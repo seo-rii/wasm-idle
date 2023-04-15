@@ -36,7 +36,7 @@
         const sandbox = await load(language);
         await sandbox.clear();
         sandbox.output = (output) => {
-            term.write(output);
+            term.write(output.replaceAll('\n', '\r\n'));
         };
         term.open(ref);
         plugin = await registerAllPlugins(term);
