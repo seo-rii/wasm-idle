@@ -46,7 +46,7 @@
             const printable = !ev.altKey && !ev.ctrlKey && !ev.metaKey;
             if (ev.key === 'Enter') {
                 term.write('\r\n');
-                sandbox.write(input);
+                sandbox.write(input + '\n');
                 input = '';
             } else if (ev.key === 'Backspace') {
                 if (term._core.buffer.x > 0) {

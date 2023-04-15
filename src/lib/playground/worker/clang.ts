@@ -4,7 +4,28 @@ declare var self: any;
 
 async function loadClang() {
     const {default: Clang} = await import('$clang');
-    self.clang = new Clang({stdout: (output) => postMessage({output})});
+    self.clang = new Clang({
+        stdout: (output) => postMessage({output}),
+        stdin: () => {
+            while (true) {
+                postMessage({buffer: true})
+                const res = Atomics.wait(stdinBuffer, 0, 0, 100)
+                if (res === 'not-equal') {
+                    try {
+                        const cpy = new Int32Array(stdinBuffer.byteLength)
+                        cpy.set(stdinBuffer)
+                        stdinBuffer.fill(0)
+                        const dec = new TextDecoder()
+                        const strInfo = dec.decode(cpy).replace(/\x00/g, ''),
+                            padding = parseInt(strInfo.slice(-1))
+                        return strInfo.slice(0, -padding)
+                    } catch (e) {
+                        postMessage({log: {e}})
+                    }
+                }
+            }
+        }
+    });
 }
 
 const blockingSleepBuffer = new Int32Array(new SharedArrayBuffer(4));

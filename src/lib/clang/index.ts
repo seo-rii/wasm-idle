@@ -16,6 +16,7 @@ const clangCommonArgs = [
 ];
 
 interface APIOption {
+    stdin: () => string;
     stdout: (str: string) => void;
 
     showTiming?: boolean;
@@ -37,6 +38,7 @@ export default class Clang {
 
         this.memfs = new MemFS({
             stdout: this.stdout,
+            stdin: options.stdin
         });
 
         this.ready = this.memfs.ready.then(() => this.hostLogAsync(`Untarring ${rootUrl}`, readBuffer(rootUrl).then(buffer => untar(buffer, this.memfs))));

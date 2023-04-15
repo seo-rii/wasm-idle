@@ -7,6 +7,7 @@ import {memfsUrl} from "$clang/url";
 const ESUCCESS = 0;
 
 interface MemFsOptions {
+    stdin: () => string;
     stdout: (str: string) => void;
     stdinStr?: string;
 }
@@ -16,11 +17,13 @@ export default class MemFS {
     mem: Memory = <any>null;
     hostMem_: Memory = <any>null;
     stdinStr: string;
+    stdin: () => string;
     stdout: (str: string) => void;
     instance: WebAssembly.Instance = <any>null;
     exports: any;
 
     constructor(options: MemFsOptions) {
+        this.stdin = options.stdin;
         this.stdout = options.stdout;
         this.stdinStr = options.stdinStr || "";
 
@@ -100,6 +103,7 @@ export default class MemFS {
             iovs += 4;
             const len = this.hostMem_.read32(iovs);
             iovs += 4;
+            if (!this.stdinStr.length) this.stdinStr = this.stdin();
             const lenToWrite = Math.min(len, this.stdinStr.length);
             if (lenToWrite === 0) break;
             this.hostMem_.write(buf, this.stdinStr.substring(0, lenToWrite));
