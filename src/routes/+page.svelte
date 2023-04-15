@@ -1,17 +1,11 @@
 <script lang="ts">
     import Clang from "$lib/clang";
+
     import {browser} from "$app/environment";
     import {onMount} from "svelte";
+    import Monaco from "./Monaco.svelte";
 
-    let value = `#include <bits/stdc++.h>
-
-        using namespace std;
-
-        int main() {
-            int a;
-            cin>>a;
-            cout<<"hi"<<a;
-    }`;
+    let value;
 
     let clang, out;
 
@@ -21,9 +15,23 @@
         });
     });
 
-    const run = () => clang.compileLinkRun(value);
+    const run = () => {
+        out = '';
+        clang.compileLinkRun(value());
+    }
 </script>
 
-<textarea bind:value></textarea>
-<button on:click={run}>run</button>
-<textarea value={out}></textarea>
+<main>
+    <button on:click={run}>run</button>
+    <textarea value={out} rows="20"></textarea>
+
+    <Monaco bind:value/>
+</main>
+
+<style>
+    main {
+        height: calc(100vh - 20px);
+        display: flex;
+        flex-direction: column;
+    }
+</style>

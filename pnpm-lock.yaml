@@ -1,5 +1,10 @@
 lockfileVersion: '6.0'
 
+dependencies:
+  monaco-editor:
+    specifier: ^0.37.1
+    version: 0.37.1
+
 devDependencies:
   '@sveltejs/adapter-auto':
     specifier: ^2.0.0
@@ -1225,6 +1230,10 @@ packages:
     dependencies:
       minimist: 1.2.8
     dev: true
+
+  /monaco-editor@0.37.1:
+    resolution: {integrity: sha512-jLXEEYSbqMkT/FuJLBZAVWGuhIb4JNwHE9kPTorAVmsdZ4UzHAfgWxLsVtD7pLRFaOwYPhNG9nUCpmFL1t/dIg==}
+    dev: false
 
   /mri@1.2.0:
     resolution: {integrity: sha512-tzzskb3bG8LvYGFF/mDTpq3jpI6Q9wc3LEmBaghu+DdCssd1FakN7Bc0hVNmEyGq1bq3RgfkCb3cmQLpNPOroA==}

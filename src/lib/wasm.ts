@@ -1,4 +1,4 @@
-const url = (url: string) => 'http://localhost:5174' + url
+const url = (url: string) => url
 
 export async function compile(filename: string) {
     // TODO: make compileStreaming work. It needs the server to use the
