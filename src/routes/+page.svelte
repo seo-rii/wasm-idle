@@ -1,37 +1,32 @@
 <script lang="ts">
-    import Clang from "$lib/clang";
-
-    import {browser} from "$app/environment";
-    import {onMount} from "svelte";
     import Monaco from "./Monaco.svelte";
+    import Terminal from "./Terminal.svelte";
+    import {tick} from "svelte";
 
-    let value;
+    let value, editor, run = false;
 
-    let clang, out;
-
-    if (browser) onMount(() => {
-        clang = new Clang({
-            stdout: (str) => out += str,
-        });
-    });
-
-    const run = () => {
-        out = '';
-        clang.compileLinkRun(value());
+    async function exec() {
+        run = false;
+        await tick();
+        run = true;
     }
 </script>
 
-<main>
-    <button on:click={run}>run</button>
-    <textarea value={out} rows="20"></textarea>
 
-    <Monaco bind:value/>
+<main>
+    <div style="width: 520px">
+        <button on:click={exec}>Run</button>
+        {#if editor && run}
+            <Terminal language="CPP" {editor}/>
+        {/if}
+    </div>
+    <Monaco bind:editor/>
 </main>
 
 <style>
     main {
         height: calc(100vh - 20px);
         display: flex;
-        flex-direction: column;
+        flex-direction: row;
     }
 </style>

@@ -6,7 +6,7 @@
     export const value = () => editor.getValue();
 
     let divEl: HTMLDivElement | null = null;
-    let editor: monaco.editor.IStandaloneCodeEditor;
+    export let editor: monaco.editor.IStandaloneCodeEditor;
     let Monaco;
 
     onMount(async () => {
@@ -18,7 +18,7 @@
         };
 
         Monaco = await import('monaco-editor');
-        editor = Monaco.editor.create(divEl, {
+        window.editor = editor = Monaco.editor.create(divEl, {
             value: `#include <bits/stdc++.h>
 
 using namespace std;
