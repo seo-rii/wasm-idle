@@ -45,6 +45,7 @@ int main() {
 <style>
     main {
         flex: 1;
+        border-left: 1px solid #e5e7eb;
     }
 
     div {
