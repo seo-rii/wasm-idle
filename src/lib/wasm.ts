@@ -1,8 +1,3 @@
-import clang from '$lib/bin/clang?url';
-import lld from '$lib/bin/lld?url';
-import root from '$lib/bin/sysroot.tar?url';
-import memfs from '$lib/bin/memfs?url';
-
 const url = (url: string) => 'http://localhost:5174' + url
 
 export async function compile(filename: string) {
