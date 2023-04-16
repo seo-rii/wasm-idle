@@ -2,7 +2,7 @@
 
 ![wasm-idle](static/image.jpeg)
 
-Executes C++ Code with working stdio.
+Executes C++, Python Code with working stdio.
 
 Refer to src/lib/clang.
 

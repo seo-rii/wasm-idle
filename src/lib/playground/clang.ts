@@ -11,7 +11,7 @@ class Clang implements Sandbox {
     elapse = 0
     uid = 0
 
-    load(code = '', log = true) {
+    load(path: string, code = '', log = true) {
         return new Promise<void>(async (resolve) => {
             this.internalBuffer = []
             if (!this.worker) {
@@ -19,7 +19,7 @@ class Clang implements Sandbox {
                 this.worker.onmessage = (event) => {
                     resolve()
                 }
-                this.worker.postMessage({load: true, log, code})
+                this.worker.postMessage({load: true, path, log, code})
             } else resolve()
         })
     }

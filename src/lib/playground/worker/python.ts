@@ -1,20 +1,18 @@
 import type {PyodideInterface} from "pyodide";
 
-const staticUrl = '';
-
 declare var self: any;
 
 let stdinBufferPyodide: Int32Array, interruptBufferPyodide: Uint8Array, pyodide: PyodideInterface;
 
-async function loadPyodideAndPackages() {
+async function loadPyodideAndPackages(path: string) {
     const {loadPyodide} = await import('pyodide')
-    pyodide = await loadPyodide({indexURL: staticUrl + '/pyodide'})
+    pyodide = await loadPyodide({indexURL: path + '/pyodide'})
 }
 
 self.onmessage = async (event: any) => {
-    const {code, buffer, load, interrupt} = event.data
+    const {code, buffer, load, interrupt, path} = event.data
     if (load) {
-        await loadPyodideAndPackages();
+        await loadPyodideAndPackages(path);
         await pyodide.loadPackagesFromImports(code);
         postMessage({load: true});
     } else if (code) {

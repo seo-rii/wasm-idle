@@ -21,11 +21,11 @@ export async function load(language: string) {
     }
     sandboxCache[language] = sandbox
     if (sandbox) {
-        if (language === 'PYTHON3') sandboxCache['PYPY3'] = sandboxCache['PYTHON'] = sandbox['PYTHON3'];
-        if (language === 'PYTHON') sandboxCache['PYTHON3'] = sandboxCache['PYPY3'] = sandbox['PYTHON'];
-        if (language === 'PYPY3') sandboxCache['PYTHON3'] = sandboxCache['PYTHON'] = sandbox['PYPY3'];
-        if (language === 'C') sandboxCache['C'] = sandbox['C'];
-        if (language === 'CPP') sandboxCache['CPP'] = sandbox['C'];
+        if (language === 'PYTHON3') sandboxCache['PYPY3'] = sandboxCache['PYTHON'] = sandbox;
+        if (language === 'PYTHON') sandboxCache['PYTHON3'] = sandboxCache['PYPY3'] = sandbox;
+        if (language === 'PYPY3') sandboxCache['PYTHON3'] = sandboxCache['PYTHON'] = sandbox;
+        if (language === 'C') sandboxCache['C'] = sandbox;
+        if (language === 'CPP') sandboxCache['CPP'] = sandbox;
     }
     return sandbox;
 }

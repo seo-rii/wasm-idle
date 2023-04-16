@@ -4,7 +4,7 @@ declare var self: any;
 
 let stdinBufferClang: Int32Array, interruptBufferClang: Uint8Array, clang: Clang;
 
-async function loadClang(log: boolean) {
+async function loadClang(path: string, log: boolean) {
     const {default: Clang} = await import('$lib/clang');
     clang = new Clang({
         stdout: (output) => postMessage({output}),
@@ -27,14 +27,14 @@ async function loadClang(log: boolean) {
                 }
             }
         },
-        log,
+        log, path,
     });
 }
 
 self.onmessage = async (event: { data: any }) => {
-    const {code, buffer, load, interrupt, log} = event.data
+    const {code, buffer, load, interrupt, log, path} = event.data
     if (load) {
-        await loadClang(log);
+        await loadClang(path, log);
         postMessage({load: true});
     } else if (code) {
         stdinBufferClang = new Int32Array(buffer);

@@ -1,6 +1,6 @@
-import type {MemFS} from "$clang/memory";
-import {readStr, readOct} from "$clang/encode";
-import {assert} from "$clang/error";
+import type {MemFS} from "$lib/clang/memory";
+import {readStr, readOct} from "$lib/clang/encode";
+import {assert} from "$lib/clang/error";
 
 interface EntryInit {
     filename: string;

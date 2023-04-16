@@ -1,4 +1,4 @@
-import {readStr} from "$clang/encode";
+import {readStr} from "$lib/clang/encode";
 
 export default class Memory {
     memory: DataView

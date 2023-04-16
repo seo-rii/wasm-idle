@@ -19,7 +19,7 @@
             if (sandbox) await sandbox.clear();
             input = '';
             finish = false;
-            sandbox = await load(language);
+            sandbox = await load(language, path);
             await sandbox.clear();
             sandbox.output = (output) => {
                 term.write(output.replaceAll('\n', '\r\n'));
@@ -27,7 +27,7 @@
             term.options.cursorBlink = true;
             if (!first) term.write(`\r\n\x1b[0m`);
 
-            await sandbox.load(code, log);
+            await sandbox.load(path, code, log);
             term.focus();
             first = false;
             sandbox.run(code).then(() => {
@@ -43,7 +43,7 @@
             });
         }
     }
-    export let dark = false;
+    export let dark = false, path = '';
     $: if (term) {
         if (dark) term.options.theme = Theme.Tango_Dark;
         else term.options.theme = Theme.Tango_Light;

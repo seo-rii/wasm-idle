@@ -1,7 +1,7 @@
-import {bindNew} from "$clang/apply";
-import {Memory, type MemFS} from "$clang/memory";
-import {getInstance} from "$clang/wasm";
-import {NotImplemented, ProcExit} from "$clang/error";
+import {bindNew} from "$lib/clang/apply";
+import {Memory, type MemFS} from "$lib/clang/memory";
+import {getInstance} from "$lib/clang/wasm";
+import {NotImplemented, ProcExit} from "$lib/clang/error";
 
 const ESUCCESS = 0;
 const RAF_PROC_EXIT_CODE = 0xC0C0A;

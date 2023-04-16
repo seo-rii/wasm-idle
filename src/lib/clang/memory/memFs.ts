@@ -1,8 +1,8 @@
-import {Memory} from '$clang/memory';
-import {bindNew} from "$clang/apply";
-import {AbortError, assert} from "$clang/error";
-import {compile} from "$clang/wasm";
-import {memfsUrl} from "$clang/url";
+import {Memory} from '$lib/clang/memory';
+import {bindNew} from "$lib/clang/apply";
+import {AbortError, assert} from "$lib/clang/error";
+import {compile} from "$lib/clang/wasm";
+import {memfsUrl} from "$lib/clang/url";
 
 const ESUCCESS = 0;
 
@@ -10,6 +10,7 @@ interface MemFsOptions {
     stdin: () => string;
     stdout: (str: string) => void;
     stdinStr?: string;
+    path: string
 }
 
 export default class MemFS {
@@ -30,7 +31,7 @@ export default class MemFS {
 
         const env = bindNew(this, 'abort', 'host_write', 'host_read', 'memfs_log', 'copy_in', 'copy_out');
 
-        this.ready = compile(memfsUrl)
+        this.ready = compile(memfsUrl(options.path))
             .then(module => WebAssembly.instantiate(module, {env}))
             .then(instance => {
                 this.instance = instance;

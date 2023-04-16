@@ -1,7 +1,7 @@
 interface sandbox {
     constructor: any
     eof: () => void
-    load: (code?: string, log?: boolean) => Promise<void>
+    load: (path: string, code?: string, log?: boolean) => Promise<void>
     run: (code: string) => Promise<string>
     terminate: () => void
     clear: () => Promise<void>
