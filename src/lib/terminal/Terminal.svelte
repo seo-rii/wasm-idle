@@ -89,8 +89,15 @@
                         input += e.key;
                         term.write(e.key);
                     }
-                } else if (ev.ctrlKey && ev.key === 'c') {
+                } else if ((ev.ctrlKey || ev.metaKey) && ev.key === 'c') {
                     sandbox.kill();
+                } else if ((ev.ctrlKey || ev.metaKey) && ev.key === 'd') {
+                    sandbox.kill();
+                } else if ((ev.ctrlKey || ev.metaKey) && ev.key === 'v') {
+                    navigator.clipboard.readText().then((text) => {
+                        term.write(text);
+                        sandbox.write(text);
+                    });
                 }
             });
             plugin = await registerAllPlugins(term);
