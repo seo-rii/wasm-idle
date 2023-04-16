@@ -1,13 +1,13 @@
 import {publish} from 'gh-pages';
 
 publish(
-    'build', // path to public directory
+    'build',
     {
         branch: 'gh-pages',
-        repo: 'https://github.com/el3um4s/memento-sveltekit-and-github-pages.git', // Update to point to your repository
+        repo: 'https://github.com/seo-rii/wasm-clang-es6.git',
         user: {
-            name: 'Samuele de Tomasi', // update to use your name
-            email: 'samuele@stranianelli.com' // Update to use your email
+            name: 'seo-rii',
+            email: 'me@seorii.page'
         },
         dotfiles: true
     },

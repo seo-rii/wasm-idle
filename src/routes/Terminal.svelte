@@ -1,85 +1,101 @@
 <script lang='ts'>
-    import {onMount, tick} from 'svelte';
+    import {onMount} from 'svelte';
     import {Theme, registerAllPlugins} from '$lib/terminal';
     import {createEventDispatcher} from 'svelte';
     import {load} from '$lib/playground';
-    import 'xterm/css/xterm.css';
     import {browser} from "$app/environment";
+    import 'xterm/css/xterm.css';
 
     const dispatch = createEventDispatcher();
-    let ref, clientWidth, clientHeight, term;
-    export let language, editor;
+    let ref, clientWidth, clientHeight, term, finish = true, input = '', sandbox, first = true;
+    export const terminal = {
+        clear() {
+            term.clear();
+            term.write(`\x1b[0m`);
+            term.write(`\x1b[1;3;31m`);
+            term.write(`\x1b[?25l`);
+            term.options.cursorBlink = false;
+        },
+        async run(language, code) {
+            if (sandbox) await sandbox.clear();
+            input = '';
+            finish = false;
+            sandbox = await load(language);
+            await sandbox.clear();
+            sandbox.output = (output) => {
+                term.write(output.replaceAll('\n', '\r\n'));
+            };
+            term.options.cursorBlink = true;
+            if (!first) term.write(`\r\n\x1b[0m`);
+
+            await sandbox.load(code);
+            term.focus();
+            first = false;
+            sandbox.run(code).then(() => {
+                dispatch('finish');
+                finish = true;
+                term.write(`\r\nProcess finished after ${sandbox.elapse}ms\r\n\u001B[?25l`);
+                term.options.cursorBlink = false;
+            }).catch((msg) => {
+                dispatch('finish');
+                finish = true;
+                term.write(`\r\n\x1B[1;3;31m${msg}`);
+                term.options.cursorBlink = false;
+            });
+        }
+    }
 
     let plugin;
-
     $: if (plugin) {
-        let _ = clientHeight, __ = clientWidth;
+        void clientWidth, clientHeight;
         try {
             plugin.fit.fit();
         } catch (e) {
         }
     }
 
-    if (browser) onMount(async () => {
-        const {Terminal} = await import('xterm');
-        let input = '', finish = false;
-        term = new Terminal({
-            theme: Theme.Tango_Light,
-            cursorBlink: true,
-            allowTransparency: true,
-            fontFamily: '\'D2 coding\', monospace',
-            fontWeight: 'bold',
-            allowProposedApi: true
-        });
-        await tick();
-        const code = editor.getValue();
-        const sandbox = await load(language);
-        await sandbox.clear();
-        sandbox.output = (output) => {
-            term.write(output.replaceAll('\n', '\r\n'));
-        };
-        term.open(ref);
-        plugin = await registerAllPlugins(term);
-        term.onKey((e: { key: string, domEvent: KeyboardEvent }) => {
-            if (finish) return;
-            const ev = e.domEvent;
-            const printable = !ev.altKey && !ev.ctrlKey && !ev.metaKey;
-            if (ev.key === 'Enter') {
-                term.write('\r\n');
-                sandbox.write(input + '\n');
-                input = '';
-            } else if (ev.key === 'Backspace') {
-                if (term._core.buffer.x > 0) {
-                    term.write('\b \b');
-                    if (input.length > 0) {
-                        input = input.substring(0, input.length - 1);
+    if (browser) onMount(() => {
+        import('xterm').then(async ({Terminal}) => {
+            term = new Terminal({
+                theme: Theme.Tango_Light,
+                cursorBlink: false,
+                allowTransparency: true,
+                fontFamily: '\'D2 coding\', monospace',
+                fontWeight: 'bold',
+                allowProposedApi: true
+            });
+            term.open(ref);
+            term.onKey((e: { key: string, domEvent: KeyboardEvent }) => {
+                if (finish) return;
+                const ev = e.domEvent;
+                const printable = !ev.altKey && !ev.ctrlKey && !ev.metaKey;
+                if (ev.key === 'Enter') {
+                    term.write('\r\n');
+                    sandbox.write(input + '\n');
+                    input = '';
+                } else if (ev.key === 'Backspace') {
+                    if (term._core.buffer.x > 0) {
+                        term.write('\b \b');
+                        if (input.length > 0) {
+                            input = input.substring(0, input.length - 1);
+                        }
                     }
+                } else if (printable) {
+                    if (e.key >= String.fromCharCode(0x20) && e.key <= String.fromCharCode(0x7E) || e.key >= '\u00a0') {
+                        input += e.key;
+                        term.write(e.key);
+                    }
+                } else if (ev.ctrlKey && ev.key === 'c') {
+                    sandbox.kill();
                 }
-            } else if (printable) {
-                if (e.key >= String.fromCharCode(0x20) && e.key <= String.fromCharCode(0x7E) || e.key >= '\u00a0') {
-                    input += e.key;
-                    term.write(e.key);
-                }
-            }
-        });
-        term.focus();
-        await sandbox.load(code);
-        dispatch('load');
-        sandbox.run(code).then(() => {
-            dispatch('finish');
-            finish = true;
-            term.write(`\r\nProcess finished after ${sandbox.elapse}ms\r\n\u001B[?25l`);
-            term.options.cursorBlink = false;
-        }).catch((msg) => {
-            dispatch('finish');
-            finish = true;
-            term.write(`\r\n\x1B[1;3;31m${msg}`);
-            term.options.cursorBlink = false;
+            });
+            plugin = await registerAllPlugins(term);
         });
 
+        dispatch('load');
         return async () => {
             term.dispose();
-            await sandbox.clear();
+            if (sandbox) await sandbox.clear();
         };
     });
 
