@@ -22,9 +22,10 @@ self.onmessage = async (event: any) => {
         stdinBufferPyodide = new Int32Array(buffer);
         interruptBufferPyodide = new Uint8Array(interrupt);
         pyodide.setInterruptBuffer(interruptBufferPyodide);
-        self['__pyodide__input_' + ts] = () => {
+        self['__pyodide__input_' + ts] = (output?: string) => {
+            if (output) postMessage({output});
             while (true) {
-                postMessage({buffer: true})
+                postMessage({buffer: true});
                 const res = Atomics.wait(stdinBufferPyodide, 0, 0, 100)
                 if (res === 'not-equal') {
                     try {

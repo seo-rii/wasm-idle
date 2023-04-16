@@ -5,8 +5,23 @@
 
     export const value = () => editor.getValue();
 
+    const defaults = {
+        cpp: `#include <bits/stdc++.h>
+
+using namespace std;
+
+int main() {
+    int a;
+    cout << "Enter a number: ";
+    cin >> a;
+    for(int i = 0; i < a; i++) cout << i << endl;
+}`, python: `a = int(input("Enter a number: "))
+for i in range(a):
+    print(i)`
+    };
+
     let divEl: HTMLDivElement | null = null;
-    export let editor: monaco.editor.IStandaloneCodeEditor;
+    export let editor: monaco.editor.IStandaloneCodeEditor, language;
     let Monaco;
 
     onMount(async () => {
@@ -18,23 +33,12 @@
         };
 
         Monaco = await import('monaco-editor');
-        window.editor = editor = Monaco.editor.create(divEl, {
-            value: `#include <bits/stdc++.h>
-
-using namespace std;
-
-int main() {
-    int a;
-    cout << "Enter a number: ";
-    cin >> a;
-    for(int i = 0; i < a; i++) cout << i << endl;
-}`,
-            language: 'cpp'
+        editor = Monaco.editor.create(divEl, {
+            value: defaults[language],
+            language
         });
 
-        return () => {
-            editor.dispose();
-        };
+        return () => editor.dispose();
     });
 </script>
 

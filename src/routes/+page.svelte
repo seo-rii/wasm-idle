@@ -2,11 +2,11 @@
     import Monaco from "./Monaco.svelte";
     import Terminal from "$lib";
 
-    let value, editor, terminal, log = true;
+    let value, editor, terminal, log = true, language = 'CPP';
 
     function exec() {
         terminal.clear();
-        terminal.run('PYTHON3', editor.getValue(), log);
+        terminal.run(language, editor.getValue(), log);
     }
 </script>
 
@@ -16,9 +16,15 @@
         <button on:click={exec}>Run</button>
         <input type="checkbox" bind:checked={log}/>
         <label>Log</label>
+        <select bind:value={language}>
+            <option value="CPP">C++</option>
+            <option value="PYTHON">Python</option>
+        </select>
         <Terminal bind:terminal/>
     </div>
-    <Monaco bind:editor/>
+    {#key language}
+        <Monaco language={language.toLowerCase()} bind:editor/>
+    {/key}
 </main>
 
 <style>

@@ -11,6 +11,7 @@ export async function load(language: string) {
     let sandbox;
     switch (language) {
         case 'PYTHON3':
+        case 'PYTHON':
         case 'PYPY3':
             sandbox = new Python();
             break
@@ -20,8 +21,9 @@ export async function load(language: string) {
     }
     sandboxCache[language] = sandbox
     if (sandbox) {
-        if (language === 'PYTHON3') sandboxCache['PYPY3'] = sandbox['PYTHON3'];
-        if (language === 'PYPY3') sandboxCache['PYTHON3'] = sandbox['PYPY3'];
+        if (language === 'PYTHON3') sandboxCache['PYPY3'] = sandboxCache['PYTHON'] = sandbox['PYTHON3'];
+        if (language === 'PYTHON') sandboxCache['PYTHON3'] = sandboxCache['PYPY3'] = sandbox['PYTHON'];
+        if (language === 'PYPY3') sandboxCache['PYTHON3'] = sandboxCache['PYTHON'] = sandbox['PYPY3'];
         if (language === 'C') sandboxCache['C'] = sandbox['C'];
         if (language === 'CPP') sandboxCache['CPP'] = sandbox['C'];
     }
