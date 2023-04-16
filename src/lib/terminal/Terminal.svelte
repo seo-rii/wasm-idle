@@ -8,7 +8,7 @@
     const dispatch = createEventDispatcher();
     let ref, clientWidth, clientHeight, term, finish = true, input = '', sandbox, first = true;
 
-    const wait = new Promise(r => {
+    const wait = () => new Promise(r => {
         const i = setInterval(() => {
             if (term) {
                 clearInterval(i);
@@ -19,7 +19,7 @@
 
     export const terminal = {
         async clear() {
-            await wait;
+            await wait();
             term.clear();
             term.write(`\u001B[?25l`);
             term.write('\x1b[0m');
@@ -27,7 +27,7 @@
             first = true;
         },
         async run(language, code, log = true) {
-            await wait;
+            await wait();
             if (sandbox) await sandbox.clear();
             input = '';
             finish = false;
