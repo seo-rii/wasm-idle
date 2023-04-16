@@ -19,6 +19,7 @@ interface APIOption {
     stdin: () => string;
     stdout: (str: string) => void;
 
+    log?: boolean;
     showTiming?: boolean;
 }
 
@@ -29,22 +30,25 @@ export default class Clang {
     moduleCache: { [key: string]: WebAssembly.Module };
 
     showTiming: boolean;
+    log: boolean;
+    lastCode = '';
 
     constructor(options: APIOption) {
-
         this.moduleCache = {};
         this.stdout = options.stdout;
         this.showTiming = options.showTiming || false;
+        this.log = options.log || false;
 
         this.memfs = new MemFS({
             stdout: this.stdout,
-            stdin: options.stdin
+            stdin: options.stdin,
         });
 
         this.ready = this.memfs.ready.then(() => this.hostLogAsync(`Untarring ${rootUrl}`, readBuffer(rootUrl).then(buffer => untar(buffer, this.memfs))));
     }
 
     hostLog(message: string) {
+        if (!this.log) return;
         const yellowArrow = `${yellow}>${normal} `;
         this.stdout(`${yellowArrow}${message}`);
     }
@@ -54,11 +58,9 @@ export default class Clang {
         this.hostLog(`${message}...`);
         const result = await promise;
         const end = +new Date();
-        this.stdout(' done.');
-        if (this.showTiming) {
-            this.stdout(` ${green}(${end - start}ms)${normal}\n`);
-        }
-        this.stdout('\n');
+        if (this.log) this.stdout(' done.');
+        if (this.showTiming) this.stdout(` ${green}(${end - start}ms)${normal}\n`);
+        if (this.log) this.stdout('\n');
         return result;
     }
 
@@ -71,14 +73,14 @@ export default class Clang {
 
     async compile(options: any) {
         const input = options.input;
-        const contents = options.contents;
+        const code = options.code;
         const obj = options.obj;
         const opt = options.opt || '2';
 
         await this.ready;
-        this.memfs.addFile(input, contents);
+        this.memfs.addFile(input, code);
         const clang = await this.getModule(clangUrl);
-        return await this.run(clang, 'clang', '-cc1', '-emit-obj',
+        return await this.run(clang, this.log, 'clang', '-cc1', '-emit-obj',
             ...clangCommonArgs, '-O' + opt, '-o', obj, '-x',
             'c++', input);
     }
@@ -89,30 +91,34 @@ export default class Clang {
         const crt1 = `${libdir}/crt1.o`;
         await this.ready;
         const lld = await this.getModule(lldUrl);
-        return await this.run(lld, 'wasm-ld', '--no-threads',
+        return await this.run(lld, this.log, 'wasm-ld', '--no-threads',
             '--export-dynamic',  // TODO required?
             '-z', `stack-size=${stackSize}`, `-L${libdir}`, crt1, obj, '-lc',
             '-lc++', '-lc++abi', '-lcanvas', '-o', wasm)
     }
 
-    async run(module: WebAssembly.Module, ...args: string[]) {
+    async run(module: WebAssembly.Module, out: boolean, ...args: string[]) {
+        this.memfs.out = out;
         this.hostLog(`${args.join(' ')}\n`);
         const start = +new Date();
         const app = new App(module, this.memfs, ...args);
         const instantiate = +new Date();
         const stillRunning = await app.run();
         const end = +new Date();
-        this.stdout('\n');
+        if (this.log) this.stdout('\n');
         if (this.showTiming) this.stdout(`${green}(${start - instantiate}ms/${end - instantiate}ms)${normal}\n`);
         return stillRunning ? app : null;
     }
 
-    async compileLinkRun(contents: string) {
+    async compileLinkRun(code: string) {
         const input = `test.cc`, obj = `test.o`, wasm = `test.wasm`;
-        await this.compile({input, contents, obj});
-        await this.link(obj, wasm);
+        if (this.lastCode !== code) {
+            await this.compile({input, code, obj});
+            await this.link(obj, wasm);
+        }
+        this.lastCode = code;
 
         const testMod = await this.hostLogAsync(`Compiling ${wasm}`, WebAssembly.compile(this.memfs.getFileContents(wasm)));
-        return await this.run(testMod, wasm);
+        return await this.run(testMod, true, wasm);
     }
 }

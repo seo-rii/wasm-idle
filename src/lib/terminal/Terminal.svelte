@@ -3,7 +3,6 @@
     import {Theme, registerAllPlugins} from '$lib/terminal';
     import {createEventDispatcher} from 'svelte';
     import {load} from '$lib/playground';
-    import {browser} from "$app/environment";
     import 'xterm/css/xterm.css';
 
     const dispatch = createEventDispatcher();
@@ -11,12 +10,12 @@
     export const terminal = {
         clear() {
             term.clear();
-            term.write(`\x1b[0m`);
-            term.write(`\x1b[1;3;31m`);
-            term.write(`\x1b[?25l`);
+            term.write(`\u001B[?25l`);
+            term.write('\x1b[0m');
             term.options.cursorBlink = false;
+            first = true;
         },
-        async run(language, code) {
+        async run(language, code, log = true) {
             if (sandbox) await sandbox.clear();
             input = '';
             finish = false;
@@ -28,7 +27,7 @@
             term.options.cursorBlink = true;
             if (!first) term.write(`\r\n\x1b[0m`);
 
-            await sandbox.load(code);
+            await sandbox.load(code, log);
             term.focus();
             first = false;
             sandbox.run(code).then(() => {
@@ -44,6 +43,11 @@
             });
         }
     }
+    export let dark = false;
+    $: if (term) {
+        if (dark) term.options.theme = Theme.Tango_Dark;
+        else term.options.theme = Theme.Tango_Light;
+    }
 
     let plugin;
     $: if (plugin) {
@@ -54,10 +58,10 @@
         }
     }
 
-    if (browser) onMount(() => {
+    onMount(() => {
         import('xterm').then(async ({Terminal}) => {
             term = new Terminal({
-                theme: Theme.Tango_Light,
+                theme: dark ? Theme.Tango_Dark : Theme.Tango_Light,
                 cursorBlink: false,
                 allowTransparency: true,
                 fontFamily: '\'D2 coding\', monospace',

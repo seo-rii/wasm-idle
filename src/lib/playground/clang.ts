@@ -11,15 +11,15 @@ class Clang implements Sandbox {
     elapse = 0
     uid = 0
 
-    load(code = '') {
+    load(code = '', log = true) {
         return new Promise<void>(async (resolve) => {
             this.internalBuffer = []
             if (!this.worker) {
-                this.worker = new (await import('$lib/playground/worker/clang?worker')).default()
+                this.worker = new (await import('$lib/playground/worker/clang?worker')).default();
                 this.worker.onmessage = (event) => {
                     resolve()
                 }
-                this.worker.postMessage({load: true, code})
+                this.worker.postMessage({load: true, log, code})
             } else resolve()
         })
     }
@@ -85,7 +85,7 @@ class Clang implements Sandbox {
     async clear() {
         this.terminate()
         this.internalBuffer = []
-        this.worker.onmessage = null
+        if (this.worker) this.worker.onmessage = null
         const buffer = new Int32Array(this.buffer)
         buffer.fill(0)
         await new Promise((resolve) => setTimeout(resolve, 200))

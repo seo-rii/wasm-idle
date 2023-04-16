@@ -11,7 +11,7 @@ class Python implements Sandbox {
     elapse = 0
     uid = 0
 
-    load(code = '') {
+    load(code = '', log = true) {
         return new Promise<void>(async (resolve) => {
             this.internalBuffer = []
             if (!this.worker) {
@@ -19,7 +19,7 @@ class Python implements Sandbox {
                 this.worker.onmessage = (event) => {
                     resolve()
                 }
-                this.worker.postMessage({load: true, code})
+                this.worker.postMessage({load: true, log, code})
             } else resolve()
         })
     }
@@ -78,14 +78,13 @@ class Python implements Sandbox {
     }
 
     terminate() {
-        const interrupt = new Uint8Array(this.interruptBuffer)
-        interrupt[0] = 2
+        new Uint8Array(this.interruptBuffer)[0] = 2
     }
 
     async clear() {
         this.terminate()
         this.internalBuffer = []
-        this.worker.onmessage = null
+        if (this.worker) this.worker.onmessage = null
         const buffer = new Int32Array(this.buffer)
         buffer.fill(0)
         await new Promise((resolve) => setTimeout(resolve, 200))

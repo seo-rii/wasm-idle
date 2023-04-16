@@ -21,6 +21,7 @@ export default class MemFS {
     stdout: (str: string) => void;
     instance: WebAssembly.Instance = <any>null;
     exports: any;
+    out = true;
 
     constructor(options: MemFsOptions) {
         this.stdin = options.stdin;
@@ -90,7 +91,7 @@ export default class MemFS {
             size += len;
         }
         this.hostMem_.write32(nwritten_out, size);
-        this.stdout(str);
+        if (this.out) this.stdout(str);
         return ESUCCESS;
     }
 
