@@ -1,5 +1,3 @@
-import clang from "../clang";
-
 declare var self: any;
 
 async function loadClang() {
