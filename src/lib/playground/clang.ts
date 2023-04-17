@@ -1,4 +1,5 @@
 import type Sandbox from '$lib/playground/sandbox'
+import workerUrl from './worker/clang?worker&url'
 
 class Clang implements Sandbox {
     ts = Date.now()
@@ -15,7 +16,7 @@ class Clang implements Sandbox {
         return new Promise<void>(async (resolve) => {
             this.internalBuffer = []
             if (!this.worker) {
-                this.worker = new (await import('$lib/playground/worker/clang?worker')).default();
+                this.worker = new Worker(workerUrl, {type: 'module'})
                 this.worker.onmessage = (event) => {
                     resolve()
                 }

@@ -1,4 +1,5 @@
 import type Sandbox from '$lib/playground/sandbox'
+import workerUrl from './worker/python?worker&url'
 
 class Python implements Sandbox {
     ts = Date.now()
@@ -15,7 +16,7 @@ class Python implements Sandbox {
         return new Promise<void>(async (resolve) => {
             this.internalBuffer = []
             if (!this.worker) {
-                this.worker = new (await import('$lib/playground/worker/python?worker')).default()
+                this.worker = new Worker(workerUrl, {type: 'module'});
                 this.worker.onmessage = (event) => {
                     resolve()
                 }

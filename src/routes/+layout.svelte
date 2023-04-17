@@ -1,10 +1,13 @@
 <script lang="ts">
     import {browser} from "$app/environment";
     import {onMount} from "svelte";
+    import {page} from "$app/stores";
 
     if (browser) onMount(async () => {
         if ("serviceWorker" in navigator) {
-            navigator.serviceWorker.register(new URL(location.href + "worker.js", import.meta.url)).then(
+            let path = '/' + $page.url.pathname.split("/").slice(0, -1).join("/");
+            if (path.endsWith('/')) path = path.slice(0, -1);
+            navigator.serviceWorker.register(new URL(path + "/worker.js", import.meta.url)).then(
                 function (registration) {
                     console.log("COOP/COEP Service Worker registered", registration.scope);
                     if (registration.active && !navigator.serviceWorker.controller) window.location.reload();

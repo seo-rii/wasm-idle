@@ -23,8 +23,10 @@
             term.clear();
             term.write(`\u001B[?25l`);
             term.write('\x1b[0m');
+            term.write('\x1b[?25h');
             term.options.cursorBlink = false;
             first = true;
+            await new Promise(r => setTimeout(r, 100));
         },
         async run(language, code, log = true) {
             await wait();

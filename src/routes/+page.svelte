@@ -1,7 +1,10 @@
 <script lang="ts">
     import Monaco from "./Monaco.svelte";
     import Terminal from "$lib";
+    import {page} from "$app/stores";
 
+    let path = $page.url.pathname;
+    if (path.endsWith('/')) path = path.slice(0, -1);
     let value, editor, terminal, log = true, language = 'CPP';
 
     function exec() {
@@ -10,9 +13,9 @@
     }
 </script>
 
-
 <main>
     <div style="width: 50%">
+        {path}
         <button on:click={exec}>Run</button>
         <input type="checkbox" bind:checked={log}/>
         <label>Log</label>
@@ -20,7 +23,7 @@
             <option value="CPP">C++</option>
             <option value="PYTHON">Python</option>
         </select>
-        <Terminal bind:terminal/>
+        <Terminal bind:terminal {path}/>
     </div>
     {#key language}
         <Monaco language={language.toLowerCase()} bind:editor/>

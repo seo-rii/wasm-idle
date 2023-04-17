@@ -1,6 +1,6 @@
 {
   "name": "wasm-idle",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "A simple web app to run C++/Python code in the browser",
   "license": "MIT",
   "type": "module",
@@ -12,7 +12,8 @@
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "lint": "prettier --plugin-search-dir . --check . && eslint .",
     "format": "prettier --plugin-search-dir . --write .",
-    "deploy": "svelte-package && npm publish"
+    "deploy": "svelte-package && npm publish",
+    "page": "pnpm run build && node ./gh-pages.js"
   },
   "devDependencies": {
     "@sveltejs/adapter-auto": "^2.0.0",
@@ -32,7 +33,7 @@
     "svelte-check": "^3.2.0",
     "tslib": "^2.5.0",
     "typescript": "^5.0.4",
-    "vite": "^4.2.1"
+    "vite": "^4.3.0-beta.6"
   },
   "dependencies": {
     "pyodide": "^0.23.1",
