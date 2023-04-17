@@ -5,7 +5,7 @@
 
     if (browser) onMount(async () => {
         if ("serviceWorker" in navigator) {
-            let path = '/' + $page.url.pathname.split("/").slice(0, -1).join("/");
+            let path = $page.url.pathname;
             if (path.endsWith('/')) path = path.slice(0, -1);
             navigator.serviceWorker.register(new URL(path + "/worker.js", import.meta.url)).then(
                 function (registration) {
