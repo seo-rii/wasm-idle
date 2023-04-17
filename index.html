@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<link rel="icon" href="/wasm-repl/favicon.png" />
+		<meta name="viewport" content="width=device-width" />
+		<meta http-equiv="content-security-policy" content="">
+		<link rel="modulepreload" href="/wasm-repl/_app/immutable/entry/start.27ecb648.js">
+		<link rel="modulepreload" href="/wasm-repl/_app/immutable/chunks/index.51f46b54.js">
+		<link rel="modulepreload" href="/wasm-repl/_app/immutable/chunks/singletons.a1a6d181.js">
+		<link rel="modulepreload" href="/wasm-repl/_app/immutable/entry/app.4bbb4db6.js">
+		<link rel="modulepreload" href="/wasm-repl/_app/immutable/chunks/preload-helper.41c905a7.js">
+	</head>
+	<body data-sveltekit-preload-data="hover">
+		<div style="display: contents">
+			<script>
+				{
+					__sveltekit_25rhng = {
+						env: {},
+						assets: "/wasm-repl",
+						base: "/wasm-repl",
+						element: document.currentScript.parentElement
+					};
+
+					Promise.all([
+						import("/wasm-repl/_app/immutable/entry/start.27ecb648.js"),
+						import("/wasm-repl/_app/immutable/entry/app.4bbb4db6.js")
+					]).then(([kit, app]) => {
+						kit.start(app, __sveltekit_25rhng.element);
+					});
+				}
+			</script>
+		</div>
+	</body>
+</html>
