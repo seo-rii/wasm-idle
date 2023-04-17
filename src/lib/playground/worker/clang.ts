@@ -1,7 +1,11 @@
 import type Clang from "$lib/clang";
 
 declare var self: any;
-
+self.document = {
+    querySelectorAll() {
+        return []
+    }
+};
 let stdinBufferClang: Int32Array, interruptBufferClang: Uint8Array, clang: Clang;
 
 async function loadClang(path: string, log: boolean) {

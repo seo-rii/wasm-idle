@@ -1,6 +1,11 @@
 import type {PyodideInterface} from "pyodide";
 
 declare var self: any;
+self.document = {
+    querySelectorAll() {
+        return []
+    }
+};
 
 let stdinBufferPyodide: Int32Array, interruptBufferPyodide: Uint8Array, pyodide: PyodideInterface, path = '';
 

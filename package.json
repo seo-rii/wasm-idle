@@ -1,6 +1,6 @@
 {
   "name": "wasm-idle",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "A simple web app to run C++/Python code in the browser",
   "license": "MIT",
   "type": "module",
@@ -33,7 +33,7 @@
     "svelte-check": "^3.2.0",
     "tslib": "^2.5.0",
     "typescript": "^5.0.4",
-    "vite": "^4.1.4"
+    "vite": "^4.3.0-beta.7"
   },
   "dependencies": {
     "pyodide": "^0.23.1",
