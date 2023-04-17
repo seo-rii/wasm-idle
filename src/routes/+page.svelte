@@ -7,9 +7,9 @@
     if (path.endsWith('/')) path = path.slice(0, -1);
     let value, editor, terminal, log = true, language = 'CPP';
 
-    function exec() {
-        terminal.clear();
-        terminal.run(language, editor.getValue(), log);
+    async function exec() {
+        await terminal.clear();
+        await terminal.run(language, editor.getValue(), log);
     }
 </script>
 
