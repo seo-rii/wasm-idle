@@ -1,9 +1,8 @@
 import type Sandbox from '$lib/playground/sandbox'
-import workerUrl from './worker/clang?worker&url'
 
 class Clang implements Sandbox {
     ts = Date.now()
-    output = null
+    output: any = null
     worker: Worker = <any>null
     buffer = new SharedArrayBuffer(1024)
     interruptBuffer = new SharedArrayBuffer(1)
@@ -16,10 +15,8 @@ class Clang implements Sandbox {
         return new Promise<void>(async (resolve) => {
             this.internalBuffer = []
             if (!this.worker) {
-                this.worker = new Worker(workerUrl, {type: 'module'})
-                this.worker.onmessage = (event) => {
-                    resolve()
-                }
+                this.worker = new (await import('$lib/playground/worker/clang?worker')).default();
+                this.worker.onmessage = () => resolve()
                 this.worker.postMessage({load: true, path, log, code})
             } else resolve()
         })
@@ -43,18 +40,13 @@ class Clang implements Sandbox {
     eof() {
     }
 
-    run(code: string) {
+    run(code: string, prepare: boolean) {
         return new Promise<string>(async (resolve, reject) => {
-            const interrupt = new Uint8Array(this.interruptBuffer),
-                _uid = ++this.uid
-            const handler = (event) => {
-                if (_uid !== this.uid) {
-                    this.worker.onmessage = null
-                    return
-                }
+            const interrupt = new Uint8Array(this.interruptBuffer), _uid = ++this.uid
+            const handler = (event: Event & { data: any }) => {
+                if (_uid !== this.uid) return this.worker.onmessage = null
                 const {id, output, results, log, error, buffer} = event.data
-                if (buffer && this.internalBuffer.length)
-                    this._write(this.internalBuffer.splice(0, 1)[0])
+                if (buffer && this.internalBuffer.length) this._write(this.internalBuffer.splice(0, 1)[0])
                 if (output) this.output(output)
                 if (results) {
                     this.elapse = Date.now() - this.begin
@@ -71,6 +63,7 @@ class Clang implements Sandbox {
             this.begin = Date.now()
             this.worker.postMessage({
                 code,
+                prepare,
                 buffer: this.buffer,
                 interrupt: this.interruptBuffer,
                 context: {}
@@ -79,8 +72,7 @@ class Clang implements Sandbox {
     }
 
     terminate() {
-        const interrupt = new Uint8Array(this.interruptBuffer)
-        interrupt[0] = 2
+        new Uint8Array(this.interruptBuffer)[0] = 2
     }
 
     async clear() {

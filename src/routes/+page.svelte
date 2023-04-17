@@ -9,6 +9,7 @@
 
     async function exec() {
         await terminal.clear();
+        await terminal.prepare(language, editor.getValue(), log);
         await terminal.run(language, editor.getValue(), log);
     }
 </script>

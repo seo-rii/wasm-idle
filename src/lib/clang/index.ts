@@ -34,6 +34,7 @@ export default class Clang {
     log: boolean;
     lastCode = '';
     path: string;
+    wasm?: WebAssembly.Instance;
 
     constructor(options: APIOption) {
         this.moduleCache = {};
@@ -114,15 +115,17 @@ export default class Clang {
         return stillRunning ? app : null;
     }
 
-    async compileLinkRun(code: string) {
+    async compileLink(code: string) {
         const input = `test.cc`, obj = `test.o`, wasm = `test.wasm`;
-        if (this.lastCode !== code) {
-            await this.compile({input, code, obj});
-            await this.link(obj, wasm);
-        }
-        this.lastCode = code;
+        if (this.lastCode === code) return this.wasm;
+        await this.compile({input, code, obj});
+        await this.link(obj, wasm);
 
-        const testMod = await this.hostLogAsync(`Compiling ${wasm}`, WebAssembly.compile(this.memfs.getFileContents(wasm)));
-        return await this.run(testMod, true, wasm);
+        this.lastCode = code;
+        return this.wasm = await this.hostLogAsync(`Compiling ${wasm}`, WebAssembly.compile(this.memfs.getFileContents(wasm)));
+    }
+
+    async compileLinkRun(code: string) {
+        return await this.run(await this.compileLink(code), true, `test.wasm`);
     }
 }

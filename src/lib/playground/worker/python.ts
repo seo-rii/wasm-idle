@@ -2,20 +2,35 @@ import type {PyodideInterface} from "pyodide";
 
 declare var self: any;
 
-let stdinBufferPyodide: Int32Array, interruptBufferPyodide: Uint8Array, pyodide: PyodideInterface;
+let stdinBufferPyodide: Int32Array, interruptBufferPyodide: Uint8Array, pyodide: PyodideInterface, path = '';
 
-async function loadPyodideAndPackages(path: string) {
-    const {loadPyodide} = await import('pyodide')
-    pyodide = await loadPyodide({indexURL: path + '/pyodide'})
+async function loadPyodide(path: string) {
+    if (pyodide) return;
+    const {loadPyodide} = await import('pyodide');
+    pyodide = await loadPyodide({indexURL: path + '/pyodide'});
 }
 
 self.onmessage = async (event: any) => {
-    const {code, buffer, load, interrupt, path} = event.data
+    const {code, buffer, load, interrupt, path: _p, prepare} = event.data
     if (load) {
-        await loadPyodideAndPackages(path);
-        await pyodide.loadPackagesFromImports(code);
+        path = _p;
+        postMessage({output: 'Loading Pyodide...'});
+        await loadPyodide(path);
+        postMessage({output: ' Done.\n\r'});
         postMessage({load: true});
+    } else if (prepare) {
+        postMessage({output: 'Loading packages...'});
+        try {
+            await loadPyodide(path);
+            await pyodide.loadPackagesFromImports(code);
+            postMessage({output: ' Done.\n\r'});
+            self.postMessage({results: true});
+        } catch (e: any) {
+            self.postMessage({error: e.message || 'Unknown error'});
+        }
     } else if (code) {
+        await loadPyodide(path);
+        await pyodide.loadPackagesFromImports(code);
         const ts = Date.now();
         stdinBufferPyodide = new Int32Array(buffer);
         interruptBufferPyodide = new Uint8Array(interrupt);
@@ -58,7 +73,7 @@ self.onmessage = async (event: any) => {
         }
 
         try {
-            let results = await pyodide.runPythonAsync(`import asyncio
+            await pyodide.runPythonAsync(`import asyncio
 from js import __pyodide__input_${ts}, __pyodide__output_${ts}
 
 input = __pyodide__input_${ts}
@@ -68,9 +83,9 @@ __builtins__.input = __pyodide__input_${ts}
 __builtins__.print = __pyodide__output_${ts}
 
 ${code}`)
-            self.postMessage({results: true})
-        } catch (error: any) {
-            self.postMessage({error: error.message})
+            self.postMessage({results: true});
+        } catch (e: any) {
+            self.postMessage({error: e.message || 'Unknown error'});
         }
     }
 }

@@ -32,10 +32,20 @@ async function loadClang(path: string, log: boolean) {
 }
 
 self.onmessage = async (event: { data: any }) => {
-    const {code, buffer, load, interrupt, log, path} = event.data
+    const {code, buffer, load, interrupt, log, path, prepare} = event.data
     if (load) {
         await loadClang(path, log);
         postMessage({load: true});
+    } else if (prepare) {
+        stdinBufferClang = new Int32Array(buffer);
+        interruptBufferClang = new Uint8Array(interrupt);
+
+        try {
+            await clang.compileLink(code);
+            self.postMessage({results: true});
+        } catch (error: any) {
+            self.postMessage({error: error.message});
+        }
     } else if (code) {
         stdinBufferClang = new Int32Array(buffer);
         interruptBufferClang = new Uint8Array(interrupt);

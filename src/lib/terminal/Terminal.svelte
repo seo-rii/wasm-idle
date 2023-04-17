@@ -8,7 +8,8 @@
     const dispatch = createEventDispatcher();
     export let dark = false, path = '', font = "'D2 coding', monospace";
 
-    let ref, clientWidth, clientHeight, term, finish = true, input = '', sandbox: Sandbox, first = true, tc = 0, plugin;
+    let ref, clientWidth, clientHeight, term, finish = true, input = '', sandbox: Sandbox, first = true, tc = 0, plugin,
+        ll = null;
 
     function wait() {
         return new Promise(r => {
@@ -27,8 +28,11 @@
         if (sandbox) await sandbox.clear();
         input = '';
         finish = false;
-        sandbox = await load(language, path);
-        await sandbox.clear();
+        if (ll !== language) {
+            sandbox = await load(language, path);
+            await sandbox.clear();
+            ll = language;
+        }
         sandbox.output = (output) => _tc === tc && term.write(output.replaceAll('\n', '\r\n'));
     }
 
@@ -42,9 +46,9 @@
             })
     }
 
-    async function initTerm() {
+    async function initTerm(blink = true) {
         await wait();
-        term.options.cursorBlink = true;
+        term.options.cursorBlink = blink;
         term.focus();
 
         if (!first) term.write(`\r\n\x1b[0m`);
@@ -61,9 +65,13 @@
             first = true;
             await new Promise(r => setTimeout(r, 100));
         },
+        async prepare(language, code, log = true) {
+            await Promise.all([initSandbox(language).then(() => sandbox.load(path, code, log)), initTerm(false)]);
+            await runSandbox(sandbox.run(code, true));
+        },
         async run(language, code, log = true) {
             await Promise.all([initSandbox(language).then(() => sandbox.load(path, code, log)), initTerm()]);
-            await runSandbox(sandbox.run(code));
+            await runSandbox(sandbox.run(code, false));
         }
     }
 
