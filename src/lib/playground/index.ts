@@ -6,7 +6,7 @@ const sandboxCache: { [key: string]: (Sandbox | undefined) } = {}
 
 export const supportedLanguages = ['PYTHON3', 'PYPY3', 'C', 'CPP']
 
-export async function load(language: string) {
+export default async function load(language: string) {
     if (sandboxCache[language]) return sandboxCache[language];
     let sandbox;
     switch (language) {

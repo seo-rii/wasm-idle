@@ -1,7 +1,7 @@
 <script lang='ts'>
     import type Sandbox from "$lib/playground/sandbox";
     import {Theme, registerAllPlugins} from '$lib/terminal';
-    import {load} from '$lib/playground';
+    import load from '$lib/playground';
     import {onMount, createEventDispatcher} from 'svelte';
     import 'xterm/css/xterm.css';
 
@@ -29,7 +29,7 @@
         input = '';
         finish = false;
         if (ll !== language) {
-            sandbox = await load(language, path);
+            sandbox = await load(language);
             await sandbox.clear();
             ll = language;
         }
@@ -72,7 +72,12 @@
         async run(language, code, log = true) {
             await Promise.all([initSandbox(language).then(() => sandbox.load(path, code, log)), initTerm()]);
             await runSandbox(sandbox.run(code, false));
-        }
+        },
+        async destroy() {
+            await wait();
+            term.dispose();
+            if (sandbox) await sandbox.clear();
+        },
     }
 
     $: if (term) {
