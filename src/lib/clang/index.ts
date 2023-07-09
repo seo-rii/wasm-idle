@@ -86,7 +86,7 @@ export default class Clang {
         this.memfs.addFile(input, code);
         const clang = await this.getModule(clangUrl(this.path));
         return await this.run(clang, this.log, 'clang', '-cc1', '-emit-obj',
-            ...clangCommonArgs, '-O' + opt, '-o', obj, '-x',
+            ...clangCommonArgs, '-O' + opt, '-o', obj, '-std=c++17', '-x',
             'c++', input);
     }
 
@@ -99,7 +99,7 @@ export default class Clang {
         return await this.run(lld, this.log, 'wasm-ld', '--no-threads',
             '--export-dynamic',  // TODO required?
             '-z', `stack-size=${stackSize}`, `-L${libdir}`, crt1, obj, '-lc',
-            '-lc++', '-lc++abi', '-lcanvas', '-o', wasm)
+            '-lc++', '-lc++abi', '-o', wasm)
     }
 
     async run(module: WebAssembly.Module, out: boolean, ...args: string[]) {
