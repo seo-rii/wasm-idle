@@ -67,11 +67,11 @@
         },
         async prepare(language, code, log = true) {
             await Promise.all([initSandbox(language).then(() => sandbox.load(path, code, log)), initTerm(false)]);
-            await runSandbox(sandbox.run(code, true));
+            await runSandbox(sandbox.run(code, true, log));
         },
         async run(language, code, log = true) {
             await Promise.all([initSandbox(language).then(() => sandbox.load(path, code, log)), initTerm()]);
-            await runSandbox(sandbox.run(code, false));
+            await runSandbox(sandbox.run(code, false, log));
         },
         async destroy() {
             await wait();
