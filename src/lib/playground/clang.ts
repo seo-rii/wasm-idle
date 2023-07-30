@@ -10,9 +10,11 @@ class Clang implements Sandbox {
     begin = 0
     elapse = 0
     uid = 0
+    log = true
 
     load(path: string, code = '', log = true) {
         return new Promise<void>(async (resolve) => {
+            this.log = log
             this.internalBuffer = []
             if (!this.worker) {
                 this.worker = new (await import('$lib/playground/worker/clang?worker')).default();
@@ -43,7 +45,7 @@ class Clang implements Sandbox {
     eof() {
     }
 
-    run(code: string, prepare: boolean) {
+    run(code: string, prepare: boolean, log = this.log) {
         return new Promise<string>(async (resolve, reject) => {
             const interrupt = new Uint8Array(this.interruptBuffer), _uid = ++this.uid
             const handler = (event: Event & { data: any }) => {
@@ -69,7 +71,8 @@ class Clang implements Sandbox {
                 prepare,
                 buffer: this.buffer,
                 interrupt: this.interruptBuffer,
-                context: {}
+                context: {},
+                log,
             })
         })
     }
