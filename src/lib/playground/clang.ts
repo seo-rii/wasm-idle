@@ -18,7 +18,10 @@ class Clang implements Sandbox {
                 this.worker = new (await import('$lib/playground/worker/clang?worker')).default();
                 this.worker.onmessage = () => resolve()
                 this.worker.postMessage({load: true, path, log, code})
-            } else resolve()
+            } else {
+                this.worker.postMessage({log})
+                resolve()
+            }
         })
     }
 

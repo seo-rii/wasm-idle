@@ -51,6 +51,7 @@ self.onmessage = async (event: { data: any }) => {
             self.postMessage({error: error.message});
         }
     } else if (code) {
+        clang.log = log;
         stdinBufferClang = new Int32Array(buffer);
         interruptBufferClang = new Uint8Array(interrupt);
 
