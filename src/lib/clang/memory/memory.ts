@@ -1,4 +1,4 @@
-import {readStr} from "$lib/clang/encode";
+import {readStr, readStrR} from "$lib/clang/encode";
 
 export default class Memory {
     memory: DataView
@@ -31,6 +31,10 @@ export default class Memory {
 
     readStr(o: number, len: number) {
         return readStr(this.u8, o, len);
+    }
+
+    readStrR(o: number, len: number) {
+        return readStrR(this.u8, o, len);
     }
 
     write8(o: number, v: number) {

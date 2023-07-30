@@ -88,7 +88,7 @@ export default class MemFS {
             iovs += 4;
             const len = this.hostMem_.read32(iovs);
             iovs += 4;
-            str += this.hostMem_.readStr(buf, len);
+            str += this.hostMem_.readStrR(buf, len);
             size += len;
         }
         this.hostMem_.write32(nwritten_out, size);

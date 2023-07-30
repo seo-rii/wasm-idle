@@ -24,6 +24,22 @@ interface APIOption {
     path: string;
 }
 
+const toUtf8 = (text: string) => {
+    const surrogate = encodeURIComponent(text);
+    let result = '';
+    for (let i = 0; i < surrogate.length;) {
+        const character = surrogate[i];
+        i += 1;
+        if (character == '%') {
+            const hex = surrogate.substring(i, i += 2);
+            if (hex) result += String.fromCharCode(parseInt(hex, 16));
+        } else {
+            result += character;
+        }
+    }
+    return result;
+};
+
 export default class Clang {
     ready: Promise<void>;
     memfs: MemFS;
@@ -78,7 +94,7 @@ export default class Clang {
 
     async compile(options: any) {
         const input = options.input;
-        const code = options.code;
+        const code = toUtf8(options.code);
         const obj = options.obj;
         const opt = options.opt || '2';
 
