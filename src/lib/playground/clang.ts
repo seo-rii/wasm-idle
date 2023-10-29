@@ -3,7 +3,7 @@ import type Sandbox from '$lib/playground/sandbox'
 class Clang implements Sandbox {
     ts = Date.now()
     output: any = null
-    worker: Worker = <any>null
+    worker?: Worker = <any>null
     buffer = new SharedArrayBuffer(1024)
     interruptBuffer = new SharedArrayBuffer(1)
     internalBuffer: string[] = []
@@ -11,6 +11,7 @@ class Clang implements Sandbox {
     elapse = 0
     uid = 0
     log = true
+    exit = true
 
     load(path: string, code = '', log = true) {
         return new Promise<void>(async (resolve) => {
@@ -46,15 +47,19 @@ class Clang implements Sandbox {
     }
 
     run(code: string, prepare: boolean, log = this.log) {
+        this.exit = false
         return new Promise<string>(async (resolve, reject) => {
+            if (!this.worker) return reject('Worker not loaded')
             const interrupt = new Uint8Array(this.interruptBuffer), _uid = ++this.uid
             const handler = (event: Event & { data: any }) => {
+                if (!this.worker) return reject('Worker not loaded')
                 if (_uid !== this.uid) return this.worker.onmessage = null
                 const {id, output, results, log, error, buffer} = event.data
                 if (buffer && this.internalBuffer.length) this._write(this.internalBuffer.splice(0, 1)[0])
                 if (output) this.output(output)
                 if (results) {
                     this.elapse = Date.now() - this.begin
+                    this.exit = true
                     resolve(results as string)
                 }
                 if (log) console.log(log)
@@ -66,7 +71,7 @@ class Clang implements Sandbox {
             interrupt[0] = 0
             this.worker.onmessage = handler
             this.begin = Date.now()
-            this.worker.postMessage({
+            this.worker?.postMessage({
                 code,
                 prepare,
                 buffer: this.buffer,
@@ -88,6 +93,11 @@ class Clang implements Sandbox {
         const buffer = new Int32Array(this.buffer)
         buffer.fill(0)
         await new Promise((resolve) => setTimeout(resolve, 200))
+        if (!this.exit) {
+            this.worker?.terminate?.();
+            delete this.worker;
+            this.exit = true;
+        }
     }
 }
 
