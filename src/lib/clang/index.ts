@@ -115,7 +115,7 @@ export default class Clang {
         return await this.run(lld, this.log, 'wasm-ld', '--no-threads',
             '--export-dynamic',  // TODO required?
             '-z', `stack-size=${stackSize}`, `-L${libdir}`, crt1, obj, '-lc',
-            '-lc++', '-lc++abi', '-o', wasm)
+            '-lc++', '-lc++abi', '-lm', `-Llib/clang/8.0.1/lib/wasi`, '-lclang_rt.builtins-wasm32', '-o', wasm)
     }
 
     async run(module: WebAssembly.Module, out: boolean, ...args: string[]) {
