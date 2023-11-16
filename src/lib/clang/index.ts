@@ -65,6 +65,8 @@ export default class Clang {
             path: this.path
         });
 
+        this.getModule(clangUrl(this.path));
+        this.getModule(lldUrl(this.path));
         this.ready = this.memfs.ready.then(() => this.hostLogAsync(`Untarring ${rootUrl(this.path)}`, readBuffer(rootUrl(this.path)).then(buffer => untar(buffer, this.memfs))));
     }
 

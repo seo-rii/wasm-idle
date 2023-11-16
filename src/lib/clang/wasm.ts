@@ -1,13 +1,20 @@
+import * as zip from "@zip.js/zip.js";
+
 const url = (url: string) => url
+const store: any = {}
 
 export async function compile(filename: string) {
     // TODO: make compileStreaming work. It needs the server to use the
     // application/wasm mimetype.
-    if (false && WebAssembly.compileStreaming) {
-        return WebAssembly.compileStreaming(fetch(url(filename)));
-    } else {
-        const response = await fetch(url(filename));
-        return WebAssembly.compile(await response.arrayBuffer());
+    if (store[filename]) return store[filename];
+    const response = await fetch(url(filename));
+    const blob = await response.blob();
+    const reader = new zip.ZipReader(new zip.BlobReader(blob));
+    const entries = await reader.getEntries();
+    for (const entry of entries) {
+        console.log(`Found WASM file: ${entry.filename}`);
+        const data = await entry.getData(new zip.Uint8ArrayWriter());
+        return store[filename] = WebAssembly.compile(data);
     }
 }
 
