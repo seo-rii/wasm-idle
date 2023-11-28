@@ -3,6 +3,7 @@ import {MemFS, untar} from "$lib/clang/memory";
 import {green, yellow, normal} from "$lib/clang/color";
 import {compile, readBuffer} from "$lib/clang/wasm";
 import {clangUrl, lldUrl, rootUrl} from "$lib/clang/url";
+import {derived, type Writable, writable} from "svelte/store";
 
 const clangCommonArgs = [
     '-disable-free',
@@ -18,6 +19,7 @@ const clangCommonArgs = [
 interface APIOption {
     stdin: () => string;
     stdout: (str: string) => void;
+    progress: (value: number) => void;
 
     log?: boolean;
     showTiming?: boolean;
@@ -51,6 +53,12 @@ export default class Clang {
     lastCode = '';
     path: string;
     wasm?: WebAssembly.Instance;
+    progress = {
+        clang: writable(0),
+        lld: writable(0),
+        memfs: writable(0),
+    }
+
 
     constructor(options: APIOption) {
         this.moduleCache = {};
@@ -62,11 +70,18 @@ export default class Clang {
         this.memfs = new MemFS({
             stdout: this.stdout,
             stdin: options.stdin,
-            path: this.path
+            path: this.path,
+            progress: this.progress.memfs,
         });
 
-        this.getModule(clangUrl(this.path));
-        this.getModule(lldUrl(this.path));
+        const progress = derived([this.progress.clang, this.progress.lld, this.progress.memfs], ([clang, lld, memfs]) => {
+            return (clang + lld + memfs) / 3;
+        });
+        progress.subscribe(value => {
+            options.progress(value);
+        });
+        this.getModule(clangUrl(this.path), this.progress.clang);
+        this.getModule(lldUrl(this.path), this.progress.lld);
         this.ready = this.memfs.ready.then(() => this.hostLogAsync(`Untarring ${rootUrl(this.path)}`, readBuffer(rootUrl(this.path)).then(buffer => untar(buffer, this.memfs))));
     }
 
@@ -87,9 +102,9 @@ export default class Clang {
         return result;
     }
 
-    async getModule(name: string) {
+    async getModule(name: string, progress?: Writable<number>) {
         if (this.moduleCache[name]) return this.moduleCache[name];
-        const module = await this.hostLogAsync(`Fetching and compiling ${name}`, compile(name));
+        const module = await this.hostLogAsync(`Fetching and compiling ${name}`, compile(name, progress));
         this.moduleCache[name] = module;
         return module;
     }

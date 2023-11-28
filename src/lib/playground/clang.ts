@@ -1,4 +1,5 @@
 import type Sandbox from '$lib/playground/sandbox'
+import type {Writable} from "svelte/store";
 
 class Clang implements Sandbox {
     ts = Date.now()
@@ -46,7 +47,7 @@ class Clang implements Sandbox {
     eof() {
     }
 
-    run(code: string, prepare: boolean, log = this.log) {
+    run(code: string, prepare: boolean, log = this.log, prog?: Writable<number>) {
         this.exit = false
         return new Promise<string>(async (resolve, reject) => {
             if (!this.worker) return reject('Worker not loaded')
@@ -54,7 +55,7 @@ class Clang implements Sandbox {
             const handler = (event: Event & { data: any }) => {
                 if (!this.worker) return reject('Worker not loaded')
                 if (_uid !== this.uid) return this.worker.onmessage = null
-                const {id, output, results, log, error, buffer} = event.data
+                const {id, output, results, log, error, buffer, progress} = event.data
                 if (buffer && this.internalBuffer.length) this._write(this.internalBuffer.splice(0, 1)[0])
                 if (output) this.output(output)
                 if (results) {
@@ -67,6 +68,7 @@ class Clang implements Sandbox {
                     this.elapse = Date.now() - this.begin
                     reject(error)
                 }
+                if (progress) prog?.set?.(progress)
             }
             interrupt[0] = 0
             this.worker.onmessage = handler

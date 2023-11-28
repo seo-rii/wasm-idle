@@ -31,6 +31,7 @@ async function loadClang(path: string, log: boolean) {
                 }
             }
         },
+        progress: (value) => postMessage({progress: value}),
         log, path,
     });
 }
