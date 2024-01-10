@@ -37,13 +37,18 @@
     }
 
     function runSandbox(pr) {
-        return pr.then(() => term.write(`\r\nProcess finished after ${sandbox.elapse}ms\u001B[?25l`))
-            .catch((msg) => term.write(`\r\n\x1B[1;3;31m${msg}\u001B[?25l`))
-            .finally(() => {
-                dispatch('finish');
-                finish = true;
-                term.options.cursorBlink = false;
-            })
+        return pr.then((x) => {
+            term.write(`\r\nProcess finished after ${sandbox.elapse}ms\u001B[?25l`);
+            return x;
+        }).catch((msg) => {
+            term.write(`\r\n\x1B[1;3;31m${msg}\u001B[?25l`)
+            return false;
+        }).finally((ret) => {
+            dispatch('finish');
+            finish = true;
+            term.options.cursorBlink = false;
+            return ret;
+        })
     }
 
     async function initTerm(blink = true) {
@@ -67,11 +72,11 @@
         },
         async prepare(language, code, log = true, prog) {
             await Promise.all([initSandbox(language).then(() => sandbox.load(path, code, log)), initTerm(false)]);
-            await runSandbox(sandbox.run(code, true, log, prog));
+            return await runSandbox(sandbox.run(code, true, log, prog));
         },
         async run(language, code, log = true, prog) {
             await Promise.all([initSandbox(language).then(() => sandbox.load(path, code, log)), initTerm()]);
-            await runSandbox(sandbox.run(code, false, log, prog));
+            return await runSandbox(sandbox.run(code, false, log, prog));
         },
         async destroy() {
             await wait();

@@ -15,8 +15,8 @@
         }
         if (!('SharedArrayBuffer' in window)) location.reload();
         await terminal.clear();
-        await terminal.prepare(language, editor.getValue(), log, {set: console.log});
-        await terminal.run(language, editor.getValue(), log);
+        console.log(await terminal.prepare(language, editor.getValue(), log, {set: console.log}));
+        console.log(await terminal.run(language, editor.getValue(), log));
     }
 
     $: if (browser && editor && !init) {
