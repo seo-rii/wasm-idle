@@ -109,6 +109,7 @@
                 if (finish) return;
                 const ev = e.domEvent;
                 const printable = !ev.altKey && !ev.ctrlKey && !ev.metaKey;
+                dispatch('key', ev);
                 if (ev.key === 'Enter') {
                     term.write('\r\n');
                     sandbox.write(input + '\n');
