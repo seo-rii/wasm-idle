@@ -83,6 +83,11 @@
             term.dispose();
             if (sandbox) await sandbox.clear();
         },
+        async write(input: string) {
+            await wait();
+            term.write(input + '\r\n');
+            sandbox.write(input.replaceAll('\r', '\n') + '\n');
+        },
     }
 
     $: if (term) {
