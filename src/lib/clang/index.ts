@@ -118,7 +118,7 @@ export default class Clang {
         await this.ready;
         this.memfs.addFile(input, code);
         const clang = await this.getModule(clangUrl(this.path));
-        return await this.run(clang, this.log, 'clang', '-cc1', '-emit-obj',
+        return await this.run(clang, true, 'clang', '-cc1', '-emit-obj',
             ...clangCommonArgs, '-O' + opt, '-o', obj, '-std=c++17', '-x',
             'c++', input);
     }
