@@ -1,62 +1,72 @@
 {
   "name": "wasm-idle",
-  "version": "0.0.22",
+  "version": "0.1.0",
   "description": "A simple web app to run C++/Python code in the browser",
   "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vite dev",
-    "build": "vite build",
+    "build": "vite build && npm run package",
     "preview": "vite preview",
+    "package": "svelte-kit sync && svelte-package && publint",
+    "prepublishOnly": "npm run package",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-    "lint": "prettier --plugin-search-dir . --check . && eslint .",
-    "format": "prettier --plugin-search-dir . --write .",
-    "deploy": "svelte-package && npm publish",
-    "page": "pnpm run build && node ./gh-pages.js"
+    "lint": "prettier --check . && eslint .",
+    "format": "prettier --write ."
   },
   "devDependencies": {
-    "@sveltejs/adapter-auto": "^2.1.1",
-    "@sveltejs/adapter-static": "^2.0.3",
-    "@sveltejs/kit": "^1.27.3",
-    "@sveltejs/package": "^2.2.2",
-    "@typescript-eslint/eslint-plugin": "^6.9.1",
-    "@typescript-eslint/parser": "^6.9.1",
-    "eslint": "^8.53.0",
-    "eslint-config-prettier": "^9.0.0",
+    "@eslint/js": "^9.8.0",
+    "@sveltejs/adapter-auto": "^3.2.2",
+    "@sveltejs/adapter-static": "^3.0.2",
+    "@sveltejs/kit": "^2.5.20",
+    "@sveltejs/package": "^2.3.2",
+    "@sveltejs/vite-plugin-svelte": "^3.1.1",
+    "@typescript-eslint/eslint-plugin": "^8.0.1",
+    "@typescript-eslint/parser": "^8.0.1",
+    "eslint": "^9.8.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-svelte": "^2.43.0",
     "eslint-plugin-svelte3": "^4.0.0",
-    "gh-pages": "^6.0.0",
-    "monaco-editor": "^0.44.0",
-    "prettier": "^3.0.3",
-    "prettier-plugin-svelte": "^3.0.3",
-    "svelte": "^4.2.2",
-    "svelte-check": "^3.5.2",
-    "tslib": "^2.6.2",
-    "typescript": "^5.2.2",
-    "vite": "^4.5.0"
+    "gh-pages": "^6.1.1",
+    "globals": "^15.9.0",
+    "monaco-editor": "^0.50.0",
+    "prettier": "^3.3.3",
+    "prettier-plugin-svelte": "^3.2.6",
+    "svelte": "^4.2.18",
+    "svelte-check": "^3.8.5",
+    "tslib": "^2.6.3",
+    "typescript": "^5.5.4",
+    "typescript-eslint": "^8.0.1",
+    "vite": "^5.3.5"
   },
   "dependencies": {
-    "@zip.js/zip.js": "^2.7.30",
-    "pyodide": "0.23.1",
-    "xterm": "^5.3.0",
-    "xterm-addon-canvas": "^0.5.0",
-    "xterm-addon-fit": "^0.8.0",
-    "xterm-addon-ligatures": "^0.7.0",
-    "xterm-addon-search": "^0.13.0",
-    "xterm-addon-serialize": "^0.11.0",
-    "xterm-addon-unicode11": "^0.6.0",
-    "xterm-addon-web-links": "^0.9.0",
-    "xterm-addon-webgl": "^0.16.0"
+    "@xterm/addon-canvas": "^0.7.0",
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/addon-ligatures": "^0.9.0",
+    "@xterm/addon-search": "^0.15.0",
+    "@xterm/addon-serialize": "^0.13.0",
+    "@xterm/addon-unicode11": "^0.8.0",
+    "@xterm/addon-web-links": "^0.11.0",
+    "@xterm/addon-webgl": "^0.18.0",
+    "@xterm/xterm": "^5.5.0",
+    "@zip.js/zip.js": "^2.7.48",
+    "pyodide": "0.26.2"
   },
   "files": [
     "dist",
-    "static/image.jpeg"
+    "!dist/**/*.test.*",
+    "!dist/**/*.spec.*"
   ],
+  "peerDependencies": {
+    "svelte": "^4.2.18"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "svelte": "./dist/index.js"
     }
   },
-  "svelte": "./dist/index.js"
+  "svelte": "./dist/index.js",
+  "types": "./dist/index.d.ts"
 }

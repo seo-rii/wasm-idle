@@ -3,7 +3,7 @@
     import {Theme, registerAllPlugins} from '$lib/terminal';
     import load from '$lib/playground';
     import {onMount, createEventDispatcher} from 'svelte';
-    import 'xterm/css/xterm.css';
+    import '@xterm/xterm/css/xterm.css';
 
     const dispatch = createEventDispatcher();
     export let dark = false, path = '', font = "'D2 coding', monospace";
@@ -101,7 +101,7 @@
     }
 
     onMount(() => {
-        import('xterm').then(async ({Terminal}) => {
+        import('@xterm/xterm').then(async ({Terminal}) => {
             term = new Terminal({
                 theme: dark ? Theme.Tango_Dark : Theme.Tango_Light,
                 cursorBlink: false,
