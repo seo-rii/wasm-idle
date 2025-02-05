@@ -52,7 +52,7 @@
 		"@xterm/xterm": "^5.5.0",
 		"@zip.js/zip.js": "^2.7.57",
 		"publint": "^0.3.3",
-		"pyodide": "0.27.2"
+		"pyodide": "0.26.2"
 	},
 	"files": [
 		"dist",
