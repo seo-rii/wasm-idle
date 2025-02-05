@@ -1,5 +1,5 @@
-import MemFS from "./memFs";
-import Memory from "./memory";
-import untar from "./tar";
+import MemFS from './memFs';
+import Memory from './memory';
+import untar from './tar';
 
-export {MemFS, Memory, untar};
+export { MemFS, Memory, untar };

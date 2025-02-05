@@ -1,0 +1,24 @@
+{
+	"eslint.validate": ["json"],
+	"scss.validate": false,
+	"editor.quickSuggestions": {
+		"strings": true
+	},
+	"editor.autoClosingQuotes": "always",
+	"tailwindCSS.experimental.classRegex": [
+		"tw`([^`]*)", // tw`...`
+		"tw=\"([^\"]*)", // <div tw="..." />
+		"tw={\"([^\"}]*)", // <div tw={"..."} />
+		"tw\\.\\w+`([^`]*)", // tw.xxx`...`
+		"tw\\(.*?\\)`([^`]*)" // tw(Component)`...`
+	],
+	"tailwindCSS.includeLanguages": {
+		"typescript": "javascript",
+		"typescriptreact": "javascript"
+	},
+	"typescript.preferences.importModuleSpecifier": "relative",
+	"editor.defaultFormatter": "esbenp.prettier-vscode",
+	"editor.formatOnSave": true,
+	"editor.tabSize": 4,
+	"editor.foldingMaximumRegions": 10000
+}
