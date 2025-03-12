@@ -14,14 +14,14 @@ class Clang implements Sandbox {
 	log = true;
 	exit = true;
 
-	load(path: string, code = '', log = true) {
+	load(path: string, code = '', log = true, args = []) {
 		return new Promise<void>(async (resolve) => {
 			this.log = log;
 			this.internalBuffer = [];
 			if (!this.worker) {
 				this.worker = new (await import('$lib/playground/worker/clang?worker')).default();
 				this.worker.onmessage = () => resolve();
-				this.worker.postMessage({ load: true, path, log, code });
+				this.worker.postMessage({ load: true, path, log, code, args });
 			} else {
 				this.worker.postMessage({ log });
 				resolve();
@@ -46,7 +46,7 @@ class Clang implements Sandbox {
 
 	eof() {}
 
-	run(code: string, prepare: boolean, log = this.log, prog?: Writable<number>) {
+	run(code: string, prepare: boolean, log = this.log, prog?: Writable<number>, args = []) {
 		this.exit = false;
 		return new Promise<string>(async (resolve, reject) => {
 			if (!this.worker) return reject('Worker not loaded');
@@ -80,7 +80,8 @@ class Clang implements Sandbox {
 				buffer: this.buffer,
 				interrupt: this.interruptBuffer,
 				context: {},
-				log
+				log,
+				args
 			});
 		});
 	}

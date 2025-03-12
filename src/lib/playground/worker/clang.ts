@@ -38,7 +38,7 @@ async function loadClang(path: string, log: boolean) {
 }
 
 self.onmessage = async (event: { data: any }) => {
-	const { code, buffer, load, interrupt, log, path, prepare } = event.data;
+	const { code, buffer, load, interrupt, log, path, prepare, args } = event.data;
 	if (load) {
 		await loadClang(path, log);
 		postMessage({ load: true });
@@ -47,7 +47,7 @@ self.onmessage = async (event: { data: any }) => {
 		interruptBufferClang = new Uint8Array(interrupt);
 
 		try {
-			await clang.compileLink(code);
+			await clang.compileLink(code, { args });
 			self.postMessage({ results: true });
 		} catch (error: any) {
 			self.postMessage({ error: error.message });
@@ -58,7 +58,7 @@ self.onmessage = async (event: { data: any }) => {
 		interruptBufferClang = new Uint8Array(interrupt);
 
 		try {
-			await clang.compileLinkRun(code);
+			await clang.compileLinkRun(code, { args });
 			self.postMessage({ results: true });
 		} catch (error: any) {
 			self.postMessage({ error: error.message });

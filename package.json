@@ -1,6 +1,6 @@
 {
 	"name": "wasm-idle",
-	"version": "0.2.1",
+	"version": "0.2.2",
 	"description": "A simple web app to run C++/Python code in the browser",
 	"license": "MIT",
 	"type": "module",
@@ -69,5 +69,10 @@
 		}
 	},
 	"svelte": "./dist/index.js",
-	"types": "./dist/index.d.ts"
+	"types": "./dist/index.d.ts",
+	"pnpm": {
+		"onlyBuiltDependencies": [
+			"esbuild"
+		]
+	}
 }

@@ -147,7 +147,8 @@ export default class Clang {
 			'-std=c++17',
 			'-x',
 			'c++',
-			input
+			input,
+			...(options.args || [])
 		);
 	}
 
@@ -193,12 +194,12 @@ export default class Clang {
 		return stillRunning ? app : null;
 	}
 
-	async compileLink(code: string) {
+	async compileLink(code: string, { args = [] } = {}) {
 		const input = `test.cc`,
 			obj = `test.o`,
 			wasm = `test.wasm`;
 		if (this.lastCode === code) return this.wasm;
-		await this.compile({ input, code, obj });
+		await this.compile({ input, code, obj, args });
 		await this.link(obj, wasm);
 
 		this.lastCode = code;
@@ -208,7 +209,7 @@ export default class Clang {
 		));
 	}
 
-	async compileLinkRun(code: string) {
-		return await this.run(await this.compileLink(code), true, `test.wasm`);
+	async compileLinkRun(code: string, { args = [] } = {}) {
+		return await this.run(await this.compileLink(code, { args }), true, `test.wasm`);
 	}
 }
