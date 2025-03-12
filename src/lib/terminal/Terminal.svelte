@@ -4,7 +4,7 @@
 	import load from '$lib/playground';
 	import { onMount } from 'svelte';
 	import '@xterm/xterm/css/xterm.css';
-	import type { Terminal } from '@xterm/xterm';
+	import type { Terminal as TerminalType } from '@xterm/xterm';
 
 	type TerminalControl = typeof terminalControl;
 	interface Props {
@@ -31,7 +31,7 @@
 	let ref = $state<HTMLElement>(),
 		clientWidth = $state(0),
 		clientHeight = $state(0),
-		term = $state<Terminal>(),
+		term = $state<TerminalType>(),
 		finish = true,
 		input = '',
 		sandbox: Sandbox,
