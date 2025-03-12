@@ -103,19 +103,19 @@
 			first = true;
 			await new Promise((r) => setTimeout(r, 100));
 		},
-		async prepare(language: string, code: string, log = true, prog) {
+		async prepare(language: string, code: string, log = true, prog, args) {
 			await Promise.all([
 				initSandbox(language).then(() => sandbox.load(path, code, log)),
 				initTerm(false)
 			]);
-			return await runSandbox(sandbox.run(code, true, log, prog));
+			return await runSandbox(sandbox.run(code, true, log, prog, args));
 		},
-		async run(language: string, code: string, log = true, prog) {
+		async run(language: string, code: string, log = true, prog, args) {
 			await Promise.all([
 				initSandbox(language).then(() => sandbox.load(path, code, log)),
 				initTerm()
 			]);
-			return await runSandbox(sandbox.run(code, false, log, prog));
+			return await runSandbox(sandbox.run(code, false, log, prog, args));
 		},
 		async destroy() {
 			await wait();
