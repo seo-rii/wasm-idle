@@ -1,8 +1,10 @@
 import type { Sandbox } from '$lib/playground/sandbox';
+import type { SandboxExecutionOptions } from '$lib/playground/options';
 
 class Python implements Sandbox {
 	ts = Date.now();
 	output: any = null;
+	image?: (data: { mime: string; b64: string; ts?: number }) => void;
 	worker: Worker = <any>null;
 	buffer = new SharedArrayBuffer(1024);
 	interruptBuffer = new SharedArrayBuffer(1);
@@ -11,7 +13,13 @@ class Python implements Sandbox {
 	elapse = 0;
 	uid = 0;
 
-	load(path: string, code = '', log = true) {
+	load(
+		path: string,
+		code = '',
+		log = true,
+		_args: string[] = [],
+		_options: SandboxExecutionOptions = {}
+	) {
 		return new Promise<void>(async (resolve) => {
 			this.internalBuffer = [];
 			if (!this.worker) {
@@ -42,15 +50,23 @@ class Python implements Sandbox {
 
 	eof() {}
 
-	run(code: string, prepare: boolean) {
-		return new Promise<string>(async (resolve, reject) => {
+	run(
+		code: string,
+		prepare: boolean,
+		_log = true,
+		_prog?: { set?: (value: number) => void } | import('svelte/store').Writable<number>,
+		_args: string[] = [],
+		_options: SandboxExecutionOptions = {}
+	): Promise<boolean | string> {
+		return new Promise<boolean | string>(async (resolve, reject) => {
 			const interrupt = new Uint8Array(this.interruptBuffer),
 				_uid = ++this.uid;
 			const handler = (event: Event & { data: any }) => {
 				if (_uid !== this.uid) return (this.worker.onmessage = null);
-				const { id, output, results, log, error, buffer } = event.data;
+				const { id, output, results, log, error, buffer, type, data: payload } = event.data;
 				if (buffer && this.internalBuffer.length)
 					this._write(this.internalBuffer.splice(0, 1)[0]);
+				if (type === 'img' && payload) this.image?.(payload);
 				if (output) this.output(output);
 				if (results) {
 					this.elapse = Date.now() - this.begin;
