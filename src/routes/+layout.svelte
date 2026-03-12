@@ -1,16 +1,14 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
+	import { base } from '$app/paths';
 	import { onMount } from 'svelte';
-	import { page } from '$app/state';
 
 	if (browser)
 		onMount(async () => {
 			if ('serviceWorker' in navigator) {
-				let path: string = page.url.pathname;
-				if (path.endsWith('/')) path = path.slice(0, -1);
-				const workerPath = path ? `${path}/worker.js` : '/worker.js';
+				const workerPath = `${base}/worker.js`;
 				navigator.serviceWorker
-					.register(workerPath)
+					.register(workerPath, { scope: base ? `${base}/` : '/' })
 					.then(
 						function (registration) {
 							console.log('COOP/COEP Service Worker registered', registration.scope);

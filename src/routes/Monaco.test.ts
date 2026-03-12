@@ -10,6 +10,7 @@ describe('Monaco route debug sync', () => {
 				generate: 'client'
 			})
 		).not.toThrow();
+		expect(source).not.toMatch(/clangdBaseUrl\s*=\s*DEFAULT_CLANGD_BASE_URL/);
 		expect(source).toMatch(/let debugView = \$state<MonacoDebugView \| null>\(null\);/);
 		expect(source).toMatch(
 			/debugView = new MonacoDebugView\(Monaco, editor, onBreakpointsChange\);\s+debugView\.setBreakpoints\(breakpoints\);\s+debugView\.setPauseState\(pausedLine, debugLocals, debugLanguage\);/s

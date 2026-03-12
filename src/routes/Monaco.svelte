@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { MonacoDebugView } from '$lib';
 	import type { ClangdSession as ClangdSessionType } from '$lib/clangd/session';
-	import { DEFAULT_CLANGD_BASE_URL, type ClangdStatus } from '$lib/clangd/config';
+	import type { ClangdStatus } from '$lib/clangd/config';
 	import type { DebugLanguageAdapter } from '$lib/debug/language';
 	import type { DebugVariable } from '$lib/playground/options';
 	import type monaco from 'monaco-editor';
@@ -44,7 +44,7 @@ print(f"sum={sum(values)}")`
 	let {
 		editor = $bindable(),
 		language,
-		clangdBaseUrl = DEFAULT_CLANGD_BASE_URL,
+		clangdBaseUrl,
 		breakpoints = [],
 		debugLocals = [],
 		debugLanguage = null,
@@ -94,12 +94,16 @@ print(f"sum={sum(values)}")`
 				debugView = new MonacoDebugView(Monaco, editor, onBreakpointsChange);
 				debugView.setBreakpoints(breakpoints);
 				debugView.setPauseState(pausedLine, debugLocals, debugLanguage);
+				if (!clangdBaseUrl) {
+					clangdStatus = { state: 'disabled' };
+					return;
+				}
 				session = new ClangdSession(
 					Monaco,
+					clangdBaseUrl,
 					(status) => {
 						if (!disposed) clangdStatus = status;
-					},
-					clangdBaseUrl
+					}
 				);
 				model = session.createModel(defaultValue);
 				editor.setModel(model);
