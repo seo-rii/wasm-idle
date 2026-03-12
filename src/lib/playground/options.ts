@@ -6,7 +6,7 @@ export interface DebugVariable {
 	value: string;
 }
 
-export type DebugVariableKind = 'number' | 'bool' | 'array';
+export type DebugVariableKind = 'number' | 'bool' | 'array' | 'text';
 export type DebugArrayElementKind = 'int' | 'float' | 'double' | 'bool' | 'char';
 
 export interface DebugVariableMetadata {
@@ -17,6 +17,7 @@ export interface DebugVariableMetadata {
 	toLine: number;
 	elementKind?: DebugArrayElementKind;
 	length?: number;
+	dimensions?: number[];
 }
 
 export interface DebugFrame {

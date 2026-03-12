@@ -187,6 +187,10 @@ export default class Clang {
 				string,
 				{ slot: number; kind: 'number' | 'bool'; fromLine: number; toLine: number }
 			>();
+			let currentFunctionContainers = new Map<
+				string,
+				{ slot: number; container: 'vector' | 'set' | 'map'; fromLine: number; toLine: number }
+			>();
 			let inBlockComment = false;
 			let pendingFunctionHeader:
 				| {
@@ -197,11 +201,66 @@ export default class Clang {
 			this.debugVariableMetadata = {};
 			this.debugFunctionMetadata = {};
 			const instrumented = [
+				'#include <map>',
+				'#include <set>',
+				'#include <string>',
+				'#include <type_traits>',
+				'#include <vector>',
 				'extern "C" __attribute__((import_module("env"), import_name("__wasm_idle_debug_enter"))) void __wasm_idle_debug_enter(int functionId);',
 				'extern "C" __attribute__((import_module("env"), import_name("__wasm_idle_debug_leave"))) void __wasm_idle_debug_leave(int functionId);',
 				'extern "C" __attribute__((import_module("env"), import_name("__wasm_idle_debug_value_num"))) void __wasm_idle_debug_value_num(int functionId, int slot, double value);',
 				'extern "C" __attribute__((import_module("env"), import_name("__wasm_idle_debug_value_bool"))) void __wasm_idle_debug_value_bool(int functionId, int slot, int value);',
 				'extern "C" __attribute__((import_module("env"), import_name("__wasm_idle_debug_value_addr"))) void __wasm_idle_debug_value_addr(int functionId, int slot, int value);',
+				'extern "C" __attribute__((import_module("env"), import_name("__wasm_idle_debug_value_text"))) void __wasm_idle_debug_value_text(int functionId, int slot, const char* ptr, int len);',
+				'template <typename T>',
+				'static inline std::string __wasm_idle_debug_format_value(const T& value) {',
+				'    if constexpr (std::is_same_v<T, bool>) return value ? "true" : "false";',
+				`    else if constexpr (std::is_same_v<T, char>) return std::string("'") + value + "'";`,
+				'    else if constexpr (std::is_same_v<T, signed char> || std::is_same_v<T, unsigned char>) return std::to_string((int)value);',
+				'    else if constexpr (std::is_integral_v<T> || std::is_floating_point_v<T>) return std::to_string(value);',
+				'    else return "?";',
+				'}',
+				'template <typename T>',
+				'static inline void __wasm_idle_debug_emit_vector(int functionId, int slot, const std::vector<T>& values) {',
+				'    std::string text = "[";',
+				'    int count = 0;',
+				'    for (const auto& value : values) {',
+				'        if (count > 0) text += ", ";',
+				'        if (count >= 8) { text += "..."; break; }',
+				'        text += __wasm_idle_debug_format_value(value);',
+				'        count += 1;',
+				'    }',
+				'    text += "]";',
+				'    __wasm_idle_debug_value_text(functionId, slot, text.c_str(), (int)text.size());',
+				'}',
+				'template <typename T>',
+				'static inline void __wasm_idle_debug_emit_set(int functionId, int slot, const std::set<T>& values) {',
+				'    std::string text = "{";',
+				'    int count = 0;',
+				'    for (const auto& value : values) {',
+				'        if (count > 0) text += ", ";',
+				'        if (count >= 8) { text += "..."; break; }',
+				'        text += __wasm_idle_debug_format_value(value);',
+				'        count += 1;',
+				'    }',
+				'    text += "}";',
+				'    __wasm_idle_debug_value_text(functionId, slot, text.c_str(), (int)text.size());',
+				'}',
+				'template <typename K, typename V>',
+				'static inline void __wasm_idle_debug_emit_map(int functionId, int slot, const std::map<K, V>& values) {',
+				'    std::string text = "{";',
+				'    int count = 0;',
+				'    for (const auto& entry : values) {',
+				'        if (count > 0) text += ", ";',
+				'        if (count >= 8) { text += "..."; break; }',
+				'        text += __wasm_idle_debug_format_value(entry.first);',
+				'        text += ": ";',
+				'        text += __wasm_idle_debug_format_value(entry.second);',
+				'        count += 1;',
+				'    }',
+				'    text += "}";',
+				'    __wasm_idle_debug_value_text(functionId, slot, text.c_str(), (int)text.size());',
+				'}',
 				'extern "C" __attribute__((import_module("env"), import_name("__wasm_idle_debug_line"))) void __wasm_idle_debug_line(int functionId, int line);'
 			];
 			for (let index = 0; index < lines.length; index += 1) {
@@ -237,6 +296,7 @@ export default class Clang {
 					/^(while|if|for)\s*\(/.test(normalized) && !normalized.includes('{');
 				const leadingInstrumentation: string[] = [];
 				const trailingInstrumentation: string[] = [];
+				const declaredContainerNames = new Set<string>();
 				if (
 					inFunctionBody &&
 					normalized &&
@@ -255,10 +315,38 @@ export default class Clang {
 					leadingInstrumentation.push(
 						`${indent}__wasm_idle_debug_line(${currentFunctionId}, ${index + 1});`
 					);
-					const declarationMatch = normalized.match(
-						/^(?:const\s+)?(?:(?:unsigned|signed)\s+)?(?:(?:short|long long|long)\s+)?(int|float|double|bool|char)\s+(.+);$/
-					);
-					if (declarationMatch && currentFunctionId) {
+						const declarationMatch = normalized.match(
+							/^(?:const\s+)?(?:(?:unsigned|signed)\s+)?(?:(?:short|long long|long)\s+)?(int|float|double|bool|char)\s+(.+);$/
+						);
+						const containerDeclarationMatch = normalized.match(
+							/^(?:const\s+)?(?:(?:std::)?(vector|set|map))\s*<(.+)>\s+([A-Za-z_]\w*)\s*(?:=.*)?;$/
+						);
+						if (containerDeclarationMatch && currentFunctionId) {
+							const slot = nextVariableSlot++;
+							const container = containerDeclarationMatch[1] as 'vector' | 'set' | 'map';
+							const name = containerDeclarationMatch[3];
+							declaredContainerNames.add(name);
+							currentFunctionContainers.set(name, {
+								slot,
+								container,
+								fromLine: index + 1,
+								toLine: Number.MAX_SAFE_INTEGER
+							});
+							this.debugVariableMetadata[currentFunctionId] = [
+								...(this.debugVariableMetadata[currentFunctionId] || []),
+								{
+									slot,
+									name,
+									kind: 'text',
+									fromLine: index + 1,
+									toLine: Number.MAX_SAFE_INTEGER
+								}
+							];
+							trailingInstrumentation.push(
+								`${indent}__wasm_idle_debug_emit_${container}(${currentFunctionId}, ${slot}, ${name});`
+							);
+						}
+						if (declarationMatch && currentFunctionId) {
 						const kind = declarationMatch[1] === 'bool' ? 'bool' : 'number';
 						const declarations: string[] = [];
 						let declarationBuffer = '';
@@ -277,29 +365,34 @@ export default class Clang {
 							declarationBuffer += character;
 						}
 						if (declarationBuffer.trim()) declarations.push(declarationBuffer.trim());
-						for (const declaration of declarations) {
-							const [left] = declaration.split('=');
-							const declarator = left?.trim() || '';
-							const arrayMatch = declarator.match(/([A-Za-z_]\w*)\s*\[(\d+)\]\s*$/);
-							if (arrayMatch) {
-								const slot = nextVariableSlot++;
-								this.debugVariableMetadata[currentFunctionId] = [
-									...(this.debugVariableMetadata[currentFunctionId] || []),
-									{
-										slot,
-										name: arrayMatch[1],
-										kind: 'array',
-										elementKind: declarationMatch[1] as DebugArrayElementKind,
-										length: Number(arrayMatch[2]),
-										fromLine: index + 1,
-										toLine: Number.MAX_SAFE_INTEGER
-									}
-								];
-								trailingInstrumentation.push(
-									`${indent}__wasm_idle_debug_value_addr(${currentFunctionId}, ${slot}, (int)((unsigned long long)(${arrayMatch[1]})));`
-								);
-								continue;
-							}
+							for (const declaration of declarations) {
+								const [left] = declaration.split('=');
+								const declarator = left?.trim() || '';
+								const arrayDimensions: number[] = [];
+								for (const match of declarator.matchAll(/\[(\d+)\]/g)) {
+									arrayDimensions.push(Number(match[1]));
+								}
+								const arrayName = declarator.match(/([A-Za-z_]\w*)\s*(?=\[\d+\])/);
+								if (arrayDimensions.length && arrayName) {
+									const slot = nextVariableSlot++;
+									this.debugVariableMetadata[currentFunctionId] = [
+										...(this.debugVariableMetadata[currentFunctionId] || []),
+										{
+											slot,
+											name: arrayName[1],
+											kind: 'array',
+											elementKind: declarationMatch[1] as DebugArrayElementKind,
+											length: arrayDimensions[0],
+											dimensions: arrayDimensions,
+											fromLine: index + 1,
+											toLine: Number.MAX_SAFE_INTEGER
+										}
+									];
+									trailingInstrumentation.push(
+										`${indent}__wasm_idle_debug_value_addr(${currentFunctionId}, ${slot}, (int)((unsigned long long)(${arrayName[1]})));`
+									);
+									continue;
+								}
 							if (/[*&]/.test(declarator)) continue;
 							const name = declarator.match(/([A-Za-z_]\w*)\s*(?:\[[^\]]*\])?$/)?.[1];
 							if (!name) continue;
@@ -358,9 +451,17 @@ export default class Clang {
 							];
 						}
 					}
-					if (!controlHeaderWithoutInlineBlock) {
-						for (const [name, variable] of currentFunctionVariables) {
-							const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+						if (!controlHeaderWithoutInlineBlock) {
+							for (const [name, container] of currentFunctionContainers) {
+								if (declaredContainerNames.has(name)) continue;
+								const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+								if (!new RegExp(`\\b${escapedName}\\b`).test(normalized)) continue;
+								trailingInstrumentation.push(
+									`${indent}__wasm_idle_debug_emit_${container.container}(${currentFunctionId}, ${container.slot}, ${name});`
+								);
+							}
+							for (const [name, variable] of currentFunctionVariables) {
+								const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 							if (normalized.startsWith('for') && variable.toLine === index + 1) continue;
 							if (
 								new RegExp(`(?:^|[^\\w])(?:\\+\\+|--)\\s*${escapedName}\\b`).test(normalized) ||
@@ -493,6 +594,7 @@ export default class Clang {
 					this.debugFunctionMetadata[currentFunctionId] = functionName;
 					nextVariableSlot = 1;
 					currentFunctionVariables = new Map();
+					currentFunctionContainers = new Map();
 					instrumented.push(`${indent}    __wasm_idle_debug_enter(${currentFunctionId});`);
 					const parameterSource = startsInlineFunctionBody
 						? normalized.slice(normalized.indexOf('(') + 1, normalized.lastIndexOf(')'))
@@ -502,23 +604,60 @@ export default class Clang {
 						.map((value: string) => value.trim())
 						.filter(Boolean)) {
 						const cleaned = parameter.split('=')[0]?.trim() || '';
-						const parameterArrayMatch = cleaned.match(/([A-Za-z_]\w*)\s*\[(\d+)\]\s*$/);
-						if (parameterArrayMatch && /\b(int|float|double|bool|char)\b/.test(cleaned)) {
+						const containerParameterMatch = cleaned.match(
+							/^(?:const\s+)?(?:(?:std::)?(vector|set|map)\s*<.+>)\s*&?\s*([A-Za-z_]\w*)\s*$/
+						);
+						if (containerParameterMatch) {
 							const slot = nextVariableSlot++;
+							const container = containerParameterMatch[1] as 'vector' | 'set' | 'map';
+							const name = containerParameterMatch[2];
+							currentFunctionContainers.set(name, {
+								slot,
+								container,
+								fromLine: index + 1,
+								toLine: Number.MAX_SAFE_INTEGER
+							});
 							this.debugVariableMetadata[currentFunctionId] = [
 								...(this.debugVariableMetadata[currentFunctionId] || []),
 								{
 									slot,
-									name: parameterArrayMatch[1],
-									kind: 'array',
-									elementKind: (cleaned.match(/\b(int|float|double|bool|char)\b/)?.[1] || 'int') as DebugArrayElementKind,
-									length: Number(parameterArrayMatch[2]),
+									name,
+									kind: 'text',
 									fromLine: index + 1,
 									toLine: Number.MAX_SAFE_INTEGER
 								}
 							];
 							instrumented.push(
-								`${indent}    __wasm_idle_debug_value_addr(${currentFunctionId}, ${slot}, (int)((unsigned long long)(${parameterArrayMatch[1]})));`
+								`${indent}    __wasm_idle_debug_emit_${container}(${currentFunctionId}, ${slot}, ${name});`
+							);
+							continue;
+						}
+						const parameterArrayDimensions: number[] = [];
+						for (const match of cleaned.matchAll(/\[(\d+)\]/g)) {
+							parameterArrayDimensions.push(Number(match[1]));
+						}
+						const parameterArrayName = cleaned.match(/([A-Za-z_]\w*)\s*(?=\[\d+\])/);
+						if (
+							parameterArrayDimensions.length &&
+							parameterArrayName &&
+							/\b(int|float|double|bool|char)\b/.test(cleaned)
+						) {
+							const slot = nextVariableSlot++;
+							this.debugVariableMetadata[currentFunctionId] = [
+								...(this.debugVariableMetadata[currentFunctionId] || []),
+								{
+									slot,
+									name: parameterArrayName[1],
+									kind: 'array',
+									elementKind: (cleaned.match(/\b(int|float|double|bool|char)\b/)?.[1] || 'int') as DebugArrayElementKind,
+									length: parameterArrayDimensions[0],
+									dimensions: parameterArrayDimensions,
+									fromLine: index + 1,
+									toLine: Number.MAX_SAFE_INTEGER
+								}
+							];
+							instrumented.push(
+								`${indent}    __wasm_idle_debug_value_addr(${currentFunctionId}, ${slot}, (int)((unsigned long long)(${parameterArrayName[1]})));`
 							);
 							continue;
 						}
@@ -572,10 +711,11 @@ export default class Clang {
 				}
 				if (functionDepth > 0 && braceDepth < functionDepth) {
 					functionDepth = 0;
-					currentFunctionId = 0;
-					currentFunctionVariables = new Map();
+						currentFunctionId = 0;
+						currentFunctionVariables = new Map();
+						currentFunctionContainers = new Map();
+					}
 				}
-			}
 			source = instrumented.join('\n');
 		} else {
 			this.debugVariableMetadata = {};

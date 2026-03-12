@@ -5,7 +5,8 @@ type Token =
 	| { type: 'boolean'; value: boolean }
 	| { type: 'identifier'; value: string }
 	| { type: 'operator'; value: string }
-	| { type: 'paren'; value: '(' | ')' };
+	| { type: 'paren'; value: '(' | ')' }
+	| { type: 'bracket'; value: '[' | ']' };
 
 const operators = ['&&', '||', '==', '!=', '<=', '>=', '+', '-', '*', '/', '%', '<', '>', '!'];
 
@@ -14,6 +15,8 @@ export function evaluateDebugExpression(expression: string, variables: DebugVari
 	if (!source) throw new Error('empty expression');
 	const values = new Map<string, string>();
 	for (const variable of variables) values.set(variable.name, variable.value);
+	type ResolvedValue = number | boolean | string | ResolvedValue[];
+	const parsedValues = new Map<string, ResolvedValue>();
 	const tokens: Token[] = [];
 	for (let index = 0; index < source.length; ) {
 		const character = source[index];
@@ -24,6 +27,11 @@ export function evaluateDebugExpression(expression: string, variables: DebugVari
 		}
 		if (character === '(' || character === ')') {
 			tokens.push({ type: 'paren', value: character });
+			index += 1;
+			continue;
+		}
+		if (character === '[' || character === ']') {
+			tokens.push({ type: 'bracket', value: character });
 			index += 1;
 			continue;
 		}
@@ -52,7 +60,65 @@ export function evaluateDebugExpression(expression: string, variables: DebugVari
 		throw new Error(`unsupported token near "${source.slice(index)}"`);
 	}
 	let cursor = 0;
-	const parsePrimary = (): number | boolean => {
+	const parsePreviewValue = (
+		text: string,
+		start = 0
+	): { value: ResolvedValue; next: number } => {
+		let index = start;
+		while (/\s/.test(text[index] || '')) index += 1;
+		const character = text[index];
+		if (character === '[') {
+			index += 1;
+			const items: ResolvedValue[] = [];
+			while (true) {
+				while (/\s/.test(text[index] || '')) index += 1;
+				if (text[index] === ']') return { value: items, next: index + 1 };
+				if (text.startsWith('...', index)) throw new Error('unavailable');
+				const item = parsePreviewValue(text, index);
+				items.push(item.value);
+				index = item.next;
+				while (/\s/.test(text[index] || '')) index += 1;
+				if (text[index] === ',') {
+					index += 1;
+					continue;
+				}
+				if (text[index] === ']') return { value: items, next: index + 1 };
+				throw new Error('unsupported array preview');
+			}
+		}
+		if (character === "'") {
+			const end = text.indexOf("'", index + 1);
+			if (end === -1) throw new Error('unsupported char preview');
+			return { value: text.slice(index + 1, end), next: end + 1 };
+		}
+		if (text.startsWith('true', index)) return { value: true, next: index + 4 };
+		if (text.startsWith('false', index)) return { value: false, next: index + 5 };
+		const number = text.slice(index).match(/^-?\d+(?:\.\d+)?/);
+		if (number?.[0]) return { value: Number(number[0]), next: index + number[0].length };
+		throw new Error('unsupported preview');
+	};
+	const resolveIdentifierValue = (name: string): ResolvedValue => {
+		if (parsedValues.has(name)) return parsedValues.get(name)!;
+		const value = values.get(name);
+		if (value == null || value === '?') throw new Error('unavailable');
+		if (value === 'true' || value === 'false') {
+			const parsed = value === 'true';
+			parsedValues.set(name, parsed);
+			return parsed;
+		}
+		const numeric = Number(value);
+		if (!Number.isNaN(numeric)) {
+			parsedValues.set(name, numeric);
+			return numeric;
+		}
+		if (value.startsWith('[')) {
+			const parsed = parsePreviewValue(value).value;
+			parsedValues.set(name, parsed);
+			return parsed;
+		}
+		throw new Error(`unsupported value for ${name}`);
+	};
+	const parsePrimary = (): ResolvedValue => {
 		const token = tokens[cursor];
 		if (!token) throw new Error('unexpected end of expression');
 		if (token.type === 'number') {
@@ -65,12 +131,20 @@ export function evaluateDebugExpression(expression: string, variables: DebugVari
 		}
 		if (token.type === 'identifier') {
 			cursor += 1;
-			const value = values.get(token.value);
-			if (value == null || value === '?') throw new Error('unavailable');
-			if (value === 'true' || value === 'false') return value === 'true';
-			const parsed = Number(value);
-			if (!Number.isNaN(parsed)) return parsed;
-			throw new Error(`unsupported value for ${token.value}`);
+			let resolved = resolveIdentifierValue(token.value);
+			while (tokens[cursor]?.type === 'bracket' && tokens[cursor]?.value === '[') {
+				cursor += 1;
+				const index = Number(parseOr());
+				const closing = tokens[cursor];
+				if (!closing || closing.type !== 'bracket' || closing.value !== ']')
+					throw new Error('missing closing bracket');
+				cursor += 1;
+				if (!Array.isArray(resolved) || !Number.isInteger(index)) throw new Error('unsupported index access');
+				const next = resolved[index];
+				if (next == null) throw new Error('unavailable');
+				resolved = next;
+			}
+			return resolved;
 		}
 		if (token.type === 'paren' && token.value === '(') {
 			cursor += 1;
@@ -83,7 +157,7 @@ export function evaluateDebugExpression(expression: string, variables: DebugVari
 		}
 		throw new Error('expected value');
 	};
-	const parseUnary = (): number | boolean => {
+	const parseUnary = (): ResolvedValue => {
 		const token = tokens[cursor];
 		if (token?.type === 'operator' && token.value === '!') {
 			cursor += 1;
@@ -99,7 +173,7 @@ export function evaluateDebugExpression(expression: string, variables: DebugVari
 		}
 		return parsePrimary();
 	};
-	const parseMul = (): number | boolean => {
+	const parseMul = (): ResolvedValue => {
 		let left = parseUnary();
 		while (true) {
 			const operator = tokens[cursor];
@@ -111,7 +185,7 @@ export function evaluateDebugExpression(expression: string, variables: DebugVari
 			if (operator.value === '%') left = Number(left) % Number(right);
 		}
 	};
-	const parseAdd = (): number | boolean => {
+	const parseAdd = (): ResolvedValue => {
 		let left = parseMul();
 		while (true) {
 			const operator = tokens[cursor];
@@ -122,7 +196,7 @@ export function evaluateDebugExpression(expression: string, variables: DebugVari
 			if (operator.value === '-') left = Number(left) - Number(right);
 		}
 	};
-	const parseCompare = (): number | boolean => {
+	const parseCompare = (): ResolvedValue => {
 		let left = parseAdd();
 		while (true) {
 			const operator = tokens[cursor];
@@ -136,7 +210,7 @@ export function evaluateDebugExpression(expression: string, variables: DebugVari
 			if (operator.value === '>=') left = Number(left) >= Number(right);
 		}
 	};
-	const parseEquality = (): number | boolean => {
+	const parseEquality = (): ResolvedValue => {
 		let left = parseCompare();
 		while (true) {
 			const operator = tokens[cursor];
@@ -147,7 +221,7 @@ export function evaluateDebugExpression(expression: string, variables: DebugVari
 			if (operator.value === '!=') left = left !== right;
 		}
 	};
-	const parseAnd = (): number | boolean => {
+	const parseAnd = (): ResolvedValue => {
 		let left = parseEquality();
 		while (tokens[cursor]?.type === 'operator' && tokens[cursor]?.value === '&&') {
 			cursor += 1;
@@ -155,7 +229,7 @@ export function evaluateDebugExpression(expression: string, variables: DebugVari
 		}
 		return left;
 	};
-	const parseOr = (): number | boolean => {
+	const parseOr = (): ResolvedValue => {
 		let left = parseAnd();
 		while (tokens[cursor]?.type === 'operator' && tokens[cursor]?.value === '||') {
 			cursor += 1;

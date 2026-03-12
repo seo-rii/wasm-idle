@@ -208,6 +208,66 @@ int main() {
 		expect(instrumentedSource).not.toContain('__wasm_idle_debug_value_num(1, 1, values);');
 	});
 
+	it('captures fixed-size two-dimensional array locals with address hooks', async () => {
+		const { clang } = createClangHarness();
+		const code = `#include <stdio.h>
+
+int main() {
+    int grid[2][3] = {{1, 2, 3}, {4, 5, 6}};
+    printf("%d\\n", grid[1][2]);
+}`;
+
+		await clang.compile({
+			input: 'main.cc',
+			code,
+			obj: 'main.o',
+			debug: true
+		});
+
+		const instrumentedSource = String(vi.mocked(clang.memfs.addFile).mock.calls[0]?.[1] || '');
+		expect(instrumentedSource).toContain(
+			'__wasm_idle_debug_value_addr(1, 1, (int)((unsigned long long)(grid)));'
+		);
+		expect(instrumentedSource).not.toContain('__wasm_idle_debug_value_num(1, 1, grid);');
+	});
+
+	it('captures vector, set, and map locals with text preview hooks', async () => {
+		const { clang } = createClangHarness();
+		const code = `#include <map>
+#include <set>
+#include <vector>
+
+int main() {
+    std::vector<int> values = {1, 2};
+    std::set<int> seen;
+    std::map<int, int> counts;
+    values.push_back(3);
+    seen.insert(2);
+    counts[1] = 4;
+}`;
+
+		await clang.compile({
+			input: 'main.cc',
+			code,
+			obj: 'main.o',
+			debug: true
+		});
+
+		const instrumentedSource = String(vi.mocked(clang.memfs.addFile).mock.calls[0]?.[1] || '');
+		expect(instrumentedSource).toContain(
+			'extern "C" __attribute__((import_module("env"), import_name("__wasm_idle_debug_value_text"))) void __wasm_idle_debug_value_text(int functionId, int slot, const char* ptr, int len);'
+		);
+		expect(instrumentedSource).toContain(
+			'__wasm_idle_debug_emit_vector(1, 1, values);'
+		);
+		expect(instrumentedSource).toContain(
+			'__wasm_idle_debug_emit_set(1, 2, seen);'
+		);
+		expect(instrumentedSource).toContain(
+			'__wasm_idle_debug_emit_map(1, 3, counts);'
+		);
+	});
+
 	it('skips pointer locals and parameters in the provided recursive sequence sample', async () => {
 		const { clang } = createClangHarness();
 		const code = `#include <stdio.h>

@@ -63,7 +63,8 @@ export default class App {
 			'__wasm_idle_debug_line',
 			'__wasm_idle_debug_value_num',
 			'__wasm_idle_debug_value_bool',
-			'__wasm_idle_debug_value_addr'
+			'__wasm_idle_debug_value_addr',
+			'__wasm_idle_debug_value_text'
 		);
 
 		const wasi_unstable = {
@@ -195,6 +196,20 @@ export default class App {
 		return ESUCCESS;
 	}
 
+	__wasm_idle_debug_value_text(functionId: number, slot: number, ptr: number, len: number) {
+		const session = this.debugSession;
+		if (!session?.buffer) return ESUCCESS;
+		this.mem?.check?.();
+		const text = this.mem?.readStr ? this.mem.readStr(ptr, len) : '?';
+		for (let index = session.frames.length - 1; index >= 0; index -= 1) {
+			const frame = session.frames[index];
+			if (frame?.functionId !== functionId) continue;
+			frame.values.set(slot, text);
+			break;
+		}
+		return ESUCCESS;
+	}
+
 	__wasm_idle_debug_line(functionId: number, line: number) {
 		const session = this.debugSession;
 		if (!session?.buffer) return ESUCCESS;
@@ -235,19 +250,65 @@ export default class App {
 				if (variable.kind === 'array') {
 					this.mem?.check?.();
 					const address = Number(frame?.values.get(variable.slot) ?? Number.NaN);
-					if (!Number.isFinite(address) || address <= 0 || !variable.length || !variable.elementKind) {
+					const dimensions =
+						variable.dimensions?.length
+							? variable.dimensions
+							: variable.length
+								? [variable.length]
+								: [];
+					if (!Number.isFinite(address) || address <= 0 || !dimensions.length || !variable.elementKind) {
 						return [{ name: variable.name, value: '?' }];
 					}
-					const previewLength = Math.min(variable.length, 8);
+					const elementStride =
+						variable.elementKind === 'double'
+							? 8
+							: variable.elementKind === 'bool' || variable.elementKind === 'char'
+								? 1
+								: 4;
+					if (dimensions.length === 2) {
+						const previewRows = Math.min(dimensions[0], 4);
+						const previewCols = Math.min(dimensions[1], 8);
+						const rows: string[] = [];
+						for (let row = 0; row < previewRows; row += 1) {
+							const values: string[] = [];
+							for (let col = 0; col < previewCols; col += 1) {
+								const offset = address + (row * dimensions[1] + col) * elementStride;
+								if (variable.elementKind === 'bool') {
+									values.push(this.mem.read8(offset) ? 'true' : 'false');
+									continue;
+								}
+								if (variable.elementKind === 'char') {
+									const charCode = this.mem.read8(offset);
+									values.push(
+										charCode >= 0x20 && charCode <= 0x7e ? `'${String.fromCharCode(charCode)}'` : `${charCode}`
+									);
+									continue;
+								}
+								if (variable.elementKind === 'float') {
+									values.push(`${this.mem.readFloat32(offset)}`);
+									continue;
+								}
+								if (variable.elementKind === 'double') {
+									values.push(`${this.mem.readFloat64(offset)}`);
+									continue;
+								}
+								values.push(`${this.mem.readInt32(offset)}`);
+							}
+							rows.push(
+								`[${values.join(', ')}${dimensions[1] > previewCols ? ', ...' : ''}]`
+							);
+						}
+						return [
+							{
+								name: variable.name,
+								value: `[${rows.join(', ')}${dimensions[0] > previewRows ? ', ...' : ''}]`
+							}
+						];
+					}
+					const previewLength = Math.min(dimensions[0], 8);
 					const values: string[] = [];
 					for (let index = 0; index < previewLength; index += 1) {
-						const offset =
-							address +
-							(variable.elementKind === 'double'
-								? index * 8
-								: variable.elementKind === 'bool' || variable.elementKind === 'char'
-									? index
-									: index * 4);
+						const offset = address + index * elementStride;
 						if (variable.elementKind === 'bool') {
 							values.push(this.mem.read8(offset) ? 'true' : 'false');
 							continue;
@@ -272,7 +333,7 @@ export default class App {
 					return [
 						{
 							name: variable.name,
-							value: `[${values.join(', ')}${variable.length > previewLength ? ', ...' : ''}]`
+							value: `[${values.join(', ')}${dimensions[0] > previewLength ? ', ...' : ''}]`
 						}
 					];
 				}

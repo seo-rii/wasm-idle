@@ -246,4 +246,117 @@ describe('App debug tracing', () => {
 			callStack: [{ functionName: 'main', line: 4 }]
 		});
 	});
+
+	it('stores string previews reported by container hooks', () => {
+		const onPause = vi.fn();
+		const buffer = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * 4);
+		const control = new Int32Array(buffer);
+		control[1] = 1;
+		const app = Object.assign(Object.create(App.prototype), {
+			debugSession: {
+				buffer: control,
+				interruptBuffer: new Uint8Array(new SharedArrayBuffer(1)),
+				breakpoints: new Set<number>(),
+				pauseOnEntry: false,
+				stepArmed: true,
+				nextLineArmed: false,
+				stepOutArmed: false,
+				callDepth: 1,
+				stepOutDepth: 0,
+				currentFunctionId: 1,
+				currentLine: 0,
+				resumeSkipActive: false,
+				resumeSkipFunctionId: 0,
+				resumeSkipLine: 0,
+				nextLineFunctionId: 0,
+				nextLineLine: 0,
+				functionMetadata: { 1: 'main' },
+				variableMetadata: {
+					1: [{ slot: 1, name: 'values', kind: 'text', fromLine: 4, toLine: Number.MAX_SAFE_INTEGER }]
+				},
+				frames: [{ functionId: 1, functionName: 'main', line: 0, values: new Map() }],
+				onPause
+			},
+			mem: {
+				check: vi.fn(),
+				readStr: vi.fn(() => '[1, 2, 3]')
+			},
+			trace: vi.fn()
+		}) as App;
+
+		expect(app.__wasm_idle_debug_value_text(1, 1, 32, 9)).toBe(0);
+		expect(app.__wasm_idle_debug_line(1, 4)).toBe(0);
+		expect(onPause).toHaveBeenCalledWith({
+			type: 'pause',
+			line: 4,
+			reason: 'step',
+			locals: [{ name: 'values', value: '[1, 2, 3]' }],
+			callStack: [{ functionName: 'main', line: 4 }]
+		});
+	});
+
+	it('renders fixed-size two-dimensional array locals from wasm memory at pause time', () => {
+		const onPause = vi.fn();
+		const buffer = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * 4);
+		const control = new Int32Array(buffer);
+		control[1] = 1;
+		const app = Object.assign(Object.create(App.prototype), {
+			debugSession: {
+				buffer: control,
+				interruptBuffer: new Uint8Array(new SharedArrayBuffer(1)),
+				breakpoints: new Set<number>(),
+				pauseOnEntry: false,
+				stepArmed: true,
+				nextLineArmed: false,
+				stepOutArmed: false,
+				callDepth: 1,
+				stepOutDepth: 0,
+				currentFunctionId: 1,
+				currentLine: 0,
+				resumeSkipActive: false,
+				resumeSkipFunctionId: 0,
+				resumeSkipLine: 0,
+				nextLineFunctionId: 0,
+				nextLineLine: 0,
+				functionMetadata: { 1: 'main' },
+				variableMetadata: {
+					1: [
+						{
+							slot: 1,
+							name: 'grid',
+							kind: 'array',
+							elementKind: 'int',
+							length: 2,
+							dimensions: [2, 3],
+							fromLine: 4,
+							toLine: Number.MAX_SAFE_INTEGER
+						}
+					]
+				},
+				frames: [{ functionId: 1, functionName: 'main', line: 0, values: new Map([[1, '16']]) }],
+				onPause
+			},
+			mem: {
+				check: vi.fn(),
+				read8: vi.fn(),
+				readInt32: vi
+					.fn()
+					.mockImplementation(
+						(offset: number) => ({ 16: 1, 20: 2, 24: 3, 28: 4, 32: 5, 36: 6 }[offset] ?? 0)
+					),
+				readFloat32: vi.fn(),
+				readFloat64: vi.fn()
+			},
+			trace: vi.fn()
+		}) as App;
+
+		expect(app.__wasm_idle_debug_line(1, 4)).toBe(0);
+		expect(onPause).toHaveBeenCalledWith({
+			type: 'pause',
+			line: 4,
+			reason: 'step',
+			locals: [{ name: 'grid', value: '[[1, 2, 3], [4, 5, 6]]' }],
+			callStack: [{ functionName: 'main', line: 4 }]
+		});
+	});
 });
