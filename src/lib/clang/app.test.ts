@@ -359,4 +359,54 @@ describe('App debug tracing', () => {
 			callStack: [{ functionName: 'main', line: 4 }]
 		});
 	});
+
+	it('includes global scalar values when pausing inside a function', () => {
+		const onPause = vi.fn();
+		const buffer = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * 4);
+		const control = new Int32Array(buffer);
+		control[1] = 1;
+		const app = Object.assign(Object.create(App.prototype), {
+			debugSession: {
+				buffer: control,
+				interruptBuffer: new Uint8Array(new SharedArrayBuffer(1)),
+				breakpoints: new Set<number>(),
+				pauseOnEntry: false,
+				stepArmed: true,
+				nextLineArmed: false,
+				stepOutArmed: false,
+				callDepth: 1,
+				stepOutDepth: 0,
+				currentFunctionId: 1,
+				currentLine: 0,
+				resumeSkipActive: false,
+				resumeSkipFunctionId: 0,
+				resumeSkipLine: 0,
+				nextLineFunctionId: 0,
+				nextLineLine: 0,
+				functionMetadata: { 1: 'main' },
+				variableMetadata: {
+					1: [{ slot: 1, name: 'local', kind: 'number', fromLine: 4, toLine: Number.MAX_SAFE_INTEGER }]
+				},
+				globalVariableMetadata: [
+					{ slot: 10, name: 'counter', kind: 'number', fromLine: 1, toLine: Number.MAX_SAFE_INTEGER }
+				],
+				frames: [{ functionId: 1, functionName: 'main', line: 0, values: new Map([[1, '3']]) }],
+				globalValues: new Map([[10, '7']]),
+				onPause
+			},
+			trace: vi.fn()
+		}) as App;
+
+		expect(app.__wasm_idle_debug_line(1, 4)).toBe(0);
+		expect(onPause).toHaveBeenCalledWith({
+			type: 'pause',
+			line: 4,
+			reason: 'step',
+			locals: [
+				{ name: 'local', value: '3' },
+				{ name: 'counter', value: '7' }
+			],
+			callStack: [{ functionName: 'main', line: 4 }]
+		});
+	});
 });

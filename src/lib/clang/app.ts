@@ -25,8 +25,10 @@ interface DebugSession {
 	nextLineFunctionId: number;
 	nextLineLine: number;
 	variableMetadata: Record<number, DebugVariableMetadata[]>;
+	globalVariableMetadata: DebugVariableMetadata[];
 	functionMetadata: Record<number, string>;
 	frames: Array<{ functionId: number; functionName: string; line: number; values: Map<number, string> }>;
+	globalValues: Map<number, string>;
 	onPause?: (event: {
 		type: 'pause';
 		line: number;
@@ -163,6 +165,10 @@ export default class App {
 	__wasm_idle_debug_value_num(functionId: number, slot: number, value: number) {
 		const session = this.debugSession;
 		if (!session?.buffer) return ESUCCESS;
+		if (functionId === 0) {
+			session.globalValues.set(slot, Number.isInteger(value) ? String(value) : `${value}`);
+			return ESUCCESS;
+		}
 		for (let index = session.frames.length - 1; index >= 0; index -= 1) {
 			const frame = session.frames[index];
 			if (frame?.functionId !== functionId) continue;
@@ -175,6 +181,10 @@ export default class App {
 	__wasm_idle_debug_value_bool(functionId: number, slot: number, value: number) {
 		const session = this.debugSession;
 		if (!session?.buffer) return ESUCCESS;
+		if (functionId === 0) {
+			session.globalValues.set(slot, value ? 'true' : 'false');
+			return ESUCCESS;
+		}
 		for (let index = session.frames.length - 1; index >= 0; index -= 1) {
 			const frame = session.frames[index];
 			if (frame?.functionId !== functionId) continue;
@@ -187,6 +197,10 @@ export default class App {
 	__wasm_idle_debug_value_addr(functionId: number, slot: number, value: number) {
 		const session = this.debugSession;
 		if (!session?.buffer) return ESUCCESS;
+		if (functionId === 0) {
+			session.globalValues.set(slot, String(value >>> 0));
+			return ESUCCESS;
+		}
 		for (let index = session.frames.length - 1; index >= 0; index -= 1) {
 			const frame = session.frames[index];
 			if (frame?.functionId !== functionId) continue;
@@ -201,6 +215,10 @@ export default class App {
 		if (!session?.buffer) return ESUCCESS;
 		this.mem?.check?.();
 		const text = this.mem?.readStr ? this.mem.readStr(ptr, len) : '?';
+		if (functionId === 0) {
+			session.globalValues.set(slot, text);
+			return ESUCCESS;
+		}
 		for (let index = session.frames.length - 1; index >= 0; index -= 1) {
 			const frame = session.frames[index];
 			if (frame?.functionId !== functionId) continue;
@@ -340,11 +358,19 @@ export default class App {
 				const value = frame?.values.get(variable.slot) ?? '?';
 				return [{ name: variable.name, value }];
 			}) || [];
+		const localNames = new Set(locals.map((variable) => variable.name));
+		const globals =
+			(session.globalVariableMetadata || []).flatMap((variable) => {
+				if (localNames.has(variable.name)) return [];
+				if (line < variable.fromLine || line > variable.toLine) return [];
+				const value = session.globalValues?.get(variable.slot) ?? '?';
+				return [{ name: variable.name, value }];
+			}) || [];
 		session.onPause?.({
 			type: 'pause',
 			line,
 			reason,
-			locals,
+			locals: [...locals, ...globals],
 			callStack: [...session.frames]
 				.reverse()
 				.map((stackFrame) => ({ functionName: stackFrame.functionName, line: stackFrame.line }))

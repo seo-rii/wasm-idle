@@ -86,6 +86,7 @@ export default class Clang {
 		callStack: { functionName: string; line: number }[];
 	}) => void;
 	debugVariableMetadata: Record<number, DebugVariableMetadata[]> = {};
+	debugGlobalMetadata: DebugVariableMetadata[] = [];
 	debugFunctionMetadata: Record<number, string> = {};
 	lastBuildKey = '';
 	path: string;
@@ -187,6 +188,10 @@ export default class Clang {
 				string,
 				{ slot: number; kind: 'number' | 'bool'; fromLine: number; toLine: number }
 			>();
+			let globalVariables = new Map<
+				string,
+				{ slot: number; kind: 'number' | 'bool'; fromLine: number; toLine: number }
+			>();
 			let currentFunctionContainers = new Map<
 				string,
 				{ slot: number; container: 'vector' | 'set' | 'map'; fromLine: number; toLine: number }
@@ -199,7 +204,9 @@ export default class Clang {
 				  }
 				| undefined;
 			this.debugVariableMetadata = {};
+			this.debugGlobalMetadata = [];
 			this.debugFunctionMetadata = {};
+			const globalInitialization: string[] = [];
 			const instrumented = [
 				'#include <map>',
 				'#include <set>',
@@ -292,11 +299,65 @@ export default class Clang {
 				if (lineComment !== -1) analysisLine = analysisLine.slice(0, lineComment);
 				const normalized = analysisLine.trim();
 				const inFunctionBody = functionDepth > 0 && braceDepth >= functionDepth;
+				const isTopLevelDeclarationContext =
+					functionDepth === 0 &&
+					braceDepth === 0 &&
+					!normalized.includes('(') &&
+					!normalized.startsWith('#');
 				const controlHeaderWithoutInlineBlock =
 					/^(while|if|for)\s*\(/.test(normalized) && !normalized.includes('{');
 				const leadingInstrumentation: string[] = [];
 				const trailingInstrumentation: string[] = [];
 				const declaredContainerNames = new Set<string>();
+				const globalDeclarationMatch =
+					isTopLevelDeclarationContext &&
+					normalized.match(
+						/^(?:const\s+)?(?:(?:unsigned|signed)\s+)?(?:(?:short|long long|long)\s+)?(int|float|double|bool|char)\s+(.+);$/
+					);
+				if (globalDeclarationMatch) {
+					const kind = globalDeclarationMatch[1] === 'bool' ? 'bool' : 'number';
+					const declarations: string[] = [];
+					let declarationBuffer = '';
+					let declarationBraceDepth = 0;
+					for (const character of globalDeclarationMatch[2]) {
+						if (character === ',' && declarationBraceDepth === 0) {
+							if (declarationBuffer.trim()) declarations.push(declarationBuffer.trim());
+							declarationBuffer = '';
+							continue;
+						}
+						if (character === '{') declarationBraceDepth += 1;
+						if (character === '}') declarationBraceDepth = Math.max(0, declarationBraceDepth - 1);
+						declarationBuffer += character;
+					}
+					if (declarationBuffer.trim()) declarations.push(declarationBuffer.trim());
+					for (const declaration of declarations) {
+						const [left] = declaration.split('=');
+						const declarator = left?.trim() || '';
+						if (/[*&\[]/.test(declarator)) continue;
+						const name = declarator.match(/([A-Za-z_]\w*)\s*$/)?.[1];
+						if (!name) continue;
+						const slot = nextVariableSlot++;
+						globalVariables.set(name, {
+							slot,
+							kind,
+							fromLine: index + 1,
+							toLine: Number.MAX_SAFE_INTEGER
+						});
+						this.debugGlobalMetadata = [
+							...this.debugGlobalMetadata,
+							{
+								slot,
+								name,
+								kind,
+								fromLine: index + 1,
+								toLine: Number.MAX_SAFE_INTEGER
+							}
+						];
+						globalInitialization.push(
+							`${kind === 'bool' ? '__wasm_idle_debug_value_bool' : '__wasm_idle_debug_value_num'}(0, ${slot}, ${name});`
+						);
+					}
+				}
 				if (
 					inFunctionBody &&
 					normalized &&
@@ -500,6 +561,19 @@ export default class Clang {
 								if (parenDepth === 0) {
 									closeIndex = cursor;
 									break;
+								}
+							}
+							for (const [name, variable] of globalVariables) {
+								if (currentFunctionVariables.has(name) || currentFunctionContainers.has(name)) continue;
+								const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+								if (
+									new RegExp(`(?:^|[^\\w])(?:\\+\\+|--)\\s*${escapedName}\\b`).test(normalized) ||
+									new RegExp(`\\b${escapedName}\\s*(?:[+\\-*/%]?=|\\+\\+|--)`).test(normalized) ||
+									new RegExp(`&\\s*${escapedName}\\b`).test(normalized)
+								) {
+									trailingInstrumentation.push(
+										`${indent}${variable.kind === 'bool' ? '__wasm_idle_debug_value_bool' : '__wasm_idle_debug_value_num'}(0, ${variable.slot}, ${name});`
+									);
 								}
 							}
 						}
@@ -715,10 +789,18 @@ export default class Clang {
 						currentFunctionVariables = new Map();
 						currentFunctionContainers = new Map();
 					}
-				}
+			}
+			if (globalInitialization.length) {
+				instrumented.push('struct __wasm_idle_debug_globals_init {');
+				instrumented.push('    __wasm_idle_debug_globals_init() {');
+				instrumented.push(...globalInitialization.map((line) => `        ${line}`));
+				instrumented.push('    }');
+				instrumented.push('} __wasm_idle_debug_globals_init_instance;');
+			}
 			source = instrumented.join('\n');
 		} else {
 			this.debugVariableMetadata = {};
+			this.debugGlobalMetadata = [];
 		}
 		const code = toUtf8(source);
 
@@ -802,8 +884,10 @@ export default class Clang {
 				nextLineFunctionId: 0,
 				nextLineLine: 0,
 				variableMetadata: this.debugVariableMetadata,
+				globalVariableMetadata: this.debugGlobalMetadata,
 				functionMetadata: this.debugFunctionMetadata,
 				frames: [],
+				globalValues: new Map(),
 				onPause: (event) => this.onDebugEvent?.(event)
 			};
 		const instantiate = +new Date();

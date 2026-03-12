@@ -268,6 +268,30 @@ int main() {
 		);
 	});
 
+	it('captures global scalar initial values and updates them inside functions', async () => {
+		const { clang } = createClangHarness();
+		const code = `#include <stdio.h>
+
+int counter = 3;
+
+int main() {
+    counter += 1;
+    printf("%d\\n", counter);
+}`;
+
+		await clang.compile({
+			input: 'main.cc',
+			code,
+			obj: 'main.o',
+			debug: true
+		});
+
+		const instrumentedSource = String(vi.mocked(clang.memfs.addFile).mock.calls[0]?.[1] || '');
+		expect(instrumentedSource).toContain('__wasm_idle_debug_value_num(0, 1, counter);');
+		expect(instrumentedSource).toContain('struct __wasm_idle_debug_globals_init {');
+		expect(instrumentedSource).toContain('__wasm_idle_debug_value_num(0, 1, counter);');
+	});
+
 	it('skips pointer locals and parameters in the provided recursive sequence sample', async () => {
 		const { clang } = createClangHarness();
 		const code = `#include <stdio.h>
