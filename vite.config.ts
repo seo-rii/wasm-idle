@@ -3,5 +3,13 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
 	plugins: [sveltekit()],
-	worker: { format: 'es' }
+	resolve: {
+		alias: {
+			vscode: '@hancomac/monaco-languageclient/vscode-compatibility'
+		}
+	},
+	worker: { format: 'es' },
+	server: {
+		allowedHosts: true
+	}
 });

@@ -6,10 +6,11 @@
 	if (browser)
 		onMount(async () => {
 			if ('serviceWorker' in navigator) {
-				let path = page.url.pathname;
+				let path: string = page.url.pathname;
 				if (path.endsWith('/')) path = path.slice(0, -1);
+				const workerPath = path ? `${path}/worker.js` : '/worker.js';
 				navigator.serviceWorker
-					.register(new URL(path + '/worker.js', import.meta.url))
+					.register(workerPath)
 					.then(
 						function (registration) {
 							console.log('COOP/COEP Service Worker registered', registration.scope);

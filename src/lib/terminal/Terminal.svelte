@@ -1,12 +1,13 @@
 <script lang="ts">
+	import type { DebugCommand, DebugSessionEvent, SandboxExecutionOptions } from '$lib/playground/options';
 	import type { Sandbox } from '$lib/playground/sandbox';
+	import type { TerminalControl } from '$lib/terminal/types';
 	import { Theme, registerAllPlugins } from '$lib/terminal';
 	import load from '$lib/playground';
 	import { onMount } from 'svelte';
 	import '@xterm/xterm/css/xterm.css';
 	import type { Terminal as TerminalType } from '@xterm/xterm';
 
-	type TerminalControl = typeof terminalControl;
 	interface Props {
 		dark?: boolean;
 		path?: string;
@@ -15,6 +16,8 @@
 		onload?: () => void;
 		onfinish?: () => void;
 		onkey?: (e: KeyboardEvent) => void;
+		ondebug?: (event: DebugSessionEvent) => void;
+		onimage?: (payload: { mime: string; b64: string; ts?: number }) => void;
 		terminal?: TerminalControl;
 	}
 
@@ -25,6 +28,8 @@
 		onload,
 		onfinish,
 		onkey,
+		ondebug,
+		onimage,
 		terminal = $bindable()
 	}: Props = $props();
 
@@ -62,11 +67,13 @@
 			await sandbox.clear();
 			ll = language;
 		}
+		sandbox.image = onimage;
+		sandbox.ondebug = ondebug;
 		sandbox.output = (output: string) =>
 			_tc === tc && term && term.write(output.replaceAll('\n', '\r\n'));
 	}
 
-	function runSandbox(pr: Promise<boolean>) {
+	function runSandbox<T>(pr: Promise<T>) {
 		return pr
 			.then((x) => {
 				term?.write(`\r\nProcess finished after ${sandbox.elapse}ms\u001B[?25l`);
@@ -76,11 +83,10 @@
 				term?.write(`\r\n\x1B[1;3;31m${msg}\u001B[?25l`);
 				return false;
 			})
-			.finally((ret) => {
+			.finally(() => {
 				onfinish?.();
 				finish = true;
 				if (term) term.options.cursorBlink = false;
-				return ret;
 			});
 	}
 
@@ -94,7 +100,7 @@
 		first = false;
 	}
 
-	const terminalControl = {
+	const terminalControl: TerminalControl = {
 		async clear() {
 			await wait();
 			term?.reset();
@@ -103,24 +109,42 @@
 			first = true;
 			await new Promise((r) => setTimeout(r, 100));
 		},
-		async prepare(language: string, code: string, log = true, prog, args) {
+		async prepare(
+			language: string,
+			code: string,
+			log = true,
+			prog?: { set?: (value: number) => void },
+			args: string[] = [],
+			options: SandboxExecutionOptions = {}
+		) {
 			await Promise.all([
-				initSandbox(language).then(() => sandbox.load(path, code, log)),
+				initSandbox(language).then(() => sandbox.load(path, code, log, args, options)),
 				initTerm(false)
 			]);
-			return await runSandbox(sandbox.run(code, true, log, prog, args));
+			return !!(await runSandbox(sandbox.run(code, true, log, prog, args, options)));
 		},
-		async run(language: string, code: string, log = true, prog, args) {
+		async run(
+			language: string,
+			code: string,
+			log = true,
+			prog?: { set?: (value: number) => void },
+			args: string[] = [],
+			options: SandboxExecutionOptions = {}
+		) {
 			await Promise.all([
-				initSandbox(language).then(() => sandbox.load(path, code, log)),
+				initSandbox(language).then(() => sandbox.load(path, code, log, args, options)),
 				initTerm()
 			]);
-			return await runSandbox(sandbox.run(code, false, log, prog, args));
+			return await runSandbox(sandbox.run(code, false, log, prog, args, options));
 		},
 		async destroy() {
 			await wait();
 			term?.dispose();
 			if (sandbox) await sandbox.clear();
+		},
+		async debugCommand(command: DebugCommand) {
+			await wait();
+			sandbox.debugCommand?.(command);
 		},
 		async write(input: string) {
 			await wait();

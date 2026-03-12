@@ -5,17 +5,22 @@ const store: any = {};
 
 export const readBuffer = async (name: string, progress?: Writable<number>) => {
 	const response = await fetch(name);
+	const contentLength = +(response.headers.get('Content-Length') || 0);
+	if (!response.body) {
+		progress?.set?.(1);
+		return new Uint8Array(await response.arrayBuffer());
+	}
 	const r = response.body.getReader();
-	const contentLength = +response.headers.get('Content-Length');
 
 	let receivedLength = 0;
-	let chunks = [];
+	const chunks: Uint8Array[] = [];
 	while (true) {
 		const { done, value } = await r.read();
 		if (done) break;
-		chunks.push(value);
+		if (!value) continue;
+		chunks.push(Uint8Array.from(value));
 		receivedLength += value.length;
-		progress?.set?.(receivedLength / contentLength);
+		if (contentLength > 0) progress?.set?.(receivedLength / contentLength);
 	}
 	progress?.set?.(1);
 	const chunksAll = new Uint8Array(receivedLength); // (4.1)
@@ -28,6 +33,7 @@ export const readBuffer = async (name: string, progress?: Writable<number>) => {
 	const reader = new zip.ZipReader(new zip.Uint8ArrayReader(chunksAll));
 	const entries = await reader.getEntries();
 	for (const entry of entries) {
+		if (!('getData' in entry)) continue;
 		const data = await entry.getData(new zip.Uint8ArrayWriter());
 		return data;
 	}
@@ -42,5 +48,5 @@ export async function compile(filename: string, progress?: Writable<number>) {
 }
 
 export function getInstance(module: WebAssembly.Module, imports: WebAssembly.Imports) {
-	return WebAssembly.instantiate(module, imports);
+	return WebAssembly.instantiate(module, imports) as Promise<WebAssembly.Instance>;
 }

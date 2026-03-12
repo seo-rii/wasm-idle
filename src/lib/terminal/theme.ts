@@ -1,7 +1,7 @@
 const theme = {
 	Tango_Dark: {
 		foreground: '#eee',
-		background: '#00000000',
+		background: '#111827',
 		cursor: '#FFFFFF',
 		cursorAccent: '#ffffff',
 		selection: '#ffffff44',
@@ -24,7 +24,7 @@ const theme = {
 	},
 	Tango_Light: {
 		foreground: '#111',
-		background: '#FFFFFF00',
+		background: '#FFFFFF',
 		cursor: '#000000',
 		cursorAccent: '#000000',
 		selection: '#00000044',

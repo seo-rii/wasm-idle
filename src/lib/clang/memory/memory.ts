@@ -2,7 +2,7 @@ import { readStr, readStrR } from '$lib/clang/encode';
 
 export default class Memory {
 	memory: DataView;
-	buffer: ArrayBuffer;
+	buffer: ArrayBufferLike;
 	u8: Uint8Array;
 	u32: Uint32Array;
 
@@ -61,8 +61,9 @@ export default class Memory {
 		return arr.length;
 	}
 
-	write(o: number, buf: ArrayBuffer | string | Uint8Array) {
+	write(o: number, buf: ArrayBufferLike | string | Uint8Array) {
 		if (buf instanceof ArrayBuffer) return this.writeUint8(o, new Uint8Array(buf));
+		if (buf instanceof SharedArrayBuffer) return this.writeUint8(o, new Uint8Array(buf));
 		else if (typeof buf === 'string')
 			return this.writeUint8(
 				o,

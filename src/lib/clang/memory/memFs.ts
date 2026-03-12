@@ -13,7 +13,11 @@ interface MemFsOptions {
 	stdinStr?: string;
 	path: string;
 	progress?: Writable<number>;
+	trace?: (message: string) => void;
 }
+
+const previewText = (text: string) =>
+	JSON.stringify(text.length > 96 ? text.slice(0, 93) + '...' : text);
 
 export default class MemFS {
 	ready: Promise<void>;
@@ -22,6 +26,7 @@ export default class MemFS {
 	stdinStr: string;
 	stdin: () => string;
 	stdout: (str: string) => void;
+	trace: (message: string) => void;
 	instance: WebAssembly.Instance = <any>null;
 	exports: any;
 	out = true;
@@ -30,6 +35,7 @@ export default class MemFS {
 		this.stdin = options.stdin;
 		this.stdout = options.stdout;
 		this.stdinStr = options.stdinStr || '';
+		this.trace = options.trace || (() => {});
 
 		const env = bindNew(
 			this,
@@ -42,7 +48,10 @@ export default class MemFS {
 		);
 
 		this.ready = compile(memfsUrl(options.path), options.progress)
-			.then((module) => WebAssembly.instantiate(module, { env }))
+			.then(
+				(module) =>
+					WebAssembly.instantiate(module, { env }) as unknown as Promise<WebAssembly.Instance>
+			)
 			.then((instance) => {
 				this.instance = instance;
 				this.exports = instance.exports;
@@ -85,6 +94,7 @@ export default class MemFS {
 	}
 
 	abort() {
+		this.trace('abort()');
 		throw new AbortError();
 	}
 
@@ -102,6 +112,7 @@ export default class MemFS {
 			size += len;
 		}
 		this.hostMem_.write32(nwritten_out, size);
+		this.trace(`host_write(fd=${fd}, bytes=${size}, data=${previewText(str)})`);
 		if (this.out) this.stdout(str);
 		return ESUCCESS;
 	}
@@ -118,18 +129,23 @@ export default class MemFS {
 			if (!this.stdinStr.length) this.stdinStr = this.stdin();
 			const lenToWrite = Math.min(len, this.stdinStr.length);
 			if (lenToWrite === 0) break;
+			const chunk = this.stdinStr.substring(0, lenToWrite);
 			this.hostMem_.write(buf, this.stdinStr.substring(0, lenToWrite));
 			this.stdinStr = this.stdinStr.substring(lenToWrite);
 			size += lenToWrite;
+			this.trace(`host_read(fd=${fd}, bytes=${lenToWrite}, data=${previewText(chunk)})`);
 			if (lenToWrite !== len) break;
 		}
 		this.hostMem_.write32(nread, size);
+		if (size === 0) this.trace(`host_read(fd=${fd}, bytes=0)`);
 		return ESUCCESS;
 	}
 
 	memfs_log(buf: number, len: number) {
 		this.mem.check();
-		console.log(this.mem.readStr(buf, len));
+		const message = this.mem.readStr(buf, len);
+		this.trace(`memfs_log(${previewText(message)})`);
+		console.log(message);
 	}
 
 	copy_out(clang_dst: number, memfs_src: number, size: number) {

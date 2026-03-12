@@ -1,10 +1,43 @@
+import type { DebugFrame, DebugVariable } from '$lib/playground/options';
 import { bindNew } from '$lib/clang/apply';
 import { Memory, type MemFS } from '$lib/clang/memory';
 import { getInstance } from '$lib/clang/wasm';
-import { NotImplemented, ProcExit } from '$lib/clang/error';
+import { AbortError, NotImplemented, ProcExit } from '$lib/clang/error';
 
 const ESUCCESS = 0;
 const RAF_PROC_EXIT_CODE = 0xc0c0a;
+
+interface DebugSession {
+	buffer?: Int32Array;
+	interruptBuffer?: Uint8Array;
+	breakpoints: Set<number>;
+	pauseOnEntry: boolean;
+	stepArmed: boolean;
+	nextLineArmed: boolean;
+	stepOutArmed: boolean;
+	callDepth: number;
+	stepOutDepth: number;
+	currentFunctionId: number;
+	currentLine: number;
+	resumeSkipActive: boolean;
+	resumeSkipFunctionId: number;
+	resumeSkipLine: number;
+	nextLineFunctionId: number;
+	nextLineLine: number;
+	variableMetadata: Record<
+		number,
+		Array<{ slot: number; name: string; kind: string; fromLine: number; toLine: number }>
+	>;
+	functionMetadata: Record<number, string>;
+	frames: Array<{ functionId: number; functionName: string; line: number; values: Map<number, string> }>;
+	onPause?: (event: {
+		type: 'pause';
+		line: number;
+		reason: string;
+		locals: DebugVariable[];
+		callStack: DebugFrame[];
+	}) => void;
+}
 
 export default class App {
 	ready: Promise<void>;
@@ -13,6 +46,8 @@ export default class App {
 	memfs: MemFS;
 	instance: WebAssembly.Instance = <any>null;
 	exports: any;
+	trace: (message: string) => void = () => {};
+	debugSession?: DebugSession;
 
 	argv: string[];
 	environ: { [key: string]: string };
@@ -24,7 +59,14 @@ export default class App {
 		this.environ = { USER: 'jungol' };
 		this.memfs = memfs;
 
-		const env = bindNew(this);
+		const env = bindNew(
+			this,
+			'__wasm_idle_debug_enter',
+			'__wasm_idle_debug_leave',
+			'__wasm_idle_debug_line',
+			'__wasm_idle_debug_value_num',
+			'__wasm_idle_debug_value_bool'
+		);
 
 		const wasi_unstable = {
 			...bindNew(
@@ -51,11 +93,17 @@ export default class App {
 
 	async run() {
 		await this.ready;
+		this.trace(
+			`start(argv=${JSON.stringify(this.argv)}, exports=${JSON.stringify(
+				Object.keys(this.exports || {})
+			)})`
+		);
 		try {
 			this.exports._start();
 		} catch (exn: any) {
 			let writeStack = true;
 			if (exn instanceof ProcExit) {
+				this.trace(`proc_exit(code=${exn.code})`);
 				if (exn.code === RAF_PROC_EXIT_CODE) {
 					console.log('Allowing rAF after exit.');
 					return true;
@@ -65,6 +113,7 @@ export default class App {
 				if (exn.code == 0) return false;
 				writeStack = false;
 			}
+			if (exn instanceof NotImplemented) this.trace(`not_implemented(${exn.message})`);
 
 			// Write error message.
 			let msg = `\x1b[91mError: ${exn.message}`;
@@ -75,10 +124,153 @@ export default class App {
 			// Propagate error.
 			throw exn;
 		}
+		this.trace('start() returned without proc_exit');
 	}
 
 	proc_exit(code: number) {
 		throw new ProcExit(code);
+	}
+
+	__wasm_idle_debug_enter(functionId: number) {
+		const session = this.debugSession;
+		if (!session?.buffer) return ESUCCESS;
+		session.callDepth += 1;
+		session.currentFunctionId = functionId;
+		session.frames.push({
+			functionId,
+			functionName: session.functionMetadata[functionId] || `fn_${functionId}`,
+			line: 0,
+			values: new Map()
+		});
+		this.trace(`enter(function=${functionId}, depth=${session.callDepth})`);
+		return ESUCCESS;
+	}
+
+	__wasm_idle_debug_leave(functionId: number) {
+		const session = this.debugSession;
+		if (!session?.buffer) return ESUCCESS;
+		this.trace(`leave(function=${functionId}, depth=${session.callDepth})`);
+		session.callDepth = Math.max(0, session.callDepth - 1);
+		if (session.currentFunctionId === functionId) session.currentFunctionId = 0;
+		for (let index = session.frames.length - 1; index >= 0; index -= 1) {
+			if (session.frames[index]?.functionId === functionId) {
+				session.frames.splice(index, 1);
+				break;
+			}
+		}
+		return ESUCCESS;
+	}
+
+	__wasm_idle_debug_value_num(functionId: number, slot: number, value: number) {
+		const session = this.debugSession;
+		if (!session?.buffer) return ESUCCESS;
+		for (let index = session.frames.length - 1; index >= 0; index -= 1) {
+			const frame = session.frames[index];
+			if (frame?.functionId !== functionId) continue;
+			frame.values.set(slot, Number.isInteger(value) ? String(value) : `${value}`);
+			break;
+		}
+		return ESUCCESS;
+	}
+
+	__wasm_idle_debug_value_bool(functionId: number, slot: number, value: number) {
+		const session = this.debugSession;
+		if (!session?.buffer) return ESUCCESS;
+		for (let index = session.frames.length - 1; index >= 0; index -= 1) {
+			const frame = session.frames[index];
+			if (frame?.functionId !== functionId) continue;
+			frame.values.set(slot, value ? 'true' : 'false');
+			break;
+		}
+		return ESUCCESS;
+	}
+
+	__wasm_idle_debug_line(functionId: number, line: number) {
+		const session = this.debugSession;
+		if (!session?.buffer) return ESUCCESS;
+		if (session.resumeSkipActive) {
+			if (functionId === session.resumeSkipFunctionId && line === session.resumeSkipLine) {
+				return ESUCCESS;
+			}
+			session.resumeSkipActive = false;
+			session.resumeSkipFunctionId = 0;
+			session.resumeSkipLine = 0;
+		}
+		let reason = '';
+		if (session.pauseOnEntry) reason = 'entry';
+		else if (session.breakpoints.has(line)) reason = 'breakpoint';
+		else if (session.stepArmed) reason = 'step';
+		else if (
+			session.nextLineArmed &&
+			functionId === session.nextLineFunctionId &&
+			line !== session.nextLineLine
+		) {
+			reason = 'nextLine';
+		} else if (session.stepOutArmed && session.callDepth <= session.stepOutDepth) {
+			reason = 'stepOut';
+		}
+		if (!reason) return ESUCCESS;
+		session.currentFunctionId = functionId;
+		session.currentLine = line;
+		const frame = [...session.frames].reverse().find((candidate) => candidate.functionId === functionId);
+		if (frame) frame.line = line;
+		session.pauseOnEntry = false;
+		session.stepArmed = false;
+		session.nextLineArmed = false;
+		session.stepOutArmed = false;
+		this.trace(`pause(function=${functionId}, line=${line}, reason=${reason})`);
+		const locals =
+			session.variableMetadata[functionId]?.flatMap((variable) => {
+				if (line < variable.fromLine || line > variable.toLine) return [];
+				const value = frame?.values.get(variable.slot) ?? '?';
+				return [{ name: variable.name, value }];
+			}) || [];
+		session.onPause?.({
+			type: 'pause',
+			line,
+			reason,
+			locals,
+			callStack: [...session.frames]
+				.reverse()
+				.map((stackFrame) => ({ functionName: stackFrame.functionName, line: stackFrame.line }))
+		});
+		const sequence = Atomics.load(session.buffer, 0);
+		while (true) {
+			if (session.interruptBuffer?.[0] === 2) throw new AbortError();
+			Atomics.wait(session.buffer, 0, sequence, 100);
+			if (session.interruptBuffer?.[0] === 2) throw new AbortError();
+			const command = Atomics.exchange(session.buffer, 1, 0);
+			if (command === 1) {
+				session.resumeSkipActive = true;
+				session.resumeSkipFunctionId = session.currentFunctionId;
+				session.resumeSkipLine = session.currentLine;
+				return ESUCCESS;
+			}
+			if (command === 2) {
+				session.stepArmed = true;
+				session.resumeSkipActive = true;
+				session.resumeSkipFunctionId = session.currentFunctionId;
+				session.resumeSkipLine = session.currentLine;
+				return ESUCCESS;
+			}
+			if (command === 3) {
+				session.nextLineArmed = true;
+				session.nextLineFunctionId = session.currentFunctionId;
+				session.nextLineLine = session.currentLine;
+				session.resumeSkipActive = true;
+				session.resumeSkipFunctionId = session.currentFunctionId;
+				session.resumeSkipLine = session.currentLine;
+				return ESUCCESS;
+			}
+			if (command === 4) {
+				session.stepOutArmed = true;
+				session.stepOutDepth = Math.max(0, session.callDepth - 1);
+				session.resumeSkipActive = true;
+				session.resumeSkipFunctionId = session.currentFunctionId;
+				session.resumeSkipLine = session.currentLine;
+				return ESUCCESS;
+			}
+		}
 	}
 
 	environ_sizes_get(environ_count_out: number, environ_buf_size_out: number) {

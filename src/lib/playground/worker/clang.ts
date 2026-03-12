@@ -6,12 +6,16 @@ self.document = {
 		return [];
 	}
 };
-let stdinBufferClang: Int32Array, interruptBufferClang: Uint8Array, clang: Clang;
+let stdinBufferClang: Int32Array,
+	debugBufferClang: Int32Array,
+	interruptBufferClang: Uint8Array,
+	clang: Clang;
 
 async function loadClang(path: string, log: boolean) {
 	const { default: Clang } = await import('$lib/clang');
 	clang = new Clang({
 		stdout: (output) => postMessage({ output }),
+		onDebugEvent: (debugEvent) => postMessage({ debugEvent }),
 		stdin: () => {
 			while (true) {
 				postMessage({ buffer: true });
@@ -38,16 +42,37 @@ async function loadClang(path: string, log: boolean) {
 }
 
 self.onmessage = async (event: { data: any }) => {
-	const { code, buffer, load, interrupt, log, path, prepare, args } = event.data;
+	const {
+		code,
+		buffer,
+		debugBuffer,
+		load,
+		interrupt,
+		log,
+		path,
+		prepare,
+		args,
+		debug,
+		breakpoints,
+		pauseOnEntry
+	} = event.data;
 	if (load) {
 		await loadClang(path, log);
 		postMessage({ load: true });
 	} else if (prepare) {
 		stdinBufferClang = new Int32Array(buffer);
+		debugBufferClang = new Int32Array(debugBuffer);
 		interruptBufferClang = new Uint8Array(interrupt);
 
 		try {
-			await clang.compileLink(code, { args });
+			await clang.compileLink(code, {
+				args,
+				debug,
+				breakpoints,
+				pauseOnEntry,
+				debugBuffer: debugBufferClang,
+				interruptBuffer: interruptBufferClang
+			});
 			self.postMessage({ results: true });
 		} catch (error: any) {
 			self.postMessage({ error: error.message });
@@ -55,10 +80,18 @@ self.onmessage = async (event: { data: any }) => {
 	} else if (code) {
 		clang.log = log;
 		stdinBufferClang = new Int32Array(buffer);
+		debugBufferClang = new Int32Array(debugBuffer);
 		interruptBufferClang = new Uint8Array(interrupt);
 
 		try {
-			await clang.compileLinkRun(code, { args });
+			await clang.compileLinkRun(code, {
+				args,
+				debug,
+				breakpoints,
+				pauseOnEntry,
+				debugBuffer: debugBufferClang,
+				interruptBuffer: interruptBufferClang
+			});
 			self.postMessage({ results: true });
 		} catch (error: any) {
 			self.postMessage({ error: error.message });

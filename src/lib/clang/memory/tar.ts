@@ -21,16 +21,16 @@ type Entry = EntryInit & {
 	devMajor: string;
 	devMinor: string;
 	filenamePrefix: string;
-	contents?: ArrayBuffer;
+	contents?: Uint8Array;
 };
 
 type FileEntry = Entry & {
 	type: '0';
-	contents: ArrayBuffer;
+	contents: Uint8Array;
 };
 
-function* readEntry(buffer: ArrayBuffer) {
-	const u8 = new Uint8Array(buffer);
+function* readEntry(buffer: Uint8Array | ArrayBufferLike) {
+	const u8 = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
 	let offset = 0;
 
 	const str = (len: number) => {
@@ -79,7 +79,7 @@ function* readEntry(buffer: ArrayBuffer) {
 	}
 }
 
-export default function untar(buffer: ArrayBuffer, memfs: MemFS) {
+export default function untar(buffer: Uint8Array | ArrayBufferLike, memfs: MemFS) {
 	for (const entry of readEntry(buffer)) {
 		switch (entry.type) {
 			case '0': // Regular file.
