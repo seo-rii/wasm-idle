@@ -1,4 +1,3 @@
-export const DEFAULT_CLANGD_BASE_URL = '/clangd';
 export const CLANGD_WORKSPACE_PATH = '/workspace';
 export const CLANGD_WORKSPACE_URI = `file://${CLANGD_WORKSPACE_PATH}`;
 export const CLANGD_CPP_FILE_PATH = `${CLANGD_WORKSPACE_PATH}/main.cpp`;

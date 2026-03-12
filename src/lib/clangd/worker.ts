@@ -94,21 +94,13 @@ self.addEventListener('message', async (event) => {
 				...(wasmSize > 0 ? { max: wasmSize } : {})
 			});
 		}
-		if (typeof DecompressionStream === 'undefined') {
-			throw new Error('This browser does not support gzip decompression streams');
-		}
-		const compressedWasmBytes = new Uint8Array(receivedLength);
+		const wasmBytes = new Uint8Array(receivedLength);
 		let offset = 0;
 		for (const chunk of chunks) {
-			compressedWasmBytes.set(chunk, offset);
+			wasmBytes.set(chunk, offset);
 			offset += chunk.length;
 		}
-		const wasmBytes = await new Response(
-			new Blob([compressedWasmBytes.buffer], { type: 'application/gzip' })
-				.stream()
-				.pipeThrough(new DecompressionStream('gzip'))
-		).arrayBuffer();
-		const wasmBlob = new Blob([wasmBytes], { type: 'application/wasm' });
+		const wasmBlob = new Blob([wasmBytes.buffer], { type: 'application/wasm' });
 		const wasmDataUrl = URL.createObjectURL(wasmBlob);
 		const { default: Clangd } = await jsModule;
 		const clangd = await Clangd({

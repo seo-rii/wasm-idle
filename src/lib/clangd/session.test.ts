@@ -109,7 +109,7 @@ describe('ClangdSession', () => {
 			}
 		};
 
-		const session = new ClangdSession(Monaco as any, status, 'https://example.com/wasm/');
+		const session = new ClangdSession(Monaco as any, 'https://example.com/wasm/', status);
 		session.createModel('int main() {}');
 		await session.start();
 

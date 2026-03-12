@@ -10,7 +10,6 @@ import { BrowserMessageReader, BrowserMessageWriter } from 'vscode-jsonrpc/brows
 import {
 	CLANGD_CPP_FILE_URI,
 	CLANGD_WORKSPACE_URI,
-	DEFAULT_CLANGD_BASE_URL,
 	type ClangdStatus,
 	normalizeClangdBaseUrl
 } from '$lib/clangd/config';
@@ -27,8 +26,8 @@ export class ClangdSession {
 
 	constructor(
 		MonacoModule: typeof Monaco,
-		onStatus?: (status: ClangdStatus) => void,
-		baseUrl = DEFAULT_CLANGD_BASE_URL
+		baseUrl: string,
+		onStatus?: (status: ClangdStatus) => void
 	) {
 		this.Monaco = MonacoModule;
 		this.onStatus = onStatus;
