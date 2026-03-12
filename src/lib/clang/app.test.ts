@@ -184,4 +184,66 @@ describe('App debug tracing', () => {
 			callStack: [{ functionName: 'main', line: 5 }]
 		});
 	});
+
+	it('renders fixed-size array locals from wasm memory at pause time', () => {
+		const onPause = vi.fn();
+		const buffer = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * 4);
+		const control = new Int32Array(buffer);
+		control[1] = 1;
+		const app = Object.assign(Object.create(App.prototype), {
+			debugSession: {
+				buffer: control,
+				interruptBuffer: new Uint8Array(new SharedArrayBuffer(1)),
+				breakpoints: new Set<number>(),
+				pauseOnEntry: false,
+				stepArmed: true,
+				nextLineArmed: false,
+				stepOutArmed: false,
+				callDepth: 1,
+				stepOutDepth: 0,
+				currentFunctionId: 1,
+				currentLine: 0,
+				resumeSkipActive: false,
+				resumeSkipFunctionId: 0,
+				resumeSkipLine: 0,
+				nextLineFunctionId: 0,
+				nextLineLine: 0,
+				functionMetadata: { 1: 'main' },
+				variableMetadata: {
+					1: [
+						{
+							slot: 1,
+							name: 'values',
+							kind: 'array',
+							elementKind: 'int',
+							length: 3,
+							fromLine: 4,
+							toLine: Number.MAX_SAFE_INTEGER
+						}
+					]
+				},
+				frames: [{ functionId: 1, functionName: 'main', line: 0, values: new Map([[1, '16']]) }],
+				onPause
+			},
+			mem: {
+				check: vi.fn(),
+				read8: vi.fn(),
+				readInt32: vi
+					.fn()
+					.mockImplementation((offset: number) => ({ 16: 1, 20: 2, 24: 3 }[offset] ?? 0)),
+				readFloat32: vi.fn(),
+				readFloat64: vi.fn()
+			},
+			trace: vi.fn()
+		}) as App;
+
+		expect(app.__wasm_idle_debug_line(1, 4)).toBe(0);
+		expect(onPause).toHaveBeenCalledWith({
+			type: 'pause',
+			line: 4,
+			reason: 'step',
+			locals: [{ name: 'values', value: '[1, 2, 3]' }],
+			callStack: [{ functionName: 'main', line: 4 }]
+		});
+	});
 });

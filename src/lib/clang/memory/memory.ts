@@ -1,14 +1,16 @@
 import { readStr, readStrR } from '$lib/clang/encode';
 
 export default class Memory {
-	memory: DataView;
+	memory: WebAssembly.Memory;
+	view: DataView;
 	buffer: ArrayBufferLike;
 	u8: Uint8Array;
 	u32: Uint32Array;
 
-	constructor(memory: DataView) {
+	constructor(memory: WebAssembly.Memory) {
 		this.memory = memory;
 		this.buffer = memory.buffer;
+		this.view = new DataView(this.buffer);
 		this.u8 = new Uint8Array(this.buffer);
 		this.u32 = new Uint32Array(this.buffer);
 	}
@@ -16,6 +18,7 @@ export default class Memory {
 	check() {
 		if (this.buffer.byteLength === 0) {
 			this.buffer = this.memory.buffer;
+			this.view = new DataView(this.buffer);
 			this.u8 = new Uint8Array(this.buffer);
 			this.u32 = new Uint32Array(this.buffer);
 		}
@@ -27,6 +30,18 @@ export default class Memory {
 
 	read32(o: number) {
 		return this.u32[o >> 2];
+	}
+
+	readInt32(o: number) {
+		return this.view.getInt32(o, true);
+	}
+
+	readFloat32(o: number) {
+		return this.view.getFloat32(o, true);
+	}
+
+	readFloat64(o: number) {
+		return this.view.getFloat64(o, true);
 	}
 
 	readStr(o: number, len: number) {

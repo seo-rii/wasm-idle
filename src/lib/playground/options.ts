@@ -6,6 +6,19 @@ export interface DebugVariable {
 	value: string;
 }
 
+export type DebugVariableKind = 'number' | 'bool' | 'array';
+export type DebugArrayElementKind = 'int' | 'float' | 'double' | 'bool' | 'char';
+
+export interface DebugVariableMetadata {
+	slot: number;
+	name: string;
+	kind: DebugVariableKind;
+	fromLine: number;
+	toLine: number;
+	elementKind?: DebugArrayElementKind;
+	length?: number;
+}
+
 export interface DebugFrame {
 	functionName: string;
 	line: number;

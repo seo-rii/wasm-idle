@@ -182,6 +182,32 @@ int main() {
 		expect(instrumentedSource).toContain('__wasm_idle_debug_value_num(1, 2, sum);');
 	});
 
+	it('captures fixed-size array locals with address hooks', async () => {
+		const { clang } = createClangHarness();
+		const code = `#include <stdio.h>
+
+int main() {
+    int values[3] = {1, 2, 3};
+    printf("%d\\n", values[0]);
+}`;
+
+		await clang.compile({
+			input: 'main.cc',
+			code,
+			obj: 'main.o',
+			debug: true
+		});
+
+		const instrumentedSource = String(vi.mocked(clang.memfs.addFile).mock.calls[0]?.[1] || '');
+		expect(instrumentedSource).toContain(
+			'extern "C" __attribute__((import_module("env"), import_name("__wasm_idle_debug_value_addr"))) void __wasm_idle_debug_value_addr(int functionId, int slot, int value);'
+		);
+		expect(instrumentedSource).toContain(
+			'__wasm_idle_debug_value_addr(1, 1, (int)((unsigned long long)(values)));'
+		);
+		expect(instrumentedSource).not.toContain('__wasm_idle_debug_value_num(1, 1, values);');
+	});
+
 	it('skips pointer locals and parameters in the provided recursive sequence sample', async () => {
 		const { clang } = createClangHarness();
 		const code = `#include <stdio.h>

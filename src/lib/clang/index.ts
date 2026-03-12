@@ -1,4 +1,8 @@
-import type { DebugVariable } from '$lib/playground/options';
+import type {
+	DebugArrayElementKind,
+	DebugVariable,
+	DebugVariableMetadata
+} from '$lib/playground/options';
 import App from '$lib/clang/app';
 import { MemFS, untar } from '$lib/clang/memory';
 import { green, yellow, normal } from '$lib/clang/color';
@@ -81,10 +85,7 @@ export default class Clang {
 		locals: DebugVariable[];
 		callStack: { functionName: string; line: number }[];
 	}) => void;
-	debugVariableMetadata: Record<
-		number,
-		Array<{ slot: number; name: string; kind: string; fromLine: number; toLine: number }>
-	> = {};
+	debugVariableMetadata: Record<number, DebugVariableMetadata[]> = {};
 	debugFunctionMetadata: Record<number, string> = {};
 	lastBuildKey = '';
 	path: string;
@@ -184,7 +185,7 @@ export default class Clang {
 			let nextVariableSlot = 1;
 			let currentFunctionVariables = new Map<
 				string,
-				{ slot: number; kind: string; fromLine: number; toLine: number }
+				{ slot: number; kind: 'number' | 'bool'; fromLine: number; toLine: number }
 			>();
 			let inBlockComment = false;
 			let pendingFunctionHeader:
@@ -200,6 +201,7 @@ export default class Clang {
 				'extern "C" __attribute__((import_module("env"), import_name("__wasm_idle_debug_leave"))) void __wasm_idle_debug_leave(int functionId);',
 				'extern "C" __attribute__((import_module("env"), import_name("__wasm_idle_debug_value_num"))) void __wasm_idle_debug_value_num(int functionId, int slot, double value);',
 				'extern "C" __attribute__((import_module("env"), import_name("__wasm_idle_debug_value_bool"))) void __wasm_idle_debug_value_bool(int functionId, int slot, int value);',
+				'extern "C" __attribute__((import_module("env"), import_name("__wasm_idle_debug_value_addr"))) void __wasm_idle_debug_value_addr(int functionId, int slot, int value);',
 				'extern "C" __attribute__((import_module("env"), import_name("__wasm_idle_debug_line"))) void __wasm_idle_debug_line(int functionId, int line);'
 			];
 			for (let index = 0; index < lines.length; index += 1) {
@@ -261,21 +263,44 @@ export default class Clang {
 						const declarations: string[] = [];
 						let declarationBuffer = '';
 						let declarationParenDepth = 0;
+						let declarationBraceDepth = 0;
 						for (const character of declarationMatch[2]) {
-							if (character === ',' && declarationParenDepth === 0) {
+							if (character === ',' && declarationParenDepth === 0 && declarationBraceDepth === 0) {
 								if (declarationBuffer.trim()) declarations.push(declarationBuffer.trim());
 								declarationBuffer = '';
 								continue;
 							}
 							if (character === '(') declarationParenDepth += 1;
 							if (character === ')') declarationParenDepth = Math.max(0, declarationParenDepth - 1);
+							if (character === '{') declarationBraceDepth += 1;
+							if (character === '}') declarationBraceDepth = Math.max(0, declarationBraceDepth - 1);
 							declarationBuffer += character;
 						}
 						if (declarationBuffer.trim()) declarations.push(declarationBuffer.trim());
 						for (const declaration of declarations) {
 							const [left] = declaration.split('=');
 							const declarator = left?.trim() || '';
-							if (/[*&\[]/.test(declarator)) continue;
+							const arrayMatch = declarator.match(/([A-Za-z_]\w*)\s*\[(\d+)\]\s*$/);
+							if (arrayMatch) {
+								const slot = nextVariableSlot++;
+								this.debugVariableMetadata[currentFunctionId] = [
+									...(this.debugVariableMetadata[currentFunctionId] || []),
+									{
+										slot,
+										name: arrayMatch[1],
+										kind: 'array',
+										elementKind: declarationMatch[1] as DebugArrayElementKind,
+										length: Number(arrayMatch[2]),
+										fromLine: index + 1,
+										toLine: Number.MAX_SAFE_INTEGER
+									}
+								];
+								trailingInstrumentation.push(
+									`${indent}__wasm_idle_debug_value_addr(${currentFunctionId}, ${slot}, (int)((unsigned long long)(${arrayMatch[1]})));`
+								);
+								continue;
+							}
+							if (/[*&]/.test(declarator)) continue;
 							const name = declarator.match(/([A-Za-z_]\w*)\s*(?:\[[^\]]*\])?$/)?.[1];
 							if (!name) continue;
 							if (!currentFunctionVariables.has(name)) {
@@ -477,6 +502,26 @@ export default class Clang {
 						.map((value: string) => value.trim())
 						.filter(Boolean)) {
 						const cleaned = parameter.split('=')[0]?.trim() || '';
+						const parameterArrayMatch = cleaned.match(/([A-Za-z_]\w*)\s*\[(\d+)\]\s*$/);
+						if (parameterArrayMatch && /\b(int|float|double|bool|char)\b/.test(cleaned)) {
+							const slot = nextVariableSlot++;
+							this.debugVariableMetadata[currentFunctionId] = [
+								...(this.debugVariableMetadata[currentFunctionId] || []),
+								{
+									slot,
+									name: parameterArrayMatch[1],
+									kind: 'array',
+									elementKind: (cleaned.match(/\b(int|float|double|bool|char)\b/)?.[1] || 'int') as DebugArrayElementKind,
+									length: Number(parameterArrayMatch[2]),
+									fromLine: index + 1,
+									toLine: Number.MAX_SAFE_INTEGER
+								}
+							];
+							instrumented.push(
+								`${indent}    __wasm_idle_debug_value_addr(${currentFunctionId}, ${slot}, (int)((unsigned long long)(${parameterArrayMatch[1]})));`
+							);
+							continue;
+						}
 						if (/[*&\[]/.test(cleaned)) continue;
 						const nameMatch = cleaned.match(/([A-Za-z_]\w*)\s*(?:\[[^\]]*\])?\s*$/);
 						if (!nameMatch) continue;

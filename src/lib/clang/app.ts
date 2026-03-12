@@ -1,4 +1,4 @@
-import type { DebugFrame, DebugVariable } from '$lib/playground/options';
+import type { DebugFrame, DebugVariable, DebugVariableMetadata } from '$lib/playground/options';
 import { bindNew } from '$lib/clang/apply';
 import { Memory, type MemFS } from '$lib/clang/memory';
 import { getInstance } from '$lib/clang/wasm';
@@ -24,10 +24,7 @@ interface DebugSession {
 	resumeSkipLine: number;
 	nextLineFunctionId: number;
 	nextLineLine: number;
-	variableMetadata: Record<
-		number,
-		Array<{ slot: number; name: string; kind: string; fromLine: number; toLine: number }>
-	>;
+	variableMetadata: Record<number, DebugVariableMetadata[]>;
 	functionMetadata: Record<number, string>;
 	frames: Array<{ functionId: number; functionName: string; line: number; values: Map<number, string> }>;
 	onPause?: (event: {
@@ -65,7 +62,8 @@ export default class App {
 			'__wasm_idle_debug_leave',
 			'__wasm_idle_debug_line',
 			'__wasm_idle_debug_value_num',
-			'__wasm_idle_debug_value_bool'
+			'__wasm_idle_debug_value_bool',
+			'__wasm_idle_debug_value_addr'
 		);
 
 		const wasi_unstable = {
@@ -185,6 +183,18 @@ export default class App {
 		return ESUCCESS;
 	}
 
+	__wasm_idle_debug_value_addr(functionId: number, slot: number, value: number) {
+		const session = this.debugSession;
+		if (!session?.buffer) return ESUCCESS;
+		for (let index = session.frames.length - 1; index >= 0; index -= 1) {
+			const frame = session.frames[index];
+			if (frame?.functionId !== functionId) continue;
+			frame.values.set(slot, String(value >>> 0));
+			break;
+		}
+		return ESUCCESS;
+	}
+
 	__wasm_idle_debug_line(functionId: number, line: number) {
 		const session = this.debugSession;
 		if (!session?.buffer) return ESUCCESS;
@@ -222,6 +232,50 @@ export default class App {
 		const locals =
 			session.variableMetadata[functionId]?.flatMap((variable) => {
 				if (line < variable.fromLine || line > variable.toLine) return [];
+				if (variable.kind === 'array') {
+					this.mem?.check?.();
+					const address = Number(frame?.values.get(variable.slot) ?? Number.NaN);
+					if (!Number.isFinite(address) || address <= 0 || !variable.length || !variable.elementKind) {
+						return [{ name: variable.name, value: '?' }];
+					}
+					const previewLength = Math.min(variable.length, 8);
+					const values: string[] = [];
+					for (let index = 0; index < previewLength; index += 1) {
+						const offset =
+							address +
+							(variable.elementKind === 'double'
+								? index * 8
+								: variable.elementKind === 'bool' || variable.elementKind === 'char'
+									? index
+									: index * 4);
+						if (variable.elementKind === 'bool') {
+							values.push(this.mem.read8(offset) ? 'true' : 'false');
+							continue;
+						}
+						if (variable.elementKind === 'char') {
+							const charCode = this.mem.read8(offset);
+							values.push(
+								charCode >= 0x20 && charCode <= 0x7e ? `'${String.fromCharCode(charCode)}'` : `${charCode}`
+							);
+							continue;
+						}
+						if (variable.elementKind === 'float') {
+							values.push(`${this.mem.readFloat32(offset)}`);
+							continue;
+						}
+						if (variable.elementKind === 'double') {
+							values.push(`${this.mem.readFloat64(offset)}`);
+							continue;
+						}
+						values.push(`${this.mem.readInt32(offset)}`);
+					}
+					return [
+						{
+							name: variable.name,
+							value: `[${values.join(', ')}${variable.length > previewLength ? ', ...' : ''}]`
+						}
+					];
+				}
 				const value = frame?.values.get(variable.slot) ?? '?';
 				return [{ name: variable.name, value }];
 			}) || [];
