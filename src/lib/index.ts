@@ -1,6 +1,7 @@
 import Terminal from '$lib/terminal';
 export {
 	cppDebugLanguageAdapter,
+	pythonDebugLanguageAdapter,
 	evaluateDebugExpression,
 	MonacoDebugView,
 	selectInlineDebugLocals

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import Monaco from './Monaco.svelte';
-	import Terminal, { cppDebugLanguageAdapter } from '$lib';
+	import Terminal, { cppDebugLanguageAdapter, pythonDebugLanguageAdapter } from '$lib';
 	import { page } from '$app/state';
 	import { browser } from '$app/environment';
 	import type { DebugFrame, DebugSessionEvent, DebugVariable } from '$lib/playground/options';
@@ -28,7 +28,13 @@
 		runningMode = $state<'run' | 'debug' | null>(null),
 		init = $state(false);
 
-	const debugLanguage = $derived.by(() => (language === 'CPP' ? cppDebugLanguageAdapter : null));
+	const debugLanguage = $derived.by(() =>
+		language === 'CPP'
+			? cppDebugLanguageAdapter
+			: language === 'PYTHON'
+				? pythonDebugLanguageAdapter
+				: null
+	);
 
 	function onDebugEvent(event: DebugSessionEvent) {
 		if (event.type === 'pause') {
@@ -119,7 +125,9 @@
 			try {
 				return {
 					expression,
-					value: debugLanguage ? debugLanguage.evaluateExpression(expression, debugLocals) : 'error'
+					value: debugLanguage
+						? debugLanguage.evaluateExpression(expression, debugLocals)
+						: 'error'
 				};
 			} catch (error) {
 				return {
@@ -141,7 +149,7 @@
 	});
 
 	$effect(() => {
-		if (language !== 'CPP') {
+		if (!debugLanguage) {
 			breakpoints = [];
 			pausedLine = null;
 			debugLocals = [];
@@ -156,11 +164,7 @@
 	<div style="width: 50%">
 		{path}
 		<button onclick={() => exec(false)} disabled={!!runningMode}>Run</button>
-		<button
-			onclick={() => exec(true)}
-			disabled={!!runningMode || language !== 'CPP'}
-			title={language === 'CPP' ? 'Trace WASI runtime and compiler steps' : 'C++ only'}
-		>
+		<button onclick={() => exec(true)} disabled={!!runningMode || !debugLanguage}>
 			Debug
 		</button>
 		<button onclick={() => sendDebugCommand('continue')} disabled={!debugPaused}>
@@ -181,8 +185,12 @@
 			<option value="CPP">C++</option>
 			<option value="PYTHON">Python</option>
 		</select>
-		{#if language === 'CPP'}
-			<p class="hint">Debug prints compile/runtime trace lines into the terminal.</p>
+		{#if debugLanguage}
+			<p class="hint">
+				{language === 'CPP'
+					? 'Debug prints compile/runtime trace lines into the terminal.'
+					: 'Debug pauses Pyodide execution at Python source lines.'}
+			</p>
 			<div class="debug-panels">
 				<section class="debug-panel">
 					<h3>Locals</h3>
@@ -212,7 +220,11 @@
 								<li>
 									<span>{watch.expression}</span>
 									<code>{watch.value}</code>
-									<button class="remove" onclick={() => removeWatchExpression(watch.expression)}>x</button>
+									<button
+										class="remove"
+										onclick={() => removeWatchExpression(watch.expression)}
+										>x</button
+									>
 								</li>
 							{/each}
 						</ul>

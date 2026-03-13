@@ -66,8 +66,8 @@ print(f"sum={sum(values)}")`
 
 	$effect(() => {
 		if (!debugView) return;
-		debugView.setBreakpoints(language === 'cpp' ? breakpoints : []);
-		debugView.setPauseState(language === 'cpp' ? pausedLine : null, debugLocals, debugLanguage);
+		debugView.setBreakpoints(debugLanguage ? breakpoints : []);
+		debugView.setPauseState(debugLanguage ? pausedLine : null, debugLocals, debugLanguage);
 	});
 
 	onMount(() => {
@@ -98,13 +98,9 @@ print(f"sum={sum(values)}")`
 					clangdStatus = { state: 'disabled' };
 					return;
 				}
-				session = new ClangdSession(
-					Monaco,
-					clangdBaseUrl,
-					(status) => {
-						if (!disposed) clangdStatus = status;
-					}
-				);
+				session = new ClangdSession(Monaco, clangdBaseUrl, (status) => {
+					if (!disposed) clangdStatus = status;
+				});
 				model = session.createModel(defaultValue);
 				editor.setModel(model);
 				try {
@@ -124,8 +120,13 @@ print(f"sum={sum(values)}")`
 				value: defaultValue,
 				language,
 				automaticLayout: true,
-				glyphMargin: false
+				glyphMargin: !!debugLanguage
 			});
+			if (debugLanguage) {
+				debugView = new MonacoDebugView(Monaco, editor, onBreakpointsChange);
+				debugView.setBreakpoints(breakpoints);
+				debugView.setPauseState(pausedLine, debugLocals, debugLanguage);
+			}
 		});
 
 		return () => {

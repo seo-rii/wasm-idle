@@ -16,17 +16,29 @@ describe('evaluateDebugExpression', () => {
 				{ name: 'result2', value: '3' }
 			])
 		).toBe('5');
+		expect(evaluateDebugExpression('a[0]', [{ name: 'a', value: '[1, 2, 3]' }])).toBe('1');
 		expect(
-			evaluateDebugExpression('a[0]', [{ name: 'a', value: '[1, 2, 3]' }])
-		).toBe('1');
-		expect(
-			evaluateDebugExpression('grid[1][2]', [{ name: 'grid', value: '[[1, 2, 3], [4, 5, 6]]' }])
+			evaluateDebugExpression('grid[1][2]', [
+				{ name: 'grid', value: '[[1, 2, 3], [4, 5, 6]]' }
+			])
 		).toBe('6');
+		expect(
+			evaluateDebugExpression('ready and not done', [
+				{ name: 'ready', value: 'True' },
+				{ name: 'done', value: 'False' }
+			])
+		).toBe('true');
+		expect(evaluateDebugExpression('name == "Ada"', [{ name: 'name', value: "'Ada'" }])).toBe(
+			'true'
+		);
+		expect(
+			evaluateDebugExpression('current == None', [{ name: 'current', value: 'None' }])
+		).toBe('true');
 	});
 
 	it('treats unavailable locals as unavailable', () => {
-		expect(() =>
-			evaluateDebugExpression('a + 1', [{ name: 'a', value: '?' }])
-		).toThrowError('unavailable');
+		expect(() => evaluateDebugExpression('a + 1', [{ name: 'a', value: '?' }])).toThrowError(
+			'unavailable'
+		);
 	});
 });
