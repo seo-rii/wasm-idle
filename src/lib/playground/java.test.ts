@@ -82,7 +82,9 @@ describe('TeaVM Java sandbox', () => {
 			1,
 			expect.objectContaining({
 				load: true,
-				baseUrl: expect.stringMatching(/^http:\/\/localhost(?::\d+)?\/absproxy\/5173\/teavm\/$/)
+				baseUrl: expect.stringMatching(
+					/^http:\/\/localhost(?::\d+)?\/absproxy\/5173\/teavm\/$/
+				)
 			})
 		);
 		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(

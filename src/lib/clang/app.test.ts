@@ -95,6 +95,75 @@ describe('App debug tracing', () => {
 		});
 	});
 
+	it('records function entry lines on debug enter', () => {
+		const app = Object.assign(Object.create(App.prototype), {
+			debugSession: {
+				buffer: new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * 4)),
+				interruptBuffer: new Uint8Array(new SharedArrayBuffer(1)),
+				breakpoints: new Set<number>(),
+				pauseOnEntry: false,
+				stepArmed: false,
+				nextLineArmed: false,
+				stepOutArmed: false,
+				callDepth: 0,
+				stepOutDepth: 0,
+				currentFunctionId: 0,
+				currentLine: 0,
+				resumeSkipActive: false,
+				resumeSkipFunctionId: 0,
+				resumeSkipLine: 0,
+				nextLineFunctionId: 0,
+				nextLineLine: 0,
+				functionMetadata: { 7: 'main' },
+				variableMetadata: {},
+				frames: [],
+				globalValues: new Map()
+			},
+			trace: vi.fn()
+		}) as App;
+
+		expect(app.__wasm_idle_debug_enter(7, 12)).toBe(0);
+		expect(app.debugSession?.currentLine).toBe(12);
+		expect(app.debugSession?.frames).toEqual([
+			{ functionId: 7, functionName: 'main', line: 12, values: new Map() }
+		]);
+	});
+
+	it('arms a step fallback when next-line leaves the current function before another line', () => {
+		const app = Object.assign(Object.create(App.prototype), {
+			debugSession: {
+				buffer: new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * 4)),
+				interruptBuffer: new Uint8Array(new SharedArrayBuffer(1)),
+				breakpoints: new Set<number>(),
+				pauseOnEntry: false,
+				stepArmed: false,
+				nextLineArmed: true,
+				stepOutArmed: false,
+				callDepth: 2,
+				stepOutDepth: 0,
+				currentFunctionId: 2,
+				currentLine: 14,
+				resumeSkipActive: false,
+				resumeSkipFunctionId: 0,
+				resumeSkipLine: 0,
+				nextLineFunctionId: 2,
+				nextLineLine: 14,
+				functionMetadata: { 1: 'main', 2: 'helper' },
+				variableMetadata: {},
+				frames: [
+					{ functionId: 1, functionName: 'main', line: 9, values: new Map() },
+					{ functionId: 2, functionName: 'helper', line: 14, values: new Map() }
+				],
+				globalValues: new Map()
+			},
+			trace: vi.fn()
+		}) as App;
+
+		expect(app.__wasm_idle_debug_leave(2)).toBe(0);
+		expect(app.debugSession?.nextLineArmed).toBe(false);
+		expect(app.debugSession?.stepArmed).toBe(true);
+	});
+
 	it('emits placeholders for declared locals without runtime values yet', () => {
 		const onPause = vi.fn();
 		const buffer = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * 4);

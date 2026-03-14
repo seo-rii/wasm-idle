@@ -213,7 +213,7 @@ export default class Clang {
 				'#include <string>',
 				'#include <type_traits>',
 				'#include <vector>',
-				'extern "C" __attribute__((import_module("env"), import_name("__wasm_idle_debug_enter"))) void __wasm_idle_debug_enter(int functionId);',
+				'extern "C" __attribute__((import_module("env"), import_name("__wasm_idle_debug_enter"))) void __wasm_idle_debug_enter(int functionId, int line);',
 				'extern "C" __attribute__((import_module("env"), import_name("__wasm_idle_debug_leave"))) void __wasm_idle_debug_leave(int functionId);',
 				'extern "C" __attribute__((import_module("env"), import_name("__wasm_idle_debug_value_num"))) void __wasm_idle_debug_value_num(int functionId, int slot, double value);',
 				'extern "C" __attribute__((import_module("env"), import_name("__wasm_idle_debug_value_bool"))) void __wasm_idle_debug_value_bool(int functionId, int slot, int value);',
@@ -669,7 +669,9 @@ export default class Clang {
 					nextVariableSlot = 1;
 					currentFunctionVariables = new Map();
 					currentFunctionContainers = new Map();
-					instrumented.push(`${indent}    __wasm_idle_debug_enter(${currentFunctionId});`);
+					instrumented.push(
+						`${indent}    __wasm_idle_debug_enter(${currentFunctionId}, ${index + 1});`
+					);
 					const parameterSource = startsInlineFunctionBody
 						? normalized.slice(normalized.indexOf('(') + 1, normalized.lastIndexOf(')'))
 						: pendingFunctionHeader?.parameters || '';

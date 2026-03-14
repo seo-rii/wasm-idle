@@ -1,5 +1,9 @@
 import type { PyodideInterface } from 'pyodide';
-import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
+import {
+	flushQueuedStdin,
+	readBufferedStdin,
+	waitForBufferedStdin
+} from '$lib/playground/stdinBuffer';
 
 declare const self: {
 	document: any;
@@ -20,6 +24,8 @@ self.document = {
 
 let stdinBufferPyodide: Int32Array,
 	debugBufferPyodide: Int32Array,
+	watchBufferPyodide: Int32Array,
+	watchResultBufferPyodide: Int32Array,
 	interruptBufferPyodide: Uint8Array,
 	pyodide: PyodideInterface,
 	path = '',
@@ -224,6 +230,8 @@ self.onmessage = async (event: any) => {
 		code,
 		buffer,
 		debugBuffer,
+		watchBuffer,
+		watchResultBuffer,
 		load,
 		interrupt,
 		path: _p,
@@ -257,6 +265,8 @@ self.onmessage = async (event: any) => {
 		const ts = Date.now();
 		stdinBufferPyodide = new Int32Array(buffer);
 		debugBufferPyodide = new Int32Array(debugBuffer);
+		watchBufferPyodide = new Int32Array(watchBuffer);
+		watchResultBufferPyodide = new Int32Array(watchResultBuffer);
 		interruptBufferPyodide = new Uint8Array(interrupt);
 		pyodide.setInterruptBuffer(interruptBufferPyodide);
 		const toPythonStr = (obj: any) => {
@@ -291,6 +301,8 @@ self.onmessage = async (event: any) => {
 		};
 		const debugPauseName = `__wasm_idle_python_debug_pause_${ts}`;
 		const debugWaitName = `__wasm_idle_python_debug_wait_${ts}`;
+		const debugReadWatchName = `__wasm_idle_python_debug_watch_read_${ts}`;
+		const debugWriteWatchName = `__wasm_idle_python_debug_watch_write_${ts}`;
 		self[debugPauseName] = (
 			line: number,
 			reason: string,
@@ -329,6 +341,10 @@ self.onmessage = async (event: any) => {
 				if (command) return command;
 			}
 		};
+		self[debugReadWatchName] = () => readBufferedStdin(watchBufferPyodide) || '';
+		self[debugWriteWatchName] = (value: string) => {
+			flushQueuedStdin([value], watchResultBufferPyodide);
+		};
 		const userFilename = '__wasm_idle_user__.py';
 		const normalizedBreakpoints = JSON.stringify(
 			[...(Array.isArray(breakpoints) ? breakpoints : [])]
@@ -344,6 +360,7 @@ import json
 import sys
 from js import __pyodide__input_${ts}, __pyodide__output_${ts}
 ${debug ? `from js import ${debugPauseName}, ${debugWaitName}` : ''}
+${debug ? `from js import ${debugReadWatchName}, ${debugWriteWatchName}` : ''}
 
 __wasm_idle_input = __pyodide__input_${ts}
 def __wasm_idle_input_wrapper(prompt = ""):
@@ -386,6 +403,9 @@ def __wasm_idle_debug_preview(value, depth = 0):
         return "True" if value else "False"
     if isinstance(value, (int, float)):
         return repr(value)
+    if isinstance(value, (bytes, bytearray)):
+        text = repr(bytes(value))
+        return text if len(text) <= 80 else text[:77] + "..."
     if isinstance(value, str):
         text = repr(value)
         return text if len(text) <= 80 else text[:77] + "..."
@@ -410,7 +430,7 @@ def __wasm_idle_debug_preview(value, depth = 0):
             items.append(__wasm_idle_debug_preview(key, depth + 1) + ": " + __wasm_idle_debug_preview(item, depth + 1))
         return "{" + ", ".join(items) + "}"
     if isinstance(value, set):
-        items = [__wasm_idle_debug_preview(item, depth + 1) for item in list(value)[:6]]
+        items = [__wasm_idle_debug_preview(item, depth + 1) for item in sorted(list(value), key = repr)[:6]]
         if len(value) > 6:
             items.append("...")
         return "{" + ", ".join(items) + "}"
@@ -423,7 +443,7 @@ def __wasm_idle_debug_preview(value, depth = 0):
 def __wasm_idle_debug_locals(frame):
     locals_preview = []
     for name, value in frame.f_locals.items():
-        if name == "__builtins__" or name.startswith("__wasm_idle_"):
+        if name == "__builtins__" or name.startswith("__wasm_idle_") or name.startswith("."):
             continue
         locals_preview.append({"name": name, "value": __wasm_idle_debug_preview(value)})
     locals_preview.sort(key = lambda item: item["name"])
@@ -480,9 +500,18 @@ def __wasm_idle_debug_trace(frame, event, arg):
     __wasm_idle_debug_step_out_depth = None
 
     ${debugPauseName}(line, reason, json.dumps(__wasm_idle_debug_locals(frame)), json.dumps(__wasm_idle_debug_stack(frame)))
-    command = ${debugWaitName}()
-    if command < 0:
-        raise KeyboardInterrupt()
+    while True:
+        command = ${debugWaitName}()
+        if command < 0:
+            raise KeyboardInterrupt()
+        if command != 5:
+            break
+        try:
+            expression = ${debugReadWatchName}()
+            result = __wasm_idle_debug_preview(eval(expression, frame.f_globals, frame.f_locals))
+        except Exception as error:
+            result = "?" if error.__class__.__name__ == "NameError" else "error"
+        ${debugWriteWatchName}(result)
     __wasm_idle_debug_resume_skip = (depth, line)
     if command == 2:
         __wasm_idle_debug_step_mode = "step"
@@ -500,14 +529,28 @@ sys.settrace(__wasm_idle_debug_trace)
 		: ''
 }
 
-__wasm_idle_globals = {"__name__": "__main__"}
-__wasm_idle_result = eval(
-    compile(${JSON.stringify(code)}, "${userFilename}", "exec", flags = ast.PyCF_ALLOW_TOP_LEVEL_AWAIT),
-    __wasm_idle_globals,
-    __wasm_idle_globals,
-)
-if inspect.isawaitable(__wasm_idle_result):
-    await __wasm_idle_result
+try:
+    __wasm_idle_globals = {"__name__": "__main__"}
+    __wasm_idle_result = eval(
+        compile(${JSON.stringify(code)}, "${userFilename}", "exec", flags = ast.PyCF_ALLOW_TOP_LEVEL_AWAIT),
+        __wasm_idle_globals,
+        __wasm_idle_globals,
+    )
+    if inspect.isawaitable(__wasm_idle_result):
+        await __wasm_idle_result
+finally:
+    sys.settrace(None)
+    ${
+	debug
+		? `
+    __wasm_idle_debug_step_mode = None
+    __wasm_idle_debug_resume_skip = None
+    __wasm_idle_debug_next_depth = None
+    __wasm_idle_debug_next_line = None
+    __wasm_idle_debug_step_out_depth = None
+`
+		: ''
+}
 `);
 			self.postMessage({ results: true });
 		} catch (e: any) {
@@ -515,6 +558,8 @@ if inspect.isawaitable(__wasm_idle_result):
 		} finally {
 			delete self[debugPauseName];
 			delete self[debugWaitName];
+			delete self[debugReadWatchName];
+			delete self[debugWriteWatchName];
 		}
 	}
 };

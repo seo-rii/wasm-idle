@@ -23,9 +23,7 @@ const loadTeaVmArtifacts = async () => {
 };
 
 describe('TeaVM Java stdin integration', () => {
-	it(
-		'compiles and runs byte-oriented stdin code with injected snapshot input',
-		async () => {
+	it('compiles and runs byte-oriented stdin code with injected snapshot input', async () => {
 		const { runtime, compilerWasm, sdk, runtimeClasslib } = await loadTeaVmArtifacts();
 		const code = `public class Main {
     public static void main(String[] args) throws Exception {
@@ -77,9 +75,11 @@ describe('TeaVM Java stdin integration', () => {
 
 		const wasm = new Uint8Array(compiler.getWebAssemblyOutputFile('app.wasm'));
 		const outputs: string[] = [];
-		(globalThis as typeof globalThis & {
-			window?: { wasmIdleJavaStdin: { readByte: () => number } };
-		}).window = {
+		(
+			globalThis as typeof globalThis & {
+				window?: { wasmIdleJavaStdin: { readByte: () => number } };
+			}
+		).window = {
 			wasmIdleJavaStdin: {
 				readByte: () => -1
 			}
@@ -110,16 +110,12 @@ describe('TeaVM Java stdin integration', () => {
 			).window;
 		}
 
-			expect(outputs.join('')).toBe('sum=10\n');
-		},
-		10000
-	);
+		expect(outputs.join('')).toBe('sum=10\n');
+	}, 10000);
 
-	it(
-		'reads live stdin chunks through the custom TeaVM bridge',
-		async () => {
-			const { runtime, compilerWasm, sdk, runtimeClasslib } = await loadTeaVmArtifacts();
-			const code = `public class Main {
+	it('reads live stdin chunks through the custom TeaVM bridge', async () => {
+		const { runtime, compilerWasm, sdk, runtimeClasslib } = await loadTeaVmArtifacts();
+		const code = `public class Main {
     public static void main(String[] args) throws Exception {
         int first = System.in.read();
         int second = System.in.read();
@@ -127,60 +123,60 @@ describe('TeaVM Java stdin integration', () => {
         System.out.println("" + (char) first + (char) second + (char) third);
     }
 }`;
-			const injection = prepareJavaStdinInjection(code, '');
-			const compilerModule = await runtime.load(compilerWasm, {
+		const injection = prepareJavaStdinInjection(code, '');
+		const compilerModule = await runtime.load(compilerWasm, {
+			stackDeobfuscator: { enabled: false }
+		});
+		const compiler = compilerModule.exports.createCompiler();
+
+		compiler.setSdk(sdk);
+		compiler.setTeaVMClasslib(runtimeClasslib);
+		compiler.addSourceFile('Main.java', injection.transformedCode);
+		if (injection.helperSourcePath && injection.helperSource) {
+			compiler.addSourceFile(injection.helperSourcePath, injection.helperSource);
+		}
+
+		expect(compiler.compile()).toBe(true);
+		expect(compiler.generateWebAssembly({ outputName: 'app', mainClass: 'Main' })).toBe(true);
+
+		const wasm = new Uint8Array(compiler.getWebAssemblyOutputFile('app.wasm'));
+		const outputs: string[] = [];
+		const bytes = ['A', 'B', 'C'].map((value) => value.charCodeAt(0));
+		(
+			globalThis as typeof globalThis & {
+				window?: { wasmIdleJavaStdin: { readByte: () => number } };
+			}
+		).window = {
+			wasmIdleJavaStdin: {
+				readByte: () => bytes.shift() ?? -1
+			}
+		};
+
+		try {
+			const module = await runtime.load(wasm, {
+				installImports(imports: {
+					teavmConsole: {
+						putcharStdout: (code: number) => void;
+						putcharStderr: (code: number) => void;
+					};
+				}) {
+					imports.teavmConsole.putcharStdout = (charCode) =>
+						outputs.push(String.fromCharCode(charCode));
+					imports.teavmConsole.putcharStderr = (charCode) =>
+						outputs.push(String.fromCharCode(charCode));
+				},
 				stackDeobfuscator: { enabled: false }
 			});
-			const compiler = compilerModule.exports.createCompiler();
 
-			compiler.setSdk(sdk);
-			compiler.setTeaVMClasslib(runtimeClasslib);
-			compiler.addSourceFile('Main.java', injection.transformedCode);
-			if (injection.helperSourcePath && injection.helperSource) {
-				compiler.addSourceFile(injection.helperSourcePath, injection.helperSource);
-			}
-
-			expect(compiler.compile()).toBe(true);
-			expect(compiler.generateWebAssembly({ outputName: 'app', mainClass: 'Main' })).toBe(true);
-
-			const wasm = new Uint8Array(compiler.getWebAssemblyOutputFile('app.wasm'));
-			const outputs: string[] = [];
-			const bytes = ['A', 'B', 'C'].map((value) => value.charCodeAt(0));
-			(globalThis as typeof globalThis & {
-				window?: { wasmIdleJavaStdin: { readByte: () => number } };
-			}).window = {
-				wasmIdleJavaStdin: {
-					readByte: () => bytes.shift() ?? -1
+			module.exports.main([]);
+		} finally {
+			delete (
+				globalThis as typeof globalThis & {
+					window?: { wasmIdleJavaStdin: { readByte: () => number } };
 				}
-			};
+			).window;
+		}
 
-			try {
-				const module = await runtime.load(wasm, {
-					installImports(imports: {
-						teavmConsole: {
-							putcharStdout: (code: number) => void;
-							putcharStderr: (code: number) => void;
-						};
-					}) {
-						imports.teavmConsole.putcharStdout = (charCode) =>
-							outputs.push(String.fromCharCode(charCode));
-						imports.teavmConsole.putcharStderr = (charCode) =>
-							outputs.push(String.fromCharCode(charCode));
-					},
-					stackDeobfuscator: { enabled: false }
-				});
-
-				module.exports.main([]);
-			} finally {
-				delete (
-					globalThis as typeof globalThis & {
-						window?: { wasmIdleJavaStdin: { readByte: () => number } };
-					}
-				).window;
-			}
-
-			expect(outputs.join('')).toBe('ABC\n');
-		},
-		10000
-	);
+		expect(outputs.join('')).toBe('ABC\n');
+	}, 10000);
 });

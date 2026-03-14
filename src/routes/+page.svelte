@@ -30,6 +30,7 @@
 		pausedLine = $state<number | null>(null),
 		debugActive = $state(false),
 		debugPaused = $state(false),
+		watchValues = $state<{ expression: string; value: string }[]>([]),
 		log = $state(true),
 		language = $state('CPP'),
 		runningMode = $state<'run' | 'debug' | null>(null),
@@ -77,6 +78,7 @@
 
 	async function exec(debug = false) {
 		if (!editor || !terminal) return;
+		if (debug && !debugLanguage) return;
 		if (runningMode) return;
 		runningMode = debug ? 'debug' : 'run';
 		if (debug) {
@@ -136,14 +138,46 @@
 		watchExpressions = watchExpressions.filter((entry) => entry !== expression);
 	}
 
-	const watchValues = $derived.by(() =>
-		watchExpressions.map((expression) => {
+	let watchRequestVersion = 0;
+
+	$effect(() => {
+		const expressions = [...watchExpressions];
+		const adapter = debugLanguage;
+		const locals = [...debugLocals];
+		const paused = debugPaused;
+		const activeLanguage = language;
+		const terminalControl = terminal;
+		const version = ++watchRequestVersion;
+
+		if (!expressions.length) {
+			watchValues = [];
+			return;
+		}
+
+		if (activeLanguage === 'PYTHON' && paused && terminalControl?.debugEvaluate) {
+			watchValues = expressions.map((expression) => ({ expression, value: '...' }));
+			(async () => {
+				const resolved: { expression: string; value: string }[] = [];
+				for (const expression of expressions) {
+					resolved.push({
+						expression,
+						value: await terminalControl.debugEvaluate!(expression)
+					});
+				}
+				if (version === watchRequestVersion) watchValues = resolved;
+			})().catch(() => {
+				if (version === watchRequestVersion) {
+					watchValues = expressions.map((expression) => ({ expression, value: 'error' }));
+				}
+			});
+			return;
+		}
+
+		watchValues = expressions.map((expression) => {
 			try {
 				return {
 					expression,
-					value: debugLanguage
-						? debugLanguage.evaluateExpression(expression, debugLocals)
-						: 'error'
+					value: adapter ? adapter.evaluateExpression(expression, locals) : 'error'
 				};
 			} catch (error) {
 				return {
@@ -151,8 +185,8 @@
 					value: error instanceof Error && error.message === 'unavailable' ? '?' : 'error'
 				};
 			}
-		})
-	);
+		});
+	});
 
 	$effect(() => {
 		if (browser && editor && !init) {

@@ -111,6 +111,8 @@ class Clang implements Sandbox {
 					this.elapse = Date.now() - this.begin;
 					this.waitingForInput = false;
 					this.pendingEof = false;
+					this.exit = true;
+					this.ondebug?.({ type: 'stop' });
 					reject(error);
 				}
 				if (progress) prog?.set?.(progress);
@@ -144,6 +146,10 @@ class Clang implements Sandbox {
 		Atomics.add(control, 0, 1);
 		Atomics.notify(control, 0);
 		this.ondebug?.({ type: 'resume', command });
+	}
+
+	kill() {
+		this.terminate();
 	}
 
 	terminate() {

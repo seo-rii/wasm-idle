@@ -67,6 +67,30 @@ export const readBufferedStdin = (buffer: SharedArrayBuffer | Int32Array) => {
 	return decoder.decode(payload.slice(0, length));
 };
 
+export const bufferedSequence = (buffer: SharedArrayBuffer | Int32Array) =>
+	Atomics.load(controlViewOf(buffer), SEQUENCE_INDEX);
+
+export const waitForBufferedSequenceChange = (
+	buffer: SharedArrayBuffer | Int32Array,
+	sequence: number,
+	timeoutMs = 5000
+) =>
+	new Promise<string | null>((resolve, reject) => {
+		const startedAt = Date.now();
+		const poll = () => {
+			if (bufferedSequence(buffer) !== sequence) {
+				resolve(readBufferedStdin(buffer));
+				return;
+			}
+			if (Date.now() - startedAt >= timeoutMs) {
+				reject(new Error('Timed out waiting for buffered value'));
+				return;
+			}
+			setTimeout(poll, 10);
+		};
+		poll();
+	});
+
 export const flushBufferedEof = (buffer: SharedArrayBuffer | Int32Array) => {
 	const control = controlViewOf(buffer);
 	const payload = payloadViewOf(control);

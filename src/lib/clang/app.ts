@@ -132,127 +132,9 @@ export default class App {
 		throw new ProcExit(code);
 	}
 
-	__wasm_idle_debug_enter(functionId: number) {
-		const session = this.debugSession;
-		if (!session?.buffer) return ESUCCESS;
-		session.callDepth += 1;
-		session.currentFunctionId = functionId;
-		session.frames.push({
-			functionId,
-			functionName: session.functionMetadata[functionId] || `fn_${functionId}`,
-			line: 0,
-			values: new Map()
-		});
-		this.trace(`enter(function=${functionId}, depth=${session.callDepth})`);
-		return ESUCCESS;
-	}
-
-	__wasm_idle_debug_leave(functionId: number) {
-		const session = this.debugSession;
-		if (!session?.buffer) return ESUCCESS;
-		this.trace(`leave(function=${functionId}, depth=${session.callDepth})`);
-		session.callDepth = Math.max(0, session.callDepth - 1);
-		if (session.currentFunctionId === functionId) session.currentFunctionId = 0;
-		for (let index = session.frames.length - 1; index >= 0; index -= 1) {
-			if (session.frames[index]?.functionId === functionId) {
-				session.frames.splice(index, 1);
-				break;
-			}
-		}
-		return ESUCCESS;
-	}
-
-	__wasm_idle_debug_value_num(functionId: number, slot: number, value: number) {
-		const session = this.debugSession;
-		if (!session?.buffer) return ESUCCESS;
-		if (functionId === 0) {
-			session.globalValues.set(slot, Number.isInteger(value) ? String(value) : `${value}`);
-			return ESUCCESS;
-		}
-		for (let index = session.frames.length - 1; index >= 0; index -= 1) {
-			const frame = session.frames[index];
-			if (frame?.functionId !== functionId) continue;
-			frame.values.set(slot, Number.isInteger(value) ? String(value) : `${value}`);
-			break;
-		}
-		return ESUCCESS;
-	}
-
-	__wasm_idle_debug_value_bool(functionId: number, slot: number, value: number) {
-		const session = this.debugSession;
-		if (!session?.buffer) return ESUCCESS;
-		if (functionId === 0) {
-			session.globalValues.set(slot, value ? 'true' : 'false');
-			return ESUCCESS;
-		}
-		for (let index = session.frames.length - 1; index >= 0; index -= 1) {
-			const frame = session.frames[index];
-			if (frame?.functionId !== functionId) continue;
-			frame.values.set(slot, value ? 'true' : 'false');
-			break;
-		}
-		return ESUCCESS;
-	}
-
-	__wasm_idle_debug_value_addr(functionId: number, slot: number, value: number) {
-		const session = this.debugSession;
-		if (!session?.buffer) return ESUCCESS;
-		if (functionId === 0) {
-			session.globalValues.set(slot, String(value >>> 0));
-			return ESUCCESS;
-		}
-		for (let index = session.frames.length - 1; index >= 0; index -= 1) {
-			const frame = session.frames[index];
-			if (frame?.functionId !== functionId) continue;
-			frame.values.set(slot, String(value >>> 0));
-			break;
-		}
-		return ESUCCESS;
-	}
-
-	__wasm_idle_debug_value_text(functionId: number, slot: number, ptr: number, len: number) {
-		const session = this.debugSession;
-		if (!session?.buffer) return ESUCCESS;
-		this.mem?.check?.();
-		const text = this.mem?.readStr ? this.mem.readStr(ptr, len) : '?';
-		if (functionId === 0) {
-			session.globalValues.set(slot, text);
-			return ESUCCESS;
-		}
-		for (let index = session.frames.length - 1; index >= 0; index -= 1) {
-			const frame = session.frames[index];
-			if (frame?.functionId !== functionId) continue;
-			frame.values.set(slot, text);
-			break;
-		}
-		return ESUCCESS;
-	}
-
-	__wasm_idle_debug_line(functionId: number, line: number) {
-		const session = this.debugSession;
-		if (!session?.buffer) return ESUCCESS;
-		if (session.resumeSkipActive) {
-			if (functionId === session.resumeSkipFunctionId && line === session.resumeSkipLine) {
-				return ESUCCESS;
-			}
-			session.resumeSkipActive = false;
-			session.resumeSkipFunctionId = 0;
-			session.resumeSkipLine = 0;
-		}
-		let reason = '';
-		if (session.pauseOnEntry) reason = 'entry';
-		else if (session.breakpoints.has(line)) reason = 'breakpoint';
-		else if (session.stepArmed) reason = 'step';
-		else if (
-			session.nextLineArmed &&
-			functionId === session.nextLineFunctionId &&
-			line !== session.nextLineLine
-		) {
-			reason = 'nextLine';
-		} else if (session.stepOutArmed && session.callDepth <= session.stepOutDepth) {
-			reason = 'stepOut';
-		}
-		if (!reason) return ESUCCESS;
+	private pauseDebugSession(session: DebugSession, functionId: number, line: number, reason: string) {
+		const buffer = session.buffer;
+		if (!buffer) return ESUCCESS;
 		session.currentFunctionId = functionId;
 		session.currentLine = line;
 		const frame = [...session.frames].reverse().find((candidate) => candidate.functionId === functionId);
@@ -375,12 +257,12 @@ export default class App {
 				.reverse()
 				.map((stackFrame) => ({ functionName: stackFrame.functionName, line: stackFrame.line }))
 		});
-		const sequence = Atomics.load(session.buffer, 0);
+		const sequence = Atomics.load(buffer, 0);
 		while (true) {
 			if (session.interruptBuffer?.[0] === 2) throw new AbortError();
-			Atomics.wait(session.buffer, 0, sequence, 100);
+			Atomics.wait(buffer, 0, sequence, 100);
 			if (session.interruptBuffer?.[0] === 2) throw new AbortError();
-			const command = Atomics.exchange(session.buffer, 1, 0);
+			const command = Atomics.exchange(buffer, 1, 0);
 			if (command === 1) {
 				session.resumeSkipActive = true;
 				session.resumeSkipFunctionId = session.currentFunctionId;
@@ -412,6 +294,141 @@ export default class App {
 				return ESUCCESS;
 			}
 		}
+	}
+
+	__wasm_idle_debug_enter(functionId: number, line: number) {
+		const session = this.debugSession;
+		if (!session?.buffer) return ESUCCESS;
+		session.callDepth += 1;
+		session.currentFunctionId = functionId;
+		session.currentLine = line;
+		session.frames.push({
+			functionId,
+			functionName: session.functionMetadata[functionId] || `fn_${functionId}`,
+			line,
+			values: new Map()
+		});
+		this.trace(`enter(function=${functionId}, line=${line}, depth=${session.callDepth})`);
+		if (session.pauseOnEntry) {
+			return this.pauseDebugSession(session, functionId, line, 'entry');
+		}
+		if (session.stepArmed) {
+			return this.pauseDebugSession(session, functionId, line, 'step');
+		}
+		return ESUCCESS;
+	}
+
+	__wasm_idle_debug_leave(functionId: number) {
+		const session = this.debugSession;
+		if (!session?.buffer) return ESUCCESS;
+		this.trace(`leave(function=${functionId}, depth=${session.callDepth})`);
+		if (session.nextLineArmed && functionId === session.nextLineFunctionId) {
+			session.nextLineArmed = false;
+			session.stepArmed = true;
+		}
+		session.callDepth = Math.max(0, session.callDepth - 1);
+		if (session.currentFunctionId === functionId) session.currentFunctionId = 0;
+		for (let index = session.frames.length - 1; index >= 0; index -= 1) {
+			if (session.frames[index]?.functionId === functionId) {
+				session.frames.splice(index, 1);
+				break;
+			}
+		}
+		return ESUCCESS;
+	}
+
+	__wasm_idle_debug_value_num(functionId: number, slot: number, value: number) {
+		const session = this.debugSession;
+		if (!session?.buffer) return ESUCCESS;
+		if (functionId === 0) {
+			session.globalValues.set(slot, Number.isInteger(value) ? String(value) : `${value}`);
+			return ESUCCESS;
+		}
+		for (let index = session.frames.length - 1; index >= 0; index -= 1) {
+			const frame = session.frames[index];
+			if (frame?.functionId !== functionId) continue;
+			frame.values.set(slot, Number.isInteger(value) ? String(value) : `${value}`);
+			break;
+		}
+		return ESUCCESS;
+	}
+
+	__wasm_idle_debug_value_bool(functionId: number, slot: number, value: number) {
+		const session = this.debugSession;
+		if (!session?.buffer) return ESUCCESS;
+		if (functionId === 0) {
+			session.globalValues.set(slot, value ? 'true' : 'false');
+			return ESUCCESS;
+		}
+		for (let index = session.frames.length - 1; index >= 0; index -= 1) {
+			const frame = session.frames[index];
+			if (frame?.functionId !== functionId) continue;
+			frame.values.set(slot, value ? 'true' : 'false');
+			break;
+		}
+		return ESUCCESS;
+	}
+
+	__wasm_idle_debug_value_addr(functionId: number, slot: number, value: number) {
+		const session = this.debugSession;
+		if (!session?.buffer) return ESUCCESS;
+		if (functionId === 0) {
+			session.globalValues.set(slot, String(value >>> 0));
+			return ESUCCESS;
+		}
+		for (let index = session.frames.length - 1; index >= 0; index -= 1) {
+			const frame = session.frames[index];
+			if (frame?.functionId !== functionId) continue;
+			frame.values.set(slot, String(value >>> 0));
+			break;
+		}
+		return ESUCCESS;
+	}
+
+	__wasm_idle_debug_value_text(functionId: number, slot: number, ptr: number, len: number) {
+		const session = this.debugSession;
+		if (!session?.buffer) return ESUCCESS;
+		this.mem?.check?.();
+		const text = this.mem?.readStr ? this.mem.readStr(ptr, len) : '?';
+		if (functionId === 0) {
+			session.globalValues.set(slot, text);
+			return ESUCCESS;
+		}
+		for (let index = session.frames.length - 1; index >= 0; index -= 1) {
+			const frame = session.frames[index];
+			if (frame?.functionId !== functionId) continue;
+			frame.values.set(slot, text);
+			break;
+		}
+		return ESUCCESS;
+	}
+
+	__wasm_idle_debug_line(functionId: number, line: number) {
+		const session = this.debugSession;
+		if (!session?.buffer) return ESUCCESS;
+		if (session.resumeSkipActive) {
+			if (functionId === session.resumeSkipFunctionId && line === session.resumeSkipLine) {
+				return ESUCCESS;
+			}
+			session.resumeSkipActive = false;
+			session.resumeSkipFunctionId = 0;
+			session.resumeSkipLine = 0;
+		}
+		let reason = '';
+		if (session.pauseOnEntry) reason = 'entry';
+		else if (session.breakpoints.has(line)) reason = 'breakpoint';
+		else if (session.stepArmed) reason = 'step';
+		else if (
+			session.nextLineArmed &&
+			functionId === session.nextLineFunctionId &&
+			line !== session.nextLineLine
+		) {
+			reason = 'nextLine';
+		} else if (session.stepOutArmed && session.callDepth <= session.stepOutDepth) {
+			reason = 'stepOut';
+		}
+		if (!reason) return ESUCCESS;
+		return this.pauseDebugSession(session, functionId, line, reason);
 	}
 
 	environ_sizes_get(environ_count_out: number, environ_buf_size_out: number) {

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { flushQueuedStdin } from './stdinBuffer';
 
 const workerInstances: MockWorker[] = [];
 
@@ -64,7 +65,9 @@ print(f"{left + right}:{is_even(left + right)}")`;
 	it('forwards Python runtime errors', async () => {
 		const sandbox = new Python();
 		const worker = new MockWorker();
+		const events: any[] = [];
 
+		sandbox.ondebug = (event) => events.push(event);
 		sandbox.worker = worker as unknown as Worker;
 		worker.postMessage.mockImplementationOnce(() =>
 			queueMicrotask(() =>
@@ -81,5 +84,25 @@ print((left + right) // (left - left))`,
 				false
 			)
 		).rejects.toContain('ZeroDivisionError');
+		expect(events).toEqual([{ type: 'stop' }]);
+	});
+
+	it('aliases kill to terminate for Python sessions', () => {
+		const sandbox = new Python();
+		sandbox.terminate = vi.fn();
+
+		sandbox.kill?.();
+		expect(sandbox.terminate).toHaveBeenCalledTimes(1);
+	});
+
+	it('evaluates watch expressions through the worker debug buffers', async () => {
+		const sandbox = new Python();
+		sandbox.worker = {} as Worker;
+
+		setTimeout(() => {
+			flushQueuedStdin(['3'], sandbox.watchResultBuffer);
+		}, 0);
+
+		await expect(sandbox.debugEvaluate?.('1 + 2')).resolves.toBe('3');
 	});
 });

@@ -5,9 +5,11 @@ import type {
 } from '$lib/playground/options';
 import type { Sandbox } from '$lib/playground/sandbox';
 import {
+	bufferedSequence,
 	flushBufferedEof,
 	flushQueuedStdin,
-	resetBufferedStdin
+	resetBufferedStdin,
+	waitForBufferedSequenceChange
 } from '$lib/playground/stdinBuffer';
 
 class Python implements Sandbox {
@@ -18,6 +20,8 @@ class Python implements Sandbox {
 	worker?: Worker = <any>null;
 	buffer = new SharedArrayBuffer(1024);
 	debugBuffer = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * 4);
+	watchBuffer = new SharedArrayBuffer(1024);
+	watchResultBuffer = new SharedArrayBuffer(1024);
 	interruptBuffer = new SharedArrayBuffer(1);
 	pendingInput: string[] = [];
 	begin = 0;
@@ -120,6 +124,7 @@ class Python implements Sandbox {
 					this.exit = true;
 					this.waitingForInput = false;
 					this.pendingEof = false;
+					this.ondebug?.({ type: 'stop' });
 					reject(error);
 				}
 			};
@@ -131,6 +136,8 @@ class Python implements Sandbox {
 				prepare,
 				buffer: this.buffer,
 				debugBuffer: this.debugBuffer,
+				watchBuffer: this.watchBuffer,
+				watchResultBuffer: this.watchResultBuffer,
 				interrupt: this.interruptBuffer,
 				context: {},
 				debug: !!options.debug,
@@ -152,6 +159,22 @@ class Python implements Sandbox {
 		this.ondebug?.({ type: 'resume', command });
 	}
 
+	async debugEvaluate(expression: string) {
+		if (!this.worker) throw new Error('Worker not loaded');
+		resetBufferedStdin(this.watchResultBuffer);
+		const previousSequence = bufferedSequence(this.watchResultBuffer);
+		flushQueuedStdin([expression], this.watchBuffer);
+		const control = new Int32Array(this.debugBuffer);
+		Atomics.store(control, 1, 5);
+		Atomics.add(control, 0, 1);
+		Atomics.notify(control, 0);
+		return (await waitForBufferedSequenceChange(this.watchResultBuffer, previousSequence, 5000)) ?? '?';
+	}
+
+	kill() {
+		this.terminate();
+	}
+
 	terminate() {
 		this.pendingEof = false;
 		new Uint8Array(this.interruptBuffer)[0] = 2;
@@ -167,6 +190,8 @@ class Python implements Sandbox {
 		this.pendingEof = false;
 		if (this.worker) this.worker.onmessage = null;
 		resetBufferedStdin(this.buffer);
+		resetBufferedStdin(this.watchBuffer);
+		resetBufferedStdin(this.watchResultBuffer);
 		const debugBuffer = new Int32Array(this.debugBuffer);
 		debugBuffer.fill(0);
 		await new Promise((resolve) => setTimeout(resolve, 200));

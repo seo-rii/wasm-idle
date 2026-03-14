@@ -73,7 +73,9 @@ int main() {
 	it('forwards C++ runtime errors', async () => {
 		const sandbox = new Clang();
 		const worker = new MockWorker();
+		const events: any[] = [];
 
+		sandbox.ondebug = (event) => events.push(event);
 		sandbox.worker = worker as unknown as Worker;
 		worker.postMessage.mockImplementationOnce(() =>
 			queueMicrotask(() =>
@@ -94,5 +96,14 @@ int main() {
 				false
 			)
 		).rejects.toContain('Runtime error');
+		expect(events).toEqual([{ type: 'stop' }]);
+	});
+
+	it('aliases kill to terminate for C++ sessions', () => {
+		const sandbox = new Clang();
+		sandbox.terminate = vi.fn();
+
+		sandbox.kill?.();
+		expect(sandbox.terminate).toHaveBeenCalledTimes(1);
 	});
 });

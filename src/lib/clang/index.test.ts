@@ -70,7 +70,7 @@ int main() {
 
 		const instrumentedSource = vi.mocked(clang.memfs.addFile).mock.calls[0]?.[1];
 		expect(String(instrumentedSource)).toContain(
-			'extern "C" __attribute__((import_module("env"), import_name("__wasm_idle_debug_enter"))) void __wasm_idle_debug_enter(int functionId);'
+			'extern "C" __attribute__((import_module("env"), import_name("__wasm_idle_debug_enter"))) void __wasm_idle_debug_enter(int functionId, int line);'
 		);
 		expect(String(instrumentedSource)).toContain(
 			'extern "C" __attribute__((import_module("env"), import_name("__wasm_idle_debug_leave"))) void __wasm_idle_debug_leave(int functionId);'
@@ -100,7 +100,7 @@ int main()
 		});
 
 		const instrumentedSource = String(vi.mocked(clang.memfs.addFile).mock.calls[0]?.[1] || '');
-		expect(instrumentedSource).toContain('__wasm_idle_debug_enter(1);');
+		expect(instrumentedSource).toContain('__wasm_idle_debug_enter(1, 3);');
 		expect(instrumentedSource).toContain('__wasm_idle_debug_line(1, 4);');
 		expect(instrumentedSource).toContain('__wasm_idle_debug_line(1, 5);');
 	});

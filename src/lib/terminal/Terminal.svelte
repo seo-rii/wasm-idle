@@ -175,6 +175,10 @@
 			await wait();
 			sandbox.debugCommand?.(command);
 		},
+		async debugEvaluate(expression: string) {
+			await wait();
+			return (await sandbox.debugEvaluate?.(expression)) || '?';
+		},
 		async write(input: string) {
 			await wait();
 			applyPastedText(input);
