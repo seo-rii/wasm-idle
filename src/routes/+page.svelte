@@ -3,7 +3,12 @@
 	import Terminal, { cppDebugLanguageAdapter, pythonDebugLanguageAdapter } from '$lib';
 	import { page } from '$app/state';
 	import { browser } from '$app/environment';
-	import type { DebugFrame, DebugSessionEvent, DebugVariable } from '$lib/playground/options';
+	import type {
+		CompilerDiagnostic,
+		DebugFrame,
+		DebugSessionEvent,
+		DebugVariable
+	} from '$lib/playground/options';
 	import type { TerminalControl } from '$lib/terminal';
 	import type monaco from 'monaco-editor';
 	import { executeTerminalRun } from './execute';
@@ -18,6 +23,8 @@
 		breakpoints = $state<number[]>([]),
 		debugLocals = $state<DebugVariable[]>([]),
 		debugCallStack = $state<DebugFrame[]>([]),
+		compilerDiagnostics = $state<CompilerDiagnostic[]>([]),
+		argsInput = $state(''),
 		watchInput = $state(''),
 		watchExpressions = $state<string[]>([]),
 		pausedLine = $state<number | null>(null),
@@ -64,6 +71,10 @@
 		terminal.debugCommand?.(command);
 	}
 
+	function onCompileDiagnostic(diagnostic: CompilerDiagnostic) {
+		compilerDiagnostics = [...compilerDiagnostics, diagnostic];
+	}
+
 	async function exec(debug = false) {
 		if (!editor || !terminal) return;
 		if (runningMode) return;
@@ -81,9 +92,12 @@
 			debugLocals = [];
 			debugCallStack = [];
 		}
+		compilerDiagnostics = [];
+		const args = language === 'JAVA' && argsInput.trim() ? argsInput.trim().split(/\s+/) : [];
 		if (browser) {
 			localStorage.setItem('code', editor.getValue());
 			localStorage.setItem('language', language);
+			localStorage.setItem('argsInput', argsInput);
 		}
 		try {
 			if (!('SharedArrayBuffer' in window)) location.reload();
@@ -92,9 +106,11 @@
 				language,
 				code: editor.getValue(),
 				log,
+				args,
 				options: {
 					debug,
 					breakpoints,
+					stdin: '',
 					pauseOnEntry: debug
 				}
 			});
@@ -142,8 +158,10 @@
 		if (browser && editor && !init) {
 			const code = localStorage.getItem('code');
 			const lang = localStorage.getItem('language');
+			const storedArgs = localStorage.getItem('argsInput');
 			if (code) editor.setValue(code);
 			if (lang) language = lang;
+			if (storedArgs !== null) argsInput = storedArgs;
 			init = true;
 		}
 	});
@@ -157,6 +175,7 @@
 			debugActive = false;
 			debugPaused = false;
 		}
+		if (language !== 'JAVA') compilerDiagnostics = [];
 	});
 </script>
 
@@ -184,7 +203,13 @@
 		<select bind:value={language}>
 			<option value="CPP">C++</option>
 			<option value="PYTHON">Python</option>
+			<option value="JAVA">Java</option>
 		</select>
+		{#if language === 'JAVA'}
+			<input bind:value={argsInput} placeholder="3 4 5" spellcheck={false} />
+			<span>Args</span>
+			<p class="hint">Run after that type into the terminal below and press Enter.</p>
+		{/if}
 		{#if debugLanguage}
 			<p class="hint">
 				{language === 'CPP'
@@ -196,7 +221,7 @@
 					<h3>Locals</h3>
 					{#if debugLocals.length}
 						<ul>
-							{#each debugLocals as variable}
+							{#each debugLocals as variable (variable.name)}
 								<li><code>{variable.name}</code> = {variable.value}</li>
 							{/each}
 						</ul>
@@ -216,7 +241,7 @@
 					</div>
 					{#if watchValues.length}
 						<ul>
-							{#each watchValues as watch}
+							{#each watchValues as watch (watch.expression)}
 								<li>
 									<span>{watch.expression}</span>
 									<code>{watch.value}</code>
@@ -236,7 +261,7 @@
 					<h3>Call Stack</h3>
 					{#if debugCallStack.length}
 						<ul>
-							{#each debugCallStack as frame}
+							{#each debugCallStack as frame (`${frame.functionName}:${frame.line}`)}
 								<li>{frame.functionName}:{frame.line}</li>
 							{/each}
 						</ul>
@@ -246,7 +271,12 @@
 				</section>
 			</div>
 		{/if}
-		<Terminal bind:terminal {path} ondebug={onDebugEvent} />
+		<Terminal
+			bind:terminal
+			{path}
+			ondebug={onDebugEvent}
+			oncompilediagnostic={onCompileDiagnostic}
+		/>
 	</div>
 	{#key language}
 		<Monaco
@@ -256,6 +286,7 @@
 			{breakpoints}
 			{debugLocals}
 			{debugLanguage}
+			{compilerDiagnostics}
 			{pausedLine}
 			onBreakpointsChange={(lines) => (breakpoints = lines)}
 		/>

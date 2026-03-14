@@ -1,49 +1,50 @@
-import type {
-	DebugCommand,
-	DebugSessionEvent,
-	SandboxExecutionOptions
-} from '$lib/playground/options';
+import type { CompilerDiagnostic, SandboxExecutionOptions } from '$lib/playground/options';
 import type { Sandbox } from '$lib/playground/sandbox';
 import {
 	flushBufferedEof,
 	flushQueuedStdin,
 	resetBufferedStdin
 } from '$lib/playground/stdinBuffer';
+import { resolveTeaVmBaseUrl } from '$lib/playground/teavmConfig';
 
-class Python implements Sandbox {
-	ts = Date.now();
+class Java implements Sandbox {
 	output: any = null;
-	ondebug?: (event: DebugSessionEvent) => void;
-	image?: (data: { mime: string; b64: string; ts?: number }) => void;
 	worker?: Worker = <any>null;
 	buffer = new SharedArrayBuffer(1024);
-	debugBuffer = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * 4);
-	interruptBuffer = new SharedArrayBuffer(1);
 	pendingInput: string[] = [];
 	begin = 0;
 	elapse = 0;
 	uid = 0;
+	exit = true;
+	baseUrl = '';
+	activeReject: ((reason: string) => void) | null = null;
+	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	waitingForInput = false;
 	pendingEof = false;
-	exit = true;
 
 	load(
 		path: string,
-		code = '',
-		log = true,
+		_code = '',
+		_log = true,
 		_args: string[] = [],
 		_options: SandboxExecutionOptions = {}
 	) {
-		return new Promise<void>(async (resolve) => {
+		return new Promise<void>(async (resolve, reject) => {
 			this.pendingInput = [];
 			this.waitingForInput = false;
 			this.pendingEof = false;
+			this.baseUrl = resolveTeaVmBaseUrl(
+				path,
+				typeof window !== 'undefined' ? window.location.href : ''
+			);
 			if (!this.worker) {
-				this.worker = new (await import('$lib/playground/worker/python?worker')).default();
-				this.worker.onmessage = () => resolve();
-				this.worker.postMessage({ load: true, path, log, code });
+				this.worker = new (await import('$lib/playground/worker/java?worker')).default();
+				this.worker.onmessage = (event: MessageEvent<any>) => {
+					if (event.data?.load) resolve();
+					if (event.data?.error) reject(event.data.error);
+				};
+				this.worker.postMessage({ load: true, baseUrl: this.baseUrl });
 			} else {
-				this.worker.postMessage({ log });
 				resolve();
 			}
 		});
@@ -78,104 +79,79 @@ class Python implements Sandbox {
 		prepare: boolean,
 		_log = true,
 		_prog?: { set?: (value: number) => void } | import('svelte/store').Writable<number>,
-		_args: string[] = [],
+		args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
 		this.exit = false;
-		return new Promise<boolean | string>(async (resolve, reject) => {
+		return new Promise<boolean | string>((resolve, reject) => {
 			if (!this.worker) return reject('Worker not loaded');
-			const interrupt = new Uint8Array(this.interruptBuffer),
-				_uid = ++this.uid;
+			const _uid = ++this.uid;
+			this.activeReject = reject;
 			const handler = (event: Event & { data: any }) => {
 				if (!this.worker) return reject('Worker not loaded');
 				if (_uid !== this.uid) return (this.worker.onmessage = null);
-				const {
-					output,
-					results,
-					log,
-					error,
-					buffer,
-					type,
-					data: payload,
-					debugEvent
-				} = event.data;
+				const { output, results, error, buffer, diagnostic } = event.data;
 				if (buffer) {
 					this.waitingForInput = true;
 					this.flushPendingInput();
 				}
-				if (type === 'img' && payload) this.image?.(payload);
 				if (output) this.output(output);
-				if (debugEvent) this.ondebug?.(debugEvent);
+				if (diagnostic) this.oncompilerdiagnostic?.(diagnostic);
 				if (results) {
 					this.elapse = Date.now() - this.begin;
 					this.exit = true;
 					this.waitingForInput = false;
 					this.pendingEof = false;
-					this.ondebug?.({ type: 'stop' });
+					this.activeReject = null;
 					resolve(results as string);
 				}
-				if (log) console.log(log);
 				if (error) {
 					this.elapse = Date.now() - this.begin;
 					this.exit = true;
 					this.waitingForInput = false;
 					this.pendingEof = false;
+					this.activeReject = null;
 					reject(error);
 				}
 			};
-			interrupt[0] = 0;
 			this.worker.onmessage = handler;
 			this.begin = Date.now();
 			this.worker.postMessage({
 				code,
 				prepare,
 				buffer: this.buffer,
-				debugBuffer: this.debugBuffer,
-				interrupt: this.interruptBuffer,
-				context: {},
-				debug: !!options.debug,
-				breakpoints: [...(options.breakpoints || [])],
-				pauseOnEntry: !!options.pauseOnEntry
+				args,
+				stdin: options.stdin || '',
+				baseUrl: this.baseUrl
 			});
 		});
 	}
 
-	debugCommand(command: DebugCommand) {
-		const control = new Int32Array(this.debugBuffer);
-		Atomics.store(
-			control,
-			1,
-			command === 'stepInto' ? 2 : command === 'nextLine' ? 3 : command === 'stepOut' ? 4 : 1
-		);
-		Atomics.add(control, 0, 1);
-		Atomics.notify(control, 0);
-		this.ondebug?.({ type: 'resume', command });
+	kill() {
+		this.terminate();
 	}
 
 	terminate() {
+		this.activeReject?.('Process terminated');
+		this.activeReject = null;
+		this.waitingForInput = false;
 		this.pendingEof = false;
-		new Uint8Array(this.interruptBuffer)[0] = 2;
-		const control = new Int32Array(this.debugBuffer);
-		Atomics.add(control, 0, 1);
-		Atomics.notify(control, 0);
+		this.uid += 1;
+		this.worker?.terminate?.();
+		delete this.worker;
+		this.exit = true;
 	}
 
 	async clear() {
-		this.terminate();
 		this.pendingInput = [];
 		this.waitingForInput = false;
 		this.pendingEof = false;
 		if (this.worker) this.worker.onmessage = null;
 		resetBufferedStdin(this.buffer);
-		const debugBuffer = new Int32Array(this.debugBuffer);
-		debugBuffer.fill(0);
-		await new Promise((resolve) => setTimeout(resolve, 200));
 		if (!this.exit) {
-			this.worker?.terminate?.();
-			delete this.worker;
-			this.exit = true;
+			this.terminate();
 		}
 	}
 }
 
-export default Python;
+export default Java;

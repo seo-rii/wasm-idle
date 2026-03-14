@@ -1,4 +1,5 @@
 import type {
+	CompilerDiagnostic,
 	DebugCommand,
 	DebugSessionEvent,
 	SandboxExecutionOptions
@@ -32,6 +33,7 @@ export interface Sandbox {
 	write?: (data: string) => void;
 	output?: (data: string) => void;
 	ondebug?: (event: DebugSessionEvent) => void;
+	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	debugCommand?: (command: DebugCommand) => void;
 	image?: (data: { mime: string; b64: string; ts?: number }) => void;
 	elapse?: number;

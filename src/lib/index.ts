@@ -18,4 +18,5 @@ export type {
 	SandboxExecutionOptions,
 	TerminalControl
 } from '$lib/terminal';
+export type { CompilerDiagnostic } from '$lib/playground/options';
 export type { DebugLanguageAdapter } from '$lib/debug';

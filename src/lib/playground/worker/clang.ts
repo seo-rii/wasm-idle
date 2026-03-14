@@ -1,4 +1,5 @@
 import type Clang from '$lib/clang';
+import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
 
 declare var self: any;
 self.document = {
@@ -16,25 +17,7 @@ async function loadClang(path: string, log: boolean) {
 	clang = new Clang({
 		stdout: (output) => postMessage({ output }),
 		onDebugEvent: (debugEvent) => postMessage({ debugEvent }),
-		stdin: () => {
-			while (true) {
-				postMessage({ buffer: true });
-				const res = Atomics.wait(stdinBufferClang, 0, 0, 100);
-				if (res === 'not-equal') {
-					try {
-						const cpy = new Int32Array(stdinBufferClang.byteLength);
-						cpy.set(stdinBufferClang);
-						stdinBufferClang.fill(0);
-						const dec = new TextDecoder();
-						const strInfo = dec.decode(cpy).replace(/\x00/g, ''),
-							padding = parseInt(strInfo.slice(-1));
-						return strInfo.slice(0, -padding);
-					} catch (e) {
-						postMessage({ log: { e } });
-					}
-				}
-			}
-		},
+		stdin: () => waitForBufferedStdin(stdinBufferClang, () => postMessage({ buffer: true })) ?? '',
 		progress: (value) => postMessage({ progress: value }),
 		log,
 		path

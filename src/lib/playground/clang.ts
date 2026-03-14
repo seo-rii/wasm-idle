@@ -4,6 +4,11 @@ import type {
 	SandboxExecutionOptions
 } from '$lib/playground/options';
 import type { Sandbox } from '$lib/playground/sandbox';
+import {
+	flushBufferedEof,
+	flushQueuedStdin,
+	resetBufferedStdin
+} from '$lib/playground/stdinBuffer';
 import type { Writable } from 'svelte/store';
 
 class Clang implements Sandbox {
@@ -14,11 +19,13 @@ class Clang implements Sandbox {
 	buffer = new SharedArrayBuffer(1024);
 	debugBuffer = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * 4);
 	interruptBuffer = new SharedArrayBuffer(1);
-	internalBuffer: string[] = [];
+	pendingInput: string[] = [];
 	begin = 0;
 	elapse = 0;
 	uid = 0;
 	log = true;
+	waitingForInput = false;
+	pendingEof = false;
 	exit = true;
 
 	load(
@@ -30,7 +37,9 @@ class Clang implements Sandbox {
 	) {
 		return new Promise<void>(async (resolve) => {
 			this.log = log;
-			this.internalBuffer = [];
+			this.pendingInput = [];
+			this.waitingForInput = false;
+			this.pendingEof = false;
 			if (!this.worker) {
 				this.worker = new (await import('$lib/playground/worker/clang?worker')).default();
 				this.worker.onmessage = () => resolve();
@@ -43,21 +52,28 @@ class Clang implements Sandbox {
 	}
 
 	write(input: string) {
-		this.internalBuffer.push(input);
+		this.pendingInput.push(input);
+		this.pendingEof = false;
+		this.flushPendingInput();
 	}
 
-	_write(input: string) {
-		let strInfo = input,
-			padding = 4 - (strInfo.length % 4);
-		while (strInfo.length % 4 !== 3) strInfo += ' ';
-		strInfo += padding;
-		const buffer = new Int32Array(this.buffer);
-		const enc = new TextEncoder();
-		const data = enc.encode(strInfo);
-		buffer.set(new Int32Array(data.buffer.slice(data.byteOffset), 0));
+	eof() {
+		this.pendingEof = true;
+		this.flushPendingInput();
 	}
 
-	eof() {}
+	private flushPendingInput() {
+		if (!this.waitingForInput) return;
+		if (flushQueuedStdin(this.pendingInput, this.buffer)) {
+			this.waitingForInput = false;
+			return;
+		}
+		if (this.pendingEof) {
+			flushBufferedEof(this.buffer);
+			this.pendingEof = false;
+			this.waitingForInput = false;
+		}
+	}
 
 	run(
 		code: string,
@@ -76,19 +92,25 @@ class Clang implements Sandbox {
 				if (!this.worker) return reject('Worker not loaded');
 				if (_uid !== this.uid) return (this.worker.onmessage = null);
 				const { id, output, results, log, error, buffer, progress, debugEvent } = event.data;
-				if (buffer && this.internalBuffer.length)
-					this._write(this.internalBuffer.splice(0, 1)[0]);
+				if (buffer) {
+					this.waitingForInput = true;
+					this.flushPendingInput();
+				}
 				if (output) this.output(output);
 				if (debugEvent) this.ondebug?.(debugEvent);
 				if (results) {
 					this.elapse = Date.now() - this.begin;
 					this.exit = true;
+					this.waitingForInput = false;
+					this.pendingEof = false;
 					this.ondebug?.({ type: 'stop' });
 					resolve(results as string);
 				}
 				if (log) console.log(log);
 				if (error) {
 					this.elapse = Date.now() - this.begin;
+					this.waitingForInput = false;
+					this.pendingEof = false;
 					reject(error);
 				}
 				if (progress) prog?.set?.(progress);
@@ -125,6 +147,7 @@ class Clang implements Sandbox {
 	}
 
 	terminate() {
+		this.pendingEof = false;
 		new Uint8Array(this.interruptBuffer)[0] = 2;
 		const control = new Int32Array(this.debugBuffer);
 		Atomics.add(control, 0, 1);
@@ -133,10 +156,11 @@ class Clang implements Sandbox {
 
 	async clear() {
 		this.terminate();
-		this.internalBuffer = [];
+		this.pendingInput = [];
+		this.waitingForInput = false;
+		this.pendingEof = false;
 		if (this.worker) this.worker.onmessage = null;
-		const buffer = new Int32Array(this.buffer);
-		buffer.fill(0);
+		resetBufferedStdin(this.buffer);
 		const debugBuffer = new Int32Array(this.debugBuffer);
 		debugBuffer.fill(0);
 		await new Promise((resolve) => setTimeout(resolve, 200));

@@ -1,5 +1,10 @@
 <script lang="ts">
-	import type { DebugCommand, DebugSessionEvent, SandboxExecutionOptions } from '$lib/playground/options';
+	import type {
+		CompilerDiagnostic,
+		DebugCommand,
+		DebugSessionEvent,
+		SandboxExecutionOptions
+	} from '$lib/playground/options';
 	import type { Sandbox } from '$lib/playground/sandbox';
 	import type { TerminalControl } from '$lib/terminal/types';
 	import { Theme, registerAllPlugins } from '$lib/terminal';
@@ -17,6 +22,7 @@
 		onfinish?: () => void;
 		onkey?: (e: KeyboardEvent) => void;
 		ondebug?: (event: DebugSessionEvent) => void;
+		oncompilediagnostic?: (diagnostic: CompilerDiagnostic) => void;
 		onimage?: (payload: { mime: string; b64: string; ts?: number }) => void;
 		terminal?: TerminalControl;
 	}
@@ -29,6 +35,7 @@
 		onfinish,
 		onkey,
 		ondebug,
+		oncompilediagnostic,
 		onimage,
 		terminal = $bindable()
 	}: Props = $props();
@@ -69,6 +76,7 @@
 		}
 		sandbox.image = onimage;
 		sandbox.ondebug = ondebug;
+		sandbox.oncompilerdiagnostic = oncompilediagnostic;
 		sandbox.output = (output: string) =>
 			_tc === tc && term && term.write(output.replaceAll('\n', '\r\n'));
 	}
@@ -100,12 +108,33 @@
 		first = false;
 	}
 
+	function appendInputText(text: string) {
+		if (!text) return;
+		input += text;
+		term?.write(text);
+	}
+
+	function submitCurrentInput() {
+		term?.write('\r\n');
+		sandbox.write?.(input + '\n');
+		input = '';
+	}
+
+	function applyPastedText(text: string) {
+		const lines = text.replaceAll('\r\n', '\n').replaceAll('\r', '\n').split('\n');
+		for (let i = 0; i < lines.length; i++) {
+			appendInputText(lines[i]);
+			if (i < lines.length - 1) submitCurrentInput();
+		}
+	}
+
 	const terminalControl: TerminalControl = {
 		async clear() {
 			await wait();
 			term?.reset();
 			term?.write(`\u001B[?25l\x1b[0m\x1b[?25h`);
 			if (term) term.options.cursorBlink = false;
+			input = '';
 			first = true;
 			await new Promise((r) => setTimeout(r, 100));
 		},
@@ -148,8 +177,8 @@
 		},
 		async write(input: string) {
 			await wait();
-			term?.write(input + '\r\n');
-			sandbox.write?.(input.replaceAll('\r', '\n') + '\n');
+			applyPastedText(input);
+			if (!input.endsWith('\n') && !input.endsWith('\r')) submitCurrentInput();
 		}
 	};
 
@@ -186,9 +215,7 @@
 				const printable = !ev.altKey && !ev.ctrlKey && !ev.metaKey;
 				onkey?.(ev);
 				if (ev.key === 'Enter') {
-					term.write('\r\n');
-					sandbox.write?.(input + '\n');
-					input = '';
+					submitCurrentInput();
 				} else if (ev.key === 'Backspace') {
 					if (term.buffer.active.cursorX > 0) {
 						term.write('\b \b');
@@ -200,17 +227,16 @@
 							e.key <= String.fromCharCode(0x7e)) ||
 						e.key >= '\u00a0'
 					) {
-						input += e.key;
-						term.write(e.key);
+						appendInputText(e.key);
 					}
 				} else if ((ev.ctrlKey || ev.metaKey) && ev.key === 'c') {
 					sandbox.kill?.();
 				} else if ((ev.ctrlKey || ev.metaKey) && ev.key === 'd') {
-					sandbox.kill?.();
+					if (input.length > 0) submitCurrentInput();
+					else sandbox.eof?.();
 				} else if ((ev.ctrlKey || ev.metaKey) && ev.key === 'v') {
 					navigator.clipboard.readText().then((text) => {
-						term?.write(text);
-						sandbox.write?.(text);
+						applyPastedText(text);
 					});
 				}
 			});

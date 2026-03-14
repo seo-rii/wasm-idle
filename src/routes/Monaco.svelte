@@ -3,14 +3,14 @@
 	import type { ClangdSession as ClangdSessionType } from '$lib/clangd/session';
 	import type { ClangdStatus } from '$lib/clangd/config';
 	import type { DebugLanguageAdapter } from '$lib/debug/language';
-	import type { DebugVariable } from '$lib/playground/options';
+	import type { CompilerDiagnostic, DebugVariable } from '$lib/playground/options';
 	import type monaco from 'monaco-editor';
 	import { onMount } from 'svelte';
 	import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
 
 	export const value = () => editor?.getValue() || '';
 
-	const defaults: Record<'cpp' | 'python', string> = {
+	const defaults: Record<'cpp' | 'python' | 'java', string> = {
 		cpp: `#include <stdio.h>
 
 int add_one(int value) {
@@ -22,7 +22,22 @@ int main() {
     printf("sum=%d\\n", sum);
 }`,
 		python: `values = [1, 2, 3, 4]
-print(f"sum={sum(values)}")`
+print(f"sum={sum(values)}")`,
+		java: `public class Main {
+    public static void main(String[] args) throws Exception {
+        StringBuilder line = new StringBuilder();
+        int ch;
+
+        System.out.println("Type a line and press Enter:");
+        while ((ch = System.in.read()) != -1 && ch != '\\n') {
+            if (ch != '\\r') {
+                line.append((char) ch);
+            }
+        }
+
+        System.out.println("echo=" + line);
+    }
+}`
 	};
 
 	let divEl: HTMLDivElement | null = $state(null);
@@ -37,6 +52,7 @@ print(f"sum={sum(values)}")`
 		breakpoints?: number[];
 		debugLocals?: DebugVariable[];
 		debugLanguage?: DebugLanguageAdapter | null;
+		compilerDiagnostics?: CompilerDiagnostic[];
 		pausedLine?: number | null;
 		onBreakpointsChange?: (lines: number[]) => void;
 	}
@@ -48,6 +64,7 @@ print(f"sum={sum(values)}")`
 		breakpoints = [],
 		debugLocals = [],
 		debugLanguage = null,
+		compilerDiagnostics = [],
 		pausedLine = null,
 		onBreakpointsChange
 	}: Props = $props();
@@ -68,6 +85,33 @@ print(f"sum={sum(values)}")`
 		if (!debugView) return;
 		debugView.setBreakpoints(debugLanguage ? breakpoints : []);
 		debugView.setPauseState(debugLanguage ? pausedLine : null, debugLocals, debugLanguage);
+	});
+
+	$effect(() => {
+		const monacoApi = Monaco;
+		if (!monacoApi || !editor) return;
+		const activeModel = model || editor.getModel();
+		if (!activeModel) return;
+		const markers =
+			language === 'java'
+				? compilerDiagnostics.map((diagnostic) => ({
+						severity:
+							diagnostic.severity === 'warning'
+								? monacoApi.MarkerSeverity.Warning
+								: diagnostic.severity === 'other'
+									? monacoApi.MarkerSeverity.Info
+									: monacoApi.MarkerSeverity.Error,
+						message: diagnostic.message,
+						startLineNumber: Math.max(1, diagnostic.lineNumber || 1),
+						startColumn: Math.max(1, diagnostic.columnNumber || 1),
+						endLineNumber: Math.max(1, diagnostic.lineNumber || 1),
+						endColumn: Math.max(
+							1,
+							diagnostic.endColumnNumber || diagnostic.columnNumber || 2
+						)
+					}))
+				: [];
+		monacoApi.editor.setModelMarkers(activeModel, 'wasm-idle-java', markers);
 	});
 
 	onMount(() => {
@@ -135,6 +179,9 @@ print(f"sum={sum(values)}")`
 			session = null;
 			debugView?.dispose();
 			debugView = null;
+			const activeModel = model || editor?.getModel();
+			if (Monaco && activeModel)
+				Monaco.editor.setModelMarkers(activeModel, 'wasm-idle-java', []);
 			model?.dispose();
 			model = null;
 			editor?.dispose();

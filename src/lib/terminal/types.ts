@@ -1,4 +1,5 @@
 import type {
+	CompilerDiagnostic,
 	DebugCommand,
 	DebugFrame,
 	DebugSessionEvent,
@@ -33,4 +34,11 @@ export interface TerminalControl {
 	write: (input: string) => Promise<void>;
 }
 
-export type { DebugCommand, DebugFrame, DebugSessionEvent, DebugVariable, SandboxExecutionOptions };
+export type {
+	CompilerDiagnostic,
+	DebugCommand,
+	DebugFrame,
+	DebugSessionEvent,
+	DebugVariable,
+	SandboxExecutionOptions
+};

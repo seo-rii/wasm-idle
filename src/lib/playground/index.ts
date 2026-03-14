@@ -1,10 +1,11 @@
 import Clang from '$lib/playground/clang';
+import Java from '$lib/playground/java';
 import Python from '$lib/playground/python';
 import type { Sandbox } from '$lib/playground/sandbox';
 
 const sandboxCache: { [key: string]: Sandbox } = {};
 
-export const supportedLanguages = ['PYTHON3', 'PYPY3', 'C', 'CPP'];
+export const supportedLanguages = ['PYTHON3', 'PYPY3', 'C', 'CPP', 'JAVA'];
 
 export default async function load(language: string) {
 	if (sandboxCache[language]) return sandboxCache[language];
@@ -19,6 +20,9 @@ export default async function load(language: string) {
 		case 'CPP':
 			sandbox = new Clang();
 			break;
+		case 'JAVA':
+			sandbox = new Java();
+			break;
 		default:
 			throw new Error(`Unsupported language: ${language}`);
 	}
@@ -29,6 +33,7 @@ export default async function load(language: string) {
 		if (language === 'PYPY3') sandboxCache['PYTHON3'] = sandboxCache['PYTHON'] = sandbox;
 		if (language === 'C') sandboxCache['C'] = sandbox;
 		if (language === 'CPP') sandboxCache['CPP'] = sandbox;
+		if (language === 'JAVA') sandboxCache['JAVA'] = sandbox;
 	}
 	return sandbox;
 }

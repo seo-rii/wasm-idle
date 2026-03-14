@@ -1,10 +1,11 @@
 import type { PyodideInterface } from 'pyodide';
+import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
 
 declare const self: {
 	document: any;
 	onmessage: (event: MessageEvent) => void;
 	postMessage: (message: any) => void;
-	prompt?: (output?: string) => string;
+	prompt?: (output?: string) => string | null;
 	[key: string]: any;
 };
 
@@ -267,23 +268,7 @@ self.onmessage = async (event: any) => {
 		};
 		self.prompt = self['__pyodide__input_' + ts] = (output?: string) => {
 			if (output) postMessage({ output });
-			while (true) {
-				postMessage({ buffer: true });
-				const res = Atomics.wait(stdinBufferPyodide, 0, 0, 100);
-				if (res === 'not-equal') {
-					try {
-						const cpy = new Int32Array(stdinBufferPyodide.byteLength);
-						cpy.set(stdinBufferPyodide);
-						stdinBufferPyodide.fill(0);
-						const dec = new TextDecoder();
-						const strInfo = dec.decode(cpy).replace(/\x00/g, ''),
-							padding = parseInt(strInfo.slice(-1));
-						return strInfo.slice(0, -padding);
-					} catch (e) {
-						postMessage({ log: { e } });
-					}
-				}
-			}
+			return waitForBufferedStdin(stdinBufferPyodide, () => postMessage({ buffer: true }));
 		};
 		self['__pyodide__output_' + ts] = (...data: any[]) => {
 			let sep = ' ',
@@ -361,8 +346,13 @@ from js import __pyodide__input_${ts}, __pyodide__output_${ts}
 ${debug ? `from js import ${debugPauseName}, ${debugWaitName}` : ''}
 
 __wasm_idle_input = __pyodide__input_${ts}
+def __wasm_idle_input_wrapper(prompt = ""):
+    value = __wasm_idle_input(prompt)
+    if value is None:
+        raise EOFError
+    return value
 __wasm_idle_output = __pyodide__output_${ts}
-builtins.input = __wasm_idle_input
+builtins.input = __wasm_idle_input_wrapper
 builtins.print = __wasm_idle_output
 
 ${imageHook}
