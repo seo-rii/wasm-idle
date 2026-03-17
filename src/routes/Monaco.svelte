@@ -48,6 +48,7 @@ print(f"sum={sum(values)}")`,
 	interface Props {
 		editor: monaco.editor.IStandaloneCodeEditor | null;
 		language: any;
+		clangdEnabled?: boolean;
 		clangdBaseUrl?: string;
 		breakpoints?: number[];
 		debugLocals?: DebugVariable[];
@@ -60,6 +61,7 @@ print(f"sum={sum(values)}")`,
 	let {
 		editor = $bindable(),
 		language,
+		clangdEnabled = false,
 		clangdBaseUrl,
 		breakpoints = [],
 		debugLocals = [],
@@ -85,6 +87,55 @@ print(f"sum={sum(values)}")`,
 		if (!debugView) return;
 		debugView.setBreakpoints(debugLanguage ? breakpoints : []);
 		debugView.setPauseState(debugLanguage ? pausedLine : null, debugLocals, debugLanguage);
+	});
+
+	$effect(() => {
+		if (language !== 'cpp' || !editor || !clangdEnabled || !clangdBaseUrl) {
+			session?.dispose();
+			session = null;
+			clangdStatus = { state: 'disabled' };
+			return;
+		}
+		if (session || !Monaco) return;
+
+		let cancelled = false;
+		let nextSession: ClangdSessionType | null = null;
+
+		(async () => {
+			try {
+				const { ClangdSession } = await import('$lib/clangd/session');
+				if (cancelled || !Monaco) return;
+				nextSession = new ClangdSession(Monaco, clangdBaseUrl, (status) => {
+					if (!cancelled) clangdStatus = status;
+				});
+				const previousModel = editor.getModel();
+				const previousModelUri = previousModel?.uri.toString();
+				const nextModel = nextSession.createModel(editor.getValue());
+				session = nextSession;
+				model = nextModel;
+				editor.setModel(nextModel);
+				if (
+					previousModel &&
+					previousModel !== nextModel &&
+					previousModelUri !== nextModel.uri.toString()
+				) {
+					previousModel.dispose();
+				}
+				await nextSession.start();
+			} catch (error) {
+				if (cancelled) return;
+				nextSession?.dispose();
+				if (session === nextSession) session = null;
+				clangdStatus = {
+					state: 'error',
+					message: error instanceof Error ? error.message : String(error)
+				};
+			}
+		})();
+
+		return () => {
+			cancelled = true;
+		};
 	});
 
 	$effect(() => {
@@ -128,7 +179,6 @@ print(f"sum={sum(values)}")`,
 			Monaco = m;
 			const defaultValue = defaults[language as keyof typeof defaults] || '';
 			if (language === 'cpp') {
-				const { ClangdSession } = await import('$lib/clangd/session');
 				editor = Monaco.editor.create(divEl!, {
 					value: defaultValue,
 					language,
@@ -138,25 +188,7 @@ print(f"sum={sum(values)}")`,
 				debugView = new MonacoDebugView(Monaco, editor, onBreakpointsChange);
 				debugView.setBreakpoints(breakpoints);
 				debugView.setPauseState(pausedLine, debugLocals, debugLanguage);
-				if (!clangdBaseUrl) {
-					clangdStatus = { state: 'disabled' };
-					return;
-				}
-				session = new ClangdSession(Monaco, clangdBaseUrl, (status) => {
-					if (!disposed) clangdStatus = status;
-				});
-				model = session.createModel(defaultValue);
-				editor.setModel(model);
-				try {
-					await session.start();
-				} catch (error) {
-					if (!disposed) {
-						clangdStatus = {
-							state: 'error',
-							message: error instanceof Error ? error.message : String(error)
-						};
-					}
-				}
+				clangdStatus = { state: 'disabled' };
 				return;
 			}
 			clangdStatus = { state: 'disabled' };

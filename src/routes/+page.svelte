@@ -24,6 +24,7 @@
 		debugLocals = $state<DebugVariable[]>([]),
 		debugCallStack = $state<DebugFrame[]>([]),
 		compilerDiagnostics = $state<CompilerDiagnostic[]>([]),
+		clangdRequested = $state(false),
 		argsInput = $state(''),
 		watchInput = $state(''),
 		watchExpressions = $state<string[]>([]),
@@ -81,6 +82,7 @@
 		if (debug && !debugLanguage) return;
 		if (runningMode) return;
 		runningMode = debug ? 'debug' : 'run';
+		if (debug && language === 'CPP') clangdRequested = true;
 		if (debug) {
 			debugActive = true;
 			debugPaused = false;
@@ -201,6 +203,7 @@
 	});
 
 	$effect(() => {
+		if (language !== 'CPP') clangdRequested = false;
 		if (!debugLanguage) {
 			breakpoints = [];
 			pausedLine = null;
@@ -316,6 +319,7 @@
 		<Monaco
 			language={language.toLowerCase()}
 			bind:editor
+			clangdEnabled={clangdRequested}
 			{clangdBaseUrl}
 			{breakpoints}
 			{debugLocals}
