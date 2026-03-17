@@ -76,10 +76,18 @@ describe('App debug tracing', () => {
 				functionMetadata: { 1: 'add_one' },
 				variableMetadata: {
 					1: [
-						{ slot: 1, name: 'value', kind: 'number', fromLine: 4, toLine: Number.MAX_SAFE_INTEGER }
+						{
+							slot: 1,
+							name: 'value',
+							kind: 'number',
+							fromLine: 4,
+							toLine: Number.MAX_SAFE_INTEGER
+						}
 					]
 				},
-				frames: [{ functionId: 1, functionName: 'add_one', line: 0, values: new Map([[1, '9']]) }],
+				frames: [
+					{ functionId: 1, functionName: 'add_one', line: 0, values: new Map([[1, '9']]) }
+				],
 				onPause
 			},
 			trace: vi.fn()
@@ -189,7 +197,15 @@ describe('App debug tracing', () => {
 				nextLineLine: 0,
 				functionMetadata: { 1: 'main' },
 				variableMetadata: {
-					1: [{ slot: 1, name: 'result1', kind: 'number', fromLine: 6, toLine: Number.MAX_SAFE_INTEGER }]
+					1: [
+						{
+							slot: 1,
+							name: 'result1',
+							kind: 'number',
+							fromLine: 6,
+							toLine: Number.MAX_SAFE_INTEGER
+						}
+					]
 				},
 				frames: [{ functionId: 1, functionName: 'main', line: 0, values: new Map() }],
 				onPause
@@ -232,9 +248,19 @@ describe('App debug tracing', () => {
 				nextLineLine: 0,
 				functionMetadata: { 1: 'main' },
 				variableMetadata: {
-					1: [{ slot: 1, name: 'value', kind: 'number', fromLine: 4, toLine: Number.MAX_SAFE_INTEGER }]
+					1: [
+						{
+							slot: 1,
+							name: 'value',
+							kind: 'number',
+							fromLine: 4,
+							toLine: Number.MAX_SAFE_INTEGER
+						}
+					]
 				},
-				frames: [{ functionId: 1, functionName: 'main', line: 4, values: new Map([[1, '9']]) }],
+				frames: [
+					{ functionId: 1, functionName: 'main', line: 4, values: new Map([[1, '9']]) }
+				],
 				onPause
 			},
 			trace: vi.fn()
@@ -291,7 +317,9 @@ describe('App debug tracing', () => {
 						}
 					]
 				},
-				frames: [{ functionId: 1, functionName: 'main', line: 0, values: new Map([[1, '16']]) }],
+				frames: [
+					{ functionId: 1, functionName: 'main', line: 0, values: new Map([[1, '16']]) }
+				],
 				onPause
 			},
 			mem: {
@@ -299,7 +327,7 @@ describe('App debug tracing', () => {
 				read8: vi.fn(),
 				readInt32: vi
 					.fn()
-					.mockImplementation((offset: number) => ({ 16: 1, 20: 2, 24: 3 }[offset] ?? 0)),
+					.mockImplementation((offset: number) => ({ 16: 1, 20: 2, 24: 3 })[offset] ?? 0),
 				readFloat32: vi.fn(),
 				readFloat64: vi.fn()
 			},
@@ -341,7 +369,15 @@ describe('App debug tracing', () => {
 				nextLineLine: 0,
 				functionMetadata: { 1: 'main' },
 				variableMetadata: {
-					1: [{ slot: 1, name: 'values', kind: 'text', fromLine: 4, toLine: Number.MAX_SAFE_INTEGER }]
+					1: [
+						{
+							slot: 1,
+							name: 'values',
+							kind: 'text',
+							fromLine: 4,
+							toLine: Number.MAX_SAFE_INTEGER
+						}
+					]
 				},
 				frames: [{ functionId: 1, functionName: 'main', line: 0, values: new Map() }],
 				onPause
@@ -402,7 +438,9 @@ describe('App debug tracing', () => {
 						}
 					]
 				},
-				frames: [{ functionId: 1, functionName: 'main', line: 0, values: new Map([[1, '16']]) }],
+				frames: [
+					{ functionId: 1, functionName: 'main', line: 0, values: new Map([[1, '16']]) }
+				],
 				onPause
 			},
 			mem: {
@@ -411,7 +449,8 @@ describe('App debug tracing', () => {
 				readInt32: vi
 					.fn()
 					.mockImplementation(
-						(offset: number) => ({ 16: 1, 20: 2, 24: 3, 28: 4, 32: 5, 36: 6 }[offset] ?? 0)
+						(offset: number) =>
+							({ 16: 1, 20: 2, 24: 3, 28: 4, 32: 5, 36: 6 })[offset] ?? 0
 					),
 				readFloat32: vi.fn(),
 				readFloat64: vi.fn()
@@ -454,12 +493,28 @@ describe('App debug tracing', () => {
 				nextLineLine: 0,
 				functionMetadata: { 1: 'main' },
 				variableMetadata: {
-					1: [{ slot: 1, name: 'local', kind: 'number', fromLine: 4, toLine: Number.MAX_SAFE_INTEGER }]
+					1: [
+						{
+							slot: 1,
+							name: 'local',
+							kind: 'number',
+							fromLine: 4,
+							toLine: Number.MAX_SAFE_INTEGER
+						}
+					]
 				},
 				globalVariableMetadata: [
-					{ slot: 10, name: 'counter', kind: 'number', fromLine: 1, toLine: Number.MAX_SAFE_INTEGER }
+					{
+						slot: 10,
+						name: 'counter',
+						kind: 'number',
+						fromLine: 1,
+						toLine: Number.MAX_SAFE_INTEGER
+					}
 				],
-				frames: [{ functionId: 1, functionName: 'main', line: 0, values: new Map([[1, '3']]) }],
+				frames: [
+					{ functionId: 1, functionName: 'main', line: 0, values: new Map([[1, '3']]) }
+				],
 				globalValues: new Map([[10, '7']]),
 				onPause
 			},

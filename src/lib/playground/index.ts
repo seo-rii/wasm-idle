@@ -17,8 +17,10 @@ export default async function load(language: string) {
 			sandbox = new Python();
 			break;
 		case 'C':
+			sandbox = new Clang('C');
+			break;
 		case 'CPP':
-			sandbox = new Clang();
+			sandbox = new Clang('CPP');
 			break;
 		case 'JAVA':
 			sandbox = new Java();

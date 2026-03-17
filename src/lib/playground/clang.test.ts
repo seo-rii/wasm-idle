@@ -34,7 +34,7 @@ describe('Clang sandbox', () => {
 	});
 
 	it('passes complex C++ source with multiple declarations and mutual recursion to the worker', async () => {
-		const sandbox = new Clang();
+		const sandbox = new Clang('CPP');
 		const outputs: string[] = [];
 		const code = `#include <stdio.h>
 
@@ -71,7 +71,7 @@ int main() {
 	});
 
 	it('forwards C++ runtime errors', async () => {
-		const sandbox = new Clang();
+		const sandbox = new Clang('CPP');
 		const worker = new MockWorker();
 		const events: any[] = [];
 
@@ -100,10 +100,33 @@ int main() {
 	});
 
 	it('aliases kill to terminate for C++ sessions', () => {
-		const sandbox = new Clang();
+		const sandbox = new Clang('CPP');
 		sandbox.terminate = vi.fn();
 
 		sandbox.kill?.();
 		expect(sandbox.terminate).toHaveBeenCalledTimes(1);
+	});
+
+	it('separates compile args from runtime args for C++ runs', async () => {
+		const sandbox = new Clang('CPP');
+		sandbox.output = vi.fn();
+
+		await sandbox.load('/');
+		await expect(
+			sandbox.run('int main() {}', false, true, undefined, ['-DLEGACY=1'], {
+				programArgs: ['one', 'two'],
+				cppVersion: 'CPP17'
+			})
+		).resolves.toBe(true);
+
+		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
+			2,
+			expect.objectContaining({
+				language: 'CPP',
+				compileArgs: ['-DLEGACY=1'],
+				programArgs: ['one', 'two'],
+				cppVersion: 'CPP17'
+			})
+		);
 	});
 });

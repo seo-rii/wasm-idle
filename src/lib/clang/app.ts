@@ -27,7 +27,12 @@ interface DebugSession {
 	variableMetadata: Record<number, DebugVariableMetadata[]>;
 	globalVariableMetadata: DebugVariableMetadata[];
 	functionMetadata: Record<number, string>;
-	frames: Array<{ functionId: number; functionName: string; line: number; values: Map<number, string> }>;
+	frames: Array<{
+		functionId: number;
+		functionName: string;
+		line: number;
+		values: Map<number, string>;
+	}>;
 	globalValues: Map<number, string>;
 	onPause?: (event: {
 		type: 'pause';
@@ -78,7 +83,6 @@ export default class App {
 				'args_sizes_get',
 				'args_get',
 				'random_get',
-				'clock_time_get',
 				'poll_oneoff'
 			),
 			...this.memfs.exports
@@ -132,12 +136,19 @@ export default class App {
 		throw new ProcExit(code);
 	}
 
-	private pauseDebugSession(session: DebugSession, functionId: number, line: number, reason: string) {
+	private pauseDebugSession(
+		session: DebugSession,
+		functionId: number,
+		line: number,
+		reason: string
+	) {
 		const buffer = session.buffer;
 		if (!buffer) return ESUCCESS;
 		session.currentFunctionId = functionId;
 		session.currentLine = line;
-		const frame = [...session.frames].reverse().find((candidate) => candidate.functionId === functionId);
+		const frame = [...session.frames]
+			.reverse()
+			.find((candidate) => candidate.functionId === functionId);
 		if (frame) frame.line = line;
 		session.pauseOnEntry = false;
 		session.stepArmed = false;
@@ -150,13 +161,17 @@ export default class App {
 				if (variable.kind === 'array') {
 					this.mem?.check?.();
 					const address = Number(frame?.values.get(variable.slot) ?? Number.NaN);
-					const dimensions =
-						variable.dimensions?.length
-							? variable.dimensions
-							: variable.length
-								? [variable.length]
-								: [];
-					if (!Number.isFinite(address) || address <= 0 || !dimensions.length || !variable.elementKind) {
+					const dimensions = variable.dimensions?.length
+						? variable.dimensions
+						: variable.length
+							? [variable.length]
+							: [];
+					if (
+						!Number.isFinite(address) ||
+						address <= 0 ||
+						!dimensions.length ||
+						!variable.elementKind
+					) {
 						return [{ name: variable.name, value: '?' }];
 					}
 					const elementStride =
@@ -172,7 +187,8 @@ export default class App {
 						for (let row = 0; row < previewRows; row += 1) {
 							const values: string[] = [];
 							for (let col = 0; col < previewCols; col += 1) {
-								const offset = address + (row * dimensions[1] + col) * elementStride;
+								const offset =
+									address + (row * dimensions[1] + col) * elementStride;
 								if (variable.elementKind === 'bool') {
 									values.push(this.mem.read8(offset) ? 'true' : 'false');
 									continue;
@@ -180,7 +196,9 @@ export default class App {
 								if (variable.elementKind === 'char') {
 									const charCode = this.mem.read8(offset);
 									values.push(
-										charCode >= 0x20 && charCode <= 0x7e ? `'${String.fromCharCode(charCode)}'` : `${charCode}`
+										charCode >= 0x20 && charCode <= 0x7e
+											? `'${String.fromCharCode(charCode)}'`
+											: `${charCode}`
 									);
 									continue;
 								}
@@ -216,7 +234,9 @@ export default class App {
 						if (variable.elementKind === 'char') {
 							const charCode = this.mem.read8(offset);
 							values.push(
-								charCode >= 0x20 && charCode <= 0x7e ? `'${String.fromCharCode(charCode)}'` : `${charCode}`
+								charCode >= 0x20 && charCode <= 0x7e
+									? `'${String.fromCharCode(charCode)}'`
+									: `${charCode}`
 							);
 							continue;
 						}
@@ -255,7 +275,10 @@ export default class App {
 			locals: [...locals, ...globals],
 			callStack: [...session.frames]
 				.reverse()
-				.map((stackFrame) => ({ functionName: stackFrame.functionName, line: stackFrame.line }))
+				.map((stackFrame) => ({
+					functionName: stackFrame.functionName,
+					line: stackFrame.line
+				}))
 		});
 		const sequence = Atomics.load(buffer, 0);
 		while (true) {

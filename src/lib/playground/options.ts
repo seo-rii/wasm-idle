@@ -52,4 +52,35 @@ export interface SandboxExecutionOptions {
 	breakpoints?: number[];
 	pauseOnEntry?: boolean;
 	stdin?: string;
+	compileArgs?: string[];
+	programArgs?: string[];
+	cppVersion?: string;
+	cVersion?: string;
+}
+
+export interface ResolvedSandboxExecutionArgs {
+	compileArgs: string[];
+	programArgs: string[];
+}
+
+function cloneArgs(value?: string[]) {
+	return Array.isArray(value) ? [...value] : [];
+}
+
+export function resolveSandboxExecutionArgs(
+	language: string,
+	args: string[] = [],
+	options: SandboxExecutionOptions = {}
+): ResolvedSandboxExecutionArgs {
+	if (language === 'C' || language === 'CPP') {
+		return {
+			compileArgs: cloneArgs(options.compileArgs ?? args),
+			programArgs: cloneArgs(options.programArgs)
+		};
+	}
+
+	return {
+		compileArgs: cloneArgs(options.compileArgs),
+		programArgs: cloneArgs(options.programArgs ?? args)
+	};
 }

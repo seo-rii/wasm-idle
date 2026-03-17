@@ -27,14 +27,11 @@ describe('executeTerminalRun', () => {
 			[],
 			{ debug: true, breakpoints: [3, 7], pauseOnEntry: true }
 		);
-		expect(terminal.run).toHaveBeenCalledWith(
-			'CPP',
-			'int main() {}',
-			false,
-			undefined,
-			[],
-			{ debug: true, breakpoints: [3, 7], pauseOnEntry: true }
-		);
+		expect(terminal.run).toHaveBeenCalledWith('CPP', 'int main() {}', false, undefined, [], {
+			debug: true,
+			breakpoints: [3, 7],
+			pauseOnEntry: true
+		});
 		expect(result).toBe('ok');
 	});
 

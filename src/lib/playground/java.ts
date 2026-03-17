@@ -1,4 +1,8 @@
-import type { CompilerDiagnostic, SandboxExecutionOptions } from '$lib/playground/options';
+import {
+	resolveSandboxExecutionArgs,
+	type CompilerDiagnostic,
+	type SandboxExecutionOptions
+} from '$lib/playground/options';
 import type { Sandbox } from '$lib/playground/sandbox';
 import {
 	flushBufferedEof,
@@ -85,6 +89,7 @@ class Java implements Sandbox {
 		this.exit = false;
 		return new Promise<boolean | string>((resolve, reject) => {
 			if (!this.worker) return reject('Worker not loaded');
+			const { programArgs } = resolveSandboxExecutionArgs('JAVA', args, options);
 			const _uid = ++this.uid;
 			this.activeReject = reject;
 			const handler = (event: Event & { data: any }) => {
@@ -120,7 +125,7 @@ class Java implements Sandbox {
 				code,
 				prepare,
 				buffer: this.buffer,
-				args,
+				args: programArgs,
 				stdin: options.stdin || '',
 				baseUrl: this.baseUrl
 			});

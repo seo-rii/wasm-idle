@@ -3,6 +3,7 @@ import type {
 	DebugSessionEvent,
 	SandboxExecutionOptions
 } from '$lib/playground/options';
+import { resolveSandboxExecutionArgs } from '$lib/playground/options';
 import type { Sandbox } from '$lib/playground/sandbox';
 import {
 	flushBufferedEof,
@@ -12,6 +13,7 @@ import {
 import type { Writable } from 'svelte/store';
 
 class Clang implements Sandbox {
+	language: 'C' | 'CPP';
 	ts = Date.now();
 	output: any = null;
 	ondebug?: (event: DebugSessionEvent) => void;
@@ -27,6 +29,10 @@ class Clang implements Sandbox {
 	waitingForInput = false;
 	pendingEof = false;
 	exit = true;
+
+	constructor(language: 'C' | 'CPP') {
+		this.language = language;
+	}
 
 	load(
 		path: string,
@@ -86,12 +92,18 @@ class Clang implements Sandbox {
 		this.exit = false;
 		return new Promise<boolean | string>(async (resolve, reject) => {
 			if (!this.worker) return reject('Worker not loaded');
+			const { compileArgs, programArgs } = resolveSandboxExecutionArgs(
+				this.language,
+				args,
+				options
+			);
 			const interrupt = new Uint8Array(this.interruptBuffer),
 				_uid = ++this.uid;
 			const handler = (event: Event & { data: any }) => {
 				if (!this.worker) return reject('Worker not loaded');
 				if (_uid !== this.uid) return (this.worker.onmessage = null);
-				const { id, output, results, log, error, buffer, progress, debugEvent } = event.data;
+				const { id, output, results, log, error, buffer, progress, debugEvent } =
+					event.data;
 				if (buffer) {
 					this.waitingForInput = true;
 					this.flushPendingInput();
@@ -126,13 +138,17 @@ class Clang implements Sandbox {
 				buffer: this.buffer,
 				debugBuffer: this.debugBuffer,
 				interrupt: this.interruptBuffer,
-					context: {},
-					log,
-					args,
-					debug: !!options.debug,
-					breakpoints: [...(options.breakpoints || [])],
-					pauseOnEntry: !!options.pauseOnEntry
-				});
+				context: {},
+				log,
+				language: this.language,
+				compileArgs,
+				programArgs,
+				cppVersion: options.cppVersion,
+				cVersion: options.cVersion,
+				debug: !!options.debug,
+				breakpoints: [...(options.breakpoints || [])],
+				pauseOnEntry: !!options.pauseOnEntry
+			});
 		});
 	}
 

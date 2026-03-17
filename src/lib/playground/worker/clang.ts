@@ -17,7 +17,8 @@ async function loadClang(path: string, log: boolean) {
 	clang = new Clang({
 		stdout: (output) => postMessage({ output }),
 		onDebugEvent: (debugEvent) => postMessage({ debugEvent }),
-		stdin: () => waitForBufferedStdin(stdinBufferClang, () => postMessage({ buffer: true })) ?? '',
+		stdin: () =>
+			waitForBufferedStdin(stdinBufferClang, () => postMessage({ buffer: true })) ?? '',
 		progress: (value) => postMessage({ progress: value }),
 		log,
 		path
@@ -34,7 +35,11 @@ self.onmessage = async (event: { data: any }) => {
 		log,
 		path,
 		prepare,
-		args,
+		language,
+		compileArgs,
+		programArgs,
+		cppVersion,
+		cVersion,
 		debug,
 		breakpoints,
 		pauseOnEntry
@@ -49,7 +54,11 @@ self.onmessage = async (event: { data: any }) => {
 
 		try {
 			await clang.compileLink(code, {
-				args,
+				language,
+				compileArgs,
+				programArgs,
+				cppVersion,
+				cVersion,
 				debug,
 				breakpoints,
 				pauseOnEntry,
@@ -68,7 +77,11 @@ self.onmessage = async (event: { data: any }) => {
 
 		try {
 			await clang.compileLinkRun(code, {
-				args,
+				language,
+				compileArgs,
+				programArgs,
+				cppVersion,
+				cVersion,
 				debug,
 				breakpoints,
 				pauseOnEntry,

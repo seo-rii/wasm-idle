@@ -111,7 +111,7 @@ print(f"sum={sum(values)}")`,
 						)
 					}))
 				: [];
-		monacoApi.editor.setModelMarkers(activeModel, 'wasm-idle-java', markers);
+		monacoApi.editor.setModelMarkers(activeModel, 'wasm-idle-compiler', markers);
 	});
 
 	onMount(() => {
@@ -181,7 +181,7 @@ print(f"sum={sum(values)}")`,
 			debugView = null;
 			const activeModel = model || editor?.getModel();
 			if (Monaco && activeModel)
-				Monaco.editor.setModelMarkers(activeModel, 'wasm-idle-java', []);
+				Monaco.editor.setModelMarkers(activeModel, 'wasm-idle-compiler', []);
 			model?.dispose();
 			model = null;
 			editor?.dispose();

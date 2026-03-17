@@ -32,23 +32,38 @@ describe('Clang compile/debug flow', () => {
 		vi.restoreAllMocks();
 	});
 
-	it('uses the supported clang standard and disables optimization for debug runs', async () => {
+	it('uses the requested C++ standard and disables optimization for debug runs', async () => {
 		const { clang } = createClangHarness();
 
 		await clang.compile({
 			input: 'main.cc',
 			code: 'int main() {}',
 			obj: 'main.o',
-			args: ['-DMODE=1'],
+			compileArgs: ['-DMODE=1'],
+			cppVersion: 'CPP17',
 			debug: true
 		});
 
 		const compileArgs = vi.mocked(clang.run).mock.calls[0]?.slice(2) ?? [];
 		expect(compileArgs).toContain('-O0');
-		expect(compileArgs).toContain('-std=gnu++2a');
+		expect(compileArgs).toContain('-std=gnu++17');
 		expect(compileArgs).not.toContain('-g');
 		expect(compileArgs).not.toContain('-fstandalone-debug');
 		expect(compileArgs).toContain('-DMODE=1');
+	});
+
+	it('maps newer C++ versions to the newest supported clang standard', async () => {
+		const { clang } = createClangHarness();
+
+		await clang.compile({
+			input: 'main.cc',
+			code: 'int main() {}',
+			obj: 'main.o',
+			cppVersion: 'CPP26'
+		});
+
+		const compileArgs = vi.mocked(clang.run).mock.calls[0]?.slice(2) ?? [];
+		expect(compileArgs).toContain('-std=gnu++2a');
 	});
 
 	it('instruments debug builds with source line hooks', async () => {
@@ -257,15 +272,9 @@ int main() {
 		expect(instrumentedSource).toContain(
 			'extern "C" __attribute__((import_module("env"), import_name("__wasm_idle_debug_value_text"))) void __wasm_idle_debug_value_text(int functionId, int slot, const char* ptr, int len);'
 		);
-		expect(instrumentedSource).toContain(
-			'__wasm_idle_debug_emit_vector(1, 1, values);'
-		);
-		expect(instrumentedSource).toContain(
-			'__wasm_idle_debug_emit_set(1, 2, seen);'
-		);
-		expect(instrumentedSource).toContain(
-			'__wasm_idle_debug_emit_map(1, 3, counts);'
-		);
+		expect(instrumentedSource).toContain('__wasm_idle_debug_emit_vector(1, 1, values);');
+		expect(instrumentedSource).toContain('__wasm_idle_debug_emit_set(1, 2, seen);');
+		expect(instrumentedSource).toContain('__wasm_idle_debug_emit_map(1, 3, counts);');
 	});
 
 	it('captures global scalar initial values and updates them inside functions', async () => {
@@ -437,12 +446,38 @@ int main() {
 		const { clang } = createClangHarness();
 		clang.compile = vi.fn(async () => null) as any;
 
-		await clang.compileLink('int main() {}', { args: ['-DTEST=1'], debug: false });
-		await clang.compileLink('int main() {}', { args: ['-DTEST=1'], debug: false });
-		await clang.compileLink('int main() {}', { args: ['-DTEST=1'], debug: true });
+		await clang.compileLink('int main() {}', { compileArgs: ['-DTEST=1'], debug: false });
+		await clang.compileLink('int main() {}', { compileArgs: ['-DTEST=1'], debug: false });
+		await clang.compileLink('int main() {}', { compileArgs: ['-DTEST=1'], debug: true });
 
 		expect(vi.mocked(clang.compile)).toHaveBeenCalledTimes(2);
 		expect(vi.mocked(clang.link)).toHaveBeenCalledTimes(2);
 		expect(compileWasm).toHaveBeenCalledTimes(2);
+	});
+
+	it('passes runtime program args to the compiled wasm module', async () => {
+		const { clang } = createClangHarness();
+		const wasmModule = { id: 'wasm-module' } as unknown as WebAssembly.Module;
+		clang.compileLink = vi.fn(async () => wasmModule) as any;
+
+		await clang.compileLinkRun('int main() {}', {
+			compileArgs: ['-DTEST=1'],
+			programArgs: ['one', 'two']
+		});
+
+		expect(vi.mocked(clang.compileLink)).toHaveBeenCalledWith('int main() {}', {
+			language: 'CPP',
+			compileArgs: ['-DTEST=1'],
+			debug: false,
+			breakpoints: [],
+			pauseOnEntry: false,
+			cppVersion: undefined,
+			cVersion: undefined,
+			debugBuffer: undefined,
+			interruptBuffer: undefined
+		});
+		const runArgs = vi.mocked(clang.run).mock.calls[0];
+		expect(runArgs?.[0]).toBe(wasmModule);
+		expect(runArgs?.slice(2)).toEqual(['test.wasm', 'one', 'two']);
 	});
 });

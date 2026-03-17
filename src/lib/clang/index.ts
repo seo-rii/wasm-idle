@@ -27,13 +27,115 @@ const clangCommonArgs = [
 	'-fcolor-diagnostics'
 ];
 
-const clangLanguageStandardArg = '-std=gnu++2a';
+const defaultCppStandardArg = '-std=gnu++2a';
+const defaultCStandardArg = '-std=gnu11';
+
+type ClangSourceLanguage = 'C' | 'CPP';
+
+function normalizeStandardCode(value?: string) {
+	return (value || '').trim().toUpperCase().replaceAll(/\s+/g, '');
+}
+
+function resolveCppStandardArg(version?: string) {
+	switch (normalizeStandardCode(version)) {
+		case '03':
+		case 'CPP03':
+		case 'C++03':
+		case 'GNU++03':
+		case 'GNUC++03':
+			return '-std=gnu++03';
+		case '11':
+		case 'CPP11':
+		case 'C++11':
+		case 'GNU++11':
+		case 'GNUC++11':
+			return '-std=gnu++11';
+		case '14':
+		case 'CPP14':
+		case 'C++14':
+		case 'GNU++14':
+		case 'GNUC++14':
+			return '-std=gnu++14';
+		case '17':
+		case 'CPP17':
+		case 'C++17':
+		case 'GNU++17':
+		case 'GNUC++17':
+			return '-std=gnu++17';
+		case '20':
+		case '23':
+		case '26':
+		case 'CPP20':
+		case 'CPP23':
+		case 'CPP26':
+		case 'C++20':
+		case 'C++23':
+		case 'C++26':
+		case 'GNU++20':
+		case 'GNU++23':
+		case 'GNU++26':
+		case 'GNUC++20':
+		case 'GNUC++23':
+		case 'GNUC++26':
+			return defaultCppStandardArg;
+		default:
+			return defaultCppStandardArg;
+	}
+}
+
+function resolveCStandardArg(version?: string) {
+	switch (normalizeStandardCode(version)) {
+		case '99':
+		case 'C99':
+		case 'GNU99':
+		case 'GNUC99':
+			return '-std=gnu99';
+		case '11':
+		case 'C11':
+		case 'GNU11':
+		case 'GNUC11':
+			return '-std=gnu11';
+		case '17':
+		case '18':
+		case 'C17':
+		case 'C18':
+		case 'GNU17':
+		case 'GNU18':
+		case 'GNUC17':
+		case 'GNUC18':
+			return '-std=gnu17';
+		default:
+			return defaultCStandardArg;
+	}
+}
+
+function resolveClangLanguageArgs(
+	language: ClangSourceLanguage,
+	options: { cppVersion?: string; cVersion?: string }
+) {
+	if (language === 'C') {
+		return {
+			languageArg: 'c',
+			standardArg: resolveCStandardArg(options.cVersion)
+		};
+	}
+
+	return {
+		languageArg: 'c++',
+		standardArg: resolveCppStandardArg(options.cppVersion)
+	};
+}
 
 interface APIOption {
 	stdin: () => string;
 	stdout: (str: string) => void;
 	progress: (value: number) => void;
-	onDebugEvent?: (event: { type: 'pause'; line: number; reason: string; locals: DebugVariable[] }) => void;
+	onDebugEvent?: (event: {
+		type: 'pause';
+		line: number;
+		reason: string;
+		locals: DebugVariable[];
+	}) => void;
 
 	log?: boolean;
 	showTiming?: boolean;
@@ -41,7 +143,12 @@ interface APIOption {
 }
 
 interface DebugRunOptions {
+	language?: ClangSourceLanguage;
 	args?: string[];
+	compileArgs?: string[];
+	programArgs?: string[];
+	cppVersion?: string;
+	cVersion?: string;
 	debug?: boolean;
 	breakpoints?: number[];
 	pauseOnEntry?: boolean;
@@ -175,8 +282,11 @@ export default class Clang {
 		const input = options.input;
 		let source = options.code;
 		const obj = options.obj;
+		const language: ClangSourceLanguage = options.language === 'C' ? 'C' : 'CPP';
+		const compileArgs = options.compileArgs ?? options.args ?? [];
+		const { languageArg, standardArg } = resolveClangLanguageArgs(language, options);
 		const debug = !!options.debug;
-		const opt = debug ? '0' : (options.opt || '2');
+		const opt = debug ? '0' : options.opt || '2';
 		if (debug) {
 			const lines = source.split('\n');
 			let braceDepth = 0;
@@ -194,7 +304,12 @@ export default class Clang {
 			>();
 			let currentFunctionContainers = new Map<
 				string,
-				{ slot: number; container: 'vector' | 'set' | 'map'; fromLine: number; toLine: number }
+				{
+					slot: number;
+					container: 'vector' | 'set' | 'map';
+					fromLine: number;
+					toLine: number;
+				}
 			>();
 			let inBlockComment = false;
 			let pendingFunctionHeader:
@@ -292,7 +407,8 @@ export default class Clang {
 						analysisLine = analysisLine.slice(0, commentStart);
 					} else {
 						analysisLine =
-							analysisLine.slice(0, commentStart) + analysisLine.slice(commentEnd + 2);
+							analysisLine.slice(0, commentStart) +
+							analysisLine.slice(commentEnd + 2);
 					}
 				}
 				const lineComment = analysisLine.indexOf('//');
@@ -321,12 +437,14 @@ export default class Clang {
 					let declarationBraceDepth = 0;
 					for (const character of globalDeclarationMatch[2]) {
 						if (character === ',' && declarationBraceDepth === 0) {
-							if (declarationBuffer.trim()) declarations.push(declarationBuffer.trim());
+							if (declarationBuffer.trim())
+								declarations.push(declarationBuffer.trim());
 							declarationBuffer = '';
 							continue;
 						}
 						if (character === '{') declarationBraceDepth += 1;
-						if (character === '}') declarationBraceDepth = Math.max(0, declarationBraceDepth - 1);
+						if (character === '}')
+							declarationBraceDepth = Math.max(0, declarationBraceDepth - 1);
 						declarationBuffer += character;
 					}
 					if (declarationBuffer.trim()) declarations.push(declarationBuffer.trim());
@@ -376,84 +494,91 @@ export default class Clang {
 					leadingInstrumentation.push(
 						`${indent}__wasm_idle_debug_line(${currentFunctionId}, ${index + 1});`
 					);
-						const declarationMatch = normalized.match(
-							/^(?:const\s+)?(?:(?:unsigned|signed)\s+)?(?:(?:short|long long|long)\s+)?(int|float|double|bool|char)\s+(.+);$/
-						);
-						const containerDeclarationMatch = normalized.match(
-							/^(?:const\s+)?(?:(?:std::)?(vector|set|map))\s*<(.+)>\s+([A-Za-z_]\w*)\s*(?:=.*)?;$/
-						);
-						if (containerDeclarationMatch && currentFunctionId) {
-							const slot = nextVariableSlot++;
-							const container = containerDeclarationMatch[1] as 'vector' | 'set' | 'map';
-							const name = containerDeclarationMatch[3];
-							declaredContainerNames.add(name);
-							currentFunctionContainers.set(name, {
+					const declarationMatch = normalized.match(
+						/^(?:const\s+)?(?:(?:unsigned|signed)\s+)?(?:(?:short|long long|long)\s+)?(int|float|double|bool|char)\s+(.+);$/
+					);
+					const containerDeclarationMatch = normalized.match(
+						/^(?:const\s+)?(?:(?:std::)?(vector|set|map))\s*<(.+)>\s+([A-Za-z_]\w*)\s*(?:=.*)?;$/
+					);
+					if (containerDeclarationMatch && currentFunctionId) {
+						const slot = nextVariableSlot++;
+						const container = containerDeclarationMatch[1] as 'vector' | 'set' | 'map';
+						const name = containerDeclarationMatch[3];
+						declaredContainerNames.add(name);
+						currentFunctionContainers.set(name, {
+							slot,
+							container,
+							fromLine: index + 1,
+							toLine: Number.MAX_SAFE_INTEGER
+						});
+						this.debugVariableMetadata[currentFunctionId] = [
+							...(this.debugVariableMetadata[currentFunctionId] || []),
+							{
 								slot,
-								container,
+								name,
+								kind: 'text',
 								fromLine: index + 1,
 								toLine: Number.MAX_SAFE_INTEGER
-							});
-							this.debugVariableMetadata[currentFunctionId] = [
-								...(this.debugVariableMetadata[currentFunctionId] || []),
-								{
-									slot,
-									name,
-									kind: 'text',
-									fromLine: index + 1,
-									toLine: Number.MAX_SAFE_INTEGER
-								}
-							];
-							trailingInstrumentation.push(
-								`${indent}__wasm_idle_debug_emit_${container}(${currentFunctionId}, ${slot}, ${name});`
-							);
-						}
-						if (declarationMatch && currentFunctionId) {
+							}
+						];
+						trailingInstrumentation.push(
+							`${indent}__wasm_idle_debug_emit_${container}(${currentFunctionId}, ${slot}, ${name});`
+						);
+					}
+					if (declarationMatch && currentFunctionId) {
 						const kind = declarationMatch[1] === 'bool' ? 'bool' : 'number';
 						const declarations: string[] = [];
 						let declarationBuffer = '';
 						let declarationParenDepth = 0;
 						let declarationBraceDepth = 0;
 						for (const character of declarationMatch[2]) {
-							if (character === ',' && declarationParenDepth === 0 && declarationBraceDepth === 0) {
-								if (declarationBuffer.trim()) declarations.push(declarationBuffer.trim());
+							if (
+								character === ',' &&
+								declarationParenDepth === 0 &&
+								declarationBraceDepth === 0
+							) {
+								if (declarationBuffer.trim())
+									declarations.push(declarationBuffer.trim());
 								declarationBuffer = '';
 								continue;
 							}
 							if (character === '(') declarationParenDepth += 1;
-							if (character === ')') declarationParenDepth = Math.max(0, declarationParenDepth - 1);
+							if (character === ')')
+								declarationParenDepth = Math.max(0, declarationParenDepth - 1);
 							if (character === '{') declarationBraceDepth += 1;
-							if (character === '}') declarationBraceDepth = Math.max(0, declarationBraceDepth - 1);
+							if (character === '}')
+								declarationBraceDepth = Math.max(0, declarationBraceDepth - 1);
 							declarationBuffer += character;
 						}
 						if (declarationBuffer.trim()) declarations.push(declarationBuffer.trim());
-							for (const declaration of declarations) {
-								const [left] = declaration.split('=');
-								const declarator = left?.trim() || '';
-								const arrayDimensions: number[] = [];
-								for (const match of declarator.matchAll(/\[(\d+)\]/g)) {
-									arrayDimensions.push(Number(match[1]));
-								}
-								const arrayName = declarator.match(/([A-Za-z_]\w*)\s*(?=\[\d+\])/);
-								if (arrayDimensions.length && arrayName) {
-									const slot = nextVariableSlot++;
-									this.debugVariableMetadata[currentFunctionId] = [
-										...(this.debugVariableMetadata[currentFunctionId] || []),
-										{
-											slot,
-											name: arrayName[1],
-											kind: 'array',
-											elementKind: declarationMatch[1] as DebugArrayElementKind,
-											length: arrayDimensions[0],
-											dimensions: arrayDimensions,
-											fromLine: index + 1,
-											toLine: Number.MAX_SAFE_INTEGER
-										}
-									];
-									trailingInstrumentation.push(
-										`${indent}__wasm_idle_debug_value_addr(${currentFunctionId}, ${slot}, (int)((unsigned long long)(${arrayName[1]})));`
-									);
-									continue;
-								}
+						for (const declaration of declarations) {
+							const [left] = declaration.split('=');
+							const declarator = left?.trim() || '';
+							const arrayDimensions: number[] = [];
+							for (const match of declarator.matchAll(/\[(\d+)\]/g)) {
+								arrayDimensions.push(Number(match[1]));
+							}
+							const arrayName = declarator.match(/([A-Za-z_]\w*)\s*(?=\[\d+\])/);
+							if (arrayDimensions.length && arrayName) {
+								const slot = nextVariableSlot++;
+								this.debugVariableMetadata[currentFunctionId] = [
+									...(this.debugVariableMetadata[currentFunctionId] || []),
+									{
+										slot,
+										name: arrayName[1],
+										kind: 'array',
+										elementKind: declarationMatch[1] as DebugArrayElementKind,
+										length: arrayDimensions[0],
+										dimensions: arrayDimensions,
+										fromLine: index + 1,
+										toLine: Number.MAX_SAFE_INTEGER
+									}
+								];
+								trailingInstrumentation.push(
+									`${indent}__wasm_idle_debug_value_addr(${currentFunctionId}, ${slot}, (int)((unsigned long long)(${arrayName[1]})));`
+								);
+								continue;
+							}
 							if (/[*&]/.test(declarator)) continue;
 							const name = declarator.match(/([A-Za-z_]\w*)\s*(?:\[[^\]]*\])?$/)?.[1];
 							if (!name) continue;
@@ -512,21 +637,26 @@ export default class Clang {
 							];
 						}
 					}
-						if (!controlHeaderWithoutInlineBlock) {
-							for (const [name, container] of currentFunctionContainers) {
-								if (declaredContainerNames.has(name)) continue;
-								const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-								if (!new RegExp(`\\b${escapedName}\\b`).test(normalized)) continue;
-								trailingInstrumentation.push(
-									`${indent}__wasm_idle_debug_emit_${container.container}(${currentFunctionId}, ${container.slot}, ${name});`
-								);
-							}
-							for (const [name, variable] of currentFunctionVariables) {
-								const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-							if (normalized.startsWith('for') && variable.toLine === index + 1) continue;
+					if (!controlHeaderWithoutInlineBlock) {
+						for (const [name, container] of currentFunctionContainers) {
+							if (declaredContainerNames.has(name)) continue;
+							const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+							if (!new RegExp(`\\b${escapedName}\\b`).test(normalized)) continue;
+							trailingInstrumentation.push(
+								`${indent}__wasm_idle_debug_emit_${container.container}(${currentFunctionId}, ${container.slot}, ${name});`
+							);
+						}
+						for (const [name, variable] of currentFunctionVariables) {
+							const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+							if (normalized.startsWith('for') && variable.toLine === index + 1)
+								continue;
 							if (
-								new RegExp(`(?:^|[^\\w])(?:\\+\\+|--)\\s*${escapedName}\\b`).test(normalized) ||
-								new RegExp(`\\b${escapedName}\\s*(?:[+\\-*/%]?=|\\+\\+|--)`).test(normalized) ||
+								new RegExp(`(?:^|[^\\w])(?:\\+\\+|--)\\s*${escapedName}\\b`).test(
+									normalized
+								) ||
+								new RegExp(`\\b${escapedName}\\s*(?:[+\\-*/%]?=|\\+\\+|--)`).test(
+									normalized
+								) ||
 								new RegExp(`&\\s*${escapedName}\\b`).test(normalized)
 							) {
 								trailingInstrumentation.push(
@@ -536,10 +666,14 @@ export default class Clang {
 						}
 					}
 					if (/^return\b/.test(normalized))
-						leadingInstrumentation.push(`${indent}__wasm_idle_debug_leave(${currentFunctionId});`);
+						leadingInstrumentation.push(
+							`${indent}__wasm_idle_debug_leave(${currentFunctionId});`
+						);
 				}
 				if (functionDepth > 0 && braceDepth === functionDepth && normalized === '}') {
-					leadingInstrumentation.push(`${indent}__wasm_idle_debug_leave(${currentFunctionId});`);
+					leadingInstrumentation.push(
+						`${indent}__wasm_idle_debug_leave(${currentFunctionId});`
+					);
 				}
 				if (
 					inFunctionBody &&
@@ -564,11 +698,19 @@ export default class Clang {
 								}
 							}
 							for (const [name, variable] of globalVariables) {
-								if (currentFunctionVariables.has(name) || currentFunctionContainers.has(name)) continue;
+								if (
+									currentFunctionVariables.has(name) ||
+									currentFunctionContainers.has(name)
+								)
+									continue;
 								const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 								if (
-									new RegExp(`(?:^|[^\\w])(?:\\+\\+|--)\\s*${escapedName}\\b`).test(normalized) ||
-									new RegExp(`\\b${escapedName}\\s*(?:[+\\-*/%]?=|\\+\\+|--)`).test(normalized) ||
+									new RegExp(
+										`(?:^|[^\\w])(?:\\+\\+|--)\\s*${escapedName}\\b`
+									).test(normalized) ||
+									new RegExp(
+										`\\b${escapedName}\\s*(?:[+\\-*/%]?=|\\+\\+|--)`
+									).test(normalized) ||
 									new RegExp(`&\\s*${escapedName}\\b`).test(normalized)
 								) {
 									trailingInstrumentation.push(
@@ -590,7 +732,8 @@ export default class Clang {
 										continue;
 									}
 									if (character === '(') segmentDepth += 1;
-									if (character === ')') segmentDepth = Math.max(0, segmentDepth - 1);
+									if (character === ')')
+										segmentDepth = Math.max(0, segmentDepth - 1);
 									segmentBuffer += character;
 								}
 								segments.push(segmentBuffer);
@@ -604,11 +747,17 @@ export default class Clang {
 											initSource
 										);
 									for (const [name, variable] of currentFunctionVariables) {
-										const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+										const escapedName = name.replace(
+											/[.*+?^${}()|[\]\\]/g,
+											'\\$&'
+										);
 										const mutationPattern = new RegExp(
 											`(?:^|[^\\w])(?:\\+\\+|--)\\s*${escapedName}\\b|\\b${escapedName}\\s*(?:[+\\-*/%]?=|\\+\\+|--)`
 										);
-										if (!initLooksLikeDeclaration && mutationPattern.test(initSource)) {
+										if (
+											!initLooksLikeDeclaration &&
+											mutationPattern.test(initSource)
+										) {
 											initHooks.push(
 												`${variable.kind === 'bool' ? '__wasm_idle_debug_value_bool' : '__wasm_idle_debug_value_num'}(${currentFunctionId}, ${variable.slot}, ${name})`
 											);
@@ -685,7 +834,10 @@ export default class Clang {
 						);
 						if (containerParameterMatch) {
 							const slot = nextVariableSlot++;
-							const container = containerParameterMatch[1] as 'vector' | 'set' | 'map';
+							const container = containerParameterMatch[1] as
+								| 'vector'
+								| 'set'
+								| 'map';
 							const name = containerParameterMatch[2];
 							currentFunctionContainers.set(name, {
 								slot,
@@ -725,7 +877,9 @@ export default class Clang {
 									slot,
 									name: parameterArrayName[1],
 									kind: 'array',
-									elementKind: (cleaned.match(/\b(int|float|double|bool|char)\b/)?.[1] || 'int') as DebugArrayElementKind,
+									elementKind: (cleaned.match(
+										/\b(int|float|double|bool|char)\b/
+									)?.[1] || 'int') as DebugArrayElementKind,
 									length: parameterArrayDimensions[0],
 									dimensions: parameterArrayDimensions,
 									fromLine: index + 1,
@@ -741,8 +895,9 @@ export default class Clang {
 						const nameMatch = cleaned.match(/([A-Za-z_]\w*)\s*(?:\[[^\]]*\])?\s*$/);
 						if (!nameMatch) continue;
 						const name = nameMatch[1];
-						const kind =
-							/\bbool\b/.test(cleaned) ? 'bool' : /\b(?:int|float|double|char|short|long)\b/.test(cleaned)
+						const kind = /\bbool\b/.test(cleaned)
+							? 'bool'
+							: /\b(?:int|float|double|char|short|long)\b/.test(cleaned)
 								? 'number'
 								: '';
 						if (!kind) continue;
@@ -780,17 +935,20 @@ export default class Clang {
 					const beforeParen = normalized.slice(0, normalized.indexOf('(')).trim();
 					pendingFunctionHeader = {
 						functionName: beforeParen.split(/\s+/).pop() || 'anonymous',
-						parameters: normalized.slice(normalized.indexOf('(') + 1, normalized.lastIndexOf(')'))
+						parameters: normalized.slice(
+							normalized.indexOf('(') + 1,
+							normalized.lastIndexOf(')')
+						)
 					};
 				} else if (normalized && normalized !== '{') {
 					pendingFunctionHeader = undefined;
 				}
 				if (functionDepth > 0 && braceDepth < functionDepth) {
 					functionDepth = 0;
-						currentFunctionId = 0;
-						currentFunctionVariables = new Map();
-						currentFunctionContainers = new Map();
-					}
+					currentFunctionId = 0;
+					currentFunctionVariables = new Map();
+					currentFunctionContainers = new Map();
+				}
 			}
 			if (globalInitialization.length) {
 				instrumented.push('struct __wasm_idle_debug_globals_init {');
@@ -816,19 +974,14 @@ export default class Clang {
 			'-O' + opt,
 			'-o',
 			obj,
-			clangLanguageStandardArg,
+			standardArg,
 			'-x',
-			'c++',
+			languageArg,
 			input,
-			...(options.args || [])
+			...compileArgs
 		];
 		this.trace(`compile ${input} -> ${obj}`);
-		return await this.run(
-			clang,
-			true,
-			'clang',
-			...compilerArgs
-		);
+		return await this.run(clang, true, 'clang', ...compilerArgs);
 	}
 
 	async link(obj: string, wasm: string, debug = false) {
@@ -868,30 +1021,30 @@ export default class Clang {
 		const start = +new Date();
 		const app = new App(module, this.memfs, args[0], ...args.slice(1));
 		app.trace = (message) => this.trace(message);
-			app.debugSession = {
-				buffer: this.debugBuffer,
-				interruptBuffer: this.debugInterruptBuffer,
-				breakpoints: new Set(this.debugBreakpoints),
-				pauseOnEntry: this.debugPauseOnEntry,
-				stepArmed: this.debugPauseOnEntry,
-				nextLineArmed: false,
-				stepOutArmed: false,
-				callDepth: 0,
-				stepOutDepth: 0,
-				currentFunctionId: 0,
-				currentLine: 0,
-				resumeSkipActive: false,
-				resumeSkipFunctionId: 0,
-				resumeSkipLine: 0,
-				nextLineFunctionId: 0,
-				nextLineLine: 0,
-				variableMetadata: this.debugVariableMetadata,
-				globalVariableMetadata: this.debugGlobalMetadata,
-				functionMetadata: this.debugFunctionMetadata,
-				frames: [],
-				globalValues: new Map(),
-				onPause: (event) => this.onDebugEvent?.(event)
-			};
+		app.debugSession = {
+			buffer: this.debugBuffer,
+			interruptBuffer: this.debugInterruptBuffer,
+			breakpoints: new Set(this.debugBreakpoints),
+			pauseOnEntry: this.debugPauseOnEntry,
+			stepArmed: this.debugPauseOnEntry,
+			nextLineArmed: false,
+			stepOutArmed: false,
+			callDepth: 0,
+			stepOutDepth: 0,
+			currentFunctionId: 0,
+			currentLine: 0,
+			resumeSkipActive: false,
+			resumeSkipFunctionId: 0,
+			resumeSkipLine: 0,
+			nextLineFunctionId: 0,
+			nextLineLine: 0,
+			variableMetadata: this.debugVariableMetadata,
+			globalVariableMetadata: this.debugGlobalMetadata,
+			functionMetadata: this.debugFunctionMetadata,
+			frames: [],
+			globalValues: new Map(),
+			onPause: (event) => this.onDebugEvent?.(event)
+		};
 		const instantiate = +new Date();
 		const stillRunning = await app.run();
 		const end = +new Date();
@@ -903,14 +1056,18 @@ export default class Clang {
 
 	async compileLink(code: string, options: DebugRunOptions = {}) {
 		const {
+			language = 'CPP',
 			args = [],
+			compileArgs = args,
 			debug = false,
 			breakpoints = [],
 			pauseOnEntry = false,
+			cppVersion,
+			cVersion,
 			debugBuffer,
 			interruptBuffer
 		} = options;
-		const input = `test.cc`,
+		const input = language === 'C' ? `test.c` : `test.cc`,
 			obj = `test.o`,
 			wasm = `test.wasm`;
 		this.beginTrace(debug);
@@ -918,12 +1075,28 @@ export default class Clang {
 		this.debugPauseOnEntry = debug && pauseOnEntry;
 		this.debugBuffer = debugBuffer;
 		this.debugInterruptBuffer = interruptBuffer;
-		const buildKey = JSON.stringify({ code, args, debug });
+		const buildKey = JSON.stringify({
+			code,
+			language,
+			compileArgs,
+			cppVersion,
+			cVersion,
+			debug
+		});
 		if (this.lastBuildKey === buildKey) {
 			this.trace(`reuse ${wasm}`);
 			return this.wasm;
 		}
-		await this.compile({ input, code, obj, args, debug });
+		await this.compile({
+			input,
+			code,
+			obj,
+			language,
+			compileArgs,
+			cppVersion,
+			cVersion,
+			debug
+		});
 		await this.link(obj, wasm, debug);
 
 		this.lastBuildKey = buildKey;
@@ -936,25 +1109,34 @@ export default class Clang {
 
 	async compileLinkRun(code: string, options: DebugRunOptions = {}) {
 		const {
+			language = 'CPP',
 			args = [],
+			compileArgs = args,
+			programArgs = [],
 			debug = false,
 			breakpoints = [],
 			pauseOnEntry = false,
+			cppVersion,
+			cVersion,
 			debugBuffer,
 			interruptBuffer
 		} = options;
 		this.debug = debug;
 		return await this.run(
 			await this.compileLink(code, {
-				args,
+				language,
+				compileArgs,
 				debug,
 				breakpoints,
 				pauseOnEntry,
+				cppVersion,
+				cVersion,
 				debugBuffer,
 				interruptBuffer
 			}),
 			true,
-			`test.wasm`
+			`test.wasm`,
+			...programArgs
 		);
 	}
 }
