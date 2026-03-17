@@ -3,13 +3,14 @@ import {
 	type CompilerDiagnostic,
 	type SandboxExecutionOptions
 } from '$lib/playground/options';
+import { WorkerAssetBridge } from '$lib/playground/assetBridge';
+import { resolveRuntimeAssetConfig, type PlaygroundRuntimeAssets } from '$lib/playground/assets';
 import type { Sandbox } from '$lib/playground/sandbox';
 import {
 	flushBufferedEof,
 	flushQueuedStdin,
 	resetBufferedStdin
 } from '$lib/playground/stdinBuffer';
-import { resolveTeaVmBaseUrl } from '$lib/playground/teavmConfig';
 
 class Java implements Sandbox {
 	output: any = null;
@@ -25,30 +26,56 @@ class Java implements Sandbox {
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	waitingForInput = false;
 	pendingEof = false;
+	assetBridge: WorkerAssetBridge | null = null;
 
 	load(
-		path: string,
+		runtimeAssets: string | PlaygroundRuntimeAssets = '',
 		_code = '',
 		_log = true,
 		_args: string[] = [],
-		_options: SandboxExecutionOptions = {}
+		_options: SandboxExecutionOptions = {},
+		progress?: { set?: (value: number) => void } | import('svelte/store').Writable<number>
 	) {
 		return new Promise<void>(async (resolve, reject) => {
 			this.pendingInput = [];
 			this.waitingForInput = false;
 			this.pendingEof = false;
-			this.baseUrl = resolveTeaVmBaseUrl(
-				path,
+			const assetConfig = resolveRuntimeAssetConfig(
+				'java',
+				runtimeAssets,
 				typeof window !== 'undefined' ? window.location.href : ''
 			);
+			this.baseUrl = assetConfig.baseUrl;
+			const needsWorkerReset =
+				!this.worker || !this.assetBridge || !this.assetBridge.matches(assetConfig);
+			if (needsWorkerReset && this.worker) {
+				this.worker.terminate();
+				delete this.worker;
+				this.assetBridge = null;
+			}
 			if (!this.worker) {
 				this.worker = new (await import('$lib/playground/worker/java?worker')).default();
+				this.assetBridge = new WorkerAssetBridge(
+					this.worker,
+					'java',
+					assetConfig,
+					progress
+				);
 				this.worker.onmessage = (event: MessageEvent<any>) => {
+					if (this.assetBridge?.handleMessage(event)) return;
 					if (event.data?.load) resolve();
 					if (event.data?.error) reject(event.data.error);
 				};
-				this.worker.postMessage({ load: true, baseUrl: this.baseUrl });
+				this.worker.postMessage({
+					load: true,
+					assets: {
+						baseUrl: assetConfig.baseUrl,
+						useAssetBridge: assetConfig.useAssetBridge
+					}
+				});
 			} else {
+				if (!this.assetBridge) return reject('Worker asset bridge unavailable');
+				this.assetBridge.rebind(this.worker, assetConfig, progress);
 				resolve();
 			}
 		});
@@ -93,6 +120,7 @@ class Java implements Sandbox {
 			const _uid = ++this.uid;
 			this.activeReject = reject;
 			const handler = (event: Event & { data: any }) => {
+				if (this.assetBridge?.handleMessage(event as MessageEvent<any>)) return;
 				if (!this.worker) return reject('Worker not loaded');
 				if (_uid !== this.uid) return (this.worker.onmessage = null);
 				const { output, results, error, buffer, diagnostic } = event.data;
@@ -144,6 +172,7 @@ class Java implements Sandbox {
 		this.uid += 1;
 		this.worker?.terminate?.();
 		delete this.worker;
+		this.assetBridge = null;
 		this.exit = true;
 	}
 

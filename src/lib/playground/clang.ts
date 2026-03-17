@@ -3,6 +3,7 @@ import type {
 	DebugSessionEvent,
 	SandboxExecutionOptions
 } from '$lib/playground/options';
+import type { PlaygroundRuntimeAssets } from '$lib/playground/assets';
 import { resolveSandboxExecutionArgs } from '$lib/playground/options';
 import type { Sandbox } from '$lib/playground/sandbox';
 import {
@@ -35,17 +36,20 @@ class Clang implements Sandbox {
 	}
 
 	load(
-		path: string,
+		runtimeAssets: string | PlaygroundRuntimeAssets = '',
 		code = '',
 		log = true,
 		args: string[] = [],
-		_options: SandboxExecutionOptions = {}
+		_options: SandboxExecutionOptions = {},
+		_progress?: { set?: (value: number) => void } | import('svelte/store').Writable<number>
 	) {
 		return new Promise<void>(async (resolve) => {
 			this.log = log;
 			this.pendingInput = [];
 			this.waitingForInput = false;
 			this.pendingEof = false;
+			const path =
+				typeof runtimeAssets === 'string' ? runtimeAssets : runtimeAssets?.rootUrl || '';
 			if (!this.worker) {
 				this.worker = new (await import('$lib/playground/worker/clang?worker')).default();
 				this.worker.onmessage = () => resolve();

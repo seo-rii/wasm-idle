@@ -19,4 +19,11 @@ export type {
 	TerminalControl
 } from '$lib/terminal';
 export type { CompilerDiagnostic } from '$lib/playground/options';
+export type {
+	PlaygroundRuntimeAssets,
+	RuntimeAssetConfig,
+	RuntimeAssetLoadRequest,
+	RuntimeAssetLoader,
+	RuntimeAssetLoaderResult
+} from '$lib/playground/assets';
 export type { DebugLanguageAdapter } from '$lib/debug';

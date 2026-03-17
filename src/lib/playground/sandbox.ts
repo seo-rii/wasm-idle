@@ -4,6 +4,7 @@ import type {
 	DebugSessionEvent,
 	SandboxExecutionOptions
 } from '$lib/playground/options';
+import type { PlaygroundRuntimeAssets } from '$lib/playground/assets';
 import type { Writable } from 'svelte/store';
 
 type ProgressLike = Writable<number> | { set?: (value: number) => void };
@@ -12,11 +13,12 @@ export interface Sandbox {
 	constructor: any;
 	eof: () => void;
 	load: (
-		path: string,
+		runtimeAssets?: string | PlaygroundRuntimeAssets,
 		code?: string,
 		log?: boolean,
 		args?: string[],
-		options?: SandboxExecutionOptions
+		options?: SandboxExecutionOptions,
+		progress?: ProgressLike
 	) => Promise<void>;
 	run: (
 		code: string,

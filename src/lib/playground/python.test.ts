@@ -105,4 +105,52 @@ print((left + right) // (left - left))`,
 
 		await expect(sandbox.debugEvaluate?.('1 + 2')).resolves.toBe('3');
 	});
+
+	it('configures a custom runtime asset loader bridge for Pyodide assets', async () => {
+		const sandbox = new Python();
+		const loader = vi.fn().mockResolvedValue({
+			data: new Uint8Array([1, 2, 3]),
+			mimeType: 'application/javascript'
+		});
+
+		await sandbox.load({ python: { loader } });
+
+		const worker = workerInstances[workerInstances.length - 1];
+		worker.onmessage?.({
+			data: {
+				assetRequest: {
+					id: 7,
+					asset: 'pyodide.asm.js'
+				}
+			}
+		} as MessageEvent<any>);
+		await vi.waitFor(() => {
+			expect(worker.postMessage).toHaveBeenCalledTimes(2);
+		});
+
+		expect(worker.postMessage).toHaveBeenNthCalledWith(
+			1,
+			expect.objectContaining({
+				load: true,
+				assets: expect.objectContaining({
+					baseUrl: 'https://wasm-idle.invalid/python/',
+					useAssetBridge: true
+				})
+			})
+		);
+		expect(loader).toHaveBeenCalledWith(
+			expect.objectContaining({
+				runtime: 'python',
+				asset: 'pyodide.asm.js',
+				reportProgress: expect.any(Function)
+			})
+		);
+		expect(worker.postMessage.mock.calls.at(-1)?.[0]).toMatchObject({
+			assetResponse: {
+				id: 7,
+				ok: true,
+				mimeType: 'application/javascript'
+			}
+		});
+	});
 });

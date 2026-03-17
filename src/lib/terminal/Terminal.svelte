@@ -5,6 +5,7 @@
 		DebugSessionEvent,
 		SandboxExecutionOptions
 	} from '$lib/playground/options';
+	import type { PlaygroundRuntimeAssets } from '$lib/playground/assets';
 	import type { Sandbox } from '$lib/playground/sandbox';
 	import type { TerminalControl } from '$lib/terminal/types';
 	import { Theme, registerAllPlugins } from '$lib/terminal';
@@ -16,6 +17,7 @@
 	interface Props {
 		dark?: boolean;
 		path?: string;
+		runtimeAssets?: string | PlaygroundRuntimeAssets;
 		font?: string;
 
 		onload?: () => void;
@@ -30,6 +32,7 @@
 	let {
 		dark = false,
 		path = '',
+		runtimeAssets = undefined,
 		font = "'D2 coding', monospace",
 		onload,
 		onfinish,
@@ -51,6 +54,20 @@
 		tc = 0,
 		plugin = $state(),
 		ll: string | null = null;
+
+	function phaseProgress(
+		progress: { set?: (value: number) => void } | undefined,
+		start: number,
+		end: number
+	) {
+		if (!progress) return undefined;
+		return {
+			set(value: number) {
+				const clamped = Number.isFinite(value) ? Math.min(Math.max(value, 0), 1) : 0;
+				progress.set?.(start + (end - start) * clamped);
+			}
+		};
+	}
 
 	function wait() {
 		return new Promise<void>((r) => {
@@ -146,11 +163,18 @@
 			args: string[] = [],
 			options: SandboxExecutionOptions = {}
 		) {
+			const loadProgress = phaseProgress(prog, 0, 0.85);
+			const prepareProgress = phaseProgress(prog, 0.85, 0.99);
 			await Promise.all([
-				initSandbox(language).then(() => sandbox.load(path, code, log, args, options)),
+				initSandbox(language).then(() =>
+					sandbox.load(runtimeAssets || path, code, log, args, options, loadProgress)
+				),
 				initTerm(false)
 			]);
-			return !!(await runSandbox(sandbox.run(code, true, log, prog, args, options)));
+			prepareProgress?.set?.(0);
+			return !!(await runSandbox(
+				sandbox.run(code, true, log, prepareProgress, args, options)
+			));
 		},
 		async run(
 			language: string,
@@ -161,7 +185,9 @@
 			options: SandboxExecutionOptions = {}
 		) {
 			await Promise.all([
-				initSandbox(language).then(() => sandbox.load(path, code, log, args, options)),
+				initSandbox(language).then(() =>
+					sandbox.load(runtimeAssets || path, code, log, args, options, prog)
+				),
 				initTerm()
 			]);
 			return await runSandbox(sandbox.run(code, false, log, prog, args, options));

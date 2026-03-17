@@ -3,6 +3,8 @@ import type {
 	DebugSessionEvent,
 	SandboxExecutionOptions
 } from '$lib/playground/options';
+import { WorkerAssetBridge } from '$lib/playground/assetBridge';
+import { resolveRuntimeAssetConfig, type PlaygroundRuntimeAssets } from '$lib/playground/assets';
 import type { Sandbox } from '$lib/playground/sandbox';
 import {
 	bufferedSequence,
@@ -30,23 +32,57 @@ class Python implements Sandbox {
 	waitingForInput = false;
 	pendingEof = false;
 	exit = true;
+	assetBridge: WorkerAssetBridge | null = null;
 
 	load(
-		path: string,
+		runtimeAssets: string | PlaygroundRuntimeAssets = '',
 		code = '',
 		log = true,
 		_args: string[] = [],
-		_options: SandboxExecutionOptions = {}
+		_options: SandboxExecutionOptions = {},
+		progress?: { set?: (value: number) => void } | import('svelte/store').Writable<number>
 	) {
-		return new Promise<void>(async (resolve) => {
+		return new Promise<void>(async (resolve, reject) => {
 			this.pendingInput = [];
 			this.waitingForInput = false;
 			this.pendingEof = false;
+			const assetConfig = resolveRuntimeAssetConfig(
+				'python',
+				runtimeAssets,
+				typeof window !== 'undefined' ? window.location.href : ''
+			);
+			const needsWorkerReset =
+				!this.worker || !this.assetBridge || !this.assetBridge.matches(assetConfig);
+			if (needsWorkerReset && this.worker) {
+				this.worker.terminate();
+				delete this.worker;
+				this.assetBridge = null;
+			}
 			if (!this.worker) {
 				this.worker = new (await import('$lib/playground/worker/python?worker')).default();
-				this.worker.onmessage = () => resolve();
-				this.worker.postMessage({ load: true, path, log, code });
+				this.assetBridge = new WorkerAssetBridge(
+					this.worker,
+					'python',
+					assetConfig,
+					progress
+				);
+				this.worker.onmessage = (event: MessageEvent<any>) => {
+					if (this.assetBridge?.handleMessage(event)) return;
+					if (event.data?.load) resolve();
+					if (event.data?.error) reject(event.data.error);
+				};
+				this.worker.postMessage({
+					load: true,
+					log,
+					code,
+					assets: {
+						baseUrl: assetConfig.baseUrl,
+						useAssetBridge: assetConfig.useAssetBridge
+					}
+				});
 			} else {
+				if (!this.assetBridge) return reject('Worker asset bridge unavailable');
+				this.assetBridge.rebind(this.worker, assetConfig, progress);
 				this.worker.postMessage({ log });
 				resolve();
 			}
@@ -91,6 +127,7 @@ class Python implements Sandbox {
 			const interrupt = new Uint8Array(this.interruptBuffer),
 				_uid = ++this.uid;
 			const handler = (event: Event & { data: any }) => {
+				if (this.assetBridge?.handleMessage(event as MessageEvent<any>)) return;
 				if (!this.worker) return reject('Worker not loaded');
 				if (_uid !== this.uid) return (this.worker.onmessage = null);
 				const {
@@ -168,7 +205,10 @@ class Python implements Sandbox {
 		Atomics.store(control, 1, 5);
 		Atomics.add(control, 0, 1);
 		Atomics.notify(control, 0);
-		return (await waitForBufferedSequenceChange(this.watchResultBuffer, previousSequence, 5000)) ?? '?';
+		return (
+			(await waitForBufferedSequenceChange(this.watchResultBuffer, previousSequence, 5000)) ??
+			'?'
+		);
 	}
 
 	kill() {
@@ -198,6 +238,7 @@ class Python implements Sandbox {
 		if (!this.exit) {
 			this.worker?.terminate?.();
 			delete this.worker;
+			this.assetBridge = null;
 			this.exit = true;
 		}
 	}

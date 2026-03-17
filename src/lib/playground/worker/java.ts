@@ -1,6 +1,11 @@
 import { prepareJavaStdinInjection } from '$lib/playground/javaStdin';
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
-import { resolveTeaVmAssetUrl } from '$lib/playground/teavmConfig';
+import {
+	configureWorkerRuntimeAssets,
+	handleWorkerAssetMessage,
+	loadWorkerRuntimeAsset,
+	type WorkerRuntimeAssetConfig
+} from '$lib/playground/worker/assets';
 
 declare const self: DedicatedWorkerGlobalScope & {
 	postMessage: (message: any) => void;
@@ -20,21 +25,10 @@ let compiledStdin = '';
 let compiledMainClass = '';
 let compiledWasm: Uint8Array | null = null;
 let currentSourcePath = '';
+const decoder = new TextDecoder();
 
-const isGzip = (bytes: Uint8Array) => bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b;
-
-const maybeDecompressWasm = async (bytes: Uint8Array) => {
-	if (!isGzip(bytes)) return bytes;
-	if (typeof DecompressionStream === 'undefined') {
-		throw new Error(
-			'Generated WebAssembly is gzip-compressed, but DecompressionStream is unavailable'
-		);
-	}
-	const stream = new Blob([Uint8Array.from(bytes)])
-		.stream()
-		.pipeThrough(new DecompressionStream('gzip'));
-	return new Uint8Array(await new Response(stream).arrayBuffer());
-};
+const toInt8Array = (bytes: Uint8Array) =>
+	new Int8Array(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
 
 const flushStdout = () => {
 	if (!stdoutBuffer) return;
@@ -59,54 +53,37 @@ const pushStderr = (charCode: number) => {
 };
 
 self.addEventListener('message', async (event) => {
-	const { load, baseUrl, buffer, code, prepare, args = [], stdin = '' } = event.data;
+	if (handleWorkerAssetMessage(event.data)) return;
+	const { load, assets, buffer, code, prepare, args = [], stdin = '' } = event.data;
 	try {
 		if (load) {
+			const runtimeAssets = assets as WorkerRuntimeAssetConfig | undefined;
+			configureWorkerRuntimeAssets(runtimeAssets || null);
+			const baseUrl = runtimeAssets?.baseUrl || '';
 			if (!compiler || loadedBaseUrl !== baseUrl) {
 				loadedBaseUrl = baseUrl;
-				const runtimeSource = await fetch(
-					resolveTeaVmAssetUrl(baseUrl, 'compiler.wasm-runtime.js')
-				).then((response) => {
-					if (!response.ok)
-						throw new Error(
-							`Failed to load TeaVM compiler runtime: ${response.status}`
-						);
-					return response.text();
-				});
+				const runtimeSource = decoder.decode(
+					(await loadWorkerRuntimeAsset('compiler.wasm-runtime.js')).bytes
+				);
 				const runtimeUrl = URL.createObjectURL(
 					new Blob([runtimeSource], { type: 'text/javascript;charset=utf-8' })
 				);
 				const runtimeModule = await import(/* @vite-ignore */ runtimeUrl);
+				URL.revokeObjectURL(runtimeUrl);
 				const runtimeLoadFn = runtimeModule.load as NonNullable<typeof runtimeLoad>;
 				runtimeLoad = runtimeLoadFn;
-				const compilerWasm = await fetch(
-					resolveTeaVmAssetUrl(baseUrl, 'compiler.wasm')
-				).then(async (response) => {
-					if (!response.ok)
-						throw new Error(`Failed to load TeaVM compiler wasm: ${response.status}`);
-					return await maybeDecompressWasm(new Uint8Array(await response.arrayBuffer()));
-				});
+				const compilerWasm = (await loadWorkerRuntimeAsset('compiler.wasm')).bytes;
 				const compilerModule = await runtimeLoadFn(compilerWasm, {
 					stackDeobfuscator: { enabled: false }
 				});
 				compilerLib = compilerModule.exports;
 				compiler = compilerLib.createCompiler();
 				const [sdk, runtimeClasslib] = await Promise.all([
-					fetch(resolveTeaVmAssetUrl(baseUrl, 'compile-classlib-teavm.bin')).then(
-						async (response) => {
-							if (!response.ok)
-								throw new Error(`Failed to load TeaVM SDK: ${response.status}`);
-							return new Int8Array(await response.arrayBuffer());
-						}
+					loadWorkerRuntimeAsset('compile-classlib-teavm.bin').then(({ bytes }) =>
+						toInt8Array(bytes)
 					),
-					fetch(resolveTeaVmAssetUrl(baseUrl, 'runtime-classlib-teavm.bin')).then(
-						async (response) => {
-							if (!response.ok)
-								throw new Error(
-									`Failed to load TeaVM runtime classlib: ${response.status}`
-								);
-							return new Int8Array(await response.arrayBuffer());
-						}
+					loadWorkerRuntimeAsset('runtime-classlib-teavm.bin').then(({ bytes }) =>
+						toInt8Array(bytes)
 					)
 				]);
 				compiler.setSdk(sdk);
@@ -230,9 +207,7 @@ self.addEventListener('message', async (event) => {
 			compiledCode = code;
 			compiledStdin = stdinInjection.stdinCacheKey;
 			compiledMainClass = mainClass;
-			compiledWasm = await maybeDecompressWasm(
-				new Uint8Array(compiler.getWebAssemblyOutputFile('app.wasm'))
-			);
+			compiledWasm = new Uint8Array(compiler.getWebAssemblyOutputFile('app.wasm'));
 		}
 
 		if (prepare) {

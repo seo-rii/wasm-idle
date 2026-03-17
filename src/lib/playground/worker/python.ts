@@ -4,6 +4,11 @@ import {
 	readBufferedStdin,
 	waitForBufferedStdin
 } from '$lib/playground/stdinBuffer';
+import {
+	configureWorkerRuntimeAssets,
+	handleWorkerAssetMessage,
+	type WorkerRuntimeAssetConfig
+} from '$lib/playground/worker/assets';
 
 declare const self: {
 	document: any;
@@ -28,10 +33,8 @@ let stdinBufferPyodide: Int32Array,
 	watchResultBufferPyodide: Int32Array,
 	interruptBufferPyodide: Uint8Array,
 	pyodide: PyodideInterface,
-	path = '',
+	baseUrl = '',
 	packageBaseUrl = '';
-
-let jungolRobotReady = false;
 
 const imageHook = `
 if not globals().get("__wasm_idle_img_inited__", False):
@@ -183,29 +186,10 @@ const cdnFallbackUrl = (version: string) =>
 async function loadPyodide(path: string) {
 	if (pyodide) return;
 	const { loadPyodide } = await import('pyodide');
-	pyodide = await loadPyodide({ indexURL: path + '/pyodide' });
-	packageBaseUrl = path + '/pyodide';
+	pyodide = await loadPyodide({ indexURL: path });
+	packageBaseUrl = path;
 	const setCdnUrl = (pyodide as any)?.setCdnUrl;
 	if (typeof setCdnUrl === 'function') setCdnUrl(packageBaseUrl);
-}
-
-async function ensureRobotJungol() {
-	if (jungolRobotReady || !pyodide) return;
-	try {
-		const res = await fetch(path + '/jungol-robot/jungol_robot.zip');
-		if (!res.ok) throw new Error('jungol-robot zip not found');
-		const data = await res.arrayBuffer();
-		const siteRaw = pyodide.runPython('import site; site.getsitepackages()[0]');
-		const sitePath = typeof siteRaw === 'string' ? siteRaw : siteRaw.toString();
-		const unpackArchive = (pyodide as any)?.unpackArchive;
-		if (typeof unpackArchive !== 'function')
-			throw new Error('pyodide.unpackArchive unavailable');
-		unpackArchive(data, 'zip', sitePath);
-		pyodide.runPython('import importlib; importlib.invalidate_caches()');
-		jungolRobotReady = true;
-	} catch (e) {
-		console.warn('jungol-robot preload failed', e);
-	}
 }
 
 async function loadPackages(code: string) {
@@ -226,6 +210,7 @@ async function loadPackages(code: string) {
 }
 
 self.onmessage = async (event: any) => {
+	if (handleWorkerAssetMessage(event.data)) return;
 	const {
 		code,
 		buffer,
@@ -234,24 +219,24 @@ self.onmessage = async (event: any) => {
 		watchResultBuffer,
 		load,
 		interrupt,
-		path: _p,
+		assets,
 		prepare,
 		debug = false,
 		breakpoints = [],
 		pauseOnEntry = false
 	} = event.data;
 	if (load) {
-		path = _p;
+		const runtimeAssets = assets as WorkerRuntimeAssetConfig | undefined;
+		baseUrl = runtimeAssets?.baseUrl || baseUrl;
+		configureWorkerRuntimeAssets(runtimeAssets || null);
 		postMessage({ output: 'Loading Pyodide...' });
-		await loadPyodide(path);
-		await ensureRobotJungol();
+		await loadPyodide(baseUrl);
 		postMessage({ output: ' Done.\n\r' });
 		postMessage({ load: true });
 	} else if (prepare) {
 		postMessage({ output: 'Loading packages...' });
 		try {
-			await loadPyodide(path);
-			await ensureRobotJungol();
+			await loadPyodide(baseUrl);
 			await loadPackages(code);
 			postMessage({ output: ' Done.\n\r' });
 			self.postMessage({ results: true });
@@ -259,8 +244,7 @@ self.onmessage = async (event: any) => {
 			self.postMessage({ error: e.message || 'Unknown error' });
 		}
 	} else if (code) {
-		await loadPyodide(path);
-		await ensureRobotJungol();
+		await loadPyodide(baseUrl);
 		await loadPackages(code);
 		const ts = Date.now();
 		stdinBufferPyodide = new Int32Array(buffer);
@@ -541,16 +525,16 @@ try:
 finally:
     sys.settrace(None)
     ${
-	debug
-		? `
+		debug
+			? `
     __wasm_idle_debug_step_mode = None
     __wasm_idle_debug_resume_skip = None
     __wasm_idle_debug_next_depth = None
     __wasm_idle_debug_next_line = None
     __wasm_idle_debug_step_out_depth = None
 `
-		: ''
-}
+			: ''
+	}
 `);
 			self.postMessage({ results: true });
 		} catch (e: any) {
