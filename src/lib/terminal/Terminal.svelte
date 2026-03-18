@@ -119,6 +119,7 @@
 		await wait();
 		if (!term) return;
 		term.options.cursorBlink = blink;
+		term.write('\u001B[?25h');
 		term.focus();
 
 		if (!first) term?.write(`\r\n\x1b[0m`);
@@ -259,12 +260,19 @@
 					) {
 						appendInputText(e.key);
 					}
-				} else if ((ev.ctrlKey || ev.metaKey) && ev.key === 'c') {
+				} else if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'c') {
+					if (term.hasSelection()) {
+						const selectedText = term.getSelection();
+						if (selectedText) {
+							navigator.clipboard.writeText(selectedText).catch(() => {});
+							return;
+						}
+					}
 					sandbox.kill?.();
-				} else if ((ev.ctrlKey || ev.metaKey) && ev.key === 'd') {
+				} else if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'd') {
 					if (input.length > 0) submitCurrentInput();
 					else sandbox.eof?.();
-				} else if ((ev.ctrlKey || ev.metaKey) && ev.key === 'v') {
+				} else if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'v') {
 					navigator.clipboard.readText().then((text) => {
 						applyPastedText(text);
 					});
@@ -297,5 +305,11 @@
 	div {
 		width: 100%;
 		height: 100%;
+	}
+
+	:global(.xterm),
+	:global(.xterm .xterm-viewport),
+	:global(.xterm .composition-view) {
+		background-color: transparent;
 	}
 </style>
