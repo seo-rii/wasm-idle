@@ -53,7 +53,8 @@
 		first = true,
 		tc = 0,
 		plugin = $state(),
-		ll: string | null = null;
+		ll: string | null = null,
+		stopRequested = false;
 
 	function phaseProgress(
 		progress: { set?: (value: number) => void } | undefined,
@@ -105,10 +106,12 @@
 				return x;
 			})
 			.catch((msg) => {
+				if (stopRequested) return false;
 				term?.write(`\r\n\x1B[1;3;31m${msg}\u001B[?25l`);
 				return false;
 			})
 			.finally(() => {
+				stopRequested = false;
 				onfinish?.();
 				finish = true;
 				if (term) term.options.cursorBlink = false;
@@ -197,6 +200,13 @@
 			await wait();
 			term?.dispose();
 			if (sandbox) await sandbox.clear();
+		},
+		async stop() {
+			await wait();
+			stopRequested = true;
+			finish = true;
+			if (sandbox?.kill) sandbox.kill();
+			else sandbox?.terminate?.();
 		},
 		async debugCommand(command: DebugCommand) {
 			await wait();

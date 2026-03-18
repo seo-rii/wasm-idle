@@ -30,6 +30,7 @@ export interface TerminalControl {
 		options?: SandboxExecutionOptions
 	) => Promise<boolean | string>;
 	destroy: () => Promise<void>;
+	stop?: () => Promise<void>;
 	debugCommand: (command: DebugCommand) => Promise<void>;
 	debugEvaluate?: (expression: string) => Promise<string>;
 	write: (input: string) => Promise<void>;

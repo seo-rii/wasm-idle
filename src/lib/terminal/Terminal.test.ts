@@ -31,4 +31,12 @@ describe('Terminal source', () => {
 			/:global\(\.xterm\),\s+:global\(\.xterm \.xterm-viewport\),\s+:global\(\.xterm \.composition-view\) \{\s+background-color: transparent;\s+\}/s
 		);
 	});
+
+	it('exposes a stop hook and suppresses abort output for user-initiated stops', () => {
+		expect(source).toMatch(/stopRequested = false;/);
+		expect(source).toMatch(/if \(stopRequested\) return false;/);
+		expect(source).toMatch(
+			/async stop\(\) \{\s+await wait\(\);\s+stopRequested = true;\s+finish = true;\s+if \(sandbox\?\.kill\) sandbox\.kill\(\);\s+else sandbox\?\.terminate\?\.\(\);\s+\}/s
+		);
+	});
 });

@@ -51,4 +51,30 @@ describe('executeTerminalRun', () => {
 		expect(terminal.run).not.toHaveBeenCalled();
 		expect(result).toBe(false);
 	});
+
+	it('marks loading complete before execute starts', async () => {
+		const values: number[] = [];
+		const terminal = {
+			clear: vi.fn(async () => {}),
+			prepare: vi.fn(async (_language, _code, _log, progress) => {
+				progress?.set?.(0.5);
+				return true;
+			}),
+			run: vi.fn(async () => 'ok')
+		};
+
+		await executeTerminalRun({
+			terminal,
+			language: 'PYTHON',
+			code: 'print(1)',
+			progress: {
+				set(value: number) {
+					values.push(value);
+				}
+			}
+		});
+
+		expect(values).toEqual([0.5, 1]);
+		expect(terminal.run).toHaveBeenCalledWith('PYTHON', 'print(1)', true, undefined, [], {});
+	});
 });

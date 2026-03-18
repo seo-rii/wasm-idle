@@ -71,17 +71,6 @@ print(f"sum={sum(values)}")`,
 		onBreakpointsChange
 	}: Props = $props();
 	let Monaco: typeof monaco | null = null;
-	let clangdLabel = $derived.by(() => {
-		if (clangdStatus.state === 'ready') return 'clangd ready';
-		if (clangdStatus.state === 'error') return `clangd failed: ${clangdStatus.message}`;
-		if (clangdStatus.state === 'loading') {
-			if (clangdStatus.total && clangdStatus.loaded) {
-				return `clangd loading ${Math.min(100, Math.round((clangdStatus.loaded / clangdStatus.total) * 100))}%`;
-			}
-			return 'clangd loading';
-		}
-		return '';
-	});
 
 	$effect(() => {
 		if (!debugView) return;
@@ -222,11 +211,6 @@ print(f"sum={sum(values)}")`,
 </script>
 
 <main>
-	{#if language === 'cpp' && clangdStatus.state !== 'disabled'}
-		<div class="clangd-status" data-state={clangdStatus.state}>
-			{clangdLabel}
-		</div>
-	{/if}
 	<div bind:this={divEl} class="editor-host h-screen"></div>
 </main>
 
@@ -239,28 +223,6 @@ print(f"sum={sum(values)}")`,
 
 	.editor-host {
 		height: 100%;
-	}
-
-	.clangd-status {
-		position: absolute;
-		top: 10px;
-		right: 10px;
-		z-index: 100;
-		font-size: 12px;
-		padding: 6px 10px;
-		border-radius: 999px;
-		background: rgba(15, 23, 42, 0.82);
-		color: white;
-		backdrop-filter: blur(8px);
-	}
-
-	.clangd-status[data-state='ready'] {
-		background: rgba(6, 95, 70, 0.88);
-	}
-
-	.clangd-status[data-state='error'] {
-		background: rgba(153, 27, 27, 0.9);
-		max-width: 280px;
 	}
 
 	:global(.monaco-editor .debug-breakpoint-glyph) {

@@ -35,7 +35,14 @@
 		log = $state(true),
 		language = $state('CPP'),
 		runningMode = $state<'run' | 'debug' | null>(null),
+		progress = $state(-1),
 		init = $state(false);
+
+	const progressRef = {
+		set(value: number) {
+			progress = value;
+		}
+	};
 
 	const debugLanguage = $derived.by(() =>
 		language === 'CPP'
@@ -49,6 +56,12 @@
 		debugPaused ? 'pause_circle' : debugActive ? 'play_circle' : 'adjust'
 	);
 	const debugTitle = $derived(language === 'CPP' ? 'Native Trace' : 'Pyodide Trace');
+	const loading = $derived(progress >= 0 && progress < 1);
+	const progressValue = $derived(progress < 0 ? 0 : progress > 1 ? 1 : progress);
+	const progressPercent = $derived(Math.round(progressValue * 100));
+	const progressLabel = $derived(
+		runningMode === 'debug' ? 'Preparing debug session' : 'Loading runtime'
+	);
 
 	function onDebugEvent(event: DebugSessionEvent) {
 		if (event.type === 'pause') {
@@ -76,6 +89,11 @@
 	function sendDebugCommand(command: 'continue' | 'stepInto' | 'nextLine' | 'stepOut') {
 		if (!terminal || !debugPaused) return;
 		terminal.debugCommand?.(command);
+	}
+
+	async function stopDebug() {
+		if (!terminal || runningMode !== 'debug') return;
+		await terminal.stop?.();
 	}
 
 	function onCompileDiagnostic(diagnostic: CompilerDiagnostic) {
@@ -110,11 +128,13 @@
 		}
 		try {
 			if (!('SharedArrayBuffer' in window)) location.reload();
+			progress = 0;
 			await executeTerminalRun({
 				terminal,
 				language,
 				code: editor.getValue(),
 				log,
+				progress: progressRef,
 				args,
 				options: {
 					debug,
@@ -124,6 +144,7 @@
 				}
 			});
 		} finally {
+			progress = -1;
 			runningMode = null;
 			if (!debugPaused) {
 				debugActive = false;
@@ -248,14 +269,21 @@
 						<span class="material-symbols-outlined">play_arrow</span>
 						<span>Run</span>
 					</button>
-					<button
-						class="action-button action-button--debug"
-						onclick={() => exec(true)}
-						disabled={!!runningMode || !debugLanguage}
-					>
-						<span class="material-symbols-outlined">bug_report</span>
-						<span>Debug</span>
-					</button>
+					{#if runningMode === 'debug'}
+						<button class="action-button action-button--stop" onclick={stopDebug}>
+							<span class="material-symbols-outlined">stop_circle</span>
+							<span>Stop Debug</span>
+						</button>
+					{:else}
+						<button
+							class="action-button action-button--debug"
+							onclick={() => exec(true)}
+							disabled={!!runningMode || !debugLanguage}
+						>
+							<span class="material-symbols-outlined">bug_report</span>
+							<span>Debug</span>
+						</button>
+					{/if}
 					<button
 						class="action-button action-button--icon"
 						onclick={() => sendDebugCommand('continue')}
@@ -316,6 +344,27 @@
 					</label>
 				{/if}
 			</div>
+			{#if loading}
+				<div class="progress-shell" aria-live="polite">
+					<div class="progress-copy">
+						<div class="progress-copy__text">
+							<span class="material-symbols-outlined">downloading</span>
+							<strong>{progressLabel}</strong>
+						</div>
+						<span class="progress-percent">{progressPercent}%</span>
+					</div>
+					<div
+						class="progress-track"
+						role="progressbar"
+						aria-label={progressLabel}
+						aria-valuemin={0}
+						aria-valuemax={100}
+						aria-valuenow={progressPercent}
+					>
+						<div class="progress-fill" style={`transform: scaleX(${progressValue})`}></div>
+					</div>
+				</div>
+			{/if}
 		</section>
 		{#if language === 'JAVA'}
 			<p class="hint">Run after that type into the terminal below and press Enter.</p>
@@ -548,6 +597,65 @@
 		gap: 8px;
 	}
 
+	.progress-shell {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		padding: 10px 12px;
+		border-radius: 14px;
+		border: 1px solid rgba(45, 212, 191, 0.2);
+		background:
+			linear-gradient(180deg, rgba(240, 253, 250, 0.96), rgba(236, 253, 245, 0.92)),
+			radial-gradient(circle at top left, rgba(20, 184, 166, 0.16), transparent 42%);
+		box-shadow:
+			inset 0 1px 0 rgba(255, 255, 255, 0.9),
+			0 12px 24px rgba(20, 184, 166, 0.08);
+	}
+
+	.progress-copy {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+		flex-wrap: wrap;
+	}
+
+	.progress-copy__text {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		color: #0f172a;
+		font-size: 12px;
+	}
+
+	.progress-copy__text strong {
+		font-size: 12px;
+	}
+
+	.progress-percent {
+		font-size: 12px;
+		font-weight: 700;
+		color: #0f766e;
+	}
+
+	.progress-track {
+		height: 8px;
+		overflow: hidden;
+		border-radius: 999px;
+		background: rgba(148, 163, 184, 0.18);
+		box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.08);
+	}
+
+	.progress-fill {
+		width: 100%;
+		height: 100%;
+		border-radius: inherit;
+		transform-origin: left center;
+		background: linear-gradient(90deg, #0f766e 0%, #14b8a6 52%, #34d399 100%);
+		box-shadow: 0 0 24px rgba(20, 184, 166, 0.28);
+		transition: transform 0.18s ease;
+	}
+
 	.path-chip,
 	.toggle-chip,
 	.select-chip,
@@ -627,6 +735,12 @@
 		background: linear-gradient(135deg, #4338ca 0%, #6366f1 100%);
 		color: #f8faff;
 		box-shadow: 0 12px 22px rgba(99, 102, 241, 0.24);
+	}
+
+	.action-button--stop {
+		background: linear-gradient(135deg, #b91c1c 0%, #ef4444 100%);
+		color: #fff8f8;
+		box-shadow: 0 12px 22px rgba(239, 68, 68, 0.24);
 	}
 
 	.action-button--icon {

@@ -27,6 +27,10 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(
 			/const \{ ClangdSession \} = await import\('\$lib\/clangd\/session'\);/s
 		);
+		expect(source).not.toMatch(/clangd ready/);
+		expect(source).not.toMatch(/clangd loading/);
+		expect(source).not.toMatch(/clangd failed:/);
+		expect(source).not.toMatch(/class="clangd-status"/);
 	});
 
 	it('requests clangd only after cpp debug starts', () => {

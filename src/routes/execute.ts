@@ -42,5 +42,6 @@ export async function executeTerminalRun({
 	await terminal.clear();
 	const prepared = await terminal.prepare(language, code, log, progress, args, options);
 	if (!prepared) return prepared;
-	return await terminal.run(language, code, log, progress, args, options);
+	progress?.set?.(1);
+	return await terminal.run(language, code, log, undefined, args, options);
 }
