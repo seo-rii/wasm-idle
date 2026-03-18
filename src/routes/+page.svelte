@@ -44,6 +44,11 @@
 				? pythonDebugLanguageAdapter
 				: null
 	);
+	const debugStatusLabel = $derived(debugPaused ? 'Paused' : debugActive ? 'Running' : 'Ready');
+	const debugStatusIcon = $derived(
+		debugPaused ? 'pause_circle' : debugActive ? 'play_circle' : 'adjust'
+	);
+	const debugTitle = $derived(language === 'CPP' ? 'Native Trace' : 'Pyodide Trace');
 
 	function onDebugEvent(event: DebugSessionEvent) {
 		if (event.type === 'pause') {
@@ -316,65 +321,163 @@
 			<p class="hint">Run after that type into the terminal below and press Enter.</p>
 		{/if}
 		{#if debugLanguage}
-			<p class="hint">
-				{language === 'CPP'
-					? 'Debug prints compile/runtime trace lines into the terminal.'
-					: 'Debug pauses Pyodide execution at Python source lines.'}
-			</p>
-			<div class="debug-panels">
-				<section class="debug-panel">
-					<h3>Locals</h3>
-					{#if debugLocals.length}
-						<ul>
-							{#each debugLocals as variable (variable.name)}
-								<li><code>{variable.name}</code> = {variable.value}</li>
-							{/each}
-						</ul>
-					{:else}
-						<p class="empty">No locals</p>
-					{/if}
-				</section>
-				<section class="debug-panel">
-					<h3>Watch</h3>
-					<div class="watch-row">
-						<input
-							bind:value={watchInput}
-							placeholder="a == b"
-							onkeydown={(event) => event.key === 'Enter' && addWatchExpression()}
-						/>
-						<button onclick={addWatchExpression}>Add</button>
+			<section
+				class={[
+					'debug-shell',
+					debugPaused && 'debug-shell--paused',
+					debugActive && !debugPaused && 'debug-shell--active'
+				]}
+			>
+				<div class="debug-hero">
+					<div class="debug-hero__intro">
+						<div class="debug-hero__badge">
+							<span class="material-symbols-outlined">bug_report</span>
+						</div>
+						<div class="debug-hero__copy">
+							<p class="debug-hero__eyebrow">Debug Workspace</p>
+							<h2>{debugTitle}</h2>
+						</div>
 					</div>
-					{#if watchValues.length}
-						<ul>
-							{#each watchValues as watch (watch.expression)}
-								<li>
-									<span>{watch.expression}</span>
-									<code>{watch.value}</code>
-									<button
-										class="remove"
-										onclick={() => removeWatchExpression(watch.expression)}
-										>x</button
+					<div class="debug-hero__stats">
+						<div
+							class={[
+								'debug-status-pill',
+								debugPaused
+									? 'debug-status-pill--paused'
+									: debugActive
+										? 'debug-status-pill--active'
+										: 'debug-status-pill--idle'
+							]}
+						>
+							<span class="material-symbols-outlined">{debugStatusIcon}</span>
+							<span>{debugStatusLabel}</span>
+						</div>
+						<div class="debug-metric">
+							<span>Breakpoints</span>
+							<strong>{breakpoints.length}</strong>
+						</div>
+						<div class="debug-metric">
+							<span>Watches</span>
+							<strong>{watchExpressions.length}</strong>
+						</div>
+						<div class="debug-metric">
+							<span>Line</span>
+							<strong>{pausedLine === null ? '—' : `L${pausedLine}`}</strong>
+						</div>
+					</div>
+				</div>
+				<div class="debug-panels">
+					<section class="debug-panel">
+						<header class="debug-panel__header">
+							<div class="debug-panel__title">
+								<span class="material-symbols-outlined">data_object</span>
+								<div class="debug-panel__copy">
+									<h3>Locals</h3>
+								</div>
+							</div>
+							<span class="debug-count">{debugLocals.length}</span>
+						</header>
+						{#if debugLocals.length}
+							<ul>
+								{#each debugLocals as variable (variable.name)}
+									<li class="debug-entry debug-entry--local">
+										<code class="debug-key">{variable.name}</code>
+										<code class="debug-value">{variable.value}</code>
+									</li>
+								{/each}
+							</ul>
+						{:else}
+							<p class="empty">
+								<span class="material-symbols-outlined">info</span>
+								<span>No locals yet</span>
+							</p>
+						{/if}
+					</section>
+					<section class="debug-panel">
+						<header class="debug-panel__header">
+							<div class="debug-panel__title">
+								<span class="material-symbols-outlined">visibility</span>
+								<div class="debug-panel__copy">
+									<h3>Watch</h3>
+								</div>
+							</div>
+							<span class="debug-count">{watchExpressions.length}</span>
+						</header>
+						<div class="watch-row">
+							<input
+								bind:value={watchInput}
+								placeholder="a == b"
+								onkeydown={(event) => event.key === 'Enter' && addWatchExpression()}
+							/>
+							<button class="watch-add" onclick={addWatchExpression}>
+								<span class="material-symbols-outlined">add</span>
+								<span>Add</span>
+							</button>
+						</div>
+						{#if watchValues.length}
+							<ul>
+								{#each watchValues as watch (watch.expression)}
+									<li class="debug-entry debug-entry--watch">
+										<div class="debug-entry__body">
+											<span class="debug-expression">{watch.expression}</span>
+											<code class="debug-value">{watch.value}</code>
+										</div>
+										<button
+											class="remove"
+											onclick={() => removeWatchExpression(watch.expression)}
+											aria-label={`Remove watch expression ${watch.expression}`}
+										>
+											<span class="material-symbols-outlined">close</span>
+										</button>
+									</li>
+								{/each}
+							</ul>
+						{:else}
+							<p class="empty">
+								<span class="material-symbols-outlined">info</span>
+								<span>No watches yet</span>
+							</p>
+						{/if}
+					</section>
+					<section class="debug-panel">
+						<header class="debug-panel__header">
+							<div class="debug-panel__title">
+								<span class="material-symbols-outlined">layers</span>
+								<div class="debug-panel__copy">
+									<h3>Call Stack</h3>
+								</div>
+							</div>
+							<span class="debug-count">{debugCallStack.length}</span>
+						</header>
+						{#if debugCallStack.length}
+							<ul>
+								{#each debugCallStack as frame, index (`${frame.functionName}:${frame.line}`)}
+									<li
+										class={[
+											'debug-entry',
+											'debug-entry--stack',
+											index === 0 && 'debug-entry--current'
+										]}
 									>
-								</li>
-							{/each}
-						</ul>
-					{:else}
-						<p class="empty">No watches</p>
-					{/if}
-				</section>
-				<section class="debug-panel">
-					<h3>Call Stack</h3>
-					{#if debugCallStack.length}
-						<ul>
-							{#each debugCallStack as frame (`${frame.functionName}:${frame.line}`)}
-								<li>{frame.functionName}:{frame.line}</li>
-							{/each}
-						</ul>
-					{:else}
-						<p class="empty">No frames</p>
-					{/if}
-				</section>
-			</div>
+										<div class="stack-meta">
+											<span class="stack-order">{index + 1}</span>
+											<span class="stack-function"
+												>{frame.functionName || '(entry)'}</span
+											>
+										</div>
+										<code class="stack-line">L{frame.line}</code>
+									</li>
+								{/each}
+							</ul>
+						{:else}
+							<p class="empty">
+								<span class="material-symbols-outlined">info</span>
+								<span>No frames yet</span>
+							</p>
+						{/if}
+					</section>
+				</div>
+			</section>
 		{/if}
 		<div class="terminal-shell">
 			<Terminal
@@ -574,25 +677,214 @@
 		color: #475569;
 	}
 
+	.debug-shell {
+		--debug-accent: #6366f1;
+		--debug-accent-soft: rgba(99, 102, 241, 0.14);
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+		margin: 8px 0 10px;
+		padding: 12px;
+		border: 1px solid rgba(148, 163, 184, 0.24);
+		border-radius: 18px;
+		background:
+			radial-gradient(circle at top left, var(--debug-accent-soft), transparent 34%),
+			linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(248, 250, 252, 0.9));
+		box-shadow: 0 22px 40px rgba(15, 23, 42, 0.08);
+	}
+
+	.debug-shell--active {
+		--debug-accent: #0f766e;
+		--debug-accent-soft: rgba(20, 184, 166, 0.16);
+	}
+
+	.debug-shell--paused {
+		--debug-accent: #7c3aed;
+		--debug-accent-soft: rgba(124, 58, 237, 0.16);
+	}
+
+	.debug-hero {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 12px;
+		flex-wrap: wrap;
+	}
+
+	.debug-hero__intro {
+		display: flex;
+		align-items: flex-start;
+		gap: 12px;
+		flex: 1 1 260px;
+		min-width: 0;
+	}
+
+	.debug-hero__badge {
+		width: 42px;
+		height: 42px;
+		display: grid;
+		place-items: center;
+		border-radius: 14px;
+		background: linear-gradient(135deg, var(--debug-accent) 0%, #0f172a 180%);
+		color: white;
+		box-shadow: 0 14px 28px rgba(15, 23, 42, 0.14);
+		flex: 0 0 auto;
+	}
+
+	.debug-hero__badge .material-symbols-outlined {
+		font-size: 20px;
+		font-variation-settings:
+			'FILL' 1,
+			'wght' 500,
+			'GRAD' 0,
+			'opsz' 24;
+	}
+
+	.debug-hero__copy {
+		min-width: 0;
+	}
+
+	.debug-hero__eyebrow {
+		margin: 0 0 4px;
+		font-size: 10px;
+		font-weight: 700;
+		letter-spacing: 0.14em;
+		text-transform: uppercase;
+		color: var(--debug-accent);
+	}
+
+	.debug-hero__copy h2 {
+		margin: 0;
+		font-size: 18px;
+		line-height: 1.1;
+		color: #0f172a;
+	}
+
+	.debug-hero__stats {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+		justify-content: flex-end;
+	}
+
+	.debug-status-pill,
+	.debug-metric {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		min-height: 32px;
+		padding: 0 10px;
+		border-radius: 999px;
+		border: 1px solid rgba(148, 163, 184, 0.26);
+		background: rgba(255, 255, 255, 0.86);
+		box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+	}
+
+	.debug-status-pill {
+		font-size: 11px;
+		font-weight: 700;
+		color: #0f172a;
+	}
+
+	.debug-status-pill--idle {
+		color: #475569;
+	}
+
+	.debug-status-pill--active {
+		color: #0f766e;
+	}
+
+	.debug-status-pill--paused {
+		color: #7c3aed;
+	}
+
+	.debug-metric {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 1px;
+		padding-top: 6px;
+		padding-bottom: 6px;
+		border-radius: 14px;
+	}
+
+	.debug-metric span {
+		font-size: 10px;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		color: #64748b;
+	}
+
+	.debug-metric strong {
+		font-size: 13px;
+		line-height: 1;
+		color: #0f172a;
+	}
+
 	.debug-panels {
 		display: grid;
-		grid-template-columns: repeat(3, minmax(0, 1fr));
-		gap: 8px;
-		margin: 8px 0;
+		grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+		gap: 10px;
 	}
 
 	.debug-panel {
-		border: 1px solid #dbe3ef;
-		border-radius: 10px;
-		padding: 10px;
-		background: #f8fafc;
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+		border: 1px solid rgba(203, 213, 225, 0.72);
+		border-radius: 16px;
+		padding: 12px;
+		background: rgba(255, 255, 255, 0.82);
+		box-shadow:
+			inset 0 1px 0 rgba(255, 255, 255, 0.88),
+			0 12px 24px rgba(15, 23, 42, 0.05);
 		font-size: 12px;
 	}
 
+	.debug-panel__header {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 10px;
+	}
+
+	.debug-panel__title {
+		display: flex;
+		gap: 10px;
+		min-width: 0;
+	}
+
+	.debug-panel__title > .material-symbols-outlined {
+		width: 28px;
+		height: 28px;
+		display: grid;
+		place-items: center;
+		border-radius: 10px;
+		background: rgba(99, 102, 241, 0.08);
+		color: var(--debug-accent);
+		flex: 0 0 auto;
+	}
+
+	.debug-panel__copy {
+		min-width: 0;
+	}
+
 	.debug-panel h3 {
-		margin: 0 0 8px;
+		margin: 0;
 		font-size: 12px;
 		color: #0f172a;
+	}
+
+	.debug-count {
+		min-width: 22px;
+		height: 22px;
+		display: inline-grid;
+		place-items: center;
+		padding: 0 6px;
+		border-radius: 999px;
+		background: rgba(15, 23, 42, 0.06);
+		color: #334155;
+		font-size: 11px;
+		font-weight: 700;
 	}
 
 	.debug-panel ul {
@@ -601,25 +893,133 @@
 		margin: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: 8px;
 	}
 
-	.debug-panel li {
+	.debug-entry {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 10px;
+		flex-wrap: wrap;
+		padding: 10px;
+		border: 1px solid rgba(226, 232, 240, 0.92);
+		border-radius: 12px;
+		background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(248, 250, 252, 0.9));
+	}
+
+	.debug-entry--local {
+		align-items: flex-start;
+	}
+
+	.debug-entry__body {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		flex: 1;
+		min-width: 0;
+	}
+
+	.debug-expression,
+	.stack-function {
+		font-weight: 600;
+		color: #0f172a;
+		word-break: break-word;
+	}
+
+	.debug-key,
+	.stack-line,
+	.debug-value {
+		max-width: 100%;
+		padding: 4px 7px;
+		border-radius: 9px;
+		background: rgba(241, 245, 249, 0.95);
+		border: 1px solid rgba(226, 232, 240, 0.95);
+	}
+
+	.debug-key {
+		color: var(--debug-accent);
+		font-weight: 700;
+	}
+
+	.debug-value {
+		color: #334155;
+		overflow-wrap: anywhere;
+	}
+
+	.debug-entry--stack {
+		align-items: center;
+	}
+
+	.debug-entry--current {
+		border-color: rgba(99, 102, 241, 0.24);
+		box-shadow: 0 8px 18px rgba(99, 102, 241, 0.08);
+	}
+
+	.stack-meta {
 		display: flex;
 		align-items: center;
 		gap: 8px;
-		flex-wrap: wrap;
+		min-width: 0;
+	}
+
+	.stack-order {
+		width: 20px;
+		height: 20px;
+		display: inline-grid;
+		place-items: center;
+		border-radius: 999px;
+		background: rgba(15, 23, 42, 0.08);
+		color: #475569;
+		font-size: 10px;
+		font-weight: 700;
 	}
 
 	.watch-row {
 		display: flex;
-		gap: 6px;
-		margin-bottom: 8px;
+		gap: 8px;
 	}
 
 	.watch-row input {
 		flex: 1;
 		min-width: 0;
+		padding: 0 12px;
+		min-height: 36px;
+		border: 1px solid rgba(148, 163, 184, 0.3);
+		border-radius: 12px;
+		background: rgba(255, 255, 255, 0.94);
+		font: inherit;
+		color: #0f172a;
+		outline: none;
+		box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+	}
+
+	.watch-row input:focus {
+		border-color: rgba(99, 102, 241, 0.42);
+		box-shadow:
+			0 0 0 3px rgba(99, 102, 241, 0.12),
+			inset 0 1px 0 rgba(255, 255, 255, 0.8);
+	}
+
+	.watch-add {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		min-height: 36px;
+		padding: 0 12px;
+		border: 0;
+		border-radius: 12px;
+		background: linear-gradient(135deg, #4338ca 0%, #6366f1 100%);
+		color: #f8faff;
+		font: inherit;
+		font-size: 11px;
+		font-weight: 700;
+		cursor: pointer;
+		box-shadow: 0 10px 18px rgba(99, 102, 241, 0.22);
+	}
+
+	.watch-add .material-symbols-outlined {
+		font-size: 16px;
 	}
 
 	.toggle-chip input {
@@ -645,11 +1045,39 @@
 	}
 
 	.remove {
-		padding: 0 6px;
+		width: 28px;
+		height: 28px;
+		display: grid;
+		place-items: center;
+		padding: 0;
+		border: 0;
+		border-radius: 999px;
+		background: rgba(239, 68, 68, 0.09);
+		color: #b91c1c;
+		cursor: pointer;
+		flex: 0 0 auto;
+	}
+
+	.remove .material-symbols-outlined {
+		font-size: 15px;
 	}
 
 	.empty {
 		margin: 0;
+		padding: 14px 12px;
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		border: 1px dashed rgba(148, 163, 184, 0.35);
+		border-radius: 12px;
+		background: rgba(248, 250, 252, 0.76);
 		color: #64748b;
+	}
+
+	@media (max-width: 960px) {
+		.debug-hero__stats {
+			width: 100%;
+			justify-content: flex-start;
+		}
 	}
 </style>
