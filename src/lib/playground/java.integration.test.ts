@@ -179,4 +179,114 @@ describe('TeaVM Java stdin integration', () => {
 
 		expect(outputs.join('')).toBe('ABC\n');
 	}, 10000);
+
+	it('compiles and runs Scanner-based stdin code across common import styles', async () => {
+		const { runtime, compilerWasm, sdk, runtimeClasslib } = await loadTeaVmArtifacts();
+		const cases = [
+			{
+				name: 'explicit import',
+				code: `import java.util.Scanner;
+
+public class Main {
+    public static void main(String[] args) {
+        Scanner scanner = new Scanner(System.in);
+        System.out.println(scanner.nextInt() + scanner.nextInt());
+    }
+}`
+			},
+			{
+				name: 'wildcard import',
+				code: `import java.util.*;
+
+public class Main {
+    public static void main(String[] args) {
+        Scanner scanner = new Scanner(System.in);
+        System.out.println(scanner.nextInt() + scanner.nextInt());
+    }
+}`
+			},
+			{
+				name: 'fully qualified name',
+				code: `public class Main {
+    public static void main(String[] args) {
+        java.util.Scanner scanner = new java.util.Scanner(System.in);
+        System.out.println(scanner.nextInt() + scanner.nextInt());
+    }
+}`
+			},
+			{
+				name: 'bare scanner',
+				code: `public class Main {
+    public static void main(String[] args) {
+        Scanner scanner = new Scanner(System.in);
+        System.out.println(scanner.nextInt() + scanner.nextInt());
+    }
+}`
+			}
+		];
+
+		for (const testCase of cases) {
+			const injection = prepareJavaStdinInjection(testCase.code, '1 2\n');
+			const compilerModule = await runtime.load(compilerWasm, {
+				stackDeobfuscator: { enabled: false }
+			});
+			const compiler = compilerModule.exports.createCompiler();
+			const diagnostics: string[] = [];
+
+			compiler.setSdk(sdk);
+			compiler.setTeaVMClasslib(runtimeClasslib);
+			compiler.onDiagnostic((diagnostic: { message?: string }) => {
+				diagnostics.push(String(diagnostic.message || ''));
+			});
+			compiler.addSourceFile('Main.java', injection.transformedCode);
+			if (injection.helperSourcePath && injection.helperSource) {
+				compiler.addSourceFile(injection.helperSourcePath, injection.helperSource);
+			}
+
+			if (!compiler.compile()) {
+				throw new Error(`${testCase.name}: ${diagnostics.join('\n')}`);
+			}
+			expect(Array.from(compiler.detectMainClasses())).toEqual(['Main']);
+			expect(compiler.generateWebAssembly({ outputName: 'app', mainClass: 'Main' })).toBe(true);
+
+			const wasm = new Uint8Array(compiler.getWebAssemblyOutputFile('app.wasm'));
+			const outputs: string[] = [];
+			(
+				globalThis as typeof globalThis & {
+					window?: { wasmIdleJavaStdin: { readByte: () => number } };
+				}
+			).window = {
+				wasmIdleJavaStdin: {
+					readByte: () => -1
+				}
+			};
+
+			try {
+				const module = await runtime.load(wasm, {
+					installImports(imports: {
+						teavmConsole: {
+							putcharStdout: (code: number) => void;
+							putcharStderr: (code: number) => void;
+						};
+					}) {
+						imports.teavmConsole.putcharStdout = (charCode) =>
+							outputs.push(String.fromCharCode(charCode));
+						imports.teavmConsole.putcharStderr = (charCode) =>
+							outputs.push(String.fromCharCode(charCode));
+					},
+					stackDeobfuscator: { enabled: false }
+				});
+
+				module.exports.main([]);
+			} finally {
+				delete (
+					globalThis as typeof globalThis & {
+						window?: { wasmIdleJavaStdin: { readByte: () => number } };
+					}
+				).window;
+			}
+
+			expect(outputs.join('')).toBe('3\n');
+		}
+	}, 20000);
 });
