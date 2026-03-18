@@ -2,8 +2,31 @@ import { describe, expect, it, vi } from 'vitest';
 
 import App from '$lib/clang/app';
 import { NotImplemented, ProcExit } from '$lib/clang/error';
+import * as wasmModule from '$lib/clang/wasm';
 
 describe('App debug tracing', () => {
+	it('binds clock_time_get into the WASI import table', async () => {
+		const getInstance = vi.spyOn(wasmModule, 'getInstance').mockResolvedValue({
+			exports: {
+				memory: new WebAssembly.Memory({ initial: 1 })
+			}
+		} as WebAssembly.Instance);
+		const memfs = { exports: {} } as any;
+		const module = {} as WebAssembly.Module;
+		const app = new App(module, memfs, 'test.wasm');
+
+		await app.ready;
+
+		expect(getInstance).toHaveBeenCalledWith(
+			module,
+			expect.objectContaining({
+				wasi_unstable: expect.objectContaining({
+					clock_time_get: expect.any(Function)
+				})
+			})
+		);
+	});
+
 	it('traces normal proc_exit without treating it as an error', async () => {
 		const trace = vi.fn();
 		const stdout = vi.fn();

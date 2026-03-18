@@ -83,6 +83,7 @@ export default class App {
 				'args_sizes_get',
 				'args_get',
 				'random_get',
+				'clock_time_get',
 				'poll_oneoff'
 			),
 			...this.memfs.exports
