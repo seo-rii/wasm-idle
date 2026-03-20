@@ -73,6 +73,22 @@ function findRustConsoleErrors(messages) {
 }
 
 /**
+ * @param {BrowserConsoleMessage[]} messages
+ * @param {string[]} pageErrors
+ */
+function findMaximumCallStackErrors(messages, pageErrors) {
+	const isMaximumCallStackError = (text) => /maximum call stack/i.test(text);
+	return [
+		...pageErrors
+			.filter((entry) => isMaximumCallStackError(entry))
+			.map((entry) => `[pageerror] ${entry}`),
+		...messages
+			.filter((entry) => isMaximumCallStackError(entry.text))
+			.map((entry) => `[${entry.type}] ${entry.text}`)
+	];
+}
+
+/**
  * @param {import('playwright-core').Page} page
  * @param {{ crossOriginIsolated: boolean; sharedArrayBuffer: boolean; serviceWorkerControlled: boolean }} activeState
  * @param {string[]} pageErrors
@@ -91,7 +107,8 @@ async function readProbeSummary(page, activeState, pageErrors, consoleMessages, 
 		transcript,
 		consoleTail: summarizeConsole(consoleMessages),
 		bootstrapErrors: findBootstrapErrors(consoleMessages),
-		rustConsoleErrors: findRustConsoleErrors(consoleMessages)
+		rustConsoleErrors: findRustConsoleErrors(consoleMessages),
+		callStackErrors: findMaximumCallStackErrors(consoleMessages, pageErrors)
 	};
 }
 
@@ -107,7 +124,7 @@ async function readActiveState(page) {
 }
 
 /**
- * @param {{ browserUrl: string; runTimeoutMs?: number; chromiumExecutable?: string; stdinText?: string; sendEof?: boolean; expectedOutput?: string }} options
+ * @param {{ browserUrl: string; runTimeoutMs?: number; chromiumExecutable?: string; stdinText?: string; sendEof?: boolean; expectedOutput?: string; targetTriple?: 'wasm32-wasip1' | 'wasm32-wasip2' }} options
  */
 export async function runRustBrowserProbe({
 	browserUrl,
@@ -115,7 +132,8 @@ export async function runRustBrowserProbe({
 	chromiumExecutable = '',
 	stdinText = '5\n',
 	sendEof = false,
-	expectedOutput = 'factorial_plus_bonus=123'
+	expectedOutput = 'factorial_plus_bonus=123',
+	targetTriple = 'wasm32-wasip1'
 }) {
 	if (!browserUrl) {
 		throw new Error('runRustBrowserProbe requires a browserUrl');
@@ -191,6 +209,7 @@ export async function runRustBrowserProbe({
 		await page.waitForSelector('select', { state: 'attached', timeout: runTimeoutMs });
 
 		await page.locator('select').selectOption('RUST');
+		await page.locator('#rust-target-triple').selectOption(targetTriple);
 		const logToggle = page.locator('#log-toggle');
 		if (!(await logToggle.isChecked())) {
 			await logToggle.check();
@@ -315,6 +334,22 @@ export async function runRustBrowserProbe({
 		) {
 			throw new Error(
 				`browser probe did not observe a successful rust compile settle log\n${JSON.stringify(summary, null, 2)}`
+			);
+		}
+		if (
+			summary.transcript.includes('memory access out of bounds') ||
+			summary.consoleTail.some((entry) => entry.includes('memory access out of bounds'))
+		) {
+			throw new Error(
+				`browser probe still observed memory access out of bounds for ${targetTriple}\n${JSON.stringify(summary, null, 2)}`
+			);
+		}
+		if (
+			/maximum call stack/i.test(summary.transcript) ||
+			summary.callStackErrors.length > 0
+		) {
+			throw new Error(
+				`browser probe still observed maximum call stack errors for ${targetTriple}\n${JSON.stringify(summary, null, 2)}`
 			);
 		}
 
