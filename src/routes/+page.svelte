@@ -9,7 +9,8 @@
 		CompilerDiagnostic,
 		DebugFrame,
 		DebugSessionEvent,
-		DebugVariable
+		DebugVariable,
+		RustTargetTriple
 	} from '$lib/playground/options';
 	import type { TerminalControl } from '$lib/terminal';
 	import type monaco from 'monaco-editor';
@@ -36,6 +37,7 @@
 		compilerDiagnostics = $state<CompilerDiagnostic[]>([]),
 		clangdRequested = $state(false),
 		argsInput = $state(''),
+		rustTargetTriple = $state<RustTargetTriple>('wasm32-wasip1'),
 		watchInput = $state(''),
 		watchExpressions = $state<string[]>([]),
 		pausedLine = $state<number | null>(null),
@@ -146,6 +148,7 @@
 			localStorage.setItem('code', editor.getValue());
 			localStorage.setItem('language', language);
 			localStorage.setItem('argsInput', argsInput);
+			localStorage.setItem('rustTargetTriple', rustTargetTriple);
 		}
 		try {
 			if (!('SharedArrayBuffer' in window)) location.reload();
@@ -161,7 +164,8 @@
 					debug,
 					breakpoints,
 					stdin: '',
-					pauseOnEntry: debug
+					pauseOnEntry: debug,
+					rustTargetTriple: language === 'RUST' ? rustTargetTriple : undefined
 				}
 			});
 		} finally {
@@ -242,9 +246,16 @@
 			const code = localStorage.getItem('code');
 			const lang = localStorage.getItem('language');
 			const storedArgs = localStorage.getItem('argsInput');
+			const storedRustTargetTriple = localStorage.getItem('rustTargetTriple');
 			if (code) editor.setValue(code);
 			if (lang) language = lang;
 			if (storedArgs !== null) argsInput = storedArgs;
+			if (
+				storedRustTargetTriple === 'wasm32-wasip1' ||
+				storedRustTargetTriple === 'wasm32-wasip2'
+			) {
+				rustTargetTriple = storedRustTargetTriple;
+			}
 			init = true;
 		}
 	});
@@ -391,6 +402,15 @@
 						<span>Args</span>
 					</label>
 				{/if}
+				{#if language === 'RUST'}
+					<label class="select-chip">
+						<span class="material-symbols-outlined">conversion_path</span>
+						<select id="rust-target-triple" bind:value={rustTargetTriple}>
+							<option value="wasm32-wasip1">wasm32-wasip1</option>
+							<option value="wasm32-wasip2">wasm32-wasip2</option>
+						</select>
+					</label>
+				{/if}
 			</div>
 			{#if loading}
 				<div class="progress-shell" aria-live="polite">
@@ -419,8 +439,9 @@
 		{/if}
 		{#if language === 'RUST'}
 			<p class="hint">
-				Type into the terminal below and press Enter to send a line. Use Ctrl+D or the EOF
-				button while running if the program reads stdin until EOF.
+				Type into the terminal below and press Enter to send a line. Choose `wasm32-wasip1`
+				for preview1 core wasm or `wasm32-wasip2` for preview2 component execution. Use
+				Ctrl+D or the EOF button while running if the program reads stdin until EOF.
 			</p>
 		{/if}
 		{#if debugLanguage}
@@ -595,6 +616,7 @@
 	{#key language}
 		<Monaco
 			language={language.toLowerCase()}
+			rustTargetTriple={language === 'RUST' ? rustTargetTriple : undefined}
 			bind:editor
 			clangdEnabled={clangdRequested}
 			{clangdBaseUrl}

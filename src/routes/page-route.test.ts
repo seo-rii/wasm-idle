@@ -31,6 +31,18 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/<Terminal\s+bind:terminal\s+\{path\}\s+\{runtimeAssets\}/s);
 	});
 
+	it('persists and forwards the Rust target triple selection', () => {
+		expect(source).toMatch(/rustTargetTriple = \$state<RustTargetTriple>\('wasm32-wasip1'\),/);
+		expect(source).toMatch(/localStorage\.setItem\('rustTargetTriple', rustTargetTriple\);/);
+		expect(source).toMatch(/const storedRustTargetTriple = localStorage\.getItem\('rustTargetTriple'\);/);
+		expect(source).toMatch(/storedRustTargetTriple === 'wasm32-wasip1'/);
+		expect(source).toMatch(/storedRustTargetTriple === 'wasm32-wasip2'/);
+		expect(source).toMatch(/rustTargetTriple: language === 'RUST' \? rustTargetTriple : undefined/);
+		expect(source).toMatch(/<select id="rust-target-triple" bind:value=\{rustTargetTriple\}>/);
+		expect(source).toMatch(/<option value="wasm32-wasip2">wasm32-wasip2<\/option>/);
+		expect(source).toMatch(/rustTargetTriple=\{language === 'RUST' \? rustTargetTriple : undefined\}/);
+	});
+
 	it('exposes a browser debug hook that writes terminal stdin through the bound control', () => {
 		expect(source).toMatch(/type WasmIdleDebugApi = \{\s+writeTerminalInput: \(text: string, eof\?: boolean\) => Promise<void>;\s+\};/s);
 		expect(source).toMatch(/target\.__wasmIdleDebug = debugApi;/);
@@ -41,8 +53,8 @@ describe('example route debug actions', () => {
 
 	it('shows a Rust stdin hint that explains EOF for read-to-end programs', () => {
 		expect(source).toMatch(/press Enter to send a line\./);
-		expect(source).toMatch(
-			/Use Ctrl\+D or the EOF\s+button while running if the program reads stdin until EOF\./s
-		);
+		expect(source).toMatch(/Choose `wasm32-wasip1`/);
+		expect(source).toMatch(/`wasm32-wasip2` for preview2 component execution/);
+		expect(source).toMatch(/Use\s+Ctrl\+D or the EOF button while running/);
 	});
 });

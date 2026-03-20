@@ -3,14 +3,18 @@
 	import type { ClangdSession as ClangdSessionType } from '$lib/clangd/session';
 	import type { ClangdStatus } from '$lib/clangd/config';
 	import type { DebugLanguageAdapter } from '$lib/debug/language';
-	import type { CompilerDiagnostic, DebugVariable } from '$lib/playground/options';
+	import type {
+		CompilerDiagnostic,
+		DebugVariable,
+		RustTargetTriple
+	} from '$lib/playground/options';
 	import type monaco from 'monaco-editor';
 	import { onMount } from 'svelte';
 	import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
 
 	export const value = () => editor?.getValue() || '';
 
-	const defaults: Record<'cpp' | 'python' | 'java' | 'rust', string> = {
+	const defaults: Record<'cpp' | 'python' | 'java', string> = {
 		cpp: `#include <iostream>
 
 int bonus = 3;
@@ -48,8 +52,11 @@ public class Main {
         int n = scanner.hasNextInt() ? scanner.nextInt() : 4;
         System.out.println("factorial_plus_bonus=" + (factorial(n) + bonus));
     }
-}`,
-		rust: `use std::io;
+		}`
+	};
+
+	const rustDefaults: Record<RustTargetTriple, string> = {
+		'wasm32-wasip1': `use std::io;
 
 static BONUS: i32 = 3;
 
@@ -62,6 +69,27 @@ fn main() {
     io::stdin().read_line(&mut input).unwrap();
     let n = input.trim().parse::<i32>().unwrap_or(4);
     println!("factorial_plus_bonus={}", factorial(n) + BONUS);
+}`,
+		'wasm32-wasip2': `#[cfg(not(target_env = "p2"))]
+compile_error!("This example requires wasm32-wasip2.");
+
+use std::env;
+use std::io;
+
+// Pass an optional label through Args to prove preview2 CLI args are wired.
+static BONUS: i32 = 3;
+
+fn factorial(n: i32) -> i32 {
+    if n <= 1 { 1 } else { n * factorial(n - 1) }
+}
+
+fn main() {
+    let preview2_label = env::args().nth(1).unwrap_or_else(|| "preview2-cli".to_string());
+    let mut input = String::new();
+    io::stdin().read_line(&mut input).unwrap();
+    let n = input.trim().parse::<i32>().unwrap_or(4);
+    println!("preview2_component={}", preview2_label);
+    println!("factorial_plus_bonus={}", factorial(n) + BONUS);
 }`
 	};
 
@@ -73,6 +101,7 @@ fn main() {
 	interface Props {
 		editor: monaco.editor.IStandaloneCodeEditor | null;
 		language: any;
+		rustTargetTriple?: RustTargetTriple;
 		clangdEnabled?: boolean;
 		clangdBaseUrl?: string;
 		breakpoints?: number[];
@@ -86,6 +115,7 @@ fn main() {
 	let {
 		editor = $bindable(),
 		language,
+		rustTargetTriple = 'wasm32-wasip1',
 		clangdEnabled = false,
 		clangdBaseUrl,
 		breakpoints = [],
@@ -179,6 +209,21 @@ fn main() {
 		monacoApi.editor.setModelMarkers(activeModel, 'wasm-idle-compiler', markers);
 	});
 
+	$effect(() => {
+		if (!editor || language !== 'rust') return;
+		const currentValue = editor.getValue();
+		if (
+			currentValue !== rustDefaults['wasm32-wasip1'] &&
+			currentValue !== rustDefaults['wasm32-wasip2']
+		) {
+			return;
+		}
+		const nextValue = rustDefaults[rustTargetTriple];
+		if (currentValue !== nextValue) {
+			editor.setValue(nextValue);
+		}
+	});
+
 	onMount(() => {
 		let disposed = false;
 		// @ts-ignore
@@ -191,7 +236,10 @@ fn main() {
 		import('monaco-editor').then(async (m) => {
 			if (disposed) return;
 			Monaco = m;
-			const defaultValue = defaults[language as keyof typeof defaults] || '';
+			const defaultValue =
+				language === 'rust'
+					? rustDefaults[rustTargetTriple]
+					: defaults[language as keyof typeof defaults] || '';
 			if (language === 'cpp') {
 				editor = Monaco.editor.create(divEl!, {
 					value: defaultValue,
