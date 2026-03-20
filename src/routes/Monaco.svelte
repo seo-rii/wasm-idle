@@ -11,31 +11,42 @@
 	export const value = () => editor?.getValue() || '';
 
 	const defaults: Record<'cpp' | 'python' | 'java', string> = {
-		cpp: `#include <stdio.h>
+		cpp: `#include <iostream>
 
-int add_one(int value) {
-    return value + 1;
+int bonus = 3;
+
+int factorial(int n) {
+    return n <= 1 ? 1 : n * factorial(n - 1);
 }
 
 int main() {
-    int sum = add_one(9);
-    printf("sum=%d\\n", sum);
+    int n = 4;
+    if (!(std::cin >> n)) n = 4;
+    std::cout << "factorial_plus_bonus=" << factorial(n) + bonus << "\\n";
 }`,
-		python: `values = [1, 2, 3, 4]
-print(f"sum={sum(values)}")`,
-		java: `public class Main {
-    public static void main(String[] args) throws Exception {
-        StringBuilder line = new StringBuilder();
-        int ch;
+		python: `import sys
 
-        System.out.println("Type a line and press Enter:");
-        while ((ch = System.in.read()) != -1 && ch != '\\n') {
-            if (ch != '\\r') {
-                line.append((char) ch);
-            }
-        }
+BONUS = 3
 
-        System.out.println("echo=" + line);
+def factorial(n):
+    return 1 if n <= 1 else n * factorial(n - 1)
+
+tokens = sys.stdin.read().split()
+n = int(tokens[0]) if tokens else 4
+print(f"factorial_plus_bonus={factorial(n) + BONUS}")`,
+		java: `import java.util.Scanner;
+
+public class Main {
+    static int bonus = 3;
+
+    static int factorial(int n) {
+        return n <= 1 ? 1 : n * factorial(n - 1);
+    }
+
+    public static void main(String[] args) {
+        Scanner scanner = new Scanner(System.in);
+        int n = scanner.hasNextInt() ? scanner.nextInt() : 4;
+        System.out.println("factorial_plus_bonus=" + (factorial(n) + bonus));
     }
 }`
 	};
