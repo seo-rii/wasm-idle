@@ -1,4 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
+
+const { publicEnv } = vi.hoisted(() => ({
+	publicEnv: {
+		PUBLIC_WASM_RUST_COMPILER_URL: ''
+	}
+}));
+
+vi.mock('$env/dynamic/public', () => ({
+	env: publicEnv
+}));
+
 import { resolveRuntimeAssetConfig } from './assets';
 
 describe('runtime asset config resolution', () => {
@@ -52,5 +63,32 @@ describe('runtime asset config resolution', () => {
 			loader,
 			useAssetBridge: true
 		});
+	});
+
+	it('prefers an explicit rust compiler url over the public env override', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_RUST_COMPILER_URL = 'https://env.example.com/compiler.js';
+		const { resolveRustCompilerUrl } = await import('./assets');
+
+		expect(
+			resolveRustCompilerUrl(
+				{
+					rust: {
+						compilerUrl: '/runtime/rust/index.js'
+					}
+				},
+				'https://example.com/app'
+			)
+		).toBe('https://example.com/runtime/rust/index.js');
+	});
+
+	it('falls back to PUBLIC_WASM_RUST_COMPILER_URL when no rust runtime config is provided', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_RUST_COMPILER_URL = '/wasm-rust/index.js';
+		const { resolveRustCompilerUrl } = await import('./assets');
+
+		expect(resolveRustCompilerUrl('/absproxy/5173', 'https://example.com/app')).toBe(
+			'https://example.com/wasm-rust/index.js'
+		);
 	});
 });

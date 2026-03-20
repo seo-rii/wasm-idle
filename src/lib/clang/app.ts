@@ -74,7 +74,7 @@ export default class App {
 			'__wasm_idle_debug_value_text'
 		);
 
-		const wasi_unstable = {
+		const wasi = {
 			...bindNew(
 				this,
 				'proc_exit',
@@ -89,7 +89,13 @@ export default class App {
 			...this.memfs.exports
 		};
 
-		this.ready = getInstance(module, { wasi_unstable, env }).then((instance) => {
+		// Rust/WASI modules import `wasi_snapshot_preview1`, while older toolchains here still use
+		// `wasi_unstable`. Expose the same host under both names so either artifact shape runs.
+		this.ready = getInstance(module, {
+			wasi_unstable: wasi,
+			wasi_snapshot_preview1: wasi,
+			env
+		}).then((instance) => {
 			this.instance = instance;
 			this.exports = this.instance.exports;
 			this.mem = new Memory(this.exports.memory);
@@ -134,6 +140,7 @@ export default class App {
 	}
 
 	proc_exit(code: number) {
+		this.trace(`proc_exit_throw(code=${code})`);
 		throw new ProcExit(code);
 	}
 
@@ -464,20 +471,21 @@ export default class App {
 			// +2 to account for = and \0 in "name=value\0".
 			size += name.length + value.length + 2;
 		}
-		this.mem.write64(environ_count_out, names.length);
-		this.mem.write64(environ_buf_size_out, size);
+		this.mem.write32(environ_count_out, names.length);
+		this.mem.write32(environ_buf_size_out, size);
+		this.trace(`environ_sizes_get(count=${names.length}, bytes=${size})`);
 		return ESUCCESS;
 	}
 
 	environ_get(environ_ptrs: number, environ_buf: number) {
 		this.mem.check();
 		const names = Object.getOwnPropertyNames(this.environ);
+		this.trace(`environ_get(entries=${JSON.stringify(names)})`);
 		for (const name of names) {
 			this.mem.write32(environ_ptrs, environ_buf);
 			environ_ptrs += 4;
 			environ_buf += this.mem.writeStr(environ_buf, `${name}=${this.environ[name]}`);
 		}
-		this.mem.write32(environ_ptrs, 0);
 		return ESUCCESS;
 	}
 
@@ -487,19 +495,20 @@ export default class App {
 		for (let arg of this.argv) {
 			size += arg.length + 1; // "arg\0".
 		}
-		this.mem.write64(argc_out, this.argv.length);
-		this.mem.write64(argv_buf_size_out, size);
+		this.mem.write32(argc_out, this.argv.length);
+		this.mem.write32(argv_buf_size_out, size);
+		this.trace(`args_sizes_get(count=${this.argv.length}, bytes=${size})`);
 		return ESUCCESS;
 	}
 
 	args_get(argv_ptrs: number, argv_buf: number) {
 		this.mem.check();
+		this.trace(`args_get(argv=${JSON.stringify(this.argv)})`);
 		for (let arg of this.argv) {
 			this.mem.write32(argv_ptrs, argv_buf);
 			argv_ptrs += 4;
 			argv_buf += this.mem.writeStr(argv_buf, arg);
 		}
-		this.mem.write32(argv_ptrs, 0);
 		return ESUCCESS;
 	}
 

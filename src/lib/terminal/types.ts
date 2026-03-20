@@ -33,7 +33,9 @@ export interface TerminalControl {
 	stop?: () => Promise<void>;
 	debugCommand: (command: DebugCommand) => Promise<void>;
 	debugEvaluate?: (expression: string) => Promise<string>;
+	waitForInput?: () => Promise<void>;
 	write: (input: string) => Promise<void>;
+	eof?: () => Promise<void>;
 }
 
 export type {

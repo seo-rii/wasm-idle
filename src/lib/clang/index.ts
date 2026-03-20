@@ -252,7 +252,7 @@ export default class Clang {
 	}
 
 	trace(message: string) {
-		if (!this.debug) return;
+		if (!this.debug || !this.log) return;
 		const elapsed = Date.now() - this.traceStartedAt;
 		this.stdout(`\x1b[2m[debug +${elapsed}ms] ${message}\x1b[0m\n`);
 	}

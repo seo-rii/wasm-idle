@@ -3,6 +3,8 @@
 	import Terminal, { cppDebugLanguageAdapter, pythonDebugLanguageAdapter } from '$lib';
 	import { page } from '$app/state';
 	import { browser } from '$app/environment';
+	import type { PlaygroundRuntimeAssets } from '$lib/playground/assets';
+	import { WASM_RUST_ASSET_VERSION } from '$lib/playground/wasmRustVersion';
 	import type {
 		CompilerDiagnostic,
 		DebugFrame,
@@ -17,6 +19,14 @@
 		page.url.pathname.endsWith('/') ? page.url.pathname.slice(0, -1) : page.url.pathname
 	);
 	let clangdBaseUrl = $derived(path ? `${path}/clangd` : '/clangd');
+	let runtimeAssets = $derived.by<PlaygroundRuntimeAssets>(() => ({
+		rootUrl: path,
+		rust: {
+			compilerUrl: path
+				? `${path}/wasm-rust/index.js?v=${WASM_RUST_ASSET_VERSION}`
+				: `/wasm-rust/index.js?v=${WASM_RUST_ASSET_VERSION}`
+		}
+	}));
 
 	let editor = $state<monaco.editor.IStandaloneCodeEditor | null>(null),
 		terminal = $state<TerminalControl | undefined>(undefined),
@@ -62,6 +72,9 @@
 	const progressLabel = $derived(
 		runningMode === 'debug' ? 'Preparing debug session' : 'Loading runtime'
 	);
+	type WasmIdleDebugApi = {
+		writeTerminalInput: (text: string, eof?: boolean) => Promise<void>;
+	};
 
 	function onDebugEvent(event: DebugSessionEvent) {
 		if (event.type === 'pause') {
@@ -96,6 +109,11 @@
 		await terminal.stop?.();
 	}
 
+	async function sendTerminalEof() {
+		if (!terminal || !runningMode) return;
+		await terminal.eof?.();
+	}
+
 	function onCompileDiagnostic(diagnostic: CompilerDiagnostic) {
 		compilerDiagnostics = [...compilerDiagnostics, diagnostic];
 	}
@@ -120,7 +138,10 @@
 			debugCallStack = [];
 		}
 		compilerDiagnostics = [];
-		const args = language === 'JAVA' && argsInput.trim() ? argsInput.trim().split(/\s+/) : [];
+		const args =
+			(language === 'JAVA' || language === 'RUST') && argsInput.trim()
+				? argsInput.trim().split(/\s+/)
+				: [];
 		if (browser) {
 			localStorage.setItem('code', editor.getValue());
 			localStorage.setItem('language', language);
@@ -229,6 +250,23 @@
 	});
 
 	$effect(() => {
+		if (!browser) return;
+		const target = window as Window & typeof globalThis & { __wasmIdleDebug?: WasmIdleDebugApi };
+		const debugApi: WasmIdleDebugApi = {
+			async writeTerminalInput(text: string, eof = false) {
+				if (!terminal) return;
+				await terminal.waitForInput?.();
+				await terminal.write(text);
+				if (eof) await terminal.eof?.();
+			}
+		};
+		target.__wasmIdleDebug = debugApi;
+		return () => {
+			if (target.__wasmIdleDebug === debugApi) delete target.__wasmIdleDebug;
+		};
+	});
+
+	$effect(() => {
 		if (language !== 'CPP') clangdRequested = false;
 		if (!debugLanguage) {
 			breakpoints = [];
@@ -238,7 +276,7 @@
 			debugActive = false;
 			debugPaused = false;
 		}
-		if (language !== 'JAVA') compilerDiagnostics = [];
+		if (language !== 'JAVA' && language !== 'RUST') compilerDiagnostics = [];
 	});
 </script>
 
@@ -284,6 +322,15 @@
 							<span>Debug</span>
 						</button>
 					{/if}
+					<button
+						class="action-button action-button--icon"
+						onclick={sendTerminalEof}
+						disabled={!runningMode}
+						title="Send EOF"
+						aria-label="Send EOF"
+					>
+						<span class="material-symbols-outlined">keyboard_tab_rtl</span>
+					</button>
 					<button
 						class="action-button action-button--icon"
 						onclick={() => sendDebugCommand('continue')}
@@ -334,9 +381,10 @@
 						<option value="CPP">C++</option>
 						<option value="PYTHON">Python</option>
 						<option value="JAVA">Java</option>
+						<option value="RUST">Rust</option>
 					</select>
 				</label>
-				{#if language === 'JAVA'}
+				{#if language === 'JAVA' || language === 'RUST'}
 					<label class="args-chip">
 						<span class="material-symbols-outlined">list_alt</span>
 						<input bind:value={argsInput} placeholder="3 4 5" spellcheck={false} />
@@ -368,6 +416,12 @@
 		</section>
 		{#if language === 'JAVA'}
 			<p class="hint">Run after that type into the terminal below and press Enter.</p>
+		{/if}
+		{#if language === 'RUST'}
+			<p class="hint">
+				Type into the terminal below and press Enter to send a line. Use Ctrl+D or the EOF
+				button while running if the program reads stdin until EOF.
+			</p>
 		{/if}
 		{#if debugLanguage}
 			<section
@@ -532,6 +586,7 @@
 			<Terminal
 				bind:terminal
 				{path}
+				{runtimeAssets}
 				ondebug={onDebugEvent}
 				oncompilediagnostic={onCompileDiagnostic}
 			/>

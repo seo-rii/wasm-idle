@@ -47,6 +47,7 @@
 		clientWidth = $state(0),
 		clientHeight = $state(0),
 		term = $state<TerminalType>(),
+		debugOutput = $state(''),
 		finish = true,
 		input = '',
 		sandbox: Sandbox,
@@ -55,6 +56,12 @@
 		plugin = $state(),
 		ll: string | null = null,
 		stopRequested = false;
+
+	function writeTerminalOutput(text: string) {
+		if (!text) return;
+		debugOutput += text;
+		term?.write(text);
+	}
 
 	function phaseProgress(
 		progress: { set?: (value: number) => void } | undefined,
@@ -96,18 +103,18 @@
 		sandbox.ondebug = ondebug;
 		sandbox.oncompilerdiagnostic = oncompilediagnostic;
 		sandbox.output = (output: string) =>
-			_tc === tc && term && term.write(output.replaceAll('\n', '\r\n'));
+			_tc === tc && writeTerminalOutput(output.replaceAll('\n', '\r\n'));
 	}
 
 	function runSandbox<T>(pr: Promise<T>) {
 		return pr
 			.then((x) => {
-				term?.write(`\r\nProcess finished after ${sandbox.elapse}ms\u001B[?25l`);
+				writeTerminalOutput(`\r\nProcess finished after ${sandbox.elapse}ms\u001B[?25l`);
 				return x;
 			})
 			.catch((msg) => {
 				if (stopRequested) return false;
-				term?.write(`\r\n\x1B[1;3;31m${msg}\u001B[?25l`);
+				writeTerminalOutput(`\r\n\x1B[1;3;31m${msg}\u001B[?25l`);
 				return false;
 			})
 			.finally(() => {
@@ -137,7 +144,7 @@
 
 	function submitCurrentInput() {
 		term?.write('\r\n');
-		sandbox.write?.(input + '\n');
+		sandbox?.write?.(input + '\n');
 		input = '';
 	}
 
@@ -149,12 +156,21 @@
 		}
 	}
 
+	async function waitForInput() {
+		await wait();
+		const startedAt = Date.now();
+		while (!sandbox && Date.now() - startedAt < 30_000) {
+			await new Promise((resolve) => setTimeout(resolve, 10));
+		}
+	}
+
 	const terminalControl: TerminalControl = {
 		async clear() {
 			await wait();
 			term?.reset();
 			term?.write(`\u001B[?25l\x1b[0m\x1b[?25h`);
 			if (term) term.options.cursorBlink = false;
+			debugOutput = '';
 			input = '';
 			first = true;
 			await new Promise((r) => setTimeout(r, 100));
@@ -216,10 +232,17 @@
 			await wait();
 			return (await sandbox.debugEvaluate?.(expression)) || '?';
 		},
+		async waitForInput() {
+			await waitForInput();
+		},
 		async write(input: string) {
-			await wait();
+			await waitForInput();
 			applyPastedText(input);
 			if (!input.endsWith('\n') && !input.endsWith('\r')) submitCurrentInput();
+		},
+		async eof() {
+			await waitForInput();
+			sandbox?.eof?.();
 		}
 	};
 
@@ -281,7 +304,7 @@
 					sandbox.kill?.();
 				} else if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'd') {
 					if (input.length > 0) submitCurrentInput();
-					else sandbox.eof?.();
+					sandbox?.eof?.();
 				} else if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'v') {
 					navigator.clipboard.readText().then((text) => {
 						applyPastedText(text);
@@ -302,6 +325,7 @@
 
 <main>
 	<div bind:this={ref} bind:clientWidth bind:clientHeight></div>
+	<pre data-testid="terminal-debug-output" style="display: none;">{debugOutput}</pre>
 </main>
 
 <style>

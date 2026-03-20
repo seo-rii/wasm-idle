@@ -39,4 +39,20 @@ describe('Terminal source', () => {
 			/async stop\(\) \{\s+await wait\(\);\s+stopRequested = true;\s+finish = true;\s+if \(sandbox\?\.kill\) sandbox\.kill\(\);\s+else sandbox\?\.terminate\?\.\(\);\s+\}/s
 		);
 	});
+
+	it('submits pending stdin and sends EOF on ctrl+d for read-to-end programs', () => {
+		expect(source).toMatch(
+			/else if \(\(ev\.ctrlKey \|\| ev\.metaKey\) && ev\.key\.toLowerCase\(\) === 'd'\) \{\s+if \(input\.length > 0\) submitCurrentInput\(\);\s+sandbox\?\.eof\?\.\(\);\s+\}/s
+		);
+	});
+
+	it('keeps a hidden transcript mirror for browser debugging and Playwright assertions', () => {
+		expect(source).toMatch(/debugOutput = \$state\(''\)/);
+		expect(source).toMatch(/function writeTerminalOutput\(text: string\)/);
+		expect(source).toMatch(/debugOutput \+= text;/);
+		expect(source).toMatch(/debugOutput = '';/);
+		expect(source).toMatch(
+			/<pre data-testid="terminal-debug-output" style="display: none;">\{debugOutput\}<\/pre>/
+		);
+	});
 });

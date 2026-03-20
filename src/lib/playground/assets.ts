@@ -1,3 +1,4 @@
+import { env as publicEnv } from '$env/dynamic/public';
 import { normalizeTeaVmBaseUrl, resolveTeaVmBaseUrl } from '$lib/playground/teavmConfig';
 
 export type RuntimeAssetRuntime = 'python' | 'java';
@@ -37,10 +38,15 @@ export interface RuntimeAssetConfig {
 	loader?: RuntimeAssetLoader;
 }
 
+export interface RustRuntimeAssetConfig {
+	compilerUrl?: string;
+}
+
 export interface PlaygroundRuntimeAssets {
 	rootUrl?: string;
 	python?: RuntimeAssetConfig;
 	java?: RuntimeAssetConfig;
+	rust?: RustRuntimeAssetConfig;
 }
 
 export interface ResolvedRuntimeAssetConfig {
@@ -174,4 +180,16 @@ export function resolveRuntimeAssetConfig(
 	return runtime === 'python'
 		? resolvePythonRuntimeAssetConfig(options, currentUrl)
 		: resolveJavaRuntimeAssetConfig(options, currentUrl);
+}
+
+export function resolveRustCompilerUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredCompilerUrl =
+		(typeof options === 'object' && options?.rust?.compilerUrl) ||
+		(publicEnv.PUBLIC_WASM_RUST_COMPILER_URL || '').trim();
+
+	if (!configuredCompilerUrl) return '';
+	return currentUrl ? new URL(configuredCompilerUrl, currentUrl).href : configuredCompilerUrl;
 }

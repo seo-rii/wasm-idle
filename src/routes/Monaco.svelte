@@ -10,7 +10,7 @@
 
 	export const value = () => editor?.getValue() || '';
 
-	const defaults: Record<'cpp' | 'python' | 'java', string> = {
+	const defaults: Record<'cpp' | 'python' | 'java' | 'rust', string> = {
 		cpp: `#include <iostream>
 
 int bonus = 3;
@@ -48,6 +48,20 @@ public class Main {
         int n = scanner.hasNextInt() ? scanner.nextInt() : 4;
         System.out.println("factorial_plus_bonus=" + (factorial(n) + bonus));
     }
+}`,
+		rust: `use std::io;
+
+static BONUS: i32 = 3;
+
+fn factorial(n: i32) -> i32 {
+    if n <= 1 { 1 } else { n * factorial(n - 1) }
+}
+
+fn main() {
+    let mut input = String::new();
+    io::stdin().read_line(&mut input).unwrap();
+    let n = input.trim().parse::<i32>().unwrap_or(4);
+    println!("factorial_plus_bonus={}", factorial(n) + BONUS);
 }`
 	};
 
@@ -144,7 +158,7 @@ public class Main {
 		const activeModel = model || editor.getModel();
 		if (!activeModel) return;
 		const markers =
-			language === 'java'
+			language === 'java' || language === 'rust'
 				? compilerDiagnostics.map((diagnostic) => ({
 						severity:
 							diagnostic.severity === 'warning'
@@ -183,6 +197,7 @@ public class Main {
 					value: defaultValue,
 					language,
 					automaticLayout: true,
+					occurrencesHighlight: 'off',
 					glyphMargin: true
 				});
 				debugView = new MonacoDebugView(Monaco, editor, onBreakpointsChange);
@@ -196,6 +211,7 @@ public class Main {
 				value: defaultValue,
 				language,
 				automaticLayout: true,
+				occurrencesHighlight: 'off',
 				glyphMargin: !!debugLanguage
 			});
 			if (debugLanguage) {

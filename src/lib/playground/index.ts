@@ -1,11 +1,12 @@
 import Clang from '$lib/playground/clang';
 import Java from '$lib/playground/java';
 import Python from '$lib/playground/python';
+import Rust from '$lib/playground/rust';
 import type { Sandbox } from '$lib/playground/sandbox';
 
 const sandboxCache: { [key: string]: Sandbox } = {};
 
-export const supportedLanguages = ['PYTHON3', 'PYPY3', 'C', 'CPP', 'JAVA'];
+export const supportedLanguages = ['PYTHON3', 'PYPY3', 'C', 'CPP', 'JAVA', 'RUST'];
 
 export default async function load(language: string) {
 	if (sandboxCache[language]) return sandboxCache[language];
@@ -25,6 +26,9 @@ export default async function load(language: string) {
 		case 'JAVA':
 			sandbox = new Java();
 			break;
+		case 'RUST':
+			sandbox = new Rust();
+			break;
 		default:
 			throw new Error(`Unsupported language: ${language}`);
 	}
@@ -36,6 +40,7 @@ export default async function load(language: string) {
 		if (language === 'C') sandboxCache['C'] = sandbox;
 		if (language === 'CPP') sandboxCache['CPP'] = sandbox;
 		if (language === 'JAVA') sandboxCache['JAVA'] = sandbox;
+		if (language === 'RUST') sandboxCache['RUST'] = sandbox;
 	}
 	return sandbox;
 }

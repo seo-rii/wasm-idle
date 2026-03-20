@@ -2,10 +2,11 @@ import { describe, expect, it, vi } from 'vitest';
 
 import App from '$lib/clang/app';
 import { NotImplemented, ProcExit } from '$lib/clang/error';
+import Memory from '$lib/clang/memory/memory';
 import * as wasmModule from '$lib/clang/wasm';
 
 describe('App debug tracing', () => {
-	it('binds clock_time_get into the WASI import table', async () => {
+	it('binds the WASI host into both legacy and preview1 import tables', async () => {
 		const getInstance = vi.spyOn(wasmModule, 'getInstance').mockResolvedValue({
 			exports: {
 				memory: new WebAssembly.Memory({ initial: 1 })
@@ -21,6 +22,9 @@ describe('App debug tracing', () => {
 			module,
 			expect.objectContaining({
 				wasi_unstable: expect.objectContaining({
+					clock_time_get: expect.any(Function)
+				}),
+				wasi_snapshot_preview1: expect.objectContaining({
 					clock_time_get: expect.any(Function)
 				})
 			})
@@ -71,6 +75,69 @@ describe('App debug tracing', () => {
 		expect(stdout).toHaveBeenCalledWith(
 			expect.stringContaining('Error: wasi_unstable.clock_time_get not implemented.')
 		);
+	});
+
+	it('writes preview1 environment sizes as 32-bit values without clobbering adjacent memory', () => {
+		const memory = new Memory(new WebAssembly.Memory({ initial: 1 }));
+		memory.write32(8, 0xdeadbeef);
+		const app = Object.assign(Object.create(App.prototype), {
+			mem: memory,
+			environ: { USER: 'jungol' },
+			trace: vi.fn()
+		}) as App;
+
+		expect(app.environ_sizes_get(0, 4)).toBe(0);
+		expect(memory.read32(0)).toBe(1);
+		expect(memory.read32(4)).toBe('USER=jungol'.length + 1);
+		expect(memory.read32(8)).toBe(0xdeadbeef);
+	});
+
+	it('writes preview1 environment pointers without a trailing null overflow', () => {
+		const memory = new Memory(new WebAssembly.Memory({ initial: 1 }));
+		memory.write32(4, 0xdeadbeef);
+		const app = Object.assign(Object.create(App.prototype), {
+			mem: memory,
+			environ: { USER: 'jungol' },
+			trace: vi.fn()
+		}) as App;
+
+		expect(app.environ_get(0, 16)).toBe(0);
+		expect(memory.read32(0)).toBe(16);
+		expect(memory.read32(4)).toBe(0xdeadbeef);
+		expect(memory.readStr(16, 'USER=jungol'.length)).toBe('USER=jungol');
+		expect(memory.read8(16 + 'USER=jungol'.length)).toBe(0);
+	});
+
+	it('writes preview1 argv sizes as 32-bit values without clobbering adjacent memory', () => {
+		const memory = new Memory(new WebAssembly.Memory({ initial: 1 }));
+		memory.write32(8, 0xdeadbeef);
+		const app = Object.assign(Object.create(App.prototype), {
+			mem: memory,
+			argv: ['main.wasm', '--flag'],
+			trace: vi.fn()
+		}) as App;
+
+		expect(app.args_sizes_get(0, 4)).toBe(0);
+		expect(memory.read32(0)).toBe(2);
+		expect(memory.read32(4)).toBe('main.wasm'.length + 1 + '--flag'.length + 1);
+		expect(memory.read32(8)).toBe(0xdeadbeef);
+	});
+
+	it('writes preview1 argv pointers without a trailing null overflow', () => {
+		const memory = new Memory(new WebAssembly.Memory({ initial: 1 }));
+		memory.write32(8, 0xdeadbeef);
+		const app = Object.assign(Object.create(App.prototype), {
+			mem: memory,
+			argv: ['main.wasm', '--flag'],
+			trace: vi.fn()
+		}) as App;
+
+		expect(app.args_get(0, 32)).toBe(0);
+		expect(memory.read32(0)).toBe(32);
+		expect(memory.read32(4)).toBe(32 + 'main.wasm'.length + 1);
+		expect(memory.read32(8)).toBe(0xdeadbeef);
+		expect(memory.readStr(32, 'main.wasm'.length)).toBe('main.wasm');
+		expect(memory.readStr(32 + 'main.wasm'.length + 1, '--flag'.length)).toBe('--flag');
 	});
 
 	it('emits current locals when pausing on a debug line', () => {

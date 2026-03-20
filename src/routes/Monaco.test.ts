@@ -18,6 +18,10 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(
 			/monacoApi\.editor\.setModelMarkers\(activeModel, 'wasm-idle-compiler', markers\);/
 		);
+		expect(source.match(/occurrencesHighlight: 'off'/g)).toHaveLength(2);
+		expect(source).toMatch(
+			/rust:\s*`use std::io;[\s\S]*static BONUS: i32 = 3;[\s\S]*io::stdin\(\)\.read_line\(&mut input\)\.unwrap\(\);[\s\S]*println!\("factorial_plus_bonus=\{\}", factorial\(n\) \+ BONUS\);[\s\S]*}`/s
+		);
 		expect(source).toMatch(
 			/debugView = new MonacoDebugView\(Monaco, editor, onBreakpointsChange\);\s+debugView\.setBreakpoints\(breakpoints\);\s+debugView\.setPauseState\(pausedLine, debugLocals, debugLanguage\);/s
 		);
@@ -43,6 +47,7 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).toMatch(/clangdRequested = \$state\(false\),/);
 		expect(pageSource).toMatch(/if \(debug && language === 'CPP'\) clangdRequested = true;/);
 		expect(pageSource).toMatch(/if \(language !== 'CPP'\) clangdRequested = false;/);
+		expect(pageSource).toMatch(/<option value="RUST">Rust<\/option>/);
 		expect(pageSource).toMatch(/clangdEnabled=\{clangdRequested\}/);
 	});
 });
