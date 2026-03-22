@@ -33,13 +33,31 @@ describe('example route debug actions', () => {
 
 	it('persists and forwards the Rust target triple selection', () => {
 		expect(source).toMatch(/rustTargetTriple = \$state<RustTargetTriple>\('wasm32-wasip1'\),/);
+		expect(source).toMatch(
+			/const knownRustTargetTriples = \['wasm32-wasip1', 'wasm32-wasip2', 'wasm32-wasip3'\] as const;/
+		);
+		expect(source).toMatch(
+			/let availableRustTargetTriples = \$state<RustTargetTriple\[]>\(\[\s+'wasm32-wasip1',\s+'wasm32-wasip2'\s+\]\);/s
+		);
 		expect(source).toMatch(/localStorage\.setItem\('rustTargetTriple', rustTargetTriple\);/);
-		expect(source).toMatch(/const storedRustTargetTriple = localStorage\.getItem\('rustTargetTriple'\);/);
-		expect(source).toMatch(/storedRustTargetTriple === 'wasm32-wasip1'/);
-		expect(source).toMatch(/storedRustTargetTriple === 'wasm32-wasip2'/);
+		expect(source).toMatch(
+			/const manifestUrl = path\s+\?\s+`\$\{path\}\/wasm-rust\/runtime\/runtime-manifest\.v3\.json\?v=\$\{WASM_RUST_ASSET_VERSION\}`\s+:\s+`\/wasm-rust\/runtime\/runtime-manifest\.v3\.json\?v=\$\{WASM_RUST_ASSET_VERSION\}`;/
+		);
+		expect(source).toMatch(/const response = await fetch\(manifestUrl, \{ cache: 'no-store' \}\);/);
+		expect(source).toMatch(
+			/const nextAvailableRustTargetTriples = knownRustTargetTriples\.filter\(\(targetTriple\) =>\s+Object\.prototype\.hasOwnProperty\.call\(manifest\.targets \|\| \{}, targetTriple\)\s+\);/s
+		);
+		expect(source).toMatch(
+			/availableRustTargetTriples = \[\.\.\.nextAvailableRustTargetTriples\];/
+		);
+		expect(source).toMatch(
+			/availableRustTargetTriples = \['wasm32-wasip1', 'wasm32-wasip2'\];/
+		);
 		expect(source).toMatch(/rustTargetTriple: language === 'RUST' \? rustTargetTriple : undefined/);
 		expect(source).toMatch(/<select id="rust-target-triple" bind:value=\{rustTargetTriple\}>/);
-		expect(source).toMatch(/<option value="wasm32-wasip2">wasm32-wasip2<\/option>/);
+		expect(source).toMatch(
+			/\{#each availableRustTargetTriples as targetTriple\}\s+<option value=\{targetTriple\}>\{targetTriple\}<\/option>\s+\{\/each\}/s
+		);
 		expect(source).toMatch(/rustTargetTriple=\{language === 'RUST' \? rustTargetTriple : undefined\}/);
 	});
 
@@ -53,8 +71,12 @@ describe('example route debug actions', () => {
 
 	it('shows a Rust stdin hint that explains EOF for read-to-end programs', () => {
 		expect(source).toMatch(/press Enter to send a line\./);
-		expect(source).toMatch(/Choose `wasm32-wasip1`/);
-		expect(source).toMatch(/`wasm32-wasip2` for preview2 component execution/);
+		expect(source).toMatch(/selector only shows\s+Rust targets advertised by the bundled wasm-rust runtime manifest/);
+		expect(source).toMatch(/`wasm32-wasip1`\s+uses preview1 core wasm/);
+		expect(source).toMatch(/availableRustTargetTriples\.includes\('wasm32-wasip2'\)/);
+		expect(source).toMatch(/`wasm32-wasip2`\s+uses preview2 component execution/);
+		expect(source).toMatch(/availableRustTargetTriples\.includes\('wasm32-wasip3'\)/);
+		expect(source).toMatch(/`wasm32-wasip3`\s+is only shown for the current transitional component path/);
 		expect(source).toMatch(/Use\s+Ctrl\+D or the EOF button while running/);
 	});
 });

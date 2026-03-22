@@ -67,6 +67,7 @@
 	const debugStatusIcon = $derived(
 		debugPaused ? 'pause_circle' : debugActive ? 'play_circle' : 'adjust'
 	);
+	const knownRustTargetTriples = ['wasm32-wasip1', 'wasm32-wasip2', 'wasm32-wasip3'] as const;
 	const debugTitle = $derived(language === 'CPP' ? 'Native Trace' : 'Pyodide Trace');
 	const loading = $derived(progress >= 0 && progress < 1);
 	const progressValue = $derived(progress < 0 ? 0 : progress > 1 ? 1 : progress);
@@ -74,6 +75,10 @@
 	const progressLabel = $derived(
 		runningMode === 'debug' ? 'Preparing debug session' : 'Loading runtime'
 	);
+	let availableRustTargetTriples = $state<RustTargetTriple[]>([
+		'wasm32-wasip1',
+		'wasm32-wasip2'
+	]);
 	type WasmIdleDebugApi = {
 		writeTerminalInput: (text: string, eof?: boolean) => Promise<void>;
 	};
@@ -246,18 +251,70 @@
 			const code = localStorage.getItem('code');
 			const lang = localStorage.getItem('language');
 			const storedArgs = localStorage.getItem('argsInput');
-			const storedRustTargetTriple = localStorage.getItem('rustTargetTriple');
 			if (code) editor.setValue(code);
 			if (lang) language = lang;
 			if (storedArgs !== null) argsInput = storedArgs;
-			if (
-				storedRustTargetTriple === 'wasm32-wasip1' ||
-				storedRustTargetTriple === 'wasm32-wasip2'
-			) {
-				rustTargetTriple = storedRustTargetTriple;
-			}
 			init = true;
 		}
+	});
+
+	$effect(() => {
+		if (!browser) return;
+		let cancelled = false;
+		(async () => {
+			const manifestUrl = path
+				? `${path}/wasm-rust/runtime/runtime-manifest.v3.json?v=${WASM_RUST_ASSET_VERSION}`
+				: `/wasm-rust/runtime/runtime-manifest.v3.json?v=${WASM_RUST_ASSET_VERSION}`;
+			try {
+				const response = await fetch(manifestUrl, { cache: 'no-store' });
+				if (!response.ok) {
+					throw new Error(`failed to load ${manifestUrl}: ${response.status}`);
+				}
+				const manifest = (await response.json()) as {
+					defaultTargetTriple?: string;
+					targets?: Record<string, unknown>;
+				};
+				const nextAvailableRustTargetTriples = knownRustTargetTriples.filter((targetTriple) =>
+					Object.prototype.hasOwnProperty.call(manifest.targets || {}, targetTriple)
+				);
+				if (!nextAvailableRustTargetTriples.length || cancelled) return;
+				availableRustTargetTriples = [...nextAvailableRustTargetTriples];
+				const storedRustTargetTriple = localStorage.getItem('rustTargetTriple');
+				const nextDefaultTargetTriple = nextAvailableRustTargetTriples.includes(
+					manifest.defaultTargetTriple as RustTargetTriple
+				)
+					? (manifest.defaultTargetTriple as RustTargetTriple)
+					: nextAvailableRustTargetTriples[0];
+				if (
+					storedRustTargetTriple &&
+					nextAvailableRustTargetTriples.includes(storedRustTargetTriple as RustTargetTriple)
+				) {
+					rustTargetTriple = storedRustTargetTriple as RustTargetTriple;
+					return;
+				}
+				if (!nextAvailableRustTargetTriples.includes(rustTargetTriple)) {
+					rustTargetTriple = nextDefaultTargetTriple;
+				}
+			} catch {
+				if (cancelled) return;
+				availableRustTargetTriples = ['wasm32-wasip1', 'wasm32-wasip2'];
+				const storedRustTargetTriple = localStorage.getItem('rustTargetTriple');
+				if (
+					(storedRustTargetTriple === 'wasm32-wasip1' ||
+						storedRustTargetTriple === 'wasm32-wasip2') &&
+					availableRustTargetTriples.includes(storedRustTargetTriple)
+				) {
+					rustTargetTriple = storedRustTargetTriple;
+					return;
+				}
+				if (!availableRustTargetTriples.includes(rustTargetTriple)) {
+					rustTargetTriple = 'wasm32-wasip1';
+				}
+			}
+		})();
+		return () => {
+			cancelled = true;
+		};
 	});
 
 	$effect(() => {
@@ -406,8 +463,9 @@
 					<label class="select-chip">
 						<span class="material-symbols-outlined">conversion_path</span>
 						<select id="rust-target-triple" bind:value={rustTargetTriple}>
-							<option value="wasm32-wasip1">wasm32-wasip1</option>
-							<option value="wasm32-wasip2">wasm32-wasip2</option>
+							{#each availableRustTargetTriples as targetTriple}
+								<option value={targetTriple}>{targetTriple}</option>
+							{/each}
 						</select>
 					</label>
 				{/if}
@@ -439,9 +497,14 @@
 		{/if}
 		{#if language === 'RUST'}
 			<p class="hint">
-				Type into the terminal below and press Enter to send a line. Choose `wasm32-wasip1`
-				for preview1 core wasm or `wasm32-wasip2` for preview2 component execution. Use
-				Ctrl+D or the EOF button while running if the program reads stdin until EOF.
+				Type into the terminal below and press Enter to send a line. The selector only shows
+				Rust targets advertised by the bundled wasm-rust runtime manifest. `wasm32-wasip1`
+				uses preview1 core wasm. {#if availableRustTargetTriples.includes('wasm32-wasip2')}
+					`wasm32-wasip2` uses preview2 component execution.
+				{/if} {#if availableRustTargetTriples.includes('wasm32-wasip3')}
+					`wasm32-wasip3` is only shown for the current transitional component path while
+					upstream Rust still requires the documented libc patch.
+				{/if} Use Ctrl+D or the EOF button while running if the program reads stdin until EOF.
 			</p>
 		{/if}
 		{#if debugLanguage}

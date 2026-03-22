@@ -29,7 +29,8 @@ describe('syncWasmRustDist', () => {
 		const versionModulePath = path.join(await makeTempDir(), 'wasmRustVersion.ts');
 
 		await writeFixtureFile(sourceDir, 'index.js', 'export default "compiler";\n');
-		await writeFixtureFile(sourceDir, 'runtime/runtime-manifest.json', '{"ok":true}\n');
+		await writeFixtureFile(sourceDir, 'runtime/runtime-manifest.v3.json', '{"manifestVersion":3}\n');
+		await writeFixtureFile(sourceDir, 'runtime/packs/sysroot/wasm32-wasip1.index.json', '{"ok":true}\n');
 		await writeFixtureFile(sourceDir, 'runtime/llvm/llc.wasm', 'llc');
 		await writeFixtureFile(sourceDir, 'types.d.ts', 'export type Ignored = true;\n');
 		await writeFixtureFile(sourceDir, 'vendor/browser_wasi_shim/tsconfig.tsbuildinfo', 'ignored');
@@ -40,7 +41,10 @@ describe('syncWasmRustDist', () => {
 			'compiler'
 		);
 		await expect(
-			readFile(path.join(targetDir, 'runtime/runtime-manifest.json'), 'utf8')
+			readFile(path.join(targetDir, 'runtime/runtime-manifest.v3.json'), 'utf8')
+		).resolves.toContain('"manifestVersion":3');
+		await expect(
+			readFile(path.join(targetDir, 'runtime/packs/sysroot/wasm32-wasip1.index.json'), 'utf8')
 		).resolves.toContain('"ok":true');
 		await expect(readFile(path.join(targetDir, 'runtime/llvm/llc.wasm'), 'utf8')).resolves.toBe(
 			'llc'
