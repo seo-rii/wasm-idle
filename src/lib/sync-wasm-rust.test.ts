@@ -30,6 +30,7 @@ describe('syncWasmRustDist', () => {
 
 		await writeFixtureFile(sourceDir, 'index.js', 'export default "compiler";\n');
 		await writeFixtureFile(sourceDir, 'runtime/runtime-manifest.v3.json', '{"manifestVersion":3}\n');
+		await writeFixtureFile(sourceDir, 'runtime/rustc/rustc.wasm.gz', 'gzip-rustc');
 		await writeFixtureFile(sourceDir, 'runtime/packs/sysroot/wasm32-wasip1.index.json', '{"ok":true}\n');
 		await writeFixtureFile(sourceDir, 'runtime/llvm/llc.wasm', 'llc');
 		await writeFixtureFile(sourceDir, 'types.d.ts', 'export type Ignored = true;\n');
@@ -43,6 +44,10 @@ describe('syncWasmRustDist', () => {
 		await expect(
 			readFile(path.join(targetDir, 'runtime/runtime-manifest.v3.json'), 'utf8')
 		).resolves.toContain('"manifestVersion":3');
+		await expect(
+			readFile(path.join(targetDir, 'runtime/rustc/rustc.wasm.gz'), 'utf8')
+		).resolves.toBe('gzip-rustc');
+		await expect(readFile(path.join(targetDir, 'runtime/rustc/rustc.wasm'), 'utf8')).rejects.toThrow();
 		await expect(
 			readFile(path.join(targetDir, 'runtime/packs/sysroot/wasm32-wasip1.index.json'), 'utf8')
 		).resolves.toContain('"ok":true');
