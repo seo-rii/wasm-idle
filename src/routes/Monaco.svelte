@@ -28,14 +28,12 @@ int main() {
     if (!(std::cin >> n)) n = 4;
     std::cout << "factorial_plus_bonus=" << factorial(n) + bonus << "\\n";
 }`,
-		python: `import sys
-
-BONUS = 3
+		python: `BONUS = 3
 
 def factorial(n):
     return 1 if n <= 1 else n * factorial(n - 1)
 
-tokens = sys.stdin.read().split()
+tokens = input().split()
 n = int(tokens[0]) if tokens else 4
 print(f"factorial_plus_bonus={factorial(n) + BONUS}")`,
 		java: `import java.util.Scanner;
@@ -89,6 +87,29 @@ fn main() {
     io::stdin().read_line(&mut input).unwrap();
     let n = input.trim().parse::<i32>().unwrap_or(4);
     println!("preview2_component={}", preview2_label);
+    println!("factorial_plus_bonus={}", factorial(n) + BONUS);
+}`,
+		'wasm32-wasip3': `#[cfg(not(target_env = "p3"))]
+compile_error!("This example requires wasm32-wasip3.");
+
+use std::env;
+use std::io;
+
+// wasm32-wasip3 is currently a transitional component target in the browser runtime.
+static BONUS: i32 = 3;
+
+fn factorial(n: i32) -> i32 {
+    if n <= 1 { 1 } else { n * factorial(n - 1) }
+}
+
+fn main() {
+    let preview3_label = env::args()
+        .nth(1)
+        .unwrap_or_else(|| "preview3-transition".to_string());
+    let mut input = String::new();
+    io::stdin().read_line(&mut input).unwrap();
+    let n = input.trim().parse::<i32>().unwrap_or(4);
+    println!("preview3_transition={}", preview3_label);
     println!("factorial_plus_bonus={}", factorial(n) + BONUS);
 }`
 	};
@@ -214,7 +235,8 @@ fn main() {
 		const currentValue = editor.getValue();
 		if (
 			currentValue !== rustDefaults['wasm32-wasip1'] &&
-			currentValue !== rustDefaults['wasm32-wasip2']
+			currentValue !== rustDefaults['wasm32-wasip2'] &&
+			currentValue !== rustDefaults['wasm32-wasip3']
 		) {
 			return;
 		}

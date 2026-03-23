@@ -123,6 +123,7 @@ class Rust implements Sandbox {
 		return new Promise<boolean | string>((resolve, reject) => {
 			if (!this.worker) return reject('Worker not loaded');
 			const { programArgs } = resolveSandboxExecutionArgs('RUST', args, options);
+			const targetTriple = options.rustTargetTriple || 'wasm32-wasip1';
 			const _uid = ++this.uid;
 			this.activeReject = reject;
 			const handler = (event: Event & { data: any }) => {
@@ -159,6 +160,7 @@ class Rust implements Sandbox {
 				prepare,
 				buffer: this.buffer,
 				args: programArgs,
+				targetTriple,
 				log: _log
 			});
 		});

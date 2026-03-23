@@ -79,7 +79,16 @@ describe('Rust sandbox', () => {
 
 		await sandbox.load('/absproxy/5173');
 		await expect(sandbox.run(code, true)).resolves.toBe(true);
-		await expect(sandbox.run(code, false, true, undefined, ['one', 'two'])).resolves.toBe(true);
+		await expect(
+			sandbox.run(code, false, true, undefined, ['one', 'two'], {
+				rustTargetTriple: 'wasm32-wasip2'
+			})
+		).resolves.toBe(true);
+		await expect(
+			sandbox.run(code, false, true, undefined, ['three'], {
+				rustTargetTriple: 'wasm32-wasip3'
+			})
+		).resolves.toBe(true);
 
 		expect(workerInstances).toHaveLength(1);
 		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
@@ -105,6 +114,17 @@ describe('Rust sandbox', () => {
 				prepare: false,
 				code,
 				args: ['one', 'two'],
+				targetTriple: 'wasm32-wasip2',
+				log: true
+			})
+		);
+		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
+			4,
+			expect.objectContaining({
+				prepare: false,
+				code,
+				args: ['three'],
+				targetTriple: 'wasm32-wasip3',
 				log: true
 			})
 		);

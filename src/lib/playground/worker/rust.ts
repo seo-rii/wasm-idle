@@ -1,4 +1,3 @@
-import { Fd, File, OpenFile, PreopenDirectory, WASI, wasi } from '@bjorn3/browser_wasi_shim';
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
 
 declare var self: any;
@@ -11,114 +10,28 @@ self.document = {
 
 let stdinBufferRust: Int32Array | null = null;
 let compilerUrl = '';
-let assetPath = '';
+let runtimeBaseUrl = '';
 let loadedCompilerUrl = '';
-let compilerPromise: Promise<any> | null = null;
-let compiledCode = '';
-let compiledWasm: Uint8Array | null = null;
-
-class TerminalFd extends Fd {
-	private readonly decoder = new TextDecoder();
-
-	constructor(
-		private readonly output: (text: string) => void,
-		private readonly trace?: (message: string) => void
-	) {
-		super();
-	}
-
-	fd_filestat_get() {
-		return {
-			ret: wasi.ERRNO_SUCCESS,
-			filestat: new wasi.Filestat(0n, wasi.FILETYPE_CHARACTER_DEVICE, 0n)
-		};
-	}
-
-	fd_fdstat_get() {
-		const fdstat = new wasi.Fdstat(wasi.FILETYPE_CHARACTER_DEVICE, 0);
-		fdstat.fs_rights_base = BigInt(wasi.RIGHTS_FD_WRITE);
-		return {
-			ret: wasi.ERRNO_SUCCESS,
-			fdstat
-		};
-	}
-
-	fd_write(data: Uint8Array) {
-		const text = this.decoder.decode(data, { stream: true });
-		this.trace?.(`fd_write(bytes=${data.byteLength}, text=${JSON.stringify(text)})`);
-		if (text) {
-			this.output(text);
+let compilerPromise: Promise<{
+	compiler: any;
+	executeBrowserRustArtifact: (
+		artifact: any,
+		runtimeBaseUrl: string,
+		options?: {
+			args?: string[];
+			env?: Record<string, string>;
+			stdin?: () => string | null;
+			stdout?: (chunk: string) => void;
+			stderr?: (chunk: string) => void;
 		}
-		return {
-			ret: wasi.ERRNO_SUCCESS,
-			nwritten: data.byteLength
-		};
-	}
-
-	flush() {
-		const text = this.decoder.decode();
-		if (!text) {
-			return;
-		}
-		this.trace?.(`fd_flush(text=${JSON.stringify(text)})`);
-		this.output(text);
-	}
-}
-
-class StdinFd extends Fd {
-	private readonly encoder = new TextEncoder();
-	private currentChunk = new Uint8Array(0);
-	private currentOffset = 0;
-
-	constructor(
-		private readonly readInput: () => string | null,
-		private readonly trace?: (message: string) => void
-	) {
-		super();
-	}
-
-	fd_filestat_get() {
-		return {
-			ret: wasi.ERRNO_SUCCESS,
-			filestat: new wasi.Filestat(0n, wasi.FILETYPE_CHARACTER_DEVICE, 0n)
-		};
-	}
-
-	fd_fdstat_get() {
-		const fdstat = new wasi.Fdstat(wasi.FILETYPE_CHARACTER_DEVICE, 0);
-		fdstat.fs_rights_base = BigInt(wasi.RIGHTS_FD_READ);
-		return {
-			ret: wasi.ERRNO_SUCCESS,
-			fdstat
-		};
-	}
-
-	fd_read(size: number) {
-		while (this.currentOffset >= this.currentChunk.length) {
-			const chunk = this.readInput();
-			if (chunk == null) {
-				this.trace?.('fd_read(bytes=0, eof=true)');
-				return {
-					ret: wasi.ERRNO_SUCCESS,
-					data: new Uint8Array(0)
-				};
-			}
-			this.currentChunk = this.encoder.encode(chunk);
-			this.currentOffset = 0;
-			this.trace?.(
-				`fd_fill(bytes=${this.currentChunk.byteLength}, text=${JSON.stringify(chunk)})`
-			);
-		}
-
-		const data = this.currentChunk.slice(this.currentOffset, this.currentOffset + size);
-		this.currentOffset += data.byteLength;
-		this.trace?.(`fd_read(bytes=${data.byteLength})`);
-		return {
-			ret: wasi.ERRNO_SUCCESS,
-			data
-		};
-	}
-}
+	) => Promise<{
+		exitCode: number | null;
+		stdout: string;
+		stderr: string;
+	}>;
+}> | null = null;
+let compiledArtifact: any = null;
+let compiledCacheKey = '';
 
 async function loadCompiler(url: string) {
 	if (!url) {
@@ -130,8 +43,13 @@ async function loadCompiler(url: string) {
 		return await compilerPromise;
 	}
 	loadedCompilerUrl = url;
-	compiledCode = '';
-	compiledWasm = null;
+	try {
+		runtimeBaseUrl = new URL('./runtime/', url).toString();
+	} catch {
+		runtimeBaseUrl = url;
+	}
+	compiledArtifact = null;
+	compiledCacheKey = '';
 	compilerPromise = (async () => {
 		const module = await import(/* @vite-ignore */ url);
 		const factory =
@@ -145,18 +63,31 @@ async function loadCompiler(url: string) {
 				'wasm-rust module must export createRustCompiler or a default factory'
 			);
 		}
-		return await factory();
+		if (typeof module.executeBrowserRustArtifact !== 'function') {
+			throw new Error('wasm-rust module must export executeBrowserRustArtifact');
+		}
+		return {
+			compiler: await factory(),
+			executeBrowserRustArtifact: module.executeBrowserRustArtifact
+		};
 	})();
 	return await compilerPromise;
 }
 
 self.onmessage = async (event: { data: any }) => {
-	const { load, compilerUrl: nextCompilerUrl, path, buffer, code, prepare, args = [], log } =
-		event.data;
+	const {
+		load,
+		compilerUrl: nextCompilerUrl,
+		buffer,
+		code,
+		prepare,
+		args = [],
+		targetTriple = 'wasm32-wasip1',
+		log
+	} = event.data;
 	try {
 		if (load) {
 			compilerUrl = nextCompilerUrl;
-			assetPath = path;
 			if (log) {
 				console.log(`[wasm-idle:rust-worker] load compilerUrl=${compilerUrl}`);
 			}
@@ -166,17 +97,19 @@ self.onmessage = async (event: { data: any }) => {
 		}
 
 		stdinBufferRust = new Int32Array(buffer);
-		const compiler = await loadCompiler(compilerUrl);
-		if (!compiledWasm || compiledCode !== code) {
+		const runtime = await loadCompiler(compilerUrl);
+		const compileCacheKey = `${targetTriple}\n${code}`;
+		if (!compiledArtifact || compiledCacheKey !== compileCacheKey) {
 			if (log) {
 				console.log(
-					`[wasm-idle:rust-worker] compile start prepare=${String(prepare)} bytes=${code.length}`
+					`[wasm-idle:rust-worker] compile start prepare=${String(prepare)} target=${targetTriple} bytes=${code.length}`
 				);
 			}
-			const result = await compiler.compile({
+			const result = await runtime.compiler.compile({
 				code,
 				edition: '2024',
 				crateType: 'bin',
+				targetTriple,
 				prepare,
 				log
 			});
@@ -197,20 +130,14 @@ self.onmessage = async (event: { data: any }) => {
 				);
 			}
 			if (result.stderr) postMessage({ output: result.stderr });
-			const wasm = result.artifact?.wasm;
-			if (!wasm) {
-				if (result.artifact?.wat) {
-					throw new Error(
-						'wasm-rust returned a WAT artifact, but this wasm-idle build expects wasm bytes'
-					);
-				}
+			if (!result.artifact?.wasm) {
 				throw new Error('wasm-rust did not return a wasm artifact');
 			}
-			compiledWasm = wasm instanceof Uint8Array ? wasm : new Uint8Array(wasm);
-			compiledCode = code;
+			compiledArtifact = result.artifact;
+			compiledCacheKey = compileCacheKey;
 			if (log) {
 				console.log(
-					`[wasm-idle:rust-worker] cached wasm bytes=${compiledWasm.byteLength}`
+					`[wasm-idle:rust-worker] cached artifact target=${compiledArtifact.targetTriple} format=${compiledArtifact.format}`
 				);
 			}
 		}
@@ -224,50 +151,52 @@ self.onmessage = async (event: { data: any }) => {
 		}
 
 		if (log) {
-			console.log('[wasm-idle:rust-worker] compiling wasm module');
-		}
-		const module = await WebAssembly.compile(Uint8Array.from(compiledWasm!));
-		if (log) {
 			console.log(
-				`[wasm-idle:rust-worker] wasm module compiled imports=${JSON.stringify(WebAssembly.Module.imports(module))} exports=${JSON.stringify(WebAssembly.Module.exports(module))}`
+				`[wasm-idle:rust-worker] runtime start target=${compiledArtifact.targetTriple} format=${compiledArtifact.format}`
 			);
 		}
-		const stdout = new TerminalFd(
-			(output) => postMessage({ output }),
-			log ? (message) => console.log(`[wasm-idle:rust-stdout] ${message}`) : undefined
-		);
-		const stderr = new TerminalFd(
-			(output) => postMessage({ output }),
-			log ? (message) => console.log(`[wasm-idle:rust-stderr] ${message}`) : undefined
-		);
-		const stdin = new StdinFd(
-			() => waitForBufferedStdin(stdinBufferRust!, () => postMessage({ buffer: true })),
-			log ? (message) => console.log(`[wasm-idle:rust-stdin] ${message}`) : undefined
-		);
-		const wasiInstance = new WASI(
-			['main.wasm', ...args],
-			['USER=jungol'],
-			[
-				stdin,
-				stdout,
-				stderr,
-				new PreopenDirectory('/tmp', new Map())
-			]
-		);
-		const instance = await WebAssembly.instantiate(module, {
-			wasi_snapshot_preview1: wasiInstance.wasiImport
+		const execution = await runtime.executeBrowserRustArtifact(compiledArtifact, runtimeBaseUrl, {
+			args,
+			env: {
+				USER: 'jungol'
+			},
+			stdin: () => {
+				const chunk = waitForBufferedStdin(stdinBufferRust!, () => postMessage({ buffer: true }));
+				if (chunk == null) {
+					if (log) {
+						console.log('[wasm-idle:rust-stdin] fd_read(bytes=0, eof=true)');
+					}
+					return null;
+				}
+				if (log) {
+					console.log(
+						`[wasm-idle:rust-stdin] fd_fill(bytes=${new TextEncoder().encode(chunk).byteLength}, text=${JSON.stringify(chunk)})`
+					);
+				}
+				return chunk;
+			},
+			stdout: (output) => {
+				if (output) {
+					postMessage({ output });
+				}
+			},
+			stderr: (output) => {
+				if (output) {
+					postMessage({ output });
+				}
+			}
 		});
 		if (log) {
-			console.log('[wasm-idle:rust-worker] wasi instance ready');
+			console.log(
+				`[wasm-idle:rust-worker] wasi run complete exitCode=${String(execution.exitCode)}`
+			);
 		}
-		const exitCode = wasiInstance.start(instance as any);
-		stdout.flush();
-		stderr.flush();
-		if (log) {
-			console.log(`[wasm-idle:rust-worker] wasi run complete exitCode=${String(exitCode)}`);
-		}
-		if (exitCode !== 0) {
-			throw new Error(`Rust program exited with code ${exitCode}`);
+		if (execution.exitCode !== 0) {
+			throw new Error(
+				execution.stderr
+					? `Rust program exited with code ${execution.exitCode}\n${execution.stderr}`
+					: `Rust program exited with code ${execution.exitCode}`
+			);
 		}
 		postMessage({ results: true });
 	} catch (error: any) {

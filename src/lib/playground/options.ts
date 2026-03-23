@@ -17,6 +17,8 @@ export interface CompilerDiagnostic {
 	message: string;
 }
 
+export type RustTargetTriple = 'wasm32-wasip1' | 'wasm32-wasip2' | 'wasm32-wasip3';
+
 export type DebugVariableKind = 'number' | 'bool' | 'array' | 'text';
 export type DebugArrayElementKind = 'int' | 'float' | 'double' | 'bool' | 'char';
 
@@ -56,6 +58,7 @@ export interface SandboxExecutionOptions {
 	programArgs?: string[];
 	cppVersion?: string;
 	cVersion?: string;
+	rustTargetTriple?: RustTargetTriple;
 }
 
 export interface ResolvedSandboxExecutionArgs {
