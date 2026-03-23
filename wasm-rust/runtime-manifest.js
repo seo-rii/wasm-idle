@@ -105,6 +105,15 @@ function parseCompilerConfig(value, label) {
         rustcMemory: parseRustcMemory(object.rustcMemory, `${label}.rustcMemory`)
     };
 }
+function normalizeRuntimeLlvmConfig(llvm) {
+    return {
+        llc: llvm.llc,
+        llcWasm: llvm.llcWasm || 'llvm/llc.wasm',
+        lld: llvm.lld,
+        lldWasm: llvm.lldWasm || 'llvm/lld.wasm',
+        lldData: llvm.lldData || 'llvm/lld.data'
+    };
+}
 function parseLinkConfig(value, label) {
     const object = expectObject(value, label);
     const pack = object.pack === undefined ? undefined : parseRuntimeAssetPack(object.pack, `${label}.pack`);
@@ -173,7 +182,22 @@ function parseRuntimeTargetConfig(value, label, targetTriple) {
             kind: expectCompileKind(compile.kind, `${label}.compile.kind`),
             llvm: {
                 llc: expectString(llvm.llc, `${label}.compile.llvm.llc`),
-                lld: expectString(llvm.lld, `${label}.compile.llvm.lld`)
+                ...(llvm.llcWasm === undefined
+                    ? {}
+                    : {
+                        llcWasm: expectString(llvm.llcWasm, `${label}.compile.llvm.llcWasm`)
+                    }),
+                lld: expectString(llvm.lld, `${label}.compile.llvm.lld`),
+                ...(llvm.lldWasm === undefined
+                    ? {}
+                    : {
+                        lldWasm: expectString(llvm.lldWasm, `${label}.compile.llvm.lldWasm`)
+                    }),
+                ...(llvm.lldData === undefined
+                    ? {}
+                    : {
+                        lldData: expectString(llvm.lldData, `${label}.compile.llvm.lldData`)
+                    })
             },
             link: parseLinkConfig(compile.link, `${label}.compile.link`)
         },
@@ -245,14 +269,45 @@ export function parseRuntimeManifest(value) {
         sysrootFiles: expectAssetFileArray(root.sysrootFiles, 'sysrootFiles'),
         llvm: {
             llc: expectString(llvm.llc, 'llvm.llc'),
-            lld: expectString(llvm.lld, 'llvm.lld')
+            ...(llvm.llcWasm === undefined
+                ? {}
+                : {
+                    llcWasm: expectString(llvm.llcWasm, 'llvm.llcWasm')
+                }),
+            lld: expectString(llvm.lld, 'llvm.lld'),
+            ...(llvm.lldWasm === undefined
+                ? {}
+                : {
+                    lldWasm: expectString(llvm.lldWasm, 'llvm.lldWasm')
+                }),
+            ...(llvm.lldData === undefined
+                ? {}
+                : {
+                    lldData: expectString(llvm.lldData, 'llvm.lldData')
+                })
         },
         link: parseLinkConfig(root.link, 'link')
     };
 }
 export function normalizeRuntimeManifest(value) {
     if (isNormalizedRuntimeManifest(value)) {
-        return value;
+        const targets = {};
+        for (const [targetTriple, targetConfig] of Object.entries(value.targets)) {
+            if (!targetConfig) {
+                continue;
+            }
+            targets[targetTriple] = {
+                ...targetConfig,
+                compile: {
+                    ...targetConfig.compile,
+                    llvm: normalizeRuntimeLlvmConfig(targetConfig.compile.llvm)
+                }
+            };
+        }
+        return {
+            ...value,
+            targets
+        };
     }
     if (isRuntimeManifestV2(value) || isRuntimeManifestV3(value)) {
         const targets = {};
@@ -273,7 +328,10 @@ export function normalizeRuntimeManifest(value) {
                         sysrootPack: targetConfig.sysrootPack
                     }
                     : {}),
-                compile: targetConfig.compile,
+                compile: {
+                    ...targetConfig.compile,
+                    llvm: normalizeRuntimeLlvmConfig(targetConfig.compile.llvm)
+                },
                 execution: targetConfig.execution
             };
         }
@@ -306,7 +364,7 @@ export function normalizeRuntimeManifest(value) {
                 sysrootFiles: value.sysrootFiles,
                 compile: {
                     kind: 'llvm-wasm',
-                    llvm: value.llvm,
+                    llvm: normalizeRuntimeLlvmConfig(value.llvm),
                     link: value.link
                 },
                 execution: {

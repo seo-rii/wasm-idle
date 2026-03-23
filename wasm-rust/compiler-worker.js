@@ -67,6 +67,9 @@ async function compileRustInWorker(request) {
     const threadPoolSize = 4;
     emitCompileWorkerLog(request, `[wasm-rust:compiler-worker] start target=${target.targetTriple} timeout=${request.manifest.compiler.compileTimeoutMs}ms`);
     const rustcUrl = resolveVersionedAssetUrl(request.runtimeBaseUrl, request.manifest.compiler.rustcWasm);
+    const packedSysrootEntriesPromise = target.sysrootPack
+        ? loadRuntimePackEntries(request.runtimeBaseUrl, target.sysrootPack)
+        : null;
     emitCompileWorkerProgress(request, {
         stage: 'fetch-rustc',
         completed: 0,
@@ -83,26 +86,25 @@ async function compileRustInWorker(request) {
         bytesCompleted: rustcBytes.byteLength,
         bytesTotal: rustcBytes.byteLength
     });
-    const rustcModule = await WebAssembly.compile(rustcBytes);
+    const rustcModulePromise = WebAssembly.compile(rustcBytes);
     let fetchedSysrootFiles = 0;
     let fetchedSysrootBytes = 0;
     const sysrootAssetTotal = target.sysrootPack?.fileCount || target.sysrootFiles?.length || 0;
-    emitCompileWorkerProgress(request, {
-        stage: 'fetch-sysroot',
-        completed: 0,
-        total: sysrootAssetTotal,
-        message: target.sysrootPack
-            ? `fetching ${sysrootAssetTotal} sysroot assets from pack`
-            : `fetching ${sysrootAssetTotal} sysroot assets`,
-        ...(target.sysrootPack
-            ? {
-                bytesTotal: target.sysrootPack.totalBytes
-            }
-            : {})
-    });
+    let rustcModule;
     let sysrootAssets;
     if (target.sysrootPack) {
-        const packedEntries = await loadRuntimePackEntries(request.runtimeBaseUrl, target.sysrootPack);
+        emitCompileWorkerProgress(request, {
+            stage: 'fetch-sysroot',
+            completed: 0,
+            total: sysrootAssetTotal,
+            message: `fetching ${sysrootAssetTotal} sysroot assets from pack`,
+            bytesTotal: target.sysrootPack.totalBytes
+        });
+        const [compiledRustcModule, packedEntries] = await Promise.all([
+            rustcModulePromise,
+            packedSysrootEntriesPromise
+        ]);
+        rustcModule = compiledRustcModule;
         sysrootAssets = packedEntries.map((entry) => {
             validateRuntimeAssetBytes(entry.runtimePath, entry.bytes);
             const sharedBuffer = new SharedArrayBuffer(entry.bytes.byteLength);
@@ -130,6 +132,12 @@ async function compileRustInWorker(request) {
         });
     }
     else if (target.sysrootFiles) {
+        emitCompileWorkerProgress(request, {
+            stage: 'fetch-sysroot',
+            completed: 0,
+            total: sysrootAssetTotal,
+            message: `fetching ${sysrootAssetTotal} sysroot assets`
+        });
         sysrootAssets = await Promise.all(target.sysrootFiles.map(async (entry) => {
             const assetUrl = resolveVersionedAssetUrl(request.runtimeBaseUrl, entry.asset);
             const bytes = await fetchRuntimeAssetBytes(assetUrl, `wasm-rust sysroot asset ${entry.asset}`);
@@ -156,6 +164,7 @@ async function compileRustInWorker(request) {
                 buffer: sharedBuffer
             };
         }));
+        rustcModule = await rustcModulePromise;
     }
     else {
         throw new Error(`missing sysroot assets for target ${target.targetTriple}`);
