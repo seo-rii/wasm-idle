@@ -98,11 +98,20 @@ function findMaximumCallStackErrors(messages, pageErrors) {
 async function readProbeSummary(page, activeState, pageErrors, consoleMessages, browserUrl) {
 	const transcript =
 		(await page.locator('[data-testid="terminal-debug-output"]').textContent().catch(() => '')) || '';
+	const availableRustTargets = await page
+		.locator('#rust-target-triple option')
+		.evaluateAll((elements) =>
+			elements
+				.map((element) => element.getAttribute('value') || '')
+				.filter((value) => value.length > 0)
+		)
+		.catch(() => []);
 	return {
 		url: browserUrl,
 		finalUrl: page.url(),
 		title: await page.title().catch(() => ''),
 		activeState,
+		availableRustTargets,
 		pageErrors,
 		transcript,
 		consoleTail: summarizeConsole(consoleMessages),
@@ -124,7 +133,7 @@ async function readActiveState(page) {
 }
 
 /**
- * @param {{ browserUrl: string; runTimeoutMs?: number; chromiumExecutable?: string; stdinText?: string; sendEof?: boolean; expectedOutput?: string; targetTriple?: 'wasm32-wasip1' | 'wasm32-wasip2' }} options
+ * @param {{ browserUrl: string; runTimeoutMs?: number; chromiumExecutable?: string; stdinText?: string; sendEof?: boolean; expectedOutput?: string; targetTriple?: 'wasm32-wasip1' | 'wasm32-wasip2' | 'wasm32-wasip3' }} options
  */
 export async function runRustBrowserProbe({
 	browserUrl,

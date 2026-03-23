@@ -6,7 +6,7 @@
  */
 export function resolveChromiumExecutable(explicitPath?: string): Promise<string>;
 /**
- * @param {{ browserUrl: string; runTimeoutMs?: number; chromiumExecutable?: string; stdinText?: string; sendEof?: boolean; expectedOutput?: string; targetTriple?: 'wasm32-wasip1' | 'wasm32-wasip2' }} options
+ * @param {{ browserUrl: string; runTimeoutMs?: number; chromiumExecutable?: string; stdinText?: string; sendEof?: boolean; expectedOutput?: string; targetTriple?: 'wasm32-wasip1' | 'wasm32-wasip2' | 'wasm32-wasip3' }} options
  */
 export function runRustBrowserProbe({ browserUrl, runTimeoutMs, chromiumExecutable, stdinText, sendEof, expectedOutput, targetTriple }: {
     browserUrl: string;
@@ -15,7 +15,7 @@ export function runRustBrowserProbe({ browserUrl, runTimeoutMs, chromiumExecutab
     stdinText?: string;
     sendEof?: boolean;
     expectedOutput?: string;
-    targetTriple?: 'wasm32-wasip1' | 'wasm32-wasip2';
+    targetTriple?: 'wasm32-wasip1' | 'wasm32-wasip2' | 'wasm32-wasip3';
 }): Promise<{
     url: string;
     finalUrl: string;
@@ -25,6 +25,7 @@ export function runRustBrowserProbe({ browserUrl, runTimeoutMs, chromiumExecutab
         sharedArrayBuffer: boolean;
         serviceWorkerControlled: boolean;
     };
+    availableRustTargets: string[];
     pageErrors: string[];
     transcript: string;
     consoleTail: string[];

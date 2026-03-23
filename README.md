@@ -17,6 +17,10 @@ cd wasm-idle
 pnpm run sync:wasm-rust
 ```
 
+The built-in Rust route now supports both `wasm32-wasip1` and `wasm32-wasip2`. The page exposes a
+target selector when Rust is active, defaults to `wasm32-wasip1`, and persists that choice in local
+storage.
+
 ## Browser regression commands
 
 Browser-level Rust checks are reproducible from this repo:
@@ -47,8 +51,8 @@ Playwright runs.
 If Rust ever reports `invalid metadata files for crate core` or `Unsupported archive identifier`,
 the browser almost always fetched a stale or wrong `wasm-rust` sysroot asset. Hard refresh the page
 and resync `static/wasm-rust/` from the sibling `wasm-rust/dist/`.
-When browser-rustc does retry, it now emits a visible warning with the exact retry reason instead of
-only a debug-level transition into attempt `2/5`, `3/5`, and so on.
+When browser-rustc does retry, it now emits a visible warning instead of only a debug-level
+transition into attempt `2/5`, `3/5`, and so on.
 When the Rust `log` option is enabled, those compile-time `wasm-rust` progress and retry lines are
 also forwarded into the terminal transcript before the final runtime output, so the browser console
 is no longer required to inspect build progress.
@@ -63,10 +67,14 @@ session; the repo-owned regression target is the local preview path above.
 
 Rust still supports an external browser compiler module for library consumers. Point `PUBLIC_WASM_RUST_COMPILER_URL` at a built `wasm-rust` ESM entry such as `.../wasm-rust/dist/index.js`, or pass `runtimeAssets.rust.compilerUrl` at runtime.
 
-The Rust browser path now executes returned WASI modules through
-`@bjorn3/browser_wasi_shim` inside the Rust worker. The generic `src/lib/clang/app.ts` host remains in
-place for other runtimes, but current `wasm-rust` artifacts are more reliable under a stricter preview1
-WASI host.
+The Rust browser path now executes returned artifacts through the target-appropriate runtime inside
+the Rust worker:
+
+- `wasm32-wasip1` runs as preview1 core wasm through `@bjorn3/browser_wasi_shim`
+- `wasm32-wasip2` runs as a preview2 component through `preview2-shim` plus transpiled `jco` output
+
+The generic `src/lib/clang/app.ts` host remains in place for other runtimes, but Rust now delegates
+execution to `wasm-rust` so the selected target and returned artifact format stay aligned.
 
 `Terminal` and `playground(...).load(...)` support either the legacy shared `path`/`rootUrl` or per-runtime asset config:
 

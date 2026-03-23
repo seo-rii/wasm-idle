@@ -1,4 +1,6 @@
 import { spawn } from 'node:child_process';
+import http from 'node:http';
+import https from 'node:https';
 import { createServer } from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,6 +14,65 @@ const REPO_ROOT = path.resolve(THIS_DIR, '..');
  */
 function isLocalHost(hostname) {
 	return hostname === 'localhost' || hostname === '127.0.0.1';
+}
+
+/**
+ * @param {string} browserUrl
+ */
+export function shouldReuseProvidedBrowserUrl(browserUrl) {
+	if (!browserUrl || process.env.WASM_IDLE_REUSE_LOCAL_PREVIEW !== '1') {
+		return false;
+	}
+	return isLocalHost(new URL(browserUrl).hostname);
+}
+
+/**
+ * @param {string} url
+ */
+async function probeHttp(url) {
+	return await new Promise((resolve, reject) => {
+		const targetUrl = new URL(url);
+		const request =
+			targetUrl.protocol === 'https:' ? https.request(targetUrl) : http.request(targetUrl);
+		request.once('response', (response) => {
+			response.resume();
+			resolve(response.statusCode || 0);
+		});
+		request.once('error', (error) => {
+			if (!isLocalHost(targetUrl.hostname) || error?.code !== 'EPERM') {
+				reject(error);
+				return;
+			}
+			const curl = spawn('curl', ['-sS', '-o', '/dev/null', '-w', '%{http_code}', url], {
+				stdio: ['ignore', 'pipe', 'pipe']
+			});
+			let stdout = '';
+			let stderr = '';
+			curl.stdout?.on('data', (chunk) => {
+				stdout += String(chunk);
+			});
+			curl.stderr?.on('data', (chunk) => {
+				stderr += String(chunk);
+			});
+			curl.once('exit', (code) => {
+				if (code !== 0) {
+					reject(
+						new Error(
+							stderr.trim() || `curl exited with code ${code ?? 'unknown'} while probing ${url}`
+						)
+					);
+					return;
+				}
+				const statusCode = Number.parseInt(stdout.trim(), 10);
+				if (!Number.isFinite(statusCode)) {
+					reject(new Error(`failed to parse curl status while probing ${url}: ${stdout.trim()}`));
+					return;
+				}
+				resolve(statusCode);
+			});
+		});
+		request.end();
+	});
 }
 
 /**
@@ -29,10 +90,8 @@ async function waitForHttp(url, timeoutMs, child, logs) {
 			);
 		}
 		try {
-			const response = await fetch(url, {
-				redirect: 'manual'
-			});
-			if (response.ok || response.status === 304) {
+			const statusCode = await probeHttp(url);
+			if (statusCode >= 200 && statusCode < 400) {
 				return;
 			}
 		} catch {

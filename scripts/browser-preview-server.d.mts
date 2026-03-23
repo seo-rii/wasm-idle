@@ -1,4 +1,8 @@
 /**
+ * @param {string} browserUrl
+ */
+export function shouldReuseProvidedBrowserUrl(browserUrl: string): boolean;
+/**
  * @param {{ origin?: string; basePath?: string; timeoutMs?: number }} options
  */
 export function startBrowserPreviewServer({ origin, basePath, timeoutMs }?: {

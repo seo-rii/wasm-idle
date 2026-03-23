@@ -1,4 +1,4 @@
-import { startBrowserPreviewServer } from './browser-preview-server.mjs';
+import { shouldReuseProvidedBrowserUrl, startBrowserPreviewServer } from './browser-preview-server.mjs';
 import { runRustBrowserProbe } from './rust-browser-probe-lib.mjs';
 
 const browserUrl = process.env.WASM_IDLE_BROWSER_URL || 'http://localhost:4173/absproxy/5173/';
@@ -13,7 +13,13 @@ let previewServer = null;
 
 try {
 	const targetUrl = new URL(browserUrl);
-	if (targetUrl.hostname === 'localhost' || targetUrl.hostname === '127.0.0.1') {
+	if (shouldReuseProvidedBrowserUrl(browserUrl)) {
+		previewServer = {
+			origin: `${targetUrl.protocol}//${targetUrl.host}`,
+			browserUrl,
+			close: async () => {}
+		};
+	} else if (targetUrl.hostname === 'localhost' || targetUrl.hostname === '127.0.0.1') {
 		previewServer = await startBrowserPreviewServer({
 			origin: `${targetUrl.protocol}//${targetUrl.host}`,
 			basePath: targetUrl.pathname
