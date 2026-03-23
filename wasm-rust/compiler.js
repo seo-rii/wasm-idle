@@ -13,15 +13,15 @@ const SUPPORTED_TARGET_TRIPLES = new Set([
     'wasm32-wasip3'
 ]);
 const PROGRESS_STAGE_RANGES = {
-    manifest: [0, 5],
-    'fetch-rustc': [5, 15],
-    'fetch-sysroot': [15, 45],
-    'prepare-fs': [45, 55],
-    'init-thread-pool': [55, 65],
-    'rustc-main': [65, 80],
-    'await-bitcode': [80, 88],
-    link: [88, 98],
-    componentize: [98, 99],
+    manifest: [0, 1],
+    'fetch-rustc': [1, 3],
+    'fetch-sysroot': [3, 8],
+    'prepare-fs': [8, 11],
+    'init-thread-pool': [11, 15],
+    'rustc-main': [15, 48],
+    'await-bitcode': [48, 68],
+    link: [68, 95],
+    componentize: [95, 99],
     retry: [0, 99],
     done: [100, 100]
 };
