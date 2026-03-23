@@ -32,7 +32,8 @@ class Rust implements Sandbox {
 		_code = '',
 		_log = true,
 		_args: string[] = [],
-		_options: SandboxExecutionOptions = {}
+		_options: SandboxExecutionOptions = {},
+		progress?: { set?: (value: number) => void } | import('svelte/store').Writable<number>
 	) {
 		return new Promise<void>(async (resolve, reject) => {
 			this.pendingInput = [];
@@ -73,7 +74,10 @@ class Rust implements Sandbox {
 					reject('Rust worker message deserialization failed');
 				};
 				this.worker.onmessage = (event: MessageEvent<any>) => {
-					if (event.data?.load) resolve();
+					if (event.data?.load) {
+						progress?.set?.(1);
+						resolve();
+					}
 					if (event.data?.error) reject(event.data.error);
 				};
 				this.worker.postMessage({
@@ -82,6 +86,7 @@ class Rust implements Sandbox {
 					path: this.assetPath
 				});
 			} else {
+				progress?.set?.(1);
 				resolve();
 			}
 		});
@@ -129,10 +134,13 @@ class Rust implements Sandbox {
 			const handler = (event: Event & { data: any }) => {
 				if (!this.worker) return reject('Worker not loaded');
 				if (_uid !== this.uid) return (this.worker.onmessage = null);
-				const { output, results, error, buffer, diagnostic } = event.data;
+				const { output, results, error, buffer, diagnostic, progress } = event.data;
 				if (buffer) {
 					this.waitingForInput = true;
 					this.flushPendingInput();
+				}
+				if (progress && typeof progress.percent === 'number') {
+					_prog?.set?.(Math.max(0, Math.min(progress.percent / 100, 1)));
 				}
 				if (output) this.output(output);
 				if (diagnostic) this.oncompilerdiagnostic?.(diagnostic);

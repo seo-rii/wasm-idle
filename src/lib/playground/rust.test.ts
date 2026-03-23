@@ -198,4 +198,47 @@ describe('Rust sandbox', () => {
 
 		expect(readBufferedStdin(runMessage.buffer)).toBe('42\n');
 	});
+
+	it('maps worker compile progress into the provided sandbox progress sink', async () => {
+		const sandbox = new Rust();
+		const worker = new MockWorker();
+		const values: number[] = [];
+
+		sandbox.worker = worker as unknown as Worker;
+		worker.postMessage.mockImplementationOnce(() => {
+			queueMicrotask(() => {
+				worker.onmessage?.({
+					data: {
+						progress: {
+							stage: 'fetch-rustc',
+							percent: 12
+						}
+					}
+				} as MessageEvent<any>);
+				worker.onmessage?.({
+					data: {
+						progress: {
+							stage: 'link',
+							percent: 93
+						}
+					}
+				} as MessageEvent<any>);
+				worker.onmessage?.({
+					data: {
+						results: true
+					}
+				} as MessageEvent<any>);
+			});
+		});
+
+		await expect(
+			sandbox.run('fn main() {}', true, true, {
+				set(value: number) {
+					values.push(value);
+				}
+			})
+		).resolves.toBe(true);
+
+		expect(values).toEqual([0.12, 0.93]);
+	});
 });

@@ -183,8 +183,13 @@
 			args: string[] = [],
 			options: SandboxExecutionOptions = {}
 		) {
-			const loadProgress = phaseProgress(prog, 0, 0.85);
-			const prepareProgress = phaseProgress(prog, 0.85, 0.99);
+			prog?.set?.(0);
+			const loadProgress =
+				language === 'RUST' ? phaseProgress(prog, 0, 0.05) : phaseProgress(prog, 0, 0.85);
+			const prepareProgress =
+				language === 'RUST'
+					? phaseProgress(prog, 0.05, 0.99)
+					: phaseProgress(prog, 0.85, 0.99);
 			await Promise.all([
 				initSandbox(language).then(() =>
 					sandbox.load(runtimeAssets || path, code, log, args, options, loadProgress)

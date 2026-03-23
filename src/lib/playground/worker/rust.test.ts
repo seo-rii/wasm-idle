@@ -214,4 +214,68 @@ describe('Rust worker', () => {
 		expect((globalThis as any).__lastExecution.artifact.format).toBe('component');
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
 	});
+
+	it('forwards structured compile progress back to the UI worker host', async () => {
+		const compilerModuleUrl = await createMockRustRuntimeModule(`
+			export async function createRustCompiler() {
+				return {
+					async compile(options) {
+						options.onProgress?.({
+							stage: 'fetch-sysroot',
+							attempt: 1,
+							maxAttempts: 5,
+							completed: 3,
+							total: 10,
+							percent: 34,
+							message: 'fetching sysroot'
+						});
+						return {
+							success: true,
+							artifact: {
+								wasm: new Uint8Array([0, 97, 115, 109]),
+								targetTriple: options.targetTriple,
+								format: 'core-wasm'
+							}
+						};
+					}
+				};
+			}
+
+			export async function executeBrowserRustArtifact() {
+				return {
+					exitCode: 0,
+					stdout: '',
+					stderr: ''
+				};
+			}
+
+			export default createRustCompiler;
+		`);
+
+		await import('./rust');
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				compilerUrl: compilerModuleUrl
+			}
+		});
+		await Promise.resolve();
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: 'fn main() {}',
+				prepare: true,
+				buffer: new SharedArrayBuffer(1024),
+				targetTriple: 'wasm32-wasip1'
+			}
+		});
+		await Promise.resolve();
+
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			progress: expect.objectContaining({
+				stage: 'fetch-sysroot',
+				percent: 34,
+				message: 'fetching sysroot'
+			})
+		});
+	});
 });

@@ -111,7 +111,10 @@ self.onmessage = async (event: { data: any }) => {
 				crateType: 'bin',
 				targetTriple,
 				prepare,
-				log
+				log,
+				onProgress(progress: unknown) {
+					postMessage({ progress });
+				}
 			});
 			if (log) {
 				console.log(

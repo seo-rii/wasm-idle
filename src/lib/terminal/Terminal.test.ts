@@ -55,4 +55,14 @@ describe('Terminal source', () => {
 			/<pre data-testid="terminal-debug-output" style="display: none;">\{debugOutput\}<\/pre>/
 		);
 	});
+
+	it('uses rust-specific progress windows instead of jumping straight to the prepare band', () => {
+		expect(source).toMatch(/prog\?\.set\?\.\(0\);/);
+		expect(source).toMatch(
+			/language === 'RUST' \? phaseProgress\(prog, 0, 0\.05\) : phaseProgress\(prog, 0, 0\.85\)/
+		);
+		expect(source).toMatch(
+			/language === 'RUST'\s+\? phaseProgress\(prog, 0\.05, 0\.99\)\s+: phaseProgress\(prog, 0\.85, 0\.99\)/
+		);
+	});
 });
