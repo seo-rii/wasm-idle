@@ -36,6 +36,18 @@ export async function linkBitcodeWithLlvmWasm(bitcode, manifest, target, runtime
         ((assetUrl) => import(/* @vite-ignore */ assetUrl));
     const fetchImpl = options.fetchImpl || fetch;
     const componentizeCoreWasm = options.componentizeCoreWasm || componentizeCoreWasmToPreview2Component;
+    const llcWasmAsset = target.compile.llvm.llcWasm || 'llvm/llc.wasm';
+    const llcWasmUrl = resolveRuntimeAssetUrl(runtimeBaseUrl, llcWasmAsset);
+    let cachedLlcWasm = linkAssetCache.get(llcWasmUrl);
+    if (!cachedLlcWasm) {
+        cachedLlcWasm = fetchRuntimeAssetBytes(llcWasmUrl, `wasm-rust llvm asset ${llcWasmAsset}`, fetchImpl);
+        linkAssetCache.set(llcWasmUrl, cachedLlcWasm);
+        cachedLlcWasm.catch(() => {
+            if (linkAssetCache.get(llcWasmUrl) === cachedLlcWasm) {
+                linkAssetCache.delete(llcWasmUrl);
+            }
+        });
+    }
     options.onProgress?.({
         stage: 'link',
         completed: 0,
@@ -47,8 +59,12 @@ export async function linkBitcodeWithLlvmWasm(bitcode, manifest, target, runtime
     const llcStderr = [];
     const llc = await Llc({
         locateFile(file) {
+            if (file === 'llc.wasm') {
+                return llcWasmUrl;
+            }
             return resolveRuntimeAssetUrl(runtimeBaseUrl, `llvm/${file}`);
         },
+        wasmBinary: await cachedLlcWasm,
         print(text) {
             llcStdout.push(String(text));
         },
@@ -77,12 +93,47 @@ export async function linkBitcodeWithLlvmWasm(bitcode, manifest, target, runtime
         total: 2,
         message: 'running lld link'
     });
+    const lldWasmAsset = target.compile.llvm.lldWasm || 'llvm/lld.wasm';
+    const lldWasmUrl = resolveRuntimeAssetUrl(runtimeBaseUrl, lldWasmAsset);
+    let cachedLldWasm = linkAssetCache.get(lldWasmUrl);
+    if (!cachedLldWasm) {
+        cachedLldWasm = fetchRuntimeAssetBytes(lldWasmUrl, `wasm-rust llvm asset ${lldWasmAsset}`, fetchImpl);
+        linkAssetCache.set(lldWasmUrl, cachedLldWasm);
+        cachedLldWasm.catch(() => {
+            if (linkAssetCache.get(lldWasmUrl) === cachedLldWasm) {
+                linkAssetCache.delete(lldWasmUrl);
+            }
+        });
+    }
+    const lldDataAsset = target.compile.llvm.lldData || 'llvm/lld.data';
+    const lldDataUrl = resolveRuntimeAssetUrl(runtimeBaseUrl, lldDataAsset);
+    let cachedLldData = linkAssetCache.get(lldDataUrl);
+    if (!cachedLldData) {
+        cachedLldData = fetchRuntimeAssetBytes(lldDataUrl, `wasm-rust llvm asset ${lldDataAsset}`, fetchImpl);
+        linkAssetCache.set(lldDataUrl, cachedLldData);
+        cachedLldData.catch(() => {
+            if (linkAssetCache.get(lldDataUrl) === cachedLldData) {
+                linkAssetCache.delete(lldDataUrl);
+            }
+        });
+    }
     const { default: Lld } = await loadRuntimeModule(resolveRuntimeAssetUrl(runtimeBaseUrl, target.compile.llvm.lld));
     const lldStdout = [];
     const lldStderr = [];
+    const lldDataBytes = await cachedLldData;
     const lld = await Lld({
         locateFile(file) {
+            if (file === 'lld.wasm') {
+                return lldWasmUrl;
+            }
+            if (file === 'lld.data') {
+                return lldDataUrl;
+            }
             return resolveRuntimeAssetUrl(runtimeBaseUrl, `llvm/${file}`);
+        },
+        wasmBinary: await cachedLldWasm,
+        getPreloadedPackage() {
+            return new Uint8Array(lldDataBytes).buffer;
         },
         print(text) {
             lldStdout.push(String(text));

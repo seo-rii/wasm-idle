@@ -27,7 +27,10 @@
         "kind": "llvm-wasm",
         "llvm": {
           "llc": "llvm/llc.js",
-          "lld": "llvm/lld.js"
+          "llcWasm": "llvm/llc.wasm.gz",
+          "lld": "llvm/lld.js",
+          "lldWasm": "llvm/lld.wasm.gz",
+          "lldData": "llvm/lld.data.gz"
         },
         "link": {
           "args": [
@@ -96,7 +99,10 @@
         "kind": "llvm-wasm+component-encoder",
         "llvm": {
           "llc": "llvm/llc.js",
-          "lld": "llvm/lld.js"
+          "llcWasm": "llvm/llc.wasm.gz",
+          "lld": "llvm/lld.js",
+          "lldWasm": "llvm/lld.wasm.gz",
+          "lldData": "llvm/lld.data.gz"
         },
         "link": {
           "args": [
@@ -167,7 +173,10 @@
         "kind": "llvm-wasm+component-encoder",
         "llvm": {
           "llc": "llvm/llc.js",
-          "lld": "llvm/lld.js"
+          "llcWasm": "llvm/llc.wasm.gz",
+          "lld": "llvm/lld.js",
+          "lldWasm": "llvm/lld.wasm.gz",
+          "lldData": "llvm/lld.data.gz"
         },
         "link": {
           "args": [

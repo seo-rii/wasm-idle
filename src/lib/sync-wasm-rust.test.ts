@@ -41,7 +41,9 @@ describe('syncWasmRustDist', () => {
 			'runtime/packs/link/wasm32-wasip1.pack.gz',
 			'gzip-link-pack'
 		);
-		await writeFixtureFile(sourceDir, 'runtime/llvm/llc.wasm', 'llc');
+		await writeFixtureFile(sourceDir, 'runtime/llvm/llc.wasm.gz', 'gzip-llc');
+		await writeFixtureFile(sourceDir, 'runtime/llvm/lld.wasm.gz', 'gzip-lld-wasm');
+		await writeFixtureFile(sourceDir, 'runtime/llvm/lld.data.gz', 'gzip-lld-data');
 		await writeFixtureFile(sourceDir, 'types.d.ts', 'export type Ignored = true;\n');
 		await writeFixtureFile(sourceDir, 'vendor/browser_wasi_shim/tsconfig.tsbuildinfo', 'ignored');
 
@@ -72,9 +74,18 @@ describe('syncWasmRustDist', () => {
 		await expect(
 			readFile(path.join(targetDir, 'runtime/packs/link/wasm32-wasip1.pack'), 'utf8')
 		).rejects.toThrow();
-		await expect(readFile(path.join(targetDir, 'runtime/llvm/llc.wasm'), 'utf8')).resolves.toBe(
-			'llc'
+		await expect(readFile(path.join(targetDir, 'runtime/llvm/llc.wasm.gz'), 'utf8')).resolves.toBe(
+			'gzip-llc'
 		);
+		await expect(readFile(path.join(targetDir, 'runtime/llvm/llc.wasm'), 'utf8')).rejects.toThrow();
+		await expect(
+			readFile(path.join(targetDir, 'runtime/llvm/lld.wasm.gz'), 'utf8')
+		).resolves.toBe('gzip-lld-wasm');
+		await expect(readFile(path.join(targetDir, 'runtime/llvm/lld.wasm'), 'utf8')).rejects.toThrow();
+		await expect(
+			readFile(path.join(targetDir, 'runtime/llvm/lld.data.gz'), 'utf8')
+		).resolves.toBe('gzip-lld-data');
+		await expect(readFile(path.join(targetDir, 'runtime/llvm/lld.data'), 'utf8')).rejects.toThrow();
 		await expect(readFile(path.join(targetDir, 'types.d.ts'), 'utf8')).rejects.toThrow();
 		await expect(
 			readFile(path.join(targetDir, 'vendor/browser_wasi_shim/tsconfig.tsbuildinfo'), 'utf8')
