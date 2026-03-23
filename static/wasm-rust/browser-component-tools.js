@@ -1,15 +1,27 @@
 import { fetchRuntimeAssetBytes } from './runtime-asset.js';
 import { resolveRuntimeAssetUrl } from './runtime-manifest.js';
-const JCO_BROWSER_MODULE = '../vendor/jco/src/browser.js';
-const JCO_WASM_TOOLS_MODULE = '../vendor/jco/obj/wasm-tools.js';
-const PREVIEW1_COMMAND_ADAPTER = '../vendor/jco/lib/wasi_snapshot_preview1.command.wasm';
-const PREVIEW2_CLI_MODULE = '../vendor/preview2-shim/lib/browser/cli.js';
-const PREVIEW2_CLOCKS_MODULE = '../vendor/preview2-shim/lib/browser/clocks.js';
-const PREVIEW2_FILESYSTEM_MODULE = '../vendor/preview2-shim/lib/browser/filesystem.js';
-const PREVIEW2_HTTP_MODULE = '../vendor/preview2-shim/lib/browser/http.js';
-const PREVIEW2_IO_MODULE = '../vendor/preview2-shim/lib/browser/io.js';
-const PREVIEW2_RANDOM_MODULE = '../vendor/preview2-shim/lib/browser/random.js';
-const PREVIEW2_SOCKETS_MODULE = '../vendor/preview2-shim/lib/browser/sockets.js';
+export const JCO_BROWSER_MODULE = '../vendor/jco/src/browser.js';
+export const JCO_WASM_TOOLS_MODULE = '../vendor/jco/obj/wasm-tools.js';
+export const PREVIEW1_COMMAND_ADAPTER = '../vendor/jco/lib/wasi_snapshot_preview1.command.wasm';
+export const PREVIEW2_CLI_MODULE = '../vendor/preview2-shim/lib/browser/cli.js';
+export const PREVIEW2_CLOCKS_MODULE = '../vendor/preview2-shim/lib/browser/clocks.js';
+export const PREVIEW2_FILESYSTEM_MODULE = '../vendor/preview2-shim/lib/browser/filesystem.js';
+export const PREVIEW2_HTTP_MODULE = '../vendor/preview2-shim/lib/browser/http.js';
+export const PREVIEW2_IO_MODULE = '../vendor/preview2-shim/lib/browser/io.js';
+export const PREVIEW2_RANDOM_MODULE = '../vendor/preview2-shim/lib/browser/random.js';
+export const PREVIEW2_SOCKETS_MODULE = '../vendor/preview2-shim/lib/browser/sockets.js';
+export const PREVIEW2_COMPONENT_RUNTIME_ASSETS = [
+    JCO_BROWSER_MODULE,
+    JCO_WASM_TOOLS_MODULE,
+    PREVIEW1_COMMAND_ADAPTER,
+    PREVIEW2_CLI_MODULE,
+    PREVIEW2_CLOCKS_MODULE,
+    PREVIEW2_FILESYSTEM_MODULE,
+    PREVIEW2_HTTP_MODULE,
+    PREVIEW2_IO_MODULE,
+    PREVIEW2_RANDOM_MODULE,
+    PREVIEW2_SOCKETS_MODULE
+];
 const symbolDispose = Symbol.dispose ?? Symbol.for('dispose');
 async function importRuntimeModule(runtimeBaseUrl, assetPath) {
     return (await import(

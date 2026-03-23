@@ -82,6 +82,11 @@
 	type WasmIdleDebugApi = {
 		writeTerminalInput: (text: string, eof?: boolean) => Promise<void>;
 	};
+	type WasmRustRuntimeModule = {
+		preloadBrowserRustRuntime?: (options?: {
+			targetTriple?: RustTargetTriple;
+		}) => Promise<void>;
+	};
 
 	function onDebugEvent(event: DebugSessionEvent) {
 		if (event.type === 'pause') {
@@ -312,6 +317,28 @@
 				}
 			}
 		})();
+		return () => {
+			cancelled = true;
+		};
+	});
+
+	$effect(() => {
+		if (!browser) return;
+		const compilerUrl = runtimeAssets.rust?.compilerUrl;
+		const preloadTargetTriple = availableRustTargetTriples.includes(rustTargetTriple)
+			? rustTargetTriple
+			: availableRustTargetTriples[0];
+		if (!compilerUrl || !preloadTargetTriple) return;
+		let cancelled = false;
+		(async () => {
+			const runtimeModule = (await import(
+				/* @vite-ignore */ compilerUrl
+			)) as WasmRustRuntimeModule;
+			if (cancelled) return;
+			await runtimeModule.preloadBrowserRustRuntime?.({
+				targetTriple: preloadTargetTriple
+			});
+		})().catch(() => {});
 		return () => {
 			cancelled = true;
 		};

@@ -56,6 +56,7 @@ describe('Monaco route debug sync', () => {
 			/\{#each availableRustTargetTriples as targetTriple\}\s+<option value=\{targetTriple\}>\{targetTriple\}<\/option>\s+\{\/each\}/s
 		);
 		expect(pageSource).toMatch(/runtime-manifest\.v3\.json\?v=\$\{WASM_RUST_ASSET_VERSION\}/);
+		expect(pageSource).toMatch(/preloadBrowserRustRuntime/);
 		expect(pageSource).toMatch(/clangdEnabled=\{clangdRequested\}/);
 	});
 });
