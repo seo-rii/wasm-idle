@@ -53,10 +53,22 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).toMatch(/<option value="RUST">Rust<\/option>/);
 		expect(pageSource).toMatch(/<select id="rust-target-triple" bind:value=\{rustTargetTriple\}>/);
 		expect(pageSource).toMatch(
-			/\{#each availableRustTargetTriples as targetTriple\}\s+<option value=\{targetTriple\}>\{targetTriple\}<\/option>\s+\{\/each\}/s
+			/\{#each availableRustTargetTriples as targetTriple \(targetTriple\)\}\s+<option value=\{targetTriple\}>\{targetTriple\}<\/option>\s+\{\/each\}/s
 		);
 		expect(pageSource).toMatch(/runtime-manifest\.v3\.json\?v=\$\{WASM_RUST_ASSET_VERSION\}/);
 		expect(pageSource).toMatch(/preloadBrowserRustRuntime/);
 		expect(pageSource).toMatch(/clangdEnabled=\{clangdRequested\}/);
+	});
+
+	it('keeps the editor pane shrinkable for the resizable example layout', () => {
+		expect(source).toMatch(/<div bind:this=\{divEl\} class="editor-host"><\/div>/);
+		expect(source).toMatch(
+			/main \{\s+flex: 1;\s+min-width: 0;\s+min-height: 0;\s+display: flex;/s
+		);
+		expect(source).toMatch(/overflow: hidden;/);
+		expect(source).toMatch(/\.editor-host \{\s+flex: 1;\s+min-height: 0;\s+\}/s);
+		expect(source).toMatch(
+			/@media \(max-width: 960px\) \{\s+main \{\s+min-height: 360px;\s+border-left: 0;\s+border-top: 1px solid #e5e7eb;\s+\}\s+\}/s
+		);
 	});
 });

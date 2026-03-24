@@ -1,3 +1,4 @@
+import layoutSource from './+layout.svelte?raw';
 import source from './+page.svelte?raw';
 import { compile } from 'svelte/compiler';
 import { describe, expect, it } from 'vitest';
@@ -68,7 +69,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/rustTargetTriple: language === 'RUST' \? rustTargetTriple : undefined/);
 		expect(source).toMatch(/<select id="rust-target-triple" bind:value=\{rustTargetTriple\}>/);
 		expect(source).toMatch(
-			/\{#each availableRustTargetTriples as targetTriple\}\s+<option value=\{targetTriple\}>\{targetTriple\}<\/option>\s+\{\/each\}/s
+			/\{#each availableRustTargetTriples as targetTriple \(targetTriple\)\}\s+<option value=\{targetTriple\}>\{targetTriple\}<\/option>\s+\{\/each\}/s
 		);
 		expect(source).toMatch(/rustTargetTriple=\{language === 'RUST' \? rustTargetTriple : undefined\}/);
 	});
@@ -90,5 +91,34 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/availableRustTargetTriples\.includes\('wasm32-wasip3'\)/);
 		expect(source).toMatch(/`wasm32-wasip3`\s+is only shown for the current transitional component path/);
 		expect(source).toMatch(/Use\s+Ctrl\+D or the EOF button while running/);
+	});
+
+	it('keeps the example workspace full-height, resizable, and hides debug panels until debug starts', () => {
+		expect(() =>
+			compile(layoutSource, {
+				filename: 'src/routes/+layout.svelte',
+				generate: 'client'
+			})
+		).not.toThrow();
+		expect(source).toMatch(/examplePaneWidth = \$state\(0\),\s+terminalPaneWidth = \$state<number \| null>\(null\),\s+resizingPane = \$state\(false\);/s);
+		expect(source).toMatch(/const desktopExampleLayout = \$derived\(examplePaneWidth > 960\);/);
+		expect(source).toMatch(/const terminalPanePixelWidth = \$derived\.by\(\(\) => \{/);
+		expect(source).toMatch(/\{#if debugLanguage && debugActive\}/);
+		expect(source).toMatch(/class="panel-resizer"/);
+		expect(source).toMatch(/role="slider"/);
+		expect(source).toMatch(/onpointerdown=\{\(event\) => \{/);
+		expect(source).toMatch(/onkeydown=\{\(event\) => \{/);
+		expect(source).toMatch(/height: 100dvh;/);
+		expect(source).toMatch(/@media \(max-width: 960px\) \{\s+main \{\s+height: auto;\s+min-height: 100vh;\s+min-height: 100dvh;/s);
+		expect(source).toMatch(/<div\s+class:panel-resizer--active=\{resizingPane\}\s+class="panel-resizer"/s);
+		expect(source).toMatch(/role="slider"/);
+		expect(layoutSource).toMatch(
+			/:global\(html\),\s+:global\(body\) \{\s+margin: 0;\s+min-height: 100%;\s+\}/s
+		);
+		expect(layoutSource).toMatch(
+			/:global\(body\) \{\s+min-height: 100vh;\s+min-height: 100dvh;\s+\}/s
+		);
+		expect(layoutSource).toMatch(/let \{ children \} = \$props\(\);/);
+		expect(layoutSource).toMatch(/\{@render children\(\)\}/);
 	});
 });

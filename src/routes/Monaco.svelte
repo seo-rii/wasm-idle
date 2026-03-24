@@ -308,18 +308,23 @@ fn main() {
 </script>
 
 <main>
-	<div bind:this={divEl} class="editor-host h-screen"></div>
+	<div bind:this={divEl} class="editor-host"></div>
 </main>
 
 <style>
 	main {
 		flex: 1;
+		min-width: 0;
+		min-height: 0;
+		display: flex;
 		border-left: 1px solid #e5e7eb;
 		position: relative;
+		overflow: hidden;
 	}
 
 	.editor-host {
-		height: 100%;
+		flex: 1;
+		min-height: 0;
 	}
 
 	:global(.monaco-editor .debug-breakpoint-glyph) {
@@ -341,5 +346,13 @@ fn main() {
 		color: #475569;
 		font-style: italic;
 		font-weight: 500;
+	}
+
+	@media (max-width: 960px) {
+		main {
+			min-height: 360px;
+			border-left: 0;
+			border-top: 1px solid #e5e7eb;
+		}
 	}
 </style>

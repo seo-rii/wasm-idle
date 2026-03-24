@@ -48,7 +48,11 @@
 		language = $state('CPP'),
 		runningMode = $state<'run' | 'debug' | null>(null),
 		progress = $state(-1),
-		init = $state(false);
+		init = $state(false),
+		examplePane = $state<HTMLElement | null>(null),
+		examplePaneWidth = $state(0),
+		terminalPaneWidth = $state<number | null>(null),
+		resizingPane = $state(false);
 
 	const progressRef = {
 		set(value: number) {
@@ -75,6 +79,30 @@
 	const progressLabel = $derived(
 		runningMode === 'debug' ? 'Preparing debug session' : 'Loading runtime'
 	);
+	const examplePaneHorizontalPadding = 40;
+	const panelResizerWidth = 14;
+	const desktopExampleLayout = $derived(examplePaneWidth > 960);
+	const resizablePaneWidth = $derived(
+		desktopExampleLayout
+			? Math.max(0, examplePaneWidth - examplePaneHorizontalPadding - panelResizerWidth)
+			: examplePaneWidth
+	);
+	const minTerminalPaneWidth = $derived(
+		desktopExampleLayout
+			? Math.min(420, Math.max(320, Math.floor(resizablePaneWidth * 0.28)))
+			: 0
+	);
+	const maxTerminalPaneWidth = $derived(
+		desktopExampleLayout
+			? Math.max(minTerminalPaneWidth, resizablePaneWidth - minTerminalPaneWidth)
+			: resizablePaneWidth
+	);
+	const terminalPanePixelWidth = $derived.by(() => {
+		if (!desktopExampleLayout || !resizablePaneWidth) return null;
+		const fallbackWidth = Math.round(resizablePaneWidth * 0.5);
+		const requestedWidth = terminalPaneWidth ?? fallbackWidth;
+		return Math.min(Math.max(requestedWidth, minTerminalPaneWidth), maxTerminalPaneWidth);
+	});
 	let availableRustTargetTriples = $state<RustTargetTriple[]>([
 		'wasm32-wasip1',
 		'wasm32-wasip2'
@@ -385,8 +413,11 @@
 	/>
 </svelte:head>
 
-<main>
-	<div class="terminal-pane">
+<main bind:this={examplePane} bind:clientWidth={examplePaneWidth}>
+	<div
+		class="terminal-pane"
+		style:width={terminalPanePixelWidth === null ? undefined : `${terminalPanePixelWidth}px`}
+	>
 		<section class="toolbar">
 			<div class="toolbar-row">
 				<div class="path-chip">
@@ -490,7 +521,7 @@
 					<label class="select-chip">
 						<span class="material-symbols-outlined">conversion_path</span>
 						<select id="rust-target-triple" bind:value={rustTargetTriple}>
-							{#each availableRustTargetTriples as targetTriple}
+							{#each availableRustTargetTriples as targetTriple (targetTriple)}
 								<option value={targetTriple}>{targetTriple}</option>
 							{/each}
 						</select>
@@ -534,7 +565,7 @@
 				{/if} Use Ctrl+D or the EOF button while running if the program reads stdin until EOF.
 			</p>
 		{/if}
-		{#if debugLanguage}
+		{#if debugLanguage && debugActive}
 			<section
 				class={[
 					'debug-shell',
@@ -703,6 +734,63 @@
 			/>
 		</div>
 	</div>
+	<div
+		class:panel-resizer--active={resizingPane}
+		class="panel-resizer"
+		role="slider"
+		aria-label="Resize example panes"
+		aria-orientation="horizontal"
+		aria-hidden={!desktopExampleLayout}
+		tabindex={desktopExampleLayout ? 0 : -1}
+		aria-valuemin={desktopExampleLayout ? minTerminalPaneWidth : undefined}
+		aria-valuemax={desktopExampleLayout ? maxTerminalPaneWidth : undefined}
+		aria-valuenow={desktopExampleLayout ? terminalPanePixelWidth ?? undefined : undefined}
+		onpointerdown={(event) => {
+			if (!desktopExampleLayout || !examplePane) return;
+			event.preventDefault();
+			const handle = event.currentTarget as HTMLDivElement;
+			const pointerId = event.pointerId;
+			const rect = examplePane.getBoundingClientRect();
+			const updateWidth = (clientX: number) => {
+				terminalPaneWidth = Math.min(
+					Math.max(
+						clientX - rect.left - examplePaneHorizontalPadding / 2 - panelResizerWidth / 2,
+						minTerminalPaneWidth
+					),
+					maxTerminalPaneWidth
+				);
+			};
+			updateWidth(event.clientX);
+			resizingPane = true;
+			handle.setPointerCapture(pointerId);
+			const handlePointerMove = (moveEvent: PointerEvent) => {
+				updateWidth(moveEvent.clientX);
+			};
+			const handlePointerUp = () => {
+				resizingPane = false;
+				handle.releasePointerCapture(pointerId);
+				handle.removeEventListener('pointermove', handlePointerMove);
+				handle.removeEventListener('pointerup', handlePointerUp);
+				handle.removeEventListener('pointercancel', handlePointerUp);
+			};
+			handle.addEventListener('pointermove', handlePointerMove);
+			handle.addEventListener('pointerup', handlePointerUp);
+			handle.addEventListener('pointercancel', handlePointerUp);
+		}}
+		onkeydown={(event) => {
+			if (!desktopExampleLayout) return;
+			if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+			event.preventDefault();
+			const step = event.key === 'ArrowLeft' ? -24 : 24;
+			const currentWidth = terminalPanePixelWidth ?? Math.round(resizablePaneWidth * 0.5);
+			terminalPaneWidth = Math.min(
+				Math.max(currentWidth + step, minTerminalPaneWidth),
+				maxTerminalPaneWidth
+			);
+		}}
+	>
+		<span class="panel-resizer__thumb" aria-hidden="true"></span>
+	</div>
 	{#key language}
 		<Monaco
 			language={language.toLowerCase()}
@@ -722,22 +810,79 @@
 
 <style>
 	main {
-		height: calc(100vh - 40px);
+		width: 100%;
+		height: 100vh;
+		height: 100dvh;
 		display: flex;
 		flex-direction: row;
+		padding: 20px;
+		box-sizing: border-box;
+		overflow: hidden;
 		background:
 			radial-gradient(circle at top left, rgba(20, 184, 166, 0.08), transparent 28%),
 			linear-gradient(180deg, #f8fbff 0%, #eef4fb 100%);
 	}
 
 	.terminal-pane {
+		flex: 0 0 auto;
 		width: 50%;
+		min-width: 320px;
 		height: 100%;
 		display: flex;
 		flex-direction: column;
 		min-height: 0;
 		padding-bottom: 6px;
+		padding-right: 6px;
 		box-sizing: border-box;
+		overflow-y: auto;
+	}
+
+	.panel-resizer {
+		flex: 0 0 14px;
+		width: 14px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0;
+		border: 0;
+		background: transparent;
+		appearance: none;
+		cursor: col-resize;
+		touch-action: none;
+		user-select: none;
+		position: relative;
+	}
+
+	.panel-resizer::before {
+		content: '';
+		width: 1px;
+		height: 100%;
+		border-radius: 999px;
+		background: linear-gradient(180deg, rgba(148, 163, 184, 0), rgba(148, 163, 184, 0.72), rgba(148, 163, 184, 0));
+	}
+
+	.panel-resizer__thumb {
+		position: absolute;
+		width: 6px;
+		height: 72px;
+		border-radius: 999px;
+		background: linear-gradient(180deg, rgba(15, 118, 110, 0.76), rgba(20, 184, 166, 0.98));
+		box-shadow:
+			0 10px 18px rgba(20, 184, 166, 0.18),
+			0 0 0 4px rgba(20, 184, 166, 0.08);
+		transition:
+			transform 0.18s ease,
+			box-shadow 0.18s ease,
+			background 0.18s ease;
+	}
+
+	.panel-resizer:hover .panel-resizer__thumb,
+	.panel-resizer:focus-visible .panel-resizer__thumb,
+	.panel-resizer--active .panel-resizer__thumb {
+		transform: scaleX(1.15);
+		box-shadow:
+			0 12px 22px rgba(20, 184, 166, 0.22),
+			0 0 0 5px rgba(20, 184, 166, 0.12);
 	}
 
 	.toolbar {
@@ -922,8 +1067,9 @@
 	}
 
 	.terminal-shell {
-		flex: 1;
+		flex: 1 1 auto;
 		min-height: 0;
+		min-height: 280px;
 	}
 
 	.material-symbols-outlined {
@@ -1356,6 +1502,27 @@
 	}
 
 	@media (max-width: 960px) {
+		main {
+			height: auto;
+			min-height: 100vh;
+			min-height: 100dvh;
+			flex-direction: column;
+			padding: 16px;
+			overflow: auto;
+		}
+
+		.terminal-pane {
+			width: 100% !important;
+			min-width: 0;
+			height: auto;
+			padding-right: 0;
+			padding-bottom: 0;
+		}
+
+		.panel-resizer {
+			display: none;
+		}
+
 		.debug-hero__stats {
 			width: 100%;
 			justify-content: flex-start;

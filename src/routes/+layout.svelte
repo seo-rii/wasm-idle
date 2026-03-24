@@ -3,6 +3,8 @@
 	import { base } from '$app/paths';
 	import { onMount } from 'svelte';
 
+	let { children } = $props();
+
 	if (browser)
 		onMount(async () => {
 			if ('serviceWorker' in navigator) {
@@ -25,4 +27,17 @@
 		});
 </script>
 
-<slot />
+{@render children()}
+
+<style>
+	:global(html),
+	:global(body) {
+		margin: 0;
+		min-height: 100%;
+	}
+
+	:global(body) {
+		min-height: 100vh;
+		min-height: 100dvh;
+	}
+</style>
