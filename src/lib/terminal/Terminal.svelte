@@ -279,9 +279,19 @@
 			});
 			term.open(ref);
 			term.onKey((e: { key: string; domEvent: KeyboardEvent }) => {
-				if (finish || !term) return;
+				if (!term) return;
 				const ev = e.domEvent;
 				const printable = !ev.altKey && !ev.ctrlKey && !ev.metaKey;
+				const isCopyShortcut = (ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'c';
+				if (isCopyShortcut && term.hasSelection()) {
+					const selectedText = term.getSelection();
+					if (selectedText) {
+						ev.preventDefault();
+						navigator.clipboard.writeText(selectedText).catch(() => {});
+						return;
+					}
+				}
+				if (finish) return;
 				onkey?.(ev);
 				if (ev.key === 'Enter') {
 					submitCurrentInput();
@@ -298,14 +308,8 @@
 					) {
 						appendInputText(e.key);
 					}
-				} else if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'c') {
-					if (term.hasSelection()) {
-						const selectedText = term.getSelection();
-						if (selectedText) {
-							navigator.clipboard.writeText(selectedText).catch(() => {});
-							return;
-						}
-					}
+				} else if (isCopyShortcut) {
+					ev.preventDefault();
 					sandbox.kill?.();
 				} else if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'd') {
 					if (input.length > 0) submitCurrentInput();
