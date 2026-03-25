@@ -22,7 +22,8 @@ export function evaluateDebugExpression(expression: string, variables: DebugVari
 	interface ResolvedObject {
 		[key: string]: ResolvedValue;
 	}
-	type ResolvedValue = ResolvedScalar | ResolvedValue[] | ResolvedObject;
+	type ResolvedArray = ResolvedValue[] & { truncated?: boolean };
+	type ResolvedValue = ResolvedScalar | ResolvedArray | ResolvedObject;
 	const parsedValues = new Map<string, ResolvedValue>();
 	const tokens: Token[] = [];
 	const parseQuotedValue = (text: string, start: number): { value: string; next: number } => {
@@ -124,11 +125,17 @@ export function evaluateDebugExpression(expression: string, variables: DebugVari
 		const character = text[index];
 		if (character === '[') {
 			index += 1;
-			const items: ResolvedValue[] = [];
+			const items: ResolvedArray = [];
 			while (true) {
 				while (/\s/.test(text[index] || '')) index += 1;
 				if (text[index] === ']') return { value: items, next: index + 1 };
-				if (text.startsWith('...', index)) throw new Error('unavailable');
+				if (text.startsWith('...', index)) {
+					items.truncated = true;
+					index += 3;
+					while (/\s/.test(text[index] || '')) index += 1;
+					if (text[index] === ']') return { value: items, next: index + 1 };
+					throw new Error('unsupported array preview');
+				}
 				const item = parsePreviewValue(text, index);
 				items.push(item.value);
 				index = item.next;
@@ -143,11 +150,17 @@ export function evaluateDebugExpression(expression: string, variables: DebugVari
 		}
 		if (character === '(') {
 			index += 1;
-			const items: ResolvedValue[] = [];
+			const items: ResolvedArray = [];
 			while (true) {
 				while (/\s/.test(text[index] || '')) index += 1;
 				if (text[index] === ')') return { value: items, next: index + 1 };
-				if (text.startsWith('...', index)) throw new Error('unavailable');
+				if (text.startsWith('...', index)) {
+					items.truncated = true;
+					index += 3;
+					while (/\s/.test(text[index] || '')) index += 1;
+					if (text[index] === ')') return { value: items, next: index + 1 };
+					throw new Error('unsupported tuple preview');
+				}
 				const item = parsePreviewValue(text, index);
 				items.push(item.value);
 				index = item.next;
@@ -267,9 +280,8 @@ export function evaluateDebugExpression(expression: string, variables: DebugVari
 					cursor += 1;
 					if (!Array.isArray(resolved) || !Number.isInteger(index))
 						throw new Error('unsupported index access');
-					const next = resolved[index];
-					if (next == null) throw new Error('unavailable');
-					resolved = next;
+					if (index < 0 || index >= resolved.length) throw new Error('unavailable');
+					resolved = resolved[index]!;
 					continue;
 				}
 				if (bracket?.type === 'dot') {
@@ -280,9 +292,8 @@ export function evaluateDebugExpression(expression: string, variables: DebugVari
 					cursor += 1;
 					if (Array.isArray(resolved) || !resolved || typeof resolved !== 'object')
 						throw new Error('unsupported member access');
-					const next = resolved[property.value];
-					if (next == null) throw new Error('unavailable');
-					resolved = next;
+					if (!Object.hasOwn(resolved, property.value)) throw new Error('unavailable');
+					resolved = resolved[property.value]!;
 					continue;
 				}
 				break;

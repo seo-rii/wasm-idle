@@ -40,6 +40,16 @@ describe('evaluateDebugExpression', () => {
 				{ name: 'A', value: '[{input: 1, s: 3, e: 5, l: 2}]' }
 			])
 		).toBe('3');
+		expect(
+			evaluateDebugExpression('A[i].s', [
+				{ name: 'i', value: '0' },
+				{
+					name: 'A',
+					value:
+						'[{input: 1, s: 3, e: 5, l: 2}, {input: 2, s: 4, e: 7, l: 3}, ...]'
+				}
+			])
+		).toBe('3');
 	});
 
 	it('treats unavailable locals as unavailable', () => {
