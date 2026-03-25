@@ -22,6 +22,22 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/title="Send EOF"/);
 	});
 
+	it('adds a run-to-cursor action that continues with a temporary cursor breakpoint', () => {
+		expect(source).toMatch(/cursorLine = \$state<number \| null>\(null\),\s+runToCursorLine = \$state<number \| null>\(null\),/s);
+		expect(source).toMatch(/const effectiveBreakpoints = \$derived\.by\(\(\) => \{/);
+		expect(source).toMatch(/const canRunToCursor = \$derived\(/);
+		expect(source).toMatch(/async function runToCursor\(targetLine = cursorLine\) \{/);
+		expect(source).toMatch(/await terminal\.setBreakpoints\?\.\(nextBreakpoints\);/);
+		expect(source).toMatch(/await terminal\.debugCommand\?\.\('continue'\);/);
+		expect(source).toMatch(/breakpoints: \[\.\.\.effectiveBreakpoints\],/);
+		expect(source).toMatch(/terminal\?\.setBreakpoints\?\.\(\[\.\.\.effectiveBreakpoints\]\);/);
+		expect(source).toMatch(/title=\{cursorLine \? `Run to Cursor \(L\$\{cursorLine\}\)` : 'Run to Cursor'\}/);
+		expect(source).toMatch(/aria-label=\{cursorLine \? `Run to Cursor \(L\$\{cursorLine\}\)` : 'Run to Cursor'\}/);
+		expect(source).toMatch(/onclick=\{\(\) => runToCursor\(\)\}/);
+		expect(source).toMatch(/disabled=\{!canRunToCursor\}/);
+		expect(source).toMatch(/<span class="material-symbols-outlined">play_circle<\/span>/);
+	});
+
 	it('passes a local wasm-rust bundle to the demo Terminal runtime assets', () => {
 		expect(source).toMatch(
 			/import \{ WASM_RUST_ASSET_VERSION \} from '\$lib\/playground\/wasmRustVersion';/
@@ -117,6 +133,9 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/@media \(max-width: 960px\) \{\s+main \{\s+height: auto;\s+min-height: 100vh;\s+min-height: 100dvh;/s);
 		expect(source).toMatch(/<div\s+class:panel-resizer--active=\{resizingPane\}\s+class="panel-resizer"/s);
 		expect(source).toMatch(/role="slider"/);
+		expect(source).toMatch(/breakpoints=\{effectiveBreakpoints\}/);
+		expect(source).toMatch(/onCursorLineChange=\{\(line\) => \(cursorLine = line\)\}/);
+		expect(source).toMatch(/onRunToCursor=\{runToCursor\}/);
 		expect(layoutSource).toMatch(
 			/:global\(html\),\s+:global\(body\) \{\s+margin: 0;\s+min-height: 100%;\s+\}/s
 		);

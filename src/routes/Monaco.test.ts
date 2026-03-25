@@ -28,6 +28,13 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(
 			/debugView = new MonacoDebugView\(Monaco, editor, onBreakpointsChange\);\s+debugView\.setBreakpoints\(breakpoints\);\s+debugView\.setPauseState\(pausedLine, debugLocals, debugLanguage\);/s
 		);
+		expect(source).toMatch(/onCursorLineChange\?: \(line: number \| null\) => void;/);
+		expect(source).toMatch(/onRunToCursor\?: \(line: number \| null\) => void;/);
+		expect(source).toMatch(/editor\.onDidChangeCursorPosition\(\(event\) => \{/);
+		expect(source).toMatch(/onCursorLineChange\?\.\(event\.position\?\.lineNumber \|\| null\);/);
+		expect(source).toMatch(/onCursorLineChange\?\.\(editor\.getPosition\(\)\?\.lineNumber \|\| 1\);/);
+		expect(source).toMatch(/editor\.addAction\(\{\s+id: 'wasm-idle-run-to-cursor',\s+label: 'Run to Cursor',/s);
+		expect(source).toMatch(/run: \(\) => onRunToCursor\?\.\(editor\?\.getPosition\(\)\?\.lineNumber \|\| null\)/);
 		expect(source).toMatch(
 			/if \(language !== 'cpp' \|\| !editor \|\| !clangdEnabled \|\| !clangdBaseUrl\) \{\s+session\?\.dispose\(\);\s+session = null;\s+clangdStatus = \{ state: 'disabled' \};\s+return;\s+\}/s
 		);

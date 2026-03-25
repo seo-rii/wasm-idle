@@ -130,6 +130,8 @@ fn main() {
 		debugLanguage?: DebugLanguageAdapter | null;
 		compilerDiagnostics?: CompilerDiagnostic[];
 		pausedLine?: number | null;
+		onCursorLineChange?: (line: number | null) => void;
+		onRunToCursor?: (line: number | null) => void;
 		onBreakpointsChange?: (lines: number[]) => void;
 	}
 
@@ -144,6 +146,8 @@ fn main() {
 		debugLanguage = null,
 		compilerDiagnostics = [],
 		pausedLine = null,
+		onCursorLineChange,
+		onRunToCursor,
 		onBreakpointsChange
 	}: Props = $props();
 	let Monaco: typeof monaco | null = null;
@@ -273,6 +277,17 @@ fn main() {
 				debugView = new MonacoDebugView(Monaco, editor, onBreakpointsChange);
 				debugView.setBreakpoints(breakpoints);
 				debugView.setPauseState(pausedLine, debugLocals, debugLanguage);
+				editor.onDidChangeCursorPosition((event) => {
+					onCursorLineChange?.(event.position?.lineNumber || null);
+				});
+				onCursorLineChange?.(editor.getPosition()?.lineNumber || 1);
+				editor.addAction({
+					id: 'wasm-idle-run-to-cursor',
+					label: 'Run to Cursor',
+					contextMenuGroupId: 'navigation',
+					contextMenuOrder: 0.5,
+					run: () => onRunToCursor?.(editor?.getPosition()?.lineNumber || null)
+				});
 				clangdStatus = { state: 'disabled' };
 				return;
 			}
@@ -288,6 +303,17 @@ fn main() {
 				debugView = new MonacoDebugView(Monaco, editor, onBreakpointsChange);
 				debugView.setBreakpoints(breakpoints);
 				debugView.setPauseState(pausedLine, debugLocals, debugLanguage);
+				editor.onDidChangeCursorPosition((event) => {
+					onCursorLineChange?.(event.position?.lineNumber || null);
+				});
+				onCursorLineChange?.(editor.getPosition()?.lineNumber || 1);
+				editor.addAction({
+					id: 'wasm-idle-run-to-cursor',
+					label: 'Run to Cursor',
+					contextMenuGroupId: 'navigation',
+					contextMenuOrder: 0.5,
+					run: () => onRunToCursor?.(editor?.getPosition()?.lineNumber || null)
+				});
 			}
 		});
 
@@ -303,6 +329,7 @@ fn main() {
 			model?.dispose();
 			model = null;
 			editor?.dispose();
+			onCursorLineChange?.(null);
 		};
 	});
 </script>

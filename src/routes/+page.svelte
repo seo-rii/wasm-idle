@@ -32,6 +32,8 @@
 	let editor = $state<monaco.editor.IStandaloneCodeEditor | null>(null),
 		terminal = $state<TerminalControl | undefined>(undefined),
 		breakpoints = $state<number[]>([]),
+		cursorLine = $state<number | null>(null),
+		runToCursorLine = $state<number | null>(null),
 		debugLocals = $state<DebugVariable[]>([]),
 		debugCallStack = $state<DebugFrame[]>([]),
 		compilerDiagnostics = $state<CompilerDiagnostic[]>([]),
@@ -66,6 +68,14 @@
 			: language === 'PYTHON'
 				? pythonDebugLanguageAdapter
 				: null
+	);
+	const effectiveBreakpoints = $derived.by(() => {
+		const lines = [...breakpoints];
+		if (runToCursorLine !== null && !lines.includes(runToCursorLine)) lines.push(runToCursorLine);
+		return lines.sort((left, right) => left - right);
+	});
+	const canRunToCursor = $derived(
+		debugPaused && cursorLine !== null && cursorLine > 0 && cursorLine !== pausedLine
 	);
 	const debugStatusLabel = $derived(debugPaused ? 'Paused' : debugActive ? 'Running' : 'Ready');
 	const debugStatusIcon = $derived(
@@ -115,6 +125,7 @@
 
 	function onDebugEvent(event: DebugSessionEvent) {
 		if (event.type === 'pause') {
+			runToCursorLine = null;
 			pausedLine = event.line;
 			debugLocals = event.locals;
 			debugCallStack = event.callStack;
@@ -129,6 +140,7 @@
 			debugCallStack = [];
 			return;
 		}
+		if (event.type === 'stop') runToCursorLine = null;
 		pausedLine = null;
 		debugLocals = [];
 		debugCallStack = [];
@@ -141,8 +153,19 @@
 		terminal.debugCommand?.(command);
 	}
 
+	async function runToCursor(targetLine = cursorLine) {
+		if (!terminal || !debugPaused || !targetLine || targetLine === pausedLine) return;
+		const nextBreakpoints = breakpoints.includes(targetLine)
+			? [...breakpoints]
+			: [...breakpoints, targetLine].sort((left, right) => left - right);
+		runToCursorLine = breakpoints.includes(targetLine) ? null : targetLine;
+		await terminal.setBreakpoints?.(nextBreakpoints);
+		await terminal.debugCommand?.('continue');
+	}
+
 	async function stopDebug() {
 		if (!terminal || runningMode !== 'debug') return;
+		runToCursorLine = null;
 		await terminal.stop?.();
 	}
 
@@ -162,12 +185,14 @@
 		runningMode = debug ? 'debug' : 'run';
 		if (debug && language === 'CPP') clangdRequested = true;
 		if (debug) {
+			runToCursorLine = null;
 			debugActive = true;
 			debugPaused = false;
 			pausedLine = null;
 			debugLocals = [];
 			debugCallStack = [];
 		} else {
+			runToCursorLine = null;
 			debugActive = false;
 			debugPaused = false;
 			pausedLine = null;
@@ -197,7 +222,7 @@
 				args,
 				options: {
 					debug,
-					breakpoints,
+					breakpoints: [...effectiveBreakpoints],
 					stdin: '',
 					pauseOnEntry: debug,
 					rustTargetTriple: language === 'RUST' ? rustTargetTriple : undefined
@@ -392,13 +417,15 @@
 
 	$effect(() => {
 		if (runningMode !== 'debug') return;
-		terminal?.setBreakpoints?.([...breakpoints]);
+		terminal?.setBreakpoints?.([...effectiveBreakpoints]);
 	});
 
 	$effect(() => {
 		if (language !== 'CPP') clangdRequested = false;
 		if (!debugLanguage) {
 			breakpoints = [];
+			cursorLine = null;
+			runToCursorLine = null;
 			pausedLine = null;
 			debugLocals = [];
 			debugCallStack = [];
@@ -471,6 +498,15 @@
 						aria-label="Continue"
 					>
 						<span class="material-symbols-outlined">skip_next</span>
+					</button>
+					<button
+						class="action-button action-button--icon"
+						onclick={() => runToCursor()}
+						disabled={!canRunToCursor}
+						title={cursorLine ? `Run to Cursor (L${cursorLine})` : 'Run to Cursor'}
+						aria-label={cursorLine ? `Run to Cursor (L${cursorLine})` : 'Run to Cursor'}
+					>
+						<span class="material-symbols-outlined">play_circle</span>
 					</button>
 					<button
 						class="action-button action-button--icon"
@@ -811,11 +847,13 @@
 			bind:editor
 			clangdEnabled={clangdRequested}
 			{clangdBaseUrl}
-			{breakpoints}
+			breakpoints={effectiveBreakpoints}
 			{debugLocals}
 			{debugLanguage}
 			{compilerDiagnostics}
 			{pausedLine}
+			onCursorLineChange={(line) => (cursorLine = line)}
+			onRunToCursor={runToCursor}
 			onBreakpointsChange={(lines) => (breakpoints = lines)}
 		/>
 	{/key}
