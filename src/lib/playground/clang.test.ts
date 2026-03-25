@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { flushQueuedStdin } from './stdinBuffer';
 
 const workerInstances: MockWorker[] = [];
 
@@ -105,6 +106,17 @@ int main() {
 
 		sandbox.kill?.();
 		expect(sandbox.terminate).toHaveBeenCalledTimes(1);
+	});
+
+	it('evaluates C++ watch expressions through the worker debug buffers', async () => {
+		const sandbox = new Clang('CPP');
+		sandbox.worker = {} as Worker;
+
+		setTimeout(() => {
+			flushQueuedStdin(['42'], sandbox.watchResultBuffer);
+		}, 0);
+
+		await expect(sandbox.debugEvaluate?.('A[i].s')).resolves.toBe('42');
 	});
 
 	it('separates compile args from runtime args for C++ runs', async () => {

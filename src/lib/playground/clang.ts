@@ -7,9 +7,11 @@ import type { PlaygroundRuntimeAssets } from '$lib/playground/assets';
 import { resolveSandboxExecutionArgs } from '$lib/playground/options';
 import type { Sandbox } from '$lib/playground/sandbox';
 import {
+	bufferedSequence,
 	flushBufferedEof,
 	flushQueuedStdin,
-	resetBufferedStdin
+	resetBufferedStdin,
+	waitForBufferedSequenceChange
 } from '$lib/playground/stdinBuffer';
 import type { Writable } from 'svelte/store';
 
@@ -23,6 +25,8 @@ class Clang implements Sandbox {
 	worker?: Worker = <any>null;
 	buffer = new SharedArrayBuffer(1024);
 	debugBuffer = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * debugBreakpointBufferInts);
+	watchBuffer = new SharedArrayBuffer(1024);
+	watchResultBuffer = new SharedArrayBuffer(1024);
 	interruptBuffer = new SharedArrayBuffer(1);
 	pendingInput: string[] = [];
 	begin = 0;
@@ -144,6 +148,8 @@ class Clang implements Sandbox {
 				prepare,
 				buffer: this.buffer,
 				debugBuffer: this.debugBuffer,
+				watchBuffer: this.watchBuffer,
+				watchResultBuffer: this.watchResultBuffer,
 				interrupt: this.interruptBuffer,
 				context: {},
 				log,
@@ -183,6 +189,21 @@ class Clang implements Sandbox {
 		Atomics.add(control, 2, 1);
 	}
 
+	async debugEvaluate(expression: string) {
+		if (!this.worker) throw new Error('Worker not loaded');
+		resetBufferedStdin(this.watchResultBuffer);
+		const previousSequence = bufferedSequence(this.watchResultBuffer);
+		flushQueuedStdin([expression], this.watchBuffer);
+		const control = new Int32Array(this.debugBuffer);
+		Atomics.store(control, 1, 5);
+		Atomics.add(control, 0, 1);
+		Atomics.notify(control, 0);
+		return (
+			(await waitForBufferedSequenceChange(this.watchResultBuffer, previousSequence, 5000)) ??
+			'?'
+		);
+	}
+
 	kill() {
 		this.terminate();
 	}
@@ -202,6 +223,8 @@ class Clang implements Sandbox {
 		this.pendingEof = false;
 		if (this.worker) this.worker.onmessage = null;
 		resetBufferedStdin(this.buffer);
+		resetBufferedStdin(this.watchBuffer);
+		resetBufferedStdin(this.watchResultBuffer);
 		const debugBuffer = new Int32Array(this.debugBuffer);
 		debugBuffer.fill(0);
 		await new Promise((resolve) => setTimeout(resolve, 200));

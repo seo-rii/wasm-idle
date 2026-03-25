@@ -155,6 +155,8 @@ interface DebugRunOptions {
 	pauseOnEntry?: boolean;
 	debugBuffer?: Int32Array;
 	interruptBuffer?: Uint8Array;
+	watchBuffer?: Int32Array;
+	watchResultBuffer?: Int32Array;
 }
 
 const toUtf8 = (text: string) => {
@@ -186,6 +188,8 @@ export default class Clang {
 	debugPauseOnEntry = false;
 	debugBuffer?: Int32Array;
 	debugInterruptBuffer?: Uint8Array;
+	debugWatchBuffer?: Int32Array;
+	debugWatchResultBuffer?: Int32Array;
 	onDebugEvent?: (event: {
 		type: 'pause';
 		line: number;
@@ -1176,6 +1180,8 @@ export default class Clang {
 		app.debugSession = {
 			buffer: this.debugBuffer,
 			interruptBuffer: this.debugInterruptBuffer,
+			watchBuffer: this.debugWatchBuffer,
+			watchResultBuffer: this.debugWatchResultBuffer,
 			breakpoints: new Set(this.debugBreakpoints),
 			breakpointVersion: 0,
 			pauseOnEntry: this.debugPauseOnEntry,
@@ -1218,7 +1224,9 @@ export default class Clang {
 			cppVersion,
 			cVersion,
 			debugBuffer,
-			interruptBuffer
+			interruptBuffer,
+			watchBuffer,
+			watchResultBuffer
 		} = options;
 		const input = language === 'C' ? `test.c` : `test.cc`,
 			obj = `test.o`,
@@ -1228,6 +1236,8 @@ export default class Clang {
 		this.debugPauseOnEntry = debug && pauseOnEntry;
 		this.debugBuffer = debugBuffer;
 		this.debugInterruptBuffer = interruptBuffer;
+		this.debugWatchBuffer = watchBuffer;
+		this.debugWatchResultBuffer = watchResultBuffer;
 		const buildKey = JSON.stringify({
 			code,
 			language,
@@ -1272,7 +1282,9 @@ export default class Clang {
 			cppVersion,
 			cVersion,
 			debugBuffer,
-			interruptBuffer
+			interruptBuffer,
+			watchBuffer,
+			watchResultBuffer
 		} = options;
 		this.debug = debug;
 		return await this.run(
@@ -1285,7 +1297,9 @@ export default class Clang {
 				cppVersion,
 				cVersion,
 				debugBuffer,
-				interruptBuffer
+				interruptBuffer,
+				watchBuffer,
+				watchResultBuffer
 			}),
 			true,
 			`test.wasm`,

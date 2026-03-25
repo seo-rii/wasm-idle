@@ -242,7 +242,7 @@
 			return;
 		}
 
-		if (activeLanguage === 'PYTHON' && paused && terminalControl?.debugEvaluate) {
+		if (paused && terminalControl?.debugEvaluate) {
 			watchValues = expressions.map((expression) => ({ expression, value: '...' }));
 			(async () => {
 				const resolved: { expression: string; value: string }[] = [];

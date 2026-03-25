@@ -9,6 +9,8 @@ self.document = {
 };
 let stdinBufferClang: Int32Array,
 	debugBufferClang: Int32Array,
+	watchBufferClang: Int32Array,
+	watchResultBufferClang: Int32Array,
 	interruptBufferClang: Uint8Array,
 	clang: Clang;
 
@@ -30,6 +32,8 @@ self.onmessage = async (event: { data: any }) => {
 		code,
 		buffer,
 		debugBuffer,
+		watchBuffer,
+		watchResultBuffer,
 		load,
 		interrupt,
 		log,
@@ -50,6 +54,8 @@ self.onmessage = async (event: { data: any }) => {
 	} else if (prepare) {
 		stdinBufferClang = new Int32Array(buffer);
 		debugBufferClang = new Int32Array(debugBuffer);
+		watchBufferClang = new Int32Array(watchBuffer);
+		watchResultBufferClang = new Int32Array(watchResultBuffer);
 		interruptBufferClang = new Uint8Array(interrupt);
 
 		try {
@@ -63,7 +69,9 @@ self.onmessage = async (event: { data: any }) => {
 				breakpoints,
 				pauseOnEntry,
 				debugBuffer: debugBufferClang,
-				interruptBuffer: interruptBufferClang
+				interruptBuffer: interruptBufferClang,
+				watchBuffer: watchBufferClang,
+				watchResultBuffer: watchResultBufferClang
 			});
 			self.postMessage({ results: true });
 		} catch (error: any) {
@@ -73,6 +81,8 @@ self.onmessage = async (event: { data: any }) => {
 		clang.log = log;
 		stdinBufferClang = new Int32Array(buffer);
 		debugBufferClang = new Int32Array(debugBuffer);
+		watchBufferClang = new Int32Array(watchBuffer);
+		watchResultBufferClang = new Int32Array(watchResultBuffer);
 		interruptBufferClang = new Uint8Array(interrupt);
 
 		try {
@@ -86,7 +96,9 @@ self.onmessage = async (event: { data: any }) => {
 				breakpoints,
 				pauseOnEntry,
 				debugBuffer: debugBufferClang,
-				interruptBuffer: interruptBufferClang
+				interruptBuffer: interruptBufferClang,
+				watchBuffer: watchBufferClang,
+				watchResultBuffer: watchResultBufferClang
 			});
 			self.postMessage({ results: true });
 		} catch (error: any) {

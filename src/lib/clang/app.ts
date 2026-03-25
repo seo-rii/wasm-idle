@@ -3,6 +3,12 @@ import { bindNew } from '$lib/clang/apply';
 import { Memory, type MemFS } from '$lib/clang/memory';
 import { getInstance } from '$lib/clang/wasm';
 import { AbortError, NotImplemented, ProcExit } from '$lib/clang/error';
+import {
+	evaluateDebugExpressionWithResolver,
+	parseStoredDebugValue,
+	type DebugExpressionValue
+} from '$lib/debug/expression';
+import { flushQueuedStdin, readBufferedStdin } from '$lib/playground/stdinBuffer';
 
 const ESUCCESS = 0;
 const RAF_PROC_EXIT_CODE = 0xc0c0a;
@@ -10,6 +16,8 @@ const RAF_PROC_EXIT_CODE = 0xc0c0a;
 interface DebugSession {
 	buffer?: Int32Array;
 	interruptBuffer?: Uint8Array;
+	watchBuffer?: Int32Array;
+	watchResultBuffer?: Int32Array;
 	breakpoints: Set<number>;
 	breakpointVersion: number;
 	pauseOnEntry: boolean;
@@ -143,6 +151,135 @@ export default class App {
 	proc_exit(code: number) {
 		this.trace(`proc_exit_throw(code=${code})`);
 		throw new ProcExit(code);
+	}
+
+	debugEvaluate(expression: string) {
+		const session = this.debugSession;
+		if (!session) throw new Error('unavailable');
+		const frame = [...session.frames]
+			.reverse()
+			.find((candidate) => candidate.functionId === session.currentFunctionId);
+		const activeLine = session.currentLine;
+		const activeLocals = [...(session.variableMetadata[session.currentFunctionId] || [])]
+			.reverse()
+			.filter((variable) => activeLine >= variable.fromLine && activeLine <= variable.toLine);
+		const activeGlobals = [...(session.globalVariableMetadata || [])]
+			.reverse()
+			.filter((variable) => activeLine >= variable.fromLine && activeLine <= variable.toLine);
+
+		return evaluateDebugExpressionWithResolver(expression, (name) => {
+			const resolveArrayValue = (
+				variable: DebugVariableMetadata,
+				addressValue: string
+			): DebugExpressionValue => {
+				const dimensions = variable.dimensions?.length
+					? variable.dimensions
+					: variable.length
+						? [variable.length]
+						: [];
+				const address = Number(addressValue);
+				if (
+					!Number.isFinite(address) ||
+					address <= 0 ||
+					!dimensions.length ||
+					(!variable.elementKind && !variable.structFields?.length)
+				) {
+					throw new Error('unavailable');
+				}
+				this.mem?.check?.();
+				const scalarSize =
+					variable.structFields?.length && variable.structSize
+						? variable.structSize
+						: variable.elementKind === 'double'
+							? 8
+							: variable.elementKind === 'bool' || variable.elementKind === 'char'
+								? 1
+								: 4;
+				const readScalar = (
+					kind: NonNullable<DebugVariableMetadata['elementKind']>,
+					offset: number
+				): DebugExpressionValue => {
+					if (kind === 'bool') return !!this.mem.read8(offset);
+					if (kind === 'char') {
+						const charCode = this.mem.read8(offset);
+						return charCode >= 0x20 && charCode <= 0x7e
+							? String.fromCharCode(charCode)
+							: charCode;
+					}
+					if (kind === 'float') return this.mem.readFloat32(offset);
+					if (kind === 'double') return this.mem.readFloat64(offset);
+					return this.mem.readInt32(offset);
+				};
+				const buildStructValue = (baseAddress: number): DebugExpressionValue => ({
+					__debugExpressionKind: 'object',
+					has: (fieldName: string) =>
+						!!variable.structFields?.some((field) => field.name === fieldName),
+					get: (fieldName: string) => {
+						const field = variable.structFields?.find(
+							(candidate) => candidate.name === fieldName
+						);
+						if (!field) throw new Error('unavailable');
+						return readScalar(field.kind, baseAddress + field.offset);
+					},
+					keys: () => variable.structFields?.map((field) => field.name) || []
+				});
+				const buildArrayValue = (
+					baseAddress: number,
+					remainingDimensions: number[]
+				): DebugExpressionValue => ({
+					__debugExpressionKind: 'array',
+					length: remainingDimensions[0],
+					truncated: remainingDimensions[0] > 8,
+					get: (index: number) => {
+						if (
+							!Number.isInteger(index) ||
+							index < 0 ||
+							index >= remainingDimensions[0]
+						) {
+							throw new Error('unavailable');
+						}
+						if (remainingDimensions.length > 1) {
+							const nestedStride =
+								remainingDimensions
+									.slice(1)
+									.reduce((total, size) => total * size, 1) * scalarSize;
+							return buildArrayValue(
+								baseAddress + index * nestedStride,
+								remainingDimensions.slice(1)
+							);
+						}
+						if (variable.structFields?.length && variable.structSize) {
+							return buildStructValue(baseAddress + index * variable.structSize);
+						}
+						if (!variable.elementKind) throw new Error('unavailable');
+						return readScalar(variable.elementKind, baseAddress + index * scalarSize);
+					},
+					keys: () =>
+						Array.from(
+							{ length: Math.min(remainingDimensions[0], 8) },
+							(_, index) => index
+						)
+				});
+				return buildArrayValue(address, dimensions);
+			};
+			const resolveVariableValue = (
+				variable: DebugVariableMetadata,
+				storedValue: string | undefined
+			): DebugExpressionValue => {
+				if (storedValue == null || storedValue === '?') throw new Error('unavailable');
+				if (variable.kind === 'array') return resolveArrayValue(variable, storedValue);
+				return parseStoredDebugValue(storedValue);
+			};
+			const localVariable = activeLocals.find((variable) => variable.name === name);
+			if (localVariable) {
+				return resolveVariableValue(localVariable, frame?.values.get(localVariable.slot));
+			}
+			const globalVariable = activeGlobals.find((variable) => variable.name === name);
+			if (globalVariable) {
+				return resolveVariableValue(globalVariable, session.globalValues.get(globalVariable.slot));
+			}
+			throw new Error('unavailable');
+		});
 	}
 
 	private pauseDebugSession(
@@ -509,6 +646,16 @@ export default class App {
 				session.resumeSkipFunctionId = session.currentFunctionId;
 				session.resumeSkipLine = session.currentLine;
 				return ESUCCESS;
+			}
+			if (command === 5) {
+				const expression = session.watchBuffer ? readBufferedStdin(session.watchBuffer) : '';
+				let result = '?';
+				try {
+					result = expression ? this.debugEvaluate(expression) : '?';
+				} catch (error) {
+					result = error instanceof Error && error.message === 'unavailable' ? '?' : 'error';
+				}
+				if (session.watchResultBuffer) flushQueuedStdin([result], session.watchResultBuffer);
 			}
 		}
 	}

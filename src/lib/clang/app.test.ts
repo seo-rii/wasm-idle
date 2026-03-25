@@ -775,4 +775,82 @@ describe('App debug tracing', () => {
 		});
 		expect(evaluateDebugExpression('A[i].s', pauseEvent.locals)).toBe('3');
 	});
+
+	it('evaluates global struct array watches directly beyond the preview window', () => {
+		const app = Object.assign(Object.create(App.prototype), {
+			debugSession: {
+				buffer: new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * 16)),
+				interruptBuffer: new Uint8Array(new SharedArrayBuffer(1)),
+				breakpoints: new Set<number>(),
+				breakpointVersion: 0,
+				pauseOnEntry: false,
+				stepArmed: false,
+				nextLineArmed: false,
+				stepOutArmed: false,
+				callDepth: 1,
+				stepOutDepth: 0,
+				currentFunctionId: 1,
+				currentLine: 4,
+				resumeSkipActive: false,
+				resumeSkipFunctionId: 0,
+				resumeSkipLine: 0,
+				nextLineFunctionId: 0,
+				nextLineLine: 0,
+				functionMetadata: { 1: 'main' },
+				variableMetadata: {
+					1: [
+						{
+							slot: 1,
+							name: 'i',
+							kind: 'number',
+							fromLine: 4,
+							toLine: Number.MAX_SAFE_INTEGER
+						}
+					]
+				},
+				globalVariableMetadata: [
+					{
+						slot: 10,
+						name: 'A',
+						kind: 'array',
+						length: 500100,
+						dimensions: [500100],
+						structSize: 16,
+						structFields: [
+							{ name: 'input', kind: 'int', offset: 0 },
+							{ name: 's', kind: 'int', offset: 4 },
+							{ name: 'e', kind: 'int', offset: 8 },
+							{ name: 'l', kind: 'int', offset: 12 }
+						],
+						fromLine: 1,
+						toLine: Number.MAX_SAFE_INTEGER
+					}
+				],
+				frames: [
+					{ functionId: 1, functionName: 'main', line: 4, values: new Map([[1, '8']]) }
+				],
+				globalValues: new Map([[10, '64']])
+			},
+			mem: {
+				check: vi.fn(),
+				read8: vi.fn(),
+				readInt32: vi.fn().mockImplementation(
+					(offset: number) =>
+						(
+							({
+								192: 9,
+								196: 42,
+								200: 50,
+								204: 8
+							}) as Record<number, number>
+						)[offset] ?? 0
+				),
+				readFloat32: vi.fn(),
+				readFloat64: vi.fn()
+			},
+			trace: vi.fn()
+		}) as App;
+
+		expect(app.debugEvaluate('A[i].s')).toBe('42');
+	});
 });

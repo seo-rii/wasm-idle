@@ -82,6 +82,11 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/if \(eof\) await terminal\.eof\?\.\(\);/);
 	});
 
+	it('prefers runtime-backed watch evaluation when the terminal exposes it', () => {
+		expect(source).toMatch(/if \(paused && terminalControl\?\.debugEvaluate\) \{/);
+		expect(source).toMatch(/value: await terminalControl\.debugEvaluate!\(expression\)/);
+	});
+
 	it('shows a Rust stdin hint that explains EOF for read-to-end programs', () => {
 		expect(source).toMatch(/press Enter to send a line\./);
 		expect(source).toMatch(/selector only shows\s+Rust targets advertised by the bundled wasm-rust runtime manifest/);
