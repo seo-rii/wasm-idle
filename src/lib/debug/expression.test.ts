@@ -34,6 +34,12 @@ describe('evaluateDebugExpression', () => {
 		expect(
 			evaluateDebugExpression('current == None', [{ name: 'current', value: 'None' }])
 		).toBe('true');
+		expect(
+			evaluateDebugExpression('A[i].s', [
+				{ name: 'i', value: '0' },
+				{ name: 'A', value: '[{input: 1, s: 3, e: 5, l: 2}]' }
+			])
+		).toBe('3');
 	});
 
 	it('treats unavailable locals as unavailable', () => {

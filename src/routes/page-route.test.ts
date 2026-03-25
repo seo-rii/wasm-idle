@@ -50,7 +50,7 @@ describe('example route debug actions', () => {
 			/const knownRustTargetTriples = \['wasm32-wasip1', 'wasm32-wasip2', 'wasm32-wasip3'\] as const;/
 		);
 		expect(source).toMatch(
-			/let availableRustTargetTriples = \$state<RustTargetTriple\[]>\(\[\s+'wasm32-wasip1',\s+'wasm32-wasip2'\s+\]\);/s
+			/let availableRustTargetTriples = \$state<RustTargetTriple\[]>\(\[\s*'wasm32-wasip1',\s*'wasm32-wasip2'\s*\]\);/s
 		);
 		expect(source).toMatch(/localStorage\.setItem\('rustTargetTriple', rustTargetTriple\);/);
 		expect(source).toMatch(
@@ -58,7 +58,7 @@ describe('example route debug actions', () => {
 		);
 		expect(source).toMatch(/const response = await fetch\(manifestUrl, \{ cache: 'no-store' \}\);/);
 		expect(source).toMatch(
-			/const nextAvailableRustTargetTriples = knownRustTargetTriples\.filter\(\(targetTriple\) =>\s+Object\.prototype\.hasOwnProperty\.call\(manifest\.targets \|\| \{}, targetTriple\)\s+\);/s
+			/const nextAvailableRustTargetTriples = knownRustTargetTriples\.filter\(\s*\(targetTriple\) =>\s*Object\.prototype\.hasOwnProperty\.call\(manifest\.targets \|\| \{}, targetTriple\)\s*\);/s
 		);
 		expect(source).toMatch(
 			/availableRustTargetTriples = \[\.\.\.nextAvailableRustTargetTriples\];/

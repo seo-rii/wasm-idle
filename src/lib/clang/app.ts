@@ -11,6 +11,7 @@ interface DebugSession {
 	buffer?: Int32Array;
 	interruptBuffer?: Uint8Array;
 	breakpoints: Set<number>;
+	breakpointVersion: number;
 	pauseOnEntry: boolean;
 	stepArmed: boolean;
 	nextLineArmed: boolean;
@@ -178,10 +179,54 @@ export default class App {
 						!Number.isFinite(address) ||
 						address <= 0 ||
 						!dimensions.length ||
-						!variable.elementKind
+						(!variable.elementKind && !variable.structFields?.length)
 					) {
 						return [{ name: variable.name, value: '?' }];
 					}
+					if (variable.structFields?.length && variable.structSize) {
+						const previewLength = Math.min(dimensions[0], 8);
+						const values: string[] = [];
+						for (let index = 0; index < previewLength; index += 1) {
+							const fieldValues: string[] = [];
+							for (const field of variable.structFields) {
+								const offset = address + index * variable.structSize + field.offset;
+								if (field.kind === 'bool') {
+									fieldValues.push(
+										`${field.name}: ${this.mem.read8(offset) ? 'true' : 'false'}`
+									);
+									continue;
+								}
+								if (field.kind === 'char') {
+									const charCode = this.mem.read8(offset);
+									fieldValues.push(
+										`${field.name}: ${charCode >= 0x20 && charCode <= 0x7e ? `'${String.fromCharCode(charCode)}'` : `${charCode}`}`
+									);
+									continue;
+								}
+								if (field.kind === 'float') {
+									fieldValues.push(
+										`${field.name}: ${this.mem.readFloat32(offset)}`
+									);
+									continue;
+								}
+								if (field.kind === 'double') {
+									fieldValues.push(
+										`${field.name}: ${this.mem.readFloat64(offset)}`
+									);
+									continue;
+								}
+								fieldValues.push(`${field.name}: ${this.mem.readInt32(offset)}`);
+							}
+							values.push(`{${fieldValues.join(', ')}}`);
+						}
+						return [
+							{
+								name: variable.name,
+								value: `[${values.join(', ')}${dimensions[0] > previewLength ? ', ...' : ''}]`
+							}
+						];
+					}
+					if (!variable.elementKind) return [{ name: variable.name, value: '?' }];
 					const elementStride =
 						variable.elementKind === 'double'
 							? 8
@@ -273,6 +318,149 @@ export default class App {
 			(session.globalVariableMetadata || []).flatMap((variable) => {
 				if (localNames.has(variable.name)) return [];
 				if (line < variable.fromLine || line > variable.toLine) return [];
+				if (variable.kind === 'array') {
+					this.mem?.check?.();
+					const address = Number(session.globalValues?.get(variable.slot) ?? Number.NaN);
+					const dimensions = variable.dimensions?.length
+						? variable.dimensions
+						: variable.length
+							? [variable.length]
+							: [];
+					if (
+						!Number.isFinite(address) ||
+						address <= 0 ||
+						!dimensions.length ||
+						(!variable.elementKind && !variable.structFields?.length)
+					) {
+						return [{ name: variable.name, value: '?' }];
+					}
+					if (variable.structFields?.length && variable.structSize) {
+						const previewLength = Math.min(dimensions[0], 8);
+						const values: string[] = [];
+						for (let index = 0; index < previewLength; index += 1) {
+							const fieldValues: string[] = [];
+							for (const field of variable.structFields) {
+								const offset = address + index * variable.structSize + field.offset;
+								if (field.kind === 'bool') {
+									fieldValues.push(
+										`${field.name}: ${this.mem.read8(offset) ? 'true' : 'false'}`
+									);
+									continue;
+								}
+								if (field.kind === 'char') {
+									const charCode = this.mem.read8(offset);
+									fieldValues.push(
+										`${field.name}: ${charCode >= 0x20 && charCode <= 0x7e ? `'${String.fromCharCode(charCode)}'` : `${charCode}`}`
+									);
+									continue;
+								}
+								if (field.kind === 'float') {
+									fieldValues.push(
+										`${field.name}: ${this.mem.readFloat32(offset)}`
+									);
+									continue;
+								}
+								if (field.kind === 'double') {
+									fieldValues.push(
+										`${field.name}: ${this.mem.readFloat64(offset)}`
+									);
+									continue;
+								}
+								fieldValues.push(`${field.name}: ${this.mem.readInt32(offset)}`);
+							}
+							values.push(`{${fieldValues.join(', ')}}`);
+						}
+						return [
+							{
+								name: variable.name,
+								value: `[${values.join(', ')}${dimensions[0] > previewLength ? ', ...' : ''}]`
+							}
+						];
+					}
+					if (!variable.elementKind) return [{ name: variable.name, value: '?' }];
+					const elementStride =
+						variable.elementKind === 'double'
+							? 8
+							: variable.elementKind === 'bool' || variable.elementKind === 'char'
+								? 1
+								: 4;
+					if (dimensions.length === 2) {
+						const previewRows = Math.min(dimensions[0], 4);
+						const previewCols = Math.min(dimensions[1], 8);
+						const rows: string[] = [];
+						for (let row = 0; row < previewRows; row += 1) {
+							const values: string[] = [];
+							for (let col = 0; col < previewCols; col += 1) {
+								const offset =
+									address + (row * dimensions[1] + col) * elementStride;
+								if (variable.elementKind === 'bool') {
+									values.push(this.mem.read8(offset) ? 'true' : 'false');
+									continue;
+								}
+								if (variable.elementKind === 'char') {
+									const charCode = this.mem.read8(offset);
+									values.push(
+										charCode >= 0x20 && charCode <= 0x7e
+											? `'${String.fromCharCode(charCode)}'`
+											: `${charCode}`
+									);
+									continue;
+								}
+								if (variable.elementKind === 'float') {
+									values.push(`${this.mem.readFloat32(offset)}`);
+									continue;
+								}
+								if (variable.elementKind === 'double') {
+									values.push(`${this.mem.readFloat64(offset)}`);
+									continue;
+								}
+								values.push(`${this.mem.readInt32(offset)}`);
+							}
+							rows.push(
+								`[${values.join(', ')}${dimensions[1] > previewCols ? ', ...' : ''}]`
+							);
+						}
+						return [
+							{
+								name: variable.name,
+								value: `[${rows.join(', ')}${dimensions[0] > previewRows ? ', ...' : ''}]`
+							}
+						];
+					}
+					const previewLength = Math.min(dimensions[0], 8);
+					const values: string[] = [];
+					for (let index = 0; index < previewLength; index += 1) {
+						const offset = address + index * elementStride;
+						if (variable.elementKind === 'bool') {
+							values.push(this.mem.read8(offset) ? 'true' : 'false');
+							continue;
+						}
+						if (variable.elementKind === 'char') {
+							const charCode = this.mem.read8(offset);
+							values.push(
+								charCode >= 0x20 && charCode <= 0x7e
+									? `'${String.fromCharCode(charCode)}'`
+									: `${charCode}`
+							);
+							continue;
+						}
+						if (variable.elementKind === 'float') {
+							values.push(`${this.mem.readFloat32(offset)}`);
+							continue;
+						}
+						if (variable.elementKind === 'double') {
+							values.push(`${this.mem.readFloat64(offset)}`);
+							continue;
+						}
+						values.push(`${this.mem.readInt32(offset)}`);
+					}
+					return [
+						{
+							name: variable.name,
+							value: `[${values.join(', ')}${dimensions[0] > previewLength ? ', ...' : ''}]`
+						}
+					];
+				}
 				const value = session.globalValues?.get(variable.slot) ?? '?';
 				return [{ name: variable.name, value }];
 			}) || [];
@@ -281,12 +469,10 @@ export default class App {
 			line,
 			reason,
 			locals: [...locals, ...globals],
-			callStack: [...session.frames]
-				.reverse()
-				.map((stackFrame) => ({
-					functionName: stackFrame.functionName,
-					line: stackFrame.line
-				}))
+			callStack: [...session.frames].reverse().map((stackFrame) => ({
+				functionName: stackFrame.functionName,
+				line: stackFrame.line
+			}))
 		});
 		const sequence = Atomics.load(buffer, 0);
 		while (true) {
@@ -437,6 +623,17 @@ export default class App {
 	__wasm_idle_debug_line(functionId: number, line: number) {
 		const session = this.debugSession;
 		if (!session?.buffer) return ESUCCESS;
+		const sharedBreakpointVersion = Atomics.load(session.buffer, 2);
+		if (sharedBreakpointVersion !== session.breakpointVersion) {
+			const count = Math.max(0, Atomics.load(session.buffer, 3));
+			const nextBreakpoints = new Set<number>();
+			for (let index = 0; index < count && index + 4 < session.buffer.length; index += 1) {
+				const breakpoint = Atomics.load(session.buffer, index + 4);
+				if (breakpoint > 0) nextBreakpoints.add(breakpoint);
+			}
+			session.breakpoints = nextBreakpoints;
+			session.breakpointVersion = sharedBreakpointVersion;
+		}
 		if (session.resumeSkipActive) {
 			if (functionId === session.resumeSkipFunctionId && line === session.resumeSkipLine) {
 				return ESUCCESS;

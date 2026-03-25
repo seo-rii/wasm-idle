@@ -37,6 +37,7 @@ export interface Sandbox {
 	ondebug?: (event: DebugSessionEvent) => void;
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	debugCommand?: (command: DebugCommand) => void;
+	setBreakpoints?: (lines: number[]) => void;
 	debugEvaluate?: (expression: string) => Promise<string>;
 	image?: (data: { mime: string; b64: string; ts?: number }) => void;
 	elapse?: number;

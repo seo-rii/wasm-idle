@@ -13,6 +13,8 @@ import {
 } from '$lib/playground/stdinBuffer';
 import type { Writable } from 'svelte/store';
 
+const debugBreakpointBufferInts = 1028;
+
 class Clang implements Sandbox {
 	language: 'C' | 'CPP';
 	ts = Date.now();
@@ -20,7 +22,7 @@ class Clang implements Sandbox {
 	ondebug?: (event: DebugSessionEvent) => void;
 	worker?: Worker = <any>null;
 	buffer = new SharedArrayBuffer(1024);
-	debugBuffer = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * 4);
+	debugBuffer = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * debugBreakpointBufferInts);
 	interruptBuffer = new SharedArrayBuffer(1);
 	pendingInput: string[] = [];
 	begin = 0;
@@ -101,6 +103,7 @@ class Clang implements Sandbox {
 				args,
 				options
 			);
+			this.setBreakpoints(options.debug ? [...(options.breakpoints || [])] : []);
 			const interrupt = new Uint8Array(this.interruptBuffer),
 				_uid = ++this.uid;
 			const handler = (event: Event & { data: any }) => {
@@ -166,6 +169,18 @@ class Clang implements Sandbox {
 		Atomics.add(control, 0, 1);
 		Atomics.notify(control, 0);
 		this.ondebug?.({ type: 'resume', command });
+	}
+
+	setBreakpoints(lines: number[]) {
+		const control = new Int32Array(this.debugBuffer);
+		const next = [...new Set(lines.filter((line) => Number.isInteger(line) && line > 0))]
+			.sort((left, right) => left - right)
+			.slice(0, Math.max(0, control.length - 4));
+		for (let index = 4; index < control.length; index += 1) {
+			Atomics.store(control, index, next[index - 4] || 0);
+		}
+		Atomics.store(control, 3, next.length);
+		Atomics.add(control, 2, 1);
 	}
 
 	kill() {

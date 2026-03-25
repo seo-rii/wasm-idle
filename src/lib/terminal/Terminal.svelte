@@ -233,6 +233,10 @@
 			await wait();
 			sandbox.debugCommand?.(command);
 		},
+		async setBreakpoints(lines: number[]) {
+			await wait();
+			sandbox.setBreakpoints?.(lines);
+		},
 		async debugEvaluate(expression: string) {
 			await wait();
 			return (await sandbox.debugEvaluate?.(expression)) || '?';

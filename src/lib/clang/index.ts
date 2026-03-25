@@ -1,5 +1,6 @@
 import type {
 	DebugArrayElementKind,
+	DebugStructFieldMetadata,
 	DebugVariable,
 	DebugVariableMetadata
 } from '$lib/playground/options';
@@ -318,6 +319,93 @@ export default class Clang {
 						parameters: string;
 				  }
 				| undefined;
+			const debugStructTypes = new Map<
+				string,
+				{ fields: DebugStructFieldMetadata[]; size: number }
+			>();
+			let structName = '';
+			let structFields: Array<{ name: string; kind: DebugArrayElementKind }> = [];
+			let structInBlockComment = false;
+			for (const rawLine of lines) {
+				let structLine = rawLine;
+				if (structInBlockComment) {
+					const commentEnd = structLine.indexOf('*/');
+					if (commentEnd === -1) continue;
+					structLine = structLine.slice(commentEnd + 2);
+					structInBlockComment = false;
+				}
+				const commentStart = structLine.indexOf('/*');
+				if (commentStart !== -1) {
+					const commentEnd = structLine.indexOf('*/', commentStart + 2);
+					if (commentEnd === -1) {
+						structInBlockComment = true;
+						structLine = structLine.slice(0, commentStart);
+					} else {
+						structLine =
+							structLine.slice(0, commentStart) + structLine.slice(commentEnd + 2);
+					}
+				}
+				const lineComment = structLine.indexOf('//');
+				if (lineComment !== -1) structLine = structLine.slice(0, lineComment);
+				const normalizedStructLine = structLine.trim();
+				if (!structName) {
+					const structMatch = normalizedStructLine.match(
+						/^struct\s+([A-Za-z_]\w*)\s*\{$/
+					);
+					if (structMatch?.[1]) {
+						structName = structMatch[1];
+						structFields = [];
+					}
+					continue;
+				}
+				if (normalizedStructLine === '};') {
+					let structOffset = 0;
+					let structAlignment = 1;
+					const resolvedFields: DebugStructFieldMetadata[] = [];
+					for (const field of structFields) {
+						const fieldSize =
+							field.kind === 'double'
+								? 8
+								: field.kind === 'bool' || field.kind === 'char'
+									? 1
+									: 4;
+						if (structOffset % fieldSize !== 0) {
+							structOffset += fieldSize - (structOffset % fieldSize);
+						}
+						resolvedFields.push({
+							name: field.name,
+							kind: field.kind,
+							offset: structOffset
+						});
+						structOffset += fieldSize;
+						structAlignment = Math.max(structAlignment, fieldSize);
+					}
+					if (structOffset % structAlignment !== 0) {
+						structOffset += structAlignment - (structOffset % structAlignment);
+					}
+					debugStructTypes.set(structName, {
+						fields: resolvedFields,
+						size: Math.max(structOffset, 1)
+					});
+					structName = '';
+					structFields = [];
+					continue;
+				}
+				const structFieldMatch = normalizedStructLine.match(
+					/^(?:const\s+)?(?:(?:unsigned|signed)\s+)?(?:(?:short|long long|long)\s+)?(int|float|double|bool|char)\s+(.+);$/
+				);
+				if (!structFieldMatch) continue;
+				for (const declaration of structFieldMatch[2].split(',')) {
+					const declarator = declaration.split('=')[0]?.trim() || '';
+					if (!declarator || /[*&\[]/.test(declarator)) continue;
+					const name = declarator.match(/([A-Za-z_]\w*)\s*$/)?.[1];
+					if (!name) continue;
+					structFields.push({
+						name,
+						kind: structFieldMatch[1] as DebugArrayElementKind
+					});
+				}
+			}
 			this.debugVariableMetadata = {};
 			this.debugGlobalMetadata = [];
 			this.debugFunctionMetadata = {};
@@ -476,6 +564,34 @@ export default class Clang {
 						);
 					}
 				}
+				const globalStructArrayMatch =
+					isTopLevelDeclarationContext &&
+					normalized.match(
+						/^(?:const\s+)?([A-Za-z_]\w*)\s+([A-Za-z_]\w*)\s*\[(\d+)\]\s*(?:=.*)?;$/
+					);
+				if (globalStructArrayMatch) {
+					const structType = debugStructTypes.get(globalStructArrayMatch[1]);
+					if (structType) {
+						const slot = nextVariableSlot++;
+						this.debugGlobalMetadata = [
+							...this.debugGlobalMetadata,
+							{
+								slot,
+								name: globalStructArrayMatch[2],
+								kind: 'array',
+								length: Number(globalStructArrayMatch[3]),
+								dimensions: [Number(globalStructArrayMatch[3])],
+								structFields: structType.fields,
+								structSize: structType.size,
+								fromLine: index + 1,
+								toLine: Number.MAX_SAFE_INTEGER
+							}
+						];
+						globalInitialization.push(
+							`__wasm_idle_debug_value_addr(0, ${slot}, (int)((unsigned long long)(${globalStructArrayMatch[2]})));`
+						);
+					}
+				}
 				if (
 					inFunctionBody &&
 					normalized &&
@@ -623,7 +739,7 @@ export default class Clang {
 								slot,
 								kind,
 								fromLine: index + 1,
-								toLine: index + 1
+								toLine: Number.MAX_SAFE_INTEGER
 							});
 							this.debugVariableMetadata[currentFunctionId] = [
 								...(this.debugVariableMetadata[currentFunctionId] || []),
@@ -632,7 +748,7 @@ export default class Clang {
 									name,
 									kind,
 									fromLine: index + 1,
-									toLine: index + 1
+									toLine: Number.MAX_SAFE_INTEGER
 								}
 							];
 						}
@@ -657,10 +773,37 @@ export default class Clang {
 								new RegExp(`\\b${escapedName}\\s*(?:[+\\-*/%]?=|\\+\\+|--)`).test(
 									normalized
 								) ||
-								new RegExp(`&\\s*${escapedName}\\b`).test(normalized)
+								new RegExp(`&\\s*${escapedName}\\b`).test(normalized) ||
+								new RegExp(
+									`\\b(?:cin|std::cin)\\b[^;]*>>\\s*${escapedName}\\b`
+								).test(normalized)
 							) {
 								trailingInstrumentation.push(
 									`${indent}${variable.kind === 'bool' ? '__wasm_idle_debug_value_bool' : '__wasm_idle_debug_value_num'}(${currentFunctionId}, ${variable.slot}, ${name});`
+								);
+							}
+						}
+						for (const [name, variable] of globalVariables) {
+							if (
+								currentFunctionVariables.has(name) ||
+								currentFunctionContainers.has(name)
+							)
+								continue;
+							const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+							if (
+								new RegExp(`(?:^|[^\\w])(?:\\+\\+|--)\\s*${escapedName}\\b`).test(
+									normalized
+								) ||
+								new RegExp(`\\b${escapedName}\\s*(?:[+\\-*/%]?=|\\+\\+|--)`).test(
+									normalized
+								) ||
+								new RegExp(`&\\s*${escapedName}\\b`).test(normalized) ||
+								new RegExp(
+									`\\b(?:cin|std::cin)\\b[^;]*>>\\s*${escapedName}\\b`
+								).test(normalized)
+							) {
+								trailingInstrumentation.push(
+									`${indent}${variable.kind === 'bool' ? '__wasm_idle_debug_value_bool' : '__wasm_idle_debug_value_num'}(0, ${variable.slot}, ${name});`
 								);
 							}
 						}
@@ -741,6 +884,7 @@ export default class Clang {
 									const initSource = segments[0].trim();
 									const updateSource = segments[2].trim();
 									const initHooks: string[] = [];
+									const conditionHooks: string[] = [];
 									const updateHooks: string[] = [];
 									const initLooksLikeDeclaration =
 										/^(?:const\s+)?(?:(?:unsigned|signed)\s+)?(?:(?:short|long long|long)\s+)?(?:int|float|double|bool|char)\b/.test(
@@ -762,6 +906,14 @@ export default class Clang {
 												`${variable.kind === 'bool' ? '__wasm_idle_debug_value_bool' : '__wasm_idle_debug_value_num'}(${currentFunctionId}, ${variable.slot}, ${name})`
 											);
 										}
+										if (
+											initLooksLikeDeclaration &&
+											mutationPattern.test(initSource)
+										) {
+											conditionHooks.push(
+												`${variable.kind === 'bool' ? '__wasm_idle_debug_value_bool' : '__wasm_idle_debug_value_num'}(${currentFunctionId}, ${variable.slot}, ${name})`
+											);
+										}
 										if (mutationPattern.test(updateSource)) {
 											updateHooks.push(
 												`${variable.kind === 'bool' ? '__wasm_idle_debug_value_bool' : '__wasm_idle_debug_value_num'}(${currentFunctionId}, ${variable.slot}, ${name})`
@@ -778,7 +930,7 @@ export default class Clang {
 											: segments[2];
 									rewrittenLine =
 										line.slice(0, openIndex + 1) +
-										`${instrumentedInit}; (__wasm_idle_debug_line(${currentFunctionId}, ${index + 1}), (${segments[1].trim()})); ${instrumentedUpdate}` +
+										`${instrumentedInit}; (${conditionHooks.length ? `${conditionHooks.join(', ')}, ` : ''}__wasm_idle_debug_line(${currentFunctionId}, ${index + 1}), (${segments[1].trim()})); ${instrumentedUpdate}` +
 										line.slice(closeIndex);
 								}
 							} else {
@@ -1025,6 +1177,7 @@ export default class Clang {
 			buffer: this.debugBuffer,
 			interruptBuffer: this.debugInterruptBuffer,
 			breakpoints: new Set(this.debugBreakpoints),
+			breakpointVersion: 0,
 			pauseOnEntry: this.debugPauseOnEntry,
 			stepArmed: this.debugPauseOnEntry,
 			nextLineArmed: false,

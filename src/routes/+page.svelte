@@ -103,10 +103,7 @@
 		const requestedWidth = terminalPaneWidth ?? fallbackWidth;
 		return Math.min(Math.max(requestedWidth, minTerminalPaneWidth), maxTerminalPaneWidth);
 	});
-	let availableRustTargetTriples = $state<RustTargetTriple[]>([
-		'wasm32-wasip1',
-		'wasm32-wasip2'
-	]);
+	let availableRustTargetTriples = $state<RustTargetTriple[]>(['wasm32-wasip1', 'wasm32-wasip2']);
 	type WasmIdleDebugApi = {
 		writeTerminalInput: (text: string, eof?: boolean) => Promise<void>;
 	};
@@ -307,8 +304,9 @@
 					defaultTargetTriple?: string;
 					targets?: Record<string, unknown>;
 				};
-				const nextAvailableRustTargetTriples = knownRustTargetTriples.filter((targetTriple) =>
-					Object.prototype.hasOwnProperty.call(manifest.targets || {}, targetTriple)
+				const nextAvailableRustTargetTriples = knownRustTargetTriples.filter(
+					(targetTriple) =>
+						Object.prototype.hasOwnProperty.call(manifest.targets || {}, targetTriple)
 				);
 				if (!nextAvailableRustTargetTriples.length || cancelled) return;
 				availableRustTargetTriples = [...nextAvailableRustTargetTriples];
@@ -320,7 +318,9 @@
 					: nextAvailableRustTargetTriples[0];
 				if (
 					storedRustTargetTriple &&
-					nextAvailableRustTargetTriples.includes(storedRustTargetTriple as RustTargetTriple)
+					nextAvailableRustTargetTriples.includes(
+						storedRustTargetTriple as RustTargetTriple
+					)
 				) {
 					rustTargetTriple = storedRustTargetTriple as RustTargetTriple;
 					return;
@@ -374,7 +374,8 @@
 
 	$effect(() => {
 		if (!browser) return;
-		const target = window as Window & typeof globalThis & { __wasmIdleDebug?: WasmIdleDebugApi };
+		const target = window as Window &
+			typeof globalThis & { __wasmIdleDebug?: WasmIdleDebugApi };
 		const debugApi: WasmIdleDebugApi = {
 			async writeTerminalInput(text: string, eof = false) {
 				if (!terminal) return;
@@ -387,6 +388,11 @@
 		return () => {
 			if (target.__wasmIdleDebug === debugApi) delete target.__wasmIdleDebug;
 		};
+	});
+
+	$effect(() => {
+		if (runningMode !== 'debug') return;
+		terminal?.setBreakpoints?.([...breakpoints]);
 	});
 
 	$effect(() => {
@@ -545,7 +551,10 @@
 						aria-valuemax={100}
 						aria-valuenow={progressPercent}
 					>
-						<div class="progress-fill" style={`transform: scaleX(${progressValue})`}></div>
+						<div
+							class="progress-fill"
+							style={`transform: scaleX(${progressValue})`}
+						></div>
 					</div>
 				</div>
 			{/if}
@@ -559,7 +568,8 @@
 				Rust targets advertised by the bundled wasm-rust runtime manifest. `wasm32-wasip1`
 				uses preview1 core wasm. {#if availableRustTargetTriples.includes('wasm32-wasip2')}
 					`wasm32-wasip2` uses preview2 component execution.
-				{/if} {#if availableRustTargetTriples.includes('wasm32-wasip3')}
+				{/if}
+				{#if availableRustTargetTriples.includes('wasm32-wasip3')}
 					`wasm32-wasip3` is only shown for the current transitional component path while
 					upstream Rust still requires the documented libc patch.
 				{/if} Use Ctrl+D or the EOF button while running if the program reads stdin until EOF.
@@ -744,7 +754,7 @@
 		tabindex={desktopExampleLayout ? 0 : -1}
 		aria-valuemin={desktopExampleLayout ? minTerminalPaneWidth : undefined}
 		aria-valuemax={desktopExampleLayout ? maxTerminalPaneWidth : undefined}
-		aria-valuenow={desktopExampleLayout ? terminalPanePixelWidth ?? undefined : undefined}
+		aria-valuenow={desktopExampleLayout ? (terminalPanePixelWidth ?? undefined) : undefined}
 		onpointerdown={(event) => {
 			if (!desktopExampleLayout || !examplePane) return;
 			event.preventDefault();
@@ -754,7 +764,10 @@
 			const updateWidth = (clientX: number) => {
 				terminalPaneWidth = Math.min(
 					Math.max(
-						clientX - rect.left - examplePaneHorizontalPadding / 2 - panelResizerWidth / 2,
+						clientX -
+							rect.left -
+							examplePaneHorizontalPadding / 2 -
+							panelResizerWidth / 2,
 						minTerminalPaneWidth
 					),
 					maxTerminalPaneWidth
@@ -858,7 +871,12 @@
 		width: 1px;
 		height: 100%;
 		border-radius: 999px;
-		background: linear-gradient(180deg, rgba(148, 163, 184, 0), rgba(148, 163, 184, 0.72), rgba(148, 163, 184, 0));
+		background: linear-gradient(
+			180deg,
+			rgba(148, 163, 184, 0),
+			rgba(148, 163, 184, 0.72),
+			rgba(148, 163, 184, 0)
+		);
 	}
 
 	.panel-resizer__thumb {

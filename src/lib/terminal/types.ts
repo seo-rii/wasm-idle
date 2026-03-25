@@ -32,6 +32,7 @@ export interface TerminalControl {
 	destroy: () => Promise<void>;
 	stop?: () => Promise<void>;
 	debugCommand: (command: DebugCommand) => Promise<void>;
+	setBreakpoints?: (lines: number[]) => Promise<void>;
 	debugEvaluate?: (expression: string) => Promise<string>;
 	waitForInput?: () => Promise<void>;
 	write: (input: string) => Promise<void>;

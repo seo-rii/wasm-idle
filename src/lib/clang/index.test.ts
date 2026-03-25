@@ -301,6 +301,87 @@ int main() {
 		expect(instrumentedSource).toContain('__wasm_idle_debug_value_num(0, 1, counter);');
 	});
 
+	it('captures global struct arrays with address hooks and field metadata', async () => {
+		const { clang } = createClangHarness();
+		const code = `struct Data {
+    int input, s, e, l;
+};
+
+Data A[4];
+
+int main() {
+    return 0;
+}`;
+
+		await clang.compile({
+			input: 'main.cc',
+			code,
+			obj: 'main.o',
+			debug: true
+		});
+
+		const instrumentedSource = String(vi.mocked(clang.memfs.addFile).mock.calls[0]?.[1] || '');
+		expect(instrumentedSource).toContain(
+			'__wasm_idle_debug_value_addr(0, 1, (int)((unsigned long long)(A)));'
+		);
+		expect(clang.debugGlobalMetadata).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					name: 'A',
+					kind: 'array',
+					length: 4,
+					structSize: 16,
+					structFields: [
+						{ name: 'input', kind: 'int', offset: 0 },
+						{ name: 's', kind: 'int', offset: 4 },
+						{ name: 'e', kind: 'int', offset: 8 },
+						{ name: 'l', kind: 'int', offset: 12 }
+					]
+				})
+			])
+		);
+	});
+
+	it('refreshes globals passed by reference and keeps for-loop locals visible in the body', async () => {
+		const { clang } = createClangHarness();
+		const code = `#include <iostream>
+using namespace std;
+
+int N;
+
+int main() {
+    cin >> N;
+    for (int i = 0; i < N; i++) {
+        cout << i << "\\n";
+    }
+}`;
+
+		await clang.compile({
+			input: 'main.cc',
+			code,
+			obj: 'main.o',
+			debug: true
+		});
+
+		const instrumentedSource = String(vi.mocked(clang.memfs.addFile).mock.calls[0]?.[1] || '');
+		expect(instrumentedSource.match(/__wasm_idle_debug_value_num\(0, 1, N\);/g)).toHaveLength(
+			2
+		);
+		expect(instrumentedSource).toContain(
+			'for (int i = 0; (__wasm_idle_debug_value_num(1, 1, i), __wasm_idle_debug_line(1, 8), (i < N)); (i++, __wasm_idle_debug_value_num(1, 1, i))) {'
+		);
+		expect(instrumentedSource).toContain('__wasm_idle_debug_value_num(1, 1, i);');
+		expect(clang.debugVariableMetadata[1]).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					name: 'i',
+					fromLine: 8,
+					toLine: Number.MAX_SAFE_INTEGER
+				})
+			])
+		);
+	});
+
 	it('skips pointer locals and parameters in the provided recursive sequence sample', async () => {
 		const { clang } = createClangHarness();
 		const code = `#include <stdio.h>

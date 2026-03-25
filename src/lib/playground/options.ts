@@ -22,6 +22,12 @@ export type RustTargetTriple = 'wasm32-wasip1' | 'wasm32-wasip2' | 'wasm32-wasip
 export type DebugVariableKind = 'number' | 'bool' | 'array' | 'text';
 export type DebugArrayElementKind = 'int' | 'float' | 'double' | 'bool' | 'char';
 
+export interface DebugStructFieldMetadata {
+	name: string;
+	kind: DebugArrayElementKind;
+	offset: number;
+}
+
 export interface DebugVariableMetadata {
 	slot: number;
 	name: string;
@@ -31,6 +37,8 @@ export interface DebugVariableMetadata {
 	elementKind?: DebugArrayElementKind;
 	length?: number;
 	dimensions?: number[];
+	structFields?: DebugStructFieldMetadata[];
+	structSize?: number;
 }
 
 export interface DebugFrame {

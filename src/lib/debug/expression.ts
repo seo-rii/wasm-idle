@@ -8,7 +8,8 @@ type Token =
 	| { type: 'identifier'; value: string }
 	| { type: 'operator'; value: string }
 	| { type: 'paren'; value: '(' | ')' }
-	| { type: 'bracket'; value: '[' | ']' };
+	| { type: 'bracket'; value: '[' | ']' }
+	| { type: 'dot' };
 
 const operators = ['&&', '||', '==', '!=', '<=', '>=', '+', '-', '*', '/', '%', '<', '>', '!'];
 
@@ -17,7 +18,11 @@ export function evaluateDebugExpression(expression: string, variables: DebugVari
 	if (!source) throw new Error('empty expression');
 	const values = new Map<string, string>();
 	for (const variable of variables) values.set(variable.name, variable.value);
-	type ResolvedValue = number | boolean | string | null | ResolvedValue[];
+	type ResolvedScalar = number | boolean | string | null;
+	interface ResolvedObject {
+		[key: string]: ResolvedValue;
+	}
+	type ResolvedValue = ResolvedScalar | ResolvedValue[] | ResolvedObject;
 	const parsedValues = new Map<string, ResolvedValue>();
 	const tokens: Token[] = [];
 	const parseQuotedValue = (text: string, start: number): { value: string; next: number } => {
@@ -58,6 +63,11 @@ export function evaluateDebugExpression(expression: string, variables: DebugVari
 		}
 		if (character === '[' || character === ']') {
 			tokens.push({ type: 'bracket', value: character });
+			index += 1;
+			continue;
+		}
+		if (character === '.') {
+			tokens.push({ type: 'dot' });
 			index += 1;
 			continue;
 		}
@@ -150,6 +160,39 @@ export function evaluateDebugExpression(expression: string, variables: DebugVari
 				throw new Error('unsupported tuple preview');
 			}
 		}
+		if (character === '{') {
+			index += 1;
+			const entries: Record<string, ResolvedValue> = {};
+			while (true) {
+				while (/\s/.test(text[index] || '')) index += 1;
+				if (text[index] === '}') return { value: entries, next: index + 1 };
+				if (text.startsWith('...', index)) throw new Error('unavailable');
+				let key = '';
+				if (text[index] === "'" || text[index] === '"') {
+					const parsedKey = parseQuotedValue(text, index);
+					key = parsedKey.value;
+					index = parsedKey.next;
+				} else {
+					const identifier = text.slice(index).match(/^[A-Za-z_]\w*/)?.[0];
+					if (!identifier) throw new Error('unsupported object preview');
+					key = identifier;
+					index += identifier.length;
+				}
+				while (/\s/.test(text[index] || '')) index += 1;
+				if (text[index] !== ':') throw new Error('unsupported object preview');
+				index += 1;
+				const entry = parsePreviewValue(text, index);
+				entries[key] = entry.value;
+				index = entry.next;
+				while (/\s/.test(text[index] || '')) index += 1;
+				if (text[index] === ',') {
+					index += 1;
+					continue;
+				}
+				if (text[index] === '}') return { value: entries, next: index + 1 };
+				throw new Error('unsupported object preview');
+			}
+		}
 		if (character === "'" || character === '"') return parseQuotedValue(text, index);
 		if (text.startsWith('true', index)) return { value: true, next: index + 4 };
 		if (text.startsWith('false', index)) return { value: false, next: index + 5 };
@@ -215,18 +258,34 @@ export function evaluateDebugExpression(expression: string, variables: DebugVari
 			let resolved = resolveIdentifierValue(token.value);
 			while (true) {
 				const bracket = tokens[cursor];
-				if (!bracket || bracket.type !== 'bracket' || bracket.value !== '[') break;
-				cursor += 1;
-				const index = Number(parseOr());
-				const closing = tokens[cursor];
-				if (!closing || closing.type !== 'bracket' || closing.value !== ']')
-					throw new Error('missing closing bracket');
-				cursor += 1;
-				if (!Array.isArray(resolved) || !Number.isInteger(index))
-					throw new Error('unsupported index access');
-				const next = resolved[index];
-				if (next == null) throw new Error('unavailable');
-				resolved = next;
+				if (bracket?.type === 'bracket' && bracket.value === '[') {
+					cursor += 1;
+					const index = Number(parseOr());
+					const closing = tokens[cursor];
+					if (!closing || closing.type !== 'bracket' || closing.value !== ']')
+						throw new Error('missing closing bracket');
+					cursor += 1;
+					if (!Array.isArray(resolved) || !Number.isInteger(index))
+						throw new Error('unsupported index access');
+					const next = resolved[index];
+					if (next == null) throw new Error('unavailable');
+					resolved = next;
+					continue;
+				}
+				if (bracket?.type === 'dot') {
+					cursor += 1;
+					const property = tokens[cursor];
+					if (!property || property.type !== 'identifier')
+						throw new Error('missing property name');
+					cursor += 1;
+					if (Array.isArray(resolved) || !resolved || typeof resolved !== 'object')
+						throw new Error('unsupported member access');
+					const next = resolved[property.value];
+					if (next == null) throw new Error('unavailable');
+					resolved = next;
+					continue;
+				}
+				break;
 			}
 			return resolved;
 		}

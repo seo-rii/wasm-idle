@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import App from '$lib/clang/app';
 import { NotImplemented, ProcExit } from '$lib/clang/error';
+import { evaluateDebugExpression } from '$lib/debug/expression';
 import Memory from '$lib/clang/memory/memory';
 import * as wasmModule from '$lib/clang/wasm';
 
@@ -370,6 +371,55 @@ describe('App debug tracing', () => {
 		});
 	});
 
+	it('picks up breakpoint updates written into the shared debug buffer while running', () => {
+		const onPause = vi.fn();
+		const buffer = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * 16);
+		const control = new Int32Array(buffer);
+		control[1] = 1;
+		control[2] = 1;
+		control[3] = 1;
+		control[4] = 7;
+		const app = Object.assign(Object.create(App.prototype), {
+			debugSession: {
+				buffer: control,
+				interruptBuffer: new Uint8Array(new SharedArrayBuffer(1)),
+				breakpoints: new Set<number>(),
+				breakpointVersion: 0,
+				pauseOnEntry: false,
+				stepArmed: false,
+				nextLineArmed: false,
+				stepOutArmed: false,
+				callDepth: 1,
+				stepOutDepth: 0,
+				currentFunctionId: 1,
+				currentLine: 0,
+				resumeSkipActive: false,
+				resumeSkipFunctionId: 0,
+				resumeSkipLine: 0,
+				nextLineFunctionId: 0,
+				nextLineLine: 0,
+				functionMetadata: { 1: 'main' },
+				variableMetadata: {},
+				frames: [{ functionId: 1, functionName: 'main', line: 0, values: new Map() }],
+				globalVariableMetadata: [],
+				globalValues: new Map(),
+				onPause
+			},
+			trace: vi.fn()
+		}) as App;
+
+		expect(app.__wasm_idle_debug_line(1, 7)).toBe(0);
+		expect(app.debugSession?.breakpoints).toEqual(new Set([7]));
+		expect(app.debugSession?.breakpointVersion).toBe(1);
+		expect(onPause).toHaveBeenCalledWith({
+			type: 'pause',
+			line: 7,
+			reason: 'breakpoint',
+			locals: [],
+			callStack: [{ functionName: 'main', line: 7 }]
+		});
+	});
+
 	it('renders fixed-size array locals from wasm memory at pause time', () => {
 		const onPause = vi.fn();
 		const buffer = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * 4);
@@ -622,5 +672,107 @@ describe('App debug tracing', () => {
 			],
 			callStack: [{ functionName: 'main', line: 4 }]
 		});
+	});
+
+	it('renders global struct arrays so watch expressions can read A[i].s', () => {
+		const onPause = vi.fn();
+		const buffer = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * 16);
+		const control = new Int32Array(buffer);
+		control[1] = 1;
+		const app = Object.assign(Object.create(App.prototype), {
+			debugSession: {
+				buffer: control,
+				interruptBuffer: new Uint8Array(new SharedArrayBuffer(1)),
+				breakpoints: new Set<number>(),
+				breakpointVersion: 0,
+				pauseOnEntry: false,
+				stepArmed: true,
+				nextLineArmed: false,
+				stepOutArmed: false,
+				callDepth: 1,
+				stepOutDepth: 0,
+				currentFunctionId: 1,
+				currentLine: 0,
+				resumeSkipActive: false,
+				resumeSkipFunctionId: 0,
+				resumeSkipLine: 0,
+				nextLineFunctionId: 0,
+				nextLineLine: 0,
+				functionMetadata: { 1: 'main' },
+				variableMetadata: {
+					1: [
+						{
+							slot: 1,
+							name: 'i',
+							kind: 'number',
+							fromLine: 4,
+							toLine: Number.MAX_SAFE_INTEGER
+						}
+					]
+				},
+				globalVariableMetadata: [
+					{
+						slot: 10,
+						name: 'A',
+						kind: 'array',
+						length: 2,
+						dimensions: [2],
+						structSize: 16,
+						structFields: [
+							{ name: 'input', kind: 'int', offset: 0 },
+							{ name: 's', kind: 'int', offset: 4 },
+							{ name: 'e', kind: 'int', offset: 8 },
+							{ name: 'l', kind: 'int', offset: 12 }
+						],
+						fromLine: 1,
+						toLine: Number.MAX_SAFE_INTEGER
+					}
+				],
+				frames: [
+					{ functionId: 1, functionName: 'main', line: 0, values: new Map([[1, '0']]) }
+				],
+				globalValues: new Map([[10, '64']]),
+				onPause
+			},
+			mem: {
+				check: vi.fn(),
+				read8: vi.fn(),
+				readInt32: vi.fn().mockImplementation(
+					(offset: number) =>
+						(
+							({
+								64: 1,
+								68: 3,
+								72: 5,
+								76: 2,
+								80: 2,
+								84: 8,
+								88: 13,
+								92: 5
+							}) as Record<number, number>
+						)[offset] ?? 0
+				),
+				readFloat32: vi.fn(),
+				readFloat64: vi.fn()
+			},
+			trace: vi.fn()
+		}) as App;
+
+		expect(app.__wasm_idle_debug_line(1, 4)).toBe(0);
+		const pauseEvent = onPause.mock.calls[0]?.[0];
+		expect(pauseEvent).toEqual({
+			type: 'pause',
+			line: 4,
+			reason: 'step',
+			locals: [
+				{ name: 'i', value: '0' },
+				{
+					name: 'A',
+					value: '[{input: 1, s: 3, e: 5, l: 2}, {input: 2, s: 8, e: 13, l: 5}]'
+				}
+			],
+			callStack: [{ functionName: 'main', line: 4 }]
+		});
+		expect(evaluateDebugExpression('A[i].s', pauseEvent.locals)).toBe('3');
 	});
 });
