@@ -27,6 +27,10 @@ vi.mock('$lib/playground/worker/python?worker', () => ({
 	default: MockWorker
 }));
 
+vi.mock('$env/dynamic/public', () => ({
+	env: {}
+}));
+
 import Python from './python';
 
 describe('Python sandbox', () => {
@@ -93,6 +97,19 @@ print((left + right) // (left - left))`,
 
 		sandbox.kill?.();
 		expect(sandbox.terminate).toHaveBeenCalledTimes(1);
+	});
+
+	it('rejects the active Python run when kill terminates the worker', async () => {
+		const sandbox = new Python();
+
+		await sandbox.load('/');
+		const worker = workerInstances[workerInstances.length - 1];
+		worker.postMessage.mockImplementationOnce(() => {});
+		const running = sandbox.run('print("hi")', false);
+		sandbox.kill();
+
+		await expect(running).rejects.toBe('Process terminated');
+		expect(worker.terminate).toHaveBeenCalledTimes(1);
 	});
 
 	it('evaluates watch expressions through the worker debug buffers', async () => {

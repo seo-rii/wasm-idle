@@ -33,6 +33,7 @@ class Python implements Sandbox {
 	pendingEof = false;
 	exit = true;
 	assetBridge: WorkerAssetBridge | null = null;
+	activeReject: ((reason?: string) => void) | null = null;
 
 	load(
 		runtimeAssets: string | PlaygroundRuntimeAssets = '',
@@ -124,6 +125,7 @@ class Python implements Sandbox {
 		this.exit = false;
 		return new Promise<boolean | string>(async (resolve, reject) => {
 			if (!this.worker) return reject('Worker not loaded');
+			this.activeReject = reject;
 			const interrupt = new Uint8Array(this.interruptBuffer),
 				_uid = ++this.uid;
 			const handler = (event: Event & { data: any }) => {
@@ -152,6 +154,7 @@ class Python implements Sandbox {
 					this.exit = true;
 					this.waitingForInput = false;
 					this.pendingEof = false;
+					this.activeReject = null;
 					this.ondebug?.({ type: 'stop' });
 					resolve(results as string);
 				}
@@ -161,6 +164,7 @@ class Python implements Sandbox {
 					this.exit = true;
 					this.waitingForInput = false;
 					this.pendingEof = false;
+					this.activeReject = null;
 					this.ondebug?.({ type: 'stop' });
 					reject(error);
 				}
@@ -216,11 +220,19 @@ class Python implements Sandbox {
 	}
 
 	terminate() {
+		this.activeReject?.('Process terminated');
+		this.activeReject = null;
+		this.waitingForInput = false;
 		this.pendingEof = false;
+		this.uid += 1;
 		new Uint8Array(this.interruptBuffer)[0] = 2;
 		const control = new Int32Array(this.debugBuffer);
 		Atomics.add(control, 0, 1);
 		Atomics.notify(control, 0);
+		this.worker?.terminate?.();
+		delete this.worker;
+		this.assetBridge = null;
+		this.exit = true;
 	}
 
 	async clear() {

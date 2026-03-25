@@ -108,6 +108,19 @@ int main() {
 		expect(sandbox.terminate).toHaveBeenCalledTimes(1);
 	});
 
+	it('rejects the active C++ run when kill terminates the worker', async () => {
+		const sandbox = new Clang('CPP');
+
+		await sandbox.load('/');
+		const worker = workerInstances[workerInstances.length - 1];
+		worker.postMessage.mockImplementationOnce(() => {});
+		const running = sandbox.run('int main() {}', false);
+		sandbox.kill();
+
+		await expect(running).rejects.toBe('Process terminated');
+		expect(worker.terminate).toHaveBeenCalledTimes(1);
+	});
+
 	it('evaluates C++ watch expressions through the worker debug buffers', async () => {
 		const sandbox = new Clang('CPP');
 		sandbox.worker = {} as Worker;

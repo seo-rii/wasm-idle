@@ -163,9 +163,16 @@
 		await terminal.debugCommand?.('continue');
 	}
 
-	async function stopDebug() {
-		if (!terminal || runningMode !== 'debug') return;
+	async function stopExecution() {
+		if (!terminal || !runningMode) return;
 		runToCursorLine = null;
+		if (runningMode === 'debug') {
+			pausedLine = null;
+			debugLocals = [];
+			debugCallStack = [];
+			debugPaused = false;
+			debugActive = false;
+		}
 		await terminal.stop?.();
 	}
 
@@ -458,16 +465,23 @@
 					<code>{path || '/'}</code>
 				</div>
 				<div class="action-group">
-					<button
-						class="action-button action-button--run"
-						onclick={() => exec(false)}
-						disabled={!!runningMode}
-					>
-						<span class="material-symbols-outlined">play_arrow</span>
-						<span>Run</span>
-					</button>
+					{#if runningMode === 'run'}
+						<button class="action-button action-button--stop" onclick={stopExecution}>
+							<span class="material-symbols-outlined">stop_circle</span>
+							<span>Stop Running</span>
+						</button>
+					{:else}
+						<button
+							class="action-button action-button--run"
+							onclick={() => exec(false)}
+							disabled={runningMode === 'debug'}
+						>
+							<span class="material-symbols-outlined">play_arrow</span>
+							<span>Run</span>
+						</button>
+					{/if}
 					{#if runningMode === 'debug'}
-						<button class="action-button action-button--stop" onclick={stopDebug}>
+						<button class="action-button action-button--stop" onclick={stopExecution}>
 							<span class="material-symbols-outlined">stop_circle</span>
 							<span>Stop Debug</span>
 						</button>

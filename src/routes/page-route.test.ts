@@ -4,19 +4,26 @@ import { compile } from 'svelte/compiler';
 import { describe, expect, it } from 'vitest';
 
 describe('example route debug actions', () => {
-	it('swaps the debug button for stop debug while a debug session is active', () => {
+	it('swaps run/debug actions for stop buttons while sessions are active', () => {
 		expect(() =>
 			compile(source, {
 				filename: 'src/routes/+page.svelte',
 				generate: 'client'
 			})
 		).not.toThrow();
-		expect(source).toMatch(/async function stopDebug\(\) \{/);
+		expect(source).toMatch(/async function stopExecution\(\) \{/);
+		expect(source).toMatch(/if \(!terminal \|\| !runningMode\) return;/);
+		expect(source).toMatch(/if \(runningMode === 'debug'\) \{/);
+		expect(source).toMatch(
+			/\{#if runningMode === 'run'\}\s+<button class="action-button action-button--stop" onclick=\{stopExecution\}>/s
+		);
+		expect(source).toMatch(/<span>Stop Running<\/span>/);
 		expect(source).toMatch(/await terminal\.stop\?\.\(\);/);
 		expect(source).toMatch(
-			/\{#if runningMode === 'debug'\}\s+<button class="action-button action-button--stop" onclick=\{stopDebug\}>/s
+			/\{#if runningMode === 'debug'\}\s+<button class="action-button action-button--stop" onclick=\{stopExecution\}>/s
 		);
 		expect(source).toMatch(/<span>Stop Debug<\/span>/);
+		expect(source).toMatch(/disabled=\{runningMode === 'debug'\}/);
 		expect(source).toMatch(/async function sendTerminalEof\(\) \{/);
 		expect(source).toMatch(/await terminal\.eof\?\.\(\);/);
 		expect(source).toMatch(/title="Send EOF"/);

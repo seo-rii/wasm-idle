@@ -36,6 +36,7 @@ class Clang implements Sandbox {
 	waitingForInput = false;
 	pendingEof = false;
 	exit = true;
+	activeReject: ((reason?: string) => void) | null = null;
 
 	constructor(language: 'C' | 'CPP') {
 		this.language = language;
@@ -102,6 +103,7 @@ class Clang implements Sandbox {
 		this.exit = false;
 		return new Promise<boolean | string>(async (resolve, reject) => {
 			if (!this.worker) return reject('Worker not loaded');
+			this.activeReject = reject;
 			const { compileArgs, programArgs } = resolveSandboxExecutionArgs(
 				this.language,
 				args,
@@ -126,6 +128,7 @@ class Clang implements Sandbox {
 					this.exit = true;
 					this.waitingForInput = false;
 					this.pendingEof = false;
+					this.activeReject = null;
 					this.ondebug?.({ type: 'stop' });
 					resolve(results as string);
 				}
@@ -134,6 +137,7 @@ class Clang implements Sandbox {
 					this.elapse = Date.now() - this.begin;
 					this.waitingForInput = false;
 					this.pendingEof = false;
+					this.activeReject = null;
 					this.exit = true;
 					this.ondebug?.({ type: 'stop' });
 					reject(error);
@@ -209,11 +213,18 @@ class Clang implements Sandbox {
 	}
 
 	terminate() {
+		this.activeReject?.('Process terminated');
+		this.activeReject = null;
+		this.waitingForInput = false;
 		this.pendingEof = false;
+		this.uid += 1;
 		new Uint8Array(this.interruptBuffer)[0] = 2;
 		const control = new Int32Array(this.debugBuffer);
 		Atomics.add(control, 0, 1);
 		Atomics.notify(control, 0);
+		this.worker?.terminate?.();
+		delete this.worker;
+		this.exit = true;
 	}
 
 	async clear() {
