@@ -415,6 +415,8 @@ export default class Clang {
 			this.debugFunctionMetadata = {};
 			const globalInitialization: string[] = [];
 			const instrumented = [
+				'#include <cstdio>',
+				'#include <iostream>',
 				'#include <map>',
 				'#include <set>',
 				'#include <string>',
@@ -977,6 +979,12 @@ export default class Clang {
 					instrumented.push(
 						`${indent}    __wasm_idle_debug_enter(${currentFunctionId}, ${index + 1});`
 					);
+					if (functionName === 'main') {
+						instrumented.push(`${indent}    std::cout.setf(std::ios::unitbuf);`);
+						instrumented.push(`${indent}    std::cerr.setf(std::ios::unitbuf);`);
+						instrumented.push(`${indent}    setvbuf(stdout, nullptr, _IONBF, 0);`);
+						instrumented.push(`${indent}    setvbuf(stderr, nullptr, _IONBF, 0);`);
+					}
 					const parameterSource = startsInlineFunctionBody
 						? normalized.slice(normalized.indexOf('(') + 1, normalized.lastIndexOf(')'))
 						: pendingFunctionHeader?.parameters || '';

@@ -120,6 +120,35 @@ int main()
 		expect(instrumentedSource).toContain('__wasm_idle_debug_line(1, 5);');
 	});
 
+	it('disables stdio and iostream buffering when debug enters main', async () => {
+		const { clang } = createClangHarness();
+		const code = `int helper() {
+    return 1;
+}
+
+int main() {
+    return helper();
+}`;
+
+		await clang.compile({
+			input: 'main.cc',
+			code,
+			obj: 'main.o',
+			debug: true
+		});
+
+		const instrumentedSource = String(vi.mocked(clang.memfs.addFile).mock.calls[0]?.[1] || '');
+		expect(instrumentedSource).toContain('#include <cstdio>');
+		expect(instrumentedSource).toContain('#include <iostream>');
+		expect(instrumentedSource).toContain('std::cout.setf(std::ios::unitbuf);');
+		expect(instrumentedSource).toContain('std::cerr.setf(std::ios::unitbuf);');
+		expect(instrumentedSource).toContain('setvbuf(stdout, nullptr, _IONBF, 0);');
+		expect(instrumentedSource).toContain('setvbuf(stderr, nullptr, _IONBF, 0);');
+		expect(instrumentedSource.match(/setvbuf\(stdout, nullptr, _IONBF, 0\);/g)).toHaveLength(
+			1
+		);
+	});
+
 	it('tracks outer loop mutations without emitting out-of-scope loop variable hooks', async () => {
 		const { clang } = createClangHarness();
 		const code = `#include <stdio.h>
