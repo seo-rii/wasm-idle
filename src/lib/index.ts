@@ -8,6 +8,13 @@ export {
 	attachMonacoDebugActions,
 	selectInlineDebugLocals
 } from '$lib/debug';
+export {
+	getEditorLanguageServer,
+	getCppLanguageServer,
+	getPythonLanguageServer,
+	resolveCppLanguageServerBaseUrl,
+	resolvePythonLanguageServerBaseUrl
+} from '$lib/lsp';
 import playground, { createPlaygroundBinding } from '$lib/playground';
 
 export default Terminal;
@@ -42,3 +49,4 @@ export type {
 	SandboxRuntimeAssets
 } from '$lib/playground/sandbox';
 export type { DebugLanguageAdapter } from '$lib/debug';
+export type { EditorLanguageServerHandle, EditorLanguageServerRuntimeOptions } from '$lib/lsp';

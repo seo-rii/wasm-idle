@@ -37,6 +37,7 @@ const stdinReady = async () => {
 };
 
 let writer: BrowserMessageWriter | null = null;
+let clangdRuntime: any = null;
 
 const stdout = (charCode: number) => {
 	const json = jsonStream.insert(charCode);
@@ -50,7 +51,23 @@ const onAbort = () => {
 	self.reportError?.('clangd aborted');
 };
 
+const syncWorkspaceFile = (filePath: string) => {
+	if (!clangdRuntime) return;
+	const normalizedFilePath = filePath.startsWith(CLANGD_WORKSPACE_PATH)
+		? filePath
+		: `${CLANGD_WORKSPACE_PATH}/${filePath.replace(/^\/+/, '')}`;
+	const lastSlash = normalizedFilePath.lastIndexOf('/');
+	const directoryPath =
+		lastSlash > 0 ? normalizedFilePath.slice(0, lastSlash) : CLANGD_WORKSPACE_PATH;
+	clangdRuntime.FS.mkdirTree(directoryPath);
+	clangdRuntime.FS.writeFile(normalizedFilePath, '');
+};
+
 self.addEventListener('message', async (event) => {
+	if (event.data?.type === 'sync-file' && typeof event.data?.name === 'string') {
+		syncWorkspaceFile(event.data.name);
+		return;
+	}
 	if (event.data?.type !== 'init') return;
 	const baseUrl = normalizeClangdBaseUrl(event.data.baseUrl);
 	try {
@@ -103,7 +120,7 @@ self.addEventListener('message', async (event) => {
 		const wasmBlob = new Blob([wasmBytes.buffer], { type: 'application/wasm' });
 		const wasmDataUrl = URL.createObjectURL(wasmBlob);
 		const { default: Clangd } = await jsModule;
-		const clangd = await Clangd({
+		clangdRuntime = await Clangd({
 			thisProgram: '/usr/bin/clangd',
 			mainScriptUrlOrBlob: jsDataUrl,
 			locateFile: (path: string, prefix: string) =>
@@ -116,9 +133,9 @@ self.addEventListener('message', async (event) => {
 			onAbort
 		});
 
-		clangd.FS.mkdirTree(CLANGD_WORKSPACE_PATH);
-		clangd.FS.writeFile(CLANGD_CPP_FILE_PATH, '');
-		clangd.FS.writeFile(
+		clangdRuntime.FS.mkdirTree(CLANGD_WORKSPACE_PATH);
+		syncWorkspaceFile(CLANGD_CPP_FILE_PATH);
+		clangdRuntime.FS.writeFile(
 			`${CLANGD_WORKSPACE_PATH}/.clangd`,
 			JSON.stringify({
 				CompileFlags: {
@@ -126,7 +143,7 @@ self.addEventListener('message', async (event) => {
 				}
 			})
 		);
-		clangd.callMain([]);
+		clangdRuntime.callMain([]);
 
 		writer = new BrowserMessageWriter(self);
 		const reader = new BrowserMessageReader(self);
