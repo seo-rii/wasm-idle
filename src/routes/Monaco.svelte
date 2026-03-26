@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { MonacoDebugView } from '$lib';
+	import { attachMonacoDebugActions, MonacoDebugView } from '$lib';
 	import type { ClangdSession as ClangdSessionType } from '$lib/clangd/session';
 	import type { ClangdStatus } from '$lib/clangd/config';
 	import type { DebugLanguageAdapter } from '$lib/debug/language';
@@ -252,6 +252,7 @@ fn main() {
 
 	onMount(() => {
 		let disposed = false;
+		let debugActionBindings: { dispose(): void } | null = null;
 		// @ts-ignore
 		self.MonacoEnvironment = {
 			getWorker: function (_moduleId: any, label: string) {
@@ -277,16 +278,9 @@ fn main() {
 				debugView = new MonacoDebugView(Monaco, editor, onBreakpointsChange);
 				debugView.setBreakpoints(breakpoints);
 				debugView.setPauseState(pausedLine, debugLocals, debugLanguage);
-				editor.onDidChangeCursorPosition((event) => {
-					onCursorLineChange?.(event.position?.lineNumber || null);
-				});
-				onCursorLineChange?.(editor.getPosition()?.lineNumber || 1);
-				editor.addAction({
-					id: 'wasm-idle-run-to-cursor',
-					label: 'Run to Cursor',
-					contextMenuGroupId: 'navigation',
-					contextMenuOrder: 0.5,
-					run: () => onRunToCursor?.(editor?.getPosition()?.lineNumber || null)
+				debugActionBindings = attachMonacoDebugActions(editor, {
+					onCursorLineChange,
+					onRunToCursor
 				});
 				clangdStatus = { state: 'disabled' };
 				return;
@@ -303,16 +297,9 @@ fn main() {
 				debugView = new MonacoDebugView(Monaco, editor, onBreakpointsChange);
 				debugView.setBreakpoints(breakpoints);
 				debugView.setPauseState(pausedLine, debugLocals, debugLanguage);
-				editor.onDidChangeCursorPosition((event) => {
-					onCursorLineChange?.(event.position?.lineNumber || null);
-				});
-				onCursorLineChange?.(editor.getPosition()?.lineNumber || 1);
-				editor.addAction({
-					id: 'wasm-idle-run-to-cursor',
-					label: 'Run to Cursor',
-					contextMenuGroupId: 'navigation',
-					contextMenuOrder: 0.5,
-					run: () => onRunToCursor?.(editor?.getPosition()?.lineNumber || null)
+				debugActionBindings = attachMonacoDebugActions(editor, {
+					onCursorLineChange,
+					onRunToCursor
 				});
 			}
 		});
@@ -321,6 +308,8 @@ fn main() {
 			disposed = true;
 			session?.dispose();
 			session = null;
+			debugActionBindings?.dispose();
+			debugActionBindings = null;
 			debugView?.dispose();
 			debugView = null;
 			const activeModel = model || editor?.getModel();
@@ -329,7 +318,6 @@ fn main() {
 			model?.dispose();
 			model = null;
 			editor?.dispose();
-			onCursorLineChange?.(null);
 		};
 	});
 </script>

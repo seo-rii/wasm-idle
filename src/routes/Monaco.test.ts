@@ -30,11 +30,10 @@ describe('Monaco route debug sync', () => {
 		);
 		expect(source).toMatch(/onCursorLineChange\?: \(line: number \| null\) => void;/);
 		expect(source).toMatch(/onRunToCursor\?: \(line: number \| null\) => void;/);
-		expect(source).toMatch(/editor\.onDidChangeCursorPosition\(\(event\) => \{/);
-		expect(source).toMatch(/onCursorLineChange\?\.\(event\.position\?\.lineNumber \|\| null\);/);
-		expect(source).toMatch(/onCursorLineChange\?\.\(editor\.getPosition\(\)\?\.lineNumber \|\| 1\);/);
-		expect(source).toMatch(/editor\.addAction\(\{\s+id: 'wasm-idle-run-to-cursor',\s+label: 'Run to Cursor',/s);
-		expect(source).toMatch(/run: \(\) => onRunToCursor\?\.\(editor\?\.getPosition\(\)\?\.lineNumber \|\| null\)/);
+		expect(source).toMatch(/import \{ attachMonacoDebugActions, MonacoDebugView \} from '\$lib';/);
+		expect(source).toMatch(/let debugActionBindings: \{ dispose\(\): void \} \| null = null;/);
+		expect(source).toMatch(/debugActionBindings = attachMonacoDebugActions\(editor, \{\s+onCursorLineChange,\s+onRunToCursor\s+\}\);/s);
+		expect(source).toMatch(/debugActionBindings\?\.dispose\(\);/);
 		expect(source).toMatch(
 			/if \(language !== 'cpp' \|\| !editor \|\| !clangdEnabled \|\| !clangdBaseUrl\) \{\s+session\?\.dispose\(\);\s+session = null;\s+clangdStatus = \{ state: 'disabled' \};\s+return;\s+\}/s
 		);
@@ -55,7 +54,7 @@ describe('Monaco route debug sync', () => {
 			})
 		).not.toThrow();
 		expect(pageSource).toMatch(/clangdRequested = \$state\(false\),/);
-		expect(pageSource).toMatch(/if \(debug && language === 'CPP'\) clangdRequested = true;/);
+		expect(pageSource).toMatch(/if \(enableDebug && language === 'CPP'\) clangdRequested = true;/);
 		expect(pageSource).toMatch(/if \(language !== 'CPP'\) clangdRequested = false;/);
 		expect(pageSource).toMatch(/<option value="RUST">Rust<\/option>/);
 		expect(pageSource).toMatch(/<select id="rust-target-triple" bind:value=\{rustTargetTriple\}>/);
@@ -64,6 +63,7 @@ describe('Monaco route debug sync', () => {
 		);
 		expect(pageSource).toMatch(/runtime-manifest\.v3\.json\?v=\$\{WASM_RUST_ASSET_VERSION\}/);
 		expect(pageSource).toMatch(/preloadBrowserRustRuntime/);
+		expect(pageSource).toMatch(/const playground = \$derived\.by\(\(\) => createPlaygroundBinding\(runtimeAssets\)\);/);
 		expect(pageSource).toMatch(/clangdEnabled=\{clangdRequested\}/);
 	});
 

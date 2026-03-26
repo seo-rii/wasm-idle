@@ -97,4 +97,24 @@ const runtimeAssets: PlaygroundRuntimeAssets = {
 
 Python custom loaders receive file names under the Pyodide asset root and can serve both core assets and package files. TeaVM custom loaders receive file names under the TeaVM asset root. Rust expects a browser-loadable compiler module URL; that module is responsible for serving its own nested runtime assets. Compressed TeaVM runtime assets are no longer unpacked inside the library; provide the final file URL or handle decompression in your own loader.
 
+If you want a host app to reuse the same runtime asset configuration for both `<Terminal>` and direct `playground(...)` access, bind it once:
+
+```ts
+import Terminal, { createPlaygroundBinding } from 'wasm-idle';
+
+const wasmIdle = createPlaygroundBinding({
+	rootUrl: 'https://cdn.example.com/repl',
+	rust: {
+		compilerUrl: 'https://cdn.example.com/wasm-rust/index.js'
+	}
+});
+
+const sandbox = await wasmIdle.load('PYTHON');
+await sandbox.load('print("hi")', false);
+```
+
+```svelte
+<Terminal {...wasmIdle.terminalProps} bind:terminal />
+```
+
 Powered by [wasm-clang](https://github.com/binji/wasm-clang), Pyodide, TeaVM, and `wasm-rust`.

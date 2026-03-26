@@ -6,7 +6,11 @@
 		SandboxExecutionOptions
 	} from '$lib/playground/options';
 	import type { PlaygroundRuntimeAssets } from '$lib/playground/assets';
-	import type { Sandbox } from '$lib/playground/sandbox';
+	import type {
+		BoundSandbox,
+		PlaygroundBinding,
+		SandboxRuntimeAssets
+	} from '$lib/playground/sandbox';
 	import type { TerminalControl } from '$lib/terminal/types';
 	import { Theme, registerAllPlugins } from '$lib/terminal';
 	import load from '$lib/playground';
@@ -18,6 +22,7 @@
 		dark?: boolean;
 		path?: string;
 		runtimeAssets?: string | PlaygroundRuntimeAssets;
+		playground?: PlaygroundBinding;
 		font?: string;
 
 		onload?: () => void;
@@ -33,6 +38,7 @@
 		dark = false,
 		path = '',
 		runtimeAssets = undefined,
+		playground = undefined,
 		font = "'D2 coding', monospace",
 		onload,
 		onfinish,
@@ -50,11 +56,13 @@
 		debugOutput = $state(''),
 		finish = true,
 		input = '',
-		sandbox: Sandbox,
+		sandbox: BoundSandbox,
 		first = true,
 		tc = 0,
 		plugin = $state(),
 		ll: string | null = null,
+		loadedRuntimeAssets = $state<SandboxRuntimeAssets | undefined>(undefined),
+		loadedPlayground = $state<PlaygroundBinding | undefined>(undefined),
 		stopRequested = false;
 
 	function writeTerminalOutput(text: string) {
@@ -89,15 +97,25 @@
 	}
 
 	async function initSandbox(language: string) {
+		const currentPlayground = playground;
+		const currentRuntimeAssets = currentPlayground?.runtimeAssets || runtimeAssets || path;
 		let _tc = ++tc;
 		await wait();
 		if (sandbox) await sandbox.clear();
 		input = '';
 		finish = false;
-		if (ll !== language) {
-			sandbox = await load(language);
+		if (
+			ll !== language ||
+			loadedRuntimeAssets !== currentRuntimeAssets ||
+			loadedPlayground !== currentPlayground
+		) {
+			sandbox = currentPlayground
+				? await currentPlayground.load(language)
+				: await load(language, currentRuntimeAssets);
 			await sandbox.clear();
 			ll = language;
+			loadedRuntimeAssets = currentRuntimeAssets;
+			loadedPlayground = currentPlayground;
 		}
 		sandbox.image = onimage;
 		sandbox.ondebug = ondebug;
@@ -192,7 +210,7 @@
 					: phaseProgress(prog, 0.85, 0.99);
 			await Promise.all([
 				initSandbox(language).then(() =>
-					sandbox.load(runtimeAssets || path, code, log, args, options, loadProgress)
+					sandbox.load(code, log, args, options, loadProgress)
 				),
 				initTerm(false)
 			]);
@@ -210,9 +228,7 @@
 			options: SandboxExecutionOptions = {}
 		) {
 			await Promise.all([
-				initSandbox(language).then(() =>
-					sandbox.load(runtimeAssets || path, code, log, args, options, prog)
-				),
+				initSandbox(language).then(() => sandbox.load(code, log, args, options, prog)),
 				initTerm()
 			]);
 			return await runSandbox(sandbox.run(code, false, log, prog, args, options));

@@ -14,6 +14,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/async function stopExecution\(\) \{/);
 		expect(source).toMatch(/if \(!terminal \|\| !runningMode\) return;/);
 		expect(source).toMatch(/if \(runningMode === 'debug'\) \{/);
+		expect(source).toMatch(/await debug\.stop\(\);/);
 		expect(source).toMatch(
 			/\{#if runningMode === 'run'\}\s+<button class="action-button action-button--stop" onclick=\{stopExecution\}>/s
 		);
@@ -29,30 +30,47 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/title="Send EOF"/);
 	});
 
-	it('adds a run-to-cursor action that continues with a temporary cursor breakpoint', () => {
-		expect(source).toMatch(/cursorLine = \$state<number \| null>\(null\),\s+runToCursorLine = \$state<number \| null>\(null\),/s);
-		expect(source).toMatch(/const effectiveBreakpoints = \$derived\.by\(\(\) => \{/);
-		expect(source).toMatch(/const canRunToCursor = \$derived\(/);
-		expect(source).toMatch(/async function runToCursor\(targetLine = cursorLine\) \{/);
-		expect(source).toMatch(/await terminal\.setBreakpoints\?\.\(nextBreakpoints\);/);
-		expect(source).toMatch(/await terminal\.debugCommand\?\.\('continue'\);/);
-		expect(source).toMatch(/breakpoints: \[\.\.\.effectiveBreakpoints\],/);
-		expect(source).toMatch(/terminal\?\.setBreakpoints\?\.\(\[\.\.\.effectiveBreakpoints\]\);/);
-		expect(source).toMatch(/title=\{cursorLine \? `Run to Cursor \(L\$\{cursorLine\}\)` : 'Run to Cursor'\}/);
-		expect(source).toMatch(/aria-label=\{cursorLine \? `Run to Cursor \(L\$\{cursorLine\}\)` : 'Run to Cursor'\}/);
-		expect(source).toMatch(/onclick=\{\(\) => runToCursor\(\)\}/);
-		expect(source).toMatch(/disabled=\{!canRunToCursor\}/);
+	it('delegates debug state, runtime watches, and run-to-cursor to the shared debug controller', () => {
+		expect(source).toMatch(
+			/import Terminal, \{\s+createPlaygroundBinding,\s+createDebugSessionController,\s+cppDebugLanguageAdapter,\s+pythonDebugLanguageAdapter\s+\} from '\$lib';/s
+		);
+		expect(source).toMatch(/const debug = createDebugSessionController\(\{/);
+		expect(source).toMatch(/syncBreakpointsWhile: \(\) => runningMode === 'debug'/);
+		expect(source).toMatch(/\$effect\(\(\) => \{\s+debug\.setTerminal\(terminal\);\s+\}\);/s);
+		expect(source).toMatch(/\$effect\(\(\) => \{\s+debug\.setAdapter\(debugLanguage\);\s+\}\);/s);
+		expect(source).toMatch(/debug\.begin\(\);/);
+		expect(source).toMatch(/breakpoints: \[\.\.\.debug\.effectiveBreakpoints\],/);
+		expect(source).toMatch(/if \(!debug\.paused\) debug\.reset\(\);/);
+		expect(source).toMatch(
+			/title=\{debug\.cursorLine \? `Run to Cursor \(L\$\{debug\.cursorLine\}\)` : 'Run to Cursor'\}/
+		);
+		expect(source).toMatch(
+			/aria-label=\{debug\.cursorLine \? `Run to Cursor \(L\$\{debug\.cursorLine\}\)` : 'Run to Cursor'\}/
+		);
+		expect(source).toMatch(/onclick=\{\(\) => debug\.runToCursor\(\)\}/);
+		expect(source).toMatch(/disabled=\{!debug\.canRunToCursor\}/);
+		expect(source).toMatch(/onclick=\{\(\) => debug\.sendCommand\('continue'\)\}/);
+		expect(source).toMatch(/ondebug=\{debug\.handleEvent\}/);
+		expect(source).toMatch(/bind:value=\{debug\.watchInput\}/);
+		expect(source).toMatch(/onclick=\{\(\) => debug\.addWatchExpression\(\)\}/);
+		expect(source).toMatch(/onclick=\{\(\) => debug\.removeWatchExpression\(watch\.expression\)\}/);
+		expect(source).toMatch(/debugLocals=\{debug\.locals\}/);
+		expect(source).toMatch(/pausedLine=\{debug\.pausedLine\}/);
+		expect(source).toMatch(/onRunToCursor=\{debug\.runToCursor\}/);
 		expect(source).toMatch(/<span class="material-symbols-outlined">play_circle<\/span>/);
 	});
 
-	it('passes a local wasm-rust bundle to the demo Terminal runtime assets', () => {
+	it('passes a local wasm-rust bundle through a reusable playground binding', () => {
 		expect(source).toMatch(
 			/import \{ WASM_RUST_ASSET_VERSION \} from '\$lib\/playground\/wasmRustVersion';/
 		);
 		expect(source).toMatch(
 			/let runtimeAssets = \$derived\.by<PlaygroundRuntimeAssets>\(\(\) => \(\{\s+rootUrl: path,\s+rust: \{\s+compilerUrl: path\s+\?\s+`\$\{path\}\/wasm-rust\/index\.js\?v=\$\{WASM_RUST_ASSET_VERSION\}`\s+:\s+`\/wasm-rust\/index\.js\?v=\$\{WASM_RUST_ASSET_VERSION\}`\s+\}\s+\}\)\);/s
 		);
-		expect(source).toMatch(/<Terminal\s+bind:terminal\s+\{path\}\s+\{runtimeAssets\}/s);
+		expect(source).toMatch(
+			/const playground = \$derived\.by\(\(\) => createPlaygroundBinding\(runtimeAssets\)\);/
+		);
+		expect(source).toMatch(/<Terminal\s+bind:terminal\s+playground=\{playground\}/s);
 		expect(source).toMatch(
 			/type WasmRustRuntimeModule = \{\s+preloadBrowserRustRuntime\?: \(options\?: \{\s+targetTriple\?: RustTargetTriple;\s+\}\) => Promise<void>;\s+\};/s
 		);
@@ -105,9 +123,9 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/if \(eof\) await terminal\.eof\?\.\(\);/);
 	});
 
-	it('prefers runtime-backed watch evaluation when the terminal exposes it', () => {
-		expect(source).toMatch(/if \(paused && terminalControl\?\.debugEvaluate\) \{/);
-		expect(source).toMatch(/value: await terminalControl\.debugEvaluate!\(expression\)/);
+	it('keeps browser stdin helper wiring separate from the shared debug controller', () => {
+		expect(source).not.toMatch(/terminalControl\?\.debugEvaluate/);
+		expect(source).toMatch(/createDebugSessionController/);
 	});
 
 	it('shows a Rust stdin hint that explains EOF for read-to-end programs', () => {
@@ -131,7 +149,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/examplePaneWidth = \$state\(0\),\s+terminalPaneWidth = \$state<number \| null>\(null\),\s+resizingPane = \$state\(false\);/s);
 		expect(source).toMatch(/const desktopExampleLayout = \$derived\(examplePaneWidth > 960\);/);
 		expect(source).toMatch(/const terminalPanePixelWidth = \$derived\.by\(\(\) => \{/);
-		expect(source).toMatch(/\{#if debugLanguage && debugActive\}/);
+		expect(source).toMatch(/\{#if debugLanguage && debug\.active\}/);
 		expect(source).toMatch(/class="panel-resizer"/);
 		expect(source).toMatch(/role="slider"/);
 		expect(source).toMatch(/onpointerdown=\{\(event\) => \{/);
@@ -140,9 +158,10 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/@media \(max-width: 960px\) \{\s+main \{\s+height: auto;\s+min-height: 100vh;\s+min-height: 100dvh;/s);
 		expect(source).toMatch(/<div\s+class:panel-resizer--active=\{resizingPane\}\s+class="panel-resizer"/s);
 		expect(source).toMatch(/role="slider"/);
-		expect(source).toMatch(/breakpoints=\{effectiveBreakpoints\}/);
-		expect(source).toMatch(/onCursorLineChange=\{\(line\) => \(cursorLine = line\)\}/);
-		expect(source).toMatch(/onRunToCursor=\{runToCursor\}/);
+		expect(source).toMatch(/breakpoints=\{debug\.effectiveBreakpoints\}/);
+		expect(source).toMatch(/onCursorLineChange=\{debug\.setCursorLine\}/);
+		expect(source).toMatch(/onBreakpointsChange=\{debug\.setBreakpoints\}/);
+		expect(source).toMatch(/onRunToCursor=\{debug\.runToCursor\}/);
 		expect(layoutSource).toMatch(
 			/:global\(html\),\s+:global\(body\) \{\s+margin: 0;\s+min-height: 100%;\s+\}/s
 		);

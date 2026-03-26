@@ -2,6 +2,12 @@ import type { DebugVariable } from '$lib/playground/options';
 import type { DebugLanguageAdapter } from '$lib/debug/language';
 import type monaco from 'monaco-editor';
 
+export type MonacoDebugActionsOptions = {
+	runToCursorLabel?: string;
+	onCursorLineChange?: (line: number | null) => void;
+	onRunToCursor?: (line: number | null) => void;
+};
+
 export class MonacoDebugView {
 	Monaco: typeof monaco;
 	editor: monaco.editor.IStandaloneCodeEditor;
@@ -124,4 +130,34 @@ export class MonacoDebugView {
 		this.mouseHandler?.dispose();
 		this.mouseHandler = null;
 	}
+}
+
+export function attachMonacoDebugActions(
+	editor: monaco.editor.IStandaloneCodeEditor,
+	options: MonacoDebugActionsOptions = {}
+) {
+	const disposables: monaco.IDisposable[] = [];
+	disposables.push(
+		editor.onDidChangeCursorPosition((event) => {
+			options.onCursorLineChange?.(event.position?.lineNumber || null);
+		})
+	);
+	options.onCursorLineChange?.(editor.getPosition()?.lineNumber || 1);
+	if (options.onRunToCursor) {
+		disposables.push(
+			editor.addAction({
+				id: 'wasm-idle-run-to-cursor',
+				label: options.runToCursorLabel || 'Run to Cursor',
+				contextMenuGroupId: 'navigation',
+				contextMenuOrder: 0.5,
+				run: () => options.onRunToCursor?.(editor.getPosition()?.lineNumber || null)
+			})
+		);
+	}
+	return {
+		dispose() {
+			while (disposables.length) disposables.pop()?.dispose();
+			options.onCursorLineChange?.(null);
+		}
+	};
 }

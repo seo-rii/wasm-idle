@@ -7,24 +7,25 @@ import type {
 import type { PlaygroundRuntimeAssets } from '$lib/playground/assets';
 import type { Writable } from 'svelte/store';
 
-type ProgressLike = Writable<number> | { set?: (value: number) => void };
+export type SandboxRuntimeAssets = string | PlaygroundRuntimeAssets;
+export type SandboxProgress = Writable<number> | { set?: (value: number) => void };
 
 export interface Sandbox {
 	constructor: any;
 	eof: () => void;
 	load: (
-		runtimeAssets?: string | PlaygroundRuntimeAssets,
+		runtimeAssets?: SandboxRuntimeAssets,
 		code?: string,
 		log?: boolean,
 		args?: string[],
 		options?: SandboxExecutionOptions,
-		progress?: ProgressLike
+		progress?: SandboxProgress
 	) => Promise<void>;
 	run: (
 		code: string,
 		prepare: boolean,
 		log?: boolean,
-		prog?: ProgressLike,
+		prog?: SandboxProgress,
 		args?: string[],
 		options?: SandboxExecutionOptions
 	) => Promise<boolean | string>;
@@ -41,4 +42,26 @@ export interface Sandbox {
 	debugEvaluate?: (expression: string) => Promise<string>;
 	image?: (data: { mime: string; b64: string; ts?: number }) => void;
 	elapse?: number;
+}
+
+export interface BoundSandbox extends Omit<Sandbox, 'load'> {
+	load: (
+		code?: string,
+		log?: boolean,
+		args?: string[],
+		options?: SandboxExecutionOptions,
+		progress?: SandboxProgress
+	) => Promise<void>;
+	runtimeAssets: SandboxRuntimeAssets;
+}
+
+export interface PlaygroundTerminalProps {
+	playground: PlaygroundBinding;
+	runtimeAssets: SandboxRuntimeAssets;
+}
+
+export interface PlaygroundBinding {
+	runtimeAssets: SandboxRuntimeAssets;
+	terminalProps: PlaygroundTerminalProps;
+	load: (language: string) => Promise<BoundSandbox>;
 }

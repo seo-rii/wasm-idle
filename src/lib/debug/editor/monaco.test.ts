@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { MonacoDebugView } from './monaco';
+import { attachMonacoDebugActions, MonacoDebugView } from './monaco';
 
 describe('MonacoDebugView', () => {
 	it('keeps inline debug hints visible for empty end-of-line ranges', () => {
@@ -71,5 +71,58 @@ describe('MonacoDebugView', () => {
 				})
 			})
 		]);
+	});
+
+	it('registers cursor sync and run-to-cursor actions together for host editors', () => {
+		let cursorHandler: ((event: { position?: { lineNumber?: number | null } | null }) => void) | null =
+			null;
+		const cursorDispose = vi.fn();
+		const actionDispose = vi.fn();
+		const onCursorLineChange = vi.fn();
+		const onRunToCursor = vi.fn();
+		const editor = {
+			onDidChangeCursorPosition: vi.fn(
+				(
+					handler: (event: { position?: { lineNumber?: number | null } | null }) => void
+				) => {
+				cursorHandler = handler;
+				return { dispose: cursorDispose };
+				}
+			),
+			getPosition: vi.fn(() => ({ lineNumber: 13 })),
+			addAction: vi.fn(({ run }) => {
+				run();
+				return { dispose: actionDispose };
+			})
+		};
+
+		const bindings = attachMonacoDebugActions(editor as never, {
+			onCursorLineChange,
+			onRunToCursor
+		});
+
+		expect(onCursorLineChange).toHaveBeenNthCalledWith(1, 13);
+		expect(editor.addAction).toHaveBeenCalledWith(
+			expect.objectContaining({
+				id: 'wasm-idle-run-to-cursor',
+				label: 'Run to Cursor'
+			})
+		);
+		expect(onRunToCursor).toHaveBeenCalledWith(13);
+
+		expect(cursorHandler).not.toBeNull();
+		if (!cursorHandler) {
+			throw new Error('expected cursor handler');
+		}
+		(
+			cursorHandler as (event: { position?: { lineNumber?: number | null } | null }) => void
+		)({ position: { lineNumber: 21 } });
+		expect(onCursorLineChange).toHaveBeenNthCalledWith(2, 21);
+
+		bindings.dispose();
+
+		expect(cursorDispose).toHaveBeenCalled();
+		expect(actionDispose).toHaveBeenCalled();
+		expect(onCursorLineChange).toHaveBeenLastCalledWith(null);
 	});
 });

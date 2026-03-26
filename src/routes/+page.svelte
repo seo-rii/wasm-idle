@@ -1,15 +1,17 @@
 <script lang="ts">
 	import Monaco from './Monaco.svelte';
-	import Terminal, { cppDebugLanguageAdapter, pythonDebugLanguageAdapter } from '$lib';
+	import Terminal, {
+		createPlaygroundBinding,
+		createDebugSessionController,
+		cppDebugLanguageAdapter,
+		pythonDebugLanguageAdapter
+	} from '$lib';
 	import { page } from '$app/state';
 	import { browser } from '$app/environment';
 	import type { PlaygroundRuntimeAssets } from '$lib/playground/assets';
 	import { WASM_RUST_ASSET_VERSION } from '$lib/playground/wasmRustVersion';
 	import type {
 		CompilerDiagnostic,
-		DebugFrame,
-		DebugSessionEvent,
-		DebugVariable,
 		RustTargetTriple
 	} from '$lib/playground/options';
 	import type { TerminalControl } from '$lib/terminal';
@@ -28,24 +30,14 @@
 				: `/wasm-rust/index.js?v=${WASM_RUST_ASSET_VERSION}`
 		}
 	}));
+	const playground = $derived.by(() => createPlaygroundBinding(runtimeAssets));
 
 	let editor = $state<monaco.editor.IStandaloneCodeEditor | null>(null),
 		terminal = $state<TerminalControl | undefined>(undefined),
-		breakpoints = $state<number[]>([]),
-		cursorLine = $state<number | null>(null),
-		runToCursorLine = $state<number | null>(null),
-		debugLocals = $state<DebugVariable[]>([]),
-		debugCallStack = $state<DebugFrame[]>([]),
 		compilerDiagnostics = $state<CompilerDiagnostic[]>([]),
 		clangdRequested = $state(false),
 		argsInput = $state(''),
 		rustTargetTriple = $state<RustTargetTriple>('wasm32-wasip1'),
-		watchInput = $state(''),
-		watchExpressions = $state<string[]>([]),
-		pausedLine = $state<number | null>(null),
-		debugActive = $state(false),
-		debugPaused = $state(false),
-		watchValues = $state<{ expression: string; value: string }[]>([]),
 		log = $state(true),
 		language = $state('CPP'),
 		runningMode = $state<'run' | 'debug' | null>(null),
@@ -69,17 +61,12 @@
 				? pythonDebugLanguageAdapter
 				: null
 	);
-	const effectiveBreakpoints = $derived.by(() => {
-		const lines = [...breakpoints];
-		if (runToCursorLine !== null && !lines.includes(runToCursorLine)) lines.push(runToCursorLine);
-		return lines.sort((left, right) => left - right);
+	const debug = createDebugSessionController({
+		syncBreakpointsWhile: () => runningMode === 'debug'
 	});
-	const canRunToCursor = $derived(
-		debugPaused && cursorLine !== null && cursorLine > 0 && cursorLine !== pausedLine
-	);
-	const debugStatusLabel = $derived(debugPaused ? 'Paused' : debugActive ? 'Running' : 'Ready');
+	const debugStatusLabel = $derived(debug.paused ? 'Paused' : debug.active ? 'Running' : 'Ready');
 	const debugStatusIcon = $derived(
-		debugPaused ? 'pause_circle' : debugActive ? 'play_circle' : 'adjust'
+		debug.paused ? 'pause_circle' : debug.active ? 'play_circle' : 'adjust'
 	);
 	const knownRustTargetTriples = ['wasm32-wasip1', 'wasm32-wasip2', 'wasm32-wasip3'] as const;
 	const debugTitle = $derived(language === 'CPP' ? 'Native Trace' : 'Pyodide Trace');
@@ -123,55 +110,11 @@
 		}) => Promise<void>;
 	};
 
-	function onDebugEvent(event: DebugSessionEvent) {
-		if (event.type === 'pause') {
-			runToCursorLine = null;
-			pausedLine = event.line;
-			debugLocals = event.locals;
-			debugCallStack = event.callStack;
-			debugActive = true;
-			debugPaused = true;
-			return;
-		}
-		if (event.type === 'resume') {
-			debugPaused = false;
-			pausedLine = null;
-			debugLocals = [];
-			debugCallStack = [];
-			return;
-		}
-		if (event.type === 'stop') runToCursorLine = null;
-		pausedLine = null;
-		debugLocals = [];
-		debugCallStack = [];
-		debugPaused = false;
-		debugActive = false;
-	}
-
-	function sendDebugCommand(command: 'continue' | 'stepInto' | 'nextLine' | 'stepOut') {
-		if (!terminal || !debugPaused) return;
-		terminal.debugCommand?.(command);
-	}
-
-	async function runToCursor(targetLine = cursorLine) {
-		if (!terminal || !debugPaused || !targetLine || targetLine === pausedLine) return;
-		const nextBreakpoints = breakpoints.includes(targetLine)
-			? [...breakpoints]
-			: [...breakpoints, targetLine].sort((left, right) => left - right);
-		runToCursorLine = breakpoints.includes(targetLine) ? null : targetLine;
-		await terminal.setBreakpoints?.(nextBreakpoints);
-		await terminal.debugCommand?.('continue');
-	}
-
 	async function stopExecution() {
 		if (!terminal || !runningMode) return;
-		runToCursorLine = null;
 		if (runningMode === 'debug') {
-			pausedLine = null;
-			debugLocals = [];
-			debugCallStack = [];
-			debugPaused = false;
-			debugActive = false;
+			await debug.stop();
+			return;
 		}
 		await terminal.stop?.();
 	}
@@ -185,26 +128,16 @@
 		compilerDiagnostics = [...compilerDiagnostics, diagnostic];
 	}
 
-	async function exec(debug = false) {
+	async function exec(enableDebug = false) {
 		if (!editor || !terminal) return;
-		if (debug && !debugLanguage) return;
+		if (enableDebug && !debugLanguage) return;
 		if (runningMode) return;
-		runningMode = debug ? 'debug' : 'run';
-		if (debug && language === 'CPP') clangdRequested = true;
-		if (debug) {
-			runToCursorLine = null;
-			debugActive = true;
-			debugPaused = false;
-			pausedLine = null;
-			debugLocals = [];
-			debugCallStack = [];
+		runningMode = enableDebug ? 'debug' : 'run';
+		if (enableDebug && language === 'CPP') clangdRequested = true;
+		if (enableDebug) {
+			debug.begin();
 		} else {
-			runToCursorLine = null;
-			debugActive = false;
-			debugPaused = false;
-			pausedLine = null;
-			debugLocals = [];
-			debugCallStack = [];
+			debug.reset();
 		}
 		compilerDiagnostics = [];
 		const args =
@@ -228,85 +161,19 @@
 				progress: progressRef,
 				args,
 				options: {
-					debug,
-					breakpoints: [...effectiveBreakpoints],
+					debug: enableDebug,
+					breakpoints: [...debug.effectiveBreakpoints],
 					stdin: '',
-					pauseOnEntry: debug,
+					pauseOnEntry: enableDebug,
 					rustTargetTriple: language === 'RUST' ? rustTargetTriple : undefined
 				}
 			});
 		} finally {
 			progress = -1;
 			runningMode = null;
-			if (!debugPaused) {
-				debugActive = false;
-				pausedLine = null;
-				debugLocals = [];
-				debugCallStack = [];
-			}
+			if (!debug.paused) debug.reset();
 		}
 	}
-
-	function addWatchExpression() {
-		const expression = watchInput.trim();
-		if (!expression || watchExpressions.includes(expression)) return;
-		watchExpressions = [...watchExpressions, expression];
-		watchInput = '';
-	}
-
-	function removeWatchExpression(expression: string) {
-		watchExpressions = watchExpressions.filter((entry) => entry !== expression);
-	}
-
-	let watchRequestVersion = 0;
-
-	$effect(() => {
-		const expressions = [...watchExpressions];
-		const adapter = debugLanguage;
-		const locals = [...debugLocals];
-		const paused = debugPaused;
-		const activeLanguage = language;
-		const terminalControl = terminal;
-		const version = ++watchRequestVersion;
-
-		if (!expressions.length) {
-			watchValues = [];
-			return;
-		}
-
-		if (paused && terminalControl?.debugEvaluate) {
-			watchValues = expressions.map((expression) => ({ expression, value: '...' }));
-			(async () => {
-				const resolved: { expression: string; value: string }[] = [];
-				for (const expression of expressions) {
-					resolved.push({
-						expression,
-						value: await terminalControl.debugEvaluate!(expression)
-					});
-				}
-				if (version === watchRequestVersion) watchValues = resolved;
-			})().catch(() => {
-				if (version === watchRequestVersion) {
-					watchValues = expressions.map((expression) => ({ expression, value: 'error' }));
-				}
-			});
-			return;
-		}
-
-		watchValues = expressions.map((expression) => {
-			try {
-				return {
-					expression,
-					value: adapter ? adapter.evaluateExpression(expression, locals) : 'error'
-				};
-			} catch (error) {
-				return {
-					expression,
-					value: error instanceof Error && error.message === 'unavailable' ? '?' : 'error'
-				};
-			}
-		});
-	});
 
 	$effect(() => {
 		if (browser && editor && !init) {
@@ -405,6 +272,14 @@
 	});
 
 	$effect(() => {
+		debug.setTerminal(terminal);
+	});
+
+	$effect(() => {
+		debug.setAdapter(debugLanguage);
+	});
+
+	$effect(() => {
 		if (!browser) return;
 		const target = window as Window &
 			typeof globalThis & { __wasmIdleDebug?: WasmIdleDebugApi };
@@ -423,21 +298,11 @@
 	});
 
 	$effect(() => {
-		if (runningMode !== 'debug') return;
-		terminal?.setBreakpoints?.([...effectiveBreakpoints]);
-	});
-
-	$effect(() => {
 		if (language !== 'CPP') clangdRequested = false;
 		if (!debugLanguage) {
-			breakpoints = [];
-			cursorLine = null;
-			runToCursorLine = null;
-			pausedLine = null;
-			debugLocals = [];
-			debugCallStack = [];
-			debugActive = false;
-			debugPaused = false;
+			debug.setBreakpoints([]);
+			debug.setCursorLine(null);
+			debug.reset();
 		}
 		if (language !== 'JAVA' && language !== 'RUST') compilerDiagnostics = [];
 	});
@@ -506,8 +371,8 @@
 					</button>
 					<button
 						class="action-button action-button--icon"
-						onclick={() => sendDebugCommand('continue')}
-						disabled={!debugPaused}
+						onclick={() => debug.sendCommand('continue')}
+						disabled={!debug.paused}
 						title="Continue"
 						aria-label="Continue"
 					>
@@ -515,17 +380,17 @@
 					</button>
 					<button
 						class="action-button action-button--icon"
-						onclick={() => runToCursor()}
-						disabled={!canRunToCursor}
-						title={cursorLine ? `Run to Cursor (L${cursorLine})` : 'Run to Cursor'}
-						aria-label={cursorLine ? `Run to Cursor (L${cursorLine})` : 'Run to Cursor'}
+						onclick={() => debug.runToCursor()}
+						disabled={!debug.canRunToCursor}
+						title={debug.cursorLine ? `Run to Cursor (L${debug.cursorLine})` : 'Run to Cursor'}
+						aria-label={debug.cursorLine ? `Run to Cursor (L${debug.cursorLine})` : 'Run to Cursor'}
 					>
 						<span class="material-symbols-outlined">play_circle</span>
 					</button>
 					<button
 						class="action-button action-button--icon"
-						onclick={() => sendDebugCommand('stepInto')}
-						disabled={!debugPaused}
+						onclick={() => debug.sendCommand('stepInto')}
+						disabled={!debug.paused}
 						title="Step Into"
 						aria-label="Step Into"
 					>
@@ -533,8 +398,8 @@
 					</button>
 					<button
 						class="action-button action-button--icon"
-						onclick={() => sendDebugCommand('nextLine')}
-						disabled={!debugPaused}
+						onclick={() => debug.sendCommand('nextLine')}
+						disabled={!debug.paused}
 						title="Next Line"
 						aria-label="Next Line"
 					>
@@ -542,8 +407,8 @@
 					</button>
 					<button
 						class="action-button action-button--icon"
-						onclick={() => sendDebugCommand('stepOut')}
-						disabled={!debugPaused}
+						onclick={() => debug.sendCommand('stepOut')}
+						disabled={!debug.paused}
 						title="Step Out"
 						aria-label="Step Out"
 					>
@@ -625,12 +490,12 @@
 				{/if} Use Ctrl+D or the EOF button while running if the program reads stdin until EOF.
 			</p>
 		{/if}
-		{#if debugLanguage && debugActive}
+		{#if debugLanguage && debug.active}
 			<section
 				class={[
 					'debug-shell',
-					debugPaused && 'debug-shell--paused',
-					debugActive && !debugPaused && 'debug-shell--active'
+					debug.paused && 'debug-shell--paused',
+					debug.active && !debug.paused && 'debug-shell--active'
 				]}
 			>
 				<div class="debug-hero">
@@ -647,9 +512,9 @@
 						<div
 							class={[
 								'debug-status-pill',
-								debugPaused
+								debug.paused
 									? 'debug-status-pill--paused'
-									: debugActive
+									: debug.active
 										? 'debug-status-pill--active'
 										: 'debug-status-pill--idle'
 							]}
@@ -659,15 +524,15 @@
 						</div>
 						<div class="debug-metric">
 							<span>Breakpoints</span>
-							<strong>{breakpoints.length}</strong>
+							<strong>{debug.breakpoints.length}</strong>
 						</div>
 						<div class="debug-metric">
 							<span>Watches</span>
-							<strong>{watchExpressions.length}</strong>
+							<strong>{debug.watchExpressions.length}</strong>
 						</div>
 						<div class="debug-metric">
 							<span>Line</span>
-							<strong>{pausedLine === null ? '—' : `L${pausedLine}`}</strong>
+							<strong>{debug.pausedLine === null ? '—' : `L${debug.pausedLine}`}</strong>
 						</div>
 					</div>
 				</div>
@@ -680,11 +545,11 @@
 									<h3>Locals</h3>
 								</div>
 							</div>
-							<span class="debug-count">{debugLocals.length}</span>
+							<span class="debug-count">{debug.locals.length}</span>
 						</header>
-						{#if debugLocals.length}
+						{#if debug.locals.length}
 							<ul>
-								{#each debugLocals as variable (variable.name)}
+								{#each debug.locals as variable (variable.name)}
 									<li class="debug-entry debug-entry--local">
 										<code class="debug-key">{variable.name}</code>
 										<code class="debug-value">{variable.value}</code>
@@ -706,22 +571,22 @@
 									<h3>Watch</h3>
 								</div>
 							</div>
-							<span class="debug-count">{watchExpressions.length}</span>
+							<span class="debug-count">{debug.watchExpressions.length}</span>
 						</header>
 						<div class="watch-row">
 							<input
-								bind:value={watchInput}
+								bind:value={debug.watchInput}
 								placeholder="a == b"
-								onkeydown={(event) => event.key === 'Enter' && addWatchExpression()}
+								onkeydown={(event) => event.key === 'Enter' && debug.addWatchExpression()}
 							/>
-							<button class="watch-add" onclick={addWatchExpression}>
+							<button class="watch-add" onclick={() => debug.addWatchExpression()}>
 								<span class="material-symbols-outlined">add</span>
 								<span>Add</span>
 							</button>
 						</div>
-						{#if watchValues.length}
+						{#if debug.watchValues.length}
 							<ul>
-								{#each watchValues as watch (watch.expression)}
+								{#each debug.watchValues as watch (watch.expression)}
 									<li class="debug-entry debug-entry--watch">
 										<div class="debug-entry__body">
 											<span class="debug-expression">{watch.expression}</span>
@@ -729,7 +594,7 @@
 										</div>
 										<button
 											class="remove"
-											onclick={() => removeWatchExpression(watch.expression)}
+											onclick={() => debug.removeWatchExpression(watch.expression)}
 											aria-label={`Remove watch expression ${watch.expression}`}
 										>
 											<span class="material-symbols-outlined">close</span>
@@ -752,11 +617,11 @@
 									<h3>Call Stack</h3>
 								</div>
 							</div>
-							<span class="debug-count">{debugCallStack.length}</span>
+							<span class="debug-count">{debug.callStack.length}</span>
 						</header>
-						{#if debugCallStack.length}
+						{#if debug.callStack.length}
 							<ul>
-								{#each debugCallStack as frame, index (`${frame.functionName}:${frame.line}`)}
+								{#each debug.callStack as frame, index (`${frame.functionName}:${frame.line}`)}
 									<li
 										class={[
 											'debug-entry',
@@ -787,9 +652,8 @@
 		<div class="terminal-shell">
 			<Terminal
 				bind:terminal
-				{path}
-				{runtimeAssets}
-				ondebug={onDebugEvent}
+				playground={playground}
+				ondebug={debug.handleEvent}
 				oncompilediagnostic={onCompileDiagnostic}
 			/>
 		</div>
@@ -861,14 +725,14 @@
 			bind:editor
 			clangdEnabled={clangdRequested}
 			{clangdBaseUrl}
-			breakpoints={effectiveBreakpoints}
-			{debugLocals}
+			breakpoints={debug.effectiveBreakpoints}
+			debugLocals={debug.locals}
 			{debugLanguage}
 			{compilerDiagnostics}
-			{pausedLine}
-			onCursorLineChange={(line) => (cursorLine = line)}
-			onRunToCursor={runToCursor}
-			onBreakpointsChange={(lines) => (breakpoints = lines)}
+			pausedLine={debug.pausedLine}
+			onCursorLineChange={debug.setCursorLine}
+			onRunToCursor={debug.runToCursor}
+			onBreakpointsChange={debug.setBreakpoints}
 		/>
 	{/key}
 </main>
