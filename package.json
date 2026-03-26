@@ -1,6 +1,6 @@
 {
 	"name": "wasm-idle",
-	"version": "0.5.0",
+	"version": "0.6.0",
 	"description": "A simple web app to run C++/Python/Java code in the browser",
 	"license": "MIT",
 	"type": "module",
