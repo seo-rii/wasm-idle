@@ -1006,6 +1006,44 @@
 		min-height: 280px;
 	}
 
+	.terminal-shell :global(.xterm .xterm-viewport) {
+		scrollbar-width: thin;
+		scrollbar-color: rgba(15, 118, 110, 0.62) rgba(148, 163, 184, 0.12);
+	}
+
+	.terminal-shell :global(.xterm .xterm-viewport::-webkit-scrollbar) {
+		width: 12px;
+	}
+
+	.terminal-shell :global(.xterm .xterm-viewport::-webkit-scrollbar-track) {
+		margin: 8px 0;
+		border-radius: 999px;
+		background:
+			linear-gradient(180deg, rgba(255, 255, 255, 0.58), rgba(226, 232, 240, 0.26)),
+			rgba(148, 163, 184, 0.08);
+		box-shadow:
+			inset 0 0 0 1px rgba(148, 163, 184, 0.08),
+			inset 0 1px 2px rgba(15, 23, 42, 0.05);
+	}
+
+	.terminal-shell :global(.xterm .xterm-viewport::-webkit-scrollbar-thumb) {
+		border: 3px solid transparent;
+		border-radius: 999px;
+		background:
+			linear-gradient(180deg, rgba(45, 212, 191, 0.86), rgba(15, 118, 110, 0.94))
+				padding-box;
+		box-shadow:
+			inset 0 1px 0 rgba(255, 255, 255, 0.42),
+			0 4px 10px rgba(15, 118, 110, 0.18);
+	}
+
+	.terminal-shell :global(.xterm:hover .xterm-viewport::-webkit-scrollbar-thumb),
+	.terminal-shell :global(.xterm .xterm-viewport::-webkit-scrollbar-thumb:hover) {
+		background:
+			linear-gradient(180deg, rgba(52, 211, 153, 0.94), rgba(13, 148, 136, 1))
+				padding-box;
+	}
+
 	.material-symbols-outlined {
 		font-family: 'Material Symbols Outlined';
 		font-weight: normal;
