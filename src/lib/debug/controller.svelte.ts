@@ -1,12 +1,12 @@
 import type { DebugLanguageAdapter } from '$lib/debug/language';
-import type {
-	DebugCommand,
-	DebugFrame,
-	DebugSessionEvent,
-	DebugVariable
-} from '$lib/playground/options';
-import type { TerminalControl } from '$lib/terminal';
-import { fromStore, writable } from 'svelte/store';
+	import type {
+		DebugCommand,
+		DebugFrame,
+		DebugSessionEvent,
+		DebugVariable
+	} from '$lib/playground/options';
+	import type { TerminalControl } from '$lib/terminal';
+	import { fromStore, get, writable } from 'svelte/store';
 
 export type DebugWatchValue = {
 	expression: string;
@@ -59,22 +59,22 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		if (typeof options.syncBreakpointsWhile === 'boolean') {
 			return options.syncBreakpointsWhile;
 		}
-		return activeState.current;
+		return get(activeStore);
 	}
 
 	function getEffectiveBreakpoints() {
-		const lines = [...breakpointsState.current];
-		const runToCursorLine = runToCursorLineState.current;
+		const lines = [...get(breakpointsStore)];
+		const runToCursorLine = get(runToCursorLineStore);
 		if (runToCursorLine !== null && !lines.includes(runToCursorLine)) lines.push(runToCursorLine);
 		return lines.sort((left, right) => left - right);
 	}
 
 	function refreshWatchValues() {
-		const expressions = [...watchExpressionsState.current];
-		const adapter = adapterState.current;
-		const localVariables = [...localsState.current];
-		const paused = pausedState.current;
-		const terminal = terminalState.current;
+		const expressions = [...get(watchExpressionsStore)];
+		const adapter = get(adapterStore);
+		const localVariables = [...get(localsStore)];
+		const paused = get(pausedStore);
+		const terminal = get(terminalStore);
 		const version = ++watchRequestVersion;
 
 		if (!expressions.length) {
@@ -121,7 +121,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 	}
 
 	function syncBreakpoints() {
-		const terminal = terminalState.current;
+		const terminal = get(terminalStore);
 		if (!shouldSyncBreakpoints() || !terminal?.setBreakpoints) return;
 		void terminal.setBreakpoints(getEffectiveBreakpoints());
 	}
@@ -189,10 +189,12 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		cursorLineStore.set(line);
 	}
 
-	function addWatchExpression(expression = watchInputState.current) {
-		const nextExpression = expression.trim();
-		if (!nextExpression || watchExpressionsState.current.includes(nextExpression)) return false;
-		watchExpressionsStore.set([...watchExpressionsState.current, nextExpression]);
+	function addWatchExpression(expression?: string) {
+		const watchInput = get(watchInputStore);
+		const watchExpressions = get(watchExpressionsStore);
+		const nextExpression = (expression || watchInput).trim();
+		if (!nextExpression || watchExpressions.includes(nextExpression)) return false;
+		watchExpressionsStore.set([...watchExpressions, nextExpression]);
 		watchInputStore.set('');
 		refreshWatchValues();
 		return true;
@@ -200,7 +202,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 
 	function removeWatchExpression(expression: string) {
 		watchExpressionsStore.set(
-			watchExpressionsState.current.filter((entry) => entry !== expression)
+			get(watchExpressionsStore).filter((entry) => entry !== expression)
 		);
 		refreshWatchValues();
 	}
@@ -208,24 +210,24 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 	function clearWatches() {
 		watchInputStore.set('');
 		watchExpressionsStore.set([]);
-		watchValuesStore.set([]);
+		refreshWatchValues();
 	}
 
 	async function sendCommand(command: DebugCommand) {
-		const terminal = terminalState.current;
-		if (!terminal || !pausedState.current) return false;
+		const terminal = get(terminalStore);
+		if (!terminal || !get(pausedStore)) return false;
 		await terminal.debugCommand(command);
 		return true;
 	}
 
-	async function runToCursor(targetLine = cursorLineState.current) {
-		const terminal = terminalState.current;
-		const breakpoints = breakpointsState.current;
+	async function runToCursor(targetLine = get(cursorLineStore)) {
+		const terminal = get(terminalStore);
+		const breakpoints = get(breakpointsStore);
 		if (
 			!terminal ||
-			!pausedState.current ||
+			!get(pausedStore) ||
 			!targetLine ||
-			targetLine === pausedLineState.current ||
+			targetLine === get(pausedLineStore) ||
 			!terminal.setBreakpoints
 		) {
 			return false;
@@ -240,7 +242,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 	}
 
 	async function stop() {
-		const terminal = terminalState.current;
+		const terminal = get(terminalStore);
 		if (!terminal) return false;
 		reset();
 		await terminal.stop?.();

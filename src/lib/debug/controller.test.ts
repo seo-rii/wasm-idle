@@ -122,4 +122,45 @@ describe('createDebugSessionController', () => {
 			expect(controller.watchValues).toEqual([{ expression: 'sum', value: '34' }])
 		);
 	});
+
+	it('does not restore cleared watches when an older runtime evaluation resolves late', async () => {
+		let resolveEvaluation: ((value: string) => void) | null = null;
+		const controller = createDebugSessionController({
+			terminal: {
+				debugCommand: vi.fn(async () => undefined),
+				debugEvaluate: vi.fn(
+					() =>
+						new Promise<string>((resolve) => {
+							resolveEvaluation = resolve;
+						})
+				)
+			} as never
+		});
+
+		controller.begin();
+		controller.handleEvent({
+			type: 'pause',
+			line: 4,
+			reason: 'breakpoint',
+			locals: [{ name: 'sum', value: '21' }],
+			callStack: [{ functionName: 'main', line: 4 }]
+		});
+		controller.watchInput = 'sum';
+		controller.addWatchExpression();
+		controller.clearWatches();
+
+		expect(controller.watchExpressions).toEqual([]);
+		expect(controller.watchValues).toEqual([]);
+
+		expect(resolveEvaluation).not.toBeNull();
+		if (!resolveEvaluation) {
+			throw new Error('expected pending evaluation resolver');
+		}
+		(resolveEvaluation as (value: string) => void)('21');
+		await Promise.resolve();
+		await Promise.resolve();
+
+		expect(controller.watchExpressions).toEqual([]);
+		expect(controller.watchValues).toEqual([]);
+	});
 });
