@@ -621,7 +621,7 @@
 						</header>
 						{#if debug.callStack.length}
 							<ul>
-								{#each debug.callStack as frame, index (`${frame.functionName}:${frame.line}`)}
+								{#each debug.callStack as frame, index (`${frame.functionName}:${frame.line}:${index}`)}
 									<li
 										class={[
 											'debug-entry',

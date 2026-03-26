@@ -228,6 +228,73 @@ describe('App debug tracing', () => {
 		]);
 	});
 
+	it('keeps recursive frames distinct in the pause call stack and only pops the innermost frame on leave', () => {
+		const onPause = vi.fn();
+		const buffer = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * 4);
+		const control = new Int32Array(buffer);
+		control[1] = 1;
+		const app = Object.assign(Object.create(App.prototype), {
+			debugSession: {
+				buffer: control,
+				interruptBuffer: new Uint8Array(new SharedArrayBuffer(1)),
+				breakpoints: new Set<number>(),
+				pauseOnEntry: false,
+				stepArmed: true,
+				nextLineArmed: false,
+				stepOutArmed: false,
+				callDepth: 3,
+				stepOutDepth: 0,
+				currentFunctionId: 2,
+				currentLine: 6,
+				resumeSkipActive: false,
+				resumeSkipFunctionId: 0,
+				resumeSkipLine: 0,
+				nextLineFunctionId: 0,
+				nextLineLine: 0,
+				functionMetadata: { 1: 'main', 2: 'factorial' },
+				variableMetadata: {
+					2: [
+						{
+							slot: 1,
+							name: 'n',
+							kind: 'number',
+							fromLine: 4,
+							toLine: Number.MAX_SAFE_INTEGER
+						}
+					]
+				},
+				frames: [
+					{ functionId: 1, functionName: 'main', line: 17, values: new Map() },
+					{ functionId: 2, functionName: 'factorial', line: 6, values: new Map([[1, '4']]) },
+					{ functionId: 2, functionName: 'factorial', line: 6, values: new Map([[1, '3']]) }
+				],
+				globalValues: new Map(),
+				onPause
+			},
+			trace: vi.fn()
+		}) as App;
+
+		expect(app.__wasm_idle_debug_line(2, 6)).toBe(0);
+		expect(onPause).toHaveBeenCalledWith({
+			type: 'pause',
+			line: 6,
+			reason: 'step',
+			locals: [{ name: 'n', value: '3' }],
+			callStack: [
+				{ functionName: 'factorial', line: 6 },
+				{ functionName: 'factorial', line: 6 },
+				{ functionName: 'main', line: 17 }
+			]
+		});
+
+		expect(app.__wasm_idle_debug_leave(2)).toBe(0);
+		expect(app.debugSession?.callDepth).toBe(2);
+		expect(app.debugSession?.frames).toEqual([
+			{ functionId: 1, functionName: 'main', line: 17, values: new Map() },
+			{ functionId: 2, functionName: 'factorial', line: 6, values: new Map([[1, '4']]) }
+		]);
+	});
+
 	it('arms a step fallback when next-line leaves the current function before another line', () => {
 		const app = Object.assign(Object.create(App.prototype), {
 			debugSession: {

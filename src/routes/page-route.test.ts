@@ -171,4 +171,10 @@ describe('example route debug actions', () => {
 		expect(layoutSource).toMatch(/let \{ children \} = \$props\(\);/);
 		expect(layoutSource).toMatch(/\{@render children\(\)\}/);
 	});
+
+	it('keys recursive call stack entries by index so duplicate frames still render', () => {
+		expect(source).toMatch(
+			/\{#each debug\.callStack as frame, index \(`\$\{frame\.functionName\}:\$\{frame\.line\}:\$\{index\}`\)\}/
+		);
+	});
 });
