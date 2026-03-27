@@ -8,6 +8,14 @@ Refer to src/lib/clang.
 
 Java uses TeaVM's browser compiler/runtime. TeaVM compiler/runtime/classlib assets are bundled under `static/teavm/` by default, and the asset base URL can be overridden with `PUBLIC_TEAVM_BASE_URL`.
 
+Pyodide core assets are vendored under `static/pyodide/`. Refresh them after bumping the `pyodide`
+package with:
+
+```bash
+cd wasm-idle
+pnpm run sync:pyodide
+```
+
 ## Rust browser integration
 
 The demo app now bundles a local `wasm-rust` browser compiler under `static/wasm-rust/` and points the example `Terminal` at `/wasm-rust/index.js` by default. Refresh that bundle after rebuilding the sibling `wasm-rust` project with:
