@@ -6,7 +6,20 @@ const workerInstances: MockWorker[] = [];
 
 const createRuntimeFixtureState = () => ({
 	activityLog: '',
-	artifact: null as { path: string; bytes: Uint8Array } | null,
+	artifact: null as {
+		path: string;
+		bytes: Uint8Array;
+		runnable?: boolean;
+		entrypoint?: '_start' | '_initialize' | null;
+		reason?: string;
+	} | null,
+	nextArtifact: null as {
+		path: string;
+		bytes: Uint8Array;
+		runnable?: boolean;
+		entrypoint?: '_start' | '_initialize' | null;
+		reason?: string;
+	} | null,
 	workspaceFiles: null as Record<string, string> | null,
 	bootCalls: 0,
 	planCalls: 0,
@@ -44,10 +57,13 @@ export const createBundledTinyGoRuntime = () => ({
   async execute() {
     state.executeCalls += 1;
     state.activityLog += '[12:00:02] build artifact ready: /working/out.wasm (4 bytes)\\\\n';
-    state.artifact = {
+    state.artifact = state.nextArtifact ?? {
       path: '/working/out.wasm',
       bytes: new Uint8Array([0, 97, 115, 109]),
+      runnable: true,
+      entrypoint: '_start',
     };
+    state.nextArtifact = null;
   },
   reset() {
     state.activityLog = '[12:00:00] log cleared\\\\n';
@@ -196,5 +212,31 @@ describe('TinyGo sandbox', () => {
 		).rejects.toContain(
 			'TinyGo runtime is not configured. Set PUBLIC_WASM_TINYGO_MODULE_URL or runtimeAssets.tinygo.moduleUrl.'
 		);
+	});
+
+	it('rejects execution when the TinyGo runtime reports a bootstrap-only artifact', async () => {
+		const sandbox = new TinyGo();
+		const code = resolveEditorDefaultSource('go', 'wasm32-wasip1');
+
+		await sandbox.load({
+			rootUrl: '/absproxy/5173',
+			tinygo: {
+				moduleUrl: runtimeModuleUrl
+			}
+		});
+		runtimeFixtureState.nextArtifact = {
+			path: '/working/out.wasm',
+			bytes: new Uint8Array([0, 97, 115, 109]),
+			runnable: false,
+			entrypoint: null,
+			reason: 'bootstrap-artifact'
+		};
+
+		await expect(sandbox.run(code, false)).rejects.toContain(
+			'TinyGo browser runtime produced a bootstrap artifact and cannot execute it yet.'
+		);
+		expect(workerInstances).toHaveLength(1);
+		expect(workerInstances[0].postMessage).toHaveBeenCalledTimes(1);
+		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(1, { load: true });
 	});
 });

@@ -6,7 +6,8 @@ const encoder = new TextEncoder();
 const wasiState = vi.hoisted(() => ({
 	lastArgs: [] as string[],
 	lastEnv: [] as string[],
-	lastFds: [] as any[]
+	lastFds: [] as any[],
+	initializeCalls: 0
 }));
 
 vi.mock('@bjorn3/browser_wasi_shim', () => {
@@ -36,6 +37,10 @@ vi.mock('@bjorn3/browser_wasi_shim', () => {
 			}
 			wasiState.lastFds[1].write(encoder.encode('tinygo-worker\n'));
 			return 0;
+		}
+
+		initialize() {
+			wasiState.initializeCalls += 1;
 		}
 	}
 
@@ -88,6 +93,7 @@ describe('TinyGo worker', () => {
 		wasiState.lastArgs = [];
 		wasiState.lastEnv = [];
 		wasiState.lastFds = [];
+		wasiState.initializeCalls = 0;
 	});
 
 	it('loads and executes a TinyGo wasm artifact through the WASI shim', async () => {
@@ -131,5 +137,35 @@ describe('TinyGo worker', () => {
 				wasi_unstable: {}
 			}
 		);
+	});
+
+	it('initializes and runs a reactor-style TinyGo artifact when _start is absent', async () => {
+		(globalThis as any).WebAssembly = {
+			instantiate: vi.fn(async () => ({
+				instance: {
+					exports: {
+						memory: {},
+						_initialize() {},
+						main() {
+							return 0;
+						}
+					}
+				}
+			}))
+		};
+
+		await import('./tinygo');
+		await (globalThis as any).self.onmessage({
+			data: {
+				artifact: new Uint8Array([0, 97, 115, 109]),
+				buffer: new SharedArrayBuffer(1024),
+				args: ['reactor'],
+				log: false
+			}
+		});
+		await Promise.resolve();
+
+		expect(wasiState.initializeCalls).toBe(1);
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
 	});
 });

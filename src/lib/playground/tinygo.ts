@@ -16,7 +16,13 @@ type TinyGoRuntimeHooks = {
 	execute(): Promise<void>;
 	reset(): void;
 	readActivityLog(): string;
-	readBuildArtifact(): { path: string; bytes: Uint8Array } | null;
+	readBuildArtifact(): {
+		path: string;
+		bytes: Uint8Array;
+		runnable?: boolean;
+		entrypoint?: '_start' | '_initialize' | null;
+		reason?: 'bootstrap-artifact' | 'missing-wasi-entrypoint';
+	} | null;
 	setWorkspaceFiles(files: Record<string, string> | null): void;
 	dispose?(): void;
 };
@@ -42,6 +48,7 @@ class TinyGo implements Sandbox {
 	runtimePromise: Promise<TinyGoRuntimeHooks> | null = null;
 	loadPromise: Promise<void> | null = null;
 	compiledArtifact: Uint8Array | null = null;
+	compiledArtifactExecutionError = '';
 	compiledCacheKey = '';
 	activeReject: ((reason: string) => void) | null = null;
 	waitingForInput = false;
@@ -70,6 +77,7 @@ class TinyGo implements Sandbox {
 			if (this.moduleUrl && this.moduleUrl !== nextModuleUrl) {
 				this.disposeRuntime();
 				this.compiledArtifact = null;
+				this.compiledArtifactExecutionError = '';
 				this.compiledCacheKey = '';
 			}
 			this.moduleUrl = nextModuleUrl;
@@ -144,6 +152,7 @@ class TinyGo implements Sandbox {
 		this.runtime = null;
 		this.runtimePromise = null;
 		this.lastActivityLog = '';
+		this.compiledArtifactExecutionError = '';
 	}
 
 	private async ensureRuntime() {
@@ -229,6 +238,12 @@ class TinyGo implements Sandbox {
 			throw new Error(this.extractCompileFailure());
 		}
 		this.compiledArtifact = new Uint8Array(artifact.bytes);
+		this.compiledArtifactExecutionError =
+			artifact.runnable === false
+				? artifact.reason === 'bootstrap-artifact'
+					? 'TinyGo browser runtime produced a bootstrap artifact and cannot execute it yet.'
+					: 'TinyGo browser runtime produced a wasm artifact without a supported WASI entrypoint.'
+				: '';
 		this.compiledCacheKey = compileCacheKey;
 		if (log) {
 			this.output?.(`tinygo artifact ready: ${artifact.path}\n`);
@@ -254,6 +269,9 @@ class TinyGo implements Sandbox {
 					this.exit = true;
 					resolve(true);
 					return;
+				}
+				if (this.compiledArtifactExecutionError) {
+					throw new Error(this.compiledArtifactExecutionError);
 				}
 				if (!this.worker || !this.compiledArtifact) {
 					throw new Error('TinyGo runtime did not prepare an artifact');

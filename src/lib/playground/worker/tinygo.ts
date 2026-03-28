@@ -107,12 +107,29 @@ self.onmessage = async (event: { data: any }) => {
 				: 'instance' in wasmModule
 					? wasmModule.instance
 					: wasmModule;
+		const exportsObject = instance.exports as Record<string, unknown>;
 
 		let exitCode = 0;
 		try {
-			exitCode = wasiRuntime.start(
-				instance as { exports: { memory: WebAssembly.Memory; _start: () => unknown } }
-			);
+			if (typeof exportsObject._start === 'function') {
+				exitCode = wasiRuntime.start(
+					instance as { exports: { memory: WebAssembly.Memory; _start: () => unknown } }
+				);
+			} else if (
+				typeof exportsObject.memory === 'object' &&
+				typeof exportsObject._initialize === 'function' &&
+				typeof exportsObject.main === 'function'
+			) {
+				wasiRuntime.initialize(
+					instance as { exports: { memory: WebAssembly.Memory; _initialize?: () => unknown } }
+				);
+				const mainResult = (exportsObject.main as () => unknown)();
+				exitCode = typeof mainResult === 'number' ? mainResult : 0;
+			} else {
+				throw new Error(
+					'TinyGo worker expected a WASI artifact with _start or a reactor artifact with _initialize + main'
+				);
+			}
 		} catch (error) {
 			if (error instanceof WASIProcExit) {
 				exitCode = error.code;
