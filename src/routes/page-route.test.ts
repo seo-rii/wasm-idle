@@ -65,7 +65,10 @@ describe('example route debug actions', () => {
 			/import \{ WASM_RUST_ASSET_VERSION \} from '\$lib\/playground\/wasmRustVersion';/
 		);
 		expect(source).toMatch(
-			/let runtimeAssets = \$derived\.by<PlaygroundRuntimeAssets>\(\(\) => \(\{\s+rootUrl: path,\s+rust: \{\s+compilerUrl: path\s+\?\s+`\$\{path\}\/wasm-rust\/index\.js\?v=\$\{WASM_RUST_ASSET_VERSION\}`\s+:\s+`\/wasm-rust\/index\.js\?v=\$\{WASM_RUST_ASSET_VERSION\}`\s+\}\s+\}\)\);/s
+			/import \{ WASM_TINYGO_ASSET_VERSION \} from '\$lib\/playground\/wasmTinyGoVersion';/
+		);
+		expect(source).toMatch(
+			/let runtimeAssets = \$derived\.by<PlaygroundRuntimeAssets>\(\(\) => \(\{\s+rootUrl: path,\s+rust: \{\s+compilerUrl: path\s+\?\s+`\$\{path\}\/wasm-rust\/index\.js\?v=\$\{WASM_RUST_ASSET_VERSION\}`\s+:\s+`\/wasm-rust\/index\.js\?v=\$\{WASM_RUST_ASSET_VERSION\}`\s+\},\s+tinygo: \{\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-tinygo\/runtime\.js\?v=\$\{WASM_TINYGO_ASSET_VERSION\}`\s+:\s+`\/wasm-tinygo\/runtime\.js\?v=\$\{WASM_TINYGO_ASSET_VERSION\}`\s+\}\s+\}\)\);/s
 		);
 		expect(source).toMatch(
 			/const playground = \$derived\.by\(\(\) => createPlaygroundBinding\(runtimeAssets\)\);/
@@ -107,6 +110,8 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(
 			/availableRustTargetTriples = \['wasm32-wasip1', 'wasm32-wasip2'\];/
 		);
+		expect(source).toMatch(/const editorLanguage = \$derived\(/);
+		expect(source).toMatch(/: 'go'/);
 		expect(source).toMatch(/rustTargetTriple: language === 'RUST' \? rustTargetTriple : undefined/);
 		expect(source).toMatch(/<select id="rust-target-triple" bind:value=\{rustTargetTriple\}>/);
 		expect(source).toMatch(
@@ -137,6 +142,17 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/availableRustTargetTriples\.includes\('wasm32-wasip3'\)/);
 		expect(source).toMatch(/`wasm32-wasip3`\s+is only shown for the current transitional component path/);
 		expect(source).toMatch(/Use\s+Ctrl\+D or the EOF button while running/);
+	});
+
+	it('surfaces TinyGo through the shared language selector, args field, and stdin hint', () => {
+		expect(source).toMatch(/<option value="TINYGO">TinyGo<\/option>/);
+		expect(source).toMatch(
+			/\{#if language === 'JAVA' \|\| language === 'RUST' \|\| language === 'TINYGO'\}/
+		);
+		expect(source).toMatch(/language === 'JAVA' \|\| language === 'RUST' \|\| language === 'TINYGO'/);
+		expect(source).toMatch(/TinyGo currently compiles through the bundled wasm-tinygo browser pipeline/);
+		expect(source).toMatch(/runs the resulting WASI artifact in the local playground runtime/);
+		expect(source).toMatch(/reads\s+stdin until EOF/);
 	});
 
 	it('keeps the example workspace full-height, resizable, and hides debug panels until debug starts', () => {

@@ -1,0 +1,135 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { flushQueuedStdin } from '$lib/playground/stdinBuffer';
+
+const encoder = new TextEncoder();
+
+const wasiState = vi.hoisted(() => ({
+	lastArgs: [] as string[],
+	lastEnv: [] as string[],
+	lastFds: [] as any[]
+}));
+
+vi.mock('@bjorn3/browser_wasi_shim', () => {
+	class Fd {}
+
+	class ConsoleStdout {
+		write: (chunk: Uint8Array) => void;
+
+		constructor(write: (chunk: Uint8Array) => void) {
+			this.write = write;
+		}
+	}
+
+	class WASI {
+		wasiImport = {};
+
+		constructor(args: string[], env: string[], fds: any[]) {
+			wasiState.lastArgs = args;
+			wasiState.lastEnv = env;
+			wasiState.lastFds = fds;
+		}
+
+		start() {
+			const stdinChunk = wasiState.lastFds[0].fd_read(1024).data;
+			if (stdinChunk.byteLength) {
+				wasiState.lastFds[1].write(stdinChunk);
+			}
+			wasiState.lastFds[1].write(encoder.encode('tinygo-worker\n'));
+			return 0;
+		}
+	}
+
+	class WASIProcExit extends Error {
+		code: number;
+
+		constructor(code: number) {
+			super(`exit ${code}`);
+			this.code = code;
+		}
+	}
+
+	return {
+		Fd,
+		ConsoleStdout,
+		WASI,
+		WASIProcExit,
+		wasi: {
+			ERRNO_SUCCESS: 0,
+			FILETYPE_CHARACTER_DEVICE: 2,
+			RIGHTS_FD_READ: 2,
+			Fdstat: class {
+				fs_rights_base = 0n;
+				fs_rights_inherited = 0n;
+				constructor(_filetype: number, _flags: number) {}
+			},
+			Filestat: class {
+				constructor(_ino: bigint, _filetype: number, _size: bigint) {}
+			}
+		}
+	};
+});
+
+describe('TinyGo worker', () => {
+	beforeEach(() => {
+		vi.resetModules();
+		(globalThis as any).self = globalThis as any;
+		(globalThis as any).document = undefined;
+		(globalThis as any).postMessage = vi.fn();
+		(globalThis as any).WebAssembly = {
+			instantiate: vi.fn(async () => ({
+				instance: {
+					exports: {
+						memory: {},
+						_start() {}
+					}
+				}
+			}))
+		};
+		wasiState.lastArgs = [];
+		wasiState.lastEnv = [];
+		wasiState.lastFds = [];
+	});
+
+	it('loads and executes a TinyGo wasm artifact through the WASI shim', async () => {
+		const buffer = new SharedArrayBuffer(1024);
+		const queuedInput = ['5\n'];
+		(globalThis as any).postMessage = vi.fn((message: any) => {
+			if (message?.buffer) {
+				flushQueuedStdin(queuedInput, buffer);
+			}
+		});
+
+		await import('./tinygo');
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true
+			}
+		});
+		await Promise.resolve();
+
+		await (globalThis as any).self.onmessage({
+			data: {
+				artifact: new Uint8Array([0, 97, 115, 109]),
+				buffer,
+				args: ['demo'],
+				log: true
+			}
+		});
+		await Promise.resolve();
+
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ load: true });
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ buffer: true });
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ output: '5\n' });
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ output: 'tinygo-worker\n' });
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
+		expect(wasiState.lastArgs).toEqual(['demo']);
+		expect(wasiState.lastEnv).toEqual(['USER=jungol']);
+		expect((globalThis as any).WebAssembly.instantiate).toHaveBeenCalledWith(
+			expect.any(Uint8Array),
+			{
+				wasi_snapshot_preview1: {},
+				wasi_unstable: {}
+			}
+		);
+	});
+});

@@ -2,7 +2,9 @@ import { describe, expect, it, vi } from 'vitest';
 
 const { publicEnv } = vi.hoisted(() => ({
 	publicEnv: {
-		PUBLIC_WASM_RUST_COMPILER_URL: ''
+		PUBLIC_WASM_RUST_COMPILER_URL: '',
+		PUBLIC_WASM_TINYGO_APP_URL: '',
+		PUBLIC_WASM_TINYGO_MODULE_URL: ''
 	}
 }));
 
@@ -89,6 +91,46 @@ describe('runtime asset config resolution', () => {
 
 		expect(resolveRustCompilerUrl('/absproxy/5173', 'https://example.com/app')).toBe(
 			'https://example.com/wasm-rust/index.js'
+		);
+	});
+
+	it('prefers an explicit TinyGo runtime module url over the public env override', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_TINYGO_APP_URL = '';
+		publicEnv.PUBLIC_WASM_TINYGO_MODULE_URL = 'https://env.example.com/wasm-tinygo/runtime.js';
+		const { resolveTinyGoModuleUrl } = await import('./assets');
+
+		expect(
+			resolveTinyGoModuleUrl(
+				{
+					tinygo: {
+						moduleUrl: '/runtime/tinygo/runtime.js'
+					}
+				},
+				'https://example.com/app'
+			)
+		).toBe('https://example.com/runtime/tinygo/runtime.js');
+	});
+
+	it('derives the default TinyGo runtime module url from the shared root path', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_TINYGO_MODULE_URL = '';
+		publicEnv.PUBLIC_WASM_TINYGO_APP_URL = '';
+		const { resolveTinyGoModuleUrl } = await import('./assets');
+
+		expect(resolveTinyGoModuleUrl('/absproxy/5173', 'https://example.com/app')).toBe(
+			'https://example.com/absproxy/5173/wasm-tinygo/runtime.js'
+		);
+	});
+
+	it('derives the TinyGo runtime module url from the legacy app url override', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_TINYGO_MODULE_URL = '';
+		publicEnv.PUBLIC_WASM_TINYGO_APP_URL = 'https://env.example.com/wasm-tinygo/index.html?v=42';
+		const { resolveTinyGoModuleUrl } = await import('./assets');
+
+		expect(resolveTinyGoModuleUrl(undefined, 'https://example.com/app')).toBe(
+			'https://env.example.com/wasm-tinygo/runtime.js?v=42'
 		);
 	});
 });

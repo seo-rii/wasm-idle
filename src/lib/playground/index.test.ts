@@ -61,6 +61,10 @@ vi.mock('$lib/playground/rust', () => ({
 	default: createMockSandboxClass('RUST')
 }));
 
+vi.mock('$lib/playground/tinygo', () => ({
+	default: createMockSandboxClass('TINYGO')
+}));
+
 vi.mock('$lib/playground/clang', () => ({
 	default: class extends createMockSandboxClass('CLANG') {
 		constructor(language: 'C' | 'CPP') {
@@ -136,6 +140,42 @@ describe('playground runtime binding', () => {
 				true,
 				['hello'],
 				{ rustTargetTriple: 'wasm32-wasip2' },
+				progress
+			]
+		]);
+	});
+
+	it('routes TinyGo requests through the TinyGo sandbox implementation', async () => {
+		const binding = createPlaygroundBinding({
+			rootUrl: '/absproxy/5173',
+			tinygo: {
+				moduleUrl: '/absproxy/5173/wasm-tinygo/runtime.js?v=test'
+			}
+		});
+		const progress = { set() {} };
+		const sandbox = await binding.load('TINYGO');
+
+		await sandbox.load('package main\nfunc main() {}', true, ['demo'], {}, progress);
+
+		expect(sandbox.runtimeAssets).toEqual({
+			rootUrl: '/absproxy/5173',
+			tinygo: {
+				moduleUrl: '/absproxy/5173/wasm-tinygo/runtime.js?v=test'
+			}
+		});
+		expect(sandboxInstances.get('TINYGO')).toHaveLength(1);
+		expect(sandboxInstances.get('TINYGO')?.[0]?.loadCalls).toEqual([
+			[
+				{
+					rootUrl: '/absproxy/5173',
+					tinygo: {
+						moduleUrl: '/absproxy/5173/wasm-tinygo/runtime.js?v=test'
+					}
+				},
+				'package main\nfunc main() {}',
+				true,
+				['demo'],
+				{},
 				progress
 			]
 		]);

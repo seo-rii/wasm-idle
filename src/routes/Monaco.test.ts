@@ -20,8 +20,9 @@ describe('Monaco route debug sync', () => {
 		);
 		expect(source.match(/occurrencesHighlight: 'off'/g)).toHaveLength(2);
 		expect(source).toMatch(
-			/const rustDefaults: Record<RustTargetTriple, string> = \{[\s\S]*'wasm32-wasip1': `use std::io;[\s\S]*'wasm32-wasip2': `#\[cfg\(not\(target_env = "p2"\)\)\][\s\S]*compile_error!\("This example requires wasm32-wasip2\."\);[\s\S]*println!\("preview2_component=\{\}", preview2_label\);[\s\S]*println!\("factorial_plus_bonus=\{\}", factorial\(n\) \+ BONUS\);[\s\S]*}`,[\s\S]*'wasm32-wasip3': `#\[cfg\(not\(target_env = "p3"\)\)\][\s\S]*compile_error!\("This example requires wasm32-wasip3\."\);[\s\S]*println!\("preview3_transition=\{\}", preview3_label\);[\s\S]*println!\("factorial_plus_bonus=\{\}", factorial\(n\) \+ BONUS\);[\s\S]*}`/s
+			/const defaults: Record<'cpp' \| 'python' \| 'java' \| 'go', string> = \{[\s\S]*go: `package main[\s\S]*fmt\.Printf\("factorial_plus_bonus=%d\\n", factorial\(n\)\+bonus\)[\s\S]*}`[\s\S]*const rustDefaults: Record<RustTargetTriple, string> = \{[\s\S]*'wasm32-wasip1': `use std::io;[\s\S]*'wasm32-wasip2': `#\[cfg\(not\(target_env = "p2"\)\)\][\s\S]*compile_error!\("This example requires wasm32-wasip2\."\);[\s\S]*println!\("preview2_component=\{\}", preview2_label\);[\s\S]*println!\("factorial_plus_bonus=\{\}", factorial\(n\) \+ BONUS\);[\s\S]*}`,[\s\S]*'wasm32-wasip3': `#\[cfg\(not\(target_env = "p3"\)\)\][\s\S]*compile_error!\("This example requires wasm32-wasip3\."\);[\s\S]*println!\("preview3_transition=\{\}", preview3_label\);[\s\S]*println!\("factorial_plus_bonus=\{\}", factorial\(n\) \+ BONUS\);[\s\S]*}`/s
 		);
+		expect(source).toMatch(/language === 'java' \|\| language === 'rust' \|\| language === 'go'/);
 		expect(source).toMatch(
 			/\$effect\(\(\) => \{\s+if \(!editor \|\| language !== 'rust'\) return;[\s\S]*currentValue !== rustDefaults\['wasm32-wasip1'\][\s\S]*currentValue !== rustDefaults\['wasm32-wasip2'\][\s\S]*currentValue !== rustDefaults\['wasm32-wasip3'\][\s\S]*editor\.setValue\(nextValue\);[\s\S]*\}\);/s
 		);
@@ -57,6 +58,8 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).toMatch(/if \(enableDebug && language === 'CPP'\) clangdRequested = true;/);
 		expect(pageSource).toMatch(/if \(language !== 'CPP'\) clangdRequested = false;/);
 		expect(pageSource).toMatch(/<option value="RUST">Rust<\/option>/);
+		expect(pageSource).toMatch(/<option value="TINYGO">TinyGo<\/option>/);
+		expect(pageSource).toMatch(/language=\{editorLanguage\}/);
 		expect(pageSource).toMatch(/<select id="rust-target-triple" bind:value=\{rustTargetTriple\}>/);
 		expect(pageSource).toMatch(
 			/\{#each availableRustTargetTriples as targetTriple \(targetTriple\)\}\s+<option value=\{targetTriple\}>\{targetTriple\}<\/option>\s+\{\/each\}/s
