@@ -1,7 +1,6 @@
 // @vitest-environment node
 
 import { readFile } from 'node:fs/promises';
-import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
@@ -37,7 +36,7 @@ describe('wasm-idle rust browser playwright integration', () => {
 						);
 			const runtimeManifest = JSON.parse(
 				await readFile(
-					path.join(process.cwd(), 'static', 'wasm-rust', 'runtime', 'runtime-manifest.v3.json'),
+					new URL('../../../static/wasm-rust/runtime/runtime-manifest.v3.json', import.meta.url),
 					'utf8'
 				)
 			) as {
