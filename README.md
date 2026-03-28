@@ -2,7 +2,7 @@
 
 ![wasm-idle](static/image.jpeg)
 
-Executes C++, Python, Java, and Rust code with working stdio.
+Executes C++, Python, Java, Rust, and TinyGo code with working stdio.
 
 Refer to src/lib/clang.
 
@@ -28,6 +28,26 @@ pnpm run sync:wasm-rust
 The built-in Rust route now supports both `wasm32-wasip1` and `wasm32-wasip2`. The page exposes a
 target selector when Rust is active, defaults to `wasm32-wasip1`, and persists that choice in local
 storage.
+
+## TinyGo browser integration
+
+The demo app can also vendor the sibling `wasm-tinygo` browser build under `static/wasm-tinygo/`
+and load its `runtime.js` entry directly inside the TinyGo playground sandbox before executing the
+produced WASI artifact in the local playground runtime. Refresh that bundle after rebuilding the
+sibling `wasm-tinygo` project with:
+
+```bash
+cd wasm-tinygo
+npm run build
+
+cd ../wasm-idle
+pnpm run sync:wasm-tinygo
+```
+
+TinyGo currently exposes a single `wasm` target through the example page. The browser pipeline
+still lives inside `wasm-tinygo`; `wasm-idle` now imports its reusable `runtime.js` library entry
+directly, then runs the emitted artifact with browser WASI so terminal stdin/EOF behavior stays
+consistent with the other runtimes.
 
 ## Browser regression commands
 
@@ -74,6 +94,10 @@ session; the repo-owned regression target is the local preview path above.
 ## Runtime expectations
 
 Rust still supports an external browser compiler module for library consumers. Point `PUBLIC_WASM_RUST_COMPILER_URL` at a built `wasm-rust` ESM entry such as `.../wasm-rust/dist/index.js`, or pass `runtimeAssets.rust.compilerUrl` at runtime.
+TinyGo expects a browser-loadable `wasm-tinygo` runtime module. Point
+`PUBLIC_WASM_TINYGO_MODULE_URL` at a built entry such as `.../wasm-tinygo/dist/runtime.js`, or
+pass `runtimeAssets.tinygo.moduleUrl` at runtime. The older `PUBLIC_WASM_TINYGO_APP_URL` /
+`runtimeAssets.tinygo.appUrl` document path is still accepted and normalized to `runtime.js`.
 
 The Rust browser path now executes returned artifacts through the target-appropriate runtime inside
 the Rust worker:
@@ -99,11 +123,14 @@ const runtimeAssets: PlaygroundRuntimeAssets = {
 	},
 	rust: {
 		compilerUrl: 'https://cdn.example.com/wasm-rust/index.js'
+	},
+	tinygo: {
+		moduleUrl: 'https://cdn.example.com/wasm-tinygo/runtime.js'
 	}
 };
 ```
 
-Python custom loaders receive file names under the Pyodide asset root and can serve both core assets and package files. TeaVM custom loaders receive file names under the TeaVM asset root. Rust expects a browser-loadable compiler module URL; that module is responsible for serving its own nested runtime assets. Compressed TeaVM runtime assets are no longer unpacked inside the library; provide the final file URL or handle decompression in your own loader.
+Python custom loaders receive file names under the Pyodide asset root and can serve both core assets and package files. TeaVM custom loaders receive file names under the TeaVM asset root. Rust expects a browser-loadable compiler module URL; that module is responsible for serving its own nested runtime assets. TinyGo expects a browser-loadable runtime module and uses that module as a compile backend, including its sibling `tools/go-probe.wasm` and vendored emception assets. Compressed TeaVM runtime assets are no longer unpacked inside the library; provide the final file URL or handle decompression in your own loader.
 
 If you want a host app to reuse the same runtime asset configuration for both `<Terminal>` and direct `playground(...)` access, bind it once:
 
@@ -114,6 +141,9 @@ const wasmIdle = createPlaygroundBinding({
 	rootUrl: 'https://cdn.example.com/repl',
 	rust: {
 		compilerUrl: 'https://cdn.example.com/wasm-rust/index.js'
+	},
+	tinygo: {
+		moduleUrl: 'https://cdn.example.com/wasm-tinygo/runtime.js'
 	}
 });
 
@@ -125,4 +155,5 @@ await sandbox.load('print("hi")', false);
 <Terminal {...wasmIdle.terminalProps} bind:terminal />
 ```
 
-Powered by [wasm-clang](https://github.com/binji/wasm-clang), Pyodide, TeaVM, and `wasm-rust`.
+Powered by [wasm-clang](https://github.com/binji/wasm-clang), Pyodide, TeaVM, `wasm-rust`, and
+`wasm-tinygo`.
