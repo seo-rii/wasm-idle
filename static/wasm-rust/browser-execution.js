@@ -2,6 +2,7 @@ import { Fd, Inode } from './vendor/browser_wasi_shim/fd.js';
 import { PreopenDirectory } from './vendor/browser_wasi_shim/fs_mem.js';
 import WASI from './vendor/browser_wasi_shim/wasi.js';
 import * as wasi from './vendor/browser_wasi_shim/wasi_defs.js';
+import { resolveVersionedAssetUrl } from './asset-url.js';
 import { createPreview2ImportObject, transpilePreview2Component } from './browser-component-tools.js';
 function toStandaloneBytes(value) {
     const source = value instanceof Uint8Array ? value : new Uint8Array(value);
@@ -199,12 +200,16 @@ async function runPreview2Component(componentBytes, runtimeBaseUrl, options = {}
         URL.revokeObjectURL(entryUrl);
     }
 }
-export async function executeBrowserRustArtifact(artifact, runtimeBaseUrl, options = {}) {
+export async function executeBrowserRustArtifact(artifact, runtimeBaseUrlOrOptions = {}, options = {}) {
     if (!artifact.wasm) {
         throw new Error('wasm-rust artifact is missing wasm bytes');
     }
+    const runtimeBaseUrl = typeof runtimeBaseUrlOrOptions === 'string'
+        ? runtimeBaseUrlOrOptions
+        : resolveVersionedAssetUrl(import.meta.url, './runtime/').toString();
+    const executionOptions = typeof runtimeBaseUrlOrOptions === 'string' ? options : runtimeBaseUrlOrOptions;
     if (artifact.format === 'component') {
-        return runPreview2Component(artifact.wasm, runtimeBaseUrl, options);
+        return runPreview2Component(artifact.wasm, runtimeBaseUrl, executionOptions);
     }
-    return runPreview1WasiModule(artifact.wasm, options);
+    return runPreview1WasiModule(artifact.wasm, executionOptions);
 }
