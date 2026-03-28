@@ -1,0 +1,1 @@
+import{n as e,r as t,t as n}from"./assets/runtime-b4mbYbKP.js";var r=(e={})=>{let n=new URL(import.meta.url);return n.hash=``,n.search=``,n.pathname=n.pathname.replace(/[^/]+$/,``),t({...e,assetBaseUrl:n.toString()})};export{n as DEFAULT_TINYGO_BOOTSTRAP_GO_ENTRY_SOURCE,r as createBundledTinyGoRuntime,e as createTinyGoBrowserRuntime,t as createTinyGoRuntime};
