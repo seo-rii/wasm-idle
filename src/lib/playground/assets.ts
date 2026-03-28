@@ -42,11 +42,17 @@ export interface RustRuntimeAssetConfig {
 	compilerUrl?: string;
 }
 
+export interface TinyGoRuntimeAssetConfig {
+	moduleUrl?: string;
+	appUrl?: string;
+}
+
 export interface PlaygroundRuntimeAssets {
 	rootUrl?: string;
 	python?: RuntimeAssetConfig;
 	java?: RuntimeAssetConfig;
 	rust?: RustRuntimeAssetConfig;
+	tinygo?: TinyGoRuntimeAssetConfig;
 }
 
 export interface ResolvedRuntimeAssetConfig {
@@ -76,6 +82,9 @@ const normalizeBaseUrl = (baseUrl: string, currentUrl = '') => {
 	const normalized = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
 	return currentUrl ? new URL(normalized, currentUrl).href : normalized;
 };
+
+const resolveConfiguredUrl = (url: string, currentUrl = '') =>
+	currentUrl ? new URL(url, currentUrl).href : url;
 
 const normalizeRootUrl = (rootUrl: string) =>
 	rootUrl.endsWith('/') ? rootUrl.slice(0, -1) : rootUrl;
@@ -192,4 +201,85 @@ export function resolveRustCompilerUrl(
 
 	if (!configuredCompilerUrl) return '';
 	return currentUrl ? new URL(configuredCompilerUrl, currentUrl).href : configuredCompilerUrl;
+}
+
+export function resolveTinyGoAppUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredAppUrl =
+		(typeof options === 'object' && options?.tinygo?.appUrl) ||
+		(publicEnv.PUBLIC_WASM_TINYGO_APP_URL || '').trim();
+
+	if (configuredAppUrl) {
+		return resolveConfiguredUrl(configuredAppUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-tinygo/index.html`,
+			currentUrl
+		);
+	}
+
+	if (options?.rootUrl) {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-tinygo/index.html`,
+			currentUrl
+		);
+	}
+
+	return '';
+}
+
+function deriveTinyGoModuleUrlFromAppUrl(appUrl: string, currentUrl = '') {
+	const resolvedAppUrl = resolveConfiguredUrl(appUrl, currentUrl);
+	const [withoutHash, hash = ''] = resolvedAppUrl.split('#', 2);
+	const [withoutQuery, query = ''] = withoutHash.split('?', 2);
+	let moduleUrlPath = withoutQuery;
+	if (moduleUrlPath.endsWith('/index.html')) {
+		moduleUrlPath = `${moduleUrlPath.slice(0, -'index.html'.length)}runtime.js`;
+	} else if (moduleUrlPath.endsWith('/')) {
+		moduleUrlPath = `${moduleUrlPath}runtime.js`;
+	} else {
+		moduleUrlPath = `${moduleUrlPath.replace(/\/$/, '')}/runtime.js`;
+	}
+	return `${moduleUrlPath}${query ? `?${query}` : ''}${hash ? `#${hash}` : ''}`;
+}
+
+export function resolveTinyGoModuleUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredModuleUrl =
+		(typeof options === 'object' && options?.tinygo?.moduleUrl) ||
+		(publicEnv.PUBLIC_WASM_TINYGO_MODULE_URL || '').trim();
+
+	if (configuredModuleUrl) {
+		return resolveConfiguredUrl(configuredModuleUrl, currentUrl);
+	}
+
+	const configuredLegacyAppUrl =
+		(typeof options === 'object' && options?.tinygo?.appUrl) ||
+		(publicEnv.PUBLIC_WASM_TINYGO_APP_URL || '').trim();
+
+	if (configuredLegacyAppUrl) {
+		return deriveTinyGoModuleUrlFromAppUrl(configuredLegacyAppUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-tinygo/runtime.js`,
+			currentUrl
+		);
+	}
+
+	if (options?.rootUrl) {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-tinygo/runtime.js`,
+			currentUrl
+		);
+	}
+
+	return '';
 }
