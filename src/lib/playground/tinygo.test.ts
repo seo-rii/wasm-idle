@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { readBufferedStdin } from './stdinBuffer';
+import { resolveEditorDefaultSource } from '../../routes/editor-defaults';
 
 const workerInstances: MockWorker[] = [];
 
@@ -113,6 +114,7 @@ describe('TinyGo sandbox', () => {
 	it('loads the TinyGo runtime module, compiles once during prepare, and runs the cached artifact', async () => {
 		const sandbox = new TinyGo();
 		const outputs: string[] = [];
+		const code = resolveEditorDefaultSource('go', 'wasm32-wasip1');
 
 		sandbox.output = (chunk: string) => outputs.push(chunk);
 
@@ -122,15 +124,19 @@ describe('TinyGo sandbox', () => {
 				moduleUrl: runtimeModuleUrl
 			}
 		});
-		await expect(sandbox.run('package main\nfunc main() {}', true)).resolves.toBe(true);
+		await expect(sandbox.run(code, true)).resolves.toBe(true);
 		await expect(
-			sandbox.run('package main\nfunc main() {}', false, true, undefined, ['demo'])
+			sandbox.run(code, false, true, undefined, ['demo'])
 		).resolves.toBe(true);
 
 		expect(workerInstances).toHaveLength(1);
 		expect(runtimeFixtureState.workspaceFiles).toEqual({
-			'main.go': 'package main\nfunc main() {}'
+			'main.go': code
 		});
+		expect(runtimeFixtureState.workspaceFiles?.['main.go']).toContain("ReadString('\\n')");
+		expect(runtimeFixtureState.workspaceFiles?.['main.go']).toContain(
+			'fmt.Printf("factorial_plus_bonus=%d\\n", factorial(n)+bonus)'
+		);
 		expect(runtimeFixtureState.bootCalls).toBe(1);
 		expect(runtimeFixtureState.planCalls).toBe(1);
 		expect(runtimeFixtureState.executeCalls).toBe(1);
@@ -150,6 +156,7 @@ describe('TinyGo sandbox', () => {
 	it('writes queued stdin when the TinyGo worker requests input', async () => {
 		const sandbox = new TinyGo();
 		const worker = new MockWorker();
+		const code = resolveEditorDefaultSource('go', 'wasm32-wasip1');
 
 		sandbox.worker = worker as unknown as Worker;
 		let runMessage: any;
@@ -173,7 +180,7 @@ describe('TinyGo sandbox', () => {
 			}
 		});
 		await expect(
-			sandbox.run('package main\nfunc main() {}', false, true, undefined, ['demo'])
+			sandbox.run(code, false, true, undefined, ['demo'])
 		).resolves.toBe(true);
 
 		expect(readBufferedStdin(runMessage.buffer)).toBe('42\n');
