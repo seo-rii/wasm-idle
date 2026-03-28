@@ -2,6 +2,14 @@ import pageSource from './+page.svelte?raw';
 import source from './Monaco.svelte?raw';
 import { compile } from 'svelte/compiler';
 import { describe, expect, it } from 'vitest';
+import {
+	editorDefaults,
+	isEditorDefaultSource,
+	isLegacyEditorDefaultSource,
+	legacyBrokenTinyGoEditorDefault,
+	resolveEditorDefaultSource,
+	rustEditorDefaults
+} from './editor-defaults';
 
 describe('Monaco route debug sync', () => {
 	it('keeps the debug view reactive and applies markers immediately after creation', () => {
@@ -16,15 +24,18 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(/clangdEnabled\?: boolean;/);
 		expect(source).toMatch(/clangdEnabled = false,/);
 		expect(source).toMatch(
+			/import \{\s+isEditorDefaultSource,\s+isLegacyEditorDefaultSource,\s+resolveEditorDefaultSource\s+\} from '\.\/editor-defaults';/s
+		);
+		expect(source).toMatch(
 			/monacoApi\.editor\.setModelMarkers\(activeModel, 'wasm-idle-compiler', markers\);/
 		);
 		expect(source.match(/occurrencesHighlight: 'off'/g)).toHaveLength(2);
-		expect(source).toMatch(
-			/const defaults: Record<'cpp' \| 'python' \| 'java' \| 'go', string> = \{[\s\S]*go: `package main[\s\S]*fmt\.Printf\("factorial_plus_bonus=%d\\n", factorial\(n\)\+bonus\)[\s\S]*}`[\s\S]*const rustDefaults: Record<RustTargetTriple, string> = \{[\s\S]*'wasm32-wasip1': `use std::io;[\s\S]*'wasm32-wasip2': `#\[cfg\(not\(target_env = "p2"\)\)\][\s\S]*compile_error!\("This example requires wasm32-wasip2\."\);[\s\S]*println!\("preview2_component=\{\}", preview2_label\);[\s\S]*println!\("factorial_plus_bonus=\{\}", factorial\(n\) \+ BONUS\);[\s\S]*}`,[\s\S]*'wasm32-wasip3': `#\[cfg\(not\(target_env = "p3"\)\)\][\s\S]*compile_error!\("This example requires wasm32-wasip3\."\);[\s\S]*println!\("preview3_transition=\{\}", preview3_label\);[\s\S]*println!\("factorial_plus_bonus=\{\}", factorial\(n\) \+ BONUS\);[\s\S]*}`/s
-		);
 		expect(source).toMatch(/language === 'java' \|\| language === 'rust' \|\| language === 'go'/);
 		expect(source).toMatch(
-			/\$effect\(\(\) => \{\s+if \(!editor \|\| language !== 'rust'\) return;[\s\S]*currentValue !== rustDefaults\['wasm32-wasip1'\][\s\S]*currentValue !== rustDefaults\['wasm32-wasip2'\][\s\S]*currentValue !== rustDefaults\['wasm32-wasip3'\][\s\S]*editor\.setValue\(nextValue\);[\s\S]*\}\);/s
+			/\$effect\(\(\) => \{\s+if \(!editor\) return;[\s\S]*if \(!isEditorDefaultSource\(currentValue\) && !isLegacyEditorDefaultSource\(currentValue\)\) \{[\s\S]*const nextValue = resolveEditorDefaultSource\([\s\S]*rustTargetTriple[\s\S]*editor\.setValue\(nextValue\);[\s\S]*\}\);/s
+		);
+		expect(source).toMatch(
+			/const defaultValue = resolveEditorDefaultSource\(\s+language as 'cpp' \| 'python' \| 'java' \| 'go' \| 'rust',\s+rustTargetTriple\s+\);/s
 		);
 		expect(source).toMatch(
 			/debugView = new MonacoDebugView\(Monaco, editor, onBreakpointsChange\);\s+debugView\.setBreakpoints\(breakpoints\);\s+debugView\.setPauseState\(pausedLine, debugLocals, debugLanguage\);/s
@@ -45,6 +56,16 @@ describe('Monaco route debug sync', () => {
 		expect(source).not.toMatch(/clangd loading/);
 		expect(source).not.toMatch(/clangd failed:/);
 		expect(source).not.toMatch(/class="clangd-status"/);
+	});
+
+	it('keeps the TinyGo starter source valid for newline-sensitive Go literals', () => {
+		expect(resolveEditorDefaultSource('go', 'wasm32-wasip1')).toBe(editorDefaults.go);
+		expect(editorDefaults.go).toContain("ReadString('\\n')");
+		expect(editorDefaults.go).toContain('fmt.Printf("factorial_plus_bonus=%d\\n", factorial(n)+bonus)');
+		expect(isEditorDefaultSource(editorDefaults.go)).toBe(true);
+		expect(isEditorDefaultSource(rustEditorDefaults['wasm32-wasip1'])).toBe(true);
+		expect(isLegacyEditorDefaultSource(legacyBrokenTinyGoEditorDefault)).toBe(true);
+		expect(isLegacyEditorDefaultSource(editorDefaults.go)).toBe(false);
 	});
 
 	it('requests clangd only after cpp debug starts', () => {

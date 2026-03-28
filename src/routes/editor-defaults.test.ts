@@ -1,0 +1,39 @@
+import { describe, expect, it } from 'vitest';
+import {
+	editorDefaults,
+	isEditorDefaultSource,
+	isLegacyEditorDefaultSource,
+	legacyBrokenTinyGoEditorDefault,
+	resolveEditorDefaultSource,
+	rustEditorDefaults
+} from './editor-defaults';
+
+describe('editor defaults', () => {
+	it('keeps TinyGo starter escape sequences intact inside the Go source', () => {
+		expect(editorDefaults.go).toContain("ReadString('\\n')");
+		expect(editorDefaults.go).toContain('fmt.Printf("factorial_plus_bonus=%d\\n", factorial(n)+bonus)');
+		expect(editorDefaults.go).not.toContain(`ReadString('
+')`);
+		expect(editorDefaults.go).not.toContain(`factorial_plus_bonus=%d
+", factorial(n)+bonus)`);
+		expect(legacyBrokenTinyGoEditorDefault).toContain(`ReadString('
+')`);
+		expect(legacyBrokenTinyGoEditorDefault).toContain(`factorial_plus_bonus=%d
+", factorial(n)+bonus)`);
+	});
+
+	it('resolves the requested default source by language and rust target', () => {
+		expect(resolveEditorDefaultSource('go', 'wasm32-wasip1')).toBe(editorDefaults.go);
+		expect(resolveEditorDefaultSource('rust', 'wasm32-wasip2')).toBe(
+			rustEditorDefaults['wasm32-wasip2']
+		);
+	});
+
+	it('recognizes bundled defaults and the legacy broken TinyGo starter separately', () => {
+		expect(isEditorDefaultSource(editorDefaults.go)).toBe(true);
+		expect(isEditorDefaultSource(rustEditorDefaults['wasm32-wasip1'])).toBe(true);
+		expect(isEditorDefaultSource('fn main() {}')).toBe(false);
+		expect(isLegacyEditorDefaultSource(legacyBrokenTinyGoEditorDefault)).toBe(true);
+		expect(isLegacyEditorDefaultSource(editorDefaults.go)).toBe(false);
+	});
+});
