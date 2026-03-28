@@ -14,7 +14,7 @@
 
 	export const value = () => editor?.getValue() || '';
 
-	const defaults: Record<'cpp' | 'python' | 'java', string> = {
+	const defaults: Record<'cpp' | 'python' | 'java' | 'go', string> = {
 		cpp: `#include <iostream>
 
 int bonus = 3;
@@ -50,7 +50,34 @@ public class Main {
         int n = scanner.hasNextInt() ? scanner.nextInt() : 4;
         System.out.println("factorial_plus_bonus=" + (factorial(n) + bonus));
     }
-		}`
+		}`,
+		go: `package main
+
+import (
+    "bufio"
+    "fmt"
+    "os"
+    "strconv"
+    "strings"
+)
+
+const bonus = 3
+
+func factorial(n int) int {
+    if n <= 1 {
+        return 1
+    }
+    return n * factorial(n-1)
+}
+
+func main() {
+    line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+    n, err := strconv.Atoi(strings.TrimSpace(line))
+    if err != nil {
+        n = 4
+    }
+    fmt.Printf("factorial_plus_bonus=%d\n", factorial(n)+bonus)
+}`
 	};
 
 	const rustDefaults: Record<RustTargetTriple, string> = {
@@ -212,9 +239,9 @@ fn main() {
 		if (!monacoApi || !editor) return;
 		const activeModel = model || editor.getModel();
 		if (!activeModel) return;
-		const markers =
-			language === 'java' || language === 'rust'
-				? compilerDiagnostics.map((diagnostic) => ({
+			const markers =
+				language === 'java' || language === 'rust' || language === 'go'
+					? compilerDiagnostics.map((diagnostic) => ({
 						severity:
 							diagnostic.severity === 'warning'
 								? monacoApi.MarkerSeverity.Warning

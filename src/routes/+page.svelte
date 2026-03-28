@@ -10,6 +10,7 @@
 	import { browser } from '$app/environment';
 	import type { PlaygroundRuntimeAssets } from '$lib/playground/assets';
 	import { WASM_RUST_ASSET_VERSION } from '$lib/playground/wasmRustVersion';
+	import { WASM_TINYGO_ASSET_VERSION } from '$lib/playground/wasmTinyGoVersion';
 	import type {
 		CompilerDiagnostic,
 		RustTargetTriple
@@ -28,6 +29,11 @@
 			compilerUrl: path
 				? `${path}/wasm-rust/index.js?v=${WASM_RUST_ASSET_VERSION}`
 				: `/wasm-rust/index.js?v=${WASM_RUST_ASSET_VERSION}`
+		},
+		tinygo: {
+			moduleUrl: path
+				? `${path}/wasm-tinygo/runtime.js?v=${WASM_TINYGO_ASSET_VERSION}`
+				: `/wasm-tinygo/runtime.js?v=${WASM_TINYGO_ASSET_VERSION}`
 		}
 	}));
 	const playground = $derived.by(() => createPlaygroundBinding(runtimeAssets));
@@ -47,6 +53,18 @@
 		examplePaneWidth = $state(0),
 		terminalPaneWidth = $state<number | null>(null),
 		resizingPane = $state(false);
+
+	const editorLanguage = $derived(
+		language === 'CPP'
+			? 'cpp'
+			: language === 'PYTHON'
+				? 'python'
+				: language === 'JAVA'
+					? 'java'
+					: language === 'RUST'
+						? 'rust'
+						: 'go'
+	);
 
 	const progressRef = {
 		set(value: number) {
@@ -141,7 +159,8 @@
 		}
 		compilerDiagnostics = [];
 		const args =
-			(language === 'JAVA' || language === 'RUST') && argsInput.trim()
+			(language === 'JAVA' || language === 'RUST' || language === 'TINYGO') &&
+			argsInput.trim()
 				? argsInput.trim().split(/\s+/)
 				: [];
 		if (browser) {
@@ -304,7 +323,8 @@
 			debug.setCursorLine(null);
 			debug.reset();
 		}
-		if (language !== 'JAVA' && language !== 'RUST') compilerDiagnostics = [];
+		if (language !== 'JAVA' && language !== 'RUST' && language !== 'TINYGO')
+			compilerDiagnostics = [];
 	});
 </script>
 
@@ -429,9 +449,10 @@
 						<option value="PYTHON">Python</option>
 						<option value="JAVA">Java</option>
 						<option value="RUST">Rust</option>
+						<option value="TINYGO">TinyGo</option>
 					</select>
 				</label>
-				{#if language === 'JAVA' || language === 'RUST'}
+				{#if language === 'JAVA' || language === 'RUST' || language === 'TINYGO'}
 					<label class="args-chip">
 						<span class="material-symbols-outlined">list_alt</span>
 						<input bind:value={argsInput} placeholder="3 4 5" spellcheck={false} />
@@ -488,6 +509,14 @@
 					`wasm32-wasip3` is only shown for the current transitional component path while
 					upstream Rust still requires the documented libc patch.
 				{/if} Use Ctrl+D or the EOF button while running if the program reads stdin until EOF.
+			</p>
+		{/if}
+		{#if language === 'TINYGO'}
+			<p class="hint">
+				TinyGo currently compiles through the bundled wasm-tinygo browser pipeline and then
+				runs the resulting WASI artifact in the local playground runtime. Pass CLI args here,
+				type into the terminal below, and use Ctrl+D or the EOF button if the program reads
+				stdin until EOF.
 			</p>
 		{/if}
 		{#if debugLanguage && debug.active}
@@ -720,7 +749,7 @@
 	</div>
 	{#key language}
 		<Monaco
-			language={language.toLowerCase()}
+			language={editorLanguage}
 			rustTargetTriple={language === 'RUST' ? rustTargetTriple : undefined}
 			bind:editor
 			clangdEnabled={clangdRequested}

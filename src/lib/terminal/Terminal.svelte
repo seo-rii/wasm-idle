@@ -203,9 +203,11 @@
 		) {
 			prog?.set?.(0);
 			const loadProgress =
-				language === 'RUST' ? phaseProgress(prog, 0, 0.05) : phaseProgress(prog, 0, 0.85);
+				language === 'RUST' || language === 'TINYGO'
+					? phaseProgress(prog, 0, 0.05)
+					: phaseProgress(prog, 0, 0.85);
 			const prepareProgress =
-				language === 'RUST'
+				language === 'RUST' || language === 'TINYGO'
 					? phaseProgress(prog, 0.05, 0.99)
 					: phaseProgress(prog, 0.85, 0.99);
 			await Promise.all([
