@@ -88,7 +88,7 @@ class TinyGo implements Sandbox {
 			const nextHostCompileUrl = resolveTinyGoHostCompileUrl(runtimeAssets, currentUrl);
 			if (!nextModuleUrl && !nextHostCompileUrl) {
 				return reject(
-					'TinyGo runtime is not configured. Set PUBLIC_WASM_TINYGO_MODULE_URL, runtimeAssets.tinygo.moduleUrl, or runtimeAssets.tinygo.hostCompileUrl.'
+					'TinyGo runtime is not configured. Set PUBLIC_WASM_TINYGO_MODULE_URL, PUBLIC_WASM_TINYGO_HOST_COMPILE_URL, runtimeAssets.tinygo.moduleUrl, or runtimeAssets.tinygo.hostCompileUrl.'
 				);
 			}
 			if (

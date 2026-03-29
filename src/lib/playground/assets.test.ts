@@ -4,7 +4,8 @@ const { publicEnv } = vi.hoisted(() => ({
 	publicEnv: {
 		PUBLIC_WASM_RUST_COMPILER_URL: '',
 		PUBLIC_WASM_TINYGO_APP_URL: '',
-		PUBLIC_WASM_TINYGO_MODULE_URL: ''
+		PUBLIC_WASM_TINYGO_MODULE_URL: '',
+		PUBLIC_WASM_TINYGO_HOST_COMPILE_URL: ''
 	}
 }));
 
@@ -136,6 +137,7 @@ describe('runtime asset config resolution', () => {
 
 	it('prefers an explicit TinyGo host compile url over the shared root path', async () => {
 		vi.resetModules();
+		publicEnv.PUBLIC_WASM_TINYGO_HOST_COMPILE_URL = 'https://env.example.com/api/tinygo/compile';
 		const { resolveTinyGoHostCompileUrl } = await import('./assets');
 
 		expect(
@@ -151,8 +153,19 @@ describe('runtime asset config resolution', () => {
 		).toBe('https://example.com/local/tinygo/compile');
 	});
 
+	it('falls back to PUBLIC_WASM_TINYGO_HOST_COMPILE_URL when no tinygo runtime config is provided', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_TINYGO_HOST_COMPILE_URL = '/runtime/tinygo/compile';
+		const { resolveTinyGoHostCompileUrl } = await import('./assets');
+
+		expect(resolveTinyGoHostCompileUrl('/absproxy/5173', 'https://example.com/app')).toBe(
+			'https://example.com/runtime/tinygo/compile'
+		);
+	});
+
 	it('derives the default TinyGo host compile url from the shared root path', async () => {
 		vi.resetModules();
+		publicEnv.PUBLIC_WASM_TINYGO_HOST_COMPILE_URL = '';
 		const { resolveTinyGoHostCompileUrl } = await import('./assets');
 
 		expect(resolveTinyGoHostCompileUrl('/absproxy/5173', 'https://example.com/app')).toBe(

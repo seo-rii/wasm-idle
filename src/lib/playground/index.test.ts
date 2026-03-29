@@ -149,6 +149,7 @@ describe('playground runtime binding', () => {
 		const binding = createPlaygroundBinding({
 			rootUrl: '/absproxy/5173',
 			tinygo: {
+				hostCompileUrl: '/absproxy/5173/api/tinygo/compile',
 				moduleUrl: '/absproxy/5173/wasm-tinygo/runtime.js?v=test'
 			}
 		});
@@ -160,6 +161,7 @@ describe('playground runtime binding', () => {
 		expect(sandbox.runtimeAssets).toEqual({
 			rootUrl: '/absproxy/5173',
 			tinygo: {
+				hostCompileUrl: '/absproxy/5173/api/tinygo/compile',
 				moduleUrl: '/absproxy/5173/wasm-tinygo/runtime.js?v=test'
 			}
 		});
@@ -169,6 +171,7 @@ describe('playground runtime binding', () => {
 				{
 					rootUrl: '/absproxy/5173',
 					tinygo: {
+						hostCompileUrl: '/absproxy/5173/api/tinygo/compile',
 						moduleUrl: '/absproxy/5173/wasm-tinygo/runtime.js?v=test'
 					}
 				},

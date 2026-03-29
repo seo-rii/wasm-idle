@@ -290,7 +290,8 @@ export function resolveTinyGoHostCompileUrl(
 	currentUrl = ''
 ) {
 	const configuredHostCompileUrl =
-		(typeof options === 'object' && options?.tinygo?.hostCompileUrl) || '';
+		(typeof options === 'object' && options?.tinygo?.hostCompileUrl) ||
+		(publicEnv.PUBLIC_WASM_TINYGO_HOST_COMPILE_URL || '').trim();
 
 	if (configuredHostCompileUrl) {
 		return resolveConfiguredUrl(configuredHostCompileUrl, currentUrl);
