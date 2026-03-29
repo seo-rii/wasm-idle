@@ -31,6 +31,7 @@
 				: `/wasm-rust/index.js?v=${WASM_RUST_ASSET_VERSION}`
 		},
 		tinygo: {
+			hostCompileUrl: path ? `${path}/api/tinygo/compile` : '/api/tinygo/compile',
 			moduleUrl: path
 				? `${path}/wasm-tinygo/runtime.js?v=${WASM_TINYGO_ASSET_VERSION}`
 				: `/wasm-tinygo/runtime.js?v=${WASM_TINYGO_ASSET_VERSION}`
@@ -513,10 +514,11 @@
 		{/if}
 		{#if language === 'TINYGO'}
 			<p class="hint">
-				TinyGo currently compiles through the bundled wasm-tinygo browser pipeline and then
-				runs the resulting WASI artifact in the local playground runtime. Pass CLI args here,
-				type into the terminal below, and use Ctrl+D or the EOF button if the program reads
-				stdin until EOF.
+				TinyGo prefers the local host-assisted compile endpoint when this dev server provides
+				it, and otherwise falls back to the bundled wasm-tinygo browser pipeline before
+				running the resulting WASI artifact in the local playground runtime. Pass CLI args
+				here, type into the terminal below, and use Ctrl+D or the EOF button if the program
+				reads stdin until EOF.
 			</p>
 		{/if}
 		{#if debugLanguage && debug.active}

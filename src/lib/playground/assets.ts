@@ -45,6 +45,7 @@ export interface RustRuntimeAssetConfig {
 export interface TinyGoRuntimeAssetConfig {
 	moduleUrl?: string;
 	appUrl?: string;
+	hostCompileUrl?: string;
 }
 
 export interface PlaygroundRuntimeAssets {
@@ -277,6 +278,31 @@ export function resolveTinyGoModuleUrl(
 	if (options?.rootUrl) {
 		return resolveConfiguredUrl(
 			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-tinygo/runtime.js`,
+			currentUrl
+		);
+	}
+
+	return '';
+}
+
+export function resolveTinyGoHostCompileUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredHostCompileUrl =
+		(typeof options === 'object' && options?.tinygo?.hostCompileUrl) || '';
+
+	if (configuredHostCompileUrl) {
+		return resolveConfiguredUrl(configuredHostCompileUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return resolveConfiguredUrl(`${normalizeRootUrl(options) || ''}/api/tinygo/compile`, currentUrl);
+	}
+
+	if (options?.rootUrl) {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/api/tinygo/compile`,
 			currentUrl
 		);
 	}
