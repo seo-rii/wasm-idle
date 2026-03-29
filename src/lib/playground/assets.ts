@@ -311,6 +311,17 @@ export function resolveTinyGoHostCompileUrls(
 		pushUrl(`${normalizeRootUrl(options) || ''}/api/tinygo/compile`);
 	} else if (options?.rootUrl) {
 		pushUrl(`${normalizeRootUrl(options.rootUrl) || ''}/api/tinygo/compile`);
+	} else if (currentUrl) {
+		const currentPageUrl = new URL(currentUrl);
+		if (
+			isLocalHostname(currentPageUrl.hostname) &&
+			(currentPageUrl.protocol === 'http:' || currentPageUrl.protocol === 'https:')
+		) {
+			const currentPathname = currentPageUrl.pathname.endsWith('/')
+				? currentPageUrl.pathname
+				: `${currentPageUrl.pathname}/`;
+			pushUrl(`${currentPageUrl.origin}${currentPathname}api/tinygo/compile`);
+		}
 	}
 
 	const moduleUrl = resolveTinyGoModuleUrl(options, currentUrl);

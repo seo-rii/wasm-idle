@@ -173,6 +173,26 @@ describe('runtime asset config resolution', () => {
 		);
 	});
 
+	it('derives the current-page TinyGo host compile url when only a browser runtime module is configured', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_TINYGO_HOST_COMPILE_URL = '';
+		const { resolveTinyGoHostCompileUrls } = await import('./assets');
+
+		expect(
+			resolveTinyGoHostCompileUrls(
+				{
+					tinygo: {
+						moduleUrl: 'data:text/javascript;base64,ZXhwb3J0IHt9'
+					}
+				},
+				'http://localhost:3000/absproxy/5173/'
+			)
+		).toEqual([
+			'http://localhost:3000/absproxy/5173/api/tinygo/compile',
+			'http://localhost:4175/api/tinygo/compile'
+		]);
+	});
+
 	it('adds a localhost sibling wasm-tinygo preview candidate after the same-origin path', async () => {
 		vi.resetModules();
 		publicEnv.PUBLIC_WASM_TINYGO_APP_URL = '';
@@ -184,6 +204,19 @@ describe('runtime asset config resolution', () => {
 			resolveTinyGoHostCompileUrls('/absproxy/5173', 'http://127.0.0.1:4173/absproxy/5173/')
 		).toEqual([
 			'http://127.0.0.1:4173/absproxy/5173/api/tinygo/compile',
+			'http://127.0.0.1:4175/api/tinygo/compile'
+		]);
+	});
+
+	it('derives a same-origin compile path from the current browser url when no root path is configured', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_TINYGO_APP_URL = '';
+		publicEnv.PUBLIC_WASM_TINYGO_MODULE_URL = '';
+		publicEnv.PUBLIC_WASM_TINYGO_HOST_COMPILE_URL = '';
+		const { resolveTinyGoHostCompileUrls } = await import('./assets');
+
+		expect(resolveTinyGoHostCompileUrls(undefined, 'http://127.0.0.1:4173/')).toEqual([
+			'http://127.0.0.1:4173/api/tinygo/compile',
 			'http://127.0.0.1:4175/api/tinygo/compile'
 		]);
 	});

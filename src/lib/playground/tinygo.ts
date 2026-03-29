@@ -248,6 +248,7 @@ class TinyGo implements Sandbox {
 		if (this.compiledArtifact && this.compiledCacheKey === compileCacheKey) {
 			return;
 		}
+		const unavailableHostCompileUrls: string[] = [];
 		if (this.hostCompileUrls.length > 0) {
 			prog?.set?.(0.05);
 			for (const hostCompileUrl of this.hostCompileUrls) {
@@ -263,6 +264,7 @@ class TinyGo implements Sandbox {
 						})
 					});
 				} catch (error) {
+					unavailableHostCompileUrls.push(hostCompileUrl);
 					if (!this.moduleUrl && hostCompileUrl === this.hostCompileUrls.at(-1)) {
 						throw error;
 					}
@@ -316,9 +318,18 @@ class TinyGo implements Sandbox {
 					}
 					throw new Error(failureMessage);
 				}
+
+				if (hostCompileResponse) {
+					unavailableHostCompileUrls.push(hostCompileUrl);
+				}
 			}
 		}
 		if (!this.moduleUrl) {
+			if (unavailableHostCompileUrls.length > 0) {
+				throw new Error(
+					`TinyGo host compile endpoints were unavailable: ${unavailableHostCompileUrls.join(', ')}.`
+				);
+			}
 			throw new Error('TinyGo host compile endpoint is unavailable.');
 		}
 		const runtime = await this.ensureRuntime();
@@ -343,8 +354,12 @@ class TinyGo implements Sandbox {
 		this.compiledArtifactExecutionError =
 			artifact.runnable === false
 				? artifact.reason === 'bootstrap-artifact'
-					? 'TinyGo browser runtime produced a bootstrap artifact and cannot execute it yet.'
-					: 'TinyGo browser runtime produced a wasm artifact without a supported WASI entrypoint.'
+					? unavailableHostCompileUrls.length > 0
+						? `TinyGo host compile endpoints were unavailable: ${unavailableHostCompileUrls.join(', ')}. TinyGo browser runtime produced a bootstrap artifact and cannot execute it yet.`
+						: 'TinyGo browser runtime produced a bootstrap artifact and cannot execute it yet.'
+					: unavailableHostCompileUrls.length > 0
+						? `TinyGo host compile endpoints were unavailable: ${unavailableHostCompileUrls.join(', ')}. TinyGo browser runtime produced a wasm artifact without a supported WASI entrypoint.`
+						: 'TinyGo browser runtime produced a wasm artifact without a supported WASI entrypoint.'
 				: '';
 		this.compiledCacheKey = compileCacheKey;
 		if (log) {
