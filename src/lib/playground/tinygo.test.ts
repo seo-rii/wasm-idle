@@ -24,7 +24,8 @@ const createRuntimeFixtureState = () => ({
 	bootCalls: 0,
 	planCalls: 0,
 	executeCalls: 0,
-	disposeCalls: 0
+	disposeCalls: 0,
+	nextExecutionFailureLine: null as string | null
 });
 
 const runtimeFixtureState =
@@ -48,16 +49,20 @@ const state = globalThis.__wasmIdleTinyGoRuntimeFixtureState;
 export const createBundledTinyGoRuntime = () => ({
   async boot() {
     state.bootCalls += 1;
-    state.activityLog += '[12:00:00] emception toolchain is ready\\\\n';
+    state.activityLog += '[12:00:00] emception toolchain is ready\\n';
   },
   async plan() {
     state.planCalls += 1;
-    state.activityLog += '[12:00:01] driver planned 4 step(s)\\\\n';
+    state.activityLog += '[12:00:01] driver planned 4 step(s)\\n';
     return { ok: true };
   },
   async execute() {
     state.executeCalls += 1;
-    state.activityLog += '[12:00:02] build artifact ready: /working/out.wasm (4 bytes)\\\\n';
+    state.activityLog += '[12:00:02] build artifact ready: /working/out.wasm (4 bytes)\\n';
+    if (state.nextExecutionFailureLine) {
+      state.activityLog += '[12:00:03] ' + state.nextExecutionFailureLine + '\\n';
+      state.nextExecutionFailureLine = null;
+    }
     state.artifact = state.nextArtifact ?? {
       path: '/working/out.wasm',
       bytes: new Uint8Array([0, 97, 115, 109]),
@@ -67,7 +72,7 @@ export const createBundledTinyGoRuntime = () => ({
     state.nextArtifact = null;
   },
   reset() {
-    state.activityLog = '[12:00:00] log cleared\\\\n';
+    state.activityLog = '[12:00:00] log cleared\\n';
     state.artifact = null;
   },
   readActivityLog() {
@@ -372,61 +377,33 @@ describe('TinyGo sandbox', () => {
 		expect(runtimeFixtureState.executeCalls).toBe(1);
 	});
 
-	it('tries the wasm-tinygo module host compile endpoint before falling back to the browser runtime', async () => {
+	it('does not derive implicit TinyGo host compile endpoints from non-local browser origins', async () => {
 		const sandbox = new TinyGo();
-		const outputs: string[] = [];
 		const code = resolveEditorDefaultSource('go', 'wasm32-wasip1');
-		vi.mocked(fetch)
-			.mockResolvedValueOnce({
-				ok: false,
-				status: 404
-			} as Response)
-			.mockResolvedValueOnce({
-				ok: true,
-				json: async () => ({
-					artifact: {
-						bytesBase64: Buffer.from([0x00, 0x61, 0x73, 0x6d]).toString('base64'),
-						entrypoint: '_start',
-						path: '/host/fallback-main.wasm',
-						runnable: true
-					},
-					logs: ['tinygo host compile ready: target=wasip1']
-				})
-			} as Response);
-
-		sandbox.output = (chunk: string) => outputs.push(chunk);
-
-		await sandbox.load({
-			rootUrl: '/absproxy/5173',
-			tinygo: {
-				moduleUrl: 'https://tinygo.example.com/wasm-tinygo/runtime.js?v=test'
+		const originalWindow = window;
+		vi.stubGlobal('window', {
+			...window,
+			location: {
+				href: 'https://example.com/wasm-idle/'
 			}
 		});
-		await expect(sandbox.run(code, false, true, undefined, ['demo'])).resolves.toBe(true);
 
-		expect(fetch).toHaveBeenNthCalledWith(1, 'http://localhost:3000/absproxy/5173/api/tinygo/compile', {
-			body: JSON.stringify({
-				source: code
-			}),
-			headers: {
-				'content-type': 'application/json'
-			},
-			method: 'POST'
-		});
-		expect(fetch).toHaveBeenNthCalledWith(2, 'https://tinygo.example.com/api/tinygo/compile', {
-			body: JSON.stringify({
-				source: code
-			}),
-			headers: {
-				'content-type': 'application/json'
-			},
-			method: 'POST'
-		});
-		expect(runtimeFixtureState.bootCalls).toBe(0);
-		expect(runtimeFixtureState.planCalls).toBe(0);
-		expect(runtimeFixtureState.executeCalls).toBe(0);
-		expect(outputs.join('')).toContain('tinygo host compile ready: target=wasip1');
-		expect(outputs.join('')).toContain('tinygo-ok\n');
+		try {
+			await sandbox.load({
+				rootUrl: '/absproxy/5173',
+				tinygo: {
+					moduleUrl: runtimeModuleUrl
+				}
+			});
+			await expect(sandbox.run(code, false)).resolves.toBe(true);
+		} finally {
+			vi.stubGlobal('window', originalWindow);
+		}
+
+		expect(fetch).not.toHaveBeenCalled();
+		expect(runtimeFixtureState.bootCalls).toBe(1);
+		expect(runtimeFixtureState.planCalls).toBe(1);
+		expect(runtimeFixtureState.executeCalls).toBe(1);
 	});
 
 	it('retries a localhost sibling wasm-tinygo preview endpoint before using the browser runtime fallback', async () => {
@@ -576,6 +553,47 @@ describe('TinyGo sandbox', () => {
 
 		await expect(sandbox.run(code, false)).rejects.toContain(
 			'TinyGo host compile endpoints were unavailable: http://localhost:3000/absproxy/5173/api/tinygo/compile, http://localhost:4175/api/tinygo/compile. TinyGo browser runtime produced a bootstrap artifact and cannot execute it yet.'
+		);
+		expect(workerInstances).toHaveLength(1);
+		expect(workerInstances[0].postMessage).toHaveBeenCalledTimes(1);
+		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(1, { load: true });
+	});
+
+	it('surfaces the browser runtime execution failure after local host compile probes miss', async () => {
+		const sandbox = new TinyGo();
+		const code = resolveEditorDefaultSource('go', 'wasm32-wasip1');
+		window.history.replaceState({}, '', 'http://localhost:3000/absproxy/5173/');
+		vi.mocked(fetch)
+			.mockResolvedValueOnce({
+				ok: false,
+				status: 404
+			} as Response)
+			.mockResolvedValueOnce({
+				ok: false,
+				status: 404
+			} as Response);
+
+		await sandbox.load({
+			tinygo: {
+				moduleUrl: runtimeModuleUrl
+			}
+		});
+		runtimeFixtureState.nextArtifact = {
+			path: '/working/out.wasm',
+			bytes: new Uint8Array([0, 97, 115, 109]),
+			runnable: false,
+			entrypoint: null,
+			reason: 'bootstrap-artifact'
+		};
+		runtimeFixtureState.nextExecutionFailureLine =
+			'build execution failed: execution artifact did not expose a supported WASI entrypoint';
+
+		const errorMessage = await sandbox.run(code, false).then(
+			() => null,
+			(error) => (error instanceof Error ? error.message : String(error))
+		);
+		expect(errorMessage).toContain(
+			'TinyGo host compile endpoints were unavailable: http://localhost:3000/absproxy/5173/api/tinygo/compile, http://localhost:4175/api/tinygo/compile. TinyGo browser runtime could not produce a runnable execution artifact: execution artifact did not expose a supported WASI entrypoint'
 		);
 		expect(workerInstances).toHaveLength(1);
 		expect(workerInstances[0].postMessage).toHaveBeenCalledTimes(1);
