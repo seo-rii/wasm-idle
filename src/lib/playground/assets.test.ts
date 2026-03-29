@@ -172,4 +172,53 @@ describe('runtime asset config resolution', () => {
 			'https://example.com/absproxy/5173/api/tinygo/compile'
 		);
 	});
+
+	it('adds a localhost sibling wasm-tinygo preview candidate after the same-origin path', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_TINYGO_APP_URL = '';
+		publicEnv.PUBLIC_WASM_TINYGO_MODULE_URL = '';
+		publicEnv.PUBLIC_WASM_TINYGO_HOST_COMPILE_URL = '';
+		const { resolveTinyGoHostCompileUrls } = await import('./assets');
+
+		expect(
+			resolveTinyGoHostCompileUrls('/absproxy/5173', 'http://127.0.0.1:4173/absproxy/5173/')
+		).toEqual([
+			'http://127.0.0.1:4173/absproxy/5173/api/tinygo/compile',
+			'http://127.0.0.1:4175/api/tinygo/compile'
+		]);
+	});
+
+	it('derives a sibling compile endpoint from an explicit TinyGo module url', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_TINYGO_HOST_COMPILE_URL = '';
+		const { resolveTinyGoHostCompileUrls } = await import('./assets');
+
+		expect(
+			resolveTinyGoHostCompileUrls(
+				{
+					tinygo: {
+						moduleUrl: 'https://tinygo.example.com/runtime/runtime.js'
+					}
+				},
+				'https://example.com/app'
+			)
+		).toEqual(['https://tinygo.example.com/api/tinygo/compile']);
+	});
+
+	it('does not derive a sibling compile endpoint from a data-url TinyGo module', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_TINYGO_HOST_COMPILE_URL = '';
+		const { resolveTinyGoHostCompileUrls } = await import('./assets');
+
+		expect(
+			resolveTinyGoHostCompileUrls(
+				{
+					tinygo: {
+						moduleUrl: 'data:text/javascript;base64,ZXhwb3J0IHt9'
+					}
+				},
+				'https://example.com/app'
+			)
+		).toEqual([]);
+	});
 });

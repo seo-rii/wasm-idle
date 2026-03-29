@@ -90,6 +90,8 @@ const resolveConfiguredUrl = (url: string, currentUrl = '') =>
 const normalizeRootUrl = (rootUrl: string) =>
 	rootUrl.endsWith('/') ? rootUrl.slice(0, -1) : rootUrl;
 
+const isLocalHostname = (hostname: string) => hostname === 'localhost' || hostname === '127.0.0.1';
+
 const resolvePythonBaseUrl = (rootUrl = '', currentUrl = '') =>
 	normalizeBaseUrl(`${normalizeRootUrl(rootUrl) || ''}/pyodide/`, currentUrl);
 
@@ -285,7 +287,7 @@ export function resolveTinyGoModuleUrl(
 	return '';
 }
 
-export function resolveTinyGoHostCompileUrl(
+export function resolveTinyGoHostCompileUrls(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
@@ -294,19 +296,44 @@ export function resolveTinyGoHostCompileUrl(
 		(publicEnv.PUBLIC_WASM_TINYGO_HOST_COMPILE_URL || '').trim();
 
 	if (configuredHostCompileUrl) {
-		return resolveConfiguredUrl(configuredHostCompileUrl, currentUrl);
+		return [resolveConfiguredUrl(configuredHostCompileUrl, currentUrl)];
 	}
+
+	const urls: string[] = [];
+	const pushUrl = (url: string) => {
+		const resolvedUrl = resolveConfiguredUrl(url, currentUrl);
+		if (!urls.includes(resolvedUrl)) {
+			urls.push(resolvedUrl);
+		}
+	};
 
 	if (typeof options === 'string') {
-		return resolveConfiguredUrl(`${normalizeRootUrl(options) || ''}/api/tinygo/compile`, currentUrl);
+		pushUrl(`${normalizeRootUrl(options) || ''}/api/tinygo/compile`);
+	} else if (options?.rootUrl) {
+		pushUrl(`${normalizeRootUrl(options.rootUrl) || ''}/api/tinygo/compile`);
 	}
 
-	if (options?.rootUrl) {
-		return resolveConfiguredUrl(
-			`${normalizeRootUrl(options.rootUrl) || ''}/api/tinygo/compile`,
-			currentUrl
-		);
+	const moduleUrl = resolveTinyGoModuleUrl(options, currentUrl);
+	if (moduleUrl) {
+		const moduleAssetUrl = new URL(moduleUrl, currentUrl || undefined);
+		if (moduleAssetUrl.protocol === 'http:' || moduleAssetUrl.protocol === 'https:') {
+			pushUrl(new URL('../api/tinygo/compile', moduleAssetUrl).toString());
+		}
 	}
 
-	return '';
+	if (currentUrl) {
+		const currentPageUrl = new URL(currentUrl);
+		if (isLocalHostname(currentPageUrl.hostname) && currentPageUrl.port !== '4175') {
+			pushUrl(`${currentPageUrl.protocol}//${currentPageUrl.hostname}:4175/api/tinygo/compile`);
+		}
+	}
+
+	return urls;
+}
+
+export function resolveTinyGoHostCompileUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	return resolveTinyGoHostCompileUrls(options, currentUrl)[0] || '';
 }
