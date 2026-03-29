@@ -121,6 +121,7 @@ import TinyGo from './tinygo';
 describe('TinyGo sandbox', () => {
 	beforeEach(() => {
 		vi.restoreAllMocks();
+		vi.stubGlobal('fetch', vi.fn());
 		workerInstances.length = 0;
 		publicEnv.PUBLIC_WASM_TINYGO_APP_URL = '';
 		publicEnv.PUBLIC_WASM_TINYGO_MODULE_URL = '';
@@ -210,8 +211,73 @@ describe('TinyGo sandbox', () => {
 				tinygo: {}
 			})
 		).rejects.toContain(
-			'TinyGo runtime is not configured. Set PUBLIC_WASM_TINYGO_MODULE_URL or runtimeAssets.tinygo.moduleUrl.'
+			'TinyGo runtime is not configured. Set PUBLIC_WASM_TINYGO_MODULE_URL, runtimeAssets.tinygo.moduleUrl, or runtimeAssets.tinygo.hostCompileUrl.'
 		);
+	});
+
+	it('prefers the TinyGo host compile endpoint when configured', async () => {
+		const sandbox = new TinyGo();
+		const outputs: string[] = [];
+		const code = resolveEditorDefaultSource('go', 'wasm32-wasip1');
+		vi.mocked(fetch).mockResolvedValue({
+			ok: true,
+			json: async () => ({
+				artifact: {
+					bytesBase64: Buffer.from([0x00, 0x61, 0x73, 0x6d]).toString('base64'),
+					entrypoint: '_start',
+					path: '/host/main.wasm',
+					runnable: true
+				},
+				logs: ['tinygo host compile ready: target=wasip1']
+			})
+		} as Response);
+
+		sandbox.output = (chunk: string) => outputs.push(chunk);
+
+		await sandbox.load({
+			rootUrl: '/absproxy/5173',
+			tinygo: {
+				hostCompileUrl: 'https://example.com/api/tinygo/compile'
+			}
+		});
+		await expect(sandbox.run(code, false, true, undefined, ['demo'])).resolves.toBe(true);
+
+		expect(fetch).toHaveBeenCalledWith('https://example.com/api/tinygo/compile', {
+			body: JSON.stringify({
+				source: code
+			}),
+			headers: {
+				'content-type': 'application/json'
+			},
+			method: 'POST'
+		});
+		expect(runtimeFixtureState.bootCalls).toBe(0);
+		expect(runtimeFixtureState.planCalls).toBe(0);
+		expect(runtimeFixtureState.executeCalls).toBe(0);
+		expect(outputs.join('')).toContain('tinygo host compile ready: target=wasip1');
+		expect(outputs.join('')).toContain('tinygo-ok\n');
+	});
+
+	it('falls back to the browser runtime when the TinyGo host compile endpoint is unavailable', async () => {
+		const sandbox = new TinyGo();
+		const code = resolveEditorDefaultSource('go', 'wasm32-wasip1');
+		vi.mocked(fetch).mockResolvedValue({
+			ok: false,
+			status: 404
+		} as Response);
+
+		await sandbox.load({
+			rootUrl: '/absproxy/5173',
+			tinygo: {
+				hostCompileUrl: 'https://example.com/api/tinygo/compile',
+				moduleUrl: runtimeModuleUrl
+			}
+		});
+		await expect(sandbox.run(code, false)).resolves.toBe(true);
+
+		expect(runtimeFixtureState.bootCalls).toBe(1);
+		expect(runtimeFixtureState.planCalls).toBe(1);
+		expect(runtimeFixtureState.executeCalls).toBe(1);
 	});
 
 	it('rejects execution when the TinyGo runtime reports a bootstrap-only artifact', async () => {

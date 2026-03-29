@@ -133,4 +133,30 @@ describe('runtime asset config resolution', () => {
 			'https://env.example.com/wasm-tinygo/runtime.js?v=42'
 		);
 	});
+
+	it('prefers an explicit TinyGo host compile url over the shared root path', async () => {
+		vi.resetModules();
+		const { resolveTinyGoHostCompileUrl } = await import('./assets');
+
+		expect(
+			resolveTinyGoHostCompileUrl(
+				{
+					rootUrl: '/ignored',
+					tinygo: {
+						hostCompileUrl: '/local/tinygo/compile'
+					}
+				},
+				'https://example.com/app'
+			)
+		).toBe('https://example.com/local/tinygo/compile');
+	});
+
+	it('derives the default TinyGo host compile url from the shared root path', async () => {
+		vi.resetModules();
+		const { resolveTinyGoHostCompileUrl } = await import('./assets');
+
+		expect(resolveTinyGoHostCompileUrl('/absproxy/5173', 'https://example.com/app')).toBe(
+			'https://example.com/absproxy/5173/api/tinygo/compile'
+		);
+	});
 });
