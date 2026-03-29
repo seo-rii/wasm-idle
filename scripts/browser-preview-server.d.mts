@@ -3,12 +3,13 @@
  */
 export function shouldReuseProvidedBrowserUrl(browserUrl: string): boolean;
 /**
- * @param {{ origin?: string; basePath?: string; timeoutMs?: number }} options
+ * @param {{ origin?: string; basePath?: string; timeoutMs?: number; serverMode?: 'dev' | 'preview' }} options
  */
-export function startBrowserPreviewServer({ origin, basePath, timeoutMs }?: {
+export function startBrowserPreviewServer({ origin, basePath, timeoutMs, serverMode }?: {
     origin?: string;
     basePath?: string;
     timeoutMs?: number;
+    serverMode?: 'dev' | 'preview';
 }): Promise<{
     origin: string;
     browserUrl: string;

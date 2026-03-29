@@ -17,6 +17,8 @@ describe('wasm-idle TinyGo browser playwright integration', () => {
 			}
 
 			const configuredBrowserUrl = process.env.WASM_IDLE_BROWSER_URL || '';
+			const serverMode =
+				process.env.WASM_IDLE_BROWSER_SERVER_MODE === 'dev' ? 'dev' : 'preview';
 			const previewServer =
 				shouldReuseProvidedBrowserUrl(configuredBrowserUrl)
 					? {
@@ -28,9 +30,10 @@ describe('wasm-idle TinyGo browser playwright integration', () => {
 							configuredBrowserUrl
 								? {
 										origin: new URL(configuredBrowserUrl).origin,
-										basePath: new URL(configuredBrowserUrl).pathname
+										basePath: new URL(configuredBrowserUrl).pathname,
+										serverMode
 									}
-								: undefined
+								: { serverMode }
 						);
 
 			try {

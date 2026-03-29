@@ -103,12 +103,13 @@ async function waitForHttp(url, timeoutMs, child, logs) {
 }
 
 /**
- * @param {{ origin?: string; basePath?: string; timeoutMs?: number }} options
+ * @param {{ origin?: string; basePath?: string; timeoutMs?: number; serverMode?: 'dev' | 'preview' }} options
  */
 export async function startBrowserPreviewServer({
 	origin = 'http://localhost:4173',
 	basePath = '/absproxy/5173/',
-	timeoutMs = 120_000
+	timeoutMs = 120_000,
+	serverMode = 'dev'
 } = {}) {
 	const originUrl = new URL(origin);
 	if (!isLocalHost(originUrl.hostname)) {
@@ -165,7 +166,7 @@ export async function startBrowserPreviewServer({
 		[
 			'exec',
 			'vite',
-			'dev',
+			serverMode,
 			'--host',
 			originUrl.hostname,
 			'--port',
