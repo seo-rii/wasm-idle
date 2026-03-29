@@ -24,7 +24,7 @@ type TinyGoRuntimeHooks = {
 		path: string;
 		bytes: Uint8Array;
 		runnable?: boolean;
-		entrypoint?: '_start' | '_initialize' | null;
+		entrypoint?: '_start' | '_initialize' | 'main' | null;
 		reason?: 'bootstrap-artifact' | 'missing-wasi-entrypoint';
 	} | null;
 	setWorkspaceFiles(files: Record<string, string> | null): void;
@@ -39,7 +39,7 @@ type TinyGoRuntimeModule = {
 type TinyGoHostCompileResponse = {
 	artifact: {
 		bytesBase64: string;
-		entrypoint?: '_start' | '_initialize' | null;
+		entrypoint?: '_start' | '_initialize' | 'main' | null;
 		path: string;
 		reason?: 'bootstrap-artifact' | 'missing-wasi-entrypoint';
 		runnable?: boolean;

@@ -117,17 +117,20 @@ self.onmessage = async (event: { data: any }) => {
 				);
 			} else if (
 				typeof exportsObject.memory === 'object' &&
-				typeof exportsObject._initialize === 'function' &&
 				typeof exportsObject.main === 'function'
 			) {
-				wasiRuntime.initialize(
-					instance as { exports: { memory: WebAssembly.Memory; _initialize?: () => unknown } }
-				);
+				if (typeof exportsObject._initialize === 'function') {
+					wasiRuntime.initialize(
+						instance as { exports: { memory: WebAssembly.Memory; _initialize?: () => unknown } }
+					);
+				} else if (typeof exportsObject.__wasm_call_ctors === 'function') {
+					(exportsObject.__wasm_call_ctors as () => unknown)();
+				}
 				const mainResult = (exportsObject.main as () => unknown)();
 				exitCode = typeof mainResult === 'number' ? mainResult : 0;
 			} else {
 				throw new Error(
-					'TinyGo worker expected a WASI artifact with _start or a reactor artifact with _initialize + main'
+					'TinyGo worker expected a WASI artifact with _start or a reactor artifact with main'
 				);
 			}
 		} catch (error) {

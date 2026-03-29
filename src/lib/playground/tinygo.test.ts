@@ -10,14 +10,14 @@ const createRuntimeFixtureState = () => ({
 		path: string;
 		bytes: Uint8Array;
 		runnable?: boolean;
-		entrypoint?: '_start' | '_initialize' | null;
+		entrypoint?: '_start' | '_initialize' | 'main' | null;
 		reason?: string;
 	} | null,
 	nextArtifact: null as {
 		path: string;
 		bytes: Uint8Array;
 		runnable?: boolean;
-		entrypoint?: '_start' | '_initialize' | null;
+		entrypoint?: '_start' | '_initialize' | 'main' | null;
 		reason?: string;
 	} | null,
 	workspaceFiles: null as Record<string, string> | null,
@@ -316,6 +316,41 @@ describe('TinyGo sandbox', () => {
 		expect(runtimeFixtureState.bootCalls).toBe(1);
 		expect(runtimeFixtureState.planCalls).toBe(1);
 		expect(runtimeFixtureState.executeCalls).toBe(1);
+	});
+
+	it('runs a browser fallback artifact when the runtime reports a main entrypoint', async () => {
+		const sandbox = new TinyGo();
+		const outputs: string[] = [];
+		const code = resolveEditorDefaultSource('go', 'wasm32-wasip1');
+
+		sandbox.output = (chunk: string) => outputs.push(chunk);
+
+		await sandbox.load({
+			rootUrl: '/absproxy/5173',
+			tinygo: {
+				moduleUrl: runtimeModuleUrl
+			}
+		});
+		runtimeFixtureState.nextArtifact = {
+			path: '/working/out.exec.wasm',
+			bytes: new Uint8Array([0, 97, 115, 109]),
+			runnable: true,
+			entrypoint: 'main'
+		};
+
+		await expect(sandbox.run(code, false, true, undefined, ['demo'])).resolves.toBe(true);
+		expect(workerInstances).toHaveLength(1);
+		expect(workerInstances[0].postMessage).toHaveBeenCalledTimes(2);
+		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(1, { load: true });
+		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
+			2,
+			expect.objectContaining({
+				artifact: expect.any(Uint8Array),
+				args: ['demo'],
+				log: true
+			})
+		);
+		expect(outputs.join('')).toContain('tinygo-ok\n');
 	});
 
 	it('rejects execution when the TinyGo runtime reports a bootstrap-only artifact', async () => {
