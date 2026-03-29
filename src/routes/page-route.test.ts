@@ -68,7 +68,7 @@ describe('example route debug actions', () => {
 			/import \{ WASM_TINYGO_ASSET_VERSION \} from '\$lib\/playground\/wasmTinyGoVersion';/
 		);
 		expect(source).toMatch(
-			/let runtimeAssets = \$derived\.by<PlaygroundRuntimeAssets>\(\(\) => \(\{\s+rootUrl: path,\s+rust: \{\s+compilerUrl: path\s+\?\s+`\$\{path\}\/wasm-rust\/index\.js\?v=\$\{WASM_RUST_ASSET_VERSION\}`\s+:\s+`\/wasm-rust\/index\.js\?v=\$\{WASM_RUST_ASSET_VERSION\}`\s+\},\s+tinygo: \{\s+hostCompileUrl: path \? `\$\{path\}\/api\/tinygo\/compile` : '\/api\/tinygo\/compile',\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-tinygo\/runtime\.js\?v=\$\{WASM_TINYGO_ASSET_VERSION\}`\s+:\s+`\/wasm-tinygo\/runtime\.js\?v=\$\{WASM_TINYGO_ASSET_VERSION\}`\s+\}\s+\}\)\);/s
+			/let runtimeAssets = \$derived\.by<PlaygroundRuntimeAssets>\(\(\) => \(\{\s+rootUrl: path,\s+rust: \{\s+compilerUrl: path\s+\?\s+`\$\{path\}\/wasm-rust\/index\.js\?v=\$\{WASM_RUST_ASSET_VERSION\}`\s+:\s+`\/wasm-rust\/index\.js\?v=\$\{WASM_RUST_ASSET_VERSION\}`\s+\},\s+tinygo: \{\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-tinygo\/runtime\.js\?v=\$\{WASM_TINYGO_ASSET_VERSION\}`\s+:\s+`\/wasm-tinygo\/runtime\.js\?v=\$\{WASM_TINYGO_ASSET_VERSION\}`\s+\}\s+\}\)\);/s
 		);
 		expect(source).toMatch(
 			/const playground = \$derived\.by\(\(\) => createPlaygroundBinding\(runtimeAssets\)\);/
@@ -150,9 +150,9 @@ describe('example route debug actions', () => {
 			/\{#if language === 'JAVA' \|\| language === 'RUST' \|\| language === 'TINYGO'\}/
 		);
 		expect(source).toMatch(/language === 'JAVA' \|\| language === 'RUST' \|\| language === 'TINYGO'/);
-		expect(source).toMatch(/TinyGo prefers the local host-assisted compile endpoint/);
+		expect(source).toMatch(/TinyGo prefers a configured host-assisted compile endpoint/);
 		expect(source).toMatch(/falls back to the bundled wasm-tinygo browser pipeline/);
-		expect(source).toMatch(/running the resulting WASI artifact in the local playground runtime/);
+		expect(source).toMatch(/resulting WASI artifact in the local playground runtime/);
 		expect(source).toMatch(/reads\s+stdin until EOF/);
 	});
 

@@ -38,7 +38,8 @@ const runtimeFixtureState =
 const { publicEnv } = vi.hoisted(() => ({
 	publicEnv: {
 		PUBLIC_WASM_TINYGO_APP_URL: '',
-		PUBLIC_WASM_TINYGO_MODULE_URL: ''
+		PUBLIC_WASM_TINYGO_MODULE_URL: '',
+		PUBLIC_WASM_TINYGO_HOST_COMPILE_URL: ''
 	}
 }));
 
@@ -125,6 +126,7 @@ describe('TinyGo sandbox', () => {
 		workerInstances.length = 0;
 		publicEnv.PUBLIC_WASM_TINYGO_APP_URL = '';
 		publicEnv.PUBLIC_WASM_TINYGO_MODULE_URL = '';
+		publicEnv.PUBLIC_WASM_TINYGO_HOST_COMPILE_URL = '';
 		Object.assign(runtimeFixtureState, createRuntimeFixtureState());
 	});
 
@@ -211,7 +213,7 @@ describe('TinyGo sandbox', () => {
 				tinygo: {}
 			})
 		).rejects.toContain(
-			'TinyGo runtime is not configured. Set PUBLIC_WASM_TINYGO_MODULE_URL, runtimeAssets.tinygo.moduleUrl, or runtimeAssets.tinygo.hostCompileUrl.'
+			'TinyGo runtime is not configured. Set PUBLIC_WASM_TINYGO_MODULE_URL, PUBLIC_WASM_TINYGO_HOST_COMPILE_URL, runtimeAssets.tinygo.moduleUrl, or runtimeAssets.tinygo.hostCompileUrl.'
 		);
 	});
 
@@ -256,6 +258,42 @@ describe('TinyGo sandbox', () => {
 		expect(runtimeFixtureState.executeCalls).toBe(0);
 		expect(outputs.join('')).toContain('tinygo host compile ready: target=wasip1');
 		expect(outputs.join('')).toContain('tinygo-ok\n');
+	});
+
+	it('uses PUBLIC_WASM_TINYGO_HOST_COMPILE_URL when runtime assets do not override it', async () => {
+		const sandbox = new TinyGo();
+		const outputs: string[] = [];
+		const code = resolveEditorDefaultSource('go', 'wasm32-wasip1');
+		publicEnv.PUBLIC_WASM_TINYGO_HOST_COMPILE_URL = '/runtime/tinygo/compile';
+		vi.mocked(fetch).mockResolvedValue({
+			ok: true,
+			json: async () => ({
+				artifact: {
+					bytesBase64: Buffer.from([0x00, 0x61, 0x73, 0x6d]).toString('base64'),
+					entrypoint: '_start',
+					path: '/host/env-main.wasm',
+					runnable: true
+				},
+				logs: ['tinygo host compile ready: target=wasip1']
+			})
+		} as Response);
+
+		sandbox.output = (chunk: string) => outputs.push(chunk);
+
+		await sandbox.load();
+		await expect(sandbox.run(code, false, true, undefined, ['demo'])).resolves.toBe(true);
+
+		expect(fetch).toHaveBeenCalledWith('http://localhost:3000/runtime/tinygo/compile', {
+			body: JSON.stringify({
+				source: code
+			}),
+			headers: {
+				'content-type': 'application/json'
+			},
+			method: 'POST'
+		});
+		expect(runtimeFixtureState.bootCalls).toBe(0);
+		expect(outputs.join('')).toContain('tinygo host compile ready: target=wasip1');
 	});
 
 	it('falls back to the browser runtime when the TinyGo host compile endpoint is unavailable', async () => {
