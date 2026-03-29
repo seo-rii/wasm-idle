@@ -93,6 +93,7 @@ hook instead of trying to click xterm's hidden helper textarea, which proved too
 Playwright runs.
 The TinyGo probe follows the same pattern and also asserts that the transcript came through the
 host compile seam by looking for `tinygo host compile ready: target=wasip1`.
+The TinyGo browser commands currently default to `vite dev`.
 If Rust ever reports `invalid metadata files for crate core` or `Unsupported archive identifier`,
 the browser almost always fetched a stale or wrong `wasm-rust` sysroot asset. Hard refresh the page
 and resync `static/wasm-rust/` from the sibling `wasm-rust/dist/`.
