@@ -23,6 +23,7 @@ type TinyGoRuntimeHooks = {
 	readBuildArtifact(): {
 		path: string;
 		bytes: Uint8Array;
+		artifactKind?: 'probe' | 'bootstrap' | 'execution';
 		runnable?: boolean;
 		entrypoint?: '_start' | '_initialize' | 'main' | null;
 		reason?: 'bootstrap-artifact' | 'missing-wasi-entrypoint';
@@ -38,6 +39,7 @@ type TinyGoRuntimeModule = {
 
 type TinyGoHostCompileResponse = {
 	artifact: {
+		artifactKind?: 'probe' | 'bootstrap' | 'execution';
 		bytesBase64: string;
 		entrypoint?: '_start' | '_initialize' | 'main' | null;
 		path: string;
@@ -285,7 +287,9 @@ class TinyGo implements Sandbox {
 						this.compiledArtifact = artifactBytes;
 						this.compiledArtifactExecutionError =
 							payload.artifact.runnable === false
-								? payload.artifact.reason === 'bootstrap-artifact'
+								? payload.artifact.artifactKind === 'probe'
+									? 'TinyGo host compile returned a non-runnable probe artifact without a supported WASI entrypoint.'
+									: payload.artifact.reason === 'bootstrap-artifact'
 									? 'TinyGo host compile returned a bootstrap artifact and cannot execute it yet.'
 									: 'TinyGo host compile returned a non-runnable artifact without a supported WASI entrypoint.'
 								: '';
@@ -350,7 +354,19 @@ class TinyGo implements Sandbox {
 		prog?.set?.(0.95);
 		const artifact = runtime.readBuildArtifact();
 		if (!artifact) {
-			throw new Error(this.extractCompileFailure());
+			const compileFailure = this.extractCompileFailure();
+			if (
+				/(?:probe-only|supported WASI entrypoint|no host compile seam is configured)/i.test(
+					compileFailure
+				)
+			) {
+				throw new Error(
+					unavailableHostCompileUrls.length > 0
+						? `TinyGo host compile endpoints were unavailable: ${unavailableHostCompileUrls.join(', ')}. TinyGo browser runtime could not produce a runnable execution artifact: ${compileFailure}. ${staticOnlyTinyGoBrowserRuntimeMessage}`
+						: `TinyGo browser runtime could not produce a runnable execution artifact: ${compileFailure}. ${staticOnlyTinyGoBrowserRuntimeMessage}`
+				);
+			}
+			throw new Error(compileFailure);
 		}
 		const runtimeLogLines = runtime
 			.readActivityLog()
@@ -377,9 +393,13 @@ class TinyGo implements Sandbox {
 						? unavailableHostCompileUrls.length > 0
 							? `TinyGo host compile endpoints were unavailable: ${unavailableHostCompileUrls.join(', ')}. TinyGo browser runtime produced a bootstrap artifact and cannot execute it yet.`
 							: 'TinyGo browser runtime produced a bootstrap artifact and cannot execute it yet.'
+						: artifact.artifactKind === 'probe'
+							? unavailableHostCompileUrls.length > 0
+								? `TinyGo host compile endpoints were unavailable: ${unavailableHostCompileUrls.join(', ')}. TinyGo browser runtime produced a non-runnable probe artifact without a supported WASI entrypoint. ${staticOnlyTinyGoBrowserRuntimeMessage}`
+								: `TinyGo browser runtime produced a non-runnable probe artifact without a supported WASI entrypoint. ${staticOnlyTinyGoBrowserRuntimeMessage}`
 						: unavailableHostCompileUrls.length > 0
-							? `TinyGo host compile endpoints were unavailable: ${unavailableHostCompileUrls.join(', ')}. TinyGo browser runtime produced a non-runnable probe artifact without a supported WASI entrypoint. ${staticOnlyTinyGoBrowserRuntimeMessage}`
-							: `TinyGo browser runtime produced a non-runnable probe artifact without a supported WASI entrypoint. ${staticOnlyTinyGoBrowserRuntimeMessage}`
+							? `TinyGo host compile endpoints were unavailable: ${unavailableHostCompileUrls.join(', ')}. TinyGo browser runtime produced a non-runnable artifact without a supported WASI entrypoint. ${staticOnlyTinyGoBrowserRuntimeMessage}`
+							: `TinyGo browser runtime produced a non-runnable artifact without a supported WASI entrypoint. ${staticOnlyTinyGoBrowserRuntimeMessage}`
 				: '';
 		this.compiledCacheKey = compileCacheKey;
 		if (log) {

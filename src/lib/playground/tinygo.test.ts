@@ -9,6 +9,7 @@ const createRuntimeFixtureState = () => ({
 	artifact: null as {
 		path: string;
 		bytes: Uint8Array;
+		artifactKind?: 'probe' | 'bootstrap' | 'execution';
 		runnable?: boolean;
 		entrypoint?: '_start' | '_initialize' | 'main' | null;
 		reason?: string;
@@ -16,6 +17,7 @@ const createRuntimeFixtureState = () => ({
 	nextArtifact: null as {
 		path: string;
 		bytes: Uint8Array;
+		artifactKind?: 'probe' | 'bootstrap' | 'execution';
 		runnable?: boolean;
 		entrypoint?: '_start' | '_initialize' | 'main' | null;
 		reason?: string;
@@ -25,7 +27,8 @@ const createRuntimeFixtureState = () => ({
 	planCalls: 0,
 	executeCalls: 0,
 	disposeCalls: 0,
-	nextExecutionFailureLine: null as string | null
+	nextExecutionFailureLine: null as string | null,
+	skipArtifact: false
 });
 
 const runtimeFixtureState =
@@ -63,12 +66,19 @@ export const createBundledTinyGoRuntime = () => ({
       state.activityLog += '[12:00:03] ' + state.nextExecutionFailureLine + '\\n';
       state.nextExecutionFailureLine = null;
     }
-    state.artifact = state.nextArtifact ?? {
-      path: '/working/out.wasm',
-      bytes: new Uint8Array([0, 97, 115, 109]),
-      runnable: true,
-      entrypoint: '_start',
-    };
+    if (state.skipArtifact) {
+      state.artifact = null;
+      state.skipArtifact = false;
+      state.nextArtifact = null;
+      return;
+    }
+	    state.artifact = state.nextArtifact ?? {
+	      path: '/working/out.wasm',
+	      bytes: new Uint8Array([0, 97, 115, 109]),
+	      artifactKind: 'execution',
+	      runnable: true,
+	      entrypoint: '_start',
+	    };
     state.nextArtifact = null;
   },
   reset() {
@@ -284,6 +294,7 @@ describe('TinyGo sandbox', () => {
 			json: async () => ({
 				artifact: {
 					bytesBase64: Buffer.from([0x00, 0x61, 0x73, 0x6d]).toString('base64'),
+					artifactKind: 'execution',
 					entrypoint: null,
 					path: '/host/main.wasm',
 					reason: 'missing-wasi-entrypoint',
@@ -543,6 +554,7 @@ describe('TinyGo sandbox', () => {
 		runtimeFixtureState.nextArtifact = {
 			path: '/working/out.wasm',
 			bytes: new Uint8Array([0, 97, 115, 109]),
+			artifactKind: 'bootstrap',
 			runnable: false,
 			entrypoint: null,
 			reason: 'bootstrap-artifact'
@@ -569,6 +581,7 @@ describe('TinyGo sandbox', () => {
 		runtimeFixtureState.nextArtifact = {
 			path: '/working/out.wasm',
 			bytes: new Uint8Array([0, 97, 115, 109]),
+			artifactKind: 'probe',
 			runnable: false,
 			entrypoint: null,
 			reason: 'missing-wasi-entrypoint'
@@ -604,6 +617,7 @@ describe('TinyGo sandbox', () => {
 		runtimeFixtureState.nextArtifact = {
 			path: '/working/out.wasm',
 			bytes: new Uint8Array([0, 97, 115, 109]),
+			artifactKind: 'bootstrap',
 			runnable: false,
 			entrypoint: null,
 			reason: 'bootstrap-artifact'
@@ -636,22 +650,16 @@ describe('TinyGo sandbox', () => {
 				moduleUrl: runtimeModuleUrl
 			}
 		});
-		runtimeFixtureState.nextArtifact = {
-			path: '/working/out.wasm',
-			bytes: new Uint8Array([0, 97, 115, 109]),
-			runnable: false,
-			entrypoint: null,
-			reason: 'bootstrap-artifact'
-		};
+		runtimeFixtureState.skipArtifact = true;
 		runtimeFixtureState.nextExecutionFailureLine =
-			'build execution failed: execution artifact did not expose a supported WASI entrypoint';
+			'build execution failed: browser runtime stopped before linking a final artifact because the backend emitted a probe-only command artifact and no host compile seam is configured';
 
 		const errorMessage = await sandbox.run(code, false).then(
 			() => null,
 			(error) => (error instanceof Error ? error.message : String(error))
 		);
 		expect(errorMessage).toContain(
-			'TinyGo host compile endpoints were unavailable: http://localhost:3000/absproxy/5173/api/tinygo/compile, http://localhost:4175/api/tinygo/compile. TinyGo browser runtime could not produce a runnable execution artifact: execution artifact did not expose a supported WASI entrypoint. Static-only TinyGo browser execution is not implemented yet.'
+			'TinyGo host compile endpoints were unavailable: http://localhost:3000/absproxy/5173/api/tinygo/compile, http://localhost:4175/api/tinygo/compile. TinyGo browser runtime could not produce a runnable execution artifact: build execution failed: browser runtime stopped before linking a final artifact because the backend emitted a probe-only command artifact and no host compile seam is configured. Static-only TinyGo browser execution is not implemented yet.'
 		);
 		expect(workerInstances).toHaveLength(1);
 		expect(workerInstances[0].postMessage).toHaveBeenCalledTimes(1);
