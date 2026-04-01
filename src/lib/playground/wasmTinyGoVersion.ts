@@ -1,1 +1,1 @@
-export const WASM_TINYGO_ASSET_VERSION = "17690032e5b0243d";
+export const WASM_TINYGO_ASSET_VERSION = "317b3af12ae5f95f";
