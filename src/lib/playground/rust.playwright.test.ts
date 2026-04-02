@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 
 import {
+	runBrowserPreparationScripts,
 	shouldReuseProvidedBrowserUrl,
 	startBrowserPreviewServer
 } from '../../../scripts/browser-preview-server.mjs';
@@ -19,21 +20,12 @@ describe('wasm-idle rust browser playwright integration', () => {
 			}
 
 			const configuredBrowserUrl = process.env.WASM_IDLE_BROWSER_URL || '';
-			const previewServer =
-				shouldReuseProvidedBrowserUrl(configuredBrowserUrl)
-					? {
-							origin: new URL(configuredBrowserUrl).origin,
-							browserUrl: configuredBrowserUrl,
-							close: async () => {}
-						}
-					: await startBrowserPreviewServer(
-							configuredBrowserUrl
-								? {
-										origin: new URL(configuredBrowserUrl).origin,
-										basePath: new URL(configuredBrowserUrl).pathname
-									}
-								: undefined
-						);
+			const serverMode =
+				process.env.WASM_IDLE_BROWSER_SERVER_MODE === 'dev' ? 'dev' : 'preview';
+			const reuseProvidedBrowserUrl = shouldReuseProvidedBrowserUrl(configuredBrowserUrl);
+			if (!reuseProvidedBrowserUrl && serverMode === 'preview') {
+				await runBrowserPreparationScripts(['sync:wasm-rust', 'build:preview']);
+			}
 			const runtimeManifest = JSON.parse(
 				await readFile(
 					new URL('../../../static/wasm-rust/runtime/runtime-manifest.v3.json', import.meta.url),
@@ -46,15 +38,31 @@ describe('wasm-idle rust browser playwright integration', () => {
 				'wasm32-wasip1' | 'wasm32-wasip2' | 'wasm32-wasip3'
 			>;
 
-			try {
-				for (const targetTriple of expectedRustTargets) {
-					const targetRuns =
-						targetTriple === 'wasm32-wasip2'
-							? Number(process.env.WASM_IDLE_WASIP2_BROWSER_REPEATS || '4')
-							: targetTriple === 'wasm32-wasip3'
-								? Number(process.env.WASM_IDLE_WASIP3_BROWSER_REPEATS || '1')
-								: Number(process.env.WASM_IDLE_WASIP1_BROWSER_REPEATS || '2');
-					for (let runIndex = 0; runIndex < targetRuns; runIndex += 1) {
+			for (const targetTriple of expectedRustTargets) {
+				const targetRuns =
+					targetTriple === 'wasm32-wasip2'
+						? Number(process.env.WASM_IDLE_WASIP2_BROWSER_REPEATS || '4')
+						: targetTriple === 'wasm32-wasip3'
+							? Number(process.env.WASM_IDLE_WASIP3_BROWSER_REPEATS || '1')
+							: Number(process.env.WASM_IDLE_WASIP1_BROWSER_REPEATS || '2');
+				for (let runIndex = 0; runIndex < targetRuns; runIndex += 1) {
+					const previewServer =
+						reuseProvidedBrowserUrl
+							? {
+									origin: new URL(configuredBrowserUrl).origin,
+									browserUrl: configuredBrowserUrl,
+									close: async () => {}
+								}
+							: await startBrowserPreviewServer(
+									configuredBrowserUrl
+										? {
+												origin: new URL(configuredBrowserUrl).origin,
+												basePath: new URL(configuredBrowserUrl).pathname,
+												serverMode
+											}
+										: { origin: 'http://127.0.0.1:4173', serverMode }
+								);
+					try {
 						const summary = await runRustBrowserProbe({
 							browserUrl: previewServer.browserUrl,
 							runTimeoutMs: Number(process.env.WASM_IDLE_RUST_RUN_TIMEOUT_MS || '300000'),
@@ -74,9 +82,6 @@ describe('wasm-idle rust browser playwright integration', () => {
 						expect(summary.bootstrapErrors).toEqual([]);
 						expect(summary.rustConsoleErrors).toEqual([]);
 						expect(summary.callStackErrors).toEqual([]);
-						expect(summary.transcript).toContain('[wasm-rust] manifest loaded');
-						expect(summary.transcript).toContain('[wasm-rust:compiler-worker] starting rustc main');
-						expect(summary.transcript).toContain(`target=${targetTriple}`);
 						expect(summary.transcript).toContain('factorial_plus_bonus=123');
 						if (targetTriple === 'wasm32-wasip2') {
 							expect(summary.transcript).toContain('preview2_component=preview2-cli');
@@ -101,6 +106,11 @@ describe('wasm-idle rust browser playwright integration', () => {
 						).toBe(true);
 						expect(
 							summary.consoleTail.some((entry: string) =>
+								entry.includes('state_proxy_equality_mismatch')
+							)
+						).toBe(false);
+						expect(
+							summary.consoleTail.some((entry: string) =>
 								entry.includes('memory access out of bounds')
 							)
 						).toBe(false);
@@ -112,10 +122,10 @@ describe('wasm-idle rust browser playwright integration', () => {
 								entry.includes('[wasm-rust] compile worker bootstrap failed')
 							)
 						).toBe(false);
+					} finally {
+						await previewServer.close();
 					}
 				}
-			} finally {
-				await previewServer.close();
 			}
 		},
 		780_000

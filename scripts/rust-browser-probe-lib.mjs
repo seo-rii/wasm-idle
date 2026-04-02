@@ -215,7 +215,20 @@ export async function runRustBrowserProbe({
 		}
 		await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
 		await page.waitForTimeout(1_000);
-		await page.waitForSelector('select', { state: 'attached', timeout: runTimeoutMs });
+		try {
+			await page.waitForSelector('select', { state: 'attached', timeout: runTimeoutMs });
+		} catch (error) {
+			const summary = await readProbeSummary(
+				page,
+				activeState,
+				pageErrors,
+				consoleMessages,
+				browserUrl
+			);
+			throw new Error(
+				`rust browser probe timed out waiting for the language selector: ${error instanceof Error ? error.message : String(error)}\n${JSON.stringify(summary, null, 2)}`
+			);
+		}
 
 		await page.locator('select').selectOption('RUST');
 		await page.locator('#rust-target-triple').selectOption(targetTriple);

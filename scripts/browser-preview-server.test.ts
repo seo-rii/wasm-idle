@@ -1,9 +1,11 @@
 import { EventEmitter } from 'node:events';
+import * as childProcess from 'node:child_process';
 import http from 'node:http';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+	runBrowserPreparationScripts,
 	shouldReuseProvidedBrowserUrl,
 	startBrowserPreviewServer
 } from './browser-preview-server.mjs';
@@ -24,6 +26,46 @@ afterEach(async () => {
 });
 
 describe('startBrowserPreviewServer', () => {
+	it('runs requested preparation scripts in order', async () => {
+		const invocations: Array<{ command: string; args: string[]; cwd: string | undefined }> = [];
+		vi.spyOn(childProcess, 'spawn').mockImplementation((command, args, options) => {
+			invocations.push({
+				command,
+				args: (args || []).map(String),
+				cwd: typeof options?.cwd === 'string' ? options.cwd : undefined
+			});
+			const child = new EventEmitter() as EventEmitter & {
+				stdout: EventEmitter;
+				stderr: EventEmitter;
+				exitCode: number | null;
+			};
+			child.stdout = new EventEmitter();
+			child.stderr = new EventEmitter();
+			child.exitCode = null;
+			queueMicrotask(() => {
+				child.exitCode = 0;
+				child.emit('exit', 0);
+			});
+			return child as any;
+		});
+
+		await expect(
+			runBrowserPreparationScripts(['sync:wasm-rust', 'build:preview'])
+		).resolves.toBeUndefined();
+		expect(invocations).toEqual([
+			{
+				command: 'pnpm',
+				args: ['run', 'sync:wasm-rust'],
+				cwd: expect.stringContaining('/wasm-idle')
+			},
+			{
+				command: 'pnpm',
+				args: ['run', 'build:preview'],
+				cwd: expect.stringContaining('/wasm-idle')
+			}
+		]);
+	});
+
 	it('reuses an explicitly provided localhost browser url only when reuse mode is enabled', () => {
 		expect(shouldReuseProvidedBrowserUrl('http://localhost:4173/absproxy/5173/')).toBe(false);
 		process.env.WASM_IDLE_REUSE_LOCAL_PREVIEW = '1';

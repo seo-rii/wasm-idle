@@ -1,4 +1,8 @@
-import { shouldReuseProvidedBrowserUrl, startBrowserPreviewServer } from './browser-preview-server.mjs';
+import {
+	runBrowserPreparationScripts,
+	shouldReuseProvidedBrowserUrl,
+	startBrowserPreviewServer
+} from './browser-preview-server.mjs';
 import { runTinyGoBrowserProbe } from './tinygo-browser-probe-lib.mjs';
 
 const browserUrl = process.env.WASM_IDLE_BROWSER_URL || 'http://127.0.0.1:4173/absproxy/5173/';
@@ -22,6 +26,9 @@ try {
 			close: async () => {}
 		};
 	} else if (targetUrl.hostname === 'localhost' || targetUrl.hostname === '127.0.0.1') {
+		if (serverMode === 'preview') {
+			await runBrowserPreparationScripts(['sync:wasm-tinygo', 'build:preview']);
+		}
 		previewServer = await startBrowserPreviewServer({
 			origin: `${targetUrl.protocol}//${targetUrl.host}`,
 			basePath: targetUrl.pathname,

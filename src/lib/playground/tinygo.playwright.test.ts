@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+	runBrowserPreparationScripts,
 	shouldReuseProvidedBrowserUrl,
 	startBrowserPreviewServer
 } from '../../../scripts/browser-preview-server.mjs';
@@ -26,15 +27,20 @@ describe('wasm-idle TinyGo browser playwright integration', () => {
 							browserUrl: configuredBrowserUrl,
 							close: async () => {}
 						}
-					: await startBrowserPreviewServer(
-							configuredBrowserUrl
-								? {
-										origin: new URL(configuredBrowserUrl).origin,
-										basePath: new URL(configuredBrowserUrl).pathname,
-										serverMode
-									}
-								: { origin: 'http://127.0.0.1:4173', serverMode }
-						);
+					: await (async () => {
+							if (serverMode === 'preview') {
+								await runBrowserPreparationScripts(['sync:wasm-tinygo', 'build:preview']);
+							}
+							return await startBrowserPreviewServer(
+								configuredBrowserUrl
+									? {
+											origin: new URL(configuredBrowserUrl).origin,
+											basePath: new URL(configuredBrowserUrl).pathname,
+											serverMode
+										}
+									: { origin: 'http://127.0.0.1:4273', serverMode }
+							);
+						})();
 
 			try {
 				const summary = await runTinyGoBrowserProbe({
@@ -80,15 +86,20 @@ describe('wasm-idle TinyGo browser playwright integration', () => {
 							browserUrl: configuredBrowserUrl,
 							close: async () => {}
 						}
-					: await startBrowserPreviewServer(
-							configuredBrowserUrl
-								? {
-										origin: new URL(configuredBrowserUrl).origin,
-										basePath: new URL(configuredBrowserUrl).pathname,
-										serverMode
-									}
-								: { origin: 'http://127.0.0.1:4173', serverMode }
-						);
+					: await (async () => {
+							if (serverMode === 'preview') {
+								await runBrowserPreparationScripts(['sync:wasm-tinygo', 'build:preview']);
+							}
+							return await startBrowserPreviewServer(
+								configuredBrowserUrl
+									? {
+											origin: new URL(configuredBrowserUrl).origin,
+											basePath: new URL(configuredBrowserUrl).pathname,
+											serverMode
+										}
+									: { origin: 'http://127.0.0.1:4273', serverMode }
+							);
+						})();
 
 			try {
 				const summary = await runTinyGoBrowserProbe({

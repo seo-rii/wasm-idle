@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { mkdirSync, rmSync, statSync } from 'node:fs';
 import http from 'node:http';
 import https from 'node:https';
 import { createServer } from 'node:net';
@@ -8,6 +9,103 @@ import { fileURLToPath } from 'node:url';
 const THIS_FILE = fileURLToPath(import.meta.url);
 const THIS_DIR = path.dirname(THIS_FILE);
 const REPO_ROOT = path.resolve(THIS_DIR, '..');
+const BROWSER_PREPARATION_LOCK_DIR = path.join(REPO_ROOT, '.svelte-kit', 'browser-preview-prep.lock');
+let browserPreparationQueue = Promise.resolve();
+
+function createBrowserPreviewChildEnv() {
+	const env = { ...process.env };
+	delete env.NODE_ENV;
+	for (const key of Object.keys(env)) {
+		if (key.startsWith('VITEST')) delete env[key];
+	}
+	return env;
+}
+
+/**
+ * @param {string[]} scriptNames
+ * @param {{ timeoutMs?: number }} options
+ */
+export async function runBrowserPreparationScripts(scriptNames, { timeoutMs = 300_000 } = {}) {
+	const task = browserPreparationQueue.then(async () => {
+		const lockStartedAt = Date.now();
+		while (true) {
+			try {
+				mkdirSync(BROWSER_PREPARATION_LOCK_DIR, { recursive: false });
+				break;
+			} catch (error) {
+				if (
+					!(error instanceof Error) ||
+					!('code' in error) ||
+					error.code !== 'EEXIST'
+				) {
+					throw error;
+				}
+				try {
+					const lockStat = statSync(BROWSER_PREPARATION_LOCK_DIR);
+					if (Date.now() - lockStat.mtimeMs > timeoutMs) {
+						rmSync(BROWSER_PREPARATION_LOCK_DIR, { force: true, recursive: true });
+						continue;
+					}
+				} catch {
+					continue;
+				}
+				if (Date.now() - lockStartedAt > timeoutMs) {
+					throw new Error(
+						`timed out waiting for browser preview preparation lock after ${timeoutMs}ms`
+					);
+				}
+				await new Promise((resolve) => setTimeout(resolve, 250));
+			}
+		}
+		try {
+			for (const scriptName of scriptNames) {
+				if (!scriptName) continue;
+				const logs = [];
+				const child = spawn('pnpm', ['run', scriptName], {
+					cwd: REPO_ROOT,
+					env: createBrowserPreviewChildEnv(),
+					stdio: ['ignore', 'pipe', 'pipe']
+				});
+				child.stdout?.on('data', (chunk) => {
+					logs.push(String(chunk).trimEnd());
+				});
+				child.stderr?.on('data', (chunk) => {
+					logs.push(String(chunk).trimEnd());
+				});
+				await new Promise((resolve, reject) => {
+					const timeout = setTimeout(() => {
+						if (child.exitCode === null) child.kill('SIGTERM');
+						reject(
+							new Error(
+								`pnpm run ${scriptName} timed out after ${timeoutMs}ms\n${logs.join('\n')}`
+							)
+						);
+					}, timeoutMs);
+					child.once('error', (error) => {
+						clearTimeout(timeout);
+						reject(error);
+					});
+					child.once('exit', (code) => {
+						clearTimeout(timeout);
+						if (code === 0) {
+							resolve(undefined);
+							return;
+						}
+						reject(
+							new Error(
+								`pnpm run ${scriptName} exited with code ${code ?? 'unknown'}\n${logs.join('\n')}`
+							)
+						);
+					});
+				});
+			}
+		} finally {
+			rmSync(BROWSER_PREPARATION_LOCK_DIR, { force: true, recursive: true });
+		}
+	});
+	browserPreparationQueue = task.catch(() => {});
+	await task;
+}
 
 /**
  * @param {string} hostname
@@ -175,7 +273,7 @@ export async function startBrowserPreviewServer({
 		],
 		{
 			cwd: REPO_ROOT,
-			env: process.env,
+			env: createBrowserPreviewChildEnv(),
 			stdio: ['ignore', 'pipe', 'pipe']
 		}
 	);
