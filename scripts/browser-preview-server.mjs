@@ -10,7 +10,13 @@ const THIS_FILE = fileURLToPath(import.meta.url);
 const THIS_DIR = path.dirname(THIS_FILE);
 const REPO_ROOT = path.resolve(THIS_DIR, '..');
 const BROWSER_PREPARATION_LOCK_DIR = path.join(REPO_ROOT, '.svelte-kit', 'browser-preview-prep.lock');
+const BROWSER_PROBE_SESSION_LOCK_DIR = path.join(
+	REPO_ROOT,
+	'.svelte-kit',
+	'browser-probe-session.lock'
+);
 let browserPreparationQueue = Promise.resolve();
+let browserProbeSessionQueue = Promise.resolve();
 
 function createBrowserPreviewChildEnv() {
 	const env = { ...process.env };
@@ -21,43 +27,49 @@ function createBrowserPreviewChildEnv() {
 	return env;
 }
 
+async function withFilesystemLock(lockDir, timeoutMs, action) {
+	const lockStartedAt = Date.now();
+	while (true) {
+		try {
+			mkdirSync(lockDir, { recursive: false });
+			break;
+		} catch (error) {
+			if (
+				!(error instanceof Error) ||
+				!('code' in error) ||
+				error.code !== 'EEXIST'
+			) {
+				throw error;
+			}
+			try {
+				const lockStat = statSync(lockDir);
+				if (Date.now() - lockStat.mtimeMs > timeoutMs) {
+					rmSync(lockDir, { force: true, recursive: true });
+					continue;
+				}
+			} catch {
+				continue;
+			}
+			if (Date.now() - lockStartedAt > timeoutMs) {
+				throw new Error(`timed out waiting for filesystem lock after ${timeoutMs}ms`);
+			}
+			await new Promise((resolve) => setTimeout(resolve, 250));
+		}
+	}
+	try {
+		return await action();
+	} finally {
+		rmSync(lockDir, { force: true, recursive: true });
+	}
+}
+
 /**
  * @param {string[]} scriptNames
  * @param {{ timeoutMs?: number }} options
  */
 export async function runBrowserPreparationScripts(scriptNames, { timeoutMs = 300_000 } = {}) {
-	const task = browserPreparationQueue.then(async () => {
-		const lockStartedAt = Date.now();
-		while (true) {
-			try {
-				mkdirSync(BROWSER_PREPARATION_LOCK_DIR, { recursive: false });
-				break;
-			} catch (error) {
-				if (
-					!(error instanceof Error) ||
-					!('code' in error) ||
-					error.code !== 'EEXIST'
-				) {
-					throw error;
-				}
-				try {
-					const lockStat = statSync(BROWSER_PREPARATION_LOCK_DIR);
-					if (Date.now() - lockStat.mtimeMs > timeoutMs) {
-						rmSync(BROWSER_PREPARATION_LOCK_DIR, { force: true, recursive: true });
-						continue;
-					}
-				} catch {
-					continue;
-				}
-				if (Date.now() - lockStartedAt > timeoutMs) {
-					throw new Error(
-						`timed out waiting for browser preview preparation lock after ${timeoutMs}ms`
-					);
-				}
-				await new Promise((resolve) => setTimeout(resolve, 250));
-			}
-		}
-		try {
+	const task = browserPreparationQueue.then(() =>
+		withFilesystemLock(BROWSER_PREPARATION_LOCK_DIR, timeoutMs, async () => {
 			for (const scriptName of scriptNames) {
 				if (!scriptName) continue;
 				const logs = [];
@@ -99,12 +111,22 @@ export async function runBrowserPreparationScripts(scriptNames, { timeoutMs = 30
 					});
 				});
 			}
-		} finally {
-			rmSync(BROWSER_PREPARATION_LOCK_DIR, { force: true, recursive: true });
-		}
-	});
+		})
+	);
 	browserPreparationQueue = task.catch(() => {});
 	await task;
+}
+
+/**
+ * @param {() => Promise<unknown>} action
+ * @param {{ timeoutMs?: number }} options
+ */
+export async function runWithBrowserProbeSessionLock(action, { timeoutMs = 600_000 } = {}) {
+	const task = browserProbeSessionQueue.then(() =>
+		withFilesystemLock(BROWSER_PROBE_SESSION_LOCK_DIR, timeoutMs, action)
+	);
+	browserProbeSessionQueue = task.catch(() => {});
+	return await task;
 }
 
 /**

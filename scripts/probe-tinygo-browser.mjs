@@ -1,5 +1,6 @@
 import {
 	runBrowserPreparationScripts,
+	runWithBrowserProbeSessionLock,
 	shouldReuseProvidedBrowserUrl,
 	startBrowserPreviewServer
 } from './browser-preview-server.mjs';
@@ -15,47 +16,48 @@ const expectedOutput =
 const serverMode =
 	process.env.WASM_IDLE_BROWSER_SERVER_MODE === 'dev' ? 'dev' : 'preview';
 
-let previewServer = null;
-
-try {
-	const targetUrl = new URL(browserUrl);
-	if (shouldReuseProvidedBrowserUrl(browserUrl)) {
-		previewServer = {
-			origin: `${targetUrl.protocol}//${targetUrl.host}`,
-			browserUrl,
-			close: async () => {}
-		};
-	} else if (targetUrl.hostname === 'localhost' || targetUrl.hostname === '127.0.0.1') {
-		if (serverMode === 'preview') {
-			await runBrowserPreparationScripts(['sync:wasm-tinygo', 'build:preview']);
+await runWithBrowserProbeSessionLock(async () => {
+	let previewServer = null;
+	try {
+		const targetUrl = new URL(browserUrl);
+		if (shouldReuseProvidedBrowserUrl(browserUrl)) {
+			previewServer = {
+				origin: `${targetUrl.protocol}//${targetUrl.host}`,
+				browserUrl,
+				close: async () => {}
+			};
+		} else if (targetUrl.hostname === 'localhost' || targetUrl.hostname === '127.0.0.1') {
+			if (serverMode === 'preview') {
+				await runBrowserPreparationScripts(['sync:wasm-tinygo', 'build:preview']);
+			}
+			previewServer = await startBrowserPreviewServer({
+				origin: `${targetUrl.protocol}//${targetUrl.host}`,
+				basePath: targetUrl.pathname,
+				serverMode
+			});
 		}
-		previewServer = await startBrowserPreviewServer({
-			origin: `${targetUrl.protocol}//${targetUrl.host}`,
-			basePath: targetUrl.pathname,
-			serverMode
+
+		const summary = await runTinyGoBrowserProbe({
+			browserUrl: previewServer?.browserUrl || browserUrl,
+			runTimeoutMs,
+			chromiumExecutable,
+			disableHostCompile,
+			expectedCompilePath: disableHostCompile ? 'browser' : 'host',
+			stdinText,
+			expectedOutput
 		});
+
+		console.log(
+			JSON.stringify(
+				{
+					...summary,
+					success: true
+				},
+				null,
+				2
+			)
+		);
+	} finally {
+		await previewServer?.close?.();
 	}
-
-	const summary = await runTinyGoBrowserProbe({
-		browserUrl: previewServer?.browserUrl || browserUrl,
-		runTimeoutMs,
-		chromiumExecutable,
-		disableHostCompile,
-		expectedCompilePath: disableHostCompile ? 'browser' : 'host',
-		stdinText,
-		expectedOutput
-	});
-
-	console.log(
-		JSON.stringify(
-			{
-				...summary,
-				success: true
-			},
-			null,
-			2
-		)
-	);
-} finally {
-	await previewServer?.close?.();
-}
+});

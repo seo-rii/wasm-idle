@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
 	runBrowserPreparationScripts,
+	runWithBrowserProbeSessionLock,
 	shouldReuseProvidedBrowserUrl,
 	startBrowserPreviewServer
 } from '../../../scripts/browser-preview-server.mjs';
@@ -17,38 +18,42 @@ describe('wasm-idle TinyGo browser playwright integration', () => {
 				return;
 			}
 
-			const configuredBrowserUrl = process.env.WASM_IDLE_BROWSER_URL || '';
-			const serverMode =
-				process.env.WASM_IDLE_BROWSER_SERVER_MODE === 'dev' ? 'dev' : 'preview';
-			const previewServer =
-				shouldReuseProvidedBrowserUrl(configuredBrowserUrl)
-					? {
-							origin: new URL(configuredBrowserUrl).origin,
-							browserUrl: configuredBrowserUrl,
-							close: async () => {}
-						}
-					: await (async () => {
-							if (serverMode === 'preview') {
-								await runBrowserPreparationScripts(['sync:wasm-tinygo', 'build:preview']);
+			await runWithBrowserProbeSessionLock(async () => {
+				const configuredBrowserUrl = process.env.WASM_IDLE_BROWSER_URL || '';
+				const serverMode =
+					process.env.WASM_IDLE_BROWSER_SERVER_MODE === 'dev' ? 'dev' : 'preview';
+				const previewServer =
+					shouldReuseProvidedBrowserUrl(configuredBrowserUrl)
+						? {
+								origin: new URL(configuredBrowserUrl).origin,
+								browserUrl: configuredBrowserUrl,
+								close: async () => {}
 							}
-							return await startBrowserPreviewServer(
-								configuredBrowserUrl
-									? {
-											origin: new URL(configuredBrowserUrl).origin,
-											basePath: new URL(configuredBrowserUrl).pathname,
-											serverMode
-										}
-									: { origin: 'http://127.0.0.1:4273', serverMode }
-							);
-						})();
+						: await (async () => {
+								if (serverMode === 'preview') {
+									await runBrowserPreparationScripts([
+										'sync:wasm-tinygo',
+										'build:preview'
+									]);
+								}
+								return await startBrowserPreviewServer(
+									configuredBrowserUrl
+										? {
+												origin: new URL(configuredBrowserUrl).origin,
+												basePath: new URL(configuredBrowserUrl).pathname,
+												serverMode
+											}
+										: { origin: 'http://127.0.0.1:4273', serverMode }
+								);
+							})();
 
-			try {
-				const summary = await runTinyGoBrowserProbe({
-					browserUrl: previewServer.browserUrl,
-					runTimeoutMs: Number(process.env.WASM_IDLE_TINYGO_RUN_TIMEOUT_MS || '300000'),
-					expectedCompilePath: 'host',
-					stdinText: '5\n'
-				});
+				try {
+					const summary = await runTinyGoBrowserProbe({
+						browserUrl: previewServer.browserUrl,
+						runTimeoutMs: Number(process.env.WASM_IDLE_TINYGO_RUN_TIMEOUT_MS || '300000'),
+						expectedCompilePath: 'host',
+						stdinText: '5\n'
+					});
 
 				expect(summary.activeState.crossOriginIsolated).toBe(true);
 				expect(summary.activeState.sharedArrayBuffer).toBe(true);
@@ -62,9 +67,10 @@ describe('wasm-idle TinyGo browser playwright integration', () => {
 						entry.includes('[wasm-idle:tinygo-worker] wasi run complete exitCode=0')
 					)
 				).toBe(true);
-			} finally {
-				await previewServer.close();
-			}
+				} finally {
+					await previewServer.close();
+				}
+			});
 		},
 		420_000
 	);
@@ -76,39 +82,43 @@ describe('wasm-idle TinyGo browser playwright integration', () => {
 				return;
 			}
 
-			const configuredBrowserUrl = process.env.WASM_IDLE_BROWSER_URL || '';
-			const serverMode =
-				process.env.WASM_IDLE_BROWSER_SERVER_MODE === 'dev' ? 'dev' : 'preview';
-			const previewServer =
-				shouldReuseProvidedBrowserUrl(configuredBrowserUrl)
-					? {
-							origin: new URL(configuredBrowserUrl).origin,
-							browserUrl: configuredBrowserUrl,
-							close: async () => {}
-						}
-					: await (async () => {
-							if (serverMode === 'preview') {
-								await runBrowserPreparationScripts(['sync:wasm-tinygo', 'build:preview']);
+			await runWithBrowserProbeSessionLock(async () => {
+				const configuredBrowserUrl = process.env.WASM_IDLE_BROWSER_URL || '';
+				const serverMode =
+					process.env.WASM_IDLE_BROWSER_SERVER_MODE === 'dev' ? 'dev' : 'preview';
+				const previewServer =
+					shouldReuseProvidedBrowserUrl(configuredBrowserUrl)
+						? {
+								origin: new URL(configuredBrowserUrl).origin,
+								browserUrl: configuredBrowserUrl,
+								close: async () => {}
 							}
-							return await startBrowserPreviewServer(
-								configuredBrowserUrl
-									? {
-											origin: new URL(configuredBrowserUrl).origin,
-											basePath: new URL(configuredBrowserUrl).pathname,
-											serverMode
-										}
-									: { origin: 'http://127.0.0.1:4273', serverMode }
-							);
-						})();
+						: await (async () => {
+								if (serverMode === 'preview') {
+									await runBrowserPreparationScripts([
+										'sync:wasm-tinygo',
+										'build:preview'
+									]);
+								}
+								return await startBrowserPreviewServer(
+									configuredBrowserUrl
+										? {
+												origin: new URL(configuredBrowserUrl).origin,
+												basePath: new URL(configuredBrowserUrl).pathname,
+												serverMode
+											}
+										: { origin: 'http://127.0.0.1:4273', serverMode }
+								);
+							})();
 
-			try {
-				const summary = await runTinyGoBrowserProbe({
-					browserUrl: previewServer.browserUrl,
-					disableHostCompile: true,
-					expectedCompilePath: 'browser',
-					runTimeoutMs: Number(process.env.WASM_IDLE_TINYGO_RUN_TIMEOUT_MS || '300000'),
-					stdinText: '5\n'
-				});
+				try {
+					const summary = await runTinyGoBrowserProbe({
+						browserUrl: previewServer.browserUrl,
+						disableHostCompile: true,
+						expectedCompilePath: 'browser',
+						runTimeoutMs: Number(process.env.WASM_IDLE_TINYGO_RUN_TIMEOUT_MS || '300000'),
+						stdinText: '5\n'
+					});
 
 				expect(summary.activeState.crossOriginIsolated).toBe(true);
 				expect(summary.activeState.sharedArrayBuffer).toBe(true);
@@ -124,9 +134,10 @@ describe('wasm-idle TinyGo browser playwright integration', () => {
 						entry.includes('[wasm-idle:tinygo-worker] wasi run complete exitCode=0')
 					)
 				).toBe(true);
-			} finally {
-				await previewServer.close();
-			}
+				} finally {
+					await previewServer.close();
+				}
+			});
 		},
 		420_000
 	);
