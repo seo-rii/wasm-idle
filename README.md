@@ -154,23 +154,31 @@ const runtimeAssets: PlaygroundRuntimeAssets = {
 };
 ```
 
-Python custom loaders receive file names under the Pyodide asset root and can serve both core assets and package files. TeaVM custom loaders receive file names under the TeaVM asset root. Rust expects a browser-loadable compiler module URL; that module is responsible for serving its own nested runtime assets. TinyGo can use either an explicit host compile URL or a browser-loadable runtime module. The host compile path is still the only path that guarantees a real executable TinyGo artifact today; the browser runtime provides the fallback compile backend and its sibling `tools/go-probe.wasm` plus vendored emception assets, but it still stops at a verification-oriented artifact boundary for some programs. Compressed TeaVM runtime assets are no longer unpacked inside the library; provide the final file URL or handle decompression in your own loader.
+Python custom loaders receive file names under the Pyodide asset root and can serve both core assets and package files. TeaVM custom loaders receive file names under the TeaVM asset root. Rust expects a browser-loadable compiler module URL; that module is responsible for serving its own nested runtime assets. TinyGo can use either an explicit host compile URL or a browser-loadable runtime module. The host compile path is still the only path that guarantees a real executable TinyGo artifact today; the browser runtime provides the fallback compile backend and its sibling `tools/go-probe.wasm` plus vendored emception assets, but it still stops at a verification-oriented artifact boundary for some programs. TinyGo also accepts a runtime asset loader + pack bundle in `runtimeAssets.tinygo` when you need to serve runtime assets out of a single compressed archive. Compressed TeaVM runtime assets are no longer unpacked inside the library; provide the final file URL or handle decompression in your own loader.
 
 If you want a host app to reuse the same runtime asset configuration for both `<Terminal>` and direct `playground(...)` access, bind it once:
 
 ```ts
 import Terminal, { createPlaygroundBinding } from 'wasm-idle';
 
-const wasmIdle = createPlaygroundBinding({
-	rootUrl: 'https://cdn.example.com/repl',
-	rust: {
-		compilerUrl: 'https://cdn.example.com/wasm-rust/index.js'
-	},
-	tinygo: {
-		hostCompileUrl: 'https://tinygo.example.com/api/compile',
-		moduleUrl: 'https://cdn.example.com/wasm-tinygo/runtime.js'
-	}
-});
+	const wasmIdle = createPlaygroundBinding({
+		rootUrl: 'https://cdn.example.com/repl',
+		rust: {
+			compilerUrl: 'https://cdn.example.com/wasm-rust/index.js'
+		},
+		tinygo: {
+			hostCompileUrl: 'https://tinygo.example.com/api/compile',
+			moduleUrl: 'https://cdn.example.com/wasm-tinygo/runtime.js',
+			assetPacks: [
+				{
+					index: 'https://cdn.example.com/wasm-tinygo/runtime-pack/runtime-pack.index.json',
+					asset: 'https://cdn.example.com/wasm-tinygo/runtime-pack/runtime-pack.bin',
+					fileCount: 12,
+					totalBytes: 123456
+				}
+			]
+		}
+	});
 
 const sandbox = await wasmIdle.load('PYTHON');
 await sandbox.load('print("hi")', false);
