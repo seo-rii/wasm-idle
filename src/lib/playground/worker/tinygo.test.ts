@@ -7,7 +7,8 @@ const wasiState = vi.hoisted(() => ({
 	lastArgs: [] as string[],
 	lastEnv: [] as string[],
 	lastFds: [] as any[],
-	initializeCalls: 0
+	initializeCalls: 0,
+	instReady: false
 }));
 
 vi.mock('@bjorn3/browser_wasi_shim', () => {
@@ -31,6 +32,7 @@ vi.mock('@bjorn3/browser_wasi_shim', () => {
 		}
 
 		start() {
+			wasiState.instReady = true;
 			const stdinChunk = wasiState.lastFds[0].fd_read(1024).data;
 			if (stdinChunk.byteLength) {
 				wasiState.lastFds[1].write(stdinChunk);
@@ -41,6 +43,7 @@ vi.mock('@bjorn3/browser_wasi_shim', () => {
 
 		initialize() {
 			wasiState.initializeCalls += 1;
+			wasiState.instReady = true;
 		}
 	}
 
@@ -94,6 +97,7 @@ describe('TinyGo worker', () => {
 		wasiState.lastEnv = [];
 		wasiState.lastFds = [];
 		wasiState.initializeCalls = 0;
+		wasiState.instReady = false;
 	});
 
 	it('loads and executes a TinyGo wasm artifact through the WASI shim', async () => {
@@ -178,6 +182,9 @@ describe('TinyGo worker', () => {
 						memory: {},
 						__wasm_call_ctors: callCtors,
 						main() {
+							if (!wasiState.instReady) {
+								throw new Error('wasi not initialized');
+							}
 							return 0;
 						}
 					}
@@ -196,7 +203,7 @@ describe('TinyGo worker', () => {
 		});
 		await Promise.resolve();
 
-		expect(wasiState.initializeCalls).toBe(0);
+		expect(wasiState.initializeCalls).toBe(1);
 		expect(callCtors).toHaveBeenCalledTimes(1);
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
 	});

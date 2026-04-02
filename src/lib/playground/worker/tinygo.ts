@@ -119,11 +119,13 @@ self.onmessage = async (event: { data: any }) => {
 				typeof exportsObject.memory === 'object' &&
 				typeof exportsObject.main === 'function'
 			) {
-				if (typeof exportsObject._initialize === 'function') {
-					wasiRuntime.initialize(
-						instance as { exports: { memory: WebAssembly.Memory; _initialize?: () => unknown } }
-					);
-				} else if (typeof exportsObject.__wasm_call_ctors === 'function') {
+				wasiRuntime.initialize(
+					instance as { exports: { memory: WebAssembly.Memory; _initialize?: () => unknown } }
+				);
+				if (
+					typeof exportsObject._initialize !== 'function' &&
+					typeof exportsObject.__wasm_call_ctors === 'function'
+				) {
 					(exportsObject.__wasm_call_ctors as () => unknown)();
 				}
 				const mainResult = (exportsObject.main as () => unknown)();
