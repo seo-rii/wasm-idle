@@ -46,6 +46,7 @@ export interface TinyGoRuntimeAssetConfig {
 	moduleUrl?: string;
 	appUrl?: string;
 	hostCompileUrl?: string;
+	disableHostCompile?: boolean;
 }
 
 export interface PlaygroundRuntimeAssets {
@@ -291,6 +292,10 @@ export function resolveTinyGoHostCompileUrls(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
+	if (typeof options === 'object' && options?.tinygo?.disableHostCompile) {
+		return [];
+	}
+
 	const configuredHostCompileUrl =
 		(typeof options === 'object' && options?.tinygo?.hostCompileUrl) ||
 		(publicEnv.PUBLIC_WASM_TINYGO_HOST_COMPILE_URL || '').trim();

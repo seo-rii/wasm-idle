@@ -22,6 +22,9 @@
 	let path = $derived(
 		page.url.pathname.endsWith('/') ? page.url.pathname.slice(0, -1) : page.url.pathname
 	);
+	let tinygoDisableHostCompile = $derived(
+		browser && page.url.searchParams.get('tinygoCompilePath') === 'browser'
+	);
 	let clangdBaseUrl = $derived(path ? `${path}/clangd` : '/clangd');
 	let runtimeAssets = $derived.by<PlaygroundRuntimeAssets>(() => ({
 		rootUrl: path,
@@ -31,6 +34,7 @@
 				: `/wasm-rust/index.js?v=${WASM_RUST_ASSET_VERSION}`
 		},
 		tinygo: {
+			disableHostCompile: tinygoDisableHostCompile,
 			moduleUrl: path
 				? `${path}/wasm-tinygo/runtime.js?v=${WASM_TINYGO_ASSET_VERSION}`
 				: `/wasm-tinygo/runtime.js?v=${WASM_TINYGO_ASSET_VERSION}`
