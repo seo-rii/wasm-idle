@@ -181,6 +181,25 @@ describe('runtime asset config resolution', () => {
 		expect(resolveTinyGoHostCompileUrl('/absproxy/5173', 'https://example.com/app')).toBe('');
 	});
 
+	it('does not derive TinyGo host compile urls when browser-only execution explicitly disables them', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_TINYGO_HOST_COMPILE_URL = 'https://env.example.com/api/tinygo/compile';
+		const { resolveTinyGoHostCompileUrls } = await import('./assets');
+
+		expect(
+			resolveTinyGoHostCompileUrls(
+				{
+					rootUrl: '/absproxy/5173',
+					tinygo: {
+						moduleUrl: '/absproxy/5173/wasm-tinygo/runtime.js',
+						disableHostCompile: true
+					}
+				},
+				'http://localhost:3000/absproxy/5173/'
+			)
+		).toEqual([]);
+	});
+
 	it('derives the current-page TinyGo host compile url when only a browser runtime module is configured', async () => {
 		vi.resetModules();
 		publicEnv.PUBLIC_WASM_TINYGO_HOST_COMPILE_URL = '';

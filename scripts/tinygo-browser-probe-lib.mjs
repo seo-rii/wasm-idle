@@ -76,7 +76,11 @@ export async function runTinyGoBrowserProbe({
 		executablePath
 	});
 	const context = await browser.newContext();
-	const origin = new URL(browserUrl).origin;
+	const resolvedBrowserUrl = new URL(browserUrl);
+	if (disableHostCompile) {
+		resolvedBrowserUrl.searchParams.set('tinygoCompilePath', 'browser');
+	}
+	const origin = resolvedBrowserUrl.origin;
 	await context.addCookies([
 		{
 			name: 'dev_bypass_waf',
@@ -85,18 +89,11 @@ export async function runTinyGoBrowserProbe({
 		}
 	]);
 	const hostCompileRequests = [];
-	if (disableHostCompile) {
-		await context.route('**/api/tinygo/compile', async (route) => {
-			hostCompileRequests.push(route.request().url());
-			await route.fulfill({
-				status: 404,
-				contentType: 'application/json',
-				body: JSON.stringify({
-					error: 'disabled by TinyGo browser probe'
-				})
-			});
-		});
-	}
+	context.on('request', (request) => {
+		if (request.url().includes('/api/tinygo/compile')) {
+			hostCompileRequests.push(request.url());
+		}
+	});
 
 	const page = await context.newPage();
 	page.setDefaultTimeout(runTimeoutMs);
@@ -116,7 +113,7 @@ export async function runTinyGoBrowserProbe({
 	});
 
 	try {
-		await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
+		await page.goto(resolvedBrowserUrl.toString(), { waitUntil: 'domcontentloaded' });
 		await page.waitForTimeout(2_000);
 
 		let activeState = await readActiveState(page);
@@ -139,7 +136,7 @@ export async function runTinyGoBrowserProbe({
 					// Ignore readiness errors and retry with a fresh navigation.
 				}
 			});
-			await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
+			await page.goto(resolvedBrowserUrl.toString(), { waitUntil: 'domcontentloaded' });
 			await page.waitForTimeout(2_500 + attempt * 500);
 			activeState = await readActiveState(page);
 		}
@@ -149,11 +146,11 @@ export async function runTinyGoBrowserProbe({
 			!activeState.serviceWorkerControlled
 		) {
 			throw new Error(
-				`page is not ready for wasm-idle TinyGo\n${JSON.stringify(await readProbeSummary(page, activeState, pageErrors, consoleMessages, browserUrl, hostCompileRequests), null, 2)}`
+				`page is not ready for wasm-idle TinyGo\n${JSON.stringify(await readProbeSummary(page, activeState, pageErrors, consoleMessages, resolvedBrowserUrl.toString(), hostCompileRequests), null, 2)}`
 			);
 		}
 
-		await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
+		await page.goto(resolvedBrowserUrl.toString(), { waitUntil: 'domcontentloaded' });
 		await page.waitForTimeout(1_000);
 		await page.waitForSelector('select', { state: 'attached', timeout: runTimeoutMs });
 		await page.locator('select').selectOption('TINYGO');
@@ -189,7 +186,7 @@ export async function runTinyGoBrowserProbe({
 			);
 		} catch (error) {
 			throw new Error(
-				`TinyGo browser probe timed out waiting for the prepare phase\n${JSON.stringify(await readProbeSummary(page, activeState, pageErrors, consoleMessages, browserUrl, hostCompileRequests), null, 2)}`,
+				`TinyGo browser probe timed out waiting for the prepare phase\n${JSON.stringify(await readProbeSummary(page, activeState, pageErrors, consoleMessages, resolvedBrowserUrl.toString(), hostCompileRequests), null, 2)}`,
 				{ cause: error }
 			);
 		}
@@ -231,7 +228,7 @@ export async function runTinyGoBrowserProbe({
 			);
 		} catch (error) {
 			throw new Error(
-				`TinyGo browser probe timed out waiting for the execution phase\n${JSON.stringify(await readProbeSummary(page, activeState, pageErrors, consoleMessages, browserUrl, hostCompileRequests), null, 2)}`,
+				`TinyGo browser probe timed out waiting for the execution phase\n${JSON.stringify(await readProbeSummary(page, activeState, pageErrors, consoleMessages, resolvedBrowserUrl.toString(), hostCompileRequests), null, 2)}`,
 				{ cause: error }
 			);
 		}
@@ -241,7 +238,7 @@ export async function runTinyGoBrowserProbe({
 			activeState,
 			pageErrors,
 			consoleMessages,
-			browserUrl,
+			resolvedBrowserUrl.toString(),
 			hostCompileRequests
 		);
 		if (summary.pageErrors.length > 0) {
@@ -289,9 +286,9 @@ export async function runTinyGoBrowserProbe({
 					`browser probe unexpectedly used the TinyGo host compile path\n${JSON.stringify(summary, null, 2)}`
 				);
 			}
-			if (summary.hostCompileRequests.length === 0) {
+			if (summary.hostCompileRequests.length !== 0) {
 				throw new Error(
-					`browser probe did not observe host compile requests being forced unavailable before the TinyGo browser runtime path\n${JSON.stringify(summary, null, 2)}`
+					`browser probe unexpectedly contacted TinyGo host compile endpoints during the browser runtime path\n${JSON.stringify(summary, null, 2)}`
 				);
 			}
 		}

@@ -68,7 +68,10 @@ describe('example route debug actions', () => {
 			/import \{ WASM_TINYGO_ASSET_VERSION \} from '\$lib\/playground\/wasmTinyGoVersion';/
 		);
 		expect(source).toMatch(
-			/let runtimeAssets = \$derived\.by<PlaygroundRuntimeAssets>\(\(\) => \(\{\s+rootUrl: path,\s+rust: \{\s+compilerUrl: path\s+\?\s+`\$\{path\}\/wasm-rust\/index\.js\?v=\$\{WASM_RUST_ASSET_VERSION\}`\s+:\s+`\/wasm-rust\/index\.js\?v=\$\{WASM_RUST_ASSET_VERSION\}`\s+\},\s+tinygo: \{\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-tinygo\/runtime\.js\?v=\$\{WASM_TINYGO_ASSET_VERSION\}`\s+:\s+`\/wasm-tinygo\/runtime\.js\?v=\$\{WASM_TINYGO_ASSET_VERSION\}`\s+\}\s+\}\)\);/s
+			/let tinygoDisableHostCompile = \$derived\(\s*browser && page\.url\.searchParams\.get\('tinygoCompilePath'\) === 'browser'\s*\);/
+		);
+		expect(source).toMatch(
+			/let runtimeAssets = \$derived\.by<PlaygroundRuntimeAssets>\(\(\) => \(\{\s+rootUrl: path,\s+rust: \{\s+compilerUrl: path\s+\?\s+`\$\{path\}\/wasm-rust\/index\.js\?v=\$\{WASM_RUST_ASSET_VERSION\}`\s+:\s+`\/wasm-rust\/index\.js\?v=\$\{WASM_RUST_ASSET_VERSION\}`\s+\},\s+tinygo: \{\s+disableHostCompile: tinygoDisableHostCompile,\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-tinygo\/runtime\.js\?v=\$\{WASM_TINYGO_ASSET_VERSION\}`\s+:\s+`\/wasm-tinygo\/runtime\.js\?v=\$\{WASM_TINYGO_ASSET_VERSION\}`\s+\}\s+\}\)\);/s
 		);
 		expect(source).toMatch(
 			/const playground = \$derived\.by\(\(\) => createPlaygroundBinding\(runtimeAssets\)\);/

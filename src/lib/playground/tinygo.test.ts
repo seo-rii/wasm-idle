@@ -449,6 +449,30 @@ describe('TinyGo sandbox', () => {
 		expect(runtimeFixtureState.executeCalls).toBe(1);
 	});
 
+	it('skips TinyGo host compile discovery when browser-only execution explicitly disables it', async () => {
+		const sandbox = new TinyGo();
+		const outputs: string[] = [];
+		const code = resolveEditorDefaultSource('go', 'wasm32-wasip1');
+		window.history.replaceState({}, '', 'http://localhost:3000/absproxy/5173/');
+
+		sandbox.output = (chunk: string) => outputs.push(chunk);
+
+		await sandbox.load({
+			tinygo: {
+				moduleUrl: runtimeModuleUrl,
+				disableHostCompile: true
+			}
+		});
+		await expect(sandbox.run(code, false, true, undefined, ['demo'])).resolves.toBe(true);
+
+		expect(fetch).not.toHaveBeenCalled();
+		expect(runtimeFixtureState.bootCalls).toBe(1);
+		expect(runtimeFixtureState.planCalls).toBe(1);
+		expect(runtimeFixtureState.executeCalls).toBe(1);
+		expect(outputs.join('')).toContain('tinygo artifact ready: /working/out.wasm');
+		expect(outputs.join('')).toContain('tinygo-ok\n');
+	});
+
 	it('retries a localhost sibling wasm-tinygo preview endpoint before using the browser runtime fallback', async () => {
 		const sandbox = new TinyGo();
 		const outputs: string[] = [];
