@@ -30,8 +30,16 @@ async function readActiveState(page) {
  * @param {string[]} pageErrors
  * @param {BrowserConsoleMessage[]} consoleMessages
  * @param {string} browserUrl
+ * @param {string[]} hostCompileRequests
  */
-async function readProbeSummary(page, activeState, pageErrors, consoleMessages, browserUrl) {
+async function readProbeSummary(
+	page,
+	activeState,
+	pageErrors,
+	consoleMessages,
+	browserUrl,
+	hostCompileRequests
+) {
 	const transcript =
 		(await page.locator('[data-testid="terminal-debug-output"]').textContent().catch(() => '')) || '';
 	return {
@@ -39,6 +47,7 @@ async function readProbeSummary(page, activeState, pageErrors, consoleMessages, 
 		browserUrl,
 		consoleTail: summarizeConsole(consoleMessages),
 		finalUrl: page.url(),
+		hostCompileRequests,
 		pageErrors,
 		title: await page.title().catch(() => ''),
 		transcript
@@ -46,11 +55,13 @@ async function readProbeSummary(page, activeState, pageErrors, consoleMessages, 
 }
 
 /**
- * @param {{ browserUrl: string; chromiumExecutable?: string; expectedOutput?: string; runTimeoutMs?: number; stdinText?: string }} options
+ * @param {{ browserUrl: string; chromiumExecutable?: string; disableHostCompile?: boolean; expectedCompilePath?: 'host' | 'browser' | 'either'; expectedOutput?: string; runTimeoutMs?: number; stdinText?: string }} options
  */
 export async function runTinyGoBrowserProbe({
 	browserUrl,
 	chromiumExecutable = '',
+	disableHostCompile = false,
+	expectedCompilePath = 'host',
 	expectedOutput = 'factorial_plus_bonus=123',
 	runTimeoutMs = 300_000,
 	stdinText = '5\n'
@@ -73,6 +84,19 @@ export async function runTinyGoBrowserProbe({
 			url: origin
 		}
 	]);
+	const hostCompileRequests = [];
+	if (disableHostCompile) {
+		await context.route('**/api/tinygo/compile', async (route) => {
+			hostCompileRequests.push(route.request().url());
+			await route.fulfill({
+				status: 404,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					error: 'disabled by TinyGo browser probe'
+				})
+			});
+		});
+	}
 
 	const page = await context.newPage();
 	page.setDefaultTimeout(runTimeoutMs);
@@ -125,7 +149,7 @@ export async function runTinyGoBrowserProbe({
 			!activeState.serviceWorkerControlled
 		) {
 			throw new Error(
-				`page is not ready for wasm-idle TinyGo\n${JSON.stringify(await readProbeSummary(page, activeState, pageErrors, consoleMessages, browserUrl), null, 2)}`
+				`page is not ready for wasm-idle TinyGo\n${JSON.stringify(await readProbeSummary(page, activeState, pageErrors, consoleMessages, browserUrl, hostCompileRequests), null, 2)}`
 			);
 		}
 
@@ -142,25 +166,33 @@ export async function runTinyGoBrowserProbe({
 		const initialTranscript =
 			(await page.locator('[data-testid="terminal-debug-output"]').textContent().catch(() => '')) || '';
 		await page.locator('button.action-button--run').first().click();
-		await page.waitForFunction(
-			(previousTranscript) => {
-				const text =
-					document.querySelector('[data-testid="terminal-debug-output"]')?.textContent || '';
-				if (text === previousTranscript) {
-					return false;
+		try {
+			await page.waitForFunction(
+				(previousTranscript) => {
+					const text =
+						document.querySelector('[data-testid="terminal-debug-output"]')?.textContent || '';
+					if (text === previousTranscript) {
+						return false;
+					}
+					return (
+						text.includes('tinygo artifact ready:') ||
+						text.includes('TinyGo compilation failed') ||
+						text.includes('TinyGo host compile failed') ||
+						text.includes('Process finished after')
+					);
+				},
+				initialTranscript,
+				{
+					polling: 250,
+					timeout: runTimeoutMs
 				}
-				return (
-					text.includes('TinyGo compilation failed') ||
-					text.includes('TinyGo host compile failed') ||
-					text.includes('Process finished after')
-				);
-			},
-			initialTranscript,
-			{
-				polling: 250,
-				timeout: runTimeoutMs
-			}
-		);
+			);
+		} catch (error) {
+			throw new Error(
+				`TinyGo browser probe timed out waiting for the prepare phase\n${JSON.stringify(await readProbeSummary(page, activeState, pageErrors, consoleMessages, browserUrl, hostCompileRequests), null, 2)}`,
+				{ cause: error }
+			);
+		}
 		const prepareTranscript =
 			(await page.locator('[data-testid="terminal-debug-output"]').textContent().catch(() => '')) || '';
 		const prepareFinishedCount = (prepareTranscript.match(/Process finished after/g) || []).length;
@@ -171,33 +203,47 @@ export async function runTinyGoBrowserProbe({
 			await (/** @type {any} */ (window)).__wasmIdleDebug.writeTerminalInput(text, false);
 		}, stdinText);
 
-		await page.waitForFunction(
-			({ previousTranscript, previousFinishedCount, requiredOutput }) => {
-				const text =
-					document.querySelector('[data-testid="terminal-debug-output"]')?.textContent || '';
-				if (text === previousTranscript) {
-					return false;
+		try {
+			await page.waitForFunction(
+				({ previousTranscript, previousFinishedCount, requiredOutput }) => {
+					const text =
+						document.querySelector('[data-testid="terminal-debug-output"]')?.textContent || '';
+					if (text === previousTranscript) {
+						return false;
+					}
+					const finishedCount = (text.match(/Process finished after/g) || []).length;
+					return (
+						text.includes(requiredOutput) ||
+						text.includes('TinyGo compilation failed') ||
+						text.includes('TinyGo host compile failed') ||
+						finishedCount >= previousFinishedCount + 1
+					);
+				},
+				{
+					previousTranscript: prepareTranscript,
+					previousFinishedCount: prepareFinishedCount,
+					requiredOutput: expectedOutput
+				},
+				{
+					polling: 250,
+					timeout: runTimeoutMs
 				}
-				const finishedCount = (text.match(/Process finished after/g) || []).length;
-				return (
-					text.includes(requiredOutput) ||
-					text.includes('TinyGo compilation failed') ||
-					text.includes('TinyGo host compile failed') ||
-					finishedCount >= previousFinishedCount + 1
-				);
-			},
-			{
-				previousTranscript: prepareTranscript,
-				previousFinishedCount: prepareFinishedCount,
-				requiredOutput: expectedOutput
-			},
-			{
-				polling: 250,
-				timeout: runTimeoutMs
-			}
-		);
+			);
+		} catch (error) {
+			throw new Error(
+				`TinyGo browser probe timed out waiting for the execution phase\n${JSON.stringify(await readProbeSummary(page, activeState, pageErrors, consoleMessages, browserUrl, hostCompileRequests), null, 2)}`,
+				{ cause: error }
+			);
+		}
 
-		const summary = await readProbeSummary(page, activeState, pageErrors, consoleMessages, browserUrl);
+		const summary = await readProbeSummary(
+			page,
+			activeState,
+			pageErrors,
+			consoleMessages,
+			browserUrl,
+			hostCompileRequests
+		);
 		if (summary.pageErrors.length > 0) {
 			throw new Error(`page errors detected\n${JSON.stringify(summary, null, 2)}`);
 		}
@@ -229,13 +275,25 @@ export async function runTinyGoBrowserProbe({
 				`browser probe did not observe a successful TinyGo worker completion log\n${JSON.stringify(summary, null, 2)}`
 			);
 		}
-		if (
-			!summary.transcript.includes('tinygo host compile ready: target=wasip1') &&
-			!summary.consoleTail.some((entry) => entry.includes('tinygo host compile ready: target=wasip1'))
-		) {
+		const observedHostCompileLog =
+			summary.transcript.includes('tinygo host compile ready: target=wasip1') ||
+			summary.consoleTail.some((entry) => entry.includes('tinygo host compile ready: target=wasip1'));
+		if (expectedCompilePath === 'host' && !observedHostCompileLog) {
 			throw new Error(
 				`browser probe did not observe the TinyGo host compile path\n${JSON.stringify(summary, null, 2)}`
 			);
+		}
+		if (expectedCompilePath === 'browser') {
+			if (observedHostCompileLog) {
+				throw new Error(
+					`browser probe unexpectedly used the TinyGo host compile path\n${JSON.stringify(summary, null, 2)}`
+				);
+			}
+			if (summary.hostCompileRequests.length === 0) {
+				throw new Error(
+					`browser probe did not observe host compile requests being forced unavailable before the TinyGo browser runtime path\n${JSON.stringify(summary, null, 2)}`
+				);
+			}
 		}
 
 		return summary;
