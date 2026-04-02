@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, utimes, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -74,5 +74,29 @@ describe('syncWasmTinyGoDist', () => {
 		await expect(syncWasmTinyGoDist({ sourceDir, targetDir, versionModulePath })).rejects.toThrow(
 			'wasm-tinygo runtime module was not found'
 		);
+	});
+
+	it('keeps the same fingerprint when bundle contents are unchanged but mtimes move', async () => {
+		const sourceDir = await makeTempDir();
+		const firstTargetDir = await makeTempDir();
+		const secondTargetDir = await makeTempDir();
+		const versionModulePath = path.join(await makeTempDir(), 'wasmTinyGoVersion.ts');
+
+		await writeFixtureFile(sourceDir, 'index.html', '<!doctype html>\n');
+		await writeFixtureFile(sourceDir, 'runtime.js', 'export const runtime = true;\n');
+		await writeFixtureFile(sourceDir, 'assets/index.js', 'console.log("tinygo");\n');
+		await writeFixtureFile(sourceDir, 'tools/go-probe.wasm', 'wasm');
+
+		const first = await syncWasmTinyGoDist({ sourceDir, targetDir: firstTargetDir, versionModulePath });
+		const shiftedTime = new Date(Date.now() + 60_000);
+		await utimes(path.join(sourceDir, 'runtime.js'), shiftedTime, shiftedTime);
+		await utimes(path.join(sourceDir, 'assets/index.js'), shiftedTime, shiftedTime);
+		const second = await syncWasmTinyGoDist({
+			sourceDir,
+			targetDir: secondTargetDir,
+			versionModulePath
+		});
+
+		expect(second.fingerprint).toBe(first.fingerprint);
 	});
 });

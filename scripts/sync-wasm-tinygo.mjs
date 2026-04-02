@@ -71,12 +71,9 @@ async function listFiles(rootDir) {
 async function computeBundleFingerprint(sourceDir) {
 	const hash = createHash('sha256');
 	for (const filePath of await listFiles(sourceDir)) {
-		const fileStats = await stat(filePath);
 		hash.update(path.relative(sourceDir, filePath));
 		hash.update('\0');
-		hash.update(String(fileStats.size));
-		hash.update('\0');
-		hash.update(String(Math.trunc(fileStats.mtimeMs)));
+		hash.update(await readFile(filePath));
 		hash.update('\n');
 	}
 	return hash.digest('hex').slice(0, 16);
