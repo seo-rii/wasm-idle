@@ -51,6 +51,12 @@ describe('Terminal source', () => {
 
 	it('keeps a hidden transcript mirror for browser debugging and Playwright assertions', () => {
 		expect(source).toMatch(/debugOutput = \$state\(''\)/);
+		expect(source).toMatch(/loadedRuntimeAssetsKey: string \| undefined = undefined/);
+		expect(source).not.toMatch(/loadedRuntimeAssets = \$state/);
+		expect(source).not.toMatch(/loadedPlayground = \$state/);
+		expect(source).toMatch(/const currentRuntimeAssetsKey =/);
+		expect(source).not.toMatch(/loadedRuntimeAssets !== currentRuntimeAssets/);
+		expect(source).not.toMatch(/loadedPlayground !== currentPlayground/);
 		expect(source).toMatch(/function writeTerminalOutput\(text: string\)/);
 		expect(source).toMatch(/debugOutput \+= text;/);
 		expect(source).toMatch(/debugOutput = '';/);
@@ -62,10 +68,10 @@ describe('Terminal source', () => {
 	it('uses rust-specific progress windows instead of jumping straight to the prepare band', () => {
 		expect(source).toMatch(/prog\?\.set\?\.\(0\);/);
 		expect(source).toMatch(
-			/language === 'RUST' \? phaseProgress\(prog, 0, 0\.05\) : phaseProgress\(prog, 0, 0\.85\)/
+			/language === 'RUST' \|\| language === 'TINYGO'\s+\? phaseProgress\(prog, 0, 0\.05\)\s+: phaseProgress\(prog, 0, 0\.85\)/
 		);
 		expect(source).toMatch(
-			/language === 'RUST'\s+\? phaseProgress\(prog, 0\.05, 0\.99\)\s+: phaseProgress\(prog, 0\.85, 0\.99\)/
+			/language === 'RUST' \|\| language === 'TINYGO'\s+\? phaseProgress\(prog, 0\.05, 0\.99\)\s+: phaseProgress\(prog, 0\.85, 0\.99\)/
 		);
 	});
 });

@@ -61,8 +61,7 @@
 		tc = 0,
 		plugin = $state(),
 		ll: string | null = null,
-		loadedRuntimeAssets = $state<SandboxRuntimeAssets | undefined>(undefined),
-		loadedPlayground = $state<PlaygroundBinding | undefined>(undefined),
+		loadedRuntimeAssetsKey: string | undefined = undefined,
 		stopRequested = false;
 
 	function writeTerminalOutput(text: string) {
@@ -99,23 +98,33 @@
 	async function initSandbox(language: string) {
 		const currentPlayground = playground;
 		const currentRuntimeAssets = currentPlayground?.runtimeAssets || runtimeAssets || path;
+		const currentRuntimeAssetsKey =
+			typeof currentRuntimeAssets === 'string'
+				? currentRuntimeAssets
+				: JSON.stringify({
+						rootUrl: currentRuntimeAssets?.rootUrl || '',
+						pythonBaseUrl: currentRuntimeAssets?.python?.baseUrl || '',
+						hasPythonLoader: !!currentRuntimeAssets?.python?.loader,
+						javaBaseUrl: currentRuntimeAssets?.java?.baseUrl || '',
+						hasJavaLoader: !!currentRuntimeAssets?.java?.loader,
+						rustCompilerUrl: currentRuntimeAssets?.rust?.compilerUrl || '',
+						tinygoAppUrl: currentRuntimeAssets?.tinygo?.appUrl || '',
+						tinygoHostCompileUrl: currentRuntimeAssets?.tinygo?.hostCompileUrl || '',
+						tinygoModuleUrl: currentRuntimeAssets?.tinygo?.moduleUrl || '',
+						tinygoDisableHostCompile: !!currentRuntimeAssets?.tinygo?.disableHostCompile
+					});
 		let _tc = ++tc;
 		await wait();
 		if (sandbox) await sandbox.clear();
 		input = '';
 		finish = false;
-		if (
-			ll !== language ||
-			loadedRuntimeAssets !== currentRuntimeAssets ||
-			loadedPlayground !== currentPlayground
-		) {
+		if (ll !== language || loadedRuntimeAssetsKey !== currentRuntimeAssetsKey) {
 			sandbox = currentPlayground
 				? await currentPlayground.load(language)
 				: await load(language, currentRuntimeAssets);
 			await sandbox.clear();
 			ll = language;
-			loadedRuntimeAssets = currentRuntimeAssets;
-			loadedPlayground = currentPlayground;
+			loadedRuntimeAssetsKey = currentRuntimeAssetsKey;
 		}
 		sandbox.image = onimage;
 		sandbox.ondebug = ondebug;
