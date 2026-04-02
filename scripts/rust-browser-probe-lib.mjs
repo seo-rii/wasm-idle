@@ -226,7 +226,7 @@ export async function runRustBrowserProbe({
 		await page.waitForSelector('[data-testid="terminal-debug-output"]', { state: 'attached' });
 		const initialTranscript =
 			(await page.locator('[data-testid="terminal-debug-output"]').textContent().catch(() => '')) || '';
-		await page.getByRole('button', { name: 'Run' }).click();
+		await page.locator('button.action-button--run').first().click();
 		try {
 			await page.waitForFunction(
 				(previousTranscript) => {
