@@ -126,6 +126,7 @@
 	type WasmIdleDebugApi = {
 		writeTerminalInput: (text: string, eof?: boolean) => Promise<void>;
 	};
+	let browserDebugHookVersion = 0;
 	type WasmRustRuntimeModule = {
 		preloadBrowserRustRuntime?: (options?: {
 			targetTriple?: RustTargetTriple;
@@ -306,6 +307,7 @@
 		if (!browser) return;
 		const target = window as Window &
 			typeof globalThis & { __wasmIdleDebug?: WasmIdleDebugApi };
+		const debugHookVersion = ++browserDebugHookVersion;
 		const debugApi: WasmIdleDebugApi = {
 			async writeTerminalInput(text: string, eof = false) {
 				if (!terminal) return;
@@ -316,7 +318,7 @@
 		};
 		target.__wasmIdleDebug = debugApi;
 		return () => {
-			if (target.__wasmIdleDebug === debugApi) delete target.__wasmIdleDebug;
+			if (browserDebugHookVersion === debugHookVersion) delete target.__wasmIdleDebug;
 		};
 	});
 

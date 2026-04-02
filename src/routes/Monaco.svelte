@@ -23,6 +23,7 @@
 	let clangdStatus = $state<ClangdStatus>({ state: 'disabled' });
 	let session: ClangdSessionType | null = null;
 	let model: monaco.editor.ITextModel | null = null;
+	let clangdSessionVersion = 0;
 	let debugView = $state<MonacoDebugView | null>(null);
 	interface Props {
 		editor: monaco.editor.IStandaloneCodeEditor | null;
@@ -74,6 +75,7 @@
 
 		let cancelled = false;
 		let nextSession: ClangdSessionType | null = null;
+		const nextSessionVersion = ++clangdSessionVersion;
 
 		(async () => {
 			try {
@@ -88,18 +90,14 @@
 				session = nextSession;
 				model = nextModel;
 				editor.setModel(nextModel);
-				if (
-					previousModel &&
-					previousModel !== nextModel &&
-					previousModelUri !== nextModel.uri.toString()
-				) {
+				if (previousModel && previousModelUri !== nextModel.uri.toString()) {
 					previousModel.dispose();
 				}
 				await nextSession.start();
 			} catch (error) {
 				if (cancelled) return;
 				nextSession?.dispose();
-				if (session === nextSession) session = null;
+				if (clangdSessionVersion === nextSessionVersion) session = null;
 				clangdStatus = {
 					state: 'error',
 					message: error instanceof Error ? error.message : String(error)

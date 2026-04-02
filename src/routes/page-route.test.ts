@@ -125,7 +125,12 @@ describe('example route debug actions', () => {
 
 	it('exposes a browser debug hook that writes terminal stdin through the bound control', () => {
 		expect(source).toMatch(/type WasmIdleDebugApi = \{\s+writeTerminalInput: \(text: string, eof\?: boolean\) => Promise<void>;\s+\};/s);
+		expect(source).toMatch(/let browserDebugHookVersion = 0;/);
+		expect(source).toMatch(/const debugHookVersion = \+\+browserDebugHookVersion;/);
 		expect(source).toMatch(/target\.__wasmIdleDebug = debugApi;/);
+		expect(source).toMatch(
+			/if \(browserDebugHookVersion === debugHookVersion\) delete target\.__wasmIdleDebug;/
+		);
 		expect(source).toMatch(/await terminal\.waitForInput\?\.\(\);/);
 		expect(source).toMatch(/await terminal\.write\(text\);/);
 		expect(source).toMatch(/if \(eof\) await terminal\.eof\?\.\(\);/);

@@ -52,6 +52,14 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(
 			/const \{ ClangdSession \} = await import\('\$lib\/clangd\/session'\);/s
 		);
+		expect(source).toMatch(/let clangdSessionVersion = 0;/);
+		expect(source).toMatch(/const nextSessionVersion = \+\+clangdSessionVersion;/);
+		expect(source).toMatch(
+			/if \(previousModel && previousModelUri !== nextModel\.uri\.toString\(\)\) \{\s+previousModel\.dispose\(\);\s+\}/s
+		);
+		expect(source).toMatch(
+			/if \(clangdSessionVersion === nextSessionVersion\) session = null;/
+		);
 		expect(source).not.toMatch(/clangd ready/);
 		expect(source).not.toMatch(/clangd loading/);
 		expect(source).not.toMatch(/clangd failed:/);
