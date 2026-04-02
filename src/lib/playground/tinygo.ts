@@ -1,7 +1,9 @@
 import {
 	resolveTinyGoHostCompileUrls,
 	resolveTinyGoModuleUrl,
-	type PlaygroundRuntimeAssets
+	type PlaygroundRuntimeAssets,
+	type TinyGoRuntimeAssetLoader,
+	type TinyGoRuntimeAssetPackReference
 } from '$lib/playground/assets';
 import {
 	resolveSandboxExecutionArgs,
@@ -33,8 +35,15 @@ type TinyGoRuntimeHooks = {
 };
 
 type TinyGoRuntimeModule = {
-	createBundledTinyGoRuntime?: () => TinyGoRuntimeHooks;
-	createTinyGoRuntime?: (options: { assetBaseUrl: string }) => TinyGoRuntimeHooks;
+	createBundledTinyGoRuntime?: (options?: {
+		assetLoader?: TinyGoRuntimeAssetLoader;
+		assetPacks?: TinyGoRuntimeAssetPackReference[];
+	}) => TinyGoRuntimeHooks;
+	createTinyGoRuntime?: (options: {
+		assetBaseUrl: string;
+		assetLoader?: TinyGoRuntimeAssetLoader;
+		assetPacks?: TinyGoRuntimeAssetPackReference[];
+	}) => TinyGoRuntimeHooks;
 };
 
 type TinyGoHostCompileResponse = {
@@ -63,6 +72,8 @@ class TinyGo implements Sandbox {
 	moduleUrl = '';
 	hostCompileUrl = '';
 	hostCompileUrls: string[] = [];
+	assetLoader: TinyGoRuntimeAssetLoader | undefined = undefined;
+	assetPacks: TinyGoRuntimeAssetPackReference[] | undefined = undefined;
 	runtime: TinyGoRuntimeHooks | null = null;
 	runtimePromise: Promise<TinyGoRuntimeHooks> | null = null;
 	loadPromise: Promise<void> | null = null;
@@ -103,9 +114,15 @@ class TinyGo implements Sandbox {
 				this.compiledArtifactExecutionError = '';
 				this.compiledCacheKey = '';
 			}
+			const nextAssetLoader =
+				typeof runtimeAssets === 'object' ? runtimeAssets?.tinygo?.assetLoader : undefined;
+			const nextAssetPacks =
+				typeof runtimeAssets === 'object' ? runtimeAssets?.tinygo?.assetPacks : undefined;
 			this.moduleUrl = nextModuleUrl;
 			this.hostCompileUrl = nextHostCompileUrls[0] || '';
 			this.hostCompileUrls = nextHostCompileUrls;
+			this.assetLoader = nextAssetLoader;
+			this.assetPacks = nextAssetPacks;
 			try {
 				progress?.set?.(0.25);
 				await this.ensureWorker();
@@ -193,12 +210,17 @@ class TinyGo implements Sandbox {
 		this.runtimePromise = (async () => {
 			const runtimeModule = (await import(/* @vite-ignore */ moduleUrl)) as TinyGoRuntimeModule;
 			if (typeof runtimeModule.createBundledTinyGoRuntime === 'function') {
-				this.runtime = runtimeModule.createBundledTinyGoRuntime();
+				this.runtime = runtimeModule.createBundledTinyGoRuntime({
+					assetLoader: this.assetLoader,
+					assetPacks: this.assetPacks
+				});
 				return this.runtime;
 			}
 			if (typeof runtimeModule.createTinyGoRuntime === 'function') {
 				this.runtime = runtimeModule.createTinyGoRuntime({
-					assetBaseUrl: new URL('./', moduleUrl).toString()
+					assetBaseUrl: new URL('./', moduleUrl).toString(),
+					assetLoader: this.assetLoader,
+					assetPacks: this.assetPacks
 				});
 				return this.runtime;
 			};

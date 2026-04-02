@@ -27,6 +27,7 @@ const createRuntimeFixtureState = () => ({
 	planCalls: 0,
 	executeCalls: 0,
 	disposeCalls: 0,
+	lastRuntimeOptions: null as { assetLoader?: unknown; assetPacks?: unknown } | null,
 	nextExecutionFailureLine: null as string | null,
 	skipArtifact: false
 });
@@ -49,7 +50,9 @@ const { publicEnv } = vi.hoisted(() => ({
 
 const runtimeModuleSource = `
 const state = globalThis.__wasmIdleTinyGoRuntimeFixtureState;
-export const createBundledTinyGoRuntime = () => ({
+export const createBundledTinyGoRuntime = (options = {}) => {
+  state.lastRuntimeOptions = options;
+  return ({
   async boot() {
     state.bootCalls += 1;
     state.activityLog += '[12:00:00] emception toolchain is ready\\n';
@@ -98,6 +101,7 @@ export const createBundledTinyGoRuntime = () => ({
     state.disposeCalls += 1;
   },
 });
+}
 `;
 
 const runtimeModuleUrl = `data:text/javascript;base64,${Buffer.from(runtimeModuleSource, 'utf8').toString('base64')}`;
@@ -186,6 +190,33 @@ describe('TinyGo sandbox', () => {
 		);
 		expect(outputs.join('')).toContain('driver planned 4 step(s)');
 		expect(outputs.join('')).toContain('tinygo-ok\n');
+	});
+
+	it('passes TinyGo runtime asset loader and pack references into the runtime module', async () => {
+		const sandbox = new TinyGo();
+		const loader = vi.fn(async () => null);
+		const packs = [
+			{
+				index: 'https://assets.invalid/runtime-pack.index.json',
+				asset: 'https://assets.invalid/runtime-pack.bin',
+				fileCount: 2,
+				totalBytes: 42
+			}
+		];
+
+		await sandbox.load({
+			tinygo: {
+				moduleUrl: runtimeModuleUrl,
+				disableHostCompile: true,
+				assetLoader: loader,
+				assetPacks: packs
+			}
+		});
+
+		expect(runtimeFixtureState.lastRuntimeOptions).toEqual({
+			assetLoader: loader,
+			assetPacks: packs
+		});
 	});
 
 	it('writes queued stdin when the TinyGo worker requests input', async () => {

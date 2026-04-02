@@ -47,6 +47,8 @@ export interface TinyGoRuntimeAssetConfig {
 	appUrl?: string;
 	hostCompileUrl?: string;
 	disableHostCompile?: boolean;
+	assetLoader?: TinyGoRuntimeAssetLoader;
+	assetPacks?: TinyGoRuntimeAssetPackReference[];
 }
 
 export interface PlaygroundRuntimeAssets {
@@ -56,6 +58,34 @@ export interface PlaygroundRuntimeAssets {
 	rust?: RustRuntimeAssetConfig;
 	tinygo?: TinyGoRuntimeAssetConfig;
 }
+
+export interface TinyGoRuntimeAssetLoaderRequest {
+	assetPath: string;
+	assetUrl: string;
+	label: string;
+}
+
+export interface TinyGoRuntimeAssetPackReference {
+	index: string;
+	asset: string;
+	fileCount: number;
+	totalBytes: number;
+}
+
+export type TinyGoRuntimeAssetLoaderResult =
+	| RuntimeAssetDataResult
+	| RuntimeAssetUrlResult
+	| string
+	| URL
+	| ArrayBuffer
+	| Uint8Array
+	| Blob
+	| null
+	| undefined;
+
+export type TinyGoRuntimeAssetLoader = (
+	request: TinyGoRuntimeAssetLoaderRequest
+) => TinyGoRuntimeAssetLoaderResult | Promise<TinyGoRuntimeAssetLoaderResult>;
 
 export interface ResolvedRuntimeAssetConfig {
 	baseUrl: string;
