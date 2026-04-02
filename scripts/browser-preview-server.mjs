@@ -29,6 +29,7 @@ function createBrowserPreviewChildEnv() {
 
 async function withFilesystemLock(lockDir, timeoutMs, action) {
 	const lockStartedAt = Date.now();
+	mkdirSync(path.dirname(lockDir), { recursive: true });
 	while (true) {
 		try {
 			mkdirSync(lockDir, { recursive: false });
