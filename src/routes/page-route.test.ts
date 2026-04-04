@@ -62,6 +62,9 @@ describe('example route debug actions', () => {
 
 	it('passes a local wasm-rust bundle through a reusable playground binding', () => {
 		expect(source).toMatch(
+			/import \{ WASM_GO_ASSET_VERSION \} from '\$lib\/playground\/wasmGoVersion';/
+		);
+		expect(source).toMatch(
 			/import \{ WASM_RUST_ASSET_VERSION \} from '\$lib\/playground\/wasmRustVersion';/
 		);
 		expect(source).toMatch(
@@ -71,7 +74,7 @@ describe('example route debug actions', () => {
 			/let tinygoDisableHostCompile = \$derived\(\s*browser && page\.url\.searchParams\.get\('tinygoCompilePath'\) === 'browser'\s*\);/
 		);
 		expect(source).toMatch(
-			/let runtimeAssets = \$derived\.by<PlaygroundRuntimeAssets>\(\(\) => \(\{\s+rootUrl: path,\s+rust: \{\s+compilerUrl: path\s+\?\s+`\$\{path\}\/wasm-rust\/index\.js\?v=\$\{WASM_RUST_ASSET_VERSION\}`\s+:\s+`\/wasm-rust\/index\.js\?v=\$\{WASM_RUST_ASSET_VERSION\}`\s+\},\s+tinygo: \{\s+disableHostCompile: tinygoDisableHostCompile,\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-tinygo\/runtime\.js\?v=\$\{WASM_TINYGO_ASSET_VERSION\}`\s+:\s+`\/wasm-tinygo\/runtime\.js\?v=\$\{WASM_TINYGO_ASSET_VERSION\}`\s+\}\s+\}\)\);/s
+			/let runtimeAssets = \$derived\.by<PlaygroundRuntimeAssets>\(\(\) => \(\{\s+rootUrl: path,\s+rust: \{\s+compilerUrl: path\s+\?\s+`\$\{path\}\/wasm-rust\/index\.js\?v=\$\{WASM_RUST_ASSET_VERSION\}`\s+:\s+`\/wasm-rust\/index\.js\?v=\$\{WASM_RUST_ASSET_VERSION\}`\s+\},\s+go: \{\s+compilerUrl: path\s+\?\s+`\$\{path\}\/wasm-go\/index\.js\?v=\$\{WASM_GO_ASSET_VERSION\}`\s+:\s+`\/wasm-go\/index\.js\?v=\$\{WASM_GO_ASSET_VERSION\}`\s+\},\s+tinygo: \{\s+disableHostCompile: tinygoDisableHostCompile,\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-tinygo\/runtime\.js\?v=\$\{WASM_TINYGO_ASSET_VERSION\}`\s+:\s+`\/wasm-tinygo\/runtime\.js\?v=\$\{WASM_TINYGO_ASSET_VERSION\}`\s+\}\s+\}\)\);/s
 		);
 		expect(source).toMatch(
 			/const playground = \$derived\.by\(\(\) => createPlaygroundBinding\(runtimeAssets\)\);/
@@ -88,6 +91,16 @@ describe('example route debug actions', () => {
 		);
 		expect(source).toMatch(
 			/await runtimeModule\.preloadBrowserRustRuntime\?\.\(\{\s+targetTriple: preloadTargetTriple\s+\}\);/s
+		);
+		expect(source).toMatch(
+			/type WasmGoRuntimeModule = \{\s+preloadBrowserGoRuntime\?: \(options\?: \{\s+target\?: 'wasip1\/wasm';\s+\}\) => Promise<void>;\s+\};/s
+		);
+		expect(source).toMatch(/const compilerUrl = runtimeAssets\.go\?\.compilerUrl;/);
+		expect(source).toMatch(
+			/const runtimeModule = \(await import\(\/\* @vite-ignore \*\/ compilerUrl\)\) as WasmGoRuntimeModule;/
+		);
+		expect(source).toMatch(
+			/await runtimeModule\.preloadBrowserGoRuntime\?\.\(\{\s+target: 'wasip1\/wasm'\s+\}\);/s
 		);
 	});
 
@@ -153,11 +166,14 @@ describe('example route debug actions', () => {
 	});
 
 	it('surfaces TinyGo through the shared language selector, args field, and stdin hint', () => {
+		expect(source).toMatch(/<option value="GO">Go<\/option>/);
 		expect(source).toMatch(/<option value="TINYGO">TinyGo<\/option>/);
 		expect(source).toMatch(
-			/\{#if language === 'JAVA' \|\| language === 'RUST' \|\| language === 'TINYGO'\}/
+			/\{#if language === 'JAVA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'TINYGO'\}/
 		);
-		expect(source).toMatch(/language === 'JAVA' \|\| language === 'RUST' \|\| language === 'TINYGO'/);
+		expect(source).toMatch(/language === 'JAVA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'TINYGO'/);
+		expect(source).toMatch(/Go uses the bundled `wasm-go` browser compiler runtime/);
+		expect(source).toMatch(/currently targets\s+`wasip1\/wasm`/);
 		expect(source).toMatch(/TinyGo prefers a configured host-assisted compile endpoint/);
 		expect(source).toMatch(/falls back to the bundled wasm-tinygo browser pipeline/);
 		expect(source).toMatch(/resulting WASI artifact in the local playground runtime/);

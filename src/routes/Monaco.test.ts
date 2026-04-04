@@ -87,6 +87,7 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).toMatch(/if \(enableDebug && language === 'CPP'\) clangdRequested = true;/);
 		expect(pageSource).toMatch(/if \(language !== 'CPP'\) clangdRequested = false;/);
 		expect(pageSource).toMatch(/<option value="RUST">Rust<\/option>/);
+		expect(pageSource).toMatch(/<option value="GO">Go<\/option>/);
 		expect(pageSource).toMatch(/<option value="TINYGO">TinyGo<\/option>/);
 		expect(pageSource).toMatch(/language=\{editorLanguage\}/);
 		expect(pageSource).toMatch(/<select id="rust-target-triple" bind:value=\{rustTargetTriple\}>/);
@@ -95,6 +96,7 @@ describe('Monaco route debug sync', () => {
 		);
 		expect(pageSource).toMatch(/runtime-manifest\.v3\.json\?v=\$\{WASM_RUST_ASSET_VERSION\}/);
 		expect(pageSource).toMatch(/preloadBrowserRustRuntime/);
+		expect(pageSource).toMatch(/preloadBrowserGoRuntime/);
 		expect(pageSource).toMatch(/const playground = \$derived\.by\(\(\) => createPlaygroundBinding\(runtimeAssets\)\);/);
 		expect(pageSource).toMatch(/clangdEnabled=\{clangdRequested\}/);
 	});
