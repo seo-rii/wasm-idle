@@ -1,4 +1,4 @@
-import { Directory, Fd, File, Inode, OpenFile, PreopenDirectory, WASI, wasi } from '@bjorn3/browser_wasi_shim';
+import { Directory, Fd, File, Inode, OpenFile, PreopenDirectory, WASI, wasi } from './vendor/browser_wasi_shim/index.js';
 import { resolveVersionedAssetUrl } from './asset-url.js';
 import { fetchRuntimeAssetBytes, loadRuntimePackEntries } from './runtime-asset.js';
 class CaptureFd extends Fd {

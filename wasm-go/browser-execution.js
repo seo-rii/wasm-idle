@@ -1,4 +1,4 @@
-import { Directory, Fd, File, Inode, PreopenDirectory, WASI, wasi } from '@bjorn3/browser_wasi_shim';
+import { Directory, Fd, File, Inode, PreopenDirectory, WASI, wasi } from './vendor/browser_wasi_shim/index.js';
 function normalizeGuestPath(path) {
     const normalized = path.replace(/\\/g, '/');
     const absolute = normalized.startsWith('/') ? normalized : `/${normalized}`;
