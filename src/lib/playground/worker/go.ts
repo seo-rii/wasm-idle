@@ -82,7 +82,16 @@ function normalizeDiagnostic(diagnostic: any) {
 }
 
 self.onmessage = async (event: { data: any }) => {
-	const { load, compilerUrl: nextCompilerUrl, buffer, code, prepare, args = [], log } = event.data;
+	const {
+		load,
+		compilerUrl: nextCompilerUrl,
+		buffer,
+		code,
+		prepare,
+		args = [],
+		target = 'wasip1/wasm',
+		log
+	} = event.data;
 	try {
 		if (load) {
 			compilerUrl = nextCompilerUrl;
@@ -96,16 +105,16 @@ self.onmessage = async (event: { data: any }) => {
 
 		stdinBufferGo = new Int32Array(buffer);
 		const runtime = await loadCompiler(compilerUrl);
-		const compileCacheKey = code;
+		const compileCacheKey = `${target}\n${code}`;
 		if (!compiledArtifact || compiledCacheKey !== compileCacheKey) {
 			if (log) {
 				console.log(
-					`[wasm-idle:go-worker] compile start prepare=${String(prepare)} bytes=${code.length}`
+					`[wasm-idle:go-worker] compile start prepare=${String(prepare)} target=${target} bytes=${code.length}`
 				);
 			}
 			const result = await runtime.compiler.compile({
 				code,
-				target: 'wasip1/wasm',
+				target,
 				prepare,
 				log,
 				onProgress(progress: unknown) {

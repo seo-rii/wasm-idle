@@ -14,6 +14,7 @@
 	import { WASM_TINYGO_ASSET_VERSION } from '$lib/playground/wasmTinyGoVersion';
 	import type {
 		CompilerDiagnostic,
+		GoTarget,
 		RustTargetTriple
 	} from '$lib/playground/options';
 	import type { TerminalControl } from '$lib/terminal';
@@ -54,6 +55,7 @@
 		clangdRequested = $state(false),
 		argsInput = $state(''),
 		rustTargetTriple = $state<RustTargetTriple>('wasm32-wasip1'),
+		goTarget = $state<GoTarget>('wasip1/wasm'),
 		log = $state(true),
 		language = $state('CPP'),
 		runningMode = $state<'run' | 'debug' | null>(null),
@@ -97,6 +99,7 @@
 		debug.paused ? 'pause_circle' : debug.active ? 'play_circle' : 'adjust'
 	);
 	const knownRustTargetTriples = ['wasm32-wasip1', 'wasm32-wasip2', 'wasm32-wasip3'] as const;
+	const knownGoTargets = ['wasip1/wasm', 'wasip2/wasm', 'wasip3/wasm'] as const;
 	const debugTitle = $derived(language === 'CPP' ? 'Native Trace' : 'Pyodide Trace');
 	const loading = $derived(progress >= 0 && progress < 1);
 	const progressValue = $derived(progress < 0 ? 0 : progress > 1 ? 1 : progress);
@@ -129,6 +132,7 @@
 		return Math.min(Math.max(requestedWidth, minTerminalPaneWidth), maxTerminalPaneWidth);
 	});
 	let availableRustTargetTriples = $state<RustTargetTriple[]>(['wasm32-wasip1', 'wasm32-wasip2']);
+	let availableGoTargets = $state<GoTarget[]>(['wasip1/wasm']);
 	type WasmIdleDebugApi = {
 		writeTerminalInput: (text: string, eof?: boolean) => Promise<void>;
 	};
@@ -140,7 +144,7 @@
 	};
 	type WasmGoRuntimeModule = {
 		preloadBrowserGoRuntime?: (options?: {
-			target?: 'wasip1/wasm';
+			target?: GoTarget;
 		}) => Promise<void>;
 	};
 
@@ -184,6 +188,7 @@
 			localStorage.setItem('language', language);
 			localStorage.setItem('argsInput', argsInput);
 			localStorage.setItem('rustTargetTriple', rustTargetTriple);
+			localStorage.setItem('goTarget', goTarget);
 		}
 		try {
 			if (!('SharedArrayBuffer' in window)) location.reload();
@@ -200,7 +205,8 @@
 					breakpoints: [...debug.effectiveBreakpoints],
 					stdin: '',
 					pauseOnEntry: enableDebug,
-					rustTargetTriple: language === 'RUST' ? rustTargetTriple : undefined
+					rustTargetTriple: language === 'RUST' ? rustTargetTriple : undefined,
+					goTarget: language === 'GO' ? goTarget : undefined
 				}
 			});
 		} finally {
@@ -215,9 +221,17 @@
 			const code = localStorage.getItem('code');
 			const lang = localStorage.getItem('language');
 			const storedArgs = localStorage.getItem('argsInput');
+			const storedGoTarget = localStorage.getItem('goTarget');
 			if (code) editor.setValue(code);
 			if (lang) language = lang;
 			if (storedArgs !== null) argsInput = storedArgs;
+			if (
+				storedGoTarget === 'wasip1/wasm' ||
+				storedGoTarget === 'wasip2/wasm' ||
+				storedGoTarget === 'wasip3/wasm'
+			) {
+				goTarget = storedGoTarget;
+			}
 			init = true;
 		}
 	});
@@ -308,14 +322,65 @@
 
 	$effect(() => {
 		if (!browser) return;
+		let cancelled = false;
+		(async () => {
+			const manifestUrl = path
+				? `${path}/wasm-go/runtime/runtime-manifest.v1.json?v=${WASM_GO_ASSET_VERSION}`
+				: `/wasm-go/runtime/runtime-manifest.v1.json?v=${WASM_GO_ASSET_VERSION}`;
+			try {
+				const response = await fetch(manifestUrl, { cache: 'no-store' });
+				if (!response.ok) {
+					throw new Error(`failed to load ${manifestUrl}: ${response.status}`);
+				}
+				const manifest = (await response.json()) as {
+					defaultTarget?: string;
+					targets?: Record<string, unknown>;
+				};
+				const nextAvailableGoTargets = knownGoTargets.filter((target) =>
+					Object.prototype.hasOwnProperty.call(manifest.targets || {}, target)
+				);
+				if (!nextAvailableGoTargets.length || cancelled) return;
+				availableGoTargets = [...nextAvailableGoTargets];
+				const storedGoTarget = localStorage.getItem('goTarget');
+				const nextDefaultGoTarget = nextAvailableGoTargets.includes(manifest.defaultTarget as GoTarget)
+					? (manifest.defaultTarget as GoTarget)
+					: nextAvailableGoTargets[0];
+				if (storedGoTarget && nextAvailableGoTargets.includes(storedGoTarget as GoTarget)) {
+					goTarget = storedGoTarget as GoTarget;
+					return;
+				}
+				if (!nextAvailableGoTargets.includes(goTarget)) {
+					goTarget = nextDefaultGoTarget;
+				}
+			} catch {
+				if (cancelled) return;
+				availableGoTargets = ['wasip1/wasm'];
+				const storedGoTarget = localStorage.getItem('goTarget');
+				if (storedGoTarget === 'wasip1/wasm') {
+					goTarget = storedGoTarget;
+					return;
+				}
+				if (!availableGoTargets.includes(goTarget)) {
+					goTarget = 'wasip1/wasm';
+				}
+			}
+		})();
+		return () => {
+			cancelled = true;
+		};
+	});
+
+	$effect(() => {
+		if (!browser) return;
 		const compilerUrl = runtimeAssets.go?.compilerUrl;
-		if (!compilerUrl) return;
+		const preloadTarget = availableGoTargets.includes(goTarget) ? goTarget : availableGoTargets[0];
+		if (!compilerUrl || !preloadTarget) return;
 		let cancelled = false;
 		(async () => {
 			const runtimeModule = (await import(/* @vite-ignore */ compilerUrl)) as WasmGoRuntimeModule;
 			if (cancelled) return;
 			await runtimeModule.preloadBrowserGoRuntime?.({
-				target: 'wasip1/wasm'
+				target: preloadTarget
 			});
 		})().catch(() => {});
 		return () => {
@@ -504,6 +569,16 @@
 						</select>
 					</label>
 				{/if}
+				{#if language === 'GO'}
+					<label class="select-chip">
+						<span class="material-symbols-outlined">conversion_path</span>
+						<select id="go-target" bind:value={goTarget}>
+							{#each availableGoTargets as target (target)}
+								<option value={target}>{target}</option>
+							{/each}
+						</select>
+					</label>
+				{/if}
 			</div>
 			{#if loading}
 				<div class="progress-shell" aria-live="polite">
@@ -548,9 +623,12 @@
 		{/if}
 		{#if language === 'GO'}
 			<p class="hint">
-				Go uses the bundled `wasm-go` browser compiler runtime and currently targets
-				`wasip1/wasm`. Pass CLI args here, type into the terminal below, and use Ctrl+D or
-				the EOF button while running if the program reads stdin until EOF.
+				Go uses the bundled `wasm-go` browser compiler runtime. The selector only shows Go
+				targets advertised by the bundled runtime manifest. `wasip1/wasm` runs as preview1
+				core wasm, while `wasip2/wasm` and `wasip3/wasm` currently compile through the shipped
+				`wasip1` backend and execute as preview1-compatible core wasm until upstream Go exposes
+				native preview2/3 ports. Pass CLI args here, type into the terminal below, and use
+				Ctrl+D or the EOF button while running if the program reads stdin until EOF.
 			</p>
 		{/if}
 		{#if language === 'TINYGO'}

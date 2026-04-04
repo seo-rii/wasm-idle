@@ -117,6 +117,7 @@ class Go implements Sandbox {
 		return new Promise<boolean | string>((resolve, reject) => {
 			if (!this.worker) return reject('Worker not loaded');
 			const { programArgs } = resolveSandboxExecutionArgs('GO', args, options);
+			const target = options.goTarget || 'wasip1/wasm';
 			const _uid = ++this.uid;
 			this.activeReject = reject;
 			const handler = (event: Event & { data: any }) => {
@@ -156,7 +157,7 @@ class Go implements Sandbox {
 				prepare,
 				buffer: this.buffer,
 				args: programArgs,
-				target: 'wasip1/wasm',
+				target,
 				log: _log
 			});
 		});
