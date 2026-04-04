@@ -1,4 +1,9 @@
-const SUPPORTED_TARGETS = new Set(['wasip1/wasm', 'js/wasm']);
+const SUPPORTED_TARGETS = new Set([
+    'wasip1/wasm',
+    'wasip2/wasm',
+    'wasip3/wasm',
+    'js/wasm'
+]);
 const SUPPORTED_PACKAGE_KINDS = new Set(['main', 'library']);
 const SUPPORTED_AUTO_DEPENDENCY_MODES = new Set(['sysroot', 'none']);
 export function validateCompileRequest(request) {

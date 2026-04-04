@@ -44,7 +44,10 @@ function expectNonNegativeInteger(value, label) {
     return value;
 }
 function expectTarget(value, label) {
-    if (value !== 'wasip1/wasm' && value !== 'js/wasm') {
+    if (value !== 'wasip1/wasm' &&
+        value !== 'wasip2/wasm' &&
+        value !== 'wasip3/wasm' &&
+        value !== 'js/wasm') {
         throw new Error(`invalid ${label} in wasm-go runtime manifest`);
     }
     return value;
@@ -136,7 +139,9 @@ function parseExecutionConfig(value, label) {
     };
 }
 function expectedTargetShape(target) {
-    if (target === 'wasip1/wasm') {
+    if (target === 'wasip1/wasm' ||
+        target === 'wasip2/wasm' ||
+        target === 'wasip3/wasm') {
         return {
             goos: 'wasip1',
             goarch: 'wasm'
