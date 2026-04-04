@@ -93,14 +93,17 @@ describe('example route debug actions', () => {
 			/await runtimeModule\.preloadBrowserRustRuntime\?\.\(\{\s+targetTriple: preloadTargetTriple\s+\}\);/s
 		);
 		expect(source).toMatch(
-			/type WasmGoRuntimeModule = \{\s+preloadBrowserGoRuntime\?: \(options\?: \{\s+target\?: 'wasip1\/wasm';\s+\}\) => Promise<void>;\s+\};/s
+			/type WasmGoRuntimeModule = \{\s+preloadBrowserGoRuntime\?: \(options\?: \{\s+target\?: GoTarget;\s+\}\) => Promise<void>;\s+\};/s
 		);
 		expect(source).toMatch(/const compilerUrl = runtimeAssets\.go\?\.compilerUrl;/);
+		expect(source).toMatch(
+			/const preloadTarget = availableGoTargets\.includes\(goTarget\) \? goTarget : availableGoTargets\[0\];/
+		);
 		expect(source).toMatch(
 			/const runtimeModule = \(await import\(\/\* @vite-ignore \*\/ compilerUrl\)\) as WasmGoRuntimeModule;/
 		);
 		expect(source).toMatch(
-			/await runtimeModule\.preloadBrowserGoRuntime\?\.\(\{\s+target: 'wasip1\/wasm'\s+\}\);/s
+			/await runtimeModule\.preloadBrowserGoRuntime\?\.\(\{\s+target: preloadTarget\s+\}\);/s
 		);
 	});
 
@@ -134,6 +137,34 @@ describe('example route debug actions', () => {
 			/\{#each availableRustTargetTriples as targetTriple \(targetTriple\)\}\s+<option value=\{targetTriple\}>\{targetTriple\}<\/option>\s+\{\/each\}/s
 		);
 		expect(source).toMatch(/rustTargetTriple=\{language === 'RUST' \? rustTargetTriple : undefined\}/);
+	});
+
+	it('persists and forwards the Go target selection', () => {
+		expect(source).toMatch(/GoTarget,/);
+		expect(source).toMatch(/goTarget = \$state<GoTarget>\('wasip1\/wasm'\),/);
+		expect(source).toMatch(
+			/const knownGoTargets = \['wasip1\/wasm', 'wasip2\/wasm', 'wasip3\/wasm'\] as const;/
+		);
+		expect(source).toMatch(
+			/let availableGoTargets = \$state<GoTarget\[]>\(\['wasip1\/wasm'\]\);/
+		);
+		expect(source).toMatch(/localStorage\.setItem\('goTarget', goTarget\);/);
+		expect(source).toMatch(
+			/const storedGoTarget = localStorage\.getItem\('goTarget'\);/
+		);
+		expect(source).toMatch(
+			/const manifestUrl = path\s+\?\s+`\$\{path\}\/wasm-go\/runtime\/runtime-manifest\.v1\.json\?v=\$\{WASM_GO_ASSET_VERSION\}`\s+:\s+`\/wasm-go\/runtime\/runtime-manifest\.v1\.json\?v=\$\{WASM_GO_ASSET_VERSION\}`;/
+		);
+		expect(source).toMatch(
+			/const nextAvailableGoTargets = knownGoTargets\.filter\(\s*\(target\) =>\s*Object\.prototype\.hasOwnProperty\.call\(manifest\.targets \|\| \{}, target\)\s*\);/s
+		);
+		expect(source).toMatch(/availableGoTargets = \[\.\.\.nextAvailableGoTargets\];/);
+		expect(source).toMatch(/availableGoTargets = \['wasip1\/wasm'\];/);
+		expect(source).toMatch(/goTarget: language === 'GO' \? goTarget : undefined/);
+		expect(source).toMatch(/<select id="go-target" bind:value=\{goTarget\}>/);
+		expect(source).toMatch(
+			/\{#each availableGoTargets as target \(target\)\}\s+<option value=\{target\}>\{target\}<\/option>\s+\{\/each\}/s
+		);
 	});
 
 	it('exposes a browser debug hook that writes terminal stdin through the bound control', () => {
@@ -173,7 +204,10 @@ describe('example route debug actions', () => {
 		);
 		expect(source).toMatch(/language === 'JAVA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'TINYGO'/);
 		expect(source).toMatch(/Go uses the bundled `wasm-go` browser compiler runtime/);
-		expect(source).toMatch(/currently targets\s+`wasip1\/wasm`/);
+		expect(source).toMatch(/selector only shows Go\s+targets advertised by the bundled runtime manifest/);
+		expect(source).toMatch(/`wasip1\/wasm`/);
+		expect(source).toMatch(/preview1\s+core wasm/);
+		expect(source).toMatch(/`wasip2\/wasm` and `wasip3\/wasm` currently compile through the shipped/);
 		expect(source).toMatch(/TinyGo prefers a configured host-assisted compile endpoint/);
 		expect(source).toMatch(/falls back to the bundled wasm-tinygo browser pipeline/);
 		expect(source).toMatch(/resulting WASI artifact in the local playground runtime/);

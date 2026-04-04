@@ -73,6 +73,7 @@ describe('Go worker', () => {
 				prepare: false,
 				buffer: new SharedArrayBuffer(1024),
 				args: ['one'],
+				target: 'wasip2/wasm',
 				log: true
 			}
 		});
@@ -91,8 +92,8 @@ describe('Go worker', () => {
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ output: 'build log\n' });
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ output: 'hi\n' });
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
-		expect((globalThis as any).__lastCompileOptions.target).toBe('wasip1/wasm');
-		expect((globalThis as any).__lastExecution.artifact.target).toBe('wasip1/wasm');
+		expect((globalThis as any).__lastCompileOptions.target).toBe('wasip2/wasm');
+		expect((globalThis as any).__lastExecution.artifact.target).toBe('wasip2/wasm');
 		expect((globalThis as any).__lastExecution.options.args).toEqual(['one']);
 		expect((globalThis as any).__lastExecution.options.env).toEqual({ USER: 'jungol' });
 	});
@@ -157,6 +158,60 @@ describe('Go worker', () => {
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ buffer: true });
 		expect((globalThis as any).__lastStdin).toBe('5\n');
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ output: '5\n' });
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
+	});
+
+	it('passes wasip3 through to compile and execution as a transitional target', async () => {
+		const compilerModuleUrl = await createMockGoRuntimeModule(`
+			export async function createGoCompiler() {
+				return {
+					async compile(options) {
+						globalThis.__lastCompileOptions = options;
+						return {
+							success: true,
+							artifact: {
+								wasm: new Uint8Array([0, 97, 115, 109]),
+								bytes: new Uint8Array([0, 97, 115, 109]),
+								target: options.target,
+								format: 'wasi-core-wasm'
+							}
+						};
+					}
+				};
+			}
+
+			export async function executeBrowserGoArtifact(artifact, options = {}) {
+				globalThis.__lastExecution = { artifact, options };
+				return {
+					exitCode: 0,
+					stdout: '',
+					stderr: ''
+				};
+			}
+
+			export default createGoCompiler;
+		`);
+
+		await import('./go');
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				compilerUrl: compilerModuleUrl
+			}
+		});
+		await Promise.resolve();
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: 'package main\nfunc main() {}',
+				prepare: false,
+				buffer: new SharedArrayBuffer(1024),
+				target: 'wasip3/wasm'
+			}
+		});
+		await Promise.resolve();
+
+		expect((globalThis as any).__lastCompileOptions.target).toBe('wasip3/wasm');
+		expect((globalThis as any).__lastExecution.artifact.target).toBe('wasip3/wasm');
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
 	});
 
