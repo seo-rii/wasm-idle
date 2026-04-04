@@ -62,28 +62,41 @@ function findGoConsoleErrors(messages) {
 async function readProbeSummary(page, activeState, pageErrors, consoleMessages, browserUrl) {
 	const transcript =
 		(await page.locator('[data-testid="terminal-debug-output"]').textContent().catch(() => '')) || '';
+	const availableGoTargets = await page
+		.locator('#go-target option')
+		.evaluateAll((elements) =>
+			elements
+				.map((element) => element.getAttribute('value') || '')
+				.filter((value) => value.length > 0)
+		)
+		.catch(() => []);
+	const selectedGoTarget =
+		(await page.locator('#go-target').inputValue().catch(() => '')) || '';
 	return {
 		activeState,
+		availableGoTargets,
 		browserUrl,
 		consoleTail: summarizeConsole(consoleMessages),
 		finalUrl: page.url(),
 		goConsoleErrors: findGoConsoleErrors(consoleMessages),
 		moduleResolutionErrors: findModuleResolutionErrors(consoleMessages),
 		pageErrors,
+		selectedGoTarget,
 		title: await page.title().catch(() => ''),
 		transcript
 	};
 }
 
 /**
- * @param {{ browserUrl: string; chromiumExecutable?: string; expectedOutput?: string; runTimeoutMs?: number; stdinText?: string }} options
+ * @param {{ browserUrl: string; chromiumExecutable?: string; expectedOutput?: string; runTimeoutMs?: number; stdinText?: string; target?: 'wasip1/wasm' | 'wasip2/wasm' | 'wasip3/wasm' }} options
  */
 export async function runGoBrowserProbe({
 	browserUrl,
 	chromiumExecutable = '',
 	expectedOutput = 'factorial_plus_bonus=123',
 	runTimeoutMs = 300_000,
-	stdinText = '5\n'
+	stdinText = '5\n',
+	target = 'wasip1/wasm'
 }) {
 	if (!browserUrl) {
 		throw new Error('runGoBrowserProbe requires a browserUrl');
@@ -161,6 +174,7 @@ export async function runGoBrowserProbe({
 		await page.waitForTimeout(1_000);
 		await page.waitForSelector('select', { state: 'attached', timeout: runTimeoutMs });
 		await page.locator('select').selectOption('GO');
+		await page.locator('#go-target').selectOption(target);
 
 		const logToggle = page.locator('#log-toggle');
 		if (!(await logToggle.isChecked())) {
@@ -251,6 +265,11 @@ export async function runGoBrowserProbe({
 		if (!summary.transcript.includes(expectedOutput)) {
 			throw new Error(
 				`terminal transcript did not contain expected Go output ${JSON.stringify(expectedOutput)}\n${JSON.stringify(summary, null, 2)}`
+			);
+		}
+		if (summary.selectedGoTarget !== target) {
+			throw new Error(
+				`go target selector did not retain ${target}\n${JSON.stringify(summary, null, 2)}`
 			);
 		}
 		if (

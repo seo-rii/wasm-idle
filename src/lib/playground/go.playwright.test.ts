@@ -1,5 +1,7 @@
 // @vitest-environment node
 
+import { readFile } from 'node:fs/promises';
+
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -22,6 +24,17 @@ describe('wasm-idle Go browser playwright integration', () => {
 				const configuredBrowserUrl = process.env.WASM_IDLE_BROWSER_URL || '';
 				const serverMode =
 					process.env.WASM_IDLE_BROWSER_SERVER_MODE === 'dev' ? 'dev' : 'preview';
+				const runtimeManifest = JSON.parse(
+					await readFile(
+						new URL('../../../static/wasm-go/runtime/runtime-manifest.v1.json', import.meta.url),
+						'utf8'
+					)
+				) as {
+					targets: Record<string, unknown>;
+				};
+				const expectedGoTargets = Object.keys(runtimeManifest.targets) as Array<
+					'wasip1/wasm' | 'wasip2/wasm' | 'wasip3/wasm'
+				>;
 				const previewServer =
 					shouldReuseProvidedBrowserUrl(configuredBrowserUrl)
 						? {
@@ -45,36 +58,51 @@ describe('wasm-idle Go browser playwright integration', () => {
 							})();
 
 				try {
-					const summary = await runGoBrowserProbe({
-						browserUrl: previewServer.browserUrl,
-						runTimeoutMs: Number(process.env.WASM_IDLE_GO_RUN_TIMEOUT_MS || '300000'),
-						stdinText: '5\n',
-						expectedOutput: 'factorial_plus_bonus=123'
-					});
+					for (const target of expectedGoTargets) {
+						const summary = await runGoBrowserProbe({
+							browserUrl: previewServer.browserUrl,
+							runTimeoutMs: Number(process.env.WASM_IDLE_GO_RUN_TIMEOUT_MS || '300000'),
+							stdinText: '5\n',
+							expectedOutput: 'factorial_plus_bonus=123',
+							target
+						});
 
-					expect(summary.activeState.crossOriginIsolated).toBe(true);
-					expect(summary.activeState.sharedArrayBuffer).toBe(true);
-					expect(summary.activeState.serviceWorkerControlled).toBe(true);
-					expect(summary.pageErrors).toEqual([]);
-					expect(summary.moduleResolutionErrors).toEqual([]);
-					expect(summary.goConsoleErrors).toEqual([]);
-					expect(summary.transcript).toContain('factorial_plus_bonus=123');
-					expect(summary.transcript).toContain('Process finished after');
-					expect(
-						summary.consoleTail.some((entry: string) =>
-							entry.includes('[wasm-idle:go-worker] compile settled success=true')
-						)
-					).toBe(true);
-					expect(
-						summary.consoleTail.some((entry: string) =>
-							entry.includes('[wasm-idle:go-worker] wasi run complete exitCode=0')
-						)
-					).toBe(true);
-					expect(
-						summary.consoleTail.some((entry: string) =>
-							entry.includes('Failed to resolve module specifier')
-						)
-					).toBe(false);
+						expect(summary.activeState.crossOriginIsolated).toBe(true);
+						expect(summary.activeState.sharedArrayBuffer).toBe(true);
+						expect(summary.activeState.serviceWorkerControlled).toBe(true);
+						expect(summary.availableGoTargets).toEqual(expectedGoTargets);
+						expect(summary.selectedGoTarget).toBe(target);
+						expect(summary.pageErrors).toEqual([]);
+						expect(summary.moduleResolutionErrors).toEqual([]);
+						expect(summary.goConsoleErrors).toEqual([]);
+						expect(summary.transcript).toContain('factorial_plus_bonus=123');
+						expect(summary.transcript).toContain('Process finished after');
+						expect(
+							summary.consoleTail.some((entry: string) =>
+								entry.includes(`[wasm-idle:go-worker] compile start prepare=true target=${target}`)
+							)
+						).toBe(true);
+						expect(
+							summary.consoleTail.some((entry: string) =>
+								entry.includes('[wasm-idle:go-worker] compile settled success=true')
+							)
+						).toBe(true);
+						expect(
+							summary.consoleTail.some((entry: string) =>
+								entry.includes(`[wasm-idle:go-worker] runtime start target=${target}`)
+							)
+						).toBe(true);
+						expect(
+							summary.consoleTail.some((entry: string) =>
+								entry.includes('[wasm-idle:go-worker] wasi run complete exitCode=0')
+							)
+						).toBe(true);
+						expect(
+							summary.consoleTail.some((entry: string) =>
+								entry.includes('Failed to resolve module specifier')
+							)
+						).toBe(false);
+					}
 				} finally {
 					await previewServer.close();
 				}
