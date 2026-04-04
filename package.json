@@ -15,6 +15,7 @@
 		"sync:pyodide": "node scripts/sync-pyodide.mjs",
 		"test:browser:playwright": "WASM_IDLE_RUN_REAL_BROWSER_RUST=1 pnpm exec vitest run src/lib/playground/rust.playwright.test.ts",
 		"test:browser:tinygo": "WASM_IDLE_RUN_REAL_BROWSER_TINYGO=1 pnpm exec vitest run src/lib/playground/tinygo.playwright.test.ts",
+		"sync:wasm-go": "node scripts/sync-wasm-go.mjs",
 		"sync:wasm-rust": "node scripts/sync-wasm-rust.mjs",
 		"sync:wasm-tinygo": "node scripts/sync-wasm-tinygo.mjs",
 		"package": "svelte-kit sync && svelte-package && publint",
