@@ -108,6 +108,7 @@
 						javaBaseUrl: currentRuntimeAssets?.java?.baseUrl || '',
 						hasJavaLoader: !!currentRuntimeAssets?.java?.loader,
 						rustCompilerUrl: currentRuntimeAssets?.rust?.compilerUrl || '',
+						goCompilerUrl: currentRuntimeAssets?.go?.compilerUrl || '',
 						tinygoAppUrl: currentRuntimeAssets?.tinygo?.appUrl || '',
 						tinygoHostCompileUrl: currentRuntimeAssets?.tinygo?.hostCompileUrl || '',
 						tinygoModuleUrl: currentRuntimeAssets?.tinygo?.moduleUrl || '',
@@ -212,11 +213,11 @@
 		) {
 			prog?.set?.(0);
 			const loadProgress =
-				language === 'RUST' || language === 'TINYGO'
+				language === 'RUST' || language === 'GO' || language === 'TINYGO'
 					? phaseProgress(prog, 0, 0.05)
 					: phaseProgress(prog, 0, 0.85);
 			const prepareProgress =
-				language === 'RUST' || language === 'TINYGO'
+				language === 'RUST' || language === 'GO' || language === 'TINYGO'
 					? phaseProgress(prog, 0.05, 0.99)
 					: phaseProgress(prog, 0.85, 0.99);
 			await Promise.all([

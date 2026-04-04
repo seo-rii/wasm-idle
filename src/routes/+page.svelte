@@ -9,6 +9,7 @@
 	import { page } from '$app/state';
 	import { browser } from '$app/environment';
 	import type { PlaygroundRuntimeAssets } from '$lib/playground/assets';
+	import { WASM_GO_ASSET_VERSION } from '$lib/playground/wasmGoVersion';
 	import { WASM_RUST_ASSET_VERSION } from '$lib/playground/wasmRustVersion';
 	import { WASM_TINYGO_ASSET_VERSION } from '$lib/playground/wasmTinyGoVersion';
 	import type {
@@ -32,6 +33,11 @@
 			compilerUrl: path
 				? `${path}/wasm-rust/index.js?v=${WASM_RUST_ASSET_VERSION}`
 				: `/wasm-rust/index.js?v=${WASM_RUST_ASSET_VERSION}`
+		},
+		go: {
+			compilerUrl: path
+				? `${path}/wasm-go/index.js?v=${WASM_GO_ASSET_VERSION}`
+				: `/wasm-go/index.js?v=${WASM_GO_ASSET_VERSION}`
 		},
 		tinygo: {
 			disableHostCompile: tinygoDisableHostCompile,
@@ -132,6 +138,11 @@
 			targetTriple?: RustTargetTriple;
 		}) => Promise<void>;
 	};
+	type WasmGoRuntimeModule = {
+		preloadBrowserGoRuntime?: (options?: {
+			target?: 'wasip1/wasm';
+		}) => Promise<void>;
+	};
 
 	async function stopExecution() {
 		if (!terminal || !runningMode) return;
@@ -164,7 +175,7 @@
 		}
 		compilerDiagnostics = [];
 		const args =
-			(language === 'JAVA' || language === 'RUST' || language === 'TINYGO') &&
+			(language === 'JAVA' || language === 'RUST' || language === 'GO' || language === 'TINYGO') &&
 			argsInput.trim()
 				? argsInput.trim().split(/\s+/)
 				: [];
@@ -296,6 +307,23 @@
 	});
 
 	$effect(() => {
+		if (!browser) return;
+		const compilerUrl = runtimeAssets.go?.compilerUrl;
+		if (!compilerUrl) return;
+		let cancelled = false;
+		(async () => {
+			const runtimeModule = (await import(/* @vite-ignore */ compilerUrl)) as WasmGoRuntimeModule;
+			if (cancelled) return;
+			await runtimeModule.preloadBrowserGoRuntime?.({
+				target: 'wasip1/wasm'
+			});
+		})().catch(() => {});
+		return () => {
+			cancelled = true;
+		};
+	});
+
+	$effect(() => {
 		debug.setTerminal(terminal);
 	});
 
@@ -329,7 +357,7 @@
 			debug.setCursorLine(null);
 			debug.reset();
 		}
-		if (language !== 'JAVA' && language !== 'RUST' && language !== 'TINYGO')
+		if (language !== 'JAVA' && language !== 'RUST' && language !== 'GO' && language !== 'TINYGO')
 			compilerDiagnostics = [];
 	});
 </script>
@@ -455,10 +483,11 @@
 						<option value="PYTHON">Python</option>
 						<option value="JAVA">Java</option>
 						<option value="RUST">Rust</option>
+						<option value="GO">Go</option>
 						<option value="TINYGO">TinyGo</option>
 					</select>
 				</label>
-				{#if language === 'JAVA' || language === 'RUST' || language === 'TINYGO'}
+				{#if language === 'JAVA' || language === 'RUST' || language === 'GO' || language === 'TINYGO'}
 					<label class="args-chip">
 						<span class="material-symbols-outlined">list_alt</span>
 						<input bind:value={argsInput} placeholder="3 4 5" spellcheck={false} />
@@ -513,8 +542,15 @@
 				{/if}
 				{#if availableRustTargetTriples.includes('wasm32-wasip3')}
 					`wasm32-wasip3` is only shown for the current transitional component path while
-					upstream Rust still requires the documented libc patch.
+				upstream Rust still requires the documented libc patch.
 				{/if} Use Ctrl+D or the EOF button while running if the program reads stdin until EOF.
+			</p>
+		{/if}
+		{#if language === 'GO'}
+			<p class="hint">
+				Go uses the bundled `wasm-go` browser compiler runtime and currently targets
+				`wasip1/wasm`. Pass CLI args here, type into the terminal below, and use Ctrl+D or
+				the EOF button while running if the program reads stdin until EOF.
 			</p>
 		{/if}
 		{#if language === 'TINYGO'}
