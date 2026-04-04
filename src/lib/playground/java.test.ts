@@ -2,6 +2,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { readBufferedStdin } from './stdinBuffer';
 
 const workerInstances: MockWorker[] = [];
+const { publicEnv } = vi.hoisted(() => ({
+	publicEnv: {
+		PUBLIC_WASM_RUST_COMPILER_URL: '',
+		PUBLIC_WASM_GO_COMPILER_URL: '',
+		PUBLIC_WASM_TINYGO_APP_URL: '',
+		PUBLIC_WASM_TINYGO_MODULE_URL: '',
+		PUBLIC_WASM_TINYGO_HOST_COMPILE_URL: ''
+	}
+}));
 
 class MockWorker {
 	onmessage: ((event: MessageEvent<any>) => void) | null = null;
@@ -42,6 +51,10 @@ class MockWorker {
 
 vi.mock('$lib/playground/worker/java?worker', () => ({
 	default: MockWorker
+}));
+
+vi.mock('$env/dynamic/public', () => ({
+	env: publicEnv
 }));
 
 import Java from './java';

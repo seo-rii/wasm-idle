@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 const { publicEnv } = vi.hoisted(() => ({
 	publicEnv: {
 		PUBLIC_WASM_RUST_COMPILER_URL: '',
+		PUBLIC_WASM_GO_COMPILER_URL: '',
 		PUBLIC_WASM_TINYGO_APP_URL: '',
 		PUBLIC_WASM_TINYGO_MODULE_URL: '',
 		PUBLIC_WASM_TINYGO_HOST_COMPILE_URL: ''
@@ -92,6 +93,33 @@ describe('runtime asset config resolution', () => {
 
 		expect(resolveRustCompilerUrl('/absproxy/5173', 'https://example.com/app')).toBe(
 			'https://example.com/wasm-rust/index.js'
+		);
+	});
+
+	it('prefers an explicit go compiler url over the public env override', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_GO_COMPILER_URL = 'https://env.example.com/wasm-go/index.js';
+		const { resolveGoCompilerUrl } = await import('./assets');
+
+		expect(
+			resolveGoCompilerUrl(
+				{
+					go: {
+						compilerUrl: '/runtime/go/index.js'
+					}
+				},
+				'https://example.com/app'
+			)
+		).toBe('https://example.com/runtime/go/index.js');
+	});
+
+	it('falls back to PUBLIC_WASM_GO_COMPILER_URL when no go runtime config is provided', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_GO_COMPILER_URL = '/wasm-go/index.js';
+		const { resolveGoCompilerUrl } = await import('./assets');
+
+		expect(resolveGoCompilerUrl('/absproxy/5173', 'https://example.com/app')).toBe(
+			'https://example.com/wasm-go/index.js'
 		);
 	});
 

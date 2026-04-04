@@ -61,6 +61,10 @@ vi.mock('$lib/playground/rust', () => ({
 	default: createMockSandboxClass('RUST')
 }));
 
+vi.mock('$lib/playground/go', () => ({
+	default: createMockSandboxClass('GO')
+}));
+
 vi.mock('$lib/playground/tinygo', () => ({
 	default: createMockSandboxClass('TINYGO')
 }));
@@ -173,6 +177,42 @@ describe('playground runtime binding', () => {
 					tinygo: {
 						hostCompileUrl: '/absproxy/5173/api/tinygo/compile',
 						moduleUrl: '/absproxy/5173/wasm-tinygo/runtime.js?v=test'
+					}
+				},
+				'package main\nfunc main() {}',
+				true,
+				['demo'],
+				{},
+				progress
+			]
+		]);
+	});
+
+	it('routes Go requests through the dedicated Go sandbox implementation', async () => {
+		const binding = createPlaygroundBinding({
+			rootUrl: '/absproxy/5173',
+			go: {
+				compilerUrl: '/absproxy/5173/wasm-go/index.js?v=test'
+			}
+		});
+		const progress = { set() {} };
+		const sandbox = await binding.load('GO');
+
+		await sandbox.load('package main\nfunc main() {}', true, ['demo'], {}, progress);
+
+		expect(sandbox.runtimeAssets).toEqual({
+			rootUrl: '/absproxy/5173',
+			go: {
+				compilerUrl: '/absproxy/5173/wasm-go/index.js?v=test'
+			}
+		});
+		expect(sandboxInstances.get('GO')).toHaveLength(1);
+		expect(sandboxInstances.get('GO')?.[0]?.loadCalls).toEqual([
+			[
+				{
+					rootUrl: '/absproxy/5173',
+					go: {
+						compilerUrl: '/absproxy/5173/wasm-go/index.js?v=test'
 					}
 				},
 				'package main\nfunc main() {}',
