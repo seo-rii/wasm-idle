@@ -1,0 +1,61 @@
+{
+  "manifestVersion": 1,
+  "version": "go1.26.1-runtime-v1",
+  "goVersion": "go1.26.1",
+  "defaultTarget": "wasip1/wasm",
+  "compiler": {
+    "compile": {
+      "asset": "tools/compile.wasm.gz",
+      "argv0": "compile",
+      "memory": {
+        "initialPages": 4096,
+        "maximumPages": 32768
+      }
+    },
+    "link": {
+      "asset": "tools/link.wasm.gz",
+      "argv0": "link",
+      "memory": {
+        "initialPages": 2048,
+        "maximumPages": 16384
+      }
+    },
+    "compileTimeoutMs": 120000,
+    "linkTimeoutMs": 120000,
+    "host": {
+      "rootDirectory": "/",
+      "pwd": "/",
+      "tmpDirectory": "/tmp",
+      "env": [
+        "HOME=/",
+        "PWD=/",
+        "TMPDIR=/tmp"
+      ]
+    }
+  },
+  "targets": {
+    "wasip1/wasm": {
+      "goos": "wasip1",
+      "goarch": "wasm",
+      "artifactFormat": "wasi-core-wasm",
+      "sysrootPack": {
+        "asset": "sysroot/wasip1.pack.gz",
+        "index": "sysroot/wasip1.index.json.gz",
+        "fileCount": 349,
+        "totalBytes": 129493860
+      },
+      "execution": {
+        "kind": "wasi-preview1"
+      },
+      "planner": {
+        "workspaceRoot": "/workspace",
+        "importcfgPath": "/workspace/importcfg",
+        "embedcfgPath": "/workspace/embedcfg",
+        "compileOutputPath": "/workspace/pkg/main.a",
+        "linkOutputPath": "/workspace/bin/main.wasm",
+        "defaultLang": "go1.26",
+        "defaultTrimpath": "/workspace"
+      }
+    }
+  }
+}

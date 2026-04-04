@@ -1,0 +1,23 @@
+{
+  "goVersion": "go1.26.1",
+  "host": "linux-x64",
+  "archive": {
+    "url": "https://go.dev/dl/go1.26.1.linux-amd64.tar.gz",
+    "filename": "go1.26.1.linux-amd64.tar.gz",
+    "sha256": "031f088e5d955bab8657ede27ad4e3bc5b7c1ba281f05f245bcc304f327c987a"
+  },
+  "toolchain": {
+    "goroot": "/home/seorii/dev/hancomac/wasm-go/artifacts/cache/toolchains/go1.26.1/linux-x64/go"
+  },
+  "outputs": {
+    "compileWasmGzip": "tools/compile.wasm.gz",
+    "linkWasmGzip": "tools/link.wasm.gz",
+    "sysrootPackGzip": "sysroot/wasip1.pack.gz",
+    "sysrootIndexGzip": "sysroot/wasip1.index.json.gz",
+    "wasmExecJs": "runtime/wasm_exec.js"
+  },
+  "sysroot": {
+    "fileCount": 349,
+    "totalBytes": 129493860
+  }
+}
