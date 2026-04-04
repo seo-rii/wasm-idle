@@ -1,4 +1,5 @@
 import Clang from '$lib/playground/clang';
+import Go from '$lib/playground/go';
 import Java from '$lib/playground/java';
 import Python from '$lib/playground/python';
 import Rust from '$lib/playground/rust';
@@ -14,7 +15,7 @@ import type { SandboxExecutionOptions } from '$lib/playground/options';
 
 const sandboxCache: { [key: string]: Sandbox } = {};
 
-export const supportedLanguages = ['PYTHON3', 'PYPY3', 'C', 'CPP', 'JAVA', 'RUST', 'TINYGO'];
+export const supportedLanguages = ['PYTHON3', 'PYPY3', 'C', 'CPP', 'JAVA', 'RUST', 'GO', 'TINYGO'];
 
 function bindRuntimeAssets(sandbox: Sandbox, runtimeAssets: SandboxRuntimeAssets): BoundSandbox {
 	return new Proxy(sandbox, {
@@ -83,6 +84,9 @@ async function playground(language: string, runtimeAssets?: SandboxRuntimeAssets
 		case 'RUST':
 			sandbox = new Rust();
 			break;
+		case 'GO':
+			sandbox = new Go();
+			break;
 		case 'TINYGO':
 			sandbox = new TinyGo();
 			break;
@@ -98,6 +102,7 @@ async function playground(language: string, runtimeAssets?: SandboxRuntimeAssets
 		if (language === 'CPP') sandboxCache['CPP'] = sandbox;
 		if (language === 'JAVA') sandboxCache['JAVA'] = sandbox;
 		if (language === 'RUST') sandboxCache['RUST'] = sandbox;
+		if (language === 'GO') sandboxCache['GO'] = sandbox;
 		if (language === 'TINYGO') sandboxCache['TINYGO'] = sandbox;
 	}
 	return runtimeAssets ? bindRuntimeAssets(sandbox, runtimeAssets) : sandbox;

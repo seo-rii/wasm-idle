@@ -42,6 +42,10 @@ export interface RustRuntimeAssetConfig {
 	compilerUrl?: string;
 }
 
+export interface GoRuntimeAssetConfig {
+	compilerUrl?: string;
+}
+
 export interface TinyGoRuntimeAssetConfig {
 	moduleUrl?: string;
 	appUrl?: string;
@@ -56,6 +60,7 @@ export interface PlaygroundRuntimeAssets {
 	python?: RuntimeAssetConfig;
 	java?: RuntimeAssetConfig;
 	rust?: RustRuntimeAssetConfig;
+	go?: GoRuntimeAssetConfig;
 	tinygo?: TinyGoRuntimeAssetConfig;
 }
 
@@ -232,6 +237,18 @@ export function resolveRustCompilerUrl(
 	const configuredCompilerUrl =
 		(typeof options === 'object' && options?.rust?.compilerUrl) ||
 		(publicEnv.PUBLIC_WASM_RUST_COMPILER_URL || '').trim();
+
+	if (!configuredCompilerUrl) return '';
+	return currentUrl ? new URL(configuredCompilerUrl, currentUrl).href : configuredCompilerUrl;
+}
+
+export function resolveGoCompilerUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredCompilerUrl =
+		(typeof options === 'object' && options?.go?.compilerUrl) ||
+		(publicEnv.PUBLIC_WASM_GO_COMPILER_URL || '').trim();
 
 	if (!configuredCompilerUrl) return '';
 	return currentUrl ? new URL(configuredCompilerUrl, currentUrl).href : configuredCompilerUrl;
