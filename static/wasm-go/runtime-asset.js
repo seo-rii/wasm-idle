@@ -64,7 +64,7 @@ export function parseRuntimePackIndex(value) {
         entries
     };
 }
-export async function fetchRuntimeAssetBytes(assetUrl, assetLabel, fetchImpl = fetch, allowCompressedFallback = true) {
+export async function fetchRuntimeAssetBytes(assetUrl, assetLabel, fetchImpl = fetch, allowCompressedFallback = true, reportProgress) {
     const resolvedAssetUrl = assetUrl.toString();
     const resolvedAssetUrlObject = new URL(resolvedAssetUrl);
     let response;
@@ -74,7 +74,35 @@ export async function fetchRuntimeAssetBytes(assetUrl, assetLabel, fetchImpl = f
     catch (error) {
         throw new Error(`failed to fetch ${assetLabel} from ${resolvedAssetUrl}: ${error instanceof Error ? error.message : String(error)}. This usually means the browser loaded a stale wasm-go bundle or blocked a nested runtime asset request; hard refresh and resync the runtime assets.`);
     }
-    const assetBytes = new Uint8Array(await response.arrayBuffer());
+    let assetBytes;
+    if (!response.body) {
+        assetBytes = new Uint8Array(await response.arrayBuffer());
+        reportProgress?.(assetBytes.byteLength, assetBytes.byteLength);
+    }
+    else {
+        const reader = response.body.getReader();
+        const contentLength = Number(response.headers.get('content-length') || 0) || undefined;
+        let receivedLength = 0;
+        const chunks = [];
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done)
+                break;
+            if (!value)
+                continue;
+            const chunk = Uint8Array.from(value);
+            chunks.push(chunk);
+            receivedLength += chunk.byteLength;
+            reportProgress?.(receivedLength, contentLength);
+        }
+        assetBytes = new Uint8Array(receivedLength);
+        let position = 0;
+        for (const chunk of chunks) {
+            assetBytes.set(chunk, position);
+            position += chunk.byteLength;
+        }
+        reportProgress?.(receivedLength, contentLength ?? receivedLength);
+    }
     const assetPreview = new TextDecoder()
         .decode(assetBytes.slice(0, 128))
         .replace(/^\uFEFF/, '')
@@ -90,7 +118,7 @@ export async function fetchRuntimeAssetBytes(assetUrl, assetLabel, fetchImpl = f
         const compressedAssetUrl = new URL(resolvedAssetUrl);
         compressedAssetUrl.pathname = `${compressedAssetUrl.pathname}.gz`;
         try {
-            return await fetchRuntimeAssetBytes(compressedAssetUrl, assetLabel, fetchImpl, false);
+            return await fetchRuntimeAssetBytes(compressedAssetUrl, assetLabel, fetchImpl, false, reportProgress);
         }
         catch { }
     }
@@ -110,21 +138,24 @@ export async function fetchRuntimeAssetBytes(assetUrl, assetLabel, fetchImpl = f
         throw new Error(`failed to decompress ${assetLabel} from ${resolvedAssetUrl}: this browser does not support DecompressionStream('gzip').`);
     }
     try {
-        const decompressedResponse = new Response(new Blob([assetBytes]).stream().pipeThrough(new DecompressionStream('gzip')));
+        const compressedBytes = new Uint8Array(assetBytes.byteLength);
+        compressedBytes.set(assetBytes);
+        const decompressedResponse = new Response(new Blob([compressedBytes.buffer]).stream().pipeThrough(new DecompressionStream('gzip')));
         return new Uint8Array(await decompressedResponse.arrayBuffer());
     }
     catch (error) {
         throw new Error(`failed to decompress ${assetLabel} from ${resolvedAssetUrl}: ${error instanceof Error ? error.message : String(error)}`);
     }
 }
-export async function fetchRuntimeAssetJson(assetUrl, assetLabel, fetchImpl = fetch) {
-    return JSON.parse(new TextDecoder().decode(await fetchRuntimeAssetBytes(assetUrl, assetLabel, fetchImpl)));
+export async function fetchRuntimeAssetJson(assetUrl, assetLabel, fetchImpl = fetch, reportProgress) {
+    return JSON.parse(new TextDecoder().decode(await fetchRuntimeAssetBytes(assetUrl, assetLabel, fetchImpl, true, reportProgress)));
 }
-async function loadRuntimePackBytes(baseUrl, pack, fetchImpl) {
+async function loadRuntimePackBytes(baseUrl, pack, fetchImpl, reportProgress) {
     const assetUrl = resolveVersionedAssetUrl(baseUrl, pack.asset).toString();
     let cached = runtimePackBytesCache.get(assetUrl);
+    const reusedCachedBytes = Boolean(cached);
     if (!cached) {
-        cached = fetchRuntimeAssetBytes(assetUrl, `wasm-go runtime pack ${pack.asset}`, fetchImpl);
+        cached = fetchRuntimeAssetBytes(assetUrl, `wasm-go runtime pack ${pack.asset}`, fetchImpl, true, reportProgress);
         runtimePackBytesCache.set(assetUrl, cached);
         cached.catch(() => {
             if (runtimePackBytesCache.get(assetUrl) === cached) {
@@ -132,13 +163,18 @@ async function loadRuntimePackBytes(baseUrl, pack, fetchImpl) {
             }
         });
     }
-    return cached;
+    const bytes = await cached;
+    if (reusedCachedBytes) {
+        reportProgress?.(bytes.byteLength, bytes.byteLength);
+    }
+    return bytes;
 }
-export async function loadRuntimePackIndex(baseUrl, pack, fetchImpl = fetch) {
+export async function loadRuntimePackIndex(baseUrl, pack, fetchImpl = fetch, reportProgress) {
     const indexUrl = resolveVersionedAssetUrl(baseUrl, pack.index).toString();
     let cached = runtimePackIndexCache.get(indexUrl);
+    const reusedCachedIndex = Boolean(cached);
     if (!cached) {
-        cached = fetchRuntimeAssetJson(indexUrl, `wasm-go runtime pack index ${pack.index}`, fetchImpl).then((value) => parseRuntimePackIndex(value));
+        cached = fetchRuntimeAssetJson(indexUrl, `wasm-go runtime pack index ${pack.index}`, fetchImpl, reportProgress).then((value) => parseRuntimePackIndex(value));
         runtimePackIndexCache.set(indexUrl, cached);
         cached.catch(() => {
             if (runtimePackIndexCache.get(indexUrl) === cached) {
@@ -146,12 +182,16 @@ export async function loadRuntimePackIndex(baseUrl, pack, fetchImpl = fetch) {
             }
         });
     }
-    return cached;
+    const index = await cached;
+    if (reusedCachedIndex) {
+        reportProgress?.(index.fileCount, index.fileCount);
+    }
+    return index;
 }
-export async function loadRuntimePackEntries(baseUrl, pack, fetchImpl = fetch) {
+export async function loadRuntimePackEntries(baseUrl, pack, fetchImpl = fetch, reportProgress) {
     const [index, bytes] = await Promise.all([
-        loadRuntimePackIndex(baseUrl, pack, fetchImpl),
-        loadRuntimePackBytes(baseUrl, pack, fetchImpl)
+        loadRuntimePackIndex(baseUrl, pack, fetchImpl, reportProgress?.index),
+        loadRuntimePackBytes(baseUrl, pack, fetchImpl, reportProgress?.asset)
     ]);
     return index.entries.map((entry) => ({
         runtimePath: entry.runtimePath,

@@ -234,9 +234,9 @@ export function resolveTargetManifest(manifest, target) {
     }
     return targetConfig;
 }
-export async function loadRuntimeManifest(manifestUrl, fetchImpl = fetch) {
+export async function loadRuntimeManifest(manifestUrl, fetchImpl = fetch, reportProgress) {
     try {
-        return normalizeRuntimeManifest(await fetchRuntimeAssetJson(manifestUrl, 'wasm-go runtime manifest', fetchImpl));
+        return normalizeRuntimeManifest(await fetchRuntimeAssetJson(manifestUrl, 'wasm-go runtime manifest', fetchImpl, reportProgress));
     }
     catch (error) {
         throw new Error(`failed to load wasm-go runtime manifest from ${manifestUrl.toString()}: ${error instanceof Error ? error.message : String(error)}`);
