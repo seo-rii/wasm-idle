@@ -65,11 +65,11 @@ export function parseRuntimePackIndex(value) {
         entries
     };
 }
-async function loadRuntimePackBytes(runtimeBaseUrl, pack, fetchImpl) {
+async function loadRuntimePackBytes(runtimeBaseUrl, pack, fetchImpl, onProgress) {
     const assetUrl = resolveVersionedAssetUrl(runtimeBaseUrl, pack.asset).toString();
     let cachedBytes = runtimePackBytesCache.get(assetUrl);
     if (!cachedBytes) {
-        cachedBytes = fetchRuntimeAssetBytes(assetUrl, `wasm-rust runtime pack ${pack.asset}`, fetchImpl);
+        cachedBytes = fetchRuntimeAssetBytes(assetUrl, `wasm-rust runtime pack ${pack.asset}`, fetchImpl, true, onProgress);
         runtimePackBytesCache.set(assetUrl, cachedBytes);
         cachedBytes.catch(() => {
             if (runtimePackBytesCache.get(assetUrl) === cachedBytes) {
@@ -93,10 +93,10 @@ async function loadRuntimePackIndex(runtimeBaseUrl, pack, fetchImpl) {
     }
     return cachedIndex;
 }
-export async function loadRuntimePackEntries(runtimeBaseUrl, pack, fetchImpl = fetch) {
+export async function loadRuntimePackEntries(runtimeBaseUrl, pack, fetchImpl = fetch, onProgress) {
     const [index, packBytes] = await Promise.all([
         loadRuntimePackIndex(runtimeBaseUrl, pack, fetchImpl),
-        loadRuntimePackBytes(runtimeBaseUrl, pack, fetchImpl)
+        loadRuntimePackBytes(runtimeBaseUrl, pack, fetchImpl, onProgress)
     ]);
     if (index.fileCount !== pack.fileCount) {
         throw new Error(`invalid wasm-rust runtime pack ${pack.index}: expected ${pack.fileCount} files but got ${index.fileCount}`);

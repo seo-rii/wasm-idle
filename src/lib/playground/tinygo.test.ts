@@ -55,15 +55,21 @@ export const createBundledTinyGoRuntime = (options = {}) => {
   return ({
   async boot() {
     state.bootCalls += 1;
+    options.onProgress?.({ assetPath: 'vendor/emception/emception.worker.js', assetUrl: 'https://example.invalid/vendor/emception/emception.worker.js', label: 'emception.worker.js', loaded: 8, total: 16 });
+    options.onProgress?.({ assetPath: 'vendor/emception/emception.worker.js', assetUrl: 'https://example.invalid/vendor/emception/emception.worker.js', label: 'emception.worker.js', loaded: 16, total: 16 });
     state.activityLog += '[12:00:00] emception toolchain is ready\\n';
   },
   async plan() {
     state.planCalls += 1;
+    options.onProgress?.({ assetPath: 'tools/tinygo-compiler.wasm', assetUrl: 'https://example.invalid/tools/tinygo-compiler.wasm', label: 'tinygo-compiler.wasm', loaded: 2, total: 4 });
+    options.onProgress?.({ assetPath: 'tools/tinygo-compiler.wasm', assetUrl: 'https://example.invalid/tools/tinygo-compiler.wasm', label: 'tinygo-compiler.wasm', loaded: 4, total: 4 });
     state.activityLog += '[12:00:01] driver planned 4 step(s)\\n';
     return { ok: true };
   },
   async execute() {
     state.executeCalls += 1;
+    options.onProgress?.({ assetPath: 'tools/go-probe.wasm', assetUrl: 'https://example.invalid/tools/go-probe.wasm', label: 'go-probe.wasm', loaded: 3, total: 6 });
+    options.onProgress?.({ assetPath: 'tools/go-probe.wasm', assetUrl: 'https://example.invalid/tools/go-probe.wasm', label: 'go-probe.wasm', loaded: 6, total: 6 });
     state.activityLog += '[12:00:02] build artifact ready: /working/out.wasm (4 bytes)\\n';
     if (state.nextExecutionFailureLine) {
       state.activityLog += '[12:00:03] ' + state.nextExecutionFailureLine + '\\n';
@@ -192,6 +198,55 @@ describe('TinyGo sandbox', () => {
 		expect(outputs.join('')).toContain('tinygo-ok\n');
 	});
 
+	it('maps browser runtime asset progress into the provided sandbox progress sink', async () => {
+		const sandbox = new TinyGo();
+		const values: number[] = [];
+		const code = resolveEditorDefaultSource('go', 'wasm32-wasip1');
+
+		await sandbox.load({
+			rootUrl: '/absproxy/5173',
+			tinygo: {
+				moduleUrl: runtimeModuleUrl
+			}
+		});
+		await expect(
+			sandbox.run(code, true, true, {
+				set(value: number) {
+					values.push(value);
+				}
+			})
+		).resolves.toBe(true);
+
+		expect(values.some((value) => value > 0.05 && value < 0.35)).toBe(true);
+		expect(values.some((value) => value > 0.35 && value < 0.65)).toBe(true);
+		expect(values.some((value) => value > 0.65 && value < 0.92)).toBe(true);
+		expect(values.at(-1)).toBe(0.95);
+		for (let index = 1; index < values.length; index += 1) {
+			expect(values[index]).toBeGreaterThanOrEqual(values[index - 1] || 0);
+		}
+	});
+
+	it('passes the rust runtime base url into the TinyGo browser runtime', async () => {
+		const sandbox = new TinyGo();
+
+		await sandbox.load({
+			rootUrl: '/absproxy/5173',
+			rust: {
+				compilerUrl: '/absproxy/5173/wasm-rust/index.js?v=test'
+			},
+			tinygo: {
+				moduleUrl: runtimeModuleUrl,
+				disableHostCompile: true
+			}
+		});
+
+		expect(runtimeFixtureState.lastRuntimeOptions).toEqual(
+			expect.objectContaining({
+				rustRuntimeBaseUrl: 'http://localhost:3000/absproxy/5173/wasm-rust/runtime/'
+			})
+		);
+	});
+
 	it('passes TinyGo runtime asset loader and pack references into the runtime module', async () => {
 		const sandbox = new TinyGo();
 		const loader = vi.fn(async () => null);
@@ -213,10 +268,13 @@ describe('TinyGo sandbox', () => {
 			}
 		});
 
-		expect(runtimeFixtureState.lastRuntimeOptions).toEqual({
-			assetLoader: loader,
-			assetPacks: packs
-		});
+		expect(runtimeFixtureState.lastRuntimeOptions).toEqual(
+			expect.objectContaining({
+				assetLoader: loader,
+				assetPacks: packs,
+				onProgress: expect.any(Function)
+			})
+		);
 	});
 
 	it('writes queued stdin when the TinyGo worker requests input', async () => {

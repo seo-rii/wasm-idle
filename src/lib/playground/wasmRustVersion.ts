@@ -1,1 +1,1 @@
-export const WASM_RUST_ASSET_VERSION = "fcb111c54030ba62";
+export const WASM_RUST_ASSET_VERSION = "b5af5268bc3a3dde";

@@ -1,0 +1,8 @@
+{
+  "sourceRef": "v0.40.1",
+  "sourceUrl": "https://github.com/tinygo-org/tinygo.git",
+  "sourceVersion": "0.40.1",
+  "patchedRoot": "/home/seorii/dev/hancomac/wasm-tinygo/.cache/tinygo-src-wasi-probe",
+  "outputPath": "/home/seorii/dev/hancomac/wasm-tinygo/public/tools/tinygo-upstream-probe.wasm",
+  "wasmBytes": 3808405
+}

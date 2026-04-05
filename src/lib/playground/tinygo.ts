@@ -1,4 +1,5 @@
 import {
+	resolveRustCompilerUrl,
 	resolveTinyGoHostCompileUrls,
 	resolveTinyGoModuleUrl,
 	type PlaygroundRuntimeAssets,
@@ -34,15 +35,27 @@ type TinyGoRuntimeHooks = {
 	dispose?(): void;
 };
 
+type TinyGoRuntimeAssetProgress = {
+	assetPath: string;
+	assetUrl: string;
+	label: string;
+	loaded: number;
+	total: number | null;
+};
+
 type TinyGoRuntimeModule = {
 	createBundledTinyGoRuntime?: (options?: {
 		assetLoader?: TinyGoRuntimeAssetLoader;
 		assetPacks?: TinyGoRuntimeAssetPackReference[];
+		rustRuntimeBaseUrl?: string;
+		onProgress?: (progress: TinyGoRuntimeAssetProgress) => void;
 	}) => TinyGoRuntimeHooks;
 	createTinyGoRuntime?: (options: {
 		assetBaseUrl: string;
 		assetLoader?: TinyGoRuntimeAssetLoader;
 		assetPacks?: TinyGoRuntimeAssetPackReference[];
+		rustRuntimeBaseUrl?: string;
+		onProgress?: (progress: TinyGoRuntimeAssetProgress) => void;
 	}) => TinyGoRuntimeHooks;
 };
 
@@ -72,6 +85,7 @@ class TinyGo implements Sandbox {
 	moduleUrl = '';
 	hostCompileUrl = '';
 	hostCompileUrls: string[] = [];
+	rustRuntimeBaseUrl = '';
 	assetLoader: TinyGoRuntimeAssetLoader | undefined = undefined;
 	assetPacks: TinyGoRuntimeAssetPackReference[] | undefined = undefined;
 	runtime: TinyGoRuntimeHooks | null = null;
@@ -84,6 +98,14 @@ class TinyGo implements Sandbox {
 	waitingForInput = false;
 	pendingEof = false;
 	lastActivityLog = '';
+	runtimeProgress:
+		| { set?: (value: number) => void }
+		| import('svelte/store').Writable<number>
+		| undefined = undefined;
+	runtimeProgressStart = 0;
+	runtimeProgressEnd = 0;
+	runtimeProgressValue = 0;
+	runtimeProgressAssets = new Map<string, { loaded: number; total: number }>();
 
 	load(
 		runtimeAssets: string | PlaygroundRuntimeAssets = '',
@@ -100,6 +122,10 @@ class TinyGo implements Sandbox {
 			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
 			const nextModuleUrl = resolveTinyGoModuleUrl(runtimeAssets, currentUrl);
 			const nextHostCompileUrls = resolveTinyGoHostCompileUrls(runtimeAssets, currentUrl);
+			const nextRustCompilerUrl = resolveRustCompilerUrl(runtimeAssets, currentUrl);
+			const nextRustRuntimeBaseUrl = nextRustCompilerUrl
+				? new URL('./runtime/', nextRustCompilerUrl).toString()
+				: '';
 			if (!nextModuleUrl && nextHostCompileUrls.length === 0) {
 				return reject(
 					'TinyGo runtime is not configured. Set PUBLIC_WASM_TINYGO_MODULE_URL, PUBLIC_WASM_TINYGO_HOST_COMPILE_URL, runtimeAssets.tinygo.moduleUrl, or runtimeAssets.tinygo.hostCompileUrl.'
@@ -107,7 +133,8 @@ class TinyGo implements Sandbox {
 			}
 			if (
 				(this.moduleUrl && this.moduleUrl !== nextModuleUrl) ||
-				this.hostCompileUrls.join('\n') !== nextHostCompileUrls.join('\n')
+				this.hostCompileUrls.join('\n') !== nextHostCompileUrls.join('\n') ||
+				this.rustRuntimeBaseUrl !== nextRustRuntimeBaseUrl
 			) {
 				this.disposeRuntime();
 				this.compiledArtifact = null;
@@ -121,6 +148,7 @@ class TinyGo implements Sandbox {
 			this.moduleUrl = nextModuleUrl;
 			this.hostCompileUrl = nextHostCompileUrls[0] || '';
 			this.hostCompileUrls = nextHostCompileUrls;
+			this.rustRuntimeBaseUrl = nextRustRuntimeBaseUrl;
 			this.assetLoader = nextAssetLoader;
 			this.assetPacks = nextAssetPacks;
 			try {
@@ -212,7 +240,30 @@ class TinyGo implements Sandbox {
 			if (typeof runtimeModule.createBundledTinyGoRuntime === 'function') {
 				this.runtime = runtimeModule.createBundledTinyGoRuntime({
 					assetLoader: this.assetLoader,
-					assetPacks: this.assetPacks
+					assetPacks: this.assetPacks,
+					rustRuntimeBaseUrl: this.rustRuntimeBaseUrl || undefined,
+					onProgress: (progress) => {
+						if (!this.runtimeProgress) return;
+						const total = progress.total && progress.total > 0 ? progress.total : progress.loaded;
+						const key = progress.assetUrl || progress.assetPath;
+						this.runtimeProgressAssets.set(key, {
+							loaded: Math.max(0, progress.loaded),
+							total: Math.max(1, total)
+						});
+						let loaded = 0;
+						let size = 0;
+						for (const entry of this.runtimeProgressAssets.values()) {
+							loaded += Math.min(entry.loaded, entry.total);
+							size += entry.total;
+						}
+						if (size <= 0) return;
+						const nextValue =
+							this.runtimeProgressStart +
+							((this.runtimeProgressEnd - this.runtimeProgressStart) * loaded) / size;
+						if (nextValue <= this.runtimeProgressValue) return;
+						this.runtimeProgressValue = nextValue;
+						this.runtimeProgress.set?.(nextValue);
+					}
 				});
 				return this.runtime;
 			}
@@ -220,7 +271,30 @@ class TinyGo implements Sandbox {
 				this.runtime = runtimeModule.createTinyGoRuntime({
 					assetBaseUrl: new URL('./', moduleUrl).toString(),
 					assetLoader: this.assetLoader,
-					assetPacks: this.assetPacks
+					assetPacks: this.assetPacks,
+					rustRuntimeBaseUrl: this.rustRuntimeBaseUrl || undefined,
+					onProgress: (progress) => {
+						if (!this.runtimeProgress) return;
+						const total = progress.total && progress.total > 0 ? progress.total : progress.loaded;
+						const key = progress.assetUrl || progress.assetPath;
+						this.runtimeProgressAssets.set(key, {
+							loaded: Math.max(0, progress.loaded),
+							total: Math.max(1, total)
+						});
+						let loaded = 0;
+						let size = 0;
+						for (const entry of this.runtimeProgressAssets.values()) {
+							loaded += Math.min(entry.loaded, entry.total);
+							size += entry.total;
+						}
+						if (size <= 0) return;
+						const nextValue =
+							this.runtimeProgressStart +
+							((this.runtimeProgressEnd - this.runtimeProgressStart) * loaded) / size;
+						if (nextValue <= this.runtimeProgressValue) return;
+						this.runtimeProgressValue = nextValue;
+						this.runtimeProgress.set?.(nextValue);
+					}
 				});
 				return this.runtime;
 			};
@@ -362,16 +436,34 @@ class TinyGo implements Sandbox {
 		runtime.reset();
 		this.lastActivityLog = runtime.readActivityLog();
 		runtime.setWorkspaceFiles({ 'main.go': code });
-		prog?.set?.(0.05);
-		await runtime.boot();
-		this.emitActivityLog(runtime);
-		prog?.set?.(0.2);
-		await runtime.plan();
-		this.emitActivityLog(runtime);
-		prog?.set?.(0.45);
-		await runtime.execute();
-		this.emitActivityLog(runtime);
-		prog?.set?.(0.95);
+		this.runtimeProgress = prog;
+		this.runtimeProgressAssets.clear();
+		this.runtimeProgressStart = 0.05;
+		this.runtimeProgressEnd = 0.35;
+		this.runtimeProgressValue = 0.05;
+		try {
+			prog?.set?.(0.05);
+			await runtime.boot();
+			this.emitActivityLog(runtime);
+			this.runtimeProgressAssets.clear();
+			this.runtimeProgressStart = 0.35;
+			this.runtimeProgressEnd = 0.65;
+			this.runtimeProgressValue = Math.max(this.runtimeProgressValue, 0.35);
+			prog?.set?.(this.runtimeProgressValue);
+			await runtime.plan();
+			this.emitActivityLog(runtime);
+			this.runtimeProgressAssets.clear();
+			this.runtimeProgressStart = 0.65;
+			this.runtimeProgressEnd = 0.92;
+			this.runtimeProgressValue = Math.max(this.runtimeProgressValue, 0.65);
+			prog?.set?.(this.runtimeProgressValue);
+			await runtime.execute();
+			this.emitActivityLog(runtime);
+			prog?.set?.(0.95);
+		} finally {
+			this.runtimeProgress = undefined;
+			this.runtimeProgressAssets.clear();
+		}
 		const artifact = runtime.readBuildArtifact();
 		if (!artifact) {
 			const compileFailure = this.extractCompileFailure();

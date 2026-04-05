@@ -1,7 +1,7 @@
-import { Fd, Inode } from './vendor/browser_wasi_shim/fd.js';
-import { PreopenDirectory } from './vendor/browser_wasi_shim/fs_mem.js';
-import WASI from './vendor/browser_wasi_shim/wasi.js';
-import * as wasi from './vendor/browser_wasi_shim/wasi_defs.js';
+import { Fd, Inode } from '@bjorn3/browser_wasi_shim/dist/fd.js';
+import { PreopenDirectory } from '@bjorn3/browser_wasi_shim/dist/fs_mem.js';
+import WASI from '@bjorn3/browser_wasi_shim/dist/wasi.js';
+import * as wasi from '@bjorn3/browser_wasi_shim/dist/wasi_defs.js';
 import { resolveVersionedAssetUrl } from './asset-url.js';
 import { createPreview2ImportObject, transpilePreview2Component } from './browser-component-tools.js';
 function toStandaloneBytes(value) {
@@ -144,12 +144,16 @@ async function runPreview2Component(componentBytes, runtimeBaseUrl, options = {}
     if (!entryName) {
         throw new Error('jco transpile did not generate a JavaScript entry file');
     }
-    const entrySource = new TextDecoder().decode(transpiled.files.get(entryName));
+    const entryFile = transpiled.files.get(entryName);
+    if (!entryFile) {
+        throw new Error(`jco transpile produced a missing entry asset: ${entryName}`);
+    }
+    const entrySource = new TextDecoder().decode(entryFile);
     const entryUrl = URL.createObjectURL(new Blob([entrySource], { type: 'text/javascript;charset=utf-8' }));
     const imports = await createPreview2ImportObject(runtimeBaseUrl, {
         args: ['component.wasm', ...(options.args || [])],
-        env: options.env,
         requiredImports: transpiled.imports,
+        ...(options.env ? { env: options.env } : {}),
         stdin: {
             blockingRead(length) {
                 return stdin.read(length);

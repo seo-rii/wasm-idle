@@ -1,0 +1,239 @@
+{
+  "manifestVersion": 3,
+  "version": "rust-1.79.0-dev-browser-split-v3",
+  "hostTriple": "x86_64-unknown-linux-gnu",
+  "defaultTargetTriple": "wasm32-wasip1",
+  "compiler": {
+    "rustcWasm": "rustc/rustc.wasm.gz",
+    "workerBitcodeFile": "main.main.1ca70c240d7de168-cgu.0.rcgu.no-opt.bc",
+    "workerSharedOutputBytes": 33554432,
+    "compileTimeoutMs": 120000,
+    "artifactIdleMs": 1500,
+    "rustcMemory": {
+      "initialPages": 16384,
+      "maximumPages": 65536
+    }
+  },
+  "targets": {
+    "wasm32-wasip1": {
+      "artifactFormat": "core-wasm",
+      "sysrootPack": {
+        "asset": "packs/sysroot/wasm32-wasip1.pack.gz",
+        "index": "packs/sysroot/wasm32-wasip1.index.json.gz",
+        "fileCount": 30,
+        "totalBytes": 70715949
+      },
+      "compile": {
+        "kind": "llvm-wasm",
+        "llvm": {
+          "llc": "llvm/llc.js",
+          "llcWasm": "llvm/llc.wasm.gz",
+          "lld": "llvm/lld.js",
+          "lldWasm": "llvm/lld.wasm.gz",
+          "lldData": "llvm/lld.data.gz"
+        },
+        "link": {
+          "args": [
+            "-flavor",
+            "wasm",
+            "--export",
+            "__main_void",
+            "-z",
+            "stack-size=1048576",
+            "--stack-first",
+            "--allow-undefined",
+            "--no-demangle",
+            "/rustlib/self-contained/crt1-command.o",
+            "/work/main.o",
+            "/work/alloc.o",
+            "-L",
+            "/rustlib",
+            "/rustlib/libstd-df590c38d1b11afb.rlib",
+            "/rustlib/libpanic_abort-135064f87bb6b9dd.rlib",
+            "/rustlib/libwasi-f6e4e6d7dd6fd800.rlib",
+            "/rustlib/librustc_demangle-7c81d43e5ef5d32e.rlib",
+            "/rustlib/libstd_detect-3eb97da9c9ecaf2a.rlib",
+            "/rustlib/libhashbrown-ad3b9cae6765bae4.rlib",
+            "/rustlib/librustc_std_workspace_alloc-f507828e94ab40ac.rlib",
+            "/rustlib/libminiz_oxide-2237a6e340f5a8a7.rlib",
+            "/rustlib/libadler-0531db35d6fa76b4.rlib",
+            "/rustlib/libunwind-ad38cfd8571ba1a4.rlib",
+            "/rustlib/libcfg_if-5b0d87aff5cb7f4b.rlib",
+            "/rustlib/liblibc-0d4b063168f8a131.rlib",
+            "/wasi-sdk/lib/clang/18/lib/wasi/libclang_rt.builtins-wasm32.a",
+            "/wasi-sdk/share/wasi-sysroot/lib/wasm32-wasip1/libc.a",
+            "/rustlib/liballoc-0d8ee3c1cbae785b.rlib",
+            "/rustlib/librustc_std_workspace_core-2a687a7141519ebc.rlib",
+            "/rustlib/libcore-b1e0cc2503cb9f94.rlib",
+            "/rustlib/libcompiler_builtins-938dbfa3b682bdb9.rlib",
+            "-L",
+            "/rustlib",
+            "-L",
+            "/rustlib/self-contained",
+            "-o",
+            "/work/main.wasm",
+            "--gc-sections",
+            "-O0"
+          ],
+          "pack": {
+            "asset": "packs/link/wasm32-wasip1.pack.gz",
+            "index": "packs/link/wasm32-wasip1.index.json.gz",
+            "fileCount": 20,
+            "totalBytes": 51389541
+          }
+        }
+      },
+      "execution": {
+        "kind": "preview1"
+      }
+    },
+    "wasm32-wasip2": {
+      "artifactFormat": "component",
+      "sysrootPack": {
+        "asset": "packs/sysroot/wasm32-wasip2.pack.gz",
+        "index": "packs/sysroot/wasm32-wasip2.index.json.gz",
+        "fileCount": 30,
+        "totalBytes": 70724815
+      },
+      "compile": {
+        "kind": "llvm-wasm+component-encoder",
+        "llvm": {
+          "llc": "llvm/llc.js",
+          "llcWasm": "llvm/llc.wasm.gz",
+          "lld": "llvm/lld.js",
+          "lldWasm": "llvm/lld.wasm.gz",
+          "lldData": "llvm/lld.data.gz"
+        },
+        "link": {
+          "args": [
+            "-flavor",
+            "wasm",
+            "--export",
+            "__main_void",
+            "--export",
+            "cabi_realloc",
+            "-z",
+            "stack-size=1048576",
+            "--stack-first",
+            "--allow-undefined",
+            "--no-demangle",
+            "/rustlib/self-contained/crt1-command.o",
+            "/work/main.o",
+            "/work/alloc.o",
+            "-L",
+            "/rustlib",
+            "/rustlib/libstd-c7e9fa1ac959cbe3.rlib",
+            "/rustlib/libpanic_abort-be36cd0e95755ac1.rlib",
+            "/rustlib/libwasi-ffa15afd6bcdb8e3.rlib",
+            "/rustlib/librustc_demangle-2b0f4b93c97fa250.rlib",
+            "/rustlib/libstd_detect-125a65b2cb39f495.rlib",
+            "/rustlib/libhashbrown-fa36eee0c51ef3c0.rlib",
+            "/rustlib/librustc_std_workspace_alloc-19301a1669f15fc4.rlib",
+            "/rustlib/libminiz_oxide-dad787d716a10e54.rlib",
+            "/rustlib/libadler-c1f390c9e4b7506f.rlib",
+            "/rustlib/libunwind-0f5300c5c37f59c2.rlib",
+            "/rustlib/libcfg_if-90f5cd48b4985ece.rlib",
+            "/rustlib/liblibc-893791e7ea176c82.rlib",
+            "/wasi-sdk/lib/clang/18/lib/wasi/libclang_rt.builtins-wasm32.a",
+            "/wasi-sdk/share/wasi-sysroot/lib/wasm32-wasip2/libc.a",
+            "/rustlib/liballoc-c0fbcec554efb9e8.rlib",
+            "/rustlib/librustc_std_workspace_core-4d1a2a121f613292.rlib",
+            "/rustlib/libcore-8357e88287e5c5da.rlib",
+            "/rustlib/libcompiler_builtins-3a0a57bad8454b0f.rlib",
+            "-L",
+            "/rustlib",
+            "-L",
+            "/rustlib/self-contained",
+            "-o",
+            "/work/main.wasm",
+            "--gc-sections",
+            "-O0"
+          ],
+          "pack": {
+            "asset": "packs/link/wasm32-wasip2.pack.gz",
+            "index": "packs/link/wasm32-wasip2.index.json.gz",
+            "fileCount": 20,
+            "totalBytes": 51496955
+          }
+        }
+      },
+      "execution": {
+        "kind": "preview2-component"
+      }
+    },
+    "wasm32-wasip3": {
+      "artifactFormat": "component",
+      "sysrootPack": {
+        "asset": "packs/sysroot/wasm32-wasip3.pack.gz",
+        "index": "packs/sysroot/wasm32-wasip3.index.json.gz",
+        "fileCount": 30,
+        "totalBytes": 70825911
+      },
+      "compile": {
+        "kind": "llvm-wasm+component-encoder",
+        "llvm": {
+          "llc": "llvm/llc.js",
+          "llcWasm": "llvm/llc.wasm.gz",
+          "lld": "llvm/lld.js",
+          "lldWasm": "llvm/lld.wasm.gz",
+          "lldData": "llvm/lld.data.gz"
+        },
+        "link": {
+          "args": [
+            "-flavor",
+            "wasm",
+            "--export",
+            "__main_void",
+            "--export",
+            "cabi_realloc",
+            "-z",
+            "stack-size=1048576",
+            "--stack-first",
+            "--allow-undefined",
+            "--no-demangle",
+            "/rustlib/self-contained/crt1-command.o",
+            "/work/main.o",
+            "/work/alloc.o",
+            "-L",
+            "/rustlib",
+            "/rustlib/libstd-c7221c60c72accdc.rlib",
+            "/rustlib/libpanic_abort-559e24a6c47f024a.rlib",
+            "/rustlib/libwasi-972def4a533a811c.rlib",
+            "/rustlib/librustc_demangle-a34ee37564909901.rlib",
+            "/rustlib/libstd_detect-db8c0cd6d5d46931.rlib",
+            "/rustlib/libhashbrown-401078393e95eda0.rlib",
+            "/rustlib/librustc_std_workspace_alloc-6dc9288738e50728.rlib",
+            "/rustlib/libminiz_oxide-43ad65cb707b4946.rlib",
+            "/rustlib/libadler-86f43dc34ff5a4cd.rlib",
+            "/rustlib/libunwind-4b8067d6a58c2ce9.rlib",
+            "/rustlib/libcfg_if-49980ce724547438.rlib",
+            "/rustlib/liblibc-984d9332357311ef.rlib",
+            "/wasi-sdk/lib/clang/18/lib/wasi/libclang_rt.builtins-wasm32.a",
+            "/wasi-sdk/share/wasi-sysroot/lib/wasm32-wasip2/libc.a",
+            "/rustlib/liballoc-1282f6b194aa68d7.rlib",
+            "/rustlib/librustc_std_workspace_core-089c7ed7b11322ee.rlib",
+            "/rustlib/libcore-0dbfca9593f21eac.rlib",
+            "/rustlib/libcompiler_builtins-396b49581634e7ce.rlib",
+            "-L",
+            "/rustlib",
+            "-L",
+            "/rustlib/self-contained",
+            "-o",
+            "/work/main.wasm",
+            "--gc-sections",
+            "-O0"
+          ],
+          "pack": {
+            "asset": "packs/link/wasm32-wasip3.pack.gz",
+            "index": "packs/link/wasm32-wasip3.index.json.gz",
+            "fileCount": 20,
+            "totalBytes": 51498353
+          }
+        }
+      },
+      "execution": {
+        "kind": "preview2-component"
+      }
+    }
+  }
+}
