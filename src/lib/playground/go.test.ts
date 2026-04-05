@@ -25,7 +25,15 @@ class MockWorker {
 					data: {
 						progress: {
 							stage: 'compile',
-							percent: 45
+							percent: 18
+						}
+					}
+				} as MessageEvent<any>);
+				this.onmessage?.({
+					data: {
+						progress: {
+							stage: 'compile',
+							percent: 63
 						}
 					}
 				} as MessageEvent<any>);
@@ -157,7 +165,7 @@ func main() {
 				message: 'demo warning'
 			}
 		]);
-		expect(values).toEqual([0.45]);
+		expect(values).toEqual([0.18, 0.63]);
 	});
 
 	it('rejects load when no go compiler url is configured', async () => {
