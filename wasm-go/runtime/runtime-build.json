@@ -19,5 +19,10 @@
   "sysroot": {
     "fileCount": 349,
     "totalBytes": 129493860
-  }
+  },
+  "supportedTargets": [
+    "wasip1/wasm",
+    "wasip2/wasm",
+    "wasip3/wasm"
+  ]
 }
