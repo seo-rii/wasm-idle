@@ -99,4 +99,74 @@ describe('OCaml worker', () => {
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ output: '5\n' });
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
 	});
+
+	it('does not replay cached wasm compile stderr on the execution pass', async () => {
+		const compilerModuleUrl = await createMockOcamlCompilerModule(`
+			let compileCount = 0;
+
+			export async function compile() {
+				compileCount += 1;
+				return {
+					success: true,
+					stdout: '',
+					stderr: 'binaryen bridge exit: 0\\n',
+					diagnostics: [],
+					artifacts: [
+						{
+							path: '/workspace/_build/main.js',
+							kind: 'js',
+							data: \`
+								globalThis.__wasm_of_js_of_ocaml_runtime_promise=Promise.resolve().then(()=>{
+									console.log('wasm runtime ok');
+								});
+							\`
+						}
+					]
+				};
+			}
+
+			export function createBrowserWorkerSystemDispatcher() {
+				return {};
+			}
+		`);
+
+		const postMessage = vi.fn();
+		(globalThis as any).postMessage = postMessage;
+
+		await import('./ocaml');
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				moduleUrl: compilerModuleUrl,
+				manifestUrl: 'https://example.test/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json'
+			}
+		});
+		await Promise.resolve();
+
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: 'let () = print_endline "ok"',
+				prepare: true,
+				target: 'wasm'
+			}
+		});
+		await Promise.resolve();
+
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: 'let () = print_endline "ok"',
+				prepare: false,
+				target: 'wasm'
+			}
+		});
+		await Promise.resolve();
+
+		expect(
+			postMessage.mock.calls.filter(
+				([message]) => message?.output === 'binaryen bridge exit: 0\n'
+			)
+		).toHaveLength(1);
+		expect(postMessage).toHaveBeenCalledWith({ output: 'wasm runtime ok\n' });
+		expect(postMessage).toHaveBeenCalledWith({ results: true });
+	});
 });

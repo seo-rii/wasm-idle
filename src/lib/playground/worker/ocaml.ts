@@ -481,6 +481,7 @@ self.onmessage = async (event: { data: LoadRequest | RunRequest }) => {
 		postMessage({ progress: { stage: 'compile-ready', percent: 25 } });
 
 		const compileKey = `${target}\n${code}`;
+		let compiledFresh = false;
 		if (!compiledResult || compiledCacheKey !== compileKey) {
 			const result = await compilerModule.compile(
 				{
@@ -498,6 +499,7 @@ self.onmessage = async (event: { data: LoadRequest | RunRequest }) => {
 			);
 			compiledResult = result;
 			compiledCacheKey = compileKey;
+			compiledFresh = true;
 		}
 
 		const result = compiledResult;
@@ -506,10 +508,10 @@ self.onmessage = async (event: { data: LoadRequest | RunRequest }) => {
 				`[wasm-idle:ocaml-worker] compile settled success=${result.success} diagnostics=${result.diagnostics?.length || 0}`
 			);
 		}
-		if (result.stdout) {
+		if (compiledFresh && result.stdout) {
 			postMessage({ output: result.stdout });
 		}
-		if (result.stderr) {
+		if ((compiledFresh || !result.success) && result.stderr) {
 			postMessage({ output: result.stderr });
 		}
 		for (const diagnostic of result.diagnostics || []) {

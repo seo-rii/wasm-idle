@@ -65,6 +65,9 @@ describe('wasm-idle OCaml browser playwright integration', () => {
 						expect(summary.ocamlConsoleErrors).toEqual([]);
 						expect(summary.transcript).toContain('hello from ocaml fixture');
 						expect(summary.transcript).toContain('Process finished after');
+						if (backend === 'wasm') {
+							expect(summary.transcript).not.toContain('binaryen bridge exit: 0');
+						}
 						expect(
 							summary.consoleTail.some((entry) =>
 								entry.includes(

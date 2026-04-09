@@ -131,6 +131,9 @@ export async function runOcamlBrowserProbe({
 	page.on('pageerror', (error) => {
 		pageErrors.push(String(error.stack || error.message || error));
 	});
+	page.on('crash', () => {
+		pageErrors.push('Page crashed');
+	});
 
 	try {
 		await page.goto(targetUrl.toString(), { waitUntil: 'domcontentloaded' });
