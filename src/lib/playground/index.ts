@@ -1,6 +1,7 @@
 import Clang from '$lib/playground/clang';
 import Go from '$lib/playground/go';
 import Java from '$lib/playground/java';
+import Ocaml from '$lib/playground/ocaml';
 import Python from '$lib/playground/python';
 import Rust from '$lib/playground/rust';
 import TinyGo from '$lib/playground/tinygo';
@@ -15,7 +16,17 @@ import type { SandboxExecutionOptions } from '$lib/playground/options';
 
 const sandboxCache: { [key: string]: Sandbox } = {};
 
-export const supportedLanguages = ['PYTHON3', 'PYPY3', 'C', 'CPP', 'JAVA', 'RUST', 'GO', 'TINYGO'];
+export const supportedLanguages = [
+	'PYTHON3',
+	'PYPY3',
+	'C',
+	'CPP',
+	'JAVA',
+	'RUST',
+	'GO',
+	'TINYGO',
+	'OCAML'
+];
 
 function bindRuntimeAssets(sandbox: Sandbox, runtimeAssets: SandboxRuntimeAssets): BoundSandbox {
 	return new Proxy(sandbox, {
@@ -90,6 +101,9 @@ async function playground(language: string, runtimeAssets?: SandboxRuntimeAssets
 		case 'TINYGO':
 			sandbox = new TinyGo();
 			break;
+		case 'OCAML':
+			sandbox = new Ocaml();
+			break;
 		default:
 			throw new Error(`Unsupported language: ${language}`);
 	}
@@ -104,6 +118,7 @@ async function playground(language: string, runtimeAssets?: SandboxRuntimeAssets
 		if (language === 'RUST') sandboxCache['RUST'] = sandbox;
 		if (language === 'GO') sandboxCache['GO'] = sandbox;
 		if (language === 'TINYGO') sandboxCache['TINYGO'] = sandbox;
+		if (language === 'OCAML') sandboxCache['OCAML'] = sandbox;
 	}
 	return runtimeAssets ? bindRuntimeAssets(sandbox, runtimeAssets) : sandbox;
 }

@@ -46,6 +46,11 @@ export interface GoRuntimeAssetConfig {
 	compilerUrl?: string;
 }
 
+export interface OcamlRuntimeAssetConfig {
+	moduleUrl?: string;
+	manifestUrl?: string;
+}
+
 export interface TinyGoRuntimeAssetConfig {
 	moduleUrl?: string;
 	appUrl?: string;
@@ -61,6 +66,7 @@ export interface PlaygroundRuntimeAssets {
 	java?: RuntimeAssetConfig;
 	rust?: RustRuntimeAssetConfig;
 	go?: GoRuntimeAssetConfig;
+	ocaml?: OcamlRuntimeAssetConfig;
 	tinygo?: TinyGoRuntimeAssetConfig;
 }
 
@@ -252,6 +258,60 @@ export function resolveGoCompilerUrl(
 
 	if (!configuredCompilerUrl) return '';
 	return currentUrl ? new URL(configuredCompilerUrl, currentUrl).href : configuredCompilerUrl;
+}
+
+export function resolveOcamlModuleUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredModuleUrl =
+		(typeof options === 'object' && options?.ocaml?.moduleUrl) ||
+		(publicEnv.PUBLIC_WASM_OCAML_MODULE_URL || '').trim();
+
+	if (configuredModuleUrl) {
+		return currentUrl ? new URL(configuredModuleUrl, currentUrl).href : configuredModuleUrl;
+	}
+	if (typeof options === 'string') {
+		return currentUrl
+			? new URL(`${normalizeRootUrl(options)}/wasm-of-js-of-ocaml/browser-native/src/index.js`, currentUrl).href
+			: `${normalizeRootUrl(options)}/wasm-of-js-of-ocaml/browser-native/src/index.js`;
+	}
+	if (options?.rootUrl) {
+		return currentUrl
+			? new URL(
+					`${normalizeRootUrl(options.rootUrl)}/wasm-of-js-of-ocaml/browser-native/src/index.js`,
+					currentUrl
+				).href
+			: `${normalizeRootUrl(options.rootUrl)}/wasm-of-js-of-ocaml/browser-native/src/index.js`;
+	}
+	return '';
+}
+
+export function resolveOcamlManifestUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredManifestUrl =
+		(typeof options === 'object' && options?.ocaml?.manifestUrl) ||
+		(publicEnv.PUBLIC_WASM_OCAML_MANIFEST_URL || '').trim();
+
+	if (configuredManifestUrl) {
+		return currentUrl ? new URL(configuredManifestUrl, currentUrl).href : configuredManifestUrl;
+	}
+	if (typeof options === 'string') {
+		return currentUrl
+			? new URL(`${normalizeRootUrl(options)}/.cache/browser-native-bundle/browser-native-manifest.v1.json`, currentUrl).href
+			: `${normalizeRootUrl(options)}/.cache/browser-native-bundle/browser-native-manifest.v1.json`;
+	}
+	if (options?.rootUrl) {
+		return currentUrl
+			? new URL(
+					`${normalizeRootUrl(options.rootUrl)}/.cache/browser-native-bundle/browser-native-manifest.v1.json`,
+					currentUrl
+				).href
+			: `${normalizeRootUrl(options.rootUrl)}/.cache/browser-native-bundle/browser-native-manifest.v1.json`;
+	}
+	return '';
 }
 
 export function resolveTinyGoAppUrl(

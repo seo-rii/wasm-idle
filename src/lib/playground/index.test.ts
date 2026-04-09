@@ -65,6 +65,10 @@ vi.mock('$lib/playground/go', () => ({
 	default: createMockSandboxClass('GO')
 }));
 
+vi.mock('$lib/playground/ocaml', () => ({
+	default: createMockSandboxClass('OCAML')
+}));
+
 vi.mock('$lib/playground/tinygo', () => ({
 	default: createMockSandboxClass('TINYGO')
 }));
@@ -218,6 +222,49 @@ describe('playground runtime binding', () => {
 				'package main\nfunc main() {}',
 				true,
 				['demo'],
+				{},
+				progress
+			]
+		]);
+	});
+
+	it('routes OCaml requests through the dedicated OCaml sandbox implementation', async () => {
+		const binding = createPlaygroundBinding({
+			rootUrl: '/absproxy/5173',
+			ocaml: {
+				moduleUrl: '/absproxy/5173/wasm-of-js-of-ocaml/browser-native/src/index.js?v=test',
+				manifestUrl:
+					'/absproxy/5173/.cache/browser-native-bundle/browser-native-manifest.v1.json?v=test'
+			}
+		});
+		const progress = { set() {} };
+		const sandbox = await binding.load('OCAML');
+
+		await sandbox.load('let () = print_endline "hello"', true, [], {}, progress);
+
+		expect(sandbox.runtimeAssets).toEqual({
+			rootUrl: '/absproxy/5173',
+			ocaml: {
+				moduleUrl: '/absproxy/5173/wasm-of-js-of-ocaml/browser-native/src/index.js?v=test',
+				manifestUrl:
+					'/absproxy/5173/.cache/browser-native-bundle/browser-native-manifest.v1.json?v=test'
+			}
+		});
+		expect(sandboxInstances.get('OCAML')).toHaveLength(1);
+		expect(sandboxInstances.get('OCAML')?.[0]?.loadCalls).toEqual([
+			[
+				{
+					rootUrl: '/absproxy/5173',
+					ocaml: {
+						moduleUrl:
+							'/absproxy/5173/wasm-of-js-of-ocaml/browser-native/src/index.js?v=test',
+						manifestUrl:
+							'/absproxy/5173/.cache/browser-native-bundle/browser-native-manifest.v1.json?v=test'
+					}
+				},
+				'let () = print_endline "hello"',
+				true,
+				[],
 				{},
 				progress
 			]

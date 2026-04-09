@@ -4,6 +4,8 @@ const { publicEnv } = vi.hoisted(() => ({
 	publicEnv: {
 		PUBLIC_WASM_RUST_COMPILER_URL: '',
 		PUBLIC_WASM_GO_COMPILER_URL: '',
+		PUBLIC_WASM_OCAML_MODULE_URL: '',
+		PUBLIC_WASM_OCAML_MANIFEST_URL: '',
 		PUBLIC_WASM_TINYGO_APP_URL: '',
 		PUBLIC_WASM_TINYGO_MODULE_URL: '',
 		PUBLIC_WASM_TINYGO_HOST_COMPILE_URL: ''
@@ -120,6 +122,61 @@ describe('runtime asset config resolution', () => {
 
 		expect(resolveGoCompilerUrl('/absproxy/5173', 'https://example.com/app')).toBe(
 			'https://example.com/wasm-go/index.js'
+		);
+	});
+
+	it('prefers an explicit OCaml browser module url over the public env override', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_OCAML_MODULE_URL = 'https://env.example.com/ocaml/index.js';
+		const { resolveOcamlModuleUrl } = await import('./assets');
+
+		expect(
+			resolveOcamlModuleUrl(
+				{
+					ocaml: {
+						moduleUrl: '/runtime/ocaml/browser-native/src/index.js'
+					}
+				},
+				'https://example.com/app'
+			)
+		).toBe('https://example.com/runtime/ocaml/browser-native/src/index.js');
+	});
+
+	it('derives the default OCaml browser module url from the shared root path', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_OCAML_MODULE_URL = '';
+		const { resolveOcamlModuleUrl } = await import('./assets');
+
+		expect(resolveOcamlModuleUrl('/absproxy/5173', 'https://example.com/app')).toBe(
+			'https://example.com/absproxy/5173/wasm-of-js-of-ocaml/browser-native/src/index.js'
+		);
+	});
+
+	it('prefers an explicit OCaml manifest url over the public env override', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_OCAML_MANIFEST_URL =
+			'https://env.example.com/ocaml/browser-native-manifest.v1.json';
+		const { resolveOcamlManifestUrl } = await import('./assets');
+
+		expect(
+			resolveOcamlManifestUrl(
+				{
+					ocaml: {
+						manifestUrl: '/runtime/ocaml/browser-native-manifest.v1.json'
+					}
+				},
+				'https://example.com/app'
+			)
+		).toBe('https://example.com/runtime/ocaml/browser-native-manifest.v1.json');
+	});
+
+	it('derives the default OCaml manifest url from the shared root path', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_OCAML_MANIFEST_URL = '';
+		const { resolveOcamlManifestUrl } = await import('./assets');
+
+		expect(resolveOcamlManifestUrl('/absproxy/5173', 'https://example.com/app')).toBe(
+			'https://example.com/absproxy/5173/.cache/browser-native-bundle/browser-native-manifest.v1.json'
 		);
 	});
 
