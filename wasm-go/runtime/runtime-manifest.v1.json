@@ -44,6 +44,10 @@
         "fileCount": 349,
         "totalBytes": 129493860
       },
+      "stdlibIndex": {
+        "asset": "sysroot/wasip1.stdlib-index.json.gz",
+        "packageCount": 349
+      },
       "execution": {
         "kind": "wasi-preview1"
       },
@@ -66,6 +70,10 @@
         "index": "sysroot/wasip1.index.json.gz",
         "fileCount": 349,
         "totalBytes": 129493860
+      },
+      "stdlibIndex": {
+        "asset": "sysroot/wasip1.stdlib-index.json.gz",
+        "packageCount": 349
       },
       "execution": {
         "kind": "wasi-preview1"
@@ -90,8 +98,40 @@
         "fileCount": 349,
         "totalBytes": 129493860
       },
+      "stdlibIndex": {
+        "asset": "sysroot/wasip1.stdlib-index.json.gz",
+        "packageCount": 349
+      },
       "execution": {
         "kind": "wasi-preview1"
+      },
+      "planner": {
+        "workspaceRoot": "/workspace",
+        "importcfgPath": "/workspace/importcfg",
+        "embedcfgPath": "/workspace/embedcfg",
+        "compileOutputPath": "/workspace/pkg/main.a",
+        "linkOutputPath": "/workspace/bin/main.wasm",
+        "defaultLang": "go1.26",
+        "defaultTrimpath": "/workspace"
+      }
+    },
+    "js/wasm": {
+      "goos": "js",
+      "goarch": "wasm",
+      "artifactFormat": "js-wasm",
+      "sysrootPack": {
+        "asset": "sysroot/js.pack.gz",
+        "index": "sysroot/js.index.json.gz",
+        "fileCount": 350,
+        "totalBytes": 129713052
+      },
+      "stdlibIndex": {
+        "asset": "sysroot/js.stdlib-index.json.gz",
+        "packageCount": 350
+      },
+      "execution": {
+        "kind": "js-wasm-exec",
+        "wasmExecJs": "runtime/wasm_exec.js"
       },
       "planner": {
         "workspaceRoot": "/workspace",

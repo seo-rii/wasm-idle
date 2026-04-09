@@ -27,10 +27,10 @@ async function importRuntimeModule(runtimeBaseUrl, assetPath) {
     return (await import(
     /* @vite-ignore */ resolveRuntimeAssetUrl(runtimeBaseUrl, assetPath)));
 }
-export async function componentizeCoreWasmToPreview2Component(coreWasm, runtimeBaseUrl) {
+export async function componentizeCoreWasmToPreview2Component(coreWasm, runtimeBaseUrl, onProgress) {
     const wasmToolsModule = await importRuntimeModule(runtimeBaseUrl, JCO_WASM_TOOLS_MODULE);
     const adapterUrl = resolveRuntimeAssetUrl(runtimeBaseUrl, PREVIEW1_COMMAND_ADAPTER);
-    const adapterBytes = await fetchRuntimeAssetBytes(adapterUrl, 'wasm-rust preview1 adapter');
+    const adapterBytes = await fetchRuntimeAssetBytes(adapterUrl, 'wasm-rust preview1 adapter', fetch, true, onProgress);
     await wasmToolsModule.$init;
     return wasmToolsModule.tools.componentNew(coreWasm, [['wasi_snapshot_preview1', adapterBytes]]);
 }
@@ -64,10 +64,14 @@ export async function createPreview2ImportObject(runtimeBaseUrl, options = {}, d
         for (const requestedImport of options.requiredImports) {
             const versionMatch = requestedImport.match(/(@.+)$/);
             if (versionMatch) {
-                if (!/^@0\.2(?:\.|$)/.test(versionMatch[1])) {
+                const versionSuffix = versionMatch[1];
+                if (!versionSuffix) {
+                    continue;
+                }
+                if (!/^@0\.2(?:\.|$)/.test(versionSuffix)) {
                     throw new Error(`wasm-rust browser runtime currently provides only WASIp2 browser shims; unsupported component import ${requestedImport}. wasm32-wasip3 works in-browser only while emitted components stay on transitional WASIp2 imports.`);
                 }
-                requestedVersionSuffixes.add(versionMatch[1]);
+                requestedVersionSuffixes.add(versionSuffix);
             }
             const normalizedImport = requestedImport.replace(/@\d+(?:\.\d+)*$/, '');
             if (normalizedImport.startsWith('wasi:cli/')) {

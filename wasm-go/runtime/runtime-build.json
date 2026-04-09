@@ -12,17 +12,64 @@
   "outputs": {
     "compileWasmGzip": "tools/compile.wasm.gz",
     "linkWasmGzip": "tools/link.wasm.gz",
-    "sysrootPackGzip": "sysroot/wasip1.pack.gz",
-    "sysrootIndexGzip": "sysroot/wasip1.index.json.gz",
+    "sysroots": {
+      "wasip1": {
+        "packGzip": "sysroot/wasip1.pack.gz",
+        "indexGzip": "sysroot/wasip1.index.json.gz",
+        "stdlibIndexGzip": "sysroot/wasip1.stdlib-index.json.gz"
+      },
+      "js": {
+        "packGzip": "sysroot/js.pack.gz",
+        "indexGzip": "sysroot/js.index.json.gz",
+        "stdlibIndexGzip": "sysroot/js.stdlib-index.json.gz"
+      }
+    },
     "wasmExecJs": "runtime/wasm_exec.js"
   },
   "sysroot": {
-    "fileCount": 349,
-    "totalBytes": 129493860
+    "wasip1": {
+      "fileCount": 349,
+      "totalBytes": 129493860
+    },
+    "js": {
+      "fileCount": 350,
+      "totalBytes": 129713052
+    }
+  },
+  "stdlibIndex": {
+    "wasip1": {
+      "packageCount": 349
+    },
+    "js": {
+      "packageCount": 350
+    }
+  },
+  "targets": {
+    "wasip1/wasm": {
+      "goos": "wasip1",
+      "sysrootKey": "wasip1",
+      "aliasedTo": null
+    },
+    "wasip2/wasm": {
+      "goos": "wasip1",
+      "sysrootKey": "wasip1",
+      "aliasedTo": "wasip1/wasm"
+    },
+    "wasip3/wasm": {
+      "goos": "wasip1",
+      "sysrootKey": "wasip1",
+      "aliasedTo": "wasip1/wasm"
+    },
+    "js/wasm": {
+      "goos": "js",
+      "sysrootKey": "js",
+      "aliasedTo": null
+    }
   },
   "supportedTargets": [
     "wasip1/wasm",
     "wasip2/wasm",
-    "wasip3/wasm"
+    "wasip3/wasm",
+    "js/wasm"
   ]
 }

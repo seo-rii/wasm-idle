@@ -1,4 +1,4 @@
-import { Directory, Fd, File, Inode, OpenFile, OpenDirectory, PreopenDirectory, WASI, wasi } from './vendor/browser_wasi_shim/index.js';
+import { Directory, Fd, File, Inode, OpenFile, OpenDirectory, PreopenDirectory, WASI, wasi } from '@bjorn3/browser_wasi_shim';
 const BITCODE_LENGTH_INDEX = 0;
 const BITCODE_OVERFLOW_INDEX = 1;
 const BITCODE_WRITE_SEQUENCE_INDEX = 2;

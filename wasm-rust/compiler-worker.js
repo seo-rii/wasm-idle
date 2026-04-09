@@ -68,8 +68,17 @@ async function compileRustInWorker(request) {
     const threadPoolSize = 4;
     emitCompileWorkerLog(request, `[wasm-rust:compiler-worker] start target=${target.targetTriple} timeout=${request.manifest.compiler.compileTimeoutMs}ms`);
     const rustcUrl = resolveVersionedAssetUrl(request.runtimeBaseUrl, request.manifest.compiler.rustcWasm);
-    const packedSysrootEntriesPromise = target.sysrootPack
-        ? loadRuntimePackEntries(request.runtimeBaseUrl, target.sysrootPack)
+    const sysrootPack = target.sysrootPack;
+    const sysrootAssetTotal = sysrootPack?.fileCount || target.sysrootFiles?.length || 0;
+    const packedSysrootEntriesPromise = sysrootPack
+        ? loadRuntimePackEntries(request.runtimeBaseUrl, sysrootPack, fetch, (progress) => emitCompileWorkerProgress(request, {
+            stage: 'fetch-sysroot',
+            completed: 0,
+            total: sysrootAssetTotal,
+            message: `fetching ${sysrootAssetTotal} sysroot assets from pack`,
+            bytesCompleted: progress.loaded,
+            bytesTotal: progress.total ?? sysrootPack.totalBytes
+        }))
         : null;
     emitCompileWorkerProgress(request, {
         stage: 'fetch-rustc',
@@ -77,7 +86,14 @@ async function compileRustInWorker(request) {
         total: 1,
         message: 'fetching rustc.wasm'
     });
-    const rustcBytes = await fetchRuntimeAssetBytes(rustcUrl, 'rustc.wasm');
+    const rustcBytes = await fetchRuntimeAssetBytes(rustcUrl, 'rustc.wasm', fetch, true, (progress) => emitCompileWorkerProgress(request, {
+        stage: 'fetch-rustc',
+        completed: 0,
+        total: 1,
+        message: 'fetching rustc.wasm',
+        bytesCompleted: progress.loaded,
+        bytesTotal: progress.total ?? progress.loaded
+    }));
     emitCompileWorkerLog(request, `[wasm-rust:compiler-worker] rustc.wasm fetched bytes=${rustcBytes.byteLength}`);
     emitCompileWorkerProgress(request, {
         stage: 'fetch-rustc',
@@ -87,10 +103,9 @@ async function compileRustInWorker(request) {
         bytesCompleted: rustcBytes.byteLength,
         bytesTotal: rustcBytes.byteLength
     });
-    const rustcModulePromise = WebAssembly.compile(rustcBytes);
+    const rustcModulePromise = WebAssembly.compile(new Uint8Array(rustcBytes).buffer);
     let fetchedSysrootFiles = 0;
     let fetchedSysrootBytes = 0;
-    const sysrootAssetTotal = target.sysrootPack?.fileCount || target.sysrootFiles?.length || 0;
     let rustcModule;
     let sysrootAssets;
     if (target.sysrootPack) {
@@ -118,7 +133,7 @@ async function compileRustInWorker(request) {
                 total: sysrootAssetTotal,
                 message: `fetched sysroot asset ${entry.runtimePath}`,
                 bytesCompleted: fetchedSysrootBytes,
-                bytesTotal: target.sysrootPack?.totalBytes
+                ...(target.sysrootPack ? { bytesTotal: target.sysrootPack.totalBytes } : {})
             });
             if (request.request.log &&
                 (fetchedSysrootFiles === 1 ||
@@ -141,7 +156,14 @@ async function compileRustInWorker(request) {
         });
         sysrootAssets = await Promise.all(target.sysrootFiles.map(async (entry) => {
             const assetUrl = resolveVersionedAssetUrl(request.runtimeBaseUrl, entry.asset);
-            const bytes = await fetchRuntimeAssetBytes(assetUrl, `wasm-rust sysroot asset ${entry.asset}`);
+            const bytes = await fetchRuntimeAssetBytes(assetUrl, `wasm-rust sysroot asset ${entry.asset}`, fetch, true, (progress) => emitCompileWorkerProgress(request, {
+                stage: 'fetch-sysroot',
+                completed: fetchedSysrootFiles,
+                total: sysrootAssetTotal,
+                message: `fetching sysroot asset ${entry.runtimePath}`,
+                bytesCompleted: fetchedSysrootBytes + progress.loaded,
+                bytesTotal: fetchedSysrootBytes + (progress.total ?? progress.loaded)
+            }));
             validateRuntimeAssetBytes(entry.asset, bytes);
             const sharedBuffer = new SharedArrayBuffer(bytes.byteLength);
             new Uint8Array(sharedBuffer).set(bytes);

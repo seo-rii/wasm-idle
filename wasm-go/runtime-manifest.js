@@ -80,6 +80,13 @@ function parseRuntimePackReference(value, label) {
         totalBytes: expectNonNegativeInteger(object.totalBytes, `${label}.totalBytes`)
     };
 }
+function parseRuntimeStdlibIndexAsset(value, label) {
+    const object = expectObject(value, label);
+    return {
+        asset: expectString(object.asset, `${label}.asset`),
+        packageCount: expectNonNegativeInteger(object.packageCount, `${label}.packageCount`)
+    };
+}
 function parseRuntimeToolConfig(value, label) {
     const object = expectObject(value, label);
     const memory = expectObject(object.memory, `${label}.memory`);
@@ -139,16 +146,26 @@ function parseExecutionConfig(value, label) {
     };
 }
 function expectedTargetShape(target) {
-    if (target === 'wasip1/wasm' ||
-        target === 'wasip2/wasm' ||
-        target === 'wasip3/wasm') {
+    if (target === 'wasip1/wasm') {
         return {
-            goos: 'wasip1',
+            goos: ['wasip1'],
+            goarch: 'wasm'
+        };
+    }
+    if (target === 'wasip2/wasm') {
+        return {
+            goos: ['wasip1', 'wasip2'],
+            goarch: 'wasm'
+        };
+    }
+    if (target === 'wasip3/wasm') {
+        return {
+            goos: ['wasip1', 'wasip3'],
             goarch: 'wasm'
         };
     }
     return {
-        goos: 'js',
+        goos: ['js'],
         goarch: 'wasm'
     };
 }
@@ -157,7 +174,7 @@ function parseTargetConfig(target, value, label) {
     const expected = expectedTargetShape(target);
     const goos = expectString(object.goos, `${label}.goos`);
     const goarch = expectString(object.goarch, `${label}.goarch`);
-    if (goos !== expected.goos || goarch !== expected.goarch) {
+    if (!expected.goos.includes(goos) || goarch !== expected.goarch) {
         throw new Error(`invalid ${label}.goos/goarch in wasm-go runtime manifest`);
     }
     return {
@@ -170,6 +187,9 @@ function parseTargetConfig(target, value, label) {
             : {}),
         ...(object.sysrootPack !== undefined
             ? { sysrootPack: parseRuntimePackReference(object.sysrootPack, `${label}.sysrootPack`) }
+            : {}),
+        ...(object.stdlibIndex !== undefined
+            ? { stdlibIndex: parseRuntimeStdlibIndexAsset(object.stdlibIndex, `${label}.stdlibIndex`) }
             : {}),
         execution: parseExecutionConfig(object.execution, `${label}.execution`),
         planner: parseRuntimePlannerConfig(object.planner, `${label}.planner`)
@@ -234,9 +254,9 @@ export function resolveTargetManifest(manifest, target) {
     }
     return targetConfig;
 }
-export async function loadRuntimeManifest(manifestUrl, fetchImpl = fetch) {
+export async function loadRuntimeManifest(manifestUrl, fetchImpl = fetch, reportProgress) {
     try {
-        return normalizeRuntimeManifest(await fetchRuntimeAssetJson(manifestUrl, 'wasm-go runtime manifest', fetchImpl));
+        return normalizeRuntimeManifest(await fetchRuntimeAssetJson(manifestUrl, 'wasm-go runtime manifest', fetchImpl, reportProgress));
     }
     catch (error) {
         throw new Error(`failed to load wasm-go runtime manifest from ${manifestUrl.toString()}: ${error instanceof Error ? error.message : String(error)}`);

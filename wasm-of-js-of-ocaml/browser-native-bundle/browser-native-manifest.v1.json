@@ -1,0 +1,2607 @@
+{
+  "version": 1,
+  "generatedAt": "2026-04-09T12:10:48.172Z",
+  "switchPrefix": "/home/seorii/.cache/wasm-of-js-of-ocaml/opam/wasm-of-js-of-ocaml",
+  "findlibConf": "/wasm-of-js-of-ocaml/browser-native-bundle/findlib.conf",
+  "tools": {
+    "ocamlc": "/wasm-of-js-of-ocaml/browser-native-bundle/tools/ocamlc.byte.browser.js",
+    "js_of_ocaml": "/wasm-of-js-of-ocaml/browser-native-bundle/tools/js_of_ocaml.bc.browser.js",
+    "wasm_of_ocaml": "/wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm_of_ocaml.bc.browser.js"
+  },
+  "toolPatches": {
+    "version_dune_static_placeholder": {
+      "path": "/home/seorii/.cache/wasm-of-js-of-ocaml/opam/wasm-of-js-of-ocaml/.opam-switch/sources/wasm_of_ocaml-compiler.6.3.2/tools/version/dune",
+      "placeholderVersion": "6.3.2",
+      "alreadyPatched": true,
+      "sourceSha256": "493d9b2ad5a7d31050337a97cb79a92846d94f6ad81edf53f486cd5e52cb0a47",
+      "patchedSha256": "493d9b2ad5a7d31050337a97cb79a92846d94f6ad81edf53f486cd5e52cb0a47"
+    },
+    "wasm_of_ocaml_binaryen_bridge": {
+      "tool": "wasm_of_ocaml.bc.browser.js",
+      "bridgeSymbol": "globalThis.__wasm_of_js_system_command",
+      "systemFunctionName": "px",
+      "alreadyPatched": false,
+      "sourceSha256": "fabe970b0a495ca9d9ef6d2450b769391d34dee2b7d09fb4273e47dbdfea6a7a",
+      "patchedSha256": "e9c8a26fe18bc3a0ecd78823bd6cc8711b6b8b41303ad4f321b47c4fd9567a84"
+    }
+  },
+  "ocamlLibFiles": [
+    {
+      "path": "/static/toolchain/lib/ocaml/camlinternalFormat.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/camlinternalFormat.cmi",
+      "size": 7785
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/camlinternalFormatBasics.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/camlinternalFormatBasics.cmi",
+      "size": 24105
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/camlinternalLazy.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/camlinternalLazy.cmi",
+      "size": 718
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/camlinternalMod.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/camlinternalMod.cmi",
+      "size": 981
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/camlinternalOO.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/camlinternalOO.cmi",
+      "size": 8335
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/afl_instrument.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/afl_instrument.cmi",
+      "size": 1927
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/alias_analysis.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/alias_analysis.cmi",
+      "size": 4490
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/allocated_const.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/allocated_const.cmi",
+      "size": 1475
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/annot.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/annot.cmi",
+      "size": 1054
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/arch.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/arch.cmi",
+      "size": 4751
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/arg_helper.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/arg_helper.cmi",
+      "size": 9948
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/asmgen.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/asmgen.cmi",
+      "size": 4494
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/asmlibrarian.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/asmlibrarian.cmi",
+      "size": 1187
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/asmlink.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/asmlink.cmi",
+      "size": 4605
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/asmpackager.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/asmpackager.cmi",
+      "size": 3421
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/ast_helper.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/ast_helper.cmi",
+      "size": 56016
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/ast_invariants.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/ast_invariants.cmi",
+      "size": 1273
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/ast_iterator.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/ast_iterator.cmi",
+      "size": 8121
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/ast_mapper.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/ast_mapper.cmi",
+      "size": 11025
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/asttypes.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/asttypes.cmi",
+      "size": 3554
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/attr_helper.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/attr_helper.cmi",
+      "size": 1605
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/augment_specialised_args.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/augment_specialised_args.cmi",
+      "size": 4365
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/backend_intf.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/backend_intf.cmi",
+      "size": 3016
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/backend_var.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/backend_var.cmi",
+      "size": 7033
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/binutils.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/binutils.cmi",
+      "size": 1204
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/branch_relaxation_intf.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/branch_relaxation_intf.cmi",
+      "size": 3274
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/branch_relaxation.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/branch_relaxation.cmi",
+      "size": 2036
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/btype.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/btype.cmi",
+      "size": 39422
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/build_export_info.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/build_export_info.cmi",
+      "size": 2570
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/build_path_prefix_map.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/build_path_prefix_map.cmi",
+      "size": 1865
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/builtin_attributes.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/builtin_attributes.cmi",
+      "size": 5461
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/bytegen.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/bytegen.cmi",
+      "size": 2017
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/bytelibrarian.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/bytelibrarian.cmi",
+      "size": 1282
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/bytelink.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/bytelink.cmi",
+      "size": 9910
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/bytepackager.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/bytepackager.cmi",
+      "size": 2571
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/bytesections.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/bytesections.cmi",
+      "size": 2642
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/camlinternalMenhirLib.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/camlinternalMenhirLib.cmi",
+      "size": 56520
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/ccomp.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/ccomp.cmi",
+      "size": 1495
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/clambda_primitives.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/clambda_primitives.cmi",
+      "size": 12689
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/clambda.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/clambda.cmi",
+      "size": 10310
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/clflags.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/clflags.cmi",
+      "size": 26027
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/closure_conversion_aux.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/closure_conversion_aux.cmi",
+      "size": 5873
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/closure_conversion.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/closure_conversion.cmi",
+      "size": 2621
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/closure_element.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/closure_element.cmi",
+      "size": 21295
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/closure_id.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/closure_id.cmi",
+      "size": 21327
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/closure_middle_end.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/closure_middle_end.cmi",
+      "size": 2711
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/closure_offsets.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/closure_offsets.cmi",
+      "size": 2604
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/closure_origin.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/closure_origin.cmi",
+      "size": 20638
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/closure.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/closure.cmi",
+      "size": 2678
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/cmi_format.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/cmi_format.cmi",
+      "size": 2852
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/cmm_helpers.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/cmm_helpers.cmi",
+      "size": 36506
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/cmm_invariants.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/cmm_invariants.cmi",
+      "size": 1722
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/cmm.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/cmm.cmi",
+      "size": 14229
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/cmmgen_state.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/cmmgen_state.cmi",
+      "size": 3474
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/cmmgen.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/cmmgen.cmi",
+      "size": 1878
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/cmo_format.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/cmo_format.cmi",
+      "size": 2649
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/cmt_format.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/cmt_format.cmi",
+      "size": 6355
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/cmt2annot.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/cmt2annot.cmi",
+      "size": 2157
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/cmx_format.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/cmx_format.cmi",
+      "size": 3886
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/cmxs_format.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/cmxs_format.cmi",
+      "size": 1131
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/coloring.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/coloring.cmi",
+      "size": 340
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/comballoc.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/comballoc.cmi",
+      "size": 1797
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/compenv.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/compenv.cmi",
+      "size": 4827
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/compilation_unit.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/compilation_unit.cmi",
+      "size": 20362
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/compile_common.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/compile_common.cmi",
+      "size": 3188
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/compile.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/compile.cmi",
+      "size": 2503
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/compilenv.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/compilenv.cmi",
+      "size": 8083
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/compmisc.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/compmisc.cmi",
+      "size": 2382
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/compression.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/compression.cmi",
+      "size": 539
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/config_boot.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/config_boot.cmi",
+      "size": 6226
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/config_main.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/config_main.cmi",
+      "size": 6226
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/config.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/config.cmi",
+      "size": 6211
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/consistbl.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/consistbl.cmi",
+      "size": 19758
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/convert_primitives.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/convert_primitives.cmi",
+      "size": 1671
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/CSE.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/CSE.cmi",
+      "size": 1779
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/CSEgen.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/CSEgen.cmi",
+      "size": 2712
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/ctype.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/ctype.cmi",
+      "size": 32967
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/data_types.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/data_types.cmi",
+      "size": 4078
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/dataflow.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/dataflow.cmi",
+      "size": 2613
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/datarepr.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/datarepr.cmi",
+      "size": 2451
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/deadcode.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/deadcode.cmi",
+      "size": 1794
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/debuginfo.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/debuginfo.cmi",
+      "size": 4395
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/depend.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/depend.cmi",
+      "size": 2702
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/diffing_with_keys.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/diffing_with_keys.cmi",
+      "size": 4810
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/diffing.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/diffing.cmi",
+      "size": 4582
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/dll.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/dll.cmi",
+      "size": 1722
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/docstrings.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/docstrings.cmi",
+      "size": 8311
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/domainstate.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/domainstate.cmi",
+      "size": 4446
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/effect_analysis.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/effect_analysis.cmi",
+      "size": 2425
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/emit.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/emit.cmi",
+      "size": 2119
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/emitaux.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/emitaux.cmi",
+      "size": 8031
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/emitcode.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/emitcode.cmi",
+      "size": 2953
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/emitenv.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/emitenv.cmi",
+      "size": 4154
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/env.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/env.cmi",
+      "size": 39275
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/envaux.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/envaux.cmi",
+      "size": 2156
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/errors.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/errors.cmi",
+      "size": 563
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/errortrace_report.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/errortrace_report.cmi",
+      "size": 3312
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/errortrace.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/errortrace.cmi",
+      "size": 10161
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/export_id.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/export_id.cmi",
+      "size": 19789
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/export_info_for_pack.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/export_info_for_pack.cmi",
+      "size": 2679
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/export_info.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/export_info.cmi",
+      "size": 11201
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/expunge.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/expunge.cmi",
+      "size": 297
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/extract_projections.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/extract_projections.cmi",
+      "size": 2795
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/find_recursive_functions.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/find_recursive_functions.cmi",
+      "size": 2576
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/flambda_invariants.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/flambda_invariants.cmi",
+      "size": 2538
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/flambda_iterators.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/flambda_iterators.cmi",
+      "size": 10074
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/flambda_middle_end.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/flambda_middle_end.cmi",
+      "size": 2711
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/flambda_to_clambda.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/flambda_to_clambda.cmi",
+      "size": 3075
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/flambda_utils.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/flambda_utils.cmi",
+      "size": 8824
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/flambda.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/flambda.cmi",
+      "size": 41945
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/format_doc.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/format_doc.cmi",
+      "size": 16764
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/freshening.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/freshening.cmi",
+      "size": 6885
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/genprintval.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/genprintval.cmi",
+      "size": 6242
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/gprinttyp.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/gprinttyp.cmi",
+      "size": 7489
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/id_types.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/id_types.cmi",
+      "size": 4141
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/ident.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/ident.cmi",
+      "size": 22867
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/identifiable.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/identifiable.cmi",
+      "size": 57296
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/import_approx.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/import_approx.cmi",
+      "size": 2651
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/includeclass.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/includeclass.cmi",
+      "size": 2657
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/includecore.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/includecore.cmi",
+      "size": 8834
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/includemod_errorprinter.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/includemod_errorprinter.cmi",
+      "size": 2165
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/includemod.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/includemod.cmi",
+      "size": 25348
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/inconstant_idents.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/inconstant_idents.cmi",
+      "size": 2917
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/initialize_symbol_to_let_symbol.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/initialize_symbol_to_let_symbol.cmi",
+      "size": 2532
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/inline_and_simplify_aux.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/inline_and_simplify_aux.cmi",
+      "size": 15429
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/inline_and_simplify.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/inline_and_simplify.cmi",
+      "size": 3212
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/inlining_cost.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/inlining_cost.cmi",
+      "size": 7360
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/inlining_decision_intf.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/inlining_decision_intf.cmi",
+      "size": 4003
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/inlining_decision.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/inlining_decision.cmi",
+      "size": 3600
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/inlining_stats_types.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/inlining_stats_types.cmi",
+      "size": 5641
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/inlining_stats.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/inlining_stats.cmi",
+      "size": 3417
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/inlining_transforms.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/inlining_transforms.cmi",
+      "size": 4482
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/instruct.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/instruct.cmi",
+      "size": 8633
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/int_replace_polymorphic_compare.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/int_replace_polymorphic_compare.cmi",
+      "size": 1049
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/interf.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/interf.cmi",
+      "size": 1788
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/internal_variable_names.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/internal_variable_names.cmi",
+      "size": 6926
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/interval.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/interval.cmi",
+      "size": 2883
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/invariant_params.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/invariant_params.cmi",
+      "size": 2954
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/lambda.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/lambda.cmi",
+      "size": 30179
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/lazy_backtrack.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/lazy_backtrack.cmi",
+      "size": 1581
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/lexer.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/lexer.cmi",
+      "size": 3921
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/lift_code.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/lift_code.cmi",
+      "size": 2903
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/lift_constants.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/lift_constants.cmi",
+      "size": 2516
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/lift_let_to_initialize_symbol.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/lift_let_to_initialize_symbol.cmi",
+      "size": 2550
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/linear_format.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/linear_format.cmi",
+      "size": 2519
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/linear.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/linear.cmi",
+      "size": 4756
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/linearize.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/linearize.cmi",
+      "size": 1830
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/linkage_name.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/linkage_name.cmi",
+      "size": 19450
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/linkdeps.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/linkdeps.cmi",
+      "size": 2287
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/linscan.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/linscan.cmi",
+      "size": 1852
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/liveness.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/liveness.cmi",
+      "size": 1790
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/load_path.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/load_path.cmi",
+      "size": 3398
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/local_store.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/local_store.cmi",
+      "size": 910
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/location.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/location.cmi",
+      "size": 13881
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/longident.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/longident.cmi",
+      "size": 1734
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/mach.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/mach.cmi",
+      "size": 9147
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/main_args.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/main_args.cmi",
+      "size": 59550
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/main.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/main.cmi",
+      "size": 181
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/main.cmo",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/main.cmo",
+      "size": 2861
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/maindriver.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/maindriver.cmi",
+      "size": 592
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/makedepend.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/makedepend.cmi",
+      "size": 402
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/matching.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/matching.cmi",
+      "size": 4605
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/META",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/META",
+      "size": 1108
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/meta.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/meta.cmi",
+      "size": 2896
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/misc.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/misc.cmi",
+      "size": 52849
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/mtype.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/mtype.cmi",
+      "size": 4132
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/mutable_variable.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/mutable_variable.cmi",
+      "size": 21863
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/numbers.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/numbers.cmi",
+      "size": 37491
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/ocamlbytecomp.cma",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/ocamlbytecomp.cma",
+      "size": 494863
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/ocamlcommon.cma",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/ocamlcommon.cma",
+      "size": 21292152
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/ocamlmiddleend.cma",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/ocamlmiddleend.cma",
+      "size": 3918971
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/ocamloptcomp.cma",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/ocamloptcomp.cma",
+      "size": 6759577
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/ocamltoplevel.cma",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/ocamltoplevel.cma",
+      "size": 463551
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/opcodes.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/opcodes.cmi",
+      "size": 10867
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/oprint.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/oprint.cmi",
+      "size": 2635
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/optcompile.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/optcompile.cmi",
+      "size": 3290
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/opterrors.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/opterrors.cmi",
+      "size": 572
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/optmain.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/optmain.cmi",
+      "size": 187
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/optmain.cmo",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/optmain.cmo",
+      "size": 2877
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/optmaindriver.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/optmaindriver.cmi",
+      "size": 601
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/out_type.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/out_type.cmi",
+      "size": 11307
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/outcometree.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/outcometree.cmi",
+      "size": 12005
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/parameter.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/parameter.cmi",
+      "size": 21198
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/parmatch.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/parmatch.cmi",
+      "size": 5911
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/parse.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/parse.cmi",
+      "size": 2552
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/parser.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/parser.cmi",
+      "size": 18985
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/parsetree.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/parsetree.cmi",
+      "size": 39105
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/pass_wrapper.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/pass_wrapper.cmi",
+      "size": 1027
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/path.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/path.cmi",
+      "size": 16492
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/patterns.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/patterns.cmi",
+      "size": 9574
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/persistent_env.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/persistent_env.cmi",
+      "size": 8329
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/polling.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/polling.cmi",
+      "size": 2110
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/pparse.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/pparse.cmi",
+      "size": 3420
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/pprintast.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/pprintast.cmi",
+      "size": 4808
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/predef.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/predef.cmi",
+      "size": 6867
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/primitive.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/primitive.cmi",
+      "size": 3589
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/printast.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/printast.cmi",
+      "size": 1921
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/printclambda_primitives.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/printclambda_primitives.cmi",
+      "size": 1729
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/printclambda.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/printclambda.cmi",
+      "size": 2247
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/printcmm.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/printcmm.cmi",
+      "size": 3456
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/printinstr.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/printinstr.cmi",
+      "size": 1837
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/printlambda.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/printlambda.cmi",
+      "size": 3274
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/printlinear.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/printlinear.cmi",
+      "size": 2021
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/printmach.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/printmach.cmi",
+      "size": 3622
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/printpat.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/printpat.cmi",
+      "size": 2356
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/printtyp.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/printtyp.cmi",
+      "size": 6048
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/printtyped.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/printtyped.cmi",
+      "size": 1960
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/proc.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/proc.cmi",
+      "size": 4287
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/profile.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/profile.cmi",
+      "size": 1600
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/projection.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/projection.cmi",
+      "size": 22500
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/rawprinttyp.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/rawprinttyp.cmi",
+      "size": 1265
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/ref_to_variables.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/ref_to_variables.cmi",
+      "size": 2336
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/reg.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/reg.cmi",
+      "size": 19227
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/reload.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/reload.cmi",
+      "size": 1881
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/reloadgen.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/reloadgen.cmi",
+      "size": 2991
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/remove_free_vars_equal_to_args.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/remove_free_vars_equal_to_args.cmi",
+      "size": 2470
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/remove_unused_arguments.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/remove_unused_arguments.cmi",
+      "size": 2789
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/remove_unused_closure_vars.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/remove_unused_closure_vars.cmi",
+      "size": 2447
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/remove_unused_program_constructs.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/remove_unused_program_constructs.cmi",
+      "size": 2406
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/runtimedef.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/runtimedef.cmi",
+      "size": 404
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/schedgen.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/schedgen.cmi",
+      "size": 3750
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/scheduling.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/scheduling.cmi",
+      "size": 1829
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/selectgen.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/selectgen.cmi",
+      "size": 10100
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/selection.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/selection.cmi",
+      "size": 1873
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/semantics_of_primitives.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/semantics_of_primitives.cmi",
+      "size": 2351
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/set_of_closures_id.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/set_of_closures_id.cmi",
+      "size": 19816
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/set_of_closures_origin.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/set_of_closures_origin.cmi",
+      "size": 19868
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/shape_reduce.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/shape_reduce.cmi",
+      "size": 2801
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/shape.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/shape.cmi",
+      "size": 37360
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/share_constants.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/share_constants.cmi",
+      "size": 2335
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/signature_group.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/signature_group.cmi",
+      "size": 3185
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/simple_value_approx.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/simple_value_approx.cmi",
+      "size": 22488
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/simplif.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/simplif.cmi",
+      "size": 2060
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/simplify_boxed_integer_ops_intf.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/simplify_boxed_integer_ops_intf.cmi",
+      "size": 3545
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/simplify_boxed_integer_ops.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/simplify_boxed_integer_ops.cmi",
+      "size": 5497
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/simplify_common.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/simplify_common.cmi",
+      "size": 4474
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/simplify_primitives.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/simplify_primitives.cmi",
+      "size": 2823
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/spill.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/spill.cmi",
+      "size": 1785
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/split.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/split.cmi",
+      "size": 1877
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/stackframe.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/stackframe.cmi",
+      "size": 1930
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/stackframegen.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/stackframegen.cmi",
+      "size": 2781
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/static_exception.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/static_exception.cmi",
+      "size": 19481
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/strmatch.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/strmatch.cmi",
+      "size": 2429
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/strongly_connected_components.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/strongly_connected_components.cmi",
+      "size": 1811
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/stypes.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/stypes.cmi",
+      "size": 2645
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/subst.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/subst.cmi",
+      "size": 12575
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/switch.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/switch.cmi",
+      "size": 5093
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/symbol.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/symbol.cmi",
+      "size": 21264
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/symtable.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/symtable.cmi",
+      "size": 42187
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/syntaxerr.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/syntaxerr.cmi",
+      "size": 2187
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/tag.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/tag.cmi",
+      "size": 19591
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/targetint.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/targetint.cmi",
+      "size": 4749
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/tast_iterator.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/tast_iterator.cmi",
+      "size": 8238
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/tast_mapper.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/tast_mapper.cmi",
+      "size": 8817
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/terminfo.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/terminfo.cmi",
+      "size": 1012
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/thread_sanitizer.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/thread_sanitizer.cmi",
+      "size": 1921
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/tmc.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/tmc.cmi",
+      "size": 1559
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/topcommon.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/topcommon.cmi",
+      "size": 14177
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/topdirs.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/topdirs.cmi",
+      "size": 2459
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/topeval.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/topeval.cmi",
+      "size": 7176
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/tophooks.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/tophooks.cmi",
+      "size": 2325
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/toploop.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/toploop.cmi",
+      "size": 12115
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/topmain.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/topmain.cmi",
+      "size": 301
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/topprinters.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/topprinters.cmi",
+      "size": 2356
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/topstart.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/topstart.cmi",
+      "size": 189
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/topstart.cmo",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/topstart.cmo",
+      "size": 2540
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/trace.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/trace.cmi",
+      "size": 2940
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/translattribute.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/translattribute.cmi",
+      "size": 3310
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/translclass.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/translclass.cmi",
+      "size": 2427
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/translcore.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/translcore.cmi",
+      "size": 4172
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/translmod.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/translmod.cmi",
+      "size": 4807
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/translobj.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/translobj.cmi",
+      "size": 3175
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/translprim.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/translprim.cmi",
+      "size": 3838
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/traverse_for_exported_symbols.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/traverse_for_exported_symbols.cmi",
+      "size": 3768
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/type_immediacy.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/type_immediacy.cmi",
+      "size": 1451
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/typeclass.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/typeclass.cmi",
+      "size": 8631
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/typecore.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/typecore.cmi",
+      "size": 20375
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/typedecl_immediacy.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/typedecl_immediacy.cmi",
+      "size": 2271
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/typedecl_properties.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/typedecl_properties.cmi",
+      "size": 2917
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/typedecl_separability.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/typedecl_separability.cmi",
+      "size": 2623
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/typedecl_unboxed.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/typedecl_unboxed.cmi",
+      "size": 1626
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/typedecl_variance.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/typedecl_variance.cmi",
+      "size": 5399
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/typedecl.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/typedecl.cmi",
+      "size": 9091
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/typedtree.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/typedtree.cmi",
+      "size": 50992
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/typemod.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/typemod.cmi",
+      "size": 9799
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/typeopt.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/typeopt.cmi",
+      "size": 3423
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/types.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/types.cmi",
+      "size": 59379
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/typetexp.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/typetexp.cmi",
+      "size": 6684
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/un_anf.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/un_anf.cmi",
+      "size": 1953
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/unbox_closures.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/unbox_closures.cmi",
+      "size": 3093
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/unbox_free_vars_of_closures.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/unbox_free_vars_of_closures.cmi",
+      "size": 2778
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/unbox_specialised_args.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/unbox_specialised_args.cmi",
+      "size": 3117
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/unit_info.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/unit_info.cmi",
+      "size": 4031
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/untypeast.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/untypeast.cmi",
+      "size": 9873
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/value_rec_check.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/value_rec_check.cmi",
+      "size": 1911
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/value_rec_compiler.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/value_rec_compiler.cmi",
+      "size": 1803
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/value_rec_types.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/value_rec_types.cmi",
+      "size": 386
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/var_within_closure.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/var_within_closure.cmi",
+      "size": 21343
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/variable.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/variable.cmi",
+      "size": 39244
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/warnings.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/warnings.cmi",
+      "size": 10752
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/x86_ast.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/x86_ast.cmi",
+      "size": 14378
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/x86_dsl.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/x86_dsl.cmi",
+      "size": 17871
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/x86_gas.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/x86_gas.cmi",
+      "size": 418
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/x86_masm.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/x86_masm.cmi",
+      "size": 421
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/x86_proc.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/compiler-libs/x86_proc.cmi",
+      "size": 3719
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/dynlink/dynlink.cma",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/dynlink/dynlink.cma",
+      "size": 193938
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/dynlink/dynlink.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/dynlink/dynlink.cmi",
+      "size": 3099
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/dynlink/META",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/dynlink/META",
+      "size": 206
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ld.conf",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ld.conf",
+      "size": 159
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ocamldoc/META",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ocamldoc/META",
+      "size": 143
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_analyse.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ocamldoc/odoc_analyse.cmi",
+      "size": 2144
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_args.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ocamldoc/odoc_args.cmi",
+      "size": 3115
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_ast.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ocamldoc/odoc_ast.cmi",
+      "size": 4697
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_class.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ocamldoc/odoc_class.cmi",
+      "size": 7108
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_comments_global.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ocamldoc/odoc_comments_global.cmi",
+      "size": 1592
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_comments.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ocamldoc/odoc_comments.cmi",
+      "size": 3093
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_config.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ocamldoc/odoc_config.cmi",
+      "size": 402
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_cross.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ocamldoc/odoc_cross.cmi",
+      "size": 1913
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_dag2html.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ocamldoc/odoc_dag2html.cmi",
+      "size": 2613
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_dep.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ocamldoc/odoc_dep.cmi",
+      "size": 2320
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_dot.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ocamldoc/odoc_dot.cmi",
+      "size": 7248
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_env.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ocamldoc/odoc_env.cmi",
+      "size": 4073
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_exception.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ocamldoc/odoc_exception.cmi",
+      "size": 2104
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_extension.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ocamldoc/odoc_extension.cmi",
+      "size": 3056
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_gen.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ocamldoc/odoc_gen.cmi",
+      "size": 3894
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_global.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ocamldoc/odoc_global.cmi",
+      "size": 3887
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_html.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ocamldoc/odoc_html.cmi",
+      "size": 71755
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_info.cma",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ocamldoc/odoc_info.cma",
+      "size": 1940233
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_info.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ocamldoc/odoc_info.cmi",
+      "size": 52660
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_latex_style.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ocamldoc/odoc_latex_style.cmi",
+      "size": 301
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_latex.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ocamldoc/odoc_latex.cmi",
+      "size": 59248
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_lexer.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ocamldoc/odoc_lexer.cmi",
+      "size": 1237
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_man.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ocamldoc/odoc_man.cmi",
+      "size": 27006
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_merge.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ocamldoc/odoc_merge.cmi",
+      "size": 2264
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_messages.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ocamldoc/odoc_messages.cmi",
+      "size": 23137
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_misc.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ocamldoc/odoc_misc.cmi",
+      "size": 4952
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_module.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ocamldoc/odoc_module.cmi",
+      "size": 14498
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_name.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ocamldoc/odoc_name.cmi",
+      "size": 10521
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_ocamlhtml.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ocamldoc/odoc_ocamlhtml.cmi",
+      "size": 855
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_parameter.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ocamldoc/odoc_parameter.cmi",
+      "size": 2702
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_parser.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ocamldoc/odoc_parser.cmi",
+      "size": 2537
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_print.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ocamldoc/odoc_print.cmi",
+      "size": 1621
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_scan.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ocamldoc/odoc_scan.cmi",
+      "size": 6717
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_search.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ocamldoc/odoc_search.cmi",
+      "size": 16540
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_see_lexer.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ocamldoc/odoc_see_lexer.cmi",
+      "size": 848
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_sig.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ocamldoc/odoc_sig.cmi",
+      "size": 8336
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_str.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ocamldoc/odoc_str.cmi",
+      "size": 3109
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_test.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ocamldoc/odoc_test.cmi",
+      "size": 191
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_texi.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ocamldoc/odoc_texi.cmi",
+      "size": 45779
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_text_lexer.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ocamldoc/odoc_text_lexer.cmi",
+      "size": 1128
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_text_parser.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ocamldoc/odoc_text_parser.cmi",
+      "size": 3743
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_text.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ocamldoc/odoc_text.cmi",
+      "size": 1057
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_to_text.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ocamldoc/odoc_to_text.cmi",
+      "size": 10631
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_type.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ocamldoc/odoc_type.cmi",
+      "size": 4054
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_types.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ocamldoc/odoc_types.cmi",
+      "size": 6826
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_value.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ocamldoc/odoc_value.cmi",
+      "size": 2923
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/ocamldoc/odoc.cmi",
+      "size": 181
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/profiling/profiling.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/profiling/profiling.cmi",
+      "size": 557
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/profiling/profiling.cmo",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/profiling/profiling.cmo",
+      "size": 8719
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/runtime_events/META",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/runtime_events/META",
+      "size": 292
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/runtime_events/runtime_events.cma",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/runtime_events/runtime_events.cma",
+      "size": 42274
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/runtime_events/runtime_events.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/runtime_events/runtime_events.cmi",
+      "size": 10416
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/runtime-launch-info",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/runtime-launch-info",
+      "size": 14617
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/std_exit.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/std_exit.cmi",
+      "size": 189
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/std_exit.cmo",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/std_exit.cmo",
+      "size": 2283
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Arg.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Arg.cmi",
+      "size": 5482
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Array.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Array.cmi",
+      "size": 10006
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__ArrayLabels.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__ArrayLabels.cmi",
+      "size": 10172
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Atomic.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Atomic.cmi",
+      "size": 2355
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Bigarray.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Bigarray.cmi",
+      "size": 27339
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Bool.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Bool.cmi",
+      "size": 1801
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Buffer.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Buffer.cmi",
+      "size": 5875
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Bytes.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Bytes.cmi",
+      "size": 15015
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__BytesLabels.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__BytesLabels.cmi",
+      "size": 15226
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Callback.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Callback.cmi",
+      "size": 475
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Char.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Char.cmi",
+      "size": 3419
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Complex.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Complex.cmi",
+      "size": 2011
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Condition.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Condition.cmi",
+      "size": 727
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Digest.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Digest.cmi",
+      "size": 3543
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Domain.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Domain.cmi",
+      "size": 2008
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Dynarray.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Dynarray.cmi",
+      "size": 9084
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Effect.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Effect.cmi",
+      "size": 4103
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Either.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Either.cmi",
+      "size": 3135
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Ephemeron.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Ephemeron.cmi",
+      "size": 23094
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Filename.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Filename.cmi",
+      "size": 3085
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Float.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Float.cmi",
+      "size": 31368
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Format.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Format.cmi",
+      "size": 27635
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Fun.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Fun.cmi",
+      "size": 1056
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Gc.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Gc.cmi",
+      "size": 8365
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Hashtbl.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Hashtbl.cmi",
+      "size": 18289
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Iarray.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Iarray.cmi",
+      "size": 7002
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__In_channel.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__In_channel.cmi",
+      "size": 4578
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Int.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Int.cmi",
+      "size": 3698
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Int32.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Int32.cmi",
+      "size": 5656
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Int64.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Int64.cmi",
+      "size": 6199
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Lazy.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Lazy.cmi",
+      "size": 1221
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Lexing.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Lexing.cmi",
+      "size": 5056
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__List.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__List.cmi",
+      "size": 12233
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__ListLabels.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__ListLabels.cmi",
+      "size": 12391
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Map.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Map.cmi",
+      "size": 14247
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Marshal.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Marshal.cmi",
+      "size": 1861
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__MoreLabels.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__MoreLabels.cmi",
+      "size": 45021
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Mutex.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Mutex.cmi",
+      "size": 748
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Nativeint.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Nativeint.cmi",
+      "size": 5488
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Obj.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Obj.cmi",
+      "size": 6673
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Oo.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Oo.cmi",
+      "size": 964
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Option.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Option.cmi",
+      "size": 2539
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Out_channel.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Out_channel.cmi",
+      "size": 4330
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Pair.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Pair.cmi",
+      "size": 2154
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Parsing.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Parsing.cmi",
+      "size": 3334
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Pqueue.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Pqueue.cmi",
+      "size": 17284
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Printexc.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Printexc.cmi",
+      "size": 5381
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Printf.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Printf.cmi",
+      "size": 3038
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Queue.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Queue.cmi",
+      "size": 2754
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Random.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Random.cmi",
+      "size": 5377
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Repr.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Repr.cmi",
+      "size": 732
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Result.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Result.cmi",
+      "size": 5096
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Scanf.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Scanf.cmi",
+      "size": 4701
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Semaphore.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Semaphore.cmi",
+      "size": 1261
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Seq.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Seq.cmi",
+      "size": 10517
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Set.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Set.cmi",
+      "size": 10845
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Stack.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Stack.cmi",
+      "size": 2314
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__StdLabels.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__StdLabels.cmi",
+      "size": 466
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__String.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__String.cmi",
+      "size": 10552
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__StringLabels.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__StringLabels.cmi",
+      "size": 10674
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Sys.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Sys.cmi",
+      "size": 9963
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Type.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Type.cmi",
+      "size": 869
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Uchar.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Uchar.cmi",
+      "size": 3002
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Unit.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Unit.cmi",
+      "size": 648
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib__Weak.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib__Weak.cmi",
+      "size": 4944
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib.cma",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib.cma",
+      "size": 3962567
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib.cmi",
+      "size": 38320
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/stdlib/META",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/stdlib/META",
+      "size": 121
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/str/META",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/str/META",
+      "size": 245
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/str/str.cma",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/str/str.cma",
+      "size": 118864
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/str/str.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/str/str.cmi",
+      "size": 4596
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/threads/event.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/threads/event.cmi",
+      "size": 1652
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/threads/META",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/threads/META",
+      "size": 294
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/threads/thread.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/threads/thread.cmi",
+      "size": 3442
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/threads/threads.cma",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/threads/threads.cma",
+      "size": 52576
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/unix/META",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/unix/META",
+      "size": 226
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/unix/unix.cma",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/unix/unix.cma",
+      "size": 210097
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/unix/unix.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/unix/unix.cmi",
+      "size": 49179
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/unix/unixLabels.cmi",
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/ocaml/unix/unixLabels.cmi",
+      "size": 51140
+    }
+  ],
+  "packages": [
+    {
+      "name": "findlib",
+      "rootPath": "/static/toolchain/lib/findlib",
+      "metaPath": "/static/toolchain/lib/findlib/META",
+      "requires": [
+        "findlib.internal"
+      ],
+      "files": [
+        {
+          "path": "/static/toolchain/lib/findlib/findlib_config.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/findlib/findlib_config.cmi",
+          "size": 2785
+        },
+        {
+          "path": "/static/toolchain/lib/findlib/findlib_dynload.cma",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/findlib/findlib_dynload.cma",
+          "size": 9113
+        },
+        {
+          "path": "/static/toolchain/lib/findlib/findlib_top.cma",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/findlib/findlib_top.cma",
+          "size": 35493
+        },
+        {
+          "path": "/static/toolchain/lib/findlib/findlib.cma",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/findlib/findlib.cma",
+          "size": 395477
+        },
+        {
+          "path": "/static/toolchain/lib/findlib/findlib.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/findlib/findlib.cmi",
+          "size": 6060
+        },
+        {
+          "path": "/static/toolchain/lib/findlib/fl_args.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/findlib/fl_args.cmi",
+          "size": 1056
+        },
+        {
+          "path": "/static/toolchain/lib/findlib/fl_dynload.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/findlib/fl_dynload.cmi",
+          "size": 475
+        },
+        {
+          "path": "/static/toolchain/lib/findlib/fl_lint.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/findlib/fl_lint.cmi",
+          "size": 15854
+        },
+        {
+          "path": "/static/toolchain/lib/findlib/fl_meta.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/findlib/fl_meta.cmi",
+          "size": 759
+        },
+        {
+          "path": "/static/toolchain/lib/findlib/fl_metascanner.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/findlib/fl_metascanner.cmi",
+          "size": 2269
+        },
+        {
+          "path": "/static/toolchain/lib/findlib/fl_metatoken.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/findlib/fl_metatoken.cmi",
+          "size": 1165
+        },
+        {
+          "path": "/static/toolchain/lib/findlib/fl_package_base.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/findlib/fl_package_base.cmi",
+          "size": 3022
+        },
+        {
+          "path": "/static/toolchain/lib/findlib/fl_split.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/findlib/fl_split.cmi",
+          "size": 1129
+        },
+        {
+          "path": "/static/toolchain/lib/findlib/fl_topo.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/findlib/fl_topo.cmi",
+          "size": 4275
+        },
+        {
+          "path": "/static/toolchain/lib/findlib/META",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/findlib/META",
+          "size": 983
+        },
+        {
+          "path": "/static/toolchain/lib/findlib/ocaml_args.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/findlib/ocaml_args.cmi",
+          "size": 1482
+        },
+        {
+          "path": "/static/toolchain/lib/findlib/topfind.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/findlib/topfind.cmi",
+          "size": 1465
+        }
+      ]
+    },
+    {
+      "name": "js_of_ocaml",
+      "rootPath": "/static/toolchain/lib/js_of_ocaml",
+      "metaPath": "/static/toolchain/lib/js_of_ocaml/META",
+      "archiveBytePath": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml.cma",
+      "requires": [
+        "js_of_ocaml-compiler.runtime"
+      ],
+      "files": [
+        {
+          "path": "/static/toolchain/lib/js_of_ocaml/deriving/deriving_Json_import.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/js_of_ocaml/deriving/deriving_Json_import.cmi",
+          "size": 15243
+        },
+        {
+          "path": "/static/toolchain/lib/js_of_ocaml/deriving/deriving_Json_lexer.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/js_of_ocaml/deriving/deriving_Json_lexer.cmi",
+          "size": 2456
+        },
+        {
+          "path": "/static/toolchain/lib/js_of_ocaml/deriving/deriving_Json.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/js_of_ocaml/deriving/deriving_Json.cmi",
+          "size": 19293
+        },
+        {
+          "path": "/static/toolchain/lib/js_of_ocaml/deriving/js_of_ocaml_deriving.cma",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/js_of_ocaml/deriving/js_of_ocaml_deriving.cma",
+          "size": 175353
+        },
+        {
+          "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/js_of_ocaml/js_of_ocaml__.cmi",
+          "size": 3198
+        },
+        {
+          "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__Console.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/js_of_ocaml/js_of_ocaml__Console.cmi",
+          "size": 11421
+        },
+        {
+          "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__CSS.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/js_of_ocaml/js_of_ocaml__CSS.cmi",
+          "size": 12794
+        },
+        {
+          "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__Dom_events.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/js_of_ocaml/js_of_ocaml__Dom_events.cmi",
+          "size": 21013
+        },
+        {
+          "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__Dom_html.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/js_of_ocaml/js_of_ocaml__Dom_html.cmi",
+          "size": 3447258
+        },
+        {
+          "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__Dom_svg.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/js_of_ocaml/js_of_ocaml__Dom_svg.cmi",
+          "size": 1106387
+        },
+        {
+          "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__Dom.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/js_of_ocaml/js_of_ocaml__Dom.cmi",
+          "size": 93521
+        },
+        {
+          "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__Effect_js.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/js_of_ocaml/js_of_ocaml__Effect_js.cmi",
+          "size": 425
+        },
+        {
+          "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__EventSource.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/js_of_ocaml/js_of_ocaml__EventSource.cmi",
+          "size": 6335
+        },
+        {
+          "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__File.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/js_of_ocaml/js_of_ocaml__File.cmi",
+          "size": 20524
+        },
+        {
+          "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__Form.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/js_of_ocaml/js_of_ocaml__Form.cmi",
+          "size": 2919
+        },
+        {
+          "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__Geolocation.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/js_of_ocaml/js_of_ocaml__Geolocation.cmi",
+          "size": 5247
+        },
+        {
+          "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__Import.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/js_of_ocaml/js_of_ocaml__Import.cmi",
+          "size": 15458
+        },
+        {
+          "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__IntersectionObserver.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/js_of_ocaml/js_of_ocaml__IntersectionObserver.cmi",
+          "size": 10842
+        },
+        {
+          "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__Intl.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/js_of_ocaml/js_of_ocaml__Intl.cmi",
+          "size": 30514
+        },
+        {
+          "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__Js.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/js_of_ocaml/js_of_ocaml__Js.cmi",
+          "size": 92150
+        },
+        {
+          "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__Json.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/js_of_ocaml/js_of_ocaml__Json.cmi",
+          "size": 782
+        },
+        {
+          "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__Jstable.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/js_of_ocaml/js_of_ocaml__Jstable.cmi",
+          "size": 1182
+        },
+        {
+          "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__Lib_version.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/js_of_ocaml/js_of_ocaml__Lib_version.cmi",
+          "size": 394
+        },
+        {
+          "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__MutationObserver.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/js_of_ocaml/js_of_ocaml__MutationObserver.cmi",
+          "size": 11758
+        },
+        {
+          "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__PerformanceObserver.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/js_of_ocaml/js_of_ocaml__PerformanceObserver.cmi",
+          "size": 3372
+        },
+        {
+          "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__Regexp.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/js_of_ocaml/js_of_ocaml__Regexp.cmi",
+          "size": 2452
+        },
+        {
+          "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__ResizeObserver.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/js_of_ocaml/js_of_ocaml__ResizeObserver.cmi",
+          "size": 16156
+        },
+        {
+          "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__Sys_js.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/js_of_ocaml/js_of_ocaml__Sys_js.cmi",
+          "size": 1486
+        },
+        {
+          "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__Typed_array.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/js_of_ocaml/js_of_ocaml__Typed_array.cmi",
+          "size": 24939
+        },
+        {
+          "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__Url.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/js_of_ocaml/js_of_ocaml__Url.cmi",
+          "size": 3486
+        },
+        {
+          "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__WebGL.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/js_of_ocaml/js_of_ocaml__WebGL.cmi",
+          "size": 103772
+        },
+        {
+          "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__WebSockets.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/js_of_ocaml/js_of_ocaml__WebSockets.cmi",
+          "size": 24645
+        },
+        {
+          "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__Worker.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/js_of_ocaml/js_of_ocaml__Worker.cmi",
+          "size": 20898
+        },
+        {
+          "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__XmlHttpRequest.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/js_of_ocaml/js_of_ocaml__XmlHttpRequest.cmi",
+          "size": 15595
+        },
+        {
+          "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml.cma",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/js_of_ocaml/js_of_ocaml.cma",
+          "size": 12349694
+        },
+        {
+          "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/js_of_ocaml/js_of_ocaml.cmi",
+          "size": 2291
+        },
+        {
+          "path": "/static/toolchain/lib/js_of_ocaml/META",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/js_of_ocaml/META",
+          "size": 538
+        }
+      ]
+    },
+    {
+      "name": "yojson",
+      "rootPath": "/static/toolchain/lib/yojson",
+      "metaPath": "/static/toolchain/lib/yojson/META",
+      "archiveBytePath": "/static/toolchain/lib/yojson/yojson.cma",
+      "requires": [],
+      "files": [
+        {
+          "path": "/static/toolchain/lib/yojson/META",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/yojson/META",
+          "size": 193
+        },
+        {
+          "path": "/static/toolchain/lib/yojson/yojson__.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/yojson/yojson__.cmi",
+          "size": 657
+        },
+        {
+          "path": "/static/toolchain/lib/yojson/yojson__Basic.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/yojson/yojson__Basic.cmi",
+          "size": 22992
+        },
+        {
+          "path": "/static/toolchain/lib/yojson/yojson__Codec.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/yojson/yojson__Codec.cmi",
+          "size": 679
+        },
+        {
+          "path": "/static/toolchain/lib/yojson/yojson__Common.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/yojson/yojson__Common.cmi",
+          "size": 1704
+        },
+        {
+          "path": "/static/toolchain/lib/yojson/yojson__Lexer_utils.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/yojson/yojson__Lexer_utils.cmi",
+          "size": 1046
+        },
+        {
+          "path": "/static/toolchain/lib/yojson/yojson__Raw.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/yojson/yojson__Raw.cmi",
+          "size": 22460
+        },
+        {
+          "path": "/static/toolchain/lib/yojson/yojson__Safe.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/yojson/yojson__Safe.cmi",
+          "size": 23294
+        },
+        {
+          "path": "/static/toolchain/lib/yojson/yojson__T.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/yojson/yojson__T.cmi",
+          "size": 7300
+        },
+        {
+          "path": "/static/toolchain/lib/yojson/yojson.cma",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/yojson/yojson.cma",
+          "size": 1094631
+        },
+        {
+          "path": "/static/toolchain/lib/yojson/yojson.cmi",
+          "url": "/wasm-of-js-of-ocaml/browser-native-bundle/lib/yojson/yojson.cmi",
+          "size": 8963
+        }
+      ]
+    }
+  ]
+}
