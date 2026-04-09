@@ -4,6 +4,7 @@ const { publicEnv } = vi.hoisted(() => ({
 	publicEnv: {
 		PUBLIC_WASM_RUST_COMPILER_URL: '',
 		PUBLIC_WASM_GO_COMPILER_URL: '',
+		PUBLIC_WASM_ELIXIR_BUNDLE_URL: '',
 		PUBLIC_WASM_OCAML_MODULE_URL: '',
 		PUBLIC_WASM_OCAML_MANIFEST_URL: '',
 		PUBLIC_WASM_TINYGO_APP_URL: '',
@@ -122,6 +123,33 @@ describe('runtime asset config resolution', () => {
 
 		expect(resolveGoCompilerUrl('/absproxy/5173', 'https://example.com/app')).toBe(
 			'https://example.com/wasm-go/index.js'
+		);
+	});
+
+	it('prefers an explicit Elixir bundle url over the public env override', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_ELIXIR_BUNDLE_URL = 'https://env.example.com/wasm-elixir/bundle.avm';
+		const { resolveElixirBundleUrl } = await import('./assets');
+
+		expect(
+			resolveElixirBundleUrl(
+				{
+					elixir: {
+						bundleUrl: '/runtime/elixir/bundle.avm'
+					}
+				},
+				'https://example.com/app'
+			)
+		).toBe('https://example.com/runtime/elixir/bundle.avm');
+	});
+
+	it('derives the default Elixir bundle url from the shared root path', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_ELIXIR_BUNDLE_URL = '';
+		const { resolveElixirBundleUrl } = await import('./assets');
+
+		expect(resolveElixirBundleUrl('/absproxy/5173', 'https://example.com/app')).toBe(
+			'https://example.com/absproxy/5173/wasm-elixir/bundle.avm'
 		);
 	});
 

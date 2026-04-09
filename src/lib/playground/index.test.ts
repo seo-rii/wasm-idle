@@ -65,6 +65,10 @@ vi.mock('$lib/playground/go', () => ({
 	default: createMockSandboxClass('GO')
 }));
 
+vi.mock('$lib/playground/elixir', () => ({
+	default: createMockSandboxClass('ELIXIR')
+}));
+
 vi.mock('$lib/playground/ocaml', () => ({
 	default: createMockSandboxClass('OCAML')
 }));
@@ -222,6 +226,42 @@ describe('playground runtime binding', () => {
 				'package main\nfunc main() {}',
 				true,
 				['demo'],
+				{},
+				progress
+			]
+		]);
+	});
+
+	it('routes Elixir requests through the Popcorn-backed sandbox implementation', async () => {
+		const binding = createPlaygroundBinding({
+			rootUrl: '/absproxy/5173',
+			elixir: {
+				bundleUrl: '/absproxy/5173/wasm-elixir/bundle.avm?v=test'
+			}
+		});
+		const progress = { set() {} };
+		const sandbox = await binding.load('ELIXIR');
+
+		await sandbox.load('IO.puts("hello")', true, [], {}, progress);
+
+		expect(sandbox.runtimeAssets).toEqual({
+			rootUrl: '/absproxy/5173',
+			elixir: {
+				bundleUrl: '/absproxy/5173/wasm-elixir/bundle.avm?v=test'
+			}
+		});
+		expect(sandboxInstances.get('ELIXIR')).toHaveLength(1);
+		expect(sandboxInstances.get('ELIXIR')?.[0]?.loadCalls).toEqual([
+			[
+				{
+					rootUrl: '/absproxy/5173',
+					elixir: {
+						bundleUrl: '/absproxy/5173/wasm-elixir/bundle.avm?v=test'
+					}
+				},
+				'IO.puts("hello")',
+				true,
+				[],
 				{},
 				progress
 			]

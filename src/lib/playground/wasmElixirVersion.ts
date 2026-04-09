@@ -1,0 +1,1 @@
+export const WASM_ELIXIR_ASSET_VERSION = 'e848c7b1e0d73af2';

@@ -109,6 +109,7 @@
 						hasJavaLoader: !!currentRuntimeAssets?.java?.loader,
 						rustCompilerUrl: currentRuntimeAssets?.rust?.compilerUrl || '',
 						goCompilerUrl: currentRuntimeAssets?.go?.compilerUrl || '',
+						elixirBundleUrl: currentRuntimeAssets?.elixir?.bundleUrl || '',
 						ocamlModuleUrl: currentRuntimeAssets?.ocaml?.moduleUrl || '',
 						ocamlManifestUrl: currentRuntimeAssets?.ocaml?.manifestUrl || '',
 						tinygoAppUrl: currentRuntimeAssets?.tinygo?.appUrl || '',

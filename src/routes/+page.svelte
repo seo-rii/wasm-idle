@@ -9,6 +9,7 @@
 	import { page } from '$app/state';
 	import { browser } from '$app/environment';
 	import type { PlaygroundRuntimeAssets } from '$lib/playground/assets';
+	import { WASM_ELIXIR_ASSET_VERSION } from '$lib/playground/wasmElixirVersion';
 	import { WASM_GO_ASSET_VERSION } from '$lib/playground/wasmGoVersion';
 	import { WASM_OCAML_ASSET_VERSION } from '$lib/playground/wasmOcamlVersion';
 	import { WASM_RUST_ASSET_VERSION } from '$lib/playground/wasmRustVersion';
@@ -41,6 +42,11 @@
 			compilerUrl: path
 				? `${path}/wasm-go/index.js?v=${WASM_GO_ASSET_VERSION}`
 				: `/wasm-go/index.js?v=${WASM_GO_ASSET_VERSION}`
+		},
+		elixir: {
+			bundleUrl: path
+				? `${path}/wasm-elixir/bundle.avm?v=${WASM_ELIXIR_ASSET_VERSION}`
+				: `/wasm-elixir/bundle.avm?v=${WASM_ELIXIR_ASSET_VERSION}`
 		},
 		ocaml: {
 			moduleUrl: path
@@ -86,6 +92,8 @@
 					? 'java'
 					: language === 'RUST'
 						? 'rust'
+						: language === 'ELIXIR'
+							? 'elixir'
 						: language === 'OCAML'
 							? 'plaintext'
 						: 'go'
@@ -203,6 +211,7 @@
 			java: 'JAVA',
 			rust: 'RUST',
 			go: 'GO',
+			elixir: 'ELIXIR',
 			ocaml: 'OCAML',
 			tinygo: 'TINYGO'
 		};
@@ -643,6 +652,7 @@
 						<option value="JAVA">Java</option>
 						<option value="RUST">Rust</option>
 						<option value="GO">Go</option>
+						<option value="ELIXIR">Elixir</option>
 						<option value="OCAML">OCaml</option>
 						<option value="TINYGO">TinyGo</option>
 					</select>
@@ -751,6 +761,14 @@
 				selector switches between `wasm_of_ocaml` and `js_of_ocaml`. The current playground
 				path focuses on browser compile-and-run for standalone source files, so this starter
 				avoids stdin and CLI args.
+			</p>
+		{/if}
+		{#if language === 'ELIXIR'}
+			<p class="hint">
+				Elixir runs through a bundled Popcorn evaluator. Each run boots a fresh `.avm`
+				bundle, evaluates the editor contents with `Code.eval_string`, streams stdout and
+				stderr into the terminal, and prints the final expression as `=&gt; ...`. The current
+				starter keeps stdin and CLI args disabled.
 			</p>
 		{/if}
 		{#if language === 'TINYGO'}

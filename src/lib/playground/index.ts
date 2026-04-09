@@ -1,4 +1,5 @@
 import Clang from '$lib/playground/clang';
+import Elixir from '$lib/playground/elixir';
 import Go from '$lib/playground/go';
 import Java from '$lib/playground/java';
 import Ocaml from '$lib/playground/ocaml';
@@ -24,6 +25,7 @@ export const supportedLanguages = [
 	'JAVA',
 	'RUST',
 	'GO',
+	'ELIXIR',
 	'TINYGO',
 	'OCAML'
 ];
@@ -98,6 +100,9 @@ async function playground(language: string, runtimeAssets?: SandboxRuntimeAssets
 		case 'GO':
 			sandbox = new Go();
 			break;
+		case 'ELIXIR':
+			sandbox = new Elixir();
+			break;
 		case 'TINYGO':
 			sandbox = new TinyGo();
 			break;
@@ -117,6 +122,7 @@ async function playground(language: string, runtimeAssets?: SandboxRuntimeAssets
 		if (language === 'JAVA') sandboxCache['JAVA'] = sandbox;
 		if (language === 'RUST') sandboxCache['RUST'] = sandbox;
 		if (language === 'GO') sandboxCache['GO'] = sandbox;
+		if (language === 'ELIXIR') sandboxCache['ELIXIR'] = sandbox;
 		if (language === 'TINYGO') sandboxCache['TINYGO'] = sandbox;
 		if (language === 'OCAML') sandboxCache['OCAML'] = sandbox;
 	}

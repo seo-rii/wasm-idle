@@ -56,6 +56,7 @@ describe('Terminal source', () => {
 		expect(source).not.toMatch(/loadedPlayground = \$state/);
 		expect(source).toMatch(/const currentRuntimeAssetsKey =/);
 		expect(source).toMatch(/goCompilerUrl: currentRuntimeAssets\?\.go\?\.compilerUrl \|\| '',/);
+		expect(source).toMatch(/elixirBundleUrl: currentRuntimeAssets\?\.elixir\?\.bundleUrl \|\| '',/);
 		expect(source).toMatch(/ocamlModuleUrl: currentRuntimeAssets\?\.ocaml\?\.moduleUrl \|\| '',/);
 		expect(source).toMatch(/ocamlManifestUrl: currentRuntimeAssets\?\.ocaml\?\.manifestUrl \|\| '',/);
 		expect(source).not.toMatch(/loadedRuntimeAssets !== currentRuntimeAssets/);

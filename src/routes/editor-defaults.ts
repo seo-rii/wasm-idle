@@ -1,8 +1,8 @@
 import type { RustTargetTriple } from '$lib/playground/options';
 
-export type EditorDefaultLanguage = 'cpp' | 'python' | 'java' | 'go' | 'ocaml' | 'rust';
+export type EditorDefaultLanguage = 'cpp' | 'python' | 'java' | 'go' | 'elixir' | 'ocaml' | 'rust';
 
-export const editorDefaults: Record<'cpp' | 'python' | 'java' | 'go' | 'ocaml', string> = {
+export const editorDefaults: Record<'cpp' | 'python' | 'java' | 'go' | 'elixir' | 'ocaml', string> = {
 	cpp: `#include <iostream>
 
 int bonus = 3;
@@ -66,6 +66,21 @@ func main() {
     }
     fmt.Printf("factorial_plus_bonus=%d\n", factorial(n)+bonus)
 }`,
+	elixir: `defmodule Demo do
+  @bonus 3
+
+  def factorial(0), do: 1
+  def factorial(1), do: 1
+  def factorial(n), do: n * factorial(n - 1)
+
+  def run do
+    n = 4
+    IO.puts("factorial_plus_bonus=#{factorial(n) + @bonus}")
+    :ok
+  end
+end
+
+Demo.run()`,
 	ocaml: `let bonus = 3
 
 let rec factorial n =
@@ -171,6 +186,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.python ||
 		source === editorDefaults.java ||
 		source === editorDefaults.go ||
+		source === editorDefaults.elixir ||
 		source === editorDefaults.ocaml ||
 		source === rustEditorDefaults['wasm32-wasip1'] ||
 		source === rustEditorDefaults['wasm32-wasip2'] ||

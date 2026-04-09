@@ -14,6 +14,9 @@ importers:
       '@hancomac/monaco-languageclient':
         specifier: ^1.1.0
         version: 1.1.0
+      '@swmansion/popcorn':
+        specifier: 0.2.2
+        version: 0.2.2(esbuild@0.27.3)(vite@8.0.3(@types/node@25.5.0)(esbuild@0.27.3))
       '@xterm/addon-canvas':
         specifier: ^0.7.0
         version: 0.7.0(@xterm/xterm@6.0.0)
@@ -628,6 +631,20 @@ packages:
     peerDependencies:
       svelte: ^5.46.4
       vite: ^8.0.0-beta.7 || ^8.0.0
+
+  '@swmansion/popcorn@0.2.2':
+    resolution: {integrity: sha512-S11s/+GUZqgdFqC75JTovIuGS23SyMLcNnjNG7dF7J9ZwXnwdiWvyZFlRsRpcgz1Nh0Ucw0U1UL8KOiKnPuItw==}
+    peerDependencies:
+      esbuild: '>=0.17.0'
+      rollup: '>=4.0.0'
+      vite: ^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0-0
+    peerDependenciesMeta:
+      esbuild:
+        optional: true
+      rollup:
+        optional: true
+      vite:
+        optional: true
 
   '@testing-library/dom@10.4.1':
     resolution: {integrity: sha512-o4PXJQidqJl82ckFaXUeoAW+XysPLauYI43Abki5hABd853iMhitooc6znOnczgbTYmEP6U6/y1ZyKAIsvMKGg==}
@@ -2363,6 +2380,11 @@ snapshots:
       svelte: 5.55.0
       vite: 8.0.3(@types/node@25.5.0)(esbuild@0.27.3)
       vitefu: 1.1.2(vite@8.0.3(@types/node@25.5.0)(esbuild@0.27.3))
+
+  '@swmansion/popcorn@0.2.2(esbuild@0.27.3)(vite@8.0.3(@types/node@25.5.0)(esbuild@0.27.3))':
+    optionalDependencies:
+      esbuild: 0.27.3
+      vite: 8.0.3(@types/node@25.5.0)(esbuild@0.27.3)
 
   '@testing-library/dom@10.4.1':
     dependencies:

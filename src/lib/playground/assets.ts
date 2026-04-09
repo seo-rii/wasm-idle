@@ -60,6 +60,10 @@ export interface TinyGoRuntimeAssetConfig {
 	assetPacks?: TinyGoRuntimeAssetPackReference[];
 }
 
+export interface ElixirRuntimeAssetConfig {
+	bundleUrl?: string;
+}
+
 export interface PlaygroundRuntimeAssets {
 	rootUrl?: string;
 	python?: RuntimeAssetConfig;
@@ -68,6 +72,7 @@ export interface PlaygroundRuntimeAssets {
 	go?: GoRuntimeAssetConfig;
 	ocaml?: OcamlRuntimeAssetConfig;
 	tinygo?: TinyGoRuntimeAssetConfig;
+	elixir?: ElixirRuntimeAssetConfig;
 }
 
 export interface TinyGoRuntimeAssetLoaderRequest {
@@ -464,4 +469,30 @@ export function resolveTinyGoHostCompileUrl(
 	currentUrl = ''
 ) {
 	return resolveTinyGoHostCompileUrls(options, currentUrl)[0] || '';
+}
+
+export function resolveElixirBundleUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredBundleUrl =
+		(typeof options === 'object' && options?.elixir?.bundleUrl) ||
+		(publicEnv.PUBLIC_WASM_ELIXIR_BUNDLE_URL || '').trim();
+
+	if (configuredBundleUrl) {
+		return resolveConfiguredUrl(configuredBundleUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return resolveConfiguredUrl(`${normalizeRootUrl(options) || ''}/wasm-elixir/bundle.avm`, currentUrl);
+	}
+
+	if (options?.rootUrl) {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-elixir/bundle.avm`,
+			currentUrl
+		);
+	}
+
+	return '';
 }
