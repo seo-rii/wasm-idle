@@ -24,8 +24,16 @@ type CompileResult = {
 
 type BrowserNativeManifestFile = {
 	path: string;
-	url: string;
+	url?: string;
 	size: number;
+};
+
+type BrowserNativeManifestRuntimePack = {
+	format: 'wasm-of-js-of-ocaml-browser-native-runtime-pack-v1';
+	asset: string;
+	index: string;
+	fileCount: number;
+	totalBytes: number;
 };
 
 type BrowserNativeManifestPackage = {
@@ -48,6 +56,7 @@ type BrowserNativeManifest = {
 		wasm_of_ocaml: string;
 	};
 	toolPatches?: Record<string, unknown>;
+	runtimePack?: BrowserNativeManifestRuntimePack;
 	ocamlLibFiles: BrowserNativeManifestFile[];
 	packages: BrowserNativeManifestPackage[];
 };
@@ -141,15 +150,24 @@ function rewriteManifest(manifest: BrowserNativeManifest, currentManifestUrl: st
 			js_of_ocaml: rewriteAbsoluteBundleUrl(manifest.tools.js_of_ocaml, currentManifestUrl),
 			wasm_of_ocaml: rewriteAbsoluteBundleUrl(manifest.tools.wasm_of_ocaml, currentManifestUrl)
 		},
+		...(manifest.runtimePack
+			? {
+					runtimePack: {
+						...manifest.runtimePack,
+						asset: rewriteAbsoluteBundleUrl(manifest.runtimePack.asset, currentManifestUrl),
+						index: rewriteAbsoluteBundleUrl(manifest.runtimePack.index, currentManifestUrl)
+					}
+				}
+			: {}),
 		ocamlLibFiles: manifest.ocamlLibFiles.map((file) => ({
 			...file,
-			url: rewriteAbsoluteBundleUrl(file.url, currentManifestUrl)
+			...(file.url ? { url: rewriteAbsoluteBundleUrl(file.url, currentManifestUrl) } : {})
 		})),
 		packages: manifest.packages.map((manifestPackage) => ({
 			...manifestPackage,
 			files: manifestPackage.files.map((file) => ({
 				...file,
-				url: rewriteAbsoluteBundleUrl(file.url, currentManifestUrl)
+				...(file.url ? { url: rewriteAbsoluteBundleUrl(file.url, currentManifestUrl) } : {})
 			}))
 		}))
 	};

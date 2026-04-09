@@ -41,10 +41,19 @@ describe('syncWasmOfJsOfOcamlDist', () => {
 		await writeFixtureFile(
 			sourceBundleDir,
 			'browser-native-manifest.v1.json',
-			'{"version":1,"findlibConf":"/.cache/browser-native-bundle/findlib.conf","tools":{"ocamlc":"/.cache/browser-native-bundle/tools/ocamlc.byte.browser.js"}}\n'
+			'{"version":1,"findlibConf":"/.cache/browser-native-bundle/findlib.conf","tools":{"ocamlc":"/.cache/browser-native-bundle/tools/ocamlc.byte.browser.js"},"runtimePack":{"format":"wasm-of-js-of-ocaml-browser-native-runtime-pack-v1","asset":"/.cache/browser-native-bundle/browser-native-runtime-pack.v1.bin.gz","index":"/.cache/browser-native-bundle/browser-native-runtime-pack.v1.index.json","fileCount":1,"totalBytes":6}}\n'
 		);
 		await writeFixtureFile(sourceBundleDir, 'tools/ocamlc.byte.browser.js', 'console.log("ocaml");\n');
-		await writeFixtureFile(sourceBundleDir, 'lib/ocaml/stdlib.cma', 'stdlib');
+		await writeFixtureFile(
+			sourceBundleDir,
+			'browser-native-runtime-pack.v1.bin.gz',
+			'packed-bytes'
+		);
+		await writeFixtureFile(
+			sourceBundleDir,
+			'browser-native-runtime-pack.v1.index.json',
+			'{"format":"wasm-of-js-of-ocaml-browser-native-runtime-pack-index-v1","fileCount":1,"totalBytes":6,"entries":[{"runtimePath":"/static/toolchain/lib/ocaml/stdlib.cma","offset":0,"length":6}]}\n'
+		);
 		await writeFixtureFile(sourceBinaryenBinDir, 'wasm-opt', '#!/bin/sh\nexit 0\n');
 		await writeFixtureFile(sourceBinaryenBinDir, 'wasm-merge', '#!/bin/sh\nexit 0\n');
 		await writeFixtureFile(sourceBinaryenBinDir, 'types.d.ts', 'ignored');
@@ -67,12 +76,24 @@ describe('syncWasmOfJsOfOcamlDist', () => {
 		).resolves.toContain('self.onmessage');
 		await expect(
 			readFile(path.join(targetBundleDir, 'browser-native-manifest.v1.json'), 'utf8')
-		).resolves.toContain('/wasm-of-js-of-ocaml/browser-native-bundle/findlib.conf');
+		).resolves.toContain('/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-runtime-pack.v1.bin.gz');
 		await expect(readFile(path.join(targetBundleDir, 'tools/ocamlc.byte.browser.js'), 'utf8')).resolves.toContain(
 			'ocaml'
 		);
-		await expect(readFile(path.join(targetBundleDir, 'lib/ocaml/stdlib.cma'), 'utf8')).resolves.toBe(
-			'stdlib'
+		await expect(
+			readFile(path.join(targetBundleDir, 'browser-native-runtime-pack.v1.bin.gz'), 'utf8')
+		).resolves.toBe('packed-bytes');
+		await expect(
+			readFile(path.join(targetBundleDir, 'browser-native-runtime-pack.v1.index.json'), 'utf8')
+		).resolves.toContain('/static/toolchain/lib/ocaml/stdlib.cma');
+		await expect(readFile(path.join(targetBundleDir, 'lib/ocaml/stdlib.cma'), 'utf8')).rejects.toThrow();
+		await expect(
+			readFile(path.join(targetBundleDir, 'browser-native-manifest.v1.json'), 'utf8')
+		).resolves.toContain('/wasm-of-js-of-ocaml/browser-native-bundle/findlib.conf');
+		await expect(
+			readFile(path.join(targetBundleDir, 'browser-native-manifest.v1.json'), 'utf8')
+		).resolves.toContain(
+			'/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-runtime-pack.v1.index.json'
 		);
 		await expect(readFile(path.join(targetBinaryenBinDir, 'wasm-opt'), 'utf8')).resolves.toContain(
 			'exit 0'
