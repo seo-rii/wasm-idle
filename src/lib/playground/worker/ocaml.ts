@@ -1,3 +1,5 @@
+import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
+
 declare var self: any;
 
 type CompilerDiagnostic = {
@@ -91,6 +93,7 @@ type RunRequest = {
 	prepare: boolean;
 	target?: 'js' | 'wasm';
 	log?: boolean;
+	buffer?: SharedArrayBuffer;
 };
 
 let moduleUrl = '';
@@ -101,6 +104,7 @@ let compilerPromise: Promise<CompilerModule> | null = null;
 let manifestPromise: Promise<BrowserNativeManifest> | null = null;
 let compiledResult: CompileResult | null = null;
 let compiledCacheKey = '';
+let stdinBufferOcaml: Int32Array | null = null;
 
 function appendTrailingNewline(text: string) {
 	return text.endsWith('\n') ? text : `${text}\n`;
@@ -232,15 +236,17 @@ function getJsArtifact(result: CompileResult) {
 	return programArtifact as CompileArtifact & { data: string };
 }
 
-async function executeCompileResult(result: CompileResult) {
+async function executeCompileResult(result: CompileResult, log = false) {
 	const programArtifact = getJsArtifact(result);
 	const assetFiles = result.artifacts.filter(
 		(artifact) => artifact.kind === 'wasm' || artifact.kind === 'asset'
 	) as Array<CompileArtifact & { data: Uint8Array | string }>;
 	const assetResolverKey = '__wasm_of_js_of_ocaml_resolve_asset';
 	const runtimePromiseKey = '__wasm_of_js_of_ocaml_runtime_promise';
+	const stdinHookKey = '__wasmIdleOcamlReadStdin';
 	const sourceDir = programArtifact.path.replace(/\/[^/]+$/, '');
 	const createdObjectUrls: string[] = [];
+	const stdinEncoder = new TextEncoder();
 	const originalConsole = globalThis.console;
 	const originalFetch = globalThis.fetch.bind(globalThis);
 	const originalInstantiate = WebAssembly.instantiate.bind(WebAssembly) as typeof WebAssembly.instantiate;
@@ -256,6 +262,8 @@ async function executeCompileResult(result: CompileResult) {
 	const originalRequire = runtimeGlobal.require;
 	const originalModule = runtimeGlobal.module;
 	const originalExports = runtimeGlobal.exports;
+	const hadStdinHook = Object.prototype.hasOwnProperty.call(runtimeGlobal, stdinHookKey);
+	const originalStdinHook = runtimeGlobal[stdinHookKey];
 	const assetEntries = assetFiles
 		.filter((artifact): artifact is CompileArtifact & { data: Uint8Array } => artifact.data instanceof Uint8Array)
 		.map((assetFile) => {
@@ -350,9 +358,48 @@ async function executeCompileResult(result: CompileResult) {
 	runtimeGlobal.require = undefined;
 	runtimeGlobal.module = undefined;
 	runtimeGlobal.exports = undefined;
+	runtimeGlobal[stdinHookKey] = () => {
+		if (!stdinBufferOcaml) {
+			return null;
+		}
+		const chunk = waitForBufferedStdin(stdinBufferOcaml, () => postMessage({ buffer: true }));
+		if (chunk == null) {
+			if (log) {
+				console.log('[wasm-idle:ocaml-stdin] read(bytes=0, eof=true)');
+			}
+			return null;
+		}
+		const encoded = stdinEncoder.encode(chunk);
+		if (log) {
+			console.log(
+				`[wasm-idle:ocaml-stdin] read(bytes=${encoded.byteLength}, text=${JSON.stringify(chunk)})`
+			);
+		}
+		let byteString = '';
+		for (const byte of encoded) {
+			byteString += String.fromCharCode(byte);
+		}
+		return byteString;
+	};
 
 	try {
-		const normalizedSource = normalizeAssetLoader(programArtifact.data, runtimePromiseKey);
+		let normalizedSource = normalizeAssetLoader(programArtifact.data, runtimePromiseKey);
+		const stdinReadReplacement =
+			'read($1,$2,$3,$4){var e=globalThis.__wasmIdleOcamlReadStdin?globalThis.__wasmIdleOcamlReadStdin($3):null;if(e==null)return 0;var h=e.length,f=new Uint8Array(h),i=0;for(;i<h;i++)f[i]=e.charCodeAt(i);var g=f.length<$3?f.length:$3;$1.set(f.subarray(0,g),$2);return g}';
+		const patchedSource = normalizedSource.replace(
+			/read\(([A-Za-z$_][\w$]*),([A-Za-z$_][\w$]*),([A-Za-z$_][\w$]*),([A-Za-z$_][\w$]*)\)\{cz\(\4,mc,aha,ow\)\}/,
+			stdinReadReplacement
+		);
+		normalizedSource =
+			patchedSource !== normalizedSource
+				? patchedSource
+				: normalizedSource.replace(
+						/read\(([A-Za-z$_][\w$]*),([A-Za-z$_][\w$]*),([A-Za-z$_][\w$]*),([A-Za-z$_][\w$]*)\)\{[^{}]+\}(?=seek\([A-Za-z$_][\w$]*,[A-Za-z$_][\w$]*,[A-Za-z$_][\w$]*\)\{[^{}]+\}pos\(\)\{return-1\}close\(\)\{this\.log=undefined\}check_stream_semantics\([A-Za-z$_][\w$]*\)\{\})/,
+						stdinReadReplacement
+					);
+		if (log && normalizedSource === programArtifact.data) {
+			console.warn('[wasm-idle:ocaml-worker] stdin runtime patch did not match generated JS');
+		}
 		new Function(`${normalizedSource}\n//# sourceURL=${programArtifact.path}`)();
 		const runtimePromise = (globalThis as typeof globalThis & Record<string, unknown>)[
 			runtimePromiseKey
@@ -390,6 +437,11 @@ async function executeCompileResult(result: CompileResult) {
 		} else {
 			runtimeGlobal.exports = originalExports;
 		}
+		if (!hadStdinHook) {
+			delete runtimeGlobal[stdinHookKey];
+		} else {
+			runtimeGlobal[stdinHookKey] = originalStdinHook;
+		}
 		for (const objectUrl of createdObjectUrls) {
 			URL.revokeObjectURL(objectUrl);
 		}
@@ -404,7 +456,8 @@ self.onmessage = async (event: { data: LoadRequest | RunRequest }) => {
 		code,
 		prepare,
 		target = 'wasm',
-		log = true
+		log = true,
+		buffer
 	} = event.data as LoadRequest & RunRequest;
 	try {
 		if (load) {
@@ -414,6 +467,8 @@ self.onmessage = async (event: { data: LoadRequest | RunRequest }) => {
 			postMessage({ load: true });
 			return;
 		}
+
+		stdinBufferOcaml = buffer ? new Int32Array(buffer) : null;
 
 		if (log) {
 			console.log(`[wasm-idle:ocaml-worker] compile start prepare=${prepare} target=${target}`);
@@ -488,22 +543,7 @@ self.onmessage = async (event: { data: LoadRequest | RunRequest }) => {
 		}
 
 		postMessage({ progress: { stage: 'runtime-start', percent: 95 } });
-		postMessage({
-			runtime: {
-				sourcePath: getJsArtifact(result).path,
-				programSource: getJsArtifact(result).data,
-				assetFiles: result.artifacts
-					.filter(
-						(artifact): artifact is CompileArtifact & { data: Uint8Array } =>
-							(artifact.kind === 'wasm' || artifact.kind === 'asset') &&
-							artifact.data instanceof Uint8Array
-					)
-					.map((artifact) => ({
-						path: artifact.path,
-						data: artifact.data
-					}))
-			}
-		});
+		await executeCompileResult(result, log);
 	} catch (error: any) {
 		if (log) {
 			console.error('[wasm-idle:ocaml-worker] failed', error);

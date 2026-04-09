@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { readBufferedStdin } from './stdinBuffer';
+
 const workerInstances: MockWorker[] = [];
 const { publicEnv } = vi.hoisted(() => ({
 	publicEnv: {
@@ -47,14 +49,9 @@ class MockWorker {
 		queueMicrotask(() =>
 			this.onmessage?.({
 				data: {
-					runtime: {
-						sourcePath: message.target === 'js' ? '/workspace/_build/hello.js' : '/workspace/_build/hello-wasm.js',
-						programSource:
-							message.target === 'js'
-								? 'globalThis.__wasm_of_js_of_ocaml_runtime_promise = Promise.resolve().then(() => console.log("hello from ocaml js"));'
-								: 'globalThis.__wasm_of_js_of_ocaml_runtime_promise = Promise.resolve().then(() => console.log("hello from ocaml wasm"));',
-						assetFiles: []
-					}
+					output:
+						message.target === 'js' ? 'hello from ocaml js\n' : 'hello from ocaml wasm\n',
+					results: true
 				}
 			} as MessageEvent<any>)
 		);
@@ -140,7 +137,8 @@ describe('OCaml sandbox', () => {
 				prepare: false,
 				code,
 				target: 'js',
-				log: true
+				log: true,
+				buffer: expect.any(SharedArrayBuffer)
 			})
 		);
 		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
@@ -149,7 +147,8 @@ describe('OCaml sandbox', () => {
 				prepare: false,
 				code,
 				target: 'wasm',
-				log: true
+				log: true,
+				buffer: expect.any(SharedArrayBuffer)
 			})
 		);
 		expect(outputs).toContain('hello from ocaml js\n');
@@ -191,5 +190,55 @@ describe('OCaml sandbox', () => {
 		const sandbox = new Ocaml();
 
 		await expect(sandbox.load({ rootUrl: '' })).rejects.toContain('OCaml runtime is not configured');
+	});
+
+	it('writes queued terminal input when the OCaml worker requests stdin', async () => {
+		const sandbox = new Ocaml();
+		const worker = new MockWorker();
+		let runMessage: any;
+
+		sandbox.worker = worker as unknown as Worker;
+		worker.postMessage.mockImplementationOnce((message) => {
+			runMessage = message;
+			queueMicrotask(() => {
+				sandbox.write('42\n');
+				worker.onmessage?.({
+					data: {
+						buffer: true,
+						results: true
+					}
+				} as MessageEvent<any>);
+			});
+		});
+
+		await expect(sandbox.run('let () = print_endline (read_line ())', false)).resolves.toBe(true);
+
+		expect(readBufferedStdin(runMessage.buffer)).toBe('42\n');
+	});
+
+	it('writes EOF when the OCaml worker requests stdin after eof is signaled', async () => {
+		const sandbox = new Ocaml();
+		const worker = new MockWorker();
+		let runMessage: any;
+
+		sandbox.worker = worker as unknown as Worker;
+		worker.postMessage.mockImplementationOnce((message) => {
+			runMessage = message;
+			queueMicrotask(() => {
+				sandbox.eof();
+				worker.onmessage?.({
+					data: {
+						buffer: true,
+						results: true
+					}
+				} as MessageEvent<any>);
+			});
+		});
+
+		await expect(
+			sandbox.run('let () = print_endline (try read_line () with End_of_file -> "eof")', false)
+		).resolves.toBe(true);
+
+		expect(readBufferedStdin(runMessage.buffer)).toBeNull();
 	});
 });

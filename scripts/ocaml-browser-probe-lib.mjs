@@ -84,7 +84,7 @@ async function readProbeSummary(page, activeState, pageErrors, consoleMessages, 
 }
 
 /**
- * @param {{ browserUrl: string; chromiumExecutable?: string; expectedOutput?: string; runTimeoutMs?: number; backend?: 'js' | 'wasm'; code?: string }} options
+ * @param {{ browserUrl: string; chromiumExecutable?: string; expectedOutput?: string; runTimeoutMs?: number; backend?: 'js' | 'wasm'; code?: string; stdinText?: string; sendEof?: boolean }} options
  */
 export async function runOcamlBrowserProbe({
 	browserUrl,
@@ -92,7 +92,9 @@ export async function runOcamlBrowserProbe({
 	expectedOutput = 'hello from ocaml fixture',
 	runTimeoutMs = 300_000,
 	backend = 'js',
-	code = 'let () = print_endline "hello from ocaml fixture"'
+	code = 'let () = print_endline "hello from ocaml fixture"',
+	stdinText = '',
+	sendEof = false
 }) {
 	if (!browserUrl) {
 		throw new Error('runOcamlBrowserProbe requires a browserUrl');
@@ -204,28 +206,102 @@ export async function runOcamlBrowserProbe({
 		await page.waitForSelector('[data-testid="terminal-debug-output"]', { state: 'attached' });
 		const initialTranscript =
 			(await page.locator('[data-testid="terminal-debug-output"]').textContent().catch(() => '')) || '';
+		const initialFinishedCount = (initialTranscript.match(/Process finished after/g) || []).length;
 		await page.locator('button.action-button--run').first().click();
-		try {
-			await page.waitForFunction(
-				(previousTranscript) => {
-					const text =
-						document.querySelector('[data-testid="terminal-debug-output"]')?.textContent || '';
-					if (text === previousTranscript) {
-						return false;
+		if (stdinText || sendEof) {
+			try {
+				await page.waitForFunction(
+					(previousFinishedCount) => {
+						const text =
+							document.querySelector('[data-testid="terminal-debug-output"]')?.textContent || '';
+						const finishedCount = (text.match(/Process finished after/g) || []).length;
+						return text.includes('OCaml compilation failed') || finishedCount >= previousFinishedCount + 1;
+					},
+					initialFinishedCount,
+					{
+						polling: 250,
+						timeout: runTimeoutMs
 					}
-					return text.includes('OCaml compilation failed') || (text.match(/Process finished after/g) || []).length >= 2;
+				);
+			} catch (error) {
+				throw new Error(
+					`OCaml browser probe timed out waiting for compile preparation\n${JSON.stringify(await readProbeSummary(page, activeState, pageErrors, consoleMessages, targetUrl.toString()), null, 2)}`,
+					{ cause: error }
+				);
+			}
+			await page.waitForFunction(
+				() => typeof /** @type {any} */ (window).__wasmIdleDebug?.writeTerminalInput === 'function'
+			);
+			await page.evaluate(
+				async ({ text, eof }) => {
+					await /** @type {any} */ (window).__wasmIdleDebug.writeTerminalInput(text, eof);
 				},
-				initialTranscript,
-				{
-					polling: 250,
-					timeout: runTimeoutMs
-				}
+				{ text: stdinText, eof: sendEof }
 			);
-		} catch (error) {
-			throw new Error(
-				`OCaml browser probe timed out waiting for the execution phase\n${JSON.stringify(await readProbeSummary(page, activeState, pageErrors, consoleMessages, targetUrl.toString()), null, 2)}`,
-				{ cause: error }
-			);
+			const compileTranscript =
+				(await page.locator('[data-testid="terminal-debug-output"]').textContent().catch(() => '')) || '';
+			const compileFinishedCount = (compileTranscript.match(/Process finished after/g) || []).length;
+			try {
+				await page.waitForFunction(
+					({
+						previousTranscript,
+						requiredOutput,
+						previousFinishedCount
+					}) => {
+						const text =
+							document.querySelector('[data-testid="terminal-debug-output"]')?.textContent || '';
+						if (text === previousTranscript) {
+							return false;
+						}
+						const finishedCount = (text.match(/Process finished after/g) || []).length;
+						return (
+							text.includes('OCaml compilation failed') ||
+							finishedCount >= previousFinishedCount + 1 ||
+							(Boolean(requiredOutput) && text.includes(requiredOutput))
+						);
+					},
+					{
+						previousTranscript: compileTranscript,
+						requiredOutput: expectedOutput,
+						previousFinishedCount: compileFinishedCount
+					},
+					{
+						polling: 250,
+						timeout: runTimeoutMs
+					}
+				);
+			} catch (error) {
+				throw new Error(
+					`OCaml browser probe timed out waiting for stdin execution\n${JSON.stringify(await readProbeSummary(page, activeState, pageErrors, consoleMessages, targetUrl.toString()), null, 2)}`,
+					{ cause: error }
+				);
+			}
+		} else {
+			try {
+				await page.waitForFunction(
+					(previousTranscript) => {
+						const text =
+							document.querySelector('[data-testid="terminal-debug-output"]')?.textContent || '';
+						if (text === previousTranscript) {
+							return false;
+						}
+						return (
+							text.includes('OCaml compilation failed') ||
+							(text.match(/Process finished after/g) || []).length >= 2
+						);
+					},
+					initialTranscript,
+					{
+						polling: 250,
+						timeout: runTimeoutMs
+					}
+				);
+			} catch (error) {
+				throw new Error(
+					`OCaml browser probe timed out waiting for the execution phase\n${JSON.stringify(await readProbeSummary(page, activeState, pageErrors, consoleMessages, targetUrl.toString()), null, 2)}`,
+					{ cause: error }
+				);
+			}
 		}
 
 		const summary = await readProbeSummary(

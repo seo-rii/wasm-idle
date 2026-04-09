@@ -9,10 +9,17 @@ import {
 	type SandboxExecutionOptions
 } from '$lib/playground/options';
 import type { Sandbox } from '$lib/playground/sandbox';
+import {
+	flushBufferedEof,
+	flushQueuedStdin,
+	resetBufferedStdin
+} from '$lib/playground/stdinBuffer';
 
 class Ocaml implements Sandbox {
 	output: any = null;
 	worker?: Worker = <any>null;
+	buffer = new SharedArrayBuffer(1024);
+	pendingInput: string[] = [];
 	begin = 0;
 	elapse = 0;
 	uid = 0;
@@ -21,6 +28,8 @@ class Ocaml implements Sandbox {
 	manifestUrl = '';
 	activeReject: ((reason: string) => void) | null = null;
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
+	waitingForInput = false;
+	pendingEof = false;
 
 	load(
 		runtimeAssets: string | PlaygroundRuntimeAssets = '',
@@ -31,6 +40,10 @@ class Ocaml implements Sandbox {
 		progress?: { set?: (value: number) => void } | import('svelte/store').Writable<number>
 	) {
 		return new Promise<void>(async (resolve, reject) => {
+			this.pendingInput = [];
+			this.waitingForInput = false;
+			this.pendingEof = false;
+			resetBufferedStdin(this.buffer);
 			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
 			const nextModuleUrl = resolveOcamlModuleUrl(runtimeAssets, currentUrl);
 			const nextManifestUrl = resolveOcamlManifestUrl(runtimeAssets, currentUrl);
@@ -80,9 +93,29 @@ class Ocaml implements Sandbox {
 		});
 	}
 
-	write() {}
+	write(input: string) {
+		this.pendingInput.push(input);
+		this.pendingEof = false;
+		this.flushPendingInput();
+	}
 
-	eof() {}
+	eof() {
+		this.pendingEof = true;
+		this.flushPendingInput();
+	}
+
+	private flushPendingInput() {
+		if (!this.waitingForInput) return;
+		if (flushQueuedStdin(this.pendingInput, this.buffer)) {
+			this.waitingForInput = false;
+			return;
+		}
+		if (this.pendingEof) {
+			flushBufferedEof(this.buffer);
+			this.pendingEof = false;
+			this.waitingForInput = false;
+		}
+	}
 
 	run(
 		code: string,
@@ -104,6 +137,10 @@ class Ocaml implements Sandbox {
 				const { output, results, error, diagnostic, progress, runtime } = event.data;
 				if (progress && typeof progress.percent === 'number') {
 					_prog?.set?.(Math.max(0, Math.min(progress.percent / 100, 1)));
+				}
+				if (event.data?.buffer) {
+					this.waitingForInput = true;
+					this.flushPendingInput();
 				}
 				if (output) this.output(output);
 				if (diagnostic) this.oncompilerdiagnostic?.(diagnostic);
@@ -300,12 +337,16 @@ class Ocaml implements Sandbox {
 				if (results) {
 					this.elapse = Date.now() - this.begin;
 					this.exit = true;
+					this.waitingForInput = false;
+					this.pendingEof = false;
 					this.activeReject = null;
 					resolve(results as string);
 				}
 				if (error) {
 					this.elapse = Date.now() - this.begin;
 					this.exit = true;
+					this.waitingForInput = false;
+					this.pendingEof = false;
 					this.activeReject = null;
 					reject(error);
 				}
@@ -318,7 +359,8 @@ class Ocaml implements Sandbox {
 				code,
 				prepare,
 				target,
-				log: _log
+				log: _log,
+				buffer: this.buffer
 			});
 		});
 	}
@@ -330,6 +372,8 @@ class Ocaml implements Sandbox {
 	terminate() {
 		this.activeReject?.('Process terminated');
 		this.activeReject = null;
+		this.waitingForInput = false;
+		this.pendingEof = false;
 		this.uid += 1;
 		this.worker?.terminate?.();
 		delete this.worker;
@@ -337,7 +381,11 @@ class Ocaml implements Sandbox {
 	}
 
 	async clear() {
+		this.pendingInput = [];
+		this.waitingForInput = false;
+		this.pendingEof = false;
 		if (this.worker) this.worker.onmessage = null;
+		resetBufferedStdin(this.buffer);
 		if (!this.exit) {
 			this.terminate();
 		}
