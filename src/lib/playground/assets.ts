@@ -300,16 +300,16 @@ export function resolveOcamlManifestUrl(
 	}
 	if (typeof options === 'string') {
 		return currentUrl
-			? new URL(`${normalizeRootUrl(options)}/.cache/browser-native-bundle/browser-native-manifest.v1.json`, currentUrl).href
-			: `${normalizeRootUrl(options)}/.cache/browser-native-bundle/browser-native-manifest.v1.json`;
+			? new URL(`${normalizeRootUrl(options)}/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json`, currentUrl).href
+			: `${normalizeRootUrl(options)}/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json`;
 	}
 	if (options?.rootUrl) {
 		return currentUrl
 			? new URL(
-					`${normalizeRootUrl(options.rootUrl)}/.cache/browser-native-bundle/browser-native-manifest.v1.json`,
+					`${normalizeRootUrl(options.rootUrl)}/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json`,
 					currentUrl
 				).href
-			: `${normalizeRootUrl(options.rootUrl)}/.cache/browser-native-bundle/browser-native-manifest.v1.json`;
+			: `${normalizeRootUrl(options.rootUrl)}/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json`;
 	}
 	return '';
 }

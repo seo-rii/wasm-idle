@@ -34,7 +34,13 @@ const DEFAULT_TARGET_BROWSER_DIST_DIR = path.resolve(
 	'wasm-of-js-of-ocaml',
 	'browser-native'
 );
-const DEFAULT_TARGET_BUNDLE_DIR = path.resolve(REPO_ROOT, 'static', '.cache', 'browser-native-bundle');
+const DEFAULT_TARGET_BUNDLE_DIR = path.resolve(
+	REPO_ROOT,
+	'static',
+	'wasm-of-js-of-ocaml',
+	'browser-native-bundle'
+);
+const LEGACY_TARGET_BUNDLE_DIR = path.resolve(REPO_ROOT, 'static', '.cache', 'browser-native-bundle');
 const DEFAULT_TARGET_BINARYEN_BIN_DIR = path.resolve(
 	REPO_ROOT,
 	'.cache',
@@ -176,6 +182,7 @@ export async function syncWasmOfJsOfOcamlDist({
 
 	await rm(targetBrowserDistDir, { recursive: true, force: true });
 	await rm(targetBundleDir, { recursive: true, force: true });
+	await rm(LEGACY_TARGET_BUNDLE_DIR, { recursive: true, force: true });
 	await rm(targetBinaryenBinDir, { recursive: true, force: true });
 	await mkdir(targetBrowserDistDir, { recursive: true });
 	await mkdir(targetBundleDir, { recursive: true });
@@ -183,6 +190,16 @@ export async function syncWasmOfJsOfOcamlDist({
 	await copyDirectory(sourceBrowserDistDir, targetBrowserDistDir);
 	await copyDirectory(sourceBundleDir, targetBundleDir);
 	await copyDirectory(sourceBinaryenBinDir, targetBinaryenBinDir);
+	const targetManifestPath = path.join(targetBundleDir, 'browser-native-manifest.v1.json');
+	const targetManifestSource = await readFile(targetManifestPath, 'utf8');
+	const publicBundleRoot = '/wasm-of-js-of-ocaml/browser-native-bundle';
+	const rewrittenManifestSource = targetManifestSource.replaceAll(
+		'/.cache/browser-native-bundle',
+		publicBundleRoot
+	);
+	if (rewrittenManifestSource !== targetManifestSource) {
+		await writeFile(targetManifestPath, rewrittenManifestSource, 'utf8');
+	}
 	const fingerprint = await computeBundleFingerprint([
 		sourceBrowserDistDir,
 		sourceBundleDir,

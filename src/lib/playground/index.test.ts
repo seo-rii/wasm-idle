@@ -234,7 +234,7 @@ describe('playground runtime binding', () => {
 			ocaml: {
 				moduleUrl: '/absproxy/5173/wasm-of-js-of-ocaml/browser-native/src/index.js?v=test',
 				manifestUrl:
-					'/absproxy/5173/.cache/browser-native-bundle/browser-native-manifest.v1.json?v=test'
+					'/absproxy/5173/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json?v=test'
 			}
 		});
 		const progress = { set() {} };
@@ -247,7 +247,7 @@ describe('playground runtime binding', () => {
 			ocaml: {
 				moduleUrl: '/absproxy/5173/wasm-of-js-of-ocaml/browser-native/src/index.js?v=test',
 				manifestUrl:
-					'/absproxy/5173/.cache/browser-native-bundle/browser-native-manifest.v1.json?v=test'
+					'/absproxy/5173/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json?v=test'
 			}
 		});
 		expect(sandboxInstances.get('OCAML')).toHaveLength(1);
@@ -259,7 +259,7 @@ describe('playground runtime binding', () => {
 						moduleUrl:
 							'/absproxy/5173/wasm-of-js-of-ocaml/browser-native/src/index.js?v=test',
 						manifestUrl:
-							'/absproxy/5173/.cache/browser-native-bundle/browser-native-manifest.v1.json?v=test'
+							'/absproxy/5173/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json?v=test'
 					}
 				},
 				'let () = print_endline "hello"',

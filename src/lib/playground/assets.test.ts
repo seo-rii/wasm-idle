@@ -176,7 +176,7 @@ describe('runtime asset config resolution', () => {
 		const { resolveOcamlManifestUrl } = await import('./assets');
 
 		expect(resolveOcamlManifestUrl('/absproxy/5173', 'https://example.com/app')).toBe(
-			'https://example.com/absproxy/5173/.cache/browser-native-bundle/browser-native-manifest.v1.json'
+			'https://example.com/absproxy/5173/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json'
 		);
 	});
 

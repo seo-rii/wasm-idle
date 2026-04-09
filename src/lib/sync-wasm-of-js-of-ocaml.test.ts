@@ -41,7 +41,7 @@ describe('syncWasmOfJsOfOcamlDist', () => {
 		await writeFixtureFile(
 			sourceBundleDir,
 			'browser-native-manifest.v1.json',
-			'{"version":1}\n'
+			'{"version":1,"findlibConf":"/.cache/browser-native-bundle/findlib.conf","tools":{"ocamlc":"/.cache/browser-native-bundle/tools/ocamlc.byte.browser.js"}}\n'
 		);
 		await writeFixtureFile(sourceBundleDir, 'tools/ocamlc.byte.browser.js', 'console.log("ocaml");\n');
 		await writeFixtureFile(sourceBundleDir, 'lib/ocaml/stdlib.cma', 'stdlib');
@@ -67,7 +67,7 @@ describe('syncWasmOfJsOfOcamlDist', () => {
 		).resolves.toContain('self.onmessage');
 		await expect(
 			readFile(path.join(targetBundleDir, 'browser-native-manifest.v1.json'), 'utf8')
-		).resolves.toContain('"version":1');
+		).resolves.toContain('/wasm-of-js-of-ocaml/browser-native-bundle/findlib.conf');
 		await expect(readFile(path.join(targetBundleDir, 'tools/ocamlc.byte.browser.js'), 'utf8')).resolves.toContain(
 			'ocaml'
 		);
