@@ -43,7 +43,10 @@ describe('syncWasmGoDist', () => {
 		await writeFixtureFile(sourceDir, 'runtime/runtime-manifest.v1.json', '{"manifestVersion":1}\n');
 		await writeFixtureFile(sourceDir, 'runtime/runtime-build.json', '{"goVersion":"1.26.1"}\n');
 		await writeFixtureFile(sourceDir, 'runtime/tools/compile.wasm.gz', 'gzip-compile');
+		await writeFixtureFile(sourceDir, 'runtime/sysroot/js.pack.gz', 'gzip-js-pack');
 		await writeFixtureFile(sourceDir, 'runtime/sysroot/wasip1.index.json.gz', 'gzip-index');
+		await writeFixtureFile(sourceDir, 'runtime/sysroot/wasip1.stdlib-index.json.gz', 'gzip-stdlib');
+		await writeFixtureFile(sourceDir, 'wasi-guest.js', 'export const guest = true;\n');
 		await writeFixtureFile(sourceDir, 'types.d.ts', 'export type Ignored = true;\n');
 		await writeFixtureFile(sourceDir, 'vendor/tsconfig.tsbuildinfo', 'ignored');
 
@@ -69,8 +72,17 @@ describe('syncWasmGoDist', () => {
 			readFile(path.join(targetDir, 'runtime/tools/compile.wasm.gz'), 'utf8')
 		).resolves.toBe('gzip-compile');
 		await expect(
+			readFile(path.join(targetDir, 'runtime/sysroot/js.pack.gz'), 'utf8')
+		).resolves.toBe('gzip-js-pack');
+		await expect(
 			readFile(path.join(targetDir, 'runtime/sysroot/wasip1.index.json.gz'), 'utf8')
 		).resolves.toBe('gzip-index');
+		await expect(
+			readFile(path.join(targetDir, 'runtime/sysroot/wasip1.stdlib-index.json.gz'), 'utf8')
+		).resolves.toBe('gzip-stdlib');
+		await expect(readFile(path.join(targetDir, 'wasi-guest.js'), 'utf8')).resolves.toContain(
+			'export const guest = true;'
+		);
 		await expect(readFile(path.join(targetDir, 'types.d.ts'), 'utf8')).rejects.toThrow();
 		await expect(readFile(path.join(targetDir, 'vendor/tsconfig.tsbuildinfo'), 'utf8')).rejects.toThrow();
 		await expect(readFile(versionModulePath, 'utf8')).resolves.toContain(

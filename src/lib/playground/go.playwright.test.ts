@@ -33,7 +33,7 @@ describe('wasm-idle Go browser playwright integration', () => {
 					targets: Record<string, unknown>;
 				};
 				const expectedGoTargets = Object.keys(runtimeManifest.targets) as Array<
-					'wasip1/wasm' | 'wasip2/wasm' | 'wasip3/wasm'
+					'wasip1/wasm' | 'wasip2/wasm' | 'wasip3/wasm' | 'js/wasm'
 				>;
 				const previewServer =
 					shouldReuseProvidedBrowserUrl(configuredBrowserUrl)

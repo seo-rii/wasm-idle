@@ -1,5 +1,5 @@
 /**
- * @param {{ browserUrl: string; chromiumExecutable?: string; expectedOutput?: string; runTimeoutMs?: number; stdinText?: string; target?: 'wasip1/wasm' | 'wasip2/wasm' | 'wasip3/wasm' }} options
+ * @param {{ browserUrl: string; chromiumExecutable?: string; expectedOutput?: string; runTimeoutMs?: number; stdinText?: string; target?: 'wasip1/wasm' | 'wasip2/wasm' | 'wasip3/wasm' | 'js/wasm' }} options
  */
 export function runGoBrowserProbe({ browserUrl, chromiumExecutable, expectedOutput, runTimeoutMs, stdinText, target }: {
     browserUrl: string;
@@ -7,7 +7,7 @@ export function runGoBrowserProbe({ browserUrl, chromiumExecutable, expectedOutp
     expectedOutput?: string;
     runTimeoutMs?: number;
     stdinText?: string;
-    target?: 'wasip1/wasm' | 'wasip2/wasm' | 'wasip3/wasm';
+    target?: 'wasip1/wasm' | 'wasip2/wasm' | 'wasip3/wasm' | 'js/wasm';
 }): Promise<{
     activeState: {
         crossOriginIsolated: boolean;

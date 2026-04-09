@@ -88,7 +88,7 @@ async function readProbeSummary(page, activeState, pageErrors, consoleMessages, 
 }
 
 /**
- * @param {{ browserUrl: string; chromiumExecutable?: string; expectedOutput?: string; runTimeoutMs?: number; stdinText?: string; target?: 'wasip1/wasm' | 'wasip2/wasm' | 'wasip3/wasm' }} options
+ * @param {{ browserUrl: string; chromiumExecutable?: string; expectedOutput?: string; runTimeoutMs?: number; stdinText?: string; target?: 'wasip1/wasm' | 'wasip2/wasm' | 'wasip3/wasm' | 'js/wasm' }} options
  */
 export async function runGoBrowserProbe({
 	browserUrl,

@@ -193,6 +193,15 @@ export async function loadRuntimePackEntries(baseUrl, pack, fetchImpl = fetch, r
         loadRuntimePackIndex(baseUrl, pack, fetchImpl, reportProgress?.index),
         loadRuntimePackBytes(baseUrl, pack, fetchImpl, reportProgress?.asset)
     ]);
+    if (index.fileCount !== pack.fileCount) {
+        throw new Error(`runtime pack index ${pack.index} expected fileCount ${pack.fileCount} but loaded ${index.fileCount}`);
+    }
+    if (index.totalBytes !== pack.totalBytes) {
+        throw new Error(`runtime pack index ${pack.index} expected totalBytes ${pack.totalBytes} but loaded ${index.totalBytes}`);
+    }
+    if (bytes.byteLength !== index.totalBytes) {
+        throw new Error(`runtime pack ${pack.asset} expected ${index.totalBytes} bytes but loaded ${bytes.byteLength}`);
+    }
     return index.entries.map((entry) => ({
         runtimePath: entry.runtimePath,
         bytes: bytes.slice(entry.offset, entry.offset + entry.length)

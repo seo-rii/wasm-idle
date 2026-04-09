@@ -18,7 +18,7 @@ export interface CompilerDiagnostic {
 }
 
 export type RustTargetTriple = 'wasm32-wasip1' | 'wasm32-wasip2' | 'wasm32-wasip3';
-export type GoTarget = 'wasip1/wasm' | 'wasip2/wasm' | 'wasip3/wasm';
+export type GoTarget = 'wasip1/wasm' | 'wasip2/wasm' | 'wasip3/wasm' | 'js/wasm';
 
 export type DebugVariableKind = 'number' | 'bool' | 'array' | 'text';
 export type DebugArrayElementKind = 'int' | 'float' | 'double' | 'bool' | 'char';

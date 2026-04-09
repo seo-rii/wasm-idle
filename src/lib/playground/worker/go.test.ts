@@ -215,6 +215,61 @@ describe('Go worker', () => {
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
 	});
 
+	it('passes js/wasm through to compile and browser execution', async () => {
+		const compilerModuleUrl = await createMockGoRuntimeModule(`
+			export async function createGoCompiler() {
+				return {
+					async compile(options) {
+						globalThis.__lastCompileOptions = options;
+						return {
+							success: true,
+							artifact: {
+								wasm: new Uint8Array([0, 97, 115, 109]),
+								bytes: new Uint8Array([0, 97, 115, 109]),
+								target: options.target,
+								format: 'js-wasm'
+							}
+						};
+					}
+				};
+			}
+
+			export async function executeBrowserGoArtifact(artifact, options = {}) {
+				globalThis.__lastExecution = { artifact, options };
+				return {
+					exitCode: 0,
+					stdout: '',
+					stderr: ''
+				};
+			}
+
+			export default createGoCompiler;
+		`);
+
+		await import('./go');
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				compilerUrl: compilerModuleUrl
+			}
+		});
+		await Promise.resolve();
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: 'package main\nfunc main() {}',
+				prepare: false,
+				buffer: new SharedArrayBuffer(1024),
+				target: 'js/wasm'
+			}
+		});
+		await Promise.resolve();
+
+		expect((globalThis as any).__lastCompileOptions.target).toBe('js/wasm');
+		expect((globalThis as any).__lastExecution.artifact.target).toBe('js/wasm');
+		expect((globalThis as any).__lastExecution.artifact.format).toBe('js-wasm');
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
+	});
+
 	it('forwards structured compile progress back to the UI worker host', async () => {
 		const compilerModuleUrl = await createMockGoRuntimeModule(`
 			export async function createGoCompiler() {

@@ -116,6 +116,11 @@ func main() {
 				goTarget: 'wasip3/wasm'
 			})
 		).resolves.toBe(true);
+		await expect(
+			sandbox.run(code, false, true, undefined, ['browser'], {
+				goTarget: 'js/wasm'
+			})
+		).resolves.toBe(true);
 
 		expect(workerInstances).toHaveLength(1);
 		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
@@ -152,6 +157,16 @@ func main() {
 				code,
 				args: ['three'],
 				target: 'wasip3/wasm',
+				log: true
+			})
+		);
+		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
+			5,
+			expect.objectContaining({
+				prepare: false,
+				code,
+				args: ['browser'],
+				target: 'js/wasm',
 				log: true
 			})
 		);

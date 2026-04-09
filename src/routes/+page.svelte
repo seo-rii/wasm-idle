@@ -99,7 +99,7 @@
 		debug.paused ? 'pause_circle' : debug.active ? 'play_circle' : 'adjust'
 	);
 	const knownRustTargetTriples = ['wasm32-wasip1', 'wasm32-wasip2', 'wasm32-wasip3'] as const;
-	const knownGoTargets = ['wasip1/wasm', 'wasip2/wasm', 'wasip3/wasm'] as const;
+	const knownGoTargets = ['wasip1/wasm', 'wasip2/wasm', 'wasip3/wasm', 'js/wasm'] as const;
 	const debugTitle = $derived(language === 'CPP' ? 'Native Trace' : 'Pyodide Trace');
 	const loading = $derived(progress >= 0 && progress < 1);
 	const progressValue = $derived(progress < 0 ? 0 : progress > 1 ? 1 : progress);
@@ -162,6 +162,37 @@
 		await terminal.eof?.();
 	}
 
+	function decodeBase64Url(value: string | null) {
+		if (!value) return null;
+		try {
+			const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
+			const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
+			const binary = atob(padded);
+			const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+			return new TextDecoder().decode(bytes);
+		} catch {
+			return null;
+		}
+	}
+
+	function normalizeRequestedLanguage(value: string | null) {
+		if (!value) return null;
+		const normalized = value.trim().toLowerCase();
+		const aliases: Record<string, string> = {
+			python: 'PYTHON',
+			python3: 'PYTHON',
+			pypy3: 'PYTHON',
+			c: 'C',
+			cpp: 'CPP',
+			cxx: 'CPP',
+			java: 'JAVA',
+			rust: 'RUST',
+			go: 'GO',
+			tinygo: 'TINYGO'
+		};
+		return aliases[normalized] ?? null;
+	}
+
 	function onCompileDiagnostic(diagnostic: CompilerDiagnostic) {
 		compilerDiagnostics = [...compilerDiagnostics, diagnostic];
 	}
@@ -222,15 +253,38 @@
 			const lang = localStorage.getItem('language');
 			const storedArgs = localStorage.getItem('argsInput');
 			const storedGoTarget = localStorage.getItem('goTarget');
-			if (code) editor.setValue(code);
-			if (lang) language = lang;
-			if (storedArgs !== null) argsInput = storedArgs;
+			const requestedCode =
+				decodeBase64Url(page.url.searchParams.get('code64')) ?? page.url.searchParams.get('code');
+			const requestedLanguage = normalizeRequestedLanguage(page.url.searchParams.get('lang'));
+			const requestedArgs =
+				decodeBase64Url(page.url.searchParams.get('args64')) ?? page.url.searchParams.get('args');
+			const requestedRustTargetTriple = page.url.searchParams.get('rustTargetTriple');
+			const requestedGoTarget = page.url.searchParams.get('goTarget');
+			if (requestedCode ?? code) editor.setValue(requestedCode ?? code ?? '');
+			if (requestedLanguage ?? lang) language = requestedLanguage ?? lang ?? language;
+			if (requestedArgs !== null) argsInput = requestedArgs;
+			else if (storedArgs !== null) argsInput = storedArgs;
 			if (
+				requestedGoTarget === 'wasip1/wasm' ||
+				requestedGoTarget === 'wasip2/wasm' ||
+				requestedGoTarget === 'wasip3/wasm' ||
+				requestedGoTarget === 'js/wasm'
+			) {
+				goTarget = requestedGoTarget;
+			} else if (
 				storedGoTarget === 'wasip1/wasm' ||
 				storedGoTarget === 'wasip2/wasm' ||
-				storedGoTarget === 'wasip3/wasm'
+				storedGoTarget === 'wasip3/wasm' ||
+				storedGoTarget === 'js/wasm'
 			) {
 				goTarget = storedGoTarget;
+			}
+			if (
+				requestedRustTargetTriple === 'wasm32-wasip1' ||
+				requestedRustTargetTriple === 'wasm32-wasip2' ||
+				requestedRustTargetTriple === 'wasm32-wasip3'
+			) {
+				rustTargetTriple = requestedRustTargetTriple;
 			}
 			init = true;
 		}
@@ -625,10 +679,20 @@
 			<p class="hint">
 				Go uses the bundled `wasm-go` browser compiler runtime. The selector only shows Go
 				targets advertised by the bundled runtime manifest. `wasip1/wasm` runs as preview1
-				core wasm, while `wasip2/wasm` and `wasip3/wasm` currently compile through the shipped
-				`wasip1` backend and execute as preview1-compatible core wasm until upstream Go exposes
-				native preview2/3 ports. Pass CLI args here, type into the terminal below, and use
-				Ctrl+D or the EOF button while running if the program reads stdin until EOF.
+				core wasm. {#if availableGoTargets.includes('wasip2/wasm')}
+					`wasip2/wasm` follows the bundled runtime manifest and currently still maps to the
+					preview1 core backend in the official Go bundle until upstream Go ships a native
+					preview2 port.
+				{/if}
+				{#if availableGoTargets.includes('wasip3/wasm')}
+					`wasip3/wasm` is only shown when the runtime bundle advertises the transitional
+					preview3 path.
+				{/if}
+				{#if availableGoTargets.includes('js/wasm')}
+					`js/wasm` runs through the bundled `wasm_exec.js` browser host.
+				{/if}
+				Pass CLI args here, type into the terminal below, and use Ctrl+D or the EOF button
+				while running if the program reads stdin until EOF.
 			</p>
 		{/if}
 		{#if language === 'TINYGO'}

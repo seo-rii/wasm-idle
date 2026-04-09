@@ -143,7 +143,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/GoTarget,/);
 		expect(source).toMatch(/goTarget = \$state<GoTarget>\('wasip1\/wasm'\),/);
 		expect(source).toMatch(
-			/const knownGoTargets = \['wasip1\/wasm', 'wasip2\/wasm', 'wasip3\/wasm'\] as const;/
+			/const knownGoTargets = \['wasip1\/wasm', 'wasip2\/wasm', 'wasip3\/wasm', 'js\/wasm'\] as const;/
 		);
 		expect(source).toMatch(
 			/let availableGoTargets = \$state<GoTarget\[]>\(\['wasip1\/wasm'\]\);/
@@ -161,6 +161,8 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/availableGoTargets = \[\.\.\.nextAvailableGoTargets\];/);
 		expect(source).toMatch(/availableGoTargets = \['wasip1\/wasm'\];/);
 		expect(source).toMatch(/goTarget: language === 'GO' \? goTarget : undefined/);
+		expect(source).toMatch(/requestedGoTarget === 'js\/wasm'/);
+		expect(source).toMatch(/storedGoTarget === 'js\/wasm'/);
 		expect(source).toMatch(/<select id="go-target" bind:value=\{goTarget\}>/);
 		expect(source).toMatch(
 			/\{#each availableGoTargets as target \(target\)\}\s+<option value=\{target\}>\{target\}<\/option>\s+\{\/each\}/s
@@ -207,7 +209,10 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/selector only shows Go\s+targets advertised by the bundled runtime manifest/);
 		expect(source).toMatch(/`wasip1\/wasm`/);
 		expect(source).toMatch(/preview1\s+core wasm/);
-		expect(source).toMatch(/`wasip2\/wasm` and `wasip3\/wasm` currently compile through the shipped/);
+		expect(source).toMatch(/availableGoTargets\.includes\('wasip2\/wasm'\)/);
+		expect(source).toMatch(/availableGoTargets\.includes\('wasip3\/wasm'\)/);
+		expect(source).toMatch(/availableGoTargets\.includes\('js\/wasm'\)/);
+		expect(source).toMatch(/`js\/wasm` runs through the bundled `wasm_exec\.js` browser host/);
 		expect(source).toMatch(/TinyGo prefers a configured host-assisted compile endpoint/);
 		expect(source).toMatch(/falls back to the bundled wasm-tinygo browser pipeline/);
 		expect(source).toMatch(/resulting WASI artifact in the local playground runtime/);

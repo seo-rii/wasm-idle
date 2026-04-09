@@ -1,8 +1,8 @@
 import { createBrowserGoBuildPlan } from './build-planner.js';
 import { resolveVersionedAssetUrl } from './asset-url.js';
-import { fetchRuntimeAssetBytes, loadRuntimePackEntries, loadRuntimePackIndex } from './runtime-asset.js';
+import { fetchRuntimeAssetJson, fetchRuntimeAssetBytes, loadRuntimePackEntries, loadRuntimePackIndex } from './runtime-asset.js';
 import { executeGoToolInvocation } from './tool-runtime.js';
-import { createSysrootDependency, normalizeCompileRequestSource, normalizePackageImportPath, normalizeRequestedTarget, parseCompilerDiagnostics, validateCompileRequest } from './compiler-support.js';
+import { collectGoFileImports, collectCompilerDiagnosticText, createSysrootDependency, normalizeCompileRequestSource, normalizePackageImportPath, normalizeRequestedTarget, parseCompilerDiagnostics, resolveStdlibDependencies, validateCompileRequest } from './compiler-support.js';
 import { loadRuntimeManifest, normalizeRuntimeManifest, resolveTargetManifest } from './runtime-manifest.js';
 const DEFAULT_RUNTIME_MANIFEST_URL = new URL('./runtime/runtime-manifest.v1.json', import.meta.url);
 const DEFAULT_RUNTIME_BASE_URL = new URL('./runtime/', import.meta.url);
@@ -192,6 +192,16 @@ async function resolveAutoDependencies(manifest, runtimeBaseUrl, request, fetchI
         return [];
     }
     const target = resolveTargetManifest(manifest, normalizeRequestedTarget(request));
+    const sourceFiles = (Array.isArray(request.files)
+        ? request.files
+        : Object.entries(request.files || {}).map(([path, contents]) => ({ path, contents })));
+    if (target.stdlibIndex) {
+        const stdlibIndex = (await fetchRuntimeAssetJson(resolveVersionedAssetUrl(runtimeBaseUrl, target.stdlibIndex.asset), 'wasm-go stdlib index', fetchImpl, (loaded, total) => reportAssetProgress?.(target.stdlibIndex.asset, loaded, total)));
+        if (stdlibIndex.format === 'wasm-go-stdlib-index-v1' &&
+            Array.isArray(stdlibIndex.packages)) {
+            return resolveStdlibDependencies(stdlibIndex, collectGoFileImports(sourceFiles), request.packageKind);
+        }
+    }
     if (target.sysrootFiles && target.sysrootFiles.length > 0) {
         return target.sysrootFiles
             .map((entry) => createSysrootDependency(entry.runtimePath))
@@ -212,13 +222,17 @@ async function resolveCompileRequest(request, manifest, runtimeBaseUrl, fetchImp
             error: validationError
         };
     }
+    const normalizedFiles = normalizeCompileRequestSource(request);
+    const normalizedRequest = {
+        ...request,
+        files: normalizedFiles
+    };
     return {
         request: {
-            ...request,
+            ...normalizedRequest,
             target: normalizeRequestedTarget(request),
-            files: normalizeCompileRequestSource(request),
             packageImportPath: normalizePackageImportPath(request),
-            dependencies: await resolveAutoDependencies(manifest, runtimeBaseUrl, request, fetchImpl, reportAssetProgress)
+            dependencies: await resolveAutoDependencies(manifest, runtimeBaseUrl, normalizedRequest, fetchImpl, reportAssetProgress)
         }
     };
 }
@@ -302,12 +316,7 @@ export async function compileGo(request, options = {}) {
         emitLinkStage(`loading ${asset.split('/').at(-1) || asset}`);
     };
     const runTool = dependencies.runTool ||
-        (!options.manifest
-            ? ((invocation, context) => executeGoToolInvocation(invocation, plan, runtimeBaseUrl, fetchImpl, context?.reportAssetProgress))
-            : undefined);
-    if (!runTool) {
-        return failure('wasm-go phase 0-1 scaffolding is ready, but compile.wasm/link.wasm execution is not wired yet. Provide dependencies.runTool to execute the generated build plan.', logs.records, plan);
-    }
+        ((invocation, context) => executeGoToolInvocation(invocation, plan, runtimeBaseUrl, fetchImpl, context?.reportAssetProgress));
     if (useDetailedRuntimeProgress) {
         emitCompileStage('preparing compile runtime');
     }
@@ -315,9 +324,15 @@ export async function compileGo(request, options = {}) {
         progress('compile', 0, 1, 'running compile');
     }
     logs.push(`[wasm-go] compile ${plan.compile.args.join(' ')}`);
-    const compileResult = await runTool(plan.compile, {
-        reportAssetProgress: updateCompileAssetProgress
-    });
+    let compileResult;
+    try {
+        compileResult = await runTool(plan.compile, {
+            reportAssetProgress: updateCompileAssetProgress
+        });
+    }
+    catch (error) {
+        return failure(error instanceof Error ? error.message : String(error), logs.records, plan);
+    }
     const compileOutputs = normalizeToolOutputs(compileResult.outputs);
     if (useDetailedRuntimeProgress) {
         compileStageExecutionFraction = 1;
@@ -327,7 +342,7 @@ export async function compileGo(request, options = {}) {
         progress('compile', 1, 1, 'compile finished');
     }
     if (compileResult.exitCode !== 0) {
-        return failure(compileResult.stderr || 'go compile failed', logs.records, plan, compileResult.stdout, parseCompilerDiagnostics(compileResult.stdout || compileResult.stderr));
+        return failure(compileResult.stderr || 'go compile failed', logs.records, plan, compileResult.stdout, parseCompilerDiagnostics(collectCompilerDiagnosticText(compileResult.stderr, compileResult.stdout)));
     }
     progress('compile', 1, 1, 'compile finished');
     let stdout = compileResult.stdout || '';
@@ -344,6 +359,10 @@ export async function compileGo(request, options = {}) {
             format: 'go-archive'
         }, logs.records, plan, stdout, stderr);
     }
+    const compileArchive = compileOutputs[plan.compile.outputPath];
+    if (!compileArchive) {
+        return failure(`compile completed without producing ${plan.compile.outputPath}`, logs.records, plan, stdout);
+    }
     if (useDetailedRuntimeProgress) {
         emitLinkStage('preparing link runtime');
     }
@@ -357,13 +376,19 @@ export async function compileGo(request, options = {}) {
             ...plan.link.inputFiles,
             {
                 path: plan.compile.outputPath,
-                contents: compileOutputs[plan.compile.outputPath]
+                contents: compileArchive
             }
         ]
     };
-    const linkResult = await runTool(linkInputs, {
-        reportAssetProgress: updateLinkAssetProgress
-    });
+    let linkResult;
+    try {
+        linkResult = await runTool(linkInputs, {
+            reportAssetProgress: updateLinkAssetProgress
+        });
+    }
+    catch (error) {
+        return failure(error instanceof Error ? error.message : String(error), logs.records, plan, stdout, parseCompilerDiagnostics(collectCompilerDiagnosticText(stderr, stdout)));
+    }
     const linkOutputs = normalizeToolOutputs(linkResult.outputs);
     if (useDetailedRuntimeProgress) {
         linkStageExecutionFraction = 1;
@@ -375,7 +400,7 @@ export async function compileGo(request, options = {}) {
     stdout += linkResult.stdout || '';
     stderr += linkResult.stderr || '';
     if (linkResult.exitCode !== 0) {
-        return failure(linkResult.stderr || 'go link failed', logs.records, plan, stdout, parseCompilerDiagnostics(linkResult.stderr || stdout));
+        return failure(linkResult.stderr || 'go link failed', logs.records, plan, stdout, parseCompilerDiagnostics(collectCompilerDiagnosticText(linkResult.stderr, linkResult.stdout)));
     }
     progress('link', 1, 1, 'link finished');
     const linkedArtifact = linkOutputs[plan.link.outputPath];
