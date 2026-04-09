@@ -9,3 +9,10 @@ node_modules
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 dist/
+
+# Local build caches and generated sync outputs
+.cache/
+static/.cache/
+static/wasm-of-js-of-ocaml/
+scripts/*.d.mts
+src/routes/editor-defaults.d.ts
