@@ -30,12 +30,14 @@ describe('Monaco route debug sync', () => {
 			/monacoApi\.editor\.setModelMarkers\(activeModel, 'wasm-idle-compiler', markers\);/
 		);
 		expect(source.match(/occurrencesHighlight: 'off'/g)).toHaveLength(2);
-		expect(source).toMatch(/language === 'java' \|\| language === 'rust' \|\| language === 'go'/);
+		expect(source).toMatch(
+			/language === 'java' \|\| language === 'rust' \|\| language === 'go' \|\| language === 'ocaml'/
+		);
 		expect(source).toMatch(
 			/\$effect\(\(\) => \{\s+if \(!editor\) return;[\s\S]*if \(!isEditorDefaultSource\(currentValue\) && !isLegacyEditorDefaultSource\(currentValue\)\) \{[\s\S]*const nextValue = resolveEditorDefaultSource\([\s\S]*rustTargetTriple[\s\S]*editor\.setValue\(nextValue\);[\s\S]*\}\);/s
 		);
 		expect(source).toMatch(
-			/const defaultValue = resolveEditorDefaultSource\(\s+language as 'cpp' \| 'python' \| 'java' \| 'go' \| 'rust',\s+rustTargetTriple\s+\);/s
+			/const defaultValue = resolveEditorDefaultSource\(\s+language as 'cpp' \| 'python' \| 'java' \| 'go' \| 'ocaml' \| 'rust',\s+rustTargetTriple\s+\);/s
 		);
 		expect(source).toMatch(
 			/debugView = new MonacoDebugView\(Monaco, editor, onBreakpointsChange\);\s+debugView\.setBreakpoints\(breakpoints\);\s+debugView\.setPauseState\(pausedLine, debugLocals, debugLanguage\);/s
@@ -88,9 +90,14 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).toMatch(/if \(language !== 'CPP'\) clangdRequested = false;/);
 		expect(pageSource).toMatch(/<option value="RUST">Rust<\/option>/);
 		expect(pageSource).toMatch(/<option value="GO">Go<\/option>/);
+		expect(pageSource).toMatch(/<option value="OCAML">OCaml<\/option>/);
 		expect(pageSource).toMatch(/<option value="TINYGO">TinyGo<\/option>/);
 		expect(pageSource).toMatch(/language=\{editorLanguage\}/);
 		expect(pageSource).toMatch(/<select id="rust-target-triple" bind:value=\{rustTargetTriple\}>/);
+		expect(pageSource).toMatch(/<select id="ocaml-backend" bind:value=\{ocamlBackend\}>/);
+		expect(pageSource).toMatch(/WASM_OCAML_ASSET_VERSION/);
+		expect(pageSource).toMatch(/wasm-of-js-of-ocaml\/browser-native\/src\/index\.js\?v=\$\{WASM_OCAML_ASSET_VERSION\}/);
+		expect(pageSource).toMatch(/wasm-of-js-of-ocaml\/browser-native-bundle\/browser-native-manifest\.v1\.json\?v=\$\{WASM_OCAML_ASSET_VERSION\}/);
 		expect(pageSource).toMatch(
 			/\{#each availableRustTargetTriples as targetTriple \(targetTriple\)\}\s+<option value=\{targetTriple\}>\{targetTriple\}<\/option>\s+\{\/each\}/s
 		);

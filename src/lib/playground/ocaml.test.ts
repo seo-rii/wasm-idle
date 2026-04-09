@@ -46,7 +46,16 @@ class MockWorker {
 		}
 		queueMicrotask(() =>
 			this.onmessage?.({
-				data: { output: 'hello from ocaml\n', results: true }
+				data: {
+					runtime: {
+						sourcePath: message.target === 'js' ? '/workspace/_build/hello.js' : '/workspace/_build/hello-wasm.js',
+						programSource:
+							message.target === 'js'
+								? 'globalThis.__wasm_of_js_of_ocaml_runtime_promise = Promise.resolve().then(() => console.log("hello from ocaml js"));'
+								: 'globalThis.__wasm_of_js_of_ocaml_runtime_promise = Promise.resolve().then(() => console.log("hello from ocaml wasm"));',
+						assetFiles: []
+					}
+				}
 			} as MessageEvent<any>)
 		);
 	});
@@ -72,7 +81,7 @@ describe('OCaml sandbox', () => {
 		workerInstances.length = 0;
 		publicEnv.PUBLIC_WASM_OCAML_MODULE_URL = '/wasm-of-js-of-ocaml/browser-native/src/index.js';
 		publicEnv.PUBLIC_WASM_OCAML_MANIFEST_URL =
-			'/.cache/browser-native-bundle/browser-native-manifest.v1.json';
+			'/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json';
 		suppressAutoLoadAck = false;
 	});
 
@@ -112,7 +121,7 @@ describe('OCaml sandbox', () => {
 				load: true,
 				moduleUrl: expect.stringMatching(/\/wasm-of-js-of-ocaml\/browser-native\/src\/index\.js$/),
 				manifestUrl: expect.stringMatching(
-					/\/\.cache\/browser-native-bundle\/browser-native-manifest\.v1\.json$/
+					/\/wasm-of-js-of-ocaml\/browser-native-bundle\/browser-native-manifest\.v1\.json$/
 				)
 			})
 		);
@@ -143,7 +152,8 @@ describe('OCaml sandbox', () => {
 				log: true
 			})
 		);
-		expect(outputs).toContain('hello from ocaml\n');
+		expect(outputs).toContain('hello from ocaml js\n');
+		expect(outputs).toContain('hello from ocaml wasm\n');
 		expect(diagnostics).toEqual([
 			{
 				fileName: 'main.ml',

@@ -116,7 +116,7 @@
 		const activeModel = model || editor.getModel();
 		if (!activeModel) return;
 			const markers =
-				language === 'java' || language === 'rust' || language === 'go'
+				language === 'java' || language === 'rust' || language === 'go' || language === 'ocaml'
 					? compilerDiagnostics.map((diagnostic) => ({
 						severity:
 							diagnostic.severity === 'warning'
@@ -144,7 +144,7 @@
 			return;
 		}
 		const nextValue = resolveEditorDefaultSource(
-			language as 'cpp' | 'python' | 'java' | 'go' | 'rust',
+			language as 'cpp' | 'python' | 'java' | 'go' | 'ocaml' | 'rust',
 			rustTargetTriple
 		);
 		if (currentValue !== nextValue) {
@@ -166,7 +166,7 @@
 			if (disposed) return;
 			Monaco = m;
 			const defaultValue = resolveEditorDefaultSource(
-				language as 'cpp' | 'python' | 'java' | 'go' | 'rust',
+				language as 'cpp' | 'python' | 'java' | 'go' | 'ocaml' | 'rust',
 				rustTargetTriple
 			);
 			if (language === 'cpp') {

@@ -24,6 +24,7 @@ describe('editor defaults', () => {
 
 	it('resolves the requested default source by language and rust target', () => {
 		expect(resolveEditorDefaultSource('go', 'wasm32-wasip1')).toBe(editorDefaults.go);
+		expect(resolveEditorDefaultSource('ocaml', 'wasm32-wasip1')).toBe(editorDefaults.ocaml);
 		expect(resolveEditorDefaultSource('rust', 'wasm32-wasip2')).toBe(
 			rustEditorDefaults['wasm32-wasip2']
 		);
@@ -31,6 +32,7 @@ describe('editor defaults', () => {
 
 	it('recognizes bundled defaults and the legacy broken TinyGo starter separately', () => {
 		expect(isEditorDefaultSource(editorDefaults.go)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.ocaml)).toBe(true);
 		expect(isEditorDefaultSource(rustEditorDefaults['wasm32-wasip1'])).toBe(true);
 		expect(isEditorDefaultSource('fn main() {}')).toBe(false);
 		expect(isLegacyEditorDefaultSource(legacyBrokenTinyGoEditorDefault)).toBe(true);

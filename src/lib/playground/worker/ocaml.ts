@@ -126,7 +126,7 @@ function rewriteAbsoluteBundleUrl(url: string, currentManifestUrl: string) {
 	}
 	const manifestLocation = new URL(currentManifestUrl, self.location.href);
 	const basePath = manifestLocation.pathname.replace(
-		/\/\.cache\/browser-native-bundle\/browser-native-manifest\.v1\.json$/,
+		/\/wasm-of-js-of-ocaml\/browser-native-bundle\/browser-native-manifest\.v1\.json$/,
 		''
 	);
 	return new URL(`${basePath}${url}`, manifestLocation.origin).toString();
@@ -229,6 +229,15 @@ async function executeCompileResult(result: CompileResult) {
 	const originalInstantiateStreaming = WebAssembly.instantiateStreaming
 		? (WebAssembly.instantiateStreaming.bind(WebAssembly) as typeof WebAssembly.instantiateStreaming)
 		: undefined;
+	const runtimeGlobal = globalThis as typeof globalThis & Record<string, unknown>;
+	const hadProcess = Object.prototype.hasOwnProperty.call(runtimeGlobal, 'process');
+	const hadRequire = Object.prototype.hasOwnProperty.call(runtimeGlobal, 'require');
+	const hadModule = Object.prototype.hasOwnProperty.call(runtimeGlobal, 'module');
+	const hadExports = Object.prototype.hasOwnProperty.call(runtimeGlobal, 'exports');
+	const originalProcess = runtimeGlobal.process;
+	const originalRequire = runtimeGlobal.require;
+	const originalModule = runtimeGlobal.module;
+	const originalExports = runtimeGlobal.exports;
 	const assetEntries = assetFiles
 		.filter((artifact): artifact is CompileArtifact & { data: Uint8Array } => artifact.data instanceof Uint8Array)
 		.map((assetFile) => {
@@ -319,6 +328,10 @@ async function executeCompileResult(result: CompileResult) {
 		}
 		return await originalFetch(input, init);
 	}) as typeof fetch;
+	runtimeGlobal.process = undefined;
+	runtimeGlobal.require = undefined;
+	runtimeGlobal.module = undefined;
+	runtimeGlobal.exports = undefined;
 
 	try {
 		const normalizedSource = normalizeAssetLoader(programArtifact.data, runtimePromiseKey);
@@ -339,6 +352,26 @@ async function executeCompileResult(result: CompileResult) {
 		}
 		delete (globalThis as typeof globalThis & Record<string, unknown>)[runtimePromiseKey];
 		delete (globalThis as typeof globalThis & Record<string, unknown>)[assetResolverKey];
+		if (!hadProcess) {
+			delete runtimeGlobal.process;
+		} else {
+			runtimeGlobal.process = originalProcess;
+		}
+		if (!hadRequire) {
+			delete runtimeGlobal.require;
+		} else {
+			runtimeGlobal.require = originalRequire;
+		}
+		if (!hadModule) {
+			delete runtimeGlobal.module;
+		} else {
+			runtimeGlobal.module = originalModule;
+		}
+		if (!hadExports) {
+			delete runtimeGlobal.exports;
+		} else {
+			runtimeGlobal.exports = originalExports;
+		}
 		for (const objectUrl of createdObjectUrls) {
 			URL.revokeObjectURL(objectUrl);
 		}
@@ -364,6 +397,9 @@ self.onmessage = async (event: { data: LoadRequest | RunRequest }) => {
 			return;
 		}
 
+		if (log) {
+			console.log(`[wasm-idle:ocaml-worker] compile start prepare=${prepare} target=${target}`);
+		}
 		postMessage({ progress: { stage: 'compile-bootstrap', percent: 10 } });
 		const [compilerModule, manifest] = await Promise.all([
 			loadCompiler(moduleUrl),
@@ -392,6 +428,11 @@ self.onmessage = async (event: { data: LoadRequest | RunRequest }) => {
 		}
 
 		const result = compiledResult;
+		if (log) {
+			console.log(
+				`[wasm-idle:ocaml-worker] compile settled success=${result.success} diagnostics=${result.diagnostics?.length || 0}`
+			);
+		}
 		if (result.stdout) {
 			postMessage({ output: result.stdout });
 		}
@@ -429,7 +470,22 @@ self.onmessage = async (event: { data: LoadRequest | RunRequest }) => {
 		}
 
 		postMessage({ progress: { stage: 'runtime-start', percent: 95 } });
-		await executeCompileResult(result);
+		postMessage({
+			runtime: {
+				sourcePath: getJsArtifact(result).path,
+				programSource: getJsArtifact(result).data,
+				assetFiles: result.artifacts
+					.filter(
+						(artifact): artifact is CompileArtifact & { data: Uint8Array } =>
+							(artifact.kind === 'wasm' || artifact.kind === 'asset') &&
+							artifact.data instanceof Uint8Array
+					)
+					.map((artifact) => ({
+						path: artifact.path,
+						data: artifact.data
+					}))
+			}
+		});
 	} catch (error: any) {
 		if (log) {
 			console.error('[wasm-idle:ocaml-worker] failed', error);

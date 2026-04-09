@@ -65,6 +65,9 @@ describe('example route debug actions', () => {
 			/import \{ WASM_GO_ASSET_VERSION \} from '\$lib\/playground\/wasmGoVersion';/
 		);
 		expect(source).toMatch(
+			/import \{ WASM_OCAML_ASSET_VERSION \} from '\$lib\/playground\/wasmOcamlVersion';/
+		);
+		expect(source).toMatch(
 			/import \{ WASM_RUST_ASSET_VERSION \} from '\$lib\/playground\/wasmRustVersion';/
 		);
 		expect(source).toMatch(
@@ -74,7 +77,7 @@ describe('example route debug actions', () => {
 			/let tinygoDisableHostCompile = \$derived\(\s*browser && page\.url\.searchParams\.get\('tinygoCompilePath'\) === 'browser'\s*\);/
 		);
 		expect(source).toMatch(
-			/let runtimeAssets = \$derived\.by<PlaygroundRuntimeAssets>\(\(\) => \(\{\s+rootUrl: path,\s+rust: \{\s+compilerUrl: path\s+\?\s+`\$\{path\}\/wasm-rust\/index\.js\?v=\$\{WASM_RUST_ASSET_VERSION\}`\s+:\s+`\/wasm-rust\/index\.js\?v=\$\{WASM_RUST_ASSET_VERSION\}`\s+\},\s+go: \{\s+compilerUrl: path\s+\?\s+`\$\{path\}\/wasm-go\/index\.js\?v=\$\{WASM_GO_ASSET_VERSION\}`\s+:\s+`\/wasm-go\/index\.js\?v=\$\{WASM_GO_ASSET_VERSION\}`\s+\},\s+tinygo: \{\s+disableHostCompile: tinygoDisableHostCompile,\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-tinygo\/runtime\.js\?v=\$\{WASM_TINYGO_ASSET_VERSION\}`\s+:\s+`\/wasm-tinygo\/runtime\.js\?v=\$\{WASM_TINYGO_ASSET_VERSION\}`\s+\}\s+\}\)\);/s
+			/let runtimeAssets = \$derived\.by<PlaygroundRuntimeAssets>\(\(\) => \(\{\s+rootUrl: path,\s+rust: \{\s+compilerUrl: path\s+\?\s+`\$\{path\}\/wasm-rust\/index\.js\?v=\$\{WASM_RUST_ASSET_VERSION\}`\s+:\s+`\/wasm-rust\/index\.js\?v=\$\{WASM_RUST_ASSET_VERSION\}`\s+\},\s+go: \{\s+compilerUrl: path\s+\?\s+`\$\{path\}\/wasm-go\/index\.js\?v=\$\{WASM_GO_ASSET_VERSION\}`\s+:\s+`\/wasm-go\/index\.js\?v=\$\{WASM_GO_ASSET_VERSION\}`\s+\},\s+ocaml: \{\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-of-js-of-ocaml\/browser-native\/src\/index\.js\?v=\$\{WASM_OCAML_ASSET_VERSION\}`\s+:\s+`\/wasm-of-js-of-ocaml\/browser-native\/src\/index\.js\?v=\$\{WASM_OCAML_ASSET_VERSION\}`,\s+manifestUrl: path\s+\?\s+`\$\{path\}\/wasm-of-js-of-ocaml\/browser-native-bundle\/browser-native-manifest\.v1\.json\?v=\$\{WASM_OCAML_ASSET_VERSION\}`\s+:\s+`\/wasm-of-js-of-ocaml\/browser-native-bundle\/browser-native-manifest\.v1\.json\?v=\$\{WASM_OCAML_ASSET_VERSION\}`\s+\},\s+tinygo: \{\s+disableHostCompile: tinygoDisableHostCompile,\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-tinygo\/runtime\.js\?v=\$\{WASM_TINYGO_ASSET_VERSION\}`\s+:\s+`\/wasm-tinygo\/runtime\.js\?v=\$\{WASM_TINYGO_ASSET_VERSION\}`\s+\}\s+\}\)\);/s
 		);
 		expect(source).toMatch(
 			/const playground = \$derived\.by\(\(\) => createPlaygroundBinding\(runtimeAssets\)\);/
@@ -170,7 +173,9 @@ describe('example route debug actions', () => {
 	});
 
 	it('exposes a browser debug hook that writes terminal stdin through the bound control', () => {
-		expect(source).toMatch(/type WasmIdleDebugApi = \{\s+writeTerminalInput: \(text: string, eof\?: boolean\) => Promise<void>;\s+\};/s);
+		expect(source).toMatch(
+			/type WasmIdleDebugApi = \{\s+writeTerminalInput: \(text: string, eof\?: boolean\) => Promise<void>;\s+getEditorValue: \(\) => string;\s+setEditorValue: \(text: string\) => Promise<boolean>;\s+\};/s
+		);
 		expect(source).toMatch(/let browserDebugHookVersion = 0;/);
 		expect(source).toMatch(/const debugHookVersion = \+\+browserDebugHookVersion;/);
 		expect(source).toMatch(/target\.__wasmIdleDebug = debugApi;/);
@@ -180,6 +185,8 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/await terminal\.waitForInput\?\.\(\);/);
 		expect(source).toMatch(/await terminal\.write\(text\);/);
 		expect(source).toMatch(/if \(eof\) await terminal\.eof\?\.\(\);/);
+		expect(source).toMatch(/getEditorValue\(\) \{\s+return editor\?\.getValue\(\) \|\| '';\s+\}/s);
+		expect(source).toMatch(/async setEditorValue\(text: string\) \{\s+if \(!editor\) return false;\s+editor\.setValue\(text\);\s+await Promise\.resolve\(\);\s+return editor\.getValue\(\) === text;\s+\}/s);
 	});
 
 	it('keeps browser stdin helper wiring separate from the shared debug controller', () => {
@@ -200,6 +207,7 @@ describe('example route debug actions', () => {
 
 	it('surfaces TinyGo through the shared language selector, args field, and stdin hint', () => {
 		expect(source).toMatch(/<option value="GO">Go<\/option>/);
+		expect(source).toMatch(/<option value="OCAML">OCaml<\/option>/);
 		expect(source).toMatch(/<option value="TINYGO">TinyGo<\/option>/);
 		expect(source).toMatch(
 			/\{#if language === 'JAVA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'TINYGO'\}/
@@ -217,6 +225,21 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/falls back to the bundled wasm-tinygo browser pipeline/);
 		expect(source).toMatch(/resulting WASI artifact in the local playground runtime/);
 		expect(source).toMatch(/reads\s+stdin until EOF/);
+	});
+
+	it('surfaces OCaml through the shared language selector and backend hint', () => {
+		expect(source).toMatch(/ocamlBackend = \$state<OcamlBackend>\('wasm'\),/);
+		expect(source).toMatch(/localStorage\.setItem\('ocamlBackend', ocamlBackend\);/);
+		expect(source).toMatch(/const storedOcamlBackend = localStorage\.getItem\('ocamlBackend'\);/);
+		expect(source).toMatch(/const requestedOcamlBackend = page\.url\.searchParams\.get\('ocamlBackend'\);/);
+		expect(source).toMatch(/requestedOcamlBackend === 'js' \|\| requestedOcamlBackend === 'wasm'/);
+		expect(source).toMatch(/storedOcamlBackend === 'js' \|\| storedOcamlBackend === 'wasm'/);
+		expect(source).toMatch(/ocamlBackend: language === 'OCAML' \? ocamlBackend : undefined/);
+		expect(source).toMatch(/<select id="ocaml-backend" bind:value=\{ocamlBackend\}>/);
+		expect(source).toMatch(/<option value="wasm">wasm_of_ocaml<\/option>/);
+		expect(source).toMatch(/<option value="js">js_of_ocaml<\/option>/);
+		expect(source).toMatch(/OCaml uses the bundled `wasm-of-js-of-ocaml` browser-native toolchain/);
+		expect(source).toMatch(/selector switches between `wasm_of_ocaml` and `js_of_ocaml`/);
 	});
 
 	it('keeps the example workspace full-height, resizable, and hides debug panels until debug starts', () => {

@@ -1,8 +1,8 @@
 import type { RustTargetTriple } from '$lib/playground/options';
 
-export type EditorDefaultLanguage = 'cpp' | 'python' | 'java' | 'go' | 'rust';
+export type EditorDefaultLanguage = 'cpp' | 'python' | 'java' | 'go' | 'ocaml' | 'rust';
 
-export const editorDefaults: Record<'cpp' | 'python' | 'java' | 'go', string> = {
+export const editorDefaults: Record<'cpp' | 'python' | 'java' | 'go' | 'ocaml', string> = {
 	cpp: `#include <iostream>
 
 int bonus = 3;
@@ -65,7 +65,15 @@ func main() {
         n = 4
     }
     fmt.Printf("factorial_plus_bonus=%d\n", factorial(n)+bonus)
-}`
+}`,
+	ocaml: `let bonus = 3
+
+let rec factorial n =
+  if n <= 1 then 1 else n * factorial (n - 1)
+
+let () =
+  let n = 4 in
+  Printf.printf "factorial_plus_bonus=%d\\n%!" (factorial n + bonus)`
 };
 
 export const rustEditorDefaults: Record<RustTargetTriple, string> = {
@@ -163,6 +171,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.python ||
 		source === editorDefaults.java ||
 		source === editorDefaults.go ||
+		source === editorDefaults.ocaml ||
 		source === rustEditorDefaults['wasm32-wasip1'] ||
 		source === rustEditorDefaults['wasm32-wasip2'] ||
 		source === rustEditorDefaults['wasm32-wasip3']

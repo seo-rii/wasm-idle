@@ -10,11 +10,13 @@
 	import { browser } from '$app/environment';
 	import type { PlaygroundRuntimeAssets } from '$lib/playground/assets';
 	import { WASM_GO_ASSET_VERSION } from '$lib/playground/wasmGoVersion';
+	import { WASM_OCAML_ASSET_VERSION } from '$lib/playground/wasmOcamlVersion';
 	import { WASM_RUST_ASSET_VERSION } from '$lib/playground/wasmRustVersion';
 	import { WASM_TINYGO_ASSET_VERSION } from '$lib/playground/wasmTinyGoVersion';
 	import type {
 		CompilerDiagnostic,
 		GoTarget,
+		OcamlBackend,
 		RustTargetTriple
 	} from '$lib/playground/options';
 	import type { TerminalControl } from '$lib/terminal';
@@ -40,6 +42,14 @@
 				? `${path}/wasm-go/index.js?v=${WASM_GO_ASSET_VERSION}`
 				: `/wasm-go/index.js?v=${WASM_GO_ASSET_VERSION}`
 		},
+		ocaml: {
+			moduleUrl: path
+				? `${path}/wasm-of-js-of-ocaml/browser-native/src/index.js?v=${WASM_OCAML_ASSET_VERSION}`
+				: `/wasm-of-js-of-ocaml/browser-native/src/index.js?v=${WASM_OCAML_ASSET_VERSION}`,
+			manifestUrl: path
+				? `${path}/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json?v=${WASM_OCAML_ASSET_VERSION}`
+				: `/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json?v=${WASM_OCAML_ASSET_VERSION}`
+		},
 		tinygo: {
 			disableHostCompile: tinygoDisableHostCompile,
 			moduleUrl: path
@@ -56,6 +66,7 @@
 		argsInput = $state(''),
 		rustTargetTriple = $state<RustTargetTriple>('wasm32-wasip1'),
 		goTarget = $state<GoTarget>('wasip1/wasm'),
+		ocamlBackend = $state<OcamlBackend>('wasm'),
 		log = $state(true),
 		language = $state('CPP'),
 		runningMode = $state<'run' | 'debug' | null>(null),
@@ -75,6 +86,8 @@
 					? 'java'
 					: language === 'RUST'
 						? 'rust'
+						: language === 'OCAML'
+							? 'plaintext'
 						: 'go'
 	);
 
@@ -135,6 +148,8 @@
 	let availableGoTargets = $state<GoTarget[]>(['wasip1/wasm']);
 	type WasmIdleDebugApi = {
 		writeTerminalInput: (text: string, eof?: boolean) => Promise<void>;
+		getEditorValue: () => string;
+		setEditorValue: (text: string) => Promise<boolean>;
 	};
 	let browserDebugHookVersion = 0;
 	type WasmRustRuntimeModule = {
@@ -188,6 +203,7 @@
 			java: 'JAVA',
 			rust: 'RUST',
 			go: 'GO',
+			ocaml: 'OCAML',
 			tinygo: 'TINYGO'
 		};
 		return aliases[normalized] ?? null;
@@ -220,6 +236,7 @@
 			localStorage.setItem('argsInput', argsInput);
 			localStorage.setItem('rustTargetTriple', rustTargetTriple);
 			localStorage.setItem('goTarget', goTarget);
+			localStorage.setItem('ocamlBackend', ocamlBackend);
 		}
 		try {
 			if (!('SharedArrayBuffer' in window)) location.reload();
@@ -237,7 +254,8 @@
 					stdin: '',
 					pauseOnEntry: enableDebug,
 					rustTargetTriple: language === 'RUST' ? rustTargetTriple : undefined,
-					goTarget: language === 'GO' ? goTarget : undefined
+					goTarget: language === 'GO' ? goTarget : undefined,
+					ocamlBackend: language === 'OCAML' ? ocamlBackend : undefined
 				}
 			});
 		} finally {
@@ -253,6 +271,7 @@
 			const lang = localStorage.getItem('language');
 			const storedArgs = localStorage.getItem('argsInput');
 			const storedGoTarget = localStorage.getItem('goTarget');
+			const storedOcamlBackend = localStorage.getItem('ocamlBackend');
 			const requestedCode =
 				decodeBase64Url(page.url.searchParams.get('code64')) ?? page.url.searchParams.get('code');
 			const requestedLanguage = normalizeRequestedLanguage(page.url.searchParams.get('lang'));
@@ -260,6 +279,7 @@
 				decodeBase64Url(page.url.searchParams.get('args64')) ?? page.url.searchParams.get('args');
 			const requestedRustTargetTriple = page.url.searchParams.get('rustTargetTriple');
 			const requestedGoTarget = page.url.searchParams.get('goTarget');
+			const requestedOcamlBackend = page.url.searchParams.get('ocamlBackend');
 			if (requestedCode ?? code) editor.setValue(requestedCode ?? code ?? '');
 			if (requestedLanguage ?? lang) language = requestedLanguage ?? lang ?? language;
 			if (requestedArgs !== null) argsInput = requestedArgs;
@@ -278,6 +298,11 @@
 				storedGoTarget === 'js/wasm'
 			) {
 				goTarget = storedGoTarget;
+			}
+			if (requestedOcamlBackend === 'js' || requestedOcamlBackend === 'wasm') {
+				ocamlBackend = requestedOcamlBackend;
+			} else if (storedOcamlBackend === 'js' || storedOcamlBackend === 'wasm') {
+				ocamlBackend = storedOcamlBackend;
 			}
 			if (
 				requestedRustTargetTriple === 'wasm32-wasip1' ||
@@ -461,6 +486,15 @@
 				await terminal.waitForInput?.();
 				await terminal.write(text);
 				if (eof) await terminal.eof?.();
+			},
+			getEditorValue() {
+				return editor?.getValue() || '';
+			},
+			async setEditorValue(text: string) {
+				if (!editor) return false;
+				editor.setValue(text);
+				await Promise.resolve();
+				return editor.getValue() === text;
 			}
 		};
 		target.__wasmIdleDebug = debugApi;
@@ -476,7 +510,13 @@
 			debug.setCursorLine(null);
 			debug.reset();
 		}
-		if (language !== 'JAVA' && language !== 'RUST' && language !== 'GO' && language !== 'TINYGO')
+		if (
+			language !== 'JAVA' &&
+			language !== 'RUST' &&
+			language !== 'GO' &&
+			language !== 'TINYGO' &&
+			language !== 'OCAML'
+		)
 			compilerDiagnostics = [];
 	});
 </script>
@@ -603,6 +643,7 @@
 						<option value="JAVA">Java</option>
 						<option value="RUST">Rust</option>
 						<option value="GO">Go</option>
+						<option value="OCAML">OCaml</option>
 						<option value="TINYGO">TinyGo</option>
 					</select>
 				</label>
@@ -630,6 +671,15 @@
 							{#each availableGoTargets as target (target)}
 								<option value={target}>{target}</option>
 							{/each}
+						</select>
+					</label>
+				{/if}
+				{#if language === 'OCAML'}
+					<label class="select-chip">
+						<span class="material-symbols-outlined">conversion_path</span>
+						<select id="ocaml-backend" bind:value={ocamlBackend}>
+							<option value="wasm">wasm_of_ocaml</option>
+							<option value="js">js_of_ocaml</option>
 						</select>
 					</label>
 				{/if}
@@ -693,6 +743,14 @@
 				{/if}
 				Pass CLI args here, type into the terminal below, and use Ctrl+D or the EOF button
 				while running if the program reads stdin until EOF.
+			</p>
+		{/if}
+		{#if language === 'OCAML'}
+			<p class="hint">
+				OCaml uses the bundled `wasm-of-js-of-ocaml` browser-native toolchain. The backend
+				selector switches between `wasm_of_ocaml` and `js_of_ocaml`. The current playground
+				path focuses on browser compile-and-run for standalone source files, so this starter
+				avoids stdin and CLI args.
 			</p>
 		{/if}
 		{#if language === 'TINYGO'}
