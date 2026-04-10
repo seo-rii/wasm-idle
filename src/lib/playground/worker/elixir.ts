@@ -3,11 +3,23 @@ import initAtomVm from '../../../../node_modules/@swmansion/popcorn/dist/AtomVM.
 
 declare var self: any;
 
-self.document = {
+const workerDocument = {
 	querySelectorAll() {
 		return [];
 	}
 };
+const workerHost = {
+	document: workerDocument,
+	postMessage(message: unknown) {
+		postMessage(message);
+	}
+};
+const popcornBrowserGlobal = ['globalThis', 'window'].join('.');
+const popcornParentGlobal = [popcornBrowserGlobal, 'parent'].join('.');
+const workerHostGlobal = 'globalThis.__wasmIdleElixirWorkerHost';
+
+self.document = workerDocument;
+(globalThis as any).__wasmIdleElixirWorkerHost = workerHost;
 
 class TrackedValue {
 	key: number;
@@ -103,7 +115,11 @@ function configureTrackedObjectBridge(module: AtomVmModule) {
 		let fn;
 		try {
 			const indirectEval = globalThis.eval;
-			fn = indirectEval(scriptString);
+			const workerScript = scriptString
+				.replaceAll(`${popcornParentGlobal}.document`, `${workerHostGlobal}.document`)
+				.replaceAll(popcornParentGlobal, workerHostGlobal)
+				.replaceAll(popcornBrowserGlobal, workerHostGlobal);
+			fn = indirectEval(workerScript);
 		} catch (error) {
 			console.error(error);
 			return [];
@@ -138,8 +154,16 @@ function configureMessagingBridge(module: AtomVmModule) {
 
 async function startVm(avmBundle: Int8Array, log: boolean) {
 	let resolveProcess: ((process: string | null) => void) | null = null;
-	const processPromise = new Promise<string | null>((resolve) => {
-		resolveProcess = resolve;
+	const processPromise = new Promise<string | null>((resolve, reject) => {
+		const timeout = setTimeout(() => {
+			resolveProcess = null;
+			reject(new Error('Elixir runtime did not become ready'));
+		}, 30_000);
+		resolveProcess = (process) => {
+			clearTimeout(timeout);
+			resolveProcess = null;
+			resolve(process);
+		};
 	});
 	const module = (await initAtomVm({
 		locateFile(path: string) {
