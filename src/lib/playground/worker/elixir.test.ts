@@ -21,6 +21,8 @@ vi.mock('../../../../node_modules/@swmansion/popcorn/dist/AtomVM.mjs', () => ({
 describe('Elixir worker', () => {
 	beforeEach(() => {
 		vi.resetModules();
+		const popcornBrowserGlobal = ['globalThis', 'window'].join('.');
+		const popcornParentGlobal = [popcornBrowserGlobal, 'parent'].join('.');
 		(globalThis as any).self = globalThis as any;
 		(globalThis as any).document = undefined;
 		(globalThis as any).window = undefined;
@@ -56,7 +58,39 @@ describe('Elixir worker', () => {
 			};
 			lastModule.current = module;
 			options.preRun?.[0]?.(module);
-			setTimeout(() => module.onElixirReady?.('popcorn_eval'), 0);
+			setTimeout(() => {
+				for (const event of [
+					{
+						name: 'popcorn_app_ready',
+						payload: {
+							name: 'main'
+						}
+					},
+					{
+						name: 'popcorn_elixir_ready',
+						payload: null
+					}
+				]) {
+					module.onRunTrackedJs?.(
+						`(Module) => {
+						const window = ${popcornParentGlobal};
+						const document = ${popcornParentGlobal}.document;
+						return (({ wasm, args }) => {
+							wasm.sendEvent(args.eventName, args.payload);
+						})({
+							wasm: Module,
+							args: Module.deserialize(JSON.stringify(${JSON.stringify({
+								eventName: event.name,
+								payload: event.payload
+							})})),
+							window,
+							document
+						});
+					}`,
+						false
+					);
+				}
+			}, 0);
 			return module;
 		});
 	});
@@ -82,6 +116,7 @@ describe('Elixir worker', () => {
 			'/data/bundle.avm',
 			expect.any(Int8Array)
 		);
+		expect(lastModule.current.sendEvent).toEqual(expect.any(Function));
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ load: true });
 		expect(
 			lastModule.current.onRunTrackedJs(
@@ -126,7 +161,7 @@ describe('Elixir worker', () => {
 		await Promise.resolve();
 
 		expect(lastModule.current.rawCall).toHaveBeenCalledWith(
-			'popcorn_eval',
+			'main',
 			JSON.stringify(['eval_elixir', 'IO.puts("hello")'])
 		);
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({

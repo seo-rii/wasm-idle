@@ -49,8 +49,9 @@ type AtomVmModule = {
 	onAbort?: () => void;
 	onElixirReady?: ((process: string | null) => void) | null;
 	onGetTrackedObjects?: (keys: number[]) => string[];
-	onRunTrackedJs?: (scriptString: string, isDebug: boolean) => number[];
+	onRunTrackedJs?: (scriptString: string, isDebug: boolean) => number[] | null;
 	onTrackedObjectDelete?: (key: number) => void;
+	sendEvent?: (eventName: string, payload: unknown) => void;
 	trackedObjectsMap: Map<number, unknown>;
 	nextTrackedObjectKey: () => number;
 };
@@ -87,10 +88,39 @@ function ensureResultKeyList(result: unknown) {
 	}
 }
 
-function configureTrackedObjectBridge(module: AtomVmModule) {
+function configureTrackedObjectBridge(
+	module: AtomVmModule,
+	resolveReadyProcess: (process: string | null) => void
+) {
+	let appReadyProcess: string | null | undefined;
+	let elixirReady = false;
 	module.serialize = JSON.stringify;
 	module.deserialize = (message: string) => deserialize(module, message);
 	module.cleanupFunctions = new Map();
+	module.sendEvent = (eventName, payload) => {
+		if (eventName === 'popcorn_app_ready') {
+			const readyPayload =
+				typeof payload === 'object' && payload !== null && Object.hasOwn(payload, 'name')
+					? (payload as { name: unknown }).name
+					: payload;
+			appReadyProcess =
+				readyPayload === null || readyPayload === undefined ? null : String(readyPayload);
+			if (elixirReady) {
+				resolveReadyProcess(appReadyProcess);
+			}
+			return;
+		}
+		if (eventName === 'popcorn_elixir_ready') {
+			elixirReady = true;
+			if (appReadyProcess !== undefined) {
+				resolveReadyProcess(appReadyProcess);
+			}
+		}
+	};
+	module.onElixirReady = (process) => {
+		module.onElixirReady = null;
+		resolveReadyProcess(process);
+	};
 	module.onTrackedObjectDelete = (key) => {
 		const cleanup = module.cleanupFunctions.get(key);
 		module.cleanupFunctions.delete(key);
@@ -122,7 +152,7 @@ function configureTrackedObjectBridge(module: AtomVmModule) {
 			fn = indirectEval(workerScript);
 		} catch (error) {
 			console.error(error);
-			return [];
+			return null;
 		}
 		if (isDebug) {
 			ensureFunctionEval(fn);
@@ -132,7 +162,7 @@ function configureTrackedObjectBridge(module: AtomVmModule) {
 			result = fn?.(module);
 		} catch (error) {
 			console.error(error);
-			return [];
+			return null;
 		}
 		if (isDebug) {
 			ensureResultKeyList(result);
@@ -192,12 +222,8 @@ async function startVm(avmBundle: Int8Array, log: boolean) {
 			setTimeout(() => postMessage({ error: 'Elixir runtime aborted' }), 100);
 		}
 	})) as AtomVmModule;
-	configureTrackedObjectBridge(module);
+	configureTrackedObjectBridge(module, (process) => resolveProcess?.(process));
 	configureMessagingBridge(module);
-	module.onElixirReady = (process) => {
-		module.onElixirReady = null;
-		resolveProcess?.(process);
-	};
 	return {
 		module,
 		process: await processPromise
