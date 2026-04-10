@@ -77,7 +77,7 @@ function getFilePreloadsFromFs(fs, prefix) {
         bytes: toArrayBuffer(fs.readFile(filePath))
     }));
 }
-function getToolchainPreloads(command, manifest, packages) {
+function getToolchainPreloads(command, manifest, packages, runtimePack) {
     const selectedPackages = command === 'ocamlc' ? packages : manifest.packages;
     const selectedOcamlLibFiles = command === 'ocamlc'
         ? manifest.ocamlLibFiles.filter((file) => !file.path.includes('/compiler-libs/') &&
@@ -85,14 +85,44 @@ function getToolchainPreloads(command, manifest, packages) {
             !file.path.includes('/runtime_events/'))
         : manifest.ocamlLibFiles;
     return [
-        ...selectedOcamlLibFiles.map((file) => ({
-            path: toToolchainPath(file.path),
-            url: file.url
+        ...selectedOcamlLibFiles.map((file) => {
+            const packedEntry = runtimePack?.entries.get(file.path);
+            if (packedEntry) {
+                const packedBytes = runtimePack.bytes.subarray(packedEntry.offset, packedEntry.offset + packedEntry.length);
+                const copiedBytes = new Uint8Array(packedBytes.byteLength);
+                copiedBytes.set(packedBytes);
+                return {
+                    path: toToolchainPath(file.path),
+                    bytes: copiedBytes.buffer
+                };
+            }
+            if (!file.url) {
+                throw new Error(`missing browser-native preload URL for ${file.path}`);
+            }
+            return {
+                path: toToolchainPath(file.path),
+                url: file.url
+            };
+        }),
+        ...selectedPackages.flatMap((manifestPackage) => manifestPackage.files.map((file) => {
+            const packedEntry = runtimePack?.entries.get(file.path);
+            if (packedEntry) {
+                const packedBytes = runtimePack.bytes.subarray(packedEntry.offset, packedEntry.offset + packedEntry.length);
+                const copiedBytes = new Uint8Array(packedBytes.byteLength);
+                copiedBytes.set(packedBytes);
+                return {
+                    path: toToolchainPath(file.path),
+                    bytes: copiedBytes.buffer
+                };
+            }
+            if (!file.url) {
+                throw new Error(`missing browser-native preload URL for ${file.path}`);
+            }
+            return {
+                path: toToolchainPath(file.path),
+                url: file.url
+            };
         })),
-        ...selectedPackages.flatMap((manifestPackage) => manifestPackage.files.map((file) => ({
-            path: toToolchainPath(file.path),
-            url: file.url
-        }))),
         {
             path: '/static/toolchain/findlib.conf',
             url: manifest.findlibConf
@@ -153,6 +183,7 @@ export async function runBrowserNativeTool(request) {
 }
 export function createBrowserWorkerSystemDispatcher(options) {
     const packageMap = new Map(options.manifest.packages.map((manifestPackage) => [manifestPackage.name, manifestPackage]));
+    let runtimePackEntriesPromise = null;
     return (async (argv, context) => {
         if (argv.length === 0) {
             throw new Error('browser-native system dispatcher requires at least one argv element');
@@ -180,12 +211,70 @@ export function createBrowserWorkerSystemDispatcher(options) {
         if (commandName === 'js_of_ocaml' || commandName === 'wasm_of_ocaml') {
             env['OCAMLFIND_CONF'] = env['OCAMLFIND_CONF'] || '/static/toolchain/findlib.conf';
         }
+        if (!runtimePackEntriesPromise) {
+            runtimePackEntriesPromise = (async () => {
+                if (!options.manifest.runtimePack) {
+                    return null;
+                }
+                const packIndexResponse = await fetch(options.manifest.runtimePack.index, {
+                    cache: 'no-store'
+                });
+                if (!packIndexResponse.ok) {
+                    throw new Error(`failed to fetch browser-native runtime pack index: ${packIndexResponse.status}`);
+                }
+                const packIndex = (await packIndexResponse.json());
+                if (packIndex.format !== 'wasm-of-js-of-ocaml-browser-native-runtime-pack-index-v1' ||
+                    !Array.isArray(packIndex.entries) ||
+                    packIndex.fileCount !== packIndex.entries.length ||
+                    typeof packIndex.totalBytes !== 'number') {
+                    throw new Error('invalid browser-native runtime pack index');
+                }
+                const packAssetResponse = await fetch(options.manifest.runtimePack.asset, {
+                    cache: 'no-store'
+                });
+                if (!packAssetResponse.ok) {
+                    throw new Error(`failed to fetch browser-native runtime pack asset: ${packAssetResponse.status}`);
+                }
+                let packBytes = new Uint8Array(await packAssetResponse.arrayBuffer());
+                if (packBytes.byteLength >= 2 &&
+                    packBytes[0] === 0x1f &&
+                    packBytes[1] === 0x8b) {
+                    if (typeof DecompressionStream !== 'function') {
+                        throw new Error("failed to decompress browser-native runtime pack: this browser does not support DecompressionStream('gzip')");
+                    }
+                    const decompressedResponse = new Response(new Blob([packBytes.buffer]).stream().pipeThrough(new DecompressionStream('gzip')));
+                    packBytes = new Uint8Array(await decompressedResponse.arrayBuffer());
+                }
+                if (packIndex.fileCount !== options.manifest.runtimePack.fileCount ||
+                    packIndex.totalBytes !== options.manifest.runtimePack.totalBytes ||
+                    packBytes.byteLength !== packIndex.totalBytes) {
+                    throw new Error('browser-native runtime pack metadata does not match payload');
+                }
+                const packEntries = new Map();
+                for (const entry of packIndex.entries) {
+                    if (typeof entry.runtimePath !== 'string' ||
+                        typeof entry.offset !== 'number' ||
+                        typeof entry.length !== 'number') {
+                        throw new Error('invalid browser-native runtime pack entry');
+                    }
+                    packEntries.set(entry.runtimePath, {
+                        offset: entry.offset,
+                        length: entry.length
+                    });
+                }
+                return {
+                    bytes: packBytes,
+                    entries: packEntries
+                };
+            })();
+        }
+        const runtimePackEntries = await runtimePackEntriesPromise;
         const result = await runBrowserNativeTool({
             toolUrl: options.manifest.tools[commandName],
             argv: toolArgv,
             env,
             preloadFiles: [
-                ...getToolchainPreloads(commandName, options.manifest, packageClosure),
+                ...getToolchainPreloads(commandName, options.manifest, packageClosure, runtimePackEntries),
                 ...getFilePreloadsFromFs(context.fs, '/workspace'),
                 ...getFilePreloadsFromFs(context.fs, '/tmp')
             ],

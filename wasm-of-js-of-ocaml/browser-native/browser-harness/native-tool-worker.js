@@ -53,6 +53,14 @@ function bytesToBase64(bytes) {
 function base64ToBytes(value) {
     return binaryStringToBytes(atob(value));
 }
+function isBinaryenBridgeDebugEnabled(runtimeGlobal) {
+    return runtimeGlobal['__wasm_bridge_debug'] === true;
+}
+function pushBinaryenBridgeMessage(runtimeGlobal, message) {
+    const bridgeMessages = runtimeGlobal['__wasm_bridge_messages'] || [];
+    bridgeMessages.push(message);
+    runtimeGlobal['__wasm_bridge_messages'] = bridgeMessages;
+}
 function shellSplit(command) {
     const tokens = [];
     let current = '';
@@ -215,8 +223,10 @@ function runBinaryenBridge(runtimeGlobal, command, endpointUrl) {
     }
     const bridgeMessages = runtimeGlobal['__wasm_bridge_messages'] || [];
     const inputPaths = [...pathTokens].filter((filePath) => !outputPaths.has(filePath));
-    bridgeMessages.push(`binaryen bridge command: ${command}`, `binaryen bridge files: ${inputPaths.sort().join(', ') || '(none)'}`, `binaryen bridge outputs: ${[...outputPaths].sort().join(', ') || '(none)'}`);
-    runtimeGlobal['__wasm_bridge_messages'] = bridgeMessages;
+    if (isBinaryenBridgeDebugEnabled(runtimeGlobal)) {
+        bridgeMessages.push(`binaryen bridge command: ${command}`, `binaryen bridge files: ${inputPaths.sort().join(', ') || '(none)'}`, `binaryen bridge outputs: ${[...outputPaths].sort().join(', ') || '(none)'}`);
+        runtimeGlobal['__wasm_bridge_messages'] = bridgeMessages;
+    }
     const requestBody = JSON.stringify({
         command,
         files: collectVirtualFiles(runtimeGlobal, inputPaths).map((file) => ({
@@ -230,21 +240,19 @@ function runBinaryenBridge(runtimeGlobal, command, endpointUrl) {
     xhr.setRequestHeader('content-type', 'application/json');
     xhr.send(requestBody);
     if (xhr.status !== 200) {
-        const bridgeMessages = runtimeGlobal['__wasm_bridge_messages'] || [];
-        bridgeMessages.push(`binaryen bridge http ${xhr.status}: ${xhr.responseText}`);
-        runtimeGlobal['__wasm_bridge_messages'] = bridgeMessages;
+        pushBinaryenBridgeMessage(runtimeGlobal, `binaryen bridge http ${xhr.status}: ${xhr.responseText}`);
         return 1;
     }
     const response = JSON.parse(xhr.responseText || '{}');
-    const responseMessages = runtimeGlobal['__wasm_bridge_messages'] || [];
-    responseMessages.push(`binaryen bridge exit: ${response.exitCode}`);
-    if (response.stdout) {
-        responseMessages.push(response.stdout);
+    if (response.exitCode !== 0 || isBinaryenBridgeDebugEnabled(runtimeGlobal)) {
+        pushBinaryenBridgeMessage(runtimeGlobal, `binaryen bridge exit: ${response.exitCode}`);
+    }
+    if (response.stdout && (response.exitCode !== 0 || isBinaryenBridgeDebugEnabled(runtimeGlobal))) {
+        pushBinaryenBridgeMessage(runtimeGlobal, response.stdout);
     }
     if (response.stderr) {
-        responseMessages.push(response.stderr);
+        pushBinaryenBridgeMessage(runtimeGlobal, response.stderr);
     }
-    runtimeGlobal['__wasm_bridge_messages'] = responseMessages;
     writeVirtualFiles(runtimeGlobal, (response.outputs || []).map((output) => ({
         path: output.path,
         data: base64ToBytes(output.dataBase64)
@@ -303,6 +311,7 @@ self.addEventListener('message', async (event) => {
     const originalJsooFsTmp = runtimeSlots['jsoo_fs_tmp'];
     const originalMounts = runtimeSlots['__jsoo_mounts'];
     const originalBridgeMessages = runtimeSlots['__wasm_bridge_messages'];
+    const originalBridgeDebug = runtimeSlots['__wasm_bridge_debug'];
     const originalRequire = runtimeSlots['require'];
     try {
         const preloadFiles = await materializePreloadFiles(request.preloadFiles);
@@ -333,11 +342,11 @@ self.addEventListener('message', async (event) => {
         };
         if (request.systemBridge === 'binaryen') {
             runtimeSlots['__wasm_bridge_messages'] = [];
-            stderrParts.push('binaryen system bridge enabled');
+            runtimeSlots['__wasm_bridge_debug'] = request.env['WASM_OF_JS_DEBUG_BINARYEN'] === '1';
             runtimeSlots['__wasm_of_js_system_command'] = (command) => {
-                const bridgeMessages = runtimeSlots['__wasm_bridge_messages'] || [];
-                bridgeMessages.push(`binaryen system bridge invoked: ${command}`);
-                runtimeSlots['__wasm_bridge_messages'] = bridgeMessages;
+                if (runtimeSlots['__wasm_bridge_debug'] === true) {
+                    pushBinaryenBridgeMessage(runtimeGlobal, `binaryen system bridge invoked: ${command}`);
+                }
                 return runBinaryenBridge(runtimeGlobal, command, '/api/binaryen-command');
             };
             runtimeSlots['require'] = (specifier) => {
@@ -499,6 +508,12 @@ self.addEventListener('message', async (event) => {
         }
         else {
             runtimeSlots['__wasm_bridge_messages'] = originalBridgeMessages;
+        }
+        if (typeof originalBridgeDebug === 'undefined') {
+            delete runtimeSlots['__wasm_bridge_debug'];
+        }
+        else {
+            runtimeSlots['__wasm_bridge_debug'] = originalBridgeDebug;
         }
         delete runtimeSlots['__wasm_of_js_system_command'];
     }
