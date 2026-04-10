@@ -17,49 +17,50 @@ const DEFAULT_VERSION_MODULE_PATH = path.resolve(
 );
 
 /**
- * @param {string} sourcePath
+ * @param {string} relativePath
  */
-function shouldSkipCopy(sourcePath) {
-	return sourcePath.endsWith('.d.ts') || sourcePath.endsWith('.tsbuildinfo');
-}
-
-/**
- * @param {string} sourceDir
- * @param {string} targetDir
- */
-async function copyDirectory(sourceDir, targetDir) {
-	const entries = await readdir(sourceDir, { withFileTypes: true });
-
-	for (const entry of entries) {
-		const sourcePath = path.join(sourceDir, entry.name);
-		if (shouldSkipCopy(sourcePath)) continue;
-
-		const targetPath = path.join(targetDir, entry.name);
-		if (entry.isDirectory()) {
-			await mkdir(targetPath, { recursive: true });
-			await copyDirectory(sourcePath, targetPath);
-			continue;
-		}
-		await cp(sourcePath, targetPath);
+function shouldInclude(relativePath) {
+	const normalized = relativePath.split(path.sep).join('/');
+	if (
+		normalized.startsWith('vendor/emception/') ||
+		normalized.startsWith('vendor/wasm-rust-runtime/')
+	) {
+		return true;
 	}
+	if (normalized.startsWith('assets/runtime-') && normalized.endsWith('.js')) {
+		return true;
+	}
+	const exactAllowlist = new Set([
+		'runtime.js',
+		'tools/go-probe.wasm',
+		'tools/tinygo-compiler.wasm',
+		'tools/tinygo-compiler.json',
+		'tools/tinygo-upstream-probe.wasm',
+		'tools/tinygo-upstream-probe.json',
+		'tools/tinygo-upstream-frontend-probe.wasm',
+		'tools/tinygo-upstream-frontend-probe.json'
+	]);
+	return exactAllowlist.has(normalized);
 }
 
 /**
  * @param {string} rootDir
  * @returns {Promise<string[]>}
  */
-async function listFiles(rootDir) {
+async function listFiles(rootDir, baseDir = rootDir) {
 	const entries = await readdir(rootDir, { withFileTypes: true });
 	const files = [];
 	for (const entry of entries) {
 		const entryPath = path.join(rootDir, entry.name);
-		if (shouldSkipCopy(entryPath)) continue;
 		if (entry.isDirectory()) {
-			files.push(...(await listFiles(entryPath)));
+			files.push(...(await listFiles(entryPath, baseDir)));
 			continue;
 		}
 		if (entry.isFile()) {
-			files.push(entryPath);
+			const relativePath = path.relative(baseDir, entryPath);
+			if (shouldInclude(relativePath)) {
+				files.push(entryPath);
+			}
 		}
 	}
 	return files.sort();
@@ -120,7 +121,13 @@ export async function syncWasmTinyGoDist({
 
 	await rm(targetDir, { recursive: true, force: true });
 	await mkdir(targetDir, { recursive: true });
-	await copyDirectory(sourceDir, targetDir);
+	const filesToCopy = await listFiles(sourceDir);
+	for (const sourcePath of filesToCopy) {
+		const relativePath = path.relative(sourceDir, sourcePath);
+		const targetPath = path.join(targetDir, relativePath);
+		await mkdir(path.dirname(targetPath), { recursive: true });
+		await cp(sourcePath, targetPath);
+	}
 	const fingerprint = await computeBundleFingerprint(sourceDir);
 	await writeVersionModule(versionModulePath, fingerprint);
 

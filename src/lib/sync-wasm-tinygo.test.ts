@@ -30,24 +30,30 @@ describe('syncWasmTinyGoDist', () => {
 
 		await writeFixtureFile(sourceDir, 'index.html', '<!doctype html>\n');
 		await writeFixtureFile(sourceDir, 'runtime.js', 'export const runtime = true;\n');
-		await writeFixtureFile(sourceDir, 'assets/index.js', 'console.log("tinygo");\n');
+		await writeFixtureFile(sourceDir, 'assets/runtime-test.js', 'console.log("runtime");\n');
 		await writeFixtureFile(sourceDir, 'tools/go-probe.wasm', 'wasm');
+		await writeFixtureFile(sourceDir, 'tools/tinygo-compiler.wasm', 'compiler');
+		await writeFixtureFile(sourceDir, 'tools/tinygo-compiler.json', '{"buildMode":"direct"}\n');
 		await writeFixtureFile(sourceDir, 'types.d.ts', 'export type Ignored = true;\n');
 
 		const result = await syncWasmTinyGoDist({ sourceDir, targetDir, versionModulePath });
 
-		await expect(readFile(path.join(targetDir, 'index.html'), 'utf8')).resolves.toContain(
-			'<!doctype html>'
-		);
 		await expect(readFile(path.join(targetDir, 'runtime.js'), 'utf8')).resolves.toContain(
 			'runtime = true'
 		);
-		await expect(readFile(path.join(targetDir, 'assets/index.js'), 'utf8')).resolves.toContain(
-			'tinygo'
+		await expect(readFile(path.join(targetDir, 'assets/runtime-test.js'), 'utf8')).resolves.toContain(
+			'runtime'
 		);
 		await expect(readFile(path.join(targetDir, 'tools/go-probe.wasm'), 'utf8')).resolves.toBe(
 			'wasm'
 		);
+		await expect(readFile(path.join(targetDir, 'tools/tinygo-compiler.wasm'), 'utf8')).resolves.toBe(
+			'compiler'
+		);
+		await expect(readFile(path.join(targetDir, 'tools/tinygo-compiler.json'), 'utf8')).resolves.toContain(
+			'"buildMode":"direct"'
+		);
+		await expect(readFile(path.join(targetDir, 'index.html'), 'utf8')).rejects.toThrow();
 		await expect(readFile(path.join(targetDir, 'types.d.ts'), 'utf8')).rejects.toThrow();
 		await expect(readFile(versionModulePath, 'utf8')).resolves.toContain(
 			`export const WASM_TINYGO_ASSET_VERSION = ${JSON.stringify(result.fingerprint)};`
@@ -84,13 +90,14 @@ describe('syncWasmTinyGoDist', () => {
 
 		await writeFixtureFile(sourceDir, 'index.html', '<!doctype html>\n');
 		await writeFixtureFile(sourceDir, 'runtime.js', 'export const runtime = true;\n');
-		await writeFixtureFile(sourceDir, 'assets/index.js', 'console.log("tinygo");\n');
+		await writeFixtureFile(sourceDir, 'assets/runtime-test.js', 'console.log("runtime");\n');
 		await writeFixtureFile(sourceDir, 'tools/go-probe.wasm', 'wasm');
+		await writeFixtureFile(sourceDir, 'tools/tinygo-compiler.json', '{"buildMode":"direct"}\n');
 
 		const first = await syncWasmTinyGoDist({ sourceDir, targetDir: firstTargetDir, versionModulePath });
 		const shiftedTime = new Date(Date.now() + 60_000);
 		await utimes(path.join(sourceDir, 'runtime.js'), shiftedTime, shiftedTime);
-		await utimes(path.join(sourceDir, 'assets/index.js'), shiftedTime, shiftedTime);
+		await utimes(path.join(sourceDir, 'assets/runtime-test.js'), shiftedTime, shiftedTime);
 		const second = await syncWasmTinyGoDist({
 			sourceDir,
 			targetDir: secondTargetDir,
