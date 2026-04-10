@@ -95,7 +95,7 @@
 						: language === 'ELIXIR'
 							? 'elixir'
 						: language === 'OCAML'
-							? 'plaintext'
+							? 'ocaml'
 						: 'go'
 	);
 

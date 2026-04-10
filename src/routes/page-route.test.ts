@@ -266,6 +266,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/const requestedOcamlBackend = page\.url\.searchParams\.get\('ocamlBackend'\);/);
 		expect(source).toMatch(/requestedOcamlBackend === 'js' \|\| requestedOcamlBackend === 'wasm'/);
 		expect(source).toMatch(/storedOcamlBackend === 'js' \|\| storedOcamlBackend === 'wasm'/);
+		expect(source).toMatch(/: language === 'OCAML'\s+\? 'ocaml'/);
 		expect(source).toMatch(/ocamlBackend: language === 'OCAML' \? ocamlBackend : undefined/);
 		expect(source).toMatch(/<select id="ocaml-backend" bind:value=\{ocamlBackend\}>/);
 		expect(source).toMatch(/<option value="wasm">wasm_of_ocaml<\/option>/);
