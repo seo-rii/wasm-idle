@@ -274,6 +274,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/<option value="js">js_of_ocaml<\/option>/);
 		expect(source).toMatch(/OCaml uses the bundled `wasm-of-js-of-ocaml` browser-native toolchain/);
 		expect(source).toMatch(/selector switches between `wasm_of_ocaml` and `js_of_ocaml`/);
+		expect(source).toMatch(/Type into the\s+terminal below and press Enter to send a line/s);
 	});
 
 	it('keeps the example workspace full-height, resizable, and hides debug panels until debug starts', () => {

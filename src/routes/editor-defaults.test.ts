@@ -39,6 +39,13 @@ describe('editor defaults', () => {
 		);
 	});
 
+	it('keeps the OCaml starter wired to stdin with a fallback value', () => {
+		expect(editorDefaults.ocaml).toContain('read_line ()');
+		expect(editorDefaults.ocaml).toContain('int_of_string value');
+		expect(editorDefaults.ocaml).toContain('read_int_or_default 4');
+		expect(editorDefaults.ocaml).toContain('factorial_plus_bonus=%d\\n%!');
+	});
+
 	it('recognizes bundled defaults and the legacy broken TinyGo starter separately', () => {
 		expect(isEditorDefaultSource(editorDefaults.go)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.ocaml)).toBe(true);

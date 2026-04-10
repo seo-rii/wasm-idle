@@ -759,8 +759,9 @@
 			<p class="hint">
 				OCaml uses the bundled `wasm-of-js-of-ocaml` browser-native toolchain. The backend
 				selector switches between `wasm_of_ocaml` and `js_of_ocaml`. The current playground
-				path focuses on browser compile-and-run for standalone source files, so this starter
-				avoids stdin and CLI args.
+				path focuses on browser compile-and-run for standalone source files. Type into the
+				terminal below and press Enter to send a line; use Ctrl+D or the EOF button while
+				running if the program reads stdin until EOF.
 			</p>
 		{/if}
 		{#if language === 'ELIXIR'}

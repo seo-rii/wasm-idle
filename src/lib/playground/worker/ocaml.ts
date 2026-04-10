@@ -258,10 +258,12 @@ async function executeCompileResult(result: CompileResult, log = false) {
 	const hadRequire = Object.prototype.hasOwnProperty.call(runtimeGlobal, 'require');
 	const hadModule = Object.prototype.hasOwnProperty.call(runtimeGlobal, 'module');
 	const hadExports = Object.prototype.hasOwnProperty.call(runtimeGlobal, 'exports');
+	const hadFs = Object.prototype.hasOwnProperty.call(runtimeGlobal, 'fs');
 	const originalProcess = runtimeGlobal.process;
 	const originalRequire = runtimeGlobal.require;
 	const originalModule = runtimeGlobal.module;
 	const originalExports = runtimeGlobal.exports;
+	const originalFs = runtimeGlobal.fs;
 	const hadStdinHook = Object.prototype.hasOwnProperty.call(runtimeGlobal, stdinHookKey);
 	const originalStdinHook = runtimeGlobal[stdinHookKey];
 	const assetEntries = assetFiles
@@ -355,9 +357,6 @@ async function executeCompileResult(result: CompileResult, log = false) {
 		return await originalFetch(input, init);
 	}) as typeof fetch;
 	runtimeGlobal.process = undefined;
-	runtimeGlobal.require = undefined;
-	runtimeGlobal.module = undefined;
-	runtimeGlobal.exports = undefined;
 	runtimeGlobal[stdinHookKey] = () => {
 		if (!stdinBufferOcaml) {
 			return null;
@@ -381,6 +380,49 @@ async function executeCompileResult(result: CompileResult, log = false) {
 		}
 		return byteString;
 	};
+	let lastFsReadSequence = -1;
+	const stdinFsShim = {
+		readSync(
+			fileDescriptor: number,
+			buffer: Uint8Array,
+			offset = 0,
+			length = buffer.byteLength - offset
+		) {
+			if (fileDescriptor !== 0 || !stdinBufferOcaml) {
+				return 0;
+			}
+			const currentSequence = Atomics.load(stdinBufferOcaml, 0);
+			if (currentSequence === lastFsReadSequence) {
+				return 0;
+			}
+			const chunk = waitForBufferedStdin(stdinBufferOcaml, () => postMessage({ buffer: true }));
+			lastFsReadSequence = Atomics.load(stdinBufferOcaml, 0);
+			if (chunk == null) {
+				if (log) {
+					console.log('[wasm-idle:ocaml-stdin] read(bytes=0, eof=true)');
+				}
+				return 0;
+			}
+			const encoded = stdinEncoder.encode(chunk);
+			const byteLength = Math.min(length, encoded.byteLength);
+			buffer.set(encoded.subarray(0, byteLength), offset);
+			if (log) {
+				console.log(
+					`[wasm-idle:ocaml-stdin] read(bytes=${byteLength}, text=${JSON.stringify(chunk)})`
+				);
+			}
+			return byteLength;
+		}
+	};
+	runtimeGlobal.fs = stdinFsShim;
+	runtimeGlobal.require = (specifier: string) => {
+		if (specifier === 'fs' || specifier === 'node:fs') {
+			return stdinFsShim;
+		}
+		throw new Error(`unsupported OCaml runtime require: ${specifier}`);
+	};
+	runtimeGlobal.module = { exports: {} };
+	runtimeGlobal.exports = (runtimeGlobal.module as { exports: unknown }).exports;
 
 	try {
 		let normalizedSource = normalizeAssetLoader(programArtifact.data, runtimePromiseKey);
@@ -397,6 +439,12 @@ async function executeCompileResult(result: CompileResult, log = false) {
 						/read\(([A-Za-z$_][\w$]*),([A-Za-z$_][\w$]*),([A-Za-z$_][\w$]*),([A-Za-z$_][\w$]*)\)\{[^{}]+\}(?=seek\([A-Za-z$_][\w$]*,[A-Za-z$_][\w$]*,[A-Za-z$_][\w$]*\)\{[^{}]+\}pos\(\)\{return-1\}close\(\)\{this\.log=undefined\}check_stream_semantics\([A-Za-z$_][\w$]*\)\{\})/,
 						stdinReadReplacement
 					);
+		normalizedSource = normalizedSource
+			.replace(/\bfs\.readSync\(/g, 'globalThis.fs.readSync(')
+			.replace(
+				/read:\(([^)]*)\)=>[A-Za-z$_][\w$]*\.readSync\(/g,
+				'read:($1)=>globalThis.fs.readSync('
+			);
 		if (log && normalizedSource === programArtifact.data) {
 			console.warn('[wasm-idle:ocaml-worker] stdin runtime patch did not match generated JS');
 		}
@@ -436,6 +484,11 @@ async function executeCompileResult(result: CompileResult, log = false) {
 			delete runtimeGlobal.exports;
 		} else {
 			runtimeGlobal.exports = originalExports;
+		}
+		if (!hadFs) {
+			delete runtimeGlobal.fs;
+		} else {
+			runtimeGlobal.fs = originalFs;
 		}
 		if (!hadStdinHook) {
 			delete runtimeGlobal[stdinHookKey];

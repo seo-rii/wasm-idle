@@ -90,7 +90,7 @@ describe('wasm-idle OCaml browser playwright integration', () => {
 	);
 
 	it(
-		'accepts stdin on the real browser-native js_of_ocaml path',
+		'accepts stdin on the real browser-native OCaml backend paths',
 		async () => {
 			if (process.env.WASM_IDLE_RUN_REAL_BROWSER_OCAML !== '1') {
 				return;
@@ -126,29 +126,31 @@ describe('wasm-idle OCaml browser playwright integration', () => {
 							})();
 
 				try {
-					const summary = await runOcamlBrowserProbe({
-						browserUrl: previewServer.browserUrl,
-						runTimeoutMs: Number(process.env.WASM_IDLE_OCAML_RUN_TIMEOUT_MS || '300000'),
-						expectedOutput: '5',
-						backend: 'js',
-						code: 'let () = print_endline (read_line ())',
-						stdinText: '5\n'
-					});
+					for (const backend of ['js', 'wasm'] as const) {
+						const summary = await runOcamlBrowserProbe({
+							browserUrl: previewServer.browserUrl,
+							runTimeoutMs: Number(process.env.WASM_IDLE_OCAML_RUN_TIMEOUT_MS || '300000'),
+							expectedOutput: '5',
+							backend,
+							code: 'let () = print_endline (read_line ())',
+							stdinText: '5\n'
+						});
 
-					expect(summary.activeState.crossOriginIsolated).toBe(true);
-					expect(summary.activeState.sharedArrayBuffer).toBe(true);
-					expect(summary.activeState.serviceWorkerControlled).toBe(true);
-					expect(summary.selectedOcamlBackend).toBe('js');
-					expect(summary.pageErrors).toEqual([]);
-					expect(summary.moduleResolutionErrors).toEqual([]);
-					expect(summary.ocamlConsoleErrors).toEqual([]);
-					expect(summary.transcript).toContain('5');
-					expect(summary.transcript).toContain('Process finished after');
-					expect(
-						summary.consoleTail.some((entry) =>
-							entry.includes('[wasm-idle:ocaml-stdin] read(bytes=')
-						)
-					).toBe(true);
+						expect(summary.activeState.crossOriginIsolated).toBe(true);
+						expect(summary.activeState.sharedArrayBuffer).toBe(true);
+						expect(summary.activeState.serviceWorkerControlled).toBe(true);
+						expect(summary.selectedOcamlBackend).toBe(backend);
+						expect(summary.pageErrors).toEqual([]);
+						expect(summary.moduleResolutionErrors).toEqual([]);
+						expect(summary.ocamlConsoleErrors).toEqual([]);
+						expect(summary.transcript).toContain('5');
+						expect(summary.transcript).toContain('Process finished after');
+						expect(
+							summary.consoleTail.some((entry) =>
+								entry.includes('[wasm-idle:ocaml-stdin] read(bytes=')
+							)
+						).toBe(true);
+					}
 				} finally {
 					await previewServer.close();
 				}

@@ -93,8 +93,17 @@ Demo.run()`,
 let rec factorial n =
   if n <= 1 then 1 else n * factorial (n - 1)
 
+let read_int_or_default default =
+  try
+    match String.trim (read_line ()) with
+    | "" -> default
+    | value -> int_of_string value
+  with
+  | End_of_file
+  | Failure _ -> default
+
 let () =
-  let n = 4 in
+  let n = read_int_or_default 4 in
   Printf.printf "factorial_plus_bonus=%d\\n%!" (factorial n + bonus)`
 };
 

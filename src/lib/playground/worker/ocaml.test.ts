@@ -169,4 +169,196 @@ describe('OCaml worker', () => {
 		expect(postMessage).toHaveBeenCalledWith({ output: 'wasm runtime ok\n' });
 		expect(postMessage).toHaveBeenCalledWith({ results: true });
 	});
+
+	it('bridges wasm_of_ocaml Node-style fs.readSync stdin reads', async () => {
+		const compilerModuleUrl = await createMockOcamlCompilerModule(`
+			export async function compile() {
+				return {
+					success: true,
+					stdout: '',
+					stderr: '',
+					diagnostics: [],
+					artifacts: [
+						{
+							path: '/workspace/_build/main.js',
+							kind: 'js',
+							data: \`
+								globalThis.__wasm_of_js_of_ocaml_runtime_promise=Promise.resolve().then(()=>{
+									const fs=globalThis.require('fs');
+									const bytes=new Uint8Array(64);
+									const length=fs.readSync(0,bytes,0,64,null);
+									const secondLength=fs.readSync(0,bytes,0,64,null);
+									if(secondLength!==0)throw new Error('expected repeated empty stdin read to return EOF');
+									console.log(new TextDecoder().decode(bytes.slice(0,length)));
+								});
+							\`
+						}
+					]
+				};
+			}
+
+			export function createBrowserWorkerSystemDispatcher() {
+				return {};
+			}
+		`);
+		const buffer = new SharedArrayBuffer(1024);
+		const queuedInput = ['7\n'];
+
+		(globalThis as any).postMessage = vi.fn((message: any) => {
+			if (message?.buffer) {
+				flushQueuedStdin(queuedInput, buffer);
+			}
+		});
+
+		await import('./ocaml');
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				moduleUrl: compilerModuleUrl,
+				manifestUrl: 'https://example.test/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json'
+			}
+		});
+		await Promise.resolve();
+
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: 'let () = print_endline (read_line ())',
+				prepare: false,
+				target: 'wasm',
+				buffer
+			}
+		});
+		await Promise.resolve();
+
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ buffer: true });
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ output: '7\n' });
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
+	});
+
+	it('rewrites local generated fs.readSync stdin reads to the browser shim', async () => {
+		const compilerModuleUrl = await createMockOcamlCompilerModule(`
+			export async function compile() {
+				return {
+					success: true,
+					stdout: '',
+					stderr: '',
+					diagnostics: [],
+					artifacts: [
+						{
+							path: '/workspace/_build/main.js',
+							kind: 'js',
+							data: \`
+								globalThis.__wasm_of_js_of_ocaml_runtime_promise=Promise.resolve().then(()=>{
+									const fs=undefined;
+									const bytes=new Uint8Array(64);
+									const length=fs.readSync(0,bytes,0,64,null);
+									console.log(new TextDecoder().decode(bytes.slice(0,length)));
+								});
+							\`
+						}
+					]
+				};
+			}
+
+			export function createBrowserWorkerSystemDispatcher() {
+				return {};
+			}
+		`);
+		const buffer = new SharedArrayBuffer(1024);
+		const queuedInput = ['8\n'];
+
+		(globalThis as any).postMessage = vi.fn((message: any) => {
+			if (message?.buffer) {
+				flushQueuedStdin(queuedInput, buffer);
+			}
+		});
+
+		await import('./ocaml');
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				moduleUrl: compilerModuleUrl,
+				manifestUrl: 'https://example.test/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json'
+			}
+		});
+		await Promise.resolve();
+
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: 'let () = print_endline (read_line ())',
+				prepare: false,
+				target: 'wasm',
+				buffer
+			}
+		});
+		await Promise.resolve();
+
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ buffer: true });
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ output: '8\n' });
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
+	});
+
+	it('rewrites minified generated read adapters to the browser fs shim', async () => {
+		const compilerModuleUrl = await createMockOcamlCompilerModule(`
+			export async function compile() {
+				return {
+					success: true,
+					stdout: '',
+					stderr: '',
+					diagnostics: [],
+					artifacts: [
+						{
+							path: '/workspace/_build/main.js',
+							kind: 'js',
+							data: \`
+								globalThis.__wasm_of_js_of_ocaml_runtime_promise=Promise.resolve().then(()=>{
+									const f=undefined;
+									const adapter={read:(a,b,c,d,e)=>f.readSync(a,b,c,d,e)};
+									const bytes=new Uint8Array(64);
+									const length=adapter.read(0,bytes,0,64,null);
+									console.log(new TextDecoder().decode(bytes.slice(0,length)));
+								});
+							\`
+						}
+					]
+				};
+			}
+
+			export function createBrowserWorkerSystemDispatcher() {
+				return {};
+			}
+		`);
+		const buffer = new SharedArrayBuffer(1024);
+		const queuedInput = ['9\n'];
+
+		(globalThis as any).postMessage = vi.fn((message: any) => {
+			if (message?.buffer) {
+				flushQueuedStdin(queuedInput, buffer);
+			}
+		});
+
+		await import('./ocaml');
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				moduleUrl: compilerModuleUrl,
+				manifestUrl: 'https://example.test/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json'
+			}
+		});
+		await Promise.resolve();
+
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: 'let () = print_endline (read_line ())',
+				prepare: false,
+				target: 'wasm',
+				buffer
+			}
+		});
+		await Promise.resolve();
+
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ buffer: true });
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ output: '9\n' });
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
+	});
 });
