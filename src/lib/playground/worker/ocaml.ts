@@ -78,6 +78,9 @@ type CompilerModule = {
 	) => Promise<CompileResult>;
 	createBrowserWorkerSystemDispatcher: (options: {
 		manifest: BrowserNativeManifest;
+		binaryenBridge?: {
+			endpointUrl?: string;
+		};
 	}) => unknown;
 };
 
@@ -112,10 +115,7 @@ function appendTrailingNewline(text: string) {
 
 function normalizeAssetLoader(programSource: string, runtimePromiseKey: string) {
 	let normalizedSource = programSource.includes('($=>async a=>{')
-		? programSource.replace(
-				'($=>async a=>{',
-				`globalThis.${runtimePromiseKey}=($=>async a=>{`
-			)
+		? programSource.replace('($=>async a=>{', `globalThis.${runtimePromiseKey}=($=>async a=>{`)
 		: programSource;
 	const assetLoaderPattern =
 		/function ([A-Za-z$_][\w$]*)\(([A-Za-z$_][\w$]*)\)\{const ([A-Za-z$_][\w$]*)=([A-Za-z$_][\w$]*)\?new URL\(\2,\4\):\2;return fetch\(\3\)\}/;
@@ -145,21 +145,37 @@ function rewriteAbsoluteBundleUrl(url: string, currentManifestUrl: string) {
 	return new URL(`${basePath}${url}`, manifestLocation.origin).toString();
 }
 
-function rewriteManifest(manifest: BrowserNativeManifest, currentManifestUrl: string): BrowserNativeManifest {
+function resolveOcamlBinaryenBridgeUrl(currentManifestUrl: string) {
+	return rewriteAbsoluteBundleUrl('/api/binaryen-command', currentManifestUrl);
+}
+
+function rewriteManifest(
+	manifest: BrowserNativeManifest,
+	currentManifestUrl: string
+): BrowserNativeManifest {
 	return {
 		...manifest,
 		findlibConf: rewriteAbsoluteBundleUrl(manifest.findlibConf, currentManifestUrl),
 		tools: {
 			ocamlc: rewriteAbsoluteBundleUrl(manifest.tools.ocamlc, currentManifestUrl),
 			js_of_ocaml: rewriteAbsoluteBundleUrl(manifest.tools.js_of_ocaml, currentManifestUrl),
-			wasm_of_ocaml: rewriteAbsoluteBundleUrl(manifest.tools.wasm_of_ocaml, currentManifestUrl)
+			wasm_of_ocaml: rewriteAbsoluteBundleUrl(
+				manifest.tools.wasm_of_ocaml,
+				currentManifestUrl
+			)
 		},
 		...(manifest.runtimePack
 			? {
 					runtimePack: {
 						...manifest.runtimePack,
-						asset: rewriteAbsoluteBundleUrl(manifest.runtimePack.asset, currentManifestUrl),
-						index: rewriteAbsoluteBundleUrl(manifest.runtimePack.index, currentManifestUrl)
+						asset: rewriteAbsoluteBundleUrl(
+							manifest.runtimePack.asset,
+							currentManifestUrl
+						),
+						index: rewriteAbsoluteBundleUrl(
+							manifest.runtimePack.index,
+							currentManifestUrl
+						)
 					}
 				}
 			: {}),
@@ -249,9 +265,13 @@ async function executeCompileResult(result: CompileResult, log = false) {
 	const stdinEncoder = new TextEncoder();
 	const originalConsole = globalThis.console;
 	const originalFetch = globalThis.fetch.bind(globalThis);
-	const originalInstantiate = WebAssembly.instantiate.bind(WebAssembly) as typeof WebAssembly.instantiate;
+	const originalInstantiate = WebAssembly.instantiate.bind(
+		WebAssembly
+	) as typeof WebAssembly.instantiate;
 	const originalInstantiateStreaming = WebAssembly.instantiateStreaming
-		? (WebAssembly.instantiateStreaming.bind(WebAssembly) as typeof WebAssembly.instantiateStreaming)
+		? (WebAssembly.instantiateStreaming.bind(
+				WebAssembly
+			) as typeof WebAssembly.instantiateStreaming)
 		: undefined;
 	const runtimeGlobal = globalThis as typeof globalThis & Record<string, unknown>;
 	const hadProcess = Object.prototype.hasOwnProperty.call(runtimeGlobal, 'process');
@@ -267,12 +287,19 @@ async function executeCompileResult(result: CompileResult, log = false) {
 	const hadStdinHook = Object.prototype.hasOwnProperty.call(runtimeGlobal, stdinHookKey);
 	const originalStdinHook = runtimeGlobal[stdinHookKey];
 	const assetEntries = assetFiles
-		.filter((artifact): artifact is CompileArtifact & { data: Uint8Array } => artifact.data instanceof Uint8Array)
+		.filter(
+			(artifact): artifact is CompileArtifact & { data: Uint8Array } =>
+				artifact.data instanceof Uint8Array
+		)
 		.map((assetFile) => {
 			const copiedAssetData = new Uint8Array(assetFile.data.byteLength);
 			copiedAssetData.set(assetFile.data);
 			const objectUrl = URL.createObjectURL(
-				new Blob([copiedAssetData], { type: assetFile.path.endsWith('.wasm') ? 'application/wasm' : 'application/octet-stream' })
+				new Blob([copiedAssetData], {
+					type: assetFile.path.endsWith('.wasm')
+						? 'application/wasm'
+						: 'application/octet-stream'
+				})
 			);
 			createdObjectUrls.push(objectUrl);
 			const relativeFromSourceDir = assetFile.path.startsWith(`${sourceDir}/`)
@@ -312,19 +339,27 @@ async function executeCompileResult(result: CompileResult, log = false) {
 	globalThis.console = {
 		...originalConsole,
 		log: (...args: unknown[]) => {
-			postMessage({ output: appendTrailingNewline(args.map((value) => String(value)).join(' ')) });
+			postMessage({
+				output: appendTrailingNewline(args.map((value) => String(value)).join(' '))
+			});
 			originalConsole.log(...args);
 		},
 		info: (...args: unknown[]) => {
-			postMessage({ output: appendTrailingNewline(args.map((value) => String(value)).join(' ')) });
+			postMessage({
+				output: appendTrailingNewline(args.map((value) => String(value)).join(' '))
+			});
 			originalConsole.info(...args);
 		},
 		warn: (...args: unknown[]) => {
-			postMessage({ output: appendTrailingNewline(args.map((value) => String(value)).join(' ')) });
+			postMessage({
+				output: appendTrailingNewline(args.map((value) => String(value)).join(' '))
+			});
 			originalConsole.warn(...args);
 		},
 		error: (...args: unknown[]) => {
-			postMessage({ output: appendTrailingNewline(args.map((value) => String(value)).join(' ')) });
+			postMessage({
+				output: appendTrailingNewline(args.map((value) => String(value)).join(' '))
+			});
 			originalConsole.error(...args);
 		}
 	} as Console;
@@ -345,11 +380,7 @@ async function executeCompileResult(result: CompileResult, log = false) {
 	(globalThis as typeof globalThis & Record<string, unknown>)[assetResolverKey] = resolveAsset;
 	globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
 		const requestUrl =
-			typeof input === 'string'
-				? input
-				: input instanceof URL
-					? input.toString()
-					: input.url;
+			typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
 		const resolvedAssetUrl = resolveAsset(requestUrl);
 		if (resolvedAssetUrl) {
 			return await originalFetch(resolvedAssetUrl, init);
@@ -395,7 +426,9 @@ async function executeCompileResult(result: CompileResult, log = false) {
 			if (currentSequence === lastFsReadSequence) {
 				return 0;
 			}
-			const chunk = waitForBufferedStdin(stdinBufferOcaml, () => postMessage({ buffer: true }));
+			const chunk = waitForBufferedStdin(stdinBufferOcaml, () =>
+				postMessage({ buffer: true })
+			);
 			lastFsReadSequence = Atomics.load(stdinBufferOcaml, 0);
 			if (chunk == null) {
 				if (log) {
@@ -524,7 +557,9 @@ self.onmessage = async (event: { data: LoadRequest | RunRequest }) => {
 		stdinBufferOcaml = buffer ? new Int32Array(buffer) : null;
 
 		if (log) {
-			console.log(`[wasm-idle:ocaml-worker] compile start prepare=${prepare} target=${target}`);
+			console.log(
+				`[wasm-idle:ocaml-worker] compile start prepare=${prepare} target=${target}`
+			);
 		}
 		postMessage({ progress: { stage: 'compile-bootstrap', percent: 10 } });
 		const [compilerModule, manifest] = await Promise.all([
@@ -546,7 +581,12 @@ self.onmessage = async (event: { data: LoadRequest | RunRequest }) => {
 					effectsMode: 'cps'
 				},
 				{
-					system: compilerModule.createBrowserWorkerSystemDispatcher({ manifest }),
+					system: compilerModule.createBrowserWorkerSystemDispatcher({
+						manifest,
+						binaryenBridge: {
+							endpointUrl: resolveOcamlBinaryenBridgeUrl(manifestUrl)
+						}
+					}),
 					toolchainRoot: '/static/toolchain'
 				}
 			);
@@ -573,7 +613,9 @@ self.onmessage = async (event: { data: LoadRequest | RunRequest }) => {
 					fileName: diagnostic.file ?? null,
 					lineNumber: Math.max(1, Number(diagnostic.line || 1)),
 					columnNumber:
-						typeof diagnostic.column === 'number' ? Math.max(1, diagnostic.column) : undefined,
+						typeof diagnostic.column === 'number'
+							? Math.max(1, diagnostic.column)
+							: undefined,
 					severity:
 						diagnostic.severity === 'warning' || diagnostic.severity === 'other'
 							? diagnostic.severity

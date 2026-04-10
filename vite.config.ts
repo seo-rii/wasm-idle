@@ -9,12 +9,13 @@ import { defineConfig } from 'vite';
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const REPO_ROOT = path.dirname(THIS_FILE);
-const tinyGoCompilePath = `${svelteConfig.kit?.paths?.base ?? ''}/api/tinygo/compile`;
+const appBasePath = (svelteConfig.kit?.paths?.base ?? '').replace(/\/+$/, '');
+const tinyGoCompilePath = `${appBasePath}/api/tinygo/compile`;
 const tinyGoHostCompilerModuleUrl = new URL(
 	'../wasm-tinygo/scripts/tinygo-host-compiler.mjs',
 	import.meta.url
 ).href;
-const ocamlBinaryenCommandPath = '/api/binaryen-command';
+const ocamlBinaryenCommandPath = `${appBasePath}/api/binaryen-command`;
 const localOcamlBinaryenBin = path.join(REPO_ROOT, '.cache', 'wasm-of-js-of-ocaml-binaryen', 'bin');
 const siblingOcamlBinaryenBin = path.resolve(
 	REPO_ROOT,
@@ -45,7 +46,9 @@ function detectOcamlBinaryenBin() {
 }
 
 function createTinyGoHostCompilePlugin() {
-	const installMiddleware = (middlewares: { use: (handler: (...args: any[]) => unknown) => void }) => {
+	const installMiddleware = (middlewares: {
+		use: (handler: (...args: any[]) => unknown) => void;
+	}) => {
 		middlewares.use(async (req: any, res: any, next: () => void) => {
 			if (!req.url) {
 				next();
@@ -60,7 +63,9 @@ function createTinyGoHostCompilePlugin() {
 			if (req.method !== 'POST') {
 				res.statusCode = 405;
 				res.setHeader('content-type', 'application/json');
-				res.end(JSON.stringify({ error: 'TinyGo host compile only accepts POST requests' }));
+				res.end(
+					JSON.stringify({ error: 'TinyGo host compile only accepts POST requests' })
+				);
 				return;
 			}
 
@@ -81,7 +86,11 @@ function createTinyGoHostCompilePlugin() {
 			if (typeof payload.source !== 'string' || payload.source.trim() === '') {
 				res.statusCode = 400;
 				res.setHeader('content-type', 'application/json');
-				res.end(JSON.stringify({ error: 'TinyGo host compile requires a non-empty source string' }));
+				res.end(
+					JSON.stringify({
+						error: 'TinyGo host compile requires a non-empty source string'
+					})
+				);
 				return;
 			}
 
@@ -90,7 +99,12 @@ function createTinyGoHostCompilePlugin() {
 					/* @vite-ignore */ tinyGoHostCompilerModuleUrl
 				)) as {
 					compileTinyGoHostSource: (options: { source: string }) => Promise<{
-						artifact: { bytes: Uint8Array; entrypoint: '_start' | '_initialize' | null; path: string; size: number };
+						artifact: {
+							bytes: Uint8Array;
+							entrypoint: '_start' | '_initialize' | null;
+							path: string;
+							size: number;
+						};
 						target: string;
 						targetInfo: { scheduler: string };
 						toolchain: { version: string };
@@ -128,10 +142,14 @@ function createTinyGoHostCompilePlugin() {
 	};
 
 	return {
-		configurePreviewServer(server: { middlewares: { use: (handler: (...args: any[]) => unknown) => void } }) {
+		configurePreviewServer(server: {
+			middlewares: { use: (handler: (...args: any[]) => unknown) => void };
+		}) {
 			installMiddleware(server.middlewares);
 		},
-		configureServer(server: { middlewares: { use: (handler: (...args: any[]) => unknown) => void } }) {
+		configureServer(server: {
+			middlewares: { use: (handler: (...args: any[]) => unknown) => void };
+		}) {
 			installMiddleware(server.middlewares);
 		},
 		name: 'tinygo-host-compile'
@@ -139,7 +157,9 @@ function createTinyGoHostCompilePlugin() {
 }
 
 function createOcamlBinaryenPlugin() {
-	const installMiddleware = (middlewares: { use: (handler: (...args: any[]) => unknown) => void }) => {
+	const installMiddleware = (middlewares: {
+		use: (handler: (...args: any[]) => unknown) => void;
+	}) => {
 		middlewares.use(async (req: any, res: any, next: () => void) => {
 			if (!req.url) {
 				next();
@@ -154,7 +174,9 @@ function createOcamlBinaryenPlugin() {
 			if (req.method !== 'POST') {
 				res.statusCode = 405;
 				res.setHeader('content-type', 'application/json');
-				res.end(JSON.stringify({ error: 'Binaryen command bridge only accepts POST requests' }));
+				res.end(
+					JSON.stringify({ error: 'Binaryen command bridge only accepts POST requests' })
+				);
 				return;
 			}
 
@@ -178,16 +200,28 @@ function createOcamlBinaryenPlugin() {
 			const stagingRoot = await mkdtemp(path.join(tmpdir(), 'wasm-idle-ocaml-binaryen-'));
 			try {
 				for (const file of payload?.files || []) {
-					const targetPath = path.join(stagingRoot, String(file.path || '').replace(/^\/+/, ''));
+					const targetPath = path.join(
+						stagingRoot,
+						String(file.path || '').replace(/^\/+/, '')
+					);
 					await mkdir(path.dirname(targetPath), { recursive: true });
-					await writeFile(targetPath, Buffer.from(String(file.dataBase64 || ''), 'base64'));
+					await writeFile(
+						targetPath,
+						Buffer.from(String(file.dataBase64 || ''), 'base64')
+					);
 				}
 				for (const outputPath of payload?.outputPaths || []) {
-					const targetPath = path.join(stagingRoot, String(outputPath).replace(/^\/+/, ''));
+					const targetPath = path.join(
+						stagingRoot,
+						String(outputPath).replace(/^\/+/, '')
+					);
 					await mkdir(path.dirname(targetPath), { recursive: true });
 				}
 
-				const command = rewriteBinaryenVirtualPaths(String(payload?.command || ''), stagingRoot);
+				const command = rewriteBinaryenVirtualPaths(
+					String(payload?.command || ''),
+					stagingRoot
+				);
 				const result = await new Promise<{
 					exitCode: number;
 					stdout: string;
@@ -221,7 +255,10 @@ function createOcamlBinaryenPlugin() {
 
 				const outputs = [];
 				for (const outputPath of payload?.outputPaths || []) {
-					const translatedPath = path.join(stagingRoot, String(outputPath).replace(/^\/+/, ''));
+					const translatedPath = path.join(
+						stagingRoot,
+						String(outputPath).replace(/^\/+/, '')
+					);
 					try {
 						const data = await readFile(translatedPath);
 						outputs.push({
@@ -255,10 +292,14 @@ function createOcamlBinaryenPlugin() {
 	};
 
 	return {
-		configurePreviewServer(server: { middlewares: { use: (handler: (...args: any[]) => unknown) => void } }) {
+		configurePreviewServer(server: {
+			middlewares: { use: (handler: (...args: any[]) => unknown) => void };
+		}) {
 			installMiddleware(server.middlewares);
 		},
-		configureServer(server: { middlewares: { use: (handler: (...args: any[]) => unknown) => void } }) {
+		configureServer(server: {
+			middlewares: { use: (handler: (...args: any[]) => unknown) => void };
+		}) {
 			installMiddleware(server.middlewares);
 		},
 		name: 'ocaml-binaryen-bridge'

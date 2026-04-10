@@ -5,6 +5,12 @@ import { resolveChromiumExecutable } from './rust-browser-probe-lib.mjs';
 /**
  * @typedef {{ type: string; text: string }} BrowserConsoleMessage
  */
+/**
+ * @typedef {{ method: string; url: string }} BrowserNetworkRequest
+ */
+/**
+ * @typedef {{ status: number; url: string }} BrowserNetworkResponse
+ */
 
 /**
  * @param {BrowserConsoleMessage[]} messages
@@ -58,18 +64,36 @@ function findOcamlConsoleErrors(messages) {
  * @param {{ crossOriginIsolated: boolean; sharedArrayBuffer: boolean; serviceWorkerControlled: boolean }} activeState
  * @param {string[]} pageErrors
  * @param {BrowserConsoleMessage[]} consoleMessages
+ * @param {BrowserNetworkRequest[]} binaryenBridgeRequests
+ * @param {BrowserNetworkResponse[]} binaryenBridgeResponses
  * @param {string} browserUrl
  */
-async function readProbeSummary(page, activeState, pageErrors, consoleMessages, browserUrl) {
+async function readProbeSummary(
+	page,
+	activeState,
+	pageErrors,
+	consoleMessages,
+	binaryenBridgeRequests,
+	binaryenBridgeResponses,
+	browserUrl
+) {
 	const transcript =
-		(await page.locator('[data-testid="terminal-debug-output"]').textContent().catch(() => '')) || '';
+		(await page
+			.locator('[data-testid="terminal-debug-output"]')
+			.textContent()
+			.catch(() => '')) || '';
 	const selectedOcamlBackend =
-		(await page.locator('#ocaml-backend').inputValue().catch(() => '')) || '';
+		(await page
+			.locator('#ocaml-backend')
+			.inputValue()
+			.catch(() => '')) || '';
 	const storedCode = await page
 		.evaluate(() => window.localStorage.getItem('code') || '')
 		.catch(() => '');
 	return {
 		activeState,
+		binaryenBridgeRequests,
+		binaryenBridgeResponses,
 		browserUrl,
 		consoleTail: summarizeConsole(consoleMessages),
 		finalUrl: page.url(),
@@ -122,6 +146,10 @@ export async function runOcamlBrowserProbe({
 	const consoleMessages = [];
 	/** @type {string[]} */
 	const pageErrors = [];
+	/** @type {BrowserNetworkRequest[]} */
+	const binaryenBridgeRequests = [];
+	/** @type {BrowserNetworkResponse[]} */
+	const binaryenBridgeResponses = [];
 	page.on('console', (message) => {
 		consoleMessages.push({
 			type: message.type(),
@@ -133,6 +161,22 @@ export async function runOcamlBrowserProbe({
 	});
 	page.on('crash', () => {
 		pageErrors.push('Page crashed');
+	});
+	page.on('request', (request) => {
+		if (request.url().includes('/api/binaryen-command')) {
+			binaryenBridgeRequests.push({
+				method: request.method(),
+				url: request.url()
+			});
+		}
+	});
+	page.on('response', (response) => {
+		if (response.url().includes('/api/binaryen-command')) {
+			binaryenBridgeResponses.push({
+				status: response.status(),
+				url: response.url()
+			});
+		}
 	});
 
 	try {
@@ -170,7 +214,7 @@ export async function runOcamlBrowserProbe({
 			!activeState.serviceWorkerControlled
 		) {
 			throw new Error(
-				`page is not ready for wasm-idle OCaml\n${JSON.stringify(await readProbeSummary(page, activeState, pageErrors, consoleMessages, targetUrl.toString()), null, 2)}`
+				`page is not ready for wasm-idle OCaml\n${JSON.stringify(await readProbeSummary(page, activeState, pageErrors, consoleMessages, binaryenBridgeRequests, binaryenBridgeResponses, targetUrl.toString()), null, 2)}`
 			);
 		}
 
@@ -181,19 +225,22 @@ export async function runOcamlBrowserProbe({
 		await page.waitForSelector('#ocaml-backend', { state: 'attached', timeout: runTimeoutMs });
 		await page.locator('#ocaml-backend').selectOption(backend);
 		await page.waitForFunction(
-			() => typeof /** @type {any} */ (window).__wasmIdleDebug?.setEditorValue === 'function'
+			() =>
+				typeof (/** @type {any} */ (window).__wasmIdleDebug?.setEditorValue) === 'function'
 		);
 		const editorValueSet = await page.evaluate(async (nextCode) => {
 			return await /** @type {any} */ (window).__wasmIdleDebug.setEditorValue(nextCode);
 		}, code);
 		if (!editorValueSet) {
 			throw new Error(
-				`OCaml browser probe could not write editor contents\n${JSON.stringify(await readProbeSummary(page, activeState, pageErrors, consoleMessages, targetUrl.toString()), null, 2)}`
+				`OCaml browser probe could not write editor contents\n${JSON.stringify(await readProbeSummary(page, activeState, pageErrors, consoleMessages, binaryenBridgeRequests, binaryenBridgeResponses, targetUrl.toString()), null, 2)}`
 			);
 		}
 		await page.waitForFunction(
 			(expectedCode) => {
-				return /** @type {any} */ (window).__wasmIdleDebug?.getEditorValue?.() === expectedCode;
+				return (
+					/** @type {any} */ (window).__wasmIdleDebug?.getEditorValue?.() === expectedCode
+				);
 			},
 			code,
 			{
@@ -208,17 +255,25 @@ export async function runOcamlBrowserProbe({
 
 		await page.waitForSelector('[data-testid="terminal-debug-output"]', { state: 'attached' });
 		const initialTranscript =
-			(await page.locator('[data-testid="terminal-debug-output"]').textContent().catch(() => '')) || '';
-		const initialFinishedCount = (initialTranscript.match(/Process finished after/g) || []).length;
+			(await page
+				.locator('[data-testid="terminal-debug-output"]')
+				.textContent()
+				.catch(() => '')) || '';
+		const initialFinishedCount = (initialTranscript.match(/Process finished after/g) || [])
+			.length;
 		await page.locator('button.action-button--run').first().click();
 		if (stdinText || sendEof) {
 			try {
 				await page.waitForFunction(
 					(previousFinishedCount) => {
 						const text =
-							document.querySelector('[data-testid="terminal-debug-output"]')?.textContent || '';
+							document.querySelector('[data-testid="terminal-debug-output"]')
+								?.textContent || '';
 						const finishedCount = (text.match(/Process finished after/g) || []).length;
-						return text.includes('OCaml compilation failed') || finishedCount >= previousFinishedCount + 1;
+						return (
+							text.includes('OCaml compilation failed') ||
+							finishedCount >= previousFinishedCount + 1
+						);
 					},
 					initialFinishedCount,
 					{
@@ -228,12 +283,14 @@ export async function runOcamlBrowserProbe({
 				);
 			} catch (error) {
 				throw new Error(
-					`OCaml browser probe timed out waiting for compile preparation\n${JSON.stringify(await readProbeSummary(page, activeState, pageErrors, consoleMessages, targetUrl.toString()), null, 2)}`,
+					`OCaml browser probe timed out waiting for compile preparation\n${JSON.stringify(await readProbeSummary(page, activeState, pageErrors, consoleMessages, binaryenBridgeRequests, binaryenBridgeResponses, targetUrl.toString()), null, 2)}`,
 					{ cause: error }
 				);
 			}
 			await page.waitForFunction(
-				() => typeof /** @type {any} */ (window).__wasmIdleDebug?.writeTerminalInput === 'function'
+				() =>
+					typeof (/** @type {any} */ (window).__wasmIdleDebug?.writeTerminalInput) ===
+					'function'
 			);
 			await page.evaluate(
 				async ({ text, eof }) => {
@@ -242,25 +299,27 @@ export async function runOcamlBrowserProbe({
 				{ text: stdinText, eof: sendEof }
 			);
 			const compileTranscript =
-				(await page.locator('[data-testid="terminal-debug-output"]').textContent().catch(() => '')) || '';
-			const compileFinishedCount = (compileTranscript.match(/Process finished after/g) || []).length;
+				(await page
+					.locator('[data-testid="terminal-debug-output"]')
+					.textContent()
+					.catch(() => '')) || '';
+			const compileFinishedCount = (compileTranscript.match(/Process finished after/g) || [])
+				.length;
 			if (
 				!compileTranscript.includes('OCaml compilation failed') &&
 				!(Boolean(expectedOutput) && compileTranscript.includes(expectedOutput))
 			) {
 				try {
 					await page.waitForFunction(
-						({
-							previousTranscript,
-							requiredOutput,
-							previousFinishedCount
-						}) => {
+						({ previousTranscript, requiredOutput, previousFinishedCount }) => {
 							const text =
-								document.querySelector('[data-testid="terminal-debug-output"]')?.textContent || '';
+								document.querySelector('[data-testid="terminal-debug-output"]')
+									?.textContent || '';
 							if (text === previousTranscript) {
 								return false;
 							}
-							const finishedCount = (text.match(/Process finished after/g) || []).length;
+							const finishedCount = (text.match(/Process finished after/g) || [])
+								.length;
 							return (
 								text.includes('OCaml compilation failed') ||
 								finishedCount >= previousFinishedCount + 1 ||
@@ -279,7 +338,7 @@ export async function runOcamlBrowserProbe({
 					);
 				} catch (error) {
 					throw new Error(
-						`OCaml browser probe timed out waiting for stdin execution\n${JSON.stringify(await readProbeSummary(page, activeState, pageErrors, consoleMessages, targetUrl.toString()), null, 2)}`,
+						`OCaml browser probe timed out waiting for stdin execution\n${JSON.stringify(await readProbeSummary(page, activeState, pageErrors, consoleMessages, binaryenBridgeRequests, binaryenBridgeResponses, targetUrl.toString()), null, 2)}`,
 						{ cause: error }
 					);
 				}
@@ -289,7 +348,8 @@ export async function runOcamlBrowserProbe({
 				await page.waitForFunction(
 					(previousTranscript) => {
 						const text =
-							document.querySelector('[data-testid="terminal-debug-output"]')?.textContent || '';
+							document.querySelector('[data-testid="terminal-debug-output"]')
+								?.textContent || '';
 						if (text === previousTranscript) {
 							return false;
 						}
@@ -306,7 +366,7 @@ export async function runOcamlBrowserProbe({
 				);
 			} catch (error) {
 				throw new Error(
-					`OCaml browser probe timed out waiting for the execution phase\n${JSON.stringify(await readProbeSummary(page, activeState, pageErrors, consoleMessages, targetUrl.toString()), null, 2)}`,
+					`OCaml browser probe timed out waiting for the execution phase\n${JSON.stringify(await readProbeSummary(page, activeState, pageErrors, consoleMessages, binaryenBridgeRequests, binaryenBridgeResponses, targetUrl.toString()), null, 2)}`,
 					{ cause: error }
 				);
 			}
@@ -317,13 +377,17 @@ export async function runOcamlBrowserProbe({
 			activeState,
 			pageErrors,
 			consoleMessages,
+			binaryenBridgeRequests,
+			binaryenBridgeResponses,
 			targetUrl.toString()
 		);
 		if (summary.pageErrors.length > 0) {
 			throw new Error(`page errors detected\n${JSON.stringify(summary, null, 2)}`);
 		}
 		if (summary.moduleResolutionErrors.length > 0) {
-			throw new Error(`module resolution errors detected\n${JSON.stringify(summary, null, 2)}`);
+			throw new Error(
+				`module resolution errors detected\n${JSON.stringify(summary, null, 2)}`
+			);
 		}
 		if (summary.ocamlConsoleErrors.length > 0) {
 			throw new Error(`ocaml console errors detected\n${JSON.stringify(summary, null, 2)}`);
