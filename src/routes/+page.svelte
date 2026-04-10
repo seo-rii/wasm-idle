@@ -774,10 +774,10 @@
 		{#if language === 'TINYGO'}
 			<p class="hint">
 				TinyGo prefers a configured host-assisted compile endpoint when one is available, and
-				otherwise falls back to the bundled wasm-tinygo browser pipeline before running the
-				resulting WASI artifact in the local playground runtime. Pass CLI args here, type
-				into the terminal below, and use Ctrl+D or the EOF button if the program reads stdin
-				until EOF.
+				otherwise falls back to the bundled wasm-tinygo browser pipeline, loads its direct
+				runtime module, and runs the resulting WASI artifact in the local playground runtime.
+				Pass CLI args here, type into the terminal below, and use Ctrl+D or the EOF button if
+				the program reads stdin until EOF.
 			</p>
 		{/if}
 		{#if debugLanguage && debug.active}

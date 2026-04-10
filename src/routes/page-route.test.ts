@@ -242,6 +242,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/`js\/wasm` runs through the bundled `wasm_exec\.js` browser host/);
 		expect(source).toMatch(/TinyGo prefers a configured host-assisted compile endpoint/);
 		expect(source).toMatch(/falls back to the bundled wasm-tinygo browser pipeline/);
+		expect(source).toMatch(/loads its direct\s+runtime module/);
 		expect(source).toMatch(/resulting WASI artifact in the local playground runtime/);
 		expect(source).toMatch(/reads\s+stdin until EOF/);
 	});

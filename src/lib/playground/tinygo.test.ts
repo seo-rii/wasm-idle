@@ -63,6 +63,8 @@ export const createBundledTinyGoRuntime = (options = {}) => {
     state.planCalls += 1;
     options.onProgress?.({ assetPath: 'tools/tinygo-compiler.wasm', assetUrl: 'https://example.invalid/tools/tinygo-compiler.wasm', label: 'tinygo-compiler.wasm', loaded: 2, total: 4 });
     options.onProgress?.({ assetPath: 'tools/tinygo-compiler.wasm', assetUrl: 'https://example.invalid/tools/tinygo-compiler.wasm', label: 'tinygo-compiler.wasm', loaded: 4, total: 4 });
+    state.activityLog += '[12:00:01] tinygo compiler module loaded from tools/tinygo-compiler.wasm (mode=direct)\\n';
+    state.activityLog += '[12:00:01] frontend bootstrap tool plan skipped: backend lowering is active\\n';
     state.activityLog += '[12:00:01] driver planned 4 step(s)\\n';
     return { ok: true };
   },
@@ -193,6 +195,12 @@ describe('TinyGo sandbox', () => {
 				args: ['demo'],
 				log: true
 			})
+		);
+		expect(outputs.join('')).toContain(
+			'tinygo compiler module loaded from tools/tinygo-compiler.wasm (mode=direct)'
+		);
+		expect(outputs.join('')).toContain(
+			'frontend bootstrap tool plan skipped: backend lowering is active'
 		);
 		expect(outputs.join('')).toContain('driver planned 4 step(s)');
 		expect(outputs.join('')).toContain('tinygo-ok\n');
@@ -558,6 +566,9 @@ describe('TinyGo sandbox', () => {
 		expect(runtimeFixtureState.bootCalls).toBe(1);
 		expect(runtimeFixtureState.planCalls).toBe(1);
 		expect(runtimeFixtureState.executeCalls).toBe(1);
+		expect(outputs.join('')).toContain(
+			'tinygo compiler module loaded from tools/tinygo-compiler.wasm (mode=direct)'
+		);
 		expect(outputs.join('')).toContain('tinygo artifact ready: /working/out.wasm');
 		expect(outputs.join('')).toContain('tinygo-ok\n');
 	});
@@ -664,6 +675,9 @@ describe('TinyGo sandbox', () => {
 		expect(runtimeFixtureState.bootCalls).toBe(1);
 		expect(runtimeFixtureState.planCalls).toBe(1);
 		expect(runtimeFixtureState.executeCalls).toBe(1);
+		expect(outputs.join('')).toContain(
+			'tinygo compiler module loaded from tools/tinygo-compiler.wasm (mode=direct)'
+		);
 		expect(outputs.join('')).toContain('tinygo artifact ready: /working/out.wasm');
 		expect(outputs.join('')).toContain('tinygo-ok\n');
 	});
