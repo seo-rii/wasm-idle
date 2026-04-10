@@ -1,5 +1,6 @@
 import atomVmWasmUrl from '../../../../node_modules/@swmansion/popcorn/dist/AtomVM.wasm?url';
 import initAtomVm from '../../../../node_modules/@swmansion/popcorn/dist/AtomVM.mjs';
+import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
 
 declare var self: any;
 
@@ -59,6 +60,7 @@ type AtomVmModule = {
 let bundleUrl = '';
 let loadedBundleUrl = '';
 let runtimePromise: Promise<{ module: AtomVmModule; process: string | null }> | null = null;
+let stdinBufferElixir: Int32Array | null = null;
 
 function deserialize(module: AtomVmModule, message: string) {
 	return JSON.parse(message, (_key, value) => {
@@ -246,7 +248,9 @@ async function loadRuntime(nextBundleUrl: string, log: boolean) {
 		}
 		const bundleBuffer = await fetch(nextBundleUrl).then((response) => {
 			if (!response.ok) {
-				throw new Error(`Failed to fetch Elixir bundle: ${response.status} ${response.statusText}`);
+				throw new Error(
+					`Failed to fetch Elixir bundle: ${response.status} ${response.statusText}`
+				);
 			}
 			return response.arrayBuffer();
 		});
@@ -280,7 +284,7 @@ function normalizeCallError(module: AtomVmModule, error: unknown) {
 }
 
 self.onmessage = async (event: { data: any }) => {
-	const { load, bundleUrl: nextBundleUrl, code, prepare, log = true } = event.data;
+	const { load, bundleUrl: nextBundleUrl, buffer, code, prepare, log = true } = event.data;
 	try {
 		if (load) {
 			bundleUrl = nextBundleUrl;
@@ -292,6 +296,7 @@ self.onmessage = async (event: { data: any }) => {
 		if (!bundleUrl) {
 			throw new Error('Elixir runtime not loaded');
 		}
+		stdinBufferElixir = buffer ? new Int32Array(buffer) : null;
 		if (prepare) {
 			postMessage({ results: true });
 			return;
@@ -304,7 +309,29 @@ self.onmessage = async (event: { data: any }) => {
 		if (log) {
 			console.log(`[wasm-idle:elixir-worker] eval bytes=${code.length}`);
 		}
-		const response = await runtime.module.call(runtime.process, ['eval_elixir', code]);
+		let evalCode = code;
+		if (stdinBufferElixir && /\bIO\.(?:gets|read)\s*\(/.test(code)) {
+			const chunk = waitForBufferedStdin(stdinBufferElixir, () =>
+				postMessage({ buffer: true })
+			);
+			const stdinLines = chunk == null ? [] : chunk.match(/[^\n]*\n|[^\n]+$/g) || [];
+			let stdinLineOffset = 0;
+			evalCode = code
+				.replace(/\bIO\.gets\s*\([^)]*\)/g, () => {
+					const line = stdinLines[stdinLineOffset++];
+					return line === undefined ? 'nil' : JSON.stringify(line);
+				})
+				.replace(/\bIO\.read\s*\(\s*(?::stdio\s*,\s*)?:line\s*\)/g, () => {
+					const line = stdinLines[stdinLineOffset++];
+					return line === undefined ? 'nil' : JSON.stringify(line);
+				})
+				.replace(/\bIO\.read\s*\(\s*(?::stdio\s*,\s*)?:all\s*\)/g, () => {
+					const remainingInput = stdinLines.slice(stdinLineOffset).join('');
+					stdinLineOffset = stdinLines.length;
+					return JSON.stringify(remainingInput);
+				});
+		}
+		const response = await runtime.module.call(runtime.process, ['eval_elixir', evalCode]);
 		const rendered = runtime.module.deserialize(response);
 		if (typeof rendered === 'string') {
 			postMessage({ results: rendered });

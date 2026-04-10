@@ -74,7 +74,14 @@ func main() {
   def factorial(n), do: n * factorial(n - 1)
 
   def run do
-    n = 4
+    line = IO.gets("") || ""
+
+    n =
+      case Integer.parse(String.trim(line)) do
+        {value, _rest} -> value
+        :error -> 4
+      end
+
     IO.puts("factorial_plus_bonus=#{factorial(n) + @bonus}")
     :ok
   end

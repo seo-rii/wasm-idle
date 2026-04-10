@@ -75,6 +75,8 @@ describe('Monaco route debug sync', () => {
 		expect(editorDefaults.go).toContain('fmt.Printf("factorial_plus_bonus=%d\\n", factorial(n)+bonus)');
 		expect(editorDefaults.elixir).toContain('defmodule Demo do');
 		expect(editorDefaults.elixir).toContain('Demo.run()');
+		expect(editorDefaults.elixir).toContain('IO.gets("")');
+		expect(editorDefaults.elixir).toContain('Integer.parse(String.trim(line))');
 		expect(isEditorDefaultSource(editorDefaults.go)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.elixir)).toBe(true);
 		expect(isEditorDefaultSource(rustEditorDefaults['wasm32-wasip1'])).toBe(true);

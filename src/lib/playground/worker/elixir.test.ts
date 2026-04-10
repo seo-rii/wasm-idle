@@ -1,14 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { atomVmInitMock, lastInitOptions, lastModule } = vi.hoisted(() => ({
-	atomVmInitMock: vi.fn(),
-	lastInitOptions: {
-		current: null as any
-	},
-	lastModule: {
-		current: null as any
-	}
-}));
+const { atomVmInitMock, lastInitOptions, lastModule, waitForBufferedStdinMock } = vi.hoisted(
+	() => ({
+		atomVmInitMock: vi.fn(),
+		lastInitOptions: {
+			current: null as any
+		},
+		lastModule: {
+			current: null as any
+		},
+		waitForBufferedStdinMock: vi.fn()
+	})
+);
 
 vi.mock('../../../../node_modules/@swmansion/popcorn/dist/AtomVM.wasm?url', () => ({
 	default: '/__mocks__/AtomVM.wasm'
@@ -16,6 +19,10 @@ vi.mock('../../../../node_modules/@swmansion/popcorn/dist/AtomVM.wasm?url', () =
 
 vi.mock('../../../../node_modules/@swmansion/popcorn/dist/AtomVM.mjs', () => ({
 	default: atomVmInitMock
+}));
+
+vi.mock('$lib/playground/stdinBuffer', () => ({
+	waitForBufferedStdin: waitForBufferedStdinMock
 }));
 
 describe('Elixir worker', () => {
@@ -37,12 +44,19 @@ describe('Elixir worker', () => {
 		lastInitOptions.current = null;
 		lastModule.current = null;
 		atomVmInitMock.mockReset();
+		waitForBufferedStdinMock.mockReset();
 		atomVmInitMock.mockImplementation(async (options) => {
 			lastInitOptions.current = options;
 			let trackedObjectKey = 0;
 			const rawCall = vi.fn(async (_process, payload) => {
-				options.print?.('factorial_plus_bonus=27\n');
-				expect(payload).toBe(JSON.stringify(['eval_elixir', 'IO.puts("hello")']));
+				const [action, source] = JSON.parse(payload);
+				expect(action).toBe('eval_elixir');
+				if (source === 'IO.puts("hello")') {
+					options.print?.('factorial_plus_bonus=27\n');
+					return JSON.stringify(':ok');
+				}
+				expect(source).toBe('IO.puts(String.trim("5\\n"))');
+				options.print?.('stdin=5\n');
 				return JSON.stringify(':ok');
 			});
 			const module = {
@@ -98,6 +112,7 @@ describe('Elixir worker', () => {
 	it('loads AtomVM with the Popcorn wasm asset and evaluates Elixir code inside the worker', async () => {
 		const popcornBrowserGlobal = ['globalThis', 'window'].join('.');
 		const popcornParentGlobal = [popcornBrowserGlobal, 'parent'].join('.');
+		const buffer = new SharedArrayBuffer(1024);
 		await import('./elixir');
 		await (globalThis as any).self.onmessage({
 			data: {
@@ -145,6 +160,7 @@ describe('Elixir worker', () => {
 			data: {
 				code: 'IO.puts("hello")',
 				prepare: true,
+				buffer,
 				log: true
 			}
 		});
@@ -155,6 +171,7 @@ describe('Elixir worker', () => {
 			data: {
 				code: 'IO.puts("hello")',
 				prepare: false,
+				buffer,
 				log: true
 			}
 		});
@@ -167,6 +184,27 @@ describe('Elixir worker', () => {
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
 			output: 'factorial_plus_bonus=27\n'
 		});
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: ':ok' });
+
+		waitForBufferedStdinMock.mockReturnValueOnce('5\n');
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: 'IO.puts(String.trim(IO.gets("")))',
+				prepare: false,
+				buffer,
+				log: true
+			}
+		});
+		await Promise.resolve();
+
+		expect(waitForBufferedStdinMock).toHaveBeenCalledWith(
+			expect.any(Int32Array),
+			expect.any(Function)
+		);
+		expect(waitForBufferedStdinMock.mock.calls[0][0].buffer).toBe(buffer);
+		waitForBufferedStdinMock.mock.calls[0][1]();
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ buffer: true });
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ output: 'stdin=5\n' });
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: ':ok' });
 	});
 });

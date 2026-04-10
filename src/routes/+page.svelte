@@ -767,8 +767,8 @@
 			<p class="hint">
 				Elixir runs through a bundled Popcorn evaluator. Each run boots a fresh `.avm`
 				bundle, evaluates the editor contents with `Code.eval_string`, streams stdout and
-				stderr into the terminal, and prints the final expression as `=&gt; ...`. The current
-				starter keeps stdin and CLI args disabled.
+				stderr into the terminal, and prints the final expression as `=&gt; ...`. Type into the
+				terminal below and press Enter to send stdin. CLI args are still disabled.
 			</p>
 		{/if}
 		{#if language === 'TINYGO'}

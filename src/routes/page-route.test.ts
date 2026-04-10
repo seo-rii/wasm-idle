@@ -256,7 +256,8 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/Elixir runs through a bundled Popcorn evaluator/);
 		expect(source).toMatch(/Code\.eval_string/);
 		expect(source).toMatch(/prints the final expression as `=&gt; \.\.\.`/);
-		expect(source).toMatch(/stdin and CLI args disabled/);
+		expect(source).toMatch(/press Enter to send stdin/);
+		expect(source).toMatch(/CLI args are still disabled/);
 	});
 
 	it('surfaces OCaml through the shared language selector and backend hint', () => {

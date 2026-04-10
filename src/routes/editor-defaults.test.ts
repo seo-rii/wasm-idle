@@ -30,6 +30,15 @@ describe('editor defaults', () => {
 		);
 	});
 
+	it('keeps the Elixir starter wired to stdin with a fallback value', () => {
+		expect(editorDefaults.elixir).toContain('IO.gets("")');
+		expect(editorDefaults.elixir).toContain('Integer.parse(String.trim(line))');
+		expect(editorDefaults.elixir).toContain(':error -> 4');
+		expect(editorDefaults.elixir).toContain(
+			'IO.puts("factorial_plus_bonus=#{factorial(n) + @bonus}")'
+		);
+	});
+
 	it('recognizes bundled defaults and the legacy broken TinyGo starter separately', () => {
 		expect(isEditorDefaultSource(editorDefaults.go)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.ocaml)).toBe(true);

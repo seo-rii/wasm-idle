@@ -19,11 +19,15 @@ class MockWorker {
 			return;
 		}
 		if (message.prepare) {
-			queueMicrotask(() => this.onmessage?.({ data: { results: true } } as MessageEvent<any>));
+			queueMicrotask(() =>
+				this.onmessage?.({ data: { results: true } } as MessageEvent<any>)
+			);
 			return;
 		}
 		queueMicrotask(() => {
-			this.onmessage?.({ data: { output: 'factorial_plus_bonus=27\n' } } as MessageEvent<any>);
+			this.onmessage?.({
+				data: { output: 'factorial_plus_bonus=27\n' }
+			} as MessageEvent<any>);
 			this.onmessage?.({ data: { results: ':ok' } } as MessageEvent<any>);
 		});
 	});
@@ -43,6 +47,7 @@ vi.mock('$env/dynamic/public', () => ({
 }));
 
 import Elixir from './elixir';
+import { readBufferedStdin } from './stdinBuffer';
 
 describe('Elixir sandbox', () => {
 	beforeEach(() => {
@@ -100,11 +105,13 @@ describe('Elixir sandbox', () => {
 		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(2, {
 			code: 'IO.puts("hello")',
 			prepare: true,
+			buffer: expect.any(SharedArrayBuffer),
 			log: true
 		});
 		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(3, {
 			code: 'IO.puts("hello")',
 			prepare: false,
+			buffer: expect.any(SharedArrayBuffer),
 			log: true
 		});
 		expect(output).toHaveBeenCalledWith('factorial_plus_bonus=27\n');
@@ -144,5 +151,67 @@ describe('Elixir sandbox', () => {
 		await expect(loadPromise).rejects.toContain(
 			'Elixir worker script error: worker script error (/worker/elixir.js:88:24)'
 		);
+	});
+
+	it('flushes queued terminal input into the worker stdin buffer when Elixir requests it', async () => {
+		const sandbox = new Elixir();
+		const output = vi.fn();
+		sandbox.output = output;
+
+		await sandbox.load({
+			elixir: {
+				bundleUrl: '/runtime/elixir/bundle.avm'
+			}
+		});
+		const worker = workerInstances[0];
+		let runMessage: any;
+		worker.postMessage.mockImplementationOnce((message: any) => {
+			runMessage = message;
+			queueMicrotask(() => {
+				sandbox.write('5\n');
+				worker.onmessage?.({ data: { buffer: true } } as MessageEvent<any>);
+				worker.onmessage?.({
+					data: { output: 'factorial_plus_bonus=123\n' }
+				} as MessageEvent<any>);
+				worker.onmessage?.({ data: { results: ':ok' } } as MessageEvent<any>);
+			});
+		});
+
+		await expect(sandbox.run('IO.gets("")', false)).resolves.toBe(':ok');
+
+		expect(runMessage).toEqual(
+			expect.objectContaining({
+				code: 'IO.gets("")',
+				prepare: false,
+				buffer: expect.any(SharedArrayBuffer)
+			})
+		);
+		expect(readBufferedStdin(runMessage.buffer)).toBe('5\n');
+		expect(output).toHaveBeenCalledWith('factorial_plus_bonus=123\n');
+		expect(output).toHaveBeenCalledWith('=> :ok\n');
+	});
+
+	it('flushes EOF into the worker stdin buffer when requested', async () => {
+		const sandbox = new Elixir();
+
+		await sandbox.load({
+			elixir: {
+				bundleUrl: '/runtime/elixir/bundle.avm'
+			}
+		});
+		const worker = workerInstances[0];
+		let runMessage: any;
+		worker.postMessage.mockImplementationOnce((message: any) => {
+			runMessage = message;
+			queueMicrotask(() => {
+				sandbox.eof();
+				worker.onmessage?.({ data: { buffer: true } } as MessageEvent<any>);
+				worker.onmessage?.({ data: { results: true } } as MessageEvent<any>);
+			});
+		});
+
+		await expect(sandbox.run('IO.gets("")', false)).resolves.toBe(true);
+
+		expect(readBufferedStdin(runMessage.buffer)).toBeNull();
 	});
 });
