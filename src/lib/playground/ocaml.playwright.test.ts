@@ -11,9 +11,9 @@ import {
 import { runOcamlBrowserProbe } from '../../../scripts/ocaml-browser-probe-lib.mjs';
 
 describe('wasm-idle OCaml browser playwright integration', () => {
-	function expectedBinaryenBridgePath(browserUrl: string) {
+	function expectedStaticBinaryenPathPrefix(browserUrl: string) {
 		const pathname = new URL(browserUrl).pathname.replace(/\/$/, '');
-		return `${pathname === '' ? '' : pathname}/api/binaryen-command`;
+		return `${pathname === '' ? '' : pathname}/wasm-of-js-of-ocaml/browser-native-bundle/tools/`;
 	}
 
 	it('runs the real OCaml page path through both bundled browser-native backends', async () => {
@@ -69,27 +69,29 @@ describe('wasm-idle OCaml browser playwright integration', () => {
 					expect(summary.ocamlConsoleErrors).toEqual([]);
 					expect(summary.transcript).toContain('hello from ocaml fixture');
 					expect(summary.transcript).toContain('Process finished after');
+					expect(summary.binaryenBridgeRequests).toEqual([]);
+					expect(summary.binaryenBridgeResponses).toEqual([]);
 					if (backend === 'wasm') {
-						expect(summary.transcript).not.toContain('binaryen bridge exit: 0');
-						expect(summary.transcript).not.toContain('binaryen bridge http');
-						expect(summary.binaryenBridgeRequests.length).toBeGreaterThan(0);
-						expect(summary.binaryenBridgeResponses.length).toBeGreaterThan(0);
+						expect(summary.transcript).not.toContain('binaryen bridge');
+						expect(summary.binaryenToolRequests.length).toBeGreaterThan(0);
+						expect(summary.binaryenToolResponses.length).toBeGreaterThan(0);
 						expect(
-							summary.binaryenBridgeRequests.every(
+							summary.binaryenToolRequests.every(
 								(request) =>
-									request.method === 'POST' &&
-									new URL(request.url).pathname ===
-										expectedBinaryenBridgePath(previewServer.browserUrl)
+									request.method === 'GET' &&
+									new URL(request.url).pathname.startsWith(
+										expectedStaticBinaryenPathPrefix(previewServer.browserUrl)
+									)
 							)
 						).toBe(true);
 						expect(
-							summary.binaryenBridgeResponses.every(
+							summary.binaryenToolResponses.every(
 								(response) => response.status === 200
 							)
 						).toBe(true);
 					} else {
-						expect(summary.binaryenBridgeRequests).toEqual([]);
-						expect(summary.binaryenBridgeResponses).toEqual([]);
+						expect(summary.binaryenToolRequests).toEqual([]);
+						expect(summary.binaryenToolResponses).toEqual([]);
 					}
 					expect(
 						summary.consoleTail.some((entry) =>
@@ -165,26 +167,29 @@ describe('wasm-idle OCaml browser playwright integration', () => {
 					expect(summary.ocamlConsoleErrors).toEqual([]);
 					expect(summary.transcript).toContain('5');
 					expect(summary.transcript).toContain('Process finished after');
+					expect(summary.binaryenBridgeRequests).toEqual([]);
+					expect(summary.binaryenBridgeResponses).toEqual([]);
 					if (backend === 'wasm') {
-						expect(summary.transcript).not.toContain('binaryen bridge http');
-						expect(summary.binaryenBridgeRequests.length).toBeGreaterThan(0);
-						expect(summary.binaryenBridgeResponses.length).toBeGreaterThan(0);
+						expect(summary.transcript).not.toContain('binaryen bridge');
+						expect(summary.binaryenToolRequests.length).toBeGreaterThan(0);
+						expect(summary.binaryenToolResponses.length).toBeGreaterThan(0);
 						expect(
-							summary.binaryenBridgeRequests.every(
+							summary.binaryenToolRequests.every(
 								(request) =>
-									request.method === 'POST' &&
-									new URL(request.url).pathname ===
-										expectedBinaryenBridgePath(previewServer.browserUrl)
+									request.method === 'GET' &&
+									new URL(request.url).pathname.startsWith(
+										expectedStaticBinaryenPathPrefix(previewServer.browserUrl)
+									)
 							)
 						).toBe(true);
 						expect(
-							summary.binaryenBridgeResponses.every(
+							summary.binaryenToolResponses.every(
 								(response) => response.status === 200
 							)
 						).toBe(true);
 					} else {
-						expect(summary.binaryenBridgeRequests).toEqual([]);
-						expect(summary.binaryenBridgeResponses).toEqual([]);
+						expect(summary.binaryenToolRequests).toEqual([]);
+						expect(summary.binaryenToolResponses).toEqual([]);
 					}
 					expect(
 						summary.consoleTail.some((entry) =>

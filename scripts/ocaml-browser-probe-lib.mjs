@@ -66,6 +66,8 @@ function findOcamlConsoleErrors(messages) {
  * @param {BrowserConsoleMessage[]} consoleMessages
  * @param {BrowserNetworkRequest[]} binaryenBridgeRequests
  * @param {BrowserNetworkResponse[]} binaryenBridgeResponses
+ * @param {BrowserNetworkRequest[]} binaryenToolRequests
+ * @param {BrowserNetworkResponse[]} binaryenToolResponses
  * @param {string} browserUrl
  */
 async function readProbeSummary(
@@ -75,6 +77,8 @@ async function readProbeSummary(
 	consoleMessages,
 	binaryenBridgeRequests,
 	binaryenBridgeResponses,
+	binaryenToolRequests,
+	binaryenToolResponses,
 	browserUrl
 ) {
 	const transcript =
@@ -94,6 +98,8 @@ async function readProbeSummary(
 		activeState,
 		binaryenBridgeRequests,
 		binaryenBridgeResponses,
+		binaryenToolRequests,
+		binaryenToolResponses,
 		browserUrl,
 		consoleTail: summarizeConsole(consoleMessages),
 		finalUrl: page.url(),
@@ -150,6 +156,10 @@ export async function runOcamlBrowserProbe({
 	const binaryenBridgeRequests = [];
 	/** @type {BrowserNetworkResponse[]} */
 	const binaryenBridgeResponses = [];
+	/** @type {BrowserNetworkRequest[]} */
+	const binaryenToolRequests = [];
+	/** @type {BrowserNetworkResponse[]} */
+	const binaryenToolResponses = [];
 	page.on('console', (message) => {
 		consoleMessages.push({
 			type: message.type(),
@@ -169,10 +179,30 @@ export async function runOcamlBrowserProbe({
 				url: request.url()
 			});
 		}
+		if (
+			request.url().includes('/wasm-opt.browser.js') ||
+			request.url().includes('/wasm-merge.browser.js') ||
+			request.url().includes('/wasm-metadce.browser.js')
+		) {
+			binaryenToolRequests.push({
+				method: request.method(),
+				url: request.url()
+			});
+		}
 	});
 	page.on('response', (response) => {
 		if (response.url().includes('/api/binaryen-command')) {
 			binaryenBridgeResponses.push({
+				status: response.status(),
+				url: response.url()
+			});
+		}
+		if (
+			response.url().includes('/wasm-opt.browser.js') ||
+			response.url().includes('/wasm-merge.browser.js') ||
+			response.url().includes('/wasm-metadce.browser.js')
+		) {
+			binaryenToolResponses.push({
 				status: response.status(),
 				url: response.url()
 			});
@@ -214,7 +244,7 @@ export async function runOcamlBrowserProbe({
 			!activeState.serviceWorkerControlled
 		) {
 			throw new Error(
-				`page is not ready for wasm-idle OCaml\n${JSON.stringify(await readProbeSummary(page, activeState, pageErrors, consoleMessages, binaryenBridgeRequests, binaryenBridgeResponses, targetUrl.toString()), null, 2)}`
+				`page is not ready for wasm-idle OCaml\n${JSON.stringify(await readProbeSummary(page, activeState, pageErrors, consoleMessages, binaryenBridgeRequests, binaryenBridgeResponses, binaryenToolRequests, binaryenToolResponses, targetUrl.toString()), null, 2)}`
 			);
 		}
 
@@ -233,7 +263,7 @@ export async function runOcamlBrowserProbe({
 		}, code);
 		if (!editorValueSet) {
 			throw new Error(
-				`OCaml browser probe could not write editor contents\n${JSON.stringify(await readProbeSummary(page, activeState, pageErrors, consoleMessages, binaryenBridgeRequests, binaryenBridgeResponses, targetUrl.toString()), null, 2)}`
+				`OCaml browser probe could not write editor contents\n${JSON.stringify(await readProbeSummary(page, activeState, pageErrors, consoleMessages, binaryenBridgeRequests, binaryenBridgeResponses, binaryenToolRequests, binaryenToolResponses, targetUrl.toString()), null, 2)}`
 			);
 		}
 		await page.waitForFunction(
@@ -283,7 +313,7 @@ export async function runOcamlBrowserProbe({
 				);
 			} catch (error) {
 				throw new Error(
-					`OCaml browser probe timed out waiting for compile preparation\n${JSON.stringify(await readProbeSummary(page, activeState, pageErrors, consoleMessages, binaryenBridgeRequests, binaryenBridgeResponses, targetUrl.toString()), null, 2)}`,
+					`OCaml browser probe timed out waiting for compile preparation\n${JSON.stringify(await readProbeSummary(page, activeState, pageErrors, consoleMessages, binaryenBridgeRequests, binaryenBridgeResponses, binaryenToolRequests, binaryenToolResponses, targetUrl.toString()), null, 2)}`,
 					{ cause: error }
 				);
 			}
@@ -338,7 +368,7 @@ export async function runOcamlBrowserProbe({
 					);
 				} catch (error) {
 					throw new Error(
-						`OCaml browser probe timed out waiting for stdin execution\n${JSON.stringify(await readProbeSummary(page, activeState, pageErrors, consoleMessages, binaryenBridgeRequests, binaryenBridgeResponses, targetUrl.toString()), null, 2)}`,
+						`OCaml browser probe timed out waiting for stdin execution\n${JSON.stringify(await readProbeSummary(page, activeState, pageErrors, consoleMessages, binaryenBridgeRequests, binaryenBridgeResponses, binaryenToolRequests, binaryenToolResponses, targetUrl.toString()), null, 2)}`,
 						{ cause: error }
 					);
 				}
@@ -366,7 +396,7 @@ export async function runOcamlBrowserProbe({
 				);
 			} catch (error) {
 				throw new Error(
-					`OCaml browser probe timed out waiting for the execution phase\n${JSON.stringify(await readProbeSummary(page, activeState, pageErrors, consoleMessages, binaryenBridgeRequests, binaryenBridgeResponses, targetUrl.toString()), null, 2)}`,
+					`OCaml browser probe timed out waiting for the execution phase\n${JSON.stringify(await readProbeSummary(page, activeState, pageErrors, consoleMessages, binaryenBridgeRequests, binaryenBridgeResponses, binaryenToolRequests, binaryenToolResponses, targetUrl.toString()), null, 2)}`,
 					{ cause: error }
 				);
 			}
@@ -379,6 +409,8 @@ export async function runOcamlBrowserProbe({
 			consoleMessages,
 			binaryenBridgeRequests,
 			binaryenBridgeResponses,
+			binaryenToolRequests,
+			binaryenToolResponses,
 			targetUrl.toString()
 		);
 		if (summary.pageErrors.length > 0) {

@@ -20,14 +20,6 @@ const DEFAULT_SOURCE_BUNDLE_DIR = path.resolve(
 	'.cache',
 	'browser-native-bundle'
 );
-const DEFAULT_SOURCE_BINARYEN_BIN_DIR = path.resolve(
-	REPO_ROOT,
-	'..',
-	'wasm-of-js-of-ocaml',
-	'.cache',
-	'binaryen-version_129',
-	'bin'
-);
 const DEFAULT_TARGET_BROWSER_DIST_DIR = path.resolve(
 	REPO_ROOT,
 	'static',
@@ -45,12 +37,6 @@ const LEGACY_TARGET_BUNDLE_DIR = path.resolve(
 	'static',
 	'.cache',
 	'browser-native-bundle'
-);
-const DEFAULT_TARGET_BINARYEN_BIN_DIR = path.resolve(
-	REPO_ROOT,
-	'.cache',
-	'wasm-of-js-of-ocaml-binaryen',
-	'bin'
 );
 const DEFAULT_VERSION_MODULE_PATH = path.resolve(
 	REPO_ROOT,
@@ -125,14 +111,14 @@ async function writeVersionModule(versionModulePath, fingerprint) {
 
 async function validateBrowserNativeWorker(nativeWorkerPath) {
 	const source = await readFile(nativeWorkerPath, 'utf8');
-	if (!source.includes('binaryenBridge') || !source.includes('WASM_OF_JS_BINARYEN_BRIDGE_URL')) {
+	if (!source.includes('request.binaryenTools') || !source.includes('runBinaryenTool')) {
 		throw new Error(
-			`wasm-of-js-of-ocaml browser-native worker at ${nativeWorkerPath} does not expose a configurable Binaryen bridge endpoint. Rebuild wasm-of-js-of-ocaml after applying the Binaryen bridge endpoint patch.`
+			`wasm-of-js-of-ocaml browser-native worker at ${nativeWorkerPath} does not embed the static Binaryen tool runner. Rebuild wasm-of-js-of-ocaml after applying the browser-native Binaryen patch.`
 		);
 	}
-	if (/runBinaryenBridge\([^)]*['"]\/api\/binaryen-command['"]\)/s.test(source)) {
+	if (source.includes('/api/binaryen-command')) {
 		throw new Error(
-			`wasm-of-js-of-ocaml browser-native worker at ${nativeWorkerPath} hard-codes the root Binaryen bridge endpoint. Rebuild wasm-of-js-of-ocaml after applying the base-aware Binaryen bridge patch.`
+			`wasm-of-js-of-ocaml browser-native worker at ${nativeWorkerPath} still references the Binaryen API bridge. Rebuild wasm-of-js-of-ocaml after applying the static Binaryen patch.`
 		);
 	}
 }
@@ -140,10 +126,8 @@ async function validateBrowserNativeWorker(nativeWorkerPath) {
 export async function syncWasmOfJsOfOcamlDist({
 	sourceBrowserDistDir = DEFAULT_SOURCE_BROWSER_DIST_DIR,
 	sourceBundleDir = DEFAULT_SOURCE_BUNDLE_DIR,
-	sourceBinaryenBinDir = DEFAULT_SOURCE_BINARYEN_BIN_DIR,
 	targetBrowserDistDir = DEFAULT_TARGET_BROWSER_DIST_DIR,
 	targetBundleDir = DEFAULT_TARGET_BUNDLE_DIR,
-	targetBinaryenBinDir = DEFAULT_TARGET_BINARYEN_BIN_DIR,
 	versionModulePath = DEFAULT_VERSION_MODULE_PATH
 } = {}) {
 	const browserDistStats = await stat(sourceBrowserDistDir).catch(() => null);
@@ -156,12 +140,6 @@ export async function syncWasmOfJsOfOcamlDist({
 	if (!bundleStats?.isDirectory()) {
 		throw new Error(
 			`wasm-of-js-of-ocaml browser-native bundle directory was not found at ${sourceBundleDir}. Run "cd ../wasm-of-js-of-ocaml && npm run prepare:browser-native -- --force" first.`
-		);
-	}
-	const binaryenBinStats = await stat(sourceBinaryenBinDir).catch(() => null);
-	if (!binaryenBinStats?.isDirectory()) {
-		throw new Error(
-			`wasm-of-js-of-ocaml Binaryen bin directory was not found at ${sourceBinaryenBinDir}. Run "cd ../wasm-of-js-of-ocaml && npm run prepare:browser-native -- --force" first.`
 		);
 	}
 
@@ -191,23 +169,31 @@ export async function syncWasmOfJsOfOcamlDist({
 			`wasm-of-js-of-ocaml browser-native manifest was not found at ${manifestPath}.`
 		);
 	}
-
-	const wasmOptPath = path.join(sourceBinaryenBinDir, 'wasm-opt');
-	const wasmOptStats = await stat(wasmOptPath).catch(() => null);
-	if (!wasmOptStats?.isFile()) {
-		throw new Error(`wasm-of-js-of-ocaml Binaryen tool was not found at ${wasmOptPath}.`);
+	const manifestSource = await readFile(manifestPath, 'utf8');
+	if (!manifestSource.includes('"binaryenTools"')) {
+		throw new Error(
+			`wasm-of-js-of-ocaml browser-native manifest at ${manifestPath} does not declare static Binaryen tools.`
+		);
+	}
+	for (const relativeToolPath of [
+		'tools/wasm-opt.browser.js',
+		'tools/wasm-merge.browser.js',
+		'tools/wasm-metadce.browser.js'
+	]) {
+		const toolPath = path.join(sourceBundleDir, relativeToolPath);
+		const toolStats = await stat(toolPath).catch(() => null);
+		if (!toolStats?.isFile()) {
+			throw new Error(`wasm-of-js-of-ocaml static Binaryen tool was not found at ${toolPath}.`);
+		}
 	}
 
 	await rm(targetBrowserDistDir, { recursive: true, force: true });
 	await rm(targetBundleDir, { recursive: true, force: true });
 	await rm(LEGACY_TARGET_BUNDLE_DIR, { recursive: true, force: true });
-	await rm(targetBinaryenBinDir, { recursive: true, force: true });
 	await mkdir(targetBrowserDistDir, { recursive: true });
 	await mkdir(targetBundleDir, { recursive: true });
-	await mkdir(targetBinaryenBinDir, { recursive: true });
 	await copyDirectory(sourceBrowserDistDir, targetBrowserDistDir);
 	await copyDirectory(sourceBundleDir, targetBundleDir);
-	await copyDirectory(sourceBinaryenBinDir, targetBinaryenBinDir);
 	const targetManifestPath = path.join(targetBundleDir, 'browser-native-manifest.v1.json');
 	const targetManifestSource = await readFile(targetManifestPath, 'utf8');
 	const publicBundleRoot = '/wasm-of-js-of-ocaml/browser-native-bundle';
@@ -220,18 +206,15 @@ export async function syncWasmOfJsOfOcamlDist({
 	}
 	const fingerprint = await computeBundleFingerprint([
 		sourceBrowserDistDir,
-		sourceBundleDir,
-		sourceBinaryenBinDir
+		sourceBundleDir
 	]);
 	await writeVersionModule(versionModulePath, fingerprint);
 
 	return {
 		sourceBrowserDistDir,
 		sourceBundleDir,
-		sourceBinaryenBinDir,
 		targetBrowserDistDir,
 		targetBundleDir,
-		targetBinaryenBinDir,
 		fingerprint,
 		versionModulePath
 	};

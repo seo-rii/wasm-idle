@@ -57,6 +57,11 @@ type BrowserNativeManifest = {
 		js_of_ocaml: string;
 		wasm_of_ocaml: string;
 	};
+	binaryenTools?: {
+		wasm_opt: string;
+		wasm_merge: string;
+		wasm_metadce: string;
+	};
 	toolPatches?: Record<string, unknown>;
 	runtimePack?: BrowserNativeManifestRuntimePack;
 	ocamlLibFiles: BrowserNativeManifestFile[];
@@ -78,9 +83,6 @@ type CompilerModule = {
 	) => Promise<CompileResult>;
 	createBrowserWorkerSystemDispatcher: (options: {
 		manifest: BrowserNativeManifest;
-		binaryenBridge?: {
-			endpointUrl?: string;
-		};
 	}) => unknown;
 };
 
@@ -145,10 +147,6 @@ function rewriteAbsoluteBundleUrl(url: string, currentManifestUrl: string) {
 	return new URL(`${basePath}${url}`, manifestLocation.origin).toString();
 }
 
-function resolveOcamlBinaryenBridgeUrl(currentManifestUrl: string) {
-	return rewriteAbsoluteBundleUrl('/api/binaryen-command', currentManifestUrl);
-}
-
 function rewriteManifest(
 	manifest: BrowserNativeManifest,
 	currentManifestUrl: string
@@ -164,6 +162,24 @@ function rewriteManifest(
 				currentManifestUrl
 			)
 		},
+		...(manifest.binaryenTools
+			? {
+					binaryenTools: {
+						wasm_opt: rewriteAbsoluteBundleUrl(
+							manifest.binaryenTools.wasm_opt,
+							currentManifestUrl
+						),
+						wasm_merge: rewriteAbsoluteBundleUrl(
+							manifest.binaryenTools.wasm_merge,
+							currentManifestUrl
+						),
+						wasm_metadce: rewriteAbsoluteBundleUrl(
+							manifest.binaryenTools.wasm_metadce,
+							currentManifestUrl
+						)
+					}
+				}
+			: {}),
 		...(manifest.runtimePack
 			? {
 					runtimePack: {
@@ -582,10 +598,7 @@ self.onmessage = async (event: { data: LoadRequest | RunRequest }) => {
 				},
 				{
 					system: compilerModule.createBrowserWorkerSystemDispatcher({
-						manifest,
-						binaryenBridge: {
-							endpointUrl: resolveOcamlBinaryenBridgeUrl(manifestUrl)
-						}
+						manifest
 					}),
 					toolchainRoot: '/static/toolchain'
 				}

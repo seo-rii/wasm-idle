@@ -15,15 +15,17 @@ async function makeTempDir() {
 async function writeFixtureFile(baseDir: string, relativePath: string, contents: string) {
 	const targetPath = path.join(baseDir, relativePath);
 	await mkdir(path.dirname(targetPath), { recursive: true });
-	await writeFile(targetPath, contents, 'utf8');
+	await writeFile(targetPath, contents, { encoding: 'utf8', flag: 'w' });
 }
 
-const bridgeCapableWorkerSource = `
-const DEFAULT_BINARYEN_BRIDGE_ENDPOINT = '/api/binaryen-command';
-function resolveBinaryenBridgeEndpoint(request) {
-	return request.binaryenBridge?.endpointUrl || request.env.WASM_OF_JS_BINARYEN_BRIDGE_URL || DEFAULT_BINARYEN_BRIDGE_ENDPOINT;
+const staticBinaryenWorkerSource = `
+function runBinaryenTool(runtimeGlobal, command, toolUrls) {
+	return toolUrls && command ? 0 : 1;
 }
-self.onmessage = () => {};
+self.onmessage = (event) => {
+	const request = event?.data?.request || { binaryenTools: true };
+	void request.binaryenTools;
+};
 `;
 
 describe('syncWasmOfJsOfOcamlDist', () => {
@@ -33,29 +35,23 @@ describe('syncWasmOfJsOfOcamlDist', () => {
 		);
 	});
 
-	it('copies the built wasm-of-js-of-ocaml browser bundle, toolchain bundle, and Binaryen tools', async () => {
+	it('copies the built wasm-of-js-of-ocaml browser bundle and bundled static Binaryen tools', async () => {
 		const sourceBrowserDistDir = await makeTempDir();
 		const sourceBundleDir = await makeTempDir();
-		const sourceBinaryenBinDir = await makeTempDir();
 		const targetBrowserDistDir = await makeTempDir();
 		const targetBundleDir = await makeTempDir();
-		const targetBinaryenBinDir = await makeTempDir();
 		const versionModulePath = path.join(await makeTempDir(), 'wasmOcamlVersion.ts');
 
-		await writeFixtureFile(
-			sourceBrowserDistDir,
-			'src/index.js',
-			'export const compiler = true;\n'
-		);
+		await writeFixtureFile(sourceBrowserDistDir, 'src/index.js', 'export const compiler = true;\n');
 		await writeFixtureFile(
 			sourceBrowserDistDir,
 			'browser-harness/native-tool-worker.js',
-			bridgeCapableWorkerSource
+			staticBinaryenWorkerSource
 		);
 		await writeFixtureFile(
 			sourceBundleDir,
 			'browser-native-manifest.v1.json',
-			'{"version":1,"findlibConf":"/.cache/browser-native-bundle/findlib.conf","tools":{"ocamlc":"/.cache/browser-native-bundle/tools/ocamlc.byte.browser.js"},"runtimePack":{"format":"wasm-of-js-of-ocaml-browser-native-runtime-pack-v1","asset":"/.cache/browser-native-bundle/browser-native-runtime-pack.v1.bin.gz","index":"/.cache/browser-native-bundle/browser-native-runtime-pack.v1.index.json","fileCount":1,"totalBytes":6}}\n'
+			'{"version":1,"findlibConf":"/.cache/browser-native-bundle/findlib.conf","tools":{"ocamlc":"/.cache/browser-native-bundle/tools/ocamlc.byte.browser.js"},"binaryenTools":{"wasm_opt":"/.cache/browser-native-bundle/tools/wasm-opt.browser.js","wasm_merge":"/.cache/browser-native-bundle/tools/wasm-merge.browser.js","wasm_metadce":"/.cache/browser-native-bundle/tools/wasm-metadce.browser.js"},"runtimePack":{"format":"wasm-of-js-of-ocaml-browser-native-runtime-pack-v1","asset":"/.cache/browser-native-bundle/browser-native-runtime-pack.v1.bin.gz","index":"/.cache/browser-native-bundle/browser-native-runtime-pack.v1.index.json","fileCount":1,"totalBytes":6}}\n'
 		);
 		await writeFixtureFile(
 			sourceBundleDir,
@@ -64,71 +60,49 @@ describe('syncWasmOfJsOfOcamlDist', () => {
 		);
 		await writeFixtureFile(
 			sourceBundleDir,
-			'browser-native-runtime-pack.v1.bin.gz',
-			'packed-bytes'
+			'tools/wasm-opt.browser.js',
+			'console.log("wasm-opt");\n'
 		);
+		await writeFixtureFile(
+			sourceBundleDir,
+			'tools/wasm-merge.browser.js',
+			'console.log("wasm-merge");\n'
+		);
+		await writeFixtureFile(
+			sourceBundleDir,
+			'tools/wasm-metadce.browser.js',
+			'console.log("wasm-metadce");\n'
+		);
+		await writeFixtureFile(sourceBundleDir, 'browser-native-runtime-pack.v1.bin.gz', 'packed-bytes');
 		await writeFixtureFile(
 			sourceBundleDir,
 			'browser-native-runtime-pack.v1.index.json',
 			'{"format":"wasm-of-js-of-ocaml-browser-native-runtime-pack-index-v1","fileCount":1,"totalBytes":6,"entries":[{"runtimePath":"/static/toolchain/lib/ocaml/stdlib.cma","offset":0,"length":6}]}\n'
 		);
-		await writeFixtureFile(sourceBinaryenBinDir, 'wasm-opt', '#!/bin/sh\nexit 0\n');
-		await writeFixtureFile(sourceBinaryenBinDir, 'wasm-merge', '#!/bin/sh\nexit 0\n');
-		await writeFixtureFile(sourceBinaryenBinDir, 'types.d.ts', 'ignored');
 
 		const result = await syncWasmOfJsOfOcamlDist({
 			sourceBrowserDistDir,
 			sourceBundleDir,
-			sourceBinaryenBinDir,
 			targetBrowserDistDir,
 			targetBundleDir,
-			targetBinaryenBinDir,
 			versionModulePath
 		});
 
-		await expect(
-			readFile(path.join(targetBrowserDistDir, 'src/index.js'), 'utf8')
-		).resolves.toContain('compiler = true');
-		await expect(
-			readFile(
-				path.join(targetBrowserDistDir, 'browser-harness/native-tool-worker.js'),
-				'utf8'
-			)
-		).resolves.toContain('self.onmessage');
-		await expect(
-			readFile(path.join(targetBundleDir, 'browser-native-manifest.v1.json'), 'utf8')
-		).resolves.toContain(
-			'/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-runtime-pack.v1.bin.gz'
+		await expect(readFile(path.join(targetBrowserDistDir, 'src/index.js'), 'utf8')).resolves.toContain(
+			'compiler = true'
 		);
 		await expect(
-			readFile(path.join(targetBundleDir, 'tools/ocamlc.byte.browser.js'), 'utf8')
-		).resolves.toContain('ocaml');
+			readFile(path.join(targetBundleDir, 'tools/wasm-opt.browser.js'), 'utf8')
+		).resolves.toContain('wasm-opt');
 		await expect(
-			readFile(path.join(targetBundleDir, 'browser-native-runtime-pack.v1.bin.gz'), 'utf8')
-		).resolves.toBe('packed-bytes');
+			readFile(path.join(targetBundleDir, 'tools/wasm-merge.browser.js'), 'utf8')
+		).resolves.toContain('wasm-merge');
 		await expect(
-			readFile(
-				path.join(targetBundleDir, 'browser-native-runtime-pack.v1.index.json'),
-				'utf8'
-			)
-		).resolves.toContain('/static/toolchain/lib/ocaml/stdlib.cma');
-		await expect(
-			readFile(path.join(targetBundleDir, 'lib/ocaml/stdlib.cma'), 'utf8')
-		).rejects.toThrow();
+			readFile(path.join(targetBundleDir, 'tools/wasm-metadce.browser.js'), 'utf8')
+		).resolves.toContain('wasm-metadce');
 		await expect(
 			readFile(path.join(targetBundleDir, 'browser-native-manifest.v1.json'), 'utf8')
-		).resolves.toContain('/wasm-of-js-of-ocaml/browser-native-bundle/findlib.conf');
-		await expect(
-			readFile(path.join(targetBundleDir, 'browser-native-manifest.v1.json'), 'utf8')
-		).resolves.toContain(
-			'/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-runtime-pack.v1.index.json'
-		);
-		await expect(
-			readFile(path.join(targetBinaryenBinDir, 'wasm-opt'), 'utf8')
-		).resolves.toContain('exit 0');
-		await expect(
-			readFile(path.join(targetBinaryenBinDir, 'types.d.ts'), 'utf8')
-		).rejects.toThrow();
+		).resolves.toContain('/wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-merge.browser.js');
 		await expect(readFile(versionModulePath, 'utf8')).resolves.toContain(
 			`export const WASM_OCAML_ASSET_VERSION = ${JSON.stringify(result.fingerprint)};`
 		);
@@ -137,110 +111,94 @@ describe('syncWasmOfJsOfOcamlDist', () => {
 	it('clears stale files from previous synced outputs', async () => {
 		const sourceBrowserDistDir = await makeTempDir();
 		const sourceBundleDir = await makeTempDir();
-		const sourceBinaryenBinDir = await makeTempDir();
 		const targetBrowserDistDir = await makeTempDir();
 		const targetBundleDir = await makeTempDir();
-		const targetBinaryenBinDir = await makeTempDir();
 		const versionModulePath = path.join(await makeTempDir(), 'wasmOcamlVersion.ts');
 
 		await writeFixtureFile(sourceBrowserDistDir, 'src/index.js', 'export default 1;\n');
 		await writeFixtureFile(
 			sourceBrowserDistDir,
 			'browser-harness/native-tool-worker.js',
-			bridgeCapableWorkerSource
+			staticBinaryenWorkerSource
 		);
 		await writeFixtureFile(
 			sourceBundleDir,
 			'browser-native-manifest.v1.json',
-			'{"version":1}\n'
+			'{"version":1,"binaryenTools":{"wasm_opt":"/.cache/browser-native-bundle/tools/wasm-opt.browser.js","wasm_merge":"/.cache/browser-native-bundle/tools/wasm-merge.browser.js","wasm_metadce":"/.cache/browser-native-bundle/tools/wasm-metadce.browser.js"}}\n'
 		);
-		await writeFixtureFile(sourceBinaryenBinDir, 'wasm-opt', '#!/bin/sh\nexit 0\n');
+		await writeFixtureFile(sourceBundleDir, 'tools/wasm-opt.browser.js', 'opt');
+		await writeFixtureFile(sourceBundleDir, 'tools/wasm-merge.browser.js', 'merge');
+		await writeFixtureFile(sourceBundleDir, 'tools/wasm-metadce.browser.js', 'metadce');
 		await writeFixtureFile(targetBrowserDistDir, 'stale.txt', 'remove me');
 		await writeFixtureFile(targetBundleDir, 'stale.txt', 'remove me');
-		await writeFixtureFile(targetBinaryenBinDir, 'stale.txt', 'remove me');
 
 		await syncWasmOfJsOfOcamlDist({
 			sourceBrowserDistDir,
 			sourceBundleDir,
-			sourceBinaryenBinDir,
 			targetBrowserDistDir,
 			targetBundleDir,
-			targetBinaryenBinDir,
 			versionModulePath
 		});
 
-		await expect(
-			readFile(path.join(targetBrowserDistDir, 'stale.txt'), 'utf8')
-		).rejects.toThrow();
+		await expect(readFile(path.join(targetBrowserDistDir, 'stale.txt'), 'utf8')).rejects.toThrow();
 		await expect(readFile(path.join(targetBundleDir, 'stale.txt'), 'utf8')).rejects.toThrow();
-		await expect(
-			readFile(path.join(targetBinaryenBinDir, 'stale.txt'), 'utf8')
-		).rejects.toThrow();
 	});
 
 	it('fails with a build hint when the browser dist directory is missing', async () => {
 		const sourceBrowserDistDir = path.join(await makeTempDir(), 'missing-dist');
 		const sourceBundleDir = await makeTempDir();
-		const sourceBinaryenBinDir = await makeTempDir();
 		const targetBrowserDistDir = await makeTempDir();
 		const targetBundleDir = await makeTempDir();
-		const targetBinaryenBinDir = await makeTempDir();
 		const versionModulePath = path.join(await makeTempDir(), 'wasmOcamlVersion.ts');
 
 		await expect(
 			syncWasmOfJsOfOcamlDist({
 				sourceBrowserDistDir,
 				sourceBundleDir,
-				sourceBinaryenBinDir,
 				targetBrowserDistDir,
 				targetBundleDir,
-				targetBinaryenBinDir,
 				versionModulePath
 			})
 		).rejects.toThrow('Build wasm-of-js-of-ocaml first');
 	});
 
-	it('fails when the Binaryen tool bundle is incomplete', async () => {
+	it('fails when the static Binaryen tool bundle is incomplete', async () => {
 		const sourceBrowserDistDir = await makeTempDir();
 		const sourceBundleDir = await makeTempDir();
-		const sourceBinaryenBinDir = await makeTempDir();
 		const targetBrowserDistDir = await makeTempDir();
 		const targetBundleDir = await makeTempDir();
-		const targetBinaryenBinDir = await makeTempDir();
 		const versionModulePath = path.join(await makeTempDir(), 'wasmOcamlVersion.ts');
 
 		await writeFixtureFile(sourceBrowserDistDir, 'src/index.js', 'export default 1;\n');
 		await writeFixtureFile(
 			sourceBrowserDistDir,
 			'browser-harness/native-tool-worker.js',
-			bridgeCapableWorkerSource
+			staticBinaryenWorkerSource
 		);
 		await writeFixtureFile(
 			sourceBundleDir,
 			'browser-native-manifest.v1.json',
-			'{"version":1}\n'
+			'{"version":1,"binaryenTools":{"wasm_opt":"/.cache/browser-native-bundle/tools/wasm-opt.browser.js","wasm_merge":"/.cache/browser-native-bundle/tools/wasm-merge.browser.js","wasm_metadce":"/.cache/browser-native-bundle/tools/wasm-metadce.browser.js"}}\n'
 		);
+		await writeFixtureFile(sourceBundleDir, 'tools/wasm-opt.browser.js', 'opt');
+		await writeFixtureFile(sourceBundleDir, 'tools/wasm-merge.browser.js', 'merge');
 
 		await expect(
 			syncWasmOfJsOfOcamlDist({
 				sourceBrowserDistDir,
 				sourceBundleDir,
-				sourceBinaryenBinDir,
 				targetBrowserDistDir,
 				targetBundleDir,
-				targetBinaryenBinDir,
 				versionModulePath
 			})
-		).rejects.toThrow('Binaryen tool was not found');
+		).rejects.toThrow('static Binaryen tool was not found');
 	});
 
-	it('fails when the browser-native worker hard-codes the root Binaryen bridge endpoint', async () => {
+	it('fails when the browser-native worker still references the Binaryen API bridge', async () => {
 		const sourceBrowserDistDir = await makeTempDir();
 		const sourceBundleDir = await makeTempDir();
-		const sourceBinaryenBinDir = await makeTempDir();
 		const targetBrowserDistDir = await makeTempDir();
 		const targetBundleDir = await makeTempDir();
-		const targetBinaryenBinDir = await makeTempDir();
 		const versionModulePath = path.join(await makeTempDir(), 'wasmOcamlVersion.ts');
 
 		await writeFixtureFile(sourceBrowserDistDir, 'src/index.js', 'export default 1;\n');
@@ -248,31 +206,32 @@ describe('syncWasmOfJsOfOcamlDist', () => {
 			sourceBrowserDistDir,
 			'browser-harness/native-tool-worker.js',
 			`
-			const bridge = { binaryenBridge: true, env: { WASM_OF_JS_BINARYEN_BRIDGE_URL: '' } };
-			function runBinaryenBridge() {}
-			function callBridge(runtimeGlobal, command) {
-				void bridge;
-				return runBinaryenBridge(runtimeGlobal, command, '/api/binaryen-command');
+			function runBinaryenTool(runtimeGlobal, command, binaryenTools) {
+				return runtimeGlobal && command && binaryenTools ? 0 : 1;
 			}
+			self.onmessage = (request) => {
+				request.binaryenTools;
+				return '/api/binaryen-command';
+			};
 			`
 		);
 		await writeFixtureFile(
 			sourceBundleDir,
 			'browser-native-manifest.v1.json',
-			'{"version":1}\n'
+			'{"version":1,"binaryenTools":{"wasm_opt":"/.cache/browser-native-bundle/tools/wasm-opt.browser.js","wasm_merge":"/.cache/browser-native-bundle/tools/wasm-merge.browser.js","wasm_metadce":"/.cache/browser-native-bundle/tools/wasm-metadce.browser.js"}}\n'
 		);
-		await writeFixtureFile(sourceBinaryenBinDir, 'wasm-opt', '#!/bin/sh\nexit 0\n');
+		await writeFixtureFile(sourceBundleDir, 'tools/wasm-opt.browser.js', 'opt');
+		await writeFixtureFile(sourceBundleDir, 'tools/wasm-merge.browser.js', 'merge');
+		await writeFixtureFile(sourceBundleDir, 'tools/wasm-metadce.browser.js', 'metadce');
 
 		await expect(
 			syncWasmOfJsOfOcamlDist({
 				sourceBrowserDistDir,
 				sourceBundleDir,
-				sourceBinaryenBinDir,
 				targetBrowserDistDir,
 				targetBundleDir,
-				targetBinaryenBinDir,
 				versionModulePath
 			})
-		).rejects.toThrow('hard-codes the root Binaryen bridge endpoint');
+		).rejects.toThrow('still references the Binaryen API bridge');
 	});
 });
