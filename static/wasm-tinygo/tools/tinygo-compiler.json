@@ -5,6 +5,7 @@
   "buildMode": "direct",
   "fallbackReason": null,
   "directFailureReason": null,
+  "patchedDirectFailureReason": null,
   "patchedEntryFailureReason": null,
   "blockers": [],
   "artifactKind": "compiler",

@@ -16,13 +16,16 @@ describe('bundled wasm-tinygo runtime', () => {
 		const runtimeChunkSource = readFileSync(path.join(assetsDir, runtimeChunk!), 'utf8');
 		const compilerManifest = JSON.parse(
 			readFileSync(path.join(toolsDir, 'tinygo-compiler.json'), 'utf8')
-		) as { buildMode?: string };
+		) as { buildMode?: string; artifactKind?: string };
 
 		expect(compilerManifest.buildMode).toBe('direct');
+		expect(compilerManifest.artifactKind).toBe('compiler');
 		expect(runtimeChunkSource).toContain('assetPath:');
 		expect(runtimeChunkSource).toContain('onProgress:e.onProgress');
 		expect(runtimeChunkSource).toMatch(/loaded:e,total:[a-z]/);
-		expect(runtimeChunkSource).toContain('mode=direct');
+		expect(runtimeChunkSource).toContain(
+			'tinygo compiler module loaded from tools/tinygo-compiler.wasm'
+		);
 		expect(runtimeChunkSource).toContain('frontend bootstrap tool plan skipped: backend lowering is active');
 	});
 });
