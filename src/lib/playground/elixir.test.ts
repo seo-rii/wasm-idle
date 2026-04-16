@@ -191,6 +191,35 @@ describe('Elixir sandbox', () => {
 		expect(output).toHaveBeenCalledWith('=> :ok\n');
 	});
 
+	it('flushes subsequent queued stdin chunks when the worker requests input multiple times', async () => {
+		const sandbox = new Elixir();
+
+		await sandbox.load({
+			elixir: {
+				bundleUrl: '/runtime/elixir/bundle.avm'
+			}
+		});
+		const worker = workerInstances[0];
+		const flushedChunks: Array<string | null> = [];
+		let runMessage: any;
+		worker.postMessage.mockImplementationOnce((message: any) => {
+			runMessage = message;
+			queueMicrotask(() => {
+				sandbox.write('5\n');
+				worker.onmessage?.({ data: { buffer: true } } as MessageEvent<any>);
+				flushedChunks.push(readBufferedStdin(runMessage.buffer));
+				sandbox.write('7\n');
+				worker.onmessage?.({ data: { buffer: true } } as MessageEvent<any>);
+				flushedChunks.push(readBufferedStdin(runMessage.buffer));
+				worker.onmessage?.({ data: { results: true } } as MessageEvent<any>);
+			});
+		});
+
+		await expect(sandbox.run('IO.gets("") <> IO.gets("")', false)).resolves.toBe(true);
+
+		expect(flushedChunks).toEqual(['5\n', '7\n']);
+	});
+
 	it('flushes EOF into the worker stdin buffer when requested', async () => {
 		const sandbox = new Elixir();
 

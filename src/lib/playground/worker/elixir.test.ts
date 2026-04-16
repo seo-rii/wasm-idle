@@ -55,9 +55,15 @@ describe('Elixir worker', () => {
 					options.print?.('factorial_plus_bonus=27\n');
 					return JSON.stringify(':ok');
 				}
-				expect(source).toBe('IO.puts(String.trim("5\\n"))');
-				options.print?.('stdin=5\n');
-				return JSON.stringify(':ok');
+				if (
+					source ===
+					'IO.puts(String.trim(((fn __wasm_idle_prompt__ -> IO.write(__wasm_idle_prompt__); "5\\n" end).(""))))'
+				) {
+					options.print?.('stdin=5\n');
+					return JSON.stringify(':ok');
+				}
+				options.print?.(`rewritten=${source}\n`);
+				return JSON.stringify(source);
 			});
 			const module = {
 				FS: {
@@ -206,5 +212,149 @@ describe('Elixir worker', () => {
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ buffer: true });
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ output: 'stdin=5\n' });
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: ':ok' });
+	});
+
+	it('requests additional stdin chunks for repeated IO.gets calls', async () => {
+		const buffer = new SharedArrayBuffer(1024);
+		await import('./elixir');
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				bundleUrl: '/runtime/elixir/bundle.avm',
+				log: true
+			}
+		});
+		await Promise.resolve();
+
+		waitForBufferedStdinMock.mockReturnValueOnce('5\n').mockReturnValueOnce('7\n');
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: 'IO.puts(String.trim(IO.gets("")) <> ":" <> String.trim(IO.gets("")))',
+				prepare: false,
+				buffer,
+				log: true
+			}
+		});
+		await Promise.resolve();
+
+		expect(waitForBufferedStdinMock).toHaveBeenCalledTimes(2);
+		expect(lastModule.current.rawCall).toHaveBeenLastCalledWith(
+			'main',
+			JSON.stringify([
+				'eval_elixir',
+				'IO.puts(String.trim(((fn __wasm_idle_prompt__ -> IO.write(__wasm_idle_prompt__); "5\\n" end).(""))) <> ":" <> String.trim(((fn __wasm_idle_prompt__ -> IO.write(__wasm_idle_prompt__); "7\\n" end).(""))))'
+			])
+		);
+	});
+
+	it('bridges IO.read and IO.binread variants across chunk boundaries until EOF', async () => {
+		const buffer = new SharedArrayBuffer(1024);
+		await import('./elixir');
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				bundleUrl: '/runtime/elixir/bundle.avm',
+				log: true
+			}
+		});
+		await Promise.resolve();
+
+		waitForBufferedStdinMock
+			.mockReturnValueOnce('abc\nre')
+			.mockReturnValueOnce('stxyz')
+			.mockReturnValueOnce(null);
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: 'IO.inspect({IO.read(:line), IO.read(3), IO.binread(:all)})',
+				prepare: false,
+				buffer,
+				log: true
+			}
+		});
+		await Promise.resolve();
+
+		expect(waitForBufferedStdinMock).toHaveBeenCalledTimes(3);
+		expect(lastModule.current.rawCall).toHaveBeenLastCalledWith(
+			'main',
+			JSON.stringify([
+				'eval_elixir',
+				'IO.inspect({"abc\\n", "res", "txyz"})'
+			])
+		);
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			output: 'rewritten=IO.inspect({"abc\\n", "res", "txyz"})\n'
+		});
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			results: 'IO.inspect({"abc\\n", "res", "txyz"})'
+		});
+	});
+
+	it('bridges IO.getn and :io input helpers with prompt output preserved', async () => {
+		const buffer = new SharedArrayBuffer(1024);
+		await import('./elixir');
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				bundleUrl: '/runtime/elixir/bundle.avm',
+				log: true
+			}
+		});
+		await Promise.resolve();
+
+		waitForBufferedStdinMock
+			.mockReturnValueOnce('ab')
+			.mockReturnValueOnce('cde')
+			.mockReturnValueOnce('rest\n');
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: 'IO.inspect({IO.getn("> ", 2), :io.get_chars(:stdio, "chars> ", 3), :io.get_line("line> ")})',
+				prepare: false,
+				buffer,
+				log: true
+			}
+		});
+		await Promise.resolve();
+
+		expect(waitForBufferedStdinMock).toHaveBeenCalledTimes(3);
+		expect(lastModule.current.rawCall).toHaveBeenLastCalledWith(
+			'main',
+			JSON.stringify([
+				'eval_elixir',
+				'IO.inspect({((fn __wasm_idle_prompt__ -> IO.write(__wasm_idle_prompt__); "ab" end).("> ")), ((fn __wasm_idle_device__, __wasm_idle_prompt__ -> _ = __wasm_idle_device__; IO.write(__wasm_idle_prompt__); "cde" end).(:stdio, "chars> ")), ((fn __wasm_idle_prompt__ -> IO.write(__wasm_idle_prompt__); "rest\\n" end).("line> "))})'
+			])
+		);
+	});
+
+	it('keeps EOF semantics distinct between IO.gets and IO.read-style helpers', async () => {
+		const buffer = new SharedArrayBuffer(1024);
+		await import('./elixir');
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				bundleUrl: '/runtime/elixir/bundle.avm',
+				log: true
+			}
+		});
+		await Promise.resolve();
+
+		waitForBufferedStdinMock.mockReturnValueOnce(null);
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: 'IO.inspect({IO.gets(""), IO.read(:line), :io.get_line("")})',
+				prepare: false,
+				buffer,
+				log: true
+			}
+		});
+		await Promise.resolve();
+
+		expect(waitForBufferedStdinMock).toHaveBeenCalledTimes(1);
+		expect(lastModule.current.rawCall).toHaveBeenLastCalledWith(
+			'main',
+			JSON.stringify([
+				'eval_elixir',
+				'IO.inspect({((fn __wasm_idle_prompt__ -> IO.write(__wasm_idle_prompt__); nil end).("")), :eof, ((fn __wasm_idle_prompt__ -> IO.write(__wasm_idle_prompt__); :eof end).(""))})'
+			])
+		);
 	});
 });
