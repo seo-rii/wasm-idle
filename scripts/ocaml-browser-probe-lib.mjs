@@ -114,7 +114,7 @@ async function readProbeSummary(
 }
 
 /**
- * @param {{ browserUrl: string; chromiumExecutable?: string; expectedOutput?: string; runTimeoutMs?: number; backend?: 'js' | 'wasm'; code?: string; stdinText?: string; sendEof?: boolean }} options
+ * @param {{ browserUrl: string; chromiumExecutable?: string; expectedOutput?: string; runTimeoutMs?: number; backend?: 'js' | 'wasm'; code?: string; stdinText?: string; sendEof?: boolean; stdinMethod?: 'debug-hook' | 'keyboard' }} options
  */
 export async function runOcamlBrowserProbe({
 	browserUrl,
@@ -124,7 +124,8 @@ export async function runOcamlBrowserProbe({
 	backend = 'js',
 	code = 'let () = print_endline "hello from ocaml fixture"',
 	stdinText = '',
-	sendEof = false
+	sendEof = false,
+	stdinMethod = 'debug-hook'
 }) {
 	if (!browserUrl) {
 		throw new Error('runOcamlBrowserProbe requires a browserUrl');
@@ -317,17 +318,34 @@ export async function runOcamlBrowserProbe({
 					{ cause: error }
 				);
 			}
-			await page.waitForFunction(
-				() =>
-					typeof (/** @type {any} */ (window).__wasmIdleDebug?.writeTerminalInput) ===
-					'function'
-			);
-			await page.evaluate(
-				async ({ text, eof }) => {
-					await /** @type {any} */ (window).__wasmIdleDebug.writeTerminalInput(text, eof);
-				},
-				{ text: stdinText, eof: sendEof }
-			);
+			if (stdinMethod === 'keyboard') {
+				const normalizedInput = stdinText.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+				await page.locator('.xterm').click();
+				const segments = normalizedInput.split('\n');
+				for (let index = 0; index < segments.length; index += 1) {
+					if (segments[index]) {
+						await page.keyboard.type(segments[index]);
+					}
+					if (index < segments.length - 1) {
+						await page.keyboard.press('Enter');
+					}
+				}
+				if (sendEof) {
+					await page.keyboard.press('Control+D');
+				}
+			} else {
+				await page.waitForFunction(
+					() =>
+						typeof (/** @type {any} */ (window).__wasmIdleDebug?.writeTerminalInput) ===
+						'function'
+				);
+				await page.evaluate(
+					async ({ text, eof }) => {
+						await /** @type {any} */ (window).__wasmIdleDebug.writeTerminalInput(text, eof);
+					},
+					{ text: stdinText, eof: sendEof }
+				);
+			}
 			const compileTranscript =
 				(await page
 					.locator('[data-testid="terminal-debug-output"]')

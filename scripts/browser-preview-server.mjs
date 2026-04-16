@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { mkdirSync, rmSync, statSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import http from 'node:http';
 import https from 'node:https';
 import { createServer } from 'node:net';
@@ -9,6 +9,19 @@ import { fileURLToPath } from 'node:url';
 const THIS_FILE = fileURLToPath(import.meta.url);
 const THIS_DIR = path.dirname(THIS_FILE);
 const REPO_ROOT = path.resolve(THIS_DIR, '..');
+const DEFAULT_BROWSER_BASE_PATH = (() => {
+	try {
+		const source = readFileSync(path.join(REPO_ROOT, 'svelte.config.js'), 'utf8');
+		const configuredBasePath = source.match(/base:\s*['"]([^'"]+)['"]/)?.[1];
+		if (!configuredBasePath) {
+			return '/absproxy/5173/';
+		}
+		const trimmedBasePath = configuredBasePath.replace(/^\/+|\/+$/g, '');
+		return trimmedBasePath ? `/${trimmedBasePath}/` : '/';
+	} catch {
+		return '/absproxy/5173/';
+	}
+})();
 const BROWSER_PREPARATION_LOCK_DIR = path.join(REPO_ROOT, '.svelte-kit', 'browser-preview-prep.lock');
 const BROWSER_PROBE_SESSION_LOCK_DIR = path.join(
 	REPO_ROOT,
@@ -228,7 +241,7 @@ async function waitForHttp(url, timeoutMs, child, logs) {
  */
 export async function startBrowserPreviewServer({
 	origin = 'http://localhost:4173',
-	basePath = '/absproxy/5173/',
+	basePath = DEFAULT_BROWSER_BASE_PATH,
 	timeoutMs = 120_000,
 	serverMode = 'dev'
 } = {}) {

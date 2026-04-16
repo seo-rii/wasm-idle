@@ -124,4 +124,14 @@ describe('startBrowserPreviewServer', () => {
 		expect(previewServer.browserUrl).toBe('http://127.0.0.1:43174/');
 		await expect(previewServer.close()).resolves.toBeUndefined();
 	});
+
+	it('uses the configured Svelte base path when no explicit browser base path is provided', async () => {
+		const previewServer = await startBrowserPreviewServer({
+			origin: 'https://example.com'
+		});
+
+		expect(previewServer.origin).toBe('https://example.com');
+		expect(previewServer.browserUrl).toBe('https://example.com/absproxy/5174/');
+		await expect(previewServer.close()).resolves.toBeUndefined();
+	});
 });

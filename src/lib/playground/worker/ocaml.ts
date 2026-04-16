@@ -279,6 +279,8 @@ async function executeCompileResult(result: CompileResult, log = false) {
 	const sourceDir = programArtifact.path.replace(/\/[^/]+$/, '');
 	const createdObjectUrls: string[] = [];
 	const stdinEncoder = new TextEncoder();
+	let stdinChunkOcaml = new Uint8Array(0);
+	let stdinChunkOffsetOcaml = 0;
 	const originalConsole = globalThis.console;
 	const originalFetch = globalThis.fetch.bind(globalThis);
 	const originalInstantiate = WebAssembly.instantiate.bind(
@@ -352,6 +354,29 @@ async function executeCompileResult(result: CompileResult, log = false) {
 		return null;
 	};
 
+	const readOcamlStdinBytes = (requestedBytes: number) => {
+		if (!stdinBufferOcaml) {
+			return null;
+		}
+		if (requestedBytes <= 0) {
+			return new Uint8Array(0);
+		}
+		while (stdinChunkOffsetOcaml >= stdinChunkOcaml.length) {
+			const chunk = waitForBufferedStdin(stdinBufferOcaml, () => postMessage({ buffer: true }));
+			if (chunk == null) {
+				stdinChunkOcaml = new Uint8Array(0);
+				stdinChunkOffsetOcaml = 0;
+				return null;
+			}
+			stdinChunkOcaml = stdinEncoder.encode(chunk);
+			stdinChunkOffsetOcaml = 0;
+		}
+		const end = Math.min(stdinChunkOffsetOcaml + requestedBytes, stdinChunkOcaml.length);
+		const bytes = stdinChunkOcaml.slice(stdinChunkOffsetOcaml, end);
+		stdinChunkOffsetOcaml = end;
+		return bytes;
+	};
+
 	globalThis.console = {
 		...originalConsole,
 		log: (...args: unknown[]) => {
@@ -404,22 +429,10 @@ async function executeCompileResult(result: CompileResult, log = false) {
 		return await originalFetch(input, init);
 	}) as typeof fetch;
 	runtimeGlobal.process = undefined;
-	runtimeGlobal[stdinHookKey] = () => {
-		if (!stdinBufferOcaml) {
+	runtimeGlobal[stdinHookKey] = (requestedBytes = Number.MAX_SAFE_INTEGER) => {
+		const encoded = readOcamlStdinBytes(requestedBytes);
+		if (encoded == null) {
 			return null;
-		}
-		const chunk = waitForBufferedStdin(stdinBufferOcaml, () => postMessage({ buffer: true }));
-		if (chunk == null) {
-			if (log) {
-				console.log('[wasm-idle:ocaml-stdin] read(bytes=0, eof=true)');
-			}
-			return null;
-		}
-		const encoded = stdinEncoder.encode(chunk);
-		if (log) {
-			console.log(
-				`[wasm-idle:ocaml-stdin] read(bytes=${encoded.byteLength}, text=${JSON.stringify(chunk)})`
-			);
 		}
 		let byteString = '';
 		for (const byte of encoded) {
@@ -427,7 +440,6 @@ async function executeCompileResult(result: CompileResult, log = false) {
 		}
 		return byteString;
 	};
-	let lastFsReadSequence = -1;
 	const stdinFsShim = {
 		readSync(
 			fileDescriptor: number,
@@ -438,29 +450,12 @@ async function executeCompileResult(result: CompileResult, log = false) {
 			if (fileDescriptor !== 0 || !stdinBufferOcaml) {
 				return 0;
 			}
-			const currentSequence = Atomics.load(stdinBufferOcaml, 0);
-			if (currentSequence === lastFsReadSequence) {
+			const encoded = readOcamlStdinBytes(length);
+			if (encoded == null) {
 				return 0;
 			}
-			const chunk = waitForBufferedStdin(stdinBufferOcaml, () =>
-				postMessage({ buffer: true })
-			);
-			lastFsReadSequence = Atomics.load(stdinBufferOcaml, 0);
-			if (chunk == null) {
-				if (log) {
-					console.log('[wasm-idle:ocaml-stdin] read(bytes=0, eof=true)');
-				}
-				return 0;
-			}
-			const encoded = stdinEncoder.encode(chunk);
-			const byteLength = Math.min(length, encoded.byteLength);
-			buffer.set(encoded.subarray(0, byteLength), offset);
-			if (log) {
-				console.log(
-					`[wasm-idle:ocaml-stdin] read(bytes=${byteLength}, text=${JSON.stringify(chunk)})`
-				);
-			}
-			return byteLength;
+			buffer.set(encoded, offset);
+			return encoded.byteLength;
 		}
 	};
 	runtimeGlobal.fs = stdinFsShim;

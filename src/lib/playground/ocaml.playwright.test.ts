@@ -112,7 +112,7 @@ describe('wasm-idle OCaml browser playwright integration', () => {
 		});
 	}, 420_000);
 
-	it('accepts stdin on the real browser-native OCaml backend paths', async () => {
+	it('accepts terminal-typed stdin on the real browser-native OCaml backend paths', async () => {
 		if (process.env.WASM_IDLE_RUN_REAL_BROWSER_OCAML !== '1') {
 			return;
 		}
@@ -155,7 +155,8 @@ describe('wasm-idle OCaml browser playwright integration', () => {
 						expectedOutput: '5',
 						backend,
 						code: 'let () = print_endline (read_line ())',
-						stdinText: '5\n'
+						stdinText: '5\n',
+						stdinMethod: 'keyboard'
 					});
 
 					expect(summary.activeState.crossOriginIsolated).toBe(true);
@@ -191,11 +192,12 @@ describe('wasm-idle OCaml browser playwright integration', () => {
 						expect(summary.binaryenToolRequests).toEqual([]);
 						expect(summary.binaryenToolResponses).toEqual([]);
 					}
+					expect(summary.transcript).not.toContain('[wasm-idle:ocaml-stdin]');
 					expect(
 						summary.consoleTail.some((entry) =>
-							entry.includes('[wasm-idle:ocaml-stdin] read(bytes=')
+							entry.includes('[wasm-idle:ocaml-stdin]')
 						)
-					).toBe(true);
+					).toBe(false);
 				}
 			} finally {
 				await previewServer.close();
