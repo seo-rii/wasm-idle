@@ -19,7 +19,7 @@ describe('Terminal source', () => {
 			/if \(isCopyShortcut && term\.hasSelection\(\)\) \{\s+const selectedText = term\.getSelection\(\);\s+if \(selectedText\) \{\s+ev\.preventDefault\(\);\s+navigator\.clipboard\.writeText\(selectedText\)\.catch\(\(\) => \{\}\);\s+return;\s+\}\s+\}\s+if \(finish\) return;/s
 		);
 		expect(source).toMatch(
-			/else if \(isCopyShortcut\) \{\s+ev\.preventDefault\(\);\s+sandbox\.kill\?\.\(\);\s+\}/s
+			/if \(isCopyShortcut\) \{\s+ev\.preventDefault\(\);\s+sandbox\.kill\?\.\(\);\s+\}/s
 		);
 	});
 
@@ -45,8 +45,18 @@ describe('Terminal source', () => {
 
 	it('submits pending stdin and sends EOF on ctrl+d for read-to-end programs', () => {
 		expect(source).toMatch(
-			/else if \(\(ev\.ctrlKey \|\| ev\.metaKey\) && ev\.key\.toLowerCase\(\) === 'd'\) \{\s+if \(input\.length > 0\) submitCurrentInput\(\);\s+sandbox\?\.eof\?\.\(\);\s+\}/s
+			/else if \(\(ev\.ctrlKey \|\| ev\.metaKey\) && ev\.key\.toLowerCase\(\) === 'd'\) \{\s+ev\.preventDefault\(\);\s+if \(input\.length > 0\) submitCurrentInput\(\);\s+sandbox\?\.eof\?\.\(\);\s+\}/s
 		);
+	});
+
+	it('uses xterm onData for printable keys, Enter, and Backspace instead of relying on keydown heuristics', () => {
+		expect(source).toMatch(/term\.onData\(\(data: string\) => \{/);
+		expect(source).toMatch(/if \(chunk === '\\r' \|\| chunk === '\\n'\)/);
+		expect(source).toMatch(/if \(chunk === '\\u007f'\)/);
+		expect(source).toMatch(/input = Array\.from\(input\)\.slice\(0, -1\)\.join\(''\);/);
+		expect(source).toMatch(/if \(\(chunk\.codePointAt\(0\) \|\| 0\) >= 0x20\) \{/);
+		expect(source).not.toMatch(/const printable = !ev\.altKey && !ev\.ctrlKey && !ev\.metaKey;/);
+		expect(source).not.toMatch(/else if \(printable\) \{/);
 	});
 
 	it('keeps a hidden transcript mirror for browser debugging and Playwright assertions', () => {

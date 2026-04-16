@@ -321,10 +321,40 @@
 				allowProposedApi: true
 			});
 			term.open(ref);
+			term.onData((data: string) => {
+				if (!term || finish) return;
+				let pendingText = '';
+				for (const chunk of data) {
+					if (chunk === '\r' || chunk === '\n') {
+						if (pendingText) {
+							appendInputText(pendingText);
+							pendingText = '';
+						}
+						submitCurrentInput();
+						continue;
+					}
+					if (chunk === '\u007f') {
+						if (pendingText) {
+							appendInputText(pendingText);
+							pendingText = '';
+						}
+						if (term.buffer.active.cursorX > 0 && input.length > 0) {
+							term.write('\b \b');
+							input = Array.from(input).slice(0, -1).join('');
+						}
+						continue;
+					}
+					if ((chunk.codePointAt(0) || 0) >= 0x20) {
+						pendingText += chunk;
+					}
+				}
+				if (pendingText) {
+					appendInputText(pendingText);
+				}
+			});
 			term.onKey((e: { key: string; domEvent: KeyboardEvent }) => {
 				if (!term) return;
 				const ev = e.domEvent;
-				const printable = !ev.altKey && !ev.ctrlKey && !ev.metaKey;
 				const isCopyShortcut = (ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'c';
 				if (isCopyShortcut && term.hasSelection()) {
 					const selectedText = term.getSelection();
@@ -336,28 +366,15 @@
 				}
 				if (finish) return;
 				onkey?.(ev);
-				if (ev.key === 'Enter') {
-					submitCurrentInput();
-				} else if (ev.key === 'Backspace') {
-					if (term.buffer.active.cursorX > 0) {
-						term.write('\b \b');
-						if (input.length > 0) input = input.substring(0, input.length - 1);
-					}
-				} else if (printable) {
-					if (
-						(e.key >= String.fromCharCode(0x20) &&
-							e.key <= String.fromCharCode(0x7e)) ||
-						e.key >= '\u00a0'
-					) {
-						appendInputText(e.key);
-					}
-				} else if (isCopyShortcut) {
+				if (isCopyShortcut) {
 					ev.preventDefault();
 					sandbox.kill?.();
 				} else if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'd') {
+					ev.preventDefault();
 					if (input.length > 0) submitCurrentInput();
 					sandbox?.eof?.();
 				} else if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'v') {
+					ev.preventDefault();
 					navigator.clipboard.readText().then((text) => {
 						applyPastedText(text);
 					});
