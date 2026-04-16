@@ -17,6 +17,142 @@
 		resolveEditorDefaultSource
 	} from './editor-defaults';
 
+	const ocamlKeywords = [
+		'and',
+		'as',
+		'assert',
+		'begin',
+		'class',
+		'constraint',
+		'do',
+		'done',
+		'downto',
+		'else',
+		'end',
+		'exception',
+		'external',
+		'false',
+		'for',
+		'fun',
+		'function',
+		'functor',
+		'if',
+		'in',
+		'include',
+		'inherit',
+		'initializer',
+		'lazy',
+		'let',
+		'match',
+		'method',
+		'module',
+		'mutable',
+		'new',
+		'nonrec',
+		'object',
+		'of',
+		'open',
+		'or',
+		'private',
+		'rec',
+		'sig',
+		'struct',
+		'then',
+		'to',
+		'true',
+		'try',
+		'type',
+		'val',
+		'virtual',
+		'when',
+		'while',
+		'with'
+	];
+
+	const ocamlOperators = [
+		'=',
+		'!=',
+		'<',
+		'>',
+		'<=',
+		'>=',
+		':=',
+		'::',
+		'@',
+		'|',
+		'||',
+		'&',
+		'&&',
+		'+',
+		'-',
+		'*',
+		'/',
+		'->',
+		'<-',
+		'=>'
+	];
+
+	const ocamlLanguageConfiguration = {
+		comments: {
+			blockComment: ['(*', '*)']
+		},
+		brackets: [
+			['{', '}'],
+			['[', ']'],
+			['(', ')']
+		],
+		autoClosingPairs: [
+			{ open: '{', close: '}' },
+			{ open: '[', close: ']' },
+			{ open: '(', close: ')' },
+			{ open: '"', close: '"' }
+		],
+		surroundingPairs: [
+			{ open: '{', close: '}' },
+			{ open: '[', close: ']' },
+			{ open: '(', close: ')' },
+			{ open: '"', close: '"' }
+		]
+	} satisfies monaco.languages.LanguageConfiguration;
+
+	const ocamlMonarchTokens = {
+		defaultToken: '',
+		tokenPostfix: '.ocaml',
+		keywords: ocamlKeywords,
+		operators: ocamlOperators,
+		symbols: /[=><!~?:&|+\-*/^%@]+/,
+		escapes: /\\(?:[abfnrtv"'\\]|x[0-9A-Fa-f]{2}|[0-9]{3})/,
+		tokenizer: {
+			root: [
+				[/[A-Z][\w']*/, 'type.identifier'],
+				[/'[a-z_][\w']*/, 'type.identifier'],
+				[/[a-z_][\w']*/, { cases: { '@keywords': 'keyword', '@default': 'identifier' } }],
+				[/\(\*/, 'comment', '@comment'],
+				[/"/, 'string', '@string'],
+				[/'([^'\\]|\\.)'/, 'string'],
+				[/0[xX][0-9a-fA-F_]+/, 'number.hex'],
+				[/0[oO][0-7_]+/, 'number.octal'],
+				[/0[bB][01_]+/, 'number.binary'],
+				[/[0-9][\d_]*(\.[\d_]+)?([eE][\-+]?[\d_]+)?/, 'number'],
+				[/[{}()[\]]/, '@brackets'],
+				[/[;,.]/, 'delimiter'],
+				[/@symbols/, { cases: { '@operators': 'operator', '@default': '' } }]
+			],
+			comment: [
+				[/[^(*)]+/, 'comment'],
+				[/\(\*/, 'comment', '@push'],
+				[/\*\)/, 'comment', '@pop'],
+				[/[(*]/, 'comment']
+			],
+			string: [
+				[/[^\\"]+/, 'string'],
+				[/@escapes/, 'string.escape'],
+				[/\\./, 'string.escape.invalid'],
+				[/"/, 'string', '@pop']
+			]
+		}
+	} satisfies monaco.languages.IMonarchLanguage;
+
 	export const value = () => editor?.getValue() || '';
 
 	let divEl: HTMLDivElement | null = $state(null);
@@ -165,6 +301,15 @@
 		import('monaco-editor').then(async (m) => {
 			if (disposed) return;
 			Monaco = m;
+			if (!Monaco.languages.getLanguages().some(({ id }) => id === 'ocaml')) {
+				Monaco.languages.register({
+					id: 'ocaml',
+					aliases: ['OCaml', 'ocaml'],
+					extensions: ['.ml', '.mli']
+				});
+			}
+			Monaco.languages.setLanguageConfiguration('ocaml', ocamlLanguageConfiguration);
+			Monaco.languages.setMonarchTokensProvider('ocaml', ocamlMonarchTokens);
 			const defaultValue = resolveEditorDefaultSource(
 				language as 'cpp' | 'python' | 'java' | 'go' | 'elixir' | 'ocaml' | 'rust',
 				rustTargetTriple
