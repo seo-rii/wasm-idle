@@ -26,12 +26,16 @@ function ensureTrailingSlash(inputPath) {
     return inputPath.endsWith('/') ? inputPath : `${inputPath}/`;
 }
 function patchToolSource(source) {
-    const needle = 'this.content={};this.root=a;';
-    const replacement = 'this.content={};(globalThis.__jsoo_mounts||(globalThis.__jsoo_mounts=[])).push({root:a,content:this.content});this.root=a;';
-    if (!source.includes(needle)) {
+    const mountNeedle = 'this.content={};this.root=a;';
+    const mountReplacement = 'this.content={};this.root=a;(globalThis.__jsoo_mounts||(globalThis.__jsoo_mounts=[])).push(this);';
+    if (!source.includes(mountNeedle)) {
         throw new Error('failed to patch browser tool source for virtual fs mount exposure');
     }
-    return source.replace(needle, replacement);
+    const createFileNeedle = /([A-Za-z$_][\w$]*)\.jsoo_create_file=([A-Za-z$_][\w$]*);\1\.jsoo_fs_tmp=\[\];return 0/;
+    const forcedBrowserSource = source
+        .replace('const isNode = globalThis.process?.versions?.node;', 'const isNode = false;')
+        .replace(createFileNeedle, '(globalThis.__jsoo_created_files||(globalThis.__jsoo_created_files={}));$1.jsoo_create_file=(name,content)=>{globalThis.__jsoo_created_files[name]=content;return $2(name,content)};$1.jsoo_fs_tmp=[];return 0');
+    return forcedBrowserSource.replace(mountNeedle, mountReplacement);
 }
 function bytesToBinaryString(bytes) {
     let output = '';
@@ -46,12 +50,6 @@ function binaryStringToBytes(value) {
         bytes[index] = value.charCodeAt(index) & 0xff;
     }
     return bytes;
-}
-function bytesToBase64(bytes) {
-    return btoa(bytesToBinaryString(bytes));
-}
-function base64ToBytes(value) {
-    return binaryStringToBytes(atob(value));
 }
 function isBinaryenBridgeDebugEnabled(runtimeGlobal) {
     return runtimeGlobal['__wasm_bridge_debug'] === true;
@@ -112,11 +110,8 @@ function findMount(runtimeGlobal, targetPath) {
         const normalizedRoot = ensureTrailingSlash(normalizePath(mount.root));
         if (normalizedTarget === normalizedRoot.slice(0, -1) ||
             normalizedTarget.startsWith(normalizedRoot)) {
-            if (!bestMatch || normalizedRoot.length > bestMatch.root.length) {
-                bestMatch = {
-                    root: normalizedRoot,
-                    content: mount.content
-                };
+            if (!bestMatch || normalizedRoot.length > ensureTrailingSlash(normalizePath(bestMatch.root)).length) {
+                bestMatch = mount;
             }
         }
     }
@@ -128,8 +123,10 @@ function readVirtualFile(runtimeGlobal, targetPath) {
         return undefined;
     }
     const normalizedTarget = normalizePath(targetPath);
-    const relativePath = normalizedTarget.slice(mount.root.length).replace(/^\/+/, '');
-    const entry = mount.content[relativePath];
+    const normalizedRoot = ensureTrailingSlash(normalizePath(mount.root));
+    const relativePath = normalizedTarget.slice(normalizedRoot.length).replace(/^\/+/, '');
+    const lookedUpEntry = typeof mount.lookup === 'function' ? mount.lookup(relativePath) : undefined;
+    const entry = (mount.content[relativePath] || lookedUpEntry);
     if (!entry || typeof entry.length !== 'function' || typeof entry.read !== 'function') {
         return undefined;
     }
@@ -137,6 +134,30 @@ function readVirtualFile(runtimeGlobal, targetPath) {
     const data = new Uint8Array(length);
     entry.read(0, data, 0, length);
     return data;
+}
+function describeVirtualFile(runtimeGlobal, targetPath) {
+    const mount = findMount(runtimeGlobal, targetPath);
+    if (!mount) {
+        return `${targetPath}: mount missing`;
+    }
+    const normalizedTarget = normalizePath(targetPath);
+    const normalizedRoot = ensureTrailingSlash(normalizePath(mount.root));
+    const relativePath = normalizedTarget.slice(normalizedRoot.length).replace(/^\/+/, '');
+    const lookedUpEntry = typeof mount.lookup === 'function' ? mount.lookup(relativePath) : undefined;
+    const entry = mount.content[relativePath] || lookedUpEntry;
+    const entryRecord = entry;
+    const constructorName = entry && typeof entry === 'object' && 'constructor' in entry
+        ? String(entry.constructor?.name || '(anonymous)')
+        : typeof entry;
+    return [
+        `target=${normalizedTarget}`,
+        `mount=${mount.root}`,
+        `relative=${relativePath}`,
+        `hasEntry=${entry ? 'yes' : 'no'}`,
+        `constructor=${constructorName}`,
+        `hasLength=${entryRecord && typeof entryRecord.length === 'function' ? 'yes' : 'no'}`,
+        `hasRead=${entryRecord && typeof entryRecord.read === 'function' ? 'yes' : 'no'}`
+    ].join(', ');
 }
 function listVirtualFiles(runtimeGlobal, prefixes) {
     const normalizedPrefixes = prefixes.map((prefix) => normalizePath(prefix));
@@ -176,13 +197,37 @@ function listVirtualFiles(runtimeGlobal, prefixes) {
 }
 function collectVirtualFiles(runtimeGlobal, paths) {
     const files = [];
+    const createdFiles = runtimeGlobal['__jsoo_created_files'];
     for (const filePath of paths) {
+        const normalizedPath = normalizePath(filePath);
+        const createdFile = createdFiles?.[normalizedPath];
+        if (typeof createdFile === 'string') {
+            files.push({
+                path: normalizedPath,
+                data: binaryStringToBytes(createdFile)
+            });
+            continue;
+        }
+        if (createdFile instanceof Uint8Array) {
+            files.push({
+                path: normalizedPath,
+                data: createdFile
+            });
+            continue;
+        }
+        if (createdFile instanceof ArrayBuffer) {
+            files.push({
+                path: normalizedPath,
+                data: new Uint8Array(createdFile)
+            });
+            continue;
+        }
         const data = readVirtualFile(runtimeGlobal, filePath);
         if (!data) {
             continue;
         }
         files.push({
-            path: normalizePath(filePath),
+            path: normalizedPath,
             data
         });
     }
@@ -203,61 +248,296 @@ function writeVirtualFiles(runtimeGlobal, files) {
         createFile(file.path, bytesToBinaryString(file.data));
     }
 }
-function runBinaryenBridge(runtimeGlobal, command, endpointUrl) {
-    const tokens = shellSplit(command);
+function loadBinaryenToolSource(runtimeGlobal, toolUrl) {
+    let sourceCache = runtimeGlobal['__binaryen_tool_source_cache'];
+    if (!sourceCache) {
+        sourceCache = new Map();
+        runtimeGlobal['__binaryen_tool_source_cache'] = sourceCache;
+    }
+    const cached = sourceCache.get(toolUrl);
+    if (cached) {
+        return cached;
+    }
+    const xhr = new XMLHttpRequest();
+    xhr.open('GET', toolUrl, false);
+    xhr.responseType = 'text';
+    xhr.send(null);
+    if (xhr.status !== 200) {
+        throw new Error(`failed to fetch static Binaryen tool: ${toolUrl} (${xhr.status})`);
+    }
+    const source = xhr.responseText || '';
+    sourceCache.set(toolUrl, source);
+    return source;
+}
+function ensureBinaryenCliDirectory(fs, targetPath) {
+    const normalizedPath = normalizePath(targetPath);
+    const directory = normalizedPath.replace(/\/[^/]+$/, '') || '/';
+    if (directory === '/') {
+        return;
+    }
+    if (typeof fs.mkdirTree === 'function') {
+        fs.mkdirTree(directory);
+        return;
+    }
+    const segments = directory.split('/').filter(Boolean);
+    let current = '';
+    for (const segment of segments) {
+        current += `/${segment}`;
+        try {
+            fs.mkdir(current);
+        }
+        catch {
+            // Directory may already exist.
+        }
+    }
+}
+function parseBinaryenCommand(command) {
+    const rawTokens = shellSplit(command);
+    const tokens = [];
+    for (let index = 0; index < rawTokens.length; index += 1) {
+        const token = rawTokens[index] || '';
+        if (/^\d+$/.test(token) && rawTokens[index + 1] === '>') {
+            tokens.push(`${token}>`);
+            index += 1;
+            continue;
+        }
+        tokens.push(token);
+    }
+    if (tokens.length === 0) {
+        throw new Error('binaryen command is empty');
+    }
+    const toolName = tokens[0] || '';
+    const argv = [];
     const pathTokens = new Set();
     const outputPaths = new Set();
-    for (let index = 0; index < tokens.length; index += 1) {
+    let stdoutRedirect = '';
+    let stderrRedirect = '';
+    for (let index = 1; index < tokens.length; index += 1) {
         const token = tokens[index] || '';
-        if (token.startsWith('/tmp/') || token.startsWith('/static/')) {
+        const nextToken = tokens[index + 1] || '';
+        if ((token === '>' || token === '1>') && nextToken) {
+            stdoutRedirect = nextToken;
+            if (nextToken.startsWith('/')) {
+                pathTokens.add(nextToken);
+                outputPaths.add(nextToken);
+            }
+            index += 1;
+            continue;
+        }
+        if (token === '2>' && nextToken) {
+            stderrRedirect = nextToken;
+            index += 1;
+            continue;
+        }
+        argv.push(token);
+        if (token.startsWith('/')) {
             pathTokens.add(token);
         }
-        if ((token === '-o' || token === '--graph-file' || token === '--output-source-map' || token === '--input-source-map' || token === '>') &&
-            (tokens[index + 1] || '').startsWith('/')) {
-            pathTokens.add(tokens[index + 1] || '');
-        }
-        if ((token === '-o' || token === '--output-source-map' || token === '>') &&
-            (tokens[index + 1] || '').startsWith('/')) {
-            outputPaths.add(tokens[index + 1] || '');
+        if ((token === '-o' ||
+            token === '--graph-file' ||
+            token === '--output-source-map' ||
+            token === '--input-source-map') &&
+            nextToken.startsWith('/')) {
+            pathTokens.add(nextToken);
+            if (token === '-o' || token === '--output-source-map') {
+                outputPaths.add(nextToken);
+            }
         }
     }
-    const bridgeMessages = runtimeGlobal['__wasm_bridge_messages'] || [];
-    const inputPaths = [...pathTokens].filter((filePath) => !outputPaths.has(filePath));
-    if (isBinaryenBridgeDebugEnabled(runtimeGlobal)) {
-        bridgeMessages.push(`binaryen bridge command: ${command}`, `binaryen bridge files: ${inputPaths.sort().join(', ') || '(none)'}`, `binaryen bridge outputs: ${[...outputPaths].sort().join(', ') || '(none)'}`);
-        runtimeGlobal['__wasm_bridge_messages'] = bridgeMessages;
-    }
-    const requestBody = JSON.stringify({
-        command,
-        files: collectVirtualFiles(runtimeGlobal, inputPaths).map((file) => ({
-            path: file.path,
-            dataBase64: bytesToBase64(file.data)
-        })),
+    return {
+        toolName,
+        argv,
+        stdoutRedirect,
+        stderrRedirect,
+        inputPaths: [...pathTokens].filter((filePath) => !outputPaths.has(filePath)),
         outputPaths: [...outputPaths]
-    });
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', endpointUrl, false);
-    xhr.setRequestHeader('content-type', 'application/json');
-    xhr.send(requestBody);
-    if (xhr.status !== 200) {
-        pushBinaryenBridgeMessage(runtimeGlobal, `binaryen bridge http ${xhr.status}: ${xhr.responseText}`);
-        return 1;
+    };
+}
+function runBinaryenTool(runtimeGlobal, command, toolUrls) {
+    if (!toolUrls) {
+        throw new Error('browser-native Binaryen tools are missing from the tool request');
     }
-    const response = JSON.parse(xhr.responseText || '{}');
-    if (response.exitCode !== 0 || isBinaryenBridgeDebugEnabled(runtimeGlobal)) {
-        pushBinaryenBridgeMessage(runtimeGlobal, `binaryen bridge exit: ${response.exitCode}`);
+    const parsed = parseBinaryenCommand(command);
+    const toolUrl = (parsed.toolName === 'wasm-opt'
+        ? toolUrls.wasm_opt
+        : parsed.toolName === 'wasm-merge'
+            ? toolUrls.wasm_merge
+            : parsed.toolName === 'wasm-metadce'
+                ? toolUrls.wasm_metadce
+                : '') || '';
+    if (!toolUrl) {
+        throw new Error(`unsupported static Binaryen tool: ${parsed.toolName}`);
     }
-    if (response.stdout && (response.exitCode !== 0 || isBinaryenBridgeDebugEnabled(runtimeGlobal))) {
-        pushBinaryenBridgeMessage(runtimeGlobal, response.stdout);
+    if (isBinaryenBridgeDebugEnabled(runtimeGlobal)) {
+        const rootMount = getMounts(runtimeGlobal).find((mount) => normalizePath(mount.root) === '/');
+        pushBinaryenBridgeMessage(runtimeGlobal, `binaryen static command: ${command}\nmounts: ${getMounts(runtimeGlobal)
+            .map((mount) => mount.root)
+            .join(', ') || '(none)'}\nroot tmp keys: ${rootMount ? Object.keys(rootMount.content).filter((key) => key.includes('tmp')).slice(0, 20).join(', ') || '(none)' : '(missing root)'}\ninputs: ${parsed.inputPaths.sort().join(', ') || '(none)'}\noutputs: ${parsed.outputPaths.sort().join(', ') || '(none)'}`);
     }
-    if (response.stderr) {
-        pushBinaryenBridgeMessage(runtimeGlobal, response.stderr);
+    const originalModule = runtimeGlobal['Module'];
+    const originalBinaryenCliRuntime = runtimeGlobal['__binaryen_cli_runtime'];
+    const originalBinaryenCliQuit = runtimeGlobal['__binaryen_cli_quit'];
+    const stdoutParts = [];
+    const stderrParts = [];
+    let exitCode = 0;
+    try {
+        try {
+            runtimeGlobal['Module'] = {
+                arguments: parsed.argv,
+                thisProgram: parsed.toolName,
+                print: (...args) => {
+                    stdoutParts.push(args.map((value) => String(value)).join(' '));
+                },
+                printErr: (...args) => {
+                    stderrParts.push(args.map((value) => String(value)).join(' '));
+                }
+            };
+            runtimeGlobal['__binaryen_cli_runtime'] = undefined;
+            runtimeGlobal['__binaryen_cli_quit'] = (status) => {
+                throw new ToolExit(status);
+            };
+            new Function(`${loadBinaryenToolSource(runtimeGlobal, toolUrl)}\n//# sourceURL=${toolUrl}`)();
+            const cliRuntime = runtimeGlobal['__binaryen_cli_runtime'];
+            const fs = cliRuntime?.FS;
+            if (!fs || typeof fs.writeFile !== 'function') {
+                throw new Error(`static Binaryen tool did not expose FS: ${parsed.toolName}`);
+            }
+            if (isBinaryenBridgeDebugEnabled(runtimeGlobal)) {
+                for (const inputPath of parsed.inputPaths) {
+                    pushBinaryenBridgeMessage(runtimeGlobal, `binaryen input probe: ${describeVirtualFile(runtimeGlobal, inputPath)}`);
+                }
+            }
+            for (const file of collectVirtualFiles(runtimeGlobal, parsed.inputPaths)) {
+                if (isBinaryenBridgeDebugEnabled(runtimeGlobal)) {
+                    pushBinaryenBridgeMessage(runtimeGlobal, `binaryen input ready: ${file.path} (${file.data.byteLength} bytes, magic=${[...file.data.subarray(0, 4)].map((value) => value.toString(16).padStart(2, '0')).join(' ')})`);
+                }
+                ensureBinaryenCliDirectory(fs, file.path);
+                fs.writeFile(file.path, file.data);
+            }
+            for (const outputPath of parsed.outputPaths) {
+                ensureBinaryenCliDirectory(fs, outputPath);
+            }
+            if (cliRuntime?.Module) {
+                cliRuntime.Module.arguments = parsed.argv;
+                cliRuntime.Module.thisProgram = parsed.toolName;
+            }
+            if (typeof cliRuntime?.run !== 'function') {
+                throw new Error(`static Binaryen tool did not expose run(): ${parsed.toolName}`);
+            }
+            cliRuntime.run(parsed.argv);
+        }
+        catch (error) {
+            if (error instanceof ToolExit) {
+                exitCode = error.code;
+            }
+            else {
+                throw error;
+            }
+        }
+        const cliRuntime = runtimeGlobal['__binaryen_cli_runtime'];
+        const fs = cliRuntime?.FS;
+        if (!fs || typeof fs.readFile !== 'function') {
+            throw new Error(`static Binaryen tool did not leave behind a readable FS: ${parsed.toolName}`);
+        }
+        const redirectedStdout = stdoutParts.length > 0 ? `${stdoutParts.join('\n')}\n` : '';
+        if (parsed.stdoutRedirect && parsed.stdoutRedirect !== '/dev/null') {
+            writeVirtualFiles(runtimeGlobal, [
+                {
+                    path: parsed.stdoutRedirect,
+                    data: new TextEncoder().encode(redirectedStdout)
+                }
+            ]);
+        }
+        if (parsed.stderrRedirect && parsed.stderrRedirect !== '/dev/null') {
+            writeVirtualFiles(runtimeGlobal, [
+                {
+                    path: parsed.stderrRedirect,
+                    data: new TextEncoder().encode(stderrParts.length > 0 ? `${stderrParts.join('\n')}\n` : '')
+                }
+            ]);
+        }
+        const outputFiles = [];
+        for (const outputPath of parsed.outputPaths) {
+            try {
+                const outputData = new Uint8Array(fs.readFile(outputPath, { encoding: 'binary' }));
+                outputFiles.push({
+                    path: outputPath,
+                    data: outputData
+                });
+                if (isBinaryenBridgeDebugEnabled(runtimeGlobal)) {
+                    pushBinaryenBridgeMessage(runtimeGlobal, `binaryen output ready: ${outputPath} (${outputData.byteLength} bytes)`);
+                }
+            }
+            catch {
+                if (isBinaryenBridgeDebugEnabled(runtimeGlobal)) {
+                    const rootListing = typeof fs.readdir === 'function'
+                        ? (() => {
+                            try {
+                                return fs.readdir('/').join(', ');
+                            }
+                            catch {
+                                return '(unavailable)';
+                            }
+                        })()
+                        : '(unsupported)';
+                    const tmpListing = typeof fs.readdir === 'function'
+                        ? (() => {
+                            try {
+                                return fs.readdir('/tmp').join(', ');
+                            }
+                            catch {
+                                return '(unavailable)';
+                            }
+                        })()
+                        : '(unsupported)';
+                    pushBinaryenBridgeMessage(runtimeGlobal, `binaryen output missing: ${outputPath}\ncli fs /: ${rootListing}\ncli fs /tmp: ${tmpListing}`);
+                }
+                // Ignore optional outputs.
+            }
+        }
+        if (outputFiles.length > 0) {
+            writeVirtualFiles(runtimeGlobal, outputFiles);
+        }
+        if (exitCode === 1 && outputFiles.length > 0 && stderrParts.length === 0) {
+            if (isBinaryenBridgeDebugEnabled(runtimeGlobal)) {
+                pushBinaryenBridgeMessage(runtimeGlobal, `binaryen normalized exit: ${parsed.toolName} reported 1 after producing ${outputFiles.length} output file(s)`);
+            }
+            exitCode = 0;
+        }
+        if (exitCode !== 0 || isBinaryenBridgeDebugEnabled(runtimeGlobal)) {
+            pushBinaryenBridgeMessage(runtimeGlobal, `binaryen exit: ${exitCode}`);
+        }
+        if (exitCode !== 0 && stdoutParts.length > 0) {
+            pushBinaryenBridgeMessage(runtimeGlobal, stdoutParts.join('\n'));
+        }
+        else if (exitCode !== 0 && redirectedStdout) {
+            pushBinaryenBridgeMessage(runtimeGlobal, redirectedStdout.trimEnd());
+        }
+        if (exitCode !== 0 && stderrParts.length > 0 && parsed.stderrRedirect !== '/dev/null') {
+            pushBinaryenBridgeMessage(runtimeGlobal, stderrParts.join('\n'));
+        }
+        return exitCode;
     }
-    writeVirtualFiles(runtimeGlobal, (response.outputs || []).map((output) => ({
-        path: output.path,
-        data: base64ToBytes(output.dataBase64)
-    })));
-    return response.exitCode;
+    finally {
+        if (typeof originalModule === 'undefined') {
+            delete runtimeGlobal['Module'];
+        }
+        else {
+            runtimeGlobal['Module'] = originalModule;
+        }
+        if (typeof originalBinaryenCliRuntime === 'undefined') {
+            delete runtimeGlobal['__binaryen_cli_runtime'];
+        }
+        else {
+            runtimeGlobal['__binaryen_cli_runtime'] = originalBinaryenCliRuntime;
+        }
+        if (typeof originalBinaryenCliQuit === 'undefined') {
+            delete runtimeGlobal['__binaryen_cli_quit'];
+        }
+        else {
+            runtimeGlobal['__binaryen_cli_quit'] = originalBinaryenCliQuit;
+        }
+    }
 }
 async function materializePreloadFiles(preloadFiles) {
     const encoder = new TextEncoder();
@@ -313,6 +593,10 @@ self.addEventListener('message', async (event) => {
     const originalBridgeMessages = runtimeSlots['__wasm_bridge_messages'];
     const originalBridgeDebug = runtimeSlots['__wasm_bridge_debug'];
     const originalRequire = runtimeSlots['require'];
+    const originalModule = runtimeSlots['Module'];
+    const originalBinaryenCliRuntime = runtimeSlots['__binaryen_cli_runtime'];
+    const originalBinaryenCliQuit = runtimeSlots['__binaryen_cli_quit'];
+    const originalCreatedFiles = runtimeSlots['__jsoo_created_files'];
     try {
         const preloadFiles = await materializePreloadFiles(request.preloadFiles);
         const toolResponse = await fetch(request.toolUrl, { cache: 'no-store' });
@@ -322,6 +606,7 @@ self.addEventListener('message', async (event) => {
         const toolSource = patchToolSource(await toolResponse.text());
         const patchedToolSource = toolSource;
         runtimeSlots['__jsoo_mounts'] = [];
+        runtimeSlots['__jsoo_created_files'] = {};
         runtimeSlots['jsoo_env'] = { ...request.env };
         runtimeSlots['jsoo_fs_tmp'] = preloadFiles;
         runtimeSlots['process'] = {
@@ -340,20 +625,25 @@ self.addEventListener('message', async (event) => {
         runtimeSlots['printErr'] = (...args) => {
             stderrParts.push(args.map((value) => String(value)).join(' '));
         };
+        if (request.env['WASM_OF_JS_DEBUG_BINARYEN'] === '1') {
+            pushBinaryenBridgeMessage(runtimeGlobal, `mount roots: ${getMounts(runtimeGlobal)
+                .map((mount) => mount.root)
+                .join(', ')}`);
+        }
         if (request.systemBridge === 'binaryen') {
             runtimeSlots['__wasm_bridge_messages'] = [];
             runtimeSlots['__wasm_bridge_debug'] = request.env['WASM_OF_JS_DEBUG_BINARYEN'] === '1';
             runtimeSlots['__wasm_of_js_system_command'] = (command) => {
                 if (runtimeSlots['__wasm_bridge_debug'] === true) {
-                    pushBinaryenBridgeMessage(runtimeGlobal, `binaryen system bridge invoked: ${command}`);
+                    pushBinaryenBridgeMessage(runtimeGlobal, `binaryen system command invoked: ${command}`);
                 }
-                return runBinaryenBridge(runtimeGlobal, command, '/api/binaryen-command');
+                return runBinaryenTool(runtimeGlobal, command, request.binaryenTools);
             };
-            runtimeSlots['require'] = (specifier) => {
+            const browserRequire = Object.assign((specifier) => {
                 if (specifier === 'node:child_process') {
                     return {
                         execSync: (command) => {
-                            const exitCode = runBinaryenBridge(runtimeGlobal, String(command), '/api/binaryen-command');
+                            const exitCode = runBinaryenTool(runtimeGlobal, String(command), request.binaryenTools);
                             if (exitCode !== 0) {
                                 const error = new Error(`execSync failed with exit code ${exitCode}`);
                                 error.status = exitCode;
@@ -367,7 +657,7 @@ self.addEventListener('message', async (event) => {
                             const commandLine = options && options.shell === true
                                 ? String(command)
                                 : [String(command), ...args.map((arg) => JSON.stringify(arg))].join(' ');
-                            const status = runBinaryenBridge(runtimeGlobal, commandLine, '/api/binaryen-command');
+                            const status = runBinaryenTool(runtimeGlobal, commandLine, request.binaryenTools);
                             return {
                                 status,
                                 signal: null,
@@ -376,9 +666,123 @@ self.addEventListener('message', async (event) => {
                         }
                     };
                 }
+                if (specifier === 'node:path') {
+                    const isUrlPath = (value) => /^[a-zA-Z]+:\/\//.test(value);
+                    const normalizeRelativePath = (value) => {
+                        const normalized = normalizePath(`/${value}`);
+                        return normalized === '/' ? '.' : normalized.slice(1);
+                    };
+                    const normalizeBrowserPath = (value) => {
+                        if (isUrlPath(value)) {
+                            const url = new URL(value);
+                            url.pathname = normalizePath(url.pathname);
+                            return url.toString();
+                        }
+                        return value.startsWith('/')
+                            ? normalizePath(value)
+                            : normalizeRelativePath(value);
+                    };
+                    const joinBrowserPath = (...parts) => {
+                        const filtered = parts.filter(Boolean);
+                        if (filtered.length === 0) {
+                            return '.';
+                        }
+                        const [rawFirstPart, ...restParts] = filtered;
+                        const firstPart = rawFirstPart || '';
+                        if (isUrlPath(firstPart)) {
+                            const base = firstPart.endsWith('/') ? firstPart : `${firstPart}/`;
+                            return new URL(restParts.join('/'), base).toString();
+                        }
+                        const joined = filtered.join('/');
+                        return firstPart.startsWith('/')
+                            ? normalizePath(joined)
+                            : normalizeRelativePath(joined);
+                    };
+                    const dirnameBrowserPath = (value) => {
+                        if (isUrlPath(value)) {
+                            const url = new URL(value);
+                            url.pathname = url.pathname.replace(/\/[^/]*$/, '/') || '/';
+                            return url.toString().replace(/\/$/, '');
+                        }
+                        const normalized = normalizeBrowserPath(value);
+                        const absolutePath = value.startsWith('/')
+                            ? normalized
+                            : `/${normalized === '.' ? '' : normalized}`;
+                        const directory = absolutePath.replace(/\/[^/]*$/, '') || '/';
+                        return value.startsWith('/')
+                            ? directory
+                            : directory === '/'
+                                ? '.'
+                                : directory.slice(1);
+                    };
+                    const basenameBrowserPath = (value) => {
+                        const normalized = normalizeBrowserPath(value).replace(/\/+$/, '');
+                        return normalized.split('/').pop() || '';
+                    };
+                    const resolvePosixPath = (...parts) => {
+                        const segments = [];
+                        for (const part of parts) {
+                            if (!part) {
+                                continue;
+                            }
+                            const normalizedPart = normalizePath(part);
+                            for (const segment of normalizedPart.split('/')) {
+                                if (!segment) {
+                                    continue;
+                                }
+                                segments.push(segment);
+                            }
+                        }
+                        return `/${segments.join('/')}`.replace(/\/+$/, '') || '/';
+                    };
+                    const relativePosixPath = (from, to) => {
+                        const fromParts = normalizePath(from).split('/').filter(Boolean);
+                        const toParts = normalizePath(to).split('/').filter(Boolean);
+                        let index = 0;
+                        while (fromParts[index] && fromParts[index] === toParts[index]) {
+                            index += 1;
+                        }
+                        const up = new Array(fromParts.length - index).fill('..');
+                        const down = toParts.slice(index);
+                        return [...up, ...down].join('/') || '.';
+                    };
+                    return {
+                        isAbsolute: (value) => value.startsWith('/') || isUrlPath(value),
+                        normalize: normalizeBrowserPath,
+                        dirname: dirnameBrowserPath,
+                        basename: basenameBrowserPath,
+                        join: joinBrowserPath,
+                        posix: {
+                            resolve: (...parts) => resolvePosixPath(...parts),
+                            relative: (from, to) => relativePosixPath(from, to)
+                        }
+                    };
+                }
                 if (specifier === 'node:tty') {
                     return {
                         isatty: () => false
+                    };
+                }
+                if (specifier === 'node:crypto') {
+                    return {
+                        randomFillSync: (view) => {
+                            globalThis.crypto.getRandomValues(view);
+                            return view;
+                        }
+                    };
+                }
+                if (specifier === 'node:fs/promises') {
+                    return {
+                        readFile: async (filePath) => {
+                            const response = await fetch(filePath, {
+                                cache: 'no-store',
+                                credentials: 'same-origin'
+                            });
+                            if (!response.ok) {
+                                throw new Error(`failed to read browser file: ${filePath}`);
+                            }
+                            return new Uint8Array(await response.arrayBuffer());
+                        }
                     };
                 }
                 if (specifier === 'node:os') {
@@ -386,8 +790,19 @@ self.addEventListener('message', async (event) => {
                         tmpdir: () => '/tmp'
                     };
                 }
+                if (specifier === 'node:util') {
+                    return {
+                        getSystemErrorMap: () => new Map(),
+                        getSystemErrorMessage: (errno) => `Unknown system error ${errno}`
+                    };
+                }
                 throw new Error(`unsupported require in browser tool worker: ${specifier}`);
-            };
+            }, {
+                main: {
+                    filename: request.toolUrl
+                }
+            });
+            runtimeSlots['require'] = browserRequire;
         }
         globalThis.console = {
             ...originalConsole,
@@ -514,6 +929,30 @@ self.addEventListener('message', async (event) => {
         }
         else {
             runtimeSlots['__wasm_bridge_debug'] = originalBridgeDebug;
+        }
+        if (typeof originalModule === 'undefined') {
+            delete runtimeSlots['Module'];
+        }
+        else {
+            runtimeSlots['Module'] = originalModule;
+        }
+        if (typeof originalBinaryenCliRuntime === 'undefined') {
+            delete runtimeSlots['__binaryen_cli_runtime'];
+        }
+        else {
+            runtimeSlots['__binaryen_cli_runtime'] = originalBinaryenCliRuntime;
+        }
+        if (typeof originalBinaryenCliQuit === 'undefined') {
+            delete runtimeSlots['__binaryen_cli_quit'];
+        }
+        else {
+            runtimeSlots['__binaryen_cli_quit'] = originalBinaryenCliQuit;
+        }
+        if (typeof originalCreatedFiles === 'undefined') {
+            delete runtimeSlots['__jsoo_created_files'];
+        }
+        else {
+            runtimeSlots['__jsoo_created_files'] = originalCreatedFiles;
         }
         delete runtimeSlots['__wasm_of_js_system_command'];
     }

@@ -110,6 +110,7 @@ export async function executeBrowserGoArtifact(artifact, options = {}) {
         const fetchImpl = options.fetchImpl || createRuntimeFetch();
         const runtimeManifestUrl = options.runtimeManifestUrl || DEFAULT_RUNTIME_MANIFEST_URL;
         const runtimeBaseUrl = options.runtimeBaseUrl || new URL('./', runtimeManifestUrl.toString());
+        const stdin = new BufferedExecutionInput(options.stdin);
         const manifest = options.manifest
             ? normalizeRuntimeManifest(options.manifest)
             : await loadRuntimeManifest(runtimeManifestUrl, fetchImpl);
@@ -204,8 +205,22 @@ export async function executeBrowserGoArtifact(artifact, options = {}) {
             open(_path, _flags, _mode, callback) {
                 callback(enosys());
             },
-            read(_fd, _buffer, _offset, _length, _position, callback) {
-                callback(enosys());
+            read(fd, buffer, offset, length, position, callback) {
+                if (fd !== 0) {
+                    callback(enosys());
+                    return;
+                }
+                if (position !== null ||
+                    offset < 0 ||
+                    length < 0 ||
+                    offset > buffer.length ||
+                    offset + length > buffer.length) {
+                    callback(new Error('unsupported fs.read signature'));
+                    return;
+                }
+                const bytes = stdin.read(length);
+                buffer.set(bytes, offset);
+                callback(null, bytes.byteLength);
             },
             readdir(_path, callback) {
                 callback(enosys());

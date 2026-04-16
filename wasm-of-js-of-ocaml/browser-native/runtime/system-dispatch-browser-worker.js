@@ -173,7 +173,8 @@ export async function runBrowserNativeTool(request) {
                 env: request.env,
                 preloadFiles: request.preloadFiles,
                 outputPrefixes: request.outputPrefixes,
-                ...(request.systemBridge ? { systemBridge: request.systemBridge } : {})
+                ...(request.systemBridge ? { systemBridge: request.systemBridge } : {}),
+                ...(request.binaryenTools ? { binaryenTools: request.binaryenTools } : {})
             });
         });
     }
@@ -269,6 +270,9 @@ export function createBrowserWorkerSystemDispatcher(options) {
             })();
         }
         const runtimePackEntries = await runtimePackEntriesPromise;
+        if (commandName === 'wasm_of_ocaml' && !options.manifest.binaryenTools) {
+            throw new Error('browser-native bundle is missing static Binaryen tools');
+        }
         const result = await runBrowserNativeTool({
             toolUrl: options.manifest.tools[commandName],
             argv: toolArgv,
@@ -279,7 +283,12 @@ export function createBrowserWorkerSystemDispatcher(options) {
                 ...getFilePreloadsFromFs(context.fs, '/tmp')
             ],
             outputPrefixes: ['/workspace/_build', '/tmp'],
-            ...(commandName === 'wasm_of_ocaml' ? { systemBridge: 'binaryen' } : {})
+            ...(commandName === 'wasm_of_ocaml'
+                ? {
+                    systemBridge: 'binaryen',
+                    binaryenTools: options.manifest.binaryenTools
+                }
+                : {})
         });
         const toolReportedSuccess = (commandName === 'js_of_ocaml' || commandName === 'wasm_of_ocaml') &&
             result.files.some((file) => file.path.endsWith('.js')) &&

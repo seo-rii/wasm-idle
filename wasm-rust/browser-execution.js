@@ -1,7 +1,7 @@
-import { Fd, Inode } from '@bjorn3/browser_wasi_shim/dist/fd.js';
-import { PreopenDirectory } from '@bjorn3/browser_wasi_shim/dist/fs_mem.js';
-import WASI from '@bjorn3/browser_wasi_shim/dist/wasi.js';
-import * as wasi from '@bjorn3/browser_wasi_shim/dist/wasi_defs.js';
+import { Fd, Inode } from './vendor/browser_wasi_shim/fd.js';
+import { PreopenDirectory } from './vendor/browser_wasi_shim/fs_mem.js';
+import WASI from './vendor/browser_wasi_shim/wasi.js';
+import * as wasi from './vendor/browser_wasi_shim/wasi_defs.js';
 import { resolveVersionedAssetUrl } from './asset-url.js';
 import { createPreview2ImportObject, transpilePreview2Component } from './browser-component-tools.js';
 function toStandaloneBytes(value) {
