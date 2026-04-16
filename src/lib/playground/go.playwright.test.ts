@@ -64,7 +64,8 @@ describe('wasm-idle Go browser playwright integration', () => {
 							runTimeoutMs: Number(process.env.WASM_IDLE_GO_RUN_TIMEOUT_MS || '300000'),
 							stdinText: '5\n',
 							expectedOutput: 'factorial_plus_bonus=123',
-							target
+							target,
+							stdinMethod: 'keyboard'
 						});
 
 						expect(summary.activeState.crossOriginIsolated).toBe(true);

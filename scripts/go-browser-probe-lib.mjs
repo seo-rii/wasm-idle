@@ -88,7 +88,7 @@ async function readProbeSummary(page, activeState, pageErrors, consoleMessages, 
 }
 
 /**
- * @param {{ browserUrl: string; chromiumExecutable?: string; expectedOutput?: string; runTimeoutMs?: number; stdinText?: string; target?: 'wasip1/wasm' | 'wasip2/wasm' | 'wasip3/wasm' | 'js/wasm' }} options
+ * @param {{ browserUrl: string; chromiumExecutable?: string; expectedOutput?: string; runTimeoutMs?: number; stdinText?: string; target?: 'wasip1/wasm' | 'wasip2/wasm' | 'wasip3/wasm' | 'js/wasm'; stdinMethod?: 'debug-hook' | 'keyboard' }} options
  */
 export async function runGoBrowserProbe({
 	browserUrl,
@@ -96,7 +96,8 @@ export async function runGoBrowserProbe({
 	expectedOutput = 'factorial_plus_bonus=123',
 	runTimeoutMs = 300_000,
 	stdinText = '5\n',
-	target = 'wasip1/wasm'
+	target = 'wasip1/wasm',
+	stdinMethod = 'debug-hook'
 }) {
 	if (!browserUrl) {
 		throw new Error('runGoBrowserProbe requires a browserUrl');
@@ -210,12 +211,26 @@ export async function runGoBrowserProbe({
 		const prepareTranscript =
 			(await page.locator('[data-testid="terminal-debug-output"]').textContent().catch(() => '')) || '';
 		const prepareFinishedCount = (prepareTranscript.match(/Process finished after/g) || []).length;
-		await page.waitForFunction(
-			() => typeof /** @type {any} */ (window).__wasmIdleDebug?.writeTerminalInput === 'function'
-		);
-		await page.evaluate(async (text) => {
-			await /** @type {any} */ (window).__wasmIdleDebug.writeTerminalInput(text, false);
-		}, stdinText);
+		if (stdinMethod === 'keyboard') {
+			const normalizedInput = stdinText.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+			await page.locator('.xterm').click();
+			const segments = normalizedInput.split('\n');
+			for (let index = 0; index < segments.length; index += 1) {
+				if (segments[index]) {
+					await page.keyboard.type(segments[index]);
+				}
+				if (index < segments.length - 1) {
+					await page.keyboard.press('Enter');
+				}
+			}
+		} else {
+			await page.waitForFunction(
+				() => typeof /** @type {any} */ (window).__wasmIdleDebug?.writeTerminalInput === 'function'
+			);
+			await page.evaluate(async (text) => {
+				await /** @type {any} */ (window).__wasmIdleDebug.writeTerminalInput(text, false);
+			}, stdinText);
+		}
 
 		try {
 			await page.waitForFunction(
