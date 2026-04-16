@@ -69,6 +69,14 @@ describe('Terminal source', () => {
 		);
 	});
 
+	it('reuses the same sandbox between prepare and run when language and runtime assets are unchanged', () => {
+		expect(source).toMatch(
+			/const requiresSandboxReset =\s+ll !== language \|\| loadedRuntimeAssetsKey !== currentRuntimeAssetsKey;/
+		);
+		expect(source).toMatch(/if \(sandbox && requiresSandboxReset\) await sandbox\.clear\(\);/);
+		expect(source).toMatch(/if \(!sandbox \|\| requiresSandboxReset\) \{/);
+	});
+
 	it('uses rust-specific progress windows instead of jumping straight to the prepare band', () => {
 		expect(source).toMatch(/prog\?\.set\?\.\(0\);/);
 		expect(source).toMatch(

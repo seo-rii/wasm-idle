@@ -117,12 +117,14 @@
 						tinygoModuleUrl: currentRuntimeAssets?.tinygo?.moduleUrl || '',
 						tinygoDisableHostCompile: !!currentRuntimeAssets?.tinygo?.disableHostCompile
 					});
+		const requiresSandboxReset =
+			ll !== language || loadedRuntimeAssetsKey !== currentRuntimeAssetsKey;
 		let _tc = ++tc;
 		await wait();
-		if (sandbox) await sandbox.clear();
+		if (sandbox && requiresSandboxReset) await sandbox.clear();
 		input = '';
 		finish = false;
-		if (ll !== language || loadedRuntimeAssetsKey !== currentRuntimeAssetsKey) {
+		if (!sandbox || requiresSandboxReset) {
 			sandbox = currentPlayground
 				? await currentPlayground.load(language)
 				: await load(language, currentRuntimeAssets);
