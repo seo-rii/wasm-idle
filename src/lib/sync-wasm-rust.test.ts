@@ -29,6 +29,27 @@ describe('syncWasmRustDist', () => {
 		const versionModulePath = path.join(await makeTempDir(), 'wasmRustVersion.ts');
 
 		await writeFixtureFile(sourceDir, 'index.js', 'export default "compiler";\n');
+		await writeFixtureFile(
+			sourceDir,
+			'browser-execution.js',
+			[
+				"import { Fd, Inode } from '@bjorn3/browser_wasi_shim/dist/fd.js';",
+				"import { PreopenDirectory } from '@bjorn3/browser_wasi_shim/dist/fs_mem.js';",
+				"import WASI from '@bjorn3/browser_wasi_shim/dist/wasi.js';",
+				"import * as wasi from '@bjorn3/browser_wasi_shim/dist/wasi_defs.js';",
+				'export { Fd, Inode, PreopenDirectory, WASI, wasi };',
+				''
+			].join('\n')
+		);
+		await writeFixtureFile(
+			sourceDir,
+			'rustc-runtime.js',
+			[
+				"import { Directory, WASI } from '@bjorn3/browser_wasi_shim';",
+				'export { Directory, WASI };',
+				''
+			].join('\n')
+		);
 		await writeFixtureFile(sourceDir, 'runtime/runtime-manifest.v3.json', '{"manifestVersion":3}\n');
 		await writeFixtureFile(sourceDir, 'runtime/rustc/rustc.wasm.gz', 'gzip-rustc');
 		await writeFixtureFile(
@@ -45,6 +66,19 @@ describe('syncWasmRustDist', () => {
 		await writeFixtureFile(sourceDir, 'runtime/llvm/lld.wasm.gz', 'gzip-lld-wasm');
 		await writeFixtureFile(sourceDir, 'runtime/llvm/lld.data.gz', 'gzip-lld-data');
 		await writeFixtureFile(sourceDir, 'types.d.ts', 'export type Ignored = true;\n');
+		await writeFixtureFile(
+			sourceDir,
+			'vendor/browser_wasi_shim/index.js',
+			'export const WASI = class WASI {};\nexport const Directory = class Directory {};\n'
+		);
+		await writeFixtureFile(sourceDir, 'vendor/browser_wasi_shim/fd.js', 'export class Fd {}\n');
+		await writeFixtureFile(
+			sourceDir,
+			'vendor/browser_wasi_shim/fs_mem.js',
+			'export class PreopenDirectory {}\n'
+		);
+		await writeFixtureFile(sourceDir, 'vendor/browser_wasi_shim/wasi.js', 'export default class WASI {}\n');
+		await writeFixtureFile(sourceDir, 'vendor/browser_wasi_shim/wasi_defs.js', 'export const ERRNO_SUCCESS = 0;\n');
 		await writeFixtureFile(sourceDir, 'vendor/browser_wasi_shim/tsconfig.tsbuildinfo', 'ignored');
 
 		const result = await syncWasmRustDist({ sourceDir, targetDir, versionModulePath });
@@ -52,6 +86,21 @@ describe('syncWasmRustDist', () => {
 		await expect(readFile(path.join(targetDir, 'index.js'), 'utf8')).resolves.toContain(
 			'compiler'
 		);
+		await expect(
+			readFile(path.join(targetDir, 'browser-execution.js'), 'utf8')
+		).resolves.toContain("./vendor/browser_wasi_shim/fd.js");
+		await expect(
+			readFile(path.join(targetDir, 'browser-execution.js'), 'utf8')
+		).resolves.toContain("./vendor/browser_wasi_shim/fs_mem.js");
+		await expect(
+			readFile(path.join(targetDir, 'browser-execution.js'), 'utf8')
+		).resolves.toContain("./vendor/browser_wasi_shim/wasi.js");
+		await expect(
+			readFile(path.join(targetDir, 'browser-execution.js'), 'utf8')
+		).resolves.toContain("./vendor/browser_wasi_shim/wasi_defs.js");
+		await expect(
+			readFile(path.join(targetDir, 'rustc-runtime.js'), 'utf8')
+		).resolves.toContain("./vendor/browser_wasi_shim/index.js");
 		await expect(
 			readFile(path.join(targetDir, 'runtime/runtime-manifest.v3.json'), 'utf8')
 		).resolves.toContain('"manifestVersion":3');
@@ -118,6 +167,23 @@ describe('syncWasmRustDist', () => {
 
 		await expect(syncWasmRustDist({ sourceDir, targetDir, versionModulePath })).rejects.toThrow(
 			'Build wasm-rust first'
+		);
+	});
+
+	it('fails when a bare browser_wasi_shim import cannot be rewritten to a vendored runtime file', async () => {
+		const sourceDir = await makeTempDir();
+		const targetDir = await makeTempDir();
+		const versionModulePath = path.join(await makeTempDir(), 'wasmRustVersion.ts');
+
+		await writeFixtureFile(
+			sourceDir,
+			'browser-execution.js',
+			"import { Fd } from '@bjorn3/browser_wasi_shim/dist/fd.js';\nexport { Fd };\n"
+		);
+		await writeFixtureFile(sourceDir, 'index.js', 'export default 1;\n');
+
+		await expect(syncWasmRustDist({ sourceDir, targetDir, versionModulePath })).rejects.toThrow(
+			'vendored browser_wasi_shim'
 		);
 	});
 });

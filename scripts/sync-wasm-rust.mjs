@@ -65,6 +65,71 @@ async function listFiles(rootDir) {
 	return files.sort();
 }
 
+function toImportPath(fromFilePath, targetPath) {
+	const relativePath = path.relative(path.dirname(fromFilePath), targetPath).replaceAll(path.sep, '/');
+	return relativePath.startsWith('.') ? relativePath : `./${relativePath}`;
+}
+
+function replaceQuotedSpecifier(input, specifier, replacement) {
+	return input
+		.replaceAll(`'${specifier}'`, `'${replacement}'`)
+		.replaceAll(`"${specifier}"`, `"${replacement}"`);
+}
+
+/**
+ * @param {string} rootDir
+ */
+async function rewriteBrowserWasiShimImports(rootDir) {
+	const replacementTargets = [
+		{
+			specifier: '@bjorn3/browser_wasi_shim',
+			relativeTargetPath: path.join('vendor', 'browser_wasi_shim', 'index.js')
+		},
+		{
+			specifier: '@bjorn3/browser_wasi_shim/dist/fd.js',
+			relativeTargetPath: path.join('vendor', 'browser_wasi_shim', 'fd.js')
+		},
+		{
+			specifier: '@bjorn3/browser_wasi_shim/dist/fs_mem.js',
+			relativeTargetPath: path.join('vendor', 'browser_wasi_shim', 'fs_mem.js')
+		},
+		{
+			specifier: '@bjorn3/browser_wasi_shim/dist/wasi.js',
+			relativeTargetPath: path.join('vendor', 'browser_wasi_shim', 'wasi.js')
+		},
+		{
+			specifier: '@bjorn3/browser_wasi_shim/dist/wasi_defs.js',
+			relativeTargetPath: path.join('vendor', 'browser_wasi_shim', 'wasi_defs.js')
+		}
+	];
+	const bundleFiles = await listFiles(rootDir);
+
+	for (const filePath of bundleFiles) {
+		if (!filePath.endsWith('.js')) continue;
+
+		const current = await readFile(filePath, 'utf8');
+		let next = current;
+
+		for (const rule of replacementTargets) {
+			if (!next.includes(rule.specifier)) continue;
+
+			const targetPath = path.join(rootDir, rule.relativeTargetPath);
+			const targetStats = await stat(targetPath).catch(() => null);
+			if (!targetStats?.isFile()) {
+				throw new Error(
+					`wasm-rust browser bundle is incomplete. Expected vendored browser_wasi_shim at ${targetPath}.`
+				);
+			}
+
+			next = replaceQuotedSpecifier(next, rule.specifier, toImportPath(filePath, targetPath));
+		}
+
+		if (next !== current) {
+			await writeFile(filePath, next, 'utf8');
+		}
+	}
+}
+
 /**
  * @param {string} sourceDir
  */
@@ -119,7 +184,8 @@ export async function syncWasmRustDist({
 	await rm(targetDir, { recursive: true, force: true });
 	await mkdir(targetDir, { recursive: true });
 	await copyDirectory(sourceDir, targetDir);
-	const fingerprint = await computeBundleFingerprint(sourceDir);
+	await rewriteBrowserWasiShimImports(targetDir);
+	const fingerprint = await computeBundleFingerprint(targetDir);
 	await writeVersionModule(versionModulePath, fingerprint);
 
 	return {
