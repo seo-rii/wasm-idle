@@ -5,7 +5,6 @@ import {
 	MonacoServices
 } from '@hancomac/monaco-languageclient';
 import type * as Monaco from 'monaco-editor';
-import { BrowserMessageReader, BrowserMessageWriter } from 'vscode-jsonrpc/browser';
 
 import {
 	CLANGD_CPP_FILE_URI,
@@ -14,6 +13,7 @@ import {
 	normalizeClangdBaseUrl
 } from '$lib/clangd/config';
 import ClangdWorker from '$lib/clangd/worker?worker';
+import { BrowserMessageReader, BrowserMessageWriter } from '$lib/utils/vscodeJsonrpcBrowser';
 
 let servicesInstalled = false;
 

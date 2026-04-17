@@ -1,5 +1,3 @@
-import atomVmWasmUrl from '../../../../node_modules/@swmansion/popcorn/dist/AtomVM.wasm?url';
-import initAtomVm from '../../../../node_modules/@swmansion/popcorn/dist/AtomVM.mjs';
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
 
 declare var self: any;
@@ -57,6 +55,8 @@ type AtomVmModule = {
 	nextTrackedObjectKey: () => number;
 };
 
+type AtomVmInitializer = (options?: Record<string, unknown>) => Promise<AtomVmModule>;
+
 let bundleUrl = '';
 let loadedBundleUrl = '';
 let runtimePromise: Promise<{ module: AtomVmModule; process: string | null }> | null = null;
@@ -69,6 +69,25 @@ const elixirStdinCallNames = [
 	':io.get_line',
 	':io.get_chars'
 ] as const;
+
+function resolveElixirRuntimeAssetUrl(assetName: string, bundleAssetUrl: string) {
+	const absoluteBundleUrl = new URL(
+		bundleAssetUrl.startsWith('/') ? `http://localhost${bundleAssetUrl}` : bundleAssetUrl,
+		globalThis.location?.href || 'http://localhost/'
+	);
+	return new URL(assetName, absoluteBundleUrl).toString();
+}
+
+async function resolveAtomVmInitializer(moduleAssetUrl: string) {
+	const injectedInitializer = (globalThis as any).__wasmIdleAtomVmInit;
+	if (typeof injectedInitializer === 'function') {
+		return injectedInitializer as AtomVmInitializer;
+	}
+	const module = (await import(/* @vite-ignore */ moduleAssetUrl)) as {
+		default: AtomVmInitializer;
+	};
+	return module.default;
+}
 
 function skipQuotedLiteral(source: string, start: number) {
 	const heredoc = source.slice(start, start + 3);
@@ -292,7 +311,7 @@ function configureMessagingBridge(module: AtomVmModule) {
 	module.call = (process, args) => originalCall(process, module.serialize(args));
 }
 
-async function startVm(avmBundle: Int8Array, log: boolean) {
+async function startVm(avmBundle: Int8Array, bundleAssetUrl: string, log: boolean) {
 	let resolveProcess: ((process: string | null) => void) | null = null;
 	const processPromise = new Promise<string | null>((resolve, reject) => {
 		const timeout = setTimeout(() => {
@@ -305,6 +324,9 @@ async function startVm(avmBundle: Int8Array, log: boolean) {
 			resolve(process);
 		};
 	});
+	const atomVmModuleUrl = resolveElixirRuntimeAssetUrl('AtomVM.mjs', bundleAssetUrl);
+	const atomVmWasmUrl = resolveElixirRuntimeAssetUrl('AtomVM.wasm', bundleAssetUrl);
+	const initAtomVm = await resolveAtomVmInitializer(atomVmModuleUrl);
 	const module = (await initAtomVm({
 		locateFile(path: string) {
 			if (path === 'AtomVM.wasm') {
@@ -362,7 +384,7 @@ async function loadRuntime(nextBundleUrl: string, log: boolean) {
 			}
 			return response.arrayBuffer();
 		});
-		return await startVm(new Int8Array(bundleBuffer), log);
+		return await startVm(new Int8Array(bundleBuffer), nextBundleUrl, log);
 	})();
 	return await runtimePromise;
 }

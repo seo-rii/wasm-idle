@@ -77,7 +77,7 @@ vi.mock('@hancomac/monaco-languageclient', () => ({
 	MonacoServices: { install: mockState.install }
 }));
 
-vi.mock('vscode-jsonrpc/browser', () => ({
+vi.mock('$lib/utils/vscodeJsonrpcBrowser', () => ({
 	BrowserMessageReader: mockState.MockReader,
 	BrowserMessageWriter: mockState.MockWriter
 }));

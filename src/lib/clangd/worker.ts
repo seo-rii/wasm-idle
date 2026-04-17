@@ -7,7 +7,11 @@ import {
 	normalizeClangdBaseUrl
 } from '$lib/clangd/config';
 import { JsonStream } from '$lib/clangd/jsonStream';
-import { BrowserMessageReader, BrowserMessageWriter } from 'vscode-jsonrpc/browser';
+import {
+	BrowserMessageReader,
+	BrowserMessageWriter,
+	type BrowserMessageWriter as BrowserMessageWriterInstance
+} from '$lib/utils/vscodeJsonrpcBrowser';
 
 declare const self: DedicatedWorkerGlobalScope & { reportError?: (message: string) => void };
 
@@ -36,7 +40,7 @@ const stdinReady = async () => {
 	}
 };
 
-let writer: BrowserMessageWriter | null = null;
+let writer: BrowserMessageWriterInstance | null = null;
 let clangdRuntime: any = null;
 
 const stdout = (charCode: number) => {

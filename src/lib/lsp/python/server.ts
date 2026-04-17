@@ -4,7 +4,7 @@ import type {
 } from '$lib/lsp/types';
 import { resolvePythonLanguageServerBaseUrl } from '$lib/lsp/runtime';
 import PythonLspWorker from './main.worker?worker';
-import { BrowserMessageReader, BrowserMessageWriter } from 'vscode-jsonrpc/browser';
+import { BrowserMessageReader, BrowserMessageWriter } from '$lib/utils/vscodeJsonrpcBrowser';
 
 const currentUrl = () => globalThis.location?.href || '';
 

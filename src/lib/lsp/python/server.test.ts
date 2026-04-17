@@ -55,7 +55,7 @@ vi.mock('./main.worker?worker', () => ({
 	default: mockState.FakeWorker
 }));
 
-vi.mock('vscode-jsonrpc/browser', () => ({
+vi.mock('$lib/utils/vscodeJsonrpcBrowser', () => ({
 	BrowserMessageReader: mockState.MockReader,
 	BrowserMessageWriter: mockState.MockWriter
 }));

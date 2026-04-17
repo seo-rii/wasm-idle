@@ -13,14 +13,6 @@ const { atomVmInitMock, lastInitOptions, lastModule, waitForBufferedStdinMock } 
 	})
 );
 
-vi.mock('../../../../node_modules/@swmansion/popcorn/dist/AtomVM.wasm?url', () => ({
-	default: '/__mocks__/AtomVM.wasm'
-}));
-
-vi.mock('../../../../node_modules/@swmansion/popcorn/dist/AtomVM.mjs', () => ({
-	default: atomVmInitMock
-}));
-
 vi.mock('$lib/playground/stdinBuffer', () => ({
 	waitForBufferedStdin: waitForBufferedStdinMock
 }));
@@ -35,6 +27,7 @@ describe('Elixir worker', () => {
 		(globalThis as any).window = undefined;
 		(globalThis as any).parent = undefined;
 		(globalThis as any).postMessage = vi.fn();
+		(globalThis as any).__wasmIdleAtomVmInit = atomVmInitMock;
 		(globalThis as any).fetch = vi.fn(async () => ({
 			ok: true,
 			status: 200,
@@ -131,7 +124,9 @@ describe('Elixir worker', () => {
 
 		expect((globalThis as any).fetch).toHaveBeenCalledWith('/runtime/elixir/bundle.avm');
 		expect(atomVmInitMock).toHaveBeenCalledTimes(1);
-		expect(lastInitOptions.current.locateFile('AtomVM.wasm')).toBe('/__mocks__/AtomVM.wasm');
+		expect(lastInitOptions.current.locateFile('AtomVM.wasm')).toBe(
+			'http://localhost/runtime/elixir/AtomVM.wasm'
+		);
 		expect(lastModule.current.FS.mkdir).toHaveBeenCalledWith('/data');
 		expect(lastModule.current.FS.writeFile).toHaveBeenCalledWith(
 			'/data/bundle.avm',
