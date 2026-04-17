@@ -117,7 +117,8 @@ self.onmessage = async (event: { data: any }) => {
 				);
 			} else if (
 				typeof exportsObject.memory === 'object' &&
-				typeof exportsObject.main === 'function'
+				(typeof exportsObject.main === 'function' ||
+					typeof exportsObject._initialize === 'function')
 			) {
 				wasiRuntime.initialize(
 					instance as { exports: { memory: WebAssembly.Memory; _initialize?: () => unknown } }
@@ -128,11 +129,13 @@ self.onmessage = async (event: { data: any }) => {
 				) {
 					(exportsObject.__wasm_call_ctors as () => unknown)();
 				}
-				const mainResult = (exportsObject.main as () => unknown)();
-				exitCode = typeof mainResult === 'number' ? mainResult : 0;
+				if (typeof exportsObject.main === 'function') {
+					const mainResult = (exportsObject.main as () => unknown)();
+					exitCode = typeof mainResult === 'number' ? mainResult : 0;
+				}
 			} else {
 				throw new Error(
-					'TinyGo worker expected a WASI artifact with _start or a reactor artifact with main'
+					'TinyGo worker expected a WASI artifact with _start or a reactor artifact with _initialize or main'
 				);
 			}
 		} catch (error) {

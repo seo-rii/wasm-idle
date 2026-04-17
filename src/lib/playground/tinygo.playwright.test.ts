@@ -127,6 +127,10 @@ describe('wasm-idle TinyGo browser playwright integration', () => {
 				expect(summary.hostCompileRequests).toEqual([]);
 				expect(summary.transcript).not.toContain('tinygo host compile ready: target=wasip1');
 				expect(summary.transcript).not.toContain('artifact probe failed:');
+				expect(summary.transcript).toContain(
+					'tinygo compiler module loaded from tools/tinygo-compiler.wasm (mode=direct)'
+				);
+				expect(summary.transcript).toContain('execution artifact ready:');
 				expect(summary.transcript).toContain('factorial_plus_bonus=123');
 				expect(summary.transcript).toContain('Process finished after');
 				expect(
