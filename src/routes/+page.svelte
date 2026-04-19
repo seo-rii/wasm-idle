@@ -27,8 +27,14 @@
 	let path = $derived(
 		page.url.pathname.endsWith('/') ? page.url.pathname.slice(0, -1) : page.url.pathname
 	);
-	let tinygoDisableHostCompile = $derived(
-		browser && page.url.searchParams.get('tinygoCompilePath') === 'browser'
+	let tinygoCompilePath = $derived(browser ? page.url.searchParams.get('tinygoCompilePath') ?? '' : '');
+	let tinygoDisableHostCompile = $derived(tinygoCompilePath === 'browser');
+	let tinygoHostCompileUrl = $derived(
+		tinygoCompilePath === 'host'
+			? path
+				? `${path}/api/tinygo/compile`
+				: '/api/tinygo/compile'
+			: undefined
 	);
 	let clangdBaseUrl = $derived(path ? `${path}/clangd` : '/clangd');
 	let runtimeAssets = $derived.by<PlaygroundRuntimeAssets>(() => ({
@@ -58,6 +64,7 @@
 		},
 		tinygo: {
 			disableHostCompile: tinygoDisableHostCompile,
+			hostCompileUrl: tinygoHostCompileUrl,
 			moduleUrl: path
 				? `${path}/wasm-tinygo/runtime.js?v=${WASM_TINYGO_ASSET_VERSION}`
 				: `/wasm-tinygo/runtime.js?v=${WASM_TINYGO_ASSET_VERSION}`
@@ -774,11 +781,11 @@
 		{/if}
 		{#if language === 'TINYGO'}
 			<p class="hint">
-				TinyGo prefers a configured host-assisted compile endpoint when one is available, and
-				otherwise falls back to the bundled wasm-tinygo browser pipeline, loads its direct
-				runtime module, and runs the resulting WASI artifact in the local playground runtime.
-				Pass CLI args here, type into the terminal below, and use Ctrl+D or the EOF button if
-				the program reads stdin until EOF.
+				TinyGo runs through the bundled wasm-tinygo browser pipeline by default, loads its
+				direct runtime module, and runs the resulting WASI artifact in the local playground
+				runtime. Use `?tinygoCompilePath=host` or an explicit host compile endpoint when you
+				want the host-assisted seam instead. Pass CLI args here, type into the terminal below,
+				and use Ctrl+D or the EOF button if the program reads stdin until EOF.
 			</p>
 		{/if}
 		{#if debugLanguage && debug.active}

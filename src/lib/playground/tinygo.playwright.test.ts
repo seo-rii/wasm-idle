@@ -12,7 +12,7 @@ import { runTinyGoBrowserProbe } from '../../../scripts/tinygo-browser-probe-lib
 
 describe('wasm-idle TinyGo browser playwright integration', () => {
 	it(
-		'runs the real TinyGo page path through the host-assisted compile seam',
+		'runs the real TinyGo page path through the explicit host-assisted compile seam',
 		async () => {
 			if (process.env.WASM_IDLE_RUN_REAL_BROWSER_TINYGO !== '1') {
 				return;
@@ -48,8 +48,10 @@ describe('wasm-idle TinyGo browser playwright integration', () => {
 							})();
 
 				try {
+					const hostBrowserUrl = new URL(previewServer.browserUrl);
+					hostBrowserUrl.searchParams.set('tinygoCompilePath', 'host');
 					const summary = await runTinyGoBrowserProbe({
-						browserUrl: previewServer.browserUrl,
+						browserUrl: hostBrowserUrl.toString(),
 						runTimeoutMs: Number(process.env.WASM_IDLE_TINYGO_RUN_TIMEOUT_MS || '300000'),
 						expectedCompilePath: 'host',
 						stdinText: '5\n'
@@ -76,7 +78,7 @@ describe('wasm-idle TinyGo browser playwright integration', () => {
 	);
 
 	it(
-		'runs the real TinyGo page path through the browser runtime when host compile is unavailable',
+		'runs the real TinyGo page path through the browser runtime by default',
 		async () => {
 			if (process.env.WASM_IDLE_RUN_REAL_BROWSER_TINYGO !== '1') {
 				return;
@@ -114,7 +116,6 @@ describe('wasm-idle TinyGo browser playwright integration', () => {
 				try {
 					const summary = await runTinyGoBrowserProbe({
 						browserUrl: previewServer.browserUrl,
-						disableHostCompile: true,
 						expectedCompilePath: 'browser',
 						runTimeoutMs: Number(process.env.WASM_IDLE_TINYGO_RUN_TIMEOUT_MS || '300000'),
 						stdinText: '5\n'

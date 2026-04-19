@@ -276,14 +276,12 @@ describe('runtime asset config resolution', () => {
 		);
 	});
 
-	it('derives the default TinyGo host compile url from the shared root path on localhost', async () => {
+	it('does not auto-derive a TinyGo host compile url from the shared root path on localhost', async () => {
 		vi.resetModules();
 		publicEnv.PUBLIC_WASM_TINYGO_HOST_COMPILE_URL = '';
 		const { resolveTinyGoHostCompileUrl } = await import('./assets');
 
-		expect(resolveTinyGoHostCompileUrl('/absproxy/5173', 'http://localhost:3000/app')).toBe(
-			'http://localhost:3000/absproxy/5173/api/tinygo/compile'
-		);
+		expect(resolveTinyGoHostCompileUrl('/absproxy/5173', 'http://localhost:3000/app')).toBe('');
 	});
 
 	it('does not derive an implicit TinyGo host compile url on non-local origins', async () => {
@@ -313,7 +311,7 @@ describe('runtime asset config resolution', () => {
 		).toEqual([]);
 	});
 
-	it('derives the current-page TinyGo host compile url when only a browser runtime module is configured', async () => {
+	it('does not auto-derive implicit TinyGo host compile urls when a browser runtime module is configured', async () => {
 		vi.resetModules();
 		publicEnv.PUBLIC_WASM_TINYGO_HOST_COMPILE_URL = '';
 		const { resolveTinyGoHostCompileUrls } = await import('./assets');
@@ -327,38 +325,27 @@ describe('runtime asset config resolution', () => {
 				},
 				'http://localhost:3000/absproxy/5173/'
 			)
-		).toEqual([
-			'http://localhost:3000/absproxy/5173/api/tinygo/compile',
-			'http://localhost:4175/api/tinygo/compile'
-		]);
+		).toEqual([]);
 	});
 
-	it('adds a localhost sibling wasm-tinygo preview candidate after the same-origin path', async () => {
+	it('does not add implicit localhost TinyGo host compile candidates when a bundled module is available', async () => {
 		vi.resetModules();
 		publicEnv.PUBLIC_WASM_TINYGO_APP_URL = '';
 		publicEnv.PUBLIC_WASM_TINYGO_MODULE_URL = '';
 		publicEnv.PUBLIC_WASM_TINYGO_HOST_COMPILE_URL = '';
 		const { resolveTinyGoHostCompileUrls } = await import('./assets');
 
-		expect(
-			resolveTinyGoHostCompileUrls('/absproxy/5173', 'http://127.0.0.1:4173/absproxy/5173/')
-		).toEqual([
-			'http://127.0.0.1:4173/absproxy/5173/api/tinygo/compile',
-			'http://127.0.0.1:4175/api/tinygo/compile'
-		]);
+		expect(resolveTinyGoHostCompileUrls('/absproxy/5173', 'http://127.0.0.1:4173/absproxy/5173/')).toEqual([]);
 	});
 
-	it('derives a same-origin compile path from the current browser url when no root path is configured', async () => {
+	it('does not derive implicit host compile paths when no browser runtime module is configured', async () => {
 		vi.resetModules();
 		publicEnv.PUBLIC_WASM_TINYGO_APP_URL = '';
 		publicEnv.PUBLIC_WASM_TINYGO_MODULE_URL = '';
 		publicEnv.PUBLIC_WASM_TINYGO_HOST_COMPILE_URL = '';
 		const { resolveTinyGoHostCompileUrls } = await import('./assets');
 
-		expect(resolveTinyGoHostCompileUrls(undefined, 'http://127.0.0.1:4173/')).toEqual([
-			'http://127.0.0.1:4173/api/tinygo/compile',
-			'http://127.0.0.1:4175/api/tinygo/compile'
-		]);
+		expect(resolveTinyGoHostCompileUrls(undefined, 'http://127.0.0.1:4173/')).toEqual([]);
 	});
 
 	it('does not derive a remote compile endpoint from an explicit TinyGo module url on non-local pages', async () => {

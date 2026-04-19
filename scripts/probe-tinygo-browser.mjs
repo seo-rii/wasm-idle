@@ -1,4 +1,5 @@
 import {
+	DEFAULT_BROWSER_BASE_PATH,
 	runBrowserPreparationScripts,
 	runWithBrowserProbeSessionLock,
 	shouldReuseProvidedBrowserUrl,
@@ -6,8 +7,10 @@ import {
 } from './browser-preview-server.mjs';
 import { runTinyGoBrowserProbe } from './tinygo-browser-probe-lib.mjs';
 
-const browserUrl = process.env.WASM_IDLE_BROWSER_URL || 'http://127.0.0.1:4173/absproxy/5173/';
+const browserUrl =
+	process.env.WASM_IDLE_BROWSER_URL || `http://127.0.0.1:4173${DEFAULT_BROWSER_BASE_PATH}`;
 const disableHostCompile = process.env.WASM_IDLE_DISABLE_TINYGO_HOST_COMPILE === '1';
+const forceHostCompile = process.env.WASM_IDLE_FORCE_TINYGO_HOST_COMPILE === '1';
 const runTimeoutMs = Number(process.env.WASM_IDLE_TINYGO_RUN_TIMEOUT_MS || '300000');
 const chromiumExecutable = process.env.WASM_IDLE_CHROMIUM_EXECUTABLE || '';
 const stdinText = process.env.WASM_IDLE_TINYGO_STDIN || '5\n';
@@ -20,10 +23,15 @@ await runWithBrowserProbeSessionLock(async () => {
 	let previewServer = null;
 	try {
 		const targetUrl = new URL(browserUrl);
+		if (disableHostCompile) {
+			targetUrl.searchParams.set('tinygoCompilePath', 'browser');
+		} else if (forceHostCompile) {
+			targetUrl.searchParams.set('tinygoCompilePath', 'host');
+		}
 		if (shouldReuseProvidedBrowserUrl(browserUrl)) {
 			previewServer = {
 				origin: `${targetUrl.protocol}//${targetUrl.host}`,
-				browserUrl,
+				browserUrl: targetUrl.toString(),
 				close: async () => {}
 			};
 		} else if (targetUrl.hostname === 'localhost' || targetUrl.hostname === '127.0.0.1') {
@@ -37,12 +45,19 @@ await runWithBrowserProbeSessionLock(async () => {
 			});
 		}
 
+		const probeBrowserUrl = (() => {
+			const resolvedBrowserUrl = new URL(previewServer?.browserUrl || targetUrl.toString());
+			resolvedBrowserUrl.search = targetUrl.search;
+			resolvedBrowserUrl.hash = targetUrl.hash;
+			return resolvedBrowserUrl.toString();
+		})();
+
 		const summary = await runTinyGoBrowserProbe({
-			browserUrl: previewServer?.browserUrl || browserUrl,
+			browserUrl: probeBrowserUrl,
 			runTimeoutMs,
 			chromiumExecutable,
 			disableHostCompile,
-			expectedCompilePath: disableHostCompile ? 'browser' : 'host',
+			expectedCompilePath: forceHostCompile ? 'host' : 'browser',
 			stdinText,
 			expectedOutput
 		});

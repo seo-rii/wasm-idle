@@ -33,10 +33,10 @@ storage.
 
 The demo app can also vendor the sibling `wasm-tinygo` browser build under `static/wasm-tinygo/`
 and load its `runtime.js` entry directly inside the TinyGo playground sandbox. The example page
-only auto-discovers a host-assisted `/api/tinygo/compile` endpoint when the browser itself is
-running on `localhost` during `vite dev` / `vite preview`. Non-local and static deployments do not
-probe that path implicitly anymore; set `PUBLIC_WASM_TINYGO_HOST_COMPILE_URL` or
-`runtimeAssets.tinygo.hostCompileUrl` explicitly if you want to use a real TinyGo compile service.
+uses the bundled browser runtime by default, including on `localhost` during `vite dev` /
+`vite preview`. Set `PUBLIC_WASM_TINYGO_HOST_COMPILE_URL` or
+`runtimeAssets.tinygo.hostCompileUrl` explicitly, or open the example page with
+`?tinygoCompilePath=host`, if you want to use a real TinyGo compile service.
 Refresh the
 bundled runtime assets after rebuilding the sibling `wasm-tinygo` project with:
 
@@ -51,10 +51,10 @@ pnpm run sync:wasm-tinygo
 TinyGo currently exposes a single `wasm` target through the example page. The browser pipeline
 still lives inside `wasm-tinygo`; `wasm-idle` now imports its reusable `runtime.js` library entry
 directly, then runs the emitted artifact with browser WASI so terminal stdin/EOF behavior stays
-consistent with the other runtimes. When host compile is unavailable, the bundled browser fallback
-now loads the vendored TinyGo runtime in `direct` mode, skips the old bootstrap-only compile step,
-and runs the resulting WASI artifact locally. A host compile service is still useful when you want
-an explicit remote compile seam or broader compatibility than the shipped browser bundle.
+consistent with the other runtimes. The default bundled browser path now loads the vendored TinyGo
+runtime in `direct` mode, skips the old bootstrap-only compile step, and runs the resulting WASI
+artifact locally. A host compile service is still useful when you want an explicit remote compile
+seam or broader compatibility than the shipped browser bundle.
 
 ## Browser regression commands
 
@@ -95,7 +95,8 @@ The browser helper writes stdin through the page-owned `window.__wasmIdleDebug.w
 hook instead of trying to click xterm's hidden helper textarea, which proved too flaky for repeatable
 Playwright runs.
 The TinyGo probe follows the same pattern. The host-assisted path still looks for
-`tinygo host compile ready: target=wasip1`, while the browser-only path should load the vendored
+`tinygo host compile ready: target=wasip1` when you opt into `?tinygoCompilePath=host`, while the
+default browser path should load the vendored
 runtime in `direct` mode and avoid the old bootstrap compile command altogether.
 The TinyGo browser commands currently default to `vite dev`.
 If Rust ever reports `invalid metadata files for crate core` or `Unsupported archive identifier`,
@@ -119,7 +120,7 @@ Rust still supports an external browser compiler module for library consumers. P
 TinyGo can use a host compile service when one is configured explicitly. Point
 `PUBLIC_WASM_TINYGO_HOST_COMPILE_URL` at an endpoint that accepts `POST { source }` and returns the
 compiled wasm artifact payload, or pass `runtimeAssets.tinygo.hostCompileUrl` at runtime. The
-bundled browser fallback still expects a browser-loadable `wasm-tinygo` runtime module. Point
+bundled browser runtime still expects a browser-loadable `wasm-tinygo` runtime module. Point
 `PUBLIC_WASM_TINYGO_MODULE_URL` at a built entry such as `.../wasm-tinygo/dist/runtime.js`, or
 pass `runtimeAssets.tinygo.moduleUrl` at runtime. The older `PUBLIC_WASM_TINYGO_APP_URL` /
 `runtimeAssets.tinygo.appUrl` document path is still accepted and normalized to `runtime.js`.
@@ -156,7 +157,7 @@ const runtimeAssets: PlaygroundRuntimeAssets = {
 };
 ```
 
-Python custom loaders receive file names under the Pyodide asset root and can serve both core assets and package files. TeaVM custom loaders receive file names under the TeaVM asset root. Rust expects a browser-loadable compiler module URL; that module is responsible for serving its own nested runtime assets. TinyGo can use either an explicit host compile URL or a browser-loadable runtime module. The browser runtime now ships a direct-mode fallback that can produce and run the bundled TinyGo WASI artifact locally, alongside its sibling `tools/go-probe.wasm` and vendored emception assets. A host compile service remains useful when you want a dedicated remote compile seam or compatibility beyond the shipped browser bundle. TinyGo also accepts a runtime asset loader + pack bundle in `runtimeAssets.tinygo` when you need to serve runtime assets out of a single compressed archive. Compressed TeaVM runtime assets are no longer unpacked inside the library; provide the final file URL or handle decompression in your own loader.
+Python custom loaders receive file names under the Pyodide asset root and can serve both core assets and package files. TeaVM custom loaders receive file names under the TeaVM asset root. Rust expects a browser-loadable compiler module URL; that module is responsible for serving its own nested runtime assets. TinyGo can use either an explicit host compile URL or a browser-loadable runtime module. The browser runtime now ships a direct-mode execution path that can produce and run the bundled TinyGo WASI artifact locally, alongside its sibling `tools/go-probe.wasm` and vendored emception assets. A host compile service remains useful when you want a dedicated remote compile seam or compatibility beyond the shipped browser bundle. TinyGo also accepts a runtime asset loader + pack bundle in `runtimeAssets.tinygo` when you need to serve runtime assets out of a single compressed archive. Compressed TeaVM runtime assets are no longer unpacked inside the library; provide the final file URL or handle decompression in your own loader.
 
 If you want a host app to reuse the same runtime asset configuration for both `<Terminal>` and direct `playground(...)` access, bind it once:
 

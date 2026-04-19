@@ -5,6 +5,7 @@ import http from 'node:http';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+	DEFAULT_BROWSER_BASE_PATH,
 	runBrowserPreparationScripts,
 	shouldReuseProvidedBrowserUrl,
 	startBrowserPreviewServer
@@ -131,7 +132,7 @@ describe('startBrowserPreviewServer', () => {
 		});
 
 		expect(previewServer.origin).toBe('https://example.com');
-		expect(previewServer.browserUrl).toBe('https://example.com/absproxy/5174/');
+		expect(previewServer.browserUrl).toBe(`https://example.com${DEFAULT_BROWSER_BASE_PATH}`);
 		await expect(previewServer.close()).resolves.toBeUndefined();
 	});
 });

@@ -77,7 +77,11 @@ describe('example route debug actions', () => {
 			/import \{ WASM_TINYGO_ASSET_VERSION \} from '\$lib\/playground\/wasmTinyGoVersion';/
 		);
 		expect(source).toMatch(
-			/let tinygoDisableHostCompile = \$derived\(\s*browser && page\.url\.searchParams\.get\('tinygoCompilePath'\) === 'browser'\s*\);/
+			/let tinygoCompilePath = \$derived\(\s*browser \? page\.url\.searchParams\.get\('tinygoCompilePath'\) \?\? '' : ''\s*\);/
+		);
+		expect(source).toMatch(/let tinygoDisableHostCompile = \$derived\(tinygoCompilePath === 'browser'\);/);
+		expect(source).toMatch(
+			/let tinygoHostCompileUrl = \$derived\(\s*tinygoCompilePath === 'host'\s*\?[^;]+\/api\/tinygo\/compile[^;]+:\s*undefined\s*\);/
 		);
 		expect(source).toMatch(/let runtimeAssets = \$derived\.by<PlaygroundRuntimeAssets>\(\(\) => \(\{/);
 		expect(source).toMatch(/rootUrl: path,/);
@@ -94,7 +98,7 @@ describe('example route debug actions', () => {
 			/ocaml: \{\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-of-js-of-ocaml\/browser-native\/src\/index\.js\?v=\$\{WASM_OCAML_ASSET_VERSION\}`\s+:\s+`\/wasm-of-js-of-ocaml\/browser-native\/src\/index\.js\?v=\$\{WASM_OCAML_ASSET_VERSION\}`,\s+manifestUrl: path\s+\?\s+`\$\{path\}\/wasm-of-js-of-ocaml\/browser-native-bundle\/browser-native-manifest\.v1\.json\?v=\$\{WASM_OCAML_ASSET_VERSION\}`\s+:\s+`\/wasm-of-js-of-ocaml\/browser-native-bundle\/browser-native-manifest\.v1\.json\?v=\$\{WASM_OCAML_ASSET_VERSION\}`\s+\}/s
 		);
 		expect(source).toMatch(
-			/tinygo: \{\s+disableHostCompile: tinygoDisableHostCompile,\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-tinygo\/runtime\.js\?v=\$\{WASM_TINYGO_ASSET_VERSION\}`\s+:\s+`\/wasm-tinygo\/runtime\.js\?v=\$\{WASM_TINYGO_ASSET_VERSION\}`\s+\}/s
+			/tinygo: \{\s+disableHostCompile: tinygoDisableHostCompile,\s+hostCompileUrl: tinygoHostCompileUrl,\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-tinygo\/runtime\.js\?v=\$\{WASM_TINYGO_ASSET_VERSION\}`\s+:\s+`\/wasm-tinygo\/runtime\.js\?v=\$\{WASM_TINYGO_ASSET_VERSION\}`\s+\}/s
 		);
 		expect(source).toMatch(
 			/const playground = \$derived\.by\(\(\) => createPlaygroundBinding\(runtimeAssets\)\);/
@@ -240,10 +244,10 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/availableGoTargets\.includes\('wasip3\/wasm'\)/);
 		expect(source).toMatch(/availableGoTargets\.includes\('js\/wasm'\)/);
 		expect(source).toMatch(/`js\/wasm` runs through the bundled `wasm_exec\.js` browser host/);
-		expect(source).toMatch(/TinyGo prefers a configured host-assisted compile endpoint/);
-		expect(source).toMatch(/falls back to the bundled wasm-tinygo browser pipeline/);
-		expect(source).toMatch(/loads its direct\s+runtime module/);
-		expect(source).toMatch(/resulting WASI artifact in the local playground runtime/);
+		expect(source).toMatch(/TinyGo runs through the bundled wasm-tinygo browser pipeline by default/);
+		expect(source).toMatch(/Use `\?tinygoCompilePath=host` or an explicit host compile endpoint/);
+		expect(source).toMatch(/loads its\s+direct runtime module/);
+		expect(source).toMatch(/resulting WASI artifact in the local playground\s+runtime/);
 		expect(source).toMatch(/reads\s+stdin until EOF/);
 	});
 

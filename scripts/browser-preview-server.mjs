@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 const THIS_FILE = fileURLToPath(import.meta.url);
 const THIS_DIR = path.dirname(THIS_FILE);
 const REPO_ROOT = path.resolve(THIS_DIR, '..');
-const DEFAULT_BROWSER_BASE_PATH = (() => {
+export const DEFAULT_BROWSER_BASE_PATH = (() => {
 	try {
 		const source = readFileSync(path.join(REPO_ROOT, 'svelte.config.js'), 'utf8');
 		const configuredBasePath = source.match(/base:\s*['"]([^'"]+)['"]/)?.[1];
