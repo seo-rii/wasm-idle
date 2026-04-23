@@ -2,13 +2,15 @@ import type {
 	EditorLanguageServerRuntimeOptions,
 	EditorLanguageServerHandle
 } from '$lib/lsp/types';
-import { resolveCppLanguageServerBaseUrl } from '$lib/lsp/runtime';
+import { resolveCppLanguageServerRuntimeAssetConfig } from '$lib/lsp/runtime';
 import ClangdWorker from '$lib/clangd/worker?worker';
+import { WorkerAssetBridge } from '$lib/playground/assetBridge';
+import type { ResolvedRuntimeAssetConfig } from '$lib/playground/assets';
 import { BrowserMessageReader, BrowserMessageWriter } from '$lib/utils/vscodeJsonrpcBrowser';
 
 const currentUrl = () => globalThis.location?.href || '';
 
-async function createServer(baseUrl: string) {
+async function createServer(assetConfig: ResolvedRuntimeAssetConfig) {
 	let resolveReady = () => {};
 	let rejectReady = (_error: Error) => {};
 	const ready = new Promise<void>((resolve, reject) => {
@@ -16,11 +18,13 @@ async function createServer(baseUrl: string) {
 		rejectReady = reject;
 	});
 	const worker = new ClangdWorker();
+	const assetBridge = new WorkerAssetBridge(worker, 'clangd', assetConfig);
 	const cleanup = () => {
 		worker.removeEventListener('message', readyListener);
 		worker.removeEventListener('error', errorListener);
 	};
 	const readyListener = (event: MessageEvent<any>) => {
+		if (assetBridge.handleMessage(event)) return;
 		switch (event.data?.type) {
 			case 'ready': {
 				cleanup();
@@ -40,7 +44,14 @@ async function createServer(baseUrl: string) {
 	};
 	worker.addEventListener('message', readyListener);
 	worker.addEventListener('error', errorListener);
-	worker.postMessage({ type: 'init', baseUrl });
+	worker.postMessage({
+		type: 'init',
+		baseUrl: assetConfig.baseUrl,
+		assets: {
+			baseUrl: assetConfig.baseUrl,
+			useAssetBridge: assetConfig.useAssetBridge
+		}
+	});
 	await ready;
 	return worker;
 }
@@ -48,8 +59,8 @@ async function createServer(baseUrl: string) {
 export async function getCppLanguageServer(
 	options?: string | EditorLanguageServerRuntimeOptions
 ): Promise<EditorLanguageServerHandle> {
-	const baseUrl = resolveCppLanguageServerBaseUrl(options, currentUrl());
-	const worker = await createServer(baseUrl);
+	const assetConfig = resolveCppLanguageServerRuntimeAssetConfig(options, currentUrl());
+	const worker = await createServer(assetConfig);
 	const reader = new BrowserMessageReader(worker);
 	const writer = new BrowserMessageWriter(worker);
 

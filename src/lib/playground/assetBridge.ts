@@ -1,4 +1,6 @@
 import {
+	CLANGD_RUNTIME_LOAD_ASSETS,
+	CLANG_RUNTIME_LOAD_ASSETS,
 	JAVA_RUNTIME_LOAD_ASSETS,
 	PYTHON_RUNTIME_LOAD_ASSETS,
 	type ResolvedRuntimeAssetConfig,
@@ -33,7 +35,13 @@ const transferBuffer = (bytes: Uint8Array) =>
 
 const expectedAssetsForRuntime = (runtime: RuntimeAssetRuntime) =>
 	new Set<string>(
-		runtime === 'python' ? [...PYTHON_RUNTIME_LOAD_ASSETS] : [...JAVA_RUNTIME_LOAD_ASSETS]
+		runtime === 'python'
+			? [...PYTHON_RUNTIME_LOAD_ASSETS]
+			: runtime === 'java'
+				? [...JAVA_RUNTIME_LOAD_ASSETS]
+				: runtime === 'clang'
+					? [...CLANG_RUNTIME_LOAD_ASSETS]
+					: [...CLANGD_RUNTIME_LOAD_ASSETS]
 	);
 
 class RuntimeLoadProgress {

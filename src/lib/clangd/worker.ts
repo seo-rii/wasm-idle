@@ -8,6 +8,12 @@ import {
 } from '$lib/clangd/config';
 import { JsonStream } from '$lib/clangd/jsonStream';
 import {
+	configureWorkerRuntimeAssets,
+	handleWorkerAssetMessage,
+	loadWorkerRuntimeAsset,
+	type WorkerRuntimeAssetConfig
+} from '$lib/playground/worker/assets';
+import {
 	BrowserMessageReader,
 	BrowserMessageWriter,
 	type BrowserMessageWriter as BrowserMessageWriterInstance
@@ -68,60 +74,49 @@ const syncWorkspaceFile = (filePath: string) => {
 };
 
 self.addEventListener('message', async (event) => {
+	if (handleWorkerAssetMessage(event.data)) return;
 	if (event.data?.type === 'sync-file' && typeof event.data?.name === 'string') {
 		syncWorkspaceFile(event.data.name);
 		return;
 	}
 	if (event.data?.type !== 'init') return;
-	const baseUrl = normalizeClangdBaseUrl(event.data.baseUrl);
+	const runtimeAssets = event.data.assets as WorkerRuntimeAssetConfig | undefined;
+	const normalizedBaseUrl = normalizeClangdBaseUrl(event.data.baseUrl || '');
+	const baseUrl =
+		runtimeAssets?.baseUrl || (normalizedBaseUrl ? `${normalizedBaseUrl}/` : '/clangd/');
+	configureWorkerRuntimeAssets({
+		baseUrl,
+		useAssetBridge: !!runtimeAssets?.useAssetBridge
+	});
 	try {
-		const jsResponse = await fetch(`${baseUrl}/clangd.js`);
-		if (!jsResponse.ok) {
-			throw new Error(`Failed to load clangd.js: ${jsResponse.status}`);
-		}
-		const jsSource = await jsResponse.text();
+		const jsSource = new TextDecoder().decode(
+			(await loadWorkerRuntimeAsset('clangd.js')).bytes
+		);
+		self.postMessage({ type: 'progress', value: 1, max: 3 });
 		const jsDataUrl = URL.createObjectURL(
 			new Blob([jsSource], { type: 'text/javascript;charset=utf-8' })
 		);
 		const jsModule = import(/* @vite-ignore */ jsDataUrl);
-		const wasmResponse = await fetch(`${baseUrl}/clangd.wasm.gz`);
-		if (!wasmResponse.ok) {
-			throw new Error(`Failed to load clangd.wasm.gz: ${wasmResponse.status}`);
-		}
-		const wasmSize = +(wasmResponse.headers.get('Content-Length') || 0);
-		const wasmReader = wasmResponse.body?.getReader();
-		const chunks: Uint8Array[] = [];
-		let receivedLength = 0;
-		if (wasmReader) {
-			while (true) {
-				const { done, value } = await wasmReader.read();
-				if (done) break;
-				if (!value) continue;
-				chunks.push(Uint8Array.from(value));
-				receivedLength += value.length;
-				self.postMessage({
-					type: 'progress',
-					value: receivedLength,
-					...(wasmSize > 0 ? { max: wasmSize } : {})
-				});
+		const compressedWasmBytes = (await loadWorkerRuntimeAsset('clangd.wasm.gz')).bytes;
+		self.postMessage({ type: 'progress', value: 2, max: 3 });
+		let wasmBytes = compressedWasmBytes;
+		if (compressedWasmBytes[0] === 0x1f && compressedWasmBytes[1] === 0x8b) {
+			if (typeof DecompressionStream === 'undefined') {
+				throw new Error(
+					'Failed to decompress clangd.wasm.gz: DecompressionStream is unavailable'
+				);
 			}
-		} else {
-			const wasmBytes = new Uint8Array(await wasmResponse.arrayBuffer());
-			chunks.push(wasmBytes);
-			receivedLength = wasmBytes.byteLength;
-			self.postMessage({
-				type: 'progress',
-				value: receivedLength,
-				...(wasmSize > 0 ? { max: wasmSize } : {})
-			});
+			const compressedWasmCopy = new Uint8Array(compressedWasmBytes.byteLength);
+			compressedWasmCopy.set(compressedWasmBytes);
+			const stream = new Blob([compressedWasmCopy.buffer])
+				.stream()
+				.pipeThrough(new DecompressionStream('gzip'));
+			wasmBytes = new Uint8Array(await new Response(stream).arrayBuffer());
 		}
-		const wasmBytes = new Uint8Array(receivedLength);
-		let offset = 0;
-		for (const chunk of chunks) {
-			wasmBytes.set(chunk, offset);
-			offset += chunk.length;
-		}
-		const wasmBlob = new Blob([wasmBytes.buffer], { type: 'application/wasm' });
+		self.postMessage({ type: 'progress', value: 3, max: 3 });
+		const wasmBlobBytes = new Uint8Array(wasmBytes.byteLength);
+		wasmBlobBytes.set(wasmBytes);
+		const wasmBlob = new Blob([wasmBlobBytes.buffer], { type: 'application/wasm' });
 		const wasmDataUrl = URL.createObjectURL(wasmBlob);
 		const { default: Clangd } = await jsModule;
 		clangdRuntime = await Clangd({
@@ -158,7 +153,7 @@ self.addEventListener('message', async (event) => {
 			stdinChunks.push(`Content-Length: ${body.length}\r\n`, '\r\n', body);
 			resolveStdinReady();
 		});
-		self.postMessage({ type: 'ready', value: receivedLength });
+		self.postMessage({ type: 'ready', value: wasmBytes.byteLength });
 	} catch (error) {
 		self.postMessage({
 			type: 'error',

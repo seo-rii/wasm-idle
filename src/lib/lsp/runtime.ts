@@ -1,4 +1,5 @@
 import type { EditorLanguageServerRuntimeOptions } from './types';
+import { resolveRuntimeAssetConfig, type ResolvedRuntimeAssetConfig } from '$lib/playground/assets';
 
 const normalizeBaseUrl = (baseUrl: string, currentUrl = '') => {
 	const normalized = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
@@ -15,16 +16,24 @@ export function resolveCppLanguageServerBaseUrl(
 	options: string | EditorLanguageServerRuntimeOptions | undefined,
 	currentUrl = ''
 ) {
+	return resolveCppLanguageServerRuntimeAssetConfig(options, currentUrl).baseUrl;
+}
+
+export function resolveCppLanguageServerRuntimeAssetConfig(
+	options: string | EditorLanguageServerRuntimeOptions | undefined,
+	currentUrl = ''
+): ResolvedRuntimeAssetConfig {
 	if (typeof options === 'string') {
-		return resolveRuntimeRootBaseUrl(options, '/clangd/', currentUrl);
+		return resolveRuntimeAssetConfig('clangd', options, currentUrl);
 	}
-	if (options?.cpp?.baseUrl) {
-		return normalizeBaseUrl(options.cpp.baseUrl, currentUrl);
-	}
-	if (options?.rootUrl) {
-		return resolveRuntimeRootBaseUrl(options.rootUrl, '/clangd/', currentUrl);
-	}
-	return normalizeBaseUrl('/clangd/', currentUrl);
+	return resolveRuntimeAssetConfig(
+		'clangd',
+		{
+			rootUrl: options?.rootUrl,
+			clangd: options?.cpp
+		},
+		currentUrl
+	);
 }
 
 export function resolvePythonLanguageServerBaseUrl(

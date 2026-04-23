@@ -1,7 +1,7 @@
 import { env as publicEnv } from '$env/dynamic/public';
 import { normalizeTeaVmBaseUrl, resolveTeaVmBaseUrl } from '$lib/playground/teavmConfig';
 
-export type RuntimeAssetRuntime = 'python' | 'java';
+export type RuntimeAssetRuntime = 'python' | 'java' | 'clang' | 'clangd';
 
 export interface RuntimeAssetLoadRequest {
 	runtime: RuntimeAssetRuntime;
@@ -68,6 +68,8 @@ export interface PlaygroundRuntimeAssets {
 	rootUrl?: string;
 	python?: RuntimeAssetConfig;
 	java?: RuntimeAssetConfig;
+	clang?: RuntimeAssetConfig;
+	clangd?: RuntimeAssetConfig;
 	rust?: RustRuntimeAssetConfig;
 	go?: GoRuntimeAssetConfig;
 	ocaml?: OcamlRuntimeAssetConfig;
@@ -123,8 +125,19 @@ export const JAVA_RUNTIME_LOAD_ASSETS = [
 	'runtime-classlib-teavm.bin'
 ] as const;
 
+export const CLANG_RUNTIME_LOAD_ASSETS = [
+	'bin/memfs.zip',
+	'bin/clang.zip',
+	'bin/lld.zip',
+	'bin/sysroot.tar.zip'
+] as const;
+
+export const CLANGD_RUNTIME_LOAD_ASSETS = ['clangd.js', 'clangd.wasm.gz'] as const;
+
 const PYTHON_VIRTUAL_BASE_URL = 'https://wasm-idle.invalid/python/';
 const JAVA_VIRTUAL_BASE_URL = 'https://wasm-idle.invalid/java/';
+const CLANG_VIRTUAL_BASE_URL = 'https://wasm-idle.invalid/clang/';
+const CLANGD_VIRTUAL_BASE_URL = 'https://wasm-idle.invalid/clangd/';
 
 const normalizeBaseUrl = (baseUrl: string, currentUrl = '') => {
 	const normalized = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
@@ -229,14 +242,111 @@ const resolveJavaRuntimeAssetConfig = (
 	};
 };
 
+const resolveClangRuntimeAssetConfig = (
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+): ResolvedRuntimeAssetConfig => {
+	if (typeof options === 'string') {
+		return {
+			baseUrl: normalizeBaseUrl(`${normalizeRootUrl(options) || ''}/clang/`, currentUrl),
+			useAssetBridge: false
+		};
+	}
+
+	const runtimeConfig = options?.clang;
+	if (runtimeConfig?.baseUrl) {
+		return {
+			baseUrl: normalizeBaseUrl(runtimeConfig.baseUrl, currentUrl),
+			loader: runtimeConfig.loader,
+			useAssetBridge: !!runtimeConfig.loader
+		};
+	}
+
+	if (options?.rootUrl) {
+		return {
+			baseUrl: normalizeBaseUrl(
+				`${normalizeRootUrl(options.rootUrl) || ''}/clang/`,
+				currentUrl
+			),
+			loader: runtimeConfig?.loader,
+			useAssetBridge: !!runtimeConfig?.loader
+		};
+	}
+
+	if (runtimeConfig?.loader) {
+		return {
+			baseUrl: CLANG_VIRTUAL_BASE_URL,
+			loader: runtimeConfig.loader,
+			useAssetBridge: true
+		};
+	}
+
+	return {
+		baseUrl: normalizeBaseUrl('/clang/', currentUrl),
+		useAssetBridge: false
+	};
+};
+
+const resolveClangdRuntimeAssetConfig = (
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+): ResolvedRuntimeAssetConfig => {
+	if (typeof options === 'string') {
+		return {
+			baseUrl: normalizeBaseUrl(`${normalizeRootUrl(options) || ''}/clangd/`, currentUrl),
+			useAssetBridge: false
+		};
+	}
+
+	const runtimeConfig = options?.clangd;
+	if (runtimeConfig?.baseUrl) {
+		return {
+			baseUrl: normalizeBaseUrl(runtimeConfig.baseUrl, currentUrl),
+			loader: runtimeConfig.loader,
+			useAssetBridge: !!runtimeConfig.loader
+		};
+	}
+
+	if (options?.rootUrl) {
+		return {
+			baseUrl: normalizeBaseUrl(
+				`${normalizeRootUrl(options.rootUrl) || ''}/clangd/`,
+				currentUrl
+			),
+			loader: runtimeConfig?.loader,
+			useAssetBridge: !!runtimeConfig?.loader
+		};
+	}
+
+	if (runtimeConfig?.loader) {
+		return {
+			baseUrl: CLANGD_VIRTUAL_BASE_URL,
+			loader: runtimeConfig.loader,
+			useAssetBridge: true
+		};
+	}
+
+	return {
+		baseUrl: normalizeBaseUrl('/clangd/', currentUrl),
+		useAssetBridge: false
+	};
+};
+
 export function resolveRuntimeAssetConfig(
 	runtime: RuntimeAssetRuntime,
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ): ResolvedRuntimeAssetConfig {
-	return runtime === 'python'
-		? resolvePythonRuntimeAssetConfig(options, currentUrl)
-		: resolveJavaRuntimeAssetConfig(options, currentUrl);
+	switch (runtime) {
+		case 'python':
+			return resolvePythonRuntimeAssetConfig(options, currentUrl);
+		case 'java':
+			return resolveJavaRuntimeAssetConfig(options, currentUrl);
+		case 'clang':
+			return resolveClangRuntimeAssetConfig(options, currentUrl);
+		case 'clangd':
+			return resolveClangdRuntimeAssetConfig(options, currentUrl);
+	}
 }
 
 export function resolveRustCompilerUrl(
@@ -276,7 +386,10 @@ export function resolveOcamlModuleUrl(
 	}
 	if (typeof options === 'string') {
 		return currentUrl
-			? new URL(`${normalizeRootUrl(options)}/wasm-of-js-of-ocaml/browser-native/src/index.js`, currentUrl).href
+			? new URL(
+					`${normalizeRootUrl(options)}/wasm-of-js-of-ocaml/browser-native/src/index.js`,
+					currentUrl
+				).href
 			: `${normalizeRootUrl(options)}/wasm-of-js-of-ocaml/browser-native/src/index.js`;
 	}
 	if (options?.rootUrl) {
@@ -303,7 +416,10 @@ export function resolveOcamlManifestUrl(
 	}
 	if (typeof options === 'string') {
 		return currentUrl
-			? new URL(`${normalizeRootUrl(options)}/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json`, currentUrl).href
+			? new URL(
+					`${normalizeRootUrl(options)}/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json`,
+					currentUrl
+				).href
 			: `${normalizeRootUrl(options)}/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json`;
 	}
 	if (options?.rootUrl) {
@@ -437,7 +553,10 @@ export function resolveElixirBundleUrl(
 	}
 
 	if (typeof options === 'string') {
-		return resolveConfiguredUrl(`${normalizeRootUrl(options) || ''}/wasm-elixir/bundle.avm`, currentUrl);
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-elixir/bundle.avm`,
+			currentUrl
+		);
 	}
 
 	if (options?.rootUrl) {

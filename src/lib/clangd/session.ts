@@ -6,13 +6,14 @@ import {
 } from '@hancomac/monaco-languageclient';
 import type * as Monaco from 'monaco-editor';
 
-import {
-	CLANGD_CPP_FILE_URI,
-	CLANGD_WORKSPACE_URI,
-	type ClangdStatus,
-	normalizeClangdBaseUrl
-} from '$lib/clangd/config';
+import { CLANGD_CPP_FILE_URI, CLANGD_WORKSPACE_URI, type ClangdStatus } from '$lib/clangd/config';
 import ClangdWorker from '$lib/clangd/worker?worker';
+import { WorkerAssetBridge } from '$lib/playground/assetBridge';
+import {
+	resolveRuntimeAssetConfig,
+	type ResolvedRuntimeAssetConfig,
+	type RuntimeAssetConfig
+} from '$lib/playground/assets';
 import { BrowserMessageReader, BrowserMessageWriter } from '$lib/utils/vscodeJsonrpcBrowser';
 
 let servicesInstalled = false;
@@ -20,18 +21,25 @@ let servicesInstalled = false;
 export class ClangdSession {
 	Monaco: typeof Monaco;
 	baseUrl: string;
+	assetConfig: ResolvedRuntimeAssetConfig;
+	assetBridge: WorkerAssetBridge | null = null;
 	onStatus?: (status: ClangdStatus) => void;
 	worker: Worker | null = null;
 	languageClient: MonacoLanguageClient | null = null;
 
 	constructor(
 		MonacoModule: typeof Monaco,
-		baseUrl: string,
+		baseUrl: string | RuntimeAssetConfig,
 		onStatus?: (status: ClangdStatus) => void
 	) {
 		this.Monaco = MonacoModule;
 		this.onStatus = onStatus;
-		this.baseUrl = normalizeClangdBaseUrl(baseUrl);
+		this.assetConfig = resolveRuntimeAssetConfig(
+			'clangd',
+			{ clangd: typeof baseUrl === 'string' ? { baseUrl } : baseUrl },
+			globalThis.location?.href || ''
+		);
+		this.baseUrl = this.assetConfig.baseUrl;
 		if (!servicesInstalled) {
 			MonacoServices.install(MonacoModule);
 			servicesInstalled = true;
@@ -49,12 +57,16 @@ export class ClangdSession {
 		this.onStatus?.({ state: 'loading' });
 		const worker = new ClangdWorker();
 		this.worker = worker;
+		this.assetBridge = new WorkerAssetBridge(worker, 'clangd', this.assetConfig, {
+			set: (value) => this.onStatus?.({ state: 'loading', loaded: value, total: 1 })
+		});
 		await new Promise<void>((resolve, reject) => {
 			const cleanup = () => {
 				worker.removeEventListener('message', handleMessage);
 				worker.removeEventListener('error', handleError);
 			};
 			const handleMessage = (event: MessageEvent<any>) => {
+				if (this.assetBridge?.handleMessage(event)) return;
 				const { type, value, max, message } = event.data || {};
 				if (type === 'progress') {
 					this.onStatus?.({ state: 'loading', loaded: value, total: max });
@@ -76,7 +88,14 @@ export class ClangdSession {
 			};
 			worker.addEventListener('message', handleMessage);
 			worker.addEventListener('error', handleError);
-			worker.postMessage({ type: 'init', baseUrl: this.baseUrl });
+			worker.postMessage({
+				type: 'init',
+				baseUrl: this.baseUrl,
+				assets: {
+					baseUrl: this.assetConfig.baseUrl,
+					useAssetBridge: this.assetConfig.useAssetBridge
+				}
+			});
 		});
 
 		const reader = new BrowserMessageReader(worker);
@@ -112,5 +131,6 @@ export class ClangdSession {
 		this.languageClient = null;
 		this.worker?.terminate();
 		this.worker = null;
+		this.assetBridge = null;
 	}
 }

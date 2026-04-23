@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushQueuedStdin } from './stdinBuffer';
 
+vi.mock('$env/dynamic/public', () => ({
+	env: {}
+}));
+
 const workerInstances: MockWorker[] = [];
 
 class MockWorker {
@@ -106,6 +110,24 @@ int main() {
 
 		sandbox.kill?.();
 		expect(sandbox.terminate).toHaveBeenCalledTimes(1);
+	});
+
+	it('configures the C++ worker asset bridge when a clang loader is provided', async () => {
+		const sandbox = new Clang('CPP');
+		const loader = vi.fn();
+
+		await sandbox.load({ clang: { loader } });
+
+		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
+			1,
+			expect.objectContaining({
+				load: true,
+				assets: {
+					baseUrl: 'https://wasm-idle.invalid/clang/',
+					useAssetBridge: true
+				}
+			})
+		);
 	});
 
 	it('rejects the active C++ run when kill terminates the worker', async () => {

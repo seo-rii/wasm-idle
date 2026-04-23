@@ -72,6 +72,62 @@ describe('runtime asset config resolution', () => {
 		});
 	});
 
+	it('derives the default clang asset base url from the shared root path', () => {
+		expect(
+			resolveRuntimeAssetConfig(
+				'clang',
+				{ rootUrl: '/absproxy/5173' },
+				'https://example.com/app'
+			)
+		).toEqual({
+			baseUrl: 'https://example.com/absproxy/5173/clang/',
+			useAssetBridge: false
+		});
+	});
+
+	it('uses a virtual base url when only a clang custom loader is provided', () => {
+		const loader = vi.fn();
+		expect(resolveRuntimeAssetConfig('clang', { clang: { loader } })).toEqual({
+			baseUrl: 'https://wasm-idle.invalid/clang/',
+			loader,
+			useAssetBridge: true
+		});
+	});
+
+	it('derives the default clangd asset base url from the shared root path', () => {
+		expect(
+			resolveRuntimeAssetConfig(
+				'clangd',
+				{ rootUrl: '/absproxy/5173' },
+				'https://example.com/app'
+			)
+		).toEqual({
+			baseUrl: 'https://example.com/absproxy/5173/clangd/',
+			useAssetBridge: false
+		});
+	});
+
+	it('prefers an explicit clangd base url over the shared root path', () => {
+		const loader = vi.fn();
+		expect(
+			resolveRuntimeAssetConfig(
+				'clangd',
+				{
+					rootUrl: '/ignored',
+					clangd: {
+						baseUrl: 'https://cdn.example.com/clangd',
+						loader
+					}
+				},
+				'https://example.com/app'
+			)
+		).toEqual({
+			baseUrl: 'https://cdn.example.com/clangd/',
+			loader,
+			useAssetBridge: true
+		});
+	});
+
 	it('prefers an explicit rust compiler url over the public env override', async () => {
 		vi.resetModules();
 		publicEnv.PUBLIC_WASM_RUST_COMPILER_URL = 'https://env.example.com/compiler.js';
@@ -240,7 +296,8 @@ describe('runtime asset config resolution', () => {
 	it('derives the TinyGo runtime module url from the legacy app url override', async () => {
 		vi.resetModules();
 		publicEnv.PUBLIC_WASM_TINYGO_MODULE_URL = '';
-		publicEnv.PUBLIC_WASM_TINYGO_APP_URL = 'https://env.example.com/wasm-tinygo/index.html?v=42';
+		publicEnv.PUBLIC_WASM_TINYGO_APP_URL =
+			'https://env.example.com/wasm-tinygo/index.html?v=42';
 		const { resolveTinyGoModuleUrl } = await import('./assets');
 
 		expect(resolveTinyGoModuleUrl(undefined, 'https://example.com/app')).toBe(
@@ -250,7 +307,8 @@ describe('runtime asset config resolution', () => {
 
 	it('prefers an explicit TinyGo host compile url over the shared root path', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_TINYGO_HOST_COMPILE_URL = 'https://env.example.com/api/tinygo/compile';
+		publicEnv.PUBLIC_WASM_TINYGO_HOST_COMPILE_URL =
+			'https://env.example.com/api/tinygo/compile';
 		const { resolveTinyGoHostCompileUrl } = await import('./assets');
 
 		expect(
@@ -294,7 +352,8 @@ describe('runtime asset config resolution', () => {
 
 	it('does not derive TinyGo host compile urls when browser-only execution explicitly disables them', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_TINYGO_HOST_COMPILE_URL = 'https://env.example.com/api/tinygo/compile';
+		publicEnv.PUBLIC_WASM_TINYGO_HOST_COMPILE_URL =
+			'https://env.example.com/api/tinygo/compile';
 		const { resolveTinyGoHostCompileUrls } = await import('./assets');
 
 		expect(
@@ -335,7 +394,9 @@ describe('runtime asset config resolution', () => {
 		publicEnv.PUBLIC_WASM_TINYGO_HOST_COMPILE_URL = '';
 		const { resolveTinyGoHostCompileUrls } = await import('./assets');
 
-		expect(resolveTinyGoHostCompileUrls('/absproxy/5173', 'http://127.0.0.1:4173/absproxy/5173/')).toEqual([]);
+		expect(
+			resolveTinyGoHostCompileUrls('/absproxy/5173', 'http://127.0.0.1:4173/absproxy/5173/')
+		).toEqual([]);
 	});
 
 	it('does not derive implicit host compile paths when no browser runtime module is configured', async () => {

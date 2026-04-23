@@ -1,4 +1,7 @@
-export const memfsUrl = (prefix: string) => prefix + '/clang/bin/memfs.zip';
-export const clangUrl = (prefix: string) => prefix + '/clang/bin/clang.zip';
-export const lldUrl = (prefix: string) => prefix + '/clang/bin/lld.zip';
-export const rootUrl = (prefix: string) => prefix + '/clang/bin/sysroot.tar.zip';
+const normalizeBaseUrl = (baseUrl: string) =>
+	baseUrl ? (baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`) : '/clang/';
+
+export const memfsUrl = (baseUrl: string) => `${normalizeBaseUrl(baseUrl)}bin/memfs.zip`;
+export const clangUrl = (baseUrl: string) => `${normalizeBaseUrl(baseUrl)}bin/clang.zip`;
+export const lldUrl = (baseUrl: string) => `${normalizeBaseUrl(baseUrl)}bin/lld.zip`;
+export const rootUrl = (baseUrl: string) => `${normalizeBaseUrl(baseUrl)}bin/sysroot.tar.zip`;

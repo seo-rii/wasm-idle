@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('$env/dynamic/public', () => ({
+	env: {}
+}));
+
 const mockState = vi.hoisted(() => {
 	const install = vi.fn();
 	const start = vi.fn();
@@ -98,7 +102,12 @@ describe('ClangdSession', () => {
 
 	it('creates a stable cpp model and starts the worker-backed language client', async () => {
 		const previousModel = { dispose: vi.fn() };
-		const createModel = vi.fn((value, language, uri) => ({ value, language, uri, dispose: vi.fn() }));
+		const createModel = vi.fn((value, language, uri) => ({
+			value,
+			language,
+			uri,
+			dispose: vi.fn()
+		}));
 		const parse = vi.fn((value: string) => ({ value }));
 		const status = vi.fn();
 		const Monaco = {

@@ -13,6 +13,7 @@ export {
 	getCppLanguageServer,
 	getPythonLanguageServer,
 	resolveCppLanguageServerBaseUrl,
+	resolveCppLanguageServerRuntimeAssetConfig,
 	resolvePythonLanguageServerBaseUrl
 } from '$lib/lsp';
 import playground, { createPlaygroundBinding } from '$lib/playground';

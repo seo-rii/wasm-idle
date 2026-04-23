@@ -3,7 +3,8 @@ import type {
 	DebugSessionEvent,
 	SandboxExecutionOptions
 } from '$lib/playground/options';
-import type { PlaygroundRuntimeAssets } from '$lib/playground/assets';
+import { WorkerAssetBridge } from '$lib/playground/assetBridge';
+import { resolveRuntimeAssetConfig, type PlaygroundRuntimeAssets } from '$lib/playground/assets';
 import { resolveSandboxExecutionArgs } from '$lib/playground/options';
 import type { Sandbox } from '$lib/playground/sandbox';
 import {
@@ -36,6 +37,7 @@ class Clang implements Sandbox {
 	waitingForInput = false;
 	pendingEof = false;
 	exit = true;
+	assetBridge: WorkerAssetBridge | null = null;
 	activeReject: ((reason?: string) => void) | null = null;
 
 	constructor(language: 'C' | 'CPP') {
@@ -48,20 +50,50 @@ class Clang implements Sandbox {
 		log = true,
 		args: string[] = [],
 		_options: SandboxExecutionOptions = {},
-		_progress?: { set?: (value: number) => void } | import('svelte/store').Writable<number>
+		progress?: { set?: (value: number) => void } | import('svelte/store').Writable<number>
 	) {
 		return new Promise<void>(async (resolve) => {
 			this.log = log;
 			this.pendingInput = [];
 			this.waitingForInput = false;
 			this.pendingEof = false;
-			const path =
-				typeof runtimeAssets === 'string' ? runtimeAssets : runtimeAssets?.rootUrl || '';
+			const assetConfig = resolveRuntimeAssetConfig(
+				'clang',
+				runtimeAssets,
+				typeof window !== 'undefined' ? window.location.href : ''
+			);
+			const needsWorkerReset =
+				!this.worker || !this.assetBridge || !this.assetBridge.matches(assetConfig);
+			if (needsWorkerReset && this.worker) {
+				this.worker.terminate();
+				delete this.worker;
+				this.assetBridge = null;
+			}
 			if (!this.worker) {
 				this.worker = new (await import('$lib/playground/worker/clang?worker')).default();
-				this.worker.onmessage = () => resolve();
-				this.worker.postMessage({ load: true, path, log, code, args });
+				this.assetBridge = new WorkerAssetBridge(
+					this.worker,
+					'clang',
+					assetConfig,
+					progress
+				);
+				this.worker.onmessage = (event: MessageEvent<any>) => {
+					if (this.assetBridge?.handleMessage(event)) return;
+					if (event.data?.progress != null) progress?.set?.(event.data.progress);
+					if (event.data?.load) resolve();
+				};
+				this.worker.postMessage({
+					load: true,
+					log,
+					code,
+					args,
+					assets: {
+						baseUrl: assetConfig.baseUrl,
+						useAssetBridge: assetConfig.useAssetBridge
+					}
+				});
 			} else {
+				this.assetBridge?.rebind(this.worker, assetConfig, progress);
 				this.worker.postMessage({ log });
 				resolve();
 			}
@@ -113,6 +145,7 @@ class Clang implements Sandbox {
 			const interrupt = new Uint8Array(this.interruptBuffer),
 				_uid = ++this.uid;
 			const handler = (event: Event & { data: any }) => {
+				if (this.assetBridge?.handleMessage(event as MessageEvent<any>)) return;
 				if (!this.worker) return reject('Worker not loaded');
 				if (_uid !== this.uid) return (this.worker.onmessage = null);
 				const { id, output, results, log, error, buffer, progress, debugEvent } =
@@ -224,6 +257,7 @@ class Clang implements Sandbox {
 		Atomics.notify(control, 0);
 		this.worker?.terminate?.();
 		delete this.worker;
+		this.assetBridge = null;
 		this.exit = true;
 	}
 
@@ -242,6 +276,7 @@ class Clang implements Sandbox {
 		if (!this.exit) {
 			this.worker?.terminate?.();
 			delete this.worker;
+			this.assetBridge = null;
 			this.exit = true;
 		}
 	}

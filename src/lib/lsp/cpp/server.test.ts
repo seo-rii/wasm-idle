@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('$env/dynamic/public', () => ({
+	env: {}
+}));
+
 const mockState = vi.hoisted(() => {
 	const workers: FakeWorker[] = [];
 
@@ -73,7 +77,11 @@ describe('getCppLanguageServer', () => {
 
 		expect(worker?.messages[0]).toEqual({
 			type: 'init',
-			baseUrl: 'https://static.example.com/repl_20240807/clangd/'
+			baseUrl: 'https://static.example.com/repl_20240807/clangd/',
+			assets: {
+				baseUrl: 'https://static.example.com/repl_20240807/clangd/',
+				useAssetBridge: false
+			}
 		});
 
 		handle.syncFile?.('/workspace/problem.cpp');

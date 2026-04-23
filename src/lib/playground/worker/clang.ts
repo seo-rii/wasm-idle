@@ -1,5 +1,10 @@
 import type Clang from '$lib/clang';
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
+import {
+	configureWorkerRuntimeAssets,
+	handleWorkerAssetMessage,
+	type WorkerRuntimeAssetConfig
+} from '$lib/playground/worker/assets';
 
 declare var self: any;
 self.document = {
@@ -28,6 +33,7 @@ async function loadClang(path: string, log: boolean) {
 }
 
 self.onmessage = async (event: { data: any }) => {
+	if (handleWorkerAssetMessage(event.data)) return;
 	const {
 		code,
 		buffer,
@@ -38,6 +44,7 @@ self.onmessage = async (event: { data: any }) => {
 		interrupt,
 		log,
 		path,
+		assets,
 		prepare,
 		language,
 		compileArgs,
@@ -49,7 +56,9 @@ self.onmessage = async (event: { data: any }) => {
 		pauseOnEntry
 	} = event.data;
 	if (load) {
-		await loadClang(path, log);
+		const runtimeAssets = assets as WorkerRuntimeAssetConfig | undefined;
+		configureWorkerRuntimeAssets(runtimeAssets || null);
+		await loadClang(runtimeAssets?.baseUrl || path || '', log);
 		postMessage({ load: true });
 	} else if (prepare) {
 		stdinBufferClang = new Int32Array(buffer);

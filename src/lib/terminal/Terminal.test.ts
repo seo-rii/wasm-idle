@@ -55,7 +55,9 @@ describe('Terminal source', () => {
 		expect(source).toMatch(/if \(chunk === '\\u007f'\)/);
 		expect(source).toMatch(/input = Array\.from\(input\)\.slice\(0, -1\)\.join\(''\);/);
 		expect(source).toMatch(/if \(\(chunk\.codePointAt\(0\) \|\| 0\) >= 0x20\) \{/);
-		expect(source).not.toMatch(/const printable = !ev\.altKey && !ev\.ctrlKey && !ev\.metaKey;/);
+		expect(source).not.toMatch(
+			/const printable = !ev\.altKey && !ev\.ctrlKey && !ev\.metaKey;/
+		);
 		expect(source).not.toMatch(/else if \(printable\) \{/);
 	});
 
@@ -65,10 +67,20 @@ describe('Terminal source', () => {
 		expect(source).not.toMatch(/loadedRuntimeAssets = \$state/);
 		expect(source).not.toMatch(/loadedPlayground = \$state/);
 		expect(source).toMatch(/const currentRuntimeAssetsKey =/);
+		expect(source).toMatch(/clangBaseUrl: currentRuntimeAssets\?\.clang\?\.baseUrl \|\| '',/);
+		expect(source).toMatch(/hasClangLoader: !!currentRuntimeAssets\?\.clang\?\.loader,/);
+		expect(source).toMatch(/clangdBaseUrl: currentRuntimeAssets\?\.clangd\?\.baseUrl \|\| '',/);
+		expect(source).toMatch(/hasClangdLoader: !!currentRuntimeAssets\?\.clangd\?\.loader,/);
 		expect(source).toMatch(/goCompilerUrl: currentRuntimeAssets\?\.go\?\.compilerUrl \|\| '',/);
-		expect(source).toMatch(/elixirBundleUrl: currentRuntimeAssets\?\.elixir\?\.bundleUrl \|\| '',/);
-		expect(source).toMatch(/ocamlModuleUrl: currentRuntimeAssets\?\.ocaml\?\.moduleUrl \|\| '',/);
-		expect(source).toMatch(/ocamlManifestUrl: currentRuntimeAssets\?\.ocaml\?\.manifestUrl \|\| '',/);
+		expect(source).toMatch(
+			/elixirBundleUrl: currentRuntimeAssets\?\.elixir\?\.bundleUrl \|\| '',/
+		);
+		expect(source).toMatch(
+			/ocamlModuleUrl: currentRuntimeAssets\?\.ocaml\?\.moduleUrl \|\| '',/
+		);
+		expect(source).toMatch(
+			/ocamlManifestUrl: currentRuntimeAssets\?\.ocaml\?\.manifestUrl \|\| '',/
+		);
 		expect(source).not.toMatch(/loadedRuntimeAssets !== currentRuntimeAssets/);
 		expect(source).not.toMatch(/loadedPlayground !== currentPlayground/);
 		expect(source).toMatch(/function writeTerminalOutput\(text: string\)/);
