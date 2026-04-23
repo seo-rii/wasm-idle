@@ -18,7 +18,8 @@
 		CompilerDiagnostic,
 		GoTarget,
 		OcamlBackend,
-		RustTargetTriple
+		RustTargetTriple,
+		TinyGoTarget
 	} from '$lib/playground/options';
 	import type { TerminalControl } from '$lib/terminal';
 	import type monaco from 'monaco-editor';
@@ -27,7 +28,9 @@
 	let path = $derived(
 		page.url.pathname.endsWith('/') ? page.url.pathname.slice(0, -1) : page.url.pathname
 	);
-	let tinygoCompilePath = $derived(browser ? page.url.searchParams.get('tinygoCompilePath') ?? '' : '');
+	let tinygoCompilePath = $derived(
+		browser ? (page.url.searchParams.get('tinygoCompilePath') ?? '') : ''
+	);
 	let tinygoDisableHostCompile = $derived(tinygoCompilePath === 'browser');
 	let tinygoHostCompileUrl = $derived(
 		tinygoCompilePath === 'host'
@@ -79,6 +82,7 @@
 		argsInput = $state(''),
 		rustTargetTriple = $state<RustTargetTriple>('wasm32-wasip1'),
 		goTarget = $state<GoTarget>('wasip1/wasm'),
+		tinygoTarget = $state<TinyGoTarget>('wasm'),
 		ocamlBackend = $state<OcamlBackend>('wasm'),
 		log = $state(true),
 		language = $state('CPP'),
@@ -101,9 +105,9 @@
 						? 'rust'
 						: language === 'ELIXIR'
 							? 'elixir'
-						: language === 'OCAML'
-							? 'ocaml'
-						: 'go'
+							: language === 'OCAML'
+								? 'ocaml'
+								: 'go'
 	);
 
 	const progressRef = {
@@ -128,6 +132,7 @@
 	);
 	const knownRustTargetTriples = ['wasm32-wasip1', 'wasm32-wasip2', 'wasm32-wasip3'] as const;
 	const knownGoTargets = ['wasip1/wasm', 'wasip2/wasm', 'wasip3/wasm', 'js/wasm'] as const;
+	const knownTinyGoTargets = ['wasm', 'wasip1', 'wasip2', 'wasip3'] as const;
 	const debugTitle = $derived(language === 'CPP' ? 'Native Trace' : 'Pyodide Trace');
 	const loading = $derived(progress >= 0 && progress < 1);
 	const progressValue = $derived(progress < 0 ? 0 : progress > 1 ? 1 : progress);
@@ -173,9 +178,7 @@
 		}) => Promise<void>;
 	};
 	type WasmGoRuntimeModule = {
-		preloadBrowserGoRuntime?: (options?: {
-			target?: GoTarget;
-		}) => Promise<void>;
+		preloadBrowserGoRuntime?: (options?: { target?: GoTarget }) => Promise<void>;
 	};
 
 	async function stopExecution() {
@@ -242,7 +245,10 @@
 		}
 		compilerDiagnostics = [];
 		const args =
-			(language === 'JAVA' || language === 'RUST' || language === 'GO' || language === 'TINYGO') &&
+			(language === 'JAVA' ||
+				language === 'RUST' ||
+				language === 'GO' ||
+				language === 'TINYGO') &&
 			argsInput.trim()
 				? argsInput.trim().split(/\s+/)
 				: [];
@@ -252,6 +258,7 @@
 			localStorage.setItem('argsInput', argsInput);
 			localStorage.setItem('rustTargetTriple', rustTargetTriple);
 			localStorage.setItem('goTarget', goTarget);
+			localStorage.setItem('tinygoTarget', tinygoTarget);
 			localStorage.setItem('ocamlBackend', ocamlBackend);
 		}
 		try {
@@ -271,6 +278,7 @@
 					pauseOnEntry: enableDebug,
 					rustTargetTriple: language === 'RUST' ? rustTargetTriple : undefined,
 					goTarget: language === 'GO' ? goTarget : undefined,
+					tinygoTarget: language === 'TINYGO' ? tinygoTarget : undefined,
 					ocamlBackend: language === 'OCAML' ? ocamlBackend : undefined
 				}
 			});
@@ -287,14 +295,18 @@
 			const lang = localStorage.getItem('language');
 			const storedArgs = localStorage.getItem('argsInput');
 			const storedGoTarget = localStorage.getItem('goTarget');
+			const storedTinyGoTarget = localStorage.getItem('tinygoTarget');
 			const storedOcamlBackend = localStorage.getItem('ocamlBackend');
 			const requestedCode =
-				decodeBase64Url(page.url.searchParams.get('code64')) ?? page.url.searchParams.get('code');
+				decodeBase64Url(page.url.searchParams.get('code64')) ??
+				page.url.searchParams.get('code');
 			const requestedLanguage = normalizeRequestedLanguage(page.url.searchParams.get('lang'));
 			const requestedArgs =
-				decodeBase64Url(page.url.searchParams.get('args64')) ?? page.url.searchParams.get('args');
+				decodeBase64Url(page.url.searchParams.get('args64')) ??
+				page.url.searchParams.get('args');
 			const requestedRustTargetTriple = page.url.searchParams.get('rustTargetTriple');
 			const requestedGoTarget = page.url.searchParams.get('goTarget');
+			const requestedTinyGoTarget = page.url.searchParams.get('tinygoTarget');
 			const requestedOcamlBackend = page.url.searchParams.get('ocamlBackend');
 			if (requestedCode ?? code) editor.setValue(requestedCode ?? code ?? '');
 			if (requestedLanguage ?? lang) language = requestedLanguage ?? lang ?? language;
@@ -314,6 +326,21 @@
 				storedGoTarget === 'js/wasm'
 			) {
 				goTarget = storedGoTarget;
+			}
+			if (
+				requestedTinyGoTarget === 'wasm' ||
+				requestedTinyGoTarget === 'wasip1' ||
+				requestedTinyGoTarget === 'wasip2' ||
+				requestedTinyGoTarget === 'wasip3'
+			) {
+				tinygoTarget = requestedTinyGoTarget;
+			} else if (
+				storedTinyGoTarget === 'wasm' ||
+				storedTinyGoTarget === 'wasip1' ||
+				storedTinyGoTarget === 'wasip2' ||
+				storedTinyGoTarget === 'wasip3'
+			) {
+				tinygoTarget = storedTinyGoTarget;
 			}
 			if (requestedOcamlBackend === 'js' || requestedOcamlBackend === 'wasm') {
 				ocamlBackend = requestedOcamlBackend;
@@ -437,7 +464,9 @@
 				if (!nextAvailableGoTargets.length || cancelled) return;
 				availableGoTargets = [...nextAvailableGoTargets];
 				const storedGoTarget = localStorage.getItem('goTarget');
-				const nextDefaultGoTarget = nextAvailableGoTargets.includes(manifest.defaultTarget as GoTarget)
+				const nextDefaultGoTarget = nextAvailableGoTargets.includes(
+					manifest.defaultTarget as GoTarget
+				)
 					? (manifest.defaultTarget as GoTarget)
 					: nextAvailableGoTargets[0];
 				if (storedGoTarget && nextAvailableGoTargets.includes(storedGoTarget as GoTarget)) {
@@ -468,11 +497,15 @@
 	$effect(() => {
 		if (!browser) return;
 		const compilerUrl = runtimeAssets.go?.compilerUrl;
-		const preloadTarget = availableGoTargets.includes(goTarget) ? goTarget : availableGoTargets[0];
+		const preloadTarget = availableGoTargets.includes(goTarget)
+			? goTarget
+			: availableGoTargets[0];
 		if (!compilerUrl || !preloadTarget) return;
 		let cancelled = false;
 		(async () => {
-			const runtimeModule = (await import(/* @vite-ignore */ compilerUrl)) as WasmGoRuntimeModule;
+			const runtimeModule = (await import(
+				/* @vite-ignore */ compilerUrl
+			)) as WasmGoRuntimeModule;
 			if (cancelled) return;
 			await runtimeModule.preloadBrowserGoRuntime?.({
 				target: preloadTarget
@@ -611,8 +644,12 @@
 						class="action-button action-button--icon"
 						onclick={() => debug.runToCursor()}
 						disabled={!debug.canRunToCursor}
-						title={debug.cursorLine ? `Run to Cursor (L${debug.cursorLine})` : 'Run to Cursor'}
-						aria-label={debug.cursorLine ? `Run to Cursor (L${debug.cursorLine})` : 'Run to Cursor'}
+						title={debug.cursorLine
+							? `Run to Cursor (L${debug.cursorLine})`
+							: 'Run to Cursor'}
+						aria-label={debug.cursorLine
+							? `Run to Cursor (L${debug.cursorLine})`
+							: 'Run to Cursor'}
 					>
 						<span class="material-symbols-outlined">play_circle</span>
 					</button>
@@ -691,6 +728,16 @@
 						</select>
 					</label>
 				{/if}
+				{#if language === 'TINYGO'}
+					<label class="select-chip">
+						<span class="material-symbols-outlined">conversion_path</span>
+						<select id="tinygo-target" bind:value={tinygoTarget}>
+							{#each knownTinyGoTargets as target (target)}
+								<option value={target}>{target}</option>
+							{/each}
+						</select>
+					</label>
+				{/if}
 				{#if language === 'OCAML'}
 					<label class="select-chip">
 						<span class="material-symbols-outlined">conversion_path</span>
@@ -738,7 +785,7 @@
 				{/if}
 				{#if availableRustTargetTriples.includes('wasm32-wasip3')}
 					`wasm32-wasip3` is only shown for the current transitional component path while
-				upstream Rust still requires the documented libc patch.
+					upstream Rust still requires the documented libc patch.
 				{/if} Use Ctrl+D or the EOF button while running if the program reads stdin until EOF.
 			</p>
 		{/if}
@@ -747,9 +794,9 @@
 				Go uses the bundled `wasm-go` browser compiler runtime. The selector only shows Go
 				targets advertised by the bundled runtime manifest. `wasip1/wasm` runs as preview1
 				core wasm. {#if availableGoTargets.includes('wasip2/wasm')}
-					`wasip2/wasm` follows the bundled runtime manifest and currently still maps to the
-					preview1 core backend in the official Go bundle until upstream Go ships a native
-					preview2 port.
+					`wasip2/wasm` follows the bundled runtime manifest and currently still maps to
+					the preview1 core backend in the official Go bundle until upstream Go ships a
+					native preview2 port.
 				{/if}
 				{#if availableGoTargets.includes('wasip3/wasm')}
 					`wasip3/wasm` is only shown when the runtime bundle advertises the transitional
@@ -758,8 +805,8 @@
 				{#if availableGoTargets.includes('js/wasm')}
 					`js/wasm` runs through the bundled `wasm_exec.js` browser host.
 				{/if}
-				Pass CLI args here, type into the terminal below, and use Ctrl+D or the EOF button
-				while running if the program reads stdin until EOF.
+				Pass CLI args here, type into the terminal below, and use Ctrl+D or the EOF button while
+				running if the program reads stdin until EOF.
 			</p>
 		{/if}
 		{#if language === 'OCAML'}
@@ -775,17 +822,18 @@
 			<p class="hint">
 				Elixir runs through a bundled Popcorn evaluator. Each run boots a fresh `.avm`
 				bundle, evaluates the editor contents with `Code.eval_string`, streams stdout and
-				stderr into the terminal, and prints the final expression as `=&gt; ...`. Type into the
-				terminal below and press Enter to send stdin. CLI args are still disabled.
+				stderr into the terminal, and prints the final expression as `=&gt; ...`. Type into
+				the terminal below and press Enter to send stdin. CLI args are still disabled.
 			</p>
 		{/if}
 		{#if language === 'TINYGO'}
 			<p class="hint">
 				TinyGo runs through the bundled wasm-tinygo browser pipeline by default, loads its
 				direct runtime module, and runs the resulting WASI artifact in the local playground
-				runtime. Use `?tinygoCompilePath=host` or an explicit host compile endpoint when you
-				want the host-assisted seam instead. Pass CLI args here, type into the terminal below,
-				and use Ctrl+D or the EOF button if the program reads stdin until EOF.
+				runtime. `wasip2` and `wasip3` use the wasm-tinygo preview target profiles. Use
+				`?tinygoCompilePath=host` or an explicit host compile endpoint when you want the
+				host-assisted seam instead. Pass CLI args here, type into the terminal below, and
+				use Ctrl+D or the EOF button if the program reads stdin until EOF.
 			</p>
 		{/if}
 		{#if debugLanguage && debug.active}
@@ -830,7 +878,9 @@
 						</div>
 						<div class="debug-metric">
 							<span>Line</span>
-							<strong>{debug.pausedLine === null ? '—' : `L${debug.pausedLine}`}</strong>
+							<strong
+								>{debug.pausedLine === null ? '—' : `L${debug.pausedLine}`}</strong
+							>
 						</div>
 					</div>
 				</div>
@@ -875,7 +925,8 @@
 							<input
 								bind:value={debug.watchInput}
 								placeholder="a == b"
-								onkeydown={(event) => event.key === 'Enter' && debug.addWatchExpression()}
+								onkeydown={(event) =>
+									event.key === 'Enter' && debug.addWatchExpression()}
 							/>
 							<button class="watch-add" onclick={() => debug.addWatchExpression()}>
 								<span class="material-symbols-outlined">add</span>
@@ -892,7 +943,8 @@
 										</div>
 										<button
 											class="remove"
-											onclick={() => debug.removeWatchExpression(watch.expression)}
+											onclick={() =>
+												debug.removeWatchExpression(watch.expression)}
 											aria-label={`Remove watch expression ${watch.expression}`}
 										>
 											<span class="material-symbols-outlined">close</span>
@@ -950,7 +1002,7 @@
 		<div class="terminal-shell">
 			<Terminal
 				bind:terminal
-				playground={playground}
+				{playground}
 				ondebug={debug.handleEvent}
 				oncompilediagnostic={onCompileDiagnostic}
 			/>
@@ -1327,9 +1379,8 @@
 	.terminal-shell :global(.xterm .xterm-viewport::-webkit-scrollbar-thumb) {
 		border: 3px solid transparent;
 		border-radius: 999px;
-		background:
-			linear-gradient(180deg, rgba(45, 212, 191, 0.86), rgba(15, 118, 110, 0.94))
-				padding-box;
+		background: linear-gradient(180deg, rgba(45, 212, 191, 0.86), rgba(15, 118, 110, 0.94))
+			padding-box;
 		box-shadow:
 			inset 0 1px 0 rgba(255, 255, 255, 0.42),
 			0 4px 10px rgba(15, 118, 110, 0.18);
@@ -1337,9 +1388,8 @@
 
 	.terminal-shell :global(.xterm:hover .xterm-viewport::-webkit-scrollbar-thumb),
 	.terminal-shell :global(.xterm .xterm-viewport::-webkit-scrollbar-thumb:hover) {
-		background:
-			linear-gradient(180deg, rgba(52, 211, 153, 0.94), rgba(13, 148, 136, 1))
-				padding-box;
+		background: linear-gradient(180deg, rgba(52, 211, 153, 0.94), rgba(13, 148, 136, 1))
+			padding-box;
 	}
 
 	.material-symbols-outlined {

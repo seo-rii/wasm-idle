@@ -44,9 +44,13 @@ describe('Monaco route debug sync', () => {
 		);
 		expect(source).toMatch(/onCursorLineChange\?: \(line: number \| null\) => void;/);
 		expect(source).toMatch(/onRunToCursor\?: \(line: number \| null\) => void;/);
-		expect(source).toMatch(/import \{ attachMonacoDebugActions, MonacoDebugView \} from '\$lib';/);
+		expect(source).toMatch(
+			/import \{ attachMonacoDebugActions, MonacoDebugView \} from '\$lib';/
+		);
 		expect(source).toMatch(/let debugActionBindings: \{ dispose\(\): void \} \| null = null;/);
-		expect(source).toMatch(/debugActionBindings = attachMonacoDebugActions\(editor, \{\s+onCursorLineChange,\s+onRunToCursor\s+\}\);/s);
+		expect(source).toMatch(
+			/debugActionBindings = attachMonacoDebugActions\(editor, \{\s+onCursorLineChange,\s+onRunToCursor\s+\}\);/s
+		);
 		expect(source).toMatch(/debugActionBindings\?\.dispose\(\);/);
 		expect(source).toMatch(
 			/if \(language !== 'cpp' \|\| !editor \|\| !clangdEnabled \|\| !clangdBaseUrl\) \{\s+session\?\.dispose\(\);\s+session = null;\s+clangdStatus = \{ state: 'disabled' \};\s+return;\s+\}/s
@@ -72,7 +76,9 @@ describe('Monaco route debug sync', () => {
 		expect(resolveEditorDefaultSource('go', 'wasm32-wasip1')).toBe(editorDefaults.go);
 		expect(resolveEditorDefaultSource('elixir', 'wasm32-wasip1')).toBe(editorDefaults.elixir);
 		expect(editorDefaults.go).toContain("ReadString('\\n')");
-		expect(editorDefaults.go).toContain('fmt.Printf("factorial_plus_bonus=%d\\n", factorial(n)+bonus)');
+		expect(editorDefaults.go).toContain(
+			'fmt.Printf("factorial_plus_bonus=%d\\n", factorial(n)+bonus)'
+		);
 		expect(editorDefaults.elixir).toContain('defmodule Demo do');
 		expect(editorDefaults.elixir).toContain('Demo.run()');
 		expect(editorDefaults.elixir).toContain('IO.gets("")');
@@ -92,7 +98,9 @@ describe('Monaco route debug sync', () => {
 			})
 		).not.toThrow();
 		expect(pageSource).toMatch(/clangdRequested = \$state\(false\),/);
-		expect(pageSource).toMatch(/if \(enableDebug && language === 'CPP'\) clangdRequested = true;/);
+		expect(pageSource).toMatch(
+			/if \(enableDebug && language === 'CPP'\) clangdRequested = true;/
+		);
 		expect(pageSource).toMatch(/if \(language !== 'CPP'\) clangdRequested = false;/);
 		expect(pageSource).toMatch(/<option value="RUST">Rust<\/option>/);
 		expect(pageSource).toMatch(/<option value="GO">Go<\/option>/);
@@ -100,20 +108,29 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).toMatch(/<option value="OCAML">OCaml<\/option>/);
 		expect(pageSource).toMatch(/<option value="TINYGO">TinyGo<\/option>/);
 		expect(pageSource).toMatch(/language=\{editorLanguage\}/);
-		expect(pageSource).toMatch(/<select id="rust-target-triple" bind:value=\{rustTargetTriple\}>/);
+		expect(pageSource).toMatch(
+			/<select id="rust-target-triple" bind:value=\{rustTargetTriple\}>/
+		);
+		expect(pageSource).toMatch(/<select id="tinygo-target" bind:value=\{tinygoTarget\}>/);
 		expect(pageSource).toMatch(/<select id="ocaml-backend" bind:value=\{ocamlBackend\}>/);
 		expect(pageSource).toMatch(/WASM_ELIXIR_ASSET_VERSION/);
 		expect(pageSource).toMatch(/wasm-elixir\/bundle\.avm\?v=\$\{WASM_ELIXIR_ASSET_VERSION\}/);
 		expect(pageSource).toMatch(/WASM_OCAML_ASSET_VERSION/);
-		expect(pageSource).toMatch(/wasm-of-js-of-ocaml\/browser-native\/src\/index\.js\?v=\$\{WASM_OCAML_ASSET_VERSION\}/);
-		expect(pageSource).toMatch(/wasm-of-js-of-ocaml\/browser-native-bundle\/browser-native-manifest\.v1\.json\?v=\$\{WASM_OCAML_ASSET_VERSION\}/);
+		expect(pageSource).toMatch(
+			/wasm-of-js-of-ocaml\/browser-native\/src\/index\.js\?v=\$\{WASM_OCAML_ASSET_VERSION\}/
+		);
+		expect(pageSource).toMatch(
+			/wasm-of-js-of-ocaml\/browser-native-bundle\/browser-native-manifest\.v1\.json\?v=\$\{WASM_OCAML_ASSET_VERSION\}/
+		);
 		expect(pageSource).toMatch(
 			/\{#each availableRustTargetTriples as targetTriple \(targetTriple\)\}\s+<option value=\{targetTriple\}>\{targetTriple\}<\/option>\s+\{\/each\}/s
 		);
 		expect(pageSource).toMatch(/runtime-manifest\.v3\.json\?v=\$\{WASM_RUST_ASSET_VERSION\}/);
 		expect(pageSource).toMatch(/preloadBrowserRustRuntime/);
 		expect(pageSource).toMatch(/preloadBrowserGoRuntime/);
-		expect(pageSource).toMatch(/const playground = \$derived\.by\(\(\) => createPlaygroundBinding\(runtimeAssets\)\);/);
+		expect(pageSource).toMatch(
+			/const playground = \$derived\.by\(\(\) => createPlaygroundBinding\(runtimeAssets\)\);/
+		);
 		expect(pageSource).toMatch(/clangdEnabled=\{clangdRequested\}/);
 	});
 

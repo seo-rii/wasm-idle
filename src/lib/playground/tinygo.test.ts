@@ -23,6 +23,7 @@ const createRuntimeFixtureState = () => ({
 		reason?: string;
 	} | null,
 	workspaceFiles: null as Record<string, string> | null,
+	buildRequestOverrides: null as { target?: string } | null,
 	bootCalls: 0,
 	planCalls: 0,
 	executeCalls: 0,
@@ -33,12 +34,16 @@ const createRuntimeFixtureState = () => ({
 });
 
 const runtimeFixtureState =
-	(globalThis as typeof globalThis & {
-		__wasmIdleTinyGoRuntimeFixtureState?: ReturnType<typeof createRuntimeFixtureState>;
-	}).__wasmIdleTinyGoRuntimeFixtureState ||
-	(((globalThis as typeof globalThis & {
-		__wasmIdleTinyGoRuntimeFixtureState?: ReturnType<typeof createRuntimeFixtureState>;
-	}).__wasmIdleTinyGoRuntimeFixtureState = createRuntimeFixtureState()));
+	(
+		globalThis as typeof globalThis & {
+			__wasmIdleTinyGoRuntimeFixtureState?: ReturnType<typeof createRuntimeFixtureState>;
+		}
+	).__wasmIdleTinyGoRuntimeFixtureState ||
+	((
+		globalThis as typeof globalThis & {
+			__wasmIdleTinyGoRuntimeFixtureState?: ReturnType<typeof createRuntimeFixtureState>;
+		}
+	).__wasmIdleTinyGoRuntimeFixtureState = createRuntimeFixtureState());
 
 const { publicEnv } = vi.hoisted(() => ({
 	publicEnv: {
@@ -104,6 +109,9 @@ export const createBundledTinyGoRuntime = (options = {}) => {
   },
   setWorkspaceFiles(files) {
     state.workspaceFiles = files;
+  },
+  setBuildRequestOverrides(overrides) {
+    state.buildRequestOverrides = overrides;
   },
   dispose() {
     state.disposeCalls += 1;
@@ -172,9 +180,7 @@ describe('TinyGo sandbox', () => {
 			}
 		});
 		await expect(sandbox.run(code, true)).resolves.toBe(true);
-		await expect(
-			sandbox.run(code, false, true, undefined, ['demo'])
-		).resolves.toBe(true);
+		await expect(sandbox.run(code, false, true, undefined, ['demo'])).resolves.toBe(true);
 
 		expect(workerInstances).toHaveLength(1);
 		expect(runtimeFixtureState.workspaceFiles).toEqual({
@@ -204,6 +210,38 @@ describe('TinyGo sandbox', () => {
 		);
 		expect(outputs.join('')).toContain('driver planned 4 step(s)');
 		expect(outputs.join('')).toContain('tinygo-ok\n');
+	});
+
+	it('passes selected TinyGo targets into the browser runtime and compile cache key', async () => {
+		const sandbox = new TinyGo();
+		const code = resolveEditorDefaultSource('go', 'wasm32-wasip1');
+
+		await sandbox.load({
+			rootUrl: '/absproxy/5173',
+			tinygo: {
+				moduleUrl: runtimeModuleUrl
+			}
+		});
+
+		await expect(
+			sandbox.run(code, true, true, undefined, [], { tinygoTarget: 'wasip2' })
+		).resolves.toBe(true);
+		expect(runtimeFixtureState.buildRequestOverrides).toEqual({ target: 'wasip2' });
+		expect(runtimeFixtureState.planCalls).toBe(1);
+		expect(runtimeFixtureState.executeCalls).toBe(1);
+
+		await expect(
+			sandbox.run(code, true, true, undefined, [], { tinygoTarget: 'wasip2' })
+		).resolves.toBe(true);
+		expect(runtimeFixtureState.planCalls).toBe(1);
+		expect(runtimeFixtureState.executeCalls).toBe(1);
+
+		await expect(
+			sandbox.run(code, true, true, undefined, [], { tinygoTarget: 'wasip3' })
+		).resolves.toBe(true);
+		expect(runtimeFixtureState.buildRequestOverrides).toEqual({ target: 'wasip3' });
+		expect(runtimeFixtureState.planCalls).toBe(2);
+		expect(runtimeFixtureState.executeCalls).toBe(2);
 	});
 
 	it('maps browser runtime asset progress into the provided sandbox progress sink', async () => {
@@ -311,9 +349,7 @@ describe('TinyGo sandbox', () => {
 				moduleUrl: runtimeModuleUrl
 			}
 		});
-		await expect(
-			sandbox.run(code, false, true, undefined, ['demo'])
-		).resolves.toBe(true);
+		await expect(sandbox.run(code, false, true, undefined, ['demo'])).resolves.toBe(true);
 
 		expect(readBufferedStdin(runMessage.buffer)).toBe('42\n');
 	});
@@ -369,7 +405,8 @@ describe('TinyGo sandbox', () => {
 
 		expect(fetch).toHaveBeenCalledWith('https://example.com/api/tinygo/compile', {
 			body: JSON.stringify({
-				source: code
+				source: code,
+				target: 'wasip1'
 			}),
 			headers: {
 				'content-type': 'application/json'
@@ -381,6 +418,44 @@ describe('TinyGo sandbox', () => {
 		expect(runtimeFixtureState.executeCalls).toBe(0);
 		expect(outputs.join('')).toContain('tinygo host compile ready: target=wasip1');
 		expect(outputs.join('')).toContain('tinygo-ok\n');
+	});
+
+	it('passes selected TinyGo targets into host compile requests', async () => {
+		const sandbox = new TinyGo();
+		const code = resolveEditorDefaultSource('go', 'wasm32-wasip1');
+		vi.mocked(fetch).mockResolvedValue({
+			ok: true,
+			json: async () => ({
+				artifact: {
+					bytesBase64: Buffer.from([0x00, 0x61, 0x73, 0x6d]).toString('base64'),
+					entrypoint: '_start',
+					path: '/host/main.wasm',
+					runnable: true
+				},
+				logs: ['tinygo host compile ready: target=wasip2']
+			})
+		} as Response);
+
+		await sandbox.load({
+			rootUrl: '/absproxy/5173',
+			tinygo: {
+				hostCompileUrl: 'https://example.com/api/tinygo/compile'
+			}
+		});
+		await expect(
+			sandbox.run(code, false, true, undefined, [], { tinygoTarget: 'wasip2' })
+		).resolves.toBe(true);
+
+		expect(fetch).toHaveBeenCalledWith('https://example.com/api/tinygo/compile', {
+			body: JSON.stringify({
+				source: code,
+				target: 'wasip2'
+			}),
+			headers: {
+				'content-type': 'application/json'
+			},
+			method: 'POST'
+		});
 	});
 
 	it('rejects execution when the TinyGo host compile endpoint returns a non-runnable artifact', async () => {
@@ -441,7 +516,8 @@ describe('TinyGo sandbox', () => {
 
 		expect(fetch).toHaveBeenCalledWith('http://localhost:3000/runtime/tinygo/compile', {
 			body: JSON.stringify({
-				source: code
+				source: code,
+				target: 'wasip1'
 			}),
 			headers: {
 				'content-type': 'application/json'
@@ -586,12 +662,13 @@ describe('TinyGo sandbox', () => {
 
 		expect(fetch).toHaveBeenCalledWith('https://example.com/api/tinygo/compile', {
 			body: JSON.stringify({
-				source: code
+				source: code,
+				target: 'wasip1'
 			}),
 			headers: {
 				'content-type': 'application/json'
 			},
-				method: 'POST'
+			method: 'POST'
 		});
 		expect(runtimeFixtureState.bootCalls).toBe(0);
 		expect(runtimeFixtureState.planCalls).toBe(0);

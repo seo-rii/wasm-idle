@@ -48,13 +48,16 @@ cd ../wasm-idle
 pnpm run sync:wasm-tinygo
 ```
 
-TinyGo currently exposes a single `wasm` target through the example page. The browser pipeline
-still lives inside `wasm-tinygo`; `wasm-idle` now imports its reusable `runtime.js` library entry
-directly, then runs the emitted artifact with browser WASI so terminal stdin/EOF behavior stays
-consistent with the other runtimes. The default bundled browser path now loads the vendored TinyGo
-runtime in `direct` mode, skips the old bootstrap-only compile step, and runs the resulting WASI
-artifact locally. A host compile service is still useful when you want an explicit remote compile
-seam or broader compatibility than the shipped browser bundle.
+TinyGo exposes `wasm`, `wasip1`, `wasip2`, and `wasip3` targets through the example page. The
+browser pipeline still lives inside `wasm-tinygo`; `wasm-idle` imports its reusable `runtime.js`
+library entry directly, forwards the selected target into the build request, then runs the emitted
+artifact with browser WASI so terminal stdin/EOF behavior stays consistent with the other runtimes.
+The default bundled browser path loads the vendored TinyGo runtime in `direct` mode, skips the old
+bootstrap-only compile step, and runs runnable WASI artifacts locally. The `wasip2` and `wasip3`
+entries use the preview target profiles shipped by the bundled `wasm-tinygo` runtime, so they may
+produce non-runnable preview artifacts until the matching execution path is available. A host
+compile service is still useful when you want an explicit remote compile seam or broader
+compatibility than the shipped browser bundle.
 
 ## Browser regression commands
 
@@ -164,24 +167,24 @@ If you want a host app to reuse the same runtime asset configuration for both `<
 ```ts
 import Terminal, { createPlaygroundBinding } from 'wasm-idle';
 
-	const wasmIdle = createPlaygroundBinding({
-		rootUrl: 'https://cdn.example.com/repl',
-		rust: {
-			compilerUrl: 'https://cdn.example.com/wasm-rust/index.js'
-		},
-		tinygo: {
-			hostCompileUrl: 'https://tinygo.example.com/api/compile',
-			moduleUrl: 'https://cdn.example.com/wasm-tinygo/runtime.js',
-			assetPacks: [
-				{
-					index: 'https://cdn.example.com/wasm-tinygo/runtime-pack/runtime-pack.index.json',
-					asset: 'https://cdn.example.com/wasm-tinygo/runtime-pack/runtime-pack.bin',
-					fileCount: 12,
-					totalBytes: 123456
-				}
-			]
-		}
-	});
+const wasmIdle = createPlaygroundBinding({
+	rootUrl: 'https://cdn.example.com/repl',
+	rust: {
+		compilerUrl: 'https://cdn.example.com/wasm-rust/index.js'
+	},
+	tinygo: {
+		hostCompileUrl: 'https://tinygo.example.com/api/compile',
+		moduleUrl: 'https://cdn.example.com/wasm-tinygo/runtime.js',
+		assetPacks: [
+			{
+				index: 'https://cdn.example.com/wasm-tinygo/runtime-pack/runtime-pack.index.json',
+				asset: 'https://cdn.example.com/wasm-tinygo/runtime-pack/runtime-pack.bin',
+				fileCount: 12,
+				totalBytes: 123456
+			}
+		]
+	}
+});
 
 const sandbox = await wasmIdle.load('PYTHON');
 await sandbox.load('print("hi")', false);

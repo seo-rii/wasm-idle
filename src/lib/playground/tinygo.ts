@@ -8,7 +8,8 @@ import {
 } from '$lib/playground/assets';
 import {
 	resolveSandboxExecutionArgs,
-	type SandboxExecutionOptions
+	type SandboxExecutionOptions,
+	type TinyGoTarget
 } from '$lib/playground/options';
 import type { Sandbox } from '$lib/playground/sandbox';
 import {
@@ -31,6 +32,7 @@ type TinyGoRuntimeHooks = {
 		entrypoint?: '_start' | '_initialize' | 'main' | null;
 		reason?: 'bootstrap-artifact' | 'missing-wasi-entrypoint';
 	} | null;
+	setBuildRequestOverrides?(overrides: { target?: TinyGoTarget } | null): void;
 	setWorkspaceFiles(files: Record<string, string> | null): void;
 	dispose?(): void;
 };
@@ -203,7 +205,9 @@ class TinyGo implements Sandbox {
 					event.filename && event.lineno
 						? ` (${event.filename}:${event.lineno}:${event.colno})`
 						: '';
-				reject(`TinyGo worker script error: ${event.message || 'unknown error'}${location}`);
+				reject(
+					`TinyGo worker script error: ${event.message || 'unknown error'}${location}`
+				);
 			};
 			this.worker.onmessageerror = () => {
 				reject('TinyGo worker message deserialization failed');
@@ -236,7 +240,9 @@ class TinyGo implements Sandbox {
 		}
 		const moduleUrl = this.moduleUrl;
 		this.runtimePromise = (async () => {
-			const runtimeModule = (await import(/* @vite-ignore */ moduleUrl)) as TinyGoRuntimeModule;
+			const runtimeModule = (await import(
+				/* @vite-ignore */ moduleUrl
+			)) as TinyGoRuntimeModule;
 			if (typeof runtimeModule.createBundledTinyGoRuntime === 'function') {
 				this.runtime = runtimeModule.createBundledTinyGoRuntime({
 					assetLoader: this.assetLoader,
@@ -244,7 +250,8 @@ class TinyGo implements Sandbox {
 					rustRuntimeBaseUrl: this.rustRuntimeBaseUrl || undefined,
 					onProgress: (progress) => {
 						if (!this.runtimeProgress) return;
-						const total = progress.total && progress.total > 0 ? progress.total : progress.loaded;
+						const total =
+							progress.total && progress.total > 0 ? progress.total : progress.loaded;
 						const key = progress.assetUrl || progress.assetPath;
 						this.runtimeProgressAssets.set(key, {
 							loaded: Math.max(0, progress.loaded),
@@ -275,7 +282,8 @@ class TinyGo implements Sandbox {
 					rustRuntimeBaseUrl: this.rustRuntimeBaseUrl || undefined,
 					onProgress: (progress) => {
 						if (!this.runtimeProgress) return;
-						const total = progress.total && progress.total > 0 ? progress.total : progress.loaded;
+						const total =
+							progress.total && progress.total > 0 ? progress.total : progress.loaded;
 						const key = progress.assetUrl || progress.assetPath;
 						this.runtimeProgressAssets.set(key, {
 							loaded: Math.max(0, progress.loaded),
@@ -297,7 +305,7 @@ class TinyGo implements Sandbox {
 					}
 				});
 				return this.runtime;
-			};
+			}
 			throw new Error(
 				'TinyGo runtime module must export createBundledTinyGoRuntime or createTinyGoRuntime'
 			);
@@ -335,13 +343,16 @@ class TinyGo implements Sandbox {
 
 	private async compileArtifact(
 		code: string,
+		target: TinyGoTarget = 'wasm',
 		log = true,
 		prog?: { set?: (value: number) => void } | import('svelte/store').Writable<number>
 	) {
+		const hostCompileTarget = target === 'wasm' ? 'wasip1' : target;
 		const compileCacheKey = JSON.stringify({
 			code,
 			hostCompileUrls: this.hostCompileUrls,
-			moduleUrl: this.moduleUrl
+			moduleUrl: this.moduleUrl,
+			target
 		});
 		if (this.compiledArtifact && this.compiledCacheKey === compileCacheKey) {
 			return;
@@ -358,7 +369,8 @@ class TinyGo implements Sandbox {
 							'content-type': 'application/json'
 						},
 						body: JSON.stringify({
-							source: code
+							source: code,
+							target: hostCompileTarget
 						})
 					});
 				} catch (error) {
@@ -378,15 +390,15 @@ class TinyGo implements Sandbox {
 					const artifactBytes = Uint8Array.from(atob(artifactBase64), (char) =>
 						char.charCodeAt(0)
 					);
-						this.compiledArtifact = artifactBytes;
-						this.compiledArtifactExecutionError =
-							payload.artifact.runnable === false
-								? payload.artifact.artifactKind === 'probe'
-									? 'TinyGo host compile returned a non-runnable probe artifact without a supported WASI entrypoint.'
-									: payload.artifact.reason === 'bootstrap-artifact'
+					this.compiledArtifact = artifactBytes;
+					this.compiledArtifactExecutionError =
+						payload.artifact.runnable === false
+							? payload.artifact.artifactKind === 'probe'
+								? 'TinyGo host compile returned a non-runnable probe artifact without a supported WASI entrypoint.'
+								: payload.artifact.reason === 'bootstrap-artifact'
 									? 'TinyGo host compile returned a bootstrap artifact and cannot execute it yet.'
 									: 'TinyGo host compile returned a non-runnable artifact without a supported WASI entrypoint.'
-								: '';
+							: '';
 					this.compiledCacheKey = compileCacheKey;
 					prog?.set?.(0.95);
 					if (log) {
@@ -436,6 +448,7 @@ class TinyGo implements Sandbox {
 		runtime.reset();
 		this.lastActivityLog = runtime.readActivityLog();
 		runtime.setWorkspaceFiles({ 'main.go': code });
+		runtime.setBuildRequestOverrides?.({ target });
 		this.runtimeProgress = prog;
 		this.runtimeProgressAssets.clear();
 		this.runtimeProgressStart = 0.05;
@@ -490,7 +503,10 @@ class TinyGo implements Sandbox {
 		for (let index = runtimeLogLines.length - 1; index >= 0; index -= 1) {
 			const line = runtimeLogLines[index] || '';
 			if (/^(?:build execution failed:|artifact probe failed:)/.test(line)) {
-				browserRuntimeFailure = line.replace(/^(?:build execution failed:|artifact probe failed:)\s*/, '');
+				browserRuntimeFailure = line.replace(
+					/^(?:build execution failed:|artifact probe failed:)\s*/,
+					''
+				);
 				break;
 			}
 		}
@@ -509,9 +525,9 @@ class TinyGo implements Sandbox {
 							? unavailableHostCompileUrls.length > 0
 								? `TinyGo host compile endpoints were unavailable: ${unavailableHostCompileUrls.join(', ')}. TinyGo browser runtime produced a non-runnable probe artifact without a supported WASI entrypoint.`
 								: 'TinyGo browser runtime produced a non-runnable probe artifact without a supported WASI entrypoint.'
-						: unavailableHostCompileUrls.length > 0
-							? `TinyGo host compile endpoints were unavailable: ${unavailableHostCompileUrls.join(', ')}. TinyGo browser runtime produced a non-runnable artifact without a supported WASI entrypoint.`
-							: 'TinyGo browser runtime produced a non-runnable artifact without a supported WASI entrypoint.'
+							: unavailableHostCompileUrls.length > 0
+								? `TinyGo host compile endpoints were unavailable: ${unavailableHostCompileUrls.join(', ')}. TinyGo browser runtime produced a non-runnable artifact without a supported WASI entrypoint.`
+								: 'TinyGo browser runtime produced a non-runnable artifact without a supported WASI entrypoint.'
 				: '';
 		this.compiledCacheKey = compileCacheKey;
 		if (log) {
@@ -532,7 +548,8 @@ class TinyGo implements Sandbox {
 			try {
 				this.begin = Date.now();
 				await this.ensureWorker();
-				await this.compileArtifact(code, _log, prepare ? _prog : undefined);
+				const target = options.tinygoTarget || 'wasm';
+				await this.compileArtifact(code, target, _log, prepare ? _prog : undefined);
 				if (prepare) {
 					this.elapse = Date.now() - this.begin;
 					this.exit = true;
