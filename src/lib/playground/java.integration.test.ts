@@ -23,6 +23,62 @@ const loadTeaVmArtifacts = async () => {
 };
 
 describe('TeaVM Java stdin integration', () => {
+	it('compiles and runs NIO byte buffer code under Wasm GC', async () => {
+		const { runtime, compilerWasm, sdk, runtimeClasslib } = await loadTeaVmArtifacts();
+		// The bundled runtime classlib must not retain JS-only @JSByRef typed array paths.
+		const code = `import java.nio.ByteBuffer;
+
+public class Main {
+    public static void main(String[] args) {
+        ByteBuffer allocated = ByteBuffer.allocate(8);
+        allocated.putInt(42);
+        allocated.flip();
+
+        byte[] source = new byte[] { 0, 0, 0, 7 };
+        ByteBuffer wrapped = ByteBuffer.wrap(source);
+        System.out.println(allocated.getInt() + wrapped.getInt());
+    }
+}`;
+		const compilerModule = await runtime.load(compilerWasm, {
+			stackDeobfuscator: { enabled: false }
+		});
+		const compiler = compilerModule.exports.createCompiler();
+		const diagnostics: string[] = [];
+
+		compiler.setSdk(sdk);
+		compiler.setTeaVMClasslib(runtimeClasslib);
+		compiler.onDiagnostic((diagnostic: { message?: string }) => {
+			diagnostics.push(String(diagnostic.message || ''));
+		});
+		compiler.addSourceFile('Main.java', code);
+
+		expect(compiler.compile()).toBe(true);
+		expect(Array.from(compiler.detectMainClasses())).toEqual(['Main']);
+		expect(compiler.generateWebAssembly({ outputName: 'app', mainClass: 'Main' })).toBe(true);
+		expect(diagnostics).toEqual([]);
+
+		const wasm = new Uint8Array(compiler.getWebAssemblyOutputFile('app.wasm'));
+		const outputs: string[] = [];
+		const module = await runtime.load(wasm, {
+			installImports(imports: {
+				teavmConsole: {
+					putcharStdout: (code: number) => void;
+					putcharStderr: (code: number) => void;
+				};
+			}) {
+				imports.teavmConsole.putcharStdout = (charCode) =>
+					outputs.push(String.fromCharCode(charCode));
+				imports.teavmConsole.putcharStderr = (charCode) =>
+					outputs.push(String.fromCharCode(charCode));
+			},
+			stackDeobfuscator: { enabled: false }
+		});
+
+		module.exports.main([]);
+
+		expect(outputs.join('')).toBe('49\n');
+	}, 10000);
+
 	it('compiles and runs byte-oriented stdin code with injected snapshot input', async () => {
 		const { runtime, compilerWasm, sdk, runtimeClasslib } = await loadTeaVmArtifacts();
 		const code = `public class Main {
@@ -247,7 +303,9 @@ public class Main {
 				throw new Error(`${testCase.name}: ${diagnostics.join('\n')}`);
 			}
 			expect(Array.from(compiler.detectMainClasses())).toEqual(['Main']);
-			expect(compiler.generateWebAssembly({ outputName: 'app', mainClass: 'Main' })).toBe(true);
+			expect(compiler.generateWebAssembly({ outputName: 'app', mainClass: 'Main' })).toBe(
+				true
+			);
 
 			const wasm = new Uint8Array(compiler.getWebAssemblyOutputFile('app.wasm'));
 			const outputs: string[] = [];
