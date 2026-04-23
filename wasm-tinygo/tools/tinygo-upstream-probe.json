@@ -2,7 +2,7 @@
   "sourceRef": "v0.40.1",
   "sourceUrl": "https://github.com/tinygo-org/tinygo.git",
   "sourceVersion": "0.40.1",
-  "patchedRoot": "/home/seorii/dev/hancomac/wasm-tinygo/.cache/tinygo-src-wasi-probe",
-  "outputPath": "/home/seorii/dev/hancomac/wasm-tinygo/public/tools/tinygo-upstream-probe.wasm",
-  "wasmBytes": 3808405
+  "patchedRoot": "/tmp/wasm-tinygo-clean.YNk9Ut/.cache/tinygo-src-wasi-probe",
+  "outputPath": "/tmp/wasm-tinygo-clean.YNk9Ut/public/tools/tinygo-upstream-probe.wasm",
+  "wasmBytes": 3808365
 }

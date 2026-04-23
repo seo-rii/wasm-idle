@@ -9,6 +9,6 @@
   "patchedEntryFailureReason": null,
   "blockers": [],
   "artifactKind": "compiler",
-  "outputPath": "/home/seorii/dev/hancomac/wasm-tinygo/public/tools/tinygo-compiler.wasm",
-  "wasmBytes": 5290389
+  "outputPath": "/tmp/wasm-tinygo-clean.YNk9Ut/public/tools/tinygo-compiler.wasm",
+  "wasmBytes": 5310740
 }
