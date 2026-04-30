@@ -75,6 +75,7 @@ type CompilerModule = {
 			entry: string;
 			target: 'js' | 'wasm';
 			effectsMode?: 'cps' | 'jspi';
+			wasmBinaryenMode?: 'fast' | 'full';
 		},
 		options: {
 			system: unknown;
@@ -97,6 +98,7 @@ type RunRequest = {
 	code: string;
 	prepare: boolean;
 	target?: 'js' | 'wasm';
+	wasmBinaryenMode?: 'fast' | 'full';
 	log?: boolean;
 	buffer?: SharedArrayBuffer;
 };
@@ -553,6 +555,7 @@ self.onmessage = async (event: { data: LoadRequest | RunRequest }) => {
 		code,
 		prepare,
 		target = 'wasm',
+		wasmBinaryenMode = 'fast',
 		log = true,
 		buffer
 	} = event.data as LoadRequest & RunRequest;
@@ -569,7 +572,7 @@ self.onmessage = async (event: { data: LoadRequest | RunRequest }) => {
 
 		if (log) {
 			console.log(
-				`[wasm-idle:ocaml-worker] compile start prepare=${prepare} target=${target}`
+				`[wasm-idle:ocaml-worker] compile start prepare=${prepare} target=${target} binaryen=${wasmBinaryenMode}`
 			);
 		}
 		postMessage({ progress: { stage: 'compile-bootstrap', percent: 10 } });
@@ -579,7 +582,7 @@ self.onmessage = async (event: { data: LoadRequest | RunRequest }) => {
 		]);
 		postMessage({ progress: { stage: 'compile-ready', percent: 25 } });
 
-		const compileKey = `${target}\n${code}`;
+		const compileKey = `${target}\n${wasmBinaryenMode}\n${code}`;
 		let compiledFresh = false;
 		if (!compiledResult || compiledCacheKey !== compileKey) {
 			const result = await compilerModule.compile(
@@ -589,7 +592,8 @@ self.onmessage = async (event: { data: LoadRequest | RunRequest }) => {
 					},
 					entry: 'main.ml',
 					target,
-					effectsMode: 'cps'
+					effectsMode: 'cps',
+					wasmBinaryenMode
 				},
 				{
 					system: compilerModule.createBrowserWorkerSystemDispatcher({

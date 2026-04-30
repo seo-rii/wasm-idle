@@ -113,6 +113,9 @@ describe('Monaco route debug sync', () => {
 		);
 		expect(pageSource).toMatch(/<select id="tinygo-target" bind:value=\{tinygoTarget\}>/);
 		expect(pageSource).toMatch(/<select id="ocaml-backend" bind:value=\{ocamlBackend\}>/);
+		expect(pageSource).toMatch(
+			/<select id="ocaml-binaryen-mode" bind:value=\{ocamlWasmBinaryenMode\}>/
+		);
 		expect(pageSource).toMatch(/WASM_ELIXIR_ASSET_VERSION/);
 		expect(pageSource).toMatch(/wasm-elixir\/bundle\.avm\?v=\$\{WASM_ELIXIR_ASSET_VERSION\}/);
 		expect(pageSource).toMatch(/WASM_OCAML_ASSET_VERSION/);

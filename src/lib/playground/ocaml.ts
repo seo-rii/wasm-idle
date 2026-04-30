@@ -6,6 +6,7 @@ import {
 import {
 	type CompilerDiagnostic,
 	type OcamlBackend,
+	type OcamlWasmBinaryenMode,
 	type SandboxExecutionOptions
 } from '$lib/playground/options';
 import type { Sandbox } from '$lib/playground/sandbox';
@@ -129,6 +130,7 @@ class Ocaml implements Sandbox {
 		return new Promise<boolean | string>((resolve, reject) => {
 			if (!this.worker) return reject('Worker not loaded');
 			const target: OcamlBackend = options.ocamlBackend || 'wasm';
+			const wasmBinaryenMode: OcamlWasmBinaryenMode = options.ocamlWasmBinaryenMode || 'fast';
 			const _uid = ++this.uid;
 			this.activeReject = reject;
 			const handler = async (event: Event & { data: any }) => {
@@ -359,6 +361,7 @@ class Ocaml implements Sandbox {
 				code,
 				prepare,
 				target,
+				wasmBinaryenMode,
 				log: _log,
 				buffer: this.buffer
 			});

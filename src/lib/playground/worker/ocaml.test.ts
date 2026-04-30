@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { flushQueuedStdin } from '$lib/playground/stdinBuffer';
+import { flushBufferedEof, flushQueuedStdin } from '$lib/playground/stdinBuffer';
 
 async function createMockOcamlCompilerModule(source: string) {
 	return `data:text/javascript;base64,${Buffer.from(source, 'utf8').toString('base64')}`;
@@ -71,7 +71,9 @@ describe('OCaml worker', () => {
 
 		(globalThis as any).postMessage = vi.fn((message: any) => {
 			if (message?.buffer) {
-				flushQueuedStdin(queuedInput, buffer);
+				if (!flushQueuedStdin(queuedInput, buffer)) {
+					flushBufferedEof(buffer);
+				}
 			}
 		});
 
@@ -170,6 +172,75 @@ describe('OCaml worker', () => {
 		expect(postMessage).toHaveBeenCalledWith({ results: true });
 	});
 
+	it('forwards wasm Binaryen mode and includes it in the compile cache key', async () => {
+		const compilerModuleUrl = await createMockOcamlCompilerModule(`
+			globalThis.__ocamlCompileRequests = [];
+
+			export async function compile(request) {
+				globalThis.__ocamlCompileRequests.push(request);
+				return {
+					success: true,
+					stdout: '',
+					stderr: '',
+					diagnostics: [],
+					artifacts: [
+						{
+							path: '/workspace/_build/main.js',
+							kind: 'js',
+							data: \`
+								globalThis.__wasm_of_js_of_ocaml_runtime_promise=Promise.resolve();
+							\`
+						}
+					]
+				};
+			}
+
+			export function createBrowserWorkerSystemDispatcher() {
+				return {};
+			}
+		`);
+
+		await import('./ocaml');
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				moduleUrl: compilerModuleUrl,
+				manifestUrl: 'https://example.test/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json'
+			}
+		});
+		await Promise.resolve();
+
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: 'let () = print_endline "ok"',
+				prepare: true,
+				target: 'wasm'
+			}
+		});
+		await Promise.resolve();
+
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: 'let () = print_endline "ok"',
+				prepare: true,
+				target: 'wasm',
+				wasmBinaryenMode: 'full'
+			}
+		});
+		await Promise.resolve();
+
+		expect((globalThis as any).__ocamlCompileRequests).toEqual([
+			expect.objectContaining({
+				target: 'wasm',
+				wasmBinaryenMode: 'fast'
+			}),
+			expect.objectContaining({
+				target: 'wasm',
+				wasmBinaryenMode: 'full'
+			})
+		]);
+	});
+
 	it('bridges wasm_of_ocaml Node-style fs.readSync stdin reads', async () => {
 		const compilerModuleUrl = await createMockOcamlCompilerModule(`
 			export async function compile() {
@@ -206,7 +277,9 @@ describe('OCaml worker', () => {
 
 		(globalThis as any).postMessage = vi.fn((message: any) => {
 			if (message?.buffer) {
-				flushQueuedStdin(queuedInput, buffer);
+				if (!flushQueuedStdin(queuedInput, buffer)) {
+					flushBufferedEof(buffer);
+				}
 			}
 		});
 

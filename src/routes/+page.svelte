@@ -18,6 +18,7 @@
 		CompilerDiagnostic,
 		GoTarget,
 		OcamlBackend,
+		OcamlWasmBinaryenMode,
 		RustTargetTriple,
 		TinyGoTarget
 	} from '$lib/playground/options';
@@ -84,6 +85,7 @@
 		goTarget = $state<GoTarget>('wasip1/wasm'),
 		tinygoTarget = $state<TinyGoTarget>('wasm'),
 		ocamlBackend = $state<OcamlBackend>('wasm'),
+		ocamlWasmBinaryenMode = $state<OcamlWasmBinaryenMode>('fast'),
 		log = $state(true),
 		language = $state('CPP'),
 		runningMode = $state<'run' | 'debug' | null>(null),
@@ -260,6 +262,7 @@
 			localStorage.setItem('goTarget', goTarget);
 			localStorage.setItem('tinygoTarget', tinygoTarget);
 			localStorage.setItem('ocamlBackend', ocamlBackend);
+			localStorage.setItem('ocamlWasmBinaryenMode', ocamlWasmBinaryenMode);
 		}
 		try {
 			if (!('SharedArrayBuffer' in window)) location.reload();
@@ -279,7 +282,9 @@
 					rustTargetTriple: language === 'RUST' ? rustTargetTriple : undefined,
 					goTarget: language === 'GO' ? goTarget : undefined,
 					tinygoTarget: language === 'TINYGO' ? tinygoTarget : undefined,
-					ocamlBackend: language === 'OCAML' ? ocamlBackend : undefined
+					ocamlBackend: language === 'OCAML' ? ocamlBackend : undefined,
+					ocamlWasmBinaryenMode:
+						language === 'OCAML' ? ocamlWasmBinaryenMode : undefined
 				}
 			});
 		} finally {
@@ -297,6 +302,7 @@
 			const storedGoTarget = localStorage.getItem('goTarget');
 			const storedTinyGoTarget = localStorage.getItem('tinygoTarget');
 			const storedOcamlBackend = localStorage.getItem('ocamlBackend');
+			const storedOcamlWasmBinaryenMode = localStorage.getItem('ocamlWasmBinaryenMode');
 			const requestedCode =
 				decodeBase64Url(page.url.searchParams.get('code64')) ??
 				page.url.searchParams.get('code');
@@ -308,6 +314,8 @@
 			const requestedGoTarget = page.url.searchParams.get('goTarget');
 			const requestedTinyGoTarget = page.url.searchParams.get('tinygoTarget');
 			const requestedOcamlBackend = page.url.searchParams.get('ocamlBackend');
+			const requestedOcamlWasmBinaryenMode =
+				page.url.searchParams.get('ocamlWasmBinaryenMode');
 			if (requestedCode ?? code) editor.setValue(requestedCode ?? code ?? '');
 			if (requestedLanguage ?? lang) language = requestedLanguage ?? lang ?? language;
 			if (requestedArgs !== null) argsInput = requestedArgs;
@@ -346,6 +354,11 @@
 				ocamlBackend = requestedOcamlBackend;
 			} else if (storedOcamlBackend === 'js' || storedOcamlBackend === 'wasm') {
 				ocamlBackend = storedOcamlBackend;
+			}
+			if (requestedOcamlWasmBinaryenMode === 'fast' || requestedOcamlWasmBinaryenMode === 'full') {
+				ocamlWasmBinaryenMode = requestedOcamlWasmBinaryenMode;
+			} else if (storedOcamlWasmBinaryenMode === 'fast' || storedOcamlWasmBinaryenMode === 'full') {
+				ocamlWasmBinaryenMode = storedOcamlWasmBinaryenMode;
 			}
 			if (
 				requestedRustTargetTriple === 'wasm32-wasip1' ||
@@ -746,6 +759,15 @@
 							<option value="js">js_of_ocaml</option>
 						</select>
 					</label>
+					{#if ocamlBackend === 'wasm'}
+						<label class="select-chip">
+							<span class="material-symbols-outlined">memory</span>
+							<select id="ocaml-binaryen-mode" bind:value={ocamlWasmBinaryenMode}>
+								<option value="fast">Binaryen fast</option>
+								<option value="full">Binaryen full</option>
+							</select>
+						</label>
+					{/if}
 				{/if}
 			</div>
 			{#if loading}
@@ -812,10 +834,12 @@
 		{#if language === 'OCAML'}
 			<p class="hint">
 				OCaml uses the bundled `wasm-of-js-of-ocaml` browser-native toolchain. The backend
-				selector switches between `wasm_of_ocaml` and `js_of_ocaml`. The current playground
-				path focuses on browser compile-and-run for standalone source files. Type into the
-				terminal below and press Enter to send a line; use Ctrl+D or the EOF button while
-				running if the program reads stdin until EOF.
+				selector switches between `wasm_of_ocaml` and `js_of_ocaml`. Binaryen fast is the
+				default low-memory wasm path; Binaryen full runs the original static `wasm-metadce`
+				and `wasm-opt` passes. The current playground path focuses on browser
+				compile-and-run for standalone source files. Type into the terminal below and press
+				Enter to send a line; use Ctrl+D or the EOF button while running if the program reads
+				stdin until EOF.
 			</p>
 		{/if}
 		{#if language === 'ELIXIR'}

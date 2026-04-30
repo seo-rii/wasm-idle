@@ -107,7 +107,8 @@ describe('OCaml sandbox', () => {
 		).resolves.toBe(true);
 		await expect(
 			sandbox.run(code, false, true, undefined, [], {
-				ocamlBackend: 'wasm'
+				ocamlBackend: 'wasm',
+				ocamlWasmBinaryenMode: 'full'
 			})
 		).resolves.toBe(true);
 
@@ -128,6 +129,7 @@ describe('OCaml sandbox', () => {
 				prepare: true,
 				code,
 				target: 'wasm',
+				wasmBinaryenMode: 'fast',
 				log: true
 			})
 		);
@@ -137,6 +139,7 @@ describe('OCaml sandbox', () => {
 				prepare: false,
 				code,
 				target: 'js',
+				wasmBinaryenMode: 'fast',
 				log: true,
 				buffer: expect.any(SharedArrayBuffer)
 			})
@@ -147,6 +150,7 @@ describe('OCaml sandbox', () => {
 				prepare: false,
 				code,
 				target: 'wasm',
+				wasmBinaryenMode: 'full',
 				log: true,
 				buffer: expect.any(SharedArrayBuffer)
 			})

@@ -312,26 +312,54 @@ describe('example route debug actions', () => {
 
 	it('surfaces OCaml through the shared language selector and backend hint', () => {
 		expect(source).toMatch(/ocamlBackend = \$state<OcamlBackend>\('wasm'\),/);
+		expect(source).toMatch(
+			/ocamlWasmBinaryenMode = \$state<OcamlWasmBinaryenMode>\('fast'\),/
+		);
 		expect(source).toMatch(/localStorage\.setItem\('ocamlBackend', ocamlBackend\);/);
 		expect(source).toMatch(
+			/localStorage\.setItem\('ocamlWasmBinaryenMode', ocamlWasmBinaryenMode\);/
+		);
+		expect(source).toMatch(
 			/const storedOcamlBackend = localStorage\.getItem\('ocamlBackend'\);/
+		);
+		expect(source).toMatch(
+			/const storedOcamlWasmBinaryenMode = localStorage\.getItem\('ocamlWasmBinaryenMode'\);/
 		);
 		expect(source).toMatch(
 			/const requestedOcamlBackend = page\.url\.searchParams\.get\('ocamlBackend'\);/
 		);
 		expect(source).toMatch(
+			/const requestedOcamlWasmBinaryenMode =\s+page\.url\.searchParams\.get\('ocamlWasmBinaryenMode'\);/s
+		);
+		expect(source).toMatch(
 			/requestedOcamlBackend === 'js' \|\| requestedOcamlBackend === 'wasm'/
 		);
 		expect(source).toMatch(/storedOcamlBackend === 'js' \|\| storedOcamlBackend === 'wasm'/);
+		expect(source).toMatch(
+			/requestedOcamlWasmBinaryenMode === 'fast' \|\| requestedOcamlWasmBinaryenMode === 'full'/
+		);
+		expect(source).toMatch(
+			/storedOcamlWasmBinaryenMode === 'fast' \|\| storedOcamlWasmBinaryenMode === 'full'/
+		);
 		expect(source).toMatch(/: language === 'OCAML'\s+\? 'ocaml'/);
 		expect(source).toMatch(/ocamlBackend: language === 'OCAML' \? ocamlBackend : undefined/);
+		expect(source).toMatch(
+			/ocamlWasmBinaryenMode:\s+language === 'OCAML' \? ocamlWasmBinaryenMode : undefined/s
+		);
 		expect(source).toMatch(/<select id="ocaml-backend" bind:value=\{ocamlBackend\}>/);
+		expect(source).toMatch(
+			/<select id="ocaml-binaryen-mode" bind:value=\{ocamlWasmBinaryenMode\}>/
+		);
 		expect(source).toMatch(/<option value="wasm">wasm_of_ocaml<\/option>/);
 		expect(source).toMatch(/<option value="js">js_of_ocaml<\/option>/);
+		expect(source).toMatch(/<option value="fast">Binaryen fast<\/option>/);
+		expect(source).toMatch(/<option value="full">Binaryen full<\/option>/);
 		expect(source).toMatch(
 			/OCaml uses the bundled `wasm-of-js-of-ocaml` browser-native toolchain/
 		);
 		expect(source).toMatch(/selector switches between `wasm_of_ocaml` and `js_of_ocaml`/);
+		expect(source).toMatch(/Binaryen fast is the\s+default low-memory wasm path/s);
+		expect(source).toMatch(/Binaryen full runs the original static `wasm-metadce`\s+and `wasm-opt` passes/s);
 		expect(source).toMatch(/Type into the\s+terminal below and press Enter to send a line/s);
 	});
 
