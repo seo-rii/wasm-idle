@@ -78,12 +78,10 @@ function getFilePreloadsFromFs(fs, prefix) {
     }));
 }
 function getToolchainPreloads(command, manifest, packages, runtimePack) {
-    const selectedPackages = command === 'ocamlc' ? packages : manifest.packages;
-    const selectedOcamlLibFiles = command === 'ocamlc'
-        ? manifest.ocamlLibFiles.filter((file) => !file.path.includes('/compiler-libs/') &&
-            !file.path.includes('/ocamldoc/') &&
-            !file.path.includes('/runtime_events/'))
-        : manifest.ocamlLibFiles;
+    const selectedPackages = command === 'ocamlc' ? packages : [];
+    const selectedOcamlLibFiles = manifest.ocamlLibFiles.filter((file) => !file.path.includes('/compiler-libs/') &&
+        !file.path.includes('/ocamldoc/') &&
+        !file.path.includes('/runtime_events/'));
     return [
         ...selectedOcamlLibFiles.map((file) => {
             const packedEntry = runtimePack?.entries.get(file.path);
@@ -144,6 +142,7 @@ export async function runBrowserNativeTool(request) {
     });
     try {
         return await new Promise((resolve, reject) => {
+            const transferPreloadBuffers = request.preloadFiles.flatMap((file) => file.bytes ? [file.bytes] : []);
             const handleMessage = (event) => {
                 const response = event.data;
                 if (!response || response.type !== 'tool-result') {
@@ -175,7 +174,7 @@ export async function runBrowserNativeTool(request) {
                 outputPrefixes: request.outputPrefixes,
                 ...(request.systemBridge ? { systemBridge: request.systemBridge } : {}),
                 ...(request.binaryenTools ? { binaryenTools: request.binaryenTools } : {})
-            });
+            }, transferPreloadBuffers);
         });
     }
     finally {
@@ -211,6 +210,10 @@ export function createBrowserWorkerSystemDispatcher(options) {
         }
         if (commandName === 'js_of_ocaml' || commandName === 'wasm_of_ocaml') {
             env['OCAMLFIND_CONF'] = env['OCAMLFIND_CONF'] || '/static/toolchain/findlib.conf';
+        }
+        if (commandName === 'wasm_of_ocaml') {
+            env['WASM_OF_JS_OF_OCAML_BROWSER_FAST_BINARYEN'] =
+                env['WASM_OF_JS_OF_OCAML_BROWSER_FAST_BINARYEN'] || '1';
         }
         if (!runtimePackEntriesPromise) {
             runtimePackEntriesPromise = (async () => {

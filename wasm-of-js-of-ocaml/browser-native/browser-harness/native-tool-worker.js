@@ -248,16 +248,7 @@ function writeVirtualFiles(runtimeGlobal, files) {
         createFile(file.path, bytesToBinaryString(file.data));
     }
 }
-function loadBinaryenToolSource(runtimeGlobal, toolUrl) {
-    let sourceCache = runtimeGlobal['__binaryen_tool_source_cache'];
-    if (!sourceCache) {
-        sourceCache = new Map();
-        runtimeGlobal['__binaryen_tool_source_cache'] = sourceCache;
-    }
-    const cached = sourceCache.get(toolUrl);
-    if (cached) {
-        return cached;
-    }
+function loadBinaryenToolSource(toolUrl) {
     const xhr = new XMLHttpRequest();
     xhr.open('GET', toolUrl, false);
     xhr.responseType = 'text';
@@ -265,9 +256,7 @@ function loadBinaryenToolSource(runtimeGlobal, toolUrl) {
     if (xhr.status !== 200) {
         throw new Error(`failed to fetch static Binaryen tool: ${toolUrl} (${xhr.status})`);
     }
-    const source = xhr.responseText || '';
-    sourceCache.set(toolUrl, source);
-    return source;
+    return xhr.responseText || '';
 }
 function ensureBinaryenCliDirectory(fs, targetPath) {
     const normalizedPath = normalizePath(targetPath);
@@ -374,6 +363,47 @@ function runBinaryenTool(runtimeGlobal, command, toolUrls) {
             .map((mount) => mount.root)
             .join(', ') || '(none)'}\nroot tmp keys: ${rootMount ? Object.keys(rootMount.content).filter((key) => key.includes('tmp')).slice(0, 20).join(', ') || '(none)' : '(missing root)'}\ninputs: ${parsed.inputPaths.sort().join(', ') || '(none)'}\noutputs: ${parsed.outputPaths.sort().join(', ') || '(none)'}`);
     }
+    const runtimeEnv = runtimeGlobal['jsoo_env'] || {};
+    if (runtimeEnv['WASM_OF_JS_OF_OCAML_BROWSER_FAST_BINARYEN'] === '1' &&
+        (parsed.toolName === 'wasm-metadce' || parsed.toolName === 'wasm-opt')) {
+        const inputWasmPath = parsed.inputPaths.find((filePath) => filePath.endsWith('.wasm')) || '';
+        const outputWasmPath = parsed.outputPaths.find((filePath) => filePath.endsWith('.wasm')) ||
+            parsed.outputPaths[0] ||
+            '';
+        if (!inputWasmPath || !outputWasmPath) {
+            throw new Error(`failed to short-circuit static Binaryen tool: ${parsed.toolName}`);
+        }
+        const inputData = readVirtualFile(runtimeGlobal, inputWasmPath);
+        if (!inputData) {
+            throw new Error(`failed to read Binaryen fast-path input: ${inputWasmPath}`);
+        }
+        writeVirtualFiles(runtimeGlobal, [
+            {
+                path: outputWasmPath,
+                data: inputData
+            }
+        ]);
+        if (parsed.stdoutRedirect && parsed.stdoutRedirect !== '/dev/null') {
+            writeVirtualFiles(runtimeGlobal, [
+                {
+                    path: parsed.stdoutRedirect,
+                    data: new Uint8Array()
+                }
+            ]);
+        }
+        if (parsed.stderrRedirect && parsed.stderrRedirect !== '/dev/null') {
+            writeVirtualFiles(runtimeGlobal, [
+                {
+                    path: parsed.stderrRedirect,
+                    data: new Uint8Array()
+                }
+            ]);
+        }
+        if (isBinaryenBridgeDebugEnabled(runtimeGlobal)) {
+            pushBinaryenBridgeMessage(runtimeGlobal, `binaryen fast path: ${parsed.toolName} copied ${inputWasmPath} to ${outputWasmPath}`);
+        }
+        return 0;
+    }
     const originalModule = runtimeGlobal['Module'];
     const originalBinaryenCliRuntime = runtimeGlobal['__binaryen_cli_runtime'];
     const originalBinaryenCliQuit = runtimeGlobal['__binaryen_cli_quit'];
@@ -396,7 +426,7 @@ function runBinaryenTool(runtimeGlobal, command, toolUrls) {
             runtimeGlobal['__binaryen_cli_quit'] = (status) => {
                 throw new ToolExit(status);
             };
-            new Function(`${loadBinaryenToolSource(runtimeGlobal, toolUrl)}\n//# sourceURL=${toolUrl}`)();
+            new Function(`${loadBinaryenToolSource(toolUrl)}\n//# sourceURL=${toolUrl}`)();
             const cliRuntime = runtimeGlobal['__binaryen_cli_runtime'];
             const fs = cliRuntime?.FS;
             if (!fs || typeof fs.writeFile !== 'function') {
@@ -519,6 +549,13 @@ function runBinaryenTool(runtimeGlobal, command, toolUrls) {
         return exitCode;
     }
     finally {
+        const activeBinaryenCliRuntime = runtimeGlobal['__binaryen_cli_runtime'];
+        try {
+            activeBinaryenCliRuntime?.FS?.quit?.();
+        }
+        catch {
+            // Binaryen's Emscripten FS may not expose a teardown hook in every build.
+        }
         if (typeof originalModule === 'undefined') {
             delete runtimeGlobal['Module'];
         }

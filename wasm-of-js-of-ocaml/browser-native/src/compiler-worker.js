@@ -50,6 +50,7 @@ export function createCompileHandler(options = {}) {
         const entryFileName = entry.split('/').at(-1) || entry;
         const entryStem = entryFileName.replace(/\.(ml|mli)$/, '') || 'program';
         const effectsMode = request.effectsMode || 'cps';
+        const wasmBinaryenMode = request.wasmBinaryenMode || 'fast';
         fs.mkdirp('/workspace');
         fs.mkdirp('/workspace/_build');
         for (const [filePath, source] of normalizedEntries) {
@@ -119,6 +120,7 @@ export function createCompileHandler(options = {}) {
                 target: request.target,
                 packages,
                 effectsMode,
+                wasmBinaryenMode,
                 sourcemap: !!request.sourcemap,
                 toolchainRoot,
                 commands: compilePlan
@@ -142,7 +144,8 @@ export function createCompileHandler(options = {}) {
                 cwd: command.cwd,
                 env: {
                     TOOLCHAIN_ROOT: toolchainRoot,
-                    WASM_OF_JS_OF_OCAML_EFFECTS: effectsMode
+                    WASM_OF_JS_OF_OCAML_EFFECTS: effectsMode,
+                    WASM_OF_JS_OF_OCAML_BROWSER_FAST_BINARYEN: wasmBinaryenMode === 'full' ? '0' : '1'
                 },
                 fs
             });
