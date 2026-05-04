@@ -6,6 +6,7 @@ import {
 	createClangdCompileFlags,
 	normalizeClangdBaseUrl
 } from '$lib/clangd/config';
+import { writeGccCompatibilityHeaders } from '$lib/clang/gccCompat';
 import { JsonStream } from '$lib/clangd/jsonStream';
 import {
 	configureWorkerRuntimeAssets,
@@ -133,6 +134,7 @@ self.addEventListener('message', async (event) => {
 		});
 
 		clangdRuntime.FS.mkdirTree(CLANGD_WORKSPACE_PATH);
+		writeGccCompatibilityHeaders(clangdRuntime.FS, '/usr');
 		syncWorkspaceFile(CLANGD_CPP_FILE_PATH);
 		clangdRuntime.FS.writeFile(
 			`${CLANGD_WORKSPACE_PATH}/.clangd`,

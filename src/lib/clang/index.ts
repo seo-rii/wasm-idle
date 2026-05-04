@@ -9,6 +9,7 @@ import { MemFS, untar } from '$lib/clang/memory';
 import { green, yellow, normal } from '$lib/clang/color';
 import { compile, readBuffer } from '$lib/clang/wasm';
 import { clangUrl, lldUrl, rootUrl } from '$lib/clang/url';
+import { installGccCompatibilityHeaders } from '$lib/clang/gccCompat';
 import { derived, type Writable, writable } from 'svelte/store';
 
 const clangCommonArgs = [
@@ -237,12 +238,13 @@ export default class Clang {
 		});
 		this.getModule(clangUrl(this.path), this.progress.clang);
 		this.getModule(lldUrl(this.path), this.progress.lld);
-		this.ready = this.memfs.ready.then(() =>
-			this.hostLogAsync(
+		this.ready = this.memfs.ready.then(async () => {
+			await this.hostLogAsync(
 				`Untarring ${rootUrl(this.path)}`,
 				readBuffer(rootUrl(this.path)).then((buffer) => untar(buffer, this.memfs))
-			)
-		);
+			);
+			installGccCompatibilityHeaders(this.memfs);
+		});
 	}
 
 	hostLog(message: string) {
