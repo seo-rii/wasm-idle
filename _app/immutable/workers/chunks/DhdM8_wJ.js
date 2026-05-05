@@ -339,8 +339,386 @@ using cc_hash_table = typename detail::hash_table_selector<
 } // namespace __gnu_pbds
 
 #endif
-`,er=[{path:`include/c++/v1/ext/pb_ds/tree_policy.hpp`,contents:Qn},{path:`include/c++/v1/ext/pb_ds/assoc_container.hpp`,contents:$n}];function tr(e){e.addDirectory(`include/c++/v1/ext/pb_ds`);for(let t of er)e.addFile(t.path,t.contents)}Array.isArray,Array.prototype.indexOf,Array.prototype.includes,Array.from,Array.prototype;const nr=()=>{};function rr(e){for(var t=0;t<e.length;t++)e[t]()}new class extends Error{name=`StaleReactionError`;message="The reaction that called `getAbortSignal()` was re-run or destroyed"},globalThis.document?.contentType;function ir(e,t){return e==e?e!==t||typeof e==`object`&&!!e||typeof e==`function`:t==t}function ar(e,t,n){if(e==null)return t(void 0),n&&n(void 0),nr;let r=dr(()=>e.subscribe(t,n));return r.unsubscribe?()=>r.unsubscribe():r}const or=[];function sr(e,t){return{subscribe:cr(e,t).subscribe}}function cr(e,t=nr){let n=null,r=new Set;function i(t){if(ir(e,t)&&(e=t,n)){let t=!or.length;for(let t of r)t[1](),or.push(t,e);if(t){for(let e=0;e<or.length;e+=2)or[e][0](or[e+1]);or.length=0}}}function a(t){i(t(e))}function o(o,s=nr){let c=[o,s];return r.add(c),r.size===1&&(n=t(i,a)||nr),o(e),()=>{r.delete(c),r.size===0&&n&&(n(),n=null)}}return{set:i,update:a,subscribe:o}}function lr(e,t,n){let r=!Array.isArray(e),i=r?[e]:e;if(!i.every(Boolean))throw Error(`derived() expects stores as input, got a falsy value`);let a=t.length<2;return sr(n,(e,n)=>{let o=!1,s=[],c=0,l=nr,u=()=>{if(c)return;l();let i=t(r?s[0]:s,e,n);a?e(i):l=typeof i==`function`?i:nr},d=i.map((e,t)=>ar(e,e=>{s[t]=e,c&=~(1<<t),o&&u()},()=>{c|=1<<t}));return o=!0,u(),function(){rr(d),l(),o=!1}})}let ur=!1;function dr(e){var t=ur;try{return ur=!0,e()}finally{ur=t}}const fr=[`-disable-free`,`-isysroot`,`/`,`-internal-isystem`,`/include/c++/v1`,`-internal-isystem`,`/include`,`-internal-isystem`,`/lib/clang/8.0.1/include`,`-ferror-limit`,`19`,`-fmessage-length`,`80`,`-fcolor-diagnostics`],pr=`-std=gnu++2a`;function mr(e){return(e||``).trim().toUpperCase().replaceAll(/\s+/g,``)}function hr(e){switch(mr(e)){case`03`:case`CPP03`:case`C++03`:case`GNU++03`:case`GNUC++03`:return`-std=gnu++03`;case`11`:case`CPP11`:case`C++11`:case`GNU++11`:case`GNUC++11`:return`-std=gnu++11`;case`14`:case`CPP14`:case`C++14`:case`GNU++14`:case`GNUC++14`:return`-std=gnu++14`;case`17`:case`CPP17`:case`C++17`:case`GNU++17`:case`GNUC++17`:return`-std=gnu++17`;case`20`:case`23`:case`26`:case`CPP20`:case`CPP23`:case`CPP26`:case`C++20`:case`C++23`:case`C++26`:case`GNU++20`:case`GNU++23`:case`GNU++26`:case`GNUC++20`:case`GNUC++23`:case`GNUC++26`:return pr;default:return pr}}function gr(e){switch(mr(e)){case`99`:case`C99`:case`GNU99`:case`GNUC99`:return`-std=gnu99`;case`11`:case`C11`:case`GNU11`:case`GNUC11`:return`-std=gnu11`;case`17`:case`18`:case`C17`:case`C18`:case`GNU17`:case`GNU18`:case`GNUC17`:case`GNUC18`:return`-std=gnu17`;default:return`-std=gnu11`}}function _r(e,t){return e===`C`?{languageArg:`c`,standardArg:gr(t.cVersion)}:{languageArg:`c++`,standardArg:hr(t.cppVersion)}}const vr=e=>{let t=encodeURIComponent(e),n=``;for(let e=0;e<t.length;){let r=t[e];if(e+=1,r==`%`){let r=t.substring(e,e+=2);r&&(n+=String.fromCharCode(parseInt(r,16)))}else n+=r}return n};var yr=class{ready;memfs;stdout;moduleCache;showTiming;log;debug=!1;debugBreakpoints=new Set;debugPauseOnEntry=!1;debugBuffer;debugInterruptBuffer;debugWatchBuffer;debugWatchResultBuffer;onDebugEvent;debugVariableMetadata={};debugGlobalMetadata=[];debugFunctionMetadata={};lastBuildKey=``;path;wasm;traceStartedAt=0;progress={clang:cr(0),lld:cr(0),memfs:cr(0)};constructor(e){this.moduleCache={},this.stdout=e.stdout,this.showTiming=e.showTiming||!1,this.log=e.log||!1,this.path=e.path,this.onDebugEvent=e.onDebugEvent,this.memfs=new jn({stdout:this.stdout,stdin:e.stdin,path:this.path,progress:this.progress.memfs,trace:e=>this.trace(e)}),lr([this.progress.clang,this.progress.lld,this.progress.memfs],([e,t,n])=>(e+t+n)/3).subscribe(t=>{e.progress(t)}),this.getModule(Dn(this.path),this.progress.clang),this.getModule(On(this.path),this.progress.lld),this.ready=this.memfs.ready.then(async()=>{await this.hostLogAsync(`Untarring ${kn(this.path)}`,Sn(kn(this.path)).then(e=>Ln(e,this.memfs))),tr(this.memfs)})}hostLog(e){if(!this.log)return;let t=`[1;93m>${Zn} `;this.stdout(`${t}${e}`)}beginTrace(e){this.debug=e,this.traceStartedAt=Date.now()}trace(e){if(!this.debug||!this.log)return;let t=Date.now()-this.traceStartedAt;this.stdout(`\x1b[2m[debug +${t}ms] ${e}\x1b[0m\n`)}async hostLogAsync(e,t){let n=+new Date;this.hostLog(`${e}...`);let r=await t,i=+new Date;return this.log&&this.stdout(` done.`),this.showTiming&&this.stdout(` ${Xn}(${i-n}ms)${Zn}\n`),this.log&&this.stdout(`
-`),r}async getModule(e,t){if(this.moduleCache[e])return this.moduleCache[e];let n=await this.hostLogAsync(`Fetching and compiling ${e}`,Cn(e,t));return this.moduleCache[e]=n,n}async compile(e){let t=e.input,n=e.code,r=e.obj,i=e.language===`C`?`C`:`CPP`,a=e.compileArgs??e.args??[],{languageArg:o,standardArg:s}=_r(i,e),c=!!e.debug,l=c?`0`:e.opt||`2`;if(c){let e=n.split(`
+`,er=String.raw`#ifndef WASM_CLANG_EXT_PB_DS_HASH_POLICY_HPP
+#define WASM_CLANG_EXT_PB_DS_HASH_POLICY_HPP
+
+#include <cstddef>
+
+namespace __gnu_pbds {
+
+template <typename Size_Type = std::size_t>
+class direct_mask_range_hashing {
+public:
+	typedef Size_Type size_type;
+};
+
+template <typename Size_Type = std::size_t>
+class direct_mod_range_hashing {
+public:
+	typedef Size_Type size_type;
+};
+
+template <typename Size_Type = std::size_t>
+class linear_probe_fn {
+public:
+	typedef Size_Type size_type;
+};
+
+template <typename Size_Type = std::size_t>
+class quadratic_probe_fn {
+public:
+	typedef Size_Type size_type;
+};
+
+class hash_exponential_size_policy {};
+class hash_prime_size_policy {};
+
+template <bool External_Load_Access = false, typename Size_Type = std::size_t>
+class hash_load_check_resize_trigger {
+public:
+	typedef Size_Type size_type;
+	explicit hash_load_check_resize_trigger(float = 0.125, float = 0.5) {}
+};
+
+template <bool External_Load_Access = false, typename Size_Type = std::size_t>
+class cc_hash_max_collision_check_resize_trigger {
+public:
+	typedef Size_Type size_type;
+	explicit cc_hash_max_collision_check_resize_trigger(float = 0.5) {}
+};
+
+template <
+	typename Size_Policy = hash_exponential_size_policy,
+	typename Trigger_Policy = hash_load_check_resize_trigger<>,
+	bool External_Size_Access = false,
+	typename Size_Type = std::size_t
+>
+class hash_standard_resize_policy {
+public:
+	typedef Size_Type size_type;
+	hash_standard_resize_policy() = default;
+	explicit hash_standard_resize_policy(const Size_Policy&) {}
+	hash_standard_resize_policy(const Size_Policy&, const Trigger_Policy&) {}
+};
+
+} // namespace __gnu_pbds
+
+#endif
+`,tr=String.raw`#ifndef WASM_CLANG_EXT_PB_DS_PRIORITY_QUEUE_HPP
+#define WASM_CLANG_EXT_PB_DS_PRIORITY_QUEUE_HPP
+
+#include <algorithm>
+#include <cstddef>
+#include <functional>
+#include <memory>
+#include <queue>
+#include <utility>
+#include <vector>
+
+namespace __gnu_pbds {
+
+struct pairing_heap_tag {};
+struct binary_heap_tag {};
+struct binomial_heap_tag {};
+struct rc_binomial_heap_tag {};
+struct thin_heap_tag {};
+
+namespace detail {
+
+template <typename Allocator, typename Value>
+struct priority_queue_rebind_allocator {
+	typedef typename std::allocator_traits<Allocator>::template rebind_alloc<Value> type;
+};
+
+} // namespace detail
+
+template <
+	typename Value_Type,
+	typename Cmp_Fn = std::less<Value_Type>,
+	typename Tag = pairing_heap_tag,
+	typename Allocator = std::allocator<char>
+>
+class priority_queue {
+public:
+	typedef Value_Type value_type;
+	typedef Cmp_Fn cmp_fn;
+	typedef Tag container_category;
+	typedef Allocator allocator_type;
+	typedef std::size_t size_type;
+	typedef value_type& reference;
+	typedef const value_type& const_reference;
+
+private:
+	typedef typename detail::priority_queue_rebind_allocator<Allocator, value_type>::type value_allocator_type;
+	typedef std::vector<value_type, value_allocator_type> container_type;
+
+public:
+	typedef typename container_type::iterator point_iterator;
+	typedef typename container_type::const_iterator const_point_iterator;
+
+	priority_queue() : values_(), compare_() {
+		std::make_heap(values_.begin(), values_.end(), compare_);
+	}
+
+	explicit priority_queue(const Cmp_Fn& compare) : values_(), compare_(compare) {
+		std::make_heap(values_.begin(), values_.end(), compare_);
+	}
+
+	template <typename InputIt>
+	priority_queue(InputIt first, InputIt last) : values_(first, last), compare_() {
+		std::make_heap(values_.begin(), values_.end(), compare_);
+	}
+
+	bool empty() const { return values_.empty(); }
+	size_type size() const { return values_.size(); }
+	const_reference top() const { return values_.front(); }
+	void clear() { values_.clear(); }
+	void swap(priority_queue& other) {
+		values_.swap(other.values_);
+		std::swap(compare_, other.compare_);
+	}
+
+	point_iterator push(const_reference value) {
+		values_.push_back(value);
+		std::push_heap(values_.begin(), values_.end(), compare_);
+		return values_.empty() ? values_.end() : values_.begin();
+	}
+
+	void pop() {
+		std::pop_heap(values_.begin(), values_.end(), compare_);
+		values_.pop_back();
+	}
+
+	void modify(point_iterator position, const_reference value) {
+		if (position == values_.end()) return;
+		*position = value;
+		std::make_heap(values_.begin(), values_.end(), compare_);
+	}
+
+	void erase(point_iterator position) {
+		if (position == values_.end()) return;
+		values_.erase(position);
+		std::make_heap(values_.begin(), values_.end(), compare_);
+	}
+
+	void join(priority_queue& other) {
+		values_.insert(values_.end(), other.values_.begin(), other.values_.end());
+		other.values_.clear();
+		std::make_heap(values_.begin(), values_.end(), compare_);
+	}
+
+private:
+	container_type values_;
+	Cmp_Fn compare_;
+};
+
+} // namespace __gnu_pbds
+
+#endif
+`,nr=String.raw`#ifndef WASM_CLANG_EXT_ROPE
+#define WASM_CLANG_EXT_ROPE
+
+#include <algorithm>
+#include <cstddef>
+#include <iosfwd>
+#include <iterator>
+#include <memory>
+#include <ostream>
+#include <string>
+#include <utility>
+
+namespace __gnu_cxx {
+
+template <typename CharT, typename Alloc = std::allocator<CharT>>
+class rope {
+public:
+	typedef CharT value_type;
+	typedef Alloc allocator_type;
+	typedef std::basic_string<CharT, std::char_traits<CharT>, Alloc> string_type;
+	typedef typename string_type::traits_type traits_type;
+	typedef typename string_type::size_type size_type;
+	typedef typename string_type::difference_type difference_type;
+	typedef typename string_type::reference reference;
+	typedef typename string_type::const_reference const_reference;
+	typedef typename string_type::iterator iterator;
+	typedef typename string_type::const_iterator const_iterator;
+
+	static const size_type npos = string_type::npos;
+
+	rope() = default;
+	rope(const rope&) = default;
+	rope(rope&&) = default;
+	rope& operator=(const rope&) = default;
+	rope& operator=(rope&&) = default;
+
+	rope(const CharT* value) : data_(value ? value : empty_c_str()) {}
+	rope(const CharT* value, size_type count) : data_(value, count) {}
+	rope(size_type count, CharT value) : data_(count, value) {}
+	rope(const string_type& value) : data_(value) {}
+	rope(string_type&& value) : data_(std::move(value)) {}
+
+	template <typename InputIt>
+	rope(InputIt first, InputIt last) : data_(first, last) {}
+
+	bool empty() const { return data_.empty(); }
+	size_type size() const { return data_.size(); }
+	size_type length() const { return data_.length(); }
+	size_type max_size() const { return data_.max_size(); }
+	void clear() { data_.clear(); }
+
+	const CharT* c_str() const { return data_.c_str(); }
+	const string_type& str() const { return data_; }
+
+	iterator begin() { return data_.begin(); }
+	const_iterator begin() const { return data_.begin(); }
+	const_iterator cbegin() const { return data_.cbegin(); }
+	iterator end() { return data_.end(); }
+	const_iterator end() const { return data_.end(); }
+	const_iterator cend() const { return data_.cend(); }
+
+	reference operator[](size_type index) { return data_[index]; }
+	const_reference operator[](size_type index) const { return data_[index]; }
+	reference at(size_type index) { return data_.at(index); }
+	const_reference at(size_type index) const { return data_.at(index); }
+	reference mutable_reference_at(size_type index) { return data_.at(index); }
+
+	void push_back(CharT value) { data_.push_back(value); }
+	void pop_back() { data_.pop_back(); }
+
+	rope& append(const rope& value) {
+		data_.append(value.data_);
+		return *this;
+	}
+
+	rope& append(const CharT* value) {
+		data_.append(value ? value : empty_c_str());
+		return *this;
+	}
+
+	rope& append(const CharT* value, size_type count) {
+		data_.append(value, count);
+		return *this;
+	}
+
+	rope& append(size_type count, CharT value) {
+		data_.append(count, value);
+		return *this;
+	}
+
+	rope& insert(size_type position, const rope& value) {
+		data_.insert(position, value.data_);
+		return *this;
+	}
+
+	rope& insert(size_type position, const CharT* value) {
+		data_.insert(position, value ? value : empty_c_str());
+		return *this;
+	}
+
+	rope& insert(size_type position, const CharT* value, size_type count) {
+		data_.insert(position, value, count);
+		return *this;
+	}
+
+	rope& insert(size_type position, size_type count, CharT value) {
+		data_.insert(position, count, value);
+		return *this;
+	}
+
+	rope& erase(size_type position = 0, size_type count = npos) {
+		data_.erase(position, count);
+		return *this;
+	}
+
+	rope& replace(size_type position, size_type count, const rope& value) {
+		data_.replace(position, count, value.data_);
+		return *this;
+	}
+
+	rope& replace(size_type position, size_type count, const CharT* value) {
+		data_.replace(position, count, value ? value : empty_c_str());
+		return *this;
+	}
+
+	rope substr(size_type position = 0, size_type count = npos) const {
+		return rope(data_.substr(position, count));
+	}
+
+	size_type copy(size_type position, size_type count, CharT* target) const {
+		if (position > data_.size()) return 0;
+		const size_type copied = std::min(count, data_.size() - position);
+		traits_type::copy(target, data_.data() + position, copied);
+		return copied;
+	}
+
+	int compare(const rope& value) const { return data_.compare(value.data_); }
+
+	rope& operator+=(const rope& value) { return append(value); }
+	rope& operator+=(const CharT* value) { return append(value); }
+	rope& operator+=(CharT value) {
+		push_back(value);
+		return *this;
+	}
+
+private:
+	static const CharT* empty_c_str() {
+		static const CharT empty[1] = {};
+		return empty;
+	}
+
+	string_type data_;
+};
+
+template <typename CharT, typename Alloc>
+rope<CharT, Alloc> operator+(rope<CharT, Alloc> left, const rope<CharT, Alloc>& right) {
+	left += right;
+	return left;
+}
+
+template <typename CharT, typename Alloc>
+bool operator==(const rope<CharT, Alloc>& left, const rope<CharT, Alloc>& right) {
+	return left.compare(right) == 0;
+}
+
+template <typename CharT, typename Alloc>
+bool operator!=(const rope<CharT, Alloc>& left, const rope<CharT, Alloc>& right) {
+	return !(left == right);
+}
+
+template <typename CharT, typename Alloc>
+bool operator<(const rope<CharT, Alloc>& left, const rope<CharT, Alloc>& right) {
+	return left.compare(right) < 0;
+}
+
+template <typename CharT, typename Alloc>
+std::basic_ostream<CharT>& operator<<(
+	std::basic_ostream<CharT>& output,
+	const rope<CharT, Alloc>& value
+) {
+	return output << value.str();
+}
+
+typedef rope<char> crope;
+typedef rope<wchar_t> wrope;
+
+} // namespace __gnu_cxx
+
+#endif
+`,rr=[{path:`include/bits/extc++.h`,contents:String.raw`#ifndef WASM_CLANG_BITS_EXTCXX_H
+#define WASM_CLANG_BITS_EXTCXX_H
+
+#include <bits/stdc++.h>
+#include <ext/hash_map>
+#include <ext/hash_set>
+#include <ext/rope>
+#include <ext/pb_ds/assoc_container.hpp>
+#include <ext/pb_ds/hash_policy.hpp>
+#include <ext/pb_ds/priority_queue.hpp>
+#include <ext/pb_ds/tree_policy.hpp>
+
+#endif
+`},{path:`include/c++/v1/ext/rope`,contents:nr},{path:`include/c++/v1/ext/pb_ds/tree_policy.hpp`,contents:Qn},{path:`include/c++/v1/ext/pb_ds/assoc_container.hpp`,contents:$n},{path:`include/c++/v1/ext/pb_ds/hash_policy.hpp`,contents:er},{path:`include/c++/v1/ext/pb_ds/priority_queue.hpp`,contents:tr}];function ir(e){e.addDirectory(`include/c++/v1/ext/pb_ds`);for(let t of rr)e.addFile(t.path,t.contents)}Array.isArray,Array.prototype.indexOf,Array.prototype.includes,Array.from,Array.prototype;const ar=()=>{};function or(e){for(var t=0;t<e.length;t++)e[t]()}new class extends Error{name=`StaleReactionError`;message="The reaction that called `getAbortSignal()` was re-run or destroyed"},globalThis.document?.contentType;function sr(e,t){return e==e?e!==t||typeof e==`object`&&!!e||typeof e==`function`:t==t}function cr(e,t,n){if(e==null)return t(void 0),n&&n(void 0),ar;let r=mr(()=>e.subscribe(t,n));return r.unsubscribe?()=>r.unsubscribe():r}const lr=[];function ur(e,t){return{subscribe:dr(e,t).subscribe}}function dr(e,t=ar){let n=null,r=new Set;function i(t){if(sr(e,t)&&(e=t,n)){let t=!lr.length;for(let t of r)t[1](),lr.push(t,e);if(t){for(let e=0;e<lr.length;e+=2)lr[e][0](lr[e+1]);lr.length=0}}}function a(t){i(t(e))}function o(o,s=ar){let c=[o,s];return r.add(c),r.size===1&&(n=t(i,a)||ar),o(e),()=>{r.delete(c),r.size===0&&n&&(n(),n=null)}}return{set:i,update:a,subscribe:o}}function fr(e,t,n){let r=!Array.isArray(e),i=r?[e]:e;if(!i.every(Boolean))throw Error(`derived() expects stores as input, got a falsy value`);let a=t.length<2;return ur(n,(e,n)=>{let o=!1,s=[],c=0,l=ar,u=()=>{if(c)return;l();let i=t(r?s[0]:s,e,n);a?e(i):l=typeof i==`function`?i:ar},d=i.map((e,t)=>cr(e,e=>{s[t]=e,c&=~(1<<t),o&&u()},()=>{c|=1<<t}));return o=!0,u(),function(){or(d),l(),o=!1}})}let pr=!1;function mr(e){var t=pr;try{return pr=!0,e()}finally{pr=t}}const hr=[`-disable-free`,`-isysroot`,`/`,`-internal-isystem`,`/include/c++/v1`,`-internal-isystem`,`/include`,`-internal-isystem`,`/lib/clang/8.0.1/include`,`-ferror-limit`,`19`,`-fmessage-length`,`80`,`-fcolor-diagnostics`],gr=`-std=gnu++2a`;function _r(e){return(e||``).trim().toUpperCase().replaceAll(/\s+/g,``)}function vr(e){switch(_r(e)){case`03`:case`CPP03`:case`C++03`:case`GNU++03`:case`GNUC++03`:return`-std=gnu++03`;case`11`:case`CPP11`:case`C++11`:case`GNU++11`:case`GNUC++11`:return`-std=gnu++11`;case`14`:case`CPP14`:case`C++14`:case`GNU++14`:case`GNUC++14`:return`-std=gnu++14`;case`17`:case`CPP17`:case`C++17`:case`GNU++17`:case`GNUC++17`:return`-std=gnu++17`;case`20`:case`23`:case`26`:case`CPP20`:case`CPP23`:case`CPP26`:case`C++20`:case`C++23`:case`C++26`:case`GNU++20`:case`GNU++23`:case`GNU++26`:case`GNUC++20`:case`GNUC++23`:case`GNUC++26`:return gr;default:return gr}}function yr(e){switch(_r(e)){case`99`:case`C99`:case`GNU99`:case`GNUC99`:return`-std=gnu99`;case`11`:case`C11`:case`GNU11`:case`GNUC11`:return`-std=gnu11`;case`17`:case`18`:case`C17`:case`C18`:case`GNU17`:case`GNU18`:case`GNUC17`:case`GNUC18`:return`-std=gnu17`;default:return`-std=gnu11`}}function br(e,t){return e===`C`?{languageArg:`c`,standardArg:yr(t.cVersion)}:{languageArg:`c++`,standardArg:vr(t.cppVersion)}}const xr=e=>{let t=encodeURIComponent(e),n=``;for(let e=0;e<t.length;){let r=t[e];if(e+=1,r==`%`){let r=t.substring(e,e+=2);r&&(n+=String.fromCharCode(parseInt(r,16)))}else n+=r}return n};var Sr=class{ready;memfs;stdout;moduleCache;showTiming;log;debug=!1;debugBreakpoints=new Set;debugPauseOnEntry=!1;debugBuffer;debugInterruptBuffer;debugWatchBuffer;debugWatchResultBuffer;onDebugEvent;debugVariableMetadata={};debugGlobalMetadata=[];debugFunctionMetadata={};lastBuildKey=``;path;wasm;traceStartedAt=0;progress={clang:dr(0),lld:dr(0),memfs:dr(0)};constructor(e){this.moduleCache={},this.stdout=e.stdout,this.showTiming=e.showTiming||!1,this.log=e.log||!1,this.path=e.path,this.onDebugEvent=e.onDebugEvent,this.memfs=new jn({stdout:this.stdout,stdin:e.stdin,path:this.path,progress:this.progress.memfs,trace:e=>this.trace(e)}),fr([this.progress.clang,this.progress.lld,this.progress.memfs],([e,t,n])=>(e+t+n)/3).subscribe(t=>{e.progress(t)}),this.getModule(Dn(this.path),this.progress.clang),this.getModule(On(this.path),this.progress.lld),this.ready=this.memfs.ready.then(async()=>{await this.hostLogAsync(`Untarring ${kn(this.path)}`,Sn(kn(this.path)).then(e=>Ln(e,this.memfs))),ir(this.memfs)})}hostLog(e){if(!this.log)return;let t=`[1;93m>${Zn} `;this.stdout(`${t}${e}`)}beginTrace(e){this.debug=e,this.traceStartedAt=Date.now()}trace(e){if(!this.debug||!this.log)return;let t=Date.now()-this.traceStartedAt;this.stdout(`\x1b[2m[debug +${t}ms] ${e}\x1b[0m\n`)}async hostLogAsync(e,t){let n=+new Date;this.hostLog(`${e}...`);let r=await t,i=+new Date;return this.log&&this.stdout(` done.`),this.showTiming&&this.stdout(` ${Xn}(${i-n}ms)${Zn}\n`),this.log&&this.stdout(`
+`),r}async getModule(e,t){if(this.moduleCache[e])return this.moduleCache[e];let n=await this.hostLogAsync(`Fetching and compiling ${e}`,Cn(e,t));return this.moduleCache[e]=n,n}async compile(e){let t=e.input,n=e.code,r=e.obj,i=e.language===`C`?`C`:`CPP`,a=e.compileArgs??e.args??[],{languageArg:o,standardArg:s}=br(i,e),c=!!e.debug,l=c?`0`:e.opt||`2`;if(c){let e=n.split(`
 `),t=0,r=0,i=0,a=1,o=1,s=new Map,c=new Map,l=new Map,u=!1,d,f=new Map,p=``,m=[],h=!1;for(let t of e){let e=t;if(h){let t=e.indexOf(`*/`);if(t===-1)continue;e=e.slice(t+2),h=!1}let n=e.indexOf(`/*`);if(n!==-1){let t=e.indexOf(`*/`,n+2);t===-1?(h=!0,e=e.slice(0,n)):e=e.slice(0,n)+e.slice(t+2)}let r=e.indexOf(`//`);r!==-1&&(e=e.slice(0,r));let i=e.trim();if(!p){let e=i.match(/^struct\s+([A-Za-z_]\w*)\s*\{$/);e?.[1]&&(p=e[1],m=[]);continue}if(i===`};`){let e=0,t=1,n=[];for(let r of m){let i=r.kind===`double`?8:r.kind===`bool`||r.kind===`char`?1:4;e%i!==0&&(e+=i-e%i),n.push({name:r.name,kind:r.kind,offset:e}),e+=i,t=Math.max(t,i)}e%t!==0&&(e+=t-e%t),f.set(p,{fields:n,size:Math.max(e,1)}),p=``,m=[];continue}let a=i.match(/^(?:const\s+)?(?:(?:unsigned|signed)\s+)?(?:(?:short|long long|long)\s+)?(int|float|double|bool|char)\s+(.+);$/);if(a)for(let e of a[2].split(`,`)){let t=e.split(`=`)[0]?.trim()||``;if(!t||/[*&\[]/.test(t))continue;let n=t.match(/([A-Za-z_]\w*)\s*$/)?.[1];n&&m.push({name:n,kind:a[1]})}}this.debugVariableMetadata={},this.debugGlobalMetadata=[],this.debugFunctionMetadata={};let g=[],_=[`#include <cstdio>`,`#include <iostream>`,`#include <map>`,`#include <set>`,`#include <string>`,`#include <type_traits>`,`#include <vector>`,`extern "C" __attribute__((import_module("env"), import_name("__wasm_idle_debug_enter"))) void __wasm_idle_debug_enter(int functionId, int line);`,`extern "C" __attribute__((import_module("env"), import_name("__wasm_idle_debug_leave"))) void __wasm_idle_debug_leave(int functionId);`,`extern "C" __attribute__((import_module("env"), import_name("__wasm_idle_debug_value_num"))) void __wasm_idle_debug_value_num(int functionId, int slot, double value);`,`extern "C" __attribute__((import_module("env"), import_name("__wasm_idle_debug_value_bool"))) void __wasm_idle_debug_value_bool(int functionId, int slot, int value);`,`extern "C" __attribute__((import_module("env"), import_name("__wasm_idle_debug_value_addr"))) void __wasm_idle_debug_value_addr(int functionId, int slot, int value);`,`extern "C" __attribute__((import_module("env"), import_name("__wasm_idle_debug_value_text"))) void __wasm_idle_debug_value_text(int functionId, int slot, const char* ptr, int len);`,`template <typename T>`,`static inline std::string __wasm_idle_debug_format_value(const T& value) {`,`    if constexpr (std::is_same_v<T, bool>) return value ? "true" : "false";`,`    else if constexpr (std::is_same_v<T, char>) return std::string("'") + value + "'";`,`    else if constexpr (std::is_same_v<T, signed char> || std::is_same_v<T, unsigned char>) return std::to_string((int)value);`,`    else if constexpr (std::is_integral_v<T> || std::is_floating_point_v<T>) return std::to_string(value);`,`    else return "?";`,`}`,`template <typename T>`,`static inline void __wasm_idle_debug_emit_vector(int functionId, int slot, const std::vector<T>& values) {`,`    std::string text = "[";`,`    int count = 0;`,`    for (const auto& value : values) {`,`        if (count > 0) text += ", ";`,`        if (count >= 8) { text += "..."; break; }`,`        text += __wasm_idle_debug_format_value(value);`,`        count += 1;`,`    }`,`    text += "]";`,`    __wasm_idle_debug_value_text(functionId, slot, text.c_str(), (int)text.size());`,`}`,`template <typename T>`,`static inline void __wasm_idle_debug_emit_set(int functionId, int slot, const std::set<T>& values) {`,`    std::string text = "{";`,`    int count = 0;`,`    for (const auto& value : values) {`,`        if (count > 0) text += ", ";`,`        if (count >= 8) { text += "..."; break; }`,`        text += __wasm_idle_debug_format_value(value);`,`        count += 1;`,`    }`,`    text += "}";`,`    __wasm_idle_debug_value_text(functionId, slot, text.c_str(), (int)text.size());`,`}`,`template <typename K, typename V>`,`static inline void __wasm_idle_debug_emit_map(int functionId, int slot, const std::map<K, V>& values) {`,`    std::string text = "{";`,`    int count = 0;`,`    for (const auto& entry : values) {`,`        if (count > 0) text += ", ";`,`        if (count >= 8) { text += "..."; break; }`,`        text += __wasm_idle_debug_format_value(entry.first);`,`        text += ": ";`,`        text += __wasm_idle_debug_format_value(entry.second);`,`        count += 1;`,`    }`,`    text += "}";`,`    __wasm_idle_debug_value_text(functionId, slot, text.c_str(), (int)text.size());`,`}`,`extern "C" __attribute__((import_module("env"), import_name("__wasm_idle_debug_line"))) void __wasm_idle_debug_line(int functionId, int line);`];for(let n=0;n<e.length;n+=1){let p=e[n],m=p.match(/^\s*/)?.[0]||``,h=p,v=p;if(u){let e=v.indexOf(`*/`);if(e===-1){_.push(p);continue}v=v.slice(e+2),u=!1}let y=v.indexOf(`/*`);if(y!==-1){let e=v.indexOf(`*/`,y+2);e===-1?(u=!0,v=v.slice(0,y)):v=v.slice(0,y)+v.slice(e+2)}let b=v.indexOf(`//`);b!==-1&&(v=v.slice(0,b));let x=v.trim(),S=r>0&&t>=r,C=r===0&&t===0&&!x.includes(`(`)&&!x.startsWith(`#`),w=/^(while|if|for)\s*\(/.test(x)&&!x.includes(`{`),T=[],E=[],D=new Set,O=C&&x.match(/^(?:const\s+)?(?:(?:unsigned|signed)\s+)?(?:(?:short|long long|long)\s+)?(int|float|double|bool|char)\s+(.+);$/);if(O){let e=O[1]===`bool`?`bool`:`number`,t=[],r=``,i=0;for(let e of O[2]){if(e===`,`&&i===0){r.trim()&&t.push(r.trim()),r=``;continue}e===`{`&&(i+=1),e===`}`&&(i=Math.max(0,i-1)),r+=e}r.trim()&&t.push(r.trim());for(let r of t){let[t]=r.split(`=`),i=t?.trim()||``;if(/[*&\[]/.test(i))continue;let a=i.match(/([A-Za-z_]\w*)\s*$/)?.[1];if(!a)continue;let s=o++;c.set(a,{slot:s,kind:e,fromLine:n+1,toLine:2**53-1}),this.debugGlobalMetadata=[...this.debugGlobalMetadata,{slot:s,name:a,kind:e,fromLine:n+1,toLine:2**53-1}],g.push(`${e===`bool`?`__wasm_idle_debug_value_bool`:`__wasm_idle_debug_value_num`}(0, ${s}, ${a});`)}}let k=C&&x.match(/^(?:const\s+)?([A-Za-z_]\w*)\s+([A-Za-z_]\w*)\s*\[(\d+)\]\s*(?:=.*)?;$/);if(k){let e=f.get(k[1]);if(e){let t=o++;this.debugGlobalMetadata=[...this.debugGlobalMetadata,{slot:t,name:k[2],kind:`array`,length:Number(k[3]),dimensions:[Number(k[3])],structFields:e.fields,structSize:e.size,fromLine:n+1,toLine:2**53-1}],g.push(`__wasm_idle_debug_value_addr(0, ${t}, (int)((unsigned long long)(${k[2]})));`)}}if(S&&x&&!x.startsWith(`#`)&&x!==`{`&&x!==`}`&&!x.startsWith(`else`)&&!x.startsWith(`case `)&&x!==`case`&&!x.startsWith(`default`)&&!x.startsWith(`catch`)&&!/^(public|private|protected)\s*:/.test(x)&&!x.endsWith(`:`)&&!x.includes(` else `)){T.push(`${m}__wasm_idle_debug_line(${i}, ${n+1});`);let e=x.match(/^(?:const\s+)?(?:(?:unsigned|signed)\s+)?(?:(?:short|long long|long)\s+)?(int|float|double|bool|char)\s+(.+);$/),t=x.match(/^(?:const\s+)?(?:(?:std::)?(vector|set|map))\s*<(.+)>\s+([A-Za-z_]\w*)\s*(?:=.*)?;$/);if(t&&i){let e=o++,r=t[1],a=t[3];D.add(a),l.set(a,{slot:e,container:r,fromLine:n+1,toLine:2**53-1}),this.debugVariableMetadata[i]=[...this.debugVariableMetadata[i]||[],{slot:e,name:a,kind:`text`,fromLine:n+1,toLine:2**53-1}],E.push(`${m}__wasm_idle_debug_emit_${r}(${i}, ${e}, ${a});`)}if(e&&i){let t=e[1]===`bool`?`bool`:`number`,r=[],a=``,c=0,l=0;for(let t of e[2]){if(t===`,`&&c===0&&l===0){a.trim()&&r.push(a.trim()),a=``;continue}t===`(`&&(c+=1),t===`)`&&(c=Math.max(0,c-1)),t===`{`&&(l+=1),t===`}`&&(l=Math.max(0,l-1)),a+=t}a.trim()&&r.push(a.trim());for(let a of r){let[r]=a.split(`=`),c=r?.trim()||``,l=[];for(let e of c.matchAll(/\[(\d+)\]/g))l.push(Number(e[1]));let u=c.match(/([A-Za-z_]\w*)\s*(?=\[\d+\])/);if(l.length&&u){let t=o++;this.debugVariableMetadata[i]=[...this.debugVariableMetadata[i]||[],{slot:t,name:u[1],kind:`array`,elementKind:e[1],length:l[0],dimensions:l,fromLine:n+1,toLine:2**53-1}],E.push(`${m}__wasm_idle_debug_value_addr(${i}, ${t}, (int)((unsigned long long)(${u[1]})));`);continue}if(/[*&]/.test(c))continue;let d=c.match(/([A-Za-z_]\w*)\s*(?:\[[^\]]*\])?$/)?.[1];if(d){if(!s.has(d)){let e=o++;s.set(d,{slot:e,kind:t,fromLine:n+1,toLine:2**53-1}),this.debugVariableMetadata[i]=[...this.debugVariableMetadata[i]||[],{slot:e,name:d,kind:t,fromLine:n+1,toLine:2**53-1}]}if(a.includes(`=`)){let e=s.get(d);e&&E.push(`${m}${e.kind===`bool`?`__wasm_idle_debug_value_bool`:`__wasm_idle_debug_value_num`}(${i}, ${e.slot}, ${d});`)}}}}let r=x.match(/^for\s*\(\s*(?:const\s+)?(?:(?:unsigned|signed)\s+)?(?:(?:short|long long|long)\s+)?(int|float|double|bool|char)\s+([A-Za-z_]\w*)\s*=/);if(r&&i){let e=r[1]===`bool`?`bool`:`number`,t=r[2];if(!s.has(t)){let r=o++;s.set(t,{slot:r,kind:e,fromLine:n+1,toLine:2**53-1}),this.debugVariableMetadata[i]=[...this.debugVariableMetadata[i]||[],{slot:r,name:t,kind:e,fromLine:n+1,toLine:2**53-1}]}}if(!w){for(let[e,t]of l){if(D.has(e))continue;let n=e.replace(/[.*+?^${}()|[\]\\]/g,`\\$&`);RegExp(`\\b${n}\\b`).test(x)&&E.push(`${m}__wasm_idle_debug_emit_${t.container}(${i}, ${t.slot}, ${e});`)}for(let[e,t]of s){let r=e.replace(/[.*+?^${}()|[\]\\]/g,`\\$&`);x.startsWith(`for`)&&t.toLine===n+1||(RegExp(`(?:^|[^\\w])(?:\\+\\+|--)\\s*${r}\\b`).test(x)||RegExp(`\\b${r}\\s*(?:[+\\-*/%]?=|\\+\\+|--)`).test(x)||RegExp(`&\\s*${r}\\b`).test(x)||RegExp(`\\b(?:cin|std::cin)\\b[^;]*>>\\s*${r}\\b`).test(x))&&E.push(`${m}${t.kind===`bool`?`__wasm_idle_debug_value_bool`:`__wasm_idle_debug_value_num`}(${i}, ${t.slot}, ${e});`)}for(let[e,t]of c){if(s.has(e)||l.has(e))continue;let n=e.replace(/[.*+?^${}()|[\]\\]/g,`\\$&`);(RegExp(`(?:^|[^\\w])(?:\\+\\+|--)\\s*${n}\\b`).test(x)||RegExp(`\\b${n}\\s*(?:[+\\-*/%]?=|\\+\\+|--)`).test(x)||RegExp(`&\\s*${n}\\b`).test(x)||RegExp(`\\b(?:cin|std::cin)\\b[^;]*>>\\s*${n}\\b`).test(x))&&E.push(`${m}${t.kind===`bool`?`__wasm_idle_debug_value_bool`:`__wasm_idle_debug_value_num`}(0, ${t.slot}, ${e});`)}}/^return\b/.test(x)&&T.push(`${m}__wasm_idle_debug_leave(${i});`)}if(r>0&&t===r&&x===`}`&&T.push(`${m}__wasm_idle_debug_leave(${i});`),S&&i&&(/^(while|if)\s*\(/.test(x)||/^for\s*\(/.test(x))){let e=x.match(/^(while|if|for)\b/)?.[1],t=p.indexOf(e||``),r=t>=0?p.indexOf(`(`,t):-1;if(r>=0){let t=-1,a=0;for(let e=r;e<p.length;e+=1){let n=p[e];if(n===`(`&&(a+=1),n===`)`&&(--a,a===0)){t=e;break}for(let[e,t]of c){if(s.has(e)||l.has(e))continue;let n=e.replace(/[.*+?^${}()|[\]\\]/g,`\\$&`);(RegExp(`(?:^|[^\\w])(?:\\+\\+|--)\\s*${n}\\b`).test(x)||RegExp(`\\b${n}\\s*(?:[+\\-*/%]?=|\\+\\+|--)`).test(x)||RegExp(`&\\s*${n}\\b`).test(x))&&E.push(`${m}${t.kind===`bool`?`__wasm_idle_debug_value_bool`:`__wasm_idle_debug_value_num`}(0, ${t.slot}, ${e});`)}}if(t>r){let a=p.slice(r+1,t);if(e===`for`){let e=[],o=``,c=0;for(let t of a){if(t===`;`&&c===0){e.push(o),o=``;continue}t===`(`&&(c+=1),t===`)`&&(c=Math.max(0,c-1)),o+=t}if(e.push(o),e.length===3&&e[1]?.trim()){let a=e[0].trim(),o=e[2].trim(),c=[],l=[],u=[],d=/^(?:const\s+)?(?:(?:unsigned|signed)\s+)?(?:(?:short|long long|long)\s+)?(?:int|float|double|bool|char)\b/.test(a);for(let[e,t]of s){let n=e.replace(/[.*+?^${}()|[\]\\]/g,`\\$&`),r=RegExp(`(?:^|[^\\w])(?:\\+\\+|--)\\s*${n}\\b|\\b${n}\\s*(?:[+\\-*/%]?=|\\+\\+|--)`);!d&&r.test(a)&&c.push(`${t.kind===`bool`?`__wasm_idle_debug_value_bool`:`__wasm_idle_debug_value_num`}(${i}, ${t.slot}, ${e})`),d&&r.test(a)&&l.push(`${t.kind===`bool`?`__wasm_idle_debug_value_bool`:`__wasm_idle_debug_value_num`}(${i}, ${t.slot}, ${e})`),r.test(o)&&u.push(`${t.kind===`bool`?`__wasm_idle_debug_value_bool`:`__wasm_idle_debug_value_num`}(${i}, ${t.slot}, ${e})`)}let f=c.length&&a?`(${a}, ${c.join(`, `)})`:e[0],m=u.length&&o?`(${o}, ${u.join(`, `)})`:e[2];h=p.slice(0,r+1)+`${f}; (${l.length?`${l.join(`, `)}, `:``}__wasm_idle_debug_line(${i}, ${n+1}), (${e[1].trim()})); ${m}`+p.slice(t)}}else h=p.slice(0,r+1)+`(__wasm_idle_debug_line(${i}, ${n+1}), (${a.trim()}))`+p.slice(t)}}}_.push(...T),_.push(h),_.push(...E);let A=r===0&&x.includes(`(`)&&x.includes(`)`)&&x.includes(`{`)&&!/^(if|for|while|switch|catch)\b/.test(x)&&!/^(class|struct|namespace|enum|union)\b/.test(x),j=r===0&&!!d&&x===`{`;if(t+=(v.match(/{/g)||[]).length,t-=(v.match(/}/g)||[]).length,A||j){r=t,i=a++;let e=`anonymous`;A?e=x.slice(0,x.indexOf(`(`)).trim().split(/\s+/).pop()||e:d&&(e=d.functionName||e),this.debugFunctionMetadata[i]=e,o=1,s=new Map,l=new Map,_.push(`${m}    __wasm_idle_debug_enter(${i}, ${n+1});`),e===`main`&&(_.push(`${m}    std::cout.setf(std::ios::unitbuf);`),_.push(`${m}    std::cerr.setf(std::ios::unitbuf);`),_.push(`${m}    setvbuf(stdout, nullptr, _IONBF, 0);`),_.push(`${m}    setvbuf(stderr, nullptr, _IONBF, 0);`));let c=A?x.slice(x.indexOf(`(`)+1,x.lastIndexOf(`)`)):d?.parameters||``;for(let e of c.split(`,`).map(e=>e.trim()).filter(Boolean)){let t=e.split(`=`)[0]?.trim()||``,r=t.match(/^(?:const\s+)?(?:(?:std::)?(vector|set|map)\s*<.+>)\s*&?\s*([A-Za-z_]\w*)\s*$/);if(r){let e=o++,t=r[1],a=r[2];l.set(a,{slot:e,container:t,fromLine:n+1,toLine:2**53-1}),this.debugVariableMetadata[i]=[...this.debugVariableMetadata[i]||[],{slot:e,name:a,kind:`text`,fromLine:n+1,toLine:2**53-1}],_.push(`${m}    __wasm_idle_debug_emit_${t}(${i}, ${e}, ${a});`);continue}let a=[];for(let e of t.matchAll(/\[(\d+)\]/g))a.push(Number(e[1]));let c=t.match(/([A-Za-z_]\w*)\s*(?=\[\d+\])/);if(a.length&&c&&/\b(int|float|double|bool|char)\b/.test(t)){let e=o++;this.debugVariableMetadata[i]=[...this.debugVariableMetadata[i]||[],{slot:e,name:c[1],kind:`array`,elementKind:t.match(/\b(int|float|double|bool|char)\b/)?.[1]||`int`,length:a[0],dimensions:a,fromLine:n+1,toLine:2**53-1}],_.push(`${m}    __wasm_idle_debug_value_addr(${i}, ${e}, (int)((unsigned long long)(${c[1]})));`);continue}if(/[*&\[]/.test(t))continue;let u=t.match(/([A-Za-z_]\w*)\s*(?:\[[^\]]*\])?\s*$/);if(!u)continue;let d=u[1],f=/\bbool\b/.test(t)?`bool`:/\b(?:int|float|double|char|short|long)\b/.test(t)?`number`:``;if(!f)continue;let p=o++;s.set(d,{slot:p,kind:f,fromLine:n+1,toLine:2**53-1}),this.debugVariableMetadata[i]=[...this.debugVariableMetadata[i]||[],{slot:p,name:d,kind:f,fromLine:n+1,toLine:2**53-1}],_.push(`${m}    ${f===`bool`?`__wasm_idle_debug_value_bool`:`__wasm_idle_debug_value_num`}(${i}, ${p}, ${d});`)}d=void 0}else r===0&&x.includes(`(`)&&x.includes(`)`)&&!x.includes(`{`)&&!x.endsWith(`;`)&&!/^(if|for|while|switch|catch)\b/.test(x)&&!/^(class|struct|namespace|enum|union)\b/.test(x)?d={functionName:x.slice(0,x.indexOf(`(`)).trim().split(/\s+/).pop()||`anonymous`,parameters:x.slice(x.indexOf(`(`)+1,x.lastIndexOf(`)`))}:x&&x!==`{`&&(d=void 0);r>0&&t<r&&(r=0,i=0,s=new Map,l=new Map)}g.length&&(_.push(`struct __wasm_idle_debug_globals_init {`),_.push(`    __wasm_idle_debug_globals_init() {`),_.push(...g.map(e=>`        ${e}`)),_.push(`    }`),_.push(`} __wasm_idle_debug_globals_init_instance;`)),n=_.join(`
-`)}else this.debugVariableMetadata={},this.debugGlobalMetadata=[];let u=vr(n);await this.ready,this.memfs.addFile(t,u);let d=await this.getModule(Dn(this.path)),f=[`-cc1`,`-emit-obj`,...fr,`-O`+l,`-o`,r,s,`-x`,o,t,...a];return this.trace(`compile ${t} -> ${r}`),await this.run(d,!0,`clang`,...f)}async link(e,t,n=!1){let r=`lib/wasm32-wasi`,i=`${r}/crt1.o`;await this.ready;let a=await this.getModule(On(this.path));return this.trace(`link ${e} -> ${t}`),await this.run(a,this.log,`wasm-ld`,`--no-threads`,`--export-dynamic`,...n?[`--allow-undefined`]:[],`-z`,`stack-size=1048576`,`-L${r}`,i,e,`-lc`,`-lc++`,`-lc++abi`,`-lm`,`-Llib/clang/8.0.1/lib/wasi`,`-lclang_rt.builtins-wasm32`,`-o`,t)}async run(e,t,...n){this.memfs.out=t,this.hostLog(`${n.join(` `)}\n`),this.trace(`run ${n.join(` `)}`);let r=+new Date,i=new Yn(e,this.memfs,n[0],...n.slice(1));i.trace=e=>this.trace(e),i.debugSession={buffer:this.debugBuffer,interruptBuffer:this.debugInterruptBuffer,watchBuffer:this.debugWatchBuffer,watchResultBuffer:this.debugWatchResultBuffer,breakpoints:new Set(this.debugBreakpoints),breakpointVersion:0,pauseOnEntry:this.debugPauseOnEntry,stepArmed:this.debugPauseOnEntry,nextLineArmed:!1,stepOutArmed:!1,callDepth:0,stepOutDepth:0,currentFunctionId:0,currentLine:0,resumeSkipActive:!1,resumeSkipFunctionId:0,resumeSkipLine:0,nextLineFunctionId:0,nextLineLine:0,variableMetadata:this.debugVariableMetadata,globalVariableMetadata:this.debugGlobalMetadata,functionMetadata:this.debugFunctionMetadata,frames:[],globalValues:new Map,onPause:e=>this.onDebugEvent?.(e)};let a=+new Date,o=await i.run(),s=+new Date;return this.log&&this.stdout(`
-`),this.showTiming&&this.stdout(`${Xn}(${r-a}ms/${s-a}ms)${Zn}\n`),o?i:null}async compileLink(e,t={}){let{language:n=`CPP`,args:r=[],compileArgs:i=r,debug:a=!1,breakpoints:o=[],pauseOnEntry:s=!1,cppVersion:c,cVersion:l,debugBuffer:u,interruptBuffer:d,watchBuffer:f,watchResultBuffer:p}=t,m=n===`C`?`test.c`:`test.cc`,h=`test.o`,g=`test.wasm`;this.beginTrace(a),this.debugBreakpoints=new Set(a?o:[]),this.debugPauseOnEntry=a&&s,this.debugBuffer=u,this.debugInterruptBuffer=d,this.debugWatchBuffer=f,this.debugWatchResultBuffer=p;let _=JSON.stringify({code:e,language:n,compileArgs:i,cppVersion:c,cVersion:l,debug:a});if(this.lastBuildKey===_)return this.trace(`reuse ${g}`),this.wasm;await this.compile({input:m,code:e,obj:h,language:n,compileArgs:i,cppVersion:c,cVersion:l,debug:a}),await this.link(h,g,a),this.lastBuildKey=_;let v=Uint8Array.from(this.memfs.getFileContents(g));return this.wasm=await this.hostLogAsync(`Compiling ${g}`,WebAssembly.compile(v))}async compileLinkRun(e,t={}){let{language:n=`CPP`,args:r=[],compileArgs:i=r,programArgs:a=[],debug:o=!1,breakpoints:s=[],pauseOnEntry:c=!1,cppVersion:l,cVersion:u,debugBuffer:d,interruptBuffer:f,watchBuffer:p,watchResultBuffer:m}=t;return this.debug=o,await this.run(await this.compileLink(e,{language:n,compileArgs:i,debug:o,breakpoints:s,pauseOnEntry:c,cppVersion:l,cVersion:u,debugBuffer:d,interruptBuffer:f,watchBuffer:p,watchResultBuffer:m}),!0,`test.wasm`,...a)}};export{yr as default};
+`)}else this.debugVariableMetadata={},this.debugGlobalMetadata=[];let u=xr(n);await this.ready,this.memfs.addFile(t,u);let d=await this.getModule(Dn(this.path)),f=[`-cc1`,`-emit-obj`,...hr,`-O`+l,`-o`,r,s,`-x`,o,t,...a];return this.trace(`compile ${t} -> ${r}`),await this.run(d,!0,`clang`,...f)}async link(e,t,n=!1){let r=`lib/wasm32-wasi`,i=`${r}/crt1.o`;await this.ready;let a=await this.getModule(On(this.path));return this.trace(`link ${e} -> ${t}`),await this.run(a,this.log,`wasm-ld`,`--no-threads`,`--export-dynamic`,...n?[`--allow-undefined`]:[],`-z`,`stack-size=1048576`,`-L${r}`,i,e,`-lc`,`-lc++`,`-lc++abi`,`-lm`,`-Llib/clang/8.0.1/lib/wasi`,`-lclang_rt.builtins-wasm32`,`-o`,t)}async run(e,t,...n){this.memfs.out=t,this.hostLog(`${n.join(` `)}\n`),this.trace(`run ${n.join(` `)}`);let r=+new Date,i=new Yn(e,this.memfs,n[0],...n.slice(1));i.trace=e=>this.trace(e),i.debugSession={buffer:this.debugBuffer,interruptBuffer:this.debugInterruptBuffer,watchBuffer:this.debugWatchBuffer,watchResultBuffer:this.debugWatchResultBuffer,breakpoints:new Set(this.debugBreakpoints),breakpointVersion:0,pauseOnEntry:this.debugPauseOnEntry,stepArmed:this.debugPauseOnEntry,nextLineArmed:!1,stepOutArmed:!1,callDepth:0,stepOutDepth:0,currentFunctionId:0,currentLine:0,resumeSkipActive:!1,resumeSkipFunctionId:0,resumeSkipLine:0,nextLineFunctionId:0,nextLineLine:0,variableMetadata:this.debugVariableMetadata,globalVariableMetadata:this.debugGlobalMetadata,functionMetadata:this.debugFunctionMetadata,frames:[],globalValues:new Map,onPause:e=>this.onDebugEvent?.(e)};let a=+new Date,o=await i.run(),s=+new Date;return this.log&&this.stdout(`
+`),this.showTiming&&this.stdout(`${Xn}(${r-a}ms/${s-a}ms)${Zn}\n`),o?i:null}async compileLink(e,t={}){let{language:n=`CPP`,args:r=[],compileArgs:i=r,debug:a=!1,breakpoints:o=[],pauseOnEntry:s=!1,cppVersion:c,cVersion:l,debugBuffer:u,interruptBuffer:d,watchBuffer:f,watchResultBuffer:p}=t,m=n===`C`?`test.c`:`test.cc`,h=`test.o`,g=`test.wasm`;this.beginTrace(a),this.debugBreakpoints=new Set(a?o:[]),this.debugPauseOnEntry=a&&s,this.debugBuffer=u,this.debugInterruptBuffer=d,this.debugWatchBuffer=f,this.debugWatchResultBuffer=p;let _=JSON.stringify({code:e,language:n,compileArgs:i,cppVersion:c,cVersion:l,debug:a});if(this.lastBuildKey===_)return this.trace(`reuse ${g}`),this.wasm;await this.compile({input:m,code:e,obj:h,language:n,compileArgs:i,cppVersion:c,cVersion:l,debug:a}),await this.link(h,g,a),this.lastBuildKey=_;let v=Uint8Array.from(this.memfs.getFileContents(g));return this.wasm=await this.hostLogAsync(`Compiling ${g}`,WebAssembly.compile(v))}async compileLinkRun(e,t={}){let{language:n=`CPP`,args:r=[],compileArgs:i=r,programArgs:a=[],debug:o=!1,breakpoints:s=[],pauseOnEntry:c=!1,cppVersion:l,cVersion:u,debugBuffer:d,interruptBuffer:f,watchBuffer:p,watchResultBuffer:m}=t;return this.debug=o,await this.run(await this.compileLink(e,{language:n,compileArgs:i,debug:o,breakpoints:s,pauseOnEntry:c,cppVersion:l,cVersion:u,debugBuffer:d,interruptBuffer:f,watchBuffer:p,watchResultBuffer:m}),!0,`test.wasm`,...a)}};export{Sr as default};
