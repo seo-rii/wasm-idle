@@ -47,7 +47,6 @@
 		openTabs: string[];
 		rustTargetTriple: RustTargetTriple;
 		sidebarOpen: boolean;
-		stdinInput: string;
 		tinygoTarget: TinyGoTarget;
 		version: number;
 	};
@@ -129,7 +128,6 @@
 	let activePath = $state('main.cpp');
 	let openTabs = $state<string[]>(['main.cpp']);
 	let sidebarOpen = $state(true);
-	let stdinInput = $state('4\n');
 	let saveStatus = $state('Ready');
 	let workspaceInitialized = false;
 	let workspaceSaveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -171,7 +169,6 @@
 			openTabs,
 			rustTargetTriple,
 			sidebarOpen,
-			stdinInput,
 			tinygoTarget
 		})
 	);
@@ -256,8 +253,7 @@
 			{
 				path: 'main.py',
 				content: resolveEditorDefaultSource('python', 'wasm32-wasip1')
-			},
-			{ path: 'input.txt', content: '4\n' }
+			}
 		];
 	}
 
@@ -488,7 +484,6 @@
 			openTabs: openTabs.filter((tab) => files.some((file) => file.path === tab)),
 			rustTargetTriple,
 			sidebarOpen,
-			stdinInput,
 			tinygoTarget,
 			version: 3
 		};
@@ -505,7 +500,6 @@
 		if (!openTabs.length) openTabs = [activePath];
 		if (typeof value?.language === 'string') language = value.language;
 		if (typeof value?.argsInput === 'string') argsInput = value.argsInput;
-		if (typeof value?.stdinInput === 'string') stdinInput = value.stdinInput;
 		if (typeof value?.log === 'boolean') log = value.log;
 		if (
 			value?.rustTargetTriple === 'wasm32-wasip1' ||
@@ -748,7 +742,6 @@
 				options: {
 					debug: enableDebug,
 					breakpoints: [...debug.effectiveBreakpoints],
-					stdin: stdinInput,
 					activePath,
 					workspaceFiles: files.map((file) => ({
 						path: file.path,
@@ -1162,10 +1155,6 @@
 				<button onclick={downloadZip}>ZIP</button>
 				<button onclick={resetWorkspace}>Reset</button>
 			</div>
-			<label class="stdin-panel">
-				<span>stdin</span>
-				<textarea bind:value={stdinInput} spellcheck="false"></textarea>
-			</label>
 		</aside>
 	{/if}
 	<div
@@ -1860,28 +1849,6 @@
 		flex: 1 1 calc(50% - 6px);
 		background: rgba(30, 41, 59, 0.92);
 		color: #e5edf7;
-	}
-
-	.stdin-panel {
-		display: grid;
-		grid-template-rows: auto minmax(90px, 1fr);
-		gap: 6px;
-		padding: 8px;
-		border-top: 1px solid rgba(148, 163, 184, 0.18);
-		color: #94a3b8;
-		font-size: 11px;
-	}
-
-	.stdin-panel textarea {
-		min-height: 90px;
-		resize: vertical;
-		border: 1px solid rgba(148, 163, 184, 0.24);
-		border-radius: 10px;
-		background: #0f172a;
-		color: #e5edf7;
-		font: inherit;
-		padding: 8px;
-		outline: none;
 	}
 
 	.tool-button {
@@ -2766,7 +2733,6 @@
 			min-height: 38px;
 		}
 
-		.stdin-panel textarea,
 		.args-chip input {
 			font-size: 16px;
 		}
