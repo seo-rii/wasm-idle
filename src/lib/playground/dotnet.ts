@@ -42,6 +42,8 @@ type DotnetRuntimeModule = {
 	}>;
 };
 
+const DOTNET_STDIN_GRACE_MS = 200;
+
 class Dotnet implements Sandbox {
 	output: any = null;
 	worker?: Worker = <any>null;
@@ -173,7 +175,18 @@ class Dotnet implements Sandbox {
 
 	eof() {}
 
-	run(
+	private async collectStdinForRun(prepare: boolean, options: SandboxExecutionOptions) {
+		if (!prepare && !options.stdin && this.pendingInput.length === 0) {
+			await new Promise((resolve) => setTimeout(resolve, DOTNET_STDIN_GRACE_MS));
+		}
+		const stdin = `${options.stdin || ''}${this.pendingInput.join('')}`;
+		if (!prepare) {
+			this.pendingInput = [];
+		}
+		return stdin;
+	}
+
+	async run(
 		code: string,
 		prepare: boolean,
 		_log = true,
@@ -185,18 +198,15 @@ class Dotnet implements Sandbox {
 			return this.runOnMainThread(code, prepare, _log, _prog, args, options);
 		}
 		this.exit = false;
+		if (!this.worker) return Promise.reject('Worker not loaded');
+		const worker = this.worker;
 		return new Promise<boolean | string>((resolve, reject) => {
-			if (!this.worker) return reject('Worker not loaded');
 			const { programArgs } = resolveSandboxExecutionArgs(this.language, args, options);
-			const stdin = `${options.stdin || ''}${this.pendingInput.join('')}`;
-			if (!prepare) {
-				this.pendingInput = [];
-			}
 			const _uid = ++this.uid;
 			this.activeReject = reject;
-			this.worker.onmessage = (event: Event & { data: any }) => {
-				if (!this.worker) return reject('Worker not loaded');
-				if (_uid !== this.uid) return (this.worker.onmessage = null);
+			worker.onmessage = (event: Event & { data: any }) => {
+				if (this.worker !== worker) return reject('Worker not loaded');
+				if (_uid !== this.uid) return (worker.onmessage = null);
 				const { output, results, error, diagnostic, progress } = event.data;
 				if (progress && typeof progress.percent === 'number') {
 					_prog?.set?.(Math.max(0, Math.min(progress.percent / 100, 1)));
@@ -217,14 +227,19 @@ class Dotnet implements Sandbox {
 				}
 			};
 			this.begin = Date.now();
-			this.worker.postMessage({
-				code,
-				language: this.compileLanguage,
-				prepare,
-				args: programArgs,
-				stdin,
-				log: _log
-			});
+			this.collectStdinForRun(prepare, options)
+				.then((stdin) => {
+					if (this.worker !== worker) return reject('Worker not loaded');
+					worker.postMessage({
+						code,
+						language: this.compileLanguage,
+						prepare,
+						args: programArgs,
+						stdin,
+						log: _log
+					});
+				})
+				.catch(reject);
 		});
 	}
 
@@ -241,10 +256,6 @@ class Dotnet implements Sandbox {
 		this.begin = Date.now();
 		const _uid = ++this.uid;
 		const { programArgs } = resolveSandboxExecutionArgs(this.language, args, options);
-		const stdin = `${options.stdin || ''}${this.pendingInput.join('')}`;
-		if (!prepare) {
-			this.pendingInput = [];
-		}
 		try {
 			const compileCacheKey = `${this.compileLanguage}\n${code}`;
 			if (!this.compiledArtifact || this.compiledCacheKey !== compileCacheKey) {
@@ -283,6 +294,7 @@ class Dotnet implements Sandbox {
 			}
 			if (prepare) return true;
 
+			const stdin = await this.collectStdinForRun(prepare, options);
 			const execution = await this.runtimeModule.executeBrowserDotnetArtifact(
 				this.compiledArtifact,
 				{

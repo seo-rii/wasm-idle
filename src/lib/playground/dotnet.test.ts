@@ -142,6 +142,26 @@ describe('Dotnet sandbox', () => {
 		);
 	});
 
+	it('collects stdin submitted immediately after a cached run starts', async () => {
+		const sandbox = new Dotnet();
+		const code = 'printfn "hello"';
+
+		await sandbox.load('/absproxy/5173');
+		const runPromise = sandbox.run(code, false);
+		sandbox.write('9\n');
+		await expect(runPromise).resolves.toBe(true);
+
+		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
+			2,
+			expect.objectContaining({
+				prepare: false,
+				code,
+				language: 'fsharp',
+				stdin: '9\n'
+			})
+		);
+	});
+
 	it('rejects load when no dotnet runtime urls are configured', async () => {
 		publicEnv.PUBLIC_WASM_DOTNET_MODULE_URL = '';
 		const sandbox = new Dotnet();

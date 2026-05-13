@@ -39,7 +39,7 @@ describe('Terminal source', () => {
 		expect(source).toMatch(/stopRequested = false;/);
 		expect(source).toMatch(/if \(stopRequested\) return false;/);
 		expect(source).toMatch(
-			/async stop\(\) \{\s+await wait\(\);\s+stopRequested = true;\s+finish = true;\s+if \(sandbox\?\.kill\) sandbox\.kill\(\);\s+else sandbox\?\.terminate\?\.\(\);\s+\}/s
+			/async stop\(\) \{\s+await wait\(\);\s+stopRequested = true;\s+finish = true;\s+sandboxAcceptingInput = false;\s+if \(sandbox\?\.kill\) sandbox\.kill\(\);\s+else sandbox\?\.terminate\?\.\(\);\s+\}/s
 		);
 	});
 
@@ -101,6 +101,18 @@ describe('Terminal source', () => {
 		);
 		expect(source).toMatch(/if \(sandbox && requiresSandboxReset\) await sandbox\.clear\(\);/);
 		expect(source).toMatch(/if \(!sandbox \|\| requiresSandboxReset\) \{/);
+	});
+
+	it('buffers stdin until the current sandbox is ready to accept it', () => {
+		expect(source).toMatch(/sandboxAcceptingInput = false,/);
+		expect(source).toMatch(/sandboxAcceptingInput = true;/);
+		expect(source).toMatch(
+			/if \(sandbox && sandboxAcceptingInput\) sandbox\.write\?\.\(submittedInput\);\s+else pendingSandboxInput\.push\(submittedInput\);/s
+		);
+		expect(source).toMatch(
+			/if \(pendingSandboxInput\.length > 0\) \{\s+for \(const pendingInput of pendingSandboxInput\) \{\s+sandbox\.write\?\.\(pendingInput\);\s+\}\s+pendingSandboxInput = \[\];\s+\}/s
+		);
+		expect(source).toMatch(/\.finally\(\(\) => \{\s+sandboxAcceptingInput = false;/s);
 	});
 
 	it('uses rust-specific progress windows instead of jumping straight to the prepare band', () => {

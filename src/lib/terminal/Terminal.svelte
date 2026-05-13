@@ -58,6 +58,7 @@
 		input = '',
 		pendingSandboxInput: string[] = [],
 		sandbox: BoundSandbox,
+		sandboxAcceptingInput = false,
 		first = true,
 		tc = 0,
 		plugin = $state(),
@@ -125,6 +126,7 @@
 			ll !== language || loadedRuntimeAssetsKey !== currentRuntimeAssetsKey;
 		let _tc = ++tc;
 		await wait();
+		sandboxAcceptingInput = false;
 		if (sandbox && requiresSandboxReset) await sandbox.clear();
 		input = '';
 		finish = false;
@@ -141,6 +143,7 @@
 		sandbox.oncompilerdiagnostic = oncompilediagnostic;
 		sandbox.output = (output: string) =>
 			_tc === tc && writeTerminalOutput(output.replaceAll('\n', '\r\n'));
+		sandboxAcceptingInput = true;
 		if (pendingSandboxInput.length > 0) {
 			for (const pendingInput of pendingSandboxInput) {
 				sandbox.write?.(pendingInput);
@@ -161,6 +164,7 @@
 				return false;
 			})
 			.finally(() => {
+				sandboxAcceptingInput = false;
 				stopRequested = false;
 				onfinish?.();
 				finish = true;
@@ -188,7 +192,7 @@
 	function submitCurrentInput() {
 		term?.write('\r\n');
 		const submittedInput = input + '\n';
-		if (sandbox) sandbox.write?.(submittedInput);
+		if (sandbox && sandboxAcceptingInput) sandbox.write?.(submittedInput);
 		else pendingSandboxInput.push(submittedInput);
 		input = '';
 	}
@@ -213,6 +217,7 @@
 			if (term) term.options.cursorBlink = false;
 			debugOutput = '';
 			input = '';
+			sandboxAcceptingInput = false;
 			first = true;
 			await new Promise((r) => setTimeout(r, 100));
 		},
@@ -270,6 +275,7 @@
 		},
 		async destroy() {
 			await wait();
+			sandboxAcceptingInput = false;
 			term?.dispose();
 			if (sandbox) await sandbox.clear();
 		},
@@ -277,6 +283,7 @@
 			await wait();
 			stopRequested = true;
 			finish = true;
+			sandboxAcceptingInput = false;
 			if (sandbox?.kill) sandbox.kill();
 			else sandbox?.terminate?.();
 		},

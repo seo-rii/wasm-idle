@@ -311,10 +311,8 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/fs: 'FSHARP'/);
 		expect(source).toMatch(/language === 'CSHARP'\s+\? 'csharp'/);
 		expect(source).toMatch(/language === 'FSHARP'\s+\? 'fsharp'/);
-		expect(source).toMatch(/legacyBrokenFsharpEditorDefault/);
-		expect(source).toMatch(
-			/nextLanguage === 'FSHARP' && content === legacyBrokenFsharpEditorDefault/
-		);
+		expect(source).toMatch(/isEditorDefaultSource\(content\)/);
+		expect(source).toMatch(/isLegacyEditorDefaultSource\(content\)/);
 		expect(source).toMatch(
 			/\{language === 'CSHARP' \? 'C#' : 'F#'\} uses a `wasm-dotnet` browser runtime module/
 		);

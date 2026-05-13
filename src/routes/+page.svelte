@@ -30,8 +30,8 @@
 	import type monaco from 'monaco-editor';
 	import { executeTerminalRun } from './execute';
 	import {
-		legacyBrokenFsharpEditorDefault,
-		legacyBrokenTinyGoEditorDefault,
+		isEditorDefaultSource,
+		isLegacyEditorDefaultSource,
 		resolveEditorDefaultSource
 	} from './editor-defaults';
 
@@ -408,14 +408,12 @@
 	}
 
 	function migrateWorkspaceFileContent(content: string, nextLanguage: PlaygroundLanguage) {
-		if (nextLanguage === 'FSHARP' && content === legacyBrokenFsharpEditorDefault) {
-			return defaultSourceForLanguage(nextLanguage);
+		const nextDefaultSource = defaultSourceForLanguage(nextLanguage);
+		if (content === nextDefaultSource) {
+			return content;
 		}
-		if (
-			(nextLanguage === 'GO' || nextLanguage === 'TINYGO') &&
-			content === legacyBrokenTinyGoEditorDefault
-		) {
-			return defaultSourceForLanguage(nextLanguage);
+		if (isEditorDefaultSource(content) || isLegacyEditorDefaultSource(content)) {
+			return nextDefaultSource;
 		}
 		return content;
 	}
