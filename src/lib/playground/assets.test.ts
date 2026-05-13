@@ -4,12 +4,12 @@ const { publicEnv } = vi.hoisted(() => ({
 	publicEnv: {
 		PUBLIC_WASM_RUST_COMPILER_URL: '',
 		PUBLIC_WASM_GO_COMPILER_URL: '',
+		PUBLIC_WASM_DOTNET_MODULE_URL: '',
 		PUBLIC_WASM_ELIXIR_BUNDLE_URL: '',
 		PUBLIC_WASM_OCAML_MODULE_URL: '',
 		PUBLIC_WASM_OCAML_MANIFEST_URL: '',
 		PUBLIC_WASM_TINYGO_APP_URL: '',
-		PUBLIC_WASM_TINYGO_MODULE_URL: '',
-		PUBLIC_WASM_TINYGO_HOST_COMPILE_URL: ''
+		PUBLIC_WASM_TINYGO_MODULE_URL: ''
 	}
 }));
 
@@ -182,6 +182,31 @@ describe('runtime asset config resolution', () => {
 		);
 	});
 
+	it('prefers an explicit Dotnet module url over the public env override', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_DOTNET_MODULE_URL = 'https://env.example.com/wasm-dotnet/index.js';
+		const { resolveDotnetModuleUrl } = await import('./assets');
+
+		const config = {
+			dotnet: {
+				moduleUrl: '/runtime/dotnet/index.js'
+			}
+		};
+		expect(resolveDotnetModuleUrl(config, 'https://example.com/app')).toBe(
+			'https://example.com/runtime/dotnet/index.js'
+		);
+	});
+
+	it('derives the default Dotnet module url from the shared root path', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_DOTNET_MODULE_URL = '';
+		const { resolveDotnetModuleUrl } = await import('./assets');
+
+		expect(resolveDotnetModuleUrl('/absproxy/5173', 'https://example.com/app')).toBe(
+			'https://example.com/absproxy/5173/wasm-dotnet/index.js'
+		);
+	});
+
 	it('prefers an explicit Elixir bundle url over the public env override', async () => {
 		vi.resetModules();
 		publicEnv.PUBLIC_WASM_ELIXIR_BUNDLE_URL = 'https://env.example.com/wasm-elixir/bundle.avm';
@@ -303,143 +328,5 @@ describe('runtime asset config resolution', () => {
 		expect(resolveTinyGoModuleUrl(undefined, 'https://example.com/app')).toBe(
 			'https://env.example.com/wasm-tinygo/runtime.js?v=42'
 		);
-	});
-
-	it('prefers an explicit TinyGo host compile url over the shared root path', async () => {
-		vi.resetModules();
-		publicEnv.PUBLIC_WASM_TINYGO_HOST_COMPILE_URL =
-			'https://env.example.com/api/tinygo/compile';
-		const { resolveTinyGoHostCompileUrl } = await import('./assets');
-
-		expect(
-			resolveTinyGoHostCompileUrl(
-				{
-					rootUrl: '/ignored',
-					tinygo: {
-						hostCompileUrl: '/local/tinygo/compile'
-					}
-				},
-				'https://example.com/app'
-			)
-		).toBe('https://example.com/local/tinygo/compile');
-	});
-
-	it('falls back to PUBLIC_WASM_TINYGO_HOST_COMPILE_URL when no tinygo runtime config is provided', async () => {
-		vi.resetModules();
-		publicEnv.PUBLIC_WASM_TINYGO_HOST_COMPILE_URL = '/runtime/tinygo/compile';
-		const { resolveTinyGoHostCompileUrl } = await import('./assets');
-
-		expect(resolveTinyGoHostCompileUrl('/absproxy/5173', 'https://example.com/app')).toBe(
-			'https://example.com/runtime/tinygo/compile'
-		);
-	});
-
-	it('does not auto-derive a TinyGo host compile url from the shared root path on localhost', async () => {
-		vi.resetModules();
-		publicEnv.PUBLIC_WASM_TINYGO_HOST_COMPILE_URL = '';
-		const { resolveTinyGoHostCompileUrl } = await import('./assets');
-
-		expect(resolveTinyGoHostCompileUrl('/absproxy/5173', 'http://localhost:3000/app')).toBe('');
-	});
-
-	it('does not derive an implicit TinyGo host compile url on non-local origins', async () => {
-		vi.resetModules();
-		publicEnv.PUBLIC_WASM_TINYGO_HOST_COMPILE_URL = '';
-		const { resolveTinyGoHostCompileUrl } = await import('./assets');
-
-		expect(resolveTinyGoHostCompileUrl('/absproxy/5173', 'https://example.com/app')).toBe('');
-	});
-
-	it('does not derive TinyGo host compile urls when browser-only execution explicitly disables them', async () => {
-		vi.resetModules();
-		publicEnv.PUBLIC_WASM_TINYGO_HOST_COMPILE_URL =
-			'https://env.example.com/api/tinygo/compile';
-		const { resolveTinyGoHostCompileUrls } = await import('./assets');
-
-		expect(
-			resolveTinyGoHostCompileUrls(
-				{
-					rootUrl: '/absproxy/5173',
-					tinygo: {
-						moduleUrl: '/absproxy/5173/wasm-tinygo/runtime.js',
-						disableHostCompile: true
-					}
-				},
-				'http://localhost:3000/absproxy/5173/'
-			)
-		).toEqual([]);
-	});
-
-	it('does not auto-derive implicit TinyGo host compile urls when a browser runtime module is configured', async () => {
-		vi.resetModules();
-		publicEnv.PUBLIC_WASM_TINYGO_HOST_COMPILE_URL = '';
-		const { resolveTinyGoHostCompileUrls } = await import('./assets');
-
-		expect(
-			resolveTinyGoHostCompileUrls(
-				{
-					tinygo: {
-						moduleUrl: 'data:text/javascript;base64,ZXhwb3J0IHt9'
-					}
-				},
-				'http://localhost:3000/absproxy/5173/'
-			)
-		).toEqual([]);
-	});
-
-	it('does not add implicit localhost TinyGo host compile candidates when a bundled module is available', async () => {
-		vi.resetModules();
-		publicEnv.PUBLIC_WASM_TINYGO_APP_URL = '';
-		publicEnv.PUBLIC_WASM_TINYGO_MODULE_URL = '';
-		publicEnv.PUBLIC_WASM_TINYGO_HOST_COMPILE_URL = '';
-		const { resolveTinyGoHostCompileUrls } = await import('./assets');
-
-		expect(
-			resolveTinyGoHostCompileUrls('/absproxy/5173', 'http://127.0.0.1:4173/absproxy/5173/')
-		).toEqual([]);
-	});
-
-	it('does not derive implicit host compile paths when no browser runtime module is configured', async () => {
-		vi.resetModules();
-		publicEnv.PUBLIC_WASM_TINYGO_APP_URL = '';
-		publicEnv.PUBLIC_WASM_TINYGO_MODULE_URL = '';
-		publicEnv.PUBLIC_WASM_TINYGO_HOST_COMPILE_URL = '';
-		const { resolveTinyGoHostCompileUrls } = await import('./assets');
-
-		expect(resolveTinyGoHostCompileUrls(undefined, 'http://127.0.0.1:4173/')).toEqual([]);
-	});
-
-	it('does not derive a remote compile endpoint from an explicit TinyGo module url on non-local pages', async () => {
-		vi.resetModules();
-		publicEnv.PUBLIC_WASM_TINYGO_HOST_COMPILE_URL = '';
-		const { resolveTinyGoHostCompileUrls } = await import('./assets');
-
-		expect(
-			resolveTinyGoHostCompileUrls(
-				{
-					tinygo: {
-						moduleUrl: 'https://tinygo.example.com/runtime/runtime.js'
-					}
-				},
-				'https://example.com/app'
-			)
-		).toEqual([]);
-	});
-
-	it('does not derive a sibling compile endpoint from a data-url TinyGo module', async () => {
-		vi.resetModules();
-		publicEnv.PUBLIC_WASM_TINYGO_HOST_COMPILE_URL = '';
-		const { resolveTinyGoHostCompileUrls } = await import('./assets');
-
-		expect(
-			resolveTinyGoHostCompileUrls(
-				{
-					tinygo: {
-						moduleUrl: 'data:text/javascript;base64,ZXhwb3J0IHt9'
-					}
-				},
-				'https://example.com/app'
-			)
-		).toEqual([]);
 	});
 });

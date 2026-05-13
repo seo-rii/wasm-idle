@@ -46,6 +46,10 @@ export interface GoRuntimeAssetConfig {
 	compilerUrl?: string;
 }
 
+export interface DotnetRuntimeAssetConfig {
+	moduleUrl?: string;
+}
+
 export interface OcamlRuntimeAssetConfig {
 	moduleUrl?: string;
 	manifestUrl?: string;
@@ -54,8 +58,6 @@ export interface OcamlRuntimeAssetConfig {
 export interface TinyGoRuntimeAssetConfig {
 	moduleUrl?: string;
 	appUrl?: string;
-	hostCompileUrl?: string;
-	disableHostCompile?: boolean;
 	assetLoader?: TinyGoRuntimeAssetLoader;
 	assetPacks?: TinyGoRuntimeAssetPackReference[];
 }
@@ -72,6 +74,7 @@ export interface PlaygroundRuntimeAssets {
 	clangd?: RuntimeAssetConfig;
 	rust?: RustRuntimeAssetConfig;
 	go?: GoRuntimeAssetConfig;
+	dotnet?: DotnetRuntimeAssetConfig;
 	ocaml?: OcamlRuntimeAssetConfig;
 	tinygo?: TinyGoRuntimeAssetConfig;
 	elixir?: ElixirRuntimeAssetConfig;
@@ -373,6 +376,35 @@ export function resolveGoCompilerUrl(
 	return currentUrl ? new URL(configuredCompilerUrl, currentUrl).href : configuredCompilerUrl;
 }
 
+export function resolveDotnetModuleUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredModuleUrl =
+		(typeof options === 'object' && options?.dotnet?.moduleUrl) ||
+		(publicEnv.PUBLIC_WASM_DOTNET_MODULE_URL || '').trim();
+
+	if (configuredModuleUrl) {
+		return resolveConfiguredUrl(configuredModuleUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-dotnet/index.js`,
+			currentUrl
+		);
+	}
+
+	if (options?.rootUrl) {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-dotnet/index.js`,
+			currentUrl
+		);
+	}
+
+	return '';
+}
+
 export function resolveOcamlModuleUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
@@ -512,32 +544,6 @@ export function resolveTinyGoModuleUrl(
 	}
 
 	return '';
-}
-
-export function resolveTinyGoHostCompileUrls(
-	options: string | PlaygroundRuntimeAssets | undefined,
-	currentUrl = ''
-) {
-	if (typeof options === 'object' && options?.tinygo?.disableHostCompile) {
-		return [];
-	}
-
-	const configuredHostCompileUrl =
-		(typeof options === 'object' && options?.tinygo?.hostCompileUrl) ||
-		(publicEnv.PUBLIC_WASM_TINYGO_HOST_COMPILE_URL || '').trim();
-
-	if (configuredHostCompileUrl) {
-		return [resolveConfiguredUrl(configuredHostCompileUrl, currentUrl)];
-	}
-
-	return [];
-}
-
-export function resolveTinyGoHostCompileUrl(
-	options: string | PlaygroundRuntimeAssets | undefined,
-	currentUrl = ''
-) {
-	return resolveTinyGoHostCompileUrls(options, currentUrl)[0] || '';
 }
 
 export function resolveElixirBundleUrl(

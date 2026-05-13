@@ -69,6 +69,9 @@ describe('example route debug actions', () => {
 			/import \{ WASM_GO_ASSET_VERSION \} from '\$lib\/playground\/wasmGoVersion';/
 		);
 		expect(source).toMatch(
+			/import \{ WASM_DOTNET_ASSET_VERSION \} from '\$lib\/playground\/wasmDotnetVersion';/
+		);
+		expect(source).toMatch(
 			/import \{ WASM_ELIXIR_ASSET_VERSION \} from '\$lib\/playground\/wasmElixirVersion';/
 		);
 		expect(source).toMatch(
@@ -80,15 +83,10 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(
 			/import \{ WASM_TINYGO_ASSET_VERSION \} from '\$lib\/playground\/wasmTinyGoVersion';/
 		);
-		expect(source).toMatch(
-			/let tinygoCompilePath = \$derived\(\s*browser \? \(page\.url\.searchParams\.get\('tinygoCompilePath'\) \?\? ''\) : ''\s*\);/
-		);
-		expect(source).toMatch(
-			/let tinygoDisableHostCompile = \$derived\(tinygoCompilePath === 'browser'\);/
-		);
-		expect(source).toMatch(
-			/let tinygoHostCompileUrl = \$derived\(\s*tinygoCompilePath === 'host'\s*\?[^;]+\/api\/tinygo\/compile[^;]+:\s*undefined\s*\);/
-		);
+		expect(source).not.toContain('tinygo' + 'CompilePath');
+		expect(source).not.toMatch(/dotnetCompilePath/);
+		expect(source).not.toContain('tinygo' + 'Host' + 'CompileUrl');
+		expect(source).not.toContain('tinygo' + 'Disable' + 'Host' + 'Compile');
 		expect(source).toMatch(
 			/let runtimeAssets = \$derived\.by<PlaygroundRuntimeAssets>\(\(\) => \(\{/
 		);
@@ -100,13 +98,16 @@ describe('example route debug actions', () => {
 			/go: \{\s+compilerUrl: path\s+\?\s+`\$\{path\}\/wasm-go\/index\.js\?v=\$\{WASM_GO_ASSET_VERSION\}`\s+:\s+`\/wasm-go\/index\.js\?v=\$\{WASM_GO_ASSET_VERSION\}`\s+\}/s
 		);
 		expect(source).toMatch(
+			/dotnet: \{\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-dotnet\/index\.js\?v=\$\{WASM_DOTNET_ASSET_VERSION\}`\s+:\s+`\/wasm-dotnet\/index\.js\?v=\$\{WASM_DOTNET_ASSET_VERSION\}`\s+\}/s
+		);
+		expect(source).toMatch(
 			/elixir: \{\s+bundleUrl: path\s+\?\s+`\$\{path\}\/wasm-elixir\/bundle\.avm\?v=\$\{WASM_ELIXIR_ASSET_VERSION\}`\s+:\s+`\/wasm-elixir\/bundle\.avm\?v=\$\{WASM_ELIXIR_ASSET_VERSION\}`\s+\}/s
 		);
 		expect(source).toMatch(
 			/ocaml: \{\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-of-js-of-ocaml\/browser-native\/src\/index\.js\?v=\$\{WASM_OCAML_ASSET_VERSION\}`\s+:\s+`\/wasm-of-js-of-ocaml\/browser-native\/src\/index\.js\?v=\$\{WASM_OCAML_ASSET_VERSION\}`,\s+manifestUrl: path\s+\?\s+`\$\{path\}\/wasm-of-js-of-ocaml\/browser-native-bundle\/browser-native-manifest\.v1\.json\?v=\$\{WASM_OCAML_ASSET_VERSION\}`\s+:\s+`\/wasm-of-js-of-ocaml\/browser-native-bundle\/browser-native-manifest\.v1\.json\?v=\$\{WASM_OCAML_ASSET_VERSION\}`\s+\}/s
 		);
 		expect(source).toMatch(
-			/tinygo: \{\s+disableHostCompile: tinygoDisableHostCompile,\s+hostCompileUrl: tinygoHostCompileUrl,\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-tinygo\/runtime\.js\?v=\$\{WASM_TINYGO_ASSET_VERSION\}`\s+:\s+`\/wasm-tinygo\/runtime\.js\?v=\$\{WASM_TINYGO_ASSET_VERSION\}`\s+\}/s
+			/tinygo: \{\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-tinygo\/runtime\.js\?v=\$\{WASM_TINYGO_ASSET_VERSION\}`\s+:\s+`\/wasm-tinygo\/runtime\.js\?v=\$\{WASM_TINYGO_ASSET_VERSION\}`\s+\}/s
 		);
 		expect(source).toMatch(
 			/const playground = \$derived\.by\(\(\) => createPlaygroundBinding\(runtimeAssets\)\);/
@@ -262,14 +263,16 @@ describe('example route debug actions', () => {
 		);
 		expect(source).toMatch(/tinygoTarget: language === 'TINYGO' \? tinygoTarget : undefined/);
 		expect(source).toMatch(/<option value="GO">Go<\/option>/);
+		expect(source).toMatch(/<option value="CSHARP">C#<\/option>/);
+		expect(source).toMatch(/<option value="FSHARP">F#<\/option>/);
 		expect(source).toMatch(/<option value="ELIXIR">Elixir<\/option>/);
 		expect(source).toMatch(/<option value="OCAML">OCaml<\/option>/);
 		expect(source).toMatch(/<option value="TINYGO">TinyGo<\/option>/);
 		expect(source).toMatch(
-			/\{#if language === 'JAVA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'TINYGO'\}/
+			/\{#if language === 'JAVA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'TINYGO'\}/
 		);
 		expect(source).toMatch(
-			/language === 'JAVA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'TINYGO'/
+			/language === 'JAVA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'TINYGO'/
 		);
 		expect(source).toMatch(/Go uses the bundled `wasm-go` browser compiler runtime/);
 		expect(source).toMatch(
@@ -288,13 +291,35 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(
 			/TinyGo runs through the bundled wasm-tinygo browser pipeline by default/
 		);
-		expect(source).toMatch(
-			/Use\s+`\?tinygoCompilePath=host` or an explicit host compile endpoint/
-		);
+		expect(source).not.toContain('host' + ' compile endpoint');
 		expect(source).toMatch(/loads its\s+direct runtime module/);
 		expect(source).toMatch(/`wasip2` and `wasip3` use the wasm-tinygo preview target profiles/);
 		expect(source).toMatch(/resulting WASI artifact in the local playground\s+runtime/);
 		expect(source).toMatch(/reads\s+stdin until EOF/);
+	});
+
+	it('surfaces C# and F# through wasm-dotnet runtime assets and the browser compiler hint', () => {
+		expect(source).toMatch(/dotnet: \{/);
+		expect(source).not.toContain('dotnet' + 'Host' + 'CompileUrl');
+		expect(source).toMatch(/<option value="CSHARP">C#<\/option>/);
+		expect(source).toMatch(/<option value="FSHARP">F#<\/option>/);
+		expect(source).toMatch(/csharp: 'CSHARP'/);
+		expect(source).toMatch(/'c#': 'CSHARP'/);
+		expect(source).toMatch(/cs: 'CSHARP'/);
+		expect(source).toMatch(/fsharp: 'FSHARP'/);
+		expect(source).toMatch(/'f#': 'FSHARP'/);
+		expect(source).toMatch(/fs: 'FSHARP'/);
+		expect(source).toMatch(/language === 'CSHARP'\s+\? 'csharp'/);
+		expect(source).toMatch(/language === 'FSHARP'\s+\? 'fsharp'/);
+		expect(source).toMatch(
+			/\{language === 'CSHARP' \? 'C#' : 'F#'\} uses a `wasm-dotnet` browser runtime module/
+		);
+		expect(source).toMatch(/static \.NET `browser-wasm` compiler app/);
+		expect(source).toMatch(/`runtime\/dotnet\.js`/);
+		expect(source).toMatch(
+			/terminal input submitted before or during preparation is passed to `Console\.In`/
+		);
+		expect(source).not.toContain('api/dotnet');
 	});
 
 	it('surfaces Elixir through the shared language selector and Popcorn hint', () => {

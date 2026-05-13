@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { sandboxInstances, createMockSandboxClass } = vi.hoisted(() => {
+const { sandboxInstances, createMockSandboxClass, MockSandbox } = vi.hoisted(() => {
 	const sandboxInstances = new Map<string, MockSandbox[]>();
 
 	class MockSandbox {
@@ -46,7 +46,7 @@ const { sandboxInstances, createMockSandboxClass } = vi.hoisted(() => {
 			}
 		};
 
-	return { sandboxInstances, createMockSandboxClass };
+	return { sandboxInstances, createMockSandboxClass, MockSandbox };
 });
 
 vi.mock('$lib/playground/python', () => ({
@@ -63,6 +63,14 @@ vi.mock('$lib/playground/rust', () => ({
 
 vi.mock('$lib/playground/go', () => ({
 	default: createMockSandboxClass('GO')
+}));
+
+vi.mock('$lib/playground/dotnet', () => ({
+	default: class extends MockSandbox {
+		constructor(language: string = 'FSHARP') {
+			super(language);
+		}
+	}
 }));
 
 vi.mock('$lib/playground/elixir', () => ({
@@ -161,7 +169,6 @@ describe('playground runtime binding', () => {
 		const binding = createPlaygroundBinding({
 			rootUrl: '/absproxy/5173',
 			tinygo: {
-				hostCompileUrl: '/absproxy/5173/api/tinygo/compile',
 				moduleUrl: '/absproxy/5173/wasm-tinygo/runtime.js?v=test'
 			}
 		});
@@ -173,7 +180,6 @@ describe('playground runtime binding', () => {
 		expect(sandbox.runtimeAssets).toEqual({
 			rootUrl: '/absproxy/5173',
 			tinygo: {
-				hostCompileUrl: '/absproxy/5173/api/tinygo/compile',
 				moduleUrl: '/absproxy/5173/wasm-tinygo/runtime.js?v=test'
 			}
 		});
@@ -183,7 +189,6 @@ describe('playground runtime binding', () => {
 				{
 					rootUrl: '/absproxy/5173',
 					tinygo: {
-						hostCompileUrl: '/absproxy/5173/api/tinygo/compile',
 						moduleUrl: '/absproxy/5173/wasm-tinygo/runtime.js?v=test'
 					}
 				},
@@ -224,6 +229,78 @@ describe('playground runtime binding', () => {
 					}
 				},
 				'package main\nfunc main() {}',
+				true,
+				['demo'],
+				{},
+				progress
+			]
+		]);
+	});
+
+	it('routes F# requests through the Dotnet sandbox implementation', async () => {
+		const binding = createPlaygroundBinding({
+			rootUrl: '/absproxy/5173',
+			dotnet: {
+				moduleUrl: '/absproxy/5173/wasm-dotnet/index.js?v=test'
+			}
+		});
+		const progress = { set() {} };
+		const sandbox = await binding.load('FSHARP');
+
+		await sandbox.load('printfn "hello"', true, ['demo'], {}, progress);
+
+		expect(sandbox.runtimeAssets).toEqual({
+			rootUrl: '/absproxy/5173',
+			dotnet: {
+				moduleUrl: '/absproxy/5173/wasm-dotnet/index.js?v=test'
+			}
+		});
+		expect(sandboxInstances.get('FSHARP')).toHaveLength(1);
+		expect(sandboxInstances.get('FSHARP')?.[0]?.loadCalls).toEqual([
+			[
+				{
+					rootUrl: '/absproxy/5173',
+					dotnet: {
+						moduleUrl: '/absproxy/5173/wasm-dotnet/index.js?v=test'
+					}
+				},
+				'printfn "hello"',
+				true,
+				['demo'],
+				{},
+				progress
+			]
+		]);
+	});
+
+	it('routes C# requests through the Dotnet sandbox implementation', async () => {
+		const binding = createPlaygroundBinding({
+			rootUrl: '/absproxy/5173',
+			dotnet: {
+				moduleUrl: '/absproxy/5173/wasm-dotnet/index.js?v=test'
+			}
+		});
+		const progress = { set() {} };
+		const sandbox = await binding.load('CSHARP');
+
+		await sandbox.load('Console.WriteLine("hello");', true, ['demo'], {}, progress);
+
+		expect(sandbox.runtimeAssets).toEqual({
+			rootUrl: '/absproxy/5173',
+			dotnet: {
+				moduleUrl: '/absproxy/5173/wasm-dotnet/index.js?v=test'
+			}
+		});
+		expect(sandboxInstances.get('CSHARP')).toHaveLength(1);
+		expect(sandboxInstances.get('CSHARP')?.[0]?.loadCalls).toEqual([
+			[
+				{
+					rootUrl: '/absproxy/5173',
+					dotnet: {
+						moduleUrl: '/absproxy/5173/wasm-dotnet/index.js?v=test'
+					}
+				},
+				'Console.WriteLine("hello");',
 				true,
 				['demo'],
 				{},

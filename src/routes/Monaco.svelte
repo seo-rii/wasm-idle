@@ -153,6 +153,138 @@
 		}
 	} satisfies monaco.languages.IMonarchLanguage;
 
+	const fsharpKeywords = [
+		'abstract',
+		'and',
+		'as',
+		'assert',
+		'base',
+		'begin',
+		'class',
+		'default',
+		'delegate',
+		'do',
+		'done',
+		'downcast',
+		'downto',
+		'elif',
+		'else',
+		'end',
+		'exception',
+		'extern',
+		'false',
+		'finally',
+		'for',
+		'fun',
+		'function',
+		'if',
+		'in',
+		'inherit',
+		'inline',
+		'interface',
+		'internal',
+		'lazy',
+		'let',
+		'match',
+		'member',
+		'module',
+		'mutable',
+		'namespace',
+		'new',
+		'null',
+		'of',
+		'open',
+		'or',
+		'override',
+		'private',
+		'public',
+		'rec',
+		'return',
+		'static',
+		'struct',
+		'then',
+		'to',
+		'true',
+		'try',
+		'type',
+		'upcast',
+		'use',
+		'val',
+		'void',
+		'when',
+		'while',
+		'with',
+		'yield'
+	];
+
+	const fsharpLanguageConfiguration = {
+		comments: {
+			lineComment: '//',
+			blockComment: ['(*', '*)']
+		},
+		brackets: [
+			['{', '}'],
+			['[', ']'],
+			['(', ')']
+		],
+		autoClosingPairs: [
+			{ open: '{', close: '}' },
+			{ open: '[', close: ']' },
+			{ open: '(', close: ')' },
+			{ open: '"', close: '"' },
+			{ open: "'", close: "'" }
+		],
+		surroundingPairs: [
+			{ open: '{', close: '}' },
+			{ open: '[', close: ']' },
+			{ open: '(', close: ')' },
+			{ open: '"', close: '"' },
+			{ open: "'", close: "'" }
+		]
+	} satisfies monaco.languages.LanguageConfiguration;
+
+	const fsharpMonarchTokens = {
+		defaultToken: '',
+		tokenPostfix: '.fsharp',
+		keywords: fsharpKeywords,
+		symbols: /[=><!~?:&|+\-*/^%@]+/,
+		escapes: /\\(?:[abfnrtv"'\\]|u[0-9A-Fa-f]{4}|[0-9]{3})/,
+		tokenizer: {
+			root: [
+				[/[A-Z][\w']*/, 'type.identifier'],
+				[/'[a-z_][\w']*/, 'type.identifier'],
+				[/[a-z_][\w']*/, { cases: { '@keywords': 'keyword', '@default': 'identifier' } }],
+				[/\/\/.*$/, 'comment'],
+				[/\(\*/, 'comment', '@comment'],
+				[/@"/, 'string', '@verbatimString'],
+				[/"/, 'string', '@string'],
+				[/'([^'\\]|\\.)'/, 'string'],
+				[/0[xX][0-9a-fA-F_]+/, 'number.hex'],
+				[/[0-9][\d_]*(\.[\d_]+)?([eE][\-+]?[\d_]+)?/, 'number'],
+				[/[{}()[\]]/, '@brackets'],
+				[/[;,.]/, 'delimiter'],
+				[/@symbols/, 'operator']
+			],
+			comment: [
+				[/[^(*)]+/, 'comment'],
+				[/\(\*/, 'comment', '@push'],
+				[/\*\)/, 'comment', '@pop'],
+				[/[(*]/, 'comment']
+			],
+			string: [
+				[/[^\\"]+/, 'string'],
+				[/@escapes/, 'string.escape'],
+				[/\\./, 'string.escape.invalid'],
+				[/"/, 'string', '@pop']
+			],
+			verbatimString: [
+				[/[^"]+/, 'string'],
+				[/""/, 'string.escape'],
+				[/"/, 'string', '@pop']
+			]
+		}
+	} satisfies monaco.languages.IMonarchLanguage;
+
 	export const editorValue = () => editor?.getValue() || '';
 
 	let divEl: HTMLDivElement | null = $state(null);
@@ -284,7 +416,12 @@
 		const activeModel = model || editor.getModel();
 		if (!activeModel) return;
 		const markers =
-			language === 'java' || language === 'rust' || language === 'go' || language === 'ocaml'
+			language === 'java' ||
+			language === 'rust' ||
+			language === 'go' ||
+			language === 'csharp' ||
+			language === 'fsharp' ||
+			language === 'ocaml'
 				? compilerDiagnostics.map((diagnostic) => ({
 						severity:
 							diagnostic.severity === 'warning'
@@ -313,7 +450,17 @@
 			return;
 		}
 		const nextValue = resolveEditorDefaultSource(
-			language as 'c' | 'cpp' | 'python' | 'java' | 'go' | 'elixir' | 'ocaml' | 'rust',
+			language as
+				| 'c'
+				| 'cpp'
+				| 'python'
+				| 'java'
+				| 'go'
+				| 'csharp'
+				| 'fsharp'
+				| 'elixir'
+				| 'ocaml'
+				| 'rust',
 			rustTargetTriple
 		);
 		if (currentValue !== nextValue) {
@@ -343,8 +490,27 @@
 			}
 			Monaco.languages.setLanguageConfiguration('ocaml', ocamlLanguageConfiguration);
 			Monaco.languages.setMonarchTokensProvider('ocaml', ocamlMonarchTokens);
+			if (!Monaco.languages.getLanguages().some(({ id }) => id === 'fsharp')) {
+				Monaco.languages.register({
+					id: 'fsharp',
+					aliases: ['F#', 'FSharp', 'fsharp'],
+					extensions: ['.fs', '.fsx', '.fsi']
+				});
+			}
+			Monaco.languages.setLanguageConfiguration('fsharp', fsharpLanguageConfiguration);
+			Monaco.languages.setMonarchTokensProvider('fsharp', fsharpMonarchTokens);
 			const defaultValue = resolveEditorDefaultSource(
-				language as 'c' | 'cpp' | 'python' | 'java' | 'go' | 'elixir' | 'ocaml' | 'rust',
+				language as
+					| 'c'
+					| 'cpp'
+					| 'python'
+					| 'java'
+					| 'go'
+					| 'csharp'
+					| 'fsharp'
+					| 'elixir'
+					| 'ocaml'
+					| 'rust',
 				rustTargetTriple
 			);
 			if (language === 'cpp') {

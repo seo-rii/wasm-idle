@@ -2,7 +2,7 @@
 
 ![wasm-idle](static/image.jpeg)
 
-Executes C++, Python, Java, Rust, and TinyGo code with working stdio.
+Executes C++, Python, Java, Rust, Go, TinyGo, OCaml, Elixir, C#, and F# code.
 
 Refer to src/lib/clang.
 
@@ -34,10 +34,7 @@ storage.
 The demo app can also vendor the sibling `wasm-tinygo` browser build under `static/wasm-tinygo/`
 and load its `runtime.js` entry directly inside the TinyGo playground sandbox. The example page
 uses the bundled browser runtime by default, including on `localhost` during `vite dev` /
-`vite preview`. Set `PUBLIC_WASM_TINYGO_HOST_COMPILE_URL` or
-`runtimeAssets.tinygo.hostCompileUrl` explicitly, or open the example page with
-`?tinygoCompilePath=host`, if you want to use a real TinyGo compile service.
-Refresh the
+`vite preview`. Refresh the
 bundled runtime assets after rebuilding the sibling `wasm-tinygo` project with:
 
 ```bash
@@ -55,9 +52,31 @@ artifact with browser WASI so terminal stdin/EOF behavior stays consistent with 
 The default bundled browser path loads the vendored TinyGo runtime in `direct` mode, skips the old
 bootstrap-only compile step, and runs runnable WASI artifacts locally. The `wasip2` and `wasip3`
 entries use the preview target profiles shipped by the bundled `wasm-tinygo` runtime, so they may
-produce non-runnable preview artifacts until the matching execution path is available. A host
-compile service is still useful when you want an explicit remote compile seam or broader
-compatibility than the shipped browser bundle.
+produce non-runnable preview artifacts until the matching execution path is available.
+
+## C# / F# / .NET browser integration
+
+The demo app vendors the sibling `wasm-dotnet` browser module under `static/wasm-dotnet/` and exposes
+C# as `CSHARP` and F# as `FSHARP` in the shared playground selector. Refresh the browser module
+after rebuilding the sibling project with:
+
+```bash
+cd wasm-dotnet
+npm run build
+dotnet workload install wasm-tools
+dotnet workload install wasm-experimental
+npm run build:runtime
+
+cd ../wasm-idle
+pnpm run sync:wasm-dotnet
+```
+
+C# and F# compile in the browser through the bundled .NET `browser-wasm` compiler app. `wasm-idle`
+loads the static `wasm-dotnet` module, which loads `runtime/dotnet.js`, invokes exported compiler
+methods, and runs the generated assembly in the same browser runtime. No server-side dotnet compile
+route is involved. For a hosted app, pass `runtimeAssets.dotnet.moduleUrl` or set
+`PUBLIC_WASM_DOTNET_MODULE_URL`. The current .NET browser path forwards CLI args and buffered
+terminal stdin into `Console.In`.
 
 ## Browser regression commands
 
@@ -97,10 +116,8 @@ Programs that intentionally read stdin until EOF can still be finished with `Ctr
 The browser helper writes stdin through the page-owned `window.__wasmIdleDebug.writeTerminalInput(...)`
 hook instead of trying to click xterm's hidden helper textarea, which proved too flaky for repeatable
 Playwright runs.
-The TinyGo probe follows the same pattern. The host-assisted path still looks for
-`tinygo host compile ready: target=wasip1` when you opt into `?tinygoCompilePath=host`, while the
-default browser path should load the vendored
-runtime in `direct` mode and avoid the old bootstrap compile command altogether.
+The TinyGo probe follows the same pattern. The browser path should load the vendored runtime in
+`direct` mode and avoid the old bootstrap compile command altogether.
 The TinyGo browser commands currently default to `vite dev`.
 If Rust ever reports `invalid metadata files for crate core` or `Unsupported archive identifier`,
 the browser almost always fetched a stale or wrong `wasm-rust` sysroot asset. Hard refresh the page
@@ -120,10 +137,7 @@ session; the repo-owned regression target is the local preview path above.
 ## Runtime expectations
 
 Rust still supports an external browser compiler module for library consumers. Point `PUBLIC_WASM_RUST_COMPILER_URL` at a built `wasm-rust` ESM entry such as `.../wasm-rust/dist/index.js`, or pass `runtimeAssets.rust.compilerUrl` at runtime.
-TinyGo can use a host compile service when one is configured explicitly. Point
-`PUBLIC_WASM_TINYGO_HOST_COMPILE_URL` at an endpoint that accepts `POST { source }` and returns the
-compiled wasm artifact payload, or pass `runtimeAssets.tinygo.hostCompileUrl` at runtime. The
-bundled browser runtime still expects a browser-loadable `wasm-tinygo` runtime module. Point
+TinyGo expects a browser-loadable `wasm-tinygo` runtime module. Point
 `PUBLIC_WASM_TINYGO_MODULE_URL` at a built entry such as `.../wasm-tinygo/dist/runtime.js`, or
 pass `runtimeAssets.tinygo.moduleUrl` at runtime. The older `PUBLIC_WASM_TINYGO_APP_URL` /
 `runtimeAssets.tinygo.appUrl` document path is still accepted and normalized to `runtime.js`.
@@ -159,14 +173,16 @@ const runtimeAssets: PlaygroundRuntimeAssets = {
 	rust: {
 		compilerUrl: 'https://cdn.example.com/wasm-rust/index.js'
 	},
+	dotnet: {
+		moduleUrl: 'https://cdn.example.com/wasm-dotnet/index.js'
+	},
 	tinygo: {
-		hostCompileUrl: 'https://tinygo.example.com/api/compile',
 		moduleUrl: 'https://cdn.example.com/wasm-tinygo/runtime.js'
 	}
 };
 ```
 
-Python custom loaders receive file names under the Pyodide asset root and can serve both core assets and package files. TeaVM custom loaders receive file names under the TeaVM asset root. Clang custom loaders receive `bin/memfs.zip`, `bin/clang.zip`, `bin/lld.zip`, and `bin/sysroot.tar.zip`; clangd custom loaders receive `clangd.js` and `clangd.wasm.gz`, with the worker decompressing the gzip payload before instantiation. Rust expects a browser-loadable compiler module URL; that module is responsible for serving its own nested runtime assets. TinyGo can use either an explicit host compile URL or a browser-loadable runtime module. The browser runtime now ships a direct-mode execution path that can produce and run the bundled TinyGo WASI artifact locally, alongside its sibling `tools/go-probe.wasm` and vendored emception assets. A host compile service remains useful when you want a dedicated remote compile seam or compatibility beyond the shipped browser bundle. TinyGo also accepts a runtime asset loader + pack bundle in `runtimeAssets.tinygo` when you need to serve runtime assets out of a single compressed archive. Compressed TeaVM runtime assets are no longer unpacked inside the library; provide the final file URL or handle decompression in your own loader.
+Python custom loaders receive file names under the Pyodide asset root and can serve both core assets and package files. TeaVM custom loaders receive file names under the TeaVM asset root. Clang custom loaders receive `bin/memfs.zip`, `bin/clang.zip`, `bin/lld.zip`, and `bin/sysroot.tar.zip`; clangd custom loaders receive `clangd.js` and `clangd.wasm.gz`, with the worker decompressing the gzip payload before instantiation. Rust expects a browser-loadable compiler module URL; that module is responsible for serving its own nested runtime assets. C# and F# expect a browser-loadable `wasm-dotnet` module with its static .NET `browser-wasm` runtime assets. TinyGo expects a browser-loadable runtime module. The browser runtime now ships a direct-mode execution path that can produce and run the bundled TinyGo WASI artifact locally, alongside its sibling `tools/go-probe.wasm` and vendored emception assets. TinyGo also accepts a runtime asset loader + pack bundle in `runtimeAssets.tinygo` when you need to serve runtime assets out of a single compressed archive. Compressed TeaVM runtime assets are no longer unpacked inside the library; provide the final file URL or handle decompression in your own loader.
 
 If you want a host app to reuse the same runtime asset configuration for both `<Terminal>` and direct `playground(...)` access, bind it once:
 
@@ -178,8 +194,10 @@ const wasmIdle = createPlaygroundBinding({
 	rust: {
 		compilerUrl: 'https://cdn.example.com/wasm-rust/index.js'
 	},
+	dotnet: {
+		moduleUrl: 'https://cdn.example.com/wasm-dotnet/index.js'
+	},
 	tinygo: {
-		hostCompileUrl: 'https://tinygo.example.com/api/compile',
 		moduleUrl: 'https://cdn.example.com/wasm-tinygo/runtime.js',
 		assetPacks: [
 			{
@@ -200,5 +218,5 @@ await sandbox.load('print("hi")', false);
 <Terminal {...wasmIdle.terminalProps} bind:terminal />
 ```
 
-Powered by [wasm-clang](https://github.com/binji/wasm-clang), Pyodide, TeaVM, `wasm-rust`, and
-`wasm-tinygo`.
+Powered by [wasm-clang](https://github.com/binji/wasm-clang), Pyodide, TeaVM, `wasm-rust`,
+`wasm-tinygo`, and `wasm-dotnet`.

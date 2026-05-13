@@ -2,6 +2,8 @@ import { chromium } from 'playwright-core';
 
 import { resolveChromiumExecutable } from './rust-browser-probe-lib.mjs';
 
+const staleBinaryenBridgePath = '/' + 'api/binaryen-command';
+
 /**
  * @typedef {{ type: string; text: string }} BrowserConsoleMessage
  */
@@ -174,7 +176,7 @@ export async function runOcamlBrowserProbe({
 		pageErrors.push('Page crashed');
 	});
 	page.on('request', (request) => {
-		if (request.url().includes('/api/binaryen-command')) {
+		if (request.url().includes(staleBinaryenBridgePath)) {
 			binaryenBridgeRequests.push({
 				method: request.method(),
 				url: request.url()
@@ -192,7 +194,7 @@ export async function runOcamlBrowserProbe({
 		}
 	});
 	page.on('response', (response) => {
-		if (response.url().includes('/api/binaryen-command')) {
+		if (response.url().includes(staleBinaryenBridgePath)) {
 			binaryenBridgeResponses.push({
 				status: response.status(),
 				url: response.url()
@@ -341,7 +343,10 @@ export async function runOcamlBrowserProbe({
 				);
 				await page.evaluate(
 					async ({ text, eof }) => {
-						await /** @type {any} */ (window).__wasmIdleDebug.writeTerminalInput(text, eof);
+						await /** @type {any} */ (window).__wasmIdleDebug.writeTerminalInput(
+							text,
+							eof
+						);
 					},
 					{ text: stdinText, eof: sendEof }
 				);

@@ -56,6 +56,7 @@
 		debugOutput = $state(''),
 		finish = true,
 		input = '',
+		pendingSandboxInput: string[] = [],
 		sandbox: BoundSandbox,
 		first = true,
 		tc = 0,
@@ -113,13 +114,12 @@
 						hasClangdLoader: !!currentRuntimeAssets?.clangd?.loader,
 						rustCompilerUrl: currentRuntimeAssets?.rust?.compilerUrl || '',
 						goCompilerUrl: currentRuntimeAssets?.go?.compilerUrl || '',
+						dotnetModuleUrl: currentRuntimeAssets?.dotnet?.moduleUrl || '',
 						elixirBundleUrl: currentRuntimeAssets?.elixir?.bundleUrl || '',
 						ocamlModuleUrl: currentRuntimeAssets?.ocaml?.moduleUrl || '',
 						ocamlManifestUrl: currentRuntimeAssets?.ocaml?.manifestUrl || '',
 						tinygoAppUrl: currentRuntimeAssets?.tinygo?.appUrl || '',
-						tinygoHostCompileUrl: currentRuntimeAssets?.tinygo?.hostCompileUrl || '',
-						tinygoModuleUrl: currentRuntimeAssets?.tinygo?.moduleUrl || '',
-						tinygoDisableHostCompile: !!currentRuntimeAssets?.tinygo?.disableHostCompile
+						tinygoModuleUrl: currentRuntimeAssets?.tinygo?.moduleUrl || ''
 					});
 		const requiresSandboxReset =
 			ll !== language || loadedRuntimeAssetsKey !== currentRuntimeAssetsKey;
@@ -141,6 +141,12 @@
 		sandbox.oncompilerdiagnostic = oncompilediagnostic;
 		sandbox.output = (output: string) =>
 			_tc === tc && writeTerminalOutput(output.replaceAll('\n', '\r\n'));
+		if (pendingSandboxInput.length > 0) {
+			for (const pendingInput of pendingSandboxInput) {
+				sandbox.write?.(pendingInput);
+			}
+			pendingSandboxInput = [];
+		}
 	}
 
 	function runSandbox<T>(pr: Promise<T>) {
@@ -181,7 +187,9 @@
 
 	function submitCurrentInput() {
 		term?.write('\r\n');
-		sandbox?.write?.(input + '\n');
+		const submittedInput = input + '\n';
+		if (sandbox) sandbox.write?.(submittedInput);
+		else pendingSandboxInput.push(submittedInput);
 		input = '';
 	}
 
@@ -195,10 +203,6 @@
 
 	async function waitForInput() {
 		await wait();
-		const startedAt = Date.now();
-		while (!sandbox && Date.now() - startedAt < 30_000) {
-			await new Promise((resolve) => setTimeout(resolve, 10));
-		}
 	}
 
 	const terminalControl: TerminalControl = {
@@ -224,6 +228,8 @@
 			const loadProgress =
 				language === 'RUST' ||
 				language === 'GO' ||
+				language === 'CSHARP' ||
+				language === 'FSHARP' ||
 				language === 'TINYGO' ||
 				language === 'OCAML'
 					? phaseProgress(prog, 0, 0.05)
@@ -231,6 +237,8 @@
 			const prepareProgress =
 				language === 'RUST' ||
 				language === 'GO' ||
+				language === 'CSHARP' ||
+				language === 'FSHARP' ||
 				language === 'TINYGO' ||
 				language === 'OCAML'
 					? phaseProgress(prog, 0.05, 0.99)

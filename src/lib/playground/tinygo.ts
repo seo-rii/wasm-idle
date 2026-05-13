@@ -1,6 +1,5 @@
 import {
 	resolveRustCompilerUrl,
-	resolveTinyGoHostCompileUrls,
 	resolveTinyGoModuleUrl,
 	type PlaygroundRuntimeAssets,
 	type TinyGoRuntimeAssetLoader,
@@ -61,18 +60,6 @@ type TinyGoRuntimeModule = {
 	}) => TinyGoRuntimeHooks;
 };
 
-type TinyGoHostCompileResponse = {
-	artifact: {
-		artifactKind?: 'probe' | 'bootstrap' | 'execution';
-		bytesBase64: string;
-		entrypoint?: '_start' | '_initialize' | 'main' | null;
-		path: string;
-		reason?: 'bootstrap-artifact' | 'missing-wasi-entrypoint';
-		runnable?: boolean;
-	};
-	logs?: string[];
-};
-
 const ACTIVITY_PREFIX_PATTERN = /^\[\d{2}:\d{2}:\d{2}\]\s?/gm;
 
 class TinyGo implements Sandbox {
@@ -85,8 +72,6 @@ class TinyGo implements Sandbox {
 	uid = 0;
 	exit = true;
 	moduleUrl = '';
-	hostCompileUrl = '';
-	hostCompileUrls: string[] = [];
 	rustRuntimeBaseUrl = '';
 	assetLoader: TinyGoRuntimeAssetLoader | undefined = undefined;
 	assetPacks: TinyGoRuntimeAssetPackReference[] | undefined = undefined;
@@ -123,19 +108,17 @@ class TinyGo implements Sandbox {
 			this.pendingEof = false;
 			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
 			const nextModuleUrl = resolveTinyGoModuleUrl(runtimeAssets, currentUrl);
-			const nextHostCompileUrls = resolveTinyGoHostCompileUrls(runtimeAssets, currentUrl);
 			const nextRustCompilerUrl = resolveRustCompilerUrl(runtimeAssets, currentUrl);
 			const nextRustRuntimeBaseUrl = nextRustCompilerUrl
 				? new URL('./runtime/', nextRustCompilerUrl).toString()
 				: '';
-			if (!nextModuleUrl && nextHostCompileUrls.length === 0) {
+			if (!nextModuleUrl) {
 				return reject(
-					'TinyGo runtime is not configured. Set PUBLIC_WASM_TINYGO_MODULE_URL, PUBLIC_WASM_TINYGO_HOST_COMPILE_URL, runtimeAssets.tinygo.moduleUrl, or runtimeAssets.tinygo.hostCompileUrl.'
+					'TinyGo runtime is not configured. Set PUBLIC_WASM_TINYGO_MODULE_URL or runtimeAssets.tinygo.moduleUrl.'
 				);
 			}
 			if (
 				(this.moduleUrl && this.moduleUrl !== nextModuleUrl) ||
-				this.hostCompileUrls.join('\n') !== nextHostCompileUrls.join('\n') ||
 				this.rustRuntimeBaseUrl !== nextRustRuntimeBaseUrl
 			) {
 				this.disposeRuntime();
@@ -148,8 +131,6 @@ class TinyGo implements Sandbox {
 			const nextAssetPacks =
 				typeof runtimeAssets === 'object' ? runtimeAssets?.tinygo?.assetPacks : undefined;
 			this.moduleUrl = nextModuleUrl;
-			this.hostCompileUrl = nextHostCompileUrls[0] || '';
-			this.hostCompileUrls = nextHostCompileUrls;
 			this.rustRuntimeBaseUrl = nextRustRuntimeBaseUrl;
 			this.assetLoader = nextAssetLoader;
 			this.assetPacks = nextAssetPacks;
@@ -157,9 +138,7 @@ class TinyGo implements Sandbox {
 				progress?.set?.(0.25);
 				await this.ensureWorker();
 				progress?.set?.(0.5);
-				if (nextHostCompileUrls.length === 0 && nextModuleUrl) {
-					await this.ensureRuntime();
-				}
+				await this.ensureRuntime();
 				progress?.set?.(1);
 				resolve();
 			} catch (error) {
@@ -347,102 +326,13 @@ class TinyGo implements Sandbox {
 		log = true,
 		prog?: { set?: (value: number) => void } | import('svelte/store').Writable<number>
 	) {
-		const hostCompileTarget = target === 'wasm' ? 'wasip1' : target;
 		const compileCacheKey = JSON.stringify({
 			code,
-			hostCompileUrls: this.hostCompileUrls,
 			moduleUrl: this.moduleUrl,
 			target
 		});
 		if (this.compiledArtifact && this.compiledCacheKey === compileCacheKey) {
 			return;
-		}
-		const unavailableHostCompileUrls: string[] = [];
-		if (this.hostCompileUrls.length > 0) {
-			prog?.set?.(0.05);
-			for (const hostCompileUrl of this.hostCompileUrls) {
-				let hostCompileResponse: Response | null = null;
-				try {
-					hostCompileResponse = await fetch(hostCompileUrl, {
-						method: 'POST',
-						headers: {
-							'content-type': 'application/json'
-						},
-						body: JSON.stringify({
-							source: code,
-							target: hostCompileTarget
-						})
-					});
-				} catch (error) {
-					unavailableHostCompileUrls.push(hostCompileUrl);
-					if (!this.moduleUrl && hostCompileUrl === this.hostCompileUrls.at(-1)) {
-						throw error;
-					}
-					continue;
-				}
-
-				if (hostCompileResponse?.ok) {
-					const payload = (await hostCompileResponse.json()) as TinyGoHostCompileResponse;
-					const artifactBase64 = payload.artifact?.bytesBase64 || '';
-					if (!payload.artifact?.path || !artifactBase64) {
-						throw new Error('TinyGo host compile did not return a wasm artifact');
-					}
-					const artifactBytes = Uint8Array.from(atob(artifactBase64), (char) =>
-						char.charCodeAt(0)
-					);
-					this.compiledArtifact = artifactBytes;
-					this.compiledArtifactExecutionError =
-						payload.artifact.runnable === false
-							? payload.artifact.artifactKind === 'probe'
-								? 'TinyGo host compile returned a non-runnable probe artifact without a supported WASI entrypoint.'
-								: payload.artifact.reason === 'bootstrap-artifact'
-									? 'TinyGo host compile returned a bootstrap artifact and cannot execute it yet.'
-									: 'TinyGo host compile returned a non-runnable artifact without a supported WASI entrypoint.'
-							: '';
-					this.compiledCacheKey = compileCacheKey;
-					prog?.set?.(0.95);
-					if (log) {
-						for (const line of payload.logs || []) {
-							this.output?.(line.endsWith('\n') ? line : `${line}\n`);
-						}
-						this.output?.(`tinygo artifact ready: ${payload.artifact.path}\n`);
-					}
-					return;
-				}
-
-				if (
-					hostCompileResponse &&
-					hostCompileResponse.status !== 404 &&
-					hostCompileResponse.status !== 405 &&
-					hostCompileResponse.status !== 501
-				) {
-					let failureMessage = 'TinyGo host compile failed';
-					try {
-						const payload = await hostCompileResponse.json();
-						if (typeof payload?.error === 'string' && payload.error) {
-							failureMessage = payload.error;
-						}
-					} catch {
-						const responseText = await hostCompileResponse.text();
-						if (responseText.trim()) {
-							failureMessage = responseText.trim();
-						}
-					}
-					throw new Error(failureMessage);
-				}
-
-				if (hostCompileResponse) {
-					unavailableHostCompileUrls.push(hostCompileUrl);
-				}
-			}
-		}
-		if (!this.moduleUrl) {
-			if (unavailableHostCompileUrls.length > 0) {
-				throw new Error(
-					`TinyGo host compile endpoints were unavailable: ${unavailableHostCompileUrls.join(', ')}.`
-				);
-			}
-			throw new Error('TinyGo host compile endpoint is unavailable.');
 		}
 		const runtime = await this.ensureRuntime();
 		runtime.reset();
@@ -480,15 +370,9 @@ class TinyGo implements Sandbox {
 		const artifact = runtime.readBuildArtifact();
 		if (!artifact) {
 			const compileFailure = this.extractCompileFailure();
-			if (
-				/(?:probe-only|supported WASI entrypoint|no host compile seam is configured)/i.test(
-					compileFailure
-				)
-			) {
+			if (/(?:probe-only|supported WASI entrypoint)/i.test(compileFailure)) {
 				throw new Error(
-					unavailableHostCompileUrls.length > 0
-						? `TinyGo host compile endpoints were unavailable: ${unavailableHostCompileUrls.join(', ')}. TinyGo browser runtime could not produce a runnable execution artifact: ${compileFailure}.`
-						: `TinyGo browser runtime could not produce a runnable execution artifact: ${compileFailure}.`
+					`TinyGo browser runtime could not produce a runnable execution artifact: ${compileFailure}.`
 				);
 			}
 			throw new Error(compileFailure);
@@ -514,20 +398,12 @@ class TinyGo implements Sandbox {
 		this.compiledArtifactExecutionError =
 			artifact.runnable === false
 				? browserRuntimeFailure !== ''
-					? unavailableHostCompileUrls.length > 0
-						? `TinyGo host compile endpoints were unavailable: ${unavailableHostCompileUrls.join(', ')}. TinyGo browser runtime could not produce a runnable execution artifact: ${browserRuntimeFailure}.`
-						: `TinyGo browser runtime could not produce a runnable execution artifact: ${browserRuntimeFailure}.`
+					? `TinyGo browser runtime could not produce a runnable execution artifact: ${browserRuntimeFailure}.`
 					: artifact.reason === 'bootstrap-artifact'
-						? unavailableHostCompileUrls.length > 0
-							? `TinyGo host compile endpoints were unavailable: ${unavailableHostCompileUrls.join(', ')}. TinyGo browser runtime produced a bootstrap artifact and cannot execute it yet.`
-							: 'TinyGo browser runtime produced a bootstrap artifact and cannot execute it yet.'
+						? 'TinyGo browser runtime produced a bootstrap artifact and cannot execute it yet.'
 						: artifact.artifactKind === 'probe'
-							? unavailableHostCompileUrls.length > 0
-								? `TinyGo host compile endpoints were unavailable: ${unavailableHostCompileUrls.join(', ')}. TinyGo browser runtime produced a non-runnable probe artifact without a supported WASI entrypoint.`
-								: 'TinyGo browser runtime produced a non-runnable probe artifact without a supported WASI entrypoint.'
-							: unavailableHostCompileUrls.length > 0
-								? `TinyGo host compile endpoints were unavailable: ${unavailableHostCompileUrls.join(', ')}. TinyGo browser runtime produced a non-runnable artifact without a supported WASI entrypoint.`
-								: 'TinyGo browser runtime produced a non-runnable artifact without a supported WASI entrypoint.'
+							? 'TinyGo browser runtime produced a non-runnable probe artifact without a supported WASI entrypoint.'
+							: 'TinyGo browser runtime produced a non-runnable artifact without a supported WASI entrypoint.'
 				: '';
 		this.compiledCacheKey = compileCacheKey;
 		if (log) {

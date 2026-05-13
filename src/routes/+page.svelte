@@ -12,6 +12,7 @@
 	import { base, resolve } from '$app/paths';
 	import { SvelteURL } from 'svelte/reactivity';
 	import type { PlaygroundRuntimeAssets } from '$lib/playground/assets';
+	import { WASM_DOTNET_ASSET_VERSION } from '$lib/playground/wasmDotnetVersion';
 	import { WASM_ELIXIR_ASSET_VERSION } from '$lib/playground/wasmElixirVersion';
 	import { WASM_GO_ASSET_VERSION } from '$lib/playground/wasmGoVersion';
 	import { WASM_OCAML_ASSET_VERSION } from '$lib/playground/wasmOcamlVersion';
@@ -42,6 +43,8 @@
 		| 'JAVA'
 		| 'RUST'
 		| 'GO'
+		| 'CSHARP'
+		| 'FSHARP'
 		| 'ELIXIR'
 		| 'OCAML'
 		| 'TINYGO';
@@ -78,6 +81,8 @@
 		'JAVA',
 		'RUST',
 		'GO',
+		'CSHARP',
+		'FSHARP',
 		'ELIXIR',
 		'OCAML',
 		'TINYGO'
@@ -89,6 +94,8 @@
 		JAVA: 'Java',
 		RUST: 'Rust',
 		GO: 'Go',
+		CSHARP: 'C#',
+		FSHARP: 'F#',
 		ELIXIR: 'Elixir',
 		OCAML: 'OCaml',
 		TINYGO: 'TinyGo'
@@ -96,17 +103,6 @@
 
 	let path = $derived(
 		page.url.pathname.endsWith('/') ? page.url.pathname.slice(0, -1) : page.url.pathname
-	);
-	let tinygoCompilePath = $derived(
-		browser ? (page.url.searchParams.get('tinygoCompilePath') ?? '') : ''
-	);
-	let tinygoDisableHostCompile = $derived(tinygoCompilePath === 'browser');
-	let tinygoHostCompileUrl = $derived(
-		tinygoCompilePath === 'host'
-			? path
-				? `${path}/api/tinygo/compile`
-				: '/api/tinygo/compile'
-			: undefined
 	);
 	let clangdBaseUrl = $derived(path ? `${path}/clangd` : '/clangd');
 	let runtimeAssets = $derived.by<PlaygroundRuntimeAssets>(() => ({
@@ -120,6 +116,11 @@
 			compilerUrl: path
 				? `${path}/wasm-go/index.js?v=${WASM_GO_ASSET_VERSION}`
 				: `/wasm-go/index.js?v=${WASM_GO_ASSET_VERSION}`
+		},
+		dotnet: {
+			moduleUrl: path
+				? `${path}/wasm-dotnet/index.js?v=${WASM_DOTNET_ASSET_VERSION}`
+				: `/wasm-dotnet/index.js?v=${WASM_DOTNET_ASSET_VERSION}`
 		},
 		elixir: {
 			bundleUrl: path
@@ -135,8 +136,6 @@
 				: `/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json?v=${WASM_OCAML_ASSET_VERSION}`
 		},
 		tinygo: {
-			disableHostCompile: tinygoDisableHostCompile,
-			hostCompileUrl: tinygoHostCompileUrl,
 			moduleUrl: path
 				? `${path}/wasm-tinygo/runtime.js?v=${WASM_TINYGO_ASSET_VERSION}`
 				: `/wasm-tinygo/runtime.js?v=${WASM_TINYGO_ASSET_VERSION}`
@@ -190,11 +189,15 @@
 						? 'java'
 						: language === 'RUST'
 							? 'rust'
-							: language === 'ELIXIR'
-								? 'elixir'
-								: language === 'OCAML'
-									? 'ocaml'
-									: 'go'
+							: language === 'CSHARP'
+								? 'csharp'
+								: language === 'FSHARP'
+									? 'fsharp'
+									: language === 'ELIXIR'
+										? 'elixir'
+										: language === 'OCAML'
+											? 'ocaml'
+											: 'go'
 	);
 	const compact = $derived(examplePaneWidth > 0 && examplePaneWidth <= 760);
 	const activeFile = $derived(files.find((file) => file.path === activePath) ?? files[0]);
@@ -351,6 +354,10 @@
 			'.py': 'PYTHON',
 			'.rs': 'RUST',
 			'.go': 'GO',
+			'.cs': 'CSHARP',
+			'.fs': 'FSHARP',
+			'.fsx': 'FSHARP',
+			'.fsi': 'FSHARP',
 			'.ex': 'ELIXIR',
 			'.exs': 'ELIXIR',
 			'.ml': 'OCAML',
@@ -367,6 +374,8 @@
 			PYTHON: 'main.py',
 			RUST: 'main.rs',
 			GO: 'main.go',
+			CSHARP: 'Program.cs',
+			FSHARP: 'Program.fsx',
 			ELIXIR: 'main.exs',
 			OCAML: 'main.ml',
 			TINYGO: 'main.go'
@@ -382,6 +391,8 @@
 			JAVA: 'java',
 			RUST: 'rust',
 			GO: 'go',
+			CSHARP: 'csharp',
+			FSHARP: 'fsharp',
 			ELIXIR: 'elixir',
 			OCAML: 'ocaml',
 			TINYGO: 'go'
@@ -827,6 +838,12 @@
 			java: 'JAVA',
 			rust: 'RUST',
 			go: 'GO',
+			csharp: 'CSHARP',
+			'c#': 'CSHARP',
+			cs: 'CSHARP',
+			fsharp: 'FSHARP',
+			'f#': 'FSHARP',
+			fs: 'FSHARP',
 			elixir: 'ELIXIR',
 			ocaml: 'OCAML',
 			tinygo: 'TINYGO'
@@ -1222,6 +1239,8 @@
 			language !== 'JAVA' &&
 			language !== 'RUST' &&
 			language !== 'GO' &&
+			language !== 'CSHARP' &&
+			language !== 'FSHARP' &&
 			language !== 'TINYGO' &&
 			language !== 'OCAML'
 		)
@@ -1421,12 +1440,14 @@
 						<option value="JAVA">Java</option>
 						<option value="RUST">Rust</option>
 						<option value="GO">Go</option>
+						<option value="CSHARP">C#</option>
+						<option value="FSHARP">F#</option>
 						<option value="ELIXIR">Elixir</option>
 						<option value="OCAML">OCaml</option>
 						<option value="TINYGO">TinyGo</option>
 					</select>
 				</label>
-				{#if language === 'JAVA' || language === 'RUST' || language === 'GO' || language === 'TINYGO'}
+				{#if language === 'JAVA' || language === 'RUST' || language === 'GO' || language === 'CSHARP' || language === 'FSHARP' || language === 'TINYGO'}
 					<label class="args-chip">
 						<span class="material-symbols-outlined">list_alt</span>
 						<input bind:value={argsInput} placeholder="3 4 5" spellcheck={false} />
@@ -1543,6 +1564,14 @@
 				running if the program reads stdin until EOF.
 			</p>
 		{/if}
+		{#if language === 'CSHARP' || language === 'FSHARP'}
+			<p class="hint">
+				{language === 'CSHARP' ? 'C#' : 'F#'} uses a `wasm-dotnet` browser runtime module plus
+				its bundled static .NET `browser-wasm` compiler app. The page loads `runtime/dotnet.js`,
+				compiles in the browser, and runs the generated assembly in the same runtime. Pass CLI
+				args here; terminal input submitted before or during preparation is passed to `Console.In`.
+			</p>
+		{/if}
 		{#if language === 'OCAML'}
 			<p class="hint">
 				OCaml uses the bundled `wasm-of-js-of-ocaml` browser-native toolchain. The backend
@@ -1566,10 +1595,9 @@
 			<p class="hint">
 				TinyGo runs through the bundled wasm-tinygo browser pipeline by default, loads its
 				direct runtime module, and runs the resulting WASI artifact in the local playground
-				runtime. `wasip2` and `wasip3` use the wasm-tinygo preview target profiles. Use
-				`?tinygoCompilePath=host` or an explicit host compile endpoint when you want the
-				host-assisted seam instead. Pass CLI args here, type into the terminal below, and
-				use Ctrl+D or the EOF button if the program reads stdin until EOF.
+				runtime. `wasip2` and `wasip3` use the wasm-tinygo preview target profiles. Pass CLI
+				args here, type into the terminal below, and use Ctrl+D or the EOF button if the
+				program reads stdin until EOF.
 			</p>
 		{/if}
 		{#if debugLanguage && debug.active}

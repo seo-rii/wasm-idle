@@ -1,4 +1,5 @@
 import Clang from '$lib/playground/clang';
+import Dotnet from '$lib/playground/dotnet';
 import Elixir from '$lib/playground/elixir';
 import Go from '$lib/playground/go';
 import Java from '$lib/playground/java';
@@ -25,6 +26,8 @@ export const supportedLanguages = [
 	'JAVA',
 	'RUST',
 	'GO',
+	'CSHARP',
+	'FSHARP',
 	'ELIXIR',
 	'TINYGO',
 	'OCAML'
@@ -100,6 +103,14 @@ async function playground(language: string, runtimeAssets?: SandboxRuntimeAssets
 		case 'GO':
 			sandbox = new Go();
 			break;
+		case 'CSHARP':
+		case 'C#':
+			sandbox = new Dotnet('CSHARP');
+			break;
+		case 'FSHARP':
+		case 'F#':
+			sandbox = new Dotnet('FSHARP');
+			break;
 		case 'ELIXIR':
 			sandbox = new Elixir();
 			break;
@@ -122,6 +133,12 @@ async function playground(language: string, runtimeAssets?: SandboxRuntimeAssets
 		if (language === 'JAVA') sandboxCache['JAVA'] = sandbox;
 		if (language === 'RUST') sandboxCache['RUST'] = sandbox;
 		if (language === 'GO') sandboxCache['GO'] = sandbox;
+		if (language === 'CSHARP' || language === 'C#') {
+			sandboxCache['CSHARP'] = sandboxCache['C#'] = sandbox;
+		}
+		if (language === 'FSHARP' || language === 'F#') {
+			sandboxCache['FSHARP'] = sandboxCache['F#'] = sandbox;
+		}
 		if (language === 'ELIXIR') sandboxCache['ELIXIR'] = sandbox;
 		if (language === 'TINYGO') sandboxCache['TINYGO'] = sandbox;
 		if (language === 'OCAML') sandboxCache['OCAML'] = sandbox;

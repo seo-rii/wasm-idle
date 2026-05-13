@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 const THIS_FILE = fileURLToPath(import.meta.url);
 const THIS_DIR = path.dirname(THIS_FILE);
 const REPO_ROOT = path.resolve(THIS_DIR, '..');
+const staleBinaryenBridgePath = '/' + 'api/binaryen-command';
 const DEFAULT_SOURCE_BROWSER_DIST_DIR = path.resolve(
 	REPO_ROOT,
 	'..',
@@ -116,7 +117,7 @@ async function validateBrowserNativeWorker(nativeWorkerPath) {
 			`wasm-of-js-of-ocaml browser-native worker at ${nativeWorkerPath} does not embed the static Binaryen tool runner. Rebuild wasm-of-js-of-ocaml after applying the browser-native Binaryen patch.`
 		);
 	}
-	if (source.includes('/api/binaryen-command')) {
+	if (source.includes(staleBinaryenBridgePath)) {
 		throw new Error(
 			`wasm-of-js-of-ocaml browser-native worker at ${nativeWorkerPath} still references the Binaryen API bridge. Rebuild wasm-of-js-of-ocaml after applying the static Binaryen patch.`
 		);
@@ -183,7 +184,9 @@ export async function syncWasmOfJsOfOcamlDist({
 		const toolPath = path.join(sourceBundleDir, relativeToolPath);
 		const toolStats = await stat(toolPath).catch(() => null);
 		if (!toolStats?.isFile()) {
-			throw new Error(`wasm-of-js-of-ocaml static Binaryen tool was not found at ${toolPath}.`);
+			throw new Error(
+				`wasm-of-js-of-ocaml static Binaryen tool was not found at ${toolPath}.`
+			);
 		}
 	}
 
@@ -204,10 +207,7 @@ export async function syncWasmOfJsOfOcamlDist({
 	if (rewrittenManifestSource !== targetManifestSource) {
 		await writeFile(targetManifestPath, rewrittenManifestSource, 'utf8');
 	}
-	const fingerprint = await computeBundleFingerprint([
-		sourceBrowserDistDir,
-		sourceBundleDir
-	]);
+	const fingerprint = await computeBundleFingerprint([sourceBrowserDistDir, sourceBundleDir]);
 	await writeVersionModule(versionModulePath, fingerprint);
 
 	return {
