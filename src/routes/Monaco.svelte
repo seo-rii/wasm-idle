@@ -153,7 +153,7 @@
 		}
 	} satisfies monaco.languages.IMonarchLanguage;
 
-	export const value = () => editor?.getValue() || '';
+	export const editorValue = () => editor?.getValue() || '';
 
 	let divEl: HTMLDivElement | null = $state(null);
 	let clangdStatus = $state<ClangdStatus>({ state: 'disabled' });
@@ -162,8 +162,11 @@
 	let clangdSessionVersion = 0;
 	let debugView = $state<MonacoDebugView | null>(null);
 	interface Props {
+		compact?: boolean;
 		editor: monaco.editor.IStandaloneCodeEditor | null;
 		language: any;
+		value?: string;
+		onChange?: (value: string) => void;
 		rustTargetTriple?: RustTargetTriple;
 		clangdEnabled?: boolean;
 		clangdBaseUrl?: string;
@@ -178,8 +181,11 @@
 	}
 
 	let {
+		compact = false,
 		editor = $bindable(),
 		language,
+		value,
+		onChange,
 		rustTargetTriple = 'wasm32-wasip1',
 		clangdEnabled = false,
 		clangdBaseUrl,
@@ -193,11 +199,37 @@
 		onBreakpointsChange
 	}: Props = $props();
 	let Monaco: typeof monaco | null = null;
+	let applyingValue = false;
 
 	$effect(() => {
 		if (!debugView) return;
 		debugView.setBreakpoints(debugLanguage ? breakpoints : []);
 		debugView.setPauseState(debugLanguage ? pausedLine : null, debugLocals, debugLanguage);
+	});
+
+	$effect(() => {
+		if (!editor || value === undefined || editor.getValue() === value) return;
+		const viewState = editor.saveViewState();
+		applyingValue = true;
+		editor.setValue(value);
+		if (viewState) editor.restoreViewState(viewState);
+		applyingValue = false;
+	});
+
+	$effect(() => {
+		if (!editor) return;
+		editor.updateOptions({
+			fontSize: compact ? 13 : 14,
+			lineHeight: compact ? 20 : 22,
+			lineNumbersMinChars: compact ? 3 : 5,
+			minimap: { enabled: false },
+			padding: compact ? { top: 10, bottom: 10 } : { top: 14, bottom: 14 },
+			scrollbar: {
+				horizontalScrollbarSize: compact ? 8 : 12,
+				verticalScrollbarSize: compact ? 8 : 12
+			},
+			wordWrap: compact ? 'on' : 'off'
+		});
 	});
 
 	$effect(() => {
@@ -275,6 +307,7 @@
 
 	$effect(() => {
 		if (!editor) return;
+		if (value !== undefined) return;
 		const currentValue = editor.getValue();
 		if (!isEditorDefaultSource(currentValue) && !isLegacyEditorDefaultSource(currentValue)) {
 			return;
@@ -316,11 +349,24 @@
 			);
 			if (language === 'cpp') {
 				editor = Monaco.editor.create(divEl!, {
-					value: defaultValue,
+					value: value ?? defaultValue,
 					language,
 					automaticLayout: true,
+					fontSize: compact ? 13 : 14,
+					lineHeight: compact ? 20 : 22,
+					lineNumbersMinChars: compact ? 3 : 5,
+					minimap: { enabled: false },
 					occurrencesHighlight: 'off',
-					glyphMargin: true
+					glyphMargin: true,
+					padding: compact ? { top: 10, bottom: 10 } : { top: 14, bottom: 14 },
+					scrollbar: {
+						horizontalScrollbarSize: compact ? 8 : 12,
+						verticalScrollbarSize: compact ? 8 : 12
+					},
+					wordWrap: compact ? 'on' : 'off'
+				});
+				editor.onDidChangeModelContent(() => {
+					if (!applyingValue) onChange?.(editor?.getValue() || '');
 				});
 				debugView = new MonacoDebugView(Monaco, editor, onBreakpointsChange);
 				debugView.setBreakpoints(breakpoints);
@@ -334,11 +380,24 @@
 			}
 			clangdStatus = { state: 'disabled' };
 			editor = Monaco.editor.create(divEl!, {
-				value: defaultValue,
+				value: value ?? defaultValue,
 				language,
 				automaticLayout: true,
+				fontSize: compact ? 13 : 14,
+				lineHeight: compact ? 20 : 22,
+				lineNumbersMinChars: compact ? 3 : 5,
+				minimap: { enabled: false },
 				occurrencesHighlight: 'off',
-				glyphMargin: !!debugLanguage
+				glyphMargin: !!debugLanguage,
+				padding: compact ? { top: 10, bottom: 10 } : { top: 14, bottom: 14 },
+				scrollbar: {
+					horizontalScrollbarSize: compact ? 8 : 12,
+					verticalScrollbarSize: compact ? 8 : 12
+				},
+				wordWrap: compact ? 'on' : 'off'
+			});
+			editor.onDidChangeModelContent(() => {
+				if (!applyingValue) onChange?.(editor?.getValue() || '');
 			});
 			if (debugLanguage) {
 				debugView = new MonacoDebugView(Monaco, editor, onBreakpointsChange);
@@ -379,7 +438,7 @@
 		min-width: 0;
 		min-height: 0;
 		display: flex;
-		border-left: 1px solid #e5e7eb;
+		border-left: 0;
 		position: relative;
 		overflow: hidden;
 	}

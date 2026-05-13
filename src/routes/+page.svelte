@@ -8,6 +8,9 @@
 	} from '$lib';
 	import { page } from '$app/state';
 	import { browser } from '$app/environment';
+	import { replaceState } from '$app/navigation';
+	import { base, resolve } from '$app/paths';
+	import { SvelteURL } from 'svelte/reactivity';
 	import type { PlaygroundRuntimeAssets } from '$lib/playground/assets';
 	import { WASM_ELIXIR_ASSET_VERSION } from '$lib/playground/wasmElixirVersion';
 	import { WASM_GO_ASSET_VERSION } from '$lib/playground/wasmGoVersion';
@@ -25,6 +28,32 @@
 	import type { TerminalControl } from '$lib/terminal';
 	import type monaco from 'monaco-editor';
 	import { executeTerminalRun } from './execute';
+	import { resolveEditorDefaultSource } from './editor-defaults';
+
+	type WorkspaceFile = {
+		path: string;
+		content: string;
+	};
+
+	type WorkspaceSnapshot = {
+		activePath: string;
+		argsInput: string;
+		files: WorkspaceFile[];
+		goTarget: GoTarget;
+		language: string;
+		log: boolean;
+		ocamlBackend: OcamlBackend;
+		ocamlWasmBinaryenMode: OcamlWasmBinaryenMode;
+		openTabs: string[];
+		rustTargetTriple: RustTargetTriple;
+		sidebarOpen: boolean;
+		stdinInput: string;
+		tinygoTarget: TinyGoTarget;
+		version: number;
+	};
+
+	const WORKSPACE_STORAGE_KEY = 'wasm-idle:example-workspace:v3';
+	const SHARE_PREFIX = 'workspace=';
 
 	let path = $derived(
 		page.url.pathname.endsWith('/') ? page.url.pathname.slice(0, -1) : page.url.pathname
@@ -96,20 +125,55 @@
 		terminalPaneWidth = $state<number | null>(null),
 		resizingPane = $state(false);
 
+	let files = $state<WorkspaceFile[]>(createDefaultWorkspaceFiles());
+	let activePath = $state('main.cpp');
+	let openTabs = $state<string[]>(['main.cpp']);
+	let sidebarOpen = $state(true);
+	let stdinInput = $state('4\n');
+	let saveStatus = $state('Ready');
+	let workspaceInitialized = false;
+	let workspaceSaveTimer: ReturnType<typeof setTimeout> | null = null;
+	let fileInput = $state<HTMLInputElement | null>(null);
+	let dragActive = $state(false);
+
 	const editorLanguage = $derived(
-		language === 'CPP'
-			? 'cpp'
-			: language === 'PYTHON'
-				? 'python'
-				: language === 'JAVA'
-					? 'java'
-					: language === 'RUST'
-						? 'rust'
-						: language === 'ELIXIR'
-							? 'elixir'
-							: language === 'OCAML'
-								? 'ocaml'
-								: 'go'
+		language === 'C'
+			? 'c'
+			: language === 'CPP'
+				? 'cpp'
+				: language === 'PYTHON'
+					? 'python'
+					: language === 'JAVA'
+						? 'java'
+						: language === 'RUST'
+							? 'rust'
+							: language === 'ELIXIR'
+								? 'elixir'
+								: language === 'OCAML'
+									? 'ocaml'
+									: 'go'
+	);
+	const compact = $derived(examplePaneWidth > 0 && examplePaneWidth <= 760);
+	const activeFile = $derived(files.find((file) => file.path === activePath) ?? files[0]);
+	const sortedFiles = $derived([...files].sort((a, b) => a.path.localeCompare(b.path)));
+	const activeLines = $derived(activeFile ? activeFile.content.split(/\r\n|\r|\n/).length : 0);
+	const activeBytes = $derived(activeFile ? new Blob([activeFile.content]).size : 0);
+	const workspaceSaveKey = $derived(
+		JSON.stringify({
+			activePath,
+			argsInput,
+			files: files.map((file) => [file.path, file.content]),
+			goTarget,
+			language,
+			log,
+			ocamlBackend,
+			ocamlWasmBinaryenMode,
+			openTabs,
+			rustTargetTriple,
+			sidebarOpen,
+			stdinInput,
+			tinygoTarget
+		})
 	);
 
 	const progressRef = {
@@ -183,6 +247,418 @@
 		preloadBrowserGoRuntime?: (options?: { target?: GoTarget }) => Promise<void>;
 	};
 
+	function createDefaultWorkspaceFiles() {
+		return [
+			{
+				path: 'main.cpp',
+				content: resolveEditorDefaultSource('cpp', 'wasm32-wasip1')
+			},
+			{
+				path: 'main.py',
+				content: resolveEditorDefaultSource('python', 'wasm32-wasip1')
+			},
+			{ path: 'input.txt', content: '4\n' }
+		];
+	}
+
+	function normalizePath(value: string) {
+		return value
+			.trim()
+			.replaceAll('\\', '/')
+			.split('/')
+			.filter((part) => part && part !== '.' && part !== '..')
+			.join('/');
+	}
+
+	function basename(value: string) {
+		return value.split('/').pop() || value;
+	}
+
+	function extension(value: string) {
+		const name = basename(value);
+		const index = name.lastIndexOf('.');
+		return index === -1 ? '' : name.slice(index).toLowerCase();
+	}
+
+	function languageForPath(filePath: string) {
+		const ext = extension(filePath);
+		const match: Record<string, string> = {
+			'.c': 'C',
+			'.cc': 'CPP',
+			'.cpp': 'CPP',
+			'.cxx': 'CPP',
+			'.h': 'CPP',
+			'.hpp': 'CPP',
+			'.java': 'JAVA',
+			'.py': 'PYTHON',
+			'.rs': 'RUST',
+			'.go': 'GO',
+			'.ex': 'ELIXIR',
+			'.exs': 'ELIXIR',
+			'.ml': 'OCAML',
+			'.mli': 'OCAML'
+		};
+		return match[ext] || null;
+	}
+
+	function defaultPathForLanguage() {
+		const match: Record<string, string> = {
+			C: 'main.c',
+			CPP: 'main.cpp',
+			JAVA: 'Main.java',
+			PYTHON: 'main.py',
+			RUST: 'main.rs',
+			GO: 'main.go',
+			ELIXIR: 'main.exs',
+			OCAML: 'main.ml',
+			TINYGO: 'main.go'
+		};
+		return match[language] || 'main.txt';
+	}
+
+	function defaultSourceForLanguage(nextLanguage = language) {
+		if (nextLanguage === 'C')
+			return '#include <stdio.h>\n\nint main() {\n    puts("hello");\n}\n';
+		if (nextLanguage === 'CPP') return resolveEditorDefaultSource('cpp', rustTargetTriple);
+		if (nextLanguage === 'PYTHON')
+			return resolveEditorDefaultSource('python', rustTargetTriple);
+		if (nextLanguage === 'JAVA') return resolveEditorDefaultSource('java', rustTargetTriple);
+		if (nextLanguage === 'RUST') return resolveEditorDefaultSource('rust', rustTargetTriple);
+		if (nextLanguage === 'GO' || nextLanguage === 'TINYGO')
+			return resolveEditorDefaultSource('go', rustTargetTriple);
+		if (nextLanguage === 'ELIXIR')
+			return resolveEditorDefaultSource('elixir', rustTargetTriple);
+		if (nextLanguage === 'OCAML') return resolveEditorDefaultSource('ocaml', rustTargetTriple);
+		return '';
+	}
+
+	function uniquePath(requestedPath: string) {
+		const safePath = normalizePath(requestedPath) || 'untitled.txt';
+		if (!files.some((file) => file.path === safePath)) return safePath;
+		const slash = safePath.lastIndexOf('/');
+		const directory = slash === -1 ? '' : safePath.slice(0, slash + 1);
+		const name = slash === -1 ? safePath : safePath.slice(slash + 1);
+		const dot = name.lastIndexOf('.');
+		const base = dot === -1 ? name : name.slice(0, dot);
+		const ext = dot === -1 ? '' : name.slice(dot);
+		let index = 2;
+		let next = `${directory}${base}-${index}${ext}`;
+		while (files.some((file) => file.path === next)) {
+			index += 1;
+			next = `${directory}${base}-${index}${ext}`;
+		}
+		return next;
+	}
+
+	function sanitizeFiles(value: unknown) {
+		if (!Array.isArray(value)) return [];
+		const seen: string[] = [];
+		const nextFiles: WorkspaceFile[] = [];
+		for (const file of value) {
+			if (!file || typeof file.path !== 'string' || typeof file.content !== 'string')
+				continue;
+			const safePath = normalizePath(file.path);
+			if (!safePath || seen.includes(safePath)) continue;
+			seen.push(safePath);
+			nextFiles.push({ path: safePath, content: file.content });
+		}
+		return nextFiles;
+	}
+
+	function updateActiveContent(value: string) {
+		const file = activeFile;
+		if (!file || file.content === value) return;
+		file.content = value;
+		saveStatus = 'Saving...';
+	}
+
+	function selectFile(filePath: string) {
+		if (!files.some((file) => file.path === filePath)) return;
+		activePath = filePath;
+		if (!openTabs.includes(filePath)) openTabs = [...openTabs, filePath];
+		const nextLanguage = languageForPath(filePath);
+		if (nextLanguage) language = nextLanguage;
+		if (compact) sidebarOpen = false;
+	}
+
+	function addWorkspaceFile(filePath: string, content = '', select = true) {
+		const nextPath = uniquePath(filePath);
+		files = [...files, { path: nextPath, content }];
+		if (select) selectFile(nextPath);
+		saveStatus = `${basename(nextPath)} added`;
+		return nextPath;
+	}
+
+	function newFile() {
+		const requested = prompt('File name', defaultPathForLanguage());
+		if (!requested) return;
+		const nextLanguage = languageForPath(requested) || language;
+		addWorkspaceFile(requested, defaultSourceForLanguage(nextLanguage));
+	}
+
+	function renameActiveFile() {
+		const file = activeFile;
+		if (!file) return;
+		const requested = prompt('Rename file', file.path);
+		if (!requested) return;
+		const nextPath = normalizePath(requested);
+		if (!nextPath || nextPath === file.path) return;
+		if (files.some((item) => item.path === nextPath)) {
+			saveStatus = 'File already exists';
+			return;
+		}
+		const previousPath = file.path;
+		file.path = nextPath;
+		activePath = nextPath;
+		openTabs = openTabs.map((tab) => (tab === previousPath ? nextPath : tab));
+		const nextLanguage = languageForPath(nextPath);
+		if (nextLanguage) language = nextLanguage;
+		saveStatus = `${basename(nextPath)} renamed`;
+	}
+
+	function duplicateActiveFile() {
+		const file = activeFile;
+		if (!file) return;
+		addWorkspaceFile(file.path, file.content);
+	}
+
+	function deleteActiveFile() {
+		const file = activeFile;
+		if (!file) return;
+		if (files.length === 1) {
+			saveStatus = 'Keep at least one file';
+			return;
+		}
+		if (!confirm(`Delete ${file.path}?`)) return;
+		const deletedPath = file.path;
+		const previousIndex = files.findIndex((item) => item.path === deletedPath);
+		files = files.filter((item) => item.path !== deletedPath);
+		openTabs = openTabs.filter((tab) => tab !== deletedPath);
+		const nextFile = files[Math.max(0, Math.min(previousIndex, files.length - 1))];
+		selectFile(nextFile.path);
+		saveStatus = `${basename(deletedPath)} deleted`;
+	}
+
+	function closeTab(filePath: string, event: MouseEvent) {
+		event.stopPropagation();
+		if (openTabs.length === 1) return;
+		const tabIndex = openTabs.indexOf(filePath);
+		openTabs = openTabs.filter((tab) => tab !== filePath);
+		if (activePath === filePath) {
+			const nextPath = openTabs[Math.max(0, Math.min(tabIndex, openTabs.length - 1))];
+			if (nextPath) selectFile(nextPath);
+		}
+	}
+
+	function parseArgs(value: string) {
+		return value.trim() ? value.trim().split(/\s+/) : [];
+	}
+
+	function encodeBase64Url(value: string) {
+		const bytes = new TextEncoder().encode(value);
+		let binary = '';
+		for (let index = 0; index < bytes.length; index += 0x8000) {
+			binary += String.fromCharCode(...bytes.slice(index, index + 0x8000));
+		}
+		return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
+	}
+
+	function readHashSnapshot() {
+		if (!browser || !location.hash.startsWith(`#${SHARE_PREFIX}`)) return null;
+		try {
+			const decoded = decodeBase64Url(location.hash.slice(SHARE_PREFIX.length + 1));
+			if (!decoded) return null;
+			return JSON.parse(decoded) as Partial<WorkspaceSnapshot>;
+		} catch {
+			saveStatus = 'Invalid share URL';
+			return null;
+		}
+	}
+
+	function snapshot(): WorkspaceSnapshot {
+		return {
+			activePath,
+			argsInput,
+			files: files.map((file) => ({ path: file.path, content: file.content })),
+			goTarget,
+			language,
+			log,
+			ocamlBackend,
+			ocamlWasmBinaryenMode,
+			openTabs: openTabs.filter((tab) => files.some((file) => file.path === tab)),
+			rustTargetTriple,
+			sidebarOpen,
+			stdinInput,
+			tinygoTarget,
+			version: 3
+		};
+	}
+
+	function applySnapshot(value?: Partial<WorkspaceSnapshot>, message = 'Workspace restored') {
+		const nextFiles = sanitizeFiles(value?.files);
+		files = nextFiles.length ? nextFiles : createDefaultWorkspaceFiles();
+		activePath =
+			value?.activePath && files.some((file) => file.path === value.activePath)
+				? value.activePath
+				: files[0].path;
+		openTabs = value?.openTabs?.filter((tab) => files.some((file) => file.path === tab)) ?? [];
+		if (!openTabs.length) openTabs = [activePath];
+		if (typeof value?.language === 'string') language = value.language;
+		if (typeof value?.argsInput === 'string') argsInput = value.argsInput;
+		if (typeof value?.stdinInput === 'string') stdinInput = value.stdinInput;
+		if (typeof value?.log === 'boolean') log = value.log;
+		if (
+			value?.rustTargetTriple === 'wasm32-wasip1' ||
+			value?.rustTargetTriple === 'wasm32-wasip2' ||
+			value?.rustTargetTriple === 'wasm32-wasip3'
+		)
+			rustTargetTriple = value.rustTargetTriple;
+		if (
+			value?.goTarget === 'wasip1/wasm' ||
+			value?.goTarget === 'wasip2/wasm' ||
+			value?.goTarget === 'wasip3/wasm' ||
+			value?.goTarget === 'js/wasm'
+		)
+			goTarget = value.goTarget;
+		if (
+			value?.tinygoTarget === 'wasm' ||
+			value?.tinygoTarget === 'wasip1' ||
+			value?.tinygoTarget === 'wasip2' ||
+			value?.tinygoTarget === 'wasip3'
+		)
+			tinygoTarget = value.tinygoTarget;
+		if (value?.ocamlBackend === 'js' || value?.ocamlBackend === 'wasm')
+			ocamlBackend = value.ocamlBackend;
+		if (value?.ocamlWasmBinaryenMode === 'fast' || value?.ocamlWasmBinaryenMode === 'full')
+			ocamlWasmBinaryenMode = value.ocamlWasmBinaryenMode;
+		sidebarOpen = value?.sidebarOpen ?? !compact;
+		const nextLanguage = languageForPath(activePath);
+		if (nextLanguage) language = nextLanguage;
+		saveStatus = message;
+	}
+
+	function saveWorkspace(showStatus = false) {
+		if (!browser) return;
+		localStorage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(snapshot()));
+		if (showStatus) saveStatus = 'Saved locally';
+		else
+			saveStatus = `Saved ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+	}
+
+	async function shareWorkspace() {
+		if (!browser) return;
+		saveWorkspace();
+		const shareHash = `${SHARE_PREFIX}${encodeBase64Url(JSON.stringify(snapshot()))}`;
+		const url = new SvelteURL(location.href);
+		const routePath =
+			base && url.pathname.startsWith(base)
+				? url.pathname.slice(base.length) || '/'
+				: url.pathname;
+		url.hash = shareHash;
+		replaceState(resolve(`${routePath}${url.search}#${shareHash}`), page.state);
+		await navigator.clipboard?.writeText(url.toString());
+		saveStatus =
+			url.toString().length > 60000 ? 'Share URL copied, but large' : 'Share URL copied';
+	}
+
+	function downloadBlob(blob: Blob, fileName: string) {
+		const url = URL.createObjectURL(blob);
+		const anchor = document.createElement('a');
+		anchor.href = url;
+		anchor.download = fileName;
+		anchor.click();
+		URL.revokeObjectURL(url);
+	}
+
+	function downloadActiveFile() {
+		const file = activeFile;
+		if (!file) return;
+		downloadBlob(
+			new Blob([file.content], { type: 'text/plain;charset=utf-8' }),
+			basename(file.path)
+		);
+		saveStatus = `${basename(file.path)} downloaded`;
+	}
+
+	async function downloadZip() {
+		const zip = await import('@zip.js/zip.js');
+		const writer = new zip.ZipWriter(new zip.BlobWriter('application/zip'));
+		for (const file of files) {
+			await writer.add(file.path, new zip.TextReader(file.content));
+		}
+		downloadBlob(await writer.close(), 'wasm-idle-workspace.zip');
+		saveStatus = 'ZIP downloaded';
+	}
+
+	async function importZip(file: File) {
+		const zip = await import('@zip.js/zip.js');
+		const reader = new zip.ZipReader(new zip.BlobReader(file));
+		const entries = await reader.getEntries();
+		const imported: string[] = [];
+		for (const entry of entries) {
+			if (entry.directory || !entry.filename) continue;
+			const blob = await entry.getData?.(new zip.BlobWriter());
+			if (!blob) continue;
+			imported.push(addWorkspaceFile(entry.filename, await blob.text(), false));
+		}
+		await reader.close();
+		return imported;
+	}
+
+	async function importFiles(fileList: File[]) {
+		const imported: string[] = [];
+		for (const file of fileList) {
+			if (file.name.toLowerCase().endsWith('.zip')) {
+				imported.push(...(await importZip(file)));
+			} else {
+				imported.push(
+					addWorkspaceFile(
+						(file as File & { webkitRelativePath?: string }).webkitRelativePath ||
+							file.name,
+						await file.text(),
+						false
+					)
+				);
+			}
+		}
+		if (imported[0]) selectFile(imported[0]);
+		saveStatus = `${imported.length} file${imported.length === 1 ? '' : 's'} imported`;
+	}
+
+	async function handleUpload(event: Event) {
+		const input = event.currentTarget as HTMLInputElement;
+		if (!input.files?.length) return;
+		await importFiles([...input.files]);
+		input.value = '';
+	}
+
+	function handleDragOver(event: DragEvent) {
+		if (!event.dataTransfer?.types.includes('Files')) return;
+		event.preventDefault();
+		dragActive = true;
+	}
+
+	async function handleDrop(event: DragEvent) {
+		if (!event.dataTransfer?.files.length) return;
+		event.preventDefault();
+		dragActive = false;
+		await importFiles([...event.dataTransfer.files]);
+	}
+
+	function resetWorkspace() {
+		if (!confirm('Reset workspace?')) return;
+		applySnapshot(
+			{
+				files: createDefaultWorkspaceFiles(),
+				activePath: 'main.cpp',
+				openTabs: ['main.cpp']
+			},
+			'Workspace reset'
+		);
+		if (browser) localStorage.removeItem(WORKSPACE_STORAGE_KEY);
+		saveWorkspace();
+	}
+
 	async function stopExecution() {
 		if (!terminal || !runningMode) return;
 		if (runningMode === 'debug') {
@@ -235,7 +711,7 @@
 	}
 
 	async function exec(enableDebug = false) {
-		if (!editor || !terminal) return;
+		if (!editor || !terminal || !activeFile) return;
 		if (enableDebug && !debugLanguage) return;
 		if (runningMode) return;
 		runningMode = enableDebug ? 'debug' : 'run';
@@ -246,16 +722,10 @@
 			debug.reset();
 		}
 		compilerDiagnostics = [];
-		const args =
-			(language === 'JAVA' ||
-				language === 'RUST' ||
-				language === 'GO' ||
-				language === 'TINYGO') &&
-			argsInput.trim()
-				? argsInput.trim().split(/\s+/)
-				: [];
+		const codeToRun = activeFile.content;
+		const args = parseArgs(argsInput);
 		if (browser) {
-			localStorage.setItem('code', editor.getValue());
+			localStorage.setItem('code', codeToRun);
 			localStorage.setItem('language', language);
 			localStorage.setItem('argsInput', argsInput);
 			localStorage.setItem('rustTargetTriple', rustTargetTriple);
@@ -263,6 +733,7 @@
 			localStorage.setItem('tinygoTarget', tinygoTarget);
 			localStorage.setItem('ocamlBackend', ocamlBackend);
 			localStorage.setItem('ocamlWasmBinaryenMode', ocamlWasmBinaryenMode);
+			saveWorkspace();
 		}
 		try {
 			if (!('SharedArrayBuffer' in window)) location.reload();
@@ -270,21 +741,25 @@
 			await executeTerminalRun({
 				terminal,
 				language,
-				code: editor.getValue(),
+				code: codeToRun,
 				log,
 				progress: progressRef,
 				args,
 				options: {
 					debug: enableDebug,
 					breakpoints: [...debug.effectiveBreakpoints],
-					stdin: '',
+					stdin: stdinInput,
+					activePath,
+					workspaceFiles: files.map((file) => ({
+						path: file.path,
+						content: file.path === activePath ? codeToRun : file.content
+					})),
 					pauseOnEntry: enableDebug,
 					rustTargetTriple: language === 'RUST' ? rustTargetTriple : undefined,
 					goTarget: language === 'GO' ? goTarget : undefined,
 					tinygoTarget: language === 'TINYGO' ? tinygoTarget : undefined,
 					ocamlBackend: language === 'OCAML' ? ocamlBackend : undefined,
-					ocamlWasmBinaryenMode:
-						language === 'OCAML' ? ocamlWasmBinaryenMode : undefined
+					ocamlWasmBinaryenMode: language === 'OCAML' ? ocamlWasmBinaryenMode : undefined
 				}
 			});
 		} finally {
@@ -296,6 +771,26 @@
 
 	$effect(() => {
 		if (browser && editor && !init) {
+			const sharedWorkspace = readHashSnapshot();
+			if (sharedWorkspace) {
+				applySnapshot(sharedWorkspace, 'Shared workspace loaded');
+				workspaceInitialized = true;
+				init = true;
+				return;
+			}
+
+			const storedWorkspace = localStorage.getItem(WORKSPACE_STORAGE_KEY);
+			if (storedWorkspace) {
+				try {
+					applySnapshot(JSON.parse(storedWorkspace), 'Workspace restored');
+					workspaceInitialized = true;
+					init = true;
+					return;
+				} catch {
+					localStorage.removeItem(WORKSPACE_STORAGE_KEY);
+				}
+			}
+
 			const code = localStorage.getItem('code');
 			const lang = localStorage.getItem('language');
 			const storedArgs = localStorage.getItem('argsInput');
@@ -316,7 +811,9 @@
 			const requestedOcamlBackend = page.url.searchParams.get('ocamlBackend');
 			const requestedOcamlWasmBinaryenMode =
 				page.url.searchParams.get('ocamlWasmBinaryenMode');
-			if (requestedCode ?? code) editor.setValue(requestedCode ?? code ?? '');
+			if (requestedCode ?? code) {
+				activeFile.content = requestedCode ?? code ?? '';
+			}
 			if (requestedLanguage ?? lang) language = requestedLanguage ?? lang ?? language;
 			if (requestedArgs !== null) argsInput = requestedArgs;
 			else if (storedArgs !== null) argsInput = storedArgs;
@@ -355,9 +852,15 @@
 			} else if (storedOcamlBackend === 'js' || storedOcamlBackend === 'wasm') {
 				ocamlBackend = storedOcamlBackend;
 			}
-			if (requestedOcamlWasmBinaryenMode === 'fast' || requestedOcamlWasmBinaryenMode === 'full') {
+			if (
+				requestedOcamlWasmBinaryenMode === 'fast' ||
+				requestedOcamlWasmBinaryenMode === 'full'
+			) {
 				ocamlWasmBinaryenMode = requestedOcamlWasmBinaryenMode;
-			} else if (storedOcamlWasmBinaryenMode === 'fast' || storedOcamlWasmBinaryenMode === 'full') {
+			} else if (
+				storedOcamlWasmBinaryenMode === 'fast' ||
+				storedOcamlWasmBinaryenMode === 'full'
+			) {
 				ocamlWasmBinaryenMode = storedOcamlWasmBinaryenMode;
 			}
 			if (
@@ -367,8 +870,22 @@
 			) {
 				rustTargetTriple = requestedRustTargetTriple;
 			}
+			const nextLanguage = languageForPath(activePath);
+			if (nextLanguage) language = nextLanguage;
+			workspaceInitialized = true;
 			init = true;
 		}
+	});
+
+	$effect(() => {
+		if (!browser || !workspaceInitialized) return;
+		const key = workspaceSaveKey;
+		if (!key) return;
+		if (workspaceSaveTimer) clearTimeout(workspaceSaveTimer);
+		workspaceSaveTimer = setTimeout(() => saveWorkspace(), 400);
+		return () => {
+			if (workspaceSaveTimer) clearTimeout(workspaceSaveTimer);
+		};
 	});
 
 	$effect(() => {
@@ -593,7 +1110,64 @@
 	/>
 </svelte:head>
 
-<main bind:this={examplePane} bind:clientWidth={examplePaneWidth}>
+<svelte:window
+	ondragover={handleDragOver}
+	ondragleave={() => (dragActive = false)}
+	ondrop={handleDrop}
+/>
+
+<main bind:this={examplePane} bind:clientWidth={examplePaneWidth} class:drag-active={dragActive}>
+	<input
+		bind:this={fileInput}
+		class="hidden-input"
+		multiple
+		onchange={handleUpload}
+		type="file"
+	/>
+	{#if sidebarOpen}
+		<button
+			aria-label="Close explorer"
+			class="sidebar-backdrop"
+			onclick={() => (sidebarOpen = false)}
+		></button>
+		<aside class="workspace-sidebar">
+			<header class="workspace-sidebar__header">
+				<div>
+					<span class="material-symbols-outlined">folder_open</span>
+					<strong>Explorer</strong>
+				</div>
+				<button aria-label="Close explorer" onclick={() => (sidebarOpen = false)}>
+					<span class="material-symbols-outlined">close</span>
+				</button>
+			</header>
+			<div class="workspace-files">
+				{#each sortedFiles as file (file.path)}
+					<button
+						class:active={file.path === activePath}
+						onclick={() => selectFile(file.path)}
+						title={file.path}
+					>
+						<span>{basename(file.path)}</span>
+						<small>{extension(file.path).replace('.', '') || 'txt'}</small>
+					</button>
+				{/each}
+			</div>
+			<div class="workspace-sidebar__actions">
+				<button onclick={newFile}>New</button>
+				<button onclick={renameActiveFile}>Rename</button>
+				<button onclick={duplicateActiveFile}>Duplicate</button>
+				<button onclick={deleteActiveFile}>Delete</button>
+				<button onclick={() => fileInput?.click()}>Upload</button>
+				<button onclick={downloadActiveFile}>Download</button>
+				<button onclick={downloadZip}>ZIP</button>
+				<button onclick={resetWorkspace}>Reset</button>
+			</div>
+			<label class="stdin-panel">
+				<span>stdin</span>
+				<textarea bind:value={stdinInput} spellcheck="false"></textarea>
+			</label>
+		</aside>
+	{/if}
 	<div
 		class="terminal-pane"
 		style:width={terminalPanePixelWidth === null ? undefined : `${terminalPanePixelWidth}px`}
@@ -696,6 +1270,18 @@
 				</div>
 			</div>
 			<div class="toolbar-row toolbar-row--secondary">
+				<button class="tool-button" onclick={() => (sidebarOpen = !sidebarOpen)}>
+					<span class="material-symbols-outlined">folder_open</span>
+					<span>Files</span>
+				</button>
+				<button class="tool-button" onclick={() => saveWorkspace(true)}>
+					<span class="material-symbols-outlined">save</span>
+					<span>Save</span>
+				</button>
+				<button class="tool-button" onclick={shareWorkspace}>
+					<span class="material-symbols-outlined">share</span>
+					<span>Share</span>
+				</button>
 				<label class="toggle-chip" for="log-toggle">
 					<input id="log-toggle" type="checkbox" bind:checked={log} />
 					<span class="material-symbols-outlined">notes</span>
@@ -704,6 +1290,7 @@
 				<label class="select-chip">
 					<span class="material-symbols-outlined">code_blocks</span>
 					<select bind:value={language}>
+						<option value="C">C</option>
 						<option value="CPP">C++</option>
 						<option value="PYTHON">Python</option>
 						<option value="JAVA">Java</option>
@@ -838,8 +1425,8 @@
 				default low-memory wasm path; Binaryen full runs the original static `wasm-metadce`
 				and `wasm-opt` passes. The current playground path focuses on browser
 				compile-and-run for standalone source files. Type into the terminal below and press
-				Enter to send a line; use Ctrl+D or the EOF button while running if the program reads
-				stdin until EOF.
+				Enter to send a line; use Ctrl+D or the EOF button while running if the program
+				reads stdin until EOF.
 			</p>
 		{/if}
 		{#if language === 'ELIXIR'}
@@ -1092,23 +1679,48 @@
 	>
 		<span class="panel-resizer__thumb" aria-hidden="true"></span>
 	</div>
-	{#key language}
-		<Monaco
-			language={editorLanguage}
-			rustTargetTriple={language === 'RUST' ? rustTargetTriple : undefined}
-			bind:editor
-			clangdEnabled={clangdRequested}
-			{clangdBaseUrl}
-			breakpoints={debug.effectiveBreakpoints}
-			debugLocals={debug.locals}
-			{debugLanguage}
-			{compilerDiagnostics}
-			pausedLine={debug.pausedLine}
-			onCursorLineChange={debug.setCursorLine}
-			onRunToCursor={debug.runToCursor}
-			onBreakpointsChange={debug.setBreakpoints}
-		/>
-	{/key}
+	<section class="editor-column">
+		<nav class="file-tabs" aria-label="Open files">
+			{#each openTabs as tab (tab)}
+				<div class:active={tab === activePath} class="file-tab" title={tab}>
+					<button onclick={() => selectFile(tab)}>{basename(tab)}</button>
+					{#if openTabs.length > 1}
+						<button
+							aria-label={`Close ${tab}`}
+							onclick={(event) => closeTab(tab, event)}
+						>
+							<span class="material-symbols-outlined">close</span>
+						</button>
+					{/if}
+				</div>
+			{/each}
+			<div class="workspace-status">
+				<span>{saveStatus}</span>
+				<span>{activeLines} lines</span>
+				<span>{activeBytes} bytes</span>
+			</div>
+		</nav>
+		{#key `${language}:${activePath}`}
+			<Monaco
+				language={editorLanguage}
+				rustTargetTriple={language === 'RUST' ? rustTargetTriple : undefined}
+				bind:editor
+				value={activeFile?.content ?? ''}
+				onChange={updateActiveContent}
+				{compact}
+				clangdEnabled={clangdRequested}
+				{clangdBaseUrl}
+				breakpoints={debug.effectiveBreakpoints}
+				debugLocals={debug.locals}
+				{debugLanguage}
+				{compilerDiagnostics}
+				pausedLine={debug.pausedLine}
+				onCursorLineChange={debug.setCursorLine}
+				onRunToCursor={debug.runToCursor}
+				onBreakpointsChange={debug.setBreakpoints}
+			/>
+		{/key}
+	</section>
 </main>
 
 <style>
@@ -1124,6 +1736,251 @@
 		background:
 			radial-gradient(circle at top left, rgba(20, 184, 166, 0.08), transparent 28%),
 			linear-gradient(180deg, #f8fbff 0%, #eef4fb 100%);
+	}
+
+	.hidden-input {
+		display: none;
+	}
+
+	.sidebar-backdrop {
+		display: none;
+	}
+
+	.workspace-sidebar {
+		flex: 0 0 250px;
+		width: 250px;
+		min-width: 220px;
+		height: 100%;
+		display: flex;
+		flex-direction: column;
+		min-height: 0;
+		margin-right: 12px;
+		border: 1px solid rgba(148, 163, 184, 0.26);
+		border-radius: 16px;
+		background: rgba(15, 23, 42, 0.94);
+		color: #e5edf7;
+		overflow: hidden;
+		box-shadow: 0 22px 40px rgba(15, 23, 42, 0.12);
+	}
+
+	.workspace-sidebar__header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+		min-height: 44px;
+		padding: 0 10px;
+		border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+	}
+
+	.workspace-sidebar__header > div {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		min-width: 0;
+	}
+
+	.workspace-sidebar__header button,
+	.workspace-sidebar__actions button,
+	.tool-button {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 6px;
+		min-height: 30px;
+		border: 1px solid rgba(148, 163, 184, 0.28);
+		border-radius: 10px;
+		background: rgba(248, 250, 252, 0.92);
+		color: #0f172a;
+		font: inherit;
+		font-size: 11px;
+		font-weight: 700;
+		cursor: pointer;
+	}
+
+	.workspace-sidebar__header button {
+		width: 30px;
+		padding: 0;
+		background: rgba(255, 255, 255, 0.08);
+		color: #e5edf7;
+	}
+
+	.workspace-files {
+		flex: 1 1 auto;
+		min-height: 0;
+		overflow: auto;
+		padding: 8px;
+	}
+
+	.workspace-files button {
+		width: 100%;
+		min-height: 34px;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+		padding: 0 9px;
+		border: 1px solid transparent;
+		border-radius: 10px;
+		background: transparent;
+		color: inherit;
+		font: inherit;
+		text-align: left;
+		cursor: pointer;
+	}
+
+	.workspace-files button.active,
+	.workspace-files button:hover {
+		border-color: rgba(74, 222, 128, 0.18);
+		background: rgba(59, 130, 246, 0.18);
+	}
+
+	.workspace-files span {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.workspace-files small {
+		color: #94a3b8;
+		font-size: 10px;
+		text-transform: uppercase;
+	}
+
+	.workspace-sidebar__actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px;
+		padding: 8px;
+		border-top: 1px solid rgba(148, 163, 184, 0.18);
+	}
+
+	.workspace-sidebar__actions button {
+		flex: 1 1 calc(50% - 6px);
+		background: rgba(30, 41, 59, 0.92);
+		color: #e5edf7;
+	}
+
+	.stdin-panel {
+		display: grid;
+		grid-template-rows: auto minmax(90px, 1fr);
+		gap: 6px;
+		padding: 8px;
+		border-top: 1px solid rgba(148, 163, 184, 0.18);
+		color: #94a3b8;
+		font-size: 11px;
+	}
+
+	.stdin-panel textarea {
+		min-height: 90px;
+		resize: vertical;
+		border: 1px solid rgba(148, 163, 184, 0.24);
+		border-radius: 10px;
+		background: #0f172a;
+		color: #e5edf7;
+		font: inherit;
+		padding: 8px;
+		outline: none;
+	}
+
+	.tool-button {
+		padding: 0 10px;
+	}
+
+	.editor-column {
+		flex: 1 1 auto;
+		min-width: 0;
+		min-height: 0;
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+		border: 1px solid rgba(148, 163, 184, 0.24);
+		border-radius: 16px;
+		background: rgba(15, 23, 42, 0.96);
+	}
+
+	.file-tabs {
+		flex: 0 0 38px;
+		display: flex;
+		align-items: stretch;
+		min-width: 0;
+		overflow-x: auto;
+		border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+		background: #111827;
+	}
+
+	.file-tab {
+		display: flex;
+		align-items: center;
+		min-width: 112px;
+		max-width: 210px;
+		border-right: 1px solid rgba(148, 163, 184, 0.14);
+		background: rgba(30, 41, 59, 0.82);
+		color: #cbd5e1;
+	}
+
+	.file-tab.active {
+		background: #1e293b;
+		color: #f8fafc;
+	}
+
+	.file-tab button {
+		min-width: 0;
+		height: 100%;
+		border: 0;
+		background: transparent;
+		color: inherit;
+		font: inherit;
+		cursor: pointer;
+	}
+
+	.file-tab button:first-child {
+		flex: 1;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		text-align: left;
+		padding: 0 10px;
+	}
+
+	.file-tab button:last-child {
+		width: 32px;
+		display: grid;
+		place-items: center;
+		color: #94a3b8;
+	}
+
+	.file-tab .material-symbols-outlined {
+		font-size: 14px;
+	}
+
+	.workspace-status {
+		margin-left: auto;
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		flex: 0 0 auto;
+		padding: 0 10px;
+		color: #94a3b8;
+		font-size: 11px;
+		white-space: nowrap;
+	}
+
+	.drag-active::after {
+		content: 'Drop files to import';
+		position: fixed;
+		inset: 20px;
+		z-index: 30;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		border: 2px dashed #14b8a6;
+		border-radius: 18px;
+		background: rgba(15, 23, 42, 0.72);
+		color: white;
+		font-weight: 800;
+		pointer-events: none;
 	}
 
 	.terminal-pane {
@@ -1855,12 +2712,63 @@
 			overflow: auto;
 		}
 
+		.sidebar-backdrop {
+			position: fixed;
+			inset: 0;
+			z-index: 20;
+			display: block;
+			border: 0;
+			background: rgba(15, 23, 42, 0.48);
+		}
+
+		.workspace-sidebar {
+			position: fixed;
+			inset: 16px auto 16px 16px;
+			z-index: 21;
+			width: min(340px, calc(100vw - 32px));
+			max-width: calc(100vw - 32px);
+			height: auto;
+			margin-right: 0;
+		}
+
 		.terminal-pane {
 			width: 100% !important;
 			min-width: 0;
 			height: auto;
 			padding-right: 0;
 			padding-bottom: 0;
+		}
+
+		.editor-column {
+			width: 100%;
+			min-height: 440px;
+			flex: 0 0 auto;
+		}
+
+		.file-tabs {
+			flex-basis: 42px;
+		}
+
+		.file-tab {
+			min-width: 108px;
+		}
+
+		.workspace-status span:nth-child(n + 2) {
+			display: none;
+		}
+
+		.tool-button,
+		.action-button,
+		.path-chip,
+		.toggle-chip,
+		.select-chip,
+		.args-chip {
+			min-height: 38px;
+		}
+
+		.stdin-panel textarea,
+		.args-chip input {
+			font-size: 16px;
 		}
 
 		.panel-resizer {
