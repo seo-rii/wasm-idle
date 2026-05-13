@@ -42,7 +42,7 @@ type DotnetRuntimeModule = {
 	}>;
 };
 
-const DOTNET_STDIN_GRACE_MS = 200;
+const readsConsoleStdin = (code: string) => /\b(?:System\.)?Console\.(?:ReadLine|In)\b/.test(code);
 
 class Dotnet implements Sandbox {
 	output: any = null;
@@ -56,6 +56,8 @@ class Dotnet implements Sandbox {
 	moduleUrl = '';
 	activeReject: ((reason: string) => void) | null = null;
 	pendingInput: string[] = [];
+	pendingEof = false;
+	stdinWaiters: Array<() => void> = [];
 	compiledArtifact: unknown = null;
 	compiledCacheKey = '';
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
@@ -171,17 +173,38 @@ class Dotnet implements Sandbox {
 
 	write(input: string) {
 		this.pendingInput.push(input);
+		this.pendingEof = false;
+		this.resolveStdinWaiters();
 	}
 
-	eof() {}
+	eof() {
+		this.pendingEof = true;
+		this.resolveStdinWaiters();
+	}
 
-	private async collectStdinForRun(prepare: boolean, options: SandboxExecutionOptions) {
-		if (!prepare && !options.stdin && this.pendingInput.length === 0) {
-			await new Promise((resolve) => setTimeout(resolve, DOTNET_STDIN_GRACE_MS));
+	private resolveStdinWaiters() {
+		const waiters = this.stdinWaiters.splice(0);
+		for (const resolve of waiters) resolve();
+	}
+
+	private async collectStdinForRun(
+		code: string,
+		prepare: boolean,
+		options: SandboxExecutionOptions
+	) {
+		if (
+			!prepare &&
+			!options.stdin &&
+			this.pendingInput.length === 0 &&
+			!this.pendingEof &&
+			readsConsoleStdin(code)
+		) {
+			await new Promise<void>((resolve) => this.stdinWaiters.push(resolve));
 		}
 		const stdin = `${options.stdin || ''}${this.pendingInput.join('')}`;
 		if (!prepare) {
 			this.pendingInput = [];
+			this.pendingEof = false;
 		}
 		return stdin;
 	}
@@ -227,7 +250,7 @@ class Dotnet implements Sandbox {
 				}
 			};
 			this.begin = Date.now();
-			this.collectStdinForRun(prepare, options)
+			this.collectStdinForRun(code, prepare, options)
 				.then((stdin) => {
 					if (this.worker !== worker) return reject('Worker not loaded');
 					worker.postMessage({
@@ -294,7 +317,8 @@ class Dotnet implements Sandbox {
 			}
 			if (prepare) return true;
 
-			const stdin = await this.collectStdinForRun(prepare, options);
+			const stdin = await this.collectStdinForRun(code, prepare, options);
+			if (_uid !== this.uid) return false;
 			const execution = await this.runtimeModule.executeBrowserDotnetArtifact(
 				this.compiledArtifact,
 				{
@@ -333,6 +357,7 @@ class Dotnet implements Sandbox {
 		this.activeReject?.('Process terminated');
 		this.activeReject = null;
 		this.uid += 1;
+		this.resolveStdinWaiters();
 		this.worker?.terminate?.();
 		delete this.worker;
 		this.exit = true;
@@ -341,6 +366,8 @@ class Dotnet implements Sandbox {
 	async clear() {
 		if (this.worker) this.worker.onmessage = null;
 		this.pendingInput = [];
+		this.pendingEof = false;
+		this.resolveStdinWaiters();
 		if (!this.exit) {
 			this.terminate();
 		}

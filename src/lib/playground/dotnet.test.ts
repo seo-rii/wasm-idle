@@ -144,10 +144,12 @@ describe('Dotnet sandbox', () => {
 
 	it('collects stdin submitted immediately after a cached run starts', async () => {
 		const sandbox = new Dotnet();
-		const code = 'printfn "hello"';
+		const code = 'let input = System.Console.ReadLine()';
 
 		await sandbox.load('/absproxy/5173');
 		const runPromise = sandbox.run(code, false);
+		await vi.dynamicImportSettled();
+		expect(workerInstances[0].postMessage).toHaveBeenCalledTimes(1);
 		sandbox.write('9\n');
 		await expect(runPromise).resolves.toBe(true);
 
@@ -158,6 +160,46 @@ describe('Dotnet sandbox', () => {
 				code,
 				language: 'fsharp',
 				stdin: '9\n'
+			})
+		);
+	});
+
+	it('runs non-stdin programs without waiting for terminal input', async () => {
+		const sandbox = new Dotnet();
+		const code = 'printfn "hello"';
+
+		await sandbox.load('/absproxy/5173');
+		await expect(sandbox.run(code, false)).resolves.toBe(true);
+
+		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
+			2,
+			expect.objectContaining({
+				prepare: false,
+				code,
+				language: 'fsharp',
+				stdin: ''
+			})
+		);
+	});
+
+	it('uses EOF to release console stdin waits without input text', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		const code = 'var input = Console.ReadLine();';
+
+		await sandbox.load('/absproxy/5173');
+		const runPromise = sandbox.run(code, false);
+		await vi.dynamicImportSettled();
+		expect(workerInstances[0].postMessage).toHaveBeenCalledTimes(1);
+		sandbox.eof();
+		await expect(runPromise).resolves.toBe(true);
+
+		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
+			2,
+			expect.objectContaining({
+				prepare: false,
+				code,
+				language: 'csharp',
+				stdin: ''
 			})
 		);
 	});
