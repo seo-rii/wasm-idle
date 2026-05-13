@@ -23,6 +23,11 @@ export type TinyGoTarget = 'wasm' | 'wasip1' | 'wasip2' | 'wasip3';
 export type OcamlBackend = 'js' | 'wasm';
 export type OcamlWasmBinaryenMode = 'fast' | 'full';
 
+export interface SandboxWorkspaceFile {
+	path: string;
+	content: string;
+}
+
 export type DebugVariableKind = 'number' | 'bool' | 'array' | 'text';
 export type DebugArrayElementKind = 'int' | 'float' | 'double' | 'bool' | 'char';
 
@@ -66,6 +71,8 @@ export interface SandboxExecutionOptions {
 	breakpoints?: number[];
 	pauseOnEntry?: boolean;
 	stdin?: string;
+	activePath?: string;
+	workspaceFiles?: SandboxWorkspaceFile[];
 	compileArgs?: string[];
 	programArgs?: string[];
 	cppVersion?: string;

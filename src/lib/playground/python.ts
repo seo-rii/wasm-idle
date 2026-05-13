@@ -183,7 +183,9 @@ class Python implements Sandbox {
 				context: {},
 				debug: !!options.debug,
 				breakpoints: [...(options.breakpoints || [])],
-				pauseOnEntry: !!options.pauseOnEntry
+				pauseOnEntry: !!options.pauseOnEntry,
+				activePath: options.activePath,
+				workspaceFiles: options.workspaceFiles
 			});
 		});
 	}

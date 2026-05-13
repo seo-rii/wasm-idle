@@ -209,6 +209,25 @@ async function loadPackages(code: string) {
 	}
 }
 
+function normalizeWorkspacePath(path: string) {
+	return path
+		.replaceAll('\\', '/')
+		.split('/')
+		.filter((part) => part && part !== '.' && part !== '..')
+		.join('/');
+}
+
+function writeWorkspaceFiles(files: { path: string; content: string }[] = []) {
+	const fs = (pyodide as any).FS;
+	for (const file of files) {
+		const safePath = normalizeWorkspacePath(file.path);
+		if (!safePath) continue;
+		const directory = safePath.split('/').slice(0, -1).join('/');
+		if (directory) fs.mkdirTree(directory);
+		fs.writeFile(safePath, file.content, { encoding: 'utf8' });
+	}
+}
+
 self.onmessage = async (event: any) => {
 	if (handleWorkerAssetMessage(event.data)) return;
 	const {
@@ -223,7 +242,9 @@ self.onmessage = async (event: any) => {
 		prepare,
 		debug = false,
 		breakpoints = [],
-		pauseOnEntry = false
+		pauseOnEntry = false,
+		activePath,
+		workspaceFiles
 	} = event.data;
 	if (load) {
 		const runtimeAssets = assets as WorkerRuntimeAssetConfig | undefined;
@@ -237,7 +258,13 @@ self.onmessage = async (event: any) => {
 		postMessage({ output: 'Loading packages...' });
 		try {
 			await loadPyodide(baseUrl);
-			await loadPackages(code);
+			writeWorkspaceFiles(workspaceFiles);
+			await loadPackages(
+				[
+					code,
+					...(workspaceFiles || []).map((file: { content: string }) => file.content)
+				].join('\n')
+			);
 			postMessage({ output: ' Done.\n\r' });
 			self.postMessage({ results: true });
 		} catch (e: any) {
@@ -245,7 +272,12 @@ self.onmessage = async (event: any) => {
 		}
 	} else if (code) {
 		await loadPyodide(baseUrl);
-		await loadPackages(code);
+		writeWorkspaceFiles(workspaceFiles);
+		await loadPackages(
+			[code, ...(workspaceFiles || []).map((file: { content: string }) => file.content)].join(
+				'\n'
+			)
+		);
 		const ts = Date.now();
 		stdinBufferPyodide = new Int32Array(buffer);
 		debugBufferPyodide = new Int32Array(debugBuffer);
@@ -329,7 +361,7 @@ self.onmessage = async (event: any) => {
 		self[debugWriteWatchName] = (value: string) => {
 			flushQueuedStdin([value], watchResultBufferPyodide);
 		};
-		const userFilename = '__wasm_idle_user__.py';
+		const userFilename = normalizeWorkspacePath(activePath || '') || '__wasm_idle_user__.py';
 		const normalizedBreakpoints = JSON.stringify(
 			[...(Array.isArray(breakpoints) ? breakpoints : [])]
 				.map((value) => Number(value))

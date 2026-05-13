@@ -149,6 +149,8 @@ interface DebugRunOptions {
 	args?: string[];
 	compileArgs?: string[];
 	programArgs?: string[];
+	activePath?: string;
+	workspaceFiles?: { path: string; content: string }[];
 	cppVersion?: string;
 	cVersion?: string;
 	debug?: boolean;
@@ -174,6 +176,14 @@ const toUtf8 = (text: string) => {
 		}
 	}
 	return result;
+};
+
+const normalizeWorkspacePath = (path: string) => {
+	return path
+		.replaceAll('\\', '/')
+		.split('/')
+		.filter((part) => part && part !== '.' && part !== '..')
+		.join('/');
 };
 
 export default class Clang {
@@ -285,8 +295,27 @@ export default class Clang {
 		return module;
 	}
 
+	addWorkspaceFiles(files: { path: string; content: string }[] = [], activePath = '') {
+		const addedDirectories = new Set<string>();
+		const normalizedActivePath = normalizeWorkspacePath(activePath);
+		for (const file of files) {
+			const safePath = normalizeWorkspacePath(file.path);
+			if (!safePath || safePath === normalizedActivePath) continue;
+			const parts = safePath.split('/').slice(0, -1);
+			let directory = '';
+			for (const part of parts) {
+				directory = directory ? `${directory}/${part}` : part;
+				if (!addedDirectories.has(directory)) {
+					this.memfs.addDirectory(directory);
+					addedDirectories.add(directory);
+				}
+			}
+			this.memfs.addFile(safePath, toUtf8(file.content));
+		}
+	}
+
 	async compile(options: any) {
-		const input = options.input;
+		const input = normalizeWorkspacePath(options.input || 'test.cc') || 'test.cc';
 		let source = options.code;
 		const obj = options.obj;
 		const language: ClangSourceLanguage = options.language === 'C' ? 'C' : 'CPP';
@@ -1131,6 +1160,7 @@ export default class Clang {
 		const code = toUtf8(source);
 
 		await this.ready;
+		this.addWorkspaceFiles(options.workspaceFiles, input);
 		this.memfs.addFile(input, code);
 		const clang = await this.getModule(clangUrl(this.path));
 		const compilerArgs = [
@@ -1141,6 +1171,10 @@ export default class Clang {
 			'-o',
 			obj,
 			standardArg,
+			'-I',
+			'.',
+			'-I',
+			'/',
 			'-x',
 			languageArg,
 			input,
@@ -1228,6 +1262,8 @@ export default class Clang {
 			language = 'CPP',
 			args = [],
 			compileArgs = args,
+			activePath,
+			workspaceFiles = [],
 			debug = false,
 			breakpoints = [],
 			pauseOnEntry = false,
@@ -1238,7 +1274,9 @@ export default class Clang {
 			watchBuffer,
 			watchResultBuffer
 		} = options;
-		const input = language === 'C' ? `test.c` : `test.cc`,
+		const input =
+				normalizeWorkspacePath(activePath || '') ||
+				(language === 'C' ? `test.c` : `test.cc`),
 			obj = `test.o`,
 			wasm = `test.wasm`;
 		this.beginTrace(debug);
@@ -1252,6 +1290,8 @@ export default class Clang {
 			code,
 			language,
 			compileArgs,
+			activePath: input,
+			workspaceFiles,
 			cppVersion,
 			cVersion,
 			debug
@@ -1266,6 +1306,7 @@ export default class Clang {
 			obj,
 			language,
 			compileArgs,
+			workspaceFiles,
 			cppVersion,
 			cVersion,
 			debug
@@ -1286,6 +1327,8 @@ export default class Clang {
 			args = [],
 			compileArgs = args,
 			programArgs = [],
+			activePath,
+			workspaceFiles = [],
 			debug = false,
 			breakpoints = [],
 			pauseOnEntry = false,
@@ -1301,6 +1344,8 @@ export default class Clang {
 			await this.compileLink(code, {
 				language,
 				compileArgs,
+				activePath,
+				workspaceFiles,
 				debug,
 				breakpoints,
 				pauseOnEntry,

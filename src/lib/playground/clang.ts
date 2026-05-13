@@ -193,6 +193,8 @@ class Clang implements Sandbox {
 				language: this.language,
 				compileArgs,
 				programArgs,
+				activePath: options.activePath,
+				workspaceFiles: options.workspaceFiles,
 				cppVersion: options.cppVersion,
 				cVersion: options.cVersion,
 				debug: !!options.debug,

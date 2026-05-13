@@ -193,6 +193,14 @@
 		}
 	}
 
+	function queueStdin(value: string) {
+		if (!value) return;
+		const normalized = (value.endsWith('\n') ? value : `${value}\n`).replaceAll('\r\n', '\n');
+		for (const line of normalized.match(/[^\n]*\n/g) ?? []) {
+			sandbox?.write?.(line);
+		}
+	}
+
 	async function waitForInput() {
 		await wait();
 		const startedAt = Date.now();
@@ -258,6 +266,7 @@
 				initSandbox(language).then(() => sandbox.load(code, log, args, options, prog)),
 				initTerm()
 			]);
+			queueStdin(options.stdin || '');
 			return await runSandbox(sandbox.run(code, false, log, prog, args, options));
 		},
 		async destroy() {
