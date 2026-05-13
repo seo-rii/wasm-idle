@@ -50,7 +50,7 @@ describe('Elixir worker', () => {
 				}
 				if (
 					source ===
-					'IO.puts(String.trim(((fn __wasm_idle_prompt__ -> IO.write(__wasm_idle_prompt__); "5\\n" end).(""))))'
+					'IO.puts(String.trim(((fn wasm_idle_prompt -> IO.write(wasm_idle_prompt); "5\\n" end).(""))))'
 				) {
 					options.print?.('stdin=5\n');
 					return JSON.stringify(':ok');
@@ -237,7 +237,7 @@ describe('Elixir worker', () => {
 			'main',
 			JSON.stringify([
 				'eval_elixir',
-				'IO.puts(String.trim(((fn __wasm_idle_prompt__ -> IO.write(__wasm_idle_prompt__); "5\\n" end).(""))) <> ":" <> String.trim(((fn __wasm_idle_prompt__ -> IO.write(__wasm_idle_prompt__); "7\\n" end).(""))))'
+				'IO.puts(String.trim(((fn wasm_idle_prompt -> IO.write(wasm_idle_prompt); "5\\n" end).(""))) <> ":" <> String.trim(((fn wasm_idle_prompt -> IO.write(wasm_idle_prompt); "7\\n" end).(""))))'
 			])
 		);
 	});
@@ -315,7 +315,7 @@ describe('Elixir worker', () => {
 			'main',
 			JSON.stringify([
 				'eval_elixir',
-				'IO.inspect({((fn __wasm_idle_prompt__ -> IO.write(__wasm_idle_prompt__); "ab" end).("> ")), ((fn __wasm_idle_device__, __wasm_idle_prompt__ -> _ = __wasm_idle_device__; IO.write(__wasm_idle_prompt__); "cde" end).(:stdio, "chars> ")), ((fn __wasm_idle_prompt__ -> IO.write(__wasm_idle_prompt__); "rest\\n" end).("line> "))})'
+				'IO.inspect({((fn wasm_idle_prompt -> IO.write(wasm_idle_prompt); "ab" end).("> ")), ((fn wasm_idle_device, wasm_idle_prompt -> _ = wasm_idle_device; IO.write(wasm_idle_prompt); "cde" end).(:stdio, "chars> ")), ((fn wasm_idle_prompt -> IO.write(wasm_idle_prompt); "rest\\n" end).("line> "))})'
 			])
 		);
 	});
@@ -348,7 +348,7 @@ describe('Elixir worker', () => {
 			'main',
 			JSON.stringify([
 				'eval_elixir',
-				'IO.inspect({((fn __wasm_idle_prompt__ -> IO.write(__wasm_idle_prompt__); nil end).("")), :eof, ((fn __wasm_idle_prompt__ -> IO.write(__wasm_idle_prompt__); :eof end).(""))})'
+				'IO.inspect({((fn wasm_idle_prompt -> IO.write(wasm_idle_prompt); nil end).("")), :eof, ((fn wasm_idle_prompt -> IO.write(wasm_idle_prompt); :eof end).(""))})'
 			])
 		);
 	});

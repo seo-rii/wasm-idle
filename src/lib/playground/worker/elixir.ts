@@ -500,7 +500,7 @@ self.onmessage = async (event: { data: any }) => {
 			};
 			const wrapWithDeviceEvaluation = (deviceArg: string | undefined, valueExpr: string) =>
 				deviceArg
-					? `((fn __wasm_idle_device__ -> _ = __wasm_idle_device__; ${valueExpr} end).(${deviceArg}))`
+					? `((fn wasm_idle_device -> _ = wasm_idle_device; ${valueExpr} end).(${deviceArg}))`
 					: valueExpr;
 			const wrapWithPromptOutput = (
 				promptArg: string,
@@ -508,8 +508,8 @@ self.onmessage = async (event: { data: any }) => {
 				deviceArg?: string
 			) =>
 				deviceArg
-					? `((fn __wasm_idle_device__, __wasm_idle_prompt__ -> _ = __wasm_idle_device__; IO.write(__wasm_idle_prompt__); ${valueExpr} end).(${deviceArg}, ${promptArg}))`
-					: `((fn __wasm_idle_prompt__ -> IO.write(__wasm_idle_prompt__); ${valueExpr} end).(${promptArg}))`;
+					? `((fn wasm_idle_device, wasm_idle_prompt -> _ = wasm_idle_device; IO.write(wasm_idle_prompt); ${valueExpr} end).(${deviceArg}, ${promptArg}))`
+					: `((fn wasm_idle_prompt -> IO.write(wasm_idle_prompt); ${valueExpr} end).(${promptArg}))`;
 			let rewritten = '';
 			let cursor = 0;
 			while (cursor < code.length) {
