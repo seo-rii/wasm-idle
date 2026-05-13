@@ -6,6 +6,7 @@ import {
 	editorDefaults,
 	isEditorDefaultSource,
 	isLegacyEditorDefaultSource,
+	legacyBrokenFsharpEditorDefault,
 	legacyBrokenTinyGoEditorDefault,
 	resolveEditorDefaultSource,
 	rustEditorDefaults
@@ -95,7 +96,9 @@ describe('Monaco route debug sync', () => {
 		expect(isEditorDefaultSource(editorDefaults.elixir)).toBe(true);
 		expect(isEditorDefaultSource(rustEditorDefaults['wasm32-wasip1'])).toBe(true);
 		expect(isLegacyEditorDefaultSource(legacyBrokenTinyGoEditorDefault)).toBe(true);
+		expect(isLegacyEditorDefaultSource(legacyBrokenFsharpEditorDefault)).toBe(true);
 		expect(isLegacyEditorDefaultSource(editorDefaults.go)).toBe(false);
+		expect(isLegacyEditorDefaultSource(editorDefaults.fsharp)).toBe(false);
 	});
 
 	it('requests clangd only after cpp debug starts', () => {

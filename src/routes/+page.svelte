@@ -29,7 +29,11 @@
 	import type { TerminalControl } from '$lib/terminal';
 	import type monaco from 'monaco-editor';
 	import { executeTerminalRun } from './execute';
-	import { resolveEditorDefaultSource } from './editor-defaults';
+	import {
+		legacyBrokenFsharpEditorDefault,
+		legacyBrokenTinyGoEditorDefault,
+		resolveEditorDefaultSource
+	} from './editor-defaults';
 
 	type WorkspaceFile = {
 		path: string;
@@ -403,13 +407,29 @@
 		return resolveEditorDefaultSource(defaultLanguage[nextLanguage], rustTargetTriple);
 	}
 
+	function migrateWorkspaceFileContent(content: string, nextLanguage: PlaygroundLanguage) {
+		if (nextLanguage === 'FSHARP' && content === legacyBrokenFsharpEditorDefault) {
+			return defaultSourceForLanguage(nextLanguage);
+		}
+		if (
+			(nextLanguage === 'GO' || nextLanguage === 'TINYGO') &&
+			content === legacyBrokenTinyGoEditorDefault
+		) {
+			return defaultSourceForLanguage(nextLanguage);
+		}
+		return content;
+	}
+
 	function sanitizeWorkspace(
 		value: Partial<LanguageWorkspace> | undefined,
 		nextLanguage: PlaygroundLanguage
 	): LanguageWorkspace {
 		const fallback = createDefaultWorkspace(nextLanguage);
 		const nextFiles = sanitizeFiles(value?.files);
-		const files = nextFiles.length ? nextFiles : fallback.files;
+		const files = (nextFiles.length ? nextFiles : fallback.files).map((file) => ({
+			path: file.path,
+			content: migrateWorkspaceFileContent(file.content, nextLanguage)
+		}));
 		const requestedActivePath =
 			typeof value?.activePath === 'string' ? normalizePath(value.activePath) : '';
 		const activePath = files.some((file) => file.path === requestedActivePath)

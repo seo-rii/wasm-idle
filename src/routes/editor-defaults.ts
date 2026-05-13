@@ -114,14 +114,13 @@ let n =
     match System.Int32.TryParse input with
     | true, parsed -> parsed
     | false, _ ->
-        System.Environment.GetCommandLineArgs()
-        |> Array.skip 1
-        |> Array.tryHead
-        |> Option.bind (fun value ->
-            match System.Int32.TryParse value with
-            | true, parsed -> Some parsed
-            | false, _ -> None)
-        |> Option.defaultValue 4
+        let commandLineArgs = System.Environment.GetCommandLineArgs()
+        let arg =
+            if commandLineArgs.Length > 1 then commandLineArgs[1] else ""
+
+        match System.Int32.TryParse arg with
+        | true, parsed -> parsed
+        | false, _ -> 4
 
 printfn "factorial_plus_bonus=%d" (factorial n + bonus)`,
 	elixir: `defmodule Demo do
@@ -254,6 +253,28 @@ func main() {
     fmt.Printf("factorial_plus_bonus=%d\n", factorial(n)+bonus)
 }`;
 
+export const legacyBrokenFsharpEditorDefault = `let bonus = 3
+
+let rec factorial n =
+    if n <= 1 then 1 else n * factorial (n - 1)
+
+let input = System.Console.ReadLine()
+
+let n =
+    match System.Int32.TryParse input with
+    | true, parsed -> parsed
+    | false, _ ->
+        System.Environment.GetCommandLineArgs()
+        |> Array.skip 1
+        |> Array.tryHead
+        |> Option.bind (fun value ->
+            match System.Int32.TryParse value with
+            | true, parsed -> Some parsed
+            | false, _ -> None)
+        |> Option.defaultValue 4
+
+printfn "factorial_plus_bonus=%d" (factorial n + bonus)`;
+
 export function isEditorDefaultSource(source: string) {
 	return (
 		source === editorDefaults.c ||
@@ -272,7 +293,7 @@ export function isEditorDefaultSource(source: string) {
 }
 
 export function isLegacyEditorDefaultSource(source: string) {
-	return source === legacyBrokenTinyGoEditorDefault;
+	return source === legacyBrokenTinyGoEditorDefault || source === legacyBrokenFsharpEditorDefault;
 }
 
 export function resolveEditorDefaultSource(
