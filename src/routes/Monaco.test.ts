@@ -37,7 +37,7 @@ describe('Monaco route debug sync', () => {
 			/\$effect\(\(\) => \{\s+if \(!editor\) return;[\s\S]*if \(!isEditorDefaultSource\(currentValue\) && !isLegacyEditorDefaultSource\(currentValue\)\) \{[\s\S]*const nextValue = resolveEditorDefaultSource\([\s\S]*rustTargetTriple[\s\S]*editor\.setValue\(nextValue\);[\s\S]*\}\);/s
 		);
 		expect(source).toMatch(
-			/const defaultValue = resolveEditorDefaultSource\(\s+language as 'cpp' \| 'python' \| 'java' \| 'go' \| 'elixir' \| 'ocaml' \| 'rust',\s+rustTargetTriple\s+\);/s
+			/const defaultValue = resolveEditorDefaultSource\(\s+language as 'c' \| 'cpp' \| 'python' \| 'java' \| 'go' \| 'elixir' \| 'ocaml' \| 'rust',\s+rustTargetTriple\s+\);/s
 		);
 		expect(source).toMatch(
 			/debugView = new MonacoDebugView\(Monaco, editor, onBreakpointsChange\);\s+debugView\.setBreakpoints\(breakpoints\);\s+debugView\.setPauseState\(pausedLine, debugLocals, debugLanguage\);/s
@@ -72,17 +72,11 @@ describe('Monaco route debug sync', () => {
 		expect(source).not.toMatch(/class="clangd-status"/);
 	});
 
-	it('keeps the TinyGo starter source valid for newline-sensitive Go literals', () => {
+	it('keeps starter sources minimal hello world programs', () => {
 		expect(resolveEditorDefaultSource('go', 'wasm32-wasip1')).toBe(editorDefaults.go);
 		expect(resolveEditorDefaultSource('elixir', 'wasm32-wasip1')).toBe(editorDefaults.elixir);
-		expect(editorDefaults.go).toContain("ReadString('\\n')");
-		expect(editorDefaults.go).toContain(
-			'fmt.Printf("factorial_plus_bonus=%d\\n", factorial(n)+bonus)'
-		);
-		expect(editorDefaults.elixir).toContain('defmodule Demo do');
-		expect(editorDefaults.elixir).toContain('Demo.run()');
-		expect(editorDefaults.elixir).toContain('IO.gets("")');
-		expect(editorDefaults.elixir).toContain('Integer.parse(String.trim(line))');
+		expect(editorDefaults.go).toContain('fmt.Println("Hello, WebAssembly!")');
+		expect(editorDefaults.elixir).toBe('IO.puts("Hello, WebAssembly!")');
 		expect(isEditorDefaultSource(editorDefaults.go)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.elixir)).toBe(true);
 		expect(isEditorDefaultSource(rustEditorDefaults['wasm32-wasip1'])).toBe(true);

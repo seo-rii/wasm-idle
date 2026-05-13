@@ -35,6 +35,23 @@
 		content: string;
 	};
 
+	type PlaygroundLanguage =
+		| 'C'
+		| 'CPP'
+		| 'PYTHON'
+		| 'JAVA'
+		| 'RUST'
+		| 'GO'
+		| 'ELIXIR'
+		| 'OCAML'
+		| 'TINYGO';
+
+	type LanguageWorkspace = {
+		activePath: string;
+		files: WorkspaceFile[];
+		openTabs: string[];
+	};
+
 	type WorkspaceSnapshot = {
 		activePath: string;
 		argsInput: string;
@@ -49,10 +66,33 @@
 		sidebarOpen: boolean;
 		tinygoTarget: TinyGoTarget;
 		version: number;
+		workspaces: Record<PlaygroundLanguage, LanguageWorkspace>;
 	};
 
 	const WORKSPACE_STORAGE_KEY = 'wasm-idle:example-workspace:v3';
 	const SHARE_PREFIX = 'workspace=';
+	const playgroundLanguages: PlaygroundLanguage[] = [
+		'C',
+		'CPP',
+		'PYTHON',
+		'JAVA',
+		'RUST',
+		'GO',
+		'ELIXIR',
+		'OCAML',
+		'TINYGO'
+	];
+	const languageLabels: Record<PlaygroundLanguage, string> = {
+		C: 'C',
+		CPP: 'C++',
+		PYTHON: 'Python',
+		JAVA: 'Java',
+		RUST: 'Rust',
+		GO: 'Go',
+		ELIXIR: 'Elixir',
+		OCAML: 'OCaml',
+		TINYGO: 'TinyGo'
+	};
 
 	let path = $derived(
 		page.url.pathname.endsWith('/') ? page.url.pathname.slice(0, -1) : page.url.pathname
@@ -115,7 +155,7 @@
 		ocamlBackend = $state<OcamlBackend>('wasm'),
 		ocamlWasmBinaryenMode = $state<OcamlWasmBinaryenMode>('fast'),
 		log = $state(true),
-		language = $state('CPP'),
+		language = $state<PlaygroundLanguage>('CPP'),
 		runningMode = $state<'run' | 'debug' | null>(null),
 		progress = $state(-1),
 		init = $state(false),
@@ -124,9 +164,14 @@
 		terminalPaneWidth = $state<number | null>(null),
 		resizingPane = $state(false);
 
-	let files = $state<WorkspaceFile[]>(createDefaultWorkspaceFiles());
-	let activePath = $state('main.cpp');
-	let openTabs = $state<string[]>(['main.cpp']);
+	const initialWorkspace = createDefaultWorkspace('CPP');
+	let languageWorkspaces = $state<Record<PlaygroundLanguage, LanguageWorkspace>>({
+		...createDefaultLanguageWorkspaces(),
+		CPP: cloneWorkspace(initialWorkspace)
+	});
+	let files = $state<WorkspaceFile[]>(cloneFiles(initialWorkspace.files));
+	let activePath = $state(initialWorkspace.activePath);
+	let openTabs = $state<string[]>([...initialWorkspace.openTabs]);
 	let sidebarOpen = $state(true);
 	let saveStatus = $state('Ready');
 	let workspaceInitialized = false;
@@ -158,18 +203,16 @@
 	const activeBytes = $derived(activeFile ? new Blob([activeFile.content]).size : 0);
 	const workspaceSaveKey = $derived(
 		JSON.stringify({
-			activePath,
 			argsInput,
-			files: files.map((file) => [file.path, file.content]),
 			goTarget,
 			language,
 			log,
 			ocamlBackend,
 			ocamlWasmBinaryenMode,
-			openTabs,
 			rustTargetTriple,
 			sidebarOpen,
-			tinygoTarget
+			tinygoTarget,
+			workspaces: workspaceMapForSnapshot()
 		})
 	);
 
@@ -244,17 +287,36 @@
 		preloadBrowserGoRuntime?: (options?: { target?: GoTarget }) => Promise<void>;
 	};
 
-	function createDefaultWorkspaceFiles() {
-		return [
-			{
-				path: 'main.cpp',
-				content: resolveEditorDefaultSource('cpp', 'wasm32-wasip1')
-			},
-			{
-				path: 'main.py',
-				content: resolveEditorDefaultSource('python', 'wasm32-wasip1')
-			}
-		];
+	function cloneFiles(value: WorkspaceFile[]) {
+		return value.map((file) => ({ path: file.path, content: file.content }));
+	}
+
+	function cloneWorkspace(value: LanguageWorkspace): LanguageWorkspace {
+		return {
+			activePath: value.activePath,
+			files: cloneFiles(value.files),
+			openTabs: [...value.openTabs]
+		};
+	}
+
+	function createDefaultLanguageWorkspaces() {
+		return Object.fromEntries(
+			playgroundLanguages.map((nextLanguage) => [
+				nextLanguage,
+				createDefaultWorkspace(nextLanguage)
+			])
+		) as Record<PlaygroundLanguage, LanguageWorkspace>;
+	}
+
+	function createDefaultWorkspace(
+		nextLanguage: PlaygroundLanguage = language
+	): LanguageWorkspace {
+		const path = defaultPathForLanguage(nextLanguage);
+		return {
+			activePath: path,
+			files: [{ path, content: defaultSourceForLanguage(nextLanguage) }],
+			openTabs: [path]
+		};
 	}
 
 	function normalizePath(value: string) {
@@ -276,9 +338,9 @@
 		return index === -1 ? '' : name.slice(index).toLowerCase();
 	}
 
-	function languageForPath(filePath: string) {
+	function languageForPath(filePath: string): PlaygroundLanguage | null {
 		const ext = extension(filePath);
-		const match: Record<string, string> = {
+		const match: Record<string, PlaygroundLanguage> = {
 			'.c': 'C',
 			'.cc': 'CPP',
 			'.cpp': 'CPP',
@@ -297,8 +359,8 @@
 		return match[ext] || null;
 	}
 
-	function defaultPathForLanguage() {
-		const match: Record<string, string> = {
+	function defaultPathForLanguage(nextLanguage: PlaygroundLanguage = language) {
+		const match: Record<PlaygroundLanguage, string> = {
 			C: 'main.c',
 			CPP: 'main.cpp',
 			JAVA: 'Main.java',
@@ -309,23 +371,87 @@
 			OCAML: 'main.ml',
 			TINYGO: 'main.go'
 		};
-		return match[language] || 'main.txt';
+		return match[nextLanguage];
 	}
 
-	function defaultSourceForLanguage(nextLanguage = language) {
-		if (nextLanguage === 'C')
-			return '#include <stdio.h>\n\nint main() {\n    puts("hello");\n}\n';
-		if (nextLanguage === 'CPP') return resolveEditorDefaultSource('cpp', rustTargetTriple);
-		if (nextLanguage === 'PYTHON')
-			return resolveEditorDefaultSource('python', rustTargetTriple);
-		if (nextLanguage === 'JAVA') return resolveEditorDefaultSource('java', rustTargetTriple);
-		if (nextLanguage === 'RUST') return resolveEditorDefaultSource('rust', rustTargetTriple);
-		if (nextLanguage === 'GO' || nextLanguage === 'TINYGO')
-			return resolveEditorDefaultSource('go', rustTargetTriple);
-		if (nextLanguage === 'ELIXIR')
-			return resolveEditorDefaultSource('elixir', rustTargetTriple);
-		if (nextLanguage === 'OCAML') return resolveEditorDefaultSource('ocaml', rustTargetTriple);
-		return '';
+	function defaultSourceForLanguage(nextLanguage: PlaygroundLanguage = language) {
+		const defaultLanguage = {
+			C: 'c',
+			CPP: 'cpp',
+			PYTHON: 'python',
+			JAVA: 'java',
+			RUST: 'rust',
+			GO: 'go',
+			ELIXIR: 'elixir',
+			OCAML: 'ocaml',
+			TINYGO: 'go'
+		} as const satisfies Record<
+			PlaygroundLanguage,
+			Parameters<typeof resolveEditorDefaultSource>[0]
+		>;
+		return resolveEditorDefaultSource(defaultLanguage[nextLanguage], rustTargetTriple);
+	}
+
+	function sanitizeWorkspace(
+		value: Partial<LanguageWorkspace> | undefined,
+		nextLanguage: PlaygroundLanguage
+	): LanguageWorkspace {
+		const fallback = createDefaultWorkspace(nextLanguage);
+		const nextFiles = sanitizeFiles(value?.files);
+		const files = nextFiles.length ? nextFiles : fallback.files;
+		const requestedActivePath =
+			typeof value?.activePath === 'string' ? normalizePath(value.activePath) : '';
+		const activePath = files.some((file) => file.path === requestedActivePath)
+			? requestedActivePath
+			: files[0].path;
+		const openTabs =
+			value?.openTabs?.filter((tab) => files.some((file) => file.path === tab)) ?? [];
+		return {
+			activePath,
+			files,
+			openTabs: openTabs.length ? openTabs : [activePath]
+		};
+	}
+
+	function currentWorkspace(): LanguageWorkspace {
+		return sanitizeWorkspace({ activePath, files, openTabs }, language);
+	}
+
+	function workspaceMapForSnapshot() {
+		const workspaces = createDefaultLanguageWorkspaces();
+		for (const nextLanguage of playgroundLanguages) {
+			workspaces[nextLanguage] = cloneWorkspace(
+				languageWorkspaces[nextLanguage] ?? createDefaultWorkspace(nextLanguage)
+			);
+		}
+		workspaces[language] = currentWorkspace();
+		return workspaces;
+	}
+
+	function activateWorkspace(workspace: LanguageWorkspace) {
+		const nextWorkspace = sanitizeWorkspace(workspace, language);
+		files = cloneFiles(nextWorkspace.files);
+		activePath = nextWorkspace.activePath;
+		openTabs = [...nextWorkspace.openTabs];
+	}
+
+	function switchLanguage(nextLanguage: PlaygroundLanguage, message?: string) {
+		if (nextLanguage === language) return;
+		languageWorkspaces = {
+			...languageWorkspaces,
+			[language]: currentWorkspace()
+		};
+		language = nextLanguage;
+		activateWorkspace(languageWorkspaces[nextLanguage] ?? createDefaultWorkspace(nextLanguage));
+		saveStatus = message ?? `${languageLabels[nextLanguage]} workspace`;
+		if (language !== 'CPP') clangdRequested = false;
+	}
+
+	function handleLanguageChange(event: Event) {
+		const nextLanguage = normalizeRequestedLanguage(
+			(event.currentTarget as HTMLSelectElement).value
+		);
+		if (nextLanguage) switchLanguage(nextLanguage);
 	}
 
 	function uniquePath(requestedPath: string) {
@@ -372,8 +498,6 @@
 		if (!files.some((file) => file.path === filePath)) return;
 		activePath = filePath;
 		if (!openTabs.includes(filePath)) openTabs = [...openTabs, filePath];
-		const nextLanguage = languageForPath(filePath);
-		if (nextLanguage) language = nextLanguage;
 		if (compact) sidebarOpen = false;
 	}
 
@@ -407,8 +531,6 @@
 		file.path = nextPath;
 		activePath = nextPath;
 		openTabs = openTabs.map((tab) => (tab === previousPath ? nextPath : tab));
-		const nextLanguage = languageForPath(nextPath);
-		if (nextLanguage) language = nextLanguage;
 		saveStatus = `${basename(nextPath)} renamed`;
 	}
 
@@ -485,20 +607,36 @@
 			rustTargetTriple,
 			sidebarOpen,
 			tinygoTarget,
-			version: 3
+			version: 4,
+			workspaces: workspaceMapForSnapshot()
 		};
 	}
 
 	function applySnapshot(value?: Partial<WorkspaceSnapshot>, message = 'Workspace restored') {
-		const nextFiles = sanitizeFiles(value?.files);
-		files = nextFiles.length ? nextFiles : createDefaultWorkspaceFiles();
-		activePath =
-			value?.activePath && files.some((file) => file.path === value.activePath)
-				? value.activePath
-				: files[0].path;
-		openTabs = value?.openTabs?.filter((tab) => files.some((file) => file.path === tab)) ?? [];
-		if (!openTabs.length) openTabs = [activePath];
-		if (typeof value?.language === 'string') language = value.language;
+		const nextLanguage =
+			normalizeRequestedLanguage(
+				typeof value?.language === 'string' ? value.language : null
+			) ??
+			languageForPath(typeof value?.activePath === 'string' ? value.activePath : '') ??
+			'CPP';
+		const nextWorkspaces = createDefaultLanguageWorkspaces();
+		for (const nextLanguageKey of playgroundLanguages) {
+			const workspace = value?.workspaces?.[nextLanguageKey];
+			nextWorkspaces[nextLanguageKey] = sanitizeWorkspace(workspace, nextLanguageKey);
+		}
+		if (!value?.workspaces) {
+			nextWorkspaces[nextLanguage] = sanitizeWorkspace(
+				{
+					activePath: value?.activePath,
+					files: value?.files,
+					openTabs: value?.openTabs
+				},
+				nextLanguage
+			);
+		}
+		languageWorkspaces = nextWorkspaces;
+		language = nextLanguage;
+		activateWorkspace(nextWorkspaces[nextLanguage]);
 		if (typeof value?.argsInput === 'string') argsInput = value.argsInput;
 		if (typeof value?.log === 'boolean') log = value.log;
 		if (
@@ -526,8 +664,6 @@
 		if (value?.ocamlWasmBinaryenMode === 'fast' || value?.ocamlWasmBinaryenMode === 'full')
 			ocamlWasmBinaryenMode = value.ocamlWasmBinaryenMode;
 		sidebarOpen = value?.sidebarOpen ?? !compact;
-		const nextLanguage = languageForPath(activePath);
-		if (nextLanguage) language = nextLanguage;
 		saveStatus = message;
 	}
 
@@ -640,16 +776,14 @@
 	}
 
 	function resetWorkspace() {
-		if (!confirm('Reset workspace?')) return;
-		applySnapshot(
-			{
-				files: createDefaultWorkspaceFiles(),
-				activePath: 'main.cpp',
-				openTabs: ['main.cpp']
-			},
-			'Workspace reset'
-		);
-		if (browser) localStorage.removeItem(WORKSPACE_STORAGE_KEY);
+		if (!confirm(`Reset ${languageLabels[language]} workspace?`)) return;
+		const nextWorkspace = createDefaultWorkspace(language);
+		languageWorkspaces = {
+			...languageWorkspaces,
+			[language]: cloneWorkspace(nextWorkspace)
+		};
+		activateWorkspace(nextWorkspace);
+		saveStatus = `${languageLabels[language]} workspace reset`;
 		saveWorkspace();
 	}
 
@@ -680,10 +814,10 @@
 		}
 	}
 
-	function normalizeRequestedLanguage(value: string | null) {
+	function normalizeRequestedLanguage(value: string | null): PlaygroundLanguage | null {
 		if (!value) return null;
 		const normalized = value.trim().toLowerCase();
-		const aliases: Record<string, string> = {
+		const aliases: Record<string, PlaygroundLanguage> = {
 			python: 'PYTHON',
 			python3: 'PYTHON',
 			pypy3: 'PYTHON',
@@ -798,16 +932,20 @@
 			const requestedArgs =
 				decodeBase64Url(page.url.searchParams.get('args64')) ??
 				page.url.searchParams.get('args');
+			const storedLanguage = normalizeRequestedLanguage(lang);
 			const requestedRustTargetTriple = page.url.searchParams.get('rustTargetTriple');
 			const requestedGoTarget = page.url.searchParams.get('goTarget');
 			const requestedTinyGoTarget = page.url.searchParams.get('tinygoTarget');
 			const requestedOcamlBackend = page.url.searchParams.get('ocamlBackend');
 			const requestedOcamlWasmBinaryenMode =
 				page.url.searchParams.get('ocamlWasmBinaryenMode');
-			if (requestedCode ?? code) {
-				activeFile.content = requestedCode ?? code ?? '';
+			if (requestedLanguage ?? storedLanguage) {
+				switchLanguage(
+					requestedLanguage ?? storedLanguage ?? language,
+					'Workspace restored'
+				);
 			}
-			if (requestedLanguage ?? lang) language = requestedLanguage ?? lang ?? language;
+			if (requestedCode ?? code) activeFile.content = requestedCode ?? code ?? '';
 			if (requestedArgs !== null) argsInput = requestedArgs;
 			else if (storedArgs !== null) argsInput = storedArgs;
 			if (
@@ -863,8 +1001,6 @@
 			) {
 				rustTargetTriple = requestedRustTargetTriple;
 			}
-			const nextLanguage = languageForPath(activePath);
-			if (nextLanguage) language = nextLanguage;
 			workspaceInitialized = true;
 			init = true;
 		}
@@ -1278,7 +1414,7 @@
 				</label>
 				<label class="select-chip">
 					<span class="material-symbols-outlined">code_blocks</span>
-					<select bind:value={language}>
+					<select value={language} onchange={handleLanguageChange}>
 						<option value="C">C</option>
 						<option value="CPP">C++</option>
 						<option value="PYTHON">Python</option>

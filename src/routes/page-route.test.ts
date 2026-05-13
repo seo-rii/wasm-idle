@@ -312,9 +312,7 @@ describe('example route debug actions', () => {
 
 	it('surfaces OCaml through the shared language selector and backend hint', () => {
 		expect(source).toMatch(/ocamlBackend = \$state<OcamlBackend>\('wasm'\),/);
-		expect(source).toMatch(
-			/ocamlWasmBinaryenMode = \$state<OcamlWasmBinaryenMode>\('fast'\),/
-		);
+		expect(source).toMatch(/ocamlWasmBinaryenMode = \$state<OcamlWasmBinaryenMode>\('fast'\),/);
 		expect(source).toMatch(/localStorage\.setItem\('ocamlBackend', ocamlBackend\);/);
 		expect(source).toMatch(
 			/localStorage\.setItem\('ocamlWasmBinaryenMode', ocamlWasmBinaryenMode\);/
@@ -336,10 +334,10 @@ describe('example route debug actions', () => {
 		);
 		expect(source).toMatch(/storedOcamlBackend === 'js' \|\| storedOcamlBackend === 'wasm'/);
 		expect(source).toMatch(
-			/requestedOcamlWasmBinaryenMode === 'fast' \|\| requestedOcamlWasmBinaryenMode === 'full'/
+			/requestedOcamlWasmBinaryenMode === 'fast' \|\|\s+requestedOcamlWasmBinaryenMode === 'full'/
 		);
 		expect(source).toMatch(
-			/storedOcamlWasmBinaryenMode === 'fast' \|\| storedOcamlWasmBinaryenMode === 'full'/
+			/storedOcamlWasmBinaryenMode === 'fast' \|\|\s+storedOcamlWasmBinaryenMode === 'full'/
 		);
 		expect(source).toMatch(/: language === 'OCAML'\s+\? 'ocaml'/);
 		expect(source).toMatch(/ocamlBackend: language === 'OCAML' \? ocamlBackend : undefined/);
@@ -359,7 +357,9 @@ describe('example route debug actions', () => {
 		);
 		expect(source).toMatch(/selector switches between `wasm_of_ocaml` and `js_of_ocaml`/);
 		expect(source).toMatch(/Binaryen fast is the\s+default low-memory wasm path/s);
-		expect(source).toMatch(/Binaryen full runs the original static `wasm-metadce`\s+and `wasm-opt` passes/s);
+		expect(source).toMatch(
+			/Binaryen full runs the original static `wasm-metadce`\s+and `wasm-opt` passes/s
+		);
 		expect(source).toMatch(/Type into the\s+terminal below and press Enter to send a line/s);
 	});
 

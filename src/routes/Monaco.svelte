@@ -313,7 +313,7 @@
 			return;
 		}
 		const nextValue = resolveEditorDefaultSource(
-			language as 'cpp' | 'python' | 'java' | 'go' | 'elixir' | 'ocaml' | 'rust',
+			language as 'c' | 'cpp' | 'python' | 'java' | 'go' | 'elixir' | 'ocaml' | 'rust',
 			rustTargetTriple
 		);
 		if (currentValue !== nextValue) {
@@ -344,7 +344,7 @@
 			Monaco.languages.setLanguageConfiguration('ocaml', ocamlLanguageConfiguration);
 			Monaco.languages.setMonarchTokensProvider('ocaml', ocamlMonarchTokens);
 			const defaultValue = resolveEditorDefaultSource(
-				language as 'cpp' | 'python' | 'java' | 'go' | 'elixir' | 'ocaml' | 'rust',
+				language as 'c' | 'cpp' | 'python' | 'java' | 'go' | 'elixir' | 'ocaml' | 'rust',
 				rustTargetTriple
 			);
 			if (language === 'cpp') {

@@ -9,13 +9,18 @@ import {
 } from './editor-defaults';
 
 describe('editor defaults', () => {
-	it('keeps TinyGo starter escape sequences intact inside the Go source', () => {
-		expect(editorDefaults.go).toContain("ReadString('\\n')");
-		expect(editorDefaults.go).toContain('fmt.Printf("factorial_plus_bonus=%d\\n", factorial(n)+bonus)');
-		expect(editorDefaults.go).not.toContain(`ReadString('
-')`);
-		expect(editorDefaults.go).not.toContain(`factorial_plus_bonus=%d
-", factorial(n)+bonus)`);
+	it('keeps each starter focused on a minimal hello world program', () => {
+		expect(editorDefaults.c).toContain('puts("Hello, WebAssembly!")');
+		expect(editorDefaults.cpp).toContain('std::cout << "Hello, WebAssembly!"');
+		expect(editorDefaults.python).toBe('print("Hello, WebAssembly!")');
+		expect(editorDefaults.java).toContain('System.out.println("Hello, WebAssembly!")');
+		expect(editorDefaults.go).toContain('fmt.Println("Hello, WebAssembly!")');
+		expect(editorDefaults.elixir).toBe('IO.puts("Hello, WebAssembly!")');
+		expect(editorDefaults.ocaml).toBe('let () = print_endline "Hello, WebAssembly!"');
+		expect(rustEditorDefaults['wasm32-wasip1']).toContain('println!("Hello, WebAssembly!")');
+	});
+
+	it('keeps the legacy broken TinyGo starter recognizable for migration', () => {
 		expect(legacyBrokenTinyGoEditorDefault).toContain(`ReadString('
 ')`);
 		expect(legacyBrokenTinyGoEditorDefault).toContain(`factorial_plus_bonus=%d
@@ -23,27 +28,12 @@ describe('editor defaults', () => {
 	});
 
 	it('resolves the requested default source by language and rust target', () => {
+		expect(resolveEditorDefaultSource('c', 'wasm32-wasip1')).toBe(editorDefaults.c);
 		expect(resolveEditorDefaultSource('go', 'wasm32-wasip1')).toBe(editorDefaults.go);
 		expect(resolveEditorDefaultSource('ocaml', 'wasm32-wasip1')).toBe(editorDefaults.ocaml);
 		expect(resolveEditorDefaultSource('rust', 'wasm32-wasip2')).toBe(
 			rustEditorDefaults['wasm32-wasip2']
 		);
-	});
-
-	it('keeps the Elixir starter wired to stdin with a fallback value', () => {
-		expect(editorDefaults.elixir).toContain('IO.gets("")');
-		expect(editorDefaults.elixir).toContain('Integer.parse(String.trim(line))');
-		expect(editorDefaults.elixir).toContain(':error -> 4');
-		expect(editorDefaults.elixir).toContain(
-			'IO.puts("factorial_plus_bonus=#{factorial(n) + @bonus}")'
-		);
-	});
-
-	it('keeps the OCaml starter wired to stdin with a fallback value', () => {
-		expect(editorDefaults.ocaml).toContain('read_line ()');
-		expect(editorDefaults.ocaml).toContain('int_of_string value');
-		expect(editorDefaults.ocaml).toContain('read_int_or_default 4');
-		expect(editorDefaults.ocaml).toContain('factorial_plus_bonus=%d\\n%!');
 	});
 
 	it('recognizes bundled defaults and the legacy broken TinyGo starter separately', () => {
