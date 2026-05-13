@@ -110,7 +110,10 @@ describe('Terminal source', () => {
 			/if \(sandbox && sandboxAcceptingInput\) sandbox\.write\?\.\(submittedInput\);\s+else pendingSandboxInput\.push\(submittedInput\);/s
 		);
 		expect(source).toMatch(
-			/if \(pendingSandboxInput\.length > 0\) \{\s+for \(const pendingInput of pendingSandboxInput\) \{\s+sandbox\.write\?\.\(pendingInput\);\s+\}\s+pendingSandboxInput = \[\];\s+\}/s
+			/function flushPendingSandboxInput\(\) \{\s+if \(pendingSandboxInput\.length > 0\) \{\s+for \(const pendingInput of pendingSandboxInput\) \{\s+sandbox\.write\?\.\(pendingInput\);\s+\}\s+pendingSandboxInput = \[\];\s+\}\s+\}/s
+		);
+		expect(source).toMatch(
+			/sandboxAcceptingInput = true;\s+flushPendingSandboxInput\(\);\s+return await runSandbox\(sandbox\.run\(code, false, log, prog, args, options\)\);/s
 		);
 		expect(source).toMatch(/\.finally\(\(\) => \{\s+sandboxAcceptingInput = false;/s);
 	});

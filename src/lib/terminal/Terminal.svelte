@@ -143,7 +143,9 @@
 		sandbox.oncompilerdiagnostic = oncompilediagnostic;
 		sandbox.output = (output: string) =>
 			_tc === tc && writeTerminalOutput(output.replaceAll('\n', '\r\n'));
-		sandboxAcceptingInput = true;
+	}
+
+	function flushPendingSandboxInput() {
 		if (pendingSandboxInput.length > 0) {
 			for (const pendingInput of pendingSandboxInput) {
 				sandbox.write?.(pendingInput);
@@ -271,6 +273,8 @@
 				initSandbox(language).then(() => sandbox.load(code, log, args, options, prog)),
 				initTerm()
 			]);
+			sandboxAcceptingInput = true;
+			flushPendingSandboxInput();
 			return await runSandbox(sandbox.run(code, false, log, prog, args, options));
 		},
 		async destroy() {
