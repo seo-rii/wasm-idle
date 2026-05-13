@@ -32,9 +32,6 @@ class Elixir implements Sandbox {
 		progress?: { set?: (value: number) => void } | import('svelte/store').Writable<number>
 	) {
 		return new Promise<void>(async (resolve, reject) => {
-			this.pendingInput = [];
-			this.waitingForInput = false;
-			this.pendingEof = false;
 			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
 			const nextBundleUrl = resolveElixirBundleUrl(runtimeAssets, currentUrl);
 			if (!nextBundleUrl) {
@@ -44,6 +41,12 @@ class Elixir implements Sandbox {
 			}
 
 			const needsWorkerReset = !this.worker || this.bundleUrl !== nextBundleUrl;
+			const preservePendingInput = this.prepared && !needsWorkerReset;
+			if (!preservePendingInput) {
+				this.pendingInput = [];
+				this.pendingEof = false;
+			}
+			this.waitingForInput = false;
 			this.bundleUrl = nextBundleUrl;
 			if (needsWorkerReset && this.worker) {
 				this.worker.terminate();
