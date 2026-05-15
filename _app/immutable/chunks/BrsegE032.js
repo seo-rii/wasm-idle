@@ -1,0 +1,1 @@
+function e(e){return new Worker(``+new URL(`../workers/typescript-Cb65iY5h.js`,import.meta.url).href,{type:`module`,name:e?.name})}export{e as default};
