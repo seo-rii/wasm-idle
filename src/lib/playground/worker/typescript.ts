@@ -54,9 +54,7 @@ async function loadRuntime(url: string) {
 			);
 		}
 		if (typeof module.executeBrowserTypeScriptArtifact !== 'function') {
-			throw new Error(
-				'wasm-typescript module must export executeBrowserTypeScriptArtifact'
-			);
+			throw new Error('wasm-typescript module must export executeBrowserTypeScriptArtifact');
 		}
 		return {
 			compiler: await factory(),
@@ -94,6 +92,7 @@ self.onmessage = async (event: { data: any }) => {
 		code,
 		prepare,
 		args = [],
+		stdin,
 		language = 'typescript',
 		activePath = language === 'typescript' ? 'main.ts' : 'main.js',
 		workspaceFiles = [],
@@ -137,7 +136,9 @@ self.onmessage = async (event: { data: any }) => {
 			if (!result.success) {
 				throw new Error(
 					result.stderr ||
-						result.diagnostics?.map((diagnostic: any) => diagnostic.message).join('\n') ||
+						result.diagnostics
+							?.map((diagnostic: any) => diagnostic.message)
+							.join('\n') ||
 						'TypeScript compilation failed'
 				);
 			}
@@ -154,6 +155,8 @@ self.onmessage = async (event: { data: any }) => {
 			return;
 		}
 
+		const hasInitialStdin = typeof stdin === 'string';
+		let initialStdin: string | null = hasInitialStdin ? stdin : null;
 		const execution = await runtime.executeBrowserTypeScriptArtifact(compiledArtifact, {
 			args,
 			env: {
@@ -162,6 +165,18 @@ self.onmessage = async (event: { data: any }) => {
 			files: workspaceFiles,
 			activePath,
 			stdin: () => {
+				if (hasInitialStdin) {
+					const chunk = initialStdin;
+					initialStdin = null;
+					if (log) {
+						console.log(
+							chunk == null
+								? '[wasm-idle:typescript-stdin] read(bytes=0, eof=true)'
+								: `[wasm-idle:typescript-stdin] read(bytes=${new TextEncoder().encode(chunk).byteLength}, text=${JSON.stringify(chunk)})`
+						);
+					}
+					return chunk;
+				}
 				const chunk = waitForBufferedStdin(stdinBufferTypeScript!, () =>
 					postMessage({ buffer: true })
 				);

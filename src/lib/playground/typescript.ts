@@ -64,7 +64,9 @@ class TypeScriptSandbox implements Sandbox {
 				delete this.worker;
 			}
 			if (!this.worker) {
-				this.worker = new (await import('$lib/playground/worker/typescript?worker')).default();
+				this.worker = new (
+					await import('$lib/playground/worker/typescript?worker')
+				).default();
 				this.worker.onerror = (event: ErrorEvent) => {
 					const location =
 						event.filename && event.lineno
@@ -170,8 +172,10 @@ class TypeScriptSandbox implements Sandbox {
 				prepare,
 				buffer: this.buffer,
 				args: programArgs,
+				stdin: options.stdin,
 				language: this.compileLanguage,
-				activePath: options.activePath || (this.language === 'JAVASCRIPT' ? 'main.js' : 'main.ts'),
+				activePath:
+					options.activePath || (this.language === 'JAVASCRIPT' ? 'main.js' : 'main.ts'),
 				workspaceFiles: options.workspaceFiles || [],
 				log: _log
 			});

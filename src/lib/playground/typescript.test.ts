@@ -146,9 +146,7 @@ console.log(value);`;
 		publicEnv.PUBLIC_WASM_TYPESCRIPT_MODULE_URL = '';
 		const sandbox = new TypeScriptSandbox('TYPESCRIPT');
 
-		await expect(sandbox.load({})).rejects.toContain(
-			'TypeScript runtime is not configured'
-		);
+		await expect(sandbox.load({})).rejects.toContain('TypeScript runtime is not configured');
 	});
 
 	it('rejects load when the worker script fails before posting load', async () => {
@@ -192,5 +190,31 @@ console.log(value);`;
 		await expect(sandbox.run('console.log(1)', false)).resolves.toBe(true);
 
 		expect(readBufferedStdin(runMessage.buffer)).toBe('42\n');
+	});
+
+	it('passes injected stdin to the worker', async () => {
+		const sandbox = new TypeScriptSandbox('JAVASCRIPT');
+		const worker = new MockWorker();
+		let runMessage: any;
+
+		sandbox.worker = worker as unknown as Worker;
+		worker.postMessage.mockImplementationOnce((message) => {
+			runMessage = message;
+			queueMicrotask(() => {
+				worker.onmessage?.({
+					data: {
+						results: true
+					}
+				} as MessageEvent<any>);
+			});
+		});
+
+		await expect(
+			sandbox.run('console.log(1)', false, true, undefined, [], {
+				stdin: 'injected\n'
+			})
+		).resolves.toBe(true);
+
+		expect(runMessage.stdin).toBe('injected\n');
 	});
 });
