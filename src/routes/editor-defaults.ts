@@ -182,7 +182,7 @@ function factorial(n) {
     return n <= 1 ? 1 : n * factorial(n - 1);
 }
 
-const input = fs.readFileSync('/dev/stdin', 'utf8').trim();
+const input = fs.readLineSync(0).trim();
 const n = Number.parseInt(input || '4', 10);
 console.log(\`factorial_plus_bonus=\${factorial(Number.isNaN(n) ? 4 : n) + bonus}\`);`,
 	typescript: `import fs from 'node:fs';
@@ -193,7 +193,7 @@ function factorial(n: number): number {
     return n <= 1 ? 1 : n * factorial(n - 1);
 }
 
-const input = fs.readFileSync('/dev/stdin', 'utf8').trim();
+const input: string = (fs as any).readLineSync(0).trim();
 const parsed = Number.parseInt(input || '4', 10);
 const n = Number.isNaN(parsed) ? 4 : parsed;
 console.log(\`factorial_plus_bonus=\${factorial(n) + bonus}\`);`

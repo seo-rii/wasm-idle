@@ -1654,11 +1654,11 @@
 		{/if}
 		{#if language === 'JAVASCRIPT' || language === 'TYPESCRIPT'}
 			<p class="hint">
-				{language === 'JAVASCRIPT' ? 'JavaScript' : 'TypeScript'} runs through the bundled
-				`wasm-typescript` browser module. `require('fs')`, `require('node:fs')`,
-				`fs.readFileSync('/dev/stdin', 'utf8')`, and `fs.readFileSync(0, 'utf8')` are
-				available. Because `/dev/stdin` follows Node-style full-input reads, send Ctrl+D or
-				the EOF button after typing input.
+				{language === 'JAVASCRIPT' ? 'JavaScript' : 'TypeScript'} runs through the bundled `wasm-typescript`
+				browser module. `require('fs')`, `require('node:fs')`, and `fs.readLineSync(0)` are available
+				for Enter-submitted line input. `fs.readFileSync('/dev/stdin', 'utf8')` and `fs.readFileSync(0,
+				'utf8')` are also available for full-input reads; send Ctrl+D or the EOF button after
+				typing input.
 			</p>
 		{/if}
 		{#if debugLanguage && debug.active}
