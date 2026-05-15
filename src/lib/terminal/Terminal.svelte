@@ -155,10 +155,14 @@
 		}
 	}
 
-	function runSandbox<T>(pr: Promise<T>) {
+	function runSandbox<T>(pr: Promise<T>, reportFinish = true) {
 		return pr
 			.then((x) => {
-				writeTerminalOutput(`\r\nProcess finished after ${sandbox.elapse}ms\u001B[?25l`);
+				if (reportFinish) {
+					writeTerminalOutput(
+						`\r\nProcess finished after ${sandbox.elapse}ms\u001B[?25l`
+					);
+				}
 				return x;
 			})
 			.catch((msg) => {
@@ -263,7 +267,8 @@
 			]);
 			prepareProgress?.set?.(0);
 			return !!(await runSandbox(
-				sandbox.run(code, true, log, prepareProgress, args, options)
+				sandbox.run(code, true, log, prepareProgress, args, options),
+				false
 			));
 		},
 		async run(
