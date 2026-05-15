@@ -120,6 +120,8 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).toMatch(/<option value="ELIXIR">Elixir<\/option>/);
 		expect(pageSource).toMatch(/<option value="OCAML">OCaml<\/option>/);
 		expect(pageSource).toMatch(/<option value="TINYGO">TinyGo<\/option>/);
+		expect(pageSource).toMatch(/<option value="JAVASCRIPT">JavaScript<\/option>/);
+		expect(pageSource).toMatch(/<option value="TYPESCRIPT">TypeScript<\/option>/);
 		expect(pageSource).toMatch(/language=\{editorLanguage\}/);
 		expect(pageSource).toMatch(
 			/<select id="rust-target-triple" bind:value=\{rustTargetTriple\}>/
@@ -132,6 +134,7 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).toMatch(/WASM_ELIXIR_ASSET_VERSION/);
 		expect(pageSource).toMatch(/wasm-elixir\/bundle\.avm\?v=\$\{WASM_ELIXIR_ASSET_VERSION\}/);
 		expect(pageSource).toMatch(/WASM_OCAML_ASSET_VERSION/);
+		expect(pageSource).toMatch(/WASM_TYPESCRIPT_ASSET_VERSION/);
 		expect(pageSource).toMatch(
 			/wasm-of-js-of-ocaml\/browser-native\/src\/index\.js\?v=\$\{WASM_OCAML_ASSET_VERSION\}/
 		);

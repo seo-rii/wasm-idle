@@ -9,7 +9,8 @@ const { publicEnv } = vi.hoisted(() => ({
 		PUBLIC_WASM_OCAML_MODULE_URL: '',
 		PUBLIC_WASM_OCAML_MANIFEST_URL: '',
 		PUBLIC_WASM_TINYGO_APP_URL: '',
-		PUBLIC_WASM_TINYGO_MODULE_URL: ''
+		PUBLIC_WASM_TINYGO_MODULE_URL: '',
+		PUBLIC_WASM_TYPESCRIPT_MODULE_URL: ''
 	}
 }));
 
@@ -327,6 +328,34 @@ describe('runtime asset config resolution', () => {
 
 		expect(resolveTinyGoModuleUrl(undefined, 'https://example.com/app')).toBe(
 			'https://env.example.com/wasm-tinygo/runtime.js?v=42'
+		);
+	});
+
+	it('prefers an explicit TypeScript module url over the public env override', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_TYPESCRIPT_MODULE_URL =
+			'https://env.example.com/wasm-typescript/index.js';
+		const { resolveTypeScriptModuleUrl } = await import('./assets');
+
+		expect(
+			resolveTypeScriptModuleUrl(
+				{
+					typescript: {
+						moduleUrl: '/runtime/wasm-typescript/index.js'
+					}
+				},
+				'https://example.com/app'
+			)
+		).toBe('https://example.com/runtime/wasm-typescript/index.js');
+	});
+
+	it('derives the default TypeScript module url from the shared root path', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_TYPESCRIPT_MODULE_URL = '';
+		const { resolveTypeScriptModuleUrl } = await import('./assets');
+
+		expect(resolveTypeScriptModuleUrl('/absproxy/5173', 'https://example.com/app')).toBe(
+			'https://example.com/absproxy/5173/wasm-typescript/index.js'
 		);
 	});
 });

@@ -120,7 +120,8 @@
 						ocamlModuleUrl: currentRuntimeAssets?.ocaml?.moduleUrl || '',
 						ocamlManifestUrl: currentRuntimeAssets?.ocaml?.manifestUrl || '',
 						tinygoAppUrl: currentRuntimeAssets?.tinygo?.appUrl || '',
-						tinygoModuleUrl: currentRuntimeAssets?.tinygo?.moduleUrl || ''
+						tinygoModuleUrl: currentRuntimeAssets?.tinygo?.moduleUrl || '',
+						typeScriptModuleUrl: currentRuntimeAssets?.typescript?.moduleUrl || ''
 					});
 		const requiresSandboxReset =
 			ll !== language || loadedRuntimeAssetsKey !== currentRuntimeAssetsKey;
@@ -238,7 +239,9 @@
 				language === 'CSHARP' ||
 				language === 'FSHARP' ||
 				language === 'TINYGO' ||
-				language === 'OCAML'
+				language === 'OCAML' ||
+				language === 'JAVASCRIPT' ||
+				language === 'TYPESCRIPT'
 					? phaseProgress(prog, 0, 0.05)
 					: phaseProgress(prog, 0, 0.85);
 			const prepareProgress =
@@ -247,7 +250,9 @@
 				language === 'CSHARP' ||
 				language === 'FSHARP' ||
 				language === 'TINYGO' ||
-				language === 'OCAML'
+				language === 'OCAML' ||
+				language === 'JAVASCRIPT' ||
+				language === 'TYPESCRIPT'
 					? phaseProgress(prog, 0.05, 0.99)
 					: phaseProgress(prog, 0.85, 0.99);
 			await Promise.all([

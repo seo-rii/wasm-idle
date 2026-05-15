@@ -18,6 +18,7 @@
 	import { WASM_OCAML_ASSET_VERSION } from '$lib/playground/wasmOcamlVersion';
 	import { WASM_RUST_ASSET_VERSION } from '$lib/playground/wasmRustVersion';
 	import { WASM_TINYGO_ASSET_VERSION } from '$lib/playground/wasmTinyGoVersion';
+	import { WASM_TYPESCRIPT_ASSET_VERSION } from '$lib/playground/wasmTypeScriptVersion';
 	import type {
 		CompilerDiagnostic,
 		GoTarget,
@@ -51,7 +52,9 @@
 		| 'FSHARP'
 		| 'ELIXIR'
 		| 'OCAML'
-		| 'TINYGO';
+		| 'TINYGO'
+		| 'JAVASCRIPT'
+		| 'TYPESCRIPT';
 
 	type LanguageWorkspace = {
 		activePath: string;
@@ -89,7 +92,9 @@
 		'FSHARP',
 		'ELIXIR',
 		'OCAML',
-		'TINYGO'
+		'TINYGO',
+		'JAVASCRIPT',
+		'TYPESCRIPT'
 	];
 	const languageLabels: Record<PlaygroundLanguage, string> = {
 		C: 'C',
@@ -102,7 +107,9 @@
 		FSHARP: 'F#',
 		ELIXIR: 'Elixir',
 		OCAML: 'OCaml',
-		TINYGO: 'TinyGo'
+		TINYGO: 'TinyGo',
+		JAVASCRIPT: 'JavaScript',
+		TYPESCRIPT: 'TypeScript'
 	};
 
 	let path = $derived(
@@ -143,6 +150,11 @@
 			moduleUrl: path
 				? `${path}/wasm-tinygo/runtime.js?v=${WASM_TINYGO_ASSET_VERSION}`
 				: `/wasm-tinygo/runtime.js?v=${WASM_TINYGO_ASSET_VERSION}`
+		},
+		typescript: {
+			moduleUrl: path
+				? `${path}/wasm-typescript/index.js?v=${WASM_TYPESCRIPT_ASSET_VERSION}`
+				: `/wasm-typescript/index.js?v=${WASM_TYPESCRIPT_ASSET_VERSION}`
 		}
 	}));
 	const playground = $derived.by(() => createPlaygroundBinding(runtimeAssets));
@@ -201,7 +213,11 @@
 										? 'elixir'
 										: language === 'OCAML'
 											? 'ocaml'
-											: 'go'
+											: language === 'JAVASCRIPT'
+												? 'javascript'
+												: language === 'TYPESCRIPT'
+													? 'typescript'
+													: 'go'
 	);
 	const compact = $derived(examplePaneWidth > 0 && examplePaneWidth <= 760);
 	const activeFile = $derived(files.find((file) => file.path === activePath) ?? files[0]);
@@ -365,7 +381,13 @@
 			'.ex': 'ELIXIR',
 			'.exs': 'ELIXIR',
 			'.ml': 'OCAML',
-			'.mli': 'OCAML'
+			'.mli': 'OCAML',
+			'.js': 'JAVASCRIPT',
+			'.mjs': 'JAVASCRIPT',
+			'.cjs': 'JAVASCRIPT',
+			'.ts': 'TYPESCRIPT',
+			'.mts': 'TYPESCRIPT',
+			'.cts': 'TYPESCRIPT'
 		};
 		return match[ext] || null;
 	}
@@ -382,7 +404,9 @@
 			FSHARP: 'Program.fsx',
 			ELIXIR: 'main.exs',
 			OCAML: 'main.ml',
-			TINYGO: 'main.go'
+			TINYGO: 'main.go',
+			JAVASCRIPT: 'main.js',
+			TYPESCRIPT: 'main.ts'
 		};
 		return match[nextLanguage];
 	}
@@ -399,7 +423,9 @@
 			FSHARP: 'fsharp',
 			ELIXIR: 'elixir',
 			OCAML: 'ocaml',
-			TINYGO: 'go'
+			TINYGO: 'go',
+			JAVASCRIPT: 'javascript',
+			TYPESCRIPT: 'typescript'
 		} as const satisfies Record<
 			PlaygroundLanguage,
 			Parameters<typeof resolveEditorDefaultSource>[0]
@@ -864,7 +890,11 @@
 			fs: 'FSHARP',
 			elixir: 'ELIXIR',
 			ocaml: 'OCAML',
-			tinygo: 'TINYGO'
+			tinygo: 'TINYGO',
+			javascript: 'JAVASCRIPT',
+			js: 'JAVASCRIPT',
+			typescript: 'TYPESCRIPT',
+			ts: 'TYPESCRIPT'
 		};
 		return aliases[normalized] ?? null;
 	}
@@ -1260,7 +1290,9 @@
 			language !== 'CSHARP' &&
 			language !== 'FSHARP' &&
 			language !== 'TINYGO' &&
-			language !== 'OCAML'
+			language !== 'OCAML' &&
+			language !== 'JAVASCRIPT' &&
+			language !== 'TYPESCRIPT'
 		)
 			compilerDiagnostics = [];
 	});
@@ -1463,9 +1495,11 @@
 						<option value="ELIXIR">Elixir</option>
 						<option value="OCAML">OCaml</option>
 						<option value="TINYGO">TinyGo</option>
+						<option value="JAVASCRIPT">JavaScript</option>
+						<option value="TYPESCRIPT">TypeScript</option>
 					</select>
 				</label>
-				{#if language === 'JAVA' || language === 'RUST' || language === 'GO' || language === 'CSHARP' || language === 'FSHARP' || language === 'TINYGO'}
+				{#if language === 'JAVA' || language === 'RUST' || language === 'GO' || language === 'CSHARP' || language === 'FSHARP' || language === 'TINYGO' || language === 'JAVASCRIPT' || language === 'TYPESCRIPT'}
 					<label class="args-chip">
 						<span class="material-symbols-outlined">list_alt</span>
 						<input bind:value={argsInput} placeholder="3 4 5" spellcheck={false} />
@@ -1616,6 +1650,15 @@
 				runtime. `wasip2` and `wasip3` use the wasm-tinygo preview target profiles. Pass CLI
 				args here, type into the terminal below, and use Ctrl+D or the EOF button if the
 				program reads stdin until EOF.
+			</p>
+		{/if}
+		{#if language === 'JAVASCRIPT' || language === 'TYPESCRIPT'}
+			<p class="hint">
+				{language === 'JAVASCRIPT' ? 'JavaScript' : 'TypeScript'} runs through the bundled
+				`wasm-typescript` browser module. `require('fs')`, `require('node:fs')`,
+				`fs.readFileSync('/dev/stdin', 'utf8')`, and `fs.readFileSync(0, 'utf8')` are
+				available. Because `/dev/stdin` follows Node-style full-input reads, send Ctrl+D or
+				the EOF button after typing input.
 			</p>
 		{/if}
 		{#if debugLanguage && debug.active}

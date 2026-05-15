@@ -7,6 +7,7 @@ import Ocaml from '$lib/playground/ocaml';
 import Python from '$lib/playground/python';
 import Rust from '$lib/playground/rust';
 import TinyGo from '$lib/playground/tinygo';
+import TypeScriptSandbox from '$lib/playground/typescript';
 import type {
 	BoundSandbox,
 	PlaygroundBinding,
@@ -30,7 +31,9 @@ export const supportedLanguages = [
 	'FSHARP',
 	'ELIXIR',
 	'TINYGO',
-	'OCAML'
+	'OCAML',
+	'JAVASCRIPT',
+	'TYPESCRIPT'
 ];
 
 function bindRuntimeAssets(sandbox: Sandbox, runtimeAssets: SandboxRuntimeAssets): BoundSandbox {
@@ -120,6 +123,14 @@ async function playground(language: string, runtimeAssets?: SandboxRuntimeAssets
 		case 'OCAML':
 			sandbox = new Ocaml();
 			break;
+		case 'JAVASCRIPT':
+		case 'JS':
+			sandbox = new TypeScriptSandbox('JAVASCRIPT');
+			break;
+		case 'TYPESCRIPT':
+		case 'TS':
+			sandbox = new TypeScriptSandbox('TYPESCRIPT');
+			break;
 		default:
 			throw new Error(`Unsupported language: ${language}`);
 	}
@@ -142,6 +153,12 @@ async function playground(language: string, runtimeAssets?: SandboxRuntimeAssets
 		if (language === 'ELIXIR') sandboxCache['ELIXIR'] = sandbox;
 		if (language === 'TINYGO') sandboxCache['TINYGO'] = sandbox;
 		if (language === 'OCAML') sandboxCache['OCAML'] = sandbox;
+		if (language === 'JAVASCRIPT' || language === 'JS') {
+			sandboxCache['JAVASCRIPT'] = sandboxCache['JS'] = sandbox;
+		}
+		if (language === 'TYPESCRIPT' || language === 'TS') {
+			sandboxCache['TYPESCRIPT'] = sandboxCache['TS'] = sandbox;
+		}
 	}
 	return runtimeAssets ? bindRuntimeAssets(sandbox, runtimeAssets) : sandbox;
 }

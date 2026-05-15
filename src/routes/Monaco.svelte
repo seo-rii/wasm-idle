@@ -421,7 +421,9 @@
 			language === 'go' ||
 			language === 'csharp' ||
 			language === 'fsharp' ||
-			language === 'ocaml'
+			language === 'ocaml' ||
+			language === 'javascript' ||
+			language === 'typescript'
 				? compilerDiagnostics.map((diagnostic) => ({
 						severity:
 							diagnostic.severity === 'warning'
@@ -460,6 +462,8 @@
 				| 'fsharp'
 				| 'elixir'
 				| 'ocaml'
+				| 'javascript'
+				| 'typescript'
 				| 'rust',
 			rustTargetTriple
 		);
@@ -510,6 +514,8 @@
 					| 'fsharp'
 					| 'elixir'
 					| 'ocaml'
+					| 'javascript'
+					| 'typescript'
 					| 'rust',
 				rustTargetTriple
 			);

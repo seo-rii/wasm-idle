@@ -66,6 +66,10 @@ export interface ElixirRuntimeAssetConfig {
 	bundleUrl?: string;
 }
 
+export interface TypeScriptRuntimeAssetConfig {
+	moduleUrl?: string;
+}
+
 export interface PlaygroundRuntimeAssets {
 	rootUrl?: string;
 	python?: RuntimeAssetConfig;
@@ -78,6 +82,7 @@ export interface PlaygroundRuntimeAssets {
 	ocaml?: OcamlRuntimeAssetConfig;
 	tinygo?: TinyGoRuntimeAssetConfig;
 	elixir?: ElixirRuntimeAssetConfig;
+	typescript?: TypeScriptRuntimeAssetConfig;
 }
 
 export interface TinyGoRuntimeAssetLoaderRequest {
@@ -568,6 +573,35 @@ export function resolveElixirBundleUrl(
 	if (options?.rootUrl) {
 		return resolveConfiguredUrl(
 			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-elixir/bundle.avm`,
+			currentUrl
+		);
+	}
+
+	return '';
+}
+
+export function resolveTypeScriptModuleUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredModuleUrl =
+		(typeof options === 'object' && options?.typescript?.moduleUrl) ||
+		(publicEnv.PUBLIC_WASM_TYPESCRIPT_MODULE_URL || '').trim();
+
+	if (configuredModuleUrl) {
+		return resolveConfiguredUrl(configuredModuleUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-typescript/index.js`,
+			currentUrl
+		);
+	}
+
+	if (options?.rootUrl) {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-typescript/index.js`,
 			currentUrl
 		);
 	}

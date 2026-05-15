@@ -10,10 +10,22 @@ export type EditorDefaultLanguage =
 	| 'fsharp'
 	| 'elixir'
 	| 'ocaml'
+	| 'javascript'
+	| 'typescript'
 	| 'rust';
 
 export const editorDefaults: Record<
-	'c' | 'cpp' | 'python' | 'java' | 'go' | 'csharp' | 'fsharp' | 'elixir' | 'ocaml',
+	| 'c'
+	| 'cpp'
+	| 'python'
+	| 'java'
+	| 'go'
+	| 'csharp'
+	| 'fsharp'
+	| 'elixir'
+	| 'ocaml'
+	| 'javascript'
+	| 'typescript',
 	string
 > = {
 	c: `#include <stdio.h>
@@ -161,7 +173,30 @@ let read_int_or_default default =
 
 let () =
   let n = read_int_or_default 4 in
-  Printf.printf "factorial_plus_bonus=%d\\n%!" (factorial n + bonus)`
+  Printf.printf "factorial_plus_bonus=%d\\n%!" (factorial n + bonus)`,
+	javascript: `const fs = require('fs');
+
+const bonus = 3;
+
+function factorial(n) {
+    return n <= 1 ? 1 : n * factorial(n - 1);
+}
+
+const input = fs.readFileSync('/dev/stdin', 'utf8').trim();
+const n = Number.parseInt(input || '4', 10);
+console.log(\`factorial_plus_bonus=\${factorial(Number.isNaN(n) ? 4 : n) + bonus}\`);`,
+	typescript: `import fs from 'node:fs';
+
+const bonus: number = 3;
+
+function factorial(n: number): number {
+    return n <= 1 ? 1 : n * factorial(n - 1);
+}
+
+const input = fs.readFileSync('/dev/stdin', 'utf8').trim();
+const parsed = Number.parseInt(input || '4', 10);
+const n = Number.isNaN(parsed) ? 4 : parsed;
+console.log(\`factorial_plus_bonus=\${factorial(n) + bonus}\`);`
 };
 
 export const rustEditorDefaults: Record<RustTargetTriple, string> = {
@@ -286,6 +321,8 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.fsharp ||
 		source === editorDefaults.elixir ||
 		source === editorDefaults.ocaml ||
+		source === editorDefaults.javascript ||
+		source === editorDefaults.typescript ||
 		source === rustEditorDefaults['wasm32-wasip1'] ||
 		source === rustEditorDefaults['wasm32-wasip2'] ||
 		source === rustEditorDefaults['wasm32-wasip3']

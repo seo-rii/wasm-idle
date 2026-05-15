@@ -85,6 +85,14 @@ vi.mock('$lib/playground/tinygo', () => ({
 	default: createMockSandboxClass('TINYGO')
 }));
 
+vi.mock('$lib/playground/typescript', () => ({
+	default: class extends MockSandbox {
+		constructor(language: string = 'TYPESCRIPT') {
+			super(language);
+		}
+	}
+}));
+
 vi.mock('$lib/playground/clang', () => ({
 	default: class extends createMockSandboxClass('CLANG') {
 		constructor(language: 'C' | 'CPP') {
@@ -385,6 +393,38 @@ describe('playground runtime binding', () => {
 				{},
 				progress
 			]
+		]);
+	});
+
+	it('routes JavaScript and TypeScript requests through the wasm-typescript sandbox implementation', async () => {
+		const binding = createPlaygroundBinding({
+			rootUrl: '/absproxy/5173',
+			typescript: {
+				moduleUrl: '/absproxy/5173/wasm-typescript/index.js?v=test'
+			}
+		});
+		const progress = { set() {} };
+		const javascriptSandbox = await binding.load('JAVASCRIPT');
+		const typescriptSandbox = await binding.load('TYPESCRIPT');
+
+		await javascriptSandbox.load('console.log(1)', true, ['demo'], {}, progress);
+		await typescriptSandbox.load('const n: number = 1;', true, ['demo'], {}, progress);
+
+		const runtimeAssets = {
+			rootUrl: '/absproxy/5173',
+			typescript: {
+				moduleUrl: '/absproxy/5173/wasm-typescript/index.js?v=test'
+			}
+		};
+		expect(javascriptSandbox.runtimeAssets).toEqual(runtimeAssets);
+		expect(typescriptSandbox.runtimeAssets).toEqual(runtimeAssets);
+		expect(sandboxInstances.get('JAVASCRIPT')).toHaveLength(1);
+		expect(sandboxInstances.get('TYPESCRIPT')).toHaveLength(1);
+		expect(sandboxInstances.get('JAVASCRIPT')?.[0]?.loadCalls).toEqual([
+			[runtimeAssets, 'console.log(1)', true, ['demo'], {}, progress]
+		]);
+		expect(sandboxInstances.get('TYPESCRIPT')?.[0]?.loadCalls).toEqual([
+			[runtimeAssets, 'const n: number = 1;', true, ['demo'], {}, progress]
 		]);
 	});
 });

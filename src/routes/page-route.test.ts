@@ -83,6 +83,9 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(
 			/import \{ WASM_TINYGO_ASSET_VERSION \} from '\$lib\/playground\/wasmTinyGoVersion';/
 		);
+		expect(source).toMatch(
+			/import \{ WASM_TYPESCRIPT_ASSET_VERSION \} from '\$lib\/playground\/wasmTypeScriptVersion';/
+		);
 		expect(source).not.toContain('tinygo' + 'CompilePath');
 		expect(source).not.toMatch(/dotnetCompilePath/);
 		expect(source).not.toContain('tinygo' + 'Host' + 'CompileUrl');
@@ -108,6 +111,9 @@ describe('example route debug actions', () => {
 		);
 		expect(source).toMatch(
 			/tinygo: \{\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-tinygo\/runtime\.js\?v=\$\{WASM_TINYGO_ASSET_VERSION\}`\s+:\s+`\/wasm-tinygo\/runtime\.js\?v=\$\{WASM_TINYGO_ASSET_VERSION\}`\s+\}/s
+		);
+		expect(source).toMatch(
+			/typescript: \{\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-typescript\/index\.js\?v=\$\{WASM_TYPESCRIPT_ASSET_VERSION\}`\s+:\s+`\/wasm-typescript\/index\.js\?v=\$\{WASM_TYPESCRIPT_ASSET_VERSION\}`\s+\}/s
 		);
 		expect(source).toMatch(
 			/const playground = \$derived\.by\(\(\) => createPlaygroundBinding\(runtimeAssets\)\);/
@@ -166,6 +172,8 @@ describe('example route debug actions', () => {
 		);
 		expect(source).toMatch(/const editorLanguage = \$derived\(/);
 		expect(source).toMatch(/: language === 'ELIXIR'\s+\? 'elixir'/);
+		expect(source).toMatch(/: language === 'JAVASCRIPT'\s+\? 'javascript'/);
+		expect(source).toMatch(/: language === 'TYPESCRIPT'\s+\? 'typescript'/);
 		expect(source).toMatch(/: 'go'/);
 		expect(source).toMatch(
 			/rustTargetTriple: language === 'RUST' \? rustTargetTriple : undefined/
@@ -268,11 +276,13 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/<option value="ELIXIR">Elixir<\/option>/);
 		expect(source).toMatch(/<option value="OCAML">OCaml<\/option>/);
 		expect(source).toMatch(/<option value="TINYGO">TinyGo<\/option>/);
+		expect(source).toMatch(/<option value="JAVASCRIPT">JavaScript<\/option>/);
+		expect(source).toMatch(/<option value="TYPESCRIPT">TypeScript<\/option>/);
 		expect(source).toMatch(
-			/\{#if language === 'JAVA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'TINYGO'\}/
+			/\{#if language === 'JAVA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'TINYGO' \|\| language === 'JAVASCRIPT' \|\| language === 'TYPESCRIPT'\}/
 		);
 		expect(source).toMatch(
-			/language === 'JAVA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'TINYGO'/
+			/language === 'JAVA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'TINYGO' \|\| language === 'JAVASCRIPT' \|\| language === 'TYPESCRIPT'/
 		);
 		expect(source).toMatch(/Go uses the bundled `wasm-go` browser compiler runtime/);
 		expect(source).toMatch(
@@ -322,6 +332,30 @@ describe('example route debug actions', () => {
 			/terminal input submitted before or during preparation is passed to `Console\.In`/
 		);
 		expect(source).not.toContain('api/dotnet');
+	});
+
+	it('surfaces JavaScript and TypeScript through the wasm-typescript runtime', () => {
+		expect(source).toMatch(/typescript: \{/);
+		expect(source).toMatch(/WASM_TYPESCRIPT_ASSET_VERSION/);
+		expect(source).toMatch(/wasm-typescript\/index\.js\?v=\$\{WASM_TYPESCRIPT_ASSET_VERSION\}/);
+		expect(source).toMatch(/<option value="JAVASCRIPT">JavaScript<\/option>/);
+		expect(source).toMatch(/<option value="TYPESCRIPT">TypeScript<\/option>/);
+		expect(source).toMatch(/javascript: 'JAVASCRIPT'/);
+		expect(source).toMatch(/js: 'JAVASCRIPT'/);
+		expect(source).toMatch(/typescript: 'TYPESCRIPT'/);
+		expect(source).toMatch(/ts: 'TYPESCRIPT'/);
+		expect(source).toMatch(/language === 'JAVASCRIPT'\s+\? 'javascript'/);
+		expect(source).toMatch(/language === 'TYPESCRIPT'\s+\? 'typescript'/);
+		expect(source).toMatch(/JAVASCRIPT: 'main\.js'/);
+		expect(source).toMatch(/TYPESCRIPT: 'main\.ts'/);
+		expect(source).toMatch(/JAVASCRIPT: 'javascript'/);
+		expect(source).toMatch(/TYPESCRIPT: 'typescript'/);
+		expect(source).toMatch(
+			/\{language === 'JAVASCRIPT' \? 'JavaScript' : 'TypeScript'\} runs through the bundled\s+`wasm-typescript` browser module/
+		);
+		expect(source).toMatch(/`fs\.readFileSync\('\/dev\/stdin', 'utf8'\)`/);
+		expect(source).toMatch(/`fs\.readFileSync\(0, 'utf8'\)`/);
+		expect(source).toMatch(/send Ctrl\+D or\s+the EOF button after typing input/s);
 	});
 
 	it('surfaces Elixir through the shared language selector and Popcorn hint', () => {

@@ -22,6 +22,10 @@ describe('editor defaults', () => {
 		expect(editorDefaults.fsharp).not.toContain('Array.skip');
 		expect(editorDefaults.elixir).toContain('IO.gets("")');
 		expect(editorDefaults.ocaml).toContain('read_line ()');
+		expect(editorDefaults.javascript).toContain("require('fs')");
+		expect(editorDefaults.javascript).toContain("readFileSync('/dev/stdin', 'utf8')");
+		expect(editorDefaults.typescript).toContain("import fs from 'node:fs'");
+		expect(editorDefaults.typescript).toContain('const bonus: number = 3;');
 		expect(rustEditorDefaults['wasm32-wasip1']).toContain('io::stdin().read_line');
 	});
 
@@ -38,6 +42,12 @@ describe('editor defaults', () => {
 		expect(resolveEditorDefaultSource('go', 'wasm32-wasip1')).toBe(editorDefaults.go);
 		expect(resolveEditorDefaultSource('fsharp', 'wasm32-wasip1')).toBe(editorDefaults.fsharp);
 		expect(resolveEditorDefaultSource('ocaml', 'wasm32-wasip1')).toBe(editorDefaults.ocaml);
+		expect(resolveEditorDefaultSource('javascript', 'wasm32-wasip1')).toBe(
+			editorDefaults.javascript
+		);
+		expect(resolveEditorDefaultSource('typescript', 'wasm32-wasip1')).toBe(
+			editorDefaults.typescript
+		);
 		expect(resolveEditorDefaultSource('rust', 'wasm32-wasip2')).toBe(
 			rustEditorDefaults['wasm32-wasip2']
 		);
@@ -47,6 +57,8 @@ describe('editor defaults', () => {
 		expect(isEditorDefaultSource(editorDefaults.go)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.fsharp)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.ocaml)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.javascript)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.typescript)).toBe(true);
 		expect(isEditorDefaultSource(rustEditorDefaults['wasm32-wasip1'])).toBe(true);
 		expect(isEditorDefaultSource('fn main() {}')).toBe(false);
 		expect(isLegacyEditorDefaultSource(legacyBrokenTinyGoEditorDefault)).toBe(true);
