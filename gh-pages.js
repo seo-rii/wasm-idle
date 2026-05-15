@@ -1,5 +1,5 @@
 import { publish } from 'gh-pages';
-import { existsSync } from 'node:fs';
+import { existsSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -35,6 +35,17 @@ if (missingBuildFiles.length > 0) {
 		].join('\n')
 	);
 	process.exit(1);
+}
+
+const redundantBuildDirs = [
+	// TinyGo is wired to reuse the top-level wasm-rust runtime at /wasm-rust/runtime/.
+	// Keeping the vendored duplicate pushes the GitHub Pages artifact over the
+	// practical legacy Pages size limit.
+	'wasm-tinygo/vendor/wasm-rust-runtime'
+];
+
+for (const dir of redundantBuildDirs) {
+	rmSync(path.join(buildDir, dir), { recursive: true, force: true });
 }
 
 publish(
