@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 const THIS_FILE = fileURLToPath(import.meta.url);
 const THIS_DIR = path.dirname(THIS_FILE);
 const REPO_ROOT = path.resolve(THIS_DIR, '..');
-const DEFAULT_SOURCE_DIR = path.resolve(REPO_ROOT, '..', 'wasm-dotnet', 'dist');
+const DEFAULT_SOURCE_DIR = path.resolve(REPO_ROOT, 'runtimes', 'wasm-dotnet', 'dist');
 const DEFAULT_TARGET_DIR = path.resolve(REPO_ROOT, 'static', 'wasm-dotnet');
 const DEFAULT_VERSION_MODULE_PATH = path.resolve(
 	REPO_ROOT,
@@ -65,7 +65,7 @@ export async function syncWasmDotnetDist({
 	const sourceStats = await stat(sourceDir).catch(() => null);
 	if (!sourceStats?.isDirectory()) {
 		throw new Error(
-			`wasm-dotnet dist directory was not found at ${sourceDir}. Build wasm-dotnet first with "cd ../wasm-dotnet && npm run build". Run "npm run build:runtime" as well when publishing the .NET browser runtime assets.`
+			`wasm-dotnet dist directory was not found at ${sourceDir}. Build wasm-dotnet first with "pnpm --dir runtimes/wasm-dotnet build". Run "pnpm --dir runtimes/wasm-dotnet build:runtime" as well when publishing the .NET browser runtime assets.`
 		);
 	}
 

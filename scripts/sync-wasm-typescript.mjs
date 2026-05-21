@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 const THIS_FILE = fileURLToPath(import.meta.url);
 const THIS_DIR = path.dirname(THIS_FILE);
 const REPO_ROOT = path.resolve(THIS_DIR, '..');
-const DEFAULT_SOURCE_DIR = path.resolve(REPO_ROOT, '..', 'wasm-typescript', 'dist');
+const DEFAULT_SOURCE_DIR = path.resolve(REPO_ROOT, 'runtimes', 'wasm-typescript', 'dist');
 const DEFAULT_TARGET_DIR = path.resolve(REPO_ROOT, 'static', 'wasm-typescript');
 const DEFAULT_VERSION_MODULE_PATH = path.resolve(
 	REPO_ROOT,
@@ -78,7 +78,7 @@ export async function syncWasmTypeScriptDist({
 	const sourceStats = await stat(sourceDir).catch(() => null);
 	if (!sourceStats?.isDirectory()) {
 		throw new Error(
-			`wasm-typescript dist directory was not found at ${sourceDir}. Build wasm-typescript first with "cd ../wasm-typescript && pnpm build".`
+			`wasm-typescript dist directory was not found at ${sourceDir}. Build wasm-typescript first with "pnpm --dir runtimes/wasm-typescript build".`
 		);
 	}
 	const entryModulePath = path.join(sourceDir, 'index.js');

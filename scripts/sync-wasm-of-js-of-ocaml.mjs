@@ -9,14 +9,14 @@ const REPO_ROOT = path.resolve(THIS_DIR, '..');
 const staleBinaryenBridgePath = '/' + 'api/binaryen-command';
 const DEFAULT_SOURCE_BROWSER_DIST_DIR = path.resolve(
 	REPO_ROOT,
-	'..',
+	'runtimes',
 	'wasm-of-js-of-ocaml',
 	'browser-harness',
 	'dist'
 );
 const DEFAULT_SOURCE_BUNDLE_DIR = path.resolve(
 	REPO_ROOT,
-	'..',
+	'runtimes',
 	'wasm-of-js-of-ocaml',
 	'.cache',
 	'browser-native-bundle'
@@ -134,13 +134,13 @@ export async function syncWasmOfJsOfOcamlDist({
 	const browserDistStats = await stat(sourceBrowserDistDir).catch(() => null);
 	if (!browserDistStats?.isDirectory()) {
 		throw new Error(
-			`wasm-of-js-of-ocaml browser dist directory was not found at ${sourceBrowserDistDir}. Build wasm-of-js-of-ocaml first with "cd ../wasm-of-js-of-ocaml && npm run build && npm run prepare:browser-native -- --force".`
+			`wasm-of-js-of-ocaml browser dist directory was not found at ${sourceBrowserDistDir}. Build wasm-of-js-of-ocaml first with "pnpm --dir runtimes/wasm-of-js-of-ocaml build && pnpm --dir runtimes/wasm-of-js-of-ocaml prepare:browser-native -- --force".`
 		);
 	}
 	const bundleStats = await stat(sourceBundleDir).catch(() => null);
 	if (!bundleStats?.isDirectory()) {
 		throw new Error(
-			`wasm-of-js-of-ocaml browser-native bundle directory was not found at ${sourceBundleDir}. Run "cd ../wasm-of-js-of-ocaml && npm run prepare:browser-native -- --force" first.`
+			`wasm-of-js-of-ocaml browser-native bundle directory was not found at ${sourceBundleDir}. Run "pnpm --dir runtimes/wasm-of-js-of-ocaml prepare:browser-native -- --force" first.`
 		);
 	}
 

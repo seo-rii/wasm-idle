@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 const THIS_FILE = fileURLToPath(import.meta.url);
 const THIS_DIR = path.dirname(THIS_FILE);
 const REPO_ROOT = path.resolve(THIS_DIR, '..');
-const DEFAULT_SOURCE_DIR = path.resolve(REPO_ROOT, '..', 'wasm-rust', 'dist');
+const DEFAULT_SOURCE_DIR = path.resolve(REPO_ROOT, 'runtimes', 'wasm-rust', 'dist');
 const DEFAULT_TARGET_DIR = path.resolve(REPO_ROOT, 'static', 'wasm-rust');
 const DEFAULT_VERSION_MODULE_PATH = path.resolve(
 	REPO_ROOT,
@@ -171,7 +171,7 @@ export async function syncWasmRustDist({
 	const sourceStats = await stat(sourceDir).catch(() => null);
 	if (!sourceStats?.isDirectory()) {
 		throw new Error(
-			`wasm-rust dist directory was not found at ${sourceDir}. Build wasm-rust first with "cd ../wasm-rust && pnpm build".`
+			`wasm-rust dist directory was not found at ${sourceDir}. Build wasm-rust first with "pnpm --dir runtimes/wasm-rust build".`
 		);
 	}
 

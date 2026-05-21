@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 const THIS_FILE = fileURLToPath(import.meta.url);
 const THIS_DIR = path.dirname(THIS_FILE);
 const REPO_ROOT = path.resolve(THIS_DIR, '..');
-const DEFAULT_SOURCE_DIR = path.resolve(REPO_ROOT, '..', 'wasm-go', 'dist');
+const DEFAULT_SOURCE_DIR = path.resolve(REPO_ROOT, 'runtimes', 'wasm-go', 'dist');
 const DEFAULT_TARGET_DIR = path.resolve(REPO_ROOT, 'static', 'wasm-go');
 const DEFAULT_VERSION_MODULE_PATH = path.resolve(
 	REPO_ROOT,
@@ -102,7 +102,7 @@ export async function syncWasmGoDist({
 	const sourceStats = await stat(sourceDir).catch(() => null);
 	if (!sourceStats?.isDirectory()) {
 		throw new Error(
-			`wasm-go dist directory was not found at ${sourceDir}. Build wasm-go first with "cd ../wasm-go && npm run build && npm run prepare:runtime".`
+			`wasm-go dist directory was not found at ${sourceDir}. Build wasm-go first with "pnpm --dir runtimes/wasm-go build && pnpm --dir runtimes/wasm-go prepare:runtime".`
 		);
 	}
 

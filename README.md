@@ -6,6 +6,39 @@ Executes C++, Python, Java, Rust, Go, TinyGo, OCaml, Elixir, C#, and F# code.
 
 Refer to src/lib/clang.
 
+## Monorepo layout
+
+`wasm-idle` is now managed as a pnpm workspace. The existing sibling repositories are intentionally
+left in place, but the default development path is inside this repo:
+
+- `packages/core`: framework-neutral contracts, runtime asset keys, progress helpers, and playground
+  binding helpers.
+- `packages/svelte`: Svelte store/binding helpers around `@wasm-idle/core`.
+- `packages/react`: React hooks around `@wasm-idle/core`.
+- `packages/vue`: Vue composables around `@wasm-idle/core`.
+- `packages/node`: Node.js host helpers for Node-capable sandbox loaders.
+- `runtimes/*`: imported runtime/compiler packages such as `wasm-rust`,
+  `wasm-of-js-of-ocaml`, `wasm-go`, `wasm-tinygo`, `wasm-dotnet`, and `wasm-typescript`.
+
+Useful workspace commands:
+
+```bash
+pnpm workspace:list
+pnpm build:packages
+pnpm check:packages
+pnpm build:runtimes
+pnpm check:runtimes
+pnpm sync:runtime list
+pnpm sync:runtimes
+```
+
+The sync scripts now default to `runtimes/<name>/dist`. To sync from one of the preserved sibling
+repositories, pass explicit source and target paths to the underlying script, for example:
+
+```bash
+node scripts/sync-wasm-rust.mjs ../wasm-rust/dist static/wasm-rust
+```
+
 Java uses TeaVM's browser compiler/runtime. TeaVM compiler/runtime/classlib assets are bundled under `static/teavm/` by default, and the asset base URL can be overridden with `PUBLIC_TEAVM_BASE_URL`.
 
 Pyodide core assets are vendored under `static/pyodide/`. Refresh them after bumping the `pyodide`
