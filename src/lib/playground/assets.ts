@@ -70,6 +70,11 @@ export interface TypeScriptRuntimeAssetConfig {
 	moduleUrl?: string;
 }
 
+export interface ZigRuntimeAssetConfig {
+	compilerUrl?: string;
+	stdlibUrl?: string;
+}
+
 export interface PlaygroundRuntimeAssets {
 	rootUrl?: string;
 	python?: RuntimeAssetConfig;
@@ -83,6 +88,7 @@ export interface PlaygroundRuntimeAssets {
 	tinygo?: TinyGoRuntimeAssetConfig;
 	elixir?: ElixirRuntimeAssetConfig;
 	typescript?: TypeScriptRuntimeAssetConfig;
+	zig?: ZigRuntimeAssetConfig;
 }
 
 export interface TinyGoRuntimeAssetLoaderRequest {
@@ -602,6 +608,64 @@ export function resolveTypeScriptModuleUrl(
 	if (options?.rootUrl) {
 		return resolveConfiguredUrl(
 			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-typescript/index.js`,
+			currentUrl
+		);
+	}
+
+	return '';
+}
+
+export function resolveZigCompilerUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredCompilerUrl =
+		(typeof options === 'object' && options?.zig?.compilerUrl) ||
+		(publicEnv.PUBLIC_WASM_ZIG_COMPILER_URL || '').trim();
+
+	if (configuredCompilerUrl) {
+		return resolveConfiguredUrl(configuredCompilerUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-zig/zig_small.wasm`,
+			currentUrl
+		);
+	}
+
+	if (options?.rootUrl) {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-zig/zig_small.wasm`,
+			currentUrl
+		);
+	}
+
+	return '';
+}
+
+export function resolveZigStdlibUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredStdlibUrl =
+		(typeof options === 'object' && options?.zig?.stdlibUrl) ||
+		(publicEnv.PUBLIC_WASM_ZIG_STDLIB_URL || '').trim();
+
+	if (configuredStdlibUrl) {
+		return resolveConfiguredUrl(configuredStdlibUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-zig/std.zip`,
+			currentUrl
+		);
+	}
+
+	if (options?.rootUrl) {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-zig/std.zip`,
 			currentUrl
 		);
 	}

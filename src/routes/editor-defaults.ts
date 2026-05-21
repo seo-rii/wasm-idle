@@ -12,6 +12,7 @@ export type EditorDefaultLanguage =
 	| 'ocaml'
 	| 'javascript'
 	| 'typescript'
+	| 'zig'
 	| 'rust';
 
 export const editorDefaults: Record<
@@ -25,7 +26,8 @@ export const editorDefaults: Record<
 	| 'elixir'
 	| 'ocaml'
 	| 'javascript'
-	| 'typescript',
+	| 'typescript'
+	| 'zig',
 	string
 > = {
 	c: `#include <stdio.h>
@@ -196,7 +198,24 @@ function factorial(n: number): number {
 const input: string = (fs as any).readLineSync(0).trim();
 const parsed = Number.parseInt(input || '4', 10);
 const n = Number.isNaN(parsed) ? 4 : parsed;
-console.log(\`factorial_plus_bonus=\${factorial(n) + bonus}\`);`
+console.log(\`factorial_plus_bonus=\${factorial(n) + bonus}\`);`,
+	zig: `const std = @import("std");
+
+const bonus: i32 = 3;
+
+fn factorial(n: i32) i32 {
+    return if (n <= 1) 1 else n * factorial(n - 1);
+}
+
+pub fn main() !void {
+    var buffer: [64]u8 = undefined;
+    const stdin = std.io.getStdIn().reader();
+    const input = (try stdin.readUntilDelimiterOrEof(&buffer, '\n')) orelse "";
+    const trimmed = std.mem.trim(u8, input, " \t\r\n");
+    const n = std.fmt.parseInt(i32, trimmed, 10) catch 4;
+    const stdout = std.io.getStdOut().writer();
+    try stdout.print("factorial_plus_bonus={d}\n", .{factorial(n) + bonus});
+}`
 };
 
 export const rustEditorDefaults: Record<RustTargetTriple, string> = {
@@ -323,6 +342,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.ocaml ||
 		source === editorDefaults.javascript ||
 		source === editorDefaults.typescript ||
+		source === editorDefaults.zig ||
 		source === rustEditorDefaults['wasm32-wasip1'] ||
 		source === rustEditorDefaults['wasm32-wasip2'] ||
 		source === rustEditorDefaults['wasm32-wasip3']

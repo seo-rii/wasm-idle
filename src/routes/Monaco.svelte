@@ -423,7 +423,8 @@
 			language === 'fsharp' ||
 			language === 'ocaml' ||
 			language === 'javascript' ||
-			language === 'typescript'
+			language === 'typescript' ||
+			language === 'zig'
 				? compilerDiagnostics.map((diagnostic) => ({
 						severity:
 							diagnostic.severity === 'warning'
@@ -464,6 +465,7 @@
 				| 'ocaml'
 				| 'javascript'
 				| 'typescript'
+				| 'zig'
 				| 'rust',
 			rustTargetTriple
 		);
@@ -503,6 +505,13 @@
 			}
 			Monaco.languages.setLanguageConfiguration('fsharp', fsharpLanguageConfiguration);
 			Monaco.languages.setMonarchTokensProvider('fsharp', fsharpMonarchTokens);
+			if (!Monaco.languages.getLanguages().some(({ id }) => id === 'zig')) {
+				Monaco.languages.register({
+					id: 'zig',
+					aliases: ['Zig', 'zig'],
+					extensions: ['.zig']
+				});
+			}
 			const defaultValue = resolveEditorDefaultSource(
 				language as
 					| 'c'
@@ -516,6 +525,7 @@
 					| 'ocaml'
 					| 'javascript'
 					| 'typescript'
+					| 'zig'
 					| 'rust',
 				rustTargetTriple
 			);

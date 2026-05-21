@@ -19,6 +19,7 @@
 	import { WASM_RUST_ASSET_VERSION } from '$lib/playground/wasmRustVersion';
 	import { WASM_TINYGO_ASSET_VERSION } from '$lib/playground/wasmTinyGoVersion';
 	import { WASM_TYPESCRIPT_ASSET_VERSION } from '$lib/playground/wasmTypeScriptVersion';
+	import { WASM_ZIG_ASSET_VERSION } from '$lib/playground/wasmZigVersion';
 	import type {
 		CompilerDiagnostic,
 		GoTarget,
@@ -54,7 +55,8 @@
 		| 'OCAML'
 		| 'TINYGO'
 		| 'JAVASCRIPT'
-		| 'TYPESCRIPT';
+		| 'TYPESCRIPT'
+		| 'ZIG';
 
 	type LanguageWorkspace = {
 		activePath: string;
@@ -94,7 +96,8 @@
 		'OCAML',
 		'TINYGO',
 		'JAVASCRIPT',
-		'TYPESCRIPT'
+		'TYPESCRIPT',
+		'ZIG'
 	];
 	const languageLabels: Record<PlaygroundLanguage, string> = {
 		C: 'C',
@@ -109,7 +112,8 @@
 		OCAML: 'OCaml',
 		TINYGO: 'TinyGo',
 		JAVASCRIPT: 'JavaScript',
-		TYPESCRIPT: 'TypeScript'
+		TYPESCRIPT: 'TypeScript',
+		ZIG: 'Zig'
 	};
 
 	let path = $derived(
@@ -155,6 +159,14 @@
 			moduleUrl: path
 				? `${path}/wasm-typescript/index.js?v=${WASM_TYPESCRIPT_ASSET_VERSION}`
 				: `/wasm-typescript/index.js?v=${WASM_TYPESCRIPT_ASSET_VERSION}`
+		},
+		zig: {
+			compilerUrl: path
+				? `${path}/wasm-zig/zig_small.wasm?v=${WASM_ZIG_ASSET_VERSION}`
+				: `/wasm-zig/zig_small.wasm?v=${WASM_ZIG_ASSET_VERSION}`,
+			stdlibUrl: path
+				? `${path}/wasm-zig/std.zip?v=${WASM_ZIG_ASSET_VERSION}`
+				: `/wasm-zig/std.zip?v=${WASM_ZIG_ASSET_VERSION}`
 		}
 	}));
 	const playground = $derived.by(() => createPlaygroundBinding(runtimeAssets));
@@ -217,6 +229,8 @@
 												? 'javascript'
 												: language === 'TYPESCRIPT'
 													? 'typescript'
+													: language === 'ZIG'
+													? 'zig'
 													: 'go'
 	);
 	const compact = $derived(examplePaneWidth > 0 && examplePaneWidth <= 760);
@@ -387,7 +401,8 @@
 			'.cjs': 'JAVASCRIPT',
 			'.ts': 'TYPESCRIPT',
 			'.mts': 'TYPESCRIPT',
-			'.cts': 'TYPESCRIPT'
+			'.cts': 'TYPESCRIPT',
+			'.zig': 'ZIG'
 		};
 		return match[ext] || null;
 	}
@@ -406,7 +421,8 @@
 			OCAML: 'main.ml',
 			TINYGO: 'main.go',
 			JAVASCRIPT: 'main.js',
-			TYPESCRIPT: 'main.ts'
+			TYPESCRIPT: 'main.ts',
+			ZIG: 'main.zig'
 		};
 		return match[nextLanguage];
 	}
@@ -425,7 +441,8 @@
 			OCAML: 'ocaml',
 			TINYGO: 'go',
 			JAVASCRIPT: 'javascript',
-			TYPESCRIPT: 'typescript'
+			TYPESCRIPT: 'typescript',
+			ZIG: 'zig'
 		} as const satisfies Record<
 			PlaygroundLanguage,
 			Parameters<typeof resolveEditorDefaultSource>[0]
@@ -894,7 +911,8 @@
 			javascript: 'JAVASCRIPT',
 			js: 'JAVASCRIPT',
 			typescript: 'TYPESCRIPT',
-			ts: 'TYPESCRIPT'
+			ts: 'TYPESCRIPT',
+			zig: 'ZIG'
 		};
 		return aliases[normalized] ?? null;
 	}
@@ -951,7 +969,8 @@
 					goTarget: language === 'GO' ? goTarget : undefined,
 					tinygoTarget: language === 'TINYGO' ? tinygoTarget : undefined,
 					ocamlBackend: language === 'OCAML' ? ocamlBackend : undefined,
-					ocamlWasmBinaryenMode: language === 'OCAML' ? ocamlWasmBinaryenMode : undefined
+					ocamlWasmBinaryenMode: language === 'OCAML' ? ocamlWasmBinaryenMode : undefined,
+					zigTargetTriple: language === 'ZIG' ? 'wasm64-wasi' : undefined
 				}
 			});
 		} finally {
@@ -1292,7 +1311,8 @@
 			language !== 'TINYGO' &&
 			language !== 'OCAML' &&
 			language !== 'JAVASCRIPT' &&
-			language !== 'TYPESCRIPT'
+			language !== 'TYPESCRIPT' &&
+			language !== 'ZIG'
 		)
 			compilerDiagnostics = [];
 	});
@@ -1497,9 +1517,10 @@
 						<option value="TINYGO">TinyGo</option>
 						<option value="JAVASCRIPT">JavaScript</option>
 						<option value="TYPESCRIPT">TypeScript</option>
+						<option value="ZIG">Zig</option>
 					</select>
 				</label>
-				{#if language === 'JAVA' || language === 'RUST' || language === 'GO' || language === 'CSHARP' || language === 'FSHARP' || language === 'TINYGO' || language === 'JAVASCRIPT' || language === 'TYPESCRIPT'}
+				{#if language === 'JAVA' || language === 'RUST' || language === 'GO' || language === 'CSHARP' || language === 'FSHARP' || language === 'TINYGO' || language === 'JAVASCRIPT' || language === 'TYPESCRIPT' || language === 'ZIG'}
 					<label class="args-chip">
 						<span class="material-symbols-outlined">list_alt</span>
 						<input bind:value={argsInput} placeholder="3 4 5" spellcheck={false} />
@@ -1659,6 +1680,14 @@
 				for Enter-submitted line input. `fs.readFileSync('/dev/stdin', 'utf8')` and `fs.readFileSync(0,
 				'utf8')` are also available for full-input reads; send Ctrl+D or the EOF button after
 				typing input.
+			</p>
+		{/if}
+		{#if language === 'ZIG'}
+			<p class="hint">
+				Zig runs the bundled `zig_small.wasm` compiler. It uses the `std.zip` standard
+				library inside the browser worker, compiles for `wasm64-wasi`. It executes the
+				emitted WASI artifact locally. Pass CLI args here, type into the terminal below, and
+				use Ctrl+D or the EOF button if the program reads stdin until EOF.
 			</p>
 		{/if}
 		{#if debugLanguage && debug.active}

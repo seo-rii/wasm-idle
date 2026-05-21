@@ -11,6 +11,7 @@ export interface RuntimeAssetKeySource {
 	ocaml?: { moduleUrl?: string; manifestUrl?: string };
 	tinygo?: { appUrl?: string; moduleUrl?: string };
 	typescript?: { moduleUrl?: string };
+	zig?: { compilerUrl?: string; stdlibUrl?: string };
 }
 
 export type RuntimeAssetKeyInput = string | RuntimeAssetKeySource | undefined;
@@ -36,6 +37,8 @@ export function createRuntimeAssetsKey(runtimeAssets: RuntimeAssetKeyInput): str
 		ocamlManifestUrl: runtimeAssets.ocaml?.manifestUrl || '',
 		tinygoAppUrl: runtimeAssets.tinygo?.appUrl || '',
 		tinygoModuleUrl: runtimeAssets.tinygo?.moduleUrl || '',
-		typeScriptModuleUrl: runtimeAssets.typescript?.moduleUrl || ''
+		typeScriptModuleUrl: runtimeAssets.typescript?.moduleUrl || '',
+		zigCompilerUrl: runtimeAssets.zig?.compilerUrl || '',
+		zigStdlibUrl: runtimeAssets.zig?.stdlibUrl || ''
 	});
 }

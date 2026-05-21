@@ -17,7 +17,8 @@ export type WasmIdleLanguageId =
 	| 'JAVASCRIPT'
 	| 'JS'
 	| 'TYPESCRIPT'
-	| 'TS';
+	| 'TS'
+	| 'ZIG';
 
 export const supportedLanguageIds = [
 	'PYTHON3',
@@ -33,7 +34,8 @@ export const supportedLanguageIds = [
 	'TINYGO',
 	'OCAML',
 	'JAVASCRIPT',
-	'TYPESCRIPT'
+	'TYPESCRIPT',
+	'ZIG'
 ] as const;
 
 export const DEFAULT_DEFERRED_PROGRESS_LANGUAGES = new Set<string>([
@@ -44,7 +46,8 @@ export const DEFAULT_DEFERRED_PROGRESS_LANGUAGES = new Set<string>([
 	'TINYGO',
 	'OCAML',
 	'JAVASCRIPT',
-	'TYPESCRIPT'
+	'TYPESCRIPT',
+	'ZIG'
 ]);
 
 const LANGUAGE_ALIASES: Record<string, string> = {

@@ -10,7 +10,9 @@ const { publicEnv } = vi.hoisted(() => ({
 		PUBLIC_WASM_OCAML_MANIFEST_URL: '',
 		PUBLIC_WASM_TINYGO_APP_URL: '',
 		PUBLIC_WASM_TINYGO_MODULE_URL: '',
-		PUBLIC_WASM_TYPESCRIPT_MODULE_URL: ''
+		PUBLIC_WASM_TYPESCRIPT_MODULE_URL: '',
+		PUBLIC_WASM_ZIG_COMPILER_URL: '',
+		PUBLIC_WASM_ZIG_STDLIB_URL: ''
 	}
 }));
 
@@ -356,6 +358,39 @@ describe('runtime asset config resolution', () => {
 
 		expect(resolveTypeScriptModuleUrl('/absproxy/5173', 'https://example.com/app')).toBe(
 			'https://example.com/absproxy/5173/wasm-typescript/index.js'
+		);
+	});
+	it('prefers explicit Zig compiler and stdlib urls over public env overrides', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_ZIG_COMPILER_URL = 'https://env.example.com/zig_small.wasm';
+		publicEnv.PUBLIC_WASM_ZIG_STDLIB_URL = 'https://env.example.com/std.zip';
+		const { resolveZigCompilerUrl, resolveZigStdlibUrl } = await import('./assets');
+
+		const config = {
+			zig: {
+				compilerUrl: '/runtime/wasm-zig/zig_small.wasm',
+				stdlibUrl: '/runtime/wasm-zig/std.zip'
+			}
+		};
+		expect(resolveZigCompilerUrl(config, 'https://example.com/app')).toBe(
+			'https://example.com/runtime/wasm-zig/zig_small.wasm'
+		);
+		expect(resolveZigStdlibUrl(config, 'https://example.com/app')).toBe(
+			'https://example.com/runtime/wasm-zig/std.zip'
+		);
+	});
+
+	it('derives default Zig asset urls from the shared root path', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_ZIG_COMPILER_URL = '';
+		publicEnv.PUBLIC_WASM_ZIG_STDLIB_URL = '';
+		const { resolveZigCompilerUrl, resolveZigStdlibUrl } = await import('./assets');
+
+		expect(resolveZigCompilerUrl('/absproxy/5173', 'https://example.com/app')).toBe(
+			'https://example.com/absproxy/5173/wasm-zig/zig_small.wasm'
+		);
+		expect(resolveZigStdlibUrl('/absproxy/5173', 'https://example.com/app')).toBe(
+			'https://example.com/absproxy/5173/wasm-zig/std.zip'
 		);
 	});
 });

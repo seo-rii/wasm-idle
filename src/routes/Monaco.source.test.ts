@@ -13,4 +13,11 @@ describe('Monaco route source', () => {
 		expect(source).toContain("tokenPostfix: '.ocaml'");
 		expect(source).toContain("blockComment: ['(*', '*)']");
 	});
+	it('registers a Zig Monaco language for source files', async () => {
+		const source = await readFile(path.resolve(process.cwd(), 'src/routes/Monaco.svelte'), 'utf8');
+
+		expect(source).toContain("id: 'zig'");
+		expect(source).toContain("aliases: ['Zig', 'zig']");
+		expect(source).toContain("extensions: ['.zig']");
+	});
 });

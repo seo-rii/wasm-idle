@@ -22,6 +22,7 @@ export type GoTarget = 'wasip1/wasm' | 'wasip2/wasm' | 'wasip3/wasm' | 'js/wasm'
 export type TinyGoTarget = 'wasm' | 'wasip1' | 'wasip2' | 'wasip3';
 export type OcamlBackend = 'js' | 'wasm';
 export type OcamlWasmBinaryenMode = 'fast' | 'full';
+export type ZigTargetTriple = 'wasm64-wasi';
 
 export interface SandboxWorkspaceFile {
 	path: string;
@@ -82,6 +83,7 @@ export interface SandboxExecutionOptions {
 	tinygoTarget?: TinyGoTarget;
 	ocamlBackend?: OcamlBackend;
 	ocamlWasmBinaryenMode?: OcamlWasmBinaryenMode;
+	zigTargetTriple?: ZigTargetTriple;
 }
 
 export interface ResolvedSandboxExecutionArgs {

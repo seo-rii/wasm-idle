@@ -2,7 +2,7 @@
 
 ![wasm-idle](static/image.jpeg)
 
-Executes C++, Python, Java, Rust, Go, TinyGo, OCaml, Elixir, C#, and F# code.
+Executes C++, Python, Java, Rust, Go, TinyGo, OCaml, Elixir, C#, F#, and Zig code.
 
 Refer to src/lib/clang.
 
@@ -19,7 +19,7 @@ left in place, but the default development path is inside this repo:
 - `packages/node`: Node.js host helpers for Node-capable sandbox loaders.
 - `runtimes/*`: imported runtime/compiler packages such as `wasm-rust`,
   `wasm-of-js-of-ocaml`, `wasm-go`, `wasm-tinygo`, `wasm-dotnet`, `wasm-typescript`,
-  `wasm-elixir`, `pyodide`, `teavm`, `assemblyscript`, `ruby`, `r`, `php`, and
+  `wasm-zig`, `wasm-elixir`, `pyodide`, `teavm`, `assemblyscript`, `ruby`, `r`, `php`, and
   `js-sandbox`.
 - `tools/*`: migrated local toolchain projects that are too broad or infrastructure-heavy to run as
   normal runtime workspace packages. `tools/dool` contains the Docker judge backend for Elixir and
@@ -190,6 +190,11 @@ TinyGo expects a browser-loadable `wasm-tinygo` runtime module. Point
 `PUBLIC_WASM_TINYGO_MODULE_URL` at a built entry such as `.../wasm-tinygo/dist/runtime.js`, or
 pass `runtimeAssets.tinygo.moduleUrl` at runtime. The older `PUBLIC_WASM_TINYGO_APP_URL` /
 `runtimeAssets.tinygo.appUrl` document path is still accepted and normalized to `runtime.js`.
+Zig uses the bundled `static/wasm-zig/zig_small.wasm` compiler and `static/wasm-zig/std.zip`
+standard library by default. Override them with `PUBLIC_WASM_ZIG_COMPILER_URL` and
+`PUBLIC_WASM_ZIG_STDLIB_URL`, or pass `runtimeAssets.zig.compilerUrl` and
+`runtimeAssets.zig.stdlibUrl`. The compiler runs under browser WASI, emits a `wasm64-wasi`
+artifact with the self-hosted backend, and wasm-idle executes that artifact locally in the worker.
 
 The Rust browser path now executes returned artifacts through the target-appropriate runtime inside
 the Rust worker:
@@ -227,6 +232,10 @@ const runtimeAssets: PlaygroundRuntimeAssets = {
 	},
 	tinygo: {
 		moduleUrl: 'https://cdn.example.com/wasm-tinygo/runtime.js'
+	},
+	zig: {
+		compilerUrl: 'https://cdn.example.com/wasm-zig/zig_small.wasm',
+		stdlibUrl: 'https://cdn.example.com/wasm-zig/std.zip'
 	}
 };
 ```
@@ -268,4 +277,4 @@ await sandbox.load('print("hi")', false);
 ```
 
 Powered by [wasm-clang](https://github.com/binji/wasm-clang), Pyodide, TeaVM, `wasm-rust`,
-`wasm-tinygo`, and `wasm-dotnet`.
+`wasm-tinygo`, `wasm-zig`, and `wasm-dotnet`.

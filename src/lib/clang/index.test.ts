@@ -578,13 +578,17 @@ int main() {
 		expect(vi.mocked(clang.compileLink)).toHaveBeenCalledWith('int main() {}', {
 			language: 'CPP',
 			compileArgs: ['-DTEST=1'],
+			activePath: undefined,
+			workspaceFiles: [],
 			debug: false,
 			breakpoints: [],
 			pauseOnEntry: false,
 			cppVersion: undefined,
 			cVersion: undefined,
 			debugBuffer: undefined,
-			interruptBuffer: undefined
+			interruptBuffer: undefined,
+			watchBuffer: undefined,
+			watchResultBuffer: undefined
 		});
 		const runArgs = vi.mocked(clang.run).mock.calls[0];
 		expect(runArgs?.[0]).toBe(wasmModule);

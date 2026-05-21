@@ -93,6 +93,10 @@ vi.mock('$lib/playground/typescript', () => ({
 	}
 }));
 
+vi.mock('$lib/playground/zig', () => ({
+	default: createMockSandboxClass('ZIG')
+}));
+
 vi.mock('$lib/playground/clang', () => ({
 	default: class extends createMockSandboxClass('CLANG') {
 		constructor(language: 'C' | 'CPP') {
@@ -427,4 +431,31 @@ describe('playground runtime binding', () => {
 			[runtimeAssets, 'const n: number = 1;', true, ['demo'], {}, progress]
 		]);
 	});
+	it('routes Zig requests through the bundled wasm-zig sandbox implementation', async () => {
+		const binding = createPlaygroundBinding({
+			rootUrl: '/absproxy/5173',
+			zig: {
+				compilerUrl: '/absproxy/5173/wasm-zig/zig_small.wasm?v=test',
+				stdlibUrl: '/absproxy/5173/wasm-zig/std.zip?v=test'
+			}
+		});
+		const progress = { set() {} };
+		const sandbox = await binding.load('ZIG');
+
+		await sandbox.load('pub fn main() void {}', true, ['demo'], {}, progress);
+
+		const runtimeAssets = {
+			rootUrl: '/absproxy/5173',
+			zig: {
+				compilerUrl: '/absproxy/5173/wasm-zig/zig_small.wasm?v=test',
+				stdlibUrl: '/absproxy/5173/wasm-zig/std.zip?v=test'
+			}
+		};
+		expect(sandbox.runtimeAssets).toEqual(runtimeAssets);
+		expect(sandboxInstances.get('ZIG')).toHaveLength(1);
+		expect(sandboxInstances.get('ZIG')?.[0]?.loadCalls).toEqual([
+			[runtimeAssets, 'pub fn main() void {}', true, ['demo'], {}, progress]
+		]);
+	});
+
 });

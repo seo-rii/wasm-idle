@@ -86,6 +86,9 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(
 			/import \{ WASM_TYPESCRIPT_ASSET_VERSION \} from '\$lib\/playground\/wasmTypeScriptVersion';/
 		);
+		expect(source).toMatch(
+			/import \{ WASM_ZIG_ASSET_VERSION \} from '\$lib\/playground\/wasmZigVersion';/
+		);
 		expect(source).not.toContain('tinygo' + 'CompilePath');
 		expect(source).not.toMatch(/dotnetCompilePath/);
 		expect(source).not.toContain('tinygo' + 'Host' + 'CompileUrl');
@@ -114,6 +117,9 @@ describe('example route debug actions', () => {
 		);
 		expect(source).toMatch(
 			/typescript: \{\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-typescript\/index\.js\?v=\$\{WASM_TYPESCRIPT_ASSET_VERSION\}`\s+:\s+`\/wasm-typescript\/index\.js\?v=\$\{WASM_TYPESCRIPT_ASSET_VERSION\}`\s+\}/s
+		);
+		expect(source).toMatch(
+			/zig: \{\s+compilerUrl: path\s+\?\s+`\$\{path\}\/wasm-zig\/zig_small\.wasm\?v=\$\{WASM_ZIG_ASSET_VERSION\}`\s+:\s+`\/wasm-zig\/zig_small\.wasm\?v=\$\{WASM_ZIG_ASSET_VERSION\}`,\s+stdlibUrl: path\s+\?\s+`\$\{path\}\/wasm-zig\/std\.zip\?v=\$\{WASM_ZIG_ASSET_VERSION\}`\s+:\s+`\/wasm-zig\/std\.zip\?v=\$\{WASM_ZIG_ASSET_VERSION\}`\s+\}/s
 		);
 		expect(source).toMatch(
 			/const playground = \$derived\.by\(\(\) => createPlaygroundBinding\(runtimeAssets\)\);/
@@ -174,6 +180,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/: language === 'ELIXIR'\s+\? 'elixir'/);
 		expect(source).toMatch(/: language === 'JAVASCRIPT'\s+\? 'javascript'/);
 		expect(source).toMatch(/: language === 'TYPESCRIPT'\s+\? 'typescript'/);
+		expect(source).toMatch(/: language === 'ZIG'\s+\? 'zig'/);
 		expect(source).toMatch(/: 'go'/);
 		expect(source).toMatch(
 			/rustTargetTriple: language === 'RUST' \? rustTargetTriple : undefined/
@@ -278,11 +285,12 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/<option value="TINYGO">TinyGo<\/option>/);
 		expect(source).toMatch(/<option value="JAVASCRIPT">JavaScript<\/option>/);
 		expect(source).toMatch(/<option value="TYPESCRIPT">TypeScript<\/option>/);
+		expect(source).toMatch(/<option value="ZIG">Zig<\/option>/);
 		expect(source).toMatch(
-			/\{#if language === 'JAVA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'TINYGO' \|\| language === 'JAVASCRIPT' \|\| language === 'TYPESCRIPT'\}/
+			/\{#if language === 'JAVA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'TINYGO' \|\| language === 'JAVASCRIPT' \|\| language === 'TYPESCRIPT' \|\| language === 'ZIG'\}/
 		);
 		expect(source).toMatch(
-			/language === 'JAVA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'TINYGO' \|\| language === 'JAVASCRIPT' \|\| language === 'TYPESCRIPT'/
+			/language === 'JAVA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'TINYGO' \|\| language === 'JAVASCRIPT' \|\| language === 'TYPESCRIPT' \|\| language === 'ZIG'/
 		);
 		expect(source).toMatch(/Go uses the bundled `wasm-go` browser compiler runtime/);
 		expect(source).toMatch(
@@ -350,12 +358,32 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/TYPESCRIPT: 'main\.ts'/);
 		expect(source).toMatch(/JAVASCRIPT: 'javascript'/);
 		expect(source).toMatch(/TYPESCRIPT: 'typescript'/);
+		expect(source).toMatch(/ZIG: 'zig'/);
 		expect(source).toMatch(
-			/\{language === 'JAVASCRIPT' \? 'JavaScript' : 'TypeScript'\} runs through the bundled\s+`wasm-typescript` browser module/
+			/\{\s*language === 'JAVASCRIPT'\s+\?\s+'JavaScript'\s+:\s+'TypeScript'\s*\}\s+runs through the bundled\s+`wasm-typescript`\s+browser module/
 		);
 		expect(source).toMatch(/`fs\.readFileSync\('\/dev\/stdin', 'utf8'\)`/);
-		expect(source).toMatch(/`fs\.readFileSync\(0, 'utf8'\)`/);
-		expect(source).toMatch(/send Ctrl\+D or\s+the EOF button after typing input/s);
+		expect(source).toMatch(/`fs\.readFileSync\(0,\s+'utf8'\)`/);
+		expect(source).toMatch(/send Ctrl\+D or\s+the EOF button after\s+typing input/s);
+	});
+
+	it('surfaces Zig through bundled wasm compiler assets and the browser runtime hint', () => {
+		expect(source).toMatch(/zig: \{/);
+		expect(source).toMatch(/WASM_ZIG_ASSET_VERSION/);
+		expect(source).toMatch(/wasm-zig\/zig_small\.wasm\?v=\$\{WASM_ZIG_ASSET_VERSION\}/);
+		expect(source).toMatch(/wasm-zig\/std\.zip\?v=\$\{WASM_ZIG_ASSET_VERSION\}/);
+		expect(source).toMatch(/<option value="ZIG">Zig<\/option>/);
+		expect(source).toMatch(/zig: 'ZIG'/);
+		expect(source).toMatch(/language === 'ZIG'\s+\? 'zig'/);
+		expect(source).toMatch(/'.zig': 'ZIG'/);
+		expect(source).toMatch(/ZIG: 'main\.zig'/);
+		expect(source).toMatch(/ZIG: 'zig'/);
+		expect(source).toMatch(/zigTargetTriple: language === 'ZIG' \? 'wasm64-wasi' : undefined/);
+		expect(source).toMatch(/Zig runs the bundled `zig_small\.wasm` compiler/);
+		expect(source).toMatch(/`std\.zip` standard\s+library inside\s+the browser worker/s);
+		expect(source).toMatch(/compiles for `wasm64-wasi`/);
+		expect(source).toMatch(/executes the\s+emitted WASI artifact locally/s);
+		expect(source).not.toContain('api/zig');
 	});
 
 	it('surfaces Elixir through the shared language selector and Popcorn hint', () => {

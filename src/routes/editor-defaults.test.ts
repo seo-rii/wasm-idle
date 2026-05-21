@@ -23,9 +23,11 @@ describe('editor defaults', () => {
 		expect(editorDefaults.elixir).toContain('IO.gets("")');
 		expect(editorDefaults.ocaml).toContain('read_line ()');
 		expect(editorDefaults.javascript).toContain("require('fs')");
-		expect(editorDefaults.javascript).toContain("readFileSync('/dev/stdin', 'utf8')");
+		expect(editorDefaults.javascript).toContain('readLineSync(0)');
 		expect(editorDefaults.typescript).toContain("import fs from 'node:fs'");
 		expect(editorDefaults.typescript).toContain('const bonus: number = 3;');
+		expect(editorDefaults.zig).toContain('std.io.getStdIn().reader()');
+		expect(editorDefaults.zig).toContain('factorial_plus_bonus={d}');
 		expect(rustEditorDefaults['wasm32-wasip1']).toContain('io::stdin().read_line');
 	});
 
@@ -48,6 +50,7 @@ describe('editor defaults', () => {
 		expect(resolveEditorDefaultSource('typescript', 'wasm32-wasip1')).toBe(
 			editorDefaults.typescript
 		);
+		expect(resolveEditorDefaultSource('zig', 'wasm32-wasip1')).toBe(editorDefaults.zig);
 		expect(resolveEditorDefaultSource('rust', 'wasm32-wasip2')).toBe(
 			rustEditorDefaults['wasm32-wasip2']
 		);
@@ -59,6 +62,7 @@ describe('editor defaults', () => {
 		expect(isEditorDefaultSource(editorDefaults.ocaml)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.javascript)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.typescript)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.zig)).toBe(true);
 		expect(isEditorDefaultSource(rustEditorDefaults['wasm32-wasip1'])).toBe(true);
 		expect(isEditorDefaultSource('fn main() {}')).toBe(false);
 		expect(isLegacyEditorDefaultSource(legacyBrokenTinyGoEditorDefault)).toBe(true);

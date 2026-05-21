@@ -27,6 +27,13 @@ const RUNTIMES = [
 		targetArg: 'targetDir'
 	},
 	{
+		name: 'wasm-zig',
+		module: './sync-wasm-zig.mjs',
+		exportName: 'syncWasmZigAssets',
+		sourceArg: 'sourceDir',
+		targetArg: 'targetDir'
+	},
+	{
 		name: 'wasm-dotnet',
 		module: './sync-wasm-dotnet.mjs',
 		exportName: 'syncWasmDotnetDist',

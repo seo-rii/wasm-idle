@@ -8,6 +8,7 @@ import Python from '$lib/playground/python';
 import Rust from '$lib/playground/rust';
 import TinyGo from '$lib/playground/tinygo';
 import TypeScriptSandbox from '$lib/playground/typescript';
+import Zig from '$lib/playground/zig';
 import type {
 	BoundSandbox,
 	PlaygroundBinding,
@@ -32,7 +33,8 @@ export const supportedLanguages = [
 	'TINYGO',
 	'OCAML',
 	'JAVASCRIPT',
-	'TYPESCRIPT'
+	'TYPESCRIPT',
+	'ZIG'
 ];
 
 export function createPlaygroundBinding(runtimeAssets: SandboxRuntimeAssets): PlaygroundBinding {
@@ -98,6 +100,9 @@ async function playground(language: string, runtimeAssets?: SandboxRuntimeAssets
 		case 'TS':
 			sandbox = new TypeScriptSandbox('TYPESCRIPT');
 			break;
+		case 'ZIG':
+			sandbox = new Zig();
+			break;
 		default:
 			throw new Error(`Unsupported language: ${language}`);
 	}
@@ -126,6 +131,7 @@ async function playground(language: string, runtimeAssets?: SandboxRuntimeAssets
 		if (language === 'TYPESCRIPT' || language === 'TS') {
 			sandboxCache['TYPESCRIPT'] = sandboxCache['TS'] = sandbox;
 		}
+		if (language === 'ZIG') sandboxCache['ZIG'] = sandbox;
 	}
 	return runtimeAssets ? createPlaygroundBinding(runtimeAssets).load(language) : sandbox;
 }
