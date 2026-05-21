@@ -222,12 +222,6 @@ importers:
         specifier: ^6.0.2
         version: 6.0.2
 
-  runtimes/haskell:
-    devDependencies:
-      typescript:
-        specifier: ^6.0.2
-        version: 6.0.2
-
   runtimes/js-sandbox:
     dependencies:
       quickjs-emscripten:
@@ -238,21 +232,8 @@ importers:
         specifier: ^6.0.2
         version: 6.0.2
 
-  runtimes/kotlin:
-    dependencies:
-      kotlin-web-helpers:
-        specifier: 3.1.0
-        version: 3.1.0
-    devDependencies:
-      typescript:
-        specifier: ^6.0.2
-        version: 6.0.2
-
   runtimes/php:
     dependencies:
-      '@php-wasm/node':
-        specifier: 3.1.34
-        version: 3.1.34
       '@php-wasm/web':
         specifier: 3.1.34
         version: 3.1.34
@@ -1173,9 +1154,6 @@ packages:
       '@emnapi/core': ^1.7.1
       '@emnapi/runtime': ^1.7.1
 
-  '@nodable/entities@2.1.0':
-    resolution: {integrity: sha512-nyT7T3nbMyBI/lvr6L5TyWbFJAI9FTgVRakNoBqCD+PmID8DzFrrNdLLtHMwMszOtqZa8PAOV24ZqDnQrhQINA==}
-
   '@nodelib/fs.scandir@2.1.5':
     resolution: {integrity: sha512-vq24Bq3ym5HEQm2NKCr3yXDwjc7vTsEThRDnkp2DK9p1uqLR+DHurm/NOTo0KG7HYHU7eppKZj3MyqYuMBf62g==}
     engines: {node: '>= 8'}
@@ -1402,52 +1380,12 @@ packages:
   '@oxc-project/types@0.76.0':
     resolution: {integrity: sha512-CH3THIrSViKal8yV/Wh3FK0pFhp40nzW1MUDCik9fNuid2D/7JJXKJnfFOAvMxInGXDlvmgT6ACAzrl47TqzkQ==}
 
-  '@php-wasm/cli-util@3.1.34':
-    resolution: {integrity: sha512-DTai4LPCIGyOru31u42diBZmizb5etexjhmPv6/6nU3Uh2UEIyD2ICFn5ol/ddSDrruyk5xC9Wj4ECAqeNgHzg==}
-    engines: {node: '>=20.10.0', npm: '>=10.2.3'}
-
   '@php-wasm/fs-journal@3.1.34':
     resolution: {integrity: sha512-j3lSM9VjMs7LjMtQmxm7Y94A/V5vv/erAqGaHGKvWebQLYOY+aogVeTfml/FjudolMc9Vj+1lpNUEdemPfnNJw==}
     engines: {node: '>=20.10.0', npm: '>=10.2.3'}
 
   '@php-wasm/logger@3.1.34':
     resolution: {integrity: sha512-/B9smYeDOZfx7K6UjJBdgmQ05lsmVsFn3yiAK4wjaVXsGJxtjiGYOPkXlSJsMbnFw06KNsoiLSEVn31QU6PveQ==}
-    engines: {node: '>=20.10.0', npm: '>=10.2.3'}
-
-  '@php-wasm/node-5-2@3.1.34':
-    resolution: {integrity: sha512-xv9mNT0hAKjGQO3H4qpjuaJ+Q/kFP8+hrco2VDBhOJqGEe/cm++1C+b/fzLMOvv6tCIVmZ6NM2CX2MKYi1Frow==}
-    engines: {node: '>=20.10.0', npm: '>=10.2.3'}
-
-  '@php-wasm/node-7-4@3.1.34':
-    resolution: {integrity: sha512-DT6FMgGvNFrOY2ZSRd/ppSAVGh1WJ5VmMJlv58jlwwhmZMsCXYTcCJOmdxlD9NY4vWiGRkC/YVEvBtidXKWUzA==}
-    engines: {node: '>=20.10.0', npm: '>=10.2.3'}
-
-  '@php-wasm/node-8-0@3.1.34':
-    resolution: {integrity: sha512-JAKW9yq2MKdd99Sv695Uiu4cGTsWqoxw4h3x6aNwmisMNscuAGHrjzXlSmhPqOPFvdEc2c8X+1fT8jgz3Hym8g==}
-    engines: {node: '>=20.10.0', npm: '>=10.2.3'}
-
-  '@php-wasm/node-8-1@3.1.34':
-    resolution: {integrity: sha512-cGQy+8MkQgaf49EI6PEbXBMLRj7JPPNWDUsp30sUMo76taVntbWwYkm0gW8JVbH6+fwDf7xj7yV/0paxyoEpaw==}
-    engines: {node: '>=20.10.0', npm: '>=10.2.3'}
-
-  '@php-wasm/node-8-2@3.1.34':
-    resolution: {integrity: sha512-9IHVOy4GpJb5tWxmbskHZBYclSr6ztpMCEKrD/jAvQKFync+jhJsBCDezNVMZpIxHrvpQ1ZqrQpja0X5r0k80w==}
-    engines: {node: '>=20.10.0', npm: '>=10.2.3'}
-
-  '@php-wasm/node-8-3@3.1.34':
-    resolution: {integrity: sha512-a6Ip/rB7P7YPQlkO9NSp/MTeAGS3xedyhj8Is2uZBo771Kfz4bvox6LEMcfH34eD45+fHjfxf3XyjkbtRoNwtg==}
-    engines: {node: '>=20.10.0', npm: '>=10.2.3'}
-
-  '@php-wasm/node-8-4@3.1.34':
-    resolution: {integrity: sha512-EhjAWZohaP8QH42mg1+pIIeh2GLi0uSvIXdsq+IdasP9IphsEAwytyWf6cRVa9nih8uxE//AI7n6BMq2T6yUYQ==}
-    engines: {node: '>=20.10.0', npm: '>=10.2.3'}
-
-  '@php-wasm/node-8-5@3.1.34':
-    resolution: {integrity: sha512-1pgbkkDw2TSjLWPbiQxfXbNdXxWq5yRYeq6TmZIob3/RvEEdzvS3C9YaN47kT4cuhJaeGDVwe7pFR5vwJvUwHw==}
-    engines: {node: '>=20.10.0', npm: '>=10.2.3'}
-
-  '@php-wasm/node@3.1.34':
-    resolution: {integrity: sha512-YQwb8Nq6ZQYgctzQmJRvpxcGAHI+GZ8PUfRzEqNgBOgGqrn53fBaK3UyTnK9OHwVtDNgbwZcgP0hSgZPjC3RPw==}
     engines: {node: '>=20.10.0', npm: '>=10.2.3'}
 
   '@php-wasm/progress@3.1.34':
@@ -2458,13 +2396,6 @@ packages:
   fast-levenshtein@2.0.6:
     resolution: {integrity: sha512-DCXu6Ifhqcks7TZKY3Hxp3y6qphY5SJZmrWMDrKcERSOXWQdMhU9Ig/PYrzyw/ul9jOIyh0N4M0tbC5hodg8dw==}
 
-  fast-xml-builder@1.2.0:
-    resolution: {integrity: sha512-00aAWieqff+ZJhsXA4g1g7M8k+7AYoMUUHF+/zFb5U6Uv/P0Vl4QZo84/IcufzYalLuEj9928bXN9PbbFzMF0Q==}
-
-  fast-xml-parser@5.8.0:
-    resolution: {integrity: sha512-6bIM7fsJxeo3uXv7OncQYsBAMPJ7V16Slahl/6M98C/i2q+vB1+4a0MtrvYwDFEUrwDSbAmeLDRXsOBwrL7yAg==}
-    hasBin: true
-
   fastq@1.19.0:
     resolution: {integrity: sha512-7SFSRCNjBQIZH/xZR3iy5iQYR8aGBE0h3VG6/cwlbrpdciNYBMotQav8c1XI3HjHH+NikUpP53nPdlZSdWmFzA==}
 
@@ -2539,15 +2470,8 @@ packages:
     resolution: {integrity: sha512-dKx12eRCVIzqCxFGplyFKJMPvLEWgmNtUrpTiJIR5u97zEhRG8ySrtboPHZXx7daLxQVrl643cTzbab2tkQjxg==}
     engines: {node: '>= 0.4'}
 
-  format-util@1.0.5:
-    resolution: {integrity: sha512-varLbTj0e0yVyRpqQhuWV+8hlePAgaoFRhNFj50BNjEIrw1/DphHSObtqwskVCPWNgzwPoQrZAbfa/SBiicNeg==}
-
   fs-constants@1.0.0:
     resolution: {integrity: sha512-y6OAwoSIf7FyjMIv94u+b5rdheZEjzR63GTyZJm5qh4Bi+2YgwLCcI/fPFZkL5PSixOt6ZNKm+w+Hfp/Bciwow==}
-
-  fs-ext-extra-prebuilt@2.2.7:
-    resolution: {integrity: sha512-Q7rayYRBDIvDF01HWOwSSjoaP+05N1g+o3BXL1Zf8Frw2JkjSmi4EtvCBITuW30l6hB2m2TW1pehdh8wyU/+gw==}
-    engines: {node: '>= 8.0.0'}
 
   fs-extra@11.3.0:
     resolution: {integrity: sha512-Z4XaCL6dUDHfP/jT25jJKMmtxvuwbkrD1vNSMFlo9lNLY2c5FHYSQgHPRZUjAB26TpDEoW9HCOgplrdbaPV/ew==}
@@ -2753,9 +2677,6 @@ packages:
   json-stable-stringify-without-jsonify@1.0.1:
     resolution: {integrity: sha512-Bdboy+l7tA3OGW6FjyFHWkP5LuByj1Tk33Ljyq0axyzdk9//JSi2u3fP1QSmd1KNwq6VOKYGlAu87CisVir6Pw==}
 
-  jsonc-parser@3.3.1:
-    resolution: {integrity: sha512-HUgH65KyejrUFPvHFPbqOY0rsFip3Bo5wb4ngvdi1EpCYWUQDC5V+Y7mZws+DLkr4M//zQJoanu1SP+87Dv1oQ==}
-
   jsonfile@6.1.0:
     resolution: {integrity: sha512-5dgndWOriYSm5cnYaJNhalLNDKOqFwyDB/rr1E9ZsGciGvKPs8R2xYGCacuf3z6K1YKDz182fd+fY3cn3pMqXQ==}
 
@@ -2781,9 +2702,6 @@ packages:
 
   known-css-properties@0.37.0:
     resolution: {integrity: sha512-JCDrsP4Z1Sb9JwG0aJ8Eo2r7k4Ou5MwmThS/6lcIe1ICyb7UBJKGRIUUdqc2ASdE/42lgz6zFUnzAIhtXnBVrQ==}
-
-  kotlin-web-helpers@3.1.0:
-    resolution: {integrity: sha512-7EWKY92ty51TXNbcj6O7k48BHCr7QzFFnZsAnh1vUYMspWYjsSaX4/xMxNfAd0XUr0m6+fBK10+bSq2oPVY+pg==}
 
   levn@0.4.1:
     resolution: {integrity: sha512-+bT2uH4E5LGE7h/n3evcS/sQlJXCpIp6ym8OWJ5eV6+67Dsql/LaaT7qJBAt2rzfoa/5QBGBhxDix1dMt2kQKQ==}
@@ -2999,9 +2917,6 @@ packages:
   ms@2.1.3:
     resolution: {integrity: sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==}
 
-  nan@2.27.0:
-    resolution: {integrity: sha512-hC+0LidcL3XE4rp1C4H54KujgXKzbfyTngZTwBByQxsOxCEKZT0MPQ4hOKUH2jU1OYstqdDH4onyHPDzcV0XdQ==}
-
   nanoid@3.3.11:
     resolution: {integrity: sha512-N8SpfPUnUp1bK+PMYW8qSWdl9U+wwNWI4QKxOYDy9JAro3WMX7p2OeVRF9v+347pnakNevPmiHhNmZ2HbFA76w==}
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
@@ -3084,10 +2999,6 @@ packages:
   path-exists@4.0.0:
     resolution: {integrity: sha512-ak9Qy5Q7jYb2Wwcey5Fpvg2KoAc/ZIhLSLOSBmRmygPsGwkVVt0fZa0qrtMz+m6tJTAHfZQ8FnmB4MG4LWy7/w==}
     engines: {node: '>=8'}
-
-  path-expression-matcher@1.5.0:
-    resolution: {integrity: sha512-cbrerZV+6rvdQrrD+iGMcZFEiiSrbv9Tfdkvnusy6y0x0GKBXREFg/Y65GhIfm0tnLntThhzCnfKwp1WRjeCyQ==}
-    engines: {node: '>=14.0.0'}
 
   path-key@3.1.1:
     resolution: {integrity: sha512-ojmeN0qd+y0jszEtoY48r0Peq5dwMEkIlCOu6Q5f41lfkswXuKtYrhgoTpLnyIcHm24Uhqx+5Tqm2InSwLhE6Q==}
@@ -3451,9 +3362,6 @@ packages:
     resolution: {integrity: sha512-k55yxKHwaXnpYGsOzg4Vl8+tDrWylxDEpknGjhTiZB8dFRU5rTo9CAzeycivxV3s+zlTKwrs6WxMxR95n26kwg==}
     engines: {node: '>=0.10.0'}
 
-  strnum@2.3.0:
-    resolution: {integrity: sha512-ums3KNd42PGyx5xaoVTO1mjU1bH3NpY4vsrVlnv9PNGqQj8wd7rJ6nEypLrJ7z5vxK5RP0yMLo6J/Gsm62DI5Q==}
-
   style-mod@4.1.3:
     resolution: {integrity: sha512-i/n8VsZydrugj3Iuzll8+x/00GH2vnYsk1eomD8QiRrSAeW6ItbCQDtfXCeJHd0iwiNagqjQkvpvREEPtW3IoQ==}
 
@@ -3806,10 +3714,6 @@ packages:
   xml-name-validator@5.0.0:
     resolution: {integrity: sha512-EvGK8EJ3DhaHfbRlETOWAS5pO9MZITeauHKJyb8wyajUfQUenkIg2MvLDTZ4T/TgIcm3HU0TFBgWWboAZ30UHg==}
     engines: {node: '>=18'}
-
-  xml-naming@0.1.0:
-    resolution: {integrity: sha512-k8KO9hrMyNk6tUWqUfkTEZbezRRpONVOzUTnc97VnCvyj6Tf9lyUR9EDAIeiVLv56jsMcoXEwjW8Kv5yPY52lw==}
-    engines: {node: '>=16.0.0'}
 
   xmlchars@2.2.0:
     resolution: {integrity: sha512-JZnDKK8B0RCDw84FNdDAIpZK+JuJw+s7Lz8nksI7SIuU3UXJJslUthsi+uWBUYOwPFwW7W7PRLRfUKpxjtjFCw==}
@@ -4415,8 +4319,6 @@ snapshots:
       '@tybys/wasm-util': 0.10.1
     optional: true
 
-  '@nodable/entities@2.1.0': {}
-
   '@nodelib/fs.scandir@2.1.5':
     dependencies:
       '@nodelib/fs.stat': 2.0.5
@@ -4640,12 +4542,6 @@ snapshots:
 
   '@oxc-project/types@0.76.0': {}
 
-  '@php-wasm/cli-util@3.1.34':
-    dependencies:
-      '@php-wasm/util': 3.1.34
-      fast-xml-parser: 5.8.0
-      jsonc-parser: 3.3.1
-
   '@php-wasm/fs-journal@3.1.34':
     dependencies:
       '@php-wasm/logger': 3.1.34
@@ -4653,67 +4549,6 @@ snapshots:
       '@php-wasm/util': 3.1.34
 
   '@php-wasm/logger@3.1.34': {}
-
-  '@php-wasm/node-5-2@3.1.34':
-    dependencies:
-      '@php-wasm/universal': 3.1.34
-      wasm-feature-detect: 1.8.0
-
-  '@php-wasm/node-7-4@3.1.34':
-    dependencies:
-      '@php-wasm/universal': 3.1.34
-      wasm-feature-detect: 1.8.0
-
-  '@php-wasm/node-8-0@3.1.34':
-    dependencies:
-      '@php-wasm/universal': 3.1.34
-      wasm-feature-detect: 1.8.0
-
-  '@php-wasm/node-8-1@3.1.34':
-    dependencies:
-      '@php-wasm/universal': 3.1.34
-      wasm-feature-detect: 1.8.0
-
-  '@php-wasm/node-8-2@3.1.34':
-    dependencies:
-      '@php-wasm/universal': 3.1.34
-      wasm-feature-detect: 1.8.0
-
-  '@php-wasm/node-8-3@3.1.34':
-    dependencies:
-      '@php-wasm/universal': 3.1.34
-      wasm-feature-detect: 1.8.0
-
-  '@php-wasm/node-8-4@3.1.34':
-    dependencies:
-      '@php-wasm/universal': 3.1.34
-      wasm-feature-detect: 1.8.0
-
-  '@php-wasm/node-8-5@3.1.34':
-    dependencies:
-      '@php-wasm/universal': 3.1.34
-      wasm-feature-detect: 1.8.0
-
-  '@php-wasm/node@3.1.34':
-    dependencies:
-      '@php-wasm/cli-util': 3.1.34
-      '@php-wasm/logger': 3.1.34
-      '@php-wasm/node-5-2': 3.1.34
-      '@php-wasm/node-7-4': 3.1.34
-      '@php-wasm/node-8-0': 3.1.34
-      '@php-wasm/node-8-1': 3.1.34
-      '@php-wasm/node-8-2': 3.1.34
-      '@php-wasm/node-8-3': 3.1.34
-      '@php-wasm/node-8-4': 3.1.34
-      '@php-wasm/node-8-5': 3.1.34
-      '@php-wasm/universal': 3.1.34
-      '@php-wasm/util': 3.1.34
-      fs-ext-extra-prebuilt: 2.2.7
-      wasm-feature-detect: 1.8.0
-      ws: 8.18.0
-    transitivePeerDependencies:
-      - bufferutil
-      - utf-8-validate
 
   '@php-wasm/progress@3.1.34':
     dependencies:
@@ -5796,19 +5631,6 @@ snapshots:
 
   fast-levenshtein@2.0.6: {}
 
-  fast-xml-builder@1.2.0:
-    dependencies:
-      path-expression-matcher: 1.5.0
-      xml-naming: 0.1.0
-
-  fast-xml-parser@5.8.0:
-    dependencies:
-      '@nodable/entities': 2.1.0
-      fast-xml-builder: 1.2.0
-      path-expression-matcher: 1.5.0
-      strnum: 2.3.0
-      xml-naming: 0.1.0
-
   fastq@1.19.0:
     dependencies:
       reusify: 1.0.4
@@ -5881,13 +5703,7 @@ snapshots:
     dependencies:
       is-callable: 1.2.7
 
-  format-util@1.0.5: {}
-
   fs-constants@1.0.0: {}
-
-  fs-ext-extra-prebuilt@2.2.7:
-    dependencies:
-      nan: 2.27.0
 
   fs-extra@11.3.0:
     dependencies:
@@ -6089,8 +5905,6 @@ snapshots:
 
   json-stable-stringify-without-jsonify@1.0.1: {}
 
-  jsonc-parser@3.3.1: {}
-
   jsonfile@6.1.0:
     dependencies:
       universalify: 2.0.1
@@ -6135,10 +5949,6 @@ snapshots:
   kleur@4.1.5: {}
 
   known-css-properties@0.37.0: {}
-
-  kotlin-web-helpers@3.1.0:
-    dependencies:
-      format-util: 1.0.5
 
   levn@0.4.1:
     dependencies:
@@ -6304,8 +6114,6 @@ snapshots:
 
   ms@2.1.3: {}
 
-  nan@2.27.0: {}
-
   nanoid@3.3.11: {}
 
   nanoid@3.3.12: {}
@@ -6411,8 +6219,6 @@ snapshots:
       entities: 6.0.1
 
   path-exists@4.0.0: {}
-
-  path-expression-matcher@1.5.0: {}
 
   path-key@3.1.1: {}
 
@@ -6758,8 +6564,6 @@ snapshots:
   strip-outer@1.0.1:
     dependencies:
       escape-string-regexp: 1.0.5
-
-  strnum@2.3.0: {}
 
   style-mod@4.1.3: {}
 
@@ -7178,8 +6982,6 @@ snapshots:
   ws@8.18.0: {}
 
   xml-name-validator@5.0.0: {}
-
-  xml-naming@0.1.0: {}
 
   xmlchars@2.2.0: {}
 

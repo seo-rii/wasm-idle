@@ -12,7 +12,7 @@ export const RUBY_WASM_ASSETS = [
 ] as const;
 
 export type RubyWasmAsset = (typeof RUBY_WASM_ASSETS)[number];
-export type RubyWasmEnvironment = 'browser' | 'node' | 'browser-script';
+export type RubyWasmEnvironment = 'browser' | 'browser-script';
 
 export interface RubyAssetResolverOptions {
 	baseUrl?: string | URL;
@@ -57,7 +57,6 @@ export function createRubyAssetManifest(options: RubyAssetResolverOptions = {}) 
 export function resolveRubyModuleSpecifier(options: RubyModuleImportOptions = {}) {
 	const { environment = 'browser', packageName = RUBY_DEFAULT_PACKAGE } = options;
 	if (environment === 'browser-script') return `${packageName}/dist/esm/browser.script.js`;
-	if (environment === 'node') return `${packageName}/dist/esm/node.js`;
 	return packageName;
 }
 

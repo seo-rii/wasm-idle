@@ -1,5 +1,4 @@
 export const PHP_WASM_WEB_PACKAGE = '@php-wasm/web';
-export const PHP_WASM_NODE_PACKAGE = '@php-wasm/node';
 
 export const PHP_SUPPORTED_VERSIONS = [
 	'8.5',
@@ -13,15 +12,12 @@ export const PHP_SUPPORTED_VERSIONS = [
 ] as const;
 
 export type PhpWasmVersion = (typeof PHP_SUPPORTED_VERSIONS)[number];
-export type PhpWasmHost = 'web' | 'node';
 
 export interface PhpRuntimeImportOptions {
-	host?: PhpWasmHost;
 	moduleName?: string;
 }
 
 export interface PhpVersionPackageOptions {
-	host?: PhpWasmHost;
 	version?: PhpWasmVersion;
 }
 
@@ -29,7 +25,6 @@ export interface PhpAssetResolverOptions {
 	baseUrl?: string | URL;
 	currentUrl?: string | URL;
 	version?: PhpWasmVersion;
-	host?: PhpWasmHost;
 }
 
 const ABSOLUTE_URL_PATTERN = /^[a-zA-Z][a-zA-Z\d+\-.]*:/;
@@ -49,13 +44,13 @@ export function normalizePhpBaseUrl(baseUrl: string | URL = '/php/', currentUrl?
 }
 
 export function resolvePhpVersionPackage(options: PhpVersionPackageOptions = {}) {
-	const { host = 'web', version = '8.4' } = options;
-	return `@php-wasm/${host}-${normalizePhpVersionForPackage(version)}`;
+	const { version = '8.4' } = options;
+	return `@php-wasm/web-${normalizePhpVersionForPackage(version)}`;
 }
 
 export function resolvePhpRuntimeModule(options: PhpRuntimeImportOptions = {}) {
 	if (options.moduleName) return options.moduleName;
-	return options.host === 'node' ? PHP_WASM_NODE_PACKAGE : PHP_WASM_WEB_PACKAGE;
+	return PHP_WASM_WEB_PACKAGE;
 }
 
 export function resolvePhpAssetUrl(asset: string, options: PhpAssetResolverOptions = {}) {
@@ -66,12 +61,12 @@ export function resolvePhpAssetUrl(asset: string, options: PhpAssetResolverOptio
 }
 
 export function createPhpRuntimeManifest(options: PhpAssetResolverOptions = {}) {
-	const { host = 'web', version = '8.4' } = options;
-	const versionPackage = resolvePhpVersionPackage({ host, version });
+	const { version = '8.4' } = options;
+	const versionPackage = resolvePhpVersionPackage({ version });
 	return {
-		host,
+		host: 'web' as const,
 		version,
-		runtimePackage: host === 'node' ? PHP_WASM_NODE_PACKAGE : PHP_WASM_WEB_PACKAGE,
+		runtimePackage: PHP_WASM_WEB_PACKAGE,
 		versionPackage,
 		baseUrl: normalizePhpBaseUrl(options.baseUrl, options.currentUrl)
 	};
