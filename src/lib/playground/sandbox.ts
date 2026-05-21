@@ -5,10 +5,10 @@ import type {
 	SandboxExecutionOptions
 } from '$lib/playground/options';
 import type { PlaygroundRuntimeAssets } from '$lib/playground/assets';
-import type { Writable } from 'svelte/store';
+import type { SandboxProgress as CoreSandboxProgress } from '@wasm-idle/core';
 
 export type SandboxRuntimeAssets = string | PlaygroundRuntimeAssets;
-export type SandboxProgress = Writable<number> | { set?: (value: number) => void };
+export type SandboxProgress = CoreSandboxProgress;
 
 export interface Sandbox {
 	constructor: any;

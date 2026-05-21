@@ -14,6 +14,11 @@
 	import type { TerminalControl } from '$lib/terminal/types';
 	import { Theme, registerAllPlugins } from '$lib/terminal';
 	import load from '$lib/playground';
+	import {
+		createRuntimeAssetsKey,
+		phaseProgress,
+		progressBandsForLanguage
+	} from '@wasm-idle/core';
 	import { onMount } from 'svelte';
 	import '@xterm/xterm/css/xterm.css';
 	import type { Terminal as TerminalType } from '@xterm/xterm';
@@ -72,20 +77,6 @@
 		term?.write(text);
 	}
 
-	function phaseProgress(
-		progress: { set?: (value: number) => void } | undefined,
-		start: number,
-		end: number
-	) {
-		if (!progress) return undefined;
-		return {
-			set(value: number) {
-				const clamped = Number.isFinite(value) ? Math.min(Math.max(value, 0), 1) : 0;
-				progress.set?.(start + (end - start) * clamped);
-			}
-		};
-	}
-
 	function wait() {
 		return new Promise<void>((r) => {
 			const i = setInterval(() => {
@@ -100,29 +91,7 @@
 	async function initSandbox(language: string) {
 		const currentPlayground = playground;
 		const currentRuntimeAssets = currentPlayground?.runtimeAssets || runtimeAssets || path;
-		const currentRuntimeAssetsKey =
-			typeof currentRuntimeAssets === 'string'
-				? currentRuntimeAssets
-				: JSON.stringify({
-						rootUrl: currentRuntimeAssets?.rootUrl || '',
-						pythonBaseUrl: currentRuntimeAssets?.python?.baseUrl || '',
-						hasPythonLoader: !!currentRuntimeAssets?.python?.loader,
-						javaBaseUrl: currentRuntimeAssets?.java?.baseUrl || '',
-						hasJavaLoader: !!currentRuntimeAssets?.java?.loader,
-						clangBaseUrl: currentRuntimeAssets?.clang?.baseUrl || '',
-						hasClangLoader: !!currentRuntimeAssets?.clang?.loader,
-						clangdBaseUrl: currentRuntimeAssets?.clangd?.baseUrl || '',
-						hasClangdLoader: !!currentRuntimeAssets?.clangd?.loader,
-						rustCompilerUrl: currentRuntimeAssets?.rust?.compilerUrl || '',
-						goCompilerUrl: currentRuntimeAssets?.go?.compilerUrl || '',
-						dotnetModuleUrl: currentRuntimeAssets?.dotnet?.moduleUrl || '',
-						elixirBundleUrl: currentRuntimeAssets?.elixir?.bundleUrl || '',
-						ocamlModuleUrl: currentRuntimeAssets?.ocaml?.moduleUrl || '',
-						ocamlManifestUrl: currentRuntimeAssets?.ocaml?.manifestUrl || '',
-						tinygoAppUrl: currentRuntimeAssets?.tinygo?.appUrl || '',
-						tinygoModuleUrl: currentRuntimeAssets?.tinygo?.moduleUrl || '',
-						typeScriptModuleUrl: currentRuntimeAssets?.typescript?.moduleUrl || ''
-					});
+		const currentRuntimeAssetsKey = createRuntimeAssetsKey(currentRuntimeAssets);
 		const requiresSandboxReset =
 			ll !== language || loadedRuntimeAssetsKey !== currentRuntimeAssetsKey;
 		let _tc = ++tc;
@@ -237,28 +206,13 @@
 			options: SandboxExecutionOptions = {}
 		) {
 			prog?.set?.(0);
-			const loadProgress =
-				language === 'RUST' ||
-				language === 'GO' ||
-				language === 'CSHARP' ||
-				language === 'FSHARP' ||
-				language === 'TINYGO' ||
-				language === 'OCAML' ||
-				language === 'JAVASCRIPT' ||
-				language === 'TYPESCRIPT'
-					? phaseProgress(prog, 0, 0.05)
-					: phaseProgress(prog, 0, 0.85);
-			const prepareProgress =
-				language === 'RUST' ||
-				language === 'GO' ||
-				language === 'CSHARP' ||
-				language === 'FSHARP' ||
-				language === 'TINYGO' ||
-				language === 'OCAML' ||
-				language === 'JAVASCRIPT' ||
-				language === 'TYPESCRIPT'
-					? phaseProgress(prog, 0.05, 0.99)
-					: phaseProgress(prog, 0.85, 0.99);
+			const progressBands = progressBandsForLanguage(language);
+			const loadProgress = phaseProgress(prog, progressBands.load[0], progressBands.load[1]);
+			const prepareProgress = phaseProgress(
+				prog,
+				progressBands.prepare[0],
+				progressBands.prepare[1]
+			);
 			await Promise.all([
 				initSandbox(language).then(() =>
 					sandbox.load(code, log, args, options, loadProgress)

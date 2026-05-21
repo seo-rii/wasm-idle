@@ -17,6 +17,9 @@ importers:
       '@swmansion/popcorn':
         specifier: 0.2.2
         version: 0.2.2(esbuild@0.27.3)(vite@8.0.8(@types/node@25.6.0)(esbuild@0.27.3)(terser@5.47.1))
+      '@wasm-idle/core':
+        specifier: workspace:*
+        version: link:packages/core
       '@xterm/addon-canvas':
         specifier: ^0.7.0
         version: 0.7.0(@xterm/xterm@6.0.0)
@@ -144,6 +147,12 @@ importers:
       vitest:
         specifier: ^4.1.4
         version: 4.1.4(@types/node@25.6.0)(jsdom@29.0.2)(vite@8.0.8(@types/node@25.6.0)(esbuild@0.27.3)(terser@5.47.1))
+
+  packages/core:
+    devDependencies:
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.2
 
   runtimes/wasm-clang:
     dependencies:

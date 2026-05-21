@@ -12,10 +12,9 @@ import type {
 	BoundSandbox,
 	PlaygroundBinding,
 	Sandbox,
-	SandboxProgress,
 	SandboxRuntimeAssets
 } from '$lib/playground/sandbox';
-import type { SandboxExecutionOptions } from '$lib/playground/options';
+import { createPlaygroundBinding as createCorePlaygroundBinding } from '@wasm-idle/core';
 
 const sandboxCache: { [key: string]: Sandbox } = {};
 
@@ -36,41 +35,11 @@ export const supportedLanguages = [
 	'TYPESCRIPT'
 ];
 
-function bindRuntimeAssets(sandbox: Sandbox, runtimeAssets: SandboxRuntimeAssets): BoundSandbox {
-	return new Proxy(sandbox, {
-		get(target, prop, receiver) {
-			if (prop === 'runtimeAssets') return runtimeAssets;
-			if (prop === 'load') {
-				return (
-					code = '',
-					log = true,
-					args: string[] = [],
-					options: SandboxExecutionOptions = {},
-					progress?: SandboxProgress
-				) => target.load(runtimeAssets, code, log, args, options, progress);
-			}
-			const value = Reflect.get(target, prop, receiver);
-			return typeof value === 'function' ? value.bind(target) : value;
-		},
-		set(target, prop, value, receiver) {
-			return Reflect.set(target, prop, value, receiver);
-		}
-	}) as BoundSandbox;
-}
-
 export function createPlaygroundBinding(runtimeAssets: SandboxRuntimeAssets): PlaygroundBinding {
-	const binding = {
-		runtimeAssets,
-		terminalProps: {} as PlaygroundBinding['terminalProps'],
-		async load(language: string) {
-			return bindRuntimeAssets(await playground(language), runtimeAssets);
-		}
-	} as PlaygroundBinding;
-	binding.terminalProps = {
-		playground: binding,
-		runtimeAssets
-	};
-	return binding;
+	return createCorePlaygroundBinding(
+		runtimeAssets as never,
+		playground as never
+	) as PlaygroundBinding;
 }
 
 async function playground(language: string): Promise<Sandbox>;
@@ -80,9 +49,7 @@ async function playground(
 ): Promise<BoundSandbox>;
 async function playground(language: string, runtimeAssets?: SandboxRuntimeAssets) {
 	if (sandboxCache[language]) {
-		return runtimeAssets
-			? bindRuntimeAssets(sandboxCache[language], runtimeAssets)
-			: sandboxCache[language];
+		return runtimeAssets ? createPlaygroundBinding(runtimeAssets).load(language) : sandboxCache[language];
 	}
 	let sandbox;
 	switch (language) {
@@ -160,7 +127,7 @@ async function playground(language: string, runtimeAssets?: SandboxRuntimeAssets
 			sandboxCache['TYPESCRIPT'] = sandboxCache['TS'] = sandbox;
 		}
 	}
-	return runtimeAssets ? bindRuntimeAssets(sandbox, runtimeAssets) : sandbox;
+	return runtimeAssets ? createPlaygroundBinding(runtimeAssets).load(language) : sandbox;
 }
 
 export default playground;

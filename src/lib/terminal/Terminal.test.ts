@@ -66,25 +66,11 @@ describe('Terminal source', () => {
 		expect(source).toMatch(/loadedRuntimeAssetsKey: string \| undefined = undefined/);
 		expect(source).not.toMatch(/loadedRuntimeAssets = \$state/);
 		expect(source).not.toMatch(/loadedPlayground = \$state/);
-		expect(source).toMatch(/const currentRuntimeAssetsKey =/);
-		expect(source).toMatch(/clangBaseUrl: currentRuntimeAssets\?\.clang\?\.baseUrl \|\| '',/);
-		expect(source).toMatch(/hasClangLoader: !!currentRuntimeAssets\?\.clang\?\.loader,/);
-		expect(source).toMatch(/clangdBaseUrl: currentRuntimeAssets\?\.clangd\?\.baseUrl \|\| '',/);
-		expect(source).toMatch(/hasClangdLoader: !!currentRuntimeAssets\?\.clangd\?\.loader,/);
-		expect(source).toMatch(/goCompilerUrl: currentRuntimeAssets\?\.go\?\.compilerUrl \|\| '',/);
+		expect(source).toContain("createRuntimeAssetsKey");
 		expect(source).toMatch(
-			/dotnetModuleUrl: currentRuntimeAssets\?\.dotnet\?\.moduleUrl \|\| '',/
+			/const currentRuntimeAssetsKey = createRuntimeAssetsKey\(currentRuntimeAssets\);/
 		);
 		expect(source).not.toContain('dotnet' + 'Host' + 'CompileUrl');
-		expect(source).toMatch(
-			/elixirBundleUrl: currentRuntimeAssets\?\.elixir\?\.bundleUrl \|\| '',/
-		);
-		expect(source).toMatch(
-			/ocamlModuleUrl: currentRuntimeAssets\?\.ocaml\?\.moduleUrl \|\| '',/
-		);
-		expect(source).toMatch(
-			/ocamlManifestUrl: currentRuntimeAssets\?\.ocaml\?\.manifestUrl \|\| '',/
-		);
 		expect(source).not.toMatch(/loadedRuntimeAssets !== currentRuntimeAssets/);
 		expect(source).not.toMatch(/loadedPlayground !== currentPlayground/);
 		expect(source).toMatch(/function writeTerminalOutput\(text: string\)/);
@@ -120,11 +106,11 @@ describe('Terminal source', () => {
 
 	it('uses rust-specific progress windows instead of jumping straight to the prepare band', () => {
 		expect(source).toMatch(/prog\?\.set\?\.\(0\);/);
+		expect(source).toMatch(/const progressBands = progressBandsForLanguage\(language\);/);
 		expect(source).toMatch(
-			/language === 'RUST' \|\|\s+language === 'GO' \|\|\s+language === 'CSHARP' \|\|\s+language === 'FSHARP' \|\|\s+language === 'TINYGO' \|\|\s+language === 'OCAML'\s+\? phaseProgress\(prog, 0, 0\.05\)\s+: phaseProgress\(prog, 0, 0\.85\)/
+			/phaseProgress\(prog, progressBands\.load\[0\], progressBands\.load\[1\]\)/
 		);
-		expect(source).toMatch(
-			/language === 'RUST' \|\|\s+language === 'GO' \|\|\s+language === 'CSHARP' \|\|\s+language === 'FSHARP' \|\|\s+language === 'TINYGO' \|\|\s+language === 'OCAML'\s+\? phaseProgress\(prog, 0\.05, 0\.99\)\s+: phaseProgress\(prog, 0\.85, 0\.99\)/
-		);
+		expect(source).toMatch(/progressBands\.prepare\[0\]/);
+		expect(source).toMatch(/progressBands\.prepare\[1\]/);
 	});
 });
