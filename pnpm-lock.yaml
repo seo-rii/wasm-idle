@@ -209,6 +209,22 @@ importers:
         specifier: ^3.5.13
         version: 3.5.34(typescript@6.0.2)
 
+  runtimes/pyodide:
+    dependencies:
+      pyodide:
+        specifier: 0.29.3
+        version: 0.29.3
+    devDependencies:
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.2
+
+  runtimes/teavm:
+    devDependencies:
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.2
+
   runtimes/wasm-clang:
     dependencies:
       '@bjorn3/browser_wasi_shim':

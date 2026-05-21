@@ -29,9 +29,7 @@ The audit currently checks the migrated sibling/local projects for missing or ch
 source files:
 
 - `runtimes/wasm-*`
-- `runtimes/robot-jungol`
 - `tools/dool`
-- `tools/import-jungol`
 
 External runtime distributions without local source checkouts, such as Pyodide and TeaVM, are
-documented in their own runtime directories.
+wrapped as JavaScript packages in their own runtime directories.

@@ -1,4 +1,0 @@
-interface:
-  display_name: "Import Jungol"
-  short_description: "Import contests into nojam/Jungol"
-  default_prompt: "Use $import-jungol to import this contest into nojam and prepare a Jungol upload."

@@ -19,9 +19,7 @@ const MIGRATIONS = [
 	['wasm-go', 'wasm-go', 'runtimes/wasm-go'],
 	['wasm-tinygo', 'wasm-tinygo', 'runtimes/wasm-tinygo'],
 	['wasm-typescript', 'wasm-typescript', 'runtimes/wasm-typescript'],
-	['dool', 'dool', 'tools/dool'],
-	['robot-jungol', 'robot-jungol', 'runtimes/robot-jungol'],
-	['import-jungol', 'import-jungol', 'tools/import-jungol']
+	['dool', 'dool', 'tools/dool']
 ];
 
 const GENERATED_SEGMENTS = new Set([

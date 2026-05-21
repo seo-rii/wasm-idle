@@ -41,7 +41,6 @@
 		"sync:wasm-typescript": "node scripts/sync-runtime.mjs wasm-typescript",
 		"sync:wasm-tinygo": "node scripts/sync-runtime.mjs wasm-tinygo",
 		"sync:wasm-elixir": "node scripts/sync-runtime.mjs wasm-elixir",
-		"sync:jungol-robot": "node scripts/sync-jungol-robot.mjs",
 		"package": "svelte-kit sync && svelte-package && publint",
 		"prepublishOnly": "npm run package",
 		"test": "vitest run",
