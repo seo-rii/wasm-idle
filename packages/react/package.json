@@ -1,0 +1,33 @@
+{
+	"name": "@wasm-idle/react",
+	"version": "0.1.0",
+	"description": "React hooks for wasm-idle core",
+	"license": "MIT",
+	"type": "module",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js",
+			"default": "./dist/index.js"
+		}
+	},
+	"files": [
+		"dist"
+	],
+	"peerDependencies": {
+		"@wasm-idle/core": "0.1.0",
+		"react": ">=18"
+	},
+	"dependencies": {
+		"@wasm-idle/core": "workspace:*"
+	},
+	"devDependencies": {
+		"@types/react": "^18.3.12",
+		"react": "^18.3.1",
+		"typescript": "^6.0.2"
+	},
+	"scripts": {
+		"build": "rm -rf dist && tsc -p tsconfig.json",
+		"check": "tsc -p tsconfig.json --noEmit"
+	}
+}

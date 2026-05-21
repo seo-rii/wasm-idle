@@ -1,0 +1,32 @@
+{
+	"name": "@wasm-idle/vue",
+	"version": "0.1.0",
+	"description": "Vue composables for wasm-idle core",
+	"license": "MIT",
+	"type": "module",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js",
+			"default": "./dist/index.js"
+		}
+	},
+	"files": [
+		"dist"
+	],
+	"peerDependencies": {
+		"@wasm-idle/core": "0.1.0",
+		"vue": ">=3.4"
+	},
+	"dependencies": {
+		"@wasm-idle/core": "workspace:*"
+	},
+	"devDependencies": {
+		"typescript": "^6.0.2",
+		"vue": "^3.5.13"
+	},
+	"scripts": {
+		"build": "rm -rf dist && tsc -p tsconfig.json",
+		"check": "tsc -p tsconfig.json --noEmit"
+	}
+}

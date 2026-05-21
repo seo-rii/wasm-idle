@@ -11,12 +11,14 @@ export {
 	type RuntimeAssetKeyInput,
 	type RuntimeAssetKeySource
 } from './runtime-assets.js';
+export type { TerminalControl } from './terminal.js';
 export {
 	createPlaygroundBinding,
 	type BoundSandbox,
 	type PlaygroundBinding,
 	type PlaygroundTerminalProps,
 	type Sandbox,
+	type SandboxExecutionOptions,
 	type SandboxLoader,
 	type SandboxProgress,
 	type SandboxRuntimeAssets

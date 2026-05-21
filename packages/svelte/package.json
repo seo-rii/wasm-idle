@@ -1,0 +1,32 @@
+{
+	"name": "@wasm-idle/svelte",
+	"version": "0.1.0",
+	"description": "Svelte bindings for wasm-idle core",
+	"license": "MIT",
+	"type": "module",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js",
+			"default": "./dist/index.js"
+		}
+	},
+	"files": [
+		"dist"
+	],
+	"peerDependencies": {
+		"@wasm-idle/core": "0.1.0",
+		"svelte": "^5.0.0"
+	},
+	"dependencies": {
+		"@wasm-idle/core": "workspace:*"
+	},
+	"devDependencies": {
+		"svelte": "^5.55.4",
+		"typescript": "^6.0.2"
+	},
+	"scripts": {
+		"build": "rm -rf dist && tsc -p tsconfig.json",
+		"check": "tsc -p tsconfig.json --noEmit"
+	}
+}
