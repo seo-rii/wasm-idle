@@ -61,6 +61,10 @@ vi.mock('$lib/playground/java', () => ({
 	default: createMockSandboxClass('JAVA')
 }));
 
+vi.mock('$lib/playground/kotlin', () => ({
+	default: createMockSandboxClass('KOTLIN')
+}));
+
 vi.mock('$lib/playground/rust', () => ({
 	default: createMockSandboxClass('RUST')
 }));
@@ -318,6 +322,45 @@ describe('playground runtime binding', () => {
 					}
 				},
 				'object Main { def main(args: Array[String]) = println(1) }',
+				true,
+				[],
+				{},
+				progress
+			]
+		]);
+	});
+
+	it('routes Kotlin requests through the Kotlin sandbox implementation', async () => {
+		const binding = createPlaygroundBinding({
+			rootUrl: '/absproxy/5173',
+			kotlin: {
+				cheerpjLoaderUrl: '/cheerpj/loader.js',
+				virtualBasePath: '/app/absproxy/5173/wasm-kotlin/'
+			}
+		});
+		const progress = { set() {} };
+		const sandbox = await binding.load('KOTLIN');
+
+		await sandbox.load('fun main() = println(1)', true, [], {}, progress);
+
+		expect(sandbox.runtimeAssets).toEqual({
+			rootUrl: '/absproxy/5173',
+			kotlin: {
+				cheerpjLoaderUrl: '/cheerpj/loader.js',
+				virtualBasePath: '/app/absproxy/5173/wasm-kotlin/'
+			}
+		});
+		expect(sandboxInstances.get('KOTLIN')).toHaveLength(1);
+		expect(sandboxInstances.get('KOTLIN')?.[0]?.loadCalls).toEqual([
+			[
+				{
+					rootUrl: '/absproxy/5173',
+					kotlin: {
+						cheerpjLoaderUrl: '/cheerpj/loader.js',
+						virtualBasePath: '/app/absproxy/5173/wasm-kotlin/'
+					}
+				},
+				'fun main() = println(1)',
 				true,
 				[],
 				{},

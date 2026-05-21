@@ -36,6 +36,7 @@ export type {
 	MonacoDebugActionsOptions
 } from '$lib/debug';
 export type {
+	KotlinRuntimeAssetConfig,
 	PlaygroundRuntimeAssets,
 	RuntimeAssetConfig,
 	RuntimeAssetLoadRequest,

@@ -71,6 +71,11 @@ export interface ScalaRuntimeAssetConfig {
 	virtualBasePath?: string;
 }
 
+export interface KotlinRuntimeAssetConfig {
+	cheerpjLoaderUrl?: string;
+	virtualBasePath?: string;
+}
+
 export interface PlaygroundRuntimeAssets {
 	rootUrl?: string;
 	python?: RuntimeAssetConfig;
@@ -84,6 +89,7 @@ export interface PlaygroundRuntimeAssets {
 	tinygo?: TinyGoRuntimeAssetConfig;
 	elixir?: ElixirRuntimeAssetConfig;
 	scala?: ScalaRuntimeAssetConfig;
+	kotlin?: KotlinRuntimeAssetConfig;
 }
 
 export interface TinyGoRuntimeAssetLoaderRequest {
@@ -131,6 +137,21 @@ export interface ResolvedScalaRuntimeAssetConfig {
 	compilerClassPath: string;
 }
 
+export interface ResolvedKotlinRuntimeAssetConfig {
+	cheerpjLoaderUrl: string;
+	virtualBasePath: string;
+	bridgeClassName: string;
+	bridgeJar: string;
+	compilerJar: string;
+	stdlibJar: string;
+	scriptRuntimeJar: string;
+	reflectJar: string;
+	daemonJar: string;
+	coroutinesJar: string;
+	annotationsJar: string;
+	compilerClassPath: string;
+}
+
 export const PYTHON_RUNTIME_LOAD_ASSETS = [
 	'pyodide.asm.js',
 	'pyodide-lock.json',
@@ -156,6 +177,11 @@ export const CLANGD_RUNTIME_LOAD_ASSETS = ['clangd.js', 'clangd.wasm.gz'] as con
 
 export const SCALA_VERSION = '2.13.18';
 export const SCALA_BRIDGE_CLASS_NAME = 'org.wasmidle.scala.Bridge';
+export const KOTLIN_VERSION = '2.3.21';
+export const KOTLIN_REFLECT_VERSION = '1.6.10';
+export const KOTLINX_COROUTINES_VERSION = '1.8.0';
+export const JETBRAINS_ANNOTATIONS_VERSION = '13.0';
+export const KOTLIN_BRIDGE_CLASS_NAME = 'org.wasmidle.kotlin.Bridge';
 export const DEFAULT_CHEERPJ_LOADER_URL = 'https://cjrtnc.leaningtech.com/4.3/loader.js';
 
 const PYTHON_VIRTUAL_BASE_URL = 'https://wasm-idle.invalid/python/';
@@ -188,6 +214,16 @@ const resolveScalaVirtualBasePath = (rootUrl = '', currentUrl = '') => {
 		return normalizeVirtualBasePath(`/app${resolvedUrl.pathname}`);
 	}
 	return normalizeVirtualBasePath(`/app${normalizeRootUrl(rootUrl) || ''}/wasm-scala/`);
+};
+
+const resolveKotlinVirtualBasePath = (rootUrl = '', currentUrl = '') => {
+	const resolvedUrl = currentUrl
+		? new URL(`${normalizeRootUrl(rootUrl) || ''}/wasm-kotlin/`, currentUrl)
+		: null;
+	if (resolvedUrl) {
+		return normalizeVirtualBasePath(`/app${resolvedUrl.pathname}`);
+	}
+	return normalizeVirtualBasePath(`/app${normalizeRootUrl(rootUrl) || ''}/wasm-kotlin/`);
 };
 
 const resolvePythonBaseUrl = (rootUrl = '', currentUrl = '') =>
@@ -641,5 +677,54 @@ export function resolveScalaRuntimeAssetConfig(
 		libraryJar,
 		reflectJar,
 		compilerClassPath: [bridgeJar, libraryJar, reflectJar, compilerJar].join(':')
+	};
+}
+
+export function resolveKotlinRuntimeAssetConfig(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+): ResolvedKotlinRuntimeAssetConfig {
+	const configuredLoaderUrl =
+		(typeof options === 'object' && options?.kotlin?.cheerpjLoaderUrl) ||
+		(publicEnv.PUBLIC_CHEERPJ_LOADER_URL || '').trim() ||
+		DEFAULT_CHEERPJ_LOADER_URL;
+	const virtualBasePath =
+		(typeof options === 'object' && options?.kotlin?.virtualBasePath) ||
+		(publicEnv.PUBLIC_WASM_KOTLIN_VIRTUAL_BASE_PATH || '').trim() ||
+		(typeof options === 'string'
+			? resolveKotlinVirtualBasePath(options, currentUrl)
+			: resolveKotlinVirtualBasePath(options?.rootUrl || '', currentUrl));
+	const normalizedVirtualBasePath = normalizeVirtualBasePath(virtualBasePath);
+	const bridgeJar = `${normalizedVirtualBasePath}wasm-idle-kotlin-bridge.jar`;
+	const compilerJar = `${normalizedVirtualBasePath}kotlin-compiler-embeddable-${KOTLIN_VERSION}.jar`;
+	const stdlibJar = `${normalizedVirtualBasePath}kotlin-stdlib-${KOTLIN_VERSION}.jar`;
+	const scriptRuntimeJar = `${normalizedVirtualBasePath}kotlin-script-runtime-${KOTLIN_VERSION}.jar`;
+	const reflectJar = `${normalizedVirtualBasePath}kotlin-reflect-${KOTLIN_REFLECT_VERSION}.jar`;
+	const daemonJar = `${normalizedVirtualBasePath}kotlin-daemon-embeddable-${KOTLIN_VERSION}.jar`;
+	const coroutinesJar = `${normalizedVirtualBasePath}kotlinx-coroutines-core-jvm-${KOTLINX_COROUTINES_VERSION}.jar`;
+	const annotationsJar = `${normalizedVirtualBasePath}annotations-${JETBRAINS_ANNOTATIONS_VERSION}.jar`;
+
+	return {
+		cheerpjLoaderUrl: resolveConfiguredUrl(configuredLoaderUrl, currentUrl),
+		virtualBasePath: normalizedVirtualBasePath,
+		bridgeClassName: KOTLIN_BRIDGE_CLASS_NAME,
+		bridgeJar,
+		compilerJar,
+		stdlibJar,
+		scriptRuntimeJar,
+		reflectJar,
+		daemonJar,
+		coroutinesJar,
+		annotationsJar,
+		compilerClassPath: [
+			bridgeJar,
+			compilerJar,
+			stdlibJar,
+			scriptRuntimeJar,
+			reflectJar,
+			daemonJar,
+			coroutinesJar,
+			annotationsJar
+		].join(':')
 	};
 }

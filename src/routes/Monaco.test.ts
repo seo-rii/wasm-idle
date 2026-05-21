@@ -32,13 +32,13 @@ describe('Monaco route debug sync', () => {
 		);
 		expect(source.match(/occurrencesHighlight: 'off'/g)).toHaveLength(2);
 		expect(source).toMatch(
-			/language === 'java' \|\|\s+language === 'scala' \|\|\s+language === 'rust' \|\|\s+language === 'go' \|\|\s+language === 'csharp' \|\|\s+language === 'fsharp' \|\|\s+language === 'ocaml'/
+			/language === 'java' \|\|\s+language === 'kotlin' \|\|\s+language === 'scala' \|\|\s+language === 'rust' \|\|\s+language === 'go' \|\|\s+language === 'csharp' \|\|\s+language === 'fsharp' \|\|\s+language === 'ocaml'/
 		);
 		expect(source).toMatch(
 			/\$effect\(\(\) => \{\s+if \(!editor\) return;[\s\S]*if \(!isEditorDefaultSource\(currentValue\) && !isLegacyEditorDefaultSource\(currentValue\)\) \{[\s\S]*const nextValue = resolveEditorDefaultSource\([\s\S]*rustTargetTriple[\s\S]*editor\.setValue\(nextValue\);[\s\S]*\}\);/s
 		);
 		expect(source).toMatch(
-			/const defaultValue = resolveEditorDefaultSource\([\s\S]*'c'[\s\S]*'cpp'[\s\S]*'python'[\s\S]*'java'[\s\S]*'scala'[\s\S]*'go'[\s\S]*'csharp'[\s\S]*'fsharp'[\s\S]*'elixir'[\s\S]*'ocaml'[\s\S]*'rust'[\s\S]*rustTargetTriple\s+\);/s
+			/const defaultValue = resolveEditorDefaultSource\([\s\S]*'c'[\s\S]*'cpp'[\s\S]*'python'[\s\S]*'java'[\s\S]*'kotlin'[\s\S]*'scala'[\s\S]*'go'[\s\S]*'csharp'[\s\S]*'fsharp'[\s\S]*'elixir'[\s\S]*'ocaml'[\s\S]*'rust'[\s\S]*rustTargetTriple\s+\);/s
 		);
 		expect(source).toMatch(
 			/debugView = new MonacoDebugView\(Monaco, editor, onBreakpointsChange\);\s+debugView\.setBreakpoints\(breakpoints\);\s+debugView\.setPauseState\(pausedLine, debugLocals, debugLanguage\);/s
@@ -79,6 +79,7 @@ describe('Monaco route debug sync', () => {
 		expect(resolveEditorDefaultSource('csharp', 'wasm32-wasip1')).toBe(editorDefaults.csharp);
 		expect(resolveEditorDefaultSource('fsharp', 'wasm32-wasip1')).toBe(editorDefaults.fsharp);
 		expect(resolveEditorDefaultSource('elixir', 'wasm32-wasip1')).toBe(editorDefaults.elixir);
+		expect(resolveEditorDefaultSource('kotlin', 'wasm32-wasip1')).toBe(editorDefaults.kotlin);
 		expect(resolveEditorDefaultSource('scala', 'wasm32-wasip1')).toBe(editorDefaults.scala);
 		expect(editorDefaults.c).toContain('puts("Hello, WebAssembly!")');
 		expect(editorDefaults.go).toContain("ReadString('\\n')");
@@ -90,12 +91,14 @@ describe('Monaco route debug sync', () => {
 		expect(editorDefaults.elixir).toContain('Demo.run()');
 		expect(editorDefaults.elixir).toContain('IO.gets("")');
 		expect(editorDefaults.elixir).toContain('Integer.parse(String.trim(line))');
+		expect(editorDefaults.kotlin).toContain('readlnOrNull()');
 		expect(editorDefaults.scala).toContain('scala.io.StdIn.readLine()');
 		expect(isEditorDefaultSource(editorDefaults.c)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.go)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.csharp)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.fsharp)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.elixir)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.kotlin)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.scala)).toBe(true);
 		expect(isEditorDefaultSource(rustEditorDefaults['wasm32-wasip1'])).toBe(true);
 		expect(isLegacyEditorDefaultSource(legacyBrokenTinyGoEditorDefault)).toBe(true);
@@ -117,6 +120,7 @@ describe('Monaco route debug sync', () => {
 		);
 		expect(pageSource).toMatch(/if \(language !== 'CPP'\) clangdRequested = false;/);
 		expect(pageSource).toMatch(/<option value="SCALA">Scala<\/option>/);
+		expect(pageSource).toMatch(/<option value="KOTLIN">Kotlin<\/option>/);
 		expect(pageSource).toMatch(/<option value="RUST">Rust<\/option>/);
 		expect(pageSource).toMatch(/<option value="GO">Go<\/option>/);
 		expect(pageSource).toMatch(/<option value="CSHARP">C#<\/option>/);

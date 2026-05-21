@@ -91,6 +91,12 @@ describe('Terminal source', () => {
 		expect(source).toMatch(
 			/scalaVirtualBasePath: currentRuntimeAssets\?\.scala\?\.virtualBasePath \|\| '',/
 		);
+		expect(source).toMatch(
+			/kotlinCheerpjLoaderUrl:\s+currentRuntimeAssets\?\.kotlin\?\.cheerpjLoaderUrl \|\| '',/
+		);
+		expect(source).toMatch(
+			/kotlinVirtualBasePath: currentRuntimeAssets\?\.kotlin\?\.virtualBasePath \|\| '',?/
+		);
 		expect(source).not.toMatch(/loadedRuntimeAssets !== currentRuntimeAssets/);
 		expect(source).not.toMatch(/loadedPlayground !== currentPlayground/);
 		expect(source).toMatch(/function writeTerminalOutput\(text: string\)/);
@@ -127,10 +133,10 @@ describe('Terminal source', () => {
 	it('uses rust-specific progress windows instead of jumping straight to the prepare band', () => {
 		expect(source).toMatch(/prog\?\.set\?\.\(0\);/);
 		expect(source).toMatch(
-			/language === 'RUST' \|\|\s+language === 'GO' \|\|\s+language === 'CSHARP' \|\|\s+language === 'FSHARP' \|\|\s+language === 'SCALA' \|\|\s+language === 'TINYGO' \|\|\s+language === 'OCAML'\s+\? phaseProgress\(prog, 0, 0\.05\)\s+: phaseProgress\(prog, 0, 0\.85\)/
+			/language === 'RUST' \|\|\s+language === 'GO' \|\|\s+language === 'CSHARP' \|\|\s+language === 'FSHARP' \|\|\s+language === 'SCALA' \|\|\s+language === 'KOTLIN' \|\|\s+language === 'TINYGO' \|\|\s+language === 'OCAML'\s+\? phaseProgress\(prog, 0, 0\.05\)\s+: phaseProgress\(prog, 0, 0\.85\)/
 		);
 		expect(source).toMatch(
-			/language === 'RUST' \|\|\s+language === 'GO' \|\|\s+language === 'CSHARP' \|\|\s+language === 'FSHARP' \|\|\s+language === 'SCALA' \|\|\s+language === 'TINYGO' \|\|\s+language === 'OCAML'\s+\? phaseProgress\(prog, 0\.05, 0\.99\)\s+: phaseProgress\(prog, 0\.85, 0\.99\)/
+			/language === 'RUST' \|\|\s+language === 'GO' \|\|\s+language === 'CSHARP' \|\|\s+language === 'FSHARP' \|\|\s+language === 'SCALA' \|\|\s+language === 'KOTLIN' \|\|\s+language === 'TINYGO' \|\|\s+language === 'OCAML'\s+\? phaseProgress\(prog, 0\.05, 0\.99\)\s+: phaseProgress\(prog, 0\.85, 0\.99\)/
 		);
 	});
 });

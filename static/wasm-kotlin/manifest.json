@@ -1,0 +1,33 @@
+{
+  "kotlinVersion": "2.3.21",
+  "kotlinReflectVersion": "1.6.10",
+  "kotlinxCoroutinesVersion": "1.8.0",
+  "jetbrainsAnnotationsVersion": "13.0",
+  "bridgeMainClass": "org.wasmidle.kotlin.Bridge",
+  "files": {
+    "kotlin-compiler-embeddable-2.3.21.jar": {
+      "sha256": "d3e70fb011675e77ef00f1a68918d3cd91eed26058977d1e3ea2a37a293233af"
+    },
+    "kotlin-stdlib-2.3.21.jar": {
+      "sha256": "6f64eac736db9434dd6925b4a518b9d1d17177652320c37916cf9ba3ce7d7d7a"
+    },
+    "kotlin-script-runtime-2.3.21.jar": {
+      "sha256": "ec61bf1229c837fa9f4255f34ca69816138b73158e7ae9b8d964cf92ca6dfd2e"
+    },
+    "kotlin-reflect-1.6.10.jar": {
+      "sha256": "3277ac102ae17aad10a55abec75ff5696c8d109790396434b496e75087854203"
+    },
+    "kotlin-daemon-embeddable-2.3.21.jar": {
+      "sha256": "222fc10a3c22e74d30369bf8a0ca6c4f9372eac7d4a0081e290c256fa4d30fb2"
+    },
+    "kotlinx-coroutines-core-jvm-1.8.0.jar": {
+      "sha256": "9860906a1937490bf5f3b06d2f0e10ef451e65b95b269f22daf68a3d1f5065c5"
+    },
+    "annotations-13.0.jar": {
+      "sha256": "ace2a10dc8e2d5fd34925ecac03e4988b2c0f851650c94b8cef49ba1bd111478"
+    },
+    "wasm-idle-kotlin-bridge.jar": {
+      "sha256": "cd76b30e139e35a3d5553f4a52f460ac012d79d5826e25f15ebaef28b5031e2c"
+    }
+  }
+}

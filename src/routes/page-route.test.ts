@@ -264,16 +264,17 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/tinygoTarget: language === 'TINYGO' \? tinygoTarget : undefined/);
 		expect(source).toMatch(/<option value="GO">Go<\/option>/);
 		expect(source).toMatch(/<option value="SCALA">Scala<\/option>/);
+		expect(source).toMatch(/<option value="KOTLIN">Kotlin<\/option>/);
 		expect(source).toMatch(/<option value="CSHARP">C#<\/option>/);
 		expect(source).toMatch(/<option value="FSHARP">F#<\/option>/);
 		expect(source).toMatch(/<option value="ELIXIR">Elixir<\/option>/);
 		expect(source).toMatch(/<option value="OCAML">OCaml<\/option>/);
 		expect(source).toMatch(/<option value="TINYGO">TinyGo<\/option>/);
 		expect(source).toMatch(
-			/\{#if language === 'JAVA' \|\| language === 'SCALA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'TINYGO'\}/
+			/\{#if language === 'JAVA' \|\| language === 'SCALA' \|\| language === 'KOTLIN' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'TINYGO'\}/
 		);
 		expect(source).toMatch(
-			/language === 'JAVA' \|\| language === 'SCALA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'TINYGO'/
+			/language === 'JAVA' \|\| language === 'SCALA' \|\| language === 'KOTLIN' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'TINYGO'/
 		);
 		expect(source).toMatch(/Go uses the bundled `wasm-go` browser compiler runtime/);
 		expect(source).toMatch(
@@ -406,6 +407,22 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/CheerpJ's WASM-based browser\s+JVM/s);
 		expect(source).toMatch(/`scalac` compiles the source to class files in the browser/);
 		expect(source).toMatch(/passed to `scala\.io\.StdIn` and `System\.in`/);
+	});
+
+	it('surfaces Kotlin through CheerpJ and the shared JVM language workflow', () => {
+		expect(source).toMatch(/<option value="KOTLIN">Kotlin<\/option>/);
+		expect(source).toMatch(/KOTLIN: 'Kotlin'/);
+		expect(source).toMatch(/kotlin: 'KOTLIN'/);
+		expect(source).toMatch(/kt: 'KOTLIN'/);
+		expect(source).toMatch(/'\.kt': 'KOTLIN'/);
+		expect(source).toMatch(/KOTLIN: 'Main\.kt'/);
+		expect(source).toMatch(/KOTLIN: 'kotlin'/);
+		expect(source).toMatch(/language === 'KOTLIN'\s+\? 'kotlin'/);
+		expect(source).toMatch(/language !== 'KOTLIN'/);
+		expect(source).toMatch(/Kotlin uses the bundled Kotlin 2\.3 compiler JARs/);
+		expect(source).toMatch(/CheerpJ's WASM-based browser\s+JVM/s);
+		expect(source).toMatch(/`kotlinc` compiles the source to Java 8 class files/);
+		expect(source).toMatch(/passed to `readlnOrNull`, `readLine`, and `System\.in`/);
 	});
 
 	it('keeps the example workspace full-height, resizable, and hides debug panels until debug starts', () => {

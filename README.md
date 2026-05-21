@@ -2,11 +2,25 @@
 
 ![wasm-idle](static/image.jpeg)
 
-Executes C++, Python, Java, Scala, Rust, Go, TinyGo, OCaml, Elixir, C#, and F# code.
+Executes C++, Python, Java, Kotlin, Scala, Rust, Go, TinyGo, OCaml, Elixir, C#, and F# code.
 
 Refer to src/lib/clang.
 
 Java uses TeaVM's browser compiler/runtime. TeaVM compiler/runtime/classlib assets are bundled under `static/teavm/` by default, and the asset base URL can be overridden with `PUBLIC_TEAVM_BASE_URL`.
+
+Kotlin uses bundled Kotlin compiler JARs under `static/wasm-kotlin/` and runs `kotlinc` inside
+CheerpJ's WebAssembly-based browser JVM. Refresh the Kotlin compiler assets and rebuild the small
+Java bridge JAR with:
+
+```bash
+cd wasm-idle
+pnpm run sync:wasm-kotlin
+```
+
+The default CheerpJ loader is shared with Scala. Override it with `PUBLIC_CHEERPJ_LOADER_URL` or
+`runtimeAssets.kotlin.cheerpjLoaderUrl`. If the Kotlin JARs are not served from the app root, set
+`PUBLIC_WASM_KOTLIN_VIRTUAL_BASE_PATH` or `runtimeAssets.kotlin.virtualBasePath` to the CheerpJ
+`/app/.../wasm-kotlin/` virtual path.
 
 Scala uses bundled Scala 2.13 compiler JARs under `static/wasm-scala/` and runs `scalac` inside
 CheerpJ's WebAssembly-based browser JVM. Refresh the Scala compiler assets and rebuild the small

@@ -122,7 +122,10 @@
 						tinygoAppUrl: currentRuntimeAssets?.tinygo?.appUrl || '',
 						tinygoModuleUrl: currentRuntimeAssets?.tinygo?.moduleUrl || '',
 						scalaCheerpjLoaderUrl: currentRuntimeAssets?.scala?.cheerpjLoaderUrl || '',
-						scalaVirtualBasePath: currentRuntimeAssets?.scala?.virtualBasePath || ''
+						scalaVirtualBasePath: currentRuntimeAssets?.scala?.virtualBasePath || '',
+						kotlinCheerpjLoaderUrl:
+							currentRuntimeAssets?.kotlin?.cheerpjLoaderUrl || '',
+						kotlinVirtualBasePath: currentRuntimeAssets?.kotlin?.virtualBasePath || ''
 					});
 		const requiresSandboxReset =
 			ll !== language || loadedRuntimeAssetsKey !== currentRuntimeAssetsKey;
@@ -240,6 +243,7 @@
 				language === 'CSHARP' ||
 				language === 'FSHARP' ||
 				language === 'SCALA' ||
+				language === 'KOTLIN' ||
 				language === 'TINYGO' ||
 				language === 'OCAML'
 					? phaseProgress(prog, 0, 0.05)
@@ -250,6 +254,7 @@
 				language === 'CSHARP' ||
 				language === 'FSHARP' ||
 				language === 'SCALA' ||
+				language === 'KOTLIN' ||
 				language === 'TINYGO' ||
 				language === 'OCAML'
 					? phaseProgress(prog, 0.05, 0.99)

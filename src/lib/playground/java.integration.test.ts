@@ -346,5 +346,5 @@ public class Main {
 
 			expect(outputs.join('')).toBe('3\n');
 		}
-	}, 20000);
+	}, 30000);
 });

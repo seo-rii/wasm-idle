@@ -45,6 +45,7 @@
 		| 'CPP'
 		| 'PYTHON'
 		| 'JAVA'
+		| 'KOTLIN'
 		| 'SCALA'
 		| 'RUST'
 		| 'GO'
@@ -84,6 +85,7 @@
 		'CPP',
 		'PYTHON',
 		'JAVA',
+		'KOTLIN',
 		'SCALA',
 		'RUST',
 		'GO',
@@ -98,6 +100,7 @@
 		CPP: 'C++',
 		PYTHON: 'Python',
 		JAVA: 'Java',
+		KOTLIN: 'Kotlin',
 		SCALA: 'Scala',
 		RUST: 'Rust',
 		GO: 'Go',
@@ -194,7 +197,9 @@
 					? 'python'
 					: language === 'JAVA'
 						? 'java'
-						: language === 'SCALA'
+						: language === 'KOTLIN'
+							? 'kotlin'
+							: language === 'SCALA'
 							? 'scala'
 							: language === 'RUST'
 								? 'rust'
@@ -360,6 +365,7 @@
 			'.h': 'CPP',
 			'.hpp': 'CPP',
 			'.java': 'JAVA',
+			'.kt': 'KOTLIN',
 			'.scala': 'SCALA',
 			'.sc': 'SCALA',
 			'.py': 'PYTHON',
@@ -382,6 +388,7 @@
 			C: 'main.c',
 			CPP: 'main.cpp',
 			JAVA: 'Main.java',
+			KOTLIN: 'Main.kt',
 			SCALA: 'Main.scala',
 			PYTHON: 'main.py',
 			RUST: 'main.rs',
@@ -401,6 +408,7 @@
 			CPP: 'cpp',
 			PYTHON: 'python',
 			JAVA: 'java',
+			KOTLIN: 'kotlin',
 			SCALA: 'scala',
 			RUST: 'rust',
 			GO: 'go',
@@ -863,6 +871,8 @@
 			cpp: 'CPP',
 			cxx: 'CPP',
 			java: 'JAVA',
+			kotlin: 'KOTLIN',
+			kt: 'KOTLIN',
 			scala: 'SCALA',
 			sc: 'SCALA',
 			rust: 'RUST',
@@ -1267,6 +1277,7 @@
 		if (
 			language !== 'JAVA' &&
 			language !== 'SCALA' &&
+			language !== 'KOTLIN' &&
 			language !== 'RUST' &&
 			language !== 'GO' &&
 			language !== 'CSHARP' &&
@@ -1468,6 +1479,7 @@
 						<option value="CPP">C++</option>
 						<option value="PYTHON">Python</option>
 						<option value="JAVA">Java</option>
+						<option value="KOTLIN">Kotlin</option>
 						<option value="SCALA">Scala</option>
 						<option value="RUST">Rust</option>
 						<option value="GO">Go</option>
@@ -1478,7 +1490,7 @@
 						<option value="TINYGO">TinyGo</option>
 					</select>
 				</label>
-				{#if language === 'JAVA' || language === 'SCALA' || language === 'RUST' || language === 'GO' || language === 'CSHARP' || language === 'FSHARP' || language === 'TINYGO'}
+				{#if language === 'JAVA' || language === 'SCALA' || language === 'KOTLIN' || language === 'RUST' || language === 'GO' || language === 'CSHARP' || language === 'FSHARP' || language === 'TINYGO'}
 					<label class="args-chip">
 						<span class="material-symbols-outlined">list_alt</span>
 						<input bind:value={argsInput} placeholder="3 4 5" spellcheck={false} />
@@ -1568,6 +1580,14 @@
 				JVM. `scalac` compiles the source to class files in the browser, then the same
 				browser JVM runs the detected `main` method. Pass CLI args here; terminal input is
 				passed to `scala.io.StdIn` and `System.in`.
+			</p>
+		{/if}
+		{#if language === 'KOTLIN'}
+			<p class="hint">
+				Kotlin uses the bundled Kotlin 2.3 compiler JARs inside CheerpJ's WASM-based browser
+				JVM. `kotlinc` compiles the source to Java 8 class files in the browser, then the
+				same browser JVM runs the detected `main` function. Pass CLI args here; terminal
+				input is passed to `readlnOrNull`, `readLine`, and `System.in`.
 			</p>
 		{/if}
 		{#if language === 'RUST'}

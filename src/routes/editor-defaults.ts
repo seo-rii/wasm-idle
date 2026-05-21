@@ -5,6 +5,7 @@ export type EditorDefaultLanguage =
 	| 'cpp'
 	| 'python'
 	| 'java'
+	| 'kotlin'
 	| 'scala'
 	| 'go'
 	| 'csharp'
@@ -14,7 +15,7 @@ export type EditorDefaultLanguage =
 	| 'rust';
 
 export const editorDefaults: Record<
-	'c' | 'cpp' | 'python' | 'java' | 'scala' | 'go' | 'csharp' | 'fsharp' | 'elixir' | 'ocaml',
+	'c' | 'cpp' | 'python' | 'java' | 'kotlin' | 'scala' | 'go' | 'csharp' | 'fsharp' | 'elixir' | 'ocaml',
 	string
 > = {
 	c: `#include <stdio.h>
@@ -58,6 +59,20 @@ public class Main {
         int n = scanner.hasNextInt() ? scanner.nextInt() : 4;
         System.out.println("factorial_plus_bonus=" + (factorial(n) + bonus));
     }
+}`,
+	kotlin: `const val BONUS = 3
+
+fun factorial(n: Int): Int =
+    if (n <= 1) 1 else n * factorial(n - 1)
+
+fun main(args: Array<String>) {
+    val input = readlnOrNull()
+    val n =
+        input?.trim()?.toIntOrNull()
+            ?: args.firstOrNull()?.toIntOrNull()
+            ?: 4
+
+    println("factorial_plus_bonus=\${factorial(n) + BONUS}")
 }`,
 	scala: `object Main {
     val bonus = 3
@@ -301,6 +316,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.cpp ||
 		source === editorDefaults.python ||
 		source === editorDefaults.java ||
+		source === editorDefaults.kotlin ||
 		source === editorDefaults.scala ||
 		source === editorDefaults.go ||
 		source === editorDefaults.csharp ||

@@ -11,7 +11,8 @@ const { publicEnv } = vi.hoisted(() => ({
 		PUBLIC_WASM_TINYGO_APP_URL: '',
 		PUBLIC_WASM_TINYGO_MODULE_URL: '',
 		PUBLIC_CHEERPJ_LOADER_URL: '',
-		PUBLIC_WASM_SCALA_VIRTUAL_BASE_PATH: ''
+		PUBLIC_WASM_SCALA_VIRTUAL_BASE_PATH: '',
+		PUBLIC_WASM_KOTLIN_VIRTUAL_BASE_PATH: ''
 	}
 }));
 
@@ -19,7 +20,11 @@ vi.mock('$env/dynamic/public', () => ({
 	env: publicEnv
 }));
 
-import { resolveRuntimeAssetConfig, resolveScalaRuntimeAssetConfig } from './assets';
+import {
+	resolveKotlinRuntimeAssetConfig,
+	resolveRuntimeAssetConfig,
+	resolveScalaRuntimeAssetConfig
+} from './assets';
 
 describe('runtime asset config resolution', () => {
 	it('derives the default python asset base url from the legacy root path', () => {
@@ -370,5 +375,53 @@ describe('runtime asset config resolution', () => {
 
 		publicEnv.PUBLIC_CHEERPJ_LOADER_URL = '';
 		publicEnv.PUBLIC_WASM_SCALA_VIRTUAL_BASE_PATH = '';
+	});
+
+	it('derives the default Kotlin CheerpJ loader and virtual classpath from the shared root path', () => {
+		expect(
+			resolveKotlinRuntimeAssetConfig(
+				{ rootUrl: '/absproxy/5173' },
+				'https://example.com/app'
+			)
+		).toEqual({
+			cheerpjLoaderUrl: 'https://cjrtnc.leaningtech.com/4.3/loader.js',
+			virtualBasePath: '/app/absproxy/5173/wasm-kotlin/',
+			bridgeClassName: 'org.wasmidle.kotlin.Bridge',
+			bridgeJar: '/app/absproxy/5173/wasm-kotlin/wasm-idle-kotlin-bridge.jar',
+			compilerJar: '/app/absproxy/5173/wasm-kotlin/kotlin-compiler-embeddable-2.3.21.jar',
+			stdlibJar: '/app/absproxy/5173/wasm-kotlin/kotlin-stdlib-2.3.21.jar',
+			scriptRuntimeJar: '/app/absproxy/5173/wasm-kotlin/kotlin-script-runtime-2.3.21.jar',
+			reflectJar: '/app/absproxy/5173/wasm-kotlin/kotlin-reflect-1.6.10.jar',
+			daemonJar: '/app/absproxy/5173/wasm-kotlin/kotlin-daemon-embeddable-2.3.21.jar',
+			coroutinesJar: '/app/absproxy/5173/wasm-kotlin/kotlinx-coroutines-core-jvm-1.8.0.jar',
+			annotationsJar: '/app/absproxy/5173/wasm-kotlin/annotations-13.0.jar',
+			compilerClassPath:
+				'/app/absproxy/5173/wasm-kotlin/wasm-idle-kotlin-bridge.jar:/app/absproxy/5173/wasm-kotlin/kotlin-compiler-embeddable-2.3.21.jar:/app/absproxy/5173/wasm-kotlin/kotlin-stdlib-2.3.21.jar:/app/absproxy/5173/wasm-kotlin/kotlin-script-runtime-2.3.21.jar:/app/absproxy/5173/wasm-kotlin/kotlin-reflect-1.6.10.jar:/app/absproxy/5173/wasm-kotlin/kotlin-daemon-embeddable-2.3.21.jar:/app/absproxy/5173/wasm-kotlin/kotlinx-coroutines-core-jvm-1.8.0.jar:/app/absproxy/5173/wasm-kotlin/annotations-13.0.jar'
+		});
+	});
+
+	it('prefers explicit Kotlin runtime paths over public env overrides', () => {
+		publicEnv.PUBLIC_CHEERPJ_LOADER_URL = 'https://env.example.com/loader.js';
+		publicEnv.PUBLIC_WASM_KOTLIN_VIRTUAL_BASE_PATH = '/app/env-kotlin';
+
+		expect(
+			resolveKotlinRuntimeAssetConfig(
+				{
+					rootUrl: '/ignored',
+					kotlin: {
+						cheerpjLoaderUrl: '/local/cheerpj.js',
+						virtualBasePath: '/app/custom-kotlin'
+					}
+				},
+				'https://example.com/app'
+			)
+		).toMatchObject({
+			cheerpjLoaderUrl: 'https://example.com/local/cheerpj.js',
+			virtualBasePath: '/app/custom-kotlin/',
+			stdlibJar: '/app/custom-kotlin/kotlin-stdlib-2.3.21.jar'
+		});
+
+		publicEnv.PUBLIC_CHEERPJ_LOADER_URL = '';
+		publicEnv.PUBLIC_WASM_KOTLIN_VIRTUAL_BASE_PATH = '';
 	});
 });

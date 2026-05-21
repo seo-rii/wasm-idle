@@ -22,6 +22,7 @@
 		"sync:wasm-of-js-of-ocaml": "node scripts/sync-wasm-of-js-of-ocaml.mjs",
 		"sync:wasm-dotnet": "node scripts/sync-wasm-dotnet.mjs",
 		"sync:wasm-go": "node scripts/sync-wasm-go.mjs",
+		"sync:wasm-kotlin": "node scripts/sync-wasm-kotlin.mjs",
 		"sync:wasm-rust": "node scripts/sync-wasm-rust.mjs",
 		"sync:wasm-scala": "node scripts/sync-wasm-scala.mjs",
 		"sync:wasm-tinygo": "node scripts/sync-wasm-tinygo.mjs",
