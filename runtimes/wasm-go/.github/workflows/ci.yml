@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: wasm-go/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: wasm-go
+
+      - name: Type check
+        run: npm run check
+        working-directory: wasm-go
+
+      - name: Unit tests
+        run: npm test
+        working-directory: wasm-go
+
+      - name: Runtime validation
+        run: npm run validate:runtime
+        working-directory: wasm-go

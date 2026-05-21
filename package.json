@@ -20,6 +20,7 @@
 		"check:runtimes": "node scripts/workspace.mjs run check --group runtimes --if-present",
 		"build:packages": "node scripts/workspace.mjs run build --group packages --if-present",
 		"check:packages": "node scripts/workspace.mjs run check --group packages --if-present",
+		"audit:runtimes": "node scripts/audit-runtime-migration.mjs",
 		"preview": "vite preview",
 		"probe:go-browser": "node scripts/probe-go-browser.mjs",
 		"probe:ocaml-browser": "node scripts/probe-ocaml-browser.mjs",

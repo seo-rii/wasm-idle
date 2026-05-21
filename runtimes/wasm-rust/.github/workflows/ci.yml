@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check Out
+        uses: actions/checkout@v6
+
+      - name: Set Up pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 9
+
+      - name: Set Up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium
+        run: pnpm dlx playwright@1.58.2 install --with-deps chromium
+
+      - name: Hydrate Latest Release Runtime
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p artifacts
+          gh release download --pattern 'wasm-rust-*.tgz' --dir artifacts --clobber
+          tar -xzf "$(find artifacts -maxdepth 1 -name 'wasm-rust-*.tgz' -print -quit)" dist/runtime
+
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      - name: Run Standalone Browser Validation
+        env:
+          WASM_RUST_ALLOW_PREBUILT_RUNTIME_FALLBACK: '1'
+        run: pnpm run validate:standalone-browser
+
+  browser-clean-room:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check Out
+        uses: actions/checkout@v6
+
+      - name: Set Up pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 9
+
+      - name: Set Up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium
+        run: pnpm dlx playwright@1.58.2 install --with-deps chromium
+
+      - name: Hydrate Latest Release Runtime
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p artifacts
+          gh release download --pattern 'wasm-rust-*.tgz' --dir artifacts --clobber
+          tar -xzf "$(find artifacts -maxdepth 1 -name 'wasm-rust-*.tgz' -print -quit)" dist/runtime
+
+      - name: Run Clean-Room Browser Validation
+        run: pnpm run test:ci:browser:clean-room
