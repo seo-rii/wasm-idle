@@ -19,7 +19,7 @@ left in place, but the default development path is inside this repo:
 - `packages/node`: Node.js host helpers for Node-capable sandbox loaders.
 - `runtimes/*`: imported runtime/compiler packages such as `wasm-rust`,
   `wasm-of-js-of-ocaml`, `wasm-go`, `wasm-tinygo`, `wasm-dotnet`, `wasm-typescript`,
-  `wasm-elixir`, `pyodide`, and `teavm`.
+  `wasm-elixir`, `pyodide`, `teavm`, and `assemblyscript`.
 - `tools/*`: migrated local toolchain projects that are too broad or infrastructure-heavy to run as
   normal runtime workspace packages. `tools/dool` contains the Docker judge backend for Elixir and
   the other server-side language runners.
