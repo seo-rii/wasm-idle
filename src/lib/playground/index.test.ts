@@ -49,6 +49,10 @@ const { sandboxInstances, createMockSandboxClass, MockSandbox } = vi.hoisted(() 
 	return { sandboxInstances, createMockSandboxClass, MockSandbox };
 });
 
+vi.mock('$env/dynamic/public', () => ({
+	env: {}
+}));
+
 vi.mock('$lib/playground/python', () => ({
 	default: createMockSandboxClass('PYTHON')
 }));
@@ -59,6 +63,10 @@ vi.mock('$lib/playground/java', () => ({
 
 vi.mock('$lib/playground/rust', () => ({
 	default: createMockSandboxClass('RUST')
+}));
+
+vi.mock('$lib/playground/scala', () => ({
+	default: createMockSandboxClass('SCALA')
 }));
 
 vi.mock('$lib/playground/go', () => ({
@@ -267,6 +275,51 @@ describe('playground runtime binding', () => {
 				'printfn "hello"',
 				true,
 				['demo'],
+				{},
+				progress
+			]
+		]);
+	});
+
+	it('routes Scala requests through the Scala sandbox implementation', async () => {
+		const binding = createPlaygroundBinding({
+			rootUrl: '/absproxy/5173',
+			scala: {
+				cheerpjLoaderUrl: '/cheerpj/loader.js',
+				virtualBasePath: '/app/absproxy/5173/wasm-scala/'
+			}
+		});
+		const progress = { set() {} };
+		const sandbox = await binding.load('SCALA');
+
+		await sandbox.load(
+			'object Main { def main(args: Array[String]) = println(1) }',
+			true,
+			[],
+			{},
+			progress
+		);
+
+		expect(sandbox.runtimeAssets).toEqual({
+			rootUrl: '/absproxy/5173',
+			scala: {
+				cheerpjLoaderUrl: '/cheerpj/loader.js',
+				virtualBasePath: '/app/absproxy/5173/wasm-scala/'
+			}
+		});
+		expect(sandboxInstances.get('SCALA')).toHaveLength(1);
+		expect(sandboxInstances.get('SCALA')?.[0]?.loadCalls).toEqual([
+			[
+				{
+					rootUrl: '/absproxy/5173',
+					scala: {
+						cheerpjLoaderUrl: '/cheerpj/loader.js',
+						virtualBasePath: '/app/absproxy/5173/wasm-scala/'
+					}
+				},
+				'object Main { def main(args: Array[String]) = println(1) }',
+				true,
+				[],
 				{},
 				progress
 			]

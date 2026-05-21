@@ -9,7 +9,9 @@ const { publicEnv } = vi.hoisted(() => ({
 		PUBLIC_WASM_OCAML_MODULE_URL: '',
 		PUBLIC_WASM_OCAML_MANIFEST_URL: '',
 		PUBLIC_WASM_TINYGO_APP_URL: '',
-		PUBLIC_WASM_TINYGO_MODULE_URL: ''
+		PUBLIC_WASM_TINYGO_MODULE_URL: '',
+		PUBLIC_CHEERPJ_LOADER_URL: '',
+		PUBLIC_WASM_SCALA_VIRTUAL_BASE_PATH: ''
 	}
 }));
 
@@ -17,7 +19,7 @@ vi.mock('$env/dynamic/public', () => ({
 	env: publicEnv
 }));
 
-import { resolveRuntimeAssetConfig } from './assets';
+import { resolveRuntimeAssetConfig, resolveScalaRuntimeAssetConfig } from './assets';
 
 describe('runtime asset config resolution', () => {
 	it('derives the default python asset base url from the legacy root path', () => {
@@ -328,5 +330,45 @@ describe('runtime asset config resolution', () => {
 		expect(resolveTinyGoModuleUrl(undefined, 'https://example.com/app')).toBe(
 			'https://env.example.com/wasm-tinygo/runtime.js?v=42'
 		);
+	});
+	it('derives the default Scala CheerpJ loader and virtual classpath from the shared root path', () => {
+		expect(
+			resolveScalaRuntimeAssetConfig({ rootUrl: '/absproxy/5173' }, 'https://example.com/app')
+		).toEqual({
+			cheerpjLoaderUrl: 'https://cjrtnc.leaningtech.com/4.3/loader.js',
+			virtualBasePath: '/app/absproxy/5173/wasm-scala/',
+			bridgeClassName: 'org.wasmidle.scala.Bridge',
+			bridgeJar: '/app/absproxy/5173/wasm-scala/wasm-idle-scala-bridge.jar',
+			libraryJar: '/app/absproxy/5173/wasm-scala/scala-library-2.13.18.jar',
+			reflectJar: '/app/absproxy/5173/wasm-scala/scala-reflect-2.13.18.jar',
+			compilerJar: '/app/absproxy/5173/wasm-scala/scala-compiler-2.13.18.jar',
+			compilerClassPath:
+				'/app/absproxy/5173/wasm-scala/wasm-idle-scala-bridge.jar:/app/absproxy/5173/wasm-scala/scala-library-2.13.18.jar:/app/absproxy/5173/wasm-scala/scala-reflect-2.13.18.jar:/app/absproxy/5173/wasm-scala/scala-compiler-2.13.18.jar'
+		});
+	});
+
+	it('prefers explicit Scala runtime paths over public env overrides', () => {
+		publicEnv.PUBLIC_CHEERPJ_LOADER_URL = 'https://env.example.com/loader.js';
+		publicEnv.PUBLIC_WASM_SCALA_VIRTUAL_BASE_PATH = '/app/env-scala';
+
+		expect(
+			resolveScalaRuntimeAssetConfig(
+				{
+					rootUrl: '/ignored',
+					scala: {
+						cheerpjLoaderUrl: '/local/cheerpj.js',
+						virtualBasePath: '/app/custom-scala'
+					}
+				},
+				'https://example.com/app'
+			)
+		).toMatchObject({
+			cheerpjLoaderUrl: 'https://example.com/local/cheerpj.js',
+			virtualBasePath: '/app/custom-scala/',
+			libraryJar: '/app/custom-scala/scala-library-2.13.18.jar'
+		});
+
+		publicEnv.PUBLIC_CHEERPJ_LOADER_URL = '';
+		publicEnv.PUBLIC_WASM_SCALA_VIRTUAL_BASE_PATH = '';
 	});
 });

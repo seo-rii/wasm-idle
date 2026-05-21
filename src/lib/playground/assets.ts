@@ -66,6 +66,11 @@ export interface ElixirRuntimeAssetConfig {
 	bundleUrl?: string;
 }
 
+export interface ScalaRuntimeAssetConfig {
+	cheerpjLoaderUrl?: string;
+	virtualBasePath?: string;
+}
+
 export interface PlaygroundRuntimeAssets {
 	rootUrl?: string;
 	python?: RuntimeAssetConfig;
@@ -78,6 +83,7 @@ export interface PlaygroundRuntimeAssets {
 	ocaml?: OcamlRuntimeAssetConfig;
 	tinygo?: TinyGoRuntimeAssetConfig;
 	elixir?: ElixirRuntimeAssetConfig;
+	scala?: ScalaRuntimeAssetConfig;
 }
 
 export interface TinyGoRuntimeAssetLoaderRequest {
@@ -114,6 +120,17 @@ export interface ResolvedRuntimeAssetConfig {
 	useAssetBridge: boolean;
 }
 
+export interface ResolvedScalaRuntimeAssetConfig {
+	cheerpjLoaderUrl: string;
+	virtualBasePath: string;
+	bridgeClassName: string;
+	bridgeJar: string;
+	compilerJar: string;
+	libraryJar: string;
+	reflectJar: string;
+	compilerClassPath: string;
+}
+
 export const PYTHON_RUNTIME_LOAD_ASSETS = [
 	'pyodide.asm.js',
 	'pyodide-lock.json',
@@ -137,6 +154,10 @@ export const CLANG_RUNTIME_LOAD_ASSETS = [
 
 export const CLANGD_RUNTIME_LOAD_ASSETS = ['clangd.js', 'clangd.wasm.gz'] as const;
 
+export const SCALA_VERSION = '2.13.18';
+export const SCALA_BRIDGE_CLASS_NAME = 'org.wasmidle.scala.Bridge';
+export const DEFAULT_CHEERPJ_LOADER_URL = 'https://cjrtnc.leaningtech.com/4.3/loader.js';
+
 const PYTHON_VIRTUAL_BASE_URL = 'https://wasm-idle.invalid/python/';
 const JAVA_VIRTUAL_BASE_URL = 'https://wasm-idle.invalid/java/';
 const CLANG_VIRTUAL_BASE_URL = 'https://wasm-idle.invalid/clang/';
@@ -152,6 +173,22 @@ const resolveConfiguredUrl = (url: string, currentUrl = '') =>
 
 const normalizeRootUrl = (rootUrl: string) =>
 	rootUrl.endsWith('/') ? rootUrl.slice(0, -1) : rootUrl;
+
+const normalizeVirtualBasePath = (value: string) => {
+	const trimmed = value.trim() || '/app/wasm-scala/';
+	const withLeadingSlash = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+	return withLeadingSlash.endsWith('/') ? withLeadingSlash : `${withLeadingSlash}/`;
+};
+
+const resolveScalaVirtualBasePath = (rootUrl = '', currentUrl = '') => {
+	const resolvedUrl = currentUrl
+		? new URL(`${normalizeRootUrl(rootUrl) || ''}/wasm-scala/`, currentUrl)
+		: null;
+	if (resolvedUrl) {
+		return normalizeVirtualBasePath(`/app${resolvedUrl.pathname}`);
+	}
+	return normalizeVirtualBasePath(`/app${normalizeRootUrl(rootUrl) || ''}/wasm-scala/`);
+};
 
 const resolvePythonBaseUrl = (rootUrl = '', currentUrl = '') =>
 	normalizeBaseUrl(`${normalizeRootUrl(rootUrl) || ''}/pyodide/`, currentUrl);
@@ -573,4 +610,36 @@ export function resolveElixirBundleUrl(
 	}
 
 	return '';
+}
+
+export function resolveScalaRuntimeAssetConfig(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+): ResolvedScalaRuntimeAssetConfig {
+	const configuredLoaderUrl =
+		(typeof options === 'object' && options?.scala?.cheerpjLoaderUrl) ||
+		(publicEnv.PUBLIC_CHEERPJ_LOADER_URL || '').trim() ||
+		DEFAULT_CHEERPJ_LOADER_URL;
+	const virtualBasePath =
+		(typeof options === 'object' && options?.scala?.virtualBasePath) ||
+		(publicEnv.PUBLIC_WASM_SCALA_VIRTUAL_BASE_PATH || '').trim() ||
+		(typeof options === 'string'
+			? resolveScalaVirtualBasePath(options, currentUrl)
+			: resolveScalaVirtualBasePath(options?.rootUrl || '', currentUrl));
+	const normalizedVirtualBasePath = normalizeVirtualBasePath(virtualBasePath);
+	const bridgeJar = `${normalizedVirtualBasePath}wasm-idle-scala-bridge.jar`;
+	const libraryJar = `${normalizedVirtualBasePath}scala-library-${SCALA_VERSION}.jar`;
+	const reflectJar = `${normalizedVirtualBasePath}scala-reflect-${SCALA_VERSION}.jar`;
+	const compilerJar = `${normalizedVirtualBasePath}scala-compiler-${SCALA_VERSION}.jar`;
+
+	return {
+		cheerpjLoaderUrl: resolveConfiguredUrl(configuredLoaderUrl, currentUrl),
+		virtualBasePath: normalizedVirtualBasePath,
+		bridgeClassName: SCALA_BRIDGE_CLASS_NAME,
+		bridgeJar,
+		compilerJar,
+		libraryJar,
+		reflectJar,
+		compilerClassPath: [bridgeJar, libraryJar, reflectJar, compilerJar].join(':')
+	};
 }

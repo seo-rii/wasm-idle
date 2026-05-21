@@ -45,6 +45,7 @@
 		| 'CPP'
 		| 'PYTHON'
 		| 'JAVA'
+		| 'SCALA'
 		| 'RUST'
 		| 'GO'
 		| 'CSHARP'
@@ -83,6 +84,7 @@
 		'CPP',
 		'PYTHON',
 		'JAVA',
+		'SCALA',
 		'RUST',
 		'GO',
 		'CSHARP',
@@ -96,6 +98,7 @@
 		CPP: 'C++',
 		PYTHON: 'Python',
 		JAVA: 'Java',
+		SCALA: 'Scala',
 		RUST: 'Rust',
 		GO: 'Go',
 		CSHARP: 'C#',
@@ -191,17 +194,19 @@
 					? 'python'
 					: language === 'JAVA'
 						? 'java'
-						: language === 'RUST'
-							? 'rust'
-							: language === 'CSHARP'
-								? 'csharp'
-								: language === 'FSHARP'
-									? 'fsharp'
-									: language === 'ELIXIR'
-										? 'elixir'
-										: language === 'OCAML'
-											? 'ocaml'
-											: 'go'
+						: language === 'SCALA'
+							? 'scala'
+							: language === 'RUST'
+								? 'rust'
+								: language === 'CSHARP'
+									? 'csharp'
+									: language === 'FSHARP'
+										? 'fsharp'
+										: language === 'ELIXIR'
+											? 'elixir'
+											: language === 'OCAML'
+												? 'ocaml'
+												: 'go'
 	);
 	const compact = $derived(examplePaneWidth > 0 && examplePaneWidth <= 760);
 	const activeFile = $derived(files.find((file) => file.path === activePath) ?? files[0]);
@@ -355,6 +360,8 @@
 			'.h': 'CPP',
 			'.hpp': 'CPP',
 			'.java': 'JAVA',
+			'.scala': 'SCALA',
+			'.sc': 'SCALA',
 			'.py': 'PYTHON',
 			'.rs': 'RUST',
 			'.go': 'GO',
@@ -375,6 +382,7 @@
 			C: 'main.c',
 			CPP: 'main.cpp',
 			JAVA: 'Main.java',
+			SCALA: 'Main.scala',
 			PYTHON: 'main.py',
 			RUST: 'main.rs',
 			GO: 'main.go',
@@ -393,6 +401,7 @@
 			CPP: 'cpp',
 			PYTHON: 'python',
 			JAVA: 'java',
+			SCALA: 'scala',
 			RUST: 'rust',
 			GO: 'go',
 			CSHARP: 'csharp',
@@ -854,6 +863,8 @@
 			cpp: 'CPP',
 			cxx: 'CPP',
 			java: 'JAVA',
+			scala: 'SCALA',
+			sc: 'SCALA',
 			rust: 'RUST',
 			go: 'GO',
 			csharp: 'CSHARP',
@@ -1255,6 +1266,7 @@
 		}
 		if (
 			language !== 'JAVA' &&
+			language !== 'SCALA' &&
 			language !== 'RUST' &&
 			language !== 'GO' &&
 			language !== 'CSHARP' &&
@@ -1456,6 +1468,7 @@
 						<option value="CPP">C++</option>
 						<option value="PYTHON">Python</option>
 						<option value="JAVA">Java</option>
+						<option value="SCALA">Scala</option>
 						<option value="RUST">Rust</option>
 						<option value="GO">Go</option>
 						<option value="CSHARP">C#</option>
@@ -1465,7 +1478,7 @@
 						<option value="TINYGO">TinyGo</option>
 					</select>
 				</label>
-				{#if language === 'JAVA' || language === 'RUST' || language === 'GO' || language === 'CSHARP' || language === 'FSHARP' || language === 'TINYGO'}
+				{#if language === 'JAVA' || language === 'SCALA' || language === 'RUST' || language === 'GO' || language === 'CSHARP' || language === 'FSHARP' || language === 'TINYGO'}
 					<label class="args-chip">
 						<span class="material-symbols-outlined">list_alt</span>
 						<input bind:value={argsInput} placeholder="3 4 5" spellcheck={false} />
@@ -1548,6 +1561,14 @@
 		</section>
 		{#if language === 'JAVA'}
 			<p class="hint">Run after that type into the terminal below and press Enter.</p>
+		{/if}
+		{#if language === 'SCALA'}
+			<p class="hint">
+				Scala uses the bundled Scala 2.13 compiler JARs inside CheerpJ's WASM-based browser
+				JVM. `scalac` compiles the source to class files in the browser, then the same
+				browser JVM runs the detected `main` method. Pass CLI args here; terminal input is
+				passed to `scala.io.StdIn` and `System.in`.
+			</p>
 		{/if}
 		{#if language === 'RUST'}
 			<p class="hint">

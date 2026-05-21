@@ -5,6 +5,7 @@ export type EditorDefaultLanguage =
 	| 'cpp'
 	| 'python'
 	| 'java'
+	| 'scala'
 	| 'go'
 	| 'csharp'
 	| 'fsharp'
@@ -13,7 +14,7 @@ export type EditorDefaultLanguage =
 	| 'rust';
 
 export const editorDefaults: Record<
-	'c' | 'cpp' | 'python' | 'java' | 'go' | 'csharp' | 'fsharp' | 'elixir' | 'ocaml',
+	'c' | 'cpp' | 'python' | 'java' | 'scala' | 'go' | 'csharp' | 'fsharp' | 'elixir' | 'ocaml',
 	string
 > = {
 	c: `#include <stdio.h>
@@ -56,6 +57,25 @@ public class Main {
         Scanner scanner = new Scanner(System.in);
         int n = scanner.hasNextInt() ? scanner.nextInt() : 4;
         System.out.println("factorial_plus_bonus=" + (factorial(n) + bonus));
+    }
+}`,
+	scala: `object Main {
+    val bonus = 3
+
+    def factorial(n: Int): Int =
+        if (n <= 1) 1 else n * factorial(n - 1)
+
+    def main(args: Array[String]): Unit = {
+        val input = scala.io.StdIn.readLine()
+        val n =
+            try {
+                if (input == null || input.trim.isEmpty) 4 else input.trim.toInt
+            } catch {
+                case _: NumberFormatException =>
+                    args.headOption.flatMap(value => scala.util.Try(value.toInt).toOption).getOrElse(4)
+            }
+
+        println(s"factorial_plus_bonus=\${factorial(n) + bonus}")
     }
 }`,
 	go: String.raw`package main
@@ -281,6 +301,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.cpp ||
 		source === editorDefaults.python ||
 		source === editorDefaults.java ||
+		source === editorDefaults.scala ||
 		source === editorDefaults.go ||
 		source === editorDefaults.csharp ||
 		source === editorDefaults.fsharp ||

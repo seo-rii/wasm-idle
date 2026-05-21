@@ -263,16 +263,17 @@ describe('example route debug actions', () => {
 		);
 		expect(source).toMatch(/tinygoTarget: language === 'TINYGO' \? tinygoTarget : undefined/);
 		expect(source).toMatch(/<option value="GO">Go<\/option>/);
+		expect(source).toMatch(/<option value="SCALA">Scala<\/option>/);
 		expect(source).toMatch(/<option value="CSHARP">C#<\/option>/);
 		expect(source).toMatch(/<option value="FSHARP">F#<\/option>/);
 		expect(source).toMatch(/<option value="ELIXIR">Elixir<\/option>/);
 		expect(source).toMatch(/<option value="OCAML">OCaml<\/option>/);
 		expect(source).toMatch(/<option value="TINYGO">TinyGo<\/option>/);
 		expect(source).toMatch(
-			/\{#if language === 'JAVA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'TINYGO'\}/
+			/\{#if language === 'JAVA' \|\| language === 'SCALA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'TINYGO'\}/
 		);
 		expect(source).toMatch(
-			/language === 'JAVA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'TINYGO'/
+			/language === 'JAVA' \|\| language === 'SCALA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'TINYGO'/
 		);
 		expect(source).toMatch(/Go uses the bundled `wasm-go` browser compiler runtime/);
 		expect(source).toMatch(
@@ -388,6 +389,23 @@ describe('example route debug actions', () => {
 			/Binaryen full runs the original static `wasm-metadce`\s+and `wasm-opt` passes/s
 		);
 		expect(source).toMatch(/Type into the\s+terminal below and press Enter to send a line/s);
+	});
+
+	it('surfaces Scala through CheerpJ and the shared JVM language workflow', () => {
+		expect(source).toMatch(/<option value="SCALA">Scala<\/option>/);
+		expect(source).toMatch(/SCALA: 'Scala'/);
+		expect(source).toMatch(/scala: 'SCALA'/);
+		expect(source).toMatch(/sc: 'SCALA'/);
+		expect(source).toMatch(/'\.scala': 'SCALA'/);
+		expect(source).toMatch(/'\.sc': 'SCALA'/);
+		expect(source).toMatch(/SCALA: 'Main\.scala'/);
+		expect(source).toMatch(/SCALA: 'scala'/);
+		expect(source).toMatch(/language === 'SCALA'\s+\? 'scala'/);
+		expect(source).toMatch(/language !== 'SCALA'/);
+		expect(source).toMatch(/Scala uses the bundled Scala 2\.13 compiler JARs/);
+		expect(source).toMatch(/CheerpJ's WASM-based browser\s+JVM/s);
+		expect(source).toMatch(/`scalac` compiles the source to class files in the browser/);
+		expect(source).toMatch(/passed to `scala\.io\.StdIn` and `System\.in`/);
 	});
 
 	it('keeps the example workspace full-height, resizable, and hides debug panels until debug starts', () => {

@@ -40,7 +40,8 @@ export type {
 	RuntimeAssetConfig,
 	RuntimeAssetLoadRequest,
 	RuntimeAssetLoader,
-	RuntimeAssetLoaderResult
+	RuntimeAssetLoaderResult,
+	ScalaRuntimeAssetConfig
 } from '$lib/playground/assets';
 export type {
 	BoundSandbox,

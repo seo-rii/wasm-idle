@@ -2,11 +2,25 @@
 
 ![wasm-idle](static/image.jpeg)
 
-Executes C++, Python, Java, Rust, Go, TinyGo, OCaml, Elixir, C#, and F# code.
+Executes C++, Python, Java, Scala, Rust, Go, TinyGo, OCaml, Elixir, C#, and F# code.
 
 Refer to src/lib/clang.
 
 Java uses TeaVM's browser compiler/runtime. TeaVM compiler/runtime/classlib assets are bundled under `static/teavm/` by default, and the asset base URL can be overridden with `PUBLIC_TEAVM_BASE_URL`.
+
+Scala uses bundled Scala 2.13 compiler JARs under `static/wasm-scala/` and runs `scalac` inside
+CheerpJ's WebAssembly-based browser JVM. Refresh the Scala compiler assets and rebuild the small
+Java bridge JAR with:
+
+```bash
+cd wasm-idle
+pnpm run sync:wasm-scala
+```
+
+The default CheerpJ loader is `https://cjrtnc.leaningtech.com/4.3/loader.js`. Override it with
+`PUBLIC_CHEERPJ_LOADER_URL` or `runtimeAssets.scala.cheerpjLoaderUrl`. If the Scala JARs are not
+served from the app root, set `PUBLIC_WASM_SCALA_VIRTUAL_BASE_PATH` or
+`runtimeAssets.scala.virtualBasePath` to the CheerpJ `/app/.../wasm-scala/` virtual path.
 
 Pyodide core assets are vendored under `static/pyodide/`. Refresh them after bumping the `pyodide`
 package with:
@@ -176,13 +190,17 @@ const runtimeAssets: PlaygroundRuntimeAssets = {
 	dotnet: {
 		moduleUrl: 'https://cdn.example.com/wasm-dotnet/index.js'
 	},
+	scala: {
+		cheerpjLoaderUrl: 'https://cjrtnc.leaningtech.com/4.3/loader.js',
+		virtualBasePath: '/app/repl/wasm-scala/'
+	},
 	tinygo: {
 		moduleUrl: 'https://cdn.example.com/wasm-tinygo/runtime.js'
 	}
 };
 ```
 
-Python custom loaders receive file names under the Pyodide asset root and can serve both core assets and package files. TeaVM custom loaders receive file names under the TeaVM asset root. Clang custom loaders receive `bin/memfs.zip`, `bin/clang.zip`, `bin/lld.zip`, and `bin/sysroot.tar.zip`; clangd custom loaders receive `clangd.js` and `clangd.wasm.gz`, with the worker decompressing the gzip payload before instantiation. Rust expects a browser-loadable compiler module URL; that module is responsible for serving its own nested runtime assets. C# and F# expect a browser-loadable `wasm-dotnet` module with its static .NET `browser-wasm` runtime assets. TinyGo expects a browser-loadable runtime module. The browser runtime now ships a direct-mode execution path that can produce and run the bundled TinyGo WASI artifact locally, alongside its sibling `tools/go-probe.wasm` and vendored emception assets. TinyGo also accepts a runtime asset loader + pack bundle in `runtimeAssets.tinygo` when you need to serve runtime assets out of a single compressed archive. Compressed TeaVM runtime assets are no longer unpacked inside the library; provide the final file URL or handle decompression in your own loader.
+Python custom loaders receive file names under the Pyodide asset root and can serve both core assets and package files. TeaVM custom loaders receive file names under the TeaVM asset root. Clang custom loaders receive `bin/memfs.zip`, `bin/clang.zip`, `bin/lld.zip`, and `bin/sysroot.tar.zip`; clangd custom loaders receive `clangd.js` and `clangd.wasm.gz`, with the worker decompressing the gzip payload before instantiation. Rust expects a browser-loadable compiler module URL; that module is responsible for serving its own nested runtime assets. Scala expects a CheerpJ loader URL plus a CheerpJ virtual classpath base for the bundled Scala compiler JARs. C# and F# expect a browser-loadable `wasm-dotnet` module with its static .NET `browser-wasm` runtime assets. TinyGo expects a browser-loadable runtime module. The browser runtime now ships a direct-mode execution path that can produce and run the bundled TinyGo WASI artifact locally, alongside its sibling `tools/go-probe.wasm` and vendored emception assets. TinyGo also accepts a runtime asset loader + pack bundle in `runtimeAssets.tinygo` when you need to serve runtime assets out of a single compressed archive. Compressed TeaVM runtime assets are no longer unpacked inside the library; provide the final file URL or handle decompression in your own loader.
 
 If you want a host app to reuse the same runtime asset configuration for both `<Terminal>` and direct `playground(...)` access, bind it once:
 
@@ -218,5 +236,5 @@ await sandbox.load('print("hi")', false);
 <Terminal {...wasmIdle.terminalProps} bind:terminal />
 ```
 
-Powered by [wasm-clang](https://github.com/binji/wasm-clang), Pyodide, TeaVM, `wasm-rust`,
-`wasm-tinygo`, and `wasm-dotnet`.
+Powered by [wasm-clang](https://github.com/binji/wasm-clang), Pyodide, TeaVM, CheerpJ,
+`wasm-rust`, `wasm-tinygo`, and `wasm-dotnet`.

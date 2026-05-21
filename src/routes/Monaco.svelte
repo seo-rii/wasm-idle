@@ -417,6 +417,7 @@
 		if (!activeModel) return;
 		const markers =
 			language === 'java' ||
+			language === 'scala' ||
 			language === 'rust' ||
 			language === 'go' ||
 			language === 'csharp' ||
@@ -455,6 +456,7 @@
 				| 'cpp'
 				| 'python'
 				| 'java'
+				| 'scala'
 				| 'go'
 				| 'csharp'
 				| 'fsharp'

@@ -120,7 +120,9 @@
 						ocamlModuleUrl: currentRuntimeAssets?.ocaml?.moduleUrl || '',
 						ocamlManifestUrl: currentRuntimeAssets?.ocaml?.manifestUrl || '',
 						tinygoAppUrl: currentRuntimeAssets?.tinygo?.appUrl || '',
-						tinygoModuleUrl: currentRuntimeAssets?.tinygo?.moduleUrl || ''
+						tinygoModuleUrl: currentRuntimeAssets?.tinygo?.moduleUrl || '',
+						scalaCheerpjLoaderUrl: currentRuntimeAssets?.scala?.cheerpjLoaderUrl || '',
+						scalaVirtualBasePath: currentRuntimeAssets?.scala?.virtualBasePath || ''
 					});
 		const requiresSandboxReset =
 			ll !== language || loadedRuntimeAssetsKey !== currentRuntimeAssetsKey;
@@ -237,6 +239,7 @@
 				language === 'GO' ||
 				language === 'CSHARP' ||
 				language === 'FSHARP' ||
+				language === 'SCALA' ||
 				language === 'TINYGO' ||
 				language === 'OCAML'
 					? phaseProgress(prog, 0, 0.05)
@@ -246,6 +249,7 @@
 				language === 'GO' ||
 				language === 'CSHARP' ||
 				language === 'FSHARP' ||
+				language === 'SCALA' ||
 				language === 'TINYGO' ||
 				language === 'OCAML'
 					? phaseProgress(prog, 0.05, 0.99)

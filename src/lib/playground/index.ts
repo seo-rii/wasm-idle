@@ -6,6 +6,7 @@ import Java from '$lib/playground/java';
 import Ocaml from '$lib/playground/ocaml';
 import Python from '$lib/playground/python';
 import Rust from '$lib/playground/rust';
+import Scala from '$lib/playground/scala';
 import TinyGo from '$lib/playground/tinygo';
 import type {
 	BoundSandbox,
@@ -28,6 +29,7 @@ export const supportedLanguages = [
 	'GO',
 	'CSHARP',
 	'FSHARP',
+	'SCALA',
 	'ELIXIR',
 	'TINYGO',
 	'OCAML'
@@ -111,6 +113,9 @@ async function playground(language: string, runtimeAssets?: SandboxRuntimeAssets
 		case 'F#':
 			sandbox = new Dotnet('FSHARP');
 			break;
+		case 'SCALA':
+			sandbox = new Scala();
+			break;
 		case 'ELIXIR':
 			sandbox = new Elixir();
 			break;
@@ -139,6 +144,7 @@ async function playground(language: string, runtimeAssets?: SandboxRuntimeAssets
 		if (language === 'FSHARP' || language === 'F#') {
 			sandboxCache['FSHARP'] = sandboxCache['F#'] = sandbox;
 		}
+		if (language === 'SCALA') sandboxCache['SCALA'] = sandbox;
 		if (language === 'ELIXIR') sandboxCache['ELIXIR'] = sandbox;
 		if (language === 'TINYGO') sandboxCache['TINYGO'] = sandbox;
 		if (language === 'OCAML') sandboxCache['OCAML'] = sandbox;

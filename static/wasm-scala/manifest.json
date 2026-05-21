@@ -1,0 +1,18 @@
+{
+	"scalaVersion": "2.13.18",
+	"bridgeMainClass": "org.wasmidle.scala.Bridge",
+	"files": {
+		"scala-library-2.13.18.jar": {
+			"sha256": "4e85d96ff7bc7dc627985523c3541b9917aaa08e956391380c42db21a2c4e5a0"
+		},
+		"scala-reflect-2.13.18.jar": {
+			"sha256": "6935ff1982b2ac93d695f15aa66921be2f602921277afe002f018fd8c7d6e29b"
+		},
+		"scala-compiler-2.13.18.jar": {
+			"sha256": "2f15891fcae7aad30a3892194fb2abb6224cf7ce5d2bd90fba7f1c48682fca21"
+		},
+		"wasm-idle-scala-bridge.jar": {
+			"sha256": "99705d8d9087fd8e02e52be81c18379162fff64d5d74e4209064714fa845307e"
+		}
+	}
+}
