@@ -18,6 +18,8 @@ export type WasmIdleLanguageId =
 	| 'JS'
 	| 'TYPESCRIPT'
 	| 'TS'
+	| 'HASKELL'
+	| 'HS'
 	| 'ZIG';
 
 export const supportedLanguageIds = [
@@ -35,6 +37,7 @@ export const supportedLanguageIds = [
 	'OCAML',
 	'JAVASCRIPT',
 	'TYPESCRIPT',
+	'HASKELL',
 	'ZIG'
 ] as const;
 
@@ -47,12 +50,14 @@ export const DEFAULT_DEFERRED_PROGRESS_LANGUAGES = new Set<string>([
 	'OCAML',
 	'JAVASCRIPT',
 	'TYPESCRIPT',
+	'HASKELL',
 	'ZIG'
 ]);
 
 const LANGUAGE_ALIASES: Record<string, string> = {
 	'C#': 'CSHARP',
 	'F#': 'FSHARP',
+	HS: 'HASKELL',
 	JS: 'JAVASCRIPT',
 	PYTHON: 'PYTHON3',
 	TS: 'TYPESCRIPT'

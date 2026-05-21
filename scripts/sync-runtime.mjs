@@ -34,6 +34,13 @@ const RUNTIMES = [
 		targetArg: 'targetDir'
 	},
 	{
+		name: 'wasm-haskell',
+		module: './sync-wasm-haskell.mjs',
+		exportName: 'syncWasmHaskellDist',
+		sourceArg: 'sourceDir',
+		targetArg: 'targetDir'
+	},
+	{
 		name: 'wasm-dotnet',
 		module: './sync-wasm-dotnet.mjs',
 		exportName: 'syncWasmDotnetDist',

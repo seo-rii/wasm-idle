@@ -70,6 +70,14 @@ export interface TypeScriptRuntimeAssetConfig {
 	moduleUrl?: string;
 }
 
+export interface HaskellRuntimeAssetConfig {
+	moduleUrl?: string;
+	rootfsUrl?: string;
+	bsdtarUrl?: string;
+	mainSoPath?: string;
+	searchDirs?: string[];
+}
+
 export interface ZigRuntimeAssetConfig {
 	compilerUrl?: string;
 	stdlibUrl?: string;
@@ -88,6 +96,7 @@ export interface PlaygroundRuntimeAssets {
 	tinygo?: TinyGoRuntimeAssetConfig;
 	elixir?: ElixirRuntimeAssetConfig;
 	typescript?: TypeScriptRuntimeAssetConfig;
+	haskell?: HaskellRuntimeAssetConfig;
 	zig?: ZigRuntimeAssetConfig;
 }
 
@@ -637,6 +646,93 @@ export function resolveZigCompilerUrl(
 	if (options?.rootUrl) {
 		return resolveConfiguredUrl(
 			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-zig/zig_small.wasm`,
+			currentUrl
+		);
+	}
+
+	return '';
+}
+
+export function resolveHaskellModuleUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredModuleUrl =
+		(typeof options === 'object' && options?.haskell?.moduleUrl) ||
+		(publicEnv.PUBLIC_WASM_HASKELL_MODULE_URL || '').trim();
+
+	if (configuredModuleUrl) {
+		return resolveConfiguredUrl(configuredModuleUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-haskell/dyld.mjs`,
+			currentUrl
+		);
+	}
+
+	if (options?.rootUrl) {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-haskell/dyld.mjs`,
+			currentUrl
+		);
+	}
+
+	return '';
+}
+
+export function resolveHaskellRootfsUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredRootfsUrl =
+		(typeof options === 'object' && options?.haskell?.rootfsUrl) ||
+		(publicEnv.PUBLIC_WASM_HASKELL_ROOTFS_URL || '').trim();
+
+	if (configuredRootfsUrl) {
+		return resolveConfiguredUrl(configuredRootfsUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-haskell/rootfs.tar.zst`,
+			currentUrl
+		);
+	}
+
+	if (options?.rootUrl) {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-haskell/rootfs.tar.zst`,
+			currentUrl
+		);
+	}
+
+	return '';
+}
+
+export function resolveHaskellBsdtarUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredBsdtarUrl =
+		(typeof options === 'object' && options?.haskell?.bsdtarUrl) ||
+		(publicEnv.PUBLIC_WASM_HASKELL_BSDTAR_URL || '').trim();
+
+	if (configuredBsdtarUrl) {
+		return resolveConfiguredUrl(configuredBsdtarUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-haskell/bsdtar.wasm`,
+			currentUrl
+		);
+	}
+
+	if (options?.rootUrl) {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-haskell/bsdtar.wasm`,
 			currentUrl
 		);
 	}

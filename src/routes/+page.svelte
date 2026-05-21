@@ -15,6 +15,7 @@
 	import { WASM_DOTNET_ASSET_VERSION } from '$lib/playground/wasmDotnetVersion';
 	import { WASM_ELIXIR_ASSET_VERSION } from '$lib/playground/wasmElixirVersion';
 	import { WASM_GO_ASSET_VERSION } from '$lib/playground/wasmGoVersion';
+	import { WASM_HASKELL_ASSET_VERSION } from '$lib/playground/wasmHaskellVersion';
 	import { WASM_OCAML_ASSET_VERSION } from '$lib/playground/wasmOcamlVersion';
 	import { WASM_RUST_ASSET_VERSION } from '$lib/playground/wasmRustVersion';
 	import { WASM_TINYGO_ASSET_VERSION } from '$lib/playground/wasmTinyGoVersion';
@@ -56,6 +57,7 @@
 		| 'TINYGO'
 		| 'JAVASCRIPT'
 		| 'TYPESCRIPT'
+		| 'HASKELL'
 		| 'ZIG';
 
 	type LanguageWorkspace = {
@@ -97,6 +99,7 @@
 		'TINYGO',
 		'JAVASCRIPT',
 		'TYPESCRIPT',
+		'HASKELL',
 		'ZIG'
 	];
 	const languageLabels: Record<PlaygroundLanguage, string> = {
@@ -113,6 +116,7 @@
 		TINYGO: 'TinyGo',
 		JAVASCRIPT: 'JavaScript',
 		TYPESCRIPT: 'TypeScript',
+		HASKELL: 'Haskell',
 		ZIG: 'Zig'
 	};
 
@@ -159,6 +163,17 @@
 			moduleUrl: path
 				? `${path}/wasm-typescript/index.js?v=${WASM_TYPESCRIPT_ASSET_VERSION}`
 				: `/wasm-typescript/index.js?v=${WASM_TYPESCRIPT_ASSET_VERSION}`
+		},
+		haskell: {
+			moduleUrl: path
+				? `${path}/wasm-haskell/dyld.mjs?v=${WASM_HASKELL_ASSET_VERSION}`
+				: `/wasm-haskell/dyld.mjs?v=${WASM_HASKELL_ASSET_VERSION}`,
+			rootfsUrl: path
+				? `${path}/wasm-haskell/rootfs.tar.zst?v=${WASM_HASKELL_ASSET_VERSION}`
+				: `/wasm-haskell/rootfs.tar.zst?v=${WASM_HASKELL_ASSET_VERSION}`,
+			bsdtarUrl: path
+				? `${path}/wasm-haskell/bsdtar.wasm?v=${WASM_HASKELL_ASSET_VERSION}`
+				: `/wasm-haskell/bsdtar.wasm?v=${WASM_HASKELL_ASSET_VERSION}`
 		},
 		zig: {
 			compilerUrl: path
@@ -229,9 +244,11 @@
 												? 'javascript'
 												: language === 'TYPESCRIPT'
 													? 'typescript'
-													: language === 'ZIG'
-													? 'zig'
-													: 'go'
+													: language === 'HASKELL'
+														? 'haskell'
+														: language === 'ZIG'
+															? 'zig'
+															: 'go'
 	);
 	const compact = $derived(examplePaneWidth > 0 && examplePaneWidth <= 760);
 	const activeFile = $derived(files.find((file) => file.path === activePath) ?? files[0]);
@@ -402,6 +419,8 @@
 			'.ts': 'TYPESCRIPT',
 			'.mts': 'TYPESCRIPT',
 			'.cts': 'TYPESCRIPT',
+			'.hs': 'HASKELL',
+			'.lhs': 'HASKELL',
 			'.zig': 'ZIG'
 		};
 		return match[ext] || null;
@@ -422,6 +441,7 @@
 			TINYGO: 'main.go',
 			JAVASCRIPT: 'main.js',
 			TYPESCRIPT: 'main.ts',
+			HASKELL: 'main.hs',
 			ZIG: 'main.zig'
 		};
 		return match[nextLanguage];
@@ -442,6 +462,7 @@
 			TINYGO: 'go',
 			JAVASCRIPT: 'javascript',
 			TYPESCRIPT: 'typescript',
+			HASKELL: 'haskell',
 			ZIG: 'zig'
 		} as const satisfies Record<
 			PlaygroundLanguage,
@@ -912,6 +933,8 @@
 			js: 'JAVASCRIPT',
 			typescript: 'TYPESCRIPT',
 			ts: 'TYPESCRIPT',
+			haskell: 'HASKELL',
+			hs: 'HASKELL',
 			zig: 'ZIG'
 		};
 		return aliases[normalized] ?? null;
@@ -1312,6 +1335,7 @@
 			language !== 'OCAML' &&
 			language !== 'JAVASCRIPT' &&
 			language !== 'TYPESCRIPT' &&
+			language !== 'HASKELL' &&
 			language !== 'ZIG'
 		)
 			compilerDiagnostics = [];
@@ -1517,14 +1541,15 @@
 						<option value="TINYGO">TinyGo</option>
 						<option value="JAVASCRIPT">JavaScript</option>
 						<option value="TYPESCRIPT">TypeScript</option>
+						<option value="HASKELL">Haskell</option>
 						<option value="ZIG">Zig</option>
 					</select>
 				</label>
-				{#if language === 'JAVA' || language === 'RUST' || language === 'GO' || language === 'CSHARP' || language === 'FSHARP' || language === 'TINYGO' || language === 'JAVASCRIPT' || language === 'TYPESCRIPT' || language === 'ZIG'}
+				{#if language === 'JAVA' || language === 'RUST' || language === 'GO' || language === 'CSHARP' || language === 'FSHARP' || language === 'TINYGO' || language === 'JAVASCRIPT' || language === 'TYPESCRIPT' || language === 'HASKELL' || language === 'ZIG'}
 					<label class="args-chip">
 						<span class="material-symbols-outlined">list_alt</span>
 						<input bind:value={argsInput} placeholder="3 4 5" spellcheck={false} />
-						<span>Args</span>
+						<span>{language === 'HASKELL' ? 'GHC Args' : 'Args'}</span>
 					</label>
 				{/if}
 				{#if language === 'RUST'}
@@ -1680,6 +1705,13 @@
 				for Enter-submitted line input. `fs.readFileSync('/dev/stdin', 'utf8')` and `fs.readFileSync(0,
 				'utf8')` are also available for full-input reads; send Ctrl+D or the EOF button after
 				typing input.
+			</p>
+		{/if}
+		{#if language === 'HASKELL'}
+			<p class="hint">
+				Haskell loads a wasm GHC/GHCi root filesystem, compiles in the browser through the
+				`ghc-in-browser` entry point, and runs the emitted WASI artifact locally. Pass GHC
+				args here; terminal stdin is available to the compiled program.
 			</p>
 		{/if}
 		{#if language === 'ZIG'}

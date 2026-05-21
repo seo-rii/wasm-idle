@@ -65,6 +65,10 @@ vi.mock('$lib/playground/go', () => ({
 	default: createMockSandboxClass('GO')
 }));
 
+vi.mock('$lib/playground/haskell', () => ({
+	default: createMockSandboxClass('HASKELL')
+}));
+
 vi.mock('$lib/playground/dotnet', () => ({
 	default: class extends MockSandbox {
 		constructor(language: string = 'FSHARP') {
@@ -431,6 +435,36 @@ describe('playground runtime binding', () => {
 			[runtimeAssets, 'const n: number = 1;', true, ['demo'], {}, progress]
 		]);
 	});
+
+	it('routes Haskell requests through the bundled wasm-haskell sandbox implementation', async () => {
+		const binding = createPlaygroundBinding({
+			rootUrl: '/absproxy/5173',
+			haskell: {
+				moduleUrl: '/absproxy/5173/wasm-haskell/dyld.mjs?v=test',
+				rootfsUrl: '/absproxy/5173/wasm-haskell/rootfs.tar.zst?v=test',
+				bsdtarUrl: '/absproxy/5173/wasm-haskell/bsdtar.wasm?v=test'
+			}
+		});
+		const progress = { set() {} };
+		const sandbox = await binding.load('HASKELL');
+
+		await sandbox.load('main = print 1', true, ['demo'], {}, progress);
+
+		const runtimeAssets = {
+			rootUrl: '/absproxy/5173',
+			haskell: {
+				moduleUrl: '/absproxy/5173/wasm-haskell/dyld.mjs?v=test',
+				rootfsUrl: '/absproxy/5173/wasm-haskell/rootfs.tar.zst?v=test',
+				bsdtarUrl: '/absproxy/5173/wasm-haskell/bsdtar.wasm?v=test'
+			}
+		};
+		expect(sandbox.runtimeAssets).toEqual(runtimeAssets);
+		expect(sandboxInstances.get('HASKELL')).toHaveLength(1);
+		expect(sandboxInstances.get('HASKELL')?.[0]?.loadCalls).toEqual([
+			[runtimeAssets, 'main = print 1', true, ['demo'], {}, progress]
+		]);
+	});
+
 	it('routes Zig requests through the bundled wasm-zig sandbox implementation', async () => {
 		const binding = createPlaygroundBinding({
 			rootUrl: '/absproxy/5173',
@@ -457,5 +491,4 @@ describe('playground runtime binding', () => {
 			[runtimeAssets, 'pub fn main() void {}', true, ['demo'], {}, progress]
 		]);
 	});
-
 });

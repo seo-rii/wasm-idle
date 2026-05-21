@@ -7,6 +7,34 @@ import {
 } from '@wasm-idle/core';
 
 describe('core language contract', () => {
+	it('exposes Haskell as a deferred browser runtime language', () => {
+		expect(supportedLanguageIds).toContain('HASKELL');
+		expect(normalizeLanguageId('haskell')).toBe('HASKELL');
+		expect(normalizeLanguageId('hs')).toBe('HASKELL');
+		expect(isDeferredProgressLanguage('haskell')).toBe(true);
+	});
+
+	it('includes Haskell module, rootfs, bsdtar, and search path urls in runtime asset cache keys', () => {
+		const key = createRuntimeAssetsKey({
+			rootUrl: '/repl',
+			haskell: {
+				moduleUrl: '/wasm-haskell/dyld.mjs?v=test',
+				rootfsUrl: '/wasm-haskell/rootfs.tar.zst?v=test',
+				bsdtarUrl: '/wasm-haskell/bsdtar.wasm?v=test',
+				mainSoPath: '/ghc_wasm_jsffi.so',
+				searchDirs: ['/lib/wasm32-wasi-ghc-9.13.20250303', '/lib/wasm-ghc']
+			}
+		});
+
+		expect(key).toContain('"haskellModuleUrl":"/wasm-haskell/dyld.mjs?v=test"');
+		expect(key).toContain('"haskellRootfsUrl":"/wasm-haskell/rootfs.tar.zst?v=test"');
+		expect(key).toContain('"haskellBsdtarUrl":"/wasm-haskell/bsdtar.wasm?v=test"');
+		expect(key).toContain('"haskellMainSoPath":"/ghc_wasm_jsffi.so"');
+		expect(JSON.parse(key || '{}').haskellSearchDirs).toBe(
+			['/lib/wasm32-wasi-ghc-9.13.20250303', '/lib/wasm-ghc'].join('\0')
+		);
+	});
+
 	it('exposes Zig as a deferred browser runtime language', () => {
 		expect(supportedLanguageIds).toContain('ZIG');
 		expect(normalizeLanguageId('zig')).toBe('ZIG');

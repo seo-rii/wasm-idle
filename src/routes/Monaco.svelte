@@ -285,6 +285,99 @@
 		}
 	} satisfies monaco.languages.IMonarchLanguage;
 
+	const haskellKeywords = [
+		'as',
+		'case',
+		'class',
+		'data',
+		'default',
+		'deriving',
+		'do',
+		'else',
+		'family',
+		'forall',
+		'foreign',
+		'hiding',
+		'if',
+		'import',
+		'in',
+		'infix',
+		'infixl',
+		'infixr',
+		'instance',
+		'let',
+		'module',
+		'newtype',
+		'of',
+		'qualified',
+		'then',
+		'type',
+		'where'
+	];
+
+	const haskellLanguageConfiguration = {
+		comments: {
+			lineComment: '--',
+			blockComment: ['{-', '-}']
+		},
+		brackets: [
+			['{', '}'],
+			['[', ']'],
+			['(', ')']
+		],
+		autoClosingPairs: [
+			{ open: '{', close: '}' },
+			{ open: '[', close: ']' },
+			{ open: '(', close: ')' },
+			{ open: '"', close: '"' },
+			{ open: "'", close: "'" }
+		],
+		surroundingPairs: [
+			{ open: '{', close: '}' },
+			{ open: '[', close: ']' },
+			{ open: '(', close: ')' },
+			{ open: '"', close: '"' },
+			{ open: "'", close: "'" }
+		]
+	} satisfies monaco.languages.LanguageConfiguration;
+
+	const haskellMonarchTokens = {
+		defaultToken: '',
+		tokenPostfix: '.haskell',
+		keywords: haskellKeywords,
+		symbols: /[=><!~?:&|+\-*/^%@.$]+/,
+		escapes: /\\(?:[abfnrtv"'\\&]|x[0-9A-Fa-f]+|o[0-7]+|[0-9]+)/,
+		tokenizer: {
+			root: [
+				[/[A-Z][\w']*/, 'type.identifier'],
+				[/[a-z_][\w']*/, { cases: { '@keywords': 'keyword', '@default': 'identifier' } }],
+				[/--.*$/, 'comment'],
+				[/{-/, 'comment', '@comment'],
+				[/"/, 'string', '@string'],
+				[/'([^'\\]|\\.)'/, 'string'],
+				[/0[xX][0-9a-fA-F_]+/, 'number.hex'],
+				[/0[oO][0-7_]+/, 'number.octal'],
+				[/0[bB][01_]+/, 'number.binary'],
+				[/[0-9][\d_]*(\.[\d_]+)?([eE][\-+]?[\d_]+)?/, 'number'],
+				[/[{}()[\]]/, '@brackets'],
+				[/[;,.]/, 'delimiter'],
+				[/@symbols/, 'operator']
+			],
+			comment: [
+				[/[^-{]+/, 'comment'],
+				[/{-/, 'comment', '@push'],
+				[/-}/, 'comment', '@pop'],
+				[/[-{]/, 'comment']
+			],
+			string: [
+				[/[^\\"]+/, 'string'],
+				[/@escapes/, 'string.escape'],
+				[/\\./, 'string.escape.invalid'],
+				[/"/, 'string', '@pop']
+			]
+		}
+	} satisfies monaco.languages.IMonarchLanguage;
+
 	export const editorValue = () => editor?.getValue() || '';
 
 	let divEl: HTMLDivElement | null = $state(null);
@@ -424,6 +517,7 @@
 			language === 'ocaml' ||
 			language === 'javascript' ||
 			language === 'typescript' ||
+			language === 'haskell' ||
 			language === 'zig'
 				? compilerDiagnostics.map((diagnostic) => ({
 						severity:
@@ -465,6 +559,7 @@
 				| 'ocaml'
 				| 'javascript'
 				| 'typescript'
+				| 'haskell'
 				| 'zig'
 				| 'rust',
 			rustTargetTriple
@@ -505,6 +600,15 @@
 			}
 			Monaco.languages.setLanguageConfiguration('fsharp', fsharpLanguageConfiguration);
 			Monaco.languages.setMonarchTokensProvider('fsharp', fsharpMonarchTokens);
+			if (!Monaco.languages.getLanguages().some(({ id }) => id === 'haskell')) {
+				Monaco.languages.register({
+					id: 'haskell',
+					aliases: ['Haskell', 'haskell'],
+					extensions: ['.hs', '.lhs']
+				});
+			}
+			Monaco.languages.setLanguageConfiguration('haskell', haskellLanguageConfiguration);
+			Monaco.languages.setMonarchTokensProvider('haskell', haskellMonarchTokens);
 			if (!Monaco.languages.getLanguages().some(({ id }) => id === 'zig')) {
 				Monaco.languages.register({
 					id: 'zig',
@@ -525,6 +629,7 @@
 					| 'ocaml'
 					| 'javascript'
 					| 'typescript'
+					| 'haskell'
 					| 'zig'
 					| 'rust',
 				rustTargetTriple

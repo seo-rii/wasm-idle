@@ -2,7 +2,7 @@
 
 ![wasm-idle](static/image.jpeg)
 
-Executes C++, Python, Java, Rust, Go, TinyGo, OCaml, Elixir, C#, F#, and Zig code.
+Executes C++, Python, Java, Rust, Go, TinyGo, OCaml, Elixir, C#, F#, Haskell, and Zig code.
 
 Refer to src/lib/clang.
 
@@ -19,8 +19,8 @@ left in place, but the default development path is inside this repo:
 - `packages/node`: Node.js host helpers for Node-capable sandbox loaders.
 - `runtimes/*`: imported runtime/compiler packages such as `wasm-rust`,
   `wasm-of-js-of-ocaml`, `wasm-go`, `wasm-tinygo`, `wasm-dotnet`, `wasm-typescript`,
-  `wasm-zig`, `wasm-elixir`, `pyodide`, `teavm`, `assemblyscript`, `ruby`, `r`, `php`, and
-  `js-sandbox`.
+  `wasm-zig`, `wasm-haskell`, `wasm-elixir`, `pyodide`, `teavm`, `assemblyscript`, `ruby`, `r`,
+  `php`, and `js-sandbox`.
 - `tools/*`: migrated local toolchain projects that are too broad or infrastructure-heavy to run as
   normal runtime workspace packages. `tools/dool` contains the Docker judge backend for Elixir and
   the other server-side language runners.
@@ -195,6 +195,13 @@ standard library by default. Override them with `PUBLIC_WASM_ZIG_COMPILER_URL` a
 `PUBLIC_WASM_ZIG_STDLIB_URL`, or pass `runtimeAssets.zig.compilerUrl` and
 `runtimeAssets.zig.stdlibUrl`. The compiler runs under browser WASI, emits a `wasm64-wasi`
 artifact with the self-hosted backend, and wasm-idle executes that artifact locally in the worker.
+Haskell uses the bundled `static/wasm-haskell/dyld.mjs`, `static/wasm-haskell/rootfs.tar.zst`,
+and `static/wasm-haskell/bsdtar.wasm` assets by default. Override them with
+`PUBLIC_WASM_HASKELL_MODULE_URL`, `PUBLIC_WASM_HASKELL_ROOTFS_URL`, and
+`PUBLIC_WASM_HASKELL_BSDTAR_URL`, or pass `runtimeAssets.haskell.moduleUrl`,
+`runtimeAssets.haskell.rootfsUrl`, and `runtimeAssets.haskell.bsdtarUrl`. The worker unpacks the
+GHC root filesystem in browser storage, compiles through the `ghc-in-browser` entry point, and
+executes the emitted WASI artifact locally.
 
 The Rust browser path now executes returned artifacts through the target-appropriate runtime inside
 the Rust worker:
@@ -232,6 +239,11 @@ const runtimeAssets: PlaygroundRuntimeAssets = {
 	},
 	tinygo: {
 		moduleUrl: 'https://cdn.example.com/wasm-tinygo/runtime.js'
+	},
+	haskell: {
+		moduleUrl: 'https://cdn.example.com/wasm-haskell/dyld.mjs',
+		rootfsUrl: 'https://cdn.example.com/wasm-haskell/rootfs.tar.zst',
+		bsdtarUrl: 'https://cdn.example.com/wasm-haskell/bsdtar.wasm'
 	},
 	zig: {
 		compilerUrl: 'https://cdn.example.com/wasm-zig/zig_small.wasm',
@@ -277,4 +289,4 @@ await sandbox.load('print("hi")', false);
 ```
 
 Powered by [wasm-clang](https://github.com/binji/wasm-clang), Pyodide, TeaVM, `wasm-rust`,
-`wasm-tinygo`, `wasm-zig`, and `wasm-dotnet`.
+`wasm-tinygo`, `wasm-haskell`, `wasm-zig`, and `wasm-dotnet`.

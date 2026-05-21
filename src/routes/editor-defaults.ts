@@ -12,6 +12,7 @@ export type EditorDefaultLanguage =
 	| 'ocaml'
 	| 'javascript'
 	| 'typescript'
+	| 'haskell'
 	| 'zig'
 	| 'rust';
 
@@ -27,6 +28,7 @@ export const editorDefaults: Record<
 	| 'ocaml'
 	| 'javascript'
 	| 'typescript'
+	| 'haskell'
 	| 'zig',
 	string
 > = {
@@ -199,6 +201,16 @@ const input: string = (fs as any).readLineSync(0).trim();
 const parsed = Number.parseInt(input || '4', 10);
 const n = Number.isNaN(parsed) ? 4 : parsed;
 console.log(\`factorial_plus_bonus=\${factorial(n) + bonus}\`);`,
+	haskell: `bonus :: Int
+bonus = 3
+
+factorial :: Int -> Int
+factorial n =
+  if n <= 1 then 1 else n * factorial (n - 1)
+
+main :: IO ()
+main =
+  putStrLn ("factorial_plus_bonus=" ++ show (factorial 4 + bonus))`,
 	zig: `const std = @import("std");
 
 const bonus: i32 = 3;
@@ -342,6 +354,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.ocaml ||
 		source === editorDefaults.javascript ||
 		source === editorDefaults.typescript ||
+		source === editorDefaults.haskell ||
 		source === editorDefaults.zig ||
 		source === rustEditorDefaults['wasm32-wasip1'] ||
 		source === rustEditorDefaults['wasm32-wasip2'] ||

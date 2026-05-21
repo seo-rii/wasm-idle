@@ -11,6 +11,9 @@ const { publicEnv } = vi.hoisted(() => ({
 		PUBLIC_WASM_TINYGO_APP_URL: '',
 		PUBLIC_WASM_TINYGO_MODULE_URL: '',
 		PUBLIC_WASM_TYPESCRIPT_MODULE_URL: '',
+		PUBLIC_WASM_HASKELL_MODULE_URL: '',
+		PUBLIC_WASM_HASKELL_ROOTFS_URL: '',
+		PUBLIC_WASM_HASKELL_BSDTAR_URL: '',
 		PUBLIC_WASM_ZIG_COMPILER_URL: '',
 		PUBLIC_WASM_ZIG_STDLIB_URL: ''
 	}
@@ -360,6 +363,52 @@ describe('runtime asset config resolution', () => {
 			'https://example.com/absproxy/5173/wasm-typescript/index.js'
 		);
 	});
+
+	it('prefers explicit Haskell asset urls over public env overrides', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_HASKELL_MODULE_URL = 'https://env.example.com/dyld.mjs';
+		publicEnv.PUBLIC_WASM_HASKELL_ROOTFS_URL = 'https://env.example.com/rootfs.tar.zst';
+		publicEnv.PUBLIC_WASM_HASKELL_BSDTAR_URL = 'https://env.example.com/bsdtar.wasm';
+		const { resolveHaskellModuleUrl, resolveHaskellRootfsUrl, resolveHaskellBsdtarUrl } =
+			await import('./assets');
+
+		const config = {
+			haskell: {
+				moduleUrl: '/runtime/wasm-haskell/dyld.mjs',
+				rootfsUrl: '/runtime/wasm-haskell/rootfs.tar.zst',
+				bsdtarUrl: '/runtime/wasm-haskell/bsdtar.wasm'
+			}
+		};
+		expect(resolveHaskellModuleUrl(config, 'https://example.com/app')).toBe(
+			'https://example.com/runtime/wasm-haskell/dyld.mjs'
+		);
+		expect(resolveHaskellRootfsUrl(config, 'https://example.com/app')).toBe(
+			'https://example.com/runtime/wasm-haskell/rootfs.tar.zst'
+		);
+		expect(resolveHaskellBsdtarUrl(config, 'https://example.com/app')).toBe(
+			'https://example.com/runtime/wasm-haskell/bsdtar.wasm'
+		);
+	});
+
+	it('derives default Haskell asset urls from the shared root path', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_HASKELL_MODULE_URL = '';
+		publicEnv.PUBLIC_WASM_HASKELL_ROOTFS_URL = '';
+		publicEnv.PUBLIC_WASM_HASKELL_BSDTAR_URL = '';
+		const { resolveHaskellModuleUrl, resolveHaskellRootfsUrl, resolveHaskellBsdtarUrl } =
+			await import('./assets');
+
+		expect(resolveHaskellModuleUrl('/absproxy/5173', 'https://example.com/app')).toBe(
+			'https://example.com/absproxy/5173/wasm-haskell/dyld.mjs'
+		);
+		expect(resolveHaskellRootfsUrl('/absproxy/5173', 'https://example.com/app')).toBe(
+			'https://example.com/absproxy/5173/wasm-haskell/rootfs.tar.zst'
+		);
+		expect(resolveHaskellBsdtarUrl('/absproxy/5173', 'https://example.com/app')).toBe(
+			'https://example.com/absproxy/5173/wasm-haskell/bsdtar.wasm'
+		);
+	});
+
 	it('prefers explicit Zig compiler and stdlib urls over public env overrides', async () => {
 		vi.resetModules();
 		publicEnv.PUBLIC_WASM_ZIG_COMPILER_URL = 'https://env.example.com/zig_small.wasm';

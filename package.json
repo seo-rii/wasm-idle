@@ -37,6 +37,7 @@
 		"sync:wasm-of-js-of-ocaml": "node scripts/sync-runtime.mjs wasm-of-js-of-ocaml",
 		"sync:wasm-dotnet": "node scripts/sync-runtime.mjs wasm-dotnet",
 		"sync:wasm-go": "node scripts/sync-runtime.mjs wasm-go",
+		"sync:wasm-haskell": "node scripts/sync-runtime.mjs wasm-haskell",
 		"sync:wasm-rust": "node scripts/sync-runtime.mjs wasm-rust",
 		"sync:wasm-typescript": "node scripts/sync-runtime.mjs wasm-typescript",
 		"sync:wasm-zig": "node scripts/sync-runtime.mjs wasm-zig",

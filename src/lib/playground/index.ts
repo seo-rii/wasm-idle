@@ -2,6 +2,7 @@ import Clang from '$lib/playground/clang';
 import Dotnet from '$lib/playground/dotnet';
 import Elixir from '$lib/playground/elixir';
 import Go from '$lib/playground/go';
+import Haskell from '$lib/playground/haskell';
 import Java from '$lib/playground/java';
 import Ocaml from '$lib/playground/ocaml';
 import Python from '$lib/playground/python';
@@ -34,6 +35,7 @@ export const supportedLanguages = [
 	'OCAML',
 	'JAVASCRIPT',
 	'TYPESCRIPT',
+	'HASKELL',
 	'ZIG'
 ];
 
@@ -51,7 +53,9 @@ async function playground(
 ): Promise<BoundSandbox>;
 async function playground(language: string, runtimeAssets?: SandboxRuntimeAssets) {
 	if (sandboxCache[language]) {
-		return runtimeAssets ? createPlaygroundBinding(runtimeAssets).load(language) : sandboxCache[language];
+		return runtimeAssets
+			? createPlaygroundBinding(runtimeAssets).load(language)
+			: sandboxCache[language];
 	}
 	let sandbox;
 	switch (language) {
@@ -100,6 +104,10 @@ async function playground(language: string, runtimeAssets?: SandboxRuntimeAssets
 		case 'TS':
 			sandbox = new TypeScriptSandbox('TYPESCRIPT');
 			break;
+		case 'HASKELL':
+		case 'HS':
+			sandbox = new Haskell();
+			break;
 		case 'ZIG':
 			sandbox = new Zig();
 			break;
@@ -130,6 +138,9 @@ async function playground(language: string, runtimeAssets?: SandboxRuntimeAssets
 		}
 		if (language === 'TYPESCRIPT' || language === 'TS') {
 			sandboxCache['TYPESCRIPT'] = sandboxCache['TS'] = sandbox;
+		}
+		if (language === 'HASKELL' || language === 'HS') {
+			sandboxCache['HASKELL'] = sandboxCache['HS'] = sandbox;
 		}
 		if (language === 'ZIG') sandboxCache['ZIG'] = sandbox;
 	}
