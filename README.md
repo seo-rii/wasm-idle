@@ -18,7 +18,11 @@ left in place, but the default development path is inside this repo:
 - `packages/vue`: Vue composables around `@wasm-idle/core`.
 - `packages/node`: Node.js host helpers for Node-capable sandbox loaders.
 - `runtimes/*`: imported runtime/compiler packages such as `wasm-rust`,
-  `wasm-of-js-of-ocaml`, `wasm-go`, `wasm-tinygo`, `wasm-dotnet`, and `wasm-typescript`.
+  `wasm-of-js-of-ocaml`, `wasm-go`, `wasm-tinygo`, `wasm-dotnet`, `wasm-typescript`,
+  `wasm-elixir`, `robot-jungol`, Pyodide notes, and TeaVM notes.
+- `tools/*`: migrated local toolchain projects that are too broad or infrastructure-heavy to run as
+  normal runtime workspace packages. `tools/dool` contains the Docker judge backend for Elixir and
+  the other server-side language runners.
 
 Useful workspace commands:
 
@@ -30,6 +34,7 @@ pnpm build:runtimes
 pnpm check:runtimes
 pnpm sync:runtime list
 pnpm sync:runtimes
+pnpm audit:runtimes
 ```
 
 The sync scripts now default to `runtimes/<name>/dist`. To sync from one of the preserved sibling
@@ -47,6 +52,23 @@ package with:
 ```bash
 cd wasm-idle
 pnpm run sync:pyodide
+```
+
+Elixir browser execution uses an AtomVM/Popcorn AVM bundle. The Popcorn `eval-in-wasm` source and
+vendored Popcorn Elixir build dependency now live under `runtimes/wasm-elixir/`; rebuild and sync
+with:
+
+```bash
+cd wasm-idle
+pnpm --dir runtimes/wasm-elixir run bundle
+pnpm run sync:wasm-elixir
+```
+
+Jungol robot Python package zips are rebuilt from `runtimes/robot-jungol/`:
+
+```bash
+cd wasm-idle
+pnpm run sync:jungol-robot
 ```
 
 ## Rust browser integration

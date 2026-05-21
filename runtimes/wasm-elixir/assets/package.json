@@ -1,0 +1,13 @@
+{
+  "name": "eval_in_wasm",
+  "private": true,
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "@swmansion/popcorn": "0.2.2"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}

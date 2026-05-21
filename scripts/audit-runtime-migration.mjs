@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { execFile } from 'node:child_process';
-import { readdir, stat } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
@@ -10,19 +11,23 @@ const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(SCRIPT_DIR, '..');
 const SOURCE_ROOT = path.resolve(REPO_ROOT, '..');
 
-const RUNTIMES = [
-	'wasm-rust',
-	'wasm-of-js-of-ocaml',
-	'wasm-clang',
-	'wasm-dotnet',
-	'wasm-go',
-	'wasm-tinygo',
-	'wasm-typescript'
+const MIGRATIONS = [
+	['wasm-rust', 'wasm-rust', 'runtimes/wasm-rust'],
+	['wasm-of-js-of-ocaml', 'wasm-of-js-of-ocaml', 'runtimes/wasm-of-js-of-ocaml'],
+	['wasm-clang', 'wasm-clang', 'runtimes/wasm-clang'],
+	['wasm-dotnet', 'wasm-dotnet', 'runtimes/wasm-dotnet'],
+	['wasm-go', 'wasm-go', 'runtimes/wasm-go'],
+	['wasm-tinygo', 'wasm-tinygo', 'runtimes/wasm-tinygo'],
+	['wasm-typescript', 'wasm-typescript', 'runtimes/wasm-typescript'],
+	['dool', 'dool', 'tools/dool'],
+	['robot-jungol', 'robot-jungol', 'runtimes/robot-jungol'],
+	['import-jungol', 'import-jungol', 'tools/import-jungol']
 ];
 
 const GENERATED_SEGMENTS = new Set([
 	'.git',
 	'.cache',
+	'__pycache__',
 	'bin',
 	'coverage',
 	'dist',
@@ -41,7 +46,11 @@ function hasGeneratedSegment(relativePath) {
 	const segments = normalized.split('/');
 	return [...GENERATED_SEGMENTS].some((segment) => {
 		if (segment.includes('/')) {
-			return normalized === segment || normalized.startsWith(`${segment}/`) || normalized.includes(`/${segment}/`);
+			return (
+				normalized === segment ||
+				normalized.startsWith(`${segment}/`) ||
+				normalized.includes(`/${segment}/`)
+			);
 		}
 		return segments.includes(segment);
 	});
@@ -49,6 +58,12 @@ function hasGeneratedSegment(relativePath) {
 
 async function exists(filePath) {
 	return Boolean(await stat(filePath).catch(() => null));
+}
+
+async function fingerprint(filePath) {
+	return createHash('sha256')
+		.update(await readFile(filePath))
+		.digest('hex');
 }
 
 async function listFiles(rootDir, baseDir = rootDir) {
@@ -85,28 +100,47 @@ async function listGitTrackedAndUntrackedFiles(sourceDir) {
 	}
 }
 
-async function auditRuntime(runtimeName) {
-	const sourceDir = path.join(SOURCE_ROOT, runtimeName);
-	const targetDir = path.join(REPO_ROOT, 'runtimes', runtimeName);
-	if (!(await exists(sourceDir))) return [];
-	const sourceFiles = (await listGitTrackedAndUntrackedFiles(sourceDir)) || (await listFiles(sourceDir));
+async function auditMigration([name, sourceRelativePath, targetRelativePath]) {
+	const sourceDir = path.join(SOURCE_ROOT, sourceRelativePath);
+	const targetDir = path.join(REPO_ROOT, targetRelativePath);
+	if (!(await exists(sourceDir))) return { name, missing: [], changed: [], skipped: true };
+	const sourceFiles =
+		(await listGitTrackedAndUntrackedFiles(sourceDir)) || (await listFiles(sourceDir));
 	const missing = [];
+	const changed = [];
 	for (const relativePath of sourceFiles) {
-		if (!(await exists(path.join(targetDir, relativePath)))) missing.push(relativePath);
+		const sourcePath = path.join(sourceDir, relativePath);
+		const targetPath = path.join(targetDir, relativePath);
+		if (!(await exists(targetPath))) {
+			missing.push(relativePath);
+			continue;
+		}
+		const [sourceHash, targetHash] = await Promise.all([
+			fingerprint(sourcePath),
+			fingerprint(targetPath)
+		]);
+		if (sourceHash !== targetHash) changed.push(relativePath);
 	}
-	return missing;
+	return { name, missing, changed };
 }
 
 let failed = false;
-for (const runtimeName of RUNTIMES) {
-	const missing = await auditRuntime(runtimeName);
-	if (missing.length === 0) {
-		console.log(`${runtimeName}: ok`);
+for (const migration of MIGRATIONS) {
+	const { name, missing, changed, skipped } = await auditMigration(migration);
+	if (skipped) {
+		console.log(`${name}: skipped (source checkout not found)`);
+		continue;
+	}
+	if (missing.length === 0 && changed.length === 0) {
+		console.log(`${name}: ok`);
 		continue;
 	}
 	failed = true;
-	console.log(`${runtimeName}: missing runtime source files`);
-	for (const file of missing) console.log(`  ${file}`);
+	console.log(`${name}: migration drift detected`);
+	if (missing.length > 0) console.log('  missing source files:');
+	for (const file of missing) console.log(`    ${file}`);
+	if (changed.length > 0) console.log('  changed source files:');
+	for (const file of changed) console.log(`    ${file}`);
 }
 
 if (failed) process.exitCode = 1;

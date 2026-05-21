@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <title>DOOL</title>
+    <link
+            href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@100;300;400;500;700;900&display=swap"
+            rel="stylesheet"
+    />
+
+    <link
+            href="https://unpkg.com/material-components-web@latest/dist/material-components-web.min.css"
+            rel="stylesheet"
+    />
+    <script src="https://unpkg.com/material-components-web@latest/dist/material-components-web.min.js"></script>
+    <style>
+        html,
+        body {
+            padding: 0;
+            margin: 0;
+        }
+
+        :root {
+            --mdc-theme-primary: #000;
+            --mdc-theme-secondary: #018786;
+            --mdc-theme-background: #fff;
+            --mdc-theme-surface: #fff;
+            --mdc-theme-error: #b00020;
+            --mdc-theme-on-primary: #000;
+            --mdc-theme-on-secondary: #fff;
+            --mdc-theme-on-surface: #000;
+            --mdc-theme-on-error: #fff;
+            --mdc-theme-text-primary-on-background: rgba(0, 0, 0, 0.87);
+            --mdc-theme-text-secondary-on-background: rgba(0, 0, 0, 0.54);
+            --mdc-theme-text-hint-on-background: rgba(0, 0, 0, 0.38);
+            --mdc-theme-text-disabled-on-background: rgba(0, 0, 0, 0.38);
+            --mdc-theme-text-icon-on-background: rgba(0, 0, 0, 0.38);
+            --mdc-theme-text-primary-on-light: rgba(0, 0, 0, 0.87);
+            --mdc-theme-text-secondary-on-light: rgba(0, 0, 0, 0.54);
+            --mdc-theme-text-hint-on-light: rgba(0, 0, 0, 0.38);
+            --mdc-theme-text-disabled-on-light: rgba(0, 0, 0, 0.38);
+            --mdc-theme-text-icon-on-light: rgba(0, 0, 0, 0.38);
+            --mdc-theme-text-primary-on-dark: black;
+            --mdc-theme-text-secondary-on-dark: rgba(255, 255, 255, 0.7);
+            --mdc-theme-text-hint-on-dark: rgba(255, 255, 255, 0.5);
+            --mdc-theme-text-disabled-on-dark: rgba(255, 255, 255, 0.5);
+            --mdc-theme-text-icon-on-dark: rgba(255, 255, 255, 0.5);
+        }
+
+        .mdc-top-app-bar {
+            color: black;
+            background: white;
+        }
+
+        body {
+            font-family: 'Noto Sans KR' !important;
+        }
+
+        .container > div {
+            width: 400px;
+            display: inline-block;
+        }
+
+        .card {
+            margin: 10px;
+            transition: color 0.5s;
+        }
+
+        .card.simple,
+        .card .mdc-card__primary-action {
+            padding: 10px;
+        }
+
+        .card.AC {
+            background-color: #e9ecf7;
+        }
+
+        .card.AC {
+            background-color: #e9ecf7;
+        }
+
+        .card.WA {
+            background-color: #f7e9e9;
+        }
+
+        .card.RE,
+        .card.CE,
+        .card.TLE {
+            background-color: #fcffe6;
+        }
+
+        .card.simple > *,
+        .card > .mdc-card__primary-action > *:not(.mdc-card__ripple) {
+            margin: 5px 0;
+        }
+
+        .form {
+            padding: 10px;
+        }
+
+        .mdc-top-app-bar__logo {
+            height: 100%;
+            padding: 10px;
+        }
+
+        .logo {
+            height: calc(100% - 20px);
+            margin-top: 10px;
+        }
+
+        #connection-error {
+            background: #ffebef;
+            margin: 10px 0;
+        }
+
+        .mdc-top-app-bar__title {
+            font-weight: 900;
+            font-size: 1.75rem;
+        }
+    </style>
+</head>
+<body>
+<script>
+    let judgeNo = 1
+    let ws,
+        tws,
+        dialog,
+        select,
+        pmp = new Map(),
+        fin = new Map()
+    const mdcProgress = {}
+    const reasonString = {
+        PD: 'Pending',
+        AC: 'Accepted',
+        WA: 'Wrong Answer',
+        TLE: 'Time Limit Exceeded',
+        MLE: 'Memory Limit Exceeded',
+        OLE: 'Output Limit Exceeded',
+        RE: 'Runtime Error',
+        CE: 'Compile Error',
+        CP: 'Compiling',
+        RUN: 'Running',
+    }
+    const supportedLanguages = {
+        PYTHON3: 'py',
+        PYPY3: 'py',
+        CPP: 'cpp',
+        C: 'c',
+        JAVA: 'java',
+        RUST: 'rs',
+        GO: 'go',
+        JAVASCRIPT: 'js',
+        TYPESCRIPT: 'ts',
+        KOTLIN: 'kt',
+        RUBY: 'rb',
+        PHP: 'php',
+        CSHARP: 'cs',
+        LUA: 'lua',
+        PERL: 'pl',
+    }
+
+    const exampleCode = {
+        C: `#include <stdio.h>
+int main(){
+    int a,b;
+    while(scanf("%d %d",&a, &b) != EOF)
+        printf("%d\\n",a+b);
+ return 0;
+}`,
+        CPP: `#include <iostream>
+using namespace std;
+int main(){
+    int a,b;
+    while(cin >> a >> b)
+        cout << a+b << endl;
+ return 0;
+}`,
+        JAVA: `import java.util.*;
+public class Main{
+\tpublic static void main(String args[]){
+\t\tScanner sc = new Scanner(System.in);
+\t\tint a, b;
+\t\ta = sc.nextInt();
+\t\tb = sc.nextInt();
+\t\tSystem.out.println(a + b);
+\t}
+}`,
+        PYTHON3: `a, b = map(int, input().split())
+print(a + b)`,
+        PYPY3: `a, b = map(int, input().split())
+print(a + b)`,
+        RUST: `use std::io;
+
+fn main() {
+    let mut input_number = String::new();
+
+    io::stdin().read_line(&mut input_number)
+        .expect("Falied to read line");
+
+    let numbers: Vec<&str> = input_number.split_whitespace().collect();
+
+    let number_a = match numbers[0].parse::<i32>() {
+        Ok(i) => i,
+        Err(_e) => {
+            -1
+        }
+    };
+
+    let number_b = match numbers[1].parse::<i32>() {
+        Ok(i) => i,
+        Err(_e) => {
+            -1
+        }
+    };
+
+    println!("{}", number_a + number_b);
+}`,
+        GO: `package main
+
+import (
+\t"fmt"
+)
+
+func main() {
+\tvar a, b int
+\tfmt.Scanf("%d %d", &a, &b)
+\tfmt.Println(a+b)
+}`,
+        JAVASCRIPT: `const fs = require('fs');
+const inputData = fs.readFileSync(0, 'utf8').toString().split(' ');
+
+const A = parseInt(inputData[0]);
+const B = parseInt(inputData[1]);
+
+console.log(A+B);`,
+        TYPESCRIPT: `import * as fs from 'fs'
+const input: string[] = fs.readFileSync(0).toString().split(' ');
+const a: number = parseInt(input[0]);
+const b: number = parseInt(input[1]);
+console.log(a+b);`,
+        KOTLIN: `fun main(args: Array<String>) {
+    var nums = readLine()!!.split(" ")
+    var a = nums[0].toInt()
+    var b = nums[1].toInt()
+    println(a+b)
+}`,
+        RUBY: `a, b = gets.split
+puts a.to_i + b.to_i`,
+        PHP: `<?php
+fscanf(STDIN,"%d %d",$a,$b);
+fprintf(STDOUT,"%d",$a+$b);
+?>`,
+        CSHARP: `using System;
+
+namespace DOOL {
+    class Program {
+        static void Main() {
+            string s = Console.ReadLine();
+            string[] ss = s.Split();
+            int a = int.Parse(ss[0]);
+            int b = int.Parse(ss[1]);
+            Console.WriteLine(a+b);
+        }
+    }
+}`,
+        LUA: `a,b = io.read("*number", "*number")
+print(a+b)`,
+        PERL:`my $a = <STDIN>;
+my @b = split(/ /, $a);
+
+my $ans = @b[0] + @b[1];
+
+print $ans;`
+    }
+
+    function connectWs() {
+        try {
+            tws = new WebSocket('wss://jungol-live-rucjbkhl7a-du.a.run.app/ws?account=&problem=1000&from=5649234&to=0&language=')
+        } catch (e) {
+            tws = null
+            return
+        }
+        tws.onerror = () => {
+        }
+        tws.onopen = () => {
+            ws = tws
+        }
+        tws.onmessage = function (event) {
+            const res = JSON.parse(event.data)
+            if (fin.get(res.data.submissionId)) return
+            if (res.type === 'JUDGE_FINISH') {
+                setCard(
+                    res.data.submissionId,
+                    1,
+                    res.data.m_reason,
+                    `<div>
+                                <h2>#${pmp[res.data.submissionId]}</h2>
+                                <h4>SubmissionId</h4>
+                                <p>${res.data.submissionId}</p>
+                                <h4>Result</h4>
+                                <p>${res.data.m_reason}</p>
+                                <h4>Run Info</h4>
+                                <p>Time: ${res.data.m_time}ms, Memory: ${
+                        res.data.m_memory
+                    }KB</p>
+                             </div>`
+                );
+                fin.set(res.data.submissionId, true);
+            }
+            if (res.type === 'JUDGE_PROGRESS')
+                setCard(
+                    res.data.submissionId,
+                    res.data.progress,
+                    res.data.m_reason,
+                    `<div>
+                                <h2>#${pmp[res.data.submissionId]}</h2>
+                                <h4>State</h4>
+                                <p>${res.data.m_reason}</p>
+                             </div>`
+                )
+        }
+        tws.addEventListener('close', () => {
+            ws = tws = null
+        })
+    }
+
+    function setCard(id, progress, reason = '', detail = '') {
+        let card = document.getElementById(`card-${id}`)
+        if (!card) card = addCard(id)
+        if (progress === 1) card.classList.add('success')
+        document.getElementById(`subtitle-${id}`).innerText =
+            reasonString[reason]
+        setTimeout(() => {
+            mdcProgress[id].foundation.setProgress(progress)
+        }, 1)
+        card.className = 'mdc-card mdc-card--outlined card ' + reason
+        card.onclick = () => {
+            document.getElementById('dialogBody').innerHTML = detail
+            dialog.open()
+        }
+    }
+
+    function addCard(id) {
+        let card = document.createElement('div')
+        let title = document.createElement('h2')
+        let subTitle = document.createElement('h4')
+        let progress = document.createElement('div')
+        let body = document.createElement('div')
+        let ripple = document.createElement('div')
+        progress.className = 'mdc-linear-progress'
+        progress.id = `progress-${id}`
+        progress.innerHTML = `<div class="mdc-linear-progress__buffer">
+              <div class="mdc-linear-progress__buffer-bar"></div>
+              <div class="mdc-linear-progress__buffer-dots"></div>
+            </div>
+            <div class="mdc-linear-progress__bar mdc-linear-progress__primary-bar">
+              <span class="mdc-linear-progress__bar-inner"></span>
+            </div>
+            <div class="mdc-linear-progress__bar mdc-linear-progress__secondary-bar">
+              <span class="mdc-linear-progress__bar-inner"></span>
+            </div>`
+        const jid = judgeNo++
+        pmp[id] = jid
+        title.innerText = `#${jid}`
+        subTitle.innerText = id
+        subTitle.id = `subtitle-${id}`
+        card.id = `card-${id}`
+
+        body.className = 'mdc-card__primary-action'
+        ripple.className = 'mdc-card__ripple'
+        body.append(title)
+        body.append(subTitle)
+        body.append(progress)
+        body.append(ripple)
+        card.append(body)
+        card.className = 'mdc-card mdc-card--outlined card'
+        document.querySelector('.container').prepend(card)
+        mdc.ripple.MDCRipple.attachTo(body)
+        mdcProgress[id] = new mdc.linearProgress.MDCLinearProgress(
+            document.getElementById(`progress-${id}`)
+        )
+        return card
+    }
+
+    function test() {
+        fetch(`//${window.location.host}/judge`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                language: select.selectedText.innerText,
+                judgeType: 'CommonJudge',
+                source: [
+                    {
+                        name:
+                            'Main.' +
+                            supportedLanguages[
+                                select.selectedText.innerText
+                                ],
+                        source: document.getElementById('source').value,
+                    },
+                ],
+                problemId: parseInt(document.getElementById('ProblemNo').value),
+                limit: {
+                    time: parseInt(document.getElementById('TimeLimit').value),
+                    memory: parseInt(document.getElementById('MemoryLimit').value),
+                },
+                additional: {
+                    account: 'admin',
+                    time: Date.now(),
+                    sca: null,
+                    contestId: null,
+                }
+            }),
+        })
+    }
+
+    function hard() {
+        for (
+            let i = 0;
+            i < parseInt(document.getElementById('loadCount').value);
+            i++
+        )
+            test()
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        for (let i of Object.keys(supportedLanguages)) {
+            document.getElementById('supportedLang').innerHTML += `<li
+                                class="mdc-list-item ripple"
+                                aria-selected="false"
+                                data-value="${i}"
+                                role="option"
+                            >
+                                <span class="mdc-list-item__ripple"></span>
+                                <span class="mdc-list-item__text">${i}</span>
+                            </li>`
+        }
+        setInterval(() => {
+            if (document.documentElement.scrollTop)
+                document
+                    .querySelector('header')
+                    .classList.add('mdc-elevation--z5')
+            else
+                document
+                    .querySelector('header')
+                    .classList.remove('mdc-elevation--z5')
+        })
+
+        setInterval(() => {
+            if (!ws) {
+                if (!tws) connectWs()
+                document.getElementById(
+                    'connection-error'
+                ).style.display = ''
+            } else {
+                document.getElementById(
+                    'connection-error'
+                ).style.display = 'none'
+            }
+        }, 100)
+        for (const i of document.querySelectorAll('.mdc-text-field'))
+            new mdc.textField.MDCTextField(i)
+        for (const i of document.querySelectorAll('.ripple'))
+            new mdc.ripple.MDCRipple(i)
+        dialog = new mdc.dialog.MDCDialog(
+            document.querySelector('.mdc-dialog')
+        )
+        select = new mdc.select.MDCSelect(
+            document.querySelector('.mdc-select')
+        )
+        document
+            .querySelector('.mdc-select')
+            .addEventListener('MDCSelect:change', () => {
+                try {
+                    document.getElementById('source').value =
+                        exampleCode[select.selectedText.innerText]
+                } catch (e) {
+                }
+            })
+    })
+</script>
+<header class="mdc-top-app-bar">
+    <div class="mdc-top-app-bar__row">
+        <section
+                class="mdc-top-app-bar__section mdc-top-app-bar__section--align-start"
+        >
+                    <span class="mdc-top-app-bar__logo">
+                        <img src="/res/logo.png" alt="logo" class="logo"/>
+                    </span>
+            <span class="mdc-top-app-bar__title">DOOL</span>
+        </section>
+        <section
+                class="mdc-top-app-bar__section mdc-top-app-bar__section--align-end"
+        ></section>
+    </div>
+</header>
+<main class="mdc-top-app-bar--fixed-adjust">
+    <div class="form">
+        <div class="mdc-select mdc-select--filled demo-width-class">
+            <div
+                    class="mdc-select__anchor"
+                    role="button"
+                    aria-haspopup="listbox"
+                    aria-expanded="false"
+                    aria-labelledby="demo-label demo-selected-text"
+            >
+                <span class="mdc-select__ripple"></span>
+                <span class="mdc-floating-label">Select Language</span>
+                <span class="mdc-select__selected-text-container">
+                            <span
+                                    id="demo-selected-text"
+                                    class="mdc-select__selected-text"
+                            ></span>
+                        </span>
+                <span class="mdc-select__dropdown-icon">
+                            <svg
+                                    class="mdc-select__dropdown-icon-graphic"
+                                    viewBox="7 10 10 5"
+                                    focusable="false"
+                            >
+                                <polygon
+                                        class="mdc-select__dropdown-icon-inactive"
+                                        stroke="none"
+                                        fill-rule="evenodd"
+                                        points="7 10 12 15 17 10"
+                                ></polygon>
+                                <polygon
+                                        class="mdc-select__dropdown-icon-active"
+                                        stroke="none"
+                                        fill-rule="evenodd"
+                                        points="7 15 12 10 17 15"
+                                ></polygon>
+                            </svg>
+                        </span>
+                <span class="mdc-line-ripple"></span>
+            </div>
+
+            <div
+                    class="mdc-select__menu mdc-menu mdc-menu-surface mdc-menu-surface--fullwidth"
+            >
+                <ul class="mdc-list" id="supportedLang"></ul>
+            </div>
+        </div>
+
+        <label class="mdc-text-field mdc-text-field--outlined">
+                    <span class="mdc-notched-outline">
+                        <span class="mdc-notched-outline__leading"></span>
+                        <span class="mdc-notched-outline__notch">
+                            <span class="mdc-floating-label" id="my-label-id"
+                            >ProblemNo</span
+                            >
+                        </span>
+                        <span class="mdc-notched-outline__trailing"></span>
+                    </span>
+            <input
+                    type="text"
+                    class="mdc-text-field__input"
+                    aria-labelledby="my-label-id"
+                    id="ProblemNo"
+                    value="1000"
+            />
+        </label>
+
+        <label class="mdc-text-field mdc-text-field--outlined">
+                    <span class="mdc-notched-outline">
+                        <span class="mdc-notched-outline__leading"></span>
+                        <span class="mdc-notched-outline__notch">
+                            <span class="mdc-floating-label"
+                            >TimeLimit</span
+                            >
+                        </span>
+                        <span class="mdc-notched-outline__trailing"></span>
+                    </span>
+            <input
+                    type="text"
+                    class="mdc-text-field__input"
+                    aria-labelledby="my-label-id"
+                    id="TimeLimit"
+                    value="1000"
+            />
+        </label>
+
+        <label class="mdc-text-field mdc-text-field--outlined">
+                    <span class="mdc-notched-outline">
+                        <span class="mdc-notched-outline__leading"></span>
+                        <span class="mdc-notched-outline__notch">
+                            <span class="mdc-floating-label"
+                            >MemoryLimit</span
+                            >
+                        </span>
+                        <span class="mdc-notched-outline__trailing"></span>
+                    </span>
+            <input
+                    type="text"
+                    class="mdc-text-field__input"
+                    aria-labelledby="my-label-id"
+                    id="MemoryLimit"
+                    value="4"
+            />
+        </label>
+
+        <label
+                class="mdc-text-field mdc-text-field--outlined mdc-text-field--textarea mdc-text-field--no-label"
+                style="width: calc(100vw - 40px); margin: 10px 0"
+        >
+                    <span class="mdc-notched-outline">
+                        <span class="mdc-notched-outline__leading"></span>
+                        <span class="mdc-notched-outline__trailing"></span>
+                    </span>
+            <span class="mdc-text-field__resizer">
+                        <textarea
+                                class="mdc-text-field__input"
+                                rows="8"
+                                cols="40"
+                                aria-label="Label"
+                                id="source"
+                                onkeydown="if(event.keyCode == 9) { this.value += '    '; return false; }"
+                        ></textarea>
+                    </span>
+        </label>
+        <button
+                class="mdc-button mdc-button--outlined ripple"
+                onclick="test()"
+        >
+            <span class="mdc-button__ripple"></span>
+            Request Test Judgement
+        </button>
+        <div
+                class="mdc-card mdc-card--outlined card simple"
+                id="connection-error"
+                style="display: none"
+        >
+            <h3>Connection lost.</h3>
+            <p>Trying to reconnect...</p>
+        </div>
+    </div>
+    <div class="container"></div>
+</main>
+<div class="mdc-dialog">
+    <div class="mdc-dialog__container">
+        <div
+                class="mdc-dialog__surface"
+                role="alertdialog"
+                aria-modal="true"
+                aria-labelledby="my-dialog-title"
+                aria-describedby="my-dialog-content"
+        >
+            <div class="mdc-dialog__content" id="dialogBody"></div>
+            <div class="mdc-dialog__actions">
+                <button
+                        type="button"
+                        class="mdc-button mdc-dialog__button"
+                        data-mdc-dialog-action="cancel"
+                >
+                    <div class="mdc-button__ripple"></div>
+                    <span class="mdc-button__label">Close</span>
+                </button>
+            </div>
+        </div>
+    </div>
+    <div class="mdc-dialog__scrim"></div>
+</div>
+</body>
+</html>

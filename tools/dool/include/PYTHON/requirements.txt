@@ -1,0 +1,13 @@
+pandas
+numpy
+seaborn
+matplotlib
+pillow
+six
+qiskit
+pyparsing
+pylatexenc
+torch
+torchvision
+jax
+jax[cpu]

@@ -1,0 +1,9 @@
+{
+	"name": "@wasm-idle/runtime-wasm-elixir",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"bundle": "bash scripts/build-bundle.sh",
+		"sync": "node ../../scripts/sync-wasm-elixir.mjs"
+	}
+}

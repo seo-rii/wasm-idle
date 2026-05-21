@@ -252,6 +252,8 @@ importers:
         specifier: ^4.0.18
         version: 4.1.4(@types/node@24.12.4)(jsdom@29.0.2)(vite@8.0.8(@types/node@24.12.4)(esbuild@0.27.3)(terser@5.47.1))
 
+  runtimes/wasm-elixir: {}
+
   runtimes/wasm-go:
     dependencies:
       '@bjorn3/browser_wasi_shim':
