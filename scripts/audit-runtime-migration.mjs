@@ -1,8 +1,11 @@
 #!/usr/bin/env node
+import { execFile } from 'node:child_process';
 import { readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
+import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 
+const execFileAsync = promisify(execFile);
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(SCRIPT_DIR, '..');
 const SOURCE_ROOT = path.resolve(REPO_ROOT, '..');
@@ -17,40 +20,9 @@ const RUNTIMES = [
 	'wasm-typescript'
 ];
 
-const BUILD_FILE_NAMES = new Set([
-	'Cargo.lock',
-	'Cargo.toml',
-	'Dockerfile',
-	'Makefile',
-	'go.mod',
-	'go.sum',
-	'package-lock.json',
-	'package.json',
-	'pnpm-lock.yaml',
-	'tsconfig.json',
-	'tsconfig.build.json',
-	'tsconfig.browser-harness.json',
-	'vite.config.ts',
-	'yarn.lock'
-]);
-
-const BUILD_EXTENSIONS = new Set([
-	'.cs',
-	'.csproj',
-	'.go',
-	'.js',
-	'.json',
-	'.mjs',
-	'.patch',
-	'.sh',
-	'.ts',
-	'.yaml',
-	'.yml'
-]);
-
 const GENERATED_SEGMENTS = new Set([
+	'.git',
 	'.cache',
-	'artifacts',
 	'bin',
 	'coverage',
 	'dist',
@@ -75,15 +47,6 @@ function hasGeneratedSegment(relativePath) {
 	});
 }
 
-function isBuildFile(relativePath) {
-	const normalized = relativePath.split(path.sep).join('/');
-	if (normalized.startsWith('.github/')) return true;
-	if (hasGeneratedSegment(relativePath)) return false;
-	const basename = path.basename(relativePath);
-	if (BUILD_FILE_NAMES.has(basename)) return true;
-	return BUILD_EXTENSIONS.has(path.extname(basename));
-}
-
 async function exists(filePath) {
 	return Boolean(await stat(filePath).catch(() => null));
 }
@@ -99,16 +62,34 @@ async function listFiles(rootDir, baseDir = rootDir) {
 			files.push(...(await listFiles(entryPath, baseDir)));
 			continue;
 		}
-		if (entry.isFile() && isBuildFile(relativePath)) files.push(relativePath);
+		if (entry.isFile()) files.push(relativePath);
 	}
 	return files.sort();
+}
+
+async function listGitTrackedAndUntrackedFiles(sourceDir) {
+	try {
+		const [tracked, untracked] = await Promise.all([
+			execFileAsync('git', ['-C', sourceDir, 'ls-files'], { maxBuffer: 10 * 1024 * 1024 }),
+			execFileAsync('git', ['-C', sourceDir, 'ls-files', '--others', '--exclude-standard'], {
+				maxBuffer: 10 * 1024 * 1024
+			})
+		]);
+		return [...tracked.stdout.split('\n'), ...untracked.stdout.split('\n')]
+			.map((file) => file.trim())
+			.filter(Boolean)
+			.filter((file) => !hasGeneratedSegment(file))
+			.sort();
+	} catch {
+		return null;
+	}
 }
 
 async function auditRuntime(runtimeName) {
 	const sourceDir = path.join(SOURCE_ROOT, runtimeName);
 	const targetDir = path.join(REPO_ROOT, 'runtimes', runtimeName);
 	if (!(await exists(sourceDir))) return [];
-	const sourceFiles = await listFiles(sourceDir);
+	const sourceFiles = (await listGitTrackedAndUntrackedFiles(sourceDir)) || (await listFiles(sourceDir));
 	const missing = [];
 	for (const relativePath of sourceFiles) {
 		if (!(await exists(path.join(targetDir, relativePath)))) missing.push(relativePath);
@@ -124,7 +105,7 @@ for (const runtimeName of RUNTIMES) {
 		continue;
 	}
 	failed = true;
-	console.log(`${runtimeName}: missing build files`);
+	console.log(`${runtimeName}: missing runtime source files`);
 	for (const file of missing) console.log(`  ${file}`);
 }
 
