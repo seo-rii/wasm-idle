@@ -1,0 +1,28 @@
+{
+	"name": "@wasm-idle/runtime-ruby",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"description": "Ruby WebAssembly runtime helpers for wasm-idle",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js",
+			"default": "./dist/index.js"
+		}
+	},
+	"files": [
+		"dist"
+	],
+	"scripts": {
+		"build": "rm -rf dist && tsc -p tsconfig.json",
+		"check": "tsc -p tsconfig.json --noEmit"
+	},
+	"dependencies": {
+		"@ruby/3.4-wasm-wasi": "2.9.3-2.9.4",
+		"@ruby/wasm-wasi": "2.9.3-2.9.4"
+	},
+	"devDependencies": {
+		"typescript": "^6.0.2"
+	}
+}

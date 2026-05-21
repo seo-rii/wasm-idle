@@ -232,6 +232,19 @@ importers:
         specifier: ^6.0.2
         version: 6.0.2
 
+  runtimes/ruby:
+    dependencies:
+      '@ruby/3.4-wasm-wasi':
+        specifier: 2.9.3-2.9.4
+        version: 2.9.3-2.9.4
+      '@ruby/wasm-wasi':
+        specifier: 2.9.3-2.9.4
+        version: 2.9.3-2.9.4
+    devDependencies:
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.2
+
   runtimes/teavm:
     devDependencies:
       typescript:
@@ -1125,6 +1138,12 @@ packages:
 
   '@rolldown/pluginutils@1.0.0-rc.15':
     resolution: {integrity: sha512-UromN0peaE53IaBRe9W7CjrZgXl90fqGpK+mIZbA3qSTeYqg3pqpROBdIPvOG3F5ereDHNwoHBI2e50n1BDr1g==}
+
+  '@ruby/3.4-wasm-wasi@2.9.3-2.9.4':
+    resolution: {integrity: sha512-Ze2grGTnyT6meSI1j5NHKIpeadecOsMuKAjPFeyU5K85MSeHJWZdNXS7QLF0a0E1kIwQcYHafU10Gz5fPqECsw==}
+
+  '@ruby/wasm-wasi@2.9.3-2.9.4':
+    resolution: {integrity: sha512-WxW9wON/TIf+8Ktng8qDJeV/6iH8kw+YwxOsOyXdAdLJgfYDPAXOqpIVd/96y2C9V8VJ2yqZm/IRv6nLeV6EKg==}
 
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
@@ -3540,6 +3559,15 @@ snapshots:
     optional: true
 
   '@rolldown/pluginutils@1.0.0-rc.15': {}
+
+  '@ruby/3.4-wasm-wasi@2.9.3-2.9.4':
+    dependencies:
+      '@ruby/wasm-wasi': 2.9.3-2.9.4
+
+  '@ruby/wasm-wasi@2.9.3-2.9.4':
+    dependencies:
+      '@bjorn3/browser_wasi_shim': 0.4.2
+      tslib: 2.8.1
 
   '@standard-schema/spec@1.1.0': {}
 
