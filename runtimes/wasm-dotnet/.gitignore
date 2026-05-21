@@ -1,0 +1,7 @@
+node_modules/
+dist/
+dotnet/**/bin/
+dotnet/**/obj/
+
+.DS_Store
+*.log

@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<link rel="icon" href="data:," />
+	<title>wasm-rust browser harness</title>
+	<style>
+		:root {
+			color-scheme: light;
+			font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+			background:
+				radial-gradient(circle at top left, #f6f7ff 0, #f2f5fb 38%, #e9eef8 100%);
+			color: #162133;
+		}
+
+		body {
+			margin: 0;
+			min-height: 100vh;
+			padding: 24px;
+		}
+
+		main {
+			max-width: 1200px;
+			margin: 0 auto;
+			display: grid;
+			gap: 16px;
+		}
+
+		.card {
+			background: rgba(255, 255, 255, 0.88);
+			border: 1px solid rgba(22, 33, 51, 0.1);
+			border-radius: 18px;
+			box-shadow: 0 18px 40px rgba(22, 33, 51, 0.08);
+			padding: 18px;
+			backdrop-filter: blur(8px);
+		}
+
+		h1 {
+			margin: 0;
+			font-size: 28px;
+			letter-spacing: -0.04em;
+		}
+
+		p {
+			margin: 8px 0 0;
+			color: #4c5a72;
+			line-height: 1.5;
+		}
+
+		.controls {
+			display: grid;
+			grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+			gap: 12px;
+			align-items: end;
+		}
+
+		label {
+			display: grid;
+			gap: 6px;
+			font-size: 13px;
+			color: #4c5a72;
+		}
+
+		input,
+		select,
+		textarea,
+		button {
+			font: inherit;
+		}
+
+		input,
+		select,
+		textarea {
+			border: 1px solid rgba(22, 33, 51, 0.16);
+			border-radius: 12px;
+			padding: 10px 12px;
+			background: rgba(248, 250, 255, 0.9);
+			color: #162133;
+		}
+
+		textarea {
+			min-height: 240px;
+			resize: vertical;
+			font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+			font-size: 14px;
+			line-height: 1.55;
+		}
+
+		button {
+			border: 0;
+			border-radius: 999px;
+			padding: 12px 18px;
+			background: linear-gradient(135deg, #0f5de2, #0a88d8);
+			color: #fff;
+			font-weight: 600;
+			cursor: pointer;
+		}
+
+		button:disabled {
+			opacity: 0.55;
+			cursor: progress;
+		}
+
+		.columns {
+			display: grid;
+			grid-template-columns: 1.1fr 0.9fr;
+			gap: 16px;
+		}
+
+		pre {
+			margin: 0;
+			min-height: 220px;
+			max-height: 480px;
+			overflow: auto;
+			border-radius: 14px;
+			padding: 14px;
+			background: #101923;
+			color: #dbe6f6;
+			font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+			font-size: 13px;
+			line-height: 1.5;
+		}
+
+		.log {
+			background: #182434;
+		}
+
+		.status {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 12px;
+			font-size: 13px;
+			color: #4c5a72;
+		}
+
+		.progress-track {
+			display: grid;
+			gap: 8px;
+			margin-top: 14px;
+		}
+
+		progress {
+			width: 100%;
+			height: 12px;
+			border: 0;
+			border-radius: 999px;
+			overflow: hidden;
+			background: rgba(15, 93, 226, 0.12);
+		}
+
+		progress::-webkit-progress-bar {
+			background: rgba(15, 93, 226, 0.12);
+			border-radius: 999px;
+		}
+
+		progress::-webkit-progress-value {
+			background: linear-gradient(90deg, #0f5de2, #0a88d8);
+			border-radius: 999px;
+		}
+
+		progress::-moz-progress-bar {
+			background: linear-gradient(90deg, #0f5de2, #0a88d8);
+			border-radius: 999px;
+		}
+
+		.pill {
+			display: inline-flex;
+			align-items: center;
+			gap: 8px;
+			padding: 6px 10px;
+			border-radius: 999px;
+			background: rgba(15, 93, 226, 0.08);
+			color: #0f5de2;
+		}
+
+		@media (max-width: 900px) {
+			.columns {
+				grid-template-columns: 1fr;
+			}
+		}
+	</style>
+</head>
+<body>
+	<main>
+		<section class="card">
+			<h1>wasm-rust browser harness</h1>
+			<p>
+				This page runs the real browser compiler directly from <code>/dist</code>. It is the
+				debug surface for browser-only failures before integrating the module back into
+				<code>wasm-idle</code>.
+			</p>
+		</section>
+
+		<section class="card">
+			<div class="controls">
+				<label>
+					Compile timeout (ms)
+					<input id="compile-timeout" type="number" value="120000" min="1000" step="1000" />
+				</label>
+				<label>
+					Artifact idle (ms)
+					<input id="artifact-idle" type="number" value="1500" min="250" step="250" />
+				</label>
+				<label>
+					Initial memory pages
+					<input id="memory-initial" type="number" value="8192" min="1" step="1" />
+				</label>
+				<label>
+					Maximum memory pages
+					<input id="memory-maximum" type="number" value="65536" min="1" step="1" />
+				</label>
+				<label>
+					Edition
+					<input id="edition" type="text" value="2024" />
+				</label>
+				<label>
+					Target triple
+					<select id="target-triple">
+						<option value="wasm32-wasip1">wasm32-wasip1</option>
+						<option value="wasm32-wasip2">wasm32-wasip2</option>
+						<option value="wasm32-wasip3">wasm32-wasip3</option>
+					</select>
+				</label>
+				<label>
+					<input id="enable-logs" type="checkbox" checked />
+					Enable worker diagnostics
+				</label>
+				<button id="run-button" type="button">Compile and run</button>
+			</div>
+		</section>
+
+		<section class="columns">
+			<div class="card">
+				<label for="source">Rust source</label>
+				<textarea id="source">fn main() { println!("hi"); }</textarea>
+			</div>
+			<div class="card">
+				<div class="status">
+					<span class="pill" id="isolation-pill">crossOriginIsolated: pending</span>
+					<span class="pill" id="run-pill">status: idle</span>
+					<span class="pill" id="progress-pill">progress: idle</span>
+				</div>
+				<div class="progress-track">
+					<progress id="progress-bar" max="100" value="0"></progress>
+				</div>
+				<p>Structured result</p>
+				<pre id="result-panel">{}</pre>
+			</div>
+		</section>
+
+		<section class="card">
+			<p>Harness log</p>
+			<pre id="log-panel" class="log"></pre>
+		</section>
+	</main>
+
+	<script type="module" src="./harness.js"></script>
+</body>
+</html>

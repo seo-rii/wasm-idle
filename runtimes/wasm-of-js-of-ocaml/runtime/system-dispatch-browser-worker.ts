@@ -1,0 +1,501 @@
+import type { MemoryFileSystem } from './fs/memory-fs.js';
+import type { SystemDispatcher } from './system-dispatch.js';
+
+export type BrowserNativeManifestFile = {
+	path: string;
+	url?: string;
+	size: number;
+};
+
+export type BrowserNativeManifestRuntimePack = {
+	format: 'wasm-of-js-of-ocaml-browser-native-runtime-pack-v1';
+	asset: string;
+	index: string;
+	fileCount: number;
+	totalBytes: number;
+};
+
+export type BrowserNativeManifestPackage = {
+	name: string;
+	rootPath: string;
+	metaPath?: string;
+	archiveBytePath?: string;
+	requires: string[];
+	files: BrowserNativeManifestFile[];
+};
+
+export type BrowserNativeManifest = {
+	version: 1;
+	generatedAt: string;
+	switchPrefix: string;
+	findlibConf: string;
+	tools: {
+		ocamlc: string;
+		js_of_ocaml: string;
+		wasm_of_ocaml: string;
+	};
+	binaryenTools?: {
+		wasm_opt: string;
+		wasm_merge: string;
+		wasm_metadce: string;
+	};
+	toolPatches?: Record<string, unknown>;
+	runtimePack?: BrowserNativeManifestRuntimePack;
+	ocamlLibFiles: BrowserNativeManifestFile[];
+	packages: BrowserNativeManifestPackage[];
+};
+
+type BrowserNativeRuntimePackEntry = {
+	offset: number;
+	length: number;
+};
+
+type BrowserNativeRuntimePackCache = {
+	bytes: Uint8Array;
+	entries: Map<string, BrowserNativeRuntimePackEntry>;
+};
+
+type BrowserToolPreloadFile = {
+	path: string;
+	url?: string;
+	text?: string;
+	bytes?: ArrayBuffer;
+};
+
+type BrowserToolResult = {
+	exitCode: number;
+	stdout: string;
+	stderr: string;
+	thrown?: string;
+	files: Array<{
+		path: string;
+		data: Uint8Array;
+	}>;
+};
+
+type WorkerResponse = {
+	type: 'tool-result';
+	exitCode: number;
+	stdout: string;
+	stderr: string;
+	thrown?: string;
+	files: Array<{
+		path: string;
+		data: ArrayBuffer;
+	}>;
+};
+
+function toArrayBuffer(data: Uint8Array) {
+	const copy = new Uint8Array(data.byteLength);
+	copy.set(data);
+	return copy.buffer;
+}
+
+function toToolchainPath(path: string) {
+	return path;
+}
+
+function isSourceArg(value: string) {
+	return /^\/workspace\/.+\.(ml|mli|cmo|cma|cmi)$/.test(value);
+}
+
+function resolvePackageClosure(
+	packages: string[],
+	packageMap: Map<string, BrowserNativeManifestPackage>
+) {
+	const resolved: BrowserNativeManifestPackage[] = [];
+	const visited = new Set<string>();
+	const visit = (packageName: string) => {
+		if (visited.has(packageName)) {
+			return;
+		}
+		const manifestPackage = packageMap.get(packageName);
+		if (!manifestPackage) {
+			throw new Error(`browser-native bundle does not include package: ${packageName}`);
+		}
+		visited.add(packageName);
+		for (const dependency of manifestPackage.requires) {
+			visit(dependency);
+		}
+		resolved.push(manifestPackage);
+	};
+	for (const packageName of packages) {
+		visit(packageName);
+	}
+	return resolved;
+}
+
+function expandOcamlfindInvocation(
+	argv: string[],
+	packageMap: Map<string, BrowserNativeManifestPackage>
+) {
+	if (argv[1] !== 'ocamlc') {
+		throw new Error(`unsupported browser-native ocamlfind subcommand: ${argv[1] || '(none)'}`);
+	}
+
+	const packages: string[] = [];
+	const forwardedArgs: string[] = [];
+	let linkpkg = false;
+	for (let index = 2; index < argv.length; index += 1) {
+		const argument = argv[index] || '';
+		if (argument === '-package') {
+			const value = argv[index + 1] || '';
+			index += 1;
+			for (const packageName of value.split(',').map((entry) => entry.trim()).filter(Boolean)) {
+				packages.push(packageName);
+			}
+			continue;
+		}
+		if (argument === '-linkpkg') {
+			linkpkg = true;
+			continue;
+		}
+		forwardedArgs.push(argument);
+	}
+
+	const resolvedPackages = resolvePackageClosure(packages, packageMap);
+	const includeArgs = resolvedPackages.flatMap((manifestPackage) => [
+		'-I',
+		toToolchainPath(manifestPackage.rootPath)
+	]);
+	const archiveArgs = linkpkg
+		? resolvedPackages.flatMap((manifestPackage) =>
+				manifestPackage.archiveBytePath ? [toToolchainPath(manifestPackage.archiveBytePath)] : []
+			)
+		: [];
+	const firstSourceIndex = forwardedArgs.findIndex((argument) => isSourceArg(argument));
+	const beforeSources =
+		firstSourceIndex >= 0 ? forwardedArgs.slice(0, firstSourceIndex) : forwardedArgs;
+	const sourceArgs = firstSourceIndex >= 0 ? forwardedArgs.slice(firstSourceIndex) : [];
+
+	return {
+		command: 'ocamlc' as const,
+		argv: [...includeArgs, ...beforeSources, ...archiveArgs, ...sourceArgs],
+		packages: resolvedPackages
+	};
+}
+
+function getFilePreloadsFromFs(fs: MemoryFileSystem, prefix: '/workspace' | '/tmp') {
+	return fs.listFiles(prefix).map((filePath) => ({
+		path: filePath,
+		bytes: toArrayBuffer(fs.readFile(filePath))
+	}));
+}
+
+function getToolchainPreloads(
+	command: 'ocamlc' | 'js_of_ocaml' | 'wasm_of_ocaml',
+	manifest: BrowserNativeManifest,
+	packages: BrowserNativeManifestPackage[],
+	runtimePack: BrowserNativeRuntimePackCache | null
+) {
+	const selectedPackages = command === 'ocamlc' ? packages : [];
+	const selectedOcamlLibFiles = manifest.ocamlLibFiles.filter(
+		(file) =>
+			!file.path.includes('/compiler-libs/') &&
+			!file.path.includes('/ocamldoc/') &&
+			!file.path.includes('/runtime_events/')
+	);
+	return [
+		...selectedOcamlLibFiles.map((file) => {
+			const packedEntry = runtimePack?.entries.get(file.path);
+			if (packedEntry) {
+				const packedBytes = runtimePack!.bytes.subarray(
+					packedEntry.offset,
+					packedEntry.offset + packedEntry.length
+				);
+				const copiedBytes = new Uint8Array(packedBytes.byteLength);
+				copiedBytes.set(packedBytes);
+				return {
+					path: toToolchainPath(file.path),
+					bytes: copiedBytes.buffer
+				};
+			}
+			if (!file.url) {
+				throw new Error(`missing browser-native preload URL for ${file.path}`);
+			}
+			return {
+				path: toToolchainPath(file.path),
+				url: file.url
+			};
+		}),
+		...selectedPackages.flatMap((manifestPackage) =>
+			manifestPackage.files.map((file) => {
+				const packedEntry = runtimePack?.entries.get(file.path);
+				if (packedEntry) {
+					const packedBytes = runtimePack!.bytes.subarray(
+						packedEntry.offset,
+						packedEntry.offset + packedEntry.length
+					);
+					const copiedBytes = new Uint8Array(packedBytes.byteLength);
+					copiedBytes.set(packedBytes);
+					return {
+						path: toToolchainPath(file.path),
+						bytes: copiedBytes.buffer
+					};
+				}
+				if (!file.url) {
+					throw new Error(`missing browser-native preload URL for ${file.path}`);
+				}
+				return {
+					path: toToolchainPath(file.path),
+					url: file.url
+				};
+			})
+		),
+		{
+			path: '/static/toolchain/findlib.conf',
+			url: manifest.findlibConf
+		}
+	];
+}
+
+export async function fetchBrowserNativeManifest() {
+	const response = await fetch('/.cache/browser-native-bundle/browser-native-manifest.v1.json', {
+		cache: 'no-store'
+	});
+	if (!response.ok) {
+		throw new Error(`failed to fetch browser-native manifest: ${response.status}`);
+	}
+	return (await response.json()) as BrowserNativeManifest;
+}
+
+export async function runBrowserNativeTool(request: {
+	toolUrl: string;
+	argv: string[];
+	env: Record<string, string>;
+	preloadFiles: BrowserToolPreloadFile[];
+	outputPrefixes: string[];
+	systemBridge?: 'binaryen';
+	binaryenTools?: BrowserNativeManifest['binaryenTools'];
+}) {
+	const worker = new Worker(new URL('../browser-harness/native-tool-worker.js', import.meta.url), {
+		type: 'module'
+	});
+
+	try {
+		return await new Promise<BrowserToolResult>((resolve, reject) => {
+			const transferPreloadBuffers = request.preloadFiles.flatMap((file) =>
+				file.bytes ? [file.bytes] : []
+			);
+			const handleMessage = (event: MessageEvent<WorkerResponse>) => {
+				const response = event.data;
+				if (!response || response.type !== 'tool-result') {
+					return;
+				}
+				worker.removeEventListener('message', handleMessage);
+				resolve({
+					exitCode: response.exitCode,
+					stdout: response.stdout,
+					stderr: response.stderr,
+					...(response.thrown ? { thrown: response.thrown } : {}),
+					files: response.files.map((file) => ({
+						path: file.path,
+						data: new Uint8Array(file.data)
+					}))
+				});
+			};
+			worker.addEventListener('message', handleMessage);
+			worker.addEventListener(
+				'error',
+				(error) => {
+					worker.removeEventListener('message', handleMessage);
+					reject(error.error || new Error(error.message));
+				},
+				{ once: true }
+			);
+			worker.postMessage({
+				type: 'run-tool',
+				toolUrl: request.toolUrl,
+				argv: request.argv,
+				env: request.env,
+				preloadFiles: request.preloadFiles,
+				outputPrefixes: request.outputPrefixes,
+				...(request.systemBridge ? { systemBridge: request.systemBridge } : {}),
+				...(request.binaryenTools ? { binaryenTools: request.binaryenTools } : {})
+			}, transferPreloadBuffers);
+		});
+	} finally {
+		worker.terminate();
+	}
+}
+
+export function createBrowserWorkerSystemDispatcher(options: {
+	manifest: BrowserNativeManifest;
+}) {
+	const packageMap = new Map(
+		options.manifest.packages.map((manifestPackage) => [manifestPackage.name, manifestPackage])
+	);
+	let runtimePackEntriesPromise: Promise<BrowserNativeRuntimePackCache | null> | null = null;
+
+	return (async (argv, context) => {
+		if (argv.length === 0) {
+			throw new Error('browser-native system dispatcher requires at least one argv element');
+		}
+
+		let commandName: 'ocamlc' | 'js_of_ocaml' | 'wasm_of_ocaml';
+		let toolArgv: string[];
+		let packageClosure: BrowserNativeManifestPackage[] = [];
+
+		if (argv[0] === 'ocamlfind') {
+			const expandedInvocation = expandOcamlfindInvocation(argv, packageMap);
+			commandName = expandedInvocation.command;
+			toolArgv = expandedInvocation.argv;
+			packageClosure = expandedInvocation.packages;
+		} else if (argv[0] === 'ocamlc' || argv[0] === 'js_of_ocaml' || argv[0] === 'wasm_of_ocaml') {
+			commandName = argv[0];
+			toolArgv = argv.slice(1);
+		} else {
+			throw new Error(`unsupported browser-native subprocess: ${argv[0]}`);
+		}
+
+		const env = { ...context.env };
+		if (commandName === 'ocamlc') {
+			env['OCAMLLIB'] = env['OCAMLLIB'] || '/static/toolchain/lib/ocaml';
+		}
+		if (commandName === 'js_of_ocaml' || commandName === 'wasm_of_ocaml') {
+			env['OCAMLFIND_CONF'] = env['OCAMLFIND_CONF'] || '/static/toolchain/findlib.conf';
+		}
+		if (commandName === 'wasm_of_ocaml') {
+			env['WASM_OF_JS_OF_OCAML_BROWSER_FAST_BINARYEN'] =
+				env['WASM_OF_JS_OF_OCAML_BROWSER_FAST_BINARYEN'] || '1';
+		}
+		if (!runtimePackEntriesPromise) {
+			runtimePackEntriesPromise = (async () => {
+				if (!options.manifest.runtimePack) {
+					return null;
+				}
+				const packIndexResponse = await fetch(options.manifest.runtimePack.index, {
+					cache: 'no-store'
+				});
+				if (!packIndexResponse.ok) {
+					throw new Error(
+						`failed to fetch browser-native runtime pack index: ${packIndexResponse.status}`
+					);
+				}
+				const packIndex = (await packIndexResponse.json()) as {
+					format?: string;
+					fileCount?: number;
+					totalBytes?: number;
+					entries?: Array<{
+						runtimePath?: string;
+						offset?: number;
+						length?: number;
+					}>;
+				};
+				if (
+					packIndex.format !== 'wasm-of-js-of-ocaml-browser-native-runtime-pack-index-v1' ||
+					!Array.isArray(packIndex.entries) ||
+					packIndex.fileCount !== packIndex.entries.length ||
+					typeof packIndex.totalBytes !== 'number'
+				) {
+					throw new Error('invalid browser-native runtime pack index');
+				}
+				const packAssetResponse = await fetch(options.manifest.runtimePack.asset, {
+					cache: 'no-store'
+				});
+				if (!packAssetResponse.ok) {
+					throw new Error(
+						`failed to fetch browser-native runtime pack asset: ${packAssetResponse.status}`
+					);
+				}
+				let packBytes = new Uint8Array(await packAssetResponse.arrayBuffer());
+				if (
+					packBytes.byteLength >= 2 &&
+					packBytes[0] === 0x1f &&
+					packBytes[1] === 0x8b
+				) {
+					if (typeof DecompressionStream !== 'function') {
+						throw new Error(
+							"failed to decompress browser-native runtime pack: this browser does not support DecompressionStream('gzip')"
+						);
+					}
+					const decompressedResponse = new Response(
+						new Blob([packBytes.buffer]).stream().pipeThrough(
+							new DecompressionStream('gzip')
+						)
+					);
+					packBytes = new Uint8Array(await decompressedResponse.arrayBuffer());
+				}
+				if (
+					packIndex.fileCount !== options.manifest.runtimePack.fileCount ||
+					packIndex.totalBytes !== options.manifest.runtimePack.totalBytes ||
+					packBytes.byteLength !== packIndex.totalBytes
+				) {
+					throw new Error('browser-native runtime pack metadata does not match payload');
+				}
+				const packEntries = new Map<string, BrowserNativeRuntimePackEntry>();
+				for (const entry of packIndex.entries) {
+					if (
+						typeof entry.runtimePath !== 'string' ||
+						typeof entry.offset !== 'number' ||
+						typeof entry.length !== 'number'
+					) {
+						throw new Error('invalid browser-native runtime pack entry');
+					}
+					packEntries.set(entry.runtimePath, {
+						offset: entry.offset,
+						length: entry.length
+					});
+				}
+				return {
+					bytes: packBytes,
+					entries: packEntries
+				};
+			})();
+		}
+		const runtimePackEntries = await runtimePackEntriesPromise;
+
+		if (commandName === 'wasm_of_ocaml' && !options.manifest.binaryenTools) {
+			throw new Error('browser-native bundle is missing static Binaryen tools');
+		}
+
+		const result = await runBrowserNativeTool({
+			toolUrl: options.manifest.tools[commandName],
+			argv: toolArgv,
+			env,
+			preloadFiles: [
+				...getToolchainPreloads(
+					commandName,
+					options.manifest,
+					packageClosure,
+					runtimePackEntries
+				),
+				...getFilePreloadsFromFs(context.fs, '/workspace'),
+				...getFilePreloadsFromFs(context.fs, '/tmp')
+			],
+			outputPrefixes: ['/workspace/_build', '/tmp'],
+			...(commandName === 'wasm_of_ocaml'
+				? {
+						systemBridge: 'binaryen' as const,
+						binaryenTools: options.manifest.binaryenTools
+					}
+				: {})
+		});
+		const toolReportedSuccess =
+			(commandName === 'js_of_ocaml' || commandName === 'wasm_of_ocaml') &&
+			result.files.some((file) => file.path.endsWith('.js')) &&
+			((result.thrown || '').includes('tool-exit:0') || result.stderr.includes('tool-exit:0'));
+		const normalizedExitCode = toolReportedSuccess ? 0 : result.exitCode;
+		const normalizedThrown =
+			toolReportedSuccess && (result.thrown || '').includes('tool-exit:0')
+				? undefined
+				: result.thrown;
+		const normalizedStderr =
+			toolReportedSuccess
+				? result.stderr
+						.split('\n')
+						.filter((line) => !line.includes('tool-exit:0'))
+						.join('\n')
+				: result.stderr;
+
+		for (const file of result.files) {
+			context.fs.writeFile(file.path, file.data);
+		}
+
+		return {
+			exitCode: normalizedExitCode,
+			stdout: result.stdout,
+			stderr: [normalizedStderr, normalizedThrown].filter(Boolean).join('\n')
+		};
+	}) satisfies SystemDispatcher;
+}

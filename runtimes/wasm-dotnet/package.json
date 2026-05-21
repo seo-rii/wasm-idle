@@ -1,0 +1,28 @@
+{
+  "name": "wasm-dotnet",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Browser-loadable .NET C# and F# runtime contract for wasm-idle",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "default": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "build:runtime": "node scripts/build-runtime.mjs",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^24.6.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  }
+}

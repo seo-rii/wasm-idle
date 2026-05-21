@@ -1,0 +1,14 @@
+Subject: [DRAFT PATCH] browser: require precompiled runtime assets
+
+Target files:
+- compiler/bin-wasm_of_ocaml/compile.ml
+- compiler/lib-wasm/runtime_files.ml
+
+Intent:
+- reject runtime build fallbacks inside the browser
+- require host-precompiled runtime variants to be bundled in the frozen toolchain
+
+Status:
+- draft only
+- upstream diff still needs to be produced against a pinned js_of_ocaml checkout
+

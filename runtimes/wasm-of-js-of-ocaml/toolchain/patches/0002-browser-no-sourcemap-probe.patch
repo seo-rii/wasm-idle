@@ -1,0 +1,14 @@
+Subject: [DRAFT PATCH] browser: disable source-map capability probes during bring-up
+
+Target files:
+- compiler/bin-wasm_of_ocaml/compile.ml
+- compiler/lib/linker.ml
+
+Intent:
+- make browser bring-up independent of source-content probing
+- keep `--source-map` off behind a browser preset until the runtime contract is stable
+
+Status:
+- draft only
+- intended for the first frozen browser toolchain milestone
+

@@ -1,0 +1,86 @@
+{
+  "version": 1,
+  "toolchainRoot": "/toolchain",
+  "findlibConfig": "lib/findlib.conf",
+  "bins": [
+    {
+      "name": "ocamlc.byte",
+      "source": "bin/ocamlc",
+      "target": "bin/ocamlc.byte"
+    },
+    {
+      "name": "ocamlfind.byte",
+      "source": "bin/ocamlfind",
+      "target": "bin/ocamlfind.byte"
+    },
+    {
+      "name": "js_of_ocaml.byte",
+      "source": "bin/js_of_ocaml",
+      "target": "bin/js_of_ocaml.byte"
+    },
+    {
+      "name": "wasm_of_ocaml.byte",
+      "source": "bin/wasm_of_ocaml",
+      "target": "bin/wasm_of_ocaml.byte"
+    }
+  ],
+  "libs": [
+    {
+      "name": "stdlib",
+      "source": "lib/ocaml",
+      "target": "lib/ocaml"
+    },
+    {
+      "name": "findlib",
+      "source": "lib/findlib",
+      "target": "lib/findlib"
+    },
+    {
+      "name": "compiler-libs",
+      "source": "lib/ocaml/compiler-libs",
+      "target": "lib/ocaml/compiler-libs"
+    },
+    {
+      "name": "js_of_ocaml",
+      "source": "lib/js_of_ocaml",
+      "target": "lib/js_of_ocaml"
+    },
+    {
+      "name": "wasm_of_ocaml",
+      "source": "lib/wasm_of_ocaml",
+      "target": "lib/wasm_of_ocaml"
+    }
+  ],
+  "runtimeVariants": [
+    {
+      "name": "browser-cps",
+      "effectsMode": "cps",
+      "source": "share/wasm-of-js-of-ocaml/runtime/browser-cps",
+      "target": "runtime/browser-cps"
+    },
+    {
+      "name": "browser-jspi",
+      "effectsMode": "jspi",
+      "source": "share/wasm-of-js-of-ocaml/runtime/browser-jspi",
+      "target": "runtime/browser-jspi"
+    }
+  ],
+  "packages": [
+    {
+      "name": "findlib",
+      "path": "lib/findlib"
+    },
+    {
+      "name": "js_of_ocaml",
+      "path": "lib/js_of_ocaml"
+    },
+    {
+      "name": "wasm_of_ocaml",
+      "path": "lib/wasm_of_ocaml"
+    },
+    {
+      "name": "yojson",
+      "path": "lib/yojson"
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+	"name": "wasm-typescript",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"description": "Browser-loadable JavaScript and TypeScript runner module for wasm-idle",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js",
+			"default": "./dist/index.js"
+		}
+	},
+	"files": [
+		"dist"
+	],
+	"scripts": {
+		"build": "rm -rf dist && tsc -p tsconfig.json --emitDeclarationOnly && node ./scripts/build.mjs",
+		"check": "tsc -p tsconfig.json --noEmit",
+		"test": "vitest run"
+	},
+	"dependencies": {
+		"@swc/wasm-typescript": "^1.15.33",
+		"buffer": "^6.0.3"
+	},
+	"devDependencies": {
+		"@types/node": "^24.6.1",
+		"esbuild": "^0.27.0",
+		"typescript": "^5.9.3",
+		"vitest": "^4.0.18"
+	}
+}

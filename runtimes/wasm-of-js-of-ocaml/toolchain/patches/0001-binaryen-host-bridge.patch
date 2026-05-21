@@ -1,0 +1,15 @@
+Subject: [DRAFT PATCH] browser: replace Binaryen shell invocations with host bridge calls
+
+Target files:
+- compiler/lib-wasm/binaryen.ml
+- compiler/bin-wasm_of_ocaml/compile.ml
+
+Intent:
+- remove `Sys.command` and shell redirection assumptions
+- route `wasm-opt`, `wasm-merge`, and `wasm-metadce` through a browser host bridge
+- keep stderr/stdout capture explicit so the worker can surface diagnostics
+
+Status:
+- draft only
+- no upstream diff has been recorded in this repository yet
+

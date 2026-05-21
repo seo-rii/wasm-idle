@@ -4,10 +4,22 @@
 	"description": "A simple web app to run code in the browser",
 	"license": "MIT",
 	"type": "module",
+	"workspaces": [
+		"packages/*",
+		"runtimes/*",
+		"apps/*"
+	],
 	"scripts": {
 		"dev": "vite dev",
 		"build:preview": "vite build",
 		"build": "vite build && npm run package",
+		"workspace:list": "node scripts/workspace.mjs list",
+		"workspace:build": "node scripts/workspace.mjs run build --if-present",
+		"workspace:check": "node scripts/workspace.mjs run check --if-present",
+		"build:runtimes": "node scripts/workspace.mjs run build --group runtimes --if-present",
+		"check:runtimes": "node scripts/workspace.mjs run check --group runtimes --if-present",
+		"build:packages": "node scripts/workspace.mjs run build --group packages --if-present",
+		"check:packages": "node scripts/workspace.mjs run check --group packages --if-present",
 		"preview": "vite preview",
 		"probe:go-browser": "node scripts/probe-go-browser.mjs",
 		"probe:ocaml-browser": "node scripts/probe-ocaml-browser.mjs",

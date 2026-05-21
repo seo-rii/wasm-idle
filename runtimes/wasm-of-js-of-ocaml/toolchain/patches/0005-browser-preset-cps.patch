@@ -1,0 +1,14 @@
+Subject: [DRAFT PATCH] browser: default wasm_of_ocaml browser preset to --effects=cps
+
+Target files:
+- compiler/bin-wasm_of_ocaml/compile.ml
+- compiler/lib-wasm/effects.ml
+
+Intent:
+- keep the early browser backend on the compatibility-first `cps` path
+- gate `jspi` behind a later feature flag and capability probe
+
+Status:
+- draft only
+- should land before the first browser `hello.ml -> js + wasm assets` milestone
+
