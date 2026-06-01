@@ -452,6 +452,88 @@
 		}
 	} satisfies monaco.languages.IMonarchLanguage;
 
+	const watLanguageConfiguration = {
+		comments: {
+			lineComment: ';;'
+		},
+		brackets: [
+			['(', ')'],
+			['[', ']']
+		],
+		autoClosingPairs: [
+			{ open: '(', close: ')' },
+			{ open: '[', close: ']' },
+			{ open: '"', close: '"' }
+		],
+		surroundingPairs: [
+			{ open: '(', close: ')' },
+			{ open: '[', close: ']' },
+			{ open: '"', close: '"' }
+		]
+	} satisfies monaco.languages.LanguageConfiguration;
+
+	const watMonarchTokens = {
+		defaultToken: '',
+		tokenPostfix: '.wat',
+		keywords: [
+			'array',
+			'block',
+			'br',
+			'br_if',
+			'call',
+			'data',
+			'elem',
+			'else',
+			'end',
+			'export',
+			'func',
+			'global',
+			'if',
+			'import',
+			'local',
+			'local.get',
+			'local.set',
+			'local.tee',
+			'memory',
+			'module',
+			'mut',
+			'param',
+			'result',
+			'return',
+			'start',
+			'table',
+			'then',
+			'type'
+		],
+		tokenizer: {
+			root: [
+				[/;;.*$/, 'comment'],
+				[/\(;/, 'comment', '@comment'],
+				[/"/, 'string', '@string'],
+				[/\$[A-Za-z0-9_!#$%&'*+\-./:<=>?@\\^`|~]+/, 'variable'],
+				[/(?:i32|i64|f32|f64)\.[A-Za-z0-9_.]+/, 'keyword'],
+				[/[-+]?(?:0x[0-9A-Fa-f_]+|\d[\d_]*)(?:\.\d[\d_]*)?/, 'number'],
+				[/[()[\]]/, '@brackets'],
+				[
+					/[A-Za-z_][\w.:-]*/,
+					{ cases: { '@keywords': 'keyword', '@default': 'identifier' } }
+				]
+			],
+			comment: [
+				[/[^(;]+/, 'comment'],
+				[/\(;/, 'comment', '@push'],
+				[/;\)/, 'comment', '@pop'],
+				[/[(;]/, 'comment']
+			],
+			string: [
+				[/[^\\"]+/, 'string'],
+				[/\\[0-9A-Fa-f]{2}/, 'string.escape'],
+				[/\\./, 'string.escape'],
+				[/"/, 'string', '@pop']
+			]
+		}
+	} satisfies monaco.languages.IMonarchLanguage;
+
 	export const editorValue = () => editor?.getValue() || '';
 
 	let divEl: HTMLDivElement | null = $state(null);
@@ -591,6 +673,7 @@
 			language === 'ocaml' ||
 			language === 'javascript' ||
 			language === 'typescript' ||
+			language === 'wat' ||
 			language === 'zig' ||
 			language === 'lisp' ||
 			language === 'haskell'
@@ -634,6 +717,7 @@
 				| 'ocaml'
 				| 'javascript'
 				| 'typescript'
+				| 'wat'
 				| 'zig'
 				| 'lisp'
 				| 'haskell'
@@ -683,6 +767,15 @@
 					extensions: ['.zig']
 				});
 			}
+			if (!Monaco.languages.getLanguages().some(({ id }) => id === 'wat')) {
+				Monaco.languages.register({
+					id: 'wat',
+					aliases: ['WAT', 'WebAssembly Text', 'wat'],
+					extensions: ['.wat', '.wast']
+				});
+			}
+			Monaco.languages.setLanguageConfiguration('wat', watLanguageConfiguration);
+			Monaco.languages.setMonarchTokensProvider('wat', watMonarchTokens);
 			if (!Monaco.languages.getLanguages().some(({ id }) => id === 'haskell')) {
 				Monaco.languages.register({
 					id: 'haskell',
@@ -714,6 +807,7 @@
 					| 'ocaml'
 					| 'javascript'
 					| 'typescript'
+					| 'wat'
 					| 'zig'
 					| 'lisp'
 					| 'haskell'

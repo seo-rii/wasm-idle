@@ -1,0 +1,31 @@
+{
+	"name": "wasm-wat",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"description": "Browser-loadable WebAssembly Text compiler module for wasm-idle",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js",
+			"default": "./dist/index.js"
+		}
+	},
+	"files": [
+		"dist"
+	],
+	"scripts": {
+		"build": "rm -rf dist && tsc -p tsconfig.json --emitDeclarationOnly && node ./scripts/build.mjs",
+		"check": "tsc -p tsconfig.json --noEmit",
+		"test": "pnpm run build && vitest run"
+	},
+	"dependencies": {
+		"wabt": "^1.0.39"
+	},
+	"devDependencies": {
+		"@types/node": "^24.6.1",
+		"esbuild": "^0.27.0",
+		"typescript": "^5.9.3",
+		"vitest": "^4.0.18"
+	}
+}

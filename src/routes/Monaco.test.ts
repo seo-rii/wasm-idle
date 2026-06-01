@@ -34,6 +34,7 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(
 			/language === 'java' \|\|\s+language === 'rust' \|\|\s+language === 'go' \|\|\s+language === 'csharp' \|\|\s+language === 'fsharp' \|\|\s+language === 'ocaml'/
 		);
+		expect(source).toMatch(/language === 'wat'/);
 		expect(source).toMatch(/language === 'lisp'/);
 		expect(source).toMatch(/language === 'haskell'/);
 		expect(source).toMatch(
@@ -126,6 +127,7 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).toMatch(/<option value="TINYGO">TinyGo<\/option>/);
 		expect(pageSource).toMatch(/<option value="JAVASCRIPT">JavaScript<\/option>/);
 		expect(pageSource).toMatch(/<option value="TYPESCRIPT">TypeScript<\/option>/);
+		expect(pageSource).toMatch(/<option value="WAT">WAT<\/option>/);
 		expect(pageSource).toMatch(/<option value="ZIG">Zig<\/option>/);
 		expect(pageSource).toMatch(/<option value="LISP">Scheme<\/option>/);
 		expect(pageSource).toMatch(/<option value="HASKELL">Haskell<\/option>/);
@@ -142,6 +144,7 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).toMatch(/wasm-elixir\/bundle\.avm\?v=\$\{WASM_ELIXIR_ASSET_VERSION\}/);
 		expect(pageSource).toMatch(/WASM_OCAML_ASSET_VERSION/);
 		expect(pageSource).toMatch(/WASM_TYPESCRIPT_ASSET_VERSION/);
+		expect(pageSource).toMatch(/WASM_WAT_ASSET_VERSION/);
 		expect(pageSource).toMatch(/WASM_ZIG_ASSET_VERSION/);
 		expect(pageSource).toMatch(/WASM_LISP_ASSET_VERSION/);
 		expect(pageSource).toMatch(/WASM_HASKELL_ASSET_VERSION/);

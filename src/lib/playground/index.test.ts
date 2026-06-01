@@ -97,6 +97,10 @@ vi.mock('$lib/playground/typescript', () => ({
 	}
 }));
 
+vi.mock('$lib/playground/wat', () => ({
+	default: createMockSandboxClass('WAT')
+}));
+
 vi.mock('$lib/playground/zig', () => ({
 	default: createMockSandboxClass('ZIG')
 }));
@@ -464,6 +468,31 @@ describe('playground runtime binding', () => {
 		expect(sandboxInstances.get('ZIG')).toHaveLength(1);
 		expect(sandboxInstances.get('ZIG')?.[0]?.loadCalls).toEqual([
 			[runtimeAssets, 'pub fn main() void {}', true, ['demo'], {}, progress]
+		]);
+	});
+
+	it('routes WAT requests through the wasm-wat sandbox implementation', async () => {
+		const binding = createPlaygroundBinding({
+			rootUrl: '/absproxy/5173',
+			wat: {
+				moduleUrl: '/absproxy/5173/wasm-wat/index.js?v=test'
+			}
+		});
+		const progress = { set() {} };
+		const sandbox = await binding.load('WAT');
+
+		await sandbox.load('(module)', true, ['demo'], {}, progress);
+
+		const runtimeAssets = {
+			rootUrl: '/absproxy/5173',
+			wat: {
+				moduleUrl: '/absproxy/5173/wasm-wat/index.js?v=test'
+			}
+		};
+		expect(sandbox.runtimeAssets).toEqual(runtimeAssets);
+		expect(sandboxInstances.get('WAT')).toHaveLength(1);
+		expect(sandboxInstances.get('WAT')?.[0]?.loadCalls).toEqual([
+			[runtimeAssets, '(module)', true, ['demo'], {}, progress]
 		]);
 	});
 

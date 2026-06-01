@@ -10,6 +10,7 @@ import Python from '$lib/playground/python';
 import Rust from '$lib/playground/rust';
 import TinyGo from '$lib/playground/tinygo';
 import TypeScriptSandbox from '$lib/playground/typescript';
+import Wat from '$lib/playground/wat';
 import Zig from '$lib/playground/zig';
 import type {
 	BoundSandbox,
@@ -36,6 +37,7 @@ export const supportedLanguages = [
 	'OCAML',
 	'JAVASCRIPT',
 	'TYPESCRIPT',
+	'WAT',
 	'ZIG',
 	'LISP',
 	'HASKELL'
@@ -106,6 +108,9 @@ async function playground(language: string, runtimeAssets?: SandboxRuntimeAssets
 		case 'TS':
 			sandbox = new TypeScriptSandbox('TYPESCRIPT');
 			break;
+		case 'WAT':
+			sandbox = new Wat();
+			break;
 		case 'ZIG':
 			sandbox = new Zig();
 			break;
@@ -146,6 +151,7 @@ async function playground(language: string, runtimeAssets?: SandboxRuntimeAssets
 		if (language === 'TYPESCRIPT' || language === 'TS') {
 			sandboxCache['TYPESCRIPT'] = sandboxCache['TS'] = sandbox;
 		}
+		if (language === 'WAT') sandboxCache['WAT'] = sandbox;
 		if (language === 'ZIG') sandboxCache['ZIG'] = sandbox;
 		if (language === 'LISP' || language === 'SCHEME' || language === 'SCM') {
 			sandboxCache['LISP'] = sandboxCache['SCHEME'] = sandboxCache['SCM'] = sandbox;

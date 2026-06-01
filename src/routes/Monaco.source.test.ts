@@ -31,4 +31,19 @@ describe('Monaco route source', () => {
 		expect(source).toContain("lineComment: '--'");
 		expect(source).toContain("blockComment: ['{-', '-}']");
 	});
+
+	it('registers a WAT Monaco language with comments and tokenizer support', async () => {
+		const source = await readFile(
+			path.resolve(process.cwd(), 'src/routes/Monaco.svelte'),
+			'utf8'
+		);
+
+		expect(source).toContain("id: 'wat'");
+		expect(source).toContain("extensions: ['.wat', '.wast']");
+		expect(source).toContain("Monaco.languages.setLanguageConfiguration('wat'");
+		expect(source).toContain("Monaco.languages.setMonarchTokensProvider('wat'");
+		expect(source).toContain("tokenPostfix: '.wat'");
+		expect(source).toContain("lineComment: ';;'");
+		expect(source).toContain("[/\\(;/, 'comment', '@comment']");
+	});
 });

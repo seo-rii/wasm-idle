@@ -70,6 +70,10 @@ export interface TypeScriptRuntimeAssetConfig {
 	moduleUrl?: string;
 }
 
+export interface WatRuntimeAssetConfig {
+	moduleUrl?: string;
+}
+
 export interface HaskellRuntimeAssetConfig {
 	moduleUrl?: string;
 	rootfsUrl?: string;
@@ -100,6 +104,7 @@ export interface PlaygroundRuntimeAssets {
 	tinygo?: TinyGoRuntimeAssetConfig;
 	elixir?: ElixirRuntimeAssetConfig;
 	typescript?: TypeScriptRuntimeAssetConfig;
+	wat?: WatRuntimeAssetConfig;
 	haskell?: HaskellRuntimeAssetConfig;
 	zig?: ZigRuntimeAssetConfig;
 	lisp?: LispRuntimeAssetConfig;
@@ -622,6 +627,35 @@ export function resolveTypeScriptModuleUrl(
 	if (options?.rootUrl) {
 		return resolveConfiguredUrl(
 			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-typescript/index.js`,
+			currentUrl
+		);
+	}
+
+	return '';
+}
+
+export function resolveWatModuleUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredModuleUrl =
+		(typeof options === 'object' && options?.wat?.moduleUrl) ||
+		(publicEnv.PUBLIC_WASM_WAT_MODULE_URL || '').trim();
+
+	if (configuredModuleUrl) {
+		return resolveConfiguredUrl(configuredModuleUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-wat/index.js`,
+			currentUrl
+		);
+	}
+
+	if (options?.rootUrl) {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-wat/index.js`,
 			currentUrl
 		);
 	}

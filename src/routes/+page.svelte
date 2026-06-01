@@ -21,6 +21,7 @@
 	import { WASM_RUST_ASSET_VERSION } from '$lib/playground/wasmRustVersion';
 	import { WASM_TINYGO_ASSET_VERSION } from '$lib/playground/wasmTinyGoVersion';
 	import { WASM_TYPESCRIPT_ASSET_VERSION } from '$lib/playground/wasmTypeScriptVersion';
+	import { WASM_WAT_ASSET_VERSION } from '$lib/playground/wasmWatVersion';
 	import { WASM_ZIG_ASSET_VERSION } from '$lib/playground/wasmZigVersion';
 	import type {
 		CompilerDiagnostic,
@@ -58,6 +59,7 @@
 		| 'TINYGO'
 		| 'JAVASCRIPT'
 		| 'TYPESCRIPT'
+		| 'WAT'
 		| 'ZIG'
 		| 'LISP'
 		| 'HASKELL';
@@ -101,6 +103,7 @@
 		'TINYGO',
 		'JAVASCRIPT',
 		'TYPESCRIPT',
+		'WAT',
 		'ZIG',
 		'LISP',
 		'HASKELL'
@@ -119,6 +122,7 @@
 		TINYGO: 'TinyGo',
 		JAVASCRIPT: 'JavaScript',
 		TYPESCRIPT: 'TypeScript',
+		WAT: 'WAT',
 		ZIG: 'Zig',
 		LISP: 'Scheme',
 		HASKELL: 'Haskell'
@@ -167,6 +171,11 @@
 			moduleUrl: path
 				? `${path}/wasm-typescript/index.js?v=${WASM_TYPESCRIPT_ASSET_VERSION}`
 				: `/wasm-typescript/index.js?v=${WASM_TYPESCRIPT_ASSET_VERSION}`
+		},
+		wat: {
+			moduleUrl: path
+				? `${path}/wasm-wat/index.js?v=${WASM_WAT_ASSET_VERSION}`
+				: `/wasm-wat/index.js?v=${WASM_WAT_ASSET_VERSION}`
 		},
 		zig: {
 			compilerUrl: path
@@ -253,13 +262,15 @@
 												? 'javascript'
 												: language === 'TYPESCRIPT'
 													? 'typescript'
-													: language === 'ZIG'
-														? 'zig'
-														: language === 'LISP'
-															? 'lisp'
-															: language === 'HASKELL'
-																? 'haskell'
-																: 'go'
+													: language === 'WAT'
+														? 'wat'
+														: language === 'ZIG'
+															? 'zig'
+															: language === 'LISP'
+																? 'lisp'
+																: language === 'HASKELL'
+																	? 'haskell'
+																	: 'go'
 	);
 	const compact = $derived(examplePaneWidth > 0 && examplePaneWidth <= 760);
 	const activeFile = $derived(files.find((file) => file.path === activePath) ?? files[0]);
@@ -430,6 +441,8 @@
 			'.ts': 'TYPESCRIPT',
 			'.mts': 'TYPESCRIPT',
 			'.cts': 'TYPESCRIPT',
+			'.wat': 'WAT',
+			'.wast': 'WAT',
 			'.zig': 'ZIG',
 			'.scm': 'LISP',
 			'.ss': 'LISP',
@@ -457,6 +470,7 @@
 			TINYGO: 'main.go',
 			JAVASCRIPT: 'main.js',
 			TYPESCRIPT: 'main.ts',
+			WAT: 'main.wat',
 			ZIG: 'main.zig',
 			LISP: 'main.scm',
 			HASKELL: 'main.hs'
@@ -479,6 +493,7 @@
 			TINYGO: 'go',
 			JAVASCRIPT: 'javascript',
 			TYPESCRIPT: 'typescript',
+			WAT: 'wat',
 			ZIG: 'zig',
 			LISP: 'lisp',
 			HASKELL: 'haskell'
@@ -951,6 +966,8 @@
 			js: 'JAVASCRIPT',
 			typescript: 'TYPESCRIPT',
 			ts: 'TYPESCRIPT',
+			wat: 'WAT',
+			wast: 'WAT',
 			zig: 'ZIG',
 			lisp: 'LISP',
 			scheme: 'LISP',
@@ -1356,6 +1373,7 @@
 			language !== 'OCAML' &&
 			language !== 'JAVASCRIPT' &&
 			language !== 'TYPESCRIPT' &&
+			language !== 'WAT' &&
 			language !== 'ZIG' &&
 			language !== 'LISP' &&
 			language !== 'HASKELL'
@@ -1563,6 +1581,7 @@
 						<option value="TINYGO">TinyGo</option>
 						<option value="JAVASCRIPT">JavaScript</option>
 						<option value="TYPESCRIPT">TypeScript</option>
+						<option value="WAT">WAT</option>
 						<option value="ZIG">Zig</option>
 						<option value="LISP">Scheme</option>
 						<option value="HASKELL">Haskell</option>
@@ -1728,6 +1747,13 @@
 				for Enter-submitted line input. `fs.readFileSync('/dev/stdin', 'utf8')` and `fs.readFileSync(0,
 				'utf8')` are also available for full-input reads; send Ctrl+D or the EOF button after
 				typing input.
+			</p>
+		{/if}
+		{#if language === 'WAT'}
+			<p class="hint">
+				WAT compiles through the bundled WABT browser module, then instantiates the emitted
+				WebAssembly locally. Zero-argument numeric exports are called automatically and
+				printed to the terminal.
 			</p>
 		{/if}
 		{#if language === 'ZIG'}

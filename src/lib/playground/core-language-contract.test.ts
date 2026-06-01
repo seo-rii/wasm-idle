@@ -41,6 +41,12 @@ describe('core language contract', () => {
 		expect(isDeferredProgressLanguage('zig')).toBe(true);
 	});
 
+	it('exposes WAT as a deferred browser runtime language', () => {
+		expect(supportedLanguageIds).toContain('WAT');
+		expect(normalizeLanguageId('wat')).toBe('WAT');
+		expect(isDeferredProgressLanguage('wat')).toBe(true);
+	});
+
 	it('exposes Lisp aliases as a deferred browser runtime language', () => {
 		expect(supportedLanguageIds).toContain('LISP');
 		expect(normalizeLanguageId('lisp')).toBe('LISP');
@@ -60,6 +66,17 @@ describe('core language contract', () => {
 
 		expect(key).toContain('"zigCompilerUrl":"/wasm-zig/zig_small.wasm?v=test"');
 		expect(key).toContain('"zigStdlibUrl":"/wasm-zig/std.zip?v=test"');
+	});
+
+	it('includes WAT module urls in runtime asset cache keys', () => {
+		const key = createRuntimeAssetsKey({
+			rootUrl: '/repl',
+			wat: {
+				moduleUrl: '/wasm-wat/index.js?v=test'
+			}
+		});
+
+		expect(key).toContain('"watModuleUrl":"/wasm-wat/index.js?v=test"');
 	});
 
 	it('includes Lisp module urls in runtime asset cache keys', () => {

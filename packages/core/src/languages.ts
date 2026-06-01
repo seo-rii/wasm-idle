@@ -18,6 +18,7 @@ export type WasmIdleLanguageId =
 	| 'JS'
 	| 'TYPESCRIPT'
 	| 'TS'
+	| 'WAT'
 	| 'ZIG'
 	| 'LISP'
 	| 'SCHEME'
@@ -40,6 +41,7 @@ export const supportedLanguageIds = [
 	'OCAML',
 	'JAVASCRIPT',
 	'TYPESCRIPT',
+	'WAT',
 	'ZIG',
 	'LISP',
 	'HASKELL'
@@ -54,6 +56,7 @@ export const DEFAULT_DEFERRED_PROGRESS_LANGUAGES = new Set<string>([
 	'OCAML',
 	'JAVASCRIPT',
 	'TYPESCRIPT',
+	'WAT',
 	'ZIG',
 	'LISP',
 	'HASKELL'

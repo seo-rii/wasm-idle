@@ -1,0 +1,1 @@
+export const WASM_WAT_ASSET_VERSION = "12517c44f6615015";
