@@ -285,30 +285,6 @@
 		}
 	} satisfies monaco.languages.IMonarchLanguage;
 
-	const kotlinLanguageConfiguration = {
-		comments: {
-			lineComment: '//',
-			blockComment: ['/*', '*/']
-		},
-		brackets: [
-			['{', '}'],
-			['[', ']'],
-			['(', ')']
-		],
-		autoClosingPairs: [
-			{ open: '{', close: '}' },
-			{ open: '[', close: ']' },
-			{ open: '(', close: ')' },
-			{ open: '"', close: '"' }
-		],
-		surroundingPairs: [
-			{ open: '{', close: '}' },
-			{ open: '[', close: ']' },
-			{ open: '(', close: ')' },
-			{ open: '"', close: '"' }
-		]
-	} satisfies monaco.languages.LanguageConfiguration;
-
 	const haskellKeywords = [
 		'as',
 		'case',
@@ -802,7 +778,6 @@
 		if (!activeModel) return;
 		const markers =
 			language === 'java' ||
-			language === 'kotlin' ||
 			language === 'rust' ||
 			language === 'go' ||
 			language === 'csharp' ||
@@ -848,7 +823,6 @@
 				| 'cpp'
 				| 'python'
 				| 'java'
-				| 'kotlin'
 				| 'go'
 				| 'csharp'
 				| 'fsharp'
@@ -900,14 +874,6 @@
 			}
 			Monaco.languages.setLanguageConfiguration('fsharp', fsharpLanguageConfiguration);
 			Monaco.languages.setMonarchTokensProvider('fsharp', fsharpMonarchTokens);
-			if (!Monaco.languages.getLanguages().some(({ id }) => id === 'kotlin')) {
-				Monaco.languages.register({
-					id: 'kotlin',
-					aliases: ['Kotlin', 'kotlin'],
-					extensions: ['.kt', '.kts']
-				});
-			}
-			Monaco.languages.setLanguageConfiguration('kotlin', kotlinLanguageConfiguration);
 			if (!Monaco.languages.getLanguages().some(({ id }) => id === 'zig')) {
 				Monaco.languages.register({
 					id: 'zig',
@@ -957,7 +923,6 @@
 					| 'cpp'
 					| 'python'
 					| 'java'
-					| 'kotlin'
 					| 'go'
 					| 'csharp'
 					| 'fsharp'

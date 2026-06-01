@@ -51,7 +51,6 @@
 		| 'CPP'
 		| 'PYTHON'
 		| 'JAVA'
-		| 'KOTLIN'
 		| 'RUST'
 		| 'GO'
 		| 'CSHARP'
@@ -97,7 +96,6 @@
 		'CPP',
 		'PYTHON',
 		'JAVA',
-		'KOTLIN',
 		'RUST',
 		'GO',
 		'CSHARP',
@@ -118,7 +116,6 @@
 		CPP: 'C++',
 		PYTHON: 'Python',
 		JAVA: 'Java',
-		KOTLIN: 'Kotlin/JVM',
 		RUST: 'Rust',
 		GO: 'Go',
 		CSHARP: 'C#',
@@ -150,14 +147,6 @@
 			compilerUrl: path
 				? `${path}/wasm-go/index.js?v=${WASM_GO_ASSET_VERSION}`
 				: `/wasm-go/index.js?v=${WASM_GO_ASSET_VERSION}`
-		},
-		kotlin: {
-			cheerpjBaseUrl: path ? `${path}/cheerpj/4.3/` : '/cheerpj/4.3/',
-			homePath: `/app${path || ''}/wasm-kotlin-jvm`.replace(/\/+/g, '/'),
-			stdlibPath: `/app${path || ''}/wasm-kotlin-jvm/lib/kotlin-stdlib.jar`.replace(
-				/\/+/g,
-				'/'
-			)
 		},
 		dotnet: {
 			moduleUrl: path
@@ -268,33 +257,31 @@
 					? 'python'
 					: language === 'JAVA'
 						? 'java'
-						: language === 'KOTLIN'
-							? 'kotlin'
-							: language === 'RUST'
-								? 'rust'
-								: language === 'CSHARP'
-									? 'csharp'
-									: language === 'FSHARP'
-										? 'fsharp'
-										: language === 'ELIXIR'
-											? 'elixir'
-											: language === 'OCAML'
-												? 'ocaml'
-												: language === 'JAVASCRIPT'
-													? 'javascript'
-													: language === 'TYPESCRIPT'
-														? 'typescript'
-														: language === 'WAT'
-															? 'wat'
-															: language === 'ZIG'
-																? 'zig'
-																: language === 'LUA'
-																	? 'lua'
-																	: language === 'LISP'
-																		? 'lisp'
-																		: language === 'HASKELL'
-																			? 'haskell'
-																			: 'go'
+						: language === 'RUST'
+							? 'rust'
+							: language === 'CSHARP'
+								? 'csharp'
+								: language === 'FSHARP'
+									? 'fsharp'
+									: language === 'ELIXIR'
+										? 'elixir'
+										: language === 'OCAML'
+											? 'ocaml'
+											: language === 'JAVASCRIPT'
+												? 'javascript'
+												: language === 'TYPESCRIPT'
+													? 'typescript'
+													: language === 'WAT'
+														? 'wat'
+														: language === 'ZIG'
+															? 'zig'
+															: language === 'LUA'
+																? 'lua'
+																: language === 'LISP'
+																	? 'lisp'
+																	: language === 'HASKELL'
+																		? 'haskell'
+																		: 'go'
 	);
 	const compact = $derived(examplePaneWidth > 0 && examplePaneWidth <= 760);
 	const activeFile = $derived(files.find((file) => file.path === activePath) ?? files[0]);
@@ -448,8 +435,6 @@
 			'.h': 'CPP',
 			'.hpp': 'CPP',
 			'.java': 'JAVA',
-			'.kt': 'KOTLIN',
-			'.kts': 'KOTLIN',
 			'.py': 'PYTHON',
 			'.rs': 'RUST',
 			'.go': 'GO',
@@ -487,7 +472,6 @@
 			C: 'main.c',
 			CPP: 'main.cpp',
 			JAVA: 'Main.java',
-			KOTLIN: 'Main.kt',
 			PYTHON: 'main.py',
 			RUST: 'main.rs',
 			GO: 'main.go',
@@ -513,7 +497,6 @@
 			CPP: 'cpp',
 			PYTHON: 'python',
 			JAVA: 'java',
-			KOTLIN: 'kotlin',
 			RUST: 'rust',
 			GO: 'go',
 			CSHARP: 'csharp',
@@ -982,8 +965,6 @@
 			cpp: 'CPP',
 			cxx: 'CPP',
 			java: 'JAVA',
-			kotlin: 'KOTLIN',
-			kt: 'KOTLIN',
 			rust: 'RUST',
 			go: 'GO',
 			csharp: 'CSHARP',
@@ -1399,7 +1380,6 @@
 		}
 		if (
 			language !== 'JAVA' &&
-			language !== 'KOTLIN' &&
 			language !== 'RUST' &&
 			language !== 'GO' &&
 			language !== 'CSHARP' &&
@@ -1608,7 +1588,6 @@
 						<option value="CPP">C++</option>
 						<option value="PYTHON">Python</option>
 						<option value="JAVA">Java</option>
-						<option value="KOTLIN">Kotlin/JVM</option>
 						<option value="RUST">Rust</option>
 						<option value="GO">Go</option>
 						<option value="CSHARP">C#</option>
@@ -1625,7 +1604,7 @@
 						<option value="HASKELL">Haskell</option>
 					</select>
 				</label>
-				{#if language === 'JAVA' || language === 'KOTLIN' || language === 'RUST' || language === 'GO' || language === 'CSHARP' || language === 'FSHARP' || language === 'TINYGO' || language === 'JAVASCRIPT' || language === 'TYPESCRIPT' || language === 'LUA' || language === 'ZIG' || language === 'LISP' || language === 'HASKELL'}
+				{#if language === 'JAVA' || language === 'RUST' || language === 'GO' || language === 'CSHARP' || language === 'FSHARP' || language === 'TINYGO' || language === 'JAVASCRIPT' || language === 'TYPESCRIPT' || language === 'LUA' || language === 'ZIG' || language === 'LISP' || language === 'HASKELL'}
 					<label class="args-chip">
 						<span class="material-symbols-outlined">list_alt</span>
 						<input bind:value={argsInput} placeholder="3 4 5" spellcheck={false} />
@@ -1708,15 +1687,6 @@
 		</section>
 		{#if language === 'JAVA'}
 			<p class="hint">Run after that type into the terminal below and press Enter.</p>
-		{/if}
-		{#if language === 'KOTLIN'}
-			<p class="hint">
-				Kotlin/JVM compiles in the browser with a self-hosted CheerpJ runtime, then runs the
-				generated JVM bytecode through the bundled TeaVM Java runtime. The CheerpJ core
-				files must be served from `cheerpj/4.3/`, and the Kotlin compiler jars from
-				`wasm-kotlin-jvm/lib/`. Pass CLI args here, type into the terminal below, and use
-				Ctrl+D or the EOF button while running if the program reads stdin until EOF.
-			</p>
 		{/if}
 		{#if language === 'RUST'}
 			<p class="hint">

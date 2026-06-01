@@ -2,7 +2,7 @@
 
 ![wasm-idle](static/image.jpeg)
 
-Executes C++, Python, Java, Kotlin/JVM, Rust, Go, TinyGo, OCaml, Elixir, C#, F#, JavaScript,
+Executes C++, Python, Java, Rust, Go, TinyGo, OCaml, Elixir, C#, F#, JavaScript,
 TypeScript, WAT, Lua, Zig, Scheme, and Haskell code.
 
 Refer to src/lib/clang.
@@ -20,12 +20,10 @@ left in place, but the default development path is inside this repo:
 - `packages/node`: Node.js host helpers for Node-capable sandbox loaders.
 - `runtimes/*`: imported runtime/compiler packages such as `wasm-rust`,
   `wasm-of-js-of-ocaml`, `wasm-go`, `wasm-tinygo`, `wasm-dotnet`, `wasm-typescript`,
-  `wasm-wat`, `wasm-lua`, `wasm-lisp`, `wasm-kotlin-jvm`, `wasm-elixir`, `pyodide`, `teavm`,
+  `wasm-wat`, `wasm-lua`, `wasm-lisp`, `wasm-elixir`, `pyodide`, `teavm`,
   `assemblyscript`, `ruby`, `r`, `php`, and `js-sandbox`.
 - `static/wasm-zig` and `static/wasm-haskell`: bundled browser compiler assets synced from
   upstream asset builds rather than local workspace packages.
-- `static/cheerpj` and `static/wasm-kotlin-jvm`: ignored local Kotlin/JVM assets that must be
-  populated from a licensed CheerpJ runtime and Kotlin compiler distribution.
 - `tools/*`: migrated local toolchain projects that are too broad or infrastructure-heavy to run as
   normal runtime workspace packages. `tools/dool` contains the Docker judge backend for Elixir and
   the other server-side language runners.
@@ -51,8 +49,6 @@ node scripts/sync-wasm-rust.mjs ../wasm-rust/dist static/wasm-rust
 ```
 
 Java uses TeaVM's browser compiler/runtime. TeaVM compiler/runtime/classlib assets are bundled under `static/teavm/` by default, and the asset base URL can be overridden with `PUBLIC_TEAVM_BASE_URL`.
-Kotlin/JVM uses a browser-hosted Kotlin compiler running on CheerpJ, then hands the emitted JVM jar
-to the same TeaVM Java worker for WebAssembly generation and execution.
 
 Pyodide core assets are vendored under `static/pyodide/`. Refresh them after bumping the `pyodide`
 package with:
@@ -134,30 +130,6 @@ route is involved. For a hosted app, pass `runtimeAssets.dotnet.moduleUrl` or se
 `PUBLIC_WASM_DOTNET_MODULE_URL`. The current .NET browser path forwards CLI args and buffered
 terminal stdin into `Console.In`.
 
-## Kotlin/JVM browser integration
-
-Kotlin/JVM stays fully client-side. The page loads a self-hosted CheerpJ 4.3 runtime, runs
-`org.jetbrains.kotlin.cli.jvm.K2JVMCompiler` in the browser, reads the generated jar from CheerpJ,
-and sends that jar plus `kotlin-stdlib.jar` into the Java TeaVM worker through the bytecode jar input
-path. No server compile route is involved.
-
-CheerpJ self-hosting requires an appropriate CheerpJ license, so this repo does not vendor CheerpJ
-runtime binaries. To prepare a local or hosted build, provide a licensed CheerpJ runtime directory,
-a Kotlin compiler distribution, and a trove4j jar:
-
-```bash
-cd wasm-idle
-CHEERPJ_RUNTIME_DIR=/path/to/cheerpj-4.3 \
-KOTLIN_COMPILER_LIB_DIR=/path/to/kotlin-compiler/lib \
-TROVE4J_JAR=/path/to/trove4j-1.0.20200330.jar \
-pnpm run sync:wasm-kotlin-jvm
-```
-
-The script copies CheerpJ to `static/cheerpj/4.3/`, copies Kotlin compiler jars to
-`static/wasm-kotlin-jvm/lib/`, and builds `kotlinc-browser-patch.jar` from
-`runtimes/wasm-kotlin-jvm/src/`. The patch disables Kotlin compiler performance measurements that
-require JVM thread CPU time, which is not available inside CheerpJ's browser runtime.
-
 ## Browser regression commands
 
 Browser-level Rust and TinyGo checks are reproducible from this repo:
@@ -217,9 +189,6 @@ session; the repo-owned regression target is the local preview path above.
 ## Runtime expectations
 
 Rust still supports an external browser compiler module for library consumers. Point `PUBLIC_WASM_RUST_COMPILER_URL` at a built `wasm-rust` ESM entry such as `.../wasm-rust/dist/index.js`, or pass `runtimeAssets.rust.compilerUrl` at runtime.
-Kotlin/JVM expects self-hosted CheerpJ files under `cheerpj/4.3/` and Kotlin compiler jars under
-`wasm-kotlin-jvm/lib/` by default. Override them with `PUBLIC_WASM_KOTLIN_CHEERPJ_BASE_URL`,
-`PUBLIC_WASM_KOTLIN_HOME_PATH`, and `PUBLIC_WASM_KOTLIN_STDLIB_PATH`, or pass `runtimeAssets.kotlin`.
 TinyGo expects a browser-loadable `wasm-tinygo` runtime module. Point
 `PUBLIC_WASM_TINYGO_MODULE_URL` at a built entry such as `.../wasm-tinygo/dist/runtime.js`, or
 pass `runtimeAssets.tinygo.moduleUrl` at runtime. The older `PUBLIC_WASM_TINYGO_APP_URL` /
@@ -272,11 +241,6 @@ const runtimeAssets: PlaygroundRuntimeAssets = {
 	rust: {
 		compilerUrl: 'https://cdn.example.com/wasm-rust/index.js'
 	},
-	kotlin: {
-		cheerpjBaseUrl: 'https://cdn.example.com/repl/cheerpj/4.3/',
-		homePath: '/app/repl/wasm-kotlin-jvm',
-		stdlibPath: '/app/repl/wasm-kotlin-jvm/lib/kotlin-stdlib.jar'
-	},
 	dotnet: {
 		moduleUrl: 'https://cdn.example.com/wasm-dotnet/index.js'
 	},
@@ -304,7 +268,7 @@ const runtimeAssets: PlaygroundRuntimeAssets = {
 };
 ```
 
-Python custom loaders receive file names under the Pyodide asset root and can serve both core assets and package files. TeaVM custom loaders receive file names under the TeaVM asset root. Kotlin/JVM expects CheerpJ to be served from the same origin under the configured CheerpJ base URL; its Kotlin compiler jars are addressed through CheerpJ's `/app/...` virtual path mapping. Clang custom loaders receive `bin/memfs.zip`, `bin/clang.zip`, `bin/lld.zip`, and `bin/sysroot.tar.zip`; clangd custom loaders receive `clangd.js` and `clangd.wasm.gz`, with the worker decompressing the gzip payload before instantiation. Rust expects a browser-loadable compiler module URL; that module is responsible for serving its own nested runtime assets. C# and F# expect a browser-loadable `wasm-dotnet` module with its static .NET `browser-wasm` runtime assets. TinyGo expects a browser-loadable runtime module. The browser runtime now ships a direct-mode execution path that can produce and run the bundled TinyGo WASI artifact locally, alongside its sibling `tools/go-probe.wasm` and vendored emception assets. TinyGo also accepts a runtime asset loader + pack bundle in `runtimeAssets.tinygo` when you need to serve runtime assets out of a single compressed archive. Compressed TeaVM runtime assets are no longer unpacked inside the library; provide the final file URL or handle decompression in your own loader.
+Python custom loaders receive file names under the Pyodide asset root and can serve both core assets and package files. TeaVM custom loaders receive file names under the TeaVM asset root. Clang custom loaders receive `bin/memfs.zip`, `bin/clang.zip`, `bin/lld.zip`, and `bin/sysroot.tar.zip`; clangd custom loaders receive `clangd.js` and `clangd.wasm.gz`, with the worker decompressing the gzip payload before instantiation. Rust expects a browser-loadable compiler module URL; that module is responsible for serving its own nested runtime assets. C# and F# expect a browser-loadable `wasm-dotnet` module with its static .NET `browser-wasm` runtime assets. TinyGo expects a browser-loadable runtime module. The browser runtime now ships a direct-mode execution path that can produce and run the bundled TinyGo WASI artifact locally, alongside its sibling `tools/go-probe.wasm` and vendored emception assets. TinyGo also accepts a runtime asset loader + pack bundle in `runtimeAssets.tinygo` when you need to serve runtime assets out of a single compressed archive. Compressed TeaVM runtime assets are no longer unpacked inside the library; provide the final file URL or handle decompression in your own loader.
 
 If you want a host app to reuse the same runtime asset configuration for both `<Terminal>` and direct `playground(...)` access, bind it once:
 
@@ -315,11 +279,6 @@ const wasmIdle = createPlaygroundBinding({
 	rootUrl: 'https://cdn.example.com/repl',
 	rust: {
 		compilerUrl: 'https://cdn.example.com/wasm-rust/index.js'
-	},
-	kotlin: {
-		cheerpjBaseUrl: 'https://cdn.example.com/repl/cheerpj/4.3/',
-		homePath: '/app/repl/wasm-kotlin-jvm',
-		stdlibPath: '/app/repl/wasm-kotlin-jvm/lib/kotlin-stdlib.jar'
 	},
 	dotnet: {
 		moduleUrl: 'https://cdn.example.com/wasm-dotnet/index.js'
@@ -345,6 +304,6 @@ await sandbox.load('print("hi")', false);
 <Terminal {...wasmIdle.terminalProps} bind:terminal />
 ```
 
-Powered by [wasm-clang](https://github.com/binji/wasm-clang), Pyodide, TeaVM, CheerpJ,
-Kotlin/JVM, `wasm-rust`, `wasm-tinygo`, `wasm-dotnet`, `wasm-of-js-of-ocaml`,
-`wasm-typescript`, `wasm-lisp`, `wasm-wat`, `wasm-lua`, `wasm-zig`, and `ghc-in-browser`.
+Powered by [wasm-clang](https://github.com/binji/wasm-clang), Pyodide, TeaVM, `wasm-rust`,
+`wasm-tinygo`, `wasm-dotnet`, `wasm-of-js-of-ocaml`, `wasm-typescript`, `wasm-lisp`,
+`wasm-wat`, `wasm-lua`, `wasm-zig`, and `ghc-in-browser`.

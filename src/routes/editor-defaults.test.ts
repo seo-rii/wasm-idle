@@ -15,8 +15,6 @@ describe('editor defaults', () => {
 		expect(editorDefaults.cpp).toContain('std::cin >> n');
 		expect(editorDefaults.python).toContain('factorial_plus_bonus');
 		expect(editorDefaults.java).toContain('Scanner scanner = new Scanner(System.in);');
-		expect(editorDefaults.kotlin).toContain('generateSequence(::readLine)');
-		expect(editorDefaults.kotlin).toContain('factorial_plus_bonus');
 		expect(editorDefaults.go).toContain("ReadString('\\n')");
 		expect(editorDefaults.csharp).toContain('Console.ReadLine()');
 		expect(editorDefaults.fsharp).toContain('System.Console.ReadLine()');
@@ -54,7 +52,6 @@ describe('editor defaults', () => {
 	it('resolves the requested default source by language and rust target', () => {
 		expect(resolveEditorDefaultSource('c', 'wasm32-wasip1')).toBe(editorDefaults.c);
 		expect(resolveEditorDefaultSource('go', 'wasm32-wasip1')).toBe(editorDefaults.go);
-		expect(resolveEditorDefaultSource('kotlin', 'wasm32-wasip1')).toBe(editorDefaults.kotlin);
 		expect(resolveEditorDefaultSource('fsharp', 'wasm32-wasip1')).toBe(editorDefaults.fsharp);
 		expect(resolveEditorDefaultSource('ocaml', 'wasm32-wasip1')).toBe(editorDefaults.ocaml);
 		expect(resolveEditorDefaultSource('javascript', 'wasm32-wasip1')).toBe(
@@ -76,7 +73,6 @@ describe('editor defaults', () => {
 
 	it('recognizes bundled defaults and the legacy broken TinyGo starter separately', () => {
 		expect(isEditorDefaultSource(editorDefaults.go)).toBe(true);
-		expect(isEditorDefaultSource(editorDefaults.kotlin)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.fsharp)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.ocaml)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.javascript)).toBe(true);

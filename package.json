@@ -42,7 +42,6 @@
 		"sync:wasm-typescript": "node scripts/sync-runtime.mjs wasm-typescript",
 		"sync:wasm-wat": "node scripts/sync-runtime.mjs wasm-wat",
 		"sync:wasm-lua": "node scripts/sync-runtime.mjs wasm-lua",
-		"sync:wasm-kotlin-jvm": "node scripts/sync-wasm-kotlin-jvm.mjs",
 		"sync:wasm-zig": "node scripts/sync-runtime.mjs wasm-zig",
 		"sync:wasm-lisp": "node scripts/sync-runtime.mjs wasm-lisp",
 		"sync:wasm-tinygo": "node scripts/sync-runtime.mjs wasm-tinygo",

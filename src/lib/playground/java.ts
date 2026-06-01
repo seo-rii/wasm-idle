@@ -155,9 +155,7 @@ class Java implements Sandbox {
 				buffer: this.buffer,
 				args: programArgs,
 				stdin: options.stdin || '',
-				baseUrl: this.baseUrl,
-				jvmInputJars: options.jvmInputJars,
-				jvmMainClassHint: options.jvmMainClassHint
+				baseUrl: this.baseUrl
 			});
 		});
 	}

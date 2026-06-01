@@ -29,11 +29,6 @@ export interface SandboxWorkspaceFile {
 	content: string;
 }
 
-export interface SandboxJvmInputJar {
-	name: string;
-	bytes: Uint8Array;
-}
-
 export type DebugVariableKind = 'number' | 'bool' | 'array' | 'text';
 export type DebugArrayElementKind = 'int' | 'float' | 'double' | 'bool' | 'char';
 
@@ -89,8 +84,6 @@ export interface SandboxExecutionOptions {
 	ocamlBackend?: OcamlBackend;
 	ocamlWasmBinaryenMode?: OcamlWasmBinaryenMode;
 	zigTargetTriple?: ZigTargetTriple;
-	jvmInputJars?: SandboxJvmInputJar[];
-	jvmMainClassHint?: string;
 }
 
 export interface ResolvedSandboxExecutionArgs {

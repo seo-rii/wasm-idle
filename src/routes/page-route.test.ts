@@ -116,9 +116,6 @@ describe('example route debug actions', () => {
 			/go: \{\s+compilerUrl: path\s+\?\s+`\$\{path\}\/wasm-go\/index\.js\?v=\$\{WASM_GO_ASSET_VERSION\}`\s+:\s+`\/wasm-go\/index\.js\?v=\$\{WASM_GO_ASSET_VERSION\}`\s+\}/s
 		);
 		expect(source).toMatch(
-			/kotlin: \{\s+cheerpjBaseUrl: path\s+\?\s+`\$\{path\}\/cheerpj\/4\.3\/`\s+:\s+'\/cheerpj\/4\.3\/',\s+homePath: `\/app\$\{path \|\| ''\}\/wasm-kotlin-jvm`\.replace\(\/\\\/\+\/g, '\/'\),\s+stdlibPath: `\/app\$\{path \|\| ''\}\/wasm-kotlin-jvm\/lib\/kotlin-stdlib\.jar`\.replace\(\s+\/\\\/\+\/g,\s+'\/'\s+\)\s+\}/s
-		);
-		expect(source).toMatch(
 			/dotnet: \{\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-dotnet\/index\.js\?v=\$\{WASM_DOTNET_ASSET_VERSION\}`\s+:\s+`\/wasm-dotnet\/index\.js\?v=\$\{WASM_DOTNET_ASSET_VERSION\}`\s+\}/s
 		);
 		expect(source).toMatch(
@@ -204,7 +201,6 @@ describe('example route debug actions', () => {
 			/availableRustTargetTriples = \['wasm32-wasip1', 'wasm32-wasip2'\];/
 		);
 		expect(source).toMatch(/const editorLanguage = \$derived\(/);
-		expect(source).toMatch(/: language === 'KOTLIN'\s+\? 'kotlin'/);
 		expect(source).toMatch(/: language === 'ELIXIR'\s+\? 'elixir'/);
 		expect(source).toMatch(/: language === 'JAVASCRIPT'\s+\? 'javascript'/);
 		expect(source).toMatch(/: language === 'TYPESCRIPT'\s+\? 'typescript'/);
@@ -252,25 +248,6 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(
 			/\{#each availableGoTargets as target \(target\)\}\s+<option value=\{target\}>\{target\}<\/option>\s+\{\/each\}/s
 		);
-	});
-
-	it('surfaces Kotlin/JVM through self-hosted CheerpJ and TeaVM jar input', () => {
-		expect(source).toMatch(/KOTLIN: 'Kotlin\/JVM'/);
-		expect(source).toMatch(/<option value="KOTLIN">Kotlin\/JVM<\/option>/);
-		expect(source).toMatch(/kotlin: 'KOTLIN'/);
-		expect(source).toMatch(/kt: 'KOTLIN'/);
-		expect(source).toMatch(/language === 'KOTLIN'\s+\? 'kotlin'/);
-		expect(source).toMatch(/'.kt': 'KOTLIN'/);
-		expect(source).toMatch(/'.kts': 'KOTLIN'/);
-		expect(source).toMatch(/KOTLIN: 'Main\.kt'/);
-		expect(source).toMatch(/KOTLIN: 'kotlin'/);
-		expect(source).toMatch(/language !== 'KOTLIN'/);
-		expect(source).toMatch(
-			/Kotlin\/JVM compiles in the browser with a self-hosted CheerpJ runtime/
-		);
-		expect(source).toMatch(/generated JVM bytecode through the bundled TeaVM Java runtime/);
-		expect(source).toMatch(/`cheerpj\/4\.3\/`/);
-		expect(source).toMatch(/`wasm-kotlin-jvm\/lib\/`/);
 	});
 
 	it('exposes a browser debug hook that writes terminal stdin through the bound control', () => {
@@ -329,7 +306,6 @@ describe('example route debug actions', () => {
 		);
 		expect(source).toMatch(/tinygoTarget: language === 'TINYGO' \? tinygoTarget : undefined/);
 		expect(source).toMatch(/<option value="GO">Go<\/option>/);
-		expect(source).toMatch(/<option value="KOTLIN">Kotlin\/JVM<\/option>/);
 		expect(source).toMatch(/<option value="CSHARP">C#<\/option>/);
 		expect(source).toMatch(/<option value="FSHARP">F#<\/option>/);
 		expect(source).toMatch(/<option value="ELIXIR">Elixir<\/option>/);
@@ -343,10 +319,10 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/<option value="LISP">Scheme<\/option>/);
 		expect(source).toMatch(/<option value="HASKELL">Haskell<\/option>/);
 		expect(source).toMatch(
-			/\{#if language === 'JAVA' \|\| language === 'KOTLIN' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'TINYGO' \|\| language === 'JAVASCRIPT' \|\| language === 'TYPESCRIPT' \|\| language === 'LUA' \|\| language === 'ZIG' \|\| language === 'LISP' \|\| language === 'HASKELL'\}/
+			/\{#if language === 'JAVA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'TINYGO' \|\| language === 'JAVASCRIPT' \|\| language === 'TYPESCRIPT' \|\| language === 'LUA' \|\| language === 'ZIG' \|\| language === 'LISP' \|\| language === 'HASKELL'\}/
 		);
 		expect(source).toMatch(
-			/language === 'JAVA' \|\| language === 'KOTLIN' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'TINYGO' \|\| language === 'JAVASCRIPT' \|\| language === 'TYPESCRIPT' \|\| language === 'LUA' \|\| language === 'ZIG' \|\| language === 'LISP' \|\| language === 'HASKELL'/
+			/language === 'JAVA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'TINYGO' \|\| language === 'JAVASCRIPT' \|\| language === 'TYPESCRIPT' \|\| language === 'LUA' \|\| language === 'ZIG' \|\| language === 'LISP' \|\| language === 'HASKELL'/
 		);
 		expect(source).toMatch(/Go uses the bundled `wasm-go` browser compiler runtime/);
 		expect(source).toMatch(

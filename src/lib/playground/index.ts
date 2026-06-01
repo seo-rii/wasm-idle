@@ -4,7 +4,6 @@ import Elixir from '$lib/playground/elixir';
 import Go from '$lib/playground/go';
 import Haskell from '$lib/playground/haskell';
 import Java from '$lib/playground/java';
-import Kotlin from '$lib/playground/kotlin';
 import Lisp from '$lib/playground/lisp';
 import Lua from '$lib/playground/lua';
 import Ocaml from '$lib/playground/ocaml';
@@ -30,7 +29,6 @@ export const supportedLanguages = [
 	'C',
 	'CPP',
 	'JAVA',
-	'KOTLIN',
 	'RUST',
 	'GO',
 	'CSHARP',
@@ -80,10 +78,6 @@ async function playground(language: string, runtimeAssets?: SandboxRuntimeAssets
 			break;
 		case 'JAVA':
 			sandbox = new Java();
-			break;
-		case 'KOTLIN':
-		case 'KT':
-			sandbox = new Kotlin();
 			break;
 		case 'RUST':
 			sandbox = new Rust();
@@ -145,9 +139,6 @@ async function playground(language: string, runtimeAssets?: SandboxRuntimeAssets
 		if (language === 'C') sandboxCache['C'] = sandbox;
 		if (language === 'CPP') sandboxCache['CPP'] = sandbox;
 		if (language === 'JAVA') sandboxCache['JAVA'] = sandbox;
-		if (language === 'KOTLIN' || language === 'KT') {
-			sandboxCache['KOTLIN'] = sandboxCache['KT'] = sandbox;
-		}
 		if (language === 'RUST') sandboxCache['RUST'] = sandbox;
 		if (language === 'GO') sandboxCache['GO'] = sandbox;
 		if (language === 'CSHARP' || language === 'C#') {

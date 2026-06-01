@@ -2,7 +2,6 @@ export interface RuntimeAssetKeySource {
 	rootUrl?: string;
 	python?: { baseUrl?: string; loader?: unknown };
 	java?: { baseUrl?: string; loader?: unknown };
-	kotlin?: { cheerpjBaseUrl?: string; homePath?: string; stdlibPath?: string };
 	clang?: { baseUrl?: string; loader?: unknown };
 	clangd?: { baseUrl?: string; loader?: unknown };
 	rust?: { compilerUrl?: string };
@@ -36,9 +35,6 @@ export function createRuntimeAssetsKey(runtimeAssets: RuntimeAssetKeyInput): str
 		hasPythonLoader: !!runtimeAssets.python?.loader,
 		javaBaseUrl: runtimeAssets.java?.baseUrl || '',
 		hasJavaLoader: !!runtimeAssets.java?.loader,
-		kotlinCheerpjBaseUrl: runtimeAssets.kotlin?.cheerpjBaseUrl || '',
-		kotlinHomePath: runtimeAssets.kotlin?.homePath || '',
-		kotlinStdlibPath: runtimeAssets.kotlin?.stdlibPath || '',
 		clangBaseUrl: runtimeAssets.clang?.baseUrl || '',
 		hasClangLoader: !!runtimeAssets.clang?.loader,
 		clangdBaseUrl: runtimeAssets.clangd?.baseUrl || '',

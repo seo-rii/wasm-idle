@@ -13,8 +13,6 @@ dist/
 # Local build caches and generated sync outputs
 .cache/
 static/.cache/
-static/cheerpj/
-static/wasm-kotlin-jvm/
 static/wasm-of-js-of-ocaml/
 scripts/*.d.mts
 src/routes/editor-defaults.d.ts
