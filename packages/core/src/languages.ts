@@ -5,6 +5,8 @@ export type WasmIdleLanguageId =
 	| 'C'
 	| 'CPP'
 	| 'JAVA'
+	| 'KOTLIN'
+	| 'KT'
 	| 'RUST'
 	| 'GO'
 	| 'CSHARP'
@@ -33,6 +35,7 @@ export const supportedLanguageIds = [
 	'C',
 	'CPP',
 	'JAVA',
+	'KOTLIN',
 	'RUST',
 	'GO',
 	'CSHARP',
@@ -50,6 +53,7 @@ export const supportedLanguageIds = [
 ] as const;
 
 export const DEFAULT_DEFERRED_PROGRESS_LANGUAGES = new Set<string>([
+	'KOTLIN',
 	'RUST',
 	'GO',
 	'CSHARP',
@@ -69,6 +73,7 @@ const LANGUAGE_ALIASES: Record<string, string> = {
 	'C#': 'CSHARP',
 	'F#': 'FSHARP',
 	JS: 'JAVASCRIPT',
+	KT: 'KOTLIN',
 	PYTHON: 'PYTHON3',
 	HS: 'HASKELL',
 	SCHEME: 'LISP',

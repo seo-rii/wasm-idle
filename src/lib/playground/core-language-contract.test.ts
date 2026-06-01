@@ -53,6 +53,13 @@ describe('core language contract', () => {
 		expect(isDeferredProgressLanguage('lua')).toBe(true);
 	});
 
+	it('exposes Kotlin aliases as a deferred browser runtime language', () => {
+		expect(supportedLanguageIds).toContain('KOTLIN');
+		expect(normalizeLanguageId('kotlin')).toBe('KOTLIN');
+		expect(normalizeLanguageId('kt')).toBe('KOTLIN');
+		expect(isDeferredProgressLanguage('kt')).toBe(true);
+	});
+
 	it('exposes Lisp aliases as a deferred browser runtime language', () => {
 		expect(supportedLanguageIds).toContain('LISP');
 		expect(normalizeLanguageId('lisp')).toBe('LISP');
@@ -94,6 +101,23 @@ describe('core language contract', () => {
 		});
 
 		expect(key).toContain('"luaModuleUrl":"/wasm-lua/index.js?v=test"');
+	});
+
+	it('includes Kotlin CheerpJ and compiler paths in runtime asset cache keys', () => {
+		const key = createRuntimeAssetsKey({
+			rootUrl: '/repl',
+			kotlin: {
+				cheerpjBaseUrl: '/cheerpj/4.3/?v=test',
+				homePath: '/app/repl/wasm-kotlin-jvm',
+				stdlibPath: '/app/repl/wasm-kotlin-jvm/lib/kotlin-stdlib.jar'
+			}
+		});
+
+		expect(key).toContain('"kotlinCheerpjBaseUrl":"/cheerpj/4.3/?v=test"');
+		expect(key).toContain('"kotlinHomePath":"/app/repl/wasm-kotlin-jvm"');
+		expect(key).toContain(
+			'"kotlinStdlibPath":"/app/repl/wasm-kotlin-jvm/lib/kotlin-stdlib.jar"'
+		);
 	});
 
 	it('includes Lisp module urls in runtime asset cache keys', () => {

@@ -57,6 +57,10 @@ vi.mock('$lib/playground/java', () => ({
 	default: createMockSandboxClass('JAVA')
 }));
 
+vi.mock('$lib/playground/kotlin', () => ({
+	default: createMockSandboxClass('KOTLIN')
+}));
+
 vi.mock('$lib/playground/rust', () => ({
 	default: createMockSandboxClass('RUST')
 }));
@@ -263,6 +267,37 @@ describe('playground runtime binding', () => {
 				progress
 			]
 		]);
+	});
+
+	it('routes Kotlin aliases through the Kotlin/JVM sandbox implementation', async () => {
+		const binding = createPlaygroundBinding({
+			rootUrl: '/absproxy/5173',
+			kotlin: {
+				cheerpjBaseUrl: '/absproxy/5173/cheerpj/4.3/',
+				homePath: '/app/absproxy/5173/wasm-kotlin-jvm',
+				stdlibPath: '/app/absproxy/5173/wasm-kotlin-jvm/lib/kotlin-stdlib.jar'
+			}
+		});
+		const progress = { set() {} };
+		const sandbox = await binding.load('KT');
+
+		await sandbox.load('fun main() = println("hello")', true, ['demo'], {}, progress);
+
+		const runtimeAssets = {
+			rootUrl: '/absproxy/5173',
+			kotlin: {
+				cheerpjBaseUrl: '/absproxy/5173/cheerpj/4.3/',
+				homePath: '/app/absproxy/5173/wasm-kotlin-jvm',
+				stdlibPath: '/app/absproxy/5173/wasm-kotlin-jvm/lib/kotlin-stdlib.jar'
+			}
+		};
+		expect(sandbox.runtimeAssets).toEqual(runtimeAssets);
+		expect(sandboxInstances.get('KOTLIN')).toHaveLength(1);
+		expect(sandboxInstances.get('KOTLIN')?.[0]?.loadCalls).toEqual([
+			[runtimeAssets, 'fun main() = println("hello")', true, ['demo'], {}, progress]
+		]);
+		expect((await binding.load('KOTLIN')).runtimeAssets).toEqual(runtimeAssets);
+		expect(sandboxInstances.get('KOTLIN')).toHaveLength(1);
 	});
 
 	it('routes F# requests through the Dotnet sandbox implementation', async () => {

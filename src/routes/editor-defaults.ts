@@ -5,6 +5,7 @@ export type EditorDefaultLanguage =
 	| 'cpp'
 	| 'python'
 	| 'java'
+	| 'kotlin'
 	| 'go'
 	| 'csharp'
 	| 'fsharp'
@@ -24,6 +25,7 @@ export const editorDefaults: Record<
 	| 'cpp'
 	| 'python'
 	| 'java'
+	| 'kotlin'
 	| 'go'
 	| 'csharp'
 	| 'fsharp'
@@ -78,7 +80,17 @@ public class Main {
         Scanner scanner = new Scanner(System.in);
         int n = scanner.hasNextInt() ? scanner.nextInt() : 4;
         System.out.println("factorial_plus_bonus=" + (factorial(n) + bonus));
-    }
+	}
+}`,
+	kotlin: `const val BONUS = 3
+
+fun factorial(n: Int): Int =
+    if (n <= 1) 1 else n * factorial(n - 1)
+
+fun main(args: Array<String>) {
+    val stdin = generateSequence(::readLine).firstOrNull()?.trim().orEmpty()
+    val n = stdin.toIntOrNull() ?: args.firstOrNull()?.toIntOrNull() ?: 4
+    println("factorial_plus_bonus=\${factorial(n) + BONUS}")
 }`,
 	go: String.raw`package main
 
@@ -399,6 +411,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.cpp ||
 		source === editorDefaults.python ||
 		source === editorDefaults.java ||
+		source === editorDefaults.kotlin ||
 		source === editorDefaults.go ||
 		source === editorDefaults.csharp ||
 		source === editorDefaults.fsharp ||

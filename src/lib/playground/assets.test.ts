@@ -4,6 +4,9 @@ const { publicEnv } = vi.hoisted(() => ({
 	publicEnv: {
 		PUBLIC_WASM_RUST_COMPILER_URL: '',
 		PUBLIC_WASM_GO_COMPILER_URL: '',
+		PUBLIC_WASM_KOTLIN_CHEERPJ_BASE_URL: '',
+		PUBLIC_WASM_KOTLIN_HOME_PATH: '',
+		PUBLIC_WASM_KOTLIN_STDLIB_PATH: '',
 		PUBLIC_WASM_DOTNET_MODULE_URL: '',
 		PUBLIC_WASM_ELIXIR_BUNDLE_URL: '',
 		PUBLIC_WASM_OCAML_MODULE_URL: '',
@@ -188,6 +191,48 @@ describe('runtime asset config resolution', () => {
 
 		expect(resolveGoCompilerUrl('/absproxy/5173', 'https://example.com/app')).toBe(
 			'https://example.com/wasm-go/index.js'
+		);
+	});
+
+	it('prefers explicit Kotlin CheerpJ and compiler paths over public env overrides', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_KOTLIN_CHEERPJ_BASE_URL = 'https://env.example.com/cheerpj/';
+		publicEnv.PUBLIC_WASM_KOTLIN_HOME_PATH = '/app/env-kotlin';
+		publicEnv.PUBLIC_WASM_KOTLIN_STDLIB_PATH = '/app/env-kotlin/lib/kotlin-stdlib.jar';
+		const { resolveKotlinCheerpjBaseUrl, resolveKotlinHomePath, resolveKotlinStdlibPath } =
+			await import('./assets');
+
+		const config = {
+			rootUrl: '/ignored',
+			kotlin: {
+				cheerpjBaseUrl: '/runtime/cheerpj/4.3',
+				homePath: '/app/runtime/wasm-kotlin-jvm/',
+				stdlibPath: '/app/runtime/wasm-kotlin-jvm/lib/kotlin-stdlib.jar'
+			}
+		};
+		expect(resolveKotlinCheerpjBaseUrl(config, 'https://example.com/app')).toBe(
+			'https://example.com/runtime/cheerpj/4.3/'
+		);
+		expect(resolveKotlinHomePath(config)).toBe('/app/runtime/wasm-kotlin-jvm');
+		expect(resolveKotlinStdlibPath(config)).toBe(
+			'/app/runtime/wasm-kotlin-jvm/lib/kotlin-stdlib.jar'
+		);
+	});
+
+	it('derives default Kotlin CheerpJ and compiler paths from the shared root path', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_KOTLIN_CHEERPJ_BASE_URL = '';
+		publicEnv.PUBLIC_WASM_KOTLIN_HOME_PATH = '';
+		publicEnv.PUBLIC_WASM_KOTLIN_STDLIB_PATH = '';
+		const { resolveKotlinCheerpjBaseUrl, resolveKotlinHomePath, resolveKotlinStdlibPath } =
+			await import('./assets');
+
+		expect(resolveKotlinCheerpjBaseUrl('/absproxy/5173', 'https://example.com/app')).toBe(
+			'https://example.com/absproxy/5173/cheerpj/4.3/'
+		);
+		expect(resolveKotlinHomePath('/absproxy/5173')).toBe('/app/absproxy/5173/wasm-kotlin-jvm');
+		expect(resolveKotlinStdlibPath('/absproxy/5173')).toBe(
+			'/app/absproxy/5173/wasm-kotlin-jvm/lib/kotlin-stdlib.jar'
 		);
 	});
 

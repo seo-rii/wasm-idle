@@ -46,6 +46,12 @@ export interface GoRuntimeAssetConfig {
 	compilerUrl?: string;
 }
 
+export interface KotlinRuntimeAssetConfig {
+	cheerpjBaseUrl?: string;
+	homePath?: string;
+	stdlibPath?: string;
+}
+
 export interface DotnetRuntimeAssetConfig {
 	moduleUrl?: string;
 }
@@ -103,6 +109,7 @@ export interface PlaygroundRuntimeAssets {
 	clangd?: RuntimeAssetConfig;
 	rust?: RustRuntimeAssetConfig;
 	go?: GoRuntimeAssetConfig;
+	kotlin?: KotlinRuntimeAssetConfig;
 	dotnet?: DotnetRuntimeAssetConfig;
 	ocaml?: OcamlRuntimeAssetConfig;
 	tinygo?: TinyGoRuntimeAssetConfig;
@@ -409,6 +416,59 @@ export function resolveGoCompilerUrl(
 
 	if (!configuredCompilerUrl) return '';
 	return currentUrl ? new URL(configuredCompilerUrl, currentUrl).href : configuredCompilerUrl;
+}
+
+export function resolveKotlinCheerpjBaseUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredBaseUrl =
+		(typeof options === 'object' && options?.kotlin?.cheerpjBaseUrl) ||
+		(publicEnv.PUBLIC_WASM_KOTLIN_CHEERPJ_BASE_URL || '').trim();
+
+	if (configuredBaseUrl) {
+		return normalizeBaseUrl(configuredBaseUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return normalizeBaseUrl(`${normalizeRootUrl(options) || ''}/cheerpj/4.3/`, currentUrl);
+	}
+
+	if (options?.rootUrl) {
+		return normalizeBaseUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/cheerpj/4.3/`,
+			currentUrl
+		);
+	}
+
+	return normalizeBaseUrl('/cheerpj/4.3/', currentUrl);
+}
+
+export function resolveKotlinHomePath(options: string | PlaygroundRuntimeAssets | undefined) {
+	const configuredHomePath =
+		(typeof options === 'object' && options?.kotlin?.homePath) ||
+		(publicEnv.PUBLIC_WASM_KOTLIN_HOME_PATH || '').trim();
+
+	if (configuredHomePath) return configuredHomePath.replace(/\/$/, '');
+
+	if (typeof options === 'string') {
+		const rootUrl = normalizeRootUrl(options);
+		return `/app${rootUrl}/wasm-kotlin-jvm`.replace(/\/+/g, '/');
+	}
+
+	if (options?.rootUrl) {
+		return `/app${normalizeRootUrl(options.rootUrl)}/wasm-kotlin-jvm`.replace(/\/+/g, '/');
+	}
+
+	return '/app/wasm-kotlin-jvm';
+}
+
+export function resolveKotlinStdlibPath(options: string | PlaygroundRuntimeAssets | undefined) {
+	const configuredStdlibPath =
+		(typeof options === 'object' && options?.kotlin?.stdlibPath) ||
+		(publicEnv.PUBLIC_WASM_KOTLIN_STDLIB_PATH || '').trim();
+
+	return configuredStdlibPath || `${resolveKotlinHomePath(options)}/lib/kotlin-stdlib.jar`;
 }
 
 export function resolveDotnetModuleUrl(

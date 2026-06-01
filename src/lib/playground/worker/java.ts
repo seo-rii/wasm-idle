@@ -25,6 +25,7 @@ let compiledStdin = '';
 let compiledMainClass = '';
 let compiledWasm: Uint8Array | null = null;
 let currentSourcePath = '';
+let compiledJvmInputJarsKey = '';
 const decoder = new TextDecoder();
 
 const toInt8Array = (bytes: Uint8Array) =>
@@ -54,7 +55,17 @@ const pushStderr = (charCode: number) => {
 
 self.addEventListener('message', async (event) => {
 	if (handleWorkerAssetMessage(event.data)) return;
-	const { load, assets, buffer, code, prepare, args = [], stdin = '' } = event.data;
+	const {
+		load,
+		assets,
+		buffer,
+		code,
+		prepare,
+		args = [],
+		stdin = '',
+		jvmInputJars = [],
+		jvmMainClassHint = ''
+	} = event.data;
 	try {
 		if (load) {
 			const runtimeAssets = assets as WorkerRuntimeAssetConfig | undefined;
@@ -92,6 +103,7 @@ self.addEventListener('message', async (event) => {
 				compiledStdin = '';
 				compiledMainClass = '';
 				compiledWasm = null;
+				compiledJvmInputJarsKey = '';
 			}
 			self.postMessage({ load: true });
 			return;
@@ -100,33 +112,42 @@ self.addEventListener('message', async (event) => {
 		if (!compiler || !runtimeLoad) throw new Error('TeaVM compiler not loaded');
 		stdoutBuffer = '';
 		stderrBuffer = '';
-		const stdinInjection = prepareJavaStdinInjection(code, stdin);
+		const hasJvmInputJars = Array.isArray(jvmInputJars) && jvmInputJars.length > 0;
+		const stdinInjection = hasJvmInputJars
+			? {
+					transformedCode: code,
+					stdinCacheKey: '',
+					usesStdin: false,
+					helperSourcePath: '',
+					helperSource: ''
+				}
+			: prepareJavaStdinInjection(code, stdin);
+		const jvmInputJarsKey = hasJvmInputJars
+			? jvmInputJars
+					.map((jar: { name?: string; bytes?: Uint8Array }) => {
+						const bytes = jar?.bytes;
+						let checksum = 0;
+						if (bytes) {
+							const byteView =
+								bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+							for (const byte of byteView) {
+								checksum = Math.imul(checksum ^ byte, 16_777_619) >>> 0 || 1;
+							}
+						}
+						return `${jar?.name || ''}:${bytes?.byteLength ?? 0}:${checksum}`;
+					})
+					.join('|')
+			: '';
 
 		if (
 			prepare ||
 			compiledCode !== code ||
 			compiledStdin !== stdinInjection.stdinCacheKey ||
+			compiledJvmInputJarsKey !== jvmInputJarsKey ||
 			!compiledWasm
 		) {
-			const packageMatch = code.match(/^\s*package\s+([A-Za-z_][\w.]*)\s*;/m);
-			const typeMatch =
-				code.match(
-					/^\s*public\s+(?:final\s+|abstract\s+)?(?:class|record|enum|interface)\s+([A-Za-z_]\w*)\b/m
-				) ||
-				code.match(
-					/^\s*(?:final\s+|abstract\s+)?(?:class|record|enum|interface)\s+([A-Za-z_]\w*)\b/m
-				);
-			const className = typeMatch?.[1];
-			if (!className)
-				throw new Error(
-					'Java source must define a top-level class, record, enum, or interface'
-				);
-			const packageName = packageMatch?.[1] || '';
-			const sourcePath = packageName
-				? `${packageName.replaceAll('.', '/')}/${className}.java`
-				: `${className}.java`;
-			const mainClass = packageName ? `${packageName}.${className}` : className;
-			currentSourcePath = sourcePath;
+			let mainClass = '';
+			currentSourcePath = '';
 			const diagnosticLines: string[] = [];
 			const diagnosticRegistration = compiler.onDiagnostic((diagnostic: any) => {
 				const severity = diagnostic.severity
@@ -138,6 +159,7 @@ self.addEventListener('message', async (event) => {
 				diagnosticLines.push(`${location}: ${severity}: ${diagnostic.message}`);
 				const fileName = diagnostic.fileName ? String(diagnostic.fileName) : null;
 				if (
+					currentSourcePath &&
 					fileName &&
 					fileName !== currentSourcePath &&
 					fileName !== currentSourcePath.split('/').pop()
@@ -169,29 +191,66 @@ self.addEventListener('message', async (event) => {
 			compiler.clearSourceFiles?.();
 			compiler.clearInputClassFiles?.();
 			compiler.clearOutputFiles?.();
-			compiler.addSourceFile(sourcePath, stdinInjection.transformedCode);
-			if (
-				stdinInjection.usesStdin &&
-				stdinInjection.helperSourcePath &&
-				stdinInjection.helperSource
-			) {
-				compiler.addSourceFile(
-					stdinInjection.helperSourcePath,
+			if (hasJvmInputJars) {
+				for (const jar of jvmInputJars as { name?: string; bytes?: Uint8Array }[]) {
+					if (!jar?.bytes) continue;
+					const bytes =
+						jar.bytes instanceof Uint8Array ? jar.bytes : new Uint8Array(jar.bytes);
+					compiler.addOutputJarFile(
+						String(jar.name || 'classes.jar'),
+						toInt8Array(bytes)
+					);
+				}
+			} else {
+				const packageMatch = code.match(/^\s*package\s+([A-Za-z_][\w.]*)\s*;/m);
+				const typeMatch =
+					code.match(
+						/^\s*public\s+(?:final\s+|abstract\s+)?(?:class|record|enum|interface)\s+([A-Za-z_]\w*)\b/m
+					) ||
+					code.match(
+						/^\s*(?:final\s+|abstract\s+)?(?:class|record|enum|interface)\s+([A-Za-z_]\w*)\b/m
+					);
+				const className = typeMatch?.[1];
+				if (!className) {
+					disposeDiagnosticRegistration();
+					throw new Error(
+						'Java source must define a top-level class, record, enum, or interface'
+					);
+				}
+				const packageName = packageMatch?.[1] || '';
+				const sourcePath = packageName
+					? `${packageName.replaceAll('.', '/')}/${className}.java`
+					: `${className}.java`;
+				mainClass = packageName ? `${packageName}.${className}` : className;
+				currentSourcePath = sourcePath;
+				compiler.addSourceFile(sourcePath, stdinInjection.transformedCode);
+				if (
+					stdinInjection.usesStdin &&
+					stdinInjection.helperSourcePath &&
 					stdinInjection.helperSource
-				);
-			}
-			const javacOk = compiler.compile();
-			if (!javacOk) {
-				disposeDiagnosticRegistration();
-				throw new Error(diagnosticLines.join('\n') || 'TeaVM javac compilation failed');
+				) {
+					compiler.addSourceFile(
+						stdinInjection.helperSourcePath,
+						stdinInjection.helperSource
+					);
+				}
+				const javacOk = compiler.compile();
+				if (!javacOk) {
+					disposeDiagnosticRegistration();
+					throw new Error(diagnosticLines.join('\n') || 'TeaVM javac compilation failed');
+				}
 			}
 			const mainClasses = Array.from(compiler.detectMainClasses() as string[]);
-			if (mainClasses.length !== 1) {
+			if (hasJvmInputJars && jvmMainClassHint && mainClasses.includes(jvmMainClassHint)) {
+				mainClass = jvmMainClassHint;
+			} else if (mainClasses.length === 1) {
+				mainClass = String(mainClasses[0]);
+			} else if (mainClasses.length !== 1) {
 				disposeDiagnosticRegistration();
 				throw new Error(
 					mainClasses.length === 0
 						? 'Main method not found'
-						: 'Multiple main methods found'
+						: `Multiple main methods found: ${mainClasses.join(', ')}`
 				);
 			}
 			const generateOk = compiler.generateWebAssembly({
@@ -206,6 +265,7 @@ self.addEventListener('message', async (event) => {
 			}
 			compiledCode = code;
 			compiledStdin = stdinInjection.stdinCacheKey;
+			compiledJvmInputJarsKey = jvmInputJarsKey;
 			compiledMainClass = mainClass;
 			compiledWasm = new Uint8Array(compiler.getWebAssemblyOutputFile('app.wasm'));
 		}
