@@ -144,9 +144,7 @@ int main() {
 		expect(instrumentedSource).toContain('std::cerr.setf(std::ios::unitbuf);');
 		expect(instrumentedSource).toContain('setvbuf(stdout, nullptr, _IONBF, 0);');
 		expect(instrumentedSource).toContain('setvbuf(stderr, nullptr, _IONBF, 0);');
-		expect(instrumentedSource.match(/setvbuf\(stdout, nullptr, _IONBF, 0\);/g)).toHaveLength(
-			1
-		);
+		expect(instrumentedSource.match(/setvbuf\(stdout, nullptr, _IONBF, 0\);/g)).toHaveLength(1);
 	});
 
 	it('tracks outer loop mutations without emitting out-of-scope loop variable hooks', async () => {

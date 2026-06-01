@@ -16,6 +16,7 @@
 	import { WASM_ELIXIR_ASSET_VERSION } from '$lib/playground/wasmElixirVersion';
 	import { WASM_GO_ASSET_VERSION } from '$lib/playground/wasmGoVersion';
 	import { WASM_HASKELL_ASSET_VERSION } from '$lib/playground/wasmHaskellVersion';
+	import { WASM_LISP_ASSET_VERSION } from '$lib/playground/wasmLispVersion';
 	import { WASM_OCAML_ASSET_VERSION } from '$lib/playground/wasmOcamlVersion';
 	import { WASM_RUST_ASSET_VERSION } from '$lib/playground/wasmRustVersion';
 	import { WASM_TINYGO_ASSET_VERSION } from '$lib/playground/wasmTinyGoVersion';
@@ -57,8 +58,9 @@
 		| 'TINYGO'
 		| 'JAVASCRIPT'
 		| 'TYPESCRIPT'
-		| 'HASKELL'
-		| 'ZIG';
+		| 'ZIG'
+		| 'LISP'
+		| 'HASKELL';
 
 	type LanguageWorkspace = {
 		activePath: string;
@@ -99,8 +101,9 @@
 		'TINYGO',
 		'JAVASCRIPT',
 		'TYPESCRIPT',
-		'HASKELL',
-		'ZIG'
+		'ZIG',
+		'LISP',
+		'HASKELL'
 	];
 	const languageLabels: Record<PlaygroundLanguage, string> = {
 		C: 'C',
@@ -116,8 +119,9 @@
 		TINYGO: 'TinyGo',
 		JAVASCRIPT: 'JavaScript',
 		TYPESCRIPT: 'TypeScript',
-		HASKELL: 'Haskell',
-		ZIG: 'Zig'
+		ZIG: 'Zig',
+		LISP: 'Scheme',
+		HASKELL: 'Haskell'
 	};
 
 	let path = $derived(
@@ -164,6 +168,19 @@
 				? `${path}/wasm-typescript/index.js?v=${WASM_TYPESCRIPT_ASSET_VERSION}`
 				: `/wasm-typescript/index.js?v=${WASM_TYPESCRIPT_ASSET_VERSION}`
 		},
+		zig: {
+			compilerUrl: path
+				? `${path}/wasm-zig/zig_small.wasm?v=${WASM_ZIG_ASSET_VERSION}`
+				: `/wasm-zig/zig_small.wasm?v=${WASM_ZIG_ASSET_VERSION}`,
+			stdlibUrl: path
+				? `${path}/wasm-zig/std.zip?v=${WASM_ZIG_ASSET_VERSION}`
+				: `/wasm-zig/std.zip?v=${WASM_ZIG_ASSET_VERSION}`
+		},
+		lisp: {
+			moduleUrl: path
+				? `${path}/wasm-lisp/index.js?v=${WASM_LISP_ASSET_VERSION}`
+				: `/wasm-lisp/index.js?v=${WASM_LISP_ASSET_VERSION}`
+		},
 		haskell: {
 			moduleUrl: path
 				? `${path}/wasm-haskell/dyld.mjs?v=${WASM_HASKELL_ASSET_VERSION}`
@@ -174,14 +191,6 @@
 			bsdtarUrl: path
 				? `${path}/wasm-haskell/bsdtar.wasm?v=${WASM_HASKELL_ASSET_VERSION}`
 				: `/wasm-haskell/bsdtar.wasm?v=${WASM_HASKELL_ASSET_VERSION}`
-		},
-		zig: {
-			compilerUrl: path
-				? `${path}/wasm-zig/zig_small.wasm?v=${WASM_ZIG_ASSET_VERSION}`
-				: `/wasm-zig/zig_small.wasm?v=${WASM_ZIG_ASSET_VERSION}`,
-			stdlibUrl: path
-				? `${path}/wasm-zig/std.zip?v=${WASM_ZIG_ASSET_VERSION}`
-				: `/wasm-zig/std.zip?v=${WASM_ZIG_ASSET_VERSION}`
 		}
 	}));
 	const playground = $derived.by(() => createPlaygroundBinding(runtimeAssets));
@@ -244,11 +253,13 @@
 												? 'javascript'
 												: language === 'TYPESCRIPT'
 													? 'typescript'
-													: language === 'HASKELL'
-														? 'haskell'
-														: language === 'ZIG'
-															? 'zig'
-															: 'go'
+													: language === 'ZIG'
+														? 'zig'
+														: language === 'LISP'
+															? 'lisp'
+															: language === 'HASKELL'
+																? 'haskell'
+																: 'go'
 	);
 	const compact = $derived(examplePaneWidth > 0 && examplePaneWidth <= 760);
 	const activeFile = $derived(files.find((file) => file.path === activePath) ?? files[0]);
@@ -419,9 +430,14 @@
 			'.ts': 'TYPESCRIPT',
 			'.mts': 'TYPESCRIPT',
 			'.cts': 'TYPESCRIPT',
+			'.zig': 'ZIG',
+			'.scm': 'LISP',
+			'.ss': 'LISP',
+			'.sls': 'LISP',
+			'.lisp': 'LISP',
+			'.lsp': 'LISP',
 			'.hs': 'HASKELL',
-			'.lhs': 'HASKELL',
-			'.zig': 'ZIG'
+			'.lhs': 'HASKELL'
 		};
 		return match[ext] || null;
 	}
@@ -441,8 +457,9 @@
 			TINYGO: 'main.go',
 			JAVASCRIPT: 'main.js',
 			TYPESCRIPT: 'main.ts',
-			HASKELL: 'main.hs',
-			ZIG: 'main.zig'
+			ZIG: 'main.zig',
+			LISP: 'main.scm',
+			HASKELL: 'main.hs'
 		};
 		return match[nextLanguage];
 	}
@@ -462,8 +479,9 @@
 			TINYGO: 'go',
 			JAVASCRIPT: 'javascript',
 			TYPESCRIPT: 'typescript',
-			HASKELL: 'haskell',
-			ZIG: 'zig'
+			ZIG: 'zig',
+			LISP: 'lisp',
+			HASKELL: 'haskell'
 		} as const satisfies Record<
 			PlaygroundLanguage,
 			Parameters<typeof resolveEditorDefaultSource>[0]
@@ -933,9 +951,12 @@
 			js: 'JAVASCRIPT',
 			typescript: 'TYPESCRIPT',
 			ts: 'TYPESCRIPT',
+			zig: 'ZIG',
+			lisp: 'LISP',
+			scheme: 'LISP',
+			scm: 'LISP',
 			haskell: 'HASKELL',
-			hs: 'HASKELL',
-			zig: 'ZIG'
+			hs: 'HASKELL'
 		};
 		return aliases[normalized] ?? null;
 	}
@@ -1335,8 +1356,9 @@
 			language !== 'OCAML' &&
 			language !== 'JAVASCRIPT' &&
 			language !== 'TYPESCRIPT' &&
-			language !== 'HASKELL' &&
-			language !== 'ZIG'
+			language !== 'ZIG' &&
+			language !== 'LISP' &&
+			language !== 'HASKELL'
 		)
 			compilerDiagnostics = [];
 	});
@@ -1541,11 +1563,12 @@
 						<option value="TINYGO">TinyGo</option>
 						<option value="JAVASCRIPT">JavaScript</option>
 						<option value="TYPESCRIPT">TypeScript</option>
-						<option value="HASKELL">Haskell</option>
 						<option value="ZIG">Zig</option>
+						<option value="LISP">Scheme</option>
+						<option value="HASKELL">Haskell</option>
 					</select>
 				</label>
-				{#if language === 'JAVA' || language === 'RUST' || language === 'GO' || language === 'CSHARP' || language === 'FSHARP' || language === 'TINYGO' || language === 'JAVASCRIPT' || language === 'TYPESCRIPT' || language === 'HASKELL' || language === 'ZIG'}
+				{#if language === 'JAVA' || language === 'RUST' || language === 'GO' || language === 'CSHARP' || language === 'FSHARP' || language === 'TINYGO' || language === 'JAVASCRIPT' || language === 'TYPESCRIPT' || language === 'ZIG' || language === 'LISP' || language === 'HASKELL'}
 					<label class="args-chip">
 						<span class="material-symbols-outlined">list_alt</span>
 						<input bind:value={argsInput} placeholder="3 4 5" spellcheck={false} />
@@ -1707,19 +1730,19 @@
 				typing input.
 			</p>
 		{/if}
-		{#if language === 'HASKELL'}
-			<p class="hint">
-				Haskell loads a wasm GHC/GHCi root filesystem, compiles in the browser through the
-				`ghc-in-browser` entry point, and runs the emitted WASI artifact locally. Pass GHC
-				args here; terminal stdin is available to the compiled program.
-			</p>
-		{/if}
 		{#if language === 'ZIG'}
 			<p class="hint">
 				Zig runs the bundled `zig_small.wasm` compiler. It uses the `std.zip` standard
 				library inside the browser worker, compiles for `wasm64-wasi`. It executes the
 				emitted WASI artifact locally. Pass CLI args here, type into the terminal below, and
 				use Ctrl+D or the EOF button if the program reads stdin until EOF.
+			</p>
+		{/if}
+		{#if language === 'HASKELL'}
+			<p class="hint">
+				Haskell loads a wasm GHC/GHCi root filesystem in the browser worker and invokes the
+				bundled `ghc-in-browser` entry point locally. The argument field is passed to GHC;
+				program stdin is currently treated as EOF by the upstream browser runtime.
 			</p>
 		{/if}
 		{#if debugLanguage && debug.active}

@@ -18,9 +18,12 @@ export type WasmIdleLanguageId =
 	| 'JS'
 	| 'TYPESCRIPT'
 	| 'TS'
+	| 'ZIG'
+	| 'LISP'
+	| 'SCHEME'
+	| 'SCM'
 	| 'HASKELL'
-	| 'HS'
-	| 'ZIG';
+	| 'HS';
 
 export const supportedLanguageIds = [
 	'PYTHON3',
@@ -37,8 +40,9 @@ export const supportedLanguageIds = [
 	'OCAML',
 	'JAVASCRIPT',
 	'TYPESCRIPT',
-	'HASKELL',
-	'ZIG'
+	'ZIG',
+	'LISP',
+	'HASKELL'
 ] as const;
 
 export const DEFAULT_DEFERRED_PROGRESS_LANGUAGES = new Set<string>([
@@ -50,16 +54,19 @@ export const DEFAULT_DEFERRED_PROGRESS_LANGUAGES = new Set<string>([
 	'OCAML',
 	'JAVASCRIPT',
 	'TYPESCRIPT',
-	'HASKELL',
-	'ZIG'
+	'ZIG',
+	'LISP',
+	'HASKELL'
 ]);
 
 const LANGUAGE_ALIASES: Record<string, string> = {
 	'C#': 'CSHARP',
 	'F#': 'FSHARP',
-	HS: 'HASKELL',
 	JS: 'JAVASCRIPT',
 	PYTHON: 'PYTHON3',
+	HS: 'HASKELL',
+	SCHEME: 'LISP',
+	SCM: 'LISP',
 	TS: 'TYPESCRIPT'
 };
 

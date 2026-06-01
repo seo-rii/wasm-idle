@@ -33,6 +33,7 @@
 		"toolchain:bootstrap:wasip3": "WASM_RUST_INSTALL_TARGETS=x86_64-unknown-linux-gnu,wasm32-wasip1,wasm32-wasip2,wasm32-wasip3 bash ./scripts/bootstrap-wasip3-toolchain.sh",
 		"toolchain:watch:custom": "node ./scripts/watch-process.mjs",
 		"release:upload": "bash ./scripts/upload-github-asset.sh",
+		"check": "pnpm run typecheck",
 		"typecheck": "pnpm exec tsc -p tsconfig.json --noEmit",
 		"test": "vitest run",
 		"test:ci": "pnpm run test:ci:fast",

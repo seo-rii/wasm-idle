@@ -4,6 +4,7 @@ import Elixir from '$lib/playground/elixir';
 import Go from '$lib/playground/go';
 import Haskell from '$lib/playground/haskell';
 import Java from '$lib/playground/java';
+import Lisp from '$lib/playground/lisp';
 import Ocaml from '$lib/playground/ocaml';
 import Python from '$lib/playground/python';
 import Rust from '$lib/playground/rust';
@@ -35,8 +36,9 @@ export const supportedLanguages = [
 	'OCAML',
 	'JAVASCRIPT',
 	'TYPESCRIPT',
-	'HASKELL',
-	'ZIG'
+	'ZIG',
+	'LISP',
+	'HASKELL'
 ];
 
 export function createPlaygroundBinding(runtimeAssets: SandboxRuntimeAssets): PlaygroundBinding {
@@ -104,12 +106,17 @@ async function playground(language: string, runtimeAssets?: SandboxRuntimeAssets
 		case 'TS':
 			sandbox = new TypeScriptSandbox('TYPESCRIPT');
 			break;
+		case 'ZIG':
+			sandbox = new Zig();
+			break;
+		case 'LISP':
+		case 'SCHEME':
+		case 'SCM':
+			sandbox = new Lisp();
+			break;
 		case 'HASKELL':
 		case 'HS':
 			sandbox = new Haskell();
-			break;
-		case 'ZIG':
-			sandbox = new Zig();
 			break;
 		default:
 			throw new Error(`Unsupported language: ${language}`);
@@ -139,10 +146,13 @@ async function playground(language: string, runtimeAssets?: SandboxRuntimeAssets
 		if (language === 'TYPESCRIPT' || language === 'TS') {
 			sandboxCache['TYPESCRIPT'] = sandboxCache['TS'] = sandbox;
 		}
+		if (language === 'ZIG') sandboxCache['ZIG'] = sandbox;
+		if (language === 'LISP' || language === 'SCHEME' || language === 'SCM') {
+			sandboxCache['LISP'] = sandboxCache['SCHEME'] = sandboxCache['SCM'] = sandbox;
+		}
 		if (language === 'HASKELL' || language === 'HS') {
 			sandboxCache['HASKELL'] = sandboxCache['HS'] = sandbox;
 		}
-		if (language === 'ZIG') sandboxCache['ZIG'] = sandbox;
 	}
 	return runtimeAssets ? createPlaygroundBinding(runtimeAssets).load(language) : sandbox;
 }

@@ -101,6 +101,10 @@ vi.mock('$lib/playground/zig', () => ({
 	default: createMockSandboxClass('ZIG')
 }));
 
+vi.mock('$lib/playground/lisp', () => ({
+	default: createMockSandboxClass('LISP')
+}));
+
 vi.mock('$lib/playground/clang', () => ({
 	default: class extends createMockSandboxClass('CLANG') {
 		constructor(language: 'C' | 'CPP') {
@@ -436,35 +440,6 @@ describe('playground runtime binding', () => {
 		]);
 	});
 
-	it('routes Haskell requests through the bundled wasm-haskell sandbox implementation', async () => {
-		const binding = createPlaygroundBinding({
-			rootUrl: '/absproxy/5173',
-			haskell: {
-				moduleUrl: '/absproxy/5173/wasm-haskell/dyld.mjs?v=test',
-				rootfsUrl: '/absproxy/5173/wasm-haskell/rootfs.tar.zst?v=test',
-				bsdtarUrl: '/absproxy/5173/wasm-haskell/bsdtar.wasm?v=test'
-			}
-		});
-		const progress = { set() {} };
-		const sandbox = await binding.load('HASKELL');
-
-		await sandbox.load('main = print 1', true, ['demo'], {}, progress);
-
-		const runtimeAssets = {
-			rootUrl: '/absproxy/5173',
-			haskell: {
-				moduleUrl: '/absproxy/5173/wasm-haskell/dyld.mjs?v=test',
-				rootfsUrl: '/absproxy/5173/wasm-haskell/rootfs.tar.zst?v=test',
-				bsdtarUrl: '/absproxy/5173/wasm-haskell/bsdtar.wasm?v=test'
-			}
-		};
-		expect(sandbox.runtimeAssets).toEqual(runtimeAssets);
-		expect(sandboxInstances.get('HASKELL')).toHaveLength(1);
-		expect(sandboxInstances.get('HASKELL')?.[0]?.loadCalls).toEqual([
-			[runtimeAssets, 'main = print 1', true, ['demo'], {}, progress]
-		]);
-	});
-
 	it('routes Zig requests through the bundled wasm-zig sandbox implementation', async () => {
 		const binding = createPlaygroundBinding({
 			rootUrl: '/absproxy/5173',
@@ -490,5 +465,64 @@ describe('playground runtime binding', () => {
 		expect(sandboxInstances.get('ZIG')?.[0]?.loadCalls).toEqual([
 			[runtimeAssets, 'pub fn main() void {}', true, ['demo'], {}, progress]
 		]);
+	});
+
+	it('routes Lisp and Scheme aliases through the wasm-lisp sandbox implementation', async () => {
+		const binding = createPlaygroundBinding({
+			rootUrl: '/absproxy/5173',
+			lisp: {
+				moduleUrl: '/absproxy/5173/wasm-lisp/index.js?v=test'
+			}
+		});
+		const progress = { set() {} };
+		const sandbox = await binding.load('SCHEME');
+
+		await sandbox.load('(display "hello")', true, ['demo'], {}, progress);
+
+		const runtimeAssets = {
+			rootUrl: '/absproxy/5173',
+			lisp: {
+				moduleUrl: '/absproxy/5173/wasm-lisp/index.js?v=test'
+			}
+		};
+		expect(sandbox.runtimeAssets).toEqual(runtimeAssets);
+		expect(sandboxInstances.get('LISP')).toHaveLength(1);
+		expect(sandboxInstances.get('LISP')?.[0]?.loadCalls).toEqual([
+			[runtimeAssets, '(display "hello")', true, ['demo'], {}, progress]
+		]);
+		expect((await binding.load('LISP')).runtimeAssets).toEqual(runtimeAssets);
+		expect((await binding.load('SCM')).runtimeAssets).toEqual(runtimeAssets);
+		expect(sandboxInstances.get('LISP')).toHaveLength(1);
+	});
+
+	it('routes Haskell aliases through the wasm-haskell sandbox implementation', async () => {
+		const binding = createPlaygroundBinding({
+			rootUrl: '/absproxy/5173',
+			haskell: {
+				moduleUrl: '/absproxy/5173/wasm-haskell/dyld.mjs?v=test',
+				rootfsUrl: '/absproxy/5173/wasm-haskell/rootfs.tar.zst?v=test',
+				bsdtarUrl: '/absproxy/5173/wasm-haskell/bsdtar.wasm?v=test'
+			}
+		});
+		const progress = { set() {} };
+		const sandbox = await binding.load('HS');
+
+		await sandbox.load('main = putStrLn "hello"', true, ['-Wall'], {}, progress);
+
+		const runtimeAssets = {
+			rootUrl: '/absproxy/5173',
+			haskell: {
+				moduleUrl: '/absproxy/5173/wasm-haskell/dyld.mjs?v=test',
+				rootfsUrl: '/absproxy/5173/wasm-haskell/rootfs.tar.zst?v=test',
+				bsdtarUrl: '/absproxy/5173/wasm-haskell/bsdtar.wasm?v=test'
+			}
+		};
+		expect(sandbox.runtimeAssets).toEqual(runtimeAssets);
+		expect(sandboxInstances.get('HASKELL')).toHaveLength(1);
+		expect(sandboxInstances.get('HASKELL')?.[0]?.loadCalls).toEqual([
+			[runtimeAssets, 'main = putStrLn "hello"', true, ['-Wall'], {}, progress]
+		]);
+		expect((await binding.load('HASKELL')).runtimeAssets).toEqual(runtimeAssets);
+		expect(sandboxInstances.get('HASKELL')).toHaveLength(1);
 	});
 });

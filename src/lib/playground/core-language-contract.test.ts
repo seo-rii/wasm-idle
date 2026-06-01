@@ -41,6 +41,14 @@ describe('core language contract', () => {
 		expect(isDeferredProgressLanguage('zig')).toBe(true);
 	});
 
+	it('exposes Lisp aliases as a deferred browser runtime language', () => {
+		expect(supportedLanguageIds).toContain('LISP');
+		expect(normalizeLanguageId('lisp')).toBe('LISP');
+		expect(normalizeLanguageId('scheme')).toBe('LISP');
+		expect(normalizeLanguageId('scm')).toBe('LISP');
+		expect(isDeferredProgressLanguage('scheme')).toBe(true);
+	});
+
 	it('includes Zig compiler and stdlib urls in runtime asset cache keys', () => {
 		const key = createRuntimeAssetsKey({
 			rootUrl: '/repl',
@@ -52,5 +60,16 @@ describe('core language contract', () => {
 
 		expect(key).toContain('"zigCompilerUrl":"/wasm-zig/zig_small.wasm?v=test"');
 		expect(key).toContain('"zigStdlibUrl":"/wasm-zig/std.zip?v=test"');
+	});
+
+	it('includes Lisp module urls in runtime asset cache keys', () => {
+		const key = createRuntimeAssetsKey({
+			rootUrl: '/repl',
+			lisp: {
+				moduleUrl: '/wasm-lisp/index.js?v=test'
+			}
+		});
+
+		expect(key).toContain('"lispModuleUrl":"/wasm-lisp/index.js?v=test"');
 	});
 });

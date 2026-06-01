@@ -83,6 +83,10 @@ export interface ZigRuntimeAssetConfig {
 	stdlibUrl?: string;
 }
 
+export interface LispRuntimeAssetConfig {
+	moduleUrl?: string;
+}
+
 export interface PlaygroundRuntimeAssets {
 	rootUrl?: string;
 	python?: RuntimeAssetConfig;
@@ -98,6 +102,7 @@ export interface PlaygroundRuntimeAssets {
 	typescript?: TypeScriptRuntimeAssetConfig;
 	haskell?: HaskellRuntimeAssetConfig;
 	zig?: ZigRuntimeAssetConfig;
+	lisp?: LispRuntimeAssetConfig;
 }
 
 export interface TinyGoRuntimeAssetLoaderRequest {
@@ -762,6 +767,35 @@ export function resolveZigStdlibUrl(
 	if (options?.rootUrl) {
 		return resolveConfiguredUrl(
 			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-zig/std.zip`,
+			currentUrl
+		);
+	}
+
+	return '';
+}
+
+export function resolveLispModuleUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredModuleUrl =
+		(typeof options === 'object' && options?.lisp?.moduleUrl) ||
+		(publicEnv.PUBLIC_WASM_LISP_MODULE_URL || '').trim();
+
+	if (configuredModuleUrl) {
+		return resolveConfiguredUrl(configuredModuleUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-lisp/index.js`,
+			currentUrl
+		);
+	}
+
+	if (options?.rootUrl) {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-lisp/index.js`,
 			currentUrl
 		);
 	}

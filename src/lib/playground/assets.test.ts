@@ -11,11 +11,12 @@ const { publicEnv } = vi.hoisted(() => ({
 		PUBLIC_WASM_TINYGO_APP_URL: '',
 		PUBLIC_WASM_TINYGO_MODULE_URL: '',
 		PUBLIC_WASM_TYPESCRIPT_MODULE_URL: '',
+		PUBLIC_WASM_ZIG_COMPILER_URL: '',
+		PUBLIC_WASM_ZIG_STDLIB_URL: '',
+		PUBLIC_WASM_LISP_MODULE_URL: '',
 		PUBLIC_WASM_HASKELL_MODULE_URL: '',
 		PUBLIC_WASM_HASKELL_ROOTFS_URL: '',
-		PUBLIC_WASM_HASKELL_BSDTAR_URL: '',
-		PUBLIC_WASM_ZIG_COMPILER_URL: '',
-		PUBLIC_WASM_ZIG_STDLIB_URL: ''
+		PUBLIC_WASM_HASKELL_BSDTAR_URL: ''
 	}
 }));
 
@@ -364,6 +365,67 @@ describe('runtime asset config resolution', () => {
 		);
 	});
 
+	it('prefers explicit Zig compiler and stdlib urls over public env overrides', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_ZIG_COMPILER_URL = 'https://env.example.com/zig_small.wasm';
+		publicEnv.PUBLIC_WASM_ZIG_STDLIB_URL = 'https://env.example.com/std.zip';
+		const { resolveZigCompilerUrl, resolveZigStdlibUrl } = await import('./assets');
+
+		const config = {
+			zig: {
+				compilerUrl: '/runtime/wasm-zig/zig_small.wasm',
+				stdlibUrl: '/runtime/wasm-zig/std.zip'
+			}
+		};
+		expect(resolveZigCompilerUrl(config, 'https://example.com/app')).toBe(
+			'https://example.com/runtime/wasm-zig/zig_small.wasm'
+		);
+		expect(resolveZigStdlibUrl(config, 'https://example.com/app')).toBe(
+			'https://example.com/runtime/wasm-zig/std.zip'
+		);
+	});
+
+	it('derives default Zig asset urls from the shared root path', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_ZIG_COMPILER_URL = '';
+		publicEnv.PUBLIC_WASM_ZIG_STDLIB_URL = '';
+		const { resolveZigCompilerUrl, resolveZigStdlibUrl } = await import('./assets');
+
+		expect(resolveZigCompilerUrl('/absproxy/5173', 'https://example.com/app')).toBe(
+			'https://example.com/absproxy/5173/wasm-zig/zig_small.wasm'
+		);
+		expect(resolveZigStdlibUrl('/absproxy/5173', 'https://example.com/app')).toBe(
+			'https://example.com/absproxy/5173/wasm-zig/std.zip'
+		);
+	});
+
+	it('prefers an explicit Lisp module url over the public env override', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_LISP_MODULE_URL = 'https://env.example.com/wasm-lisp/index.js';
+		const { resolveLispModuleUrl } = await import('./assets');
+
+		expect(
+			resolveLispModuleUrl(
+				{
+					lisp: {
+						moduleUrl: '/runtime/wasm-lisp/index.js'
+					}
+				},
+				'https://example.com/app'
+			)
+		).toBe('https://example.com/runtime/wasm-lisp/index.js');
+	});
+
+	it('derives the default Lisp module url from the shared root path', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_LISP_MODULE_URL = '';
+		const { resolveLispModuleUrl } = await import('./assets');
+
+		expect(resolveLispModuleUrl('/absproxy/5173', 'https://example.com/app')).toBe(
+			'https://example.com/absproxy/5173/wasm-lisp/index.js'
+		);
+	});
+
 	it('prefers explicit Haskell asset urls over public env overrides', async () => {
 		vi.resetModules();
 		publicEnv.PUBLIC_WASM_HASKELL_MODULE_URL = 'https://env.example.com/dyld.mjs';
@@ -406,40 +468,6 @@ describe('runtime asset config resolution', () => {
 		);
 		expect(resolveHaskellBsdtarUrl('/absproxy/5173', 'https://example.com/app')).toBe(
 			'https://example.com/absproxy/5173/wasm-haskell/bsdtar.wasm'
-		);
-	});
-
-	it('prefers explicit Zig compiler and stdlib urls over public env overrides', async () => {
-		vi.resetModules();
-		publicEnv.PUBLIC_WASM_ZIG_COMPILER_URL = 'https://env.example.com/zig_small.wasm';
-		publicEnv.PUBLIC_WASM_ZIG_STDLIB_URL = 'https://env.example.com/std.zip';
-		const { resolveZigCompilerUrl, resolveZigStdlibUrl } = await import('./assets');
-
-		const config = {
-			zig: {
-				compilerUrl: '/runtime/wasm-zig/zig_small.wasm',
-				stdlibUrl: '/runtime/wasm-zig/std.zip'
-			}
-		};
-		expect(resolveZigCompilerUrl(config, 'https://example.com/app')).toBe(
-			'https://example.com/runtime/wasm-zig/zig_small.wasm'
-		);
-		expect(resolveZigStdlibUrl(config, 'https://example.com/app')).toBe(
-			'https://example.com/runtime/wasm-zig/std.zip'
-		);
-	});
-
-	it('derives default Zig asset urls from the shared root path', async () => {
-		vi.resetModules();
-		publicEnv.PUBLIC_WASM_ZIG_COMPILER_URL = '';
-		publicEnv.PUBLIC_WASM_ZIG_STDLIB_URL = '';
-		const { resolveZigCompilerUrl, resolveZigStdlibUrl } = await import('./assets');
-
-		expect(resolveZigCompilerUrl('/absproxy/5173', 'https://example.com/app')).toBe(
-			'https://example.com/absproxy/5173/wasm-zig/zig_small.wasm'
-		);
-		expect(resolveZigStdlibUrl('/absproxy/5173', 'https://example.com/app')).toBe(
-			'https://example.com/absproxy/5173/wasm-zig/std.zip'
 		);
 	});
 });

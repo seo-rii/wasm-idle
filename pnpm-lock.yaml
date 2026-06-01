@@ -345,6 +345,25 @@ importers:
         specifier: ^1.0.39
         version: 1.0.39
 
+  runtimes/wasm-lisp:
+    dependencies:
+      '@bytecodealliance/jco':
+        specifier: ^1.19.0
+        version: 1.19.0(@emnapi/core@1.9.2)(@emnapi/runtime@1.9.2)
+      '@bytecodealliance/preview2-shim':
+        specifier: ^0.17.9
+        version: 0.17.9
+    devDependencies:
+      '@types/node':
+        specifier: ^24.6.1
+        version: 24.12.4
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^4.0.18
+        version: 4.1.4(@types/node@24.12.4)(jsdom@29.0.2)(vite@8.0.8(@types/node@24.12.4)(esbuild@0.28.0)(terser@5.47.1)(tsx@4.22.3))
+
   runtimes/wasm-of-js-of-ocaml:
     devDependencies:
       '@playwright/test':

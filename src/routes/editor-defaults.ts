@@ -12,8 +12,9 @@ export type EditorDefaultLanguage =
 	| 'ocaml'
 	| 'javascript'
 	| 'typescript'
-	| 'haskell'
 	| 'zig'
+	| 'lisp'
+	| 'haskell'
 	| 'rust';
 
 export const editorDefaults: Record<
@@ -28,8 +29,9 @@ export const editorDefaults: Record<
 	| 'ocaml'
 	| 'javascript'
 	| 'typescript'
-	| 'haskell'
-	| 'zig',
+	| 'zig'
+	| 'lisp'
+	| 'haskell',
 	string
 > = {
 	c: `#include <stdio.h>
@@ -201,16 +203,6 @@ const input: string = (fs as any).readLineSync(0).trim();
 const parsed = Number.parseInt(input || '4', 10);
 const n = Number.isNaN(parsed) ? 4 : parsed;
 console.log(\`factorial_plus_bonus=\${factorial(n) + bonus}\`);`,
-	haskell: `bonus :: Int
-bonus = 3
-
-factorial :: Int -> Int
-factorial n =
-  if n <= 1 then 1 else n * factorial (n - 1)
-
-main :: IO ()
-main =
-  putStrLn ("factorial_plus_bonus=" ++ show (factorial 4 + bonus))`,
 	zig: `const std = @import("std");
 
 const bonus: i32 = 3;
@@ -222,12 +214,32 @@ fn factorial(n: i32) i32 {
 pub fn main() !void {
     var buffer: [64]u8 = undefined;
     const stdin = std.io.getStdIn().reader();
-    const input = (try stdin.readUntilDelimiterOrEof(&buffer, '\n')) orelse "";
-    const trimmed = std.mem.trim(u8, input, " \t\r\n");
+    const input = (try stdin.readUntilDelimiterOrEof(&buffer, '\\n')) orelse "";
+    const trimmed = std.mem.trim(u8, input, " \\t\\r\\n");
     const n = std.fmt.parseInt(i32, trimmed, 10) catch 4;
     const stdout = std.io.getStdOut().writer();
-    try stdout.print("factorial_plus_bonus={d}\n", .{factorial(n) + bonus});
-}`
+    try stdout.print("factorial_plus_bonus={d}\\n", .{factorial(n) + bonus});
+}`,
+	lisp: `(define bonus 3)
+
+(define (factorial n)
+  (if (<= n 1)
+      1
+      (* n (factorial (- n 1)))))
+
+(display "factorial_plus_bonus=")
+(display (+ (factorial 4) bonus))
+(newline)`,
+	haskell: `bonus :: Int
+bonus = 3
+
+factorial :: Int -> Int
+factorial n =
+  if n <= 1 then 1 else n * factorial (n - 1)
+
+main :: IO ()
+main =
+  putStrLn ("factorial_plus_bonus=" ++ show (factorial 4 + bonus))`
 };
 
 export const rustEditorDefaults: Record<RustTargetTriple, string> = {
@@ -354,8 +366,9 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.ocaml ||
 		source === editorDefaults.javascript ||
 		source === editorDefaults.typescript ||
-		source === editorDefaults.haskell ||
 		source === editorDefaults.zig ||
+		source === editorDefaults.lisp ||
+		source === editorDefaults.haskell ||
 		source === rustEditorDefaults['wasm32-wasip1'] ||
 		source === rustEditorDefaults['wasm32-wasip2'] ||
 		source === rustEditorDefaults['wasm32-wasip3']

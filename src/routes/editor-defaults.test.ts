@@ -30,6 +30,10 @@ describe('editor defaults', () => {
 		expect(editorDefaults.haskell).toContain('putStrLn');
 		expect(editorDefaults.zig).toContain('std.io.getStdIn().reader()');
 		expect(editorDefaults.zig).toContain('factorial_plus_bonus={d}');
+		expect(editorDefaults.lisp).toContain('(define (factorial n)');
+		expect(editorDefaults.lisp).toContain('(display "factorial_plus_bonus=")');
+		expect(editorDefaults.haskell).toContain('factorial :: Int -> Int');
+		expect(editorDefaults.haskell).toContain('putStrLn');
 		expect(rustEditorDefaults['wasm32-wasip1']).toContain('io::stdin().read_line');
 	});
 
@@ -54,6 +58,8 @@ describe('editor defaults', () => {
 		);
 		expect(resolveEditorDefaultSource('haskell', 'wasm32-wasip1')).toBe(editorDefaults.haskell);
 		expect(resolveEditorDefaultSource('zig', 'wasm32-wasip1')).toBe(editorDefaults.zig);
+		expect(resolveEditorDefaultSource('lisp', 'wasm32-wasip1')).toBe(editorDefaults.lisp);
+		expect(resolveEditorDefaultSource('haskell', 'wasm32-wasip1')).toBe(editorDefaults.haskell);
 		expect(resolveEditorDefaultSource('rust', 'wasm32-wasip2')).toBe(
 			rustEditorDefaults['wasm32-wasip2']
 		);
@@ -67,6 +73,8 @@ describe('editor defaults', () => {
 		expect(isEditorDefaultSource(editorDefaults.typescript)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.haskell)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.zig)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.lisp)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.haskell)).toBe(true);
 		expect(isEditorDefaultSource(rustEditorDefaults['wasm32-wasip1'])).toBe(true);
 		expect(isEditorDefaultSource('fn main() {}')).toBe(false);
 		expect(isLegacyEditorDefaultSource(legacyBrokenTinyGoEditorDefault)).toBe(true);

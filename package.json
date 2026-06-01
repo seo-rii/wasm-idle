@@ -41,6 +41,7 @@
 		"sync:wasm-rust": "node scripts/sync-runtime.mjs wasm-rust",
 		"sync:wasm-typescript": "node scripts/sync-runtime.mjs wasm-typescript",
 		"sync:wasm-zig": "node scripts/sync-runtime.mjs wasm-zig",
+		"sync:wasm-lisp": "node scripts/sync-runtime.mjs wasm-lisp",
 		"sync:wasm-tinygo": "node scripts/sync-runtime.mjs wasm-tinygo",
 		"sync:wasm-elixir": "node scripts/sync-runtime.mjs wasm-elixir",
 		"package": "svelte-kit sync && svelte-package && publint",

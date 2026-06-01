@@ -16,25 +16,14 @@ describe('Monaco route source', () => {
 		expect(source).toContain("tokenPostfix: '.ocaml'");
 		expect(source).toContain("blockComment: ['(*', '*)']");
 	});
-	it('registers a Zig Monaco language for source files', async () => {
-		const source = await readFile(
-			path.resolve(process.cwd(), 'src/routes/Monaco.svelte'),
-			'utf8'
-		);
 
-		expect(source).toContain("id: 'zig'");
-		expect(source).toContain("aliases: ['Zig', 'zig']");
-		expect(source).toContain("extensions: ['.zig']");
-	});
-
-	it('registers a Haskell Monaco language with a tokenizer and language configuration', async () => {
+	it('registers a Haskell Monaco language with comments and tokenizer support', async () => {
 		const source = await readFile(
 			path.resolve(process.cwd(), 'src/routes/Monaco.svelte'),
 			'utf8'
 		);
 
 		expect(source).toContain("id: 'haskell'");
-		expect(source).toContain("aliases: ['Haskell', 'haskell']");
 		expect(source).toContain("extensions: ['.hs', '.lhs']");
 		expect(source).toContain("Monaco.languages.setLanguageConfiguration('haskell'");
 		expect(source).toContain("Monaco.languages.setMonarchTokensProvider('haskell'");

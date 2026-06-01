@@ -378,6 +378,80 @@
 		}
 	} satisfies monaco.languages.IMonarchLanguage;
 
+	const schemeLanguageConfiguration = {
+		comments: {
+			lineComment: ';'
+		},
+		brackets: [
+			['(', ')'],
+			['[', ']'],
+			['{', '}']
+		],
+		autoClosingPairs: [
+			{ open: '(', close: ')' },
+			{ open: '[', close: ']' },
+			{ open: '{', close: '}' },
+			{ open: '"', close: '"' }
+		],
+		surroundingPairs: [
+			{ open: '(', close: ')' },
+			{ open: '[', close: ']' },
+			{ open: '{', close: '}' },
+			{ open: '"', close: '"' }
+		]
+	} satisfies monaco.languages.LanguageConfiguration;
+
+	const schemeMonarchTokens = {
+		defaultToken: '',
+		tokenPostfix: '.scheme',
+		keywords: [
+			'and',
+			'begin',
+			'case',
+			'cond',
+			'define',
+			'define-library',
+			'define-syntax',
+			'delay',
+			'do',
+			'else',
+			'if',
+			'import',
+			'include',
+			'lambda',
+			'let',
+			'let*',
+			'letrec',
+			'let-syntax',
+			'letrec-syntax',
+			'or',
+			'quasiquote',
+			'quote',
+			'set!',
+			'syntax-rules',
+			'unless',
+			'unquote',
+			'unquote-splicing',
+			'when'
+		],
+		tokenizer: {
+			root: [
+				[/;.*$/, 'comment'],
+				[/"/, 'string', '@string'],
+				[/#\\(?:newline|space|tab|.)/, 'string.escape'],
+				[/#(?:t|f|true|false)\b/, 'keyword'],
+				[/[-+]?(?:\d+\.\d+|\d+)(?:[eE][-+]?\d+)?/, 'number'],
+				[/[()[\]{}]/, '@brackets'],
+				[/[^\s()[\]{}";]+/, { cases: { '@keywords': 'keyword', '@default': 'identifier' } }]
+			],
+			string: [
+				[/[^\\"]+/, 'string'],
+				[/\\./, 'string.escape'],
+				[/"/, 'string', '@pop']
+			]
+		}
+	} satisfies monaco.languages.IMonarchLanguage;
+
 	export const editorValue = () => editor?.getValue() || '';
 
 	let divEl: HTMLDivElement | null = $state(null);
@@ -517,8 +591,9 @@
 			language === 'ocaml' ||
 			language === 'javascript' ||
 			language === 'typescript' ||
-			language === 'haskell' ||
-			language === 'zig'
+			language === 'zig' ||
+			language === 'lisp' ||
+			language === 'haskell'
 				? compilerDiagnostics.map((diagnostic) => ({
 						severity:
 							diagnostic.severity === 'warning'
@@ -559,8 +634,9 @@
 				| 'ocaml'
 				| 'javascript'
 				| 'typescript'
-				| 'haskell'
 				| 'zig'
+				| 'lisp'
+				| 'haskell'
 				| 'rust',
 			rustTargetTriple
 		);
@@ -600,6 +676,13 @@
 			}
 			Monaco.languages.setLanguageConfiguration('fsharp', fsharpLanguageConfiguration);
 			Monaco.languages.setMonarchTokensProvider('fsharp', fsharpMonarchTokens);
+			if (!Monaco.languages.getLanguages().some(({ id }) => id === 'zig')) {
+				Monaco.languages.register({
+					id: 'zig',
+					aliases: ['Zig', 'zig'],
+					extensions: ['.zig']
+				});
+			}
 			if (!Monaco.languages.getLanguages().some(({ id }) => id === 'haskell')) {
 				Monaco.languages.register({
 					id: 'haskell',
@@ -609,13 +692,15 @@
 			}
 			Monaco.languages.setLanguageConfiguration('haskell', haskellLanguageConfiguration);
 			Monaco.languages.setMonarchTokensProvider('haskell', haskellMonarchTokens);
-			if (!Monaco.languages.getLanguages().some(({ id }) => id === 'zig')) {
+			if (!Monaco.languages.getLanguages().some(({ id }) => id === 'lisp')) {
 				Monaco.languages.register({
-					id: 'zig',
-					aliases: ['Zig', 'zig'],
-					extensions: ['.zig']
+					id: 'lisp',
+					aliases: ['Scheme', 'Lisp', 'scheme', 'lisp'],
+					extensions: ['.scm', '.ss', '.sls', '.lisp', '.lsp']
 				});
 			}
+			Monaco.languages.setLanguageConfiguration('lisp', schemeLanguageConfiguration);
+			Monaco.languages.setMonarchTokensProvider('lisp', schemeMonarchTokens);
 			const defaultValue = resolveEditorDefaultSource(
 				language as
 					| 'c'
@@ -629,8 +714,9 @@
 					| 'ocaml'
 					| 'javascript'
 					| 'typescript'
-					| 'haskell'
 					| 'zig'
+					| 'lisp'
+					| 'haskell'
 					| 'rust',
 				rustTargetTriple
 			);

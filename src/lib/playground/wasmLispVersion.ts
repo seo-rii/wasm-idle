@@ -1,0 +1,1 @@
+export const WASM_LISP_ASSET_VERSION = "3a3d5b1010a0e056";

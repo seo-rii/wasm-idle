@@ -366,7 +366,7 @@ export default function commonJudge(
                             output: interactiveResult.output.slice(0, logSize),
                         }
                     }
-                    if (interactiveResult.message && !message) {
+                    if (verdict !== 'AC' && interactiveResult.message && !message) {
                         message = interactiveResult.message.slice(0, logSize)
                     }
                     if (verdict !== 'AC' && (subtask.scoringType === ScoringType.QUANTIZED || subtask.scoringType === ScoringType.MINIMUM)) {

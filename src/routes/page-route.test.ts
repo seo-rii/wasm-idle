@@ -69,9 +69,6 @@ describe('example route debug actions', () => {
 			/import \{ WASM_GO_ASSET_VERSION \} from '\$lib\/playground\/wasmGoVersion';/
 		);
 		expect(source).toMatch(
-			/import \{ WASM_HASKELL_ASSET_VERSION \} from '\$lib\/playground\/wasmHaskellVersion';/
-		);
-		expect(source).toMatch(
 			/import \{ WASM_DOTNET_ASSET_VERSION \} from '\$lib\/playground\/wasmDotnetVersion';/
 		);
 		expect(source).toMatch(
@@ -91,6 +88,12 @@ describe('example route debug actions', () => {
 		);
 		expect(source).toMatch(
 			/import \{ WASM_ZIG_ASSET_VERSION \} from '\$lib\/playground\/wasmZigVersion';/
+		);
+		expect(source).toMatch(
+			/import \{ WASM_LISP_ASSET_VERSION \} from '\$lib\/playground\/wasmLispVersion';/
+		);
+		expect(source).toMatch(
+			/import \{ WASM_HASKELL_ASSET_VERSION \} from '\$lib\/playground\/wasmHaskellVersion';/
 		);
 		expect(source).not.toContain('tinygo' + 'CompilePath');
 		expect(source).not.toMatch(/dotnetCompilePath/);
@@ -122,10 +125,13 @@ describe('example route debug actions', () => {
 			/typescript: \{\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-typescript\/index\.js\?v=\$\{WASM_TYPESCRIPT_ASSET_VERSION\}`\s+:\s+`\/wasm-typescript\/index\.js\?v=\$\{WASM_TYPESCRIPT_ASSET_VERSION\}`\s+\}/s
 		);
 		expect(source).toMatch(
-			/haskell: \{\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-haskell\/dyld\.mjs\?v=\$\{WASM_HASKELL_ASSET_VERSION\}`\s+:\s+`\/wasm-haskell\/dyld\.mjs\?v=\$\{WASM_HASKELL_ASSET_VERSION\}`,\s+rootfsUrl: path\s+\?\s+`\$\{path\}\/wasm-haskell\/rootfs\.tar\.zst\?v=\$\{WASM_HASKELL_ASSET_VERSION\}`\s+:\s+`\/wasm-haskell\/rootfs\.tar\.zst\?v=\$\{WASM_HASKELL_ASSET_VERSION\}`,\s+bsdtarUrl: path\s+\?\s+`\$\{path\}\/wasm-haskell\/bsdtar\.wasm\?v=\$\{WASM_HASKELL_ASSET_VERSION\}`\s+:\s+`\/wasm-haskell\/bsdtar\.wasm\?v=\$\{WASM_HASKELL_ASSET_VERSION\}`\s+\}/s
+			/zig: \{\s+compilerUrl: path\s+\?\s+`\$\{path\}\/wasm-zig\/zig_small\.wasm\?v=\$\{WASM_ZIG_ASSET_VERSION\}`\s+:\s+`\/wasm-zig\/zig_small\.wasm\?v=\$\{WASM_ZIG_ASSET_VERSION\}`,\s+stdlibUrl: path\s+\?\s+`\$\{path\}\/wasm-zig\/std\.zip\?v=\$\{WASM_ZIG_ASSET_VERSION\}`\s+:\s+`\/wasm-zig\/std\.zip\?v=\$\{WASM_ZIG_ASSET_VERSION\}`\s+\}/s
 		);
 		expect(source).toMatch(
-			/zig: \{\s+compilerUrl: path\s+\?\s+`\$\{path\}\/wasm-zig\/zig_small\.wasm\?v=\$\{WASM_ZIG_ASSET_VERSION\}`\s+:\s+`\/wasm-zig\/zig_small\.wasm\?v=\$\{WASM_ZIG_ASSET_VERSION\}`,\s+stdlibUrl: path\s+\?\s+`\$\{path\}\/wasm-zig\/std\.zip\?v=\$\{WASM_ZIG_ASSET_VERSION\}`\s+:\s+`\/wasm-zig\/std\.zip\?v=\$\{WASM_ZIG_ASSET_VERSION\}`\s+\}/s
+			/lisp: \{\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-lisp\/index\.js\?v=\$\{WASM_LISP_ASSET_VERSION\}`\s+:\s+`\/wasm-lisp\/index\.js\?v=\$\{WASM_LISP_ASSET_VERSION\}`\s+\}/s
+		);
+		expect(source).toMatch(
+			/haskell: \{\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-haskell\/dyld\.mjs\?v=\$\{WASM_HASKELL_ASSET_VERSION\}`\s+:\s+`\/wasm-haskell\/dyld\.mjs\?v=\$\{WASM_HASKELL_ASSET_VERSION\}`,\s+rootfsUrl: path\s+\?\s+`\$\{path\}\/wasm-haskell\/rootfs\.tar\.zst\?v=\$\{WASM_HASKELL_ASSET_VERSION\}`\s+:\s+`\/wasm-haskell\/rootfs\.tar\.zst\?v=\$\{WASM_HASKELL_ASSET_VERSION\}`,\s+bsdtarUrl: path\s+\?\s+`\$\{path\}\/wasm-haskell\/bsdtar\.wasm\?v=\$\{WASM_HASKELL_ASSET_VERSION\}`\s+:\s+`\/wasm-haskell\/bsdtar\.wasm\?v=\$\{WASM_HASKELL_ASSET_VERSION\}`\s+\}/s
 		);
 		expect(source).toMatch(
 			/const playground = \$derived\.by\(\(\) => createPlaygroundBinding\(runtimeAssets\)\);/
@@ -187,6 +193,8 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/: language === 'JAVASCRIPT'\s+\? 'javascript'/);
 		expect(source).toMatch(/: language === 'TYPESCRIPT'\s+\? 'typescript'/);
 		expect(source).toMatch(/: language === 'ZIG'\s+\? 'zig'/);
+		expect(source).toMatch(/: language === 'LISP'\s+\? 'lisp'/);
+		expect(source).toMatch(/: language === 'HASKELL'\s+\? 'haskell'/);
 		expect(source).toMatch(/: 'go'/);
 		expect(source).toMatch(
 			/rustTargetTriple: language === 'RUST' \? rustTargetTriple : undefined/
@@ -291,13 +299,14 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/<option value="TINYGO">TinyGo<\/option>/);
 		expect(source).toMatch(/<option value="JAVASCRIPT">JavaScript<\/option>/);
 		expect(source).toMatch(/<option value="TYPESCRIPT">TypeScript<\/option>/);
-		expect(source).toMatch(/<option value="HASKELL">Haskell<\/option>/);
 		expect(source).toMatch(/<option value="ZIG">Zig<\/option>/);
+		expect(source).toMatch(/<option value="LISP">Scheme<\/option>/);
+		expect(source).toMatch(/<option value="HASKELL">Haskell<\/option>/);
 		expect(source).toMatch(
-			/\{#if language === 'JAVA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'TINYGO' \|\| language === 'JAVASCRIPT' \|\| language === 'TYPESCRIPT' \|\| language === 'HASKELL' \|\| language === 'ZIG'\}/
+			/\{#if language === 'JAVA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'TINYGO' \|\| language === 'JAVASCRIPT' \|\| language === 'TYPESCRIPT' \|\| language === 'ZIG' \|\| language === 'LISP' \|\| language === 'HASKELL'\}/
 		);
 		expect(source).toMatch(
-			/language === 'JAVA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'TINYGO' \|\| language === 'JAVASCRIPT' \|\| language === 'TYPESCRIPT' \|\| language === 'HASKELL' \|\| language === 'ZIG'/
+			/language === 'JAVA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'TINYGO' \|\| language === 'JAVASCRIPT' \|\| language === 'TYPESCRIPT' \|\| language === 'ZIG' \|\| language === 'LISP' \|\| language === 'HASKELL'/
 		);
 		expect(source).toMatch(/Go uses the bundled `wasm-go` browser compiler runtime/);
 		expect(source).toMatch(
@@ -373,26 +382,6 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/send Ctrl\+D or\s+the EOF button after\s+typing input/s);
 	});
 
-	it('surfaces Haskell through the wasm-haskell browser compiler contract', () => {
-		expect(source).toMatch(/haskell: \{/);
-		expect(source).toMatch(/WASM_HASKELL_ASSET_VERSION/);
-		expect(source).toMatch(/wasm-haskell\/dyld\.mjs\?v=\$\{WASM_HASKELL_ASSET_VERSION\}/);
-		expect(source).toMatch(
-			/wasm-haskell\/rootfs\.tar\.zst\?v=\$\{WASM_HASKELL_ASSET_VERSION\}/
-		);
-		expect(source).toMatch(/wasm-haskell\/bsdtar\.wasm\?v=\$\{WASM_HASKELL_ASSET_VERSION\}/);
-		expect(source).toMatch(/<option value="HASKELL">Haskell<\/option>/);
-		expect(source).toMatch(/haskell: 'HASKELL'/);
-		expect(source).toMatch(/hs: 'HASKELL'/);
-		expect(source).toMatch(/language === 'HASKELL'\s+\? 'haskell'/);
-		expect(source).toMatch(/'.hs': 'HASKELL'/);
-		expect(source).toMatch(/HASKELL: 'main\.hs'/);
-		expect(source).toMatch(/HASKELL: 'haskell'/);
-		expect(source).toMatch(/language === 'HASKELL' \? 'GHC Args' : 'Args'/);
-		expect(source).toMatch(/Haskell loads a wasm GHC\/GHCi root filesystem/);
-		expect(source).toMatch(/`ghc-in-browser` entry point/);
-	});
-
 	it('surfaces Zig through bundled wasm compiler assets and the browser runtime hint', () => {
 		expect(source).toMatch(/zig: \{/);
 		expect(source).toMatch(/WASM_ZIG_ASSET_VERSION/);
@@ -410,6 +399,39 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/compiles for `wasm64-wasi`/);
 		expect(source).toMatch(/executes the\s+emitted WASI artifact locally/s);
 		expect(source).not.toContain('api/zig');
+	});
+
+	it('surfaces Lisp through the Puppy Scheme wasm compiler contract', () => {
+		expect(source).toMatch(/lisp: \{/);
+		expect(source).toMatch(/WASM_LISP_ASSET_VERSION/);
+		expect(source).toMatch(/wasm-lisp\/index\.js\?v=\$\{WASM_LISP_ASSET_VERSION\}/);
+		expect(source).toMatch(/<option value="LISP">Scheme<\/option>/);
+		expect(source).toMatch(/lisp: 'LISP'/);
+		expect(source).toMatch(/scheme: 'LISP'/);
+		expect(source).toMatch(/language === 'LISP'\s+\? 'lisp'/);
+		expect(source).toMatch(/'.scm': 'LISP'/);
+		expect(source).toMatch(/LISP: 'main\.scm'/);
+		expect(source).toMatch(/LISP: 'lisp'/);
+	});
+
+	it('surfaces Haskell through the ghc-in-browser wasm compiler contract', () => {
+		expect(source).toMatch(/haskell: \{/);
+		expect(source).toMatch(/WASM_HASKELL_ASSET_VERSION/);
+		expect(source).toMatch(/wasm-haskell\/dyld\.mjs\?v=\$\{WASM_HASKELL_ASSET_VERSION\}/);
+		expect(source).toMatch(
+			/wasm-haskell\/rootfs\.tar\.zst\?v=\$\{WASM_HASKELL_ASSET_VERSION\}/
+		);
+		expect(source).toMatch(/wasm-haskell\/bsdtar\.wasm\?v=\$\{WASM_HASKELL_ASSET_VERSION\}/);
+		expect(source).toMatch(/<option value="HASKELL">Haskell<\/option>/);
+		expect(source).toMatch(/haskell: 'HASKELL'/);
+		expect(source).toMatch(/hs: 'HASKELL'/);
+		expect(source).toMatch(/language === 'HASKELL'\s+\? 'haskell'/);
+		expect(source).toMatch(/'.hs': 'HASKELL'/);
+		expect(source).toMatch(/HASKELL: 'main\.hs'/);
+		expect(source).toMatch(/HASKELL: 'haskell'/);
+		expect(source).toMatch(/language === 'HASKELL' \? 'GHC Args' : 'Args'/);
+		expect(source).toMatch(/Haskell loads a wasm GHC\/GHCi root filesystem/);
+		expect(source).toMatch(/program stdin is currently treated as EOF/);
 	});
 
 	it('surfaces Elixir through the shared language selector and Popcorn hint', () => {
