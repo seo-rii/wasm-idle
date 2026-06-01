@@ -12,6 +12,7 @@ export interface RuntimeAssetKeySource {
 	tinygo?: { appUrl?: string; moduleUrl?: string };
 	typescript?: { moduleUrl?: string };
 	wat?: { moduleUrl?: string };
+	lua?: { moduleUrl?: string };
 	haskell?: {
 		moduleUrl?: string;
 		rootfsUrl?: string;
@@ -48,6 +49,7 @@ export function createRuntimeAssetsKey(runtimeAssets: RuntimeAssetKeyInput): str
 		tinygoModuleUrl: runtimeAssets.tinygo?.moduleUrl || '',
 		typeScriptModuleUrl: runtimeAssets.typescript?.moduleUrl || '',
 		watModuleUrl: runtimeAssets.wat?.moduleUrl || '',
+		luaModuleUrl: runtimeAssets.lua?.moduleUrl || '',
 		haskellModuleUrl: runtimeAssets.haskell?.moduleUrl || '',
 		haskellRootfsUrl: runtimeAssets.haskell?.rootfsUrl || '',
 		haskellBsdtarUrl: runtimeAssets.haskell?.bsdtarUrl || '',

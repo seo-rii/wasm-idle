@@ -34,6 +34,13 @@ const RUNTIMES = [
 		targetArg: 'targetDir'
 	},
 	{
+		name: 'wasm-lua',
+		module: './sync-wasm-lua.mjs',
+		exportName: 'syncWasmLuaDist',
+		sourceArg: 'sourceDir',
+		targetArg: 'targetDir'
+	},
+	{
 		name: 'wasm-zig',
 		module: './sync-wasm-zig.mjs',
 		exportName: 'syncWasmZigAssets',

@@ -35,6 +35,7 @@ describe('Monaco route debug sync', () => {
 			/language === 'java' \|\|\s+language === 'rust' \|\|\s+language === 'go' \|\|\s+language === 'csharp' \|\|\s+language === 'fsharp' \|\|\s+language === 'ocaml'/
 		);
 		expect(source).toMatch(/language === 'wat'/);
+		expect(source).toMatch(/language === 'lua'/);
 		expect(source).toMatch(/language === 'lisp'/);
 		expect(source).toMatch(/language === 'haskell'/);
 		expect(source).toMatch(
@@ -82,6 +83,7 @@ describe('Monaco route debug sync', () => {
 		expect(resolveEditorDefaultSource('csharp', 'wasm32-wasip1')).toBe(editorDefaults.csharp);
 		expect(resolveEditorDefaultSource('fsharp', 'wasm32-wasip1')).toBe(editorDefaults.fsharp);
 		expect(resolveEditorDefaultSource('elixir', 'wasm32-wasip1')).toBe(editorDefaults.elixir);
+		expect(resolveEditorDefaultSource('lua', 'wasm32-wasip1')).toBe(editorDefaults.lua);
 		expect(editorDefaults.c).toContain('puts("Hello, WebAssembly!")');
 		expect(editorDefaults.go).toContain("ReadString('\\n')");
 		expect(editorDefaults.csharp).toContain('Console.WriteLine');
@@ -92,12 +94,14 @@ describe('Monaco route debug sync', () => {
 		expect(editorDefaults.elixir).toContain('Demo.run()');
 		expect(editorDefaults.elixir).toContain('IO.gets("")');
 		expect(editorDefaults.elixir).toContain('Integer.parse(String.trim(line))');
+		expect(editorDefaults.lua).toContain('io.read("*l")');
 		expect(editorDefaults.haskell).toContain('putStrLn');
 		expect(isEditorDefaultSource(editorDefaults.c)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.go)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.csharp)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.fsharp)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.elixir)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.lua)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.haskell)).toBe(true);
 		expect(isEditorDefaultSource(rustEditorDefaults['wasm32-wasip1'])).toBe(true);
 		expect(isLegacyEditorDefaultSource(legacyBrokenTinyGoEditorDefault)).toBe(true);
@@ -128,6 +132,7 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).toMatch(/<option value="JAVASCRIPT">JavaScript<\/option>/);
 		expect(pageSource).toMatch(/<option value="TYPESCRIPT">TypeScript<\/option>/);
 		expect(pageSource).toMatch(/<option value="WAT">WAT<\/option>/);
+		expect(pageSource).toMatch(/<option value="LUA">Lua<\/option>/);
 		expect(pageSource).toMatch(/<option value="ZIG">Zig<\/option>/);
 		expect(pageSource).toMatch(/<option value="LISP">Scheme<\/option>/);
 		expect(pageSource).toMatch(/<option value="HASKELL">Haskell<\/option>/);
@@ -145,6 +150,7 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).toMatch(/WASM_OCAML_ASSET_VERSION/);
 		expect(pageSource).toMatch(/WASM_TYPESCRIPT_ASSET_VERSION/);
 		expect(pageSource).toMatch(/WASM_WAT_ASSET_VERSION/);
+		expect(pageSource).toMatch(/WASM_LUA_ASSET_VERSION/);
 		expect(pageSource).toMatch(/WASM_ZIG_ASSET_VERSION/);
 		expect(pageSource).toMatch(/WASM_LISP_ASSET_VERSION/);
 		expect(pageSource).toMatch(/WASM_HASKELL_ASSET_VERSION/);

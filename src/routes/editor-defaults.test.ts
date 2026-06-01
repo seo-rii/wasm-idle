@@ -28,6 +28,8 @@ describe('editor defaults', () => {
 		expect(editorDefaults.typescript).toContain('const bonus: number = 3;');
 		expect(editorDefaults.wat).toContain('(module');
 		expect(editorDefaults.wat).toContain('(export "factorial_plus_bonus")');
+		expect(editorDefaults.lua).toContain('local function factorial');
+		expect(editorDefaults.lua).toContain('io.read("*l")');
 		expect(editorDefaults.haskell).toContain('factorial :: Int -> Int');
 		expect(editorDefaults.haskell).toContain('putStrLn');
 		expect(editorDefaults.zig).toContain('std.io.getStdIn().reader()');
@@ -59,6 +61,7 @@ describe('editor defaults', () => {
 			editorDefaults.typescript
 		);
 		expect(resolveEditorDefaultSource('wat', 'wasm32-wasip1')).toBe(editorDefaults.wat);
+		expect(resolveEditorDefaultSource('lua', 'wasm32-wasip1')).toBe(editorDefaults.lua);
 		expect(resolveEditorDefaultSource('haskell', 'wasm32-wasip1')).toBe(editorDefaults.haskell);
 		expect(resolveEditorDefaultSource('zig', 'wasm32-wasip1')).toBe(editorDefaults.zig);
 		expect(resolveEditorDefaultSource('lisp', 'wasm32-wasip1')).toBe(editorDefaults.lisp);
@@ -75,6 +78,7 @@ describe('editor defaults', () => {
 		expect(isEditorDefaultSource(editorDefaults.javascript)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.typescript)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.wat)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.lua)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.haskell)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.zig)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.lisp)).toBe(true);

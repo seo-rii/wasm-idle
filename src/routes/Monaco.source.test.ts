@@ -46,4 +46,19 @@ describe('Monaco route source', () => {
 		expect(source).toContain("lineComment: ';;'");
 		expect(source).toContain("[/\\(;/, 'comment', '@comment']");
 	});
+
+	it('registers a Lua Monaco language with comments and tokenizer support', async () => {
+		const source = await readFile(
+			path.resolve(process.cwd(), 'src/routes/Monaco.svelte'),
+			'utf8'
+		);
+
+		expect(source).toContain("id: 'lua'");
+		expect(source).toContain("extensions: ['.lua']");
+		expect(source).toContain("Monaco.languages.setLanguageConfiguration('lua'");
+		expect(source).toContain("Monaco.languages.setMonarchTokensProvider('lua'");
+		expect(source).toContain("tokenPostfix: '.lua'");
+		expect(source).toContain("lineComment: '--'");
+		expect(source).toContain("blockComment: ['--[[', ']]']");
+	});
 });

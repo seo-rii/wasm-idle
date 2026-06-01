@@ -47,6 +47,12 @@ describe('core language contract', () => {
 		expect(isDeferredProgressLanguage('wat')).toBe(true);
 	});
 
+	it('exposes Lua as a deferred browser runtime language', () => {
+		expect(supportedLanguageIds).toContain('LUA');
+		expect(normalizeLanguageId('lua')).toBe('LUA');
+		expect(isDeferredProgressLanguage('lua')).toBe(true);
+	});
+
 	it('exposes Lisp aliases as a deferred browser runtime language', () => {
 		expect(supportedLanguageIds).toContain('LISP');
 		expect(normalizeLanguageId('lisp')).toBe('LISP');
@@ -77,6 +83,17 @@ describe('core language contract', () => {
 		});
 
 		expect(key).toContain('"watModuleUrl":"/wasm-wat/index.js?v=test"');
+	});
+
+	it('includes Lua module urls in runtime asset cache keys', () => {
+		const key = createRuntimeAssetsKey({
+			rootUrl: '/repl',
+			lua: {
+				moduleUrl: '/wasm-lua/index.js?v=test'
+			}
+		});
+
+		expect(key).toContain('"luaModuleUrl":"/wasm-lua/index.js?v=test"');
 	});
 
 	it('includes Lisp module urls in runtime asset cache keys', () => {

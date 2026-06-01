@@ -90,6 +90,9 @@ describe('example route debug actions', () => {
 			/import \{ WASM_WAT_ASSET_VERSION \} from '\$lib\/playground\/wasmWatVersion';/
 		);
 		expect(source).toMatch(
+			/import \{ WASM_LUA_ASSET_VERSION \} from '\$lib\/playground\/wasmLuaVersion';/
+		);
+		expect(source).toMatch(
 			/import \{ WASM_ZIG_ASSET_VERSION \} from '\$lib\/playground\/wasmZigVersion';/
 		);
 		expect(source).toMatch(
@@ -129,6 +132,9 @@ describe('example route debug actions', () => {
 		);
 		expect(source).toMatch(
 			/wat: \{\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-wat\/index\.js\?v=\$\{WASM_WAT_ASSET_VERSION\}`\s+:\s+`\/wasm-wat\/index\.js\?v=\$\{WASM_WAT_ASSET_VERSION\}`\s+\}/s
+		);
+		expect(source).toMatch(
+			/lua: \{\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-lua\/index\.js\?v=\$\{WASM_LUA_ASSET_VERSION\}`\s+:\s+`\/wasm-lua\/index\.js\?v=\$\{WASM_LUA_ASSET_VERSION\}`\s+\}/s
 		);
 		expect(source).toMatch(
 			/zig: \{\s+compilerUrl: path\s+\?\s+`\$\{path\}\/wasm-zig\/zig_small\.wasm\?v=\$\{WASM_ZIG_ASSET_VERSION\}`\s+:\s+`\/wasm-zig\/zig_small\.wasm\?v=\$\{WASM_ZIG_ASSET_VERSION\}`,\s+stdlibUrl: path\s+\?\s+`\$\{path\}\/wasm-zig\/std\.zip\?v=\$\{WASM_ZIG_ASSET_VERSION\}`\s+:\s+`\/wasm-zig\/std\.zip\?v=\$\{WASM_ZIG_ASSET_VERSION\}`\s+\}/s
@@ -199,6 +205,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/: language === 'JAVASCRIPT'\s+\? 'javascript'/);
 		expect(source).toMatch(/: language === 'TYPESCRIPT'\s+\? 'typescript'/);
 		expect(source).toMatch(/: language === 'WAT'\s+\? 'wat'/);
+		expect(source).toMatch(/: language === 'LUA'\s+\? 'lua'/);
 		expect(source).toMatch(/: language === 'ZIG'\s+\? 'zig'/);
 		expect(source).toMatch(/: language === 'LISP'\s+\? 'lisp'/);
 		expect(source).toMatch(/: language === 'HASKELL'\s+\? 'haskell'/);
@@ -307,14 +314,15 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/<option value="JAVASCRIPT">JavaScript<\/option>/);
 		expect(source).toMatch(/<option value="TYPESCRIPT">TypeScript<\/option>/);
 		expect(source).toMatch(/<option value="WAT">WAT<\/option>/);
+		expect(source).toMatch(/<option value="LUA">Lua<\/option>/);
 		expect(source).toMatch(/<option value="ZIG">Zig<\/option>/);
 		expect(source).toMatch(/<option value="LISP">Scheme<\/option>/);
 		expect(source).toMatch(/<option value="HASKELL">Haskell<\/option>/);
 		expect(source).toMatch(
-			/\{#if language === 'JAVA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'TINYGO' \|\| language === 'JAVASCRIPT' \|\| language === 'TYPESCRIPT' \|\| language === 'ZIG' \|\| language === 'LISP' \|\| language === 'HASKELL'\}/
+			/\{#if language === 'JAVA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'TINYGO' \|\| language === 'JAVASCRIPT' \|\| language === 'TYPESCRIPT' \|\| language === 'LUA' \|\| language === 'ZIG' \|\| language === 'LISP' \|\| language === 'HASKELL'\}/
 		);
 		expect(source).toMatch(
-			/language === 'JAVA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'TINYGO' \|\| language === 'JAVASCRIPT' \|\| language === 'TYPESCRIPT' \|\| language === 'ZIG' \|\| language === 'LISP' \|\| language === 'HASKELL'/
+			/language === 'JAVA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'TINYGO' \|\| language === 'JAVASCRIPT' \|\| language === 'TYPESCRIPT' \|\| language === 'LUA' \|\| language === 'ZIG' \|\| language === 'LISP' \|\| language === 'HASKELL'/
 		);
 		expect(source).toMatch(/Go uses the bundled `wasm-go` browser compiler runtime/);
 		expect(source).toMatch(
@@ -403,6 +411,20 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/WAT: 'wat'/);
 		expect(source).toMatch(/WAT compiles through the bundled WABT browser module/);
 		expect(source).toMatch(/Zero-argument numeric exports are called automatically/);
+	});
+
+	it('surfaces Lua through the wasm-lua browser runtime contract', () => {
+		expect(source).toMatch(/lua: \{/);
+		expect(source).toMatch(/WASM_LUA_ASSET_VERSION/);
+		expect(source).toMatch(/wasm-lua\/index\.js\?v=\$\{WASM_LUA_ASSET_VERSION\}/);
+		expect(source).toMatch(/<option value="LUA">Lua<\/option>/);
+		expect(source).toMatch(/lua: 'LUA'/);
+		expect(source).toMatch(/language === 'LUA'\s+\? 'lua'/);
+		expect(source).toMatch(/'.lua': 'LUA'/);
+		expect(source).toMatch(/LUA: 'main\.lua'/);
+		expect(source).toMatch(/LUA: 'lua'/);
+		expect(source).toMatch(/Lua runs through the bundled `wasmoon` Lua VM/);
+		expect(source).toMatch(/backed by its local wasm payload/);
 	});
 
 	it('surfaces Zig through bundled wasm compiler assets and the browser runtime hint', () => {

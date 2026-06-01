@@ -101,6 +101,10 @@ vi.mock('$lib/playground/wat', () => ({
 	default: createMockSandboxClass('WAT')
 }));
 
+vi.mock('$lib/playground/lua', () => ({
+	default: createMockSandboxClass('LUA')
+}));
+
 vi.mock('$lib/playground/zig', () => ({
 	default: createMockSandboxClass('ZIG')
 }));
@@ -493,6 +497,31 @@ describe('playground runtime binding', () => {
 		expect(sandboxInstances.get('WAT')).toHaveLength(1);
 		expect(sandboxInstances.get('WAT')?.[0]?.loadCalls).toEqual([
 			[runtimeAssets, '(module)', true, ['demo'], {}, progress]
+		]);
+	});
+
+	it('routes Lua requests through the wasm-lua sandbox implementation', async () => {
+		const binding = createPlaygroundBinding({
+			rootUrl: '/absproxy/5173',
+			lua: {
+				moduleUrl: '/absproxy/5173/wasm-lua/index.js?v=test'
+			}
+		});
+		const progress = { set() {} };
+		const sandbox = await binding.load('LUA');
+
+		await sandbox.load('print("hello")', true, ['demo'], {}, progress);
+
+		const runtimeAssets = {
+			rootUrl: '/absproxy/5173',
+			lua: {
+				moduleUrl: '/absproxy/5173/wasm-lua/index.js?v=test'
+			}
+		};
+		expect(sandbox.runtimeAssets).toEqual(runtimeAssets);
+		expect(sandboxInstances.get('LUA')).toHaveLength(1);
+		expect(sandboxInstances.get('LUA')?.[0]?.loadCalls).toEqual([
+			[runtimeAssets, 'print("hello")', true, ['demo'], {}, progress]
 		]);
 	});
 

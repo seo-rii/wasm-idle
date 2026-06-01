@@ -74,6 +74,10 @@ export interface WatRuntimeAssetConfig {
 	moduleUrl?: string;
 }
 
+export interface LuaRuntimeAssetConfig {
+	moduleUrl?: string;
+}
+
 export interface HaskellRuntimeAssetConfig {
 	moduleUrl?: string;
 	rootfsUrl?: string;
@@ -105,6 +109,7 @@ export interface PlaygroundRuntimeAssets {
 	elixir?: ElixirRuntimeAssetConfig;
 	typescript?: TypeScriptRuntimeAssetConfig;
 	wat?: WatRuntimeAssetConfig;
+	lua?: LuaRuntimeAssetConfig;
 	haskell?: HaskellRuntimeAssetConfig;
 	zig?: ZigRuntimeAssetConfig;
 	lisp?: LispRuntimeAssetConfig;
@@ -656,6 +661,35 @@ export function resolveWatModuleUrl(
 	if (options?.rootUrl) {
 		return resolveConfiguredUrl(
 			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-wat/index.js`,
+			currentUrl
+		);
+	}
+
+	return '';
+}
+
+export function resolveLuaModuleUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredModuleUrl =
+		(typeof options === 'object' && options?.lua?.moduleUrl) ||
+		(publicEnv.PUBLIC_WASM_LUA_MODULE_URL || '').trim();
+
+	if (configuredModuleUrl) {
+		return resolveConfiguredUrl(configuredModuleUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-lua/index.js`,
+			currentUrl
+		);
+	}
+
+	if (options?.rootUrl) {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-lua/index.js`,
 			currentUrl
 		);
 	}

@@ -13,6 +13,7 @@ export type EditorDefaultLanguage =
 	| 'javascript'
 	| 'typescript'
 	| 'wat'
+	| 'lua'
 	| 'zig'
 	| 'lisp'
 	| 'haskell'
@@ -31,6 +32,7 @@ export const editorDefaults: Record<
 	| 'javascript'
 	| 'typescript'
 	| 'wat'
+	| 'lua'
 	| 'zig'
 	| 'lisp'
 	| 'haskell',
@@ -229,6 +231,18 @@ console.log(\`factorial_plus_bonus=\${factorial(n) + bonus}\`);`,
     i32.add
   )
 )`,
+	lua: `local bonus = 3
+
+local function factorial(n)
+    if n <= 1 then
+        return 1
+    end
+    return n * factorial(n - 1)
+end
+
+local input = io.read("*l")
+local n = tonumber(input or "") or tonumber(arg[1] or "") or 4
+print("factorial_plus_bonus=" .. tostring(factorial(n) + bonus))`,
 	zig: `const std = @import("std");
 
 const bonus: i32 = 3;
@@ -393,6 +407,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.javascript ||
 		source === editorDefaults.typescript ||
 		source === editorDefaults.wat ||
+		source === editorDefaults.lua ||
 		source === editorDefaults.zig ||
 		source === editorDefaults.lisp ||
 		source === editorDefaults.haskell ||

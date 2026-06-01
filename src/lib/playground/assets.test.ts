@@ -12,6 +12,7 @@ const { publicEnv } = vi.hoisted(() => ({
 		PUBLIC_WASM_TINYGO_MODULE_URL: '',
 		PUBLIC_WASM_TYPESCRIPT_MODULE_URL: '',
 		PUBLIC_WASM_WAT_MODULE_URL: '',
+		PUBLIC_WASM_LUA_MODULE_URL: '',
 		PUBLIC_WASM_ZIG_COMPILER_URL: '',
 		PUBLIC_WASM_ZIG_STDLIB_URL: '',
 		PUBLIC_WASM_LISP_MODULE_URL: '',
@@ -390,6 +391,33 @@ describe('runtime asset config resolution', () => {
 
 		expect(resolveWatModuleUrl('/absproxy/5173', 'https://example.com/app')).toBe(
 			'https://example.com/absproxy/5173/wasm-wat/index.js'
+		);
+	});
+
+	it('prefers an explicit Lua module url over the public env override', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_LUA_MODULE_URL = 'https://env.example.com/wasm-lua/index.js';
+		const { resolveLuaModuleUrl } = await import('./assets');
+
+		expect(
+			resolveLuaModuleUrl(
+				{
+					lua: {
+						moduleUrl: '/runtime/wasm-lua/index.js'
+					}
+				},
+				'https://example.com/app'
+			)
+		).toBe('https://example.com/runtime/wasm-lua/index.js');
+	});
+
+	it('derives the default Lua module url from the shared root path', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_LUA_MODULE_URL = '';
+		const { resolveLuaModuleUrl } = await import('./assets');
+
+		expect(resolveLuaModuleUrl('/absproxy/5173', 'https://example.com/app')).toBe(
+			'https://example.com/absproxy/5173/wasm-lua/index.js'
 		);
 	});
 

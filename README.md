@@ -3,7 +3,7 @@
 ![wasm-idle](static/image.jpeg)
 
 Executes C++, Python, Java, Rust, Go, TinyGo, OCaml, Elixir, C#, F#, JavaScript,
-TypeScript, WAT, Zig, Scheme, and Haskell code.
+TypeScript, WAT, Lua, Zig, Scheme, and Haskell code.
 
 Refer to src/lib/clang.
 
@@ -20,8 +20,8 @@ left in place, but the default development path is inside this repo:
 - `packages/node`: Node.js host helpers for Node-capable sandbox loaders.
 - `runtimes/*`: imported runtime/compiler packages such as `wasm-rust`,
   `wasm-of-js-of-ocaml`, `wasm-go`, `wasm-tinygo`, `wasm-dotnet`, `wasm-typescript`,
-  `wasm-wat`, `wasm-lisp`, `wasm-elixir`, `pyodide`, `teavm`, `assemblyscript`, `ruby`,
-  `r`, `php`, and `js-sandbox`.
+  `wasm-wat`, `wasm-lua`, `wasm-lisp`, `wasm-elixir`, `pyodide`, `teavm`,
+  `assemblyscript`, `ruby`, `r`, `php`, and `js-sandbox`.
 - `static/wasm-zig` and `static/wasm-haskell`: bundled browser compiler assets synced from
   upstream asset builds rather than local workspace packages.
 - `tools/*`: migrated local toolchain projects that are too broad or infrastructure-heavy to run as
@@ -195,6 +195,9 @@ pass `runtimeAssets.tinygo.moduleUrl` at runtime. The older `PUBLIC_WASM_TINYGO_
 `runtimeAssets.tinygo.appUrl` document path is still accepted and normalized to `runtime.js`.
 WAT uses the bundled `static/wasm-wat/` WABT browser module by default. Override it with
 `PUBLIC_WASM_WAT_MODULE_URL`, or pass `runtimeAssets.wat.moduleUrl`.
+Lua uses the bundled `static/wasm-lua/` wasmoon browser module plus its local `glue.wasm`
+payload by default. Override it with `PUBLIC_WASM_LUA_MODULE_URL`, or pass
+`runtimeAssets.lua.moduleUrl`.
 Zig uses the bundled `static/wasm-zig/zig_small.wasm` compiler and `static/wasm-zig/std.zip`
 standard library by default. Override them with `PUBLIC_WASM_ZIG_COMPILER_URL` and
 `PUBLIC_WASM_ZIG_STDLIB_URL`, or pass `runtimeAssets.zig.compilerUrl` and
@@ -246,6 +249,9 @@ const runtimeAssets: PlaygroundRuntimeAssets = {
 	},
 	wat: {
 		moduleUrl: 'https://cdn.example.com/wasm-wat/index.js'
+	},
+	lua: {
+		moduleUrl: 'https://cdn.example.com/wasm-lua/index.js'
 	},
 	zig: {
 		compilerUrl: 'https://cdn.example.com/wasm-zig/zig_small.wasm',
@@ -300,4 +306,4 @@ await sandbox.load('print("hi")', false);
 
 Powered by [wasm-clang](https://github.com/binji/wasm-clang), Pyodide, TeaVM, `wasm-rust`,
 `wasm-tinygo`, `wasm-dotnet`, `wasm-of-js-of-ocaml`, `wasm-typescript`, `wasm-lisp`,
-`wasm-wat`, `wasm-zig`, and `ghc-in-browser`.
+`wasm-wat`, `wasm-lua`, `wasm-zig`, and `ghc-in-browser`.

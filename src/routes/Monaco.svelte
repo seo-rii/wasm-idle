@@ -534,6 +534,118 @@
 		}
 	} satisfies monaco.languages.IMonarchLanguage;
 
+	const luaLanguageConfiguration = {
+		comments: {
+			lineComment: '--',
+			blockComment: ['--[[', ']]']
+		},
+		brackets: [
+			['{', '}'],
+			['[', ']'],
+			['(', ')']
+		],
+		autoClosingPairs: [
+			{ open: '{', close: '}' },
+			{ open: '[', close: ']' },
+			{ open: '(', close: ')' },
+			{ open: '"', close: '"' },
+			{ open: "'", close: "'" }
+		],
+		surroundingPairs: [
+			{ open: '{', close: '}' },
+			{ open: '[', close: ']' },
+			{ open: '(', close: ')' },
+			{ open: '"', close: '"' },
+			{ open: "'", close: "'" }
+		]
+	} satisfies monaco.languages.LanguageConfiguration;
+
+	const luaMonarchTokens = {
+		defaultToken: '',
+		tokenPostfix: '.lua',
+		keywords: [
+			'and',
+			'break',
+			'do',
+			'else',
+			'elseif',
+			'end',
+			'false',
+			'for',
+			'function',
+			'goto',
+			'if',
+			'in',
+			'local',
+			'nil',
+			'not',
+			'or',
+			'repeat',
+			'return',
+			'then',
+			'true',
+			'until',
+			'while'
+		],
+		builtins: [
+			'arg',
+			'assert',
+			'error',
+			'ipairs',
+			'io',
+			'math',
+			'next',
+			'os',
+			'pairs',
+			'pcall',
+			'print',
+			'select',
+			'string',
+			'table',
+			'tonumber',
+			'tostring',
+			'type',
+			'xpcall'
+		],
+		tokenizer: {
+			root: [
+				[/--\[\[/, 'comment', '@comment'],
+				[/--.*$/, 'comment'],
+				[/"([^"\\]|\\.)*$/, 'string.invalid'],
+				[/'([^'\\]|\\.)*$/, 'string.invalid'],
+				[/"/, 'string', '@stringDouble'],
+				[/'/, 'string', '@stringSingle'],
+				[/\b\d+(?:\.\d+)?(?:e[-+]?\d+)?\b/i, 'number'],
+				[
+					/[A-Za-z_]\w*/,
+					{
+						cases: {
+							'@keywords': 'keyword',
+							'@builtins': 'type.identifier',
+							'@default': 'identifier'
+						}
+					}
+				],
+				[/[{}()[\]]/, '@brackets']
+			],
+			comment: [
+				[/[^\]]+/, 'comment'],
+				[/\]\]/, 'comment', '@pop'],
+				[/./, 'comment']
+			],
+			stringDouble: [
+				[/[^\\"]+/, 'string'],
+				[/\\./, 'string.escape'],
+				[/"/, 'string', '@pop']
+			],
+			stringSingle: [
+				[/[^\\']+/, 'string'],
+				[/\\./, 'string.escape'],
+				[/'/, 'string', '@pop']
+			]
+		}
+	} satisfies monaco.languages.IMonarchLanguage;
+
 	export const editorValue = () => editor?.getValue() || '';
 
 	let divEl: HTMLDivElement | null = $state(null);
@@ -674,6 +786,7 @@
 			language === 'javascript' ||
 			language === 'typescript' ||
 			language === 'wat' ||
+			language === 'lua' ||
 			language === 'zig' ||
 			language === 'lisp' ||
 			language === 'haskell'
@@ -718,6 +831,7 @@
 				| 'javascript'
 				| 'typescript'
 				| 'wat'
+				| 'lua'
 				| 'zig'
 				| 'lisp'
 				| 'haskell'
@@ -776,6 +890,15 @@
 			}
 			Monaco.languages.setLanguageConfiguration('wat', watLanguageConfiguration);
 			Monaco.languages.setMonarchTokensProvider('wat', watMonarchTokens);
+			if (!Monaco.languages.getLanguages().some(({ id }) => id === 'lua')) {
+				Monaco.languages.register({
+					id: 'lua',
+					aliases: ['Lua', 'lua'],
+					extensions: ['.lua']
+				});
+			}
+			Monaco.languages.setLanguageConfiguration('lua', luaLanguageConfiguration);
+			Monaco.languages.setMonarchTokensProvider('lua', luaMonarchTokens);
 			if (!Monaco.languages.getLanguages().some(({ id }) => id === 'haskell')) {
 				Monaco.languages.register({
 					id: 'haskell',
@@ -808,6 +931,7 @@
 					| 'javascript'
 					| 'typescript'
 					| 'wat'
+					| 'lua'
 					| 'zig'
 					| 'lisp'
 					| 'haskell'

@@ -16,6 +16,7 @@
 	import { WASM_ELIXIR_ASSET_VERSION } from '$lib/playground/wasmElixirVersion';
 	import { WASM_GO_ASSET_VERSION } from '$lib/playground/wasmGoVersion';
 	import { WASM_HASKELL_ASSET_VERSION } from '$lib/playground/wasmHaskellVersion';
+	import { WASM_LUA_ASSET_VERSION } from '$lib/playground/wasmLuaVersion';
 	import { WASM_LISP_ASSET_VERSION } from '$lib/playground/wasmLispVersion';
 	import { WASM_OCAML_ASSET_VERSION } from '$lib/playground/wasmOcamlVersion';
 	import { WASM_RUST_ASSET_VERSION } from '$lib/playground/wasmRustVersion';
@@ -60,6 +61,7 @@
 		| 'JAVASCRIPT'
 		| 'TYPESCRIPT'
 		| 'WAT'
+		| 'LUA'
 		| 'ZIG'
 		| 'LISP'
 		| 'HASKELL';
@@ -104,6 +106,7 @@
 		'JAVASCRIPT',
 		'TYPESCRIPT',
 		'WAT',
+		'LUA',
 		'ZIG',
 		'LISP',
 		'HASKELL'
@@ -123,6 +126,7 @@
 		JAVASCRIPT: 'JavaScript',
 		TYPESCRIPT: 'TypeScript',
 		WAT: 'WAT',
+		LUA: 'Lua',
 		ZIG: 'Zig',
 		LISP: 'Scheme',
 		HASKELL: 'Haskell'
@@ -176,6 +180,11 @@
 			moduleUrl: path
 				? `${path}/wasm-wat/index.js?v=${WASM_WAT_ASSET_VERSION}`
 				: `/wasm-wat/index.js?v=${WASM_WAT_ASSET_VERSION}`
+		},
+		lua: {
+			moduleUrl: path
+				? `${path}/wasm-lua/index.js?v=${WASM_LUA_ASSET_VERSION}`
+				: `/wasm-lua/index.js?v=${WASM_LUA_ASSET_VERSION}`
 		},
 		zig: {
 			compilerUrl: path
@@ -266,11 +275,13 @@
 														? 'wat'
 														: language === 'ZIG'
 															? 'zig'
-															: language === 'LISP'
-																? 'lisp'
-																: language === 'HASKELL'
-																	? 'haskell'
-																	: 'go'
+															: language === 'LUA'
+																? 'lua'
+																: language === 'LISP'
+																	? 'lisp'
+																	: language === 'HASKELL'
+																		? 'haskell'
+																		: 'go'
 	);
 	const compact = $derived(examplePaneWidth > 0 && examplePaneWidth <= 760);
 	const activeFile = $derived(files.find((file) => file.path === activePath) ?? files[0]);
@@ -443,6 +454,7 @@
 			'.cts': 'TYPESCRIPT',
 			'.wat': 'WAT',
 			'.wast': 'WAT',
+			'.lua': 'LUA',
 			'.zig': 'ZIG',
 			'.scm': 'LISP',
 			'.ss': 'LISP',
@@ -471,6 +483,7 @@
 			JAVASCRIPT: 'main.js',
 			TYPESCRIPT: 'main.ts',
 			WAT: 'main.wat',
+			LUA: 'main.lua',
 			ZIG: 'main.zig',
 			LISP: 'main.scm',
 			HASKELL: 'main.hs'
@@ -494,6 +507,7 @@
 			JAVASCRIPT: 'javascript',
 			TYPESCRIPT: 'typescript',
 			WAT: 'wat',
+			LUA: 'lua',
 			ZIG: 'zig',
 			LISP: 'lisp',
 			HASKELL: 'haskell'
@@ -968,6 +982,7 @@
 			ts: 'TYPESCRIPT',
 			wat: 'WAT',
 			wast: 'WAT',
+			lua: 'LUA',
 			zig: 'ZIG',
 			lisp: 'LISP',
 			scheme: 'LISP',
@@ -1374,6 +1389,7 @@
 			language !== 'JAVASCRIPT' &&
 			language !== 'TYPESCRIPT' &&
 			language !== 'WAT' &&
+			language !== 'LUA' &&
 			language !== 'ZIG' &&
 			language !== 'LISP' &&
 			language !== 'HASKELL'
@@ -1582,12 +1598,13 @@
 						<option value="JAVASCRIPT">JavaScript</option>
 						<option value="TYPESCRIPT">TypeScript</option>
 						<option value="WAT">WAT</option>
+						<option value="LUA">Lua</option>
 						<option value="ZIG">Zig</option>
 						<option value="LISP">Scheme</option>
 						<option value="HASKELL">Haskell</option>
 					</select>
 				</label>
-				{#if language === 'JAVA' || language === 'RUST' || language === 'GO' || language === 'CSHARP' || language === 'FSHARP' || language === 'TINYGO' || language === 'JAVASCRIPT' || language === 'TYPESCRIPT' || language === 'ZIG' || language === 'LISP' || language === 'HASKELL'}
+				{#if language === 'JAVA' || language === 'RUST' || language === 'GO' || language === 'CSHARP' || language === 'FSHARP' || language === 'TINYGO' || language === 'JAVASCRIPT' || language === 'TYPESCRIPT' || language === 'LUA' || language === 'ZIG' || language === 'LISP' || language === 'HASKELL'}
 					<label class="args-chip">
 						<span class="material-symbols-outlined">list_alt</span>
 						<input bind:value={argsInput} placeholder="3 4 5" spellcheck={false} />
@@ -1754,6 +1771,13 @@
 				WAT compiles through the bundled WABT browser module, then instantiates the emitted
 				WebAssembly locally. Zero-argument numeric exports are called automatically and
 				printed to the terminal.
+			</p>
+		{/if}
+		{#if language === 'LUA'}
+			<p class="hint">
+				Lua runs through the bundled `wasmoon` Lua VM, backed by its local wasm payload.
+				Pass CLI args here, type into the terminal below, and use Ctrl+D or the EOF button
+				if the program reads stdin until EOF.
 			</p>
 		{/if}
 		{#if language === 'ZIG'}
