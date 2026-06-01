@@ -23,6 +23,69 @@ const loadTeaVmArtifacts = async () => {
 };
 
 describe('TeaVM Java stdin integration', () => {
+	it('generates Wasm from output class files', async () => {
+		const { runtime, compilerWasm, sdk, runtimeClasslib } = await loadTeaVmArtifacts();
+		const code = `public class Main {
+    public static int factorial(int n) {
+        return n <= 1 ? 1 : n * factorial(n - 1);
+    }
+
+    public static void main(String[] args) {
+        int n = args.length > 0 ? Integer.parseInt(args[0]) : 4;
+        System.out.println("factorial=" + factorial(n));
+    }
+}`;
+		const sourceCompilerModule = await runtime.load(compilerWasm, {
+			stackDeobfuscator: { enabled: false }
+		});
+		const sourceCompiler = sourceCompilerModule.exports.createCompiler();
+		sourceCompiler.setSdk(sdk);
+		sourceCompiler.setTeaVMClasslib(runtimeClasslib);
+		sourceCompiler.addSourceFile('Main.java', code);
+
+		expect(sourceCompiler.compile()).toBe(true);
+		const mainClassFile = new Int8Array(sourceCompiler.getOutputFile('Main.class'));
+
+		const outputCompilerModule = await runtime.load(compilerWasm, {
+			stackDeobfuscator: { enabled: false }
+		});
+		const outputCompiler = outputCompilerModule.exports.createCompiler();
+		const diagnostics: string[] = [];
+		outputCompiler.setSdk(sdk);
+		outputCompiler.setTeaVMClasslib(runtimeClasslib);
+		outputCompiler.onDiagnostic((diagnostic: { message?: string }) => {
+			diagnostics.push(String(diagnostic.message || ''));
+		});
+		outputCompiler.addOutputClassFile('Main.class', mainClassFile);
+
+		expect(Array.from(outputCompiler.detectMainClasses())).toEqual(['Main']);
+		expect(
+			outputCompiler.generateWebAssembly({ outputName: 'app', mainClass: 'Main' })
+		).toBe(true);
+		expect(diagnostics).toEqual([]);
+
+		const wasm = new Uint8Array(outputCompiler.getWebAssemblyOutputFile('app.wasm'));
+		const outputs: string[] = [];
+		const module = await runtime.load(wasm, {
+			installImports(imports: {
+				teavmConsole: {
+					putcharStdout: (code: number) => void;
+					putcharStderr: (code: number) => void;
+				};
+			}) {
+				imports.teavmConsole.putcharStdout = (charCode) =>
+					outputs.push(String.fromCharCode(charCode));
+				imports.teavmConsole.putcharStderr = (charCode) =>
+					outputs.push(String.fromCharCode(charCode));
+			},
+			stackDeobfuscator: { enabled: false }
+		});
+
+		module.exports.main(['5']);
+
+		expect(outputs.join('')).toBe('factorial=120\n');
+	}, 10000);
+
 	it('compiles and runs NIO byte buffer code under Wasm GC', async () => {
 		const { runtime, compilerWasm, sdk, runtimeClasslib } = await loadTeaVmArtifacts();
 		// The bundled runtime classlib must not retain JS-only @JSByRef typed array paths.
