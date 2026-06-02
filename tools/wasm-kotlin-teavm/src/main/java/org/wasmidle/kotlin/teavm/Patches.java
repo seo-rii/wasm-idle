@@ -1866,6 +1866,10 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
         var deprecationSettingsType = ValueType.object("org.jetbrains.kotlin.resolve.deprecation.DeprecationSettings");
         var javaDeprecationSettingsType = ValueType.object(
                 "org.jetbrains.kotlin.load.java.components.JavaDeprecationSettings");
+        var deserializationConfigType = ValueType.object(
+                "org.jetbrains.kotlin.serialization.deserialization.DeserializationConfiguration");
+        var deserializationConfigDefaultType = ValueType.object(
+                "org.jetbrains.kotlin.serialization.deserialization.DeserializationConfiguration$Default");
 
         var method = cls.getMethod(new MethodDescriptor("createInstance", contextType, objectType));
         if (method == null) {
@@ -2150,6 +2154,17 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
                         pe.getField("org.jetbrains.kotlin.config.LanguageVersionSettingsImpl", "DEFAULT",
                                 languageSettingsType)
                                 .cast(languageSettingsInterfaceType))
+                        .cast(objectType)
+                        .returnValue());
+        pe.when(pe.var(0, descriptorType).getField("klass", classType)
+                .isSame(pe.constant(org.jetbrains.kotlin.contracts.ContractDeserializerImpl.class)
+                        .cast(classType)))
+                .thenDo(() -> pe.construct("org.jetbrains.kotlin.contracts.ContractDeserializerImpl",
+                        pe.getField("org.jetbrains.kotlin.serialization.deserialization.DeserializationConfiguration$Default",
+                                "INSTANCE", deserializationConfigDefaultType)
+                                .cast(deserializationConfigType),
+                        pe.getField("org.jetbrains.kotlin.storage.LockBasedStorageManager", "NO_LOCKS",
+                                storageManagerType))
                         .cast(objectType)
                         .returnValue());
         pe.var(0, descriptorType)
