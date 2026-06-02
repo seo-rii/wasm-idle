@@ -106,9 +106,12 @@ Known findings from the initial experiments:
 - JDK utility patches cover class resource lookup, class/type names, generic interface reflection,
   `Runtime.addShutdownHook`, `System.mapLibraryName`, `Long.parseUnsignedLong`, `StringJoiner`, and
   `LockSupport`.
-- With those patches, fast analysis fails in about 61 seconds at roughly 5.9 GB RSS. The next blocker
-  group is missing coroutines classes, Jansi native-loading/file-permission APIs, file-channel copy
-  APIs, `AtomicIntegerArray`, Swing utilities, method-handle lookup, and streams/spliterators.
+- Replacing the compiler probe's `PrintingMessageCollector` with a minimal in-memory collector keeps
+  `PlainTextMessageRenderer` and Jansi's native-loading path out of the current browser graph.
+- With those patches, fast analysis fails in about 74 seconds at roughly 5.3 GB RSS. The next blocker
+  group is missing coroutines classes, file-channel copy APIs, `AtomicIntegerArray`, XML/StAX plugin
+  descriptor APIs, Swing utilities, method-handle lookup, streams/spliterators, and additional
+  reflective `Field` APIs.
 - `jdeps` reports that the Kotlin compiler distribution reaches beyond `java.base` into
   `java.desktop`, `java.instrument`, `java.management`, `java.scripting`, `jdk.compiler`, and
   `jdk.unsupported`.

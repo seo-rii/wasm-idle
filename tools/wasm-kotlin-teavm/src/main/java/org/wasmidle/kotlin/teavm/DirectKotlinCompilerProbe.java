@@ -6,9 +6,9 @@ import java.io.File;
 import java.util.Arrays;
 import org.jetbrains.kotlin.cli.common.CLIConfigurationKeys;
 import org.jetbrains.kotlin.cli.common.config.KotlinSourceRoot;
+import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity;
+import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSourceLocation;
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector;
-import org.jetbrains.kotlin.cli.common.messages.MessageRenderer;
-import org.jetbrains.kotlin.cli.common.messages.PrintingMessageCollector;
 import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles;
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment;
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinToJVMBytecodeCompiler;
@@ -53,8 +53,7 @@ public final class DirectKotlinCompilerProbe {
     private static CompilerConfiguration createBaseConfiguration(
             String sourcePath, String outputDir, String[] classpathEntries) {
         var configuration = new CompilerConfiguration();
-        MessageCollector collector = new PrintingMessageCollector(
-                System.err, MessageRenderer.PLAIN_FULL_PATHS, false);
+        MessageCollector collector = new NoOpMessageCollector();
 
         configuration.put(CommonConfigurationKeys.MODULE_NAME, "main");
         configuration.put(CommonConfigurationKeys.LANGUAGE_VERSION_SETTINGS,
@@ -87,6 +86,26 @@ public final class DirectKotlinCompilerProbe {
                     && !collector.hasErrors();
         } finally {
             Disposer.dispose(rootDisposable);
+        }
+    }
+
+    private static final class NoOpMessageCollector implements MessageCollector {
+        private boolean hasErrors;
+
+        @Override
+        public void clear() {
+            hasErrors = false;
+        }
+
+        @Override
+        public void report(CompilerMessageSeverity severity, String message,
+                CompilerMessageSourceLocation location) {
+            hasErrors |= severity != null && severity.isError();
+        }
+
+        @Override
+        public boolean hasErrors() {
+            return hasErrors;
         }
     }
 }

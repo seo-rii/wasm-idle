@@ -67,15 +67,16 @@ Current TeaVM fast-analysis blockers:
     - `Class.getResource(...)`, `ClassLoader.getSystemResource(...)`, class/type name helpers,
       `Runtime.addShutdownHook(...)`, `System.mapLibraryName(...)`, `StringJoiner`,
       `Long.parseUnsignedLong(...)`, and `LockSupport`
+    - `PlainTextMessageRenderer`/Jansi native-loading path by using a minimal probe-local
+      `MessageCollector`
 - Still blocking:
     - `kotlinx.coroutines.BuildersKt` and `kotlinx.coroutines.flow.SharedFlowKt`
     - `java.lang.invoke.MethodHandles.lookup()`
     - `Arrays.spliterator(...)`, `Spliterators.AbstractSpliterator`, and `StreamSupport.intStream(...)`
-    - Jansi native-loading and file permission APIs: `System.load(...)`, `File.canExecute()`,
-      `File.setReadable(...)`
     - File-channel copy APIs: `FileInputStream.getChannel()`, `FileOutputStream.getChannel()`,
       and `java.nio.channels.FileChannel`
     - `AtomicIntegerArray`
+    - XML/StAX plugin descriptor APIs such as `XMLStreamException` and `XMLStreamReader2`
     - `javax.swing.SwingUtilities`
     - Additional reflective field APIs such as `Field.setLong(...)`, `Field.setShort(...)`, and
       `Field.getGenericType()`
