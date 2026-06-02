@@ -463,24 +463,12 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
                 .constantNull(ValueType.object("java.lang.reflect.Field"))
                 .returnValue();
 
-        var declaredMethodsType = ValueType.arrayOf(ValueType.object("java.lang.reflect.Method"));
-        var declaredMethods = getOrCreateMethod(cls, "getDeclaredMethods", declaredMethodsType);
-        ProgramEmitter.create(declaredMethods, context.getHierarchy())
-                .constructArray(ValueType.object("java.lang.reflect.Method"), 0)
-                .returnValue();
-
         var classArrayType = ValueType.arrayOf(ValueType.object("java.lang.Class"));
         var declaredMethod = getOrCreateMethod(cls, "getDeclaredMethod",
                 ValueType.object("java.lang.reflect.Method"),
                 ValueType.object("java.lang.String"), classArrayType);
         ProgramEmitter.create(declaredMethod, context.getHierarchy())
                 .constantNull(ValueType.object("java.lang.reflect.Method"))
-                .returnValue();
-
-        var declaredConstructorsType = ValueType.arrayOf(ValueType.object("java.lang.reflect.Constructor"));
-        var declaredConstructors = getOrCreateMethod(cls, "getDeclaredConstructors", declaredConstructorsType);
-        ProgramEmitter.create(declaredConstructors, context.getHierarchy())
-                .constructArray(ValueType.object("java.lang.reflect.Constructor"), 0)
                 .returnValue();
 
         var constructor = getOrCreateMethod(cls, "getConstructor", ValueType.object("java.lang.reflect.Constructor"),
@@ -677,7 +665,8 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
         var method = getOrCreateMethod(cls, "getGenericParameterTypes",
                 ValueType.arrayOf(ValueType.object("java.lang.reflect.Type")));
         ProgramEmitter.create(method, context.getHierarchy())
-                .constructArray(ValueType.object("java.lang.reflect.Type"), 0)
+                .var(0, ValueType.object("java.lang.reflect.Method"))
+                .invokeVirtual("getParameterTypes", ValueType.arrayOf(ValueType.object("java.lang.Class")))
                 .returnValue();
     }
 
@@ -685,7 +674,8 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
         var method = getOrCreateMethod(cls, "getGenericParameterTypes",
                 ValueType.arrayOf(ValueType.object("java.lang.reflect.Type")));
         ProgramEmitter.create(method, context.getHierarchy())
-                .constructArray(ValueType.object("java.lang.reflect.Type"), 0)
+                .var(0, ValueType.object("java.lang.reflect.Constructor"))
+                .invokeVirtual("getParameterTypes", ValueType.arrayOf(ValueType.object("java.lang.Class")))
                 .returnValue();
     }
 
