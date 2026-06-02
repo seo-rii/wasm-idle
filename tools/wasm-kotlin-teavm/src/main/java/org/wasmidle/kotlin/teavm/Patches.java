@@ -150,6 +150,9 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
             case "com.intellij.psi.compiled.ClassFileDecompilers":
                 transformClassFileDecompilers(cls, context);
                 break;
+            case "com.intellij.psi.impl.PsiModificationTrackerImpl":
+                transformPsiModificationTrackerImpl(cls, context);
+                break;
             case "com.intellij.util.containers.ContainerUtil":
                 transformContainerUtil(cls, context);
                 break;
@@ -966,6 +969,71 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
         replaceWithNoOp(cls, context, "dispose", ValueType.VOID, disposableType);
         replaceWithNoOp(cls, context, "dispose", ValueType.VOID, disposableType, ValueType.BOOLEAN);
         replaceWithNull(cls, context, "getDisposalTrace", ValueType.object("java.lang.Throwable"), disposableType);
+    }
+
+    private void transformPsiModificationTrackerImpl(ClassHolder cls, ClassHolderTransformerContext context) {
+        var trackerImplType = ValueType.object("com.intellij.psi.impl.PsiModificationTrackerImpl");
+        var simpleTrackerType = ValueType.object("com.intellij.openapi.util.SimpleModificationTracker");
+        var mapType = ValueType.object("java.util.Map");
+        var modificationTrackerType = ValueType.object("com.intellij.openapi.util.ModificationTracker");
+
+        var constructor = cls.getMethod(new MethodDescriptor("<init>",
+                ValueType.object("com.intellij.openapi.project.Project"), ValueType.VOID));
+        if (constructor != null) {
+            prepareMethodBody(constructor);
+            var pe = ProgramEmitter.create(constructor, context.getHierarchy());
+            pe.var(0, trackerImplType).invokeSpecial("java.lang.Object", "<init>");
+            pe.var(0, trackerImplType).setField("myModificationCount",
+                    pe.construct("com.intellij.openapi.util.SimpleModificationTracker"));
+            pe.var(0, trackerImplType).setField("myAllLanguagesTracker",
+                    pe.construct("com.intellij.openapi.util.SimpleModificationTracker"));
+            pe.var(0, trackerImplType).setField("myLanguageTrackers",
+                    pe.construct("java.util.HashMap").cast(mapType));
+            pe.var(0, trackerImplType).setField("myPublisher",
+                    pe.constantNull(ValueType.object("com.intellij.psi.util.PsiModificationTracker$Listener")));
+            pe.exit();
+        }
+
+        replaceWithNoOp(cls, context, "fireEvent", ValueType.VOID);
+        replaceWithNoOp(cls, context, "treeChanged", ValueType.VOID,
+                ValueType.object("com.intellij.psi.impl.PsiTreeChangeEventImpl"));
+        replaceWithNoOp(cls, context, "incLanguageModificationCount", ValueType.VOID,
+                ValueType.object("com.intellij.lang.Language"));
+
+        var method = cls.getMethod(new MethodDescriptor("getJavaStructureModificationTracker",
+                appendReturnType(modificationTrackerType, new ValueType[0])));
+        if (method != null) {
+            prepareMethodBody(method);
+            ProgramEmitter.create(method, context.getHierarchy())
+                    .var(0, trackerImplType)
+                    .getField("myModificationCount", simpleTrackerType)
+                    .cast(modificationTrackerType)
+                    .returnValue();
+        }
+
+        method = cls.getMethod(new MethodDescriptor("forLanguage",
+                appendReturnType(modificationTrackerType,
+                        new ValueType[] { ValueType.object("com.intellij.lang.Language") })));
+        if (method != null) {
+            prepareMethodBody(method);
+            ProgramEmitter.create(method, context.getHierarchy())
+                    .var(0, trackerImplType)
+                    .getField("myAllLanguagesTracker", simpleTrackerType)
+                    .cast(modificationTrackerType)
+                    .returnValue();
+        }
+
+        method = cls.getMethod(new MethodDescriptor("forLanguages",
+                appendReturnType(modificationTrackerType,
+                        new ValueType[] { ValueType.object("java.util.function.Predicate") })));
+        if (method != null) {
+            prepareMethodBody(method);
+            ProgramEmitter.create(method, context.getHierarchy())
+                    .var(0, trackerImplType)
+                    .getField("myAllLanguagesTracker", simpleTrackerType)
+                    .cast(modificationTrackerType)
+                    .returnValue();
+        }
     }
 
     private void transformVirtualFileManagerImpl(ClassHolder cls, ClassHolderTransformerContext context) {
