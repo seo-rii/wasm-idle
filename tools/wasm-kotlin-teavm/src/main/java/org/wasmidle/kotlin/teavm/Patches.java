@@ -2063,6 +2063,29 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
                                 .cast(deprecationSettingsType))
                         .cast(objectType)
                         .returnValue());
+        pe.when(pe.var(0, descriptorType).getField("klass", classType)
+                .isSame(pe.constant(
+                        org.jetbrains.kotlin.resolve.calls.tower.KotlinResolutionStatelessCallbacksImpl.class)
+                        .cast(classType)))
+                .thenDo(() -> pe.construct(
+                        "org.jetbrains.kotlin.resolve.calls.tower.KotlinResolutionStatelessCallbacksImpl",
+                        pe.construct("org.jetbrains.kotlin.resolve.deprecation.DeprecationResolver",
+                                pe.getField("org.jetbrains.kotlin.storage.LockBasedStorageManager", "NO_LOCKS",
+                                        storageManagerType),
+                                pe.getField("org.jetbrains.kotlin.config.LanguageVersionSettingsImpl", "DEFAULT",
+                                        languageSettingsType)
+                                        .cast(languageSettingsInterfaceType),
+                                pe.getField("org.jetbrains.kotlin.load.java.components.JavaDeprecationSettings",
+                                        "INSTANCE", javaDeprecationSettingsType)
+                                        .cast(deprecationSettingsType)),
+                        pe.getField("org.jetbrains.kotlin.config.LanguageVersionSettingsImpl", "DEFAULT",
+                                languageSettingsType)
+                                .cast(languageSettingsInterfaceType),
+                        pe.getField("org.jetbrains.kotlin.types.checker.KotlinTypeRefiner$Default", "INSTANCE",
+                                refinerDefaultType)
+                                .cast(refinerType))
+                        .cast(objectType)
+                        .returnValue());
         pe.var(0, descriptorType)
                 .invokeSpecial("createInstanceOf", objectType,
                         pe.var(0, descriptorType).getField("klass", classType),
