@@ -108,6 +108,9 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
             case "org.jetbrains.kotlin.cli.common.CLICompiler":
                 transformCliCompiler(cls, context);
                 break;
+            case "org.jetbrains.kotlin.cli.jvm.compiler.CompileEnvironmentUtil":
+                transformCompileEnvironmentUtil(cls, context);
+                break;
             case "org.jetbrains.kotlin.javac.JavacWrapper":
                 transformJavacWrapper(cls, context);
                 break;
@@ -530,6 +533,25 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
         var pe = ProgramEmitter.create(method, context.getHierarchy());
         pe.getField("org.jetbrains.kotlin.cli.common.ExitCode", "OK",
                 ValueType.object("org.jetbrains.kotlin.cli.common.ExitCode")).returnValue();
+    }
+
+    private void transformCompileEnvironmentUtil(ClassHolder cls, ClassHolderTransformerContext context) {
+        var jarOutputStreamType = ValueType.object("java.util.jar.JarOutputStream");
+        replaceWithNoOp(cls, context, "writeToJar", ValueType.VOID,
+                ValueType.object("java.io.File"), ValueType.BOOLEAN, ValueType.BOOLEAN, ValueType.BOOLEAN,
+                ValueType.object("org.jetbrains.kotlin.name.FqName"),
+                ValueType.object("org.jetbrains.kotlin.backend.common.output.OutputFileCollection"),
+                ValueType.object("org.jetbrains.kotlin.cli.common.messages.MessageCollector"));
+        replaceWithNoOp(cls, context, "doWriteToJar", ValueType.VOID,
+                ValueType.object("org.jetbrains.kotlin.backend.common.output.OutputFileCollection"),
+                ValueType.object("java.io.OutputStream"), ValueType.object("org.jetbrains.kotlin.name.FqName"),
+                ValueType.BOOLEAN, ValueType.BOOLEAN, ValueType.BOOLEAN);
+        replaceWithNoOp(cls, context, "writeRuntimeToJar", ValueType.VOID,
+                jarOutputStreamType, ValueType.BOOLEAN);
+        replaceWithNoOp(cls, context, "writeReflectToJar", ValueType.VOID,
+                jarOutputStreamType, ValueType.BOOLEAN);
+        replaceWithNoOp(cls, context, "copyJarImpl", ValueType.VOID,
+                jarOutputStreamType, ValueType.object("java.io.File"), ValueType.BOOLEAN);
     }
 
     private void transformPerformanceManager(ClassHolder cls, ClassHolderTransformerContext context) {
