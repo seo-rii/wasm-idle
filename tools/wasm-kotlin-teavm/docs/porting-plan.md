@@ -85,17 +85,18 @@ Current TeaVM fast-analysis blockers:
     - `CompileEnvironmentUtil.writeToJar(...)` and runtime/reflect JAR copy helpers, removing the
       `FileInputStream.getChannel()` and `FileOutputStream.getChannel()` blockers from the current
       browser-directory-output path
+    - File-based IntelliJ JAR readers in `JBZipFileWrapper`, `FastJarFileSystem`, and
+      `FastJarHandler`, removing the remaining `RandomAccessFile.getChannel()`,
+      `FileSystemProvider.newFileChannel(...)`, and `java.nio.channels.FileChannel` blockers
 - Still blocking:
-    - JAR filesystem file-channel APIs through `JBZipFile` and `FastJarFileSystem`:
-      `RandomAccessFile.getChannel()`, `FileSystemProvider.newFileChannel(...)`, and
-      `java.nio.channels.FileChannel`
     - IntelliJ unsafe paths through `MethodHandle.invokeExact(...)` and
       `MethodType.methodType(...)`
+    - Message bus `MethodHandle.bindTo(...)` and `MethodHandle.invoke(...)` paths
     - `com.intellij.util.lang.CharSequenceAccess`
     - `java.beans.PropertyChangeSupport`
     - Swing icon classes such as `javax.swing.Icon`
-    - `ConcurrentHashMap.keySet(Object)` and `ThreadMXBean` paths exposed by the current
-      direct compiler graph
+    - `ConcurrentHashMap.keySet(Object)`, `ConcurrentHashMap.KeySetView`, and `ThreadMXBean` paths
+      exposed by the current direct compiler graph
 
 TeaVM did not load ordinary application jar classes placed in `java.*` packages. Classlib additions
 must follow TeaVM's internal `T...` class naming under `org.teavm.classlib...`.

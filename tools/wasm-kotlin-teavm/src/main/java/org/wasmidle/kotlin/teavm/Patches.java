@@ -81,6 +81,9 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
             case "com.intellij.mock.MockProject":
                 transformMockProject(cls, context);
                 break;
+            case "com.intellij.openapi.vfs.impl.JBZipFileWrapper":
+                transformJBZipFileWrapper(cls, context);
+                break;
             case "com.intellij.diagnostic.ThreadDumper":
                 transformThreadDumper(cls, context);
                 break;
@@ -110,6 +113,12 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
                 break;
             case "org.jetbrains.kotlin.cli.jvm.compiler.CompileEnvironmentUtil":
                 transformCompileEnvironmentUtil(cls, context);
+                break;
+            case "org.jetbrains.kotlin.cli.jvm.compiler.jarfs.FastJarFileSystem":
+                transformFastJarFileSystem(cls, context);
+                break;
+            case "org.jetbrains.kotlin.cli.jvm.compiler.jarfs.FastJarHandler":
+                transformFastJarHandler(cls, context);
                 break;
             case "org.jetbrains.kotlin.javac.JavacWrapper":
                 transformJavacWrapper(cls, context);
@@ -554,6 +563,78 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
                 jarOutputStreamType, ValueType.object("java.io.File"), ValueType.BOOLEAN);
     }
 
+    private void transformJBZipFileWrapper(ClassHolder cls, ClassHolderTransformerContext context) {
+        var constructor = cls.getMethod(new MethodDescriptor("<init>",
+                ValueType.object("java.io.File"), ValueType.VOID));
+        if (constructor != null) {
+            var wrapperType = ValueType.object("com.intellij.openapi.vfs.impl.JBZipFileWrapper");
+            var pe = ProgramEmitter.create(constructor, context.getHierarchy());
+            pe.var(0, wrapperType).invokeSpecial(Object.class, "<init>");
+            pe.var(0, wrapperType)
+                    .setField("myZipFile", pe.constantNull(ValueType.object("com.intellij.util.io.zip.JBZipFile")));
+            pe.exit();
+        }
+        replaceWithNull(cls, context, "getEntry",
+                ValueType.object("com.intellij.openapi.vfs.impl.GenericZipFile$GenericZipEntry"),
+                ValueType.object("java.lang.String"));
+        replaceWithEmptyList(cls, context, "getEntries");
+        replaceWithNoOp(cls, context, "close", ValueType.VOID);
+    }
+
+    private void transformFastJarFileSystem(ClassHolder cls, ClassHolderTransformerContext context) {
+        var functionType = ValueType.object("kotlin.jvm.functions.Function1");
+        var constructor = cls.getMethod(new MethodDescriptor("<init>", functionType, ValueType.VOID));
+        if (constructor != null) {
+            var fileSystemType = ValueType.object("org.jetbrains.kotlin.cli.jvm.compiler.jarfs.FastJarFileSystem");
+            var pe = ProgramEmitter.create(constructor, context.getHierarchy());
+            pe.var(0, fileSystemType)
+                    .invokeSpecial("com.intellij.openapi.vfs.DeprecatedVirtualFileSystem", "<init>");
+            pe.var(0, fileSystemType).setField("unmapBuffer", pe.var(1, functionType));
+            pe.var(0, fileSystemType)
+                    .setField("myHandlers", pe.construct("java.util.HashMap").cast(ValueType.object("java.util.Map")));
+            pe.var(0, fileSystemType)
+                    .setField("cachedOpenFileHandles",
+                            pe.constantNull(ValueType.object("com.intellij.util.io.FileAccessorCache")));
+            pe.exit();
+        }
+        replaceWithNull(cls, context, "getCachedOpenFileHandles$cli_base",
+                ValueType.object("com.intellij.util.io.FileAccessorCache"));
+        replaceWithNull(cls, context, "findFileByPath",
+                ValueType.object("com.intellij.openapi.vfs.VirtualFile"), ValueType.object("java.lang.String"));
+        replaceWithNull(cls, context, "refreshAndFindFileByPath",
+                ValueType.object("com.intellij.openapi.vfs.VirtualFile"), ValueType.object("java.lang.String"));
+        replaceWithNoOp(cls, context, "clearHandlersCache", ValueType.VOID);
+        replaceWithNoOp(cls, context, "cleanOpenFilesCache", ValueType.VOID);
+    }
+
+    private void transformFastJarHandler(ClassHolder cls, ClassHolderTransformerContext context) {
+        var fileSystemType = ValueType.object("org.jetbrains.kotlin.cli.jvm.compiler.jarfs.FastJarFileSystem");
+        var constructor = cls.getMethod(new MethodDescriptor("<init>",
+                fileSystemType, ValueType.object("java.lang.String"), ValueType.VOID));
+        if (constructor != null) {
+            var handlerType = ValueType.object("org.jetbrains.kotlin.cli.jvm.compiler.jarfs.FastJarHandler");
+            var virtualFileType = ValueType.object("com.intellij.openapi.vfs.VirtualFile");
+            var jarVirtualFileType = ValueType.object("org.jetbrains.kotlin.cli.jvm.compiler.jarfs.FastJarVirtualFile");
+            var zipEntryType = ValueType.object("org.jetbrains.kotlin.cli.jvm.compiler.jarfs.ZipEntryDescription");
+            var pe = ProgramEmitter.create(constructor, context.getHierarchy());
+            pe.var(0, handlerType).invokeSpecial(Object.class, "<init>");
+            pe.var(0, handlerType).setField("fileSystem", pe.var(1, fileSystemType));
+            pe.var(0, handlerType)
+                    .setField("file", pe.construct("java.io.File", pe.var(2, ValueType.object("java.lang.String"))));
+            pe.var(0, handlerType).setField("cachedManifest", pe.constructArray(ValueType.BYTE, 0));
+            pe.var(0, handlerType)
+                    .setField("myRoot", pe.construct("org.jetbrains.kotlin.cli.jvm.compiler.jarfs.FastJarVirtualFile",
+                            pe.var(0, handlerType), pe.constant("").cast(ValueType.object("java.lang.CharSequence")),
+                            pe.constant(-1L), pe.constantNull(jarVirtualFileType), pe.constantNull(zipEntryType))
+                            .cast(virtualFileType));
+            pe.exit();
+        }
+        replaceWithNull(cls, context, "findFileByPath",
+                ValueType.object("com.intellij.openapi.vfs.VirtualFile"), ValueType.object("java.lang.String"));
+        replaceWithEmptyByteArray(cls, context, "contentsToByteArray",
+                ValueType.object("org.jetbrains.kotlin.cli.jvm.compiler.jarfs.ZipEntryDescription"));
+    }
+
     private void transformPerformanceManager(ClassHolder cls, ClassHolderTransformerContext context) {
         replaceWithNoOp(cls, context, "initializeCurrentThread", ValueType.VOID);
         replaceWithNoOp(cls, context, "notifyCompilationFinished", ValueType.VOID);
@@ -628,6 +709,16 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
             ValueType... argumentTypes) {
         replaceWithStaticFactory(cls, context, name, ValueType.object("java.util.Set"),
                 "java.util.Collections", "emptySet", argumentTypes);
+    }
+
+    private static void replaceWithEmptyByteArray(ClassHolder cls, ClassHolderTransformerContext context, String name,
+            ValueType... argumentTypes) {
+        var returnType = ValueType.arrayOf(ValueType.BYTE);
+        var method = cls.getMethod(new MethodDescriptor(name, appendReturnType(returnType, argumentTypes)));
+        if (method == null) {
+            return;
+        }
+        ProgramEmitter.create(method, context.getHierarchy()).constructArray(ValueType.BYTE, 0).returnValue();
     }
 
     private static void replaceWithStaticFactory(ClassHolder cls, ClassHolderTransformerContext context, String name,
