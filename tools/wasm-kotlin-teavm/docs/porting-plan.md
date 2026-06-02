@@ -88,15 +88,20 @@ Current TeaVM fast-analysis blockers:
     - File-based IntelliJ JAR readers in `JBZipFileWrapper`, `FastJarFileSystem`, and
       `FastJarHandler`, removing the remaining `RandomAccessFile.getChannel()`,
       `FileSystemProvider.newFileChannel(...)`, and `java.nio.channels.FileChannel` blockers
+    - IntelliJ `Unsafe`, message bus invocation, and `UrlClassLoader` resource lookup paths,
+      removing the current `MethodHandle.invokeExact(...)`, `MethodHandle.bindTo(...)`,
+      `MethodHandle.invoke(...)`, `MethodType.methodType(...)`, and `CharSequenceAccess` blockers
 - Still blocking:
-    - IntelliJ unsafe paths through `MethodHandle.invokeExact(...)` and
-      `MethodType.methodType(...)`
-    - Message bus `MethodHandle.bindTo(...)` and `MethodHandle.invoke(...)` paths
-    - `com.intellij.util.lang.CharSequenceAccess`
     - `java.beans.PropertyChangeSupport`
     - Swing icon classes such as `javax.swing.Icon`
     - `ConcurrentHashMap.keySet(Object)`, `ConcurrentHashMap.KeySetView`, and `ThreadMXBean` paths
       exposed by the current direct compiler graph
+    - IntelliJ coroutine thread context: `kotlinx.coroutines.internal.intellij.IntellijCoroutines`
+    - App executor queues: `SynchronousQueue` and `DelayQueue`
+    - Low-memory watcher management APIs such as `MemoryPoolMXBean`
+    - Generic reflection APIs: `ParameterizedType` and `Class.getGenericSuperclass()`
+    - `java.lang.reflect.Proxy`
+    - `kotlin.reflect.full.KClasses`
 
 TeaVM did not load ordinary application jar classes placed in `java.*` packages. Classlib additions
 must follow TeaVM's internal `T...` class naming under `org.teavm.classlib...`.

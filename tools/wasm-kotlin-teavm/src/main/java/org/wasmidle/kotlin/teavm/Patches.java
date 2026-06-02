@@ -72,8 +72,14 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
             case "com.intellij.util.containers.ContainerUtil":
                 transformContainerUtil(cls, context);
                 break;
+            case "com.intellij.util.containers.Unsafe":
+                transformUnsafe(cls, context);
+                break;
             case "com.intellij.util.lang.UrlClassLoader":
                 transformUrlClassLoader(cls, context);
+                break;
+            case "com.intellij.util.messages.impl.MessageBusImplKt":
+                transformMessageBusImplKt(cls, context);
                 break;
             case "com.intellij.mock.MockApplication":
                 transformMockApplication(cls, context);
@@ -324,6 +330,16 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
         ProgramEmitter.create(method, context.getHierarchy())
                 .constantNull(ValueType.object("java.lang.Class"))
                 .returnValue();
+
+        replaceWithNull(cls, context, "getResourceAsStream",
+                ValueType.object("java.io.InputStream"), ValueType.object("java.lang.String"));
+        replaceWithNull(cls, context, "findResource",
+                ValueType.object("java.net.URL"), ValueType.object("java.lang.String"));
+        replaceWithNull(cls, context, "doFindResource",
+                ValueType.object("com.intellij.util.lang.Resource"), ValueType.object("java.lang.String"));
+        replaceWithNoOp(cls, context, "logError", ValueType.VOID,
+                ValueType.object("java.lang.String"), ValueType.object("java.lang.Throwable"));
+        replaceWithEmptyEnumeration(cls, context, "findResources", ValueType.object("java.lang.String"));
     }
 
     private void transformCodeInsightContextManagerImpl(ClassHolder cls, ClassHolderTransformerContext context) {
@@ -442,6 +458,61 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
     private void transformReflectionUtil(ClassHolder cls, ClassHolderTransformerContext context) {
         replaceWithNull(cls, context, "proxy", ValueType.object("java.lang.Object"),
                 ValueType.object("java.lang.Class"), ValueType.object("java.lang.reflect.InvocationHandler"));
+    }
+
+    private void transformUnsafe(ClassHolder cls, ClassHolderTransformerContext context) {
+        replaceWithNoOp(cls, context, "<clinit>", ValueType.VOID);
+        replaceWithNull(cls, context, "find", ValueType.object("java.lang.invoke.MethodHandle"),
+                ValueType.object("java.lang.String"), ValueType.object("java.lang.Class"),
+                ValueType.arrayOf(ValueType.object("java.lang.Class")));
+        replaceWithConstantBoolean(cls, context, "compareAndSwapInt", false,
+                ValueType.object("java.lang.Object"), ValueType.LONG, ValueType.INTEGER, ValueType.INTEGER);
+        replaceWithConstantBoolean(cls, context, "compareAndSwapLong", false,
+                ValueType.object("java.lang.Object"), ValueType.LONG, ValueType.LONG, ValueType.LONG);
+        replaceWithConstantBoolean(cls, context, "compareAndSwapObject", false,
+                ValueType.object("java.lang.Object"), ValueType.LONG,
+                ValueType.object("java.lang.Object"), ValueType.object("java.lang.Object"));
+        replaceWithConstantInt(cls, context, "getAndAddInt", 0,
+                ValueType.object("java.lang.Object"), ValueType.LONG, ValueType.INTEGER);
+        replaceWithNull(cls, context, "getObjectVolatile", ValueType.object("java.lang.Object"),
+                ValueType.object("java.lang.Object"), ValueType.LONG);
+        replaceWithNoOp(cls, context, "putObjectVolatile", ValueType.VOID,
+                ValueType.object("java.lang.Object"), ValueType.LONG, ValueType.object("java.lang.Object"));
+        replaceWithConstantLong(cls, context, "objectFieldOffset", 0,
+                ValueType.object("java.lang.reflect.Field"));
+        replaceWithConstantInt(cls, context, "arrayIndexScale", 1, ValueType.object("java.lang.Class"));
+        replaceWithConstantInt(cls, context, "arrayBaseOffset", 0, ValueType.object("java.lang.Class"));
+        replaceWithNoOp(cls, context, "copyMemory", ValueType.VOID,
+                ValueType.object("java.lang.Object"), ValueType.LONG, ValueType.object("java.lang.Object"),
+                ValueType.LONG, ValueType.LONG);
+    }
+
+    private void transformMessageBusImplKt(ClassHolder cls, ClassHolderTransformerContext context) {
+        replaceWithNoOp(cls, context, "pumpWaiting", ValueType.VOID,
+                ValueType.object("com.intellij.util.messages.impl.MessageQueue"));
+        replaceWithReturnedArgument(cls, context, "deliverMessage", ValueType.object("java.lang.Throwable"), 2,
+                ValueType.object("com.intellij.util.messages.impl.Message"),
+                ValueType.object("com.intellij.util.messages.impl.MessageQueue"),
+                ValueType.object("java.lang.Throwable"));
+        replaceWithReturnedArgument(cls, context, "executeOrAddToQueue", ValueType.object("java.lang.Throwable"), 5,
+                ValueType.object("com.intellij.util.messages.Topic"),
+                ValueType.object("java.lang.reflect.Method"), ValueType.arrayOf(ValueType.object("java.lang.Object")),
+                ValueType.arrayOf(ValueType.object("java.lang.Object")),
+                ValueType.object("com.intellij.util.messages.impl.MessageQueue"),
+                ValueType.object("java.lang.Throwable"),
+                ValueType.object("com.intellij.util.messages.impl.MessageBusImpl"));
+        replaceWithEmptyList(cls, context, "deliverImmediately",
+                ValueType.object("com.intellij.util.messages.impl.MessageBusConnectionImpl"),
+                ValueType.object("java.util.Deque"));
+        replaceWithReturnedArgument(cls, context, "invokeListener", ValueType.object("java.lang.Throwable"), 6,
+                ValueType.object("java.lang.invoke.MethodHandle"), ValueType.object("java.lang.String"),
+                ValueType.arrayOf(ValueType.object("java.lang.Object")),
+                ValueType.object("com.intellij.util.messages.Topic"),
+                ValueType.object("java.lang.Object"), ValueType.object("java.util.Set"),
+                ValueType.object("java.lang.Throwable"));
+        replaceWithNoOp(cls, context, "invokeMethod", ValueType.VOID,
+                ValueType.object("java.lang.Object"), ValueType.arrayOf(ValueType.object("java.lang.Object")),
+                ValueType.object("java.lang.invoke.MethodHandle"));
     }
 
     private void transformCoreApplicationEnvironment(ClassHolder cls, ClassHolderTransformerContext context) {
@@ -692,6 +763,33 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
         ProgramEmitter.create(method, context.getHierarchy()).constant(value ? 1 : 0).returnValue();
     }
 
+    private static void replaceWithConstantInt(ClassHolder cls, ClassHolderTransformerContext context, String name,
+            int value, ValueType... argumentTypes) {
+        var method = cls.getMethod(new MethodDescriptor(name, appendReturnType(ValueType.INTEGER, argumentTypes)));
+        if (method == null) {
+            return;
+        }
+        ProgramEmitter.create(method, context.getHierarchy()).constant(value).returnValue();
+    }
+
+    private static void replaceWithConstantLong(ClassHolder cls, ClassHolderTransformerContext context, String name,
+            long value, ValueType... argumentTypes) {
+        var method = cls.getMethod(new MethodDescriptor(name, appendReturnType(ValueType.LONG, argumentTypes)));
+        if (method == null) {
+            return;
+        }
+        ProgramEmitter.create(method, context.getHierarchy()).constant(value).returnValue();
+    }
+
+    private static void replaceWithReturnedArgument(ClassHolder cls, ClassHolderTransformerContext context, String name,
+            ValueType returnType, int argumentIndex, ValueType... argumentTypes) {
+        var method = cls.getMethod(new MethodDescriptor(name, appendReturnType(returnType, argumentTypes)));
+        if (method == null) {
+            return;
+        }
+        ProgramEmitter.create(method, context.getHierarchy()).var(argumentIndex, returnType).returnValue();
+    }
+
     private static void createNoOpFieldSetter(ClassHolder cls, ClassHolderTransformerContext context, String name,
             ValueType valueType) {
         var method = getOrCreateMethod(cls, name, ValueType.VOID,
@@ -709,6 +807,12 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
             ValueType... argumentTypes) {
         replaceWithStaticFactory(cls, context, name, ValueType.object("java.util.Set"),
                 "java.util.Collections", "emptySet", argumentTypes);
+    }
+
+    private static void replaceWithEmptyEnumeration(ClassHolder cls, ClassHolderTransformerContext context, String name,
+            ValueType... argumentTypes) {
+        replaceWithStaticFactory(cls, context, name, ValueType.object("java.util.Enumeration"),
+                "java.util.Collections", "emptyEnumeration", argumentTypes);
     }
 
     private static void replaceWithEmptyByteArray(ClassHolder cls, ClassHolderTransformerContext context, String name,
