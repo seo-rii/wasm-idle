@@ -141,6 +141,9 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
             case "com.intellij.openapi.util.ObjectTree":
                 transformObjectTree(cls, context);
                 break;
+            case "com.intellij.openapi.util.Disposer":
+                transformDisposer(cls, context);
+                break;
             case "com.intellij.psi.tree.IStubFileElementType":
                 replaceWithConstantBoolean(cls, context, "hasNonTrivialExternalId", false);
                 break;
@@ -955,6 +958,14 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
                 ValueType.object("com.intellij.openapi.Disposable"), ValueType.BOOLEAN);
         replaceWithNoOp(cls, context, "handleExceptions", ValueType.VOID,
                 ValueType.object("java.util.List"));
+    }
+
+    private void transformDisposer(ClassHolder cls, ClassHolderTransformerContext context) {
+        var disposableType = ValueType.object("com.intellij.openapi.Disposable");
+        replaceWithNoOp(cls, context, "register", ValueType.VOID, disposableType, disposableType);
+        replaceWithNoOp(cls, context, "dispose", ValueType.VOID, disposableType);
+        replaceWithNoOp(cls, context, "dispose", ValueType.VOID, disposableType, ValueType.BOOLEAN);
+        replaceWithNull(cls, context, "getDisposalTrace", ValueType.object("java.lang.Throwable"), disposableType);
     }
 
     private void transformVirtualFileManagerImpl(ClassHolder cls, ClassHolderTransformerContext context) {
