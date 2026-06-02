@@ -1878,6 +1878,8 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
                 "org.jetbrains.kotlin.serialization.deserialization.DeserializationConfiguration");
         var deserializationConfigDefaultType = ValueType.object(
                 "org.jetbrains.kotlin.serialization.deserialization.DeserializationConfiguration$Default");
+        var builtInsType = ValueType.object("org.jetbrains.kotlin.builtins.KotlinBuiltIns");
+        var defaultBuiltInsType = ValueType.object("org.jetbrains.kotlin.builtins.DefaultBuiltIns");
 
         var method = cls.getMethod(new MethodDescriptor("createInstance", contextType, objectType));
         if (method == null) {
@@ -2171,6 +2173,19 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
                         pe.getField("org.jetbrains.kotlin.config.LanguageVersionSettingsImpl", "DEFAULT",
                                 languageSettingsType)
                                 .cast(languageSettingsInterfaceType))
+                        .cast(objectType)
+                        .returnValue());
+        pe.when(pe.var(0, descriptorType).getField("klass", classType)
+                .isSame(pe.constant(org.jetbrains.kotlin.resolve.calls.components.ClassicTypeSystemContextForCS.class)
+                        .cast(classType)))
+                .thenDo(() -> pe.construct(
+                        "org.jetbrains.kotlin.resolve.calls.components.ClassicTypeSystemContextForCS",
+                        pe.invoke("org.jetbrains.kotlin.builtins.DefaultBuiltIns", "getInstance",
+                                defaultBuiltInsType)
+                                .cast(builtInsType),
+                        pe.getField("org.jetbrains.kotlin.types.checker.KotlinTypeRefiner$Default", "INSTANCE",
+                                refinerDefaultType)
+                                .cast(refinerType))
                         .cast(objectType)
                         .returnValue());
         pe.when(pe.var(0, descriptorType).getField("klass", classType)
