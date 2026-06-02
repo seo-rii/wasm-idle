@@ -98,10 +98,11 @@ Known findings from the initial experiments:
 - Classlib-style stubs now cover the first lock/future/string-iterator blocker set:
   `ReentrantLock`, `ReentrantReadWriteLock`, `ExecutorService`, `Executors`, `CompletableFuture`,
   `Future`, `TimeoutException`, and `StringCharacterIterator`.
-- With those stubs, fast analysis fails in about 60 seconds at roughly 5.4 GB RSS. The next blocker
-  group is `org.jetbrains.kotlin.javac.JavacWrapper`/`com.sun.tools.javac`, missing coroutines
-  classes, resource lookup APIs, `ConcurrentHashMap`/atomic collection gaps, method-handle lookup,
-  and streams/spliterators.
+- The `JavacWrapper` and `JavacBasedClassFinder` transformer patches remove the statically
+  reachable `com.sun.tools.javac`/`javax.tools` blocker group when `USE_JAVAC=false`.
+- With those patches, fast analysis fails in about 53 seconds at roughly 4.7 GB RSS. The next blocker
+  group is missing coroutines classes, resource lookup APIs, `ConcurrentHashMap`/atomic collection
+  gaps, method-handle lookup, generic reflection APIs, and streams/spliterators.
 - `jdeps` reports that the Kotlin compiler distribution reaches beyond `java.base` into
   `java.desktop`, `java.instrument`, `java.management`, `java.scripting`, `jdk.compiler`, and
   `jdk.unsupported`.

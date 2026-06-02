@@ -29,6 +29,12 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
             case "org.jetbrains.kotlin.cli.common.CLICompiler":
                 transformCliCompiler(cls, context);
                 break;
+            case "org.jetbrains.kotlin.javac.JavacWrapper":
+                transformJavacWrapper(cls, context);
+                break;
+            case "org.jetbrains.kotlin.javac.components.JavacBasedClassFinder":
+                transformJavacBasedClassFinder(cls, context);
+                break;
             case "org.jetbrains.kotlin.util.PerformanceManager":
                 transformPerformanceManager(cls, context);
                 break;
@@ -56,6 +62,53 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
             cls.addMethod(method);
         }
         ProgramEmitter.create(method, context.getHierarchy()).exit();
+    }
+
+    private void transformJavacWrapper(ClassHolder cls, ClassHolderTransformerContext context) {
+        replaceWithConstantBoolean(cls, context, "compile", true, ValueType.object("java.io.File"));
+        replaceWithNoOp(cls, context, "close", ValueType.VOID);
+        replaceWithNull(cls, context, "findClass",
+                ValueType.object("org.jetbrains.kotlin.load.java.structure.JavaClass"),
+                ValueType.object("org.jetbrains.kotlin.name.ClassId"),
+                ValueType.object("com.intellij.psi.search.GlobalSearchScope"));
+        replaceWithNull(cls, context, "findPackage",
+                ValueType.object("org.jetbrains.kotlin.load.java.structure.JavaPackage"),
+                ValueType.object("org.jetbrains.kotlin.name.FqName"),
+                ValueType.object("com.intellij.psi.search.GlobalSearchScope"));
+        replaceWithEmptyList(cls, context, "findSubPackages",
+                ValueType.object("org.jetbrains.kotlin.name.FqName"));
+        replaceWithEmptyList(cls, context, "getPackageAnnotationsFromSources",
+                ValueType.object("org.jetbrains.kotlin.name.FqName"));
+        replaceWithEmptyList(cls, context, "findClassesFromPackage",
+                ValueType.object("org.jetbrains.kotlin.name.FqName"));
+        replaceWithEmptySet(cls, context, "knownClassNamesInPackage",
+                ValueType.object("org.jetbrains.kotlin.name.FqName"));
+        replaceWithNull(cls, context, "getKotlinClassifier",
+                ValueType.object("org.jetbrains.kotlin.load.java.structure.JavaClass"),
+                ValueType.object("org.jetbrains.kotlin.name.ClassId"));
+        replaceWithConstantBoolean(cls, context, "isDeprecated", false,
+                ValueType.object("javax.lang.model.element.Element"));
+        replaceWithConstantBoolean(cls, context, "isDeprecated", false,
+                ValueType.object("javax.lang.model.type.TypeMirror"));
+    }
+
+    private void transformJavacBasedClassFinder(ClassHolder cls, ClassHolderTransformerContext context) {
+        replaceWithNoOp(cls, context, "initialize", ValueType.VOID,
+                ValueType.object("org.jetbrains.kotlin.resolve.BindingTrace"),
+                ValueType.object("org.jetbrains.kotlin.resolve.lazy.KotlinCodeAnalyzer"),
+                ValueType.object("org.jetbrains.kotlin.config.LanguageVersionSettings"),
+                ValueType.object("org.jetbrains.kotlin.config.JvmTarget"));
+        replaceWithNull(cls, context, "findClass",
+                ValueType.object("org.jetbrains.kotlin.load.java.structure.JavaClass"),
+                ValueType.object("org.jetbrains.kotlin.load.java.JavaClassFinder$Request"));
+        replaceWithEmptyList(cls, context, "findClasses",
+                ValueType.object("org.jetbrains.kotlin.load.java.JavaClassFinder$Request"));
+        replaceWithNull(cls, context, "findPackage",
+                ValueType.object("org.jetbrains.kotlin.load.java.structure.JavaPackage"),
+                ValueType.object("org.jetbrains.kotlin.name.FqName"), ValueType.BOOLEAN);
+        replaceWithEmptySet(cls, context, "knownClassNamesInPackage",
+                ValueType.object("org.jetbrains.kotlin.name.FqName"));
+        replaceWithConstantBoolean(cls, context, "canComputeKnownClassNamesInPackage", false);
     }
 
     private void transformCliCompiler(ClassHolder cls, ClassHolderTransformerContext context) {
@@ -110,6 +163,47 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
             return;
         }
         ProgramEmitter.create(method, context.getHierarchy()).constant("").returnValue();
+    }
+
+    private static void replaceWithNull(ClassHolder cls, ClassHolderTransformerContext context, String name,
+            ValueType returnType, ValueType... argumentTypes) {
+        var method = cls.getMethod(new MethodDescriptor(name, appendReturnType(returnType, argumentTypes)));
+        if (method == null) {
+            return;
+        }
+        ProgramEmitter.create(method, context.getHierarchy()).constantNull(returnType).returnValue();
+    }
+
+    private static void replaceWithConstantBoolean(ClassHolder cls, ClassHolderTransformerContext context, String name,
+            boolean value, ValueType... argumentTypes) {
+        var method = cls.getMethod(new MethodDescriptor(name, appendReturnType(ValueType.BOOLEAN, argumentTypes)));
+        if (method == null) {
+            return;
+        }
+        ProgramEmitter.create(method, context.getHierarchy()).constant(value ? 1 : 0).returnValue();
+    }
+
+    private static void replaceWithEmptyList(ClassHolder cls, ClassHolderTransformerContext context, String name,
+            ValueType... argumentTypes) {
+        replaceWithStaticFactory(cls, context, name, ValueType.object("java.util.List"),
+                "java.util.Collections", "emptyList", argumentTypes);
+    }
+
+    private static void replaceWithEmptySet(ClassHolder cls, ClassHolderTransformerContext context, String name,
+            ValueType... argumentTypes) {
+        replaceWithStaticFactory(cls, context, name, ValueType.object("java.util.Set"),
+                "java.util.Collections", "emptySet", argumentTypes);
+    }
+
+    private static void replaceWithStaticFactory(ClassHolder cls, ClassHolderTransformerContext context, String name,
+            ValueType returnType, String owner, String factoryName, ValueType... argumentTypes) {
+        var method = cls.getMethod(new MethodDescriptor(name, appendReturnType(returnType, argumentTypes)));
+        if (method == null) {
+            return;
+        }
+        ProgramEmitter.create(method, context.getHierarchy())
+                .invoke(owner, factoryName, returnType)
+                .returnValue();
     }
 
     private static void replaceMeasureSideTime(ClassHolder cls, ClassHolderTransformerContext context) {
