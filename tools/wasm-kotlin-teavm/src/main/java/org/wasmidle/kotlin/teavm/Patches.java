@@ -1867,6 +1867,17 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
         var moduleStructureOracleType = ValueType.object("org.jetbrains.kotlin.resolve.ModuleStructureOracle");
         var annotationFeaturesType = ValueType.object(
                 "org.jetbrains.kotlin.resolve.jvm.JvmPlatformAnnotationFeaturesSupport");
+        var picoType = ValueType.object("org.picocontainer.PicoContainer");
+        var disposableType = ValueType.object("com.intellij.openapi.Disposable");
+        var globalContextType = ValueType.object("org.jetbrains.kotlin.context.GlobalContext");
+        var lockBasedStorageManagerType = ValueType.object("org.jetbrains.kotlin.storage.LockBasedStorageManager");
+        var exceptionTrackerType = ValueType.object("org.jetbrains.kotlin.storage.ExceptionTracker");
+        var nameType = ValueType.object("org.jetbrains.kotlin.name.Name");
+        var bindingTraceType = ValueType.object("org.jetbrains.kotlin.resolve.BindingTrace");
+        var declarationProviderFactoryType = ValueType.object(
+                "org.jetbrains.kotlin.resolve.lazy.declarations.DeclarationProviderFactory");
+        var newCheckerType = ValueType.object("org.jetbrains.kotlin.types.checker.NewKotlinTypeChecker");
+        var collectionType = ValueType.object("java.util.Collection");
         var refinerType = ValueType.object("org.jetbrains.kotlin.types.checker.KotlinTypeRefiner");
         var preparatorType = ValueType.object("org.jetbrains.kotlin.types.checker.KotlinTypePreparator");
         var refinerDefaultType = ValueType.object("org.jetbrains.kotlin.types.checker.KotlinTypeRefiner$Default");
@@ -2200,6 +2211,51 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
                         pe.invoke("org.jetbrains.kotlin.builtins.DefaultBuiltIns", "getInstance",
                                 defaultBuiltInsType)
                                 .cast(builtInsType))
+                        .cast(objectType)
+                        .returnValue());
+        pe.when(pe.var(0, descriptorType).getField("klass", classType)
+                .isSame(pe.constant(org.jetbrains.kotlin.resolve.lazy.ResolveSession.class).cast(classType)))
+                .thenDo(() -> pe.construct("org.jetbrains.kotlin.resolve.lazy.ResolveSession",
+                        pe.construct("com.intellij.mock.MockProject",
+                                pe.constantNull(picoType),
+                                pe.invoke("com.intellij.openapi.util.Disposer", "newDisposable", disposableType))
+                                .cast(projectType),
+                        pe.construct("org.jetbrains.kotlin.context.GlobalContextImpl",
+                                pe.construct("org.jetbrains.kotlin.storage.LockBasedStorageManager",
+                                        pe.constant("wasm-idle")),
+                                pe.construct("org.jetbrains.kotlin.storage.ExceptionTracker"))
+                                .cast(globalContextType),
+                        pe.construct("org.jetbrains.kotlin.descriptors.impl.ModuleDescriptorImpl",
+                                pe.invoke("org.jetbrains.kotlin.name.Name", "special", nameType,
+                                        pe.constant("<wasm-idle>")),
+                                pe.construct("org.jetbrains.kotlin.storage.LockBasedStorageManager",
+                                        pe.constant("wasm-idle"))
+                                        .cast(storageManagerType),
+                                pe.invoke("org.jetbrains.kotlin.builtins.DefaultBuiltIns", "getInstance",
+                                        defaultBuiltInsType)
+                                        .cast(builtInsType))
+                                .cast(moduleType),
+                        pe.construct("org.jetbrains.kotlin.resolve.lazy.declarations.FileBasedDeclarationProviderFactory",
+                        pe.construct("org.jetbrains.kotlin.storage.LockBasedStorageManager",
+                                pe.constant("wasm-idle"))
+                                .cast(storageManagerType),
+                                pe.invoke("java.util.Collections", "emptyList", ValueType.object("java.util.List"))
+                                        .cast(collectionType))
+                                .cast(declarationProviderFactoryType),
+                        pe.construct("org.jetbrains.kotlin.cli.jvm.compiler.NoScopeRecordCliBindingTrace",
+                                pe.construct("com.intellij.mock.MockProject",
+                                        pe.constantNull(picoType),
+                                        pe.invoke("com.intellij.openapi.util.Disposer", "newDisposable", disposableType))
+                                        .cast(projectType))
+                                .cast(bindingTraceType),
+                        pe.construct("org.jetbrains.kotlin.types.checker.NewKotlinTypeCheckerImpl",
+                                pe.getField("org.jetbrains.kotlin.types.checker.KotlinTypeRefiner$Default", "INSTANCE",
+                                        refinerDefaultType)
+                                        .cast(refinerType),
+                                pe.getField("org.jetbrains.kotlin.types.checker.KotlinTypePreparator$Default",
+                                        "INSTANCE", preparatorDefaultType)
+                                        .cast(preparatorType))
+                                .cast(newCheckerType))
                         .cast(objectType)
                         .returnValue());
         pe.when(pe.var(0, descriptorType).getField("klass", classType)
