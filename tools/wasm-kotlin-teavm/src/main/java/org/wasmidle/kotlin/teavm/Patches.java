@@ -76,6 +76,9 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
             case "java.lang.invoke.MethodType":
                 transformMethodType(cls, context);
                 break;
+            case "java.lang.reflect.AccessibleObject":
+                transformAccessibleObject(cls, context);
+                break;
             case "java.lang.reflect.Field":
                 transformReflectField(cls, context);
                 break;
@@ -640,6 +643,19 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
         method = getOrCreateMethod(cls, "parameterType", ValueType.object("java.lang.Class"), ValueType.INTEGER);
         ProgramEmitter.create(method, context.getHierarchy())
                 .constantNull(ValueType.object("java.lang.Class"))
+                .returnValue();
+    }
+
+    private void transformAccessibleObject(ClassHolder cls, ClassHolderTransformerContext context) {
+        var annotationArrayType = ValueType.arrayOf(ValueType.object("java.lang.annotation.Annotation"));
+        var annotations = getOrCreateMethod(cls, "getAnnotations", annotationArrayType);
+        ProgramEmitter.create(annotations, context.getHierarchy())
+                .constructArray(ValueType.object("java.lang.annotation.Annotation"), 0)
+                .returnValue();
+
+        var declaredAnnotations = getOrCreateMethod(cls, "getDeclaredAnnotations", annotationArrayType);
+        ProgramEmitter.create(declaredAnnotations, context.getHierarchy())
+                .constructArray(ValueType.object("java.lang.annotation.Annotation"), 0)
                 .returnValue();
     }
 
