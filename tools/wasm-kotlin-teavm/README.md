@@ -77,6 +77,17 @@ The runtime probe writes `.cache/probes/last-wasm-runtime.json`. It first valida
 compile the generated Wasm module with imported JS string support, then calls TeaVM's generated
 runtime loader.
 
+To call the exported Kotlin compiler probe against the minimal fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs
+```
+
+The compile probe writes `.cache/probes/last-kotlin-compile.json`. The current artifact loads and
+exposes `compileKotlinSource`, but the fixture compile is still expected to fail while the runtime
+stubs are incomplete.
+
 ## Current Status
 
 This folder is a porting scaffold, not an app integration. The current probe compiles a small Java
@@ -151,8 +162,13 @@ Known findings from the initial experiments:
 - Node can compile the generated WasmGC module when run with
   `--experimental-wasm-imported-strings`, and the module exports `main`, `compileKotlinSource`, and
   `teavm.memory`.
-- TeaVM's generated runtime loader still traps during module initialization with
-  `RuntimeError: dereferencing a null pointer`, before the exported Kotlin compile API can be
-  called. The next porting target is that startup trap.
+- TeaVM's generated runtime loader now initializes successfully in Node. The startup trap was caused
+  by TeaVM's JS string conversion path calling `Fiber.isResuming()` before a fiber existed; the probe
+  patches `Fiber.isResuming()` and `Fiber.isSuspending()` for this browser compiler graph.
+- The `compileKotlinSource` JSO export is present and callable. The minimal fixture compile now
+  starts, but still fails inside the reduced IntelliJ/Kotlin runtime. The latest blockers were
+  `ConcurrentHashMap.newKeySet()` returning null, `SystemInfoRt` OS initialization,
+  `ReflectionUtil`/event multicaster proxy initialization, VFS listener setup, and command/message
+  bus publisher setup.
 
 See `docs/porting-plan.md` for the next patch targets.

@@ -39,6 +39,10 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
             case "java.lang.Long":
                 transformLong(cls, context);
                 break;
+            case "org.teavm.runtime.Fiber":
+                replaceWithConstantBoolean(cls, context, "isResuming", false);
+                replaceWithConstantBoolean(cls, context, "isSuspending", false);
+                break;
             case "java.util.Locale":
                 transformLocale(cls, context);
                 break;
@@ -131,6 +135,9 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
             case "com.intellij.core.CoreApplicationEnvironment":
                 transformCoreApplicationEnvironment(cls, context);
                 break;
+            case "com.intellij.openapi.util.SystemInfoRt":
+                transformSystemInfoRt(cls, context);
+                break;
             case "com.intellij.util.containers.ContainerUtil":
                 transformContainerUtil(cls, context);
                 break;
@@ -160,6 +167,12 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
                 break;
             case "com.intellij.openapi.application.impl.ApplicationInfoImpl":
                 transformApplicationInfoImpl(cls, context);
+                break;
+            case "com.intellij.openapi.command.impl.CoreCommandProcessor":
+                transformCoreCommandProcessor(cls, context);
+                break;
+            case "com.intellij.openapi.vfs.impl.VirtualFileManagerImpl":
+                transformVirtualFileManagerImpl(cls, context);
                 break;
             case "com.intellij.openapi.application.TransactionGuardImpl":
                 transformTransactionGuardImpl(cls, context);
@@ -653,14 +666,14 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
         method = getOrCreateStaticMethod(cls, "newKeySet",
                 ValueType.object("java.util.concurrent.ConcurrentHashMap$KeySetView"));
         ProgramEmitter.create(method, context.getHierarchy())
-                .constantNull(ValueType.object("java.util.concurrent.ConcurrentHashMap$KeySetView"))
+                .construct("java.util.concurrent.ConcurrentHashMap$KeySetView")
                 .returnValue();
 
         method = getOrCreateMethod(cls, "keySet",
                 ValueType.object("java.util.concurrent.ConcurrentHashMap$KeySetView"),
                 ValueType.object("java.lang.Object"));
         ProgramEmitter.create(method, context.getHierarchy())
-                .constantNull(ValueType.object("java.util.concurrent.ConcurrentHashMap$KeySetView"))
+                .construct("java.util.concurrent.ConcurrentHashMap$KeySetView")
                 .returnValue();
     }
 
@@ -672,6 +685,29 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
         ProgramEmitter.create(method, context.getHierarchy())
                 .construct("java.util.HashSet")
                 .returnValue();
+    }
+
+    private void transformSystemInfoRt(ClassHolder cls, ClassHolderTransformerContext context) {
+        var method = cls.getMethod(new MethodDescriptor("<clinit>", ValueType.VOID));
+        if (method == null) {
+            return;
+        }
+        prepareMethodBody(method);
+        var pe = ProgramEmitter.create(method, context.getHierarchy());
+        var owner = "com.intellij.openapi.util.SystemInfoRt";
+        pe.setField(owner, "OS_NAME", pe.constant("Linux"));
+        pe.setField(owner, "OS_VERSION", pe.constant(""));
+        pe.setField(owner, "_OS_NAME", pe.constant("linux"));
+        pe.setField(owner, "isWindows", pe.constant(0));
+        pe.setField(owner, "isMac", pe.constant(0));
+        pe.setField(owner, "isLinux", pe.constant(1));
+        pe.setField(owner, "isFreeBSD", pe.constant(0));
+        pe.setField(owner, "isSolaris", pe.constant(0));
+        pe.setField(owner, "isUnix", pe.constant(1));
+        pe.setField(owner, "isXWindow", pe.constant(1));
+        pe.setField(owner, "isJBSystemMenu", pe.constant(0));
+        pe.setField(owner, "isFileSystemCaseSensitive", pe.constant(1));
+        pe.exit();
     }
 
     private void transformStreamSupport(ClassHolder cls, ClassHolderTransformerContext context) {
@@ -825,8 +861,72 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
     }
 
     private void transformReflectionUtil(ClassHolder cls, ClassHolderTransformerContext context) {
+        replaceWithNoOp(cls, context, "<clinit>", ValueType.VOID);
         replaceWithNull(cls, context, "proxy", ValueType.object("java.lang.Object"),
                 ValueType.object("java.lang.Class"), ValueType.object("java.lang.reflect.InvocationHandler"));
+    }
+
+    private void transformCoreCommandProcessor(ClassHolder cls, ClassHolderTransformerContext context) {
+        var processorType = ValueType.object("com.intellij.openapi.command.impl.CoreCommandProcessor");
+        var constructor = cls.getMethod(new MethodDescriptor("<init>", ValueType.VOID));
+        if (constructor != null) {
+            prepareMethodBody(constructor);
+            var pe = ProgramEmitter.create(constructor, context.getHierarchy());
+            pe.var(0, processorType).invokeSpecial("com.intellij.openapi.command.CommandProcessorEx", "<init>");
+            pe.var(0, processorType).setField("myInterruptedCommands",
+                    pe.construct("com.intellij.util.containers.Stack"));
+            pe.var(0, processorType).setField("myListeners", pe.construct("java.util.ArrayList"));
+            pe.var(0, processorType).setField("eventPublisher",
+                    pe.constantNull(ValueType.object("com.intellij.openapi.command.CommandListener")));
+            pe.exit();
+        }
+
+        replaceWithNoOp(cls, context, "fireCommandStarted", ValueType.VOID);
+        replaceWithNoOp(cls, context, "fireCommandFinished", ValueType.VOID);
+    }
+
+    private void transformVirtualFileManagerImpl(ClassHolder cls, ClassHolderTransformerContext context) {
+        var managerType = ValueType.object("com.intellij.openapi.vfs.impl.VirtualFileManagerImpl");
+        var listType = ValueType.object("java.util.List");
+        var collectionType = ValueType.object("java.util.Collection");
+        var messageBusType = ValueType.object("com.intellij.util.messages.MessageBus");
+        var constructor = cls.getMethod(new MethodDescriptor("<init>", listType, messageBusType, ValueType.VOID));
+        if (constructor != null) {
+            prepareMethodBody(constructor);
+            var pe = ProgramEmitter.create(constructor, context.getHierarchy());
+            pe.var(0, managerType).invokeSpecial("com.intellij.openapi.vfs.VirtualFileManager", "<init>");
+            pe.var(0, managerType).setField("myCollector",
+                    pe.constantNull(ValueType.object("com.intellij.openapi.util.KeyedExtensionCollector")));
+            pe.var(0, managerType).setField("myVirtualFileListenerMulticaster",
+                    pe.constantNull(ValueType.object("com.intellij.util.EventDispatcher")));
+            pe.var(0, managerType).setField("virtualFileManagerListeners", pe.construct("java.util.ArrayList"));
+            pe.var(0, managerType).setField("asyncFileListeners", pe.construct("java.util.ArrayList"));
+            pe.var(0, managerType).setField("myPreCreatedFileSystems",
+                    pe.construct("java.util.ArrayList", pe.var(1, collectionType)));
+            pe.exit();
+        }
+
+        constructor = cls.getMethod(new MethodDescriptor("<init>", listType, ValueType.VOID));
+        if (constructor != null) {
+            prepareMethodBody(constructor);
+            var pe = ProgramEmitter.create(constructor, context.getHierarchy());
+            pe.var(0, managerType).invokeSpecial("com.intellij.openapi.vfs.impl.VirtualFileManagerImpl", "<init>",
+                    pe.var(1, listType), pe.constantNull(messageBusType));
+            pe.exit();
+        }
+
+        var method = getOrCreateMethod(cls, "getFileSystemsForProtocol", listType,
+                ValueType.object("java.lang.String"));
+        ProgramEmitter.create(method, context.getHierarchy())
+                .var(0, managerType)
+                .getField("myPreCreatedFileSystems", listType)
+                .returnValue();
+
+        replaceWithNoOp(cls, context, "addVirtualFileListener", ValueType.VOID,
+                ValueType.object("com.intellij.openapi.vfs.VirtualFileListener"));
+        replaceWithNoOp(cls, context, "notifyPropertyChanged", ValueType.VOID,
+                ValueType.object("com.intellij.openapi.vfs.VirtualFile"), ValueType.object("java.lang.String"),
+                ValueType.object("java.lang.Object"), ValueType.object("java.lang.Object"));
     }
 
     private void transformDummyIconManager(ClassHolder cls, ClassHolderTransformerContext context) {

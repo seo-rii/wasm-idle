@@ -64,7 +64,7 @@ if (report.module?.ok) {
         });
         report.runtimeLoad = {
             ok: true,
-            exports: Object.keys(module.exports).sort()
+            exports: Reflect.ownKeys(module.exports).sort()
         };
     } catch (error) {
         report.runtimeLoad = {

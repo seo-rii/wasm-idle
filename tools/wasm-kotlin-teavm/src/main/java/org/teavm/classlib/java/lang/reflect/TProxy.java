@@ -12,7 +12,7 @@ public class TProxy {
     }
 
     public static Object newProxyInstance(ClassLoader loader, Class<?>[] interfaces, TInvocationHandler h) {
-        return null;
+        return new TProxy(h);
     }
 
     public static boolean isProxyClass(Class<?> cls) {
@@ -20,6 +20,6 @@ public class TProxy {
     }
 
     public static TInvocationHandler getInvocationHandler(Object proxy) {
-        return null;
+        return proxy instanceof TProxy ? ((TProxy) proxy).h : null;
     }
 }
