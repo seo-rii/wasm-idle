@@ -244,11 +244,37 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
             case "org.jetbrains.kotlin.cli.common.CLICompiler":
                 transformCliCompiler(cls, context);
                 break;
-            case "org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment$Companion":
+            case "org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment$Companion": {
                 replaceWithNoOp(cls, context, "registerApplicationExtensionPointsAndExtensionsFrom", ValueType.VOID,
                         ValueType.object("org.jetbrains.kotlin.config.CompilerConfiguration"),
                         ValueType.object("java.lang.String"));
+                var companionType = ValueType.object("org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment$Companion");
+                var projectEnvironmentType = ValueType.object(
+                        "org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment$ProjectEnvironment");
+                var compilerConfigurationType = ValueType.object("org.jetbrains.kotlin.config.CompilerConfiguration");
+                var configFilesType = ValueType.object("org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles");
+                var configureProjectEnvironment = cls.getMethod(new MethodDescriptor("configureProjectEnvironment",
+                        projectEnvironmentType, compilerConfigurationType, configFilesType, ValueType.VOID));
+                if (configureProjectEnvironment != null) {
+                    prepareMethodBody(configureProjectEnvironment);
+                    var pe = ProgramEmitter.create(configureProjectEnvironment, context.getHierarchy());
+                    pe.invoke("org.jetbrains.kotlin.cli.CliDiagnosticsKt",
+                            "initializeDiagnosticFactoriesStorageForCli", ValueType.VOID,
+                            pe.var(2, compilerConfigurationType));
+                    var project = pe.var(1, projectEnvironmentType)
+                            .invokeVirtual("getProject", ValueType.object("com.intellij.mock.MockProject"));
+                    project.invokeVirtual("registerService", ValueType.VOID,
+                            pe.constant(org.jetbrains.kotlin.load.kotlin.ModuleVisibilityManager.class),
+                            pe.construct("org.jetbrains.kotlin.cli.common.CliModuleVisibilityManagerImpl",
+                                    pe.defaultValue(ValueType.BOOLEAN)).cast(ValueType.object("java.lang.Object")));
+                    pe.var(0, companionType).invokeVirtual("registerProjectServicesForCLI", ValueType.VOID,
+                            pe.var(1, projectEnvironmentType)
+                                    .cast(ValueType.object("com.intellij.core.JavaCoreProjectEnvironment")));
+                    pe.var(0, companionType).invokeVirtual("registerProjectServices", ValueType.VOID, project);
+                    pe.exit();
+                }
                 break;
+            }
             case "org.jetbrains.kotlin.KotlinElementTypeProvider$Companion":
                 transformKotlinElementTypeProviderCompanion(cls, context);
                 break;
