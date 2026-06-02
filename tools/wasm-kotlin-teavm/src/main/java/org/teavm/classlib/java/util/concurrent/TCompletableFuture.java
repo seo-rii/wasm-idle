@@ -1,6 +1,7 @@
 package org.teavm.classlib.java.util.concurrent;
 
 import org.teavm.classlib.java.lang.TRunnable;
+import org.teavm.classlib.java.util.function.TBiFunction;
 import org.teavm.classlib.java.util.function.TSupplier;
 
 public class TCompletableFuture<T> implements TFuture<T> {
@@ -95,6 +96,10 @@ public class TCompletableFuture<T> implements TFuture<T> {
 
     public T getNow(T valueIfAbsent) {
         return done ? join() : valueIfAbsent;
+    }
+
+    public <U> TCompletableFuture<U> handle(TBiFunction<? super T, Throwable, ? extends U> function) {
+        return completedFuture(function.apply(done ? value : null, failure));
     }
 
     @Override

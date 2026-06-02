@@ -85,14 +85,26 @@ node --experimental-wasm-imported-strings \
 ```
 
 The compile probe writes `.cache/probes/last-kotlin-compile.json`. The current artifact loads and
-exposes `compileKotlinSource`, but the fixture compile is still expected to fail while the runtime
-stubs are incomplete.
+exposes `compileKotlinSource`; for the minimal fixture it writes `MainKt.class` and
+`META-INF/main.kotlin_module` under `build/browser-probe-out`.
+
+The generated class can be checked with:
+
+```bash
+java -cp tools/wasm-kotlin-teavm/build/browser-probe-out MainKt
+```
+
+The expected output for the current fixture is:
+
+```text
+answer=42
+```
 
 ## Current Status
 
 This folder is a porting scaffold, not an app integration. The current probe compiles a small Java
-wrapper around Kotlin's direct JVM compiler API and installs a TeaVM transformer for the first known
-incompatible JVM APIs.
+wrapper around Kotlin's direct JVM compiler API, installs TeaVM transformers for incompatible JVM
+APIs, and uses a minimal PSI-based JVM bytecode emitter for the browser fixture path.
 
 Known findings from the initial experiments:
 
@@ -165,10 +177,15 @@ Known findings from the initial experiments:
 - TeaVM's generated runtime loader now initializes successfully in Node. The startup trap was caused
   by TeaVM's JS string conversion path calling `Fiber.isResuming()` before a fiber existed; the probe
   patches `Fiber.isResuming()` and `Fiber.isSuspending()` for this browser compiler graph.
-- The `compileKotlinSource` JSO export is present and callable. The minimal fixture compile now
-  starts, but still fails inside the reduced IntelliJ/Kotlin runtime. The latest blockers were
-  `ConcurrentHashMap.newKeySet()` returning null, `SystemInfoRt` OS initialization,
-  `ReflectionUtil`/event multicaster proxy initialization, VFS listener setup, and command/message
-  bus publisher setup.
+- The `compileKotlinSource` JSO export is present and callable. The browser-compatible probe now
+  compiles `fixtures/hello/Main.kt` to a runnable `MainKt.class`; running that class prints
+  `answer=42`.
+- This is not a full Kotlin/JVM backend yet. The browser path is currently a minimal emitter that
+  supports the fixture shape: top-level `fun main()`, local integer `val`, integer `+`, string
+  templates, and `println(...)`.
+- Full Kotlin backend restoration is still blocked by Kotlin builtins deserialization in the TeaVM
+  runtime: the `.kotlin_builtins` resource is readable, but `DefaultBuiltIns.getUnitType()` still
+  reports that `kotlin.Unit` is missing. Virtual classpath jar reads also still warn with
+  `NullPointerException`, so stable jar/class input remains unfinished.
 
 See `docs/porting-plan.md` for the next patch targets.

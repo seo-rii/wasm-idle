@@ -50,6 +50,25 @@ public final class DirectKotlinCompilerProbe {
         return compileConfigured(configuration);
     }
 
+    public static String compileWithoutHostJdkAndDescribe(
+            String sourcePath, String outputDir, String[] classpathEntries) {
+        var configuration = createBaseConfiguration(sourcePath, outputDir, classpathEntries);
+        configuration.put(JVMConfigurationKeys.NO_JDK, Boolean.TRUE);
+        var ok = compileConfigured(configuration);
+        var collector = (NoOpMessageCollector) configuration.get(CLIConfigurationKeys.MESSAGE_COLLECTOR_KEY);
+        if (ok) {
+            return "OK";
+        }
+        var result = new StringBuilder();
+        result.append("DIRECT_FALSE");
+        result.append("\nhasErrors=").append(collector.hasErrors());
+        result.append("\nrunCodegen=").append(SimpleRunCodegen.getLastStatus());
+        if (collector.messages.length() > 0) {
+            result.append("\n").append(collector.messages);
+        }
+        return result.toString();
+    }
+
     private static CompilerConfiguration createBaseConfiguration(
             String sourcePath, String outputDir, String[] classpathEntries) {
         var configuration = new CompilerConfiguration();
@@ -58,11 +77,11 @@ public final class DirectKotlinCompilerProbe {
         configuration.put(CommonConfigurationKeys.MODULE_NAME, "main");
         configuration.put(CommonConfigurationKeys.LANGUAGE_VERSION_SETTINGS,
                 LanguageVersionSettingsImpl.DEFAULT);
-        configuration.put(CommonConfigurationKeys.MESSAGE_COLLECTOR_KEY, collector);
         configuration.put(CommonConfigurationKeys.PARALLEL_BACKEND_THREADS, 1);
         configuration.put(CLIConfigurationKeys.MESSAGE_COLLECTOR_KEY, collector);
         configuration.put(JVMConfigurationKeys.OUTPUT_DIRECTORY, new File(outputDir));
         configuration.put(JVMConfigurationKeys.JVM_TARGET, JvmTarget.JVM_1_8);
+        configuration.put(JVMConfigurationKeys.IR, Boolean.FALSE);
         configuration.put(JVMConfigurationKeys.NO_REFLECT, Boolean.TRUE);
         configuration.put(JVMConfigurationKeys.INCLUDE_RUNTIME, Boolean.FALSE);
         configuration.put(JVMConfigurationKeys.USE_JAVAC, Boolean.FALSE);
@@ -77,7 +96,8 @@ public final class DirectKotlinCompilerProbe {
     }
 
     private static boolean compileConfigured(CompilerConfiguration configuration) {
-        MessageCollector collector = configuration.get(CommonConfigurationKeys.MESSAGE_COLLECTOR_KEY);
+        SimpleSourceRegistry.clear();
+        MessageCollector collector = configuration.get(CLIConfigurationKeys.MESSAGE_COLLECTOR_KEY);
         Disposable rootDisposable = Disposer.newDisposable("wasm-idle-kotlin-direct-probe");
         try {
             var environment = KotlinCoreEnvironment.Companion.createForProduction(
@@ -91,16 +111,28 @@ public final class DirectKotlinCompilerProbe {
 
     private static final class NoOpMessageCollector implements MessageCollector {
         private boolean hasErrors;
+        private final StringBuilder messages = new StringBuilder();
 
         @Override
         public void clear() {
             hasErrors = false;
+            messages.setLength(0);
         }
 
         @Override
         public void report(CompilerMessageSeverity severity, String message,
                 CompilerMessageSourceLocation location) {
             hasErrors |= severity != null && severity.isError();
+            if (messages.length() > 0) {
+                messages.append('\n');
+            }
+            messages.append(severity == null ? "<unknown>" : severity.name()).append(": ");
+            if (location != null) {
+                messages.append(location.getPath()).append(':')
+                        .append(location.getLine()).append(':')
+                        .append(location.getColumn()).append(": ");
+            }
+            messages.append(message);
         }
 
         @Override

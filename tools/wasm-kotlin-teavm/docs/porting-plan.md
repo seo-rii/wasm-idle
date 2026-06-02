@@ -183,5 +183,10 @@ Current status:
 - The JVM fixture runner still compiles `fixtures/hello/Main.kt` to `MainKt.class`.
 - The WasmGC artifact builds successfully, validates as a module in Node, and loads through TeaVM's
   generated runtime.
-- The browser-facing compile export is callable, but the artifact has not yet completed the minimal
-  Kotlin compile in a browser-compatible runtime.
+- The browser-facing compile export now completes the minimal fixture in a browser-compatible Node
+  runtime. It writes `MainKt.class`, and `java -cp build/browser-probe-out MainKt` prints
+  `answer=42`.
+- This success currently comes from a minimal PSI-based bytecode emitter for the fixture shape, not
+  from the full Kotlin/JVM backend. The full backend still fails because Kotlin builtins
+  deserialization can read `kotlin/kotlin.kotlin_builtins` but cannot resolve `kotlin.Unit`; virtual
+  classpath jar reads also still warn with `NullPointerException`.

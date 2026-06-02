@@ -18,6 +18,8 @@ def trove4jJar = file(
 def kotlinCompilerJars = [
         "kotlin-compiler.jar",
         "kotlin-stdlib.jar",
+        "kotlin-reflect.jar",
+        "kotlinx-coroutines-core-jvm.jar",
         "annotations-13.0.jar"
 ].collect { new File(kotlinCompilerLibDir, it) }
 def teavmVersion = "0.13.1"
@@ -52,6 +54,113 @@ tasks.register("verifyKotlinCompilerInputs") {
 
 compileJava.dependsOn tasks.named("verifyKotlinCompilerInputs")
 
+def generatedBuiltinsSourceDir = layout.buildDirectory.dir("generated/builtins/java")
+
+def generateBuiltinsResources = tasks.register("generateBuiltinsResources") {
+    def stdlibJar = new File(kotlinCompilerLibDir, "kotlin-stdlib.jar")
+    inputs.file(stdlibJar)
+    outputs.dir(generatedBuiltinsSourceDir)
+    doLast {
+        def outputDir = generatedBuiltinsSourceDir.get().asFile
+        def packageDir = new File(outputDir, "org/wasmidle/kotlin/teavm")
+        mkdir(packageDir)
+        def output = new File(packageDir, "KotlinBuiltinsResources.java")
+        def resources = zipTree(stdlibJar).matching {
+            include "kotlin/**/*.kotlin_builtins"
+        }.files.sort { it.path }
+        def source = new StringBuilder()
+        source.append("package org.wasmidle.kotlin.teavm;\n\n")
+        source.append("import java.io.ByteArrayInputStream;\n")
+        source.append("import java.io.InputStream;\n")
+        source.append("import java.util.Base64;\n\n")
+        source.append("public final class KotlinBuiltinsResources {\n")
+        source.append("    private KotlinBuiltinsResources() {\n")
+        source.append("    }\n\n")
+        source.append("    public static InputStream open(String path) {\n")
+        source.append("        if (path == null) {\n")
+        source.append("            return null;\n")
+        source.append("        }\n")
+        source.append("        while (path.startsWith(\"/\")) {\n")
+        source.append("            path = path.substring(1);\n")
+        source.append("        }\n")
+        int resourceIndex = 0
+        for (def resource : resources) {
+            def relativePath = resource.path.replace('\\', '/')
+            def marker = "/kotlin/"
+            def markerIndex = relativePath.indexOf(marker)
+            if (markerIndex >= 0) {
+                relativePath = relativePath.substring(markerIndex + 1)
+            }
+            source.append("        if (\"").append(relativePath).append("\".equals(path)) {\n")
+            source.append("            return open").append(resourceIndex).append("();\n")
+            source.append("        }\n")
+            resourceIndex++
+        }
+        source.append("        return null;\n")
+        source.append("    }\n\n")
+        resourceIndex = 0
+        for (def resource : resources) {
+            source.append("    private static InputStream open").append(resourceIndex).append("() {\n")
+            source.append("        return new ByteArrayInputStream(Base64.getDecoder().decode(\"")
+                    .append(resource.bytes.encodeBase64().toString())
+                    .append("\"));\n")
+            source.append("    }\n\n")
+            resourceIndex++
+        }
+        source.append("}\n")
+        output.text = source.toString()
+    }
+}
+
+sourceSets.main.java.srcDir(generatedBuiltinsSourceDir)
+compileJava.dependsOn generateBuiltinsResources
+
+processResources {
+    from(zipTree(new File(kotlinCompilerLibDir, "kotlin-stdlib.jar"))) {
+        include "kotlin/**/*.kotlin_builtins"
+    }
+}
+
+tasks.named("processTeavmResources") {
+    from(zipTree(new File(kotlinCompilerLibDir, "kotlin-stdlib.jar"))) {
+        include "kotlin/**/*.kotlin_builtins"
+    }
+}
+
+def jdkStubSourceDir = file("${projectDir}/src/jdkStubs/java")
+def jdkStubClassesDir = layout.buildDirectory.dir("classes/jdkStubs")
+
+def compileJdkStubs = tasks.register("compileJdkStubs", Exec) {
+    def sources = fileTree(jdkStubSourceDir) {
+        include "**/*.java"
+    }
+    inputs.files(sources)
+    outputs.dir(jdkStubClassesDir)
+    doFirst {
+        def outputDir = jdkStubClassesDir.get().asFile
+        delete(outputDir)
+        mkdir(outputDir)
+        def sourceFiles = sources.files.sort { it.path }
+        if (sourceFiles.isEmpty()) {
+            throw new GradleException("No JDK stub sources found under ${jdkStubSourceDir}")
+        }
+        commandLine "javac", "--release", "8", "-d", outputDir.absolutePath
+        args sourceFiles.collect { it.absolutePath }
+    }
+}
+
+def jdkStubsJar = tasks.register("jdkStubsJar", Jar) {
+    archiveBaseName = "wasm-kotlin-teavm-jdk-stubs"
+    from(jdkStubClassesDir)
+    dependsOn compileJdkStubs
+}
+
+tasks.configureEach {
+    if (name == "buildWasmGC") {
+        dependsOn jdkStubsJar
+    }
+}
+
 teavm {
     wasmGC {
         mainClass = "org.wasmidle.kotlin.teavm.BrowserKotlinCompilerProbe"
@@ -59,6 +168,7 @@ teavm {
         processMemory = 8192
         modularRuntime = true
         debugInformation = teavmDebugInformation
+        obfuscated = false
         // Keep this diagnostic mode on while the port is incomplete: it fails faster and reports
         // the next TeaVM/JDK API gaps instead of spending minutes in precise analysis.
         fastGlobalAnalysis = true

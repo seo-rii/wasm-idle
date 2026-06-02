@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -13,7 +13,11 @@ let wasmPath = resolve(defaultOutputDir, 'kotlin-compiler-probe.wasm');
 let runtimePath = resolve(defaultOutputDir, 'kotlin-compiler-probe-runtime.js');
 let sourcePath = resolve(projectDir, 'fixtures/hello/Main.kt');
 let outputDir = resolve(projectDir, 'build/browser-probe-out');
-let classpath = resolve('/tmp/wasm-idle-kotlin-teavm-poc/package/lib/kotlin-stdlib.jar');
+let virtualOutputDir = '/workspace/out';
+let classpath = [
+    resolve('/tmp/wasm-idle-kotlin-teavm-poc/package/lib/kotlin-stdlib.jar'),
+    resolve(projectDir, 'build/libs/wasm-kotlin-teavm-jdk-stubs.jar')
+].join('\n');
 let reportPath = defaultReportPath;
 
 for (let i = 0; i < args.length; i++) {
@@ -46,10 +50,12 @@ const report = {
     runtimePath,
     sourcePath,
     outputDir,
+    virtualOutputDir,
     classpath,
     node: process.version,
     startedAt: new Date().toISOString(),
     load: null,
+    builtins: null,
     compile: null,
     finishedAt: null
 };
@@ -63,16 +69,63 @@ try {
         ok: true,
         exports: Reflect.ownKeys(module.exports).sort()
     };
+    if (typeof module.exports.builtinsResourceLength === 'function'
+            && typeof module.exports.describeDefaultUnitType === 'function') {
+        report.builtins = {
+            kotlinLength: module.exports.builtinsResourceLength('kotlin/kotlin.kotlin_builtins'),
+            slashKotlinLength: module.exports.builtinsResourceLength('/kotlin/kotlin.kotlin_builtins'),
+            unitType: module.exports.describeDefaultUnitType()
+        };
+    }
+    let source = null;
+    let classpathPayload = null;
     try {
+        source = await readFile(sourcePath, 'utf8');
+        classpathPayload = (await Promise.all(
+            classpath.split('\n')
+                .filter((entry) => entry.length > 0)
+                .map(async (entry) => (await readFile(entry)).toString('base64'))
+        )).join('\n');
+        const result = module.exports.compileKotlinSourceContent(source, virtualOutputDir, classpathPayload);
         report.compile = {
             ok: true,
-            result: module.exports.compileKotlinSource(sourcePath, outputDir, classpath)
+            result
         };
+        if (result !== true && typeof module.exports.describeKotlinCompileContentFailure === 'function') {
+            report.compile.description = module.exports.describeKotlinCompileContentFailure(
+                source, virtualOutputDir, classpathPayload);
+        }
+        if (typeof module.exports.listVirtualFiles === 'function') {
+            report.compile.virtualFiles = module.exports.listVirtualFiles(virtualOutputDir);
+            if (report.compile.virtualFiles) {
+                await mkdir(outputDir, { recursive: true });
+                for (const line of report.compile.virtualFiles.split('\n')) {
+                    if (!line) {
+                        continue;
+                    }
+                    const [virtualPath] = line.split('\t');
+                    const relativePath = virtualPath.slice(`${virtualOutputDir}/`.length);
+                    const targetPath = resolve(outputDir, relativePath);
+                    await mkdir(dirname(targetPath), { recursive: true });
+                    const base64 = module.exports.readVirtualFileBase64(virtualPath);
+                    await writeFile(targetPath, Buffer.from(base64, 'base64'));
+                }
+            }
+        }
     } catch (error) {
         report.compile = {
             ok: false,
             error: error?.stack || String(error)
         };
+        if (source !== null && classpathPayload !== null
+                && typeof module.exports.describeKotlinCompileContentFailure === 'function') {
+            try {
+                report.compile.description = module.exports.describeKotlinCompileContentFailure(
+                    source, virtualOutputDir, classpathPayload);
+            } catch (describeError) {
+                report.compile.descriptionError = describeError?.stack || String(describeError);
+            }
+        }
     }
 } catch (error) {
     report.load = {
