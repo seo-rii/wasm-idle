@@ -1,19 +1,18 @@
 package org.wasmidle.kotlin.teavm;
 
-import org.teavm.interop.Export;
+import org.teavm.jso.JSExport;
+import org.teavm.jso.JSMethod;
 
 public final class BrowserKotlinCompilerProbe {
     private BrowserKotlinCompilerProbe() {
     }
 
     public static void main(String[] args) {
-        // Keep the compiler path reachable for TeaVM analysis while this is still a probe.
-        if (args.length == 42) {
-            compileKotlinSource("", "", "");
-        }
+        // The browser API is exposed through JSO exports; loading the module should not compile.
     }
 
-    @Export(name = "compileKotlinSource")
+    @JSExport
+    @JSMethod("compileKotlinSource")
     public static boolean compileKotlinSource(String sourcePath, String outputDir, String classpath) {
         return DirectKotlinCompilerProbe.compileWithoutHostJdk(
                 sourcePath, outputDir, splitClasspath(classpath));

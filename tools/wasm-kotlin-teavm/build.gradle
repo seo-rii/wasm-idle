@@ -21,11 +21,16 @@ def kotlinCompilerJars = [
         "annotations-13.0.jar"
 ].collect { new File(kotlinCompilerLibDir, it) }
 def teavmVersion = "0.13.1"
+def teavmDebugInformation = providers.gradleProperty("teavmDebugInformation")
+        .map { it.toBoolean() }
+        .orElse(false)
+        .get()
 
 dependencies {
     implementation files(kotlinCompilerJars)
     implementation files(trove4jJar)
     compileOnly "org.teavm:teavm-core:${teavmVersion}"
+    compileOnly "org.teavm:teavm-jso:${teavmVersion}"
 }
 
 tasks.register("verifyKotlinCompilerInputs") {
@@ -53,7 +58,7 @@ teavm {
         outOfProcess = true
         processMemory = 8192
         modularRuntime = true
-        debugInformation = false
+        debugInformation = teavmDebugInformation
         // Keep this diagnostic mode on while the port is incomplete: it fails faster and reports
         // the next TeaVM/JDK API gaps instead of spending minutes in precise analysis.
         fastGlobalAnalysis = true

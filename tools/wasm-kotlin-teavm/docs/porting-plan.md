@@ -117,9 +117,12 @@ Current TeaVM fast-analysis blockers:
       `build/generated/teavm/wasm-gc/kotlin-compiler-probe.wasm`.
     - The latest successful probe recorded `peakRssMb: 8151`, so memory use remains high even
       after the graph reduction.
-    - The generated WasmGC artifact has not yet been proven to execute a browser-side Kotlin
-      compile. The next blocker is runtime smoke testing of `compileKotlinSource(...)` against the
-      minimal fixture.
+    - The generated WasmGC module validates in Node with
+      `--experimental-wasm-imported-strings`, and exports `main`, `compileKotlinSource`, and
+      `teavm.memory`.
+    - TeaVM's generated runtime loader still traps during initialization with
+      `RuntimeError: dereferencing a null pointer`, before `compileKotlinSource(...)` can be called.
+      The current runtime smoke probe records this under `.cache/probes/last-wasm-runtime.json`.
 
 TeaVM did not load ordinary application jar classes placed in `java.*` packages. Most classlib
 additions must follow TeaVM's internal `T...` class naming under `org.teavm.classlib...`; a few
@@ -136,11 +139,11 @@ Current status:
 
 - `BrowserKotlinCompilerProbe` is the TeaVM `mainClass`.
 - `BrowserKotlinCompilerProbe.compileKotlinSource(...)` calls the no-host-JDK compiler path.
-- A guarded call keeps that compiler path reachable for TeaVM analysis while the browser API shape is
-  still being determined.
+- The `main(...)` body is intentionally a no-op; the browser-facing API is exposed through TeaVM JSO
+  exports.
 - `buildWasmGC` now produces a WasmGC artifact when run with `JAVA_TOOL_OPTIONS=-Xss64m`.
-- Browser or Node execution of the exported API still needs a minimal smoke test before wiring this
-  into wasm-idle's UI.
+- Node can compile the WasmGC module and see the exported API, but TeaVM runtime initialization still
+  traps before the API can be invoked.
 
 ### ARCH-005: Remove statically reachable javac and parallel backend code
 
@@ -171,5 +174,6 @@ without multi-minute, multi-gigabyte rebuilds.
 Current status:
 
 - The JVM fixture runner still compiles `fixtures/hello/Main.kt` to `MainKt.class`.
-- The WasmGC artifact builds successfully, but the artifact has not yet run the minimal Kotlin
+- The WasmGC artifact builds successfully and validates as a module in Node, but the TeaVM runtime
+  loader currently traps during initialization, so the artifact has not yet run the minimal Kotlin
   compile in a browser-compatible runtime.

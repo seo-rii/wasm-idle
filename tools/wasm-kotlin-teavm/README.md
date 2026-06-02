@@ -65,6 +65,18 @@ java -cp "tools/wasm-kotlin-teavm/build/classes/java/main:/path/to/kotlin-compil
   /path/to/kotlin-compiler/lib/kotlin-stdlib.jar
 ```
 
+To smoke-test the generated WasmGC artifact in a browser-compatible Node runtime:
+
+```bash
+JAVA_TOOL_OPTIONS=-Xss64m gradle -p tools/wasm-kotlin-teavm buildWasmGC
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-wasm-runtime.mjs
+```
+
+The runtime probe writes `.cache/probes/last-wasm-runtime.json`. It first validates that Node can
+compile the generated Wasm module with imported JS string support, then calls TeaVM's generated
+runtime loader.
+
 ## Current Status
 
 This folder is a porting scaffold, not an app integration. The current probe compiles a small Java
@@ -134,5 +146,13 @@ Known findings from the initial experiments:
 - `jdeps` reports that the Kotlin compiler distribution reaches beyond `java.base` into
   `java.desktop`, `java.instrument`, `java.management`, `java.scripting`, `jdk.compiler`, and
   `jdk.unsupported`.
+- With `JAVA_TOOL_OPTIONS=-Xss64m`, `buildWasmGC` now succeeds and writes
+  `build/generated/teavm/wasm-gc/kotlin-compiler-probe.wasm`.
+- Node can compile the generated WasmGC module when run with
+  `--experimental-wasm-imported-strings`, and the module exports `main`, `compileKotlinSource`, and
+  `teavm.memory`.
+- TeaVM's generated runtime loader still traps during module initialization with
+  `RuntimeError: dereferencing a null pointer`, before the exported Kotlin compile API can be
+  called. The next porting target is that startup trap.
 
 See `docs/porting-plan.md` for the next patch targets.
