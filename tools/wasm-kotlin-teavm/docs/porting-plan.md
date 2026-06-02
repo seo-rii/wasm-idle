@@ -103,7 +103,8 @@ Current TeaVM fast-analysis blockers:
       directly on JDK 17 source path, including `javax.swing.Icon`,
       `ScheduledExecutorService`, `RunnableScheduledFuture`, and `AbstractExecutorService`
 - WasmGC code generation blockers cleared by pruning:
-    - `Class.getDeclaredField(...)`/`getDeclaredFields()` now return empty reflection results.
+    - Reflective `Field` primitive setters are no-op in the browser port while field metadata remains
+      available for Kotlin container singleton lookup.
     - `Arrays.spliterator(...)` and `Spliterators.iterator(...)` no longer construct stream-backed
       iterator paths during generation.
     - `CachedValueBase`/`CachedValueImpl` diagnostics cache paths are stubbed for the current

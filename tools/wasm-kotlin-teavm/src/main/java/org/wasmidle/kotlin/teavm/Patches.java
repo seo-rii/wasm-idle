@@ -454,18 +454,6 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
                 .constructArray(ValueType.object("java.lang.Class"), 0)
                 .returnValue();
 
-        var declaredFieldsType = ValueType.arrayOf(ValueType.object("java.lang.reflect.Field"));
-        var declaredFields = getOrCreateMethod(cls, "getDeclaredFields", declaredFieldsType);
-        ProgramEmitter.create(declaredFields, context.getHierarchy())
-                .constructArray(ValueType.object("java.lang.reflect.Field"), 0)
-                .returnValue();
-
-        var declaredField = getOrCreateMethod(cls, "getDeclaredField", ValueType.object("java.lang.reflect.Field"),
-                ValueType.object("java.lang.String"));
-        ProgramEmitter.create(declaredField, context.getHierarchy())
-                .constantNull(ValueType.object("java.lang.reflect.Field"))
-                .returnValue();
-
         var classArrayType = ValueType.arrayOf(ValueType.object("java.lang.Class"));
         var declaredMethod = getOrCreateMethod(cls, "getDeclaredMethod",
                 ValueType.object("java.lang.reflect.Method"),
