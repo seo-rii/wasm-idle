@@ -108,10 +108,14 @@ Known findings from the initial experiments:
   `LockSupport`.
 - Replacing the compiler probe's `PrintingMessageCollector` with a minimal in-memory collector keeps
   `PlainTextMessageRenderer` and Jansi's native-loading path out of the current browser graph.
-- With those patches, fast analysis fails in about 74 seconds at roughly 5.3 GB RSS. The next blocker
-  group is missing coroutines classes, file-channel copy APIs, `AtomicIntegerArray`, XML/StAX plugin
-  descriptor APIs, Swing utilities, method-handle lookup, streams/spliterators, and additional
-  reflective `Field` APIs.
+- The next JDK stub round covers `AtomicIntegerArray`, `AtomicLongArray`, primitive reflective
+  `Field` setters, `Field.getGenericType()`, method-handle lookup metadata, array/spliterator
+  helpers, `StreamSupport.intStream(...)`, and the `MockApplication.invokeLater(...)` path that was
+  reaching Swing.
+- With those patches, fast analysis fails in about 56 seconds at roughly 5.0 GB RSS. The next blocker
+  group is coroutines, file-channel APIs, XML/StAX plugin descriptor parsing, IntelliJ unsafe
+  method-handle CAS calls, `java.awt.Rectangle`, `java.lang.management.ManagementFactory`,
+  `TypeNotPresentException`, and `ClassLoader.getResource(...)`.
 - `jdeps` reports that the Kotlin compiler distribution reaches beyond `java.base` into
   `java.desktop`, `java.instrument`, `java.management`, `java.scripting`, `jdk.compiler`, and
   `jdk.unsupported`.

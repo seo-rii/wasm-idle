@@ -4,6 +4,7 @@ import org.teavm.model.AccessLevel;
 import org.teavm.model.ClassHolder;
 import org.teavm.model.ClassHolderTransformer;
 import org.teavm.model.ClassHolderTransformerContext;
+import org.teavm.model.ElementModifier;
 import org.teavm.model.MethodDescriptor;
 import org.teavm.model.MethodHolder;
 import org.teavm.model.ValueType;
@@ -35,20 +36,38 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
             case "java.lang.System":
                 transformSystem(cls, context);
                 break;
+            case "java.lang.invoke.MethodHandles":
+                transformMethodHandles(cls, context);
+                break;
+            case "java.lang.invoke.MethodHandles$Lookup":
+                transformMethodHandlesLookup(cls, context);
+                break;
             case "java.lang.reflect.Field":
                 transformReflectField(cls, context);
                 break;
             case "java.lang.reflect.Type":
                 transformReflectType(cls, context);
                 break;
+            case "java.util.Arrays":
+                transformArrays(cls, context);
+                break;
+            case "java.util.Spliterators":
+                transformSpliterators(cls, context);
+                break;
             case "java.util.concurrent.ConcurrentHashMap":
                 transformConcurrentHashMap(cls, context);
+                break;
+            case "java.util.stream.StreamSupport":
+                transformStreamSupport(cls, context);
                 break;
             case "com.intellij.util.containers.ContainerUtil":
                 transformContainerUtil(cls, context);
                 break;
             case "com.intellij.util.lang.UrlClassLoader":
                 transformUrlClassLoader(cls, context);
+                break;
+            case "com.intellij.mock.MockApplication":
+                transformMockApplication(cls, context);
                 break;
             case "org.jetbrains.kotlin.cli.common.CLICompiler":
                 transformCliCompiler(cls, context);
@@ -125,21 +144,61 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
                 .returnValue();
     }
 
+    private void transformMethodHandles(ClassHolder cls, ClassHolderTransformerContext context) {
+        var lookupType = ValueType.object("java.lang.invoke.MethodHandles$Lookup");
+        var method = getOrCreateStaticMethod(cls, "lookup", lookupType);
+        ProgramEmitter.create(method, context.getHierarchy())
+                .construct("java.lang.invoke.MethodHandles$Lookup")
+                .returnValue();
+    }
+
+    private void transformMethodHandlesLookup(ClassHolder cls, ClassHolderTransformerContext context) {
+        var method = getOrCreateMethod(cls, "lookupClass", ValueType.object("java.lang.Class"));
+        ProgramEmitter.create(method, context.getHierarchy())
+                .constant(Object.class)
+                .returnValue();
+    }
+
     private void transformReflectField(ClassHolder cls, ClassHolderTransformerContext context) {
-        var method = cls.getMethod(new MethodDescriptor("setInt",
-                ValueType.object("java.lang.Object"), ValueType.INTEGER, ValueType.VOID));
-        if (method == null) {
-            method = new MethodHolder(new MethodDescriptor("setInt",
-                    ValueType.object("java.lang.Object"), ValueType.INTEGER, ValueType.VOID));
-            method.setLevel(AccessLevel.PUBLIC);
-            cls.addMethod(method);
-        }
-        ProgramEmitter.create(method, context.getHierarchy()).exit();
+        createNoOpFieldSetter(cls, context, "setBoolean", ValueType.BOOLEAN);
+        createNoOpFieldSetter(cls, context, "setByte", ValueType.BYTE);
+        createNoOpFieldSetter(cls, context, "setChar", ValueType.CHARACTER);
+        createNoOpFieldSetter(cls, context, "setDouble", ValueType.DOUBLE);
+        createNoOpFieldSetter(cls, context, "setFloat", ValueType.FLOAT);
+        createNoOpFieldSetter(cls, context, "setInt", ValueType.INTEGER);
+        createNoOpFieldSetter(cls, context, "setLong", ValueType.LONG);
+        createNoOpFieldSetter(cls, context, "setShort", ValueType.SHORT);
+
+        var method = getOrCreateMethod(cls, "getGenericType",
+                ValueType.object("java.lang.reflect.Type"));
+        ProgramEmitter.create(method, context.getHierarchy())
+                .var(0, ValueType.object("java.lang.reflect.Field"))
+                .invokeVirtual("getType", ValueType.object("java.lang.Class"))
+                .returnValue();
     }
 
     private void transformReflectType(ClassHolder cls, ClassHolderTransformerContext context) {
         var method = getOrCreateMethod(cls, "getTypeName", ValueType.object("java.lang.String"));
         ProgramEmitter.create(method, context.getHierarchy()).constant("").returnValue();
+    }
+
+    private void transformArrays(ClassHolder cls, ClassHolderTransformerContext context) {
+        var arrayType = ValueType.arrayOf(ValueType.object("java.lang.Object"));
+        var spliteratorType = ValueType.object("java.util.Spliterator");
+        var method = getOrCreateStaticMethod(cls, "spliterator", spliteratorType, arrayType);
+        var pe = ProgramEmitter.create(method, context.getHierarchy());
+        pe.invoke("java.util.Spliterators", "spliterator", spliteratorType,
+                pe.var(0, arrayType), pe.constant(0x410))
+                .returnValue();
+    }
+
+    private void transformSpliterators(ClassHolder cls, ClassHolderTransformerContext context) {
+        var spliteratorType = ValueType.object("java.util.Spliterator");
+        var iteratorType = ValueType.object("java.util.Iterator");
+        var method = getOrCreateStaticMethod(cls, "iterator", iteratorType, spliteratorType);
+        var pe = ProgramEmitter.create(method, context.getHierarchy());
+        pe.construct("org.wasmidle.kotlin.teavm.SpliteratorIterator", pe.var(0, spliteratorType))
+                .returnValue();
     }
 
     private void transformConcurrentHashMap(ClassHolder cls, ClassHolderTransformerContext context) {
@@ -168,9 +227,44 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
                 .returnValue();
     }
 
+    private void transformStreamSupport(ClassHolder cls, ClassHolderTransformerContext context) {
+        var intStreamType = ValueType.object("java.util.stream.IntStream");
+        var intSpliteratorType = ValueType.object("java.util.Spliterator$OfInt");
+        var method = getOrCreateStaticMethod(cls, "intStream", intStreamType,
+                intSpliteratorType, ValueType.BOOLEAN);
+        ProgramEmitter.create(method, context.getHierarchy())
+                .invoke("java.util.stream.IntStream", "empty", intStreamType)
+                .returnValue();
+
+        method = getOrCreateStaticMethod(cls, "intStream", intStreamType,
+                ValueType.object("java.util.function.Supplier"), ValueType.INTEGER, ValueType.BOOLEAN);
+        ProgramEmitter.create(method, context.getHierarchy())
+                .invoke("java.util.stream.IntStream", "empty", intStreamType)
+                .returnValue();
+    }
+
     private void transformUrlClassLoader(ClassHolder cls, ClassHolderTransformerContext context) {
         var method = getOrCreateMethod(cls, "registerAsParallelCapable", ValueType.BOOLEAN);
         ProgramEmitter.create(method, context.getHierarchy()).constant(1).returnValue();
+    }
+
+    private void transformMockApplication(ClassHolder cls, ClassHolderTransformerContext context) {
+        var runnableType = ValueType.object("java.lang.Runnable");
+        var modalityStateType = ValueType.object("com.intellij.openapi.application.ModalityState");
+        var conditionType = ValueType.object("com.intellij.openapi.util.Condition");
+
+        replaceWithNoOp(cls, context, "invokeLater", ValueType.VOID, runnableType);
+        replaceWithNoOp(cls, context, "invokeLater", ValueType.VOID, runnableType, modalityStateType);
+        replaceWithNoOp(cls, context, "invokeLater", ValueType.VOID, runnableType, conditionType);
+        replaceWithNoOp(cls, context, "invokeLater", ValueType.VOID,
+                runnableType, modalityStateType, conditionType);
+        replaceWithNoOp(cls, context, "invokeLaterOnWriteThread", ValueType.VOID, runnableType);
+        replaceWithNoOp(cls, context, "invokeLaterOnWriteThread", ValueType.VOID,
+                runnableType, modalityStateType);
+        replaceWithNoOp(cls, context, "invokeLaterOnWriteThread", ValueType.VOID,
+                runnableType, modalityStateType, conditionType);
+        replaceWithNoOp(cls, context, "invokeAndWait", ValueType.VOID, runnableType);
+        replaceWithNoOp(cls, context, "invokeAndWait", ValueType.VOID, runnableType, modalityStateType);
     }
 
     private void transformJavacWrapper(ClassHolder cls, ClassHolderTransformerContext context) {
@@ -292,6 +386,13 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
         ProgramEmitter.create(method, context.getHierarchy()).constant(value ? 1 : 0).returnValue();
     }
 
+    private static void createNoOpFieldSetter(ClassHolder cls, ClassHolderTransformerContext context, String name,
+            ValueType valueType) {
+        var method = getOrCreateMethod(cls, name, ValueType.VOID,
+                ValueType.object("java.lang.Object"), valueType);
+        ProgramEmitter.create(method, context.getHierarchy()).exit();
+    }
+
     private static void replaceWithEmptyList(ClassHolder cls, ClassHolderTransformerContext context, String name,
             ValueType... argumentTypes) {
         replaceWithStaticFactory(cls, context, name, ValueType.object("java.util.List"),
@@ -323,6 +424,13 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
             method.setLevel(AccessLevel.PUBLIC);
             cls.addMethod(method);
         }
+        return method;
+    }
+
+    private static MethodHolder getOrCreateStaticMethod(ClassHolder cls, String name, ValueType returnType,
+            ValueType... argumentTypes) {
+        var method = getOrCreateMethod(cls, name, returnType, argumentTypes);
+        method.getModifiers().add(ElementModifier.STATIC);
         return method;
     }
 

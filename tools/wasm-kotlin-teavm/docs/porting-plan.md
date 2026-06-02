@@ -69,17 +69,22 @@ Current TeaVM fast-analysis blockers:
       `Long.parseUnsignedLong(...)`, and `LockSupport`
     - `PlainTextMessageRenderer`/Jansi native-loading path by using a minimal probe-local
       `MessageCollector`
+    - `AtomicIntegerArray`, `AtomicLongArray`, primitive reflective `Field` setters,
+      `Field.getGenericType()`, `MethodHandles.lookup()`, `Lookup.lookupClass()`,
+      `Arrays.spliterator(...)`, `Spliterators.iterator(...)`,
+      `Spliterators.AbstractSpliterator`, and `StreamSupport.intStream(...)`
+    - Swing's `invokeLater(...)` path by no-oping the corresponding `MockApplication` methods
 - Still blocking:
     - `kotlinx.coroutines.BuildersKt` and `kotlinx.coroutines.flow.SharedFlowKt`
-    - `java.lang.invoke.MethodHandles.lookup()`
-    - `Arrays.spliterator(...)`, `Spliterators.AbstractSpliterator`, and `StreamSupport.intStream(...)`
-    - File-channel copy APIs: `FileInputStream.getChannel()`, `FileOutputStream.getChannel()`,
-      and `java.nio.channels.FileChannel`
-    - `AtomicIntegerArray`
+    - File-channel APIs: `FileInputStream.getChannel()`, `FileOutputStream.getChannel()`,
+      `RandomAccessFile.getChannel()`, `FileSystemProvider.newFileChannel(...)`, and
+      `java.nio.channels.FileChannel`
     - XML/StAX plugin descriptor APIs such as `XMLStreamException` and `XMLStreamReader2`
-    - `javax.swing.SwingUtilities`
-    - Additional reflective field APIs such as `Field.setLong(...)`, `Field.setShort(...)`, and
-      `Field.getGenericType()`
+    - IntelliJ unsafe CAS paths through `MethodHandle.invokeExact(...)`
+    - `java.awt.Rectangle` through XML serializer property collection
+    - `java.lang.management.ManagementFactory` through debug-attach detection
+    - `java.lang.TypeNotPresentException` through ASM frame computation
+    - `ClassLoader.getResource(...)` through Kotlin builtins resource loading
 
 TeaVM did not load ordinary application jar classes placed in `java.*` packages. Classlib additions
 must follow TeaVM's internal `T...` class naming under `org.teavm.classlib...`.
