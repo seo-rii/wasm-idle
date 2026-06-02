@@ -304,6 +304,12 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
             case "org.jetbrains.kotlin.resolve.checkers.OptInMarkerDeclarationAnnotationChecker":
                 transformOptInMarkerDeclarationAnnotationChecker(cls, context);
                 break;
+            case "org.jetbrains.kotlin.resolve.checkers.OptInUsageChecker":
+                transformOptInUsageChecker(cls, context);
+                break;
+            case "org.jetbrains.kotlin.resolve.checkers.OptInUsageChecker$Overrides":
+                transformOptInUsageCheckerOverrides(cls, context);
+                break;
             case "org.jetbrains.kotlin.resolve.checkers.ExpectedActualDeclarationChecker":
                 transformExpectedActualDeclarationChecker(cls, context);
                 break;
@@ -735,7 +741,6 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
                 .var(0, ValueType.object("java.lang.reflect.Constructor"))
                 .invokeVirtual("getParameterTypes", ValueType.arrayOf(ValueType.object("java.lang.Class")))
                 .returnValue();
-
     }
 
     private void transformReflectType(ClassHolder cls, ClassHolderTransformerContext context) {
@@ -1709,6 +1714,20 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
                 ValueType.object("org.jetbrains.kotlin.config.LanguageVersionSettings"));
     }
 
+    private void transformOptInUsageChecker(ClassHolder cls, ClassHolderTransformerContext context) {
+        replaceWithNoOp(cls, context, "check", ValueType.VOID,
+                ValueType.object("org.jetbrains.kotlin.resolve.calls.model.ResolvedCall"),
+                ValueType.object("com.intellij.psi.PsiElement"),
+                ValueType.object("org.jetbrains.kotlin.resolve.calls.checkers.CallCheckerContext"));
+    }
+
+    private void transformOptInUsageCheckerOverrides(ClassHolder cls, ClassHolderTransformerContext context) {
+        replaceWithNoOp(cls, context, "check", ValueType.VOID,
+                ValueType.object("org.jetbrains.kotlin.psi.KtDeclaration"),
+                ValueType.object("org.jetbrains.kotlin.descriptors.DeclarationDescriptor"),
+                ValueType.object("org.jetbrains.kotlin.resolve.checkers.DeclarationCheckerContext"));
+    }
+
     private void transformExpectedActualDeclarationChecker(ClassHolder cls, ClassHolderTransformerContext context) {
         var checkerType = ValueType.object("org.jetbrains.kotlin.resolve.checkers.ExpectedActualDeclarationChecker");
         var moduleStructureOracleType = ValueType.object("org.jetbrains.kotlin.resolve.ModuleStructureOracle");
@@ -2005,6 +2024,17 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
                 .thenDo(() -> pe.construct(
                         "org.jetbrains.kotlin.resolve.checkers.OptInMarkerDeclarationAnnotationChecker",
                         pe.constantNull(moduleType))
+                        .cast(objectType)
+                        .returnValue());
+        pe.when(pe.var(0, descriptorType).getField("klass", classType)
+                .isSame(pe.constant(org.jetbrains.kotlin.resolve.checkers.OptInUsageChecker.class).cast(classType)))
+                .thenDo(() -> pe.construct("org.jetbrains.kotlin.resolve.checkers.OptInUsageChecker")
+                        .cast(objectType)
+                        .returnValue());
+        pe.when(pe.var(0, descriptorType).getField("klass", classType)
+                .isSame(pe.constant(org.jetbrains.kotlin.resolve.checkers.OptInUsageChecker.Overrides.class)
+                        .cast(classType)))
+                .thenDo(() -> pe.construct("org.jetbrains.kotlin.resolve.checkers.OptInUsageChecker$Overrides")
                         .cast(objectType)
                         .returnValue());
         pe.when(pe.var(0, descriptorType).getField("klass", classType)
