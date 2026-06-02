@@ -100,9 +100,13 @@ Known findings from the initial experiments:
   `Future`, `TimeoutException`, and `StringCharacterIterator`.
 - The `JavacWrapper` and `JavacBasedClassFinder` transformer patches remove the statically
   reachable `com.sun.tools.javac`/`javax.tools` blocker group when `USE_JAVAC=false`.
-- With those patches, fast analysis fails in about 53 seconds at roughly 4.7 GB RSS. The next blocker
-  group is missing coroutines classes, resource lookup APIs, `ConcurrentHashMap`/atomic collection
-  gaps, method-handle lookup, generic reflection APIs, and streams/spliterators.
+- Additional classlib stubs cover `AtomicReferenceArray`, `ConcurrentLinkedQueue`, `ForkJoinPool`,
+  and `ForkJoinTask`, while transformer patches cover `ConcurrentHashMap`'s missing constructor and
+  `ContainerUtil.newConcurrentSet()`.
+- With those patches, fast analysis fails in about 64 seconds at roughly 5.2 GB RSS. The next blocker
+  group is missing coroutines classes, resource lookup APIs, method-handle lookup, generic
+  reflection APIs, streams/spliterators, `Runtime.addShutdownHook`, `System.mapLibraryName`,
+  `StringJoiner`, `Long.parseUnsignedLong`, and `LockSupport`.
 - `jdeps` reports that the Kotlin compiler distribution reaches beyond `java.base` into
   `java.desktop`, `java.instrument`, `java.management`, `java.scripting`, `jdk.compiler`, and
   `jdk.unsupported`.

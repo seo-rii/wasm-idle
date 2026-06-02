@@ -26,6 +26,12 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
             case "java.lang.reflect.Field":
                 transformReflectField(cls, context);
                 break;
+            case "java.util.concurrent.ConcurrentHashMap":
+                transformConcurrentHashMap(cls, context);
+                break;
+            case "com.intellij.util.containers.ContainerUtil":
+                transformContainerUtil(cls, context);
+                break;
             case "org.jetbrains.kotlin.cli.common.CLICompiler":
                 transformCliCompiler(cls, context);
                 break;
@@ -62,6 +68,32 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
             cls.addMethod(method);
         }
         ProgramEmitter.create(method, context.getHierarchy()).exit();
+    }
+
+    private void transformConcurrentHashMap(ClassHolder cls, ClassHolderTransformerContext context) {
+        var method = cls.getMethod(new MethodDescriptor("<init>",
+                ValueType.INTEGER, ValueType.FLOAT, ValueType.INTEGER, ValueType.VOID));
+        if (method == null) {
+            method = new MethodHolder(new MethodDescriptor("<init>",
+                    ValueType.INTEGER, ValueType.FLOAT, ValueType.INTEGER, ValueType.VOID));
+            method.setLevel(AccessLevel.PUBLIC);
+            cls.addMethod(method);
+        }
+        var pe = ProgramEmitter.create(method, context.getHierarchy());
+        pe.var(0, ValueType.object("java.util.concurrent.ConcurrentHashMap"))
+                .invokeSpecial("<init>", ValueType.VOID,
+                        pe.var(1, ValueType.INTEGER), pe.var(2, ValueType.FLOAT));
+        pe.exit();
+    }
+
+    private void transformContainerUtil(ClassHolder cls, ClassHolderTransformerContext context) {
+        var method = cls.getMethod(new MethodDescriptor("newConcurrentSet", ValueType.object("java.util.Set")));
+        if (method == null) {
+            return;
+        }
+        ProgramEmitter.create(method, context.getHierarchy())
+                .construct("java.util.HashSet")
+                .returnValue();
     }
 
     private void transformJavacWrapper(ClassHolder cls, ClassHolderTransformerContext context) {

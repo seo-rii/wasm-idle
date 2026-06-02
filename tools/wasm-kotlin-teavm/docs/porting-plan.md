@@ -62,15 +62,16 @@ Current TeaVM fast-analysis blockers:
     - `com.intellij.util.diff.Diff` and `FilesTooBigForDiffException`
     - `org.jetbrains.kotlin.javac.JavacWrapper` and `JavacBasedClassFinder` static bodies when
       `USE_JAVAC=false`
+    - `AtomicReferenceArray`, `ConcurrentLinkedQueue`, `ForkJoinPool`, and `ForkJoinTask`
+    - `ConcurrentHashMap`'s `(int, float, int)` constructor and `ContainerUtil.newConcurrentSet()`
 - Still blocking:
     - `kotlinx.coroutines.BuildersKt` and `kotlinx.coroutines.flow.SharedFlowKt`
     - `java.lang.Class.getResource(...)` and `ClassLoader.getSystemResource(...)`
     - `java.lang.invoke.MethodHandles.lookup()`
     - `Class.getTypeName()`, `Class.getGenericInterfaces()`, and `Type.getTypeName()`
-    - `java.util.concurrent.atomic.AtomicReferenceArray`
-    - `ConcurrentHashMap.newKeySet()` and the `(int, float, int)` constructor
-    - `ConcurrentLinkedQueue` and `ForkJoinPool`
     - `Arrays.spliterator(...)`, `Spliterators.AbstractSpliterator`, and `StreamSupport.intStream(...)`
+    - `Runtime.addShutdownHook(...)`, `System.mapLibraryName(...)`, `StringJoiner`,
+      `Long.parseUnsignedLong(...)`, and `LockSupport`
 
 TeaVM did not load ordinary application jar classes placed in `java.*` packages. Classlib additions
 must follow TeaVM's internal `T...` class naming under `org.teavm.classlib...`.
