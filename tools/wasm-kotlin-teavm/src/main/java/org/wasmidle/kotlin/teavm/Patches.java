@@ -2189,6 +2189,20 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
                         .cast(objectType)
                         .returnValue());
         pe.when(pe.var(0, descriptorType).getField("klass", classType)
+                .isSame(pe.constant(
+                        org.jetbrains.kotlin.resolve.calls.inference.components.ClassicConstraintSystemUtilContext.class)
+                        .cast(classType)))
+                .thenDo(() -> pe.construct(
+                        "org.jetbrains.kotlin.resolve.calls.inference.components.ClassicConstraintSystemUtilContext",
+                        pe.getField("org.jetbrains.kotlin.types.checker.KotlinTypeRefiner$Default", "INSTANCE",
+                                refinerDefaultType)
+                                .cast(refinerType),
+                        pe.invoke("org.jetbrains.kotlin.builtins.DefaultBuiltIns", "getInstance",
+                                defaultBuiltInsType)
+                                .cast(builtInsType))
+                        .cast(objectType)
+                        .returnValue());
+        pe.when(pe.var(0, descriptorType).getField("klass", classType)
                 .isSame(pe.constant(org.jetbrains.kotlin.contracts.ContractDeserializerImpl.class)
                         .cast(classType)))
                 .thenDo(() -> pe.construct("org.jetbrains.kotlin.contracts.ContractDeserializerImpl",
