@@ -103,6 +103,12 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
             case "java.util.ResourceBundle":
                 transformResourceBundle(cls, context);
                 break;
+            case "org.jetbrains.kotlin.resolve.calls.checkers.AbstractReflectionApiCallChecker":
+                transformAbstractReflectionApiCallChecker(cls, context);
+                break;
+            case "org.jetbrains.kotlin.container.SingletonTypeComponentDescriptor":
+                transformSingletonTypeComponentDescriptor(cls, context);
+                break;
             case "java.util.stream.StreamSupport":
                 transformStreamSupport(cls, context);
                 break;
@@ -262,8 +268,29 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
             case "org.jetbrains.kotlin.diagnostics.Errors$Initializer":
                 transformErrorsInitializer(cls, context);
                 break;
-            case "org.jetbrains.kotlin.resolve.jvm.checkers.WarningAwareUpperBoundChecker":
-                transformWarningAwareUpperBoundChecker(cls, context);
+            case "org.jetbrains.kotlin.container.StorageComponentContainer":
+                transformStorageComponentContainer(cls, context);
+                break;
+            case "org.jetbrains.kotlin.resolve.jvm.checkers.JvmReflectionAPICallChecker":
+                transformJvmReflectionApiCallChecker(cls, context);
+                break;
+            case "org.jetbrains.kotlin.resolve.jvm.checkers.InterfaceDefaultMethodCallChecker":
+                transformInterfaceDefaultMethodCallChecker(cls, context);
+                break;
+            case "org.jetbrains.kotlin.resolve.jvm.checkers.JvmDefaultChecker":
+                transformJvmDefaultChecker(cls, context);
+                break;
+            case "org.jetbrains.kotlin.resolve.jvm.checkers.InlinePlatformCompatibilityChecker":
+                transformInlinePlatformCompatibilityChecker(cls, context);
+                break;
+            case "org.jetbrains.kotlin.resolve.jvm.checkers.JvmModuleAccessibilityChecker":
+                transformJvmModuleAccessibilityChecker(cls, context);
+                break;
+            case "org.jetbrains.kotlin.resolve.jvm.checkers.JvmModuleAccessibilityChecker$ClassifierUsage":
+                transformJvmModuleAccessibilityCheckerClassifierUsage(cls, context);
+                break;
+            case "org.jetbrains.kotlin.synthetic.JavaSyntheticScopes":
+                transformJavaSyntheticScopes(cls, context);
                 break;
             case "org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment$Companion": {
                 replaceWithNoOp(cls, context, "registerApplicationExtensionPointsAndExtensionsFrom", ValueType.VOID,
@@ -687,6 +714,7 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
                 .var(0, ValueType.object("java.lang.reflect.Constructor"))
                 .invokeVirtual("getParameterTypes", ValueType.arrayOf(ValueType.object("java.lang.Class")))
                 .returnValue();
+
     }
 
     private void transformReflectType(ClassHolder cls, ClassHolderTransformerContext context) {
@@ -729,6 +757,24 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
         ProgramEmitter.create(method, context.getHierarchy())
                 .constantNull(ValueType.object("java.util.ResourceBundle"))
                 .returnValue();
+    }
+
+    private void transformAbstractReflectionApiCallChecker(ClassHolder cls, ClassHolderTransformerContext context) {
+        var constructor = cls.getMethod(new MethodDescriptor("<init>",
+                ValueType.object("org.jetbrains.kotlin.builtins.ReflectionTypes"),
+                ValueType.object("org.jetbrains.kotlin.storage.StorageManager"),
+                ValueType.VOID));
+        if (constructor != null) {
+            prepareMethodBody(constructor);
+            var pe = ProgramEmitter.create(constructor, context.getHierarchy());
+            pe.var(0, ValueType.object("org.jetbrains.kotlin.resolve.calls.checkers.AbstractReflectionApiCallChecker"))
+                    .invokeSpecial(Object.class, "<init>");
+            pe.exit();
+        }
+        replaceWithNoOp(cls, context, "check", ValueType.VOID,
+                ValueType.object("org.jetbrains.kotlin.resolve.calls.model.ResolvedCall"),
+                ValueType.object("com.intellij.psi.PsiElement"),
+                ValueType.object("org.jetbrains.kotlin.resolve.calls.checkers.CallCheckerContext"));
     }
 
     private void transformConcurrentHashMap(ClassHolder cls, ClassHolderTransformerContext context) {
@@ -1342,27 +1388,363 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
                 ValueType.object("org.jetbrains.kotlin.diagnostics.rendering.DefaultErrorMessages$Extension"));
     }
 
-    private void transformWarningAwareUpperBoundChecker(ClassHolder cls, ClassHolderTransformerContext context) {
+    private void transformStorageComponentContainer(ClassHolder cls, ClassHolderTransformerContext context) {
+        var typeType = ValueType.object("java.lang.reflect.Type");
+        var contextType = ValueType.object("org.jetbrains.kotlin.container.ValueResolveContext");
+        var descriptorType = ValueType.object("org.jetbrains.kotlin.container.ValueDescriptor");
+        var containerType = ValueType.object("org.jetbrains.kotlin.container.StorageComponentContainer");
+        var storageType = ValueType.object("org.jetbrains.kotlin.container.ComponentStorage");
         var checkerType = ValueType.object("org.jetbrains.kotlin.types.checker.KotlinTypeChecker");
-        var typedConstructor = cls.getMethod(new MethodDescriptor("<init>", checkerType, ValueType.VOID));
-        if (typedConstructor != null) {
-            typedConstructor.setLevel(AccessLevel.PRIVATE);
-        }
+        var languageSettingsType = ValueType.object("org.jetbrains.kotlin.config.LanguageVersionSettingsImpl");
+        var storageManagerType = ValueType.object("org.jetbrains.kotlin.storage.StorageManager");
 
-        var checkerClass = "org.jetbrains.kotlin.resolve.jvm.checkers.WarningAwareUpperBoundChecker";
-        var checkerObjectType = ValueType.object(checkerClass);
-        var constructor = cls.getMethod(new MethodDescriptor("<init>", ValueType.VOID));
-        if (constructor == null) {
-            constructor = new MethodHolder(new MethodDescriptor("<init>", ValueType.VOID));
-            cls.addMethod(constructor);
+        var method = cls.getMethod(new MethodDescriptor("resolve", typeType, contextType, descriptorType));
+        if (method == null) {
+            return;
         }
-        constructor.setLevel(AccessLevel.PUBLIC);
-        prepareMethodBody(constructor);
-        var pe = ProgramEmitter.create(constructor, context.getHierarchy());
-        pe.var(0, checkerObjectType)
-                .invokeSpecial("<init>", ValueType.VOID,
-                        pe.getField("org.jetbrains.kotlin.types.checker.KotlinTypeChecker", "DEFAULT", checkerType));
-        pe.exit();
+        prepareMethodBody(method);
+        var pe = ProgramEmitter.create(method, context.getHierarchy());
+        var request = pe.var(1, typeType);
+        var resolveContext = pe.var(2, contextType);
+        pe.when(request.isSame(pe.constant(org.jetbrains.kotlin.types.checker.KotlinTypeChecker.class).cast(typeType)))
+                .thenDo(() -> pe.construct("org.jetbrains.kotlin.container.InstanceComponentDescriptor",
+                        pe.getField("org.jetbrains.kotlin.types.checker.KotlinTypeChecker", "DEFAULT", checkerType)
+                                .cast(ValueType.object("java.lang.Object")))
+                        .cast(descriptorType)
+                        .returnValue());
+        pe.when(request.isSame(
+                pe.constant(org.jetbrains.kotlin.config.LanguageVersionSettings.class).cast(typeType)))
+                .thenDo(() -> pe.construct("org.jetbrains.kotlin.container.InstanceComponentDescriptor",
+                        pe.getField("org.jetbrains.kotlin.config.LanguageVersionSettingsImpl", "DEFAULT",
+                                languageSettingsType)
+                                .cast(ValueType.object("java.lang.Object")))
+                        .cast(descriptorType)
+                        .returnValue());
+        pe.when(request.isSame(pe.constant(org.jetbrains.kotlin.storage.StorageManager.class).cast(typeType)))
+                .thenDo(() -> pe.construct("org.jetbrains.kotlin.container.InstanceComponentDescriptor",
+                        pe.getField("org.jetbrains.kotlin.storage.LockBasedStorageManager", "NO_LOCKS",
+                                storageManagerType)
+                                .cast(ValueType.object("java.lang.Object")))
+                        .cast(descriptorType)
+                        .returnValue());
+        pe.when(request.isSame(pe.constant(Iterable.class).cast(typeType)))
+                .thenDo(() -> pe.construct("org.jetbrains.kotlin.container.InstanceComponentDescriptor",
+                        pe.invoke("java.util.Collections", "emptyList", ValueType.object("java.util.List"))
+                                .cast(ValueType.object("java.lang.Object")))
+                        .cast(descriptorType)
+                        .returnValue());
+        var resolved = pe.var(0, containerType)
+                .getField("componentStorage", storageType)
+                .invokeVirtual("resolve", descriptorType, request, resolveContext);
+        pe.when(resolved.isNotNull()).thenDo(resolved::returnValue);
+        pe.var(0, containerType)
+                .invokeSpecial("resolveIterable", descriptorType, request, resolveContext)
+                .returnValue();
+    }
+
+    private void transformJvmReflectionApiCallChecker(ClassHolder cls, ClassHolderTransformerContext context) {
+        var checkerType = ValueType.object("org.jetbrains.kotlin.resolve.jvm.checkers.JvmReflectionAPICallChecker");
+        var reflectionTypesType = ValueType.object("org.jetbrains.kotlin.builtins.ReflectionTypes");
+        var storageManagerType = ValueType.object("org.jetbrains.kotlin.storage.StorageManager");
+        var constructor = cls.getMethod(new MethodDescriptor("<init>",
+                ValueType.object("org.jetbrains.kotlin.descriptors.ModuleDescriptor"),
+                reflectionTypesType,
+                storageManagerType,
+                ValueType.VOID));
+        if (constructor != null) {
+            prepareMethodBody(constructor);
+            var pe = ProgramEmitter.create(constructor, context.getHierarchy());
+            pe.var(0, checkerType)
+                    .invokeSpecial("org.jetbrains.kotlin.resolve.calls.checkers.AbstractReflectionApiCallChecker",
+                            "<init>", ValueType.VOID,
+                            pe.var(2, reflectionTypesType),
+                            pe.var(3, storageManagerType));
+            pe.exit();
+        }
+        replaceWithConstantBoolean(cls, context, "isWholeReflectionApiAvailable", false);
+        replaceWithNoOp(cls, context, "report", ValueType.VOID,
+                ValueType.object("com.intellij.psi.PsiElement"),
+                ValueType.object("org.jetbrains.kotlin.resolve.calls.checkers.CallCheckerContext"));
+    }
+
+    private void transformInterfaceDefaultMethodCallChecker(ClassHolder cls,
+            ClassHolderTransformerContext context) {
+        var checkerType = ValueType.object("org.jetbrains.kotlin.resolve.jvm.checkers.InterfaceDefaultMethodCallChecker");
+        var jvmTargetType = ValueType.object("org.jetbrains.kotlin.config.JvmTarget");
+        var constructor = cls.getMethod(new MethodDescriptor("<init>", jvmTargetType,
+                ValueType.object("com.intellij.openapi.project.Project"), ValueType.VOID));
+        if (constructor != null) {
+            prepareMethodBody(constructor);
+            var pe = ProgramEmitter.create(constructor, context.getHierarchy());
+            pe.var(0, checkerType).invokeSpecial(Object.class, "<init>");
+            pe.var(0, checkerType).setField("jvmTarget", pe.var(1, jvmTargetType));
+            pe.var(0, checkerType).setField("ideService",
+                    pe.constantNull(ValueType.object("org.jetbrains.kotlin.resolve.LanguageVersionSettingsProvider")));
+            pe.exit();
+        }
+        replaceWithNoOp(cls, context, "check", ValueType.VOID,
+                ValueType.object("org.jetbrains.kotlin.resolve.calls.model.ResolvedCall"),
+                ValueType.object("com.intellij.psi.PsiElement"),
+                ValueType.object("org.jetbrains.kotlin.resolve.calls.checkers.CallCheckerContext"));
+    }
+
+    private void transformJvmDefaultChecker(ClassHolder cls, ClassHolderTransformerContext context) {
+        var checkerType = ValueType.object("org.jetbrains.kotlin.resolve.jvm.checkers.JvmDefaultChecker");
+        var constructor = cls.getMethod(new MethodDescriptor("<init>",
+                ValueType.object("com.intellij.openapi.project.Project"), ValueType.VOID));
+        if (constructor != null) {
+            prepareMethodBody(constructor);
+            var pe = ProgramEmitter.create(constructor, context.getHierarchy());
+            pe.var(0, checkerType).invokeSpecial(Object.class, "<init>");
+            pe.var(0, checkerType).setField("ideService",
+                    pe.constantNull(ValueType.object("org.jetbrains.kotlin.resolve.LanguageVersionSettingsProvider")));
+            pe.exit();
+        }
+        replaceWithNoOp(cls, context, "check", ValueType.VOID,
+                ValueType.object("org.jetbrains.kotlin.psi.KtDeclaration"),
+                ValueType.object("org.jetbrains.kotlin.descriptors.DeclarationDescriptor"),
+                ValueType.object("org.jetbrains.kotlin.resolve.checkers.DeclarationCheckerContext"));
+    }
+
+    private void transformInlinePlatformCompatibilityChecker(ClassHolder cls,
+            ClassHolderTransformerContext context) {
+        var checkerType = ValueType.object("org.jetbrains.kotlin.resolve.jvm.checkers.InlinePlatformCompatibilityChecker");
+        var jvmTargetType = ValueType.object("org.jetbrains.kotlin.config.JvmTarget");
+        var constructor = cls.getMethod(new MethodDescriptor("<init>", jvmTargetType, ValueType.VOID));
+        if (constructor != null) {
+            prepareMethodBody(constructor);
+            var pe = ProgramEmitter.create(constructor, context.getHierarchy());
+            pe.var(0, checkerType).invokeSpecial(Object.class, "<init>");
+            pe.var(0, checkerType).setField("jvmTarget", pe.var(1, jvmTargetType));
+            pe.exit();
+        }
+        replaceWithNoOp(cls, context, "check", ValueType.VOID,
+                ValueType.object("org.jetbrains.kotlin.resolve.calls.model.ResolvedCall"),
+                ValueType.object("com.intellij.psi.PsiElement"),
+                ValueType.object("org.jetbrains.kotlin.resolve.calls.checkers.CallCheckerContext"));
+    }
+
+    private void transformJvmModuleAccessibilityChecker(ClassHolder cls, ClassHolderTransformerContext context) {
+        var checkerType = ValueType.object("org.jetbrains.kotlin.resolve.jvm.checkers.JvmModuleAccessibilityChecker");
+        var constructor = cls.getMethod(new MethodDescriptor("<init>",
+                ValueType.object("com.intellij.openapi.project.Project"), ValueType.VOID));
+        if (constructor != null) {
+            prepareMethodBody(constructor);
+            var pe = ProgramEmitter.create(constructor, context.getHierarchy());
+            pe.var(0, checkerType).invokeSpecial(Object.class, "<init>");
+            pe.var(0, checkerType).setField("moduleResolver",
+                    pe.constantNull(ValueType.object("org.jetbrains.kotlin.resolve.jvm.modules.JavaModuleResolver")));
+            pe.exit();
+        }
+        replaceWithNoOp(cls, context, "check", ValueType.VOID,
+                ValueType.object("org.jetbrains.kotlin.resolve.calls.model.ResolvedCall"),
+                ValueType.object("com.intellij.psi.PsiElement"),
+                ValueType.object("org.jetbrains.kotlin.resolve.calls.checkers.CallCheckerContext"));
+    }
+
+    private void transformJvmModuleAccessibilityCheckerClassifierUsage(ClassHolder cls,
+            ClassHolderTransformerContext context) {
+        var checkerType = ValueType.object(
+                "org.jetbrains.kotlin.resolve.jvm.checkers.JvmModuleAccessibilityChecker$ClassifierUsage");
+        var ownerType = ValueType.object("org.jetbrains.kotlin.resolve.jvm.checkers.JvmModuleAccessibilityChecker");
+        var constructor = cls.getMethod(new MethodDescriptor("<init>", ownerType, ValueType.VOID));
+        if (constructor != null) {
+            prepareMethodBody(constructor);
+            var pe = ProgramEmitter.create(constructor, context.getHierarchy());
+            pe.var(0, checkerType).invokeSpecial(Object.class, "<init>");
+            pe.var(0, checkerType).setField("this$0", pe.var(1, ownerType));
+            pe.exit();
+        }
+        replaceWithNoOp(cls, context, "check", ValueType.VOID,
+                ValueType.object("org.jetbrains.kotlin.descriptors.ClassifierDescriptor"),
+                ValueType.object("com.intellij.psi.PsiElement"),
+                ValueType.object("org.jetbrains.kotlin.resolve.checkers.ClassifierUsageCheckerContext"));
+    }
+
+    private void transformJavaSyntheticScopes(ClassHolder cls, ClassHolderTransformerContext context) {
+        var projectType = ValueType.object("com.intellij.openapi.project.Project");
+        var moduleType = ValueType.object("org.jetbrains.kotlin.descriptors.ModuleDescriptor");
+        var storageManagerType = ValueType.object("org.jetbrains.kotlin.storage.StorageManager");
+        var lookupTrackerType = ValueType.object("org.jetbrains.kotlin.incremental.components.LookupTracker");
+        var languageSettingsType = ValueType.object("org.jetbrains.kotlin.config.LanguageVersionSettings");
+        var samResolverType = ValueType.object("org.jetbrains.kotlin.resolve.sam.SamConversionResolver");
+        var samOracleType = ValueType.object("org.jetbrains.kotlin.resolve.sam.SamConversionOracle");
+        var deprecationResolverType = ValueType.object("org.jetbrains.kotlin.resolve.deprecation.DeprecationResolver");
+        var typeRefinerType = ValueType.object("org.jetbrains.kotlin.types.checker.KotlinTypeRefiner");
+        var constructor = cls.getMethod(new MethodDescriptor("<init>",
+                projectType, moduleType, storageManagerType, lookupTrackerType, languageSettingsType,
+                samResolverType, samOracleType, deprecationResolverType, typeRefinerType, ValueType.VOID));
+        if (constructor != null) {
+            prepareMethodBody(constructor);
+            var pe = ProgramEmitter.create(constructor, context.getHierarchy());
+            pe.var(0, ValueType.object("org.jetbrains.kotlin.synthetic.JavaSyntheticScopes"))
+                    .invokeSpecial(Object.class, "<init>");
+            pe.exit();
+        }
+        var collectionType = ValueType.object("java.util.Collection");
+        var getScopes = cls.getMethod(new MethodDescriptor("getScopes", collectionType));
+        if (getScopes != null) {
+            prepareMethodBody(getScopes);
+            ProgramEmitter.create(getScopes, context.getHierarchy())
+                    .invoke("java.util.Collections", "emptyList", ValueType.object("java.util.List"))
+                    .cast(collectionType)
+                    .returnValue();
+        }
+        var getScopesWithSamAdapters = cls.getMethod(
+                new MethodDescriptor("getScopesWithForceEnabledSamAdapters", collectionType));
+        if (getScopesWithSamAdapters != null) {
+            prepareMethodBody(getScopesWithSamAdapters);
+            ProgramEmitter.create(getScopesWithSamAdapters, context.getHierarchy())
+                    .invoke("java.util.Collections", "emptyList", ValueType.object("java.util.List"))
+                    .cast(collectionType)
+                    .returnValue();
+        }
+    }
+
+    private void transformSingletonTypeComponentDescriptor(ClassHolder cls, ClassHolderTransformerContext context) {
+        var contextType = ValueType.object("org.jetbrains.kotlin.container.ValueResolveContext");
+        var classType = ValueType.object("java.lang.Class");
+        var objectType = ValueType.object("java.lang.Object");
+        var descriptorType = ValueType.object("org.jetbrains.kotlin.container.SingletonTypeComponentDescriptor");
+        var checkerType = ValueType.object("org.jetbrains.kotlin.types.checker.KotlinTypeChecker");
+        var languageSettingsType = ValueType.object("org.jetbrains.kotlin.config.LanguageVersionSettingsImpl");
+        var moduleType = ValueType.object("org.jetbrains.kotlin.descriptors.ModuleDescriptor");
+        var reflectionTypesType = ValueType.object("org.jetbrains.kotlin.builtins.ReflectionTypes");
+        var storageManagerType = ValueType.object("org.jetbrains.kotlin.storage.StorageManager");
+        var projectType = ValueType.object("com.intellij.openapi.project.Project");
+        var lookupTrackerType = ValueType.object("org.jetbrains.kotlin.incremental.components.LookupTracker");
+        var languageSettingsInterfaceType = ValueType.object("org.jetbrains.kotlin.config.LanguageVersionSettings");
+        var samResolverType = ValueType.object("org.jetbrains.kotlin.resolve.sam.SamConversionResolver");
+        var samOracleType = ValueType.object("org.jetbrains.kotlin.resolve.sam.SamConversionOracle");
+        var deprecationResolverType = ValueType.object("org.jetbrains.kotlin.resolve.deprecation.DeprecationResolver");
+        var typeRefinerType = ValueType.object("org.jetbrains.kotlin.types.checker.KotlinTypeRefiner");
+        var iterableType = ValueType.object("java.lang.Iterable");
+        var jvmTargetType = ValueType.object("org.jetbrains.kotlin.config.JvmTarget");
+
+        var method = cls.getMethod(new MethodDescriptor("createInstance", contextType, objectType));
+        if (method == null) {
+            return;
+        }
+        prepareMethodBody(method);
+        var pe = ProgramEmitter.create(method, context.getHierarchy());
+        pe.when(pe.var(0, descriptorType).getField("klass", classType)
+                .isSame(pe.constant(org.jetbrains.kotlin.resolve.UpperBoundChecker.class).cast(classType)))
+                .thenDo(() -> pe.construct("org.jetbrains.kotlin.resolve.UpperBoundChecker",
+                        pe.getField("org.jetbrains.kotlin.types.checker.KotlinTypeChecker", "DEFAULT", checkerType))
+                        .cast(objectType)
+                        .returnValue());
+        pe.when(pe.var(0, descriptorType).getField("klass", classType)
+                .isSame(pe.constant(
+                        org.jetbrains.kotlin.resolve.jvm.checkers.WarningAwareUpperBoundChecker.class)
+                        .cast(classType)))
+                .thenDo(() -> pe.construct("org.jetbrains.kotlin.resolve.jvm.checkers.WarningAwareUpperBoundChecker",
+                        pe.getField("org.jetbrains.kotlin.types.checker.KotlinTypeChecker", "DEFAULT", checkerType))
+                        .cast(objectType)
+                        .returnValue());
+        pe.when(pe.var(0, descriptorType).getField("klass", classType)
+                .isSame(pe.constant(
+                        org.jetbrains.kotlin.resolve.jvm.checkers.JavaNullabilityChecker.class)
+                        .cast(classType)))
+                .thenDo(() -> pe.construct("org.jetbrains.kotlin.resolve.jvm.checkers.JavaNullabilityChecker",
+                        pe.construct("org.jetbrains.kotlin.resolve.UpperBoundChecker",
+                                pe.getField("org.jetbrains.kotlin.types.checker.KotlinTypeChecker", "DEFAULT",
+                                        checkerType)))
+                        .cast(objectType)
+                        .returnValue());
+        pe.when(pe.var(0, descriptorType).getField("klass", classType)
+                .isSame(pe.constant(
+                        org.jetbrains.kotlin.resolve.jvm.checkers.JvmStaticChecker.class)
+                        .cast(classType)))
+                .thenDo(() -> pe.construct("org.jetbrains.kotlin.resolve.jvm.checkers.JvmStaticChecker",
+                        pe.getField("org.jetbrains.kotlin.config.LanguageVersionSettingsImpl", "DEFAULT",
+                                languageSettingsType)
+                                .cast(ValueType.object("org.jetbrains.kotlin.config.LanguageVersionSettings")))
+                        .cast(objectType)
+                        .returnValue());
+        pe.when(pe.var(0, descriptorType).getField("klass", classType)
+                .isSame(pe.constant(
+                        org.jetbrains.kotlin.resolve.jvm.checkers.JvmReflectionAPICallChecker.class)
+                        .cast(classType)))
+                .thenDo(() -> pe.construct("org.jetbrains.kotlin.resolve.jvm.checkers.JvmReflectionAPICallChecker",
+                        pe.constantNull(moduleType),
+                        pe.constantNull(reflectionTypesType),
+                        pe.constantNull(storageManagerType))
+                        .cast(objectType)
+                        .returnValue());
+        pe.when(pe.var(0, descriptorType).getField("klass", classType)
+                .isSame(pe.constant(org.jetbrains.kotlin.synthetic.JavaSyntheticScopes.class).cast(classType)))
+                .thenDo(() -> pe.construct("org.jetbrains.kotlin.synthetic.JavaSyntheticScopes",
+                        pe.constantNull(projectType),
+                        pe.constantNull(moduleType),
+                        pe.constantNull(storageManagerType),
+                        pe.constantNull(lookupTrackerType),
+                        pe.getField("org.jetbrains.kotlin.config.LanguageVersionSettingsImpl", "DEFAULT",
+                                languageSettingsType)
+                                .cast(languageSettingsInterfaceType),
+                        pe.constantNull(samResolverType),
+                        pe.constantNull(samOracleType),
+                        pe.constantNull(deprecationResolverType),
+                        pe.constantNull(typeRefinerType))
+                        .cast(objectType)
+                        .returnValue());
+        pe.when(pe.var(0, descriptorType).getField("klass", classType)
+                .isSame(pe.constant(org.jetbrains.kotlin.resolve.sam.SamConversionResolverImpl.class).cast(classType)))
+                .thenDo(() -> pe.construct("org.jetbrains.kotlin.resolve.sam.SamConversionResolverImpl",
+                        pe.getField("org.jetbrains.kotlin.storage.LockBasedStorageManager", "NO_LOCKS",
+                                storageManagerType),
+                        pe.invoke("java.util.Collections", "emptyList", ValueType.object("java.util.List"))
+                                .cast(iterableType))
+                        .cast(objectType)
+                        .returnValue());
+        pe.when(pe.var(0, descriptorType).getField("klass", classType)
+                .isSame(pe.constant(
+                        org.jetbrains.kotlin.resolve.jvm.checkers.InterfaceDefaultMethodCallChecker.class)
+                        .cast(classType)))
+                .thenDo(() -> pe.construct(
+                        "org.jetbrains.kotlin.resolve.jvm.checkers.InterfaceDefaultMethodCallChecker",
+                        pe.getField("org.jetbrains.kotlin.config.JvmTarget", "DEFAULT", jvmTargetType),
+                        pe.constantNull(projectType))
+                        .cast(objectType)
+                        .returnValue());
+        pe.when(pe.var(0, descriptorType).getField("klass", classType)
+                .isSame(pe.constant(org.jetbrains.kotlin.resolve.jvm.checkers.JvmDefaultChecker.class).cast(classType)))
+                .thenDo(() -> pe.construct("org.jetbrains.kotlin.resolve.jvm.checkers.JvmDefaultChecker",
+                        pe.constantNull(projectType))
+                        .cast(objectType)
+                        .returnValue());
+        pe.when(pe.var(0, descriptorType).getField("klass", classType)
+                .isSame(pe.constant(
+                        org.jetbrains.kotlin.resolve.jvm.checkers.InlinePlatformCompatibilityChecker.class)
+                        .cast(classType)))
+                .thenDo(() -> pe.construct(
+                        "org.jetbrains.kotlin.resolve.jvm.checkers.InlinePlatformCompatibilityChecker",
+                        pe.getField("org.jetbrains.kotlin.config.JvmTarget", "DEFAULT", jvmTargetType))
+                        .cast(objectType)
+                        .returnValue());
+        pe.when(pe.var(0, descriptorType).getField("klass", classType)
+                .isSame(pe.constant(
+                        org.jetbrains.kotlin.resolve.jvm.checkers.JvmModuleAccessibilityChecker.class)
+                        .cast(classType)))
+                .thenDo(() -> pe.construct(
+                        "org.jetbrains.kotlin.resolve.jvm.checkers.JvmModuleAccessibilityChecker",
+                        pe.constantNull(projectType))
+                        .cast(objectType)
+                        .returnValue());
+        pe.when(pe.var(0, descriptorType).getField("klass", classType)
+                .isSame(pe.constant(
+                        org.jetbrains.kotlin.resolve.jvm.checkers.JvmModuleAccessibilityChecker.ClassifierUsage.class)
+                        .cast(classType)))
+                .thenDo(() -> pe.construct(
+                        "org.jetbrains.kotlin.resolve.jvm.checkers.JvmModuleAccessibilityChecker$ClassifierUsage",
+                        pe.construct("org.jetbrains.kotlin.resolve.jvm.checkers.JvmModuleAccessibilityChecker",
+                                pe.constantNull(projectType)))
+                        .cast(objectType)
+                        .returnValue());
+        pe.var(0, descriptorType)
+                .invokeSpecial("createInstanceOf", objectType,
+                        pe.var(0, descriptorType).getField("klass", classType),
+                        pe.var(1, contextType))
+                .returnValue();
     }
 
     private void transformCompileEnvironmentUtil(ClassHolder cls, ClassHolderTransformerContext context) {
