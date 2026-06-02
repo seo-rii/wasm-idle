@@ -1420,6 +1420,8 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
         var storageManagerType = ValueType.object("org.jetbrains.kotlin.storage.StorageManager");
         var refinerDefaultType = ValueType.object("org.jetbrains.kotlin.types.checker.KotlinTypeRefiner$Default");
         var preparatorDefaultType = ValueType.object("org.jetbrains.kotlin.types.checker.KotlinTypePreparator$Default");
+        var javaDeprecationSettingsType = ValueType.object(
+                "org.jetbrains.kotlin.load.java.components.JavaDeprecationSettings");
 
         var method = cls.getMethod(new MethodDescriptor("resolve", typeType, contextType, descriptorType));
         if (method == null) {
@@ -1463,6 +1465,14 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
                 .thenDo(() -> pe.construct("org.jetbrains.kotlin.container.InstanceComponentDescriptor",
                         pe.getField("org.jetbrains.kotlin.types.checker.KotlinTypePreparator$Default", "INSTANCE",
                                 preparatorDefaultType)
+                                .cast(ValueType.object("java.lang.Object")))
+                        .cast(descriptorType)
+                        .returnValue());
+        pe.when(request.isSame(pe.constant(org.jetbrains.kotlin.resolve.deprecation.DeprecationSettings.class)
+                .cast(typeType)))
+                .thenDo(() -> pe.construct("org.jetbrains.kotlin.container.InstanceComponentDescriptor",
+                        pe.getField("org.jetbrains.kotlin.load.java.components.JavaDeprecationSettings", "INSTANCE",
+                                javaDeprecationSettingsType)
                                 .cast(ValueType.object("java.lang.Object")))
                         .cast(descriptorType)
                         .returnValue());
@@ -1814,6 +1824,9 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
         var preparatorType = ValueType.object("org.jetbrains.kotlin.types.checker.KotlinTypePreparator");
         var refinerDefaultType = ValueType.object("org.jetbrains.kotlin.types.checker.KotlinTypeRefiner$Default");
         var preparatorDefaultType = ValueType.object("org.jetbrains.kotlin.types.checker.KotlinTypePreparator$Default");
+        var deprecationSettingsType = ValueType.object("org.jetbrains.kotlin.resolve.deprecation.DeprecationSettings");
+        var javaDeprecationSettingsType = ValueType.object(
+                "org.jetbrains.kotlin.load.java.components.JavaDeprecationSettings");
 
         var method = cls.getMethod(new MethodDescriptor("createInstance", contextType, objectType));
         if (method == null) {
@@ -2029,6 +2042,25 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
                         pe.getField("org.jetbrains.kotlin.types.checker.KotlinTypePreparator$Default", "INSTANCE",
                                 preparatorDefaultType)
                                 .cast(preparatorType))
+                        .cast(objectType)
+                        .returnValue());
+        pe.when(pe.var(0, descriptorType).getField("klass", classType)
+                .isSame(pe.constant(org.jetbrains.kotlin.resolve.SupertypeLoopCheckerImpl.class).cast(classType)))
+                .thenDo(() -> pe.construct("org.jetbrains.kotlin.resolve.SupertypeLoopCheckerImpl")
+                        .cast(objectType)
+                        .returnValue());
+        pe.when(pe.var(0, descriptorType).getField("klass", classType)
+                .isSame(pe.constant(org.jetbrains.kotlin.resolve.deprecation.DeprecationResolver.class)
+                        .cast(classType)))
+                .thenDo(() -> pe.construct("org.jetbrains.kotlin.resolve.deprecation.DeprecationResolver",
+                        pe.getField("org.jetbrains.kotlin.storage.LockBasedStorageManager", "NO_LOCKS",
+                                storageManagerType),
+                        pe.getField("org.jetbrains.kotlin.config.LanguageVersionSettingsImpl", "DEFAULT",
+                                languageSettingsType)
+                                .cast(languageSettingsInterfaceType),
+                        pe.getField("org.jetbrains.kotlin.load.java.components.JavaDeprecationSettings", "INSTANCE",
+                                javaDeprecationSettingsType)
+                                .cast(deprecationSettingsType))
                         .cast(objectType)
                         .returnValue());
         pe.var(0, descriptorType)
