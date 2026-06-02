@@ -1841,6 +1841,12 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
                                 .cast(languageSettingsInterfaceType))
                         .cast(objectType)
                         .returnValue());
+        pe.when(pe.var(0, descriptorType).getField("klass", classType)
+                .isSame(pe.constant(org.jetbrains.kotlin.resolve.jvm.JvmAdditionalClassPartsProvider.class)
+                        .cast(classType)))
+                .thenDo(() -> pe.construct("org.jetbrains.kotlin.resolve.jvm.JvmAdditionalClassPartsProvider")
+                        .cast(objectType)
+                        .returnValue());
         pe.var(0, descriptorType)
                 .invokeSpecial("createInstanceOf", objectType,
                         pe.var(0, descriptorType).getField("klass", classType),
