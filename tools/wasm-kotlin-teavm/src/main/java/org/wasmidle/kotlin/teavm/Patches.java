@@ -259,6 +259,9 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
             case "org.jetbrains.kotlin.cli.common.CLICompiler":
                 transformCliCompiler(cls, context);
                 break;
+            case "org.jetbrains.kotlin.diagnostics.Errors$Initializer":
+                transformErrorsInitializer(cls, context);
+                break;
             case "org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment$Companion": {
                 replaceWithNoOp(cls, context, "registerApplicationExtensionPointsAndExtensionsFrom", ValueType.VOID,
                         ValueType.object("org.jetbrains.kotlin.config.CompilerConfiguration"),
@@ -1326,6 +1329,14 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
         var pe = ProgramEmitter.create(method, context.getHierarchy());
         pe.getField("org.jetbrains.kotlin.cli.common.ExitCode", "OK",
                 ValueType.object("org.jetbrains.kotlin.cli.common.ExitCode")).returnValue();
+    }
+
+    private void transformErrorsInitializer(ClassHolder cls, ClassHolderTransformerContext context) {
+        replaceWithNoOp(cls, context, "initializeFactoryNames", ValueType.VOID,
+                ValueType.object("java.lang.Class"));
+        replaceWithNoOp(cls, context, "initializeFactoryNamesAndDefaultErrorMessages", ValueType.VOID,
+                ValueType.object("java.lang.Class"),
+                ValueType.object("org.jetbrains.kotlin.diagnostics.rendering.DefaultErrorMessages$Extension"));
     }
 
     private void transformCompileEnvironmentUtil(ClassHolder cls, ClassHolderTransformerContext context) {
