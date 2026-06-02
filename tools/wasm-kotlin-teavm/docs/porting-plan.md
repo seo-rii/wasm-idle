@@ -74,6 +74,14 @@ Current status:
   still being determined.
 - Fast analysis now fails without the previous `java.io.File.toPath()` host JDK blocker.
 
+### ARCH-005: Remove statically reachable javac and parallel backend code
+
+The probe sets `USE_JAVAC=false`, `COMPILE_JAVA=false`, and `PARALLEL_BACKEND_THREADS=1`, which are
+the right runtime options for a browser-only Kotlin compile path. TeaVM fast analysis still reports
+`org.jetbrains.kotlin.javac.JavacWrapper`, `java.util.concurrent.Executors`, and
+`CompletableFuture`, so these branches need bytecode transformers or class stubs rather than only
+configuration values.
+
 ### TEST-000: Keep the build probe reproducible
 
 Use `scripts/probe-wasm-build.mjs` for long-running Wasm build experiments. The probe records exit

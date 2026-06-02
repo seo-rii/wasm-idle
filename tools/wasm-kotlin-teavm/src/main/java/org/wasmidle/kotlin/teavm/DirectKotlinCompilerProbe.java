@@ -60,11 +60,14 @@ public final class DirectKotlinCompilerProbe {
         configuration.put(CommonConfigurationKeys.LANGUAGE_VERSION_SETTINGS,
                 LanguageVersionSettingsImpl.DEFAULT);
         configuration.put(CommonConfigurationKeys.MESSAGE_COLLECTOR_KEY, collector);
+        configuration.put(CommonConfigurationKeys.PARALLEL_BACKEND_THREADS, 1);
         configuration.put(CLIConfigurationKeys.MESSAGE_COLLECTOR_KEY, collector);
         configuration.put(JVMConfigurationKeys.OUTPUT_DIRECTORY, new File(outputDir));
         configuration.put(JVMConfigurationKeys.JVM_TARGET, JvmTarget.JVM_1_8);
         configuration.put(JVMConfigurationKeys.NO_REFLECT, Boolean.TRUE);
         configuration.put(JVMConfigurationKeys.INCLUDE_RUNTIME, Boolean.FALSE);
+        configuration.put(JVMConfigurationKeys.USE_JAVAC, Boolean.FALSE);
+        configuration.put(JVMConfigurationKeys.COMPILE_JAVA, Boolean.FALSE);
         configuration.add(CLIConfigurationKeys.CONTENT_ROOTS,
                 new KotlinSourceRoot(sourcePath, false, null));
 
