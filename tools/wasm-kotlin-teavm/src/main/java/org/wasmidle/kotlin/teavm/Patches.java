@@ -289,6 +289,12 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
             case "org.jetbrains.kotlin.resolve.jvm.checkers.JvmModuleAccessibilityChecker$ClassifierUsage":
                 transformJvmModuleAccessibilityCheckerClassifierUsage(cls, context);
                 break;
+            case "org.jetbrains.kotlin.resolve.jvm.JvmTypeSpecificityComparator":
+                transformJvmTypeSpecificityComparator(cls, context);
+                break;
+            case "org.jetbrains.kotlin.resolve.jvm.JvmTypeSpecificityComparatorDelegate":
+                transformJvmTypeSpecificityComparatorDelegate(cls, context);
+                break;
             case "org.jetbrains.kotlin.synthetic.JavaSyntheticScopes":
                 transformJavaSyntheticScopes(cls, context);
                 break;
@@ -1561,6 +1567,50 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
                 ValueType.object("org.jetbrains.kotlin.resolve.checkers.ClassifierUsageCheckerContext"));
     }
 
+    private void transformJvmTypeSpecificityComparator(ClassHolder cls, ClassHolderTransformerContext context) {
+        var comparatorType = ValueType.object("org.jetbrains.kotlin.resolve.jvm.JvmTypeSpecificityComparator");
+        var contextType = ValueType.object("org.jetbrains.kotlin.types.model.TypeSystemInferenceExtensionContext");
+        var languageSettingsType = ValueType.object("org.jetbrains.kotlin.config.LanguageVersionSettings");
+        var constructor = cls.getMethod(new MethodDescriptor("<init>", contextType, languageSettingsType,
+                ValueType.VOID));
+        if (constructor != null) {
+            prepareMethodBody(constructor);
+            var pe = ProgramEmitter.create(constructor, context.getHierarchy());
+            pe.var(0, comparatorType).invokeSpecial(Object.class, "<init>");
+            pe.var(0, comparatorType).setField("context", pe.var(1, contextType));
+            pe.var(0, comparatorType).setField("languageVersionSettings", pe.var(2, languageSettingsType));
+            pe.exit();
+        }
+        replaceWithConstantBoolean(cls, context, "isDefinitelyLessSpecific", false,
+                ValueType.object("org.jetbrains.kotlin.types.model.KotlinTypeMarker"),
+                ValueType.object("org.jetbrains.kotlin.types.model.KotlinTypeMarker"));
+    }
+
+    private void transformJvmTypeSpecificityComparatorDelegate(ClassHolder cls,
+            ClassHolderTransformerContext context) {
+        var delegateType = ValueType.object("org.jetbrains.kotlin.resolve.jvm.JvmTypeSpecificityComparatorDelegate");
+        var contextDelegateType = ValueType.object(
+                "org.jetbrains.kotlin.types.model.TypeSystemInferenceExtensionContextDelegate");
+        var contextType = ValueType.object("org.jetbrains.kotlin.types.model.TypeSystemInferenceExtensionContext");
+        var languageSettingsType = ValueType.object("org.jetbrains.kotlin.config.LanguageVersionSettings");
+        var constructor = cls.getMethod(new MethodDescriptor("<init>", contextDelegateType, languageSettingsType,
+                ValueType.VOID));
+        if (constructor != null) {
+            prepareMethodBody(constructor);
+            var pe = ProgramEmitter.create(constructor, context.getHierarchy());
+            pe.var(0, delegateType)
+                    .invokeSpecial("org.jetbrains.kotlin.resolve.jvm.JvmTypeSpecificityComparator", "<init>",
+                            ValueType.VOID,
+                            pe.var(1, contextDelegateType).cast(contextType),
+                            pe.var(2, languageSettingsType));
+            pe.var(0, delegateType).setField("context", pe.var(1, contextDelegateType));
+            pe.exit();
+        }
+        replaceWithConstantBoolean(cls, context, "isDefinitelyLessSpecific", false,
+                ValueType.object("org.jetbrains.kotlin.types.model.KotlinTypeMarker"),
+                ValueType.object("org.jetbrains.kotlin.types.model.KotlinTypeMarker"));
+    }
+
     private void transformJavaSyntheticScopes(ClassHolder cls, ClassHolderTransformerContext context) {
         var projectType = ValueType.object("com.intellij.openapi.project.Project");
         var moduleType = ValueType.object("org.jetbrains.kotlin.descriptors.ModuleDescriptor");
@@ -1620,6 +1670,8 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
         var typeRefinerType = ValueType.object("org.jetbrains.kotlin.types.checker.KotlinTypeRefiner");
         var iterableType = ValueType.object("java.lang.Iterable");
         var jvmTargetType = ValueType.object("org.jetbrains.kotlin.config.JvmTarget");
+        var contextDelegateType = ValueType.object(
+                "org.jetbrains.kotlin.types.model.TypeSystemInferenceExtensionContextDelegate");
 
         var method = cls.getMethod(new MethodDescriptor("createInstance", contextType, objectType));
         if (method == null) {
@@ -1738,6 +1790,16 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
                         "org.jetbrains.kotlin.resolve.jvm.checkers.JvmModuleAccessibilityChecker$ClassifierUsage",
                         pe.construct("org.jetbrains.kotlin.resolve.jvm.checkers.JvmModuleAccessibilityChecker",
                                 pe.constantNull(projectType)))
+                        .cast(objectType)
+                        .returnValue());
+        pe.when(pe.var(0, descriptorType).getField("klass", classType)
+                .isSame(pe.constant(org.jetbrains.kotlin.resolve.jvm.JvmTypeSpecificityComparatorDelegate.class)
+                        .cast(classType)))
+                .thenDo(() -> pe.construct("org.jetbrains.kotlin.resolve.jvm.JvmTypeSpecificityComparatorDelegate",
+                        pe.constantNull(contextDelegateType),
+                        pe.getField("org.jetbrains.kotlin.config.LanguageVersionSettingsImpl", "DEFAULT",
+                                languageSettingsType)
+                                .cast(languageSettingsInterfaceType))
                         .cast(objectType)
                         .returnValue());
         pe.var(0, descriptorType)
