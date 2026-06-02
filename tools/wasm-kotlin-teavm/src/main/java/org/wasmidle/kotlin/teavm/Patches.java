@@ -290,6 +290,21 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
             case "org.jetbrains.kotlin.KotlinElementTypeProvider$Companion":
                 transformKotlinElementTypeProviderCompanion(cls, context);
                 break;
+            case "org.jetbrains.kotlin.config.KotlinCompilerVersion": {
+                var owner = "org.jetbrains.kotlin.config.KotlinCompilerVersion";
+                var clinit = getOrCreateStaticMethod(cls, "<clinit>", ValueType.VOID);
+                var pe = ProgramEmitter.create(clinit, context.getHierarchy());
+                pe.setField(owner, "VERSION", pe.constant("2.3.21"));
+                pe.setField(owner, "IS_PRE_RELEASE", pe.constant(0));
+                pe.exit();
+
+                var getVersion = getOrCreateStaticMethod(cls, "getVersion", ValueType.object("java.lang.String"));
+                ProgramEmitter.create(getVersion, context.getHierarchy())
+                        .constant("2.3.21")
+                        .returnValue();
+                replaceWithConstantBoolean(cls, context, "isPreRelease", false);
+                break;
+            }
             case "org.jetbrains.kotlin.cli.jvm.compiler.CompileEnvironmentUtil":
                 transformCompileEnvironmentUtil(cls, context);
                 break;
