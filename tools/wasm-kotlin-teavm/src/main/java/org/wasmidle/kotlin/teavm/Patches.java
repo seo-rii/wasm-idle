@@ -1430,6 +1430,8 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
         var preparatorDefaultType = ValueType.object("org.jetbrains.kotlin.types.checker.KotlinTypePreparator$Default");
         var javaDeprecationSettingsType = ValueType.object(
                 "org.jetbrains.kotlin.load.java.components.JavaDeprecationSettings");
+        var deserializationConfigDefaultType = ValueType.object(
+                "org.jetbrains.kotlin.serialization.deserialization.DeserializationConfiguration$Default");
 
         var method = cls.getMethod(new MethodDescriptor("resolve", typeType, contextType, descriptorType));
         if (method == null) {
@@ -1481,6 +1483,14 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
                 .thenDo(() -> pe.construct("org.jetbrains.kotlin.container.InstanceComponentDescriptor",
                         pe.getField("org.jetbrains.kotlin.load.java.components.JavaDeprecationSettings", "INSTANCE",
                                 javaDeprecationSettingsType)
+                                .cast(ValueType.object("java.lang.Object")))
+                        .cast(descriptorType)
+                        .returnValue());
+        pe.when(request.isSame(pe.constant(
+                org.jetbrains.kotlin.serialization.deserialization.DeserializationConfiguration.class).cast(typeType)))
+                .thenDo(() -> pe.construct("org.jetbrains.kotlin.container.InstanceComponentDescriptor",
+                        pe.getField("org.jetbrains.kotlin.serialization.deserialization.DeserializationConfiguration$Default",
+                                "INSTANCE", deserializationConfigDefaultType)
                                 .cast(ValueType.object("java.lang.Object")))
                         .cast(descriptorType)
                         .returnValue());
