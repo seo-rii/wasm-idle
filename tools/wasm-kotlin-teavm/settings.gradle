@@ -1,0 +1,17 @@
+pluginManagement {
+    repositories {
+        maven { url = uri("https://teavm.org/maven/repository") }
+        gradlePluginPortal()
+        mavenCentral()
+    }
+}
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        maven { url = uri("https://teavm.org/maven/repository") }
+        mavenCentral()
+    }
+}
+
+rootProject.name = "wasm-kotlin-teavm"

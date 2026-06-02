@@ -1,0 +1,64 @@
+plugins {
+    id "java"
+    id "org.teavm" version "0.13.1"
+}
+
+import org.teavm.gradle.api.OptimizationLevel
+
+def kotlinCompilerLibDir = file(
+        findProperty("kotlinCompilerLibDir")
+                ?: System.getenv("KOTLIN_COMPILER_LIB_DIR")
+                ?: "${projectDir}/.cache/kotlin-compiler/package/lib"
+)
+def trove4jJar = file(
+        findProperty("trove4jJar")
+                ?: System.getenv("TROVE4J_JAR")
+                ?: "${projectDir}/.cache/trove4j/trove4j-1.0.20200330.jar"
+)
+def kotlinCompilerJars = [
+        "kotlin-compiler.jar",
+        "kotlin-stdlib.jar",
+        "kotlin-reflect.jar",
+        "kotlin-script-runtime.jar",
+        "kotlinx-coroutines-core-jvm.jar",
+        "annotations-13.0.jar"
+].collect { new File(kotlinCompilerLibDir, it) }
+def teavmVersion = "0.13.1"
+
+dependencies {
+    implementation files(kotlinCompilerJars)
+    implementation files(trove4jJar)
+    compileOnly "org.teavm:teavm-core:${teavmVersion}"
+}
+
+tasks.register("verifyKotlinCompilerInputs") {
+    inputs.files(kotlinCompilerJars)
+    inputs.file(trove4jJar)
+    doLast {
+        def missing = (kotlinCompilerJars + [trove4jJar]).findAll { !it.isFile() }
+        if (!missing.isEmpty()) {
+            throw new GradleException(
+                    "Missing Kotlin compiler inputs:\n"
+                            + missing.collect { " - ${it}" }.join("\n")
+                            + "\nRun `node scripts/prepare-inputs.mjs` or pass "
+                            + "`-PkotlinCompilerLibDir=/path/to/kotlin-compiler/lib "
+                            + "-Ptrove4jJar=/path/to/trove4j.jar`."
+            )
+        }
+    }
+}
+
+compileJava.dependsOn tasks.named("verifyKotlinCompilerInputs")
+
+teavm {
+    wasmGC {
+        mainClass = "org.wasmidle.kotlin.teavm.KotlinCompilerProbe"
+        outOfProcess = true
+        processMemory = 8192
+        modularRuntime = true
+        debugInformation = false
+        fastGlobalAnalysis = false
+        optimization = OptimizationLevel.NONE
+        targetFileName = "kotlin-compiler-probe"
+    }
+}

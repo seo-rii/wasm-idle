@@ -1,0 +1,100 @@
+package org.wasmidle.kotlin.teavm;
+
+import org.teavm.model.ClassHolder;
+import org.teavm.model.ClassHolderTransformer;
+import org.teavm.model.ClassHolderTransformerContext;
+import org.teavm.model.MethodDescriptor;
+import org.teavm.model.MethodHolder;
+import org.teavm.model.ValueType;
+import org.teavm.model.emit.ProgramEmitter;
+import org.teavm.vm.spi.TeaVMHost;
+import org.teavm.vm.spi.TeaVMPlugin;
+
+public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
+    @Override
+    public void install(TeaVMHost host) {
+        host.add(this);
+    }
+
+    @Override
+    public void transformClass(ClassHolder cls, ClassHolderTransformerContext context) {
+        switch (cls.getName()) {
+            case "java.lang.System":
+                transformSystem(cls, context);
+                break;
+            case "org.jetbrains.kotlin.util.PerformanceManager":
+                transformPerformanceManager(cls, context);
+                break;
+        }
+    }
+
+    private void transformSystem(ClassHolder cls, ClassHolderTransformerContext context) {
+        var method = cls.getMethod(new MethodDescriptor("exit", ValueType.INTEGER, ValueType.VOID));
+        if (method == null) {
+            method = new MethodHolder(new MethodDescriptor("exit", ValueType.INTEGER, ValueType.VOID));
+            cls.addMethod(method);
+        }
+        var pe = ProgramEmitter.create(method, context.getHierarchy());
+        pe.construct(IllegalStateException.class, pe.constant("System.exit is not available in wasm-idle"))
+                .raise();
+    }
+
+    private void transformPerformanceManager(ClassHolder cls, ClassHolderTransformerContext context) {
+        replaceWithNoOp(cls, context, "initializeCurrentThread", ValueType.VOID);
+        replaceWithNoOp(cls, context, "notifyCompilationFinished", ValueType.VOID);
+        replaceWithNoOp(cls, context, "notifyCurrentPhaseFinishedIfNeeded", ValueType.VOID);
+        replaceWithNoOp(cls, context, "enableExtendedStats", ValueType.VOID);
+        replaceWithNoOp(cls, context, "dumpPerformanceReport", ValueType.VOID,
+                ValueType.object("java.lang.String"));
+        replaceWithNoOp(cls, context, "notifyDynamicPhaseStarted", ValueType.VOID,
+                ValueType.object("java.lang.String"));
+        replaceWithNoOp(cls, context, "notifyDynamicPhaseFinished", ValueType.VOID,
+                ValueType.object("java.lang.String"), ValueType.object("org.jetbrains.kotlin.util.PhaseType"));
+        replaceWithNoOp(cls, context, "notifyPhaseStarted", ValueType.VOID,
+                ValueType.object("org.jetbrains.kotlin.util.PhaseType"));
+        replaceWithNoOp(cls, context, "notifyPhaseFinished", ValueType.VOID,
+                ValueType.object("org.jetbrains.kotlin.util.PhaseType"));
+        replaceWithConstantString(cls, context, "createPerformanceReport",
+                ValueType.object("org.jetbrains.kotlin.util.PerformanceManager$DumpFormat"));
+        replaceMeasureSideTime(cls, context);
+    }
+
+    private static void replaceWithNoOp(ClassHolder cls, ClassHolderTransformerContext context, String name,
+            ValueType returnType, ValueType... argumentTypes) {
+        var method = cls.getMethod(new MethodDescriptor(name, appendReturnType(returnType, argumentTypes)));
+        if (method == null) {
+            return;
+        }
+        ProgramEmitter.create(method, context.getHierarchy()).exit();
+    }
+
+    private static void replaceWithConstantString(ClassHolder cls, ClassHolderTransformerContext context, String name,
+            ValueType... argumentTypes) {
+        var method = cls.getMethod(new MethodDescriptor(name,
+                appendReturnType(ValueType.object("java.lang.String"), argumentTypes)));
+        if (method == null) {
+            return;
+        }
+        ProgramEmitter.create(method, context.getHierarchy()).constant("").returnValue();
+    }
+
+    private static void replaceMeasureSideTime(ClassHolder cls, ClassHolderTransformerContext context) {
+        var method = cls.getMethod(new MethodDescriptor("measureSideTime$compiler_common",
+                ValueType.object("org.jetbrains.kotlin.util.PhaseSideType"),
+                ValueType.object("kotlin.jvm.functions.Function0"), ValueType.object("java.lang.Object")));
+        if (method == null) {
+            return;
+        }
+        var pe = ProgramEmitter.create(method, context.getHierarchy());
+        pe.var(2, ValueType.object("kotlin.jvm.functions.Function0"))
+                .invokeVirtual("invoke", ValueType.object("java.lang.Object"))
+                .returnValue();
+    }
+
+    private static ValueType[] appendReturnType(ValueType returnType, ValueType[] argumentTypes) {
+        var result = new ValueType[argumentTypes.length + 1];
+        System.arraycopy(argumentTypes, 0, result, 0, argumentTypes.length);
+        result[argumentTypes.length] = returnType;
+        return result;
+    }
+}
