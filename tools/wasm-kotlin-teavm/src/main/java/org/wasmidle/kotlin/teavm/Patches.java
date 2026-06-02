@@ -1426,6 +1426,7 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
         var checkerType = ValueType.object("org.jetbrains.kotlin.types.checker.KotlinTypeChecker");
         var languageSettingsType = ValueType.object("org.jetbrains.kotlin.config.LanguageVersionSettingsImpl");
         var storageManagerType = ValueType.object("org.jetbrains.kotlin.storage.StorageManager");
+        var defaultBuiltInsType = ValueType.object("org.jetbrains.kotlin.builtins.DefaultBuiltIns");
         var refinerDefaultType = ValueType.object("org.jetbrains.kotlin.types.checker.KotlinTypeRefiner$Default");
         var preparatorDefaultType = ValueType.object("org.jetbrains.kotlin.types.checker.KotlinTypePreparator$Default");
         var javaDeprecationSettingsType = ValueType.object(
@@ -1459,6 +1460,13 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
                 .thenDo(() -> pe.construct("org.jetbrains.kotlin.container.InstanceComponentDescriptor",
                         pe.getField("org.jetbrains.kotlin.storage.LockBasedStorageManager", "NO_LOCKS",
                                 storageManagerType)
+                                .cast(ValueType.object("java.lang.Object")))
+                        .cast(descriptorType)
+                        .returnValue());
+        pe.when(request.isSame(pe.constant(org.jetbrains.kotlin.builtins.KotlinBuiltIns.class).cast(typeType)))
+                .thenDo(() -> pe.construct("org.jetbrains.kotlin.container.InstanceComponentDescriptor",
+                        pe.invoke("org.jetbrains.kotlin.builtins.DefaultBuiltIns", "getInstance",
+                                defaultBuiltInsType)
                                 .cast(ValueType.object("java.lang.Object")))
                         .cast(descriptorType)
                         .returnValue());
