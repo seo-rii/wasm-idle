@@ -90,8 +90,18 @@ Known findings from the initial experiments:
 - Splitting the browser TeaVM entry point from the JVM fixture runner removed the host JDK scan from
   the browser graph. The current fast-analysis build fails in about 100 seconds at roughly 5.6 GB
   RSS; `java.io.File.toPath` is no longer in the first blocker set.
-- The first transformer patches disable `System.exit`, Kotlin CLI plugin loading, and Kotlin
-  performance measurements that can reach JVM management APIs.
+- The first transformer patches disable `System.exit`, Kotlin CLI plugin loading, Kotlin
+  performance measurements that can reach JVM management APIs, and the reflective `Field.setInt`
+  call used by IntelliJ's file-size limit setup.
+- TeaVM ignores ordinary application jar classes in `java.*` packages for this classlib path. The
+  working approach is to add TeaVM classlib-style `T...` classes under `org.teavm.classlib...`.
+- Classlib-style stubs now cover the first lock/future/string-iterator blocker set:
+  `ReentrantLock`, `ReentrantReadWriteLock`, `ExecutorService`, `Executors`, `CompletableFuture`,
+  `Future`, `TimeoutException`, and `StringCharacterIterator`.
+- With those stubs, fast analysis fails in about 60 seconds at roughly 5.4 GB RSS. The next blocker
+  group is `org.jetbrains.kotlin.javac.JavacWrapper`/`com.sun.tools.javac`, missing coroutines
+  classes, resource lookup APIs, `ConcurrentHashMap`/atomic collection gaps, method-handle lookup,
+  and streams/spliterators.
 - `jdeps` reports that the Kotlin compiler distribution reaches beyond `java.base` into
   `java.desktop`, `java.instrument`, `java.management`, `java.scripting`, `jdk.compiler`, and
   `jdk.unsupported`.

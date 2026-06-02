@@ -1,5 +1,6 @@
 package org.wasmidle.kotlin.teavm;
 
+import org.teavm.model.AccessLevel;
 import org.teavm.model.ClassHolder;
 import org.teavm.model.ClassHolderTransformer;
 import org.teavm.model.ClassHolderTransformerContext;
@@ -22,6 +23,9 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
             case "java.lang.System":
                 transformSystem(cls, context);
                 break;
+            case "java.lang.reflect.Field":
+                transformReflectField(cls, context);
+                break;
             case "org.jetbrains.kotlin.cli.common.CLICompiler":
                 transformCliCompiler(cls, context);
                 break;
@@ -40,6 +44,18 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
         var pe = ProgramEmitter.create(method, context.getHierarchy());
         pe.construct(IllegalStateException.class, pe.constant("System.exit is not available in wasm-idle"))
                 .raise();
+    }
+
+    private void transformReflectField(ClassHolder cls, ClassHolderTransformerContext context) {
+        var method = cls.getMethod(new MethodDescriptor("setInt",
+                ValueType.object("java.lang.Object"), ValueType.INTEGER, ValueType.VOID));
+        if (method == null) {
+            method = new MethodHolder(new MethodDescriptor("setInt",
+                    ValueType.object("java.lang.Object"), ValueType.INTEGER, ValueType.VOID));
+            method.setLevel(AccessLevel.PUBLIC);
+            cls.addMethod(method);
+        }
+        ProgramEmitter.create(method, context.getHierarchy()).exit();
     }
 
     private void transformCliCompiler(ClassHolder cls, ClassHolderTransformerContext context) {

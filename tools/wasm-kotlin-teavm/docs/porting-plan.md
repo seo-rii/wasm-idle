@@ -54,11 +54,24 @@ unreachable from the browser compile path or replaced with a TeaVM-compatible st
 
 Current TeaVM fast-analysis blockers:
 
-- `java.lang.reflect.Field.setInt(...)`
-- `java.util.concurrent.locks.ReentrantLock` and `ReentrantReadWriteLock`
-- `java.util.concurrent.Executors` and `CompletableFuture`
-- `javax.tools.StandardLocation` and `com.sun.tools.javac.*`
-- `com.intellij.util.diff.*`
+- Cleared by transformer/classlib stubs:
+    - `java.lang.reflect.Field.setInt(...)`
+    - `java.util.concurrent.locks.ReentrantLock` and `ReentrantReadWriteLock`
+    - `java.util.concurrent.Executors`, `ExecutorService`, `Future`, and `CompletableFuture`
+    - `java.text.StringCharacterIterator`
+    - `com.intellij.util.diff.Diff` and `FilesTooBigForDiffException`
+- Still blocking:
+    - `javax.tools.StandardLocation` and `com.sun.tools.javac.*`
+    - `kotlinx.coroutines.BuildersKt` and `kotlinx.coroutines.flow.SharedFlowKt`
+    - `java.lang.Class.getResource(...)` and `ClassLoader.getSystemResource(...)`
+    - `java.lang.invoke.MethodHandles.lookup()`
+    - `java.util.concurrent.atomic.AtomicReferenceArray`
+    - `ConcurrentHashMap.newKeySet()` and the `(int, float, int)` constructor
+    - `ConcurrentLinkedQueue`
+    - `Arrays.spliterator(...)`, `Spliterators.AbstractSpliterator`, and `StreamSupport.intStream(...)`
+
+TeaVM did not load ordinary application jar classes placed in `java.*` packages. Classlib additions
+must follow TeaVM's internal `T...` class naming under `org.teavm.classlib...`.
 
 ### ARCH-004: Split JVM fixture runner from browser entry point
 
