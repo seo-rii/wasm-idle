@@ -116,6 +116,13 @@ Known findings from the initial experiments:
   group is coroutines, file-channel APIs, XML/StAX plugin descriptor parsing, IntelliJ unsafe
   method-handle CAS calls, `java.awt.Rectangle`, `java.lang.management.ManagementFactory`,
   `TypeNotPresentException`, and `ClassLoader.getResource(...)`.
+- Pruning IntelliJ plugin descriptor registration and replacing the multiverse context manager with
+  default-context behavior removes the current coroutines and XML/StAX descriptor paths from the
+  browser graph.
+- With those patches, fast analysis fails in about 64 seconds at roughly 4.7 GB RSS. The next blocker
+  group is file-channel APIs, IntelliJ event multicaster proxy creation, JVM management/thread dump
+  APIs, Swing transaction guard setup, `ConcurrentHashMap.newKeySet()`, unsafe method-handle CAS
+  calls, `TypeNotPresentException`, and `ClassLoader.getResource(...)`.
 - `jdeps` reports that the Kotlin compiler distribution reaches beyond `java.base` into
   `java.desktop`, `java.instrument`, `java.management`, `java.scripting`, `jdk.compiler`, and
   `jdk.unsupported`.

@@ -60,6 +60,12 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
             case "java.util.stream.StreamSupport":
                 transformStreamSupport(cls, context);
                 break;
+            case "com.intellij.codeInsight.multiverse.CodeInsightContextManagerImpl":
+                transformCodeInsightContextManagerImpl(cls, context);
+                break;
+            case "com.intellij.core.CoreApplicationEnvironment":
+                transformCoreApplicationEnvironment(cls, context);
+                break;
             case "com.intellij.util.containers.ContainerUtil":
                 transformContainerUtil(cls, context);
                 break;
@@ -248,6 +254,38 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
         ProgramEmitter.create(method, context.getHierarchy()).constant(1).returnValue();
     }
 
+    private void transformCodeInsightContextManagerImpl(ClassHolder cls, ClassHolderTransformerContext context) {
+        var managerType = ValueType.object("com.intellij.codeInsight.multiverse.CodeInsightContextManagerImpl");
+        var fileViewProviderType = ValueType.object("com.intellij.psi.FileViewProvider");
+        var codeInsightContextType = ValueType.object("com.intellij.codeInsight.multiverse.CodeInsightContext");
+
+        var constructor = cls.getMethod(new MethodDescriptor("<init>",
+                ValueType.object("com.intellij.openapi.project.Project"),
+                ValueType.object("kotlinx.coroutines.CoroutineScope"), ValueType.VOID));
+        if (constructor != null) {
+            var pe = ProgramEmitter.create(constructor, context.getHierarchy());
+            pe.var(0, managerType).invokeSpecial(Object.class, "<init>");
+            pe.exit();
+        }
+
+        replaceWithDefaultCodeInsightContext(cls, context, "getPreferredContext",
+                ValueType.object("com.intellij.openapi.vfs.VirtualFile"));
+        replaceWithDefaultCodeInsightContext(cls, context, "getCodeInsightContext", fileViewProviderType);
+        replaceWithDefaultCodeInsightContext(cls, context, "getOrSetContext",
+                fileViewProviderType, codeInsightContextType);
+        replaceWithDefaultCodeInsightContext(cls, context, "getCodeInsightContextRaw", fileViewProviderType);
+        replaceWithConstantBoolean(cls, context, "isSharedSourceSupportEnabled", false);
+        replaceWithNoOp(cls, context, "setCodeInsightContext", ValueType.VOID,
+                fileViewProviderType, codeInsightContextType);
+        replaceWithNoOp(cls, context, "dispose", ValueType.VOID);
+    }
+
+    private void transformCoreApplicationEnvironment(ClassHolder cls, ClassHolderTransformerContext context) {
+        replaceWithNoOp(cls, context, "registerExtensionPointAndExtensions", ValueType.VOID,
+                ValueType.object("java.nio.file.Path"), ValueType.object("java.lang.String"),
+                ValueType.object("com.intellij.openapi.extensions.ExtensionsArea"));
+    }
+
     private void transformMockApplication(ClassHolder cls, ClassHolderTransformerContext context) {
         var runnableType = ValueType.object("java.lang.Runnable");
         var modalityStateType = ValueType.object("com.intellij.openapi.application.ModalityState");
@@ -312,6 +350,19 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
         replaceWithEmptySet(cls, context, "knownClassNamesInPackage",
                 ValueType.object("org.jetbrains.kotlin.name.FqName"));
         replaceWithConstantBoolean(cls, context, "canComputeKnownClassNamesInPackage", false);
+    }
+
+    private static void replaceWithDefaultCodeInsightContext(ClassHolder cls, ClassHolderTransformerContext context,
+            String name, ValueType... argumentTypes) {
+        var returnType = ValueType.object("com.intellij.codeInsight.multiverse.CodeInsightContext");
+        var method = cls.getMethod(new MethodDescriptor(name, appendReturnType(returnType, argumentTypes)));
+        if (method == null) {
+            return;
+        }
+        ProgramEmitter.create(method, context.getHierarchy())
+                .invoke("com.intellij.codeInsight.multiverse.CodeInsightContextKt",
+                        "defaultContext", returnType)
+                .returnValue();
     }
 
     private void transformCliCompiler(ClassHolder cls, ClassHolderTransformerContext context) {

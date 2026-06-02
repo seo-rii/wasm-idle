@@ -74,15 +74,18 @@ Current TeaVM fast-analysis blockers:
       `Arrays.spliterator(...)`, `Spliterators.iterator(...)`,
       `Spliterators.AbstractSpliterator`, and `StreamSupport.intStream(...)`
     - Swing's `invokeLater(...)` path by no-oping the corresponding `MockApplication` methods
+    - IntelliJ plugin descriptor loading and multiverse context coroutines by no-oping
+      `CoreApplicationEnvironment.registerExtensionPointAndExtensions(...)` and replacing
+      `CodeInsightContextManagerImpl` with default-context behavior
 - Still blocking:
-    - `kotlinx.coroutines.BuildersKt` and `kotlinx.coroutines.flow.SharedFlowKt`
     - File-channel APIs: `FileInputStream.getChannel()`, `FileOutputStream.getChannel()`,
       `RandomAccessFile.getChannel()`, `FileSystemProvider.newFileChannel(...)`, and
       `java.nio.channels.FileChannel`
-    - XML/StAX plugin descriptor APIs such as `XMLStreamException` and `XMLStreamReader2`
+    - IntelliJ event multicaster proxy creation through `java.lang.reflect.Proxy`
     - IntelliJ unsafe CAS paths through `MethodHandle.invokeExact(...)`
-    - `java.awt.Rectangle` through XML serializer property collection
-    - `java.lang.management.ManagementFactory` through debug-attach detection
+    - JVM management/thread dump APIs such as `ManagementFactory` and `ThreadInfo`
+    - Swing transaction guard setup through `javax.swing.SwingUtilities`
+    - `ConcurrentHashMap.newKeySet()`
     - `java.lang.TypeNotPresentException` through ASM frame computation
     - `ClassLoader.getResource(...)` through Kotlin builtins resource loading
 
