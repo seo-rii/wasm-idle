@@ -138,8 +138,20 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
             case "com.intellij.openapi.util.SystemInfoRt":
                 transformSystemInfoRt(cls, context);
                 break;
+            case "com.intellij.openapi.util.ObjectTree":
+                transformObjectTree(cls, context);
+                break;
+            case "com.intellij.psi.tree.IStubFileElementType":
+                replaceWithConstantBoolean(cls, context, "hasNonTrivialExternalId", false);
+                break;
+            case "com.intellij.psi.compiled.ClassFileDecompilers":
+                transformClassFileDecompilers(cls, context);
+                break;
             case "com.intellij.util.containers.ContainerUtil":
                 transformContainerUtil(cls, context);
+                break;
+            case "com.intellij.util.ExceptionUtil":
+                transformExceptionUtil(cls, context);
                 break;
             case "com.intellij.util.containers.Unsafe":
                 transformUnsafe(cls, context);
@@ -170,6 +182,10 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
                 break;
             case "com.intellij.openapi.command.impl.CoreCommandProcessor":
                 transformCoreCommandProcessor(cls, context);
+                break;
+            case "com.intellij.openapi.diagnostic.DefaultLogger":
+                replaceWithConstantString(cls, context, "attachmentsToString",
+                        ValueType.object("java.lang.Throwable"));
                 break;
             case "com.intellij.openapi.vfs.impl.VirtualFileManagerImpl":
                 transformVirtualFileManagerImpl(cls, context);
@@ -221,6 +237,14 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
                 break;
             case "org.jetbrains.kotlin.cli.common.CLICompiler":
                 transformCliCompiler(cls, context);
+                break;
+            case "org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment$Companion":
+                replaceWithNoOp(cls, context, "registerApplicationExtensionPointsAndExtensionsFrom", ValueType.VOID,
+                        ValueType.object("org.jetbrains.kotlin.config.CompilerConfiguration"),
+                        ValueType.object("java.lang.String"));
+                break;
+            case "org.jetbrains.kotlin.KotlinElementTypeProvider$Companion":
+                transformKotlinElementTypeProviderCompanion(cls, context);
                 break;
             case "org.jetbrains.kotlin.cli.jvm.compiler.CompileEnvironmentUtil":
                 transformCompileEnvironmentUtil(cls, context);
@@ -885,6 +909,54 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
         replaceWithNoOp(cls, context, "fireCommandFinished", ValueType.VOID);
     }
 
+    private void transformExceptionUtil(ClassHolder cls, ClassHolderTransformerContext context) {
+        var streamType = ValueType.object("java.util.stream.Stream");
+        var method = getOrCreateStaticMethod(cls, "causeAndSuppressed", streamType,
+                ValueType.object("java.lang.Throwable"), ValueType.object("java.lang.Class"));
+        ProgramEmitter.create(method, context.getHierarchy())
+                .invoke("java.util.stream.Stream", "empty", streamType)
+                .returnValue();
+    }
+
+    private void transformClassFileDecompilers(ClassHolder cls, ClassHolderTransformerContext context) {
+        var type = ValueType.object("com.intellij.psi.compiled.ClassFileDecompilers");
+        var constructor = cls.getMethod(new MethodDescriptor("<init>", ValueType.VOID));
+        if (constructor != null) {
+            prepareMethodBody(constructor);
+            var pe = ProgramEmitter.create(constructor, context.getHierarchy());
+            pe.var(0, type).invokeSpecial("java.lang.Object", "<init>");
+            pe.var(0, type).setField("EP_NAME",
+                    pe.constantNull(ValueType.object("com.intellij.openapi.extensions.ExtensionPointName")));
+            pe.exit();
+        }
+
+        var method = getOrCreateStaticMethod(cls, "getInstance", type);
+        ProgramEmitter.create(method, context.getHierarchy())
+                .construct("com.intellij.psi.compiled.ClassFileDecompilers")
+                .returnValue();
+
+        replaceWithNull(cls, context, "find", ValueType.object("com.intellij.psi.compiled.ClassFileDecompilers$Decompiler"),
+                ValueType.object("com.intellij.openapi.vfs.VirtualFile"), ValueType.object("java.lang.Class"));
+    }
+
+    private void transformKotlinElementTypeProviderCompanion(ClassHolder cls, ClassHolderTransformerContext context) {
+        var returnType = ValueType.object("org.jetbrains.kotlin.KotlinElementTypeProvider");
+        var method = getOrCreateMethod(cls, "getInstance", returnType);
+        ProgramEmitter.create(method, context.getHierarchy())
+                .getField("org.jetbrains.kotlin.psi.impl.KotlinElementTypeProviderImpl", "INSTANCE", returnType)
+                .returnValue();
+    }
+
+    private void transformObjectTree(ClassHolder cls, ClassHolderTransformerContext context) {
+        replaceWithNoOp(cls, context, "register", ValueType.VOID,
+                ValueType.object("com.intellij.openapi.Disposable"),
+                ValueType.object("com.intellij.openapi.Disposable"));
+        replaceWithNoOp(cls, context, "executeAll", ValueType.VOID,
+                ValueType.object("com.intellij.openapi.Disposable"), ValueType.BOOLEAN);
+        replaceWithNoOp(cls, context, "handleExceptions", ValueType.VOID,
+                ValueType.object("java.util.List"));
+    }
+
     private void transformVirtualFileManagerImpl(ClassHolder cls, ClassHolderTransformerContext context) {
         var managerType = ValueType.object("com.intellij.openapi.vfs.impl.VirtualFileManagerImpl");
         var listType = ValueType.object("java.util.List");
@@ -927,6 +999,7 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
         replaceWithNoOp(cls, context, "notifyPropertyChanged", ValueType.VOID,
                 ValueType.object("com.intellij.openapi.vfs.VirtualFile"), ValueType.object("java.lang.String"),
                 ValueType.object("java.lang.Object"), ValueType.object("java.lang.Object"));
+        replaceWithNoOp(cls, context, "dispose", ValueType.VOID);
     }
 
     private void transformDummyIconManager(ClassHolder cls, ClassHolderTransformerContext context) {
@@ -1023,6 +1096,9 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
     }
 
     private void transformCoreApplicationEnvironment(ClassHolder cls, ClassHolderTransformerContext context) {
+        replaceWithNoOp(cls, context, "addExtension", ValueType.VOID,
+                ValueType.object("com.intellij.openapi.extensions.ExtensionPointName"),
+                ValueType.object("java.lang.Object"));
         replaceWithNoOp(cls, context, "registerExtensionPointAndExtensions", ValueType.VOID,
                 ValueType.object("java.nio.file.Path"), ValueType.object("java.lang.String"),
                 ValueType.object("com.intellij.openapi.extensions.ExtensionsArea"));
