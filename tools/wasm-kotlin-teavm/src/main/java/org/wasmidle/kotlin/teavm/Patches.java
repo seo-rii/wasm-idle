@@ -102,6 +102,15 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
             case "com.intellij.openapi.application.TransactionGuardImpl":
                 transformTransactionGuardImpl(cls, context);
                 break;
+            case "com.intellij.openapi.util.LowMemoryWatcherManager":
+                transformLowMemoryWatcherManager(cls, context);
+                break;
+            case "com.intellij.concurrency.ThreadContext":
+                transformThreadContext(cls, context);
+                break;
+            case "com.intellij.codeWithMe.ClientIdKt":
+                transformClientIdKt(cls, context);
+                break;
             case "com.intellij.util.concurrency.ThreadingAssertions":
                 transformThreadingAssertions(cls, context);
                 break;
@@ -155,6 +164,12 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
         var genericInterfaces = getOrCreateMethod(cls, "getGenericInterfaces", genericInterfacesType);
         ProgramEmitter.create(genericInterfaces, context.getHierarchy())
                 .constructArray(ValueType.object("java.lang.reflect.Type"), 0)
+                .returnValue();
+
+        var genericSuperclass = getOrCreateMethod(cls, "getGenericSuperclass",
+                ValueType.object("java.lang.reflect.Type"));
+        ProgramEmitter.create(genericSuperclass, context.getHierarchy())
+                .constantNull(ValueType.object("java.lang.reflect.Type"))
                 .returnValue();
     }
 
@@ -290,6 +305,13 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
 
         method = getOrCreateStaticMethod(cls, "newKeySet",
                 ValueType.object("java.util.concurrent.ConcurrentHashMap$KeySetView"));
+        ProgramEmitter.create(method, context.getHierarchy())
+                .constantNull(ValueType.object("java.util.concurrent.ConcurrentHashMap$KeySetView"))
+                .returnValue();
+
+        method = getOrCreateMethod(cls, "keySet",
+                ValueType.object("java.util.concurrent.ConcurrentHashMap$KeySetView"),
+                ValueType.object("java.lang.Object"));
         ProgramEmitter.create(method, context.getHierarchy())
                 .constantNull(ValueType.object("java.util.concurrent.ConcurrentHashMap$KeySetView"))
                 .returnValue();
@@ -538,6 +560,9 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
                 runnableType, modalityStateType, conditionType);
         replaceWithNoOp(cls, context, "invokeAndWait", ValueType.VOID, runnableType);
         replaceWithNoOp(cls, context, "invokeAndWait", ValueType.VOID, runnableType, modalityStateType);
+        replaceWithCompletedFuture(cls, context, "executeOnPooledThread", runnableType);
+        replaceWithCompletedFuture(cls, context, "executeOnPooledThread",
+                ValueType.object("java.util.concurrent.Callable"));
     }
 
     private void transformJavacWrapper(ClassHolder cls, ClassHolderTransformerContext context) {
@@ -707,6 +732,7 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
     }
 
     private void transformPerformanceManager(ClassHolder cls, ClassHolderTransformerContext context) {
+        replaceWithZeroTime(cls, context, "currentTime");
         replaceWithNoOp(cls, context, "initializeCurrentThread", ValueType.VOID);
         replaceWithNoOp(cls, context, "notifyCompilationFinished", ValueType.VOID);
         replaceWithNoOp(cls, context, "notifyCurrentPhaseFinishedIfNeeded", ValueType.VOID);
@@ -724,6 +750,33 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
         replaceWithConstantString(cls, context, "createPerformanceReport",
                 ValueType.object("org.jetbrains.kotlin.util.PerformanceManager$DumpFormat"));
         replaceMeasureSideTime(cls, context);
+    }
+
+    private void transformLowMemoryWatcherManager(ClassHolder cls, ClassHolderTransformerContext context) {
+        replaceWithConstantLong(cls, context, "getMajorGcTime", 0);
+        replaceWithCompletedFuture(cls, context, "initializeMXBeanListenersLater",
+                ValueType.object("java.util.concurrent.ExecutorService"));
+        replaceWithConstantFloat(cls, context, "getOccupiedMemoryThreshold", 1);
+        replaceWithConstantLong(cls, context, "access$600", 0);
+    }
+
+    private void transformThreadContext(ClassHolder cls, ClassHolderTransformerContext context) {
+        replaceWithEmptyCoroutineContext(cls, context, "currentThreadContextOrNull");
+        replaceWithEmptyCoroutineContext(cls, context, "currentThreadContext");
+        replaceWithNoOp(cls, context, "checkContextInstalled", ValueType.VOID);
+        replaceWithEmptyAccessToken(cls, context, "resetThreadContext");
+        replaceWithEmptyAccessToken(cls, context, "installThreadContext",
+                ValueType.object("kotlin.coroutines.CoroutineContext"), ValueType.BOOLEAN);
+        replaceWithReturnedArgument(cls, context, "captureThreadContext", ValueType.object("java.lang.Runnable"), 0,
+                ValueType.object("java.lang.Runnable"));
+    }
+
+    private void transformClientIdKt(ClassHolder cls, ClassHolderTransformerContext context) {
+        replaceWithNull(cls, context, "getClientIdContextElement",
+                ValueType.object("com.intellij.codeWithMe.ClientIdContextElement"),
+                ValueType.object("kotlin.coroutines.CoroutineContext"));
+        replaceWithNull(cls, context, "getCurrentThreadClientId",
+                ValueType.object("com.intellij.codeWithMe.ClientId"));
     }
 
     private static void replaceWithNoOp(ClassHolder cls, ClassHolderTransformerContext context, String name,
@@ -781,6 +834,15 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
         ProgramEmitter.create(method, context.getHierarchy()).constant(value).returnValue();
     }
 
+    private static void replaceWithConstantFloat(ClassHolder cls, ClassHolderTransformerContext context, String name,
+            float value, ValueType... argumentTypes) {
+        var method = cls.getMethod(new MethodDescriptor(name, appendReturnType(ValueType.FLOAT, argumentTypes)));
+        if (method == null) {
+            return;
+        }
+        ProgramEmitter.create(method, context.getHierarchy()).constant(value).returnValue();
+    }
+
     private static void replaceWithReturnedArgument(ClassHolder cls, ClassHolderTransformerContext context, String name,
             ValueType returnType, int argumentIndex, ValueType... argumentTypes) {
         var method = cls.getMethod(new MethodDescriptor(name, appendReturnType(returnType, argumentTypes)));
@@ -788,6 +850,59 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
             return;
         }
         ProgramEmitter.create(method, context.getHierarchy()).var(argumentIndex, returnType).returnValue();
+    }
+
+    private static void replaceWithCompletedFuture(ClassHolder cls, ClassHolderTransformerContext context, String name,
+            ValueType... argumentTypes) {
+        var returnType = ValueType.object("java.util.concurrent.Future");
+        var method = cls.getMethod(new MethodDescriptor(name, appendReturnType(returnType, argumentTypes)));
+        if (method == null) {
+            return;
+        }
+        var pe = ProgramEmitter.create(method, context.getHierarchy());
+        pe.invoke("java.util.concurrent.CompletableFuture", "completedFuture",
+                ValueType.object("java.util.concurrent.CompletableFuture"),
+                pe.constantNull(ValueType.object("java.lang.Object")))
+                .cast(returnType)
+                .returnValue();
+    }
+
+    private static void replaceWithZeroTime(ClassHolder cls, ClassHolderTransformerContext context, String name,
+            ValueType... argumentTypes) {
+        var returnType = ValueType.object("org.jetbrains.kotlin.util.Time");
+        var method = cls.getMethod(new MethodDescriptor(name, appendReturnType(returnType, argumentTypes)));
+        if (method == null) {
+            return;
+        }
+        var pe = ProgramEmitter.create(method, context.getHierarchy());
+        pe.construct("org.jetbrains.kotlin.util.Time", pe.constant(0L), pe.constant(0L), pe.constant(0L))
+                .returnValue();
+    }
+
+    private static void replaceWithEmptyCoroutineContext(ClassHolder cls, ClassHolderTransformerContext context,
+            String name, ValueType... argumentTypes) {
+        var returnType = ValueType.object("kotlin.coroutines.CoroutineContext");
+        var method = cls.getMethod(new MethodDescriptor(name, appendReturnType(returnType, argumentTypes)));
+        if (method == null) {
+            return;
+        }
+        ProgramEmitter.create(method, context.getHierarchy())
+                .getField("kotlin.coroutines.EmptyCoroutineContext", "INSTANCE",
+                        ValueType.object("kotlin.coroutines.EmptyCoroutineContext"))
+                .cast(returnType)
+                .returnValue();
+    }
+
+    private static void replaceWithEmptyAccessToken(ClassHolder cls, ClassHolderTransformerContext context, String name,
+            ValueType... argumentTypes) {
+        var returnType = ValueType.object("com.intellij.openapi.application.AccessToken");
+        var method = cls.getMethod(new MethodDescriptor(name, appendReturnType(returnType, argumentTypes)));
+        if (method == null) {
+            return;
+        }
+        ProgramEmitter.create(method, context.getHierarchy())
+                .getField("com.intellij.openapi.application.AccessToken", "EMPTY_ACCESS_TOKEN", returnType)
+                .returnValue();
     }
 
     private static void createNoOpFieldSetter(ClassHolder cls, ClassHolderTransformerContext context, String name,

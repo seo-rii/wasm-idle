@@ -91,16 +91,19 @@ Current TeaVM fast-analysis blockers:
     - IntelliJ `Unsafe`, message bus invocation, and `UrlClassLoader` resource lookup paths,
       removing the current `MethodHandle.invokeExact(...)`, `MethodHandle.bindTo(...)`,
       `MethodHandle.invoke(...)`, `MethodType.methodType(...)`, and `CharSequenceAccess` blockers
+    - JDK/IntelliJ runtime stubs for `PropertyChangeSupport`, `ConcurrentHashMap.KeySetView`,
+      `ThreadMXBean`/low-memory watcher paths, generic superclass lookup, `ParameterizedType`,
+      `Proxy`, Swing `Icon`, and IntelliJ coroutine thread context
 - Still blocking:
-    - `java.beans.PropertyChangeSupport`
-    - Swing icon classes such as `javax.swing.Icon`
-    - `ConcurrentHashMap.keySet(Object)`, `ConcurrentHashMap.KeySetView`, and `ThreadMXBean` paths
-      exposed by the current direct compiler graph
-    - IntelliJ coroutine thread context: `kotlinx.coroutines.internal.intellij.IntellijCoroutines`
-    - App executor queues: `SynchronousQueue` and `DelayQueue`
-    - Low-memory watcher management APIs such as `MemoryPoolMXBean`
-    - Generic reflection APIs: `ParameterizedType` and `Class.getGenericSuperclass()`
-    - `java.lang.reflect.Proxy`
+    - `java.security.MessageDigest` for inline/value-class ABI hashing
+    - `Character.UnicodeBlock` and variation-selector fields used by IntelliJ string escaping
+    - Generic executable reflection APIs: `Method.getGenericParameterTypes()` and
+      `Constructor.getGenericParameterTypes()`
+    - Additional `MethodType` APIs: `methodType(Class)`, `methodType(Class, List)`, and
+      `parameterType(int)`
+    - IntelliJ scheduling paths: `FutureTask`, `SchedulingWrapper.MyScheduledFutureTask.runAndReset()`,
+      and `AppDelayQueue.remove(Object)`
+    - Backend serialization reaches `File.toPath()` again through `IrFileSerializer`
     - `kotlin.reflect.full.KClasses`
 
 TeaVM did not load ordinary application jar classes placed in `java.*` packages. Classlib additions
@@ -118,7 +121,8 @@ Current status:
 - `BrowserKotlinCompilerProbe.compileKotlinSource(...)` calls the no-host-JDK compiler path.
 - A guarded call keeps that compiler path reachable for TeaVM analysis while the browser API shape is
   still being determined.
-- Fast analysis now fails without the previous `java.io.File.toPath()` host JDK blocker.
+- Fast analysis passed the earlier host-JDK setup `File.toPath()` blocker, but backend IR
+  serialization now exposes a separate `IrFileSerializer` `File.toPath()` path.
 
 ### ARCH-005: Remove statically reachable javac and parallel backend code
 
