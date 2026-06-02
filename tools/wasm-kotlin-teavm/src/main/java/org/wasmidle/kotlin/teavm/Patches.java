@@ -35,6 +35,12 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
                 break;
             case "java.io.InputStreamReader":
                 replaceWithNoOp(cls, context, "close", ValueType.VOID);
+                replaceWithConstantInt(cls, context, "read", -1);
+                replaceWithConstantInt(cls, context, "read", -1,
+                        ValueType.arrayOf(ValueType.CHARACTER), ValueType.INTEGER, ValueType.INTEGER);
+                replaceWithConstantInt(cls, context, "read", -1,
+                        ValueType.object("java.nio.CharBuffer"));
+                replaceWithConstantBoolean(cls, context, "ready", false);
                 break;
             case "java.io.BufferedReader":
                 replaceWithNoOp(cls, context, "close", ValueType.VOID);
