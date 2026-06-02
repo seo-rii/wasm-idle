@@ -301,6 +301,15 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
             case "org.jetbrains.kotlin.resolve.jvm.JvmPlatformOverloadsSpecificityComparator":
                 transformJvmPlatformOverloadsSpecificityComparator(cls, context);
                 break;
+            case "org.jetbrains.kotlin.resolve.checkers.OptInMarkerDeclarationAnnotationChecker":
+                transformOptInMarkerDeclarationAnnotationChecker(cls, context);
+                break;
+            case "org.jetbrains.kotlin.resolve.checkers.ExpectedActualDeclarationChecker":
+                transformExpectedActualDeclarationChecker(cls, context);
+                break;
+            case "org.jetbrains.kotlin.resolve.jvm.checkers.RepeatableAnnotationChecker":
+                transformRepeatableAnnotationChecker(cls, context);
+                break;
             case "org.jetbrains.kotlin.synthetic.JavaSyntheticScopes":
                 transformJavaSyntheticScopes(cls, context);
                 break;
@@ -1409,6 +1418,8 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
         var checkerType = ValueType.object("org.jetbrains.kotlin.types.checker.KotlinTypeChecker");
         var languageSettingsType = ValueType.object("org.jetbrains.kotlin.config.LanguageVersionSettingsImpl");
         var storageManagerType = ValueType.object("org.jetbrains.kotlin.storage.StorageManager");
+        var refinerDefaultType = ValueType.object("org.jetbrains.kotlin.types.checker.KotlinTypeRefiner$Default");
+        var preparatorDefaultType = ValueType.object("org.jetbrains.kotlin.types.checker.KotlinTypePreparator$Default");
 
         var method = cls.getMethod(new MethodDescriptor("resolve", typeType, contextType, descriptorType));
         if (method == null) {
@@ -1436,6 +1447,22 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
                 .thenDo(() -> pe.construct("org.jetbrains.kotlin.container.InstanceComponentDescriptor",
                         pe.getField("org.jetbrains.kotlin.storage.LockBasedStorageManager", "NO_LOCKS",
                                 storageManagerType)
+                                .cast(ValueType.object("java.lang.Object")))
+                        .cast(descriptorType)
+                        .returnValue());
+        pe.when(request.isSame(pe.constant(org.jetbrains.kotlin.types.checker.KotlinTypeRefiner.class)
+                .cast(typeType)))
+                .thenDo(() -> pe.construct("org.jetbrains.kotlin.container.InstanceComponentDescriptor",
+                        pe.getField("org.jetbrains.kotlin.types.checker.KotlinTypeRefiner$Default", "INSTANCE",
+                                refinerDefaultType)
+                                .cast(ValueType.object("java.lang.Object")))
+                        .cast(descriptorType)
+                        .returnValue());
+        pe.when(request.isSame(pe.constant(org.jetbrains.kotlin.types.checker.KotlinTypePreparator.class)
+                .cast(typeType)))
+                .thenDo(() -> pe.construct("org.jetbrains.kotlin.container.InstanceComponentDescriptor",
+                        pe.getField("org.jetbrains.kotlin.types.checker.KotlinTypePreparator$Default", "INSTANCE",
+                                preparatorDefaultType)
                                 .cast(ValueType.object("java.lang.Object")))
                         .cast(descriptorType)
                         .returnValue());
@@ -1652,6 +1679,73 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
                 ValueType.object("org.jetbrains.kotlin.descriptors.CallableDescriptor"));
     }
 
+    private void transformOptInMarkerDeclarationAnnotationChecker(ClassHolder cls,
+            ClassHolderTransformerContext context) {
+        var checkerType = ValueType.object("org.jetbrains.kotlin.resolve.checkers.OptInMarkerDeclarationAnnotationChecker");
+        var moduleType = ValueType.object("org.jetbrains.kotlin.descriptors.ModuleDescriptor");
+        var constructor = cls.getMethod(new MethodDescriptor("<init>", moduleType, ValueType.VOID));
+        if (constructor != null) {
+            prepareMethodBody(constructor);
+            var pe = ProgramEmitter.create(constructor, context.getHierarchy());
+            pe.var(0, checkerType).invokeSpecial(Object.class, "<init>");
+            pe.var(0, checkerType).setField("module", pe.var(1, moduleType));
+            pe.exit();
+        }
+        replaceWithNoOp(cls, context, "checkEntries", ValueType.VOID,
+                ValueType.object("java.util.List"),
+                ValueType.object("java.util.List"),
+                ValueType.object("org.jetbrains.kotlin.resolve.BindingTrace"),
+                ValueType.object("org.jetbrains.kotlin.psi.KtAnnotated"),
+                ValueType.object("org.jetbrains.kotlin.config.LanguageVersionSettings"));
+    }
+
+    private void transformExpectedActualDeclarationChecker(ClassHolder cls, ClassHolderTransformerContext context) {
+        var checkerType = ValueType.object("org.jetbrains.kotlin.resolve.checkers.ExpectedActualDeclarationChecker");
+        var moduleStructureOracleType = ValueType.object("org.jetbrains.kotlin.resolve.ModuleStructureOracle");
+        var iterableType = ValueType.object("java.lang.Iterable");
+        var constructor = cls.getMethod(new MethodDescriptor("<init>", moduleStructureOracleType, iterableType,
+                ValueType.VOID));
+        if (constructor != null) {
+            prepareMethodBody(constructor);
+            var pe = ProgramEmitter.create(constructor, context.getHierarchy());
+            pe.var(0, checkerType).invokeSpecial(Object.class, "<init>");
+            pe.var(0, checkerType).setField("moduleStructureOracle", pe.var(1, moduleStructureOracleType));
+            pe.var(0, checkerType).setField("argumentExtractors", pe.var(2, iterableType));
+            pe.exit();
+        }
+        replaceWithNoOp(cls, context, "check", ValueType.VOID,
+                ValueType.object("org.jetbrains.kotlin.psi.KtDeclaration"),
+                ValueType.object("org.jetbrains.kotlin.descriptors.DeclarationDescriptor"),
+                ValueType.object("org.jetbrains.kotlin.resolve.checkers.DeclarationCheckerContext"));
+    }
+
+    private void transformRepeatableAnnotationChecker(ClassHolder cls, ClassHolderTransformerContext context) {
+        var checkerType = ValueType.object("org.jetbrains.kotlin.resolve.jvm.checkers.RepeatableAnnotationChecker");
+        var languageSettingsType = ValueType.object("org.jetbrains.kotlin.config.LanguageVersionSettings");
+        var jvmTargetType = ValueType.object("org.jetbrains.kotlin.config.JvmTarget");
+        var annotationFeaturesType = ValueType.object(
+                "org.jetbrains.kotlin.resolve.jvm.JvmPlatformAnnotationFeaturesSupport");
+        var moduleType = ValueType.object("org.jetbrains.kotlin.descriptors.ModuleDescriptor");
+        var constructor = cls.getMethod(new MethodDescriptor("<init>", languageSettingsType, jvmTargetType,
+                annotationFeaturesType, moduleType, ValueType.VOID));
+        if (constructor != null) {
+            prepareMethodBody(constructor);
+            var pe = ProgramEmitter.create(constructor, context.getHierarchy());
+            pe.var(0, checkerType).invokeSpecial(Object.class, "<init>");
+            pe.var(0, checkerType).setField("languageVersionSettings", pe.var(1, languageSettingsType));
+            pe.var(0, checkerType).setField("jvmTarget", pe.var(2, jvmTargetType));
+            pe.var(0, checkerType).setField("platformAnnotationFeaturesSupport", pe.var(3, annotationFeaturesType));
+            pe.var(0, checkerType).setField("module", pe.var(4, moduleType));
+            pe.exit();
+        }
+        replaceWithNoOp(cls, context, "checkEntries", ValueType.VOID,
+                ValueType.object("java.util.List"),
+                ValueType.object("java.util.List"),
+                ValueType.object("org.jetbrains.kotlin.resolve.BindingTrace"),
+                ValueType.object("org.jetbrains.kotlin.psi.KtAnnotated"),
+                ValueType.object("org.jetbrains.kotlin.config.LanguageVersionSettings"));
+    }
+
     private void transformJavaSyntheticScopes(ClassHolder cls, ClassHolderTransformerContext context) {
         var projectType = ValueType.object("com.intellij.openapi.project.Project");
         var moduleType = ValueType.object("org.jetbrains.kotlin.descriptors.ModuleDescriptor");
@@ -1713,6 +1807,13 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
         var jvmTargetType = ValueType.object("org.jetbrains.kotlin.config.JvmTarget");
         var contextDelegateType = ValueType.object(
                 "org.jetbrains.kotlin.types.model.TypeSystemInferenceExtensionContextDelegate");
+        var moduleStructureOracleType = ValueType.object("org.jetbrains.kotlin.resolve.ModuleStructureOracle");
+        var annotationFeaturesType = ValueType.object(
+                "org.jetbrains.kotlin.resolve.jvm.JvmPlatformAnnotationFeaturesSupport");
+        var refinerType = ValueType.object("org.jetbrains.kotlin.types.checker.KotlinTypeRefiner");
+        var preparatorType = ValueType.object("org.jetbrains.kotlin.types.checker.KotlinTypePreparator");
+        var refinerDefaultType = ValueType.object("org.jetbrains.kotlin.types.checker.KotlinTypeRefiner$Default");
+        var preparatorDefaultType = ValueType.object("org.jetbrains.kotlin.types.checker.KotlinTypePreparator$Default");
 
         var method = cls.getMethod(new MethodDescriptor("createInstance", contextType, objectType));
         if (method == null) {
@@ -1873,6 +1974,61 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
                 .isSame(pe.constant(org.jetbrains.kotlin.resolve.jvm.JvmAdditionalClassPartsProvider.class)
                         .cast(classType)))
                 .thenDo(() -> pe.construct("org.jetbrains.kotlin.resolve.jvm.JvmAdditionalClassPartsProvider")
+                        .cast(objectType)
+                        .returnValue());
+        pe.when(pe.var(0, descriptorType).getField("klass", classType)
+                .isSame(pe.constant(org.jetbrains.kotlin.resolve.jvm.JvmPlatformAnnotationFeaturesSupport.class)
+                        .cast(classType)))
+                .thenDo(() -> pe.construct("org.jetbrains.kotlin.resolve.jvm.JvmPlatformAnnotationFeaturesSupport",
+                        pe.getField("org.jetbrains.kotlin.config.LanguageVersionSettingsImpl", "DEFAULT",
+                                languageSettingsType)
+                                .cast(languageSettingsInterfaceType))
+                        .cast(objectType)
+                        .returnValue());
+        pe.when(pe.var(0, descriptorType).getField("klass", classType)
+                .isSame(pe.constant(
+                        org.jetbrains.kotlin.resolve.checkers.OptInMarkerDeclarationAnnotationChecker.class)
+                        .cast(classType)))
+                .thenDo(() -> pe.construct(
+                        "org.jetbrains.kotlin.resolve.checkers.OptInMarkerDeclarationAnnotationChecker",
+                        pe.constantNull(moduleType))
+                        .cast(objectType)
+                        .returnValue());
+        pe.when(pe.var(0, descriptorType).getField("klass", classType)
+                .isSame(pe.constant(org.jetbrains.kotlin.resolve.checkers.ExpectedActualDeclarationChecker.class)
+                        .cast(classType)))
+                .thenDo(() -> pe.construct("org.jetbrains.kotlin.resolve.checkers.ExpectedActualDeclarationChecker",
+                        pe.constantNull(moduleStructureOracleType),
+                        pe.invoke("java.util.Collections", "emptyList", ValueType.object("java.util.List"))
+                                .cast(iterableType))
+                        .cast(objectType)
+                        .returnValue());
+        pe.when(pe.var(0, descriptorType).getField("klass", classType)
+                .isSame(pe.constant(org.jetbrains.kotlin.resolve.jvm.checkers.RepeatableAnnotationChecker.class)
+                        .cast(classType)))
+                .thenDo(() -> pe.construct("org.jetbrains.kotlin.resolve.jvm.checkers.RepeatableAnnotationChecker",
+                        pe.getField("org.jetbrains.kotlin.config.LanguageVersionSettingsImpl", "DEFAULT",
+                                languageSettingsType)
+                                .cast(languageSettingsInterfaceType),
+                        pe.getField("org.jetbrains.kotlin.config.JvmTarget", "DEFAULT", jvmTargetType),
+                        pe.construct("org.jetbrains.kotlin.resolve.jvm.JvmPlatformAnnotationFeaturesSupport",
+                                pe.getField("org.jetbrains.kotlin.config.LanguageVersionSettingsImpl", "DEFAULT",
+                                        languageSettingsType)
+                                        .cast(languageSettingsInterfaceType))
+                                .cast(annotationFeaturesType),
+                        pe.constantNull(moduleType))
+                        .cast(objectType)
+                        .returnValue());
+        pe.when(pe.var(0, descriptorType).getField("klass", classType)
+                .isSame(pe.constant(org.jetbrains.kotlin.types.checker.NewKotlinTypeCheckerImpl.class)
+                        .cast(classType)))
+                .thenDo(() -> pe.construct("org.jetbrains.kotlin.types.checker.NewKotlinTypeCheckerImpl",
+                        pe.getField("org.jetbrains.kotlin.types.checker.KotlinTypeRefiner$Default", "INSTANCE",
+                                refinerDefaultType)
+                                .cast(refinerType),
+                        pe.getField("org.jetbrains.kotlin.types.checker.KotlinTypePreparator$Default", "INSTANCE",
+                                preparatorDefaultType)
+                                .cast(preparatorType))
                         .cast(objectType)
                         .returnValue());
         pe.var(0, descriptorType)
