@@ -18,9 +18,6 @@ def trove4jJar = file(
 def kotlinCompilerJars = [
         "kotlin-compiler.jar",
         "kotlin-stdlib.jar",
-        "kotlin-reflect.jar",
-        "kotlin-script-runtime.jar",
-        "kotlinx-coroutines-core-jvm.jar",
         "annotations-13.0.jar"
 ].collect { new File(kotlinCompilerLibDir, it) }
 def teavmVersion = "0.13.1"
@@ -52,12 +49,14 @@ compileJava.dependsOn tasks.named("verifyKotlinCompilerInputs")
 
 teavm {
     wasmGC {
-        mainClass = "org.wasmidle.kotlin.teavm.KotlinCompilerProbe"
+        mainClass = "org.wasmidle.kotlin.teavm.DirectKotlinCompilerProbe"
         outOfProcess = true
         processMemory = 8192
         modularRuntime = true
         debugInformation = false
-        fastGlobalAnalysis = false
+        // Keep this diagnostic mode on while the port is incomplete: it fails faster and reports
+        // the next TeaVM/JDK API gaps instead of spending minutes in precise analysis.
+        fastGlobalAnalysis = true
         optimization = OptimizationLevel.NONE
         targetFileName = "kotlin-compiler-probe"
     }

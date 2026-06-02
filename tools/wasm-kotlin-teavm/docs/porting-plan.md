@@ -29,6 +29,11 @@ Current patch status:
 
 - `CLICompiler.loadPlugins(...)` returns `ExitCode.OK`.
 - `System.exit(int)` throws instead of trying to terminate the host VM.
+- `DirectKotlinCompilerProbe` bypasses `K2JVMCompiler.exec(...)` and calls
+  `KotlinToJVMBytecodeCompiler.compileBunchOfSources(...)` directly.
+- The direct path compiles `fixtures/hello/Main.kt` to `MainKt.class` on the JVM.
+- TeaVM precise analysis still times out after 300 seconds, but peak RSS dropped from about 9.25 GB
+  to about 6.4 GB after using the direct path and trimming the compiler classpath.
 
 ### ARCH-002: Patch JVM management/performance APIs
 
@@ -46,6 +51,21 @@ Current patch status:
 The compiler distribution reaches `java.desktop`, `java.instrument`, `java.management`,
 `java.scripting`, `jdk.compiler`, and `jdk.unsupported`. Each package must either be proven
 unreachable from the browser compile path or replaced with a TeaVM-compatible stub.
+
+Current TeaVM fast-analysis blockers:
+
+- `java.io.File.toPath()`
+- `java.lang.reflect.Field.setInt(...)`
+- `java.util.concurrent.locks.ReentrantLock` and `ReentrantReadWriteLock`
+- `java.util.concurrent.Executors` and `CompletableFuture`
+- `javax.tools.StandardLocation` and `com.sun.tools.javac.*`
+- `com.intellij.util.diff.*`
+
+### ARCH-004: Split JVM fixture runner from browser entry point
+
+`DirectKotlinCompilerProbe.main(...)` is useful for local JVM validation, but it configures the host
+JDK through `java.home`. The browser compiler entry point should be a separate exported TeaVM API
+that accepts source/classpath inputs from the worker and does not scan the local JVM.
 
 ### TEST-000: Keep the build probe reproducible
 
