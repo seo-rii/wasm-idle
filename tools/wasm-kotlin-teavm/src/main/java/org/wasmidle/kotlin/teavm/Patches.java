@@ -262,6 +262,9 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
             case "org.jetbrains.kotlin.diagnostics.Errors$Initializer":
                 transformErrorsInitializer(cls, context);
                 break;
+            case "org.jetbrains.kotlin.resolve.jvm.checkers.WarningAwareUpperBoundChecker":
+                transformWarningAwareUpperBoundChecker(cls, context);
+                break;
             case "org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment$Companion": {
                 replaceWithNoOp(cls, context, "registerApplicationExtensionPointsAndExtensionsFrom", ValueType.VOID,
                         ValueType.object("org.jetbrains.kotlin.config.CompilerConfiguration"),
@@ -1337,6 +1340,29 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
         replaceWithNoOp(cls, context, "initializeFactoryNamesAndDefaultErrorMessages", ValueType.VOID,
                 ValueType.object("java.lang.Class"),
                 ValueType.object("org.jetbrains.kotlin.diagnostics.rendering.DefaultErrorMessages$Extension"));
+    }
+
+    private void transformWarningAwareUpperBoundChecker(ClassHolder cls, ClassHolderTransformerContext context) {
+        var checkerType = ValueType.object("org.jetbrains.kotlin.types.checker.KotlinTypeChecker");
+        var typedConstructor = cls.getMethod(new MethodDescriptor("<init>", checkerType, ValueType.VOID));
+        if (typedConstructor != null) {
+            typedConstructor.setLevel(AccessLevel.PRIVATE);
+        }
+
+        var checkerClass = "org.jetbrains.kotlin.resolve.jvm.checkers.WarningAwareUpperBoundChecker";
+        var checkerObjectType = ValueType.object(checkerClass);
+        var constructor = cls.getMethod(new MethodDescriptor("<init>", ValueType.VOID));
+        if (constructor == null) {
+            constructor = new MethodHolder(new MethodDescriptor("<init>", ValueType.VOID));
+            cls.addMethod(constructor);
+        }
+        constructor.setLevel(AccessLevel.PUBLIC);
+        prepareMethodBody(constructor);
+        var pe = ProgramEmitter.create(constructor, context.getHierarchy());
+        pe.var(0, checkerObjectType)
+                .invokeSpecial("<init>", ValueType.VOID,
+                        pe.getField("org.jetbrains.kotlin.types.checker.KotlinTypeChecker", "DEFAULT", checkerType));
+        pe.exit();
     }
 
     private void transformCompileEnvironmentUtil(ClassHolder cls, ClassHolderTransformerContext context) {
