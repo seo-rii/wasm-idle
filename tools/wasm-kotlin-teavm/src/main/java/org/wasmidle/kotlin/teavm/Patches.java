@@ -20,17 +20,35 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
     @Override
     public void transformClass(ClassHolder cls, ClassHolderTransformerContext context) {
         switch (cls.getName()) {
+            case "java.lang.Class":
+                transformLangClass(cls, context);
+                break;
+            case "java.lang.ClassLoader":
+                transformClassLoader(cls, context);
+                break;
+            case "java.lang.Long":
+                transformLong(cls, context);
+                break;
+            case "java.lang.Runtime":
+                transformRuntime(cls, context);
+                break;
             case "java.lang.System":
                 transformSystem(cls, context);
                 break;
             case "java.lang.reflect.Field":
                 transformReflectField(cls, context);
                 break;
+            case "java.lang.reflect.Type":
+                transformReflectType(cls, context);
+                break;
             case "java.util.concurrent.ConcurrentHashMap":
                 transformConcurrentHashMap(cls, context);
                 break;
             case "com.intellij.util.containers.ContainerUtil":
                 transformContainerUtil(cls, context);
+                break;
+            case "com.intellij.util.lang.UrlClassLoader":
+                transformUrlClassLoader(cls, context);
                 break;
             case "org.jetbrains.kotlin.cli.common.CLICompiler":
                 transformCliCompiler(cls, context);
@@ -47,6 +65,49 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
         }
     }
 
+    private void transformLangClass(ClassHolder cls, ClassHolderTransformerContext context) {
+        var resource = getOrCreateMethod(cls, "getResource", ValueType.object("java.net.URL"),
+                ValueType.object("java.lang.String"));
+        ProgramEmitter.create(resource, context.getHierarchy())
+                .constantNull(ValueType.object("java.net.URL"))
+                .returnValue();
+
+        var typeName = getOrCreateMethod(cls, "getTypeName", ValueType.object("java.lang.String"));
+        ProgramEmitter.create(typeName, context.getHierarchy())
+                .var(0, ValueType.object("java.lang.Class"))
+                .invokeVirtual("getName", ValueType.object("java.lang.String"))
+                .returnValue();
+
+        var genericInterfacesType = ValueType.arrayOf(ValueType.object("java.lang.reflect.Type"));
+        var genericInterfaces = getOrCreateMethod(cls, "getGenericInterfaces", genericInterfacesType);
+        ProgramEmitter.create(genericInterfaces, context.getHierarchy())
+                .constructArray(ValueType.object("java.lang.reflect.Type"), 0)
+                .returnValue();
+    }
+
+    private void transformClassLoader(ClassHolder cls, ClassHolderTransformerContext context) {
+        var method = getOrCreateMethod(cls, "getSystemResource", ValueType.object("java.net.URL"),
+                ValueType.object("java.lang.String"));
+        ProgramEmitter.create(method, context.getHierarchy())
+                .constantNull(ValueType.object("java.net.URL"))
+                .returnValue();
+    }
+
+    private void transformLong(ClassHolder cls, ClassHolderTransformerContext context) {
+        var method = getOrCreateMethod(cls, "parseUnsignedLong", ValueType.LONG,
+                ValueType.object("java.lang.String"), ValueType.INTEGER);
+        var pe = ProgramEmitter.create(method, context.getHierarchy());
+        pe.invoke("java.lang.Long", "parseLong", ValueType.LONG,
+                pe.var(1, ValueType.object("java.lang.String")), pe.var(2, ValueType.INTEGER))
+                .returnValue();
+    }
+
+    private void transformRuntime(ClassHolder cls, ClassHolderTransformerContext context) {
+        var method = getOrCreateMethod(cls, "addShutdownHook", ValueType.VOID,
+                ValueType.object("java.lang.Thread"));
+        ProgramEmitter.create(method, context.getHierarchy()).exit();
+    }
+
     private void transformSystem(ClassHolder cls, ClassHolderTransformerContext context) {
         var method = cls.getMethod(new MethodDescriptor("exit", ValueType.INTEGER, ValueType.VOID));
         if (method == null) {
@@ -56,6 +117,12 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
         var pe = ProgramEmitter.create(method, context.getHierarchy());
         pe.construct(IllegalStateException.class, pe.constant("System.exit is not available in wasm-idle"))
                 .raise();
+
+        method = getOrCreateMethod(cls, "mapLibraryName", ValueType.object("java.lang.String"),
+                ValueType.object("java.lang.String"));
+        ProgramEmitter.create(method, context.getHierarchy())
+                .var(1, ValueType.object("java.lang.String"))
+                .returnValue();
     }
 
     private void transformReflectField(ClassHolder cls, ClassHolderTransformerContext context) {
@@ -68,6 +135,11 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
             cls.addMethod(method);
         }
         ProgramEmitter.create(method, context.getHierarchy()).exit();
+    }
+
+    private void transformReflectType(ClassHolder cls, ClassHolderTransformerContext context) {
+        var method = getOrCreateMethod(cls, "getTypeName", ValueType.object("java.lang.String"));
+        ProgramEmitter.create(method, context.getHierarchy()).constant("").returnValue();
     }
 
     private void transformConcurrentHashMap(ClassHolder cls, ClassHolderTransformerContext context) {
@@ -94,6 +166,11 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
         ProgramEmitter.create(method, context.getHierarchy())
                 .construct("java.util.HashSet")
                 .returnValue();
+    }
+
+    private void transformUrlClassLoader(ClassHolder cls, ClassHolderTransformerContext context) {
+        var method = getOrCreateMethod(cls, "registerAsParallelCapable", ValueType.BOOLEAN);
+        ProgramEmitter.create(method, context.getHierarchy()).constant(1).returnValue();
     }
 
     private void transformJavacWrapper(ClassHolder cls, ClassHolderTransformerContext context) {
@@ -236,6 +313,17 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
         ProgramEmitter.create(method, context.getHierarchy())
                 .invoke(owner, factoryName, returnType)
                 .returnValue();
+    }
+
+    private static MethodHolder getOrCreateMethod(ClassHolder cls, String name, ValueType returnType,
+            ValueType... argumentTypes) {
+        var method = cls.getMethod(new MethodDescriptor(name, appendReturnType(returnType, argumentTypes)));
+        if (method == null) {
+            method = new MethodHolder(new MethodDescriptor(name, appendReturnType(returnType, argumentTypes)));
+            method.setLevel(AccessLevel.PUBLIC);
+            cls.addMethod(method);
+        }
+        return method;
     }
 
     private static void replaceMeasureSideTime(ClassHolder cls, ClassHolderTransformerContext context) {

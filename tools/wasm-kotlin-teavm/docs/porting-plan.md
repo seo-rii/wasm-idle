@@ -64,14 +64,21 @@ Current TeaVM fast-analysis blockers:
       `USE_JAVAC=false`
     - `AtomicReferenceArray`, `ConcurrentLinkedQueue`, `ForkJoinPool`, and `ForkJoinTask`
     - `ConcurrentHashMap`'s `(int, float, int)` constructor and `ContainerUtil.newConcurrentSet()`
+    - `Class.getResource(...)`, `ClassLoader.getSystemResource(...)`, class/type name helpers,
+      `Runtime.addShutdownHook(...)`, `System.mapLibraryName(...)`, `StringJoiner`,
+      `Long.parseUnsignedLong(...)`, and `LockSupport`
 - Still blocking:
     - `kotlinx.coroutines.BuildersKt` and `kotlinx.coroutines.flow.SharedFlowKt`
-    - `java.lang.Class.getResource(...)` and `ClassLoader.getSystemResource(...)`
     - `java.lang.invoke.MethodHandles.lookup()`
-    - `Class.getTypeName()`, `Class.getGenericInterfaces()`, and `Type.getTypeName()`
     - `Arrays.spliterator(...)`, `Spliterators.AbstractSpliterator`, and `StreamSupport.intStream(...)`
-    - `Runtime.addShutdownHook(...)`, `System.mapLibraryName(...)`, `StringJoiner`,
-      `Long.parseUnsignedLong(...)`, and `LockSupport`
+    - Jansi native-loading and file permission APIs: `System.load(...)`, `File.canExecute()`,
+      `File.setReadable(...)`
+    - File-channel copy APIs: `FileInputStream.getChannel()`, `FileOutputStream.getChannel()`,
+      and `java.nio.channels.FileChannel`
+    - `AtomicIntegerArray`
+    - `javax.swing.SwingUtilities`
+    - Additional reflective field APIs such as `Field.setLong(...)`, `Field.setShort(...)`, and
+      `Field.getGenericType()`
 
 TeaVM did not load ordinary application jar classes placed in `java.*` packages. Classlib additions
 must follow TeaVM's internal `T...` class naming under `org.teavm.classlib...`.

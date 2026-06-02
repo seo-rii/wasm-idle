@@ -103,10 +103,12 @@ Known findings from the initial experiments:
 - Additional classlib stubs cover `AtomicReferenceArray`, `ConcurrentLinkedQueue`, `ForkJoinPool`,
   and `ForkJoinTask`, while transformer patches cover `ConcurrentHashMap`'s missing constructor and
   `ContainerUtil.newConcurrentSet()`.
-- With those patches, fast analysis fails in about 64 seconds at roughly 5.2 GB RSS. The next blocker
-  group is missing coroutines classes, resource lookup APIs, method-handle lookup, generic
-  reflection APIs, streams/spliterators, `Runtime.addShutdownHook`, `System.mapLibraryName`,
-  `StringJoiner`, `Long.parseUnsignedLong`, and `LockSupport`.
+- JDK utility patches cover class resource lookup, class/type names, generic interface reflection,
+  `Runtime.addShutdownHook`, `System.mapLibraryName`, `Long.parseUnsignedLong`, `StringJoiner`, and
+  `LockSupport`.
+- With those patches, fast analysis fails in about 61 seconds at roughly 5.9 GB RSS. The next blocker
+  group is missing coroutines classes, Jansi native-loading/file-permission APIs, file-channel copy
+  APIs, `AtomicIntegerArray`, Swing utilities, method-handle lookup, and streams/spliterators.
 - `jdeps` reports that the Kotlin compiler distribution reaches beyond `java.base` into
   `java.desktop`, `java.instrument`, `java.management`, `java.scripting`, `jdk.compiler`, and
   `jdk.unsupported`.
