@@ -280,6 +280,9 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
             case "org.jetbrains.kotlin.resolve.jvm.checkers.JvmDefaultChecker":
                 transformJvmDefaultChecker(cls, context);
                 break;
+            case "org.jetbrains.kotlin.resolve.jvm.checkers.JvmRecordApplicabilityChecker":
+                transformJvmRecordApplicabilityChecker(cls, context);
+                break;
             case "org.jetbrains.kotlin.resolve.jvm.checkers.InlinePlatformCompatibilityChecker":
                 transformInlinePlatformCompatibilityChecker(cls, context);
                 break;
@@ -1515,6 +1518,23 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
                 ValueType.object("org.jetbrains.kotlin.resolve.checkers.DeclarationCheckerContext"));
     }
 
+    private void transformJvmRecordApplicabilityChecker(ClassHolder cls, ClassHolderTransformerContext context) {
+        var checkerType = ValueType.object("org.jetbrains.kotlin.resolve.jvm.checkers.JvmRecordApplicabilityChecker");
+        var jvmTargetType = ValueType.object("org.jetbrains.kotlin.config.JvmTarget");
+        var constructor = cls.getMethod(new MethodDescriptor("<init>", jvmTargetType, ValueType.VOID));
+        if (constructor != null) {
+            prepareMethodBody(constructor);
+            var pe = ProgramEmitter.create(constructor, context.getHierarchy());
+            pe.var(0, checkerType).invokeSpecial(Object.class, "<init>");
+            pe.var(0, checkerType).setField("jvmTarget", pe.var(1, jvmTargetType));
+            pe.exit();
+        }
+        replaceWithNoOp(cls, context, "check", ValueType.VOID,
+                ValueType.object("org.jetbrains.kotlin.psi.KtDeclaration"),
+                ValueType.object("org.jetbrains.kotlin.descriptors.DeclarationDescriptor"),
+                ValueType.object("org.jetbrains.kotlin.resolve.checkers.DeclarationCheckerContext"));
+    }
+
     private void transformInlinePlatformCompatibilityChecker(ClassHolder cls,
             ClassHolderTransformerContext context) {
         var checkerType = ValueType.object("org.jetbrains.kotlin.resolve.jvm.checkers.InlinePlatformCompatibilityChecker");
@@ -1783,6 +1803,14 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
                 .isSame(pe.constant(org.jetbrains.kotlin.resolve.jvm.checkers.JvmDefaultChecker.class).cast(classType)))
                 .thenDo(() -> pe.construct("org.jetbrains.kotlin.resolve.jvm.checkers.JvmDefaultChecker",
                         pe.constantNull(projectType))
+                        .cast(objectType)
+                        .returnValue());
+        pe.when(pe.var(0, descriptorType).getField("klass", classType)
+                .isSame(pe.constant(org.jetbrains.kotlin.resolve.jvm.checkers.JvmRecordApplicabilityChecker.class)
+                        .cast(classType)))
+                .thenDo(() -> pe.construct(
+                        "org.jetbrains.kotlin.resolve.jvm.checkers.JvmRecordApplicabilityChecker",
+                        pe.getField("org.jetbrains.kotlin.config.JvmTarget", "DEFAULT", jvmTargetType))
                         .cast(objectType)
                         .returnValue());
         pe.when(pe.var(0, descriptorType).getField("klass", classType)
