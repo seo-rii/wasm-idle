@@ -57,6 +57,9 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
             case "java.util.concurrent.ConcurrentHashMap":
                 transformConcurrentHashMap(cls, context);
                 break;
+            case "java.util.ResourceBundle":
+                transformResourceBundle(cls, context);
+                break;
             case "java.util.stream.StreamSupport":
                 transformStreamSupport(cls, context);
                 break;
@@ -74,6 +77,33 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
                 break;
             case "com.intellij.mock.MockApplication":
                 transformMockApplication(cls, context);
+                break;
+            case "com.intellij.mock.MockProject":
+                transformMockProject(cls, context);
+                break;
+            case "com.intellij.diagnostic.ThreadDumper":
+                transformThreadDumper(cls, context);
+                break;
+            case "com.intellij.openapi.progress.Cancellation":
+                transformCancellation(cls, context);
+                break;
+            case "com.intellij.openapi.application.impl.ApplicationInfoImpl":
+                transformApplicationInfoImpl(cls, context);
+                break;
+            case "com.intellij.openapi.application.TransactionGuardImpl":
+                transformTransactionGuardImpl(cls, context);
+                break;
+            case "com.intellij.util.concurrency.ThreadingAssertions":
+                transformThreadingAssertions(cls, context);
+                break;
+            case "com.intellij.util.DebugAttachDetectorArgs":
+                transformDebugAttachDetectorArgs(cls, context);
+                break;
+            case "com.intellij.util.ReflectionUtil":
+                transformReflectionUtil(cls, context);
+                break;
+            case "com.intellij.util.ui.EDT":
+                transformEdt(cls, context);
                 break;
             case "org.jetbrains.kotlin.cli.common.CLICompiler":
                 transformCliCompiler(cls, context);
@@ -115,6 +145,18 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
                 ValueType.object("java.lang.String"));
         ProgramEmitter.create(method, context.getHierarchy())
                 .constantNull(ValueType.object("java.net.URL"))
+                .returnValue();
+
+        method = getOrCreateMethod(cls, "getResource", ValueType.object("java.net.URL"),
+                ValueType.object("java.lang.String"));
+        ProgramEmitter.create(method, context.getHierarchy())
+                .constantNull(ValueType.object("java.net.URL"))
+                .returnValue();
+
+        method = getOrCreateMethod(cls, "loadClass", ValueType.object("java.lang.Class"),
+                ValueType.object("java.lang.String"));
+        ProgramEmitter.create(method, context.getHierarchy())
+                .constantNull(ValueType.object("java.lang.Class"))
                 .returnValue();
     }
 
@@ -207,6 +249,12 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
                 .returnValue();
     }
 
+    private void transformResourceBundle(ClassHolder cls, ClassHolderTransformerContext context) {
+        var method = getOrCreateStaticMethod(cls, "clearCache", ValueType.VOID,
+                ValueType.object("java.lang.ClassLoader"));
+        ProgramEmitter.create(method, context.getHierarchy()).exit();
+    }
+
     private void transformConcurrentHashMap(ClassHolder cls, ClassHolderTransformerContext context) {
         var method = cls.getMethod(new MethodDescriptor("<init>",
                 ValueType.INTEGER, ValueType.FLOAT, ValueType.INTEGER, ValueType.VOID));
@@ -221,6 +269,12 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
                 .invokeSpecial("<init>", ValueType.VOID,
                         pe.var(1, ValueType.INTEGER), pe.var(2, ValueType.FLOAT));
         pe.exit();
+
+        method = getOrCreateStaticMethod(cls, "newKeySet",
+                ValueType.object("java.util.concurrent.ConcurrentHashMap$KeySetView"));
+        ProgramEmitter.create(method, context.getHierarchy())
+                .constantNull(ValueType.object("java.util.concurrent.ConcurrentHashMap$KeySetView"))
+                .returnValue();
     }
 
     private void transformContainerUtil(ClassHolder cls, ClassHolderTransformerContext context) {
@@ -252,6 +306,12 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
     private void transformUrlClassLoader(ClassHolder cls, ClassHolderTransformerContext context) {
         var method = getOrCreateMethod(cls, "registerAsParallelCapable", ValueType.BOOLEAN);
         ProgramEmitter.create(method, context.getHierarchy()).constant(1).returnValue();
+
+        method = getOrCreateMethod(cls, "loadClass", ValueType.object("java.lang.Class"),
+                ValueType.object("java.lang.String"));
+        ProgramEmitter.create(method, context.getHierarchy())
+                .constantNull(ValueType.object("java.lang.Class"))
+                .returnValue();
     }
 
     private void transformCodeInsightContextManagerImpl(ClassHolder cls, ClassHolderTransformerContext context) {
@@ -278,6 +338,98 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
         replaceWithNoOp(cls, context, "setCodeInsightContext", ValueType.VOID,
                 fileViewProviderType, codeInsightContextType);
         replaceWithNoOp(cls, context, "dispose", ValueType.VOID);
+    }
+
+    private void transformApplicationInfoImpl(ClassHolder cls, ClassHolderTransformerContext context) {
+        var appInfoType = ValueType.object("com.intellij.openapi.application.impl.ApplicationInfoImpl");
+        var constructors = new MethodDescriptor[] {
+                new MethodDescriptor("<init>", ValueType.VOID),
+                new MethodDescriptor("<init>", ValueType.object("com.intellij.util.xml.dom.XmlElement"),
+                        ValueType.VOID)
+        };
+        for (var descriptor : constructors) {
+            var constructor = cls.getMethod(descriptor);
+            if (constructor == null) {
+                continue;
+            }
+            var pe = ProgramEmitter.create(constructor, context.getHierarchy());
+            pe.var(0, appInfoType)
+                    .invokeSpecial("com.intellij.openapi.application.ex.ApplicationInfoEx", "<init>");
+            pe.var(0, appInfoType)
+                    .setField("essentialPluginIds",
+                            pe.construct("java.util.ArrayList").cast(ValueType.object("java.util.List")));
+            pe.exit();
+        }
+    }
+
+    private void transformDebugAttachDetectorArgs(ClassHolder cls, ClassHolderTransformerContext context) {
+        replaceWithNoOp(cls, context, "<clinit>", ValueType.VOID);
+        replaceWithConstantBoolean(cls, context, "isDebugEnabled", false);
+        replaceWithConstantBoolean(cls, context, "isAttached", false);
+    }
+
+    private void transformCancellation(ClassHolder cls, ClassHolderTransformerContext context) {
+        replaceWithNoOp(cls, context, "<clinit>", ValueType.VOID);
+        replaceWithConstantBoolean(cls, context, "isInNonCancelableSection", false);
+        replaceWithConstantBoolean(cls, context, "isInNonCancelableSectionInternal", false);
+    }
+
+    private void transformEdt(ClassHolder cls, ClassHolderTransformerContext context) {
+        replaceWithNull(cls, context, "getEventDispatchThreadOrNull",
+                ValueType.object("java.lang.Thread"));
+        replaceWithConstantBoolean(cls, context, "isCurrentThreadEdt", true);
+    }
+
+    private void transformThreadDumper(ClassHolder cls, ClassHolderTransformerContext context) {
+        replaceWithConstantString(cls, context, "dumpThreadsToString");
+    }
+
+    private void transformTransactionGuardImpl(ClassHolder cls, ClassHolderTransformerContext context) {
+        var guardType = ValueType.object("com.intellij.openapi.application.TransactionGuardImpl");
+        var constructor = cls.getMethod(new MethodDescriptor("<init>", ValueType.VOID));
+        if (constructor != null) {
+            var pe = ProgramEmitter.create(constructor, context.getHierarchy());
+            pe.var(0, guardType)
+                    .invokeSpecial("com.intellij.openapi.application.TransactionGuard", "<init>");
+            pe.exit();
+        }
+        replaceWithConstantBoolean(cls, context, "isWriteSafeModality", true,
+                ValueType.object("com.intellij.openapi.application.ModalityState"));
+        replaceWithNoOp(cls, context, "assertWriteActionAllowed", ValueType.VOID);
+        replaceWithNoOp(cls, context, "enteredModality", ValueType.VOID,
+                ValueType.object("com.intellij.openapi.application.ModalityState"));
+        replaceWithConstantString(cls, context, "toString");
+    }
+
+    private void transformThreadingAssertions(ClassHolder cls, ClassHolderTransformerContext context) {
+        replaceWithNoOp(cls, context, "assertEventDispatchThread", ValueType.VOID);
+        replaceWithNoOp(cls, context, "assertBackgroundThread", ValueType.VOID);
+        replaceWithNoOp(cls, context, "softAssertReadAccess", ValueType.VOID);
+        replaceWithNoOp(cls, context, "assertWriteAccess", ValueType.VOID);
+        replaceWithNoOp(cls, context, "trySoftAssertReadAccessWhenLocksAreForbidden", ValueType.VOID);
+        replaceWithNoOp(cls, context, "trySoftAssertWriteAccessWhenLocksAreForbidden", ValueType.VOID);
+    }
+
+    private void transformMockProject(ClassHolder cls, ClassHolderTransformerContext context) {
+        var projectType = ValueType.object("com.intellij.mock.MockProject");
+        var picoType = ValueType.object("org.picocontainer.PicoContainer");
+        var disposableType = ValueType.object("com.intellij.openapi.Disposable");
+        var constructor = cls.getMethod(new MethodDescriptor("<init>", picoType, disposableType, ValueType.VOID));
+        if (constructor != null) {
+            var pe = ProgramEmitter.create(constructor, context.getHierarchy());
+            pe.var(0, projectType)
+                    .invokeSpecial("com.intellij.mock.MockComponentManager", "<init>",
+                            pe.var(1, picoType), pe.var(2, disposableType));
+            pe.exit();
+        }
+        replaceWithNoOp(cls, context, "dispose", ValueType.VOID);
+        replaceWithNull(cls, context, "getCoroutineScope",
+                ValueType.object("kotlinx.coroutines.CoroutineScope"));
+    }
+
+    private void transformReflectionUtil(ClassHolder cls, ClassHolderTransformerContext context) {
+        replaceWithNull(cls, context, "proxy", ValueType.object("java.lang.Object"),
+                ValueType.object("java.lang.Class"), ValueType.object("java.lang.reflect.InvocationHandler"));
     }
 
     private void transformCoreApplicationEnvironment(ClassHolder cls, ClassHolderTransformerContext context) {

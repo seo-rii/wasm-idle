@@ -77,17 +77,20 @@ Current TeaVM fast-analysis blockers:
     - IntelliJ plugin descriptor loading and multiverse context coroutines by no-oping
       `CoreApplicationEnvironment.registerExtensionPointAndExtensions(...)` and replacing
       `CodeInsightContextManagerImpl` with default-context behavior
+    - IntelliJ runtime utility paths including `MockProject` coroutine setup,
+      application-info XML setup, debug/thread-dump helpers, transaction guard Swing setup,
+      event multicaster proxy creation, `ResourceBundle.clearCache(...)`,
+      `ClassLoader.loadClass(...)`, EDT/threading assertions, cancellation checks,
+      `Introspector`, and `TypeNotPresentException`
 - Still blocking:
     - File-channel APIs: `FileInputStream.getChannel()`, `FileOutputStream.getChannel()`,
       `RandomAccessFile.getChannel()`, `FileSystemProvider.newFileChannel(...)`, and
       `java.nio.channels.FileChannel`
-    - IntelliJ event multicaster proxy creation through `java.lang.reflect.Proxy`
-    - IntelliJ unsafe CAS paths through `MethodHandle.invokeExact(...)`
-    - JVM management/thread dump APIs such as `ManagementFactory` and `ThreadInfo`
-    - Swing transaction guard setup through `javax.swing.SwingUtilities`
-    - `ConcurrentHashMap.newKeySet()`
-    - `java.lang.TypeNotPresentException` through ASM frame computation
-    - `ClassLoader.getResource(...)` through Kotlin builtins resource loading
+    - IntelliJ unsafe paths through `MethodHandle.invokeExact(...)` and
+      `MethodType.methodType(...)`
+    - `com.intellij.util.lang.CharSequenceAccess`
+    - `java.beans.PropertyChangeSupport`
+    - Swing icon classes such as `javax.swing.Icon`
 
 TeaVM did not load ordinary application jar classes placed in `java.*` packages. Classlib additions
 must follow TeaVM's internal `T...` class naming under `org.teavm.classlib...`.

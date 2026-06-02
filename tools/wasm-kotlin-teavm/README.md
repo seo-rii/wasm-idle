@@ -123,6 +123,14 @@ Known findings from the initial experiments:
   group is file-channel APIs, IntelliJ event multicaster proxy creation, JVM management/thread dump
   APIs, Swing transaction guard setup, `ConcurrentHashMap.newKeySet()`, unsafe method-handle CAS
   calls, `TypeNotPresentException`, and `ClassLoader.getResource(...)`.
+- Additional IntelliJ runtime pruning removes the current `MockProject` coroutine initialization,
+  application-info XML initialization, debug/thread-dump helpers, transaction guard Swing setup,
+  event multicaster proxy creation, `ResourceBundle.clearCache(...)`, `ClassLoader.loadClass(...)`,
+  EDT/threading assertions, cancellation checks, `Introspector`, and `TypeNotPresentException`
+  paths.
+- With those patches, fast analysis fails in about 67 seconds at roughly 5.1 GB RSS. The next blocker
+  group is file-channel APIs, IntelliJ unsafe method-handle calls, `MethodType.methodType(...)`,
+  `CharSequenceAccess`, `PropertyChangeSupport`, and Swing icon classes.
 - `jdeps` reports that the Kotlin compiler distribution reaches beyond `java.base` into
   `java.desktop`, `java.instrument`, `java.management`, `java.scripting`, `jdk.compiler`, and
   `jdk.unsupported`.
