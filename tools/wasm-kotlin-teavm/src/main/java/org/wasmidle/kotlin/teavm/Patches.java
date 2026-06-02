@@ -295,6 +295,9 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
             case "org.jetbrains.kotlin.resolve.jvm.JvmTypeSpecificityComparatorDelegate":
                 transformJvmTypeSpecificityComparatorDelegate(cls, context);
                 break;
+            case "org.jetbrains.kotlin.resolve.jvm.JvmPlatformOverloadsSpecificityComparator":
+                transformJvmPlatformOverloadsSpecificityComparator(cls, context);
+                break;
             case "org.jetbrains.kotlin.synthetic.JavaSyntheticScopes":
                 transformJavaSyntheticScopes(cls, context);
                 break;
@@ -1611,6 +1614,24 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
                 ValueType.object("org.jetbrains.kotlin.types.model.KotlinTypeMarker"));
     }
 
+    private void transformJvmPlatformOverloadsSpecificityComparator(ClassHolder cls,
+            ClassHolderTransformerContext context) {
+        var comparatorType = ValueType.object(
+                "org.jetbrains.kotlin.resolve.jvm.JvmPlatformOverloadsSpecificityComparator");
+        var languageSettingsType = ValueType.object("org.jetbrains.kotlin.config.LanguageVersionSettings");
+        var constructor = cls.getMethod(new MethodDescriptor("<init>", languageSettingsType, ValueType.VOID));
+        if (constructor != null) {
+            prepareMethodBody(constructor);
+            var pe = ProgramEmitter.create(constructor, context.getHierarchy());
+            pe.var(0, comparatorType).invokeSpecial(Object.class, "<init>");
+            pe.var(0, comparatorType).setField("languageVersionSettings", pe.var(1, languageSettingsType));
+            pe.exit();
+        }
+        replaceWithConstantBoolean(cls, context, "isMoreSpecificShape", false,
+                ValueType.object("org.jetbrains.kotlin.descriptors.CallableDescriptor"),
+                ValueType.object("org.jetbrains.kotlin.descriptors.CallableDescriptor"));
+    }
+
     private void transformJavaSyntheticScopes(ClassHolder cls, ClassHolderTransformerContext context) {
         var projectType = ValueType.object("com.intellij.openapi.project.Project");
         var moduleType = ValueType.object("org.jetbrains.kotlin.descriptors.ModuleDescriptor");
@@ -1797,6 +1818,16 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
                         .cast(classType)))
                 .thenDo(() -> pe.construct("org.jetbrains.kotlin.resolve.jvm.JvmTypeSpecificityComparatorDelegate",
                         pe.constantNull(contextDelegateType),
+                        pe.getField("org.jetbrains.kotlin.config.LanguageVersionSettingsImpl", "DEFAULT",
+                                languageSettingsType)
+                                .cast(languageSettingsInterfaceType))
+                        .cast(objectType)
+                        .returnValue());
+        pe.when(pe.var(0, descriptorType).getField("klass", classType)
+                .isSame(pe.constant(org.jetbrains.kotlin.resolve.jvm.JvmPlatformOverloadsSpecificityComparator.class)
+                        .cast(classType)))
+                .thenDo(() -> pe.construct(
+                        "org.jetbrains.kotlin.resolve.jvm.JvmPlatformOverloadsSpecificityComparator",
                         pe.getField("org.jetbrains.kotlin.config.LanguageVersionSettingsImpl", "DEFAULT",
                                 languageSettingsType)
                                 .cast(languageSettingsInterfaceType))
