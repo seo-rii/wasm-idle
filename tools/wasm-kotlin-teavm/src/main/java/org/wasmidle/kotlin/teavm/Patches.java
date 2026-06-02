@@ -87,6 +87,28 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
             case "java.util.stream.StreamSupport":
                 transformStreamSupport(cls, context);
                 break;
+            case "com.intellij.util.CachedValueBase": {
+                var dataType = ValueType.object("com.intellij.util.CachedValueBase$Data");
+                var resultType = ValueType.object("com.intellij.openapi.util.CachedValueProvider$Result");
+                replaceWithReturnedArgument(cls, context, "cacheOrGetData", dataType, 2, dataType, dataType);
+                replaceWithNoOp(cls, context, "setRawData", ValueType.VOID, dataType);
+                replaceWithNull(cls, context, "getValueWithLock", ValueType.object("java.lang.Object"),
+                        ValueType.object("java.lang.Object"));
+                replaceWithNoOp(cls, context, "clear", ValueType.VOID);
+                replaceWithNull(cls, context, "setValue", ValueType.object("java.lang.Object"), resultType);
+                replaceWithNull(cls, context, "getUpToDateOrNull", dataType);
+                replaceWithConstantBoolean(cls, context, "hasUpToDateValue", false);
+                replaceWithConstantBoolean(cls, context, "isUpToDate", false, dataType);
+                break;
+            }
+            case "com.intellij.util.CachedValueImpl": {
+                var dataType = ValueType.object("com.intellij.util.CachedValueBase$Data");
+                replaceWithNull(cls, context, "getValue", ValueType.object("java.lang.Object"));
+                replaceWithNull(cls, context, "getUpToDateOrNull", dataType);
+                replaceWithNull(cls, context, "getRawData", dataType);
+                replaceWithNoOp(cls, context, "setData", ValueType.VOID, dataType);
+                break;
+            }
             case "com.intellij.codeInsight.multiverse.CodeInsightContextManagerImpl":
                 transformCodeInsightContextManagerImpl(cls, context);
                 break;
@@ -316,6 +338,18 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
         ProgramEmitter.create(declaredClasses, context.getHierarchy())
                 .constructArray(ValueType.object("java.lang.Class"), 0)
                 .returnValue();
+
+        var declaredFieldsType = ValueType.arrayOf(ValueType.object("java.lang.reflect.Field"));
+        var declaredFields = getOrCreateMethod(cls, "getDeclaredFields", declaredFieldsType);
+        ProgramEmitter.create(declaredFields, context.getHierarchy())
+                .constructArray(ValueType.object("java.lang.reflect.Field"), 0)
+                .returnValue();
+
+        var declaredField = getOrCreateMethod(cls, "getDeclaredField", ValueType.object("java.lang.reflect.Field"),
+                ValueType.object("java.lang.String"));
+        ProgramEmitter.create(declaredField, context.getHierarchy())
+                .constantNull(ValueType.object("java.lang.reflect.Field"))
+                .returnValue();
     }
 
     private void transformClassLoader(ClassHolder cls, ClassHolderTransformerContext context) {
@@ -518,9 +552,14 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
         var arrayType = ValueType.arrayOf(ValueType.object("java.lang.Object"));
         var spliteratorType = ValueType.object("java.util.Spliterator");
         var method = getOrCreateStaticMethod(cls, "spliterator", spliteratorType, arrayType);
-        var pe = ProgramEmitter.create(method, context.getHierarchy());
-        pe.invoke("java.util.Spliterators", "spliterator", spliteratorType,
-                pe.var(0, arrayType), pe.constant(0x410))
+        ProgramEmitter.create(method, context.getHierarchy())
+                .constantNull(spliteratorType)
+                .returnValue();
+
+        method = getOrCreateStaticMethod(cls, "spliterator", spliteratorType, arrayType,
+                ValueType.INTEGER, ValueType.INTEGER);
+        ProgramEmitter.create(method, context.getHierarchy())
+                .constantNull(spliteratorType)
                 .returnValue();
     }
 
@@ -528,8 +567,8 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
         var spliteratorType = ValueType.object("java.util.Spliterator");
         var iteratorType = ValueType.object("java.util.Iterator");
         var method = getOrCreateStaticMethod(cls, "iterator", iteratorType, spliteratorType);
-        var pe = ProgramEmitter.create(method, context.getHierarchy());
-        pe.construct("org.wasmidle.kotlin.teavm.SpliteratorIterator", pe.var(0, spliteratorType))
+        ProgramEmitter.create(method, context.getHierarchy())
+                .invoke("java.util.Collections", "emptyIterator", iteratorType)
                 .returnValue();
     }
 
@@ -1104,8 +1143,10 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
         replaceWithNoOp(cls, context, "onDelayQueuePurgedOnShutdown", ValueType.VOID);
         replaceWithConstantBoolean(cls, context, "awaitTermination", true,
                 ValueType.LONG, ValueType.object("java.util.concurrent.TimeUnit"));
-        replaceWithReturnedArgument(cls, context, "capturePropagationAndCancellationContext",
-                ValueType.object("java.lang.Runnable"), 0, ValueType.object("java.lang.Runnable"));
+        replaceWithNull(cls, context, "capturePropagationAndCancellationContext",
+                ValueType.object("java.lang.Runnable"), ValueType.object("java.lang.Runnable"));
+        replaceWithNull(cls, context, "capturePropagationAndCancellationContext",
+                ValueType.object("java.util.concurrent.FutureTask"), ValueType.object("java.util.concurrent.Callable"));
     }
 
     private void transformThreadContext(ClassHolder cls, ClassHolderTransformerContext context) {

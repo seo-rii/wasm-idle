@@ -102,18 +102,24 @@ Current TeaVM fast-analysis blockers:
     - Synthetic TeaVM classes for missing original-name interfaces/classes that cannot be compiled
       directly on JDK 17 source path, including `javax.swing.Icon`,
       `ScheduledExecutorService`, `RunnableScheduledFuture`, and `AbstractExecutorService`
-- Still blocking:
+- WasmGC code generation blockers cleared by pruning:
+    - `Class.getDeclaredField(...)`/`getDeclaredFields()` now return empty reflection results.
+    - `Arrays.spliterator(...)` and `Spliterators.iterator(...)` no longer construct stream-backed
+      iterator paths during generation.
+    - `CachedValueBase`/`CachedValueImpl` diagnostics cache paths are stubbed for the current
+      browser compile analysis.
+    - `AppScheduledExecutorService.capturePropagationAndCancellationContext(...)` overloads are
+      stubbed so WasmGC generation no longer hits TeaVM's local-variable codegen bug.
+- Current WasmGC build result:
     - Without a larger JVM stack, TeaVM reaches `AsyncMethodFinder` recursion and throws
       `StackOverflowError`. `JAVA_TOOL_OPTIONS=-Xss64m` moves the probe past that point.
-    - With `JAVA_TOOL_OPTIONS=-Xss64m`, WasmGC generation reaches internal codegen errors rather
-      than missing-class diagnostics:
-        - `WasmGCAnnotationsGenerator` NPE while generating reflection metadata reached from
-          `Class.getDeclaredField(...)` in `KotlinCoreEnvironment.configureProjectEnvironment(...)`
-        - `BaseWasmGenerationVisitor.localVar(...)` `IndexOutOfBoundsException` on
-          `Arrays.spliterator(...)`/`Spliterators.iterator(...)` paths
-        - `CoroutineTransformation` NPE in a diagnostics/cached-value path
-        - another `BaseWasmGenerationVisitor.localVar(...)` failure in
-          `AppScheduledExecutorService.capturePropagationAndCancellationContext(...)`
+    - With `JAVA_TOOL_OPTIONS=-Xss64m`, `buildWasmGC` now succeeds in about 2 minutes and writes
+      `build/generated/teavm/wasm-gc/kotlin-compiler-probe.wasm`.
+    - The latest successful probe recorded `peakRssMb: 8151`, so memory use remains high even
+      after the graph reduction.
+    - The generated WasmGC artifact has not yet been proven to execute a browser-side Kotlin
+      compile. The next blocker is runtime smoke testing of `compileKotlinSource(...)` against the
+      minimal fixture.
 
 TeaVM did not load ordinary application jar classes placed in `java.*` packages. Most classlib
 additions must follow TeaVM's internal `T...` class naming under `org.teavm.classlib...`; a few
@@ -132,8 +138,9 @@ Current status:
 - `BrowserKotlinCompilerProbe.compileKotlinSource(...)` calls the no-host-JDK compiler path.
 - A guarded call keeps that compiler path reachable for TeaVM analysis while the browser API shape is
   still being determined.
-- Fast analysis passed the earlier host-JDK setup `File.toPath()` blocker, but backend IR
-  serialization now exposes a separate `IrFileSerializer` `File.toPath()` path.
+- `buildWasmGC` now produces a WasmGC artifact when run with `JAVA_TOOL_OPTIONS=-Xss64m`.
+- Browser or Node execution of the exported API still needs a minimal smoke test before wiring this
+  into wasm-idle's UI.
 
 ### ARCH-005: Remove statically reachable javac and parallel backend code
 
@@ -160,3 +167,9 @@ fun main() {
 
 Do not wire this into wasm-idle's UI until that minimal compile path works and can be run repeatedly
 without multi-minute, multi-gigabyte rebuilds.
+
+Current status:
+
+- The JVM fixture runner still compiles `fixtures/hello/Main.kt` to `MainKt.class`.
+- The WasmGC artifact builds successfully, but the artifact has not yet run the minimal Kotlin
+  compile in a browser-compatible runtime.
