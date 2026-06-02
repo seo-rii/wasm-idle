@@ -54,7 +54,6 @@ unreachable from the browser compile path or replaced with a TeaVM-compatible st
 
 Current TeaVM fast-analysis blockers:
 
-- `java.io.File.toPath()`
 - `java.lang.reflect.Field.setInt(...)`
 - `java.util.concurrent.locks.ReentrantLock` and `ReentrantReadWriteLock`
 - `java.util.concurrent.Executors` and `CompletableFuture`
@@ -66,6 +65,14 @@ Current TeaVM fast-analysis blockers:
 `DirectKotlinCompilerProbe.main(...)` is useful for local JVM validation, but it configures the host
 JDK through `java.home`. The browser compiler entry point should be a separate exported TeaVM API
 that accepts source/classpath inputs from the worker and does not scan the local JVM.
+
+Current status:
+
+- `BrowserKotlinCompilerProbe` is the TeaVM `mainClass`.
+- `BrowserKotlinCompilerProbe.compileKotlinSource(...)` calls the no-host-JDK compiler path.
+- A guarded call keeps that compiler path reachable for TeaVM analysis while the browser API shape is
+  still being determined.
+- Fast analysis now fails without the previous `java.io.File.toPath()` host JDK blocker.
 
 ### TEST-000: Keep the build probe reproducible
 

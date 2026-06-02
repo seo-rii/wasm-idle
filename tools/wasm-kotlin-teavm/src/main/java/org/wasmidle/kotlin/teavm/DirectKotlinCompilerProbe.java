@@ -37,6 +37,21 @@ public final class DirectKotlinCompilerProbe {
     }
 
     public static boolean compile(String sourcePath, String outputDir, String[] classpathEntries) {
+        var configuration = createBaseConfiguration(sourcePath, outputDir, classpathEntries);
+        configuration.put(JVMConfigurationKeys.JDK_HOME, new File(System.getProperty("java.home")));
+        JvmContentRootsKt.configureJdkClasspathRoots(configuration);
+        return compileConfigured(configuration);
+    }
+
+    public static boolean compileWithoutHostJdk(
+            String sourcePath, String outputDir, String[] classpathEntries) {
+        var configuration = createBaseConfiguration(sourcePath, outputDir, classpathEntries);
+        configuration.put(JVMConfigurationKeys.NO_JDK, Boolean.TRUE);
+        return compileConfigured(configuration);
+    }
+
+    private static CompilerConfiguration createBaseConfiguration(
+            String sourcePath, String outputDir, String[] classpathEntries) {
         var configuration = new CompilerConfiguration();
         MessageCollector collector = new PrintingMessageCollector(
                 System.err, MessageRenderer.PLAIN_FULL_PATHS, false);
@@ -47,18 +62,20 @@ public final class DirectKotlinCompilerProbe {
         configuration.put(CommonConfigurationKeys.MESSAGE_COLLECTOR_KEY, collector);
         configuration.put(CLIConfigurationKeys.MESSAGE_COLLECTOR_KEY, collector);
         configuration.put(JVMConfigurationKeys.OUTPUT_DIRECTORY, new File(outputDir));
-        configuration.put(JVMConfigurationKeys.JDK_HOME, new File(System.getProperty("java.home")));
         configuration.put(JVMConfigurationKeys.JVM_TARGET, JvmTarget.JVM_1_8);
         configuration.put(JVMConfigurationKeys.NO_REFLECT, Boolean.TRUE);
         configuration.put(JVMConfigurationKeys.INCLUDE_RUNTIME, Boolean.FALSE);
         configuration.add(CLIConfigurationKeys.CONTENT_ROOTS,
                 new KotlinSourceRoot(sourcePath, false, null));
-        JvmContentRootsKt.configureJdkClasspathRoots(configuration);
 
         for (var classpathEntry : classpathEntries) {
             JvmContentRootsKt.addJvmClasspathRoot(configuration, new File(classpathEntry));
         }
+        return configuration;
+    }
 
+    private static boolean compileConfigured(CompilerConfiguration configuration) {
+        MessageCollector collector = configuration.get(CommonConfigurationKeys.MESSAGE_COLLECTOR_KEY);
         Disposable rootDisposable = Disposer.newDisposable("wasm-idle-kotlin-direct-probe");
         try {
             var environment = KotlinCoreEnvironment.Companion.createForProduction(

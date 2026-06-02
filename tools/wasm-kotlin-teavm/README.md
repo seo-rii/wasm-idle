@@ -87,6 +87,9 @@ Known findings from the initial experiments:
   300 seconds at roughly 6.4 GB RSS. With fast global analysis it failed in about 80 seconds at
   roughly 5.8 GB RSS and exposed the next missing APIs: `java.io.File.toPath`, reflection field
   mutation, `java.util.concurrent` locks/futures, `javax.tools`/`javac`, and IntelliJ diff helpers.
+- Splitting the browser TeaVM entry point from the JVM fixture runner removed the host JDK scan from
+  the browser graph. The current fast-analysis build fails in about 100 seconds at roughly 5.6 GB
+  RSS; `java.io.File.toPath` is no longer in the first blocker set.
 - The first transformer patches disable `System.exit`, Kotlin CLI plugin loading, and Kotlin
   performance measurements that can reach JVM management APIs.
 - `jdeps` reports that the Kotlin compiler distribution reaches beyond `java.base` into

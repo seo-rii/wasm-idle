@@ -49,7 +49,7 @@ compileJava.dependsOn tasks.named("verifyKotlinCompilerInputs")
 
 teavm {
     wasmGC {
-        mainClass = "org.wasmidle.kotlin.teavm.DirectKotlinCompilerProbe"
+        mainClass = "org.wasmidle.kotlin.teavm.BrowserKotlinCompilerProbe"
         outOfProcess = true
         processMemory = 8192
         modularRuntime = true
