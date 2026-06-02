@@ -94,20 +94,31 @@ Current TeaVM fast-analysis blockers:
     - JDK/IntelliJ runtime stubs for `PropertyChangeSupport`, `ConcurrentHashMap.KeySetView`,
       `ThreadMXBean`/low-memory watcher paths, generic superclass lookup, `ParameterizedType`,
       `Proxy`, Swing `Icon`, and IntelliJ coroutine thread context
+    - Backend/runtime stubs for `MessageDigest`, `Character.UnicodeBlock`, executable generic
+      parameter reflection, additional `MethodHandle`/`MethodType` descriptors,
+      `ResourceBundle.Control`, `Locale.forLanguageTag(...)`, `File.toPath()`, Kotlin reflection
+      `KClasses`, coroutine `Job`/`DisposableHandle`, scheduling futures/queues, `URLClassLoader`,
+      `ThreadPoolExecutor` support types, `CountDownLatch`, and `RejectedExecutionException`
+    - Synthetic TeaVM classes for missing original-name interfaces/classes that cannot be compiled
+      directly on JDK 17 source path, including `javax.swing.Icon`,
+      `ScheduledExecutorService`, `RunnableScheduledFuture`, and `AbstractExecutorService`
 - Still blocking:
-    - `java.security.MessageDigest` for inline/value-class ABI hashing
-    - `Character.UnicodeBlock` and variation-selector fields used by IntelliJ string escaping
-    - Generic executable reflection APIs: `Method.getGenericParameterTypes()` and
-      `Constructor.getGenericParameterTypes()`
-    - Additional `MethodType` APIs: `methodType(Class)`, `methodType(Class, List)`, and
-      `parameterType(int)`
-    - IntelliJ scheduling paths: `FutureTask`, `SchedulingWrapper.MyScheduledFutureTask.runAndReset()`,
-      and `AppDelayQueue.remove(Object)`
-    - Backend serialization reaches `File.toPath()` again through `IrFileSerializer`
-    - `kotlin.reflect.full.KClasses`
+    - Without a larger JVM stack, TeaVM reaches `AsyncMethodFinder` recursion and throws
+      `StackOverflowError`. `JAVA_TOOL_OPTIONS=-Xss64m` moves the probe past that point.
+    - With `JAVA_TOOL_OPTIONS=-Xss64m`, WasmGC generation reaches internal codegen errors rather
+      than missing-class diagnostics:
+        - `WasmGCAnnotationsGenerator` NPE while generating reflection metadata reached from
+          `Class.getDeclaredField(...)` in `KotlinCoreEnvironment.configureProjectEnvironment(...)`
+        - `BaseWasmGenerationVisitor.localVar(...)` `IndexOutOfBoundsException` on
+          `Arrays.spliterator(...)`/`Spliterators.iterator(...)` paths
+        - `CoroutineTransformation` NPE in a diagnostics/cached-value path
+        - another `BaseWasmGenerationVisitor.localVar(...)` failure in
+          `AppScheduledExecutorService.capturePropagationAndCancellationContext(...)`
 
-TeaVM did not load ordinary application jar classes placed in `java.*` packages. Classlib additions
-must follow TeaVM's internal `T...` class naming under `org.teavm.classlib...`.
+TeaVM did not load ordinary application jar classes placed in `java.*` packages. Most classlib
+additions must follow TeaVM's internal `T...` class naming under `org.teavm.classlib...`; a few
+missing original-name interfaces/classes are submitted synthetically by the TeaVM plugin because
+JDK 17 rejects direct source stubs for packages like `javax.swing`.
 
 ### ARCH-004: Split JVM fixture runner from browser entry point
 
