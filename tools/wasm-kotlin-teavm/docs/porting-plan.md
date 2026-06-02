@@ -25,16 +25,32 @@
 Start from `KotlinCompilerProbe` instead of `K2JVMCompiler.main`. Keep plugin loading, scripting,
 daemon support, JS/metadata compiler entry points, and service scanning unreachable where possible.
 
+Current patch status:
+
+- `CLICompiler.loadPlugins(...)` returns `ExitCode.OK`.
+- `System.exit(int)` throws instead of trying to terminate the host VM.
+
 ### ARCH-002: Patch JVM management/performance APIs
 
 Kotlin's CLI performance machinery can reach thread CPU time and related management APIs. Patch
 `PerformanceManager` methods to no-op or call through only the user-supplied callback.
+
+Current patch status:
+
+- Phase notification methods are no-ops.
+- `measureSideTime$compiler_common(...)` directly invokes the callback.
+- Performance report generation returns an empty string.
 
 ### ARCH-003: Replace unavailable JDK APIs
 
 The compiler distribution reaches `java.desktop`, `java.instrument`, `java.management`,
 `java.scripting`, `jdk.compiler`, and `jdk.unsupported`. Each package must either be proven
 unreachable from the browser compile path or replaced with a TeaVM-compatible stub.
+
+### TEST-000: Keep the build probe reproducible
+
+Use `scripts/probe-wasm-build.mjs` for long-running Wasm build experiments. The probe records exit
+status, timeout status, and peak RSS under `.cache/probes/last-wasm-build.json`.
 
 ### TEST-001: Define a minimal success case
 

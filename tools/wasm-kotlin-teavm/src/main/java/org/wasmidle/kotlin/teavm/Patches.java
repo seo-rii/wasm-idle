@@ -22,6 +22,9 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
             case "java.lang.System":
                 transformSystem(cls, context);
                 break;
+            case "org.jetbrains.kotlin.cli.common.CLICompiler":
+                transformCliCompiler(cls, context);
+                break;
             case "org.jetbrains.kotlin.util.PerformanceManager":
                 transformPerformanceManager(cls, context);
                 break;
@@ -37,6 +40,21 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
         var pe = ProgramEmitter.create(method, context.getHierarchy());
         pe.construct(IllegalStateException.class, pe.constant("System.exit is not available in wasm-idle"))
                 .raise();
+    }
+
+    private void transformCliCompiler(ClassHolder cls, ClassHolderTransformerContext context) {
+        var method = cls.getMethod(new MethodDescriptor("loadPlugins",
+                ValueType.object("org.jetbrains.kotlin.utils.KotlinPaths"),
+                ValueType.object("org.jetbrains.kotlin.cli.common.arguments.CommonCompilerArguments"),
+                ValueType.object("org.jetbrains.kotlin.config.CompilerConfiguration"),
+                ValueType.object("com.intellij.openapi.Disposable"),
+                ValueType.object("org.jetbrains.kotlin.cli.common.ExitCode")));
+        if (method == null) {
+            return;
+        }
+        var pe = ProgramEmitter.create(method, context.getHierarchy());
+        pe.getField("org.jetbrains.kotlin.cli.common.ExitCode", "OK",
+                ValueType.object("org.jetbrains.kotlin.cli.common.ExitCode")).returnValue();
     }
 
     private void transformPerformanceManager(ClassHolder cls, ClassHolderTransformerContext context) {

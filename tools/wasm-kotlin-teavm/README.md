@@ -42,6 +42,18 @@ If this repo does not have a Gradle wrapper available, use any Gradle 8/9 compat
 gradle -p tools/wasm-kotlin-teavm compileJava
 ```
 
+To run the Wasm build with a timeout and memory report:
+
+```bash
+GRADLE=/path/to/gradle \
+KOTLIN_COMPILER_LIB_DIR=/path/to/kotlin-compiler/lib \
+TROVE4J_JAR=/path/to/trove4j.jar \
+node scripts/probe-wasm-build.mjs --timeout-ms 300000
+```
+
+The probe writes `.cache/probes/last-wasm-build.json`, which is ignored by git. Use it to compare
+peak RSS and timeout behavior after each transformer patch.
+
 ## Current Status
 
 This folder is a porting scaffold, not an app integration. The current probe compiles a small Java
@@ -54,6 +66,8 @@ Known findings from the initial experiments:
   input either fails class resolution or crashes inside the TeaVM compiler.
 - A JVM-hosted TeaVM Gradle build reaches `generateWasmGC`, but the unpatched Kotlin compiler graph
   uses roughly 9 GB RSS and does not produce a final Wasm artifact in a practical feedback loop.
+- The first transformer patches disable `System.exit`, Kotlin CLI plugin loading, and Kotlin
+  performance measurements that can reach JVM management APIs.
 - `jdeps` reports that the Kotlin compiler distribution reaches beyond `java.base` into
   `java.desktop`, `java.instrument`, `java.management`, `java.scripting`, `jdk.compiler`, and
   `jdk.unsupported`.
