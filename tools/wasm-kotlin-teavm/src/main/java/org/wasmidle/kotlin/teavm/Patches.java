@@ -1094,9 +1094,10 @@ public final class Patches implements TeaVMPlugin, ClassHolderTransformer {
 
         var method = getOrCreateMethod(cls, "getFileSystemsForProtocol", listType,
                 ValueType.object("java.lang.String"));
-        ProgramEmitter.create(method, context.getHierarchy())
-                .var(0, managerType)
-                .getField("myPreCreatedFileSystems", listType)
+        var pe = ProgramEmitter.create(method, context.getHierarchy());
+        pe.invoke("org.wasmidle.kotlin.teavm.BrowserVirtualFileSystems", "forProtocol", listType,
+                pe.var(0, managerType).getField("myPreCreatedFileSystems", listType),
+                pe.var(1, ValueType.object("java.lang.String")))
                 .returnValue();
 
         replaceWithNoOp(cls, context, "addVirtualFileListener", ValueType.VOID,
