@@ -330,6 +330,28 @@ the expected output is:
 for=15 rev=9 last=5
 ```
 
+To run the PS-style `indices` for-loop fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs \
+  --source tools/wasm-kotlin-teavm/fixtures/ps-indices/Main.kt \
+  --out tools/wasm-kotlin-teavm/build/browser-ps-indices-out
+java -cp tools/wasm-kotlin-teavm/build/browser-ps-indices-out MainKt
+```
+
+With this stdin:
+
+```text
+4 3 1 4 1 algorithm
+```
+
+the expected output is:
+
+```text
+indices=4 sum=9 list=41 long=200000000007 string=72
+```
+
 To run the PS-style array-compound fixture:
 
 ```bash
@@ -1149,6 +1171,11 @@ Known findings from the initial experiments:
   Int `for` loops over `until`, inclusive `..`, and `downTo ... step ...` ranges. The minimal emitter
   lowers these loops directly to index comparisons and increments. Running that generated class with
   `5 1 2 3 4 5` on stdin prints `for=15 rev=9 last=5`.
+- The browser-compatible probe also compiles `fixtures/ps-indices/Main.kt`, which exercises
+  `indices` for-loops over primitive arrays, `String`, `CharArray`, `ArrayList<Int>`, and
+  `ArrayList<Pair<Int, Long>>`, including `indices step 2`. These lower to `0 until size` loops.
+  Running that generated class with `4 3 1 4 1 algorithm` on stdin prints
+  `indices=4 sum=9 list=41 long=200000000007 string=72`.
 - The browser-compatible probe also compiles `fixtures/ps-array-compound/Main.kt`, which exercises
   compound assignments on `IntArray`, `LongArray`, and `DoubleArray` elements, including RHS numeric
   widening to `Long` and `Double`. Running that generated class with

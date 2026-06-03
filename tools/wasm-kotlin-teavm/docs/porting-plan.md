@@ -227,6 +227,11 @@ Current status:
   Int `for` loops over `until`, inclusive `..`, and `downTo ... step ...` ranges. The minimal emitter
   lowers these loops directly to index comparisons and increments. With stdin `5 1 2 3 4 5` it
   prints `for=15 rev=9 last=5`.
+- The browser-facing compile export also completes `fixtures/ps-indices/Main.kt`, which covers
+  `indices` for-loops over primitive arrays, `String`, `CharArray`, `ArrayList<Int>`, and
+  `ArrayList<Pair<Int, Long>>`, including `indices step 2`. These lower to `0 until size` loops.
+  With stdin `4 3 1 4 1 algorithm` it prints
+  `indices=4 sum=9 list=41 long=200000000007 string=72`.
 - The browser-facing compile export also completes `fixtures/ps-array-compound/Main.kt`, which covers
   compound assignments on `IntArray`, `LongArray`, and `DoubleArray` elements, including RHS numeric
   widening to `Long` and `Double`. With stdin `2 3 5 100000000000 1.5` it prints

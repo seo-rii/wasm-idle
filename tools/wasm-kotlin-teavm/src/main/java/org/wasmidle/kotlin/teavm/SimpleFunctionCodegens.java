@@ -509,10 +509,32 @@ public final class SimpleFunctionCodegens {
         }
         ForProgression progression = parseForProgression(expression.getLoopRange());
         int loopIndex = context.allocate(parameterName, ValueType.INT);
-        emitExpressionAs(method, context, progression.start, ValueType.INT);
+        if (progression.indicesReceiver == null) {
+            emitExpressionAs(method, context, progression.start, ValueType.INT);
+        } else {
+            method.visitInsn(Opcodes.ICONST_0);
+        }
         method.visitVarInsn(Opcodes.ISTORE, loopIndex);
         int endIndex = context.allocateTemporary(ValueType.INT);
-        emitExpressionAs(method, context, progression.end, ValueType.INT);
+        if (progression.indicesReceiver == null) {
+            emitExpressionAs(method, context, progression.end, ValueType.INT);
+        } else {
+            ValueType receiverType = emitExpression(method, context, progression.indicesReceiver);
+            if (receiverType.array) {
+                method.visitInsn(Opcodes.ARRAYLENGTH);
+            } else if (receiverType == ValueType.STRING) {
+                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/String", "length", "()I", false);
+            } else if (receiverType == ValueType.INT_ARRAY_LIST
+                    || receiverType == ValueType.LONG_ARRAY_LIST
+                    || receiverType == ValueType.STRING_ARRAY_LIST
+                    || receiverType == ValueType.INT_PAIR_ARRAY_LIST
+                    || receiverType == ValueType.INT_LONG_PAIR_ARRAY_LIST) {
+                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "size", "()I", false);
+            } else {
+                throw new IllegalArgumentException("Unsupported indices receiver: "
+                        + progression.indicesReceiver.getText());
+            }
+        }
         method.visitVarInsn(Opcodes.ISTORE, endIndex);
         int stepIndex = context.allocateTemporary(ValueType.INT);
         if (progression.step == null) {
@@ -5042,6 +5064,13 @@ public final class SimpleFunctionCodegens {
         if (expression instanceof KtParenthesizedExpression) {
             return parseForProgression(((KtParenthesizedExpression) expression).getExpression());
         }
+        if (expression instanceof KtDotQualifiedExpression) {
+            KtDotQualifiedExpression qualified = (KtDotQualifiedExpression) expression;
+            KtExpression selector = qualified.getSelectorExpression();
+            if (selector != null && "indices".equals(selector.getText())) {
+                return new ForProgression(qualified.getReceiverExpression(), null);
+            }
+        }
         if (!(expression instanceof KtBinaryExpression)) {
             throw new IllegalArgumentException("Unsupported for-loop range: " + expression.getText());
         }
@@ -5051,6 +5080,9 @@ public final class SimpleFunctionCodegens {
             ForProgression base = parseForProgression(binary.getLeft());
             if (binary.getRight() == null) {
                 throw new IllegalArgumentException("Missing step expression: " + expression.getText());
+            }
+            if (base.indicesReceiver != null) {
+                return new ForProgression(base.indicesReceiver, binary.getRight());
             }
             return new ForProgression(base.start, base.end, base.inclusive, base.descending, binary.getRight());
         }
@@ -5152,6 +5184,7 @@ public final class SimpleFunctionCodegens {
         private final boolean inclusive;
         private final boolean descending;
         private final KtExpression step;
+        private final KtExpression indicesReceiver;
 
         private ForProgression(
                 KtExpression start, KtExpression end, boolean inclusive, boolean descending, KtExpression step) {
@@ -5163,6 +5196,19 @@ public final class SimpleFunctionCodegens {
             this.inclusive = inclusive;
             this.descending = descending;
             this.step = step;
+            this.indicesReceiver = null;
+        }
+
+        private ForProgression(KtExpression indicesReceiver, KtExpression step) {
+            if (indicesReceiver == null) {
+                throw new IllegalArgumentException("For-loop indices range is missing a receiver");
+            }
+            this.start = null;
+            this.end = null;
+            this.inclusive = false;
+            this.descending = false;
+            this.step = step;
+            this.indicesReceiver = indicesReceiver;
         }
     }
 
