@@ -1124,6 +1124,22 @@ The expected output is:
 destructure=7,9|8,100000000007|-100000000000,9 tail=3 graph=16,100000000010
 ```
 
+To run the PS-style for-each and Pair destructuring loop fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs \
+  --source tools/wasm-kotlin-teavm/fixtures/ps-foreach-pair/Main.kt \
+  --out tools/wasm-kotlin-teavm/build/browser-ps-foreach-pair-out
+printf '100000000000 7\n' | java -cp tools/wasm-kotlin-teavm/build/browser-ps-foreach-pair-out MainKt
+```
+
+The expected output is:
+
+```text
+foreach=24,200000000007,1,21 pair=200000000010 state=200000000007 graph=45 text=4
+```
+
 To run the PS-style `ArrayList<Pair<Int, Int>>` fixture:
 
 ```bash
@@ -1533,6 +1549,12 @@ Known findings from the initial experiments:
   `Pair<Long, Int>` values from direct construction, `PriorityQueue.poll()`, list indexing, and
   graph-list indexing. With stdin `100000000000 7` it prints
   `destructure=7,9|8,100000000007|-100000000000,9 tail=3 graph=16,100000000010`.
+- The browser-compatible probe also compiles `fixtures/ps-foreach-pair/Main.kt`, which exercises
+  `for (x in ...)` lowering over primitive arrays, `String`, and `ArrayList` values, plus
+  `for ((v, w) in graph[u])`-style Pair destructuring over `ArrayList<Pair<Int, Long>>`,
+  `ArrayList<Pair<Long, Int>>`, and `Array<ArrayList<Pair<Int, Int>>>`. With stdin
+  `100000000000 7` it prints
+  `foreach=24,200000000007,1,21 pair=200000000010 state=200000000007 graph=45 text=4`.
 - The browser-compatible probe also compiles `fixtures/ps-pair-list/Main.kt`, which exercises
   `ArrayList<Pair<Int, Int>>` and `mutableListOf<Pair<Int, Int>>()` construction, `add`, index
   get/set, `.first`, `.second`, `in`/`!in`, `contains`, `remove`, `size`, and `isEmpty` by storing

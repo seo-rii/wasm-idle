@@ -163,23 +163,8 @@ public final class SimpleFunctionCodegens {
                 if (entryName == null || entryName.isEmpty() || "_".equals(entryName)) {
                     continue;
                 }
-                ValueType componentType;
-                if (pairType == ValueType.INT_PAIR) {
-                    componentType = ValueType.INT;
-                } else if (pairType == ValueType.INT_LONG_PAIR) {
-                    componentType = entryIndex == 0 ? ValueType.INT : ValueType.LONG;
-                } else {
-                    componentType = entryIndex == 0 ? ValueType.LONG : ValueType.INT;
-                }
-                loadLocal(method, pairType, pairIndex);
-                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/AbstractMap$SimpleEntry",
-                        entryIndex == 0 ? "getKey" : "getValue",
-                        "()Ljava/lang/Object;", false);
-                if (componentType == ValueType.LONG) {
-                    unboxLong(method);
-                } else {
-                    unboxInt(method);
-                }
+                ValueType componentType = pairComponentType(pairType, entryIndex);
+                emitPairComponent(method, pairType, pairIndex, entryIndex);
                 int index = context.allocate(entryName, componentType);
                 storeLocal(method, componentType, index);
             }
@@ -551,12 +536,34 @@ public final class SimpleFunctionCodegens {
     }
 
     private static void emitForExpression(MethodVisitor method, MethodContext context, KtForExpression expression) {
-        if (expression.getLoopParameter() == null || expression.getLoopRange() == null) {
+        if (expression.getLoopRange() == null) {
+            throw new IllegalArgumentException("Unsupported for-loop shape: " + expression.getText());
+        }
+        KtDestructuringDeclaration destructuringDeclaration = expression.getDestructuringDeclaration();
+        if (destructuringDeclaration != null) {
+            ValueType rangeType = inferExpressionType(context, expression.getLoopRange());
+            if (!isForEachRangeType(rangeType)) {
+                throw new IllegalArgumentException("Unsupported destructuring for-loop range: "
+                        + expression.getLoopRange().getText());
+            }
+            emitForEachExpression(method, context, expression, rangeType);
+            return;
+        }
+        if (expression.getLoopParameter() == null) {
             throw new IllegalArgumentException("Unsupported for-loop shape: " + expression.getText());
         }
         String parameterName = expression.getLoopParameter().getName();
         if (parameterName == null || parameterName.isEmpty()) {
             throw new IllegalArgumentException("Unsupported unnamed for-loop parameter: " + expression.getText());
+        }
+        try {
+            ValueType rangeType = inferExpressionType(context, expression.getLoopRange());
+            if (isForEachRangeType(rangeType)) {
+                emitForEachExpression(method, context, expression, rangeType);
+                return;
+            }
+        } catch (IllegalArgumentException ignored) {
+            // Progression loops such as arr.indices are parsed below.
         }
         ForProgression progression = parseForProgression(expression.getLoopRange());
         int loopIndex = context.allocate(parameterName, ValueType.INT);
@@ -617,6 +624,106 @@ public final class SimpleFunctionCodegens {
         method.visitVarInsn(Opcodes.ILOAD, loopIndex);
         method.visitVarInsn(Opcodes.ILOAD, stepIndex);
         method.visitInsn(progression.descending ? Opcodes.ISUB : Opcodes.IADD);
+        method.visitVarInsn(Opcodes.ISTORE, loopIndex);
+        method.visitJumpInsn(Opcodes.GOTO, startLabel);
+        method.visitLabel(endLabel);
+    }
+
+    private static void emitForEachExpression(
+            MethodVisitor method, MethodContext context, KtForExpression expression, ValueType rangeType) {
+        KtExpression loopRange = expression.getLoopRange();
+        if (loopRange == null) {
+            throw new IllegalArgumentException("Missing for-loop range: " + expression.getText());
+        }
+        ValueType emittedRangeType = emitExpression(method, context, loopRange);
+        if (emittedRangeType != rangeType) {
+            throw new IllegalArgumentException("For-loop range type changed: " + expression.getText());
+        }
+        int rangeIndex = context.allocateTemporary(rangeType);
+        storeLocal(method, rangeType, rangeIndex);
+        ValueType elementType = forEachElementType(rangeType);
+        KtDestructuringDeclaration destructuringDeclaration = expression.getDestructuringDeclaration();
+        int elementIndex = -1;
+        int valueIndex = -1;
+        int[] componentIndexes = null;
+        if (destructuringDeclaration != null) {
+            if (elementType != ValueType.INT_PAIR && elementType != ValueType.INT_LONG_PAIR
+                    && elementType != ValueType.LONG_INT_PAIR) {
+                throw new IllegalArgumentException("Destructuring for-loop requires Pair elements: "
+                        + expression.getText());
+            }
+            List<KtDestructuringDeclarationEntry> entries = destructuringDeclaration.getEntries();
+            if (entries.size() != 2) {
+                throw new IllegalArgumentException("Only Pair destructuring for-loops are supported: "
+                        + expression.getText());
+            }
+            elementIndex = context.allocateTemporary(elementType);
+            componentIndexes = new int[entries.size()];
+            for (int entryIndex = 0; entryIndex < entries.size(); entryIndex++) {
+                KtDestructuringDeclarationEntry entry = entries.get(entryIndex);
+                String entryName = entry.getName();
+                if (entryName == null || entryName.isEmpty() || "_".equals(entryName)) {
+                    componentIndexes[entryIndex] = -1;
+                } else {
+                    componentIndexes[entryIndex] = context.allocate(entryName,
+                            pairComponentType(elementType, entryIndex));
+                }
+            }
+        } else {
+            KtParameter loopParameter = expression.getLoopParameter();
+            if (loopParameter == null) {
+                throw new IllegalArgumentException("Missing for-loop parameter: " + expression.getText());
+            }
+            String parameterName = loopParameter.getName();
+            if (parameterName == null || parameterName.isEmpty()) {
+                throw new IllegalArgumentException("Unsupported unnamed for-loop parameter: "
+                        + expression.getText());
+            }
+            valueIndex = context.allocate(parameterName, elementType);
+        }
+        int loopIndex = context.allocateTemporary(ValueType.INT);
+        method.visitInsn(Opcodes.ICONST_0);
+        method.visitVarInsn(Opcodes.ISTORE, loopIndex);
+        int endIndex = context.allocateTemporary(ValueType.INT);
+        loadLocal(method, rangeType, rangeIndex);
+        if (rangeType.array) {
+            method.visitInsn(Opcodes.ARRAYLENGTH);
+        } else if (rangeType == ValueType.STRING) {
+            method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/String", "length", "()I", false);
+        } else {
+            method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "size", "()I", false);
+        }
+        method.visitVarInsn(Opcodes.ISTORE, endIndex);
+
+        Label startLabel = new Label();
+        Label updateLabel = new Label();
+        Label endLabel = new Label();
+        method.visitLabel(startLabel);
+        method.visitVarInsn(Opcodes.ILOAD, loopIndex);
+        method.visitVarInsn(Opcodes.ILOAD, endIndex);
+        method.visitJumpInsn(Opcodes.IF_ICMPGE, endLabel);
+        emitForEachElement(method, rangeType, rangeIndex, loopIndex);
+        if (destructuringDeclaration != null) {
+            storeLocal(method, elementType, elementIndex);
+            for (int entryIndex = 0; entryIndex < componentIndexes.length; entryIndex++) {
+                if (componentIndexes[entryIndex] < 0) {
+                    continue;
+                }
+                ValueType componentType = pairComponentType(elementType, entryIndex);
+                emitPairComponent(method, elementType, elementIndex, entryIndex);
+                storeLocal(method, componentType, componentIndexes[entryIndex]);
+            }
+        } else {
+            storeLocal(method, elementType, valueIndex);
+        }
+        context.loopLabels.push(new LoopLabels(endLabel, updateLabel));
+        emitBranch(method, context, expression.getBody());
+        context.loopLabels.pop();
+        context.hasExplicitReturn = false;
+        method.visitLabel(updateLabel);
+        method.visitVarInsn(Opcodes.ILOAD, loopIndex);
+        method.visitInsn(Opcodes.ICONST_1);
+        method.visitInsn(Opcodes.IADD);
         method.visitVarInsn(Opcodes.ISTORE, loopIndex);
         method.visitJumpInsn(Opcodes.GOTO, startLabel);
         method.visitLabel(endLabel);
@@ -4541,6 +4648,116 @@ public final class SimpleFunctionCodegens {
                 || type == ValueType.LONG_LONG_HASH_MAP
                 || type == ValueType.STRING_INT_HASH_MAP
                 || type == ValueType.STRING_LONG_HASH_MAP;
+    }
+
+    private static boolean isForEachRangeType(ValueType type) {
+        return type.array || type == ValueType.STRING || isArrayListType(type);
+    }
+
+    private static boolean isArrayListType(ValueType type) {
+        return type == ValueType.INT_ARRAY_LIST
+                || type == ValueType.LONG_ARRAY_LIST
+                || type == ValueType.STRING_ARRAY_LIST
+                || type == ValueType.INT_PAIR_ARRAY_LIST
+                || type == ValueType.INT_LONG_PAIR_ARRAY_LIST
+                || type == ValueType.LONG_INT_PAIR_ARRAY_LIST;
+    }
+
+    private static ValueType forEachElementType(ValueType rangeType) {
+        if (rangeType == ValueType.STRING) {
+            return ValueType.CHAR;
+        }
+        if (rangeType == ValueType.INT_ARRAY_LIST) {
+            return ValueType.INT;
+        }
+        if (rangeType == ValueType.LONG_ARRAY_LIST) {
+            return ValueType.LONG;
+        }
+        if (rangeType == ValueType.STRING_ARRAY_LIST) {
+            return ValueType.STRING;
+        }
+        if (rangeType == ValueType.INT_PAIR_ARRAY_LIST) {
+            return ValueType.INT_PAIR;
+        }
+        if (rangeType == ValueType.INT_LONG_PAIR_ARRAY_LIST) {
+            return ValueType.INT_LONG_PAIR;
+        }
+        if (rangeType == ValueType.LONG_INT_PAIR_ARRAY_LIST) {
+            return ValueType.LONG_INT_PAIR;
+        }
+        if (rangeType.array) {
+            return indexedElementType(rangeType);
+        }
+        throw new IllegalArgumentException("Unsupported for-each range type: " + rangeType);
+    }
+
+    private static void emitForEachElement(MethodVisitor method, ValueType rangeType, int rangeIndex, int loopIndex) {
+        ValueType elementType = forEachElementType(rangeType);
+        loadLocal(method, rangeType, rangeIndex);
+        method.visitVarInsn(Opcodes.ILOAD, loopIndex);
+        if (rangeType == ValueType.STRING) {
+            method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/String", "charAt", "(I)C", false);
+            return;
+        }
+        if (isArrayListType(rangeType)) {
+            method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "get",
+                    "(I)Ljava/lang/Object;", false);
+            if (elementType == ValueType.INT) {
+                unboxInt(method);
+            } else if (elementType == ValueType.LONG) {
+                unboxLong(method);
+            } else if (elementType == ValueType.STRING) {
+                method.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/String");
+            } else {
+                method.visitTypeInsn(Opcodes.CHECKCAST, "java/util/AbstractMap$SimpleEntry");
+            }
+            return;
+        }
+        if (elementType == ValueType.INT) {
+            method.visitInsn(Opcodes.IALOAD);
+        } else if (elementType == ValueType.LONG) {
+            method.visitInsn(Opcodes.LALOAD);
+        } else if (elementType == ValueType.DOUBLE) {
+            method.visitInsn(Opcodes.DALOAD);
+        } else if (elementType == ValueType.CHAR) {
+            method.visitInsn(Opcodes.CALOAD);
+        } else if (elementType == ValueType.BOOLEAN) {
+            method.visitInsn(Opcodes.BALOAD);
+        } else {
+            method.visitInsn(Opcodes.AALOAD);
+            if (isArrayListType(elementType)) {
+                method.visitTypeInsn(Opcodes.CHECKCAST, "java/util/ArrayList");
+            }
+        }
+    }
+
+    private static ValueType pairComponentType(ValueType pairType, int componentIndex) {
+        if (componentIndex < 0 || componentIndex > 1) {
+            throw new IllegalArgumentException("Pair component index must be 0 or 1: " + componentIndex);
+        }
+        if (pairType == ValueType.INT_PAIR) {
+            return ValueType.INT;
+        }
+        if (pairType == ValueType.INT_LONG_PAIR) {
+            return componentIndex == 0 ? ValueType.INT : ValueType.LONG;
+        }
+        if (pairType == ValueType.LONG_INT_PAIR) {
+            return componentIndex == 0 ? ValueType.LONG : ValueType.INT;
+        }
+        throw new IllegalArgumentException("Unsupported Pair type: " + pairType);
+    }
+
+    private static void emitPairComponent(MethodVisitor method, ValueType pairType, int pairIndex, int componentIndex) {
+        ValueType componentType = pairComponentType(pairType, componentIndex);
+        loadLocal(method, pairType, pairIndex);
+        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/AbstractMap$SimpleEntry",
+                componentIndex == 0 ? "getKey" : "getValue",
+                "()Ljava/lang/Object;", false);
+        if (componentType == ValueType.LONG) {
+            unboxLong(method);
+        } else {
+            unboxInt(method);
+        }
     }
 
     private static boolean isArrayListConstructor(String calleeText) {

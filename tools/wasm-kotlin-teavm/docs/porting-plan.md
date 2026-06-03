@@ -423,6 +423,12 @@ Current status:
   `Pair<Long, Int>` values from direct construction, `PriorityQueue.poll()`, list indexing, and
   graph-list indexing. With stdin `100000000000 7` it prints
   `destructure=7,9|8,100000000007|-100000000000,9 tail=3 graph=16,100000000010`.
+- The browser-facing compile export also completes `fixtures/ps-foreach-pair/Main.kt`, which covers
+  `for (x in ...)` lowering over primitive arrays, `String`, and `ArrayList` values, plus
+  `for ((v, w) in graph[u])`-style Pair destructuring over `ArrayList<Pair<Int, Long>>`,
+  `ArrayList<Pair<Long, Int>>`, and `Array<ArrayList<Pair<Int, Int>>>`. With stdin
+  `100000000000 7` it prints
+  `foreach=24,200000000007,1,21 pair=200000000010 state=200000000007 graph=45 text=4`.
 - The browser-facing compile export also completes `fixtures/ps-pair-list/Main.kt`, which covers
   `ArrayList<Pair<Int, Int>>` and `mutableListOf<Pair<Int, Int>>()` construction, `add`, index
   get/set, `.first`, `.second`, `in`/`!in`, `contains`, `remove`, `size`, and `isEmpty` by storing
