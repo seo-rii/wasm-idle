@@ -522,6 +522,28 @@ the expected output is:
 parse=8 long=100000000002 double=3.0
 ```
 
+To run the PS-style string equality fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs \
+  --source tools/wasm-kotlin-teavm/fixtures/ps-string-equality/Main.kt \
+  --out tools/wasm-kotlin-teavm/build/browser-ps-string-equality-out
+java -cp tools/wasm-kotlin-teavm/build/browser-ps-string-equality-out MainKt
+```
+
+With this stdin:
+
+```text
+go go
+```
+
+the expected output is:
+
+```text
+eq=true diff=true score=7
+```
+
 ## Current Status
 
 This folder is a porting scaffold, not an app integration. The current probe compiles a small Java
@@ -680,6 +702,9 @@ Known findings from the initial experiments:
   `String.toInt()`, `String.toLong()`, and `String.toDouble()` on token input. Running that
   generated class with `7 100000000000 2.5` on stdin prints
   `parse=8 long=100000000002 double=3.0`.
+- The browser-compatible probe also compiles `fixtures/ps-string-equality/Main.kt`, which exercises
+  `String` `==`/`!=` comparisons in boolean expressions and conditions. Running that generated class
+  with `go go` on stdin prints `eq=true diff=true score=7`.
 - This is not a full Kotlin/JVM backend yet. The browser path is currently a minimal emitter that
   supports the verified fixture shapes above. It does not yet support enough Kotlin for real
   competitive-programming use: collections and common library helpers, classes/data classes,

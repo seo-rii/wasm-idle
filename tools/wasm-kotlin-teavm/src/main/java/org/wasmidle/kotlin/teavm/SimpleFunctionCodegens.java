@@ -1762,6 +1762,15 @@ public final class SimpleFunctionCodegens {
             if (isComparison(operation)) {
                 ValueType leftType = inferExpressionType(context, binary.getLeft());
                 ValueType rightType = inferExpressionType(context, binary.getRight());
+                if (leftType == ValueType.STRING && rightType == ValueType.STRING
+                        && isEqualityComparison(operation)) {
+                    emitExpressionAs(method, context, binary.getLeft(), ValueType.STRING);
+                    emitExpressionAs(method, context, binary.getRight(), ValueType.STRING);
+                    method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/String", "equals",
+                            "(Ljava/lang/Object;)Z", false);
+                    method.visitJumpInsn(stringEqualityOpcode(operation, jumpWhenTrue), target);
+                    return;
+                }
                 boolean comparable = (leftType.numeric && rightType.numeric)
                         || (leftType == ValueType.CHAR && rightType == ValueType.CHAR)
                         || (leftType == ValueType.BOOLEAN && rightType == ValueType.BOOLEAN
@@ -1903,6 +1912,11 @@ public final class SimpleFunctionCodegens {
     private static boolean isEqualityComparison(IElementType operation) {
         return operation == KtTokens.EQEQ || operation == KtTokens.EXCLEQ
                 || operation == KtTokens.EQEQEQ || operation == KtTokens.EXCLEQEQEQ;
+    }
+
+    private static int stringEqualityOpcode(IElementType operation, boolean jumpWhenTrue) {
+        boolean equalityOperation = operation == KtTokens.EQEQ || operation == KtTokens.EQEQEQ;
+        return equalityOperation == jumpWhenTrue ? Opcodes.IFNE : Opcodes.IFEQ;
     }
 
     private static void loadLocal(MethodVisitor method, ValueType type, int index) {

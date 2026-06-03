@@ -256,6 +256,9 @@ Current status:
 - The browser-facing compile export also completes `fixtures/ps-string-parse/Main.kt`, which covers
   `String.toInt()`, `String.toLong()`, and `String.toDouble()` on token input. With stdin
   `7 100000000000 2.5` it prints `parse=8 long=100000000002 double=3.0`.
+- The browser-facing compile export also completes `fixtures/ps-string-equality/Main.kt`, which
+  covers `String` `==`/`!=` comparisons in boolean expressions and conditions. With stdin `go go` it
+  prints `eq=true diff=true score=7`.
 - This success currently comes from a minimal PSI-based bytecode emitter for the verified fixture
   shapes, not from the full Kotlin/JVM backend. The full backend still fails because Kotlin builtins
   deserialization can read `kotlin/kotlin.kotlin_builtins` but cannot resolve `kotlin.Unit`; virtual
