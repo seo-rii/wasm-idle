@@ -982,6 +982,10 @@ public final class SimpleFunctionCodegens {
                     method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashSet", "size", "()I", false);
                     return ValueType.INT;
                 }
+                if (receiverType == ValueType.STRING_HASH_SET) {
+                    method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashSet", "size", "()I", false);
+                    return ValueType.INT;
+                }
                 if (receiverType == ValueType.INT_INT_HASH_MAP) {
                     method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "size", "()I", false);
                     return ValueType.INT;
@@ -1272,6 +1276,14 @@ public final class SimpleFunctionCodegens {
                                 "(Ljava/lang/Object;)Z", false);
                         return ValueType.BOOLEAN;
                     }
+                    if (receiverType == ValueType.STRING_HASH_SET) {
+                        emitExpressionAs(method, context,
+                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
+                                ValueType.STRING);
+                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashSet", "add",
+                                "(Ljava/lang/Object;)Z", false);
+                        return ValueType.BOOLEAN;
+                    }
                 }
                 if (callee != null && "add".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().size() == 2) {
@@ -1504,6 +1516,11 @@ public final class SimpleFunctionCodegens {
                                 false);
                         return ValueType.BOOLEAN;
                     }
+                    if (receiverType == ValueType.STRING_HASH_SET) {
+                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashSet", "isEmpty", "()Z",
+                                false);
+                        return ValueType.BOOLEAN;
+                    }
                     if (receiverType == ValueType.INT_INT_HASH_MAP) {
                         method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "isEmpty", "()Z",
                                 false);
@@ -1559,6 +1576,14 @@ public final class SimpleFunctionCodegens {
                                 ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
                                 ValueType.LONG);
                         boxLong(method);
+                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashSet", callee.getText(),
+                                "(Ljava/lang/Object;)Z", false);
+                        return ValueType.BOOLEAN;
+                    }
+                    if (receiverType == ValueType.STRING_HASH_SET) {
+                        emitExpressionAs(method, context,
+                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
+                                ValueType.STRING);
                         method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashSet", callee.getText(),
                                 "(Ljava/lang/Object;)Z", false);
                         return ValueType.BOOLEAN;
@@ -1795,6 +1820,11 @@ public final class SimpleFunctionCodegens {
                         return ValueType.VOID;
                     }
                     if (receiverType == ValueType.LONG_HASH_SET) {
+                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashSet", "clear", "()V",
+                                false);
+                        return ValueType.VOID;
+                    }
+                    if (receiverType == ValueType.STRING_HASH_SET) {
                         method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashSet", "clear", "()V",
                                 false);
                         return ValueType.VOID;
@@ -2268,6 +2298,10 @@ public final class SimpleFunctionCodegens {
                     || isLongSetFactoryOrConstructor(call.getText())) {
                 return ValueType.LONG_HASH_SET;
             }
+            if (isStringSetFactoryOrConstructor(calleeText)
+                    || isStringSetFactoryOrConstructor(call.getText())) {
+                return ValueType.STRING_HASH_SET;
+            }
             return ValueType.INT_HASH_SET;
         }
         if ((isHashMapConstructor(calleeText) || isMutableMapFactory(calleeText))
@@ -2500,6 +2534,7 @@ public final class SimpleFunctionCodegens {
                         || receiverType == ValueType.LONG_ARRAY_DEQUE
                         || receiverType == ValueType.INT_HASH_SET
                         || receiverType == ValueType.LONG_HASH_SET
+                        || receiverType == ValueType.STRING_HASH_SET
                         || receiverType == ValueType.INT_INT_HASH_MAP
                         || receiverType == ValueType.INT_LONG_HASH_MAP
                         || receiverType == ValueType.LONG_INT_HASH_MAP
@@ -2592,7 +2627,9 @@ public final class SimpleFunctionCodegens {
                                 || inferExpressionType(context, qualified.getReceiverExpression())
                                         == ValueType.INT_HASH_SET
                                 || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.LONG_HASH_SET)) {
+                                        == ValueType.LONG_HASH_SET
+                                || inferExpressionType(context, qualified.getReceiverExpression())
+                                        == ValueType.STRING_HASH_SET)) {
                     return ValueType.BOOLEAN;
                 }
                 if (callee != null && "add".equals(callee.getText())
@@ -2666,6 +2703,8 @@ public final class SimpleFunctionCodegens {
                                 || inferExpressionType(context, qualified.getReceiverExpression())
                                         == ValueType.LONG_HASH_SET
                                 || inferExpressionType(context, qualified.getReceiverExpression())
+                                        == ValueType.STRING_HASH_SET
+                                || inferExpressionType(context, qualified.getReceiverExpression())
                                         == ValueType.INT_INT_HASH_MAP
                                 || inferExpressionType(context, qualified.getReceiverExpression())
                                         == ValueType.INT_LONG_HASH_MAP
@@ -2685,6 +2724,12 @@ public final class SimpleFunctionCodegens {
                         && ((KtCallExpression) selector).getValueArguments().size() == 1
                         && inferExpressionType(context, qualified.getReceiverExpression())
                                 == ValueType.LONG_HASH_SET) {
+                    return ValueType.BOOLEAN;
+                }
+                if (callee != null && ("contains".equals(callee.getText()) || "remove".equals(callee.getText()))
+                        && ((KtCallExpression) selector).getValueArguments().size() == 1
+                        && inferExpressionType(context, qualified.getReceiverExpression())
+                                == ValueType.STRING_HASH_SET) {
                     return ValueType.BOOLEAN;
                 }
                 if (callee != null && ("contains".equals(callee.getText()) || "remove".equals(callee.getText()))
@@ -2784,6 +2829,8 @@ public final class SimpleFunctionCodegens {
                                 == ValueType.INT_HASH_SET
                                 || inferExpressionType(context, qualified.getReceiverExpression())
                                         == ValueType.LONG_HASH_SET
+                                || inferExpressionType(context, qualified.getReceiverExpression())
+                                        == ValueType.STRING_HASH_SET
                                 || inferExpressionType(context, qualified.getReceiverExpression())
                                         == ValueType.INT_ARRAY_LIST
                                 || inferExpressionType(context, qualified.getReceiverExpression())
@@ -2957,6 +3004,10 @@ public final class SimpleFunctionCodegens {
                 if (isLongSetFactoryOrConstructor(calleeText)
                         || isLongSetFactoryOrConstructor(expression.getText())) {
                     return ValueType.LONG_HASH_SET;
+                }
+                if (isStringSetFactoryOrConstructor(calleeText)
+                        || isStringSetFactoryOrConstructor(expression.getText())) {
+                    return ValueType.STRING_HASH_SET;
                 }
                 return ValueType.INT_HASH_SET;
             }
@@ -3185,6 +3236,16 @@ public final class SimpleFunctionCodegens {
         }
         return "HashSet<Long>".equals(compact)
                 || "mutableSetOf<Long>".equals(compact);
+    }
+
+    private static boolean isStringSetFactoryOrConstructor(String calleeText) {
+        String compact = calleeText.replace(" ", "");
+        int parenIndex = compact.indexOf('(');
+        if (parenIndex >= 0) {
+            compact = compact.substring(0, parenIndex);
+        }
+        return "HashSet<String>".equals(compact)
+                || "mutableSetOf<String>".equals(compact);
     }
 
     private static boolean isHashMapConstructor(String calleeText) {
@@ -3745,6 +3806,21 @@ public final class SimpleFunctionCodegens {
             }
             return ValueType.BOOLEAN;
         }
+        if (containerType == ValueType.STRING_HASH_SET) {
+            if (elementType != ValueType.STRING) {
+                throw new IllegalArgumentException("String collection contains requires String element: "
+                        + binary.getText());
+            }
+            emitExpression(method, context, container);
+            emitExpressionAs(method, context, element, ValueType.STRING);
+            method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashSet", "contains",
+                    "(Ljava/lang/Object;)Z", false);
+            if (negated) {
+                method.visitInsn(Opcodes.ICONST_1);
+                method.visitInsn(Opcodes.IXOR);
+            }
+            return ValueType.BOOLEAN;
+        }
         if (containerType == ValueType.INT_PAIR_ARRAY_LIST) {
             if (elementType != ValueType.INT_PAIR) {
                 throw new IllegalArgumentException("Pair list contains requires Pair<Int, Int> element: "
@@ -4071,6 +4147,10 @@ public final class SimpleFunctionCodegens {
                 || "Set<Long>".equals(compactText)) {
             return ValueType.LONG_HASH_SET;
         }
+        if ("HashSet<String>".equals(compactText) || "MutableSet<String>".equals(compactText)
+                || "Set<String>".equals(compactText)) {
+            return ValueType.STRING_HASH_SET;
+        }
         if ("HashMap<Int, Int>".equals(text) || "HashMap<Int,Int>".equals(text)
                 || "MutableMap<Int, Int>".equals(text) || "MutableMap<Int,Int>".equals(text)
                 || "Map<Int, Int>".equals(text) || "Map<Int,Int>".equals(text)) {
@@ -4198,6 +4278,7 @@ public final class SimpleFunctionCodegens {
         LONG_ARRAY_DEQUE("Ljava/util/ArrayDeque;", 1, false, false),
         INT_HASH_SET("Ljava/util/HashSet;", 1, false, false),
         LONG_HASH_SET("Ljava/util/HashSet;", 1, false, false),
+        STRING_HASH_SET("Ljava/util/HashSet;", 1, false, false),
         INT_INT_HASH_MAP("Ljava/util/HashMap;", 1, false, false),
         INT_LONG_HASH_MAP("Ljava/util/HashMap;", 1, false, false),
         LONG_INT_HASH_MAP("Ljava/util/HashMap;", 1, false, false),

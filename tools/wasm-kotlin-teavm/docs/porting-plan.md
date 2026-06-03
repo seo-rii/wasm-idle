@@ -300,6 +300,11 @@ Current status:
   `size`, `isEmpty`, and `in`/`!in` by lowering to `java.util.HashSet<Long>`. With stdin
   `100000000000 7` it prints
   `longSet=0,2 flags=true,true,true,true,false,true empty=true,false`.
+- The browser-facing compile export also completes `fixtures/ps-string-set/Main.kt`, which covers
+  `HashSet<String>`, `MutableSet<String>` parameters, and `mutableSetOf<String>()` construction,
+  `add`, `contains`, `remove`, `clear`, `size`, `isEmpty`, and `in`/`!in` by lowering to
+  `java.util.HashSet<String>`. With stdin `Alpha beta` it prints
+  `stringSet=0,2 count=2 flags=true,true,true,true,false,true empty=true,false`.
 - The browser-facing compile export also completes `fixtures/ps-hash-map/Main.kt`, which covers
   `HashMap<Int, Int>` and `mutableMapOf<Int, Int>()` construction, `map[key]`, `map[key] = value`,
   `put`, `getOrDefault`, `containsKey`, `remove`, `clear`, `size`, and `isEmpty` by lowering to
