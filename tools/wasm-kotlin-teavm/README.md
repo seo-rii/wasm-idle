@@ -560,6 +560,22 @@ The expected output is:
 fill=7,8 long=100000000000 double=3.0 char=xx bool=true
 ```
 
+To run the PS-style `ArrayList<Int>` fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs \
+  --source tools/wasm-kotlin-teavm/fixtures/ps-array-list/Main.kt \
+  --out tools/wasm-kotlin-teavm/build/browser-ps-array-list-out
+printf '4 5 1 4 1\n' | java -cp tools/wasm-kotlin-teavm/build/browser-ps-array-list-out MainKt
+```
+
+The expected output is:
+
+```text
+list=1,6 size=5 sum=17 empty=false
+```
+
 ## Current Status
 
 This folder is a porting scaffold, not an app integration. The current probe compiles a small Java
@@ -724,9 +740,13 @@ Known findings from the initial experiments:
 - The browser-compatible probe also compiles `fixtures/ps-array-fill/Main.kt`, which exercises
   `fill(...)` on primitive arrays by lowering to `java.util.Arrays.fill`. Running that generated
   class prints `fill=7,8 long=100000000000 double=3.0 char=xx bool=true`.
+- The browser-compatible probe also compiles `fixtures/ps-array-list/Main.kt`, which exercises
+  `ArrayList<Int>` construction, `add`, index get/set, `size`, `isEmpty`, and `sort()` by lowering
+  to `java.util.ArrayList<Integer>` plus `java.util.Collections.sort`. With stdin `4 5 1 4 1` it
+  prints `list=1,6 size=5 sum=17 empty=false`.
 - This is not a full Kotlin/JVM backend yet. The browser path is currently a minimal emitter that
   supports the verified fixture shapes above. It does not yet support enough Kotlin for real
-  competitive-programming use: collections and common library helpers, classes/data classes,
+  competitive-programming use: full collections and common library helpers, classes/data classes,
   lambdas, generics, broader library calls, and stable classpath jar reads are still missing.
 - Full Kotlin backend restoration is still blocked by Kotlin builtins deserialization in the TeaVM
   runtime: the `.kotlin_builtins` resource is readable, but `DefaultBuiltIns.getUnitType()` still

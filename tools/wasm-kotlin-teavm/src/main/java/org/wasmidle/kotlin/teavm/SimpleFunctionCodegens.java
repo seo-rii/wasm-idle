@@ -532,6 +532,18 @@ public final class SimpleFunctionCodegens {
         }
         if (left instanceof KtArrayAccessExpression) {
             ValueType arrayType = emitArrayReferenceAndIndex(method, context, (KtArrayAccessExpression) left);
+            if (arrayType == ValueType.INT_ARRAY_LIST) {
+                if (operation != KtTokens.EQ) {
+                    throw new IllegalArgumentException("List compound assignment is not supported: "
+                            + binary.getText());
+                }
+                emitExpressionAs(method, context, right, ValueType.INT);
+                boxInt(method);
+                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "set",
+                        "(ILjava/lang/Object;)Ljava/lang/Object;", false);
+                method.visitInsn(Opcodes.POP);
+                return true;
+            }
             if (operation != KtTokens.EQ) {
                 if (!isCompoundAssignment(operation)) {
                     throw new IllegalArgumentException("Unsupported array assignment: " + binary.getText());
@@ -775,6 +787,13 @@ public final class SimpleFunctionCodegens {
                 method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/String", "charAt", "(I)C", false);
                 return ValueType.CHAR;
             }
+            if (arrayType == ValueType.INT_ARRAY_LIST) {
+                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "get",
+                        "(I)Ljava/lang/Object;", false);
+                method.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/Integer");
+                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false);
+                return ValueType.INT;
+            }
             ValueType elementType = indexedElementType(arrayType);
             if (elementType == ValueType.INT) {
                 method.visitInsn(Opcodes.IALOAD);
@@ -819,6 +838,10 @@ public final class SimpleFunctionCodegens {
                     method.visitInsn(Opcodes.ARRAYLENGTH);
                     return ValueType.INT;
                 }
+                if (receiverType == ValueType.INT_ARRAY_LIST) {
+                    method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "size", "()I", false);
+                    return ValueType.INT;
+                }
             }
             if (selector instanceof KtCallExpression) {
                 KtExpression callee = ((KtCallExpression) selector).getCalleeExpression();
@@ -851,6 +874,11 @@ public final class SimpleFunctionCodegens {
                                 "(" + receiverType.descriptor + ")V", false);
                         return ValueType.VOID;
                     }
+                    if (receiverType == ValueType.INT_ARRAY_LIST) {
+                        method.visitMethodInsn(Opcodes.INVOKESTATIC, "java/util/Collections", "sort",
+                                "(Ljava/util/List;)V", false);
+                        return ValueType.VOID;
+                    }
                 }
                 if (callee != null && "fill".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().size() == 1) {
@@ -865,6 +893,28 @@ public final class SimpleFunctionCodegens {
                         method.visitMethodInsn(Opcodes.INVOKESTATIC, "java/util/Arrays", "fill",
                                 "(" + receiverType.descriptor + elementType.descriptor + ")V", false);
                         return ValueType.VOID;
+                    }
+                }
+                if (callee != null && "add".equals(callee.getText())
+                        && ((KtCallExpression) selector).getValueArguments().size() == 1) {
+                    ValueType receiverType = emitExpression(method, context, receiver);
+                    if (receiverType == ValueType.INT_ARRAY_LIST) {
+                        emitExpressionAs(method, context,
+                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
+                                ValueType.INT);
+                        boxInt(method);
+                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "add",
+                                "(Ljava/lang/Object;)Z", false);
+                        return ValueType.BOOLEAN;
+                    }
+                }
+                if (callee != null && "isEmpty".equals(callee.getText())
+                        && ((KtCallExpression) selector).getValueArguments().isEmpty()) {
+                    ValueType receiverType = emitExpression(method, context, receiver);
+                    if (receiverType == ValueType.INT_ARRAY_LIST) {
+                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "isEmpty", "()Z",
+                                false);
+                        return ValueType.BOOLEAN;
                     }
                 }
                 if (callee != null && "append".equals(callee.getText())
@@ -1179,6 +1229,13 @@ public final class SimpleFunctionCodegens {
             method.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "()V", false);
             return ValueType.STRING_BUILDER;
         }
+        if ((isArrayListConstructor(calleeText) || isMutableListFactory(calleeText))
+                && call.getValueArguments().isEmpty()) {
+            method.visitTypeInsn(Opcodes.NEW, "java/util/ArrayList");
+            method.visitInsn(Opcodes.DUP);
+            method.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/util/ArrayList", "<init>", "()V", false);
+            return ValueType.INT_ARRAY_LIST;
+        }
         if ("readInt".equals(calleeText) && call.getValueArguments().isEmpty()) {
             ensureReadIntHelper(context);
             method.visitMethodInsn(Opcodes.INVOKESTATIC, context.ownerInternalName, "__wasmIdleReadInt", "()I",
@@ -1309,8 +1366,11 @@ public final class SimpleFunctionCodegens {
                 throw new IllegalArgumentException("Missing array expression: " + expression.getText());
             }
             ValueType arrayType = inferExpressionType(context, arrayExpression);
-            if (!arrayType.array && arrayType != ValueType.STRING) {
+            if (!isIndexableType(arrayType)) {
                 throw new IllegalArgumentException("Unsupported array type: " + expression.getText());
+            }
+            if (arrayType == ValueType.INT_ARRAY_LIST) {
+                return ValueType.INT;
             }
             return indexedElementType(arrayType);
         }
@@ -1321,9 +1381,11 @@ public final class SimpleFunctionCodegens {
                     && inferExpressionType(context, qualified.getReceiverExpression()) == ValueType.STRING) {
                 return ValueType.INT;
             }
-            if (selector != null && "size".equals(selector.getText())
-                    && inferExpressionType(context, qualified.getReceiverExpression()).array) {
-                return ValueType.INT;
+            if (selector != null && "size".equals(selector.getText())) {
+                ValueType receiverType = inferExpressionType(context, qualified.getReceiverExpression());
+                if (receiverType.array || receiverType == ValueType.INT_ARRAY_LIST) {
+                    return ValueType.INT;
+                }
             }
             if (selector instanceof KtCallExpression) {
                 KtExpression callee = ((KtCallExpression) selector).getCalleeExpression();
@@ -1343,7 +1405,8 @@ public final class SimpleFunctionCodegens {
                         && ((KtCallExpression) selector).getValueArguments().isEmpty()) {
                     ValueType receiverType = inferExpressionType(context, qualified.getReceiverExpression());
                     if (receiverType == ValueType.INT_ARRAY || receiverType == ValueType.LONG_ARRAY
-                            || receiverType == ValueType.DOUBLE_ARRAY || receiverType == ValueType.CHAR_ARRAY) {
+                            || receiverType == ValueType.DOUBLE_ARRAY || receiverType == ValueType.CHAR_ARRAY
+                            || receiverType == ValueType.INT_ARRAY_LIST) {
                         return ValueType.VOID;
                     }
                 }
@@ -1355,6 +1418,18 @@ public final class SimpleFunctionCodegens {
                             || receiverType == ValueType.BOOLEAN_ARRAY) {
                         return ValueType.VOID;
                     }
+                }
+                if (callee != null && "add".equals(callee.getText())
+                        && ((KtCallExpression) selector).getValueArguments().size() == 1
+                        && inferExpressionType(context, qualified.getReceiverExpression())
+                                == ValueType.INT_ARRAY_LIST) {
+                    return ValueType.BOOLEAN;
+                }
+                if (callee != null && "isEmpty".equals(callee.getText())
+                        && ((KtCallExpression) selector).getValueArguments().isEmpty()
+                        && inferExpressionType(context, qualified.getReceiverExpression())
+                                == ValueType.INT_ARRAY_LIST) {
+                    return ValueType.BOOLEAN;
                 }
                 if (callee != null && "append".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().size() == 1
@@ -1435,6 +1510,9 @@ public final class SimpleFunctionCodegens {
             }
             if ("StringBuilder".equals(calleeText)) {
                 return ValueType.STRING_BUILDER;
+            }
+            if (isArrayListConstructor(calleeText) || isMutableListFactory(calleeText)) {
+                return ValueType.INT_ARRAY_LIST;
             }
             if ("IntArray".equals(calleeText)) {
                 return ValueType.INT_ARRAY;
@@ -1518,14 +1596,14 @@ public final class SimpleFunctionCodegens {
         ValueType arrayType;
         if (arrayExpression instanceof KtNameReferenceExpression) {
             Local local = context.locals.get(arrayExpression.getText());
-            if (local == null || (!local.type.array && local.type != ValueType.STRING)) {
+            if (local == null || !isIndexableType(local.type)) {
                 throw new IllegalArgumentException("Unknown array local: " + arrayExpression.getText());
             }
             method.visitVarInsn(Opcodes.ALOAD, local.index);
             arrayType = local.type;
         } else {
             arrayType = emitExpression(method, context, arrayExpression);
-            if (!arrayType.array && arrayType != ValueType.STRING) {
+            if (!isIndexableType(arrayType)) {
                 throw new IllegalArgumentException("Unsupported array expression: " + arrayExpression.getText());
             }
         }
@@ -1534,6 +1612,23 @@ public final class SimpleFunctionCodegens {
             throw new IllegalArgumentException("Array index must be Int: " + expression.getText());
         }
         return arrayType;
+    }
+
+    private static boolean isIndexableType(ValueType type) {
+        return type.array || type == ValueType.STRING || type == ValueType.INT_ARRAY_LIST;
+    }
+
+    private static boolean isArrayListConstructor(String calleeText) {
+        return "ArrayList".equals(calleeText) || calleeText.startsWith("ArrayList<");
+    }
+
+    private static boolean isMutableListFactory(String calleeText) {
+        return "mutableListOf".equals(calleeText) || calleeText.startsWith("mutableListOf<");
+    }
+
+    private static void boxInt(MethodVisitor method) {
+        method.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Integer", "valueOf",
+                "(I)Ljava/lang/Integer;", false);
     }
 
     private static void ensureReadStringHelper(MethodContext context) {
@@ -2100,6 +2195,10 @@ public final class SimpleFunctionCodegens {
         if ("StringBuilder".equals(text)) {
             return ValueType.STRING_BUILDER;
         }
+        if ("ArrayList<Int>".equals(text) || "MutableList<Int>".equals(text)
+                || "List<Int>".equals(text)) {
+            return ValueType.INT_ARRAY_LIST;
+        }
         if ("Char".equals(text)) {
             return ValueType.CHAR;
         }
@@ -2198,6 +2297,7 @@ public final class SimpleFunctionCodegens {
         BOOLEAN("Z", 1, false, false),
         STRING("Ljava/lang/String;", 1, false, false),
         STRING_BUILDER("Ljava/lang/StringBuilder;", 1, false, false),
+        INT_ARRAY_LIST("Ljava/util/ArrayList;", 1, false, false),
         INT_ARRAY("[I", 1, false, true),
         LONG_ARRAY("[J", 1, false, true),
         DOUBLE_ARRAY("[D", 1, false, true),

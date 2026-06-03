@@ -262,6 +262,10 @@ Current status:
 - The browser-facing compile export also completes `fixtures/ps-array-fill/Main.kt`, which covers
   `fill(...)` on primitive arrays by lowering to `java.util.Arrays.fill`. Running the generated class
   prints `fill=7,8 long=100000000000 double=3.0 char=xx bool=true`.
+- The browser-facing compile export also completes `fixtures/ps-array-list/Main.kt`, which covers
+  `ArrayList<Int>` construction, `add`, index get/set, `size`, `isEmpty`, and `sort()` by lowering to
+  `java.util.ArrayList<Integer>` plus `java.util.Collections.sort`. With stdin `4 5 1 4 1` it prints
+  `list=1,6 size=5 sum=17 empty=false`.
 - This success currently comes from a minimal PSI-based bytecode emitter for the verified fixture
   shapes, not from the full Kotlin/JVM backend. The full backend still fails because Kotlin builtins
   deserialization can read `kotlin/kotlin.kotlin_builtins` but cannot resolve `kotlin.Unit`; virtual
