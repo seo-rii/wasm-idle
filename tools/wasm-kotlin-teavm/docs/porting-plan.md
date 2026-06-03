@@ -305,6 +305,11 @@ Current status:
   `put`, `getOrDefault`, `containsKey`, `remove`, `clear`, `size`, and `isEmpty` by lowering to
   `java.util.HashMap<Integer, Integer>`. With stdin `7 1 2 1 3 2 2 3` it prints
   `map=3 removed=2 after=-1 had=true extra=3 empty=true size=0`.
+- The browser-facing compile export also completes `fixtures/ps-int-long-map/Main.kt`, which covers
+  `HashMap<Int, Long>` and `mutableMapOf<Int, Long>()` construction, `map[key]`, `map[key] = value`,
+  `put`, `get`, `getOrDefault`, `containsKey`, `remove`, `clear`, `size`, `isEmpty`, and `in`/`!in`
+  by lowering to `java.util.HashMap<Integer, Long>`. With stdin `3 100000000000 7` it prints
+  `intLongMap=0,2 value=100000000007 removed=7 fallback=-5 flags=true,true empty=true,false more=2,100000000007`.
 - The browser-facing compile export also completes `fixtures/ps-long-int-map/Main.kt`, which covers
   `HashMap<Long, Int>` and `mutableMapOf<Long, Int>()` construction, `map[key]`, `map[key] = value`,
   `put`, `get`, `getOrDefault`, `containsKey`, `remove`, `clear`, `size`, `isEmpty`, and `in`/`!in`

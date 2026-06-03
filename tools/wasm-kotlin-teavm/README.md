@@ -720,6 +720,22 @@ The expected output is:
 map=3 removed=2 after=-1 had=true extra=3 empty=true size=0
 ```
 
+To run the PS-style `HashMap<Int, Long>` fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs \
+  --source tools/wasm-kotlin-teavm/fixtures/ps-int-long-map/Main.kt \
+  --out tools/wasm-kotlin-teavm/build/browser-ps-int-long-map-out
+printf '3 100000000000 7\n' | java -cp tools/wasm-kotlin-teavm/build/browser-ps-int-long-map-out MainKt
+```
+
+The expected output is:
+
+```text
+intLongMap=0,2 value=100000000007 removed=7 fallback=-5 flags=true,true empty=true,false more=2,100000000007
+```
+
 To run the PS-style `HashMap<Long, Int>` fixture:
 
 ```bash
@@ -1055,6 +1071,12 @@ Known findings from the initial experiments:
   `put`, `getOrDefault`, `containsKey`, `remove`, `clear`, `size`, and `isEmpty` by lowering to
   `java.util.HashMap<Integer, Integer>`. With stdin `7 1 2 1 3 2 2 3` it prints
   `map=3 removed=2 after=-1 had=true extra=3 empty=true size=0`.
+- The browser-compatible probe also compiles `fixtures/ps-int-long-map/Main.kt`, which exercises
+  `HashMap<Int, Long>` and `mutableMapOf<Int, Long>()` construction, `map[key]`,
+  `map[key] = value`, `put`, `get`, `getOrDefault`, `containsKey`, `remove`, `clear`, `size`,
+  `isEmpty`, and `in`/`!in` by lowering to `java.util.HashMap<Integer, Long>`. With stdin
+  `3 100000000000 7` it prints
+  `intLongMap=0,2 value=100000000007 removed=7 fallback=-5 flags=true,true empty=true,false more=2,100000000007`.
 - The browser-compatible probe also compiles `fixtures/ps-long-int-map/Main.kt`, which exercises
   `HashMap<Long, Int>` and `mutableMapOf<Long, Int>()` construction, `map[key]`, `map[key] = value`,
   `put`, `get`, `getOrDefault`, `containsKey`, `remove`, `clear`, `size`, `isEmpty`, and
