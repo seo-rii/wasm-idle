@@ -672,6 +672,22 @@ The expected output is:
 pairPq=4 peek=-1,8 first=-1,8 second=3,4 third=0,-10 score=807 flags=true,true,true,true empty=true size=0
 ```
 
+To run the PS-style `PriorityQueue<Pair<Int, Int>>(compareBy { ... })` fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs \
+  --source tools/wasm-kotlin-teavm/fixtures/ps-pair-priority-queue-compareby/Main.kt \
+  --out tools/wasm-kotlin-teavm/build/browser-ps-pair-priority-queue-compareby-out
+java -cp tools/wasm-kotlin-teavm/build/browser-ps-pair-priority-queue-compareby-out MainKt
+```
+
+The expected output is:
+
+```text
+pairPqSecond=4 peek=-3,-1 first=-3,-1 second=2,-1 third=-5,0 score=112 flags=true,true,true,true empty=true size=0 firstOrder=1,99
+```
+
 To run the PS-style `PriorityQueue<Long>` fixture:
 
 ```bash
@@ -1189,6 +1205,12 @@ Known findings from the initial experiments:
   `java.util.PriorityQueue<Long>` ordered by signed `(first, second)`. Running the generated class
   prints
   `pairPq=4 peek=-1,8 first=-1,8 second=3,4 third=0,-10 score=807 flags=true,true,true,true empty=true size=0`.
+- The browser-compatible probe also compiles `fixtures/ps-pair-priority-queue-compareby/Main.kt`,
+  which exercises `PriorityQueue<Pair<Int, Int>>(compareBy { it.second })` and
+  `compareBy { it.first }` construction by applying the comparator intent to the packed `Long`
+  ordering. `it.second` orders by signed `(second, first)`, while `it.first` keeps signed
+  `(first, second)`. Running the generated class prints
+  `pairPqSecond=4 peek=-3,-1 first=-3,-1 second=2,-1 third=-5,0 score=112 flags=true,true,true,true empty=true size=0 firstOrder=1,99`.
 - The browser-compatible probe also compiles `fixtures/ps-long-priority-queue/Main.kt`, which
   exercises `PriorityQueue<Long>` construction, `add`, `offer`, `peek`, `poll`, `size`, `isEmpty`,
   and `in`/`!in` by lowering to `java.util.PriorityQueue<Long>`. With stdin `100000000000 7` it

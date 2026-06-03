@@ -294,6 +294,12 @@ Current status:
   `remove`, `size`, `isEmpty`, and `in`/`!in` by lowering to a packed `java.util.PriorityQueue<Long>`
   ordered by signed `(first, second)`. Running the generated class prints
   `pairPq=4 peek=-1,8 first=-1,8 second=3,4 third=0,-10 score=807 flags=true,true,true,true empty=true size=0`.
+- The browser-facing compile export also completes `fixtures/ps-pair-priority-queue-compareby/Main.kt`,
+  which covers `PriorityQueue<Pair<Int, Int>>(compareBy { it.second })` and
+  `compareBy { it.first }` construction by applying the comparator intent to the packed `Long`
+  ordering. `it.second` orders by signed `(second, first)`, while `it.first` keeps signed
+  `(first, second)`. Running the generated class prints
+  `pairPqSecond=4 peek=-3,-1 first=-3,-1 second=2,-1 third=-5,0 score=112 flags=true,true,true,true empty=true size=0 firstOrder=1,99`.
 - The browser-facing compile export also completes `fixtures/ps-long-priority-queue/Main.kt`, which
   covers `PriorityQueue<Long>` construction, `add`, `offer`, `peek`, `poll`, `size`, `isEmpty`, and
   `in`/`!in` by lowering to `java.util.PriorityQueue<Long>`. With stdin `100000000000 7` it prints
