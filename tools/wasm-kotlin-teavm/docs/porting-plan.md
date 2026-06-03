@@ -284,6 +284,10 @@ Current status:
   `put`, `getOrDefault`, `containsKey`, `remove`, `clear`, `size`, and `isEmpty` by lowering to
   `java.util.HashMap<Integer, Integer>`. With stdin `7 1 2 1 3 2 2 3` it prints
   `map=3 removed=2 after=-1 had=true extra=3 empty=true size=0`.
+- The browser-facing compile export also completes `fixtures/ps-in-operator/Main.kt`, which covers
+  `in`/`!in` for `Int` ranges, `String`/`Char` in `String`, `String` in `String`, and membership in
+  the verified `Int` collection/map shapes above. With stdin `4 1 2 3 2 algorithmgo` it prints
+  `in=131071 size=3,3`.
 - This success currently comes from a minimal PSI-based bytecode emitter for the verified fixture
   shapes, not from the full Kotlin/JVM backend. The full backend still fails because Kotlin builtins
   deserialization can read `kotlin/kotlin.kotlin_builtins` but cannot resolve `kotlin.Unit`; virtual

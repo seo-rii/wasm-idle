@@ -1248,6 +1248,9 @@ public final class SimpleFunctionCodegens {
                 }
                 throw new IllegalArgumentException("Numeric operation type mismatch: " + expression.getText());
             }
+            if (isContainsOperation(operation)) {
+                return emitContainsExpression(method, context, binary);
+            }
             if (isComparison(operation) || operation == KtTokens.ANDAND || operation == KtTokens.OROR) {
                 Label trueLabel = new Label();
                 Label endLabel = new Label();
@@ -1847,7 +1850,8 @@ public final class SimpleFunctionCodegens {
         if (expression instanceof KtBinaryExpression) {
             KtBinaryExpression binary = (KtBinaryExpression) expression;
             IElementType operation = binary.getOperationToken();
-            if (isComparison(operation) || operation == KtTokens.ANDAND || operation == KtTokens.OROR) {
+            if (isComparison(operation) || isContainsOperation(operation)
+                    || operation == KtTokens.ANDAND || operation == KtTokens.OROR) {
                 return ValueType.BOOLEAN;
             }
             ValueType leftType = inferExpressionType(context, binary.getLeft());
@@ -2317,6 +2321,11 @@ public final class SimpleFunctionCodegens {
                 }
                 return;
             }
+            if (isContainsOperation(operation)) {
+                emitContainsExpression(method, context, binary);
+                method.visitJumpInsn(jumpWhenTrue ? Opcodes.IFNE : Opcodes.IFEQ, target);
+                return;
+            }
             if (isComparison(operation)) {
                 ValueType leftType = inferExpressionType(context, binary.getLeft());
                 ValueType rightType = inferExpressionType(context, binary.getRight());
@@ -2362,6 +2371,118 @@ public final class SimpleFunctionCodegens {
                     + expression.getText());
         }
         method.visitJumpInsn(jumpWhenTrue ? Opcodes.IFNE : Opcodes.IFEQ, target);
+    }
+
+    private static ValueType emitContainsExpression(
+            MethodVisitor method, MethodContext context, KtBinaryExpression binary) {
+        KtExpression element = binary.getLeft();
+        KtExpression container = binary.getRight();
+        if (element == null || container == null) {
+            throw new IllegalArgumentException("Missing in-expression operand: " + binary.getText());
+        }
+        boolean negated = binary.getOperationToken() == KtTokens.NOT_IN;
+
+        if (container instanceof KtBinaryExpression) {
+            KtBinaryExpression rangeExpression = (KtBinaryExpression) container;
+            String rangeOperation = rangeExpression.getOperationReference().getText();
+            if ("until".equals(rangeOperation) || "..<".equals(rangeOperation)
+                    || "..".equals(rangeOperation) || "downTo".equals(rangeOperation)) {
+                ValueType elementType = inferExpressionType(context, element);
+                if (elementType != ValueType.INT) {
+                    throw new IllegalArgumentException("Range contains only supports Int: " + binary.getText());
+                }
+                int valueIndex = context.allocateTemporary(ValueType.INT);
+                emitExpressionAs(method, context, element, ValueType.INT);
+                method.visitVarInsn(Opcodes.ISTORE, valueIndex);
+                Label falseLabel = new Label();
+                Label endLabel = new Label();
+                if ("downTo".equals(rangeOperation)) {
+                    method.visitVarInsn(Opcodes.ILOAD, valueIndex);
+                    emitExpressionAs(method, context, rangeExpression.getLeft(), ValueType.INT);
+                    method.visitJumpInsn(Opcodes.IF_ICMPGT, falseLabel);
+                    method.visitVarInsn(Opcodes.ILOAD, valueIndex);
+                    emitExpressionAs(method, context, rangeExpression.getRight(), ValueType.INT);
+                    method.visitJumpInsn(Opcodes.IF_ICMPLT, falseLabel);
+                } else {
+                    method.visitVarInsn(Opcodes.ILOAD, valueIndex);
+                    emitExpressionAs(method, context, rangeExpression.getLeft(), ValueType.INT);
+                    method.visitJumpInsn(Opcodes.IF_ICMPLT, falseLabel);
+                    method.visitVarInsn(Opcodes.ILOAD, valueIndex);
+                    emitExpressionAs(method, context, rangeExpression.getRight(), ValueType.INT);
+                    method.visitJumpInsn("..".equals(rangeOperation) ? Opcodes.IF_ICMPGT : Opcodes.IF_ICMPGE,
+                            falseLabel);
+                }
+                method.visitInsn(negated ? Opcodes.ICONST_0 : Opcodes.ICONST_1);
+                method.visitJumpInsn(Opcodes.GOTO, endLabel);
+                method.visitLabel(falseLabel);
+                method.visitInsn(negated ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+                method.visitLabel(endLabel);
+                return ValueType.BOOLEAN;
+            }
+        }
+
+        ValueType containerType = inferExpressionType(context, container);
+        ValueType elementType = inferExpressionType(context, element);
+        if (containerType == ValueType.STRING) {
+            emitExpressionAs(method, context, container, ValueType.STRING);
+            if (elementType == ValueType.CHAR) {
+                emitExpressionAs(method, context, element, ValueType.CHAR);
+                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/String", "indexOf", "(I)I", false);
+                method.visitInsn(Opcodes.ICONST_M1);
+                Label trueLabel = new Label();
+                Label endLabel = new Label();
+                method.visitJumpInsn(negated ? Opcodes.IF_ICMPEQ : Opcodes.IF_ICMPNE, trueLabel);
+                method.visitInsn(Opcodes.ICONST_0);
+                method.visitJumpInsn(Opcodes.GOTO, endLabel);
+                method.visitLabel(trueLabel);
+                method.visitInsn(Opcodes.ICONST_1);
+                method.visitLabel(endLabel);
+                return ValueType.BOOLEAN;
+            }
+            if (elementType == ValueType.STRING) {
+                emitExpressionAs(method, context, element, ValueType.STRING);
+                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/String", "contains",
+                        "(Ljava/lang/CharSequence;)Z", false);
+                if (negated) {
+                    method.visitInsn(Opcodes.ICONST_1);
+                    method.visitInsn(Opcodes.IXOR);
+                }
+                return ValueType.BOOLEAN;
+            }
+        }
+        if (containerType == ValueType.INT_HASH_SET || containerType == ValueType.INT_ARRAY_LIST
+                || containerType == ValueType.INT_PRIORITY_QUEUE || containerType == ValueType.INT_ARRAY_DEQUE
+                || containerType == ValueType.INT_INT_HASH_MAP) {
+            if (elementType != ValueType.INT) {
+                throw new IllegalArgumentException("Int collection contains requires Int element: "
+                        + binary.getText());
+            }
+            emitExpression(method, context, container);
+            emitExpressionAs(method, context, element, ValueType.INT);
+            boxInt(method);
+            if (containerType == ValueType.INT_HASH_SET) {
+                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashSet", "contains",
+                        "(Ljava/lang/Object;)Z", false);
+            } else if (containerType == ValueType.INT_ARRAY_LIST) {
+                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "contains",
+                        "(Ljava/lang/Object;)Z", false);
+            } else if (containerType == ValueType.INT_PRIORITY_QUEUE) {
+                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/PriorityQueue", "contains",
+                        "(Ljava/lang/Object;)Z", false);
+            } else if (containerType == ValueType.INT_ARRAY_DEQUE) {
+                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayDeque", "contains",
+                        "(Ljava/lang/Object;)Z", false);
+            } else {
+                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "containsKey",
+                        "(Ljava/lang/Object;)Z", false);
+            }
+            if (negated) {
+                method.visitInsn(Opcodes.ICONST_1);
+                method.visitInsn(Opcodes.IXOR);
+            }
+            return ValueType.BOOLEAN;
+        }
+        throw new IllegalArgumentException("Unsupported in-expression: " + binary.getText());
     }
 
     private static void emitArithmeticOpcode(MethodVisitor method, IElementType operation, ValueType type) {
@@ -2455,6 +2576,10 @@ public final class SimpleFunctionCodegens {
                 || operation == KtTokens.GT || operation == KtTokens.GTEQ
                 || operation == KtTokens.EQEQ || operation == KtTokens.EXCLEQ
                 || operation == KtTokens.EQEQEQ || operation == KtTokens.EXCLEQEQEQ;
+    }
+
+    private static boolean isContainsOperation(IElementType operation) {
+        return operation == KtTokens.IN_KEYWORD || operation == KtTokens.NOT_IN;
     }
 
     private static boolean isIncrementOperation(IElementType operation) {

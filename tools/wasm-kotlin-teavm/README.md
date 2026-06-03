@@ -640,6 +640,22 @@ The expected output is:
 map=3 removed=2 after=-1 had=true extra=3 empty=true size=0
 ```
 
+To run the PS-style `in`/`!in` fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs \
+  --source tools/wasm-kotlin-teavm/fixtures/ps-in-operator/Main.kt \
+  --out tools/wasm-kotlin-teavm/build/browser-ps-in-operator-out
+printf '4 1 2 3 2 algorithmgo\n' | java -cp tools/wasm-kotlin-teavm/build/browser-ps-in-operator-out MainKt
+```
+
+The expected output is:
+
+```text
+in=131071 size=3,3
+```
+
 ## Current Status
 
 This folder is a porting scaffold, not an app integration. The current probe compiles a small Java
@@ -826,6 +842,10 @@ Known findings from the initial experiments:
   `put`, `getOrDefault`, `containsKey`, `remove`, `clear`, `size`, and `isEmpty` by lowering to
   `java.util.HashMap<Integer, Integer>`. With stdin `7 1 2 1 3 2 2 3` it prints
   `map=3 removed=2 after=-1 had=true extra=3 empty=true size=0`.
+- The browser-compatible probe also compiles `fixtures/ps-in-operator/Main.kt`, which exercises
+  `in`/`!in` for `Int` ranges, `String`/`Char` in `String`, `String` in `String`, and membership in
+  the verified `Int` collection/map shapes above. With stdin `4 1 2 3 2 algorithmgo` it prints
+  `in=131071 size=3,3`.
 - This is not a full Kotlin/JVM backend yet. The browser path is currently a minimal emitter that
   supports the verified fixture shapes above. It does not yet support enough Kotlin for real
   competitive-programming use: full collections and common library helpers, classes/data classes,
