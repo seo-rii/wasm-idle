@@ -544,6 +544,18 @@ public final class SimpleFunctionCodegens {
                 method.visitInsn(Opcodes.POP);
                 return true;
             }
+            if (arrayType == ValueType.LONG_INT_HASH_MAP) {
+                if (operation != KtTokens.EQ) {
+                    throw new IllegalArgumentException("Long-key map compound assignment is not supported: "
+                            + binary.getText());
+                }
+                emitExpressionAs(method, context, right, ValueType.INT);
+                boxInt(method);
+                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "put",
+                        "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", false);
+                method.visitInsn(Opcodes.POP);
+                return true;
+            }
             if (arrayType == ValueType.INT_ARRAY_LIST) {
                 if (operation != KtTokens.EQ) {
                     throw new IllegalArgumentException("List compound assignment is not supported: "
@@ -846,6 +858,12 @@ public final class SimpleFunctionCodegens {
                 unboxInt(method);
                 return ValueType.INT;
             }
+            if (arrayType == ValueType.LONG_INT_HASH_MAP) {
+                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "get",
+                        "(Ljava/lang/Object;)Ljava/lang/Object;", false);
+                unboxInt(method);
+                return ValueType.INT;
+            }
             ValueType elementType = indexedElementType(arrayType);
             if (elementType == ValueType.INT) {
                 method.visitInsn(Opcodes.IALOAD);
@@ -920,6 +938,10 @@ public final class SimpleFunctionCodegens {
                     return ValueType.INT;
                 }
                 if (receiverType == ValueType.INT_INT_HASH_MAP) {
+                    method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "size", "()I", false);
+                    return ValueType.INT;
+                }
+                if (receiverType == ValueType.LONG_INT_HASH_MAP) {
                     method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "size", "()I", false);
                     return ValueType.INT;
                 }
@@ -1236,6 +1258,20 @@ public final class SimpleFunctionCodegens {
                         method.visitInsn(Opcodes.POP);
                         return ValueType.VOID;
                     }
+                    if (receiverType == ValueType.LONG_INT_HASH_MAP) {
+                        emitExpressionAs(method, context,
+                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
+                                ValueType.LONG);
+                        boxLong(method);
+                        emitExpressionAs(method, context,
+                                ((KtCallExpression) selector).getValueArguments().get(1).getArgumentExpression(),
+                                ValueType.INT);
+                        boxInt(method);
+                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "put",
+                                "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", false);
+                        method.visitInsn(Opcodes.POP);
+                        return ValueType.VOID;
+                    }
                 }
                 if (callee != null && "offer".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().size() == 1) {
@@ -1328,6 +1364,11 @@ public final class SimpleFunctionCodegens {
                                 false);
                         return ValueType.BOOLEAN;
                     }
+                    if (receiverType == ValueType.LONG_INT_HASH_MAP) {
+                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "isEmpty", "()Z",
+                                false);
+                        return ValueType.BOOLEAN;
+                    }
                 }
                 if (callee != null && ("contains".equals(callee.getText()) || "remove".equals(callee.getText()))
                         && ((KtCallExpression) selector).getValueArguments().size() == 1) {
@@ -1377,6 +1418,16 @@ public final class SimpleFunctionCodegens {
                         unboxInt(method);
                         return ValueType.INT;
                     }
+                    if (receiverType == ValueType.LONG_INT_HASH_MAP && "remove".equals(callee.getText())) {
+                        emitExpressionAs(method, context,
+                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
+                                ValueType.LONG);
+                        boxLong(method);
+                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "remove",
+                                "(Ljava/lang/Object;)Ljava/lang/Object;", false);
+                        unboxInt(method);
+                        return ValueType.INT;
+                    }
                 }
                 if (callee != null && "removeAt".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().size() == 1) {
@@ -1421,6 +1472,15 @@ public final class SimpleFunctionCodegens {
                                 "(Ljava/lang/Object;)Z", false);
                         return ValueType.BOOLEAN;
                     }
+                    if (receiverType == ValueType.LONG_INT_HASH_MAP) {
+                        emitExpressionAs(method, context,
+                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
+                                ValueType.LONG);
+                        boxLong(method);
+                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "containsKey",
+                                "(Ljava/lang/Object;)Z", false);
+                        return ValueType.BOOLEAN;
+                    }
                 }
                 if (callee != null && "get".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().size() == 1) {
@@ -1435,6 +1495,16 @@ public final class SimpleFunctionCodegens {
                         unboxInt(method);
                         return ValueType.INT;
                     }
+                    if (receiverType == ValueType.LONG_INT_HASH_MAP) {
+                        emitExpressionAs(method, context,
+                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
+                                ValueType.LONG);
+                        boxLong(method);
+                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "get",
+                                "(Ljava/lang/Object;)Ljava/lang/Object;", false);
+                        unboxInt(method);
+                        return ValueType.INT;
+                    }
                 }
                 if (callee != null && "getOrDefault".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().size() == 2) {
@@ -1444,6 +1514,20 @@ public final class SimpleFunctionCodegens {
                                 ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
                                 ValueType.INT);
                         boxInt(method);
+                        emitExpressionAs(method, context,
+                                ((KtCallExpression) selector).getValueArguments().get(1).getArgumentExpression(),
+                                ValueType.INT);
+                        boxInt(method);
+                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "getOrDefault",
+                                "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", false);
+                        unboxInt(method);
+                        return ValueType.INT;
+                    }
+                    if (receiverType == ValueType.LONG_INT_HASH_MAP) {
+                        emitExpressionAs(method, context,
+                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
+                                ValueType.LONG);
+                        boxLong(method);
                         emitExpressionAs(method, context,
                                 ((KtCallExpression) selector).getValueArguments().get(1).getArgumentExpression(),
                                 ValueType.INT);
@@ -1475,6 +1559,11 @@ public final class SimpleFunctionCodegens {
                         return ValueType.VOID;
                     }
                     if (receiverType == ValueType.INT_INT_HASH_MAP) {
+                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "clear", "()V",
+                                false);
+                        return ValueType.VOID;
+                    }
+                    if (receiverType == ValueType.LONG_INT_HASH_MAP) {
                         method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "clear", "()V",
                                 false);
                         return ValueType.VOID;
@@ -1903,6 +1992,10 @@ public final class SimpleFunctionCodegens {
             method.visitTypeInsn(Opcodes.NEW, "java/util/HashMap");
             method.visitInsn(Opcodes.DUP);
             method.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/util/HashMap", "<init>", "()V", false);
+            if (isLongIntMapFactoryOrConstructor(calleeText)
+                    || isLongIntMapFactoryOrConstructor(call.getText())) {
+                return ValueType.LONG_INT_HASH_MAP;
+            }
             return ValueType.INT_INT_HASH_MAP;
         }
         if ("Pair".equals(calleeText) && call.getValueArguments().size() == 2) {
@@ -2087,6 +2180,9 @@ public final class SimpleFunctionCodegens {
             if (arrayType == ValueType.INT_INT_HASH_MAP) {
                 return ValueType.INT;
             }
+            if (arrayType == ValueType.LONG_INT_HASH_MAP) {
+                return ValueType.INT;
+            }
             return indexedElementType(arrayType);
         }
         if (expression instanceof KtDotQualifiedExpression) {
@@ -2105,7 +2201,8 @@ public final class SimpleFunctionCodegens {
                         || receiverType == ValueType.INT_ARRAY_DEQUE
                         || receiverType == ValueType.INT_HASH_SET
                         || receiverType == ValueType.LONG_HASH_SET
-                        || receiverType == ValueType.INT_INT_HASH_MAP) {
+                        || receiverType == ValueType.INT_INT_HASH_MAP
+                        || receiverType == ValueType.LONG_INT_HASH_MAP) {
                     return ValueType.INT;
                 }
             }
@@ -2205,8 +2302,10 @@ public final class SimpleFunctionCodegens {
                 }
                 if (callee != null && "put".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().size() == 2
-                        && inferExpressionType(context, qualified.getReceiverExpression())
-                                == ValueType.INT_INT_HASH_MAP) {
+                        && (inferExpressionType(context, qualified.getReceiverExpression())
+                                == ValueType.INT_INT_HASH_MAP
+                                || inferExpressionType(context, qualified.getReceiverExpression())
+                                        == ValueType.LONG_INT_HASH_MAP)) {
                     return ValueType.VOID;
                 }
                 if (callee != null && "offer".equals(callee.getText())
@@ -2246,7 +2345,9 @@ public final class SimpleFunctionCodegens {
                                 || inferExpressionType(context, qualified.getReceiverExpression())
                                         == ValueType.LONG_HASH_SET
                                 || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.INT_INT_HASH_MAP)) {
+                                        == ValueType.INT_INT_HASH_MAP
+                                || inferExpressionType(context, qualified.getReceiverExpression())
+                                        == ValueType.LONG_INT_HASH_MAP)) {
                     return ValueType.BOOLEAN;
                 }
                 if (callee != null && ("contains".equals(callee.getText()) || "remove".equals(callee.getText()))
@@ -2275,8 +2376,10 @@ public final class SimpleFunctionCodegens {
                 }
                 if (callee != null && "remove".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().size() == 1
-                        && inferExpressionType(context, qualified.getReceiverExpression())
-                                == ValueType.INT_INT_HASH_MAP) {
+                        && (inferExpressionType(context, qualified.getReceiverExpression())
+                                == ValueType.INT_INT_HASH_MAP
+                                || inferExpressionType(context, qualified.getReceiverExpression())
+                                        == ValueType.LONG_INT_HASH_MAP)) {
                     return ValueType.INT;
                 }
                 if (callee != null && "removeAt".equals(callee.getText())
@@ -2294,20 +2397,26 @@ public final class SimpleFunctionCodegens {
                 }
                 if (callee != null && "containsKey".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().size() == 1
-                        && inferExpressionType(context, qualified.getReceiverExpression())
-                                == ValueType.INT_INT_HASH_MAP) {
+                        && (inferExpressionType(context, qualified.getReceiverExpression())
+                                == ValueType.INT_INT_HASH_MAP
+                                || inferExpressionType(context, qualified.getReceiverExpression())
+                                        == ValueType.LONG_INT_HASH_MAP)) {
                     return ValueType.BOOLEAN;
                 }
                 if (callee != null && "get".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().size() == 1
-                        && inferExpressionType(context, qualified.getReceiverExpression())
-                                == ValueType.INT_INT_HASH_MAP) {
+                        && (inferExpressionType(context, qualified.getReceiverExpression())
+                                == ValueType.INT_INT_HASH_MAP
+                                || inferExpressionType(context, qualified.getReceiverExpression())
+                                        == ValueType.LONG_INT_HASH_MAP)) {
                     return ValueType.INT;
                 }
                 if (callee != null && "getOrDefault".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().size() == 2
-                        && inferExpressionType(context, qualified.getReceiverExpression())
-                                == ValueType.INT_INT_HASH_MAP) {
+                        && (inferExpressionType(context, qualified.getReceiverExpression())
+                                == ValueType.INT_INT_HASH_MAP
+                                || inferExpressionType(context, qualified.getReceiverExpression())
+                                        == ValueType.LONG_INT_HASH_MAP)) {
                     return ValueType.INT;
                 }
                 if (callee != null && "clear".equals(callee.getText())
@@ -2323,7 +2432,9 @@ public final class SimpleFunctionCodegens {
                                 || inferExpressionType(context, qualified.getReceiverExpression())
                                         == ValueType.INT_PAIR_ARRAY_LIST
                                 || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.INT_INT_HASH_MAP)) {
+                                        == ValueType.INT_INT_HASH_MAP
+                                || inferExpressionType(context, qualified.getReceiverExpression())
+                                        == ValueType.LONG_INT_HASH_MAP)) {
                     return ValueType.VOID;
                 }
                 if (callee != null && ("first".equals(callee.getText()) || "last".equals(callee.getText()))
@@ -2463,6 +2574,10 @@ public final class SimpleFunctionCodegens {
                 return ValueType.INT_HASH_SET;
             }
             if (isHashMapConstructor(calleeText) || isMutableMapFactory(calleeText)) {
+                if (isLongIntMapFactoryOrConstructor(calleeText)
+                        || isLongIntMapFactoryOrConstructor(expression.getText())) {
+                    return ValueType.LONG_INT_HASH_MAP;
+                }
                 return ValueType.INT_INT_HASH_MAP;
             }
             if ("Pair".equals(calleeText) && ((KtCallExpression) expression).getValueArguments().size() == 2) {
@@ -2579,6 +2694,13 @@ public final class SimpleFunctionCodegens {
             }
         }
         ValueType indexType = emitExpression(method, context, expression.getIndexExpressions().get(0));
+        if (arrayType == ValueType.LONG_INT_HASH_MAP) {
+            if (indexType != ValueType.LONG) {
+                throw new IllegalArgumentException("Long-key map index must be Long: " + expression.getText());
+            }
+            boxLong(method);
+            return arrayType;
+        }
         if (indexType != ValueType.INT) {
             throw new IllegalArgumentException("Array index must be Int: " + expression.getText());
         }
@@ -2592,7 +2714,8 @@ public final class SimpleFunctionCodegens {
         return type.array || type == ValueType.STRING || type == ValueType.INT_ARRAY_LIST
                 || type == ValueType.LONG_ARRAY_LIST
                 || type == ValueType.INT_PAIR_ARRAY_LIST
-                || type == ValueType.INT_INT_HASH_MAP;
+                || type == ValueType.INT_INT_HASH_MAP
+                || type == ValueType.LONG_INT_HASH_MAP;
     }
 
     private static boolean isArrayListConstructor(String calleeText) {
@@ -2655,6 +2778,16 @@ public final class SimpleFunctionCodegens {
 
     private static boolean isMutableMapFactory(String calleeText) {
         return "mutableMapOf".equals(calleeText) || calleeText.startsWith("mutableMapOf<");
+    }
+
+    private static boolean isLongIntMapFactoryOrConstructor(String calleeText) {
+        String compact = calleeText.replace(" ", "");
+        int parenIndex = compact.indexOf('(');
+        if (parenIndex >= 0) {
+            compact = compact.substring(0, parenIndex);
+        }
+        return "HashMap<Long,Int>".equals(compact)
+                || "mutableMapOf<Long,Int>".equals(compact);
     }
 
     private static void boxInt(MethodVisitor method) {
@@ -3144,7 +3277,8 @@ public final class SimpleFunctionCodegens {
             }
             return ValueType.BOOLEAN;
         }
-        if (containerType == ValueType.LONG_ARRAY_LIST || containerType == ValueType.LONG_HASH_SET) {
+        if (containerType == ValueType.LONG_ARRAY_LIST || containerType == ValueType.LONG_HASH_SET
+                || containerType == ValueType.LONG_INT_HASH_MAP) {
             if (elementType != ValueType.LONG) {
                 throw new IllegalArgumentException("Long collection contains requires Long element: "
                         + binary.getText());
@@ -3155,8 +3289,11 @@ public final class SimpleFunctionCodegens {
             if (containerType == ValueType.LONG_ARRAY_LIST) {
                 method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "contains",
                         "(Ljava/lang/Object;)Z", false);
-            } else {
+            } else if (containerType == ValueType.LONG_HASH_SET) {
                 method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashSet", "contains",
+                        "(Ljava/lang/Object;)Z", false);
+            } else {
+                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "containsKey",
                         "(Ljava/lang/Object;)Z", false);
             }
             if (negated) {
@@ -3490,6 +3627,10 @@ public final class SimpleFunctionCodegens {
                 || "Map<Int, Int>".equals(text) || "Map<Int,Int>".equals(text)) {
             return ValueType.INT_INT_HASH_MAP;
         }
+        if ("HashMap<Long,Int>".equals(compactText) || "MutableMap<Long,Int>".equals(compactText)
+                || "Map<Long,Int>".equals(compactText)) {
+            return ValueType.LONG_INT_HASH_MAP;
+        }
         if ("Pair<Int, Int>".equals(text) || "Pair<Int,Int>".equals(text)) {
             return ValueType.INT_PAIR;
         }
@@ -3599,6 +3740,7 @@ public final class SimpleFunctionCodegens {
         INT_HASH_SET("Ljava/util/HashSet;", 1, false, false),
         LONG_HASH_SET("Ljava/util/HashSet;", 1, false, false),
         INT_INT_HASH_MAP("Ljava/util/HashMap;", 1, false, false),
+        LONG_INT_HASH_MAP("Ljava/util/HashMap;", 1, false, false),
         INT_PAIR("Ljava/util/AbstractMap$SimpleEntry;", 1, false, false),
         INT_ARRAY("[I", 1, false, true),
         LONG_ARRAY("[J", 1, false, true),

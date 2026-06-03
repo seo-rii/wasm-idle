@@ -289,6 +289,11 @@ Current status:
   `put`, `getOrDefault`, `containsKey`, `remove`, `clear`, `size`, and `isEmpty` by lowering to
   `java.util.HashMap<Integer, Integer>`. With stdin `7 1 2 1 3 2 2 3` it prints
   `map=3 removed=2 after=-1 had=true extra=3 empty=true size=0`.
+- The browser-facing compile export also completes `fixtures/ps-long-int-map/Main.kt`, which covers
+  `HashMap<Long, Int>` and `mutableMapOf<Long, Int>()` construction, `map[key]`, `map[key] = value`,
+  `put`, `get`, `getOrDefault`, `containsKey`, `remove`, `clear`, `size`, `isEmpty`, and `in`/`!in`
+  by lowering to `java.util.HashMap<Long, Integer>`. With stdin `100000000000 7` it prints
+  `longMap=0,2 value=3 removed=2 fallback=-7 flags=true,true,true empty=true,false more=-5,3`.
 - The browser-facing compile export also completes `fixtures/ps-in-operator/Main.kt`, which covers
   `in`/`!in` for `Int` ranges, `String`/`Char` in `String`, `String` in `String`, and membership in
   the verified `Int` collection/map shapes above. With stdin `4 1 2 3 2 algorithmgo` it prints
