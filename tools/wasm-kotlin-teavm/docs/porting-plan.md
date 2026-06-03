@@ -234,6 +234,9 @@ Current status:
 - The browser-facing compile export also completes `fixtures/ps-unary-minus/Main.kt`, which covers
   unary minus on `Int`, `Long`, and `Double` values, including negative `Double` literals. With
   stdin `7 100000000000 2.5` it prints `neg=-7 long=-100000000000 double=-4.0`.
+- The browser-facing compile export also completes `fixtures/ps-repeat/Main.kt`, which covers
+  `repeat(n) { index -> ... }` and `repeat(n) { ... }` with implicit `it`. With stdin
+  `4 3 1 4 1` it prints `repeat=21 implicit=3`.
 - This success currently comes from a minimal PSI-based bytecode emitter for the verified fixture
   shapes, not from the full Kotlin/JVM backend. The full backend still fails because Kotlin builtins
   deserialization can read `kotlin/kotlin.kotlin_builtins` but cannot resolve `kotlin.Unit`; virtual

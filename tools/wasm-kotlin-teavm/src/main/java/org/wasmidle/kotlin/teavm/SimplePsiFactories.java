@@ -51,8 +51,14 @@ public final class SimplePsiFactories {
         if ("org.jetbrains.kotlin.psi.KtForExpression".equals(className)) {
             return new org.jetbrains.kotlin.psi.KtForExpression(node);
         }
+        if ("org.jetbrains.kotlin.psi.KtFunctionLiteral".equals(className)) {
+            return new org.jetbrains.kotlin.psi.KtFunctionLiteral(node);
+        }
         if ("org.jetbrains.kotlin.psi.KtIfExpression".equals(className)) {
             return new org.jetbrains.kotlin.psi.KtIfExpression(node);
+        }
+        if ("org.jetbrains.kotlin.psi.KtLambdaArgument".equals(className)) {
+            return new org.jetbrains.kotlin.psi.KtLambdaArgument(node);
         }
         if ("org.jetbrains.kotlin.psi.KtLiteralStringTemplateEntry".equals(className)) {
             return new org.jetbrains.kotlin.psi.KtLiteralStringTemplateEntry(node);

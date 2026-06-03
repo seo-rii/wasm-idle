@@ -374,6 +374,28 @@ the expected output is:
 neg=-7 long=-100000000000 double=-4.0
 ```
 
+To run the PS-style repeat-loop fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs \
+  --source tools/wasm-kotlin-teavm/fixtures/ps-repeat/Main.kt \
+  --out tools/wasm-kotlin-teavm/build/browser-ps-repeat-out
+java -cp tools/wasm-kotlin-teavm/build/browser-ps-repeat-out MainKt
+```
+
+With this stdin:
+
+```text
+4 3 1 4 1
+```
+
+the expected output is:
+
+```text
+repeat=21 implicit=3
+```
+
 ## Current Status
 
 This folder is a porting scaffold, not an app integration. The current probe compiles a small Java
@@ -508,6 +530,9 @@ Known findings from the initial experiments:
   unary minus on `Int`, `Long`, and `Double` values, including negative `Double` literals. Running
   that generated class with `7 100000000000 2.5` on stdin prints
   `neg=-7 long=-100000000000 double=-4.0`.
+- The browser-compatible probe also compiles `fixtures/ps-repeat/Main.kt`, which exercises
+  `repeat(n) { index -> ... }` and `repeat(n) { ... }` with implicit `it`. Running that generated
+  class with `4 3 1 4 1` on stdin prints `repeat=21 implicit=3`.
 - This is not a full Kotlin/JVM backend yet. The browser path is currently a minimal emitter that
   supports the verified fixture shapes above. It does not yet support enough Kotlin for real
   competitive-programming use: collections and common library helpers, classes/data classes,

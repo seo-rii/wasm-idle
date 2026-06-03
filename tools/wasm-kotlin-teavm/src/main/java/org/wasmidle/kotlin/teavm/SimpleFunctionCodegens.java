@@ -1,6 +1,7 @@
 package org.wasmidle.kotlin.teavm;
 
 import com.intellij.psi.tree.IElementType;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -20,6 +21,7 @@ import org.jetbrains.kotlin.psi.KtExpression;
 import org.jetbrains.kotlin.psi.KtFile;
 import org.jetbrains.kotlin.psi.KtForExpression;
 import org.jetbrains.kotlin.psi.KtIfExpression;
+import org.jetbrains.kotlin.psi.KtLambdaExpression;
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression;
 import org.jetbrains.kotlin.psi.KtNamedFunction;
 import org.jetbrains.kotlin.psi.KtParameter;
@@ -654,6 +656,58 @@ public final class SimpleFunctionCodegens {
     private static ValueType emitCallExpression(MethodVisitor method, MethodContext context, KtCallExpression call) {
         KtExpression callee = call.getCalleeExpression();
         String calleeText = callee == null ? "" : callee.getText();
+        List<KtValueArgument> parenthesizedArguments = call.getValueArgumentList() == null
+                ? Collections.emptyList()
+                : call.getValueArgumentList().getArguments();
+        if ("repeat".equals(calleeText) && parenthesizedArguments.size() == 1
+                && call.getLambdaArguments().size() == 1) {
+            KtExpression countExpression = parenthesizedArguments.get(0).getArgumentExpression();
+            if (countExpression == null) {
+                throw new IllegalArgumentException("repeat count is missing: " + call.getText());
+            }
+            ValueType countType = emitExpression(method, context, countExpression);
+            if (countType != ValueType.INT) {
+                throw new IllegalArgumentException("repeat count must be Int: " + call.getText());
+            }
+            int countIndex = context.allocateTemporary(ValueType.INT);
+            method.visitVarInsn(Opcodes.ISTORE, countIndex);
+            int loopIndex = context.allocateTemporary(ValueType.INT);
+            method.visitInsn(Opcodes.ICONST_0);
+            method.visitVarInsn(Opcodes.ISTORE, loopIndex);
+
+            KtLambdaExpression lambda = call.getLambdaArguments().get(0).getLambdaExpression();
+            List<KtParameter> parameters = lambda.getValueParameters();
+            if (parameters.size() > 1) {
+                throw new IllegalArgumentException("repeat lambda supports at most one parameter: " + call.getText());
+            }
+            String parameterName = "it";
+            if (parameters.size() == 1) {
+                parameterName = parameters.get(0).getName();
+                if (parameterName == null || parameterName.isEmpty()) {
+                    throw new IllegalArgumentException("Unsupported unnamed repeat parameter: " + call.getText());
+                }
+            }
+            Local previousLocal = context.locals.get(parameterName);
+            context.locals.put(parameterName, new Local(loopIndex, ValueType.INT));
+
+            Label startLabel = new Label();
+            Label endLabel = new Label();
+            method.visitLabel(startLabel);
+            method.visitVarInsn(Opcodes.ILOAD, loopIndex);
+            method.visitVarInsn(Opcodes.ILOAD, countIndex);
+            method.visitJumpInsn(Opcodes.IF_ICMPGE, endLabel);
+            emitBranch(method, context, lambda.getBodyExpression());
+            context.hasExplicitReturn = false;
+            method.visitIincInsn(loopIndex, 1);
+            method.visitJumpInsn(Opcodes.GOTO, startLabel);
+            method.visitLabel(endLabel);
+            if (previousLocal == null) {
+                context.locals.remove(parameterName);
+            } else {
+                context.locals.put(parameterName, previousLocal);
+            }
+            return ValueType.VOID;
+        }
         if (("println".equals(calleeText) || "print".equals(calleeText)) && call.getValueArguments().size() == 1) {
             method.visitFieldInsn(Opcodes.GETSTATIC, "java/lang/System", "out", "Ljava/io/PrintStream;");
             ValueType type = emitExpression(method, context,
