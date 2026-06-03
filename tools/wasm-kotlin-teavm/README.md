@@ -608,6 +608,22 @@ The expected output is:
 pq=74 count=6 size=0
 ```
 
+To run the PS-style `PriorityQueue<Long>` fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs \
+  --source tools/wasm-kotlin-teavm/fixtures/ps-long-priority-queue/Main.kt \
+  --out tools/wasm-kotlin-teavm/build/browser-ps-long-priority-queue-out
+printf '100000000000 7\n' | java -cp tools/wasm-kotlin-teavm/build/browser-ps-long-priority-queue-out MainKt
+```
+
+The expected output is:
+
+```text
+longPq=7,7,99999999993 more=0 flags=true,true empty=false,false size=1,2
+```
+
 To run the PS-style `ArrayDeque<Int>` fixture:
 
 ```bash
@@ -972,6 +988,10 @@ Known findings from the initial experiments:
   `PriorityQueue<Int>` construction, `add`, `offer`, `peek`, `poll`, `size`, and `isEmpty` by
   lowering to `java.util.PriorityQueue<Integer>`. With stdin `5 3 1 4 1 5` it prints
   `pq=74 count=6 size=0`.
+- The browser-compatible probe also compiles `fixtures/ps-long-priority-queue/Main.kt`, which
+  exercises `PriorityQueue<Long>` construction, `add`, `offer`, `peek`, `poll`, `size`, `isEmpty`,
+  and `in`/`!in` by lowering to `java.util.PriorityQueue<Long>`. With stdin `100000000000 7` it
+  prints `longPq=7,7,99999999993 more=0 flags=true,true empty=false,false size=1,2`.
 - The browser-compatible probe also compiles `fixtures/ps-array-deque/Main.kt`, which exercises
   `ArrayDeque<Int>` construction, `addFirst`, `addLast`, `offer`, `offerFirst`, `offerLast`,
   `first`, `last`, `getFirst`, `getLast`, `poll`, `pollLast`, `removeFirst`, `removeLast`, `size`,

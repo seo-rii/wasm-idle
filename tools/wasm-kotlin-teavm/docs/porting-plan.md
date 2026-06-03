@@ -270,6 +270,10 @@ Current status:
   `PriorityQueue<Int>` construction, `add`, `offer`, `peek`, `poll`, `size`, and `isEmpty` by
   lowering to `java.util.PriorityQueue<Integer>`. With stdin `5 3 1 4 1 5` it prints
   `pq=74 count=6 size=0`.
+- The browser-facing compile export also completes `fixtures/ps-long-priority-queue/Main.kt`, which
+  covers `PriorityQueue<Long>` construction, `add`, `offer`, `peek`, `poll`, `size`, `isEmpty`, and
+  `in`/`!in` by lowering to `java.util.PriorityQueue<Long>`. With stdin `100000000000 7` it prints
+  `longPq=7,7,99999999993 more=0 flags=true,true empty=false,false size=1,2`.
 - The browser-facing compile export also completes `fixtures/ps-array-deque/Main.kt`, which covers
   `ArrayDeque<Int>` construction, `addFirst`, `addLast`, `offer`, `offerFirst`, `offerLast`, `first`,
   `last`, `getFirst`, `getLast`, `poll`, `pollLast`, `removeFirst`, `removeLast`, `size`, and
