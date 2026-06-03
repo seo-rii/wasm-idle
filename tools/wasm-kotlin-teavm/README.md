@@ -608,6 +608,22 @@ The expected output is:
 adj=4,2,2 first=4 removed=1 total=32 flags=true,true tail=9,10
 ```
 
+To run the PS-style `Array<ArrayList<Pair<Int, Int>>>` weighted-adjacency fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs \
+  --source tools/wasm-kotlin-teavm/fixtures/ps-pair-list-array/Main.kt \
+  --out tools/wasm-kotlin-teavm/build/browser-ps-pair-list-array-out
+printf '4 3 0 1 5 1 2 7 2 3 11\n' | java -cp tools/wasm-kotlin-teavm/build/browser-ps-pair-list-array-out MainKt
+```
+
+The expected output is:
+
+```text
+weighted=4,2,2 first=4,1 removed=1,8 total=398 flags=true,true tail=9,10|11,12
+```
+
 To run the PS-style `MutableList<Long>` / `ArrayList<Long>` fixture:
 
 ```bash
@@ -1140,6 +1156,13 @@ Known findings from the initial experiments:
   `size`, and `in`/`!in` by lowering to a `java.util.ArrayList<Integer>[]`. With stdin
   `4 3 0 1 1 2 2 3` it prints
   `adj=4,2,2 first=4 removed=1 total=32 flags=true,true tail=9,10`.
+- The browser-compatible probe also compiles `fixtures/ps-pair-list-array/Main.kt`, which exercises
+  weighted-graph `Array<ArrayList<Pair<Int, Int>>>` construction with
+  `Array(n) { ArrayList<Pair<Int, Int>>() }`, function parameters, `graph[u].add(Pair(v, w))`,
+  nested pair index access, `first`, `removeAt`, element replacement, `size`, and `in`/`!in` by
+  lowering to a `java.util.ArrayList<AbstractMap.SimpleEntry<Integer, Integer>>[]`. With stdin
+  `4 3 0 1 5 1 2 7 2 3 11` it prints
+  `weighted=4,2,2 first=4,1 removed=1,8 total=398 flags=true,true tail=9,10|11,12`.
 - The browser-compatible probe also compiles `fixtures/ps-priority-queue/Main.kt`, which exercises
   `PriorityQueue<Int>` construction, `add`, `offer`, `peek`, `poll`, `size`, and `isEmpty` by
   lowering to `java.util.PriorityQueue<Integer>`. With stdin `5 3 1 4 1 5` it prints

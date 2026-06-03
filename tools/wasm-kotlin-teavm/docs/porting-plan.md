@@ -278,6 +278,13 @@ Current status:
   `size`, and `in`/`!in` by lowering to a `java.util.ArrayList<Integer>[]`. With stdin
   `4 3 0 1 1 2 2 3` it prints
   `adj=4,2,2 first=4 removed=1 total=32 flags=true,true tail=9,10`.
+- The browser-facing compile export also completes `fixtures/ps-pair-list-array/Main.kt`, which covers
+  weighted-graph `Array<ArrayList<Pair<Int, Int>>>` construction with
+  `Array(n) { ArrayList<Pair<Int, Int>>() }`, function parameters, `graph[u].add(Pair(v, w))`,
+  nested pair index access, `first`, `removeAt`, element replacement, `size`, and `in`/`!in` by
+  lowering to a `java.util.ArrayList<AbstractMap.SimpleEntry<Integer, Integer>>[]`. With stdin
+  `4 3 0 1 5 1 2 7 2 3 11` it prints
+  `weighted=4,2,2 first=4,1 removed=1,8 total=398 flags=true,true tail=9,10|11,12`.
 - The browser-facing compile export also completes `fixtures/ps-priority-queue/Main.kt`, which covers
   `PriorityQueue<Int>` construction, `add`, `offer`, `peek`, `poll`, `size`, and `isEmpty` by
   lowering to `java.util.PriorityQueue<Integer>`. With stdin `5 3 1 4 1 5` it prints

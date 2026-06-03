@@ -289,6 +289,9 @@ public final class SimpleFunctionCodegens {
         if (initializerType == ValueType.INT_ARRAY_LIST) {
             return ValueType.INT_ARRAY_LIST_ARRAY;
         }
+        if (initializerType == ValueType.INT_PAIR_ARRAY_LIST) {
+            return ValueType.INT_PAIR_ARRAY_LIST_ARRAY;
+        }
         throw new IllegalArgumentException("Unsupported Array initializer type: " + callText);
     }
 
@@ -325,6 +328,9 @@ public final class SimpleFunctionCodegens {
         }
         if (arrayType == ValueType.INT_ARRAY_LIST_ARRAY) {
             return ValueType.INT_ARRAY_LIST;
+        }
+        if (arrayType == ValueType.INT_PAIR_ARRAY_LIST_ARRAY) {
+            return ValueType.INT_PAIR_ARRAY_LIST;
         }
         throw new IllegalArgumentException("Unsupported indexed type: " + arrayType);
     }
@@ -695,6 +701,10 @@ public final class SimpleFunctionCodegens {
                 method.visitInsn(Opcodes.AASTORE);
                 return true;
             }
+            if (elementType == ValueType.INT_PAIR_ARRAY_LIST && valueType == ValueType.INT_PAIR_ARRAY_LIST) {
+                method.visitInsn(Opcodes.AASTORE);
+                return true;
+            }
             if (elementType.array && valueType == elementType) {
                 method.visitInsn(Opcodes.AASTORE);
                 return true;
@@ -995,6 +1005,11 @@ public final class SimpleFunctionCodegens {
                 method.visitInsn(Opcodes.AALOAD);
                 method.visitTypeInsn(Opcodes.CHECKCAST, "java/util/ArrayList");
                 return ValueType.INT_ARRAY_LIST;
+            }
+            if (elementType == ValueType.INT_PAIR_ARRAY_LIST) {
+                method.visitInsn(Opcodes.AALOAD);
+                method.visitTypeInsn(Opcodes.CHECKCAST, "java/util/ArrayList");
+                return ValueType.INT_PAIR_ARRAY_LIST;
             }
             if (elementType.array) {
                 method.visitInsn(Opcodes.AALOAD);
@@ -4538,6 +4553,11 @@ public final class SimpleFunctionCodegens {
                 || "Array<List<Int>>".equals(compactText)) {
             return ValueType.INT_ARRAY_LIST_ARRAY;
         }
+        if ("Array<ArrayList<Pair<Int,Int>>>".equals(compactText)
+                || "Array<MutableList<Pair<Int,Int>>>".equals(compactText)
+                || "Array<List<Pair<Int,Int>>>".equals(compactText)) {
+            return ValueType.INT_PAIR_ARRAY_LIST_ARRAY;
+        }
         if ("PriorityQueue<Int>".equals(text)) {
             return ValueType.INT_PRIORITY_QUEUE;
         }
@@ -4717,6 +4737,7 @@ public final class SimpleFunctionCodegens {
         CHAR_2D_ARRAY("[[C", 1, false, true),
         BOOLEAN_2D_ARRAY("[[Z", 1, false, true),
         INT_ARRAY_LIST_ARRAY("[Ljava/util/ArrayList;", 1, false, true),
+        INT_PAIR_ARRAY_LIST_ARRAY("[Ljava/util/ArrayList;", 1, false, true),
         VOID("V", 0, false, false);
 
         private final String descriptor;
