@@ -704,6 +704,22 @@ The expected output is:
 pair=3,4 combined=10,24 diff=14
 ```
 
+To run the PS-style `ArrayList<Pair<Int, Int>>` fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs \
+  --source tools/wasm-kotlin-teavm/fixtures/ps-pair-list/Main.kt \
+  --out tools/wasm-kotlin-teavm/build/browser-ps-pair-list-out
+printf '2 1 2 3 4\n' | java -cp tools/wasm-kotlin-teavm/build/browser-ps-pair-list-out MainKt
+```
+
+The expected output is:
+
+```text
+pairs=13,24|2,1 score=186 flags=true,true,true,true empty=false size=2
+```
+
 To run the PS-style double math fixture:
 
 ```bash
@@ -922,6 +938,12 @@ Known findings from the initial experiments:
   limited `Pair<Int, Int>` construction, `.first`, `.second`, and function return values by lowering
   to `java.util.AbstractMap.SimpleEntry<Integer, Integer>`. With stdin `3 4` it prints
   `pair=3,4 combined=10,24 diff=14`.
+- The browser-compatible probe also compiles `fixtures/ps-pair-list/Main.kt`, which exercises
+  `ArrayList<Pair<Int, Int>>` and `mutableListOf<Pair<Int, Int>>()` construction, `add`, index
+  get/set, `.first`, `.second`, `in`/`!in`, `contains`, `remove`, `size`, and `isEmpty` by storing
+  `java.util.AbstractMap.SimpleEntry<Integer, Integer>` values in `java.util.ArrayList`. With stdin
+  `2 1 2 3 4` it prints
+  `pairs=13,24|2,1 score=186 flags=true,true,true,true empty=false size=2`.
 - The browser-compatible probe also compiles `fixtures/ps-double-math/Main.kt`, which exercises
   numeric `toInt`/`toLong`/`toDouble` conversions and `sqrt`, `floor`, `ceil`, and `pow` by lowering
   to JVM numeric conversion opcodes and `java.lang.Math`. With stdin `16 100000000000 2.5` it

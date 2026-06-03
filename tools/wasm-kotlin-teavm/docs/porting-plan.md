@@ -300,6 +300,12 @@ Current status:
   limited `Pair<Int, Int>` construction, `.first`, `.second`, and function return values by lowering
   to `java.util.AbstractMap.SimpleEntry<Integer, Integer>`. With stdin `3 4` it prints
   `pair=3,4 combined=10,24 diff=14`.
+- The browser-facing compile export also completes `fixtures/ps-pair-list/Main.kt`, which covers
+  `ArrayList<Pair<Int, Int>>` and `mutableListOf<Pair<Int, Int>>()` construction, `add`, index
+  get/set, `.first`, `.second`, `in`/`!in`, `contains`, `remove`, `size`, and `isEmpty` by storing
+  `java.util.AbstractMap.SimpleEntry<Integer, Integer>` values in `java.util.ArrayList`. With stdin
+  `2 1 2 3 4` it prints
+  `pairs=13,24|2,1 score=186 flags=true,true,true,true empty=false size=2`.
 - The browser-facing compile export also completes `fixtures/ps-double-math/Main.kt`, which covers
   numeric `toInt`/`toLong`/`toDouble` conversions plus `sqrt`, `floor`, `ceil`, and `pow` by lowering
   to JVM numeric conversion opcodes and `java.lang.Math`. With stdin `16 100000000000 2.5` it prints
