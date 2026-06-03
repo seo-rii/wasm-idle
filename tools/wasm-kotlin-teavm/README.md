@@ -884,6 +884,22 @@ The expected output is:
 longDeque=0,100000000014 peek=0,100000000014 removed=0,7,100000000014,100000000007,100000000000 edge=100000000000,100000000007 flags=true,true empty=false,false size=1,2 more=7,100000000000
 ```
 
+To run the PS-style `ArrayDeque<Pair<Int, Int>>` fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs \
+  --source tools/wasm-kotlin-teavm/fixtures/ps-pair-array-deque/Main.kt \
+  --out tools/wasm-kotlin-teavm/build/browser-ps-pair-array-deque-out
+printf '5\n' | java -cp tools/wasm-kotlin-teavm/build/browser-ps-pair-array-deque-out MainKt
+```
+
+The expected output is:
+
+```text
+pairDeque=298 peek=4,5 first=4,5 last=7,8 edge=9,1|2,8 flags=true,true size=0
+```
+
 To run the PS-style `HashSet<Int>` fixture:
 
 ```bash
@@ -1475,6 +1491,12 @@ Known findings from the initial experiments:
   `pollFirst`, `pollLast`, `removeFirst`, `removeLast`, `size`, `isEmpty`, and `in`/`!in` by
   lowering to `java.util.ArrayDeque<Long>`. With stdin `100000000000 7` it prints
   `longDeque=0,100000000014 peek=0,100000000014 removed=0,7,100000000014,100000000007,100000000000 edge=100000000000,100000000007 flags=true,true empty=false,false size=1,2 more=7,100000000000`.
+- The browser-compatible probe also compiles `fixtures/ps-pair-array-deque/Main.kt`, which exercises
+  BFS-style `ArrayDeque<Pair<Int, Int>>` construction, `add`, `addFirst`, `addLast`, `offer`,
+  `offerFirst`, `offerLast`, `peek`, `poll`, `pollLast`, `removeFirst`, `first`, `last`, `size`,
+  `isEmpty`, `in`/`!in`, and Pair destructuring by lowering to
+  `java.util.ArrayDeque<AbstractMap.SimpleEntry<Integer, Integer>>`. With stdin `5` it prints
+  `pairDeque=298 peek=4,5 first=4,5 last=7,8 edge=9,1|2,8 flags=true,true size=0`.
 - The browser-compatible probe also compiles `fixtures/ps-hash-set/Main.kt`, which exercises
   `HashSet<Int>` and `mutableSetOf<Int>()` construction, `add`, `contains`, `remove`, `clear`,
   `size`, and `isEmpty` by lowering to `java.util.HashSet<Integer>`. With stdin `5 1 2 1 3 2` it
