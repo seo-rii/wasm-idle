@@ -640,6 +640,22 @@ The expected output is:
 set=2,true had=true removed=true missing=false empty=true
 ```
 
+To run the PS-style `HashSet<Long>` fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs \
+  --source tools/wasm-kotlin-teavm/fixtures/ps-long-set/Main.kt \
+  --out tools/wasm-kotlin-teavm/build/browser-ps-long-set-out
+printf '100000000000 7\n' | java -cp tools/wasm-kotlin-teavm/build/browser-ps-long-set-out MainKt
+```
+
+The expected output is:
+
+```text
+longSet=0,2 flags=true,true,true,true,false,true empty=true,false
+```
+
 To run the PS-style `HashMap<Int, Int>` fixture:
 
 ```bash
@@ -949,6 +965,11 @@ Known findings from the initial experiments:
   `HashSet<Int>` and `mutableSetOf<Int>()` construction, `add`, `contains`, `remove`, `clear`,
   `size`, and `isEmpty` by lowering to `java.util.HashSet<Integer>`. With stdin `5 1 2 1 3 2` it
   prints `set=2,true had=true removed=true missing=false empty=true`.
+- The browser-compatible probe also compiles `fixtures/ps-long-set/Main.kt`, which exercises
+  `HashSet<Long>` and `mutableSetOf<Long>()` construction, `add`, `contains`, `remove`, `clear`,
+  `size`, `isEmpty`, and `in`/`!in` by lowering to `java.util.HashSet<Long>`. With stdin
+  `100000000000 7` it prints
+  `longSet=0,2 flags=true,true,true,true,false,true empty=true,false`.
 - The browser-compatible probe also compiles `fixtures/ps-hash-map/Main.kt`, which exercises
   `HashMap<Int, Int>` and `mutableMapOf<Int, Int>()` construction, `map[key]`, `map[key] = value`,
   `put`, `getOrDefault`, `containsKey`, `remove`, `clear`, `size`, and `isEmpty` by lowering to

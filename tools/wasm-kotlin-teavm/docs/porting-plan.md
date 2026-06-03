@@ -279,6 +279,11 @@ Current status:
   `HashSet<Int>` and `mutableSetOf<Int>()` construction, `add`, `contains`, `remove`, `clear`,
   `size`, and `isEmpty` by lowering to `java.util.HashSet<Integer>`. With stdin `5 1 2 1 3 2` it
   prints `set=2,true had=true removed=true missing=false empty=true`.
+- The browser-facing compile export also completes `fixtures/ps-long-set/Main.kt`, which covers
+  `HashSet<Long>` and `mutableSetOf<Long>()` construction, `add`, `contains`, `remove`, `clear`,
+  `size`, `isEmpty`, and `in`/`!in` by lowering to `java.util.HashSet<Long>`. With stdin
+  `100000000000 7` it prints
+  `longSet=0,2 flags=true,true,true,true,false,true empty=true,false`.
 - The browser-facing compile export also completes `fixtures/ps-hash-map/Main.kt`, which covers
   `HashMap<Int, Int>` and `mutableMapOf<Int, Int>()` construction, `map[key]`, `map[key] = value`,
   `put`, `getOrDefault`, `containsKey`, `remove`, `clear`, `size`, and `isEmpty` by lowering to
