@@ -23,6 +23,7 @@ import org.jetbrains.kotlin.psi.KtNameReferenceExpression;
 import org.jetbrains.kotlin.psi.KtNamedFunction;
 import org.jetbrains.kotlin.psi.KtParameter;
 import org.jetbrains.kotlin.psi.KtParenthesizedExpression;
+import org.jetbrains.kotlin.psi.KtPostfixExpression;
 import org.jetbrains.kotlin.psi.KtProperty;
 import org.jetbrains.kotlin.psi.KtReturnExpression;
 import org.jetbrains.kotlin.psi.KtStringTemplateEntry;
@@ -132,6 +133,11 @@ public final class SimpleFunctionCodegens {
             if (emitAssignment(method, context, (KtBinaryExpression) statement)) {
                 return;
             }
+        }
+        if (statement instanceof KtUnaryExpression && isIncrementOperation(
+                ((KtUnaryExpression) statement).getOperationToken())) {
+            emitIncrementExpression(method, context, (KtUnaryExpression) statement, false);
+            return;
         }
         if (statement instanceof KtIfExpression) {
             KtIfExpression ifExpression = (KtIfExpression) statement;
@@ -257,6 +263,47 @@ public final class SimpleFunctionCodegens {
         return false;
     }
 
+    private static ValueType emitIncrementExpression(
+            MethodVisitor method, MethodContext context, KtUnaryExpression expression, boolean keepResult) {
+        KtExpression base = expression.getBaseExpression();
+        if (!(base instanceof KtNameReferenceExpression)) {
+            throw new IllegalArgumentException("Increment only supports local variables: " + expression.getText());
+        }
+        Local local = context.locals.get(base.getText());
+        if (local == null) {
+            throw new IllegalArgumentException("Unknown increment target: " + base.getText());
+        }
+        if (!local.type.numeric) {
+            throw new IllegalArgumentException("Increment only supports numbers: " + expression.getText());
+        }
+        boolean decrement = expression.getOperationToken() == KtTokens.MINUSMINUS;
+        boolean postfix = expression instanceof KtPostfixExpression;
+        if (local.type == ValueType.LONG) {
+            loadLocal(method, local.type, local.index);
+            if (keepResult && postfix) {
+                method.visitInsn(Opcodes.DUP2);
+            }
+            method.visitLdcInsn(Long.valueOf(1));
+            method.visitInsn(decrement ? Opcodes.LSUB : Opcodes.LADD);
+            if (keepResult && !postfix) {
+                method.visitInsn(Opcodes.DUP2);
+            }
+            storeLocal(method, local.type, local.index);
+            return keepResult ? local.type : ValueType.VOID;
+        }
+        loadLocal(method, local.type, local.index);
+        if (keepResult && postfix) {
+            method.visitInsn(Opcodes.DUP);
+        }
+        method.visitInsn(Opcodes.ICONST_1);
+        method.visitInsn(decrement ? Opcodes.ISUB : Opcodes.IADD);
+        if (keepResult && !postfix) {
+            method.visitInsn(Opcodes.DUP);
+        }
+        storeLocal(method, local.type, local.index);
+        return keepResult ? local.type : ValueType.VOID;
+    }
+
     private static ValueType emitExpression(MethodVisitor method, MethodContext context, KtExpression expression) {
         if (expression == null) {
             throw new IllegalArgumentException("Missing Kotlin expression");
@@ -320,6 +367,9 @@ public final class SimpleFunctionCodegens {
                 method.visitInsn(Opcodes.ICONST_1);
                 method.visitLabel(endLabel);
                 return ValueType.BOOLEAN;
+            }
+            if (isIncrementOperation(unary.getOperationToken())) {
+                return emitIncrementExpression(method, context, unary, true);
             }
         }
         if (expression instanceof KtNameReferenceExpression) {
@@ -1039,6 +1089,10 @@ public final class SimpleFunctionCodegens {
                 || operation == KtTokens.GT || operation == KtTokens.GTEQ
                 || operation == KtTokens.EQEQ || operation == KtTokens.EXCLEQ
                 || operation == KtTokens.EQEQEQ || operation == KtTokens.EXCLEQEQEQ;
+    }
+
+    private static boolean isIncrementOperation(IElementType operation) {
+        return operation == KtTokens.PLUSPLUS || operation == KtTokens.MINUSMINUS;
     }
 
     private static boolean isEqualityComparison(IElementType operation) {

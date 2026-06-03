@@ -220,6 +220,28 @@ the expected output is:
 bool=true count=4 two=true
 ```
 
+To run the PS-style increment fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs \
+  --source tools/wasm-kotlin-teavm/fixtures/ps-increment/Main.kt \
+  --out tools/wasm-kotlin-teavm/build/browser-ps-increment-out
+java -cp tools/wasm-kotlin-teavm/build/browser-ps-increment-out MainKt
+```
+
+With this stdin:
+
+```text
+4 3 1 4 1
+```
+
+the expected output is:
+
+```text
+inc=15 last=1
+```
+
 ## Current Status
 
 This folder is a porting scaffold, not an app integration. The current probe compiles a small Java
@@ -326,6 +348,10 @@ Known findings from the initial experiments:
   `BooleanArray` construction, reads and writes, boolean conditions, and boolean output/string
   templates. Running that generated class with `5 2 3 2 0 5` on stdin prints
   `bool=true count=4 two=true`.
+- The browser-compatible probe also compiles `fixtures/ps-increment/Main.kt`, which exercises
+  prefix/postfix `++` and `--` on numeric locals, including postfix increments used as array indexes
+  and prefix decrement statements. Running that generated class with `4 3 1 4 1` on stdin prints
+  `inc=15 last=1`.
 - This is not a full Kotlin/JVM backend yet. The browser path is currently a minimal emitter that
   supports the verified fixture shapes above. It does not yet support enough Kotlin for real
   competitive-programming use: collections and common library helpers, classes/data classes,

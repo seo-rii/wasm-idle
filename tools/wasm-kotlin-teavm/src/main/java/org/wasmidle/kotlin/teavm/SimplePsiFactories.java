@@ -78,6 +78,9 @@ public final class SimplePsiFactories {
         if ("org.jetbrains.kotlin.psi.KtPrefixExpression".equals(className)) {
             return new org.jetbrains.kotlin.psi.KtPrefixExpression(node);
         }
+        if ("org.jetbrains.kotlin.psi.KtPostfixExpression".equals(className)) {
+            return new org.jetbrains.kotlin.psi.KtPostfixExpression(node);
+        }
         if ("org.jetbrains.kotlin.psi.KtReturnExpression".equals(className)) {
             return new org.jetbrains.kotlin.psi.KtReturnExpression(node);
         }
