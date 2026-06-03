@@ -877,6 +877,17 @@ public final class SimpleFunctionCodegens {
                     return ValueType.INT;
                 }
             }
+            if (selector != null && ("first".equals(selector.getText()) || "second".equals(selector.getText()))) {
+                ValueType receiverType = inferExpressionType(context, receiver);
+                if (receiverType == ValueType.INT_PAIR) {
+                    emitExpressionAs(method, context, receiver, ValueType.INT_PAIR);
+                    method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/AbstractMap$SimpleEntry",
+                            "first".equals(selector.getText()) ? "getKey" : "getValue",
+                            "()Ljava/lang/Object;", false);
+                    unboxInt(method);
+                    return ValueType.INT;
+                }
+            }
             if (selector instanceof KtCallExpression) {
                 KtExpression callee = ((KtCallExpression) selector).getCalleeExpression();
                 if (callee != null && ("toInt".equals(callee.getText()) || "toLong".equals(callee.getText())
@@ -1628,6 +1639,19 @@ public final class SimpleFunctionCodegens {
             method.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/util/HashMap", "<init>", "()V", false);
             return ValueType.INT_INT_HASH_MAP;
         }
+        if ("Pair".equals(calleeText) && call.getValueArguments().size() == 2) {
+            method.visitTypeInsn(Opcodes.NEW, "java/util/AbstractMap$SimpleEntry");
+            method.visitInsn(Opcodes.DUP);
+            emitExpressionAs(method, context, call.getValueArguments().get(0).getArgumentExpression(),
+                    ValueType.INT);
+            boxInt(method);
+            emitExpressionAs(method, context, call.getValueArguments().get(1).getArgumentExpression(),
+                    ValueType.INT);
+            boxInt(method);
+            method.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/util/AbstractMap$SimpleEntry", "<init>",
+                    "(Ljava/lang/Object;Ljava/lang/Object;)V", false);
+            return ValueType.INT_PAIR;
+        }
         if ("readInt".equals(calleeText) && call.getValueArguments().isEmpty()) {
             ensureReadIntHelper(context);
             method.visitMethodInsn(Opcodes.INVOKESTATIC, context.ownerInternalName, "__wasmIdleReadInt", "()I",
@@ -1785,6 +1809,10 @@ public final class SimpleFunctionCodegens {
                         || receiverType == ValueType.INT_INT_HASH_MAP) {
                     return ValueType.INT;
                 }
+            }
+            if (selector != null && ("first".equals(selector.getText()) || "second".equals(selector.getText()))
+                    && inferExpressionType(context, qualified.getReceiverExpression()) == ValueType.INT_PAIR) {
+                return ValueType.INT;
             }
             if (selector instanceof KtCallExpression) {
                 KtExpression callee = ((KtCallExpression) selector).getCalleeExpression();
@@ -2048,6 +2076,9 @@ public final class SimpleFunctionCodegens {
             }
             if (isHashMapConstructor(calleeText) || isMutableMapFactory(calleeText)) {
                 return ValueType.INT_INT_HASH_MAP;
+            }
+            if ("Pair".equals(calleeText) && ((KtCallExpression) expression).getValueArguments().size() == 2) {
+                return ValueType.INT_PAIR;
             }
             if ("IntArray".equals(calleeText)) {
                 return ValueType.INT_ARRAY;
@@ -2962,6 +2993,9 @@ public final class SimpleFunctionCodegens {
                 || "Map<Int, Int>".equals(text) || "Map<Int,Int>".equals(text)) {
             return ValueType.INT_INT_HASH_MAP;
         }
+        if ("Pair<Int, Int>".equals(text) || "Pair<Int,Int>".equals(text)) {
+            return ValueType.INT_PAIR;
+        }
         if ("Char".equals(text)) {
             return ValueType.CHAR;
         }
@@ -3065,6 +3099,7 @@ public final class SimpleFunctionCodegens {
         INT_ARRAY_DEQUE("Ljava/util/ArrayDeque;", 1, false, false),
         INT_HASH_SET("Ljava/util/HashSet;", 1, false, false),
         INT_INT_HASH_MAP("Ljava/util/HashMap;", 1, false, false),
+        INT_PAIR("Ljava/util/AbstractMap$SimpleEntry;", 1, false, false),
         INT_ARRAY("[I", 1, false, true),
         LONG_ARRAY("[J", 1, false, true),
         DOUBLE_ARRAY("[D", 1, false, true),

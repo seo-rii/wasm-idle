@@ -296,6 +296,10 @@ Current status:
   `in`/`!in` membership on `IntArray`, `LongArray`, `DoubleArray`, `CharArray`, and `BooleanArray`
   by emitting direct primitive-array scan loops. With stdin `banana` it prints
   `arrayIn=1023 size=3,6`.
+- The browser-facing compile export also completes `fixtures/ps-pair-int/Main.kt`, which covers
+  limited `Pair<Int, Int>` construction, `.first`, `.second`, and function return values by lowering
+  to `java.util.AbstractMap.SimpleEntry<Integer, Integer>`. With stdin `3 4` it prints
+  `pair=3,4 combined=10,24 diff=14`.
 - This success currently comes from a minimal PSI-based bytecode emitter for the verified fixture
   shapes, not from the full Kotlin/JVM backend. The full backend still fails because Kotlin builtins
   deserialization can read `kotlin/kotlin.kotlin_builtins` but cannot resolve `kotlin.Unit`; virtual

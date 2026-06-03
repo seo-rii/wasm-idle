@@ -688,6 +688,22 @@ The expected output is:
 arrayIn=1023 size=3,6
 ```
 
+To run the PS-style `Pair<Int, Int>` fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs \
+  --source tools/wasm-kotlin-teavm/fixtures/ps-pair-int/Main.kt \
+  --out tools/wasm-kotlin-teavm/build/browser-ps-pair-int-out
+printf '3 4\n' | java -cp tools/wasm-kotlin-teavm/build/browser-ps-pair-int-out MainKt
+```
+
+The expected output is:
+
+```text
+pair=3,4 combined=10,24 diff=14
+```
+
 ## Current Status
 
 This folder is a porting scaffold, not an app integration. The current probe compiles a small Java
@@ -886,6 +902,10 @@ Known findings from the initial experiments:
   `in`/`!in` membership on `IntArray`, `LongArray`, `DoubleArray`, `CharArray`, and `BooleanArray`
   by emitting direct primitive-array scan loops. With stdin `banana` it prints
   `arrayIn=1023 size=3,6`.
+- The browser-compatible probe also compiles `fixtures/ps-pair-int/Main.kt`, which exercises
+  limited `Pair<Int, Int>` construction, `.first`, `.second`, and function return values by lowering
+  to `java.util.AbstractMap.SimpleEntry<Integer, Integer>`. With stdin `3 4` it prints
+  `pair=3,4 combined=10,24 diff=14`.
 - This is not a full Kotlin/JVM backend yet. The browser path is currently a minimal emitter that
   supports the verified fixture shapes above. It does not yet support enough Kotlin for real
   competitive-programming use: full collections and common library helpers, classes/data classes,
