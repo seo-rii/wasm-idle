@@ -14,6 +14,7 @@ public final class SimpleSourceRegistry {
     public static synchronized void clear() {
         files.clear();
         SimpleKotlinAnalysisBridge.clear();
+        SimpleFunctionCodegens.clearGeneratedHelpers();
     }
 
     public static synchronized void add(KtFile file) {

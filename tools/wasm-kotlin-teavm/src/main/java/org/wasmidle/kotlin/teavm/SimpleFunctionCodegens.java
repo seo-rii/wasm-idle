@@ -2,8 +2,10 @@ package org.wasmidle.kotlin.teavm;
 
 import com.intellij.psi.tree.IElementType;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.jetbrains.kotlin.codegen.ClassBuilder;
 import org.jetbrains.kotlin.lexer.KtTokens;
 import org.jetbrains.kotlin.psi.KtArrayAccessExpression;
@@ -33,7 +35,13 @@ import org.jetbrains.org.objectweb.asm.MethodVisitor;
 import org.jetbrains.org.objectweb.asm.Opcodes;
 
 public final class SimpleFunctionCodegens {
+    private static final Set<String> generatedHelpers = new HashSet<>();
+
     private SimpleFunctionCodegens() {
+    }
+
+    public static void clearGeneratedHelpers() {
+        generatedHelpers.clear();
     }
 
     public static void gen(ClassBuilder builder, KtNamedFunction function) {
@@ -53,7 +61,7 @@ public final class SimpleFunctionCodegens {
                 new String[0]);
         method.visitCode();
 
-        var context = new MethodContext(builder.getThisName(), returnType);
+        var context = new MethodContext(builder, builder.getThisName(), returnType);
         for (KtParameter parameter : function.getValueParameters()) {
             String parameterName = parameter.getName();
             if (parameterName == null || parameterName.isEmpty()) {
@@ -316,11 +324,16 @@ public final class SimpleFunctionCodegens {
             if (operation == KtTokens.PLUS || operation == KtTokens.MINUS
                     || operation == KtTokens.MUL || operation == KtTokens.DIV
                     || operation == KtTokens.PERC) {
-                ValueType leftType = emitExpression(method, context, binary.getLeft());
-                ValueType rightType = emitExpression(method, context, binary.getRight());
-                if (leftType == rightType && leftType.numeric) {
-                    emitArithmeticOpcode(method, operation, leftType);
-                    return leftType;
+                ValueType leftType = inferExpressionType(context, binary.getLeft());
+                ValueType rightType = inferExpressionType(context, binary.getRight());
+                if (leftType.numeric && rightType.numeric) {
+                    ValueType resultType = leftType == ValueType.LONG || rightType == ValueType.LONG
+                            ? ValueType.LONG
+                            : ValueType.INT;
+                    emitExpressionAs(method, context, binary.getLeft(), resultType);
+                    emitExpressionAs(method, context, binary.getRight(), resultType);
+                    emitArithmeticOpcode(method, operation, resultType);
+                    return resultType;
                 }
                 throw new IllegalArgumentException("Numeric operation type mismatch: " + expression.getText());
             }
@@ -431,27 +444,123 @@ public final class SimpleFunctionCodegens {
             method.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_LONG);
             return ValueType.LONG_ARRAY;
         }
-
-        ValueType[] argumentTypes = new ValueType[call.getValueArguments().size()];
-        for (int i = 0; i < argumentTypes.length; i++) {
-            argumentTypes[i] = emitExpression(method, context,
-                    call.getValueArguments().get(i).getArgumentExpression());
+        if ("readInt".equals(calleeText) && call.getValueArguments().isEmpty()) {
+            ensureReadIntHelper(context);
+            method.visitMethodInsn(Opcodes.INVOKESTATIC, context.ownerInternalName, "__wasmIdleReadInt", "()I",
+                    false);
+            return ValueType.INT;
         }
+        if ("readLong".equals(calleeText) && call.getValueArguments().isEmpty()) {
+            ensureReadLongHelper(context);
+            method.visitMethodInsn(Opcodes.INVOKESTATIC, context.ownerInternalName, "__wasmIdleReadLong", "()J",
+                    false);
+            return ValueType.LONG;
+        }
+
         FunctionSignature signature = findFunctionSignature(calleeText);
         if (signature == null) {
             throw new IllegalArgumentException("Unknown function call: " + call.getText());
         }
-        if (argumentTypes.length != signature.parameterTypes.length) {
+        if (call.getValueArguments().size() != signature.parameterTypes.length) {
             throw new IllegalArgumentException("Function argument count mismatch: " + call.getText());
         }
-        for (int i = 0; i < argumentTypes.length; i++) {
-            if (argumentTypes[i] != signature.parameterTypes[i]) {
-                throw new IllegalArgumentException("Function argument type mismatch: " + call.getText());
-            }
+        for (int i = 0; i < signature.parameterTypes.length; i++) {
+            emitExpressionAs(method, context, call.getValueArguments().get(i).getArgumentExpression(),
+                    signature.parameterTypes[i]);
         }
         method.visitMethodInsn(Opcodes.INVOKESTATIC, context.ownerInternalName, calleeText,
                 signature.descriptor, false);
         return signature.returnType;
+    }
+
+    private static void emitExpressionAs(
+            MethodVisitor method, MethodContext context, KtExpression expression, ValueType expectedType) {
+        ValueType actualType = emitExpression(method, context, expression);
+        if (actualType == expectedType) {
+            return;
+        }
+        if (actualType == ValueType.INT && expectedType == ValueType.LONG) {
+            method.visitInsn(Opcodes.I2L);
+            return;
+        }
+        throw new IllegalArgumentException("Expression type mismatch: expected " + expectedType
+                + ", got " + actualType + " for " + expression.getText());
+    }
+
+    private static ValueType inferExpressionType(MethodContext context, KtExpression expression) {
+        if (expression instanceof KtParenthesizedExpression) {
+            return inferExpressionType(context, ((KtParenthesizedExpression) expression).getExpression());
+        }
+        if (expression instanceof KtConstantExpression) {
+            String text = expression.getText();
+            return text.endsWith("L") || text.endsWith("l") ? ValueType.LONG : ValueType.INT;
+        }
+        if (expression instanceof KtUnaryExpression) {
+            return inferExpressionType(context, ((KtUnaryExpression) expression).getBaseExpression());
+        }
+        if (expression instanceof KtNameReferenceExpression) {
+            Local local = context.locals.get(expression.getText());
+            if (local == null) {
+                throw new IllegalArgumentException("Unknown local: " + expression.getText());
+            }
+            return local.type;
+        }
+        if (expression instanceof KtArrayAccessExpression) {
+            KtExpression arrayExpression = ((KtArrayAccessExpression) expression).getArrayExpression();
+            if (!(arrayExpression instanceof KtNameReferenceExpression)) {
+                throw new IllegalArgumentException("Only local array type inference is supported: "
+                        + expression.getText());
+            }
+            Local local = context.locals.get(arrayExpression.getText());
+            if (local == null) {
+                throw new IllegalArgumentException("Unknown array local: " + arrayExpression.getText());
+            }
+            if (local.type == ValueType.INT_ARRAY) {
+                return ValueType.INT;
+            }
+            if (local.type == ValueType.LONG_ARRAY) {
+                return ValueType.LONG;
+            }
+            throw new IllegalArgumentException("Unsupported array type: " + expression.getText());
+        }
+        if (expression instanceof KtBinaryExpression) {
+            KtBinaryExpression binary = (KtBinaryExpression) expression;
+            IElementType operation = binary.getOperationToken();
+            if (isComparison(operation) || operation == KtTokens.ANDAND || operation == KtTokens.OROR) {
+                return ValueType.INT;
+            }
+            ValueType leftType = inferExpressionType(context, binary.getLeft());
+            ValueType rightType = inferExpressionType(context, binary.getRight());
+            if (leftType.numeric && rightType.numeric) {
+                return leftType == ValueType.LONG || rightType == ValueType.LONG
+                        ? ValueType.LONG
+                        : ValueType.INT;
+            }
+        }
+        if (expression instanceof KtStringTemplateExpression) {
+            return ValueType.STRING;
+        }
+        if (expression instanceof KtCallExpression) {
+            KtExpression callee = ((KtCallExpression) expression).getCalleeExpression();
+            String calleeText = callee == null ? "" : callee.getText();
+            if ("readInt".equals(calleeText)) {
+                return ValueType.INT;
+            }
+            if ("readLong".equals(calleeText)) {
+                return ValueType.LONG;
+            }
+            if ("IntArray".equals(calleeText)) {
+                return ValueType.INT_ARRAY;
+            }
+            if ("LongArray".equals(calleeText)) {
+                return ValueType.LONG_ARRAY;
+            }
+            FunctionSignature signature = findFunctionSignature(calleeText);
+            if (signature != null) {
+                return signature.returnType;
+            }
+        }
+        throw new IllegalArgumentException("Could not infer expression type: " + expression.getText());
     }
 
     private static ValueType emitArrayReferenceAndIndex(
@@ -471,6 +580,158 @@ public final class SimpleFunctionCodegens {
             throw new IllegalArgumentException("Array index must be Int: " + expression.getText());
         }
         return local.type;
+    }
+
+    private static void ensureReadIntHelper(MethodContext context) {
+        String key = context.ownerInternalName + ".__wasmIdleReadInt";
+        if (!generatedHelpers.add(key)) {
+            return;
+        }
+        MethodVisitor method = context.builder.newMethod(
+                JvmDeclarationOrigin.NO_ORIGIN,
+                Opcodes.ACC_PRIVATE | Opcodes.ACC_STATIC,
+                "__wasmIdleReadInt",
+                "()I",
+                null,
+                new String[0]);
+        method.visitCode();
+
+        Label skipWhitespace = new Label();
+        Label afterWhitespace = new Label();
+        Label afterSign = new Label();
+        Label digitLoop = new Label();
+        Label end = new Label();
+
+        method.visitLabel(skipWhitespace);
+        emitReadByte(method);
+        method.visitVarInsn(Opcodes.ISTORE, 0);
+        method.visitVarInsn(Opcodes.ILOAD, 0);
+        method.visitJumpInsn(Opcodes.IFLT, afterWhitespace);
+        method.visitVarInsn(Opcodes.ILOAD, 0);
+        method.visitIntInsn(Opcodes.BIPUSH, 32);
+        method.visitJumpInsn(Opcodes.IF_ICMPGT, afterWhitespace);
+        method.visitJumpInsn(Opcodes.GOTO, skipWhitespace);
+
+        method.visitLabel(afterWhitespace);
+        method.visitInsn(Opcodes.ICONST_1);
+        method.visitVarInsn(Opcodes.ISTORE, 1);
+        method.visitVarInsn(Opcodes.ILOAD, 0);
+        method.visitIntInsn(Opcodes.BIPUSH, 45);
+        method.visitJumpInsn(Opcodes.IF_ICMPNE, afterSign);
+        method.visitInsn(Opcodes.ICONST_M1);
+        method.visitVarInsn(Opcodes.ISTORE, 1);
+        emitReadByte(method);
+        method.visitVarInsn(Opcodes.ISTORE, 0);
+
+        method.visitLabel(afterSign);
+        method.visitInsn(Opcodes.ICONST_0);
+        method.visitVarInsn(Opcodes.ISTORE, 2);
+
+        method.visitLabel(digitLoop);
+        method.visitVarInsn(Opcodes.ILOAD, 0);
+        method.visitIntInsn(Opcodes.BIPUSH, 32);
+        method.visitJumpInsn(Opcodes.IF_ICMPLE, end);
+        method.visitVarInsn(Opcodes.ILOAD, 2);
+        method.visitIntInsn(Opcodes.BIPUSH, 10);
+        method.visitInsn(Opcodes.IMUL);
+        method.visitVarInsn(Opcodes.ILOAD, 0);
+        method.visitInsn(Opcodes.IADD);
+        method.visitIntInsn(Opcodes.BIPUSH, 48);
+        method.visitInsn(Opcodes.ISUB);
+        method.visitVarInsn(Opcodes.ISTORE, 2);
+        emitReadByte(method);
+        method.visitVarInsn(Opcodes.ISTORE, 0);
+        method.visitJumpInsn(Opcodes.GOTO, digitLoop);
+
+        method.visitLabel(end);
+        method.visitVarInsn(Opcodes.ILOAD, 2);
+        method.visitVarInsn(Opcodes.ILOAD, 1);
+        method.visitInsn(Opcodes.IMUL);
+        method.visitInsn(Opcodes.IRETURN);
+        method.visitMaxs(4, 3);
+        method.visitEnd();
+    }
+
+    private static void ensureReadLongHelper(MethodContext context) {
+        String key = context.ownerInternalName + ".__wasmIdleReadLong";
+        if (!generatedHelpers.add(key)) {
+            return;
+        }
+        MethodVisitor method = context.builder.newMethod(
+                JvmDeclarationOrigin.NO_ORIGIN,
+                Opcodes.ACC_PRIVATE | Opcodes.ACC_STATIC,
+                "__wasmIdleReadLong",
+                "()J",
+                null,
+                new String[0]);
+        method.visitCode();
+
+        Label skipWhitespace = new Label();
+        Label afterWhitespace = new Label();
+        Label afterSign = new Label();
+        Label digitLoop = new Label();
+        Label end = new Label();
+        Label negative = new Label();
+
+        method.visitLabel(skipWhitespace);
+        emitReadByte(method);
+        method.visitVarInsn(Opcodes.ISTORE, 0);
+        method.visitVarInsn(Opcodes.ILOAD, 0);
+        method.visitJumpInsn(Opcodes.IFLT, afterWhitespace);
+        method.visitVarInsn(Opcodes.ILOAD, 0);
+        method.visitIntInsn(Opcodes.BIPUSH, 32);
+        method.visitJumpInsn(Opcodes.IF_ICMPGT, afterWhitespace);
+        method.visitJumpInsn(Opcodes.GOTO, skipWhitespace);
+
+        method.visitLabel(afterWhitespace);
+        method.visitInsn(Opcodes.ICONST_1);
+        method.visitVarInsn(Opcodes.ISTORE, 1);
+        method.visitVarInsn(Opcodes.ILOAD, 0);
+        method.visitIntInsn(Opcodes.BIPUSH, 45);
+        method.visitJumpInsn(Opcodes.IF_ICMPNE, afterSign);
+        method.visitInsn(Opcodes.ICONST_M1);
+        method.visitVarInsn(Opcodes.ISTORE, 1);
+        emitReadByte(method);
+        method.visitVarInsn(Opcodes.ISTORE, 0);
+
+        method.visitLabel(afterSign);
+        method.visitInsn(Opcodes.LCONST_0);
+        method.visitVarInsn(Opcodes.LSTORE, 2);
+
+        method.visitLabel(digitLoop);
+        method.visitVarInsn(Opcodes.ILOAD, 0);
+        method.visitIntInsn(Opcodes.BIPUSH, 32);
+        method.visitJumpInsn(Opcodes.IF_ICMPLE, end);
+        method.visitVarInsn(Opcodes.LLOAD, 2);
+        method.visitLdcInsn(Long.valueOf(10));
+        method.visitInsn(Opcodes.LMUL);
+        method.visitVarInsn(Opcodes.ILOAD, 0);
+        method.visitInsn(Opcodes.I2L);
+        method.visitInsn(Opcodes.LADD);
+        method.visitLdcInsn(Long.valueOf(48));
+        method.visitInsn(Opcodes.LSUB);
+        method.visitVarInsn(Opcodes.LSTORE, 2);
+        emitReadByte(method);
+        method.visitVarInsn(Opcodes.ISTORE, 0);
+        method.visitJumpInsn(Opcodes.GOTO, digitLoop);
+
+        method.visitLabel(end);
+        method.visitVarInsn(Opcodes.ILOAD, 1);
+        method.visitJumpInsn(Opcodes.IFLT, negative);
+        method.visitVarInsn(Opcodes.LLOAD, 2);
+        method.visitInsn(Opcodes.LRETURN);
+
+        method.visitLabel(negative);
+        method.visitVarInsn(Opcodes.LLOAD, 2);
+        method.visitInsn(Opcodes.LNEG);
+        method.visitInsn(Opcodes.LRETURN);
+        method.visitMaxs(5, 4);
+        method.visitEnd();
+    }
+
+    private static void emitReadByte(MethodVisitor method) {
+        method.visitFieldInsn(Opcodes.GETSTATIC, "java/lang/System", "in", "Ljava/io/InputStream;");
+        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/io/InputStream", "read", "()I", false);
     }
 
     private static void emitConditionJump(
@@ -509,12 +770,17 @@ public final class SimpleFunctionCodegens {
                 return;
             }
             if (isComparison(operation)) {
-                ValueType leftType = emitExpression(method, context, binary.getLeft());
-                ValueType rightType = emitExpression(method, context, binary.getRight());
-                if (leftType != rightType || !leftType.numeric) {
+                ValueType leftType = inferExpressionType(context, binary.getLeft());
+                ValueType rightType = inferExpressionType(context, binary.getRight());
+                if (!leftType.numeric || !rightType.numeric) {
                     throw new IllegalArgumentException("Comparison type mismatch: " + expression.getText());
                 }
-                if (leftType == ValueType.LONG) {
+                ValueType comparisonType = leftType == ValueType.LONG || rightType == ValueType.LONG
+                        ? ValueType.LONG
+                        : ValueType.INT;
+                emitExpressionAs(method, context, binary.getLeft(), comparisonType);
+                emitExpressionAs(method, context, binary.getRight(), comparisonType);
+                if (comparisonType == ValueType.LONG) {
                     method.visitInsn(Opcodes.LCMP);
                     method.visitJumpInsn(comparisonZeroOpcode(operation, jumpWhenTrue), target);
                 } else {
@@ -800,13 +1066,15 @@ public final class SimpleFunctionCodegens {
     }
 
     private static final class MethodContext {
+        private final ClassBuilder builder;
         private final String ownerInternalName;
         private final ValueType returnType;
         private final Map<String, Local> locals = new HashMap<>();
         private int nextLocal;
         private boolean hasExplicitReturn;
 
-        private MethodContext(String ownerInternalName, ValueType returnType) {
+        private MethodContext(ClassBuilder builder, String ownerInternalName, ValueType returnType) {
+            this.builder = builder;
             this.ownerInternalName = ownerInternalName;
             this.returnType = returnType;
         }
