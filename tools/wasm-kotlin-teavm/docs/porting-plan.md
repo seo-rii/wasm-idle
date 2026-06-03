@@ -270,6 +270,11 @@ Current status:
   `PriorityQueue<Int>` construction, `add`, `offer`, `peek`, `poll`, `size`, and `isEmpty` by
   lowering to `java.util.PriorityQueue<Integer>`. With stdin `5 3 1 4 1 5` it prints
   `pq=74 count=6 size=0`.
+- The browser-facing compile export also completes `fixtures/ps-array-deque/Main.kt`, which covers
+  `ArrayDeque<Int>` construction, `addFirst`, `addLast`, `offer`, `offerFirst`, `offerLast`, `first`,
+  `last`, `getFirst`, `getLast`, `poll`, `pollLast`, `removeFirst`, `removeLast`, `size`, and
+  `isEmpty` by lowering to `java.util.ArrayDeque<Integer>`. With stdin `4 2 7 1 5` it prints
+  `deque=52 edge=19 removed=100 tail=5 count=5 size=0`.
 - This success currently comes from a minimal PSI-based bytecode emitter for the verified fixture
   shapes, not from the full Kotlin/JVM backend. The full backend still fails because Kotlin builtins
   deserialization can read `kotlin/kotlin.kotlin_builtins` but cannot resolve `kotlin.Unit`; virtual
