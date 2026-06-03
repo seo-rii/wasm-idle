@@ -852,6 +852,21 @@ public final class SimpleFunctionCodegens {
                         return ValueType.VOID;
                     }
                 }
+                if (callee != null && "fill".equals(callee.getText())
+                        && ((KtCallExpression) selector).getValueArguments().size() == 1) {
+                    ValueType receiverType = emitExpression(method, context, receiver);
+                    if (receiverType == ValueType.INT_ARRAY || receiverType == ValueType.LONG_ARRAY
+                            || receiverType == ValueType.DOUBLE_ARRAY || receiverType == ValueType.CHAR_ARRAY
+                            || receiverType == ValueType.BOOLEAN_ARRAY) {
+                        ValueType elementType = indexedElementType(receiverType);
+                        emitExpressionAs(method, context,
+                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
+                                elementType);
+                        method.visitMethodInsn(Opcodes.INVOKESTATIC, "java/util/Arrays", "fill",
+                                "(" + receiverType.descriptor + elementType.descriptor + ")V", false);
+                        return ValueType.VOID;
+                    }
+                }
                 if (callee != null && "append".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().size() == 1) {
                     ValueType receiverType = emitExpression(method, context, receiver);
@@ -1329,6 +1344,15 @@ public final class SimpleFunctionCodegens {
                     ValueType receiverType = inferExpressionType(context, qualified.getReceiverExpression());
                     if (receiverType == ValueType.INT_ARRAY || receiverType == ValueType.LONG_ARRAY
                             || receiverType == ValueType.DOUBLE_ARRAY || receiverType == ValueType.CHAR_ARRAY) {
+                        return ValueType.VOID;
+                    }
+                }
+                if (callee != null && "fill".equals(callee.getText())
+                        && ((KtCallExpression) selector).getValueArguments().size() == 1) {
+                    ValueType receiverType = inferExpressionType(context, qualified.getReceiverExpression());
+                    if (receiverType == ValueType.INT_ARRAY || receiverType == ValueType.LONG_ARRAY
+                            || receiverType == ValueType.DOUBLE_ARRAY || receiverType == ValueType.CHAR_ARRAY
+                            || receiverType == ValueType.BOOLEAN_ARRAY) {
                         return ValueType.VOID;
                     }
                 }

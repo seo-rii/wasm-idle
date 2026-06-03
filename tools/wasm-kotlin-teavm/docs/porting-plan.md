@@ -259,6 +259,9 @@ Current status:
 - The browser-facing compile export also completes `fixtures/ps-string-equality/Main.kt`, which
   covers `String` `==`/`!=` comparisons in boolean expressions and conditions. With stdin `go go` it
   prints `eq=true diff=true score=7`.
+- The browser-facing compile export also completes `fixtures/ps-array-fill/Main.kt`, which covers
+  `fill(...)` on primitive arrays by lowering to `java.util.Arrays.fill`. Running the generated class
+  prints `fill=7,8 long=100000000000 double=3.0 char=xx bool=true`.
 - This success currently comes from a minimal PSI-based bytecode emitter for the verified fixture
   shapes, not from the full Kotlin/JVM backend. The full backend still fails because Kotlin builtins
   deserialization can read `kotlin/kotlin.kotlin_builtins` but cannot resolve `kotlin.Unit`; virtual

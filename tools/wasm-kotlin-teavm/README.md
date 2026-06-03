@@ -544,6 +544,22 @@ the expected output is:
 eq=true diff=true score=7
 ```
 
+To run the PS-style primitive-array fill fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs \
+  --source tools/wasm-kotlin-teavm/fixtures/ps-array-fill/Main.kt \
+  --out tools/wasm-kotlin-teavm/build/browser-ps-array-fill-out
+java -cp tools/wasm-kotlin-teavm/build/browser-ps-array-fill-out MainKt
+```
+
+The expected output is:
+
+```text
+fill=7,8 long=100000000000 double=3.0 char=xx bool=true
+```
+
 ## Current Status
 
 This folder is a porting scaffold, not an app integration. The current probe compiles a small Java
@@ -705,6 +721,9 @@ Known findings from the initial experiments:
 - The browser-compatible probe also compiles `fixtures/ps-string-equality/Main.kt`, which exercises
   `String` `==`/`!=` comparisons in boolean expressions and conditions. Running that generated class
   with `go go` on stdin prints `eq=true diff=true score=7`.
+- The browser-compatible probe also compiles `fixtures/ps-array-fill/Main.kt`, which exercises
+  `fill(...)` on primitive arrays by lowering to `java.util.Arrays.fill`. Running that generated
+  class prints `fill=7,8 long=100000000000 double=3.0 char=xx bool=true`.
 - This is not a full Kotlin/JVM backend yet. The browser path is currently a minimal emitter that
   supports the verified fixture shapes above. It does not yet support enough Kotlin for real
   competitive-programming use: collections and common library helpers, classes/data classes,
