@@ -576,6 +576,22 @@ The expected output is:
 list=1,6 size=5 sum=17 empty=false
 ```
 
+To run the PS-style `PriorityQueue<Int>` fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs \
+  --source tools/wasm-kotlin-teavm/fixtures/ps-priority-queue/Main.kt \
+  --out tools/wasm-kotlin-teavm/build/browser-ps-priority-queue-out
+printf '5 3 1 4 1 5\n' | java -cp tools/wasm-kotlin-teavm/build/browser-ps-priority-queue-out MainKt
+```
+
+The expected output is:
+
+```text
+pq=74 count=6 size=0
+```
+
 ## Current Status
 
 This folder is a porting scaffold, not an app integration. The current probe compiles a small Java
@@ -744,6 +760,10 @@ Known findings from the initial experiments:
   `ArrayList<Int>` construction, `add`, index get/set, `size`, `isEmpty`, and `sort()` by lowering
   to `java.util.ArrayList<Integer>` plus `java.util.Collections.sort`. With stdin `4 5 1 4 1` it
   prints `list=1,6 size=5 sum=17 empty=false`.
+- The browser-compatible probe also compiles `fixtures/ps-priority-queue/Main.kt`, which exercises
+  `PriorityQueue<Int>` construction, `add`, `offer`, `peek`, `poll`, `size`, and `isEmpty` by
+  lowering to `java.util.PriorityQueue<Integer>`. With stdin `5 3 1 4 1 5` it prints
+  `pq=74 count=6 size=0`.
 - This is not a full Kotlin/JVM backend yet. The browser path is currently a minimal emitter that
   supports the verified fixture shapes above. It does not yet support enough Kotlin for real
   competitive-programming use: full collections and common library helpers, classes/data classes,

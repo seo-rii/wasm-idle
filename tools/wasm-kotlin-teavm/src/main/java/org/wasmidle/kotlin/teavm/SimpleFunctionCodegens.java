@@ -790,8 +790,7 @@ public final class SimpleFunctionCodegens {
             if (arrayType == ValueType.INT_ARRAY_LIST) {
                 method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "get",
                         "(I)Ljava/lang/Object;", false);
-                method.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/Integer");
-                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false);
+                unboxInt(method);
                 return ValueType.INT;
             }
             ValueType elementType = indexedElementType(arrayType);
@@ -840,6 +839,11 @@ public final class SimpleFunctionCodegens {
                 }
                 if (receiverType == ValueType.INT_ARRAY_LIST) {
                     method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "size", "()I", false);
+                    return ValueType.INT;
+                }
+                if (receiverType == ValueType.INT_PRIORITY_QUEUE) {
+                    method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/PriorityQueue", "size", "()I",
+                            false);
                     return ValueType.INT;
                 }
             }
@@ -907,6 +911,28 @@ public final class SimpleFunctionCodegens {
                                 "(Ljava/lang/Object;)Z", false);
                         return ValueType.BOOLEAN;
                     }
+                    if (receiverType == ValueType.INT_PRIORITY_QUEUE) {
+                        emitExpressionAs(method, context,
+                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
+                                ValueType.INT);
+                        boxInt(method);
+                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/PriorityQueue", "add",
+                                "(Ljava/lang/Object;)Z", false);
+                        return ValueType.BOOLEAN;
+                    }
+                }
+                if (callee != null && "offer".equals(callee.getText())
+                        && ((KtCallExpression) selector).getValueArguments().size() == 1) {
+                    ValueType receiverType = emitExpression(method, context, receiver);
+                    if (receiverType == ValueType.INT_PRIORITY_QUEUE) {
+                        emitExpressionAs(method, context,
+                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
+                                ValueType.INT);
+                        boxInt(method);
+                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/PriorityQueue", "offer",
+                                "(Ljava/lang/Object;)Z", false);
+                        return ValueType.BOOLEAN;
+                    }
                 }
                 if (callee != null && "isEmpty".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().isEmpty()) {
@@ -915,6 +941,21 @@ public final class SimpleFunctionCodegens {
                         method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "isEmpty", "()Z",
                                 false);
                         return ValueType.BOOLEAN;
+                    }
+                    if (receiverType == ValueType.INT_PRIORITY_QUEUE) {
+                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/PriorityQueue", "isEmpty", "()Z",
+                                false);
+                        return ValueType.BOOLEAN;
+                    }
+                }
+                if (callee != null && ("peek".equals(callee.getText()) || "poll".equals(callee.getText()))
+                        && ((KtCallExpression) selector).getValueArguments().isEmpty()) {
+                    ValueType receiverType = emitExpression(method, context, receiver);
+                    if (receiverType == ValueType.INT_PRIORITY_QUEUE) {
+                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/PriorityQueue", callee.getText(),
+                                "()Ljava/lang/Object;", false);
+                        unboxInt(method);
+                        return ValueType.INT;
                     }
                 }
                 if (callee != null && "append".equals(callee.getText())
@@ -1236,6 +1277,12 @@ public final class SimpleFunctionCodegens {
             method.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/util/ArrayList", "<init>", "()V", false);
             return ValueType.INT_ARRAY_LIST;
         }
+        if (isPriorityQueueConstructor(calleeText) && call.getValueArguments().isEmpty()) {
+            method.visitTypeInsn(Opcodes.NEW, "java/util/PriorityQueue");
+            method.visitInsn(Opcodes.DUP);
+            method.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/util/PriorityQueue", "<init>", "()V", false);
+            return ValueType.INT_PRIORITY_QUEUE;
+        }
         if ("readInt".equals(calleeText) && call.getValueArguments().isEmpty()) {
             ensureReadIntHelper(context);
             method.visitMethodInsn(Opcodes.INVOKESTATIC, context.ownerInternalName, "__wasmIdleReadInt", "()I",
@@ -1383,7 +1430,8 @@ public final class SimpleFunctionCodegens {
             }
             if (selector != null && "size".equals(selector.getText())) {
                 ValueType receiverType = inferExpressionType(context, qualified.getReceiverExpression());
-                if (receiverType.array || receiverType == ValueType.INT_ARRAY_LIST) {
+                if (receiverType.array || receiverType == ValueType.INT_ARRAY_LIST
+                        || receiverType == ValueType.INT_PRIORITY_QUEUE) {
                     return ValueType.INT;
                 }
             }
@@ -1421,15 +1469,31 @@ public final class SimpleFunctionCodegens {
                 }
                 if (callee != null && "add".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().size() == 1
+                        && (inferExpressionType(context, qualified.getReceiverExpression())
+                                == ValueType.INT_ARRAY_LIST
+                                || inferExpressionType(context, qualified.getReceiverExpression())
+                                        == ValueType.INT_PRIORITY_QUEUE)) {
+                    return ValueType.BOOLEAN;
+                }
+                if (callee != null && "offer".equals(callee.getText())
+                        && ((KtCallExpression) selector).getValueArguments().size() == 1
                         && inferExpressionType(context, qualified.getReceiverExpression())
-                                == ValueType.INT_ARRAY_LIST) {
+                                == ValueType.INT_PRIORITY_QUEUE) {
                     return ValueType.BOOLEAN;
                 }
                 if (callee != null && "isEmpty".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().isEmpty()
-                        && inferExpressionType(context, qualified.getReceiverExpression())
-                                == ValueType.INT_ARRAY_LIST) {
+                        && (inferExpressionType(context, qualified.getReceiverExpression())
+                                == ValueType.INT_ARRAY_LIST
+                                || inferExpressionType(context, qualified.getReceiverExpression())
+                                        == ValueType.INT_PRIORITY_QUEUE)) {
                     return ValueType.BOOLEAN;
+                }
+                if (callee != null && ("peek".equals(callee.getText()) || "poll".equals(callee.getText()))
+                        && ((KtCallExpression) selector).getValueArguments().isEmpty()
+                        && inferExpressionType(context, qualified.getReceiverExpression())
+                                == ValueType.INT_PRIORITY_QUEUE) {
+                    return ValueType.INT;
                 }
                 if (callee != null && "append".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().size() == 1
@@ -1513,6 +1577,9 @@ public final class SimpleFunctionCodegens {
             }
             if (isArrayListConstructor(calleeText) || isMutableListFactory(calleeText)) {
                 return ValueType.INT_ARRAY_LIST;
+            }
+            if (isPriorityQueueConstructor(calleeText)) {
+                return ValueType.INT_PRIORITY_QUEUE;
             }
             if ("IntArray".equals(calleeText)) {
                 return ValueType.INT_ARRAY;
@@ -1626,9 +1693,18 @@ public final class SimpleFunctionCodegens {
         return "mutableListOf".equals(calleeText) || calleeText.startsWith("mutableListOf<");
     }
 
+    private static boolean isPriorityQueueConstructor(String calleeText) {
+        return "PriorityQueue".equals(calleeText) || calleeText.startsWith("PriorityQueue<");
+    }
+
     private static void boxInt(MethodVisitor method) {
         method.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Integer", "valueOf",
                 "(I)Ljava/lang/Integer;", false);
+    }
+
+    private static void unboxInt(MethodVisitor method) {
+        method.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/Integer");
+        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false);
     }
 
     private static void ensureReadStringHelper(MethodContext context) {
@@ -2199,6 +2275,9 @@ public final class SimpleFunctionCodegens {
                 || "List<Int>".equals(text)) {
             return ValueType.INT_ARRAY_LIST;
         }
+        if ("PriorityQueue<Int>".equals(text)) {
+            return ValueType.INT_PRIORITY_QUEUE;
+        }
         if ("Char".equals(text)) {
             return ValueType.CHAR;
         }
@@ -2298,6 +2377,7 @@ public final class SimpleFunctionCodegens {
         STRING("Ljava/lang/String;", 1, false, false),
         STRING_BUILDER("Ljava/lang/StringBuilder;", 1, false, false),
         INT_ARRAY_LIST("Ljava/util/ArrayList;", 1, false, false),
+        INT_PRIORITY_QUEUE("Ljava/util/PriorityQueue;", 1, false, false),
         INT_ARRAY("[I", 1, false, true),
         LONG_ARRAY("[J", 1, false, true),
         DOUBLE_ARRAY("[D", 1, false, true),

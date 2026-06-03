@@ -266,6 +266,10 @@ Current status:
   `ArrayList<Int>` construction, `add`, index get/set, `size`, `isEmpty`, and `sort()` by lowering to
   `java.util.ArrayList<Integer>` plus `java.util.Collections.sort`. With stdin `4 5 1 4 1` it prints
   `list=1,6 size=5 sum=17 empty=false`.
+- The browser-facing compile export also completes `fixtures/ps-priority-queue/Main.kt`, which covers
+  `PriorityQueue<Int>` construction, `add`, `offer`, `peek`, `poll`, `size`, and `isEmpty` by
+  lowering to `java.util.PriorityQueue<Integer>`. With stdin `5 3 1 4 1 5` it prints
+  `pq=74 count=6 size=0`.
 - This success currently comes from a minimal PSI-based bytecode emitter for the verified fixture
   shapes, not from the full Kotlin/JVM backend. The full backend still fails because Kotlin builtins
   deserialization can read `kotlin/kotlin.kotlin_builtins` but cannot resolve `kotlin.Unit`; virtual
