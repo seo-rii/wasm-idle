@@ -291,6 +291,12 @@ Current status:
   `ArrayList<Int>`, and `ArrayList<Long>`. With stdin
   `4 5 -2 7 1 100000000000 -4 9 12 1.5 -2.0 3.5 0.5` it prints
   `agg=11,-2,7 long=100000000017,-4,100000000000 double=3.5,-2.0,3.5 list=11,-2,7 longList=100000000017,-4,100000000000`.
+- The browser-facing compile export also completes `fixtures/ps-reverse-sort-desc/Main.kt`, which
+  covers `sortDescending()` on `IntArray`, `LongArray`, `DoubleArray`, `CharArray`,
+  `ArrayList<Int>`, `ArrayList<Long>`, and `ArrayList<String>`, plus `reverse()` on
+  `BooleanArray`. With stdin
+  `4 dbca 5 -2 7 1 100000000000 -4 9 12 1.5 -2.0 3.5 0.5 beta alpha delta gamma` it prints
+  `desc=7,-2 long=100000000000,-4 double=3.5,-2.0 chars=da flags=false,true list=7,-2 longList=100000000000,-4 strings=gamma,alpha`.
 - The browser-facing compile export also completes `fixtures/ps-array-list/Main.kt`, which covers
   `ArrayList<Int>` construction, `add`, index get/set, `size`, `isEmpty`, and `sort()` by lowering to
   `java.util.ArrayList<Integer>` plus `java.util.Collections.sort`. With stdin `4 5 1 4 1` it prints

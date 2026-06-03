@@ -1416,6 +1416,105 @@ public final class SimpleFunctionCodegens {
                         return ValueType.VOID;
                     }
                 }
+                if (callee != null
+                        && ("reverse".equals(callee.getText()) || "sortDescending".equals(callee.getText()))
+                        && ((KtCallExpression) selector).getValueArguments().isEmpty()) {
+                    ValueType receiverType = inferExpressionType(context, receiver);
+                    boolean sortDescending = "sortDescending".equals(callee.getText());
+                    if (isReversiblePrimitiveArrayType(receiverType)
+                            && (!sortDescending || isSortablePrimitiveArrayType(receiverType))) {
+                        int receiverIndex = context.allocateTemporary(receiverType);
+                        emitExpressionAs(method, context, receiver, receiverType);
+                        method.visitVarInsn(Opcodes.ASTORE, receiverIndex);
+                        if (sortDescending) {
+                            method.visitVarInsn(Opcodes.ALOAD, receiverIndex);
+                            method.visitMethodInsn(Opcodes.INVOKESTATIC, "java/util/Arrays", "sort",
+                                    "(" + receiverType.descriptor + ")V", false);
+                        }
+                        int leftIndex = context.allocateTemporary(ValueType.INT);
+                        method.visitInsn(Opcodes.ICONST_0);
+                        method.visitVarInsn(Opcodes.ISTORE, leftIndex);
+                        int rightIndex = context.allocateTemporary(ValueType.INT);
+                        method.visitVarInsn(Opcodes.ALOAD, receiverIndex);
+                        method.visitInsn(Opcodes.ARRAYLENGTH);
+                        method.visitInsn(Opcodes.ICONST_1);
+                        method.visitInsn(Opcodes.ISUB);
+                        method.visitVarInsn(Opcodes.ISTORE, rightIndex);
+                        ValueType elementType = indexedElementType(receiverType);
+                        int temporaryIndex = context.allocateTemporary(elementType);
+                        Label startLabel = new Label();
+                        Label endLabel = new Label();
+                        method.visitLabel(startLabel);
+                        method.visitVarInsn(Opcodes.ILOAD, leftIndex);
+                        method.visitVarInsn(Opcodes.ILOAD, rightIndex);
+                        method.visitJumpInsn(Opcodes.IF_ICMPGE, endLabel);
+                        method.visitVarInsn(Opcodes.ALOAD, receiverIndex);
+                        method.visitVarInsn(Opcodes.ILOAD, leftIndex);
+                        if (receiverType == ValueType.LONG_ARRAY) {
+                            method.visitInsn(Opcodes.LALOAD);
+                        } else if (receiverType == ValueType.DOUBLE_ARRAY) {
+                            method.visitInsn(Opcodes.DALOAD);
+                        } else if (receiverType == ValueType.CHAR_ARRAY) {
+                            method.visitInsn(Opcodes.CALOAD);
+                        } else if (receiverType == ValueType.BOOLEAN_ARRAY) {
+                            method.visitInsn(Opcodes.BALOAD);
+                        } else {
+                            method.visitInsn(Opcodes.IALOAD);
+                        }
+                        storeLocal(method, elementType, temporaryIndex);
+                        method.visitVarInsn(Opcodes.ALOAD, receiverIndex);
+                        method.visitVarInsn(Opcodes.ILOAD, leftIndex);
+                        method.visitVarInsn(Opcodes.ALOAD, receiverIndex);
+                        method.visitVarInsn(Opcodes.ILOAD, rightIndex);
+                        if (receiverType == ValueType.LONG_ARRAY) {
+                            method.visitInsn(Opcodes.LALOAD);
+                            method.visitInsn(Opcodes.LASTORE);
+                        } else if (receiverType == ValueType.DOUBLE_ARRAY) {
+                            method.visitInsn(Opcodes.DALOAD);
+                            method.visitInsn(Opcodes.DASTORE);
+                        } else if (receiverType == ValueType.CHAR_ARRAY) {
+                            method.visitInsn(Opcodes.CALOAD);
+                            method.visitInsn(Opcodes.CASTORE);
+                        } else if (receiverType == ValueType.BOOLEAN_ARRAY) {
+                            method.visitInsn(Opcodes.BALOAD);
+                            method.visitInsn(Opcodes.BASTORE);
+                        } else {
+                            method.visitInsn(Opcodes.IALOAD);
+                            method.visitInsn(Opcodes.IASTORE);
+                        }
+                        method.visitVarInsn(Opcodes.ALOAD, receiverIndex);
+                        method.visitVarInsn(Opcodes.ILOAD, rightIndex);
+                        loadLocal(method, elementType, temporaryIndex);
+                        if (receiverType == ValueType.LONG_ARRAY) {
+                            method.visitInsn(Opcodes.LASTORE);
+                        } else if (receiverType == ValueType.DOUBLE_ARRAY) {
+                            method.visitInsn(Opcodes.DASTORE);
+                        } else if (receiverType == ValueType.CHAR_ARRAY) {
+                            method.visitInsn(Opcodes.CASTORE);
+                        } else if (receiverType == ValueType.BOOLEAN_ARRAY) {
+                            method.visitInsn(Opcodes.BASTORE);
+                        } else {
+                            method.visitInsn(Opcodes.IASTORE);
+                        }
+                        method.visitIincInsn(leftIndex, 1);
+                        method.visitIincInsn(rightIndex, -1);
+                        method.visitJumpInsn(Opcodes.GOTO, startLabel);
+                        method.visitLabel(endLabel);
+                        return ValueType.VOID;
+                    }
+                    if (isReversibleArrayListType(receiverType)
+                            && (!sortDescending || isSortableArrayListType(receiverType))) {
+                        emitExpressionAs(method, context, receiver, receiverType);
+                        if (sortDescending) {
+                            method.visitInsn(Opcodes.DUP);
+                            method.visitMethodInsn(Opcodes.INVOKESTATIC, "java/util/Collections", "sort",
+                                    "(Ljava/util/List;)V", false);
+                        }
+                        method.visitMethodInsn(Opcodes.INVOKESTATIC, "java/util/Collections", "reverse",
+                                "(Ljava/util/List;)V", false);
+                        return ValueType.VOID;
+                    }
+                }
                 if (callee != null && "fill".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().size() == 1) {
                     ValueType receiverType = emitExpression(method, context, receiver);
@@ -3422,6 +3521,19 @@ public final class SimpleFunctionCodegens {
                             || receiverType == ValueType.INT_ARRAY_LIST
                             || receiverType == ValueType.LONG_ARRAY_LIST
                             || receiverType == ValueType.STRING_ARRAY_LIST) {
+                        return ValueType.VOID;
+                    }
+                }
+                if (callee != null
+                        && ("reverse".equals(callee.getText()) || "sortDescending".equals(callee.getText()))
+                        && ((KtCallExpression) selector).getValueArguments().isEmpty()) {
+                    ValueType receiverType = inferExpressionType(context, qualified.getReceiverExpression());
+                    if ("sortDescending".equals(callee.getText())) {
+                        if (isSortablePrimitiveArrayType(receiverType) || isSortableArrayListType(receiverType)) {
+                            return ValueType.VOID;
+                        }
+                    } else if (isReversiblePrimitiveArrayType(receiverType)
+                            || isReversibleArrayListType(receiverType)) {
                         return ValueType.VOID;
                     }
                 }
@@ -5454,6 +5566,25 @@ public final class SimpleFunctionCodegens {
             return ValueType.DOUBLE;
         }
         return null;
+    }
+
+    private static boolean isSortablePrimitiveArrayType(ValueType type) {
+        return type == ValueType.INT_ARRAY || type == ValueType.LONG_ARRAY
+                || type == ValueType.DOUBLE_ARRAY || type == ValueType.CHAR_ARRAY;
+    }
+
+    private static boolean isReversiblePrimitiveArrayType(ValueType type) {
+        return isSortablePrimitiveArrayType(type) || type == ValueType.BOOLEAN_ARRAY;
+    }
+
+    private static boolean isSortableArrayListType(ValueType type) {
+        return type == ValueType.INT_ARRAY_LIST || type == ValueType.LONG_ARRAY_LIST
+                || type == ValueType.STRING_ARRAY_LIST;
+    }
+
+    private static boolean isReversibleArrayListType(ValueType type) {
+        return isSortableArrayListType(type) || type == ValueType.INT_PAIR_ARRAY_LIST
+                || type == ValueType.INT_LONG_PAIR_ARRAY_LIST;
     }
 
     private static ForProgression parseForProgression(KtExpression expression) {
