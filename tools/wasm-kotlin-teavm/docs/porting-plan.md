@@ -272,6 +272,12 @@ Current status:
   `ArrayList<Int>` construction, `add`, index get/set, `size`, `isEmpty`, and `sort()` by lowering to
   `java.util.ArrayList<Integer>` plus `java.util.Collections.sort`. With stdin `4 5 1 4 1` it prints
   `list=1,6 size=5 sum=17 empty=false`.
+- The browser-facing compile export also completes `fixtures/ps-int-list-array/Main.kt`, which covers
+  graph-style `Array<ArrayList<Int>>` construction with `Array(n) { ArrayList<Int>() }`, function
+  parameters, `graph[u].add(v)`, nested index access, `first`, `removeAt`, element replacement,
+  `size`, and `in`/`!in` by lowering to a `java.util.ArrayList<Integer>[]`. With stdin
+  `4 3 0 1 1 2 2 3` it prints
+  `adj=4,2,2 first=4 removed=1 total=32 flags=true,true tail=9,10`.
 - The browser-facing compile export also completes `fixtures/ps-priority-queue/Main.kt`, which covers
   `PriorityQueue<Int>` construction, `add`, `offer`, `peek`, `poll`, `size`, and `isEmpty` by
   lowering to `java.util.PriorityQueue<Integer>`. With stdin `5 3 1 4 1 5` it prints

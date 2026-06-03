@@ -592,6 +592,22 @@ The expected output is:
 list=1,6 size=5 sum=17 empty=false
 ```
 
+To run the PS-style `Array<ArrayList<Int>>` adjacency-list fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs \
+  --source tools/wasm-kotlin-teavm/fixtures/ps-int-list-array/Main.kt \
+  --out tools/wasm-kotlin-teavm/build/browser-ps-int-list-array-out
+printf '4 3 0 1 1 2 2 3\n' | java -cp tools/wasm-kotlin-teavm/build/browser-ps-int-list-array-out MainKt
+```
+
+The expected output is:
+
+```text
+adj=4,2,2 first=4 removed=1 total=32 flags=true,true tail=9,10
+```
+
 To run the PS-style `MutableList<Long>` / `ArrayList<Long>` fixture:
 
 ```bash
@@ -1118,6 +1134,12 @@ Known findings from the initial experiments:
   `ArrayList<Int>` construction, `add`, index get/set, `size`, `isEmpty`, and `sort()` by lowering
   to `java.util.ArrayList<Integer>` plus `java.util.Collections.sort`. With stdin `4 5 1 4 1` it
   prints `list=1,6 size=5 sum=17 empty=false`.
+- The browser-compatible probe also compiles `fixtures/ps-int-list-array/Main.kt`, which exercises
+  graph-style `Array<ArrayList<Int>>` construction with `Array(n) { ArrayList<Int>() }`, function
+  parameters, `graph[u].add(v)`, nested index access, `first`, `removeAt`, element replacement,
+  `size`, and `in`/`!in` by lowering to a `java.util.ArrayList<Integer>[]`. With stdin
+  `4 3 0 1 1 2 2 3` it prints
+  `adj=4,2,2 first=4 removed=1 total=32 flags=true,true tail=9,10`.
 - The browser-compatible probe also compiles `fixtures/ps-priority-queue/Main.kt`, which exercises
   `PriorityQueue<Int>` construction, `add`, `offer`, `peek`, `poll`, `size`, and `isEmpty` by
   lowering to `java.util.PriorityQueue<Integer>`. With stdin `5 3 1 4 1 5` it prints

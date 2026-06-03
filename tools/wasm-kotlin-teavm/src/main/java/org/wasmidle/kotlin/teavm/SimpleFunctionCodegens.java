@@ -286,7 +286,10 @@ public final class SimpleFunctionCodegens {
         if (initializerType == ValueType.BOOLEAN_ARRAY) {
             return ValueType.BOOLEAN_2D_ARRAY;
         }
-        throw new IllegalArgumentException("Array initializer must produce a primitive array: " + callText);
+        if (initializerType == ValueType.INT_ARRAY_LIST) {
+            return ValueType.INT_ARRAY_LIST_ARRAY;
+        }
+        throw new IllegalArgumentException("Unsupported Array initializer type: " + callText);
     }
 
     private static ValueType indexedElementType(ValueType arrayType) {
@@ -320,7 +323,17 @@ public final class SimpleFunctionCodegens {
         if (arrayType == ValueType.BOOLEAN_2D_ARRAY) {
             return ValueType.BOOLEAN_ARRAY;
         }
+        if (arrayType == ValueType.INT_ARRAY_LIST_ARRAY) {
+            return ValueType.INT_ARRAY_LIST;
+        }
         throw new IllegalArgumentException("Unsupported indexed type: " + arrayType);
+    }
+
+    private static String anewArrayComponentType(ValueType elementType) {
+        if (elementType.descriptor.startsWith("L") && elementType.descriptor.endsWith(";")) {
+            return elementType.descriptor.substring(1, elementType.descriptor.length() - 1);
+        }
+        return elementType.descriptor;
     }
 
     private static void emitWhenStatement(MethodVisitor method, MethodContext context, KtWhenExpression expression) {
@@ -678,6 +691,10 @@ public final class SimpleFunctionCodegens {
                 method.visitInsn(Opcodes.BASTORE);
                 return true;
             }
+            if (elementType == ValueType.INT_ARRAY_LIST && valueType == ValueType.INT_ARRAY_LIST) {
+                method.visitInsn(Opcodes.AASTORE);
+                return true;
+            }
             if (elementType.array && valueType == elementType) {
                 method.visitInsn(Opcodes.AASTORE);
                 return true;
@@ -973,6 +990,11 @@ public final class SimpleFunctionCodegens {
             if (elementType == ValueType.BOOLEAN) {
                 method.visitInsn(Opcodes.BALOAD);
                 return ValueType.BOOLEAN;
+            }
+            if (elementType == ValueType.INT_ARRAY_LIST) {
+                method.visitInsn(Opcodes.AALOAD);
+                method.visitTypeInsn(Opcodes.CHECKCAST, "java/util/ArrayList");
+                return ValueType.INT_ARRAY_LIST;
             }
             if (elementType.array) {
                 method.visitInsn(Opcodes.AALOAD);
@@ -2360,7 +2382,7 @@ public final class SimpleFunctionCodegens {
             ValueType initializerType = inferExpressionType(context, initializer);
             ValueType arrayType = arrayTypeForArrayInitializer(initializerType, call.getText());
             method.visitVarInsn(Opcodes.ILOAD, countIndex);
-            method.visitTypeInsn(Opcodes.ANEWARRAY, indexedElementType(arrayType).descriptor);
+            method.visitTypeInsn(Opcodes.ANEWARRAY, anewArrayComponentType(indexedElementType(arrayType)));
             int arrayIndex = context.allocateTemporary(arrayType);
             method.visitVarInsn(Opcodes.ASTORE, arrayIndex);
             method.visitInsn(Opcodes.ICONST_0);
@@ -4512,6 +4534,10 @@ public final class SimpleFunctionCodegens {
                 || "List<Int>".equals(text)) {
             return ValueType.INT_ARRAY_LIST;
         }
+        if ("Array<ArrayList<Int>>".equals(compactText) || "Array<MutableList<Int>>".equals(compactText)
+                || "Array<List<Int>>".equals(compactText)) {
+            return ValueType.INT_ARRAY_LIST_ARRAY;
+        }
         if ("PriorityQueue<Int>".equals(text)) {
             return ValueType.INT_PRIORITY_QUEUE;
         }
@@ -4690,6 +4716,7 @@ public final class SimpleFunctionCodegens {
         DOUBLE_2D_ARRAY("[[D", 1, false, true),
         CHAR_2D_ARRAY("[[C", 1, false, true),
         BOOLEAN_2D_ARRAY("[[Z", 1, false, true),
+        INT_ARRAY_LIST_ARRAY("[Ljava/util/ArrayList;", 1, false, true),
         VOID("V", 0, false, false);
 
         private final String descriptor;
