@@ -224,6 +224,10 @@ public final class SimpleFunctionCodegens {
                 method.visitInsn(Opcodes.LASTORE);
                 return true;
             }
+            if (arrayType == ValueType.DOUBLE_ARRAY && valueType == ValueType.DOUBLE) {
+                method.visitInsn(Opcodes.DASTORE);
+                return true;
+            }
             if (arrayType == ValueType.BOOLEAN_ARRAY && valueType == ValueType.BOOLEAN) {
                 method.visitInsn(Opcodes.BASTORE);
                 return true;
@@ -278,6 +282,19 @@ public final class SimpleFunctionCodegens {
         }
         boolean decrement = expression.getOperationToken() == KtTokens.MINUSMINUS;
         boolean postfix = expression instanceof KtPostfixExpression;
+        if (local.type == ValueType.DOUBLE) {
+            loadLocal(method, local.type, local.index);
+            if (keepResult && postfix) {
+                method.visitInsn(Opcodes.DUP2);
+            }
+            method.visitLdcInsn(Double.valueOf(1));
+            method.visitInsn(decrement ? Opcodes.DSUB : Opcodes.DADD);
+            if (keepResult && !postfix) {
+                method.visitInsn(Opcodes.DUP2);
+            }
+            storeLocal(method, local.type, local.index);
+            return keepResult ? local.type : ValueType.VOID;
+        }
         if (local.type == ValueType.LONG) {
             loadLocal(method, local.type, local.index);
             if (keepResult && postfix) {
@@ -324,6 +341,10 @@ public final class SimpleFunctionCodegens {
             if (text.endsWith("L") || text.endsWith("l")) {
                 method.visitLdcInsn(Long.valueOf(text.substring(0, text.length() - 1)));
                 return ValueType.LONG;
+            }
+            if (isDoubleLiteralText(text)) {
+                method.visitLdcInsn(Double.valueOf(text));
+                return ValueType.DOUBLE;
             }
             if (text.length() >= 3 && text.charAt(0) == '\'' && text.charAt(text.length() - 1) == '\'') {
                 char value;
@@ -390,6 +411,10 @@ public final class SimpleFunctionCodegens {
                 method.visitInsn(Opcodes.LALOAD);
                 return ValueType.LONG;
             }
+            if (arrayType == ValueType.DOUBLE_ARRAY) {
+                method.visitInsn(Opcodes.DALOAD);
+                return ValueType.DOUBLE;
+            }
             if (arrayType == ValueType.BOOLEAN_ARRAY) {
                 method.visitInsn(Opcodes.BALOAD);
                 return ValueType.BOOLEAN;
@@ -422,7 +447,9 @@ public final class SimpleFunctionCodegens {
                 ValueType leftType = inferExpressionType(context, binary.getLeft());
                 ValueType rightType = inferExpressionType(context, binary.getRight());
                 if (leftType.numeric && rightType.numeric) {
-                    ValueType resultType = leftType == ValueType.LONG || rightType == ValueType.LONG
+                    ValueType resultType = leftType == ValueType.DOUBLE || rightType == ValueType.DOUBLE
+                            ? ValueType.DOUBLE
+                            : leftType == ValueType.LONG || rightType == ValueType.LONG
                             ? ValueType.LONG
                             : ValueType.INT;
                     emitExpressionAs(method, context, binary.getLeft(), resultType);
@@ -485,6 +512,9 @@ public final class SimpleFunctionCodegens {
                     } else if (type == ValueType.LONG) {
                         method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append",
                                 "(J)Ljava/lang/StringBuilder;", false);
+                    } else if (type == ValueType.DOUBLE) {
+                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append",
+                                "(D)Ljava/lang/StringBuilder;", false);
                     } else if (type == ValueType.CHAR) {
                         method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append",
                                 "(C)Ljava/lang/StringBuilder;", false);
@@ -526,6 +556,10 @@ public final class SimpleFunctionCodegens {
                 method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/io/PrintStream", methodName, "(J)V", false);
                 return ValueType.VOID;
             }
+            if (type == ValueType.DOUBLE) {
+                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/io/PrintStream", methodName, "(D)V", false);
+                return ValueType.VOID;
+            }
             if (type == ValueType.CHAR) {
                 method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/io/PrintStream", methodName, "(C)V", false);
                 return ValueType.VOID;
@@ -541,6 +575,7 @@ public final class SimpleFunctionCodegens {
             }
         }
         if (("IntArray".equals(calleeText) || "LongArray".equals(calleeText)
+                || "DoubleArray".equals(calleeText)
                 || "BooleanArray".equals(calleeText)) && call.getValueArguments().size() == 1) {
             ValueType sizeType = emitExpression(method, context,
                     call.getValueArguments().get(0).getArgumentExpression());
@@ -554,6 +589,10 @@ public final class SimpleFunctionCodegens {
             if ("BooleanArray".equals(calleeText)) {
                 method.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_BOOLEAN);
                 return ValueType.BOOLEAN_ARRAY;
+            }
+            if ("DoubleArray".equals(calleeText)) {
+                method.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_DOUBLE);
+                return ValueType.DOUBLE_ARRAY;
             }
             method.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_LONG);
             return ValueType.LONG_ARRAY;
@@ -569,6 +608,14 @@ public final class SimpleFunctionCodegens {
             method.visitMethodInsn(Opcodes.INVOKESTATIC, context.ownerInternalName, "__wasmIdleReadLong", "()J",
                     false);
             return ValueType.LONG;
+        }
+        if ("readDouble".equals(calleeText) && call.getValueArguments().isEmpty()) {
+            ensureReadStringHelper(context);
+            method.visitMethodInsn(Opcodes.INVOKESTATIC, context.ownerInternalName, "__wasmIdleReadString",
+                    "()Ljava/lang/String;", false);
+            method.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Double", "parseDouble",
+                    "(Ljava/lang/String;)D", false);
+            return ValueType.DOUBLE;
         }
         if ("readString".equals(calleeText) && call.getValueArguments().isEmpty()) {
             ensureReadStringHelper(context);
@@ -603,6 +650,14 @@ public final class SimpleFunctionCodegens {
             method.visitInsn(Opcodes.I2L);
             return;
         }
+        if (actualType == ValueType.INT && expectedType == ValueType.DOUBLE) {
+            method.visitInsn(Opcodes.I2D);
+            return;
+        }
+        if (actualType == ValueType.LONG && expectedType == ValueType.DOUBLE) {
+            method.visitInsn(Opcodes.L2D);
+            return;
+        }
         throw new IllegalArgumentException("Expression type mismatch: expected " + expectedType
                 + ", got " + actualType + " for " + expression.getText());
     }
@@ -615,6 +670,9 @@ public final class SimpleFunctionCodegens {
             String text = expression.getText();
             if ("true".equals(text) || "false".equals(text)) {
                 return ValueType.BOOLEAN;
+            }
+            if (isDoubleLiteralText(text)) {
+                return ValueType.DOUBLE;
             }
             if (text.length() >= 3 && text.charAt(0) == '\'' && text.charAt(text.length() - 1) == '\'') {
                 return ValueType.CHAR;
@@ -651,6 +709,9 @@ public final class SimpleFunctionCodegens {
             if (local.type == ValueType.LONG_ARRAY) {
                 return ValueType.LONG;
             }
+            if (local.type == ValueType.DOUBLE_ARRAY) {
+                return ValueType.DOUBLE;
+            }
             if (local.type == ValueType.BOOLEAN_ARRAY) {
                 return ValueType.BOOLEAN;
             }
@@ -676,7 +737,9 @@ public final class SimpleFunctionCodegens {
             ValueType leftType = inferExpressionType(context, binary.getLeft());
             ValueType rightType = inferExpressionType(context, binary.getRight());
             if (leftType.numeric && rightType.numeric) {
-                return leftType == ValueType.LONG || rightType == ValueType.LONG
+                return leftType == ValueType.DOUBLE || rightType == ValueType.DOUBLE
+                        ? ValueType.DOUBLE
+                        : leftType == ValueType.LONG || rightType == ValueType.LONG
                         ? ValueType.LONG
                         : ValueType.INT;
             }
@@ -693,6 +756,9 @@ public final class SimpleFunctionCodegens {
             if ("readLong".equals(calleeText)) {
                 return ValueType.LONG;
             }
+            if ("readDouble".equals(calleeText)) {
+                return ValueType.DOUBLE;
+            }
             if ("readString".equals(calleeText)) {
                 return ValueType.STRING;
             }
@@ -701,6 +767,9 @@ public final class SimpleFunctionCodegens {
             }
             if ("LongArray".equals(calleeText)) {
                 return ValueType.LONG_ARRAY;
+            }
+            if ("DoubleArray".equals(calleeText)) {
+                return ValueType.DOUBLE_ARRAY;
             }
             if ("BooleanArray".equals(calleeText)) {
                 return ValueType.BOOLEAN_ARRAY;
@@ -989,7 +1058,9 @@ public final class SimpleFunctionCodegens {
                 if (!comparable) {
                     throw new IllegalArgumentException("Comparison type mismatch: " + expression.getText());
                 }
-                ValueType comparisonType = leftType == ValueType.LONG || rightType == ValueType.LONG
+                ValueType comparisonType = leftType == ValueType.DOUBLE || rightType == ValueType.DOUBLE
+                        ? ValueType.DOUBLE
+                        : leftType == ValueType.LONG || rightType == ValueType.LONG
                         ? ValueType.LONG
                         : leftType == ValueType.CHAR ? ValueType.CHAR
                                 : leftType == ValueType.BOOLEAN ? ValueType.BOOLEAN : ValueType.INT;
@@ -997,6 +1068,9 @@ public final class SimpleFunctionCodegens {
                 emitExpressionAs(method, context, binary.getRight(), comparisonType);
                 if (comparisonType == ValueType.LONG) {
                     method.visitInsn(Opcodes.LCMP);
+                    method.visitJumpInsn(comparisonZeroOpcode(operation, jumpWhenTrue), target);
+                } else if (comparisonType == ValueType.DOUBLE) {
+                    method.visitInsn(Opcodes.DCMPL);
                     method.visitJumpInsn(comparisonZeroOpcode(operation, jumpWhenTrue), target);
                 } else {
                     method.visitJumpInsn(comparisonOpcode(operation, jumpWhenTrue), target);
@@ -1013,6 +1087,20 @@ public final class SimpleFunctionCodegens {
     }
 
     private static void emitArithmeticOpcode(MethodVisitor method, IElementType operation, ValueType type) {
+        if (type == ValueType.DOUBLE) {
+            if (operation == KtTokens.PLUS || operation == KtTokens.PLUSEQ) {
+                method.visitInsn(Opcodes.DADD);
+            } else if (operation == KtTokens.MINUS || operation == KtTokens.MINUSEQ) {
+                method.visitInsn(Opcodes.DSUB);
+            } else if (operation == KtTokens.MUL || operation == KtTokens.MULTEQ) {
+                method.visitInsn(Opcodes.DMUL);
+            } else if (operation == KtTokens.DIV || operation == KtTokens.DIVEQ) {
+                method.visitInsn(Opcodes.DDIV);
+            } else {
+                method.visitInsn(Opcodes.DREM);
+            }
+            return;
+        }
         if (type == ValueType.LONG) {
             if (operation == KtTokens.PLUS || operation == KtTokens.PLUSEQ) {
                 method.visitInsn(Opcodes.LADD);
@@ -1105,6 +1193,8 @@ public final class SimpleFunctionCodegens {
             method.visitVarInsn(Opcodes.ILOAD, index);
         } else if (type == ValueType.LONG) {
             method.visitVarInsn(Opcodes.LLOAD, index);
+        } else if (type == ValueType.DOUBLE) {
+            method.visitVarInsn(Opcodes.DLOAD, index);
         } else {
             method.visitVarInsn(Opcodes.ALOAD, index);
         }
@@ -1115,13 +1205,15 @@ public final class SimpleFunctionCodegens {
             method.visitVarInsn(Opcodes.ISTORE, index);
         } else if (type == ValueType.LONG) {
             method.visitVarInsn(Opcodes.LSTORE, index);
+        } else if (type == ValueType.DOUBLE) {
+            method.visitVarInsn(Opcodes.DSTORE, index);
         } else {
             method.visitVarInsn(Opcodes.ASTORE, index);
         }
     }
 
     private static void popIfNeeded(MethodVisitor method, ValueType type) {
-        if (type == ValueType.LONG) {
+        if (type == ValueType.LONG || type == ValueType.DOUBLE) {
             method.visitInsn(Opcodes.POP2);
         } else if (type != ValueType.VOID) {
             method.visitInsn(Opcodes.POP);
@@ -1135,6 +1227,8 @@ public final class SimpleFunctionCodegens {
                 method.visitInsn(Opcodes.IRETURN);
             } else if (expectedType == ValueType.LONG) {
                 method.visitInsn(Opcodes.LRETURN);
+            } else if (expectedType == ValueType.DOUBLE) {
+                method.visitInsn(Opcodes.DRETURN);
             } else if (expectedType == ValueType.VOID) {
                 method.visitInsn(Opcodes.RETURN);
             } else {
@@ -1158,11 +1252,14 @@ public final class SimpleFunctionCodegens {
         } else if (returnType == ValueType.LONG) {
             method.visitInsn(Opcodes.LCONST_0);
             method.visitInsn(Opcodes.LRETURN);
+        } else if (returnType == ValueType.DOUBLE) {
+            method.visitInsn(Opcodes.DCONST_0);
+            method.visitInsn(Opcodes.DRETURN);
         } else if (returnType == ValueType.STRING) {
             method.visitLdcInsn("");
             method.visitInsn(Opcodes.ARETURN);
         } else if (returnType == ValueType.INT_ARRAY || returnType == ValueType.LONG_ARRAY
-                || returnType == ValueType.BOOLEAN_ARRAY) {
+                || returnType == ValueType.DOUBLE_ARRAY || returnType == ValueType.BOOLEAN_ARRAY) {
             method.visitInsn(Opcodes.ACONST_NULL);
             method.visitInsn(Opcodes.ARETURN);
         } else {
@@ -1233,6 +1330,9 @@ public final class SimpleFunctionCodegens {
         if ("Long".equals(text)) {
             return ValueType.LONG;
         }
+        if ("Double".equals(text)) {
+            return ValueType.DOUBLE;
+        }
         if ("String".equals(text)) {
             return ValueType.STRING;
         }
@@ -1248,6 +1348,9 @@ public final class SimpleFunctionCodegens {
         if ("LongArray".equals(text)) {
             return ValueType.LONG_ARRAY;
         }
+        if ("DoubleArray".equals(text)) {
+            return ValueType.DOUBLE_ARRAY;
+        }
         if ("BooleanArray".equals(text)) {
             return ValueType.BOOLEAN_ARRAY;
         }
@@ -1257,14 +1360,26 @@ public final class SimpleFunctionCodegens {
         throw new IllegalArgumentException("Unsupported Kotlin type in browser probe emitter: " + text);
     }
 
+    private static boolean isDoubleLiteralText(String text) {
+        if (text == null || text.isEmpty()) {
+            return false;
+        }
+        if (text.charAt(0) == '\'' || text.charAt(0) == '"') {
+            return false;
+        }
+        return text.indexOf('.') >= 0 || text.indexOf('e') >= 0 || text.indexOf('E') >= 0;
+    }
+
     private enum ValueType {
         INT("I", 1, true, false),
         LONG("J", 2, true, false),
+        DOUBLE("D", 2, true, false),
         CHAR("C", 1, false, false),
         BOOLEAN("Z", 1, false, false),
         STRING("Ljava/lang/String;", 1, false, false),
         INT_ARRAY("[I", 1, false, true),
         LONG_ARRAY("[J", 1, false, true),
+        DOUBLE_ARRAY("[D", 1, false, true),
         BOOLEAN_ARRAY("[Z", 1, false, true),
         VOID("V", 0, false, false);
 

@@ -212,6 +212,10 @@ Current status:
 - The browser-facing compile export also completes `fixtures/ps-increment/Main.kt`, which covers
   prefix/postfix `++` and `--` on numeric locals, including postfix increments used as array indexes
   and prefix decrement statements. With stdin `4 3 1 4 1` it prints `inc=15 last=1`.
+- The browser-facing compile export also completes `fixtures/ps-double/Main.kt`, which covers
+  `Double` parameters/returns/locals, double literals, `readDouble()`, `DoubleArray` construction,
+  reads and writes, double arithmetic/comparisons, and double output/string templates. With stdin
+  `3 1.5 2.5 4.0` it prints `double=4.0 first=1.5`.
 - This success currently comes from a minimal PSI-based bytecode emitter for the verified fixture
   shapes, not from the full Kotlin/JVM backend. The full backend still fails because Kotlin builtins
   deserialization can read `kotlin/kotlin.kotlin_builtins` but cannot resolve `kotlin.Unit`; virtual

@@ -242,6 +242,28 @@ the expected output is:
 inc=15 last=1
 ```
 
+To run the PS-style double fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs \
+  --source tools/wasm-kotlin-teavm/fixtures/ps-double/Main.kt \
+  --out tools/wasm-kotlin-teavm/build/browser-ps-double-out
+java -cp tools/wasm-kotlin-teavm/build/browser-ps-double-out MainKt
+```
+
+With this stdin:
+
+```text
+3 1.5 2.5 4.0
+```
+
+the expected output is:
+
+```text
+double=4.0 first=1.5
+```
+
 ## Current Status
 
 This folder is a porting scaffold, not an app integration. The current probe compiles a small Java
@@ -352,6 +374,10 @@ Known findings from the initial experiments:
   prefix/postfix `++` and `--` on numeric locals, including postfix increments used as array indexes
   and prefix decrement statements. Running that generated class with `4 3 1 4 1` on stdin prints
   `inc=15 last=1`.
+- The browser-compatible probe also compiles `fixtures/ps-double/Main.kt`, which exercises
+  `Double` parameters/returns/locals, double literals, `readDouble()`, `DoubleArray` construction,
+  reads and writes, double arithmetic/comparisons, and double output/string templates. Running that
+  generated class with `3 1.5 2.5 4.0` on stdin prints `double=4.0 first=1.5`.
 - This is not a full Kotlin/JVM backend yet. The browser path is currently a minimal emitter that
   supports the verified fixture shapes above. It does not yet support enough Kotlin for real
   competitive-programming use: collections and common library helpers, classes/data classes,
