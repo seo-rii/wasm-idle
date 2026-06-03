@@ -246,6 +246,10 @@ Current status:
 - The browser-facing compile export also completes `fixtures/ps-string-builder/Main.kt`, which
   covers `StringBuilder()`, `append(...)` for primitive/string values, and `toString()`. With stdin
   `4 3 1 4 1` it prints `builder=3 1 4 1|done`.
+- The browser-facing compile export also completes `fixtures/ps-2d-array/Main.kt`, which covers
+  `Array(n) { IntArray(m) }`, nested primitive-array reads and writes, compound assignment on nested
+  elements, outer `.size`, and row `.size`. With stdin `2 3 1 2 3 4 5 6` it prints
+  `grid=6 edge=6 size=2,3`.
 - This success currently comes from a minimal PSI-based bytecode emitter for the verified fixture
   shapes, not from the full Kotlin/JVM backend. The full backend still fails because Kotlin builtins
   deserialization can read `kotlin/kotlin.kotlin_builtins` but cannot resolve `kotlin.Unit`; virtual

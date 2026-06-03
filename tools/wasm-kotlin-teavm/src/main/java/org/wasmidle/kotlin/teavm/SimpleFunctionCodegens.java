@@ -242,6 +242,87 @@ public final class SimpleFunctionCodegens {
         }
     }
 
+    private static KtExpression singleLambdaResultExpression(KtLambdaExpression lambda, String callText) {
+        KtExpression body = lambda.getBodyExpression();
+        if (body instanceof KtBlockExpression) {
+            List<KtExpression> statements = ((KtBlockExpression) body).getStatements();
+            if (statements.size() == 1) {
+                return statements.get(0);
+            }
+        } else if (body != null) {
+            return body;
+        }
+        throw new IllegalArgumentException("Only single-expression lambda bodies are supported: " + callText);
+    }
+
+    private static String lambdaParameterName(KtLambdaExpression lambda, String defaultName, String callText) {
+        List<KtParameter> parameters = lambda.getValueParameters();
+        if (parameters.size() > 1) {
+            throw new IllegalArgumentException("Lambda supports at most one parameter: " + callText);
+        }
+        if (parameters.isEmpty()) {
+            return defaultName;
+        }
+        String parameterName = parameters.get(0).getName();
+        if (parameterName == null || parameterName.isEmpty()) {
+            throw new IllegalArgumentException("Unsupported unnamed lambda parameter: " + callText);
+        }
+        return parameterName;
+    }
+
+    private static ValueType arrayTypeForArrayInitializer(ValueType initializerType, String callText) {
+        if (initializerType == ValueType.INT_ARRAY) {
+            return ValueType.INT_2D_ARRAY;
+        }
+        if (initializerType == ValueType.LONG_ARRAY) {
+            return ValueType.LONG_2D_ARRAY;
+        }
+        if (initializerType == ValueType.DOUBLE_ARRAY) {
+            return ValueType.DOUBLE_2D_ARRAY;
+        }
+        if (initializerType == ValueType.CHAR_ARRAY) {
+            return ValueType.CHAR_2D_ARRAY;
+        }
+        if (initializerType == ValueType.BOOLEAN_ARRAY) {
+            return ValueType.BOOLEAN_2D_ARRAY;
+        }
+        throw new IllegalArgumentException("Array initializer must produce a primitive array: " + callText);
+    }
+
+    private static ValueType indexedElementType(ValueType arrayType) {
+        if (arrayType == ValueType.INT_ARRAY) {
+            return ValueType.INT;
+        }
+        if (arrayType == ValueType.LONG_ARRAY) {
+            return ValueType.LONG;
+        }
+        if (arrayType == ValueType.DOUBLE_ARRAY) {
+            return ValueType.DOUBLE;
+        }
+        if (arrayType == ValueType.CHAR_ARRAY || arrayType == ValueType.STRING) {
+            return ValueType.CHAR;
+        }
+        if (arrayType == ValueType.BOOLEAN_ARRAY) {
+            return ValueType.BOOLEAN;
+        }
+        if (arrayType == ValueType.INT_2D_ARRAY) {
+            return ValueType.INT_ARRAY;
+        }
+        if (arrayType == ValueType.LONG_2D_ARRAY) {
+            return ValueType.LONG_ARRAY;
+        }
+        if (arrayType == ValueType.DOUBLE_2D_ARRAY) {
+            return ValueType.DOUBLE_ARRAY;
+        }
+        if (arrayType == ValueType.CHAR_2D_ARRAY) {
+            return ValueType.CHAR_ARRAY;
+        }
+        if (arrayType == ValueType.BOOLEAN_2D_ARRAY) {
+            return ValueType.BOOLEAN_ARRAY;
+        }
+        throw new IllegalArgumentException("Unsupported indexed type: " + arrayType);
+    }
+
     private static void emitWhenStatement(MethodVisitor method, MethodContext context, KtWhenExpression expression) {
         KtExpression subjectExpression = expression.getSubjectExpression();
         ValueType subjectType = null;
@@ -457,25 +538,30 @@ public final class SimpleFunctionCodegens {
                 }
                 return emitArrayCompoundAssignment(method, context, binary, arrayType, right);
             }
+            ValueType elementType = indexedElementType(arrayType);
             ValueType valueType = emitExpression(method, context, right);
-            if (arrayType == ValueType.INT_ARRAY && valueType == ValueType.INT) {
+            if (elementType == ValueType.INT && valueType == ValueType.INT) {
                 method.visitInsn(Opcodes.IASTORE);
                 return true;
             }
-            if (arrayType == ValueType.LONG_ARRAY && valueType == ValueType.LONG) {
+            if (elementType == ValueType.LONG && valueType == ValueType.LONG) {
                 method.visitInsn(Opcodes.LASTORE);
                 return true;
             }
-            if (arrayType == ValueType.DOUBLE_ARRAY && valueType == ValueType.DOUBLE) {
+            if (elementType == ValueType.DOUBLE && valueType == ValueType.DOUBLE) {
                 method.visitInsn(Opcodes.DASTORE);
                 return true;
             }
-            if (arrayType == ValueType.CHAR_ARRAY && valueType == ValueType.CHAR) {
+            if (elementType == ValueType.CHAR && valueType == ValueType.CHAR) {
                 method.visitInsn(Opcodes.CASTORE);
                 return true;
             }
-            if (arrayType == ValueType.BOOLEAN_ARRAY && valueType == ValueType.BOOLEAN) {
+            if (elementType == ValueType.BOOLEAN && valueType == ValueType.BOOLEAN) {
                 method.visitInsn(Opcodes.BASTORE);
+                return true;
+            }
+            if (elementType.array && valueType == elementType) {
+                method.visitInsn(Opcodes.AASTORE);
                 return true;
             }
             throw new IllegalArgumentException("Array assignment type mismatch: " + binary.getText());
@@ -685,29 +771,34 @@ public final class SimpleFunctionCodegens {
         }
         if (expression instanceof KtArrayAccessExpression) {
             ValueType arrayType = emitArrayReferenceAndIndex(method, context, (KtArrayAccessExpression) expression);
-            if (arrayType == ValueType.INT_ARRAY) {
-                method.visitInsn(Opcodes.IALOAD);
-                return ValueType.INT;
-            }
-            if (arrayType == ValueType.LONG_ARRAY) {
-                method.visitInsn(Opcodes.LALOAD);
-                return ValueType.LONG;
-            }
-            if (arrayType == ValueType.DOUBLE_ARRAY) {
-                method.visitInsn(Opcodes.DALOAD);
-                return ValueType.DOUBLE;
-            }
-            if (arrayType == ValueType.CHAR_ARRAY) {
-                method.visitInsn(Opcodes.CALOAD);
-                return ValueType.CHAR;
-            }
-            if (arrayType == ValueType.BOOLEAN_ARRAY) {
-                method.visitInsn(Opcodes.BALOAD);
-                return ValueType.BOOLEAN;
-            }
             if (arrayType == ValueType.STRING) {
                 method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/String", "charAt", "(I)C", false);
                 return ValueType.CHAR;
+            }
+            ValueType elementType = indexedElementType(arrayType);
+            if (elementType == ValueType.INT) {
+                method.visitInsn(Opcodes.IALOAD);
+                return ValueType.INT;
+            }
+            if (elementType == ValueType.LONG) {
+                method.visitInsn(Opcodes.LALOAD);
+                return ValueType.LONG;
+            }
+            if (elementType == ValueType.DOUBLE) {
+                method.visitInsn(Opcodes.DALOAD);
+                return ValueType.DOUBLE;
+            }
+            if (elementType == ValueType.CHAR) {
+                method.visitInsn(Opcodes.CALOAD);
+                return ValueType.CHAR;
+            }
+            if (elementType == ValueType.BOOLEAN) {
+                method.visitInsn(Opcodes.BALOAD);
+                return ValueType.BOOLEAN;
+            }
+            if (elementType.array) {
+                method.visitInsn(Opcodes.AALOAD);
+                return elementType;
             }
             throw new IllegalArgumentException("Unsupported array access: " + expression.getText());
         }
@@ -887,6 +978,54 @@ public final class SimpleFunctionCodegens {
         List<KtValueArgument> parenthesizedArguments = call.getValueArgumentList() == null
                 ? Collections.emptyList()
                 : call.getValueArgumentList().getArguments();
+        if ("Array".equals(calleeText) && parenthesizedArguments.size() == 1
+                && call.getLambdaArguments().size() == 1) {
+            KtExpression countExpression = parenthesizedArguments.get(0).getArgumentExpression();
+            if (countExpression == null) {
+                throw new IllegalArgumentException("Array size is missing: " + call.getText());
+            }
+            ValueType countType = emitExpression(method, context, countExpression);
+            if (countType != ValueType.INT) {
+                throw new IllegalArgumentException("Array size must be Int: " + call.getText());
+            }
+            int countIndex = context.allocateTemporary(ValueType.INT);
+            method.visitVarInsn(Opcodes.ISTORE, countIndex);
+            int loopIndex = context.allocateTemporary(ValueType.INT);
+            KtLambdaExpression lambda = call.getLambdaArguments().get(0).getLambdaExpression();
+            String parameterName = lambdaParameterName(lambda, "it", call.getText());
+            Local previousLocal = context.locals.get(parameterName);
+            context.locals.put(parameterName, new Local(loopIndex, ValueType.INT));
+            KtExpression initializer = singleLambdaResultExpression(lambda, call.getText());
+            ValueType initializerType = inferExpressionType(context, initializer);
+            ValueType arrayType = arrayTypeForArrayInitializer(initializerType, call.getText());
+            method.visitVarInsn(Opcodes.ILOAD, countIndex);
+            method.visitTypeInsn(Opcodes.ANEWARRAY, indexedElementType(arrayType).descriptor);
+            int arrayIndex = context.allocateTemporary(arrayType);
+            method.visitVarInsn(Opcodes.ASTORE, arrayIndex);
+            method.visitInsn(Opcodes.ICONST_0);
+            method.visitVarInsn(Opcodes.ISTORE, loopIndex);
+
+            Label startLabel = new Label();
+            Label endLabel = new Label();
+            method.visitLabel(startLabel);
+            method.visitVarInsn(Opcodes.ILOAD, loopIndex);
+            method.visitVarInsn(Opcodes.ILOAD, countIndex);
+            method.visitJumpInsn(Opcodes.IF_ICMPGE, endLabel);
+            method.visitVarInsn(Opcodes.ALOAD, arrayIndex);
+            method.visitVarInsn(Opcodes.ILOAD, loopIndex);
+            emitExpressionAs(method, context, initializer, initializerType);
+            method.visitInsn(Opcodes.AASTORE);
+            method.visitIincInsn(loopIndex, 1);
+            method.visitJumpInsn(Opcodes.GOTO, startLabel);
+            method.visitLabel(endLabel);
+            method.visitVarInsn(Opcodes.ALOAD, arrayIndex);
+            if (previousLocal == null) {
+                context.locals.remove(parameterName);
+            } else {
+                context.locals.put(parameterName, previousLocal);
+            }
+            return arrayType;
+        }
         if ("repeat".equals(calleeText) && parenthesizedArguments.size() == 1
                 && call.getLambdaArguments().size() == 1) {
             KtExpression countExpression = parenthesizedArguments.get(0).getArgumentExpression();
@@ -904,17 +1043,7 @@ public final class SimpleFunctionCodegens {
             method.visitVarInsn(Opcodes.ISTORE, loopIndex);
 
             KtLambdaExpression lambda = call.getLambdaArguments().get(0).getLambdaExpression();
-            List<KtParameter> parameters = lambda.getValueParameters();
-            if (parameters.size() > 1) {
-                throw new IllegalArgumentException("repeat lambda supports at most one parameter: " + call.getText());
-            }
-            String parameterName = "it";
-            if (parameters.size() == 1) {
-                parameterName = parameters.get(0).getName();
-                if (parameterName == null || parameterName.isEmpty()) {
-                    throw new IllegalArgumentException("Unsupported unnamed repeat parameter: " + call.getText());
-                }
-            }
+            String parameterName = lambdaParameterName(lambda, "it", call.getText());
             Local previousLocal = context.locals.get(parameterName);
             context.locals.put(parameterName, new Local(loopIndex, ValueType.INT));
 
@@ -1131,33 +1260,14 @@ public final class SimpleFunctionCodegens {
         }
         if (expression instanceof KtArrayAccessExpression) {
             KtExpression arrayExpression = ((KtArrayAccessExpression) expression).getArrayExpression();
-            if (!(arrayExpression instanceof KtNameReferenceExpression)) {
-                throw new IllegalArgumentException("Only local array type inference is supported: "
-                        + expression.getText());
+            if (arrayExpression == null) {
+                throw new IllegalArgumentException("Missing array expression: " + expression.getText());
             }
-            Local local = context.locals.get(arrayExpression.getText());
-            if (local == null) {
-                throw new IllegalArgumentException("Unknown array local: " + arrayExpression.getText());
+            ValueType arrayType = inferExpressionType(context, arrayExpression);
+            if (!arrayType.array && arrayType != ValueType.STRING) {
+                throw new IllegalArgumentException("Unsupported array type: " + expression.getText());
             }
-            if (local.type == ValueType.INT_ARRAY) {
-                return ValueType.INT;
-            }
-            if (local.type == ValueType.LONG_ARRAY) {
-                return ValueType.LONG;
-            }
-            if (local.type == ValueType.DOUBLE_ARRAY) {
-                return ValueType.DOUBLE;
-            }
-            if (local.type == ValueType.CHAR_ARRAY) {
-                return ValueType.CHAR;
-            }
-            if (local.type == ValueType.BOOLEAN_ARRAY) {
-                return ValueType.BOOLEAN;
-            }
-            if (local.type == ValueType.STRING) {
-                return ValueType.CHAR;
-            }
-            throw new IllegalArgumentException("Unsupported array type: " + expression.getText());
+            return indexedElementType(arrayType);
         }
         if (expression instanceof KtDotQualifiedExpression) {
             KtDotQualifiedExpression qualified = (KtDotQualifiedExpression) expression;
@@ -1223,6 +1333,31 @@ public final class SimpleFunctionCodegens {
             }
             if ("readString".equals(calleeText)) {
                 return ValueType.STRING;
+            }
+            if ("Array".equals(calleeText)) {
+                List<KtValueArgument> parenthesizedArguments = ((KtCallExpression) expression)
+                        .getValueArgumentList() == null
+                        ? Collections.emptyList()
+                        : ((KtCallExpression) expression).getValueArgumentList().getArguments();
+                if (parenthesizedArguments.size() == 1
+                        && ((KtCallExpression) expression).getLambdaArguments().size() == 1) {
+                    KtLambdaExpression lambda = ((KtCallExpression) expression).getLambdaArguments()
+                            .get(0).getLambdaExpression();
+                    String parameterName = lambdaParameterName(lambda, "it", expression.getText());
+                    Local previousLocal = context.locals.get(parameterName);
+                    context.locals.put(parameterName, new Local(-1, ValueType.INT));
+                    try {
+                        ValueType initializerType = inferExpressionType(context,
+                                singleLambdaResultExpression(lambda, expression.getText()));
+                        return arrayTypeForArrayInitializer(initializerType, expression.getText());
+                    } finally {
+                        if (previousLocal == null) {
+                            context.locals.remove(parameterName);
+                        } else {
+                            context.locals.put(parameterName, previousLocal);
+                        }
+                    }
+                }
             }
             if ("StringBuilder".equals(calleeText)) {
                 return ValueType.STRING_BUILDER;
@@ -1302,20 +1437,29 @@ public final class SimpleFunctionCodegens {
     private static ValueType emitArrayReferenceAndIndex(
             MethodVisitor method, MethodContext context, KtArrayAccessExpression expression) {
         KtExpression arrayExpression = expression.getArrayExpression();
-        if (!(arrayExpression instanceof KtNameReferenceExpression) || expression.getIndexExpressions().size() != 1) {
-            throw new IllegalArgumentException("Only local one-dimensional arrays are supported: "
+        if (arrayExpression == null || expression.getIndexExpressions().size() != 1) {
+            throw new IllegalArgumentException("Only one-dimensional index expressions are supported: "
                     + expression.getText());
         }
-        Local local = context.locals.get(arrayExpression.getText());
-        if (local == null || (!local.type.array && local.type != ValueType.STRING)) {
-            throw new IllegalArgumentException("Unknown array local: " + arrayExpression.getText());
+        ValueType arrayType;
+        if (arrayExpression instanceof KtNameReferenceExpression) {
+            Local local = context.locals.get(arrayExpression.getText());
+            if (local == null || (!local.type.array && local.type != ValueType.STRING)) {
+                throw new IllegalArgumentException("Unknown array local: " + arrayExpression.getText());
+            }
+            method.visitVarInsn(Opcodes.ALOAD, local.index);
+            arrayType = local.type;
+        } else {
+            arrayType = emitExpression(method, context, arrayExpression);
+            if (!arrayType.array && arrayType != ValueType.STRING) {
+                throw new IllegalArgumentException("Unsupported array expression: " + arrayExpression.getText());
+            }
         }
-        method.visitVarInsn(Opcodes.ALOAD, local.index);
         ValueType indexType = emitExpression(method, context, expression.getIndexExpressions().get(0));
         if (indexType != ValueType.INT) {
             throw new IllegalArgumentException("Array index must be Int: " + expression.getText());
         }
-        return local.type;
+        return arrayType;
     }
 
     private static void ensureReadStringHelper(MethodContext context) {
@@ -1786,7 +1930,9 @@ public final class SimpleFunctionCodegens {
             method.visitInsn(Opcodes.ARETURN);
         } else if (returnType == ValueType.INT_ARRAY || returnType == ValueType.LONG_ARRAY
                 || returnType == ValueType.DOUBLE_ARRAY || returnType == ValueType.CHAR_ARRAY
-                || returnType == ValueType.BOOLEAN_ARRAY) {
+                || returnType == ValueType.BOOLEAN_ARRAY || returnType == ValueType.INT_2D_ARRAY
+                || returnType == ValueType.LONG_2D_ARRAY || returnType == ValueType.DOUBLE_2D_ARRAY
+                || returnType == ValueType.CHAR_2D_ARRAY || returnType == ValueType.BOOLEAN_2D_ARRAY) {
             method.visitInsn(Opcodes.ACONST_NULL);
             method.visitInsn(Opcodes.ARETURN);
         } else {
@@ -1887,6 +2033,21 @@ public final class SimpleFunctionCodegens {
         if ("BooleanArray".equals(text)) {
             return ValueType.BOOLEAN_ARRAY;
         }
+        if ("Array<IntArray>".equals(text)) {
+            return ValueType.INT_2D_ARRAY;
+        }
+        if ("Array<LongArray>".equals(text)) {
+            return ValueType.LONG_2D_ARRAY;
+        }
+        if ("Array<DoubleArray>".equals(text)) {
+            return ValueType.DOUBLE_2D_ARRAY;
+        }
+        if ("Array<CharArray>".equals(text)) {
+            return ValueType.CHAR_2D_ARRAY;
+        }
+        if ("Array<BooleanArray>".equals(text)) {
+            return ValueType.BOOLEAN_2D_ARRAY;
+        }
         if ("Unit".equals(text)) {
             return ValueType.VOID;
         }
@@ -1954,6 +2115,11 @@ public final class SimpleFunctionCodegens {
         DOUBLE_ARRAY("[D", 1, false, true),
         CHAR_ARRAY("[C", 1, false, true),
         BOOLEAN_ARRAY("[Z", 1, false, true),
+        INT_2D_ARRAY("[[I", 1, false, true),
+        LONG_2D_ARRAY("[[J", 1, false, true),
+        DOUBLE_2D_ARRAY("[[D", 1, false, true),
+        CHAR_2D_ARRAY("[[C", 1, false, true),
+        BOOLEAN_2D_ARRAY("[[Z", 1, false, true),
         VOID("V", 0, false, false);
 
         private final String descriptor;

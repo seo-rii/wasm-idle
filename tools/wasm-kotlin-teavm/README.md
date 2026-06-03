@@ -456,6 +456,28 @@ the expected output is:
 builder=3 1 4 1|done
 ```
 
+To run the PS-style 2D primitive-array fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs \
+  --source tools/wasm-kotlin-teavm/fixtures/ps-2d-array/Main.kt \
+  --out tools/wasm-kotlin-teavm/build/browser-ps-2d-array-out
+java -cp tools/wasm-kotlin-teavm/build/browser-ps-2d-array-out MainKt
+```
+
+With this stdin:
+
+```text
+2 3 1 2 3 4 5 6
+```
+
+the expected output is:
+
+```text
+grid=6 edge=6 size=2,3
+```
+
 ## Current Status
 
 This folder is a porting scaffold, not an app integration. The current probe compiles a small Java
@@ -602,6 +624,10 @@ Known findings from the initial experiments:
 - The browser-compatible probe also compiles `fixtures/ps-string-builder/Main.kt`, which exercises
   `StringBuilder()`, `append(...)` for primitive/string values, and `toString()`. Running that
   generated class with `4 3 1 4 1` on stdin prints `builder=3 1 4 1|done`.
+- The browser-compatible probe also compiles `fixtures/ps-2d-array/Main.kt`, which exercises
+  `Array(n) { IntArray(m) }`, nested primitive-array reads and writes, compound assignment on nested
+  elements, outer `.size`, and row `.size`. Running that generated class with
+  `2 3 1 2 3 4 5 6` on stdin prints `grid=6 edge=6 size=2,3`.
 - This is not a full Kotlin/JVM backend yet. The browser path is currently a minimal emitter that
   supports the verified fixture shapes above. It does not yet support enough Kotlin for real
   competitive-programming use: collections and common library helpers, classes/data classes,
