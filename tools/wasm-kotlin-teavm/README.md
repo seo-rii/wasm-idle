@@ -176,6 +176,28 @@ the expected output is:
 score=25 first=a secondLast=e
 ```
 
+To run the PS-style package/import fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs \
+  --source tools/wasm-kotlin-teavm/fixtures/ps-package-import/Main.kt \
+  --out tools/wasm-kotlin-teavm/build/browser-ps-package-import-out
+java -cp tools/wasm-kotlin-teavm/build/browser-ps-package-import-out solve.MainKt
+```
+
+With this stdin:
+
+```text
+42 30
+```
+
+the expected output is:
+
+```text
+pkg=6
+```
+
 ## Current Status
 
 This folder is a porting scaffold, not an app integration. The current probe compiles a small Java
@@ -272,11 +294,15 @@ Known findings from the initial experiments:
   string-token input through `readString()`, `String.length`, `String[index]`, `Char` literals and
   comparisons, character appends in string templates, and character output support. Running that
   generated class with `algorithm queue` on stdin prints `score=25 first=a secondLast=e`.
+- The browser-compatible probe also compiles `fixtures/ps-package-import/Main.kt`, which exercises a
+  package declaration and a common unused import header. The browser source prepass strips import
+  directives before reduced Kotlin analysis so the minimal emitter can accept typical PS boilerplate;
+  imported library symbols are still part of the separate library-helper target. Running that
+  generated class with `42 30` on stdin prints `pkg=6`.
 - This is not a full Kotlin/JVM backend yet. The browser path is currently a minimal emitter that
   supports the verified fixture shapes above. It does not yet support enough Kotlin for real
-  competitive-programming use: packages/imports, collections and common library helpers,
-  classes/data classes, lambdas, generics, broader library calls, and stable classpath jar reads are
-  still missing.
+  competitive-programming use: collections and common library helpers, classes/data classes,
+  lambdas, generics, broader library calls, and stable classpath jar reads are still missing.
 - Full Kotlin backend restoration is still blocked by Kotlin builtins deserialization in the TeaVM
   runtime: the `.kotlin_builtins` resource is readable, but `DefaultBuiltIns.getUnitType()` still
   reports that `kotlin.Unit` is missing. Virtual classpath jar reads also still warn with

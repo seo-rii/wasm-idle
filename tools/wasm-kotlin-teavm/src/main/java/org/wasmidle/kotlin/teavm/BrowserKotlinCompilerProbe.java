@@ -23,8 +23,12 @@ public final class BrowserKotlinCompilerProbe {
     @JSExport
     @JSMethod("compileKotlinSource")
     public static boolean compileKotlinSource(String sourcePath, String outputDir, String classpath) {
-        return KotlinCompilerProbe.compileWithoutHostJdk(
-                sourcePath, outputDir, splitClasspath(classpath));
+        try {
+            return KotlinCompilerProbe.compileWithoutHostJdk(
+                    sanitizeSourcePath(sourcePath), outputDir, splitClasspath(classpath));
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @JSExport
@@ -32,7 +36,7 @@ public final class BrowserKotlinCompilerProbe {
     public static boolean compileKotlinSourceContent(String source, String outputDir, String classpathPayload) {
         try {
             String sourcePath = "/workspace/src/Main.kt";
-            writeVirtualFile(sourcePath, source.getBytes(StandardCharsets.UTF_8));
+            writeVirtualFile(sourcePath, stripImportDirectives(source).getBytes(StandardCharsets.UTF_8));
             String[] classpath = materializeClasspath(classpathPayload);
             new File(outputDir).mkdirs();
             return KotlinCompilerProbe.compileWithoutHostJdk(sourcePath, outputDir, classpath);
@@ -46,7 +50,7 @@ public final class BrowserKotlinCompilerProbe {
     public static String describeKotlinCompileFailure(String sourcePath, String outputDir, String classpath) {
         try {
             return KotlinCompilerProbe.compileWithoutHostJdkAndDescribe(
-                    sourcePath, outputDir, splitClasspath(classpath));
+                    sanitizeSourcePath(sourcePath), outputDir, splitClasspath(classpath));
         } catch (Throwable failure) {
             return describe(failure);
         }
@@ -57,7 +61,7 @@ public final class BrowserKotlinCompilerProbe {
     public static String describeKotlinCompileContentFailure(String source, String outputDir, String classpathPayload) {
         try {
             String sourcePath = "/workspace/src/Main.kt";
-            writeVirtualFile(sourcePath, source.getBytes(StandardCharsets.UTF_8));
+            writeVirtualFile(sourcePath, stripImportDirectives(source).getBytes(StandardCharsets.UTF_8));
             String[] classpath = materializeClasspath(classpathPayload);
             new File(outputDir).mkdirs();
             return KotlinCompilerProbe.compileWithoutHostJdkAndDescribe(sourcePath, outputDir, classpath);
@@ -113,6 +117,48 @@ public final class BrowserKotlinCompilerProbe {
         } catch (Throwable failure) {
             return describe(failure);
         }
+    }
+
+    private static String sanitizeSourcePath(String sourcePath) throws IOException {
+        String sanitizedPath = "/workspace/src/Main.kt";
+        String source = new String(readVirtualFile(sourcePath), StandardCharsets.UTF_8);
+        writeVirtualFile(sanitizedPath, stripImportDirectives(source).getBytes(StandardCharsets.UTF_8));
+        return sanitizedPath;
+    }
+
+    private static String stripImportDirectives(String source) {
+        if (source == null || source.isEmpty()) {
+            return "";
+        }
+        StringBuilder result = new StringBuilder(source.length());
+        int start = 0;
+        while (start < source.length()) {
+            int end = source.indexOf('\n', start);
+            boolean hasNewline = end >= 0;
+            if (!hasNewline) {
+                end = source.length();
+            }
+            int first = start;
+            while (first < end) {
+                char ch = source.charAt(first);
+                if (ch != ' ' && ch != '\t') {
+                    break;
+                }
+                first++;
+            }
+            boolean importDirective = first + 6 <= end
+                    && source.startsWith("import", first)
+                    && (first + 6 == end || source.charAt(first + 6) == ' '
+                            || source.charAt(first + 6) == '\t');
+            if (!importDirective) {
+                result.append(source, start, end);
+            }
+            if (hasNewline) {
+                result.append('\n');
+            }
+            start = end + 1;
+        }
+        return result.toString();
     }
 
     private static String[] materializeClasspath(String classpathPayload) throws IOException {
