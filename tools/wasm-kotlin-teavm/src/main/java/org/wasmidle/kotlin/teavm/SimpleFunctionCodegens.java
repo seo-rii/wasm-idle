@@ -899,6 +899,104 @@ public final class SimpleFunctionCodegens {
                         return ValueType.DOUBLE;
                     }
                 }
+                if (callee != null && ("trim".equals(callee.getText()) || "lowercase".equals(callee.getText())
+                        || "uppercase".equals(callee.getText()))
+                        && ((KtCallExpression) selector).getValueArguments().isEmpty()) {
+                    ValueType receiverType = inferExpressionType(context, receiver);
+                    if (receiverType == ValueType.STRING) {
+                        emitExpressionAs(method, context, receiver, ValueType.STRING);
+                        String methodName = callee.getText();
+                        if ("lowercase".equals(methodName)) {
+                            methodName = "toLowerCase";
+                        } else if ("uppercase".equals(methodName)) {
+                            methodName = "toUpperCase";
+                        }
+                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/String", methodName,
+                                "()Ljava/lang/String;", false);
+                        return ValueType.STRING;
+                    }
+                }
+                if (callee != null && "substring".equals(callee.getText())
+                        && (((KtCallExpression) selector).getValueArguments().size() == 1
+                                || ((KtCallExpression) selector).getValueArguments().size() == 2)) {
+                    ValueType receiverType = inferExpressionType(context, receiver);
+                    if (receiverType == ValueType.STRING) {
+                        emitExpressionAs(method, context, receiver, ValueType.STRING);
+                        emitExpressionAs(method, context,
+                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
+                                ValueType.INT);
+                        if (((KtCallExpression) selector).getValueArguments().size() == 1) {
+                            method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/String", "substring",
+                                    "(I)Ljava/lang/String;", false);
+                        } else {
+                            emitExpressionAs(method, context,
+                                    ((KtCallExpression) selector).getValueArguments().get(1)
+                                            .getArgumentExpression(),
+                                    ValueType.INT);
+                            method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/String", "substring",
+                                    "(II)Ljava/lang/String;", false);
+                        }
+                        return ValueType.STRING;
+                    }
+                }
+                if (callee != null && ("startsWith".equals(callee.getText()) || "endsWith".equals(callee.getText())
+                        || "contains".equals(callee.getText()))
+                        && ((KtCallExpression) selector).getValueArguments().size() == 1) {
+                    ValueType receiverType = inferExpressionType(context, receiver);
+                    if (receiverType == ValueType.STRING) {
+                        emitExpressionAs(method, context, receiver, ValueType.STRING);
+                        KtExpression argument = ((KtCallExpression) selector).getValueArguments()
+                                .get(0).getArgumentExpression();
+                        ValueType argumentType = inferExpressionType(context, argument);
+                        if ("contains".equals(callee.getText())) {
+                            if (argumentType == ValueType.CHAR) {
+                                emitExpressionAs(method, context, argument, ValueType.CHAR);
+                                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/String", "indexOf",
+                                        "(I)I", false);
+                                Label trueLabel = new Label();
+                                Label endLabel = new Label();
+                                method.visitInsn(Opcodes.ICONST_M1);
+                                method.visitJumpInsn(Opcodes.IF_ICMPNE, trueLabel);
+                                method.visitInsn(Opcodes.ICONST_0);
+                                method.visitJumpInsn(Opcodes.GOTO, endLabel);
+                                method.visitLabel(trueLabel);
+                                method.visitInsn(Opcodes.ICONST_1);
+                                method.visitLabel(endLabel);
+                            } else {
+                                emitExpressionAs(method, context, argument, ValueType.STRING);
+                                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/String", "contains",
+                                        "(Ljava/lang/CharSequence;)Z", false);
+                            }
+                        } else {
+                            emitExpressionAs(method, context, argument, ValueType.STRING);
+                            method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/String", callee.getText(),
+                                    "(Ljava/lang/String;)Z", false);
+                        }
+                        return ValueType.BOOLEAN;
+                    }
+                }
+                if (callee != null && ("indexOf".equals(callee.getText()) || "lastIndexOf".equals(callee.getText()))
+                        && ((KtCallExpression) selector).getValueArguments().size() == 1) {
+                    ValueType receiverType = inferExpressionType(context, receiver);
+                    if (receiverType == ValueType.STRING) {
+                        emitExpressionAs(method, context, receiver, ValueType.STRING);
+                        KtExpression argument = ((KtCallExpression) selector).getValueArguments()
+                                .get(0).getArgumentExpression();
+                        ValueType argumentType = inferExpressionType(context, argument);
+                        if (argumentType == ValueType.CHAR) {
+                            emitExpressionAs(method, context, argument, ValueType.CHAR);
+                            method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/String", callee.getText(),
+                                    "(I)I", false);
+                            return ValueType.INT;
+                        }
+                        if (argumentType == ValueType.STRING) {
+                            emitExpressionAs(method, context, argument, ValueType.STRING);
+                            method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/String", callee.getText(),
+                                    "(Ljava/lang/String;)I", false);
+                            return ValueType.INT;
+                        }
+                    }
+                }
                 if (callee != null && "sort".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().isEmpty()) {
                     ValueType receiverType = emitExpression(method, context, receiver);
@@ -1701,6 +1799,33 @@ public final class SimpleFunctionCodegens {
                         return ValueType.LONG;
                     }
                     return ValueType.DOUBLE;
+                }
+                if (callee != null && ("trim".equals(callee.getText()) || "lowercase".equals(callee.getText())
+                        || "uppercase".equals(callee.getText()))
+                        && ((KtCallExpression) selector).getValueArguments().isEmpty()
+                        && inferExpressionType(context, qualified.getReceiverExpression()) == ValueType.STRING) {
+                    return ValueType.STRING;
+                }
+                if (callee != null && "substring".equals(callee.getText())
+                        && (((KtCallExpression) selector).getValueArguments().size() == 1
+                                || ((KtCallExpression) selector).getValueArguments().size() == 2)
+                        && inferExpressionType(context, qualified.getReceiverExpression()) == ValueType.STRING) {
+                    return ValueType.STRING;
+                }
+                if (callee != null && ("startsWith".equals(callee.getText()) || "endsWith".equals(callee.getText())
+                        || "contains".equals(callee.getText()))
+                        && ((KtCallExpression) selector).getValueArguments().size() == 1
+                        && inferExpressionType(context, qualified.getReceiverExpression()) == ValueType.STRING) {
+                    return ValueType.BOOLEAN;
+                }
+                if (callee != null && ("indexOf".equals(callee.getText()) || "lastIndexOf".equals(callee.getText()))
+                        && ((KtCallExpression) selector).getValueArguments().size() == 1
+                        && inferExpressionType(context, qualified.getReceiverExpression()) == ValueType.STRING) {
+                    ValueType argumentType = inferExpressionType(context,
+                            ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression());
+                    if (argumentType == ValueType.CHAR || argumentType == ValueType.STRING) {
+                        return ValueType.INT;
+                    }
                 }
                 if (callee != null && "sort".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().isEmpty()) {

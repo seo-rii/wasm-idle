@@ -656,6 +656,22 @@ The expected output is:
 in=131071 size=3,3
 ```
 
+To run the PS-style String API fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs \
+  --source tools/wasm-kotlin-teavm/fixtures/ps-string-api/Main.kt \
+  --out tools/wasm-kotlin-teavm/build/browser-ps-string-api-out
+printf 'algorithmgo\n' | java -cp tools/wasm-kotlin-teavm/build/browser-ps-string-api-out MainKt
+```
+
+The expected output is:
+
+```text
+str=algor|ithmgo|orithm idx=3,2,9 score=15 case=kotlingo/KOTLINGO
+```
+
 ## Current Status
 
 This folder is a porting scaffold, not an app integration. The current probe compiles a small Java
@@ -846,6 +862,10 @@ Known findings from the initial experiments:
   `in`/`!in` for `Int` ranges, `String`/`Char` in `String`, `String` in `String`, and membership in
   the verified `Int` collection/map shapes above. With stdin `4 1 2 3 2 algorithmgo` it prints
   `in=131071 size=3,3`.
+- The browser-compatible probe also compiles `fixtures/ps-string-api/Main.kt`, which exercises
+  `String.substring`, `startsWith`, `endsWith`, `contains` with `String` and `Char`, `indexOf`,
+  `lastIndexOf`, `trim`, `lowercase`, and `uppercase`. With stdin `algorithmgo` it prints
+  `str=algor|ithmgo|orithm idx=3,2,9 score=15 case=kotlingo/KOTLINGO`.
 - This is not a full Kotlin/JVM backend yet. The browser path is currently a minimal emitter that
   supports the verified fixture shapes above. It does not yet support enough Kotlin for real
   competitive-programming use: full collections and common library helpers, classes/data classes,

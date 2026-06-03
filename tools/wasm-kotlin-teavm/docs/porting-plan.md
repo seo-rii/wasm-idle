@@ -288,6 +288,10 @@ Current status:
   `in`/`!in` for `Int` ranges, `String`/`Char` in `String`, `String` in `String`, and membership in
   the verified `Int` collection/map shapes above. With stdin `4 1 2 3 2 algorithmgo` it prints
   `in=131071 size=3,3`.
+- The browser-facing compile export also completes `fixtures/ps-string-api/Main.kt`, which covers
+  `String.substring`, `startsWith`, `endsWith`, `contains` with `String` and `Char`, `indexOf`,
+  `lastIndexOf`, `trim`, `lowercase`, and `uppercase`. With stdin `algorithmgo` it prints
+  `str=algor|ithmgo|orithm idx=3,2,9 score=15 case=kotlingo/KOTLINGO`.
 - This success currently comes from a minimal PSI-based bytecode emitter for the verified fixture
   shapes, not from the full Kotlin/JVM backend. The full backend still fails because Kotlin builtins
   deserialization can read `kotlin/kotlin.kotlin_builtins` but cannot resolve `kotlin.Unit`; virtual
