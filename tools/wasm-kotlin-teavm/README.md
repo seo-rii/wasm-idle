@@ -434,6 +434,28 @@ the expected output is:
 when=10 23
 ```
 
+To run the PS-style StringBuilder fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs \
+  --source tools/wasm-kotlin-teavm/fixtures/ps-string-builder/Main.kt \
+  --out tools/wasm-kotlin-teavm/build/browser-ps-string-builder-out
+java -cp tools/wasm-kotlin-teavm/build/browser-ps-string-builder-out MainKt
+```
+
+With this stdin:
+
+```text
+4 3 1 4 1
+```
+
+the expected output is:
+
+```text
+builder=3 1 4 1|done
+```
+
 ## Current Status
 
 This folder is a porting scaffold, not an app integration. The current probe compiles a small Java
@@ -577,6 +599,9 @@ Known findings from the initial experiments:
 - The browser-compatible probe also compiles `fixtures/ps-when/Main.kt`, which exercises subject
   `when` statements with comma-separated value conditions and condition-only `when` expressions.
   Running that generated class with `0 2` on stdin prints `when=10 23`.
+- The browser-compatible probe also compiles `fixtures/ps-string-builder/Main.kt`, which exercises
+  `StringBuilder()`, `append(...)` for primitive/string values, and `toString()`. Running that
+  generated class with `4 3 1 4 1` on stdin prints `builder=3 1 4 1|done`.
 - This is not a full Kotlin/JVM backend yet. The browser path is currently a minimal emitter that
   supports the verified fixture shapes above. It does not yet support enough Kotlin for real
   competitive-programming use: collections and common library helpers, classes/data classes,

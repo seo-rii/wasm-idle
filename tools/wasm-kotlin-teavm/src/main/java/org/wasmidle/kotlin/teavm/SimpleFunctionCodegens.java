@@ -221,6 +221,11 @@ public final class SimpleFunctionCodegens {
             popIfNeeded(method, type);
             return;
         }
+        if (statement instanceof KtDotQualifiedExpression) {
+            ValueType type = emitExpression(method, context, statement);
+            popIfNeeded(method, type);
+            return;
+        }
 
         throw new IllegalArgumentException("Unsupported Kotlin statement in browser probe emitter: "
                 + statement.getText());
@@ -726,6 +731,43 @@ public final class SimpleFunctionCodegens {
             }
             if (selector instanceof KtCallExpression) {
                 KtExpression callee = ((KtCallExpression) selector).getCalleeExpression();
+                if (callee != null && "append".equals(callee.getText())
+                        && ((KtCallExpression) selector).getValueArguments().size() == 1) {
+                    ValueType receiverType = emitExpression(method, context, receiver);
+                    if (receiverType == ValueType.STRING_BUILDER) {
+                        ValueType argumentType = emitExpression(method, context,
+                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression());
+                        String descriptor;
+                        if (argumentType == ValueType.INT) {
+                            descriptor = "(I)Ljava/lang/StringBuilder;";
+                        } else if (argumentType == ValueType.LONG) {
+                            descriptor = "(J)Ljava/lang/StringBuilder;";
+                        } else if (argumentType == ValueType.DOUBLE) {
+                            descriptor = "(D)Ljava/lang/StringBuilder;";
+                        } else if (argumentType == ValueType.CHAR) {
+                            descriptor = "(C)Ljava/lang/StringBuilder;";
+                        } else if (argumentType == ValueType.BOOLEAN) {
+                            descriptor = "(Z)Ljava/lang/StringBuilder;";
+                        } else if (argumentType == ValueType.STRING) {
+                            descriptor = "(Ljava/lang/String;)Ljava/lang/StringBuilder;";
+                        } else {
+                            throw new IllegalArgumentException("Unsupported StringBuilder.append type: "
+                                    + selector.getText());
+                        }
+                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append",
+                                descriptor, false);
+                        return ValueType.STRING_BUILDER;
+                    }
+                }
+                if (callee != null && "toString".equals(callee.getText())
+                        && ((KtCallExpression) selector).getValueArguments().isEmpty()) {
+                    ValueType receiverType = emitExpression(method, context, receiver);
+                    if (receiverType == ValueType.STRING_BUILDER) {
+                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString",
+                                "()Ljava/lang/String;", false);
+                        return ValueType.STRING;
+                    }
+                }
                 if (callee != null && "toCharArray".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().isEmpty()) {
                     ValueType receiverType = emitExpression(method, context, receiver);
@@ -957,6 +999,12 @@ public final class SimpleFunctionCodegens {
             method.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_LONG);
             return ValueType.LONG_ARRAY;
         }
+        if ("StringBuilder".equals(calleeText) && call.getValueArguments().isEmpty()) {
+            method.visitTypeInsn(Opcodes.NEW, "java/lang/StringBuilder");
+            method.visitInsn(Opcodes.DUP);
+            method.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "()V", false);
+            return ValueType.STRING_BUILDER;
+        }
         if ("readInt".equals(calleeText) && call.getValueArguments().isEmpty()) {
             ensureReadIntHelper(context);
             method.visitMethodInsn(Opcodes.INVOKESTATIC, context.ownerInternalName, "__wasmIdleReadInt", "()I",
@@ -1124,6 +1172,18 @@ public final class SimpleFunctionCodegens {
             }
             if (selector instanceof KtCallExpression) {
                 KtExpression callee = ((KtCallExpression) selector).getCalleeExpression();
+                if (callee != null && "append".equals(callee.getText())
+                        && ((KtCallExpression) selector).getValueArguments().size() == 1
+                        && inferExpressionType(context, qualified.getReceiverExpression())
+                                == ValueType.STRING_BUILDER) {
+                    return ValueType.STRING_BUILDER;
+                }
+                if (callee != null && "toString".equals(callee.getText())
+                        && ((KtCallExpression) selector).getValueArguments().isEmpty()
+                        && inferExpressionType(context, qualified.getReceiverExpression())
+                                == ValueType.STRING_BUILDER) {
+                    return ValueType.STRING;
+                }
                 if (callee != null && "toCharArray".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().isEmpty()
                         && inferExpressionType(context, qualified.getReceiverExpression()) == ValueType.STRING) {
@@ -1163,6 +1223,9 @@ public final class SimpleFunctionCodegens {
             }
             if ("readString".equals(calleeText)) {
                 return ValueType.STRING;
+            }
+            if ("StringBuilder".equals(calleeText)) {
+                return ValueType.STRING_BUILDER;
             }
             if ("IntArray".equals(calleeText)) {
                 return ValueType.INT_ARRAY;
@@ -1718,6 +1781,9 @@ public final class SimpleFunctionCodegens {
         } else if (returnType == ValueType.STRING) {
             method.visitLdcInsn("");
             method.visitInsn(Opcodes.ARETURN);
+        } else if (returnType == ValueType.STRING_BUILDER) {
+            method.visitInsn(Opcodes.ACONST_NULL);
+            method.visitInsn(Opcodes.ARETURN);
         } else if (returnType == ValueType.INT_ARRAY || returnType == ValueType.LONG_ARRAY
                 || returnType == ValueType.DOUBLE_ARRAY || returnType == ValueType.CHAR_ARRAY
                 || returnType == ValueType.BOOLEAN_ARRAY) {
@@ -1796,6 +1862,9 @@ public final class SimpleFunctionCodegens {
         }
         if ("String".equals(text)) {
             return ValueType.STRING;
+        }
+        if ("StringBuilder".equals(text)) {
+            return ValueType.STRING_BUILDER;
         }
         if ("Char".equals(text)) {
             return ValueType.CHAR;
@@ -1879,6 +1948,7 @@ public final class SimpleFunctionCodegens {
         CHAR("C", 1, false, false),
         BOOLEAN("Z", 1, false, false),
         STRING("Ljava/lang/String;", 1, false, false),
+        STRING_BUILDER("Ljava/lang/StringBuilder;", 1, false, false),
         INT_ARRAY("[I", 1, false, true),
         LONG_ARRAY("[J", 1, false, true),
         DOUBLE_ARRAY("[D", 1, false, true),
