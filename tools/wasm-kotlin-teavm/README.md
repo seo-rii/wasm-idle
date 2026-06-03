@@ -720,6 +720,22 @@ The expected output is:
 stringSet=0,2 count=2 flags=true,true,true,true,false,true empty=true,false
 ```
 
+To run the PS-style `HashMap<String, Int>` fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs \
+  --source tools/wasm-kotlin-teavm/fixtures/ps-string-int-map/Main.kt \
+  --out tools/wasm-kotlin-teavm/build/browser-ps-string-int-map-out
+printf 'go lang\n' | java -cp tools/wasm-kotlin-teavm/build/browser-ps-string-int-map-out MainKt
+```
+
+The expected output is:
+
+```text
+stringMap=0,2 first=1 second=2 value=3 removed=1 fallback=-7 flags=true,true,true empty=true,false more=-6,3
+```
+
 To run the PS-style `HashMap<Int, Int>` fixture:
 
 ```bash
@@ -1103,6 +1119,12 @@ Known findings from the initial experiments:
   `add`, `contains`, `remove`, `clear`, `size`, `isEmpty`, and `in`/`!in` by lowering to
   `java.util.HashSet<String>`. With stdin `Alpha beta` it prints
   `stringSet=0,2 count=2 flags=true,true,true,true,false,true empty=true,false`.
+- The browser-compatible probe also compiles `fixtures/ps-string-int-map/Main.kt`, which exercises
+  `HashMap<String, Int>`, `MutableMap<String, Int>` parameters, and `mutableMapOf<String, Int>()`
+  construction, `map[key]`, `map[key] = value`, `put`, `get`, `getOrDefault`, `containsKey`,
+  `remove`, `clear`, `size`, `isEmpty`, and `in`/`!in` by lowering to
+  `java.util.HashMap<String, Integer>`. With stdin `go lang` it prints
+  `stringMap=0,2 first=1 second=2 value=3 removed=1 fallback=-7 flags=true,true,true empty=true,false more=-6,3`.
 - The browser-compatible probe also compiles `fixtures/ps-hash-map/Main.kt`, which exercises
   `HashMap<Int, Int>` and `mutableMapOf<Int, Int>()` construction, `map[key]`, `map[key] = value`,
   `put`, `getOrDefault`, `containsKey`, `remove`, `clear`, `size`, and `isEmpty` by lowering to
