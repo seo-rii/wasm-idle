@@ -1431,6 +1431,44 @@ public final class SimpleFunctionCodegens {
                         return ValueType.VOID;
                     }
                 }
+                if (callee != null && "copyOf".equals(callee.getText())
+                        && (((KtCallExpression) selector).getValueArguments().isEmpty()
+                                || ((KtCallExpression) selector).getValueArguments().size() == 1)) {
+                    ValueType receiverType = emitExpression(method, context, receiver);
+                    if (receiverType == ValueType.INT_ARRAY || receiverType == ValueType.LONG_ARRAY
+                            || receiverType == ValueType.DOUBLE_ARRAY || receiverType == ValueType.CHAR_ARRAY
+                            || receiverType == ValueType.BOOLEAN_ARRAY) {
+                        if (((KtCallExpression) selector).getValueArguments().isEmpty()) {
+                            method.visitInsn(Opcodes.DUP);
+                            method.visitInsn(Opcodes.ARRAYLENGTH);
+                        } else {
+                            emitExpressionAs(method, context,
+                                    ((KtCallExpression) selector).getValueArguments().get(0)
+                                            .getArgumentExpression(),
+                                    ValueType.INT);
+                        }
+                        method.visitMethodInsn(Opcodes.INVOKESTATIC, "java/util/Arrays", "copyOf",
+                                "(" + receiverType.descriptor + "I)" + receiverType.descriptor, false);
+                        return receiverType;
+                    }
+                }
+                if (callee != null && "copyOfRange".equals(callee.getText())
+                        && ((KtCallExpression) selector).getValueArguments().size() == 2) {
+                    ValueType receiverType = emitExpression(method, context, receiver);
+                    if (receiverType == ValueType.INT_ARRAY || receiverType == ValueType.LONG_ARRAY
+                            || receiverType == ValueType.DOUBLE_ARRAY || receiverType == ValueType.CHAR_ARRAY
+                            || receiverType == ValueType.BOOLEAN_ARRAY) {
+                        emitExpressionAs(method, context,
+                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
+                                ValueType.INT);
+                        emitExpressionAs(method, context,
+                                ((KtCallExpression) selector).getValueArguments().get(1).getArgumentExpression(),
+                                ValueType.INT);
+                        method.visitMethodInsn(Opcodes.INVOKESTATIC, "java/util/Arrays", "copyOfRange",
+                                "(" + receiverType.descriptor + "II)" + receiverType.descriptor, false);
+                        return receiverType;
+                    }
+                }
                 if (callee != null && "add".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().size() == 1) {
                     ValueType receiverType = emitExpression(method, context, receiver);
@@ -2331,6 +2369,50 @@ public final class SimpleFunctionCodegens {
                 if (callee != null && ("first".equals(callee.getText()) || "last".equals(callee.getText()))
                         && ((KtCallExpression) selector).getValueArguments().isEmpty()) {
                     ValueType receiverType = inferExpressionType(context, receiver);
+                    if (receiverType == ValueType.INT_ARRAY || receiverType == ValueType.LONG_ARRAY
+                            || receiverType == ValueType.DOUBLE_ARRAY || receiverType == ValueType.CHAR_ARRAY
+                            || receiverType == ValueType.BOOLEAN_ARRAY || receiverType == ValueType.STRING) {
+                        emitExpressionAs(method, context, receiver, receiverType);
+                        if ("last".equals(callee.getText())) {
+                            method.visitInsn(Opcodes.DUP);
+                            if (receiverType == ValueType.STRING) {
+                                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/String", "length",
+                                        "()I", false);
+                            } else {
+                                method.visitInsn(Opcodes.ARRAYLENGTH);
+                            }
+                            method.visitInsn(Opcodes.ICONST_1);
+                            method.visitInsn(Opcodes.ISUB);
+                        } else {
+                            method.visitInsn(Opcodes.ICONST_0);
+                        }
+                        if (receiverType == ValueType.STRING) {
+                            method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/String", "charAt", "(I)C",
+                                    false);
+                            return ValueType.CHAR;
+                        }
+                        ValueType elementType = indexedElementType(receiverType);
+                        if (elementType == ValueType.INT) {
+                            method.visitInsn(Opcodes.IALOAD);
+                            return ValueType.INT;
+                        }
+                        if (elementType == ValueType.LONG) {
+                            method.visitInsn(Opcodes.LALOAD);
+                            return ValueType.LONG;
+                        }
+                        if (elementType == ValueType.DOUBLE) {
+                            method.visitInsn(Opcodes.DALOAD);
+                            return ValueType.DOUBLE;
+                        }
+                        if (elementType == ValueType.CHAR) {
+                            method.visitInsn(Opcodes.CALOAD);
+                            return ValueType.CHAR;
+                        }
+                        if (elementType == ValueType.BOOLEAN) {
+                            method.visitInsn(Opcodes.BALOAD);
+                            return ValueType.BOOLEAN;
+                        }
+                    }
                     if (receiverType == ValueType.INT_ARRAY_LIST || receiverType == ValueType.LONG_ARRAY_LIST
                             || receiverType == ValueType.STRING_ARRAY_LIST
                             || receiverType == ValueType.INT_PAIR_ARRAY_LIST
@@ -3190,6 +3272,25 @@ public final class SimpleFunctionCodegens {
                         return ValueType.VOID;
                     }
                 }
+                if (callee != null && "copyOf".equals(callee.getText())
+                        && (((KtCallExpression) selector).getValueArguments().isEmpty()
+                                || ((KtCallExpression) selector).getValueArguments().size() == 1)) {
+                    ValueType receiverType = inferExpressionType(context, qualified.getReceiverExpression());
+                    if (receiverType == ValueType.INT_ARRAY || receiverType == ValueType.LONG_ARRAY
+                            || receiverType == ValueType.DOUBLE_ARRAY || receiverType == ValueType.CHAR_ARRAY
+                            || receiverType == ValueType.BOOLEAN_ARRAY) {
+                        return receiverType;
+                    }
+                }
+                if (callee != null && "copyOfRange".equals(callee.getText())
+                        && ((KtCallExpression) selector).getValueArguments().size() == 2) {
+                    ValueType receiverType = inferExpressionType(context, qualified.getReceiverExpression());
+                    if (receiverType == ValueType.INT_ARRAY || receiverType == ValueType.LONG_ARRAY
+                            || receiverType == ValueType.DOUBLE_ARRAY || receiverType == ValueType.CHAR_ARRAY
+                            || receiverType == ValueType.BOOLEAN_ARRAY) {
+                        return receiverType;
+                    }
+                }
                 if (callee != null && "add".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().size() == 1
                         && (inferExpressionType(context, qualified.getReceiverExpression())
@@ -3524,6 +3625,21 @@ public final class SimpleFunctionCodegens {
                 if (callee != null && ("first".equals(callee.getText()) || "last".equals(callee.getText()))
                         && ((KtCallExpression) selector).getValueArguments().isEmpty()) {
                     ValueType receiverType = inferExpressionType(context, qualified.getReceiverExpression());
+                    if (receiverType == ValueType.INT_ARRAY) {
+                        return ValueType.INT;
+                    }
+                    if (receiverType == ValueType.LONG_ARRAY) {
+                        return ValueType.LONG;
+                    }
+                    if (receiverType == ValueType.DOUBLE_ARRAY) {
+                        return ValueType.DOUBLE;
+                    }
+                    if (receiverType == ValueType.CHAR_ARRAY || receiverType == ValueType.STRING) {
+                        return ValueType.CHAR;
+                    }
+                    if (receiverType == ValueType.BOOLEAN_ARRAY) {
+                        return ValueType.BOOLEAN;
+                    }
                     if (receiverType == ValueType.INT_ARRAY_LIST) {
                         return ValueType.INT;
                     }

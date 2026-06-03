@@ -642,6 +642,28 @@ The expected output is:
 fill=7,8 long=100000000000 double=3.0 char=xx bool=true
 ```
 
+To run the PS-style primitive-array copy fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs \
+  --source tools/wasm-kotlin-teavm/fixtures/ps-array-copy/Main.kt \
+  --out tools/wasm-kotlin-teavm/build/browser-ps-array-copy-out
+java -cp tools/wasm-kotlin-teavm/build/browser-ps-array-copy-out MainKt
+```
+
+With this stdin:
+
+```text
+4 3 1 4 1 100000000000 2.5 algorithm
+```
+
+The expected output is:
+
+```text
+arrayCopy=3,6,0,1,1 long=100000000007,100000000014 double=2.5,0.0 char=l,h flags=false,true,true
+```
+
 To run the PS-style `ArrayList<Int>` fixture:
 
 ```bash
@@ -1274,6 +1296,12 @@ Known findings from the initial experiments:
 - The browser-compatible probe also compiles `fixtures/ps-array-fill/Main.kt`, which exercises
   `fill(...)` on primitive arrays by lowering to `java.util.Arrays.fill`. Running that generated
   class prints `fill=7,8 long=100000000000 double=3.0 char=xx bool=true`.
+- The browser-compatible probe also compiles `fixtures/ps-array-copy/Main.kt`, which exercises
+  `copyOf()`, `copyOf(newSize)`, and `copyOfRange(from, to)` on primitive arrays by lowering to
+  `java.util.Arrays.copyOf/copyOfRange`, plus primitive-array `first()`/`last()`. Running that
+  generated class with
+  `4 3 1 4 1 100000000000 2.5 algorithm` on stdin prints
+  `arrayCopy=3,6,0,1,1 long=100000000007,100000000014 double=2.5,0.0 char=l,h flags=false,true,true`.
 - The browser-compatible probe also compiles `fixtures/ps-array-list/Main.kt`, which exercises
   `ArrayList<Int>` construction, `add`, index get/set, `size`, `isEmpty`, and `sort()` by lowering
   to `java.util.ArrayList<Integer>` plus `java.util.Collections.sort`. With stdin `4 5 1 4 1` it
