@@ -389,6 +389,13 @@ Current status:
   `java.util.AbstractMap.SimpleEntry<Integer, Integer>` values in `java.util.ArrayList`. With stdin
   `2 1 2 3 4` it prints
   `pairs=13,24|2,1 score=186 flags=true,true,true,true empty=false size=2`.
+- The browser-facing compile export also completes `fixtures/ps-int-long-pair-list/Main.kt`, which
+  covers `ArrayList<Pair<Int, Long>>` and `mutableListOf<Pair<Int, Long>>()` construction, function
+  returns, `Array<ArrayList<Pair<Int, Long>>>`, indexed get/set, `.first`, `.second`, `in`/`!in`,
+  `contains`, `remove`, `removeAt`, `first()`, `last()`, `clear()`, `size`, and `isEmpty` by storing
+  `java.util.AbstractMap.SimpleEntry<Integer, Long>` values in `java.util.ArrayList`. With stdin
+  `100000000000 7` it prints
+  `intLongPairs=1,7|6,100000000000 removed=13,100000000007 flags=true,true,true,true graph=100000000007 empty=true size=0,2`.
 - The browser-facing compile export also completes `fixtures/ps-list-helpers/Main.kt`, which covers
   `MutableList<Int>` and `ArrayList<Pair<Int, Int>>` stack/list helpers: indexed `add`,
   `removeAt`, `first()`, `last()`, `clear()`, `size`, and `isEmpty`. With stdin `5 9` it prints
