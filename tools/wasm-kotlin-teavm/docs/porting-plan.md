@@ -227,6 +227,10 @@ Current status:
   Int `for` loops over `until`, inclusive `..`, and `downTo ... step ...` ranges. The minimal emitter
   lowers these loops directly to index comparisons and increments. With stdin `5 1 2 3 4 5` it
   prints `for=15 rev=9 last=5`.
+- The browser-facing compile export also completes `fixtures/ps-array-compound/Main.kt`, which covers
+  compound assignments on `IntArray`, `LongArray`, and `DoubleArray` elements, including RHS numeric
+  widening to `Long` and `Double`. With stdin `2 3 5 100000000000 1.5` it prints
+  `arr=5,15,1 long=100000000005 double=5.0`.
 - This success currently comes from a minimal PSI-based bytecode emitter for the verified fixture
   shapes, not from the full Kotlin/JVM backend. The full backend still fails because Kotlin builtins
   deserialization can read `kotlin/kotlin.kotlin_builtins` but cannot resolve `kotlin.Unit`; virtual

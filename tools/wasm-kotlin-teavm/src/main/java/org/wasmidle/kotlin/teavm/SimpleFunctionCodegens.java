@@ -260,11 +260,13 @@ public final class SimpleFunctionCodegens {
             return false;
         }
         if (left instanceof KtArrayAccessExpression) {
-            if (operation != KtTokens.EQ) {
-                throw new IllegalArgumentException("Array compound assignment is not supported yet: "
-                        + binary.getText());
-            }
             ValueType arrayType = emitArrayReferenceAndIndex(method, context, (KtArrayAccessExpression) left);
+            if (operation != KtTokens.EQ) {
+                if (!isCompoundAssignment(operation)) {
+                    throw new IllegalArgumentException("Unsupported array assignment: " + binary.getText());
+                }
+                return emitArrayCompoundAssignment(method, context, binary, arrayType, right);
+            }
             ValueType valueType = emitExpression(method, context, right);
             if (arrayType == ValueType.INT_ARRAY && valueType == ValueType.INT) {
                 method.visitInsn(Opcodes.IASTORE);
@@ -319,6 +321,36 @@ public final class SimpleFunctionCodegens {
             return true;
         }
         return false;
+    }
+
+    private static boolean emitArrayCompoundAssignment(
+            MethodVisitor method, MethodContext context, KtBinaryExpression binary, ValueType arrayType,
+            KtExpression right) {
+        ValueType elementType;
+        int loadOpcode;
+        int storeOpcode;
+        if (arrayType == ValueType.INT_ARRAY) {
+            elementType = ValueType.INT;
+            loadOpcode = Opcodes.IALOAD;
+            storeOpcode = Opcodes.IASTORE;
+        } else if (arrayType == ValueType.LONG_ARRAY) {
+            elementType = ValueType.LONG;
+            loadOpcode = Opcodes.LALOAD;
+            storeOpcode = Opcodes.LASTORE;
+        } else if (arrayType == ValueType.DOUBLE_ARRAY) {
+            elementType = ValueType.DOUBLE;
+            loadOpcode = Opcodes.DALOAD;
+            storeOpcode = Opcodes.DASTORE;
+        } else {
+            throw new IllegalArgumentException("Array compound assignment only supports numeric arrays: "
+                    + binary.getText());
+        }
+        method.visitInsn(Opcodes.DUP2);
+        method.visitInsn(loadOpcode);
+        emitExpressionAs(method, context, right, elementType);
+        emitArithmeticOpcode(method, binary.getOperationToken(), elementType);
+        method.visitInsn(storeOpcode);
+        return true;
     }
 
     private static ValueType emitIncrementExpression(
@@ -1318,6 +1350,12 @@ public final class SimpleFunctionCodegens {
 
     private static boolean isIncrementOperation(IElementType operation) {
         return operation == KtTokens.PLUSPLUS || operation == KtTokens.MINUSMINUS;
+    }
+
+    private static boolean isCompoundAssignment(IElementType operation) {
+        return operation == KtTokens.PLUSEQ || operation == KtTokens.MINUSEQ
+                || operation == KtTokens.MULTEQ || operation == KtTokens.DIVEQ
+                || operation == KtTokens.PERCEQ;
     }
 
     private static boolean isEqualityComparison(IElementType operation) {

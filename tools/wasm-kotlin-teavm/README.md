@@ -330,6 +330,28 @@ the expected output is:
 for=15 rev=9 last=5
 ```
 
+To run the PS-style array-compound fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs \
+  --source tools/wasm-kotlin-teavm/fixtures/ps-array-compound/Main.kt \
+  --out tools/wasm-kotlin-teavm/build/browser-ps-array-compound-out
+java -cp tools/wasm-kotlin-teavm/build/browser-ps-array-compound-out MainKt
+```
+
+With this stdin:
+
+```text
+2 3 5 100000000000 1.5
+```
+
+the expected output is:
+
+```text
+arr=5,15,1 long=100000000005 double=5.0
+```
+
 ## Current Status
 
 This folder is a porting scaffold, not an app integration. The current probe compiles a small Java
@@ -455,6 +477,11 @@ Known findings from the initial experiments:
   Int `for` loops over `until`, inclusive `..`, and `downTo ... step ...` ranges. The minimal emitter
   lowers these loops directly to index comparisons and increments. Running that generated class with
   `5 1 2 3 4 5` on stdin prints `for=15 rev=9 last=5`.
+- The browser-compatible probe also compiles `fixtures/ps-array-compound/Main.kt`, which exercises
+  compound assignments on `IntArray`, `LongArray`, and `DoubleArray` elements, including RHS numeric
+  widening to `Long` and `Double`. Running that generated class with
+  `2 3 5 100000000000 1.5` on stdin prints
+  `arr=5,15,1 long=100000000005 double=5.0`.
 - This is not a full Kotlin/JVM backend yet. The browser path is currently a minimal emitter that
   supports the verified fixture shapes above. It does not yet support enough Kotlin for real
   competitive-programming use: collections and common library helpers, classes/data classes,
