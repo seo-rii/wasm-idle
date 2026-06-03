@@ -116,6 +116,22 @@ The expected output is:
 gcd=6 sum=9
 ```
 
+To run the PS-style `Long` and primitive-array fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs \
+  --source tools/wasm-kotlin-teavm/fixtures/ps-long-array/Main.kt \
+  --out tools/wasm-kotlin-teavm/build/browser-ps-long-array-out
+java -cp tools/wasm-kotlin-teavm/build/browser-ps-long-array-out MainKt
+```
+
+The expected output is:
+
+```text
+chk=46 total=100000000007
+```
+
 ## Current Status
 
 This folder is a porting scaffold, not an app integration. The current probe compiles a small Java
@@ -200,11 +216,13 @@ Known findings from the initial experiments:
   `Int` functions, `Int` parameters/returns, `var` reassignment, `while`, `if/else`, arithmetic,
   modulo, comparisons, `return`, function calls, string templates, and `print`/`println`. Running
   that generated class prints `gcd=6 sum=9`.
+- The browser-compatible probe also compiles `fixtures/ps-long-array/Main.kt`, which exercises
+  `Long` values/functions, `LongArray`, `IntArray`, array construction, array element reads/writes,
+  and mixed fixture calls. Running that generated class prints `chk=46 total=100000000007`.
 - This is not a full Kotlin/JVM backend yet. The browser path is currently a minimal emitter that
   supports the verified fixture shapes above. It does not yet support enough Kotlin for real
-  competitive-programming use: arrays/collections, `Long`, `String` input parsing, classes/data
-  classes, lambdas, generics, library calls, packages/imports, and stable classpath jar reads are
-  still missing.
+  competitive-programming use: `String` input parsing, collections, classes/data classes, lambdas,
+  generics, library calls, packages/imports, and stable classpath jar reads are still missing.
 - Full Kotlin backend restoration is still blocked by Kotlin builtins deserialization in the TeaVM
   runtime: the `.kotlin_builtins` resource is readable, but `DefaultBuiltIns.getUnitType()` still
   reports that `kotlin.Unit` is missing. Virtual classpath jar reads also still warn with

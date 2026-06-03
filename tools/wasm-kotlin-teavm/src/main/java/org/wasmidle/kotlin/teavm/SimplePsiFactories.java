@@ -27,6 +27,9 @@ public final class SimplePsiFactories {
     }
 
     private static KtElement createDirect(String className, ASTNode node) {
+        if ("org.jetbrains.kotlin.psi.KtArrayAccessExpression".equals(className)) {
+            return new org.jetbrains.kotlin.psi.KtArrayAccessExpression(node);
+        }
         if ("org.jetbrains.kotlin.psi.KtBinaryExpression".equals(className)) {
             return new org.jetbrains.kotlin.psi.KtBinaryExpression(node);
         }

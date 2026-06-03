@@ -6,16 +6,20 @@ import java.util.List;
 import java.util.Map;
 import org.jetbrains.kotlin.codegen.ClassBuilder;
 import org.jetbrains.kotlin.lexer.KtTokens;
+import org.jetbrains.kotlin.psi.KtArrayAccessExpression;
 import org.jetbrains.kotlin.psi.KtBinaryExpression;
 import org.jetbrains.kotlin.psi.KtBlockExpression;
 import org.jetbrains.kotlin.psi.KtCallExpression;
 import org.jetbrains.kotlin.psi.KtConstantExpression;
+import org.jetbrains.kotlin.psi.KtDeclaration;
 import org.jetbrains.kotlin.psi.KtEscapeStringTemplateEntry;
 import org.jetbrains.kotlin.psi.KtExpression;
+import org.jetbrains.kotlin.psi.KtFile;
 import org.jetbrains.kotlin.psi.KtIfExpression;
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression;
 import org.jetbrains.kotlin.psi.KtNamedFunction;
 import org.jetbrains.kotlin.psi.KtParameter;
+import org.jetbrains.kotlin.psi.KtParenthesizedExpression;
 import org.jetbrains.kotlin.psi.KtProperty;
 import org.jetbrains.kotlin.psi.KtReturnExpression;
 import org.jetbrains.kotlin.psi.KtStringTemplateEntry;
@@ -67,17 +71,9 @@ public final class SimpleFunctionCodegens {
             context.hasExplicitReturn = true;
         }
         if (!context.hasExplicitReturn) {
-            if (returnType == ValueType.INT) {
-                method.visitInsn(Opcodes.ICONST_0);
-                method.visitInsn(Opcodes.IRETURN);
-            } else if (returnType == ValueType.STRING) {
-                method.visitLdcInsn("");
-                method.visitInsn(Opcodes.ARETURN);
-            } else {
-                method.visitInsn(Opcodes.RETURN);
-            }
+            emitDefaultReturn(method, returnType);
         }
-        method.visitMaxs(32, Math.max(1, context.nextLocal));
+        method.visitMaxs(48, Math.max(1, context.nextLocal));
         method.visitEnd();
 
         if ("main".equals(name) && function.getValueParameters().isEmpty()) {
@@ -172,11 +168,7 @@ public final class SimpleFunctionCodegens {
         }
         if (statement instanceof KtCallExpression) {
             ValueType type = emitExpression(method, context, statement);
-            if (type == ValueType.INT) {
-                method.visitInsn(Opcodes.POP);
-            } else if (type == ValueType.STRING) {
-                method.visitInsn(Opcodes.POP);
-            }
+            popIfNeeded(method, type);
             return;
         }
 
@@ -199,7 +191,27 @@ public final class SimpleFunctionCodegens {
         IElementType operation = binary.getOperationToken();
         KtExpression left = binary.getLeft();
         KtExpression right = binary.getRight();
-        if (!(left instanceof KtNameReferenceExpression) || right == null) {
+        if (right == null) {
+            return false;
+        }
+        if (left instanceof KtArrayAccessExpression) {
+            if (operation != KtTokens.EQ) {
+                throw new IllegalArgumentException("Array compound assignment is not supported yet: "
+                        + binary.getText());
+            }
+            ValueType arrayType = emitArrayReferenceAndIndex(method, context, (KtArrayAccessExpression) left);
+            ValueType valueType = emitExpression(method, context, right);
+            if (arrayType == ValueType.INT_ARRAY && valueType == ValueType.INT) {
+                method.visitInsn(Opcodes.IASTORE);
+                return true;
+            }
+            if (arrayType == ValueType.LONG_ARRAY && valueType == ValueType.LONG) {
+                method.visitInsn(Opcodes.LASTORE);
+                return true;
+            }
+            throw new IllegalArgumentException("Array assignment type mismatch: " + binary.getText());
+        }
+        if (!(left instanceof KtNameReferenceExpression)) {
             return false;
         }
         Local local = context.locals.get(left.getText());
@@ -217,26 +229,16 @@ public final class SimpleFunctionCodegens {
         if (operation == KtTokens.PLUSEQ || operation == KtTokens.MINUSEQ
                 || operation == KtTokens.MULTEQ || operation == KtTokens.DIVEQ
                 || operation == KtTokens.PERCEQ) {
-            if (local.type != ValueType.INT) {
-                throw new IllegalArgumentException("Compound assignment only supports Int: " + binary.getText());
+            if (!local.type.numeric) {
+                throw new IllegalArgumentException("Compound assignment only supports numbers: " + binary.getText());
             }
-            method.visitVarInsn(Opcodes.ILOAD, local.index);
+            loadLocal(method, local.type, local.index);
             ValueType type = emitExpression(method, context, right);
-            if (type != ValueType.INT) {
+            if (type != local.type) {
                 throw new IllegalArgumentException("Compound assignment type mismatch: " + binary.getText());
             }
-            if (operation == KtTokens.PLUSEQ) {
-                method.visitInsn(Opcodes.IADD);
-            } else if (operation == KtTokens.MINUSEQ) {
-                method.visitInsn(Opcodes.ISUB);
-            } else if (operation == KtTokens.MULTEQ) {
-                method.visitInsn(Opcodes.IMUL);
-            } else if (operation == KtTokens.DIVEQ) {
-                method.visitInsn(Opcodes.IDIV);
-            } else {
-                method.visitInsn(Opcodes.IREM);
-            }
-            method.visitVarInsn(Opcodes.ISTORE, local.index);
+            emitArithmeticOpcode(method, operation, local.type);
+            storeLocal(method, local.type, local.index);
             return true;
         }
         return false;
@@ -245,6 +247,9 @@ public final class SimpleFunctionCodegens {
     private static ValueType emitExpression(MethodVisitor method, MethodContext context, KtExpression expression) {
         if (expression == null) {
             throw new IllegalArgumentException("Missing Kotlin expression");
+        }
+        if (expression instanceof KtParenthesizedExpression) {
+            return emitExpression(method, context, ((KtParenthesizedExpression) expression).getExpression());
         }
         if (expression instanceof KtConstantExpression) {
             String text = expression.getText();
@@ -256,18 +261,22 @@ public final class SimpleFunctionCodegens {
                 method.visitInsn(Opcodes.ICONST_0);
                 return ValueType.INT;
             }
-            method.visitLdcInsn(Integer.parseInt(text));
+            if (text.endsWith("L") || text.endsWith("l")) {
+                method.visitLdcInsn(Long.valueOf(text.substring(0, text.length() - 1)));
+                return ValueType.LONG;
+            }
+            method.visitLdcInsn(Integer.valueOf(text));
             return ValueType.INT;
         }
         if (expression instanceof KtUnaryExpression) {
             KtUnaryExpression unary = (KtUnaryExpression) expression;
             if (unary.getOperationToken() == KtTokens.MINUS) {
                 ValueType type = emitExpression(method, context, unary.getBaseExpression());
-                if (type != ValueType.INT) {
-                    throw new IllegalArgumentException("Unary minus only supports Int: " + expression.getText());
+                if (!type.numeric) {
+                    throw new IllegalArgumentException("Unary minus only supports numbers: " + expression.getText());
                 }
-                method.visitInsn(Opcodes.INEG);
-                return ValueType.INT;
+                method.visitInsn(type == ValueType.LONG ? Opcodes.LNEG : Opcodes.INEG);
+                return type;
             }
             if (unary.getOperationToken() == KtTokens.EXCL) {
                 Label trueLabel = new Label();
@@ -289,6 +298,18 @@ public final class SimpleFunctionCodegens {
             loadLocal(method, local.type, local.index);
             return local.type;
         }
+        if (expression instanceof KtArrayAccessExpression) {
+            ValueType arrayType = emitArrayReferenceAndIndex(method, context, (KtArrayAccessExpression) expression);
+            if (arrayType == ValueType.INT_ARRAY) {
+                method.visitInsn(Opcodes.IALOAD);
+                return ValueType.INT;
+            }
+            if (arrayType == ValueType.LONG_ARRAY) {
+                method.visitInsn(Opcodes.LALOAD);
+                return ValueType.LONG;
+            }
+            throw new IllegalArgumentException("Unsupported array access: " + expression.getText());
+        }
         if (expression instanceof KtBinaryExpression) {
             KtBinaryExpression binary = (KtBinaryExpression) expression;
             IElementType operation = binary.getOperationToken();
@@ -297,20 +318,11 @@ public final class SimpleFunctionCodegens {
                     || operation == KtTokens.PERC) {
                 ValueType leftType = emitExpression(method, context, binary.getLeft());
                 ValueType rightType = emitExpression(method, context, binary.getRight());
-                if (leftType == ValueType.INT && rightType == ValueType.INT) {
-                    if (operation == KtTokens.PLUS) {
-                        method.visitInsn(Opcodes.IADD);
-                    } else if (operation == KtTokens.MINUS) {
-                        method.visitInsn(Opcodes.ISUB);
-                    } else if (operation == KtTokens.MUL) {
-                        method.visitInsn(Opcodes.IMUL);
-                    } else if (operation == KtTokens.DIV) {
-                        method.visitInsn(Opcodes.IDIV);
-                    } else {
-                        method.visitInsn(Opcodes.IREM);
-                    }
-                    return ValueType.INT;
+                if (leftType == rightType && leftType.numeric) {
+                    emitArithmeticOpcode(method, operation, leftType);
+                    return leftType;
                 }
+                throw new IllegalArgumentException("Numeric operation type mismatch: " + expression.getText());
             }
             if (isComparison(operation) || operation == KtTokens.ANDAND || operation == KtTokens.OROR) {
                 Label trueLabel = new Label();
@@ -362,6 +374,9 @@ public final class SimpleFunctionCodegens {
                     if (type == ValueType.INT) {
                         method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append",
                                 "(I)Ljava/lang/StringBuilder;", false);
+                    } else if (type == ValueType.LONG) {
+                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append",
+                                "(J)Ljava/lang/StringBuilder;", false);
                     } else if (type == ValueType.STRING) {
                         method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append",
                                 "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false);
@@ -375,47 +390,97 @@ public final class SimpleFunctionCodegens {
             return ValueType.STRING;
         }
         if (expression instanceof KtCallExpression) {
-            KtCallExpression call = (KtCallExpression) expression;
-            KtExpression callee = call.getCalleeExpression();
-            String calleeText = callee == null ? "" : callee.getText();
-            if (("println".equals(calleeText) || "print".equals(calleeText))
-                    && call.getValueArguments().size() == 1) {
-                method.visitFieldInsn(Opcodes.GETSTATIC, "java/lang/System", "out", "Ljava/io/PrintStream;");
-                KtValueArgument argument = call.getValueArguments().get(0);
-                ValueType type = emitExpression(method, context, argument.getArgumentExpression());
-                String methodName = "println".equals(calleeText) ? "println" : "print";
-                if (type == ValueType.INT) {
-                    method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/io/PrintStream", methodName, "(I)V", false);
-                    return ValueType.VOID;
-                }
-                if (type == ValueType.STRING) {
-                    method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/io/PrintStream", methodName,
-                            "(Ljava/lang/String;)V", false);
-                    return ValueType.VOID;
-                }
-            }
-            StringBuilder descriptor = new StringBuilder();
-            descriptor.append('(');
-            for (KtValueArgument argument : call.getValueArguments()) {
-                ValueType type = emitExpression(method, context, argument.getArgumentExpression());
-                if (type != ValueType.INT) {
-                    throw new IllegalArgumentException("Only Int function arguments are supported: "
-                            + call.getText());
-                }
-                descriptor.append('I');
-            }
-            descriptor.append(")I");
-            method.visitMethodInsn(Opcodes.INVOKESTATIC, context.ownerInternalName, calleeText,
-                    descriptor.toString(), false);
-            return ValueType.INT;
+            return emitCallExpression(method, context, (KtCallExpression) expression);
         }
         throw new IllegalArgumentException("Unsupported Kotlin expression in browser probe emitter: "
                 + expression.getText());
     }
 
+    private static ValueType emitCallExpression(MethodVisitor method, MethodContext context, KtCallExpression call) {
+        KtExpression callee = call.getCalleeExpression();
+        String calleeText = callee == null ? "" : callee.getText();
+        if (("println".equals(calleeText) || "print".equals(calleeText)) && call.getValueArguments().size() == 1) {
+            method.visitFieldInsn(Opcodes.GETSTATIC, "java/lang/System", "out", "Ljava/io/PrintStream;");
+            ValueType type = emitExpression(method, context,
+                    call.getValueArguments().get(0).getArgumentExpression());
+            String methodName = "println".equals(calleeText) ? "println" : "print";
+            if (type == ValueType.INT) {
+                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/io/PrintStream", methodName, "(I)V", false);
+                return ValueType.VOID;
+            }
+            if (type == ValueType.LONG) {
+                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/io/PrintStream", methodName, "(J)V", false);
+                return ValueType.VOID;
+            }
+            if (type == ValueType.STRING) {
+                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/io/PrintStream", methodName,
+                        "(Ljava/lang/String;)V", false);
+                return ValueType.VOID;
+            }
+        }
+        if (("IntArray".equals(calleeText) || "LongArray".equals(calleeText)) && call.getValueArguments().size() == 1) {
+            ValueType sizeType = emitExpression(method, context,
+                    call.getValueArguments().get(0).getArgumentExpression());
+            if (sizeType != ValueType.INT) {
+                throw new IllegalArgumentException("Array size must be Int: " + call.getText());
+            }
+            if ("IntArray".equals(calleeText)) {
+                method.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_INT);
+                return ValueType.INT_ARRAY;
+            }
+            method.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_LONG);
+            return ValueType.LONG_ARRAY;
+        }
+
+        ValueType[] argumentTypes = new ValueType[call.getValueArguments().size()];
+        for (int i = 0; i < argumentTypes.length; i++) {
+            argumentTypes[i] = emitExpression(method, context,
+                    call.getValueArguments().get(i).getArgumentExpression());
+        }
+        FunctionSignature signature = findFunctionSignature(calleeText);
+        if (signature == null) {
+            throw new IllegalArgumentException("Unknown function call: " + call.getText());
+        }
+        if (argumentTypes.length != signature.parameterTypes.length) {
+            throw new IllegalArgumentException("Function argument count mismatch: " + call.getText());
+        }
+        for (int i = 0; i < argumentTypes.length; i++) {
+            if (argumentTypes[i] != signature.parameterTypes[i]) {
+                throw new IllegalArgumentException("Function argument type mismatch: " + call.getText());
+            }
+        }
+        method.visitMethodInsn(Opcodes.INVOKESTATIC, context.ownerInternalName, calleeText,
+                signature.descriptor, false);
+        return signature.returnType;
+    }
+
+    private static ValueType emitArrayReferenceAndIndex(
+            MethodVisitor method, MethodContext context, KtArrayAccessExpression expression) {
+        KtExpression arrayExpression = expression.getArrayExpression();
+        if (!(arrayExpression instanceof KtNameReferenceExpression) || expression.getIndexExpressions().size() != 1) {
+            throw new IllegalArgumentException("Only local one-dimensional arrays are supported: "
+                    + expression.getText());
+        }
+        Local local = context.locals.get(arrayExpression.getText());
+        if (local == null || !local.type.array) {
+            throw new IllegalArgumentException("Unknown array local: " + arrayExpression.getText());
+        }
+        method.visitVarInsn(Opcodes.ALOAD, local.index);
+        ValueType indexType = emitExpression(method, context, expression.getIndexExpressions().get(0));
+        if (indexType != ValueType.INT) {
+            throw new IllegalArgumentException("Array index must be Int: " + expression.getText());
+        }
+        return local.type;
+    }
+
     private static void emitConditionJump(
             MethodVisitor method, MethodContext context, KtExpression expression, boolean jumpWhenTrue,
             Label target) {
+        if (expression instanceof KtParenthesizedExpression) {
+            emitConditionJump(method, context, ((KtParenthesizedExpression) expression).getExpression(),
+                    jumpWhenTrue, target);
+            return;
+        }
         if (expression instanceof KtBinaryExpression) {
             KtBinaryExpression binary = (KtBinaryExpression) expression;
             IElementType operation = binary.getOperationToken();
@@ -446,11 +511,15 @@ public final class SimpleFunctionCodegens {
             if (isComparison(operation)) {
                 ValueType leftType = emitExpression(method, context, binary.getLeft());
                 ValueType rightType = emitExpression(method, context, binary.getRight());
-                if (leftType != ValueType.INT || rightType != ValueType.INT) {
-                    throw new IllegalArgumentException("Only Int comparisons are supported: "
-                            + expression.getText());
+                if (leftType != rightType || !leftType.numeric) {
+                    throw new IllegalArgumentException("Comparison type mismatch: " + expression.getText());
                 }
-                method.visitJumpInsn(comparisonOpcode(operation, jumpWhenTrue), target);
+                if (leftType == ValueType.LONG) {
+                    method.visitInsn(Opcodes.LCMP);
+                    method.visitJumpInsn(comparisonZeroOpcode(operation, jumpWhenTrue), target);
+                } else {
+                    method.visitJumpInsn(comparisonOpcode(operation, jumpWhenTrue), target);
+                }
                 return;
             }
         }
@@ -460,6 +529,34 @@ public final class SimpleFunctionCodegens {
                     + expression.getText());
         }
         method.visitJumpInsn(jumpWhenTrue ? Opcodes.IFNE : Opcodes.IFEQ, target);
+    }
+
+    private static void emitArithmeticOpcode(MethodVisitor method, IElementType operation, ValueType type) {
+        if (type == ValueType.LONG) {
+            if (operation == KtTokens.PLUS || operation == KtTokens.PLUSEQ) {
+                method.visitInsn(Opcodes.LADD);
+            } else if (operation == KtTokens.MINUS || operation == KtTokens.MINUSEQ) {
+                method.visitInsn(Opcodes.LSUB);
+            } else if (operation == KtTokens.MUL || operation == KtTokens.MULTEQ) {
+                method.visitInsn(Opcodes.LMUL);
+            } else if (operation == KtTokens.DIV || operation == KtTokens.DIVEQ) {
+                method.visitInsn(Opcodes.LDIV);
+            } else {
+                method.visitInsn(Opcodes.LREM);
+            }
+            return;
+        }
+        if (operation == KtTokens.PLUS || operation == KtTokens.PLUSEQ) {
+            method.visitInsn(Opcodes.IADD);
+        } else if (operation == KtTokens.MINUS || operation == KtTokens.MINUSEQ) {
+            method.visitInsn(Opcodes.ISUB);
+        } else if (operation == KtTokens.MUL || operation == KtTokens.MULTEQ) {
+            method.visitInsn(Opcodes.IMUL);
+        } else if (operation == KtTokens.DIV || operation == KtTokens.DIVEQ) {
+            method.visitInsn(Opcodes.IDIV);
+        } else {
+            method.visitInsn(Opcodes.IREM);
+        }
     }
 
     private static int comparisonOpcode(IElementType operation, boolean jumpWhenTrue) {
@@ -484,6 +581,28 @@ public final class SimpleFunctionCodegens {
         throw new IllegalArgumentException("Unsupported comparison token: " + operation);
     }
 
+    private static int comparisonZeroOpcode(IElementType operation, boolean jumpWhenTrue) {
+        if (operation == KtTokens.LT) {
+            return jumpWhenTrue ? Opcodes.IFLT : Opcodes.IFGE;
+        }
+        if (operation == KtTokens.LTEQ) {
+            return jumpWhenTrue ? Opcodes.IFLE : Opcodes.IFGT;
+        }
+        if (operation == KtTokens.GT) {
+            return jumpWhenTrue ? Opcodes.IFGT : Opcodes.IFLE;
+        }
+        if (operation == KtTokens.GTEQ) {
+            return jumpWhenTrue ? Opcodes.IFGE : Opcodes.IFLT;
+        }
+        if (operation == KtTokens.EQEQ || operation == KtTokens.EQEQEQ) {
+            return jumpWhenTrue ? Opcodes.IFEQ : Opcodes.IFNE;
+        }
+        if (operation == KtTokens.EXCLEQ || operation == KtTokens.EXCLEQEQEQ) {
+            return jumpWhenTrue ? Opcodes.IFNE : Opcodes.IFEQ;
+        }
+        throw new IllegalArgumentException("Unsupported comparison token: " + operation);
+    }
+
     private static boolean isComparison(IElementType operation) {
         return operation == KtTokens.LT || operation == KtTokens.LTEQ
                 || operation == KtTokens.GT || operation == KtTokens.GTEQ
@@ -494,6 +613,8 @@ public final class SimpleFunctionCodegens {
     private static void loadLocal(MethodVisitor method, ValueType type, int index) {
         if (type == ValueType.INT) {
             method.visitVarInsn(Opcodes.ILOAD, index);
+        } else if (type == ValueType.LONG) {
+            method.visitVarInsn(Opcodes.LLOAD, index);
         } else {
             method.visitVarInsn(Opcodes.ALOAD, index);
         }
@@ -502,24 +623,36 @@ public final class SimpleFunctionCodegens {
     private static void storeLocal(MethodVisitor method, ValueType type, int index) {
         if (type == ValueType.INT) {
             method.visitVarInsn(Opcodes.ISTORE, index);
+        } else if (type == ValueType.LONG) {
+            method.visitVarInsn(Opcodes.LSTORE, index);
         } else {
             method.visitVarInsn(Opcodes.ASTORE, index);
         }
     }
 
-    private static void emitReturn(MethodVisitor method, ValueType expectedType, ValueType actualType) {
-        if (expectedType == ValueType.INT && actualType == ValueType.INT) {
-            method.visitInsn(Opcodes.IRETURN);
-            return;
+    private static void popIfNeeded(MethodVisitor method, ValueType type) {
+        if (type == ValueType.LONG) {
+            method.visitInsn(Opcodes.POP2);
+        } else if (type != ValueType.VOID) {
+            method.visitInsn(Opcodes.POP);
         }
-        if (expectedType == ValueType.STRING && actualType == ValueType.STRING) {
-            method.visitInsn(Opcodes.ARETURN);
+    }
+
+    private static void emitReturn(MethodVisitor method, ValueType expectedType, ValueType actualType) {
+        if (expectedType == actualType) {
+            if (expectedType == ValueType.INT) {
+                method.visitInsn(Opcodes.IRETURN);
+            } else if (expectedType == ValueType.LONG) {
+                method.visitInsn(Opcodes.LRETURN);
+            } else if (expectedType == ValueType.VOID) {
+                method.visitInsn(Opcodes.RETURN);
+            } else {
+                method.visitInsn(Opcodes.ARETURN);
+            }
             return;
         }
         if (expectedType == ValueType.VOID) {
-            if (actualType == ValueType.INT || actualType == ValueType.STRING) {
-                method.visitInsn(Opcodes.POP);
-            }
+            popIfNeeded(method, actualType);
             method.visitInsn(Opcodes.RETURN);
             return;
         }
@@ -527,11 +660,57 @@ public final class SimpleFunctionCodegens {
                 + ", got " + actualType);
     }
 
+    private static void emitDefaultReturn(MethodVisitor method, ValueType returnType) {
+        if (returnType == ValueType.INT) {
+            method.visitInsn(Opcodes.ICONST_0);
+            method.visitInsn(Opcodes.IRETURN);
+        } else if (returnType == ValueType.LONG) {
+            method.visitInsn(Opcodes.LCONST_0);
+            method.visitInsn(Opcodes.LRETURN);
+        } else if (returnType == ValueType.STRING) {
+            method.visitLdcInsn("");
+            method.visitInsn(Opcodes.ARETURN);
+        } else if (returnType == ValueType.INT_ARRAY || returnType == ValueType.LONG_ARRAY) {
+            method.visitInsn(Opcodes.ACONST_NULL);
+            method.visitInsn(Opcodes.ARETURN);
+        } else {
+            method.visitInsn(Opcodes.RETURN);
+        }
+    }
+
+    private static FunctionSignature findFunctionSignature(String name) {
+        for (KtFile file : SimpleSourceRegistry.files()) {
+            for (KtDeclaration declaration : file.getDeclarations()) {
+                if (declaration instanceof KtNamedFunction) {
+                    KtNamedFunction function = (KtNamedFunction) declaration;
+                    if (name.equals(function.getName())) {
+                        ValueType returnType = returnTypeOf(function);
+                        ValueType[] parameterTypes = new ValueType[function.getValueParameters().size()];
+                        for (int i = 0; i < parameterTypes.length; i++) {
+                            parameterTypes[i] = typeOf(function.getValueParameters().get(i));
+                        }
+                        return new FunctionSignature(parameterTypes, returnType,
+                                descriptorOf(parameterTypes, returnType));
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
     private static String descriptorOf(KtNamedFunction function, ValueType returnType) {
+        ValueType[] parameterTypes = new ValueType[function.getValueParameters().size()];
+        for (int i = 0; i < parameterTypes.length; i++) {
+            parameterTypes[i] = typeOf(function.getValueParameters().get(i));
+        }
+        return descriptorOf(parameterTypes, returnType);
+    }
+
+    private static String descriptorOf(ValueType[] parameterTypes, ValueType returnType) {
         StringBuilder descriptor = new StringBuilder();
         descriptor.append('(');
-        for (KtParameter parameter : function.getValueParameters()) {
-            descriptor.append(typeOf(parameter).descriptor);
+        for (ValueType parameterType : parameterTypes) {
+            descriptor.append(parameterType.descriptor);
         }
         descriptor.append(')');
         descriptor.append(returnType.descriptor);
@@ -559,8 +738,17 @@ public final class SimpleFunctionCodegens {
         if ("Int".equals(text)) {
             return ValueType.INT;
         }
+        if ("Long".equals(text)) {
+            return ValueType.LONG;
+        }
         if ("String".equals(text)) {
             return ValueType.STRING;
+        }
+        if ("IntArray".equals(text)) {
+            return ValueType.INT_ARRAY;
+        }
+        if ("LongArray".equals(text)) {
+            return ValueType.LONG_ARRAY;
         }
         if ("Unit".equals(text)) {
             return ValueType.VOID;
@@ -569,13 +757,34 @@ public final class SimpleFunctionCodegens {
     }
 
     private enum ValueType {
-        INT("I"),
-        STRING("Ljava/lang/String;"),
-        VOID("V");
+        INT("I", 1, true, false),
+        LONG("J", 2, true, false),
+        STRING("Ljava/lang/String;", 1, false, false),
+        INT_ARRAY("[I", 1, false, true),
+        LONG_ARRAY("[J", 1, false, true),
+        VOID("V", 0, false, false);
 
         private final String descriptor;
+        private final int slots;
+        private final boolean numeric;
+        private final boolean array;
 
-        ValueType(String descriptor) {
+        ValueType(String descriptor, int slots, boolean numeric, boolean array) {
+            this.descriptor = descriptor;
+            this.slots = slots;
+            this.numeric = numeric;
+            this.array = array;
+        }
+    }
+
+    private static final class FunctionSignature {
+        private final ValueType[] parameterTypes;
+        private final ValueType returnType;
+        private final String descriptor;
+
+        private FunctionSignature(ValueType[] parameterTypes, ValueType returnType, String descriptor) {
+            this.parameterTypes = parameterTypes;
+            this.returnType = returnType;
             this.descriptor = descriptor;
         }
     }
@@ -603,7 +812,8 @@ public final class SimpleFunctionCodegens {
         }
 
         private int allocate(String name, ValueType type) {
-            int index = nextLocal++;
+            int index = nextLocal;
+            nextLocal += type.slots;
             locals.put(name, new Local(index, type));
             return index;
         }
