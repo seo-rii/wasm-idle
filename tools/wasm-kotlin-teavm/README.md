@@ -672,6 +672,22 @@ The expected output is:
 str=algor|ithmgo|orithm idx=3,2,9 score=15 case=kotlingo/KOTLINGO
 ```
 
+To run the PS-style primitive-array `in`/`!in` fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs \
+  --source tools/wasm-kotlin-teavm/fixtures/ps-array-in/Main.kt \
+  --out tools/wasm-kotlin-teavm/build/browser-ps-array-in-out
+printf 'banana\n' | java -cp tools/wasm-kotlin-teavm/build/browser-ps-array-in-out MainKt
+```
+
+The expected output is:
+
+```text
+arrayIn=1023 size=3,6
+```
+
 ## Current Status
 
 This folder is a porting scaffold, not an app integration. The current probe compiles a small Java
@@ -866,6 +882,10 @@ Known findings from the initial experiments:
   `String.substring`, `startsWith`, `endsWith`, `contains` with `String` and `Char`, `indexOf`,
   `lastIndexOf`, `trim`, `lowercase`, and `uppercase`. With stdin `algorithmgo` it prints
   `str=algor|ithmgo|orithm idx=3,2,9 score=15 case=kotlingo/KOTLINGO`.
+- The browser-compatible probe also compiles `fixtures/ps-array-in/Main.kt`, which exercises
+  `in`/`!in` membership on `IntArray`, `LongArray`, `DoubleArray`, `CharArray`, and `BooleanArray`
+  by emitting direct primitive-array scan loops. With stdin `banana` it prints
+  `arrayIn=1023 size=3,6`.
 - This is not a full Kotlin/JVM backend yet. The browser path is currently a minimal emitter that
   supports the verified fixture shapes above. It does not yet support enough Kotlin for real
   competitive-programming use: full collections and common library helpers, classes/data classes,

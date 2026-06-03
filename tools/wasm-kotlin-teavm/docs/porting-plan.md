@@ -292,6 +292,10 @@ Current status:
   `String.substring`, `startsWith`, `endsWith`, `contains` with `String` and `Char`, `indexOf`,
   `lastIndexOf`, `trim`, `lowercase`, and `uppercase`. With stdin `algorithmgo` it prints
   `str=algor|ithmgo|orithm idx=3,2,9 score=15 case=kotlingo/KOTLINGO`.
+- The browser-facing compile export also completes `fixtures/ps-array-in/Main.kt`, which covers
+  `in`/`!in` membership on `IntArray`, `LongArray`, `DoubleArray`, `CharArray`, and `BooleanArray`
+  by emitting direct primitive-array scan loops. With stdin `banana` it prints
+  `arrayIn=1023 size=3,6`.
 - This success currently comes from a minimal PSI-based bytecode emitter for the verified fixture
   shapes, not from the full Kotlin/JVM backend. The full backend still fails because Kotlin builtins
   deserialization can read `kotlin/kotlin.kotlin_builtins` but cannot resolve `kotlin.Unit`; virtual

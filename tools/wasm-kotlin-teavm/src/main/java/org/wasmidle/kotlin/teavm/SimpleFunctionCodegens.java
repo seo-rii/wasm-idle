@@ -2575,6 +2575,65 @@ public final class SimpleFunctionCodegens {
                 return ValueType.BOOLEAN;
             }
         }
+        if (containerType == ValueType.INT_ARRAY || containerType == ValueType.LONG_ARRAY
+                || containerType == ValueType.DOUBLE_ARRAY || containerType == ValueType.CHAR_ARRAY
+                || containerType == ValueType.BOOLEAN_ARRAY) {
+            ValueType arrayElementType = indexedElementType(containerType);
+            if (elementType != arrayElementType) {
+                throw new IllegalArgumentException("Array contains type mismatch: " + binary.getText());
+            }
+            int arrayIndex = context.allocateTemporary(containerType);
+            emitExpressionAs(method, context, container, containerType);
+            method.visitVarInsn(Opcodes.ASTORE, arrayIndex);
+            int valueIndex = context.allocateTemporary(arrayElementType);
+            emitExpressionAs(method, context, element, arrayElementType);
+            storeLocal(method, arrayElementType, valueIndex);
+            int loopIndex = context.allocateTemporary(ValueType.INT);
+            method.visitInsn(Opcodes.ICONST_0);
+            method.visitVarInsn(Opcodes.ISTORE, loopIndex);
+
+            Label startLabel = new Label();
+            Label foundLabel = new Label();
+            Label missingLabel = new Label();
+            Label endLabel = new Label();
+            method.visitLabel(startLabel);
+            method.visitVarInsn(Opcodes.ILOAD, loopIndex);
+            method.visitVarInsn(Opcodes.ALOAD, arrayIndex);
+            method.visitInsn(Opcodes.ARRAYLENGTH);
+            method.visitJumpInsn(Opcodes.IF_ICMPGE, missingLabel);
+            method.visitVarInsn(Opcodes.ALOAD, arrayIndex);
+            method.visitVarInsn(Opcodes.ILOAD, loopIndex);
+            if (containerType == ValueType.INT_ARRAY) {
+                method.visitInsn(Opcodes.IALOAD);
+            } else if (containerType == ValueType.LONG_ARRAY) {
+                method.visitInsn(Opcodes.LALOAD);
+            } else if (containerType == ValueType.DOUBLE_ARRAY) {
+                method.visitInsn(Opcodes.DALOAD);
+            } else if (containerType == ValueType.CHAR_ARRAY) {
+                method.visitInsn(Opcodes.CALOAD);
+            } else {
+                method.visitInsn(Opcodes.BALOAD);
+            }
+            loadLocal(method, arrayElementType, valueIndex);
+            if (arrayElementType == ValueType.LONG) {
+                method.visitInsn(Opcodes.LCMP);
+                method.visitJumpInsn(Opcodes.IFEQ, foundLabel);
+            } else if (arrayElementType == ValueType.DOUBLE) {
+                method.visitInsn(Opcodes.DCMPL);
+                method.visitJumpInsn(Opcodes.IFEQ, foundLabel);
+            } else {
+                method.visitJumpInsn(Opcodes.IF_ICMPEQ, foundLabel);
+            }
+            method.visitIincInsn(loopIndex, 1);
+            method.visitJumpInsn(Opcodes.GOTO, startLabel);
+            method.visitLabel(foundLabel);
+            method.visitInsn(negated ? Opcodes.ICONST_0 : Opcodes.ICONST_1);
+            method.visitJumpInsn(Opcodes.GOTO, endLabel);
+            method.visitLabel(missingLabel);
+            method.visitInsn(negated ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+            method.visitLabel(endLabel);
+            return ValueType.BOOLEAN;
+        }
         if (containerType == ValueType.INT_HASH_SET || containerType == ValueType.INT_ARRAY_LIST
                 || containerType == ValueType.INT_PRIORITY_QUEUE || containerType == ValueType.INT_ARRAY_DEQUE
                 || containerType == ValueType.INT_INT_HASH_MAP) {
