@@ -447,11 +447,7 @@ public final class SimpleFunctionCodegens {
                 ValueType leftType = inferExpressionType(context, binary.getLeft());
                 ValueType rightType = inferExpressionType(context, binary.getRight());
                 if (leftType.numeric && rightType.numeric) {
-                    ValueType resultType = leftType == ValueType.DOUBLE || rightType == ValueType.DOUBLE
-                            ? ValueType.DOUBLE
-                            : leftType == ValueType.LONG || rightType == ValueType.LONG
-                            ? ValueType.LONG
-                            : ValueType.INT;
+                    ValueType resultType = promotedNumericType(leftType, rightType);
                     emitExpressionAs(method, context, binary.getLeft(), resultType);
                     emitExpressionAs(method, context, binary.getRight(), resultType);
                     emitArithmeticOpcode(method, operation, resultType);
@@ -623,6 +619,34 @@ public final class SimpleFunctionCodegens {
                     "()Ljava/lang/String;", false);
             return ValueType.STRING;
         }
+        if ("abs".equals(calleeText) && call.getValueArguments().size() == 1) {
+            KtExpression argument = call.getValueArguments().get(0).getArgumentExpression();
+            ValueType type = inferExpressionType(context, argument);
+            if (!type.numeric) {
+                throw new IllegalArgumentException("abs only supports numbers: " + call.getText());
+            }
+            emitExpressionAs(method, context, argument, type);
+            method.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Math", "abs",
+                    "(" + type.descriptor + ")" + type.descriptor, false);
+            return type;
+        }
+        if (("minOf".equals(calleeText) || "maxOf".equals(calleeText))
+                && call.getValueArguments().size() == 2) {
+            KtExpression left = call.getValueArguments().get(0).getArgumentExpression();
+            KtExpression right = call.getValueArguments().get(1).getArgumentExpression();
+            ValueType leftType = inferExpressionType(context, left);
+            ValueType rightType = inferExpressionType(context, right);
+            if (!leftType.numeric || !rightType.numeric) {
+                throw new IllegalArgumentException(calleeText + " only supports numbers: " + call.getText());
+            }
+            ValueType type = promotedNumericType(leftType, rightType);
+            emitExpressionAs(method, context, left, type);
+            emitExpressionAs(method, context, right, type);
+            method.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Math",
+                    "minOf".equals(calleeText) ? "min" : "max",
+                    "(" + type.descriptor + type.descriptor + ")" + type.descriptor, false);
+            return type;
+        }
 
         FunctionSignature signature = findFunctionSignature(calleeText);
         if (signature == null) {
@@ -737,11 +761,7 @@ public final class SimpleFunctionCodegens {
             ValueType leftType = inferExpressionType(context, binary.getLeft());
             ValueType rightType = inferExpressionType(context, binary.getRight());
             if (leftType.numeric && rightType.numeric) {
-                return leftType == ValueType.DOUBLE || rightType == ValueType.DOUBLE
-                        ? ValueType.DOUBLE
-                        : leftType == ValueType.LONG || rightType == ValueType.LONG
-                        ? ValueType.LONG
-                        : ValueType.INT;
+                return promotedNumericType(leftType, rightType);
             }
         }
         if (expression instanceof KtStringTemplateExpression) {
@@ -773,6 +793,23 @@ public final class SimpleFunctionCodegens {
             }
             if ("BooleanArray".equals(calleeText)) {
                 return ValueType.BOOLEAN_ARRAY;
+            }
+            if ("abs".equals(calleeText) && ((KtCallExpression) expression).getValueArguments().size() == 1) {
+                ValueType type = inferExpressionType(context,
+                        ((KtCallExpression) expression).getValueArguments().get(0).getArgumentExpression());
+                if (type.numeric) {
+                    return type;
+                }
+            }
+            if (("minOf".equals(calleeText) || "maxOf".equals(calleeText))
+                    && ((KtCallExpression) expression).getValueArguments().size() == 2) {
+                ValueType leftType = inferExpressionType(context,
+                        ((KtCallExpression) expression).getValueArguments().get(0).getArgumentExpression());
+                ValueType rightType = inferExpressionType(context,
+                        ((KtCallExpression) expression).getValueArguments().get(1).getArgumentExpression());
+                if (leftType.numeric && rightType.numeric) {
+                    return promotedNumericType(leftType, rightType);
+                }
             }
             FunctionSignature signature = findFunctionSignature(calleeText);
             if (signature != null) {
@@ -1358,6 +1395,16 @@ public final class SimpleFunctionCodegens {
             return ValueType.VOID;
         }
         throw new IllegalArgumentException("Unsupported Kotlin type in browser probe emitter: " + text);
+    }
+
+    private static ValueType promotedNumericType(ValueType leftType, ValueType rightType) {
+        if (leftType == ValueType.DOUBLE || rightType == ValueType.DOUBLE) {
+            return ValueType.DOUBLE;
+        }
+        if (leftType == ValueType.LONG || rightType == ValueType.LONG) {
+            return ValueType.LONG;
+        }
+        return ValueType.INT;
     }
 
     private static boolean isDoubleLiteralText(String text) {

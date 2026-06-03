@@ -216,10 +216,14 @@ Current status:
   `Double` parameters/returns/locals, double literals, `readDouble()`, `DoubleArray` construction,
   reads and writes, double arithmetic/comparisons, and double output/string templates. With stdin
   `3 1.5 2.5 4.0` it prints `double=4.0 first=1.5`.
+- The browser-facing compile export also completes `fixtures/ps-math-helpers/Main.kt`, which covers
+  `abs`, `minOf`, and `maxOf` for promoted `Int`, `Long`, and `Double` arguments. These helper calls
+  lower directly to `java.lang.Math` overloads. With stdin `-7 5 123456789012 -3.5` it prints
+  `math=12 long=123456789012 double=2.5`.
 - This success currently comes from a minimal PSI-based bytecode emitter for the verified fixture
   shapes, not from the full Kotlin/JVM backend. The full backend still fails because Kotlin builtins
   deserialization can read `kotlin/kotlin.kotlin_builtins` but cannot resolve `kotlin.Unit`; virtual
   classpath jar reads also still warn with `NullPointerException`.
 - The next PS coverage targets are collection helpers, classes/data classes, lambdas/generics,
-  broader library calls, and stable classpath jar reads. Imported library symbols still need explicit
-  helper support; import directives are currently accepted as boilerplate only.
+  broader library calls, and stable classpath jar reads. Most imported library symbols still need
+  explicit helper support; import directives are currently accepted as boilerplate only.
