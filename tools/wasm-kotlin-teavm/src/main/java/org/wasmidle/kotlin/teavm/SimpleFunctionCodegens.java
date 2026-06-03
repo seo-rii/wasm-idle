@@ -822,6 +822,16 @@ public final class SimpleFunctionCodegens {
             }
             if (selector instanceof KtCallExpression) {
                 KtExpression callee = ((KtCallExpression) selector).getCalleeExpression();
+                if (callee != null && "sort".equals(callee.getText())
+                        && ((KtCallExpression) selector).getValueArguments().isEmpty()) {
+                    ValueType receiverType = emitExpression(method, context, receiver);
+                    if (receiverType == ValueType.INT_ARRAY || receiverType == ValueType.LONG_ARRAY
+                            || receiverType == ValueType.DOUBLE_ARRAY || receiverType == ValueType.CHAR_ARRAY) {
+                        method.visitMethodInsn(Opcodes.INVOKESTATIC, "java/util/Arrays", "sort",
+                                "(" + receiverType.descriptor + ")V", false);
+                        return ValueType.VOID;
+                    }
+                }
                 if (callee != null && "append".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().size() == 1) {
                     ValueType receiverType = emitExpression(method, context, receiver);
@@ -1282,6 +1292,14 @@ public final class SimpleFunctionCodegens {
             }
             if (selector instanceof KtCallExpression) {
                 KtExpression callee = ((KtCallExpression) selector).getCalleeExpression();
+                if (callee != null && "sort".equals(callee.getText())
+                        && ((KtCallExpression) selector).getValueArguments().isEmpty()) {
+                    ValueType receiverType = inferExpressionType(context, qualified.getReceiverExpression());
+                    if (receiverType == ValueType.INT_ARRAY || receiverType == ValueType.LONG_ARRAY
+                            || receiverType == ValueType.DOUBLE_ARRAY || receiverType == ValueType.CHAR_ARRAY) {
+                        return ValueType.VOID;
+                    }
+                }
                 if (callee != null && "append".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().size() == 1
                         && inferExpressionType(context, qualified.getReceiverExpression())

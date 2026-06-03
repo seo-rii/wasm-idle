@@ -478,6 +478,28 @@ the expected output is:
 grid=6 edge=6 size=2,3
 ```
 
+To run the PS-style primitive-array sort fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs \
+  --source tools/wasm-kotlin-teavm/fixtures/ps-array-sort/Main.kt \
+  --out tools/wasm-kotlin-teavm/build/browser-ps-array-sort-out
+java -cp tools/wasm-kotlin-teavm/build/browser-ps-array-sort-out MainKt
+```
+
+With this stdin:
+
+```text
+4 9 90 1 10 4 40 1 20 dcba
+```
+
+the expected output is:
+
+```text
+sort=1,9 long=10,90 chars=ad
+```
+
 ## Current Status
 
 This folder is a porting scaffold, not an app integration. The current probe compiles a small Java
@@ -628,6 +650,10 @@ Known findings from the initial experiments:
   `Array(n) { IntArray(m) }`, nested primitive-array reads and writes, compound assignment on nested
   elements, outer `.size`, and row `.size`. Running that generated class with
   `2 3 1 2 3 4 5 6` on stdin prints `grid=6 edge=6 size=2,3`.
+- The browser-compatible probe also compiles `fixtures/ps-array-sort/Main.kt`, which exercises
+  `sort()` on `IntArray`, `LongArray`, and `CharArray` values by lowering to `java.util.Arrays`.
+  Running that generated class with `4 9 90 1 10 4 40 1 20 dcba` on stdin prints
+  `sort=1,9 long=10,90 chars=ad`.
 - This is not a full Kotlin/JVM backend yet. The browser path is currently a minimal emitter that
   supports the verified fixture shapes above. It does not yet support enough Kotlin for real
   competitive-programming use: collections and common library helpers, classes/data classes,
