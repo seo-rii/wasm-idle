@@ -822,6 +822,26 @@ public final class SimpleFunctionCodegens {
             }
             if (selector instanceof KtCallExpression) {
                 KtExpression callee = ((KtCallExpression) selector).getCalleeExpression();
+                if (callee != null && ("toInt".equals(callee.getText()) || "toLong".equals(callee.getText())
+                        || "toDouble".equals(callee.getText()))
+                        && ((KtCallExpression) selector).getValueArguments().isEmpty()) {
+                    ValueType receiverType = emitExpression(method, context, receiver);
+                    if (receiverType == ValueType.STRING) {
+                        if ("toInt".equals(callee.getText())) {
+                            method.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Integer", "parseInt",
+                                    "(Ljava/lang/String;)I", false);
+                            return ValueType.INT;
+                        }
+                        if ("toLong".equals(callee.getText())) {
+                            method.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Long", "parseLong",
+                                    "(Ljava/lang/String;)J", false);
+                            return ValueType.LONG;
+                        }
+                        method.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Double", "parseDouble",
+                                "(Ljava/lang/String;)D", false);
+                        return ValueType.DOUBLE;
+                    }
+                }
                 if (callee != null && "sort".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().isEmpty()) {
                     ValueType receiverType = emitExpression(method, context, receiver);
@@ -1292,6 +1312,18 @@ public final class SimpleFunctionCodegens {
             }
             if (selector instanceof KtCallExpression) {
                 KtExpression callee = ((KtCallExpression) selector).getCalleeExpression();
+                if (callee != null && ("toInt".equals(callee.getText()) || "toLong".equals(callee.getText())
+                        || "toDouble".equals(callee.getText()))
+                        && ((KtCallExpression) selector).getValueArguments().isEmpty()
+                        && inferExpressionType(context, qualified.getReceiverExpression()) == ValueType.STRING) {
+                    if ("toInt".equals(callee.getText())) {
+                        return ValueType.INT;
+                    }
+                    if ("toLong".equals(callee.getText())) {
+                        return ValueType.LONG;
+                    }
+                    return ValueType.DOUBLE;
+                }
                 if (callee != null && "sort".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().isEmpty()) {
                     ValueType receiverType = inferExpressionType(context, qualified.getReceiverExpression());

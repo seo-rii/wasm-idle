@@ -500,6 +500,28 @@ the expected output is:
 sort=1,9 long=10,90 chars=ad
 ```
 
+To run the PS-style string numeric parse fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs \
+  --source tools/wasm-kotlin-teavm/fixtures/ps-string-parse/Main.kt \
+  --out tools/wasm-kotlin-teavm/build/browser-ps-string-parse-out
+java -cp tools/wasm-kotlin-teavm/build/browser-ps-string-parse-out MainKt
+```
+
+With this stdin:
+
+```text
+7 100000000000 2.5
+```
+
+the expected output is:
+
+```text
+parse=8 long=100000000002 double=3.0
+```
+
 ## Current Status
 
 This folder is a porting scaffold, not an app integration. The current probe compiles a small Java
@@ -654,6 +676,10 @@ Known findings from the initial experiments:
   `sort()` on `IntArray`, `LongArray`, and `CharArray` values by lowering to `java.util.Arrays`.
   Running that generated class with `4 9 90 1 10 4 40 1 20 dcba` on stdin prints
   `sort=1,9 long=10,90 chars=ad`.
+- The browser-compatible probe also compiles `fixtures/ps-string-parse/Main.kt`, which exercises
+  `String.toInt()`, `String.toLong()`, and `String.toDouble()` on token input. Running that
+  generated class with `7 100000000000 2.5` on stdin prints
+  `parse=8 long=100000000002 double=3.0`.
 - This is not a full Kotlin/JVM backend yet. The browser path is currently a minimal emitter that
   supports the verified fixture shapes above. It does not yet support enough Kotlin for real
   competitive-programming use: collections and common library helpers, classes/data classes,
