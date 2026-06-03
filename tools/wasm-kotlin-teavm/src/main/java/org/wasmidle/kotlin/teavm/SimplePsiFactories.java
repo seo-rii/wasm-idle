@@ -39,6 +39,15 @@ public final class SimplePsiFactories {
         if ("org.jetbrains.kotlin.psi.KtContainerNode".equals(className)) {
             return new org.jetbrains.kotlin.psi.KtContainerNode(node);
         }
+        if ("org.jetbrains.kotlin.psi.KtContainerNodeForControlStructureBody".equals(className)) {
+            return new org.jetbrains.kotlin.psi.KtContainerNodeForControlStructureBody(node);
+        }
+        if ("org.jetbrains.kotlin.psi.KtIfExpression".equals(className)) {
+            return new org.jetbrains.kotlin.psi.KtIfExpression(node);
+        }
+        if ("org.jetbrains.kotlin.psi.KtLiteralStringTemplateEntry".equals(className)) {
+            return new org.jetbrains.kotlin.psi.KtLiteralStringTemplateEntry(node);
+        }
         if ("org.jetbrains.kotlin.psi.KtNameReferenceExpression".equals(className)) {
             return new org.jetbrains.kotlin.psi.KtNameReferenceExpression(node);
         }
@@ -48,20 +57,41 @@ public final class SimplePsiFactories {
         if ("org.jetbrains.kotlin.psi.KtOperationReferenceExpression".equals(className)) {
             return new org.jetbrains.kotlin.psi.KtOperationReferenceExpression(node);
         }
+        if ("org.jetbrains.kotlin.psi.KtParameter".equals(className)) {
+            return new org.jetbrains.kotlin.psi.KtParameter(node);
+        }
+        if ("org.jetbrains.kotlin.psi.KtParameterList".equals(className)) {
+            return new org.jetbrains.kotlin.psi.KtParameterList(node);
+        }
         if ("org.jetbrains.kotlin.psi.KtParenthesizedExpression".equals(className)) {
             return new org.jetbrains.kotlin.psi.KtParenthesizedExpression(node);
         }
         if ("org.jetbrains.kotlin.psi.KtProperty".equals(className)) {
             return new org.jetbrains.kotlin.psi.KtProperty(node);
         }
+        if ("org.jetbrains.kotlin.psi.KtReturnExpression".equals(className)) {
+            return new org.jetbrains.kotlin.psi.KtReturnExpression(node);
+        }
+        if ("org.jetbrains.kotlin.psi.KtSimpleNameStringTemplateEntry".equals(className)) {
+            return new org.jetbrains.kotlin.psi.KtSimpleNameStringTemplateEntry(node);
+        }
         if ("org.jetbrains.kotlin.psi.KtStringTemplateExpression".equals(className)) {
             return new org.jetbrains.kotlin.psi.KtStringTemplateExpression(node);
+        }
+        if ("org.jetbrains.kotlin.psi.KtTypeReference".equals(className)) {
+            return new org.jetbrains.kotlin.psi.KtTypeReference(node);
+        }
+        if ("org.jetbrains.kotlin.psi.KtUserType".equals(className)) {
+            return new org.jetbrains.kotlin.psi.KtUserType(node);
         }
         if ("org.jetbrains.kotlin.psi.KtValueArgument".equals(className)) {
             return new org.jetbrains.kotlin.psi.KtValueArgument(node);
         }
         if ("org.jetbrains.kotlin.psi.KtValueArgumentList".equals(className)) {
             return new org.jetbrains.kotlin.psi.KtValueArgumentList(node);
+        }
+        if ("org.jetbrains.kotlin.psi.KtWhileExpression".equals(className)) {
+            return new org.jetbrains.kotlin.psi.KtWhileExpression(node);
         }
         return null;
     }

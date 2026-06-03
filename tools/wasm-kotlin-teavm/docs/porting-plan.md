@@ -186,7 +186,13 @@ Current status:
 - The browser-facing compile export now completes the minimal fixture in a browser-compatible Node
   runtime. It writes `MainKt.class`, and `java -cp build/browser-probe-out MainKt` prints
   `answer=42`.
-- This success currently comes from a minimal PSI-based bytecode emitter for the fixture shape, not
-  from the full Kotlin/JVM backend. The full backend still fails because Kotlin builtins
+- The browser-facing compile export also completes `fixtures/ps-basic/Main.kt`, which covers a
+  PS-style slice: top-level `Int` functions, parameters/returns, `var`, reassignment, `while`,
+  `if/else`, arithmetic, modulo, comparisons, `return`, function calls, string templates, and
+  `print`/`println`. Running the generated class prints `gcd=6 sum=9`.
+- This success currently comes from a minimal PSI-based bytecode emitter for the verified fixture
+  shapes, not from the full Kotlin/JVM backend. The full backend still fails because Kotlin builtins
   deserialization can read `kotlin/kotlin.kotlin_builtins` but cannot resolve `kotlin.Unit`; virtual
   classpath jar reads also still warn with `NullPointerException`.
+- The next PS coverage targets are arrays, `Long`, simple input parsing, packages/imports, and
+  stable classpath jar reads.

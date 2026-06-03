@@ -100,6 +100,22 @@ The expected output for the current fixture is:
 answer=42
 ```
 
+To run the PS-style control-flow fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs \
+  --source tools/wasm-kotlin-teavm/fixtures/ps-basic/Main.kt \
+  --out tools/wasm-kotlin-teavm/build/browser-ps-basic-out
+java -cp tools/wasm-kotlin-teavm/build/browser-ps-basic-out MainKt
+```
+
+The expected output is:
+
+```text
+gcd=6 sum=9
+```
+
 ## Current Status
 
 This folder is a porting scaffold, not an app integration. The current probe compiles a small Java
@@ -177,12 +193,18 @@ Known findings from the initial experiments:
 - TeaVM's generated runtime loader now initializes successfully in Node. The startup trap was caused
   by TeaVM's JS string conversion path calling `Fiber.isResuming()` before a fiber existed; the probe
   patches `Fiber.isResuming()` and `Fiber.isSuspending()` for this browser compiler graph.
-- The `compileKotlinSource` JSO export is present and callable. The browser-compatible probe now
+- The `compileKotlinSource` JSO export is present and callable. The browser-compatible probe
   compiles `fixtures/hello/Main.kt` to a runnable `MainKt.class`; running that class prints
   `answer=42`.
+- The browser-compatible probe also compiles `fixtures/ps-basic/Main.kt`, which exercises top-level
+  `Int` functions, `Int` parameters/returns, `var` reassignment, `while`, `if/else`, arithmetic,
+  modulo, comparisons, `return`, function calls, string templates, and `print`/`println`. Running
+  that generated class prints `gcd=6 sum=9`.
 - This is not a full Kotlin/JVM backend yet. The browser path is currently a minimal emitter that
-  supports the fixture shape: top-level `fun main()`, local integer `val`, integer `+`, string
-  templates, and `println(...)`.
+  supports the verified fixture shapes above. It does not yet support enough Kotlin for real
+  competitive-programming use: arrays/collections, `Long`, `String` input parsing, classes/data
+  classes, lambdas, generics, library calls, packages/imports, and stable classpath jar reads are
+  still missing.
 - Full Kotlin backend restoration is still blocked by Kotlin builtins deserialization in the TeaVM
   runtime: the `.kotlin_builtins` resource is readable, but `DefaultBuiltIns.getUnitType()` still
   reports that `kotlin.Unit` is missing. Virtual classpath jar reads also still warn with
