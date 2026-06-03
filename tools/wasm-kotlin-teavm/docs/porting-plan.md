@@ -329,6 +329,12 @@ Current status:
   ordering. `it.second` orders by signed `(second, first)`, while `it.first` keeps signed
   `(first, second)`. Running the generated class prints
   `pairPqSecond=4 peek=-3,-1 first=-3,-1 second=2,-1 third=-5,0 score=112 flags=true,true,true,true empty=true size=0 firstOrder=1,99`.
+- The browser-facing compile export also completes `fixtures/ps-long-int-pair-priority-queue/Main.kt`,
+  which covers Dijkstra-style `PriorityQueue<Pair<Long, Int>>` construction, function parameters
+  and returns, `add`, `offer`, `peek`, `poll`, `contains`, `remove`, `size`, `isEmpty`, and
+  `in`/`!in`. It lowers queue entries to fixed-width signed-order string keys and decodes
+  `peek`/`poll` back to `Pair<Long, Int>`. With stdin `100000000000 10` it prints
+  `longIntPq=5 peek=-100000000000,9 first=-100000000000,9 second=99999999990,1 third=99999999990,2 fourth=100000000010,3 flags=true,true,true empty=true size=0`.
 - The browser-facing compile export also completes `fixtures/ps-long-priority-queue/Main.kt`, which
   covers `PriorityQueue<Long>` construction, `add`, `offer`, `peek`, `poll`, `size`, `isEmpty`, and
   `in`/`!in` by lowering to `java.util.PriorityQueue<Long>`. With stdin `100000000000 7` it prints
