@@ -317,6 +317,12 @@ Current status:
   `remove`, `clear`, `size`, `isEmpty`, and `in`/`!in` by lowering to
   `java.util.HashMap<String, Integer>`. With stdin `go lang` it prints
   `stringMap=0,2 first=1 second=2 value=3 removed=1 fallback=-7 flags=true,true,true empty=true,false more=-6,3`.
+- The browser-facing compile export also completes `fixtures/ps-string-long-map/Main.kt`, which covers
+  `HashMap<String, Long>`, `MutableMap<String, Long>` parameters, and `mutableMapOf<String, Long>()`
+  construction, `map[key]`, `map[key] = value`, `put`, `get`, `getOrDefault`, `containsKey`,
+  `remove`, `clear`, `size`, `isEmpty`, and `in`/`!in` by lowering to
+  `java.util.HashMap<String, Long>`. With stdin `go lang 100000000000 7` it prints
+  `stringLongMap=0,2 first=100000000000 second=100000000007 value=100000000014 removed=7 fallback=-11 flags=true,true,true empty=true,false more=-4,100000000014`.
 - The browser-facing compile export also completes `fixtures/ps-hash-map/Main.kt`, which covers
   `HashMap<Int, Int>` and `mutableMapOf<Int, Int>()` construction, `map[key]`, `map[key] = value`,
   `put`, `getOrDefault`, `containsKey`, `remove`, `clear`, `size`, and `isEmpty` by lowering to
