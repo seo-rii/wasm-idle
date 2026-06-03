@@ -624,6 +624,22 @@ The expected output is:
 set=2,true had=true removed=true missing=false empty=true
 ```
 
+To run the PS-style `HashMap<Int, Int>` fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs \
+  --source tools/wasm-kotlin-teavm/fixtures/ps-hash-map/Main.kt \
+  --out tools/wasm-kotlin-teavm/build/browser-ps-hash-map-out
+printf '7 1 2 1 3 2 2 3\n' | java -cp tools/wasm-kotlin-teavm/build/browser-ps-hash-map-out MainKt
+```
+
+The expected output is:
+
+```text
+map=3 removed=2 after=-1 had=true extra=3 empty=true size=0
+```
+
 ## Current Status
 
 This folder is a porting scaffold, not an app integration. The current probe compiles a small Java
@@ -805,6 +821,11 @@ Known findings from the initial experiments:
   `HashSet<Int>` and `mutableSetOf<Int>()` construction, `add`, `contains`, `remove`, `clear`,
   `size`, and `isEmpty` by lowering to `java.util.HashSet<Integer>`. With stdin `5 1 2 1 3 2` it
   prints `set=2,true had=true removed=true missing=false empty=true`.
+- The browser-compatible probe also compiles `fixtures/ps-hash-map/Main.kt`, which exercises
+  `HashMap<Int, Int>` and `mutableMapOf<Int, Int>()` construction, `map[key]`, `map[key] = value`,
+  `put`, `getOrDefault`, `containsKey`, `remove`, `clear`, `size`, and `isEmpty` by lowering to
+  `java.util.HashMap<Integer, Integer>`. With stdin `7 1 2 1 3 2 2 3` it prints
+  `map=3 removed=2 after=-1 had=true extra=3 empty=true size=0`.
 - This is not a full Kotlin/JVM backend yet. The browser path is currently a minimal emitter that
   supports the verified fixture shapes above. It does not yet support enough Kotlin for real
   competitive-programming use: full collections and common library helpers, classes/data classes,

@@ -279,6 +279,11 @@ Current status:
   `HashSet<Int>` and `mutableSetOf<Int>()` construction, `add`, `contains`, `remove`, `clear`,
   `size`, and `isEmpty` by lowering to `java.util.HashSet<Integer>`. With stdin `5 1 2 1 3 2` it
   prints `set=2,true had=true removed=true missing=false empty=true`.
+- The browser-facing compile export also completes `fixtures/ps-hash-map/Main.kt`, which covers
+  `HashMap<Int, Int>` and `mutableMapOf<Int, Int>()` construction, `map[key]`, `map[key] = value`,
+  `put`, `getOrDefault`, `containsKey`, `remove`, `clear`, `size`, and `isEmpty` by lowering to
+  `java.util.HashMap<Integer, Integer>`. With stdin `7 1 2 1 3 2 2 3` it prints
+  `map=3 removed=2 after=-1 had=true extra=3 empty=true size=0`.
 - This success currently comes from a minimal PSI-based bytecode emitter for the verified fixture
   shapes, not from the full Kotlin/JVM backend. The full backend still fails because Kotlin builtins
   deserialization can read `kotlin/kotlin.kotlin_builtins` but cannot resolve `kotlin.Unit`; virtual
