@@ -1250,6 +1250,49 @@ public final class SimpleFunctionCodegens {
                         return ValueType.DOUBLE;
                     }
                 }
+                if (callee != null
+                        && ("coerceAtLeast".equals(callee.getText())
+                                || "coerceAtMost".equals(callee.getText()))
+                        && ((KtCallExpression) selector).getValueArguments().size() == 1) {
+                    KtExpression argument = ((KtCallExpression) selector).getValueArguments()
+                            .get(0).getArgumentExpression();
+                    ValueType receiverType = inferExpressionType(context, receiver);
+                    ValueType argumentType = inferExpressionType(context, argument);
+                    if (!receiverType.numeric || !argumentType.numeric) {
+                        throw new IllegalArgumentException(callee.getText() + " only supports numbers: "
+                                + qualified.getText());
+                    }
+                    ValueType type = promotedNumericType(receiverType, argumentType);
+                    emitExpressionAs(method, context, receiver, type);
+                    emitExpressionAs(method, context, argument, type);
+                    method.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Math",
+                            "coerceAtLeast".equals(callee.getText()) ? "max" : "min",
+                            "(" + type.descriptor + type.descriptor + ")" + type.descriptor, false);
+                    return type;
+                }
+                if (callee != null && "coerceIn".equals(callee.getText())
+                        && ((KtCallExpression) selector).getValueArguments().size() == 2) {
+                    KtExpression lower = ((KtCallExpression) selector).getValueArguments()
+                            .get(0).getArgumentExpression();
+                    KtExpression upper = ((KtCallExpression) selector).getValueArguments()
+                            .get(1).getArgumentExpression();
+                    ValueType receiverType = inferExpressionType(context, receiver);
+                    ValueType lowerType = inferExpressionType(context, lower);
+                    ValueType upperType = inferExpressionType(context, upper);
+                    if (!receiverType.numeric || !lowerType.numeric || !upperType.numeric) {
+                        throw new IllegalArgumentException("coerceIn only supports numbers: "
+                                + qualified.getText());
+                    }
+                    ValueType type = promotedNumericType(promotedNumericType(receiverType, lowerType), upperType);
+                    emitExpressionAs(method, context, receiver, type);
+                    emitExpressionAs(method, context, lower, type);
+                    method.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Math", "max",
+                            "(" + type.descriptor + type.descriptor + ")" + type.descriptor, false);
+                    emitExpressionAs(method, context, upper, type);
+                    method.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Math", "min",
+                            "(" + type.descriptor + type.descriptor + ")" + type.descriptor, false);
+                    return type;
+                }
                 if (callee != null && ("trim".equals(callee.getText()) || "lowercase".equals(callee.getText())
                         || "uppercase".equals(callee.getText()))
                         && ((KtCallExpression) selector).getValueArguments().isEmpty()) {
@@ -3076,6 +3119,28 @@ public final class SimpleFunctionCodegens {
                             return ValueType.LONG;
                         }
                         return ValueType.DOUBLE;
+                    }
+                }
+                if (callee != null
+                        && ("coerceAtLeast".equals(callee.getText())
+                                || "coerceAtMost".equals(callee.getText()))
+                        && ((KtCallExpression) selector).getValueArguments().size() == 1) {
+                    ValueType receiverType = inferExpressionType(context, qualified.getReceiverExpression());
+                    ValueType argumentType = inferExpressionType(context,
+                            ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression());
+                    if (receiverType.numeric && argumentType.numeric) {
+                        return promotedNumericType(receiverType, argumentType);
+                    }
+                }
+                if (callee != null && "coerceIn".equals(callee.getText())
+                        && ((KtCallExpression) selector).getValueArguments().size() == 2) {
+                    ValueType receiverType = inferExpressionType(context, qualified.getReceiverExpression());
+                    ValueType lowerType = inferExpressionType(context,
+                            ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression());
+                    ValueType upperType = inferExpressionType(context,
+                            ((KtCallExpression) selector).getValueArguments().get(1).getArgumentExpression());
+                    if (receiverType.numeric && lowerType.numeric && upperType.numeric) {
+                        return promotedNumericType(promotedNumericType(receiverType, lowerType), upperType);
                     }
                 }
                 if (callee != null && ("trim".equals(callee.getText()) || "lowercase".equals(callee.getText())

@@ -286,6 +286,28 @@ the expected output is:
 math=12 long=123456789012 double=2.5
 ```
 
+To run the PS-style numeric coerce fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs \
+  --source tools/wasm-kotlin-teavm/fixtures/ps-coerce/Main.kt \
+  --out tools/wasm-kotlin-teavm/build/browser-ps-coerce-out
+java -cp tools/wasm-kotlin-teavm/build/browser-ps-coerce-out MainKt
+```
+
+With this stdin:
+
+```text
+-3 100000000020 5.25
+```
+
+the expected output is:
+
+```text
+coerce=0,-3,2 long=100000000010,100000000000 double=4.5,3.0
+```
+
 To run the PS-style char-array fixture:
 
 ```bash
@@ -1186,6 +1208,11 @@ Known findings from the initial experiments:
   `abs`, `minOf`, and `maxOf` for promoted `Int`, `Long`, and `Double` arguments. These helper calls
   lower directly to `java.lang.Math` overloads. Running that generated class with
   `-7 5 123456789012 -3.5` on stdin prints `math=12 long=123456789012 double=2.5`.
+- The browser-compatible probe also compiles `fixtures/ps-coerce/Main.kt`, which exercises numeric
+  `coerceAtLeast`, `coerceAtMost`, and `coerceIn` on `Int`, `Long`, and `Double` expressions by
+  lowering to `java.lang.Math.min/max`. Running that generated class with
+  `-3 100000000020 5.25` on stdin prints
+  `coerce=0,-3,2 long=100000000010,100000000000 double=4.5,3.0`.
 - The browser-compatible probe also compiles `fixtures/ps-char-array/Main.kt`, which exercises
   `String.toCharArray()`, `CharArray` reads and writes, array `.size`, and character output/string
   templates. Running that generated class with `banana` on stdin prints `chars=bz score=9`.

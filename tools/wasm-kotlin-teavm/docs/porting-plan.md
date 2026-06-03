@@ -220,6 +220,10 @@ Current status:
   `abs`, `minOf`, and `maxOf` for promoted `Int`, `Long`, and `Double` arguments. These helper calls
   lower directly to `java.lang.Math` overloads. With stdin `-7 5 123456789012 -3.5` it prints
   `math=12 long=123456789012 double=2.5`.
+- The browser-facing compile export also completes `fixtures/ps-coerce/Main.kt`, which covers
+  numeric `coerceAtLeast`, `coerceAtMost`, and `coerceIn` on `Int`, `Long`, and `Double`
+  expressions by lowering to `java.lang.Math.min/max`. With stdin `-3 100000000020 5.25` it prints
+  `coerce=0,-3,2 long=100000000010,100000000000 double=4.5,3.0`.
 - The browser-facing compile export also completes `fixtures/ps-char-array/Main.kt`, which covers
   `String.toCharArray()`, `CharArray` reads and writes, array `.size`, and character output/string
   templates. With stdin `banana` it prints `chars=bz score=9`.
