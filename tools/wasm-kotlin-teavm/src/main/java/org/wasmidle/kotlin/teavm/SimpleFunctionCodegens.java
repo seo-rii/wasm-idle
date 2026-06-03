@@ -1169,6 +1169,25 @@ public final class SimpleFunctionCodegens {
                     return ValueType.INT;
                 }
             }
+            if (selector != null && "lastIndex".equals(selector.getText())) {
+                ValueType receiverType = emitExpression(method, context, receiver);
+                if (receiverType.array) {
+                    method.visitInsn(Opcodes.ARRAYLENGTH);
+                } else if (receiverType == ValueType.STRING) {
+                    method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/String", "length", "()I", false);
+                } else if (receiverType == ValueType.INT_ARRAY_LIST
+                        || receiverType == ValueType.LONG_ARRAY_LIST
+                        || receiverType == ValueType.STRING_ARRAY_LIST
+                        || receiverType == ValueType.INT_PAIR_ARRAY_LIST
+                        || receiverType == ValueType.INT_LONG_PAIR_ARRAY_LIST) {
+                    method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "size", "()I", false);
+                } else {
+                    throw new IllegalArgumentException("Unsupported lastIndex receiver: " + receiver.getText());
+                }
+                method.visitInsn(Opcodes.ICONST_1);
+                method.visitInsn(Opcodes.ISUB);
+                return ValueType.INT;
+            }
             if (selector != null && ("first".equals(selector.getText()) || "second".equals(selector.getText()))) {
                 ValueType receiverType = inferExpressionType(context, receiver);
                 if (receiverType == ValueType.INT_PAIR || receiverType == ValueType.INT_LONG_PAIR) {
@@ -3020,6 +3039,17 @@ public final class SimpleFunctionCodegens {
                         || receiverType == ValueType.LONG_LONG_HASH_MAP
                         || receiverType == ValueType.STRING_INT_HASH_MAP
                         || receiverType == ValueType.STRING_LONG_HASH_MAP) {
+                    return ValueType.INT;
+                }
+            }
+            if (selector != null && "lastIndex".equals(selector.getText())) {
+                ValueType receiverType = inferExpressionType(context, qualified.getReceiverExpression());
+                if (receiverType.array || receiverType == ValueType.STRING
+                        || receiverType == ValueType.INT_ARRAY_LIST
+                        || receiverType == ValueType.LONG_ARRAY_LIST
+                        || receiverType == ValueType.STRING_ARRAY_LIST
+                        || receiverType == ValueType.INT_PAIR_ARRAY_LIST
+                        || receiverType == ValueType.INT_LONG_PAIR_ARRAY_LIST) {
                     return ValueType.INT;
                 }
             }

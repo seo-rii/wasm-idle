@@ -352,6 +352,28 @@ the expected output is:
 indices=4 sum=9 list=41 long=200000000007 string=72
 ```
 
+To run the PS-style `lastIndex` fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs \
+  --source tools/wasm-kotlin-teavm/fixtures/ps-last-index/Main.kt \
+  --out tools/wasm-kotlin-teavm/build/browser-ps-last-index-out
+java -cp tools/wasm-kotlin-teavm/build/browser-ps-last-index-out MainKt
+```
+
+With this stdin:
+
+```text
+4 3 1 4 1 algorithm
+```
+
+the expected output is:
+
+```text
+lastIndex=1413 score=25
+```
+
 To run the PS-style array-compound fixture:
 
 ```bash
@@ -1176,6 +1198,10 @@ Known findings from the initial experiments:
   `ArrayList<Pair<Int, Long>>`, including `indices step 2`. These lower to `0 until size` loops.
   Running that generated class with `4 3 1 4 1 algorithm` on stdin prints
   `indices=4 sum=9 list=41 long=200000000007 string=72`.
+- The browser-compatible probe also compiles `fixtures/ps-last-index/Main.kt`, which exercises
+  `.lastIndex` on primitive arrays, `String`, `CharArray`, `ArrayList<Int>`, and
+  `ArrayList<Pair<Int, Long>>`, including `lastIndex downTo 0` loops. Running that generated class
+  with `4 3 1 4 1 algorithm` on stdin prints `lastIndex=1413 score=25`.
 - The browser-compatible probe also compiles `fixtures/ps-array-compound/Main.kt`, which exercises
   compound assignments on `IntArray`, `LongArray`, and `DoubleArray` elements, including RHS numeric
   widening to `Long` and `Double`. Running that generated class with

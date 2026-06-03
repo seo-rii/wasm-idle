@@ -232,6 +232,10 @@ Current status:
   `ArrayList<Pair<Int, Long>>`, including `indices step 2`. These lower to `0 until size` loops.
   With stdin `4 3 1 4 1 algorithm` it prints
   `indices=4 sum=9 list=41 long=200000000007 string=72`.
+- The browser-facing compile export also completes `fixtures/ps-last-index/Main.kt`, which covers
+  `.lastIndex` on primitive arrays, `String`, `CharArray`, `ArrayList<Int>`, and
+  `ArrayList<Pair<Int, Long>>`, including `lastIndex downTo 0` loops. With stdin
+  `4 3 1 4 1 algorithm` it prints `lastIndex=1413 score=25`.
 - The browser-facing compile export also completes `fixtures/ps-array-compound/Main.kt`, which covers
   compound assignments on `IntArray`, `LongArray`, and `DoubleArray` elements, including RHS numeric
   widening to `Long` and `Double`. With stdin `2 3 5 100000000000 1.5` it prints
