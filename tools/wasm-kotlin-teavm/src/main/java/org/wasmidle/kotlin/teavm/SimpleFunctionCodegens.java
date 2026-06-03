@@ -556,6 +556,18 @@ public final class SimpleFunctionCodegens {
                 method.visitInsn(Opcodes.POP);
                 return true;
             }
+            if (arrayType == ValueType.LONG_ARRAY_LIST) {
+                if (operation != KtTokens.EQ) {
+                    throw new IllegalArgumentException("Long list compound assignment is not supported: "
+                            + binary.getText());
+                }
+                emitExpressionAs(method, context, right, ValueType.LONG);
+                boxLong(method);
+                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "set",
+                        "(ILjava/lang/Object;)Ljava/lang/Object;", false);
+                method.visitInsn(Opcodes.POP);
+                return true;
+            }
             if (arrayType == ValueType.INT_PAIR_ARRAY_LIST) {
                 if (operation != KtTokens.EQ) {
                     throw new IllegalArgumentException("Pair list compound assignment is not supported: "
@@ -816,6 +828,12 @@ public final class SimpleFunctionCodegens {
                 unboxInt(method);
                 return ValueType.INT;
             }
+            if (arrayType == ValueType.LONG_ARRAY_LIST) {
+                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "get",
+                        "(I)Ljava/lang/Object;", false);
+                unboxLong(method);
+                return ValueType.LONG;
+            }
             if (arrayType == ValueType.INT_PAIR_ARRAY_LIST) {
                 method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "get",
                         "(I)Ljava/lang/Object;", false);
@@ -873,6 +891,10 @@ public final class SimpleFunctionCodegens {
                     return ValueType.INT;
                 }
                 if (receiverType == ValueType.INT_ARRAY_LIST) {
+                    method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "size", "()I", false);
+                    return ValueType.INT;
+                }
+                if (receiverType == ValueType.LONG_ARRAY_LIST) {
                     method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "size", "()I", false);
                     return ValueType.INT;
                 }
@@ -1067,6 +1089,11 @@ public final class SimpleFunctionCodegens {
                                 "(Ljava/util/List;)V", false);
                         return ValueType.VOID;
                     }
+                    if (receiverType == ValueType.LONG_ARRAY_LIST) {
+                        method.visitMethodInsn(Opcodes.INVOKESTATIC, "java/util/Collections", "sort",
+                                "(Ljava/util/List;)V", false);
+                        return ValueType.VOID;
+                    }
                 }
                 if (callee != null && "fill".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().size() == 1) {
@@ -1091,6 +1118,15 @@ public final class SimpleFunctionCodegens {
                                 ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
                                 ValueType.INT);
                         boxInt(method);
+                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "add",
+                                "(Ljava/lang/Object;)Z", false);
+                        return ValueType.BOOLEAN;
+                    }
+                    if (receiverType == ValueType.LONG_ARRAY_LIST) {
+                        emitExpressionAs(method, context,
+                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
+                                ValueType.LONG);
+                        boxLong(method);
                         method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "add",
                                 "(Ljava/lang/Object;)Z", false);
                         return ValueType.BOOLEAN;
@@ -1142,6 +1178,18 @@ public final class SimpleFunctionCodegens {
                                 ((KtCallExpression) selector).getValueArguments().get(1).getArgumentExpression(),
                                 ValueType.INT);
                         boxInt(method);
+                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "add",
+                                "(ILjava/lang/Object;)V", false);
+                        return ValueType.VOID;
+                    }
+                    if (receiverType == ValueType.LONG_ARRAY_LIST) {
+                        emitExpressionAs(method, context,
+                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
+                                ValueType.INT);
+                        emitExpressionAs(method, context,
+                                ((KtCallExpression) selector).getValueArguments().get(1).getArgumentExpression(),
+                                ValueType.LONG);
+                        boxLong(method);
                         method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "add",
                                 "(ILjava/lang/Object;)V", false);
                         return ValueType.VOID;
@@ -1232,6 +1280,11 @@ public final class SimpleFunctionCodegens {
                                 false);
                         return ValueType.BOOLEAN;
                     }
+                    if (receiverType == ValueType.LONG_ARRAY_LIST) {
+                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "isEmpty", "()Z",
+                                false);
+                        return ValueType.BOOLEAN;
+                    }
                     if (receiverType == ValueType.INT_PAIR_ARRAY_LIST) {
                         method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "isEmpty", "()Z",
                                 false);
@@ -1269,6 +1322,15 @@ public final class SimpleFunctionCodegens {
                                 "(Ljava/lang/Object;)Z", false);
                         return ValueType.BOOLEAN;
                     }
+                    if (receiverType == ValueType.LONG_ARRAY_LIST) {
+                        emitExpressionAs(method, context,
+                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
+                                ValueType.LONG);
+                        boxLong(method);
+                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", callee.getText(),
+                                "(Ljava/lang/Object;)Z", false);
+                        return ValueType.BOOLEAN;
+                    }
                     if (receiverType == ValueType.INT_HASH_SET) {
                         emitExpressionAs(method, context,
                                 ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
@@ -1300,6 +1362,15 @@ public final class SimpleFunctionCodegens {
                                 "(I)Ljava/lang/Object;", false);
                         unboxInt(method);
                         return ValueType.INT;
+                    }
+                    if (receiverType == ValueType.LONG_ARRAY_LIST) {
+                        emitExpressionAs(method, context,
+                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
+                                ValueType.INT);
+                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "remove",
+                                "(I)Ljava/lang/Object;", false);
+                        unboxLong(method);
+                        return ValueType.LONG;
                     }
                     if (receiverType == ValueType.INT_PAIR_ARRAY_LIST) {
                         emitExpressionAs(method, context,
@@ -1360,6 +1431,7 @@ public final class SimpleFunctionCodegens {
                         && ((KtCallExpression) selector).getValueArguments().isEmpty()) {
                     ValueType receiverType = emitExpression(method, context, receiver);
                     if (receiverType == ValueType.INT_ARRAY_LIST
+                            || receiverType == ValueType.LONG_ARRAY_LIST
                             || receiverType == ValueType.INT_PAIR_ARRAY_LIST) {
                         method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "clear", "()V",
                                 false);
@@ -1379,7 +1451,8 @@ public final class SimpleFunctionCodegens {
                 if (callee != null && ("first".equals(callee.getText()) || "last".equals(callee.getText()))
                         && ((KtCallExpression) selector).getValueArguments().isEmpty()) {
                     ValueType receiverType = inferExpressionType(context, receiver);
-                    if (receiverType == ValueType.INT_ARRAY_LIST || receiverType == ValueType.INT_PAIR_ARRAY_LIST) {
+                    if (receiverType == ValueType.INT_ARRAY_LIST || receiverType == ValueType.LONG_ARRAY_LIST
+                            || receiverType == ValueType.INT_PAIR_ARRAY_LIST) {
                         emitExpressionAs(method, context, receiver, receiverType);
                         if ("last".equals(callee.getText())) {
                             method.visitInsn(Opcodes.DUP);
@@ -1395,6 +1468,10 @@ public final class SimpleFunctionCodegens {
                         if (receiverType == ValueType.INT_ARRAY_LIST) {
                             unboxInt(method);
                             return ValueType.INT;
+                        }
+                        if (receiverType == ValueType.LONG_ARRAY_LIST) {
+                            unboxLong(method);
+                            return ValueType.LONG;
                         }
                         method.visitTypeInsn(Opcodes.CHECKCAST, "java/util/AbstractMap$SimpleEntry");
                         return ValueType.INT_PAIR;
@@ -1756,6 +1833,10 @@ public final class SimpleFunctionCodegens {
             method.visitTypeInsn(Opcodes.NEW, "java/util/ArrayList");
             method.visitInsn(Opcodes.DUP);
             method.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/util/ArrayList", "<init>", "()V", false);
+            if (isLongListFactoryOrConstructor(calleeText)
+                    || isLongListFactoryOrConstructor(call.getText())) {
+                return ValueType.LONG_ARRAY_LIST;
+            }
             if (isIntPairListFactoryOrConstructor(calleeText)
                     || isIntPairListFactoryOrConstructor(call.getText())) {
                 return ValueType.INT_PAIR_ARRAY_LIST;
@@ -1961,6 +2042,9 @@ public final class SimpleFunctionCodegens {
             if (arrayType == ValueType.INT_ARRAY_LIST) {
                 return ValueType.INT;
             }
+            if (arrayType == ValueType.LONG_ARRAY_LIST) {
+                return ValueType.LONG;
+            }
             if (arrayType == ValueType.INT_PAIR_ARRAY_LIST) {
                 return ValueType.INT_PAIR;
             }
@@ -1979,6 +2063,7 @@ public final class SimpleFunctionCodegens {
             if (selector != null && "size".equals(selector.getText())) {
                 ValueType receiverType = inferExpressionType(context, qualified.getReceiverExpression());
                 if (receiverType.array || receiverType == ValueType.INT_ARRAY_LIST
+                        || receiverType == ValueType.LONG_ARRAY_LIST
                         || receiverType == ValueType.INT_PAIR_ARRAY_LIST
                         || receiverType == ValueType.INT_PRIORITY_QUEUE
                         || receiverType == ValueType.INT_ARRAY_DEQUE
@@ -2039,7 +2124,8 @@ public final class SimpleFunctionCodegens {
                     ValueType receiverType = inferExpressionType(context, qualified.getReceiverExpression());
                     if (receiverType == ValueType.INT_ARRAY || receiverType == ValueType.LONG_ARRAY
                             || receiverType == ValueType.DOUBLE_ARRAY || receiverType == ValueType.CHAR_ARRAY
-                            || receiverType == ValueType.INT_ARRAY_LIST) {
+                            || receiverType == ValueType.INT_ARRAY_LIST
+                            || receiverType == ValueType.LONG_ARRAY_LIST) {
                         return ValueType.VOID;
                     }
                 }
@@ -2057,6 +2143,8 @@ public final class SimpleFunctionCodegens {
                         && (inferExpressionType(context, qualified.getReceiverExpression())
                                 == ValueType.INT_ARRAY_LIST
                                 || inferExpressionType(context, qualified.getReceiverExpression())
+                                        == ValueType.LONG_ARRAY_LIST
+                                || inferExpressionType(context, qualified.getReceiverExpression())
                                         == ValueType.INT_PAIR_ARRAY_LIST
                                 || inferExpressionType(context, qualified.getReceiverExpression())
                                         == ValueType.INT_PRIORITY_QUEUE
@@ -2070,6 +2158,8 @@ public final class SimpleFunctionCodegens {
                         && ((KtCallExpression) selector).getValueArguments().size() == 2
                         && (inferExpressionType(context, qualified.getReceiverExpression())
                                 == ValueType.INT_ARRAY_LIST
+                                || inferExpressionType(context, qualified.getReceiverExpression())
+                                        == ValueType.LONG_ARRAY_LIST
                                 || inferExpressionType(context, qualified.getReceiverExpression())
                                         == ValueType.INT_PAIR_ARRAY_LIST)) {
                     return ValueType.VOID;
@@ -2105,6 +2195,8 @@ public final class SimpleFunctionCodegens {
                         && (inferExpressionType(context, qualified.getReceiverExpression())
                                 == ValueType.INT_ARRAY_LIST
                                 || inferExpressionType(context, qualified.getReceiverExpression())
+                                        == ValueType.LONG_ARRAY_LIST
+                                || inferExpressionType(context, qualified.getReceiverExpression())
                                         == ValueType.INT_PAIR_ARRAY_LIST
                                 || inferExpressionType(context, qualified.getReceiverExpression())
                                         == ValueType.INT_PRIORITY_QUEUE
@@ -2128,6 +2220,12 @@ public final class SimpleFunctionCodegens {
                                 == ValueType.INT_PAIR_ARRAY_LIST) {
                     return ValueType.BOOLEAN;
                 }
+                if (callee != null && ("contains".equals(callee.getText()) || "remove".equals(callee.getText()))
+                        && ((KtCallExpression) selector).getValueArguments().size() == 1
+                        && inferExpressionType(context, qualified.getReceiverExpression())
+                                == ValueType.LONG_ARRAY_LIST) {
+                    return ValueType.BOOLEAN;
+                }
                 if (callee != null && "remove".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().size() == 1
                         && inferExpressionType(context, qualified.getReceiverExpression())
@@ -2139,6 +2237,9 @@ public final class SimpleFunctionCodegens {
                     ValueType receiverType = inferExpressionType(context, qualified.getReceiverExpression());
                     if (receiverType == ValueType.INT_ARRAY_LIST) {
                         return ValueType.INT;
+                    }
+                    if (receiverType == ValueType.LONG_ARRAY_LIST) {
+                        return ValueType.LONG;
                     }
                     if (receiverType == ValueType.INT_PAIR_ARRAY_LIST) {
                         return ValueType.INT_PAIR;
@@ -2169,6 +2270,8 @@ public final class SimpleFunctionCodegens {
                                 || inferExpressionType(context, qualified.getReceiverExpression())
                                         == ValueType.INT_ARRAY_LIST
                                 || inferExpressionType(context, qualified.getReceiverExpression())
+                                        == ValueType.LONG_ARRAY_LIST
+                                || inferExpressionType(context, qualified.getReceiverExpression())
                                         == ValueType.INT_PAIR_ARRAY_LIST
                                 || inferExpressionType(context, qualified.getReceiverExpression())
                                         == ValueType.INT_INT_HASH_MAP)) {
@@ -2179,6 +2282,9 @@ public final class SimpleFunctionCodegens {
                     ValueType receiverType = inferExpressionType(context, qualified.getReceiverExpression());
                     if (receiverType == ValueType.INT_ARRAY_LIST) {
                         return ValueType.INT;
+                    }
+                    if (receiverType == ValueType.LONG_ARRAY_LIST) {
+                        return ValueType.LONG;
                     }
                     if (receiverType == ValueType.INT_PAIR_ARRAY_LIST) {
                         return ValueType.INT_PAIR;
@@ -2284,6 +2390,10 @@ public final class SimpleFunctionCodegens {
                 return ValueType.STRING_BUILDER;
             }
             if (isArrayListConstructor(calleeText) || isMutableListFactory(calleeText)) {
+                if (isLongListFactoryOrConstructor(calleeText)
+                        || isLongListFactoryOrConstructor(expression.getText())) {
+                    return ValueType.LONG_ARRAY_LIST;
+                }
                 if (isIntPairListFactoryOrConstructor(calleeText)
                         || isIntPairListFactoryOrConstructor(expression.getText())) {
                     return ValueType.INT_PAIR_ARRAY_LIST;
@@ -2427,6 +2537,7 @@ public final class SimpleFunctionCodegens {
 
     private static boolean isIndexableType(ValueType type) {
         return type.array || type == ValueType.STRING || type == ValueType.INT_ARRAY_LIST
+                || type == ValueType.LONG_ARRAY_LIST
                 || type == ValueType.INT_PAIR_ARRAY_LIST
                 || type == ValueType.INT_INT_HASH_MAP;
     }
@@ -2447,6 +2558,16 @@ public final class SimpleFunctionCodegens {
         }
         return "ArrayList<Pair<Int,Int>>".equals(compact)
                 || "mutableListOf<Pair<Int,Int>>".equals(compact);
+    }
+
+    private static boolean isLongListFactoryOrConstructor(String calleeText) {
+        String compact = calleeText.replace(" ", "");
+        int parenIndex = compact.indexOf('(');
+        if (parenIndex >= 0) {
+            compact = compact.substring(0, parenIndex);
+        }
+        return "ArrayList<Long>".equals(compact)
+                || "mutableListOf<Long>".equals(compact);
     }
 
     private static boolean isPriorityQueueConstructor(String calleeText) {
@@ -2481,6 +2602,16 @@ public final class SimpleFunctionCodegens {
     private static void unboxInt(MethodVisitor method) {
         method.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/Integer");
         method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false);
+    }
+
+    private static void boxLong(MethodVisitor method) {
+        method.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Long", "valueOf",
+                "(J)Ljava/lang/Long;", false);
+    }
+
+    private static void unboxLong(MethodVisitor method) {
+        method.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/Long");
+        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()J", false);
     }
 
     private static void ensureReadStringHelper(MethodContext context) {
@@ -2950,6 +3081,22 @@ public final class SimpleFunctionCodegens {
             }
             return ValueType.BOOLEAN;
         }
+        if (containerType == ValueType.LONG_ARRAY_LIST) {
+            if (elementType != ValueType.LONG) {
+                throw new IllegalArgumentException("Long list contains requires Long element: "
+                        + binary.getText());
+            }
+            emitExpression(method, context, container);
+            emitExpressionAs(method, context, element, ValueType.LONG);
+            boxLong(method);
+            method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "contains",
+                    "(Ljava/lang/Object;)Z", false);
+            if (negated) {
+                method.visitInsn(Opcodes.ICONST_1);
+                method.visitInsn(Opcodes.IXOR);
+            }
+            return ValueType.BOOLEAN;
+        }
         if (containerType == ValueType.INT_PAIR_ARRAY_LIST) {
             if (elementType != ValueType.INT_PAIR) {
                 throw new IllegalArgumentException("Pair list contains requires Pair<Int, Int> element: "
@@ -3248,6 +3395,10 @@ public final class SimpleFunctionCodegens {
                 || "List<Pair<Int,Int>>".equals(compactText)) {
             return ValueType.INT_PAIR_ARRAY_LIST;
         }
+        if ("ArrayList<Long>".equals(compactText) || "MutableList<Long>".equals(compactText)
+                || "List<Long>".equals(compactText)) {
+            return ValueType.LONG_ARRAY_LIST;
+        }
         if ("ArrayList<Int>".equals(text) || "MutableList<Int>".equals(text)
                 || "List<Int>".equals(text)) {
             return ValueType.INT_ARRAY_LIST;
@@ -3369,6 +3520,7 @@ public final class SimpleFunctionCodegens {
         STRING("Ljava/lang/String;", 1, false, false),
         STRING_BUILDER("Ljava/lang/StringBuilder;", 1, false, false),
         INT_ARRAY_LIST("Ljava/util/ArrayList;", 1, false, false),
+        LONG_ARRAY_LIST("Ljava/util/ArrayList;", 1, false, false),
         INT_PAIR_ARRAY_LIST("Ljava/util/ArrayList;", 1, false, false),
         INT_PRIORITY_QUEUE("Ljava/util/PriorityQueue;", 1, false, false),
         INT_ARRAY_DEQUE("Ljava/util/ArrayDeque;", 1, false, false),

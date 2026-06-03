@@ -310,6 +310,11 @@ Current status:
   `MutableList<Int>` and `ArrayList<Pair<Int, Int>>` stack/list helpers: indexed `add`,
   `removeAt`, `first()`, `last()`, `clear()`, `size`, and `isEmpty`. With stdin `5 9` it prints
   `list=5,9 removed=3 pair=3,4|5,6 removedPair=1,2 empty=true,true size=0,0`.
+- The browser-facing compile export also completes `fixtures/ps-long-list/Main.kt`, which covers
+  `MutableList<Long>` and `ArrayList<Long>` construction, `add`, indexed `add`, index get/set,
+  `sort()`, `first()`, `last()`, `removeAt`, `remove`, `in`/`!in`, `clear`, `size`, and `isEmpty`
+  by lowering to `java.util.ArrayList<Long>`. With stdin `100000000000 7` it prints
+  `longList=7,100000000007 removed=100000000000,true sorted=99999999993,100000000014 flags=true,true empty=true extra=7 size=0,2`.
 - The browser-facing compile export also completes `fixtures/ps-double-math/Main.kt`, which covers
   numeric `toInt`/`toLong`/`toDouble` conversions plus `sqrt`, `floor`, `ceil`, and `pow` by lowering
   to JVM numeric conversion opcodes and `java.lang.Math`. With stdin `16 100000000000 2.5` it prints

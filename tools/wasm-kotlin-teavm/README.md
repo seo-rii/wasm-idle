@@ -576,6 +576,22 @@ The expected output is:
 list=1,6 size=5 sum=17 empty=false
 ```
 
+To run the PS-style `MutableList<Long>` / `ArrayList<Long>` fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs \
+  --source tools/wasm-kotlin-teavm/fixtures/ps-long-list/Main.kt \
+  --out tools/wasm-kotlin-teavm/build/browser-ps-long-list-out
+printf '100000000000 7\n' | java -cp tools/wasm-kotlin-teavm/build/browser-ps-long-list-out MainKt
+```
+
+The expected output is:
+
+```text
+longList=7,100000000007 removed=100000000000,true sorted=99999999993,100000000014 flags=true,true empty=true extra=7 size=0,2
+```
+
 To run the PS-style `PriorityQueue<Int>` fixture:
 
 ```bash
@@ -964,6 +980,11 @@ Known findings from the initial experiments:
   `MutableList<Int>` and `ArrayList<Pair<Int, Int>>` stack/list helpers: indexed `add`,
   `removeAt`, `first()`, `last()`, `clear()`, `size`, and `isEmpty`. With stdin `5 9` it prints
   `list=5,9 removed=3 pair=3,4|5,6 removedPair=1,2 empty=true,true size=0,0`.
+- The browser-compatible probe also compiles `fixtures/ps-long-list/Main.kt`, which exercises
+  `MutableList<Long>` and `ArrayList<Long>` construction, `add`, indexed `add`, index get/set,
+  `sort()`, `first()`, `last()`, `removeAt`, `remove`, `in`/`!in`, `clear`, `size`, and `isEmpty`
+  by lowering to `java.util.ArrayList<Long>`. With stdin `100000000000 7` it prints
+  `longList=7,100000000007 removed=100000000000,true sorted=99999999993,100000000014 flags=true,true empty=true extra=7 size=0,2`.
 - The browser-compatible probe also compiles `fixtures/ps-double-math/Main.kt`, which exercises
   numeric `toInt`/`toLong`/`toDouble` conversions and `sqrt`, `floor`, `ceil`, and `pow` by lowering
   to JVM numeric conversion opcodes and `java.lang.Math`. With stdin `16 100000000000 2.5` it
