@@ -1108,6 +1108,22 @@ The expected output is:
 pair=3,4 combined=10,24 diff=14
 ```
 
+To run the PS-style Pair destructuring fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs \
+  --source tools/wasm-kotlin-teavm/fixtures/ps-pair-destructuring/Main.kt \
+  --out tools/wasm-kotlin-teavm/build/browser-ps-pair-destructuring-out
+printf '100000000000 7\n' | java -cp tools/wasm-kotlin-teavm/build/browser-ps-pair-destructuring-out MainKt
+```
+
+The expected output is:
+
+```text
+destructure=7,9|8,100000000007|-100000000000,9 tail=3 graph=16,100000000010
+```
+
 To run the PS-style `ArrayList<Pair<Int, Int>>` fixture:
 
 ```bash
@@ -1512,6 +1528,11 @@ Known findings from the initial experiments:
   limited `Pair<Int, Int>` construction, `.first`, `.second`, and function return values by lowering
   to `java.util.AbstractMap.SimpleEntry<Integer, Integer>`. With stdin `3 4` it prints
   `pair=3,4 combined=10,24 diff=14`.
+- The browser-compatible probe also compiles `fixtures/ps-pair-destructuring/Main.kt`, which
+  exercises `val (a, b) = ...` destructuring for `Pair<Int, Int>`, `Pair<Int, Long>`, and
+  `Pair<Long, Int>` values from direct construction, `PriorityQueue.poll()`, list indexing, and
+  graph-list indexing. With stdin `100000000000 7` it prints
+  `destructure=7,9|8,100000000007|-100000000000,9 tail=3 graph=16,100000000010`.
 - The browser-compatible probe also compiles `fixtures/ps-pair-list/Main.kt`, which exercises
   `ArrayList<Pair<Int, Int>>` and `mutableListOf<Pair<Int, Int>>()` construction, `add`, index
   get/set, `.first`, `.second`, `in`/`!in`, `contains`, `remove`, `size`, and `isEmpty` by storing

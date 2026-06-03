@@ -418,6 +418,11 @@ Current status:
   limited `Pair<Int, Int>` construction, `.first`, `.second`, and function return values by lowering
   to `java.util.AbstractMap.SimpleEntry<Integer, Integer>`. With stdin `3 4` it prints
   `pair=3,4 combined=10,24 diff=14`.
+- The browser-facing compile export also completes `fixtures/ps-pair-destructuring/Main.kt`, which
+  covers `val (a, b) = ...` destructuring for `Pair<Int, Int>`, `Pair<Int, Long>`, and
+  `Pair<Long, Int>` values from direct construction, `PriorityQueue.poll()`, list indexing, and
+  graph-list indexing. With stdin `100000000000 7` it prints
+  `destructure=7,9|8,100000000007|-100000000000,9 tail=3 graph=16,100000000010`.
 - The browser-facing compile export also completes `fixtures/ps-pair-list/Main.kt`, which covers
   `ArrayList<Pair<Int, Int>>` and `mutableListOf<Pair<Int, Int>>()` construction, `add`, index
   get/set, `.first`, `.second`, `in`/`!in`, `contains`, `remove`, `size`, and `isEmpty` by storing

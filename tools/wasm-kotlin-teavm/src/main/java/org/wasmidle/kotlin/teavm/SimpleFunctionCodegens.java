@@ -19,6 +19,8 @@ import org.jetbrains.kotlin.psi.KtCallExpression;
 import org.jetbrains.kotlin.psi.KtConstantExpression;
 import org.jetbrains.kotlin.psi.KtContinueExpression;
 import org.jetbrains.kotlin.psi.KtDeclaration;
+import org.jetbrains.kotlin.psi.KtDestructuringDeclaration;
+import org.jetbrains.kotlin.psi.KtDestructuringDeclarationEntry;
 import org.jetbrains.kotlin.psi.KtDotQualifiedExpression;
 import org.jetbrains.kotlin.psi.KtEscapeStringTemplateEntry;
 import org.jetbrains.kotlin.psi.KtExpression;
@@ -138,6 +140,49 @@ public final class SimpleFunctionCodegens {
             ValueType type = emitExpression(method, context, initializer);
             int index = context.allocate(name, type);
             storeLocal(method, type, index);
+            return;
+        }
+        if (statement instanceof KtDestructuringDeclaration) {
+            KtDestructuringDeclaration declaration = (KtDestructuringDeclaration) statement;
+            KtExpression initializer = declaration.getInitializer();
+            List<KtDestructuringDeclarationEntry> entries = declaration.getEntries();
+            if (initializer == null || entries.size() != 2) {
+                throw new IllegalArgumentException("Only Pair destructuring declarations are supported: "
+                        + declaration.getText());
+            }
+            ValueType pairType = emitExpression(method, context, initializer);
+            if (pairType != ValueType.INT_PAIR && pairType != ValueType.INT_LONG_PAIR
+                    && pairType != ValueType.LONG_INT_PAIR) {
+                throw new IllegalArgumentException("Destructuring requires a Pair value: " + declaration.getText());
+            }
+            int pairIndex = context.allocateTemporary(pairType);
+            storeLocal(method, pairType, pairIndex);
+            for (int entryIndex = 0; entryIndex < entries.size(); entryIndex++) {
+                KtDestructuringDeclarationEntry entry = entries.get(entryIndex);
+                String entryName = entry.getName();
+                if (entryName == null || entryName.isEmpty() || "_".equals(entryName)) {
+                    continue;
+                }
+                ValueType componentType;
+                if (pairType == ValueType.INT_PAIR) {
+                    componentType = ValueType.INT;
+                } else if (pairType == ValueType.INT_LONG_PAIR) {
+                    componentType = entryIndex == 0 ? ValueType.INT : ValueType.LONG;
+                } else {
+                    componentType = entryIndex == 0 ? ValueType.LONG : ValueType.INT;
+                }
+                loadLocal(method, pairType, pairIndex);
+                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/AbstractMap$SimpleEntry",
+                        entryIndex == 0 ? "getKey" : "getValue",
+                        "()Ljava/lang/Object;", false);
+                if (componentType == ValueType.LONG) {
+                    unboxLong(method);
+                } else {
+                    unboxInt(method);
+                }
+                int index = context.allocate(entryName, componentType);
+                storeLocal(method, componentType, index);
+            }
             return;
         }
         if (statement instanceof KtBinaryExpression) {
