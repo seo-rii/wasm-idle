@@ -1140,6 +1140,22 @@ The expected output is:
 intLongPairs=1,7|6,100000000000 removed=13,100000000007 flags=true,true,true,true graph=100000000007 empty=true size=0,2
 ```
 
+To run the PS-style `ArrayList<Pair<Long, Int>>` fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs \
+  --source tools/wasm-kotlin-teavm/fixtures/ps-long-int-pair-list/Main.kt \
+  --out tools/wasm-kotlin-teavm/build/browser-ps-long-int-pair-list-out
+printf '100000000000 7\n' | java -cp tools/wasm-kotlin-teavm/build/browser-ps-long-int-pair-list-out MainKt
+```
+
+The expected output is:
+
+```text
+longIntPairs=100000000000,2|99999999993,1 removed=-100000000000,9 flags=true,true,true graph=200000000011 total=100000000000 empty=false size=1,2
+```
+
 To run the PS-style list helper fixture:
 
 ```bash
@@ -1510,6 +1526,13 @@ Known findings from the initial experiments:
   `java.util.AbstractMap.SimpleEntry<Integer, Long>` values in `java.util.ArrayList`. With stdin
   `100000000000 7` it prints
   `intLongPairs=1,7|6,100000000000 removed=13,100000000007 flags=true,true,true,true graph=100000000007 empty=true size=0,2`.
+- The browser-compatible probe also compiles `fixtures/ps-long-int-pair-list/Main.kt`, which
+  exercises `ArrayList<Pair<Long, Int>>` and `mutableListOf<Pair<Long, Int>>()` construction,
+  `Array<ArrayList<Pair<Long, Int>>>`, function parameters, indexed get/set, `.first`, `.second`,
+  `in`/`!in`, `contains`, `remove`, `removeAt`, `first()`, `last()`, `size`, and `isEmpty` by
+  storing `java.util.AbstractMap.SimpleEntry<Long, Integer>` values in `java.util.ArrayList`.
+  With stdin `100000000000 7` it prints
+  `longIntPairs=100000000000,2|99999999993,1 removed=-100000000000,9 flags=true,true,true graph=200000000011 total=100000000000 empty=false size=1,2`.
 - The browser-compatible probe also compiles `fixtures/ps-list-helpers/Main.kt`, which exercises
   `MutableList<Int>` and `ArrayList<Pair<Int, Int>>` stack/list helpers: indexed `add`,
   `removeAt`, `first()`, `last()`, `clear()`, `size`, and `isEmpty`. With stdin `5 9` it prints
