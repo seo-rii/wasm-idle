@@ -352,6 +352,28 @@ the expected output is:
 arr=5,15,1 long=100000000005 double=5.0
 ```
 
+To run the PS-style unary-minus fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs \
+  --source tools/wasm-kotlin-teavm/fixtures/ps-unary-minus/Main.kt \
+  --out tools/wasm-kotlin-teavm/build/browser-ps-unary-minus-out
+java -cp tools/wasm-kotlin-teavm/build/browser-ps-unary-minus-out MainKt
+```
+
+With this stdin:
+
+```text
+7 100000000000 2.5
+```
+
+the expected output is:
+
+```text
+neg=-7 long=-100000000000 double=-4.0
+```
+
 ## Current Status
 
 This folder is a porting scaffold, not an app integration. The current probe compiles a small Java
@@ -482,6 +504,10 @@ Known findings from the initial experiments:
   widening to `Long` and `Double`. Running that generated class with
   `2 3 5 100000000000 1.5` on stdin prints
   `arr=5,15,1 long=100000000005 double=5.0`.
+- The browser-compatible probe also compiles `fixtures/ps-unary-minus/Main.kt`, which exercises
+  unary minus on `Int`, `Long`, and `Double` values, including negative `Double` literals. Running
+  that generated class with `7 100000000000 2.5` on stdin prints
+  `neg=-7 long=-100000000000 double=-4.0`.
 - This is not a full Kotlin/JVM backend yet. The browser path is currently a minimal emitter that
   supports the verified fixture shapes above. It does not yet support enough Kotlin for real
   competitive-programming use: collections and common library helpers, classes/data classes,

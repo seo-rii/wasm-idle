@@ -231,6 +231,9 @@ Current status:
   compound assignments on `IntArray`, `LongArray`, and `DoubleArray` elements, including RHS numeric
   widening to `Long` and `Double`. With stdin `2 3 5 100000000000 1.5` it prints
   `arr=5,15,1 long=100000000005 double=5.0`.
+- The browser-facing compile export also completes `fixtures/ps-unary-minus/Main.kt`, which covers
+  unary minus on `Int`, `Long`, and `Double` values, including negative `Double` literals. With
+  stdin `7 100000000000 2.5` it prints `neg=-7 long=-100000000000 double=-4.0`.
 - This success currently comes from a minimal PSI-based bytecode emitter for the verified fixture
   shapes, not from the full Kotlin/JVM backend. The full backend still fails because Kotlin builtins
   deserialization can read `kotlin/kotlin.kotlin_builtins` but cannot resolve `kotlin.Unit`; virtual

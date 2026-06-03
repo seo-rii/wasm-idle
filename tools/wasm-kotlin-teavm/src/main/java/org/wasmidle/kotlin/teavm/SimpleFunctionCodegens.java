@@ -461,7 +461,13 @@ public final class SimpleFunctionCodegens {
                 if (!type.numeric) {
                     throw new IllegalArgumentException("Unary minus only supports numbers: " + expression.getText());
                 }
-                method.visitInsn(type == ValueType.LONG ? Opcodes.LNEG : Opcodes.INEG);
+                if (type == ValueType.LONG) {
+                    method.visitInsn(Opcodes.LNEG);
+                } else if (type == ValueType.DOUBLE) {
+                    method.visitInsn(Opcodes.DNEG);
+                } else {
+                    method.visitInsn(Opcodes.INEG);
+                }
                 return type;
             }
             if (unary.getOperationToken() == KtTokens.EXCL) {
