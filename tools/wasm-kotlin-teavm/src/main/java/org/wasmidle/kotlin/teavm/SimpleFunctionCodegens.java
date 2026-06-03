@@ -1060,6 +1060,11 @@ public final class SimpleFunctionCodegens {
                             false);
                     return ValueType.INT;
                 }
+                if (receiverType == ValueType.INT_PAIR_PRIORITY_QUEUE) {
+                    method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/PriorityQueue", "size", "()I",
+                            false);
+                    return ValueType.INT;
+                }
                 if (receiverType == ValueType.INT_ARRAY_DEQUE) {
                     method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayDeque", "size", "()I", false);
                     return ValueType.INT;
@@ -1355,6 +1360,14 @@ public final class SimpleFunctionCodegens {
                                 "(Ljava/lang/Object;)Z", false);
                         return ValueType.BOOLEAN;
                     }
+                    if (receiverType == ValueType.INT_PAIR_PRIORITY_QUEUE) {
+                        emitPackedIntPair(method, context,
+                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression());
+                        boxLong(method);
+                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/PriorityQueue", "add",
+                                "(Ljava/lang/Object;)Z", false);
+                        return ValueType.BOOLEAN;
+                    }
                     if (receiverType == ValueType.INT_ARRAY_DEQUE) {
                         emitExpressionAs(method, context,
                                 ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
@@ -1557,6 +1570,14 @@ public final class SimpleFunctionCodegens {
                                 "(Ljava/lang/Object;)Z", false);
                         return ValueType.BOOLEAN;
                     }
+                    if (receiverType == ValueType.INT_PAIR_PRIORITY_QUEUE) {
+                        emitPackedIntPair(method, context,
+                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression());
+                        boxLong(method);
+                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/PriorityQueue", "offer",
+                                "(Ljava/lang/Object;)Z", false);
+                        return ValueType.BOOLEAN;
+                    }
                     if (receiverType == ValueType.INT_ARRAY_DEQUE) {
                         emitExpressionAs(method, context,
                                 ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
@@ -1649,6 +1670,11 @@ public final class SimpleFunctionCodegens {
                         return ValueType.BOOLEAN;
                     }
                     if (receiverType == ValueType.LONG_PRIORITY_QUEUE) {
+                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/PriorityQueue", "isEmpty", "()Z",
+                                false);
+                        return ValueType.BOOLEAN;
+                    }
+                    if (receiverType == ValueType.INT_PAIR_PRIORITY_QUEUE) {
                         method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/PriorityQueue", "isEmpty", "()Z",
                                 false);
                         return ValueType.BOOLEAN;
@@ -1760,6 +1786,14 @@ public final class SimpleFunctionCodegens {
                                 ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
                                 ValueType.STRING);
                         method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashSet", callee.getText(),
+                                "(Ljava/lang/Object;)Z", false);
+                        return ValueType.BOOLEAN;
+                    }
+                    if (receiverType == ValueType.INT_PAIR_PRIORITY_QUEUE) {
+                        emitPackedIntPair(method, context,
+                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression());
+                        boxLong(method);
+                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/PriorityQueue", callee.getText(),
                                 "(Ljava/lang/Object;)Z", false);
                         return ValueType.BOOLEAN;
                     }
@@ -2172,6 +2206,13 @@ public final class SimpleFunctionCodegens {
                         unboxLong(method);
                         return ValueType.LONG;
                     }
+                    if (receiverType == ValueType.INT_PAIR_PRIORITY_QUEUE) {
+                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/PriorityQueue", callee.getText(),
+                                "()Ljava/lang/Object;", false);
+                        unboxLong(method);
+                        emitIntPairFromPackedLong(method, context);
+                        return ValueType.INT_PAIR;
+                    }
                     if (receiverType == ValueType.INT_ARRAY_DEQUE) {
                         method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayDeque", callee.getText(),
                                 "()Ljava/lang/Object;", false);
@@ -2559,6 +2600,10 @@ public final class SimpleFunctionCodegens {
                     || isLongPriorityQueueConstructor(call.getText())) {
                 return ValueType.LONG_PRIORITY_QUEUE;
             }
+            if (isIntPairPriorityQueueConstructor(calleeText)
+                    || isIntPairPriorityQueueConstructor(call.getText())) {
+                return ValueType.INT_PAIR_PRIORITY_QUEUE;
+            }
             return ValueType.INT_PRIORITY_QUEUE;
         }
         if (isArrayDequeConstructor(calleeText) && call.getValueArguments().isEmpty()) {
@@ -2830,6 +2875,7 @@ public final class SimpleFunctionCodegens {
                         || receiverType == ValueType.INT_PAIR_ARRAY_LIST
                         || receiverType == ValueType.INT_PRIORITY_QUEUE
                         || receiverType == ValueType.LONG_PRIORITY_QUEUE
+                        || receiverType == ValueType.INT_PAIR_PRIORITY_QUEUE
                         || receiverType == ValueType.INT_ARRAY_DEQUE
                         || receiverType == ValueType.LONG_ARRAY_DEQUE
                         || receiverType == ValueType.INT_HASH_SET
@@ -2926,6 +2972,8 @@ public final class SimpleFunctionCodegens {
                                 || inferExpressionType(context, qualified.getReceiverExpression())
                                         == ValueType.LONG_PRIORITY_QUEUE
                                 || inferExpressionType(context, qualified.getReceiverExpression())
+                                        == ValueType.INT_PAIR_PRIORITY_QUEUE
+                                || inferExpressionType(context, qualified.getReceiverExpression())
                                         == ValueType.INT_ARRAY_DEQUE
                                 || inferExpressionType(context, qualified.getReceiverExpression())
                                         == ValueType.LONG_ARRAY_DEQUE
@@ -2972,6 +3020,8 @@ public final class SimpleFunctionCodegens {
                                 || inferExpressionType(context, qualified.getReceiverExpression())
                                         == ValueType.LONG_PRIORITY_QUEUE
                                 || inferExpressionType(context, qualified.getReceiverExpression())
+                                        == ValueType.INT_PAIR_PRIORITY_QUEUE
+                                || inferExpressionType(context, qualified.getReceiverExpression())
                                         == ValueType.INT_ARRAY_DEQUE
                                 || inferExpressionType(context, qualified.getReceiverExpression())
                                         == ValueType.LONG_ARRAY_DEQUE)) {
@@ -3007,6 +3057,8 @@ public final class SimpleFunctionCodegens {
                                         == ValueType.INT_PRIORITY_QUEUE
                                 || inferExpressionType(context, qualified.getReceiverExpression())
                                         == ValueType.LONG_PRIORITY_QUEUE
+                                || inferExpressionType(context, qualified.getReceiverExpression())
+                                        == ValueType.INT_PAIR_PRIORITY_QUEUE
                                 || inferExpressionType(context, qualified.getReceiverExpression())
                                         == ValueType.INT_ARRAY_DEQUE
                                 || inferExpressionType(context, qualified.getReceiverExpression())
@@ -3065,6 +3117,12 @@ public final class SimpleFunctionCodegens {
                         && ((KtCallExpression) selector).getValueArguments().size() == 1
                         && inferExpressionType(context, qualified.getReceiverExpression())
                                 == ValueType.STRING_ARRAY_LIST) {
+                    return ValueType.BOOLEAN;
+                }
+                if (callee != null && ("contains".equals(callee.getText()) || "remove".equals(callee.getText()))
+                        && ((KtCallExpression) selector).getValueArguments().size() == 1
+                        && inferExpressionType(context, qualified.getReceiverExpression())
+                                == ValueType.INT_PAIR_PRIORITY_QUEUE) {
                     return ValueType.BOOLEAN;
                 }
                 if (callee != null && "remove".equals(callee.getText())
@@ -3224,6 +3282,8 @@ public final class SimpleFunctionCodegens {
                                 || inferExpressionType(context, qualified.getReceiverExpression())
                                         == ValueType.LONG_PRIORITY_QUEUE
                                 || inferExpressionType(context, qualified.getReceiverExpression())
+                                        == ValueType.INT_PAIR_PRIORITY_QUEUE
+                                || inferExpressionType(context, qualified.getReceiverExpression())
                                         == ValueType.INT_ARRAY_DEQUE
                                 || inferExpressionType(context, qualified.getReceiverExpression())
                                         == ValueType.LONG_ARRAY_DEQUE)) {
@@ -3232,6 +3292,10 @@ public final class SimpleFunctionCodegens {
                             || inferExpressionType(context, qualified.getReceiverExpression())
                                     == ValueType.LONG_ARRAY_DEQUE) {
                         return ValueType.LONG;
+                    }
+                    if (inferExpressionType(context, qualified.getReceiverExpression())
+                            == ValueType.INT_PAIR_PRIORITY_QUEUE) {
+                        return ValueType.INT_PAIR;
                     }
                     return ValueType.INT;
                 }
@@ -3351,6 +3415,10 @@ public final class SimpleFunctionCodegens {
                 if (isLongPriorityQueueConstructor(calleeText)
                         || isLongPriorityQueueConstructor(expression.getText())) {
                     return ValueType.LONG_PRIORITY_QUEUE;
+                }
+                if (isIntPairPriorityQueueConstructor(calleeText)
+                        || isIntPairPriorityQueueConstructor(expression.getText())) {
+                    return ValueType.INT_PAIR_PRIORITY_QUEUE;
                 }
                 return ValueType.INT_PRIORITY_QUEUE;
             }
@@ -3595,6 +3663,15 @@ public final class SimpleFunctionCodegens {
         return "PriorityQueue<Long>".equals(compact);
     }
 
+    private static boolean isIntPairPriorityQueueConstructor(String calleeText) {
+        String compact = calleeText.replace(" ", "");
+        int parenIndex = compact.indexOf('(');
+        if (parenIndex >= 0) {
+            compact = compact.substring(0, parenIndex);
+        }
+        return "PriorityQueue<Pair<Int,Int>>".equals(compact);
+    }
+
     private static boolean isArrayDequeConstructor(String calleeText) {
         return "ArrayDeque".equals(calleeText) || calleeText.startsWith("ArrayDeque<");
     }
@@ -3712,6 +3789,50 @@ public final class SimpleFunctionCodegens {
     private static void unboxLong(MethodVisitor method) {
         method.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/Long");
         method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()J", false);
+    }
+
+    private static void emitPackedIntPair(MethodVisitor method, MethodContext context, KtExpression expression) {
+        emitExpressionAs(method, context, expression, ValueType.INT_PAIR);
+        int pairIndex = context.allocateTemporary(ValueType.INT_PAIR);
+        method.visitVarInsn(Opcodes.ASTORE, pairIndex);
+
+        method.visitVarInsn(Opcodes.ALOAD, pairIndex);
+        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/AbstractMap$SimpleEntry", "getKey",
+                "()Ljava/lang/Object;", false);
+        unboxInt(method);
+        method.visitInsn(Opcodes.I2L);
+        method.visitLdcInsn(32);
+        method.visitInsn(Opcodes.LSHL);
+
+        method.visitVarInsn(Opcodes.ALOAD, pairIndex);
+        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/AbstractMap$SimpleEntry", "getValue",
+                "()Ljava/lang/Object;", false);
+        unboxInt(method);
+        method.visitLdcInsn(Integer.MIN_VALUE);
+        method.visitInsn(Opcodes.IXOR);
+        method.visitInsn(Opcodes.I2L);
+        method.visitLdcInsn(0xffffffffL);
+        method.visitInsn(Opcodes.LAND);
+        method.visitInsn(Opcodes.LOR);
+    }
+
+    private static void emitIntPairFromPackedLong(MethodVisitor method, MethodContext context) {
+        int packedIndex = context.allocateTemporary(ValueType.LONG);
+        method.visitVarInsn(Opcodes.LSTORE, packedIndex);
+        method.visitTypeInsn(Opcodes.NEW, "java/util/AbstractMap$SimpleEntry");
+        method.visitInsn(Opcodes.DUP);
+        method.visitVarInsn(Opcodes.LLOAD, packedIndex);
+        method.visitLdcInsn(32);
+        method.visitInsn(Opcodes.LSHR);
+        method.visitInsn(Opcodes.L2I);
+        boxInt(method);
+        method.visitVarInsn(Opcodes.LLOAD, packedIndex);
+        method.visitInsn(Opcodes.L2I);
+        method.visitLdcInsn(Integer.MIN_VALUE);
+        method.visitInsn(Opcodes.IXOR);
+        boxInt(method);
+        method.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/util/AbstractMap$SimpleEntry", "<init>",
+                "(Ljava/lang/Object;Ljava/lang/Object;)V", false);
     }
 
     private static void ensureReadStringHelper(MethodContext context) {
@@ -4254,6 +4375,22 @@ public final class SimpleFunctionCodegens {
             }
             return ValueType.BOOLEAN;
         }
+        if (containerType == ValueType.INT_PAIR_PRIORITY_QUEUE) {
+            if (elementType != ValueType.INT_PAIR) {
+                throw new IllegalArgumentException("Pair priority queue contains requires Pair<Int, Int> element: "
+                        + binary.getText());
+            }
+            emitExpression(method, context, container);
+            emitPackedIntPair(method, context, element);
+            boxLong(method);
+            method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/PriorityQueue", "contains",
+                    "(Ljava/lang/Object;)Z", false);
+            if (negated) {
+                method.visitInsn(Opcodes.ICONST_1);
+                method.visitInsn(Opcodes.IXOR);
+            }
+            return ValueType.BOOLEAN;
+        }
         throw new IllegalArgumentException("Unsupported in-expression: " + binary.getText());
     }
 
@@ -4564,6 +4701,9 @@ public final class SimpleFunctionCodegens {
         if ("PriorityQueue<Long>".equals(compactText)) {
             return ValueType.LONG_PRIORITY_QUEUE;
         }
+        if ("PriorityQueue<Pair<Int,Int>>".equals(compactText)) {
+            return ValueType.INT_PAIR_PRIORITY_QUEUE;
+        }
         if ("ArrayDeque<Int>".equals(text)) {
             return ValueType.INT_ARRAY_DEQUE;
         }
@@ -4714,6 +4854,7 @@ public final class SimpleFunctionCodegens {
         INT_PAIR_ARRAY_LIST("Ljava/util/ArrayList;", 1, false, false),
         INT_PRIORITY_QUEUE("Ljava/util/PriorityQueue;", 1, false, false),
         LONG_PRIORITY_QUEUE("Ljava/util/PriorityQueue;", 1, false, false),
+        INT_PAIR_PRIORITY_QUEUE("Ljava/util/PriorityQueue;", 1, false, false),
         INT_ARRAY_DEQUE("Ljava/util/ArrayDeque;", 1, false, false),
         LONG_ARRAY_DEQUE("Ljava/util/ArrayDeque;", 1, false, false),
         INT_HASH_SET("Ljava/util/HashSet;", 1, false, false),

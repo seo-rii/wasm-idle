@@ -289,6 +289,11 @@ Current status:
   `PriorityQueue<Int>` construction, `add`, `offer`, `peek`, `poll`, `size`, and `isEmpty` by
   lowering to `java.util.PriorityQueue<Integer>`. With stdin `5 3 1 4 1 5` it prints
   `pq=74 count=6 size=0`.
+- The browser-facing compile export also completes `fixtures/ps-pair-priority-queue/Main.kt`, which
+  covers `PriorityQueue<Pair<Int, Int>>` construction, `add`, `offer`, `peek`, `poll`, `contains`,
+  `remove`, `size`, `isEmpty`, and `in`/`!in` by lowering to a packed `java.util.PriorityQueue<Long>`
+  ordered by signed `(first, second)`. Running the generated class prints
+  `pairPq=4 peek=-1,8 first=-1,8 second=3,4 third=0,-10 score=807 flags=true,true,true,true empty=true size=0`.
 - The browser-facing compile export also completes `fixtures/ps-long-priority-queue/Main.kt`, which
   covers `PriorityQueue<Long>` construction, `add`, `offer`, `peek`, `poll`, `size`, `isEmpty`, and
   `in`/`!in` by lowering to `java.util.PriorityQueue<Long>`. With stdin `100000000000 7` it prints
