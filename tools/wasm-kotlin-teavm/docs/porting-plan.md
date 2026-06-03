@@ -275,6 +275,10 @@ Current status:
   `last`, `getFirst`, `getLast`, `poll`, `pollLast`, `removeFirst`, `removeLast`, `size`, and
   `isEmpty` by lowering to `java.util.ArrayDeque<Integer>`. With stdin `4 2 7 1 5` it prints
   `deque=52 edge=19 removed=100 tail=5 count=5 size=0`.
+- The browser-facing compile export also completes `fixtures/ps-hash-set/Main.kt`, which covers
+  `HashSet<Int>` and `mutableSetOf<Int>()` construction, `add`, `contains`, `remove`, `clear`,
+  `size`, and `isEmpty` by lowering to `java.util.HashSet<Integer>`. With stdin `5 1 2 1 3 2` it
+  prints `set=2,true had=true removed=true missing=false empty=true`.
 - This success currently comes from a minimal PSI-based bytecode emitter for the verified fixture
   shapes, not from the full Kotlin/JVM backend. The full backend still fails because Kotlin builtins
   deserialization can read `kotlin/kotlin.kotlin_builtins` but cannot resolve `kotlin.Unit`; virtual
