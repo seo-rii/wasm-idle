@@ -250,6 +250,12 @@ Current status:
   `Array(n) { IntArray(m) }`, nested primitive-array reads and writes, compound assignment on nested
   elements, outer `.size`, and row `.size`. With stdin `2 3 1 2 3 4 5 6` it prints
   `grid=6 edge=6 size=2,3`.
+- The browser-facing compile export also completes `fixtures/ps-primitive-2d-arrays/Main.kt`, which
+  covers `Array(n) { LongArray(m) }`, `Array(n) { DoubleArray(m) }`,
+  `Array(n) { CharArray(m) }`, and `Array(n) { BooleanArray(m) }`, including nested get/set,
+  compound assignment on nested numeric elements, outer `.size`, and row `.size`. With stdin
+  `2 3 100000000000 1.5 algorithm` it prints
+  `grid2=300000000017 double=9 chars=am bool=10 size=2,3,3,3,3`.
 - The browser-facing compile export also completes `fixtures/ps-array-sort/Main.kt`, which covers
   `sort()` on `IntArray`, `LongArray`, and `CharArray` values by lowering to `java.util.Arrays`.
   With stdin `4 9 90 1 10 4 40 1 20 dcba` it prints `sort=1,9 long=10,90 chars=ad`.
