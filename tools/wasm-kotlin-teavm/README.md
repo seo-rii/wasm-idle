@@ -640,6 +640,22 @@ The expected output is:
 deque=52 edge=19 removed=100 tail=5 count=5 size=0
 ```
 
+To run the PS-style `ArrayDeque<Long>` fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs \
+  --source tools/wasm-kotlin-teavm/fixtures/ps-long-array-deque/Main.kt \
+  --out tools/wasm-kotlin-teavm/build/browser-ps-long-array-deque-out
+printf '100000000000 7\n' | java -cp tools/wasm-kotlin-teavm/build/browser-ps-long-array-deque-out MainKt
+```
+
+The expected output is:
+
+```text
+longDeque=0,100000000014 peek=0,100000000014 removed=0,7,100000000014,100000000007,100000000000 edge=100000000000,100000000007 flags=true,true empty=false,false size=1,2 more=7,100000000000
+```
+
 To run the PS-style `HashSet<Int>` fixture:
 
 ```bash
@@ -997,6 +1013,12 @@ Known findings from the initial experiments:
   `first`, `last`, `getFirst`, `getLast`, `poll`, `pollLast`, `removeFirst`, `removeLast`, `size`,
   and `isEmpty` by lowering to `java.util.ArrayDeque<Integer>`. With stdin `4 2 7 1 5` it prints
   `deque=52 edge=19 removed=100 tail=5 count=5 size=0`.
+- The browser-compatible probe also compiles `fixtures/ps-long-array-deque/Main.kt`, which exercises
+  `ArrayDeque<Long>` construction, `add`, `addFirst`, `addLast`, `offer`, `offerFirst`,
+  `offerLast`, `first`, `last`, `getFirst`, `getLast`, `peek`, `peekFirst`, `peekLast`, `poll`,
+  `pollFirst`, `pollLast`, `removeFirst`, `removeLast`, `size`, `isEmpty`, and `in`/`!in` by
+  lowering to `java.util.ArrayDeque<Long>`. With stdin `100000000000 7` it prints
+  `longDeque=0,100000000014 peek=0,100000000014 removed=0,7,100000000014,100000000007,100000000000 edge=100000000000,100000000007 flags=true,true empty=false,false size=1,2 more=7,100000000000`.
 - The browser-compatible probe also compiles `fixtures/ps-hash-set/Main.kt`, which exercises
   `HashSet<Int>` and `mutableSetOf<Int>()` construction, `add`, `contains`, `remove`, `clear`,
   `size`, and `isEmpty` by lowering to `java.util.HashSet<Integer>`. With stdin `5 1 2 1 3 2` it
