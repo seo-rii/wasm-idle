@@ -37,6 +37,10 @@ import org.jetbrains.kotlin.psi.KtStringTemplateEntry;
 import org.jetbrains.kotlin.psi.KtStringTemplateExpression;
 import org.jetbrains.kotlin.psi.KtUnaryExpression;
 import org.jetbrains.kotlin.psi.KtValueArgument;
+import org.jetbrains.kotlin.psi.KtWhenCondition;
+import org.jetbrains.kotlin.psi.KtWhenConditionWithExpression;
+import org.jetbrains.kotlin.psi.KtWhenEntry;
+import org.jetbrains.kotlin.psi.KtWhenExpression;
 import org.jetbrains.kotlin.psi.KtWhileExpression;
 import org.jetbrains.kotlin.resolve.jvm.diagnostics.JvmDeclarationOrigin;
 import org.jetbrains.org.objectweb.asm.Label;
@@ -196,6 +200,10 @@ public final class SimpleFunctionCodegens {
             method.visitJumpInsn(Opcodes.GOTO, context.loopLabels.peek().continueTarget);
             return;
         }
+        if (statement instanceof KtWhenExpression) {
+            emitWhenStatement(method, context, (KtWhenExpression) statement);
+            return;
+        }
         if (statement instanceof KtReturnExpression) {
             KtExpression returnedExpression = ((KtReturnExpression) statement).getReturnedExpression();
             if (context.returnType == ValueType.VOID || returnedExpression == null) {
@@ -227,6 +235,157 @@ public final class SimpleFunctionCodegens {
         } else {
             emitStatement(method, context, expression);
         }
+    }
+
+    private static void emitWhenStatement(MethodVisitor method, MethodContext context, KtWhenExpression expression) {
+        KtExpression subjectExpression = expression.getSubjectExpression();
+        ValueType subjectType = null;
+        int subjectIndex = -1;
+        if (subjectExpression != null) {
+            subjectType = emitExpression(method, context, subjectExpression);
+            subjectIndex = context.allocateTemporary(subjectType);
+            storeLocal(method, subjectType, subjectIndex);
+        }
+
+        Label endLabel = new Label();
+        for (KtWhenEntry entry : expression.getEntries()) {
+            if (entry.isElse()) {
+                emitBranch(method, context, entry.getExpression());
+                context.hasExplicitReturn = false;
+                break;
+            }
+            KtWhenCondition[] conditions = entry.getConditions();
+            if (conditions.length == 0) {
+                throw new IllegalArgumentException("when entry is missing conditions: " + entry.getText());
+            }
+            Label bodyLabel = new Label();
+            Label nextLabel = new Label();
+            for (KtWhenCondition condition : conditions) {
+                emitWhenConditionJump(method, context, condition, subjectType, subjectIndex, bodyLabel);
+            }
+            method.visitJumpInsn(Opcodes.GOTO, nextLabel);
+            method.visitLabel(bodyLabel);
+            emitBranch(method, context, entry.getExpression());
+            boolean entryReturned = context.hasExplicitReturn;
+            context.hasExplicitReturn = false;
+            if (!entryReturned) {
+                method.visitJumpInsn(Opcodes.GOTO, endLabel);
+            }
+            method.visitLabel(nextLabel);
+        }
+        method.visitLabel(endLabel);
+    }
+
+    private static ValueType emitWhenExpression(
+            MethodVisitor method, MethodContext context, KtWhenExpression expression) {
+        ValueType resultType = inferWhenExpressionType(context, expression);
+        KtExpression subjectExpression = expression.getSubjectExpression();
+        ValueType subjectType = null;
+        int subjectIndex = -1;
+        if (subjectExpression != null) {
+            subjectType = emitExpression(method, context, subjectExpression);
+            subjectIndex = context.allocateTemporary(subjectType);
+            storeLocal(method, subjectType, subjectIndex);
+        }
+
+        Label endLabel = new Label();
+        for (KtWhenEntry entry : expression.getEntries()) {
+            if (entry.isElse()) {
+                emitExpressionAs(method, context, entry.getExpression(), resultType);
+                method.visitJumpInsn(Opcodes.GOTO, endLabel);
+                break;
+            }
+            KtWhenCondition[] conditions = entry.getConditions();
+            if (conditions.length == 0) {
+                throw new IllegalArgumentException("when entry is missing conditions: " + entry.getText());
+            }
+            Label bodyLabel = new Label();
+            Label nextLabel = new Label();
+            for (KtWhenCondition condition : conditions) {
+                emitWhenConditionJump(method, context, condition, subjectType, subjectIndex, bodyLabel);
+            }
+            method.visitJumpInsn(Opcodes.GOTO, nextLabel);
+            method.visitLabel(bodyLabel);
+            emitExpressionAs(method, context, entry.getExpression(), resultType);
+            method.visitJumpInsn(Opcodes.GOTO, endLabel);
+            method.visitLabel(nextLabel);
+        }
+        method.visitLabel(endLabel);
+        return resultType;
+    }
+
+    private static void emitWhenConditionJump(
+            MethodVisitor method, MethodContext context, KtWhenCondition condition, ValueType subjectType,
+            int subjectIndex, Label target) {
+        if (!(condition instanceof KtWhenConditionWithExpression)) {
+            throw new IllegalArgumentException("Only expression when conditions are supported: "
+                    + condition.getText());
+        }
+        KtExpression conditionExpression = ((KtWhenConditionWithExpression) condition).getExpression();
+        if (conditionExpression == null) {
+            throw new IllegalArgumentException("when condition is missing an expression: " + condition.getText());
+        }
+        if (subjectType == null) {
+            emitConditionJump(method, context, conditionExpression, true, target);
+            return;
+        }
+        emitWhenSubjectEqualityJump(method, context, subjectType, subjectIndex, conditionExpression, target);
+    }
+
+    private static void emitWhenSubjectEqualityJump(
+            MethodVisitor method, MethodContext context, ValueType subjectType, int subjectIndex,
+            KtExpression conditionExpression, Label target) {
+        ValueType conditionType = inferExpressionType(context, conditionExpression);
+        if (subjectType == ValueType.STRING && conditionType == ValueType.STRING) {
+            loadLocal(method, subjectType, subjectIndex);
+            emitExpressionAs(method, context, conditionExpression, ValueType.STRING);
+            method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/String", "equals",
+                    "(Ljava/lang/Object;)Z", false);
+            method.visitJumpInsn(Opcodes.IFNE, target);
+            return;
+        }
+        ValueType comparisonType;
+        if (subjectType.numeric && conditionType.numeric) {
+            comparisonType = promotedNumericType(subjectType, conditionType);
+        } else if (subjectType == conditionType
+                && (subjectType == ValueType.CHAR || subjectType == ValueType.BOOLEAN)) {
+            comparisonType = subjectType;
+        } else {
+            throw new IllegalArgumentException("when condition type mismatch: " + conditionExpression.getText());
+        }
+        emitLocalAs(method, subjectType, subjectIndex, comparisonType);
+        emitExpressionAs(method, context, conditionExpression, comparisonType);
+        if (comparisonType == ValueType.LONG) {
+            method.visitInsn(Opcodes.LCMP);
+            method.visitJumpInsn(Opcodes.IFEQ, target);
+        } else if (comparisonType == ValueType.DOUBLE) {
+            method.visitInsn(Opcodes.DCMPL);
+            method.visitJumpInsn(Opcodes.IFEQ, target);
+        } else {
+            method.visitJumpInsn(Opcodes.IF_ICMPEQ, target);
+        }
+    }
+
+    private static void emitLocalAs(
+            MethodVisitor method, ValueType actualType, int index, ValueType expectedType) {
+        loadLocal(method, actualType, index);
+        if (actualType == expectedType) {
+            return;
+        }
+        if (actualType == ValueType.INT && expectedType == ValueType.LONG) {
+            method.visitInsn(Opcodes.I2L);
+            return;
+        }
+        if (actualType == ValueType.INT && expectedType == ValueType.DOUBLE) {
+            method.visitInsn(Opcodes.I2D);
+            return;
+        }
+        if (actualType == ValueType.LONG && expectedType == ValueType.DOUBLE) {
+            method.visitInsn(Opcodes.L2D);
+            return;
+        }
+        throw new IllegalArgumentException("Local type mismatch: expected " + expectedType
+                + ", got " + actualType);
     }
 
     private static void emitForExpression(MethodVisitor method, MethodContext context, KtForExpression expression) {
@@ -625,6 +784,9 @@ public final class SimpleFunctionCodegens {
             method.visitLabel(endLabel);
             return thenType;
         }
+        if (expression instanceof KtWhenExpression) {
+            return emitWhenExpression(method, context, (KtWhenExpression) expression);
+        }
         if (expression instanceof KtStringTemplateExpression) {
             KtStringTemplateEntry[] entries = ((KtStringTemplateExpression) expression).getEntries();
             method.visitTypeInsn(Opcodes.NEW, "java/lang/StringBuilder");
@@ -984,6 +1146,9 @@ public final class SimpleFunctionCodegens {
         if (expression instanceof KtStringTemplateExpression) {
             return ValueType.STRING;
         }
+        if (expression instanceof KtWhenExpression) {
+            return inferWhenExpressionType(context, (KtWhenExpression) expression);
+        }
         if (expression instanceof KtCallExpression) {
             KtExpression callee = ((KtCallExpression) expression).getCalleeExpression();
             String calleeText = callee == null ? "" : callee.getText();
@@ -1037,6 +1202,38 @@ public final class SimpleFunctionCodegens {
             }
         }
         throw new IllegalArgumentException("Could not infer expression type: " + expression.getText());
+    }
+
+    private static ValueType inferWhenExpressionType(MethodContext context, KtWhenExpression expression) {
+        ValueType resultType = null;
+        boolean hasElse = false;
+        for (KtWhenEntry entry : expression.getEntries()) {
+            if (entry.isElse()) {
+                hasElse = true;
+            }
+            KtExpression entryExpression = entry.getExpression();
+            if (entryExpression == null) {
+                throw new IllegalArgumentException("when entry is missing a result expression: "
+                        + entry.getText());
+            }
+            ValueType entryType = inferExpressionType(context, entryExpression);
+            if (resultType == null) {
+                resultType = entryType;
+            } else if (resultType.numeric && entryType.numeric) {
+                resultType = promotedNumericType(resultType, entryType);
+            } else if (resultType != entryType) {
+                throw new IllegalArgumentException("when expression branches have different types: "
+                        + expression.getText());
+            }
+        }
+        if (!hasElse) {
+            throw new IllegalArgumentException("when expression requires an else branch: "
+                    + expression.getText());
+        }
+        if (resultType == null) {
+            throw new IllegalArgumentException("when expression has no entries: " + expression.getText());
+        }
+        return resultType;
     }
 
     private static ValueType emitArrayReferenceAndIndex(

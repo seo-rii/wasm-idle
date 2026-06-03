@@ -117,6 +117,21 @@ public final class SimplePsiFactories {
         if ("org.jetbrains.kotlin.psi.KtValueArgumentList".equals(className)) {
             return new org.jetbrains.kotlin.psi.KtValueArgumentList(node);
         }
+        if ("org.jetbrains.kotlin.psi.KtWhenConditionInRange".equals(className)) {
+            return new org.jetbrains.kotlin.psi.KtWhenConditionInRange(node);
+        }
+        if ("org.jetbrains.kotlin.psi.KtWhenConditionIsPattern".equals(className)) {
+            return new org.jetbrains.kotlin.psi.KtWhenConditionIsPattern(node);
+        }
+        if ("org.jetbrains.kotlin.psi.KtWhenConditionWithExpression".equals(className)) {
+            return new org.jetbrains.kotlin.psi.KtWhenConditionWithExpression(node);
+        }
+        if ("org.jetbrains.kotlin.psi.KtWhenEntry".equals(className)) {
+            return new org.jetbrains.kotlin.psi.KtWhenEntry(node);
+        }
+        if ("org.jetbrains.kotlin.psi.KtWhenExpression".equals(className)) {
+            return new org.jetbrains.kotlin.psi.KtWhenExpression(node);
+        }
         if ("org.jetbrains.kotlin.psi.KtWhileExpression".equals(className)) {
             return new org.jetbrains.kotlin.psi.KtWhileExpression(node);
         }
