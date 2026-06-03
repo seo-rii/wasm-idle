@@ -220,6 +220,9 @@ Current status:
   `abs`, `minOf`, and `maxOf` for promoted `Int`, `Long`, and `Double` arguments. These helper calls
   lower directly to `java.lang.Math` overloads. With stdin `-7 5 123456789012 -3.5` it prints
   `math=12 long=123456789012 double=2.5`.
+- The browser-facing compile export also completes `fixtures/ps-char-array/Main.kt`, which covers
+  `String.toCharArray()`, `CharArray` reads and writes, array `.size`, and character output/string
+  templates. With stdin `banana` it prints `chars=bz score=9`.
 - This success currently comes from a minimal PSI-based bytecode emitter for the verified fixture
   shapes, not from the full Kotlin/JVM backend. The full backend still fails because Kotlin builtins
   deserialization can read `kotlin/kotlin.kotlin_builtins` but cannot resolve `kotlin.Unit`; virtual

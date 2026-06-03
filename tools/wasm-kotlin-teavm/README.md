@@ -286,6 +286,28 @@ the expected output is:
 math=12 long=123456789012 double=2.5
 ```
 
+To run the PS-style char-array fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs \
+  --source tools/wasm-kotlin-teavm/fixtures/ps-char-array/Main.kt \
+  --out tools/wasm-kotlin-teavm/build/browser-ps-char-array-out
+java -cp tools/wasm-kotlin-teavm/build/browser-ps-char-array-out MainKt
+```
+
+With this stdin:
+
+```text
+banana
+```
+
+the expected output is:
+
+```text
+chars=bz score=9
+```
+
 ## Current Status
 
 This folder is a porting scaffold, not an app integration. The current probe compiles a small Java
@@ -404,6 +426,9 @@ Known findings from the initial experiments:
   `abs`, `minOf`, and `maxOf` for promoted `Int`, `Long`, and `Double` arguments. These helper calls
   lower directly to `java.lang.Math` overloads. Running that generated class with
   `-7 5 123456789012 -3.5` on stdin prints `math=12 long=123456789012 double=2.5`.
+- The browser-compatible probe also compiles `fixtures/ps-char-array/Main.kt`, which exercises
+  `String.toCharArray()`, `CharArray` reads and writes, array `.size`, and character output/string
+  templates. Running that generated class with `banana` on stdin prints `chars=bz score=9`.
 - This is not a full Kotlin/JVM backend yet. The browser path is currently a minimal emitter that
   supports the verified fixture shapes above. It does not yet support enough Kotlin for real
   competitive-programming use: collections and common library helpers, classes/data classes,

@@ -228,6 +228,10 @@ public final class SimpleFunctionCodegens {
                 method.visitInsn(Opcodes.DASTORE);
                 return true;
             }
+            if (arrayType == ValueType.CHAR_ARRAY && valueType == ValueType.CHAR) {
+                method.visitInsn(Opcodes.CASTORE);
+                return true;
+            }
             if (arrayType == ValueType.BOOLEAN_ARRAY && valueType == ValueType.BOOLEAN) {
                 method.visitInsn(Opcodes.BASTORE);
                 return true;
@@ -415,6 +419,10 @@ public final class SimpleFunctionCodegens {
                 method.visitInsn(Opcodes.DALOAD);
                 return ValueType.DOUBLE;
             }
+            if (arrayType == ValueType.CHAR_ARRAY) {
+                method.visitInsn(Opcodes.CALOAD);
+                return ValueType.CHAR;
+            }
             if (arrayType == ValueType.BOOLEAN_ARRAY) {
                 method.visitInsn(Opcodes.BALOAD);
                 return ValueType.BOOLEAN;
@@ -434,6 +442,25 @@ public final class SimpleFunctionCodegens {
                 if (receiverType == ValueType.STRING) {
                     method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/String", "length", "()I", false);
                     return ValueType.INT;
+                }
+            }
+            if (selector != null && "size".equals(selector.getText())) {
+                ValueType receiverType = emitExpression(method, context, receiver);
+                if (receiverType.array) {
+                    method.visitInsn(Opcodes.ARRAYLENGTH);
+                    return ValueType.INT;
+                }
+            }
+            if (selector instanceof KtCallExpression) {
+                KtExpression callee = ((KtCallExpression) selector).getCalleeExpression();
+                if (callee != null && "toCharArray".equals(callee.getText())
+                        && ((KtCallExpression) selector).getValueArguments().isEmpty()) {
+                    ValueType receiverType = emitExpression(method, context, receiver);
+                    if (receiverType == ValueType.STRING) {
+                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/String", "toCharArray",
+                                "()[C", false);
+                        return ValueType.CHAR_ARRAY;
+                    }
                 }
             }
             throw new IllegalArgumentException("Unsupported qualified expression: " + expression.getText());
@@ -572,6 +599,7 @@ public final class SimpleFunctionCodegens {
         }
         if (("IntArray".equals(calleeText) || "LongArray".equals(calleeText)
                 || "DoubleArray".equals(calleeText)
+                || "CharArray".equals(calleeText)
                 || "BooleanArray".equals(calleeText)) && call.getValueArguments().size() == 1) {
             ValueType sizeType = emitExpression(method, context,
                     call.getValueArguments().get(0).getArgumentExpression());
@@ -589,6 +617,10 @@ public final class SimpleFunctionCodegens {
             if ("DoubleArray".equals(calleeText)) {
                 method.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_DOUBLE);
                 return ValueType.DOUBLE_ARRAY;
+            }
+            if ("CharArray".equals(calleeText)) {
+                method.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_CHAR);
+                return ValueType.CHAR_ARRAY;
             }
             method.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_LONG);
             return ValueType.LONG_ARRAY;
@@ -736,6 +768,9 @@ public final class SimpleFunctionCodegens {
             if (local.type == ValueType.DOUBLE_ARRAY) {
                 return ValueType.DOUBLE;
             }
+            if (local.type == ValueType.CHAR_ARRAY) {
+                return ValueType.CHAR;
+            }
             if (local.type == ValueType.BOOLEAN_ARRAY) {
                 return ValueType.BOOLEAN;
             }
@@ -750,6 +785,18 @@ public final class SimpleFunctionCodegens {
             if (selector != null && "length".equals(selector.getText())
                     && inferExpressionType(context, qualified.getReceiverExpression()) == ValueType.STRING) {
                 return ValueType.INT;
+            }
+            if (selector != null && "size".equals(selector.getText())
+                    && inferExpressionType(context, qualified.getReceiverExpression()).array) {
+                return ValueType.INT;
+            }
+            if (selector instanceof KtCallExpression) {
+                KtExpression callee = ((KtCallExpression) selector).getCalleeExpression();
+                if (callee != null && "toCharArray".equals(callee.getText())
+                        && ((KtCallExpression) selector).getValueArguments().isEmpty()
+                        && inferExpressionType(context, qualified.getReceiverExpression()) == ValueType.STRING) {
+                    return ValueType.CHAR_ARRAY;
+                }
             }
         }
         if (expression instanceof KtBinaryExpression) {
@@ -790,6 +837,9 @@ public final class SimpleFunctionCodegens {
             }
             if ("DoubleArray".equals(calleeText)) {
                 return ValueType.DOUBLE_ARRAY;
+            }
+            if ("CharArray".equals(calleeText)) {
+                return ValueType.CHAR_ARRAY;
             }
             if ("BooleanArray".equals(calleeText)) {
                 return ValueType.BOOLEAN_ARRAY;
@@ -1296,7 +1346,8 @@ public final class SimpleFunctionCodegens {
             method.visitLdcInsn("");
             method.visitInsn(Opcodes.ARETURN);
         } else if (returnType == ValueType.INT_ARRAY || returnType == ValueType.LONG_ARRAY
-                || returnType == ValueType.DOUBLE_ARRAY || returnType == ValueType.BOOLEAN_ARRAY) {
+                || returnType == ValueType.DOUBLE_ARRAY || returnType == ValueType.CHAR_ARRAY
+                || returnType == ValueType.BOOLEAN_ARRAY) {
             method.visitInsn(Opcodes.ACONST_NULL);
             method.visitInsn(Opcodes.ARETURN);
         } else {
@@ -1388,6 +1439,9 @@ public final class SimpleFunctionCodegens {
         if ("DoubleArray".equals(text)) {
             return ValueType.DOUBLE_ARRAY;
         }
+        if ("CharArray".equals(text)) {
+            return ValueType.CHAR_ARRAY;
+        }
         if ("BooleanArray".equals(text)) {
             return ValueType.BOOLEAN_ARRAY;
         }
@@ -1427,6 +1481,7 @@ public final class SimpleFunctionCodegens {
         INT_ARRAY("[I", 1, false, true),
         LONG_ARRAY("[J", 1, false, true),
         DOUBLE_ARRAY("[D", 1, false, true),
+        CHAR_ARRAY("[C", 1, false, true),
         BOOLEAN_ARRAY("[Z", 1, false, true),
         VOID("V", 0, false, false);
 
