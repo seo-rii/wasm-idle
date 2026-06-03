@@ -14,6 +14,7 @@ import org.jetbrains.kotlin.psi.KtBlockExpression;
 import org.jetbrains.kotlin.psi.KtCallExpression;
 import org.jetbrains.kotlin.psi.KtConstantExpression;
 import org.jetbrains.kotlin.psi.KtDeclaration;
+import org.jetbrains.kotlin.psi.KtDotQualifiedExpression;
 import org.jetbrains.kotlin.psi.KtEscapeStringTemplateEntry;
 import org.jetbrains.kotlin.psi.KtExpression;
 import org.jetbrains.kotlin.psi.KtFile;
@@ -273,6 +274,25 @@ public final class SimpleFunctionCodegens {
                 method.visitLdcInsn(Long.valueOf(text.substring(0, text.length() - 1)));
                 return ValueType.LONG;
             }
+            if (text.length() >= 3 && text.charAt(0) == '\'' && text.charAt(text.length() - 1) == '\'') {
+                char value;
+                if (text.charAt(1) != '\\') {
+                    value = text.charAt(1);
+                } else {
+                    char escaped = text.charAt(2);
+                    if (escaped == 'n') {
+                        value = '\n';
+                    } else if (escaped == 't') {
+                        value = '\t';
+                    } else if (escaped == 'r') {
+                        value = '\r';
+                    } else {
+                        value = escaped;
+                    }
+                }
+                method.visitLdcInsn(Integer.valueOf(value));
+                return ValueType.CHAR;
+            }
             method.visitLdcInsn(Integer.valueOf(text));
             return ValueType.INT;
         }
@@ -316,7 +336,24 @@ public final class SimpleFunctionCodegens {
                 method.visitInsn(Opcodes.LALOAD);
                 return ValueType.LONG;
             }
+            if (arrayType == ValueType.STRING) {
+                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/String", "charAt", "(I)C", false);
+                return ValueType.CHAR;
+            }
             throw new IllegalArgumentException("Unsupported array access: " + expression.getText());
+        }
+        if (expression instanceof KtDotQualifiedExpression) {
+            KtDotQualifiedExpression qualified = (KtDotQualifiedExpression) expression;
+            KtExpression receiver = qualified.getReceiverExpression();
+            KtExpression selector = qualified.getSelectorExpression();
+            if (selector != null && "length".equals(selector.getText())) {
+                ValueType receiverType = emitExpression(method, context, receiver);
+                if (receiverType == ValueType.STRING) {
+                    method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/String", "length", "()I", false);
+                    return ValueType.INT;
+                }
+            }
+            throw new IllegalArgumentException("Unsupported qualified expression: " + expression.getText());
         }
         if (expression instanceof KtBinaryExpression) {
             KtBinaryExpression binary = (KtBinaryExpression) expression;
@@ -390,6 +427,9 @@ public final class SimpleFunctionCodegens {
                     } else if (type == ValueType.LONG) {
                         method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append",
                                 "(J)Ljava/lang/StringBuilder;", false);
+                    } else if (type == ValueType.CHAR) {
+                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append",
+                                "(C)Ljava/lang/StringBuilder;", false);
                     } else if (type == ValueType.STRING) {
                         method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append",
                                 "(Ljava/lang/String;)Ljava/lang/StringBuilder;", false);
@@ -425,6 +465,10 @@ public final class SimpleFunctionCodegens {
                 method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/io/PrintStream", methodName, "(J)V", false);
                 return ValueType.VOID;
             }
+            if (type == ValueType.CHAR) {
+                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/io/PrintStream", methodName, "(C)V", false);
+                return ValueType.VOID;
+            }
             if (type == ValueType.STRING) {
                 method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/io/PrintStream", methodName,
                         "(Ljava/lang/String;)V", false);
@@ -455,6 +499,12 @@ public final class SimpleFunctionCodegens {
             method.visitMethodInsn(Opcodes.INVOKESTATIC, context.ownerInternalName, "__wasmIdleReadLong", "()J",
                     false);
             return ValueType.LONG;
+        }
+        if ("readString".equals(calleeText) && call.getValueArguments().isEmpty()) {
+            ensureReadStringHelper(context);
+            method.visitMethodInsn(Opcodes.INVOKESTATIC, context.ownerInternalName, "__wasmIdleReadString",
+                    "()Ljava/lang/String;", false);
+            return ValueType.STRING;
         }
 
         FunctionSignature signature = findFunctionSignature(calleeText);
@@ -493,6 +543,9 @@ public final class SimpleFunctionCodegens {
         }
         if (expression instanceof KtConstantExpression) {
             String text = expression.getText();
+            if (text.length() >= 3 && text.charAt(0) == '\'' && text.charAt(text.length() - 1) == '\'') {
+                return ValueType.CHAR;
+            }
             return text.endsWith("L") || text.endsWith("l") ? ValueType.LONG : ValueType.INT;
         }
         if (expression instanceof KtUnaryExpression) {
@@ -521,7 +574,18 @@ public final class SimpleFunctionCodegens {
             if (local.type == ValueType.LONG_ARRAY) {
                 return ValueType.LONG;
             }
+            if (local.type == ValueType.STRING) {
+                return ValueType.CHAR;
+            }
             throw new IllegalArgumentException("Unsupported array type: " + expression.getText());
+        }
+        if (expression instanceof KtDotQualifiedExpression) {
+            KtDotQualifiedExpression qualified = (KtDotQualifiedExpression) expression;
+            KtExpression selector = qualified.getSelectorExpression();
+            if (selector != null && "length".equals(selector.getText())
+                    && inferExpressionType(context, qualified.getReceiverExpression()) == ValueType.STRING) {
+                return ValueType.INT;
+            }
         }
         if (expression instanceof KtBinaryExpression) {
             KtBinaryExpression binary = (KtBinaryExpression) expression;
@@ -549,6 +613,9 @@ public final class SimpleFunctionCodegens {
             if ("readLong".equals(calleeText)) {
                 return ValueType.LONG;
             }
+            if ("readString".equals(calleeText)) {
+                return ValueType.STRING;
+            }
             if ("IntArray".equals(calleeText)) {
                 return ValueType.INT_ARRAY;
             }
@@ -571,7 +638,7 @@ public final class SimpleFunctionCodegens {
                     + expression.getText());
         }
         Local local = context.locals.get(arrayExpression.getText());
-        if (local == null || !local.type.array) {
+        if (local == null || (!local.type.array && local.type != ValueType.STRING)) {
             throw new IllegalArgumentException("Unknown array local: " + arrayExpression.getText());
         }
         method.visitVarInsn(Opcodes.ALOAD, local.index);
@@ -580,6 +647,66 @@ public final class SimpleFunctionCodegens {
             throw new IllegalArgumentException("Array index must be Int: " + expression.getText());
         }
         return local.type;
+    }
+
+    private static void ensureReadStringHelper(MethodContext context) {
+        String key = context.ownerInternalName + ".__wasmIdleReadString";
+        if (!generatedHelpers.add(key)) {
+            return;
+        }
+        MethodVisitor method = context.builder.newMethod(
+                JvmDeclarationOrigin.NO_ORIGIN,
+                Opcodes.ACC_PRIVATE | Opcodes.ACC_STATIC,
+                "__wasmIdleReadString",
+                "()Ljava/lang/String;",
+                null,
+                new String[0]);
+        method.visitCode();
+
+        Label skipWhitespace = new Label();
+        Label afterWhitespace = new Label();
+        Label tokenLoop = new Label();
+        Label end = new Label();
+
+        method.visitLabel(skipWhitespace);
+        emitReadByte(method);
+        method.visitVarInsn(Opcodes.ISTORE, 0);
+        method.visitVarInsn(Opcodes.ILOAD, 0);
+        method.visitJumpInsn(Opcodes.IFLT, afterWhitespace);
+        method.visitVarInsn(Opcodes.ILOAD, 0);
+        method.visitIntInsn(Opcodes.BIPUSH, 32);
+        method.visitJumpInsn(Opcodes.IF_ICMPGT, afterWhitespace);
+        method.visitJumpInsn(Opcodes.GOTO, skipWhitespace);
+
+        method.visitLabel(afterWhitespace);
+        method.visitTypeInsn(Opcodes.NEW, "java/lang/StringBuilder");
+        method.visitInsn(Opcodes.DUP);
+        method.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/lang/StringBuilder", "<init>", "()V", false);
+        method.visitVarInsn(Opcodes.ASTORE, 1);
+
+        method.visitLabel(tokenLoop);
+        method.visitVarInsn(Opcodes.ILOAD, 0);
+        method.visitJumpInsn(Opcodes.IFLT, end);
+        method.visitVarInsn(Opcodes.ILOAD, 0);
+        method.visitIntInsn(Opcodes.BIPUSH, 32);
+        method.visitJumpInsn(Opcodes.IF_ICMPLE, end);
+        method.visitVarInsn(Opcodes.ALOAD, 1);
+        method.visitVarInsn(Opcodes.ILOAD, 0);
+        method.visitInsn(Opcodes.I2C);
+        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "append",
+                "(C)Ljava/lang/StringBuilder;", false);
+        method.visitInsn(Opcodes.POP);
+        emitReadByte(method);
+        method.visitVarInsn(Opcodes.ISTORE, 0);
+        method.visitJumpInsn(Opcodes.GOTO, tokenLoop);
+
+        method.visitLabel(end);
+        method.visitVarInsn(Opcodes.ALOAD, 1);
+        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/StringBuilder", "toString",
+                "()Ljava/lang/String;", false);
+        method.visitInsn(Opcodes.ARETURN);
+        method.visitMaxs(3, 2);
+        method.visitEnd();
     }
 
     private static void ensureReadIntHelper(MethodContext context) {
@@ -772,12 +899,14 @@ public final class SimpleFunctionCodegens {
             if (isComparison(operation)) {
                 ValueType leftType = inferExpressionType(context, binary.getLeft());
                 ValueType rightType = inferExpressionType(context, binary.getRight());
-                if (!leftType.numeric || !rightType.numeric) {
+                boolean comparable = (leftType.numeric && rightType.numeric)
+                        || (leftType == ValueType.CHAR && rightType == ValueType.CHAR);
+                if (!comparable) {
                     throw new IllegalArgumentException("Comparison type mismatch: " + expression.getText());
                 }
                 ValueType comparisonType = leftType == ValueType.LONG || rightType == ValueType.LONG
                         ? ValueType.LONG
-                        : ValueType.INT;
+                        : leftType == ValueType.CHAR ? ValueType.CHAR : ValueType.INT;
                 emitExpressionAs(method, context, binary.getLeft(), comparisonType);
                 emitExpressionAs(method, context, binary.getRight(), comparisonType);
                 if (comparisonType == ValueType.LONG) {
@@ -877,7 +1006,7 @@ public final class SimpleFunctionCodegens {
     }
 
     private static void loadLocal(MethodVisitor method, ValueType type, int index) {
-        if (type == ValueType.INT) {
+        if (type == ValueType.INT || type == ValueType.CHAR) {
             method.visitVarInsn(Opcodes.ILOAD, index);
         } else if (type == ValueType.LONG) {
             method.visitVarInsn(Opcodes.LLOAD, index);
@@ -887,7 +1016,7 @@ public final class SimpleFunctionCodegens {
     }
 
     private static void storeLocal(MethodVisitor method, ValueType type, int index) {
-        if (type == ValueType.INT) {
+        if (type == ValueType.INT || type == ValueType.CHAR) {
             method.visitVarInsn(Opcodes.ISTORE, index);
         } else if (type == ValueType.LONG) {
             method.visitVarInsn(Opcodes.LSTORE, index);
@@ -906,7 +1035,7 @@ public final class SimpleFunctionCodegens {
 
     private static void emitReturn(MethodVisitor method, ValueType expectedType, ValueType actualType) {
         if (expectedType == actualType) {
-            if (expectedType == ValueType.INT) {
+            if (expectedType == ValueType.INT || expectedType == ValueType.CHAR) {
                 method.visitInsn(Opcodes.IRETURN);
             } else if (expectedType == ValueType.LONG) {
                 method.visitInsn(Opcodes.LRETURN);
@@ -927,7 +1056,7 @@ public final class SimpleFunctionCodegens {
     }
 
     private static void emitDefaultReturn(MethodVisitor method, ValueType returnType) {
-        if (returnType == ValueType.INT) {
+        if (returnType == ValueType.INT || returnType == ValueType.CHAR) {
             method.visitInsn(Opcodes.ICONST_0);
             method.visitInsn(Opcodes.IRETURN);
         } else if (returnType == ValueType.LONG) {
@@ -1010,6 +1139,9 @@ public final class SimpleFunctionCodegens {
         if ("String".equals(text)) {
             return ValueType.STRING;
         }
+        if ("Char".equals(text)) {
+            return ValueType.CHAR;
+        }
         if ("IntArray".equals(text)) {
             return ValueType.INT_ARRAY;
         }
@@ -1025,6 +1157,7 @@ public final class SimpleFunctionCodegens {
     private enum ValueType {
         INT("I", 1, true, false),
         LONG("J", 2, true, false),
+        CHAR("C", 1, false, false),
         STRING("Ljava/lang/String;", 1, false, false),
         INT_ARRAY("[I", 1, false, true),
         LONG_ARRAY("[J", 1, false, true),

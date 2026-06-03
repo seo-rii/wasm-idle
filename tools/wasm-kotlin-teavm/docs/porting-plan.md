@@ -147,10 +147,9 @@ Current status:
 - `buildWasmGC` now produces a WasmGC artifact when run with `JAVA_TOOL_OPTIONS=-Xss64m`.
 - Node can compile the WasmGC module, load TeaVM's generated runtime, and see the exported
   `compileKotlinSource` API.
-- The exported API call starts the Kotlin compiler path, but fixture compilation is not complete yet.
-  The current blocker is still in the reduced IntelliJ runtime stubs, after passing runtime startup,
-  `ConcurrentHashMap.newKeySet()`, `SystemInfoRt`, event multicaster, VFS listener, and command
-  publisher initialization issues.
+- The exported API call now completes the verified browser fixture set through the minimal
+  PSI-based bytecode emitter. Full Kotlin/JVM backend restoration is tracked separately because
+  Kotlin builtins and virtual classpath jar reads are still not stable under the TeaVM runtime.
 
 ### ARCH-005: Remove statically reachable javac and parallel backend code
 
@@ -197,9 +196,13 @@ Current status:
   numeric stdin through `readInt()` and `readLong()` browser-emitter intrinsics. The generated class
   contains private `System.in.read()`-based helpers, and with stdin
   `5 3 1 4 1 5 100000000000` it prints `weighted=46 total=100000000046`.
+- The browser-facing compile export also completes `fixtures/ps-string-char/Main.kt`, which covers
+  string-token stdin through `readString()`, `String.length`, `String[index]`, `Char` literals and
+  comparisons, character appends in string templates, and character output. With stdin
+  `algorithm queue` it prints `score=25 first=a secondLast=e`.
 - This success currently comes from a minimal PSI-based bytecode emitter for the verified fixture
   shapes, not from the full Kotlin/JVM backend. The full backend still fails because Kotlin builtins
   deserialization can read `kotlin/kotlin.kotlin_builtins` but cannot resolve `kotlin.Unit`; virtual
   classpath jar reads also still warn with `NullPointerException`.
-- The next PS coverage targets are string-token input, strings/chars, packages/imports, collection
-  helpers, and stable classpath jar reads.
+- The next PS coverage targets are packages/imports, collection helpers, classes/data classes,
+  lambdas/generics, broader library calls, and stable classpath jar reads.

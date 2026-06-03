@@ -45,6 +45,9 @@ public final class SimplePsiFactories {
         if ("org.jetbrains.kotlin.psi.KtContainerNodeForControlStructureBody".equals(className)) {
             return new org.jetbrains.kotlin.psi.KtContainerNodeForControlStructureBody(node);
         }
+        if ("org.jetbrains.kotlin.psi.KtDotQualifiedExpression".equals(className)) {
+            return new org.jetbrains.kotlin.psi.KtDotQualifiedExpression(node);
+        }
         if ("org.jetbrains.kotlin.psi.KtIfExpression".equals(className)) {
             return new org.jetbrains.kotlin.psi.KtIfExpression(node);
         }
