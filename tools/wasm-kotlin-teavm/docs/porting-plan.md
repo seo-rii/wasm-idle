@@ -306,6 +306,10 @@ Current status:
   `java.util.AbstractMap.SimpleEntry<Integer, Integer>` values in `java.util.ArrayList`. With stdin
   `2 1 2 3 4` it prints
   `pairs=13,24|2,1 score=186 flags=true,true,true,true empty=false size=2`.
+- The browser-facing compile export also completes `fixtures/ps-list-helpers/Main.kt`, which covers
+  `MutableList<Int>` and `ArrayList<Pair<Int, Int>>` stack/list helpers: indexed `add`,
+  `removeAt`, `first()`, `last()`, `clear()`, `size`, and `isEmpty`. With stdin `5 9` it prints
+  `list=5,9 removed=3 pair=3,4|5,6 removedPair=1,2 empty=true,true size=0,0`.
 - The browser-facing compile export also completes `fixtures/ps-double-math/Main.kt`, which covers
   numeric `toInt`/`toLong`/`toDouble` conversions plus `sqrt`, `floor`, `ceil`, and `pow` by lowering
   to JVM numeric conversion opcodes and `java.lang.Math`. With stdin `16 100000000000 2.5` it prints
