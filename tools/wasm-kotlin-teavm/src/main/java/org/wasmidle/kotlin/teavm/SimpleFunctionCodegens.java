@@ -1,7 +1,9 @@
 package org.wasmidle.kotlin.teavm;
 
 import com.intellij.psi.tree.IElementType;
+import java.util.ArrayDeque;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -12,8 +14,10 @@ import org.jetbrains.kotlin.lexer.KtTokens;
 import org.jetbrains.kotlin.psi.KtArrayAccessExpression;
 import org.jetbrains.kotlin.psi.KtBinaryExpression;
 import org.jetbrains.kotlin.psi.KtBlockExpression;
+import org.jetbrains.kotlin.psi.KtBreakExpression;
 import org.jetbrains.kotlin.psi.KtCallExpression;
 import org.jetbrains.kotlin.psi.KtConstantExpression;
+import org.jetbrains.kotlin.psi.KtContinueExpression;
 import org.jetbrains.kotlin.psi.KtDeclaration;
 import org.jetbrains.kotlin.psi.KtDotQualifiedExpression;
 import org.jetbrains.kotlin.psi.KtEscapeStringTemplateEntry;
@@ -170,10 +174,26 @@ public final class SimpleFunctionCodegens {
             Label endLabel = new Label();
             method.visitLabel(startLabel);
             emitConditionJump(method, context, whileExpression.getCondition(), false, endLabel);
+            context.loopLabels.push(new LoopLabels(endLabel, startLabel));
             emitBranch(method, context, whileExpression.getBody());
+            context.loopLabels.pop();
             context.hasExplicitReturn = false;
             method.visitJumpInsn(Opcodes.GOTO, startLabel);
             method.visitLabel(endLabel);
+            return;
+        }
+        if (statement instanceof KtBreakExpression) {
+            if (context.loopLabels.isEmpty()) {
+                throw new IllegalArgumentException("break is only supported inside loops: " + statement.getText());
+            }
+            method.visitJumpInsn(Opcodes.GOTO, context.loopLabels.peek().breakTarget);
+            return;
+        }
+        if (statement instanceof KtContinueExpression) {
+            if (context.loopLabels.isEmpty()) {
+                throw new IllegalArgumentException("continue is only supported inside loops: " + statement.getText());
+            }
+            method.visitJumpInsn(Opcodes.GOTO, context.loopLabels.peek().continueTarget);
             return;
         }
         if (statement instanceof KtReturnExpression) {
@@ -233,6 +253,7 @@ public final class SimpleFunctionCodegens {
         method.visitVarInsn(Opcodes.ISTORE, stepIndex);
 
         Label startLabel = new Label();
+        Label updateLabel = new Label();
         Label endLabel = new Label();
         method.visitLabel(startLabel);
         method.visitVarInsn(Opcodes.ILOAD, loopIndex);
@@ -244,8 +265,11 @@ public final class SimpleFunctionCodegens {
         } else {
             method.visitJumpInsn(Opcodes.IF_ICMPGE, endLabel);
         }
+        context.loopLabels.push(new LoopLabels(endLabel, updateLabel));
         emitBranch(method, context, expression.getBody());
+        context.loopLabels.pop();
         context.hasExplicitReturn = false;
+        method.visitLabel(updateLabel);
         method.visitVarInsn(Opcodes.ILOAD, loopIndex);
         method.visitVarInsn(Opcodes.ILOAD, stepIndex);
         method.visitInsn(progression.descending ? Opcodes.ISUB : Opcodes.IADD);
@@ -691,13 +715,17 @@ public final class SimpleFunctionCodegens {
             context.locals.put(parameterName, new Local(loopIndex, ValueType.INT));
 
             Label startLabel = new Label();
+            Label updateLabel = new Label();
             Label endLabel = new Label();
             method.visitLabel(startLabel);
             method.visitVarInsn(Opcodes.ILOAD, loopIndex);
             method.visitVarInsn(Opcodes.ILOAD, countIndex);
             method.visitJumpInsn(Opcodes.IF_ICMPGE, endLabel);
+            context.loopLabels.push(new LoopLabels(endLabel, updateLabel));
             emitBranch(method, context, lambda.getBodyExpression());
+            context.loopLabels.pop();
             context.hasExplicitReturn = false;
+            method.visitLabel(updateLabel);
             method.visitIincInsn(loopIndex, 1);
             method.visitJumpInsn(Opcodes.GOTO, startLabel);
             method.visitLabel(endLabel);
@@ -1716,11 +1744,22 @@ public final class SimpleFunctionCodegens {
         }
     }
 
+    private static final class LoopLabels {
+        private final Label breakTarget;
+        private final Label continueTarget;
+
+        private LoopLabels(Label breakTarget, Label continueTarget) {
+            this.breakTarget = breakTarget;
+            this.continueTarget = continueTarget;
+        }
+    }
+
     private static final class MethodContext {
         private final ClassBuilder builder;
         private final String ownerInternalName;
         private final ValueType returnType;
         private final Map<String, Local> locals = new HashMap<>();
+        private final Deque<LoopLabels> loopLabels = new ArrayDeque<>();
         private int nextLocal;
         private boolean hasExplicitReturn;
 

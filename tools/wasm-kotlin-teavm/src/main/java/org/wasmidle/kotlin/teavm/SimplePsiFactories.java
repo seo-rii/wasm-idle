@@ -33,11 +33,17 @@ public final class SimplePsiFactories {
         if ("org.jetbrains.kotlin.psi.KtBinaryExpression".equals(className)) {
             return new org.jetbrains.kotlin.psi.KtBinaryExpression(node);
         }
+        if ("org.jetbrains.kotlin.psi.KtBreakExpression".equals(className)) {
+            return new org.jetbrains.kotlin.psi.KtBreakExpression(node);
+        }
         if ("org.jetbrains.kotlin.psi.KtCallExpression".equals(className)) {
             return new org.jetbrains.kotlin.psi.KtCallExpression(node);
         }
         if ("org.jetbrains.kotlin.psi.KtConstantExpression".equals(className)) {
             return new org.jetbrains.kotlin.psi.KtConstantExpression(node);
+        }
+        if ("org.jetbrains.kotlin.psi.KtContinueExpression".equals(className)) {
+            return new org.jetbrains.kotlin.psi.KtContinueExpression(node);
         }
         if ("org.jetbrains.kotlin.psi.KtContainerNode".equals(className)) {
             return new org.jetbrains.kotlin.psi.KtContainerNode(node);

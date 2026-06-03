@@ -396,6 +396,22 @@ the expected output is:
 repeat=21 implicit=3
 ```
 
+To run the PS-style break/continue fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs \
+  --source tools/wasm-kotlin-teavm/fixtures/ps-break-continue/Main.kt \
+  --out tools/wasm-kotlin-teavm/build/browser-ps-break-continue-out
+java -cp tools/wasm-kotlin-teavm/build/browser-ps-break-continue-out MainKt
+```
+
+The expected output is:
+
+```text
+flow=34 i=8
+```
+
 ## Current Status
 
 This folder is a porting scaffold, not an app integration. The current probe compiles a small Java
@@ -533,6 +549,9 @@ Known findings from the initial experiments:
 - The browser-compatible probe also compiles `fixtures/ps-repeat/Main.kt`, which exercises
   `repeat(n) { index -> ... }` and `repeat(n) { ... }` with implicit `it`. Running that generated
   class with `4 3 1 4 1` on stdin prints `repeat=21 implicit=3`.
+- The browser-compatible probe also compiles `fixtures/ps-break-continue/Main.kt`, which exercises
+  `break` and `continue` in `while` and `for` loops. Running that generated class prints
+  `flow=34 i=8`.
 - This is not a full Kotlin/JVM backend yet. The browser path is currently a minimal emitter that
   supports the verified fixture shapes above. It does not yet support enough Kotlin for real
   competitive-programming use: collections and common library helpers, classes/data classes,

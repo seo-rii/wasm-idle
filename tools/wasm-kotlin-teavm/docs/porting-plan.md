@@ -237,6 +237,9 @@ Current status:
 - The browser-facing compile export also completes `fixtures/ps-repeat/Main.kt`, which covers
   `repeat(n) { index -> ... }` and `repeat(n) { ... }` with implicit `it`. With stdin
   `4 3 1 4 1` it prints `repeat=21 implicit=3`.
+- The browser-facing compile export also completes `fixtures/ps-break-continue/Main.kt`, which
+  covers `break` and `continue` in `while` and `for` loops. Running the generated class prints
+  `flow=34 i=8`.
 - This success currently comes from a minimal PSI-based bytecode emitter for the verified fixture
   shapes, not from the full Kotlin/JVM backend. The full backend still fails because Kotlin builtins
   deserialization can read `kotlin/kotlin.kotlin_builtins` but cannot resolve `kotlin.Unit`; virtual
