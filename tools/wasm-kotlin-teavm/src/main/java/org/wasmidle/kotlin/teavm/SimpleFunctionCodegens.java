@@ -1469,6 +1469,168 @@ public final class SimpleFunctionCodegens {
                         return receiverType;
                     }
                 }
+                if (callee != null && "sum".equals(callee.getText())
+                        && ((KtCallExpression) selector).getValueArguments().isEmpty()) {
+                    ValueType receiverType = inferExpressionType(context, receiver);
+                    ValueType aggregateType = numericAggregateType(receiverType);
+                    if (aggregateType != null) {
+                        if (receiverType == ValueType.INT_ARRAY || receiverType == ValueType.LONG_ARRAY
+                                || receiverType == ValueType.DOUBLE_ARRAY) {
+                            int receiverIndex = context.allocateTemporary(receiverType);
+                            emitExpressionAs(method, context, receiver, receiverType);
+                            method.visitVarInsn(Opcodes.ASTORE, receiverIndex);
+                            int resultIndex = context.allocateTemporary(aggregateType);
+                            if (aggregateType == ValueType.LONG) {
+                                method.visitInsn(Opcodes.LCONST_0);
+                            } else if (aggregateType == ValueType.DOUBLE) {
+                                method.visitInsn(Opcodes.DCONST_0);
+                            } else {
+                                method.visitInsn(Opcodes.ICONST_0);
+                            }
+                            storeLocal(method, aggregateType, resultIndex);
+                            int loopIndex = context.allocateTemporary(ValueType.INT);
+                            method.visitInsn(Opcodes.ICONST_0);
+                            method.visitVarInsn(Opcodes.ISTORE, loopIndex);
+                            Label startLabel = new Label();
+                            Label endLabel = new Label();
+                            method.visitLabel(startLabel);
+                            method.visitVarInsn(Opcodes.ILOAD, loopIndex);
+                            method.visitVarInsn(Opcodes.ALOAD, receiverIndex);
+                            method.visitInsn(Opcodes.ARRAYLENGTH);
+                            method.visitJumpInsn(Opcodes.IF_ICMPGE, endLabel);
+                            loadLocal(method, aggregateType, resultIndex);
+                            method.visitVarInsn(Opcodes.ALOAD, receiverIndex);
+                            method.visitVarInsn(Opcodes.ILOAD, loopIndex);
+                            if (receiverType == ValueType.LONG_ARRAY) {
+                                method.visitInsn(Opcodes.LALOAD);
+                                method.visitInsn(Opcodes.LADD);
+                            } else if (receiverType == ValueType.DOUBLE_ARRAY) {
+                                method.visitInsn(Opcodes.DALOAD);
+                                method.visitInsn(Opcodes.DADD);
+                            } else {
+                                method.visitInsn(Opcodes.IALOAD);
+                                method.visitInsn(Opcodes.IADD);
+                            }
+                            storeLocal(method, aggregateType, resultIndex);
+                            method.visitIincInsn(loopIndex, 1);
+                            method.visitJumpInsn(Opcodes.GOTO, startLabel);
+                            method.visitLabel(endLabel);
+                            loadLocal(method, aggregateType, resultIndex);
+                            return aggregateType;
+                        }
+                        if (receiverType == ValueType.INT_ARRAY_LIST || receiverType == ValueType.LONG_ARRAY_LIST) {
+                            int receiverIndex = context.allocateTemporary(receiverType);
+                            emitExpressionAs(method, context, receiver, receiverType);
+                            method.visitVarInsn(Opcodes.ASTORE, receiverIndex);
+                            int resultIndex = context.allocateTemporary(aggregateType);
+                            if (aggregateType == ValueType.LONG) {
+                                method.visitInsn(Opcodes.LCONST_0);
+                            } else {
+                                method.visitInsn(Opcodes.ICONST_0);
+                            }
+                            storeLocal(method, aggregateType, resultIndex);
+                            int loopIndex = context.allocateTemporary(ValueType.INT);
+                            method.visitInsn(Opcodes.ICONST_0);
+                            method.visitVarInsn(Opcodes.ISTORE, loopIndex);
+                            Label startLabel = new Label();
+                            Label endLabel = new Label();
+                            method.visitLabel(startLabel);
+                            method.visitVarInsn(Opcodes.ILOAD, loopIndex);
+                            method.visitVarInsn(Opcodes.ALOAD, receiverIndex);
+                            method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "size", "()I",
+                                    false);
+                            method.visitJumpInsn(Opcodes.IF_ICMPGE, endLabel);
+                            loadLocal(method, aggregateType, resultIndex);
+                            method.visitVarInsn(Opcodes.ALOAD, receiverIndex);
+                            method.visitVarInsn(Opcodes.ILOAD, loopIndex);
+                            method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "get",
+                                    "(I)Ljava/lang/Object;", false);
+                            if (receiverType == ValueType.LONG_ARRAY_LIST) {
+                                unboxLong(method);
+                                method.visitInsn(Opcodes.LADD);
+                            } else {
+                                unboxInt(method);
+                                method.visitInsn(Opcodes.IADD);
+                            }
+                            storeLocal(method, aggregateType, resultIndex);
+                            method.visitIincInsn(loopIndex, 1);
+                            method.visitJumpInsn(Opcodes.GOTO, startLabel);
+                            method.visitLabel(endLabel);
+                            loadLocal(method, aggregateType, resultIndex);
+                            return aggregateType;
+                        }
+                    }
+                }
+                if (callee != null
+                        && ("minOrNull".equals(callee.getText()) || "maxOrNull".equals(callee.getText()))
+                        && ((KtCallExpression) selector).getValueArguments().isEmpty()) {
+                    ValueType receiverType = inferExpressionType(context, receiver);
+                    ValueType aggregateType = numericAggregateType(receiverType);
+                    if (aggregateType != null) {
+                        boolean max = "maxOrNull".equals(callee.getText());
+                        if (receiverType == ValueType.INT_ARRAY || receiverType == ValueType.LONG_ARRAY
+                                || receiverType == ValueType.DOUBLE_ARRAY) {
+                            int receiverIndex = context.allocateTemporary(receiverType);
+                            emitExpressionAs(method, context, receiver, receiverType);
+                            method.visitVarInsn(Opcodes.ASTORE, receiverIndex);
+                            int resultIndex = context.allocateTemporary(aggregateType);
+                            method.visitVarInsn(Opcodes.ALOAD, receiverIndex);
+                            method.visitInsn(Opcodes.ICONST_0);
+                            if (receiverType == ValueType.LONG_ARRAY) {
+                                method.visitInsn(Opcodes.LALOAD);
+                            } else if (receiverType == ValueType.DOUBLE_ARRAY) {
+                                method.visitInsn(Opcodes.DALOAD);
+                            } else {
+                                method.visitInsn(Opcodes.IALOAD);
+                            }
+                            storeLocal(method, aggregateType, resultIndex);
+                            int loopIndex = context.allocateTemporary(ValueType.INT);
+                            method.visitInsn(Opcodes.ICONST_1);
+                            method.visitVarInsn(Opcodes.ISTORE, loopIndex);
+                            Label startLabel = new Label();
+                            Label endLabel = new Label();
+                            method.visitLabel(startLabel);
+                            method.visitVarInsn(Opcodes.ILOAD, loopIndex);
+                            method.visitVarInsn(Opcodes.ALOAD, receiverIndex);
+                            method.visitInsn(Opcodes.ARRAYLENGTH);
+                            method.visitJumpInsn(Opcodes.IF_ICMPGE, endLabel);
+                            loadLocal(method, aggregateType, resultIndex);
+                            method.visitVarInsn(Opcodes.ALOAD, receiverIndex);
+                            method.visitVarInsn(Opcodes.ILOAD, loopIndex);
+                            String descriptor;
+                            if (receiverType == ValueType.LONG_ARRAY) {
+                                method.visitInsn(Opcodes.LALOAD);
+                                descriptor = "(JJ)J";
+                            } else if (receiverType == ValueType.DOUBLE_ARRAY) {
+                                method.visitInsn(Opcodes.DALOAD);
+                                descriptor = "(DD)D";
+                            } else {
+                                method.visitInsn(Opcodes.IALOAD);
+                                descriptor = "(II)I";
+                            }
+                            method.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Math", max ? "max" : "min",
+                                    descriptor, false);
+                            storeLocal(method, aggregateType, resultIndex);
+                            method.visitIincInsn(loopIndex, 1);
+                            method.visitJumpInsn(Opcodes.GOTO, startLabel);
+                            method.visitLabel(endLabel);
+                            loadLocal(method, aggregateType, resultIndex);
+                            return aggregateType;
+                        }
+                        if (receiverType == ValueType.INT_ARRAY_LIST || receiverType == ValueType.LONG_ARRAY_LIST) {
+                            emitExpressionAs(method, context, receiver, receiverType);
+                            method.visitMethodInsn(Opcodes.INVOKESTATIC, "java/util/Collections",
+                                    max ? "max" : "min",
+                                    "(Ljava/util/Collection;)Ljava/lang/Object;", false);
+                            if (receiverType == ValueType.LONG_ARRAY_LIST) {
+                                unboxLong(method);
+                                return ValueType.LONG;
+                            }
+                            unboxInt(method);
+                            return ValueType.INT;
+                        }
+                    }
+                }
                 if (callee != null && "add".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().size() == 1) {
                     ValueType receiverType = emitExpression(method, context, receiver);
@@ -3289,6 +3451,16 @@ public final class SimpleFunctionCodegens {
                             || receiverType == ValueType.DOUBLE_ARRAY || receiverType == ValueType.CHAR_ARRAY
                             || receiverType == ValueType.BOOLEAN_ARRAY) {
                         return receiverType;
+                    }
+                }
+                if (callee != null
+                        && ("sum".equals(callee.getText()) || "minOrNull".equals(callee.getText())
+                                || "maxOrNull".equals(callee.getText()))
+                        && ((KtCallExpression) selector).getValueArguments().isEmpty()) {
+                    ValueType aggregateType = numericAggregateType(
+                            inferExpressionType(context, qualified.getReceiverExpression()));
+                    if (aggregateType != null) {
+                        return aggregateType;
                     }
                 }
                 if (callee != null && "add".equals(callee.getText())
@@ -5269,6 +5441,19 @@ public final class SimpleFunctionCodegens {
             return ValueType.LONG;
         }
         return ValueType.INT;
+    }
+
+    private static ValueType numericAggregateType(ValueType receiverType) {
+        if (receiverType == ValueType.INT_ARRAY || receiverType == ValueType.INT_ARRAY_LIST) {
+            return ValueType.INT;
+        }
+        if (receiverType == ValueType.LONG_ARRAY || receiverType == ValueType.LONG_ARRAY_LIST) {
+            return ValueType.LONG;
+        }
+        if (receiverType == ValueType.DOUBLE_ARRAY) {
+            return ValueType.DOUBLE;
+        }
+        return null;
     }
 
     private static ForProgression parseForProgression(KtExpression expression) {

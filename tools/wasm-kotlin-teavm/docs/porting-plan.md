@@ -286,6 +286,11 @@ Current status:
   `java.util.Arrays.copyOf/copyOfRange`, plus primitive-array `first()`/`last()`. With stdin
   `4 3 1 4 1 100000000000 2.5 algorithm` it prints
   `arrayCopy=3,6,0,1,1 long=100000000007,100000000014 double=2.5,0.0 char=l,h flags=false,true,true`.
+- The browser-facing compile export also completes `fixtures/ps-numeric-aggregates/Main.kt`, which
+  covers `sum()`, `minOrNull()`, and `maxOrNull()` on `IntArray`, `LongArray`, `DoubleArray`,
+  `ArrayList<Int>`, and `ArrayList<Long>`. With stdin
+  `4 5 -2 7 1 100000000000 -4 9 12 1.5 -2.0 3.5 0.5` it prints
+  `agg=11,-2,7 long=100000000017,-4,100000000000 double=3.5,-2.0,3.5 list=11,-2,7 longList=100000000017,-4,100000000000`.
 - The browser-facing compile export also completes `fixtures/ps-array-list/Main.kt`, which covers
   `ArrayList<Int>` construction, `add`, index get/set, `size`, `isEmpty`, and `sort()` by lowering to
   `java.util.ArrayList<Integer>` plus `java.util.Collections.sort`. With stdin `4 5 1 4 1` it prints
