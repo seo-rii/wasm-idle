@@ -305,6 +305,12 @@ Current status:
   `add`, `contains`, `remove`, `clear`, `size`, `isEmpty`, and `in`/`!in` by lowering to
   `java.util.HashSet<String>`. With stdin `Alpha beta` it prints
   `stringSet=0,2 count=2 flags=true,true,true,true,false,true empty=true,false`.
+- The browser-facing compile export also completes `fixtures/ps-string-list/Main.kt`, which covers
+  `ArrayList<String>`, `MutableList<String>` parameters, and `mutableListOf<String>()` construction,
+  `add`, indexed `add`, index get/set, `sort`, `first`, `last`, `removeAt`, `remove`, `clear`,
+  `size`, `isEmpty`, and `in`/`!in` by lowering to `java.util.ArrayList<String>`. With stdin
+  `go lang` it prints
+  `stringList=0,2 count=2 first=GO last=LANG removed=lang,true sorted=LANG,lang flags=true,true empty=true extra=lang,GO`.
 - The browser-facing compile export also completes `fixtures/ps-string-int-map/Main.kt`, which covers
   `HashMap<String, Int>`, `MutableMap<String, Int>` parameters, and `mutableMapOf<String, Int>()`
   construction, `map[key]`, `map[key] = value`, `put`, `get`, `getOrDefault`, `containsKey`,

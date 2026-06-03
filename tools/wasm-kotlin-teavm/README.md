@@ -720,6 +720,22 @@ The expected output is:
 stringSet=0,2 count=2 flags=true,true,true,true,false,true empty=true,false
 ```
 
+To run the PS-style `ArrayList<String>` fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs \
+  --source tools/wasm-kotlin-teavm/fixtures/ps-string-list/Main.kt \
+  --out tools/wasm-kotlin-teavm/build/browser-ps-string-list-out
+printf 'go lang\n' | java -cp tools/wasm-kotlin-teavm/build/browser-ps-string-list-out MainKt
+```
+
+The expected output is:
+
+```text
+stringList=0,2 count=2 first=GO last=LANG removed=lang,true sorted=LANG,lang flags=true,true empty=true extra=lang,GO
+```
+
 To run the PS-style `HashMap<String, Int>` fixture:
 
 ```bash
@@ -1119,6 +1135,12 @@ Known findings from the initial experiments:
   `add`, `contains`, `remove`, `clear`, `size`, `isEmpty`, and `in`/`!in` by lowering to
   `java.util.HashSet<String>`. With stdin `Alpha beta` it prints
   `stringSet=0,2 count=2 flags=true,true,true,true,false,true empty=true,false`.
+- The browser-compatible probe also compiles `fixtures/ps-string-list/Main.kt`, which exercises
+  `ArrayList<String>`, `MutableList<String>` parameters, and `mutableListOf<String>()` construction,
+  `add`, indexed `add`, index get/set, `sort`, `first`, `last`, `removeAt`, `remove`, `clear`,
+  `size`, `isEmpty`, and `in`/`!in` by lowering to `java.util.ArrayList<String>`. With stdin
+  `go lang` it prints
+  `stringList=0,2 count=2 first=GO last=LANG removed=lang,true sorted=LANG,lang flags=true,true empty=true extra=lang,GO`.
 - The browser-compatible probe also compiles `fixtures/ps-string-int-map/Main.kt`, which exercises
   `HashMap<String, Int>`, `MutableMap<String, Int>` parameters, and `mutableMapOf<String, Int>()`
   construction, `map[key]`, `map[key] = value`, `put`, `get`, `getOrDefault`, `containsKey`,
