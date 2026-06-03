@@ -205,10 +205,15 @@ Current status:
   before reduced Kotlin analysis; this avoids the current import-resolution diagnostic path while
   preserving package-based class output such as `solve/MainKt.class`. With stdin `42 30` it prints
   `pkg=6`.
+- The browser-facing compile export also completes `fixtures/ps-boolean/Main.kt`, which covers
+  `Boolean` parameters/returns/locals, `true`/`false`, `!`, `&&`, `||`, boolean equality,
+  `BooleanArray` construction, reads and writes, boolean conditions, and boolean output/string
+  templates. With stdin `5 2 3 2 0 5` it prints `bool=true count=4 two=true`.
 - This success currently comes from a minimal PSI-based bytecode emitter for the verified fixture
   shapes, not from the full Kotlin/JVM backend. The full backend still fails because Kotlin builtins
   deserialization can read `kotlin/kotlin.kotlin_builtins` but cannot resolve `kotlin.Unit`; virtual
   classpath jar reads also still warn with `NullPointerException`.
 - The next PS coverage targets are collection helpers, classes/data classes, lambdas/generics,
-  broader library calls, and stable classpath jar reads. Imported library symbols still need explicit
-  helper support; import directives are currently accepted as boilerplate only.
+  postfix increment/decrement, broader library calls, and stable classpath jar reads. Imported
+  library symbols still need explicit helper support; import directives are currently accepted as
+  boilerplate only.
