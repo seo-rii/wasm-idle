@@ -704,6 +704,22 @@ The expected output is:
 pair=3,4 combined=10,24 diff=14
 ```
 
+To run the PS-style double math fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs \
+  --source tools/wasm-kotlin-teavm/fixtures/ps-double-math/Main.kt \
+  --out tools/wasm-kotlin-teavm/build/browser-ps-double-math-out
+printf '16 100000000000 2.5\n' | java -cp tools/wasm-kotlin-teavm/build/browser-ps-double-math-out MainKt
+```
+
+The expected output is:
+
+```text
+math=4,64 low=2 high=3 mix=100000000004
+```
+
 ## Current Status
 
 This folder is a porting scaffold, not an app integration. The current probe compiles a small Java
@@ -906,6 +922,10 @@ Known findings from the initial experiments:
   limited `Pair<Int, Int>` construction, `.first`, `.second`, and function return values by lowering
   to `java.util.AbstractMap.SimpleEntry<Integer, Integer>`. With stdin `3 4` it prints
   `pair=3,4 combined=10,24 diff=14`.
+- The browser-compatible probe also compiles `fixtures/ps-double-math/Main.kt`, which exercises
+  numeric `toInt`/`toLong`/`toDouble` conversions and `sqrt`, `floor`, `ceil`, and `pow` by lowering
+  to JVM numeric conversion opcodes and `java.lang.Math`. With stdin `16 100000000000 2.5` it
+  prints `math=4,64 low=2 high=3 mix=100000000004`.
 - This is not a full Kotlin/JVM backend yet. The browser path is currently a minimal emitter that
   supports the verified fixture shapes above. It does not yet support enough Kotlin for real
   competitive-programming use: full collections and common library helpers, classes/data classes,

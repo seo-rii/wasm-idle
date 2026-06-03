@@ -909,6 +909,30 @@ public final class SimpleFunctionCodegens {
                                 "(Ljava/lang/String;)D", false);
                         return ValueType.DOUBLE;
                     }
+                    if (receiverType.numeric) {
+                        if ("toInt".equals(callee.getText())) {
+                            if (receiverType == ValueType.LONG) {
+                                method.visitInsn(Opcodes.L2I);
+                            } else if (receiverType == ValueType.DOUBLE) {
+                                method.visitInsn(Opcodes.D2I);
+                            }
+                            return ValueType.INT;
+                        }
+                        if ("toLong".equals(callee.getText())) {
+                            if (receiverType == ValueType.INT) {
+                                method.visitInsn(Opcodes.I2L);
+                            } else if (receiverType == ValueType.DOUBLE) {
+                                method.visitInsn(Opcodes.D2L);
+                            }
+                            return ValueType.LONG;
+                        }
+                        if (receiverType == ValueType.INT) {
+                            method.visitInsn(Opcodes.I2D);
+                        } else if (receiverType == ValueType.LONG) {
+                            method.visitInsn(Opcodes.L2D);
+                        }
+                        return ValueType.DOUBLE;
+                    }
                 }
                 if (callee != null && ("trim".equals(callee.getText()) || "lowercase".equals(callee.getText())
                         || "uppercase".equals(callee.getText()))
@@ -1706,6 +1730,30 @@ public final class SimpleFunctionCodegens {
                     "(" + type.descriptor + type.descriptor + ")" + type.descriptor, false);
             return type;
         }
+        if (("sqrt".equals(calleeText) || "floor".equals(calleeText) || "ceil".equals(calleeText))
+                && call.getValueArguments().size() == 1) {
+            KtExpression argument = call.getValueArguments().get(0).getArgumentExpression();
+            ValueType type = inferExpressionType(context, argument);
+            if (!type.numeric) {
+                throw new IllegalArgumentException(calleeText + " only supports numbers: " + call.getText());
+            }
+            emitExpressionAs(method, context, argument, ValueType.DOUBLE);
+            method.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Math", calleeText, "(D)D", false);
+            return ValueType.DOUBLE;
+        }
+        if ("pow".equals(calleeText) && call.getValueArguments().size() == 2) {
+            KtExpression left = call.getValueArguments().get(0).getArgumentExpression();
+            KtExpression right = call.getValueArguments().get(1).getArgumentExpression();
+            ValueType leftType = inferExpressionType(context, left);
+            ValueType rightType = inferExpressionType(context, right);
+            if (!leftType.numeric || !rightType.numeric) {
+                throw new IllegalArgumentException("pow only supports numbers: " + call.getText());
+            }
+            emitExpressionAs(method, context, left, ValueType.DOUBLE);
+            emitExpressionAs(method, context, right, ValueType.DOUBLE);
+            method.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Math", "pow", "(DD)D", false);
+            return ValueType.DOUBLE;
+        }
 
         FunctionSignature signature = findFunctionSignature(calleeText);
         if (signature == null) {
@@ -1818,15 +1866,17 @@ public final class SimpleFunctionCodegens {
                 KtExpression callee = ((KtCallExpression) selector).getCalleeExpression();
                 if (callee != null && ("toInt".equals(callee.getText()) || "toLong".equals(callee.getText())
                         || "toDouble".equals(callee.getText()))
-                        && ((KtCallExpression) selector).getValueArguments().isEmpty()
-                        && inferExpressionType(context, qualified.getReceiverExpression()) == ValueType.STRING) {
-                    if ("toInt".equals(callee.getText())) {
-                        return ValueType.INT;
+                        && ((KtCallExpression) selector).getValueArguments().isEmpty()) {
+                    ValueType receiverType = inferExpressionType(context, qualified.getReceiverExpression());
+                    if (receiverType == ValueType.STRING || receiverType.numeric) {
+                        if ("toInt".equals(callee.getText())) {
+                            return ValueType.INT;
+                        }
+                        if ("toLong".equals(callee.getText())) {
+                            return ValueType.LONG;
+                        }
+                        return ValueType.DOUBLE;
                     }
-                    if ("toLong".equals(callee.getText())) {
-                        return ValueType.LONG;
-                    }
-                    return ValueType.DOUBLE;
                 }
                 if (callee != null && ("trim".equals(callee.getText()) || "lowercase".equals(callee.getText())
                         || "uppercase".equals(callee.getText()))
@@ -2110,6 +2160,23 @@ public final class SimpleFunctionCodegens {
                         ((KtCallExpression) expression).getValueArguments().get(1).getArgumentExpression());
                 if (leftType.numeric && rightType.numeric) {
                     return promotedNumericType(leftType, rightType);
+                }
+            }
+            if (("sqrt".equals(calleeText) || "floor".equals(calleeText) || "ceil".equals(calleeText))
+                    && ((KtCallExpression) expression).getValueArguments().size() == 1) {
+                KtExpression argument = ((KtCallExpression) expression).getValueArguments()
+                        .get(0).getArgumentExpression();
+                if (inferExpressionType(context, argument).numeric) {
+                    return ValueType.DOUBLE;
+                }
+            }
+            if ("pow".equals(calleeText) && ((KtCallExpression) expression).getValueArguments().size() == 2) {
+                ValueType leftType = inferExpressionType(context,
+                        ((KtCallExpression) expression).getValueArguments().get(0).getArgumentExpression());
+                ValueType rightType = inferExpressionType(context,
+                        ((KtCallExpression) expression).getValueArguments().get(1).getArgumentExpression());
+                if (leftType.numeric && rightType.numeric) {
+                    return ValueType.DOUBLE;
                 }
             }
             FunctionSignature signature = findFunctionSignature(calleeText);

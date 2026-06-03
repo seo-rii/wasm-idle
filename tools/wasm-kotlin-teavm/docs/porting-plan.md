@@ -300,6 +300,10 @@ Current status:
   limited `Pair<Int, Int>` construction, `.first`, `.second`, and function return values by lowering
   to `java.util.AbstractMap.SimpleEntry<Integer, Integer>`. With stdin `3 4` it prints
   `pair=3,4 combined=10,24 diff=14`.
+- The browser-facing compile export also completes `fixtures/ps-double-math/Main.kt`, which covers
+  numeric `toInt`/`toLong`/`toDouble` conversions plus `sqrt`, `floor`, `ceil`, and `pow` by lowering
+  to JVM numeric conversion opcodes and `java.lang.Math`. With stdin `16 100000000000 2.5` it prints
+  `math=4,64 low=2 high=3 mix=100000000004`.
 - This success currently comes from a minimal PSI-based bytecode emitter for the verified fixture
   shapes, not from the full Kotlin/JVM backend. The full backend still fails because Kotlin builtins
   deserialization can read `kotlin/kotlin.kotlin_builtins` but cannot resolve `kotlin.Unit`; virtual
