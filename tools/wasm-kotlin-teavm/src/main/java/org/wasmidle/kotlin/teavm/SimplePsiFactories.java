@@ -48,6 +48,9 @@ public final class SimplePsiFactories {
         if ("org.jetbrains.kotlin.psi.KtDotQualifiedExpression".equals(className)) {
             return new org.jetbrains.kotlin.psi.KtDotQualifiedExpression(node);
         }
+        if ("org.jetbrains.kotlin.psi.KtForExpression".equals(className)) {
+            return new org.jetbrains.kotlin.psi.KtForExpression(node);
+        }
         if ("org.jetbrains.kotlin.psi.KtIfExpression".equals(className)) {
             return new org.jetbrains.kotlin.psi.KtIfExpression(node);
         }

@@ -18,6 +18,7 @@ import org.jetbrains.kotlin.psi.KtDotQualifiedExpression;
 import org.jetbrains.kotlin.psi.KtEscapeStringTemplateEntry;
 import org.jetbrains.kotlin.psi.KtExpression;
 import org.jetbrains.kotlin.psi.KtFile;
+import org.jetbrains.kotlin.psi.KtForExpression;
 import org.jetbrains.kotlin.psi.KtIfExpression;
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression;
 import org.jetbrains.kotlin.psi.KtNamedFunction;
@@ -157,6 +158,10 @@ public final class SimpleFunctionCodegens {
             method.visitLabel(endLabel);
             return;
         }
+        if (statement instanceof KtForExpression) {
+            emitForExpression(method, context, (KtForExpression) statement);
+            return;
+        }
         if (statement instanceof KtWhileExpression) {
             KtWhileExpression whileExpression = (KtWhileExpression) statement;
             Label startLabel = new Label();
@@ -200,6 +205,51 @@ public final class SimpleFunctionCodegens {
         } else {
             emitStatement(method, context, expression);
         }
+    }
+
+    private static void emitForExpression(MethodVisitor method, MethodContext context, KtForExpression expression) {
+        if (expression.getLoopParameter() == null || expression.getLoopRange() == null) {
+            throw new IllegalArgumentException("Unsupported for-loop shape: " + expression.getText());
+        }
+        String parameterName = expression.getLoopParameter().getName();
+        if (parameterName == null || parameterName.isEmpty()) {
+            throw new IllegalArgumentException("Unsupported unnamed for-loop parameter: " + expression.getText());
+        }
+        ForProgression progression = parseForProgression(expression.getLoopRange());
+        int loopIndex = context.allocate(parameterName, ValueType.INT);
+        emitExpressionAs(method, context, progression.start, ValueType.INT);
+        method.visitVarInsn(Opcodes.ISTORE, loopIndex);
+        int endIndex = context.allocateTemporary(ValueType.INT);
+        emitExpressionAs(method, context, progression.end, ValueType.INT);
+        method.visitVarInsn(Opcodes.ISTORE, endIndex);
+        int stepIndex = context.allocateTemporary(ValueType.INT);
+        if (progression.step == null) {
+            method.visitInsn(Opcodes.ICONST_1);
+        } else {
+            emitExpressionAs(method, context, progression.step, ValueType.INT);
+        }
+        method.visitVarInsn(Opcodes.ISTORE, stepIndex);
+
+        Label startLabel = new Label();
+        Label endLabel = new Label();
+        method.visitLabel(startLabel);
+        method.visitVarInsn(Opcodes.ILOAD, loopIndex);
+        method.visitVarInsn(Opcodes.ILOAD, endIndex);
+        if (progression.descending) {
+            method.visitJumpInsn(Opcodes.IF_ICMPLT, endLabel);
+        } else if (progression.inclusive) {
+            method.visitJumpInsn(Opcodes.IF_ICMPGT, endLabel);
+        } else {
+            method.visitJumpInsn(Opcodes.IF_ICMPGE, endLabel);
+        }
+        emitBranch(method, context, expression.getBody());
+        context.hasExplicitReturn = false;
+        method.visitVarInsn(Opcodes.ILOAD, loopIndex);
+        method.visitVarInsn(Opcodes.ILOAD, stepIndex);
+        method.visitInsn(progression.descending ? Opcodes.ISUB : Opcodes.IADD);
+        method.visitVarInsn(Opcodes.ISTORE, loopIndex);
+        method.visitJumpInsn(Opcodes.GOTO, startLabel);
+        method.visitLabel(endLabel);
     }
 
     private static boolean emitAssignment(MethodVisitor method, MethodContext context, KtBinaryExpression binary) {
@@ -1461,6 +1511,34 @@ public final class SimpleFunctionCodegens {
         return ValueType.INT;
     }
 
+    private static ForProgression parseForProgression(KtExpression expression) {
+        if (expression instanceof KtParenthesizedExpression) {
+            return parseForProgression(((KtParenthesizedExpression) expression).getExpression());
+        }
+        if (!(expression instanceof KtBinaryExpression)) {
+            throw new IllegalArgumentException("Unsupported for-loop range: " + expression.getText());
+        }
+        KtBinaryExpression binary = (KtBinaryExpression) expression;
+        String operation = binary.getOperationReference().getText();
+        if ("step".equals(operation)) {
+            ForProgression base = parseForProgression(binary.getLeft());
+            if (binary.getRight() == null) {
+                throw new IllegalArgumentException("Missing step expression: " + expression.getText());
+            }
+            return new ForProgression(base.start, base.end, base.inclusive, base.descending, binary.getRight());
+        }
+        if ("until".equals(operation) || "..<".equals(operation)) {
+            return new ForProgression(binary.getLeft(), binary.getRight(), false, false, null);
+        }
+        if ("..".equals(operation)) {
+            return new ForProgression(binary.getLeft(), binary.getRight(), true, false, null);
+        }
+        if ("downTo".equals(operation)) {
+            return new ForProgression(binary.getLeft(), binary.getRight(), true, true, null);
+        }
+        throw new IllegalArgumentException("Unsupported for-loop range operation: " + expression.getText());
+    }
+
     private static boolean isDoubleLiteralText(String text) {
         if (text == null || text.isEmpty()) {
             return false;
@@ -1510,6 +1588,26 @@ public final class SimpleFunctionCodegens {
         }
     }
 
+    private static final class ForProgression {
+        private final KtExpression start;
+        private final KtExpression end;
+        private final boolean inclusive;
+        private final boolean descending;
+        private final KtExpression step;
+
+        private ForProgression(
+                KtExpression start, KtExpression end, boolean inclusive, boolean descending, KtExpression step) {
+            if (start == null || end == null) {
+                throw new IllegalArgumentException("For-loop range is missing a bound");
+            }
+            this.start = start;
+            this.end = end;
+            this.inclusive = inclusive;
+            this.descending = descending;
+            this.step = step;
+        }
+    }
+
     private static final class Local {
         private final int index;
         private final ValueType type;
@@ -1538,6 +1636,12 @@ public final class SimpleFunctionCodegens {
             int index = nextLocal;
             nextLocal += type.slots;
             locals.put(name, new Local(index, type));
+            return index;
+        }
+
+        private int allocateTemporary(ValueType type) {
+            int index = nextLocal;
+            nextLocal += type.slots;
             return index;
         }
     }

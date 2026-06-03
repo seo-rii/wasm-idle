@@ -223,6 +223,10 @@ Current status:
 - The browser-facing compile export also completes `fixtures/ps-char-array/Main.kt`, which covers
   `String.toCharArray()`, `CharArray` reads and writes, array `.size`, and character output/string
   templates. With stdin `banana` it prints `chars=bz score=9`.
+- The browser-facing compile export also completes `fixtures/ps-for-loop/Main.kt`, which covers
+  Int `for` loops over `until`, inclusive `..`, and `downTo ... step ...` ranges. The minimal emitter
+  lowers these loops directly to index comparisons and increments. With stdin `5 1 2 3 4 5` it
+  prints `for=15 rev=9 last=5`.
 - This success currently comes from a minimal PSI-based bytecode emitter for the verified fixture
   shapes, not from the full Kotlin/JVM backend. The full backend still fails because Kotlin builtins
   deserialization can read `kotlin/kotlin.kotlin_builtins` but cannot resolve `kotlin.Unit`; virtual
