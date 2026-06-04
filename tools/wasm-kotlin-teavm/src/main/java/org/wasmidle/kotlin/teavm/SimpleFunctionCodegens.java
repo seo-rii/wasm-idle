@@ -1327,7 +1327,7 @@ public final class SimpleFunctionCodegens {
                     method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayDeque", "size", "()I", false);
                     return ValueType.INT;
                 }
-                if (receiverType == ValueType.INT_PAIR_ARRAY_DEQUE) {
+                if (isPairArrayDequeType(receiverType)) {
                     method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayDeque", "size", "()I", false);
                     return ValueType.INT;
                 }
@@ -2037,10 +2037,10 @@ public final class SimpleFunctionCodegens {
                                 "(Ljava/lang/Object;)Z", false);
                         return ValueType.BOOLEAN;
                     }
-                    if (receiverType == ValueType.INT_PAIR_ARRAY_DEQUE) {
+                    if (isPairArrayDequeType(receiverType)) {
                         emitExpressionAs(method, context,
                                 ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.INT_PAIR);
+                                pairTypeForArrayDeque(receiverType));
                         method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayDeque", "add",
                                 "(Ljava/lang/Object;)Z", false);
                         return ValueType.BOOLEAN;
@@ -2285,10 +2285,10 @@ public final class SimpleFunctionCodegens {
                                 "(Ljava/lang/Object;)Z", false);
                         return ValueType.BOOLEAN;
                     }
-                    if (receiverType == ValueType.INT_PAIR_ARRAY_DEQUE) {
+                    if (isPairArrayDequeType(receiverType)) {
                         emitExpressionAs(method, context,
                                 ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.INT_PAIR);
+                                pairTypeForArrayDeque(receiverType));
                         method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayDeque", "offer",
                                 "(Ljava/lang/Object;)Z", false);
                         return ValueType.BOOLEAN;
@@ -2315,10 +2315,10 @@ public final class SimpleFunctionCodegens {
                                 "(Ljava/lang/Object;)V", false);
                         return ValueType.VOID;
                     }
-                    if (receiverType == ValueType.INT_PAIR_ARRAY_DEQUE) {
+                    if (isPairArrayDequeType(receiverType)) {
                         emitExpressionAs(method, context,
                                 ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.INT_PAIR);
+                                pairTypeForArrayDeque(receiverType));
                         method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayDeque", callee.getText(),
                                 "(Ljava/lang/Object;)V", false);
                         return ValueType.VOID;
@@ -2345,10 +2345,10 @@ public final class SimpleFunctionCodegens {
                                 "(Ljava/lang/Object;)Z", false);
                         return ValueType.BOOLEAN;
                     }
-                    if (receiverType == ValueType.INT_PAIR_ARRAY_DEQUE) {
+                    if (isPairArrayDequeType(receiverType)) {
                         emitExpressionAs(method, context,
                                 ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.INT_PAIR);
+                                pairTypeForArrayDeque(receiverType));
                         method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayDeque", callee.getText(),
                                 "(Ljava/lang/Object;)Z", false);
                         return ValueType.BOOLEAN;
@@ -2417,7 +2417,7 @@ public final class SimpleFunctionCodegens {
                                 false);
                         return ValueType.BOOLEAN;
                     }
-                    if (receiverType == ValueType.INT_PAIR_ARRAY_DEQUE) {
+                    if (isPairArrayDequeType(receiverType)) {
                         method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayDeque", "isEmpty", "()Z",
                                 false);
                         return ValueType.BOOLEAN;
@@ -3060,11 +3060,11 @@ public final class SimpleFunctionCodegens {
                         unboxLong(method);
                         return ValueType.LONG;
                     }
-                    if (receiverType == ValueType.INT_PAIR_ARRAY_DEQUE) {
+                    if (isPairArrayDequeType(receiverType)) {
                         method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayDeque", callee.getText(),
                                 "()Ljava/lang/Object;", false);
                         method.visitTypeInsn(Opcodes.CHECKCAST, "java/util/AbstractMap$SimpleEntry");
-                        return ValueType.INT_PAIR;
+                        return pairTypeForArrayDeque(receiverType);
                     }
                 }
                 if (callee != null && ("peekFirst".equals(callee.getText()) || "peekLast".equals(callee.getText())
@@ -3098,7 +3098,7 @@ public final class SimpleFunctionCodegens {
                         unboxLong(method);
                         return ValueType.LONG;
                     }
-                    if (receiverType == ValueType.INT_PAIR_ARRAY_DEQUE) {
+                    if (isPairArrayDequeType(receiverType)) {
                         String methodName = callee.getText();
                         if ("first".equals(methodName)) {
                             methodName = "getFirst";
@@ -3108,7 +3108,7 @@ public final class SimpleFunctionCodegens {
                         method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayDeque", methodName,
                                 "()Ljava/lang/Object;", false);
                         method.visitTypeInsn(Opcodes.CHECKCAST, "java/util/AbstractMap$SimpleEntry");
-                        return ValueType.INT_PAIR;
+                        return pairTypeForArrayDeque(receiverType);
                     }
                 }
                 if (callee != null && "append".equals(callee.getText())
@@ -3489,6 +3489,14 @@ public final class SimpleFunctionCodegens {
                     || isIntPairArrayDequeConstructor(call.getText())) {
                 return ValueType.INT_PAIR_ARRAY_DEQUE;
             }
+            if (isIntLongPairArrayDequeConstructor(calleeText)
+                    || isIntLongPairArrayDequeConstructor(call.getText())) {
+                return ValueType.INT_LONG_PAIR_ARRAY_DEQUE;
+            }
+            if (isLongIntPairArrayDequeConstructor(calleeText)
+                    || isLongIntPairArrayDequeConstructor(call.getText())) {
+                return ValueType.LONG_INT_PAIR_ARRAY_DEQUE;
+            }
             return ValueType.INT_ARRAY_DEQUE;
         }
         if ((isHashSetConstructor(calleeText) || isMutableSetFactory(calleeText))
@@ -3780,7 +3788,7 @@ public final class SimpleFunctionCodegens {
                         || receiverType == ValueType.LONG_INT_PAIR_PRIORITY_QUEUE
                         || receiverType == ValueType.INT_ARRAY_DEQUE
                         || receiverType == ValueType.LONG_ARRAY_DEQUE
-                        || receiverType == ValueType.INT_PAIR_ARRAY_DEQUE
+                        || isPairArrayDequeType(receiverType)
                         || receiverType == ValueType.INT_HASH_SET
                         || receiverType == ValueType.LONG_HASH_SET
                         || receiverType == ValueType.STRING_HASH_SET
@@ -3972,8 +3980,8 @@ public final class SimpleFunctionCodegens {
                                         == ValueType.INT_ARRAY_DEQUE
                                 || inferExpressionType(context, qualified.getReceiverExpression())
                                         == ValueType.LONG_ARRAY_DEQUE
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.INT_PAIR_ARRAY_DEQUE
+                                || isPairArrayDequeType(
+                                        inferExpressionType(context, qualified.getReceiverExpression()))
                                 || inferExpressionType(context, qualified.getReceiverExpression())
                                         == ValueType.INT_HASH_SET
                                 || inferExpressionType(context, qualified.getReceiverExpression())
@@ -4030,8 +4038,8 @@ public final class SimpleFunctionCodegens {
                                         == ValueType.INT_ARRAY_DEQUE
                                 || inferExpressionType(context, qualified.getReceiverExpression())
                                         == ValueType.LONG_ARRAY_DEQUE
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.INT_PAIR_ARRAY_DEQUE)) {
+                                || isPairArrayDequeType(
+                                        inferExpressionType(context, qualified.getReceiverExpression())))) {
                     return ValueType.BOOLEAN;
                 }
                 if (callee != null && ("addFirst".equals(callee.getText()) || "addLast".equals(callee.getText()))
@@ -4040,8 +4048,8 @@ public final class SimpleFunctionCodegens {
                                 == ValueType.INT_ARRAY_DEQUE
                                 || inferExpressionType(context, qualified.getReceiverExpression())
                                         == ValueType.LONG_ARRAY_DEQUE
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.INT_PAIR_ARRAY_DEQUE)) {
+                                || isPairArrayDequeType(
+                                        inferExpressionType(context, qualified.getReceiverExpression())))) {
                     return ValueType.VOID;
                 }
                 if (callee != null && ("offerFirst".equals(callee.getText()) || "offerLast".equals(callee.getText()))
@@ -4050,8 +4058,8 @@ public final class SimpleFunctionCodegens {
                                 == ValueType.INT_ARRAY_DEQUE
                                 || inferExpressionType(context, qualified.getReceiverExpression())
                                         == ValueType.LONG_ARRAY_DEQUE
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.INT_PAIR_ARRAY_DEQUE)) {
+                                || isPairArrayDequeType(
+                                        inferExpressionType(context, qualified.getReceiverExpression())))) {
                     return ValueType.BOOLEAN;
                 }
                 if (callee != null && "isEmpty".equals(callee.getText())
@@ -4080,8 +4088,8 @@ public final class SimpleFunctionCodegens {
                                         == ValueType.INT_ARRAY_DEQUE
                                 || inferExpressionType(context, qualified.getReceiverExpression())
                                         == ValueType.LONG_ARRAY_DEQUE
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.INT_PAIR_ARRAY_DEQUE
+                                || isPairArrayDequeType(
+                                        inferExpressionType(context, qualified.getReceiverExpression()))
                                 || inferExpressionType(context, qualified.getReceiverExpression())
                                         == ValueType.INT_HASH_SET
                                 || inferExpressionType(context, qualified.getReceiverExpression())
@@ -4350,64 +4358,51 @@ public final class SimpleFunctionCodegens {
                     }
                 }
                 if (callee != null && ("peek".equals(callee.getText()) || "poll".equals(callee.getText()))
-                        && ((KtCallExpression) selector).getValueArguments().isEmpty()
-                        && (inferExpressionType(context, qualified.getReceiverExpression())
-                                == ValueType.INT_PRIORITY_QUEUE
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.LONG_PRIORITY_QUEUE
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.INT_PAIR_PRIORITY_QUEUE
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.INT_PAIR_SECOND_PRIORITY_QUEUE
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.LONG_INT_PAIR_PRIORITY_QUEUE
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.INT_ARRAY_DEQUE
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.LONG_ARRAY_DEQUE
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.INT_PAIR_ARRAY_DEQUE)) {
-                    if (inferExpressionType(context, qualified.getReceiverExpression())
-                            == ValueType.LONG_PRIORITY_QUEUE
-                            || inferExpressionType(context, qualified.getReceiverExpression())
-                                    == ValueType.LONG_ARRAY_DEQUE) {
-                        return ValueType.LONG;
+                        && ((KtCallExpression) selector).getValueArguments().isEmpty()) {
+                    ValueType receiverType = inferExpressionType(context, qualified.getReceiverExpression());
+                    if (receiverType == ValueType.INT_PRIORITY_QUEUE
+                            || receiverType == ValueType.LONG_PRIORITY_QUEUE
+                            || receiverType == ValueType.INT_PAIR_PRIORITY_QUEUE
+                            || receiverType == ValueType.INT_PAIR_SECOND_PRIORITY_QUEUE
+                            || receiverType == ValueType.LONG_INT_PAIR_PRIORITY_QUEUE
+                            || receiverType == ValueType.INT_ARRAY_DEQUE
+                            || receiverType == ValueType.LONG_ARRAY_DEQUE
+                            || isPairArrayDequeType(receiverType)) {
+                        if (receiverType == ValueType.LONG_PRIORITY_QUEUE
+                                || receiverType == ValueType.LONG_ARRAY_DEQUE) {
+                            return ValueType.LONG;
+                        }
+                        if (receiverType == ValueType.INT_PAIR_PRIORITY_QUEUE
+                                || receiverType == ValueType.INT_PAIR_SECOND_PRIORITY_QUEUE) {
+                            return ValueType.INT_PAIR;
+                        }
+                        if (receiverType == ValueType.LONG_INT_PAIR_PRIORITY_QUEUE) {
+                            return ValueType.LONG_INT_PAIR;
+                        }
+                        if (isPairArrayDequeType(receiverType)) {
+                            return pairTypeForArrayDeque(receiverType);
+                        }
+                        return ValueType.INT;
                     }
-                    if (inferExpressionType(context, qualified.getReceiverExpression())
-                            == ValueType.INT_PAIR_PRIORITY_QUEUE
-                            || inferExpressionType(context, qualified.getReceiverExpression())
-                                    == ValueType.INT_PAIR_SECOND_PRIORITY_QUEUE
-                            || inferExpressionType(context, qualified.getReceiverExpression())
-                                    == ValueType.INT_PAIR_ARRAY_DEQUE) {
-                        return ValueType.INT_PAIR;
-                    }
-                    if (inferExpressionType(context, qualified.getReceiverExpression())
-                            == ValueType.LONG_INT_PAIR_PRIORITY_QUEUE) {
-                        return ValueType.LONG_INT_PAIR;
-                    }
-                    return ValueType.INT;
                 }
                 if (callee != null && ("peekFirst".equals(callee.getText()) || "peekLast".equals(callee.getText())
                         || "pollFirst".equals(callee.getText()) || "pollLast".equals(callee.getText())
                         || "removeFirst".equals(callee.getText()) || "removeLast".equals(callee.getText())
                         || "getFirst".equals(callee.getText()) || "getLast".equals(callee.getText())
                         || "first".equals(callee.getText()) || "last".equals(callee.getText()))
-                        && ((KtCallExpression) selector).getValueArguments().isEmpty()
-                        && (inferExpressionType(context, qualified.getReceiverExpression())
-                                == ValueType.INT_ARRAY_DEQUE
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.LONG_ARRAY_DEQUE
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.INT_PAIR_ARRAY_DEQUE)) {
-                    if (inferExpressionType(context, qualified.getReceiverExpression())
-                            == ValueType.LONG_ARRAY_DEQUE) {
-                        return ValueType.LONG;
+                        && ((KtCallExpression) selector).getValueArguments().isEmpty()) {
+                    ValueType receiverType = inferExpressionType(context, qualified.getReceiverExpression());
+                    if (receiverType == ValueType.INT_ARRAY_DEQUE
+                            || receiverType == ValueType.LONG_ARRAY_DEQUE
+                            || isPairArrayDequeType(receiverType)) {
+                        if (receiverType == ValueType.LONG_ARRAY_DEQUE) {
+                            return ValueType.LONG;
+                        }
+                        if (isPairArrayDequeType(receiverType)) {
+                            return pairTypeForArrayDeque(receiverType);
+                        }
+                        return ValueType.INT;
                     }
-                    if (inferExpressionType(context, qualified.getReceiverExpression())
-                            == ValueType.INT_PAIR_ARRAY_DEQUE) {
-                        return ValueType.INT_PAIR;
-                    }
-                    return ValueType.INT;
                 }
                 if (callee != null && "append".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().size() == 1
@@ -4540,6 +4535,14 @@ public final class SimpleFunctionCodegens {
                 if (isIntPairArrayDequeConstructor(calleeText)
                         || isIntPairArrayDequeConstructor(expression.getText())) {
                     return ValueType.INT_PAIR_ARRAY_DEQUE;
+                }
+                if (isIntLongPairArrayDequeConstructor(calleeText)
+                        || isIntLongPairArrayDequeConstructor(expression.getText())) {
+                    return ValueType.INT_LONG_PAIR_ARRAY_DEQUE;
+                }
+                if (isLongIntPairArrayDequeConstructor(calleeText)
+                        || isLongIntPairArrayDequeConstructor(expression.getText())) {
+                    return ValueType.LONG_INT_PAIR_ARRAY_DEQUE;
                 }
                 return ValueType.INT_ARRAY_DEQUE;
             }
@@ -4973,6 +4976,43 @@ public final class SimpleFunctionCodegens {
             compact = compact.substring(0, parenIndex);
         }
         return "ArrayDeque<Pair<Int,Int>>".equals(compact);
+    }
+
+    private static boolean isIntLongPairArrayDequeConstructor(String calleeText) {
+        String compact = calleeText.replace(" ", "");
+        int parenIndex = compact.indexOf('(');
+        if (parenIndex >= 0) {
+            compact = compact.substring(0, parenIndex);
+        }
+        return "ArrayDeque<Pair<Int,Long>>".equals(compact);
+    }
+
+    private static boolean isLongIntPairArrayDequeConstructor(String calleeText) {
+        String compact = calleeText.replace(" ", "");
+        int parenIndex = compact.indexOf('(');
+        if (parenIndex >= 0) {
+            compact = compact.substring(0, parenIndex);
+        }
+        return "ArrayDeque<Pair<Long,Int>>".equals(compact);
+    }
+
+    private static boolean isPairArrayDequeType(ValueType type) {
+        return type == ValueType.INT_PAIR_ARRAY_DEQUE
+                || type == ValueType.INT_LONG_PAIR_ARRAY_DEQUE
+                || type == ValueType.LONG_INT_PAIR_ARRAY_DEQUE;
+    }
+
+    private static ValueType pairTypeForArrayDeque(ValueType type) {
+        if (type == ValueType.INT_PAIR_ARRAY_DEQUE) {
+            return ValueType.INT_PAIR;
+        }
+        if (type == ValueType.INT_LONG_PAIR_ARRAY_DEQUE) {
+            return ValueType.INT_LONG_PAIR;
+        }
+        if (type == ValueType.LONG_INT_PAIR_ARRAY_DEQUE) {
+            return ValueType.LONG_INT_PAIR;
+        }
+        throw new IllegalArgumentException("Unsupported Pair ArrayDeque type: " + type);
     }
 
     private static boolean isHashSetConstructor(String calleeText) {
@@ -5833,13 +5873,13 @@ public final class SimpleFunctionCodegens {
             }
             return ValueType.BOOLEAN;
         }
-        if (containerType == ValueType.INT_PAIR_ARRAY_DEQUE) {
-            if (elementType != ValueType.INT_PAIR) {
-                throw new IllegalArgumentException("Pair deque contains requires Pair<Int, Int> element: "
-                        + binary.getText());
+        if (isPairArrayDequeType(containerType)) {
+            ValueType pairType = pairTypeForArrayDeque(containerType);
+            if (elementType != pairType) {
+                throw new IllegalArgumentException("Pair deque contains type mismatch: " + binary.getText());
             }
             emitExpression(method, context, container);
-            emitExpressionAs(method, context, element, ValueType.INT_PAIR);
+            emitExpressionAs(method, context, element, pairType);
             method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayDeque", "contains",
                     "(Ljava/lang/Object;)Z", false);
             if (negated) {
@@ -6254,6 +6294,12 @@ public final class SimpleFunctionCodegens {
         if ("ArrayDeque<Pair<Int,Int>>".equals(compactText)) {
             return ValueType.INT_PAIR_ARRAY_DEQUE;
         }
+        if ("ArrayDeque<Pair<Int,Long>>".equals(compactText)) {
+            return ValueType.INT_LONG_PAIR_ARRAY_DEQUE;
+        }
+        if ("ArrayDeque<Pair<Long,Int>>".equals(compactText)) {
+            return ValueType.LONG_INT_PAIR_ARRAY_DEQUE;
+        }
         if ("HashSet<Int>".equals(text) || "MutableSet<Int>".equals(text)
                 || "Set<Int>".equals(text)) {
             return ValueType.INT_HASH_SET;
@@ -6455,6 +6501,8 @@ public final class SimpleFunctionCodegens {
         INT_ARRAY_DEQUE("Ljava/util/ArrayDeque;", 1, false, false),
         LONG_ARRAY_DEQUE("Ljava/util/ArrayDeque;", 1, false, false),
         INT_PAIR_ARRAY_DEQUE("Ljava/util/ArrayDeque;", 1, false, false),
+        INT_LONG_PAIR_ARRAY_DEQUE("Ljava/util/ArrayDeque;", 1, false, false),
+        LONG_INT_PAIR_ARRAY_DEQUE("Ljava/util/ArrayDeque;", 1, false, false),
         INT_HASH_SET("Ljava/util/HashSet;", 1, false, false),
         LONG_HASH_SET("Ljava/util/HashSet;", 1, false, false),
         STRING_HASH_SET("Ljava/util/HashSet;", 1, false, false),

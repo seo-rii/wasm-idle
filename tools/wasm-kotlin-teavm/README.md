@@ -900,6 +900,22 @@ The expected output is:
 pairDeque=298 peek=4,5 first=4,5 last=7,8 edge=9,1|2,8 flags=true,true size=0
 ```
 
+To run the PS-style `ArrayDeque<Pair<Int, Long>>` and `ArrayDeque<Pair<Long, Int>>` fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs \
+  --source tools/wasm-kotlin-teavm/fixtures/ps-mixed-pair-array-deque/Main.kt \
+  --out tools/wasm-kotlin-teavm/build/browser-ps-mixed-pair-array-deque-out
+printf '100000000000 7\n' | java -cp tools/wasm-kotlin-teavm/build/browser-ps-mixed-pair-array-deque-out MainKt
+```
+
+The expected output is:
+
+```text
+mixedPairDeque=300000000031,300000000047 weighted=6,99999999993|1,2|3,4 state=99999999993,6|5,6|7,8 flags=true,true,true,true size=0,0
+```
+
 To run the PS-style `HashSet<Int>` fixture:
 
 ```bash
@@ -1497,6 +1513,13 @@ Known findings from the initial experiments:
   `isEmpty`, `in`/`!in`, and Pair destructuring by lowering to
   `java.util.ArrayDeque<AbstractMap.SimpleEntry<Integer, Integer>>`. With stdin `5` it prints
   `pairDeque=298 peek=4,5 first=4,5 last=7,8 edge=9,1|2,8 flags=true,true size=0`.
+- The browser-compatible probe also compiles `fixtures/ps-mixed-pair-array-deque/Main.kt`, which
+  exercises `ArrayDeque<Pair<Int, Long>>` and `ArrayDeque<Pair<Long, Int>>` construction, `add`,
+  `addFirst`, `addLast`, `offer`, `offerFirst`, `offerLast`, `peek`, `peekFirst`, `poll`,
+  `pollLast`, `removeFirst`, `first`, `last`, `getFirst`, `getLast`, `size`, `isEmpty`,
+  `in`/`!in`, and Pair destructuring by lowering to
+  `java.util.ArrayDeque<AbstractMap.SimpleEntry<...>>`. With stdin `100000000000 7` it prints
+  `mixedPairDeque=300000000031,300000000047 weighted=6,99999999993|1,2|3,4 state=99999999993,6|5,6|7,8 flags=true,true,true,true size=0,0`.
 - The browser-compatible probe also compiles `fixtures/ps-hash-set/Main.kt`, which exercises
   `HashSet<Int>` and `mutableSetOf<Int>()` construction, `add`, `contains`, `remove`, `clear`,
   `size`, and `isEmpty` by lowering to `java.util.HashSet<Integer>`. With stdin `5 1 2 1 3 2` it
