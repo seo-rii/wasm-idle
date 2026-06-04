@@ -1042,63 +1042,9 @@ public final class SimpleFunctionCodegens {
                     method.visitInsn(Opcodes.ARRAYLENGTH);
                     return ValueType.INT;
                 }
-                if (receiverType == ValueType.INT_ARRAY_LIST) {
-                    method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "size", "()I", false);
-                    return ValueType.INT;
-                }
-                if (receiverType == ValueType.LONG_ARRAY_LIST) {
-                    method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "size", "()I", false);
-                    return ValueType.INT;
-                }
-                if (receiverType == ValueType.STRING_ARRAY_LIST) {
-                    method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "size", "()I", false);
-                    return ValueType.INT;
-                }
-                if (isPairArrayListType(receiverType)) {
-                    method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "size", "()I", false);
-                    return ValueType.INT;
-                }
-                if (receiverType == ValueType.INT_PRIORITY_QUEUE) {
-                    method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/PriorityQueue", "size", "()I",
-                            false);
-                    return ValueType.INT;
-                }
-                if (receiverType == ValueType.LONG_PRIORITY_QUEUE) {
-                    method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/PriorityQueue", "size", "()I",
-                            false);
-                    return ValueType.INT;
-                }
-                if (isPairPriorityQueueType(receiverType)) {
-                    method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/PriorityQueue", "size", "()I",
-                            false);
-                    return ValueType.INT;
-                }
-                if (receiverType == ValueType.INT_ARRAY_DEQUE) {
-                    method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayDeque", "size", "()I", false);
-                    return ValueType.INT;
-                }
-                if (receiverType == ValueType.LONG_ARRAY_DEQUE) {
-                    method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayDeque", "size", "()I", false);
-                    return ValueType.INT;
-                }
-                if (isPairArrayDequeType(receiverType)) {
-                    method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayDeque", "size", "()I", false);
-                    return ValueType.INT;
-                }
-                if (receiverType == ValueType.INT_HASH_SET) {
-                    method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashSet", "size", "()I", false);
-                    return ValueType.INT;
-                }
-                if (receiverType == ValueType.LONG_HASH_SET) {
-                    method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashSet", "size", "()I", false);
-                    return ValueType.INT;
-                }
-                if (receiverType == ValueType.STRING_HASH_SET) {
-                    method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashSet", "size", "()I", false);
-                    return ValueType.INT;
-                }
-                if (isHashMapType(receiverType)) {
-                    method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "size", "()I", false);
+                String collectionOwner = sizedCollectionOwner(receiverType);
+                if (collectionOwner != null) {
+                    method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, collectionOwner, "size", "()I", false);
                     return ValueType.INT;
                 }
             }
@@ -1914,74 +1860,9 @@ public final class SimpleFunctionCodegens {
                 if (callee != null && "isEmpty".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().isEmpty()) {
                     ValueType receiverType = emitExpression(method, context, receiver);
-                    if (receiverType == ValueType.INT_ARRAY_LIST) {
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "isEmpty", "()Z",
-                                false);
-                        return ValueType.BOOLEAN;
-                    }
-                    if (receiverType == ValueType.LONG_ARRAY_LIST) {
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "isEmpty", "()Z",
-                                false);
-                        return ValueType.BOOLEAN;
-                    }
-                    if (receiverType == ValueType.STRING_ARRAY_LIST) {
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "isEmpty", "()Z",
-                                false);
-                        return ValueType.BOOLEAN;
-                    }
-                    if (isPairArrayListType(receiverType)) {
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "isEmpty", "()Z",
-                                false);
-                        return ValueType.BOOLEAN;
-                    }
-                    if (receiverType == ValueType.INT_PRIORITY_QUEUE) {
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/PriorityQueue", "isEmpty", "()Z",
-                                false);
-                        return ValueType.BOOLEAN;
-                    }
-                    if (receiverType == ValueType.LONG_PRIORITY_QUEUE) {
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/PriorityQueue", "isEmpty", "()Z",
-                                false);
-                        return ValueType.BOOLEAN;
-                    }
-                    if (isPairPriorityQueueType(receiverType)) {
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/PriorityQueue", "isEmpty", "()Z",
-                                false);
-                        return ValueType.BOOLEAN;
-                    }
-                    if (receiverType == ValueType.INT_ARRAY_DEQUE) {
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayDeque", "isEmpty", "()Z",
-                                false);
-                        return ValueType.BOOLEAN;
-                    }
-                    if (receiverType == ValueType.LONG_ARRAY_DEQUE) {
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayDeque", "isEmpty", "()Z",
-                                false);
-                        return ValueType.BOOLEAN;
-                    }
-                    if (isPairArrayDequeType(receiverType)) {
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayDeque", "isEmpty", "()Z",
-                                false);
-                        return ValueType.BOOLEAN;
-                    }
-                    if (receiverType == ValueType.INT_HASH_SET) {
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashSet", "isEmpty", "()Z",
-                                false);
-                        return ValueType.BOOLEAN;
-                    }
-                    if (receiverType == ValueType.LONG_HASH_SET) {
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashSet", "isEmpty", "()Z",
-                                false);
-                        return ValueType.BOOLEAN;
-                    }
-                    if (receiverType == ValueType.STRING_HASH_SET) {
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashSet", "isEmpty", "()Z",
-                                false);
-                        return ValueType.BOOLEAN;
-                    }
-                    if (isHashMapType(receiverType)) {
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "isEmpty", "()Z",
-                                false);
+                    String collectionOwner = sizedCollectionOwner(receiverType);
+                    if (collectionOwner != null) {
+                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, collectionOwner, "isEmpty", "()Z", false);
                         return ValueType.BOOLEAN;
                     }
                 }
@@ -2898,20 +2779,7 @@ public final class SimpleFunctionCodegens {
             }
             if (selector != null && "size".equals(selector.getText())) {
                 ValueType receiverType = inferExpressionType(context, qualified.getReceiverExpression());
-                if (receiverType.array || receiverType == ValueType.INT_ARRAY_LIST
-                        || receiverType == ValueType.LONG_ARRAY_LIST
-                        || receiverType == ValueType.STRING_ARRAY_LIST
-                        || isPairArrayListType(receiverType)
-                        || receiverType == ValueType.INT_PRIORITY_QUEUE
-                        || receiverType == ValueType.LONG_PRIORITY_QUEUE
-                        || isPairPriorityQueueType(receiverType)
-                        || receiverType == ValueType.INT_ARRAY_DEQUE
-                        || receiverType == ValueType.LONG_ARRAY_DEQUE
-                        || isPairArrayDequeType(receiverType)
-                        || receiverType == ValueType.INT_HASH_SET
-                        || receiverType == ValueType.LONG_HASH_SET
-                        || receiverType == ValueType.STRING_HASH_SET
-                        || isHashMapType(receiverType)) {
+                if (receiverType.array || sizedCollectionOwner(receiverType) != null) {
                     return ValueType.INT;
                 }
             }
@@ -3128,29 +2996,11 @@ public final class SimpleFunctionCodegens {
                     return ValueType.BOOLEAN;
                 }
                 if (callee != null && "isEmpty".equals(callee.getText())
-                        && ((KtCallExpression) selector).getValueArguments().isEmpty()
-                        && (isArrayListType(inferExpressionType(context, qualified.getReceiverExpression()))
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.INT_PRIORITY_QUEUE
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.LONG_PRIORITY_QUEUE
-                                || isPairPriorityQueueType(
-                                        inferExpressionType(context, qualified.getReceiverExpression()))
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.INT_ARRAY_DEQUE
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.LONG_ARRAY_DEQUE
-                                || isPairArrayDequeType(
-                                        inferExpressionType(context, qualified.getReceiverExpression()))
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.INT_HASH_SET
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.LONG_HASH_SET
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.STRING_HASH_SET
-                                || isHashMapType(
-                                        inferExpressionType(context, qualified.getReceiverExpression())))) {
-                    return ValueType.BOOLEAN;
+                        && ((KtCallExpression) selector).getValueArguments().isEmpty()) {
+                    ValueType receiverType = inferExpressionType(context, qualified.getReceiverExpression());
+                    if (sizedCollectionOwner(receiverType) != null) {
+                        return ValueType.BOOLEAN;
+                    }
                 }
                 if (callee != null && ("contains".equals(callee.getText()) || "remove".equals(callee.getText()))
                         && ((KtCallExpression) selector).getValueArguments().size() == 1) {
@@ -4139,6 +3989,26 @@ public final class SimpleFunctionCodegens {
         }
         if (shape.hashSetType == type) {
             return "java/util/HashSet";
+        }
+        return null;
+    }
+
+    private static String sizedCollectionOwner(ValueType type) {
+        String owner = scalarCollectionOwner(type);
+        if (owner != null) {
+            return owner;
+        }
+        if (isPairArrayListType(type)) {
+            return "java/util/ArrayList";
+        }
+        if (isPairPriorityQueueType(type)) {
+            return "java/util/PriorityQueue";
+        }
+        if (isPairArrayDequeType(type)) {
+            return "java/util/ArrayDeque";
+        }
+        if (isHashMapType(type)) {
+            return "java/util/HashMap";
         }
         return null;
     }
