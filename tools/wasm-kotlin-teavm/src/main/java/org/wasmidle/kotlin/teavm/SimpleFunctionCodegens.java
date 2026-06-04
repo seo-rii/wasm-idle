@@ -324,6 +324,25 @@ public final class SimpleFunctionCodegens {
         throw new IllegalArgumentException("Unsupported Array initializer type: " + callText);
     }
 
+    private static ValueType primitiveArrayTypeForConstructor(String calleeText) {
+        if ("IntArray".equals(calleeText)) {
+            return ValueType.INT_ARRAY;
+        }
+        if ("LongArray".equals(calleeText)) {
+            return ValueType.LONG_ARRAY;
+        }
+        if ("DoubleArray".equals(calleeText)) {
+            return ValueType.DOUBLE_ARRAY;
+        }
+        if ("CharArray".equals(calleeText)) {
+            return ValueType.CHAR_ARRAY;
+        }
+        if ("BooleanArray".equals(calleeText)) {
+            return ValueType.BOOLEAN_ARRAY;
+        }
+        return null;
+    }
+
     private static ValueType indexedElementType(ValueType arrayType) {
         if (arrayType == ValueType.INT_ARRAY) {
             return ValueType.INT;
@@ -2725,28 +2744,95 @@ public final class SimpleFunctionCodegens {
                 return ValueType.VOID;
             }
         }
-        if (("IntArray".equals(calleeText) || "LongArray".equals(calleeText)
-                || "DoubleArray".equals(calleeText)
-                || "CharArray".equals(calleeText)
-                || "BooleanArray".equals(calleeText)) && call.getValueArguments().size() == 1) {
+        ValueType primitiveArrayType = primitiveArrayTypeForConstructor(calleeText);
+        if (primitiveArrayType != null && parenthesizedArguments.size() == 1
+                && call.getLambdaArguments().size() == 1) {
+            KtExpression sizeExpression = parenthesizedArguments.get(0).getArgumentExpression();
+            if (sizeExpression == null) {
+                throw new IllegalArgumentException("Array size is missing: " + call.getText());
+            }
+            ValueType sizeType = emitExpression(method, context,
+                    sizeExpression);
+            if (sizeType != ValueType.INT) {
+                throw new IllegalArgumentException("Array size must be Int: " + call.getText());
+            }
+            int countIndex = context.allocateTemporary(ValueType.INT);
+            method.visitVarInsn(Opcodes.ISTORE, countIndex);
+            method.visitVarInsn(Opcodes.ILOAD, countIndex);
+            if (primitiveArrayType == ValueType.INT_ARRAY) {
+                method.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_INT);
+            } else if (primitiveArrayType == ValueType.LONG_ARRAY) {
+                method.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_LONG);
+            } else if (primitiveArrayType == ValueType.DOUBLE_ARRAY) {
+                method.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_DOUBLE);
+            } else if (primitiveArrayType == ValueType.CHAR_ARRAY) {
+                method.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_CHAR);
+            } else {
+                method.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_BOOLEAN);
+            }
+            int arrayIndex = context.allocateTemporary(primitiveArrayType);
+            method.visitVarInsn(Opcodes.ASTORE, arrayIndex);
+            int loopIndex = context.allocateTemporary(ValueType.INT);
+            method.visitInsn(Opcodes.ICONST_0);
+            method.visitVarInsn(Opcodes.ISTORE, loopIndex);
+            KtLambdaExpression lambda = call.getLambdaArguments().get(0).getLambdaExpression();
+            String parameterName = lambdaParameterName(lambda, "it", call.getText());
+            Local previousLocal = context.locals.get(parameterName);
+            context.locals.put(parameterName, new Local(loopIndex, ValueType.INT));
+            KtExpression initializer = singleLambdaResultExpression(lambda, call.getText());
+            ValueType elementType = indexedElementType(primitiveArrayType);
+
+            Label startLabel = new Label();
+            Label endLabel = new Label();
+            method.visitLabel(startLabel);
+            method.visitVarInsn(Opcodes.ILOAD, loopIndex);
+            method.visitVarInsn(Opcodes.ILOAD, countIndex);
+            method.visitJumpInsn(Opcodes.IF_ICMPGE, endLabel);
+            method.visitVarInsn(Opcodes.ALOAD, arrayIndex);
+            method.visitVarInsn(Opcodes.ILOAD, loopIndex);
+            emitExpressionAs(method, context, initializer, elementType);
+            if (primitiveArrayType == ValueType.LONG_ARRAY) {
+                method.visitInsn(Opcodes.LASTORE);
+            } else if (primitiveArrayType == ValueType.DOUBLE_ARRAY) {
+                method.visitInsn(Opcodes.DASTORE);
+            } else if (primitiveArrayType == ValueType.CHAR_ARRAY) {
+                method.visitInsn(Opcodes.CASTORE);
+            } else if (primitiveArrayType == ValueType.BOOLEAN_ARRAY) {
+                method.visitInsn(Opcodes.BASTORE);
+            } else {
+                method.visitInsn(Opcodes.IASTORE);
+            }
+            method.visitIincInsn(loopIndex, 1);
+            method.visitJumpInsn(Opcodes.GOTO, startLabel);
+            method.visitLabel(endLabel);
+            method.visitVarInsn(Opcodes.ALOAD, arrayIndex);
+            if (previousLocal == null) {
+                context.locals.remove(parameterName);
+            } else {
+                context.locals.put(parameterName, previousLocal);
+            }
+            return primitiveArrayType;
+        }
+        if (primitiveArrayType != null && call.getValueArguments().size() == 1
+                && call.getLambdaArguments().isEmpty()) {
             ValueType sizeType = emitExpression(method, context,
                     call.getValueArguments().get(0).getArgumentExpression());
             if (sizeType != ValueType.INT) {
                 throw new IllegalArgumentException("Array size must be Int: " + call.getText());
             }
-            if ("IntArray".equals(calleeText)) {
+            if (primitiveArrayType == ValueType.INT_ARRAY) {
                 method.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_INT);
                 return ValueType.INT_ARRAY;
             }
-            if ("BooleanArray".equals(calleeText)) {
+            if (primitiveArrayType == ValueType.BOOLEAN_ARRAY) {
                 method.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_BOOLEAN);
                 return ValueType.BOOLEAN_ARRAY;
             }
-            if ("DoubleArray".equals(calleeText)) {
+            if (primitiveArrayType == ValueType.DOUBLE_ARRAY) {
                 method.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_DOUBLE);
                 return ValueType.DOUBLE_ARRAY;
             }
-            if ("CharArray".equals(calleeText)) {
+            if (primitiveArrayType == ValueType.CHAR_ARRAY) {
                 method.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_CHAR);
                 return ValueType.CHAR_ARRAY;
             }
@@ -3536,6 +3622,42 @@ public final class SimpleFunctionCodegens {
                             context.locals.put(parameterName, previousLocal);
                         }
                     }
+                }
+            }
+            ValueType primitiveArrayType = primitiveArrayTypeForConstructor(calleeText);
+            if (primitiveArrayType != null) {
+                List<KtValueArgument> parenthesizedArguments = ((KtCallExpression) expression)
+                        .getValueArgumentList() == null
+                        ? Collections.emptyList()
+                        : ((KtCallExpression) expression).getValueArgumentList().getArguments();
+                if (parenthesizedArguments.size() == 1
+                        && ((KtCallExpression) expression).getLambdaArguments().size() == 1) {
+                    KtLambdaExpression lambda = ((KtCallExpression) expression).getLambdaArguments()
+                            .get(0).getLambdaExpression();
+                    String parameterName = lambdaParameterName(lambda, "it", expression.getText());
+                    Local previousLocal = context.locals.get(parameterName);
+                    context.locals.put(parameterName, new Local(-1, ValueType.INT));
+                    try {
+                        ValueType initializerType = inferExpressionType(context,
+                                singleLambdaResultExpression(lambda, expression.getText()));
+                        ValueType elementType = indexedElementType(primitiveArrayType);
+                        if (initializerType == elementType
+                                || initializerType == ValueType.INT && (elementType == ValueType.LONG
+                                        || elementType == ValueType.DOUBLE)
+                                || initializerType == ValueType.LONG && elementType == ValueType.DOUBLE) {
+                            return primitiveArrayType;
+                        }
+                    } finally {
+                        if (previousLocal == null) {
+                            context.locals.remove(parameterName);
+                        } else {
+                            context.locals.put(parameterName, previousLocal);
+                        }
+                    }
+                }
+                if (((KtCallExpression) expression).getValueArguments().size() == 1
+                        && ((KtCallExpression) expression).getLambdaArguments().isEmpty()) {
+                    return primitiveArrayType;
                 }
             }
             if ("StringBuilder".equals(calleeText)) {

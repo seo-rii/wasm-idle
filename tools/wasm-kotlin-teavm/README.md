@@ -560,6 +560,28 @@ The expected output is:
 grid2=300000000017 double=9 chars=am bool=10 size=2,3,3,3,3
 ```
 
+To run the PS-style primitive-array initializer fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs \
+  --source tools/wasm-kotlin-teavm/fixtures/ps-primitive-array-initializers/Main.kt \
+  --out tools/wasm-kotlin-teavm/build/browser-ps-primitive-array-initializers-out
+java -cp tools/wasm-kotlin-teavm/build/browser-ps-primitive-array-initializers-out MainKt
+```
+
+With this stdin:
+
+```text
+3 5 6 7 100000000000 10 20 1.5 2.5 abc
+```
+
+the expected output is:
+
+```text
+arrayInit=5,9,21 long=100000000000,22,100000000033 double=1,3 chars=ac flags=true,true
+```
+
 To run the PS-style primitive-array sort fixture:
 
 ```bash
@@ -1470,6 +1492,12 @@ Known findings from the initial experiments:
   compound assignment on nested numeric elements, outer `.size`, and row `.size`. With stdin
   `2 3 100000000000 1.5 algorithm` it prints
   `grid2=300000000017 double=9 chars=am bool=10 size=2,3,3,3,3`.
+- The browser-compatible probe also compiles `fixtures/ps-primitive-array-initializers/Main.kt`,
+  which exercises `IntArray(n) { ... }`, `LongArray(n) { ... }`, `DoubleArray(n) { ... }`,
+  `CharArray(n) { ... }`, and `BooleanArray(n) { ... }` initializer lambdas with explicit
+  parameters and implicit `it`. Running that generated class with
+  `3 5 6 7 100000000000 10 20 1.5 2.5 abc` on stdin prints
+  `arrayInit=5,9,21 long=100000000000,22,100000000033 double=1,3 chars=ac flags=true,true`.
 - The browser-compatible probe also compiles `fixtures/ps-array-sort/Main.kt`, which exercises
   `sort()` on `IntArray`, `LongArray`, and `CharArray` values by lowering to `java.util.Arrays`.
   Running that generated class with `4 9 90 1 10 4 40 1 20 dcba` on stdin prints
