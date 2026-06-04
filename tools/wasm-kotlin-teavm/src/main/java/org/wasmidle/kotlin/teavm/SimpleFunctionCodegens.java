@@ -1993,29 +1993,9 @@ public final class SimpleFunctionCodegens {
                 if (callee != null && "clear".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().isEmpty()) {
                     ValueType receiverType = emitExpression(method, context, receiver);
-                    if (isArrayListType(receiverType)) {
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "clear", "()V",
-                                false);
-                        return ValueType.VOID;
-                    }
-                    if (receiverType == ValueType.INT_HASH_SET) {
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashSet", "clear", "()V",
-                                false);
-                        return ValueType.VOID;
-                    }
-                    if (receiverType == ValueType.LONG_HASH_SET) {
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashSet", "clear", "()V",
-                                false);
-                        return ValueType.VOID;
-                    }
-                    if (receiverType == ValueType.STRING_HASH_SET) {
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashSet", "clear", "()V",
-                                false);
-                        return ValueType.VOID;
-                    }
-                    if (isHashMapType(receiverType)) {
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "clear", "()V",
-                                false);
+                    String collectionOwner = sizedCollectionOwner(receiverType);
+                    if (collectionOwner != null) {
+                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, collectionOwner, "clear", "()V", false);
                         return ValueType.VOID;
                     }
                 }
@@ -3056,24 +3036,11 @@ public final class SimpleFunctionCodegens {
                     }
                 }
                 if (callee != null && "clear".equals(callee.getText())
-                        && ((KtCallExpression) selector).getValueArguments().isEmpty()
-                        && (inferExpressionType(context, qualified.getReceiverExpression())
-                                == ValueType.INT_HASH_SET
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.LONG_HASH_SET
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.STRING_HASH_SET
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.INT_ARRAY_LIST
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.LONG_ARRAY_LIST
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.STRING_ARRAY_LIST
-                                || isPairArrayListType(
-                                        inferExpressionType(context, qualified.getReceiverExpression()))
-                                || isHashMapType(
-                                        inferExpressionType(context, qualified.getReceiverExpression())))) {
-                    return ValueType.VOID;
+                        && ((KtCallExpression) selector).getValueArguments().isEmpty()) {
+                    ValueType receiverType = inferExpressionType(context, qualified.getReceiverExpression());
+                    if (sizedCollectionOwner(receiverType) != null) {
+                        return ValueType.VOID;
+                    }
                 }
                 if (callee != null && ("first".equals(callee.getText()) || "last".equals(callee.getText()))
                         && ((KtCallExpression) selector).getValueArguments().isEmpty()) {

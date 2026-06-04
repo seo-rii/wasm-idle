@@ -1143,7 +1143,7 @@ java -cp tools/wasm-kotlin-teavm/build/browser-ps-scalar-collection-methods-out 
 The expected output is:
 
 ```text
-methods=list=true,true,false,1 queue=true,true,7 deque=true,true,5 long=true,true,100000000000 words=true,true,1
+methods=list=true,true,false,1 queue=true,true,7,1 deque=true,true,5,1 long=true,true,100000000000,1 words=true,true,1 clear=true,true,0,true,0
 ```
 
 To run the PS-style String API fixture:
@@ -1677,8 +1677,9 @@ Known findings from the initial experiments:
   `in=131071 size=3,3`.
 - The browser-compatible probe also compiles `fixtures/ps-scalar-collection-methods/Main.kt`, which
   exercises direct scalar `contains`/`remove` method calls on `ArrayList<Int>`, `PriorityQueue<Int>`,
-  `ArrayDeque<Int>`, `PriorityQueue<Long>`, and `ArrayList<String>`. It prints
-  `methods=list=true,true,false,1 queue=true,true,7 deque=true,true,5 long=true,true,100000000000 words=true,true,1`.
+  `ArrayDeque<Int>`, `PriorityQueue<Long>`, and `ArrayList<String>`, plus `clear` on scalar list,
+  queue, and deque shapes. It prints
+  `methods=list=true,true,false,1 queue=true,true,7,1 deque=true,true,5,1 long=true,true,100000000000,1 words=true,true,1 clear=true,true,0,true,0`.
 - The browser-compatible probe also compiles `fixtures/ps-string-api/Main.kt`, which exercises
   `String.substring`, `startsWith`, `endsWith`, `contains` with `String` and `Char`, `indexOf`,
   `lastIndexOf`, `trim`, `lowercase`, and `uppercase`. With stdin `algorithmgo` it prints
