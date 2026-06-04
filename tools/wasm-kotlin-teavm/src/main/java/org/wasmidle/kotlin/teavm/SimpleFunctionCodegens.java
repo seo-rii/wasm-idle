@@ -300,20 +300,9 @@ public final class SimpleFunctionCodegens {
     }
 
     private static ValueType arrayTypeForArrayInitializer(ValueType initializerType, String callText) {
-        if (initializerType == ValueType.INT_ARRAY) {
-            return ValueType.INT_2D_ARRAY;
-        }
-        if (initializerType == ValueType.LONG_ARRAY) {
-            return ValueType.LONG_2D_ARRAY;
-        }
-        if (initializerType == ValueType.DOUBLE_ARRAY) {
-            return ValueType.DOUBLE_2D_ARRAY;
-        }
-        if (initializerType == ValueType.CHAR_ARRAY) {
-            return ValueType.CHAR_2D_ARRAY;
-        }
-        if (initializerType == ValueType.BOOLEAN_ARRAY) {
-            return ValueType.BOOLEAN_2D_ARRAY;
+        PrimitiveArrayShape primitiveShape = primitiveArrayShapeForArrayType(initializerType);
+        if (primitiveShape != null) {
+            return primitiveShape.arrayArrayType;
         }
         if (initializerType == ValueType.INT_ARRAY_LIST) {
             return ValueType.INT_ARRAY_LIST_ARRAY;
@@ -324,55 +313,21 @@ public final class SimpleFunctionCodegens {
         throw new IllegalArgumentException("Unsupported Array initializer type: " + callText);
     }
 
-    private static ValueType primitiveArrayTypeForConstructor(String calleeText) {
-        if ("IntArray".equals(calleeText)) {
-            return ValueType.INT_ARRAY;
-        }
-        if ("LongArray".equals(calleeText)) {
-            return ValueType.LONG_ARRAY;
-        }
-        if ("DoubleArray".equals(calleeText)) {
-            return ValueType.DOUBLE_ARRAY;
-        }
-        if ("CharArray".equals(calleeText)) {
-            return ValueType.CHAR_ARRAY;
-        }
-        if ("BooleanArray".equals(calleeText)) {
-            return ValueType.BOOLEAN_ARRAY;
-        }
-        return null;
+    private static PrimitiveArrayShape primitiveArrayShapeForConstructor(String calleeText) {
+        return primitiveArrayShapeFromKotlinType(calleeText);
     }
 
     private static ValueType indexedElementType(ValueType arrayType) {
-        if (arrayType == ValueType.INT_ARRAY) {
-            return ValueType.INT;
-        }
-        if (arrayType == ValueType.LONG_ARRAY) {
-            return ValueType.LONG;
-        }
-        if (arrayType == ValueType.DOUBLE_ARRAY) {
-            return ValueType.DOUBLE;
-        }
-        if (arrayType == ValueType.CHAR_ARRAY || arrayType == ValueType.STRING) {
+        if (arrayType == ValueType.STRING) {
             return ValueType.CHAR;
         }
-        if (arrayType == ValueType.BOOLEAN_ARRAY) {
-            return ValueType.BOOLEAN;
+        PrimitiveArrayShape primitiveShape = primitiveArrayShapeForArrayType(arrayType);
+        if (primitiveShape != null) {
+            return primitiveShape.elementType;
         }
-        if (arrayType == ValueType.INT_2D_ARRAY) {
-            return ValueType.INT_ARRAY;
-        }
-        if (arrayType == ValueType.LONG_2D_ARRAY) {
-            return ValueType.LONG_ARRAY;
-        }
-        if (arrayType == ValueType.DOUBLE_2D_ARRAY) {
-            return ValueType.DOUBLE_ARRAY;
-        }
-        if (arrayType == ValueType.CHAR_2D_ARRAY) {
-            return ValueType.CHAR_ARRAY;
-        }
-        if (arrayType == ValueType.BOOLEAN_2D_ARRAY) {
-            return ValueType.BOOLEAN_ARRAY;
+        primitiveShape = primitiveArrayShapeForArrayArrayType(arrayType);
+        if (primitiveShape != null) {
+            return primitiveShape.arrayType;
         }
         if (arrayType == ValueType.INT_ARRAY_LIST_ARRAY) {
             return ValueType.INT_ARRAY_LIST;
@@ -803,24 +758,9 @@ public final class SimpleFunctionCodegens {
             }
             ValueType elementType = indexedElementType(arrayType);
             ValueType valueType = emitExpression(method, context, right);
-            if (elementType == ValueType.INT && valueType == ValueType.INT) {
-                method.visitInsn(Opcodes.IASTORE);
-                return true;
-            }
-            if (elementType == ValueType.LONG && valueType == ValueType.LONG) {
-                method.visitInsn(Opcodes.LASTORE);
-                return true;
-            }
-            if (elementType == ValueType.DOUBLE && valueType == ValueType.DOUBLE) {
-                method.visitInsn(Opcodes.DASTORE);
-                return true;
-            }
-            if (elementType == ValueType.CHAR && valueType == ValueType.CHAR) {
-                method.visitInsn(Opcodes.CASTORE);
-                return true;
-            }
-            if (elementType == ValueType.BOOLEAN && valueType == ValueType.BOOLEAN) {
-                method.visitInsn(Opcodes.BASTORE);
+            PrimitiveArrayShape primitiveShape = primitiveArrayShapeForArrayType(arrayType);
+            if (primitiveShape != null && valueType == primitiveShape.elementType) {
+                method.visitInsn(primitiveShape.storeOpcode);
                 return true;
             }
             if (elementType == ValueType.INT_ARRAY_LIST && valueType == ValueType.INT_ARRAY_LIST) {
@@ -873,30 +813,16 @@ public final class SimpleFunctionCodegens {
     private static boolean emitArrayCompoundAssignment(
             MethodVisitor method, MethodContext context, KtBinaryExpression binary, ValueType arrayType,
             KtExpression right) {
-        ValueType elementType;
-        int loadOpcode;
-        int storeOpcode;
-        if (arrayType == ValueType.INT_ARRAY) {
-            elementType = ValueType.INT;
-            loadOpcode = Opcodes.IALOAD;
-            storeOpcode = Opcodes.IASTORE;
-        } else if (arrayType == ValueType.LONG_ARRAY) {
-            elementType = ValueType.LONG;
-            loadOpcode = Opcodes.LALOAD;
-            storeOpcode = Opcodes.LASTORE;
-        } else if (arrayType == ValueType.DOUBLE_ARRAY) {
-            elementType = ValueType.DOUBLE;
-            loadOpcode = Opcodes.DALOAD;
-            storeOpcode = Opcodes.DASTORE;
-        } else {
+        PrimitiveArrayShape shape = primitiveArrayShapeForArrayType(arrayType);
+        if (shape == null || !shape.elementType.numeric) {
             throw new IllegalArgumentException("Array compound assignment only supports numeric arrays: "
                     + binary.getText());
         }
         method.visitInsn(Opcodes.DUP2);
-        method.visitInsn(loadOpcode);
-        emitExpressionAs(method, context, right, elementType);
-        emitArithmeticOpcode(method, binary.getOperationToken(), elementType);
-        method.visitInsn(storeOpcode);
+        method.visitInsn(shape.loadOpcode);
+        emitExpressionAs(method, context, right, shape.elementType);
+        emitArithmeticOpcode(method, binary.getOperationToken(), shape.elementType);
+        method.visitInsn(shape.storeOpcode);
         return true;
     }
 
@@ -1078,25 +1004,10 @@ public final class SimpleFunctionCodegens {
                 return valueType;
             }
             ValueType elementType = indexedElementType(arrayType);
-            if (elementType == ValueType.INT) {
-                method.visitInsn(Opcodes.IALOAD);
-                return ValueType.INT;
-            }
-            if (elementType == ValueType.LONG) {
-                method.visitInsn(Opcodes.LALOAD);
-                return ValueType.LONG;
-            }
-            if (elementType == ValueType.DOUBLE) {
-                method.visitInsn(Opcodes.DALOAD);
-                return ValueType.DOUBLE;
-            }
-            if (elementType == ValueType.CHAR) {
-                method.visitInsn(Opcodes.CALOAD);
-                return ValueType.CHAR;
-            }
-            if (elementType == ValueType.BOOLEAN) {
-                method.visitInsn(Opcodes.BALOAD);
-                return ValueType.BOOLEAN;
+            PrimitiveArrayShape primitiveShape = primitiveArrayShapeForArrayType(arrayType);
+            if (primitiveShape != null) {
+                method.visitInsn(primitiveShape.loadOpcode);
+                return primitiveShape.elementType;
             }
             if (elementType == ValueType.INT_ARRAY_LIST) {
                 method.visitInsn(Opcodes.AALOAD);
@@ -1465,52 +1376,19 @@ public final class SimpleFunctionCodegens {
                         method.visitJumpInsn(Opcodes.IF_ICMPGE, endLabel);
                         method.visitVarInsn(Opcodes.ALOAD, receiverIndex);
                         method.visitVarInsn(Opcodes.ILOAD, leftIndex);
-                        if (receiverType == ValueType.LONG_ARRAY) {
-                            method.visitInsn(Opcodes.LALOAD);
-                        } else if (receiverType == ValueType.DOUBLE_ARRAY) {
-                            method.visitInsn(Opcodes.DALOAD);
-                        } else if (receiverType == ValueType.CHAR_ARRAY) {
-                            method.visitInsn(Opcodes.CALOAD);
-                        } else if (receiverType == ValueType.BOOLEAN_ARRAY) {
-                            method.visitInsn(Opcodes.BALOAD);
-                        } else {
-                            method.visitInsn(Opcodes.IALOAD);
-                        }
+                        PrimitiveArrayShape primitiveShape = primitiveArrayShapeForArrayType(receiverType);
+                        method.visitInsn(primitiveShape.loadOpcode);
                         storeLocal(method, elementType, temporaryIndex);
                         method.visitVarInsn(Opcodes.ALOAD, receiverIndex);
                         method.visitVarInsn(Opcodes.ILOAD, leftIndex);
                         method.visitVarInsn(Opcodes.ALOAD, receiverIndex);
                         method.visitVarInsn(Opcodes.ILOAD, rightIndex);
-                        if (receiverType == ValueType.LONG_ARRAY) {
-                            method.visitInsn(Opcodes.LALOAD);
-                            method.visitInsn(Opcodes.LASTORE);
-                        } else if (receiverType == ValueType.DOUBLE_ARRAY) {
-                            method.visitInsn(Opcodes.DALOAD);
-                            method.visitInsn(Opcodes.DASTORE);
-                        } else if (receiverType == ValueType.CHAR_ARRAY) {
-                            method.visitInsn(Opcodes.CALOAD);
-                            method.visitInsn(Opcodes.CASTORE);
-                        } else if (receiverType == ValueType.BOOLEAN_ARRAY) {
-                            method.visitInsn(Opcodes.BALOAD);
-                            method.visitInsn(Opcodes.BASTORE);
-                        } else {
-                            method.visitInsn(Opcodes.IALOAD);
-                            method.visitInsn(Opcodes.IASTORE);
-                        }
+                        method.visitInsn(primitiveShape.loadOpcode);
+                        method.visitInsn(primitiveShape.storeOpcode);
                         method.visitVarInsn(Opcodes.ALOAD, receiverIndex);
                         method.visitVarInsn(Opcodes.ILOAD, rightIndex);
                         loadLocal(method, elementType, temporaryIndex);
-                        if (receiverType == ValueType.LONG_ARRAY) {
-                            method.visitInsn(Opcodes.LASTORE);
-                        } else if (receiverType == ValueType.DOUBLE_ARRAY) {
-                            method.visitInsn(Opcodes.DASTORE);
-                        } else if (receiverType == ValueType.CHAR_ARRAY) {
-                            method.visitInsn(Opcodes.CASTORE);
-                        } else if (receiverType == ValueType.BOOLEAN_ARRAY) {
-                            method.visitInsn(Opcodes.BASTORE);
-                        } else {
-                            method.visitInsn(Opcodes.IASTORE);
-                        }
+                        method.visitInsn(primitiveShape.storeOpcode);
                         method.visitIincInsn(leftIndex, 1);
                         method.visitIincInsn(rightIndex, -1);
                         method.visitJumpInsn(Opcodes.GOTO, startLabel);
@@ -1588,8 +1466,8 @@ public final class SimpleFunctionCodegens {
                     ValueType receiverType = inferExpressionType(context, receiver);
                     ValueType aggregateType = numericAggregateType(receiverType);
                     if (aggregateType != null) {
-                        if (receiverType == ValueType.INT_ARRAY || receiverType == ValueType.LONG_ARRAY
-                                || receiverType == ValueType.DOUBLE_ARRAY) {
+                        PrimitiveArrayShape primitiveShape = primitiveArrayShapeForArrayType(receiverType);
+                        if (primitiveShape != null && primitiveShape.elementType.numeric) {
                             int receiverIndex = context.allocateTemporary(receiverType);
                             emitExpressionAs(method, context, receiver, receiverType);
                             method.visitVarInsn(Opcodes.ASTORE, receiverIndex);
@@ -1615,14 +1493,12 @@ public final class SimpleFunctionCodegens {
                             loadLocal(method, aggregateType, resultIndex);
                             method.visitVarInsn(Opcodes.ALOAD, receiverIndex);
                             method.visitVarInsn(Opcodes.ILOAD, loopIndex);
-                            if (receiverType == ValueType.LONG_ARRAY) {
-                                method.visitInsn(Opcodes.LALOAD);
+                            method.visitInsn(primitiveShape.loadOpcode);
+                            if (aggregateType == ValueType.LONG) {
                                 method.visitInsn(Opcodes.LADD);
-                            } else if (receiverType == ValueType.DOUBLE_ARRAY) {
-                                method.visitInsn(Opcodes.DALOAD);
+                            } else if (aggregateType == ValueType.DOUBLE) {
                                 method.visitInsn(Opcodes.DADD);
                             } else {
-                                method.visitInsn(Opcodes.IALOAD);
                                 method.visitInsn(Opcodes.IADD);
                             }
                             storeLocal(method, aggregateType, resultIndex);
@@ -1682,21 +1558,15 @@ public final class SimpleFunctionCodegens {
                     ValueType aggregateType = numericAggregateType(receiverType);
                     if (aggregateType != null) {
                         boolean max = "maxOrNull".equals(callee.getText());
-                        if (receiverType == ValueType.INT_ARRAY || receiverType == ValueType.LONG_ARRAY
-                                || receiverType == ValueType.DOUBLE_ARRAY) {
+                        PrimitiveArrayShape primitiveShape = primitiveArrayShapeForArrayType(receiverType);
+                        if (primitiveShape != null && primitiveShape.elementType.numeric) {
                             int receiverIndex = context.allocateTemporary(receiverType);
                             emitExpressionAs(method, context, receiver, receiverType);
                             method.visitVarInsn(Opcodes.ASTORE, receiverIndex);
                             int resultIndex = context.allocateTemporary(aggregateType);
                             method.visitVarInsn(Opcodes.ALOAD, receiverIndex);
                             method.visitInsn(Opcodes.ICONST_0);
-                            if (receiverType == ValueType.LONG_ARRAY) {
-                                method.visitInsn(Opcodes.LALOAD);
-                            } else if (receiverType == ValueType.DOUBLE_ARRAY) {
-                                method.visitInsn(Opcodes.DALOAD);
-                            } else {
-                                method.visitInsn(Opcodes.IALOAD);
-                            }
+                            method.visitInsn(primitiveShape.loadOpcode);
                             storeLocal(method, aggregateType, resultIndex);
                             int loopIndex = context.allocateTemporary(ValueType.INT);
                             method.visitInsn(Opcodes.ICONST_1);
@@ -1712,14 +1582,12 @@ public final class SimpleFunctionCodegens {
                             method.visitVarInsn(Opcodes.ALOAD, receiverIndex);
                             method.visitVarInsn(Opcodes.ILOAD, loopIndex);
                             String descriptor;
-                            if (receiverType == ValueType.LONG_ARRAY) {
-                                method.visitInsn(Opcodes.LALOAD);
+                            method.visitInsn(primitiveShape.loadOpcode);
+                            if (aggregateType == ValueType.LONG) {
                                 descriptor = "(JJ)J";
-                            } else if (receiverType == ValueType.DOUBLE_ARRAY) {
-                                method.visitInsn(Opcodes.DALOAD);
+                            } else if (aggregateType == ValueType.DOUBLE) {
                                 descriptor = "(DD)D";
                             } else {
-                                method.visitInsn(Opcodes.IALOAD);
                                 descriptor = "(II)I";
                             }
                             method.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Math", max ? "max" : "min",
@@ -2327,26 +2195,10 @@ public final class SimpleFunctionCodegens {
                                     false);
                             return ValueType.CHAR;
                         }
-                        ValueType elementType = indexedElementType(receiverType);
-                        if (elementType == ValueType.INT) {
-                            method.visitInsn(Opcodes.IALOAD);
-                            return ValueType.INT;
-                        }
-                        if (elementType == ValueType.LONG) {
-                            method.visitInsn(Opcodes.LALOAD);
-                            return ValueType.LONG;
-                        }
-                        if (elementType == ValueType.DOUBLE) {
-                            method.visitInsn(Opcodes.DALOAD);
-                            return ValueType.DOUBLE;
-                        }
-                        if (elementType == ValueType.CHAR) {
-                            method.visitInsn(Opcodes.CALOAD);
-                            return ValueType.CHAR;
-                        }
-                        if (elementType == ValueType.BOOLEAN) {
-                            method.visitInsn(Opcodes.BALOAD);
-                            return ValueType.BOOLEAN;
+                        PrimitiveArrayShape primitiveShape = primitiveArrayShapeForArrayType(receiverType);
+                        if (primitiveShape != null) {
+                            method.visitInsn(primitiveShape.loadOpcode);
+                            return primitiveShape.elementType;
                         }
                     }
                     if (isArrayListType(receiverType)) {
@@ -2744,8 +2596,8 @@ public final class SimpleFunctionCodegens {
                 return ValueType.VOID;
             }
         }
-        ValueType primitiveArrayType = primitiveArrayTypeForConstructor(calleeText);
-        if (primitiveArrayType != null && parenthesizedArguments.size() == 1
+        PrimitiveArrayShape primitiveArrayShape = primitiveArrayShapeForConstructor(calleeText);
+        if (primitiveArrayShape != null && parenthesizedArguments.size() == 1
                 && call.getLambdaArguments().size() == 1) {
             KtExpression sizeExpression = parenthesizedArguments.get(0).getArgumentExpression();
             if (sizeExpression == null) {
@@ -2759,18 +2611,8 @@ public final class SimpleFunctionCodegens {
             int countIndex = context.allocateTemporary(ValueType.INT);
             method.visitVarInsn(Opcodes.ISTORE, countIndex);
             method.visitVarInsn(Opcodes.ILOAD, countIndex);
-            if (primitiveArrayType == ValueType.INT_ARRAY) {
-                method.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_INT);
-            } else if (primitiveArrayType == ValueType.LONG_ARRAY) {
-                method.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_LONG);
-            } else if (primitiveArrayType == ValueType.DOUBLE_ARRAY) {
-                method.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_DOUBLE);
-            } else if (primitiveArrayType == ValueType.CHAR_ARRAY) {
-                method.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_CHAR);
-            } else {
-                method.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_BOOLEAN);
-            }
-            int arrayIndex = context.allocateTemporary(primitiveArrayType);
+            method.visitIntInsn(Opcodes.NEWARRAY, primitiveArrayShape.newArrayOperand);
+            int arrayIndex = context.allocateTemporary(primitiveArrayShape.arrayType);
             method.visitVarInsn(Opcodes.ASTORE, arrayIndex);
             int loopIndex = context.allocateTemporary(ValueType.INT);
             method.visitInsn(Opcodes.ICONST_0);
@@ -2780,7 +2622,6 @@ public final class SimpleFunctionCodegens {
             Local previousLocal = context.locals.get(parameterName);
             context.locals.put(parameterName, new Local(loopIndex, ValueType.INT));
             KtExpression initializer = singleLambdaResultExpression(lambda, call.getText());
-            ValueType elementType = indexedElementType(primitiveArrayType);
 
             Label startLabel = new Label();
             Label endLabel = new Label();
@@ -2790,18 +2631,8 @@ public final class SimpleFunctionCodegens {
             method.visitJumpInsn(Opcodes.IF_ICMPGE, endLabel);
             method.visitVarInsn(Opcodes.ALOAD, arrayIndex);
             method.visitVarInsn(Opcodes.ILOAD, loopIndex);
-            emitExpressionAs(method, context, initializer, elementType);
-            if (primitiveArrayType == ValueType.LONG_ARRAY) {
-                method.visitInsn(Opcodes.LASTORE);
-            } else if (primitiveArrayType == ValueType.DOUBLE_ARRAY) {
-                method.visitInsn(Opcodes.DASTORE);
-            } else if (primitiveArrayType == ValueType.CHAR_ARRAY) {
-                method.visitInsn(Opcodes.CASTORE);
-            } else if (primitiveArrayType == ValueType.BOOLEAN_ARRAY) {
-                method.visitInsn(Opcodes.BASTORE);
-            } else {
-                method.visitInsn(Opcodes.IASTORE);
-            }
+            emitExpressionAs(method, context, initializer, primitiveArrayShape.elementType);
+            method.visitInsn(primitiveArrayShape.storeOpcode);
             method.visitIincInsn(loopIndex, 1);
             method.visitJumpInsn(Opcodes.GOTO, startLabel);
             method.visitLabel(endLabel);
@@ -2811,33 +2642,17 @@ public final class SimpleFunctionCodegens {
             } else {
                 context.locals.put(parameterName, previousLocal);
             }
-            return primitiveArrayType;
+            return primitiveArrayShape.arrayType;
         }
-        if (primitiveArrayType != null && call.getValueArguments().size() == 1
+        if (primitiveArrayShape != null && call.getValueArguments().size() == 1
                 && call.getLambdaArguments().isEmpty()) {
             ValueType sizeType = emitExpression(method, context,
                     call.getValueArguments().get(0).getArgumentExpression());
             if (sizeType != ValueType.INT) {
                 throw new IllegalArgumentException("Array size must be Int: " + call.getText());
             }
-            if (primitiveArrayType == ValueType.INT_ARRAY) {
-                method.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_INT);
-                return ValueType.INT_ARRAY;
-            }
-            if (primitiveArrayType == ValueType.BOOLEAN_ARRAY) {
-                method.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_BOOLEAN);
-                return ValueType.BOOLEAN_ARRAY;
-            }
-            if (primitiveArrayType == ValueType.DOUBLE_ARRAY) {
-                method.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_DOUBLE);
-                return ValueType.DOUBLE_ARRAY;
-            }
-            if (primitiveArrayType == ValueType.CHAR_ARRAY) {
-                method.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_CHAR);
-                return ValueType.CHAR_ARRAY;
-            }
-            method.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_LONG);
-            return ValueType.LONG_ARRAY;
+            method.visitIntInsn(Opcodes.NEWARRAY, primitiveArrayShape.newArrayOperand);
+            return primitiveArrayShape.arrayType;
         }
         if ("StringBuilder".equals(calleeText) && call.getValueArguments().isEmpty()) {
             method.visitTypeInsn(Opcodes.NEW, "java/lang/StringBuilder");
@@ -3624,8 +3439,8 @@ public final class SimpleFunctionCodegens {
                     }
                 }
             }
-            ValueType primitiveArrayType = primitiveArrayTypeForConstructor(calleeText);
-            if (primitiveArrayType != null) {
+            PrimitiveArrayShape primitiveArrayShape = primitiveArrayShapeForConstructor(calleeText);
+            if (primitiveArrayShape != null) {
                 List<KtValueArgument> parenthesizedArguments = ((KtCallExpression) expression)
                         .getValueArgumentList() == null
                         ? Collections.emptyList()
@@ -3640,12 +3455,12 @@ public final class SimpleFunctionCodegens {
                     try {
                         ValueType initializerType = inferExpressionType(context,
                                 singleLambdaResultExpression(lambda, expression.getText()));
-                        ValueType elementType = indexedElementType(primitiveArrayType);
-                        if (initializerType == elementType
-                                || initializerType == ValueType.INT && (elementType == ValueType.LONG
-                                        || elementType == ValueType.DOUBLE)
-                                || initializerType == ValueType.LONG && elementType == ValueType.DOUBLE) {
-                            return primitiveArrayType;
+                        if (initializerType == primitiveArrayShape.elementType
+                                || initializerType == ValueType.INT && (primitiveArrayShape.elementType == ValueType.LONG
+                                        || primitiveArrayShape.elementType == ValueType.DOUBLE)
+                                || initializerType == ValueType.LONG
+                                        && primitiveArrayShape.elementType == ValueType.DOUBLE) {
+                            return primitiveArrayShape.arrayType;
                         }
                     } finally {
                         if (previousLocal == null) {
@@ -3657,8 +3472,9 @@ public final class SimpleFunctionCodegens {
                 }
                 if (((KtCallExpression) expression).getValueArguments().size() == 1
                         && ((KtCallExpression) expression).getLambdaArguments().isEmpty()) {
-                    return primitiveArrayType;
+                    return primitiveArrayShape.arrayType;
                 }
+                return primitiveArrayShape.arrayType;
             }
             if ("StringBuilder".equals(calleeText)) {
                 return ValueType.STRING_BUILDER;
@@ -3706,21 +3522,6 @@ public final class SimpleFunctionCodegens {
                 ValueType firstType = inferExpressionType(context, firstArgument);
                 ValueType secondType = inferExpressionType(context, secondArgument);
                 return pairTypeFromComponents(firstType, secondType);
-            }
-            if ("IntArray".equals(calleeText)) {
-                return ValueType.INT_ARRAY;
-            }
-            if ("LongArray".equals(calleeText)) {
-                return ValueType.LONG_ARRAY;
-            }
-            if ("DoubleArray".equals(calleeText)) {
-                return ValueType.DOUBLE_ARRAY;
-            }
-            if ("CharArray".equals(calleeText)) {
-                return ValueType.CHAR_ARRAY;
-            }
-            if ("BooleanArray".equals(calleeText)) {
-                return ValueType.BOOLEAN_ARRAY;
             }
             if ("abs".equals(calleeText) && ((KtCallExpression) expression).getValueArguments().size() == 1) {
                 ValueType type = inferExpressionType(context,
@@ -3927,16 +3728,9 @@ public final class SimpleFunctionCodegens {
             }
             return;
         }
-        if (elementType == ValueType.INT) {
-            method.visitInsn(Opcodes.IALOAD);
-        } else if (elementType == ValueType.LONG) {
-            method.visitInsn(Opcodes.LALOAD);
-        } else if (elementType == ValueType.DOUBLE) {
-            method.visitInsn(Opcodes.DALOAD);
-        } else if (elementType == ValueType.CHAR) {
-            method.visitInsn(Opcodes.CALOAD);
-        } else if (elementType == ValueType.BOOLEAN) {
-            method.visitInsn(Opcodes.BALOAD);
+        PrimitiveArrayShape primitiveShape = primitiveArrayShapeForArrayType(rangeType);
+        if (primitiveShape != null) {
+            method.visitInsn(primitiveShape.loadOpcode);
         } else {
             method.visitInsn(Opcodes.AALOAD);
             if (isArrayListType(elementType)) {
@@ -4340,6 +4134,44 @@ public final class SimpleFunctionCodegens {
                     || genericTypeEquals(compact, "MutableMap", shape.kotlinType)
                     || genericTypeEquals(compact, "Map", shape.kotlinType)) {
                 return shape.mapType;
+            }
+        }
+        return null;
+    }
+
+    private static PrimitiveArrayShape primitiveArrayShapeForArrayType(ValueType type) {
+        for (PrimitiveArrayShape shape : PrimitiveArrayShape.values()) {
+            if (shape.arrayType == type) {
+                return shape;
+            }
+        }
+        return null;
+    }
+
+    private static PrimitiveArrayShape primitiveArrayShapeForArrayArrayType(ValueType type) {
+        for (PrimitiveArrayShape shape : PrimitiveArrayShape.values()) {
+            if (shape.arrayArrayType == type) {
+                return shape;
+            }
+        }
+        return null;
+    }
+
+    private static PrimitiveArrayShape primitiveArrayShapeFromKotlinType(String text) {
+        String compact = compactText(text);
+        for (PrimitiveArrayShape shape : PrimitiveArrayShape.values()) {
+            if (shape.kotlinType.equals(compact)) {
+                return shape;
+            }
+        }
+        return null;
+    }
+
+    private static PrimitiveArrayShape primitiveArrayShapeFromArrayKotlinType(String text) {
+        String compact = compactText(text);
+        for (PrimitiveArrayShape shape : PrimitiveArrayShape.values()) {
+            if (genericTypeEquals(compact, "Array", shape.kotlinType)) {
+                return shape;
             }
         }
         return null;
@@ -5035,10 +4867,9 @@ public final class SimpleFunctionCodegens {
                 return ValueType.BOOLEAN;
             }
         }
-        if (containerType == ValueType.INT_ARRAY || containerType == ValueType.LONG_ARRAY
-                || containerType == ValueType.DOUBLE_ARRAY || containerType == ValueType.CHAR_ARRAY
-                || containerType == ValueType.BOOLEAN_ARRAY) {
-            ValueType arrayElementType = indexedElementType(containerType);
+        PrimitiveArrayShape primitiveArrayShape = primitiveArrayShapeForArrayType(containerType);
+        if (primitiveArrayShape != null) {
+            ValueType arrayElementType = primitiveArrayShape.elementType;
             if (elementType != arrayElementType) {
                 throw new IllegalArgumentException("Array contains type mismatch: " + binary.getText());
             }
@@ -5063,17 +4894,7 @@ public final class SimpleFunctionCodegens {
             method.visitJumpInsn(Opcodes.IF_ICMPGE, missingLabel);
             method.visitVarInsn(Opcodes.ALOAD, arrayIndex);
             method.visitVarInsn(Opcodes.ILOAD, loopIndex);
-            if (containerType == ValueType.INT_ARRAY) {
-                method.visitInsn(Opcodes.IALOAD);
-            } else if (containerType == ValueType.LONG_ARRAY) {
-                method.visitInsn(Opcodes.LALOAD);
-            } else if (containerType == ValueType.DOUBLE_ARRAY) {
-                method.visitInsn(Opcodes.DALOAD);
-            } else if (containerType == ValueType.CHAR_ARRAY) {
-                method.visitInsn(Opcodes.CALOAD);
-            } else {
-                method.visitInsn(Opcodes.BALOAD);
-            }
+            method.visitInsn(primitiveArrayShape.loadOpcode);
             loadLocal(method, arrayElementType, valueIndex);
             if (arrayElementType == ValueType.LONG) {
                 method.visitInsn(Opcodes.LCMP);
@@ -5543,35 +5364,13 @@ public final class SimpleFunctionCodegens {
         if ("Boolean".equals(text)) {
             return ValueType.BOOLEAN;
         }
-        if ("IntArray".equals(text)) {
-            return ValueType.INT_ARRAY;
+        PrimitiveArrayShape primitiveArrayShape = primitiveArrayShapeFromKotlinType(text);
+        if (primitiveArrayShape != null) {
+            return primitiveArrayShape.arrayType;
         }
-        if ("LongArray".equals(text)) {
-            return ValueType.LONG_ARRAY;
-        }
-        if ("DoubleArray".equals(text)) {
-            return ValueType.DOUBLE_ARRAY;
-        }
-        if ("CharArray".equals(text)) {
-            return ValueType.CHAR_ARRAY;
-        }
-        if ("BooleanArray".equals(text)) {
-            return ValueType.BOOLEAN_ARRAY;
-        }
-        if ("Array<IntArray>".equals(text)) {
-            return ValueType.INT_2D_ARRAY;
-        }
-        if ("Array<LongArray>".equals(text)) {
-            return ValueType.LONG_2D_ARRAY;
-        }
-        if ("Array<DoubleArray>".equals(text)) {
-            return ValueType.DOUBLE_2D_ARRAY;
-        }
-        if ("Array<CharArray>".equals(text)) {
-            return ValueType.CHAR_2D_ARRAY;
-        }
-        if ("Array<BooleanArray>".equals(text)) {
-            return ValueType.BOOLEAN_2D_ARRAY;
+        primitiveArrayShape = primitiveArrayShapeFromArrayKotlinType(text);
+        if (primitiveArrayShape != null) {
+            return primitiveArrayShape.arrayArrayType;
         }
         if ("Unit".equals(text)) {
             return ValueType.VOID;
@@ -5590,25 +5389,26 @@ public final class SimpleFunctionCodegens {
     }
 
     private static ValueType numericAggregateType(ValueType receiverType) {
-        if (receiverType == ValueType.INT_ARRAY || receiverType == ValueType.INT_ARRAY_LIST) {
+        PrimitiveArrayShape primitiveShape = primitiveArrayShapeForArrayType(receiverType);
+        if (primitiveShape != null && primitiveShape.elementType.numeric) {
+            return primitiveShape.elementType;
+        }
+        if (receiverType == ValueType.INT_ARRAY_LIST) {
             return ValueType.INT;
         }
-        if (receiverType == ValueType.LONG_ARRAY || receiverType == ValueType.LONG_ARRAY_LIST) {
+        if (receiverType == ValueType.LONG_ARRAY_LIST) {
             return ValueType.LONG;
-        }
-        if (receiverType == ValueType.DOUBLE_ARRAY) {
-            return ValueType.DOUBLE;
         }
         return null;
     }
 
     private static boolean isSortablePrimitiveArrayType(ValueType type) {
-        return type == ValueType.INT_ARRAY || type == ValueType.LONG_ARRAY
-                || type == ValueType.DOUBLE_ARRAY || type == ValueType.CHAR_ARRAY;
+        PrimitiveArrayShape shape = primitiveArrayShapeForArrayType(type);
+        return shape != null && shape.sortable;
     }
 
     private static boolean isReversiblePrimitiveArrayType(ValueType type) {
-        return isSortablePrimitiveArrayType(type) || type == ValueType.BOOLEAN_ARRAY;
+        return primitiveArrayShapeForArrayType(type) != null;
     }
 
     private static boolean isSortableArrayListType(ValueType type) {
@@ -5666,6 +5466,47 @@ public final class SimpleFunctionCodegens {
             return false;
         }
         return text.indexOf('.') >= 0 || text.indexOf('e') >= 0 || text.indexOf('E') >= 0;
+    }
+
+    private enum PrimitiveArrayShape {
+        INT("IntArray", ValueType.INT, ValueType.INT_ARRAY, ValueType.INT_2D_ARRAY,
+                Opcodes.T_INT, Opcodes.IALOAD, Opcodes.IASTORE, true),
+        LONG("LongArray", ValueType.LONG, ValueType.LONG_ARRAY, ValueType.LONG_2D_ARRAY,
+                Opcodes.T_LONG, Opcodes.LALOAD, Opcodes.LASTORE, true),
+        DOUBLE("DoubleArray", ValueType.DOUBLE, ValueType.DOUBLE_ARRAY, ValueType.DOUBLE_2D_ARRAY,
+                Opcodes.T_DOUBLE, Opcodes.DALOAD, Opcodes.DASTORE, true),
+        CHAR("CharArray", ValueType.CHAR, ValueType.CHAR_ARRAY, ValueType.CHAR_2D_ARRAY,
+                Opcodes.T_CHAR, Opcodes.CALOAD, Opcodes.CASTORE, true),
+        BOOLEAN("BooleanArray", ValueType.BOOLEAN, ValueType.BOOLEAN_ARRAY, ValueType.BOOLEAN_2D_ARRAY,
+                Opcodes.T_BOOLEAN, Opcodes.BALOAD, Opcodes.BASTORE, false);
+
+        private final String kotlinType;
+        private final ValueType elementType;
+        private final ValueType arrayType;
+        private final ValueType arrayArrayType;
+        private final int newArrayOperand;
+        private final int loadOpcode;
+        private final int storeOpcode;
+        private final boolean sortable;
+
+        PrimitiveArrayShape(
+                String kotlinType,
+                ValueType elementType,
+                ValueType arrayType,
+                ValueType arrayArrayType,
+                int newArrayOperand,
+                int loadOpcode,
+                int storeOpcode,
+                boolean sortable) {
+            this.kotlinType = kotlinType;
+            this.elementType = elementType;
+            this.arrayType = arrayType;
+            this.arrayArrayType = arrayArrayType;
+            this.newArrayOperand = newArrayOperand;
+            this.loadOpcode = loadOpcode;
+            this.storeOpcode = storeOpcode;
+            this.sortable = sortable;
+        }
     }
 
     private enum ScalarCollectionShape {
