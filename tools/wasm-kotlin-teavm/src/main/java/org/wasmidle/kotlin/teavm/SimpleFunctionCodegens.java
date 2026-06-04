@@ -719,73 +719,12 @@ public final class SimpleFunctionCodegens {
         }
         if (left instanceof KtArrayAccessExpression) {
             ValueType arrayType = emitArrayReferenceAndIndex(method, context, (KtArrayAccessExpression) left);
-            if (arrayType == ValueType.INT_INT_HASH_MAP) {
+            if (isHashMapType(arrayType)) {
                 if (operation != KtTokens.EQ) {
                     throw new IllegalArgumentException("Map compound assignment is not supported: "
                             + binary.getText());
                 }
-                emitExpressionAs(method, context, right, ValueType.INT);
-                boxInt(method);
-                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "put",
-                        "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", false);
-                method.visitInsn(Opcodes.POP);
-                return true;
-            }
-            if (arrayType == ValueType.INT_LONG_HASH_MAP) {
-                if (operation != KtTokens.EQ) {
-                    throw new IllegalArgumentException("Int-key long-value map compound assignment is not supported: "
-                            + binary.getText());
-                }
-                emitExpressionAs(method, context, right, ValueType.LONG);
-                boxLong(method);
-                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "put",
-                        "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", false);
-                method.visitInsn(Opcodes.POP);
-                return true;
-            }
-            if (arrayType == ValueType.LONG_INT_HASH_MAP) {
-                if (operation != KtTokens.EQ) {
-                    throw new IllegalArgumentException("Long-key map compound assignment is not supported: "
-                            + binary.getText());
-                }
-                emitExpressionAs(method, context, right, ValueType.INT);
-                boxInt(method);
-                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "put",
-                        "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", false);
-                method.visitInsn(Opcodes.POP);
-                return true;
-            }
-            if (arrayType == ValueType.LONG_LONG_HASH_MAP) {
-                if (operation != KtTokens.EQ) {
-                    throw new IllegalArgumentException("Long-key long-value map compound assignment is not supported: "
-                            + binary.getText());
-                }
-                emitExpressionAs(method, context, right, ValueType.LONG);
-                boxLong(method);
-                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "put",
-                        "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", false);
-                method.visitInsn(Opcodes.POP);
-                return true;
-            }
-            if (arrayType == ValueType.STRING_INT_HASH_MAP) {
-                if (operation != KtTokens.EQ) {
-                    throw new IllegalArgumentException("String-key map compound assignment is not supported: "
-                            + binary.getText());
-                }
-                emitExpressionAs(method, context, right, ValueType.INT);
-                boxInt(method);
-                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "put",
-                        "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", false);
-                method.visitInsn(Opcodes.POP);
-                return true;
-            }
-            if (arrayType == ValueType.STRING_LONG_HASH_MAP) {
-                if (operation != KtTokens.EQ) {
-                    throw new IllegalArgumentException("String-key long-value map compound assignment is not supported: "
-                            + binary.getText());
-                }
-                emitExpressionAs(method, context, right, ValueType.LONG);
-                boxLong(method);
+                emitBoxedExpressionAs(method, context, right, hashMapValueType(arrayType));
                 method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "put",
                         "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", false);
                 method.visitInsn(Opcodes.POP);
@@ -1112,41 +1051,12 @@ public final class SimpleFunctionCodegens {
                 method.visitTypeInsn(Opcodes.CHECKCAST, "java/util/AbstractMap$SimpleEntry");
                 return pairTypeForArrayList(arrayType);
             }
-            if (arrayType == ValueType.INT_INT_HASH_MAP) {
+            if (isHashMapType(arrayType)) {
                 method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "get",
                         "(Ljava/lang/Object;)Ljava/lang/Object;", false);
-                unboxInt(method);
-                return ValueType.INT;
-            }
-            if (arrayType == ValueType.INT_LONG_HASH_MAP) {
-                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "get",
-                        "(Ljava/lang/Object;)Ljava/lang/Object;", false);
-                unboxLong(method);
-                return ValueType.LONG;
-            }
-            if (arrayType == ValueType.LONG_INT_HASH_MAP) {
-                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "get",
-                        "(Ljava/lang/Object;)Ljava/lang/Object;", false);
-                unboxInt(method);
-                return ValueType.INT;
-            }
-            if (arrayType == ValueType.LONG_LONG_HASH_MAP) {
-                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "get",
-                        "(Ljava/lang/Object;)Ljava/lang/Object;", false);
-                unboxLong(method);
-                return ValueType.LONG;
-            }
-            if (arrayType == ValueType.STRING_INT_HASH_MAP) {
-                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "get",
-                        "(Ljava/lang/Object;)Ljava/lang/Object;", false);
-                unboxInt(method);
-                return ValueType.INT;
-            }
-            if (arrayType == ValueType.STRING_LONG_HASH_MAP) {
-                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "get",
-                        "(Ljava/lang/Object;)Ljava/lang/Object;", false);
-                unboxLong(method);
-                return ValueType.LONG;
+                ValueType valueType = hashMapValueType(arrayType);
+                unboxValue(method, valueType);
+                return valueType;
             }
             ValueType elementType = indexedElementType(arrayType);
             if (elementType == ValueType.INT) {
@@ -1228,12 +1138,7 @@ public final class SimpleFunctionCodegens {
                             false);
                     return ValueType.INT;
                 }
-                if (isIntPairPriorityQueueType(receiverType)) {
-                    method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/PriorityQueue", "size", "()I",
-                            false);
-                    return ValueType.INT;
-                }
-                if (receiverType == ValueType.LONG_INT_PAIR_PRIORITY_QUEUE) {
+                if (isPairPriorityQueueType(receiverType)) {
                     method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/PriorityQueue", "size", "()I",
                             false);
                     return ValueType.INT;
@@ -1262,27 +1167,7 @@ public final class SimpleFunctionCodegens {
                     method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashSet", "size", "()I", false);
                     return ValueType.INT;
                 }
-                if (receiverType == ValueType.INT_INT_HASH_MAP) {
-                    method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "size", "()I", false);
-                    return ValueType.INT;
-                }
-                if (receiverType == ValueType.INT_LONG_HASH_MAP) {
-                    method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "size", "()I", false);
-                    return ValueType.INT;
-                }
-                if (receiverType == ValueType.LONG_INT_HASH_MAP) {
-                    method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "size", "()I", false);
-                    return ValueType.INT;
-                }
-                if (receiverType == ValueType.LONG_LONG_HASH_MAP) {
-                    method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "size", "()I", false);
-                    return ValueType.INT;
-                }
-                if (receiverType == ValueType.STRING_INT_HASH_MAP) {
-                    method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "size", "()I", false);
-                    return ValueType.INT;
-                }
-                if (receiverType == ValueType.STRING_LONG_HASH_MAP) {
+                if (isHashMapType(receiverType)) {
                     method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "size", "()I", false);
                     return ValueType.INT;
                 }
@@ -1310,14 +1195,9 @@ public final class SimpleFunctionCodegens {
                     method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/AbstractMap$SimpleEntry",
                             first ? "getKey" : "getValue",
                             "()Ljava/lang/Object;", false);
-                    if ((receiverType == ValueType.INT_LONG_PAIR && !first)
-                            || (receiverType == ValueType.LONG_INT_PAIR && first)
-                            || receiverType == ValueType.LONG_LONG_PAIR) {
-                        unboxLong(method);
-                        return ValueType.LONG;
-                    }
-                    unboxInt(method);
-                    return ValueType.INT;
+                    ValueType componentType = pairComponentType(receiverType, first ? 0 : 1);
+                    unboxValue(method, componentType);
+                    return componentType;
                 }
             }
             if (selector instanceof KtCallExpression) {
@@ -1901,18 +1781,10 @@ public final class SimpleFunctionCodegens {
                                 "(Ljava/lang/Object;)Z", false);
                         return ValueType.BOOLEAN;
                     }
-                    if (isIntPairPriorityQueueType(receiverType)) {
-                        emitPackedIntPair(method, context,
+                    if (isPairPriorityQueueType(receiverType)) {
+                        emitPackedPairPriorityQueueElement(method, context,
                                 ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                isSecondOrderIntPairPriorityQueue(receiverType));
-                        boxLong(method);
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/PriorityQueue", "add",
-                                "(Ljava/lang/Object;)Z", false);
-                        return ValueType.BOOLEAN;
-                    }
-                    if (receiverType == ValueType.LONG_INT_PAIR_PRIORITY_QUEUE) {
-                        emitPackedLongIntPair(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression());
+                                receiverType);
                         method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/PriorityQueue", "add",
                                 "(Ljava/lang/Object;)Z", false);
                         return ValueType.BOOLEAN;
@@ -2023,83 +1895,13 @@ public final class SimpleFunctionCodegens {
                 if (callee != null && "put".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().size() == 2) {
                     ValueType receiverType = emitExpression(method, context, receiver);
-                    if (receiverType == ValueType.INT_INT_HASH_MAP) {
-                        emitExpressionAs(method, context,
+                    if (isHashMapType(receiverType)) {
+                        emitBoxedExpressionAs(method, context,
                                 ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.INT);
-                        boxInt(method);
-                        emitExpressionAs(method, context,
+                                hashMapKeyType(receiverType));
+                        emitBoxedExpressionAs(method, context,
                                 ((KtCallExpression) selector).getValueArguments().get(1).getArgumentExpression(),
-                                ValueType.INT);
-                        boxInt(method);
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "put",
-                                "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", false);
-                        method.visitInsn(Opcodes.POP);
-                        return ValueType.VOID;
-                    }
-                    if (receiverType == ValueType.INT_LONG_HASH_MAP) {
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.INT);
-                        boxInt(method);
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(1).getArgumentExpression(),
-                                ValueType.LONG);
-                        boxLong(method);
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "put",
-                                "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", false);
-                        method.visitInsn(Opcodes.POP);
-                        return ValueType.VOID;
-                    }
-                    if (receiverType == ValueType.LONG_INT_HASH_MAP) {
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.LONG);
-                        boxLong(method);
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(1).getArgumentExpression(),
-                                ValueType.INT);
-                        boxInt(method);
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "put",
-                                "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", false);
-                        method.visitInsn(Opcodes.POP);
-                        return ValueType.VOID;
-                    }
-                    if (receiverType == ValueType.LONG_LONG_HASH_MAP) {
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.LONG);
-                        boxLong(method);
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(1).getArgumentExpression(),
-                                ValueType.LONG);
-                        boxLong(method);
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "put",
-                                "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", false);
-                        method.visitInsn(Opcodes.POP);
-                        return ValueType.VOID;
-                    }
-                    if (receiverType == ValueType.STRING_INT_HASH_MAP) {
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.STRING);
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(1).getArgumentExpression(),
-                                ValueType.INT);
-                        boxInt(method);
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "put",
-                                "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", false);
-                        method.visitInsn(Opcodes.POP);
-                        return ValueType.VOID;
-                    }
-                    if (receiverType == ValueType.STRING_LONG_HASH_MAP) {
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.STRING);
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(1).getArgumentExpression(),
-                                ValueType.LONG);
-                        boxLong(method);
+                                hashMapValueType(receiverType));
                         method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "put",
                                 "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", false);
                         method.visitInsn(Opcodes.POP);
@@ -2127,18 +1929,10 @@ public final class SimpleFunctionCodegens {
                                 "(Ljava/lang/Object;)Z", false);
                         return ValueType.BOOLEAN;
                     }
-                    if (isIntPairPriorityQueueType(receiverType)) {
-                        emitPackedIntPair(method, context,
+                    if (isPairPriorityQueueType(receiverType)) {
+                        emitPackedPairPriorityQueueElement(method, context,
                                 ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                isSecondOrderIntPairPriorityQueue(receiverType));
-                        boxLong(method);
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/PriorityQueue", "offer",
-                                "(Ljava/lang/Object;)Z", false);
-                        return ValueType.BOOLEAN;
-                    }
-                    if (receiverType == ValueType.LONG_INT_PAIR_PRIORITY_QUEUE) {
-                        emitPackedLongIntPair(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression());
+                                receiverType);
                         method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/PriorityQueue", "offer",
                                 "(Ljava/lang/Object;)Z", false);
                         return ValueType.BOOLEAN;
@@ -2263,12 +2057,7 @@ public final class SimpleFunctionCodegens {
                                 false);
                         return ValueType.BOOLEAN;
                     }
-                    if (isIntPairPriorityQueueType(receiverType)) {
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/PriorityQueue", "isEmpty", "()Z",
-                                false);
-                        return ValueType.BOOLEAN;
-                    }
-                    if (receiverType == ValueType.LONG_INT_PAIR_PRIORITY_QUEUE) {
+                    if (isPairPriorityQueueType(receiverType)) {
                         method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/PriorityQueue", "isEmpty", "()Z",
                                 false);
                         return ValueType.BOOLEAN;
@@ -2303,32 +2092,7 @@ public final class SimpleFunctionCodegens {
                                 false);
                         return ValueType.BOOLEAN;
                     }
-                    if (receiverType == ValueType.INT_INT_HASH_MAP) {
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "isEmpty", "()Z",
-                                false);
-                        return ValueType.BOOLEAN;
-                    }
-                    if (receiverType == ValueType.INT_LONG_HASH_MAP) {
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "isEmpty", "()Z",
-                                false);
-                        return ValueType.BOOLEAN;
-                    }
-                    if (receiverType == ValueType.LONG_INT_HASH_MAP) {
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "isEmpty", "()Z",
-                                false);
-                        return ValueType.BOOLEAN;
-                    }
-                    if (receiverType == ValueType.LONG_LONG_HASH_MAP) {
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "isEmpty", "()Z",
-                                false);
-                        return ValueType.BOOLEAN;
-                    }
-                    if (receiverType == ValueType.STRING_INT_HASH_MAP) {
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "isEmpty", "()Z",
-                                false);
-                        return ValueType.BOOLEAN;
-                    }
-                    if (receiverType == ValueType.STRING_LONG_HASH_MAP) {
+                    if (isHashMapType(receiverType)) {
                         method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "isEmpty", "()Z",
                                 false);
                         return ValueType.BOOLEAN;
@@ -2388,79 +2152,23 @@ public final class SimpleFunctionCodegens {
                                 "(Ljava/lang/Object;)Z", false);
                         return ValueType.BOOLEAN;
                     }
-                    if (isIntPairPriorityQueueType(receiverType)) {
-                        emitPackedIntPair(method, context,
+                    if (isPairPriorityQueueType(receiverType)) {
+                        emitPackedPairPriorityQueueElement(method, context,
                                 ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                isSecondOrderIntPairPriorityQueue(receiverType));
-                        boxLong(method);
+                                receiverType);
                         method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/PriorityQueue", callee.getText(),
                                 "(Ljava/lang/Object;)Z", false);
                         return ValueType.BOOLEAN;
                     }
-                    if (receiverType == ValueType.LONG_INT_PAIR_PRIORITY_QUEUE) {
-                        emitPackedLongIntPair(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression());
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/PriorityQueue", callee.getText(),
-                                "(Ljava/lang/Object;)Z", false);
-                        return ValueType.BOOLEAN;
-                    }
-                    if (receiverType == ValueType.INT_INT_HASH_MAP && "remove".equals(callee.getText())) {
-                        emitExpressionAs(method, context,
+                    if (isHashMapType(receiverType) && "remove".equals(callee.getText())) {
+                        emitBoxedExpressionAs(method, context,
                                 ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.INT);
-                        boxInt(method);
+                                hashMapKeyType(receiverType));
                         method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "remove",
                                 "(Ljava/lang/Object;)Ljava/lang/Object;", false);
-                        unboxInt(method);
-                        return ValueType.INT;
-                    }
-                    if (receiverType == ValueType.INT_LONG_HASH_MAP && "remove".equals(callee.getText())) {
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.INT);
-                        boxInt(method);
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "remove",
-                                "(Ljava/lang/Object;)Ljava/lang/Object;", false);
-                        unboxLong(method);
-                        return ValueType.LONG;
-                    }
-                    if (receiverType == ValueType.LONG_INT_HASH_MAP && "remove".equals(callee.getText())) {
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.LONG);
-                        boxLong(method);
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "remove",
-                                "(Ljava/lang/Object;)Ljava/lang/Object;", false);
-                        unboxInt(method);
-                        return ValueType.INT;
-                    }
-                    if (receiverType == ValueType.LONG_LONG_HASH_MAP && "remove".equals(callee.getText())) {
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.LONG);
-                        boxLong(method);
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "remove",
-                                "(Ljava/lang/Object;)Ljava/lang/Object;", false);
-                        unboxLong(method);
-                        return ValueType.LONG;
-                    }
-                    if (receiverType == ValueType.STRING_INT_HASH_MAP && "remove".equals(callee.getText())) {
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.STRING);
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "remove",
-                                "(Ljava/lang/Object;)Ljava/lang/Object;", false);
-                        unboxInt(method);
-                        return ValueType.INT;
-                    }
-                    if (receiverType == ValueType.STRING_LONG_HASH_MAP && "remove".equals(callee.getText())) {
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.STRING);
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "remove",
-                                "(Ljava/lang/Object;)Ljava/lang/Object;", false);
-                        unboxLong(method);
-                        return ValueType.LONG;
+                        ValueType valueType = hashMapValueType(receiverType);
+                        unboxValue(method, valueType);
+                        return valueType;
                     }
                 }
                 if (callee != null && "removeAt".equals(callee.getText())
@@ -2506,54 +2214,10 @@ public final class SimpleFunctionCodegens {
                 if (callee != null && "containsKey".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().size() == 1) {
                     ValueType receiverType = emitExpression(method, context, receiver);
-                    if (receiverType == ValueType.INT_INT_HASH_MAP) {
-                        emitExpressionAs(method, context,
+                    if (isHashMapType(receiverType)) {
+                        emitBoxedExpressionAs(method, context,
                                 ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.INT);
-                        boxInt(method);
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "containsKey",
-                                "(Ljava/lang/Object;)Z", false);
-                        return ValueType.BOOLEAN;
-                    }
-                    if (receiverType == ValueType.INT_LONG_HASH_MAP) {
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.INT);
-                        boxInt(method);
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "containsKey",
-                                "(Ljava/lang/Object;)Z", false);
-                        return ValueType.BOOLEAN;
-                    }
-                    if (receiverType == ValueType.LONG_INT_HASH_MAP) {
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.LONG);
-                        boxLong(method);
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "containsKey",
-                                "(Ljava/lang/Object;)Z", false);
-                        return ValueType.BOOLEAN;
-                    }
-                    if (receiverType == ValueType.LONG_LONG_HASH_MAP) {
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.LONG);
-                        boxLong(method);
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "containsKey",
-                                "(Ljava/lang/Object;)Z", false);
-                        return ValueType.BOOLEAN;
-                    }
-                    if (receiverType == ValueType.STRING_INT_HASH_MAP) {
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.STRING);
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "containsKey",
-                                "(Ljava/lang/Object;)Z", false);
-                        return ValueType.BOOLEAN;
-                    }
-                    if (receiverType == ValueType.STRING_LONG_HASH_MAP) {
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.STRING);
+                                hashMapKeyType(receiverType));
                         method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "containsKey",
                                 "(Ljava/lang/Object;)Z", false);
                         return ValueType.BOOLEAN;
@@ -2562,149 +2226,32 @@ public final class SimpleFunctionCodegens {
                 if (callee != null && "get".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().size() == 1) {
                     ValueType receiverType = emitExpression(method, context, receiver);
-                    if (receiverType == ValueType.INT_INT_HASH_MAP) {
-                        emitExpressionAs(method, context,
+                    if (isHashMapType(receiverType)) {
+                        emitBoxedExpressionAs(method, context,
                                 ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.INT);
-                        boxInt(method);
+                                hashMapKeyType(receiverType));
                         method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "get",
                                 "(Ljava/lang/Object;)Ljava/lang/Object;", false);
-                        unboxInt(method);
-                        return ValueType.INT;
-                    }
-                    if (receiverType == ValueType.INT_LONG_HASH_MAP) {
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.INT);
-                        boxInt(method);
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "get",
-                                "(Ljava/lang/Object;)Ljava/lang/Object;", false);
-                        unboxLong(method);
-                        return ValueType.LONG;
-                    }
-                    if (receiverType == ValueType.LONG_INT_HASH_MAP) {
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.LONG);
-                        boxLong(method);
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "get",
-                                "(Ljava/lang/Object;)Ljava/lang/Object;", false);
-                        unboxInt(method);
-                        return ValueType.INT;
-                    }
-                    if (receiverType == ValueType.LONG_LONG_HASH_MAP) {
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.LONG);
-                        boxLong(method);
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "get",
-                                "(Ljava/lang/Object;)Ljava/lang/Object;", false);
-                        unboxLong(method);
-                        return ValueType.LONG;
-                    }
-                    if (receiverType == ValueType.STRING_INT_HASH_MAP) {
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.STRING);
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "get",
-                                "(Ljava/lang/Object;)Ljava/lang/Object;", false);
-                        unboxInt(method);
-                        return ValueType.INT;
-                    }
-                    if (receiverType == ValueType.STRING_LONG_HASH_MAP) {
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.STRING);
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "get",
-                                "(Ljava/lang/Object;)Ljava/lang/Object;", false);
-                        unboxLong(method);
-                        return ValueType.LONG;
+                        ValueType valueType = hashMapValueType(receiverType);
+                        unboxValue(method, valueType);
+                        return valueType;
                     }
                 }
                 if (callee != null && "getOrDefault".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().size() == 2) {
                     ValueType receiverType = emitExpression(method, context, receiver);
-                    if (receiverType == ValueType.INT_INT_HASH_MAP) {
-                        emitExpressionAs(method, context,
+                    if (isHashMapType(receiverType)) {
+                        emitBoxedExpressionAs(method, context,
                                 ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.INT);
-                        boxInt(method);
-                        emitExpressionAs(method, context,
+                                hashMapKeyType(receiverType));
+                        ValueType valueType = hashMapValueType(receiverType);
+                        emitBoxedExpressionAs(method, context,
                                 ((KtCallExpression) selector).getValueArguments().get(1).getArgumentExpression(),
-                                ValueType.INT);
-                        boxInt(method);
+                                valueType);
                         method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "getOrDefault",
                                 "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", false);
-                        unboxInt(method);
-                        return ValueType.INT;
-                    }
-                    if (receiverType == ValueType.INT_LONG_HASH_MAP) {
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.INT);
-                        boxInt(method);
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(1).getArgumentExpression(),
-                                ValueType.LONG);
-                        boxLong(method);
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "getOrDefault",
-                                "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", false);
-                        unboxLong(method);
-                        return ValueType.LONG;
-                    }
-                    if (receiverType == ValueType.LONG_INT_HASH_MAP) {
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.LONG);
-                        boxLong(method);
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(1).getArgumentExpression(),
-                                ValueType.INT);
-                        boxInt(method);
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "getOrDefault",
-                                "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", false);
-                        unboxInt(method);
-                        return ValueType.INT;
-                    }
-                    if (receiverType == ValueType.LONG_LONG_HASH_MAP) {
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.LONG);
-                        boxLong(method);
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(1).getArgumentExpression(),
-                                ValueType.LONG);
-                        boxLong(method);
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "getOrDefault",
-                                "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", false);
-                        unboxLong(method);
-                        return ValueType.LONG;
-                    }
-                    if (receiverType == ValueType.STRING_INT_HASH_MAP) {
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.STRING);
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(1).getArgumentExpression(),
-                                ValueType.INT);
-                        boxInt(method);
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "getOrDefault",
-                                "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", false);
-                        unboxInt(method);
-                        return ValueType.INT;
-                    }
-                    if (receiverType == ValueType.STRING_LONG_HASH_MAP) {
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.STRING);
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(1).getArgumentExpression(),
-                                ValueType.LONG);
-                        boxLong(method);
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "getOrDefault",
-                                "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", false);
-                        unboxLong(method);
-                        return ValueType.LONG;
+                        unboxValue(method, valueType);
+                        return valueType;
                     }
                 }
                 if (callee != null && "clear".equals(callee.getText())
@@ -2730,32 +2277,7 @@ public final class SimpleFunctionCodegens {
                                 false);
                         return ValueType.VOID;
                     }
-                    if (receiverType == ValueType.INT_INT_HASH_MAP) {
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "clear", "()V",
-                                false);
-                        return ValueType.VOID;
-                    }
-                    if (receiverType == ValueType.INT_LONG_HASH_MAP) {
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "clear", "()V",
-                                false);
-                        return ValueType.VOID;
-                    }
-                    if (receiverType == ValueType.LONG_INT_HASH_MAP) {
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "clear", "()V",
-                                false);
-                        return ValueType.VOID;
-                    }
-                    if (receiverType == ValueType.LONG_LONG_HASH_MAP) {
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "clear", "()V",
-                                false);
-                        return ValueType.VOID;
-                    }
-                    if (receiverType == ValueType.STRING_INT_HASH_MAP) {
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "clear", "()V",
-                                false);
-                        return ValueType.VOID;
-                    }
-                    if (receiverType == ValueType.STRING_LONG_HASH_MAP) {
+                    if (isHashMapType(receiverType)) {
                         method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "clear", "()V",
                                 false);
                         return ValueType.VOID;
@@ -2854,18 +2376,10 @@ public final class SimpleFunctionCodegens {
                         unboxLong(method);
                         return ValueType.LONG;
                     }
-                    if (isIntPairPriorityQueueType(receiverType)) {
+                    if (isPairPriorityQueueType(receiverType)) {
                         method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/PriorityQueue", callee.getText(),
                                 "()Ljava/lang/Object;", false);
-                        unboxLong(method);
-                        emitIntPairFromPackedLong(method, context, isSecondOrderIntPairPriorityQueue(receiverType));
-                        return ValueType.INT_PAIR;
-                    }
-                    if (receiverType == ValueType.LONG_INT_PAIR_PRIORITY_QUEUE) {
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/PriorityQueue", callee.getText(),
-                                "()Ljava/lang/Object;", false);
-                        emitLongIntPairFromPackedString(method, context);
-                        return ValueType.LONG_INT_PAIR;
+                        return emitPairFromPackedPriorityQueueElement(method, context, receiverType);
                     }
                     if (receiverType == ValueType.INT_ARRAY_DEQUE) {
                         method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayDeque", callee.getText(),
@@ -3250,53 +2764,21 @@ public final class SimpleFunctionCodegens {
             method.visitTypeInsn(Opcodes.NEW, "java/util/ArrayList");
             method.visitInsn(Opcodes.DUP);
             method.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/util/ArrayList", "<init>", "()V", false);
-            if (isLongListFactoryOrConstructor(calleeText)
-                    || isLongListFactoryOrConstructor(call.getText())) {
-                return ValueType.LONG_ARRAY_LIST;
-            }
-            if (isStringListFactoryOrConstructor(calleeText)
-                    || isStringListFactoryOrConstructor(call.getText())) {
-                return ValueType.STRING_ARRAY_LIST;
-            }
-            if (isIntPairListFactoryOrConstructor(calleeText)
-                    || isIntPairListFactoryOrConstructor(call.getText())) {
-                return ValueType.INT_PAIR_ARRAY_LIST;
-            }
-            if (isIntLongPairListFactoryOrConstructor(calleeText)
-                    || isIntLongPairListFactoryOrConstructor(call.getText())) {
-                return ValueType.INT_LONG_PAIR_ARRAY_LIST;
-            }
-            if (isLongIntPairListFactoryOrConstructor(calleeText)
-                    || isLongIntPairListFactoryOrConstructor(call.getText())) {
-                return ValueType.LONG_INT_PAIR_ARRAY_LIST;
-            }
-            if (isLongLongPairListFactoryOrConstructor(calleeText)
-                    || isLongLongPairListFactoryOrConstructor(call.getText())) {
-                return ValueType.LONG_LONG_PAIR_ARRAY_LIST;
+            ValueType listType = arrayListTypeForFactoryOrConstructor(calleeText, call.getText());
+            if (listType != null) {
+                return listType;
             }
             return ValueType.INT_ARRAY_LIST;
         }
+        ValueType priorityQueueType = priorityQueueTypeForConstructor(calleeText, call.getText());
         if (isPriorityQueueConstructor(calleeText)
-                && (call.getValueArguments().isEmpty() || isIntPairPriorityQueueConstructor(call.getText())
-                        || isLongIntPairPriorityQueueConstructor(call.getText()))) {
+                && (call.getValueArguments().isEmpty()
+                        || isPairPriorityQueueType(priorityQueueType))) {
             method.visitTypeInsn(Opcodes.NEW, "java/util/PriorityQueue");
             method.visitInsn(Opcodes.DUP);
             method.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/util/PriorityQueue", "<init>", "()V", false);
-            if (isLongPriorityQueueConstructor(calleeText)
-                    || isLongPriorityQueueConstructor(call.getText())) {
-                return ValueType.LONG_PRIORITY_QUEUE;
-            }
-            if (isIntPairSecondPriorityQueueConstructor(calleeText)
-                    || isIntPairSecondPriorityQueueConstructor(call.getText())) {
-                return ValueType.INT_PAIR_SECOND_PRIORITY_QUEUE;
-            }
-            if (isIntPairPriorityQueueConstructor(calleeText)
-                    || isIntPairPriorityQueueConstructor(call.getText())) {
-                return ValueType.INT_PAIR_PRIORITY_QUEUE;
-            }
-            if (isLongIntPairPriorityQueueConstructor(calleeText)
-                    || isLongIntPairPriorityQueueConstructor(call.getText())) {
-                return ValueType.LONG_INT_PAIR_PRIORITY_QUEUE;
+            if (priorityQueueType != null) {
+                return priorityQueueType;
             }
             return ValueType.INT_PRIORITY_QUEUE;
         }
@@ -3304,25 +2786,9 @@ public final class SimpleFunctionCodegens {
             method.visitTypeInsn(Opcodes.NEW, "java/util/ArrayDeque");
             method.visitInsn(Opcodes.DUP);
             method.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/util/ArrayDeque", "<init>", "()V", false);
-            if (isLongArrayDequeConstructor(calleeText)
-                    || isLongArrayDequeConstructor(call.getText())) {
-                return ValueType.LONG_ARRAY_DEQUE;
-            }
-            if (isIntPairArrayDequeConstructor(calleeText)
-                    || isIntPairArrayDequeConstructor(call.getText())) {
-                return ValueType.INT_PAIR_ARRAY_DEQUE;
-            }
-            if (isIntLongPairArrayDequeConstructor(calleeText)
-                    || isIntLongPairArrayDequeConstructor(call.getText())) {
-                return ValueType.INT_LONG_PAIR_ARRAY_DEQUE;
-            }
-            if (isLongIntPairArrayDequeConstructor(calleeText)
-                    || isLongIntPairArrayDequeConstructor(call.getText())) {
-                return ValueType.LONG_INT_PAIR_ARRAY_DEQUE;
-            }
-            if (isLongLongPairArrayDequeConstructor(calleeText)
-                    || isLongLongPairArrayDequeConstructor(call.getText())) {
-                return ValueType.LONG_LONG_PAIR_ARRAY_DEQUE;
+            ValueType dequeType = arrayDequeTypeForConstructor(calleeText, call.getText());
+            if (dequeType != null) {
+                return dequeType;
             }
             return ValueType.INT_ARRAY_DEQUE;
         }
@@ -3331,13 +2797,9 @@ public final class SimpleFunctionCodegens {
             method.visitTypeInsn(Opcodes.NEW, "java/util/HashSet");
             method.visitInsn(Opcodes.DUP);
             method.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/util/HashSet", "<init>", "()V", false);
-            if (isLongSetFactoryOrConstructor(calleeText)
-                    || isLongSetFactoryOrConstructor(call.getText())) {
-                return ValueType.LONG_HASH_SET;
-            }
-            if (isStringSetFactoryOrConstructor(calleeText)
-                    || isStringSetFactoryOrConstructor(call.getText())) {
-                return ValueType.STRING_HASH_SET;
+            ValueType setType = hashSetTypeForFactoryOrConstructor(calleeText, call.getText());
+            if (setType != null) {
+                return setType;
             }
             return ValueType.INT_HASH_SET;
         }
@@ -3346,25 +2808,9 @@ public final class SimpleFunctionCodegens {
             method.visitTypeInsn(Opcodes.NEW, "java/util/HashMap");
             method.visitInsn(Opcodes.DUP);
             method.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/util/HashMap", "<init>", "()V", false);
-            if (isIntLongMapFactoryOrConstructor(calleeText)
-                    || isIntLongMapFactoryOrConstructor(call.getText())) {
-                return ValueType.INT_LONG_HASH_MAP;
-            }
-            if (isLongIntMapFactoryOrConstructor(calleeText)
-                    || isLongIntMapFactoryOrConstructor(call.getText())) {
-                return ValueType.LONG_INT_HASH_MAP;
-            }
-            if (isLongLongMapFactoryOrConstructor(calleeText)
-                    || isLongLongMapFactoryOrConstructor(call.getText())) {
-                return ValueType.LONG_LONG_HASH_MAP;
-            }
-            if (isStringIntMapFactoryOrConstructor(calleeText)
-                    || isStringIntMapFactoryOrConstructor(call.getText())) {
-                return ValueType.STRING_INT_HASH_MAP;
-            }
-            if (isStringLongMapFactoryOrConstructor(calleeText)
-                    || isStringLongMapFactoryOrConstructor(call.getText())) {
-                return ValueType.STRING_LONG_HASH_MAP;
+            ValueType mapType = hashMapTypeForFactoryOrConstructor(calleeText, call.getText());
+            if (mapType != null) {
+                return mapType;
             }
             return ValueType.INT_INT_HASH_MAP;
         }
@@ -3398,10 +2844,7 @@ public final class SimpleFunctionCodegens {
             }
             method.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/util/AbstractMap$SimpleEntry", "<init>",
                     "(Ljava/lang/Object;Ljava/lang/Object;)V", false);
-            if (firstType == ValueType.LONG) {
-                return secondType == ValueType.LONG ? ValueType.LONG_LONG_PAIR : ValueType.LONG_INT_PAIR;
-            }
-            return secondType == ValueType.LONG ? ValueType.INT_LONG_PAIR : ValueType.INT_PAIR;
+            return pairTypeFromComponents(firstType, secondType);
         }
         if ("readInt".equals(calleeText) && call.getValueArguments().isEmpty()) {
             ensureReadIntHelper(context);
@@ -3572,23 +3015,8 @@ public final class SimpleFunctionCodegens {
             if (isPairArrayListType(arrayType)) {
                 return pairTypeForArrayList(arrayType);
             }
-            if (arrayType == ValueType.INT_INT_HASH_MAP) {
-                return ValueType.INT;
-            }
-            if (arrayType == ValueType.INT_LONG_HASH_MAP) {
-                return ValueType.LONG;
-            }
-            if (arrayType == ValueType.LONG_INT_HASH_MAP) {
-                return ValueType.INT;
-            }
-            if (arrayType == ValueType.LONG_LONG_HASH_MAP) {
-                return ValueType.LONG;
-            }
-            if (arrayType == ValueType.STRING_INT_HASH_MAP) {
-                return ValueType.INT;
-            }
-            if (arrayType == ValueType.STRING_LONG_HASH_MAP) {
-                return ValueType.LONG;
+            if (isHashMapType(arrayType)) {
+                return hashMapValueType(arrayType);
             }
             return indexedElementType(arrayType);
         }
@@ -3607,21 +3035,14 @@ public final class SimpleFunctionCodegens {
                         || isPairArrayListType(receiverType)
                         || receiverType == ValueType.INT_PRIORITY_QUEUE
                         || receiverType == ValueType.LONG_PRIORITY_QUEUE
-                        || receiverType == ValueType.INT_PAIR_PRIORITY_QUEUE
-                        || receiverType == ValueType.INT_PAIR_SECOND_PRIORITY_QUEUE
-                        || receiverType == ValueType.LONG_INT_PAIR_PRIORITY_QUEUE
+                        || isPairPriorityQueueType(receiverType)
                         || receiverType == ValueType.INT_ARRAY_DEQUE
                         || receiverType == ValueType.LONG_ARRAY_DEQUE
                         || isPairArrayDequeType(receiverType)
                         || receiverType == ValueType.INT_HASH_SET
                         || receiverType == ValueType.LONG_HASH_SET
                         || receiverType == ValueType.STRING_HASH_SET
-                        || receiverType == ValueType.INT_INT_HASH_MAP
-                        || receiverType == ValueType.INT_LONG_HASH_MAP
-                        || receiverType == ValueType.LONG_INT_HASH_MAP
-                        || receiverType == ValueType.LONG_LONG_HASH_MAP
-                        || receiverType == ValueType.STRING_INT_HASH_MAP
-                        || receiverType == ValueType.STRING_LONG_HASH_MAP) {
+                        || isHashMapType(receiverType)) {
                     return ValueType.INT;
                 }
             }
@@ -3637,17 +3058,8 @@ public final class SimpleFunctionCodegens {
             }
             if (selector != null && ("first".equals(selector.getText()) || "second".equals(selector.getText()))) {
                 ValueType receiverType = inferExpressionType(context, qualified.getReceiverExpression());
-                if (receiverType == ValueType.INT_PAIR) {
-                    return ValueType.INT;
-                }
-                if (receiverType == ValueType.INT_LONG_PAIR) {
-                    return "first".equals(selector.getText()) ? ValueType.INT : ValueType.LONG;
-                }
-                if (receiverType == ValueType.LONG_INT_PAIR) {
-                    return "first".equals(selector.getText()) ? ValueType.LONG : ValueType.INT;
-                }
-                if (receiverType == ValueType.LONG_LONG_PAIR) {
-                    return ValueType.LONG;
+                if (isPairType(receiverType)) {
+                    return pairComponentType(receiverType, "first".equals(selector.getText()) ? 0 : 1);
                 }
             }
             if (selector instanceof KtCallExpression) {
@@ -3784,12 +3196,8 @@ public final class SimpleFunctionCodegens {
                                         == ValueType.INT_PRIORITY_QUEUE
                                 || inferExpressionType(context, qualified.getReceiverExpression())
                                         == ValueType.LONG_PRIORITY_QUEUE
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.INT_PAIR_PRIORITY_QUEUE
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.INT_PAIR_SECOND_PRIORITY_QUEUE
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.LONG_INT_PAIR_PRIORITY_QUEUE
+                                || isPairPriorityQueueType(
+                                        inferExpressionType(context, qualified.getReceiverExpression()))
                                 || inferExpressionType(context, qualified.getReceiverExpression())
                                         == ValueType.INT_ARRAY_DEQUE
                                 || inferExpressionType(context, qualified.getReceiverExpression())
@@ -3811,18 +3219,7 @@ public final class SimpleFunctionCodegens {
                 }
                 if (callee != null && "put".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().size() == 2
-                        && (inferExpressionType(context, qualified.getReceiverExpression())
-                                == ValueType.INT_INT_HASH_MAP
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.INT_LONG_HASH_MAP
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.LONG_INT_HASH_MAP
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.LONG_LONG_HASH_MAP
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.STRING_INT_HASH_MAP
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.STRING_LONG_HASH_MAP)) {
+                        && isHashMapType(inferExpressionType(context, qualified.getReceiverExpression()))) {
                     return ValueType.VOID;
                 }
                 if (callee != null && "offer".equals(callee.getText())
@@ -3831,12 +3228,8 @@ public final class SimpleFunctionCodegens {
                                 == ValueType.INT_PRIORITY_QUEUE
                                 || inferExpressionType(context, qualified.getReceiverExpression())
                                         == ValueType.LONG_PRIORITY_QUEUE
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.INT_PAIR_PRIORITY_QUEUE
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.INT_PAIR_SECOND_PRIORITY_QUEUE
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.LONG_INT_PAIR_PRIORITY_QUEUE
+                                || isPairPriorityQueueType(
+                                        inferExpressionType(context, qualified.getReceiverExpression()))
                                 || inferExpressionType(context, qualified.getReceiverExpression())
                                         == ValueType.INT_ARRAY_DEQUE
                                 || inferExpressionType(context, qualified.getReceiverExpression())
@@ -3872,12 +3265,8 @@ public final class SimpleFunctionCodegens {
                                         == ValueType.INT_PRIORITY_QUEUE
                                 || inferExpressionType(context, qualified.getReceiverExpression())
                                         == ValueType.LONG_PRIORITY_QUEUE
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.INT_PAIR_PRIORITY_QUEUE
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.INT_PAIR_SECOND_PRIORITY_QUEUE
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.LONG_INT_PAIR_PRIORITY_QUEUE
+                                || isPairPriorityQueueType(
+                                        inferExpressionType(context, qualified.getReceiverExpression()))
                                 || inferExpressionType(context, qualified.getReceiverExpression())
                                         == ValueType.INT_ARRAY_DEQUE
                                 || inferExpressionType(context, qualified.getReceiverExpression())
@@ -3890,18 +3279,8 @@ public final class SimpleFunctionCodegens {
                                         == ValueType.LONG_HASH_SET
                                 || inferExpressionType(context, qualified.getReceiverExpression())
                                         == ValueType.STRING_HASH_SET
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.INT_INT_HASH_MAP
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.INT_LONG_HASH_MAP
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.LONG_INT_HASH_MAP
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.LONG_LONG_HASH_MAP
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.STRING_INT_HASH_MAP
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.STRING_LONG_HASH_MAP)) {
+                                || isHashMapType(
+                                        inferExpressionType(context, qualified.getReceiverExpression())))) {
                     return ValueType.BOOLEAN;
                 }
                 if (callee != null && ("contains".equals(callee.getText()) || "remove".equals(callee.getText()))
@@ -3941,45 +3320,16 @@ public final class SimpleFunctionCodegens {
                 }
                 if (callee != null && ("contains".equals(callee.getText()) || "remove".equals(callee.getText()))
                         && ((KtCallExpression) selector).getValueArguments().size() == 1
-                        && inferExpressionType(context, qualified.getReceiverExpression())
-                                == ValueType.INT_PAIR_PRIORITY_QUEUE) {
-                    return ValueType.BOOLEAN;
-                }
-                if (callee != null && ("contains".equals(callee.getText()) || "remove".equals(callee.getText()))
-                        && ((KtCallExpression) selector).getValueArguments().size() == 1
-                        && inferExpressionType(context, qualified.getReceiverExpression())
-                                == ValueType.INT_PAIR_SECOND_PRIORITY_QUEUE) {
-                    return ValueType.BOOLEAN;
-                }
-                if (callee != null && ("contains".equals(callee.getText()) || "remove".equals(callee.getText()))
-                        && ((KtCallExpression) selector).getValueArguments().size() == 1
-                        && inferExpressionType(context, qualified.getReceiverExpression())
-                                == ValueType.LONG_INT_PAIR_PRIORITY_QUEUE) {
+                        && isPairPriorityQueueType(
+                                inferExpressionType(context, qualified.getReceiverExpression()))) {
                     return ValueType.BOOLEAN;
                 }
                 if (callee != null && "remove".equals(callee.getText())
-                        && ((KtCallExpression) selector).getValueArguments().size() == 1
-                        && (inferExpressionType(context, qualified.getReceiverExpression())
-                                == ValueType.INT_INT_HASH_MAP
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.INT_LONG_HASH_MAP
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.LONG_INT_HASH_MAP
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.LONG_LONG_HASH_MAP
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.STRING_INT_HASH_MAP
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.STRING_LONG_HASH_MAP)) {
-                    if (inferExpressionType(context, qualified.getReceiverExpression())
-                            == ValueType.INT_LONG_HASH_MAP
-                            || inferExpressionType(context, qualified.getReceiverExpression())
-                                    == ValueType.LONG_LONG_HASH_MAP
-                            || inferExpressionType(context, qualified.getReceiverExpression())
-                                    == ValueType.STRING_LONG_HASH_MAP) {
-                        return ValueType.LONG;
+                        && ((KtCallExpression) selector).getValueArguments().size() == 1) {
+                    ValueType receiverType = inferExpressionType(context, qualified.getReceiverExpression());
+                    if (isHashMapType(receiverType)) {
+                        return hashMapValueType(receiverType);
                     }
-                    return ValueType.INT;
                 }
                 if (callee != null && "removeAt".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().size() == 1) {
@@ -3998,68 +3348,25 @@ public final class SimpleFunctionCodegens {
                     }
                 }
                 if (callee != null && "containsKey".equals(callee.getText())
-                        && ((KtCallExpression) selector).getValueArguments().size() == 1
-                        && (inferExpressionType(context, qualified.getReceiverExpression())
-                                == ValueType.INT_INT_HASH_MAP
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.INT_LONG_HASH_MAP
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.LONG_INT_HASH_MAP
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.LONG_LONG_HASH_MAP
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.STRING_INT_HASH_MAP
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.STRING_LONG_HASH_MAP)) {
-                    return ValueType.BOOLEAN;
+                        && ((KtCallExpression) selector).getValueArguments().size() == 1) {
+                    ValueType receiverType = inferExpressionType(context, qualified.getReceiverExpression());
+                    if (isHashMapType(receiverType)) {
+                        return ValueType.BOOLEAN;
+                    }
                 }
                 if (callee != null && "get".equals(callee.getText())
-                        && ((KtCallExpression) selector).getValueArguments().size() == 1
-                        && (inferExpressionType(context, qualified.getReceiverExpression())
-                                == ValueType.INT_INT_HASH_MAP
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.INT_LONG_HASH_MAP
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.LONG_INT_HASH_MAP
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.LONG_LONG_HASH_MAP
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.STRING_INT_HASH_MAP
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.STRING_LONG_HASH_MAP)) {
-                    if (inferExpressionType(context, qualified.getReceiverExpression())
-                            == ValueType.INT_LONG_HASH_MAP
-                            || inferExpressionType(context, qualified.getReceiverExpression())
-                                    == ValueType.LONG_LONG_HASH_MAP
-                            || inferExpressionType(context, qualified.getReceiverExpression())
-                                    == ValueType.STRING_LONG_HASH_MAP) {
-                        return ValueType.LONG;
+                        && ((KtCallExpression) selector).getValueArguments().size() == 1) {
+                    ValueType receiverType = inferExpressionType(context, qualified.getReceiverExpression());
+                    if (isHashMapType(receiverType)) {
+                        return hashMapValueType(receiverType);
                     }
-                    return ValueType.INT;
                 }
                 if (callee != null && "getOrDefault".equals(callee.getText())
-                        && ((KtCallExpression) selector).getValueArguments().size() == 2
-                        && (inferExpressionType(context, qualified.getReceiverExpression())
-                                == ValueType.INT_INT_HASH_MAP
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.INT_LONG_HASH_MAP
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.LONG_INT_HASH_MAP
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.LONG_LONG_HASH_MAP
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.STRING_INT_HASH_MAP
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.STRING_LONG_HASH_MAP)) {
-                    if (inferExpressionType(context, qualified.getReceiverExpression())
-                            == ValueType.INT_LONG_HASH_MAP
-                            || inferExpressionType(context, qualified.getReceiverExpression())
-                                    == ValueType.LONG_LONG_HASH_MAP
-                            || inferExpressionType(context, qualified.getReceiverExpression())
-                                    == ValueType.STRING_LONG_HASH_MAP) {
-                        return ValueType.LONG;
+                        && ((KtCallExpression) selector).getValueArguments().size() == 2) {
+                    ValueType receiverType = inferExpressionType(context, qualified.getReceiverExpression());
+                    if (isHashMapType(receiverType)) {
+                        return hashMapValueType(receiverType);
                     }
-                    return ValueType.INT;
                 }
                 if (callee != null && "clear".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().isEmpty()
@@ -4077,18 +3384,8 @@ public final class SimpleFunctionCodegens {
                                         == ValueType.STRING_ARRAY_LIST
                                 || isPairArrayListType(
                                         inferExpressionType(context, qualified.getReceiverExpression()))
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.INT_INT_HASH_MAP
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.INT_LONG_HASH_MAP
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.LONG_INT_HASH_MAP
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.LONG_LONG_HASH_MAP
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.STRING_INT_HASH_MAP
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.STRING_LONG_HASH_MAP)) {
+                                || isHashMapType(
+                                        inferExpressionType(context, qualified.getReceiverExpression())))) {
                     return ValueType.VOID;
                 }
                 if (callee != null && ("first".equals(callee.getText()) || "last".equals(callee.getText()))
@@ -4127,9 +3424,7 @@ public final class SimpleFunctionCodegens {
                     ValueType receiverType = inferExpressionType(context, qualified.getReceiverExpression());
                     if (receiverType == ValueType.INT_PRIORITY_QUEUE
                             || receiverType == ValueType.LONG_PRIORITY_QUEUE
-                            || receiverType == ValueType.INT_PAIR_PRIORITY_QUEUE
-                            || receiverType == ValueType.INT_PAIR_SECOND_PRIORITY_QUEUE
-                            || receiverType == ValueType.LONG_INT_PAIR_PRIORITY_QUEUE
+                            || isPairPriorityQueueType(receiverType)
                             || receiverType == ValueType.INT_ARRAY_DEQUE
                             || receiverType == ValueType.LONG_ARRAY_DEQUE
                             || isPairArrayDequeType(receiverType)) {
@@ -4137,12 +3432,8 @@ public final class SimpleFunctionCodegens {
                                 || receiverType == ValueType.LONG_ARRAY_DEQUE) {
                             return ValueType.LONG;
                         }
-                        if (receiverType == ValueType.INT_PAIR_PRIORITY_QUEUE
-                                || receiverType == ValueType.INT_PAIR_SECOND_PRIORITY_QUEUE) {
-                            return ValueType.INT_PAIR;
-                        }
-                        if (receiverType == ValueType.LONG_INT_PAIR_PRIORITY_QUEUE) {
-                            return ValueType.LONG_INT_PAIR;
+                        if (isPairPriorityQueueType(receiverType)) {
+                            return pairTypeForPriorityQueue(receiverType);
                         }
                         if (isPairArrayDequeType(receiverType)) {
                             return pairTypeForArrayDeque(receiverType);
@@ -4251,105 +3542,37 @@ public final class SimpleFunctionCodegens {
                 return ValueType.STRING_BUILDER;
             }
             if (isArrayListConstructor(calleeText) || isMutableListFactory(calleeText)) {
-                if (isLongListFactoryOrConstructor(calleeText)
-                        || isLongListFactoryOrConstructor(expression.getText())) {
-                    return ValueType.LONG_ARRAY_LIST;
-                }
-                if (isStringListFactoryOrConstructor(calleeText)
-                        || isStringListFactoryOrConstructor(expression.getText())) {
-                    return ValueType.STRING_ARRAY_LIST;
-                }
-                if (isIntPairListFactoryOrConstructor(calleeText)
-                        || isIntPairListFactoryOrConstructor(expression.getText())) {
-                    return ValueType.INT_PAIR_ARRAY_LIST;
-                }
-                if (isIntLongPairListFactoryOrConstructor(calleeText)
-                        || isIntLongPairListFactoryOrConstructor(expression.getText())) {
-                    return ValueType.INT_LONG_PAIR_ARRAY_LIST;
-                }
-                if (isLongIntPairListFactoryOrConstructor(calleeText)
-                        || isLongIntPairListFactoryOrConstructor(expression.getText())) {
-                    return ValueType.LONG_INT_PAIR_ARRAY_LIST;
-                }
-                if (isLongLongPairListFactoryOrConstructor(calleeText)
-                        || isLongLongPairListFactoryOrConstructor(expression.getText())) {
-                    return ValueType.LONG_LONG_PAIR_ARRAY_LIST;
+                ValueType listType = arrayListTypeForFactoryOrConstructor(calleeText, expression.getText());
+                if (listType != null) {
+                    return listType;
                 }
                 return ValueType.INT_ARRAY_LIST;
             }
             if (isPriorityQueueConstructor(calleeText)) {
-                if (isLongPriorityQueueConstructor(calleeText)
-                        || isLongPriorityQueueConstructor(expression.getText())) {
-                    return ValueType.LONG_PRIORITY_QUEUE;
-                }
-                if (isIntPairSecondPriorityQueueConstructor(calleeText)
-                        || isIntPairSecondPriorityQueueConstructor(expression.getText())) {
-                    return ValueType.INT_PAIR_SECOND_PRIORITY_QUEUE;
-                }
-                if (isIntPairPriorityQueueConstructor(calleeText)
-                        || isIntPairPriorityQueueConstructor(expression.getText())) {
-                    return ValueType.INT_PAIR_PRIORITY_QUEUE;
-                }
-                if (isLongIntPairPriorityQueueConstructor(calleeText)
-                        || isLongIntPairPriorityQueueConstructor(expression.getText())) {
-                    return ValueType.LONG_INT_PAIR_PRIORITY_QUEUE;
+                ValueType queueType = priorityQueueTypeForConstructor(calleeText, expression.getText());
+                if (queueType != null) {
+                    return queueType;
                 }
                 return ValueType.INT_PRIORITY_QUEUE;
             }
             if (isArrayDequeConstructor(calleeText)) {
-                if (isLongArrayDequeConstructor(calleeText)
-                        || isLongArrayDequeConstructor(expression.getText())) {
-                    return ValueType.LONG_ARRAY_DEQUE;
-                }
-                if (isIntPairArrayDequeConstructor(calleeText)
-                        || isIntPairArrayDequeConstructor(expression.getText())) {
-                    return ValueType.INT_PAIR_ARRAY_DEQUE;
-                }
-                if (isIntLongPairArrayDequeConstructor(calleeText)
-                        || isIntLongPairArrayDequeConstructor(expression.getText())) {
-                    return ValueType.INT_LONG_PAIR_ARRAY_DEQUE;
-                }
-                if (isLongIntPairArrayDequeConstructor(calleeText)
-                        || isLongIntPairArrayDequeConstructor(expression.getText())) {
-                    return ValueType.LONG_INT_PAIR_ARRAY_DEQUE;
-                }
-                if (isLongLongPairArrayDequeConstructor(calleeText)
-                        || isLongLongPairArrayDequeConstructor(expression.getText())) {
-                    return ValueType.LONG_LONG_PAIR_ARRAY_DEQUE;
+                ValueType dequeType = arrayDequeTypeForConstructor(calleeText, expression.getText());
+                if (dequeType != null) {
+                    return dequeType;
                 }
                 return ValueType.INT_ARRAY_DEQUE;
             }
             if (isHashSetConstructor(calleeText) || isMutableSetFactory(calleeText)) {
-                if (isLongSetFactoryOrConstructor(calleeText)
-                        || isLongSetFactoryOrConstructor(expression.getText())) {
-                    return ValueType.LONG_HASH_SET;
-                }
-                if (isStringSetFactoryOrConstructor(calleeText)
-                        || isStringSetFactoryOrConstructor(expression.getText())) {
-                    return ValueType.STRING_HASH_SET;
+                ValueType setType = hashSetTypeForFactoryOrConstructor(calleeText, expression.getText());
+                if (setType != null) {
+                    return setType;
                 }
                 return ValueType.INT_HASH_SET;
             }
             if (isHashMapConstructor(calleeText) || isMutableMapFactory(calleeText)) {
-                if (isIntLongMapFactoryOrConstructor(calleeText)
-                        || isIntLongMapFactoryOrConstructor(expression.getText())) {
-                    return ValueType.INT_LONG_HASH_MAP;
-                }
-                if (isLongIntMapFactoryOrConstructor(calleeText)
-                        || isLongIntMapFactoryOrConstructor(expression.getText())) {
-                    return ValueType.LONG_INT_HASH_MAP;
-                }
-                if (isLongLongMapFactoryOrConstructor(calleeText)
-                        || isLongLongMapFactoryOrConstructor(expression.getText())) {
-                    return ValueType.LONG_LONG_HASH_MAP;
-                }
-                if (isStringIntMapFactoryOrConstructor(calleeText)
-                        || isStringIntMapFactoryOrConstructor(expression.getText())) {
-                    return ValueType.STRING_INT_HASH_MAP;
-                }
-                if (isStringLongMapFactoryOrConstructor(calleeText)
-                        || isStringLongMapFactoryOrConstructor(expression.getText())) {
-                    return ValueType.STRING_LONG_HASH_MAP;
+                ValueType mapType = hashMapTypeForFactoryOrConstructor(calleeText, expression.getText());
+                if (mapType != null) {
+                    return mapType;
                 }
                 return ValueType.INT_INT_HASH_MAP;
             }
@@ -4360,13 +3583,7 @@ public final class SimpleFunctionCodegens {
                         .getArgumentExpression();
                 ValueType firstType = inferExpressionType(context, firstArgument);
                 ValueType secondType = inferExpressionType(context, secondArgument);
-                if (firstType == ValueType.LONG) {
-                    return secondType == ValueType.LONG ? ValueType.LONG_LONG_PAIR : ValueType.LONG_INT_PAIR;
-                }
-                if (secondType == ValueType.LONG) {
-                    return ValueType.INT_LONG_PAIR;
-                }
-                return ValueType.INT_PAIR;
+                return pairTypeFromComponents(firstType, secondType);
             }
             if ("IntArray".equals(calleeText)) {
                 return ValueType.INT_ARRAY;
@@ -4479,24 +3696,16 @@ public final class SimpleFunctionCodegens {
             }
         }
         ValueType indexType = emitExpression(method, context, expression.getIndexExpressions().get(0));
-        if (arrayType == ValueType.LONG_INT_HASH_MAP || arrayType == ValueType.LONG_LONG_HASH_MAP) {
-            if (indexType != ValueType.LONG) {
-                throw new IllegalArgumentException("Long-key map index must be Long: " + expression.getText());
+        if (isHashMapType(arrayType)) {
+            ValueType keyType = hashMapKeyType(arrayType);
+            if (indexType != keyType) {
+                throw new IllegalArgumentException("Map index type mismatch: " + expression.getText());
             }
-            boxLong(method);
-            return arrayType;
-        }
-        if (arrayType == ValueType.STRING_INT_HASH_MAP || arrayType == ValueType.STRING_LONG_HASH_MAP) {
-            if (indexType != ValueType.STRING) {
-                throw new IllegalArgumentException("String-key map index must be String: " + expression.getText());
-            }
+            boxValue(method, keyType);
             return arrayType;
         }
         if (indexType != ValueType.INT) {
             throw new IllegalArgumentException("Array index must be Int: " + expression.getText());
-        }
-        if (arrayType == ValueType.INT_INT_HASH_MAP || arrayType == ValueType.INT_LONG_HASH_MAP) {
-            boxInt(method);
         }
         return arrayType;
     }
@@ -4506,12 +3715,7 @@ public final class SimpleFunctionCodegens {
                 || type == ValueType.LONG_ARRAY_LIST
                 || type == ValueType.STRING_ARRAY_LIST
                 || isPairArrayListType(type)
-                || type == ValueType.INT_INT_HASH_MAP
-                || type == ValueType.INT_LONG_HASH_MAP
-                || type == ValueType.LONG_INT_HASH_MAP
-                || type == ValueType.LONG_LONG_HASH_MAP
-                || type == ValueType.STRING_INT_HASH_MAP
-                || type == ValueType.STRING_LONG_HASH_MAP;
+                || isHashMapType(type);
     }
 
     private static boolean isForEachRangeType(ValueType type) {
@@ -4526,63 +3730,33 @@ public final class SimpleFunctionCodegens {
     }
 
     private static boolean isPairArrayListType(ValueType type) {
-        return type == ValueType.INT_PAIR_ARRAY_LIST
-                || type == ValueType.INT_LONG_PAIR_ARRAY_LIST
-                || type == ValueType.LONG_INT_PAIR_ARRAY_LIST
-                || type == ValueType.LONG_LONG_PAIR_ARRAY_LIST;
+        return pairShapeForArrayListType(type) != null;
     }
 
     private static ValueType pairTypeForArrayList(ValueType type) {
-        if (type == ValueType.INT_PAIR_ARRAY_LIST) {
-            return ValueType.INT_PAIR;
-        }
-        if (type == ValueType.INT_LONG_PAIR_ARRAY_LIST) {
-            return ValueType.INT_LONG_PAIR;
-        }
-        if (type == ValueType.LONG_INT_PAIR_ARRAY_LIST) {
-            return ValueType.LONG_INT_PAIR;
-        }
-        if (type == ValueType.LONG_LONG_PAIR_ARRAY_LIST) {
-            return ValueType.LONG_LONG_PAIR;
+        PairShape shape = pairShapeForArrayListType(type);
+        if (shape != null) {
+            return shape.pairType;
         }
         throw new IllegalArgumentException("Unsupported Pair ArrayList type: " + type);
     }
 
     private static boolean isPairArrayListArrayType(ValueType type) {
-        return type == ValueType.INT_PAIR_ARRAY_LIST_ARRAY
-                || type == ValueType.INT_LONG_PAIR_ARRAY_LIST_ARRAY
-                || type == ValueType.LONG_INT_PAIR_ARRAY_LIST_ARRAY
-                || type == ValueType.LONG_LONG_PAIR_ARRAY_LIST_ARRAY;
+        return pairShapeForArrayListArrayType(type) != null;
     }
 
     private static ValueType arrayListTypeForPairArrayListArray(ValueType type) {
-        if (type == ValueType.INT_PAIR_ARRAY_LIST_ARRAY) {
-            return ValueType.INT_PAIR_ARRAY_LIST;
-        }
-        if (type == ValueType.INT_LONG_PAIR_ARRAY_LIST_ARRAY) {
-            return ValueType.INT_LONG_PAIR_ARRAY_LIST;
-        }
-        if (type == ValueType.LONG_INT_PAIR_ARRAY_LIST_ARRAY) {
-            return ValueType.LONG_INT_PAIR_ARRAY_LIST;
-        }
-        if (type == ValueType.LONG_LONG_PAIR_ARRAY_LIST_ARRAY) {
-            return ValueType.LONG_LONG_PAIR_ARRAY_LIST;
+        PairShape shape = pairShapeForArrayListArrayType(type);
+        if (shape != null) {
+            return shape.arrayListType;
         }
         throw new IllegalArgumentException("Unsupported Pair ArrayList array type: " + type);
     }
 
     private static ValueType arrayTypeForPairArrayList(ValueType type) {
-        if (type == ValueType.INT_PAIR_ARRAY_LIST) {
-            return ValueType.INT_PAIR_ARRAY_LIST_ARRAY;
-        }
-        if (type == ValueType.INT_LONG_PAIR_ARRAY_LIST) {
-            return ValueType.INT_LONG_PAIR_ARRAY_LIST_ARRAY;
-        }
-        if (type == ValueType.LONG_INT_PAIR_ARRAY_LIST) {
-            return ValueType.LONG_INT_PAIR_ARRAY_LIST_ARRAY;
-        }
-        if (type == ValueType.LONG_LONG_PAIR_ARRAY_LIST) {
-            return ValueType.LONG_LONG_PAIR_ARRAY_LIST_ARRAY;
+        PairShape shape = pairShapeForArrayListType(type);
+        if (shape != null) {
+            return shape.arrayListArrayType;
         }
         throw new IllegalArgumentException("Unsupported Pair ArrayList type: " + type);
     }
@@ -4653,26 +3827,15 @@ public final class SimpleFunctionCodegens {
         if (componentIndex < 0 || componentIndex > 1) {
             throw new IllegalArgumentException("Pair component index must be 0 or 1: " + componentIndex);
         }
-        if (pairType == ValueType.INT_PAIR) {
-            return ValueType.INT;
-        }
-        if (pairType == ValueType.INT_LONG_PAIR) {
-            return componentIndex == 0 ? ValueType.INT : ValueType.LONG;
-        }
-        if (pairType == ValueType.LONG_INT_PAIR) {
-            return componentIndex == 0 ? ValueType.LONG : ValueType.INT;
-        }
-        if (pairType == ValueType.LONG_LONG_PAIR) {
-            return ValueType.LONG;
+        PairShape shape = pairShapeForPairType(pairType);
+        if (shape != null) {
+            return componentIndex == 0 ? shape.firstType : shape.secondType;
         }
         throw new IllegalArgumentException("Unsupported Pair type: " + pairType);
     }
 
     private static boolean isPairType(ValueType type) {
-        return type == ValueType.INT_PAIR
-                || type == ValueType.INT_LONG_PAIR
-                || type == ValueType.LONG_INT_PAIR
-                || type == ValueType.LONG_LONG_PAIR;
+        return pairShapeForPairType(type) != null;
     }
 
     private static void emitPairComponent(MethodVisitor method, ValueType pairType, int pairIndex, int componentIndex) {
@@ -4696,107 +3859,82 @@ public final class SimpleFunctionCodegens {
         return "mutableListOf".equals(calleeText) || calleeText.startsWith("mutableListOf<");
     }
 
-    private static boolean isIntPairListFactoryOrConstructor(String calleeText) {
-        String compact = calleeText.replace(" ", "");
-        int parenIndex = compact.indexOf('(');
-        if (parenIndex >= 0) {
-            compact = compact.substring(0, parenIndex);
+    private static ValueType arrayListTypeForFactoryOrConstructor(String calleeText, String expressionText) {
+        ValueType type = arrayListTypeForFactoryOrConstructor(calleeText);
+        if (type != null) {
+            return type;
         }
-        return "ArrayList<Pair<Int,Int>>".equals(compact)
-                || "mutableListOf<Pair<Int,Int>>".equals(compact);
+        return arrayListTypeForFactoryOrConstructor(expressionText);
     }
 
-    private static boolean isIntLongPairListFactoryOrConstructor(String calleeText) {
-        String compact = calleeText.replace(" ", "");
-        int parenIndex = compact.indexOf('(');
-        if (parenIndex >= 0) {
-            compact = compact.substring(0, parenIndex);
+    private static ValueType arrayListTypeForFactoryOrConstructor(String text) {
+        String compact = compactCallablePrefix(text);
+        for (ScalarCollectionShape shape : ScalarCollectionShape.values()) {
+            if (shape.arrayListType != null
+                    && (genericTypeEquals(compact, "ArrayList", shape.kotlinType)
+                            || genericTypeEquals(compact, "mutableListOf", shape.kotlinType))) {
+                return shape.arrayListType;
+            }
         }
-        return "ArrayList<Pair<Int,Long>>".equals(compact)
-                || "mutableListOf<Pair<Int,Long>>".equals(compact);
-    }
-
-    private static boolean isLongIntPairListFactoryOrConstructor(String calleeText) {
-        String compact = calleeText.replace(" ", "");
-        int parenIndex = compact.indexOf('(');
-        if (parenIndex >= 0) {
-            compact = compact.substring(0, parenIndex);
+        for (PairShape shape : PairShape.values()) {
+            if (genericTypeEquals(compact, "ArrayList", shape.kotlinType)
+                    || genericTypeEquals(compact, "mutableListOf", shape.kotlinType)) {
+                return shape.arrayListType;
+            }
         }
-        return "ArrayList<Pair<Long,Int>>".equals(compact)
-                || "mutableListOf<Pair<Long,Int>>".equals(compact);
-    }
-
-    private static boolean isLongLongPairListFactoryOrConstructor(String calleeText) {
-        String compact = calleeText.replace(" ", "");
-        int parenIndex = compact.indexOf('(');
-        if (parenIndex >= 0) {
-            compact = compact.substring(0, parenIndex);
-        }
-        return "ArrayList<Pair<Long,Long>>".equals(compact)
-                || "mutableListOf<Pair<Long,Long>>".equals(compact);
-    }
-
-    private static boolean isLongListFactoryOrConstructor(String calleeText) {
-        String compact = calleeText.replace(" ", "");
-        int parenIndex = compact.indexOf('(');
-        if (parenIndex >= 0) {
-            compact = compact.substring(0, parenIndex);
-        }
-        return "ArrayList<Long>".equals(compact)
-                || "mutableListOf<Long>".equals(compact);
-    }
-
-    private static boolean isStringListFactoryOrConstructor(String calleeText) {
-        String compact = calleeText.replace(" ", "");
-        int parenIndex = compact.indexOf('(');
-        if (parenIndex >= 0) {
-            compact = compact.substring(0, parenIndex);
-        }
-        return "ArrayList<String>".equals(compact)
-                || "mutableListOf<String>".equals(compact);
+        return null;
     }
 
     private static boolean isPriorityQueueConstructor(String calleeText) {
         return "PriorityQueue".equals(calleeText) || calleeText.startsWith("PriorityQueue<");
     }
 
-    private static boolean isLongPriorityQueueConstructor(String calleeText) {
-        String compact = calleeText.replace(" ", "");
-        int parenIndex = compact.indexOf('(');
-        if (parenIndex >= 0) {
-            compact = compact.substring(0, parenIndex);
+    private static ValueType priorityQueueTypeForConstructor(String calleeText, String expressionText) {
+        ValueType type = priorityQueueTypeForConstructor(calleeText);
+        if (type != null) {
+            return type;
         }
-        return "PriorityQueue<Long>".equals(compact);
+        return priorityQueueTypeForConstructor(expressionText);
     }
 
-    private static boolean isIntPairPriorityQueueConstructor(String calleeText) {
-        String compact = calleeText.replace(" ", "");
-        int parenIndex = compact.indexOf('(');
-        if (parenIndex >= 0) {
-            compact = compact.substring(0, parenIndex);
+    private static ValueType priorityQueueTypeForConstructor(String text) {
+        String compactExpression = compactText(text);
+        if (compactExpression.startsWith("PriorityQueue<" + PairShape.INT_INT.kotlinType + ">(")
+                && compactExpression.contains("compareBy")
+                && compactExpression.contains("it.second")) {
+            return ValueType.INT_PAIR_SECOND_PRIORITY_QUEUE;
         }
-        return "PriorityQueue<Pair<Int,Int>>".equals(compact);
-    }
-
-    private static boolean isIntPairSecondPriorityQueueConstructor(String calleeText) {
-        String compact = calleeText.replace(" ", "");
-        return compact.startsWith("PriorityQueue<Pair<Int,Int>>(")
-                && compact.contains("compareBy")
-                && compact.contains("it.second");
-    }
-
-    private static boolean isLongIntPairPriorityQueueConstructor(String calleeText) {
-        String compact = calleeText.replace(" ", "");
-        int parenIndex = compact.indexOf('(');
-        if (parenIndex >= 0) {
-            compact = compact.substring(0, parenIndex);
+        String compact = compactCallablePrefix(text);
+        for (ScalarCollectionShape shape : ScalarCollectionShape.values()) {
+            if (shape.priorityQueueType != null
+                    && genericTypeEquals(compact, "PriorityQueue", shape.kotlinType)) {
+                return shape.priorityQueueType;
+            }
         }
-        return "PriorityQueue<Pair<Long,Int>>".equals(compact);
+        for (PairShape shape : PairShape.values()) {
+            if (shape.priorityQueueType != null
+                    && genericTypeEquals(compact, "PriorityQueue", shape.kotlinType)) {
+                return shape.priorityQueueType;
+            }
+        }
+        return null;
     }
 
     private static boolean isIntPairPriorityQueueType(ValueType type) {
-        return type == ValueType.INT_PAIR_PRIORITY_QUEUE
-                || type == ValueType.INT_PAIR_SECOND_PRIORITY_QUEUE;
+        PairShape shape = pairShapeForPriorityQueueType(type);
+        return shape != null && shape.pairType == ValueType.INT_PAIR;
+    }
+
+    private static boolean isPairPriorityQueueType(ValueType type) {
+        return pairShapeForPriorityQueueType(type) != null;
+    }
+
+    private static ValueType pairTypeForPriorityQueue(ValueType type) {
+        PairShape shape = pairShapeForPriorityQueueType(type);
+        if (shape != null) {
+            return shape.pairType;
+        }
+        throw new IllegalArgumentException("Unsupported Pair PriorityQueue type: " + type);
     }
 
     private static boolean isSecondOrderIntPairPriorityQueue(ValueType type) {
@@ -4807,70 +3945,38 @@ public final class SimpleFunctionCodegens {
         return "ArrayDeque".equals(calleeText) || calleeText.startsWith("ArrayDeque<");
     }
 
-    private static boolean isLongArrayDequeConstructor(String calleeText) {
-        String compact = calleeText.replace(" ", "");
-        int parenIndex = compact.indexOf('(');
-        if (parenIndex >= 0) {
-            compact = compact.substring(0, parenIndex);
+    private static ValueType arrayDequeTypeForConstructor(String calleeText, String expressionText) {
+        ValueType type = arrayDequeTypeForConstructor(calleeText);
+        if (type != null) {
+            return type;
         }
-        return "ArrayDeque<Long>".equals(compact);
+        return arrayDequeTypeForConstructor(expressionText);
     }
 
-    private static boolean isIntPairArrayDequeConstructor(String calleeText) {
-        String compact = calleeText.replace(" ", "");
-        int parenIndex = compact.indexOf('(');
-        if (parenIndex >= 0) {
-            compact = compact.substring(0, parenIndex);
+    private static ValueType arrayDequeTypeForConstructor(String text) {
+        String compact = compactCallablePrefix(text);
+        for (ScalarCollectionShape shape : ScalarCollectionShape.values()) {
+            if (shape.arrayDequeType != null
+                    && genericTypeEquals(compact, "ArrayDeque", shape.kotlinType)) {
+                return shape.arrayDequeType;
+            }
         }
-        return "ArrayDeque<Pair<Int,Int>>".equals(compact);
-    }
-
-    private static boolean isIntLongPairArrayDequeConstructor(String calleeText) {
-        String compact = calleeText.replace(" ", "");
-        int parenIndex = compact.indexOf('(');
-        if (parenIndex >= 0) {
-            compact = compact.substring(0, parenIndex);
+        for (PairShape shape : PairShape.values()) {
+            if (genericTypeEquals(compact, "ArrayDeque", shape.kotlinType)) {
+                return shape.arrayDequeType;
+            }
         }
-        return "ArrayDeque<Pair<Int,Long>>".equals(compact);
-    }
-
-    private static boolean isLongIntPairArrayDequeConstructor(String calleeText) {
-        String compact = calleeText.replace(" ", "");
-        int parenIndex = compact.indexOf('(');
-        if (parenIndex >= 0) {
-            compact = compact.substring(0, parenIndex);
-        }
-        return "ArrayDeque<Pair<Long,Int>>".equals(compact);
-    }
-
-    private static boolean isLongLongPairArrayDequeConstructor(String calleeText) {
-        String compact = calleeText.replace(" ", "");
-        int parenIndex = compact.indexOf('(');
-        if (parenIndex >= 0) {
-            compact = compact.substring(0, parenIndex);
-        }
-        return "ArrayDeque<Pair<Long,Long>>".equals(compact);
+        return null;
     }
 
     private static boolean isPairArrayDequeType(ValueType type) {
-        return type == ValueType.INT_PAIR_ARRAY_DEQUE
-                || type == ValueType.INT_LONG_PAIR_ARRAY_DEQUE
-                || type == ValueType.LONG_INT_PAIR_ARRAY_DEQUE
-                || type == ValueType.LONG_LONG_PAIR_ARRAY_DEQUE;
+        return pairShapeForArrayDequeType(type) != null;
     }
 
     private static ValueType pairTypeForArrayDeque(ValueType type) {
-        if (type == ValueType.INT_PAIR_ARRAY_DEQUE) {
-            return ValueType.INT_PAIR;
-        }
-        if (type == ValueType.INT_LONG_PAIR_ARRAY_DEQUE) {
-            return ValueType.INT_LONG_PAIR;
-        }
-        if (type == ValueType.LONG_INT_PAIR_ARRAY_DEQUE) {
-            return ValueType.LONG_INT_PAIR;
-        }
-        if (type == ValueType.LONG_LONG_PAIR_ARRAY_DEQUE) {
-            return ValueType.LONG_LONG_PAIR;
+        PairShape shape = pairShapeForArrayDequeType(type);
+        if (shape != null) {
+            return shape.pairType;
         }
         throw new IllegalArgumentException("Unsupported Pair ArrayDeque type: " + type);
     }
@@ -4883,24 +3989,24 @@ public final class SimpleFunctionCodegens {
         return "mutableSetOf".equals(calleeText) || calleeText.startsWith("mutableSetOf<");
     }
 
-    private static boolean isLongSetFactoryOrConstructor(String calleeText) {
-        String compact = calleeText.replace(" ", "");
-        int parenIndex = compact.indexOf('(');
-        if (parenIndex >= 0) {
-            compact = compact.substring(0, parenIndex);
+    private static ValueType hashSetTypeForFactoryOrConstructor(String calleeText, String expressionText) {
+        ValueType type = hashSetTypeForFactoryOrConstructor(calleeText);
+        if (type != null) {
+            return type;
         }
-        return "HashSet<Long>".equals(compact)
-                || "mutableSetOf<Long>".equals(compact);
+        return hashSetTypeForFactoryOrConstructor(expressionText);
     }
 
-    private static boolean isStringSetFactoryOrConstructor(String calleeText) {
-        String compact = calleeText.replace(" ", "");
-        int parenIndex = compact.indexOf('(');
-        if (parenIndex >= 0) {
-            compact = compact.substring(0, parenIndex);
+    private static ValueType hashSetTypeForFactoryOrConstructor(String text) {
+        String compact = compactCallablePrefix(text);
+        for (ScalarCollectionShape shape : ScalarCollectionShape.values()) {
+            if (shape.hashSetType != null
+                    && (genericTypeEquals(compact, "HashSet", shape.kotlinType)
+                            || genericTypeEquals(compact, "mutableSetOf", shape.kotlinType))) {
+                return shape.hashSetType;
+            }
         }
-        return "HashSet<String>".equals(compact)
-                || "mutableSetOf<String>".equals(compact);
+        return null;
     }
 
     private static boolean isHashMapConstructor(String calleeText) {
@@ -4911,54 +4017,227 @@ public final class SimpleFunctionCodegens {
         return "mutableMapOf".equals(calleeText) || calleeText.startsWith("mutableMapOf<");
     }
 
-    private static boolean isIntLongMapFactoryOrConstructor(String calleeText) {
-        String compact = calleeText.replace(" ", "");
-        int parenIndex = compact.indexOf('(');
-        if (parenIndex >= 0) {
-            compact = compact.substring(0, parenIndex);
+    private static ValueType hashMapTypeForFactoryOrConstructor(String calleeText, String expressionText) {
+        ValueType type = hashMapTypeForFactoryOrConstructor(calleeText);
+        if (type != null) {
+            return type;
         }
-        return "HashMap<Int,Long>".equals(compact)
-                || "mutableMapOf<Int,Long>".equals(compact);
+        return hashMapTypeForFactoryOrConstructor(expressionText);
     }
 
-    private static boolean isLongIntMapFactoryOrConstructor(String calleeText) {
-        String compact = calleeText.replace(" ", "");
-        int parenIndex = compact.indexOf('(');
-        if (parenIndex >= 0) {
-            compact = compact.substring(0, parenIndex);
+    private static ValueType hashMapTypeForFactoryOrConstructor(String text) {
+        String compact = compactCallablePrefix(text);
+        for (MapShape shape : MapShape.values()) {
+            if (genericTypeEquals(compact, "HashMap", shape.kotlinType)
+                    || genericTypeEquals(compact, "mutableMapOf", shape.kotlinType)) {
+                return shape.mapType;
+            }
         }
-        return "HashMap<Long,Int>".equals(compact)
-                || "mutableMapOf<Long,Int>".equals(compact);
+        return null;
     }
 
-    private static boolean isLongLongMapFactoryOrConstructor(String calleeText) {
-        String compact = calleeText.replace(" ", "");
-        int parenIndex = compact.indexOf('(');
-        if (parenIndex >= 0) {
-            compact = compact.substring(0, parenIndex);
-        }
-        return "HashMap<Long,Long>".equals(compact)
-                || "mutableMapOf<Long,Long>".equals(compact);
+    private static boolean isHashMapType(ValueType type) {
+        return mapShapeForMapType(type) != null;
     }
 
-    private static boolean isStringIntMapFactoryOrConstructor(String calleeText) {
-        String compact = calleeText.replace(" ", "");
-        int parenIndex = compact.indexOf('(');
-        if (parenIndex >= 0) {
-            compact = compact.substring(0, parenIndex);
+    private static ValueType hashMapKeyType(ValueType type) {
+        MapShape shape = mapShapeForMapType(type);
+        if (shape == null) {
+            throw new IllegalArgumentException("Unsupported HashMap type: " + type);
         }
-        return "HashMap<String,Int>".equals(compact)
-                || "mutableMapOf<String,Int>".equals(compact);
+        return shape.keyType;
     }
 
-    private static boolean isStringLongMapFactoryOrConstructor(String calleeText) {
-        String compact = calleeText.replace(" ", "");
+    private static ValueType hashMapValueType(ValueType type) {
+        MapShape shape = mapShapeForMapType(type);
+        if (shape == null) {
+            throw new IllegalArgumentException("Unsupported HashMap type: " + type);
+        }
+        return shape.valueType;
+    }
+
+    private static PairShape pairShapeForPairType(ValueType type) {
+        for (PairShape shape : PairShape.values()) {
+            if (shape.pairType == type) {
+                return shape;
+            }
+        }
+        return null;
+    }
+
+    private static PairShape pairShapeForArrayListType(ValueType type) {
+        for (PairShape shape : PairShape.values()) {
+            if (shape.arrayListType == type) {
+                return shape;
+            }
+        }
+        return null;
+    }
+
+    private static PairShape pairShapeForArrayListArrayType(ValueType type) {
+        for (PairShape shape : PairShape.values()) {
+            if (shape.arrayListArrayType == type) {
+                return shape;
+            }
+        }
+        return null;
+    }
+
+    private static PairShape pairShapeForArrayDequeType(ValueType type) {
+        for (PairShape shape : PairShape.values()) {
+            if (shape.arrayDequeType == type) {
+                return shape;
+            }
+        }
+        return null;
+    }
+
+    private static PairShape pairShapeForPriorityQueueType(ValueType type) {
+        for (PairShape shape : PairShape.values()) {
+            if (shape.priorityQueueType == type || shape.secondPriorityQueueType == type) {
+                return shape;
+            }
+        }
+        return null;
+    }
+
+    private static MapShape mapShapeForMapType(ValueType type) {
+        for (MapShape shape : MapShape.values()) {
+            if (shape.mapType == type) {
+                return shape;
+            }
+        }
+        return null;
+    }
+
+    private static ValueType pairTypeFromComponents(ValueType firstType, ValueType secondType) {
+        for (PairShape shape : PairShape.values()) {
+            if (shape.firstType == firstType && shape.secondType == secondType) {
+                return shape.pairType;
+            }
+        }
+        throw new IllegalArgumentException("Unsupported Pair component types: " + firstType + ", " + secondType);
+    }
+
+    private static ValueType pairTypeFromText(String text) {
+        String compact = compactText(text);
+        for (PairShape shape : PairShape.values()) {
+            if (shape.kotlinType.equals(compact)) {
+                return shape.pairType;
+            }
+        }
+        return null;
+    }
+
+    private static ValueType arrayListTypeFromText(String text) {
+        String compact = compactText(text);
+        for (ScalarCollectionShape shape : ScalarCollectionShape.values()) {
+            if (shape.arrayListType != null
+                    && (genericTypeEquals(compact, "ArrayList", shape.kotlinType)
+                            || genericTypeEquals(compact, "MutableList", shape.kotlinType)
+                            || genericTypeEquals(compact, "List", shape.kotlinType))) {
+                return shape.arrayListType;
+            }
+        }
+        for (PairShape shape : PairShape.values()) {
+            if (genericTypeEquals(compact, "ArrayList", shape.kotlinType)
+                    || genericTypeEquals(compact, "MutableList", shape.kotlinType)
+                    || genericTypeEquals(compact, "List", shape.kotlinType)) {
+                return shape.arrayListType;
+            }
+        }
+        return null;
+    }
+
+    private static ValueType arrayListArrayTypeFromText(String text) {
+        String compact = compactText(text);
+        if ("Array<ArrayList<Int>>".equals(compact) || "Array<MutableList<Int>>".equals(compact)
+                || "Array<List<Int>>".equals(compact)) {
+            return ValueType.INT_ARRAY_LIST_ARRAY;
+        }
+        for (PairShape shape : PairShape.values()) {
+            if (genericTypeEquals(compact, "Array", "ArrayList<" + shape.kotlinType + ">")
+                    || genericTypeEquals(compact, "Array", "MutableList<" + shape.kotlinType + ">")
+                    || genericTypeEquals(compact, "Array", "List<" + shape.kotlinType + ">")) {
+                return shape.arrayListArrayType;
+            }
+        }
+        return null;
+    }
+
+    private static ValueType priorityQueueTypeFromText(String text) {
+        String compact = compactText(text);
+        for (ScalarCollectionShape shape : ScalarCollectionShape.values()) {
+            if (shape.priorityQueueType != null
+                    && genericTypeEquals(compact, "PriorityQueue", shape.kotlinType)) {
+                return shape.priorityQueueType;
+            }
+        }
+        for (PairShape shape : PairShape.values()) {
+            if (shape.priorityQueueType != null
+                    && genericTypeEquals(compact, "PriorityQueue", shape.kotlinType)) {
+                return shape.priorityQueueType;
+            }
+        }
+        return null;
+    }
+
+    private static ValueType arrayDequeTypeFromText(String text) {
+        String compact = compactText(text);
+        for (ScalarCollectionShape shape : ScalarCollectionShape.values()) {
+            if (shape.arrayDequeType != null
+                    && genericTypeEquals(compact, "ArrayDeque", shape.kotlinType)) {
+                return shape.arrayDequeType;
+            }
+        }
+        for (PairShape shape : PairShape.values()) {
+            if (genericTypeEquals(compact, "ArrayDeque", shape.kotlinType)) {
+                return shape.arrayDequeType;
+            }
+        }
+        return null;
+    }
+
+    private static ValueType hashSetTypeFromText(String text) {
+        String compact = compactText(text);
+        for (ScalarCollectionShape shape : ScalarCollectionShape.values()) {
+            if (shape.hashSetType != null
+                    && (genericTypeEquals(compact, "HashSet", shape.kotlinType)
+                            || genericTypeEquals(compact, "MutableSet", shape.kotlinType)
+                            || genericTypeEquals(compact, "Set", shape.kotlinType))) {
+                return shape.hashSetType;
+            }
+        }
+        return null;
+    }
+
+    private static ValueType hashMapTypeFromText(String text) {
+        String compact = compactText(text);
+        for (MapShape shape : MapShape.values()) {
+            if (genericTypeEquals(compact, "HashMap", shape.kotlinType)
+                    || genericTypeEquals(compact, "MutableMap", shape.kotlinType)
+                    || genericTypeEquals(compact, "Map", shape.kotlinType)) {
+                return shape.mapType;
+            }
+        }
+        return null;
+    }
+
+    private static boolean genericTypeEquals(String compactText, String typeName, String typeArguments) {
+        return (typeName + "<" + typeArguments + ">").equals(compactText);
+    }
+
+    private static String compactCallablePrefix(String text) {
+        String compact = compactText(text);
         int parenIndex = compact.indexOf('(');
         if (parenIndex >= 0) {
             compact = compact.substring(0, parenIndex);
         }
-        return "HashMap<String,Long>".equals(compact)
-                || "mutableMapOf<String,Long>".equals(compact);
+        return compact;
+    }
+
+    private static String compactText(String text) {
+        return text == null ? "" : text.replace(" ", "");
     }
 
     private static void boxInt(MethodVisitor method) {
@@ -4979,6 +4258,43 @@ public final class SimpleFunctionCodegens {
     private static void unboxLong(MethodVisitor method) {
         method.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/Long");
         method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Long", "longValue", "()J", false);
+    }
+
+    private static void emitBoxedExpressionAs(
+            MethodVisitor method, MethodContext context, KtExpression expression, ValueType type) {
+        emitExpressionAs(method, context, expression, type);
+        boxValue(method, type);
+    }
+
+    private static void boxValue(MethodVisitor method, ValueType type) {
+        if (type == ValueType.INT) {
+            boxInt(method);
+            return;
+        }
+        if (type == ValueType.LONG) {
+            boxLong(method);
+            return;
+        }
+        if (type == ValueType.STRING) {
+            return;
+        }
+        throw new IllegalArgumentException("Unsupported boxed value type: " + type);
+    }
+
+    private static void unboxValue(MethodVisitor method, ValueType type) {
+        if (type == ValueType.INT) {
+            unboxInt(method);
+            return;
+        }
+        if (type == ValueType.LONG) {
+            unboxLong(method);
+            return;
+        }
+        if (type == ValueType.STRING) {
+            method.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/String");
+            return;
+        }
+        throw new IllegalArgumentException("Unsupported unboxed value type: " + type);
     }
 
     private static void emitPackedIntPair(
@@ -5046,6 +4362,34 @@ public final class SimpleFunctionCodegens {
         emitExpressionAs(method, context, expression, ValueType.LONG_INT_PAIR);
         method.visitMethodInsn(Opcodes.INVOKESTATIC, context.ownerInternalName,
                 "__wasmIdlePackLongIntPair", "(Ljava/util/AbstractMap$SimpleEntry;)Ljava/lang/String;", false);
+    }
+
+    private static void emitPackedPairPriorityQueueElement(
+            MethodVisitor method, MethodContext context, KtExpression expression, ValueType queueType) {
+        if (isIntPairPriorityQueueType(queueType)) {
+            emitPackedIntPair(method, context, expression, isSecondOrderIntPairPriorityQueue(queueType));
+            boxLong(method);
+            return;
+        }
+        if (queueType == ValueType.LONG_INT_PAIR_PRIORITY_QUEUE) {
+            emitPackedLongIntPair(method, context, expression);
+            return;
+        }
+        throw new IllegalArgumentException("Unsupported Pair PriorityQueue type: " + queueType);
+    }
+
+    private static ValueType emitPairFromPackedPriorityQueueElement(
+            MethodVisitor method, MethodContext context, ValueType queueType) {
+        if (isIntPairPriorityQueueType(queueType)) {
+            unboxLong(method);
+            emitIntPairFromPackedLong(method, context, isSecondOrderIntPairPriorityQueue(queueType));
+            return ValueType.INT_PAIR;
+        }
+        if (queueType == ValueType.LONG_INT_PAIR_PRIORITY_QUEUE) {
+            emitLongIntPairFromPackedString(method, context);
+            return ValueType.LONG_INT_PAIR;
+        }
+        throw new IllegalArgumentException("Unsupported Pair PriorityQueue type: " + queueType);
     }
 
     private static void emitLongIntPairFromPackedString(MethodVisitor method, MethodContext context) {
@@ -5628,9 +4972,24 @@ public final class SimpleFunctionCodegens {
             method.visitLabel(endLabel);
             return ValueType.BOOLEAN;
         }
+        if (isHashMapType(containerType)) {
+            ValueType keyType = hashMapKeyType(containerType);
+            if (elementType != keyType) {
+                throw new IllegalArgumentException("Map contains requires key type " + keyType + ": "
+                        + binary.getText());
+            }
+            emitExpression(method, context, container);
+            emitBoxedExpressionAs(method, context, element, keyType);
+            method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "containsKey",
+                    "(Ljava/lang/Object;)Z", false);
+            if (negated) {
+                method.visitInsn(Opcodes.ICONST_1);
+                method.visitInsn(Opcodes.IXOR);
+            }
+            return ValueType.BOOLEAN;
+        }
         if (containerType == ValueType.INT_HASH_SET || containerType == ValueType.INT_ARRAY_LIST
-                || containerType == ValueType.INT_PRIORITY_QUEUE || containerType == ValueType.INT_ARRAY_DEQUE
-                || containerType == ValueType.INT_INT_HASH_MAP || containerType == ValueType.INT_LONG_HASH_MAP) {
+                || containerType == ValueType.INT_PRIORITY_QUEUE || containerType == ValueType.INT_ARRAY_DEQUE) {
             if (elementType != ValueType.INT) {
                 throw new IllegalArgumentException("Int collection contains requires Int element: "
                         + binary.getText());
@@ -5647,11 +5006,8 @@ public final class SimpleFunctionCodegens {
             } else if (containerType == ValueType.INT_PRIORITY_QUEUE) {
                 method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/PriorityQueue", "contains",
                         "(Ljava/lang/Object;)Z", false);
-            } else if (containerType == ValueType.INT_ARRAY_DEQUE) {
-                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayDeque", "contains",
-                        "(Ljava/lang/Object;)Z", false);
             } else {
-                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "containsKey",
+                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayDeque", "contains",
                         "(Ljava/lang/Object;)Z", false);
             }
             if (negated) {
@@ -5661,9 +5017,7 @@ public final class SimpleFunctionCodegens {
             return ValueType.BOOLEAN;
         }
         if (containerType == ValueType.LONG_ARRAY_LIST || containerType == ValueType.LONG_PRIORITY_QUEUE
-                || containerType == ValueType.LONG_ARRAY_DEQUE || containerType == ValueType.LONG_HASH_SET
-                || containerType == ValueType.LONG_INT_HASH_MAP
-                || containerType == ValueType.LONG_LONG_HASH_MAP) {
+                || containerType == ValueType.LONG_ARRAY_DEQUE || containerType == ValueType.LONG_HASH_SET) {
             if (elementType != ValueType.LONG) {
                 throw new IllegalArgumentException("Long collection contains requires Long element: "
                         + binary.getText());
@@ -5680,11 +5034,8 @@ public final class SimpleFunctionCodegens {
             } else if (containerType == ValueType.LONG_ARRAY_DEQUE) {
                 method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayDeque", "contains",
                         "(Ljava/lang/Object;)Z", false);
-            } else if (containerType == ValueType.LONG_HASH_SET) {
-                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashSet", "contains",
-                        "(Ljava/lang/Object;)Z", false);
             } else {
-                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "containsKey",
+                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashSet", "contains",
                         "(Ljava/lang/Object;)Z", false);
             }
             if (negated) {
@@ -5693,9 +5044,7 @@ public final class SimpleFunctionCodegens {
             }
             return ValueType.BOOLEAN;
         }
-        if (containerType == ValueType.STRING_ARRAY_LIST || containerType == ValueType.STRING_HASH_SET
-                || containerType == ValueType.STRING_INT_HASH_MAP
-                || containerType == ValueType.STRING_LONG_HASH_MAP) {
+        if (containerType == ValueType.STRING_ARRAY_LIST || containerType == ValueType.STRING_HASH_SET) {
             if (elementType != ValueType.STRING) {
                 throw new IllegalArgumentException("String collection contains requires String element: "
                         + binary.getText());
@@ -5705,11 +5054,8 @@ public final class SimpleFunctionCodegens {
             if (containerType == ValueType.STRING_ARRAY_LIST) {
                 method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "contains",
                         "(Ljava/lang/Object;)Z", false);
-            } else if (containerType == ValueType.STRING_HASH_SET) {
-                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashSet", "contains",
-                        "(Ljava/lang/Object;)Z", false);
             } else {
-                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashMap", "containsKey",
+                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashSet", "contains",
                         "(Ljava/lang/Object;)Z", false);
             }
             if (negated) {
@@ -5748,29 +5094,14 @@ public final class SimpleFunctionCodegens {
             }
             return ValueType.BOOLEAN;
         }
-        if (isIntPairPriorityQueueType(containerType)) {
-            if (elementType != ValueType.INT_PAIR) {
-                throw new IllegalArgumentException("Pair priority queue contains requires Pair<Int, Int> element: "
+        if (isPairPriorityQueueType(containerType)) {
+            ValueType pairType = pairTypeForPriorityQueue(containerType);
+            if (elementType != pairType) {
+                throw new IllegalArgumentException("Pair priority queue contains requires " + pairType + " element: "
                         + binary.getText());
             }
             emitExpression(method, context, container);
-            emitPackedIntPair(method, context, element, isSecondOrderIntPairPriorityQueue(containerType));
-            boxLong(method);
-            method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/PriorityQueue", "contains",
-                    "(Ljava/lang/Object;)Z", false);
-            if (negated) {
-                method.visitInsn(Opcodes.ICONST_1);
-                method.visitInsn(Opcodes.IXOR);
-            }
-            return ValueType.BOOLEAN;
-        }
-        if (containerType == ValueType.LONG_INT_PAIR_PRIORITY_QUEUE) {
-            if (elementType != ValueType.LONG_INT_PAIR) {
-                throw new IllegalArgumentException("Pair priority queue contains requires Pair<Long, Int> element: "
-                        + binary.getText());
-            }
-            emitExpression(method, context, container);
-            emitPackedLongIntPair(method, context, element);
+            emitPackedPairPriorityQueueElement(method, context, element, containerType);
             method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/PriorityQueue", "contains",
                     "(Ljava/lang/Object;)Z", false);
             if (negated) {
@@ -6056,141 +5387,33 @@ public final class SimpleFunctionCodegens {
         if ("StringBuilder".equals(text)) {
             return ValueType.STRING_BUILDER;
         }
-        String compactText = text.replace(" ", "");
-        if ("ArrayList<Pair<Int,Int>>".equals(compactText)
-                || "MutableList<Pair<Int,Int>>".equals(compactText)
-                || "List<Pair<Int,Int>>".equals(compactText)) {
-            return ValueType.INT_PAIR_ARRAY_LIST;
+        ValueType parsedType = arrayListTypeFromText(text);
+        if (parsedType != null) {
+            return parsedType;
         }
-        if ("ArrayList<Pair<Int,Long>>".equals(compactText)
-                || "MutableList<Pair<Int,Long>>".equals(compactText)
-                || "List<Pair<Int,Long>>".equals(compactText)) {
-            return ValueType.INT_LONG_PAIR_ARRAY_LIST;
+        parsedType = arrayListArrayTypeFromText(text);
+        if (parsedType != null) {
+            return parsedType;
         }
-        if ("ArrayList<Pair<Long,Int>>".equals(compactText)
-                || "MutableList<Pair<Long,Int>>".equals(compactText)
-                || "List<Pair<Long,Int>>".equals(compactText)) {
-            return ValueType.LONG_INT_PAIR_ARRAY_LIST;
+        parsedType = priorityQueueTypeFromText(text);
+        if (parsedType != null) {
+            return parsedType;
         }
-        if ("ArrayList<Pair<Long,Long>>".equals(compactText)
-                || "MutableList<Pair<Long,Long>>".equals(compactText)
-                || "List<Pair<Long,Long>>".equals(compactText)) {
-            return ValueType.LONG_LONG_PAIR_ARRAY_LIST;
+        parsedType = arrayDequeTypeFromText(text);
+        if (parsedType != null) {
+            return parsedType;
         }
-        if ("ArrayList<Long>".equals(compactText) || "MutableList<Long>".equals(compactText)
-                || "List<Long>".equals(compactText)) {
-            return ValueType.LONG_ARRAY_LIST;
+        parsedType = hashSetTypeFromText(text);
+        if (parsedType != null) {
+            return parsedType;
         }
-        if ("ArrayList<String>".equals(compactText) || "MutableList<String>".equals(compactText)
-                || "List<String>".equals(compactText)) {
-            return ValueType.STRING_ARRAY_LIST;
+        parsedType = hashMapTypeFromText(text);
+        if (parsedType != null) {
+            return parsedType;
         }
-        if ("ArrayList<Int>".equals(text) || "MutableList<Int>".equals(text)
-                || "List<Int>".equals(text)) {
-            return ValueType.INT_ARRAY_LIST;
-        }
-        if ("Array<ArrayList<Int>>".equals(compactText) || "Array<MutableList<Int>>".equals(compactText)
-                || "Array<List<Int>>".equals(compactText)) {
-            return ValueType.INT_ARRAY_LIST_ARRAY;
-        }
-        if ("Array<ArrayList<Pair<Int,Int>>>".equals(compactText)
-                || "Array<MutableList<Pair<Int,Int>>>".equals(compactText)
-                || "Array<List<Pair<Int,Int>>>".equals(compactText)) {
-            return ValueType.INT_PAIR_ARRAY_LIST_ARRAY;
-        }
-        if ("Array<ArrayList<Pair<Int,Long>>>".equals(compactText)
-                || "Array<MutableList<Pair<Int,Long>>>".equals(compactText)
-                || "Array<List<Pair<Int,Long>>>".equals(compactText)) {
-            return ValueType.INT_LONG_PAIR_ARRAY_LIST_ARRAY;
-        }
-        if ("Array<ArrayList<Pair<Long,Int>>>".equals(compactText)
-                || "Array<MutableList<Pair<Long,Int>>>".equals(compactText)
-                || "Array<List<Pair<Long,Int>>>".equals(compactText)) {
-            return ValueType.LONG_INT_PAIR_ARRAY_LIST_ARRAY;
-        }
-        if ("Array<ArrayList<Pair<Long,Long>>>".equals(compactText)
-                || "Array<MutableList<Pair<Long,Long>>>".equals(compactText)
-                || "Array<List<Pair<Long,Long>>>".equals(compactText)) {
-            return ValueType.LONG_LONG_PAIR_ARRAY_LIST_ARRAY;
-        }
-        if ("PriorityQueue<Int>".equals(text)) {
-            return ValueType.INT_PRIORITY_QUEUE;
-        }
-        if ("PriorityQueue<Long>".equals(compactText)) {
-            return ValueType.LONG_PRIORITY_QUEUE;
-        }
-        if ("PriorityQueue<Pair<Int,Int>>".equals(compactText)) {
-            return ValueType.INT_PAIR_PRIORITY_QUEUE;
-        }
-        if ("PriorityQueue<Pair<Long,Int>>".equals(compactText)) {
-            return ValueType.LONG_INT_PAIR_PRIORITY_QUEUE;
-        }
-        if ("ArrayDeque<Int>".equals(text)) {
-            return ValueType.INT_ARRAY_DEQUE;
-        }
-        if ("ArrayDeque<Long>".equals(compactText)) {
-            return ValueType.LONG_ARRAY_DEQUE;
-        }
-        if ("ArrayDeque<Pair<Int,Int>>".equals(compactText)) {
-            return ValueType.INT_PAIR_ARRAY_DEQUE;
-        }
-        if ("ArrayDeque<Pair<Int,Long>>".equals(compactText)) {
-            return ValueType.INT_LONG_PAIR_ARRAY_DEQUE;
-        }
-        if ("ArrayDeque<Pair<Long,Int>>".equals(compactText)) {
-            return ValueType.LONG_INT_PAIR_ARRAY_DEQUE;
-        }
-        if ("ArrayDeque<Pair<Long,Long>>".equals(compactText)) {
-            return ValueType.LONG_LONG_PAIR_ARRAY_DEQUE;
-        }
-        if ("HashSet<Int>".equals(text) || "MutableSet<Int>".equals(text)
-                || "Set<Int>".equals(text)) {
-            return ValueType.INT_HASH_SET;
-        }
-        if ("HashSet<Long>".equals(compactText) || "MutableSet<Long>".equals(compactText)
-                || "Set<Long>".equals(compactText)) {
-            return ValueType.LONG_HASH_SET;
-        }
-        if ("HashSet<String>".equals(compactText) || "MutableSet<String>".equals(compactText)
-                || "Set<String>".equals(compactText)) {
-            return ValueType.STRING_HASH_SET;
-        }
-        if ("HashMap<Int, Int>".equals(text) || "HashMap<Int,Int>".equals(text)
-                || "MutableMap<Int, Int>".equals(text) || "MutableMap<Int,Int>".equals(text)
-                || "Map<Int, Int>".equals(text) || "Map<Int,Int>".equals(text)) {
-            return ValueType.INT_INT_HASH_MAP;
-        }
-        if ("HashMap<Int,Long>".equals(compactText) || "MutableMap<Int,Long>".equals(compactText)
-                || "Map<Int,Long>".equals(compactText)) {
-            return ValueType.INT_LONG_HASH_MAP;
-        }
-        if ("HashMap<Long,Int>".equals(compactText) || "MutableMap<Long,Int>".equals(compactText)
-                || "Map<Long,Int>".equals(compactText)) {
-            return ValueType.LONG_INT_HASH_MAP;
-        }
-        if ("HashMap<Long,Long>".equals(compactText) || "MutableMap<Long,Long>".equals(compactText)
-                || "Map<Long,Long>".equals(compactText)) {
-            return ValueType.LONG_LONG_HASH_MAP;
-        }
-        if ("HashMap<String,Int>".equals(compactText) || "MutableMap<String,Int>".equals(compactText)
-                || "Map<String,Int>".equals(compactText)) {
-            return ValueType.STRING_INT_HASH_MAP;
-        }
-        if ("HashMap<String,Long>".equals(compactText) || "MutableMap<String,Long>".equals(compactText)
-                || "Map<String,Long>".equals(compactText)) {
-            return ValueType.STRING_LONG_HASH_MAP;
-        }
-        if ("Pair<Int, Int>".equals(text) || "Pair<Int,Int>".equals(text)) {
-            return ValueType.INT_PAIR;
-        }
-        if ("Pair<Int,Long>".equals(compactText)) {
-            return ValueType.INT_LONG_PAIR;
-        }
-        if ("Pair<Long,Int>".equals(compactText)) {
-            return ValueType.LONG_INT_PAIR;
-        }
-        if ("Pair<Long,Long>".equals(compactText)) {
-            return ValueType.LONG_LONG_PAIR;
+        parsedType = pairTypeFromText(text);
+        if (parsedType != null) {
+            return parsedType;
         }
         if ("Char".equals(text)) {
             return ValueType.CHAR;
@@ -6321,6 +5544,101 @@ public final class SimpleFunctionCodegens {
             return false;
         }
         return text.indexOf('.') >= 0 || text.indexOf('e') >= 0 || text.indexOf('E') >= 0;
+    }
+
+    private enum ScalarCollectionShape {
+        INT("Int", ValueType.INT_ARRAY_LIST, ValueType.INT_PRIORITY_QUEUE,
+                ValueType.INT_ARRAY_DEQUE, ValueType.INT_HASH_SET),
+        LONG("Long", ValueType.LONG_ARRAY_LIST, ValueType.LONG_PRIORITY_QUEUE,
+                ValueType.LONG_ARRAY_DEQUE, ValueType.LONG_HASH_SET),
+        STRING("String", ValueType.STRING_ARRAY_LIST, null, null, ValueType.STRING_HASH_SET);
+
+        private final String kotlinType;
+        private final ValueType arrayListType;
+        private final ValueType priorityQueueType;
+        private final ValueType arrayDequeType;
+        private final ValueType hashSetType;
+
+        ScalarCollectionShape(
+                String kotlinType,
+                ValueType arrayListType,
+                ValueType priorityQueueType,
+                ValueType arrayDequeType,
+                ValueType hashSetType) {
+            this.kotlinType = kotlinType;
+            this.arrayListType = arrayListType;
+            this.priorityQueueType = priorityQueueType;
+            this.arrayDequeType = arrayDequeType;
+            this.hashSetType = hashSetType;
+        }
+    }
+
+    private enum PairShape {
+        INT_INT("Pair<Int,Int>", ValueType.INT, ValueType.INT, ValueType.INT_PAIR,
+                ValueType.INT_PAIR_ARRAY_LIST, ValueType.INT_PAIR_ARRAY_LIST_ARRAY,
+                ValueType.INT_PAIR_ARRAY_DEQUE, ValueType.INT_PAIR_PRIORITY_QUEUE,
+                ValueType.INT_PAIR_SECOND_PRIORITY_QUEUE),
+        INT_LONG("Pair<Int,Long>", ValueType.INT, ValueType.LONG, ValueType.INT_LONG_PAIR,
+                ValueType.INT_LONG_PAIR_ARRAY_LIST, ValueType.INT_LONG_PAIR_ARRAY_LIST_ARRAY,
+                ValueType.INT_LONG_PAIR_ARRAY_DEQUE, null, null),
+        LONG_INT("Pair<Long,Int>", ValueType.LONG, ValueType.INT, ValueType.LONG_INT_PAIR,
+                ValueType.LONG_INT_PAIR_ARRAY_LIST, ValueType.LONG_INT_PAIR_ARRAY_LIST_ARRAY,
+                ValueType.LONG_INT_PAIR_ARRAY_DEQUE, ValueType.LONG_INT_PAIR_PRIORITY_QUEUE, null),
+        LONG_LONG("Pair<Long,Long>", ValueType.LONG, ValueType.LONG, ValueType.LONG_LONG_PAIR,
+                ValueType.LONG_LONG_PAIR_ARRAY_LIST, ValueType.LONG_LONG_PAIR_ARRAY_LIST_ARRAY,
+                ValueType.LONG_LONG_PAIR_ARRAY_DEQUE, null, null);
+
+        private final String kotlinType;
+        private final ValueType firstType;
+        private final ValueType secondType;
+        private final ValueType pairType;
+        private final ValueType arrayListType;
+        private final ValueType arrayListArrayType;
+        private final ValueType arrayDequeType;
+        private final ValueType priorityQueueType;
+        private final ValueType secondPriorityQueueType;
+
+        PairShape(
+                String kotlinType,
+                ValueType firstType,
+                ValueType secondType,
+                ValueType pairType,
+                ValueType arrayListType,
+                ValueType arrayListArrayType,
+                ValueType arrayDequeType,
+                ValueType priorityQueueType,
+                ValueType secondPriorityQueueType) {
+            this.kotlinType = kotlinType;
+            this.firstType = firstType;
+            this.secondType = secondType;
+            this.pairType = pairType;
+            this.arrayListType = arrayListType;
+            this.arrayListArrayType = arrayListArrayType;
+            this.arrayDequeType = arrayDequeType;
+            this.priorityQueueType = priorityQueueType;
+            this.secondPriorityQueueType = secondPriorityQueueType;
+        }
+    }
+
+    private enum MapShape {
+        INT_INT("Int,Int", ValueType.INT, ValueType.INT, ValueType.INT_INT_HASH_MAP),
+        INT_LONG("Int,Long", ValueType.INT, ValueType.LONG, ValueType.INT_LONG_HASH_MAP),
+        LONG_INT("Long,Int", ValueType.LONG, ValueType.INT, ValueType.LONG_INT_HASH_MAP),
+        LONG_LONG("Long,Long", ValueType.LONG, ValueType.LONG, ValueType.LONG_LONG_HASH_MAP),
+        STRING_INT("String,Int", ValueType.STRING, ValueType.INT, ValueType.STRING_INT_HASH_MAP),
+        STRING_LONG("String,Long", ValueType.STRING, ValueType.LONG, ValueType.STRING_LONG_HASH_MAP);
+
+        private final String kotlinType;
+        private final ValueType keyType;
+        private final ValueType valueType;
+        private final ValueType mapType;
+
+        MapShape(String kotlinType, ValueType keyType, ValueType valueType, ValueType mapType) {
+            this.kotlinType = kotlinType;
+            this.keyType = keyType;
+            this.valueType = valueType;
+            this.mapType = mapType;
+        }
     }
 
     private enum ValueType {
