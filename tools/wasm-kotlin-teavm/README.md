@@ -1130,6 +1130,22 @@ The expected output is:
 in=131071 size=3,3
 ```
 
+To run the PS-style scalar collection method fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs \
+  --source tools/wasm-kotlin-teavm/fixtures/ps-scalar-collection-methods/Main.kt \
+  --out tools/wasm-kotlin-teavm/build/browser-ps-scalar-collection-methods-out
+java -cp tools/wasm-kotlin-teavm/build/browser-ps-scalar-collection-methods-out MainKt
+```
+
+The expected output is:
+
+```text
+methods=list=true,true,false,1 queue=true,true,7 deque=true,true,5 long=true,true,100000000000 words=true,true,1
+```
+
 To run the PS-style String API fixture:
 
 ```bash
@@ -1659,6 +1675,10 @@ Known findings from the initial experiments:
   `in`/`!in` for `Int` ranges, `String`/`Char` in `String`, `String` in `String`, and membership in
   the verified `Int` collection/map shapes above. With stdin `4 1 2 3 2 algorithmgo` it prints
   `in=131071 size=3,3`.
+- The browser-compatible probe also compiles `fixtures/ps-scalar-collection-methods/Main.kt`, which
+  exercises direct scalar `contains`/`remove` method calls on `ArrayList<Int>`, `PriorityQueue<Int>`,
+  `ArrayDeque<Int>`, `PriorityQueue<Long>`, and `ArrayList<String>`. It prints
+  `methods=list=true,true,false,1 queue=true,true,7 deque=true,true,5 long=true,true,100000000000 words=true,true,1`.
 - The browser-compatible probe also compiles `fixtures/ps-string-api/Main.kt`, which exercises
   `String.substring`, `startsWith`, `endsWith`, `contains` with `String` and `Char`, `indexOf`,
   `lastIndexOf`, `trim`, `lowercase`, and `uppercase`. With stdin `algorithmgo` it prints

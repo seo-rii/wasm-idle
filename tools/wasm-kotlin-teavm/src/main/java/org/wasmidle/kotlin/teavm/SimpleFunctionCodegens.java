@@ -1996,46 +1996,14 @@ public final class SimpleFunctionCodegens {
                                 "(Ljava/lang/Object;)Z", false);
                         return ValueType.BOOLEAN;
                     }
-                    if (receiverType == ValueType.LONG_ARRAY_LIST) {
+                    ScalarCollectionShape scalarShape = scalarCollectionShapeForType(receiverType);
+                    String scalarOwner = scalarCollectionOwner(receiverType);
+                    if (scalarShape != null && scalarOwner != null) {
                         emitExpressionAs(method, context,
                                 ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.LONG);
-                        boxLong(method);
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", callee.getText(),
-                                "(Ljava/lang/Object;)Z", false);
-                        return ValueType.BOOLEAN;
-                    }
-                    if (receiverType == ValueType.STRING_ARRAY_LIST) {
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.STRING);
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", callee.getText(),
-                                "(Ljava/lang/Object;)Z", false);
-                        return ValueType.BOOLEAN;
-                    }
-                    if (receiverType == ValueType.INT_HASH_SET) {
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.INT);
-                        boxInt(method);
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashSet", callee.getText(),
-                                "(Ljava/lang/Object;)Z", false);
-                        return ValueType.BOOLEAN;
-                    }
-                    if (receiverType == ValueType.LONG_HASH_SET) {
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.LONG);
-                        boxLong(method);
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashSet", callee.getText(),
-                                "(Ljava/lang/Object;)Z", false);
-                        return ValueType.BOOLEAN;
-                    }
-                    if (receiverType == ValueType.STRING_HASH_SET) {
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.STRING);
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashSet", callee.getText(),
+                                scalarShape.elementType);
+                        boxValue(method, scalarShape.elementType);
+                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, scalarOwner, callee.getText(),
                                 "(Ljava/lang/Object;)Z", false);
                         return ValueType.BOOLEAN;
                     }
@@ -3185,45 +3153,13 @@ public final class SimpleFunctionCodegens {
                     return ValueType.BOOLEAN;
                 }
                 if (callee != null && ("contains".equals(callee.getText()) || "remove".equals(callee.getText()))
-                        && ((KtCallExpression) selector).getValueArguments().size() == 1
-                        && inferExpressionType(context, qualified.getReceiverExpression())
-                                == ValueType.INT_HASH_SET) {
-                    return ValueType.BOOLEAN;
-                }
-                if (callee != null && ("contains".equals(callee.getText()) || "remove".equals(callee.getText()))
-                        && ((KtCallExpression) selector).getValueArguments().size() == 1
-                        && inferExpressionType(context, qualified.getReceiverExpression())
-                                == ValueType.LONG_HASH_SET) {
-                    return ValueType.BOOLEAN;
-                }
-                if (callee != null && ("contains".equals(callee.getText()) || "remove".equals(callee.getText()))
-                        && ((KtCallExpression) selector).getValueArguments().size() == 1
-                        && inferExpressionType(context, qualified.getReceiverExpression())
-                                == ValueType.STRING_HASH_SET) {
-                    return ValueType.BOOLEAN;
-                }
-                if (callee != null && ("contains".equals(callee.getText()) || "remove".equals(callee.getText()))
-                        && ((KtCallExpression) selector).getValueArguments().size() == 1
-                        && isPairArrayListType(inferExpressionType(context, qualified.getReceiverExpression()))) {
-                    return ValueType.BOOLEAN;
-                }
-                if (callee != null && ("contains".equals(callee.getText()) || "remove".equals(callee.getText()))
-                        && ((KtCallExpression) selector).getValueArguments().size() == 1
-                        && inferExpressionType(context, qualified.getReceiverExpression())
-                                == ValueType.LONG_ARRAY_LIST) {
-                    return ValueType.BOOLEAN;
-                }
-                if (callee != null && ("contains".equals(callee.getText()) || "remove".equals(callee.getText()))
-                        && ((KtCallExpression) selector).getValueArguments().size() == 1
-                        && inferExpressionType(context, qualified.getReceiverExpression())
-                                == ValueType.STRING_ARRAY_LIST) {
-                    return ValueType.BOOLEAN;
-                }
-                if (callee != null && ("contains".equals(callee.getText()) || "remove".equals(callee.getText()))
-                        && ((KtCallExpression) selector).getValueArguments().size() == 1
-                        && isPairPriorityQueueType(
-                                inferExpressionType(context, qualified.getReceiverExpression()))) {
-                    return ValueType.BOOLEAN;
+                        && ((KtCallExpression) selector).getValueArguments().size() == 1) {
+                    ValueType receiverType = inferExpressionType(context, qualified.getReceiverExpression());
+                    if (scalarCollectionShapeForType(receiverType) != null
+                            || isPairArrayListType(receiverType)
+                            || isPairPriorityQueueType(receiverType)) {
+                        return ValueType.BOOLEAN;
+                    }
                 }
                 if (callee != null && "remove".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().size() == 1) {
@@ -4177,6 +4113,36 @@ public final class SimpleFunctionCodegens {
         return null;
     }
 
+    private static ScalarCollectionShape scalarCollectionShapeForType(ValueType type) {
+        for (ScalarCollectionShape shape : ScalarCollectionShape.values()) {
+            if (shape.arrayListType == type || shape.priorityQueueType == type
+                    || shape.arrayDequeType == type || shape.hashSetType == type) {
+                return shape;
+            }
+        }
+        return null;
+    }
+
+    private static String scalarCollectionOwner(ValueType type) {
+        ScalarCollectionShape shape = scalarCollectionShapeForType(type);
+        if (shape == null) {
+            return null;
+        }
+        if (shape.arrayListType == type) {
+            return "java/util/ArrayList";
+        }
+        if (shape.priorityQueueType == type) {
+            return "java/util/PriorityQueue";
+        }
+        if (shape.arrayDequeType == type) {
+            return "java/util/ArrayDeque";
+        }
+        if (shape.hashSetType == type) {
+            return "java/util/HashSet";
+        }
+        return null;
+    }
+
     private static boolean genericTypeEquals(String compactText, String typeName, String typeArguments) {
         return (typeName + "<" + typeArguments + ">").equals(compactText);
     }
@@ -4931,76 +4897,19 @@ public final class SimpleFunctionCodegens {
             }
             return ValueType.BOOLEAN;
         }
-        if (containerType == ValueType.INT_HASH_SET || containerType == ValueType.INT_ARRAY_LIST
-                || containerType == ValueType.INT_PRIORITY_QUEUE || containerType == ValueType.INT_ARRAY_DEQUE) {
-            if (elementType != ValueType.INT) {
-                throw new IllegalArgumentException("Int collection contains requires Int element: "
+        ScalarCollectionShape scalarShape = scalarCollectionShapeForType(containerType);
+        String scalarOwner = scalarCollectionOwner(containerType);
+        if (scalarShape != null && scalarOwner != null) {
+            if (elementType != scalarShape.elementType) {
+                throw new IllegalArgumentException(scalarShape.kotlinType
+                        + " collection contains requires " + scalarShape.kotlinType + " element: "
                         + binary.getText());
             }
             emitExpression(method, context, container);
-            emitExpressionAs(method, context, element, ValueType.INT);
-            boxInt(method);
-            if (containerType == ValueType.INT_HASH_SET) {
-                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashSet", "contains",
-                        "(Ljava/lang/Object;)Z", false);
-            } else if (containerType == ValueType.INT_ARRAY_LIST) {
-                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "contains",
-                        "(Ljava/lang/Object;)Z", false);
-            } else if (containerType == ValueType.INT_PRIORITY_QUEUE) {
-                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/PriorityQueue", "contains",
-                        "(Ljava/lang/Object;)Z", false);
-            } else {
-                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayDeque", "contains",
-                        "(Ljava/lang/Object;)Z", false);
-            }
-            if (negated) {
-                method.visitInsn(Opcodes.ICONST_1);
-                method.visitInsn(Opcodes.IXOR);
-            }
-            return ValueType.BOOLEAN;
-        }
-        if (containerType == ValueType.LONG_ARRAY_LIST || containerType == ValueType.LONG_PRIORITY_QUEUE
-                || containerType == ValueType.LONG_ARRAY_DEQUE || containerType == ValueType.LONG_HASH_SET) {
-            if (elementType != ValueType.LONG) {
-                throw new IllegalArgumentException("Long collection contains requires Long element: "
-                        + binary.getText());
-            }
-            emitExpression(method, context, container);
-            emitExpressionAs(method, context, element, ValueType.LONG);
-            boxLong(method);
-            if (containerType == ValueType.LONG_ARRAY_LIST) {
-                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "contains",
-                        "(Ljava/lang/Object;)Z", false);
-            } else if (containerType == ValueType.LONG_PRIORITY_QUEUE) {
-                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/PriorityQueue", "contains",
-                        "(Ljava/lang/Object;)Z", false);
-            } else if (containerType == ValueType.LONG_ARRAY_DEQUE) {
-                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayDeque", "contains",
-                        "(Ljava/lang/Object;)Z", false);
-            } else {
-                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashSet", "contains",
-                        "(Ljava/lang/Object;)Z", false);
-            }
-            if (negated) {
-                method.visitInsn(Opcodes.ICONST_1);
-                method.visitInsn(Opcodes.IXOR);
-            }
-            return ValueType.BOOLEAN;
-        }
-        if (containerType == ValueType.STRING_ARRAY_LIST || containerType == ValueType.STRING_HASH_SET) {
-            if (elementType != ValueType.STRING) {
-                throw new IllegalArgumentException("String collection contains requires String element: "
-                        + binary.getText());
-            }
-            emitExpression(method, context, container);
-            emitExpressionAs(method, context, element, ValueType.STRING);
-            if (containerType == ValueType.STRING_ARRAY_LIST) {
-                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "contains",
-                        "(Ljava/lang/Object;)Z", false);
-            } else {
-                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashSet", "contains",
-                        "(Ljava/lang/Object;)Z", false);
-            }
+            emitExpressionAs(method, context, element, scalarShape.elementType);
+            boxValue(method, scalarShape.elementType);
+            method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, scalarOwner, "contains",
+                    "(Ljava/lang/Object;)Z", false);
             if (negated) {
                 method.visitInsn(Opcodes.ICONST_1);
                 method.visitInsn(Opcodes.IXOR);
@@ -5510,13 +5419,14 @@ public final class SimpleFunctionCodegens {
     }
 
     private enum ScalarCollectionShape {
-        INT("Int", ValueType.INT_ARRAY_LIST, ValueType.INT_PRIORITY_QUEUE,
+        INT("Int", ValueType.INT, ValueType.INT_ARRAY_LIST, ValueType.INT_PRIORITY_QUEUE,
                 ValueType.INT_ARRAY_DEQUE, ValueType.INT_HASH_SET),
-        LONG("Long", ValueType.LONG_ARRAY_LIST, ValueType.LONG_PRIORITY_QUEUE,
+        LONG("Long", ValueType.LONG, ValueType.LONG_ARRAY_LIST, ValueType.LONG_PRIORITY_QUEUE,
                 ValueType.LONG_ARRAY_DEQUE, ValueType.LONG_HASH_SET),
-        STRING("String", ValueType.STRING_ARRAY_LIST, null, null, ValueType.STRING_HASH_SET);
+        STRING("String", ValueType.STRING, ValueType.STRING_ARRAY_LIST, null, null, ValueType.STRING_HASH_SET);
 
         private final String kotlinType;
+        private final ValueType elementType;
         private final ValueType arrayListType;
         private final ValueType priorityQueueType;
         private final ValueType arrayDequeType;
@@ -5524,11 +5434,13 @@ public final class SimpleFunctionCodegens {
 
         ScalarCollectionShape(
                 String kotlinType,
+                ValueType elementType,
                 ValueType arrayListType,
                 ValueType priorityQueueType,
                 ValueType arrayDequeType,
                 ValueType hashSetType) {
             this.kotlinType = kotlinType;
+            this.elementType = elementType;
             this.arrayListType = arrayListType;
             this.priorityQueueType = priorityQueueType;
             this.arrayDequeType = arrayDequeType;
