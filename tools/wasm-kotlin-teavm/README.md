@@ -1140,6 +1140,22 @@ The expected output is:
 pair=3,4 combined=10,24 diff=14
 ```
 
+To run the PS-style `Pair<Long, Long>` fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs \
+  --source tools/wasm-kotlin-teavm/fixtures/ps-long-long-pair/Main.kt \
+  --out tools/wasm-kotlin-teavm/build/browser-ps-long-long-pair-out
+printf '100000000000 7\n' | java -cp tools/wasm-kotlin-teavm/build/browser-ps-long-long-pair-out MainKt
+```
+
+The expected output is:
+
+```text
+longPair=100000000000,100000000007 shifted=100000000000,100000000007 tail=100000000014 direct=-100000000000,100000000014
+```
+
 To run the PS-style Pair destructuring fixture:
 
 ```bash
@@ -1589,6 +1605,10 @@ Known findings from the initial experiments:
   limited `Pair<Int, Int>` construction, `.first`, `.second`, and function return values by lowering
   to `java.util.AbstractMap.SimpleEntry<Integer, Integer>`. With stdin `3 4` it prints
   `pair=3,4 combined=10,24 diff=14`.
+- The browser-compatible probe also compiles `fixtures/ps-long-long-pair/Main.kt`, which exercises
+  `Pair<Long, Long>` construction, `.first`, `.second`, function return values, and destructuring by
+  lowering to `java.util.AbstractMap.SimpleEntry<Long, Long>`. With stdin `100000000000 7` it prints
+  `longPair=100000000000,100000000007 shifted=100000000000,100000000007 tail=100000000014 direct=-100000000000,100000000014`.
 - The browser-compatible probe also compiles `fixtures/ps-pair-destructuring/Main.kt`, which
   exercises `val (a, b) = ...` destructuring for `Pair<Int, Int>`, `Pair<Int, Long>`, and
   `Pair<Long, Int>` values from direct construction, `PriorityQueue.poll()`, list indexing, and

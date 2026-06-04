@@ -431,6 +431,11 @@ Current status:
   limited `Pair<Int, Int>` construction, `.first`, `.second`, and function return values by lowering
   to `java.util.AbstractMap.SimpleEntry<Integer, Integer>`. With stdin `3 4` it prints
   `pair=3,4 combined=10,24 diff=14`.
+- The browser-facing compile export also completes `fixtures/ps-long-long-pair/Main.kt`, which
+  covers `Pair<Long, Long>` construction, `.first`, `.second`, function return values, and
+  destructuring by lowering to `java.util.AbstractMap.SimpleEntry<Long, Long>`. With stdin
+  `100000000000 7` it prints
+  `longPair=100000000000,100000000007 shifted=100000000000,100000000007 tail=100000000014 direct=-100000000000,100000000014`.
 - The browser-facing compile export also completes `fixtures/ps-pair-destructuring/Main.kt`, which
   covers `val (a, b) = ...` destructuring for `Pair<Int, Int>`, `Pair<Int, Long>`, and
   `Pair<Long, Int>` values from direct construction, `PriorityQueue.poll()`, list indexing, and

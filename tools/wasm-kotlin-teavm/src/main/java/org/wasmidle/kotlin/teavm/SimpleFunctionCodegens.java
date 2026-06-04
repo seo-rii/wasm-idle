@@ -151,8 +151,7 @@ public final class SimpleFunctionCodegens {
                         + declaration.getText());
             }
             ValueType pairType = emitExpression(method, context, initializer);
-            if (pairType != ValueType.INT_PAIR && pairType != ValueType.INT_LONG_PAIR
-                    && pairType != ValueType.LONG_INT_PAIR) {
+            if (!isPairType(pairType)) {
                 throw new IllegalArgumentException("Destructuring requires a Pair value: " + declaration.getText());
             }
             int pairIndex = context.allocateTemporary(pairType);
@@ -647,8 +646,7 @@ public final class SimpleFunctionCodegens {
         int valueIndex = -1;
         int[] componentIndexes = null;
         if (destructuringDeclaration != null) {
-            if (elementType != ValueType.INT_PAIR && elementType != ValueType.INT_LONG_PAIR
-                    && elementType != ValueType.LONG_INT_PAIR) {
+            if (!isPairType(elementType)) {
                 throw new IllegalArgumentException("Destructuring for-loop requires Pair elements: "
                         + expression.getText());
             }
@@ -1390,15 +1388,15 @@ public final class SimpleFunctionCodegens {
             }
             if (selector != null && ("first".equals(selector.getText()) || "second".equals(selector.getText()))) {
                 ValueType receiverType = inferExpressionType(context, receiver);
-                if (receiverType == ValueType.INT_PAIR || receiverType == ValueType.INT_LONG_PAIR
-                        || receiverType == ValueType.LONG_INT_PAIR) {
+                if (isPairType(receiverType)) {
                     boolean first = "first".equals(selector.getText());
                     emitExpressionAs(method, context, receiver, receiverType);
                     method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/AbstractMap$SimpleEntry",
                             first ? "getKey" : "getValue",
                             "()Ljava/lang/Object;", false);
                     if ((receiverType == ValueType.INT_LONG_PAIR && !first)
-                            || (receiverType == ValueType.LONG_INT_PAIR && first)) {
+                            || (receiverType == ValueType.LONG_INT_PAIR && first)
+                            || receiverType == ValueType.LONG_LONG_PAIR) {
                         unboxLong(method);
                         return ValueType.LONG;
                     }
@@ -3551,8 +3549,13 @@ public final class SimpleFunctionCodegens {
             if (firstType == ValueType.LONG) {
                 emitExpressionAs(method, context, firstArgument, ValueType.LONG);
                 boxLong(method);
-                emitExpressionAs(method, context, secondArgument, ValueType.INT);
-                boxInt(method);
+                if (secondType == ValueType.LONG) {
+                    emitExpressionAs(method, context, secondArgument, ValueType.LONG);
+                    boxLong(method);
+                } else {
+                    emitExpressionAs(method, context, secondArgument, ValueType.INT);
+                    boxInt(method);
+                }
             } else {
                 emitExpressionAs(method, context, firstArgument, ValueType.INT);
                 boxInt(method);
@@ -3567,7 +3570,7 @@ public final class SimpleFunctionCodegens {
             method.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/util/AbstractMap$SimpleEntry", "<init>",
                     "(Ljava/lang/Object;Ljava/lang/Object;)V", false);
             if (firstType == ValueType.LONG) {
-                return ValueType.LONG_INT_PAIR;
+                return secondType == ValueType.LONG ? ValueType.LONG_LONG_PAIR : ValueType.LONG_INT_PAIR;
             }
             return secondType == ValueType.LONG ? ValueType.INT_LONG_PAIR : ValueType.INT_PAIR;
         }
@@ -3823,6 +3826,9 @@ public final class SimpleFunctionCodegens {
                 }
                 if (receiverType == ValueType.LONG_INT_PAIR) {
                     return "first".equals(selector.getText()) ? ValueType.LONG : ValueType.INT;
+                }
+                if (receiverType == ValueType.LONG_LONG_PAIR) {
+                    return ValueType.LONG;
                 }
             }
             if (selector instanceof KtCallExpression) {
@@ -4585,10 +4591,12 @@ public final class SimpleFunctionCodegens {
                         .getArgumentExpression();
                 KtExpression secondArgument = ((KtCallExpression) expression).getValueArguments().get(1)
                         .getArgumentExpression();
-                if (inferExpressionType(context, firstArgument) == ValueType.LONG) {
-                    return ValueType.LONG_INT_PAIR;
+                ValueType firstType = inferExpressionType(context, firstArgument);
+                ValueType secondType = inferExpressionType(context, secondArgument);
+                if (firstType == ValueType.LONG) {
+                    return secondType == ValueType.LONG ? ValueType.LONG_LONG_PAIR : ValueType.LONG_INT_PAIR;
                 }
-                if (inferExpressionType(context, secondArgument) == ValueType.LONG) {
+                if (secondType == ValueType.LONG) {
                     return ValueType.INT_LONG_PAIR;
                 }
                 return ValueType.INT_PAIR;
@@ -4835,7 +4843,17 @@ public final class SimpleFunctionCodegens {
         if (pairType == ValueType.LONG_INT_PAIR) {
             return componentIndex == 0 ? ValueType.LONG : ValueType.INT;
         }
+        if (pairType == ValueType.LONG_LONG_PAIR) {
+            return ValueType.LONG;
+        }
         throw new IllegalArgumentException("Unsupported Pair type: " + pairType);
+    }
+
+    private static boolean isPairType(ValueType type) {
+        return type == ValueType.INT_PAIR
+                || type == ValueType.INT_LONG_PAIR
+                || type == ValueType.LONG_INT_PAIR
+                || type == ValueType.LONG_LONG_PAIR;
     }
 
     private static void emitPairComponent(MethodVisitor method, ValueType pairType, int pairIndex, int componentIndex) {
@@ -6346,6 +6364,9 @@ public final class SimpleFunctionCodegens {
         if ("Pair<Long,Int>".equals(compactText)) {
             return ValueType.LONG_INT_PAIR;
         }
+        if ("Pair<Long,Long>".equals(compactText)) {
+            return ValueType.LONG_LONG_PAIR;
+        }
         if ("Char".equals(text)) {
             return ValueType.CHAR;
         }
@@ -6515,6 +6536,7 @@ public final class SimpleFunctionCodegens {
         INT_PAIR("Ljava/util/AbstractMap$SimpleEntry;", 1, false, false),
         INT_LONG_PAIR("Ljava/util/AbstractMap$SimpleEntry;", 1, false, false),
         LONG_INT_PAIR("Ljava/util/AbstractMap$SimpleEntry;", 1, false, false),
+        LONG_LONG_PAIR("Ljava/util/AbstractMap$SimpleEntry;", 1, false, false),
         INT_ARRAY("[I", 1, false, true),
         LONG_ARRAY("[J", 1, false, true),
         DOUBLE_ARRAY("[D", 1, false, true),
