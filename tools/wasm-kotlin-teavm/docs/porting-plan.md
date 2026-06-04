@@ -473,6 +473,13 @@ Current status:
   storing `java.util.AbstractMap.SimpleEntry<Long, Integer>` values in `java.util.ArrayList`.
   With stdin `100000000000 7` it prints
   `longIntPairs=100000000000,2|99999999993,1 removed=-100000000000,9 flags=true,true,true graph=200000000011 total=100000000000 empty=false size=1,2`.
+- The browser-facing compile export also completes `fixtures/ps-long-long-pair-list/Main.kt`, which
+  covers `ArrayList<Pair<Long, Long>>` and `mutableListOf<Pair<Long, Long>>()` construction,
+  `Array<ArrayList<Pair<Long, Long>>>`, indexed get/set, `.first`, `.second`, `in`/`!in`,
+  `contains`, `remove`, `removeAt`, `indices`, `first()`, `last()`, `reverse`, `clear`, `size`,
+  `isEmpty`, and Pair destructuring by storing `java.util.AbstractMap.SimpleEntry<Long, Long>`
+  values in `java.util.ArrayList`. With stdin `100000000000 7` it prints
+  `longLongPairList=400000000068 first=100000000007,100000000014 last=100000000007,100000000014 removed=99999999993,99999999986 head=100000000007,100000000014 tail=100000000007,100000000014 edge=5,6 rev=7,8 flags=true,true,true,true size=2,1,0`.
 - The browser-facing compile export also completes `fixtures/ps-list-helpers/Main.kt`, which covers
   `MutableList<Int>` and `ArrayList<Pair<Int, Int>>` stack/list helpers: indexed `add`,
   `removeAt`, `first()`, `last()`, `clear()`, `size`, and `isEmpty`. With stdin `5 9` it prints
