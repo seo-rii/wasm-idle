@@ -3495,6 +3495,10 @@ public final class SimpleFunctionCodegens {
                     || isLongIntPairArrayDequeConstructor(call.getText())) {
                 return ValueType.LONG_INT_PAIR_ARRAY_DEQUE;
             }
+            if (isLongLongPairArrayDequeConstructor(calleeText)
+                    || isLongLongPairArrayDequeConstructor(call.getText())) {
+                return ValueType.LONG_LONG_PAIR_ARRAY_DEQUE;
+            }
             return ValueType.INT_ARRAY_DEQUE;
         }
         if ((isHashSetConstructor(calleeText) || isMutableSetFactory(calleeText))
@@ -4550,6 +4554,10 @@ public final class SimpleFunctionCodegens {
                         || isLongIntPairArrayDequeConstructor(expression.getText())) {
                     return ValueType.LONG_INT_PAIR_ARRAY_DEQUE;
                 }
+                if (isLongLongPairArrayDequeConstructor(calleeText)
+                        || isLongLongPairArrayDequeConstructor(expression.getText())) {
+                    return ValueType.LONG_LONG_PAIR_ARRAY_DEQUE;
+                }
                 return ValueType.INT_ARRAY_DEQUE;
             }
             if (isHashSetConstructor(calleeText) || isMutableSetFactory(calleeText)) {
@@ -5014,10 +5022,20 @@ public final class SimpleFunctionCodegens {
         return "ArrayDeque<Pair<Long,Int>>".equals(compact);
     }
 
+    private static boolean isLongLongPairArrayDequeConstructor(String calleeText) {
+        String compact = calleeText.replace(" ", "");
+        int parenIndex = compact.indexOf('(');
+        if (parenIndex >= 0) {
+            compact = compact.substring(0, parenIndex);
+        }
+        return "ArrayDeque<Pair<Long,Long>>".equals(compact);
+    }
+
     private static boolean isPairArrayDequeType(ValueType type) {
         return type == ValueType.INT_PAIR_ARRAY_DEQUE
                 || type == ValueType.INT_LONG_PAIR_ARRAY_DEQUE
-                || type == ValueType.LONG_INT_PAIR_ARRAY_DEQUE;
+                || type == ValueType.LONG_INT_PAIR_ARRAY_DEQUE
+                || type == ValueType.LONG_LONG_PAIR_ARRAY_DEQUE;
     }
 
     private static ValueType pairTypeForArrayDeque(ValueType type) {
@@ -5029,6 +5047,9 @@ public final class SimpleFunctionCodegens {
         }
         if (type == ValueType.LONG_INT_PAIR_ARRAY_DEQUE) {
             return ValueType.LONG_INT_PAIR;
+        }
+        if (type == ValueType.LONG_LONG_PAIR_ARRAY_DEQUE) {
+            return ValueType.LONG_LONG_PAIR;
         }
         throw new IllegalArgumentException("Unsupported Pair ArrayDeque type: " + type);
     }
@@ -6318,6 +6339,9 @@ public final class SimpleFunctionCodegens {
         if ("ArrayDeque<Pair<Long,Int>>".equals(compactText)) {
             return ValueType.LONG_INT_PAIR_ARRAY_DEQUE;
         }
+        if ("ArrayDeque<Pair<Long,Long>>".equals(compactText)) {
+            return ValueType.LONG_LONG_PAIR_ARRAY_DEQUE;
+        }
         if ("HashSet<Int>".equals(text) || "MutableSet<Int>".equals(text)
                 || "Set<Int>".equals(text)) {
             return ValueType.INT_HASH_SET;
@@ -6524,6 +6548,7 @@ public final class SimpleFunctionCodegens {
         INT_PAIR_ARRAY_DEQUE("Ljava/util/ArrayDeque;", 1, false, false),
         INT_LONG_PAIR_ARRAY_DEQUE("Ljava/util/ArrayDeque;", 1, false, false),
         LONG_INT_PAIR_ARRAY_DEQUE("Ljava/util/ArrayDeque;", 1, false, false),
+        LONG_LONG_PAIR_ARRAY_DEQUE("Ljava/util/ArrayDeque;", 1, false, false),
         INT_HASH_SET("Ljava/util/HashSet;", 1, false, false),
         LONG_HASH_SET("Ljava/util/HashSet;", 1, false, false),
         STRING_HASH_SET("Ljava/util/HashSet;", 1, false, false),

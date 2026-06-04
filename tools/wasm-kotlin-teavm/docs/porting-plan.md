@@ -363,6 +363,12 @@ Current status:
   `in`/`!in`, and Pair destructuring by lowering to
   `java.util.ArrayDeque<AbstractMap.SimpleEntry<...>>`. With stdin `100000000000 7` it prints
   `mixedPairDeque=300000000031,300000000047 weighted=6,99999999993|1,2|3,4 state=99999999993,6|5,6|7,8 flags=true,true,true,true size=0,0`.
+- The browser-facing compile export also completes `fixtures/ps-long-long-pair-array-deque/Main.kt`,
+  which covers `ArrayDeque<Pair<Long, Long>>` construction, `add`, `addFirst`, `addLast`, `offer`,
+  `offerFirst`, `offerLast`, `peek`, `poll`, `pollLast`, `removeFirst`, `getFirst`, `getLast`,
+  `size`, `isEmpty`, `in`/`!in`, and Pair destructuring by lowering to
+  `java.util.ArrayDeque<AbstractMap.SimpleEntry<Long, Long>>`. With stdin `100000000000 7` it
+  prints `longLongPairDeque=600000000017 peek=99999999993,99999999986 first=99999999993,99999999986 last=100000000007,100000000014 edge=1,2|3,4 flags=true,true size=0`.
 - The browser-facing compile export also completes `fixtures/ps-hash-set/Main.kt`, which covers
   `HashSet<Int>` and `mutableSetOf<Int>()` construction, `add`, `contains`, `remove`, `clear`,
   `size`, and `isEmpty` by lowering to `java.util.HashSet<Integer>`. With stdin `5 1 2 1 3 2` it
