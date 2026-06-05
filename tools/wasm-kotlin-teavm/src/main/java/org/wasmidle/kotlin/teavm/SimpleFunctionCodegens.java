@@ -1562,29 +1562,14 @@ public final class SimpleFunctionCodegens {
                 if (callee != null && "add".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().size() == 1) {
                     ValueType receiverType = emitExpression(method, context, receiver);
-                    if (receiverType == ValueType.INT_ARRAY_LIST) {
+                    ScalarCollectionShape scalarShape = scalarCollectionShapeForType(receiverType);
+                    String scalarOwner = scalarCollectionOwner(receiverType);
+                    if (scalarShape != null && scalarOwner != null) {
                         emitExpressionAs(method, context,
                                 ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.INT);
-                        boxInt(method);
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "add",
-                                "(Ljava/lang/Object;)Z", false);
-                        return ValueType.BOOLEAN;
-                    }
-                    if (receiverType == ValueType.LONG_ARRAY_LIST) {
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.LONG);
-                        boxLong(method);
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "add",
-                                "(Ljava/lang/Object;)Z", false);
-                        return ValueType.BOOLEAN;
-                    }
-                    if (receiverType == ValueType.STRING_ARRAY_LIST) {
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.STRING);
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "add",
+                                scalarShape.elementType);
+                        boxValue(method, scalarShape.elementType);
+                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, scalarOwner, "add",
                                 "(Ljava/lang/Object;)Z", false);
                         return ValueType.BOOLEAN;
                     }
@@ -1596,24 +1581,6 @@ public final class SimpleFunctionCodegens {
                                 "(Ljava/lang/Object;)Z", false);
                         return ValueType.BOOLEAN;
                     }
-                    if (receiverType == ValueType.INT_PRIORITY_QUEUE) {
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.INT);
-                        boxInt(method);
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/PriorityQueue", "add",
-                                "(Ljava/lang/Object;)Z", false);
-                        return ValueType.BOOLEAN;
-                    }
-                    if (receiverType == ValueType.LONG_PRIORITY_QUEUE) {
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.LONG);
-                        boxLong(method);
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/PriorityQueue", "add",
-                                "(Ljava/lang/Object;)Z", false);
-                        return ValueType.BOOLEAN;
-                    }
                     if (isPairPriorityQueueType(receiverType)) {
                         emitPackedPairPriorityQueueElement(method, context,
                                 ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
@@ -1622,55 +1589,11 @@ public final class SimpleFunctionCodegens {
                                 "(Ljava/lang/Object;)Z", false);
                         return ValueType.BOOLEAN;
                     }
-                    if (receiverType == ValueType.INT_ARRAY_DEQUE) {
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.INT);
-                        boxInt(method);
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayDeque", "add",
-                                "(Ljava/lang/Object;)Z", false);
-                        return ValueType.BOOLEAN;
-                    }
-                    if (receiverType == ValueType.LONG_ARRAY_DEQUE) {
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.LONG);
-                        boxLong(method);
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayDeque", "add",
-                                "(Ljava/lang/Object;)Z", false);
-                        return ValueType.BOOLEAN;
-                    }
                     if (isPairArrayDequeType(receiverType)) {
                         emitExpressionAs(method, context,
                                 ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
                                 pairTypeForArrayDeque(receiverType));
                         method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayDeque", "add",
-                                "(Ljava/lang/Object;)Z", false);
-                        return ValueType.BOOLEAN;
-                    }
-                    if (receiverType == ValueType.INT_HASH_SET) {
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.INT);
-                        boxInt(method);
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashSet", "add",
-                                "(Ljava/lang/Object;)Z", false);
-                        return ValueType.BOOLEAN;
-                    }
-                    if (receiverType == ValueType.LONG_HASH_SET) {
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.LONG);
-                        boxLong(method);
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashSet", "add",
-                                "(Ljava/lang/Object;)Z", false);
-                        return ValueType.BOOLEAN;
-                    }
-                    if (receiverType == ValueType.STRING_HASH_SET) {
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.STRING);
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/HashSet", "add",
                                 "(Ljava/lang/Object;)Z", false);
                         return ValueType.BOOLEAN;
                     }
@@ -2907,27 +2830,14 @@ public final class SimpleFunctionCodegens {
                     }
                 }
                 if (callee != null && "add".equals(callee.getText())
-                        && ((KtCallExpression) selector).getValueArguments().size() == 1
-                        && (isArrayListType(inferExpressionType(context, qualified.getReceiverExpression()))
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.INT_PRIORITY_QUEUE
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.LONG_PRIORITY_QUEUE
-                                || isPairPriorityQueueType(
-                                        inferExpressionType(context, qualified.getReceiverExpression()))
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.INT_ARRAY_DEQUE
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.LONG_ARRAY_DEQUE
-                                || isPairArrayDequeType(
-                                        inferExpressionType(context, qualified.getReceiverExpression()))
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.INT_HASH_SET
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.LONG_HASH_SET
-                                || inferExpressionType(context, qualified.getReceiverExpression())
-                                        == ValueType.STRING_HASH_SET)) {
-                    return ValueType.BOOLEAN;
+                        && ((KtCallExpression) selector).getValueArguments().size() == 1) {
+                    ValueType receiverType = inferExpressionType(context, qualified.getReceiverExpression());
+                    if (scalarCollectionShapeForType(receiverType) != null
+                            || isPairArrayListType(receiverType)
+                            || isPairPriorityQueueType(receiverType)
+                            || isPairArrayDequeType(receiverType)) {
+                        return ValueType.BOOLEAN;
+                    }
                 }
                 if (callee != null && "add".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().size() == 2
