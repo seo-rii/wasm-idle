@@ -1931,37 +1931,21 @@ public final class SimpleFunctionCodegens {
                         || "first".equals(callee.getText()) || "last".equals(callee.getText()))
                         && ((KtCallExpression) selector).getValueArguments().isEmpty()) {
                     ValueType receiverType = emitExpression(method, context, receiver);
-                    if (receiverType == ValueType.INT_ARRAY_DEQUE) {
-                        String methodName = callee.getText();
-                        if ("first".equals(methodName)) {
-                            methodName = "getFirst";
-                        } else if ("last".equals(methodName)) {
-                            methodName = "getLast";
-                        }
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayDeque", methodName,
-                                "()Ljava/lang/Object;", false);
-                        unboxInt(method);
-                        return ValueType.INT;
+                    String methodName = callee.getText();
+                    if ("first".equals(methodName)) {
+                        methodName = "getFirst";
+                    } else if ("last".equals(methodName)) {
+                        methodName = "getLast";
                     }
-                    if (receiverType == ValueType.LONG_ARRAY_DEQUE) {
-                        String methodName = callee.getText();
-                        if ("first".equals(methodName)) {
-                            methodName = "getFirst";
-                        } else if ("last".equals(methodName)) {
-                            methodName = "getLast";
-                        }
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayDeque", methodName,
+                    ScalarCollectionShape scalarShape = scalarCollectionShapeForType(receiverType);
+                    String scalarOwner = scalarDequeOwner(receiverType);
+                    if (scalarShape != null && scalarOwner != null) {
+                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, scalarOwner, methodName,
                                 "()Ljava/lang/Object;", false);
-                        unboxLong(method);
-                        return ValueType.LONG;
+                        unboxValue(method, scalarShape.elementType);
+                        return scalarShape.elementType;
                     }
                     if (isPairArrayDequeType(receiverType)) {
-                        String methodName = callee.getText();
-                        if ("first".equals(methodName)) {
-                            methodName = "getFirst";
-                        } else if ("last".equals(methodName)) {
-                            methodName = "getLast";
-                        }
                         method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayDeque", methodName,
                                 "()Ljava/lang/Object;", false);
                         method.visitTypeInsn(Opcodes.CHECKCAST, "java/util/AbstractMap$SimpleEntry");
@@ -2882,16 +2866,12 @@ public final class SimpleFunctionCodegens {
                         || "first".equals(callee.getText()) || "last".equals(callee.getText()))
                         && ((KtCallExpression) selector).getValueArguments().isEmpty()) {
                     ValueType receiverType = inferExpressionType(context, qualified.getReceiverExpression());
-                    if (receiverType == ValueType.INT_ARRAY_DEQUE
-                            || receiverType == ValueType.LONG_ARRAY_DEQUE
-                            || isPairArrayDequeType(receiverType)) {
-                        if (receiverType == ValueType.LONG_ARRAY_DEQUE) {
-                            return ValueType.LONG;
-                        }
-                        if (isPairArrayDequeType(receiverType)) {
-                            return pairTypeForArrayDeque(receiverType);
-                        }
-                        return ValueType.INT;
+                    ScalarCollectionShape scalarShape = scalarCollectionShapeForType(receiverType);
+                    if (scalarShape != null && scalarDequeOwner(receiverType) != null) {
+                        return scalarShape.elementType;
+                    }
+                    if (isPairArrayDequeType(receiverType)) {
+                        return pairTypeForArrayDeque(receiverType);
                     }
                 }
                 if (callee != null && "append".equals(callee.getText())
