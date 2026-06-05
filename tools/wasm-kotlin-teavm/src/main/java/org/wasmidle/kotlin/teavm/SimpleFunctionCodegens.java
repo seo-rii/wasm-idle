@@ -300,16 +300,9 @@ public final class SimpleFunctionCodegens {
     }
 
     private static ValueType arrayTypeForArrayInitializer(ValueType initializerType, String callText) {
-        PrimitiveArrayShape primitiveShape = primitiveArrayShapeForArrayType(initializerType);
-        if (primitiveShape != null) {
-            return primitiveShape.arrayArrayType;
-        }
-        ValueType scalarArrayListArrayType = scalarArrayListArrayType(initializerType);
-        if (scalarArrayListArrayType != null) {
-            return scalarArrayListArrayType;
-        }
-        if (isPairArrayListType(initializerType)) {
-            return arrayTypeForPairArrayList(initializerType);
+        ValueType arrayType = arrayTypeForElementType(initializerType);
+        if (arrayType != null) {
+            return arrayType;
         }
         throw new IllegalArgumentException("Unsupported Array initializer type: " + callText);
     }
@@ -330,12 +323,9 @@ public final class SimpleFunctionCodegens {
         if (primitiveShape != null) {
             return primitiveShape.arrayType;
         }
-        ValueType scalarArrayListElementType = scalarArrayListElementType(arrayType);
-        if (scalarArrayListElementType != null) {
-            return scalarArrayListElementType;
-        }
-        if (isPairArrayListArrayType(arrayType)) {
-            return arrayListTypeForPairArrayListArray(arrayType);
+        ValueType referenceElementType = referenceArrayElementType(arrayType);
+        if (referenceElementType != null) {
+            return referenceElementType;
         }
         throw new IllegalArgumentException("Unsupported indexed type: " + arrayType);
     }
@@ -744,11 +734,7 @@ public final class SimpleFunctionCodegens {
                 method.visitInsn(primitiveShape.storeOpcode);
                 return true;
             }
-            if (scalarArrayListOwner(elementType) != null && valueType == elementType) {
-                method.visitInsn(Opcodes.AASTORE);
-                return true;
-            }
-            if (isPairArrayListType(elementType) && valueType == elementType) {
+            if (isReferenceArrayElementType(elementType) && valueType == elementType) {
                 method.visitInsn(Opcodes.AASTORE);
                 return true;
             }
@@ -980,14 +966,9 @@ public final class SimpleFunctionCodegens {
                 method.visitInsn(primitiveShape.loadOpcode);
                 return primitiveShape.elementType;
             }
-            if (scalarArrayListOwner(elementType) != null) {
+            if (isReferenceArrayElementType(elementType)) {
                 method.visitInsn(Opcodes.AALOAD);
-                method.visitTypeInsn(Opcodes.CHECKCAST, "java/util/ArrayList");
-                return elementType;
-            }
-            if (isPairArrayListType(elementType)) {
-                method.visitInsn(Opcodes.AALOAD);
-                method.visitTypeInsn(Opcodes.CHECKCAST, "java/util/ArrayList");
+                method.visitTypeInsn(Opcodes.CHECKCAST, anewArrayComponentType(elementType));
                 return elementType;
             }
             if (elementType.array) {
@@ -3112,26 +3093,6 @@ public final class SimpleFunctionCodegens {
         throw new IllegalArgumentException("Unsupported Pair ArrayList type: " + type);
     }
 
-    private static boolean isPairArrayListArrayType(ValueType type) {
-        return pairShapeForArrayListArrayType(type) != null;
-    }
-
-    private static ValueType arrayListTypeForPairArrayListArray(ValueType type) {
-        PairShape shape = pairShapeForArrayListArrayType(type);
-        if (shape != null) {
-            return shape.arrayListType;
-        }
-        throw new IllegalArgumentException("Unsupported Pair ArrayList array type: " + type);
-    }
-
-    private static ValueType arrayTypeForPairArrayList(ValueType type) {
-        PairShape shape = pairShapeForArrayListType(type);
-        if (shape != null) {
-            return shape.arrayListArrayType;
-        }
-        throw new IllegalArgumentException("Unsupported Pair ArrayList type: " + type);
-    }
-
     private static ValueType forEachElementType(ValueType rangeType) {
         if (rangeType == ValueType.STRING) {
             return ValueType.CHAR;
@@ -3172,8 +3133,8 @@ public final class SimpleFunctionCodegens {
             method.visitInsn(primitiveShape.loadOpcode);
         } else {
             method.visitInsn(Opcodes.AALOAD);
-            if (isArrayListType(elementType)) {
-                method.visitTypeInsn(Opcodes.CHECKCAST, "java/util/ArrayList");
+            if (isReferenceArrayElementType(elementType)) {
+                method.visitTypeInsn(Opcodes.CHECKCAST, anewArrayComponentType(elementType));
             }
         }
     }
@@ -3429,15 +3390,6 @@ public final class SimpleFunctionCodegens {
         return null;
     }
 
-    private static PairShape pairShapeForArrayListArrayType(ValueType type) {
-        for (PairShape shape : PairShape.values()) {
-            if (shape.arrayListArrayType == type) {
-                return shape;
-            }
-        }
-        return null;
-    }
-
     private static PairShape pairShapeForArrayDequeType(ValueType type) {
         for (PairShape shape : PairShape.values()) {
             if (shape.arrayDequeType == type) {
@@ -3504,23 +3456,13 @@ public final class SimpleFunctionCodegens {
         return null;
     }
 
-    private static ValueType arrayListArrayTypeFromText(String text) {
+    private static ValueType arrayTypeFromText(String text) {
         String compact = compactText(text);
-        for (ScalarCollectionShape shape : ScalarCollectionShape.values()) {
-            if (genericTypeEquals(compact, "Array", "ArrayList<" + shape.kotlinType + ">")
-                    || genericTypeEquals(compact, "Array", "MutableList<" + shape.kotlinType + ">")
-                    || genericTypeEquals(compact, "Array", "List<" + shape.kotlinType + ">")) {
-                return shape.arrayListArrayType;
-            }
+        String elementText = genericArgumentText(compact, "Array");
+        if (elementText == null) {
+            return null;
         }
-        for (PairShape shape : PairShape.values()) {
-            if (genericTypeEquals(compact, "Array", "ArrayList<" + shape.kotlinType + ">")
-                    || genericTypeEquals(compact, "Array", "MutableList<" + shape.kotlinType + ">")
-                    || genericTypeEquals(compact, "Array", "List<" + shape.kotlinType + ">")) {
-                return shape.arrayListArrayType;
-            }
-        }
-        return null;
+        return arrayTypeForElementType(typeFromText(elementText));
     }
 
     private static ValueType priorityQueueTypeFromText(String text) {
@@ -3599,6 +3541,45 @@ public final class SimpleFunctionCodegens {
         return null;
     }
 
+    private static ValueType arrayTypeForElementType(ValueType elementType) {
+        PrimitiveArrayShape primitiveShape = primitiveArrayShapeForArrayType(elementType);
+        if (primitiveShape != null) {
+            return primitiveShape.arrayArrayType;
+        }
+        ReferenceArrayShape referenceShape = referenceArrayShapeForElementType(elementType);
+        if (referenceShape != null) {
+            return referenceShape.arrayType;
+        }
+        return null;
+    }
+
+    private static ValueType referenceArrayElementType(ValueType arrayType) {
+        ReferenceArrayShape shape = referenceArrayShapeForArrayType(arrayType);
+        return shape == null ? null : shape.elementType;
+    }
+
+    private static boolean isReferenceArrayElementType(ValueType type) {
+        return referenceArrayShapeForElementType(type) != null;
+    }
+
+    private static ReferenceArrayShape referenceArrayShapeForElementType(ValueType type) {
+        for (ReferenceArrayShape shape : ReferenceArrayShape.values()) {
+            if (shape.elementType == type) {
+                return shape;
+            }
+        }
+        return null;
+    }
+
+    private static ReferenceArrayShape referenceArrayShapeForArrayType(ValueType type) {
+        for (ReferenceArrayShape shape : ReferenceArrayShape.values()) {
+            if (shape.arrayType == type) {
+                return shape;
+            }
+        }
+        return null;
+    }
+
     private static PrimitiveArrayShape primitiveArrayShapeFromKotlinType(String text) {
         String compact = compactText(text);
         for (PrimitiveArrayShape shape : PrimitiveArrayShape.values()) {
@@ -3671,24 +3652,6 @@ public final class SimpleFunctionCodegens {
         return null;
     }
 
-    private static ValueType scalarArrayListArrayType(ValueType arrayListType) {
-        for (ScalarCollectionShape shape : ScalarCollectionShape.values()) {
-            if (shape.arrayListType == arrayListType) {
-                return shape.arrayListArrayType;
-            }
-        }
-        return null;
-    }
-
-    private static ValueType scalarArrayListElementType(ValueType arrayListArrayType) {
-        for (ScalarCollectionShape shape : ScalarCollectionShape.values()) {
-            if (shape.arrayListArrayType == arrayListArrayType) {
-                return shape.arrayListType;
-            }
-        }
-        return null;
-    }
-
     private static String scalarDequeOwner(ValueType type) {
         ScalarCollectionShape shape = scalarCollectionShapeForType(type);
         if (shape != null && shape.arrayDequeType == type) {
@@ -3719,6 +3682,14 @@ public final class SimpleFunctionCodegens {
 
     private static boolean genericTypeEquals(String compactText, String typeName, String typeArguments) {
         return (typeName + "<" + typeArguments + ">").equals(compactText);
+    }
+
+    private static String genericArgumentText(String compactText, String typeName) {
+        String prefix = typeName + "<";
+        if (!compactText.startsWith(prefix) || !compactText.endsWith(">")) {
+            return null;
+        }
+        return compactText.substring(prefix.length(), compactText.length() - 1);
     }
 
     private static String compactCallablePrefix(String text) {
@@ -4817,7 +4788,7 @@ public final class SimpleFunctionCodegens {
         if (parsedType != null) {
             return parsedType;
         }
-        parsedType = arrayListArrayTypeFromText(text);
+        parsedType = arrayTypeFromText(text);
         if (parsedType != null) {
             return parsedType;
         }
@@ -4991,19 +4962,15 @@ public final class SimpleFunctionCodegens {
     }
 
     private enum ScalarCollectionShape {
-        INT("Int", ValueType.INT, ValueType.INT_ARRAY_LIST, ValueType.INT_ARRAY_LIST_ARRAY,
-                ValueType.INT_PRIORITY_QUEUE,
+        INT("Int", ValueType.INT, ValueType.INT_ARRAY_LIST, ValueType.INT_PRIORITY_QUEUE,
                 ValueType.INT_ARRAY_DEQUE, ValueType.INT_HASH_SET),
-        LONG("Long", ValueType.LONG, ValueType.LONG_ARRAY_LIST, ValueType.LONG_ARRAY_LIST_ARRAY,
-                ValueType.LONG_PRIORITY_QUEUE,
+        LONG("Long", ValueType.LONG, ValueType.LONG_ARRAY_LIST, ValueType.LONG_PRIORITY_QUEUE,
                 ValueType.LONG_ARRAY_DEQUE, ValueType.LONG_HASH_SET),
-        STRING("String", ValueType.STRING, ValueType.STRING_ARRAY_LIST, ValueType.STRING_ARRAY_LIST_ARRAY,
-                null, null, ValueType.STRING_HASH_SET);
+        STRING("String", ValueType.STRING, ValueType.STRING_ARRAY_LIST, null, null, ValueType.STRING_HASH_SET);
 
         private final String kotlinType;
         private final ValueType elementType;
         private final ValueType arrayListType;
-        private final ValueType arrayListArrayType;
         private final ValueType priorityQueueType;
         private final ValueType arrayDequeType;
         private final ValueType hashSetType;
@@ -5012,14 +4979,12 @@ public final class SimpleFunctionCodegens {
                 String kotlinType,
                 ValueType elementType,
                 ValueType arrayListType,
-                ValueType arrayListArrayType,
                 ValueType priorityQueueType,
                 ValueType arrayDequeType,
                 ValueType hashSetType) {
             this.kotlinType = kotlinType;
             this.elementType = elementType;
             this.arrayListType = arrayListType;
-            this.arrayListArrayType = arrayListArrayType;
             this.priorityQueueType = priorityQueueType;
             this.arrayDequeType = arrayDequeType;
             this.hashSetType = hashSetType;
@@ -5028,25 +4993,21 @@ public final class SimpleFunctionCodegens {
 
     private enum PairShape {
         INT_INT("Pair<Int,Int>", ValueType.INT, ValueType.INT, ValueType.INT_PAIR,
-                ValueType.INT_PAIR_ARRAY_LIST, ValueType.INT_PAIR_ARRAY_LIST_ARRAY,
-                ValueType.INT_PAIR_ARRAY_DEQUE, ValueType.INT_PAIR_PRIORITY_QUEUE,
+                ValueType.INT_PAIR_ARRAY_LIST, ValueType.INT_PAIR_ARRAY_DEQUE, ValueType.INT_PAIR_PRIORITY_QUEUE,
                 ValueType.INT_PAIR_SECOND_PRIORITY_QUEUE),
         INT_LONG("Pair<Int,Long>", ValueType.INT, ValueType.LONG, ValueType.INT_LONG_PAIR,
-                ValueType.INT_LONG_PAIR_ARRAY_LIST, ValueType.INT_LONG_PAIR_ARRAY_LIST_ARRAY,
-                ValueType.INT_LONG_PAIR_ARRAY_DEQUE, null, null),
+                ValueType.INT_LONG_PAIR_ARRAY_LIST, ValueType.INT_LONG_PAIR_ARRAY_DEQUE, null, null),
         LONG_INT("Pair<Long,Int>", ValueType.LONG, ValueType.INT, ValueType.LONG_INT_PAIR,
-                ValueType.LONG_INT_PAIR_ARRAY_LIST, ValueType.LONG_INT_PAIR_ARRAY_LIST_ARRAY,
-                ValueType.LONG_INT_PAIR_ARRAY_DEQUE, ValueType.LONG_INT_PAIR_PRIORITY_QUEUE, null),
+                ValueType.LONG_INT_PAIR_ARRAY_LIST, ValueType.LONG_INT_PAIR_ARRAY_DEQUE,
+                ValueType.LONG_INT_PAIR_PRIORITY_QUEUE, null),
         LONG_LONG("Pair<Long,Long>", ValueType.LONG, ValueType.LONG, ValueType.LONG_LONG_PAIR,
-                ValueType.LONG_LONG_PAIR_ARRAY_LIST, ValueType.LONG_LONG_PAIR_ARRAY_LIST_ARRAY,
-                ValueType.LONG_LONG_PAIR_ARRAY_DEQUE, null, null);
+                ValueType.LONG_LONG_PAIR_ARRAY_LIST, ValueType.LONG_LONG_PAIR_ARRAY_DEQUE, null, null);
 
         private final String kotlinType;
         private final ValueType firstType;
         private final ValueType secondType;
         private final ValueType pairType;
         private final ValueType arrayListType;
-        private final ValueType arrayListArrayType;
         private final ValueType arrayDequeType;
         private final ValueType priorityQueueType;
         private final ValueType secondPriorityQueueType;
@@ -5057,7 +5018,6 @@ public final class SimpleFunctionCodegens {
                 ValueType secondType,
                 ValueType pairType,
                 ValueType arrayListType,
-                ValueType arrayListArrayType,
                 ValueType arrayDequeType,
                 ValueType priorityQueueType,
                 ValueType secondPriorityQueueType) {
@@ -5066,10 +5026,27 @@ public final class SimpleFunctionCodegens {
             this.secondType = secondType;
             this.pairType = pairType;
             this.arrayListType = arrayListType;
-            this.arrayListArrayType = arrayListArrayType;
             this.arrayDequeType = arrayDequeType;
             this.priorityQueueType = priorityQueueType;
             this.secondPriorityQueueType = secondPriorityQueueType;
+        }
+    }
+
+    private enum ReferenceArrayShape {
+        INT_ARRAY_LIST(ValueType.INT_ARRAY_LIST, ValueType.INT_ARRAY_LIST_ARRAY),
+        LONG_ARRAY_LIST(ValueType.LONG_ARRAY_LIST, ValueType.LONG_ARRAY_LIST_ARRAY),
+        STRING_ARRAY_LIST(ValueType.STRING_ARRAY_LIST, ValueType.STRING_ARRAY_LIST_ARRAY),
+        INT_PAIR_ARRAY_LIST(ValueType.INT_PAIR_ARRAY_LIST, ValueType.INT_PAIR_ARRAY_LIST_ARRAY),
+        INT_LONG_PAIR_ARRAY_LIST(ValueType.INT_LONG_PAIR_ARRAY_LIST, ValueType.INT_LONG_PAIR_ARRAY_LIST_ARRAY),
+        LONG_INT_PAIR_ARRAY_LIST(ValueType.LONG_INT_PAIR_ARRAY_LIST, ValueType.LONG_INT_PAIR_ARRAY_LIST_ARRAY),
+        LONG_LONG_PAIR_ARRAY_LIST(ValueType.LONG_LONG_PAIR_ARRAY_LIST, ValueType.LONG_LONG_PAIR_ARRAY_LIST_ARRAY);
+
+        private final ValueType elementType;
+        private final ValueType arrayType;
+
+        ReferenceArrayShape(ValueType elementType, ValueType arrayType) {
+            this.elementType = elementType;
+            this.arrayType = arrayType;
         }
     }
 
