@@ -1443,7 +1443,7 @@ public final class SimpleFunctionCodegens {
                             loadLocal(method, aggregateType, resultIndex);
                             return aggregateType;
                         }
-                        if (receiverType == ValueType.INT_ARRAY_LIST || receiverType == ValueType.LONG_ARRAY_LIST) {
+                        if (scalarArrayListOwner(receiverType) != null) {
                             int receiverIndex = context.allocateTemporary(receiverType);
                             emitExpressionAs(method, context, receiver, receiverType);
                             method.visitVarInsn(Opcodes.ASTORE, receiverIndex);
@@ -1470,11 +1470,10 @@ public final class SimpleFunctionCodegens {
                             method.visitVarInsn(Opcodes.ILOAD, loopIndex);
                             method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "get",
                                     "(I)Ljava/lang/Object;", false);
-                            if (receiverType == ValueType.LONG_ARRAY_LIST) {
-                                unboxLong(method);
+                            unboxValue(method, aggregateType);
+                            if (aggregateType == ValueType.LONG) {
                                 method.visitInsn(Opcodes.LADD);
                             } else {
-                                unboxInt(method);
                                 method.visitInsn(Opcodes.IADD);
                             }
                             storeLocal(method, aggregateType, resultIndex);
@@ -1534,17 +1533,13 @@ public final class SimpleFunctionCodegens {
                             loadLocal(method, aggregateType, resultIndex);
                             return aggregateType;
                         }
-                        if (receiverType == ValueType.INT_ARRAY_LIST || receiverType == ValueType.LONG_ARRAY_LIST) {
+                        if (scalarArrayListOwner(receiverType) != null) {
                             emitExpressionAs(method, context, receiver, receiverType);
                             method.visitMethodInsn(Opcodes.INVOKESTATIC, "java/util/Collections",
                                     max ? "max" : "min",
                                     "(Ljava/util/Collection;)Ljava/lang/Object;", false);
-                            if (receiverType == ValueType.LONG_ARRAY_LIST) {
-                                unboxLong(method);
-                                return ValueType.LONG;
-                            }
-                            unboxInt(method);
-                            return ValueType.INT;
+                            unboxValue(method, aggregateType);
+                            return aggregateType;
                         }
                     }
                 }
@@ -4914,11 +4909,10 @@ public final class SimpleFunctionCodegens {
         if (primitiveShape != null && primitiveShape.elementType.numeric) {
             return primitiveShape.elementType;
         }
-        if (receiverType == ValueType.INT_ARRAY_LIST) {
-            return ValueType.INT;
-        }
-        if (receiverType == ValueType.LONG_ARRAY_LIST) {
-            return ValueType.LONG;
+        ScalarCollectionShape scalarShape = scalarCollectionShapeForType(receiverType);
+        if (scalarShape != null && scalarShape.arrayListType == receiverType
+                && scalarShape.elementType.numeric) {
+            return scalarShape.elementType;
         }
         return null;
     }
