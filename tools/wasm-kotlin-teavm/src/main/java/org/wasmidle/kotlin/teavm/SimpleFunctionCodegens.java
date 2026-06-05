@@ -704,37 +704,16 @@ public final class SimpleFunctionCodegens {
                 method.visitInsn(Opcodes.POP);
                 return true;
             }
-            if (arrayType == ValueType.INT_ARRAY_LIST) {
+            ScalarCollectionShape scalarShape = scalarCollectionShapeForType(arrayType);
+            String scalarOwner = scalarArrayListOwner(arrayType);
+            if (scalarShape != null && scalarOwner != null) {
                 if (operation != KtTokens.EQ) {
                     throw new IllegalArgumentException("List compound assignment is not supported: "
                             + binary.getText());
                 }
-                emitExpressionAs(method, context, right, ValueType.INT);
-                boxInt(method);
-                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "set",
-                        "(ILjava/lang/Object;)Ljava/lang/Object;", false);
-                method.visitInsn(Opcodes.POP);
-                return true;
-            }
-            if (arrayType == ValueType.LONG_ARRAY_LIST) {
-                if (operation != KtTokens.EQ) {
-                    throw new IllegalArgumentException("Long list compound assignment is not supported: "
-                            + binary.getText());
-                }
-                emitExpressionAs(method, context, right, ValueType.LONG);
-                boxLong(method);
-                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "set",
-                        "(ILjava/lang/Object;)Ljava/lang/Object;", false);
-                method.visitInsn(Opcodes.POP);
-                return true;
-            }
-            if (arrayType == ValueType.STRING_ARRAY_LIST) {
-                if (operation != KtTokens.EQ) {
-                    throw new IllegalArgumentException("String list compound assignment is not supported: "
-                            + binary.getText());
-                }
-                emitExpressionAs(method, context, right, ValueType.STRING);
-                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "set",
+                emitExpressionAs(method, context, right, scalarShape.elementType);
+                boxValue(method, scalarShape.elementType);
+                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, scalarOwner, "set",
                         "(ILjava/lang/Object;)Ljava/lang/Object;", false);
                 method.visitInsn(Opcodes.POP);
                 return true;
@@ -972,23 +951,13 @@ public final class SimpleFunctionCodegens {
                 method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/String", "charAt", "(I)C", false);
                 return ValueType.CHAR;
             }
-            if (arrayType == ValueType.INT_ARRAY_LIST) {
-                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "get",
+            ScalarCollectionShape scalarShape = scalarCollectionShapeForType(arrayType);
+            String scalarOwner = scalarArrayListOwner(arrayType);
+            if (scalarShape != null && scalarOwner != null) {
+                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, scalarOwner, "get",
                         "(I)Ljava/lang/Object;", false);
-                unboxInt(method);
-                return ValueType.INT;
-            }
-            if (arrayType == ValueType.LONG_ARRAY_LIST) {
-                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "get",
-                        "(I)Ljava/lang/Object;", false);
-                unboxLong(method);
-                return ValueType.LONG;
-            }
-            if (arrayType == ValueType.STRING_ARRAY_LIST) {
-                method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "get",
-                        "(I)Ljava/lang/Object;", false);
-                method.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/String");
-                return ValueType.STRING;
+                unboxValue(method, scalarShape.elementType);
+                return scalarShape.elementType;
             }
             if (isPairArrayListType(arrayType)) {
                 method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "get",
@@ -2525,14 +2494,9 @@ public final class SimpleFunctionCodegens {
             if (!isIndexableType(arrayType)) {
                 throw new IllegalArgumentException("Unsupported array type: " + expression.getText());
             }
-            if (arrayType == ValueType.INT_ARRAY_LIST) {
-                return ValueType.INT;
-            }
-            if (arrayType == ValueType.LONG_ARRAY_LIST) {
-                return ValueType.LONG;
-            }
-            if (arrayType == ValueType.STRING_ARRAY_LIST) {
-                return ValueType.STRING;
+            ScalarCollectionShape scalarShape = scalarCollectionShapeForType(arrayType);
+            if (scalarShape != null && scalarArrayListOwner(arrayType) != null) {
+                return scalarShape.elementType;
             }
             if (isPairArrayListType(arrayType)) {
                 return pairTypeForArrayList(arrayType);
