@@ -1266,23 +1266,12 @@ public final class SimpleFunctionCodegens {
                 if (callee != null && "sort".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().isEmpty()) {
                     ValueType receiverType = emitExpression(method, context, receiver);
-                    if (receiverType == ValueType.INT_ARRAY || receiverType == ValueType.LONG_ARRAY
-                            || receiverType == ValueType.DOUBLE_ARRAY || receiverType == ValueType.CHAR_ARRAY) {
+                    if (isSortablePrimitiveArrayType(receiverType)) {
                         method.visitMethodInsn(Opcodes.INVOKESTATIC, "java/util/Arrays", "sort",
                                 "(" + receiverType.descriptor + ")V", false);
                         return ValueType.VOID;
                     }
-                    if (receiverType == ValueType.INT_ARRAY_LIST) {
-                        method.visitMethodInsn(Opcodes.INVOKESTATIC, "java/util/Collections", "sort",
-                                "(Ljava/util/List;)V", false);
-                        return ValueType.VOID;
-                    }
-                    if (receiverType == ValueType.LONG_ARRAY_LIST) {
-                        method.visitMethodInsn(Opcodes.INVOKESTATIC, "java/util/Collections", "sort",
-                                "(Ljava/util/List;)V", false);
-                        return ValueType.VOID;
-                    }
-                    if (receiverType == ValueType.STRING_ARRAY_LIST) {
+                    if (isSortableArrayListType(receiverType)) {
                         method.visitMethodInsn(Opcodes.INVOKESTATIC, "java/util/Collections", "sort",
                                 "(Ljava/util/List;)V", false);
                         return ValueType.VOID;
@@ -2655,11 +2644,7 @@ public final class SimpleFunctionCodegens {
                 if (callee != null && "sort".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().isEmpty()) {
                     ValueType receiverType = inferExpressionType(context, qualified.getReceiverExpression());
-                    if (receiverType == ValueType.INT_ARRAY || receiverType == ValueType.LONG_ARRAY
-                            || receiverType == ValueType.DOUBLE_ARRAY || receiverType == ValueType.CHAR_ARRAY
-                            || receiverType == ValueType.INT_ARRAY_LIST
-                            || receiverType == ValueType.LONG_ARRAY_LIST
-                            || receiverType == ValueType.STRING_ARRAY_LIST) {
+                    if (isSortablePrimitiveArrayType(receiverType) || isSortableArrayListType(receiverType)) {
                         return ValueType.VOID;
                     }
                 }
