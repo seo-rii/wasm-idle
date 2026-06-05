@@ -1773,32 +1773,16 @@ public final class SimpleFunctionCodegens {
                 if (callee != null && "removeAt".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().size() == 1) {
                     ValueType receiverType = emitExpression(method, context, receiver);
-                    if (receiverType == ValueType.INT_ARRAY_LIST) {
+                    ScalarCollectionShape scalarShape = scalarCollectionShapeForType(receiverType);
+                    String scalarOwner = scalarArrayListOwner(receiverType);
+                    if (scalarShape != null && scalarOwner != null) {
                         emitExpressionAs(method, context,
                                 ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
                                 ValueType.INT);
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "remove",
+                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, scalarOwner, "remove",
                                 "(I)Ljava/lang/Object;", false);
-                        unboxInt(method);
-                        return ValueType.INT;
-                    }
-                    if (receiverType == ValueType.LONG_ARRAY_LIST) {
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.INT);
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "remove",
-                                "(I)Ljava/lang/Object;", false);
-                        unboxLong(method);
-                        return ValueType.LONG;
-                    }
-                    if (receiverType == ValueType.STRING_ARRAY_LIST) {
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.INT);
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "remove",
-                                "(I)Ljava/lang/Object;", false);
-                        method.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/String");
-                        return ValueType.STRING;
+                        unboxValue(method, scalarShape.elementType);
+                        return scalarShape.elementType;
                     }
                     if (isPairArrayListType(receiverType)) {
                         emitExpressionAs(method, context,
@@ -2838,14 +2822,9 @@ public final class SimpleFunctionCodegens {
                 if (callee != null && "removeAt".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().size() == 1) {
                     ValueType receiverType = inferExpressionType(context, qualified.getReceiverExpression());
-                    if (receiverType == ValueType.INT_ARRAY_LIST) {
-                        return ValueType.INT;
-                    }
-                    if (receiverType == ValueType.LONG_ARRAY_LIST) {
-                        return ValueType.LONG;
-                    }
-                    if (receiverType == ValueType.STRING_ARRAY_LIST) {
-                        return ValueType.STRING;
+                    ScalarCollectionShape scalarShape = scalarCollectionShapeForType(receiverType);
+                    if (scalarShape != null && scalarArrayListOwner(receiverType) != null) {
+                        return scalarShape.elementType;
                     }
                     if (isPairArrayListType(receiverType)) {
                         return pairTypeForArrayList(receiverType);
