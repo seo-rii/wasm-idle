@@ -2521,11 +2521,7 @@ public final class SimpleFunctionCodegens {
             }
             if (selector != null && "lastIndex".equals(selector.getText())) {
                 ValueType receiverType = inferExpressionType(context, qualified.getReceiverExpression());
-                if (receiverType.array || receiverType == ValueType.STRING
-                        || receiverType == ValueType.INT_ARRAY_LIST
-                        || receiverType == ValueType.LONG_ARRAY_LIST
-                        || receiverType == ValueType.STRING_ARRAY_LIST
-                        || isPairArrayListType(receiverType)) {
+                if (receiverType.array || receiverType == ValueType.STRING || isArrayListType(receiverType)) {
                     return ValueType.INT;
                 }
             }
