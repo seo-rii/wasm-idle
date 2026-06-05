@@ -1647,7 +1647,7 @@ public final class SimpleFunctionCodegens {
                         && ((KtCallExpression) selector).getValueArguments().size() == 1) {
                     ValueType receiverType = emitExpression(method, context, receiver);
                     ScalarCollectionShape scalarShape = scalarCollectionShapeForType(receiverType);
-                    String scalarOwner = scalarOfferOwner(receiverType);
+                    String scalarOwner = scalarQueueOwner(receiverType);
                     if (scalarShape != null && scalarOwner != null) {
                         emitExpressionAs(method, context,
                                 ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
@@ -1904,34 +1904,18 @@ public final class SimpleFunctionCodegens {
                 if (callee != null && ("peek".equals(callee.getText()) || "poll".equals(callee.getText()))
                         && ((KtCallExpression) selector).getValueArguments().isEmpty()) {
                     ValueType receiverType = emitExpression(method, context, receiver);
-                    if (receiverType == ValueType.INT_PRIORITY_QUEUE) {
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/PriorityQueue", callee.getText(),
+                    ScalarCollectionShape scalarShape = scalarCollectionShapeForType(receiverType);
+                    String scalarOwner = scalarQueueOwner(receiverType);
+                    if (scalarShape != null && scalarOwner != null) {
+                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, scalarOwner, callee.getText(),
                                 "()Ljava/lang/Object;", false);
-                        unboxInt(method);
-                        return ValueType.INT;
-                    }
-                    if (receiverType == ValueType.LONG_PRIORITY_QUEUE) {
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/PriorityQueue", callee.getText(),
-                                "()Ljava/lang/Object;", false);
-                        unboxLong(method);
-                        return ValueType.LONG;
+                        unboxValue(method, scalarShape.elementType);
+                        return scalarShape.elementType;
                     }
                     if (isPairPriorityQueueType(receiverType)) {
                         method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/PriorityQueue", callee.getText(),
                                 "()Ljava/lang/Object;", false);
                         return emitPairFromPackedPriorityQueueElement(method, context, receiverType);
-                    }
-                    if (receiverType == ValueType.INT_ARRAY_DEQUE) {
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayDeque", callee.getText(),
-                                "()Ljava/lang/Object;", false);
-                        unboxInt(method);
-                        return ValueType.INT;
-                    }
-                    if (receiverType == ValueType.LONG_ARRAY_DEQUE) {
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayDeque", callee.getText(),
-                                "()Ljava/lang/Object;", false);
-                        unboxLong(method);
-                        return ValueType.LONG;
                     }
                     if (isPairArrayDequeType(receiverType)) {
                         method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayDeque", callee.getText(),
@@ -2769,7 +2753,7 @@ public final class SimpleFunctionCodegens {
                 if (callee != null && "offer".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().size() == 1) {
                     ValueType receiverType = inferExpressionType(context, qualified.getReceiverExpression());
-                    if (scalarOfferOwner(receiverType) != null
+                    if (scalarQueueOwner(receiverType) != null
                             || isPairPriorityQueueType(receiverType)
                             || isPairArrayDequeType(receiverType)) {
                         return ValueType.BOOLEAN;
@@ -2880,23 +2864,15 @@ public final class SimpleFunctionCodegens {
                 if (callee != null && ("peek".equals(callee.getText()) || "poll".equals(callee.getText()))
                         && ((KtCallExpression) selector).getValueArguments().isEmpty()) {
                     ValueType receiverType = inferExpressionType(context, qualified.getReceiverExpression());
-                    if (receiverType == ValueType.INT_PRIORITY_QUEUE
-                            || receiverType == ValueType.LONG_PRIORITY_QUEUE
-                            || isPairPriorityQueueType(receiverType)
-                            || receiverType == ValueType.INT_ARRAY_DEQUE
-                            || receiverType == ValueType.LONG_ARRAY_DEQUE
-                            || isPairArrayDequeType(receiverType)) {
-                        if (receiverType == ValueType.LONG_PRIORITY_QUEUE
-                                || receiverType == ValueType.LONG_ARRAY_DEQUE) {
-                            return ValueType.LONG;
-                        }
-                        if (isPairPriorityQueueType(receiverType)) {
-                            return pairTypeForPriorityQueue(receiverType);
-                        }
-                        if (isPairArrayDequeType(receiverType)) {
-                            return pairTypeForArrayDeque(receiverType);
-                        }
-                        return ValueType.INT;
+                    ScalarCollectionShape scalarShape = scalarCollectionShapeForType(receiverType);
+                    if (scalarShape != null && scalarQueueOwner(receiverType) != null) {
+                        return scalarShape.elementType;
+                    }
+                    if (isPairPriorityQueueType(receiverType)) {
+                        return pairTypeForPriorityQueue(receiverType);
+                    }
+                    if (isPairArrayDequeType(receiverType)) {
+                        return pairTypeForArrayDeque(receiverType);
                     }
                 }
                 if (callee != null && ("peekFirst".equals(callee.getText()) || "peekLast".equals(callee.getText())
@@ -3764,7 +3740,7 @@ public final class SimpleFunctionCodegens {
         return null;
     }
 
-    private static String scalarOfferOwner(ValueType type) {
+    private static String scalarQueueOwner(ValueType type) {
         ScalarCollectionShape shape = scalarCollectionShapeForType(type);
         if (shape == null) {
             return null;
