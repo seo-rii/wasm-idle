@@ -1601,38 +1601,17 @@ public final class SimpleFunctionCodegens {
                 if (callee != null && "add".equals(callee.getText())
                         && ((KtCallExpression) selector).getValueArguments().size() == 2) {
                     ValueType receiverType = emitExpression(method, context, receiver);
-                    if (receiverType == ValueType.INT_ARRAY_LIST) {
+                    ScalarCollectionShape scalarShape = scalarCollectionShapeForType(receiverType);
+                    String scalarOwner = scalarArrayListOwner(receiverType);
+                    if (scalarShape != null && scalarOwner != null) {
                         emitExpressionAs(method, context,
                                 ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
                                 ValueType.INT);
                         emitExpressionAs(method, context,
                                 ((KtCallExpression) selector).getValueArguments().get(1).getArgumentExpression(),
-                                ValueType.INT);
-                        boxInt(method);
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "add",
-                                "(ILjava/lang/Object;)V", false);
-                        return ValueType.VOID;
-                    }
-                    if (receiverType == ValueType.LONG_ARRAY_LIST) {
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.INT);
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(1).getArgumentExpression(),
-                                ValueType.LONG);
-                        boxLong(method);
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "add",
-                                "(ILjava/lang/Object;)V", false);
-                        return ValueType.VOID;
-                    }
-                    if (receiverType == ValueType.STRING_ARRAY_LIST) {
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(0).getArgumentExpression(),
-                                ValueType.INT);
-                        emitExpressionAs(method, context,
-                                ((KtCallExpression) selector).getValueArguments().get(1).getArgumentExpression(),
-                                ValueType.STRING);
-                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "add",
+                                scalarShape.elementType);
+                        boxValue(method, scalarShape.elementType);
+                        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, scalarOwner, "add",
                                 "(ILjava/lang/Object;)V", false);
                         return ValueType.VOID;
                     }
@@ -3828,6 +3807,14 @@ public final class SimpleFunctionCodegens {
         }
         if (shape.arrayDequeType == type) {
             return "java/util/ArrayDeque";
+        }
+        return null;
+    }
+
+    private static String scalarArrayListOwner(ValueType type) {
+        ScalarCollectionShape shape = scalarCollectionShapeForType(type);
+        if (shape != null && shape.arrayListType == type) {
+            return "java/util/ArrayList";
         }
         return null;
     }
