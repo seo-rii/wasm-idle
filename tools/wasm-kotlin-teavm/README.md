@@ -762,6 +762,22 @@ The expected output is:
 adj=4,2,2 first=4 removed=1 total=32 flags=true,true tail=9,10
 ```
 
+To run the PS-style scalar `Array<ArrayList<T>>` fixture:
+
+```bash
+node --experimental-wasm-imported-strings \
+  tools/wasm-kotlin-teavm/scripts/probe-kotlin-compile.mjs \
+  --source tools/wasm-kotlin-teavm/fixtures/ps-scalar-list-array/Main.kt \
+  --out tools/wasm-kotlin-teavm/build/browser-ps-scalar-list-array-out
+printf '100000000000 7 Alpha Beta\n' | java -cp tools/wasm-kotlin-teavm/build/browser-ps-scalar-list-array-out MainKt
+```
+
+The expected output is:
+
+```text
+scalarListArray=longs=2,2,2,300000000007 words=2,Beta,beta,ALPHA,18
+```
+
 To run the PS-style `Array<ArrayList<Pair<Int, Int>>>` weighted-adjacency fixture:
 
 ```bash
@@ -1555,6 +1571,11 @@ Known findings from the initial experiments:
   `size`, and `in`/`!in` by lowering to a `java.util.ArrayList<Integer>[]`. With stdin
   `4 3 0 1 1 2 2 3` it prints
   `adj=4,2,2 first=4 removed=1 total=32 flags=true,true tail=9,10`.
+- The browser-compatible probe also compiles `fixtures/ps-scalar-list-array/Main.kt`, which exercises
+  scalar `Array<ArrayList<Long>>` and `Array<ArrayList<String>>` construction, function parameters,
+  nested index access, and element replacement through the shared scalar collection shape path.
+  With stdin `100000000000 7 Alpha Beta` it prints
+  `scalarListArray=longs=2,2,2,300000000007 words=2,Beta,beta,ALPHA,18`.
 - The browser-compatible probe also compiles `fixtures/ps-pair-list-array/Main.kt`, which exercises
   weighted-graph `Array<ArrayList<Pair<Int, Int>>>` construction with
   `Array(n) { ArrayList<Pair<Int, Int>>() }`, function parameters, `graph[u].add(Pair(v, w))`,

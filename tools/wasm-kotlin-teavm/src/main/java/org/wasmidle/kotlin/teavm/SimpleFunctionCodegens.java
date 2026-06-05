@@ -304,8 +304,9 @@ public final class SimpleFunctionCodegens {
         if (primitiveShape != null) {
             return primitiveShape.arrayArrayType;
         }
-        if (initializerType == ValueType.INT_ARRAY_LIST) {
-            return ValueType.INT_ARRAY_LIST_ARRAY;
+        ValueType scalarArrayListArrayType = scalarArrayListArrayType(initializerType);
+        if (scalarArrayListArrayType != null) {
+            return scalarArrayListArrayType;
         }
         if (isPairArrayListType(initializerType)) {
             return arrayTypeForPairArrayList(initializerType);
@@ -329,8 +330,9 @@ public final class SimpleFunctionCodegens {
         if (primitiveShape != null) {
             return primitiveShape.arrayType;
         }
-        if (arrayType == ValueType.INT_ARRAY_LIST_ARRAY) {
-            return ValueType.INT_ARRAY_LIST;
+        ValueType scalarArrayListElementType = scalarArrayListElementType(arrayType);
+        if (scalarArrayListElementType != null) {
+            return scalarArrayListElementType;
         }
         if (isPairArrayListArrayType(arrayType)) {
             return arrayListTypeForPairArrayListArray(arrayType);
@@ -742,7 +744,7 @@ public final class SimpleFunctionCodegens {
                 method.visitInsn(primitiveShape.storeOpcode);
                 return true;
             }
-            if (elementType == ValueType.INT_ARRAY_LIST && valueType == ValueType.INT_ARRAY_LIST) {
+            if (scalarArrayListOwner(elementType) != null && valueType == elementType) {
                 method.visitInsn(Opcodes.AASTORE);
                 return true;
             }
@@ -978,10 +980,10 @@ public final class SimpleFunctionCodegens {
                 method.visitInsn(primitiveShape.loadOpcode);
                 return primitiveShape.elementType;
             }
-            if (elementType == ValueType.INT_ARRAY_LIST) {
+            if (scalarArrayListOwner(elementType) != null) {
                 method.visitInsn(Opcodes.AALOAD);
                 method.visitTypeInsn(Opcodes.CHECKCAST, "java/util/ArrayList");
-                return ValueType.INT_ARRAY_LIST;
+                return elementType;
             }
             if (isPairArrayListType(elementType)) {
                 method.visitInsn(Opcodes.AALOAD);
@@ -3504,9 +3506,12 @@ public final class SimpleFunctionCodegens {
 
     private static ValueType arrayListArrayTypeFromText(String text) {
         String compact = compactText(text);
-        if ("Array<ArrayList<Int>>".equals(compact) || "Array<MutableList<Int>>".equals(compact)
-                || "Array<List<Int>>".equals(compact)) {
-            return ValueType.INT_ARRAY_LIST_ARRAY;
+        for (ScalarCollectionShape shape : ScalarCollectionShape.values()) {
+            if (genericTypeEquals(compact, "Array", "ArrayList<" + shape.kotlinType + ">")
+                    || genericTypeEquals(compact, "Array", "MutableList<" + shape.kotlinType + ">")
+                    || genericTypeEquals(compact, "Array", "List<" + shape.kotlinType + ">")) {
+                return shape.arrayListArrayType;
+            }
         }
         for (PairShape shape : PairShape.values()) {
             if (genericTypeEquals(compact, "Array", "ArrayList<" + shape.kotlinType + ">")
@@ -3662,6 +3667,24 @@ public final class SimpleFunctionCodegens {
         ScalarCollectionShape shape = scalarCollectionShapeForType(type);
         if (shape != null && shape.arrayListType == type) {
             return "java/util/ArrayList";
+        }
+        return null;
+    }
+
+    private static ValueType scalarArrayListArrayType(ValueType arrayListType) {
+        for (ScalarCollectionShape shape : ScalarCollectionShape.values()) {
+            if (shape.arrayListType == arrayListType) {
+                return shape.arrayListArrayType;
+            }
+        }
+        return null;
+    }
+
+    private static ValueType scalarArrayListElementType(ValueType arrayListArrayType) {
+        for (ScalarCollectionShape shape : ScalarCollectionShape.values()) {
+            if (shape.arrayListArrayType == arrayListArrayType) {
+                return shape.arrayListType;
+            }
         }
         return null;
     }
@@ -4968,15 +4991,19 @@ public final class SimpleFunctionCodegens {
     }
 
     private enum ScalarCollectionShape {
-        INT("Int", ValueType.INT, ValueType.INT_ARRAY_LIST, ValueType.INT_PRIORITY_QUEUE,
+        INT("Int", ValueType.INT, ValueType.INT_ARRAY_LIST, ValueType.INT_ARRAY_LIST_ARRAY,
+                ValueType.INT_PRIORITY_QUEUE,
                 ValueType.INT_ARRAY_DEQUE, ValueType.INT_HASH_SET),
-        LONG("Long", ValueType.LONG, ValueType.LONG_ARRAY_LIST, ValueType.LONG_PRIORITY_QUEUE,
+        LONG("Long", ValueType.LONG, ValueType.LONG_ARRAY_LIST, ValueType.LONG_ARRAY_LIST_ARRAY,
+                ValueType.LONG_PRIORITY_QUEUE,
                 ValueType.LONG_ARRAY_DEQUE, ValueType.LONG_HASH_SET),
-        STRING("String", ValueType.STRING, ValueType.STRING_ARRAY_LIST, null, null, ValueType.STRING_HASH_SET);
+        STRING("String", ValueType.STRING, ValueType.STRING_ARRAY_LIST, ValueType.STRING_ARRAY_LIST_ARRAY,
+                null, null, ValueType.STRING_HASH_SET);
 
         private final String kotlinType;
         private final ValueType elementType;
         private final ValueType arrayListType;
+        private final ValueType arrayListArrayType;
         private final ValueType priorityQueueType;
         private final ValueType arrayDequeType;
         private final ValueType hashSetType;
@@ -4985,12 +5012,14 @@ public final class SimpleFunctionCodegens {
                 String kotlinType,
                 ValueType elementType,
                 ValueType arrayListType,
+                ValueType arrayListArrayType,
                 ValueType priorityQueueType,
                 ValueType arrayDequeType,
                 ValueType hashSetType) {
             this.kotlinType = kotlinType;
             this.elementType = elementType;
             this.arrayListType = arrayListType;
+            this.arrayListArrayType = arrayListArrayType;
             this.priorityQueueType = priorityQueueType;
             this.arrayDequeType = arrayDequeType;
             this.hashSetType = hashSetType;
@@ -5115,6 +5144,8 @@ public final class SimpleFunctionCodegens {
         CHAR_2D_ARRAY("[[C", 1, false, true),
         BOOLEAN_2D_ARRAY("[[Z", 1, false, true),
         INT_ARRAY_LIST_ARRAY("[Ljava/util/ArrayList;", 1, false, true),
+        LONG_ARRAY_LIST_ARRAY("[Ljava/util/ArrayList;", 1, false, true),
+        STRING_ARRAY_LIST_ARRAY("[Ljava/util/ArrayList;", 1, false, true),
         INT_PAIR_ARRAY_LIST_ARRAY("[Ljava/util/ArrayList;", 1, false, true),
         INT_LONG_PAIR_ARRAY_LIST_ARRAY("[Ljava/util/ArrayList;", 1, false, true),
         LONG_INT_PAIR_ARRAY_LIST_ARRAY("[Ljava/util/ArrayList;", 1, false, true),
