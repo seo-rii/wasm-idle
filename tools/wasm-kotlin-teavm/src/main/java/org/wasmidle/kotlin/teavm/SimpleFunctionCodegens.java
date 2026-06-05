@@ -1890,17 +1890,10 @@ public final class SimpleFunctionCodegens {
                         }
                         method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "get",
                                 "(I)Ljava/lang/Object;", false);
-                        if (receiverType == ValueType.INT_ARRAY_LIST) {
-                            unboxInt(method);
-                            return ValueType.INT;
-                        }
-                        if (receiverType == ValueType.LONG_ARRAY_LIST) {
-                            unboxLong(method);
-                            return ValueType.LONG;
-                        }
-                        if (receiverType == ValueType.STRING_ARRAY_LIST) {
-                            method.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/String");
-                            return ValueType.STRING;
+                        ScalarCollectionShape scalarShape = scalarCollectionShapeForType(receiverType);
+                        if (scalarShape != null && scalarArrayListOwner(receiverType) != null) {
+                            unboxValue(method, scalarShape.elementType);
+                            return scalarShape.elementType;
                         }
                         method.visitTypeInsn(Opcodes.CHECKCAST, "java/util/AbstractMap$SimpleEntry");
                         if (isPairArrayListType(receiverType)) {
@@ -2876,14 +2869,9 @@ public final class SimpleFunctionCodegens {
                     if (receiverType == ValueType.BOOLEAN_ARRAY) {
                         return ValueType.BOOLEAN;
                     }
-                    if (receiverType == ValueType.INT_ARRAY_LIST) {
-                        return ValueType.INT;
-                    }
-                    if (receiverType == ValueType.LONG_ARRAY_LIST) {
-                        return ValueType.LONG;
-                    }
-                    if (receiverType == ValueType.STRING_ARRAY_LIST) {
-                        return ValueType.STRING;
+                    ScalarCollectionShape scalarShape = scalarCollectionShapeForType(receiverType);
+                    if (scalarShape != null && scalarArrayListOwner(receiverType) != null) {
+                        return scalarShape.elementType;
                     }
                     if (isPairArrayListType(receiverType)) {
                         return pairTypeForArrayList(receiverType);
