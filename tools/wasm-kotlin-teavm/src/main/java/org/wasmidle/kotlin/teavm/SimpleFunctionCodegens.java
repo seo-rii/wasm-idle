@@ -3145,14 +3145,9 @@ public final class SimpleFunctionCodegens {
         if (rangeType == ValueType.STRING) {
             return ValueType.CHAR;
         }
-        if (rangeType == ValueType.INT_ARRAY_LIST) {
-            return ValueType.INT;
-        }
-        if (rangeType == ValueType.LONG_ARRAY_LIST) {
-            return ValueType.LONG;
-        }
-        if (rangeType == ValueType.STRING_ARRAY_LIST) {
-            return ValueType.STRING;
+        ScalarCollectionShape scalarShape = scalarCollectionShapeForType(rangeType);
+        if (scalarShape != null && scalarArrayListOwner(rangeType) != null) {
+            return scalarShape.elementType;
         }
         if (isPairArrayListType(rangeType)) {
             return pairTypeForArrayList(rangeType);
@@ -3174,12 +3169,8 @@ public final class SimpleFunctionCodegens {
         if (isArrayListType(rangeType)) {
             method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/ArrayList", "get",
                     "(I)Ljava/lang/Object;", false);
-            if (elementType == ValueType.INT) {
-                unboxInt(method);
-            } else if (elementType == ValueType.LONG) {
-                unboxLong(method);
-            } else if (elementType == ValueType.STRING) {
-                method.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/String");
+            if (scalarArrayListOwner(rangeType) != null) {
+                unboxValue(method, elementType);
             } else {
                 method.visitTypeInsn(Opcodes.CHECKCAST, "java/util/AbstractMap$SimpleEntry");
             }
