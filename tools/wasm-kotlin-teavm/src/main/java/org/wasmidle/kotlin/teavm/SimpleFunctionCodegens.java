@@ -3091,11 +3091,7 @@ public final class SimpleFunctionCodegens {
     }
 
     private static boolean isIndexableType(ValueType type) {
-        return type.array || type == ValueType.STRING || type == ValueType.INT_ARRAY_LIST
-                || type == ValueType.LONG_ARRAY_LIST
-                || type == ValueType.STRING_ARRAY_LIST
-                || isPairArrayListType(type)
-                || isHashMapType(type);
+        return type.array || type == ValueType.STRING || isArrayListType(type) || isHashMapType(type);
     }
 
     private static boolean isForEachRangeType(ValueType type) {
@@ -3103,10 +3099,7 @@ public final class SimpleFunctionCodegens {
     }
 
     private static boolean isArrayListType(ValueType type) {
-        return type == ValueType.INT_ARRAY_LIST
-                || type == ValueType.LONG_ARRAY_LIST
-                || type == ValueType.STRING_ARRAY_LIST
-                || isPairArrayListType(type);
+        return scalarArrayListOwner(type) != null || isPairArrayListType(type);
     }
 
     private static boolean isPairArrayListType(ValueType type) {
@@ -4882,8 +4875,7 @@ public final class SimpleFunctionCodegens {
     }
 
     private static boolean isSortableArrayListType(ValueType type) {
-        return type == ValueType.INT_ARRAY_LIST || type == ValueType.LONG_ARRAY_LIST
-                || type == ValueType.STRING_ARRAY_LIST;
+        return scalarArrayListOwner(type) != null;
     }
 
     private static boolean isReversibleArrayListType(ValueType type) {
