@@ -2,6 +2,7 @@ package org.wasmidle.kotlin.teavm;
 
 import com.intellij.psi.tree.IElementType;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
@@ -3078,17 +3079,17 @@ public final class SimpleFunctionCodegens {
     }
 
     private static boolean isArrayListType(ValueType type) {
-        return scalarArrayListOwner(type) != null || isPairArrayListType(type);
+        return arrayListElementType(type) != null;
     }
 
     private static boolean isPairArrayListType(ValueType type) {
-        return pairShapeForArrayListType(type) != null;
+        return isPairType(arrayListElementType(type));
     }
 
     private static ValueType pairTypeForArrayList(ValueType type) {
-        PairShape shape = pairShapeForArrayListType(type);
-        if (shape != null) {
-            return shape.pairType;
+        ValueType elementType = arrayListElementType(type);
+        if (isPairType(elementType)) {
+            return elementType;
         }
         throw new IllegalArgumentException("Unsupported Pair ArrayList type: " + type);
     }
@@ -3185,20 +3186,11 @@ public final class SimpleFunctionCodegens {
 
     private static ValueType arrayListTypeForFactoryOrConstructor(String text) {
         String compact = compactCallablePrefix(text);
-        for (ScalarCollectionShape shape : ScalarCollectionShape.values()) {
-            if (shape.arrayListType != null
-                    && (genericTypeEquals(compact, "ArrayList", shape.kotlinType)
-                            || genericTypeEquals(compact, "mutableListOf", shape.kotlinType))) {
-                return shape.arrayListType;
-            }
+        String elementText = genericArgumentText(compact, "ArrayList");
+        if (elementText == null) {
+            elementText = genericArgumentText(compact, "mutableListOf");
         }
-        for (PairShape shape : PairShape.values()) {
-            if (genericTypeEquals(compact, "ArrayList", shape.kotlinType)
-                    || genericTypeEquals(compact, "mutableListOf", shape.kotlinType)) {
-                return shape.arrayListType;
-            }
-        }
-        return null;
+        return elementText == null ? null : arrayListTypeForElementType(typeFromText(elementText));
     }
 
     private static boolean isPriorityQueueConstructor(String calleeText) {
@@ -3215,40 +3207,28 @@ public final class SimpleFunctionCodegens {
 
     private static ValueType priorityQueueTypeForConstructor(String text) {
         String compactExpression = compactText(text);
-        if (compactExpression.startsWith("PriorityQueue<" + PairShape.INT_INT.kotlinType + ">(")
+        if (genericArgumentEquals(compactCallablePrefix(text), "PriorityQueue", ValueType.INT_PAIR)
                 && compactExpression.contains("compareBy")
                 && compactExpression.contains("it.second")) {
             return ValueType.INT_PAIR_SECOND_PRIORITY_QUEUE;
         }
         String compact = compactCallablePrefix(text);
-        for (ScalarCollectionShape shape : ScalarCollectionShape.values()) {
-            if (shape.priorityQueueType != null
-                    && genericTypeEquals(compact, "PriorityQueue", shape.kotlinType)) {
-                return shape.priorityQueueType;
-            }
-        }
-        for (PairShape shape : PairShape.values()) {
-            if (shape.priorityQueueType != null
-                    && genericTypeEquals(compact, "PriorityQueue", shape.kotlinType)) {
-                return shape.priorityQueueType;
-            }
-        }
-        return null;
+        String elementText = genericArgumentText(compact, "PriorityQueue");
+        return elementText == null ? null : priorityQueueTypeForElementType(typeFromText(elementText));
     }
 
     private static boolean isIntPairPriorityQueueType(ValueType type) {
-        PairShape shape = pairShapeForPriorityQueueType(type);
-        return shape != null && shape.pairType == ValueType.INT_PAIR;
+        return priorityQueueElementType(type) == ValueType.INT_PAIR;
     }
 
     private static boolean isPairPriorityQueueType(ValueType type) {
-        return pairShapeForPriorityQueueType(type) != null;
+        return isPairType(priorityQueueElementType(type));
     }
 
     private static ValueType pairTypeForPriorityQueue(ValueType type) {
-        PairShape shape = pairShapeForPriorityQueueType(type);
-        if (shape != null) {
-            return shape.pairType;
+        ValueType elementType = priorityQueueElementType(type);
+        if (isPairType(elementType)) {
+            return elementType;
         }
         throw new IllegalArgumentException("Unsupported Pair PriorityQueue type: " + type);
     }
@@ -3271,28 +3251,18 @@ public final class SimpleFunctionCodegens {
 
     private static ValueType arrayDequeTypeForConstructor(String text) {
         String compact = compactCallablePrefix(text);
-        for (ScalarCollectionShape shape : ScalarCollectionShape.values()) {
-            if (shape.arrayDequeType != null
-                    && genericTypeEquals(compact, "ArrayDeque", shape.kotlinType)) {
-                return shape.arrayDequeType;
-            }
-        }
-        for (PairShape shape : PairShape.values()) {
-            if (genericTypeEquals(compact, "ArrayDeque", shape.kotlinType)) {
-                return shape.arrayDequeType;
-            }
-        }
-        return null;
+        String elementText = genericArgumentText(compact, "ArrayDeque");
+        return elementText == null ? null : arrayDequeTypeForElementType(typeFromText(elementText));
     }
 
     private static boolean isPairArrayDequeType(ValueType type) {
-        return pairShapeForArrayDequeType(type) != null;
+        return isPairType(arrayDequeElementType(type));
     }
 
     private static ValueType pairTypeForArrayDeque(ValueType type) {
-        PairShape shape = pairShapeForArrayDequeType(type);
-        if (shape != null) {
-            return shape.pairType;
+        ValueType elementType = arrayDequeElementType(type);
+        if (isPairType(elementType)) {
+            return elementType;
         }
         throw new IllegalArgumentException("Unsupported Pair ArrayDeque type: " + type);
     }
@@ -3315,14 +3285,11 @@ public final class SimpleFunctionCodegens {
 
     private static ValueType hashSetTypeForFactoryOrConstructor(String text) {
         String compact = compactCallablePrefix(text);
-        for (ScalarCollectionShape shape : ScalarCollectionShape.values()) {
-            if (shape.hashSetType != null
-                    && (genericTypeEquals(compact, "HashSet", shape.kotlinType)
-                            || genericTypeEquals(compact, "mutableSetOf", shape.kotlinType))) {
-                return shape.hashSetType;
-            }
+        String elementText = genericArgumentText(compact, "HashSet");
+        if (elementText == null) {
+            elementText = genericArgumentText(compact, "mutableSetOf");
         }
-        return null;
+        return elementText == null ? null : hashSetTypeForElementType(typeFromText(elementText));
     }
 
     private static boolean isHashMapConstructor(String calleeText) {
@@ -3343,13 +3310,14 @@ public final class SimpleFunctionCodegens {
 
     private static ValueType hashMapTypeForFactoryOrConstructor(String text) {
         String compact = compactCallablePrefix(text);
-        for (MapShape shape : MapShape.values()) {
-            if (genericTypeEquals(compact, "HashMap", shape.kotlinType)
-                    || genericTypeEquals(compact, "mutableMapOf", shape.kotlinType)) {
-                return shape.mapType;
-            }
+        List<String> argumentTexts = genericArgumentTexts(compact, "HashMap");
+        if (argumentTexts == null) {
+            argumentTexts = genericArgumentTexts(compact, "mutableMapOf");
         }
-        return null;
+        if (argumentTexts == null || argumentTexts.size() != 2) {
+            return null;
+        }
+        return hashMapTypeFromKeyValueTypes(typeFromText(argumentTexts.get(0)), typeFromText(argumentTexts.get(1)));
     }
 
     private static boolean isHashMapType(ValueType type) {
@@ -3381,33 +3349,6 @@ public final class SimpleFunctionCodegens {
         return null;
     }
 
-    private static PairShape pairShapeForArrayListType(ValueType type) {
-        for (PairShape shape : PairShape.values()) {
-            if (shape.arrayListType == type) {
-                return shape;
-            }
-        }
-        return null;
-    }
-
-    private static PairShape pairShapeForArrayDequeType(ValueType type) {
-        for (PairShape shape : PairShape.values()) {
-            if (shape.arrayDequeType == type) {
-                return shape;
-            }
-        }
-        return null;
-    }
-
-    private static PairShape pairShapeForPriorityQueueType(ValueType type) {
-        for (PairShape shape : PairShape.values()) {
-            if (shape.priorityQueueType == type || shape.secondPriorityQueueType == type) {
-                return shape;
-            }
-        }
-        return null;
-    }
-
     private static MapShape mapShapeForMapType(ValueType type) {
         for (MapShape shape : MapShape.values()) {
             if (shape.mapType == type) {
@@ -3428,32 +3369,23 @@ public final class SimpleFunctionCodegens {
 
     private static ValueType pairTypeFromText(String text) {
         String compact = compactText(text);
-        for (PairShape shape : PairShape.values()) {
-            if (shape.kotlinType.equals(compact)) {
-                return shape.pairType;
-            }
+        List<String> argumentTexts = genericArgumentTexts(compact, "Pair");
+        if (argumentTexts == null || argumentTexts.size() != 2) {
+            return null;
         }
-        return null;
+        return pairTypeFromComponents(typeFromText(argumentTexts.get(0)), typeFromText(argumentTexts.get(1)));
     }
 
     private static ValueType arrayListTypeFromText(String text) {
         String compact = compactText(text);
-        for (ScalarCollectionShape shape : ScalarCollectionShape.values()) {
-            if (shape.arrayListType != null
-                    && (genericTypeEquals(compact, "ArrayList", shape.kotlinType)
-                            || genericTypeEquals(compact, "MutableList", shape.kotlinType)
-                            || genericTypeEquals(compact, "List", shape.kotlinType))) {
-                return shape.arrayListType;
-            }
+        String elementText = genericArgumentText(compact, "ArrayList");
+        if (elementText == null) {
+            elementText = genericArgumentText(compact, "MutableList");
         }
-        for (PairShape shape : PairShape.values()) {
-            if (genericTypeEquals(compact, "ArrayList", shape.kotlinType)
-                    || genericTypeEquals(compact, "MutableList", shape.kotlinType)
-                    || genericTypeEquals(compact, "List", shape.kotlinType)) {
-                return shape.arrayListType;
-            }
+        if (elementText == null) {
+            elementText = genericArgumentText(compact, "List");
         }
-        return null;
+        return elementText == null ? null : arrayListTypeForElementType(typeFromText(elementText));
     }
 
     private static ValueType arrayTypeFromText(String text) {
@@ -3467,60 +3399,41 @@ public final class SimpleFunctionCodegens {
 
     private static ValueType priorityQueueTypeFromText(String text) {
         String compact = compactText(text);
-        for (ScalarCollectionShape shape : ScalarCollectionShape.values()) {
-            if (shape.priorityQueueType != null
-                    && genericTypeEquals(compact, "PriorityQueue", shape.kotlinType)) {
-                return shape.priorityQueueType;
-            }
-        }
-        for (PairShape shape : PairShape.values()) {
-            if (shape.priorityQueueType != null
-                    && genericTypeEquals(compact, "PriorityQueue", shape.kotlinType)) {
-                return shape.priorityQueueType;
-            }
-        }
-        return null;
+        String elementText = genericArgumentText(compact, "PriorityQueue");
+        return elementText == null ? null : priorityQueueTypeForElementType(typeFromText(elementText));
     }
 
     private static ValueType arrayDequeTypeFromText(String text) {
         String compact = compactText(text);
-        for (ScalarCollectionShape shape : ScalarCollectionShape.values()) {
-            if (shape.arrayDequeType != null
-                    && genericTypeEquals(compact, "ArrayDeque", shape.kotlinType)) {
-                return shape.arrayDequeType;
-            }
-        }
-        for (PairShape shape : PairShape.values()) {
-            if (genericTypeEquals(compact, "ArrayDeque", shape.kotlinType)) {
-                return shape.arrayDequeType;
-            }
-        }
-        return null;
+        String elementText = genericArgumentText(compact, "ArrayDeque");
+        return elementText == null ? null : arrayDequeTypeForElementType(typeFromText(elementText));
     }
 
     private static ValueType hashSetTypeFromText(String text) {
         String compact = compactText(text);
-        for (ScalarCollectionShape shape : ScalarCollectionShape.values()) {
-            if (shape.hashSetType != null
-                    && (genericTypeEquals(compact, "HashSet", shape.kotlinType)
-                            || genericTypeEquals(compact, "MutableSet", shape.kotlinType)
-                            || genericTypeEquals(compact, "Set", shape.kotlinType))) {
-                return shape.hashSetType;
-            }
+        String elementText = genericArgumentText(compact, "HashSet");
+        if (elementText == null) {
+            elementText = genericArgumentText(compact, "MutableSet");
         }
-        return null;
+        if (elementText == null) {
+            elementText = genericArgumentText(compact, "Set");
+        }
+        return elementText == null ? null : hashSetTypeForElementType(typeFromText(elementText));
     }
 
     private static ValueType hashMapTypeFromText(String text) {
         String compact = compactText(text);
-        for (MapShape shape : MapShape.values()) {
-            if (genericTypeEquals(compact, "HashMap", shape.kotlinType)
-                    || genericTypeEquals(compact, "MutableMap", shape.kotlinType)
-                    || genericTypeEquals(compact, "Map", shape.kotlinType)) {
-                return shape.mapType;
-            }
+        List<String> argumentTexts = genericArgumentTexts(compact, "HashMap");
+        if (argumentTexts == null) {
+            argumentTexts = genericArgumentTexts(compact, "MutableMap");
         }
-        return null;
+        if (argumentTexts == null) {
+            argumentTexts = genericArgumentTexts(compact, "Map");
+        }
+        if (argumentTexts == null || argumentTexts.size() != 2) {
+            return null;
+        }
+        return hashMapTypeFromKeyValueTypes(typeFromText(argumentTexts.get(0)), typeFromText(argumentTexts.get(1)));
     }
 
     private static PrimitiveArrayShape primitiveArrayShapeForArrayType(ValueType type) {
@@ -3549,6 +3462,122 @@ public final class SimpleFunctionCodegens {
         ReferenceArrayShape referenceShape = referenceArrayShapeForElementType(elementType);
         if (referenceShape != null) {
             return referenceShape.arrayType;
+        }
+        return null;
+    }
+
+    private static ValueType arrayListTypeForElementType(ValueType elementType) {
+        ArrayListShape shape = arrayListShapeForElementType(elementType);
+        return shape == null ? null : shape.arrayListType;
+    }
+
+    private static ValueType arrayListElementType(ValueType arrayListType) {
+        ArrayListShape shape = arrayListShapeForArrayListType(arrayListType);
+        return shape == null ? null : shape.elementType;
+    }
+
+    private static ValueType priorityQueueTypeForElementType(ValueType elementType) {
+        for (PriorityQueueShape shape : PriorityQueueShape.values()) {
+            if (shape.elementType == elementType && !shape.secondaryOrder) {
+                return shape.priorityQueueType;
+            }
+        }
+        return null;
+    }
+
+    private static ValueType priorityQueueElementType(ValueType priorityQueueType) {
+        PriorityQueueShape shape = priorityQueueShapeForPriorityQueueType(priorityQueueType);
+        return shape == null ? null : shape.elementType;
+    }
+
+    private static ValueType arrayDequeTypeForElementType(ValueType elementType) {
+        ArrayDequeShape shape = arrayDequeShapeForElementType(elementType);
+        return shape == null ? null : shape.arrayDequeType;
+    }
+
+    private static ValueType arrayDequeElementType(ValueType arrayDequeType) {
+        ArrayDequeShape shape = arrayDequeShapeForArrayDequeType(arrayDequeType);
+        return shape == null ? null : shape.elementType;
+    }
+
+    private static ValueType hashSetTypeForElementType(ValueType elementType) {
+        HashSetShape shape = hashSetShapeForElementType(elementType);
+        return shape == null ? null : shape.hashSetType;
+    }
+
+    private static ValueType hashSetElementType(ValueType hashSetType) {
+        HashSetShape shape = hashSetShapeForHashSetType(hashSetType);
+        return shape == null ? null : shape.elementType;
+    }
+
+    private static ValueType hashMapTypeFromKeyValueTypes(ValueType keyType, ValueType valueType) {
+        for (MapShape shape : MapShape.values()) {
+            if (shape.keyType == keyType && shape.valueType == valueType) {
+                return shape.mapType;
+            }
+        }
+        return null;
+    }
+
+    private static ArrayListShape arrayListShapeForElementType(ValueType type) {
+        for (ArrayListShape shape : ArrayListShape.values()) {
+            if (shape.elementType == type) {
+                return shape;
+            }
+        }
+        return null;
+    }
+
+    private static ArrayListShape arrayListShapeForArrayListType(ValueType type) {
+        for (ArrayListShape shape : ArrayListShape.values()) {
+            if (shape.arrayListType == type) {
+                return shape;
+            }
+        }
+        return null;
+    }
+
+    private static PriorityQueueShape priorityQueueShapeForPriorityQueueType(ValueType type) {
+        for (PriorityQueueShape shape : PriorityQueueShape.values()) {
+            if (shape.priorityQueueType == type) {
+                return shape;
+            }
+        }
+        return null;
+    }
+
+    private static ArrayDequeShape arrayDequeShapeForElementType(ValueType type) {
+        for (ArrayDequeShape shape : ArrayDequeShape.values()) {
+            if (shape.elementType == type) {
+                return shape;
+            }
+        }
+        return null;
+    }
+
+    private static ArrayDequeShape arrayDequeShapeForArrayDequeType(ValueType type) {
+        for (ArrayDequeShape shape : ArrayDequeShape.values()) {
+            if (shape.arrayDequeType == type) {
+                return shape;
+            }
+        }
+        return null;
+    }
+
+    private static HashSetShape hashSetShapeForElementType(ValueType type) {
+        for (HashSetShape shape : HashSetShape.values()) {
+            if (shape.elementType == type) {
+                return shape;
+            }
+        }
+        return null;
+    }
+
+    private static HashSetShape hashSetShapeForHashSetType(ValueType type) {
+        for (HashSetShape shape : HashSetShape.values()) {
+            if (shape.hashSetType == type) {
+                return shape;
+            }
         }
         return null;
     }
@@ -3601,9 +3630,22 @@ public final class SimpleFunctionCodegens {
     }
 
     private static ScalarCollectionShape scalarCollectionShapeForType(ValueType type) {
+        ValueType elementType = arrayListElementType(type);
+        if (elementType == null) {
+            elementType = priorityQueueElementType(type);
+        }
+        if (elementType == null) {
+            elementType = arrayDequeElementType(type);
+        }
+        if (elementType == null) {
+            elementType = hashSetElementType(type);
+        }
+        return scalarCollectionShapeForElementType(elementType);
+    }
+
+    private static ScalarCollectionShape scalarCollectionShapeForElementType(ValueType type) {
         for (ScalarCollectionShape shape : ScalarCollectionShape.values()) {
-            if (shape.arrayListType == type || shape.priorityQueueType == type
-                    || shape.arrayDequeType == type || shape.hashSetType == type) {
+            if (shape.elementType == type) {
                 return shape;
             }
         }
@@ -3615,16 +3657,16 @@ public final class SimpleFunctionCodegens {
         if (shape == null) {
             return null;
         }
-        if (shape.arrayListType == type) {
+        if (arrayListElementType(type) != null) {
             return "java/util/ArrayList";
         }
-        if (shape.priorityQueueType == type) {
+        if (priorityQueueElementType(type) != null) {
             return "java/util/PriorityQueue";
         }
-        if (shape.arrayDequeType == type) {
+        if (arrayDequeElementType(type) != null) {
             return "java/util/ArrayDeque";
         }
-        if (shape.hashSetType == type) {
+        if (hashSetElementType(type) != null) {
             return "java/util/HashSet";
         }
         return null;
@@ -3635,26 +3677,26 @@ public final class SimpleFunctionCodegens {
         if (shape == null) {
             return null;
         }
-        if (shape.priorityQueueType == type) {
+        if (priorityQueueElementType(type) != null) {
             return "java/util/PriorityQueue";
         }
-        if (shape.arrayDequeType == type) {
+        if (arrayDequeElementType(type) != null) {
             return "java/util/ArrayDeque";
         }
         return null;
     }
 
     private static String scalarArrayListOwner(ValueType type) {
-        ScalarCollectionShape shape = scalarCollectionShapeForType(type);
-        if (shape != null && shape.arrayListType == type) {
+        if (arrayListElementType(type) != null
+                && scalarCollectionShapeForElementType(arrayListElementType(type)) != null) {
             return "java/util/ArrayList";
         }
         return null;
     }
 
     private static String scalarDequeOwner(ValueType type) {
-        ScalarCollectionShape shape = scalarCollectionShapeForType(type);
-        if (shape != null && shape.arrayDequeType == type) {
+        if (arrayDequeElementType(type) != null
+                && scalarCollectionShapeForElementType(arrayDequeElementType(type)) != null) {
             return "java/util/ArrayDeque";
         }
         return null;
@@ -3685,11 +3727,50 @@ public final class SimpleFunctionCodegens {
     }
 
     private static String genericArgumentText(String compactText, String typeName) {
+        List<String> argumentTexts = genericArgumentTexts(compactText, typeName);
+        return argumentTexts != null && argumentTexts.size() == 1 ? argumentTexts.get(0) : null;
+    }
+
+    private static List<String> genericArgumentTexts(String compactText, String typeName) {
         String prefix = typeName + "<";
         if (!compactText.startsWith(prefix) || !compactText.endsWith(">")) {
             return null;
         }
-        return compactText.substring(prefix.length(), compactText.length() - 1);
+        String body = compactText.substring(prefix.length(), compactText.length() - 1);
+        List<String> arguments = new ArrayList<>();
+        int depth = 0;
+        int start = 0;
+        for (int index = 0; index < body.length(); index++) {
+            char ch = body.charAt(index);
+            if (ch == '<') {
+                depth++;
+            } else if (ch == '>') {
+                depth--;
+                if (depth < 0) {
+                    return null;
+                }
+            } else if (ch == ',' && depth == 0) {
+                arguments.add(body.substring(start, index));
+                start = index + 1;
+            }
+        }
+        if (depth != 0) {
+            return null;
+        }
+        arguments.add(body.substring(start));
+        return arguments;
+    }
+
+    private static boolean genericArgumentEquals(String compactText, String typeName, ValueType type) {
+        String argumentText = genericArgumentText(compactText, typeName);
+        if (argumentText == null) {
+            return false;
+        }
+        try {
+            return typeFromText(argumentText) == type;
+        } catch (IllegalArgumentException ignored) {
+            return false;
+        }
     }
 
     private static String compactCallablePrefix(String text) {
@@ -4848,7 +4929,7 @@ public final class SimpleFunctionCodegens {
             return primitiveShape.elementType;
         }
         ScalarCollectionShape scalarShape = scalarCollectionShapeForType(receiverType);
-        if (scalarShape != null && scalarShape.arrayListType == receiverType
+        if (scalarShape != null && scalarArrayListOwner(receiverType) != null
                 && scalarShape.elementType.numeric) {
             return scalarShape.elementType;
         }
@@ -4962,73 +5043,33 @@ public final class SimpleFunctionCodegens {
     }
 
     private enum ScalarCollectionShape {
-        INT("Int", ValueType.INT, ValueType.INT_ARRAY_LIST, ValueType.INT_PRIORITY_QUEUE,
-                ValueType.INT_ARRAY_DEQUE, ValueType.INT_HASH_SET),
-        LONG("Long", ValueType.LONG, ValueType.LONG_ARRAY_LIST, ValueType.LONG_PRIORITY_QUEUE,
-                ValueType.LONG_ARRAY_DEQUE, ValueType.LONG_HASH_SET),
-        STRING("String", ValueType.STRING, ValueType.STRING_ARRAY_LIST, null, null, ValueType.STRING_HASH_SET);
+        INT("Int", ValueType.INT),
+        LONG("Long", ValueType.LONG),
+        STRING("String", ValueType.STRING);
 
         private final String kotlinType;
         private final ValueType elementType;
-        private final ValueType arrayListType;
-        private final ValueType priorityQueueType;
-        private final ValueType arrayDequeType;
-        private final ValueType hashSetType;
 
-        ScalarCollectionShape(
-                String kotlinType,
-                ValueType elementType,
-                ValueType arrayListType,
-                ValueType priorityQueueType,
-                ValueType arrayDequeType,
-                ValueType hashSetType) {
+        ScalarCollectionShape(String kotlinType, ValueType elementType) {
             this.kotlinType = kotlinType;
             this.elementType = elementType;
-            this.arrayListType = arrayListType;
-            this.priorityQueueType = priorityQueueType;
-            this.arrayDequeType = arrayDequeType;
-            this.hashSetType = hashSetType;
         }
     }
 
     private enum PairShape {
-        INT_INT("Pair<Int,Int>", ValueType.INT, ValueType.INT, ValueType.INT_PAIR,
-                ValueType.INT_PAIR_ARRAY_LIST, ValueType.INT_PAIR_ARRAY_DEQUE, ValueType.INT_PAIR_PRIORITY_QUEUE,
-                ValueType.INT_PAIR_SECOND_PRIORITY_QUEUE),
-        INT_LONG("Pair<Int,Long>", ValueType.INT, ValueType.LONG, ValueType.INT_LONG_PAIR,
-                ValueType.INT_LONG_PAIR_ARRAY_LIST, ValueType.INT_LONG_PAIR_ARRAY_DEQUE, null, null),
-        LONG_INT("Pair<Long,Int>", ValueType.LONG, ValueType.INT, ValueType.LONG_INT_PAIR,
-                ValueType.LONG_INT_PAIR_ARRAY_LIST, ValueType.LONG_INT_PAIR_ARRAY_DEQUE,
-                ValueType.LONG_INT_PAIR_PRIORITY_QUEUE, null),
-        LONG_LONG("Pair<Long,Long>", ValueType.LONG, ValueType.LONG, ValueType.LONG_LONG_PAIR,
-                ValueType.LONG_LONG_PAIR_ARRAY_LIST, ValueType.LONG_LONG_PAIR_ARRAY_DEQUE, null, null);
+        INT_INT(ValueType.INT, ValueType.INT, ValueType.INT_PAIR),
+        INT_LONG(ValueType.INT, ValueType.LONG, ValueType.INT_LONG_PAIR),
+        LONG_INT(ValueType.LONG, ValueType.INT, ValueType.LONG_INT_PAIR),
+        LONG_LONG(ValueType.LONG, ValueType.LONG, ValueType.LONG_LONG_PAIR);
 
-        private final String kotlinType;
         private final ValueType firstType;
         private final ValueType secondType;
         private final ValueType pairType;
-        private final ValueType arrayListType;
-        private final ValueType arrayDequeType;
-        private final ValueType priorityQueueType;
-        private final ValueType secondPriorityQueueType;
 
-        PairShape(
-                String kotlinType,
-                ValueType firstType,
-                ValueType secondType,
-                ValueType pairType,
-                ValueType arrayListType,
-                ValueType arrayDequeType,
-                ValueType priorityQueueType,
-                ValueType secondPriorityQueueType) {
-            this.kotlinType = kotlinType;
+        PairShape(ValueType firstType, ValueType secondType, ValueType pairType) {
             this.firstType = firstType;
             this.secondType = secondType;
             this.pairType = pairType;
-            this.arrayListType = arrayListType;
-            this.arrayDequeType = arrayDequeType;
-            this.priorityQueueType = priorityQueueType;
-            this.secondPriorityQueueType = secondPriorityQueueType;
         }
     }
 
@@ -5050,21 +5091,86 @@ public final class SimpleFunctionCodegens {
         }
     }
 
-    private enum MapShape {
-        INT_INT("Int,Int", ValueType.INT, ValueType.INT, ValueType.INT_INT_HASH_MAP),
-        INT_LONG("Int,Long", ValueType.INT, ValueType.LONG, ValueType.INT_LONG_HASH_MAP),
-        LONG_INT("Long,Int", ValueType.LONG, ValueType.INT, ValueType.LONG_INT_HASH_MAP),
-        LONG_LONG("Long,Long", ValueType.LONG, ValueType.LONG, ValueType.LONG_LONG_HASH_MAP),
-        STRING_INT("String,Int", ValueType.STRING, ValueType.INT, ValueType.STRING_INT_HASH_MAP),
-        STRING_LONG("String,Long", ValueType.STRING, ValueType.LONG, ValueType.STRING_LONG_HASH_MAP);
+    private enum ArrayListShape {
+        INT(ValueType.INT, ValueType.INT_ARRAY_LIST),
+        LONG(ValueType.LONG, ValueType.LONG_ARRAY_LIST),
+        STRING(ValueType.STRING, ValueType.STRING_ARRAY_LIST),
+        INT_PAIR(ValueType.INT_PAIR, ValueType.INT_PAIR_ARRAY_LIST),
+        INT_LONG_PAIR(ValueType.INT_LONG_PAIR, ValueType.INT_LONG_PAIR_ARRAY_LIST),
+        LONG_INT_PAIR(ValueType.LONG_INT_PAIR, ValueType.LONG_INT_PAIR_ARRAY_LIST),
+        LONG_LONG_PAIR(ValueType.LONG_LONG_PAIR, ValueType.LONG_LONG_PAIR_ARRAY_LIST);
 
-        private final String kotlinType;
+        private final ValueType elementType;
+        private final ValueType arrayListType;
+
+        ArrayListShape(ValueType elementType, ValueType arrayListType) {
+            this.elementType = elementType;
+            this.arrayListType = arrayListType;
+        }
+    }
+
+    private enum PriorityQueueShape {
+        INT(ValueType.INT, ValueType.INT_PRIORITY_QUEUE, false),
+        LONG(ValueType.LONG, ValueType.LONG_PRIORITY_QUEUE, false),
+        INT_PAIR(ValueType.INT_PAIR, ValueType.INT_PAIR_PRIORITY_QUEUE, false),
+        INT_PAIR_SECOND(ValueType.INT_PAIR, ValueType.INT_PAIR_SECOND_PRIORITY_QUEUE, true),
+        LONG_INT_PAIR(ValueType.LONG_INT_PAIR, ValueType.LONG_INT_PAIR_PRIORITY_QUEUE, false);
+
+        private final ValueType elementType;
+        private final ValueType priorityQueueType;
+        private final boolean secondaryOrder;
+
+        PriorityQueueShape(ValueType elementType, ValueType priorityQueueType, boolean secondaryOrder) {
+            this.elementType = elementType;
+            this.priorityQueueType = priorityQueueType;
+            this.secondaryOrder = secondaryOrder;
+        }
+    }
+
+    private enum ArrayDequeShape {
+        INT(ValueType.INT, ValueType.INT_ARRAY_DEQUE),
+        LONG(ValueType.LONG, ValueType.LONG_ARRAY_DEQUE),
+        INT_PAIR(ValueType.INT_PAIR, ValueType.INT_PAIR_ARRAY_DEQUE),
+        INT_LONG_PAIR(ValueType.INT_LONG_PAIR, ValueType.INT_LONG_PAIR_ARRAY_DEQUE),
+        LONG_INT_PAIR(ValueType.LONG_INT_PAIR, ValueType.LONG_INT_PAIR_ARRAY_DEQUE),
+        LONG_LONG_PAIR(ValueType.LONG_LONG_PAIR, ValueType.LONG_LONG_PAIR_ARRAY_DEQUE);
+
+        private final ValueType elementType;
+        private final ValueType arrayDequeType;
+
+        ArrayDequeShape(ValueType elementType, ValueType arrayDequeType) {
+            this.elementType = elementType;
+            this.arrayDequeType = arrayDequeType;
+        }
+    }
+
+    private enum HashSetShape {
+        INT(ValueType.INT, ValueType.INT_HASH_SET),
+        LONG(ValueType.LONG, ValueType.LONG_HASH_SET),
+        STRING(ValueType.STRING, ValueType.STRING_HASH_SET);
+
+        private final ValueType elementType;
+        private final ValueType hashSetType;
+
+        HashSetShape(ValueType elementType, ValueType hashSetType) {
+            this.elementType = elementType;
+            this.hashSetType = hashSetType;
+        }
+    }
+
+    private enum MapShape {
+        INT_INT(ValueType.INT, ValueType.INT, ValueType.INT_INT_HASH_MAP),
+        INT_LONG(ValueType.INT, ValueType.LONG, ValueType.INT_LONG_HASH_MAP),
+        LONG_INT(ValueType.LONG, ValueType.INT, ValueType.LONG_INT_HASH_MAP),
+        LONG_LONG(ValueType.LONG, ValueType.LONG, ValueType.LONG_LONG_HASH_MAP),
+        STRING_INT(ValueType.STRING, ValueType.INT, ValueType.STRING_INT_HASH_MAP),
+        STRING_LONG(ValueType.STRING, ValueType.LONG, ValueType.STRING_LONG_HASH_MAP);
+
         private final ValueType keyType;
         private final ValueType valueType;
         private final ValueType mapType;
 
-        MapShape(String kotlinType, ValueType keyType, ValueType valueType, ValueType mapType) {
-            this.kotlinType = kotlinType;
+        MapShape(ValueType keyType, ValueType valueType, ValueType mapType) {
             this.keyType = keyType;
             this.valueType = valueType;
             this.mapType = mapType;
