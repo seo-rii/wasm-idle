@@ -299,8 +299,8 @@ self.onmessage = async (event: any) => {
 		self['__pyodide__output_' + ts] = (...data: any[]) => {
 			let sep = ' ',
 				end = '\r\n',
-				output = '',
-				clear = [];
+				output = '';
+			const clear = [];
 			for (const i of data) {
 				if (i?.end !== undefined) end = toPythonStr(i.end);
 				else if (i?.sep !== undefined) sep = toPythonStr(i.sep);
@@ -325,8 +325,8 @@ self.onmessage = async (event: any) => {
 			localsJson: string,
 			callStackJson: string
 		) => {
-			let locals = [];
-			let callStack = [];
+			let locals: unknown[];
+			let callStack: unknown[];
 			try {
 				locals = JSON.parse(localsJson);
 			} catch {
@@ -383,6 +383,10 @@ def __wasm_idle_input_wrapper(prompt = ""):
     value = __wasm_idle_input(prompt)
     if value is None:
         raise EOFError
+    if value.endswith("\\r\\n"):
+        value = value[:-2]
+    elif value.endswith("\\n") or value.endswith("\\r"):
+        value = value[:-1]
     return value
 __wasm_idle_output = __pyodide__output_${ts}
 builtins.input = __wasm_idle_input_wrapper
