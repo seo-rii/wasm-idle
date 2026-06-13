@@ -29,6 +29,7 @@
 		"probe:tinygo-browser:static": "node scripts/probe-tinygo-browser.mjs",
 		"sync:pyodide": "node scripts/sync-pyodide.mjs",
 		"test:browser:go": "WASM_IDLE_RUN_REAL_BROWSER_GO=1 pnpm exec vitest run src/lib/playground/go.playwright.test.ts",
+		"test:browser:stdin": "WASM_IDLE_RUN_REAL_BROWSER_STDIN=1 pnpm exec vitest run src/lib/playground/stdin.playwright.test.ts",
 		"test:browser:ocaml": "WASM_IDLE_RUN_REAL_BROWSER_OCAML=1 pnpm exec vitest run src/lib/playground/ocaml.playwright.test.ts",
 		"test:browser:playwright": "WASM_IDLE_RUN_REAL_BROWSER_RUST=1 pnpm exec vitest run src/lib/playground/rust.playwright.test.ts",
 		"test:browser:tinygo": "WASM_IDLE_RUN_REAL_BROWSER_TINYGO=1 pnpm exec vitest run src/lib/playground/tinygo.playwright.test.ts",
