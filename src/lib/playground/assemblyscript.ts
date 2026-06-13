@@ -1,16 +1,25 @@
 import type { CompilerDiagnostic, SandboxExecutionOptions } from '$lib/playground/options';
 import type { PlaygroundRuntimeAssets } from '$lib/playground/assets';
 import type { Sandbox } from '$lib/playground/sandbox';
+import {
+	flushBufferedEof,
+	flushQueuedStdin,
+	resetBufferedStdin
+} from '$lib/playground/stdinBuffer';
 
 class AssemblyScriptSandbox implements Sandbox {
 	output: any = null;
 	worker?: Worker = <any>null;
+	buffer = new SharedArrayBuffer(4096);
+	pendingInput: string[] = [];
 	begin = 0;
 	elapse = 0;
 	uid = 0;
 	exit = true;
 	activeReject: ((reason: string) => void) | null = null;
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
+	waitingForInput = false;
+	pendingEof = false;
 
 	load(
 		_runtimeAssets: string | PlaygroundRuntimeAssets = '',
@@ -21,6 +30,9 @@ class AssemblyScriptSandbox implements Sandbox {
 		progress?: { set?: (value: number) => void } | import('svelte/store').Writable<number>
 	) {
 		return new Promise<void>(async (resolve, reject) => {
+			this.pendingInput = [];
+			this.waitingForInput = false;
+			this.pendingEof = false;
 			if (!this.worker) {
 				this.worker = new (
 					await import('$lib/playground/worker/assemblyscript?worker')
@@ -55,9 +67,29 @@ class AssemblyScriptSandbox implements Sandbox {
 		});
 	}
 
-	write(_input: string) {}
+	write(input: string) {
+		this.pendingInput.push(input);
+		this.pendingEof = false;
+		this.flushPendingInput();
+	}
 
-	eof() {}
+	eof() {
+		this.pendingEof = true;
+		this.flushPendingInput();
+	}
+
+	private flushPendingInput() {
+		if (!this.waitingForInput) return;
+		if (flushQueuedStdin(this.pendingInput, this.buffer)) {
+			this.waitingForInput = false;
+			return;
+		}
+		if (this.pendingEof) {
+			flushBufferedEof(this.buffer);
+			this.pendingEof = false;
+			this.waitingForInput = false;
+		}
+	}
 
 	run(
 		code: string,
@@ -75,7 +107,11 @@ class AssemblyScriptSandbox implements Sandbox {
 			const handler = (event: Event & { data: any }) => {
 				if (!this.worker) return reject('Worker not loaded');
 				if (_uid !== this.uid) return (this.worker.onmessage = null);
-				const { output, results, error, diagnostic, progress } = event.data;
+				const { output, results, error, buffer, diagnostic, progress } = event.data;
+				if (buffer) {
+					this.waitingForInput = true;
+					this.flushPendingInput();
+				}
 				if (progress && typeof progress.percent === 'number') {
 					_prog?.set?.(Math.max(0, Math.min(progress.percent / 100, 1)));
 				}
@@ -84,12 +120,16 @@ class AssemblyScriptSandbox implements Sandbox {
 				if (results) {
 					this.elapse = Date.now() - this.begin;
 					this.exit = true;
+					this.waitingForInput = false;
+					this.pendingEof = false;
 					this.activeReject = null;
 					resolve(results as string);
 				}
 				if (error) {
 					this.elapse = Date.now() - this.begin;
 					this.exit = true;
+					this.waitingForInput = false;
+					this.pendingEof = false;
 					this.activeReject = null;
 					reject(error);
 				}
@@ -99,6 +139,8 @@ class AssemblyScriptSandbox implements Sandbox {
 			this.worker.postMessage({
 				code,
 				prepare,
+				buffer: this.buffer,
+				stdin: options.stdin,
 				activePath: options.activePath || 'main.as.ts',
 				workspaceFiles: options.workspaceFiles || [],
 				log: _log
@@ -113,6 +155,8 @@ class AssemblyScriptSandbox implements Sandbox {
 	terminate() {
 		this.activeReject?.('Process terminated');
 		this.activeReject = null;
+		this.waitingForInput = false;
+		this.pendingEof = false;
 		this.uid += 1;
 		this.worker?.terminate?.();
 		delete this.worker;
@@ -120,7 +164,11 @@ class AssemblyScriptSandbox implements Sandbox {
 	}
 
 	async clear() {
+		this.pendingInput = [];
+		this.waitingForInput = false;
+		this.pendingEof = false;
 		if (this.worker) this.worker.onmessage = null;
+		resetBufferedStdin(this.buffer);
 		if (!this.exit) {
 			this.terminate();
 		}

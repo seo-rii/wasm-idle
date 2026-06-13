@@ -209,7 +209,10 @@ Ruby uses the bundled `@ruby/3.4-wasm-wasi` CRuby `ruby+stdlib.wasm` asset by de
 with `PUBLIC_WASM_RUBY_WASM_URL`, or pass `runtimeAssets.ruby.wasmUrl`.
 AssemblyScript uses the bundled `assemblyscript` browser compiler and instantiates the emitted
 WebAssembly locally. `_start` or `main` runs first; otherwise zero-argument numeric, boolean, and
-string exports are printed to the terminal.
+string exports are printed to the terminal. AssemblyScript programs can import stdin helpers from
+`env`: `readLine(): string | null`, `readAll(): string`, and `readByte(): i32`. `readLine` waits for
+Enter-submitted terminal input, while `readAll` reads until Ctrl+D or the EOF button.
+WAT modules can import `env.readByte(): i32` for byte-oriented stdin; it returns `-1` at EOF.
 Haskell uses the bundled `static/wasm-haskell/` `ghc-in-browser` assets by default. Override them
 with `PUBLIC_WASM_HASKELL_MODULE_URL`, `PUBLIC_WASM_HASKELL_ROOTFS_URL`, and
 `PUBLIC_WASM_HASKELL_BSDTAR_URL`, or pass `runtimeAssets.haskell`. The worker extracts the wasm GHC

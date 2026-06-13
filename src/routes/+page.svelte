@@ -1795,14 +1795,16 @@
 				AssemblyScript compiles in the browser with the bundled `assemblyscript` compiler,
 				then instantiates the emitted WebAssembly locally. `_start` or `main` runs first; if
 				neither exists, zero-argument numeric, boolean, and string exports are printed to
-				the terminal.
+				the terminal. Import `readLine`, `readAll`, or `readByte` from `env` for stdin;
+				use Ctrl+D or the EOF button for full-input reads.
 			</p>
 		{/if}
 		{#if language === 'WAT'}
 			<p class="hint">
 				WAT compiles through the bundled WABT browser module, then instantiates the emitted
 				WebAssembly locally. Zero-argument numeric exports are called automatically and
-				printed to the terminal.
+				printed to the terminal. Import `env.readByte` for byte-oriented stdin; it returns
+				`-1` after EOF.
 			</p>
 		{/if}
 		{#if language === 'LUA'}

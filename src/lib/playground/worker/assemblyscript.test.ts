@@ -62,6 +62,35 @@ export function ok(): bool {
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
 	}, 15000);
 
+	it('provides injected stdin through env readLine, readByte, and readAll imports', async () => {
+		await import('./assemblyscript');
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: `@external("env", "readLine")
+declare function readLine(): string | null;
+@external("env", "readByte")
+declare function readByte(): i32;
+@external("env", "readAll")
+declare function readAll(): string;
+
+export function main(): string {
+  const line = readLine();
+  const byte = readByte();
+  return (line == null ? "EOF" : line) + ":" + byte.toString() + ":" + readAll();
+}`,
+				prepare: false,
+				stdin: '5\nabc',
+				activePath: 'main.as.ts',
+				workspaceFiles: []
+			}
+		});
+
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			output: 'main=5:97:bc\n'
+		});
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
+	}, 15000);
+
 	it('reports compiler failures as diagnostics and worker errors', async () => {
 		await import('./assemblyscript');
 		await (globalThis as any).self.onmessage({

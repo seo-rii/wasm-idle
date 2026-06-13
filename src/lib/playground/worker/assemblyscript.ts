@@ -2,8 +2,12 @@ import { instantiate, type ASUtil } from '@assemblyscript/loader';
 import { compileAssemblyScript } from '@wasm-idle/runtime-assemblyscript';
 import type { AssemblyScriptCompilerModule } from '@wasm-idle/runtime-assemblyscript';
 import type { SandboxWorkspaceFile } from '$lib/playground/options';
+import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
 
 declare var self: any;
+
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
 
 let loaded = false;
 let compilerPromise: Promise<AssemblyScriptCompilerModule> | null = null;
@@ -11,11 +15,82 @@ let compiledWasm: Uint8Array | null = null;
 let compiledCacheKey = '';
 let compiledReturnTypes: Record<string, string> = {};
 
+class AssemblyScriptStdin {
+	private initialStdin: string | null;
+	private readonly fixedInitialStdin: boolean;
+	private currentBytes = new Uint8Array(0);
+	private currentOffset = 0;
+
+	constructor(
+		initialStdin: string | undefined,
+		private readonly buffer: Int32Array | null,
+		private readonly log: boolean
+	) {
+		this.initialStdin = typeof initialStdin === 'string' ? initialStdin : null;
+		this.fixedInitialStdin = typeof initialStdin === 'string';
+	}
+
+	readByte() {
+		while (this.currentOffset >= this.currentBytes.length) {
+			const chunk = this.readChunk();
+			if (chunk == null) return -1;
+			if (!chunk) continue;
+			this.currentBytes = encoder.encode(chunk);
+			this.currentOffset = 0;
+		}
+		return this.currentBytes[this.currentOffset++] ?? -1;
+	}
+
+	readLine() {
+		const bytes: number[] = [];
+		while (true) {
+			const byte = this.readByte();
+			if (byte < 0) {
+				return bytes.length ? decoder.decode(new Uint8Array(bytes)) : null;
+			}
+			if (byte === 10) {
+				if (bytes[bytes.length - 1] === 13) bytes.pop();
+				return decoder.decode(new Uint8Array(bytes));
+			}
+			bytes.push(byte);
+		}
+	}
+
+	readAll() {
+		const bytes: number[] = [];
+		while (true) {
+			const byte = this.readByte();
+			if (byte < 0) return decoder.decode(new Uint8Array(bytes));
+			bytes.push(byte);
+		}
+	}
+
+	private readChunk() {
+		if (this.initialStdin != null) {
+			const chunk = this.initialStdin;
+			this.initialStdin = null;
+			return chunk;
+		}
+		if (this.fixedInitialStdin || !this.buffer) return null;
+		const chunk = waitForBufferedStdin(this.buffer, () => postMessage({ buffer: true }));
+		if (this.log) {
+			console.log(
+				chunk == null
+					? '[wasm-idle:assemblyscript-stdin] read(bytes=0, eof=true)'
+					: `[wasm-idle:assemblyscript-stdin] read(bytes=${encoder.encode(chunk).byteLength}, text=${JSON.stringify(chunk)})`
+			);
+		}
+		return chunk;
+	}
+}
+
 self.onmessage = async (event: { data: any }) => {
 	const {
 		load,
 		code,
 		prepare,
+		buffer,
+		stdin,
 		activePath = 'main.as.ts',
 		workspaceFiles = [],
 		log
@@ -23,6 +98,8 @@ self.onmessage = async (event: { data: any }) => {
 		load?: boolean;
 		code?: string;
 		prepare?: boolean;
+		buffer?: SharedArrayBuffer;
+		stdin?: string;
 		activePath?: string;
 		workspaceFiles?: SandboxWorkspaceFile[];
 		log?: boolean;
@@ -51,26 +128,26 @@ self.onmessage = async (event: { data: any }) => {
 				);
 			}
 			if (!compilerPromise) {
-					const workerGlobal = globalThis as Record<string, unknown>;
-					const hadProcess = Object.prototype.hasOwnProperty.call(workerGlobal, 'process');
-					const previousProcess = workerGlobal.process;
-					if (!Reflect.deleteProperty(workerGlobal, 'process')) {
-						workerGlobal.process = undefined;
-					}
-					compilerPromise =
-						import('assemblyscript/asc') as Promise<AssemblyScriptCompilerModule>;
-					const restoreProcess = () => {
-						if (hadProcess) {
-							workerGlobal.process = previousProcess;
-						} else {
-							Reflect.deleteProperty(workerGlobal, 'process');
-						}
-					};
-					compilerPromise.then(
-						() => restoreProcess(),
-						() => restoreProcess()
-					);
+				const workerGlobal = globalThis as Record<string, unknown>;
+				const hadProcess = Object.prototype.hasOwnProperty.call(workerGlobal, 'process');
+				const previousProcess = workerGlobal.process;
+				if (!Reflect.deleteProperty(workerGlobal, 'process')) {
+					workerGlobal.process = undefined;
 				}
+				compilerPromise =
+					import('assemblyscript/asc') as Promise<AssemblyScriptCompilerModule>;
+				const restoreProcess = () => {
+					if (hadProcess) {
+						workerGlobal.process = previousProcess;
+					} else {
+						Reflect.deleteProperty(workerGlobal, 'process');
+					}
+				};
+				compilerPromise.then(
+					() => restoreProcess(),
+					() => restoreProcess()
+				);
+			}
 			const files: Record<string, string> = {};
 			for (const file of workspaceFiles) {
 				files[file.path] = file.content;
@@ -128,10 +205,31 @@ self.onmessage = async (event: { data: any }) => {
 		}
 
 		let activeExports: (Record<string, unknown> & ASUtil) | null = null;
+		const stdinReader = new AssemblyScriptStdin(
+			stdin,
+			buffer ? new Int32Array(buffer) : null,
+			Boolean(log)
+		);
+		const createAssemblyScriptString = (value: string | null) => {
+			if (value == null) return 0;
+			if (!activeExports?.__newString) {
+				throw new Error('AssemblyScript runtime string allocator is unavailable');
+			}
+			return activeExports.__newString(value);
+		};
 		const imports = {
 			env: {
 				seed() {
 					return Math.floor(Math.random() * 0x7fffffff);
+				},
+				readByte() {
+					return stdinReader.readByte();
+				},
+				readLine() {
+					return createAssemblyScriptString(stdinReader.readLine());
+				},
+				readAll() {
+					return createAssemblyScriptString(stdinReader.readAll());
 				},
 				abort(message: number, fileName: number, lineNumber: number, columnNumber: number) {
 					const text = activeExports?.__getString

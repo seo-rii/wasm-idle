@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { readBufferedStdin } from './stdinBuffer';
 
 const workerInstances: MockWorker[] = [];
 let suppressAutoLoadAck = false;
+let suppressAutoRunAck = false;
 
 class MockWorker {
 	onmessage: ((event: MessageEvent<any>) => void) | null = null;
@@ -30,6 +32,7 @@ class MockWorker {
 			});
 			return;
 		}
+		if (suppressAutoRunAck) return;
 		queueMicrotask(() =>
 			this.onmessage?.({
 				data: { output: 'factorial_plus_bonus=27\n', results: true }
@@ -53,6 +56,7 @@ describe('AssemblyScript sandbox', () => {
 	beforeEach(() => {
 		workerInstances.length = 0;
 		suppressAutoLoadAck = false;
+		suppressAutoRunAck = false;
 	});
 
 	it('loads the AssemblyScript worker and forwards diagnostics plus run output', async () => {
@@ -127,5 +131,47 @@ describe('AssemblyScript sandbox', () => {
 		await expect(loadPromise).rejects.toContain(
 			'AssemblyScript worker script error: worker script error (/worker/assemblyscript.js:8:2)'
 		);
+	});
+
+	it('writes queued terminal input when the worker requests stdin', async () => {
+		suppressAutoRunAck = true;
+		const sandbox = new AssemblyScript();
+		await sandbox.load('/absproxy/5173');
+
+		const runPromise = sandbox.run(
+			'@external("env", "readLine") declare function readLine(): string | null;',
+			false
+		);
+		await vi.dynamicImportSettled();
+		const worker = workerInstances[0];
+		const runMessage = worker.postMessage.mock.calls.at(-1)?.[0];
+
+		worker.onmessage?.({ data: { buffer: true } } as MessageEvent<any>);
+		sandbox.write('42\n');
+
+		expect(readBufferedStdin(runMessage.buffer)).toBe('42\n');
+		worker.onmessage?.({ data: { results: true } } as MessageEvent<any>);
+		await expect(runPromise).resolves.toBe(true);
+	});
+
+	it('writes EOF when the worker requests stdin after eof is signaled', async () => {
+		suppressAutoRunAck = true;
+		const sandbox = new AssemblyScript();
+		await sandbox.load('/absproxy/5173');
+
+		const runPromise = sandbox.run(
+			'@external("env", "readAll") declare function readAll(): string;',
+			false
+		);
+		await vi.dynamicImportSettled();
+		const worker = workerInstances[0];
+		const runMessage = worker.postMessage.mock.calls.at(-1)?.[0];
+
+		worker.onmessage?.({ data: { buffer: true } } as MessageEvent<any>);
+		sandbox.eof();
+
+		expect(readBufferedStdin(runMessage.buffer)).toBeNull();
+		worker.onmessage?.({ data: { results: true } } as MessageEvent<any>);
+		await expect(runPromise).resolves.toBe(true);
 	});
 });

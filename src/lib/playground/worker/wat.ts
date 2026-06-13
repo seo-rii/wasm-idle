@@ -1,19 +1,23 @@
 import type { SandboxWorkspaceFile } from '$lib/playground/options';
+import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
 
 declare var self: any;
+
+const encoder = new TextEncoder();
 
 let moduleUrl = '';
 let loadedModuleUrl = '';
 let runtimePromise: Promise<{
 	compiler: any;
 	executeBrowserWatArtifact: (
-		artifact: any,
-		options?: {
-			stdout?: (chunk: string) => void;
-			stderr?: (chunk: string) => void;
-			files?: SandboxWorkspaceFile[];
-			activePath?: string;
-		}
+			artifact: any,
+			options?: {
+				stdout?: (chunk: string) => void;
+				stderr?: (chunk: string) => void;
+				files?: SandboxWorkspaceFile[];
+				activePath?: string;
+				imports?: WebAssembly.Imports;
+			}
 	) => Promise<{
 		exitCode: number | null;
 		stdout: string;
@@ -22,6 +26,51 @@ let runtimePromise: Promise<{
 }> | null = null;
 let compiledArtifact: any = null;
 let compiledCacheKey = '';
+
+class WatStdin {
+	private initialStdin: string | null;
+	private readonly fixedInitialStdin: boolean;
+	private currentBytes = new Uint8Array(0);
+	private currentOffset = 0;
+
+	constructor(
+		initialStdin: string | undefined,
+		private readonly buffer: Int32Array | null,
+		private readonly log: boolean
+	) {
+		this.initialStdin = typeof initialStdin === 'string' ? initialStdin : null;
+		this.fixedInitialStdin = typeof initialStdin === 'string';
+	}
+
+	readByte() {
+		while (this.currentOffset >= this.currentBytes.length) {
+			const chunk = this.readChunk();
+			if (chunk == null) return -1;
+			if (!chunk) continue;
+			this.currentBytes = encoder.encode(chunk);
+			this.currentOffset = 0;
+		}
+		return this.currentBytes[this.currentOffset++] ?? -1;
+	}
+
+	private readChunk() {
+		if (this.initialStdin != null) {
+			const chunk = this.initialStdin;
+			this.initialStdin = null;
+			return chunk;
+		}
+		if (this.fixedInitialStdin || !this.buffer) return null;
+		const chunk = waitForBufferedStdin(this.buffer, () => postMessage({ buffer: true }));
+		if (this.log) {
+			console.log(
+				chunk == null
+					? '[wasm-idle:wat-stdin] read(bytes=0, eof=true)'
+					: `[wasm-idle:wat-stdin] read(bytes=${encoder.encode(chunk).byteLength}, text=${JSON.stringify(chunk)})`
+			);
+		}
+		return chunk;
+	}
+}
 
 async function loadRuntime(url: string) {
 	if (!url) {
@@ -83,6 +132,8 @@ self.onmessage = async (event: { data: any }) => {
 		moduleUrl: nextModuleUrl,
 		code,
 		prepare,
+		buffer,
+		stdin,
 		activePath = 'main.wat',
 		workspaceFiles = [],
 		log
@@ -143,15 +194,27 @@ self.onmessage = async (event: { data: any }) => {
 			return;
 		}
 
-		const execution = await runtime.executeBrowserWatArtifact(compiledArtifact, {
-			files: workspaceFiles,
-			activePath,
-			stdout: (output) => {
-				if (output) postMessage({ output });
-			},
-			stderr: (output) => {
-				if (output) postMessage({ output });
-			}
+			const stdinReader = new WatStdin(
+				stdin,
+				buffer ? new Int32Array(buffer) : null,
+				Boolean(log)
+			);
+			const execution = await runtime.executeBrowserWatArtifact(compiledArtifact, {
+				files: workspaceFiles,
+				activePath,
+				imports: {
+					env: {
+						readByte() {
+							return stdinReader.readByte();
+						}
+					}
+				},
+				stdout: (output) => {
+					if (output) postMessage({ output });
+				},
+				stderr: (output) => {
+					if (output) postMessage({ output });
+				}
 		});
 		if (execution.exitCode !== 0) {
 			throw new Error(

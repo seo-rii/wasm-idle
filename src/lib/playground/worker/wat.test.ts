@@ -94,6 +94,66 @@ describe('WAT worker', () => {
 			log: true
 		});
 		expect((globalThis as any).__lastExecution.options.activePath).toBe('main.wat');
+		expect(typeof (globalThis as any).__lastExecution.options.imports.env.readByte).toBe(
+			'function'
+		);
+	});
+
+	it('provides injected stdin through the env readByte import', async () => {
+		const moduleUrl = await createMockWatRuntimeModule(`
+			export async function createWatCompiler() {
+				return {
+					async compile(options) {
+						return {
+							stdout: '',
+							success: true,
+							diagnostics: [],
+							artifact: {
+								wasm: new Uint8Array([0, 97, 115, 109]),
+								fileName: options.fileName,
+								source: options.code
+							}
+						};
+					}
+				};
+			}
+
+			export async function executeBrowserWatArtifact(_artifact, options = {}) {
+				const readByte = options.imports.env.readByte;
+				options.stdout?.(\`bytes=\${readByte()},\${readByte()},\${readByte()}\\n\`);
+				return {
+					exitCode: 0,
+					stdout: '',
+					stderr: ''
+				};
+			}
+
+			export default createWatCompiler;
+		`);
+
+		await import('./wat');
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				moduleUrl
+			}
+		});
+		await Promise.resolve();
+
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: '(module (import "env" "readByte" (func $readByte (result i32))))',
+				prepare: false,
+				stdin: 'A\n',
+				activePath: 'main.wat'
+			}
+		});
+		await Promise.resolve();
+
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			output: 'bytes=65,10,-1\n'
+		});
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
 	});
 
 	it('reports compiler failures as worker errors after forwarding diagnostics', async () => {
