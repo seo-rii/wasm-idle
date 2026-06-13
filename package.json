@@ -88,12 +88,14 @@
 		"vitest": "^4.1.4"
 	},
 	"dependencies": {
+		"@assemblyscript/loader": "0.28.17",
 		"@bjorn3/browser_wasi_shim": "^0.4.2",
 		"@hancomac/monaco-languageclient": "^1.1.0",
 		"@ruby/3.4-wasm-wasi": "2.9.3-2.9.4",
 		"@ruby/wasm-wasi": "2.9.3-2.9.4",
 		"@swmansion/popcorn": "0.2.2",
 		"@wasm-idle/core": "workspace:*",
+		"@wasm-idle/runtime-assemblyscript": "workspace:*",
 		"@xterm/addon-canvas": "^0.7.0",
 		"@xterm/addon-fit": "^0.11.0",
 		"@xterm/addon-ligatures": "^0.10.0",
@@ -104,6 +106,7 @@
 		"@xterm/addon-webgl": "^0.19.0",
 		"@xterm/xterm": "^6.0.0",
 		"@zip.js/zip.js": "^2.8.26",
+		"assemblyscript": "0.28.17",
 		"publint": "^0.3.18",
 		"pyodide": "0.29.3",
 		"vscode-jsonrpc": "^8.2.1"

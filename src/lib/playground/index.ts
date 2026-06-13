@@ -1,4 +1,5 @@
 import Clang from '$lib/playground/clang';
+import AssemblyScript from '$lib/playground/assemblyscript';
 import Dotnet from '$lib/playground/dotnet';
 import Elixir from '$lib/playground/elixir';
 import Go from '$lib/playground/go';
@@ -39,6 +40,7 @@ export const supportedLanguages = [
 	'OCAML',
 	'JAVASCRIPT',
 	'TYPESCRIPT',
+	'ASSEMBLYSCRIPT',
 	'WAT',
 	'LUA',
 	'ZIG',
@@ -112,6 +114,10 @@ async function playground(language: string, runtimeAssets?: SandboxRuntimeAssets
 		case 'TS':
 			sandbox = new TypeScriptSandbox('TYPESCRIPT');
 			break;
+		case 'ASSEMBLYSCRIPT':
+		case 'AS':
+			sandbox = new AssemblyScript();
+			break;
 		case 'WAT':
 			sandbox = new Wat();
 			break;
@@ -161,6 +167,9 @@ async function playground(language: string, runtimeAssets?: SandboxRuntimeAssets
 		}
 		if (language === 'TYPESCRIPT' || language === 'TS') {
 			sandboxCache['TYPESCRIPT'] = sandboxCache['TS'] = sandbox;
+		}
+		if (language === 'ASSEMBLYSCRIPT' || language === 'AS') {
+			sandboxCache['ASSEMBLYSCRIPT'] = sandboxCache['AS'] = sandbox;
 		}
 		if (language === 'WAT') sandboxCache['WAT'] = sandbox;
 		if (language === 'LUA') sandboxCache['LUA'] = sandbox;

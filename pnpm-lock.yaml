@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@assemblyscript/loader':
+        specifier: 0.28.17
+        version: 0.28.17
       '@bjorn3/browser_wasi_shim':
         specifier: ^0.4.2
         version: 0.4.2
@@ -26,6 +29,9 @@ importers:
       '@wasm-idle/core':
         specifier: workspace:*
         version: link:packages/core
+      '@wasm-idle/runtime-assemblyscript':
+        specifier: workspace:*
+        version: link:runtimes/assemblyscript
       '@xterm/addon-canvas':
         specifier: ^0.7.0
         version: 0.7.0(@xterm/xterm@6.0.0)
@@ -56,6 +62,9 @@ importers:
       '@zip.js/zip.js':
         specifier: ^2.8.26
         version: 2.8.26
+      assemblyscript:
+        specifier: 0.28.17
+        version: 0.28.17
       publint:
         specifier: ^0.3.18
         version: 0.3.18

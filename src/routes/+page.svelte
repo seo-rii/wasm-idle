@@ -60,6 +60,7 @@
 		| 'TINYGO'
 		| 'JAVASCRIPT'
 		| 'TYPESCRIPT'
+		| 'ASSEMBLYSCRIPT'
 		| 'WAT'
 		| 'LUA'
 		| 'ZIG'
@@ -106,6 +107,7 @@
 		'TINYGO',
 		'JAVASCRIPT',
 		'TYPESCRIPT',
+		'ASSEMBLYSCRIPT',
 		'WAT',
 		'LUA',
 		'ZIG',
@@ -127,6 +129,7 @@
 		TINYGO: 'TinyGo',
 		JAVASCRIPT: 'JavaScript',
 		TYPESCRIPT: 'TypeScript',
+		ASSEMBLYSCRIPT: 'AssemblyScript',
 		WAT: 'WAT',
 		LUA: 'Lua',
 		ZIG: 'Zig',
@@ -274,19 +277,21 @@
 												? 'javascript'
 												: language === 'TYPESCRIPT'
 													? 'typescript'
-													: language === 'WAT'
-														? 'wat'
-														: language === 'ZIG'
-															? 'zig'
-															: language === 'LUA'
-																? 'lua'
-																: language === 'LISP'
-																	? 'lisp'
-																	: language === 'RUBY'
-																		? 'ruby'
-																		: language === 'HASKELL'
-																			? 'haskell'
-																			: 'go'
+													: language === 'ASSEMBLYSCRIPT'
+														? 'typescript'
+														: language === 'WAT'
+															? 'wat'
+															: language === 'ZIG'
+																? 'zig'
+																: language === 'LUA'
+																	? 'lua'
+																	: language === 'LISP'
+																		? 'lisp'
+																		: language === 'RUBY'
+																			? 'ruby'
+																			: language === 'HASKELL'
+																				? 'haskell'
+																				: 'go'
 	);
 	const compact = $derived(examplePaneWidth > 0 && examplePaneWidth <= 760);
 	const activeFile = $derived(files.find((file) => file.path === activePath) ?? files[0]);
@@ -431,6 +436,7 @@
 	}
 
 	function languageForPath(filePath: string): PlaygroundLanguage | null {
+		if (filePath.toLowerCase().endsWith('.as.ts')) return 'ASSEMBLYSCRIPT';
 		const ext = extension(filePath);
 		const match: Record<string, PlaygroundLanguage> = {
 			'.c': 'C',
@@ -488,6 +494,7 @@
 			TINYGO: 'main.go',
 			JAVASCRIPT: 'main.js',
 			TYPESCRIPT: 'main.ts',
+			ASSEMBLYSCRIPT: 'main.as.ts',
 			WAT: 'main.wat',
 			LUA: 'main.lua',
 			ZIG: 'main.zig',
@@ -513,6 +520,7 @@
 			TINYGO: 'go',
 			JAVASCRIPT: 'javascript',
 			TYPESCRIPT: 'typescript',
+			ASSEMBLYSCRIPT: 'assemblyscript',
 			WAT: 'wat',
 			LUA: 'lua',
 			ZIG: 'zig',
@@ -988,6 +996,8 @@
 			js: 'JAVASCRIPT',
 			typescript: 'TYPESCRIPT',
 			ts: 'TYPESCRIPT',
+			assemblyscript: 'ASSEMBLYSCRIPT',
+			as: 'ASSEMBLYSCRIPT',
 			wat: 'WAT',
 			wast: 'WAT',
 			lua: 'LUA',
@@ -1398,6 +1408,7 @@
 			language !== 'OCAML' &&
 			language !== 'JAVASCRIPT' &&
 			language !== 'TYPESCRIPT' &&
+			language !== 'ASSEMBLYSCRIPT' &&
 			language !== 'WAT' &&
 			language !== 'LUA' &&
 			language !== 'ZIG' &&
@@ -1608,6 +1619,7 @@
 						<option value="TINYGO">TinyGo</option>
 						<option value="JAVASCRIPT">JavaScript</option>
 						<option value="TYPESCRIPT">TypeScript</option>
+						<option value="ASSEMBLYSCRIPT">AssemblyScript</option>
 						<option value="WAT">WAT</option>
 						<option value="LUA">Lua</option>
 						<option value="ZIG">Zig</option>
@@ -1776,6 +1788,14 @@
 				for Enter-submitted line input. `fs.readFileSync('/dev/stdin', 'utf8')` and `fs.readFileSync(0,
 				'utf8')` are also available for full-input reads; send Ctrl+D or the EOF button after
 				typing input.
+			</p>
+		{/if}
+		{#if language === 'ASSEMBLYSCRIPT'}
+			<p class="hint">
+				AssemblyScript compiles in the browser with the bundled `assemblyscript` compiler,
+				then instantiates the emitted WebAssembly locally. `_start` or `main` runs first; if
+				neither exists, zero-argument numeric, boolean, and string exports are printed to
+				the terminal.
 			</p>
 		{/if}
 		{#if language === 'WAT'}

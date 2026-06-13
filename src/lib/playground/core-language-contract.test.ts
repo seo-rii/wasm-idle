@@ -60,6 +60,13 @@ describe('core language contract', () => {
 		expect(isDeferredProgressLanguage('ruby')).toBe(true);
 	});
 
+	it('exposes AssemblyScript aliases as a deferred browser runtime language', () => {
+		expect(supportedLanguageIds).toContain('ASSEMBLYSCRIPT');
+		expect(normalizeLanguageId('assemblyscript')).toBe('ASSEMBLYSCRIPT');
+		expect(normalizeLanguageId('as')).toBe('ASSEMBLYSCRIPT');
+		expect(isDeferredProgressLanguage('assemblyscript')).toBe(true);
+	});
+
 	it('exposes Lisp aliases as a deferred browser runtime language', () => {
 		expect(supportedLanguageIds).toContain('LISP');
 		expect(normalizeLanguageId('lisp')).toBe('LISP');

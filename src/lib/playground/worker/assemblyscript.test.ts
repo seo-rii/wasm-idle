@@ -1,0 +1,88 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+describe('AssemblyScript worker', () => {
+	beforeEach(() => {
+		vi.resetModules();
+		(globalThis as any).self = globalThis as any;
+		(globalThis as any).postMessage = vi.fn();
+	});
+
+	it('compiles AssemblyScript source and prints zero-argument exports', async () => {
+		await import('./assemblyscript');
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true
+			}
+		});
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: `const bonus: i32 = 3;
+
+function factorial(n: i32): i32 {
+  return n <= 1 ? 1 : n * factorial(n - 1);
+}
+
+export function factorial_plus_bonus(): i32 {
+  return factorial(4) + bonus;
+}`,
+				prepare: false,
+				activePath: 'main.as.ts',
+				workspaceFiles: []
+			}
+		});
+
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ load: true });
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			output: 'factorial_plus_bonus=27\n'
+		});
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
+	}, 15000);
+
+	it('decodes string and boolean export results from declaration metadata', async () => {
+		await import('./assemblyscript');
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: `export function greeting(): string {
+  return "hello";
+}
+
+export function ok(): bool {
+  return true;
+}`,
+				prepare: false,
+				activePath: 'main.as.ts',
+				workspaceFiles: []
+			}
+		});
+
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			output: 'greeting=hello\n'
+		});
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ output: 'ok=true\n' });
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
+	}, 15000);
+
+	it('reports compiler failures as diagnostics and worker errors', async () => {
+		await import('./assemblyscript');
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: 'export function broken(): i32 { return nope; }',
+				prepare: false,
+				activePath: 'main.as.ts',
+				workspaceFiles: []
+			}
+		});
+
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			diagnostic: expect.objectContaining({
+				fileName: 'main.as.ts',
+				lineNumber: 1,
+				columnNumber: 40,
+				severity: 'error'
+			})
+		});
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			error: expect.stringContaining("Cannot find name 'nope'")
+		});
+	}, 15000);
+});

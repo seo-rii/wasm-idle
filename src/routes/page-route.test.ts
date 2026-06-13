@@ -204,6 +204,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/: language === 'ELIXIR'\s+\? 'elixir'/);
 		expect(source).toMatch(/: language === 'JAVASCRIPT'\s+\? 'javascript'/);
 		expect(source).toMatch(/: language === 'TYPESCRIPT'\s+\? 'typescript'/);
+		expect(source).toMatch(/: language === 'ASSEMBLYSCRIPT'\s+\? 'typescript'/);
 		expect(source).toMatch(/: language === 'WAT'\s+\? 'wat'/);
 		expect(source).toMatch(/: language === 'LUA'\s+\? 'lua'/);
 		expect(source).toMatch(/: language === 'ZIG'\s+\? 'zig'/);
@@ -314,6 +315,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/<option value="TINYGO">TinyGo<\/option>/);
 		expect(source).toMatch(/<option value="JAVASCRIPT">JavaScript<\/option>/);
 		expect(source).toMatch(/<option value="TYPESCRIPT">TypeScript<\/option>/);
+		expect(source).toMatch(/<option value="ASSEMBLYSCRIPT">AssemblyScript<\/option>/);
 		expect(source).toMatch(/<option value="WAT">WAT<\/option>/);
 		expect(source).toMatch(/<option value="LUA">Lua<\/option>/);
 		expect(source).toMatch(/<option value="ZIG">Zig<\/option>/);
@@ -398,6 +400,19 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/`fs\.readFileSync\('\/dev\/stdin', 'utf8'\)`/);
 		expect(source).toMatch(/`fs\.readFileSync\(0,\s+'utf8'\)`/);
 		expect(source).toMatch(/send Ctrl\+D or\s+the EOF button after\s+typing input/s);
+	});
+
+	it('surfaces AssemblyScript through the bundled browser compiler', () => {
+		expect(source).toMatch(/<option value="ASSEMBLYSCRIPT">AssemblyScript<\/option>/);
+		expect(source).toMatch(/assemblyscript: 'ASSEMBLYSCRIPT'/);
+		expect(source).toMatch(/as: 'ASSEMBLYSCRIPT'/);
+		expect(source).toMatch(/language === 'ASSEMBLYSCRIPT'\s+\? 'typescript'/);
+		expect(source).toMatch(/endsWith\('\.as\.ts'\)\) return 'ASSEMBLYSCRIPT'/);
+		expect(source).toMatch(/ASSEMBLYSCRIPT: 'main\.as\.ts'/);
+		expect(source).toMatch(/ASSEMBLYSCRIPT: 'assemblyscript'/);
+		expect(source).toMatch(/AssemblyScript compiles in the browser/);
+		expect(source).toMatch(/bundled `assemblyscript` compiler/);
+		expect(source).toMatch(/zero-argument numeric, boolean, and string exports/);
 	});
 
 	it('surfaces WAT through the wasm-wat browser compiler contract', () => {

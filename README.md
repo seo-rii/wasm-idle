@@ -3,7 +3,7 @@
 ![wasm-idle](static/image.jpeg)
 
 Executes C++, Python, Java, Rust, Go, TinyGo, OCaml, Elixir, C#, F#, JavaScript,
-TypeScript, WAT, Lua, Zig, Scheme, Ruby, and Haskell code.
+TypeScript, AssemblyScript, WAT, Lua, Zig, Scheme, Ruby, and Haskell code.
 
 Refer to src/lib/clang.
 
@@ -207,6 +207,9 @@ Scheme uses the bundled `static/wasm-lisp/` Puppy Scheme compiler module by defa
 with `PUBLIC_WASM_LISP_MODULE_URL`, or pass `runtimeAssets.lisp.moduleUrl`.
 Ruby uses the bundled `@ruby/3.4-wasm-wasi` CRuby `ruby+stdlib.wasm` asset by default. Override it
 with `PUBLIC_WASM_RUBY_WASM_URL`, or pass `runtimeAssets.ruby.wasmUrl`.
+AssemblyScript uses the bundled `assemblyscript` browser compiler and instantiates the emitted
+WebAssembly locally. `_start` or `main` runs first; otherwise zero-argument numeric, boolean, and
+string exports are printed to the terminal.
 Haskell uses the bundled `static/wasm-haskell/` `ghc-in-browser` assets by default. Override them
 with `PUBLIC_WASM_HASKELL_MODULE_URL`, `PUBLIC_WASM_HASKELL_ROOTFS_URL`, and
 `PUBLIC_WASM_HASKELL_BSDTAR_URL`, or pass `runtimeAssets.haskell`. The worker extracts the wasm GHC

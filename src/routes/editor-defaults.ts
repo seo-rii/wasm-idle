@@ -12,6 +12,7 @@ export type EditorDefaultLanguage =
 	| 'ocaml'
 	| 'javascript'
 	| 'typescript'
+	| 'assemblyscript'
 	| 'wat'
 	| 'lua'
 	| 'zig'
@@ -32,6 +33,7 @@ export const editorDefaults: Record<
 	| 'ocaml'
 	| 'javascript'
 	| 'typescript'
+	| 'assemblyscript'
 	| 'wat'
 	| 'lua'
 	| 'zig'
@@ -209,6 +211,15 @@ const input: string = (fs as any).readLineSync(0).trim();
 const parsed = Number.parseInt(input || '4', 10);
 const n = Number.isNaN(parsed) ? 4 : parsed;
 console.log(\`factorial_plus_bonus=\${factorial(n) + bonus}\`);`,
+	assemblyscript: `const bonus: i32 = 3;
+
+function factorial(n: i32): i32 {
+    return n <= 1 ? 1 : n * factorial(n - 1);
+}
+
+export function factorial_plus_bonus(): i32 {
+    return factorial(4) + bonus;
+}`,
 	wat: `(module
   (func $factorial (param $n i32) (result i32)
     local.get $n
@@ -417,6 +428,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.ocaml ||
 		source === editorDefaults.javascript ||
 		source === editorDefaults.typescript ||
+		source === editorDefaults.assemblyscript ||
 		source === editorDefaults.wat ||
 		source === editorDefaults.lua ||
 		source === editorDefaults.zig ||
