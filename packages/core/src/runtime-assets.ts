@@ -22,6 +22,7 @@ export interface RuntimeAssetKeySource {
 	};
 	zig?: { compilerUrl?: string; stdlibUrl?: string };
 	lisp?: { moduleUrl?: string };
+	ruby?: { wasmUrl?: string };
 }
 
 export type RuntimeAssetKeyInput = string | RuntimeAssetKeySource | undefined;
@@ -57,6 +58,7 @@ export function createRuntimeAssetsKey(runtimeAssets: RuntimeAssetKeyInput): str
 		haskellSearchDirs: runtimeAssets.haskell?.searchDirs?.join('\0') || '',
 		zigCompilerUrl: runtimeAssets.zig?.compilerUrl || '',
 		zigStdlibUrl: runtimeAssets.zig?.stdlibUrl || '',
-		lispModuleUrl: runtimeAssets.lisp?.moduleUrl || ''
+		lispModuleUrl: runtimeAssets.lisp?.moduleUrl || '',
+		rubyWasmUrl: runtimeAssets.ruby?.wasmUrl || ''
 	});
 }

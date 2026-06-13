@@ -18,7 +18,8 @@ const { publicEnv } = vi.hoisted(() => ({
 		PUBLIC_WASM_LISP_MODULE_URL: '',
 		PUBLIC_WASM_HASKELL_MODULE_URL: '',
 		PUBLIC_WASM_HASKELL_ROOTFS_URL: '',
-		PUBLIC_WASM_HASKELL_BSDTAR_URL: ''
+		PUBLIC_WASM_HASKELL_BSDTAR_URL: '',
+		PUBLIC_WASM_RUBY_WASM_URL: ''
 	}
 }));
 
@@ -480,6 +481,41 @@ describe('runtime asset config resolution', () => {
 		expect(resolveLispModuleUrl('/absproxy/5173', 'https://example.com/app')).toBe(
 			'https://example.com/absproxy/5173/wasm-lisp/index.js'
 		);
+	});
+
+	it('prefers an explicit Ruby wasm url over the public env override', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_RUBY_WASM_URL = 'https://env.example.com/ruby+stdlib.wasm';
+		const { resolveRubyWasmUrl } = await import('./assets');
+
+		expect(
+			resolveRubyWasmUrl(
+				{
+					ruby: {
+						wasmUrl: '/runtime/ruby+stdlib.wasm'
+					}
+				},
+				'https://example.com/app'
+			)
+		).toBe('https://example.com/runtime/ruby+stdlib.wasm');
+	});
+
+	it('falls back to PUBLIC_WASM_RUBY_WASM_URL when no Ruby runtime config is provided', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_RUBY_WASM_URL = '/ruby/ruby+stdlib.wasm';
+		const { resolveRubyWasmUrl } = await import('./assets');
+
+		expect(resolveRubyWasmUrl('/absproxy/5173', 'https://example.com/app')).toBe(
+			'https://example.com/ruby/ruby+stdlib.wasm'
+		);
+	});
+
+	it('uses the bundled Ruby wasm asset when no Ruby asset url is configured', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_RUBY_WASM_URL = '';
+		const { resolveRubyWasmUrl } = await import('./assets');
+
+		expect(resolveRubyWasmUrl('/absproxy/5173', 'https://example.com/app')).toBe('');
 	});
 
 	it('prefers explicit Haskell asset urls over public env overrides', async () => {

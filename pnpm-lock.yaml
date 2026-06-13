@@ -14,6 +14,12 @@ importers:
       '@hancomac/monaco-languageclient':
         specifier: ^1.1.0
         version: 1.1.0
+      '@ruby/3.4-wasm-wasi':
+        specifier: 2.9.3-2.9.4
+        version: 2.9.3-2.9.4
+      '@ruby/wasm-wasi':
+        specifier: 2.9.3-2.9.4
+        version: 2.9.3-2.9.4
       '@swmansion/popcorn':
         specifier: 0.2.2
         version: 0.2.2(esbuild@0.28.0)(vite@8.0.8(@types/node@25.6.0)(esbuild@0.28.0)(terser@5.47.1)(tsx@4.22.3))

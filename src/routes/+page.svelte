@@ -64,6 +64,7 @@
 		| 'LUA'
 		| 'ZIG'
 		| 'LISP'
+		| 'RUBY'
 		| 'HASKELL';
 
 	type LanguageWorkspace = {
@@ -109,6 +110,7 @@
 		'LUA',
 		'ZIG',
 		'LISP',
+		'RUBY',
 		'HASKELL'
 	];
 	const languageLabels: Record<PlaygroundLanguage, string> = {
@@ -129,6 +131,7 @@
 		LUA: 'Lua',
 		ZIG: 'Zig',
 		LISP: 'Scheme',
+		RUBY: 'Ruby',
 		HASKELL: 'Haskell'
 	};
 
@@ -279,9 +282,11 @@
 																? 'lua'
 																: language === 'LISP'
 																	? 'lisp'
-																	: language === 'HASKELL'
-																		? 'haskell'
-																		: 'go'
+																	: language === 'RUBY'
+																		? 'ruby'
+																		: language === 'HASKELL'
+																			? 'haskell'
+																			: 'go'
 	);
 	const compact = $derived(examplePaneWidth > 0 && examplePaneWidth <= 760);
 	const activeFile = $derived(files.find((file) => file.path === activePath) ?? files[0]);
@@ -461,6 +466,7 @@
 			'.sls': 'LISP',
 			'.lisp': 'LISP',
 			'.lsp': 'LISP',
+			'.rb': 'RUBY',
 			'.hs': 'HASKELL',
 			'.lhs': 'HASKELL'
 		};
@@ -486,6 +492,7 @@
 			LUA: 'main.lua',
 			ZIG: 'main.zig',
 			LISP: 'main.scm',
+			RUBY: 'main.rb',
 			HASKELL: 'main.hs'
 		};
 		return match[nextLanguage];
@@ -510,6 +517,7 @@
 			LUA: 'lua',
 			ZIG: 'zig',
 			LISP: 'lisp',
+			RUBY: 'ruby',
 			HASKELL: 'haskell'
 		} as const satisfies Record<
 			PlaygroundLanguage,
@@ -987,6 +995,8 @@
 			lisp: 'LISP',
 			scheme: 'LISP',
 			scm: 'LISP',
+			ruby: 'RUBY',
+			rb: 'RUBY',
 			haskell: 'HASKELL',
 			hs: 'HASKELL'
 		};
@@ -1392,6 +1402,7 @@
 			language !== 'LUA' &&
 			language !== 'ZIG' &&
 			language !== 'LISP' &&
+			language !== 'RUBY' &&
 			language !== 'HASKELL'
 		)
 			compilerDiagnostics = [];
@@ -1601,10 +1612,11 @@
 						<option value="LUA">Lua</option>
 						<option value="ZIG">Zig</option>
 						<option value="LISP">Scheme</option>
+						<option value="RUBY">Ruby</option>
 						<option value="HASKELL">Haskell</option>
 					</select>
 				</label>
-				{#if language === 'JAVA' || language === 'RUST' || language === 'GO' || language === 'CSHARP' || language === 'FSHARP' || language === 'TINYGO' || language === 'JAVASCRIPT' || language === 'TYPESCRIPT' || language === 'LUA' || language === 'ZIG' || language === 'LISP' || language === 'HASKELL'}
+				{#if language === 'JAVA' || language === 'RUST' || language === 'GO' || language === 'CSHARP' || language === 'FSHARP' || language === 'TINYGO' || language === 'JAVASCRIPT' || language === 'TYPESCRIPT' || language === 'LUA' || language === 'ZIG' || language === 'LISP' || language === 'RUBY' || language === 'HASKELL'}
 					<label class="args-chip">
 						<span class="material-symbols-outlined">list_alt</span>
 						<input bind:value={argsInput} placeholder="3 4 5" spellcheck={false} />
@@ -1778,6 +1790,13 @@
 				Lua runs through the bundled `wasmoon` Lua VM, backed by its local wasm payload.
 				Pass CLI args here, type into the terminal below, and use Ctrl+D or the EOF button
 				if the program reads stdin until EOF.
+			</p>
+		{/if}
+		{#if language === 'RUBY'}
+			<p class="hint">
+				Ruby runs through bundled CRuby WebAssembly assets from `ruby.wasm`. Pass CLI args
+				here, type into the terminal below, and use Ctrl+D or the EOF button if the program
+				reads stdin until EOF.
 			</p>
 		{/if}
 		{#if language === 'ZIG'}

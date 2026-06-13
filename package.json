@@ -90,6 +90,8 @@
 	"dependencies": {
 		"@bjorn3/browser_wasi_shim": "^0.4.2",
 		"@hancomac/monaco-languageclient": "^1.1.0",
+		"@ruby/3.4-wasm-wasi": "2.9.3-2.9.4",
+		"@ruby/wasm-wasi": "2.9.3-2.9.4",
 		"@swmansion/popcorn": "0.2.2",
 		"@wasm-idle/core": "workspace:*",
 		"@xterm/addon-canvas": "^0.7.0",

@@ -16,6 +16,7 @@ export type EditorDefaultLanguage =
 	| 'lua'
 	| 'zig'
 	| 'lisp'
+	| 'ruby'
 	| 'haskell'
 	| 'rust';
 
@@ -35,6 +36,7 @@ export const editorDefaults: Record<
 	| 'lua'
 	| 'zig'
 	| 'lisp'
+	| 'ruby'
 	| 'haskell',
 	string
 > = {
@@ -270,6 +272,15 @@ pub fn main() !void {
 (display "factorial_plus_bonus=")
 (display (+ (factorial 4) bonus))
 (newline)`,
+	ruby: `BONUS = 3
+
+def factorial(n)
+  n <= 1 ? 1 : n * factorial(n - 1)
+end
+
+input = STDIN.gets&.strip
+n = Integer(input || ARGV[0] || 4, exception: false) || 4
+puts "factorial_plus_bonus=#{factorial(n) + BONUS}"`,
 	haskell: `bonus :: Int
 bonus = 3
 
@@ -410,6 +421,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.lua ||
 		source === editorDefaults.zig ||
 		source === editorDefaults.lisp ||
+		source === editorDefaults.ruby ||
 		source === editorDefaults.haskell ||
 		source === rustEditorDefaults['wasm32-wasip1'] ||
 		source === rustEditorDefaults['wasm32-wasip2'] ||

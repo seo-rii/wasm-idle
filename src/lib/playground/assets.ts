@@ -95,6 +95,10 @@ export interface LispRuntimeAssetConfig {
 	moduleUrl?: string;
 }
 
+export interface RubyRuntimeAssetConfig {
+	wasmUrl?: string;
+}
+
 export interface PlaygroundRuntimeAssets {
 	rootUrl?: string;
 	python?: RuntimeAssetConfig;
@@ -113,6 +117,7 @@ export interface PlaygroundRuntimeAssets {
 	haskell?: HaskellRuntimeAssetConfig;
 	zig?: ZigRuntimeAssetConfig;
 	lisp?: LispRuntimeAssetConfig;
+	ruby?: RubyRuntimeAssetConfig;
 }
 
 export interface TinyGoRuntimeAssetLoaderRequest {
@@ -866,6 +871,21 @@ export function resolveLispModuleUrl(
 			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-lisp/index.js`,
 			currentUrl
 		);
+	}
+
+	return '';
+}
+
+export function resolveRubyWasmUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredWasmUrl =
+		(typeof options === 'object' && options?.ruby?.wasmUrl) ||
+		(publicEnv.PUBLIC_WASM_RUBY_WASM_URL || '').trim();
+
+	if (configuredWasmUrl) {
+		return resolveConfiguredUrl(configuredWasmUrl, currentUrl);
 	}
 
 	return '';

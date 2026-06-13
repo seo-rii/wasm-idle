@@ -9,6 +9,7 @@ import Lua from '$lib/playground/lua';
 import Ocaml from '$lib/playground/ocaml';
 import Python from '$lib/playground/python';
 import Rust from '$lib/playground/rust';
+import Ruby from '$lib/playground/ruby';
 import TinyGo from '$lib/playground/tinygo';
 import TypeScriptSandbox from '$lib/playground/typescript';
 import Wat from '$lib/playground/wat';
@@ -42,6 +43,7 @@ export const supportedLanguages = [
 	'LUA',
 	'ZIG',
 	'LISP',
+	'RUBY',
 	'HASKELL'
 ];
 
@@ -124,6 +126,10 @@ async function playground(language: string, runtimeAssets?: SandboxRuntimeAssets
 		case 'SCM':
 			sandbox = new Lisp();
 			break;
+		case 'RUBY':
+		case 'RB':
+			sandbox = new Ruby();
+			break;
 		case 'HASKELL':
 		case 'HS':
 			sandbox = new Haskell();
@@ -161,6 +167,9 @@ async function playground(language: string, runtimeAssets?: SandboxRuntimeAssets
 		if (language === 'ZIG') sandboxCache['ZIG'] = sandbox;
 		if (language === 'LISP' || language === 'SCHEME' || language === 'SCM') {
 			sandboxCache['LISP'] = sandboxCache['SCHEME'] = sandboxCache['SCM'] = sandbox;
+		}
+		if (language === 'RUBY' || language === 'RB') {
+			sandboxCache['RUBY'] = sandboxCache['RB'] = sandbox;
 		}
 		if (language === 'HASKELL' || language === 'HS') {
 			sandboxCache['HASKELL'] = sandboxCache['HS'] = sandbox;

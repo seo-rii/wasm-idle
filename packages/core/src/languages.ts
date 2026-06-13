@@ -24,6 +24,8 @@ export type WasmIdleLanguageId =
 	| 'LISP'
 	| 'SCHEME'
 	| 'SCM'
+	| 'RUBY'
+	| 'RB'
 	| 'HASKELL'
 	| 'HS';
 
@@ -46,6 +48,7 @@ export const supportedLanguageIds = [
 	'LUA',
 	'ZIG',
 	'LISP',
+	'RUBY',
 	'HASKELL'
 ] as const;
 
@@ -62,6 +65,7 @@ export const DEFAULT_DEFERRED_PROGRESS_LANGUAGES = new Set<string>([
 	'LUA',
 	'ZIG',
 	'LISP',
+	'RUBY',
 	'HASKELL'
 ]);
 
@@ -71,6 +75,7 @@ const LANGUAGE_ALIASES: Record<string, string> = {
 	JS: 'JAVASCRIPT',
 	PYTHON: 'PYTHON3',
 	HS: 'HASKELL',
+	RB: 'RUBY',
 	SCHEME: 'LISP',
 	SCM: 'LISP',
 	TS: 'TYPESCRIPT'

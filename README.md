@@ -3,7 +3,7 @@
 ![wasm-idle](static/image.jpeg)
 
 Executes C++, Python, Java, Rust, Go, TinyGo, OCaml, Elixir, C#, F#, JavaScript,
-TypeScript, WAT, Lua, Zig, Scheme, and Haskell code.
+TypeScript, WAT, Lua, Zig, Scheme, Ruby, and Haskell code.
 
 Refer to src/lib/clang.
 
@@ -205,6 +205,8 @@ standard library by default. Override them with `PUBLIC_WASM_ZIG_COMPILER_URL` a
 artifact with the self-hosted backend, and wasm-idle executes that artifact locally in the worker.
 Scheme uses the bundled `static/wasm-lisp/` Puppy Scheme compiler module by default. Override it
 with `PUBLIC_WASM_LISP_MODULE_URL`, or pass `runtimeAssets.lisp.moduleUrl`.
+Ruby uses the bundled `@ruby/3.4-wasm-wasi` CRuby `ruby+stdlib.wasm` asset by default. Override it
+with `PUBLIC_WASM_RUBY_WASM_URL`, or pass `runtimeAssets.ruby.wasmUrl`.
 Haskell uses the bundled `static/wasm-haskell/` `ghc-in-browser` assets by default. Override them
 with `PUBLIC_WASM_HASKELL_MODULE_URL`, `PUBLIC_WASM_HASKELL_ROOTFS_URL`, and
 `PUBLIC_WASM_HASKELL_BSDTAR_URL`, or pass `runtimeAssets.haskell`. The worker extracts the wasm GHC

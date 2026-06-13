@@ -208,6 +208,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/: language === 'LUA'\s+\? 'lua'/);
 		expect(source).toMatch(/: language === 'ZIG'\s+\? 'zig'/);
 		expect(source).toMatch(/: language === 'LISP'\s+\? 'lisp'/);
+		expect(source).toMatch(/: language === 'RUBY'\s+\? 'ruby'/);
 		expect(source).toMatch(/: language === 'HASKELL'\s+\? 'haskell'/);
 		expect(source).toMatch(/: 'go'/);
 		expect(source).toMatch(
@@ -317,12 +318,13 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/<option value="LUA">Lua<\/option>/);
 		expect(source).toMatch(/<option value="ZIG">Zig<\/option>/);
 		expect(source).toMatch(/<option value="LISP">Scheme<\/option>/);
+		expect(source).toMatch(/<option value="RUBY">Ruby<\/option>/);
 		expect(source).toMatch(/<option value="HASKELL">Haskell<\/option>/);
 		expect(source).toMatch(
-			/\{#if language === 'JAVA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'TINYGO' \|\| language === 'JAVASCRIPT' \|\| language === 'TYPESCRIPT' \|\| language === 'LUA' \|\| language === 'ZIG' \|\| language === 'LISP' \|\| language === 'HASKELL'\}/
+			/\{#if language === 'JAVA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'TINYGO' \|\| language === 'JAVASCRIPT' \|\| language === 'TYPESCRIPT' \|\| language === 'LUA' \|\| language === 'ZIG' \|\| language === 'LISP' \|\| language === 'RUBY' \|\| language === 'HASKELL'\}/
 		);
 		expect(source).toMatch(
-			/language === 'JAVA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'TINYGO' \|\| language === 'JAVASCRIPT' \|\| language === 'TYPESCRIPT' \|\| language === 'LUA' \|\| language === 'ZIG' \|\| language === 'LISP' \|\| language === 'HASKELL'/
+			/language === 'JAVA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'TINYGO' \|\| language === 'JAVASCRIPT' \|\| language === 'TYPESCRIPT' \|\| language === 'LUA' \|\| language === 'ZIG' \|\| language === 'LISP' \|\| language === 'RUBY' \|\| language === 'HASKELL'/
 		);
 		expect(source).toMatch(/Go uses the bundled `wasm-go` browser compiler runtime/);
 		expect(source).toMatch(
@@ -457,6 +459,19 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/'.scm': 'LISP'/);
 		expect(source).toMatch(/LISP: 'main\.scm'/);
 		expect(source).toMatch(/LISP: 'lisp'/);
+	});
+
+	it('surfaces Ruby through the CRuby WebAssembly runtime contract', () => {
+		expect(source).toMatch(/<option value="RUBY">Ruby<\/option>/);
+		expect(source).toMatch(/ruby: 'RUBY'/);
+		expect(source).toMatch(/rb: 'RUBY'/);
+		expect(source).toMatch(/language === 'RUBY'\s+\? 'ruby'/);
+		expect(source).toMatch(/'.rb': 'RUBY'/);
+		expect(source).toMatch(/RUBY: 'main\.rb'/);
+		expect(source).toMatch(/RUBY: 'ruby'/);
+		expect(source).toMatch(/Ruby runs through bundled CRuby WebAssembly assets/);
+		expect(source).toMatch(/from `ruby\.wasm`/);
+		expect(source).toMatch(/reads stdin until EOF/);
 	});
 
 	it('surfaces Haskell through the ghc-in-browser wasm compiler contract', () => {

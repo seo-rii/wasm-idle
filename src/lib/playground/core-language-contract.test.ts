@@ -53,6 +53,13 @@ describe('core language contract', () => {
 		expect(isDeferredProgressLanguage('lua')).toBe(true);
 	});
 
+	it('exposes Ruby aliases as a deferred browser runtime language', () => {
+		expect(supportedLanguageIds).toContain('RUBY');
+		expect(normalizeLanguageId('ruby')).toBe('RUBY');
+		expect(normalizeLanguageId('rb')).toBe('RUBY');
+		expect(isDeferredProgressLanguage('ruby')).toBe(true);
+	});
+
 	it('exposes Lisp aliases as a deferred browser runtime language', () => {
 		expect(supportedLanguageIds).toContain('LISP');
 		expect(normalizeLanguageId('lisp')).toBe('LISP');
@@ -105,5 +112,16 @@ describe('core language contract', () => {
 		});
 
 		expect(key).toContain('"lispModuleUrl":"/wasm-lisp/index.js?v=test"');
+	});
+
+	it('includes Ruby wasm urls in runtime asset cache keys', () => {
+		const key = createRuntimeAssetsKey({
+			rootUrl: '/repl',
+			ruby: {
+				wasmUrl: '/ruby/ruby+stdlib.wasm?v=test'
+			}
+		});
+
+		expect(key).toContain('"rubyWasmUrl":"/ruby/ruby+stdlib.wasm?v=test"');
 	});
 });
