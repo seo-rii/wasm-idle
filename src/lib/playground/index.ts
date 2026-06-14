@@ -38,6 +38,7 @@ export const supportedLanguages = [
 	'GO',
 	'CSHARP',
 	'FSHARP',
+	'VBNET',
 	'ELIXIR',
 	'TINYGO',
 	'OCAML',
@@ -102,6 +103,11 @@ async function playground(language: string, runtimeAssets?: SandboxRuntimeAssets
 		case 'FSHARP':
 		case 'F#':
 			sandbox = new Dotnet('FSHARP');
+			break;
+		case 'VBNET':
+		case 'VB':
+		case 'VISUALBASIC':
+			sandbox = new Dotnet('VBNET');
 			break;
 		case 'ELIXIR':
 			sandbox = new Elixir();
@@ -174,6 +180,9 @@ async function playground(language: string, runtimeAssets?: SandboxRuntimeAssets
 		}
 		if (language === 'FSHARP' || language === 'F#') {
 			sandboxCache['FSHARP'] = sandboxCache['F#'] = sandbox;
+		}
+		if (language === 'VBNET' || language === 'VB' || language === 'VISUALBASIC') {
+			sandboxCache['VBNET'] = sandboxCache['VB'] = sandboxCache['VISUALBASIC'] = sandbox;
 		}
 		if (language === 'ELIXIR') sandboxCache['ELIXIR'] = sandbox;
 		if (language === 'TINYGO') sandboxCache['TINYGO'] = sandbox;

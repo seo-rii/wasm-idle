@@ -210,8 +210,8 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/: language === 'ZIG'\s+\? 'zig'/);
 		expect(source).toMatch(/: language === 'LISP'\s+\? 'lisp'/);
 		expect(source).toMatch(/: language === 'RUBY'\s+\? 'ruby'/);
-		expect(source).toMatch(/: language === 'HASKELL'\s+\? 'haskell'/);
-		expect(source).toMatch(/: language === 'R'\s+\? 'r'/);
+		expect(source).toMatch(/:\s+language ===\s+'HASKELL'\s+\?\s+'haskell'/);
+		expect(source).toMatch(/:\s+language ===\s+'R'\s+\?\s+'r'/);
 		expect(source).toMatch(/: 'go'/);
 		expect(source).toMatch(
 			/rustTargetTriple: language === 'RUST' \? rustTargetTriple : undefined/
@@ -311,6 +311,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/<option value="GO">Go<\/option>/);
 		expect(source).toMatch(/<option value="CSHARP">C#<\/option>/);
 		expect(source).toMatch(/<option value="FSHARP">F#<\/option>/);
+		expect(source).toMatch(/<option value="VBNET">VB\.NET<\/option>/);
 		expect(source).toMatch(/<option value="ELIXIR">Elixir<\/option>/);
 		expect(source).toMatch(/<option value="OCAML">OCaml<\/option>/);
 		expect(source).toMatch(/<option value="TINYGO">TinyGo<\/option>/);
@@ -327,10 +328,10 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/<option value="SQLITE">SQLite<\/option>/);
 		expect(source).toMatch(/<option value="PHP">PHP<\/option>/);
 		expect(source).toMatch(
-			/\{#if language === 'JAVA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'TINYGO' \|\| language === 'JAVASCRIPT' \|\| language === 'TYPESCRIPT' \|\| language === 'LUA' \|\| language === 'ZIG' \|\| language === 'LISP' \|\| language === 'RUBY' \|\| language === 'HASKELL' \|\| language === 'R' \|\| language === 'PHP'\}/
+			/\{#if language === 'JAVA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'VBNET' \|\| language === 'TINYGO' \|\| language === 'JAVASCRIPT' \|\| language === 'TYPESCRIPT' \|\| language === 'LUA' \|\| language === 'ZIG' \|\| language === 'LISP' \|\| language === 'RUBY' \|\| language === 'HASKELL' \|\| language === 'R' \|\| language === 'PHP'\}/
 		);
 		expect(source).toMatch(
-			/language === 'JAVA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'TINYGO' \|\| language === 'JAVASCRIPT' \|\| language === 'TYPESCRIPT' \|\| language === 'LUA' \|\| language === 'ZIG' \|\| language === 'LISP' \|\| language === 'RUBY' \|\| language === 'HASKELL' \|\| language === 'R' \|\| language === 'PHP'/
+			/language === 'JAVA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'VBNET' \|\| language === 'TINYGO' \|\| language === 'JAVASCRIPT' \|\| language === 'TYPESCRIPT' \|\| language === 'LUA' \|\| language === 'ZIG' \|\| language === 'LISP' \|\| language === 'RUBY' \|\| language === 'HASKELL' \|\| language === 'R' \|\| language === 'PHP'/
 		);
 		expect(source).toMatch(/Go uses the bundled `wasm-go` browser compiler runtime/);
 		expect(source).toMatch(
@@ -356,28 +357,37 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/reads\s+stdin until EOF/);
 	});
 
-	it('surfaces C# and F# through wasm-dotnet runtime assets and the browser compiler hint', () => {
+	it('surfaces C#, F#, and VB.NET through wasm-dotnet runtime assets and the browser compiler hint', () => {
 		expect(source).toMatch(/dotnet: \{/);
 		expect(source).not.toContain('dotnet' + 'Host' + 'CompileUrl');
 		expect(source).toMatch(/<option value="CSHARP">C#<\/option>/);
 		expect(source).toMatch(/<option value="FSHARP">F#<\/option>/);
+		expect(source).toMatch(/<option value="VBNET">VB\.NET<\/option>/);
 		expect(source).toMatch(/csharp: 'CSHARP'/);
 		expect(source).toMatch(/'c#': 'CSHARP'/);
 		expect(source).toMatch(/cs: 'CSHARP'/);
 		expect(source).toMatch(/fsharp: 'FSHARP'/);
 		expect(source).toMatch(/'f#': 'FSHARP'/);
 		expect(source).toMatch(/fs: 'FSHARP'/);
+		expect(source).toMatch(/vbnet: 'VBNET'/);
+		expect(source).toMatch(/vb: 'VBNET'/);
+		expect(source).toMatch(/visualbasic: 'VBNET'/);
 		expect(source).toMatch(/language === 'CSHARP'\s+\? 'csharp'/);
-		expect(source).toMatch(/language === 'FSHARP'\s+\? 'fsharp'/);
+		expect(source).toMatch(/language ===\s+'FSHARP'\s+\?\s+'fsharp'/);
+		expect(source).toMatch(/language ===\s+'VBNET'\s+\?\s+'vb'/);
+		expect(source).toMatch(/'.vb': 'VBNET'/);
+		expect(source).toMatch(/VBNET: 'Program\.vb'/);
+		expect(source).toMatch(/VBNET: 'vbnet'/);
+		expect(source).toMatch(/language !== 'VBNET'/);
 		expect(source).toMatch(/isEditorDefaultSource\(content\)/);
 		expect(source).toMatch(/isLegacyEditorDefaultSource\(content\)/);
 		expect(source).toMatch(
-			/\{language === 'CSHARP' \? 'C#' : 'F#'\} uses a `wasm-dotnet` browser runtime module/
+			/\{language === 'CSHARP' \? 'C#' : language === 'VBNET' \? 'VB\.NET' : 'F#'\} uses a\s+`wasm-dotnet`\s+browser runtime module/
 		);
 		expect(source).toMatch(/static \.NET `browser-wasm` compiler app/);
 		expect(source).toMatch(/`runtime\/dotnet\.js`/);
 		expect(source).toMatch(
-			/terminal input submitted before or during preparation is passed to `Console\.In`/
+			/terminal input submitted before or during preparation\s+is passed to `Console\.In`/
 		);
 		expect(source).not.toContain('api/dotnet');
 	});
@@ -504,7 +514,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/<option value="HASKELL">Haskell<\/option>/);
 		expect(source).toMatch(/haskell: 'HASKELL'/);
 		expect(source).toMatch(/hs: 'HASKELL'/);
-		expect(source).toMatch(/language === 'HASKELL'\s+\? 'haskell'/);
+		expect(source).toMatch(/language ===\s+'HASKELL'\s+\?\s+'haskell'/);
 		expect(source).toMatch(/'.hs': 'HASKELL'/);
 		expect(source).toMatch(/HASKELL: 'main\.hs'/);
 		expect(source).toMatch(/HASKELL: 'haskell'/);
@@ -522,7 +532,7 @@ describe('example route debug actions', () => {
 		);
 		expect(source).toMatch(/<option value="R">R<\/option>/);
 		expect(source).toMatch(/r: 'R'/);
-		expect(source).toMatch(/language === 'R'\s+\? 'r'/);
+		expect(source).toMatch(/language ===\s+'R'\s+\?\s+'r'/);
 		expect(source).toMatch(/'.r': 'R'/);
 		expect(source).toMatch(/R: 'main\.R'/);
 		expect(source).toMatch(/R: 'r'/);

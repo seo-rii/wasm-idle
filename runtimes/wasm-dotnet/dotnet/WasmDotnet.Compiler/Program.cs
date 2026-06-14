@@ -11,6 +11,8 @@ using System.Threading.Tasks;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.VisualBasic;
+using CSharpSyntaxFactory = Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 using FSharp.Compiler.CodeAnalysis;
 using FSharp.Compiler.Diagnostics;
 using Microsoft.FSharp.Control;
@@ -28,6 +30,10 @@ public static partial class CompilerHost
     }
 
     [DynamicDependency(DynamicallyAccessedMemberTypes.PublicMethods | DynamicallyAccessedMemberTypes.PublicProperties, typeof(StdinShim))]
+    [DynamicDependency(DynamicallyAccessedMemberTypes.PublicMethods | DynamicallyAccessedMemberTypes.PublicProperties, typeof(Console))]
+    [DynamicDependency(DynamicallyAccessedMemberTypes.PublicMethods | DynamicallyAccessedMemberTypes.PublicProperties, typeof(Environment))]
+    [DynamicDependency(DynamicallyAccessedMemberTypes.PublicMethods | DynamicallyAccessedMemberTypes.PublicProperties, typeof(int))]
+    [DynamicDependency(DynamicallyAccessedMemberTypes.PublicMethods | DynamicallyAccessedMemberTypes.PublicProperties, typeof(string))]
     public static void Main()
     {
     }
@@ -48,9 +54,12 @@ public static partial class CompilerHost
                 });
             }
 
-            var result = request.Language == "csharp"
-                ? CompileCSharp(request.Source, request.References)
-                : await CompileFSharp(request.Source, request.References);
+            var result = request.Language switch
+            {
+                "csharp" => CompileCSharp(request.Source, request.References),
+                "vbnet" => CompileVisualBasic(request.Source, request.References),
+                _ => await CompileFSharp(request.Source, request.References)
+            };
 
             if (!result.Success || result.Assembly is null)
             {
@@ -166,6 +175,40 @@ public static partial class CompilerHost
             MetadataReferences(references),
             new CSharpCompilationOptions(OutputKind.ConsoleApplication)
                 .WithConcurrentBuild(false));
+        var emit = compilation.Emit(stream);
+        var diagnostics = emit.Diagnostics.Select(ToDiagnostic).ToArray();
+        if (!emit.Success)
+        {
+            return new CompileResult
+            {
+                Success = false,
+                Diagnostics = diagnostics,
+                Stderr = string.Join("\n", diagnostics.Select(d => d.Message))
+            };
+        }
+
+        stream.Position = 0;
+        return new CompileResult
+        {
+            Success = true,
+            Assembly = Assembly.Load(stream.ToArray()),
+            Diagnostics = diagnostics
+        };
+    }
+
+    private static CompileResult CompileVisualBasic(string source, ReferenceAssembly[]? references)
+    {
+        using var stream = new MemoryStream();
+        var syntaxTree = VisualBasicSyntaxTree.ParseText(RewriteVisualBasicSource(source));
+        var compilation = VisualBasicCompilation.Create(
+            $"WasmIdleVisualBasic_{Guid.NewGuid():N}",
+            [syntaxTree],
+            MetadataReferences(references),
+            new VisualBasicCompilationOptions(OutputKind.ConsoleApplication)
+                .WithConcurrentBuild(false)
+                .WithOptionStrict(OptionStrict.Off)
+                .WithOptionInfer(true)
+                .WithOptionExplicit(true));
         var emit = compilation.Emit(stream);
         var diagnostics = emit.Diagnostics.Select(ToDiagnostic).ToArray();
         if (!emit.Success)
@@ -338,6 +381,13 @@ public static partial class CompilerHost
             .Replace("System.Console.In", "WasmDotnet.Compiler.StdinShim.In")
             .Replace("Console.In", "WasmDotnet.Compiler.StdinShim.In");
 
+    private static string RewriteVisualBasicSource(string source) =>
+        source
+            .Replace("System.Console.ReadLine(", "WasmDotnet.Compiler.StdinShim.ReadLine(")
+            .Replace("Console.ReadLine(", "WasmDotnet.Compiler.StdinShim.ReadLine(")
+            .Replace("System.Console.In", "WasmDotnet.Compiler.StdinShim.In")
+            .Replace("Console.In", "WasmDotnet.Compiler.StdinShim.In");
+
     private sealed class CSharpStdinRewriter : CSharpSyntaxRewriter
     {
         public override SyntaxNode? VisitInvocationExpression(InvocationExpressionSyntax node)
@@ -349,7 +399,7 @@ public static partial class CompilerHost
             )
             {
                 return node.WithExpression(
-                    SyntaxFactory.ParseExpression("WasmDotnet.Compiler.StdinShim.ReadLine"));
+                    CSharpSyntaxFactory.ParseExpression("WasmDotnet.Compiler.StdinShim.ReadLine"));
             }
 
             return base.VisitInvocationExpression(node);
@@ -359,7 +409,7 @@ public static partial class CompilerHost
         {
             if (node.Name.Identifier.ValueText == "In" && IsConsoleExpression(node.Expression))
             {
-                return SyntaxFactory.ParseExpression("WasmDotnet.Compiler.StdinShim.In");
+                return CSharpSyntaxFactory.ParseExpression("WasmDotnet.Compiler.StdinShim.In");
             }
 
             return base.VisitMemberAccessExpression(node);

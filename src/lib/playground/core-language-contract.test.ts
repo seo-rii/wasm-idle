@@ -79,6 +79,14 @@ describe('core language contract', () => {
 		expect(isDeferredProgressLanguage('php')).toBe(true);
 	});
 
+	it('exposes VB.NET aliases as a deferred browser runtime language', () => {
+		expect(supportedLanguageIds).toContain('VBNET');
+		expect(normalizeLanguageId('vbnet')).toBe('VBNET');
+		expect(normalizeLanguageId('vb')).toBe('VBNET');
+		expect(normalizeLanguageId('visualbasic')).toBe('VBNET');
+		expect(isDeferredProgressLanguage('vb')).toBe(true);
+	});
+
 	it('exposes AssemblyScript aliases as a deferred browser runtime language', () => {
 		expect(supportedLanguageIds).toContain('ASSEMBLYSCRIPT');
 		expect(normalizeLanguageId('assemblyscript')).toBe('ASSEMBLYSCRIPT');

@@ -782,6 +782,7 @@
 			language === 'go' ||
 			language === 'csharp' ||
 			language === 'fsharp' ||
+			language === 'vb' ||
 			language === 'ocaml' ||
 			language === 'javascript' ||
 			language === 'typescript' ||
@@ -819,8 +820,9 @@
 		if (!isEditorDefaultSource(currentValue) && !isLegacyEditorDefaultSource(currentValue)) {
 			return;
 		}
+		const nextDefaultLanguage = language === 'vb' ? 'vbnet' : language;
 		const nextValue = resolveEditorDefaultSource(
-			language as
+			nextDefaultLanguage as
 				| 'c'
 				| 'cpp'
 				| 'python'
@@ -828,6 +830,7 @@
 				| 'go'
 				| 'csharp'
 				| 'fsharp'
+				| 'vbnet'
 				| 'elixir'
 				| 'ocaml'
 				| 'javascript'
@@ -919,8 +922,9 @@
 			}
 			Monaco.languages.setLanguageConfiguration('lisp', schemeLanguageConfiguration);
 			Monaco.languages.setMonarchTokensProvider('lisp', schemeMonarchTokens);
+			const defaultLanguage = language === 'vb' ? 'vbnet' : language;
 			const defaultValue = resolveEditorDefaultSource(
-				language as
+				defaultLanguage as
 					| 'c'
 					| 'cpp'
 					| 'python'
@@ -928,6 +932,7 @@
 					| 'go'
 					| 'csharp'
 					| 'fsharp'
+					| 'vbnet'
 					| 'elixir'
 					| 'ocaml'
 					| 'javascript'

@@ -37,6 +37,15 @@ const phpStdinSource = `<?php
 $input = trim(file_get_contents('php://input'));
 echo "main=", $input, "\\n";`;
 
+const vbnetStdinSource = `Imports System
+
+Module Program
+    Sub Main()
+        Dim line = Console.ReadLine()
+        Console.WriteLine("main={0}", line)
+    End Sub
+End Module`;
+
 describe('wasm-idle browser stdin connection', () => {
 	it('passes terminal stdin and output through real browser runtime paths', async () => {
 		if (process.env.WASM_IDLE_RUN_REAL_BROWSER_STDIN !== '1') {
@@ -127,6 +136,16 @@ describe('wasm-idle browser stdin connection', () => {
 					stdinText: '73\n'
 				});
 				expect(phpSummary.transcript).toContain('main=73');
+
+				const vbnetSummary = await runStdinBrowserProbe({
+					browserUrl: previewServer.browserUrl,
+					expectedOutput: 'main=73',
+					language: 'VBNET',
+					runTimeoutMs: Number(process.env.WASM_IDLE_STDIN_RUN_TIMEOUT_MS || '300000'),
+					source: vbnetStdinSource,
+					stdinText: '73\n'
+				});
+				expect(vbnetSummary.transcript).toContain('main=73');
 			} finally {
 				await previewServer.close();
 			}

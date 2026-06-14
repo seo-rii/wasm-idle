@@ -56,6 +56,7 @@
 		| 'GO'
 		| 'CSHARP'
 		| 'FSHARP'
+		| 'VBNET'
 		| 'ELIXIR'
 		| 'OCAML'
 		| 'TINYGO'
@@ -106,6 +107,7 @@
 		'GO',
 		'CSHARP',
 		'FSHARP',
+		'VBNET',
 		'ELIXIR',
 		'OCAML',
 		'TINYGO',
@@ -131,6 +133,7 @@
 		GO: 'Go',
 		CSHARP: 'C#',
 		FSHARP: 'F#',
+		VBNET: 'VB.NET',
 		ELIXIR: 'Elixir',
 		OCAML: 'OCaml',
 		TINYGO: 'TinyGo',
@@ -284,37 +287,41 @@
 								? 'csharp'
 								: language === 'FSHARP'
 									? 'fsharp'
-									: language === 'ELIXIR'
-										? 'elixir'
-										: language === 'OCAML'
-											? 'ocaml'
-											: language === 'JAVASCRIPT'
-												? 'javascript'
-												: language === 'TYPESCRIPT'
-													? 'typescript'
-													: language === 'ASSEMBLYSCRIPT'
+									: language === 'VBNET'
+										? 'vb'
+										: language === 'ELIXIR'
+											? 'elixir'
+											: language === 'OCAML'
+												? 'ocaml'
+												: language === 'JAVASCRIPT'
+													? 'javascript'
+													: language === 'TYPESCRIPT'
 														? 'typescript'
-														: language === 'WAT'
-															? 'wat'
-															: language === 'ZIG'
-																? 'zig'
-																: language === 'LUA'
-																	? 'lua'
-																	: language === 'LISP'
-																		? 'lisp'
-																		: language === 'RUBY'
-																			? 'ruby'
-																			: language === 'HASKELL'
-																				? 'haskell'
-																				: language === 'R'
-																					? 'r'
+														: language === 'ASSEMBLYSCRIPT'
+															? 'typescript'
+															: language === 'WAT'
+																? 'wat'
+																: language === 'ZIG'
+																	? 'zig'
+																	: language === 'LUA'
+																		? 'lua'
+																		: language === 'LISP'
+																			? 'lisp'
+																			: language === 'RUBY'
+																				? 'ruby'
+																				: language ===
+																					  'HASKELL'
+																					? 'haskell'
 																					: language ===
-																						  'SQLITE'
-																						? 'sql'
+																						  'R'
+																						? 'r'
 																						: language ===
-																							  'PHP'
-																							? 'php'
-																							: 'go'
+																							  'SQLITE'
+																							? 'sql'
+																							: language ===
+																								  'PHP'
+																								? 'php'
+																								: 'go'
 	);
 	const compact = $derived(examplePaneWidth > 0 && examplePaneWidth <= 760);
 	const activeFile = $derived(files.find((file) => file.path === activePath) ?? files[0]);
@@ -476,6 +483,7 @@
 			'.fs': 'FSHARP',
 			'.fsx': 'FSHARP',
 			'.fsi': 'FSHARP',
+			'.vb': 'VBNET',
 			'.ex': 'ELIXIR',
 			'.exs': 'ELIXIR',
 			'.ml': 'OCAML',
@@ -516,6 +524,7 @@
 			GO: 'main.go',
 			CSHARP: 'Program.cs',
 			FSHARP: 'Program.fsx',
+			VBNET: 'Program.vb',
 			ELIXIR: 'main.exs',
 			OCAML: 'main.ml',
 			TINYGO: 'main.go',
@@ -545,6 +554,7 @@
 			GO: 'go',
 			CSHARP: 'csharp',
 			FSHARP: 'fsharp',
+			VBNET: 'vbnet',
 			ELIXIR: 'elixir',
 			OCAML: 'ocaml',
 			TINYGO: 'go',
@@ -1022,6 +1032,9 @@
 			fsharp: 'FSHARP',
 			'f#': 'FSHARP',
 			fs: 'FSHARP',
+			vbnet: 'VBNET',
+			vb: 'VBNET',
+			visualbasic: 'VBNET',
 			elixir: 'ELIXIR',
 			ocaml: 'OCAML',
 			tinygo: 'TINYGO',
@@ -1442,6 +1455,7 @@
 			language !== 'GO' &&
 			language !== 'CSHARP' &&
 			language !== 'FSHARP' &&
+			language !== 'VBNET' &&
 			language !== 'TINYGO' &&
 			language !== 'OCAML' &&
 			language !== 'JAVASCRIPT' &&
@@ -1654,6 +1668,7 @@
 						<option value="GO">Go</option>
 						<option value="CSHARP">C#</option>
 						<option value="FSHARP">F#</option>
+						<option value="VBNET">VB.NET</option>
 						<option value="ELIXIR">Elixir</option>
 						<option value="OCAML">OCaml</option>
 						<option value="TINYGO">TinyGo</option>
@@ -1671,7 +1686,7 @@
 						<option value="PHP">PHP</option>
 					</select>
 				</label>
-				{#if language === 'JAVA' || language === 'RUST' || language === 'GO' || language === 'CSHARP' || language === 'FSHARP' || language === 'TINYGO' || language === 'JAVASCRIPT' || language === 'TYPESCRIPT' || language === 'LUA' || language === 'ZIG' || language === 'LISP' || language === 'RUBY' || language === 'HASKELL' || language === 'R' || language === 'PHP'}
+				{#if language === 'JAVA' || language === 'RUST' || language === 'GO' || language === 'CSHARP' || language === 'FSHARP' || language === 'VBNET' || language === 'TINYGO' || language === 'JAVASCRIPT' || language === 'TYPESCRIPT' || language === 'LUA' || language === 'ZIG' || language === 'LISP' || language === 'RUBY' || language === 'HASKELL' || language === 'R' || language === 'PHP'}
 					<label class="args-chip">
 						<span class="material-symbols-outlined">list_alt</span>
 						<input bind:value={argsInput} placeholder="3 4 5" spellcheck={false} />
@@ -1788,12 +1803,13 @@
 				running if the program reads stdin until EOF.
 			</p>
 		{/if}
-		{#if language === 'CSHARP' || language === 'FSHARP'}
+		{#if language === 'CSHARP' || language === 'FSHARP' || language === 'VBNET'}
 			<p class="hint">
-				{language === 'CSHARP' ? 'C#' : 'F#'} uses a `wasm-dotnet` browser runtime module plus
-				its bundled static .NET `browser-wasm` compiler app. The page loads `runtime/dotnet.js`,
-				compiles in the browser, and runs the generated assembly in the same runtime. Pass CLI
-				args here; terminal input submitted before or during preparation is passed to `Console.In`.
+				{language === 'CSHARP' ? 'C#' : language === 'VBNET' ? 'VB.NET' : 'F#'} uses a `wasm-dotnet`
+				browser runtime module plus its bundled static .NET `browser-wasm` compiler app. The page
+				loads `runtime/dotnet.js`, compiles in the browser, and runs the generated assembly in
+				the same runtime. Pass CLI args here; terminal input submitted before or during preparation
+				is passed to `Console.In`.
 			</p>
 		{/if}
 		{#if language === 'OCAML'}

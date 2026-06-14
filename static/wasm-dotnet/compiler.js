@@ -7,7 +7,11 @@ function normalizeLanguage(language) {
     return language || "fsharp";
 }
 function languageLabel(language) {
-    return language === "csharp" ? "C#" : "F#";
+    return language === "csharp"
+        ? "C#"
+        : language === "vbnet"
+            ? "VB.NET"
+            : "F#";
 }
 function emitProgress(request, stage, completed, total, message) {
     request.onProgress?.({
@@ -60,10 +64,14 @@ function bytesToBase64(bytes) {
 function isUserReferenceAssembly(name, language) {
     if (name === "FSharp.Compiler.Service.dll" ||
         name === "Microsoft.CodeAnalysis.dll" ||
-        name === "Microsoft.CodeAnalysis.CSharp.dll") {
+        name === "Microsoft.CodeAnalysis.CSharp.dll" ||
+        name === "Microsoft.CodeAnalysis.VisualBasic.dll") {
         return false;
     }
     if (language === "csharp" && name === "FSharp.Core.dll") {
+        return false;
+    }
+    if (language === "vbnet" && name === "FSharp.Core.dll") {
         return false;
     }
     return name.endsWith(".dll");
@@ -101,7 +109,7 @@ export async function compileDotnet(request, dependencies = {}) {
         return failure(".NET compilation requires a non-empty source string.");
     }
     const language = normalizeLanguage(request.language);
-    if (language !== "fsharp" && language !== "csharp") {
+    if (language !== "fsharp" && language !== "csharp" && language !== "vbnet") {
         return failure(`Unsupported .NET language: ${language}`);
     }
     const target = request.target || "browser-wasm";

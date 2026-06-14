@@ -11,6 +11,9 @@ export type WasmIdleLanguageId =
 	| 'C#'
 	| 'FSHARP'
 	| 'F#'
+	| 'VBNET'
+	| 'VB'
+	| 'VISUALBASIC'
 	| 'ELIXIR'
 	| 'TINYGO'
 	| 'OCAML'
@@ -45,6 +48,7 @@ export const supportedLanguageIds = [
 	'GO',
 	'CSHARP',
 	'FSHARP',
+	'VBNET',
 	'ELIXIR',
 	'TINYGO',
 	'OCAML',
@@ -67,6 +71,7 @@ export const DEFAULT_DEFERRED_PROGRESS_LANGUAGES = new Set<string>([
 	'GO',
 	'CSHARP',
 	'FSHARP',
+	'VBNET',
 	'TINYGO',
 	'OCAML',
 	'JAVASCRIPT',
@@ -86,6 +91,8 @@ export const DEFAULT_DEFERRED_PROGRESS_LANGUAGES = new Set<string>([
 const LANGUAGE_ALIASES: Record<string, string> = {
 	'C#': 'CSHARP',
 	'F#': 'FSHARP',
+	VB: 'VBNET',
+	VISUALBASIC: 'VBNET',
 	JS: 'JAVASCRIPT',
 	AS: 'ASSEMBLYSCRIPT',
 	PYTHON: 'PYTHON3',

@@ -32,7 +32,7 @@ describe('Monaco route debug sync', () => {
 		);
 		expect(source.match(/occurrencesHighlight: 'off'/g)).toHaveLength(2);
 		expect(source).toMatch(
-			/language === 'java' \|\|\s+language === 'rust' \|\|\s+language === 'go' \|\|\s+language === 'csharp' \|\|\s+language === 'fsharp' \|\|\s+language === 'ocaml'/
+			/language === 'java' \|\|\s+language === 'rust' \|\|\s+language === 'go' \|\|\s+language === 'csharp' \|\|\s+language === 'fsharp' \|\|\s+language === 'vb' \|\|\s+language === 'ocaml'/
 		);
 		expect(source).toMatch(/language === 'wat'/);
 		expect(source).toMatch(/language === 'lua'/);
@@ -40,10 +40,14 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(/language === 'haskell'/);
 		expect(source).toMatch(/language === 'r'/);
 		expect(source).toMatch(
+			/const nextDefaultLanguage = language === 'vb' \? 'vbnet' : language;/
+		);
+		expect(source).toMatch(/const defaultLanguage = language === 'vb' \? 'vbnet' : language;/);
+		expect(source).toMatch(
 			/\$effect\(\(\) => \{\s+if \(!editor\) return;[\s\S]*if \(!isEditorDefaultSource\(currentValue\) && !isLegacyEditorDefaultSource\(currentValue\)\) \{[\s\S]*const nextValue = resolveEditorDefaultSource\([\s\S]*rustTargetTriple[\s\S]*editor\.setValue\(nextValue\);[\s\S]*\}\);/s
 		);
 		expect(source).toMatch(
-			/const defaultValue = resolveEditorDefaultSource\([\s\S]*'c'[\s\S]*'cpp'[\s\S]*'python'[\s\S]*'java'[\s\S]*'go'[\s\S]*'csharp'[\s\S]*'fsharp'[\s\S]*'elixir'[\s\S]*'ocaml'[\s\S]*'rust'[\s\S]*rustTargetTriple\s+\);/s
+			/const defaultValue = resolveEditorDefaultSource\([\s\S]*'c'[\s\S]*'cpp'[\s\S]*'python'[\s\S]*'java'[\s\S]*'go'[\s\S]*'csharp'[\s\S]*'fsharp'[\s\S]*'vbnet'[\s\S]*'elixir'[\s\S]*'ocaml'[\s\S]*'rust'[\s\S]*rustTargetTriple\s+\);/s
 		);
 		expect(source).toMatch(
 			/debugView = new MonacoDebugView\(Monaco, editor, onBreakpointsChange\);\s+debugView\.setBreakpoints\(breakpoints\);\s+debugView\.setPauseState\(pausedLine, debugLocals, debugLanguage\);/s
@@ -83,6 +87,7 @@ describe('Monaco route debug sync', () => {
 		expect(resolveEditorDefaultSource('c', 'wasm32-wasip1')).toBe(editorDefaults.c);
 		expect(resolveEditorDefaultSource('csharp', 'wasm32-wasip1')).toBe(editorDefaults.csharp);
 		expect(resolveEditorDefaultSource('fsharp', 'wasm32-wasip1')).toBe(editorDefaults.fsharp);
+		expect(resolveEditorDefaultSource('vbnet', 'wasm32-wasip1')).toBe(editorDefaults.vbnet);
 		expect(resolveEditorDefaultSource('elixir', 'wasm32-wasip1')).toBe(editorDefaults.elixir);
 		expect(resolveEditorDefaultSource('lua', 'wasm32-wasip1')).toBe(editorDefaults.lua);
 		expect(resolveEditorDefaultSource('sqlite', 'wasm32-wasip1')).toBe(editorDefaults.sqlite);
@@ -90,6 +95,7 @@ describe('Monaco route debug sync', () => {
 		expect(editorDefaults.c).toContain('puts("Hello, WebAssembly!")');
 		expect(editorDefaults.go).toContain("ReadString('\\n')");
 		expect(editorDefaults.csharp).toContain('Console.WriteLine');
+		expect(editorDefaults.vbnet).toContain('Console.ReadLine()');
 		expect(editorDefaults.go).toContain(
 			'fmt.Printf("factorial_plus_bonus=%d\\n", factorial(n)+bonus)'
 		);
@@ -106,6 +112,7 @@ describe('Monaco route debug sync', () => {
 		expect(isEditorDefaultSource(editorDefaults.go)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.csharp)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.fsharp)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.vbnet)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.elixir)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.lua)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.haskell)).toBe(true);
@@ -135,6 +142,7 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).toMatch(/<option value="GO">Go<\/option>/);
 		expect(pageSource).toMatch(/<option value="CSHARP">C#<\/option>/);
 		expect(pageSource).toMatch(/<option value="FSHARP">F#<\/option>/);
+		expect(pageSource).toMatch(/<option value="VBNET">VB\.NET<\/option>/);
 		expect(pageSource).toMatch(/<option value="ELIXIR">Elixir<\/option>/);
 		expect(pageSource).toMatch(/<option value="OCAML">OCaml<\/option>/);
 		expect(pageSource).toMatch(/<option value="TINYGO">TinyGo<\/option>/);

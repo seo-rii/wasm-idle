@@ -2,7 +2,7 @@
 
 ![wasm-idle](static/image.jpeg)
 
-Executes C++, Python, Java, Rust, Go, TinyGo, OCaml, Elixir, C#, F#, JavaScript,
+Executes C++, Python, Java, Rust, Go, TinyGo, OCaml, Elixir, C#, F#, VB.NET, JavaScript,
 TypeScript, AssemblyScript, WAT, Lua, Zig, Scheme, Ruby, Haskell, R, SQLite, and PHP code.
 
 Refer to src/lib/clang.
@@ -114,11 +114,11 @@ bootstrap-only compile step, and runs runnable WASI artifacts locally. The `wasi
 entries use the preview target profiles shipped by the bundled `wasm-tinygo` runtime, so they may
 produce non-runnable preview artifacts until the matching execution path is available.
 
-## C# / F# / .NET browser integration
+## C# / F# / VB.NET / .NET browser integration
 
 The demo app vendors the sibling `wasm-dotnet` browser module under `static/wasm-dotnet/` and exposes
-C# as `CSHARP` and F# as `FSHARP` in the shared playground selector. Refresh the browser module
-after rebuilding the sibling project with:
+C# as `CSHARP`, F# as `FSHARP`, and VB.NET as `VBNET` in the shared playground selector. Refresh the
+browser module after rebuilding the sibling project with:
 
 ```bash
 cd wasm-dotnet
@@ -131,10 +131,10 @@ cd ../wasm-idle
 pnpm run sync:wasm-dotnet
 ```
 
-C# and F# compile in the browser through the bundled .NET `browser-wasm` compiler app. `wasm-idle`
-loads the static `wasm-dotnet` module, which loads `runtime/dotnet.js`, invokes exported compiler
-methods, and runs the generated assembly in the same browser runtime. No server-side dotnet compile
-route is involved. For a hosted app, pass `runtimeAssets.dotnet.moduleUrl` or set
+C#, F#, and VB.NET compile in the browser through the bundled .NET `browser-wasm` compiler app.
+`wasm-idle` loads the static `wasm-dotnet` module, which loads `runtime/dotnet.js`, invokes exported
+compiler methods, and runs the generated assembly in the same browser runtime. No server-side dotnet
+compile route is involved. For a hosted app, pass `runtimeAssets.dotnet.moduleUrl` or set
 `PUBLIC_WASM_DOTNET_MODULE_URL`. The current .NET browser path forwards CLI args and buffered
 terminal stdin into `Console.In`.
 

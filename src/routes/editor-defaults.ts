@@ -8,6 +8,7 @@ export type EditorDefaultLanguage =
 	| 'go'
 	| 'csharp'
 	| 'fsharp'
+	| 'vbnet'
 	| 'elixir'
 	| 'ocaml'
 	| 'javascript'
@@ -32,6 +33,7 @@ export const editorDefaults: Record<
 	| 'go'
 	| 'csharp'
 	| 'fsharp'
+	| 'vbnet'
 	| 'elixir'
 	| 'ocaml'
 	| 'javascript'
@@ -155,6 +157,32 @@ let n =
         | false, _ -> 4
 
 printfn "factorial_plus_bonus=%d" (factorial n + bonus)`,
+	vbnet: `Imports System
+
+Module Program
+    Const Bonus As Integer = 3
+
+    Function Factorial(n As Integer) As Integer
+        If n <= 1 Then
+            Return 1
+        End If
+
+        Return n * Factorial(n - 1)
+    End Function
+
+    Sub Main(args As String())
+        Dim input = Console.ReadLine()
+        Dim n As Integer = 4
+
+        If Not String.IsNullOrWhiteSpace(input) Then
+            Integer.TryParse(input.Trim(), n)
+        ElseIf args.Length > 0 Then
+            Integer.TryParse(args(0), n)
+        End If
+
+        Console.WriteLine("factorial_plus_bonus={0}", Factorial(n) + Bonus)
+    End Sub
+End Module`,
 	elixir: `defmodule Demo do
   @bonus 3
 
@@ -469,6 +497,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.go ||
 		source === editorDefaults.csharp ||
 		source === editorDefaults.fsharp ||
+		source === editorDefaults.vbnet ||
 		source === editorDefaults.elixir ||
 		source === editorDefaults.ocaml ||
 		source === editorDefaults.javascript ||

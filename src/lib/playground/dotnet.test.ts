@@ -142,6 +142,33 @@ describe('Dotnet sandbox', () => {
 		);
 	});
 
+	it('forwards VB.NET compile requests to the dotnet worker', async () => {
+		const sandbox = new Dotnet('VBNET');
+		const code = `Imports System
+Module Program
+    Sub Main(args As String())
+        Console.WriteLine("hello")
+    End Sub
+End Module`;
+
+		await sandbox.load('/absproxy/5173');
+		sandbox.write('7\n');
+		await expect(sandbox.run(code, false, true, undefined, ['7'])).resolves.toBe(true);
+
+		expect(workerInstances).toHaveLength(1);
+		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
+			2,
+			expect.objectContaining({
+				prepare: false,
+				code,
+				language: 'vbnet',
+				args: ['7'],
+				stdin: '7\n',
+				log: true
+			})
+		);
+	});
+
 	it('collects stdin submitted immediately after a cached run starts', async () => {
 		const sandbox = new Dotnet();
 		const code = 'let input = System.Console.ReadLine()';

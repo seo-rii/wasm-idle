@@ -66,7 +66,7 @@ async function readProbeSummary(page, activeState, pageErrors, consoleMessages) 
 }
 
 /**
- * @param {{ browserUrl: string; chromiumExecutable?: string; expectedOutput: string; language: 'ASSEMBLYSCRIPT' | 'WAT' | 'RUBY' | 'R' | 'SQLITE' | 'PHP'; runTimeoutMs?: number; sendEof?: boolean; source: string; stdinText: string }} options
+ * @param {{ browserUrl: string; chromiumExecutable?: string; expectedOutput: string; language: 'ASSEMBLYSCRIPT' | 'WAT' | 'RUBY' | 'R' | 'SQLITE' | 'PHP' | 'VBNET'; runTimeoutMs?: number; sendEof?: boolean; source: string; stdinText: string }} options
  */
 export async function runStdinBrowserProbe({
 	browserUrl,

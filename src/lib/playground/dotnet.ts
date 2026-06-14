@@ -6,8 +6,8 @@ import {
 } from '$lib/playground/options';
 import type { Sandbox } from '$lib/playground/sandbox';
 
-type DotnetSandboxLanguage = 'FSHARP' | 'CSHARP';
-type DotnetCompileLanguage = 'fsharp' | 'csharp';
+type DotnetSandboxLanguage = 'FSHARP' | 'CSHARP' | 'VBNET';
+type DotnetCompileLanguage = 'fsharp' | 'csharp' | 'vbnet';
 type DotnetRuntimeModule = {
 	createDotnetCompiler: () => {
 		compile(request: {
@@ -65,11 +65,15 @@ class Dotnet implements Sandbox {
 	constructor(private readonly language: DotnetSandboxLanguage = 'FSHARP') {}
 
 	private get compileLanguage(): DotnetCompileLanguage {
-		return this.language === 'CSHARP' ? 'csharp' : 'fsharp';
+		return this.language === 'CSHARP'
+			? 'csharp'
+			: this.language === 'VBNET'
+				? 'vbnet'
+				: 'fsharp';
 	}
 
 	private get languageLabel() {
-		return this.language === 'CSHARP' ? 'C#' : 'F#';
+		return this.language === 'CSHARP' ? 'C#' : this.language === 'VBNET' ? 'VB.NET' : 'F#';
 	}
 
 	private shouldRunOnMainThread() {

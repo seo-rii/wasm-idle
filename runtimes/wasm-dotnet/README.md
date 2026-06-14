@@ -1,6 +1,6 @@
 # wasm-dotnet
 
-Browser-loadable .NET C# and F# compiler/runtime glue for `wasm-idle`.
+Browser-loadable .NET C#, F#, and VB.NET compiler/runtime glue for `wasm-idle`.
 
 The TypeScript entry exposes the same browser compiler contract used by the other `wasm-*`
 projects:

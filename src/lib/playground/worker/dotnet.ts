@@ -4,7 +4,7 @@ const workerSelf = globalThis as any;
 
 workerSelf.dotnetSidecar = true;
 
-type DotnetCompileLanguage = 'fsharp' | 'csharp';
+type DotnetCompileLanguage = 'fsharp' | 'csharp' | 'vbnet';
 
 type DotnetRuntimeModule = {
 	createDotnetCompiler: () => {
@@ -48,7 +48,7 @@ let compiledArtifact: unknown = null;
 let compiledCacheKey = '';
 
 function languageLabel(language: DotnetCompileLanguage) {
-	return language === 'csharp' ? 'C#' : 'F#';
+	return language === 'csharp' ? 'C#' : language === 'vbnet' ? 'VB.NET' : 'F#';
 }
 
 async function loadRuntime(url: string) {
@@ -100,7 +100,8 @@ workerSelf.onmessage = async (event: { data: any }) => {
 		}
 
 		const runtime = await loadRuntime(moduleUrl);
-		const compileLanguage = language === 'csharp' ? 'csharp' : 'fsharp';
+		const compileLanguage =
+			language === 'csharp' ? 'csharp' : language === 'vbnet' ? 'vbnet' : 'fsharp';
 		const compileCacheKey = `${compileLanguage}\n${code}`;
 		if (!compiledArtifact || compiledCacheKey !== compileCacheKey) {
 			if (!compiler) {

@@ -20,6 +20,8 @@ describe('editor defaults', () => {
 		expect(editorDefaults.fsharp).toContain('System.Console.ReadLine()');
 		expect(editorDefaults.fsharp).toContain('commandLineArgs.Length > 1');
 		expect(editorDefaults.fsharp).not.toContain('Array.skip');
+		expect(editorDefaults.vbnet).toContain('Console.ReadLine()');
+		expect(editorDefaults.vbnet).toContain('Sub Main(args As String())');
 		expect(editorDefaults.elixir).toContain('IO.gets("")');
 		expect(editorDefaults.ocaml).toContain('read_line ()');
 		expect(editorDefaults.javascript).toContain("require('fs')");
@@ -59,6 +61,7 @@ describe('editor defaults', () => {
 		expect(resolveEditorDefaultSource('c', 'wasm32-wasip1')).toBe(editorDefaults.c);
 		expect(resolveEditorDefaultSource('go', 'wasm32-wasip1')).toBe(editorDefaults.go);
 		expect(resolveEditorDefaultSource('fsharp', 'wasm32-wasip1')).toBe(editorDefaults.fsharp);
+		expect(resolveEditorDefaultSource('vbnet', 'wasm32-wasip1')).toBe(editorDefaults.vbnet);
 		expect(resolveEditorDefaultSource('ocaml', 'wasm32-wasip1')).toBe(editorDefaults.ocaml);
 		expect(resolveEditorDefaultSource('javascript', 'wasm32-wasip1')).toBe(
 			editorDefaults.javascript
@@ -83,6 +86,7 @@ describe('editor defaults', () => {
 	it('recognizes bundled defaults and the legacy broken TinyGo starter separately', () => {
 		expect(isEditorDefaultSource(editorDefaults.go)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.fsharp)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.vbnet)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.ocaml)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.javascript)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.typescript)).toBe(true);

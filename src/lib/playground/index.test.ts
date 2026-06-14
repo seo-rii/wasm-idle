@@ -353,6 +353,40 @@ describe('playground runtime binding', () => {
 		]);
 	});
 
+	it('routes VB.NET aliases through the Dotnet sandbox implementation', async () => {
+		const binding = createPlaygroundBinding({
+			rootUrl: '/absproxy/5173',
+			dotnet: {
+				moduleUrl: '/absproxy/5173/wasm-dotnet/index.js?v=test'
+			}
+		});
+		const progress = { set() {} };
+		const code = `Imports System
+Module Program
+    Sub Main()
+        Console.WriteLine("hello")
+    End Sub
+End Module`;
+		const sandbox = await binding.load('VB');
+
+		await sandbox.load(code, true, ['demo'], {}, progress);
+
+		const runtimeAssets = {
+			rootUrl: '/absproxy/5173',
+			dotnet: {
+				moduleUrl: '/absproxy/5173/wasm-dotnet/index.js?v=test'
+			}
+		};
+		expect(sandbox.runtimeAssets).toEqual(runtimeAssets);
+		expect(sandboxInstances.get('VBNET')).toHaveLength(1);
+		expect(sandboxInstances.get('VBNET')?.[0]?.loadCalls).toEqual([
+			[runtimeAssets, code, true, ['demo'], {}, progress]
+		]);
+		expect((await binding.load('VBNET')).runtimeAssets).toEqual(runtimeAssets);
+		expect((await binding.load('VISUALBASIC')).runtimeAssets).toEqual(runtimeAssets);
+		expect(sandboxInstances.get('VBNET')).toHaveLength(1);
+	});
+
 	it('routes Elixir requests through the Popcorn-backed sandbox implementation', async () => {
 		const binding = createPlaygroundBinding({
 			rootUrl: '/absproxy/5173',
