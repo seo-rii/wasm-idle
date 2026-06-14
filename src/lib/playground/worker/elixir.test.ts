@@ -58,7 +58,18 @@ describe('Elixir worker', () => {
 				options.print?.(`rewritten=${source}\n`);
 				return JSON.stringify(source);
 			});
-			const module = {
+			const module: {
+				FS: {
+					mkdir: ReturnType<typeof vi.fn>;
+					writeFile: ReturnType<typeof vi.fn>;
+				};
+				cast: ReturnType<typeof vi.fn>;
+				call: typeof rawCall;
+				trackedObjectsMap: Map<unknown, unknown>;
+				nextTrackedObjectKey: ReturnType<typeof vi.fn>;
+				rawCall: typeof rawCall;
+				onRunTrackedJs?: (scriptString: string, isDebug: boolean) => number[] | null;
+			} = {
 				FS: {
 					mkdir: vi.fn(),
 					writeFile: vi.fn()
@@ -271,10 +282,7 @@ describe('Elixir worker', () => {
 		expect(waitForBufferedStdinMock).toHaveBeenCalledTimes(3);
 		expect(lastModule.current.rawCall).toHaveBeenLastCalledWith(
 			'main',
-			JSON.stringify([
-				'eval_elixir',
-				'IO.inspect({"abc\\n", "res", "txyz"})'
-			])
+			JSON.stringify(['eval_elixir', 'IO.inspect({"abc\\n", "res", "txyz"})'])
 		);
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
 			output: 'rewritten=IO.inspect({"abc\\n", "res", "txyz"})\n'

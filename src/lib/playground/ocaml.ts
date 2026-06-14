@@ -16,6 +16,14 @@ import {
 	resetBufferedStdin
 } from '$lib/playground/stdinBuffer';
 
+type RuntimeGlobal = Record<string, unknown>;
+type RuntimeAssetEntry = {
+	path: string;
+	basename: string;
+	relativeFromSourceDir: string;
+	objectUrl: string;
+};
+
 class Ocaml implements Sandbox {
 	output: any = null;
 	worker?: Worker = <any>null;
@@ -70,7 +78,9 @@ class Ocaml implements Sandbox {
 						event.filename && event.lineno
 							? ` (${event.filename}:${event.lineno}:${event.colno})`
 							: '';
-					reject(`OCaml worker script error: ${event.message || 'unknown error'}${location}`);
+					reject(
+						`OCaml worker script error: ${event.message || 'unknown error'}${location}`
+					);
 				};
 				this.worker.onmessageerror = () => {
 					reject('OCaml worker message deserialization failed');
@@ -160,40 +170,56 @@ class Ocaml implements Sandbox {
 						: undefined;
 					const runtimePromiseKey = '__wasm_of_js_of_ocaml_runtime_promise';
 					const assetResolverKey = '__wasm_of_js_of_ocaml_resolve_asset';
-					const runtimeGlobal = window as typeof window & Record<string, unknown>;
-					const hadProcess = Object.prototype.hasOwnProperty.call(runtimeGlobal, 'process');
-					const hadRequire = Object.prototype.hasOwnProperty.call(runtimeGlobal, 'require');
+					const runtimeGlobal = window as unknown as RuntimeGlobal;
+					const hadProcess = Object.prototype.hasOwnProperty.call(
+						runtimeGlobal,
+						'process'
+					);
+					const hadRequire = Object.prototype.hasOwnProperty.call(
+						runtimeGlobal,
+						'require'
+					);
 					const hadModule = Object.prototype.hasOwnProperty.call(runtimeGlobal, 'module');
-					const hadExports = Object.prototype.hasOwnProperty.call(runtimeGlobal, 'exports');
-					const originalProcess = runtimeGlobal.process;
-					const originalRequire = runtimeGlobal.require;
-					const originalModule = runtimeGlobal.module;
-					const originalExports = runtimeGlobal.exports;
+					const hadExports = Object.prototype.hasOwnProperty.call(
+						runtimeGlobal,
+						'exports'
+					);
+					const originalProcess = runtimeGlobal['process'];
+					const originalRequire = runtimeGlobal['require'];
+					const originalModule = runtimeGlobal['module'];
+					const originalExports = runtimeGlobal['exports'];
 					originalConsole.log(
 						`[wasm-idle:ocaml-runtime] start source=${String(runtime.sourcePath || '')} chars=${String(String(runtime.programSource || '').length)} assets=${String(Array.isArray(runtime.assetFiles) ? runtime.assetFiles.length : 0)}`
 					);
 					const sourceDir = String(runtime.sourcePath || '').replace(/\/[^/]+$/, '');
-					const assetEntries = Array.isArray(runtime.assetFiles)
-						? runtime.assetFiles.map((assetFile: { path: string; data: Uint8Array }) => {
-								const copiedAssetData = new Uint8Array(assetFile.data.byteLength);
-								copiedAssetData.set(assetFile.data);
-								const objectUrl = URL.createObjectURL(
-									new Blob([copiedAssetData], {
-										type: assetFile.path.endsWith('.wasm')
-											? 'application/wasm'
-											: 'application/octet-stream'
-									})
-								);
-								createdObjectUrls.push(objectUrl);
-								return {
-									path: assetFile.path,
-									basename: assetFile.path.split('/').at(-1) || assetFile.path,
-									relativeFromSourceDir: assetFile.path.startsWith(`${sourceDir}/`)
-										? assetFile.path.slice(sourceDir.length + 1)
-										: assetFile.path.replace(/^\/+/, ''),
-									objectUrl
-								};
-							})
+					const assetEntries: RuntimeAssetEntry[] = Array.isArray(runtime.assetFiles)
+						? runtime.assetFiles.map(
+								(assetFile: { path: string; data: Uint8Array }) => {
+									const copiedAssetData = new Uint8Array(
+										assetFile.data.byteLength
+									);
+									copiedAssetData.set(assetFile.data);
+									const objectUrl = URL.createObjectURL(
+										new Blob([copiedAssetData], {
+											type: assetFile.path.endsWith('.wasm')
+												? 'application/wasm'
+												: 'application/octet-stream'
+										})
+									);
+									createdObjectUrls.push(objectUrl);
+									return {
+										path: assetFile.path,
+										basename:
+											assetFile.path.split('/').at(-1) || assetFile.path,
+										relativeFromSourceDir: assetFile.path.startsWith(
+											`${sourceDir}/`
+										)
+											? assetFile.path.slice(sourceDir.length + 1)
+											: assetFile.path.replace(/^\/+/, ''),
+										objectUrl
+									};
+								}
+							)
 						: [];
 					const emitOutput = (...args: unknown[]) => {
 						const text = args.map((value) => String(value)).join(' ');
@@ -201,10 +227,13 @@ class Ocaml implements Sandbox {
 					};
 					const resolveAssetUrl = (requestedAsset: string) =>
 						assetEntries
-							.map((assetEntry) => {
+							.map((assetEntry: RuntimeAssetEntry) => {
 								const candidates = [String(requestedAsset)];
 								try {
-									candidates.push(new URL(String(requestedAsset), window.location.href).pathname);
+									candidates.push(
+										new URL(String(requestedAsset), window.location.href)
+											.pathname
+									);
 								} catch {
 									// ignore URL parse errors
 								}
@@ -212,13 +241,15 @@ class Ocaml implements Sandbox {
 									(candidate) =>
 										candidate === assetEntry.path ||
 										candidate === assetEntry.relativeFromSourceDir ||
-										candidate.endsWith(`/${assetEntry.relativeFromSourceDir}`) ||
+										candidate.endsWith(
+											`/${assetEntry.relativeFromSourceDir}`
+										) ||
 										candidate.endsWith(`/${assetEntry.basename}`)
 								)
 									? assetEntry.objectUrl
 									: null;
 							})
-							.find((candidate) => !!candidate) || null;
+							.find((candidate: string | null) => !!candidate) || null;
 					window.console = {
 						...originalConsole,
 						log: (...args: unknown[]) => {
@@ -265,13 +296,15 @@ class Ocaml implements Sandbox {
 							return await originalInstantiateStreaming(source, importObject);
 						}) as typeof WebAssembly.instantiateStreaming;
 					}
-					runtimeGlobal.process = undefined;
-					runtimeGlobal.require = undefined;
-					runtimeGlobal.module = undefined;
-					runtimeGlobal.exports = undefined;
+					runtimeGlobal['process'] = undefined;
+					runtimeGlobal['require'] = undefined;
+					runtimeGlobal['module'] = undefined;
+					runtimeGlobal['exports'] = undefined;
 					runtimeGlobal[assetResolverKey] = resolveAssetUrl;
 					try {
-						const normalizedSource = String(runtime.programSource || '').includes('($=>async a=>{')
+						const normalizedSource = String(runtime.programSource || '').includes(
+							'($=>async a=>{'
+						)
 							? String(runtime.programSource).replace(
 									'($=>async a=>{',
 									`globalThis.${runtimePromiseKey}=($=>async a=>{`
@@ -311,24 +344,24 @@ class Ocaml implements Sandbox {
 						delete runtimeGlobal[runtimePromiseKey];
 						delete runtimeGlobal[assetResolverKey];
 						if (!hadProcess) {
-							delete runtimeGlobal.process;
+							delete runtimeGlobal['process'];
 						} else {
-							runtimeGlobal.process = originalProcess;
+							runtimeGlobal['process'] = originalProcess;
 						}
 						if (!hadRequire) {
-							delete runtimeGlobal.require;
+							delete runtimeGlobal['require'];
 						} else {
-							runtimeGlobal.require = originalRequire;
+							runtimeGlobal['require'] = originalRequire;
 						}
 						if (!hadModule) {
-							delete runtimeGlobal.module;
+							delete runtimeGlobal['module'];
 						} else {
-							runtimeGlobal.module = originalModule;
+							runtimeGlobal['module'] = originalModule;
 						}
 						if (!hadExports) {
-							delete runtimeGlobal.exports;
+							delete runtimeGlobal['exports'];
 						} else {
-							runtimeGlobal.exports = originalExports;
+							runtimeGlobal['exports'] = originalExports;
 						}
 						for (const objectUrl of createdObjectUrls) {
 							URL.revokeObjectURL(objectUrl);

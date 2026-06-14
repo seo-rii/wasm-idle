@@ -24,6 +24,8 @@ type CompileResult = {
 	artifacts: CompileArtifact[];
 };
 
+type RuntimeGlobal = Record<string, unknown>;
+
 type BrowserNativeManifestFile = {
 	path: string;
 	url?: string;
@@ -82,9 +84,7 @@ type CompilerModule = {
 			toolchainRoot: string;
 		}
 	) => Promise<CompileResult>;
-	createBrowserWorkerSystemDispatcher: (options: {
-		manifest: BrowserNativeManifest;
-	}) => unknown;
+	createBrowserWorkerSystemDispatcher: (options: { manifest: BrowserNativeManifest }) => unknown;
 };
 
 type LoadRequest = {
@@ -293,17 +293,17 @@ async function executeCompileResult(result: CompileResult, log = false) {
 				WebAssembly
 			) as typeof WebAssembly.instantiateStreaming)
 		: undefined;
-	const runtimeGlobal = globalThis as typeof globalThis & Record<string, unknown>;
+	const runtimeGlobal = globalThis as unknown as RuntimeGlobal;
 	const hadProcess = Object.prototype.hasOwnProperty.call(runtimeGlobal, 'process');
 	const hadRequire = Object.prototype.hasOwnProperty.call(runtimeGlobal, 'require');
 	const hadModule = Object.prototype.hasOwnProperty.call(runtimeGlobal, 'module');
 	const hadExports = Object.prototype.hasOwnProperty.call(runtimeGlobal, 'exports');
 	const hadFs = Object.prototype.hasOwnProperty.call(runtimeGlobal, 'fs');
-	const originalProcess = runtimeGlobal.process;
-	const originalRequire = runtimeGlobal.require;
-	const originalModule = runtimeGlobal.module;
-	const originalExports = runtimeGlobal.exports;
-	const originalFs = runtimeGlobal.fs;
+	const originalProcess = runtimeGlobal['process'];
+	const originalRequire = runtimeGlobal['require'];
+	const originalModule = runtimeGlobal['module'];
+	const originalExports = runtimeGlobal['exports'];
+	const originalFs = runtimeGlobal['fs'];
 	const hadStdinHook = Object.prototype.hasOwnProperty.call(runtimeGlobal, stdinHookKey);
 	const originalStdinHook = runtimeGlobal[stdinHookKey];
 	const assetEntries = assetFiles
@@ -364,7 +364,9 @@ async function executeCompileResult(result: CompileResult, log = false) {
 			return new Uint8Array(0);
 		}
 		while (stdinChunkOffsetOcaml >= stdinChunkOcaml.length) {
-			const chunk = waitForBufferedStdin(stdinBufferOcaml, () => postMessage({ buffer: true }));
+			const chunk = waitForBufferedStdin(stdinBufferOcaml, () =>
+				postMessage({ buffer: true })
+			);
 			if (chunk == null) {
 				stdinChunkOcaml = new Uint8Array(0);
 				stdinChunkOffsetOcaml = 0;
@@ -430,7 +432,7 @@ async function executeCompileResult(result: CompileResult, log = false) {
 		}
 		return await originalFetch(input, init);
 	}) as typeof fetch;
-	runtimeGlobal.process = undefined;
+	runtimeGlobal['process'] = undefined;
 	runtimeGlobal[stdinHookKey] = (requestedBytes = Number.MAX_SAFE_INTEGER) => {
 		const encoded = readOcamlStdinBytes(requestedBytes);
 		if (encoded == null) {
@@ -460,15 +462,15 @@ async function executeCompileResult(result: CompileResult, log = false) {
 			return encoded.byteLength;
 		}
 	};
-	runtimeGlobal.fs = stdinFsShim;
-	runtimeGlobal.require = (specifier: string) => {
+	runtimeGlobal['fs'] = stdinFsShim;
+	runtimeGlobal['require'] = (specifier: string) => {
 		if (specifier === 'fs' || specifier === 'node:fs') {
 			return stdinFsShim;
 		}
 		throw new Error(`unsupported OCaml runtime require: ${specifier}`);
 	};
-	runtimeGlobal.module = { exports: {} };
-	runtimeGlobal.exports = (runtimeGlobal.module as { exports: unknown }).exports;
+	runtimeGlobal['module'] = { exports: {} };
+	runtimeGlobal['exports'] = (runtimeGlobal['module'] as { exports: unknown }).exports;
 
 	try {
 		let normalizedSource = normalizeAssetLoader(programArtifact.data, runtimePromiseKey);
@@ -512,29 +514,29 @@ async function executeCompileResult(result: CompileResult, log = false) {
 		delete (globalThis as typeof globalThis & Record<string, unknown>)[runtimePromiseKey];
 		delete (globalThis as typeof globalThis & Record<string, unknown>)[assetResolverKey];
 		if (!hadProcess) {
-			delete runtimeGlobal.process;
+			delete runtimeGlobal['process'];
 		} else {
-			runtimeGlobal.process = originalProcess;
+			runtimeGlobal['process'] = originalProcess;
 		}
 		if (!hadRequire) {
-			delete runtimeGlobal.require;
+			delete runtimeGlobal['require'];
 		} else {
-			runtimeGlobal.require = originalRequire;
+			runtimeGlobal['require'] = originalRequire;
 		}
 		if (!hadModule) {
-			delete runtimeGlobal.module;
+			delete runtimeGlobal['module'];
 		} else {
-			runtimeGlobal.module = originalModule;
+			runtimeGlobal['module'] = originalModule;
 		}
 		if (!hadExports) {
-			delete runtimeGlobal.exports;
+			delete runtimeGlobal['exports'];
 		} else {
-			runtimeGlobal.exports = originalExports;
+			runtimeGlobal['exports'] = originalExports;
 		}
 		if (!hadFs) {
-			delete runtimeGlobal.fs;
+			delete runtimeGlobal['fs'];
 		} else {
-			runtimeGlobal.fs = originalFs;
+			runtimeGlobal['fs'] = originalFs;
 		}
 		if (!hadStdinHook) {
 			delete runtimeGlobal[stdinHookKey];

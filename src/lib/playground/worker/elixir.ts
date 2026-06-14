@@ -440,12 +440,13 @@ self.onmessage = async (event: { data: any }) => {
 			console.log(`[wasm-idle:elixir-worker] eval bytes=${code.length}`);
 		}
 		let evalCode = code;
-		if (stdinBufferElixir && /(?:\bIO\.|\:io\.)/.test(code)) {
+		const currentStdinBuffer = stdinBufferElixir;
+		if (currentStdinBuffer && /(?:\bIO\.|\:io\.)/.test(code)) {
 			let bufferedInput = '';
 			let reachedEof = false;
 			const pullStdinChunk = () => {
 				if (reachedEof) return false;
-				const nextChunk = waitForBufferedStdin(stdinBufferElixir, () =>
+				const nextChunk = waitForBufferedStdin(currentStdinBuffer, () =>
 					postMessage({ buffer: true })
 				);
 				if (nextChunk === null) {
@@ -589,13 +590,22 @@ self.onmessage = async (event: { data: any }) => {
 				} else if (callName === 'IO.getn' && (args.length === 2 || args.length === 3)) {
 					const count = parseLiteralCount(args[args.length - 1]);
 					if (count === null) {
-						throw new Error('IO.getn stdin bridge requires a literal non-negative count');
+						throw new Error(
+							'IO.getn stdin bridge requires a literal non-negative count'
+						);
 					}
 					replacement =
 						args.length === 3
-							? wrapWithPromptOutput(args[1], readCountLiteral(count, ':eof'), args[0])
+							? wrapWithPromptOutput(
+									args[1],
+									readCountLiteral(count, ':eof'),
+									args[0]
+								)
 							: wrapWithPromptOutput(args[0], readCountLiteral(count, ':eof'));
-				} else if (callName === ':io.get_line' && (args.length === 1 || args.length === 2)) {
+				} else if (
+					callName === ':io.get_line' &&
+					(args.length === 1 || args.length === 2)
+				) {
 					replacement =
 						args.length === 2
 							? wrapWithPromptOutput(args[1], readLineLiteral(':eof'), args[0])
@@ -612,7 +622,11 @@ self.onmessage = async (event: { data: any }) => {
 					}
 					replacement =
 						args.length === 3
-							? wrapWithPromptOutput(args[1], readCountLiteral(count, ':eof'), args[0])
+							? wrapWithPromptOutput(
+									args[1],
+									readCountLiteral(count, ':eof'),
+									args[0]
+								)
 							: wrapWithPromptOutput(args[0], readCountLiteral(count, ':eof'));
 				}
 				rewritten += replacement;
