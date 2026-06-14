@@ -63,6 +63,21 @@ function findOcamlConsoleErrors(messages) {
 
 /**
  * @param {import('playwright-core').Page} page
+ * @param {BrowserConsoleMessage[]} messages
+ * @param {(message: BrowserConsoleMessage) => boolean} predicate
+ * @param {number} timeoutMs
+ */
+async function waitForConsoleMessage(page, messages, predicate, timeoutMs) {
+	const startedAt = Date.now();
+	while (Date.now() - startedAt < timeoutMs) {
+		if (messages.some(predicate)) return;
+		await page.waitForTimeout(100);
+	}
+	throw new Error('timed out waiting for OCaml browser console message');
+}
+
+/**
+ * @param {import('playwright-core').Page} page
  * @param {{ crossOriginIsolated: boolean; sharedArrayBuffer: boolean; serviceWorkerControlled: boolean }} activeState
  * @param {string[]} pageErrors
  * @param {BrowserConsoleMessage[]} consoleMessages
@@ -296,31 +311,16 @@ export async function runOcamlBrowserProbe({
 			.length;
 		await page.locator('button.action-button--run').first().click();
 		if (stdinText || sendEof) {
-			try {
-				await page.waitForFunction(
-					(previousFinishedCount) => {
-						const text =
-							document.querySelector('[data-testid="terminal-debug-output"]')
-								?.textContent || '';
-						const finishedCount = (text.match(/Process finished after/g) || []).length;
-						return (
-							text.includes('OCaml compilation failed') ||
-							finishedCount >= previousFinishedCount + 1
-						);
-					},
-					initialFinishedCount,
-					{
-						polling: 250,
-						timeout: runTimeoutMs
-					}
-				);
-			} catch (error) {
-				throw new Error(
-					`OCaml browser probe timed out waiting for compile preparation\n${JSON.stringify(await readProbeSummary(page, activeState, pageErrors, consoleMessages, binaryenBridgeRequests, binaryenBridgeResponses, binaryenToolRequests, binaryenToolResponses, targetUrl.toString()), null, 2)}`,
-					{ cause: error }
-				);
-			}
 			if (stdinMethod === 'keyboard') {
+				await waitForConsoleMessage(
+					page,
+					consoleMessages,
+					(message) =>
+						message.text.includes(
+							`[wasm-idle:ocaml-worker] compile start prepare=false target=${backend}`
+						),
+					runTimeoutMs
+				);
 				const normalizedInput = stdinText.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
 				await page.locator('.xterm').click();
 				const segments = normalizedInput.split('\n');
@@ -341,77 +341,76 @@ export async function runOcamlBrowserProbe({
 						typeof (/** @type {any} */ (window).__wasmIdleDebug?.writeTerminalInput) ===
 						'function'
 				);
-				await page.evaluate(
-					async ({ text, eof }) => {
+				await page.evaluate(async (text) => {
+					await /** @type {any} */ (window).__wasmIdleDebug.writeTerminalInput(
+						text,
+						false
+					);
+				}, stdinText);
+				if (sendEof) {
+					await page.waitForTimeout(500);
+					await page.evaluate(async () => {
 						await /** @type {any} */ (window).__wasmIdleDebug.writeTerminalInput(
-							text,
-							eof
+							'',
+							true
 						);
-					},
-					{ text: stdinText, eof: sendEof }
-				);
-			}
-			const compileTranscript =
-				(await page
-					.locator('[data-testid="terminal-debug-output"]')
-					.textContent()
-					.catch(() => '')) || '';
-			const compileFinishedCount = (compileTranscript.match(/Process finished after/g) || [])
-				.length;
-			if (
-				!compileTranscript.includes('OCaml compilation failed') &&
-				!(Boolean(expectedOutput) && compileTranscript.includes(expectedOutput))
-			) {
-				try {
-					await page.waitForFunction(
-						({ previousTranscript, requiredOutput, previousFinishedCount }) => {
-							const text =
-								document.querySelector('[data-testid="terminal-debug-output"]')
-									?.textContent || '';
-							if (text === previousTranscript) {
-								return false;
-							}
-							const finishedCount = (text.match(/Process finished after/g) || [])
-								.length;
-							return (
-								text.includes('OCaml compilation failed') ||
-								finishedCount >= previousFinishedCount + 1 ||
-								(Boolean(requiredOutput) && text.includes(requiredOutput))
-							);
-						},
-						{
-							previousTranscript: compileTranscript,
-							requiredOutput: expectedOutput,
-							previousFinishedCount: compileFinishedCount
-						},
-						{
-							polling: 250,
-							timeout: runTimeoutMs
-						}
-					);
-				} catch (error) {
-					throw new Error(
-						`OCaml browser probe timed out waiting for stdin execution\n${JSON.stringify(await readProbeSummary(page, activeState, pageErrors, consoleMessages, binaryenBridgeRequests, binaryenBridgeResponses, binaryenToolRequests, binaryenToolResponses, targetUrl.toString()), null, 2)}`,
-						{ cause: error }
-					);
+					});
 				}
 			}
-		} else {
 			try {
 				await page.waitForFunction(
-					(previousTranscript) => {
+					({ previousTranscript, requiredOutput, previousFinishedCount }) => {
 						const text =
 							document.querySelector('[data-testid="terminal-debug-output"]')
 								?.textContent || '';
 						if (text === previousTranscript) {
 							return false;
 						}
+						const finishedCount = (text.match(/Process finished after/g) || []).length;
 						return (
 							text.includes('OCaml compilation failed') ||
-							(text.match(/Process finished after/g) || []).length >= 2
+							finishedCount >= previousFinishedCount + 1 ||
+							(Boolean(requiredOutput) && text.includes(requiredOutput))
 						);
 					},
-					initialTranscript,
+					{
+						previousTranscript: initialTranscript,
+						requiredOutput: expectedOutput,
+						previousFinishedCount: initialFinishedCount
+					},
+					{
+						polling: 250,
+						timeout: runTimeoutMs
+					}
+				);
+			} catch (error) {
+				throw new Error(
+					`OCaml browser probe timed out waiting for stdin execution\n${JSON.stringify(await readProbeSummary(page, activeState, pageErrors, consoleMessages, binaryenBridgeRequests, binaryenBridgeResponses, binaryenToolRequests, binaryenToolResponses, targetUrl.toString()), null, 2)}`,
+					{ cause: error }
+				);
+			}
+		} else {
+			try {
+				await page.waitForFunction(
+					({ previousTranscript, requiredOutput, previousFinishedCount }) => {
+						const text =
+							document.querySelector('[data-testid="terminal-debug-output"]')
+								?.textContent || '';
+						if (text === previousTranscript) {
+							return false;
+						}
+						const finishedCount = (text.match(/Process finished after/g) || []).length;
+						return (
+							text.includes('OCaml compilation failed') ||
+							finishedCount >= previousFinishedCount + 1 ||
+							(Boolean(requiredOutput) && text.includes(requiredOutput))
+						);
+					},
+					{
+						previousTranscript: initialTranscript,
+						requiredOutput: expectedOutput,
+						previousFinishedCount: initialFinishedCount
+					},
 					{
 						polling: 250,
 						timeout: runTimeoutMs

@@ -54,6 +54,21 @@ function findGoConsoleErrors(messages) {
 
 /**
  * @param {import('playwright-core').Page} page
+ * @param {BrowserConsoleMessage[]} messages
+ * @param {(message: BrowserConsoleMessage) => boolean} predicate
+ * @param {number} timeoutMs
+ */
+async function waitForConsoleMessage(page, messages, predicate, timeoutMs) {
+	const startedAt = Date.now();
+	while (Date.now() - startedAt < timeoutMs) {
+		if (messages.some(predicate)) return;
+		await page.waitForTimeout(100);
+	}
+	throw new Error('timed out waiting for Go browser console message');
+}
+
+/**
+ * @param {import('playwright-core').Page} page
  * @param {{ crossOriginIsolated: boolean; sharedArrayBuffer: boolean; serviceWorkerControlled: boolean }} activeState
  * @param {string[]} pageErrors
  * @param {BrowserConsoleMessage[]} consoleMessages
@@ -61,7 +76,10 @@ function findGoConsoleErrors(messages) {
  */
 async function readProbeSummary(page, activeState, pageErrors, consoleMessages, browserUrl) {
 	const transcript =
-		(await page.locator('[data-testid="terminal-debug-output"]').textContent().catch(() => '')) || '';
+		(await page
+			.locator('[data-testid="terminal-debug-output"]')
+			.textContent()
+			.catch(() => '')) || '';
 	const availableGoTargets = await page
 		.locator('#go-target option')
 		.evaluateAll((elements) =>
@@ -71,7 +89,10 @@ async function readProbeSummary(page, activeState, pageErrors, consoleMessages, 
 		)
 		.catch(() => []);
 	const selectedGoTarget =
-		(await page.locator('#go-target').inputValue().catch(() => '')) || '';
+		(await page
+			.locator('#go-target')
+			.inputValue()
+			.catch(() => '')) || '';
 	return {
 		activeState,
 		availableGoTargets,
@@ -184,34 +205,21 @@ export async function runGoBrowserProbe({
 
 		await page.waitForSelector('[data-testid="terminal-debug-output"]', { state: 'attached' });
 		const initialTranscript =
-			(await page.locator('[data-testid="terminal-debug-output"]').textContent().catch(() => '')) || '';
+			(await page
+				.locator('[data-testid="terminal-debug-output"]')
+				.textContent()
+				.catch(() => '')) || '';
+		const initialFinishedCount = (initialTranscript.match(/Process finished after/g) || [])
+			.length;
 		await page.locator('button.action-button--run').first().click();
-		try {
-			await page.waitForFunction(
-				(previousTranscript) => {
-					const text =
-						document.querySelector('[data-testid="terminal-debug-output"]')?.textContent || '';
-					if (text === previousTranscript) {
-						return false;
-					}
-					return text.includes('Go compilation failed') || text.includes('Process finished after');
-				},
-				initialTranscript,
-				{
-					polling: 250,
-					timeout: runTimeoutMs
-				}
-			);
-		} catch (error) {
-			throw new Error(
-				`Go browser probe timed out waiting for the prepare phase\n${JSON.stringify(await readProbeSummary(page, activeState, pageErrors, consoleMessages, browserUrl), null, 2)}`,
-				{ cause: error }
-			);
-		}
-		const prepareTranscript =
-			(await page.locator('[data-testid="terminal-debug-output"]').textContent().catch(() => '')) || '';
-		const prepareFinishedCount = (prepareTranscript.match(/Process finished after/g) || []).length;
 		if (stdinMethod === 'keyboard') {
+			await waitForConsoleMessage(
+				page,
+				consoleMessages,
+				(message) =>
+					message.text.includes(`[wasm-idle:go-worker] runtime start target=${target}`),
+				runTimeoutMs
+			);
 			const normalizedInput = stdinText.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
 			await page.locator('.xterm').click();
 			const segments = normalizedInput.split('\n');
@@ -225,7 +233,9 @@ export async function runGoBrowserProbe({
 			}
 		} else {
 			await page.waitForFunction(
-				() => typeof /** @type {any} */ (window).__wasmIdleDebug?.writeTerminalInput === 'function'
+				() =>
+					typeof (/** @type {any} */ (window).__wasmIdleDebug?.writeTerminalInput) ===
+					'function'
 			);
 			await page.evaluate(async (text) => {
 				await /** @type {any} */ (window).__wasmIdleDebug.writeTerminalInput(text, false);
@@ -236,7 +246,8 @@ export async function runGoBrowserProbe({
 			await page.waitForFunction(
 				({ previousTranscript, previousFinishedCount, requiredOutput }) => {
 					const text =
-						document.querySelector('[data-testid="terminal-debug-output"]')?.textContent || '';
+						document.querySelector('[data-testid="terminal-debug-output"]')
+							?.textContent || '';
 					if (text === previousTranscript) {
 						return false;
 					}
@@ -248,8 +259,8 @@ export async function runGoBrowserProbe({
 					);
 				},
 				{
-					previousTranscript: prepareTranscript,
-					previousFinishedCount: prepareFinishedCount,
+					previousTranscript: initialTranscript,
+					previousFinishedCount: initialFinishedCount,
 					requiredOutput: expectedOutput
 				},
 				{
@@ -264,12 +275,20 @@ export async function runGoBrowserProbe({
 			);
 		}
 
-		const summary = await readProbeSummary(page, activeState, pageErrors, consoleMessages, browserUrl);
+		const summary = await readProbeSummary(
+			page,
+			activeState,
+			pageErrors,
+			consoleMessages,
+			browserUrl
+		);
 		if (summary.pageErrors.length > 0) {
 			throw new Error(`page errors detected\n${JSON.stringify(summary, null, 2)}`);
 		}
 		if (summary.moduleResolutionErrors.length > 0) {
-			throw new Error(`module resolution errors detected\n${JSON.stringify(summary, null, 2)}`);
+			throw new Error(
+				`module resolution errors detected\n${JSON.stringify(summary, null, 2)}`
+			);
 		}
 		if (summary.goConsoleErrors.length > 0) {
 			throw new Error(`go console errors detected\n${JSON.stringify(summary, null, 2)}`);

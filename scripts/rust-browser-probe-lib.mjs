@@ -15,15 +15,32 @@ export async function resolveChromiumExecutable(explicitPath = '') {
 	if (explicitPath) {
 		return explicitPath;
 	}
+	const playwrightExecutable = chromium.executablePath();
+	try {
+		await fs.access(playwrightExecutable);
+		return playwrightExecutable;
+	} catch {
+		// Fall back to the cache scan below for older Playwright layouts.
+	}
 	const cacheRoot = path.join(os.homedir(), '.cache', 'ms-playwright');
-	const entries = await fs.readdir(cacheRoot, { withFileTypes: true });
+	let entries = [];
+	try {
+		entries = await fs.readdir(cacheRoot, { withFileTypes: true });
+	} catch (error) {
+		if (error?.code !== 'ENOENT') throw error;
+		throw new Error(
+			`failed to locate a cached Chromium build. Tried ${playwrightExecutable} and ${cacheRoot}. Run "pnpm exec playwright-core install chromium" or set WASM_IDLE_CHROMIUM_EXECUTABLE.`
+		);
+	}
 	const chromiumFolder = entries
 		.filter((entry) => entry.isDirectory() && entry.name.startsWith('chromium-'))
 		.map((entry) => entry.name)
 		.sort()
 		.at(-1);
 	if (!chromiumFolder) {
-		throw new Error('failed to locate a cached Chromium build under ~/.cache/ms-playwright');
+		throw new Error(
+			`failed to locate a cached Chromium build under ${cacheRoot}. Run "pnpm exec playwright-core install chromium" or set WASM_IDLE_CHROMIUM_EXECUTABLE.`
+		);
 	}
 	return path.join(cacheRoot, chromiumFolder, 'chrome-linux64', 'chrome');
 }
@@ -97,7 +114,10 @@ function findMaximumCallStackErrors(messages, pageErrors) {
  */
 async function readProbeSummary(page, activeState, pageErrors, consoleMessages, browserUrl) {
 	const transcript =
-		(await page.locator('[data-testid="terminal-debug-output"]').textContent().catch(() => '')) || '';
+		(await page
+			.locator('[data-testid="terminal-debug-output"]')
+			.textContent()
+			.catch(() => '')) || '';
 	const availableRustTargets = await page
 		.locator('#rust-target-triple option')
 		.evaluateAll((elements) =>
@@ -119,6 +139,72 @@ async function readProbeSummary(page, activeState, pageErrors, consoleMessages, 
 		rustConsoleErrors: findRustConsoleErrors(consoleMessages),
 		callStackErrors: findMaximumCallStackErrors(consoleMessages, pageErrors)
 	};
+}
+
+/**
+ * @param {'wasm32-wasip1' | 'wasm32-wasip2' | 'wasm32-wasip3'} targetTriple
+ */
+function rustSourceForTarget(targetTriple) {
+	if (targetTriple === 'wasm32-wasip2') {
+		return `#[cfg(not(target_env = "p2"))]
+compile_error!("This example requires wasm32-wasip2.");
+
+use std::env;
+use std::io;
+
+static BONUS: i32 = 3;
+
+fn factorial(n: i32) -> i32 {
+    if n <= 1 { 1 } else { n * factorial(n - 1) }
+}
+
+fn main() {
+    let preview2_label = env::args().nth(1).unwrap_or_else(|| "preview2-cli".to_string());
+    let mut input = String::new();
+    io::stdin().read_line(&mut input).unwrap();
+    let n = input.trim().parse::<i32>().unwrap_or(4);
+    println!("preview2_component={}", preview2_label);
+    println!("factorial_plus_bonus={}", factorial(n) + BONUS);
+}`;
+	}
+	if (targetTriple === 'wasm32-wasip3') {
+		return `#[cfg(not(target_env = "p3"))]
+compile_error!("This example requires wasm32-wasip3.");
+
+use std::env;
+use std::io;
+
+static BONUS: i32 = 3;
+
+fn factorial(n: i32) -> i32 {
+    if n <= 1 { 1 } else { n * factorial(n - 1) }
+}
+
+fn main() {
+    let preview3_label = env::args()
+        .nth(1)
+        .unwrap_or_else(|| "preview3-transition".to_string());
+    let mut input = String::new();
+    io::stdin().read_line(&mut input).unwrap();
+    let n = input.trim().parse::<i32>().unwrap_or(4);
+    println!("preview3_transition={}", preview3_label);
+    println!("factorial_plus_bonus={}", factorial(n) + BONUS);
+}`;
+	}
+	return `use std::io;
+
+static BONUS: i32 = 3;
+
+fn factorial(n: i32) -> i32 {
+    if n <= 1 { 1 } else { n * factorial(n - 1) }
+}
+
+fn main() {
+    let mut input = String::new();
+    io::stdin().read_line(&mut input).unwrap();
+    let n = input.trim().parse::<i32>().unwrap_or(4);
+    println!("factorial_plus_bonus={}", factorial(n) + BONUS);
+}`;
 }
 
 /**
@@ -232,31 +318,14 @@ export async function runRustBrowserProbe({
 
 		await page.locator('select').selectOption('RUST');
 		await page.locator('#rust-target-triple').selectOption(targetTriple);
-		const logToggle = page.locator('#log-toggle');
-		if (!(await logToggle.isChecked())) {
-			await logToggle.check();
-		}
-		await page.waitForSelector('[data-testid="terminal-debug-output"]', { state: 'attached' });
-		const initialTranscript =
-			(await page.locator('[data-testid="terminal-debug-output"]').textContent().catch(() => '')) || '';
-		await page.locator('button.action-button--run').first().click();
-		try {
-			await page.waitForFunction(
-				(previousTranscript) => {
-					const text =
-						document.querySelector('[data-testid="terminal-debug-output"]')?.textContent || '';
-					if (text === previousTranscript) {
-						return false;
-					}
-					return text.includes('Rust compilation failed') || text.includes('Process finished after');
-				},
-				initialTranscript,
-				{
-					polling: 250,
-					timeout: runTimeoutMs
-				}
-			);
-		} catch (error) {
+		await page.waitForFunction(
+			() => typeof window.__wasmIdleDebug?.setEditorValue === 'function'
+		);
+		const source = rustSourceForTarget(targetTriple);
+		const editorValueSet = await page.evaluate(async (text) => {
+			return await window.__wasmIdleDebug.setEditorValue(text);
+		}, source);
+		if (!editorValueSet) {
 			const summary = await readProbeSummary(
 				page,
 				activeState,
@@ -265,29 +334,41 @@ export async function runRustBrowserProbe({
 				browserUrl
 			);
 			throw new Error(
-				`rust browser probe timed out waiting for prepare to finish: ${error instanceof Error ? error.message : String(error)}\n${JSON.stringify(summary, null, 2)}`
+				`rust browser probe could not write editor contents\n${JSON.stringify(summary, null, 2)}`
 			);
 		}
-		const prepareTranscript =
-			(await page.locator('[data-testid="terminal-debug-output"]').textContent().catch(() => '')) || '';
-		const prepareFinishedCount = (prepareTranscript.match(/Process finished after/g) || []).length;
-		await page.waitForFunction(() => typeof window.__wasmIdleDebug?.writeTerminalInput === 'function');
-		await page.evaluate(
-			async ({ text, eof }) => {
-				await window.__wasmIdleDebug.writeTerminalInput(text, eof);
-			},
-			{ text: stdinText, eof: sendEof }
+		const logToggle = page.locator('#log-toggle');
+		if (!(await logToggle.isChecked())) {
+			await logToggle.check();
+		}
+		await page.waitForSelector('[data-testid="terminal-debug-output"]', { state: 'attached' });
+		const initialTranscript =
+			(await page
+				.locator('[data-testid="terminal-debug-output"]')
+				.textContent()
+				.catch(() => '')) || '';
+		const initialFinishedCount = (initialTranscript.match(/Process finished after/g) || [])
+			.length;
+		await page.locator('button.action-button--run').first().click();
+		await page.waitForFunction(
+			() => typeof window.__wasmIdleDebug?.writeTerminalInput === 'function'
 		);
+		await page.evaluate(async (text) => {
+			await window.__wasmIdleDebug.writeTerminalInput(text, false);
+		}, stdinText);
+		if (sendEof) {
+			await page.waitForTimeout(500);
+			await page.evaluate(async () => {
+				await window.__wasmIdleDebug.writeTerminalInput('', true);
+			});
+		}
 
 		try {
 			await page.waitForFunction(
-				({
-					previousTranscript,
-					requiredOutput,
-					previousFinishedCount
-				}) => {
+				({ previousTranscript, requiredOutput, previousFinishedCount }) => {
 					const text =
-						document.querySelector('[data-testid="terminal-debug-output"]')?.textContent || '';
+						document.querySelector('[data-testid="terminal-debug-output"]')
+							?.textContent || '';
 					if (text === previousTranscript) {
 						return false;
 					}
@@ -299,9 +380,9 @@ export async function runRustBrowserProbe({
 					);
 				},
 				{
-					previousTranscript: prepareTranscript,
+					previousTranscript: initialTranscript,
 					requiredOutput: expectedOutput,
-					previousFinishedCount: prepareFinishedCount
+					previousFinishedCount: initialFinishedCount
 				},
 				{
 					polling: 250,
@@ -321,17 +402,27 @@ export async function runRustBrowserProbe({
 			);
 		}
 
-		const summary = await readProbeSummary(page, activeState, pageErrors, consoleMessages, browserUrl);
+		const summary = await readProbeSummary(
+			page,
+			activeState,
+			pageErrors,
+			consoleMessages,
+			browserUrl
+		);
 		const relevantPageErrors = filterBenignPageErrors(pageErrors);
 
 		if (relevantPageErrors.length > 0) {
 			throw new Error(`page errors detected\n${JSON.stringify(summary, null, 2)}`);
 		}
 		if (summary.bootstrapErrors.length > 0) {
-			throw new Error(`rust worker bootstrap errors detected\n${JSON.stringify(summary, null, 2)}`);
+			throw new Error(
+				`rust worker bootstrap errors detected\n${JSON.stringify(summary, null, 2)}`
+			);
 		}
 		if (summary.rustConsoleErrors.length > 0) {
-			throw new Error(`unexpected rust console errors detected\n${JSON.stringify(summary, null, 2)}`);
+			throw new Error(
+				`unexpected rust console errors detected\n${JSON.stringify(summary, null, 2)}`
+			);
 		}
 		if (summary.transcript.includes('Rust compilation failed')) {
 			throw new Error(`rust run failed\n${JSON.stringify(summary, null, 2)}`);
@@ -366,10 +457,7 @@ export async function runRustBrowserProbe({
 				`browser probe still observed memory access out of bounds for ${targetTriple}\n${JSON.stringify(summary, null, 2)}`
 			);
 		}
-		if (
-			/maximum call stack/i.test(summary.transcript) ||
-			summary.callStackErrors.length > 0
-		) {
+		if (/maximum call stack/i.test(summary.transcript) || summary.callStackErrors.length > 0) {
 			throw new Error(
 				`browser probe still observed maximum call stack errors for ${targetTriple}\n${JSON.stringify(summary, null, 2)}`
 			);
