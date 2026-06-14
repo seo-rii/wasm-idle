@@ -45,13 +45,20 @@ async function readActiveState(page) {
  */
 async function readProbeSummary(page, activeState, pageErrors, consoleMessages) {
 	const transcript =
-		(await page.locator('[data-testid="terminal-debug-output"]').textContent().catch(() => '')) ||
-		'';
+		(await page
+			.locator('[data-testid="terminal-debug-output"]')
+			.textContent()
+			.catch(() => '')) || '';
 	return {
 		activeState,
 		consoleTail: summarizeConsole(consoleMessages),
 		finalUrl: page.url(),
-		language: (await page.locator('select').first().inputValue().catch(() => '')) || '',
+		language:
+			(await page
+				.locator('select')
+				.first()
+				.inputValue()
+				.catch(() => '')) || '',
 		pageErrors,
 		title: await page.title().catch(() => ''),
 		transcript
@@ -59,7 +66,7 @@ async function readProbeSummary(page, activeState, pageErrors, consoleMessages) 
 }
 
 /**
- * @param {{ browserUrl: string; chromiumExecutable?: string; expectedOutput: string; language: 'ASSEMBLYSCRIPT' | 'WAT'; runTimeoutMs?: number; source: string; stdinText: string }} options
+ * @param {{ browserUrl: string; chromiumExecutable?: string; expectedOutput: string; language: 'ASSEMBLYSCRIPT' | 'WAT' | 'RUBY' | 'R' | 'SQLITE' | 'PHP'; runTimeoutMs?: number; sendEof?: boolean; source: string; stdinText: string }} options
  */
 export async function runStdinBrowserProbe({
 	browserUrl,
@@ -67,6 +74,7 @@ export async function runStdinBrowserProbe({
 	expectedOutput,
 	language,
 	runTimeoutMs = 120_000,
+	sendEof = false,
 	source,
 	stdinText
 }) {
@@ -151,13 +159,27 @@ export async function runStdinBrowserProbe({
 		await page.evaluate(() => localStorage.clear());
 		await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
 		await page.waitForSelector('select', { state: 'attached', timeout: runTimeoutMs });
+		await page.waitForFunction(
+			() =>
+				typeof (/** @type {any} */ (window).__wasmIdleDebug?.getEditorValue) ===
+					'function' &&
+				typeof (/** @type {any} */ (window).__wasmIdleDebug?.setEditorValue) ===
+					'function' &&
+				typeof (/** @type {any} */ (window).__wasmIdleDebug?.writeTerminalInput) ===
+					'function',
+			undefined,
+			{ timeout: runTimeoutMs }
+		);
 		await page.locator('select').selectOption(language);
 		await page.waitForFunction(
 			(expectedLanguage) =>
 				document.querySelector('select')?.value === expectedLanguage &&
-				typeof window.__wasmIdleDebug?.getEditorValue === 'function' &&
-				typeof window.__wasmIdleDebug?.setEditorValue === 'function' &&
-				typeof window.__wasmIdleDebug?.writeTerminalInput === 'function',
+				typeof (/** @type {any} */ (window).__wasmIdleDebug?.getEditorValue) ===
+					'function' &&
+				typeof (/** @type {any} */ (window).__wasmIdleDebug?.setEditorValue) ===
+					'function' &&
+				typeof (/** @type {any} */ (window).__wasmIdleDebug?.writeTerminalInput) ===
+					'function',
 			language,
 			{ timeout: runTimeoutMs }
 		);
@@ -165,19 +187,16 @@ export async function runStdinBrowserProbe({
 		let editorValueStable = false;
 		for (let attempt = 0; attempt < 3; attempt += 1) {
 			const editorValueSet = await page.evaluate(async (text) => {
-				return await window.__wasmIdleDebug.setEditorValue(text);
+				return await /** @type {any} */ (window).__wasmIdleDebug.setEditorValue(text);
 			}, source);
 			if (!editorValueSet) {
-				throw new Error(
-					`stdin browser probe could not write editor contents\n${JSON.stringify(
-						await readProbeSummary(page, activeState, pageErrors, consoleMessages),
-						null,
-						2
-					)}`
-				);
+				await page.waitForTimeout(500);
+				continue;
 			}
 			await page.waitForFunction(
-				(expectedSource) => window.__wasmIdleDebug?.getEditorValue?.() === expectedSource,
+				(expectedSource) =>
+					/** @type {any} */ (window).__wasmIdleDebug?.getEditorValue?.() ===
+					expectedSource,
 				source,
 				{
 					polling: 100,
@@ -186,7 +205,9 @@ export async function runStdinBrowserProbe({
 			);
 			await page.waitForTimeout(250);
 			editorValueStable = await page.evaluate(
-				(expectedSource) => window.__wasmIdleDebug?.getEditorValue?.() === expectedSource,
+				(expectedSource) =>
+					/** @type {any} */ (window).__wasmIdleDebug?.getEditorValue?.() ===
+					expectedSource,
 				source
 			);
 			if (editorValueStable) {
@@ -204,10 +225,13 @@ export async function runStdinBrowserProbe({
 		}
 		await page.waitForSelector('[data-testid="terminal-debug-output"]', { state: 'attached' });
 		const initialTranscript =
-			(await page.locator('[data-testid="terminal-debug-output"]').textContent().catch(() => '')) ||
-			'';
+			(await page
+				.locator('[data-testid="terminal-debug-output"]')
+				.textContent()
+				.catch(() => '')) || '';
 		const editorValueBeforeRun = await page.evaluate(
-			(expectedSource) => window.__wasmIdleDebug?.getEditorValue?.() === expectedSource,
+			(expectedSource) =>
+				/** @type {any} */ (window).__wasmIdleDebug?.getEditorValue?.() === expectedSource,
 			source
 		);
 		if (!editorValueBeforeRun) {
@@ -219,16 +243,23 @@ export async function runStdinBrowserProbe({
 				)}`
 			);
 		}
-		await page.evaluate(() => document.querySelector('button.action-button--run')?.click());
+		await page.locator('button.action-button--run').first().click();
 		await page.evaluate(async (text) => {
-			await window.__wasmIdleDebug.writeTerminalInput(text, false);
+			await /** @type {any} */ (window).__wasmIdleDebug.writeTerminalInput(text, false);
 		}, stdinText);
+		if (sendEof) {
+			await page.waitForTimeout(500);
+			await page.evaluate(async () => {
+				await /** @type {any} */ (window).__wasmIdleDebug.writeTerminalInput('', true);
+			});
+		}
 
 		try {
 			await page.waitForFunction(
 				({ previousTranscript, requiredOutput }) => {
 					const text =
-						document.querySelector('[data-testid="terminal-debug-output"]')?.textContent || '';
+						document.querySelector('[data-testid="terminal-debug-output"]')
+							?.textContent || '';
 					return text !== previousTranscript && text.includes(requiredOutput);
 				},
 				{
@@ -271,7 +302,9 @@ export async function runStdinBrowserProbe({
 			);
 		}
 		if (!summary.transcript.includes('Process finished after')) {
-			throw new Error(`stdin browser run did not finish\n${JSON.stringify(summary, null, 2)}`);
+			throw new Error(
+				`stdin browser run did not finish\n${JSON.stringify(summary, null, 2)}`
+			);
 		}
 		return summary;
 	} finally {

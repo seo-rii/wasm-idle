@@ -69,6 +69,22 @@ vi.mock('$lib/playground/haskell', () => ({
 	default: createMockSandboxClass('HASKELL')
 }));
 
+vi.mock('$lib/playground/ruby', () => ({
+	default: createMockSandboxClass('RUBY')
+}));
+
+vi.mock('$lib/playground/r', () => ({
+	default: createMockSandboxClass('R')
+}));
+
+vi.mock('$lib/playground/sqlite', () => ({
+	default: createMockSandboxClass('SQLITE')
+}));
+
+vi.mock('$lib/playground/php', () => ({
+	default: createMockSandboxClass('PHP')
+}));
+
 vi.mock('$lib/playground/dotnet', () => ({
 	default: class extends MockSandbox {
 		constructor(language: string = 'FSHARP') {
@@ -582,5 +598,82 @@ describe('playground runtime binding', () => {
 		]);
 		expect((await binding.load('HASKELL')).runtimeAssets).toEqual(runtimeAssets);
 		expect(sandboxInstances.get('HASKELL')).toHaveLength(1);
+	});
+
+	it('routes R requests through the webR sandbox implementation', async () => {
+		const binding = createPlaygroundBinding({
+			rootUrl: '/absproxy/5173',
+			r: {
+				baseUrl: '/absproxy/5173/webr/test/'
+			}
+		});
+		const progress = { set() {} };
+		const sandbox = await binding.load('R');
+
+		await sandbox.load('cat("hello\\n")', true, [], {}, progress);
+
+		const runtimeAssets = {
+			rootUrl: '/absproxy/5173',
+			r: {
+				baseUrl: '/absproxy/5173/webr/test/'
+			}
+		};
+		expect(sandbox.runtimeAssets).toEqual(runtimeAssets);
+		expect(sandboxInstances.get('R')).toHaveLength(1);
+		expect(sandboxInstances.get('R')?.[0]?.loadCalls).toEqual([
+			[runtimeAssets, 'cat("hello\\n")', true, [], {}, progress]
+		]);
+	});
+
+	it('routes SQLite aliases through the SQLite sandbox implementation', async () => {
+		const binding = createPlaygroundBinding({
+			rootUrl: '/absproxy/5173',
+			sqlite: {
+				wasmUrl: '/absproxy/5173/sqlite/sql-wasm.wasm?v=test'
+			}
+		});
+		const progress = { set() {} };
+		const sandbox = await binding.load('SQL');
+
+		await sandbox.load('select 1;', true, [], {}, progress);
+
+		const runtimeAssets = {
+			rootUrl: '/absproxy/5173',
+			sqlite: {
+				wasmUrl: '/absproxy/5173/sqlite/sql-wasm.wasm?v=test'
+			}
+		};
+		expect(sandbox.runtimeAssets).toEqual(runtimeAssets);
+		expect(sandboxInstances.get('SQLITE')).toHaveLength(1);
+		expect(sandboxInstances.get('SQLITE')?.[0]?.loadCalls).toEqual([
+			[runtimeAssets, 'select 1;', true, [], {}, progress]
+		]);
+		expect((await binding.load('SQLITE')).runtimeAssets).toEqual(runtimeAssets);
+		expect(sandboxInstances.get('SQLITE')).toHaveLength(1);
+	});
+
+	it('routes PHP requests through the PHP wasm sandbox implementation', async () => {
+		const binding = createPlaygroundBinding({
+			rootUrl: '/absproxy/5173',
+			php: {
+				version: '8.5'
+			}
+		});
+		const progress = { set() {} };
+		const sandbox = await binding.load('PHP');
+
+		await sandbox.load('<?php echo "hello\\n";', true, ['7'], {}, progress);
+
+		const runtimeAssets = {
+			rootUrl: '/absproxy/5173',
+			php: {
+				version: '8.5'
+			}
+		};
+		expect(sandbox.runtimeAssets).toEqual(runtimeAssets);
+		expect(sandboxInstances.get('PHP')).toHaveLength(1);
+		expect(sandboxInstances.get('PHP')?.[0]?.loadCalls).toEqual([
+			[runtimeAssets, '<?php echo "hello\\n";', true, ['7'], {}, progress]
+		]);
 	});
 });

@@ -99,6 +99,18 @@ export interface RubyRuntimeAssetConfig {
 	wasmUrl?: string;
 }
 
+export interface RRuntimeAssetConfig {
+	baseUrl?: string;
+}
+
+export interface SqliteRuntimeAssetConfig {
+	wasmUrl?: string;
+}
+
+export interface PhpRuntimeAssetConfig {
+	version?: string;
+}
+
 export interface PlaygroundRuntimeAssets {
 	rootUrl?: string;
 	python?: RuntimeAssetConfig;
@@ -118,6 +130,9 @@ export interface PlaygroundRuntimeAssets {
 	zig?: ZigRuntimeAssetConfig;
 	lisp?: LispRuntimeAssetConfig;
 	ruby?: RubyRuntimeAssetConfig;
+	r?: RRuntimeAssetConfig;
+	sqlite?: SqliteRuntimeAssetConfig;
+	php?: PhpRuntimeAssetConfig;
 }
 
 export interface TinyGoRuntimeAssetLoaderRequest {
@@ -889,4 +904,50 @@ export function resolveRubyWasmUrl(
 	}
 
 	return '';
+}
+
+export function resolveRBaseUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredBaseUrl =
+		(typeof options === 'object' && options?.r?.baseUrl) ||
+		(publicEnv.PUBLIC_WASM_R_BASE_URL || '').trim();
+
+	if (configuredBaseUrl) {
+		return normalizeBaseUrl(configuredBaseUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return normalizeBaseUrl(`${normalizeRootUrl(options) || ''}/webr/`, currentUrl);
+	}
+
+	if (options?.rootUrl) {
+		return normalizeBaseUrl(`${normalizeRootUrl(options.rootUrl) || ''}/webr/`, currentUrl);
+	}
+
+	return '';
+}
+
+export function resolveSqliteWasmUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredWasmUrl =
+		(typeof options === 'object' && options?.sqlite?.wasmUrl) ||
+		(publicEnv.PUBLIC_WASM_SQLITE_WASM_URL || '').trim();
+
+	if (configuredWasmUrl) {
+		return resolveConfiguredUrl(configuredWasmUrl, currentUrl);
+	}
+
+	return '';
+}
+
+export function resolvePhpVersion(options: string | PlaygroundRuntimeAssets | undefined) {
+	const configuredVersion =
+		(typeof options === 'object' && options?.php?.version) ||
+		(publicEnv.PUBLIC_WASM_PHP_VERSION || '').trim();
+
+	return configuredVersion || '8.4';
 }

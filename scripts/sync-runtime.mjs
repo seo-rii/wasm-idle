@@ -83,6 +83,13 @@ const RUNTIMES = [
 		targetArg: 'targetDir'
 	},
 	{
+		name: 'webr',
+		module: './sync-webr.mjs',
+		exportName: 'syncWebRAssets',
+		sourceArg: 'sourceDir',
+		targetArg: 'targetDir'
+	},
+	{
 		name: 'wasm-of-js-of-ocaml',
 		module: './sync-wasm-of-js-of-ocaml.mjs',
 		exportName: 'syncWasmOfJsOfOcamlDist',

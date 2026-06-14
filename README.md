@@ -3,9 +3,17 @@
 ![wasm-idle](static/image.jpeg)
 
 Executes C++, Python, Java, Rust, Go, TinyGo, OCaml, Elixir, C#, F#, JavaScript,
-TypeScript, AssemblyScript, WAT, Lua, Zig, Scheme, Ruby, and Haskell code.
+TypeScript, AssemblyScript, WAT, Lua, Zig, Scheme, Ruby, Haskell, R, SQLite, and PHP code.
 
 Refer to src/lib/clang.
+
+## Language support policy
+
+wasm-idle language support must run user code through the real language implementation in the
+browser, normally via a WebAssembly compiler, interpreter, or runtime. Do not add handwritten
+parsers, translators, emulators, or "subset" executors as language support. A language should be
+listed only after normal user code runs on that actual runtime and stdin/stdout behavior is covered
+by tests.
 
 ## Monorepo layout
 

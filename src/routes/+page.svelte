@@ -9,7 +9,7 @@
 	import { page } from '$app/state';
 	import { browser } from '$app/environment';
 	import { replaceState } from '$app/navigation';
-	import { base, resolve } from '$app/paths';
+	import { base } from '$app/paths';
 	import { SvelteURL } from 'svelte/reactivity';
 	import type { PlaygroundRuntimeAssets } from '$lib/playground/assets';
 	import { WASM_DOTNET_ASSET_VERSION } from '$lib/playground/wasmDotnetVersion';
@@ -19,6 +19,7 @@
 	import { WASM_LUA_ASSET_VERSION } from '$lib/playground/wasmLuaVersion';
 	import { WASM_LISP_ASSET_VERSION } from '$lib/playground/wasmLispVersion';
 	import { WASM_OCAML_ASSET_VERSION } from '$lib/playground/wasmOcamlVersion';
+	import { WASM_R_ASSET_VERSION } from '$lib/playground/wasmRVersion';
 	import { WASM_RUST_ASSET_VERSION } from '$lib/playground/wasmRustVersion';
 	import { WASM_TINYGO_ASSET_VERSION } from '$lib/playground/wasmTinyGoVersion';
 	import { WASM_TYPESCRIPT_ASSET_VERSION } from '$lib/playground/wasmTypeScriptVersion';
@@ -66,7 +67,10 @@
 		| 'ZIG'
 		| 'LISP'
 		| 'RUBY'
-		| 'HASKELL';
+		| 'HASKELL'
+		| 'R'
+		| 'SQLITE'
+		| 'PHP';
 
 	type LanguageWorkspace = {
 		activePath: string;
@@ -113,7 +117,10 @@
 		'ZIG',
 		'LISP',
 		'RUBY',
-		'HASKELL'
+		'HASKELL',
+		'R',
+		'SQLITE',
+		'PHP'
 	];
 	const languageLabels: Record<PlaygroundLanguage, string> = {
 		C: 'C',
@@ -135,7 +142,10 @@
 		ZIG: 'Zig',
 		LISP: 'Scheme',
 		RUBY: 'Ruby',
-		HASKELL: 'Haskell'
+		HASKELL: 'Haskell',
+		R: 'R',
+		SQLITE: 'SQLite',
+		PHP: 'PHP'
 	};
 
 	let path = $derived(
@@ -215,6 +225,11 @@
 			bsdtarUrl: path
 				? `${path}/wasm-haskell/bsdtar.wasm?v=${WASM_HASKELL_ASSET_VERSION}`
 				: `/wasm-haskell/bsdtar.wasm?v=${WASM_HASKELL_ASSET_VERSION}`
+		},
+		r: {
+			baseUrl: path
+				? `${path}/webr/${WASM_R_ASSET_VERSION}/`
+				: `/webr/${WASM_R_ASSET_VERSION}/`
 		}
 	}));
 	const playground = $derived.by(() => createPlaygroundBinding(runtimeAssets));
@@ -291,7 +306,15 @@
 																			? 'ruby'
 																			: language === 'HASKELL'
 																				? 'haskell'
-																				: 'go'
+																				: language === 'R'
+																					? 'r'
+																					: language ===
+																						  'SQLITE'
+																						? 'sql'
+																						: language ===
+																							  'PHP'
+																							? 'php'
+																							: 'go'
 	);
 	const compact = $derived(examplePaneWidth > 0 && examplePaneWidth <= 760);
 	const activeFile = $derived(files.find((file) => file.path === activePath) ?? files[0]);
@@ -474,7 +497,11 @@
 			'.lsp': 'LISP',
 			'.rb': 'RUBY',
 			'.hs': 'HASKELL',
-			'.lhs': 'HASKELL'
+			'.lhs': 'HASKELL',
+			'.r': 'R',
+			'.sql': 'SQLITE',
+			'.sqlite': 'SQLITE',
+			'.php': 'PHP'
 		};
 		return match[ext] || null;
 	}
@@ -500,7 +527,10 @@
 			ZIG: 'main.zig',
 			LISP: 'main.scm',
 			RUBY: 'main.rb',
-			HASKELL: 'main.hs'
+			HASKELL: 'main.hs',
+			R: 'main.R',
+			SQLITE: 'main.sql',
+			PHP: 'main.php'
 		};
 		return match[nextLanguage];
 	}
@@ -526,7 +556,10 @@
 			ZIG: 'zig',
 			LISP: 'lisp',
 			RUBY: 'ruby',
-			HASKELL: 'haskell'
+			HASKELL: 'haskell',
+			R: 'r',
+			SQLITE: 'sqlite',
+			PHP: 'php'
 		} as const satisfies Record<
 			PlaygroundLanguage,
 			Parameters<typeof resolveEditorDefaultSource>[0]
@@ -841,7 +874,7 @@
 				? url.pathname.slice(base.length) || '/'
 				: url.pathname;
 		url.hash = shareHash;
-		replaceState(resolve(`${routePath}${url.search}#${shareHash}`), page.state);
+		replaceState(`${routePath}${url.search}#${shareHash}`, page.state);
 		await navigator.clipboard?.writeText(url.toString());
 		saveStatus =
 			url.toString().length > 60000 ? 'Share URL copied, but large' : 'Share URL copied';
@@ -1008,7 +1041,11 @@
 			ruby: 'RUBY',
 			rb: 'RUBY',
 			haskell: 'HASKELL',
-			hs: 'HASKELL'
+			hs: 'HASKELL',
+			r: 'R',
+			sqlite: 'SQLITE',
+			sql: 'SQLITE',
+			php: 'PHP'
 		};
 		return aliases[normalized] ?? null;
 	}
@@ -1381,8 +1418,9 @@
 			async setEditorValue(text: string) {
 				if (!editor) return false;
 				editor.setValue(text);
+				updateActiveContent(text);
 				await Promise.resolve();
-				return editor.getValue() === text;
+				return editor.getValue() === text && activeFile?.content === text;
 			}
 		};
 		target.__wasmIdleDebug = debugApi;
@@ -1414,7 +1452,9 @@
 			language !== 'ZIG' &&
 			language !== 'LISP' &&
 			language !== 'RUBY' &&
-			language !== 'HASKELL'
+			language !== 'HASKELL' &&
+			language !== 'SQLITE' &&
+			language !== 'PHP'
 		)
 			compilerDiagnostics = [];
 	});
@@ -1626,9 +1666,12 @@
 						<option value="LISP">Scheme</option>
 						<option value="RUBY">Ruby</option>
 						<option value="HASKELL">Haskell</option>
+						<option value="R">R</option>
+						<option value="SQLITE">SQLite</option>
+						<option value="PHP">PHP</option>
 					</select>
 				</label>
-				{#if language === 'JAVA' || language === 'RUST' || language === 'GO' || language === 'CSHARP' || language === 'FSHARP' || language === 'TINYGO' || language === 'JAVASCRIPT' || language === 'TYPESCRIPT' || language === 'LUA' || language === 'ZIG' || language === 'LISP' || language === 'RUBY' || language === 'HASKELL'}
+				{#if language === 'JAVA' || language === 'RUST' || language === 'GO' || language === 'CSHARP' || language === 'FSHARP' || language === 'TINYGO' || language === 'JAVASCRIPT' || language === 'TYPESCRIPT' || language === 'LUA' || language === 'ZIG' || language === 'LISP' || language === 'RUBY' || language === 'HASKELL' || language === 'R' || language === 'PHP'}
 					<label class="args-chip">
 						<span class="material-symbols-outlined">list_alt</span>
 						<input bind:value={argsInput} placeholder="3 4 5" spellcheck={false} />
@@ -1795,8 +1838,8 @@
 				AssemblyScript compiles in the browser with the bundled `assemblyscript` compiler,
 				then instantiates the emitted WebAssembly locally. `_start` or `main` runs first; if
 				neither exists, zero-argument numeric, boolean, and string exports are printed to
-				the terminal. Import `readLine`, `readAll`, or `readByte` from `env` for stdin;
-				use Ctrl+D or the EOF button for full-input reads.
+				the terminal. Import `readLine`, `readAll`, or `readByte` from `env` for stdin; use
+				Ctrl+D or the EOF button for full-input reads.
 			</p>
 		{/if}
 		{#if language === 'WAT'}
@@ -1819,6 +1862,25 @@
 				Ruby runs through bundled CRuby WebAssembly assets from `ruby.wasm`. Pass CLI args
 				here, type into the terminal below, and use Ctrl+D or the EOF button if the program
 				reads stdin until EOF.
+			</p>
+		{/if}
+		{#if language === 'R'}
+			<p class="hint">
+				R runs through bundled webR WebAssembly assets. Type into the terminal below and
+				press Enter before code using `stdin()` reads a line.
+			</p>
+		{/if}
+		{#if language === 'SQLITE'}
+			<p class="hint">
+				SQLite runs through bundled sql.js WebAssembly assets against a fresh in-memory
+				database on every run. SELECT results are printed as tab-separated tables.
+			</p>
+		{/if}
+		{#if language === 'PHP'}
+			<p class="hint">
+				PHP runs through `@php-wasm/web` in the browser worker. Pass CLI args here; terminal
+				stdin is provided as `php://input`, so use Ctrl+D or the EOF button after typing
+				full-input data.
 			</p>
 		{/if}
 		{#if language === 'ZIG'}

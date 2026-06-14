@@ -39,13 +39,13 @@ describe('Terminal source', () => {
 		expect(source).toMatch(/stopRequested = false;/);
 		expect(source).toMatch(/if \(stopRequested\) return false;/);
 		expect(source).toMatch(
-			/async stop\(\) \{\s+await wait\(\);\s+stopRequested = true;\s+finish = true;\s+sandboxAcceptingInput = false;\s+if \(sandbox\?\.kill\) sandbox\.kill\(\);\s+else sandbox\?\.terminate\?\.\(\);\s+\}/s
+			/async stop\(\) \{\s+await wait\(\);\s+stopRequested = true;\s+finish = true;\s+sandboxAcceptingInput = false;\s+pendingSandboxEof = false;\s+if \(sandbox\?\.kill\) sandbox\.kill\(\);\s+else sandbox\?\.terminate\?\.\(\);\s+\}/s
 		);
 	});
 
 	it('submits pending stdin and sends EOF on ctrl+d for read-to-end programs', () => {
 		expect(source).toMatch(
-			/else if \(\(ev\.ctrlKey \|\| ev\.metaKey\) && ev\.key\.toLowerCase\(\) === 'd'\) \{\s+ev\.preventDefault\(\);\s+if \(input\.length > 0\) submitCurrentInput\(\);\s+sandbox\?\.eof\?\.\(\);\s+\}/s
+			/else if \(\(ev\.ctrlKey \|\| ev\.metaKey\) && ev\.key\.toLowerCase\(\) === 'd'\) \{\s+ev\.preventDefault\(\);\s+if \(input\.length > 0\) submitCurrentInput\(\);\s+submitSandboxEof\(\);\s+\}/s
 		);
 	});
 
@@ -66,7 +66,7 @@ describe('Terminal source', () => {
 		expect(source).toMatch(/loadedRuntimeAssetsKey: string \| undefined = undefined/);
 		expect(source).not.toMatch(/loadedRuntimeAssets = \$state/);
 		expect(source).not.toMatch(/loadedPlayground = \$state/);
-		expect(source).toContain("createRuntimeAssetsKey");
+		expect(source).toContain('createRuntimeAssetsKey');
 		expect(source).toMatch(
 			/const currentRuntimeAssetsKey = createRuntimeAssetsKey\(currentRuntimeAssets\);/
 		);
@@ -90,13 +90,30 @@ describe('Terminal source', () => {
 	});
 
 	it('buffers stdin until the current sandbox is ready to accept it', () => {
+		const prepareStart = source.slice(
+			source.indexOf('async prepare('),
+			source.indexOf('const progressBands')
+		);
+		const runStart = source.slice(
+			source.indexOf('async run('),
+			source.indexOf('await Promise.all', source.indexOf('async run('))
+		);
 		expect(source).toMatch(/sandboxAcceptingInput = false,/);
+		expect(source).toMatch(/pendingSandboxEof = false,/);
+		expect(prepareStart).not.toContain('pendingSandboxEof = false;');
+		expect(runStart).not.toContain('pendingSandboxEof = false;');
 		expect(source).toMatch(/sandboxAcceptingInput = true;/);
 		expect(source).toMatch(
 			/if \(sandbox && sandboxAcceptingInput\) sandbox\.write\?\.\(submittedInput\);\s+else pendingSandboxInput\.push\(submittedInput\);/s
 		);
 		expect(source).toMatch(
-			/function flushPendingSandboxInput\(\) \{\s+if \(pendingSandboxInput\.length > 0\) \{\s+for \(const pendingInput of pendingSandboxInput\) \{\s+sandbox\.write\?\.\(pendingInput\);\s+\}\s+pendingSandboxInput = \[\];\s+\}\s+\}/s
+			/function flushPendingSandboxInput\(\) \{\s+if \(pendingSandboxInput\.length > 0\) \{\s+for \(const pendingInput of pendingSandboxInput\) \{\s+sandbox\.write\?\.\(pendingInput\);\s+\}\s+pendingSandboxInput = \[\];\s+\}\s+if \(pendingSandboxEof\) \{\s+sandbox\.eof\?\.\(\);\s+pendingSandboxEof = false;\s+\}\s+\}/s
+		);
+		expect(source).toMatch(
+			/function submitSandboxEof\(\) \{\s+if \(sandbox && sandboxAcceptingInput\) sandbox\.eof\?\.\(\);\s+else pendingSandboxEof = true;\s+\}/s
+		);
+		expect(source).toMatch(
+			/async write\(input: string\) \{\s+await waitForInput\(\);\s+if \(!input\) return;\s+applyPastedText\(input\);/s
 		);
 		expect(source).toMatch(
 			/sandboxAcceptingInput = true;\s+flushPendingSandboxInput\(\);\s+return await runSandbox\(sandbox\.run\(code, false, log, prog, args, options\)\);/s

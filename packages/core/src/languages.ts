@@ -29,7 +29,11 @@ export type WasmIdleLanguageId =
 	| 'RUBY'
 	| 'RB'
 	| 'HASKELL'
-	| 'HS';
+	| 'HS'
+	| 'R'
+	| 'SQLITE'
+	| 'SQL'
+	| 'PHP';
 
 export const supportedLanguageIds = [
 	'PYTHON3',
@@ -52,7 +56,10 @@ export const supportedLanguageIds = [
 	'ZIG',
 	'LISP',
 	'RUBY',
-	'HASKELL'
+	'HASKELL',
+	'R',
+	'SQLITE',
+	'PHP'
 ] as const;
 
 export const DEFAULT_DEFERRED_PROGRESS_LANGUAGES = new Set<string>([
@@ -70,7 +77,10 @@ export const DEFAULT_DEFERRED_PROGRESS_LANGUAGES = new Set<string>([
 	'ZIG',
 	'LISP',
 	'RUBY',
-	'HASKELL'
+	'HASKELL',
+	'R',
+	'SQLITE',
+	'PHP'
 ]);
 
 const LANGUAGE_ALIASES: Record<string, string> = {
@@ -83,7 +93,8 @@ const LANGUAGE_ALIASES: Record<string, string> = {
 	RB: 'RUBY',
 	SCHEME: 'LISP',
 	SCM: 'LISP',
-	TS: 'TYPESCRIPT'
+	TS: 'TYPESCRIPT',
+	SQL: 'SQLITE'
 };
 
 export function normalizeLanguageId(language: string): string {

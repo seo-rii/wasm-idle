@@ -62,6 +62,7 @@
 		finish = true,
 		input = '',
 		pendingSandboxInput: string[] = [],
+		pendingSandboxEof = false,
 		sandbox: BoundSandbox,
 		sandboxAcceptingInput = false,
 		first = true,
@@ -122,6 +123,15 @@
 			}
 			pendingSandboxInput = [];
 		}
+		if (pendingSandboxEof) {
+			sandbox.eof?.();
+			pendingSandboxEof = false;
+		}
+	}
+
+	function submitSandboxEof() {
+		if (sandbox && sandboxAcceptingInput) sandbox.eof?.();
+		else pendingSandboxEof = true;
 	}
 
 	function runSandbox<T>(pr: Promise<T>, reportFinish = true) {
@@ -194,6 +204,7 @@
 			debugOutput = '';
 			input = '';
 			sandboxAcceptingInput = false;
+			pendingSandboxEof = false;
 			first = true;
 			await new Promise((r) => setTimeout(r, 100));
 		},
@@ -244,6 +255,7 @@
 		async destroy() {
 			await wait();
 			sandboxAcceptingInput = false;
+			pendingSandboxEof = false;
 			term?.dispose();
 			if (sandbox) await sandbox.clear();
 		},
@@ -252,6 +264,7 @@
 			stopRequested = true;
 			finish = true;
 			sandboxAcceptingInput = false;
+			pendingSandboxEof = false;
 			if (sandbox?.kill) sandbox.kill();
 			else sandbox?.terminate?.();
 		},
@@ -272,12 +285,13 @@
 		},
 		async write(input: string) {
 			await waitForInput();
+			if (!input) return;
 			applyPastedText(input);
 			if (!input.endsWith('\n') && !input.endsWith('\r')) submitCurrentInput();
 		},
 		async eof() {
 			await waitForInput();
-			sandbox?.eof?.();
+			submitSandboxEof();
 		}
 	};
 
@@ -359,7 +373,7 @@
 				} else if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'd') {
 					ev.preventDefault();
 					if (input.length > 0) submitCurrentInput();
-					sandbox?.eof?.();
+					submitSandboxEof();
 				} else if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'v') {
 					ev.preventDefault();
 					navigator.clipboard.readText().then((text) => {

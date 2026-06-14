@@ -19,6 +19,9 @@ export type EditorDefaultLanguage =
 	| 'lisp'
 	| 'ruby'
 	| 'haskell'
+	| 'r'
+	| 'sqlite'
+	| 'php'
 	| 'rust';
 
 export const editorDefaults: Record<
@@ -39,7 +42,10 @@ export const editorDefaults: Record<
 	| 'zig'
 	| 'lisp'
 	| 'ruby'
-	| 'haskell',
+	| 'haskell'
+	| 'r'
+	| 'sqlite'
+	| 'php',
 	string
 > = {
 	c: `#include <stdio.h>
@@ -301,7 +307,46 @@ factorial n =
 
 main :: IO ()
 main =
-  putStrLn ("factorial_plus_bonus=" ++ show (factorial 4 + bonus))`
+  putStrLn ("factorial_plus_bonus=" ++ show (factorial 4 + bonus))`,
+	r: `bonus <- 3
+
+factorial <- function(n) {
+    if (n <= 1) {
+        return(1)
+    }
+    n * factorial(n - 1)
+}
+
+line <- readLines(stdin(), n = 1, warn = FALSE)
+n <- suppressWarnings(as.integer(if (length(line)) trimws(line[[1]]) else ""))
+if (is.na(n)) n <- 4
+
+cat(sprintf("factorial_plus_bonus=%d\\n", factorial(n) + bonus))`,
+	sqlite: `CREATE TABLE numbers (n INTEGER NOT NULL);
+INSERT INTO numbers VALUES (1), (2), (3), (4);
+
+WITH RECURSIVE factorial(n, value) AS (
+    SELECT 1, 1
+    UNION ALL
+    SELECT n + 1, value * (n + 1)
+    FROM factorial
+    WHERE n < (SELECT max(n) FROM numbers)
+)
+SELECT 'factorial_plus_bonus=' || (value + 3) AS result
+FROM factorial
+ORDER BY n DESC
+LIMIT 1;`,
+	php: `<?php
+const BONUS = 3;
+
+function factorial(int $n): int {
+    return $n <= 1 ? 1 : $n * factorial($n - 1);
+}
+
+$input = trim(file_get_contents('php://input'));
+$n = is_numeric($input) ? intval($input) : (isset($argv[1]) ? intval($argv[1]) : 4);
+echo "factorial_plus_bonus=" . (factorial($n) + BONUS) . "\\n";
+`
 };
 
 export const rustEditorDefaults: Record<RustTargetTriple, string> = {
@@ -435,6 +480,9 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.lisp ||
 		source === editorDefaults.ruby ||
 		source === editorDefaults.haskell ||
+		source === editorDefaults.r ||
+		source === editorDefaults.sqlite ||
+		source === editorDefaults.php ||
 		source === rustEditorDefaults['wasm32-wasip1'] ||
 		source === rustEditorDefaults['wasm32-wasip2'] ||
 		source === rustEditorDefaults['wasm32-wasip3']

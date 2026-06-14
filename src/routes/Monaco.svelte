@@ -789,7 +789,9 @@
 			language === 'lua' ||
 			language === 'zig' ||
 			language === 'lisp' ||
-			language === 'haskell'
+			language === 'haskell' ||
+			language === 'r' ||
+			language === 'cpp'
 				? compilerDiagnostics.map((diagnostic) => ({
 						severity:
 							diagnostic.severity === 'warning'

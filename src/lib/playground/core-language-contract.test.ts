@@ -60,6 +60,25 @@ describe('core language contract', () => {
 		expect(isDeferredProgressLanguage('ruby')).toBe(true);
 	});
 
+	it('exposes R as a deferred browser runtime language', () => {
+		expect(supportedLanguageIds).toContain('R');
+		expect(normalizeLanguageId('r')).toBe('R');
+		expect(isDeferredProgressLanguage('r')).toBe(true);
+	});
+
+	it('exposes SQLite aliases as a deferred browser runtime language', () => {
+		expect(supportedLanguageIds).toContain('SQLITE');
+		expect(normalizeLanguageId('sqlite')).toBe('SQLITE');
+		expect(normalizeLanguageId('sql')).toBe('SQLITE');
+		expect(isDeferredProgressLanguage('sql')).toBe(true);
+	});
+
+	it('exposes PHP as a deferred browser runtime language', () => {
+		expect(supportedLanguageIds).toContain('PHP');
+		expect(normalizeLanguageId('php')).toBe('PHP');
+		expect(isDeferredProgressLanguage('php')).toBe(true);
+	});
+
 	it('exposes AssemblyScript aliases as a deferred browser runtime language', () => {
 		expect(supportedLanguageIds).toContain('ASSEMBLYSCRIPT');
 		expect(normalizeLanguageId('assemblyscript')).toBe('ASSEMBLYSCRIPT');
@@ -86,6 +105,17 @@ describe('core language contract', () => {
 
 		expect(key).toContain('"zigCompilerUrl":"/wasm-zig/zig_small.wasm?v=test"');
 		expect(key).toContain('"zigStdlibUrl":"/wasm-zig/std.zip?v=test"');
+	});
+
+	it('includes R base url in runtime asset cache keys', () => {
+		const key = createRuntimeAssetsKey({
+			rootUrl: '/repl',
+			r: {
+				baseUrl: '/webr/test/'
+			}
+		});
+
+		expect(key).toContain('"rBaseUrl":"/webr/test/"');
 	});
 
 	it('includes WAT module urls in runtime asset cache keys', () => {
@@ -130,5 +160,27 @@ describe('core language contract', () => {
 		});
 
 		expect(key).toContain('"rubyWasmUrl":"/ruby/ruby+stdlib.wasm?v=test"');
+	});
+
+	it('includes SQLite wasm urls in runtime asset cache keys', () => {
+		const key = createRuntimeAssetsKey({
+			rootUrl: '/repl',
+			sqlite: {
+				wasmUrl: '/sqlite/sql-wasm.wasm?v=test'
+			}
+		});
+
+		expect(key).toContain('"sqliteWasmUrl":"/sqlite/sql-wasm.wasm?v=test"');
+	});
+
+	it('includes PHP versions in runtime asset cache keys', () => {
+		const key = createRuntimeAssetsKey({
+			rootUrl: '/repl',
+			php: {
+				version: '8.5'
+			}
+		});
+
+		expect(key).toContain('"phpVersion":"8.5"');
 	});
 });

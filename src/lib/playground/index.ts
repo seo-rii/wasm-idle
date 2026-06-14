@@ -8,9 +8,12 @@ import Java from '$lib/playground/java';
 import Lisp from '$lib/playground/lisp';
 import Lua from '$lib/playground/lua';
 import Ocaml from '$lib/playground/ocaml';
+import Php from '$lib/playground/php';
 import Python from '$lib/playground/python';
+import R from '$lib/playground/r';
 import Rust from '$lib/playground/rust';
 import Ruby from '$lib/playground/ruby';
+import Sqlite from '$lib/playground/sqlite';
 import TinyGo from '$lib/playground/tinygo';
 import TypeScriptSandbox from '$lib/playground/typescript';
 import Wat from '$lib/playground/wat';
@@ -46,7 +49,10 @@ export const supportedLanguages = [
 	'ZIG',
 	'LISP',
 	'RUBY',
-	'HASKELL'
+	'HASKELL',
+	'R',
+	'SQLITE',
+	'PHP'
 ];
 
 export function createPlaygroundBinding(runtimeAssets: SandboxRuntimeAssets): PlaygroundBinding {
@@ -140,6 +146,16 @@ async function playground(language: string, runtimeAssets?: SandboxRuntimeAssets
 		case 'HS':
 			sandbox = new Haskell();
 			break;
+		case 'R':
+			sandbox = new R();
+			break;
+		case 'SQLITE':
+		case 'SQL':
+			sandbox = new Sqlite();
+			break;
+		case 'PHP':
+			sandbox = new Php();
+			break;
 		default:
 			throw new Error(`Unsupported language: ${language}`);
 	}
@@ -183,6 +199,11 @@ async function playground(language: string, runtimeAssets?: SandboxRuntimeAssets
 		if (language === 'HASKELL' || language === 'HS') {
 			sandboxCache['HASKELL'] = sandboxCache['HS'] = sandbox;
 		}
+		if (language === 'R') sandboxCache['R'] = sandbox;
+		if (language === 'SQLITE' || language === 'SQL') {
+			sandboxCache['SQLITE'] = sandboxCache['SQL'] = sandbox;
+		}
+		if (language === 'PHP') sandboxCache['PHP'] = sandbox;
 	}
 	return runtimeAssets ? createPlaygroundBinding(runtimeAssets).load(language) : sandbox;
 }

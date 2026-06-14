@@ -10,6 +10,15 @@ self.addEventListener("fetch", function (event) {
     if (event.request.cache === "only-if-cached" && event.request.mode !== "same-origin") {
         return;
     }
+    const url = new URL(event.request.url);
+    if (
+        url.pathname.includes("/webr/") &&
+        !url.pathname.endsWith("/R.js") &&
+        !url.pathname.endsWith("/webr-worker.js")
+    ) {
+        event.respondWith(fetch(event.request));
+        return;
+    }
 
     event.respondWith(
         fetch(event.request)

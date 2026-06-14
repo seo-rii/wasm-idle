@@ -32,6 +32,12 @@ describe('editor defaults', () => {
 		expect(editorDefaults.lua).toContain('io.read("*l")');
 		expect(editorDefaults.haskell).toContain('factorial :: Int -> Int');
 		expect(editorDefaults.haskell).toContain('putStrLn');
+		expect(editorDefaults.r).toContain('readLines(stdin(), n = 1');
+		expect(editorDefaults.r).toContain('factorial_plus_bonus=%d');
+		expect(editorDefaults.sqlite).toContain('CREATE TABLE numbers');
+		expect(editorDefaults.sqlite).toContain('factorial_plus_bonus=');
+		expect(editorDefaults.php).toContain("file_get_contents('php://input')");
+		expect(editorDefaults.php).toContain('factorial_plus_bonus=');
 		expect(editorDefaults.zig).toContain('std.io.getStdIn().reader()');
 		expect(editorDefaults.zig).toContain('factorial_plus_bonus={d}');
 		expect(editorDefaults.lisp).toContain('(define (factorial n)');
@@ -63,6 +69,9 @@ describe('editor defaults', () => {
 		expect(resolveEditorDefaultSource('wat', 'wasm32-wasip1')).toBe(editorDefaults.wat);
 		expect(resolveEditorDefaultSource('lua', 'wasm32-wasip1')).toBe(editorDefaults.lua);
 		expect(resolveEditorDefaultSource('haskell', 'wasm32-wasip1')).toBe(editorDefaults.haskell);
+		expect(resolveEditorDefaultSource('r', 'wasm32-wasip1')).toBe(editorDefaults.r);
+		expect(resolveEditorDefaultSource('sqlite', 'wasm32-wasip1')).toBe(editorDefaults.sqlite);
+		expect(resolveEditorDefaultSource('php', 'wasm32-wasip1')).toBe(editorDefaults.php);
 		expect(resolveEditorDefaultSource('zig', 'wasm32-wasip1')).toBe(editorDefaults.zig);
 		expect(resolveEditorDefaultSource('lisp', 'wasm32-wasip1')).toBe(editorDefaults.lisp);
 		expect(resolveEditorDefaultSource('haskell', 'wasm32-wasip1')).toBe(editorDefaults.haskell);
@@ -80,6 +89,9 @@ describe('editor defaults', () => {
 		expect(isEditorDefaultSource(editorDefaults.wat)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.lua)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.haskell)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.r)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.sqlite)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.php)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.zig)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.lisp)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.haskell)).toBe(true);

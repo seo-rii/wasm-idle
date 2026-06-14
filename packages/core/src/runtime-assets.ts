@@ -23,6 +23,9 @@ export interface RuntimeAssetKeySource {
 	zig?: { compilerUrl?: string; stdlibUrl?: string };
 	lisp?: { moduleUrl?: string };
 	ruby?: { wasmUrl?: string };
+	r?: { baseUrl?: string };
+	sqlite?: { wasmUrl?: string };
+	php?: { version?: string };
 }
 
 export type RuntimeAssetKeyInput = string | RuntimeAssetKeySource | undefined;
@@ -59,6 +62,9 @@ export function createRuntimeAssetsKey(runtimeAssets: RuntimeAssetKeyInput): str
 		zigCompilerUrl: runtimeAssets.zig?.compilerUrl || '',
 		zigStdlibUrl: runtimeAssets.zig?.stdlibUrl || '',
 		lispModuleUrl: runtimeAssets.lisp?.moduleUrl || '',
-		rubyWasmUrl: runtimeAssets.ruby?.wasmUrl || ''
+		rubyWasmUrl: runtimeAssets.ruby?.wasmUrl || '',
+		rBaseUrl: runtimeAssets.r?.baseUrl || '',
+		sqliteWasmUrl: runtimeAssets.sqlite?.wasmUrl || '',
+		phpVersion: runtimeAssets.php?.version || ''
 	});
 }

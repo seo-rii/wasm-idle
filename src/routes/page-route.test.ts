@@ -211,6 +211,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/: language === 'LISP'\s+\? 'lisp'/);
 		expect(source).toMatch(/: language === 'RUBY'\s+\? 'ruby'/);
 		expect(source).toMatch(/: language === 'HASKELL'\s+\? 'haskell'/);
+		expect(source).toMatch(/: language === 'R'\s+\? 'r'/);
 		expect(source).toMatch(/: 'go'/);
 		expect(source).toMatch(
 			/rustTargetTriple: language === 'RUST' \? rustTargetTriple : undefined/
@@ -269,7 +270,7 @@ describe('example route debug actions', () => {
 			/getEditorValue\(\) \{\s+return editor\?\.getValue\(\) \|\| '';\s+\}/s
 		);
 		expect(source).toMatch(
-			/async setEditorValue\(text: string\) \{\s+if \(!editor\) return false;\s+editor\.setValue\(text\);\s+await Promise\.resolve\(\);\s+return editor\.getValue\(\) === text;\s+\}/s
+			/async setEditorValue\(text: string\) \{\s+if \(!editor\) return false;\s+editor\.setValue\(text\);\s+updateActiveContent\(text\);\s+await Promise\.resolve\(\);\s+return editor\.getValue\(\) === text && activeFile\?\.content === text;\s+\}/s
 		);
 	});
 
@@ -322,11 +323,14 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/<option value="LISP">Scheme<\/option>/);
 		expect(source).toMatch(/<option value="RUBY">Ruby<\/option>/);
 		expect(source).toMatch(/<option value="HASKELL">Haskell<\/option>/);
+		expect(source).toMatch(/<option value="R">R<\/option>/);
+		expect(source).toMatch(/<option value="SQLITE">SQLite<\/option>/);
+		expect(source).toMatch(/<option value="PHP">PHP<\/option>/);
 		expect(source).toMatch(
-			/\{#if language === 'JAVA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'TINYGO' \|\| language === 'JAVASCRIPT' \|\| language === 'TYPESCRIPT' \|\| language === 'LUA' \|\| language === 'ZIG' \|\| language === 'LISP' \|\| language === 'RUBY' \|\| language === 'HASKELL'\}/
+			/\{#if language === 'JAVA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'TINYGO' \|\| language === 'JAVASCRIPT' \|\| language === 'TYPESCRIPT' \|\| language === 'LUA' \|\| language === 'ZIG' \|\| language === 'LISP' \|\| language === 'RUBY' \|\| language === 'HASKELL' \|\| language === 'R' \|\| language === 'PHP'\}/
 		);
 		expect(source).toMatch(
-			/language === 'JAVA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'TINYGO' \|\| language === 'JAVASCRIPT' \|\| language === 'TYPESCRIPT' \|\| language === 'LUA' \|\| language === 'ZIG' \|\| language === 'LISP' \|\| language === 'RUBY' \|\| language === 'HASKELL'/
+			/language === 'JAVA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'TINYGO' \|\| language === 'JAVASCRIPT' \|\| language === 'TYPESCRIPT' \|\| language === 'LUA' \|\| language === 'ZIG' \|\| language === 'LISP' \|\| language === 'RUBY' \|\| language === 'HASKELL' \|\| language === 'R' \|\| language === 'PHP'/
 		);
 		expect(source).toMatch(/Go uses the bundled `wasm-go` browser compiler runtime/);
 		expect(source).toMatch(
@@ -507,6 +511,46 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/language === 'HASKELL' \? 'GHC Args' : 'Args'/);
 		expect(source).toMatch(/Haskell loads a wasm GHC\/GHCi root filesystem/);
 		expect(source).toMatch(/program stdin is currently treated as EOF/);
+	});
+
+	it('surfaces R through the bundled webR runtime contract', () => {
+		expect(source).toMatch(
+			/import \{ WASM_R_ASSET_VERSION \} from '\$lib\/playground\/wasmRVersion';/
+		);
+		expect(source).toMatch(
+			/r: \{\s+baseUrl: path\s+\?\s+`\$\{path\}\/webr\/\$\{WASM_R_ASSET_VERSION\}\/`\s+:\s+`\/webr\/\$\{WASM_R_ASSET_VERSION\}\/`\s+\}/s
+		);
+		expect(source).toMatch(/<option value="R">R<\/option>/);
+		expect(source).toMatch(/r: 'R'/);
+		expect(source).toMatch(/language === 'R'\s+\? 'r'/);
+		expect(source).toMatch(/'.r': 'R'/);
+		expect(source).toMatch(/R: 'main\.R'/);
+		expect(source).toMatch(/R: 'r'/);
+		expect(source).toMatch(/R runs through bundled webR WebAssembly assets/);
+	});
+
+	it('surfaces SQLite through the bundled sql.js worker runtime contract', () => {
+		expect(source).toMatch(/<option value="SQLITE">SQLite<\/option>/);
+		expect(source).toMatch(/sqlite: 'SQLITE'/);
+		expect(source).toMatch(/sql: 'SQLITE'/);
+		expect(source).toMatch(/language ===\s+'SQLITE'\s+\?\s+'sql'/);
+		expect(source).toMatch(/'.sql': 'SQLITE'/);
+		expect(source).toMatch(/'.sqlite': 'SQLITE'/);
+		expect(source).toMatch(/SQLITE: 'main\.sql'/);
+		expect(source).toMatch(/SQLITE: 'sqlite'/);
+		expect(source).toMatch(/SQLite runs through bundled sql\.js WebAssembly assets/);
+		expect(source).toMatch(/SELECT results are printed as tab-separated tables/);
+	});
+
+	it('surfaces PHP through the php-wasm browser runtime contract', () => {
+		expect(source).toMatch(/<option value="PHP">PHP<\/option>/);
+		expect(source).toMatch(/php: 'PHP'/);
+		expect(source).toMatch(/language ===\s+'PHP'\s+\?\s+'php'/);
+		expect(source).toMatch(/'.php': 'PHP'/);
+		expect(source).toMatch(/PHP: 'main\.php'/);
+		expect(source).toMatch(/PHP: 'php'/);
+		expect(source).toMatch(/PHP runs through `@php-wasm\/web` in the browser worker/);
+		expect(source).toMatch(/stdin is provided as `php:\/\/input`/);
 	});
 
 	it('surfaces Elixir through the shared language selector and Popcorn hint', () => {
