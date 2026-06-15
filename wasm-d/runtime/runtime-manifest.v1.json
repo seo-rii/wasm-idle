@@ -1,0 +1,40 @@
+{
+  "manifestVersion": 1,
+  "name": "wasm-d",
+  "version": "ldc-1.42.0-wasi-smoke",
+  "defaultTarget": "wasm32-wasi",
+  "compiler": {
+    "ldc2": {
+      "asset": "bin/ldc2.wasm.gz",
+      "argv0": "ldc2",
+      "compression": "gzip"
+    },
+    "toolchain": {
+      "asset": "toolchain/toolchain.tar.gz",
+      "compression": "gzip"
+    },
+    "linker": {
+      "kind": "emscripten-lld",
+      "argv0": "wasm-ld",
+      "js": {
+        "asset": "bin/lld.js"
+      },
+      "wasm": {
+        "asset": "bin/lld.wasm.gz",
+        "compression": "gzip"
+      },
+      "data": {
+        "asset": "bin/lld.data.gz",
+        "compression": "gzip"
+      }
+    }
+  },
+  "targets": {
+    "wasm32-wasi": {
+      "artifactFormat": "wasi-core-wasm",
+      "execution": {
+        "kind": "wasi-preview1"
+      }
+    }
+  }
+}

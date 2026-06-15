@@ -1,0 +1,1 @@
+var e=``+new URL(`../assets/intl-CHkDcS7E.so`,import.meta.url).href;export{e as default};

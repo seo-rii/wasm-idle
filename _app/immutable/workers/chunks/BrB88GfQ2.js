@@ -1,0 +1,1 @@
+var e=``+new URL(`../assets/icu-_xyRJXmL.dat`,import.meta.url).href;export{e as default};

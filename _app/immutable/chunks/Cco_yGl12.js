@@ -1,0 +1,1 @@
+function e(e){return new Worker(``+new URL(`../workers/r-1SW1vm0n.js`,import.meta.url).href,{type:`module`,name:e?.name})}export{e as default};

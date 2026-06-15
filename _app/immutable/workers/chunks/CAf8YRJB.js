@@ -1,0 +1,1 @@
+import{t as e}from"./C4gGJF5P.js";async function t(){return await e()?await import(`./B1tqgJzq.js`):await import(`./WIXoG7eI.js`)}export{t as getPHPLoaderModule};

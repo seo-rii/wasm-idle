@@ -1,0 +1,1 @@
+{"version":3,"file":"tar.d.ts","sourceRoot":"","sources":["../../src/tar.ts"],"names":[],"mappings":"AAAA,MAAM,WAAW,QAAQ;IACxB,IAAI,EAAE,MAAM,CAAC;IACb,IAAI,EAAE,MAAM,GAAG,WAAW,CAAC;IAC3B,KAAK,EAAE,UAAU,CAAC;CAClB;AA0BD,wBAAgB,QAAQ,CAAC,KAAK,EAAE,UAAU,GAAG,WAAW,GAAG,QAAQ,EAAE,CAwBpE"}

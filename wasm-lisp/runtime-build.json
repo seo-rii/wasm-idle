@@ -1,0 +1,6 @@
+{
+  "upstream": "puppy-scheme",
+  "upstreamRelease": "v0.0.7",
+  "compiler": "puppyc.wasm",
+  "fingerprint": "5cff5dcde4105ee1"
+}

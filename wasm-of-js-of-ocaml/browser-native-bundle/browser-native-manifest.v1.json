@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "generatedAt": "2026-04-11T03:46:30.056Z",
-  "switchPrefix": "/home/seorii/.cache/wasm-of-js-of-ocaml/opam/wasm-of-js-of-ocaml",
+  "generatedAt": "2026-06-15T10:44:48.793Z",
+  "switchPrefix": "/home/seorii/.cache/wasm-of-js-of-ocaml/opam/wasm-of-js-of-ocaml-5.4.1",
   "findlibConf": "/wasm-of-js-of-ocaml/browser-native-bundle/findlib.conf",
   "tools": {
     "ocamlc": "/wasm-of-js-of-ocaml/browser-native-bundle/tools/ocamlc.byte.browser.js",
@@ -15,10 +15,10 @@
   },
   "toolPatches": {
     "version_dune_static_placeholder": {
-      "path": "/home/seorii/.cache/wasm-of-js-of-ocaml/opam/wasm-of-js-of-ocaml/.opam-switch/sources/wasm_of_ocaml-compiler.6.3.2/tools/version/dune",
+      "path": "/home/seorii/.cache/wasm-of-js-of-ocaml/opam/wasm-of-js-of-ocaml-5.4.1/.opam-switch/sources/js_of_ocaml-compiler.6.3.2/tools/version/dune",
       "placeholderVersion": "6.3.2",
-      "alreadyPatched": true,
-      "sourceSha256": "493d9b2ad5a7d31050337a97cb79a92846d94f6ad81edf53f486cd5e52cb0a47",
+      "alreadyPatched": false,
+      "sourceSha256": "d87f844a1737ad4bc2ad89b6200303c80b18734e1ac802026daa7d359bb71101",
       "patchedSha256": "493d9b2ad5a7d31050337a97cb79a92846d94f6ad81edf53f486cd5e52cb0a47"
     },
     "wasm_of_ocaml_binaryen_bridge": {
@@ -26,28 +26,28 @@
       "bridgeSymbol": "globalThis.__wasm_of_js_system_command",
       "systemFunctionName": "px",
       "alreadyPatched": false,
-      "sourceSha256": "fabe970b0a495ca9d9ef6d2450b769391d34dee2b7d09fb4273e47dbdfea6a7a",
-      "patchedSha256": "e9c8a26fe18bc3a0ecd78823bd6cc8711b6b8b41303ad4f321b47c4fd9567a84"
+      "sourceSha256": "303aa68b4b6b19c1eeac1c5a96dca6addfb10ce4aca42810db0ce1a28e1af551",
+      "patchedSha256": "666b83417cdf9b0aab3b3933529e48432953763c0385a26605c84efbfaab2e76"
     },
     "browser_binaryen_tools": [
       {
         "tool": "wasm-opt",
-        "sourcePath": "/home/seorii/dev/hancomac/wasm-of-js-of-ocaml/node_modules/binaryen/bin/wasm-opt",
-        "outPath": "/home/seorii/dev/hancomac/wasm-of-js-of-ocaml/wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-opt.browser.js",
+        "sourcePath": "/home/seorii/dev/hancomac/wasm-idle/runtimes/wasm-of-js-of-ocaml/node_modules/binaryen/bin/wasm-opt",
+        "outPath": "/home/seorii/dev/hancomac/wasm-idle/runtimes/wasm-of-js-of-ocaml/wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-opt.browser.js",
         "sourceSha256": "c1c8014d0222245e69f16a25156cb21cb418f19177581f7f4c58ceb3c7571b9b",
         "patchedSha256": "c20aa56b52da835ec997a15599971c59114ed2665c030b04a55b8f093964a20f"
       },
       {
         "tool": "wasm-merge",
-        "sourcePath": "/home/seorii/dev/hancomac/wasm-of-js-of-ocaml/node_modules/binaryen/bin/wasm-merge",
-        "outPath": "/home/seorii/dev/hancomac/wasm-of-js-of-ocaml/wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-merge.browser.js",
+        "sourcePath": "/home/seorii/dev/hancomac/wasm-idle/runtimes/wasm-of-js-of-ocaml/node_modules/binaryen/bin/wasm-merge",
+        "outPath": "/home/seorii/dev/hancomac/wasm-idle/runtimes/wasm-of-js-of-ocaml/wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-merge.browser.js",
         "sourceSha256": "d0c1d9cd2beb4e28f250c26139216dd5eb5d9b3e70b76a3fb90cff1822930094",
         "patchedSha256": "be81efabcf5d87ad5622a4577169841600ffef431e9bf095899580f5516753c7"
       },
       {
         "tool": "wasm-metadce",
-        "sourcePath": "/home/seorii/dev/hancomac/wasm-of-js-of-ocaml/node_modules/binaryen/bin/wasm-metadce",
-        "outPath": "/home/seorii/dev/hancomac/wasm-of-js-of-ocaml/wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-metadce.browser.js",
+        "sourcePath": "/home/seorii/dev/hancomac/wasm-idle/runtimes/wasm-of-js-of-ocaml/node_modules/binaryen/bin/wasm-metadce",
+        "outPath": "/home/seorii/dev/hancomac/wasm-idle/runtimes/wasm-of-js-of-ocaml/wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-metadce.browser.js",
         "sourceSha256": "12fe224e09099a71c84eabf468ea04243604ac4d49de5b54bef9ea1af94a9364",
         "patchedSha256": "b8badf17dbf6094dbf2e207beff6706deff918e4e1b4622e455d8ec04fa98cdd"
       }
@@ -58,656 +58,656 @@
     "asset": "/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-runtime-pack.v1.bin.gz",
     "index": "/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-runtime-pack.v1.index.json",
     "fileCount": 509,
-    "totalBytes": 62298713
+    "totalBytes": 24453239
   },
   "ocamlLibFiles": [
     {
       "path": "/static/toolchain/lib/ocaml/camlinternalFormat.cmi",
-      "size": 7785
+      "size": 3103
     },
     {
       "path": "/static/toolchain/lib/ocaml/camlinternalFormatBasics.cmi",
-      "size": 24105
+      "size": 8272
     },
     {
       "path": "/static/toolchain/lib/ocaml/camlinternalLazy.cmi",
-      "size": 718
+      "size": 537
     },
     {
       "path": "/static/toolchain/lib/ocaml/camlinternalMod.cmi",
-      "size": 981
+      "size": 697
     },
     {
       "path": "/static/toolchain/lib/ocaml/camlinternalOO.cmi",
-      "size": 8335
+      "size": 3152
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/afl_instrument.cmi",
-      "size": 1927
+      "size": 1773
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/alias_analysis.cmi",
-      "size": 4490
+      "size": 3235
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/allocated_const.cmi",
-      "size": 1475
+      "size": 979
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/annot.cmi",
-      "size": 1054
+      "size": 902
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/arch.cmi",
-      "size": 4751
+      "size": 2947
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/arg_helper.cmi",
-      "size": 9948
+      "size": 3509
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/asmgen.cmi",
-      "size": 4494
+      "size": 3583
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/asmlibrarian.cmi",
-      "size": 1187
+      "size": 913
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/asmlink.cmi",
-      "size": 4605
+      "size": 3415
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/asmpackager.cmi",
-      "size": 3421
+      "size": 2944
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/ast_helper.cmi",
-      "size": 56016
+      "size": 13798
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/ast_invariants.cmi",
-      "size": 1273
+      "size": 1053
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/ast_iterator.cmi",
-      "size": 8121
+      "size": 2841
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/ast_mapper.cmi",
-      "size": 11025
+      "size": 3889
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/asttypes.cmi",
-      "size": 3554
+      "size": 1965
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/attr_helper.cmi",
-      "size": 1605
+      "size": 1232
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/augment_specialised_args.cmi",
-      "size": 4365
+      "size": 3405
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/backend_intf.cmi",
-      "size": 3016
+      "size": 2734
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/backend_var.cmi",
-      "size": 7033
+      "size": 3258
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/binutils.cmi",
-      "size": 1204
+      "size": 814
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/branch_relaxation_intf.cmi",
-      "size": 3274
+      "size": 2520
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/branch_relaxation.cmi",
-      "size": 2036
+      "size": 1974
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/btype.cmi",
-      "size": 39422
+      "size": 12823
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/build_export_info.cmi",
-      "size": 2570
+      "size": 2514
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/build_path_prefix_map.cmi",
-      "size": 1865
+      "size": 916
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/builtin_attributes.cmi",
-      "size": 5461
+      "size": 2612
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/bytegen.cmi",
-      "size": 2017
+      "size": 1796
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/bytelibrarian.cmi",
-      "size": 1282
+      "size": 967
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/bytelink.cmi",
-      "size": 9910
+      "size": 4608
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/bytepackager.cmi",
-      "size": 2571
+      "size": 2118
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/bytesections.cmi",
-      "size": 2642
+      "size": 1358
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/camlinternalMenhirLib.cmi",
-      "size": 56520
+      "size": 19153
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/ccomp.cmi",
-      "size": 1495
+      "size": 832
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/clambda_primitives.cmi",
-      "size": 12689
+      "size": 5521
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/clambda.cmi",
-      "size": 10310
+      "size": 5015
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/clflags.cmi",
-      "size": 26027
+      "size": 9215
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/closure_conversion_aux.cmi",
-      "size": 5873
+      "size": 3332
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/closure_conversion.cmi",
-      "size": 2621
+      "size": 2536
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/closure_element.cmi",
-      "size": 21295
+      "size": 7072
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/closure_id.cmi",
-      "size": 21327
+      "size": 7124
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/closure_middle_end.cmi",
-      "size": 2711
+      "size": 2618
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/closure_offsets.cmi",
-      "size": 2604
+      "size": 2480
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/closure_origin.cmi",
-      "size": 20638
+      "size": 6934
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/closure.cmi",
-      "size": 2678
+      "size": 2589
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/cmi_format.cmi",
-      "size": 2852
+      "size": 2125
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/cmm_helpers.cmi",
-      "size": 36506
+      "size": 11255
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/cmm_invariants.cmi",
-      "size": 1722
+      "size": 1683
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/cmm.cmi",
-      "size": 14229
+      "size": 6377
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/cmmgen_state.cmi",
-      "size": 3474
+      "size": 2458
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/cmmgen.cmi",
-      "size": 1878
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/cmo_format.cmi",
-      "size": 2649
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/cmt_format.cmi",
-      "size": 6355
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/cmt2annot.cmi",
-      "size": 2157
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/cmx_format.cmi",
-      "size": 3886
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/cmxs_format.cmi",
-      "size": 1131
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/coloring.cmi",
-      "size": 340
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/comballoc.cmi",
-      "size": 1797
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/compenv.cmi",
-      "size": 4827
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/compilation_unit.cmi",
-      "size": 20362
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/compile_common.cmi",
-      "size": 3188
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/compile.cmi",
-      "size": 2503
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/compilenv.cmi",
-      "size": 8083
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/compmisc.cmi",
-      "size": 2382
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/compression.cmi",
-      "size": 539
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/config_boot.cmi",
-      "size": 6226
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/config_main.cmi",
-      "size": 6226
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/config.cmi",
-      "size": 6211
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/consistbl.cmi",
-      "size": 19758
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/convert_primitives.cmi",
-      "size": 1671
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/CSE.cmi",
-      "size": 1779
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/CSEgen.cmi",
-      "size": 2712
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/ctype.cmi",
-      "size": 32967
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/data_types.cmi",
-      "size": 4078
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/dataflow.cmi",
-      "size": 2613
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/datarepr.cmi",
-      "size": 2451
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/deadcode.cmi",
       "size": 1794
     },
     {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/cmo_format.cmi",
+      "size": 1378
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/cmt_format.cmi",
+      "size": 3630
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/cmt2annot.cmi",
+      "size": 1924
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/cmx_format.cmi",
+      "size": 3150
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/cmxs_format.cmi",
+      "size": 752
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/coloring.cmi",
+      "size": 317
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/comballoc.cmi",
+      "size": 1766
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/compenv.cmi",
+      "size": 2410
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/compilation_unit.cmi",
+      "size": 6134
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/compile_common.cmi",
+      "size": 2300
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/compile.cmi",
+      "size": 2134
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/compilenv.cmi",
+      "size": 4654
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/compmisc.cmi",
+      "size": 2000
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/compression.cmi",
+      "size": 425
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/config_boot.cmi",
+      "size": 2524
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/config_main.cmi",
+      "size": 2523
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/config.cmi",
+      "size": 2515
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/consistbl.cmi",
+      "size": 6669
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/convert_primitives.cmi",
+      "size": 1614
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/CSE.cmi",
+      "size": 1754
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/CSEgen.cmi",
+      "size": 2263
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/ctype.cmi",
+      "size": 10813
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/data_types.cmi",
+      "size": 2469
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/dataflow.cmi",
+      "size": 2209
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/datarepr.cmi",
+      "size": 1749
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/deadcode.cmi",
+      "size": 1764
+    },
+    {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/debuginfo.cmi",
-      "size": 4395
+      "size": 2316
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/depend.cmi",
-      "size": 2702
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/diffing_with_keys.cmi",
-      "size": 4810
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/diffing.cmi",
-      "size": 4582
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/dll.cmi",
-      "size": 1722
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/docstrings.cmi",
-      "size": 8311
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/domainstate.cmi",
-      "size": 4446
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/effect_analysis.cmi",
-      "size": 2425
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/emit.cmi",
-      "size": 2119
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/emitaux.cmi",
-      "size": 8031
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/emitcode.cmi",
-      "size": 2953
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/emitenv.cmi",
-      "size": 4154
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/env.cmi",
-      "size": 39275
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/envaux.cmi",
-      "size": 2156
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/errors.cmi",
-      "size": 563
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/errortrace_report.cmi",
-      "size": 3312
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/errortrace.cmi",
-      "size": 10161
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/export_id.cmi",
-      "size": 19789
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/export_info_for_pack.cmi",
-      "size": 2679
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/export_info.cmi",
-      "size": 11201
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/expunge.cmi",
-      "size": 297
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/extract_projections.cmi",
-      "size": 2795
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/find_recursive_functions.cmi",
-      "size": 2576
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/flambda_invariants.cmi",
-      "size": 2538
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/flambda_iterators.cmi",
-      "size": 10074
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/flambda_middle_end.cmi",
-      "size": 2711
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/flambda_to_clambda.cmi",
-      "size": 3075
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/flambda_utils.cmi",
-      "size": 8824
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/flambda.cmi",
-      "size": 41945
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/format_doc.cmi",
-      "size": 16764
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/freshening.cmi",
-      "size": 6885
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/genprintval.cmi",
-      "size": 6242
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/gprinttyp.cmi",
-      "size": 7489
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/id_types.cmi",
-      "size": 4141
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/ident.cmi",
-      "size": 22867
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/identifiable.cmi",
-      "size": 57296
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/import_approx.cmi",
-      "size": 2651
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/includeclass.cmi",
-      "size": 2657
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/includecore.cmi",
-      "size": 8834
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/includemod_errorprinter.cmi",
-      "size": 2165
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/includemod.cmi",
-      "size": 25348
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/inconstant_idents.cmi",
-      "size": 2917
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/initialize_symbol_to_let_symbol.cmi",
-      "size": 2532
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/inline_and_simplify_aux.cmi",
-      "size": 15429
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/inline_and_simplify.cmi",
-      "size": 3212
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/inlining_cost.cmi",
-      "size": 7360
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/inlining_decision_intf.cmi",
-      "size": 4003
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/inlining_decision.cmi",
-      "size": 3600
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/inlining_stats_types.cmi",
-      "size": 5641
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/inlining_stats.cmi",
-      "size": 3417
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/inlining_transforms.cmi",
-      "size": 4482
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/instruct.cmi",
-      "size": 8633
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/int_replace_polymorphic_compare.cmi",
-      "size": 1049
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/interf.cmi",
-      "size": 1788
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/internal_variable_names.cmi",
-      "size": 6926
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/interval.cmi",
-      "size": 2883
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/invariant_params.cmi",
-      "size": 2954
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/lambda.cmi",
-      "size": 30179
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/lazy_backtrack.cmi",
-      "size": 1581
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/lexer.cmi",
-      "size": 3921
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/lift_code.cmi",
-      "size": 2903
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/lift_constants.cmi",
-      "size": 2516
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/lift_let_to_initialize_symbol.cmi",
-      "size": 2550
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/linear_format.cmi",
-      "size": 2519
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/linear.cmi",
-      "size": 4756
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/linearize.cmi",
-      "size": 1830
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/linkage_name.cmi",
-      "size": 19450
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/linkdeps.cmi",
-      "size": 2287
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/linscan.cmi",
-      "size": 1852
-    },
-    {
-      "path": "/static/toolchain/lib/ocaml/compiler-libs/liveness.cmi",
       "size": 1790
     },
     {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/diffing_with_keys.cmi",
+      "size": 2386
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/diffing.cmi",
+      "size": 2314
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/dll.cmi",
+      "size": 937
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/docstrings.cmi",
+      "size": 3029
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/domainstate.cmi",
+      "size": 2026
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/effect_analysis.cmi",
+      "size": 2354
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/emit.cmi",
+      "size": 1952
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/emitaux.cmi",
+      "size": 4077
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/emitcode.cmi",
+      "size": 2322
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/emitenv.cmi",
+      "size": 2834
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/env.cmi",
+      "size": 12347
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/envaux.cmi",
+      "size": 1874
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/errors.cmi",
+      "size": 533
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/errortrace_report.cmi",
+      "size": 2143
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/errortrace.cmi",
+      "size": 4729
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/export_id.cmi",
+      "size": 5978
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/export_info_for_pack.cmi",
+      "size": 2559
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/export_info.cmi",
+      "size": 5422
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/expunge.cmi",
+      "size": 281
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/extract_projections.cmi",
+      "size": 2685
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/find_recursive_functions.cmi",
+      "size": 2501
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/flambda_invariants.cmi",
+      "size": 2447
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/flambda_iterators.cmi",
+      "size": 4453
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/flambda_middle_end.cmi",
+      "size": 2614
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/flambda_to_clambda.cmi",
+      "size": 2825
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/flambda_utils.cmi",
+      "size": 4657
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/flambda.cmi",
+      "size": 14437
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/format_doc.cmi",
+      "size": 5970
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/freshening.cmi",
+      "size": 3883
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/genprintval.cmi",
+      "size": 3361
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/gprinttyp.cmi",
+      "size": 3568
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/id_types.cmi",
+      "size": 1925
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/ident.cmi",
+      "size": 6805
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/identifiable.cmi",
+      "size": 16664
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/import_approx.cmi",
+      "size": 2506
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/includeclass.cmi",
+      "size": 2009
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/includecore.cmi",
+      "size": 4452
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/includemod_errorprinter.cmi",
+      "size": 2001
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/includemod.cmi",
+      "size": 9688
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/inconstant_idents.cmi",
+      "size": 2687
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/initialize_symbol_to_let_symbol.cmi",
+      "size": 2418
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/inline_and_simplify_aux.cmi",
+      "size": 6703
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/inline_and_simplify.cmi",
+      "size": 2913
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/inlining_cost.cmi",
+      "size": 4216
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/inlining_decision_intf.cmi",
+      "size": 3123
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/inlining_decision.cmi",
+      "size": 3059
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/inlining_stats_types.cmi",
+      "size": 3689
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/inlining_stats.cmi",
+      "size": 2870
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/inlining_transforms.cmi",
+      "size": 3308
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/instruct.cmi",
+      "size": 4392
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/int_replace_polymorphic_compare.cmi",
+      "size": 563
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/interf.cmi",
+      "size": 1775
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/internal_variable_names.cmi",
+      "size": 3560
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/interval.cmi",
+      "size": 2302
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/invariant_params.cmi",
+      "size": 2665
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/lambda.cmi",
+      "size": 11640
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/lazy_backtrack.cmi",
+      "size": 878
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/lexer.cmi",
+      "size": 2216
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/lift_code.cmi",
+      "size": 2616
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/lift_constants.cmi",
+      "size": 2464
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/lift_let_to_initialize_symbol.cmi",
+      "size": 2494
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/linear_format.cmi",
+      "size": 2204
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/linear.cmi",
+      "size": 3166
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/linearize.cmi",
+      "size": 1793
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/linkage_name.cmi",
+      "size": 5731
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/linkdeps.cmi",
+      "size": 1306
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/linscan.cmi",
+      "size": 1830
+    },
+    {
+      "path": "/static/toolchain/lib/ocaml/compiler-libs/liveness.cmi",
+      "size": 1768
+    },
+    {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/load_path.cmi",
-      "size": 3398
+      "size": 1491
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/local_store.cmi",
-      "size": 910
+      "size": 619
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/location.cmi",
-      "size": 13881
+      "size": 4970
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/longident.cmi",
-      "size": 1734
+      "size": 1217
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/mach.cmi",
-      "size": 9147
+      "size": 4742
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/main_args.cmi",
-      "size": 59550
+      "size": 15777
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/main.cmi",
-      "size": 181
+      "size": 180
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/main.cmo",
-      "size": 2861
+      "size": 1696
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/maindriver.cmi",
-      "size": 592
+      "size": 547
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/makedepend.cmi",
-      "size": 402
+      "size": 346
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/matching.cmi",
-      "size": 4605
+      "size": 2553
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/META",
@@ -715,579 +715,579 @@
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/meta.cmi",
-      "size": 2896
+      "size": 2279
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/misc.cmi",
-      "size": 52849
+      "size": 17876
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/mtype.cmi",
-      "size": 4132
+      "size": 2352
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/mutable_variable.cmi",
-      "size": 21863
+      "size": 7298
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/numbers.cmi",
-      "size": 37491
+      "size": 11119
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/ocamlbytecomp.cma",
-      "size": 494863
+      "size": 269977
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/ocamlcommon.cma",
-      "size": 21292152
+      "size": 9874772
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/ocamlmiddleend.cma",
-      "size": 3918971
+      "size": 1991145
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/ocamloptcomp.cma",
-      "size": 6759577
+      "size": 3451447
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/ocamltoplevel.cma",
-      "size": 463551
+      "size": 248755
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/opcodes.cmi",
-      "size": 10867
+      "size": 3610
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/oprint.cmi",
-      "size": 2635
+      "size": 1634
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/optcompile.cmi",
-      "size": 3290
+      "size": 2934
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/opterrors.cmi",
-      "size": 572
+      "size": 536
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/optmain.cmi",
-      "size": 187
+      "size": 186
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/optmain.cmo",
-      "size": 2877
+      "size": 1709
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/optmaindriver.cmi",
-      "size": 601
+      "size": 553
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/out_type.cmi",
-      "size": 11307
+      "size": 4884
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/outcometree.cmi",
-      "size": 12005
+      "size": 5049
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/parameter.cmi",
-      "size": 21198
+      "size": 7098
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/parmatch.cmi",
-      "size": 5911
+      "size": 3193
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/parse.cmi",
-      "size": 2552
+      "size": 1393
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/parser.cmi",
-      "size": 18985
+      "size": 7305
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/parsetree.cmi",
-      "size": 39105
+      "size": 13851
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/pass_wrapper.cmi",
-      "size": 1027
+      "size": 767
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/path.cmi",
-      "size": 16492
+      "size": 5627
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/patterns.cmi",
-      "size": 9574
+      "size": 4276
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/persistent_env.cmi",
-      "size": 8329
+      "size": 4110
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/polling.cmi",
-      "size": 2110
+      "size": 1962
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/pparse.cmi",
-      "size": 3420
+      "size": 1907
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/pprintast.cmi",
-      "size": 4808
+      "size": 1996
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/predef.cmi",
-      "size": 6867
+      "size": 3136
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/primitive.cmi",
-      "size": 3589
+      "size": 2056
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/printast.cmi",
-      "size": 1921
+      "size": 1225
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/printclambda_primitives.cmi",
-      "size": 1729
+      "size": 1652
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/printclambda.cmi",
-      "size": 2247
+      "size": 1924
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/printcmm.cmi",
-      "size": 3456
+      "size": 2293
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/printinstr.cmi",
-      "size": 1837
+      "size": 1702
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/printlambda.cmi",
-      "size": 3274
+      "size": 2176
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/printlinear.cmi",
-      "size": 2021
+      "size": 1912
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/printmach.cmi",
-      "size": 3622
+      "size": 2393
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/printpat.cmi",
-      "size": 2356
+      "size": 1931
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/printtyp.cmi",
-      "size": 6048
+      "size": 3004
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/printtyped.cmi",
-      "size": 1960
+      "size": 1745
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/proc.cmi",
-      "size": 4287
+      "size": 2734
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/profile.cmi",
-      "size": 1600
+      "size": 1033
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/projection.cmi",
-      "size": 22500
+      "size": 7553
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/rawprinttyp.cmi",
-      "size": 1265
+      "size": 1222
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/ref_to_variables.cmi",
-      "size": 2336
+      "size": 2306
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/reg.cmi",
-      "size": 19227
+      "size": 7224
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/reload.cmi",
-      "size": 1881
+      "size": 1813
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/reloadgen.cmi",
-      "size": 2991
+      "size": 2244
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/remove_free_vars_equal_to_args.cmi",
-      "size": 2470
+      "size": 2386
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/remove_unused_arguments.cmi",
-      "size": 2789
+      "size": 2580
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/remove_unused_closure_vars.cmi",
-      "size": 2447
+      "size": 2363
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/remove_unused_program_constructs.cmi",
-      "size": 2406
+      "size": 2322
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/runtimedef.cmi",
-      "size": 404
+      "size": 359
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/schedgen.cmi",
-      "size": 3750
+      "size": 2638
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/scheduling.cmi",
-      "size": 1829
+      "size": 1797
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/selectgen.cmi",
-      "size": 10100
+      "size": 4573
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/selection.cmi",
-      "size": 1873
+      "size": 1833
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/semantics_of_primitives.cmi",
-      "size": 2351
+      "size": 1967
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/set_of_closures_id.cmi",
-      "size": 19816
+      "size": 5991
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/set_of_closures_origin.cmi",
-      "size": 19868
+      "size": 6034
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/shape_reduce.cmi",
-      "size": 2801
+      "size": 2114
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/shape.cmi",
-      "size": 37360
+      "size": 11350
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/share_constants.cmi",
-      "size": 2335
+      "size": 2288
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/signature_group.cmi",
-      "size": 3185
+      "size": 2036
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/simple_value_approx.cmi",
-      "size": 22488
+      "size": 9235
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/simplif.cmi",
-      "size": 2060
+      "size": 1817
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/simplify_boxed_integer_ops_intf.cmi",
-      "size": 3545
+      "size": 2858
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/simplify_boxed_integer_ops.cmi",
-      "size": 5497
+      "size": 3437
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/simplify_common.cmi",
-      "size": 4474
+      "size": 3119
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/simplify_primitives.cmi",
-      "size": 2823
+      "size": 2608
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/spill.cmi",
-      "size": 1785
+      "size": 1760
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/split.cmi",
-      "size": 1877
+      "size": 1822
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/stackframe.cmi",
-      "size": 1930
+      "size": 1886
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/stackframegen.cmi",
-      "size": 2781
+      "size": 2294
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/static_exception.cmi",
-      "size": 19481
+      "size": 5751
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/strmatch.cmi",
-      "size": 2429
+      "size": 1991
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/strongly_connected_components.cmi",
-      "size": 1811
+      "size": 1257
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/stypes.cmi",
-      "size": 2645
+      "size": 2131
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/subst.cmi",
-      "size": 12575
+      "size": 4989
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/switch.cmi",
-      "size": 5093
+      "size": 2157
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/symbol.cmi",
-      "size": 21264
+      "size": 7049
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/symtable.cmi",
-      "size": 42187
+      "size": 13585
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/syntaxerr.cmi",
-      "size": 2187
+      "size": 1428
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/tag.cmi",
-      "size": 19591
+      "size": 5798
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/targetint.cmi",
-      "size": 4749
+      "size": 1929
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/tast_iterator.cmi",
-      "size": 8238
+      "size": 3512
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/tast_mapper.cmi",
-      "size": 8817
+      "size": 3755
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/terminfo.cmi",
-      "size": 1012
+      "size": 644
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/thread_sanitizer.cmi",
-      "size": 1921
+      "size": 1766
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/tmc.cmi",
-      "size": 1559
+      "size": 1533
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/topcommon.cmi",
-      "size": 14177
+      "size": 6101
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/topdirs.cmi",
-      "size": 2459
+      "size": 1373
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/topeval.cmi",
-      "size": 7176
+      "size": 3631
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/tophooks.cmi",
-      "size": 2325
+      "size": 2097
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/toploop.cmi",
-      "size": 12115
+      "size": 5191
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/topmain.cmi",
-      "size": 301
+      "size": 285
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/topprinters.cmi",
-      "size": 2356
+      "size": 1967
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/topstart.cmi",
-      "size": 189
+      "size": 188
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/topstart.cmo",
-      "size": 2540
+      "size": 1361
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/trace.cmi",
-      "size": 2940
+      "size": 2156
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/translattribute.cmi",
-      "size": 3310
+      "size": 2192
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/translclass.cmi",
-      "size": 2427
+      "size": 2072
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/translcore.cmi",
-      "size": 4172
+      "size": 2679
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/translmod.cmi",
-      "size": 4807
+      "size": 2916
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/translobj.cmi",
-      "size": 3175
+      "size": 2199
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/translprim.cmi",
-      "size": 3838
+      "size": 2511
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/traverse_for_exported_symbols.cmi",
-      "size": 3768
+      "size": 3007
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/type_immediacy.cmi",
-      "size": 1451
+      "size": 1186
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/typeclass.cmi",
-      "size": 8631
+      "size": 4396
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/typecore.cmi",
-      "size": 20375
+      "size": 8607
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/typedecl_immediacy.cmi",
-      "size": 2271
+      "size": 1929
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/typedecl_properties.cmi",
-      "size": 2917
+      "size": 2115
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/typedecl_separability.cmi",
-      "size": 2623
+      "size": 2096
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/typedecl_unboxed.cmi",
-      "size": 1626
+      "size": 1561
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/typedecl_variance.cmi",
-      "size": 5399
+      "size": 3136
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/typedecl.cmi",
-      "size": 9091
+      "size": 4647
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/typedtree.cmi",
-      "size": 50992
+      "size": 18567
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/typemod.cmi",
-      "size": 9799
+      "size": 5155
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/typeopt.cmi",
-      "size": 3423
+      "size": 2312
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/types.cmi",
-      "size": 59379
+      "size": 20680
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/typetexp.cmi",
-      "size": 6684
+      "size": 3635
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/un_anf.cmi",
-      "size": 1953
+      "size": 1896
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/unbox_closures.cmi",
-      "size": 3093
+      "size": 2807
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/unbox_free_vars_of_closures.cmi",
-      "size": 2778
+      "size": 2671
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/unbox_specialised_args.cmi",
-      "size": 3117
+      "size": 2814
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/unit_info.cmi",
-      "size": 4031
+      "size": 1676
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/untypeast.cmi",
-      "size": 9873
+      "size": 4138
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/value_rec_check.cmi",
-      "size": 1911
+      "size": 1748
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/value_rec_compiler.cmi",
-      "size": 1803
+      "size": 1692
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/value_rec_types.cmi",
-      "size": 386
+      "size": 356
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/var_within_closure.cmi",
-      "size": 21343
+      "size": 7134
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/variable.cmi",
-      "size": 39244
+      "size": 12292
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/warnings.cmi",
-      "size": 10752
+      "size": 4891
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/x86_ast.cmi",
-      "size": 14378
+      "size": 5402
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/x86_dsl.cmi",
-      "size": 17871
+      "size": 5342
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/x86_gas.cmi",
-      "size": 418
+      "size": 377
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/x86_masm.cmi",
-      "size": 421
+      "size": 381
     },
     {
       "path": "/static/toolchain/lib/ocaml/compiler-libs/x86_proc.cmi",
-      "size": 3719
+      "size": 1733
     },
     {
       "path": "/static/toolchain/lib/ocaml/dynlink/dynlink.cma",
-      "size": 193938
+      "size": 95466
     },
     {
       "path": "/static/toolchain/lib/ocaml/dynlink/dynlink.cmi",
-      "size": 3099
+      "size": 1547
     },
     {
       "path": "/static/toolchain/lib/ocaml/dynlink/META",
@@ -1295,7 +1295,7 @@
     },
     {
       "path": "/static/toolchain/lib/ocaml/ld.conf",
-      "size": 159
+      "size": 171
     },
     {
       "path": "/static/toolchain/lib/ocaml/ocamldoc/META",
@@ -1303,199 +1303,199 @@
     },
     {
       "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_analyse.cmi",
-      "size": 2144
+      "size": 1879
     },
     {
       "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_args.cmi",
-      "size": 3115
+      "size": 2450
     },
     {
       "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_ast.cmi",
-      "size": 4697
+      "size": 3000
     },
     {
       "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_class.cmi",
-      "size": 7108
+      "size": 3414
     },
     {
       "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_comments_global.cmi",
-      "size": 1592
+      "size": 791
     },
     {
       "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_comments.cmi",
-      "size": 3093
+      "size": 2262
     },
     {
       "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_config.cmi",
-      "size": 402
+      "size": 370
     },
     {
       "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_cross.cmi",
-      "size": 1913
+      "size": 1782
     },
     {
       "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_dag2html.cmi",
-      "size": 2613
+      "size": 2199
     },
     {
       "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_dep.cmi",
-      "size": 2320
+      "size": 1963
     },
     {
       "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_dot.cmi",
-      "size": 7248
+      "size": 3467
     },
     {
       "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_env.cmi",
-      "size": 4073
+      "size": 2046
     },
     {
       "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_exception.cmi",
-      "size": 2104
+      "size": 1737
     },
     {
       "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_extension.cmi",
-      "size": 3056
+      "size": 2117
     },
     {
       "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_gen.cmi",
-      "size": 3894
+      "size": 2817
     },
     {
       "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_global.cmi",
-      "size": 3887
+      "size": 1906
     },
     {
       "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_html.cmi",
-      "size": 71755
+      "size": 17380
     },
     {
       "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_info.cma",
-      "size": 1940233
+      "size": 973734
     },
     {
       "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_info.cmi",
-      "size": 52660
+      "size": 18362
     },
     {
       "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_latex_style.cmi",
-      "size": 301
+      "size": 289
     },
     {
       "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_latex.cmi",
-      "size": 59248
+      "size": 13609
     },
     {
       "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_lexer.cmi",
-      "size": 1237
+      "size": 994
     },
     {
       "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_man.cmi",
-      "size": 27006
+      "size": 7724
     },
     {
       "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_merge.cmi",
-      "size": 2264
+      "size": 1907
     },
     {
       "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_messages.cmi",
-      "size": 23137
+      "size": 7323
     },
     {
       "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_misc.cmi",
-      "size": 4952
+      "size": 2595
     },
     {
       "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_module.cmi",
-      "size": 14498
+      "size": 5602
     },
     {
       "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_name.cmi",
-      "size": 10521
+      "size": 4007
     },
     {
       "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_ocamlhtml.cmi",
-      "size": 855
+      "size": 663
     },
     {
       "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_parameter.cmi",
-      "size": 2702
+      "size": 1861
     },
     {
       "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_parser.cmi",
-      "size": 2537
+      "size": 1523
     },
     {
       "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_print.cmi",
-      "size": 1621
+      "size": 1383
     },
     {
       "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_scan.cmi",
-      "size": 6717
+      "size": 3082
     },
     {
       "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_search.cmi",
-      "size": 16540
+      "size": 5542
     },
     {
       "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_see_lexer.cmi",
-      "size": 848
+      "size": 825
     },
     {
       "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_sig.cmi",
-      "size": 8336
+      "size": 4139
     },
     {
       "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_str.cmi",
-      "size": 3109
+      "size": 2055
     },
     {
       "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_test.cmi",
-      "size": 191
+      "size": 190
     },
     {
       "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_texi.cmi",
-      "size": 45779
+      "size": 11485
     },
     {
       "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_text_lexer.cmi",
-      "size": 1128
+      "size": 977
     },
     {
       "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_text_parser.cmi",
-      "size": 3743
+      "size": 2083
     },
     {
       "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_text.cmi",
-      "size": 1057
+      "size": 950
     },
     {
       "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_to_text.cmi",
-      "size": 10631
+      "size": 4129
     },
     {
       "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_type.cmi",
-      "size": 4054
+      "size": 2510
     },
     {
       "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_types.cmi",
-      "size": 6826
+      "size": 3217
     },
     {
       "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc_value.cmi",
-      "size": 2923
+      "size": 2063
     },
     {
       "path": "/static/toolchain/lib/ocaml/ocamldoc/odoc.cmi",
-      "size": 181
+      "size": 180
     },
     {
       "path": "/static/toolchain/lib/ocaml/profiling/profiling.cmi",
-      "size": 557
+      "size": 437
     },
     {
       "path": "/static/toolchain/lib/ocaml/profiling/profiling.cmo",
-      "size": 8719
+      "size": 4769
     },
     {
       "path": "/static/toolchain/lib/ocaml/runtime_events/META",
@@ -1503,291 +1503,291 @@
     },
     {
       "path": "/static/toolchain/lib/ocaml/runtime_events/runtime_events.cma",
-      "size": 42274
+      "size": 21224
     },
     {
       "path": "/static/toolchain/lib/ocaml/runtime_events/runtime_events.cmi",
-      "size": 10416
+      "size": 4243
     },
     {
       "path": "/static/toolchain/lib/ocaml/runtime-launch-info",
-      "size": 14617
+      "size": 14623
     },
     {
       "path": "/static/toolchain/lib/ocaml/std_exit.cmi",
-      "size": 189
+      "size": 188
     },
     {
       "path": "/static/toolchain/lib/ocaml/std_exit.cmo",
-      "size": 2283
+      "size": 1243
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Arg.cmi",
-      "size": 5482
+      "size": 2074
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Array.cmi",
-      "size": 10006
+      "size": 3367
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__ArrayLabels.cmi",
-      "size": 10172
+      "size": 3467
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Atomic.cmi",
-      "size": 2355
+      "size": 1098
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Bigarray.cmi",
-      "size": 27339
+      "size": 8236
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Bool.cmi",
-      "size": 1801
+      "size": 856
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Buffer.cmi",
-      "size": 5875
+      "size": 2038
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Bytes.cmi",
-      "size": 15015
+      "size": 4409
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__BytesLabels.cmi",
-      "size": 15226
+      "size": 4524
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Callback.cmi",
-      "size": 475
+      "size": 395
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Char.cmi",
-      "size": 3419
+      "size": 1376
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Complex.cmi",
-      "size": 2011
+      "size": 895
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Condition.cmi",
-      "size": 727
+      "size": 527
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Digest.cmi",
-      "size": 3543
+      "size": 1427
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Domain.cmi",
-      "size": 2008
+      "size": 1115
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Dynarray.cmi",
-      "size": 9084
+      "size": 3128
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Effect.cmi",
-      "size": 4103
+      "size": 1942
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Either.cmi",
-      "size": 3135
+      "size": 1306
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Ephemeron.cmi",
-      "size": 23094
+      "size": 7087
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Filename.cmi",
-      "size": 3085
+      "size": 1279
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Float.cmi",
-      "size": 31368
+      "size": 9352
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Format.cmi",
-      "size": 27635
+      "size": 8126
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Fun.cmi",
-      "size": 1056
+      "size": 687
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Gc.cmi",
-      "size": 8365
+      "size": 3540
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Hashtbl.cmi",
-      "size": 18289
+      "size": 6357
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Iarray.cmi",
-      "size": 7002
+      "size": 2515
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__In_channel.cmi",
-      "size": 4578
+      "size": 1886
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Int.cmi",
-      "size": 3698
+      "size": 1396
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Int32.cmi",
-      "size": 5656
+      "size": 1997
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Int64.cmi",
-      "size": 6199
+      "size": 2160
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Lazy.cmi",
-      "size": 1221
+      "size": 770
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Lexing.cmi",
-      "size": 5056
+      "size": 2003
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__List.cmi",
-      "size": 12233
+      "size": 3920
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__ListLabels.cmi",
-      "size": 12391
+      "size": 3947
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Map.cmi",
-      "size": 14247
+      "size": 4720
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Marshal.cmi",
-      "size": 1861
+      "size": 957
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__MoreLabels.cmi",
-      "size": 45021
+      "size": 14677
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Mutex.cmi",
-      "size": 748
+      "size": 514
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Nativeint.cmi",
-      "size": 5488
+      "size": 1953
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Obj.cmi",
-      "size": 6673
+      "size": 2593
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Oo.cmi",
-      "size": 964
+      "size": 736
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Option.cmi",
-      "size": 2539
+      "size": 1213
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Out_channel.cmi",
-      "size": 4330
+      "size": 1804
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Pair.cmi",
-      "size": 2154
+      "size": 980
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Parsing.cmi",
-      "size": 3334
+      "size": 1582
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Pqueue.cmi",
-      "size": 17284
+      "size": 5669
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Printexc.cmi",
-      "size": 5381
+      "size": 2328
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Printf.cmi",
-      "size": 3038
+      "size": 1233
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Queue.cmi",
-      "size": 2754
+      "size": 1317
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Random.cmi",
-      "size": 5377
+      "size": 2038
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Repr.cmi",
-      "size": 732
+      "size": 498
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Result.cmi",
-      "size": 5096
+      "size": 1985
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Scanf.cmi",
-      "size": 4701
+      "size": 1923
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Semaphore.cmi",
-      "size": 1261
+      "size": 738
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Seq.cmi",
-      "size": 10517
+      "size": 3565
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Set.cmi",
-      "size": 10845
+      "size": 3559
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Stack.cmi",
-      "size": 2314
+      "size": 1198
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__StdLabels.cmi",
-      "size": 466
+      "size": 383
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__String.cmi",
-      "size": 10552
+      "size": 3423
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__StringLabels.cmi",
-      "size": 10674
+      "size": 3510
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Sys.cmi",
-      "size": 9963
+      "size": 4062
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Type.cmi",
-      "size": 869
+      "size": 607
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Uchar.cmi",
-      "size": 3002
+      "size": 1280
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Unit.cmi",
-      "size": 648
+      "size": 477
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib__Weak.cmi",
-      "size": 4944
+      "size": 1927
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib.cma",
-      "size": 3962567
+      "size": 1798294
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib.cmi",
-      "size": 38320
+      "size": 13139
     },
     {
       "path": "/static/toolchain/lib/ocaml/stdlib/META",
@@ -1799,15 +1799,15 @@
     },
     {
       "path": "/static/toolchain/lib/ocaml/str/str.cma",
-      "size": 118864
+      "size": 58934
     },
     {
       "path": "/static/toolchain/lib/ocaml/str/str.cmi",
-      "size": 4596
+      "size": 1637
     },
     {
       "path": "/static/toolchain/lib/ocaml/threads/event.cmi",
-      "size": 1652
+      "size": 855
     },
     {
       "path": "/static/toolchain/lib/ocaml/threads/META",
@@ -1815,11 +1815,11 @@
     },
     {
       "path": "/static/toolchain/lib/ocaml/threads/thread.cmi",
-      "size": 3442
+      "size": 1593
     },
     {
       "path": "/static/toolchain/lib/ocaml/threads/threads.cma",
-      "size": 52576
+      "size": 26899
     },
     {
       "path": "/static/toolchain/lib/ocaml/unix/META",
@@ -1827,15 +1827,15 @@
     },
     {
       "path": "/static/toolchain/lib/ocaml/unix/unix.cma",
-      "size": 210097
+      "size": 96865
     },
     {
       "path": "/static/toolchain/lib/ocaml/unix/unix.cmi",
-      "size": 49179
+      "size": 17332
     },
     {
       "path": "/static/toolchain/lib/ocaml/unix/unixLabels.cmi",
-      "size": 51140
+      "size": 18038
     }
   ],
   "packages": [
@@ -1849,59 +1849,59 @@
       "files": [
         {
           "path": "/static/toolchain/lib/findlib/findlib_config.cmi",
-          "size": 2785
+          "size": 1557
         },
         {
           "path": "/static/toolchain/lib/findlib/findlib_dynload.cma",
-          "size": 9113
+          "size": 5448
         },
         {
           "path": "/static/toolchain/lib/findlib/findlib_top.cma",
-          "size": 35493
+          "size": 20464
         },
         {
           "path": "/static/toolchain/lib/findlib/findlib.cma",
-          "size": 395477
+          "size": 199974
         },
         {
           "path": "/static/toolchain/lib/findlib/findlib.cmi",
-          "size": 6060
+          "size": 2247
         },
         {
           "path": "/static/toolchain/lib/findlib/fl_args.cmi",
-          "size": 1056
+          "size": 812
         },
         {
           "path": "/static/toolchain/lib/findlib/fl_dynload.cmi",
-          "size": 475
+          "size": 390
         },
         {
           "path": "/static/toolchain/lib/findlib/fl_lint.cmi",
-          "size": 15854
+          "size": 5432
         },
         {
           "path": "/static/toolchain/lib/findlib/fl_meta.cmi",
-          "size": 759
+          "size": 664
         },
         {
           "path": "/static/toolchain/lib/findlib/fl_metascanner.cmi",
-          "size": 2269
+          "size": 1224
         },
         {
           "path": "/static/toolchain/lib/findlib/fl_metatoken.cmi",
-          "size": 1165
+          "size": 745
         },
         {
           "path": "/static/toolchain/lib/findlib/fl_package_base.cmi",
-          "size": 3022
+          "size": 1404
         },
         {
           "path": "/static/toolchain/lib/findlib/fl_split.cmi",
-          "size": 1129
+          "size": 789
         },
         {
           "path": "/static/toolchain/lib/findlib/fl_topo.cmi",
-          "size": 4275
+          "size": 1695
         },
         {
           "path": "/static/toolchain/lib/findlib/META",
@@ -1909,11 +1909,11 @@
         },
         {
           "path": "/static/toolchain/lib/findlib/ocaml_args.cmi",
-          "size": 1482
+          "size": 627
         },
         {
           "path": "/static/toolchain/lib/findlib/topfind.cmi",
-          "size": 1465
+          "size": 731
         }
       ]
     },
@@ -1928,147 +1928,147 @@
       "files": [
         {
           "path": "/static/toolchain/lib/js_of_ocaml/deriving/deriving_Json_import.cmi",
-          "size": 15243
+          "size": 5134
         },
         {
           "path": "/static/toolchain/lib/js_of_ocaml/deriving/deriving_Json_lexer.cmi",
-          "size": 2456
+          "size": 1234
         },
         {
           "path": "/static/toolchain/lib/js_of_ocaml/deriving/deriving_Json.cmi",
-          "size": 19293
+          "size": 4908
         },
         {
           "path": "/static/toolchain/lib/js_of_ocaml/deriving/js_of_ocaml_deriving.cma",
-          "size": 175353
+          "size": 81583
         },
         {
           "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__.cmi",
-          "size": 3198
+          "size": 1898
         },
         {
           "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__Console.cmi",
-          "size": 11421
+          "size": 3451
         },
         {
           "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__CSS.cmi",
-          "size": 12794
+          "size": 5141
         },
         {
           "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__Dom_events.cmi",
-          "size": 21013
+          "size": 5383
         },
         {
           "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__Dom_html.cmi",
-          "size": 3447258
+          "size": 462703
         },
         {
           "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__Dom_svg.cmi",
-          "size": 1106387
+          "size": 154327
         },
         {
           "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__Dom.cmi",
-          "size": 93521
+          "size": 18740
         },
         {
           "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__Effect_js.cmi",
-          "size": 425
+          "size": 383
         },
         {
           "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__EventSource.cmi",
-          "size": 6335
+          "size": 2305
         },
         {
           "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__File.cmi",
-          "size": 20524
+          "size": 5867
         },
         {
           "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__Form.cmi",
-          "size": 2919
+          "size": 1537
         },
         {
           "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__Geolocation.cmi",
-          "size": 5247
+          "size": 2187
         },
         {
           "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__Import.cmi",
-          "size": 15458
+          "size": 5177
         },
         {
           "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__IntersectionObserver.cmi",
-          "size": 10842
+          "size": 3458
         },
         {
           "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__Intl.cmi",
-          "size": 30514
+          "size": 8377
         },
         {
           "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__Js.cmi",
-          "size": 92150
+          "size": 25315
         },
         {
           "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__Json.cmi",
-          "size": 782
+          "size": 564
         },
         {
           "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__Jstable.cmi",
-          "size": 1182
+          "size": 710
         },
         {
           "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__Lib_version.cmi",
-          "size": 394
+          "size": 367
         },
         {
           "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__MutationObserver.cmi",
-          "size": 11758
+          "size": 3470
         },
         {
           "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__PerformanceObserver.cmi",
-          "size": 3372
+          "size": 1545
         },
         {
           "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__Regexp.cmi",
-          "size": 2452
+          "size": 1079
         },
         {
           "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__ResizeObserver.cmi",
-          "size": 16156
+          "size": 4214
         },
         {
           "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__Sys_js.cmi",
-          "size": 1486
+          "size": 797
         },
         {
           "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__Typed_array.cmi",
-          "size": 24939
+          "size": 6812
         },
         {
           "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__Url.cmi",
-          "size": 3486
+          "size": 1575
         },
         {
           "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__WebGL.cmi",
-          "size": 103772
+          "size": 27635
         },
         {
           "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__WebSockets.cmi",
-          "size": 24645
+          "size": 6174
         },
         {
           "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__Worker.cmi",
-          "size": 20898
+          "size": 5234
         },
         {
           "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml__XmlHttpRequest.cmi",
-          "size": 15595
+          "size": 4583
         },
         {
           "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml.cma",
-          "size": 12349694
+          "size": 2370455
         },
         {
           "path": "/static/toolchain/lib/js_of_ocaml/js_of_ocaml.cmi",
-          "size": 2291
+          "size": 1260
         },
         {
           "path": "/static/toolchain/lib/js_of_ocaml/META",
@@ -2089,43 +2089,43 @@
         },
         {
           "path": "/static/toolchain/lib/yojson/yojson__.cmi",
-          "size": 657
+          "size": 508
         },
         {
           "path": "/static/toolchain/lib/yojson/yojson__Basic.cmi",
-          "size": 22992
+          "size": 6534
         },
         {
           "path": "/static/toolchain/lib/yojson/yojson__Codec.cmi",
-          "size": 679
+          "size": 573
         },
         {
           "path": "/static/toolchain/lib/yojson/yojson__Common.cmi",
-          "size": 1704
+          "size": 1104
         },
         {
           "path": "/static/toolchain/lib/yojson/yojson__Lexer_utils.cmi",
-          "size": 1046
+          "size": 784
         },
         {
           "path": "/static/toolchain/lib/yojson/yojson__Raw.cmi",
-          "size": 22460
+          "size": 6435
         },
         {
           "path": "/static/toolchain/lib/yojson/yojson__Safe.cmi",
-          "size": 23294
+          "size": 6698
         },
         {
           "path": "/static/toolchain/lib/yojson/yojson__T.cmi",
-          "size": 7300
+          "size": 2375
         },
         {
           "path": "/static/toolchain/lib/yojson/yojson.cma",
-          "size": 1094631
+          "size": 558004
         },
         {
           "path": "/static/toolchain/lib/yojson/yojson.cmi",
-          "size": 8963
+          "size": 3191
         }
       ]
     }
