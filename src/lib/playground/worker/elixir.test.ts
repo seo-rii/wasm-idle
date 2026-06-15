@@ -43,6 +43,17 @@ describe('Elixir worker', () => {
 			let trackedObjectKey = 0;
 			const rawCall = vi.fn(async (_process, payload) => {
 				const [action, source] = JSON.parse(payload);
+				if (action === 'eval_erlang_module') {
+					return JSON.stringify('main');
+				}
+				if (action === 'eval_erlang') {
+					if (source === 'main:main().') {
+						options.print?.('module=ok\n');
+						return JSON.stringify('ok');
+					}
+					options.print?.('erlang=73\n');
+					return JSON.stringify('ok');
+				}
 				expect(action).toBe('eval_elixir');
 				if (source === 'IO.puts("hello")') {
 					options.print?.('factorial_plus_bonus=27\n');
@@ -251,6 +262,82 @@ describe('Elixir worker', () => {
 				'IO.puts(String.trim(((fn wasm_idle_prompt -> IO.write(wasm_idle_prompt); "5\\n" end).(""))) <> ":" <> String.trim(((fn wasm_idle_prompt -> IO.write(wasm_idle_prompt); "7\\n" end).(""))))'
 			])
 		);
+	});
+
+	it('evaluates Erlang expressions and bridges io:get_line stdin calls', async () => {
+		const buffer = new SharedArrayBuffer(1024);
+		await import('./elixir');
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				bundleUrl: '/runtime/elixir/bundle.avm',
+				log: true
+			}
+		});
+		await Promise.resolve();
+
+		waitForBufferedStdinMock.mockReturnValueOnce('73\n');
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: 'Line = io:get_line(""), io:format("main=~s", [Line]).',
+				language: 'ERLANG',
+				prepare: false,
+				buffer,
+				log: true
+			}
+		});
+		await Promise.resolve();
+
+		expect(waitForBufferedStdinMock).toHaveBeenCalledTimes(1);
+		expect(lastModule.current.rawCall).toHaveBeenLastCalledWith(
+			'main',
+			JSON.stringify([
+				'eval_erlang',
+				'Line = ((fun(WasmIdlePrompt) -> io:format("~s", [WasmIdlePrompt]), "73\\n" end)("")), io:format("main=~s", [Line]).'
+			])
+		);
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ output: 'erlang=73\n' });
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: 'ok' });
+	});
+
+	it('compiles Erlang modules and invokes main/0 after loading the module', async () => {
+		const buffer = new SharedArrayBuffer(1024);
+		const source = `-module(main).
+-export([main/0]).
+
+main() ->
+    io:format("module=ok~n").`;
+		await import('./elixir');
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				bundleUrl: '/runtime/elixir/bundle.avm',
+				log: true
+			}
+		});
+		await Promise.resolve();
+
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: source,
+				language: 'ERLANG',
+				prepare: false,
+				buffer,
+				log: true
+			}
+		});
+		await Promise.resolve();
+
+		expect(lastModule.current.rawCall).toHaveBeenCalledWith(
+			'main',
+			JSON.stringify(['eval_erlang_module', source])
+		);
+		expect(lastModule.current.rawCall).toHaveBeenLastCalledWith(
+			'main',
+			JSON.stringify(['eval_erlang', 'main:main().'])
+		);
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ output: 'module=ok\n' });
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: 'ok' });
 	});
 
 	it('bridges IO.read and IO.binread variants across chunk boundaries until EOF', async () => {

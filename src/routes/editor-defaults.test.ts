@@ -25,6 +25,8 @@ describe('editor defaults', () => {
 		expect(editorDefaults.vbnet).toContain('Console.ReadLine()');
 		expect(editorDefaults.vbnet).toContain('Sub Main(args As String())');
 		expect(editorDefaults.elixir).toContain('IO.gets("")');
+		expect(editorDefaults.erlang).toContain('io:get_line("")');
+		expect(editorDefaults.erlang).toContain('io:format("stdin=~s"');
 		expect(editorDefaults.ocaml).toContain('read_line ()');
 		expect(editorDefaults.javascript).toContain("require('fs')");
 		expect(editorDefaults.javascript).toContain('readLineSync(0)');
@@ -38,6 +40,8 @@ describe('editor defaults', () => {
 		expect(editorDefaults.haskell).toContain('putStrLn');
 		expect(editorDefaults.r).toContain('readLines(stdin(), n = 1');
 		expect(editorDefaults.r).toContain('factorial_plus_bonus=%d');
+		expect(editorDefaults.octave).toContain('fgetl(stdin)');
+		expect(editorDefaults.octave).toContain('factorial_plus_bonus=%d');
 		expect(editorDefaults.sqlite).toContain('CREATE TABLE numbers');
 		expect(editorDefaults.sqlite).toContain('factorial_plus_bonus=');
 		expect(editorDefaults.php).toContain("file_get_contents('php://input')");
@@ -65,6 +69,7 @@ describe('editor defaults', () => {
 		expect(resolveEditorDefaultSource('d', 'wasm32-wasip1')).toBe(editorDefaults.d);
 		expect(resolveEditorDefaultSource('fsharp', 'wasm32-wasip1')).toBe(editorDefaults.fsharp);
 		expect(resolveEditorDefaultSource('vbnet', 'wasm32-wasip1')).toBe(editorDefaults.vbnet);
+		expect(resolveEditorDefaultSource('erlang', 'wasm32-wasip1')).toBe(editorDefaults.erlang);
 		expect(resolveEditorDefaultSource('ocaml', 'wasm32-wasip1')).toBe(editorDefaults.ocaml);
 		expect(resolveEditorDefaultSource('javascript', 'wasm32-wasip1')).toBe(
 			editorDefaults.javascript
@@ -76,6 +81,7 @@ describe('editor defaults', () => {
 		expect(resolveEditorDefaultSource('lua', 'wasm32-wasip1')).toBe(editorDefaults.lua);
 		expect(resolveEditorDefaultSource('haskell', 'wasm32-wasip1')).toBe(editorDefaults.haskell);
 		expect(resolveEditorDefaultSource('r', 'wasm32-wasip1')).toBe(editorDefaults.r);
+		expect(resolveEditorDefaultSource('octave', 'wasm32-wasip1')).toBe(editorDefaults.octave);
 		expect(resolveEditorDefaultSource('sqlite', 'wasm32-wasip1')).toBe(editorDefaults.sqlite);
 		expect(resolveEditorDefaultSource('php', 'wasm32-wasip1')).toBe(editorDefaults.php);
 		expect(resolveEditorDefaultSource('zig', 'wasm32-wasip1')).toBe(editorDefaults.zig);
@@ -91,6 +97,7 @@ describe('editor defaults', () => {
 		expect(isEditorDefaultSource(editorDefaults.d)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.fsharp)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.vbnet)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.erlang)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.ocaml)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.javascript)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.typescript)).toBe(true);
@@ -98,6 +105,7 @@ describe('editor defaults', () => {
 		expect(isEditorDefaultSource(editorDefaults.lua)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.haskell)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.r)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.octave)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.sqlite)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.php)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.zig)).toBe(true);

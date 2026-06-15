@@ -9,6 +9,7 @@ import Java from '$lib/playground/java';
 import Lisp from '$lib/playground/lisp';
 import Lua from '$lib/playground/lua';
 import Ocaml from '$lib/playground/ocaml';
+import Octave from '$lib/playground/octave';
 import Php from '$lib/playground/php';
 import Python from '$lib/playground/python';
 import R from '$lib/playground/r';
@@ -42,6 +43,7 @@ export const supportedLanguages = [
 	'FSHARP',
 	'VBNET',
 	'ELIXIR',
+	'ERLANG',
 	'TINYGO',
 	'OCAML',
 	'JAVASCRIPT',
@@ -54,6 +56,7 @@ export const supportedLanguages = [
 	'RUBY',
 	'HASKELL',
 	'R',
+	'OCTAVE',
 	'SQLITE',
 	'PHP'
 ];
@@ -118,6 +121,10 @@ async function playground(language: string, runtimeAssets?: SandboxRuntimeAssets
 		case 'ELIXIR':
 			sandbox = new Elixir();
 			break;
+		case 'ERLANG':
+		case 'ERL':
+			sandbox = new Elixir('ERLANG');
+			break;
 		case 'TINYGO':
 			sandbox = new TinyGo();
 			break;
@@ -161,6 +168,10 @@ async function playground(language: string, runtimeAssets?: SandboxRuntimeAssets
 		case 'R':
 			sandbox = new R();
 			break;
+		case 'OCTAVE':
+		case 'MATLAB':
+			sandbox = new Octave();
+			break;
 		case 'SQLITE':
 		case 'SQL':
 			sandbox = new Sqlite();
@@ -194,6 +205,9 @@ async function playground(language: string, runtimeAssets?: SandboxRuntimeAssets
 			sandboxCache['VBNET'] = sandboxCache['VB'] = sandboxCache['VISUALBASIC'] = sandbox;
 		}
 		if (language === 'ELIXIR') sandboxCache['ELIXIR'] = sandbox;
+		if (language === 'ERLANG' || language === 'ERL') {
+			sandboxCache['ERLANG'] = sandboxCache['ERL'] = sandbox;
+		}
 		if (language === 'TINYGO') sandboxCache['TINYGO'] = sandbox;
 		if (language === 'OCAML') sandboxCache['OCAML'] = sandbox;
 		if (language === 'JAVASCRIPT' || language === 'JS') {
@@ -218,6 +232,9 @@ async function playground(language: string, runtimeAssets?: SandboxRuntimeAssets
 			sandboxCache['HASKELL'] = sandboxCache['HS'] = sandbox;
 		}
 		if (language === 'R') sandboxCache['R'] = sandbox;
+		if (language === 'OCTAVE' || language === 'MATLAB') {
+			sandboxCache['OCTAVE'] = sandboxCache['MATLAB'] = sandbox;
+		}
 		if (language === 'SQLITE' || language === 'SQL') {
 			sandboxCache['SQLITE'] = sandboxCache['SQL'] = sandbox;
 		}

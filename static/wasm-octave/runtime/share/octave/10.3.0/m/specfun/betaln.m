@@ -1,0 +1,72 @@
+########################################################################
+##
+## Copyright (C) 1998-2025 The Octave Project Developers
+##
+## See the file COPYRIGHT.md in the top-level directory of this
+## distribution or <https://octave.org/copyright/>.
+##
+## This file is part of Octave.
+##
+## Octave is free software: you can redistribute it and/or modify it
+## under the terms of the GNU General Public License as published by
+## the Free Software Foundation, either version 3 of the License, or
+## (at your option) any later version.
+##
+## Octave is distributed in the hope that it will be useful, but
+## WITHOUT ANY WARRANTY; without even the implied warranty of
+## MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+## GNU General Public License for more details.
+##
+## You should have received a copy of the GNU General Public License
+## along with Octave; see the file COPYING.  If not, see
+## <https://www.gnu.org/licenses/>.
+##
+########################################################################
+
+## -*- texinfo -*-
+## @deftypefn {} {@var{lnb} =} betaln (@var{a}, @var{b})
+## Compute the natural logarithm of the Beta function for real inputs @var{a}
+## and @var{b}.
+##
+## @code{betaln} is defined as
+## @tex
+## $$
+##  {\rm betaln} (a, b) = \ln (B (a,b)) \equiv \ln ({\Gamma (a) \Gamma (b) \over \Gamma (a + b)}).
+## $$
+## @end tex
+## @ifnottex
+##
+## @example
+## betaln (a, b) = log (beta (a, b))
+## @end example
+##
+## @end ifnottex
+## and is calculated in a way to reduce the occurrence of underflow.
+##
+## The Beta function can grow quite large and it is often more useful to work
+## with the logarithm of the output rather than the function directly.
+## @seealso{beta, betainc, betaincinv, gammaln}
+## @end deftypefn
+
+function lnb = betaln (a, b)
+
+  if (nargin != 2)
+    print_usage ();
+  endif
+
+  if (! isreal (a) || ! isreal (b))
+    error ("betaln: A and B must be real");
+  endif
+
+  lnb = gammaln (a) + gammaln (b) - gammaln (a + b);
+
+endfunction
+
+
+%!assert (betaln (3,4), log (beta (3,4)), eps)
+
+## Test input validation
+%!error <Invalid call> betaln ()
+%!error <Invalid call> betaln (1)
+%!error <A and B must be real> betaln (1i, 2)
+%!error <A and B must be real> betaln (2, 1i)

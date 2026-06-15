@@ -7,6 +7,7 @@ const { publicEnv } = vi.hoisted(() => ({
 		PUBLIC_WASM_D_MODULE_URL: '',
 		PUBLIC_WASM_DOTNET_MODULE_URL: '',
 		PUBLIC_WASM_ELIXIR_BUNDLE_URL: '',
+		PUBLIC_WASM_ERLANG_BUNDLE_URL: '',
 		PUBLIC_WASM_OCAML_MODULE_URL: '',
 		PUBLIC_WASM_OCAML_MANIFEST_URL: '',
 		PUBLIC_WASM_TINYGO_APP_URL: '',
@@ -22,6 +23,9 @@ const { publicEnv } = vi.hoisted(() => ({
 		PUBLIC_WASM_HASKELL_BSDTAR_URL: '',
 		PUBLIC_WASM_RUBY_WASM_URL: '',
 		PUBLIC_WASM_R_BASE_URL: '',
+		PUBLIC_WASM_OCTAVE_BASE_URL: '',
+		PUBLIC_WASM_OCTAVE_WORKER_URL: '',
+		PUBLIC_WASM_OCTAVE_MANIFEST_URL: '',
 		PUBLIC_WASM_SQLITE_WASM_URL: '',
 		PUBLIC_WASM_PHP_VERSION: ''
 	}
@@ -271,6 +275,45 @@ describe('runtime asset config resolution', () => {
 		const { resolveElixirBundleUrl } = await import('./assets');
 
 		expect(resolveElixirBundleUrl('/absproxy/5173', 'https://example.com/app')).toBe(
+			'https://example.com/absproxy/5173/wasm-elixir/bundle.avm'
+		);
+	});
+
+	it('prefers an explicit Erlang bundle url over the public env override', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_ERLANG_BUNDLE_URL =
+			'https://env.example.com/wasm-elixir/bundle.avm';
+		const { resolveErlangBundleUrl } = await import('./assets');
+
+		expect(
+			resolveErlangBundleUrl(
+				{
+					erlang: {
+						bundleUrl: '/runtime/erlang/bundle.avm'
+					}
+				},
+				'https://example.com/app'
+			)
+		).toBe('https://example.com/runtime/erlang/bundle.avm');
+	});
+
+	it('falls back to the Elixir bundle config for Erlang', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_ERLANG_BUNDLE_URL = '';
+		publicEnv.PUBLIC_WASM_ELIXIR_BUNDLE_URL = '';
+		const { resolveErlangBundleUrl } = await import('./assets');
+
+		expect(
+			resolveErlangBundleUrl(
+				{
+					elixir: {
+						bundleUrl: '/runtime/elixir/bundle.avm'
+					}
+				},
+				'https://example.com/app'
+			)
+		).toBe('https://example.com/runtime/elixir/bundle.avm');
+		expect(resolveErlangBundleUrl('/absproxy/5173', 'https://example.com/app')).toBe(
 			'https://example.com/absproxy/5173/wasm-elixir/bundle.avm'
 		);
 	});
@@ -584,6 +627,48 @@ describe('runtime asset config resolution', () => {
 		expect(resolveRBaseUrl('/absproxy/5173', 'https://example.com/app')).toBe(
 			'https://example.com/absproxy/5173/webr/'
 		);
+	});
+
+	it('prefers explicit Octave runtime urls over public env overrides', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_OCTAVE_BASE_URL = 'https://env.example.com/octave/runtime/';
+		publicEnv.PUBLIC_WASM_OCTAVE_WORKER_URL = 'https://env.example.com/octave/worker.js';
+		publicEnv.PUBLIC_WASM_OCTAVE_MANIFEST_URL = 'https://env.example.com/octave/manifest.json';
+		const { resolveOctaveRuntimeAssetConfig } = await import('./assets');
+
+		expect(
+			resolveOctaveRuntimeAssetConfig(
+				{
+					octave: {
+						baseUrl: '/runtime/wasm-octave/runtime',
+						workerUrl: '/runtime/wasm-octave/runner-worker.js',
+						manifestUrl: '/runtime/wasm-octave/runtime/runtime-manifest.v1.json'
+					}
+				},
+				'https://example.com/app'
+			)
+		).toEqual({
+			baseUrl: 'https://example.com/runtime/wasm-octave/runtime/',
+			workerUrl: 'https://example.com/runtime/wasm-octave/runner-worker.js',
+			manifestUrl: 'https://example.com/runtime/wasm-octave/runtime/runtime-manifest.v1.json'
+		});
+	});
+
+	it('derives default Octave runtime urls from the shared root path', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_OCTAVE_BASE_URL = '';
+		publicEnv.PUBLIC_WASM_OCTAVE_WORKER_URL = '';
+		publicEnv.PUBLIC_WASM_OCTAVE_MANIFEST_URL = '';
+		const { resolveOctaveRuntimeAssetConfig } = await import('./assets');
+
+		expect(
+			resolveOctaveRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')
+		).toEqual({
+			baseUrl: 'https://example.com/absproxy/5173/wasm-octave/runtime/',
+			workerUrl: 'https://example.com/absproxy/5173/wasm-octave/runner-worker.js',
+			manifestUrl:
+				'https://example.com/absproxy/5173/wasm-octave/runtime/runtime-manifest.v1.json'
+		});
 	});
 
 	it('prefers an explicit SQLite wasm url over the public env override', async () => {

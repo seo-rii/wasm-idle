@@ -97,6 +97,13 @@ const RUNTIMES = [
 		targetArg: 'targetDir'
 	},
 	{
+		name: 'wasm-octave',
+		module: './sync-wasm-octave.mjs',
+		exportName: 'syncWasmOctaveAssets',
+		sourceArg: 'sourceDir',
+		targetArg: 'targetDir'
+	},
+	{
 		name: 'wasm-of-js-of-ocaml',
 		module: './sync-wasm-of-js-of-ocaml.mjs',
 		exportName: 'syncWasmOfJsOfOcamlDist',

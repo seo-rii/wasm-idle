@@ -90,6 +90,38 @@ describe('Monaco route source', () => {
 		expect(source).toContain("blockComment: ['--[[', ']]']");
 	});
 
+	it('registers an Octave Monaco language with MATLAB-compatible comments and tokenizer support', async () => {
+		const source = await readFile(
+			path.resolve(process.cwd(), 'src/routes/Monaco.svelte'),
+			'utf8'
+		);
+
+		expect(source).toContain("id: 'octave'");
+		expect(source).toContain("aliases: ['Octave', 'MATLAB', 'octave', 'matlab']");
+		expect(source).toContain("extensions: ['.m']");
+		expect(source).toContain("Monaco.languages.setLanguageConfiguration('octave'");
+		expect(source).toContain("Monaco.languages.setMonarchTokensProvider('octave'");
+		expect(source).toContain("tokenPostfix: '.octave'");
+		expect(source).toContain("lineComment: '%'");
+		expect(source).toContain("blockComment: ['%{', '%}']");
+	});
+
+	it('registers an Erlang Monaco language with comments and tokenizer support', async () => {
+		const source = await readFile(
+			path.resolve(process.cwd(), 'src/routes/Monaco.svelte'),
+			'utf8'
+		);
+
+		expect(source).toContain("id: 'erlang'");
+		expect(source).toContain("aliases: ['Erlang', 'erlang', 'erl']");
+		expect(source).toContain("extensions: ['.erl', '.hrl']");
+		expect(source).toContain("Monaco.languages.setLanguageConfiguration('erlang'");
+		expect(source).toContain("Monaco.languages.setMonarchTokensProvider('erlang'");
+		expect(source).toContain("tokenPostfix: '.erlang'");
+		expect(source).toContain("lineComment: '%'");
+		expect(source).toContain("'receive'");
+	});
+
 	it('registers D and Zig Monaco languages with tokenizers', async () => {
 		const source = await readFile(
 			path.resolve(process.cwd(), 'src/routes/Monaco.svelte'),

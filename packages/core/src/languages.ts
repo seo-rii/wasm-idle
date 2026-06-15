@@ -17,6 +17,8 @@ export type WasmIdleLanguageId =
 	| 'VB'
 	| 'VISUALBASIC'
 	| 'ELIXIR'
+	| 'ERLANG'
+	| 'ERL'
 	| 'TINYGO'
 	| 'OCAML'
 	| 'JAVASCRIPT'
@@ -36,6 +38,8 @@ export type WasmIdleLanguageId =
 	| 'HASKELL'
 	| 'HS'
 	| 'R'
+	| 'OCTAVE'
+	| 'MATLAB'
 	| 'SQLITE'
 	| 'SQL'
 	| 'PHP';
@@ -53,6 +57,7 @@ export const supportedLanguageIds = [
 	'FSHARP',
 	'VBNET',
 	'ELIXIR',
+	'ERLANG',
 	'TINYGO',
 	'OCAML',
 	'JAVASCRIPT',
@@ -65,6 +70,7 @@ export const supportedLanguageIds = [
 	'RUBY',
 	'HASKELL',
 	'R',
+	'OCTAVE',
 	'SQLITE',
 	'PHP'
 ] as const;
@@ -77,6 +83,7 @@ export const DEFAULT_DEFERRED_PROGRESS_LANGUAGES = new Set<string>([
 	'FSHARP',
 	'VBNET',
 	'TINYGO',
+	'ERLANG',
 	'OCAML',
 	'JAVASCRIPT',
 	'TYPESCRIPT',
@@ -88,6 +95,7 @@ export const DEFAULT_DEFERRED_PROGRESS_LANGUAGES = new Set<string>([
 	'RUBY',
 	'HASKELL',
 	'R',
+	'OCTAVE',
 	'SQLITE',
 	'PHP'
 ]);
@@ -97,6 +105,7 @@ const LANGUAGE_ALIASES: Record<string, string> = {
 	'F#': 'FSHARP',
 	VB: 'VBNET',
 	VISUALBASIC: 'VBNET',
+	ERL: 'ERLANG',
 	DLANG: 'D',
 	JS: 'JAVASCRIPT',
 	AS: 'ASSEMBLYSCRIPT',
@@ -106,6 +115,7 @@ const LANGUAGE_ALIASES: Record<string, string> = {
 	SCHEME: 'LISP',
 	SCM: 'LISP',
 	TS: 'TYPESCRIPT',
+	MATLAB: 'OCTAVE',
 	SQL: 'SQLITE'
 };
 

@@ -81,6 +81,9 @@ describe('example route debug actions', () => {
 			/import \{ WASM_OCAML_ASSET_VERSION \} from '\$lib\/playground\/wasmOcamlVersion';/
 		);
 		expect(source).toMatch(
+			/import \{ WASM_OCTAVE_ASSET_VERSION \} from '\$lib\/playground\/wasmOctaveVersion';/
+		);
+		expect(source).toMatch(
 			/import \{ WASM_RUST_ASSET_VERSION \} from '\$lib\/playground\/wasmRustVersion';/
 		);
 		expect(source).toMatch(
@@ -128,6 +131,9 @@ describe('example route debug actions', () => {
 			/elixir: \{\s+bundleUrl: path\s+\?\s+`\$\{path\}\/wasm-elixir\/bundle\.avm\?v=\$\{WASM_ELIXIR_ASSET_VERSION\}`\s+:\s+`\/wasm-elixir\/bundle\.avm\?v=\$\{WASM_ELIXIR_ASSET_VERSION\}`\s+\}/s
 		);
 		expect(source).toMatch(
+			/erlang: \{\s+bundleUrl: path\s+\?\s+`\$\{path\}\/wasm-elixir\/bundle\.avm\?v=\$\{WASM_ELIXIR_ASSET_VERSION\}`\s+:\s+`\/wasm-elixir\/bundle\.avm\?v=\$\{WASM_ELIXIR_ASSET_VERSION\}`\s+\}/s
+		);
+		expect(source).toMatch(
 			/ocaml: \{\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-of-js-of-ocaml\/browser-native\/src\/index\.js\?v=\$\{WASM_OCAML_ASSET_VERSION\}`\s+:\s+`\/wasm-of-js-of-ocaml\/browser-native\/src\/index\.js\?v=\$\{WASM_OCAML_ASSET_VERSION\}`,\s+manifestUrl: path\s+\?\s+`\$\{path\}\/wasm-of-js-of-ocaml\/browser-native-bundle\/browser-native-manifest\.v1\.json\?v=\$\{WASM_OCAML_ASSET_VERSION\}`\s+:\s+`\/wasm-of-js-of-ocaml\/browser-native-bundle\/browser-native-manifest\.v1\.json\?v=\$\{WASM_OCAML_ASSET_VERSION\}`\s+\}/s
 		);
 		expect(source).toMatch(
@@ -150,6 +156,9 @@ describe('example route debug actions', () => {
 		);
 		expect(source).toMatch(
 			/haskell: \{\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-haskell\/dyld\.mjs\?v=\$\{WASM_HASKELL_ASSET_VERSION\}`\s+:\s+`\/wasm-haskell\/dyld\.mjs\?v=\$\{WASM_HASKELL_ASSET_VERSION\}`,\s+rootfsUrl: path\s+\?\s+`\$\{path\}\/wasm-haskell\/rootfs\.tar\.zst\?v=\$\{WASM_HASKELL_ASSET_VERSION\}`\s+:\s+`\/wasm-haskell\/rootfs\.tar\.zst\?v=\$\{WASM_HASKELL_ASSET_VERSION\}`,\s+bsdtarUrl: path\s+\?\s+`\$\{path\}\/wasm-haskell\/bsdtar\.wasm\?v=\$\{WASM_HASKELL_ASSET_VERSION\}`\s+:\s+`\/wasm-haskell\/bsdtar\.wasm\?v=\$\{WASM_HASKELL_ASSET_VERSION\}`\s+\}/s
+		);
+		expect(source).toMatch(
+			/octave: \{\s+baseUrl: path\s+\?\s+`\$\{path\}\/wasm-octave\/runtime\/`\s+:\s+'\/wasm-octave\/runtime\/',\s+workerUrl: path\s+\?\s+`\$\{path\}\/wasm-octave\/runner-worker\.js\?v=\$\{WASM_OCTAVE_ASSET_VERSION\}`\s+:\s+`\/wasm-octave\/runner-worker\.js\?v=\$\{WASM_OCTAVE_ASSET_VERSION\}`,\s+manifestUrl: path\s+\?\s+`\$\{path\}\/wasm-octave\/runtime\/runtime-manifest\.v1\.json\?v=\$\{WASM_OCTAVE_ASSET_VERSION\}`\s+:\s+`\/wasm-octave\/runtime\/runtime-manifest\.v1\.json\?v=\$\{WASM_OCTAVE_ASSET_VERSION\}`\s+\}/s
 		);
 		expect(source).toMatch(
 			/const playground = \$derived\.by\(\(\) => createPlaygroundBinding\(runtimeAssets\)\);/
@@ -208,6 +217,7 @@ describe('example route debug actions', () => {
 		);
 		expect(source).toMatch(/const editorLanguage = \$derived\(/);
 		expect(source).toMatch(/: language === 'ELIXIR'\s+\? 'elixir'/);
+		expect(source).toMatch(/: language === 'ERLANG'\s+\? 'erlang'/);
 		expect(source).toMatch(/: language === 'JAVASCRIPT'\s+\? 'javascript'/);
 		expect(source).toMatch(/: language === 'TYPESCRIPT'\s+\? 'typescript'/);
 		expect(source).toMatch(/: language === 'ASSEMBLYSCRIPT'\s+\? 'typescript'/);
@@ -320,6 +330,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/<option value="FSHARP">F#<\/option>/);
 		expect(source).toMatch(/<option value="VBNET">VB\.NET<\/option>/);
 		expect(source).toMatch(/<option value="ELIXIR">Elixir<\/option>/);
+		expect(source).toMatch(/<option value="ERLANG">Erlang<\/option>/);
 		expect(source).toMatch(/<option value="OCAML">OCaml<\/option>/);
 		expect(source).toMatch(/<option value="TINYGO">TinyGo<\/option>/);
 		expect(source).toMatch(/<option value="JAVASCRIPT">JavaScript<\/option>/);
@@ -332,13 +343,14 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/<option value="RUBY">Ruby<\/option>/);
 		expect(source).toMatch(/<option value="HASKELL">Haskell<\/option>/);
 		expect(source).toMatch(/<option value="R">R<\/option>/);
+		expect(source).toMatch(/<option value="OCTAVE">Octave<\/option>/);
 		expect(source).toMatch(/<option value="SQLITE">SQLite<\/option>/);
 		expect(source).toMatch(/<option value="PHP">PHP<\/option>/);
 		expect(source).toMatch(
-			/\{#if language === 'JAVA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'D' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'VBNET' \|\| language === 'TINYGO' \|\| language === 'JAVASCRIPT' \|\| language === 'TYPESCRIPT' \|\| language === 'LUA' \|\| language === 'ZIG' \|\| language === 'LISP' \|\| language === 'RUBY' \|\| language === 'HASKELL' \|\| language === 'R' \|\| language === 'PHP'\}/
+			/\{#if language === 'JAVA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'D' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'VBNET' \|\| language === 'TINYGO' \|\| language === 'JAVASCRIPT' \|\| language === 'TYPESCRIPT' \|\| language === 'LUA' \|\| language === 'ZIG' \|\| language === 'LISP' \|\| language === 'RUBY' \|\| language === 'HASKELL' \|\| language === 'R' \|\| language === 'OCTAVE' \|\| language === 'PHP'\}/
 		);
 		expect(source).toMatch(
-			/language === 'JAVA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'D' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'VBNET' \|\| language === 'TINYGO' \|\| language === 'JAVASCRIPT' \|\| language === 'TYPESCRIPT' \|\| language === 'LUA' \|\| language === 'ZIG' \|\| language === 'LISP' \|\| language === 'RUBY' \|\| language === 'HASKELL' \|\| language === 'R' \|\| language === 'PHP'/
+			/language === 'JAVA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'D' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'VBNET' \|\| language === 'TINYGO' \|\| language === 'JAVASCRIPT' \|\| language === 'TYPESCRIPT' \|\| language === 'LUA' \|\| language === 'ZIG' \|\| language === 'LISP' \|\| language === 'RUBY' \|\| language === 'HASKELL' \|\| language === 'R' \|\| language === 'OCTAVE' \|\| language === 'PHP'/
 		);
 		expect(source).toMatch(/Go uses the bundled `wasm-go` browser compiler runtime/);
 		expect(source).toMatch(
@@ -564,6 +576,21 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/R runs through bundled webR WebAssembly assets/);
 	});
 
+	it('surfaces Octave through the bundled GNU Octave wasm runtime contract', () => {
+		expect(source).toMatch(
+			/import \{ WASM_OCTAVE_ASSET_VERSION \} from '\$lib\/playground\/wasmOctaveVersion';/
+		);
+		expect(source).toMatch(/<option value="OCTAVE">Octave<\/option>/);
+		expect(source).toMatch(/octave: 'OCTAVE'/);
+		expect(source).toMatch(/matlab: 'OCTAVE'/);
+		expect(source).toMatch(/language ===\s+'OCTAVE'\s+\?\s+'octave'/);
+		expect(source).toMatch(/'.m': 'OCTAVE'/);
+		expect(source).toMatch(/OCTAVE: 'main\.m'/);
+		expect(source).toMatch(/OCTAVE: 'octave'/);
+		expect(source).toMatch(/Octave runs through bundled GNU Octave WebAssembly assets/);
+		expect(source).toMatch(/code using `stdin` reads a line/);
+	});
+
 	it('surfaces SQLite through the bundled sql.js worker runtime contract', () => {
 		expect(source).toMatch(/<option value="SQLITE">SQLite<\/option>/);
 		expect(source).toMatch(/sqlite: 'SQLITE'/);
@@ -599,6 +626,20 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/prints the final expression as `=&gt; \.\.\.`/);
 		expect(source).toMatch(/press Enter to send stdin/);
 		expect(source).toMatch(/CLI args are still disabled/);
+	});
+
+	it('surfaces Erlang through the shared language selector and Popcorn hint', () => {
+		expect(source).toMatch(/erlang: \{/);
+		expect(source).toMatch(/<option value="ERLANG">Erlang<\/option>/);
+		expect(source).toMatch(/erlang: 'ERLANG'/);
+		expect(source).toMatch(/erl: 'ERLANG'/);
+		expect(source).toMatch(/'.erl': 'ERLANG'/);
+		expect(source).toMatch(/ERLANG: 'main\.erl'/);
+		expect(source).toMatch(/ERLANG: 'erlang'/);
+		expect(source).toMatch(/language === 'ERLANG'\s+\? 'erlang'/);
+		expect(source).toMatch(/Erlang runs through the bundled Popcorn\/AtomVM evaluator/);
+		expect(source).toMatch(/module files compile with the bundled Erlang compiler/);
+		expect(source).toMatch(/`io:get_line\(""\)` or `io:get_chars\("", N\)`/);
 	});
 
 	it('surfaces OCaml through the shared language selector and backend hint', () => {

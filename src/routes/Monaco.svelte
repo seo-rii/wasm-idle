@@ -944,6 +944,234 @@
 		}
 	} satisfies monaco.languages.IMonarchLanguage;
 
+	const octaveLanguageConfiguration = {
+		comments: {
+			lineComment: '%',
+			blockComment: ['%{', '%}']
+		},
+		brackets: [
+			['{', '}'],
+			['[', ']'],
+			['(', ')']
+		],
+		autoClosingPairs: [
+			{ open: '{', close: '}' },
+			{ open: '[', close: ']' },
+			{ open: '(', close: ')' },
+			{ open: '"', close: '"' },
+			{ open: "'", close: "'" }
+		],
+		surroundingPairs: [
+			{ open: '{', close: '}' },
+			{ open: '[', close: ']' },
+			{ open: '(', close: ')' },
+			{ open: '"', close: '"' },
+			{ open: "'", close: "'" }
+		]
+	} satisfies monaco.languages.LanguageConfiguration;
+
+	const octaveMonarchTokens = {
+		defaultToken: '',
+		tokenPostfix: '.octave',
+		keywords: [
+			'break',
+			'case',
+			'catch',
+			'classdef',
+			'continue',
+			'do',
+			'else',
+			'elseif',
+			'end',
+			'end_try_catch',
+			'end_unwind_protect',
+			'endclassdef',
+			'endenumeration',
+			'endevents',
+			'endfor',
+			'endfunction',
+			'endif',
+			'endmethods',
+			'endparfor',
+			'endproperties',
+			'endswitch',
+			'endwhile',
+			'enumeration',
+			'events',
+			'for',
+			'function',
+			'global',
+			'if',
+			'methods',
+			'otherwise',
+			'parfor',
+			'persistent',
+			'properties',
+			'return',
+			'switch',
+			'try',
+			'until',
+			'unwind_protect',
+			'unwind_protect_cleanup',
+			'while'
+		],
+		builtins: [
+			'argv',
+			'disp',
+			'fgetl',
+			'fprintf',
+			'input',
+			'isnan',
+			'length',
+			'printf',
+			'size',
+			'stdin',
+			'str2double',
+			'strtrim'
+		],
+		tokenizer: {
+			root: [
+				[/%\{/, 'comment', '@blockComment'],
+				[/%.*/, 'comment'],
+				[/"([^"\\]|\\.)*$/, 'string.invalid'],
+				[/'([^'\\]|\\.)*$/, 'string.invalid'],
+				[/"/, 'string', '@stringDouble'],
+				[/'/, 'string', '@stringSingle'],
+				[/\b\d+(?:\.\d+)?(?:[eE][-+]?\d+)?[ij]?\b/, 'number'],
+				[/\b(?:Inf|NaN|true|false)\b/, 'constant'],
+				[
+					/[A-Za-z_]\w*/,
+					{
+						cases: {
+							'@keywords': 'keyword',
+							'@builtins': 'type.identifier',
+							'@default': 'identifier'
+						}
+					}
+				],
+				[/[{}()[\]]/, '@brackets'],
+				[/[;,.]/, 'delimiter'],
+				[/[=><!~?:&|+\-*/\\^@]+/, 'operator']
+			],
+			blockComment: [
+				[/%\}/, 'comment', '@pop'],
+				[/[^%]+/, 'comment'],
+				[/./, 'comment']
+			],
+			stringDouble: [
+				[/[^\\"]+/, 'string'],
+				[/\\./, 'string.escape'],
+				[/"/, 'string', '@pop']
+			],
+			stringSingle: [
+				[/[^\\']+/, 'string'],
+				[/''/, 'string.escape'],
+				[/\\./, 'string.escape'],
+				[/'/, 'string', '@pop']
+			]
+		}
+	} satisfies monaco.languages.IMonarchLanguage;
+
+	const erlangLanguageConfiguration = {
+		comments: {
+			lineComment: '%'
+		},
+		brackets: [
+			['{', '}'],
+			['[', ']'],
+			['(', ')']
+		],
+		autoClosingPairs: [
+			{ open: '{', close: '}' },
+			{ open: '[', close: ']' },
+			{ open: '(', close: ')' },
+			{ open: '"', close: '"' },
+			{ open: "'", close: "'" }
+		],
+		surroundingPairs: [
+			{ open: '{', close: '}' },
+			{ open: '[', close: ']' },
+			{ open: '(', close: ')' },
+			{ open: '"', close: '"' },
+			{ open: "'", close: "'" }
+		]
+	} satisfies monaco.languages.LanguageConfiguration;
+
+	const erlangMonarchTokens = {
+		defaultToken: '',
+		tokenPostfix: '.erlang',
+		keywords: [
+			'after',
+			'and',
+			'andalso',
+			'band',
+			'begin',
+			'bnot',
+			'bor',
+			'bsl',
+			'bsr',
+			'bxor',
+			'case',
+			'catch',
+			'cond',
+			'div',
+			'end',
+			'fun',
+			'if',
+			'let',
+			'not',
+			'of',
+			'or',
+			'orelse',
+			'query',
+			'receive',
+			'rem',
+			'try',
+			'when',
+			'xor'
+		],
+		attributes: ['module', 'export', 'import', 'define', 'include', 'include_lib', 'record'],
+		builtins: ['erlang', 'io', 'lists', 'maps', 'string', 'timer'],
+		tokenizer: {
+			root: [
+				[/%.*$/, 'comment'],
+				[/"([^"\\]|\\.)*$/, 'string.invalid'],
+				[/"/, 'string', '@stringDouble'],
+				[/'([^'\\]|\\.)*$/, 'string.invalid'],
+				[/'/, 'string', '@quotedAtom'],
+				[/\?[A-Za-z_]\w*/, 'variable.predefined'],
+				[/-[a-z][A-Za-z0-9_@]*(?=\s*\()/, 'keyword'],
+				[/\b\d+#[0-9A-Za-z]+\b/, 'number'],
+				[/\b\d+(?:\.\d+)?(?:[eE][-+]?\d+)?\b/, 'number'],
+				[
+					/[a-z][A-Za-z0-9_@]*/,
+					{
+						cases: {
+							'@keywords': 'keyword',
+							'@attributes': 'keyword',
+							'@builtins': 'type.identifier',
+							'@default': 'identifier'
+						}
+					}
+				],
+				[/[A-Z_][A-Za-z0-9_@]*/, 'variable'],
+				[/[{}()[\]]/, '@brackets'],
+				[/[;,.]/, 'delimiter'],
+				[/[=><!:+\-*/\\|&]+/, 'operator']
+			],
+			stringDouble: [
+				[/[^\\"]+/, 'string'],
+				[/\\./, 'string.escape'],
+				[/"/, 'string', '@pop']
+			],
+			quotedAtom: [
+				[/[^\\']+/, 'string'],
+				[/\\./, 'string.escape'],
+				[/'/, 'string', '@pop']
+			]
+		}
+	} satisfies monaco.languages.IMonarchLanguage;
+
 	export const editorValue = () => editor?.getValue() || '';
 
 	let divEl: HTMLDivElement | null = $state(null);
@@ -1082,6 +1310,7 @@
 			language === 'csharp' ||
 			language === 'fsharp' ||
 			language === 'vb' ||
+			language === 'erlang' ||
 			language === 'ocaml' ||
 			language === 'javascript' ||
 			language === 'typescript' ||
@@ -1091,6 +1320,7 @@
 			language === 'lisp' ||
 			language === 'haskell' ||
 			language === 'r' ||
+			language === 'octave' ||
 			language === 'cpp'
 				? compilerDiagnostics.map((diagnostic) => ({
 						severity:
@@ -1133,6 +1363,7 @@
 				| 'fsharp'
 				| 'vbnet'
 				| 'elixir'
+				| 'erlang'
 				| 'ocaml'
 				| 'javascript'
 				| 'typescript'
@@ -1144,6 +1375,7 @@
 				| 'ruby'
 				| 'haskell'
 				| 'r'
+				| 'octave'
 				| 'sqlite'
 				| 'php'
 				| 'rust',
@@ -1237,6 +1469,24 @@
 			}
 			Monaco.languages.setLanguageConfiguration('lua', luaLanguageConfiguration);
 			Monaco.languages.setMonarchTokensProvider('lua', luaMonarchTokens);
+			if (!Monaco.languages.getLanguages().some(({ id }) => id === 'erlang')) {
+				Monaco.languages.register({
+					id: 'erlang',
+					aliases: ['Erlang', 'erlang', 'erl'],
+					extensions: ['.erl', '.hrl']
+				});
+			}
+			Monaco.languages.setLanguageConfiguration('erlang', erlangLanguageConfiguration);
+			Monaco.languages.setMonarchTokensProvider('erlang', erlangMonarchTokens);
+			if (!Monaco.languages.getLanguages().some(({ id }) => id === 'octave')) {
+				Monaco.languages.register({
+					id: 'octave',
+					aliases: ['Octave', 'MATLAB', 'octave', 'matlab'],
+					extensions: ['.m']
+				});
+			}
+			Monaco.languages.setLanguageConfiguration('octave', octaveLanguageConfiguration);
+			Monaco.languages.setMonarchTokensProvider('octave', octaveMonarchTokens);
 			if (!Monaco.languages.getLanguages().some(({ id }) => id === 'haskell')) {
 				Monaco.languages.register({
 					id: 'haskell',
@@ -1269,6 +1519,7 @@
 					| 'fsharp'
 					| 'vbnet'
 					| 'elixir'
+					| 'erlang'
 					| 'ocaml'
 					| 'javascript'
 					| 'typescript'
@@ -1280,6 +1531,7 @@
 					| 'ruby'
 					| 'haskell'
 					| 'r'
+					| 'octave'
 					| 'sqlite'
 					| 'php'
 					| 'rust',

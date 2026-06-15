@@ -66,15 +66,20 @@ cd wasm-idle
 pnpm run sync:pyodide
 ```
 
-Elixir browser execution uses an AtomVM/Popcorn AVM bundle. The Popcorn `eval-in-wasm` source and
-vendored Popcorn Elixir build dependency now live under `runtimes/wasm-elixir/`; rebuild and sync
-with:
+Elixir and Erlang browser execution use an AtomVM/Popcorn AVM bundle. The Popcorn `eval-in-wasm`
+source and vendored Popcorn Elixir build dependency now live under `runtimes/wasm-elixir/`;
+rebuild and sync with:
 
 ```bash
 cd wasm-idle
 pnpm --dir runtimes/wasm-elixir run bundle
 pnpm run sync:wasm-elixir
 ```
+
+Erlang support uses Popcorn's upstream `eval_erlang` and `eval_erlang_module` paths. This is not a
+handwritten wasm-idle subset, but it inherits AtomVM/Popcorn runtime limits and is not full
+Erlang/OTP ERTS coverage. Some OTP paths that rely on missing NIFs can fail in the current bundle,
+so the browser starter and stdin coverage use `io:get_line`/`io:format` only.
 
 ## Rust browser integration
 
@@ -322,4 +327,4 @@ await sandbox.load('print("hi")', false);
 
 Powered by [wasm-clang](https://github.com/binji/wasm-clang), Pyodide, TeaVM, `wasm-rust`,
 `wasm-tinygo`, `wasm-dotnet`, `wasm-of-js-of-ocaml`, `wasm-typescript`, `wasm-lisp`,
-`wasm-wat`, `wasm-lua`, `wasm-zig`, and `ghc-in-browser`.
+`wasm-wat`, `wasm-lua`, `wasm-zig`, AtomVM/Popcorn, and `ghc-in-browser`.

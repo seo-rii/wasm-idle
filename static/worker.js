@@ -6,7 +6,7 @@ self.addEventListener('activate', (event) => {
 	event.waitUntil(self.clients.claim());
 });
 
-const gzipVirtualExtensions = /\.(a|avm|bin|data|dat|dll|js|mjs|pdb|so|symbols|wasm)$/i;
+const gzipVirtualExtensions = /\.(a|avm|bin|data|dat|dll|js|mjs|oct|pdb|so|symbols|wasm)$/i;
 const precompressedExtension = /\.(br|brotli|gz|tgz|zip|zst)$/i;
 const runtimeAssetAliases = [
 	{
@@ -41,18 +41,21 @@ async function compressedRuntimeAssetManifest() {
 			}
 		)
 			.then((response) => (response.ok ? response.json() : { assets: [] }))
-			.then((manifest) => new Set(Array.isArray(manifest.assets) ? manifest.assets : []))
-			.catch(() => new Set());
+			.then((manifest) => ({
+				assets: new Set(Array.isArray(manifest.assets) ? manifest.assets : []),
+				sizes: manifest.sizes && typeof manifest.sizes === 'object' ? manifest.sizes : {}
+			}))
+			.catch(() => ({ assets: new Set(), sizes: {} }));
 	}
 	return compressedRuntimeAssetManifestPromise;
 }
 
 async function shouldTryCompressedRuntimeAsset(request, url) {
-	if (request.method !== 'GET') return false;
+	if (request.method !== 'GET' && request.method !== 'HEAD') return false;
 	if (request.headers.has('range')) return false;
 	if (precompressedExtension.test(url.pathname)) return false;
 	if (!gzipVirtualExtensions.test(url.pathname)) return false;
-	return (await compressedRuntimeAssetManifest()).has(relativePathInScope(url));
+	return (await compressedRuntimeAssetManifest()).assets.has(relativePathInScope(url));
 }
 
 function contentTypeForPath(pathname) {
@@ -87,6 +90,21 @@ function hasGzipContentEncoding(response) {
 
 async function fetchCompressedRuntimeAsset(request, url) {
 	if (!(await shouldTryCompressedRuntimeAsset(request, url))) return null;
+	if (request.method === 'HEAD') {
+		const manifest = await compressedRuntimeAssetManifest();
+		const relativePath = relativePathInScope(url);
+		if (!manifest.assets.has(relativePath)) return null;
+		const headers = new Headers({
+			'content-type': contentTypeForPath(url.pathname)
+		});
+		const originalSize = manifest.sizes[relativePath];
+		if (Number.isFinite(originalSize)) headers.set('content-length', String(originalSize));
+		return new Response(null, {
+			status: 200,
+			statusText: 'OK',
+			headers
+		});
+	}
 	const compressedUrl = new URL(url);
 	compressedUrl.pathname = `${compressedUrl.pathname}.gz`;
 	const compressedResponse = await fetch(compressedUrl, {

@@ -9,6 +9,7 @@ export interface RuntimeAssetKeySource {
 	d?: { moduleUrl?: string };
 	dotnet?: { moduleUrl?: string };
 	elixir?: { bundleUrl?: string };
+	erlang?: { bundleUrl?: string };
 	ocaml?: { moduleUrl?: string; manifestUrl?: string };
 	tinygo?: { appUrl?: string; moduleUrl?: string };
 	typescript?: { moduleUrl?: string };
@@ -25,6 +26,7 @@ export interface RuntimeAssetKeySource {
 	lisp?: { moduleUrl?: string };
 	ruby?: { wasmUrl?: string };
 	r?: { baseUrl?: string };
+	octave?: { baseUrl?: string; workerUrl?: string; manifestUrl?: string };
 	sqlite?: { wasmUrl?: string };
 	php?: { version?: string };
 }
@@ -49,6 +51,7 @@ export function createRuntimeAssetsKey(runtimeAssets: RuntimeAssetKeyInput): str
 		dModuleUrl: runtimeAssets.d?.moduleUrl || '',
 		dotnetModuleUrl: runtimeAssets.dotnet?.moduleUrl || '',
 		elixirBundleUrl: runtimeAssets.elixir?.bundleUrl || '',
+		erlangBundleUrl: runtimeAssets.erlang?.bundleUrl || '',
 		ocamlModuleUrl: runtimeAssets.ocaml?.moduleUrl || '',
 		ocamlManifestUrl: runtimeAssets.ocaml?.manifestUrl || '',
 		tinygoAppUrl: runtimeAssets.tinygo?.appUrl || '',
@@ -66,6 +69,9 @@ export function createRuntimeAssetsKey(runtimeAssets: RuntimeAssetKeyInput): str
 		lispModuleUrl: runtimeAssets.lisp?.moduleUrl || '',
 		rubyWasmUrl: runtimeAssets.ruby?.wasmUrl || '',
 		rBaseUrl: runtimeAssets.r?.baseUrl || '',
+		octaveBaseUrl: runtimeAssets.octave?.baseUrl || '',
+		octaveWorkerUrl: runtimeAssets.octave?.workerUrl || '',
+		octaveManifestUrl: runtimeAssets.octave?.manifestUrl || '',
 		sqliteWasmUrl: runtimeAssets.sqlite?.wasmUrl || '',
 		phpVersion: runtimeAssets.php?.version || ''
 	});

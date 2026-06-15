@@ -18,6 +18,7 @@ const compressedRuntimeAssetSamples = [
 	'wasm-dotnet/runtime/FSharp.Compiler.Service.wasm',
 	'wasm-elixir/bundle.avm',
 	'wasm-lisp/vendor/jco/obj/js-component-bindgen-component.core.wasm',
+	'wasm-octave/runtime/bin/octave-cli.wasm',
 	'wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-opt.browser.js',
 	'wasm-tinygo/tools/tinygo-compiler.wasm',
 	'wasm-tinygo/vendor/emception/04de61a8a0f85ee15beb.a',

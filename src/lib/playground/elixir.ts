@@ -1,4 +1,8 @@
-import { resolveElixirBundleUrl, type PlaygroundRuntimeAssets } from '$lib/playground/assets';
+import {
+	resolveElixirBundleUrl,
+	resolveErlangBundleUrl,
+	type PlaygroundRuntimeAssets
+} from '$lib/playground/assets';
 import type { SandboxExecutionOptions } from '$lib/playground/options';
 import type { Sandbox } from '$lib/playground/sandbox';
 import {
@@ -7,7 +11,10 @@ import {
 	resetBufferedStdin
 } from '$lib/playground/stdinBuffer';
 
+type BeamEvalLanguage = 'ELIXIR' | 'ERLANG';
+
 class Elixir implements Sandbox {
+	language: BeamEvalLanguage;
 	output: any = null;
 	worker?: Worker = <any>null;
 	buffer = new SharedArrayBuffer(1024);
@@ -23,6 +30,10 @@ class Elixir implements Sandbox {
 	waitingForInput = false;
 	pendingEof = false;
 
+	constructor(language: BeamEvalLanguage = 'ELIXIR') {
+		this.language = language;
+	}
+
 	load(
 		runtimeAssets: string | PlaygroundRuntimeAssets = '',
 		_code = '',
@@ -33,10 +44,18 @@ class Elixir implements Sandbox {
 	) {
 		return new Promise<void>(async (resolve, reject) => {
 			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
-			const nextBundleUrl = resolveElixirBundleUrl(runtimeAssets, currentUrl);
+			const nextBundleUrl =
+				this.language === 'ERLANG'
+					? resolveErlangBundleUrl(runtimeAssets, currentUrl)
+					: resolveElixirBundleUrl(runtimeAssets, currentUrl);
+			const runtimeLabel = this.language === 'ERLANG' ? 'Erlang' : 'Elixir';
 			if (!nextBundleUrl) {
 				return reject(
-					'Elixir runtime is not configured. Set PUBLIC_WASM_ELIXIR_BUNDLE_URL or runtimeAssets.elixir.bundleUrl.'
+					`${runtimeLabel} runtime is not configured. Set ${
+						this.language === 'ERLANG'
+							? 'PUBLIC_WASM_ERLANG_BUNDLE_URL or runtimeAssets.erlang.bundleUrl'
+							: 'PUBLIC_WASM_ELIXIR_BUNDLE_URL or runtimeAssets.elixir.bundleUrl'
+					}.`
 				);
 			}
 
@@ -62,11 +81,11 @@ class Elixir implements Sandbox {
 							? ` (${event.filename}:${event.lineno}:${event.colno})`
 							: '';
 					reject(
-						`Elixir worker script error: ${event.message || 'unknown error'}${location}`
+						`${runtimeLabel} worker script error: ${event.message || 'unknown error'}${location}`
 					);
 				};
 				this.worker.onmessageerror = () => {
-					reject('Elixir worker message deserialization failed');
+					reject(`${runtimeLabel} worker message deserialization failed`);
 				};
 				this.worker.onmessage = (event: MessageEvent<any>) => {
 					if (event.data?.load) {
@@ -168,6 +187,7 @@ class Elixir implements Sandbox {
 				code,
 				prepare,
 				buffer: this.buffer,
+				language: this.language,
 				log
 			});
 		});

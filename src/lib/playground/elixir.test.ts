@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const workerInstances: MockWorker[] = [];
 const { publicEnv } = vi.hoisted(() => ({
 	publicEnv: {
-		PUBLIC_WASM_ELIXIR_BUNDLE_URL: ''
+		PUBLIC_WASM_ELIXIR_BUNDLE_URL: '',
+		PUBLIC_WASM_ERLANG_BUNDLE_URL: ''
 	}
 }));
 let suppressAutoLoadAck = false;
@@ -53,6 +54,7 @@ describe('Elixir sandbox', () => {
 	beforeEach(() => {
 		workerInstances.length = 0;
 		publicEnv.PUBLIC_WASM_ELIXIR_BUNDLE_URL = '';
+		publicEnv.PUBLIC_WASM_ERLANG_BUNDLE_URL = '';
 		suppressAutoLoadAck = false;
 		history.replaceState({}, '', '/editor');
 	});
@@ -106,12 +108,14 @@ describe('Elixir sandbox', () => {
 			code: 'IO.puts("hello")',
 			prepare: true,
 			buffer: expect.any(SharedArrayBuffer),
+			language: 'ELIXIR',
 			log: true
 		});
 		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(3, {
 			code: 'IO.puts("hello")',
 			prepare: false,
 			buffer: expect.any(SharedArrayBuffer),
+			language: 'ELIXIR',
 			log: true
 		});
 		expect(output).toHaveBeenCalledWith('factorial_plus_bonus=27\n');
@@ -119,6 +123,43 @@ describe('Elixir sandbox', () => {
 
 		await sandbox.clear();
 		expect(workerInstances[0].terminate).toHaveBeenCalledTimes(1);
+	});
+
+	it('loads Erlang through the shared Popcorn worker and marks run messages as Erlang', async () => {
+		const sandbox = new Elixir('ERLANG');
+		const progress = { set: vi.fn() };
+
+		await sandbox.load(
+			{
+				erlang: {
+					bundleUrl: '/runtime/erlang/bundle.avm'
+				}
+			},
+			'io:format("hello~n").',
+			true,
+			[],
+			{},
+			progress
+		);
+
+		expect(workerInstances).toHaveLength(1);
+		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
+			1,
+			expect.objectContaining({
+				load: true,
+				bundleUrl: expect.stringMatching(/\/runtime\/erlang\/bundle\.avm$/),
+				log: true
+			})
+		);
+
+		await expect(sandbox.run('io:format("hello~n").', false)).resolves.toBe(':ok');
+		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(2, {
+			code: 'io:format("hello~n").',
+			prepare: false,
+			buffer: expect.any(SharedArrayBuffer),
+			language: 'ERLANG',
+			log: true
+		});
 	});
 
 	it('rejects load when no Elixir bundle is configured', async () => {

@@ -81,6 +81,10 @@ vi.mock('$lib/playground/r', () => ({
 	default: createMockSandboxClass('R')
 }));
 
+vi.mock('$lib/playground/octave', () => ({
+	default: createMockSandboxClass('OCTAVE')
+}));
+
 vi.mock('$lib/playground/sqlite', () => ({
 	default: createMockSandboxClass('SQLITE')
 }));
@@ -98,7 +102,11 @@ vi.mock('$lib/playground/dotnet', () => ({
 }));
 
 vi.mock('$lib/playground/elixir', () => ({
-	default: createMockSandboxClass('ELIXIR')
+	default: class extends MockSandbox {
+		constructor(language: string = 'ELIXIR') {
+			super(language);
+		}
+	}
 }));
 
 vi.mock('$lib/playground/ocaml', () => ({
@@ -454,6 +462,50 @@ End Module`;
 		]);
 	});
 
+	it('routes Erlang aliases through the Popcorn-backed sandbox implementation', async () => {
+		const binding = createPlaygroundBinding({
+			rootUrl: '/absproxy/5173',
+			erlang: {
+				bundleUrl: '/absproxy/5173/wasm-elixir/bundle.avm?v=test'
+			}
+		});
+		const progress = { set() {} };
+		const code = 'io:format("hello~n").';
+		const sandbox = await binding.load('ERLANG');
+
+		await sandbox.load(code, true, [], {}, progress);
+
+		expect(sandbox.runtimeAssets).toEqual({
+			rootUrl: '/absproxy/5173',
+			erlang: {
+				bundleUrl: '/absproxy/5173/wasm-elixir/bundle.avm?v=test'
+			}
+		});
+		expect(sandboxInstances.get('ERLANG')).toHaveLength(1);
+		expect(sandboxInstances.get('ERLANG')?.[0]?.loadCalls).toEqual([
+			[
+				{
+					rootUrl: '/absproxy/5173',
+					erlang: {
+						bundleUrl: '/absproxy/5173/wasm-elixir/bundle.avm?v=test'
+					}
+				},
+				code,
+				true,
+				[],
+				{},
+				progress
+			]
+		]);
+		expect((await binding.load('ERL')).runtimeAssets).toEqual({
+			rootUrl: '/absproxy/5173',
+			erlang: {
+				bundleUrl: '/absproxy/5173/wasm-elixir/bundle.avm?v=test'
+			}
+		});
+		expect(sandboxInstances.get('ERLANG')).toHaveLength(1);
+	});
+
 	it('routes OCaml requests through the dedicated OCaml sandbox implementation', async () => {
 		const binding = createPlaygroundBinding({
 			rootUrl: '/absproxy/5173',
@@ -688,6 +740,37 @@ End Module`;
 		expect(sandboxInstances.get('R')?.[0]?.loadCalls).toEqual([
 			[runtimeAssets, 'cat("hello\\n")', true, [], {}, progress]
 		]);
+	});
+
+	it('routes Octave aliases through the GNU Octave wasm sandbox implementation', async () => {
+		const binding = createPlaygroundBinding({
+			rootUrl: '/absproxy/5173',
+			octave: {
+				baseUrl: '/absproxy/5173/wasm-octave/runtime/',
+				workerUrl: '/absproxy/5173/wasm-octave/runner-worker.js?v=test',
+				manifestUrl: '/absproxy/5173/wasm-octave/runtime/runtime-manifest.v1.json?v=test'
+			}
+		});
+		const progress = { set() {} };
+		const sandbox = await binding.load('MATLAB');
+
+		await sandbox.load('disp("hello")', true, [], {}, progress);
+
+		const runtimeAssets = {
+			rootUrl: '/absproxy/5173',
+			octave: {
+				baseUrl: '/absproxy/5173/wasm-octave/runtime/',
+				workerUrl: '/absproxy/5173/wasm-octave/runner-worker.js?v=test',
+				manifestUrl: '/absproxy/5173/wasm-octave/runtime/runtime-manifest.v1.json?v=test'
+			}
+		};
+		expect(sandbox.runtimeAssets).toEqual(runtimeAssets);
+		expect(sandboxInstances.get('OCTAVE')).toHaveLength(1);
+		expect(sandboxInstances.get('OCTAVE')?.[0]?.loadCalls).toEqual([
+			[runtimeAssets, 'disp("hello")', true, [], {}, progress]
+		]);
+		expect((await binding.load('OCTAVE')).runtimeAssets).toEqual(runtimeAssets);
+		expect(sandboxInstances.get('OCTAVE')).toHaveLength(1);
 	});
 
 	it('routes SQLite aliases through the SQLite sandbox implementation', async () => {

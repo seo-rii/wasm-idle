@@ -70,6 +70,10 @@ export interface ElixirRuntimeAssetConfig {
 	bundleUrl?: string;
 }
 
+export interface ErlangRuntimeAssetConfig {
+	bundleUrl?: string;
+}
+
 export interface TypeScriptRuntimeAssetConfig {
 	moduleUrl?: string;
 }
@@ -107,6 +111,12 @@ export interface RRuntimeAssetConfig {
 	baseUrl?: string;
 }
 
+export interface OctaveRuntimeAssetConfig {
+	baseUrl?: string;
+	workerUrl?: string;
+	manifestUrl?: string;
+}
+
 export interface SqliteRuntimeAssetConfig {
 	wasmUrl?: string;
 }
@@ -128,6 +138,7 @@ export interface PlaygroundRuntimeAssets {
 	ocaml?: OcamlRuntimeAssetConfig;
 	tinygo?: TinyGoRuntimeAssetConfig;
 	elixir?: ElixirRuntimeAssetConfig;
+	erlang?: ErlangRuntimeAssetConfig;
 	typescript?: TypeScriptRuntimeAssetConfig;
 	wat?: WatRuntimeAssetConfig;
 	lua?: LuaRuntimeAssetConfig;
@@ -136,6 +147,7 @@ export interface PlaygroundRuntimeAssets {
 	lisp?: LispRuntimeAssetConfig;
 	ruby?: RubyRuntimeAssetConfig;
 	r?: RRuntimeAssetConfig;
+	octave?: OctaveRuntimeAssetConfig;
 	sqlite?: SqliteRuntimeAssetConfig;
 	php?: PhpRuntimeAssetConfig;
 }
@@ -449,7 +461,10 @@ export function resolveDModuleUrl(
 	}
 
 	if (typeof options === 'string') {
-		return resolveConfiguredUrl(`${normalizeRootUrl(options) || ''}/wasm-d/index.js`, currentUrl);
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-d/index.js`,
+			currentUrl
+		);
 	}
 
 	if (options?.rootUrl) {
@@ -637,6 +652,37 @@ export function resolveElixirBundleUrl(
 	currentUrl = ''
 ) {
 	const configuredBundleUrl =
+		(typeof options === 'object' && options?.elixir?.bundleUrl) ||
+		(publicEnv.PUBLIC_WASM_ELIXIR_BUNDLE_URL || '').trim();
+
+	if (configuredBundleUrl) {
+		return resolveConfiguredUrl(configuredBundleUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-elixir/bundle.avm`,
+			currentUrl
+		);
+	}
+
+	if (options?.rootUrl) {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-elixir/bundle.avm`,
+			currentUrl
+		);
+	}
+
+	return '';
+}
+
+export function resolveErlangBundleUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredBundleUrl =
+		(typeof options === 'object' && options?.erlang?.bundleUrl) ||
+		(publicEnv.PUBLIC_WASM_ERLANG_BUNDLE_URL || '').trim() ||
 		(typeof options === 'object' && options?.elixir?.bundleUrl) ||
 		(publicEnv.PUBLIC_WASM_ELIXIR_BUNDLE_URL || '').trim();
 
@@ -958,6 +1004,104 @@ export function resolveRBaseUrl(
 	}
 
 	return '';
+}
+
+export function resolveOctaveBaseUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredBaseUrl =
+		(typeof options === 'object' && options?.octave?.baseUrl) ||
+		(publicEnv.PUBLIC_WASM_OCTAVE_BASE_URL || '').trim();
+
+	if (configuredBaseUrl) {
+		return normalizeBaseUrl(configuredBaseUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return normalizeBaseUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-octave/runtime/`,
+			currentUrl
+		);
+	}
+
+	if (options?.rootUrl) {
+		return normalizeBaseUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-octave/runtime/`,
+			currentUrl
+		);
+	}
+
+	return normalizeBaseUrl('/wasm-octave/runtime/', currentUrl);
+}
+
+export function resolveOctaveWorkerUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredWorkerUrl =
+		(typeof options === 'object' && options?.octave?.workerUrl) ||
+		(publicEnv.PUBLIC_WASM_OCTAVE_WORKER_URL || '').trim();
+
+	if (configuredWorkerUrl) {
+		return resolveConfiguredUrl(configuredWorkerUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-octave/runner-worker.js`,
+			currentUrl
+		);
+	}
+
+	if (options?.rootUrl) {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-octave/runner-worker.js`,
+			currentUrl
+		);
+	}
+
+	return resolveConfiguredUrl('/wasm-octave/runner-worker.js', currentUrl);
+}
+
+export function resolveOctaveManifestUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredManifestUrl =
+		(typeof options === 'object' && options?.octave?.manifestUrl) ||
+		(publicEnv.PUBLIC_WASM_OCTAVE_MANIFEST_URL || '').trim();
+
+	if (configuredManifestUrl) {
+		return resolveConfiguredUrl(configuredManifestUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-octave/runtime/runtime-manifest.v1.json`,
+			currentUrl
+		);
+	}
+
+	if (options?.rootUrl) {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-octave/runtime/runtime-manifest.v1.json`,
+			currentUrl
+		);
+	}
+
+	return resolveConfiguredUrl('/wasm-octave/runtime/runtime-manifest.v1.json', currentUrl);
+}
+
+export function resolveOctaveRuntimeAssetConfig(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	return {
+		baseUrl: resolveOctaveBaseUrl(options, currentUrl),
+		workerUrl: resolveOctaveWorkerUrl(options, currentUrl),
+		manifestUrl: resolveOctaveManifestUrl(options, currentUrl)
+	};
 }
 
 export function resolveSqliteWasmUrl(

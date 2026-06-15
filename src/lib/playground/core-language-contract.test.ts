@@ -66,6 +66,13 @@ describe('core language contract', () => {
 		expect(isDeferredProgressLanguage('r')).toBe(true);
 	});
 
+	it('exposes Octave and MATLAB aliases as a deferred browser runtime language', () => {
+		expect(supportedLanguageIds).toContain('OCTAVE');
+		expect(normalizeLanguageId('octave')).toBe('OCTAVE');
+		expect(normalizeLanguageId('matlab')).toBe('OCTAVE');
+		expect(isDeferredProgressLanguage('matlab')).toBe(true);
+	});
+
 	it('exposes SQLite aliases as a deferred browser runtime language', () => {
 		expect(supportedLanguageIds).toContain('SQLITE');
 		expect(normalizeLanguageId('sqlite')).toBe('SQLITE');
@@ -77,6 +84,13 @@ describe('core language contract', () => {
 		expect(supportedLanguageIds).toContain('PHP');
 		expect(normalizeLanguageId('php')).toBe('PHP');
 		expect(isDeferredProgressLanguage('php')).toBe(true);
+	});
+
+	it('exposes Erlang aliases as a deferred browser runtime language', () => {
+		expect(supportedLanguageIds).toContain('ERLANG');
+		expect(normalizeLanguageId('erlang')).toBe('ERLANG');
+		expect(normalizeLanguageId('erl')).toBe('ERLANG');
+		expect(isDeferredProgressLanguage('erl')).toBe(true);
 	});
 
 	it('exposes VB.NET aliases as a deferred browser runtime language', () => {
@@ -133,6 +147,23 @@ describe('core language contract', () => {
 		expect(key).toContain('"rBaseUrl":"/webr/test/"');
 	});
 
+	it('includes Octave runtime urls in runtime asset cache keys', () => {
+		const key = createRuntimeAssetsKey({
+			rootUrl: '/repl',
+			octave: {
+				baseUrl: '/wasm-octave/runtime/',
+				workerUrl: '/wasm-octave/runner-worker.js?v=test',
+				manifestUrl: '/wasm-octave/runtime/runtime-manifest.v1.json?v=test'
+			}
+		});
+
+		expect(key).toContain('"octaveBaseUrl":"/wasm-octave/runtime/"');
+		expect(key).toContain('"octaveWorkerUrl":"/wasm-octave/runner-worker.js?v=test"');
+		expect(key).toContain(
+			'"octaveManifestUrl":"/wasm-octave/runtime/runtime-manifest.v1.json?v=test"'
+		);
+	});
+
 	it('includes WAT module urls in runtime asset cache keys', () => {
 		const key = createRuntimeAssetsKey({
 			rootUrl: '/repl',
@@ -164,6 +195,17 @@ describe('core language contract', () => {
 		});
 
 		expect(key).toContain('"dModuleUrl":"/wasm-d/index.js?v=test"');
+	});
+
+	it('includes Erlang bundle urls in runtime asset cache keys', () => {
+		const key = createRuntimeAssetsKey({
+			rootUrl: '/repl',
+			erlang: {
+				bundleUrl: '/wasm-elixir/bundle.avm?v=test'
+			}
+		});
+
+		expect(key).toContain('"erlangBundleUrl":"/wasm-elixir/bundle.avm?v=test"');
 	});
 
 	it('includes Lisp module urls in runtime asset cache keys', () => {

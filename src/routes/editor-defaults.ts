@@ -11,6 +11,7 @@ export type EditorDefaultLanguage =
 	| 'fsharp'
 	| 'vbnet'
 	| 'elixir'
+	| 'erlang'
 	| 'ocaml'
 	| 'javascript'
 	| 'typescript'
@@ -22,6 +23,7 @@ export type EditorDefaultLanguage =
 	| 'ruby'
 	| 'haskell'
 	| 'r'
+	| 'octave'
 	| 'sqlite'
 	| 'php'
 	| 'rust';
@@ -37,6 +39,7 @@ export const editorDefaults: Record<
 	| 'fsharp'
 	| 'vbnet'
 	| 'elixir'
+	| 'erlang'
 	| 'ocaml'
 	| 'javascript'
 	| 'typescript'
@@ -48,6 +51,7 @@ export const editorDefaults: Record<
 	| 'ruby'
 	| 'haskell'
 	| 'r'
+	| 'octave'
 	| 'sqlite'
 	| 'php',
 	string
@@ -229,6 +233,11 @@ End Module`,
 end
 
 Demo.run()`,
+	erlang: `Line = io:get_line(""),
+case Line of
+    eof -> io:format("stdin=~s~n", [""]);
+    _ -> io:format("stdin=~s", [Line])
+end.`,
 	ocaml: `let bonus = 3
 
 let rec factorial n =
@@ -374,6 +383,23 @@ n <- suppressWarnings(as.integer(if (length(line)) trimws(line[[1]]) else ""))
 if (is.na(n)) n <- 4
 
 cat(sprintf("factorial_plus_bonus=%d\\n", factorial(n) + bonus))`,
+	octave: `bonus = 3;
+
+function value = factorial(n)
+    if (n <= 1)
+        value = 1;
+    else
+        value = n * factorial(n - 1);
+    endif
+endfunction
+
+line = fgetl(stdin);
+n = str2double(line);
+if (isnan(n))
+    n = 4;
+endif
+
+printf("factorial_plus_bonus=%d\\n", factorial(n) + bonus);`,
 	sqlite: `CREATE TABLE numbers (n INTEGER NOT NULL);
 INSERT INTO numbers VALUES (1), (2), (3), (4);
 
@@ -524,6 +550,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.fsharp ||
 		source === editorDefaults.vbnet ||
 		source === editorDefaults.elixir ||
+		source === editorDefaults.erlang ||
 		source === editorDefaults.ocaml ||
 		source === editorDefaults.javascript ||
 		source === editorDefaults.typescript ||
@@ -535,6 +562,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.ruby ||
 		source === editorDefaults.haskell ||
 		source === editorDefaults.r ||
+		source === editorDefaults.octave ||
 		source === editorDefaults.sqlite ||
 		source === editorDefaults.php ||
 		source === rustEditorDefaults['wasm32-wasip1'] ||

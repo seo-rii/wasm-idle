@@ -1,0 +1,1 @@
+export const WASM_OCTAVE_ASSET_VERSION = "a776c4feb552005a";

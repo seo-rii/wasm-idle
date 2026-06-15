@@ -20,6 +20,7 @@
 	import { WASM_LUA_ASSET_VERSION } from '$lib/playground/wasmLuaVersion';
 	import { WASM_LISP_ASSET_VERSION } from '$lib/playground/wasmLispVersion';
 	import { WASM_OCAML_ASSET_VERSION } from '$lib/playground/wasmOcamlVersion';
+	import { WASM_OCTAVE_ASSET_VERSION } from '$lib/playground/wasmOctaveVersion';
 	import { WASM_R_ASSET_VERSION } from '$lib/playground/wasmRVersion';
 	import { WASM_RUST_ASSET_VERSION } from '$lib/playground/wasmRustVersion';
 	import { WASM_TINYGO_ASSET_VERSION } from '$lib/playground/wasmTinyGoVersion';
@@ -60,6 +61,7 @@
 		| 'FSHARP'
 		| 'VBNET'
 		| 'ELIXIR'
+		| 'ERLANG'
 		| 'OCAML'
 		| 'TINYGO'
 		| 'JAVASCRIPT'
@@ -72,6 +74,7 @@
 		| 'RUBY'
 		| 'HASKELL'
 		| 'R'
+		| 'OCTAVE'
 		| 'SQLITE'
 		| 'PHP';
 
@@ -112,6 +115,7 @@
 		'FSHARP',
 		'VBNET',
 		'ELIXIR',
+		'ERLANG',
 		'OCAML',
 		'TINYGO',
 		'JAVASCRIPT',
@@ -124,6 +128,7 @@
 		'RUBY',
 		'HASKELL',
 		'R',
+		'OCTAVE',
 		'SQLITE',
 		'PHP'
 	];
@@ -139,6 +144,7 @@
 		FSHARP: 'F#',
 		VBNET: 'VB.NET',
 		ELIXIR: 'Elixir',
+		ERLANG: 'Erlang',
 		OCAML: 'OCaml',
 		TINYGO: 'TinyGo',
 		JAVASCRIPT: 'JavaScript',
@@ -151,6 +157,7 @@
 		RUBY: 'Ruby',
 		HASKELL: 'Haskell',
 		R: 'R',
+		OCTAVE: 'Octave',
 		SQLITE: 'SQLite',
 		PHP: 'PHP'
 	};
@@ -182,6 +189,11 @@
 				: `/wasm-dotnet/index.js?v=${WASM_DOTNET_ASSET_VERSION}`
 		},
 		elixir: {
+			bundleUrl: path
+				? `${path}/wasm-elixir/bundle.avm?v=${WASM_ELIXIR_ASSET_VERSION}`
+				: `/wasm-elixir/bundle.avm?v=${WASM_ELIXIR_ASSET_VERSION}`
+		},
+		erlang: {
 			bundleUrl: path
 				? `${path}/wasm-elixir/bundle.avm?v=${WASM_ELIXIR_ASSET_VERSION}`
 				: `/wasm-elixir/bundle.avm?v=${WASM_ELIXIR_ASSET_VERSION}`
@@ -242,6 +254,15 @@
 			baseUrl: path
 				? `${path}/webr/${WASM_R_ASSET_VERSION}/`
 				: `/webr/${WASM_R_ASSET_VERSION}/`
+		},
+		octave: {
+			baseUrl: path ? `${path}/wasm-octave/runtime/` : '/wasm-octave/runtime/',
+			workerUrl: path
+				? `${path}/wasm-octave/runner-worker.js?v=${WASM_OCTAVE_ASSET_VERSION}`
+				: `/wasm-octave/runner-worker.js?v=${WASM_OCTAVE_ASSET_VERSION}`,
+			manifestUrl: path
+				? `${path}/wasm-octave/runtime/runtime-manifest.v1.json?v=${WASM_OCTAVE_ASSET_VERSION}`
+				: `/wasm-octave/runtime/runtime-manifest.v1.json?v=${WASM_OCTAVE_ASSET_VERSION}`
 		}
 	}));
 	const playground = $derived.by(() => createPlaygroundBinding(runtimeAssets));
@@ -302,38 +323,43 @@
 											? 'vb'
 											: language === 'ELIXIR'
 												? 'elixir'
-												: language === 'OCAML'
-													? 'ocaml'
-													: language === 'JAVASCRIPT'
-														? 'javascript'
-														: language === 'TYPESCRIPT'
-															? 'typescript'
-															: language === 'ASSEMBLYSCRIPT'
+												: language === 'ERLANG'
+													? 'erlang'
+													: language === 'OCAML'
+														? 'ocaml'
+														: language === 'JAVASCRIPT'
+															? 'javascript'
+															: language === 'TYPESCRIPT'
 																? 'typescript'
-																: language === 'WAT'
-																	? 'wat'
-																	: language === 'ZIG'
-																		? 'zig'
-																		: language === 'LUA'
-																			? 'lua'
-																			: language === 'LISP'
-																				? 'lisp'
-																				: language ===
-																					  'RUBY'
-																					? 'ruby'
+																: language === 'ASSEMBLYSCRIPT'
+																	? 'typescript'
+																	: language === 'WAT'
+																		? 'wat'
+																		: language === 'ZIG'
+																			? 'zig'
+																			: language === 'LUA'
+																				? 'lua'
+																				: language === 'LISP'
+																					? 'lisp'
 																					: language ===
-																						  'HASKELL'
-																						? 'haskell'
+																						  'RUBY'
+																						? 'ruby'
 																						: language ===
-																							  'R'
-																							? 'r'
+																							  'HASKELL'
+																							? 'haskell'
 																							: language ===
-																								  'SQLITE'
-																								? 'sql'
+																								  'R'
+																								? 'r'
 																								: language ===
-																									  'PHP'
-																									? 'php'
-																									: 'go'
+																									  'OCTAVE'
+																									? 'octave'
+																									: language ===
+																										  'SQLITE'
+																										? 'sql'
+																										: language ===
+																											  'PHP'
+																											? 'php'
+																											: 'go'
 	);
 	const compact = $derived(examplePaneWidth > 0 && examplePaneWidth <= 760);
 	const activeFile = $derived(files.find((file) => file.path === activePath) ?? files[0]);
@@ -499,6 +525,8 @@
 			'.vb': 'VBNET',
 			'.ex': 'ELIXIR',
 			'.exs': 'ELIXIR',
+			'.erl': 'ERLANG',
+			'.hrl': 'ERLANG',
 			'.ml': 'OCAML',
 			'.mli': 'OCAML',
 			'.js': 'JAVASCRIPT',
@@ -520,6 +548,7 @@
 			'.hs': 'HASKELL',
 			'.lhs': 'HASKELL',
 			'.r': 'R',
+			'.m': 'OCTAVE',
 			'.sql': 'SQLITE',
 			'.sqlite': 'SQLITE',
 			'.php': 'PHP'
@@ -540,6 +569,7 @@
 			FSHARP: 'Program.fsx',
 			VBNET: 'Program.vb',
 			ELIXIR: 'main.exs',
+			ERLANG: 'main.erl',
 			OCAML: 'main.ml',
 			TINYGO: 'main.go',
 			JAVASCRIPT: 'main.js',
@@ -552,6 +582,7 @@
 			RUBY: 'main.rb',
 			HASKELL: 'main.hs',
 			R: 'main.R',
+			OCTAVE: 'main.m',
 			SQLITE: 'main.sql',
 			PHP: 'main.php'
 		};
@@ -571,6 +602,7 @@
 			FSHARP: 'fsharp',
 			VBNET: 'vbnet',
 			ELIXIR: 'elixir',
+			ERLANG: 'erlang',
 			OCAML: 'ocaml',
 			TINYGO: 'go',
 			JAVASCRIPT: 'javascript',
@@ -583,6 +615,7 @@
 			RUBY: 'ruby',
 			HASKELL: 'haskell',
 			R: 'r',
+			OCTAVE: 'octave',
 			SQLITE: 'sqlite',
 			PHP: 'php'
 		} as const satisfies Record<
@@ -1053,6 +1086,8 @@
 			vb: 'VBNET',
 			visualbasic: 'VBNET',
 			elixir: 'ELIXIR',
+			erlang: 'ERLANG',
+			erl: 'ERLANG',
 			ocaml: 'OCAML',
 			tinygo: 'TINYGO',
 			javascript: 'JAVASCRIPT',
@@ -1073,6 +1108,8 @@
 			haskell: 'HASKELL',
 			hs: 'HASKELL',
 			r: 'R',
+			octave: 'OCTAVE',
+			matlab: 'OCTAVE',
 			sqlite: 'SQLITE',
 			sql: 'SQLITE',
 			php: 'PHP'
@@ -1689,6 +1726,7 @@
 						<option value="FSHARP">F#</option>
 						<option value="VBNET">VB.NET</option>
 						<option value="ELIXIR">Elixir</option>
+						<option value="ERLANG">Erlang</option>
 						<option value="OCAML">OCaml</option>
 						<option value="TINYGO">TinyGo</option>
 						<option value="JAVASCRIPT">JavaScript</option>
@@ -1701,11 +1739,12 @@
 						<option value="RUBY">Ruby</option>
 						<option value="HASKELL">Haskell</option>
 						<option value="R">R</option>
+						<option value="OCTAVE">Octave</option>
 						<option value="SQLITE">SQLite</option>
 						<option value="PHP">PHP</option>
 					</select>
 				</label>
-				{#if language === 'JAVA' || language === 'RUST' || language === 'GO' || language === 'D' || language === 'CSHARP' || language === 'FSHARP' || language === 'VBNET' || language === 'TINYGO' || language === 'JAVASCRIPT' || language === 'TYPESCRIPT' || language === 'LUA' || language === 'ZIG' || language === 'LISP' || language === 'RUBY' || language === 'HASKELL' || language === 'R' || language === 'PHP'}
+				{#if language === 'JAVA' || language === 'RUST' || language === 'GO' || language === 'D' || language === 'CSHARP' || language === 'FSHARP' || language === 'VBNET' || language === 'TINYGO' || language === 'JAVASCRIPT' || language === 'TYPESCRIPT' || language === 'LUA' || language === 'ZIG' || language === 'LISP' || language === 'RUBY' || language === 'HASKELL' || language === 'R' || language === 'OCTAVE' || language === 'PHP'}
 					<label class="args-chip">
 						<span class="material-symbols-outlined">list_alt</span>
 						<input bind:value={argsInput} placeholder="3 4 5" spellcheck={false} />
@@ -1858,6 +1897,13 @@
 				the terminal below and press Enter to send stdin. CLI args are still disabled.
 			</p>
 		{/if}
+		{#if language === 'ERLANG'}
+			<p class="hint">
+				Erlang runs through the bundled Popcorn/AtomVM evaluator. Expression files use
+				`erl_eval`, module files compile with the bundled Erlang compiler and then call
+				`main/0`. Use `io:get_line("")` or `io:get_chars("", N)` for stdin.
+			</p>
+		{/if}
 		{#if language === 'TINYGO'}
 			<p class="hint">
 				TinyGo runs through the bundled wasm-tinygo browser pipeline by default, loads its
@@ -1911,6 +1957,12 @@
 			<p class="hint">
 				R runs through bundled webR WebAssembly assets. Type into the terminal below and
 				press Enter before code using `stdin()` reads a line.
+			</p>
+		{/if}
+		{#if language === 'OCTAVE'}
+			<p class="hint">
+				Octave runs through bundled GNU Octave WebAssembly assets. Type into the terminal
+				below and press Enter before code using `stdin` reads a line.
 			</p>
 		{/if}
 		{#if language === 'SQLITE'}

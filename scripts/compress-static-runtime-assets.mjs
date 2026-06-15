@@ -20,6 +20,7 @@ const COMPRESSIBLE_EXTENSIONS = new Set([
 	'.dll',
 	'.js',
 	'.mjs',
+	'.oct',
 	'.pdb',
 	'.so',
 	'.symbols',
@@ -36,6 +37,7 @@ const COMPRESSIBLE_TOP_LEVEL_DIRS = [
 	'wasm-go',
 	'wasm-haskell',
 	'wasm-lisp',
+	'wasm-octave',
 	'wasm-of-js-of-ocaml',
 	'wasm-rust',
 	'wasm-tinygo',
@@ -100,6 +102,13 @@ async function collectCompressedManifestEntries(rootDir) {
 	return entries.sort();
 }
 
+async function readExistingCompressedAssetManifest(rootDir) {
+	const manifest = await readFile(path.join(rootDir, MANIFEST_FILE_NAME), 'utf8')
+		.then((value) => JSON.parse(value))
+		.catch(() => ({}));
+	return manifest && typeof manifest === 'object' ? manifest : {};
+}
+
 function sha256(bytes) {
 	return createHash('sha256').update(bytes).digest('hex');
 }
@@ -122,11 +131,23 @@ async function compressFile(filePath) {
 	};
 }
 
-async function writeCompressedAssetManifest(rootDir) {
+async function writeCompressedAssetManifest(rootDir, compressed) {
 	const assets = await collectCompressedManifestEntries(rootDir);
+	const existingManifest = await readExistingCompressedAssetManifest(rootDir);
+	const existingSizes =
+		existingManifest.sizes && typeof existingManifest.sizes === 'object'
+			? existingManifest.sizes
+			: {};
+	const sizes = {};
+	for (const [assetPath, size] of Object.entries(existingSizes)) {
+		if (assets.includes(assetPath) && Number.isFinite(size)) sizes[assetPath] = size;
+	}
+	for (const entry of compressed) {
+		sizes[relativeToRoot(rootDir, entry.originalPath)] = entry.originalSize;
+	}
 	await writeFile(
 		path.join(rootDir, MANIFEST_FILE_NAME),
-		`${JSON.stringify({ assets }, null, 2)}\n`,
+		`${JSON.stringify({ assets, sizes }, null, 2)}\n`,
 		'utf8'
 	);
 	return assets;
@@ -144,7 +165,7 @@ export async function compressStaticRuntimeAssets({ rootDir = STATIC_DIR } = {})
 		if (!isCompressibleFile(rootDir, filePath, fileStats)) continue;
 		compressed.push(await compressFile(filePath));
 	}
-	const manifestAssets = await writeCompressedAssetManifest(rootDir);
+	const manifestAssets = await writeCompressedAssetManifest(rootDir, compressed);
 	return { compressed, manifestAssets, rootDir };
 }
 
