@@ -61,12 +61,7 @@ function extractDiagnostics(output: string) {
 }
 
 function defaultSourceFileName(fileName?: string) {
-	const normalized =
-		fileName
-			?.replace(/\\/g, '/')
-			.split('/')
-			.filter(Boolean)
-			.pop() || 'main.d';
+	const normalized = fileName?.replace(/\\/g, '/').split('/').filter(Boolean).pop() || 'main.d';
 	return normalized.endsWith('.d') ? normalized : `${normalized}.d`;
 }
 
@@ -97,11 +92,7 @@ function collectLinkerFiles(entries: ReturnType<typeof parseTar>) {
 	return files;
 }
 
-function resultFromFailure(
-	message: string,
-	stdout = '',
-	stderr = message
-): BrowserDCompilerResult {
+function resultFromFailure(message: string, stdout = '', stderr = message): BrowserDCompilerResult {
 	return {
 		success: false,
 		stdout,
@@ -139,25 +130,29 @@ async function loadRuntimeAssets(
 			resolveVersionedAssetUrl(runtimeBaseUrl, manifest.compiler.ldc2.asset),
 			'ldc2.wasm',
 			fetchImpl,
-			report
+			report,
+			manifest.compiler.ldc2.compression
 		),
 		fetchRuntimeAssetBytes(
 			resolveVersionedAssetUrl(runtimeBaseUrl, manifest.compiler.toolchain.asset),
 			'D toolchain',
 			fetchImpl,
-			report
+			report,
+			manifest.compiler.toolchain.compression
 		),
 		fetchRuntimeAssetBytes(
 			resolveVersionedAssetUrl(runtimeBaseUrl, linker.wasm.asset),
 			'wasm-ld.wasm',
 			fetchImpl,
-			report
+			report,
+			linker.wasm.compression
 		),
 		fetchRuntimeAssetBytes(
 			resolveVersionedAssetUrl(runtimeBaseUrl, linker.data.asset),
 			'wasm-ld.data',
 			fetchImpl,
-			report
+			report,
+			linker.data.compression
 		)
 	]);
 	emitProgress(request, 'assets', 25, 'D compiler assets loaded');
@@ -257,9 +252,7 @@ async function linkDArtifact(
 	);
 	if (linked.exitCode !== 0 || !linked.output) {
 		throw new Error(
-			linked.stderr ||
-				linked.stdout ||
-				`wasm-ld exited with code ${linked.exitCode}`
+			linked.stderr || linked.stdout || `wasm-ld exited with code ${linked.exitCode}`
 		);
 	}
 	return {
@@ -310,14 +303,20 @@ export async function compileD(
 		);
 		if (compileResult.exitCode !== 0) {
 			return resultFromFailure(
-				compileResult.stderr || compileResult.stdout || `ldc2 exited with code ${compileResult.exitCode}`,
+				compileResult.stderr ||
+					compileResult.stdout ||
+					`ldc2 exited with code ${compileResult.exitCode}`,
 				compileResult.stdout,
 				compileResult.stderr
 			);
 		}
 		const objectBytes = readGuestFile(root, `/work/${objectFileName}`);
 		if (!objectBytes) {
-			return resultFromFailure(`ldc2 did not emit /work/${objectFileName}`, compileResult.stdout, compileResult.stderr);
+			return resultFromFailure(
+				`ldc2 did not emit /work/${objectFileName}`,
+				compileResult.stdout,
+				compileResult.stderr
+			);
 		}
 		emitProgress(request, 'link', 55, 'linking D wasm');
 		const linked = await linkDArtifact(
@@ -351,7 +350,9 @@ export async function compileD(
 	}
 }
 
-export async function createDCompiler(options: CreateDCompilerOptions = {}): Promise<BrowserDCompiler> {
+export async function createDCompiler(
+	options: CreateDCompilerOptions = {}
+): Promise<BrowserDCompiler> {
 	return {
 		compile: (request) => compileD(request, options)
 	};

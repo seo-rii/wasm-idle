@@ -93,11 +93,11 @@ export async function syncWasmDDist({
 		'index.js',
 		'runtime/runtime-manifest.v1.json',
 		'runtime/runtime-build.json',
-		'runtime/bin/ldc2.wasm',
+		'runtime/bin/ldc2.wasm.gz',
 		'runtime/bin/lld.js',
-		'runtime/bin/lld.wasm',
-		'runtime/bin/lld.data',
-		'runtime/toolchain/toolchain.tar'
+		'runtime/bin/lld.wasm.gz',
+		'runtime/bin/lld.data.gz',
+		'runtime/toolchain/toolchain.tar.gz'
 	];
 	for (const filePath of requiredFiles) {
 		const absolutePath = path.join(sourceDir, filePath);

@@ -1,6 +1,7 @@
 import { resolveVersionedAssetUrl } from './asset-url.js';
 
 type RuntimeAssetProgressReporter = (loaded: number, total?: number) => void;
+type RuntimeAssetCompression = 'gzip' | undefined;
 
 function createRuntimeFetch(): typeof fetch {
 	return (async (input: string | URL) => {
@@ -14,7 +15,9 @@ function createRuntimeFetch(): typeof fetch {
 			return new Response(await readFile(fileURLToPath(url)));
 		} catch (error) {
 			const code =
-				error && typeof error === 'object' && 'code' in error ? (error as { code?: string }).code : '';
+				error && typeof error === 'object' && 'code' in error
+					? (error as { code?: string }).code
+					: '';
 			return new Response(null, {
 				status: code === 'ENOENT' ? 404 : 500
 			});
@@ -24,11 +27,38 @@ function createRuntimeFetch(): typeof fetch {
 
 export const defaultFetch = createRuntimeFetch();
 
+function toArrayBuffer(bytes: Uint8Array) {
+	return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+}
+
+async function decompressGzip(bytes: Uint8Array, assetLabel: string) {
+	if (typeof DecompressionStream !== 'function') {
+		throw new Error(
+			`cannot decompress gzip ${assetLabel}: DecompressionStream is not available`
+		);
+	}
+	const stream = new Blob([toArrayBuffer(bytes)])
+		.stream()
+		.pipeThrough(new DecompressionStream('gzip'));
+	return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+function shouldDecompressResponse(response: Response, compression: RuntimeAssetCompression) {
+	if (compression !== 'gzip') return false;
+	const contentEncoding = response.headers.get('content-encoding') || '';
+	return !contentEncoding
+		.toLowerCase()
+		.split(',')
+		.map((value) => value.trim())
+		.includes('gzip');
+}
+
 export async function fetchRuntimeAssetBytes(
 	assetUrl: string | URL,
 	assetLabel: string,
 	fetchImpl: typeof fetch = defaultFetch,
-	reportProgress?: RuntimeAssetProgressReporter
+	reportProgress?: RuntimeAssetProgressReporter,
+	compression?: RuntimeAssetCompression
 ) {
 	const resolvedAssetUrl = assetUrl.toString();
 	let response: Response;
@@ -40,12 +70,15 @@ export async function fetchRuntimeAssetBytes(
 		);
 	}
 	if (!response.ok) {
-		throw new Error(`failed to fetch ${assetLabel} from ${resolvedAssetUrl} (status ${response.status})`);
+		throw new Error(
+			`failed to fetch ${assetLabel} from ${resolvedAssetUrl} (status ${response.status})`
+		);
 	}
+	const shouldDecompress = shouldDecompressResponse(response, compression);
 	if (!response.body) {
 		const bytes = new Uint8Array(await response.arrayBuffer());
 		reportProgress?.(bytes.byteLength, bytes.byteLength);
-		return bytes;
+		return shouldDecompress ? await decompressGzip(bytes, assetLabel) : bytes;
 	}
 	const reader = response.body.getReader();
 	const contentLength = Number(response.headers.get('content-length') || 0) || undefined;
@@ -67,6 +100,9 @@ export async function fetchRuntimeAssetBytes(
 		position += chunk.byteLength;
 	}
 	reportProgress?.(receivedLength, contentLength ?? receivedLength);
+	if (shouldDecompress) {
+		return await decompressGzip(bytes, assetLabel);
+	}
 	return bytes;
 }
 
@@ -75,7 +111,8 @@ export async function fetchRuntimeAssetJson<T>(
 	asset: string,
 	assetLabel: string,
 	fetchImpl: typeof fetch = defaultFetch,
-	reportProgress?: RuntimeAssetProgressReporter
+	reportProgress?: RuntimeAssetProgressReporter,
+	compression?: RuntimeAssetCompression
 ) {
 	return JSON.parse(
 		new TextDecoder().decode(
@@ -83,7 +120,8 @@ export async function fetchRuntimeAssetJson<T>(
 				resolveVersionedAssetUrl(baseUrl, asset),
 				assetLabel,
 				fetchImpl,
-				reportProgress
+				reportProgress,
+				compression
 			)
 		)
 	) as T;

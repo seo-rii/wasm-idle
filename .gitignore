@@ -16,3 +16,7 @@ static/.cache/
 static/wasm-of-js-of-ocaml/
 scripts/*.d.mts
 src/routes/editor-defaults.d.ts
+static/wasm-d/runtime/bin/ldc2.wasm
+static/wasm-d/runtime/bin/lld.data
+static/wasm-d/runtime/bin/lld.wasm
+static/wasm-d/runtime/toolchain/toolchain.tar

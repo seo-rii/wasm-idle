@@ -69,6 +69,7 @@ export interface BrowserDExecutionResult {
 export interface RuntimeAssetConfig {
 	asset: string;
 	argv0?: string;
+	compression?: 'gzip';
 }
 
 export interface EmscriptenLldRuntimeAssetConfig {
@@ -85,9 +86,9 @@ export interface RuntimeManifestV1 {
 	version: string;
 	defaultTarget: BrowserDTarget;
 	compiler: {
-			ldc2: RuntimeAssetConfig;
-			toolchain: RuntimeAssetConfig;
-			linker: EmscriptenLldRuntimeAssetConfig;
+		ldc2: RuntimeAssetConfig;
+		toolchain: RuntimeAssetConfig;
+		linker: EmscriptenLldRuntimeAssetConfig;
 	};
 	targets: Record<
 		BrowserDTarget,

@@ -7,11 +7,11 @@ import { compileD, executeBrowserDArtifact } from '../src/index.js';
 const runtimeDir = path.resolve('dist/runtime');
 const hasRuntimeAssets =
 	existsSync(path.join(runtimeDir, 'runtime-manifest.v1.json')) &&
-	existsSync(path.join(runtimeDir, 'bin', 'ldc2.wasm')) &&
+	existsSync(path.join(runtimeDir, 'bin', 'ldc2.wasm.gz')) &&
 	existsSync(path.join(runtimeDir, 'bin', 'lld.js')) &&
-	existsSync(path.join(runtimeDir, 'bin', 'lld.wasm')) &&
-	existsSync(path.join(runtimeDir, 'bin', 'lld.data')) &&
-	existsSync(path.join(runtimeDir, 'toolchain', 'toolchain.tar'));
+	existsSync(path.join(runtimeDir, 'bin', 'lld.wasm.gz')) &&
+	existsSync(path.join(runtimeDir, 'bin', 'lld.data.gz')) &&
+	existsSync(path.join(runtimeDir, 'toolchain', 'toolchain.tar.gz'));
 
 describe.runIf(hasRuntimeAssets)('real LDC runtime assets', () => {
 	it('compiles, links, and runs a stdin/stdout D program', async () => {

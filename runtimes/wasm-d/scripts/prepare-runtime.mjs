@@ -4,6 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
+import { gzip } from 'node:zlib';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const runtimeRoot = path.resolve(scriptDir, '..');
@@ -12,7 +14,9 @@ const workspaceRoot = path.resolve(wasmIdleRoot, '..');
 const defaultSourceDir = path.resolve(workspaceRoot, 'ldc-wasm', 'dist', 'wasm-idle');
 const defaultTargetDir = path.resolve(runtimeRoot, 'dist', 'runtime');
 
-const TOOLCHAIN_ASSET = 'toolchain/toolchain.tar';
+const gzipAsync = promisify(gzip);
+
+const TOOLCHAIN_ASSET = 'toolchain/toolchain.tar.gz';
 
 const USAGE = `Usage: node runtimes/wasm-d/scripts/prepare-runtime.mjs [--source DIR] [--out DIR]
 
@@ -129,6 +133,11 @@ async function createUncompressedTar(sourceDir, archivePath) {
 	await run('tar', ['-cf', archivePath, '-C', sourceDir, '.']);
 }
 
+async function gzipFile(sourcePath, targetPath) {
+	await fs.mkdir(path.dirname(targetPath), { recursive: true });
+	await fs.writeFile(targetPath, await gzipAsync(await fs.readFile(sourcePath), { level: 9 }));
+}
+
 const options = parseArgs(process.argv.slice(2));
 const sourceManifestPath = path.join(options.sourceDir, 'runtime-manifest.v1.json');
 const sourceManifest = JSON.parse(await fs.readFile(sourceManifestPath, 'utf8'));
@@ -162,23 +171,26 @@ for (const asset of Object.values(requiredAssets)) {
 	if (!stat?.isFile()) throw new Error(`ldc-wasm manifest asset is not a file: ${asset}`);
 }
 
-const targetLdc2Asset = 'bin/ldc2.wasm';
+const targetLdc2Asset = 'bin/ldc2.wasm.gz';
 await fs.mkdir(path.join(options.targetDir, 'bin'), { recursive: true });
-await fs.copyFile(
+await gzipFile(
 	path.join(options.sourceDir, requiredAssets.ldc2),
 	path.join(options.targetDir, targetLdc2Asset)
 );
 const linkerAssets = {
 	js: 'bin/lld.js',
-	wasm: 'bin/lld.wasm',
-	data: 'bin/lld.data'
+	wasm: 'bin/lld.wasm.gz',
+	data: 'bin/lld.data.gz'
 };
-await fs.copyFile(path.join(options.sourceDir, requiredAssets.lldJs), path.join(options.targetDir, linkerAssets.js));
 await fs.copyFile(
+	path.join(options.sourceDir, requiredAssets.lldJs),
+	path.join(options.targetDir, linkerAssets.js)
+);
+await gzipFile(
 	path.join(options.sourceDir, requiredAssets.lldWasm),
 	path.join(options.targetDir, linkerAssets.wasm)
 );
-await fs.copyFile(
+await gzipFile(
 	path.join(options.sourceDir, requiredAssets.lldData),
 	path.join(options.targetDir, linkerAssets.data)
 );
@@ -188,10 +200,21 @@ try {
 	const toolchainRoot = path.join(tempRoot, 'toolchain');
 	await fs.mkdir(path.join(toolchainRoot, 'etc'), { recursive: true });
 	await fs.mkdir(path.join(toolchainRoot, 'imports'), { recursive: true });
-	await extractTarZst(path.join(options.sourceDir, requiredAssets.config), path.join(toolchainRoot, 'etc'));
-	await extractTarZst(path.join(options.sourceDir, requiredAssets.imports), path.join(toolchainRoot, 'imports'));
-	await extractTarZst(path.join(options.sourceDir, requiredAssets.runtimeLibraries), toolchainRoot);
-	await createUncompressedTar(toolchainRoot, path.join(options.targetDir, TOOLCHAIN_ASSET));
+	await extractTarZst(
+		path.join(options.sourceDir, requiredAssets.config),
+		path.join(toolchainRoot, 'etc')
+	);
+	await extractTarZst(
+		path.join(options.sourceDir, requiredAssets.imports),
+		path.join(toolchainRoot, 'imports')
+	);
+	await extractTarZst(
+		path.join(options.sourceDir, requiredAssets.runtimeLibraries),
+		toolchainRoot
+	);
+	const toolchainTarPath = path.join(tempRoot, 'toolchain.tar');
+	await createUncompressedTar(toolchainRoot, toolchainTarPath);
+	await gzipFile(toolchainTarPath, path.join(options.targetDir, TOOLCHAIN_ASSET));
 } finally {
 	await fs.rm(tempRoot, { recursive: true, force: true });
 }
@@ -204,10 +227,12 @@ const targetManifest = {
 	compiler: {
 		ldc2: {
 			asset: targetLdc2Asset,
-			argv0: sourceManifest.compiler.ldc2.argv0 || 'ldc2'
+			argv0: sourceManifest.compiler.ldc2.argv0 || 'ldc2',
+			compression: 'gzip'
 		},
 		toolchain: {
-			asset: TOOLCHAIN_ASSET
+			asset: TOOLCHAIN_ASSET,
+			compression: 'gzip'
 		},
 		linker: {
 			kind: 'emscripten-lld',
@@ -216,10 +241,12 @@ const targetManifest = {
 				asset: linkerAssets.js
 			},
 			wasm: {
-				asset: linkerAssets.wasm
+				asset: linkerAssets.wasm,
+				compression: 'gzip'
 			},
 			data: {
-				asset: linkerAssets.data
+				asset: linkerAssets.data,
+				compression: 'gzip'
 			}
 		}
 	},
@@ -239,7 +266,13 @@ await fs.writeFile(
 	'utf8'
 );
 
-const targetAssets = [targetLdc2Asset, linkerAssets.js, linkerAssets.wasm, linkerAssets.data, TOOLCHAIN_ASSET];
+const targetAssets = [
+	targetLdc2Asset,
+	linkerAssets.js,
+	linkerAssets.wasm,
+	linkerAssets.data,
+	TOOLCHAIN_ASSET
+];
 const preparedAssets = [];
 for (const asset of targetAssets) {
 	const filePath = path.join(options.targetDir, asset);

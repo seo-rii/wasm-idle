@@ -5,11 +5,13 @@
   "defaultTarget": "wasm32-wasi",
   "compiler": {
     "ldc2": {
-      "asset": "bin/ldc2.wasm",
-      "argv0": "ldc2"
+      "asset": "bin/ldc2.wasm.gz",
+      "argv0": "ldc2",
+      "compression": "gzip"
     },
     "toolchain": {
-      "asset": "toolchain/toolchain.tar"
+      "asset": "toolchain/toolchain.tar.gz",
+      "compression": "gzip"
     },
     "linker": {
       "kind": "emscripten-lld",
@@ -18,10 +20,12 @@
         "asset": "bin/lld.js"
       },
       "wasm": {
-        "asset": "bin/lld.wasm"
+        "asset": "bin/lld.wasm.gz",
+        "compression": "gzip"
       },
       "data": {
-        "asset": "bin/lld.data"
+        "asset": "bin/lld.data.gz",
+        "compression": "gzip"
       }
     }
   },

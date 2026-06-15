@@ -34,6 +34,17 @@ function toArrayBuffer(bytes: Uint8Array) {
 	return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
 }
 
+function createObjectUrl(bytes: ArrayBuffer, type: string) {
+	if (
+		typeof Blob !== 'function' ||
+		typeof URL === 'undefined' ||
+		typeof URL.createObjectURL !== 'function'
+	) {
+		return null;
+	}
+	return URL.createObjectURL(new Blob([bytes], { type }));
+}
+
 async function importLldFactory(jsUrl: string | URL) {
 	const module = await import(/* @vite-ignore */ jsUrl.toString());
 	const factory = module.default || module;
@@ -77,56 +88,67 @@ export async function runEmscriptenLld(
 	const factory = await importLldFactory(assets.jsUrl);
 	const wasmBinary = toArrayBuffer(assets.wasmBytes);
 	const dataBytes = toArrayBuffer(assets.dataBytes);
-	const lld = await factory({
-		wasmBinary,
-		getPreloadedPackage() {
-			return dataBytes.slice(0);
-		},
-		locateFile(fileName: string) {
-			return new URL(fileName, assets.jsUrl).href;
-		},
-		print(line: string) {
-			const chunk = `${line}\n`;
-			stdout.push(chunk);
-			options.stdout?.(chunk);
-		},
-		printErr(line: string) {
-			const chunk = `${line}\n`;
-			stderr.push(chunk);
-			options.stderr?.(chunk);
-		},
-		quit(_status: number, toThrow: unknown) {
-			throw toThrow;
-		}
-	});
+	const wasmObjectUrl = createObjectUrl(wasmBinary, 'application/wasm');
+	const dataObjectUrl = createObjectUrl(dataBytes, 'application/octet-stream');
 
-	for (const [filePath, bytes] of files) {
-		ensureEmscriptenDirectory(lld.FS, parentDirectory(filePath));
-		lld.FS.writeFile(filePath, bytes);
-	}
-
-	let exitCode = 0;
 	try {
-		exitCode = Number(await lld.callMain(['-flavor', 'wasm', ...args])) || 0;
-	} catch (error) {
-		const status = typeof (error as { status?: unknown })?.status === 'number'
-			? Number((error as { status: number }).status)
-			: 1;
-		exitCode = status;
-		if (!(error instanceof Error && error.name === 'ExitStatus')) {
-			stderr.push(`${error instanceof Error ? error.message : String(error)}\n`);
+		const lld = await factory({
+			wasmBinary,
+			getPreloadedPackage() {
+				return dataBytes.slice(0);
+			},
+			locateFile(fileName: string) {
+				if (wasmObjectUrl && fileName.endsWith('.wasm')) return wasmObjectUrl;
+				if (dataObjectUrl && fileName.endsWith('.data')) return dataObjectUrl;
+				return new URL(fileName, assets.jsUrl).href;
+			},
+			print(line: string) {
+				const chunk = `${line}\n`;
+				stdout.push(chunk);
+				options.stdout?.(chunk);
+			},
+			printErr(line: string) {
+				const chunk = `${line}\n`;
+				stderr.push(chunk);
+				options.stderr?.(chunk);
+			},
+			quit(_status: number, toThrow: unknown) {
+				throw toThrow;
+			}
+		});
+
+		for (const [filePath, bytes] of files) {
+			ensureEmscriptenDirectory(lld.FS, parentDirectory(filePath));
+			lld.FS.writeFile(filePath, bytes);
 		}
-	}
 
-	let output: Uint8Array | undefined;
-	if (exitCode === 0) {
-		output = new Uint8Array(lld.FS.readFile(outputPath));
-	}
+		let exitCode = 0;
+		try {
+			exitCode = Number(await lld.callMain(['-flavor', 'wasm', ...args])) || 0;
+		} catch (error) {
+			const status =
+				typeof (error as { status?: unknown })?.status === 'number'
+					? Number((error as { status: number }).status)
+					: 1;
+			exitCode = status;
+			if (!(error instanceof Error && error.name === 'ExitStatus')) {
+				stderr.push(`${error instanceof Error ? error.message : String(error)}\n`);
+			}
+		}
 
-	return {
-		exitCode,
-		stdout: stdout.join(''),
-		stderr: stderr.join(''),
-		output
-	};
+		let output: Uint8Array | undefined;
+		if (exitCode === 0) {
+			output = new Uint8Array(lld.FS.readFile(outputPath));
+		}
+
+		return {
+			exitCode,
+			stdout: stdout.join(''),
+			stderr: stderr.join(''),
+			output
+		};
+	} finally {
+		if (wasmObjectUrl) URL.revokeObjectURL(wasmObjectUrl);
+		if (dataObjectUrl) URL.revokeObjectURL(dataObjectUrl);
+	}
 }
