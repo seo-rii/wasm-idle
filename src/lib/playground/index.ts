@@ -1,5 +1,6 @@
 import Clang from '$lib/playground/clang';
 import AssemblyScript from '$lib/playground/assemblyscript';
+import D from '$lib/playground/d';
 import Dotnet from '$lib/playground/dotnet';
 import Elixir from '$lib/playground/elixir';
 import Go from '$lib/playground/go';
@@ -36,6 +37,7 @@ export const supportedLanguages = [
 	'JAVA',
 	'RUST',
 	'GO',
+	'D',
 	'CSHARP',
 	'FSHARP',
 	'VBNET',
@@ -95,6 +97,10 @@ async function playground(language: string, runtimeAssets?: SandboxRuntimeAssets
 			break;
 		case 'GO':
 			sandbox = new Go();
+			break;
+		case 'D':
+		case 'DLANG':
+			sandbox = new D();
 			break;
 		case 'CSHARP':
 		case 'C#':
@@ -175,6 +181,9 @@ async function playground(language: string, runtimeAssets?: SandboxRuntimeAssets
 		if (language === 'JAVA') sandboxCache['JAVA'] = sandbox;
 		if (language === 'RUST') sandboxCache['RUST'] = sandbox;
 		if (language === 'GO') sandboxCache['GO'] = sandbox;
+		if (language === 'D' || language === 'DLANG') {
+			sandboxCache['D'] = sandboxCache['DLANG'] = sandbox;
+		}
 		if (language === 'CSHARP' || language === 'C#') {
 			sandboxCache['CSHARP'] = sandboxCache['C#'] = sandbox;
 		}

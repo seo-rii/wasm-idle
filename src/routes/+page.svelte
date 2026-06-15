@@ -12,6 +12,7 @@
 	import { base } from '$app/paths';
 	import { SvelteURL } from 'svelte/reactivity';
 	import type { PlaygroundRuntimeAssets } from '$lib/playground/assets';
+	import { WASM_D_ASSET_VERSION } from '$lib/playground/wasmDVersion';
 	import { WASM_DOTNET_ASSET_VERSION } from '$lib/playground/wasmDotnetVersion';
 	import { WASM_ELIXIR_ASSET_VERSION } from '$lib/playground/wasmElixirVersion';
 	import { WASM_GO_ASSET_VERSION } from '$lib/playground/wasmGoVersion';
@@ -54,6 +55,7 @@
 		| 'JAVA'
 		| 'RUST'
 		| 'GO'
+		| 'D'
 		| 'CSHARP'
 		| 'FSHARP'
 		| 'VBNET'
@@ -105,6 +107,7 @@
 		'JAVA',
 		'RUST',
 		'GO',
+		'D',
 		'CSHARP',
 		'FSHARP',
 		'VBNET',
@@ -131,6 +134,7 @@
 		JAVA: 'Java',
 		RUST: 'Rust',
 		GO: 'Go',
+		D: 'D',
 		CSHARP: 'C#',
 		FSHARP: 'F#',
 		VBNET: 'VB.NET',
@@ -166,6 +170,11 @@
 			compilerUrl: path
 				? `${path}/wasm-go/index.js?v=${WASM_GO_ASSET_VERSION}`
 				: `/wasm-go/index.js?v=${WASM_GO_ASSET_VERSION}`
+		},
+		d: {
+			moduleUrl: path
+				? `${path}/wasm-d/index.js?v=${WASM_D_ASSET_VERSION}`
+				: `/wasm-d/index.js?v=${WASM_D_ASSET_VERSION}`
 		},
 		dotnet: {
 			moduleUrl: path
@@ -283,45 +292,48 @@
 						? 'java'
 						: language === 'RUST'
 							? 'rust'
-							: language === 'CSHARP'
-								? 'csharp'
-								: language === 'FSHARP'
-									? 'fsharp'
-									: language === 'VBNET'
-										? 'vb'
-										: language === 'ELIXIR'
-											? 'elixir'
-											: language === 'OCAML'
-												? 'ocaml'
-												: language === 'JAVASCRIPT'
-													? 'javascript'
-													: language === 'TYPESCRIPT'
-														? 'typescript'
-														: language === 'ASSEMBLYSCRIPT'
+							: language === 'D'
+								? 'd'
+								: language === 'CSHARP'
+									? 'csharp'
+									: language === 'FSHARP'
+										? 'fsharp'
+										: language === 'VBNET'
+											? 'vb'
+											: language === 'ELIXIR'
+												? 'elixir'
+												: language === 'OCAML'
+													? 'ocaml'
+													: language === 'JAVASCRIPT'
+														? 'javascript'
+														: language === 'TYPESCRIPT'
 															? 'typescript'
-															: language === 'WAT'
-																? 'wat'
-																: language === 'ZIG'
-																	? 'zig'
-																	: language === 'LUA'
-																		? 'lua'
-																		: language === 'LISP'
-																			? 'lisp'
-																			: language === 'RUBY'
-																				? 'ruby'
+															: language === 'ASSEMBLYSCRIPT'
+																? 'typescript'
+																: language === 'WAT'
+																	? 'wat'
+																	: language === 'ZIG'
+																		? 'zig'
+																		: language === 'LUA'
+																			? 'lua'
+																			: language === 'LISP'
+																				? 'lisp'
 																				: language ===
-																					  'HASKELL'
-																					? 'haskell'
+																					  'RUBY'
+																					? 'ruby'
 																					: language ===
-																						  'R'
-																						? 'r'
+																						  'HASKELL'
+																						? 'haskell'
 																						: language ===
-																							  'SQLITE'
-																							? 'sql'
+																							  'R'
+																							? 'r'
 																							: language ===
-																								  'PHP'
-																								? 'php'
-																								: 'go'
+																								  'SQLITE'
+																								? 'sql'
+																								: language ===
+																									  'PHP'
+																									? 'php'
+																									: 'go'
 	);
 	const compact = $derived(examplePaneWidth > 0 && examplePaneWidth <= 760);
 	const activeFile = $derived(files.find((file) => file.path === activePath) ?? files[0]);
@@ -479,6 +491,7 @@
 			'.py': 'PYTHON',
 			'.rs': 'RUST',
 			'.go': 'GO',
+			'.d': 'D',
 			'.cs': 'CSHARP',
 			'.fs': 'FSHARP',
 			'.fsx': 'FSHARP',
@@ -522,6 +535,7 @@
 			PYTHON: 'main.py',
 			RUST: 'main.rs',
 			GO: 'main.go',
+			D: 'main.d',
 			CSHARP: 'Program.cs',
 			FSHARP: 'Program.fsx',
 			VBNET: 'Program.vb',
@@ -552,6 +566,7 @@
 			JAVA: 'java',
 			RUST: 'rust',
 			GO: 'go',
+			D: 'd',
 			CSHARP: 'csharp',
 			FSHARP: 'fsharp',
 			VBNET: 'vbnet',
@@ -1026,6 +1041,8 @@
 			java: 'JAVA',
 			rust: 'RUST',
 			go: 'GO',
+			d: 'D',
+			dlang: 'D',
 			csharp: 'CSHARP',
 			'c#': 'CSHARP',
 			cs: 'CSHARP',
@@ -1453,6 +1470,7 @@
 			language !== 'JAVA' &&
 			language !== 'RUST' &&
 			language !== 'GO' &&
+			language !== 'D' &&
 			language !== 'CSHARP' &&
 			language !== 'FSHARP' &&
 			language !== 'VBNET' &&
@@ -1666,6 +1684,7 @@
 						<option value="JAVA">Java</option>
 						<option value="RUST">Rust</option>
 						<option value="GO">Go</option>
+						<option value="D">D</option>
 						<option value="CSHARP">C#</option>
 						<option value="FSHARP">F#</option>
 						<option value="VBNET">VB.NET</option>
@@ -1686,7 +1705,7 @@
 						<option value="PHP">PHP</option>
 					</select>
 				</label>
-				{#if language === 'JAVA' || language === 'RUST' || language === 'GO' || language === 'CSHARP' || language === 'FSHARP' || language === 'VBNET' || language === 'TINYGO' || language === 'JAVASCRIPT' || language === 'TYPESCRIPT' || language === 'LUA' || language === 'ZIG' || language === 'LISP' || language === 'RUBY' || language === 'HASKELL' || language === 'R' || language === 'PHP'}
+				{#if language === 'JAVA' || language === 'RUST' || language === 'GO' || language === 'D' || language === 'CSHARP' || language === 'FSHARP' || language === 'VBNET' || language === 'TINYGO' || language === 'JAVASCRIPT' || language === 'TYPESCRIPT' || language === 'LUA' || language === 'ZIG' || language === 'LISP' || language === 'RUBY' || language === 'HASKELL' || language === 'R' || language === 'PHP'}
 					<label class="args-chip">
 						<span class="material-symbols-outlined">list_alt</span>
 						<input bind:value={argsInput} placeholder="3 4 5" spellcheck={false} />
@@ -1801,6 +1820,14 @@
 				{/if}
 				Pass CLI args here, type into the terminal below, and use Ctrl+D or the EOF button while
 				running if the program reads stdin until EOF.
+			</p>
+		{/if}
+		{#if language === 'D'}
+			<p class="hint">
+				D compiles in the browser with the bundled LDC WASI compiler and Emscripten LLD
+				linker assets, then executes the emitted WASI artifact locally. Pass CLI args here,
+				type into the terminal below, and use Ctrl+D or the EOF button if the program reads
+				stdin until EOF.
 			</p>
 		{/if}
 		{#if language === 'CSHARP' || language === 'FSHARP' || language === 'VBNET'}

@@ -6,6 +6,7 @@ export type EditorDefaultLanguage =
 	| 'python'
 	| 'java'
 	| 'go'
+	| 'd'
 	| 'csharp'
 	| 'fsharp'
 	| 'vbnet'
@@ -31,6 +32,7 @@ export const editorDefaults: Record<
 	| 'python'
 	| 'java'
 	| 'go'
+	| 'd'
 	| 'csharp'
 	| 'fsharp'
 	| 'vbnet'
@@ -118,6 +120,28 @@ func main() {
         n = 4
     }
     fmt.Printf("factorial_plus_bonus=%d\n", factorial(n)+bonus)
+}`,
+	d: `import std.stdio;
+import std.conv;
+import std.string;
+
+enum bonus = 3;
+
+int factorial(int n) {
+    return n <= 1 ? 1 : n * factorial(n - 1);
+}
+
+void main() {
+    auto line = stdin.readln();
+    int n = 4;
+    if (line.length) {
+        try {
+            n = to!int(line.strip());
+        } catch (Exception) {
+            n = 4;
+        }
+    }
+    writeln("factorial_plus_bonus=", factorial(n) + bonus);
 }`,
 	csharp: `using System;
 
@@ -495,6 +519,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.python ||
 		source === editorDefaults.java ||
 		source === editorDefaults.go ||
+		source === editorDefaults.d ||
 		source === editorDefaults.csharp ||
 		source === editorDefaults.fsharp ||
 		source === editorDefaults.vbnet ||

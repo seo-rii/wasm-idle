@@ -87,6 +87,13 @@ describe('core language contract', () => {
 		expect(isDeferredProgressLanguage('vb')).toBe(true);
 	});
 
+	it('exposes D aliases as a deferred browser runtime language', () => {
+		expect(supportedLanguageIds).toContain('D');
+		expect(normalizeLanguageId('d')).toBe('D');
+		expect(normalizeLanguageId('dlang')).toBe('D');
+		expect(isDeferredProgressLanguage('dlang')).toBe(true);
+	});
+
 	it('exposes AssemblyScript aliases as a deferred browser runtime language', () => {
 		expect(supportedLanguageIds).toContain('ASSEMBLYSCRIPT');
 		expect(normalizeLanguageId('assemblyscript')).toBe('ASSEMBLYSCRIPT');
@@ -146,6 +153,17 @@ describe('core language contract', () => {
 		});
 
 		expect(key).toContain('"luaModuleUrl":"/wasm-lua/index.js?v=test"');
+	});
+
+	it('includes D module urls in runtime asset cache keys', () => {
+		const key = createRuntimeAssetsKey({
+			rootUrl: '/repl',
+			d: {
+				moduleUrl: '/wasm-d/index.js?v=test'
+			}
+		});
+
+		expect(key).toContain('"dModuleUrl":"/wasm-d/index.js?v=test"');
 	});
 
 	it('includes Lisp module urls in runtime asset cache keys', () => {

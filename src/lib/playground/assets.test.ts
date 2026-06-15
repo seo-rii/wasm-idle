@@ -4,6 +4,7 @@ const { publicEnv } = vi.hoisted(() => ({
 	publicEnv: {
 		PUBLIC_WASM_RUST_COMPILER_URL: '',
 		PUBLIC_WASM_GO_COMPILER_URL: '',
+		PUBLIC_WASM_D_MODULE_URL: '',
 		PUBLIC_WASM_DOTNET_MODULE_URL: '',
 		PUBLIC_WASM_ELIXIR_BUNDLE_URL: '',
 		PUBLIC_WASM_OCAML_MODULE_URL: '',
@@ -192,6 +193,33 @@ describe('runtime asset config resolution', () => {
 
 		expect(resolveGoCompilerUrl('/absproxy/5173', 'https://example.com/app')).toBe(
 			'https://example.com/wasm-go/index.js'
+		);
+	});
+
+	it('prefers an explicit D module url over the public env override', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_D_MODULE_URL = 'https://env.example.com/wasm-d/index.js';
+		const { resolveDModuleUrl } = await import('./assets');
+
+		expect(
+			resolveDModuleUrl(
+				{
+					d: {
+						moduleUrl: '/runtime/d/index.js'
+					}
+				},
+				'https://example.com/app'
+			)
+		).toBe('https://example.com/runtime/d/index.js');
+	});
+
+	it('derives the default D module url from the shared root path', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_D_MODULE_URL = '';
+		const { resolveDModuleUrl } = await import('./assets');
+
+		expect(resolveDModuleUrl('/absproxy/5173', 'https://example.com/app')).toBe(
+			'https://example.com/absproxy/5173/wasm-d/index.js'
 		);
 	});
 

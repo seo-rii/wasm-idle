@@ -46,6 +46,10 @@ export interface GoRuntimeAssetConfig {
 	compilerUrl?: string;
 }
 
+export interface DRuntimeAssetConfig {
+	moduleUrl?: string;
+}
+
 export interface DotnetRuntimeAssetConfig {
 	moduleUrl?: string;
 }
@@ -119,6 +123,7 @@ export interface PlaygroundRuntimeAssets {
 	clangd?: RuntimeAssetConfig;
 	rust?: RustRuntimeAssetConfig;
 	go?: GoRuntimeAssetConfig;
+	d?: DRuntimeAssetConfig;
 	dotnet?: DotnetRuntimeAssetConfig;
 	ocaml?: OcamlRuntimeAssetConfig;
 	tinygo?: TinyGoRuntimeAssetConfig;
@@ -429,6 +434,32 @@ export function resolveGoCompilerUrl(
 
 	if (!configuredCompilerUrl) return '';
 	return currentUrl ? new URL(configuredCompilerUrl, currentUrl).href : configuredCompilerUrl;
+}
+
+export function resolveDModuleUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredModuleUrl =
+		(typeof options === 'object' && options?.d?.moduleUrl) ||
+		(publicEnv.PUBLIC_WASM_D_MODULE_URL || '').trim();
+
+	if (configuredModuleUrl) {
+		return resolveConfiguredUrl(configuredModuleUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return resolveConfiguredUrl(`${normalizeRootUrl(options) || ''}/wasm-d/index.js`, currentUrl);
+	}
+
+	if (options?.rootUrl) {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-d/index.js`,
+			currentUrl
+		);
+	}
+
+	return '';
 }
 
 export function resolveDotnetModuleUrl(

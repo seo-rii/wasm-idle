@@ -6,6 +6,7 @@ export interface RuntimeAssetKeySource {
 	clangd?: { baseUrl?: string; loader?: unknown };
 	rust?: { compilerUrl?: string };
 	go?: { compilerUrl?: string };
+	d?: { moduleUrl?: string };
 	dotnet?: { moduleUrl?: string };
 	elixir?: { bundleUrl?: string };
 	ocaml?: { moduleUrl?: string; manifestUrl?: string };
@@ -45,6 +46,7 @@ export function createRuntimeAssetsKey(runtimeAssets: RuntimeAssetKeyInput): str
 		hasClangdLoader: !!runtimeAssets.clangd?.loader,
 		rustCompilerUrl: runtimeAssets.rust?.compilerUrl || '',
 		goCompilerUrl: runtimeAssets.go?.compilerUrl || '',
+		dModuleUrl: runtimeAssets.d?.moduleUrl || '',
 		dotnetModuleUrl: runtimeAssets.dotnet?.moduleUrl || '',
 		elixirBundleUrl: runtimeAssets.elixir?.bundleUrl || '',
 		ocamlModuleUrl: runtimeAssets.ocaml?.moduleUrl || '',

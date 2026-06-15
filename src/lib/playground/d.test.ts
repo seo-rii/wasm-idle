@@ -1,0 +1,195 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { readBufferedStdin } from './stdinBuffer';
+
+const workerInstances: MockWorker[] = [];
+const { publicEnv } = vi.hoisted(() => ({
+	publicEnv: {
+		PUBLIC_WASM_D_MODULE_URL: ''
+	}
+}));
+let suppressAutoLoadAck = false;
+
+class MockWorker {
+	onmessage: ((event: MessageEvent<any>) => void) | null = null;
+	onerror: ((event: ErrorEvent) => void) | null = null;
+	onmessageerror: ((event: MessageEvent<any>) => void) | null = null;
+	postMessage = vi.fn((message: any) => {
+		if (message.load) {
+			if (suppressAutoLoadAck) return;
+			queueMicrotask(() => this.onmessage?.({ data: { load: true } } as MessageEvent<any>));
+			return;
+		}
+		if (message.prepare) {
+			queueMicrotask(() => {
+				this.onmessage?.({
+					data: {
+						progress: {
+							stage: 'compile',
+							percent: 25
+						}
+					}
+				} as MessageEvent<any>);
+				this.onmessage?.({
+					data: {
+						diagnostic: {
+							fileName: 'main.d',
+							lineNumber: 2,
+							columnNumber: 5,
+							severity: 'warning',
+							message: 'demo warning'
+						}
+					}
+				} as MessageEvent<any>);
+				this.onmessage?.({ data: { results: true, buffer: true } } as MessageEvent<any>);
+			});
+			return;
+		}
+		queueMicrotask(() =>
+			this.onmessage?.({
+				data: { output: 'hi\n', results: true, buffer: true }
+			} as MessageEvent<any>)
+		);
+	});
+	terminate = vi.fn();
+
+	constructor() {
+		workerInstances.push(this);
+	}
+}
+
+vi.mock('$lib/playground/worker/d?worker', () => ({
+	default: MockWorker
+}));
+
+vi.mock('$env/dynamic/public', () => ({
+	env: publicEnv
+}));
+
+import D from './d';
+
+describe('D sandbox', () => {
+	beforeEach(() => {
+		workerInstances.length = 0;
+		publicEnv.PUBLIC_WASM_D_MODULE_URL = '/wasm-d/index.js';
+		suppressAutoLoadAck = false;
+	});
+
+	it('loads the D worker and forwards diagnostics plus run output', async () => {
+		const sandbox = new D();
+		const outputs: string[] = [];
+		const diagnostics: any[] = [];
+		const values: number[] = [];
+		const code = `import std.stdio;
+
+void main() {
+    writeln("hi");
+}`;
+
+		sandbox.output = (chunk: string) => outputs.push(chunk);
+		sandbox.oncompilerdiagnostic = (diagnostic) => diagnostics.push(diagnostic);
+
+		await sandbox.load('/absproxy/5173');
+		await expect(
+			sandbox.run(code, true, true, {
+				set(value: number) {
+					values.push(value);
+				}
+			})
+		).resolves.toBe(true);
+		await expect(sandbox.run(code, false, true, undefined, ['one', 'two'])).resolves.toBe(
+			true
+		);
+
+		expect(workerInstances).toHaveLength(1);
+		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
+			1,
+			expect.objectContaining({
+				load: true,
+				moduleUrl: expect.stringMatching(/\/wasm-d\/index\.js$/)
+			})
+		);
+		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
+			2,
+			expect.objectContaining({
+				prepare: true,
+				code,
+				args: [],
+				fileName: 'main.d',
+				log: true
+			})
+		);
+		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
+			3,
+			expect.objectContaining({
+				prepare: false,
+				code,
+				args: ['one', 'two'],
+				fileName: 'main.d',
+				log: true
+			})
+		);
+		expect(outputs).toContain('hi\n');
+		expect(diagnostics).toEqual([
+			{
+				fileName: 'main.d',
+				lineNumber: 2,
+				columnNumber: 5,
+				severity: 'warning',
+				message: 'demo warning'
+			}
+		]);
+		expect(values).toEqual([0.25]);
+	});
+
+	it('rejects load when no D module url is configured', async () => {
+		publicEnv.PUBLIC_WASM_D_MODULE_URL = '';
+		const sandbox = new D();
+
+		await expect(sandbox.load({})).rejects.toContain('D runtime is not configured');
+	});
+
+	it('rejects load when the D worker script fails before posting load', async () => {
+		suppressAutoLoadAck = true;
+		const sandbox = new D();
+		const loadPromise = sandbox.load('/absproxy/5173');
+		await vi.dynamicImportSettled();
+		const worker = workerInstances[0];
+
+		worker.onerror?.({
+			message: 'worker script error',
+			filename: '/worker/d.js',
+			lineno: 88,
+			colno: 24
+		} as ErrorEvent);
+
+		await expect(loadPromise).rejects.toContain(
+			'D worker script error: worker script error (/worker/d.js:88:24)'
+		);
+	});
+
+	it('writes queued terminal input when the worker requests stdin', async () => {
+		const sandbox = new D();
+		const worker = new MockWorker();
+		let runMessage: any;
+
+		sandbox.worker = worker as unknown as Worker;
+		worker.postMessage.mockImplementationOnce((message) => {
+			runMessage = message;
+			queueMicrotask(() => {
+				sandbox.write('42\n');
+				worker.onmessage?.({
+					data: {
+						buffer: true,
+						results: true
+					}
+				} as MessageEvent<any>);
+			});
+		});
+
+		await expect(
+			sandbox.run(`void main() {}`, false)
+		).resolves.toBe(true);
+
+		expect(readBufferedStdin(runMessage.buffer)).toBe('42\n');
+	});
+});

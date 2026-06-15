@@ -65,6 +65,10 @@ vi.mock('$lib/playground/go', () => ({
 	default: createMockSandboxClass('GO')
 }));
 
+vi.mock('$lib/playground/d', () => ({
+	default: createMockSandboxClass('D')
+}));
+
 vi.mock('$lib/playground/haskell', () => ({
 	default: createMockSandboxClass('HASKELL')
 }));
@@ -279,6 +283,33 @@ describe('playground runtime binding', () => {
 				progress
 			]
 		]);
+	});
+
+	it('routes D requests through the dedicated D sandbox implementation', async () => {
+		const binding = createPlaygroundBinding({
+			rootUrl: '/absproxy/5173',
+			d: {
+				moduleUrl: '/absproxy/5173/wasm-d/index.js?v=test'
+			}
+		});
+		const progress = { set() {} };
+		const sandbox = await binding.load('DLANG');
+
+		await sandbox.load('void main() {}', true, ['demo'], {}, progress);
+
+		const runtimeAssets = {
+			rootUrl: '/absproxy/5173',
+			d: {
+				moduleUrl: '/absproxy/5173/wasm-d/index.js?v=test'
+			}
+		};
+		expect(sandbox.runtimeAssets).toEqual(runtimeAssets);
+		expect(sandboxInstances.get('D')).toHaveLength(1);
+		expect(sandboxInstances.get('D')?.[0]?.loadCalls).toEqual([
+			[runtimeAssets, 'void main() {}', true, ['demo'], {}, progress]
+		]);
+		expect((await binding.load('D')).runtimeAssets).toEqual(runtimeAssets);
+		expect(sandboxInstances.get('D')).toHaveLength(1);
 	});
 
 	it('routes F# requests through the Dotnet sandbox implementation', async () => {

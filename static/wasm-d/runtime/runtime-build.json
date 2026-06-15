@@ -1,0 +1,41 @@
+{
+  "generatedAt": "2026-06-15T01:28:54.533Z",
+  "source": "../ldc-wasm/dist/wasm-idle",
+  "manifestSha256": "af8bd2ef54e114e06e91dafcba5e043fb8e70e32fb19ffddb9d5c46d235e0544",
+  "sourceAssets": [
+    "bin/ldc2.wasm",
+    "bin/lld.data",
+    "bin/lld.js",
+    "bin/lld.wasm",
+    "etc/ldc2.conf.tar.zst",
+    "lib/imports.tar.zst",
+    "lib/runtime-libs.tar.zst"
+  ],
+  "assets": [
+    {
+      "asset": "bin/ldc2.wasm",
+      "size": 23577090,
+      "sha256": "e0e0c2766ae3aff308c6d587439143c4a88e68f11c6e8084ce5f134ee87d2091"
+    },
+    {
+      "asset": "bin/lld.js",
+      "size": 91650,
+      "sha256": "095fb1add8ddf8188677d36b44e25ac97d8a21e8cac0346dc2b1bf0b7fc7a0cf"
+    },
+    {
+      "asset": "bin/lld.wasm",
+      "size": 83133801,
+      "sha256": "28f079e4997a4e2eebe02b8209a663d56eeba0815b010ff74b3ead2549d0ff9b"
+    },
+    {
+      "asset": "bin/lld.data",
+      "size": 9489178,
+      "sha256": "8c58f81883c4f3f0980743dfb75b4241b69447f67b5731341f72ed98571a05c7"
+    },
+    {
+      "asset": "toolchain/toolchain.tar",
+      "size": 36239360,
+      "sha256": "55bd3446aaedc062fa078bb654800a00c69a120ae5343434cfed8d5562de9583"
+    }
+  ]
+}

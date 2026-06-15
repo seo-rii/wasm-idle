@@ -1,0 +1,33 @@
+{
+  "name": "wasm-d",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Browser-loadable D compiler runtime using real LDC WASI assets",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json --emitDeclarationOnly && node ./scripts/build.mjs && pnpm run prepare:runtime",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "prepare:runtime": "node ./scripts/prepare-runtime.mjs",
+    "validate:runtime": "pnpm run build && pnpm run test"
+  },
+  "dependencies": {
+    "@bjorn3/browser_wasi_shim": "^0.4.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.6.1",
+    "esbuild": "^0.27.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  }
+}

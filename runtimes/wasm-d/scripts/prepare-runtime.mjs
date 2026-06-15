@@ -1,6 +1,8 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
+import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
@@ -10,9 +12,11 @@ const workspaceRoot = path.resolve(wasmIdleRoot, '..');
 const defaultSourceDir = path.resolve(workspaceRoot, 'ldc-wasm', 'dist', 'wasm-idle');
 const defaultTargetDir = path.resolve(runtimeRoot, 'dist', 'runtime');
 
+const TOOLCHAIN_ASSET = 'toolchain/toolchain.tar';
+
 const USAGE = `Usage: node runtimes/wasm-d/scripts/prepare-runtime.mjs [--source DIR] [--out DIR]
 
-Copies finalized ldc-wasm assets into wasm-idle's runtime asset directory.
+Creates browser-ready wasm-idle D runtime assets from finalized ldc-wasm assets.
 
 Defaults:
   --source ${path.relative(wasmIdleRoot, defaultSourceDir)}
@@ -88,39 +92,162 @@ async function sha256File(filePath) {
 	return hash.digest('hex');
 }
 
-const options = parseArgs(process.argv.slice(2));
-const sourceManifestPath = path.join(options.sourceDir, 'runtime-manifest.v1.json');
-const manifest = JSON.parse(await fs.readFile(sourceManifestPath, 'utf8'));
-if (manifest.manifestVersion !== 1) {
-	throw new Error(`unsupported ldc-wasm manifestVersion: ${manifest.manifestVersion}`);
-}
-if (manifest.name !== 'ldc-wasm') {
-	throw new Error(`unexpected ldc-wasm manifest name: ${manifest.name}`);
+async function run(command, args, options = {}) {
+	return await new Promise((resolve, reject) => {
+		const child = spawn(command, args, {
+			stdio: ['ignore', 'pipe', 'pipe'],
+			...options
+		});
+		const stdout = [];
+		const stderr = [];
+		child.stdout?.on('data', (chunk) => stdout.push(Buffer.from(chunk)));
+		child.stderr?.on('data', (chunk) => stderr.push(Buffer.from(chunk)));
+		child.on('error', reject);
+		child.on('close', (code, signal) => {
+			const output = Buffer.concat(stdout).toString('utf8');
+			const error = Buffer.concat(stderr).toString('utf8');
+			if (code === 0) {
+				resolve({ stdout: output, stderr: error });
+				return;
+			}
+			reject(
+				new Error(
+					`${command} ${args.join(' ')} failed${signal ? ` with signal ${signal}` : ` with code ${code}`}${error ? `\n${error}` : ''}`
+				)
+			);
+		});
+	});
 }
 
-const assets = [...collectAssetPaths(manifest)].sort();
-if (assets.length === 0) {
+async function extractTarZst(archivePath, targetDir) {
+	await fs.mkdir(targetDir, { recursive: true });
+	await run('tar', ['--zstd', '-xf', archivePath, '-C', targetDir]);
+}
+
+async function createUncompressedTar(sourceDir, archivePath) {
+	await fs.mkdir(path.dirname(archivePath), { recursive: true });
+	await run('tar', ['-cf', archivePath, '-C', sourceDir, '.']);
+}
+
+const options = parseArgs(process.argv.slice(2));
+const sourceManifestPath = path.join(options.sourceDir, 'runtime-manifest.v1.json');
+const sourceManifest = JSON.parse(await fs.readFile(sourceManifestPath, 'utf8'));
+if (sourceManifest.manifestVersion !== 1) {
+	throw new Error(`unsupported ldc-wasm manifestVersion: ${sourceManifest.manifestVersion}`);
+}
+if (sourceManifest.name !== 'ldc-wasm') {
+	throw new Error(`unexpected ldc-wasm manifest name: ${sourceManifest.name}`);
+}
+
+const sourceAssets = [...collectAssetPaths(sourceManifest)].sort();
+if (sourceAssets.length === 0) {
 	throw new Error(`ldc-wasm manifest does not reference any assets: ${sourceManifestPath}`);
 }
 
+const requiredAssets = {
+	ldc2: assertAssetPath(sourceManifest.compiler?.ldc2?.asset),
+	config: assertAssetPath(sourceManifest.compiler?.config?.asset),
+	imports: assertAssetPath(sourceManifest.compiler?.imports?.asset),
+	runtimeLibraries: assertAssetPath(sourceManifest.compiler?.runtimeLibraries?.asset),
+	lldJs: assertAssetPath(sourceManifest.compiler?.linker?.js?.asset),
+	lldWasm: assertAssetPath(sourceManifest.compiler?.linker?.wasm?.asset),
+	lldData: assertAssetPath(sourceManifest.compiler?.linker?.data?.asset)
+};
+
 await fs.rm(options.targetDir, { recursive: true, force: true });
 await fs.mkdir(options.targetDir, { recursive: true });
-await fs.copyFile(sourceManifestPath, path.join(options.targetDir, 'runtime-manifest.v1.json'));
 
-const copiedAssets = [];
-for (const asset of assets) {
-	const sourcePath = path.join(options.sourceDir, asset);
-	const targetPath = path.join(options.targetDir, asset);
-	const stat = await fs.stat(sourcePath);
-	if (!stat.isFile()) {
-		throw new Error(`ldc-wasm manifest asset is not a file: ${asset}`);
+for (const asset of Object.values(requiredAssets)) {
+	const stat = await fs.stat(path.join(options.sourceDir, asset)).catch(() => null);
+	if (!stat?.isFile()) throw new Error(`ldc-wasm manifest asset is not a file: ${asset}`);
+}
+
+const targetLdc2Asset = 'bin/ldc2.wasm';
+await fs.mkdir(path.join(options.targetDir, 'bin'), { recursive: true });
+await fs.copyFile(
+	path.join(options.sourceDir, requiredAssets.ldc2),
+	path.join(options.targetDir, targetLdc2Asset)
+);
+const linkerAssets = {
+	js: 'bin/lld.js',
+	wasm: 'bin/lld.wasm',
+	data: 'bin/lld.data'
+};
+await fs.copyFile(path.join(options.sourceDir, requiredAssets.lldJs), path.join(options.targetDir, linkerAssets.js));
+await fs.copyFile(
+	path.join(options.sourceDir, requiredAssets.lldWasm),
+	path.join(options.targetDir, linkerAssets.wasm)
+);
+await fs.copyFile(
+	path.join(options.sourceDir, requiredAssets.lldData),
+	path.join(options.targetDir, linkerAssets.data)
+);
+
+const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'wasm-idle-d-runtime-'));
+try {
+	const toolchainRoot = path.join(tempRoot, 'toolchain');
+	await fs.mkdir(path.join(toolchainRoot, 'etc'), { recursive: true });
+	await fs.mkdir(path.join(toolchainRoot, 'imports'), { recursive: true });
+	await extractTarZst(path.join(options.sourceDir, requiredAssets.config), path.join(toolchainRoot, 'etc'));
+	await extractTarZst(path.join(options.sourceDir, requiredAssets.imports), path.join(toolchainRoot, 'imports'));
+	await extractTarZst(path.join(options.sourceDir, requiredAssets.runtimeLibraries), toolchainRoot);
+	await createUncompressedTar(toolchainRoot, path.join(options.targetDir, TOOLCHAIN_ASSET));
+} finally {
+	await fs.rm(tempRoot, { recursive: true, force: true });
+}
+
+const targetManifest = {
+	manifestVersion: 1,
+	name: 'wasm-d',
+	version: sourceManifest.version,
+	defaultTarget: 'wasm32-wasi',
+	compiler: {
+		ldc2: {
+			asset: targetLdc2Asset,
+			argv0: sourceManifest.compiler.ldc2.argv0 || 'ldc2'
+		},
+		toolchain: {
+			asset: TOOLCHAIN_ASSET
+		},
+		linker: {
+			kind: 'emscripten-lld',
+			argv0: sourceManifest.compiler.linker.argv0 || 'wasm-ld',
+			js: {
+				asset: linkerAssets.js
+			},
+			wasm: {
+				asset: linkerAssets.wasm
+			},
+			data: {
+				asset: linkerAssets.data
+			}
+		}
+	},
+	targets: {
+		'wasm32-wasi': {
+			artifactFormat: 'wasi-core-wasm',
+			execution: {
+				kind: 'wasi-preview1'
+			}
+		}
 	}
-	await fs.mkdir(path.dirname(targetPath), { recursive: true });
-	await fs.copyFile(sourcePath, targetPath);
-	copiedAssets.push({
+};
+
+await fs.writeFile(
+	path.join(options.targetDir, 'runtime-manifest.v1.json'),
+	`${JSON.stringify(targetManifest, null, 2)}\n`,
+	'utf8'
+);
+
+const targetAssets = [targetLdc2Asset, linkerAssets.js, linkerAssets.wasm, linkerAssets.data, TOOLCHAIN_ASSET];
+const preparedAssets = [];
+for (const asset of targetAssets) {
+	const filePath = path.join(options.targetDir, asset);
+	const stat = await fs.stat(filePath);
+	preparedAssets.push({
 		asset,
 		size: stat.size,
-		sha256: await sha256File(sourcePath)
+		sha256: await sha256File(filePath)
 	});
 }
 
@@ -131,7 +258,8 @@ await fs.writeFile(
 			generatedAt: new Date().toISOString(),
 			source: path.relative(wasmIdleRoot, options.sourceDir),
 			manifestSha256: await sha256File(sourceManifestPath),
-			assets: copiedAssets
+			sourceAssets,
+			assets: preparedAssets
 		},
 		null,
 		2

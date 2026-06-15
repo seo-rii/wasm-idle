@@ -20,6 +20,13 @@ const RUNTIMES = [
 		targetArg: 'targetDir'
 	},
 	{
+		name: 'wasm-d',
+		module: './sync-wasm-d.mjs',
+		exportName: 'syncWasmDDist',
+		sourceArg: 'sourceDir',
+		targetArg: 'targetDir'
+	},
+	{
 		name: 'wasm-typescript',
 		module: './sync-wasm-typescript.mjs',
 		exportName: 'syncWasmTypeScriptDist',

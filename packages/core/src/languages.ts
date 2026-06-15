@@ -7,6 +7,8 @@ export type WasmIdleLanguageId =
 	| 'JAVA'
 	| 'RUST'
 	| 'GO'
+	| 'D'
+	| 'DLANG'
 	| 'CSHARP'
 	| 'C#'
 	| 'FSHARP'
@@ -46,6 +48,7 @@ export const supportedLanguageIds = [
 	'JAVA',
 	'RUST',
 	'GO',
+	'D',
 	'CSHARP',
 	'FSHARP',
 	'VBNET',
@@ -69,6 +72,7 @@ export const supportedLanguageIds = [
 export const DEFAULT_DEFERRED_PROGRESS_LANGUAGES = new Set<string>([
 	'RUST',
 	'GO',
+	'D',
 	'CSHARP',
 	'FSHARP',
 	'VBNET',
@@ -93,6 +97,7 @@ const LANGUAGE_ALIASES: Record<string, string> = {
 	'F#': 'FSHARP',
 	VB: 'VBNET',
 	VISUALBASIC: 'VBNET',
+	DLANG: 'D',
 	JS: 'JAVASCRIPT',
 	AS: 'ASSEMBLYSCRIPT',
 	PYTHON: 'PYTHON3',

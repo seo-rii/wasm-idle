@@ -16,6 +16,8 @@ describe('editor defaults', () => {
 		expect(editorDefaults.python).toContain('factorial_plus_bonus');
 		expect(editorDefaults.java).toContain('Scanner scanner = new Scanner(System.in);');
 		expect(editorDefaults.go).toContain("ReadString('\\n')");
+		expect(editorDefaults.d).toContain('stdin.readln()');
+		expect(editorDefaults.d).toContain('writeln("factorial_plus_bonus="');
 		expect(editorDefaults.csharp).toContain('Console.ReadLine()');
 		expect(editorDefaults.fsharp).toContain('System.Console.ReadLine()');
 		expect(editorDefaults.fsharp).toContain('commandLineArgs.Length > 1');
@@ -60,6 +62,7 @@ describe('editor defaults', () => {
 	it('resolves the requested default source by language and rust target', () => {
 		expect(resolveEditorDefaultSource('c', 'wasm32-wasip1')).toBe(editorDefaults.c);
 		expect(resolveEditorDefaultSource('go', 'wasm32-wasip1')).toBe(editorDefaults.go);
+		expect(resolveEditorDefaultSource('d', 'wasm32-wasip1')).toBe(editorDefaults.d);
 		expect(resolveEditorDefaultSource('fsharp', 'wasm32-wasip1')).toBe(editorDefaults.fsharp);
 		expect(resolveEditorDefaultSource('vbnet', 'wasm32-wasip1')).toBe(editorDefaults.vbnet);
 		expect(resolveEditorDefaultSource('ocaml', 'wasm32-wasip1')).toBe(editorDefaults.ocaml);
@@ -85,6 +88,7 @@ describe('editor defaults', () => {
 
 	it('recognizes bundled defaults and the legacy broken TinyGo starter separately', () => {
 		expect(isEditorDefaultSource(editorDefaults.go)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.d)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.fsharp)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.vbnet)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.ocaml)).toBe(true);

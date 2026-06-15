@@ -32,7 +32,7 @@ describe('Monaco route debug sync', () => {
 		);
 		expect(source.match(/occurrencesHighlight: 'off'/g)).toHaveLength(2);
 		expect(source).toMatch(
-			/language === 'java' \|\|\s+language === 'rust' \|\|\s+language === 'go' \|\|\s+language === 'csharp' \|\|\s+language === 'fsharp' \|\|\s+language === 'vb' \|\|\s+language === 'ocaml'/
+			/language === 'java' \|\|\s+language === 'rust' \|\|\s+language === 'go' \|\|\s+language === 'd' \|\|\s+language === 'csharp' \|\|\s+language === 'fsharp' \|\|\s+language === 'vb' \|\|\s+language === 'ocaml'/
 		);
 		expect(source).toMatch(/language === 'wat'/);
 		expect(source).toMatch(/language === 'lua'/);
@@ -49,6 +49,9 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(
 			/const defaultValue = resolveEditorDefaultSource\([\s\S]*'c'[\s\S]*'cpp'[\s\S]*'python'[\s\S]*'java'[\s\S]*'go'[\s\S]*'csharp'[\s\S]*'fsharp'[\s\S]*'vbnet'[\s\S]*'elixir'[\s\S]*'ocaml'[\s\S]*'rust'[\s\S]*rustTargetTriple\s+\);/s
 		);
+		expect(source).toMatch(/id: 'd'/);
+		expect(source).toMatch(/aliases: \['D', 'd'\]/);
+		expect(source).toMatch(/extensions: \['\.d'\]/);
 		expect(source).toMatch(
 			/debugView = new MonacoDebugView\(Monaco, editor, onBreakpointsChange\);\s+debugView\.setBreakpoints\(breakpoints\);\s+debugView\.setPauseState\(pausedLine, debugLocals, debugLanguage\);/s
 		);
@@ -84,6 +87,7 @@ describe('Monaco route debug sync', () => {
 
 	it('keeps starter sources wired for stdin examples', () => {
 		expect(resolveEditorDefaultSource('go', 'wasm32-wasip1')).toBe(editorDefaults.go);
+		expect(resolveEditorDefaultSource('d', 'wasm32-wasip1')).toBe(editorDefaults.d);
 		expect(resolveEditorDefaultSource('c', 'wasm32-wasip1')).toBe(editorDefaults.c);
 		expect(resolveEditorDefaultSource('csharp', 'wasm32-wasip1')).toBe(editorDefaults.csharp);
 		expect(resolveEditorDefaultSource('fsharp', 'wasm32-wasip1')).toBe(editorDefaults.fsharp);
@@ -94,6 +98,7 @@ describe('Monaco route debug sync', () => {
 		expect(resolveEditorDefaultSource('php', 'wasm32-wasip1')).toBe(editorDefaults.php);
 		expect(editorDefaults.c).toContain('puts("Hello, WebAssembly!")');
 		expect(editorDefaults.go).toContain("ReadString('\\n')");
+		expect(editorDefaults.d).toContain('stdin.readln()');
 		expect(editorDefaults.csharp).toContain('Console.WriteLine');
 		expect(editorDefaults.vbnet).toContain('Console.ReadLine()');
 		expect(editorDefaults.go).toContain(
@@ -110,6 +115,7 @@ describe('Monaco route debug sync', () => {
 		expect(editorDefaults.php).toContain("file_get_contents('php://input')");
 		expect(isEditorDefaultSource(editorDefaults.c)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.go)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.d)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.csharp)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.fsharp)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.vbnet)).toBe(true);
@@ -140,6 +146,7 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).toMatch(/if \(language !== 'CPP'\) clangdRequested = false;/);
 		expect(pageSource).toMatch(/<option value="RUST">Rust<\/option>/);
 		expect(pageSource).toMatch(/<option value="GO">Go<\/option>/);
+		expect(pageSource).toMatch(/<option value="D">D<\/option>/);
 		expect(pageSource).toMatch(/<option value="CSHARP">C#<\/option>/);
 		expect(pageSource).toMatch(/<option value="FSHARP">F#<\/option>/);
 		expect(pageSource).toMatch(/<option value="VBNET">VB\.NET<\/option>/);
@@ -173,6 +180,8 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).toMatch(/WASM_LISP_ASSET_VERSION/);
 		expect(pageSource).toMatch(/WASM_HASKELL_ASSET_VERSION/);
 		expect(pageSource).toMatch(/WASM_R_ASSET_VERSION/);
+		expect(pageSource).toMatch(/WASM_D_ASSET_VERSION/);
+		expect(pageSource).toMatch(/wasm-d\/index\.js\?v=\$\{WASM_D_ASSET_VERSION\}/);
 		expect(pageSource).toMatch(
 			/wasm-of-js-of-ocaml\/browser-native\/src\/index\.js\?v=\$\{WASM_OCAML_ASSET_VERSION\}/
 		);

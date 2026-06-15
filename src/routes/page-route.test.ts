@@ -69,6 +69,9 @@ describe('example route debug actions', () => {
 			/import \{ WASM_GO_ASSET_VERSION \} from '\$lib\/playground\/wasmGoVersion';/
 		);
 		expect(source).toMatch(
+			/import \{ WASM_D_ASSET_VERSION \} from '\$lib\/playground\/wasmDVersion';/
+		);
+		expect(source).toMatch(
 			/import \{ WASM_DOTNET_ASSET_VERSION \} from '\$lib\/playground\/wasmDotnetVersion';/
 		);
 		expect(source).toMatch(
@@ -114,6 +117,9 @@ describe('example route debug actions', () => {
 		);
 		expect(source).toMatch(
 			/go: \{\s+compilerUrl: path\s+\?\s+`\$\{path\}\/wasm-go\/index\.js\?v=\$\{WASM_GO_ASSET_VERSION\}`\s+:\s+`\/wasm-go\/index\.js\?v=\$\{WASM_GO_ASSET_VERSION\}`\s+\}/s
+		);
+		expect(source).toMatch(
+			/d: \{\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-d\/index\.js\?v=\$\{WASM_D_ASSET_VERSION\}`\s+:\s+`\/wasm-d\/index\.js\?v=\$\{WASM_D_ASSET_VERSION\}`\s+\}/s
 		);
 		expect(source).toMatch(
 			/dotnet: \{\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-dotnet\/index\.js\?v=\$\{WASM_DOTNET_ASSET_VERSION\}`\s+:\s+`\/wasm-dotnet\/index\.js\?v=\$\{WASM_DOTNET_ASSET_VERSION\}`\s+\}/s
@@ -209,7 +215,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/: language === 'LUA'\s+\? 'lua'/);
 		expect(source).toMatch(/: language === 'ZIG'\s+\? 'zig'/);
 		expect(source).toMatch(/: language === 'LISP'\s+\? 'lisp'/);
-		expect(source).toMatch(/: language === 'RUBY'\s+\? 'ruby'/);
+		expect(source).toMatch(/: language ===\s+'RUBY'\s+\?\s+'ruby'/);
 		expect(source).toMatch(/:\s+language ===\s+'HASKELL'\s+\?\s+'haskell'/);
 		expect(source).toMatch(/:\s+language ===\s+'R'\s+\?\s+'r'/);
 		expect(source).toMatch(/: 'go'/);
@@ -309,6 +315,7 @@ describe('example route debug actions', () => {
 		);
 		expect(source).toMatch(/tinygoTarget: language === 'TINYGO' \? tinygoTarget : undefined/);
 		expect(source).toMatch(/<option value="GO">Go<\/option>/);
+		expect(source).toMatch(/<option value="D">D<\/option>/);
 		expect(source).toMatch(/<option value="CSHARP">C#<\/option>/);
 		expect(source).toMatch(/<option value="FSHARP">F#<\/option>/);
 		expect(source).toMatch(/<option value="VBNET">VB\.NET<\/option>/);
@@ -328,10 +335,10 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/<option value="SQLITE">SQLite<\/option>/);
 		expect(source).toMatch(/<option value="PHP">PHP<\/option>/);
 		expect(source).toMatch(
-			/\{#if language === 'JAVA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'VBNET' \|\| language === 'TINYGO' \|\| language === 'JAVASCRIPT' \|\| language === 'TYPESCRIPT' \|\| language === 'LUA' \|\| language === 'ZIG' \|\| language === 'LISP' \|\| language === 'RUBY' \|\| language === 'HASKELL' \|\| language === 'R' \|\| language === 'PHP'\}/
+			/\{#if language === 'JAVA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'D' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'VBNET' \|\| language === 'TINYGO' \|\| language === 'JAVASCRIPT' \|\| language === 'TYPESCRIPT' \|\| language === 'LUA' \|\| language === 'ZIG' \|\| language === 'LISP' \|\| language === 'RUBY' \|\| language === 'HASKELL' \|\| language === 'R' \|\| language === 'PHP'\}/
 		);
 		expect(source).toMatch(
-			/language === 'JAVA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'VBNET' \|\| language === 'TINYGO' \|\| language === 'JAVASCRIPT' \|\| language === 'TYPESCRIPT' \|\| language === 'LUA' \|\| language === 'ZIG' \|\| language === 'LISP' \|\| language === 'RUBY' \|\| language === 'HASKELL' \|\| language === 'R' \|\| language === 'PHP'/
+			/language === 'JAVA' \|\| language === 'RUST' \|\| language === 'GO' \|\| language === 'D' \|\| language === 'CSHARP' \|\| language === 'FSHARP' \|\| language === 'VBNET' \|\| language === 'TINYGO' \|\| language === 'JAVASCRIPT' \|\| language === 'TYPESCRIPT' \|\| language === 'LUA' \|\| language === 'ZIG' \|\| language === 'LISP' \|\| language === 'RUBY' \|\| language === 'HASKELL' \|\| language === 'R' \|\| language === 'PHP'/
 		);
 		expect(source).toMatch(/Go uses the bundled `wasm-go` browser compiler runtime/);
 		expect(source).toMatch(
@@ -355,6 +362,24 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/`wasip2` and `wasip3` use the wasm-tinygo preview target profiles/);
 		expect(source).toMatch(/resulting WASI artifact in the local playground\s+runtime/);
 		expect(source).toMatch(/reads\s+stdin until EOF/);
+	});
+
+	it('surfaces D through bundled LDC and Emscripten LLD browser assets', () => {
+		expect(source).toMatch(/d: \{/);
+		expect(source).toMatch(/WASM_D_ASSET_VERSION/);
+		expect(source).toMatch(/wasm-d\/index\.js\?v=\$\{WASM_D_ASSET_VERSION\}/);
+		expect(source).toMatch(/<option value="D">D<\/option>/);
+		expect(source).toMatch(/d: 'D'/);
+		expect(source).toMatch(/dlang: 'D'/);
+		expect(source).toMatch(/language === 'D'\s+\? 'd'/);
+		expect(source).toMatch(/'.d': 'D'/);
+		expect(source).toMatch(/D: 'main\.d'/);
+		expect(source).toMatch(/D: 'd'/);
+		expect(source).toMatch(/language !== 'D'/);
+		expect(source).toMatch(/D compiles in the browser with the bundled LDC WASI compiler/);
+		expect(source).toMatch(/Emscripten LLD\s+linker assets/);
+		expect(source).toMatch(/executes the emitted WASI artifact locally/);
+		expect(source).toMatch(/stdin until EOF/);
 	});
 
 	it('surfaces C#, F#, and VB.NET through wasm-dotnet runtime assets and the browser compiler hint', () => {
@@ -494,7 +519,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/<option value="RUBY">Ruby<\/option>/);
 		expect(source).toMatch(/ruby: 'RUBY'/);
 		expect(source).toMatch(/rb: 'RUBY'/);
-		expect(source).toMatch(/language === 'RUBY'\s+\? 'ruby'/);
+		expect(source).toMatch(/language ===\s+'RUBY'\s+\?\s+'ruby'/);
 		expect(source).toMatch(/'.rb': 'RUBY'/);
 		expect(source).toMatch(/RUBY: 'main\.rb'/);
 		expect(source).toMatch(/RUBY: 'ruby'/);

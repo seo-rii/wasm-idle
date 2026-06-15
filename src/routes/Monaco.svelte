@@ -780,6 +780,7 @@
 			language === 'java' ||
 			language === 'rust' ||
 			language === 'go' ||
+			language === 'd' ||
 			language === 'csharp' ||
 			language === 'fsharp' ||
 			language === 'vb' ||
@@ -828,6 +829,7 @@
 				| 'python'
 				| 'java'
 				| 'go'
+				| 'd'
 				| 'csharp'
 				| 'fsharp'
 				| 'vbnet'
@@ -879,6 +881,13 @@
 			}
 			Monaco.languages.setLanguageConfiguration('fsharp', fsharpLanguageConfiguration);
 			Monaco.languages.setMonarchTokensProvider('fsharp', fsharpMonarchTokens);
+			if (!Monaco.languages.getLanguages().some(({ id }) => id === 'd')) {
+				Monaco.languages.register({
+					id: 'd',
+					aliases: ['D', 'd'],
+					extensions: ['.d']
+				});
+			}
 			if (!Monaco.languages.getLanguages().some(({ id }) => id === 'zig')) {
 				Monaco.languages.register({
 					id: 'zig',
@@ -930,6 +939,7 @@
 					| 'python'
 					| 'java'
 					| 'go'
+					| 'd'
 					| 'csharp'
 					| 'fsharp'
 					| 'vbnet'
