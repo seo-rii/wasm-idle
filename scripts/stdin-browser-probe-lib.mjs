@@ -183,9 +183,25 @@ export async function runStdinBrowserProbe({
 			language,
 			{ timeout: runTimeoutMs }
 		);
-		await page.waitForTimeout(500);
+		let previousEditorValue = await page.evaluate(
+			() => /** @type {any} */ (window).__wasmIdleDebug?.getEditorValue?.() ?? ''
+		);
+		let stableEditorReads = 0;
+		for (let attempt = 0; attempt < 20; attempt += 1) {
+			await page.waitForTimeout(250);
+			const nextEditorValue = await page.evaluate(
+				() => /** @type {any} */ (window).__wasmIdleDebug?.getEditorValue?.() ?? ''
+			);
+			if (nextEditorValue === previousEditorValue) {
+				stableEditorReads += 1;
+				if (stableEditorReads >= 2) break;
+				continue;
+			}
+			previousEditorValue = nextEditorValue;
+			stableEditorReads = 0;
+		}
 		let editorValueStable = false;
-		for (let attempt = 0; attempt < 3; attempt += 1) {
+		for (let attempt = 0; attempt < 5; attempt += 1) {
 			const editorValueSet = await page.evaluate(async (text) => {
 				return await /** @type {any} */ (window).__wasmIdleDebug.setEditorValue(text);
 			}, source);
@@ -203,7 +219,7 @@ export async function runStdinBrowserProbe({
 					timeout: runTimeoutMs
 				}
 			);
-			await page.waitForTimeout(250);
+			await page.waitForTimeout(500);
 			editorValueStable = await page.evaluate(
 				(expectedSource) =>
 					/** @type {any} */ (window).__wasmIdleDebug?.getEditorValue?.() ===

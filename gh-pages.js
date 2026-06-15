@@ -7,6 +7,7 @@ const repoRoot = path.dirname(fileURLToPath(import.meta.url));
 const buildDir = path.join(repoRoot, 'build');
 
 const requiredBuildFiles = [
+	'compressed-runtime-assets.v1.json',
 	'wasm-of-js-of-ocaml/browser-native/src/index.js',
 	'wasm-of-js-of-ocaml/browser-native/src/compiler-worker.js',
 	'wasm-of-js-of-ocaml/browser-native/runtime/fs/memory-fs.js',
@@ -15,10 +16,10 @@ const requiredBuildFiles = [
 	'wasm-of-js-of-ocaml/browser-native-bundle/browser-native-runtime-pack.v1.index.json',
 	'wasm-of-js-of-ocaml/browser-native-bundle/tools/ocamlc.byte.browser.js',
 	'wasm-of-js-of-ocaml/browser-native-bundle/tools/js_of_ocaml.bc.browser.js',
-	'wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm_of_ocaml.bc.browser.js',
-	'wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-merge.browser.js',
-	'wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-metadce.browser.js',
-	'wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-opt.browser.js'
+	'wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm_of_ocaml.bc.browser.js.gz',
+	'wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-merge.browser.js.gz',
+	'wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-metadce.browser.js.gz',
+	'wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-opt.browser.js.gz'
 ];
 
 const missingBuildFiles = requiredBuildFiles.filter(
