@@ -172,6 +172,60 @@ describe('compressed runtime assets', () => {
 						);
 					}
 				}
+
+				const aliasResponses = await page.evaluate(async () => {
+					async function digest(bytes: ArrayBuffer) {
+						return Array.from(
+							new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))
+						)
+							.map((value) => value.toString(16).padStart(2, '0'))
+							.join('');
+					}
+					return await Promise.all(
+						[
+							[
+								'wasm-tinygo/vendor/wasm-rust-runtime/runtime-manifest.v3.json',
+								'wasm-rust/runtime/runtime-manifest.v3.json'
+							],
+							[
+								'wasm-tinygo/vendor/wasm-rust-runtime/rustc/rustc.wasm.gz',
+								'wasm-rust/runtime/rustc/rustc.wasm.gz'
+							]
+						].map(async ([aliasPath, canonicalPath]) => {
+							const aliasResponse = await fetch(new URL(aliasPath, location.href));
+							const canonicalResponse = await fetch(
+								new URL(canonicalPath, location.href)
+							);
+							const aliasBytes = await aliasResponse.arrayBuffer();
+							const canonicalBytes = await canonicalResponse.arrayBuffer();
+							return {
+								aliasDigest: await digest(aliasBytes),
+								aliasOk: aliasResponse.ok,
+								aliasPath,
+								aliasStatus: aliasResponse.status,
+								byteLength: aliasBytes.byteLength,
+								canonicalDigest: await digest(canonicalBytes),
+								canonicalOk: canonicalResponse.ok,
+								canonicalPath,
+								canonicalStatus: canonicalResponse.status,
+								canonicalByteLength: canonicalBytes.byteLength
+							};
+						})
+					);
+				});
+
+				expect(aliasResponses).toEqual(
+					aliasResponses.map((response) =>
+						expect.objectContaining({
+							aliasDigest: response.canonicalDigest,
+							aliasOk: true,
+							aliasStatus: 200,
+							byteLength: response.canonicalByteLength,
+							canonicalOk: true,
+							canonicalStatus: 200
+						})
+					)
+				);
 			} finally {
 				await context.close();
 				await browser.close();

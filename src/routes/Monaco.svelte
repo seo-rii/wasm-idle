@@ -285,6 +285,304 @@
 		}
 	} satisfies monaco.languages.IMonarchLanguage;
 
+	const dLanguageConfiguration = {
+		comments: {
+			lineComment: '//',
+			blockComment: ['/*', '*/']
+		},
+		brackets: [
+			['{', '}'],
+			['[', ']'],
+			['(', ')']
+		],
+		autoClosingPairs: [
+			{ open: '{', close: '}' },
+			{ open: '[', close: ']' },
+			{ open: '(', close: ')' },
+			{ open: '"', close: '"' },
+			{ open: "'", close: "'" }
+		],
+		surroundingPairs: [
+			{ open: '{', close: '}' },
+			{ open: '[', close: ']' },
+			{ open: '(', close: ')' },
+			{ open: '"', close: '"' },
+			{ open: "'", close: "'" }
+		]
+	} satisfies monaco.languages.LanguageConfiguration;
+
+	const dMonarchTokens = {
+		defaultToken: '',
+		tokenPostfix: '.d',
+		keywords: [
+			'abstract',
+			'alias',
+			'align',
+			'asm',
+			'assert',
+			'auto',
+			'body',
+			'bool',
+			'break',
+			'byte',
+			'case',
+			'cast',
+			'catch',
+			'cdouble',
+			'cent',
+			'cfloat',
+			'char',
+			'class',
+			'const',
+			'continue',
+			'creal',
+			'debug',
+			'default',
+			'delegate',
+			'delete',
+			'deprecated',
+			'do',
+			'double',
+			'else',
+			'enum',
+			'export',
+			'extern',
+			'false',
+			'final',
+			'finally',
+			'float',
+			'for',
+			'foreach',
+			'foreach_reverse',
+			'function',
+			'goto',
+			'idouble',
+			'if',
+			'ifloat',
+			'immutable',
+			'import',
+			'in',
+			'inout',
+			'int',
+			'interface',
+			'invariant',
+			'ireal',
+			'is',
+			'lazy',
+			'long',
+			'macro',
+			'mixin',
+			'module',
+			'new',
+			'nothrow',
+			'null',
+			'out',
+			'override',
+			'package',
+			'pragma',
+			'private',
+			'protected',
+			'public',
+			'pure',
+			'real',
+			'ref',
+			'return',
+			'scope',
+			'shared',
+			'short',
+			'static',
+			'struct',
+			'super',
+			'switch',
+			'synchronized',
+			'template',
+			'this',
+			'throw',
+			'true',
+			'try',
+			'typeid',
+			'typeof',
+			'ubyte',
+			'ucent',
+			'uint',
+			'ulong',
+			'union',
+			'unittest',
+			'ushort',
+			'version',
+			'void',
+			'wchar',
+			'while',
+			'with'
+		],
+		tokenizer: {
+			root: [
+				[/\/\/.*$/, 'comment'],
+				[/\/\+/, 'comment', '@nestedComment'],
+				[/\/\*/, 'comment', '@blockComment'],
+				[/"/, 'string', '@stringDouble'],
+				[/'([^'\\]|\\.)'/, 'string'],
+				[/`[^`]*`/, 'string'],
+				[/0[xX][0-9a-fA-F_]+/, 'number.hex'],
+				[/0[bB][01_]+/, 'number.binary'],
+				[/\b\d[\d_]*(?:\.\d[\d_]*)?(?:[eE][\-+]?\d[\d_]*)?\b/, 'number'],
+				[/[A-Za-z_]\w*/, { cases: { '@keywords': 'keyword', '@default': 'identifier' } }],
+				[/[{}()[\]]/, '@brackets'],
+				[/[;,.]/, 'delimiter'],
+				[/[=><!~?:&|+\-*/^%@]+/, 'operator']
+			],
+			blockComment: [
+				[/[^*]+/, 'comment'],
+				[/\*\//, 'comment', '@pop'],
+				[/./, 'comment']
+			],
+			nestedComment: [
+				[/[^/+]+/, 'comment'],
+				[/\/\+/, 'comment', '@push'],
+				[/\+\//, 'comment', '@pop'],
+				[/[+/]/, 'comment']
+			],
+			stringDouble: [
+				[/[^\\"]+/, 'string'],
+				[
+					/\\(?:[abfnrtv"'\\]|x[0-9A-Fa-f]{2}|u[0-9A-Fa-f]{4}|U[0-9A-Fa-f]{8})/,
+					'string.escape'
+				],
+				[/\\./, 'string.escape.invalid'],
+				[/"/, 'string', '@pop']
+			]
+		}
+	} satisfies monaco.languages.IMonarchLanguage;
+
+	const zigLanguageConfiguration = {
+		comments: {
+			lineComment: '//'
+		},
+		brackets: [
+			['{', '}'],
+			['[', ']'],
+			['(', ')']
+		],
+		autoClosingPairs: [
+			{ open: '{', close: '}' },
+			{ open: '[', close: ']' },
+			{ open: '(', close: ')' },
+			{ open: '"', close: '"' },
+			{ open: "'", close: "'" }
+		],
+		surroundingPairs: [
+			{ open: '{', close: '}' },
+			{ open: '[', close: ']' },
+			{ open: '(', close: ')' },
+			{ open: '"', close: '"' },
+			{ open: "'", close: "'" }
+		]
+	} satisfies monaco.languages.LanguageConfiguration;
+
+	const zigMonarchTokens = {
+		defaultToken: '',
+		tokenPostfix: '.zig',
+		keywords: [
+			'addrspace',
+			'align',
+			'allowzero',
+			'and',
+			'anyframe',
+			'anytype',
+			'asm',
+			'async',
+			'await',
+			'break',
+			'callconv',
+			'catch',
+			'comptime',
+			'const',
+			'continue',
+			'defer',
+			'else',
+			'enum',
+			'errdefer',
+			'error',
+			'export',
+			'extern',
+			'fn',
+			'for',
+			'if',
+			'inline',
+			'linksection',
+			'noalias',
+			'noinline',
+			'nosuspend',
+			'opaque',
+			'or',
+			'orelse',
+			'packed',
+			'pub',
+			'resume',
+			'return',
+			'struct',
+			'suspend',
+			'switch',
+			'test',
+			'threadlocal',
+			'try',
+			'union',
+			'unreachable',
+			'usingnamespace',
+			'var',
+			'volatile',
+			'while'
+		],
+		builtins: [
+			'bool',
+			'comptime_float',
+			'comptime_int',
+			'f16',
+			'f32',
+			'f64',
+			'f80',
+			'f128',
+			'false',
+			'isize',
+			'null',
+			'true',
+			'type',
+			'undefined',
+			'usize',
+			'void'
+		],
+		tokenizer: {
+			root: [
+				[/\/\/.*$/, 'comment'],
+				[/"/, 'string', '@stringDouble'],
+				[/'([^'\\]|\\.)'/, 'string'],
+				[/@[A-Za-z_]\w*/, 'annotation'],
+				[/0[xX][0-9a-fA-F_]+/, 'number.hex'],
+				[/0[bB][01_]+/, 'number.binary'],
+				[/\b\d[\d_]*(?:\.\d[\d_]*)?(?:[eE][\-+]?\d[\d_]*)?\b/, 'number'],
+				[
+					/[A-Za-z_]\w*/,
+					{
+						cases: {
+							'@keywords': 'keyword',
+							'@builtins': 'type.identifier',
+							'@default': 'identifier'
+						}
+					}
+				],
+				[/[{}()[\]]/, '@brackets'],
+				[/[;,.]/, 'delimiter'],
+				[/[=><!~?:&|+\-*/^%@]+/, 'operator']
+			],
+			stringDouble: [
+				[/[^\\"]+/, 'string'],
+				[/\\(?:[nrt0"'\\]|x[0-9A-Fa-f]{2}|u\{[0-9A-Fa-f]+\})/, 'string.escape'],
+				[/\\./, 'string.escape.invalid'],
+				[/"/, 'string', '@pop']
+			]
+		}
+	} satisfies monaco.languages.IMonarchLanguage;
+
 	const haskellKeywords = [
 		'as',
 		'case',
@@ -821,7 +1119,8 @@
 		if (!isEditorDefaultSource(currentValue) && !isLegacyEditorDefaultSource(currentValue)) {
 			return;
 		}
-		const nextDefaultLanguage = language === 'vb' ? 'vbnet' : language;
+		const nextDefaultLanguage =
+			language === 'vb' ? 'vbnet' : language === 'sql' ? 'sqlite' : language;
 		const nextValue = resolveEditorDefaultSource(
 			nextDefaultLanguage as
 				| 'c'
@@ -837,11 +1136,16 @@
 				| 'ocaml'
 				| 'javascript'
 				| 'typescript'
+				| 'assemblyscript'
 				| 'wat'
 				| 'lua'
 				| 'zig'
 				| 'lisp'
+				| 'ruby'
 				| 'haskell'
+				| 'r'
+				| 'sqlite'
+				| 'php'
 				| 'rust',
 			rustTargetTriple
 		);
@@ -860,7 +1164,23 @@
 			}
 		};
 
-		import('monaco-editor').then(async (m) => {
+		Promise.all([
+			import('monaco-editor'),
+			import('monaco-editor/esm/vs/basic-languages/cpp/cpp.contribution.js'),
+			import('monaco-editor/esm/vs/basic-languages/csharp/csharp.contribution.js'),
+			import('monaco-editor/esm/vs/basic-languages/elixir/elixir.contribution.js'),
+			import('monaco-editor/esm/vs/basic-languages/go/go.contribution.js'),
+			import('monaco-editor/esm/vs/basic-languages/java/java.contribution.js'),
+			import('monaco-editor/esm/vs/basic-languages/javascript/javascript.contribution.js'),
+			import('monaco-editor/esm/vs/basic-languages/php/php.contribution.js'),
+			import('monaco-editor/esm/vs/basic-languages/python/python.contribution.js'),
+			import('monaco-editor/esm/vs/basic-languages/r/r.contribution.js'),
+			import('monaco-editor/esm/vs/basic-languages/ruby/ruby.contribution.js'),
+			import('monaco-editor/esm/vs/basic-languages/rust/rust.contribution.js'),
+			import('monaco-editor/esm/vs/basic-languages/sql/sql.contribution.js'),
+			import('monaco-editor/esm/vs/basic-languages/typescript/typescript.contribution.js'),
+			import('monaco-editor/esm/vs/basic-languages/vb/vb.contribution.js')
+		]).then(async ([m]) => {
 			if (disposed) return;
 			Monaco = m;
 			if (!Monaco.languages.getLanguages().some(({ id }) => id === 'ocaml')) {
@@ -888,6 +1208,8 @@
 					extensions: ['.d']
 				});
 			}
+			Monaco.languages.setLanguageConfiguration('d', dLanguageConfiguration);
+			Monaco.languages.setMonarchTokensProvider('d', dMonarchTokens);
 			if (!Monaco.languages.getLanguages().some(({ id }) => id === 'zig')) {
 				Monaco.languages.register({
 					id: 'zig',
@@ -895,6 +1217,8 @@
 					extensions: ['.zig']
 				});
 			}
+			Monaco.languages.setLanguageConfiguration('zig', zigLanguageConfiguration);
+			Monaco.languages.setMonarchTokensProvider('zig', zigMonarchTokens);
 			if (!Monaco.languages.getLanguages().some(({ id }) => id === 'wat')) {
 				Monaco.languages.register({
 					id: 'wat',
@@ -931,7 +1255,8 @@
 			}
 			Monaco.languages.setLanguageConfiguration('lisp', schemeLanguageConfiguration);
 			Monaco.languages.setMonarchTokensProvider('lisp', schemeMonarchTokens);
-			const defaultLanguage = language === 'vb' ? 'vbnet' : language;
+			const defaultLanguage =
+				language === 'vb' ? 'vbnet' : language === 'sql' ? 'sqlite' : language;
 			const defaultValue = resolveEditorDefaultSource(
 				defaultLanguage as
 					| 'c'
@@ -947,11 +1272,16 @@
 					| 'ocaml'
 					| 'javascript'
 					| 'typescript'
+					| 'assemblyscript'
 					| 'wat'
 					| 'lua'
 					| 'zig'
 					| 'lisp'
+					| 'ruby'
 					| 'haskell'
+					| 'r'
+					| 'sqlite'
+					| 'php'
 					| 'rust',
 				rustTargetTriple
 			);

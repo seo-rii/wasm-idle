@@ -40,18 +40,26 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(/language === 'haskell'/);
 		expect(source).toMatch(/language === 'r'/);
 		expect(source).toMatch(
-			/const nextDefaultLanguage = language === 'vb' \? 'vbnet' : language;/
+			/const nextDefaultLanguage =\s+language === 'vb' \? 'vbnet' : language === 'sql' \? 'sqlite' : language;/
 		);
-		expect(source).toMatch(/const defaultLanguage = language === 'vb' \? 'vbnet' : language;/);
+		expect(source).toMatch(
+			/const defaultLanguage =\s+language === 'vb' \? 'vbnet' : language === 'sql' \? 'sqlite' : language;/
+		);
 		expect(source).toMatch(
 			/\$effect\(\(\) => \{\s+if \(!editor\) return;[\s\S]*if \(!isEditorDefaultSource\(currentValue\) && !isLegacyEditorDefaultSource\(currentValue\)\) \{[\s\S]*const nextValue = resolveEditorDefaultSource\([\s\S]*rustTargetTriple[\s\S]*editor\.setValue\(nextValue\);[\s\S]*\}\);/s
 		);
 		expect(source).toMatch(
-			/const defaultValue = resolveEditorDefaultSource\([\s\S]*'c'[\s\S]*'cpp'[\s\S]*'python'[\s\S]*'java'[\s\S]*'go'[\s\S]*'csharp'[\s\S]*'fsharp'[\s\S]*'vbnet'[\s\S]*'elixir'[\s\S]*'ocaml'[\s\S]*'rust'[\s\S]*rustTargetTriple\s+\);/s
+			/const defaultValue = resolveEditorDefaultSource\([\s\S]*'c'[\s\S]*'cpp'[\s\S]*'python'[\s\S]*'java'[\s\S]*'go'[\s\S]*'d'[\s\S]*'csharp'[\s\S]*'fsharp'[\s\S]*'vbnet'[\s\S]*'elixir'[\s\S]*'ocaml'[\s\S]*'ruby'[\s\S]*'sqlite'[\s\S]*'php'[\s\S]*'rust'[\s\S]*rustTargetTriple\s+\);/s
 		);
 		expect(source).toMatch(/id: 'd'/);
 		expect(source).toMatch(/aliases: \['D', 'd'\]/);
 		expect(source).toMatch(/extensions: \['\.d'\]/);
+		expect(source).toMatch(
+			/Monaco\.languages\.setMonarchTokensProvider\('d', dMonarchTokens\);/
+		);
+		expect(source).toMatch(
+			/Monaco\.languages\.setMonarchTokensProvider\('zig', zigMonarchTokens\);/
+		);
 		expect(source).toMatch(
 			/debugView = new MonacoDebugView\(Monaco, editor, onBreakpointsChange\);\s+debugView\.setBreakpoints\(breakpoints\);\s+debugView\.setPauseState\(pausedLine, debugLocals, debugLanguage\);/s
 		);

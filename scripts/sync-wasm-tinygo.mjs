@@ -21,10 +21,7 @@ const DEFAULT_VERSION_MODULE_PATH = path.resolve(
  */
 function shouldInclude(relativePath) {
 	const normalized = relativePath.split(path.sep).join('/');
-	if (
-		normalized.startsWith('vendor/emception/') ||
-		normalized.startsWith('vendor/wasm-rust-runtime/')
-	) {
+	if (normalized.startsWith('vendor/emception/')) {
 		return true;
 	}
 	if (normalized.startsWith('assets/runtime-') && normalized.endsWith('.js')) {
@@ -86,8 +83,7 @@ async function computeBundleFingerprint(sourceDir) {
  */
 async function writeVersionModule(versionModulePath, fingerprint) {
 	await mkdir(path.dirname(versionModulePath), { recursive: true });
-	const moduleSource =
-		`export const WASM_TINYGO_ASSET_VERSION = ${JSON.stringify(fingerprint)};\n`;
+	const moduleSource = `export const WASM_TINYGO_ASSET_VERSION = ${JSON.stringify(fingerprint)};\n`;
 	const current = await readFile(versionModulePath, 'utf8').catch(() => '');
 	if (current === moduleSource) return;
 	await writeFile(versionModulePath, moduleSource, 'utf8');

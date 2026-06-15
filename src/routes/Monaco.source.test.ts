@@ -3,6 +3,34 @@ import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 
 describe('Monaco route source', () => {
+	it('loads Monaco basic language contributions used by the playground', async () => {
+		const source = await readFile(
+			path.resolve(process.cwd(), 'src/routes/Monaco.svelte'),
+			'utf8'
+		);
+
+		for (const language of [
+			'cpp',
+			'csharp',
+			'elixir',
+			'go',
+			'java',
+			'javascript',
+			'php',
+			'python',
+			'r',
+			'ruby',
+			'rust',
+			'sql',
+			'typescript',
+			'vb'
+		]) {
+			expect(source).toContain(
+				`monaco-editor/esm/vs/basic-languages/${language}/${language}.contribution.js`
+			);
+		}
+	});
+
 	it('registers an OCaml Monaco language with a tokenizer and language configuration', async () => {
 		const source = await readFile(
 			path.resolve(process.cwd(), 'src/routes/Monaco.svelte'),
@@ -60,5 +88,23 @@ describe('Monaco route source', () => {
 		expect(source).toContain("tokenPostfix: '.lua'");
 		expect(source).toContain("lineComment: '--'");
 		expect(source).toContain("blockComment: ['--[[', ']]']");
+	});
+
+	it('registers D and Zig Monaco languages with tokenizers', async () => {
+		const source = await readFile(
+			path.resolve(process.cwd(), 'src/routes/Monaco.svelte'),
+			'utf8'
+		);
+
+		expect(source).toContain("id: 'd'");
+		expect(source).toContain("Monaco.languages.setLanguageConfiguration('d'");
+		expect(source).toContain("Monaco.languages.setMonarchTokensProvider('d'");
+		expect(source).toContain("tokenPostfix: '.d'");
+		expect(source).toContain("blockComment: ['/*', '*/']");
+		expect(source).toContain("id: 'zig'");
+		expect(source).toContain("Monaco.languages.setLanguageConfiguration('zig'");
+		expect(source).toContain("Monaco.languages.setMonarchTokensProvider('zig'");
+		expect(source).toContain("tokenPostfix: '.zig'");
+		expect(source).toContain("lineComment: '//'");
 	});
 });

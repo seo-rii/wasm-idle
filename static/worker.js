@@ -8,6 +8,12 @@ self.addEventListener('activate', (event) => {
 
 const gzipVirtualExtensions = /\.(a|avm|bin|data|dat|dll|js|mjs|pdb|so|symbols|wasm)$/i;
 const precompressedExtension = /\.(br|brotli|gz|tgz|zip|zst)$/i;
+const runtimeAssetAliases = [
+	{
+		from: 'wasm-tinygo/vendor/wasm-rust-runtime/',
+		to: 'wasm-rust/runtime/'
+	}
+];
 let compressedRuntimeAssetManifestPromise = null;
 
 function shouldBypassIsolationHeaders(url) {
@@ -56,6 +62,20 @@ function contentTypeForPath(pathname) {
 	return 'application/octet-stream';
 }
 
+function aliasedRuntimeAssetUrl(url) {
+	const relativePath = relativePathInScope(url);
+	for (const alias of runtimeAssetAliases) {
+		if (!relativePath.startsWith(alias.from)) continue;
+		const aliasedUrl = new URL(
+			`${alias.to}${relativePath.slice(alias.from.length)}`,
+			self.registration.scope
+		);
+		aliasedUrl.search = url.search;
+		return aliasedUrl;
+	}
+	return null;
+}
+
 function hasGzipContentEncoding(response) {
 	const contentEncoding = response.headers.get('content-encoding') || '';
 	return contentEncoding
@@ -93,6 +113,25 @@ async function fetchCompressedRuntimeAsset(request, url) {
 	});
 }
 
+async function fetchRuntimeAssetAlias(request, url) {
+	if (request.method !== 'GET') return null;
+	const aliasUrl = aliasedRuntimeAssetUrl(url);
+	if (!aliasUrl) return null;
+	const aliasRequest = new Request(aliasUrl, {
+		cache: request.cache,
+		credentials: request.credentials,
+		headers: request.headers,
+		mode: request.mode,
+		redirect: request.redirect,
+		referrer: request.referrer,
+		referrerPolicy: request.referrerPolicy
+	});
+	return (
+		(await fetchCompressedRuntimeAsset(aliasRequest, aliasUrl)) ||
+		fetch(aliasRequest).catch(() => null)
+	);
+}
+
 function withIsolationHeaders(response) {
 	const newHeaders = new Headers(response.headers);
 	newHeaders.set('Cross-Origin-Embedder-Policy', 'require-corp');
@@ -115,7 +154,9 @@ self.addEventListener('fetch', function (event) {
 		Promise.resolve()
 			.then(async function () {
 				return (
-					(await fetchCompressedRuntimeAsset(event.request, url)) || fetch(event.request)
+					(await fetchRuntimeAssetAlias(event.request, url)) ||
+					(await fetchCompressedRuntimeAsset(event.request, url)) ||
+					fetch(event.request)
 				);
 			})
 			.then(function (response) {
