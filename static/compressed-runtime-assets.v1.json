@@ -142,6 +142,10 @@
     "wasm-octave/runtime/lib/octave/10.3.0/oct/wasm32-unknown-emscripten/audioread.oct": 6965747,
     "wasm-octave/runtime/lib/octave/10.3.0/oct/wasm32-unknown-emscripten/convhulln.oct": 6962883,
     "wasm-octave/runtime/lib/octave/10.3.0/oct/wasm32-unknown-emscripten/fftw.oct": 6962877,
-    "wasm-octave/runtime/lib/octave/10.3.0/oct/wasm32-unknown-emscripten/gzip.oct": 6963614
+    "wasm-octave/runtime/lib/octave/10.3.0/oct/wasm32-unknown-emscripten/gzip.oct": 6963614,
+    "wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-merge.browser.js": 9560005,
+    "wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-metadce.browser.js": 9599667,
+    "wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-opt.browser.js": 10601940,
+    "wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm_of_ocaml.bc.browser.js": 6250420
   }
 }
