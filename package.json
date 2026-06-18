@@ -33,6 +33,9 @@
 		"test:browser:stdin": "WASM_IDLE_RUN_REAL_BROWSER_STDIN=1 pnpm exec vitest run src/lib/playground/stdin.playwright.test.ts",
 		"test:browser:ocaml": "WASM_IDLE_RUN_REAL_BROWSER_OCAML=1 pnpm exec vitest run src/lib/playground/ocaml.playwright.test.ts",
 		"test:browser:octave": "WASM_IDLE_RUN_REAL_BROWSER_OCTAVE=1 pnpm exec vitest run src/lib/playground/octave.playwright.test.ts",
+		"test:browser:prolog": "WASM_IDLE_RUN_REAL_BROWSER_PROLOG=1 pnpm exec vitest run src/lib/playground/static-worker-runtimes.playwright.test.ts",
+		"test:browser:gleam": "WASM_IDLE_RUN_REAL_BROWSER_GLEAM=1 pnpm exec vitest run src/lib/playground/static-worker-runtimes.playwright.test.ts",
+		"test:browser:perl": "WASM_IDLE_RUN_REAL_BROWSER_PERL=1 pnpm exec vitest run src/lib/playground/static-worker-runtimes.playwright.test.ts",
 		"test:browser:playwright": "WASM_IDLE_RUN_REAL_BROWSER_RUST=1 pnpm exec vitest run src/lib/playground/rust.playwright.test.ts",
 		"test:browser:tinygo": "WASM_IDLE_RUN_REAL_BROWSER_TINYGO=1 pnpm exec vitest run src/lib/playground/tinygo.playwright.test.ts",
 		"sync:runtime": "node scripts/sync-runtime.mjs",
@@ -51,6 +54,9 @@
 		"sync:wasm-tinygo": "node scripts/sync-runtime.mjs wasm-tinygo",
 		"sync:wasm-elixir": "node scripts/sync-runtime.mjs wasm-elixir",
 		"sync:wasm-octave": "node scripts/sync-runtime.mjs wasm-octave",
+		"sync:wasm-prolog": "node scripts/sync-runtime.mjs wasm-prolog",
+		"sync:wasm-gleam": "node scripts/sync-runtime.mjs wasm-gleam",
+		"sync:wasm-perl": "node scripts/sync-runtime.mjs wasm-perl",
 		"sync:webr": "node scripts/sync-runtime.mjs webr",
 		"compress:static-runtimes": "node scripts/compress-static-runtime-assets.mjs static",
 		"compress:build-runtimes": "node scripts/compress-static-runtime-assets.mjs build",
@@ -62,7 +68,7 @@
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"lint": "prettier --check . && eslint .",
 		"format": "prettier --write .",
-		"page": "npm run sync:wasm-of-js-of-ocaml && npm run sync:wasm-typescript && npm run sync:wasm-octave && npm run compress:static-runtimes && npm run build && npm run compress:build-runtimes && node gh-pages.js"
+		"page": "npm run sync:wasm-of-js-of-ocaml && npm run sync:wasm-typescript && npm run sync:wasm-octave && npm run sync:wasm-prolog && npm run sync:wasm-gleam && npm run sync:wasm-perl && npm run compress:static-runtimes && npm run build && npm run compress:build-runtimes && node gh-pages.js"
 	},
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",
@@ -99,6 +105,7 @@
 		"@assemblyscript/loader": "0.28.17",
 		"@bjorn3/browser_wasi_shim": "^0.4.2",
 		"@hancomac/monaco-languageclient": "^1.1.0",
+		"@live-codes/gleam-precompiled": "0.5.0",
 		"@php-wasm/universal": "3.1.34",
 		"@php-wasm/web": "3.1.34",
 		"@ruby/3.4-wasm-wasi": "2.9.3-2.9.4",
@@ -106,6 +113,7 @@
 		"@swmansion/popcorn": "0.2.2",
 		"@types/sql.js": "^1.4.11",
 		"@wasm-idle/core": "workspace:*",
+		"@wasm-idle/lsp": "workspace:*",
 		"@wasm-idle/runtime-assemblyscript": "workspace:*",
 		"@wasm-idle/runtime-php": "workspace:*",
 		"@xterm/addon-canvas": "^0.7.0",
@@ -122,6 +130,7 @@
 		"publint": "^0.3.18",
 		"pyodide": "0.29.3",
 		"sql.js": "^1.14.1",
+		"swipl-wasm": "8.0.1",
 		"vscode-jsonrpc": "^8.2.1",
 		"webr": "0.6.0"
 	},

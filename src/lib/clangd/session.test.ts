@@ -8,6 +8,8 @@ const mockState = vi.hoisted(() => {
 	const install = vi.fn();
 	const start = vi.fn();
 	const stop = vi.fn();
+	const serverDispose = vi.fn();
+	const serverSyncFile = vi.fn();
 
 	class MockLanguageClient {
 		constructor(public options: any) {}
@@ -26,51 +28,29 @@ const mockState = vi.hoisted(() => {
 		constructor(public worker: any) {}
 	}
 
-	const workers: FakeWorker[] = [];
-
-	class FakeWorker {
-		listeners = {
-			message: new Set<(event: MessageEvent<any>) => void>(),
-			error: new Set<(event: ErrorEvent) => void>()
+	const getCppLanguageServer = vi.fn(async (options: any) => {
+		options.onStatus?.({ state: 'loading', loaded: 32, total: 64 });
+		options.onStatus?.({ state: 'ready' });
+		return {
+			transport: {
+				reader: new MockReader('clangd'),
+				writer: new MockWriter('clangd')
+			},
+			syncFile: serverSyncFile,
+			dispose: serverDispose
 		};
-		terminated = false;
-
-		constructor() {
-			workers.push(this);
-		}
-
-		addEventListener(type: 'message' | 'error', handler: any) {
-			this.listeners[type].add(handler);
-		}
-
-		removeEventListener(type: 'message' | 'error', handler: any) {
-			this.listeners[type].delete(handler);
-		}
-
-		postMessage(message: any) {
-			if (message.type !== 'init') return;
-			for (const handler of this.listeners.message) {
-				handler({ data: { type: 'progress', value: 32, max: 64 } } as MessageEvent<any>);
-			}
-			for (const handler of this.listeners.message) {
-				handler({ data: { type: 'ready' } } as MessageEvent<any>);
-			}
-		}
-
-		terminate() {
-			this.terminated = true;
-		}
-	}
+	});
 
 	return {
 		install,
 		start,
 		stop,
-		workers,
 		MockLanguageClient,
 		MockReader,
 		MockWriter,
-		FakeWorker
+		getCppLanguageServer,
+		serverDispose,
+		serverSyncFile
 	};
 });
 
@@ -81,13 +61,9 @@ vi.mock('@hancomac/monaco-languageclient', () => ({
 	MonacoServices: { install: mockState.install }
 }));
 
-vi.mock('$lib/utils/vscodeJsonrpcBrowser', () => ({
-	BrowserMessageReader: mockState.MockReader,
-	BrowserMessageWriter: mockState.MockWriter
-}));
-
-vi.mock('$lib/clangd/worker?worker', () => ({
-	default: mockState.FakeWorker
+vi.mock('@wasm-idle/lsp', async (importOriginal) => ({
+	...(await importOriginal<typeof import('@wasm-idle/lsp')>()),
+	getCppLanguageServer: mockState.getCppLanguageServer
 }));
 
 import { ClangdSession } from '$lib/clangd/session';
@@ -97,7 +73,9 @@ describe('ClangdSession', () => {
 		mockState.install.mockClear();
 		mockState.start.mockClear();
 		mockState.stop.mockClear();
-		mockState.workers.splice(0, mockState.workers.length);
+		mockState.getCppLanguageServer.mockClear();
+		mockState.serverDispose.mockClear();
+		mockState.serverSyncFile.mockClear();
 	});
 
 	it('creates a stable cpp model and starts the worker-backed language client', async () => {
@@ -133,9 +111,14 @@ describe('ClangdSession', () => {
 		expect(status).toHaveBeenCalledWith({ state: 'loading', loaded: 32, total: 64 });
 		expect(status).toHaveBeenCalledWith({ state: 'ready' });
 		expect(mockState.start).toHaveBeenCalledTimes(1);
+		expect(mockState.getCppLanguageServer).toHaveBeenCalledWith({
+			cpp: { baseUrl: 'https://example.com/wasm/' },
+			currentUrl: 'http://localhost:3000/',
+			onStatus: status
+		});
 
 		session.dispose();
 		expect(mockState.stop).toHaveBeenCalledTimes(1);
-		expect(mockState.workers[0]?.terminated).toBe(true);
+		expect(mockState.serverDispose).toHaveBeenCalledTimes(1);
 	});
 });

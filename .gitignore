@@ -9,6 +9,8 @@ node_modules
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 dist/
+!packages/lsp/dist/
+!packages/lsp/dist/**
 
 # Local build caches and generated sync outputs
 .cache/

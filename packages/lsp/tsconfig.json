@@ -1,0 +1,18 @@
+{
+	"compilerOptions": {
+		"declaration": true,
+		"declarationMap": true,
+		"emitDeclarationOnly": false,
+		"module": "ESNext",
+		"moduleResolution": "bundler",
+		"outDir": "dist",
+		"rootDir": "src",
+		"sourceMap": true,
+		"skipLibCheck": true,
+		"strict": true,
+		"target": "ES2022",
+		"lib": ["ES2022", "DOM"],
+		"types": ["node"]
+	},
+	"include": ["src/**/*.ts"]
+}

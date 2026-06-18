@@ -10,8 +10,14 @@ export {
 } from '$lib/debug';
 export {
 	getEditorLanguageServer,
+	getAssemblyScriptLanguageServer,
+	getCSharpLanguageServer,
 	getCppLanguageServer,
+	getJavaScriptLanguageServer,
 	getPythonLanguageServer,
+	getTypeScriptLanguageServer,
+	getVisualBasicLanguageServer,
+	getWatLanguageServer,
 	resolveCppLanguageServerBaseUrl,
 	resolveCppLanguageServerRuntimeAssetConfig,
 	resolvePythonLanguageServerBaseUrl
@@ -20,6 +26,10 @@ import playground, { createPlaygroundBinding } from '$lib/playground';
 
 export default Terminal;
 export { createPlaygroundBinding, playground };
+export {
+	isSharedArrayBufferAvailable,
+	requireSharedArrayBuffer
+} from '$lib/playground/sharedBuffer';
 export type {
 	DebugCommand,
 	DebugFrame,

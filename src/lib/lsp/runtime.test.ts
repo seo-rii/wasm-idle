@@ -55,8 +55,7 @@ describe('lsp runtime asset resolution', () => {
 			})
 		).toEqual({
 			baseUrl: 'https://cpp.example.com/assets/',
-			loader,
-			useAssetBridge: true
+			loader
 		});
 	});
 

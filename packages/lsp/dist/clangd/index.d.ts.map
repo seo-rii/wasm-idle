@@ -1,0 +1,1 @@
+{"version":3,"file":"index.d.ts","sourceRoot":"","sources":["../../src/clangd/index.ts"],"names":[],"mappings":"AAAA,OAAO,EACN,oBAAoB,EACpB,mBAAmB,EACnB,qBAAqB,EACrB,oBAAoB,EACpB,wBAAwB,EACxB,sBAAsB,EACtB,KAAK,YAAY,EACjB,MAAM,aAAa,CAAC;AACrB,OAAO,EACN,0BAA0B,EAC1B,oBAAoB,EACpB,KAAK,2BAA2B,EAChC,MAAM,aAAa,CAAC;AACrB,YAAY,EACX,qBAAqB,EACrB,0BAA0B,EAC1B,2BAA2B,EAC3B,MAAM,eAAe,CAAC"}

@@ -1,0 +1,1 @@
+{"version":3,"file":"json-stream.d.ts","sourceRoot":"","sources":["../../src/clangd/json-stream.ts"],"names":[],"mappings":"AAKA,qBAAa,UAAU;IACtB,MAAM,UAAS;IACf,OAAO,EAAE,MAAM,EAAE,CAAM;IACvB,gBAAgB,SAAK;IACrB,QAAQ,UAAS;IACjB,QAAQ,SAAK;IACb,WAAW,cAAqB;IAEhC,MAAM,CAAC,QAAQ,EAAE,MAAM,GAAG,MAAM,GAAG,IAAI;CA6BvC"}

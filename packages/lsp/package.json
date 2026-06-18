@@ -1,0 +1,68 @@
+{
+	"name": "@wasm-idle/lsp",
+	"version": "0.1.0",
+	"description": "Framework-neutral browser LSP hosts for wasm-idle language tools",
+	"license": "MIT",
+	"type": "module",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js",
+			"default": "./dist/index.js"
+		},
+		"./clangd": {
+			"types": "./dist/clangd/index.d.ts",
+			"import": "./dist/clangd/index.js",
+			"default": "./dist/clangd/index.js"
+		},
+		"./python": {
+			"types": "./dist/python/index.d.ts",
+			"import": "./dist/python/index.js",
+			"default": "./dist/python/index.js"
+		},
+		"./typescript": {
+			"types": "./dist/typescript/index.d.ts",
+			"import": "./dist/typescript/index.js",
+			"default": "./dist/typescript/index.js"
+		},
+		"./javascript": {
+			"types": "./dist/typescript/index.d.ts",
+			"import": "./dist/typescript/index.js",
+			"default": "./dist/typescript/index.js"
+		},
+		"./wat": {
+			"types": "./dist/wat/index.d.ts",
+			"import": "./dist/wat/index.js",
+			"default": "./dist/wat/index.js"
+		},
+		"./dotnet": {
+			"types": "./dist/dotnet/index.d.ts",
+			"import": "./dist/dotnet/index.js",
+			"default": "./dist/dotnet/index.js"
+		},
+		"./assemblyscript": {
+			"types": "./dist/assemblyscript/index.d.ts",
+			"import": "./dist/assemblyscript/index.js",
+			"default": "./dist/assemblyscript/index.js"
+		}
+	},
+	"files": [
+		"dist"
+	],
+	"scripts": {
+		"build": "rm -rf dist && tsc -p tsconfig.json && node scripts/build.mjs",
+		"check": "tsc -p tsconfig.json --noEmit",
+		"test": "vitest run"
+	},
+	"dependencies": {
+		"assemblyscript": "0.28.17",
+		"pyodide": "0.29.3",
+		"typescript": "^6.0.2",
+		"wabt": "^1.0.39",
+		"vscode-jsonrpc": "^8.2.1"
+	},
+	"devDependencies": {
+		"@types/node": "^25.6.0",
+		"vitest": "^4.1.4"
+	}
+}

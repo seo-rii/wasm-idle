@@ -2,44 +2,35 @@ import {
 	CloseAction,
 	ErrorAction,
 	MonacoLanguageClient,
-	MonacoServices
+	MonacoServices,
+	type MessageTransports
 } from '@hancomac/monaco-languageclient';
+import {
+	getCppLanguageServer,
+	type EditorLanguageServerHandle,
+	type LanguageToolAssetConfig
+} from '@wasm-idle/lsp';
 import type * as Monaco from 'monaco-editor';
 
 import { CLANGD_CPP_FILE_URI, CLANGD_WORKSPACE_URI, type ClangdStatus } from '$lib/clangd/config';
-import ClangdWorker from '$lib/clangd/worker?worker';
-import { WorkerAssetBridge } from '$lib/playground/assetBridge';
-import {
-	resolveRuntimeAssetConfig,
-	type ResolvedRuntimeAssetConfig,
-	type RuntimeAssetConfig
-} from '$lib/playground/assets';
-import { BrowserMessageReader, BrowserMessageWriter } from '$lib/utils/vscodeJsonrpcBrowser';
 
 let servicesInstalled = false;
 
 export class ClangdSession {
 	Monaco: typeof Monaco;
-	baseUrl: string;
-	assetConfig: ResolvedRuntimeAssetConfig;
-	assetBridge: WorkerAssetBridge | null = null;
+	assetConfig: LanguageToolAssetConfig;
 	onStatus?: (status: ClangdStatus) => void;
-	worker: Worker | null = null;
+	languageServer: EditorLanguageServerHandle | null = null;
 	languageClient: MonacoLanguageClient | null = null;
 
 	constructor(
 		MonacoModule: typeof Monaco,
-		baseUrl: string | RuntimeAssetConfig,
+		baseUrl: string | LanguageToolAssetConfig,
 		onStatus?: (status: ClangdStatus) => void
 	) {
 		this.Monaco = MonacoModule;
 		this.onStatus = onStatus;
-		this.assetConfig = resolveRuntimeAssetConfig(
-			'clangd',
-			{ clangd: typeof baseUrl === 'string' ? { baseUrl } : baseUrl },
-			globalThis.location?.href || ''
-		);
-		this.baseUrl = this.assetConfig.baseUrl;
+		this.assetConfig = typeof baseUrl === 'string' ? { baseUrl } : baseUrl;
 		if (!servicesInstalled) {
 			MonacoServices.install(MonacoModule);
 			servicesInstalled = true;
@@ -53,53 +44,16 @@ export class ClangdSession {
 	}
 
 	async start() {
-		if (this.worker) return;
+		if (this.languageServer) return;
 		this.onStatus?.({ state: 'loading' });
-		const worker = new ClangdWorker();
-		this.worker = worker;
-		this.assetBridge = new WorkerAssetBridge(worker, 'clangd', this.assetConfig, {
-			set: (value) => this.onStatus?.({ state: 'loading', loaded: value, total: 1 })
+		const languageServer = await getCppLanguageServer({
+			cpp: this.assetConfig,
+			currentUrl: globalThis.location?.href || '',
+			onStatus: this.onStatus
 		});
-		await new Promise<void>((resolve, reject) => {
-			const cleanup = () => {
-				worker.removeEventListener('message', handleMessage);
-				worker.removeEventListener('error', handleError);
-			};
-			const handleMessage = (event: MessageEvent<any>) => {
-				if (this.assetBridge?.handleMessage(event)) return;
-				const { type, value, max, message } = event.data || {};
-				if (type === 'progress') {
-					this.onStatus?.({ state: 'loading', loaded: value, total: max });
-					return;
-				}
-				if (type === 'ready') {
-					cleanup();
-					resolve();
-					return;
-				}
-				if (type === 'error') {
-					cleanup();
-					reject(new Error(message || 'clangd failed to start'));
-				}
-			};
-			const handleError = (event: ErrorEvent) => {
-				cleanup();
-				reject(event.error || new Error(event.message || 'clangd worker failed'));
-			};
-			worker.addEventListener('message', handleMessage);
-			worker.addEventListener('error', handleError);
-			worker.postMessage({
-				type: 'init',
-				baseUrl: this.baseUrl,
-				assets: {
-					baseUrl: this.assetConfig.baseUrl,
-					useAssetBridge: this.assetConfig.useAssetBridge
-				}
-			});
-		});
+		this.languageServer = languageServer;
 
-		const reader = new BrowserMessageReader(worker);
-		const writer = new BrowserMessageWriter(worker);
+		const { reader, writer } = languageServer.transport as MessageTransports;
 		this.languageClient = new MonacoLanguageClient({
 			name: 'wasm-idle clangd',
 			clientOptions: {
@@ -129,8 +83,7 @@ export class ClangdSession {
 	dispose() {
 		this.languageClient?.stop();
 		this.languageClient = null;
-		this.worker?.terminate();
-		this.worker = null;
-		this.assetBridge = null;
+		this.languageServer?.dispose();
+		this.languageServer = null;
 	}
 }

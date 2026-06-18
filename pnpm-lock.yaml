@@ -17,6 +17,9 @@ importers:
       '@hancomac/monaco-languageclient':
         specifier: ^1.1.0
         version: 1.1.0
+      '@live-codes/gleam-precompiled':
+        specifier: 0.5.0
+        version: 0.5.0
       '@php-wasm/universal':
         specifier: 3.1.34
         version: 3.1.34
@@ -38,6 +41,9 @@ importers:
       '@wasm-idle/core':
         specifier: workspace:*
         version: link:packages/core
+      '@wasm-idle/lsp':
+        specifier: workspace:*
+        version: link:packages/lsp
       '@wasm-idle/runtime-assemblyscript':
         specifier: workspace:*
         version: link:runtimes/assemblyscript
@@ -86,6 +92,9 @@ importers:
       sql.js:
         specifier: ^1.14.1
         version: 1.14.1
+      swipl-wasm:
+        specifier: 8.0.1
+        version: 8.0.1
       vscode-jsonrpc:
         specifier: ^8.2.1
         version: 8.2.1
@@ -186,6 +195,31 @@ importers:
       typescript:
         specifier: ^6.0.2
         version: 6.0.2
+
+  packages/lsp:
+    dependencies:
+      assemblyscript:
+        specifier: 0.28.17
+        version: 0.28.17
+      pyodide:
+        specifier: 0.29.3
+        version: 0.29.3
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.2
+      vscode-jsonrpc:
+        specifier: ^8.2.1
+        version: 8.2.1
+      wabt:
+        specifier: ^1.0.39
+        version: 1.0.39
+    devDependencies:
+      '@types/node':
+        specifier: ^25.6.0
+        version: 25.6.0
+      vitest:
+        specifier: ^4.1.4
+        version: 4.1.4(@types/node@25.6.0)(jsdom@29.0.2)(vite@8.0.8(@types/node@25.6.0)(esbuild@0.28.0)(terser@5.47.1)(tsx@4.22.3))
 
   packages/node:
     dependencies:
@@ -1134,6 +1168,9 @@ packages:
 
   '@lezer/lr@1.4.10':
     resolution: {integrity: sha512-rnCpTIBafOx4mRp43xOxDJbFipJm/c0cia/V5TiGlhmMa+wsSdoGmUN3w5Bqrks/09Q/D4tNAmWaT8p6NRi77A==}
+
+  '@live-codes/gleam-precompiled@0.5.0':
+    resolution: {integrity: sha512-qHHxbRk71+Q2ze5U1SHKEvcam/zCELxNioa94IEqmy+A4GtvgBVIRqwu2e4gdpqqgPY5WdE7hKURVn1OVlJ8mA==}
 
   '@marijn/find-cluster-break@1.0.2':
     resolution: {integrity: sha512-l0h88YhZFyKdXIFNfSWpyjStDjGHwZ/U7iobcK1cQQD8sejsONdQtTVU+1wVN1PBw40PiiHB1vA5S7VTfQiP9g==}
@@ -3510,6 +3547,10 @@ packages:
     resolution: {integrity: sha512-q8DFohk6vUswSng95IZb9nzWJnbINZsK7OiM1snAa3qCjJBL0ZQpvMyAaVXjUukdM75J/m8UE8xwqat8Ors/zQ==}
     engines: {node: '>=18'}
 
+  swipl-wasm@8.0.1:
+    resolution: {integrity: sha512-tP3bSRaMboFRWGD5cfBAGIzu2HH80yqRG+i/YL8BEgQ7xasvJAycwgx0DW16vqqRhUHyFOOPbzX4aXuy9s+b1g==}
+    hasBin: true
+
   symbol-tree@3.2.4:
     resolution: {integrity: sha512-9QNk5KwDF+Bvz+PyObkmSYjI5ksVUYtjW7AU22r2NKcfLJcXp96hkDWU3+XndOsUb+AQ9QhfzfCT2O+CNWT5Tw==}
 
@@ -4343,6 +4384,8 @@ snapshots:
   '@lezer/lr@1.4.10':
     dependencies:
       '@lezer/common': 1.5.2
+
+  '@live-codes/gleam-precompiled@0.5.0': {}
 
   '@marijn/find-cluster-break@1.0.2': {}
 
@@ -6749,6 +6792,10 @@ snapshots:
       zimmerframe: 1.1.4
     transitivePeerDependencies:
       - '@typescript-eslint/types'
+
+  swipl-wasm@8.0.1:
+    dependencies:
+      '@types/emscripten': 1.41.5
 
   symbol-tree@3.2.4: {}
 
