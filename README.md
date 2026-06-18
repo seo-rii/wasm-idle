@@ -2,8 +2,9 @@
 
 ![wasm-idle](static/image.jpeg)
 
-Executes C++, Python, Java, Rust, Go, TinyGo, OCaml, Elixir, C#, F#, VB.NET, JavaScript,
-TypeScript, AssemblyScript, WAT, Lua, Zig, Scheme, Ruby, Haskell, R, SQLite, and PHP code.
+Executes C, C++, Python, Java, Rust, Go, D, C#, F#, VB.NET, Elixir, Erlang, Prolog,
+Gleam, Perl, OCaml, TinyGo, JavaScript, TypeScript, AssemblyScript, WAT, Lua, Zig,
+Scheme, Ruby, Haskell, R, Octave, SQLite, and PHP code.
 
 Refer to src/lib/clang.
 
@@ -14,6 +15,45 @@ browser, normally via a WebAssembly compiler, interpreter, or runtime. Do not ad
 parsers, translators, emulators, or "subset" executors as language support. A language should be
 listed only after normal user code runs on that actual runtime and stdin/stdout behavior is covered
 by tests.
+
+## Support matrix
+
+All entries run in the browser through real runtime, compiler, or interpreter implementations.
+`Editor support` lists browser LSP/compiler diagnostics when wired; `syntax` means Monaco syntax
+highlighting only. `Debug` means wasm-idle's trace/debug controls, not a native debugger.
+
+| Language       | Browser runtime/compiler             | Stdin | Editor support       | Debug |
+| -------------- | ------------------------------------ | ----- | -------------------- | ----- |
+| C              | wasm-clang / Clang WASI              | Yes   | clangd               | -     |
+| C++            | wasm-clang / Clang WASI              | Yes   | clangd               | Trace |
+| Python         | Pyodide                              | Yes   | Python LSP           | Trace |
+| Java           | TeaVM                                | Yes   | syntax               | -     |
+| Rust           | wasm-rust / browser rustc            | Yes   | rustc diagnostics    | Trace |
+| Go             | wasm-go / browser Go compiler        | Yes   | compiler diagnostics | Trace |
+| D              | wasm-d                               | Yes   | syntax               | -     |
+| C#             | wasm-dotnet                          | Yes   | compiler diagnostics | -     |
+| F#             | wasm-dotnet                          | Yes   | compiler diagnostics | -     |
+| VB.NET         | wasm-dotnet                          | Yes   | compiler diagnostics | -     |
+| Elixir         | AtomVM / Popcorn                     | Yes   | syntax               | -     |
+| Erlang         | AtomVM / Popcorn                     | Yes   | syntax               | -     |
+| Prolog         | SWI-Prolog WASM worker               | Yes   | syntax               | -     |
+| Gleam          | Gleam precompiled browser runtime    | Yes   | compiler diagnostics | -     |
+| Perl           | Perl WASM worker                     | Yes   | syntax               | -     |
+| OCaml          | wasm-of-js-of-ocaml / js_of_ocaml    | Yes   | syntax               | -     |
+| TinyGo         | wasm-tinygo                          | Yes   | syntax               | -     |
+| JavaScript     | wasm-typescript / TypeScript service | Yes   | TypeScript LSP       | -     |
+| TypeScript     | wasm-typescript / TypeScript service | Yes   | TypeScript LSP       | -     |
+| AssemblyScript | AssemblyScript compiler              | Yes   | AssemblyScript LSP   | -     |
+| WAT            | WABT                                 | Yes   | WAT LSP              | -     |
+| Lua            | Wasmoon                              | Yes   | syntax               | -     |
+| Zig            | zig_small.wasm                       | Yes   | syntax               | -     |
+| Scheme         | Puppy Scheme / wasm-lisp             | Yes   | syntax               | -     |
+| Ruby           | CRuby WASI                           | Yes   | syntax               | -     |
+| Haskell        | ghc-in-browser                       | Yes   | syntax               | -     |
+| R              | WebR                                 | Yes   | syntax               | -     |
+| Octave         | wasm-octave                          | Yes   | syntax               | -     |
+| SQLite         | sql.js                               | n/a   | syntax               | -     |
+| PHP            | php-wasm                             | Yes   | syntax               | -     |
 
 ## Monorepo layout
 
