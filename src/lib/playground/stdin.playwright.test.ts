@@ -37,6 +37,23 @@ const phpStdinSource = `<?php
 $input = trim(file_get_contents('php://input'));
 echo "main=", $input, "\\n";`;
 
+const csharpStdinSource = `using System;
+
+class Program {
+    static void Main() {
+        var line = Console.ReadLine();
+        Console.WriteLine($"main={line}");
+    }
+}`;
+
+const fsharpStdinSource = `open System
+
+[<EntryPoint>]
+let main argv =
+    let line = Console.ReadLine()
+    printfn "main=%s" line
+    0`;
+
 const vbnetStdinSource = `Imports System
 
 Module Program
@@ -136,6 +153,26 @@ describe('wasm-idle browser stdin connection', () => {
 					stdinText: '73\n'
 				});
 				expect(phpSummary.transcript).toContain('main=73');
+
+				const csharpSummary = await runStdinBrowserProbe({
+					browserUrl: previewServer.browserUrl,
+					expectedOutput: 'main=73',
+					language: 'CSHARP',
+					runTimeoutMs: Number(process.env.WASM_IDLE_STDIN_RUN_TIMEOUT_MS || '300000'),
+					source: csharpStdinSource,
+					stdinText: '73\n'
+				});
+				expect(csharpSummary.transcript).toContain('main=73');
+
+				const fsharpSummary = await runStdinBrowserProbe({
+					browserUrl: previewServer.browserUrl,
+					expectedOutput: 'main=73',
+					language: 'FSHARP',
+					runTimeoutMs: Number(process.env.WASM_IDLE_STDIN_RUN_TIMEOUT_MS || '300000'),
+					source: fsharpStdinSource,
+					stdinText: '73\n'
+				});
+				expect(fsharpSummary.transcript).toContain('main=73');
 
 				const vbnetSummary = await runStdinBrowserProbe({
 					browserUrl: previewServer.browserUrl,
