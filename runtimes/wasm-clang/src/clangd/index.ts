@@ -1,4 +1,7 @@
-export { ClangdSession } from './session.js';
+export {
+	createClangdLanguageServer,
+	getClangdLanguageServer
+} from './server.js';
 export {
 	CLANGD_CPP_FILE_PATH,
 	CLANGD_CPP_FILE_URI,
@@ -8,6 +11,10 @@ export {
 	normalizeClangdBaseUrl
 } from './config.js';
 export type { ClangdStatus } from './config.js';
+export type {
+	ClangdLanguageServerHandle,
+	ClangdLanguageServerOptions
+} from './server.js';
 export type {
 	ClangdWorkerInboundMessage,
 	ClangdWorkerOutboundMessage

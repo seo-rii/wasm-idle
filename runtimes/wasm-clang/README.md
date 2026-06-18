@@ -16,7 +16,7 @@ Current scope:
 - runtime manifest and build metadata under `dist/runtime/`
 - high-level `createClangCompiler()`, `preloadBrowserClangRuntime()`,
   `executeBrowserClangArtifact()`, and `resolveRuntimeAssetUrls()` helpers
-- a debug control wrapper in the root package plus a `wasm-clang/clangd` session subpath
+- a debug control wrapper in the root package plus a `wasm-clang/clangd` transport subpath
 - unit tests ported from the current `wasm-idle` clang host
 
 ## Build
@@ -57,10 +57,15 @@ If you host the assets somewhere else, pass `runtimeBaseUrl` to
 
 ## Additional wrappers
 
-For editor/LSP integration, import the clangd session wrapper from the package subpath:
+For editor/LSP integration, import the clangd language-server transport from the package subpath
+and pass the returned reader/writer pair to your editor client:
 
 ```ts
-import { ClangdSession } from 'wasm-clang/clangd';
+import { createClangdLanguageServer } from 'wasm-clang/clangd';
+
+const clangd = await createClangdLanguageServer({
+  baseUrl: new URL('./dist/runtime/', import.meta.url).href
+});
 ```
 
 For debug control, the root package also exposes a thin wrapper that owns the shared debug buffers
