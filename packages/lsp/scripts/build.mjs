@@ -1,6 +1,7 @@
-import { cp, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gzipSync } from 'node:zlib';
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const typescriptLibDir = path.resolve(packageRoot, 'node_modules', 'typescript', 'lib');
@@ -20,10 +21,12 @@ const libraries = Object.fromEntries(
 		])
 	)
 );
+const typescriptLibrariesJson = JSON.stringify(libraries);
 await writeFile(
-	path.join(typescriptOutputDir, 'typescript-libs.json'),
-	JSON.stringify(libraries)
+	path.join(typescriptOutputDir, 'typescript-libs.json.gz'),
+	gzipSync(typescriptLibrariesJson, { level: 9, mtime: 0 })
 );
+await rm(path.join(typescriptOutputDir, 'typescript-libs.json'), { force: true });
 
 await mkdir(path.dirname(pythonOutputDir), { recursive: true });
 await cp(pythonSourceDir, pythonOutputDir, { recursive: true });

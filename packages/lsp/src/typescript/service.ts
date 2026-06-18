@@ -101,11 +101,23 @@ const scriptKind = (fileName: string) => {
 };
 
 async function loadBundledTypeScriptLibs() {
-	const response = await fetch(new URL('./typescript-libs.json', import.meta.url));
+	const response = await fetch(new URL('./typescript-libs.json.gz', import.meta.url));
 	if (!response.ok) {
 		throw new Error(`Failed to load TypeScript standard libraries: ${response.status}`);
 	}
-	return (await response.json()) as Record<string, string>;
+	if (response.headers.get('content-encoding')?.toLowerCase().includes('gzip')) {
+		return (await response.json()) as Record<string, string>;
+	}
+	if (typeof DecompressionStream !== 'function') {
+		throw new Error(
+			"Failed to load TypeScript standard libraries: this browser does not support DecompressionStream('gzip')"
+		);
+	}
+	const sourceStream = response.body || new Blob([await response.arrayBuffer()]).stream();
+	const decompressedResponse = new Response(
+		sourceStream.pipeThrough(new DecompressionStream('gzip'))
+	);
+	return (await decompressedResponse.json()) as Record<string, string>;
 }
 
 export function createTypeScriptWorkerService(
