@@ -100,7 +100,8 @@ type RunRequest = {
 	target?: 'js' | 'wasm';
 	wasmBinaryenMode?: 'fast' | 'full';
 	log?: boolean;
-	buffer?: SharedArrayBuffer;
+	buffer?: ArrayBufferLike;
+	stdin?: string;
 };
 
 let moduleUrl = '';
@@ -270,7 +271,7 @@ function getJsArtifact(result: CompileResult) {
 	return programArtifact as CompileArtifact & { data: string };
 }
 
-async function executeCompileResult(result: CompileResult, log = false) {
+async function executeCompileResult(result: CompileResult, log = false, stdin?: string) {
 	const programArtifact = getJsArtifact(result);
 	const assetFiles = result.artifacts.filter(
 		(artifact) => artifact.kind === 'wasm' || artifact.kind === 'asset'
@@ -281,7 +282,7 @@ async function executeCompileResult(result: CompileResult, log = false) {
 	const sourceDir = programArtifact.path.replace(/\/[^/]+$/, '');
 	const createdObjectUrls: string[] = [];
 	const stdinEncoder = new TextEncoder();
-	let stdinChunkOcaml = new Uint8Array(0);
+	let stdinChunkOcaml = typeof stdin === 'string' ? stdinEncoder.encode(stdin) : new Uint8Array(0);
 	let stdinChunkOffsetOcaml = 0;
 	const originalConsole = globalThis.console;
 	const originalFetch = globalThis.fetch.bind(globalThis);
@@ -559,7 +560,8 @@ self.onmessage = async (event: { data: LoadRequest | RunRequest }) => {
 		target = 'wasm',
 		wasmBinaryenMode = 'fast',
 		log = true,
-		buffer
+		buffer,
+		stdin
 	} = event.data as LoadRequest & RunRequest;
 	try {
 		if (load) {
@@ -654,7 +656,7 @@ self.onmessage = async (event: { data: LoadRequest | RunRequest }) => {
 		}
 
 		postMessage({ progress: { stage: 'runtime-start', percent: 95 } });
-		await executeCompileResult(result, log);
+		await executeCompileResult(result, log, stdin);
 	} catch (error: any) {
 		if (log) {
 			console.error('[wasm-idle:ocaml-worker] failed', error);

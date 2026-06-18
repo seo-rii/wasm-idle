@@ -66,18 +66,31 @@ async function readProbeSummary(page, activeState, pageErrors, consoleMessages) 
 }
 
 /**
- * @param {{ browserUrl: string; chromiumExecutable?: string; expectedOutput: string; language: 'ASSEMBLYSCRIPT' | 'WAT' | 'RUBY' | 'R' | 'OCTAVE' | 'SQLITE' | 'PHP' | 'VBNET' | 'D' | 'ERLANG' | 'PROLOG' | 'GLEAM' | 'PERL'; runTimeoutMs?: number; sendEof?: boolean; source: string; stdinText: string }} options
+ * @typedef {object} StdinBrowserProbeOptions
+ * @property {string} browserUrl
+ * @property {string} [chromiumExecutable]
+ * @property {string} expectedOutput
+ * @property {string} language
+ * @property {number} [runTimeoutMs]
+ * @property {boolean} [sendEof]
+ * @property {string} source
+ * @property {string} stdinText
  */
-export async function runStdinBrowserProbe({
-	browserUrl,
-	chromiumExecutable = '',
-	expectedOutput,
-	language,
-	runTimeoutMs = 120_000,
-	sendEof = false,
-	source,
-	stdinText
-}) {
+
+/**
+ * @param {StdinBrowserProbeOptions} options
+ */
+export async function runStdinBrowserProbe(options) {
+	const {
+		browserUrl = '',
+		chromiumExecutable = '',
+		expectedOutput = '',
+		language = '',
+		runTimeoutMs = 120_000,
+		sendEof = false,
+		source = '',
+		stdinText = ''
+	} = options;
 	if (!browserUrl) {
 		throw new Error('runStdinBrowserProbe requires a browserUrl');
 	}

@@ -397,7 +397,8 @@ class Ocaml implements Sandbox {
 				target,
 				wasmBinaryenMode,
 				log: _log,
-				buffer: this.buffer
+				buffer: this.buffer,
+				stdin: options.stdin
 			});
 		});
 	}

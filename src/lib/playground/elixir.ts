@@ -135,7 +135,9 @@ class Elixir implements Sandbox {
 		code: string,
 		prepare: boolean,
 		log = true,
-		_prog?: { set?: (value: number) => void } | import('svelte/store').Writable<number>
+		_prog?: { set?: (value: number) => void } | import('svelte/store').Writable<number>,
+		_args: string[] = [],
+		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
 		this.exit = false;
 		return new Promise<boolean | string>((resolve, reject) => {
@@ -189,7 +191,8 @@ class Elixir implements Sandbox {
 				prepare,
 				buffer: this.buffer,
 				language: this.language,
-				log
+				log,
+				stdin: options.stdin
 			});
 		});
 	}

@@ -216,6 +216,8 @@ self.addEventListener('message', async (event) => {
 		}
 
 		stdinBufferJava = new Int32Array(buffer);
+		stdinChunkJava = new TextEncoder().encode(stdin);
+		stdinChunkOffsetJava = 0;
 		const workerGlobal = globalThis as typeof globalThis & {
 			window?: Window & typeof globalThis;
 			wasmIdleJavaStdin?: { readByte: () => number };

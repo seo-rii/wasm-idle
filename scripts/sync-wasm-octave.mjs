@@ -186,14 +186,28 @@ async function writeRuntimeManifest(targetDir, files, fingerprint) {
 	);
 }
 
-export async function syncWasmOctaveAssets({
-	sourceDir,
-	targetDir = DEFAULT_TARGET_DIR,
-	versionModulePath = DEFAULT_VERSION_MODULE_PATH,
-	cacheDir = DEFAULT_CACHE_DIR,
-	packageUrl = OCTAVE_PACKAGE_URL,
-	runnerWorkerPath = DEFAULT_RUNNER_WORKER_PATH
-} = {}) {
+/**
+ * @typedef {object} SyncWasmOctaveOptions
+ * @property {string} [sourceDir]
+ * @property {string} [targetDir]
+ * @property {string} [versionModulePath]
+ * @property {string} [cacheDir]
+ * @property {string} [packageUrl]
+ * @property {string} [runnerWorkerPath]
+ */
+
+/**
+ * @param {SyncWasmOctaveOptions} [options]
+ */
+export async function syncWasmOctaveAssets(options = {}) {
+	const {
+		sourceDir = '',
+		targetDir = DEFAULT_TARGET_DIR,
+		versionModulePath = DEFAULT_VERSION_MODULE_PATH,
+		cacheDir = DEFAULT_CACHE_DIR,
+		packageUrl = OCTAVE_PACKAGE_URL,
+		runnerWorkerPath = DEFAULT_RUNNER_WORKER_PATH
+	} = options;
 	const resolvedSourceDir = sourceDir || (await ensureDefaultSourceDir(cacheDir, packageUrl));
 	const sourceStats = await stat(resolvedSourceDir).catch(() => null);
 	if (!sourceStats?.isDirectory()) {

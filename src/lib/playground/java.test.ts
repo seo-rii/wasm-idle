@@ -87,7 +87,9 @@ describe('TeaVM Java sandbox', () => {
 
 		await sandbox.load('/absproxy/5173');
 		await expect(sandbox.run(code, true)).resolves.toBe(true);
-		await expect(sandbox.run(code, false, true, undefined, ['one', 'two'])).resolves.toBe(true);
+		await expect(
+			sandbox.run(code, false, true, undefined, ['one', 'two'], { stdin: '4\n6\n' })
+		).resolves.toBe(true);
 
 		expect(workerInstances).toHaveLength(1);
 		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
@@ -115,7 +117,8 @@ describe('TeaVM Java sandbox', () => {
 			expect.objectContaining({
 				prepare: false,
 				code,
-				args: ['one', 'two']
+				args: ['one', 'two'],
+				stdin: '4\n6\n'
 			})
 		);
 		expect(outputs).toContain('sum=10\n');

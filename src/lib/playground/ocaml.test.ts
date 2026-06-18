@@ -102,7 +102,8 @@ describe('OCaml sandbox', () => {
 		).resolves.toBe(true);
 		await expect(
 			sandbox.run(code, false, true, undefined, [], {
-				ocamlBackend: 'js'
+				ocamlBackend: 'js',
+				stdin: 'line one\n'
 			})
 		).resolves.toBe(true);
 		await expect(
@@ -141,7 +142,8 @@ describe('OCaml sandbox', () => {
 				target: 'js',
 				wasmBinaryenMode: 'fast',
 				log: true,
-				buffer: expect.any(SharedArrayBuffer)
+				buffer: expect.any(SharedArrayBuffer),
+				stdin: 'line one\n'
 			})
 		);
 		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(

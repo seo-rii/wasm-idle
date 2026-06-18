@@ -15,18 +15,14 @@ import {
 } from '$lib/playground/stdinBuffer';
 import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
 
-type OctaveWorkerMessage =
-	| {
-			load?: never;
-			output?: string;
-			results?: boolean;
-			error?: string;
-			buffer?: boolean;
-			progress?: { percent?: number };
-	  }
-	| {
-			load: true;
-	  };
+type OctaveWorkerMessage = {
+	load?: true;
+	output?: string;
+	results?: boolean;
+	error?: string;
+	buffer?: boolean;
+	progress?: { percent?: number };
+};
 
 class Octave implements Sandbox {
 	output: any = null;

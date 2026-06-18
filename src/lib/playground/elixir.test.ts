@@ -103,20 +103,26 @@ describe('Elixir sandbox', () => {
 		);
 		expect(workerInstances).toHaveLength(1);
 
-		await expect(sandbox.run('IO.puts("hello")', false)).resolves.toBe(':ok');
+		await expect(
+			sandbox.run('IO.puts("hello")', false, true, undefined, [], {
+				stdin: 'hello from stdin\n'
+			})
+		).resolves.toBe(':ok');
 		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(2, {
 			code: 'IO.puts("hello")',
 			prepare: true,
 			buffer: expect.any(SharedArrayBuffer),
 			language: 'ELIXIR',
-			log: true
+			log: true,
+			stdin: undefined
 		});
 		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(3, {
 			code: 'IO.puts("hello")',
 			prepare: false,
 			buffer: expect.any(SharedArrayBuffer),
 			language: 'ELIXIR',
-			log: true
+			log: true,
+			stdin: 'hello from stdin\n'
 		});
 		expect(output).toHaveBeenCalledWith('factorial_plus_bonus=27\n');
 		expect(output).toHaveBeenCalledWith('=> :ok\n');

@@ -421,6 +421,7 @@ self.onmessage = async (event: { data: any }) => {
 		buffer,
 		code,
 		prepare,
+		stdin,
 		language = 'ELIXIR',
 		log = true
 	} = event.data;
@@ -453,9 +454,9 @@ self.onmessage = async (event: { data: any }) => {
 		}
 		let evalCode = code;
 		const currentStdinBuffer = stdinBufferElixir;
-			if (evalLanguage === 'ELIXIR' && currentStdinBuffer && /(?:\bIO\.|\:io\.)/.test(code)) {
-			let bufferedInput = '';
-			let reachedEof = false;
+		if (evalLanguage === 'ELIXIR' && currentStdinBuffer && /(?:\bIO\.|\:io\.)/.test(code)) {
+			let bufferedInput = typeof stdin === 'string' ? stdin : '';
+			let reachedEof = typeof stdin === 'string';
 			const pullStdinChunk = () => {
 				if (reachedEof) return false;
 				const nextChunk = waitForBufferedStdin(currentStdinBuffer, () =>
