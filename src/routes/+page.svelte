@@ -2371,6 +2371,7 @@
 		{#key `${language}:${activePath}`}
 			<Monaco
 				language={editorLanguage}
+				filePath={activePath}
 				rustTargetTriple={language === 'RUST' ? rustTargetTriple : undefined}
 				goTarget={language === 'GO' ? goTarget : undefined}
 				bind:editor

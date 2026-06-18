@@ -27,12 +27,12 @@ export default defineConfig({
 	plugins: [phpWasmIcuDataResolver(), sveltekit()],
 	assetsInclude: [/\.dat$/, /\.wasm$/, /\.so$/, /\.la$/],
 	optimizeDeps: {
-		exclude: ['@php-wasm/web']
-	},
-	resolve: {
-		alias: {
-			vscode: '@hancomac/monaco-languageclient/vscode-compatibility'
-		}
+		exclude: [
+			'@php-wasm/web',
+			'@seorii/monaco',
+			'@seorii/monaco/workers',
+			'monaco-editor'
+		]
 	},
 	worker: { format: 'es', plugins: () => [phpWasmIcuDataResolver()] },
 	server: {

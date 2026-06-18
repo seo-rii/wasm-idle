@@ -1,5 +1,7 @@
 import pageSource from './+page.svelte?raw';
 import source from './Monaco.svelte?raw';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 import { compile } from 'svelte/compiler';
 import { describe, expect, it } from 'vitest';
 import {
@@ -21,7 +23,21 @@ describe('Monaco route debug sync', () => {
 			})
 		).not.toThrow();
 		expect(source).not.toMatch(/clangdBaseUrl\s*=\s*DEFAULT_CLANGD_BASE_URL/);
+		expect(source).toMatch(/import type MonacoEditorComponent from '@seorii\/monaco';/);
+		expect(source).toMatch(/from '@seorii\/monaco';/);
+		expect(source).toMatch(/import\('@seorii\/monaco'\)/);
+		expect(source).toMatch(/import\('@seorii\/monaco\/workers'\)/);
+		expect(source).not.toMatch(/from '\$lib\/clangd\/session'/);
+		expect(source).not.toMatch(/from '\$lib\/clangd\/config'/);
+		expect(source).not.toMatch(/from '\$lib\/lsp\/goSession'/);
+		expect(source).not.toMatch(/from '\$lib\/lsp\/rustSession'/);
+		expect(source).not.toMatch(/@hancomac\/monaco-languageclient/);
+		expect(source).not.toMatch(/Monaco\.editor\.create\(/);
 		expect(source).toMatch(/let debugView = \$state<MonacoDebugView \| null>\(null\);/);
+		expect(source).toMatch(/let Monaco = \$state<typeof monaco \| null>\(null\);/);
+		expect(source).toMatch(
+			/let MonacoEditor = \$state<typeof MonacoEditorComponent \| null>\(null\);/
+		);
 		expect(source).toMatch(/clangdEnabled\?: boolean;/);
 		expect(source).toMatch(/clangdEnabled = false,/);
 		expect(source).toMatch(/dotnetLspEnabled\?: boolean;/);
@@ -32,13 +48,20 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(/goLspEnabled = false,/);
 		expect(source).toMatch(/rustLspEnabled\?: boolean;/);
 		expect(source).toMatch(/rustLspEnabled = false,/);
+		expect(source).toMatch(/filePath\?: string;/);
 		expect(source).toMatch(
 			/import \{\s+isEditorDefaultSource,\s+isLegacyEditorDefaultSource,\s+resolveEditorDefaultSource\s+\} from '\.\/editor-defaults';/s
 		);
 		expect(source).toMatch(
 			/monacoApi\.editor\.setModelMarkers\(activeModel, 'wasm-idle-compiler', markers\);/
 		);
-		expect(source.match(/occurrencesHighlight: 'off'/g)).toHaveLength(2);
+		expect(source).toMatch(/occurrencesHighlight: 'off'/);
+		expect(source).toMatch(/const modelUriString = \$derived\(`file:\/\/\/workspace\/\$\{normalizedFilePath\}`\);/);
+		expect(source).toMatch(/globalThis as typeof globalThis & \{ MonacoEnvironment\?: unknown \}/);
+		expect(source).toMatch(/MonacoEnvironment =\s+workers\.createMonacoEnvironment\(\);/s);
+		expect(source).toMatch(/<MonacoEditor[\s\S]*lsp=\{resolveLspConnection\}/);
+		expect(source).toMatch(/onload=\{handleEditorLoad\}/);
+		expect(source).toMatch(/oninput=\{handleEditorInput\}/);
 		expect(source).toMatch(
 			/language === 'java' \|\|\s+language === 'rust' \|\|\s+language === 'go' \|\|\s+language === 'd' \|\|\s+language === 'csharp' \|\|\s+language === 'fsharp' \|\|\s+language === 'vb' \|\|\s+language === 'erlang' \|\|\s+language === 'prolog' \|\|\s+language === 'gleam' \|\|\s+language === 'perl' \|\|\s+language === 'ocaml'/
 		);
@@ -48,16 +71,13 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(/language === 'haskell'/);
 		expect(source).toMatch(/language === 'r'/);
 		expect(source).toMatch(
-			/const nextDefaultLanguage =\s+language === 'vb' \? 'vbnet' : language === 'sql' \? 'sqlite' : language;/
+			/const defaultLanguage = \$derived\(\s+language === 'vb' \? 'vbnet' : language === 'sql' \? 'sqlite' : language\s+\);/
 		);
 		expect(source).toMatch(
-			/const defaultLanguage =\s+language === 'vb' \? 'vbnet' : language === 'sql' \? 'sqlite' : language;/
+			/\$effect\(\(\) => \{\s+const activeModel = model \|\| editor\?\.getModel\(\);[\s\S]*if \(!isEditorDefaultSource\(currentValue\) && !isLegacyEditorDefaultSource\(currentValue\)\) \{[\s\S]*activeModel\.setValue\(defaultValue\);[\s\S]*\}\s+\}\);/s
 		);
 		expect(source).toMatch(
-			/\$effect\(\(\) => \{\s+if \(!editor\) return;[\s\S]*if \(!isEditorDefaultSource\(currentValue\) && !isLegacyEditorDefaultSource\(currentValue\)\) \{[\s\S]*const nextValue = resolveEditorDefaultSource\([\s\S]*rustTargetTriple[\s\S]*editor\.setValue\(nextValue\);[\s\S]*\}\);/s
-		);
-		expect(source).toMatch(
-			/const defaultValue = resolveEditorDefaultSource\([\s\S]*'c'[\s\S]*'cpp'[\s\S]*'python'[\s\S]*'java'[\s\S]*'go'[\s\S]*'d'[\s\S]*'csharp'[\s\S]*'fsharp'[\s\S]*'vbnet'[\s\S]*'elixir'[\s\S]*'erlang'[\s\S]*'prolog'[\s\S]*'gleam'[\s\S]*'perl'[\s\S]*'ocaml'[\s\S]*'ruby'[\s\S]*'sqlite'[\s\S]*'php'[\s\S]*'rust'[\s\S]*rustTargetTriple\s+\);/s
+			/const defaultValue = \$derived\(\s+resolveEditorDefaultSource\([\s\S]*'c'[\s\S]*'cpp'[\s\S]*'python'[\s\S]*'java'[\s\S]*'go'[\s\S]*'d'[\s\S]*'csharp'[\s\S]*'fsharp'[\s\S]*'vbnet'[\s\S]*'elixir'[\s\S]*'erlang'[\s\S]*'prolog'[\s\S]*'gleam'[\s\S]*'perl'[\s\S]*'ocaml'[\s\S]*'ruby'[\s\S]*'sqlite'[\s\S]*'php'[\s\S]*'rust'[\s\S]*rustTargetTriple[\s\S]*\)\s+\);/s
 		);
 		expect(source).toMatch(/id: 'd'/);
 		expect(source).toMatch(/aliases: \['D', 'd'\]/);
@@ -69,7 +89,7 @@ describe('Monaco route debug sync', () => {
 			/Monaco\.languages\.setMonarchTokensProvider\('zig', zigMonarchTokens\);/
 		);
 		expect(source).toMatch(
-			/debugView = new MonacoDebugView\(Monaco, editor, onBreakpointsChange\);\s+debugView\.setBreakpoints\(breakpoints\);\s+debugView\.setPauseState\(pausedLine, debugLocals, debugLanguage\);/s
+			/const nextDebugView = new MonacoDebugView\(monacoApi, activeEditor, onBreakpointsChange\);[\s\S]*debugView = nextDebugView;/s
 		);
 		expect(source).toMatch(/onCursorLineChange\?: \(line: number \| null\) => void;/);
 		expect(source).toMatch(/onRunToCursor\?: \(line: number \| null\) => void;/);
@@ -78,57 +98,17 @@ describe('Monaco route debug sync', () => {
 		);
 		expect(source).toMatch(/let debugActionBindings: \{ dispose\(\): void \} \| null = null;/);
 		expect(source).toMatch(
-			/debugActionBindings = attachMonacoDebugActions\(editor, \{\s+onCursorLineChange,\s+onRunToCursor\s+\}\);/s
+			/debugActionBindings = attachMonacoDebugActions\(activeEditor, \{\s+onCursorLineChange,\s+onRunToCursor\s+\}\);/s
 		);
 		expect(source).toMatch(/debugActionBindings\?\.dispose\(\);/);
-		expect(source).toMatch(
-			/if \(language !== 'cpp' \|\| !editor \|\| !clangdEnabled \|\| !clangdBaseUrl\) \{\s+session\?\.dispose\(\);\s+session = null;\s+clangdStatus = \{ state: 'disabled' \};\s+return;\s+\}/s
-		);
-		expect(source).toMatch(
-			/const \{ ClangdSession \} = await import\('\$lib\/clangd\/session'\);/s
-		);
-		expect(source).toMatch(/let clangdSessionVersion = 0;/);
-		expect(source).toMatch(/const nextSessionVersion = \+\+clangdSessionVersion;/);
-		expect(source).toMatch(/let dotnetLspSessionVersion = 0;/);
-		expect(source).toMatch(/let gleamLspSessionVersion = 0;/);
-		expect(source).toMatch(/let rustLspSessionVersion = 0;/);
-		expect(source).toMatch(/let goLspSessionVersion = 0;/);
-		expect(source).toMatch(
-			/const \{ DotnetLspSession \} = await import\('\$lib\/lsp\/dotnetSession'\);/s
-		);
-		expect(source).toMatch(
-			/dotnetLspSessionKey = nextSessionKey;[\s\S]*await nextSession\.start\(\);/s
-		);
-		expect(source).toMatch(
-			/const \{ GleamLspSession \} = await import\('\$lib\/lsp\/gleamSession'\);/s
-		);
-		expect(source).toMatch(
-			/gleamLspSessionKey = nextSessionKey;[\s\S]*await nextSession\.start\(\);/s
-		);
-		expect(source).toMatch(
-			/if \(language !== 'go' \|\| !editor \|\| !goLspEnabled \|\| !goLspCompilerUrl\) \{\s+goLspSession\?\.dispose\(\);\s+goLspSession = null;\s+goLspSessionKey = '';\s+goLspStatus = \{ state: 'disabled' \};\s+return;\s+\}/s
-		);
-		expect(source).toMatch(
-			/const \{ GoLspSession \} = await import\('\$lib\/lsp\/goSession'\);/s
-		);
-		expect(source).toMatch(
-			/goLspSessionKey = nextSessionKey;[\s\S]*await nextSession\.start\(\);/s
-		);
-		expect(source).toMatch(
-			/if \(language !== 'rust' \|\| !editor \|\| !rustLspEnabled \|\| !rustLspCompilerUrl\) \{\s+rustLspSession\?\.dispose\(\);\s+rustLspSession = null;\s+rustLspSessionKey = '';\s+rustLspStatus = \{ state: 'disabled' \};\s+return;\s+\}/s
-		);
-		expect(source).toMatch(
-			/const \{ RustLspSession \} = await import\('\$lib\/lsp\/rustSession'\);/s
-		);
-		expect(source).toMatch(
-			/rustLspSessionKey = nextSessionKey;[\s\S]*await nextSession\.start\(\);/s
-		);
-		expect(source).toMatch(
-			/if \(previousModel && previousModelUri !== nextModel\.uri\.toString\(\)\) \{\s+previousModel\.dispose\(\);\s+\}/s
-		);
-		expect(source).toMatch(
-			/if \(clangdSessionVersion === nextSessionVersion\) session = null;/
-		);
+		expect(source).toMatch(/const \{ getCppLanguageServer \} = await import\('@wasm-idle\/lsp'\);/);
+		expect(source).toMatch(/handle\.syncFile\?\.\(normalizedFilePath\);/);
+		expect(source).toMatch(/getCSharpLanguageServer/);
+		expect(source).toMatch(/getFSharpLanguageServer/);
+		expect(source).toMatch(/getVisualBasicLanguageServer/);
+		expect(source).toMatch(/getGleamLanguageServer/);
+		expect(source).toMatch(/getGoLanguageServer/);
+		expect(source).toMatch(/getRustLanguageServer/);
 		expect(source).not.toMatch(/clangd ready/);
 		expect(source).not.toMatch(/clangd loading/);
 		expect(source).not.toMatch(/clangd failed:/);
@@ -232,6 +212,7 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).toMatch(/<option value="R">R<\/option>/);
 		expect(pageSource).toMatch(/<option value="OCTAVE">Octave<\/option>/);
 		expect(pageSource).toMatch(/language=\{editorLanguage\}/);
+		expect(pageSource).toMatch(/filePath=\{activePath\}/);
 		expect(pageSource).toMatch(
 			/<select id="rust-target-triple" bind:value=\{rustTargetTriple\}>/
 		);
@@ -286,7 +267,7 @@ describe('Monaco route debug sync', () => {
 	});
 
 	it('keeps the editor pane shrinkable for the resizable example layout', () => {
-		expect(source).toMatch(/<div bind:this=\{divEl\} class="editor-host"><\/div>/);
+		expect(source).toMatch(/<div class="editor-host">[\s\S]*<MonacoEditor/);
 		expect(source).toMatch(
 			/main \{\s+flex: 1;\s+min-width: 0;\s+min-height: 0;\s+display: flex;/s
 		);
@@ -295,5 +276,17 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(
 			/@media \(max-width: 960px\) \{\s+main \{\s+min-height: 360px;\s+border-left: 0;\s+border-top: 1px solid #e5e7eb;\s+\}\s+\}/s
 		);
+	});
+
+	it('does not keep the legacy monaco-languageclient in the app shell', async () => {
+		const packageJson = JSON.parse(
+			await readFile(path.resolve(process.cwd(), 'package.json'), 'utf8')
+		) as { dependencies?: Record<string, string> };
+		const viteConfig = await readFile(path.resolve(process.cwd(), 'vite.config.ts'), 'utf8');
+
+		expect(packageJson.dependencies?.['@seorii/monaco']).toBe('file:../monaco');
+		expect(packageJson.dependencies).not.toHaveProperty('@hancomac/monaco-languageclient');
+		expect(viteConfig).not.toContain('@hancomac/monaco-languageclient');
+		expect(viteConfig).not.toContain('vscode-compatibility');
 	});
 });

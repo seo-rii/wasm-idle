@@ -1,33 +1,34 @@
 <script lang="ts">
 	import { attachMonacoDebugActions, MonacoDebugView } from '$lib';
-	import type { ClangdSession as ClangdSessionType } from '$lib/clangd/session';
-	import type { ClangdStatus } from '$lib/clangd/config';
 	import type { DebugLanguageAdapter } from '$lib/debug/language';
-	import type {
-		DotnetLspLanguage,
-		DotnetLspSession as DotnetLspSessionType,
-		DotnetLspStatus
-	} from '$lib/lsp/dotnetSession';
-	import type {
-		GleamLspSession as GleamLspSessionType,
-		GleamLspStatus
-	} from '$lib/lsp/gleamSession';
-	import type { GoLspSession as GoLspSessionType, GoLspStatus } from '$lib/lsp/goSession';
-	import type { RustLspSession as RustLspSessionType, RustLspStatus } from '$lib/lsp/rustSession';
 	import type {
 		CompilerDiagnostic,
 		DebugVariable,
 		GoTarget,
 		RustTargetTriple
 	} from '$lib/playground/options';
+	import type MonacoEditorComponent from '@seorii/monaco';
+	import type {
+		IMonacoInputEvent,
+		IMonacoLspConnection,
+		IMonacoLspProvider,
+		IMonacoSetting
+	} from '@seorii/monaco';
+	import type { LanguageServerStatus } from '@wasm-idle/lsp';
 	import type monaco from 'monaco-editor';
-	import { onMount } from 'svelte';
-	import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
+	import { onMount, untrack } from 'svelte';
 	import {
 		isEditorDefaultSource,
 		isLegacyEditorDefaultSource,
 		resolveEditorDefaultSource
 	} from './editor-defaults';
+
+	type DotnetLspLanguage = 'csharp' | 'fsharp' | 'vbnet';
+	type ClangdStatus = LanguageServerStatus;
+	type DotnetLspStatus = LanguageServerStatus;
+	type GleamLspStatus = LanguageServerStatus;
+	type GoLspStatus = LanguageServerStatus;
+	type RustLspStatus = LanguageServerStatus;
 
 	const ocamlKeywords = [
 		'and',
@@ -1336,32 +1337,18 @@
 
 	export const editorValue = () => editor?.getValue() || '';
 
-	let divEl: HTMLDivElement | null = $state(null);
 	let clangdStatus = $state<ClangdStatus>({ state: 'disabled' });
 	let dotnetLspStatus = $state<DotnetLspStatus>({ state: 'disabled' });
 	let gleamLspStatus = $state<GleamLspStatus>({ state: 'disabled' });
 	let goLspStatus = $state<GoLspStatus>({ state: 'disabled' });
 	let rustLspStatus = $state<RustLspStatus>({ state: 'disabled' });
-	let session: ClangdSessionType | null = null;
-	let dotnetLspSession: DotnetLspSessionType | null = null;
-	let gleamLspSession: GleamLspSessionType | null = null;
-	let goLspSession: GoLspSessionType | null = null;
-	let rustLspSession: RustLspSessionType | null = null;
-	let model: monaco.editor.ITextModel | null = null;
-	let clangdSessionVersion = 0;
-	let dotnetLspSessionVersion = 0;
-	let gleamLspSessionVersion = 0;
-	let goLspSessionVersion = 0;
-	let rustLspSessionVersion = 0;
-	let dotnetLspSessionKey = '';
-	let gleamLspSessionKey = '';
-	let goLspSessionKey = '';
-	let rustLspSessionKey = '';
+	let model = $state<monaco.editor.ITextModel | undefined>();
 	let debugView = $state<MonacoDebugView | null>(null);
 	interface Props {
 		compact?: boolean;
 		editor: monaco.editor.IStandaloneCodeEditor | null;
 		language: any;
+		filePath?: string;
 		value?: string;
 		onChange?: (value: string) => void;
 		rustTargetTriple?: RustTargetTriple;
@@ -1391,6 +1378,7 @@
 		compact = false,
 		editor = $bindable(),
 		language,
+		filePath,
 		value,
 		onChange,
 		rustTargetTriple = 'wasm32-wasip1',
@@ -1415,8 +1403,10 @@
 		onRunToCursor,
 		onBreakpointsChange
 	}: Props = $props();
-	let Monaco: typeof monaco | null = null;
+	let Monaco = $state<typeof monaco | null>(null);
+	let MonacoEditor = $state<typeof MonacoEditorComponent | null>(null);
 	let applyingValue = false;
+	let debugActionBindings: { dispose(): void } | null = null;
 	const dotnetLspLanguage = $derived<DotnetLspLanguage | null>(
 		language === 'csharp'
 			? 'csharp'
@@ -1426,6 +1416,255 @@
 					? 'vbnet'
 					: null
 	);
+	const defaultLanguage = $derived(
+		language === 'vb' ? 'vbnet' : language === 'sql' ? 'sqlite' : language
+	);
+	const defaultValue = $derived(
+		resolveEditorDefaultSource(
+			defaultLanguage as
+				| 'c'
+				| 'cpp'
+				| 'python'
+				| 'java'
+				| 'go'
+				| 'd'
+				| 'csharp'
+				| 'fsharp'
+				| 'vbnet'
+				| 'elixir'
+				| 'erlang'
+				| 'prolog'
+				| 'gleam'
+				| 'perl'
+				| 'ocaml'
+				| 'javascript'
+				| 'typescript'
+				| 'assemblyscript'
+				| 'wat'
+				| 'lua'
+				| 'zig'
+				| 'lisp'
+				| 'ruby'
+				| 'haskell'
+				| 'r'
+				| 'octave'
+				| 'sqlite'
+				| 'php'
+				| 'rust',
+			rustTargetTriple
+		)
+	);
+	const normalizedFilePath = $derived(
+		(filePath || `main.${language || 'txt'}`).replace(/\\/g, '/').replace(/^\/+/, '') ||
+			'main.txt'
+	);
+	const modelUriString = $derived(`file:///workspace/${normalizedFilePath}`);
+	const editorSetting = $derived<IMonacoSetting>({
+		automaticLayout: true,
+		fontSize: compact ? 13 : 14,
+		lineHeight: compact ? 20 : 22,
+		lineNumbersMinChars: compact ? 3 : 5,
+		minimap: { enabled: false },
+		occurrencesHighlight: 'off',
+		glyphMargin: language === 'cpp' || !!debugLanguage,
+		padding: compact ? { top: 10, bottom: 10 } : { top: 14, bottom: 14 },
+		scrollbar: {
+			horizontalScrollbarSize: compact ? 8 : 12,
+			verticalScrollbarSize: compact ? 8 : 12
+		},
+		wordWrap: compact ? 'on' : 'off'
+	});
+	const lspConnectionKey = $derived(
+		[
+			language,
+			normalizedFilePath,
+			clangdEnabled ? clangdBaseUrl || '' : '',
+			dotnetLspEnabled ? dotnetLspModuleUrl || '' : '',
+			gleamLspEnabled ? gleamLspBaseUrl || '' : '',
+			gleamLspEnabled ? gleamLspManifestUrl || '' : '',
+			goLspEnabled ? goLspCompilerUrl || '' : '',
+			goTarget,
+			rustLspEnabled ? rustLspCompilerUrl || '' : '',
+			rustTargetTriple
+		].join('\n')
+	);
+	const resolveLspConnection = $derived<IMonacoLspProvider>(
+		((key) =>
+			async () => {
+				if (key !== lspConnectionKey) return null;
+				const currentUrl = globalThis.location?.href || '';
+				if (language === 'cpp') {
+					if (!clangdEnabled || !clangdBaseUrl) {
+						clangdStatus = { state: 'disabled' };
+						return null;
+					}
+					try {
+						const { getCppLanguageServer } = await import('@wasm-idle/lsp');
+						const handle = await getCppLanguageServer({
+							cpp: { baseUrl: clangdBaseUrl },
+							currentUrl,
+							onStatus: (status) => (clangdStatus = status)
+						});
+						handle.syncFile?.(normalizedFilePath);
+						return handle as unknown as IMonacoLspConnection;
+					} catch (error) {
+						clangdStatus = {
+							state: 'error',
+							message: error instanceof Error ? error.message : String(error)
+						};
+						throw error;
+					}
+				}
+				if (dotnetLspLanguage) {
+					if (!dotnetLspEnabled || !dotnetLspModuleUrl) {
+						dotnetLspStatus = { state: 'disabled' };
+						return null;
+					}
+					try {
+						const {
+							getCSharpLanguageServer,
+							getFSharpLanguageServer,
+							getVisualBasicLanguageServer
+						} = await import('@wasm-idle/lsp');
+						const load =
+							dotnetLspLanguage === 'csharp'
+								? getCSharpLanguageServer
+								: dotnetLspLanguage === 'fsharp'
+									? getFSharpLanguageServer
+									: getVisualBasicLanguageServer;
+						return (await load({
+							currentUrl,
+							dotnet: { moduleUrl: dotnetLspModuleUrl },
+							onStatus: (status) => (dotnetLspStatus = status)
+						})) as unknown as IMonacoLspConnection;
+					} catch (error) {
+						dotnetLspStatus = {
+							state: 'error',
+							message: error instanceof Error ? error.message : String(error)
+						};
+						throw error;
+					}
+				}
+				if (language === 'gleam') {
+					if (!gleamLspEnabled || !gleamLspBaseUrl) {
+						gleamLspStatus = { state: 'disabled' };
+						return null;
+					}
+					try {
+						const { getGleamLanguageServer } = await import('@wasm-idle/lsp');
+						return (await getGleamLanguageServer({
+							currentUrl,
+							gleam: {
+								baseUrl: gleamLspBaseUrl,
+								manifestUrl: gleamLspManifestUrl
+							},
+							onStatus: (status) => (gleamLspStatus = status)
+						})) as unknown as IMonacoLspConnection;
+					} catch (error) {
+						gleamLspStatus = {
+							state: 'error',
+							message: error instanceof Error ? error.message : String(error)
+						};
+						throw error;
+					}
+				}
+				if (language === 'go') {
+					if (!goLspEnabled || !goLspCompilerUrl) {
+						goLspStatus = { state: 'disabled' };
+						return null;
+					}
+					try {
+						const { getGoLanguageServer } = await import('@wasm-idle/lsp');
+						return (await getGoLanguageServer({
+							currentUrl,
+							go: {
+								compilerUrl: goLspCompilerUrl,
+								target: goTarget
+							},
+							onStatus: (status) => (goLspStatus = status)
+						})) as unknown as IMonacoLspConnection;
+					} catch (error) {
+						goLspStatus = {
+							state: 'error',
+							message: error instanceof Error ? error.message : String(error)
+						};
+						throw error;
+					}
+				}
+				if (language === 'rust') {
+					if (!rustLspEnabled || !rustLspCompilerUrl) {
+						rustLspStatus = { state: 'disabled' };
+						return null;
+					}
+					try {
+						const { getRustLanguageServer } = await import('@wasm-idle/lsp');
+						return (await getRustLanguageServer({
+							currentUrl,
+							rust: {
+								compilerUrl: rustLspCompilerUrl,
+								targetTriple: rustTargetTriple
+							},
+							onStatus: (status) => (rustLspStatus = status)
+						})) as unknown as IMonacoLspConnection;
+					} catch (error) {
+						rustLspStatus = {
+							state: 'error',
+							message: error instanceof Error ? error.message : String(error)
+						};
+						throw error;
+					}
+				}
+				return null;
+			})(lspConnectionKey)
+	);
+
+	$effect(() => {
+		const monacoApi = Monaco;
+		if (!monacoApi) return;
+		const uri = monacoApi.Uri.parse(modelUriString);
+		const initialValue = untrack(() => value ?? defaultValue);
+		let nextModel = monacoApi.editor.getModel(uri) as monaco.editor.ITextModel | null;
+		if (!nextModel) {
+			nextModel = monacoApi.editor.createModel(initialValue, language, uri);
+		} else {
+			monacoApi.editor.setModelLanguage(nextModel, language);
+			if (nextModel.getValue() !== initialValue) nextModel.setValue(initialValue);
+		}
+		model = nextModel;
+		return () => {
+			if (!nextModel?.isDisposed()) {
+				monacoApi.editor.setModelMarkers(nextModel, 'wasm-idle-compiler', []);
+				nextModel.dispose();
+			}
+			if (model === nextModel) model = undefined;
+		};
+	});
+
+	$effect(() => {
+		if (language !== 'cpp' || !clangdEnabled || !clangdBaseUrl) {
+			clangdStatus = { state: 'disabled' };
+		}
+		if (!dotnetLspLanguage || !dotnetLspEnabled || !dotnetLspModuleUrl) {
+			dotnetLspStatus = { state: 'disabled' };
+		}
+		if (language !== 'gleam' || !gleamLspEnabled || !gleamLspBaseUrl) {
+			gleamLspStatus = { state: 'disabled' };
+		}
+		if (language !== 'go' || !goLspEnabled || !goLspCompilerUrl) {
+			goLspStatus = { state: 'disabled' };
+		}
+		if (language !== 'rust' || !rustLspEnabled || !rustLspCompilerUrl) {
+			rustLspStatus = { state: 'disabled' };
+		}
+	});
+
+	const handleEditorLoad = (nextEditor: monaco.editor.IStandaloneCodeEditor) => {
+		editor = nextEditor;
+	};
+
+	const handleEditorInput = (event: IMonacoInputEvent) => {
+		if (!applyingValue) onChange?.(event.value);
+	};
 
 	$effect(() => {
 		if (!debugView) return;
@@ -1434,314 +1673,37 @@
 	});
 
 	$effect(() => {
-		if (!editor || value === undefined || editor.getValue() === value) return;
-		const viewState = editor.saveViewState();
-		applyingValue = true;
-		editor.setValue(value);
-		if (viewState) editor.restoreViewState(viewState);
-		applyingValue = false;
-	});
-
-	$effect(() => {
-		if (!editor) return;
-		editor.updateOptions({
-			fontSize: compact ? 13 : 14,
-			lineHeight: compact ? 20 : 22,
-			lineNumbersMinChars: compact ? 3 : 5,
-			minimap: { enabled: false },
-			padding: compact ? { top: 10, bottom: 10 } : { top: 14, bottom: 14 },
-			scrollbar: {
-				horizontalScrollbarSize: compact ? 8 : 12,
-				verticalScrollbarSize: compact ? 8 : 12
-			},
-			wordWrap: compact ? 'on' : 'off'
+		const monacoApi = Monaco;
+		const activeEditor = editor;
+		if (!monacoApi || !activeEditor || (language !== 'cpp' && !debugLanguage)) return;
+		untrack(() => {
+			debugView?.dispose();
+			debugActionBindings?.dispose();
 		});
-	});
-
-	$effect(() => {
-		if (language !== 'cpp' || !editor || !clangdEnabled || !clangdBaseUrl) {
-			session?.dispose();
-			session = null;
-			clangdStatus = { state: 'disabled' };
-			return;
-		}
-		if (session || !Monaco) return;
-
-		let cancelled = false;
-		let nextSession: ClangdSessionType | null = null;
-		const nextSessionVersion = ++clangdSessionVersion;
-
-		(async () => {
-			try {
-				const { ClangdSession } = await import('$lib/clangd/session');
-				if (cancelled || !Monaco) return;
-				nextSession = new ClangdSession(Monaco, clangdBaseUrl, (status) => {
-					if (!cancelled) clangdStatus = status;
-				});
-				const previousModel = editor.getModel();
-				const previousModelUri = previousModel?.uri.toString();
-				const nextModel = nextSession.createModel(editor.getValue());
-				session = nextSession;
-				model = nextModel;
-				editor.setModel(nextModel);
-				if (previousModel && previousModelUri !== nextModel.uri.toString()) {
-					previousModel.dispose();
-				}
-				await nextSession.start();
-			} catch (error) {
-				if (cancelled) return;
-				nextSession?.dispose();
-				if (clangdSessionVersion === nextSessionVersion) session = null;
-				clangdStatus = {
-					state: 'error',
-					message: error instanceof Error ? error.message : String(error)
-				};
-			}
-		})();
-
+		const nextDebugView = new MonacoDebugView(monacoApi, activeEditor, onBreakpointsChange);
+		nextDebugView.setBreakpoints(debugLanguage ? breakpoints : []);
+		nextDebugView.setPauseState(debugLanguage ? pausedLine : null, debugLocals, debugLanguage);
+		debugView = nextDebugView;
+		debugActionBindings = attachMonacoDebugActions(activeEditor, {
+			onCursorLineChange,
+			onRunToCursor
+		});
 		return () => {
-			cancelled = true;
+			debugActionBindings?.dispose();
+			debugActionBindings = null;
+			nextDebugView.dispose();
+			if (debugView === nextDebugView) debugView = null;
 		};
 	});
 
 	$effect(() => {
-		const activeDotnetLspLanguage = dotnetLspLanguage;
-		if (!activeDotnetLspLanguage || !editor || !dotnetLspEnabled || !dotnetLspModuleUrl) {
-			dotnetLspSession?.dispose();
-			dotnetLspSession = null;
-			dotnetLspSessionKey = '';
-			dotnetLspStatus = { state: 'disabled' };
-			return;
-		}
-		if (!Monaco) return;
-
-		const nextSessionKey = `${dotnetLspModuleUrl}\n${activeDotnetLspLanguage}`;
-		if (dotnetLspSession && dotnetLspSessionKey === nextSessionKey) return;
-		dotnetLspSession?.dispose();
-		dotnetLspSession = null;
-
-		let cancelled = false;
-		let nextSession: DotnetLspSessionType | null = null;
-		const nextSessionVersion = ++dotnetLspSessionVersion;
-
-		(async () => {
-			try {
-				const { DotnetLspSession } = await import('$lib/lsp/dotnetSession');
-				if (cancelled || !Monaco) return;
-				nextSession = new DotnetLspSession(
-					Monaco,
-					dotnetLspModuleUrl,
-					activeDotnetLspLanguage,
-					(status) => {
-						if (!cancelled) dotnetLspStatus = status;
-					}
-				);
-				const previousModel = editor.getModel();
-				const previousModelUri = previousModel?.uri.toString();
-				const nextModel = nextSession.createModel(editor.getValue());
-				dotnetLspSession = nextSession;
-				dotnetLspSessionKey = nextSessionKey;
-				model = nextModel;
-				editor.setModel(nextModel);
-				if (previousModel && previousModelUri !== nextModel.uri.toString()) {
-					previousModel.dispose();
-				}
-				await nextSession.start();
-			} catch (error) {
-				if (cancelled) return;
-				nextSession?.dispose();
-				if (dotnetLspSessionVersion === nextSessionVersion) {
-					dotnetLspSession = null;
-					dotnetLspSessionKey = '';
-				}
-				dotnetLspStatus = {
-					state: 'error',
-					message: error instanceof Error ? error.message : String(error)
-				};
-			}
-		})();
-
-		return () => {
-			cancelled = true;
-		};
-	});
-
-	$effect(() => {
-		if (!editor || !gleamLspEnabled || language !== 'gleam' || !gleamLspBaseUrl) {
-			gleamLspSession?.dispose();
-			gleamLspSession = null;
-			gleamLspSessionKey = '';
-			gleamLspStatus = { state: 'disabled' };
-			return;
-		}
-		if (!Monaco) return;
-
-		const nextSessionKey = `${gleamLspBaseUrl}\n${gleamLspManifestUrl || ''}`;
-		if (gleamLspSession && gleamLspSessionKey === nextSessionKey) return;
-		gleamLspSession?.dispose();
-		gleamLspSession = null;
-
-		let cancelled = false;
-		let nextSession: GleamLspSessionType | null = null;
-		const nextSessionVersion = ++gleamLspSessionVersion;
-
-		(async () => {
-			try {
-				const { GleamLspSession } = await import('$lib/lsp/gleamSession');
-				if (cancelled || !Monaco) return;
-				nextSession = new GleamLspSession(
-					Monaco,
-					gleamLspBaseUrl,
-					gleamLspManifestUrl,
-					(status) => {
-						if (!cancelled) gleamLspStatus = status;
-					}
-				);
-				const previousModel = editor.getModel();
-				const previousModelUri = previousModel?.uri.toString();
-				const nextModel = nextSession.createModel(editor.getValue());
-				gleamLspSession = nextSession;
-				gleamLspSessionKey = nextSessionKey;
-				model = nextModel;
-				editor.setModel(nextModel);
-				if (previousModel && previousModelUri !== nextModel.uri.toString()) {
-					previousModel.dispose();
-				}
-				await nextSession.start();
-			} catch (error) {
-				if (cancelled) return;
-				nextSession?.dispose();
-				if (gleamLspSessionVersion === nextSessionVersion) {
-					gleamLspSession = null;
-					gleamLspSessionKey = '';
-				}
-				gleamLspStatus = {
-					state: 'error',
-					message: error instanceof Error ? error.message : String(error)
-				};
-			}
-		})();
-
-		return () => {
-			cancelled = true;
-		};
-	});
-
-	$effect(() => {
-		if (language !== 'go' || !editor || !goLspEnabled || !goLspCompilerUrl) {
-			goLspSession?.dispose();
-			goLspSession = null;
-			goLspSessionKey = '';
-			goLspStatus = { state: 'disabled' };
-			return;
-		}
-		if (!Monaco) return;
-
-		const nextSessionKey = `${goLspCompilerUrl}\n${goTarget}`;
-		if (goLspSession && goLspSessionKey === nextSessionKey) return;
-		goLspSession?.dispose();
-		goLspSession = null;
-
-		let cancelled = false;
-		let nextSession: GoLspSessionType | null = null;
-		const nextSessionVersion = ++goLspSessionVersion;
-
-		(async () => {
-			try {
-				const { GoLspSession } = await import('$lib/lsp/goSession');
-				if (cancelled || !Monaco) return;
-				nextSession = new GoLspSession(Monaco, goLspCompilerUrl, goTarget, (status) => {
-					if (!cancelled) goLspStatus = status;
-				});
-				const previousModel = editor.getModel();
-				const previousModelUri = previousModel?.uri.toString();
-				const nextModel = nextSession.createModel(editor.getValue());
-				goLspSession = nextSession;
-				goLspSessionKey = nextSessionKey;
-				model = nextModel;
-				editor.setModel(nextModel);
-				if (previousModel && previousModelUri !== nextModel.uri.toString()) {
-					previousModel.dispose();
-				}
-				await nextSession.start();
-			} catch (error) {
-				if (cancelled) return;
-				nextSession?.dispose();
-				if (goLspSessionVersion === nextSessionVersion) {
-					goLspSession = null;
-					goLspSessionKey = '';
-				}
-				goLspStatus = {
-					state: 'error',
-					message: error instanceof Error ? error.message : String(error)
-				};
-			}
-		})();
-
-		return () => {
-			cancelled = true;
-		};
-	});
-
-	$effect(() => {
-		if (language !== 'rust' || !editor || !rustLspEnabled || !rustLspCompilerUrl) {
-			rustLspSession?.dispose();
-			rustLspSession = null;
-			rustLspSessionKey = '';
-			rustLspStatus = { state: 'disabled' };
-			return;
-		}
-		if (!Monaco) return;
-
-		const nextSessionKey = `${rustLspCompilerUrl}\n${rustTargetTriple}`;
-		if (rustLspSession && rustLspSessionKey === nextSessionKey) return;
-		rustLspSession?.dispose();
-		rustLspSession = null;
-
-		let cancelled = false;
-		let nextSession: RustLspSessionType | null = null;
-		const nextSessionVersion = ++rustLspSessionVersion;
-
-		(async () => {
-			try {
-				const { RustLspSession } = await import('$lib/lsp/rustSession');
-				if (cancelled || !Monaco) return;
-				nextSession = new RustLspSession(
-					Monaco,
-					rustLspCompilerUrl,
-					rustTargetTriple,
-					(status) => {
-						if (!cancelled) rustLspStatus = status;
-					}
-				);
-				const previousModel = editor.getModel();
-				const previousModelUri = previousModel?.uri.toString();
-				const nextModel = nextSession.createModel(editor.getValue());
-				rustLspSession = nextSession;
-				rustLspSessionKey = nextSessionKey;
-				model = nextModel;
-				editor.setModel(nextModel);
-				if (previousModel && previousModelUri !== nextModel.uri.toString()) {
-					previousModel.dispose();
-				}
-				await nextSession.start();
-			} catch (error) {
-				if (cancelled) return;
-				nextSession?.dispose();
-				if (rustLspSessionVersion === nextSessionVersion) {
-					rustLspSession = null;
-					rustLspSessionKey = '';
-				}
-				rustLspStatus = {
-					state: 'error',
-					message: error instanceof Error ? error.message : String(error)
-				};
-			}
-		})();
-
-		return () => {
-			cancelled = true;
-		};
+		const activeModel = model || editor?.getModel();
+		if (!activeModel || value === undefined || activeModel.getValue() === value) return;
+		const viewState = editor?.saveViewState();
+		applyingValue = true;
+		activeModel.setValue(value);
+		if (viewState) editor?.restoreViewState(viewState);
+		applyingValue = false;
 	});
 
 	$effect(() => {
@@ -1793,80 +1755,47 @@
 	});
 
 	$effect(() => {
-		if (!editor) return;
+		const activeModel = model || editor?.getModel();
+		if (!activeModel) return;
 		if (value !== undefined) return;
-		const currentValue = editor.getValue();
+		const currentValue = activeModel.getValue();
 		if (!isEditorDefaultSource(currentValue) && !isLegacyEditorDefaultSource(currentValue)) {
 			return;
 		}
-		const nextDefaultLanguage =
-			language === 'vb' ? 'vbnet' : language === 'sql' ? 'sqlite' : language;
-		const nextValue = resolveEditorDefaultSource(
-			nextDefaultLanguage as
-				| 'c'
-				| 'cpp'
-				| 'python'
-				| 'java'
-				| 'go'
-				| 'd'
-				| 'csharp'
-				| 'fsharp'
-				| 'vbnet'
-				| 'elixir'
-				| 'erlang'
-				| 'prolog'
-				| 'gleam'
-				| 'perl'
-				| 'ocaml'
-				| 'javascript'
-				| 'typescript'
-				| 'assemblyscript'
-				| 'wat'
-				| 'lua'
-				| 'zig'
-				| 'lisp'
-				| 'ruby'
-				| 'haskell'
-				| 'r'
-				| 'octave'
-				| 'sqlite'
-				| 'php'
-				| 'rust',
-			rustTargetTriple
-		);
-		if (currentValue !== nextValue) {
-			editor.setValue(nextValue);
+		if (currentValue !== defaultValue) {
+			activeModel.setValue(defaultValue);
 		}
 	});
 
 	onMount(() => {
 		let disposed = false;
-		let debugActionBindings: { dispose(): void } | null = null;
-		// @ts-ignore
-		self.MonacoEnvironment = {
-			getWorker: function (_moduleId: any, label: string) {
-				return new editorWorker();
-			}
-		};
-
-		Promise.all([
-			import('monaco-editor'),
-			import('monaco-editor/esm/vs/basic-languages/cpp/cpp.contribution.js'),
-			import('monaco-editor/esm/vs/basic-languages/csharp/csharp.contribution.js'),
-			import('monaco-editor/esm/vs/basic-languages/elixir/elixir.contribution.js'),
-			import('monaco-editor/esm/vs/basic-languages/go/go.contribution.js'),
-			import('monaco-editor/esm/vs/basic-languages/java/java.contribution.js'),
-			import('monaco-editor/esm/vs/basic-languages/javascript/javascript.contribution.js'),
-			import('monaco-editor/esm/vs/basic-languages/perl/perl.contribution.js'),
-			import('monaco-editor/esm/vs/basic-languages/php/php.contribution.js'),
-			import('monaco-editor/esm/vs/basic-languages/python/python.contribution.js'),
-			import('monaco-editor/esm/vs/basic-languages/r/r.contribution.js'),
-			import('monaco-editor/esm/vs/basic-languages/ruby/ruby.contribution.js'),
-			import('monaco-editor/esm/vs/basic-languages/rust/rust.contribution.js'),
-			import('monaco-editor/esm/vs/basic-languages/sql/sql.contribution.js'),
-			import('monaco-editor/esm/vs/basic-languages/typescript/typescript.contribution.js'),
-			import('monaco-editor/esm/vs/basic-languages/vb/vb.contribution.js')
-		]).then(async ([m]) => {
+		void (async () => {
+			const [monacoComponent, workers] = await Promise.all([
+				import('@seorii/monaco'),
+				import('@seorii/monaco/workers')
+			]);
+			if (disposed) return;
+			(globalThis as typeof globalThis & { MonacoEnvironment?: unknown }).MonacoEnvironment =
+				workers.createMonacoEnvironment();
+			MonacoEditor = monacoComponent.default;
+			const [m] = await Promise.all([
+				monacoComponent.loadMonaco(),
+				import('monaco-editor/esm/vs/basic-languages/cpp/cpp.contribution.js'),
+				import('monaco-editor/esm/vs/basic-languages/csharp/csharp.contribution.js'),
+				import('monaco-editor/esm/vs/basic-languages/elixir/elixir.contribution.js'),
+				import('monaco-editor/esm/vs/basic-languages/go/go.contribution.js'),
+				import('monaco-editor/esm/vs/basic-languages/java/java.contribution.js'),
+				import('monaco-editor/esm/vs/basic-languages/javascript/javascript.contribution.js'),
+				import('monaco-editor/esm/vs/basic-languages/perl/perl.contribution.js'),
+				import('monaco-editor/esm/vs/basic-languages/php/php.contribution.js'),
+				import('monaco-editor/esm/vs/basic-languages/python/python.contribution.js'),
+				import('monaco-editor/esm/vs/basic-languages/r/r.contribution.js'),
+				import('monaco-editor/esm/vs/basic-languages/ruby/ruby.contribution.js'),
+				import('monaco-editor/esm/vs/basic-languages/rust/rust.contribution.js'),
+				import('monaco-editor/esm/vs/basic-languages/sql/sql.contribution.js'),
+				import('monaco-editor/esm/vs/basic-languages/typescript/typescript.contribution.js'),
+				import('monaco-editor/esm/vs/basic-languages/vb/vb.contribution.js')
+			]);
 			if (disposed) return;
 			Monaco = m;
 			if (!Monaco.languages.getLanguages().some(({ id }) => id === 'ocaml')) {
@@ -1977,124 +1906,10 @@
 			}
 			Monaco.languages.setLanguageConfiguration('lisp', schemeLanguageConfiguration);
 			Monaco.languages.setMonarchTokensProvider('lisp', schemeMonarchTokens);
-			const defaultLanguage =
-				language === 'vb' ? 'vbnet' : language === 'sql' ? 'sqlite' : language;
-			const defaultValue = resolveEditorDefaultSource(
-				defaultLanguage as
-					| 'c'
-					| 'cpp'
-					| 'python'
-					| 'java'
-					| 'go'
-					| 'd'
-					| 'csharp'
-					| 'fsharp'
-					| 'vbnet'
-					| 'elixir'
-					| 'erlang'
-					| 'prolog'
-					| 'gleam'
-					| 'perl'
-					| 'ocaml'
-					| 'javascript'
-					| 'typescript'
-					| 'assemblyscript'
-					| 'wat'
-					| 'lua'
-					| 'zig'
-					| 'lisp'
-					| 'ruby'
-					| 'haskell'
-					| 'r'
-					| 'octave'
-					| 'sqlite'
-					| 'php'
-					| 'rust',
-				rustTargetTriple
-			);
-			if (language === 'cpp') {
-				editor = Monaco.editor.create(divEl!, {
-					value: value ?? defaultValue,
-					language,
-					automaticLayout: true,
-					fontSize: compact ? 13 : 14,
-					lineHeight: compact ? 20 : 22,
-					lineNumbersMinChars: compact ? 3 : 5,
-					minimap: { enabled: false },
-					occurrencesHighlight: 'off',
-					glyphMargin: true,
-					padding: compact ? { top: 10, bottom: 10 } : { top: 14, bottom: 14 },
-					scrollbar: {
-						horizontalScrollbarSize: compact ? 8 : 12,
-						verticalScrollbarSize: compact ? 8 : 12
-					},
-					wordWrap: compact ? 'on' : 'off'
-				});
-				editor.onDidChangeModelContent(() => {
-					if (!applyingValue) onChange?.(editor?.getValue() || '');
-				});
-				debugView = new MonacoDebugView(Monaco, editor, onBreakpointsChange);
-				debugView.setBreakpoints(breakpoints);
-				debugView.setPauseState(pausedLine, debugLocals, debugLanguage);
-				debugActionBindings = attachMonacoDebugActions(editor, {
-					onCursorLineChange,
-					onRunToCursor
-				});
-				clangdStatus = { state: 'disabled' };
-				goLspStatus = { state: 'disabled' };
-				rustLspStatus = { state: 'disabled' };
-				return;
-			}
-			clangdStatus = { state: 'disabled' };
-			goLspStatus = { state: 'disabled' };
-			rustLspStatus = { state: 'disabled' };
-			editor = Monaco.editor.create(divEl!, {
-				value: value ?? defaultValue,
-				language,
-				automaticLayout: true,
-				fontSize: compact ? 13 : 14,
-				lineHeight: compact ? 20 : 22,
-				lineNumbersMinChars: compact ? 3 : 5,
-				minimap: { enabled: false },
-				occurrencesHighlight: 'off',
-				glyphMargin: !!debugLanguage,
-				padding: compact ? { top: 10, bottom: 10 } : { top: 14, bottom: 14 },
-				scrollbar: {
-					horizontalScrollbarSize: compact ? 8 : 12,
-					verticalScrollbarSize: compact ? 8 : 12
-				},
-				wordWrap: compact ? 'on' : 'off'
-			});
-			editor.onDidChangeModelContent(() => {
-				if (!applyingValue) onChange?.(editor?.getValue() || '');
-			});
-			if (debugLanguage) {
-				debugView = new MonacoDebugView(Monaco, editor, onBreakpointsChange);
-				debugView.setBreakpoints(breakpoints);
-				debugView.setPauseState(pausedLine, debugLocals, debugLanguage);
-				debugActionBindings = attachMonacoDebugActions(editor, {
-					onCursorLineChange,
-					onRunToCursor
-				});
-			}
-		});
+		})();
 
 		return () => {
 			disposed = true;
-			session?.dispose();
-			session = null;
-			dotnetLspSession?.dispose();
-			dotnetLspSession = null;
-			dotnetLspSessionKey = '';
-			gleamLspSession?.dispose();
-			gleamLspSession = null;
-			gleamLspSessionKey = '';
-			goLspSession?.dispose();
-			goLspSession = null;
-			goLspSessionKey = '';
-			rustLspSession?.dispose();
-			rustLspSession = null;
-			rustLspSessionKey = '';
 			debugActionBindings?.dispose();
 			debugActionBindings = null;
 			debugView?.dispose();
@@ -2102,15 +1917,25 @@
 			const activeModel = model || editor?.getModel();
 			if (Monaco && activeModel)
 				Monaco.editor.setModelMarkers(activeModel, 'wasm-idle-compiler', []);
-			model?.dispose();
-			model = null;
-			editor?.dispose();
+			if (!model?.isDisposed()) model?.dispose();
+			model = undefined;
+			editor = null;
 		};
 	});
 </script>
 
 <main>
-	<div bind:this={divEl} class="editor-host"></div>
+	<div class="editor-host">
+		{#if Monaco && model}
+			<MonacoEditor
+				{model}
+				setting={editorSetting}
+				lsp={resolveLspConnection}
+				onload={handleEditorLoad}
+				oninput={handleEditorInput}
+			/>
+		{/if}
+	</div>
 </main>
 
 <style>
