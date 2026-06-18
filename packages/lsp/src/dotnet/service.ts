@@ -1,10 +1,6 @@
-import type {
-	LspDiagnostic,
-	LspDocument,
-	WorkerLanguageService
-} from '../lsp.js';
+import type { LspDiagnostic, LspDocument, WorkerLanguageService } from '../lsp.js';
 
-export type DotnetLanguage = 'csharp' | 'vbnet';
+export type DotnetLanguage = 'csharp' | 'fsharp' | 'vbnet';
 
 export interface DotnetWorkerOptions {
 	language: DotnetLanguage;
@@ -31,11 +27,7 @@ interface DotnetCompiler {
 		language: DotnetLanguage;
 		target: 'browser-wasm';
 		prepare?: boolean;
-		onProgress?: (progress: {
-			stage?: string;
-			completed?: number;
-			total?: number;
-		}) => void;
+		onProgress?: (progress: { stage?: string; completed?: number; total?: number }) => void;
 	}): Promise<DotnetCompilerResult>;
 }
 
@@ -236,6 +228,70 @@ const VB_KEYWORDS = [
 	'Xor'
 ] as const;
 
+const FSHARP_KEYWORDS = [
+	'abstract',
+	'and',
+	'as',
+	'assert',
+	'base',
+	'begin',
+	'class',
+	'default',
+	'delegate',
+	'do',
+	'done',
+	'downcast',
+	'downto',
+	'elif',
+	'else',
+	'end',
+	'exception',
+	'extern',
+	'false',
+	'finally',
+	'for',
+	'fun',
+	'function',
+	'if',
+	'in',
+	'inherit',
+	'inline',
+	'interface',
+	'internal',
+	'lazy',
+	'let',
+	'match',
+	'member',
+	'module',
+	'mutable',
+	'namespace',
+	'new',
+	'null',
+	'of',
+	'open',
+	'or',
+	'override',
+	'private',
+	'public',
+	'rec',
+	'return',
+	'static',
+	'struct',
+	'then',
+	'to',
+	'true',
+	'try',
+	'type',
+	'upcast',
+	'use',
+	'val',
+	'void',
+	'when',
+	'while',
+	'with',
+	'yield'
+] as const;
+
 const loadDotnetModule: LoadDotnetModule = async (moduleUrl) =>
 	(await import(/* @vite-ignore */ moduleUrl)) as DotnetRuntimeModule;
 
@@ -245,11 +301,22 @@ export function createDotnetWorkerService(
 ): WorkerLanguageService {
 	let language = defaultLanguage;
 	let compiler: DotnetCompiler;
-	let reportProgress: (
-		stage: string,
-		loaded?: number,
-		total?: number
-	) => void = () => {};
+	let reportProgress: (stage: string, loaded?: number, total?: number) => void = () => {};
+
+	const diagnosticSource = () =>
+		language === 'csharp' ? 'roslyn-csharp' : language === 'fsharp' ? 'fsharp' : 'roslyn-vb';
+	const serverName = () =>
+		defaultLanguage === 'csharp'
+			? 'wasm-idle-csharp-lsp'
+			: defaultLanguage === 'fsharp'
+				? 'wasm-idle-fsharp-lsp'
+				: 'wasm-idle-visual-basic-lsp';
+	const completionKeywords = () =>
+		language === 'csharp'
+			? CSHARP_KEYWORDS
+			: language === 'fsharp'
+				? FSHARP_KEYWORDS
+				: VB_KEYWORDS;
 
 	const convertDiagnostic = (diagnostic: DotnetDiagnostic): LspDiagnostic => {
 		const line = Math.max(0, Number(diagnostic.lineNumber || 1) - 1);
@@ -264,21 +331,14 @@ export function createDotnetWorkerService(
 				end: { line, character: endCharacter }
 			},
 			severity:
-				diagnostic.severity === 'warning'
-					? 2
-					: diagnostic.severity === 'other'
-						? 3
-						: 1,
-			source: language === 'csharp' ? 'roslyn-csharp' : 'roslyn-vb',
+				diagnostic.severity === 'warning' ? 2 : diagnostic.severity === 'other' ? 3 : 1,
+			source: diagnosticSource(),
 			message: String(diagnostic.message || 'Compilation error')
 		};
 	};
 
 	return {
-		name:
-			defaultLanguage === 'csharp'
-				? 'wasm-idle-csharp-lsp'
-				: 'wasm-idle-visual-basic-lsp',
+		name: serverName(),
 		diagnosticDelay: 500,
 		capabilities: {
 			completionProvider: { triggerCharacters: ['.', ' '] }
@@ -301,11 +361,7 @@ export function createDotnetWorkerService(
 				target: 'browser-wasm',
 				prepare: true,
 				onProgress(progress) {
-					reportProgress(
-						progress.stage || 'compile',
-						progress.completed,
-						progress.total
-					);
+					reportProgress(progress.stage || 'compile', progress.completed, progress.total);
 				}
 			});
 			const diagnostics = (result.diagnostics || []).map(convertDiagnostic);
@@ -316,14 +372,14 @@ export function createDotnetWorkerService(
 						end: { line: 0, character: 1 }
 					},
 					severity: 1,
-					source: language === 'csharp' ? 'roslyn-csharp' : 'roslyn-vb',
+					source: diagnosticSource(),
 					message: result.stderr
 				});
 			}
 			return diagnostics;
 		},
 		completion() {
-			const keywords = language === 'csharp' ? CSHARP_KEYWORDS : VB_KEYWORDS;
+			const keywords = completionKeywords();
 			return {
 				isIncomplete: false,
 				items: keywords.map((keyword) => ({

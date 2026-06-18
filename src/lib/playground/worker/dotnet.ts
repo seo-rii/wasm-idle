@@ -3,6 +3,16 @@ export {};
 const workerSelf = globalThis as any;
 
 workerSelf.dotnetSidecar = true;
+workerSelf.document ??= {
+	addEventListener() {},
+	dispatchEvent() {
+		return true;
+	},
+	querySelectorAll() {
+		return [];
+	},
+	removeEventListener() {}
+};
 
 type DotnetCompileLanguage = 'fsharp' | 'csharp' | 'vbnet';
 

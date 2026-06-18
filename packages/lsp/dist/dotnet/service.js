@@ -187,11 +187,85 @@ const VB_KEYWORDS = [
     'WriteOnly',
     'Xor'
 ];
+const FSHARP_KEYWORDS = [
+    'abstract',
+    'and',
+    'as',
+    'assert',
+    'base',
+    'begin',
+    'class',
+    'default',
+    'delegate',
+    'do',
+    'done',
+    'downcast',
+    'downto',
+    'elif',
+    'else',
+    'end',
+    'exception',
+    'extern',
+    'false',
+    'finally',
+    'for',
+    'fun',
+    'function',
+    'if',
+    'in',
+    'inherit',
+    'inline',
+    'interface',
+    'internal',
+    'lazy',
+    'let',
+    'match',
+    'member',
+    'module',
+    'mutable',
+    'namespace',
+    'new',
+    'null',
+    'of',
+    'open',
+    'or',
+    'override',
+    'private',
+    'public',
+    'rec',
+    'return',
+    'static',
+    'struct',
+    'then',
+    'to',
+    'true',
+    'try',
+    'type',
+    'upcast',
+    'use',
+    'val',
+    'void',
+    'when',
+    'while',
+    'with',
+    'yield'
+];
 const loadDotnetModule = async (moduleUrl) => (await import(/* @vite-ignore */ moduleUrl));
 export function createDotnetWorkerService(defaultLanguage, loadModule = loadDotnetModule) {
     let language = defaultLanguage;
     let compiler;
     let reportProgress = () => { };
+    const diagnosticSource = () => language === 'csharp' ? 'roslyn-csharp' : language === 'fsharp' ? 'fsharp' : 'roslyn-vb';
+    const serverName = () => defaultLanguage === 'csharp'
+        ? 'wasm-idle-csharp-lsp'
+        : defaultLanguage === 'fsharp'
+            ? 'wasm-idle-fsharp-lsp'
+            : 'wasm-idle-visual-basic-lsp';
+    const completionKeywords = () => language === 'csharp'
+        ? CSHARP_KEYWORDS
+        : language === 'fsharp'
+            ? FSHARP_KEYWORDS
+            : VB_KEYWORDS;
     const convertDiagnostic = (diagnostic) => {
         const line = Math.max(0, Number(diagnostic.lineNumber || 1) - 1);
         const character = Math.max(0, Number(diagnostic.columnNumber || 1) - 1);
@@ -201,19 +275,13 @@ export function createDotnetWorkerService(defaultLanguage, loadModule = loadDotn
                 start: { line, character },
                 end: { line, character: endCharacter }
             },
-            severity: diagnostic.severity === 'warning'
-                ? 2
-                : diagnostic.severity === 'other'
-                    ? 3
-                    : 1,
-            source: language === 'csharp' ? 'roslyn-csharp' : 'roslyn-vb',
+            severity: diagnostic.severity === 'warning' ? 2 : diagnostic.severity === 'other' ? 3 : 1,
+            source: diagnosticSource(),
             message: String(diagnostic.message || 'Compilation error')
         };
     };
     return {
-        name: defaultLanguage === 'csharp'
-            ? 'wasm-idle-csharp-lsp'
-            : 'wasm-idle-visual-basic-lsp',
+        name: serverName(),
         diagnosticDelay: 500,
         capabilities: {
             completionProvider: { triggerCharacters: ['.', ' '] }
@@ -247,14 +315,14 @@ export function createDotnetWorkerService(defaultLanguage, loadModule = loadDotn
                         end: { line: 0, character: 1 }
                     },
                     severity: 1,
-                    source: language === 'csharp' ? 'roslyn-csharp' : 'roslyn-vb',
+                    source: diagnosticSource(),
                     message: result.stderr
                 });
             }
             return diagnostics;
         },
         completion() {
-            const keywords = language === 'csharp' ? CSHARP_KEYWORDS : VB_KEYWORDS;
+            const keywords = completionKeywords();
             return {
                 isIncomplete: false,
                 items: keywords.map((keyword) => ({

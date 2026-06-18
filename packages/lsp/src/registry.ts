@@ -1,6 +1,11 @@
 import { getAssemblyScriptLanguageServer } from './assemblyscript/server.js';
 import { getCppLanguageServer } from './clangd/server.js';
-import { getCSharpLanguageServer, getVisualBasicLanguageServer } from './dotnet/server.js';
+import {
+	getCSharpLanguageServer,
+	getFSharpLanguageServer,
+	getVisualBasicLanguageServer
+} from './dotnet/server.js';
+import { getGleamLanguageServer } from './gleam/server.js';
 import { getGoLanguageServer } from './go/server.js';
 import { getPythonLanguageServer } from './python/server.js';
 import { getRustLanguageServer } from './rust/server.js';
@@ -30,6 +35,10 @@ export async function getEditorLanguageServer(
 		return getGoLanguageServer(options);
 	}
 
+	if (normalized === 'gleam') {
+		return getGleamLanguageServer(options);
+	}
+
 	if (normalized === 'typescript' || normalized === 'ts') {
 		return getTypeScriptLanguageServer(options);
 	}
@@ -44,6 +53,10 @@ export async function getEditorLanguageServer(
 
 	if (normalized === 'csharp' || normalized === 'c#' || normalized === 'cs') {
 		return getCSharpLanguageServer(options);
+	}
+
+	if (normalized === 'fsharp' || normalized === 'f#' || normalized === 'fs') {
+		return getFSharpLanguageServer(options);
 	}
 
 	if (

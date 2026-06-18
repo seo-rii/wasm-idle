@@ -1,5 +1,5 @@
 import type { WorkerLanguageService } from '../lsp.js';
-export type DotnetLanguage = 'csharp' | 'vbnet';
+export type DotnetLanguage = 'csharp' | 'fsharp' | 'vbnet';
 export interface DotnetWorkerOptions {
     language: DotnetLanguage;
     moduleUrl: string;

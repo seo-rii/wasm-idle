@@ -3,6 +3,15 @@
 	import type { ClangdSession as ClangdSessionType } from '$lib/clangd/session';
 	import type { ClangdStatus } from '$lib/clangd/config';
 	import type { DebugLanguageAdapter } from '$lib/debug/language';
+	import type {
+		DotnetLspLanguage,
+		DotnetLspSession as DotnetLspSessionType,
+		DotnetLspStatus
+	} from '$lib/lsp/dotnetSession';
+	import type {
+		GleamLspSession as GleamLspSessionType,
+		GleamLspStatus
+	} from '$lib/lsp/gleamSession';
 	import type { GoLspSession as GoLspSessionType, GoLspStatus } from '$lib/lsp/goSession';
 	import type { RustLspSession as RustLspSessionType, RustLspStatus } from '$lib/lsp/rustSession';
 	import type {
@@ -1329,15 +1338,23 @@
 
 	let divEl: HTMLDivElement | null = $state(null);
 	let clangdStatus = $state<ClangdStatus>({ state: 'disabled' });
+	let dotnetLspStatus = $state<DotnetLspStatus>({ state: 'disabled' });
+	let gleamLspStatus = $state<GleamLspStatus>({ state: 'disabled' });
 	let goLspStatus = $state<GoLspStatus>({ state: 'disabled' });
 	let rustLspStatus = $state<RustLspStatus>({ state: 'disabled' });
 	let session: ClangdSessionType | null = null;
+	let dotnetLspSession: DotnetLspSessionType | null = null;
+	let gleamLspSession: GleamLspSessionType | null = null;
 	let goLspSession: GoLspSessionType | null = null;
 	let rustLspSession: RustLspSessionType | null = null;
 	let model: monaco.editor.ITextModel | null = null;
 	let clangdSessionVersion = 0;
+	let dotnetLspSessionVersion = 0;
+	let gleamLspSessionVersion = 0;
 	let goLspSessionVersion = 0;
 	let rustLspSessionVersion = 0;
+	let dotnetLspSessionKey = '';
+	let gleamLspSessionKey = '';
 	let goLspSessionKey = '';
 	let rustLspSessionKey = '';
 	let debugView = $state<MonacoDebugView | null>(null);
@@ -1351,6 +1368,11 @@
 		goTarget?: GoTarget;
 		clangdEnabled?: boolean;
 		clangdBaseUrl?: string;
+		dotnetLspEnabled?: boolean;
+		dotnetLspModuleUrl?: string;
+		gleamLspEnabled?: boolean;
+		gleamLspBaseUrl?: string;
+		gleamLspManifestUrl?: string;
 		goLspEnabled?: boolean;
 		goLspCompilerUrl?: string;
 		rustLspEnabled?: boolean;
@@ -1375,6 +1397,11 @@
 		goTarget = 'wasip1/wasm',
 		clangdEnabled = false,
 		clangdBaseUrl,
+		dotnetLspEnabled = false,
+		dotnetLspModuleUrl,
+		gleamLspEnabled = false,
+		gleamLspBaseUrl,
+		gleamLspManifestUrl,
 		goLspEnabled = false,
 		goLspCompilerUrl,
 		rustLspEnabled = false,
@@ -1390,6 +1417,15 @@
 	}: Props = $props();
 	let Monaco: typeof monaco | null = null;
 	let applyingValue = false;
+	const dotnetLspLanguage = $derived<DotnetLspLanguage | null>(
+		language === 'csharp'
+			? 'csharp'
+			: language === 'fsharp'
+				? 'fsharp'
+				: language === 'vb'
+					? 'vbnet'
+					: null
+	);
 
 	$effect(() => {
 		if (!debugView) return;
@@ -1457,6 +1493,129 @@
 				nextSession?.dispose();
 				if (clangdSessionVersion === nextSessionVersion) session = null;
 				clangdStatus = {
+					state: 'error',
+					message: error instanceof Error ? error.message : String(error)
+				};
+			}
+		})();
+
+		return () => {
+			cancelled = true;
+		};
+	});
+
+	$effect(() => {
+		const activeDotnetLspLanguage = dotnetLspLanguage;
+		if (!activeDotnetLspLanguage || !editor || !dotnetLspEnabled || !dotnetLspModuleUrl) {
+			dotnetLspSession?.dispose();
+			dotnetLspSession = null;
+			dotnetLspSessionKey = '';
+			dotnetLspStatus = { state: 'disabled' };
+			return;
+		}
+		if (!Monaco) return;
+
+		const nextSessionKey = `${dotnetLspModuleUrl}\n${activeDotnetLspLanguage}`;
+		if (dotnetLspSession && dotnetLspSessionKey === nextSessionKey) return;
+		dotnetLspSession?.dispose();
+		dotnetLspSession = null;
+
+		let cancelled = false;
+		let nextSession: DotnetLspSessionType | null = null;
+		const nextSessionVersion = ++dotnetLspSessionVersion;
+
+		(async () => {
+			try {
+				const { DotnetLspSession } = await import('$lib/lsp/dotnetSession');
+				if (cancelled || !Monaco) return;
+				nextSession = new DotnetLspSession(
+					Monaco,
+					dotnetLspModuleUrl,
+					activeDotnetLspLanguage,
+					(status) => {
+						if (!cancelled) dotnetLspStatus = status;
+					}
+				);
+				const previousModel = editor.getModel();
+				const previousModelUri = previousModel?.uri.toString();
+				const nextModel = nextSession.createModel(editor.getValue());
+				dotnetLspSession = nextSession;
+				dotnetLspSessionKey = nextSessionKey;
+				model = nextModel;
+				editor.setModel(nextModel);
+				if (previousModel && previousModelUri !== nextModel.uri.toString()) {
+					previousModel.dispose();
+				}
+				await nextSession.start();
+			} catch (error) {
+				if (cancelled) return;
+				nextSession?.dispose();
+				if (dotnetLspSessionVersion === nextSessionVersion) {
+					dotnetLspSession = null;
+					dotnetLspSessionKey = '';
+				}
+				dotnetLspStatus = {
+					state: 'error',
+					message: error instanceof Error ? error.message : String(error)
+				};
+			}
+		})();
+
+		return () => {
+			cancelled = true;
+		};
+	});
+
+	$effect(() => {
+		if (!editor || !gleamLspEnabled || language !== 'gleam' || !gleamLspBaseUrl) {
+			gleamLspSession?.dispose();
+			gleamLspSession = null;
+			gleamLspSessionKey = '';
+			gleamLspStatus = { state: 'disabled' };
+			return;
+		}
+		if (!Monaco) return;
+
+		const nextSessionKey = `${gleamLspBaseUrl}\n${gleamLspManifestUrl || ''}`;
+		if (gleamLspSession && gleamLspSessionKey === nextSessionKey) return;
+		gleamLspSession?.dispose();
+		gleamLspSession = null;
+
+		let cancelled = false;
+		let nextSession: GleamLspSessionType | null = null;
+		const nextSessionVersion = ++gleamLspSessionVersion;
+
+		(async () => {
+			try {
+				const { GleamLspSession } = await import('$lib/lsp/gleamSession');
+				if (cancelled || !Monaco) return;
+				nextSession = new GleamLspSession(
+					Monaco,
+					gleamLspBaseUrl,
+					gleamLspManifestUrl,
+					(status) => {
+						if (!cancelled) gleamLspStatus = status;
+					}
+				);
+				const previousModel = editor.getModel();
+				const previousModelUri = previousModel?.uri.toString();
+				const nextModel = nextSession.createModel(editor.getValue());
+				gleamLspSession = nextSession;
+				gleamLspSessionKey = nextSessionKey;
+				model = nextModel;
+				editor.setModel(nextModel);
+				if (previousModel && previousModelUri !== nextModel.uri.toString()) {
+					previousModel.dispose();
+				}
+				await nextSession.start();
+			} catch (error) {
+				if (cancelled) return;
+				nextSession?.dispose();
+				if (gleamLspSessionVersion === nextSessionVersion) {
+					gleamLspSession = null;
+					gleamLspSessionKey = '';
+				}
+				gleamLspStatus = {
 					state: 'error',
 					message: error instanceof Error ? error.message : String(error)
 				};
@@ -1924,6 +2083,12 @@
 			disposed = true;
 			session?.dispose();
 			session = null;
+			dotnetLspSession?.dispose();
+			dotnetLspSession = null;
+			dotnetLspSessionKey = '';
+			gleamLspSession?.dispose();
+			gleamLspSession = null;
+			gleamLspSessionKey = '';
 			goLspSession?.dispose();
 			goLspSession = null;
 			goLspSessionKey = '';

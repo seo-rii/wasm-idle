@@ -4,6 +4,8 @@ import {
 	resolveCppLanguageServerBaseUrl,
 	resolveCppLanguageServerRuntimeAssetConfig,
 	resolveGoLanguageServerCompilerUrl,
+	resolveGleamLanguageServerBaseUrl,
+	resolveGleamLanguageServerManifestUrl,
 	resolvePythonLanguageServerBaseUrl,
 	resolveRustLanguageServerCompilerUrl
 } from '../src/index.js';
@@ -34,6 +36,18 @@ describe('lsp runtime asset resolution', () => {
 				'https://app.example.com/editor'
 			)
 		).toBe('https://static.example.com/repl_20240807/wasm-go/index.js');
+		expect(
+			resolveGleamLanguageServerBaseUrl(
+				'https://static.example.com/repl_20240807',
+				'https://app.example.com/editor'
+			)
+		).toBe('https://static.example.com/repl_20240807/wasm-gleam/');
+		expect(
+			resolveGleamLanguageServerManifestUrl(
+				'https://static.example.com/repl_20240807',
+				'https://app.example.com/editor'
+			)
+		).toBe('https://static.example.com/repl_20240807/wasm-gleam/source-manifest.v1.json');
 	});
 
 	it('prefers explicit per-language overrides', () => {
@@ -50,6 +64,10 @@ describe('lsp runtime asset resolution', () => {
 			},
 			go: {
 				compilerUrl: 'https://go.example.com/wasm-go/index.js?v=20240807'
+			},
+			gleam: {
+				baseUrl: 'https://gleam.example.com/wasm-gleam/',
+				manifestUrl: 'https://gleam.example.com/manifest.json'
 			}
 		};
 
@@ -62,6 +80,12 @@ describe('lsp runtime asset resolution', () => {
 		);
 		expect(resolveGoLanguageServerCompilerUrl(options)).toBe(
 			'https://go.example.com/wasm-go/index.js?v=20240807'
+		);
+		expect(resolveGleamLanguageServerBaseUrl(options)).toBe(
+			'https://gleam.example.com/wasm-gleam/'
+		);
+		expect(resolveGleamLanguageServerManifestUrl(options)).toBe(
+			'https://gleam.example.com/manifest.json'
 		);
 	});
 
@@ -94,5 +118,11 @@ describe('lsp runtime asset resolution', () => {
 		expect(
 			resolveGoLanguageServerCompilerUrl(undefined, 'https://app.example.com/editor')
 		).toBe('https://app.example.com/wasm-go/index.js');
+		expect(resolveGleamLanguageServerBaseUrl(undefined, 'https://app.example.com/editor')).toBe(
+			'https://app.example.com/wasm-gleam/'
+		);
+		expect(
+			resolveGleamLanguageServerManifestUrl(undefined, 'https://app.example.com/editor')
+		).toBe('https://app.example.com/wasm-gleam/source-manifest.v1.json');
 	});
 });

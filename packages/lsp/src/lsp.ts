@@ -164,6 +164,7 @@ export function startWorkerLanguageServer(
 	const documents = new Map<string, LspDocument>();
 	const diagnosticVersions = new Map<string, number>();
 	let initialized = false;
+	let ready = false;
 	let shutdown = false;
 
 	const send = (message: unknown) => scope.postMessage(message);
@@ -190,6 +191,7 @@ export function startWorkerLanguageServer(
 		documents,
 		publishDiagnostics,
 		reportProgress(stage, loaded, total) {
+			if (ready) return;
 			send({
 				type: 'progress',
 				stage,
@@ -203,30 +205,33 @@ export function startWorkerLanguageServer(
 		if (!service.diagnostics) return;
 		const version = (diagnosticVersions.get(document.uri) || 0) + 1;
 		diagnosticVersions.set(document.uri, version);
-		setTimeout(async () => {
-			try {
-				const diagnostics = await service.diagnostics?.(document, context);
-				if (
-					diagnosticVersions.get(document.uri) === version &&
-					documents.get(document.uri)?.version === document.version
-				) {
-					publishDiagnostics(document.uri, diagnostics || []);
-				}
-			} catch (error) {
-				if (diagnosticVersions.get(document.uri) !== version) return;
-				publishDiagnostics(document.uri, [
-					{
-						range: {
-							start: { line: 0, character: 0 },
-							end: { line: 0, character: 1 }
-						},
-						severity: 1,
-						source: service.name,
-						message: error instanceof Error ? error.message : String(error)
+		setTimeout(
+			async () => {
+				try {
+					const diagnostics = await service.diagnostics?.(document, context);
+					if (
+						diagnosticVersions.get(document.uri) === version &&
+						documents.get(document.uri)?.version === document.version
+					) {
+						publishDiagnostics(document.uri, diagnostics || []);
 					}
-				]);
-			}
-		}, Math.max(0, service.diagnosticDelay || 0));
+				} catch (error) {
+					if (diagnosticVersions.get(document.uri) !== version) return;
+					publishDiagnostics(document.uri, [
+						{
+							range: {
+								start: { line: 0, character: 0 },
+								end: { line: 0, character: 1 }
+							},
+							severity: 1,
+							source: service.name,
+							message: error instanceof Error ? error.message : String(error)
+						}
+					]);
+				}
+			},
+			Math.max(0, service.diagnosticDelay || 0)
+		);
 	};
 
 	const getDocument = (params: Record<string, any> | undefined) => {
@@ -278,23 +283,25 @@ export function startWorkerLanguageServer(
 					respond(id, (await service.definition?.(document, position, context)) ?? null);
 					return;
 				case 'textDocument/signatureHelp':
-					respond(id, (await service.signatureHelp?.(document, position, context)) ?? null);
+					respond(
+						id,
+						(await service.signatureHelp?.(document, position, context)) ?? null
+					);
 					return;
 				case 'textDocument/documentSymbol':
 					respond(id, (await service.documentSymbols?.(document, context)) ?? []);
 					return;
 				case 'textDocument/formatting':
-					respond(id, (await service.formatting?.(document, params.options || {}, context)) ?? []);
+					respond(
+						id,
+						(await service.formatting?.(document, params.options || {}, context)) ?? []
+					);
 					return;
 				default:
 					respondError(id, -32601, `Method not found: ${message.method}`);
 			}
 		} catch (error) {
-			respondError(
-				id,
-				-32603,
-				error instanceof Error ? error.message : String(error)
-			);
+			respondError(id, -32603, error instanceof Error ? error.message : String(error));
 		}
 	};
 
@@ -362,7 +369,10 @@ export function startWorkerLanguageServer(
 			if (initialized) return;
 			initialized = true;
 			void Promise.resolve(service.initialize?.(message.options, context))
-				.then(() => send({ type: 'ready' }))
+				.then(() => {
+					ready = true;
+					send({ type: 'ready' });
+				})
 				.catch((error) =>
 					send({
 						type: 'error',

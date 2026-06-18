@@ -2379,6 +2379,19 @@
 				{compact}
 				clangdEnabled={clangdRequested}
 				{clangdBaseUrl}
+				dotnetLspEnabled={language === 'CSHARP' ||
+					language === 'FSHARP' ||
+					language === 'VBNET'}
+				dotnetLspModuleUrl={language === 'CSHARP' ||
+				language === 'FSHARP' ||
+				language === 'VBNET'
+					? runtimeAssets.dotnet?.moduleUrl
+					: undefined}
+				gleamLspEnabled={language === 'GLEAM'}
+				gleamLspBaseUrl={language === 'GLEAM' ? runtimeAssets.gleam?.baseUrl : undefined}
+				gleamLspManifestUrl={language === 'GLEAM'
+					? runtimeAssets.gleam?.manifestUrl
+					: undefined}
 				goLspEnabled={language === 'GO'}
 				goLspCompilerUrl={language === 'GO' ? runtimeAssets.go?.compilerUrl : undefined}
 				rustLspEnabled={language === 'RUST'}

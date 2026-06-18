@@ -3,16 +3,20 @@ export {
 	resolveCppLanguageServerBaseUrl,
 	resolveCppLanguageServerRuntimeAssetConfig,
 	resolveGoLanguageServerCompilerUrl,
+	resolveGleamLanguageServerBaseUrl,
+	resolveGleamLanguageServerManifestUrl,
 	resolvePythonLanguageServerBaseUrl,
 	resolveRustLanguageServerCompilerUrl
 } from '@wasm-idle/lsp';
 export { getCppLanguageServer } from '@wasm-idle/lsp';
 export { getGoLanguageServer } from '@wasm-idle/lsp';
+export { getGleamLanguageServer } from '@wasm-idle/lsp';
 export { getPythonLanguageServer } from '@wasm-idle/lsp';
 export { getRustLanguageServer } from '@wasm-idle/lsp';
 export {
 	getAssemblyScriptLanguageServer,
 	getCSharpLanguageServer,
+	getFSharpLanguageServer,
 	getJavaScriptLanguageServer,
 	getTypeScriptLanguageServer,
 	getVisualBasicLanguageServer,

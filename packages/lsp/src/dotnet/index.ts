@@ -1,5 +1,6 @@
 export {
 	getCSharpLanguageServer,
+	getFSharpLanguageServer,
 	getVisualBasicLanguageServer,
 	resolveDotnetLanguageServerModuleUrl,
 	type DotnetLanguageServerOptions

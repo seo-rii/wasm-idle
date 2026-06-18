@@ -41,6 +41,10 @@ export interface EditorLanguageServerRuntimeOptions {
     dotnet?: {
         moduleUrl?: string;
     };
+    gleam?: {
+        baseUrl?: string;
+        manifestUrl?: string;
+    };
     assemblyscript?: {
         extraFiles?: Record<string, string>;
     };

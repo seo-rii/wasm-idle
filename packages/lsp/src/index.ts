@@ -3,6 +3,8 @@ export {
 	resolveCppLanguageServerBaseUrl,
 	resolveCppLanguageServerRuntimeAssetConfig,
 	resolveGoLanguageServerCompilerUrl,
+	resolveGleamLanguageServerBaseUrl,
+	resolveGleamLanguageServerManifestUrl,
 	resolvePythonLanguageServerBaseUrl,
 	resolveRustLanguageServerCompilerUrl
 } from './runtime.js';
@@ -63,6 +65,13 @@ export {
 	type GoWorkerOptions
 } from './go/index.js';
 export {
+	createGleamWorkerService,
+	getGleamLanguageServer,
+	resolveGleamCompilerUrl,
+	type GleamLanguageServerOptions,
+	type GleamWorkerOptions
+} from './gleam/index.js';
+export {
 	createTypeScriptWorkerService,
 	getJavaScriptLanguageServer,
 	getTypeScriptLanguageServer,
@@ -80,6 +89,7 @@ export {
 export {
 	createDotnetWorkerService,
 	getCSharpLanguageServer,
+	getFSharpLanguageServer,
 	getVisualBasicLanguageServer,
 	resolveDotnetLanguageServerModuleUrl,
 	type DotnetLanguage,

@@ -50,6 +50,11 @@
 			"import": "./dist/dotnet/index.js",
 			"default": "./dist/dotnet/index.js"
 		},
+		"./gleam": {
+			"types": "./dist/gleam/index.d.ts",
+			"import": "./dist/gleam/index.js",
+			"default": "./dist/gleam/index.js"
+		},
 		"./assemblyscript": {
 			"types": "./dist/assemblyscript/index.d.ts",
 			"import": "./dist/assemblyscript/index.js",

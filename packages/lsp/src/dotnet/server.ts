@@ -1,9 +1,6 @@
 import { normalizeBaseUrl, normalizeRootUrl } from '../assets.js';
 import type { EditorLanguageServerOptions, EditorLanguageServerRuntimeOptions } from '../types.js';
-import {
-	createWorkerLanguageServerClient,
-	type LanguageServerStatus
-} from '../worker-client.js';
+import { createWorkerLanguageServerClient, type LanguageServerStatus } from '../worker-client.js';
 import type { DotnetLanguage } from './service.js';
 
 export interface DotnetLanguageServerOptions extends EditorLanguageServerRuntimeOptions {
@@ -22,9 +19,7 @@ export function resolveDotnetLanguageServerModuleUrl(
 	baseUrl = ''
 ) {
 	if (typeof options === 'object' && options.dotnet?.moduleUrl) {
-		return baseUrl
-			? new URL(options.dotnet.moduleUrl, baseUrl).href
-			: options.dotnet.moduleUrl;
+		return baseUrl ? new URL(options.dotnet.moduleUrl, baseUrl).href : options.dotnet.moduleUrl;
 	}
 	const rootUrl =
 		typeof options === 'string' ? options : typeof options === 'object' ? options.rootUrl : '';
@@ -52,6 +47,10 @@ async function createLanguageServer(
 export const getCSharpLanguageServer = (
 	options?: EditorLanguageServerOptions | DotnetLanguageServerOptions
 ) => createLanguageServer('csharp', options);
+
+export const getFSharpLanguageServer = (
+	options?: EditorLanguageServerOptions | DotnetLanguageServerOptions
+) => createLanguageServer('fsharp', options);
 
 export const getVisualBasicLanguageServer = (
 	options?: EditorLanguageServerOptions | DotnetLanguageServerOptions

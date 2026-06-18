@@ -7,5 +7,6 @@ export interface DotnetLanguageServerOptions extends EditorLanguageServerRuntime
 }
 export declare function resolveDotnetLanguageServerModuleUrl(options: EditorLanguageServerOptions | DotnetLanguageServerOptions | undefined, baseUrl?: string): string;
 export declare const getCSharpLanguageServer: (options?: EditorLanguageServerOptions | DotnetLanguageServerOptions) => Promise<import("../types.js").EditorLanguageServerHandle>;
+export declare const getFSharpLanguageServer: (options?: EditorLanguageServerOptions | DotnetLanguageServerOptions) => Promise<import("../types.js").EditorLanguageServerHandle>;
 export declare const getVisualBasicLanguageServer: (options?: EditorLanguageServerOptions | DotnetLanguageServerOptions) => Promise<import("../types.js").EditorLanguageServerHandle>;
 //# sourceMappingURL=server.d.ts.map

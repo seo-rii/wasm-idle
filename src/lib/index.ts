@@ -15,6 +15,8 @@ export {
 	getAssemblyScriptLanguageServer,
 	getCSharpLanguageServer,
 	getCppLanguageServer,
+	getFSharpLanguageServer,
+	getGleamLanguageServer,
 	getGoLanguageServer,
 	getJavaScriptLanguageServer,
 	getPythonLanguageServer,
@@ -25,6 +27,8 @@ export {
 	resolveCppLanguageServerBaseUrl,
 	resolveCppLanguageServerRuntimeAssetConfig,
 	resolveGoLanguageServerCompilerUrl,
+	resolveGleamLanguageServerBaseUrl,
+	resolveGleamLanguageServerManifestUrl,
 	resolvePythonLanguageServerBaseUrl,
 	resolveRustLanguageServerCompilerUrl
 } from '$lib/lsp';

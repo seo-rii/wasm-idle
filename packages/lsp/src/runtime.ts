@@ -108,4 +108,33 @@ export function resolveGoLanguageServerCompilerUrl(
 	return resolveFileUrl('/wasm-go/index.js', currentUrl);
 }
 
+export function resolveGleamLanguageServerBaseUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	if (typeof options === 'string') {
+		return resolveRootToolBaseUrl(options, '/wasm-gleam/', currentUrl);
+	}
+	if (options?.gleam?.baseUrl) {
+		return normalizeBaseUrl(options.gleam.baseUrl, currentUrl);
+	}
+	if (options?.rootUrl) {
+		return resolveRootToolBaseUrl(options.rootUrl, '/wasm-gleam/', currentUrl);
+	}
+	return normalizeBaseUrl('/wasm-gleam/', currentUrl);
+}
+
+export function resolveGleamLanguageServerManifestUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	if (typeof options === 'object' && options.gleam?.manifestUrl) {
+		return resolveFileUrl(options.gleam.manifestUrl, currentUrl);
+	}
+	return resolveFileUrl(
+		`${resolveGleamLanguageServerBaseUrl(options, currentUrl)}source-manifest.v1.json`,
+		currentUrl
+	);
+}
+
 export type { EditorLanguageServerRuntimeOptions };

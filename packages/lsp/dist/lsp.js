@@ -61,6 +61,7 @@ export function startWorkerLanguageServer(service, scope = globalThis) {
     const documents = new Map();
     const diagnosticVersions = new Map();
     let initialized = false;
+    let ready = false;
     let shutdown = false;
     const send = (message) => scope.postMessage(message);
     const respond = (id, result) => send({ jsonrpc: '2.0', id, result });
@@ -78,6 +79,8 @@ export function startWorkerLanguageServer(service, scope = globalThis) {
         documents,
         publishDiagnostics,
         reportProgress(stage, loaded, total) {
+            if (ready)
+                return;
             send({
                 type: 'progress',
                 stage,
@@ -243,7 +246,10 @@ export function startWorkerLanguageServer(service, scope = globalThis) {
                 return;
             initialized = true;
             void Promise.resolve(service.initialize?.(message.options, context))
-                .then(() => send({ type: 'ready' }))
+                .then(() => {
+                ready = true;
+                send({ type: 'ready' });
+            })
                 .catch((error) => send({
                 type: 'error',
                 message: error instanceof Error ? error.message : String(error)

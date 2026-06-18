@@ -24,6 +24,10 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(/let debugView = \$state<MonacoDebugView \| null>\(null\);/);
 		expect(source).toMatch(/clangdEnabled\?: boolean;/);
 		expect(source).toMatch(/clangdEnabled = false,/);
+		expect(source).toMatch(/dotnetLspEnabled\?: boolean;/);
+		expect(source).toMatch(/dotnetLspEnabled = false,/);
+		expect(source).toMatch(/gleamLspEnabled\?: boolean;/);
+		expect(source).toMatch(/gleamLspEnabled = false,/);
 		expect(source).toMatch(/goLspEnabled\?: boolean;/);
 		expect(source).toMatch(/goLspEnabled = false,/);
 		expect(source).toMatch(/rustLspEnabled\?: boolean;/);
@@ -85,8 +89,22 @@ describe('Monaco route debug sync', () => {
 		);
 		expect(source).toMatch(/let clangdSessionVersion = 0;/);
 		expect(source).toMatch(/const nextSessionVersion = \+\+clangdSessionVersion;/);
+		expect(source).toMatch(/let dotnetLspSessionVersion = 0;/);
+		expect(source).toMatch(/let gleamLspSessionVersion = 0;/);
 		expect(source).toMatch(/let rustLspSessionVersion = 0;/);
 		expect(source).toMatch(/let goLspSessionVersion = 0;/);
+		expect(source).toMatch(
+			/const \{ DotnetLspSession \} = await import\('\$lib\/lsp\/dotnetSession'\);/s
+		);
+		expect(source).toMatch(
+			/dotnetLspSessionKey = nextSessionKey;[\s\S]*await nextSession\.start\(\);/s
+		);
+		expect(source).toMatch(
+			/const \{ GleamLspSession \} = await import\('\$lib\/lsp\/gleamSession'\);/s
+		);
+		expect(source).toMatch(
+			/gleamLspSessionKey = nextSessionKey;[\s\S]*await nextSession\.start\(\);/s
+		);
 		expect(source).toMatch(
 			/if \(language !== 'go' \|\| !editor \|\| !goLspEnabled \|\| !goLspCompilerUrl\) \{\s+goLspSession\?\.dispose\(\);\s+goLspSession = null;\s+goLspSessionKey = '';\s+goLspStatus = \{ state: 'disabled' \};\s+return;\s+\}/s
 		);
@@ -251,6 +269,12 @@ describe('Monaco route debug sync', () => {
 			/const playground = \$derived\.by\(\(\) => createPlaygroundBinding\(runtimeAssets\)\);/
 		);
 		expect(pageSource).toMatch(/clangdEnabled=\{clangdRequested\}/);
+		expect(pageSource).toMatch(/dotnetLspEnabled=\{language === 'CSHARP'/);
+		expect(pageSource).toMatch(/dotnetLspModuleUrl=\{language === 'CSHARP'/);
+		expect(pageSource).toMatch(/gleamLspEnabled=\{language === 'GLEAM'\}/);
+		expect(pageSource).toMatch(
+			/gleamLspBaseUrl=\{language === 'GLEAM' \? runtimeAssets\.gleam\?\.baseUrl : undefined\}/
+		);
 		expect(pageSource).toMatch(/goLspEnabled=\{language === 'GO'\}/);
 		expect(pageSource).toMatch(
 			/goLspCompilerUrl=\{language === 'GO'\s+\?\s+runtimeAssets\.go\?\.compilerUrl\s+:\s+undefined\}/

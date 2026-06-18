@@ -5,5 +5,7 @@ export declare function resolveCppLanguageServerBaseUrl(options: EditorLanguageS
 export declare function resolvePythonLanguageServerBaseUrl(options: EditorLanguageServerOptions | undefined, currentUrl?: string): string;
 export declare function resolveRustLanguageServerCompilerUrl(options: EditorLanguageServerOptions | undefined, currentUrl?: string): string;
 export declare function resolveGoLanguageServerCompilerUrl(options: EditorLanguageServerOptions | undefined, currentUrl?: string): string;
+export declare function resolveGleamLanguageServerBaseUrl(options: EditorLanguageServerOptions | undefined, currentUrl?: string): string;
+export declare function resolveGleamLanguageServerManifestUrl(options: EditorLanguageServerOptions | undefined, currentUrl?: string): string;
 export type { EditorLanguageServerRuntimeOptions };
 //# sourceMappingURL=runtime.d.ts.map
