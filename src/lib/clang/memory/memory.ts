@@ -78,7 +78,9 @@ export default class Memory {
 
 	write(o: number, buf: ArrayBufferLike | string | Uint8Array) {
 		if (buf instanceof ArrayBuffer) return this.writeUint8(o, new Uint8Array(buf));
-		if (buf instanceof SharedArrayBuffer) return this.writeUint8(o, new Uint8Array(buf));
+		if (typeof SharedArrayBuffer === 'function' && buf instanceof SharedArrayBuffer) {
+			return this.writeUint8(o, new Uint8Array(buf));
+		}
 		else if (typeof buf === 'string')
 			return this.writeUint8(
 				o,

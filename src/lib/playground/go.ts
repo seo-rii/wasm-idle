@@ -157,6 +157,7 @@ class Go implements Sandbox {
 				code,
 				prepare,
 				buffer: this.buffer,
+				stdin: options.stdin,
 				args: programArgs,
 				target,
 				log: _log

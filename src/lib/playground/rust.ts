@@ -168,6 +168,7 @@ class Rust implements Sandbox {
 				code,
 				prepare,
 				buffer: this.buffer,
+				stdin: options.stdin,
 				args: programArgs,
 				targetTriple,
 				log: _log

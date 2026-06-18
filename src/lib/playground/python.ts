@@ -13,7 +13,10 @@ import {
 	resetBufferedStdin,
 	waitForBufferedSequenceChange
 } from '$lib/playground/stdinBuffer';
-import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
+import {
+	createWasmIdleSharedBuffer,
+	requireSharedArrayBuffer
+} from '$lib/playground/sharedBuffer';
 
 class Python implements Sandbox {
 	ts = Date.now();
@@ -123,6 +126,7 @@ class Python implements Sandbox {
 		_args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
+		if (options.debug) requireSharedArrayBuffer('Python debugging');
 		this.exit = false;
 		return new Promise<boolean | string>(async (resolve, reject) => {
 			if (!this.worker) return reject('Worker not loaded');
@@ -182,6 +186,7 @@ class Python implements Sandbox {
 				watchResultBuffer: this.watchResultBuffer,
 				interrupt: this.interruptBuffer,
 				context: {},
+				stdin: options.stdin,
 				debug: !!options.debug,
 				breakpoints: [...(options.breakpoints || [])],
 				pauseOnEntry: !!options.pauseOnEntry,

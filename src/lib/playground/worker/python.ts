@@ -4,6 +4,7 @@ import {
 	readBufferedStdin,
 	waitForBufferedStdin
 } from '$lib/playground/stdinBuffer';
+import { isSharedBufferBackedView } from '$lib/playground/sharedBuffer';
 import {
 	configureWorkerRuntimeAssets,
 	handleWorkerAssetMessage,
@@ -240,6 +241,7 @@ self.onmessage = async (event: any) => {
 		interrupt,
 		assets,
 		prepare,
+		stdin,
 		debug = false,
 		breakpoints = [],
 		pauseOnEntry = false,
@@ -284,7 +286,13 @@ self.onmessage = async (event: any) => {
 		watchBufferPyodide = new Int32Array(watchBuffer);
 		watchResultBufferPyodide = new Int32Array(watchResultBuffer);
 		interruptBufferPyodide = new Uint8Array(interrupt);
-		pyodide.setInterruptBuffer(interruptBufferPyodide);
+		if (debug && !isSharedBufferBackedView(debugBufferPyodide)) {
+			self.postMessage({ error: 'Python debugging requires SharedArrayBuffer.' });
+			return;
+		}
+		if (isSharedBufferBackedView(interruptBufferPyodide)) {
+			pyodide.setInterruptBuffer(interruptBufferPyodide);
+		}
 		const toPythonStr = (obj: any) => {
 			if (obj === true) return 'True';
 			if (obj === false) return 'False';
@@ -292,8 +300,15 @@ self.onmessage = async (event: any) => {
 			if (obj === undefined) return 'None';
 			return obj.toString();
 		};
+		const hasInitialStdin = typeof stdin === 'string';
+		let initialStdin: string | null = hasInitialStdin ? stdin : null;
 		self.prompt = self['__pyodide__input_' + ts] = (output?: string) => {
 			if (output) postMessage({ output });
+			if (hasInitialStdin) {
+				const chunk = initialStdin;
+				initialStdin = null;
+				return chunk;
+			}
 			return waitForBufferedStdin(stdinBufferPyodide, () => postMessage({ buffer: true }));
 		};
 		self['__pyodide__output_' + ts] = (...data: any[]) => {

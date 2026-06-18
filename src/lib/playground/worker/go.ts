@@ -89,6 +89,7 @@ self.onmessage = async (event: { data: any }) => {
 		code,
 		prepare,
 		args = [],
+		stdin,
 		target = 'wasip1/wasm',
 		log
 	} = event.data;
@@ -163,13 +164,27 @@ self.onmessage = async (event: { data: any }) => {
 				`[wasm-idle:go-worker] runtime start target=${compiledArtifact.target} format=${compiledArtifact.format}`
 			);
 		}
+		const hasInitialStdin = typeof stdin === 'string';
+		let initialStdin: string | null = hasInitialStdin ? stdin : null;
 		const execution = await runtime.executeBrowserGoArtifact(compiledArtifact, {
 			args,
 			env: {
 				USER: 'jungol'
 			},
 			stdin: () => {
-				const chunk = waitForBufferedStdin(stdinBufferGo!, () => postMessage({ buffer: true }));
+				if (hasInitialStdin) {
+					const chunk = initialStdin;
+					initialStdin = null;
+					if (log) {
+						console.log(
+							chunk == null
+								? '[wasm-idle:go-stdin] fd_read(bytes=0, eof=true)'
+								: `[wasm-idle:go-stdin] fd_fill(bytes=${new TextEncoder().encode(chunk).byteLength}, text=${JSON.stringify(chunk)})`
+						);
+					}
+					return chunk;
+				}
+				const chunk = waitForBufferedStdin(stdinBufferGo, () => postMessage({ buffer: true }));
 				if (chunk == null) {
 					if (log) {
 						console.log('[wasm-idle:go-stdin] fd_read(bytes=0, eof=true)');

@@ -1,5 +1,6 @@
 import type Clang from '$lib/clang';
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
+import { isSharedBufferBackedView } from '$lib/playground/sharedBuffer';
 import {
 	configureWorkerRuntimeAssets,
 	handleWorkerAssetMessage,
@@ -18,14 +19,22 @@ let stdinBufferClang: Int32Array,
 	watchResultBufferClang: Int32Array,
 	interruptBufferClang: Uint8Array,
 	clang: Clang;
+let hasInitialStdinClang = false;
+let initialStdinClang: string | null = null;
 
 async function loadClang(path: string, log: boolean) {
 	const { default: Clang } = await import('$lib/clang');
 	clang = new Clang({
 		stdout: (output) => postMessage({ output }),
 		onDebugEvent: (debugEvent) => postMessage({ debugEvent }),
-		stdin: () =>
-			waitForBufferedStdin(stdinBufferClang, () => postMessage({ buffer: true })) ?? '',
+		stdin: () => {
+			if (hasInitialStdinClang) {
+				const chunk = initialStdinClang;
+				initialStdinClang = null;
+				return chunk ?? '';
+			}
+			return waitForBufferedStdin(stdinBufferClang, () => postMessage({ buffer: true })) ?? '';
+		},
 		progress: (value) => postMessage({ progress: value }),
 		log,
 		path
@@ -55,7 +64,8 @@ self.onmessage = async (event: { data: any }) => {
 		cVersion,
 		debug,
 		breakpoints,
-		pauseOnEntry
+		pauseOnEntry,
+		stdin
 	} = event.data;
 	if (load) {
 		const runtimeAssets = assets as WorkerRuntimeAssetConfig | undefined;
@@ -68,6 +78,12 @@ self.onmessage = async (event: { data: any }) => {
 		watchBufferClang = new Int32Array(watchBuffer);
 		watchResultBufferClang = new Int32Array(watchResultBuffer);
 		interruptBufferClang = new Uint8Array(interrupt);
+		hasInitialStdinClang = typeof stdin === 'string';
+		initialStdinClang = hasInitialStdinClang ? stdin : null;
+		if (debug && !isSharedBufferBackedView(debugBufferClang)) {
+			self.postMessage({ error: 'C/C++ debugging requires SharedArrayBuffer.' });
+			return;
+		}
 
 		try {
 			await clang.compileLink(code, {
@@ -97,6 +113,12 @@ self.onmessage = async (event: { data: any }) => {
 		watchBufferClang = new Int32Array(watchBuffer);
 		watchResultBufferClang = new Int32Array(watchResultBuffer);
 		interruptBufferClang = new Uint8Array(interrupt);
+		hasInitialStdinClang = typeof stdin === 'string';
+		initialStdinClang = hasInitialStdinClang ? stdin : null;
+		if (debug && !isSharedBufferBackedView(debugBufferClang)) {
+			self.postMessage({ error: 'C/C++ debugging requires SharedArrayBuffer.' });
+			return;
+		}
 
 		try {
 			await clang.compileLinkRun(code, {

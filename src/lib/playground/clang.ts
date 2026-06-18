@@ -14,7 +14,10 @@ import {
 	resetBufferedStdin,
 	waitForBufferedSequenceChange
 } from '$lib/playground/stdinBuffer';
-import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
+import {
+	createWasmIdleSharedBuffer,
+	requireSharedArrayBuffer
+} from '$lib/playground/sharedBuffer';
 import type { Writable } from 'svelte/store';
 
 const debugBreakpointBufferInts = 1028;
@@ -133,6 +136,7 @@ class Clang implements Sandbox {
 		args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
+		if (options.debug) requireSharedArrayBuffer(`${this.language} debugging`);
 		this.exit = false;
 		return new Promise<boolean | string>(async (resolve, reject) => {
 			if (!this.worker) return reject('Worker not loaded');
@@ -190,6 +194,7 @@ class Clang implements Sandbox {
 				watchResultBuffer: this.watchResultBuffer,
 				interrupt: this.interruptBuffer,
 				context: {},
+				stdin: options.stdin,
 				log,
 				language: this.language,
 				compileArgs,
