@@ -1,0 +1,149 @@
+{
+  "format": "wasm-gleam-source-manifest-v1",
+  "compilerVersion": "v1.3.0",
+  "fingerprint": "9485c199782f928c",
+  "files": [
+    {
+      "path": "dict.mjs",
+      "size": 23205,
+      "sha256": "67435ecfe61bddcfe1c9040120952fae9b0dc950a2770bd3e4eeff4f607cf9d3"
+    },
+    {
+      "path": "gleam/bit_array.gleam",
+      "size": 5680,
+      "sha256": "15c3c643370ae43d0a6b1d7911750bc5fca805286e4817ed0f9fffce00dda3e7"
+    },
+    {
+      "path": "gleam/bool.gleam",
+      "size": 7082,
+      "sha256": "09379714087867004e2e1db57f119d568b710d457cc23639afe132fcd057dd51"
+    },
+    {
+      "path": "gleam/bytes_builder.gleam",
+      "size": 5691,
+      "sha256": "07c17bdfe67c2fdac75c7de3fa9453ea2cbe724e4d9fc238660782a623096c35"
+    },
+    {
+      "path": "gleam/dict.gleam",
+      "size": 13817,
+      "sha256": "66ac4b82b7814590b8c432b6b974b996bc0dfcb1f0e2df9f94499622d386e418"
+    },
+    {
+      "path": "gleam/dynamic.gleam",
+      "size": 37646,
+      "sha256": "9c5906382110d216d8b1ec8f7928419e70563dcdd16a65e1629c0cf4c45888d1"
+    },
+    {
+      "path": "gleam/float.gleam",
+      "size": 10952,
+      "sha256": "e1bfd4f316d5cfd6572cd2097f3c972a241825afb3fb16403b657adfc6522318"
+    },
+    {
+      "path": "gleam/function.gleam",
+      "size": 4490,
+      "sha256": "55f5a6343b13d24208551408a23cbfe0fd0c67b053007499ca389267c621e5fb"
+    },
+    {
+      "path": "gleam/int.gleam",
+      "size": 17176,
+      "sha256": "3d7e41b53583a5a0d2633d9cf5f586f92a3d45d9083f7e316462bc95546085b8"
+    },
+    {
+      "path": "gleam/io.gleam",
+      "size": 2461,
+      "sha256": "ad71598d61f8bd98f91776aca5c482f781320e448b9c9d9e99abe97f58cc7f7b"
+    },
+    {
+      "path": "gleam/iterator.gleam",
+      "size": 37070,
+      "sha256": "1432b6caa22351c71fa0179d0438ad0dbe4273d3c1759407fa3114a5045847ce"
+    },
+    {
+      "path": "gleam/list.gleam",
+      "size": 52264,
+      "sha256": "ffd71633fa1d6cbd03bc15c5d6fd3d9b66f043386e6c2cf5e7603155f23385ac"
+    },
+    {
+      "path": "gleam/option.gleam",
+      "size": 7204,
+      "sha256": "f5a4d999d04ae316fffeeea085d9fd1adeed44e3c5a2744972a414c86ab5cf5d"
+    },
+    {
+      "path": "gleam/order.gleam",
+      "size": 3153,
+      "sha256": "c72c1da6ff7b4e06cf157a0758ee6fe9e67b06088f462c249eb804424c41cffd"
+    },
+    {
+      "path": "gleam/pair.gleam",
+      "size": 1467,
+      "sha256": "3defaee82f71823b7a562b1ee7f03be372868e18d5e724d851fc52ffd01aadfe"
+    },
+    {
+      "path": "gleam/queue.gleam",
+      "size": 7113,
+      "sha256": "8fdc49a6a68096b6ea75aed2a98adf1b8344dc3fae6c988f32063a41e36bbbfc"
+    },
+    {
+      "path": "gleam/regex.gleam",
+      "size": 4965,
+      "sha256": "ea1ff9c5c9edd4e12a72cf5669a97a9540b08c4180d891979ac6dc48d4aa0352"
+    },
+    {
+      "path": "gleam/result.gleam",
+      "size": 9771,
+      "sha256": "9a00815d6529e97b9f833dad5d773e26eed427c889b15b6297231773821c6e0c"
+    },
+    {
+      "path": "gleam/set.gleam",
+      "size": 7575,
+      "sha256": "430bb63f84446739b045ee8f9849333786c36b6e6e3224507178afd1a03fc24c"
+    },
+    {
+      "path": "gleam/string.gleam",
+      "size": 21133,
+      "sha256": "a51748571a0284f8dc2430177b0a808fba72afdb4b21e572c140d6f5d531fe99"
+    },
+    {
+      "path": "gleam/string_builder.gleam",
+      "size": 7326,
+      "sha256": "22eabab1b23c79c520193c14f8a2f6301aae330e3b9dde579a764a2bfe7d77cf"
+    },
+    {
+      "path": "gleam/uri.gleam",
+      "size": 12300,
+      "sha256": "ac286b26f3db33a0b4c3dfe219a26b5c053deb68567d76a3274e57aa0ccc3536"
+    },
+    {
+      "path": "gleam_stdlib.mjs",
+      "size": 21144,
+      "sha256": "8e048e1bb26b598abf4b7db14e062591a2c4880854d17381b5348c974f21229b"
+    }
+  ],
+  "javascriptFiles": [
+    "dict.mjs",
+    "gleam.mjs",
+    "gleam/bit_array.mjs",
+    "gleam/bool.mjs",
+    "gleam/bytes_builder.mjs",
+    "gleam/dict.mjs",
+    "gleam/dynamic.mjs",
+    "gleam/float.mjs",
+    "gleam/function.mjs",
+    "gleam/int.mjs",
+    "gleam/io.mjs",
+    "gleam/iterator.mjs",
+    "gleam/list.mjs",
+    "gleam/option.mjs",
+    "gleam/order.mjs",
+    "gleam/pair.mjs",
+    "gleam/queue.mjs",
+    "gleam/regex.mjs",
+    "gleam/result.mjs",
+    "gleam/set.mjs",
+    "gleam/string.mjs",
+    "gleam/string_builder.mjs",
+    "gleam/uri.mjs",
+    "gleam_prelude.mjs",
+    "gleam_stdlib.mjs"
+  ]
+}

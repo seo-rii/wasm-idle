@@ -13,6 +13,7 @@ import {
 	resetBufferedStdin,
 	waitForBufferedSequenceChange
 } from '$lib/playground/stdinBuffer';
+import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
 
 class Python implements Sandbox {
 	ts = Date.now();
@@ -20,11 +21,11 @@ class Python implements Sandbox {
 	ondebug?: (event: DebugSessionEvent) => void;
 	image?: (data: { mime: string; b64: string; ts?: number }) => void;
 	worker?: Worker = <any>null;
-	buffer = new SharedArrayBuffer(1024);
-	debugBuffer = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * 4);
-	watchBuffer = new SharedArrayBuffer(1024);
-	watchResultBuffer = new SharedArrayBuffer(1024);
-	interruptBuffer = new SharedArrayBuffer(1);
+	buffer = createWasmIdleSharedBuffer(1024);
+	debugBuffer = createWasmIdleSharedBuffer(Int32Array.BYTES_PER_ELEMENT * 4);
+	watchBuffer = createWasmIdleSharedBuffer(1024);
+	watchResultBuffer = createWasmIdleSharedBuffer(1024);
+	interruptBuffer = createWasmIdleSharedBuffer(1);
 	pendingInput: string[] = [];
 	begin = 0;
 	elapse = 0;

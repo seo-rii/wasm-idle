@@ -14,6 +14,7 @@ import {
 	resetBufferedStdin,
 	waitForBufferedSequenceChange
 } from '$lib/playground/stdinBuffer';
+import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
 import type { Writable } from 'svelte/store';
 
 const debugBreakpointBufferInts = 1028;
@@ -24,11 +25,11 @@ class Clang implements Sandbox {
 	output: any = null;
 	ondebug?: (event: DebugSessionEvent) => void;
 	worker?: Worker = <any>null;
-	buffer = new SharedArrayBuffer(1024);
-	debugBuffer = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * debugBreakpointBufferInts);
-	watchBuffer = new SharedArrayBuffer(1024);
-	watchResultBuffer = new SharedArrayBuffer(1024);
-	interruptBuffer = new SharedArrayBuffer(1);
+	buffer = createWasmIdleSharedBuffer(1024);
+	debugBuffer = createWasmIdleSharedBuffer(Int32Array.BYTES_PER_ELEMENT * debugBreakpointBufferInts);
+	watchBuffer = createWasmIdleSharedBuffer(1024);
+	watchResultBuffer = createWasmIdleSharedBuffer(1024);
+	interruptBuffer = createWasmIdleSharedBuffer(1);
 	pendingInput: string[] = [];
 	begin = 0;
 	elapse = 0;

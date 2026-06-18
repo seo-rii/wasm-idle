@@ -1,3 +1,5 @@
+import { isSharedBufferBackedView } from './sharedBuffer';
+
 const SEQUENCE_INDEX = 0;
 const LENGTH_INDEX = 1;
 const HEADER_BYTES = Int32Array.BYTES_PER_ELEMENT * 2;
@@ -5,7 +7,9 @@ const EOF_LENGTH = -1;
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-const controlViewOf = (buffer: SharedArrayBuffer | Int32Array) =>
+type StdinBuffer = ArrayBufferLike | Int32Array;
+
+const controlViewOf = (buffer: StdinBuffer) =>
 	buffer instanceof Int32Array ? buffer : new Int32Array(buffer);
 
 const payloadViewOf = (control: Int32Array) =>
@@ -36,7 +40,7 @@ const splitChunk = (input: string, maxBytes: number) => {
 	};
 };
 
-export const flushQueuedStdin = (queue: string[], buffer: SharedArrayBuffer | Int32Array) => {
+export const flushQueuedStdin = (queue: string[], buffer: StdinBuffer) => {
 	if (!queue.length) return false;
 
 	const control = controlViewOf(buffer);
@@ -59,7 +63,7 @@ export const flushQueuedStdin = (queue: string[], buffer: SharedArrayBuffer | In
 	return true;
 };
 
-export const readBufferedStdin = (buffer: SharedArrayBuffer | Int32Array) => {
+export const readBufferedStdin = (buffer: StdinBuffer) => {
 	const control = controlViewOf(buffer);
 	const length = Atomics.load(control, LENGTH_INDEX);
 	if (length === EOF_LENGTH) return null;
@@ -67,11 +71,11 @@ export const readBufferedStdin = (buffer: SharedArrayBuffer | Int32Array) => {
 	return decoder.decode(payload.slice(0, length));
 };
 
-export const bufferedSequence = (buffer: SharedArrayBuffer | Int32Array) =>
+export const bufferedSequence = (buffer: StdinBuffer) =>
 	Atomics.load(controlViewOf(buffer), SEQUENCE_INDEX);
 
 export const waitForBufferedSequenceChange = (
-	buffer: SharedArrayBuffer | Int32Array,
+	buffer: StdinBuffer,
 	sequence: number,
 	timeoutMs = 5000
 ) =>
@@ -91,7 +95,7 @@ export const waitForBufferedSequenceChange = (
 		poll();
 	});
 
-export const flushBufferedEof = (buffer: SharedArrayBuffer | Int32Array) => {
+export const flushBufferedEof = (buffer: StdinBuffer) => {
 	const control = controlViewOf(buffer);
 	const payload = payloadViewOf(control);
 	payload.fill(0);
@@ -100,7 +104,8 @@ export const flushBufferedEof = (buffer: SharedArrayBuffer | Int32Array) => {
 	Atomics.notify(control, SEQUENCE_INDEX);
 };
 
-export const waitForBufferedStdin = (buffer: Int32Array, requestInput: () => void) => {
+export const waitForBufferedStdin = (buffer: Int32Array | null | undefined, requestInput: () => void) => {
+	if (!buffer || !isSharedBufferBackedView(buffer)) return null;
 	const sequence = Atomics.load(buffer, SEQUENCE_INDEX);
 	requestInput();
 	while (true) {
@@ -111,7 +116,7 @@ export const waitForBufferedStdin = (buffer: Int32Array, requestInput: () => voi
 	}
 };
 
-export const resetBufferedStdin = (buffer: SharedArrayBuffer | Int32Array) => {
+export const resetBufferedStdin = (buffer: StdinBuffer) => {
 	const control = controlViewOf(buffer);
 	const payload = payloadViewOf(control);
 	payload.fill(0);

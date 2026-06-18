@@ -27,6 +27,10 @@ describe('editor defaults', () => {
 		expect(editorDefaults.elixir).toContain('IO.gets("")');
 		expect(editorDefaults.erlang).toContain('io:get_line("")');
 		expect(editorDefaults.erlang).toContain('io:format("stdin=~s"');
+		expect(editorDefaults.prolog).toContain('read_line_to_string(user_input, Line)');
+		expect(editorDefaults.gleam).toContain('import wasm_idle/stdin');
+		expect(editorDefaults.gleam).toContain('stdin.read_line()');
+		expect(editorDefaults.perl).toContain('my $line = <STDIN>;');
 		expect(editorDefaults.ocaml).toContain('read_line ()');
 		expect(editorDefaults.javascript).toContain("require('fs')");
 		expect(editorDefaults.javascript).toContain('readLineSync(0)');
@@ -70,6 +74,9 @@ describe('editor defaults', () => {
 		expect(resolveEditorDefaultSource('fsharp', 'wasm32-wasip1')).toBe(editorDefaults.fsharp);
 		expect(resolveEditorDefaultSource('vbnet', 'wasm32-wasip1')).toBe(editorDefaults.vbnet);
 		expect(resolveEditorDefaultSource('erlang', 'wasm32-wasip1')).toBe(editorDefaults.erlang);
+		expect(resolveEditorDefaultSource('prolog', 'wasm32-wasip1')).toBe(editorDefaults.prolog);
+		expect(resolveEditorDefaultSource('gleam', 'wasm32-wasip1')).toBe(editorDefaults.gleam);
+		expect(resolveEditorDefaultSource('perl', 'wasm32-wasip1')).toBe(editorDefaults.perl);
 		expect(resolveEditorDefaultSource('ocaml', 'wasm32-wasip1')).toBe(editorDefaults.ocaml);
 		expect(resolveEditorDefaultSource('javascript', 'wasm32-wasip1')).toBe(
 			editorDefaults.javascript
@@ -98,6 +105,9 @@ describe('editor defaults', () => {
 		expect(isEditorDefaultSource(editorDefaults.fsharp)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.vbnet)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.erlang)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.prolog)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.gleam)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.perl)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.ocaml)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.javascript)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.typescript)).toBe(true);

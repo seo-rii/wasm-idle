@@ -66,7 +66,7 @@ async function readProbeSummary(page, activeState, pageErrors, consoleMessages) 
 }
 
 /**
- * @param {{ browserUrl: string; chromiumExecutable?: string; expectedOutput: string; language: 'ASSEMBLYSCRIPT' | 'WAT' | 'RUBY' | 'R' | 'OCTAVE' | 'SQLITE' | 'PHP' | 'VBNET' | 'D' | 'ERLANG'; runTimeoutMs?: number; sendEof?: boolean; source: string; stdinText: string }} options
+ * @param {{ browserUrl: string; chromiumExecutable?: string; expectedOutput: string; language: 'ASSEMBLYSCRIPT' | 'WAT' | 'RUBY' | 'R' | 'OCTAVE' | 'SQLITE' | 'PHP' | 'VBNET' | 'D' | 'ERLANG' | 'PROLOG' | 'GLEAM' | 'PERL'; runTimeoutMs?: number; sendEof?: boolean; source: string; stdinText: string }} options
  */
 export async function runStdinBrowserProbe({
 	browserUrl,
@@ -186,6 +186,22 @@ export async function runStdinBrowserProbe({
 		let previousEditorValue = await page.evaluate(
 			() => /** @type {any} */ (window).__wasmIdleDebug?.getEditorValue?.() ?? ''
 		);
+		if (!previousEditorValue) {
+			await page
+				.waitForFunction(
+					() => {
+						const value =
+							/** @type {any} */ (window).__wasmIdleDebug?.getEditorValue?.() ?? '';
+						return value.length > 0;
+					},
+					undefined,
+					{ polling: 100, timeout: Math.min(runTimeoutMs, 10_000) }
+				)
+				.catch(() => {});
+			previousEditorValue = await page.evaluate(
+				() => /** @type {any} */ (window).__wasmIdleDebug?.getEditorValue?.() ?? ''
+			);
+		}
 		let stableEditorReads = 0;
 		for (let attempt = 0; attempt < 20; attempt += 1) {
 			await page.waitForTimeout(250);
@@ -201,7 +217,7 @@ export async function runStdinBrowserProbe({
 			stableEditorReads = 0;
 		}
 		let editorValueStable = false;
-		for (let attempt = 0; attempt < 5; attempt += 1) {
+		for (let attempt = 0; attempt < 20; attempt += 1) {
 			const editorValueSet = await page.evaluate(async (text) => {
 				return await /** @type {any} */ (window).__wasmIdleDebug.setEditorValue(text);
 			}, source);

@@ -15,6 +15,7 @@ import {
 	flushQueuedStdin,
 	resetBufferedStdin
 } from '$lib/playground/stdinBuffer';
+import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
 
 const DEFAULT_HASKELL_MAIN_SO_PATH = '/tmp/libplayground001.so';
 const DEFAULT_HASKELL_SEARCH_DIRS = [
@@ -36,7 +37,7 @@ function haskellRuntimeKey(runtimeAssets: string | PlaygroundRuntimeAssets, curr
 class Haskell implements Sandbox {
 	output: any = null;
 	worker?: Worker = <any>null;
-	buffer = new SharedArrayBuffer(1024);
+	buffer = createWasmIdleSharedBuffer(1024);
 	pendingInput: string[] = [];
 	begin = 0;
 	elapse = 0;

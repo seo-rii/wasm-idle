@@ -26,6 +26,13 @@ const { publicEnv } = vi.hoisted(() => ({
 		PUBLIC_WASM_OCTAVE_BASE_URL: '',
 		PUBLIC_WASM_OCTAVE_WORKER_URL: '',
 		PUBLIC_WASM_OCTAVE_MANIFEST_URL: '',
+		PUBLIC_WASM_PROLOG_BASE_URL: '',
+		PUBLIC_WASM_PROLOG_WORKER_URL: '',
+		PUBLIC_WASM_GLEAM_BASE_URL: '',
+		PUBLIC_WASM_GLEAM_WORKER_URL: '',
+		PUBLIC_WASM_GLEAM_MANIFEST_URL: '',
+		PUBLIC_WASM_PERL_BASE_URL: '',
+		PUBLIC_WASM_PERL_WORKER_URL: '',
 		PUBLIC_WASM_SQLITE_WASM_URL: '',
 		PUBLIC_WASM_PHP_VERSION: ''
 	}
@@ -281,8 +288,7 @@ describe('runtime asset config resolution', () => {
 
 	it('prefers an explicit Erlang bundle url over the public env override', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_ERLANG_BUNDLE_URL =
-			'https://env.example.com/wasm-elixir/bundle.avm';
+		publicEnv.PUBLIC_WASM_ERLANG_BUNDLE_URL = 'https://env.example.com/wasm-elixir/bundle.avm';
 		const { resolveErlangBundleUrl } = await import('./assets');
 
 		expect(
@@ -668,6 +674,80 @@ describe('runtime asset config resolution', () => {
 			workerUrl: 'https://example.com/absproxy/5173/wasm-octave/runner-worker.js',
 			manifestUrl:
 				'https://example.com/absproxy/5173/wasm-octave/runtime/runtime-manifest.v1.json'
+		});
+	});
+
+	it('derives default Prolog, Gleam, and Perl runtime urls from the shared root path', async () => {
+		vi.resetModules();
+		const {
+			resolveGleamRuntimeAssetConfig,
+			resolvePerlRuntimeAssetConfig,
+			resolvePrologRuntimeAssetConfig
+		} = await import('./assets');
+
+		expect(
+			resolvePrologRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')
+		).toEqual({
+			baseUrl: 'https://example.com/absproxy/5173/wasm-prolog/',
+			workerUrl: 'https://example.com/absproxy/5173/wasm-prolog/runner-worker.js'
+		});
+		expect(resolveGleamRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual(
+			{
+				baseUrl: 'https://example.com/absproxy/5173/wasm-gleam/',
+				workerUrl: 'https://example.com/absproxy/5173/wasm-gleam/runner-worker.js',
+				manifestUrl: 'https://example.com/absproxy/5173/wasm-gleam/source-manifest.v1.json'
+			}
+		);
+		expect(resolvePerlRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual({
+			baseUrl: 'https://example.com/absproxy/5173/wasm-perl/',
+			workerUrl: 'https://example.com/absproxy/5173/wasm-perl/runner-worker.js'
+		});
+	});
+
+	it('prefers explicit static worker runtime urls over public env overrides', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_PROLOG_BASE_URL = 'https://env.example.com/prolog/';
+		publicEnv.PUBLIC_WASM_GLEAM_BASE_URL = 'https://env.example.com/gleam/';
+		publicEnv.PUBLIC_WASM_PERL_BASE_URL = 'https://env.example.com/perl/';
+		const {
+			resolveGleamRuntimeAssetConfig,
+			resolvePerlRuntimeAssetConfig,
+			resolvePrologRuntimeAssetConfig
+		} = await import('./assets');
+
+		expect(
+			resolvePrologRuntimeAssetConfig(
+				{ prolog: { baseUrl: '/runtime/prolog', workerUrl: '/runtime/prolog/worker.js' } },
+				'https://example.com/app'
+			)
+		).toEqual({
+			baseUrl: 'https://example.com/runtime/prolog/',
+			workerUrl: 'https://example.com/runtime/prolog/worker.js'
+		});
+		expect(
+			resolveGleamRuntimeAssetConfig(
+				{
+					gleam: {
+						baseUrl: '/runtime/gleam',
+						workerUrl: '/runtime/gleam/worker.js',
+						manifestUrl: '/runtime/gleam/manifest.json'
+					}
+				},
+				'https://example.com/app'
+			)
+		).toEqual({
+			baseUrl: 'https://example.com/runtime/gleam/',
+			workerUrl: 'https://example.com/runtime/gleam/worker.js',
+			manifestUrl: 'https://example.com/runtime/gleam/manifest.json'
+		});
+		expect(
+			resolvePerlRuntimeAssetConfig(
+				{ perl: { baseUrl: '/runtime/perl', workerUrl: '/runtime/perl/worker.js' } },
+				'https://example.com/app'
+			)
+		).toEqual({
+			baseUrl: 'https://example.com/runtime/perl/',
+			workerUrl: 'https://example.com/runtime/perl/worker.js'
 		});
 	});
 

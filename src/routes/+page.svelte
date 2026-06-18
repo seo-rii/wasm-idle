@@ -21,6 +21,9 @@
 	import { WASM_LISP_ASSET_VERSION } from '$lib/playground/wasmLispVersion';
 	import { WASM_OCAML_ASSET_VERSION } from '$lib/playground/wasmOcamlVersion';
 	import { WASM_OCTAVE_ASSET_VERSION } from '$lib/playground/wasmOctaveVersion';
+	import { WASM_PROLOG_ASSET_VERSION } from '$lib/playground/wasmPrologVersion';
+	import { WASM_GLEAM_ASSET_VERSION } from '$lib/playground/wasmGleamVersion';
+	import { WASM_PERL_ASSET_VERSION } from '$lib/playground/wasmPerlVersion';
 	import { WASM_R_ASSET_VERSION } from '$lib/playground/wasmRVersion';
 	import { WASM_RUST_ASSET_VERSION } from '$lib/playground/wasmRustVersion';
 	import { WASM_TINYGO_ASSET_VERSION } from '$lib/playground/wasmTinyGoVersion';
@@ -62,6 +65,9 @@
 		| 'VBNET'
 		| 'ELIXIR'
 		| 'ERLANG'
+		| 'PROLOG'
+		| 'GLEAM'
+		| 'PERL'
 		| 'OCAML'
 		| 'TINYGO'
 		| 'JAVASCRIPT'
@@ -116,6 +122,9 @@
 		'VBNET',
 		'ELIXIR',
 		'ERLANG',
+		'PROLOG',
+		'GLEAM',
+		'PERL',
 		'OCAML',
 		'TINYGO',
 		'JAVASCRIPT',
@@ -145,6 +154,9 @@
 		VBNET: 'VB.NET',
 		ELIXIR: 'Elixir',
 		ERLANG: 'Erlang',
+		PROLOG: 'Prolog',
+		GLEAM: 'Gleam',
+		PERL: 'Perl',
 		OCAML: 'OCaml',
 		TINYGO: 'TinyGo',
 		JAVASCRIPT: 'JavaScript',
@@ -197,6 +209,27 @@
 			bundleUrl: path
 				? `${path}/wasm-elixir/bundle.avm?v=${WASM_ELIXIR_ASSET_VERSION}`
 				: `/wasm-elixir/bundle.avm?v=${WASM_ELIXIR_ASSET_VERSION}`
+		},
+		prolog: {
+			baseUrl: path ? `${path}/wasm-prolog/` : '/wasm-prolog/',
+			workerUrl: path
+				? `${path}/wasm-prolog/runner-worker.js?v=${WASM_PROLOG_ASSET_VERSION}`
+				: `/wasm-prolog/runner-worker.js?v=${WASM_PROLOG_ASSET_VERSION}`
+		},
+		gleam: {
+			baseUrl: path ? `${path}/wasm-gleam/` : '/wasm-gleam/',
+			workerUrl: path
+				? `${path}/wasm-gleam/runner-worker.js?v=${WASM_GLEAM_ASSET_VERSION}`
+				: `/wasm-gleam/runner-worker.js?v=${WASM_GLEAM_ASSET_VERSION}`,
+			manifestUrl: path
+				? `${path}/wasm-gleam/source-manifest.v1.json?v=${WASM_GLEAM_ASSET_VERSION}`
+				: `/wasm-gleam/source-manifest.v1.json?v=${WASM_GLEAM_ASSET_VERSION}`
+		},
+		perl: {
+			baseUrl: path ? `${path}/wasm-perl/` : '/wasm-perl/',
+			workerUrl: path
+				? `${path}/wasm-perl/runner-worker.js?v=${WASM_PERL_ASSET_VERSION}`
+				: `/wasm-perl/runner-worker.js?v=${WASM_PERL_ASSET_VERSION}`
 		},
 		ocaml: {
 			moduleUrl: path
@@ -325,41 +358,51 @@
 												? 'elixir'
 												: language === 'ERLANG'
 													? 'erlang'
-													: language === 'OCAML'
-														? 'ocaml'
-														: language === 'JAVASCRIPT'
-															? 'javascript'
-															: language === 'TYPESCRIPT'
-																? 'typescript'
-																: language === 'ASSEMBLYSCRIPT'
-																	? 'typescript'
-																	: language === 'WAT'
-																		? 'wat'
-																		: language === 'ZIG'
-																			? 'zig'
-																			: language === 'LUA'
-																				? 'lua'
-																				: language === 'LISP'
-																					? 'lisp'
+													: language === 'PROLOG'
+														? 'prolog'
+														: language === 'GLEAM'
+															? 'gleam'
+															: language === 'PERL'
+																? 'perl'
+																: language === 'OCAML'
+																	? 'ocaml'
+																	: language === 'JAVASCRIPT'
+																		? 'javascript'
+																		: language === 'TYPESCRIPT'
+																			? 'typescript'
+																			: language ===
+																				  'ASSEMBLYSCRIPT'
+																				? 'typescript'
+																				: language === 'WAT'
+																					? 'wat'
 																					: language ===
-																						  'RUBY'
-																						? 'ruby'
+																						  'ZIG'
+																						? 'zig'
 																						: language ===
-																							  'HASKELL'
-																							? 'haskell'
+																							  'LUA'
+																							? 'lua'
 																							: language ===
-																								  'R'
-																								? 'r'
+																								  'LISP'
+																								? 'lisp'
 																								: language ===
-																									  'OCTAVE'
-																									? 'octave'
+																									  'RUBY'
+																									? 'ruby'
 																									: language ===
-																										  'SQLITE'
-																										? 'sql'
+																										  'HASKELL'
+																										? 'haskell'
 																										: language ===
-																											  'PHP'
-																											? 'php'
-																											: 'go'
+																											  'R'
+																											? 'r'
+																											: language ===
+																												  'OCTAVE'
+																												? 'octave'
+																												: language ===
+																													  'SQLITE'
+																													? 'sql'
+																													: language ===
+																														  'PHP'
+																														? 'php'
+																														: 'go'
 	);
 	const compact = $derived(examplePaneWidth > 0 && examplePaneWidth <= 760);
 	const activeFile = $derived(files.find((file) => file.path === activePath) ?? files[0]);
@@ -527,6 +570,11 @@
 			'.exs': 'ELIXIR',
 			'.erl': 'ERLANG',
 			'.hrl': 'ERLANG',
+			'.prolog': 'PROLOG',
+			'.pro': 'PROLOG',
+			'.gleam': 'GLEAM',
+			'.pl': 'PERL',
+			'.pm': 'PERL',
 			'.ml': 'OCAML',
 			'.mli': 'OCAML',
 			'.js': 'JAVASCRIPT',
@@ -570,6 +618,9 @@
 			VBNET: 'Program.vb',
 			ELIXIR: 'main.exs',
 			ERLANG: 'main.erl',
+			PROLOG: 'main.prolog',
+			GLEAM: 'main.gleam',
+			PERL: 'main.pl',
 			OCAML: 'main.ml',
 			TINYGO: 'main.go',
 			JAVASCRIPT: 'main.js',
@@ -603,6 +654,9 @@
 			VBNET: 'vbnet',
 			ELIXIR: 'elixir',
 			ERLANG: 'erlang',
+			PROLOG: 'prolog',
+			GLEAM: 'gleam',
+			PERL: 'perl',
 			OCAML: 'ocaml',
 			TINYGO: 'go',
 			JAVASCRIPT: 'javascript',
@@ -1088,6 +1142,11 @@
 			elixir: 'ELIXIR',
 			erlang: 'ERLANG',
 			erl: 'ERLANG',
+			prolog: 'PROLOG',
+			swipl: 'PROLOG',
+			swi: 'PROLOG',
+			gleam: 'GLEAM',
+			perl: 'PERL',
 			ocaml: 'OCAML',
 			tinygo: 'TINYGO',
 			javascript: 'JAVASCRIPT',
@@ -1511,6 +1570,9 @@
 			language !== 'CSHARP' &&
 			language !== 'FSHARP' &&
 			language !== 'VBNET' &&
+			language !== 'PROLOG' &&
+			language !== 'GLEAM' &&
+			language !== 'PERL' &&
 			language !== 'TINYGO' &&
 			language !== 'OCAML' &&
 			language !== 'JAVASCRIPT' &&
@@ -1727,6 +1789,9 @@
 						<option value="VBNET">VB.NET</option>
 						<option value="ELIXIR">Elixir</option>
 						<option value="ERLANG">Erlang</option>
+						<option value="PROLOG">Prolog</option>
+						<option value="GLEAM">Gleam</option>
+						<option value="PERL">Perl</option>
 						<option value="OCAML">OCaml</option>
 						<option value="TINYGO">TinyGo</option>
 						<option value="JAVASCRIPT">JavaScript</option>
@@ -1744,7 +1809,7 @@
 						<option value="PHP">PHP</option>
 					</select>
 				</label>
-				{#if language === 'JAVA' || language === 'RUST' || language === 'GO' || language === 'D' || language === 'CSHARP' || language === 'FSHARP' || language === 'VBNET' || language === 'TINYGO' || language === 'JAVASCRIPT' || language === 'TYPESCRIPT' || language === 'LUA' || language === 'ZIG' || language === 'LISP' || language === 'RUBY' || language === 'HASKELL' || language === 'R' || language === 'OCTAVE' || language === 'PHP'}
+				{#if language === 'JAVA' || language === 'RUST' || language === 'GO' || language === 'D' || language === 'CSHARP' || language === 'FSHARP' || language === 'VBNET' || language === 'PROLOG' || language === 'GLEAM' || language === 'PERL' || language === 'TINYGO' || language === 'JAVASCRIPT' || language === 'TYPESCRIPT' || language === 'LUA' || language === 'ZIG' || language === 'LISP' || language === 'RUBY' || language === 'HASKELL' || language === 'R' || language === 'OCTAVE' || language === 'PHP'}
 					<label class="args-chip">
 						<span class="material-symbols-outlined">list_alt</span>
 						<input bind:value={argsInput} placeholder="3 4 5" spellcheck={false} />
@@ -1902,6 +1967,24 @@
 				Erlang runs through the bundled Popcorn/AtomVM evaluator. Expression files use
 				`erl_eval`, module files compile with the bundled Erlang compiler and then call
 				`main/0`. Use `io:get_line("")` or `io:get_chars("", N)` for stdin.
+			</p>
+		{/if}
+		{#if language === 'PROLOG'}
+			<p class="hint">
+				Prolog runs through bundled SWI-Prolog WebAssembly assets. Define `main/0` to run
+				after consult; use `read_line_to_string(user_input, Line)` for line input.
+			</p>
+		{/if}
+		{#if language === 'GLEAM'}
+			<p class="hint">
+				Gleam compiles in the browser with the bundled Gleam WebAssembly compiler and runs
+				the JavaScript target output locally. Import `wasm_idle/stdin` for line input.
+			</p>
+		{/if}
+		{#if language === 'PERL'}
+			<p class="hint">
+				Perl runs through bundled WebPerl WebAssembly assets. Use `&lt;STDIN&gt;` for line
+				input and pass CLI args here.
 			</p>
 		{/if}
 		{#if language === 'TINYGO'}

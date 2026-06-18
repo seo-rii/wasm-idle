@@ -93,6 +93,19 @@ describe('core language contract', () => {
 		expect(isDeferredProgressLanguage('erl')).toBe(true);
 	});
 
+	it('exposes Prolog, Gleam, and Perl as deferred browser runtime languages', () => {
+		expect(supportedLanguageIds).toContain('PROLOG');
+		expect(supportedLanguageIds).toContain('GLEAM');
+		expect(supportedLanguageIds).toContain('PERL');
+		expect(normalizeLanguageId('swipl')).toBe('PROLOG');
+		expect(normalizeLanguageId('swi')).toBe('PROLOG');
+		expect(normalizeLanguageId('gleam')).toBe('GLEAM');
+		expect(normalizeLanguageId('perl')).toBe('PERL');
+		expect(isDeferredProgressLanguage('swipl')).toBe(true);
+		expect(isDeferredProgressLanguage('gleam')).toBe(true);
+		expect(isDeferredProgressLanguage('perl')).toBe(true);
+	});
+
 	it('exposes VB.NET aliases as a deferred browser runtime language', () => {
 		expect(supportedLanguageIds).toContain('VBNET');
 		expect(normalizeLanguageId('vbnet')).toBe('VBNET');
@@ -162,6 +175,33 @@ describe('core language contract', () => {
 		expect(key).toContain(
 			'"octaveManifestUrl":"/wasm-octave/runtime/runtime-manifest.v1.json?v=test"'
 		);
+	});
+
+	it('includes static worker runtime urls in runtime asset cache keys', () => {
+		const key = createRuntimeAssetsKey({
+			rootUrl: '/repl',
+			prolog: {
+				baseUrl: '/wasm-prolog/',
+				workerUrl: '/wasm-prolog/runner-worker.js?v=test'
+			},
+			gleam: {
+				baseUrl: '/wasm-gleam/',
+				workerUrl: '/wasm-gleam/runner-worker.js?v=test',
+				manifestUrl: '/wasm-gleam/source-manifest.v1.json?v=test'
+			},
+			perl: {
+				baseUrl: '/wasm-perl/',
+				workerUrl: '/wasm-perl/runner-worker.js?v=test'
+			}
+		});
+
+		expect(key).toContain('"prologBaseUrl":"/wasm-prolog/"');
+		expect(key).toContain('"prologWorkerUrl":"/wasm-prolog/runner-worker.js?v=test"');
+		expect(key).toContain('"gleamBaseUrl":"/wasm-gleam/"');
+		expect(key).toContain('"gleamWorkerUrl":"/wasm-gleam/runner-worker.js?v=test"');
+		expect(key).toContain('"gleamManifestUrl":"/wasm-gleam/source-manifest.v1.json?v=test"');
+		expect(key).toContain('"perlBaseUrl":"/wasm-perl/"');
+		expect(key).toContain('"perlWorkerUrl":"/wasm-perl/runner-worker.js?v=test"');
 	});
 
 	it('includes WAT module urls in runtime asset cache keys', () => {

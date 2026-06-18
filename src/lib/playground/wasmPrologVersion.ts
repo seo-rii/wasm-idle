@@ -1,0 +1,1 @@
+export const WASM_PROLOG_ASSET_VERSION = "06d1c63f49cca6e3";

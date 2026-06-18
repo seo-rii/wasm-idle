@@ -3,6 +3,7 @@ import AssemblyScript from '$lib/playground/assemblyscript';
 import D from '$lib/playground/d';
 import Dotnet from '$lib/playground/dotnet';
 import Elixir from '$lib/playground/elixir';
+import Gleam from '$lib/playground/gleam';
 import Go from '$lib/playground/go';
 import Haskell from '$lib/playground/haskell';
 import Java from '$lib/playground/java';
@@ -10,7 +11,9 @@ import Lisp from '$lib/playground/lisp';
 import Lua from '$lib/playground/lua';
 import Ocaml from '$lib/playground/ocaml';
 import Octave from '$lib/playground/octave';
+import Perl from '$lib/playground/perl';
 import Php from '$lib/playground/php';
+import Prolog from '$lib/playground/prolog';
 import Python from '$lib/playground/python';
 import R from '$lib/playground/r';
 import Rust from '$lib/playground/rust';
@@ -44,6 +47,9 @@ export const supportedLanguages = [
 	'VBNET',
 	'ELIXIR',
 	'ERLANG',
+	'PROLOG',
+	'GLEAM',
+	'PERL',
 	'TINYGO',
 	'OCAML',
 	'JAVASCRIPT',
@@ -124,6 +130,17 @@ async function playground(language: string, runtimeAssets?: SandboxRuntimeAssets
 		case 'ERLANG':
 		case 'ERL':
 			sandbox = new Elixir('ERLANG');
+			break;
+		case 'PROLOG':
+		case 'SWIPL':
+		case 'SWI':
+			sandbox = new Prolog();
+			break;
+		case 'GLEAM':
+			sandbox = new Gleam();
+			break;
+		case 'PERL':
+			sandbox = new Perl();
 			break;
 		case 'TINYGO':
 			sandbox = new TinyGo();
@@ -208,6 +225,11 @@ async function playground(language: string, runtimeAssets?: SandboxRuntimeAssets
 		if (language === 'ERLANG' || language === 'ERL') {
 			sandboxCache['ERLANG'] = sandboxCache['ERL'] = sandbox;
 		}
+		if (language === 'PROLOG' || language === 'SWIPL' || language === 'SWI') {
+			sandboxCache['PROLOG'] = sandboxCache['SWIPL'] = sandboxCache['SWI'] = sandbox;
+		}
+		if (language === 'GLEAM') sandboxCache['GLEAM'] = sandbox;
+		if (language === 'PERL') sandboxCache['PERL'] = sandbox;
 		if (language === 'TINYGO') sandboxCache['TINYGO'] = sandbox;
 		if (language === 'OCAML') sandboxCache['OCAML'] = sandbox;
 		if (language === 'JAVASCRIPT' || language === 'JS') {

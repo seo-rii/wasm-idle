@@ -12,6 +12,9 @@ export type EditorDefaultLanguage =
 	| 'vbnet'
 	| 'elixir'
 	| 'erlang'
+	| 'prolog'
+	| 'gleam'
+	| 'perl'
 	| 'ocaml'
 	| 'javascript'
 	| 'typescript'
@@ -40,6 +43,9 @@ export const editorDefaults: Record<
 	| 'vbnet'
 	| 'elixir'
 	| 'erlang'
+	| 'prolog'
+	| 'gleam'
+	| 'perl'
 	| 'ocaml'
 	| 'javascript'
 	| 'typescript'
@@ -238,6 +244,61 @@ case Line of
     eof -> io:format("stdin=~s~n", [""]);
     _ -> io:format("stdin=~s", [Line])
 end.`,
+	prolog: `:- use_module(library(readutil)).
+
+bonus(3).
+
+factorial(N, Value) :-
+    N =< 1,
+    Value is 1.
+factorial(N, Value) :-
+    N > 1,
+    Next is N - 1,
+    factorial(Next, Previous),
+    Value is N * Previous.
+
+main :-
+    read_line_to_string(user_input, Line),
+    (number_string(N, Line) -> true ; N = 4),
+    bonus(Bonus),
+    factorial(N, Factorial),
+    Result is Factorial + Bonus,
+    format("factorial_plus_bonus=~w~n", [Result]).`,
+	gleam: `import gleam/int
+import gleam/io
+import wasm_idle/stdin
+
+const bonus = 3
+
+fn factorial(n: Int) -> Int {
+  case n <= 1 {
+    True -> 1
+    False -> n * factorial(n - 1)
+  }
+}
+
+pub fn main() {
+  let n = case int.parse(stdin.read_line()) {
+    Ok(value) -> value
+    Error(_) -> 4
+  }
+  io.println("factorial_plus_bonus=" <> int.to_string(factorial(n) + bonus))
+}`,
+	perl: `use strict;
+use warnings;
+
+use constant BONUS => 3;
+
+sub factorial {
+    my ($n) = @_;
+    return 1 if $n <= 1;
+    return $n * factorial($n - 1);
+}
+
+my $line = <STDIN>;
+chomp($line //= "");
+my $n = $line =~ /^-?\\d+$/ ? int($line) : 4;
+print "factorial_plus_bonus=", factorial($n) + BONUS, "\\n";`,
 	ocaml: `let bonus = 3
 
 let rec factorial n =
@@ -551,6 +612,9 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.vbnet ||
 		source === editorDefaults.elixir ||
 		source === editorDefaults.erlang ||
+		source === editorDefaults.prolog ||
+		source === editorDefaults.gleam ||
+		source === editorDefaults.perl ||
 		source === editorDefaults.ocaml ||
 		source === editorDefaults.javascript ||
 		source === editorDefaults.typescript ||

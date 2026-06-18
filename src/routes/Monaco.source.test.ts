@@ -16,6 +16,7 @@ describe('Monaco route source', () => {
 			'go',
 			'java',
 			'javascript',
+			'perl',
 			'php',
 			'python',
 			'r',
@@ -120,6 +121,24 @@ describe('Monaco route source', () => {
 		expect(source).toContain("tokenPostfix: '.erlang'");
 		expect(source).toContain("lineComment: '%'");
 		expect(source).toContain("'receive'");
+	});
+
+	it('registers Prolog and Gleam Monaco languages with tokenizers', async () => {
+		const source = await readFile(
+			path.resolve(process.cwd(), 'src/routes/Monaco.svelte'),
+			'utf8'
+		);
+
+		expect(source).toContain("id: 'prolog'");
+		expect(source).toContain("extensions: ['.prolog', '.pro']");
+		expect(source).toContain("Monaco.languages.setLanguageConfiguration('prolog'");
+		expect(source).toContain("Monaco.languages.setMonarchTokensProvider('prolog'");
+		expect(source).toContain("tokenPostfix: '.prolog'");
+		expect(source).toContain("id: 'gleam'");
+		expect(source).toContain("extensions: ['.gleam']");
+		expect(source).toContain("Monaco.languages.setLanguageConfiguration('gleam'");
+		expect(source).toContain("Monaco.languages.setMonarchTokensProvider('gleam'");
+		expect(source).toContain("tokenPostfix: '.gleam'");
 	});
 
 	it('registers D and Zig Monaco languages with tokenizers', async () => {

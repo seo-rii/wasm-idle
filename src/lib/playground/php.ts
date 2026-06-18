@@ -10,11 +10,12 @@ import {
 	flushQueuedStdin,
 	resetBufferedStdin
 } from '$lib/playground/stdinBuffer';
+import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
 
 class Php implements Sandbox {
 	output: any = null;
 	worker?: Worker = <any>null;
-	buffer = new SharedArrayBuffer(4096);
+	buffer = createWasmIdleSharedBuffer(4096);
 	pendingInput: string[] = [];
 	begin = 0;
 	elapse = 0;

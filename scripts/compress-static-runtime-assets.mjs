@@ -10,7 +10,7 @@ const REPO_ROOT = path.resolve(THIS_DIR, '..');
 const STATIC_DIR = path.resolve(REPO_ROOT, 'static');
 const BUILD_DIR = path.resolve(REPO_ROOT, 'build');
 const MANIFEST_FILE_NAME = 'compressed-runtime-assets.v1.json';
-const MIN_COMPRESS_BYTES = 5_000_000;
+const MIN_COMPRESS_BYTES = 1_000_000;
 const COMPRESSIBLE_EXTENSIONS = new Set([
 	'.a',
 	'.avm',
@@ -31,16 +31,21 @@ const COMPRESSIBLE_TOP_LEVEL_DIRS = [
 	'clang',
 	'clangd',
 	'pyodide',
+	'teavm',
 	'wasm-d',
 	'wasm-dotnet',
 	'wasm-elixir',
 	'wasm-go',
+	'wasm-gleam',
 	'wasm-haskell',
 	'wasm-lisp',
 	'wasm-octave',
 	'wasm-of-js-of-ocaml',
+	'wasm-perl',
+	'wasm-prolog',
 	'wasm-rust',
 	'wasm-tinygo',
+	'wasm-typescript',
 	'wasm-wat',
 	'wasm-zig',
 	'webr'

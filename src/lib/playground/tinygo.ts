@@ -16,6 +16,7 @@ import {
 	flushQueuedStdin,
 	resetBufferedStdin
 } from '$lib/playground/stdinBuffer';
+import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
 
 type TinyGoRuntimeHooks = {
 	boot(): Promise<void>;
@@ -65,7 +66,7 @@ const ACTIVITY_PREFIX_PATTERN = /^\[\d{2}:\d{2}:\d{2}\]\s?/gm;
 class TinyGo implements Sandbox {
 	output: any = null;
 	worker?: Worker = <any>null;
-	buffer = new SharedArrayBuffer(1024);
+	buffer = createWasmIdleSharedBuffer(1024);
 	pendingInput: string[] = [];
 	begin = 0;
 	elapse = 0;

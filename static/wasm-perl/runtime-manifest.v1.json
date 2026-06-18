@@ -1,0 +1,12 @@
+{
+  "format": "wasm-perl-runtime-manifest-v1",
+  "version": "v0.09-beta",
+  "package": "webperl_prebuilt_v0.09-beta.zip",
+  "packageUrl": "https://github.com/haukex/webperl/releases/download/v0.09-beta/webperl_prebuilt_v0.09-beta.zip",
+  "fingerprint": "956357f4f64f1f43",
+  "files": [
+    "emperl.js",
+    "emperl.wasm",
+    "emperl.data"
+  ]
+}

@@ -10,6 +10,7 @@ import {
 	flushQueuedStdin,
 	resetBufferedStdin
 } from '$lib/playground/stdinBuffer';
+import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
 
 type BeamEvalLanguage = 'ELIXIR' | 'ERLANG';
 
@@ -17,7 +18,7 @@ class Elixir implements Sandbox {
 	language: BeamEvalLanguage;
 	output: any = null;
 	worker?: Worker = <any>null;
-	buffer = new SharedArrayBuffer(1024);
+	buffer = createWasmIdleSharedBuffer(1024);
 	pendingInput: string[] = [];
 	begin = 0;
 	elapse = 0;

@@ -85,6 +85,18 @@ vi.mock('$lib/playground/octave', () => ({
 	default: createMockSandboxClass('OCTAVE')
 }));
 
+vi.mock('$lib/playground/prolog', () => ({
+	default: createMockSandboxClass('PROLOG')
+}));
+
+vi.mock('$lib/playground/gleam', () => ({
+	default: createMockSandboxClass('GLEAM')
+}));
+
+vi.mock('$lib/playground/perl', () => ({
+	default: createMockSandboxClass('PERL')
+}));
+
 vi.mock('$lib/playground/sqlite', () => ({
 	default: createMockSandboxClass('SQLITE')
 }));
@@ -504,6 +516,70 @@ End Module`;
 			}
 		});
 		expect(sandboxInstances.get('ERLANG')).toHaveLength(1);
+	});
+
+	it('routes Prolog aliases through the SWI-Prolog wasm sandbox implementation', async () => {
+		const binding = createPlaygroundBinding({
+			rootUrl: '/absproxy/5173',
+			prolog: {
+				baseUrl: '/absproxy/5173/wasm-prolog/',
+				workerUrl: '/absproxy/5173/wasm-prolog/runner-worker.js?v=test'
+			}
+		});
+		const progress = { set() {} };
+		const code = 'main :- writeln(hello).';
+		const sandbox = await binding.load('SWIPL');
+
+		await sandbox.load(code, true, [], {}, progress);
+
+		const runtimeAssets = {
+			rootUrl: '/absproxy/5173',
+			prolog: {
+				baseUrl: '/absproxy/5173/wasm-prolog/',
+				workerUrl: '/absproxy/5173/wasm-prolog/runner-worker.js?v=test'
+			}
+		};
+		expect(sandbox.runtimeAssets).toEqual(runtimeAssets);
+		expect(sandboxInstances.get('PROLOG')).toHaveLength(1);
+		expect(sandboxInstances.get('PROLOG')?.[0]?.loadCalls).toEqual([
+			[runtimeAssets, code, true, [], {}, progress]
+		]);
+		expect((await binding.load('PROLOG')).runtimeAssets).toEqual(runtimeAssets);
+		expect((await binding.load('SWI')).runtimeAssets).toEqual(runtimeAssets);
+		expect(sandboxInstances.get('PROLOG')).toHaveLength(1);
+	});
+
+	it('routes Gleam and Perl requests through their static worker wasm implementations', async () => {
+		const runtimeAssets = {
+			rootUrl: '/absproxy/5173',
+			gleam: {
+				baseUrl: '/absproxy/5173/wasm-gleam/',
+				workerUrl: '/absproxy/5173/wasm-gleam/runner-worker.js?v=test',
+				manifestUrl: '/absproxy/5173/wasm-gleam/source-manifest.v1.json?v=test'
+			},
+			perl: {
+				baseUrl: '/absproxy/5173/wasm-perl/',
+				workerUrl: '/absproxy/5173/wasm-perl/runner-worker.js?v=test'
+			}
+		};
+		const binding = createPlaygroundBinding(runtimeAssets);
+		const progress = { set() {} };
+		const gleam = await binding.load('GLEAM');
+		const perl = await binding.load('PERL');
+
+		await gleam.load('pub fn main() { Nil }', true, [], {}, progress);
+		await perl.load('print "hello\\n";', true, [], {}, progress);
+
+		expect(gleam.runtimeAssets).toEqual(runtimeAssets);
+		expect(perl.runtimeAssets).toEqual(runtimeAssets);
+		expect(sandboxInstances.get('GLEAM')).toHaveLength(1);
+		expect(sandboxInstances.get('PERL')).toHaveLength(1);
+		expect(sandboxInstances.get('GLEAM')?.[0]?.loadCalls).toEqual([
+			[runtimeAssets, 'pub fn main() { Nil }', true, [], {}, progress]
+		]);
+		expect(sandboxInstances.get('PERL')?.[0]?.loadCalls).toEqual([
+			[runtimeAssets, 'print "hello\\n";', true, [], {}, progress]
+		]);
 	});
 
 	it('routes OCaml requests through the dedicated OCaml sandbox implementation', async () => {

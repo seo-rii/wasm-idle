@@ -104,6 +104,27 @@ const RUNTIMES = [
 		targetArg: 'targetDir'
 	},
 	{
+		name: 'wasm-prolog',
+		module: './sync-wasm-prolog.mjs',
+		exportName: 'syncWasmPrologAssets',
+		sourceArg: 'sourceDir',
+		targetArg: 'targetDir'
+	},
+	{
+		name: 'wasm-gleam',
+		module: './sync-wasm-gleam.mjs',
+		exportName: 'syncWasmGleamAssets',
+		sourceArg: 'sourceDir',
+		targetArg: 'targetDir'
+	},
+	{
+		name: 'wasm-perl',
+		module: './sync-wasm-perl.mjs',
+		exportName: 'syncWasmPerlAssets',
+		sourceArg: 'sourceDir',
+		targetArg: 'targetDir'
+	},
+	{
 		name: 'wasm-of-js-of-ocaml',
 		module: './sync-wasm-of-js-of-ocaml.mjs',
 		exportName: 'syncWasmOfJsOfOcamlDist',

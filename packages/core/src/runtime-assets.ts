@@ -27,6 +27,9 @@ export interface RuntimeAssetKeySource {
 	ruby?: { wasmUrl?: string };
 	r?: { baseUrl?: string };
 	octave?: { baseUrl?: string; workerUrl?: string; manifestUrl?: string };
+	prolog?: { baseUrl?: string; workerUrl?: string };
+	gleam?: { baseUrl?: string; workerUrl?: string; manifestUrl?: string };
+	perl?: { baseUrl?: string; workerUrl?: string };
 	sqlite?: { wasmUrl?: string };
 	php?: { version?: string };
 }
@@ -72,6 +75,13 @@ export function createRuntimeAssetsKey(runtimeAssets: RuntimeAssetKeyInput): str
 		octaveBaseUrl: runtimeAssets.octave?.baseUrl || '',
 		octaveWorkerUrl: runtimeAssets.octave?.workerUrl || '',
 		octaveManifestUrl: runtimeAssets.octave?.manifestUrl || '',
+		prologBaseUrl: runtimeAssets.prolog?.baseUrl || '',
+		prologWorkerUrl: runtimeAssets.prolog?.workerUrl || '',
+		gleamBaseUrl: runtimeAssets.gleam?.baseUrl || '',
+		gleamWorkerUrl: runtimeAssets.gleam?.workerUrl || '',
+		gleamManifestUrl: runtimeAssets.gleam?.manifestUrl || '',
+		perlBaseUrl: runtimeAssets.perl?.baseUrl || '',
+		perlWorkerUrl: runtimeAssets.perl?.workerUrl || '',
 		sqliteWasmUrl: runtimeAssets.sqlite?.wasmUrl || '',
 		phpVersion: runtimeAssets.php?.version || ''
 	});

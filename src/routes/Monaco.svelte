@@ -1172,6 +1172,156 @@
 		}
 	} satisfies monaco.languages.IMonarchLanguage;
 
+	const prologLanguageConfiguration = {
+		comments: {
+			lineComment: '%',
+			blockComment: ['/*', '*/']
+		},
+		brackets: [
+			['[', ']'],
+			['(', ')'],
+			['{', '}']
+		],
+		autoClosingPairs: [
+			{ open: '[', close: ']' },
+			{ open: '(', close: ')' },
+			{ open: '{', close: '}' },
+			{ open: "'", close: "'" },
+			{ open: '"', close: '"' }
+		],
+		surroundingPairs: [
+			{ open: '[', close: ']' },
+			{ open: '(', close: ')' },
+			{ open: '{', close: '}' },
+			{ open: "'", close: "'" },
+			{ open: '"', close: '"' }
+		]
+	} satisfies monaco.languages.LanguageConfiguration;
+
+	const prologMonarchTokens = {
+		defaultToken: '',
+		tokenPostfix: '.prolog',
+		keywords: ['is', 'mod', 'not', 'true', 'fail', 'repeat', 'once'],
+		builtins: [
+			'format',
+			'read',
+			'read_line_to_string',
+			'read_line_to_codes',
+			'use_module',
+			'write',
+			'writeln'
+		],
+		tokenizer: {
+			root: [
+				[/%.*$/, 'comment'],
+				[/\/\*/, 'comment', '@comment'],
+				[/:-/, 'keyword'],
+				[/[A-Z_][A-Za-z0-9_]*/, 'variable'],
+				[
+					/[a-z][A-Za-z0-9_]*/,
+					{
+						cases: {
+							'@keywords': 'keyword',
+							'@builtins': 'type.identifier',
+							'@default': 'identifier'
+						}
+					}
+				],
+				[/\b\d+(?:\.\d+)?\b/, 'number'],
+				[/'/, 'string', '@singleString'],
+				[/"/, 'string', '@doubleString'],
+				[/[{}()[\]]/, '@brackets'],
+				[/[;,.]/, 'delimiter'],
+				[/[=><!:+\-*/\\|&]+/, 'operator']
+			],
+			comment: [
+				[/[^*/]+/, 'comment'],
+				[/\/\*/, 'comment', '@push'],
+				[/\*\//, 'comment', '@pop'],
+				[/[*/]/, 'comment']
+			],
+			singleString: [
+				[/[^\\']+/, 'string'],
+				[/\\./, 'string.escape'],
+				[/'/, 'string', '@pop']
+			],
+			doubleString: [
+				[/[^\\"]+/, 'string'],
+				[/\\./, 'string.escape'],
+				[/"/, 'string', '@pop']
+			]
+		}
+	} satisfies monaco.languages.IMonarchLanguage;
+
+	const gleamLanguageConfiguration = {
+		comments: {
+			lineComment: '//'
+		},
+		brackets: [
+			['{', '}'],
+			['[', ']'],
+			['(', ')']
+		],
+		autoClosingPairs: [
+			{ open: '{', close: '}' },
+			{ open: '[', close: ']' },
+			{ open: '(', close: ')' },
+			{ open: '"', close: '"' }
+		],
+		surroundingPairs: [
+			{ open: '{', close: '}' },
+			{ open: '[', close: ']' },
+			{ open: '(', close: ')' },
+			{ open: '"', close: '"' }
+		]
+	} satisfies monaco.languages.LanguageConfiguration;
+
+	const gleamMonarchTokens = {
+		defaultToken: '',
+		tokenPostfix: '.gleam',
+		keywords: [
+			'as',
+			'assert',
+			'case',
+			'const',
+			'external',
+			'fn',
+			'if',
+			'import',
+			'let',
+			'opaque',
+			'pub',
+			'todo',
+			'type',
+			'use'
+		],
+		constants: ['True', 'False', 'Nil', 'Ok', 'Error'],
+		tokenizer: {
+			root: [
+				[/\/\/.*$/, 'comment'],
+				[/"([^"\\]|\\.)*$/, 'string.invalid'],
+				[/"/, 'string', '@string'],
+				[/\b\d+(?:\.\d+)?\b/, 'number'],
+				[
+					/[A-Z][A-Za-z0-9_]*/,
+					{ cases: { '@constants': 'constant', '@default': 'type.identifier' } }
+				],
+				[
+					/[a-z_][A-Za-z0-9_]*/,
+					{ cases: { '@keywords': 'keyword', '@default': 'identifier' } }
+				],
+				[/[{}()[\]]/, '@brackets'],
+				[/[;,.]/, 'delimiter'],
+				[/[=><!:+\-*/\\|&]+/, 'operator']
+			],
+			string: [
+				[/[^\\"]+/, 'string'],
+				[/\\./, 'string.escape'],
+				[/"/, 'string', '@pop']
+			]
+		}
+	} satisfies monaco.languages.IMonarchLanguage;
+
 	export const editorValue = () => editor?.getValue() || '';
 
 	let divEl: HTMLDivElement | null = $state(null);
@@ -1311,6 +1461,9 @@
 			language === 'fsharp' ||
 			language === 'vb' ||
 			language === 'erlang' ||
+			language === 'prolog' ||
+			language === 'gleam' ||
+			language === 'perl' ||
 			language === 'ocaml' ||
 			language === 'javascript' ||
 			language === 'typescript' ||
@@ -1364,6 +1517,9 @@
 				| 'vbnet'
 				| 'elixir'
 				| 'erlang'
+				| 'prolog'
+				| 'gleam'
+				| 'perl'
 				| 'ocaml'
 				| 'javascript'
 				| 'typescript'
@@ -1404,6 +1560,7 @@
 			import('monaco-editor/esm/vs/basic-languages/go/go.contribution.js'),
 			import('monaco-editor/esm/vs/basic-languages/java/java.contribution.js'),
 			import('monaco-editor/esm/vs/basic-languages/javascript/javascript.contribution.js'),
+			import('monaco-editor/esm/vs/basic-languages/perl/perl.contribution.js'),
 			import('monaco-editor/esm/vs/basic-languages/php/php.contribution.js'),
 			import('monaco-editor/esm/vs/basic-languages/python/python.contribution.js'),
 			import('monaco-editor/esm/vs/basic-languages/r/r.contribution.js'),
@@ -1478,6 +1635,24 @@
 			}
 			Monaco.languages.setLanguageConfiguration('erlang', erlangLanguageConfiguration);
 			Monaco.languages.setMonarchTokensProvider('erlang', erlangMonarchTokens);
+			if (!Monaco.languages.getLanguages().some(({ id }) => id === 'prolog')) {
+				Monaco.languages.register({
+					id: 'prolog',
+					aliases: ['Prolog', 'SWI-Prolog', 'prolog', 'swipl'],
+					extensions: ['.prolog', '.pro']
+				});
+			}
+			Monaco.languages.setLanguageConfiguration('prolog', prologLanguageConfiguration);
+			Monaco.languages.setMonarchTokensProvider('prolog', prologMonarchTokens);
+			if (!Monaco.languages.getLanguages().some(({ id }) => id === 'gleam')) {
+				Monaco.languages.register({
+					id: 'gleam',
+					aliases: ['Gleam', 'gleam'],
+					extensions: ['.gleam']
+				});
+			}
+			Monaco.languages.setLanguageConfiguration('gleam', gleamLanguageConfiguration);
+			Monaco.languages.setMonarchTokensProvider('gleam', gleamMonarchTokens);
 			if (!Monaco.languages.getLanguages().some(({ id }) => id === 'octave')) {
 				Monaco.languages.register({
 					id: 'octave',
@@ -1520,6 +1695,9 @@
 					| 'vbnet'
 					| 'elixir'
 					| 'erlang'
+					| 'prolog'
+					| 'gleam'
+					| 'perl'
 					| 'ocaml'
 					| 'javascript'
 					| 'typescript'

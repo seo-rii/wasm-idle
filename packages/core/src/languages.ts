@@ -19,6 +19,11 @@ export type WasmIdleLanguageId =
 	| 'ELIXIR'
 	| 'ERLANG'
 	| 'ERL'
+	| 'PROLOG'
+	| 'SWIPL'
+	| 'SWI'
+	| 'GLEAM'
+	| 'PERL'
 	| 'TINYGO'
 	| 'OCAML'
 	| 'JAVASCRIPT'
@@ -58,6 +63,9 @@ export const supportedLanguageIds = [
 	'VBNET',
 	'ELIXIR',
 	'ERLANG',
+	'PROLOG',
+	'GLEAM',
+	'PERL',
 	'TINYGO',
 	'OCAML',
 	'JAVASCRIPT',
@@ -84,6 +92,9 @@ export const DEFAULT_DEFERRED_PROGRESS_LANGUAGES = new Set<string>([
 	'VBNET',
 	'TINYGO',
 	'ERLANG',
+	'PROLOG',
+	'GLEAM',
+	'PERL',
 	'OCAML',
 	'JAVASCRIPT',
 	'TYPESCRIPT',
@@ -106,6 +117,8 @@ const LANGUAGE_ALIASES: Record<string, string> = {
 	VB: 'VBNET',
 	VISUALBASIC: 'VBNET',
 	ERL: 'ERLANG',
+	SWIPL: 'PROLOG',
+	SWI: 'PROLOG',
 	DLANG: 'D',
 	JS: 'JAVASCRIPT',
 	AS: 'ASSEMBLYSCRIPT',

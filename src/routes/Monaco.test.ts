@@ -32,7 +32,7 @@ describe('Monaco route debug sync', () => {
 		);
 		expect(source.match(/occurrencesHighlight: 'off'/g)).toHaveLength(2);
 		expect(source).toMatch(
-			/language === 'java' \|\|\s+language === 'rust' \|\|\s+language === 'go' \|\|\s+language === 'd' \|\|\s+language === 'csharp' \|\|\s+language === 'fsharp' \|\|\s+language === 'vb' \|\|\s+language === 'erlang' \|\|\s+language === 'ocaml'/
+			/language === 'java' \|\|\s+language === 'rust' \|\|\s+language === 'go' \|\|\s+language === 'd' \|\|\s+language === 'csharp' \|\|\s+language === 'fsharp' \|\|\s+language === 'vb' \|\|\s+language === 'erlang' \|\|\s+language === 'prolog' \|\|\s+language === 'gleam' \|\|\s+language === 'perl' \|\|\s+language === 'ocaml'/
 		);
 		expect(source).toMatch(/language === 'wat'/);
 		expect(source).toMatch(/language === 'lua'/);
@@ -49,7 +49,7 @@ describe('Monaco route debug sync', () => {
 			/\$effect\(\(\) => \{\s+if \(!editor\) return;[\s\S]*if \(!isEditorDefaultSource\(currentValue\) && !isLegacyEditorDefaultSource\(currentValue\)\) \{[\s\S]*const nextValue = resolveEditorDefaultSource\([\s\S]*rustTargetTriple[\s\S]*editor\.setValue\(nextValue\);[\s\S]*\}\);/s
 		);
 		expect(source).toMatch(
-			/const defaultValue = resolveEditorDefaultSource\([\s\S]*'c'[\s\S]*'cpp'[\s\S]*'python'[\s\S]*'java'[\s\S]*'go'[\s\S]*'d'[\s\S]*'csharp'[\s\S]*'fsharp'[\s\S]*'vbnet'[\s\S]*'elixir'[\s\S]*'erlang'[\s\S]*'ocaml'[\s\S]*'ruby'[\s\S]*'sqlite'[\s\S]*'php'[\s\S]*'rust'[\s\S]*rustTargetTriple\s+\);/s
+			/const defaultValue = resolveEditorDefaultSource\([\s\S]*'c'[\s\S]*'cpp'[\s\S]*'python'[\s\S]*'java'[\s\S]*'go'[\s\S]*'d'[\s\S]*'csharp'[\s\S]*'fsharp'[\s\S]*'vbnet'[\s\S]*'elixir'[\s\S]*'erlang'[\s\S]*'prolog'[\s\S]*'gleam'[\s\S]*'perl'[\s\S]*'ocaml'[\s\S]*'ruby'[\s\S]*'sqlite'[\s\S]*'php'[\s\S]*'rust'[\s\S]*rustTargetTriple\s+\);/s
 		);
 		expect(source).toMatch(/id: 'd'/);
 		expect(source).toMatch(/aliases: \['D', 'd'\]/);
@@ -102,6 +102,9 @@ describe('Monaco route debug sync', () => {
 		expect(resolveEditorDefaultSource('vbnet', 'wasm32-wasip1')).toBe(editorDefaults.vbnet);
 		expect(resolveEditorDefaultSource('elixir', 'wasm32-wasip1')).toBe(editorDefaults.elixir);
 		expect(resolveEditorDefaultSource('erlang', 'wasm32-wasip1')).toBe(editorDefaults.erlang);
+		expect(resolveEditorDefaultSource('prolog', 'wasm32-wasip1')).toBe(editorDefaults.prolog);
+		expect(resolveEditorDefaultSource('gleam', 'wasm32-wasip1')).toBe(editorDefaults.gleam);
+		expect(resolveEditorDefaultSource('perl', 'wasm32-wasip1')).toBe(editorDefaults.perl);
 		expect(resolveEditorDefaultSource('lua', 'wasm32-wasip1')).toBe(editorDefaults.lua);
 		expect(resolveEditorDefaultSource('sqlite', 'wasm32-wasip1')).toBe(editorDefaults.sqlite);
 		expect(resolveEditorDefaultSource('php', 'wasm32-wasip1')).toBe(editorDefaults.php);
@@ -119,6 +122,9 @@ describe('Monaco route debug sync', () => {
 		expect(editorDefaults.elixir).toContain('Integer.parse(String.trim(line))');
 		expect(editorDefaults.erlang).toContain('io:get_line("")');
 		expect(editorDefaults.erlang).toContain('io:format("stdin=~s"');
+		expect(editorDefaults.prolog).toContain('read_line_to_string(user_input, Line)');
+		expect(editorDefaults.gleam).toContain('stdin.read_line()');
+		expect(editorDefaults.perl).toContain('my $line = <STDIN>;');
 		expect(editorDefaults.lua).toContain('io.read("*l")');
 		expect(editorDefaults.haskell).toContain('putStrLn');
 		expect(editorDefaults.r).toContain('readLines(stdin(), n = 1');
@@ -133,6 +139,9 @@ describe('Monaco route debug sync', () => {
 		expect(isEditorDefaultSource(editorDefaults.vbnet)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.elixir)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.erlang)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.prolog)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.gleam)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.perl)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.lua)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.haskell)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.r)).toBe(true);
@@ -166,6 +175,9 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).toMatch(/<option value="VBNET">VB\.NET<\/option>/);
 		expect(pageSource).toMatch(/<option value="ELIXIR">Elixir<\/option>/);
 		expect(pageSource).toMatch(/<option value="ERLANG">Erlang<\/option>/);
+		expect(pageSource).toMatch(/<option value="PROLOG">Prolog<\/option>/);
+		expect(pageSource).toMatch(/<option value="GLEAM">Gleam<\/option>/);
+		expect(pageSource).toMatch(/<option value="PERL">Perl<\/option>/);
 		expect(pageSource).toMatch(/<option value="OCAML">OCaml<\/option>/);
 		expect(pageSource).toMatch(/<option value="TINYGO">TinyGo<\/option>/);
 		expect(pageSource).toMatch(/<option value="JAVASCRIPT">JavaScript<\/option>/);

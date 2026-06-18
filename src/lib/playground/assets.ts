@@ -117,6 +117,22 @@ export interface OctaveRuntimeAssetConfig {
 	manifestUrl?: string;
 }
 
+export interface PrologRuntimeAssetConfig {
+	baseUrl?: string;
+	workerUrl?: string;
+}
+
+export interface GleamRuntimeAssetConfig {
+	baseUrl?: string;
+	workerUrl?: string;
+	manifestUrl?: string;
+}
+
+export interface PerlRuntimeAssetConfig {
+	baseUrl?: string;
+	workerUrl?: string;
+}
+
 export interface SqliteRuntimeAssetConfig {
 	wasmUrl?: string;
 }
@@ -148,6 +164,9 @@ export interface PlaygroundRuntimeAssets {
 	ruby?: RubyRuntimeAssetConfig;
 	r?: RRuntimeAssetConfig;
 	octave?: OctaveRuntimeAssetConfig;
+	prolog?: PrologRuntimeAssetConfig;
+	gleam?: GleamRuntimeAssetConfig;
+	perl?: PerlRuntimeAssetConfig;
 	sqlite?: SqliteRuntimeAssetConfig;
 	php?: PhpRuntimeAssetConfig;
 }
@@ -1101,6 +1120,231 @@ export function resolveOctaveRuntimeAssetConfig(
 		baseUrl: resolveOctaveBaseUrl(options, currentUrl),
 		workerUrl: resolveOctaveWorkerUrl(options, currentUrl),
 		manifestUrl: resolveOctaveManifestUrl(options, currentUrl)
+	};
+}
+
+export function resolvePrologBaseUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredBaseUrl =
+		(typeof options === 'object' && options?.prolog?.baseUrl) ||
+		(publicEnv.PUBLIC_WASM_PROLOG_BASE_URL || '').trim();
+
+	if (configuredBaseUrl) {
+		return normalizeBaseUrl(configuredBaseUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return normalizeBaseUrl(`${normalizeRootUrl(options) || ''}/wasm-prolog/`, currentUrl);
+	}
+
+	if (options?.rootUrl) {
+		return normalizeBaseUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-prolog/`,
+			currentUrl
+		);
+	}
+
+	return normalizeBaseUrl('/wasm-prolog/', currentUrl);
+}
+
+export function resolvePrologWorkerUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredWorkerUrl =
+		(typeof options === 'object' && options?.prolog?.workerUrl) ||
+		(publicEnv.PUBLIC_WASM_PROLOG_WORKER_URL || '').trim();
+
+	if (configuredWorkerUrl) {
+		return resolveConfiguredUrl(configuredWorkerUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-prolog/runner-worker.js`,
+			currentUrl
+		);
+	}
+
+	if (options?.rootUrl) {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-prolog/runner-worker.js`,
+			currentUrl
+		);
+	}
+
+	return resolveConfiguredUrl('/wasm-prolog/runner-worker.js', currentUrl);
+}
+
+export function resolvePrologRuntimeAssetConfig(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	return {
+		baseUrl: resolvePrologBaseUrl(options, currentUrl),
+		workerUrl: resolvePrologWorkerUrl(options, currentUrl)
+	};
+}
+
+export function resolveGleamBaseUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredBaseUrl =
+		(typeof options === 'object' && options?.gleam?.baseUrl) ||
+		(publicEnv.PUBLIC_WASM_GLEAM_BASE_URL || '').trim();
+
+	if (configuredBaseUrl) {
+		return normalizeBaseUrl(configuredBaseUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return normalizeBaseUrl(`${normalizeRootUrl(options) || ''}/wasm-gleam/`, currentUrl);
+	}
+
+	if (options?.rootUrl) {
+		return normalizeBaseUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-gleam/`,
+			currentUrl
+		);
+	}
+
+	return normalizeBaseUrl('/wasm-gleam/', currentUrl);
+}
+
+export function resolveGleamWorkerUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredWorkerUrl =
+		(typeof options === 'object' && options?.gleam?.workerUrl) ||
+		(publicEnv.PUBLIC_WASM_GLEAM_WORKER_URL || '').trim();
+
+	if (configuredWorkerUrl) {
+		return resolveConfiguredUrl(configuredWorkerUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-gleam/runner-worker.js`,
+			currentUrl
+		);
+	}
+
+	if (options?.rootUrl) {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-gleam/runner-worker.js`,
+			currentUrl
+		);
+	}
+
+	return resolveConfiguredUrl('/wasm-gleam/runner-worker.js', currentUrl);
+}
+
+export function resolveGleamManifestUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredManifestUrl =
+		(typeof options === 'object' && options?.gleam?.manifestUrl) ||
+		(publicEnv.PUBLIC_WASM_GLEAM_MANIFEST_URL || '').trim();
+
+	if (configuredManifestUrl) {
+		return resolveConfiguredUrl(configuredManifestUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-gleam/source-manifest.v1.json`,
+			currentUrl
+		);
+	}
+
+	if (options?.rootUrl) {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-gleam/source-manifest.v1.json`,
+			currentUrl
+		);
+	}
+
+	return resolveConfiguredUrl('/wasm-gleam/source-manifest.v1.json', currentUrl);
+}
+
+export function resolveGleamRuntimeAssetConfig(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	return {
+		baseUrl: resolveGleamBaseUrl(options, currentUrl),
+		workerUrl: resolveGleamWorkerUrl(options, currentUrl),
+		manifestUrl: resolveGleamManifestUrl(options, currentUrl)
+	};
+}
+
+export function resolvePerlBaseUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredBaseUrl =
+		(typeof options === 'object' && options?.perl?.baseUrl) ||
+		(publicEnv.PUBLIC_WASM_PERL_BASE_URL || '').trim();
+
+	if (configuredBaseUrl) {
+		return normalizeBaseUrl(configuredBaseUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return normalizeBaseUrl(`${normalizeRootUrl(options) || ''}/wasm-perl/`, currentUrl);
+	}
+
+	if (options?.rootUrl) {
+		return normalizeBaseUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-perl/`,
+			currentUrl
+		);
+	}
+
+	return normalizeBaseUrl('/wasm-perl/', currentUrl);
+}
+
+export function resolvePerlWorkerUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredWorkerUrl =
+		(typeof options === 'object' && options?.perl?.workerUrl) ||
+		(publicEnv.PUBLIC_WASM_PERL_WORKER_URL || '').trim();
+
+	if (configuredWorkerUrl) {
+		return resolveConfiguredUrl(configuredWorkerUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-perl/runner-worker.js`,
+			currentUrl
+		);
+	}
+
+	if (options?.rootUrl) {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-perl/runner-worker.js`,
+			currentUrl
+		);
+	}
+
+	return resolveConfiguredUrl('/wasm-perl/runner-worker.js', currentUrl);
+}
+
+export function resolvePerlRuntimeAssetConfig(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	return {
+		baseUrl: resolvePerlBaseUrl(options, currentUrl),
+		workerUrl: resolvePerlWorkerUrl(options, currentUrl)
 	};
 }
 
