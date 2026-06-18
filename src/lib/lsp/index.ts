@@ -2,10 +2,14 @@ export { getEditorLanguageServer } from './registry';
 export {
 	resolveCppLanguageServerBaseUrl,
 	resolveCppLanguageServerRuntimeAssetConfig,
-	resolvePythonLanguageServerBaseUrl
+	resolveGoLanguageServerCompilerUrl,
+	resolvePythonLanguageServerBaseUrl,
+	resolveRustLanguageServerCompilerUrl
 } from '@wasm-idle/lsp';
 export { getCppLanguageServer } from '@wasm-idle/lsp';
+export { getGoLanguageServer } from '@wasm-idle/lsp';
 export { getPythonLanguageServer } from '@wasm-idle/lsp';
+export { getRustLanguageServer } from '@wasm-idle/lsp';
 export {
 	getAssemblyScriptLanguageServer,
 	getCSharpLanguageServer,
@@ -14,4 +18,10 @@ export {
 	getVisualBasicLanguageServer,
 	getWatLanguageServer
 } from '@wasm-idle/lsp';
-export type { EditorLanguageServerHandle, EditorLanguageServerRuntimeOptions } from './types';
+export type {
+	EditorLanguageServerHandle,
+	EditorLanguageServerRuntimeOptions,
+	GoLanguageServerTarget,
+	LanguageServerStatus,
+	RustLanguageServerTargetTriple
+} from './types';

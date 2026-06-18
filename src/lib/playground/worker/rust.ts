@@ -1,4 +1,10 @@
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
+import { isSharedBufferBackedView } from '$lib/playground/sharedBuffer';
+import {
+	instrumentRustDebugSource,
+	RUST_DEBUG_MARKER
+} from '$lib/playground/rustDebugInstrumentation';
+import type { DebugFrame, DebugPauseReason } from '$lib/playground/options';
 
 declare var self: any;
 
@@ -9,6 +15,7 @@ self.document = {
 };
 
 let stdinBufferRust: Int32Array | null = null;
+let debugBufferRust: Int32Array | null = null;
 let compilerUrl = '';
 let runtimeBaseUrl = '';
 let loadedCompilerUrl = '';
@@ -32,6 +39,15 @@ let compilerPromise: Promise<{
 }> | null = null;
 let compiledArtifact: any = null;
 let compiledCacheKey = '';
+
+interface RustDebugState {
+	breakpointVersion: number;
+	breakpoints: Set<number>;
+	pauseOnEntry: boolean;
+	stepMode: 'step' | 'next' | null;
+	resumeSkip: string | null;
+	nextLine: number | null;
+}
 
 async function loadCompiler(url: string) {
 	if (!url) {
@@ -59,9 +75,7 @@ async function loadCompiler(url: string) {
 					? module.default
 					: null;
 		if (!factory) {
-			throw new Error(
-				'wasm-rust module must export createRustCompiler or a default factory'
-			);
+			throw new Error('wasm-rust module must export createRustCompiler or a default factory');
 		}
 		if (typeof module.executeBrowserRustArtifact !== 'function') {
 			throw new Error('wasm-rust module must export executeBrowserRustArtifact');
@@ -74,17 +88,138 @@ async function loadCompiler(url: string) {
 	return await compilerPromise;
 }
 
+function normalizedBreakpointSet(values: unknown) {
+	return new Set(
+		[...(Array.isArray(values) ? values : [])]
+			.map((value) => Number(value))
+			.filter((value) => Number.isInteger(value) && value > 0)
+	);
+}
+
+function refreshRustDebugBreakpoints(state: RustDebugState, control: Int32Array) {
+	const version = Atomics.load(control, 2);
+	if (state.breakpointVersion === version) return;
+	state.breakpointVersion = version;
+	const count = Math.max(0, Math.min(Atomics.load(control, 3), control.length - 4));
+	const next = new Set<number>();
+	for (let index = 0; index < count; index += 1) {
+		const line = Atomics.load(control, 4 + index);
+		if (Number.isInteger(line) && line > 0) next.add(line);
+	}
+	state.breakpoints = next;
+}
+
+function waitForRustDebugCommand(state: RustDebugState, control: Int32Array, line: number) {
+	while (true) {
+		const command = Atomics.exchange(control, 1, 0);
+		if (!command) {
+			const sequence = Atomics.load(control, 0);
+			Atomics.wait(control, 0, sequence, 100);
+			continue;
+		}
+		state.resumeSkip = String(line);
+		state.stepMode = null;
+		state.nextLine = null;
+		if (command === 2) {
+			state.stepMode = 'step';
+		} else if (command === 3) {
+			state.stepMode = 'next';
+			state.nextLine = line;
+		}
+		return;
+	}
+}
+
+function createRustDebugHost(options: {
+	control: Int32Array;
+	breakpoints: unknown;
+	pauseOnEntry: boolean;
+}) {
+	const state: RustDebugState = {
+		breakpointVersion: Atomics.load(options.control, 2),
+		breakpoints: normalizedBreakpointSet(options.breakpoints),
+		pauseOnEntry: options.pauseOnEntry,
+		stepMode: null,
+		resumeSkip: null,
+		nextLine: null
+	};
+	let stderrBuffer = '';
+	const markerPrefix = `${RUST_DEBUG_MARKER}:`;
+
+	const handleMarker = (line: number, functionName: string) => {
+		refreshRustDebugBreakpoints(state, options.control);
+		const skipKey = String(line);
+		if (state.resumeSkip === skipKey) return;
+		if (state.resumeSkip) state.resumeSkip = null;
+
+		let reason: DebugPauseReason | null = null;
+		if (state.pauseOnEntry) {
+			reason = 'entry';
+		} else if (state.breakpoints.has(line)) {
+			reason = 'breakpoint';
+		} else if (state.stepMode === 'step') {
+			reason = 'step';
+		} else if (state.stepMode === 'next' && line !== state.nextLine) {
+			reason = 'nextLine';
+		}
+		if (!reason) return;
+
+		state.pauseOnEntry = false;
+		state.stepMode = null;
+		state.nextLine = null;
+		const callStack: DebugFrame[] = [{ functionName: functionName || 'main', line }];
+		postMessage({
+			debugEvent: {
+				type: 'pause',
+				line,
+				reason,
+				locals: [],
+				callStack
+			}
+		});
+		waitForRustDebugCommand(state, options.control, line);
+	};
+
+	const consumeLine = (line: string, hasNewline: boolean) => {
+		if (line.startsWith(markerPrefix)) {
+			const match = /^__WASM_IDLE_RUST_DEBUG__:(\d+):(.*)$/u.exec(line);
+			if (match) handleMarker(Math.max(1, Number(match[1] || 1)), match[2] || 'main');
+			return '';
+		}
+		return `${line}${hasNewline ? '\n' : ''}`;
+	};
+
+	return {
+		handleStderr(chunk: string) {
+			stderrBuffer += chunk;
+			const parts = stderrBuffer.split('\n');
+			stderrBuffer = parts.pop() || '';
+			return parts.map((line) => consumeLine(line, true)).join('');
+		},
+		flush() {
+			if (!stderrBuffer) return '';
+			const chunk = consumeLine(stderrBuffer, false);
+			stderrBuffer = '';
+			return chunk;
+		}
+	};
+}
+
 self.onmessage = async (event: { data: any }) => {
 	const {
 		load,
 		compilerUrl: nextCompilerUrl,
 		buffer,
+		debugBuffer,
 		code,
 		prepare,
 		args = [],
 		stdin,
 		targetTriple = 'wasm32-wasip1',
-		log
+		log,
+		debug = false,
+		breakpoints = [],
+		pauseOnEntry = false
 	} = event.data;
 	try {
 		if (load) {
@@ -98,16 +233,22 @@ self.onmessage = async (event: { data: any }) => {
 		}
 
 		stdinBufferRust = new Int32Array(buffer);
+		debugBufferRust = debugBuffer ? new Int32Array(debugBuffer) : null;
+		if (debug && (!debugBufferRust || !isSharedBufferBackedView(debugBufferRust))) {
+			postMessage({ error: 'Rust debugging requires SharedArrayBuffer.' });
+			return;
+		}
 		const runtime = await loadCompiler(compilerUrl);
-		const compileCacheKey = `${targetTriple}\n${code}`;
+		const compileCode = debug ? instrumentRustDebugSource(code) : code;
+		const compileCacheKey = `${targetTriple}\n${compileCode}`;
 		if (!compiledArtifact || compiledCacheKey !== compileCacheKey) {
 			if (log) {
 				console.log(
-					`[wasm-idle:rust-worker] compile start prepare=${String(prepare)} target=${targetTriple} bytes=${code.length}`
+					`[wasm-idle:rust-worker] compile start prepare=${String(prepare)} target=${targetTriple} bytes=${compileCode.length}`
 				);
 			}
 			const result = await runtime.compiler.compile({
-				code,
+				code: compileCode,
 				edition: '2024',
 				crateType: 'bin',
 				targetTriple,
@@ -129,7 +270,9 @@ self.onmessage = async (event: { data: any }) => {
 			if (!result.success) {
 				throw new Error(
 					result.stderr ||
-						result.diagnostics?.map((diagnostic: any) => diagnostic.message).join('\n') ||
+						result.diagnostics
+							?.map((diagnostic: any) => diagnostic.message)
+							.join('\n') ||
 						'Rust compilation failed'
 				);
 			}
@@ -159,53 +302,68 @@ self.onmessage = async (event: { data: any }) => {
 				`[wasm-idle:rust-worker] runtime start target=${compiledArtifact.targetTriple} format=${compiledArtifact.format}`
 			);
 		}
+		const rustDebugHost =
+			debug && debugBufferRust
+				? createRustDebugHost({
+						control: debugBufferRust,
+						breakpoints,
+						pauseOnEntry: !!pauseOnEntry
+					})
+				: null;
 		const hasInitialStdin = typeof stdin === 'string';
 		let initialStdin: string | null = hasInitialStdin ? stdin : null;
-		const execution = await runtime.executeBrowserRustArtifact(compiledArtifact, runtimeBaseUrl, {
-			args,
-			env: {
-				USER: 'jungol'
-			},
-			stdin: () => {
-				if (hasInitialStdin) {
-					const chunk = initialStdin;
-					initialStdin = null;
+		const execution = await runtime.executeBrowserRustArtifact(
+			compiledArtifact,
+			runtimeBaseUrl,
+			{
+				args,
+				env: {
+					USER: 'jungol'
+				},
+				stdin: () => {
+					if (hasInitialStdin) {
+						const chunk = initialStdin;
+						initialStdin = null;
+						if (log) {
+							console.log(
+								chunk == null
+									? '[wasm-idle:rust-stdin] fd_read(bytes=0, eof=true)'
+									: `[wasm-idle:rust-stdin] fd_fill(bytes=${new TextEncoder().encode(chunk).byteLength}, text=${JSON.stringify(chunk)})`
+							);
+						}
+						return chunk;
+					}
+					const chunk = waitForBufferedStdin(stdinBufferRust, () =>
+						postMessage({ buffer: true })
+					);
+					if (chunk == null) {
+						if (log) {
+							console.log('[wasm-idle:rust-stdin] fd_read(bytes=0, eof=true)');
+						}
+						return null;
+					}
 					if (log) {
 						console.log(
-							chunk == null
-								? '[wasm-idle:rust-stdin] fd_read(bytes=0, eof=true)'
-								: `[wasm-idle:rust-stdin] fd_fill(bytes=${new TextEncoder().encode(chunk).byteLength}, text=${JSON.stringify(chunk)})`
+							`[wasm-idle:rust-stdin] fd_fill(bytes=${new TextEncoder().encode(chunk).byteLength}, text=${JSON.stringify(chunk)})`
 						);
 					}
 					return chunk;
-				}
-				const chunk = waitForBufferedStdin(stdinBufferRust, () =>
-					postMessage({ buffer: true })
-				);
-				if (chunk == null) {
-					if (log) {
-						console.log('[wasm-idle:rust-stdin] fd_read(bytes=0, eof=true)');
+				},
+				stdout: (output) => {
+					if (output) {
+						postMessage({ output });
 					}
-					return null;
-				}
-				if (log) {
-					console.log(
-						`[wasm-idle:rust-stdin] fd_fill(bytes=${new TextEncoder().encode(chunk).byteLength}, text=${JSON.stringify(chunk)})`
-					);
-				}
-				return chunk;
-			},
-			stdout: (output) => {
-				if (output) {
-					postMessage({ output });
-				}
-			},
-			stderr: (output) => {
-				if (output) {
-					postMessage({ output });
+				},
+				stderr: (output) => {
+					const visibleOutput = rustDebugHost
+						? rustDebugHost.handleStderr(output)
+						: output;
+					if (visibleOutput) postMessage({ output: visibleOutput });
 				}
 			}
-		});
+		);
+		const flushedDebugOutput = rustDebugHost?.flush();
+		if (flushedDebugOutput) postMessage({ output: flushedDebugOutput });
 		if (log) {
 			console.log(
 				`[wasm-idle:rust-worker] wasi run complete exitCode=${String(execution.exitCode)}`

@@ -3,9 +3,12 @@
 	import type { ClangdSession as ClangdSessionType } from '$lib/clangd/session';
 	import type { ClangdStatus } from '$lib/clangd/config';
 	import type { DebugLanguageAdapter } from '$lib/debug/language';
+	import type { GoLspSession as GoLspSessionType, GoLspStatus } from '$lib/lsp/goSession';
+	import type { RustLspSession as RustLspSessionType, RustLspStatus } from '$lib/lsp/rustSession';
 	import type {
 		CompilerDiagnostic,
 		DebugVariable,
+		GoTarget,
 		RustTargetTriple
 	} from '$lib/playground/options';
 	import type monaco from 'monaco-editor';
@@ -1326,9 +1329,17 @@
 
 	let divEl: HTMLDivElement | null = $state(null);
 	let clangdStatus = $state<ClangdStatus>({ state: 'disabled' });
+	let goLspStatus = $state<GoLspStatus>({ state: 'disabled' });
+	let rustLspStatus = $state<RustLspStatus>({ state: 'disabled' });
 	let session: ClangdSessionType | null = null;
+	let goLspSession: GoLspSessionType | null = null;
+	let rustLspSession: RustLspSessionType | null = null;
 	let model: monaco.editor.ITextModel | null = null;
 	let clangdSessionVersion = 0;
+	let goLspSessionVersion = 0;
+	let rustLspSessionVersion = 0;
+	let goLspSessionKey = '';
+	let rustLspSessionKey = '';
 	let debugView = $state<MonacoDebugView | null>(null);
 	interface Props {
 		compact?: boolean;
@@ -1337,8 +1348,13 @@
 		value?: string;
 		onChange?: (value: string) => void;
 		rustTargetTriple?: RustTargetTriple;
+		goTarget?: GoTarget;
 		clangdEnabled?: boolean;
 		clangdBaseUrl?: string;
+		goLspEnabled?: boolean;
+		goLspCompilerUrl?: string;
+		rustLspEnabled?: boolean;
+		rustLspCompilerUrl?: string;
 		breakpoints?: number[];
 		debugLocals?: DebugVariable[];
 		debugLanguage?: DebugLanguageAdapter | null;
@@ -1356,8 +1372,13 @@
 		value,
 		onChange,
 		rustTargetTriple = 'wasm32-wasip1',
+		goTarget = 'wasip1/wasm',
 		clangdEnabled = false,
 		clangdBaseUrl,
+		goLspEnabled = false,
+		goLspCompilerUrl,
+		rustLspEnabled = false,
+		rustLspCompilerUrl,
 		breakpoints = [],
 		debugLocals = [],
 		debugLanguage = null,
@@ -1436,6 +1457,123 @@
 				nextSession?.dispose();
 				if (clangdSessionVersion === nextSessionVersion) session = null;
 				clangdStatus = {
+					state: 'error',
+					message: error instanceof Error ? error.message : String(error)
+				};
+			}
+		})();
+
+		return () => {
+			cancelled = true;
+		};
+	});
+
+	$effect(() => {
+		if (language !== 'go' || !editor || !goLspEnabled || !goLspCompilerUrl) {
+			goLspSession?.dispose();
+			goLspSession = null;
+			goLspSessionKey = '';
+			goLspStatus = { state: 'disabled' };
+			return;
+		}
+		if (!Monaco) return;
+
+		const nextSessionKey = `${goLspCompilerUrl}\n${goTarget}`;
+		if (goLspSession && goLspSessionKey === nextSessionKey) return;
+		goLspSession?.dispose();
+		goLspSession = null;
+
+		let cancelled = false;
+		let nextSession: GoLspSessionType | null = null;
+		const nextSessionVersion = ++goLspSessionVersion;
+
+		(async () => {
+			try {
+				const { GoLspSession } = await import('$lib/lsp/goSession');
+				if (cancelled || !Monaco) return;
+				nextSession = new GoLspSession(Monaco, goLspCompilerUrl, goTarget, (status) => {
+					if (!cancelled) goLspStatus = status;
+				});
+				const previousModel = editor.getModel();
+				const previousModelUri = previousModel?.uri.toString();
+				const nextModel = nextSession.createModel(editor.getValue());
+				goLspSession = nextSession;
+				goLspSessionKey = nextSessionKey;
+				model = nextModel;
+				editor.setModel(nextModel);
+				if (previousModel && previousModelUri !== nextModel.uri.toString()) {
+					previousModel.dispose();
+				}
+				await nextSession.start();
+			} catch (error) {
+				if (cancelled) return;
+				nextSession?.dispose();
+				if (goLspSessionVersion === nextSessionVersion) {
+					goLspSession = null;
+					goLspSessionKey = '';
+				}
+				goLspStatus = {
+					state: 'error',
+					message: error instanceof Error ? error.message : String(error)
+				};
+			}
+		})();
+
+		return () => {
+			cancelled = true;
+		};
+	});
+
+	$effect(() => {
+		if (language !== 'rust' || !editor || !rustLspEnabled || !rustLspCompilerUrl) {
+			rustLspSession?.dispose();
+			rustLspSession = null;
+			rustLspSessionKey = '';
+			rustLspStatus = { state: 'disabled' };
+			return;
+		}
+		if (!Monaco) return;
+
+		const nextSessionKey = `${rustLspCompilerUrl}\n${rustTargetTriple}`;
+		if (rustLspSession && rustLspSessionKey === nextSessionKey) return;
+		rustLspSession?.dispose();
+		rustLspSession = null;
+
+		let cancelled = false;
+		let nextSession: RustLspSessionType | null = null;
+		const nextSessionVersion = ++rustLspSessionVersion;
+
+		(async () => {
+			try {
+				const { RustLspSession } = await import('$lib/lsp/rustSession');
+				if (cancelled || !Monaco) return;
+				nextSession = new RustLspSession(
+					Monaco,
+					rustLspCompilerUrl,
+					rustTargetTriple,
+					(status) => {
+						if (!cancelled) rustLspStatus = status;
+					}
+				);
+				const previousModel = editor.getModel();
+				const previousModelUri = previousModel?.uri.toString();
+				const nextModel = nextSession.createModel(editor.getValue());
+				rustLspSession = nextSession;
+				rustLspSessionKey = nextSessionKey;
+				model = nextModel;
+				editor.setModel(nextModel);
+				if (previousModel && previousModelUri !== nextModel.uri.toString()) {
+					previousModel.dispose();
+				}
+				await nextSession.start();
+			} catch (error) {
+				if (cancelled) return;
+				nextSession?.dispose();
+				if (rustLspSessionVersion === nextSessionVersion) {
+					rustLspSession = null;
+					rustLspSessionKey = '';
+				}
+				rustLspStatus = {
 					state: 'error',
 					message: error instanceof Error ? error.message : String(error)
 				};
@@ -1744,9 +1882,13 @@
 					onRunToCursor
 				});
 				clangdStatus = { state: 'disabled' };
+				goLspStatus = { state: 'disabled' };
+				rustLspStatus = { state: 'disabled' };
 				return;
 			}
 			clangdStatus = { state: 'disabled' };
+			goLspStatus = { state: 'disabled' };
+			rustLspStatus = { state: 'disabled' };
 			editor = Monaco.editor.create(divEl!, {
 				value: value ?? defaultValue,
 				language,
@@ -1782,6 +1924,12 @@
 			disposed = true;
 			session?.dispose();
 			session = null;
+			goLspSession?.dispose();
+			goLspSession = null;
+			goLspSessionKey = '';
+			rustLspSession?.dispose();
+			rustLspSession = null;
+			rustLspSessionKey = '';
 			debugActionBindings?.dispose();
 			debugActionBindings = null;
 			debugView?.dispose();

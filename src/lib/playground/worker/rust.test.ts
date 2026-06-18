@@ -15,6 +15,7 @@ describe('Rust worker', () => {
 		(globalThis as any).__lastCompileOptions = undefined;
 		(globalThis as any).__lastExecution = undefined;
 		(globalThis as any).__lastStdin = undefined;
+		(globalThis as any).__debugControl = undefined;
 	});
 
 	it('loads a wasm-rust-style compiler module and runs the returned artifact through executeBrowserRustArtifact', async () => {
@@ -277,5 +278,90 @@ describe('Rust worker', () => {
 				message: 'fetching sysroot'
 			})
 		});
+	});
+
+	it('instruments Rust source and forwards debug pauses from stderr trace markers', async () => {
+		const compilerModuleUrl = await createMockRustRuntimeModule(`
+			export async function createRustCompiler() {
+				return {
+					async compile(options) {
+						globalThis.__lastCompileOptions = options;
+						return {
+							success: true,
+							artifact: {
+								wasm: new Uint8Array([0, 97, 115, 109]),
+								targetTriple: options.targetTriple,
+								format: 'core-wasm'
+							}
+						};
+					}
+				};
+			}
+
+			export async function executeBrowserRustArtifact(artifact, runtimeBaseUrl, options = {}) {
+				globalThis.__lastExecution = { artifact, runtimeBaseUrl, options };
+				options.stderr?.('__WASM_IDLE_RUST_DEBUG__:4:main\\n');
+				options.stderr?.('visible stderr\\n');
+				return {
+					exitCode: 0,
+					stdout: '',
+					stderr: ''
+				};
+			}
+
+			export default createRustCompiler;
+		`);
+		const debugBuffer = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * 1028);
+		(globalThis as any).__debugControl = new Int32Array(debugBuffer);
+		(globalThis as any).postMessage = vi.fn((message: any) => {
+			if (message?.debugEvent?.type === 'pause') {
+				Atomics.store((globalThis as any).__debugControl, 1, 1);
+				Atomics.add((globalThis as any).__debugControl, 0, 1);
+				Atomics.notify((globalThis as any).__debugControl, 0);
+			}
+		});
+
+		await import('./rust');
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				compilerUrl: compilerModuleUrl
+			}
+		});
+		await Promise.resolve();
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: `fn main() {
+    println!("hi");
+}`,
+				prepare: false,
+				buffer: new SharedArrayBuffer(1024),
+				debugBuffer,
+				debug: true,
+				breakpoints: [4],
+				pauseOnEntry: true
+			}
+		});
+		await Promise.resolve();
+
+		expect((globalThis as any).__lastCompileOptions.code).toContain(
+			'eprintln!("__WASM_IDLE_RUST_DEBUG__:{}:{}", 2, "main");'
+		);
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			debugEvent: {
+				type: 'pause',
+				line: 4,
+				reason: 'entry',
+				locals: [],
+				callStack: [{ functionName: 'main', line: 4 }]
+			}
+		});
+		expect((globalThis as any).postMessage).not.toHaveBeenCalledWith({
+			output: '__WASM_IDLE_RUST_DEBUG__:4:main\n'
+		});
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			output: 'visible stderr\n'
+		});
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
 	});
 });

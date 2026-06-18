@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 import {
 	resolveCppLanguageServerBaseUrl,
 	resolveCppLanguageServerRuntimeAssetConfig,
-	resolvePythonLanguageServerBaseUrl
+	resolveGoLanguageServerCompilerUrl,
+	resolvePythonLanguageServerBaseUrl,
+	resolveRustLanguageServerCompilerUrl
 } from '../src/index.js';
 
 describe('lsp runtime asset resolution', () => {
@@ -20,6 +22,18 @@ describe('lsp runtime asset resolution', () => {
 				'https://app.example.com/editor'
 			)
 		).toBe('https://static.example.com/repl_20240807/pyodide/');
+		expect(
+			resolveRustLanguageServerCompilerUrl(
+				'https://static.example.com/repl_20240807',
+				'https://app.example.com/editor'
+			)
+		).toBe('https://static.example.com/repl_20240807/wasm-rust/index.js');
+		expect(
+			resolveGoLanguageServerCompilerUrl(
+				'https://static.example.com/repl_20240807',
+				'https://app.example.com/editor'
+			)
+		).toBe('https://static.example.com/repl_20240807/wasm-go/index.js');
 	});
 
 	it('prefers explicit per-language overrides', () => {
@@ -30,12 +44,24 @@ describe('lsp runtime asset resolution', () => {
 			},
 			python: {
 				baseUrl: 'https://python.example.com/assets/'
+			},
+			rust: {
+				compilerUrl: 'https://rust.example.com/wasm-rust/index.js?v=20240807'
+			},
+			go: {
+				compilerUrl: 'https://go.example.com/wasm-go/index.js?v=20240807'
 			}
 		};
 
 		expect(resolveCppLanguageServerBaseUrl(options)).toBe('https://cpp.example.com/assets/');
 		expect(resolvePythonLanguageServerBaseUrl(options)).toBe(
 			'https://python.example.com/assets/'
+		);
+		expect(resolveRustLanguageServerCompilerUrl(options)).toBe(
+			'https://rust.example.com/wasm-rust/index.js?v=20240807'
+		);
+		expect(resolveGoLanguageServerCompilerUrl(options)).toBe(
+			'https://go.example.com/wasm-go/index.js?v=20240807'
 		);
 	});
 
@@ -62,5 +88,11 @@ describe('lsp runtime asset resolution', () => {
 		expect(
 			resolvePythonLanguageServerBaseUrl(undefined, 'https://app.example.com/editor')
 		).toBe('https://app.example.com/pyodide/');
+		expect(
+			resolveRustLanguageServerCompilerUrl(undefined, 'https://app.example.com/editor')
+		).toBe('https://app.example.com/wasm-rust/index.js');
+		expect(
+			resolveGoLanguageServerCompilerUrl(undefined, 'https://app.example.com/editor')
+		).toBe('https://app.example.com/wasm-go/index.js');
 	});
 });

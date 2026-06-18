@@ -2,7 +2,9 @@ export { getEditorLanguageServer } from './registry.js';
 export {
 	resolveCppLanguageServerBaseUrl,
 	resolveCppLanguageServerRuntimeAssetConfig,
-	resolvePythonLanguageServerBaseUrl
+	resolveGoLanguageServerCompilerUrl,
+	resolvePythonLanguageServerBaseUrl,
+	resolveRustLanguageServerCompilerUrl
 } from './runtime.js';
 export {
 	CLANGD_ASSETS,
@@ -44,6 +46,22 @@ export {
 	type PythonLspWorkerInboundMessage,
 	type PythonLspWorkerOutboundMessage
 } from './python/index.js';
+export {
+	createRustWorkerService,
+	getRustLanguageServer,
+	type RustLanguageServerConfig,
+	type RustLanguageServerOptions,
+	type RustLanguageServerTargetTriple,
+	type RustWorkerOptions
+} from './rust/index.js';
+export {
+	createGoWorkerService,
+	getGoLanguageServer,
+	type GoLanguageServerConfig,
+	type GoLanguageServerOptions,
+	type GoLanguageServerTarget,
+	type GoWorkerOptions
+} from './go/index.js';
 export {
 	createTypeScriptWorkerService,
 	getJavaScriptLanguageServer,

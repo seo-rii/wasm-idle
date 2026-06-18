@@ -4,7 +4,10 @@
 		createPlaygroundBinding,
 		createDebugSessionController,
 		cppDebugLanguageAdapter,
-		pythonDebugLanguageAdapter
+		goDebugLanguageAdapter,
+		pythonDebugLanguageAdapter,
+		rustDebugLanguageAdapter,
+		isSharedArrayBufferAvailable
 	} from '$lib';
 	import { page } from '$app/state';
 	import { browser } from '$app/environment';
@@ -314,6 +317,7 @@
 		language = $state<PlaygroundLanguage>('CPP'),
 		runningMode = $state<'run' | 'debug' | null>(null),
 		progress = $state(-1),
+		stdinInput = $state(''),
 		init = $state(false),
 		examplePane = $state<HTMLElement | null>(null),
 		examplePaneWidth = $state(0),
@@ -334,6 +338,7 @@
 	let workspaceSaveTimer: ReturnType<typeof setTimeout> | null = null;
 	let fileInput = $state<HTMLInputElement | null>(null);
 	let dragActive = $state(false);
+	const sharedBufferAvailable = $derived(!browser || isSharedArrayBufferAvailable());
 
 	const editorLanguage = $derived(
 		language === 'C'
@@ -433,9 +438,13 @@
 	const debugLanguage = $derived.by(() =>
 		language === 'CPP'
 			? cppDebugLanguageAdapter
-			: language === 'PYTHON'
-				? pythonDebugLanguageAdapter
-				: null
+			: language === 'GO'
+				? goDebugLanguageAdapter
+				: language === 'RUST'
+					? rustDebugLanguageAdapter
+					: language === 'PYTHON'
+						? pythonDebugLanguageAdapter
+						: null
 	);
 	const debug = createDebugSessionController({
 		syncBreakpointsWhile: () => runningMode === 'debug'
@@ -447,7 +456,15 @@
 	const knownRustTargetTriples = ['wasm32-wasip1', 'wasm32-wasip2', 'wasm32-wasip3'] as const;
 	const knownGoTargets = ['wasip1/wasm', 'wasip2/wasm', 'wasip3/wasm', 'js/wasm'] as const;
 	const knownTinyGoTargets = ['wasm', 'wasip1', 'wasip2', 'wasip3'] as const;
-	const debugTitle = $derived(language === 'CPP' ? 'Native Trace' : 'Pyodide Trace');
+	const debugTitle = $derived(
+		language === 'CPP'
+			? 'Native Trace'
+			: language === 'GO'
+				? 'Go Trace'
+				: language === 'RUST'
+					? 'Rust Trace'
+					: 'Pyodide Trace'
+	);
 	const loading = $derived(progress >= 0 && progress < 1);
 	const progressValue = $derived(progress < 0 ? 0 : progress > 1 ? 1 : progress);
 	const progressPercent = $derived(Math.round(progressValue * 100));
@@ -1183,6 +1200,7 @@
 	async function exec(enableDebug = false) {
 		if (!editor || !terminal || !activeFile) return;
 		if (enableDebug && !debugLanguage) return;
+		if (enableDebug && !sharedBufferAvailable) return;
 		if (runningMode) return;
 		runningMode = enableDebug ? 'debug' : 'run';
 		if (enableDebug && language === 'CPP') clangdRequested = true;
@@ -1206,8 +1224,8 @@
 			saveWorkspace();
 		}
 		try {
-			if (!('SharedArrayBuffer' in window)) location.reload();
 			progress = 0;
+			const preloadedStdin = sharedBufferAvailable ? undefined : stdinInput;
 			await executeTerminalRun({
 				terminal,
 				language,
@@ -1229,7 +1247,8 @@
 					tinygoTarget: language === 'TINYGO' ? tinygoTarget : undefined,
 					ocamlBackend: language === 'OCAML' ? ocamlBackend : undefined,
 					ocamlWasmBinaryenMode: language === 'OCAML' ? ocamlWasmBinaryenMode : undefined,
-					zigTargetTriple: language === 'ZIG' ? 'wasm64-wasi' : undefined
+					zigTargetTriple: language === 'ZIG' ? 'wasm64-wasi' : undefined,
+					stdin: preloadedStdin
 				}
 			});
 		} finally {
@@ -1690,7 +1709,10 @@
 						<button
 							class="action-button action-button--debug"
 							onclick={() => exec(true)}
-							disabled={!!runningMode || !debugLanguage}
+							disabled={!!runningMode || !debugLanguage || !sharedBufferAvailable}
+							title={!sharedBufferAvailable
+								? 'Debugging requires SharedArrayBuffer'
+								: 'Debug'}
 						>
 							<span class="material-symbols-outlined">bug_report</span>
 							<span>Debug</span>
@@ -1756,6 +1778,23 @@
 					</button>
 				</div>
 			</div>
+			{#if !sharedBufferAvailable}
+				<div class="stdin-panel">
+					<div>
+						<strong>Preloaded stdin</strong>
+						<span
+							>SharedArrayBuffer is unavailable here, so terminal input cannot be sent
+							while the program is running. Enter stdin before Run; extra reads
+							receive EOF.</span
+						>
+					</div>
+					<textarea
+						bind:value={stdinInput}
+						placeholder="Input to pass before running"
+						spellcheck={false}
+					></textarea>
+				</div>
+			{/if}
 			<div class="toolbar-row toolbar-row--secondary">
 				<button class="tool-button" onclick={() => (sidebarOpen = !sidebarOpen)}>
 					<span class="material-symbols-outlined">folder_open</span>
@@ -2333,12 +2372,19 @@
 			<Monaco
 				language={editorLanguage}
 				rustTargetTriple={language === 'RUST' ? rustTargetTriple : undefined}
+				goTarget={language === 'GO' ? goTarget : undefined}
 				bind:editor
 				value={activeFile?.content ?? ''}
 				onChange={updateActiveContent}
 				{compact}
 				clangdEnabled={clangdRequested}
 				{clangdBaseUrl}
+				goLspEnabled={language === 'GO'}
+				goLspCompilerUrl={language === 'GO' ? runtimeAssets.go?.compilerUrl : undefined}
+				rustLspEnabled={language === 'RUST'}
+				rustLspCompilerUrl={language === 'RUST'
+					? runtimeAssets.rust?.compilerUrl
+					: undefined}
 				breakpoints={debug.effectiveBreakpoints}
 				debugLocals={debug.locals}
 				{debugLanguage}
@@ -2679,6 +2725,53 @@
 
 	.toolbar-row--secondary {
 		gap: 8px;
+	}
+
+	.stdin-panel {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+		gap: 8px;
+		padding: 10px;
+		border: 1px solid rgba(245, 158, 11, 0.28);
+		border-radius: 12px;
+		background: rgba(255, 251, 235, 0.92);
+		color: #451a03;
+	}
+
+	.stdin-panel > div {
+		display: flex;
+		flex-direction: column;
+		gap: 3px;
+		font-size: 12px;
+		line-height: 1.35;
+	}
+
+	.stdin-panel strong {
+		font-size: 12px;
+	}
+
+	.stdin-panel textarea {
+		width: 100%;
+		min-height: 86px;
+		resize: vertical;
+		box-sizing: border-box;
+		padding: 8px 9px;
+		border: 1px solid rgba(180, 83, 9, 0.22);
+		border-radius: 10px;
+		background: rgba(255, 255, 255, 0.88);
+		color: #0f172a;
+		font:
+			12px/1.45 ui-monospace,
+			SFMono-Regular,
+			Menlo,
+			Monaco,
+			Consolas,
+			monospace;
+	}
+
+	.stdin-panel textarea:focus {
+		outline: 2px solid rgba(245, 158, 11, 0.24);
+		border-color: rgba(217, 119, 6, 0.45);
 	}
 
 	.progress-shell {

@@ -15,6 +15,9 @@ describe('Go worker', () => {
 		(globalThis as any).__lastCompileOptions = undefined;
 		(globalThis as any).__lastExecution = undefined;
 		(globalThis as any).__lastStdin = undefined;
+		(globalThis as any).__debugControl = undefined;
+		(globalThis as any).__hookDuringExecute = undefined;
+		delete (globalThis as any).__wasmIdleGoDebugLine;
 	});
 
 	it('loads a wasm-go-style compiler module and runs the returned artifact through executeBrowserGoArtifact', async () => {
@@ -330,5 +333,90 @@ describe('Go worker', () => {
 				message: 'compiling'
 			})
 		});
+	});
+
+	it('instruments Go source, forces js/wasm, and forwards debug pauses from the runtime hook', async () => {
+		const compilerModuleUrl = await createMockGoRuntimeModule(`
+			export async function createGoCompiler() {
+				return {
+					async compile(options) {
+						globalThis.__lastCompileOptions = options;
+						return {
+							success: true,
+							artifact: {
+								wasm: new Uint8Array([0, 97, 115, 109]),
+								bytes: new Uint8Array([0, 97, 115, 109]),
+								target: options.target,
+								format: 'js-wasm'
+							}
+						};
+					}
+				};
+			}
+
+			export async function executeBrowserGoArtifact(artifact, options = {}) {
+				globalThis.__lastExecution = { artifact, options };
+				globalThis.__hookDuringExecute = typeof globalThis.__wasmIdleGoDebugLine;
+				Atomics.store(globalThis.__debugControl, 1, 1);
+				Atomics.add(globalThis.__debugControl, 0, 1);
+				globalThis.__wasmIdleGoDebugLine(
+					4,
+					JSON.stringify([{ functionName: 'main', line: 4 }])
+				);
+				return {
+					exitCode: 0,
+					stdout: '',
+					stderr: ''
+				};
+			}
+
+			export default createGoCompiler;
+		`);
+		const debugBuffer = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * 1028);
+		(globalThis as any).__debugControl = new Int32Array(debugBuffer);
+
+		await import('./go');
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				compilerUrl: compilerModuleUrl
+			}
+		});
+		await Promise.resolve();
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: `package main
+
+func main() {
+	println("hi")
+}`,
+				prepare: false,
+				buffer: new SharedArrayBuffer(1024),
+				debugBuffer,
+				target: 'wasip2/wasm',
+				debug: true,
+				breakpoints: [4]
+			}
+		});
+		await Promise.resolve();
+
+		expect((globalThis as any).__lastCompileOptions.target).toBe('js/wasm');
+		expect((globalThis as any).__lastCompileOptions.code).toContain('__wasmIdleDebugLine(4)');
+		expect((globalThis as any).__lastCompileOptions.code).toContain(
+			'__wasm_idle_debug_js "syscall/js"'
+		);
+		expect((globalThis as any).__lastExecution.artifact.target).toBe('js/wasm');
+		expect((globalThis as any).__hookDuringExecute).toBe('function');
+		expect((globalThis as any).__wasmIdleGoDebugLine).toBeUndefined();
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			debugEvent: {
+				type: 'pause',
+				line: 4,
+				reason: 'breakpoint',
+				locals: [],
+				callStack: [{ functionName: 'main', line: 4 }]
+			}
+		});
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
 	});
 });

@@ -32,8 +32,10 @@ describe('example route debug actions', () => {
 
 	it('delegates debug state, runtime watches, and run-to-cursor to the shared debug controller', () => {
 		expect(source).toMatch(
-			/import Terminal, \{\s+createPlaygroundBinding,\s+createDebugSessionController,\s+cppDebugLanguageAdapter,\s+pythonDebugLanguageAdapter\s+\} from '\$lib';/s
+			/import Terminal, \{\s+createPlaygroundBinding,\s+createDebugSessionController,\s+cppDebugLanguageAdapter,\s+goDebugLanguageAdapter,\s+pythonDebugLanguageAdapter,\s+rustDebugLanguageAdapter,\s+isSharedArrayBufferAvailable\s+\} from '\$lib';/s
 		);
+		expect(source).toMatch(/language === 'GO'\s+\?\s+goDebugLanguageAdapter/);
+		expect(source).toMatch(/language === 'RUST'\s+\?\s+rustDebugLanguageAdapter/);
 		expect(source).toMatch(/const debug = createDebugSessionController\(\{/);
 		expect(source).toMatch(/syncBreakpointsWhile: \(\) => runningMode === 'debug'/);
 		expect(source).toMatch(/\$effect\(\(\) => \{\s+debug\.setTerminal\(terminal\);\s+\}\);/s);
@@ -62,6 +64,22 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/pausedLine=\{debug\.pausedLine\}/);
 		expect(source).toMatch(/onRunToCursor=\{debug\.runToCursor\}/);
 		expect(source).toMatch(/<span class="material-symbols-outlined">play_circle<\/span>/);
+	});
+
+	it('preloads stdin instead of reloading when SharedArrayBuffer is unavailable', () => {
+		expect(source).not.toMatch(/location\.reload\(\)/);
+		expect(source).toMatch(
+			/const sharedBufferAvailable = \$derived\(\s*!browser \|\| isSharedArrayBufferAvailable\(\)\s*\);/s
+		);
+		expect(source).toMatch(
+			/const preloadedStdin = sharedBufferAvailable \? undefined : stdinInput;/
+		);
+		expect(source).toMatch(/stdin: preloadedStdin/);
+		expect(source).toMatch(/\{#if !sharedBufferAvailable\}\s+<div class="stdin-panel">/s);
+		expect(source).toMatch(/bind:value=\{stdinInput\}/);
+		expect(source).toMatch(
+			/disabled=\{!!runningMode \|\| !debugLanguage \|\| !sharedBufferAvailable\}/
+		);
 	});
 
 	it('passes a local wasm-rust bundle through a reusable playground binding', () => {

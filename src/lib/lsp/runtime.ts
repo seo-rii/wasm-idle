@@ -1,5 +1,7 @@
 export {
 	resolveCppLanguageServerBaseUrl,
 	resolveCppLanguageServerRuntimeAssetConfig,
-	resolvePythonLanguageServerBaseUrl
+	resolveGoLanguageServerCompilerUrl,
+	resolvePythonLanguageServerBaseUrl,
+	resolveRustLanguageServerCompilerUrl
 } from '@wasm-idle/lsp';

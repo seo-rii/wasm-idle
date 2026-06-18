@@ -1,7 +1,9 @@
 import Terminal from '$lib/terminal';
 export {
 	cppDebugLanguageAdapter,
+	goDebugLanguageAdapter,
 	pythonDebugLanguageAdapter,
+	rustDebugLanguageAdapter,
 	evaluateDebugExpression,
 	createDebugSessionController,
 	MonacoDebugView,
@@ -13,14 +15,18 @@ export {
 	getAssemblyScriptLanguageServer,
 	getCSharpLanguageServer,
 	getCppLanguageServer,
+	getGoLanguageServer,
 	getJavaScriptLanguageServer,
 	getPythonLanguageServer,
+	getRustLanguageServer,
 	getTypeScriptLanguageServer,
 	getVisualBasicLanguageServer,
 	getWatLanguageServer,
 	resolveCppLanguageServerBaseUrl,
 	resolveCppLanguageServerRuntimeAssetConfig,
-	resolvePythonLanguageServerBaseUrl
+	resolveGoLanguageServerCompilerUrl,
+	resolvePythonLanguageServerBaseUrl,
+	resolveRustLanguageServerCompilerUrl
 } from '$lib/lsp';
 import playground, { createPlaygroundBinding } from '$lib/playground';
 
@@ -60,4 +66,10 @@ export type {
 	SandboxRuntimeAssets
 } from '$lib/playground/sandbox';
 export type { DebugLanguageAdapter } from '$lib/debug';
-export type { EditorLanguageServerHandle, EditorLanguageServerRuntimeOptions } from '$lib/lsp';
+export type {
+	EditorLanguageServerHandle,
+	EditorLanguageServerRuntimeOptions,
+	GoLanguageServerTarget,
+	LanguageServerStatus,
+	RustLanguageServerTargetTriple
+} from '$lib/lsp';

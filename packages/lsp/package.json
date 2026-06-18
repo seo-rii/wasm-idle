@@ -20,6 +20,16 @@
 			"import": "./dist/python/index.js",
 			"default": "./dist/python/index.js"
 		},
+		"./rust": {
+			"types": "./dist/rust/index.d.ts",
+			"import": "./dist/rust/index.js",
+			"default": "./dist/rust/index.js"
+		},
+		"./go": {
+			"types": "./dist/go/index.d.ts",
+			"import": "./dist/go/index.js",
+			"default": "./dist/go/index.js"
+		},
 		"./typescript": {
 			"types": "./dist/typescript/index.d.ts",
 			"import": "./dist/typescript/index.js",

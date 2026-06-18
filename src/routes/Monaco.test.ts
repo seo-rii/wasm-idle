@@ -24,6 +24,10 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(/let debugView = \$state<MonacoDebugView \| null>\(null\);/);
 		expect(source).toMatch(/clangdEnabled\?: boolean;/);
 		expect(source).toMatch(/clangdEnabled = false,/);
+		expect(source).toMatch(/goLspEnabled\?: boolean;/);
+		expect(source).toMatch(/goLspEnabled = false,/);
+		expect(source).toMatch(/rustLspEnabled\?: boolean;/);
+		expect(source).toMatch(/rustLspEnabled = false,/);
 		expect(source).toMatch(
 			/import \{\s+isEditorDefaultSource,\s+isLegacyEditorDefaultSource,\s+resolveEditorDefaultSource\s+\} from '\.\/editor-defaults';/s
 		);
@@ -81,6 +85,26 @@ describe('Monaco route debug sync', () => {
 		);
 		expect(source).toMatch(/let clangdSessionVersion = 0;/);
 		expect(source).toMatch(/const nextSessionVersion = \+\+clangdSessionVersion;/);
+		expect(source).toMatch(/let rustLspSessionVersion = 0;/);
+		expect(source).toMatch(/let goLspSessionVersion = 0;/);
+		expect(source).toMatch(
+			/if \(language !== 'go' \|\| !editor \|\| !goLspEnabled \|\| !goLspCompilerUrl\) \{\s+goLspSession\?\.dispose\(\);\s+goLspSession = null;\s+goLspSessionKey = '';\s+goLspStatus = \{ state: 'disabled' \};\s+return;\s+\}/s
+		);
+		expect(source).toMatch(
+			/const \{ GoLspSession \} = await import\('\$lib\/lsp\/goSession'\);/s
+		);
+		expect(source).toMatch(
+			/goLspSessionKey = nextSessionKey;[\s\S]*await nextSession\.start\(\);/s
+		);
+		expect(source).toMatch(
+			/if \(language !== 'rust' \|\| !editor \|\| !rustLspEnabled \|\| !rustLspCompilerUrl\) \{\s+rustLspSession\?\.dispose\(\);\s+rustLspSession = null;\s+rustLspSessionKey = '';\s+rustLspStatus = \{ state: 'disabled' \};\s+return;\s+\}/s
+		);
+		expect(source).toMatch(
+			/const \{ RustLspSession \} = await import\('\$lib\/lsp\/rustSession'\);/s
+		);
+		expect(source).toMatch(
+			/rustLspSessionKey = nextSessionKey;[\s\S]*await nextSession\.start\(\);/s
+		);
 		expect(source).toMatch(
 			/if \(previousModel && previousModelUri !== nextModel\.uri\.toString\(\)\) \{\s+previousModel\.dispose\(\);\s+\}/s
 		);
@@ -227,6 +251,14 @@ describe('Monaco route debug sync', () => {
 			/const playground = \$derived\.by\(\(\) => createPlaygroundBinding\(runtimeAssets\)\);/
 		);
 		expect(pageSource).toMatch(/clangdEnabled=\{clangdRequested\}/);
+		expect(pageSource).toMatch(/goLspEnabled=\{language === 'GO'\}/);
+		expect(pageSource).toMatch(
+			/goLspCompilerUrl=\{language === 'GO'\s+\?\s+runtimeAssets\.go\?\.compilerUrl\s+:\s+undefined\}/
+		);
+		expect(pageSource).toMatch(/rustLspEnabled=\{language === 'RUST'\}/);
+		expect(pageSource).toMatch(
+			/rustLspCompilerUrl=\{language === 'RUST'\s+\?\s+runtimeAssets\.rust\?\.compilerUrl\s+:\s+undefined\}/
+		);
 	});
 
 	it('keeps the editor pane shrinkable for the resizable example layout', () => {

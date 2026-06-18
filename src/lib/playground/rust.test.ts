@@ -241,4 +241,61 @@ describe('Rust sandbox', () => {
 
 		expect(values).toEqual([0.12, 0.93]);
 	});
+
+	it('forwards Rust debug options, commands, and breakpoint updates through the worker', async () => {
+		const sandbox = new Rust();
+		const worker = new MockWorker();
+		const events: any[] = [];
+		let runMessage: any;
+
+		sandbox.worker = worker as unknown as Worker;
+		sandbox.ondebug = (event) => events.push(event);
+		worker.postMessage.mockImplementationOnce((message) => {
+			runMessage = message;
+			queueMicrotask(() => {
+				worker.onmessage?.({
+					data: {
+						debugEvent: {
+							type: 'pause',
+							line: 2,
+							reason: 'entry',
+							locals: [],
+							callStack: [{ functionName: 'main', line: 2 }]
+						}
+					}
+				} as MessageEvent<any>);
+				worker.onmessage?.({ data: { results: true } } as MessageEvent<any>);
+			});
+		});
+
+		await expect(
+			sandbox.run('fn main() {}', false, true, undefined, [], {
+				debug: true,
+				breakpoints: [2],
+				pauseOnEntry: true
+			})
+		).resolves.toBe(true);
+
+		expect(runMessage).toMatchObject({
+			debug: true,
+			breakpoints: [2],
+			pauseOnEntry: true
+		});
+		expect(runMessage.debugBuffer).toBe(sandbox.debugBuffer);
+		expect(events).toContainEqual({
+			type: 'pause',
+			line: 2,
+			reason: 'entry',
+			locals: [],
+			callStack: [{ functionName: 'main', line: 2 }]
+		});
+		expect(events).toContainEqual({ type: 'stop' });
+
+		sandbox.debugCommand('nextLine');
+		expect(Atomics.load(new Int32Array(sandbox.debugBuffer), 1)).toBe(3);
+		sandbox.setBreakpoints([5, 3]);
+		const control = new Int32Array(sandbox.debugBuffer);
+		expect(Atomics.load(control, 3)).toBe(2);
+		expect([Atomics.load(control, 4), Atomics.load(control, 5)]).toEqual([3, 5]);
+	});
 });

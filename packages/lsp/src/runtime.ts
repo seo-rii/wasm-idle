@@ -1,6 +1,7 @@
 import {
 	CLANGD_VIRTUAL_BASE_URL,
 	normalizeBaseUrl,
+	normalizeRootUrl,
 	resolveRootToolBaseUrl,
 	type ResolvedLanguageToolAssetConfig
 } from './assets.js';
@@ -64,6 +65,47 @@ export function resolvePythonLanguageServerBaseUrl(
 		return resolveRootToolBaseUrl(options.rootUrl, '/pyodide/', currentUrl);
 	}
 	return normalizeBaseUrl('/pyodide/', currentUrl);
+}
+
+const resolveFileUrl = (value: string, currentUrl = '') =>
+	currentUrl ? new URL(value, currentUrl).href : value;
+
+export function resolveRustLanguageServerCompilerUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	if (typeof options === 'string') {
+		return resolveFileUrl(`${normalizeRootUrl(options) || ''}/wasm-rust/index.js`, currentUrl);
+	}
+	if (options?.rust?.compilerUrl) {
+		return resolveFileUrl(options.rust.compilerUrl, currentUrl);
+	}
+	if (options?.rootUrl) {
+		return resolveFileUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-rust/index.js`,
+			currentUrl
+		);
+	}
+	return resolveFileUrl('/wasm-rust/index.js', currentUrl);
+}
+
+export function resolveGoLanguageServerCompilerUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	if (typeof options === 'string') {
+		return resolveFileUrl(`${normalizeRootUrl(options) || ''}/wasm-go/index.js`, currentUrl);
+	}
+	if (options?.go?.compilerUrl) {
+		return resolveFileUrl(options.go.compilerUrl, currentUrl);
+	}
+	if (options?.rootUrl) {
+		return resolveFileUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-go/index.js`,
+			currentUrl
+		);
+	}
+	return resolveFileUrl('/wasm-go/index.js', currentUrl);
 }
 
 export type { EditorLanguageServerRuntimeOptions };

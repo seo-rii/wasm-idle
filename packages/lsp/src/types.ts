@@ -21,6 +21,15 @@ export interface EditorLanguageServerRuntimeOptions {
 	python?: {
 		baseUrl?: string;
 	};
+	rust?: {
+		compilerUrl?: string;
+		targetTriple?: 'wasm32-wasip1' | 'wasm32-wasip2' | 'wasm32-wasip3';
+		edition?: string;
+	};
+	go?: {
+		compilerUrl?: string;
+		target?: 'wasip1/wasm' | 'wasip2/wasm' | 'wasip3/wasm' | 'js/wasm';
+	};
 	typescript?: {
 		compilerOptions?: CompilerOptions;
 		extraLibs?: Record<string, string>;

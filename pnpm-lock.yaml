@@ -17,6 +17,9 @@ importers:
       '@hancomac/monaco-languageclient':
         specifier: ^1.1.0
         version: 1.1.0
+      '@lezer/rust':
+        specifier: ^1.0.2
+        version: 1.0.2
       '@live-codes/gleam-precompiled':
         specifier: 0.5.0
         version: 0.5.0
@@ -1168,6 +1171,9 @@ packages:
 
   '@lezer/lr@1.4.10':
     resolution: {integrity: sha512-rnCpTIBafOx4mRp43xOxDJbFipJm/c0cia/V5TiGlhmMa+wsSdoGmUN3w5Bqrks/09Q/D4tNAmWaT8p6NRi77A==}
+
+  '@lezer/rust@1.0.2':
+    resolution: {integrity: sha512-Lz5sIPBdF2FUXcWeCu1//ojFAZqzTQNRga0aYv6dYXqJqPfMdCAI0NzajWUd4Xijj1IKJLtjoXRPMvTKWBcqKg==}
 
   '@live-codes/gleam-precompiled@0.5.0':
     resolution: {integrity: sha512-qHHxbRk71+Q2ze5U1SHKEvcam/zCELxNioa94IEqmy+A4GtvgBVIRqwu2e4gdpqqgPY5WdE7hKURVn1OVlJ8mA==}
@@ -4384,6 +4390,12 @@ snapshots:
   '@lezer/lr@1.4.10':
     dependencies:
       '@lezer/common': 1.5.2
+
+  '@lezer/rust@1.0.2':
+    dependencies:
+      '@lezer/common': 1.5.2
+      '@lezer/highlight': 1.2.3
+      '@lezer/lr': 1.4.10
 
   '@live-codes/gleam-precompiled@0.5.0': {}
 

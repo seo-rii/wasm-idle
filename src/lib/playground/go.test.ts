@@ -241,4 +241,76 @@ func main() {}`,
 
 		expect(readBufferedStdin(runMessage.buffer)).toBe('42\n');
 	});
+
+	it('passes debug buffers, breakpoints, and debug events through the worker host', async () => {
+		const sandbox = new Go();
+		const events: any[] = [];
+		let runMessage: any;
+
+		sandbox.ondebug = (event) => events.push(event);
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		worker.postMessage.mockImplementationOnce((message) => {
+			runMessage = message;
+			queueMicrotask(() => {
+				worker.onmessage?.({
+					data: {
+						debugEvent: {
+							type: 'pause',
+							line: 5,
+							reason: 'entry',
+							locals: [],
+							callStack: [{ functionName: 'main', line: 5 }]
+						}
+					}
+				} as MessageEvent<any>);
+				sandbox.debugCommand?.('nextLine');
+				worker.onmessage?.({ data: { results: true } } as MessageEvent<any>);
+			});
+		});
+
+		await expect(
+			sandbox.run(
+				`package main
+
+func main() {
+	println("hi")
+}`,
+				false,
+				true,
+				undefined,
+				[],
+				{
+					debug: true,
+					breakpoints: [8, 5, 5],
+					pauseOnEntry: true,
+					goTarget: 'wasip2/wasm'
+				}
+			)
+		).resolves.toBe(true);
+
+		expect(runMessage).toEqual(
+			expect.objectContaining({
+				debug: true,
+				breakpoints: [8, 5, 5],
+				pauseOnEntry: true,
+				target: 'wasip2/wasm'
+			})
+		);
+		expect(runMessage.debugBuffer).toBeDefined();
+		const control = new Int32Array(runMessage.debugBuffer);
+		expect(Array.from(control.slice(3, 6))).toEqual([2, 5, 8]);
+		expect(Atomics.load(control, 1)).toBe(3);
+		expect(events).toEqual([
+			{
+				type: 'pause',
+				line: 5,
+				reason: 'entry',
+				locals: [],
+				callStack: [{ functionName: 'main', line: 5 }]
+			},
+			{ type: 'resume', command: 'nextLine' },
+			{ type: 'stop' }
+		]);
+	});
 });

@@ -1,7 +1,9 @@
 import { getAssemblyScriptLanguageServer } from './assemblyscript/server.js';
 import { getCppLanguageServer } from './clangd/server.js';
 import { getCSharpLanguageServer, getVisualBasicLanguageServer } from './dotnet/server.js';
+import { getGoLanguageServer } from './go/server.js';
 import { getPythonLanguageServer } from './python/server.js';
+import { getRustLanguageServer } from './rust/server.js';
 import { getJavaScriptLanguageServer, getTypeScriptLanguageServer } from './typescript/server.js';
 import { getWatLanguageServer } from './wat/server.js';
 export async function getEditorLanguageServer(language, options) {
@@ -11,6 +13,12 @@ export async function getEditorLanguageServer(language, options) {
     }
     if (normalized === 'python') {
         return getPythonLanguageServer(options);
+    }
+    if (normalized === 'rust' || normalized === 'rs') {
+        return getRustLanguageServer(options);
+    }
+    if (normalized === 'go' || normalized === 'golang') {
+        return getGoLanguageServer(options);
     }
     if (normalized === 'typescript' || normalized === 'ts') {
         return getTypeScriptLanguageServer(options);

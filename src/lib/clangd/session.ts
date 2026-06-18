@@ -2,7 +2,6 @@ import {
 	CloseAction,
 	ErrorAction,
 	MonacoLanguageClient,
-	MonacoServices,
 	type MessageTransports
 } from '@hancomac/monaco-languageclient';
 import {
@@ -13,8 +12,7 @@ import {
 import type * as Monaco from 'monaco-editor';
 
 import { CLANGD_CPP_FILE_URI, CLANGD_WORKSPACE_URI, type ClangdStatus } from '$lib/clangd/config';
-
-let servicesInstalled = false;
+import { installMonacoLanguageServices } from '$lib/lsp/monacoServices';
 
 export class ClangdSession {
 	Monaco: typeof Monaco;
@@ -31,10 +29,7 @@ export class ClangdSession {
 		this.Monaco = MonacoModule;
 		this.onStatus = onStatus;
 		this.assetConfig = typeof baseUrl === 'string' ? { baseUrl } : baseUrl;
-		if (!servicesInstalled) {
-			MonacoServices.install(MonacoModule);
-			servicesInstalled = true;
-		}
+		installMonacoLanguageServices(MonacoModule);
 	}
 
 	createModel(value: string) {

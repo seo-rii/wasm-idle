@@ -1,5 +1,7 @@
 import { resolveRustCompilerUrl, type PlaygroundRuntimeAssets } from '$lib/playground/assets';
 import {
+	type DebugCommand,
+	type DebugSessionEvent,
 	resolveSandboxExecutionArgs,
 	type CompilerDiagnostic,
 	type SandboxExecutionOptions
@@ -10,12 +12,18 @@ import {
 	flushQueuedStdin,
 	resetBufferedStdin
 } from '$lib/playground/stdinBuffer';
-import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
+import { createWasmIdleSharedBuffer, requireSharedArrayBuffer } from '$lib/playground/sharedBuffer';
+
+const debugBreakpointBufferInts = 1028;
 
 class Rust implements Sandbox {
 	output: any = null;
+	ondebug?: (event: DebugSessionEvent) => void;
 	worker?: Worker = <any>null;
 	buffer = createWasmIdleSharedBuffer(1024);
+	debugBuffer = createWasmIdleSharedBuffer(
+		Int32Array.BYTES_PER_ELEMENT * debugBreakpointBufferInts
+	);
 	pendingInput: string[] = [];
 	begin = 0;
 	elapse = 0;
@@ -55,7 +63,9 @@ class Rust implements Sandbox {
 				);
 			}
 			const needsWorkerReset =
-				!this.worker || this.compilerUrl !== nextCompilerUrl || this.assetPath !== nextAssetPath;
+				!this.worker ||
+				this.compilerUrl !== nextCompilerUrl ||
+				this.assetPath !== nextAssetPath;
 			this.compilerUrl = nextCompilerUrl;
 			this.assetPath = nextAssetPath;
 			if (needsWorkerReset && this.worker) {
@@ -69,7 +79,9 @@ class Rust implements Sandbox {
 						event.filename && event.lineno
 							? ` (${event.filename}:${event.lineno}:${event.colno})`
 							: '';
-					reject(`Rust worker script error: ${event.message || 'unknown error'}${location}`);
+					reject(
+						`Rust worker script error: ${event.message || 'unknown error'}${location}`
+					);
 				};
 				this.worker.onmessageerror = () => {
 					reject('Rust worker message deserialization failed');
@@ -125,6 +137,7 @@ class Rust implements Sandbox {
 		args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
+		if (options.debug) requireSharedArrayBuffer('Rust debugging');
 		this.exit = false;
 		return new Promise<boolean | string>((resolve, reject) => {
 			if (!this.worker) return reject('Worker not loaded');
@@ -132,10 +145,12 @@ class Rust implements Sandbox {
 			const targetTriple = options.rustTargetTriple || 'wasm32-wasip1';
 			const _uid = ++this.uid;
 			this.activeReject = reject;
+			this.setBreakpoints(options.debug ? [...(options.breakpoints || [])] : []);
 			const handler = (event: Event & { data: any }) => {
 				if (!this.worker) return reject('Worker not loaded');
 				if (_uid !== this.uid) return (this.worker.onmessage = null);
-				const { output, results, error, buffer, diagnostic, progress } = event.data;
+				const { output, results, error, buffer, diagnostic, progress, debugEvent } =
+					event.data;
 				if (buffer) {
 					this.waitingForInput = true;
 					this.flushPendingInput();
@@ -145,12 +160,14 @@ class Rust implements Sandbox {
 				}
 				if (output) this.output(output);
 				if (diagnostic) this.oncompilerdiagnostic?.(diagnostic);
+				if (debugEvent) this.ondebug?.(debugEvent);
 				if (results) {
 					this.elapse = Date.now() - this.begin;
 					this.exit = true;
 					this.waitingForInput = false;
 					this.pendingEof = false;
 					this.activeReject = null;
+					this.ondebug?.({ type: 'stop' });
 					resolve(results as string);
 				}
 				if (error) {
@@ -159,6 +176,7 @@ class Rust implements Sandbox {
 					this.waitingForInput = false;
 					this.pendingEof = false;
 					this.activeReject = null;
+					this.ondebug?.({ type: 'stop' });
 					reject(error);
 				}
 			};
@@ -168,12 +186,40 @@ class Rust implements Sandbox {
 				code,
 				prepare,
 				buffer: this.buffer,
+				debugBuffer: this.debugBuffer,
 				stdin: options.stdin,
 				args: programArgs,
 				targetTriple,
-				log: _log
+				log: _log,
+				debug: !!options.debug,
+				breakpoints: [...(options.breakpoints || [])],
+				pauseOnEntry: !!options.pauseOnEntry
 			});
 		});
+	}
+
+	debugCommand(command: DebugCommand) {
+		const control = new Int32Array(this.debugBuffer);
+		Atomics.store(
+			control,
+			1,
+			command === 'stepInto' ? 2 : command === 'nextLine' ? 3 : command === 'stepOut' ? 4 : 1
+		);
+		Atomics.add(control, 0, 1);
+		Atomics.notify(control, 0);
+		this.ondebug?.({ type: 'resume', command });
+	}
+
+	setBreakpoints(lines: number[]) {
+		const control = new Int32Array(this.debugBuffer);
+		const next = [...new Set(lines.filter((line) => Number.isInteger(line) && line > 0))]
+			.sort((left, right) => left - right)
+			.slice(0, Math.max(0, control.length - 4));
+		for (let index = 4; index < control.length; index += 1) {
+			Atomics.store(control, index, next[index - 4] || 0);
+		}
+		Atomics.store(control, 3, next.length);
+		Atomics.add(control, 2, 1);
 	}
 
 	kill() {
@@ -186,6 +232,9 @@ class Rust implements Sandbox {
 		this.waitingForInput = false;
 		this.pendingEof = false;
 		this.uid += 1;
+		const control = new Int32Array(this.debugBuffer);
+		Atomics.add(control, 0, 1);
+		Atomics.notify(control, 0);
 		this.worker?.terminate?.();
 		delete this.worker;
 		this.exit = true;
@@ -197,6 +246,7 @@ class Rust implements Sandbox {
 		this.pendingEof = false;
 		if (this.worker) this.worker.onmessage = null;
 		resetBufferedStdin(this.buffer);
+		new Int32Array(this.debugBuffer).fill(0);
 		if (!this.exit) {
 			this.terminate();
 		}
