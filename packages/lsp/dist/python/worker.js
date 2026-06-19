@@ -36,7 +36,12 @@ async function bootstrapPythonBridge(pyodideBaseUrl) {
             emit: emitTransportMessage
         });
         self.postMessage({ type: 'progress', stage: 'load-jedi' });
-        await pyodide.loadPackage('jedi');
+        try {
+            await pyodide.loadPackage('jedi');
+        }
+        catch (error) {
+            console.warn('Python LSP semantic features disabled because jedi failed to load', error);
+        }
         installPythonServerPackage(pyodide);
         await pyodide.runPythonAsync(`
 import sys

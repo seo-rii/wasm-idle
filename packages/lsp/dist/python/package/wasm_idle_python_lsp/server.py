@@ -5,7 +5,11 @@ import json
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-from jedi import Project, Script
+try:
+    from jedi import Project, Script
+except Exception:
+    Project = None
+    Script = None
 
 from wasm_idle_lsp_bridge import emit
 
@@ -142,11 +146,7 @@ class WasmIdlePythonLsp:
     def __init__(self) -> None:
         self.workspace_root = WORKSPACE_ROOT
         Path(self.workspace_root).mkdir(parents=True, exist_ok=True)
-        self.project = Project(
-            path=self.workspace_root,
-            smart_sys_path=True,
-            load_unsafe_extensions=False,
-        )
+        self.project = self._create_project(self.workspace_root)
         self.documents: dict[str, Document] = {}
         self.shutdown_requested = False
 
@@ -183,8 +183,13 @@ class WasmIdlePythonLsp:
             self.workspace_root = _uri_to_path(root_uri)
 
         Path(self.workspace_root).mkdir(parents=True, exist_ok=True)
-        self.project = Project(
-            path=self.workspace_root,
+        self.project = self._create_project(self.workspace_root)
+
+    def _create_project(self, path: str):
+        if Project is None:
+            return None
+        return Project(
+            path=path,
             smart_sys_path=True,
             load_unsafe_extensions=False,
         )
@@ -199,6 +204,8 @@ class WasmIdlePythonLsp:
         path.write_text(document.source, encoding="utf-8")
 
     def _script(self, uri: str) -> Script:
+        if Script is None:
+            raise RuntimeError("Python semantic LSP features require jedi")
         document = self._document(uri)
         return Script(code=document.source, path=document.path, project=self.project)
 
@@ -274,18 +281,24 @@ class WasmIdlePythonLsp:
         if not root_uri and params.get("workspaceFolders"):
             root_uri = params["workspaceFolders"][0].get("uri")
         self._refresh_project(root_uri)
+        capabilities = {
+            "textDocumentSync": TEXT_DOCUMENT_SYNC_FULL,
+        }
+        if Script is not None:
+            capabilities.update(
+                {
+                    "completionProvider": {
+                        "triggerCharacters": [".", "(", "[", '"', "'"],
+                        "resolveProvider": False,
+                    },
+                    "hoverProvider": True,
+                    "definitionProvider": True,
+                    "documentSymbolProvider": True,
+                    "signatureHelpProvider": {"triggerCharacters": ["(", ","]},
+                }
+            )
         return {
-            "capabilities": {
-                "textDocumentSync": TEXT_DOCUMENT_SYNC_FULL,
-                "completionProvider": {
-                    "triggerCharacters": [".", "(", "[", '"', "'"],
-                    "resolveProvider": False,
-                },
-                "hoverProvider": True,
-                "definitionProvider": True,
-                "documentSymbolProvider": True,
-                "signatureHelpProvider": {"triggerCharacters": ["(", ","]},
-            },
+            "capabilities": capabilities,
             "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION},
         }
 
@@ -391,12 +404,17 @@ class WasmIdlePythonLsp:
             handlers = {
                 "initialize": self._initialize,
                 "shutdown": self._shutdown,
-                "textDocument/completion": self._completion,
-                "textDocument/signatureHelp": self._signature_help,
-                "textDocument/hover": self._hover,
-                "textDocument/definition": self._definition,
-                "textDocument/documentSymbol": self._document_symbols,
             }
+            if Script is not None:
+                handlers.update(
+                    {
+                        "textDocument/completion": self._completion,
+                        "textDocument/signatureHelp": self._signature_help,
+                        "textDocument/hover": self._hover,
+                        "textDocument/definition": self._definition,
+                        "textDocument/documentSymbol": self._document_symbols,
+                    }
+                )
             handler = handlers.get(method)
             if handler is None:
                 self._respond(
