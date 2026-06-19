@@ -38,6 +38,8 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(
 			/let MonacoEditor = \$state<typeof MonacoEditorComponent \| null>\(null\);/
 		);
+		expect(source).toMatch(/lspEnabled\?: boolean;/);
+		expect(source).toMatch(/lspEnabled = false,/);
 		expect(source).toMatch(/clangdEnabled\?: boolean;/);
 		expect(source).toMatch(/clangdEnabled = false,/);
 		expect(source).toMatch(/dotnetLspEnabled\?: boolean;/);
@@ -48,6 +50,9 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(/goLspEnabled = false,/);
 		expect(source).toMatch(/rustLspEnabled\?: boolean;/);
 		expect(source).toMatch(/rustLspEnabled = false,/);
+		expect(source).toMatch(/lspLanguage\?: string;/);
+		expect(source).toMatch(/typescriptLspLibUrl\?: string;/);
+		expect(source).toMatch(/const activeLspLanguage = \$derived\(lspLanguage \|\| language\);/);
 		expect(source).toMatch(/filePath\?: string;/);
 		expect(source).toMatch(
 			/import \{\s+isEditorDefaultSource,\s+isLegacyEditorDefaultSource,\s+resolveEditorDefaultSource\s+\} from '\.\/editor-defaults';/s
@@ -56,8 +61,12 @@ describe('Monaco route debug sync', () => {
 			/monacoApi\.editor\.setModelMarkers\(activeModel, 'wasm-idle-compiler', markers\);/
 		);
 		expect(source).toMatch(/occurrencesHighlight: 'off'/);
-		expect(source).toMatch(/const modelUriString = \$derived\(`file:\/\/\/workspace\/\$\{normalizedFilePath\}`\);/);
-		expect(source).toMatch(/globalThis as typeof globalThis & \{ MonacoEnvironment\?: unknown \}/);
+		expect(source).toMatch(
+			/const modelUriString = \$derived\(`file:\/\/\/workspace\/\$\{normalizedFilePath\}`\);/
+		);
+		expect(source).toMatch(
+			/globalThis as typeof globalThis & \{ MonacoEnvironment\?: unknown \}/
+		);
 		expect(source).toMatch(/MonacoEnvironment =\s+workers\.createMonacoEnvironment\(\);/s);
 		expect(source).toMatch(/<MonacoEditor[\s\S]*lsp=\{resolveLspConnection\}/);
 		expect(source).toMatch(/onload=\{handleEditorLoad\}/);
@@ -101,7 +110,14 @@ describe('Monaco route debug sync', () => {
 			/debugActionBindings = attachMonacoDebugActions\(activeEditor, \{\s+onCursorLineChange,\s+onRunToCursor\s+\}\);/s
 		);
 		expect(source).toMatch(/debugActionBindings\?\.dispose\(\);/);
-		expect(source).toMatch(/const \{ getCppLanguageServer \} = await import\('@wasm-idle\/lsp'\);/);
+		expect(source).toMatch(/import type \{ LanguageServerStatus \} from '@wasm-idle\/lsp';/);
+		expect(source).not.toMatch(/^\s*import \{[^\n]*\} from '@wasm-idle\/lsp';/m);
+		expect(source).toMatch(
+			/if \(!lspEnabled\) \{[\s\S]*clangdStatus = \{ state: 'disabled' \};[\s\S]*return null;[\s\S]*\}/s
+		);
+		expect(source).toMatch(
+			/const \{ getCppLanguageServer \} = await import\('@wasm-idle\/lsp'\);/
+		);
 		expect(source).toMatch(/handle\.syncFile\?\.\(normalizedFilePath\);/);
 		expect(source).toMatch(/getCSharpLanguageServer/);
 		expect(source).toMatch(/getFSharpLanguageServer/);
@@ -109,6 +125,12 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(/getGleamLanguageServer/);
 		expect(source).toMatch(/getGoLanguageServer/);
 		expect(source).toMatch(/getRustLanguageServer/);
+		expect(source).toMatch(/getTypeScriptLanguageServer/);
+		expect(source).toMatch(/getJavaScriptLanguageServer/);
+		expect(source).toMatch(/getAssemblyScriptLanguageServer/);
+		expect(source).toMatch(/getWatLanguageServer/);
+		expect(source).toMatch(/typescript: \{ libUrl: typescriptLspLibUrl \}/);
+		expect(source).toMatch(/javascript: \{ libUrl: typescriptLspLibUrl \}/);
 		expect(source).not.toMatch(/clangd ready/);
 		expect(source).not.toMatch(/clangd loading/);
 		expect(source).not.toMatch(/clangd failed:/);
@@ -212,7 +234,13 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).toMatch(/<option value="R">R<\/option>/);
 		expect(pageSource).toMatch(/<option value="OCTAVE">Octave<\/option>/);
 		expect(pageSource).toMatch(/language=\{editorLanguage\}/);
+		expect(pageSource).toMatch(
+			/lspLanguage=\{language === 'ASSEMBLYSCRIPT' \? 'assemblyscript' : editorLanguage\}/
+		);
 		expect(pageSource).toMatch(/filePath=\{activePath\}/);
+		expect(pageSource).toMatch(
+			/typescriptLspLibUrl=\{lspEnabled &&\s+\(language === 'JAVASCRIPT' \|\| language === 'TYPESCRIPT'\)/
+		);
 		expect(pageSource).toMatch(
 			/<select id="rust-target-triple" bind:value=\{rustTargetTriple\}>/
 		);
@@ -225,6 +253,9 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).toMatch(/wasm-elixir\/bundle\.avm\?v=\$\{WASM_ELIXIR_ASSET_VERSION\}/);
 		expect(pageSource).toMatch(/WASM_OCAML_ASSET_VERSION/);
 		expect(pageSource).toMatch(/WASM_TYPESCRIPT_ASSET_VERSION/);
+		expect(pageSource).toMatch(
+			/lsp\/typescript-libs\.json\.gz\?v=\$\{WASM_TYPESCRIPT_ASSET_VERSION\}/
+		);
 		expect(pageSource).toMatch(/WASM_WAT_ASSET_VERSION/);
 		expect(pageSource).toMatch(/WASM_LUA_ASSET_VERSION/);
 		expect(pageSource).toMatch(/WASM_ZIG_ASSET_VERSION/);
@@ -249,18 +280,24 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).toMatch(
 			/const playground = \$derived\.by\(\(\) => createPlaygroundBinding\(runtimeAssets\)\);/
 		);
-		expect(pageSource).toMatch(/clangdEnabled=\{clangdRequested\}/);
-		expect(pageSource).toMatch(/dotnetLspEnabled=\{language === 'CSHARP'/);
+		expect(pageSource).toMatch(/lspEnabled = \$state\(false\),/);
+		expect(pageSource).toMatch(/id="lsp-toggle"/);
+		expect(pageSource).toMatch(/version: 5,/);
+		expect(pageSource).toMatch(
+			/if \(typeof value\?\.lspEnabled === 'boolean'\) lspEnabled = value\.lspEnabled;/
+		);
+		expect(pageSource).toMatch(/clangdEnabled=\{lspEnabled && clangdRequested\}/);
+		expect(pageSource).toMatch(/dotnetLspEnabled=\{lspEnabled &&\s+\(language === 'CSHARP'/);
 		expect(pageSource).toMatch(/dotnetLspModuleUrl=\{language === 'CSHARP'/);
-		expect(pageSource).toMatch(/gleamLspEnabled=\{language === 'GLEAM'\}/);
+		expect(pageSource).toMatch(/gleamLspEnabled=\{lspEnabled && language === 'GLEAM'\}/);
 		expect(pageSource).toMatch(
 			/gleamLspBaseUrl=\{language === 'GLEAM' \? runtimeAssets\.gleam\?\.baseUrl : undefined\}/
 		);
-		expect(pageSource).toMatch(/goLspEnabled=\{language === 'GO'\}/);
+		expect(pageSource).toMatch(/goLspEnabled=\{lspEnabled && language === 'GO'\}/);
 		expect(pageSource).toMatch(
 			/goLspCompilerUrl=\{language === 'GO'\s+\?\s+runtimeAssets\.go\?\.compilerUrl\s+:\s+undefined\}/
 		);
-		expect(pageSource).toMatch(/rustLspEnabled=\{language === 'RUST'\}/);
+		expect(pageSource).toMatch(/rustLspEnabled=\{lspEnabled && language === 'RUST'\}/);
 		expect(pageSource).toMatch(
 			/rustLspCompilerUrl=\{language === 'RUST'\s+\?\s+runtimeAssets\.rust\?\.compilerUrl\s+:\s+undefined\}/
 		);
@@ -283,10 +320,13 @@ describe('Monaco route debug sync', () => {
 			await readFile(path.resolve(process.cwd(), 'package.json'), 'utf8')
 		) as { dependencies?: Record<string, string> };
 		const viteConfig = await readFile(path.resolve(process.cwd(), 'vite.config.ts'), 'utf8');
+		const libIndex = await readFile(path.resolve(process.cwd(), 'src/lib/index.ts'), 'utf8');
 
-		expect(packageJson.dependencies?.['@seorii/monaco']).toBe('file:../monaco');
+		expect(packageJson.dependencies?.['@seorii/monaco']).toBe('0.1.0');
 		expect(packageJson.dependencies).not.toHaveProperty('@hancomac/monaco-languageclient');
 		expect(viteConfig).not.toContain('@hancomac/monaco-languageclient');
 		expect(viteConfig).not.toContain('vscode-compatibility');
+		expect(libIndex).not.toContain('$lib/lsp');
+		expect(libIndex).not.toContain('@wasm-idle/lsp');
 	});
 });

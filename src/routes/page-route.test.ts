@@ -176,7 +176,7 @@ describe('example route debug actions', () => {
 			/tinygo: \{\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-tinygo\/runtime\.js\?v=\$\{WASM_TINYGO_ASSET_VERSION\}`\s+:\s+`\/wasm-tinygo\/runtime\.js\?v=\$\{WASM_TINYGO_ASSET_VERSION\}`\s+\}/s
 		);
 		expect(source).toMatch(
-			/typescript: \{\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-typescript\/index\.js\?v=\$\{WASM_TYPESCRIPT_ASSET_VERSION\}`\s+:\s+`\/wasm-typescript\/index\.js\?v=\$\{WASM_TYPESCRIPT_ASSET_VERSION\}`\s+\}/s
+			/typescript: \{\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-typescript\/index\.js\?v=\$\{WASM_TYPESCRIPT_ASSET_VERSION\}`\s+:\s+`\/wasm-typescript\/index\.js\?v=\$\{WASM_TYPESCRIPT_ASSET_VERSION\}`,\s+libUrl: path\s+\?\s+`\$\{path\}\/lsp\/typescript-libs\.json\.gz\?v=\$\{WASM_TYPESCRIPT_ASSET_VERSION\}`\s+:\s+`\/lsp\/typescript-libs\.json\.gz\?v=\$\{WASM_TYPESCRIPT_ASSET_VERSION\}`\s+\}/s
 		);
 		expect(source).toMatch(
 			/wat: \{\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-wat\/index\.js\?v=\$\{WASM_WAT_ASSET_VERSION\}`\s+:\s+`\/wasm-wat\/index\.js\?v=\$\{WASM_WAT_ASSET_VERSION\}`\s+\}/s
@@ -203,6 +203,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(
 			/type WasmRustRuntimeModule = \{\s+preloadBrowserRustRuntime\?: \(options\?: \{\s+targetTriple\?: RustTargetTriple;\s+\}\) => Promise<void>;\s+\};/s
 		);
+		expect(source).toMatch(/if \(!browser \|\| language !== 'RUST'\) return;/);
 		expect(source).toMatch(
 			/const compilerUrl = runtimeAssets\.rust\?\.compilerUrl;\s+const preloadTargetTriple = availableRustTargetTriples\.includes\(rustTargetTriple\)\s+\?\s+rustTargetTriple\s+:\s+availableRustTargetTriples\[0\];/s
 		);
@@ -215,6 +216,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(
 			/type WasmGoRuntimeModule = \{\s+preloadBrowserGoRuntime\?: \(options\?: \{\s*target\?: GoTarget;?\s*\}\) => Promise<void>;\s+\};/s
 		);
+		expect(source).toMatch(/if \(!browser \|\| language !== 'GO'\) return;/);
 		expect(source).toMatch(/const compilerUrl = runtimeAssets\.go\?\.compilerUrl;/);
 		expect(source).toMatch(
 			/const preloadTarget = availableGoTargets\.includes\(goTarget\)\s+\?\s+goTarget\s+:\s+availableGoTargets\[0\];/
@@ -229,6 +231,7 @@ describe('example route debug actions', () => {
 
 	it('persists and forwards the Rust target triple selection', () => {
 		expect(source).toMatch(/rustTargetTriple = \$state<RustTargetTriple>\('wasm32-wasip1'\),/);
+		expect(source).toMatch(/if \(!browser \|\| language !== 'RUST'\) return;/);
 		expect(source).toMatch(
 			/const knownRustTargetTriples = \['wasm32-wasip1', 'wasm32-wasip2', 'wasm32-wasip3'\] as const;/
 		);
@@ -283,6 +286,7 @@ describe('example route debug actions', () => {
 	it('persists and forwards the Go target selection', () => {
 		expect(source).toMatch(/GoTarget,/);
 		expect(source).toMatch(/goTarget = \$state<GoTarget>\('wasip1\/wasm'\),/);
+		expect(source).toMatch(/if \(!browser \|\| language !== 'GO'\) return;/);
 		expect(source).toMatch(
 			/const knownGoTargets = \['wasip1\/wasm', 'wasip2\/wasm', 'wasip3\/wasm', 'js\/wasm'\] as const;/
 		);
@@ -332,6 +336,23 @@ describe('example route debug actions', () => {
 	it('keeps browser stdin helper wiring separate from the shared debug controller', () => {
 		expect(source).not.toMatch(/terminalControl\?\.debugEvaluate/);
 		expect(source).toMatch(/createDebugSessionController/);
+	});
+
+	it('keeps LSP opt-in and persists the toggle in workspace snapshots', () => {
+		expect(source).toMatch(/lspEnabled = \$state\(false\),/);
+		expect(source).toMatch(
+			/function snapshot\(\): WorkspaceSnapshot \{[\s\S]*log,\s+lspEnabled,[\s\S]*version: 5,/s
+		);
+		expect(source).toMatch(
+			/if \(typeof value\?\.lspEnabled === 'boolean'\) lspEnabled = value\.lspEnabled;/
+		);
+		expect(source).toMatch(
+			/<input id="lsp-toggle" type="checkbox" bind:checked=\{lspEnabled\} \/>/
+		);
+		expect(source).toMatch(
+			/<Monaco[\s\S]*\{lspEnabled\}[\s\S]*clangdEnabled=\{lspEnabled && clangdRequested\}/s
+		);
+		expect(source).toMatch(/typescriptLspLibUrl=\{lspEnabled &&/);
 	});
 
 	it('shows a Rust stdin hint that explains EOF for read-to-end programs', () => {
@@ -475,6 +496,9 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/typescript: \{/);
 		expect(source).toMatch(/WASM_TYPESCRIPT_ASSET_VERSION/);
 		expect(source).toMatch(/wasm-typescript\/index\.js\?v=\$\{WASM_TYPESCRIPT_ASSET_VERSION\}/);
+		expect(source).toMatch(
+			/lsp\/typescript-libs\.json\.gz\?v=\$\{WASM_TYPESCRIPT_ASSET_VERSION\}/
+		);
 		expect(source).toMatch(/<option value="JAVASCRIPT">JavaScript<\/option>/);
 		expect(source).toMatch(/<option value="TYPESCRIPT">TypeScript<\/option>/);
 		expect(source).toMatch(/javascript: 'JAVASCRIPT'/);

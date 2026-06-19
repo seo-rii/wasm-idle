@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { sandboxInstances, createMockSandboxClass, MockSandbox } = vi.hoisted(() => {
+const { moduleLoads, sandboxInstances, createMockSandboxClass, MockSandbox } = vi.hoisted(() => {
+	const moduleLoads = new Set<string>();
 	const sandboxInstances = new Map<string, MockSandbox[]>();
 
 	class MockSandbox {
@@ -46,130 +47,216 @@ const { sandboxInstances, createMockSandboxClass, MockSandbox } = vi.hoisted(() 
 			}
 		};
 
-	return { sandboxInstances, createMockSandboxClass, MockSandbox };
+	return { moduleLoads, sandboxInstances, createMockSandboxClass, MockSandbox };
 });
 
-vi.mock('$lib/playground/python', () => ({
-	default: createMockSandboxClass('PYTHON')
-}));
+vi.mock('$lib/playground/python', () => {
+	moduleLoads.add('PYTHON');
+	return {
+		default: createMockSandboxClass('PYTHON')
+	};
+});
 
-vi.mock('$lib/playground/java', () => ({
-	default: createMockSandboxClass('JAVA')
-}));
+vi.mock('$lib/playground/java', () => {
+	moduleLoads.add('JAVA');
+	return {
+		default: createMockSandboxClass('JAVA')
+	};
+});
 
-vi.mock('$lib/playground/rust', () => ({
-	default: createMockSandboxClass('RUST')
-}));
+vi.mock('$lib/playground/rust', () => {
+	moduleLoads.add('RUST');
+	return {
+		default: createMockSandboxClass('RUST')
+	};
+});
 
-vi.mock('$lib/playground/go', () => ({
-	default: createMockSandboxClass('GO')
-}));
+vi.mock('$lib/playground/go', () => {
+	moduleLoads.add('GO');
+	return {
+		default: createMockSandboxClass('GO')
+	};
+});
 
-vi.mock('$lib/playground/d', () => ({
-	default: createMockSandboxClass('D')
-}));
+vi.mock('$lib/playground/d', () => {
+	moduleLoads.add('D');
+	return {
+		default: createMockSandboxClass('D')
+	};
+});
 
-vi.mock('$lib/playground/haskell', () => ({
-	default: createMockSandboxClass('HASKELL')
-}));
+vi.mock('$lib/playground/haskell', () => {
+	moduleLoads.add('HASKELL');
+	return {
+		default: createMockSandboxClass('HASKELL')
+	};
+});
 
-vi.mock('$lib/playground/ruby', () => ({
-	default: createMockSandboxClass('RUBY')
-}));
+vi.mock('$lib/playground/ruby', () => {
+	moduleLoads.add('RUBY');
+	return {
+		default: createMockSandboxClass('RUBY')
+	};
+});
 
-vi.mock('$lib/playground/r', () => ({
-	default: createMockSandboxClass('R')
-}));
+vi.mock('$lib/playground/r', () => {
+	moduleLoads.add('R');
+	return {
+		default: createMockSandboxClass('R')
+	};
+});
 
-vi.mock('$lib/playground/octave', () => ({
-	default: createMockSandboxClass('OCTAVE')
-}));
+vi.mock('$lib/playground/octave', () => {
+	moduleLoads.add('OCTAVE');
+	return {
+		default: createMockSandboxClass('OCTAVE')
+	};
+});
 
-vi.mock('$lib/playground/prolog', () => ({
-	default: createMockSandboxClass('PROLOG')
-}));
+vi.mock('$lib/playground/prolog', () => {
+	moduleLoads.add('PROLOG');
+	return {
+		default: createMockSandboxClass('PROLOG')
+	};
+});
 
-vi.mock('$lib/playground/gleam', () => ({
-	default: createMockSandboxClass('GLEAM')
-}));
+vi.mock('$lib/playground/gleam', () => {
+	moduleLoads.add('GLEAM');
+	return {
+		default: createMockSandboxClass('GLEAM')
+	};
+});
 
-vi.mock('$lib/playground/perl', () => ({
-	default: createMockSandboxClass('PERL')
-}));
+vi.mock('$lib/playground/perl', () => {
+	moduleLoads.add('PERL');
+	return {
+		default: createMockSandboxClass('PERL')
+	};
+});
 
-vi.mock('$lib/playground/sqlite', () => ({
-	default: createMockSandboxClass('SQLITE')
-}));
+vi.mock('$lib/playground/sqlite', () => {
+	moduleLoads.add('SQLITE');
+	return {
+		default: createMockSandboxClass('SQLITE')
+	};
+});
 
-vi.mock('$lib/playground/php', () => ({
-	default: createMockSandboxClass('PHP')
-}));
+vi.mock('$lib/playground/php', () => {
+	moduleLoads.add('PHP');
+	return {
+		default: createMockSandboxClass('PHP')
+	};
+});
 
-vi.mock('$lib/playground/dotnet', () => ({
-	default: class extends MockSandbox {
-		constructor(language: string = 'FSHARP') {
-			super(language);
+vi.mock('$lib/playground/dotnet', () => {
+	moduleLoads.add('DOTNET');
+	return {
+		default: class extends MockSandbox {
+			constructor(language: string = 'FSHARP') {
+				super(language);
+			}
 		}
-	}
-}));
+	};
+});
 
-vi.mock('$lib/playground/elixir', () => ({
-	default: class extends MockSandbox {
-		constructor(language: string = 'ELIXIR') {
-			super(language);
+vi.mock('$lib/playground/elixir', () => {
+	moduleLoads.add('ELIXIR');
+	return {
+		default: class extends MockSandbox {
+			constructor(language: string = 'ELIXIR') {
+				super(language);
+			}
 		}
-	}
-}));
+	};
+});
 
-vi.mock('$lib/playground/ocaml', () => ({
-	default: createMockSandboxClass('OCAML')
-}));
+vi.mock('$lib/playground/ocaml', () => {
+	moduleLoads.add('OCAML');
+	return {
+		default: createMockSandboxClass('OCAML')
+	};
+});
 
-vi.mock('$lib/playground/tinygo', () => ({
-	default: createMockSandboxClass('TINYGO')
-}));
+vi.mock('$lib/playground/tinygo', () => {
+	moduleLoads.add('TINYGO');
+	return {
+		default: createMockSandboxClass('TINYGO')
+	};
+});
 
-vi.mock('$lib/playground/typescript', () => ({
-	default: class extends MockSandbox {
-		constructor(language: string = 'TYPESCRIPT') {
-			super(language);
+vi.mock('$lib/playground/typescript', () => {
+	moduleLoads.add('TYPESCRIPT');
+	return {
+		default: class extends MockSandbox {
+			constructor(language: string = 'TYPESCRIPT') {
+				super(language);
+			}
 		}
-	}
-}));
+	};
+});
 
-vi.mock('$lib/playground/wat', () => ({
-	default: createMockSandboxClass('WAT')
-}));
+vi.mock('$lib/playground/assemblyscript', () => {
+	moduleLoads.add('ASSEMBLYSCRIPT');
+	return {
+		default: createMockSandboxClass('ASSEMBLYSCRIPT')
+	};
+});
 
-vi.mock('$lib/playground/lua', () => ({
-	default: createMockSandboxClass('LUA')
-}));
+vi.mock('$lib/playground/wat', () => {
+	moduleLoads.add('WAT');
+	return {
+		default: createMockSandboxClass('WAT')
+	};
+});
 
-vi.mock('$lib/playground/zig', () => ({
-	default: createMockSandboxClass('ZIG')
-}));
+vi.mock('$lib/playground/lua', () => {
+	moduleLoads.add('LUA');
+	return {
+		default: createMockSandboxClass('LUA')
+	};
+});
 
-vi.mock('$lib/playground/lisp', () => ({
-	default: createMockSandboxClass('LISP')
-}));
+vi.mock('$lib/playground/zig', () => {
+	moduleLoads.add('ZIG');
+	return {
+		default: createMockSandboxClass('ZIG')
+	};
+});
 
-vi.mock('$lib/playground/clang', () => ({
-	default: class extends createMockSandboxClass('CLANG') {
-		constructor(language: 'C' | 'CPP') {
-			super();
-			this.language = language;
-			const entries = sandboxInstances.get(language) || [];
-			entries.push(this as unknown as (typeof entries)[number]);
-			sandboxInstances.set(language, entries);
+vi.mock('$lib/playground/lisp', () => {
+	moduleLoads.add('LISP');
+	return {
+		default: createMockSandboxClass('LISP')
+	};
+});
+
+vi.mock('$lib/playground/clang', () => {
+	moduleLoads.add('CLANG');
+	return {
+		default: class extends createMockSandboxClass('CLANG') {
+			constructor(language: 'C' | 'CPP') {
+				super();
+				this.language = language;
+				const entries = sandboxInstances.get(language) || [];
+				entries.push(this as unknown as (typeof entries)[number]);
+				sandboxInstances.set(language, entries);
+			}
 		}
-	}
-}));
+	};
+});
 
 import playground, { createPlaygroundBinding } from './index';
 
+const moduleLoadsAfterFactoryImport = new Set(moduleLoads);
+
 describe('playground runtime binding', () => {
 	beforeEach(() => {
+		moduleLoads.clear();
 		sandboxInstances.clear();
+	});
+
+	it('does not load language sandbox modules when the playground factory is imported', () => {
+		expect([...moduleLoadsAfterFactoryImport]).toEqual([]);
 	});
 
 	it('keeps the legacy sandbox load signature when runtime assets are not bound', async () => {

@@ -100,6 +100,7 @@
 		goTarget: GoTarget;
 		language: string;
 		log: boolean;
+		lspEnabled: boolean;
 		ocamlBackend: OcamlBackend;
 		ocamlWasmBinaryenMode: OcamlWasmBinaryenMode;
 		openTabs: string[];
@@ -250,7 +251,10 @@
 		typescript: {
 			moduleUrl: path
 				? `${path}/wasm-typescript/index.js?v=${WASM_TYPESCRIPT_ASSET_VERSION}`
-				: `/wasm-typescript/index.js?v=${WASM_TYPESCRIPT_ASSET_VERSION}`
+				: `/wasm-typescript/index.js?v=${WASM_TYPESCRIPT_ASSET_VERSION}`,
+			libUrl: path
+				? `${path}/lsp/typescript-libs.json.gz?v=${WASM_TYPESCRIPT_ASSET_VERSION}`
+				: `/lsp/typescript-libs.json.gz?v=${WASM_TYPESCRIPT_ASSET_VERSION}`
 		},
 		wat: {
 			moduleUrl: path
@@ -314,6 +318,7 @@
 		ocamlBackend = $state<OcamlBackend>('wasm'),
 		ocamlWasmBinaryenMode = $state<OcamlWasmBinaryenMode>('fast'),
 		log = $state(true),
+		lspEnabled = $state(false),
 		language = $state<PlaygroundLanguage>('CPP'),
 		runningMode = $state<'run' | 'debug' | null>(null),
 		progress = $state(-1),
@@ -420,6 +425,7 @@
 			goTarget,
 			language,
 			log,
+			lspEnabled,
 			ocamlBackend,
 			ocamlWasmBinaryenMode,
 			rustTargetTriple,
@@ -919,13 +925,14 @@
 			goTarget,
 			language,
 			log,
+			lspEnabled,
 			ocamlBackend,
 			ocamlWasmBinaryenMode,
 			openTabs: openTabs.filter((tab) => files.some((file) => file.path === tab)),
 			rustTargetTriple,
 			sidebarOpen,
 			tinygoTarget,
-			version: 4,
+			version: 5,
 			workspaces: workspaceMapForSnapshot()
 		};
 	}
@@ -957,6 +964,7 @@
 		activateWorkspace(nextWorkspaces[nextLanguage]);
 		if (typeof value?.argsInput === 'string') argsInput = value.argsInput;
 		if (typeof value?.log === 'boolean') log = value.log;
+		if (typeof value?.lspEnabled === 'boolean') lspEnabled = value.lspEnabled;
 		if (
 			value?.rustTargetTriple === 'wasm32-wasip1' ||
 			value?.rustTargetTriple === 'wasm32-wasip2' ||
@@ -1380,7 +1388,7 @@
 	});
 
 	$effect(() => {
-		if (!browser) return;
+		if (!browser || language !== 'RUST') return;
 		let cancelled = false;
 		(async () => {
 			const manifestUrl = path
@@ -1442,7 +1450,7 @@
 	});
 
 	$effect(() => {
-		if (!browser) return;
+		if (!browser || language !== 'RUST') return;
 		const compilerUrl = runtimeAssets.rust?.compilerUrl;
 		const preloadTargetTriple = availableRustTargetTriples.includes(rustTargetTriple)
 			? rustTargetTriple
@@ -1464,7 +1472,7 @@
 	});
 
 	$effect(() => {
-		if (!browser) return;
+		if (!browser || language !== 'GO') return;
 		let cancelled = false;
 		(async () => {
 			const manifestUrl = path
@@ -1516,7 +1524,7 @@
 	});
 
 	$effect(() => {
-		if (!browser) return;
+		if (!browser || language !== 'GO') return;
 		const compilerUrl = runtimeAssets.go?.compilerUrl;
 		const preloadTarget = availableGoTargets.includes(goTarget)
 			? goTarget
@@ -1813,9 +1821,14 @@
 					<span class="material-symbols-outlined">notes</span>
 					<span>Log</span>
 				</label>
+				<label class="toggle-chip" for="lsp-toggle">
+					<input id="lsp-toggle" type="checkbox" bind:checked={lspEnabled} />
+					<span class="material-symbols-outlined">hub</span>
+					<span>LSP</span>
+				</label>
 				<label class="select-chip">
 					<span class="material-symbols-outlined">code_blocks</span>
-					<select value={language} onchange={handleLanguageChange}>
+					<select id="language-select" value={language} onchange={handleLanguageChange}>
 						<option value="C">C</option>
 						<option value="CPP">C++</option>
 						<option value="PYTHON">Python</option>
@@ -2371,6 +2384,7 @@
 		{#key `${language}:${activePath}`}
 			<Monaco
 				language={editorLanguage}
+				lspLanguage={language === 'ASSEMBLYSCRIPT' ? 'assemblyscript' : editorLanguage}
 				filePath={activePath}
 				rustTargetTriple={language === 'RUST' ? rustTargetTriple : undefined}
 				goTarget={language === 'GO' ? goTarget : undefined}
@@ -2378,26 +2392,30 @@
 				value={activeFile?.content ?? ''}
 				onChange={updateActiveContent}
 				{compact}
-				clangdEnabled={clangdRequested}
+				{lspEnabled}
+				clangdEnabled={lspEnabled && clangdRequested}
 				{clangdBaseUrl}
-				dotnetLspEnabled={language === 'CSHARP' ||
-					language === 'FSHARP' ||
-					language === 'VBNET'}
+				dotnetLspEnabled={lspEnabled &&
+					(language === 'CSHARP' || language === 'FSHARP' || language === 'VBNET')}
 				dotnetLspModuleUrl={language === 'CSHARP' ||
 				language === 'FSHARP' ||
 				language === 'VBNET'
 					? runtimeAssets.dotnet?.moduleUrl
 					: undefined}
-				gleamLspEnabled={language === 'GLEAM'}
+				gleamLspEnabled={lspEnabled && language === 'GLEAM'}
 				gleamLspBaseUrl={language === 'GLEAM' ? runtimeAssets.gleam?.baseUrl : undefined}
 				gleamLspManifestUrl={language === 'GLEAM'
 					? runtimeAssets.gleam?.manifestUrl
 					: undefined}
-				goLspEnabled={language === 'GO'}
+				goLspEnabled={lspEnabled && language === 'GO'}
 				goLspCompilerUrl={language === 'GO' ? runtimeAssets.go?.compilerUrl : undefined}
-				rustLspEnabled={language === 'RUST'}
+				rustLspEnabled={lspEnabled && language === 'RUST'}
 				rustLspCompilerUrl={language === 'RUST'
 					? runtimeAssets.rust?.compilerUrl
+					: undefined}
+				typescriptLspLibUrl={lspEnabled &&
+				(language === 'JAVASCRIPT' || language === 'TYPESCRIPT')
+					? runtimeAssets.typescript?.libUrl
 					: undefined}
 				breakpoints={debug.effectiveBreakpoints}
 				debugLocals={debug.locals}

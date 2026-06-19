@@ -1,28 +1,3 @@
-import Clang from '$lib/playground/clang';
-import AssemblyScript from '$lib/playground/assemblyscript';
-import D from '$lib/playground/d';
-import Dotnet from '$lib/playground/dotnet';
-import Elixir from '$lib/playground/elixir';
-import Gleam from '$lib/playground/gleam';
-import Go from '$lib/playground/go';
-import Haskell from '$lib/playground/haskell';
-import Java from '$lib/playground/java';
-import Lisp from '$lib/playground/lisp';
-import Lua from '$lib/playground/lua';
-import Ocaml from '$lib/playground/ocaml';
-import Octave from '$lib/playground/octave';
-import Perl from '$lib/playground/perl';
-import Php from '$lib/playground/php';
-import Prolog from '$lib/playground/prolog';
-import Python from '$lib/playground/python';
-import R from '$lib/playground/r';
-import Rust from '$lib/playground/rust';
-import Ruby from '$lib/playground/ruby';
-import Sqlite from '$lib/playground/sqlite';
-import TinyGo from '$lib/playground/tinygo';
-import TypeScriptSandbox from '$lib/playground/typescript';
-import Wat from '$lib/playground/wat';
-import Zig from '$lib/playground/zig';
 import type {
 	BoundSandbox,
 	PlaygroundBinding,
@@ -85,117 +60,177 @@ async function playground(language: string, runtimeAssets?: SandboxRuntimeAssets
 			? createPlaygroundBinding(runtimeAssets).load(language)
 			: sandboxCache[language];
 	}
-	let sandbox;
+	let sandbox: Sandbox;
 	switch (language) {
 		case 'PYTHON3':
 		case 'PYTHON':
-		case 'PYPY3':
+		case 'PYPY3': {
+			const { default: Python } = await import('$lib/playground/python');
 			sandbox = new Python();
 			break;
-		case 'C':
+		}
+		case 'C': {
+			const { default: Clang } = await import('$lib/playground/clang');
 			sandbox = new Clang('C');
 			break;
-		case 'CPP':
+		}
+		case 'CPP': {
+			const { default: Clang } = await import('$lib/playground/clang');
 			sandbox = new Clang('CPP');
 			break;
-		case 'JAVA':
+		}
+		case 'JAVA': {
+			const { default: Java } = await import('$lib/playground/java');
 			sandbox = new Java();
 			break;
-		case 'RUST':
+		}
+		case 'RUST': {
+			const { default: Rust } = await import('$lib/playground/rust');
 			sandbox = new Rust();
 			break;
-		case 'GO':
+		}
+		case 'GO': {
+			const { default: Go } = await import('$lib/playground/go');
 			sandbox = new Go();
 			break;
+		}
 		case 'D':
-		case 'DLANG':
+		case 'DLANG': {
+			const { default: D } = await import('$lib/playground/d');
 			sandbox = new D();
 			break;
+		}
 		case 'CSHARP':
-		case 'C#':
+		case 'C#': {
+			const { default: Dotnet } = await import('$lib/playground/dotnet');
 			sandbox = new Dotnet('CSHARP');
 			break;
+		}
 		case 'FSHARP':
-		case 'F#':
+		case 'F#': {
+			const { default: Dotnet } = await import('$lib/playground/dotnet');
 			sandbox = new Dotnet('FSHARP');
 			break;
+		}
 		case 'VBNET':
 		case 'VB':
-		case 'VISUALBASIC':
+		case 'VISUALBASIC': {
+			const { default: Dotnet } = await import('$lib/playground/dotnet');
 			sandbox = new Dotnet('VBNET');
 			break;
-		case 'ELIXIR':
+		}
+		case 'ELIXIR': {
+			const { default: Elixir } = await import('$lib/playground/elixir');
 			sandbox = new Elixir();
 			break;
+		}
 		case 'ERLANG':
-		case 'ERL':
+		case 'ERL': {
+			const { default: Elixir } = await import('$lib/playground/elixir');
 			sandbox = new Elixir('ERLANG');
 			break;
+		}
 		case 'PROLOG':
 		case 'SWIPL':
-		case 'SWI':
+		case 'SWI': {
+			const { default: Prolog } = await import('$lib/playground/prolog');
 			sandbox = new Prolog();
 			break;
-		case 'GLEAM':
+		}
+		case 'GLEAM': {
+			const { default: Gleam } = await import('$lib/playground/gleam');
 			sandbox = new Gleam();
 			break;
-		case 'PERL':
+		}
+		case 'PERL': {
+			const { default: Perl } = await import('$lib/playground/perl');
 			sandbox = new Perl();
 			break;
-		case 'TINYGO':
+		}
+		case 'TINYGO': {
+			const { default: TinyGo } = await import('$lib/playground/tinygo');
 			sandbox = new TinyGo();
 			break;
-		case 'OCAML':
+		}
+		case 'OCAML': {
+			const { default: Ocaml } = await import('$lib/playground/ocaml');
 			sandbox = new Ocaml();
 			break;
+		}
 		case 'JAVASCRIPT':
-		case 'JS':
+		case 'JS': {
+			const { default: TypeScriptSandbox } = await import('$lib/playground/typescript');
 			sandbox = new TypeScriptSandbox('JAVASCRIPT');
 			break;
+		}
 		case 'TYPESCRIPT':
-		case 'TS':
+		case 'TS': {
+			const { default: TypeScriptSandbox } = await import('$lib/playground/typescript');
 			sandbox = new TypeScriptSandbox('TYPESCRIPT');
 			break;
+		}
 		case 'ASSEMBLYSCRIPT':
-		case 'AS':
+		case 'AS': {
+			const { default: AssemblyScript } = await import('$lib/playground/assemblyscript');
 			sandbox = new AssemblyScript();
 			break;
-		case 'WAT':
+		}
+		case 'WAT': {
+			const { default: Wat } = await import('$lib/playground/wat');
 			sandbox = new Wat();
 			break;
-		case 'LUA':
+		}
+		case 'LUA': {
+			const { default: Lua } = await import('$lib/playground/lua');
 			sandbox = new Lua();
 			break;
-		case 'ZIG':
+		}
+		case 'ZIG': {
+			const { default: Zig } = await import('$lib/playground/zig');
 			sandbox = new Zig();
 			break;
+		}
 		case 'LISP':
 		case 'SCHEME':
-		case 'SCM':
+		case 'SCM': {
+			const { default: Lisp } = await import('$lib/playground/lisp');
 			sandbox = new Lisp();
 			break;
+		}
 		case 'RUBY':
-		case 'RB':
+		case 'RB': {
+			const { default: Ruby } = await import('$lib/playground/ruby');
 			sandbox = new Ruby();
 			break;
+		}
 		case 'HASKELL':
-		case 'HS':
+		case 'HS': {
+			const { default: Haskell } = await import('$lib/playground/haskell');
 			sandbox = new Haskell();
 			break;
-		case 'R':
+		}
+		case 'R': {
+			const { default: R } = await import('$lib/playground/r');
 			sandbox = new R();
 			break;
+		}
 		case 'OCTAVE':
-		case 'MATLAB':
+		case 'MATLAB': {
+			const { default: Octave } = await import('$lib/playground/octave');
 			sandbox = new Octave();
 			break;
+		}
 		case 'SQLITE':
-		case 'SQL':
+		case 'SQL': {
+			const { default: Sqlite } = await import('$lib/playground/sqlite');
 			sandbox = new Sqlite();
 			break;
-		case 'PHP':
+		}
+		case 'PHP': {
+			const { default: Php } = await import('$lib/playground/php');
 			sandbox = new Php();
 			break;
+		}
 		default:
 			throw new Error(`Unsupported language: ${language}`);
 	}

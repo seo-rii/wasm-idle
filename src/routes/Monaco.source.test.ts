@@ -3,19 +3,26 @@ import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 
 describe('Monaco route source', () => {
-	it('loads Monaco basic language contributions used by the playground', async () => {
+	it('lazy-loads Monaco basic language contributions used by the selected language', async () => {
 		const source = await readFile(
 			path.resolve(process.cwd(), 'src/routes/Monaco.svelte'),
 			'utf8'
 		);
 
+		expect(source).toContain('let languageContribution: Promise<unknown> = Promise.resolve();');
+		expect(source).toContain('switch (language) {');
+		expect(source).not.toMatch(
+			/Promise\.all\(\[\s*import\('monaco-editor\/esm\/vs\/basic-languages\/cpp\/cpp\.contribution\.js'\)/
+		);
+		expect(source).toContain(
+			'monaco-editor/esm/vs/basic-languages/typescript/typescript.contribution.js'
+		);
 		for (const language of [
 			'cpp',
 			'csharp',
 			'elixir',
 			'go',
 			'java',
-			'javascript',
 			'perl',
 			'php',
 			'python',
