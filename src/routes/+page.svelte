@@ -15,6 +15,7 @@
 	import { base } from '$app/paths';
 	import { SvelteURL } from 'svelte/reactivity';
 	import type { PlaygroundRuntimeAssets } from '$lib/playground/assets';
+	import type { DebugLanguageAdapter } from '$lib';
 	import { WASM_AWK_ASSET_VERSION } from '$lib/playground/wasmAwkVersion';
 	import { WASM_D_ASSET_VERSION } from '$lib/playground/wasmDVersion';
 	import { WASM_DOTNET_ASSET_VERSION } from '$lib/playground/wasmDotnetVersion';
@@ -41,6 +42,7 @@
 		OcamlBackend,
 		OcamlWasmBinaryenMode,
 		RustTargetTriple,
+		SandboxExecutionOptions,
 		TinyGoTarget
 	} from '$lib/playground/options';
 	import type { TerminalControl } from '$lib/terminal';
@@ -90,6 +92,16 @@
 		| 'OCTAVE'
 		| 'SQLITE'
 		| 'PHP';
+
+	type RuntimeLspCapability =
+		| 'gleam'
+		| 'go'
+		| 'rust'
+		| 'zig'
+		| 'php'
+		| 'lua'
+		| 'ocaml'
+		| 'haskell';
 
 	type LanguageWorkspace = {
 		activePath: string;
@@ -185,6 +197,121 @@
 		SQLITE: 'SQLite',
 		PHP: 'PHP'
 	};
+	const editorLanguages: Record<PlaygroundLanguage, string> = {
+		C: 'c',
+		CPP: 'cpp',
+		PYTHON: 'python',
+		JAVA: 'java',
+		RUST: 'rust',
+		GO: 'go',
+		D: 'd',
+		CSHARP: 'csharp',
+		FSHARP: 'fsharp',
+		VBNET: 'vb',
+		ELIXIR: 'elixir',
+		ERLANG: 'erlang',
+		PROLOG: 'prolog',
+		GLEAM: 'gleam',
+		PERL: 'perl',
+		TCL: 'tcl',
+		AWK: 'awk',
+		OCAML: 'ocaml',
+		TINYGO: 'go',
+		JAVASCRIPT: 'javascript',
+		TYPESCRIPT: 'typescript',
+		ASSEMBLYSCRIPT: 'typescript',
+		WAT: 'wat',
+		LUA: 'lua',
+		ZIG: 'zig',
+		LISP: 'lisp',
+		RUBY: 'ruby',
+		HASKELL: 'haskell',
+		R: 'r',
+		OCTAVE: 'octave',
+		SQLITE: 'sql',
+		PHP: 'php'
+	};
+	const debugLanguageAdapters: Partial<Record<PlaygroundLanguage, DebugLanguageAdapter>> = {
+		CPP: cppDebugLanguageAdapter,
+		GO: goDebugLanguageAdapter,
+		RUST: rustDebugLanguageAdapter,
+		PYTHON: pythonDebugLanguageAdapter
+	};
+	const debugTitles: Partial<Record<PlaygroundLanguage, string>> = {
+		CPP: 'Native Trace',
+		GO: 'Go Trace',
+		RUST: 'Rust Trace',
+		PYTHON: 'Pyodide Trace'
+	};
+	const debugLspLanguages = new Set<PlaygroundLanguage>(['CPP']);
+	const dotnetLspLanguages = new Set<PlaygroundLanguage>(['CSHARP', 'FSHARP', 'VBNET']);
+	const typescriptLspLanguages = new Set<PlaygroundLanguage>(['JAVASCRIPT', 'TYPESCRIPT']);
+	const lspLanguageOverrides: Partial<Record<PlaygroundLanguage, string>> = {
+		ASSEMBLYSCRIPT: 'assemblyscript'
+	};
+	const runtimeLspCapabilities: Partial<Record<PlaygroundLanguage, RuntimeLspCapability>> = {
+		GLEAM: 'gleam',
+		GO: 'go',
+		RUST: 'rust',
+		ZIG: 'zig',
+		PHP: 'php',
+		LUA: 'lua',
+		OCAML: 'ocaml',
+		HASKELL: 'haskell'
+	};
+	const argsHelpLanguages = new Set<PlaygroundLanguage>([
+		'JAVA',
+		'RUST',
+		'GO',
+		'D',
+		'CSHARP',
+		'FSHARP',
+		'VBNET',
+		'PROLOG',
+		'GLEAM',
+		'PERL',
+		'TCL',
+		'AWK',
+		'TINYGO',
+		'JAVASCRIPT',
+		'TYPESCRIPT',
+		'LUA',
+		'ZIG',
+		'LISP',
+		'RUBY',
+		'HASKELL',
+		'R',
+		'OCTAVE',
+		'PHP'
+	]);
+	const argsLabels: Partial<Record<PlaygroundLanguage, string>> = {
+		HASKELL: 'GHC Args'
+	};
+	const compilerDiagnosticLanguages = new Set<PlaygroundLanguage>([
+		'JAVA',
+		'RUST',
+		'GO',
+		'D',
+		'CSHARP',
+		'FSHARP',
+		'VBNET',
+		'PROLOG',
+		'GLEAM',
+		'PERL',
+		'TINYGO',
+		'OCAML',
+		'JAVASCRIPT',
+		'TYPESCRIPT',
+		'ASSEMBLYSCRIPT',
+		'WAT',
+		'LUA',
+		'ZIG',
+		'LISP',
+		'RUBY',
+		'HASKELL',
+		'SQLITE',
+		'PHP'
+	]);
 
 	let path = $derived(
 		page.url.pathname.endsWith('/') ? page.url.pathname.slice(0, -1) : page.url.pathname
@@ -365,81 +492,66 @@
 	let dragActive = $state(false);
 	const sharedBufferAvailable = $derived(!browser || isSharedArrayBufferAvailable());
 
-	const editorLanguage = $derived(
-		language === 'C'
-			? 'c'
-			: language === 'CPP'
-				? 'cpp'
-				: language === 'PYTHON'
-					? 'python'
-					: language === 'JAVA'
-						? 'java'
-						: language === 'RUST'
-							? 'rust'
-							: language === 'D'
-								? 'd'
-								: language === 'CSHARP'
-									? 'csharp'
-									: language === 'FSHARP'
-										? 'fsharp'
-										: language === 'VBNET'
-											? 'vb'
-											: language === 'ELIXIR'
-												? 'elixir'
-												: language === 'ERLANG'
-													? 'erlang'
-													: language === 'PROLOG'
-														? 'prolog'
-														: language === 'GLEAM'
-															? 'gleam'
-															: language === 'PERL'
-																? 'perl'
-																: language === 'TCL'
-																	? 'tcl'
-																	: language === 'AWK'
-																		? 'awk'
-																		: language === 'OCAML'
-																			? 'ocaml'
-																			: language ===
-																				  'JAVASCRIPT'
-																				? 'javascript'
-																				: language ===
-																					  'TYPESCRIPT'
-																					? 'typescript'
-																					: language ===
-																						  'ASSEMBLYSCRIPT'
-																						? 'typescript'
-																						: language ===
-																							  'WAT'
-																							? 'wat'
-																							: language ===
-																								  'ZIG'
-																								? 'zig'
-																								: language ===
-																									  'LUA'
-																									? 'lua'
-																									: language ===
-																										  'LISP'
-																										? 'lisp'
-																										: language ===
-																											  'RUBY'
-																											? 'ruby'
-																											: language ===
-																												  'HASKELL'
-																												? 'haskell'
-																												: language ===
-																													  'R'
-																													? 'r'
-																													: language ===
-																														  'OCTAVE'
-																														? 'octave'
-																														: language ===
-																															  'SQLITE'
-																															? 'sql'
-																															: language ===
-																																  'PHP'
-																																? 'php'
-																																: 'go'
+	const executionOptionResolvers: Partial<
+		Record<PlaygroundLanguage, () => Partial<SandboxExecutionOptions>>
+	> = {
+		RUST: () => ({ rustTargetTriple }),
+		GO: () => ({ goTarget }),
+		TINYGO: () => ({ tinygoTarget }),
+		OCAML: () => ({ ocamlBackend, ocamlWasmBinaryenMode }),
+		ZIG: () => ({ zigTargetTriple: 'wasm64-wasi' })
+	};
+	const languageExecutionOptions = $derived.by<Partial<SandboxExecutionOptions>>(
+		() => executionOptionResolvers[language]?.() ?? {}
+	);
+	const editorLanguage = $derived(editorLanguages[language]);
+	const argsLabel = $derived(argsLabels[language] ?? 'Args');
+	const monacoLspLanguage = $derived(lspLanguageOverrides[language] ?? editorLanguage);
+	const activeRuntimeLspCapability = $derived(runtimeLspCapabilities[language] ?? null);
+	const clangdLspEnabled = $derived(lspEnabled && clangdRequested);
+	const dotnetLspEnabled = $derived(lspEnabled && dotnetLspLanguages.has(language));
+	const dotnetLspModuleUrl = $derived(
+		dotnetLspEnabled ? runtimeAssets.dotnet?.moduleUrl : undefined
+	);
+	const gleamLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'gleam');
+	const gleamLspBaseUrl = $derived(gleamLspEnabled ? runtimeAssets.gleam?.baseUrl : undefined);
+	const gleamLspManifestUrl = $derived(
+		gleamLspEnabled ? runtimeAssets.gleam?.manifestUrl : undefined
+	);
+	const goLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'go');
+	const goLspCompilerUrl = $derived(goLspEnabled ? runtimeAssets.go?.compilerUrl : undefined);
+	const rustLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'rust');
+	const rustLspCompilerUrl = $derived(
+		rustLspEnabled ? runtimeAssets.rust?.compilerUrl : undefined
+	);
+	const zigLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'zig');
+	const zigLspCompilerUrl = $derived(zigLspEnabled ? runtimeAssets.zig?.compilerUrl : undefined);
+	const zigLspStdlibUrl = $derived(zigLspEnabled ? runtimeAssets.zig?.stdlibUrl : undefined);
+	const phpLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'php');
+	const luaLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'lua');
+	const luaLspModuleUrl = $derived(luaLspEnabled ? runtimeAssets.lua?.moduleUrl : undefined);
+	const ocamlLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'ocaml');
+	const ocamlLspModuleUrl = $derived(
+		ocamlLspEnabled ? runtimeAssets.ocaml?.moduleUrl : undefined
+	);
+	const ocamlLspManifestUrl = $derived(
+		ocamlLspEnabled ? runtimeAssets.ocaml?.manifestUrl : undefined
+	);
+	const haskellLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'haskell');
+	const haskellLspModuleUrl = $derived(
+		haskellLspEnabled ? runtimeAssets.haskell?.moduleUrl : undefined
+	);
+	const haskellLspRootfsUrl = $derived(
+		haskellLspEnabled ? runtimeAssets.haskell?.rootfsUrl : undefined
+	);
+	const haskellLspBsdtarUrl = $derived(
+		haskellLspEnabled ? runtimeAssets.haskell?.bsdtarUrl : undefined
+	);
+	const pythonLspBaseUrl = $derived(path ? `${path}/pyodide/` : '/pyodide/');
+	const typescriptLspLibUrl = $derived(
+		lspEnabled && typescriptLspLanguages.has(language)
+			? runtimeAssets.typescript?.libUrl
+			: undefined
 	);
 	const compact = $derived(examplePaneWidth > 0 && examplePaneWidth <= 760);
 	const activeFile = $derived(files.find((file) => file.path === activePath) ?? files[0]);
@@ -468,17 +580,7 @@
 		}
 	};
 
-	const debugLanguage = $derived.by(() =>
-		language === 'CPP'
-			? cppDebugLanguageAdapter
-			: language === 'GO'
-				? goDebugLanguageAdapter
-				: language === 'RUST'
-					? rustDebugLanguageAdapter
-					: language === 'PYTHON'
-						? pythonDebugLanguageAdapter
-						: null
-	);
+	const debugLanguage = $derived(debugLanguageAdapters[language] ?? null);
 	const debug = createDebugSessionController({
 		syncBreakpointsWhile: () => runningMode === 'debug'
 	});
@@ -489,15 +591,7 @@
 	const knownRustTargetTriples = ['wasm32-wasip1', 'wasm32-wasip2', 'wasm32-wasip3'] as const;
 	const knownGoTargets = ['wasip1/wasm', 'wasip2/wasm', 'wasip3/wasm', 'js/wasm'] as const;
 	const knownTinyGoTargets = ['wasm', 'wasip1', 'wasip2', 'wasip3'] as const;
-	const debugTitle = $derived(
-		language === 'CPP'
-			? 'Native Trace'
-			: language === 'GO'
-				? 'Go Trace'
-				: language === 'RUST'
-					? 'Rust Trace'
-					: 'Pyodide Trace'
-	);
+	const debugTitle = $derived(debugTitles[language] ?? 'Pyodide Trace');
 	const loading = $derived(progress >= 0 && progress < 1);
 	const progressValue = $derived(progress < 0 ? 0 : progress > 1 ? 1 : progress);
 	const progressPercent = $derived(Math.round(progressValue * 100));
@@ -802,7 +896,7 @@
 		language = nextLanguage;
 		activateWorkspace(languageWorkspaces[nextLanguage] ?? createDefaultWorkspace(nextLanguage));
 		saveStatus = message ?? `${languageLabels[nextLanguage]} workspace`;
-		if (language !== 'CPP') clangdRequested = false;
+		if (!debugLspLanguages.has(language)) clangdRequested = false;
 	}
 
 	function handleLanguageChange(event: Event) {
@@ -1249,7 +1343,7 @@
 		if (enableDebug && !sharedBufferAvailable) return;
 		if (runningMode) return;
 		runningMode = enableDebug ? 'debug' : 'run';
-		if (enableDebug && language === 'CPP') clangdRequested = true;
+		if (enableDebug && debugLspLanguages.has(language)) clangdRequested = true;
 		if (enableDebug) {
 			debug.begin();
 		} else {
@@ -1288,12 +1382,7 @@
 						content: file.path === activePath ? codeToRun : file.content
 					})),
 					pauseOnEntry: enableDebug,
-					rustTargetTriple: language === 'RUST' ? rustTargetTriple : undefined,
-					goTarget: language === 'GO' ? goTarget : undefined,
-					tinygoTarget: language === 'TINYGO' ? tinygoTarget : undefined,
-					ocamlBackend: language === 'OCAML' ? ocamlBackend : undefined,
-					ocamlWasmBinaryenMode: language === 'OCAML' ? ocamlWasmBinaryenMode : undefined,
-					zigTargetTriple: language === 'ZIG' ? 'wasm64-wasi' : undefined,
+					...languageExecutionOptions,
 					stdin: preloadedStdin
 				}
 			});
@@ -1621,38 +1710,13 @@
 	});
 
 	$effect(() => {
-		if (language !== 'CPP') clangdRequested = false;
+		if (!debugLspLanguages.has(language)) clangdRequested = false;
 		if (!debugLanguage) {
 			debug.setBreakpoints([]);
 			debug.setCursorLine(null);
 			debug.reset();
 		}
-		if (
-			language !== 'JAVA' &&
-			language !== 'RUST' &&
-			language !== 'GO' &&
-			language !== 'D' &&
-			language !== 'CSHARP' &&
-			language !== 'FSHARP' &&
-			language !== 'VBNET' &&
-			language !== 'PROLOG' &&
-			language !== 'GLEAM' &&
-			language !== 'PERL' &&
-			language !== 'TINYGO' &&
-			language !== 'OCAML' &&
-			language !== 'JAVASCRIPT' &&
-			language !== 'TYPESCRIPT' &&
-			language !== 'ASSEMBLYSCRIPT' &&
-			language !== 'WAT' &&
-			language !== 'LUA' &&
-			language !== 'ZIG' &&
-			language !== 'LISP' &&
-			language !== 'RUBY' &&
-			language !== 'HASKELL' &&
-			language !== 'SQLITE' &&
-			language !== 'PHP'
-		)
-			compilerDiagnostics = [];
+		if (!compilerDiagnosticLanguages.has(language)) compilerDiagnostics = [];
 	});
 </script>
 
@@ -1901,11 +1965,11 @@
 						<option value="PHP">PHP</option>
 					</select>
 				</label>
-				{#if language === 'JAVA' || language === 'RUST' || language === 'GO' || language === 'D' || language === 'CSHARP' || language === 'FSHARP' || language === 'VBNET' || language === 'PROLOG' || language === 'GLEAM' || language === 'PERL' || language === 'TCL' || language === 'AWK' || language === 'TINYGO' || language === 'JAVASCRIPT' || language === 'TYPESCRIPT' || language === 'LUA' || language === 'ZIG' || language === 'LISP' || language === 'RUBY' || language === 'HASKELL' || language === 'R' || language === 'OCTAVE' || language === 'PHP'}
+				{#if argsHelpLanguages.has(language)}
 					<label class="args-chip">
 						<span class="material-symbols-outlined">list_alt</span>
 						<input bind:value={argsInput} placeholder="3 4 5" spellcheck={false} />
-						<span>{language === 'HASKELL' ? 'GHC Args' : 'Args'}</span>
+						<span>{argsLabel}</span>
 					</label>
 				{/if}
 				{#if language === 'RUST'}
@@ -2436,62 +2500,41 @@
 		{#key `${language}:${activePath}`}
 			<Monaco
 				language={editorLanguage}
-				lspLanguage={language === 'ASSEMBLYSCRIPT' ? 'assemblyscript' : editorLanguage}
+				lspLanguage={monacoLspLanguage}
 				filePath={activePath}
-				rustTargetTriple={language === 'RUST' ? rustTargetTriple : undefined}
-				goTarget={language === 'GO' ? goTarget : undefined}
+				rustTargetTriple={languageExecutionOptions.rustTargetTriple}
+				goTarget={languageExecutionOptions.goTarget}
 				bind:editor
 				value={activeFile?.content ?? ''}
 				onChange={updateActiveContent}
 				{compact}
 				{lspEnabled}
-				clangdEnabled={lspEnabled && clangdRequested}
+				clangdEnabled={clangdLspEnabled}
 				{clangdBaseUrl}
-				dotnetLspEnabled={lspEnabled &&
-					(language === 'CSHARP' || language === 'FSHARP' || language === 'VBNET')}
-				dotnetLspModuleUrl={language === 'CSHARP' ||
-				language === 'FSHARP' ||
-				language === 'VBNET'
-					? runtimeAssets.dotnet?.moduleUrl
-					: undefined}
-				gleamLspEnabled={lspEnabled && language === 'GLEAM'}
-				gleamLspBaseUrl={language === 'GLEAM' ? runtimeAssets.gleam?.baseUrl : undefined}
-				gleamLspManifestUrl={language === 'GLEAM'
-					? runtimeAssets.gleam?.manifestUrl
-					: undefined}
-				goLspEnabled={lspEnabled && language === 'GO'}
-				goLspCompilerUrl={language === 'GO' ? runtimeAssets.go?.compilerUrl : undefined}
-				rustLspEnabled={lspEnabled && language === 'RUST'}
-				rustLspCompilerUrl={language === 'RUST'
-					? runtimeAssets.rust?.compilerUrl
-					: undefined}
-				zigLspEnabled={lspEnabled && language === 'ZIG'}
-				zigLspCompilerUrl={language === 'ZIG' ? runtimeAssets.zig?.compilerUrl : undefined}
-				zigLspStdlibUrl={language === 'ZIG' ? runtimeAssets.zig?.stdlibUrl : undefined}
-				phpLspEnabled={lspEnabled && language === 'PHP'}
-				luaLspEnabled={lspEnabled && language === 'LUA'}
-				luaLspModuleUrl={language === 'LUA' ? runtimeAssets.lua?.moduleUrl : undefined}
-				ocamlLspEnabled={lspEnabled && language === 'OCAML'}
-				ocamlLspModuleUrl={language === 'OCAML'
-					? runtimeAssets.ocaml?.moduleUrl
-					: undefined}
-				ocamlLspManifestUrl={language === 'OCAML'
-					? runtimeAssets.ocaml?.manifestUrl
-					: undefined}
-				haskellLspEnabled={lspEnabled && language === 'HASKELL'}
-				haskellLspModuleUrl={language === 'HASKELL'
-					? runtimeAssets.haskell?.moduleUrl
-					: undefined}
-				haskellLspRootfsUrl={language === 'HASKELL'
-					? runtimeAssets.haskell?.rootfsUrl
-					: undefined}
-				haskellLspBsdtarUrl={language === 'HASKELL'
-					? runtimeAssets.haskell?.bsdtarUrl
-					: undefined}
-				typescriptLspLibUrl={lspEnabled &&
-				(language === 'JAVASCRIPT' || language === 'TYPESCRIPT')
-					? runtimeAssets.typescript?.libUrl
-					: undefined}
+				{dotnetLspEnabled}
+				{dotnetLspModuleUrl}
+				{gleamLspEnabled}
+				{gleamLspBaseUrl}
+				{gleamLspManifestUrl}
+				{goLspEnabled}
+				{goLspCompilerUrl}
+				{rustLspEnabled}
+				{rustLspCompilerUrl}
+				{zigLspEnabled}
+				{zigLspCompilerUrl}
+				{zigLspStdlibUrl}
+				{phpLspEnabled}
+				{luaLspEnabled}
+				{luaLspModuleUrl}
+				{ocamlLspEnabled}
+				{ocamlLspModuleUrl}
+				{ocamlLspManifestUrl}
+				{haskellLspEnabled}
+				{haskellLspModuleUrl}
+				{haskellLspRootfsUrl}
+				{haskellLspBsdtarUrl}
+				{pythonLspBaseUrl}
+				{typescriptLspLibUrl}
 				breakpoints={debug.effectiveBreakpoints}
 				debugLocals={debug.locals}
 				{debugLanguage}

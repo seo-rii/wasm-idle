@@ -24,19 +24,70 @@
 	} from './editor-defaults';
 
 	type DotnetLspLanguage = 'csharp' | 'fsharp' | 'vbnet';
-	type ClangdStatus = LanguageServerStatus;
-	type DotnetLspStatus = LanguageServerStatus;
-	type GleamLspStatus = LanguageServerStatus;
-	type GoLspStatus = LanguageServerStatus;
-	type RustLspStatus = LanguageServerStatus;
-	type TypeScriptLspStatus = LanguageServerStatus;
-	type AssemblyScriptLspStatus = LanguageServerStatus;
-	type WatLspStatus = LanguageServerStatus;
-	type ZigLspStatus = LanguageServerStatus;
-	type PhpLspStatus = LanguageServerStatus;
-	type LuaLspStatus = LanguageServerStatus;
-	type OcamlLspStatus = LanguageServerStatus;
-	type HaskellLspStatus = LanguageServerStatus;
+	type MonacoLanguageContributionLoader = () => Promise<unknown>;
+	interface LspRoute {
+		languages: readonly string[];
+		isEnabled: () => boolean;
+		setStatus: (status: LanguageServerStatus) => void;
+		load: (currentUrl: string) => Promise<IMonacoLspConnection>;
+	}
+
+	const dotnetLspLanguages: Record<string, DotnetLspLanguage> = {
+		csharp: 'csharp',
+		fsharp: 'fsharp',
+		vb: 'vbnet'
+	};
+	const defaultLanguageAliases: Record<string, string> = {
+		vb: 'vbnet',
+		sql: 'sqlite'
+	};
+	const debugViewLanguages = new Set(['cpp']);
+	const diagnosticMarkerLanguages = new Set([
+		'java',
+		'python',
+		'rust',
+		'go',
+		'd',
+		'csharp',
+		'fsharp',
+		'vb',
+		'erlang',
+		'prolog',
+		'gleam',
+		'perl',
+		'ocaml',
+		'javascript',
+		'typescript',
+		'wat',
+		'lua',
+		'zig',
+		'lisp',
+		'haskell',
+		'r',
+		'octave',
+		'cpp'
+	]);
+	const monacoLanguageContributionLoaders: Record<string, MonacoLanguageContributionLoader> = {
+		c: () => import('monaco-editor/esm/vs/basic-languages/cpp/cpp.contribution.js'),
+		cpp: () => import('monaco-editor/esm/vs/basic-languages/cpp/cpp.contribution.js'),
+		csharp: () => import('monaco-editor/esm/vs/basic-languages/csharp/csharp.contribution.js'),
+		elixir: () => import('monaco-editor/esm/vs/basic-languages/elixir/elixir.contribution.js'),
+		go: () => import('monaco-editor/esm/vs/basic-languages/go/go.contribution.js'),
+		java: () => import('monaco-editor/esm/vs/basic-languages/java/java.contribution.js'),
+		javascript: () =>
+			import('monaco-editor/esm/vs/basic-languages/typescript/typescript.contribution.js'),
+		typescript: () =>
+			import('monaco-editor/esm/vs/basic-languages/typescript/typescript.contribution.js'),
+		perl: () => import('monaco-editor/esm/vs/basic-languages/perl/perl.contribution.js'),
+		tcl: () => import('monaco-editor/esm/vs/basic-languages/tcl/tcl.contribution.js'),
+		php: () => import('monaco-editor/esm/vs/basic-languages/php/php.contribution.js'),
+		python: () => import('monaco-editor/esm/vs/basic-languages/python/python.contribution.js'),
+		r: () => import('monaco-editor/esm/vs/basic-languages/r/r.contribution.js'),
+		ruby: () => import('monaco-editor/esm/vs/basic-languages/ruby/ruby.contribution.js'),
+		rust: () => import('monaco-editor/esm/vs/basic-languages/rust/rust.contribution.js'),
+		sql: () => import('monaco-editor/esm/vs/basic-languages/sql/sql.contribution.js'),
+		vb: () => import('monaco-editor/esm/vs/basic-languages/vb/vb.contribution.js')
+	};
 
 	const ocamlKeywords = [
 		'and',
@@ -1468,19 +1519,20 @@
 
 	export const editorValue = () => editor?.getValue() || '';
 
-	let clangdStatus = $state<ClangdStatus>({ state: 'disabled' });
-	let dotnetLspStatus = $state<DotnetLspStatus>({ state: 'disabled' });
-	let gleamLspStatus = $state<GleamLspStatus>({ state: 'disabled' });
-	let goLspStatus = $state<GoLspStatus>({ state: 'disabled' });
-	let rustLspStatus = $state<RustLspStatus>({ state: 'disabled' });
-	let typescriptLspStatus = $state<TypeScriptLspStatus>({ state: 'disabled' });
-	let assemblyScriptLspStatus = $state<AssemblyScriptLspStatus>({ state: 'disabled' });
-	let watLspStatus = $state<WatLspStatus>({ state: 'disabled' });
-	let zigLspStatus = $state<ZigLspStatus>({ state: 'disabled' });
-	let phpLspStatus = $state<PhpLspStatus>({ state: 'disabled' });
-	let luaLspStatus = $state<LuaLspStatus>({ state: 'disabled' });
-	let ocamlLspStatus = $state<OcamlLspStatus>({ state: 'disabled' });
-	let haskellLspStatus = $state<HaskellLspStatus>({ state: 'disabled' });
+	let clangdStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let pythonLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let dotnetLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let gleamLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let goLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let rustLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let typescriptLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let assemblyScriptLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let watLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let zigLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let phpLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let luaLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let ocamlLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let haskellLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let model = $state<monaco.editor.ITextModel | undefined>();
 	let debugView = $state<MonacoDebugView | null>(null);
 	interface Props {
@@ -1519,6 +1571,7 @@
 		haskellLspModuleUrl?: string;
 		haskellLspRootfsUrl?: string;
 		haskellLspBsdtarUrl?: string;
+		pythonLspBaseUrl?: string;
 		breakpoints?: number[];
 		debugLocals?: DebugVariable[];
 		debugLanguage?: DebugLanguageAdapter | null;
@@ -1565,6 +1618,7 @@
 		haskellLspModuleUrl,
 		haskellLspRootfsUrl,
 		haskellLspBsdtarUrl,
+		pythonLspBaseUrl,
 		breakpoints = [],
 		debugLocals = [],
 		debugLanguage = null,
@@ -1579,17 +1633,9 @@
 	let applyingValue = false;
 	let debugActionBindings: { dispose(): void } | null = null;
 	const dotnetLspLanguage = $derived<DotnetLspLanguage | null>(
-		language === 'csharp'
-			? 'csharp'
-			: language === 'fsharp'
-				? 'fsharp'
-				: language === 'vb'
-					? 'vbnet'
-					: null
+		dotnetLspLanguages[language] ?? null
 	);
-	const defaultLanguage = $derived(
-		language === 'vb' ? 'vbnet' : language === 'sql' ? 'sqlite' : language
-	);
+	const defaultLanguage = $derived(defaultLanguageAliases[language] ?? language);
 	const activeLspLanguage = $derived(lspLanguage || language);
 	const defaultValue = $derived(
 		resolveEditorDefaultSource(
@@ -1640,7 +1686,7 @@
 		lineNumbersMinChars: compact ? 3 : 5,
 		minimap: { enabled: false },
 		occurrencesHighlight: 'off',
-		glyphMargin: language === 'cpp' || !!debugLanguage,
+		glyphMargin: debugViewLanguages.has(language) || !!debugLanguage,
 		padding: compact ? { top: 10, bottom: 10 } : { top: 14, bottom: 14 },
 		scrollbar: {
 			horizontalScrollbarSize: compact ? 8 : 12,
@@ -1669,331 +1715,269 @@
 			haskellLspEnabled ? haskellLspModuleUrl || '' : '',
 			haskellLspEnabled ? haskellLspRootfsUrl || '' : '',
 			haskellLspEnabled ? haskellLspBsdtarUrl || '' : '',
+			pythonLspBaseUrl || '',
 			activeLspLanguage,
 			lspEnabled ? 'lsp-on' : 'lsp-off',
 			typescriptLspLibUrl || ''
 		].join('\n')
 	);
-	const resolveLspConnection = $derived<IMonacoLspProvider>(
-		((key) => async () => {
-			if (key !== lspConnectionKey) return null;
-			const currentUrl = globalThis.location?.href || '';
-			if (!lspEnabled) {
-				clangdStatus = { state: 'disabled' };
-				dotnetLspStatus = { state: 'disabled' };
-				gleamLspStatus = { state: 'disabled' };
-				goLspStatus = { state: 'disabled' };
-				rustLspStatus = { state: 'disabled' };
-				typescriptLspStatus = { state: 'disabled' };
-				assemblyScriptLspStatus = { state: 'disabled' };
-				watLspStatus = { state: 'disabled' };
-				zigLspStatus = { state: 'disabled' };
-				phpLspStatus = { state: 'disabled' };
-				luaLspStatus = { state: 'disabled' };
-				ocamlLspStatus = { state: 'disabled' };
-				haskellLspStatus = { state: 'disabled' };
-				return null;
+	const lspRoutes: LspRoute[] = [
+		{
+			languages: ['cpp'],
+			isEnabled: () => clangdEnabled && !!clangdBaseUrl,
+			setStatus: (status) => (clangdStatus = status),
+			load: async (currentUrl) => {
+				const { getCppLanguageServer } = await import('@wasm-idle/lsp');
+				const handle = await getCppLanguageServer({
+					cpp: { baseUrl: clangdBaseUrl || '' },
+					currentUrl,
+					onStatus: (status) => (clangdStatus = status)
+				});
+				handle.syncFile?.(normalizedFilePath);
+				return handle as unknown as IMonacoLspConnection;
 			}
-			if (language === 'cpp') {
-				if (!clangdEnabled || !clangdBaseUrl) {
-					clangdStatus = { state: 'disabled' };
-					return null;
-				}
-				try {
-					const { getCppLanguageServer } = await import('@wasm-idle/lsp');
-					const handle = await getCppLanguageServer({
-						cpp: { baseUrl: clangdBaseUrl },
-						currentUrl,
-						onStatus: (status) => (clangdStatus = status)
-					});
-					handle.syncFile?.(normalizedFilePath);
-					return handle as unknown as IMonacoLspConnection;
-				} catch (error) {
-					clangdStatus = {
-						state: 'error',
-						message: error instanceof Error ? error.message : String(error)
-					};
-					throw error;
-				}
+		},
+		{
+			languages: ['python'],
+			isEnabled: () => true,
+			setStatus: (status) => (pythonLspStatus = status),
+			load: async (currentUrl) => {
+				const { getPythonLanguageServer } = await import('@wasm-idle/lsp');
+				return (await getPythonLanguageServer({
+					currentUrl,
+					python: { baseUrl: pythonLspBaseUrl },
+					onStatus: (status) => (pythonLspStatus = status)
+				})) as unknown as IMonacoLspConnection;
 			}
-			if (dotnetLspLanguage) {
-				if (!dotnetLspEnabled || !dotnetLspModuleUrl) {
-					dotnetLspStatus = { state: 'disabled' };
-					return null;
-				}
-				try {
-					const {
-						getCSharpLanguageServer,
-						getFSharpLanguageServer,
-						getVisualBasicLanguageServer
-					} = await import('@wasm-idle/lsp');
-					const load =
-						dotnetLspLanguage === 'csharp'
-							? getCSharpLanguageServer
-							: dotnetLspLanguage === 'fsharp'
-								? getFSharpLanguageServer
-								: getVisualBasicLanguageServer;
-					return (await load({
-						currentUrl,
-						dotnet: { moduleUrl: dotnetLspModuleUrl },
-						onStatus: (status) => (dotnetLspStatus = status)
-					})) as unknown as IMonacoLspConnection;
-				} catch (error) {
-					dotnetLspStatus = {
-						state: 'error',
-						message: error instanceof Error ? error.message : String(error)
-					};
-					throw error;
-				}
+		},
+		{
+			languages: ['csharp', 'fsharp', 'vb'],
+			isEnabled: () => dotnetLspEnabled && !!dotnetLspModuleUrl && !!dotnetLspLanguage,
+			setStatus: (status) => (dotnetLspStatus = status),
+			load: async (currentUrl) => {
+				const activeDotnetLanguage = dotnetLspLanguage;
+				if (!activeDotnetLanguage)
+					throw new Error(`Unsupported .NET LSP language: ${language}`);
+				const {
+					getCSharpLanguageServer,
+					getFSharpLanguageServer,
+					getVisualBasicLanguageServer
+				} = await import('@wasm-idle/lsp');
+				const load = {
+					csharp: getCSharpLanguageServer,
+					fsharp: getFSharpLanguageServer,
+					vbnet: getVisualBasicLanguageServer
+				}[activeDotnetLanguage];
+				return (await load({
+					currentUrl,
+					dotnet: { moduleUrl: dotnetLspModuleUrl || '' },
+					onStatus: (status) => (dotnetLspStatus = status)
+				})) as unknown as IMonacoLspConnection;
 			}
-			if (language === 'gleam') {
-				if (!gleamLspEnabled || !gleamLspBaseUrl) {
-					gleamLspStatus = { state: 'disabled' };
-					return null;
-				}
-				try {
-					const { getGleamLanguageServer } = await import('@wasm-idle/lsp');
-					return (await getGleamLanguageServer({
-						currentUrl,
-						gleam: {
-							baseUrl: gleamLspBaseUrl,
-							manifestUrl: gleamLspManifestUrl
-						},
-						onStatus: (status) => (gleamLspStatus = status)
-					})) as unknown as IMonacoLspConnection;
-				} catch (error) {
-					gleamLspStatus = {
-						state: 'error',
-						message: error instanceof Error ? error.message : String(error)
-					};
-					throw error;
-				}
+		},
+		{
+			languages: ['gleam'],
+			isEnabled: () => gleamLspEnabled && !!gleamLspBaseUrl,
+			setStatus: (status) => (gleamLspStatus = status),
+			load: async (currentUrl) => {
+				const { getGleamLanguageServer } = await import('@wasm-idle/lsp');
+				return (await getGleamLanguageServer({
+					currentUrl,
+					gleam: {
+						baseUrl: gleamLspBaseUrl || '',
+						manifestUrl: gleamLspManifestUrl
+					},
+					onStatus: (status) => (gleamLspStatus = status)
+				})) as unknown as IMonacoLspConnection;
 			}
-			if (language === 'go') {
-				if (!goLspEnabled || !goLspCompilerUrl) {
-					goLspStatus = { state: 'disabled' };
-					return null;
-				}
-				try {
-					const { getGoLanguageServer } = await import('@wasm-idle/lsp');
-					return (await getGoLanguageServer({
-						currentUrl,
-						go: {
-							compilerUrl: goLspCompilerUrl,
-							target: goTarget
-						},
-						onStatus: (status) => (goLspStatus = status)
-					})) as unknown as IMonacoLspConnection;
-				} catch (error) {
-					goLspStatus = {
-						state: 'error',
-						message: error instanceof Error ? error.message : String(error)
-					};
-					throw error;
-				}
+		},
+		{
+			languages: ['go'],
+			isEnabled: () => goLspEnabled && !!goLspCompilerUrl,
+			setStatus: (status) => (goLspStatus = status),
+			load: async (currentUrl) => {
+				const { getGoLanguageServer } = await import('@wasm-idle/lsp');
+				return (await getGoLanguageServer({
+					currentUrl,
+					go: {
+						compilerUrl: goLspCompilerUrl || '',
+						target: goTarget
+					},
+					onStatus: (status) => (goLspStatus = status)
+				})) as unknown as IMonacoLspConnection;
 			}
-			if (language === 'rust') {
-				if (!rustLspEnabled || !rustLspCompilerUrl) {
-					rustLspStatus = { state: 'disabled' };
-					return null;
-				}
-				try {
-					const { getRustLanguageServer } = await import('@wasm-idle/lsp');
-					return (await getRustLanguageServer({
-						currentUrl,
-						rust: {
-							compilerUrl: rustLspCompilerUrl,
-							targetTriple: rustTargetTriple
-						},
-						onStatus: (status) => (rustLspStatus = status)
-					})) as unknown as IMonacoLspConnection;
-				} catch (error) {
-					rustLspStatus = {
-						state: 'error',
-						message: error instanceof Error ? error.message : String(error)
-					};
-					throw error;
-				}
+		},
+		{
+			languages: ['rust'],
+			isEnabled: () => rustLspEnabled && !!rustLspCompilerUrl,
+			setStatus: (status) => (rustLspStatus = status),
+			load: async (currentUrl) => {
+				const { getRustLanguageServer } = await import('@wasm-idle/lsp');
+				return (await getRustLanguageServer({
+					currentUrl,
+					rust: {
+						compilerUrl: rustLspCompilerUrl || '',
+						targetTriple: rustTargetTriple
+					},
+					onStatus: (status) => (rustLspStatus = status)
+				})) as unknown as IMonacoLspConnection;
 			}
-			if (activeLspLanguage === 'typescript') {
-				try {
-					const { getTypeScriptLanguageServer } = await import('@wasm-idle/lsp');
-					return (await getTypeScriptLanguageServer({
-						currentUrl,
-						typescript: { libUrl: typescriptLspLibUrl },
-						onStatus: (status) => (typescriptLspStatus = status)
-					})) as unknown as IMonacoLspConnection;
-				} catch (error) {
-					typescriptLspStatus = {
-						state: 'error',
-						message: error instanceof Error ? error.message : String(error)
-					};
-					throw error;
-				}
-			}
-			if (activeLspLanguage === 'javascript') {
-				try {
-					const { getJavaScriptLanguageServer } = await import('@wasm-idle/lsp');
+		},
+		{
+			languages: ['typescript', 'javascript'],
+			isEnabled: () => true,
+			setStatus: (status) => (typescriptLspStatus = status),
+			load: async (currentUrl) => {
+				const { getJavaScriptLanguageServer, getTypeScriptLanguageServer } =
+					await import('@wasm-idle/lsp');
+				if (activeLspLanguage === 'javascript') {
 					return (await getJavaScriptLanguageServer({
 						currentUrl,
 						javascript: { libUrl: typescriptLspLibUrl },
 						onStatus: (status) => (typescriptLspStatus = status)
 					})) as unknown as IMonacoLspConnection;
-				} catch (error) {
-					typescriptLspStatus = {
-						state: 'error',
-						message: error instanceof Error ? error.message : String(error)
-					};
-					throw error;
 				}
+				return (await getTypeScriptLanguageServer({
+					currentUrl,
+					typescript: { libUrl: typescriptLspLibUrl },
+					onStatus: (status) => (typescriptLspStatus = status)
+				})) as unknown as IMonacoLspConnection;
 			}
-			if (activeLspLanguage === 'assemblyscript') {
-				try {
-					const { getAssemblyScriptLanguageServer } = await import('@wasm-idle/lsp');
-					return (await getAssemblyScriptLanguageServer({
-						currentUrl,
-						onStatus: (status) => (assemblyScriptLspStatus = status)
-					})) as unknown as IMonacoLspConnection;
-				} catch (error) {
-					assemblyScriptLspStatus = {
-						state: 'error',
-						message: error instanceof Error ? error.message : String(error)
-					};
-					throw error;
-				}
+		},
+		{
+			languages: ['assemblyscript'],
+			isEnabled: () => true,
+			setStatus: (status) => (assemblyScriptLspStatus = status),
+			load: async (currentUrl) => {
+				const { getAssemblyScriptLanguageServer } = await import('@wasm-idle/lsp');
+				return (await getAssemblyScriptLanguageServer({
+					currentUrl,
+					onStatus: (status) => (assemblyScriptLspStatus = status)
+				})) as unknown as IMonacoLspConnection;
 			}
-			if (activeLspLanguage === 'wat') {
-				try {
-					const { getWatLanguageServer } = await import('@wasm-idle/lsp');
-					return (await getWatLanguageServer({
-						currentUrl,
-						onStatus: (status) => (watLspStatus = status)
-					})) as unknown as IMonacoLspConnection;
-				} catch (error) {
-					watLspStatus = {
-						state: 'error',
-						message: error instanceof Error ? error.message : String(error)
-					};
-					throw error;
-				}
+		},
+		{
+			languages: ['wat'],
+			isEnabled: () => true,
+			setStatus: (status) => (watLspStatus = status),
+			load: async (currentUrl) => {
+				const { getWatLanguageServer } = await import('@wasm-idle/lsp');
+				return (await getWatLanguageServer({
+					currentUrl,
+					onStatus: (status) => (watLspStatus = status)
+				})) as unknown as IMonacoLspConnection;
 			}
-			if (activeLspLanguage === 'zig') {
-				if (!zigLspEnabled || !zigLspCompilerUrl || !zigLspStdlibUrl) {
-					zigLspStatus = { state: 'disabled' };
-					return null;
-				}
-				try {
-					const { getZigLanguageServer } = await import('@wasm-idle/lsp');
-					return (await getZigLanguageServer({
-						currentUrl,
-						zig: {
-							compilerUrl: zigLspCompilerUrl,
-							stdlibUrl: zigLspStdlibUrl
-						},
-						onStatus: (status) => (zigLspStatus = status)
-					})) as unknown as IMonacoLspConnection;
-				} catch (error) {
-					zigLspStatus = {
-						state: 'error',
-						message: error instanceof Error ? error.message : String(error)
-					};
-					throw error;
-				}
+		},
+		{
+			languages: ['zig'],
+			isEnabled: () => zigLspEnabled && !!zigLspCompilerUrl && !!zigLspStdlibUrl,
+			setStatus: (status) => (zigLspStatus = status),
+			load: async (currentUrl) => {
+				const { getZigLanguageServer } = await import('@wasm-idle/lsp');
+				return (await getZigLanguageServer({
+					currentUrl,
+					zig: {
+						compilerUrl: zigLspCompilerUrl || '',
+						stdlibUrl: zigLspStdlibUrl || ''
+					},
+					onStatus: (status) => (zigLspStatus = status)
+				})) as unknown as IMonacoLspConnection;
 			}
-			if (activeLspLanguage === 'php') {
-				if (!phpLspEnabled) {
-					phpLspStatus = { state: 'disabled' };
-					return null;
-				}
-				try {
-					const { getPhpLanguageServer } = await import('@wasm-idle/lsp');
-					return (await getPhpLanguageServer({
-						currentUrl,
-						onStatus: (status) => (phpLspStatus = status)
-					})) as unknown as IMonacoLspConnection;
-				} catch (error) {
-					phpLspStatus = {
-						state: 'error',
-						message: error instanceof Error ? error.message : String(error)
-					};
-					throw error;
-				}
+		},
+		{
+			languages: ['php'],
+			isEnabled: () => phpLspEnabled,
+			setStatus: (status) => (phpLspStatus = status),
+			load: async (currentUrl) => {
+				const { getPhpLanguageServer } = await import('@wasm-idle/lsp');
+				return (await getPhpLanguageServer({
+					currentUrl,
+					onStatus: (status) => (phpLspStatus = status)
+				})) as unknown as IMonacoLspConnection;
 			}
-			if (activeLspLanguage === 'lua') {
-				if (!luaLspEnabled || !luaLspModuleUrl) {
-					luaLspStatus = { state: 'disabled' };
-					return null;
-				}
-				try {
-					const { getLuaLanguageServer } = await import('@wasm-idle/lsp');
-					return (await getLuaLanguageServer({
-						currentUrl,
-						lua: {
-							moduleUrl: luaLspModuleUrl
-						},
-						onStatus: (status) => (luaLspStatus = status)
-					})) as unknown as IMonacoLspConnection;
-				} catch (error) {
-					luaLspStatus = {
-						state: 'error',
-						message: error instanceof Error ? error.message : String(error)
-					};
-					throw error;
-				}
+		},
+		{
+			languages: ['lua'],
+			isEnabled: () => luaLspEnabled && !!luaLspModuleUrl,
+			setStatus: (status) => (luaLspStatus = status),
+			load: async (currentUrl) => {
+				const { getLuaLanguageServer } = await import('@wasm-idle/lsp');
+				return (await getLuaLanguageServer({
+					currentUrl,
+					lua: {
+						moduleUrl: luaLspModuleUrl || ''
+					},
+					onStatus: (status) => (luaLspStatus = status)
+				})) as unknown as IMonacoLspConnection;
 			}
-			if (activeLspLanguage === 'ocaml') {
-				if (!ocamlLspEnabled || !ocamlLspModuleUrl || !ocamlLspManifestUrl) {
-					ocamlLspStatus = { state: 'disabled' };
-					return null;
-				}
-				try {
-					const { getOcamlLanguageServer } = await import('@wasm-idle/lsp');
-					return (await getOcamlLanguageServer({
-						currentUrl,
-						ocaml: {
-							moduleUrl: ocamlLspModuleUrl,
-							manifestUrl: ocamlLspManifestUrl
-						},
-						onStatus: (status) => (ocamlLspStatus = status)
-					})) as unknown as IMonacoLspConnection;
-				} catch (error) {
-					ocamlLspStatus = {
-						state: 'error',
-						message: error instanceof Error ? error.message : String(error)
-					};
-					throw error;
-				}
+		},
+		{
+			languages: ['ocaml'],
+			isEnabled: () => ocamlLspEnabled && !!ocamlLspModuleUrl && !!ocamlLspManifestUrl,
+			setStatus: (status) => (ocamlLspStatus = status),
+			load: async (currentUrl) => {
+				const { getOcamlLanguageServer } = await import('@wasm-idle/lsp');
+				return (await getOcamlLanguageServer({
+					currentUrl,
+					ocaml: {
+						moduleUrl: ocamlLspModuleUrl || '',
+						manifestUrl: ocamlLspManifestUrl || ''
+					},
+					onStatus: (status) => (ocamlLspStatus = status)
+				})) as unknown as IMonacoLspConnection;
 			}
-			if (activeLspLanguage === 'haskell') {
-				if (
-					!haskellLspEnabled ||
-					!haskellLspModuleUrl ||
-					!haskellLspRootfsUrl ||
-					!haskellLspBsdtarUrl
-				) {
-					haskellLspStatus = { state: 'disabled' };
-					return null;
-				}
-				try {
-					const { getHaskellLanguageServer } = await import('@wasm-idle/lsp');
-					return (await getHaskellLanguageServer({
-						currentUrl,
-						haskell: {
-							moduleUrl: haskellLspModuleUrl,
-							rootfsUrl: haskellLspRootfsUrl,
-							bsdtarUrl: haskellLspBsdtarUrl
-						},
-						onStatus: (status) => (haskellLspStatus = status)
-					})) as unknown as IMonacoLspConnection;
-				} catch (error) {
-					haskellLspStatus = {
-						state: 'error',
-						message: error instanceof Error ? error.message : String(error)
-					};
-					throw error;
-				}
+		},
+		{
+			languages: ['haskell'],
+			isEnabled: () =>
+				haskellLspEnabled &&
+				!!haskellLspModuleUrl &&
+				!!haskellLspRootfsUrl &&
+				!!haskellLspBsdtarUrl,
+			setStatus: (status) => (haskellLspStatus = status),
+			load: async (currentUrl) => {
+				const { getHaskellLanguageServer } = await import('@wasm-idle/lsp');
+				return (await getHaskellLanguageServer({
+					currentUrl,
+					haskell: {
+						moduleUrl: haskellLspModuleUrl || '',
+						rootfsUrl: haskellLspRootfsUrl || '',
+						bsdtarUrl: haskellLspBsdtarUrl || ''
+					},
+					onStatus: (status) => (haskellLspStatus = status)
+				})) as unknown as IMonacoLspConnection;
 			}
-			return null;
+		}
+	];
+
+	function disableAllLspStatuses() {
+		for (const route of lspRoutes) route.setStatus({ state: 'disabled' });
+	}
+	const resolveLspConnection = $derived<IMonacoLspProvider>(
+		((key) => async () => {
+			if (key !== lspConnectionKey) return null;
+			const currentUrl = globalThis.location?.href || '';
+			if (!lspEnabled) {
+				disableAllLspStatuses();
+				return null;
+			}
+			const route = lspRoutes.find((candidate) =>
+				candidate.languages.includes(activeLspLanguage)
+			);
+			if (!route) return null;
+			if (!route.isEnabled()) {
+				route.setStatus({ state: 'disabled' });
+				return null;
+			}
+			try {
+				return await route.load(currentUrl);
+			} catch (error) {
+				route.setStatus({
+					state: 'error',
+					message: error instanceof Error ? error.message : String(error)
+				});
+				throw error;
+			}
 		})(lspConnectionKey)
 	);
 
@@ -2021,75 +2005,13 @@
 
 	$effect(() => {
 		if (!lspEnabled) {
-			clangdStatus = { state: 'disabled' };
-			dotnetLspStatus = { state: 'disabled' };
-			gleamLspStatus = { state: 'disabled' };
-			goLspStatus = { state: 'disabled' };
-			rustLspStatus = { state: 'disabled' };
-			typescriptLspStatus = { state: 'disabled' };
-			assemblyScriptLspStatus = { state: 'disabled' };
-			watLspStatus = { state: 'disabled' };
-			zigLspStatus = { state: 'disabled' };
-			phpLspStatus = { state: 'disabled' };
-			luaLspStatus = { state: 'disabled' };
-			ocamlLspStatus = { state: 'disabled' };
-			haskellLspStatus = { state: 'disabled' };
+			disableAllLspStatuses();
 			return;
 		}
-		if (language !== 'cpp' || !clangdEnabled || !clangdBaseUrl) {
-			clangdStatus = { state: 'disabled' };
-		}
-		if (!dotnetLspLanguage || !dotnetLspEnabled || !dotnetLspModuleUrl) {
-			dotnetLspStatus = { state: 'disabled' };
-		}
-		if (language !== 'gleam' || !gleamLspEnabled || !gleamLspBaseUrl) {
-			gleamLspStatus = { state: 'disabled' };
-		}
-		if (language !== 'go' || !goLspEnabled || !goLspCompilerUrl) {
-			goLspStatus = { state: 'disabled' };
-		}
-		if (language !== 'rust' || !rustLspEnabled || !rustLspCompilerUrl) {
-			rustLspStatus = { state: 'disabled' };
-		}
-		if (activeLspLanguage !== 'typescript' && activeLspLanguage !== 'javascript') {
-			typescriptLspStatus = { state: 'disabled' };
-		}
-		if (activeLspLanguage !== 'assemblyscript') {
-			assemblyScriptLspStatus = { state: 'disabled' };
-		}
-		if (activeLspLanguage !== 'wat') {
-			watLspStatus = { state: 'disabled' };
-		}
-		if (
-			activeLspLanguage !== 'zig' ||
-			!zigLspEnabled ||
-			!zigLspCompilerUrl ||
-			!zigLspStdlibUrl
-		) {
-			zigLspStatus = { state: 'disabled' };
-		}
-		if (activeLspLanguage !== 'php' || !phpLspEnabled) {
-			phpLspStatus = { state: 'disabled' };
-		}
-		if (activeLspLanguage !== 'lua' || !luaLspEnabled || !luaLspModuleUrl) {
-			luaLspStatus = { state: 'disabled' };
-		}
-		if (
-			activeLspLanguage !== 'ocaml' ||
-			!ocamlLspEnabled ||
-			!ocamlLspModuleUrl ||
-			!ocamlLspManifestUrl
-		) {
-			ocamlLspStatus = { state: 'disabled' };
-		}
-		if (
-			activeLspLanguage !== 'haskell' ||
-			!haskellLspEnabled ||
-			!haskellLspModuleUrl ||
-			!haskellLspRootfsUrl ||
-			!haskellLspBsdtarUrl
-		) {
-			haskellLspStatus = { state: 'disabled' };
+		for (const route of lspRoutes) {
+			if (!route.languages.includes(activeLspLanguage) || !route.isEnabled()) {
+				route.setStatus({ state: 'disabled' });
+			}
 		}
 	});
 
@@ -2110,7 +2032,8 @@
 	$effect(() => {
 		const monacoApi = Monaco;
 		const activeEditor = editor;
-		if (!monacoApi || !activeEditor || (language !== 'cpp' && !debugLanguage)) return;
+		if (!monacoApi || !activeEditor || (!debugViewLanguages.has(language) && !debugLanguage))
+			return;
 		untrack(() => {
 			debugView?.dispose();
 			debugActionBindings?.dispose();
@@ -2146,46 +2069,24 @@
 		if (!monacoApi || !editor) return;
 		const activeModel = model || editor.getModel();
 		if (!activeModel) return;
-		const markers =
-			language === 'java' ||
-			language === 'rust' ||
-			language === 'go' ||
-			language === 'd' ||
-			language === 'csharp' ||
-			language === 'fsharp' ||
-			language === 'vb' ||
-			language === 'erlang' ||
-			language === 'prolog' ||
-			language === 'gleam' ||
-			language === 'perl' ||
-			language === 'ocaml' ||
-			language === 'javascript' ||
-			language === 'typescript' ||
-			language === 'wat' ||
-			language === 'lua' ||
-			language === 'zig' ||
-			language === 'lisp' ||
-			language === 'haskell' ||
-			language === 'r' ||
-			language === 'octave' ||
-			language === 'cpp'
-				? compilerDiagnostics.map((diagnostic) => ({
-						severity:
-							diagnostic.severity === 'warning'
-								? monacoApi.MarkerSeverity.Warning
-								: diagnostic.severity === 'other'
-									? monacoApi.MarkerSeverity.Info
-									: monacoApi.MarkerSeverity.Error,
-						message: diagnostic.message,
-						startLineNumber: Math.max(1, diagnostic.lineNumber || 1),
-						startColumn: Math.max(1, diagnostic.columnNumber || 1),
-						endLineNumber: Math.max(1, diagnostic.lineNumber || 1),
-						endColumn: Math.max(
-							1,
-							diagnostic.endColumnNumber || diagnostic.columnNumber || 2
-						)
-					}))
-				: [];
+		const markers = diagnosticMarkerLanguages.has(language)
+			? compilerDiagnostics.map((diagnostic) => ({
+					severity:
+						diagnostic.severity === 'warning'
+							? monacoApi.MarkerSeverity.Warning
+							: diagnostic.severity === 'other'
+								? monacoApi.MarkerSeverity.Info
+								: monacoApi.MarkerSeverity.Error,
+					message: diagnostic.message,
+					startLineNumber: Math.max(1, diagnostic.lineNumber || 1),
+					startColumn: Math.max(1, diagnostic.columnNumber || 1),
+					endLineNumber: Math.max(1, diagnostic.lineNumber || 1),
+					endColumn: Math.max(
+						1,
+						diagnostic.endColumnNumber || diagnostic.columnNumber || 2
+					)
+				}))
+			: [];
 		monacoApi.editor.setModelMarkers(activeModel, 'wasm-idle-compiler', markers);
 	});
 
@@ -2213,191 +2114,129 @@
 			(globalThis as typeof globalThis & { MonacoEnvironment?: unknown }).MonacoEnvironment =
 				workers.createMonacoEnvironment();
 			MonacoEditor = monacoComponent.default;
-			let languageContribution: Promise<unknown> = Promise.resolve();
-			switch (language) {
-				case 'c':
-				case 'cpp':
-					languageContribution =
-						import('monaco-editor/esm/vs/basic-languages/cpp/cpp.contribution.js');
-					break;
-				case 'csharp':
-					languageContribution =
-						import('monaco-editor/esm/vs/basic-languages/csharp/csharp.contribution.js');
-					break;
-				case 'elixir':
-					languageContribution =
-						import('monaco-editor/esm/vs/basic-languages/elixir/elixir.contribution.js');
-					break;
-				case 'go':
-					languageContribution =
-						import('monaco-editor/esm/vs/basic-languages/go/go.contribution.js');
-					break;
-				case 'java':
-					languageContribution =
-						import('monaco-editor/esm/vs/basic-languages/java/java.contribution.js');
-					break;
-				case 'javascript':
-				case 'typescript':
-					languageContribution =
-						import('monaco-editor/esm/vs/basic-languages/typescript/typescript.contribution.js');
-					break;
-				case 'perl':
-					languageContribution =
-						import('monaco-editor/esm/vs/basic-languages/perl/perl.contribution.js');
-					break;
-				case 'tcl':
-					languageContribution =
-						import('monaco-editor/esm/vs/basic-languages/tcl/tcl.contribution.js');
-					break;
-				case 'php':
-					languageContribution =
-						import('monaco-editor/esm/vs/basic-languages/php/php.contribution.js');
-					break;
-				case 'python':
-					languageContribution =
-						import('monaco-editor/esm/vs/basic-languages/python/python.contribution.js');
-					break;
-				case 'r':
-					languageContribution =
-						import('monaco-editor/esm/vs/basic-languages/r/r.contribution.js');
-					break;
-				case 'ruby':
-					languageContribution =
-						import('monaco-editor/esm/vs/basic-languages/ruby/ruby.contribution.js');
-					break;
-				case 'rust':
-					languageContribution =
-						import('monaco-editor/esm/vs/basic-languages/rust/rust.contribution.js');
-					break;
-				case 'sql':
-					languageContribution =
-						import('monaco-editor/esm/vs/basic-languages/sql/sql.contribution.js');
-					break;
-				case 'vb':
-					languageContribution =
-						import('monaco-editor/esm/vs/basic-languages/vb/vb.contribution.js');
-					break;
-			}
+			const languageContribution =
+				monacoLanguageContributionLoaders[language]?.() ?? Promise.resolve();
 			const [m] = await Promise.all([monacoComponent.loadMonaco(), languageContribution]);
 			if (disposed) return;
-			Monaco = m;
-			if (!Monaco.languages.getLanguages().some(({ id }) => id === 'ocaml')) {
-				Monaco.languages.register({
+			const monacoApi = m;
+			Monaco = monacoApi;
+			if (!monacoApi.languages.getLanguages().some(({ id }) => id === 'ocaml')) {
+				monacoApi.languages.register({
 					id: 'ocaml',
 					aliases: ['OCaml', 'ocaml'],
 					extensions: ['.ml', '.mli']
 				});
 			}
-			Monaco.languages.setLanguageConfiguration('ocaml', ocamlLanguageConfiguration);
-			Monaco.languages.setMonarchTokensProvider('ocaml', ocamlMonarchTokens);
-			if (!Monaco.languages.getLanguages().some(({ id }) => id === 'fsharp')) {
-				Monaco.languages.register({
+			monacoApi.languages.setLanguageConfiguration('ocaml', ocamlLanguageConfiguration);
+			monacoApi.languages.setMonarchTokensProvider('ocaml', ocamlMonarchTokens);
+			if (!monacoApi.languages.getLanguages().some(({ id }) => id === 'fsharp')) {
+				monacoApi.languages.register({
 					id: 'fsharp',
 					aliases: ['F#', 'FSharp', 'fsharp'],
 					extensions: ['.fs', '.fsx', '.fsi']
 				});
 			}
-			Monaco.languages.setLanguageConfiguration('fsharp', fsharpLanguageConfiguration);
-			Monaco.languages.setMonarchTokensProvider('fsharp', fsharpMonarchTokens);
-			if (!Monaco.languages.getLanguages().some(({ id }) => id === 'd')) {
-				Monaco.languages.register({
+			monacoApi.languages.setLanguageConfiguration('fsharp', fsharpLanguageConfiguration);
+			monacoApi.languages.setMonarchTokensProvider('fsharp', fsharpMonarchTokens);
+			if (!monacoApi.languages.getLanguages().some(({ id }) => id === 'd')) {
+				monacoApi.languages.register({
 					id: 'd',
 					aliases: ['D', 'd'],
 					extensions: ['.d']
 				});
 			}
-			Monaco.languages.setLanguageConfiguration('d', dLanguageConfiguration);
-			Monaco.languages.setMonarchTokensProvider('d', dMonarchTokens);
-			if (!Monaco.languages.getLanguages().some(({ id }) => id === 'zig')) {
-				Monaco.languages.register({
+			monacoApi.languages.setLanguageConfiguration('d', dLanguageConfiguration);
+			monacoApi.languages.setMonarchTokensProvider('d', dMonarchTokens);
+			if (!monacoApi.languages.getLanguages().some(({ id }) => id === 'zig')) {
+				monacoApi.languages.register({
 					id: 'zig',
 					aliases: ['Zig', 'zig'],
 					extensions: ['.zig']
 				});
 			}
-			Monaco.languages.setLanguageConfiguration('zig', zigLanguageConfiguration);
-			Monaco.languages.setMonarchTokensProvider('zig', zigMonarchTokens);
-			if (!Monaco.languages.getLanguages().some(({ id }) => id === 'wat')) {
-				Monaco.languages.register({
+			monacoApi.languages.setLanguageConfiguration('zig', zigLanguageConfiguration);
+			monacoApi.languages.setMonarchTokensProvider('zig', zigMonarchTokens);
+			if (!monacoApi.languages.getLanguages().some(({ id }) => id === 'wat')) {
+				monacoApi.languages.register({
 					id: 'wat',
 					aliases: ['WAT', 'WebAssembly Text', 'wat'],
 					extensions: ['.wat', '.wast']
 				});
 			}
-			Monaco.languages.setLanguageConfiguration('wat', watLanguageConfiguration);
-			Monaco.languages.setMonarchTokensProvider('wat', watMonarchTokens);
-			if (!Monaco.languages.getLanguages().some(({ id }) => id === 'lua')) {
-				Monaco.languages.register({
+			monacoApi.languages.setLanguageConfiguration('wat', watLanguageConfiguration);
+			monacoApi.languages.setMonarchTokensProvider('wat', watMonarchTokens);
+			if (!monacoApi.languages.getLanguages().some(({ id }) => id === 'lua')) {
+				monacoApi.languages.register({
 					id: 'lua',
 					aliases: ['Lua', 'lua'],
 					extensions: ['.lua']
 				});
 			}
-			Monaco.languages.setLanguageConfiguration('lua', luaLanguageConfiguration);
-			Monaco.languages.setMonarchTokensProvider('lua', luaMonarchTokens);
-			if (!Monaco.languages.getLanguages().some(({ id }) => id === 'erlang')) {
-				Monaco.languages.register({
+			monacoApi.languages.setLanguageConfiguration('lua', luaLanguageConfiguration);
+			monacoApi.languages.setMonarchTokensProvider('lua', luaMonarchTokens);
+			if (!monacoApi.languages.getLanguages().some(({ id }) => id === 'erlang')) {
+				monacoApi.languages.register({
 					id: 'erlang',
 					aliases: ['Erlang', 'erlang', 'erl'],
 					extensions: ['.erl', '.hrl']
 				});
 			}
-			Monaco.languages.setLanguageConfiguration('erlang', erlangLanguageConfiguration);
-			Monaco.languages.setMonarchTokensProvider('erlang', erlangMonarchTokens);
-			if (!Monaco.languages.getLanguages().some(({ id }) => id === 'prolog')) {
-				Monaco.languages.register({
+			monacoApi.languages.setLanguageConfiguration('erlang', erlangLanguageConfiguration);
+			monacoApi.languages.setMonarchTokensProvider('erlang', erlangMonarchTokens);
+			if (!monacoApi.languages.getLanguages().some(({ id }) => id === 'prolog')) {
+				monacoApi.languages.register({
 					id: 'prolog',
 					aliases: ['Prolog', 'SWI-Prolog', 'prolog', 'swipl'],
 					extensions: ['.prolog', '.pro']
 				});
 			}
-			Monaco.languages.setLanguageConfiguration('prolog', prologLanguageConfiguration);
-			Monaco.languages.setMonarchTokensProvider('prolog', prologMonarchTokens);
-			if (!Monaco.languages.getLanguages().some(({ id }) => id === 'gleam')) {
-				Monaco.languages.register({
+			monacoApi.languages.setLanguageConfiguration('prolog', prologLanguageConfiguration);
+			monacoApi.languages.setMonarchTokensProvider('prolog', prologMonarchTokens);
+			if (!monacoApi.languages.getLanguages().some(({ id }) => id === 'gleam')) {
+				monacoApi.languages.register({
 					id: 'gleam',
 					aliases: ['Gleam', 'gleam'],
 					extensions: ['.gleam']
 				});
 			}
-			Monaco.languages.setLanguageConfiguration('gleam', gleamLanguageConfiguration);
-			Monaco.languages.setMonarchTokensProvider('gleam', gleamMonarchTokens);
-			if (!Monaco.languages.getLanguages().some(({ id }) => id === 'awk')) {
-				Monaco.languages.register({
+			monacoApi.languages.setLanguageConfiguration('gleam', gleamLanguageConfiguration);
+			monacoApi.languages.setMonarchTokensProvider('gleam', gleamMonarchTokens);
+			if (!monacoApi.languages.getLanguages().some(({ id }) => id === 'awk')) {
+				monacoApi.languages.register({
 					id: 'awk',
 					aliases: ['AWK', 'awk', 'gawk'],
 					extensions: ['.awk', '.gawk']
 				});
 			}
-			Monaco.languages.setLanguageConfiguration('awk', awkLanguageConfiguration);
-			Monaco.languages.setMonarchTokensProvider('awk', awkMonarchTokens);
-			if (!Monaco.languages.getLanguages().some(({ id }) => id === 'octave')) {
-				Monaco.languages.register({
+			monacoApi.languages.setLanguageConfiguration('awk', awkLanguageConfiguration);
+			monacoApi.languages.setMonarchTokensProvider('awk', awkMonarchTokens);
+			if (!monacoApi.languages.getLanguages().some(({ id }) => id === 'octave')) {
+				monacoApi.languages.register({
 					id: 'octave',
 					aliases: ['Octave', 'MATLAB', 'octave', 'matlab'],
 					extensions: ['.m']
 				});
 			}
-			Monaco.languages.setLanguageConfiguration('octave', octaveLanguageConfiguration);
-			Monaco.languages.setMonarchTokensProvider('octave', octaveMonarchTokens);
-			if (!Monaco.languages.getLanguages().some(({ id }) => id === 'haskell')) {
-				Monaco.languages.register({
+			monacoApi.languages.setLanguageConfiguration('octave', octaveLanguageConfiguration);
+			monacoApi.languages.setMonarchTokensProvider('octave', octaveMonarchTokens);
+			if (!monacoApi.languages.getLanguages().some(({ id }) => id === 'haskell')) {
+				monacoApi.languages.register({
 					id: 'haskell',
 					aliases: ['Haskell', 'haskell'],
 					extensions: ['.hs', '.lhs']
 				});
 			}
-			Monaco.languages.setLanguageConfiguration('haskell', haskellLanguageConfiguration);
-			Monaco.languages.setMonarchTokensProvider('haskell', haskellMonarchTokens);
-			if (!Monaco.languages.getLanguages().some(({ id }) => id === 'lisp')) {
-				Monaco.languages.register({
+			monacoApi.languages.setLanguageConfiguration('haskell', haskellLanguageConfiguration);
+			monacoApi.languages.setMonarchTokensProvider('haskell', haskellMonarchTokens);
+			if (!monacoApi.languages.getLanguages().some(({ id }) => id === 'lisp')) {
+				monacoApi.languages.register({
 					id: 'lisp',
 					aliases: ['Scheme', 'Lisp', 'scheme', 'lisp'],
 					extensions: ['.scm', '.ss', '.sls', '.lisp', '.lsp']
 				});
 			}
-			Monaco.languages.setLanguageConfiguration('lisp', schemeLanguageConfiguration);
-			Monaco.languages.setMonarchTokensProvider('lisp', schemeMonarchTokens);
+			monacoApi.languages.setLanguageConfiguration('lisp', schemeLanguageConfiguration);
+			monacoApi.languages.setMonarchTokensProvider('lisp', schemeMonarchTokens);
 		})();
 
 		return () => {

@@ -95,12 +95,14 @@ function cloneArgs(value?: string[]) {
 	return Array.isArray(value) ? [...value] : [];
 }
 
+const compileArgLanguages = new Set(['C', 'CPP']);
+
 export function resolveSandboxExecutionArgs(
 	language: string,
 	args: string[] = [],
 	options: SandboxExecutionOptions = {}
 ): ResolvedSandboxExecutionArgs {
-	if (language === 'C' || language === 'CPP') {
+	if (compileArgLanguages.has(language)) {
 		return {
 			compileArgs: cloneArgs(options.compileArgs ?? args),
 			programArgs: cloneArgs(options.programArgs)

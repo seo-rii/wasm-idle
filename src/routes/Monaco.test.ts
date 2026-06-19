@@ -71,16 +71,32 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(/<MonacoEditor[\s\S]*lsp=\{resolveLspConnection\}/);
 		expect(source).toMatch(/onload=\{handleEditorLoad\}/);
 		expect(source).toMatch(/oninput=\{handleEditorInput\}/);
+		expect(source).toMatch(/const diagnosticMarkerLanguages = new Set\(\[/);
+		for (const markerLanguage of [
+			'java',
+			'rust',
+			'go',
+			'd',
+			'csharp',
+			'fsharp',
+			'vb',
+			'erlang',
+			'prolog',
+			'gleam',
+			'perl',
+			'ocaml',
+			'wat',
+			'lua',
+			'lisp',
+			'haskell',
+			'r',
+			'octave',
+			'cpp'
+		]) {
+			expect(source).toContain(`'${markerLanguage}'`);
+		}
 		expect(source).toMatch(
-			/language === 'java' \|\|\s+language === 'rust' \|\|\s+language === 'go' \|\|\s+language === 'd' \|\|\s+language === 'csharp' \|\|\s+language === 'fsharp' \|\|\s+language === 'vb' \|\|\s+language === 'erlang' \|\|\s+language === 'prolog' \|\|\s+language === 'gleam' \|\|\s+language === 'perl' \|\|\s+language === 'ocaml'/
-		);
-		expect(source).toMatch(/language === 'wat'/);
-		expect(source).toMatch(/language === 'lua'/);
-		expect(source).toMatch(/language === 'lisp'/);
-		expect(source).toMatch(/language === 'haskell'/);
-		expect(source).toMatch(/language === 'r'/);
-		expect(source).toMatch(
-			/const defaultLanguage = \$derived\(\s+language === 'vb' \? 'vbnet' : language === 'sql' \? 'sqlite' : language\s+\);/
+			/const defaultLanguage = \$derived\(defaultLanguageAliases\[language\] \?\? language\);/
 		);
 		expect(source).toMatch(
 			/\$effect\(\(\) => \{\s+const activeModel = model \|\| editor\?\.getModel\(\);[\s\S]*if \(!isEditorDefaultSource\(currentValue\) && !isLegacyEditorDefaultSource\(currentValue\)\) \{[\s\S]*activeModel\.setValue\(defaultValue\);[\s\S]*\}\s+\}\);/s
@@ -92,10 +108,10 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(/aliases: \['D', 'd'\]/);
 		expect(source).toMatch(/extensions: \['\.d'\]/);
 		expect(source).toMatch(
-			/Monaco\.languages\.setMonarchTokensProvider\('d', dMonarchTokens\);/
+			/monacoApi\.languages\.setMonarchTokensProvider\('d', dMonarchTokens\);/
 		);
 		expect(source).toMatch(
-			/Monaco\.languages\.setMonarchTokensProvider\('zig', zigMonarchTokens\);/
+			/monacoApi\.languages\.setMonarchTokensProvider\('zig', zigMonarchTokens\);/
 		);
 		expect(source).toMatch(
 			/const nextDebugView = new MonacoDebugView\(monacoApi, activeEditor, onBreakpointsChange\);[\s\S]*debugView = nextDebugView;/s
@@ -112,9 +128,11 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(/debugActionBindings\?\.dispose\(\);/);
 		expect(source).toMatch(/import type \{ LanguageServerStatus \} from '@wasm-idle\/lsp';/);
 		expect(source).not.toMatch(/^\s*import \{[^\n]*\} from '@wasm-idle\/lsp';/m);
-		expect(source).toMatch(
-			/if \(!lspEnabled\) \{[\s\S]*clangdStatus = \{ state: 'disabled' \};[\s\S]*return null;[\s\S]*\}/s
-		);
+		expect(source).toMatch(/const lspRoutes: LspRoute\[] = \[/);
+		expect(source).toMatch(/function disableAllLspStatuses\(\) \{/);
+		expect(source).toMatch(/if \(!lspEnabled\) \{\s+disableAllLspStatuses\(\);/);
+		expect(source).toMatch(/const route = lspRoutes\.find/);
+		expect(source).toMatch(/return await route\.load\(currentUrl\);/);
 		expect(source).toMatch(
 			/const \{ getCppLanguageServer \} = await import\('@wasm-idle\/lsp'\);/
 		);
@@ -213,9 +231,14 @@ describe('Monaco route debug sync', () => {
 		).not.toThrow();
 		expect(pageSource).toMatch(/clangdRequested = \$state\(false\),/);
 		expect(pageSource).toMatch(
-			/if \(enableDebug && language === 'CPP'\) clangdRequested = true;/
+			/const debugLspLanguages = new Set<PlaygroundLanguage>\(\['CPP'\]\);/
 		);
-		expect(pageSource).toMatch(/if \(language !== 'CPP'\) clangdRequested = false;/);
+		expect(pageSource).toMatch(
+			/if \(enableDebug && debugLspLanguages\.has\(language\)\) clangdRequested = true;/
+		);
+		expect(pageSource).toMatch(
+			/if \(!debugLspLanguages\.has\(language\)\) clangdRequested = false;/
+		);
 		expect(pageSource).toMatch(/<option value="RUST">Rust<\/option>/);
 		expect(pageSource).toMatch(/<option value="GO">Go<\/option>/);
 		expect(pageSource).toMatch(/<option value="D">D<\/option>/);
@@ -239,12 +262,14 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).toMatch(/<option value="R">R<\/option>/);
 		expect(pageSource).toMatch(/<option value="OCTAVE">Octave<\/option>/);
 		expect(pageSource).toMatch(/language=\{editorLanguage\}/);
-		expect(pageSource).toMatch(
-			/lspLanguage=\{language === 'ASSEMBLYSCRIPT' \? 'assemblyscript' : editorLanguage\}/
-		);
+		expect(pageSource).toMatch(/lspLanguage=\{monacoLspLanguage\}/);
 		expect(pageSource).toMatch(/filePath=\{activePath\}/);
+		expect(pageSource).toMatch(/const monacoLspLanguage = \$derived/);
 		expect(pageSource).toMatch(
-			/typescriptLspLibUrl=\{lspEnabled &&\s+\(language === 'JAVASCRIPT' \|\| language === 'TYPESCRIPT'\)/
+			/const runtimeLspCapabilities(?:: Partial<Record<PlaygroundLanguage, RuntimeLspCapability>>)? = \{/
+		);
+		expect(pageSource).toMatch(
+			/const typescriptLspLibUrl = \$derived\(\s+lspEnabled && typescriptLspLanguages\.has\(language\)/
 		);
 		expect(pageSource).toMatch(
 			/<select id="rust-target-triple" bind:value=\{rustTargetTriple\}>/
@@ -291,50 +316,29 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).toMatch(
 			/if \(typeof value\?\.lspEnabled === 'boolean'\) lspEnabled = value\.lspEnabled;/
 		);
-		expect(pageSource).toMatch(/clangdEnabled=\{lspEnabled && clangdRequested\}/);
-		expect(pageSource).toMatch(/dotnetLspEnabled=\{lspEnabled &&\s+\(language === 'CSHARP'/);
-		expect(pageSource).toMatch(/dotnetLspModuleUrl=\{language === 'CSHARP'/);
-		expect(pageSource).toMatch(/gleamLspEnabled=\{lspEnabled && language === 'GLEAM'\}/);
-		expect(pageSource).toMatch(
-			/gleamLspBaseUrl=\{language === 'GLEAM' \? runtimeAssets\.gleam\?\.baseUrl : undefined\}/
-		);
-		expect(pageSource).toMatch(/goLspEnabled=\{lspEnabled && language === 'GO'\}/);
-		expect(pageSource).toMatch(
-			/goLspCompilerUrl=\{language === 'GO'\s+\?\s+runtimeAssets\.go\?\.compilerUrl\s+:\s+undefined\}/
-		);
-		expect(pageSource).toMatch(/rustLspEnabled=\{lspEnabled && language === 'RUST'\}/);
-		expect(pageSource).toMatch(
-			/rustLspCompilerUrl=\{language === 'RUST'\s+\?\s+runtimeAssets\.rust\?\.compilerUrl\s+:\s+undefined\}/
-		);
-		expect(pageSource).toMatch(/zigLspEnabled=\{lspEnabled && language === 'ZIG'\}/);
-		expect(pageSource).toMatch(
-			/zigLspCompilerUrl=\{language === 'ZIG'\s+\?\s+runtimeAssets\.zig\?\.compilerUrl\s+:\s+undefined\}/
-		);
-		expect(pageSource).toMatch(
-			/zigLspStdlibUrl=\{language === 'ZIG'\s+\?\s+runtimeAssets\.zig\?\.stdlibUrl\s+:\s+undefined\}/
-		);
-		expect(pageSource).toMatch(/phpLspEnabled=\{lspEnabled && language === 'PHP'\}/);
-		expect(pageSource).toMatch(/luaLspEnabled=\{lspEnabled && language === 'LUA'\}/);
-		expect(pageSource).toMatch(
-			/luaLspModuleUrl=\{language === 'LUA' \? runtimeAssets\.lua\?\.moduleUrl : undefined\}/
-		);
-		expect(pageSource).toMatch(/ocamlLspEnabled=\{lspEnabled && language === 'OCAML'\}/);
-		expect(pageSource).toMatch(
-			/ocamlLspModuleUrl=\{language === 'OCAML'\s+\?\s+runtimeAssets\.ocaml\?\.moduleUrl\s+:\s+undefined\}/
-		);
-		expect(pageSource).toMatch(
-			/ocamlLspManifestUrl=\{language === 'OCAML'\s+\?\s+runtimeAssets\.ocaml\?\.manifestUrl\s+:\s+undefined\}/
-		);
-		expect(pageSource).toMatch(/haskellLspEnabled=\{lspEnabled && language === 'HASKELL'\}/);
-		expect(pageSource).toMatch(
-			/haskellLspModuleUrl=\{language === 'HASKELL'\s+\?\s+runtimeAssets\.haskell\?\.moduleUrl\s+:\s+undefined\}/
-		);
-		expect(pageSource).toMatch(
-			/haskellLspRootfsUrl=\{language === 'HASKELL'\s+\?\s+runtimeAssets\.haskell\?\.rootfsUrl\s+:\s+undefined\}/
-		);
-		expect(pageSource).toMatch(
-			/haskellLspBsdtarUrl=\{language === 'HASKELL'\s+\?\s+runtimeAssets\.haskell\?\.bsdtarUrl\s+:\s+undefined\}/
-		);
+		expect(pageSource).toMatch(/clangdEnabled=\{clangdLspEnabled\}/);
+		expect(pageSource).toMatch(/const dotnetLspEnabled = \$derived/);
+		expect(pageSource).toMatch(/dotnetLspLanguages\.has\(language\)/);
+		for (const capability of ['gleam', 'go', 'rust', 'zig', 'php', 'lua', 'ocaml', 'haskell']) {
+			expect(pageSource).toContain(`activeRuntimeLspCapability === '${capability}'`);
+		}
+		for (const prop of [
+			'dotnetLspModuleUrl',
+			'gleamLspBaseUrl',
+			'gleamLspManifestUrl',
+			'goLspCompilerUrl',
+			'rustLspCompilerUrl',
+			'zigLspCompilerUrl',
+			'zigLspStdlibUrl',
+			'luaLspModuleUrl',
+			'ocamlLspModuleUrl',
+			'ocamlLspManifestUrl',
+			'haskellLspModuleUrl',
+			'haskellLspRootfsUrl',
+			'haskellLspBsdtarUrl'
+		]) {
+			expect(pageSource).toContain(`{${prop}}`);
+		}
 	});
 
 	it('keeps the editor pane shrinkable for the resizable example layout', () => {

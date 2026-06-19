@@ -9,8 +9,13 @@ describe('Monaco route source', () => {
 			'utf8'
 		);
 
-		expect(source).toContain('let languageContribution: Promise<unknown> = Promise.resolve();');
-		expect(source).toContain('switch (language) {');
+		expect(source).toMatch(
+			/const monacoLanguageContributionLoaders(?:: Record<string, MonacoLanguageContributionLoader>)? = \{/
+		);
+		expect(source).toContain(
+			'monacoLanguageContributionLoaders[language]?.() ?? Promise.resolve()'
+		);
+		expect(source).not.toContain('switch (language) {');
 		expect(source).not.toMatch(
 			/Promise\.all\(\[\s*import\('monaco-editor\/esm\/vs\/basic-languages\/cpp\/cpp\.contribution\.js'\)/
 		);
@@ -45,10 +50,10 @@ describe('Monaco route source', () => {
 			'utf8'
 		);
 
-		expect(source).toContain('Monaco.languages.register({');
+		expect(source).toContain('monacoApi.languages.register({');
 		expect(source).toContain("id: 'ocaml'");
-		expect(source).toContain("Monaco.languages.setLanguageConfiguration('ocaml'");
-		expect(source).toContain("Monaco.languages.setMonarchTokensProvider('ocaml'");
+		expect(source).toContain("monacoApi.languages.setLanguageConfiguration('ocaml'");
+		expect(source).toContain("monacoApi.languages.setMonarchTokensProvider('ocaml'");
 		expect(source).toContain("tokenPostfix: '.ocaml'");
 		expect(source).toContain("blockComment: ['(*', '*)']");
 	});
@@ -61,8 +66,8 @@ describe('Monaco route source', () => {
 
 		expect(source).toContain("id: 'haskell'");
 		expect(source).toContain("extensions: ['.hs', '.lhs']");
-		expect(source).toContain("Monaco.languages.setLanguageConfiguration('haskell'");
-		expect(source).toContain("Monaco.languages.setMonarchTokensProvider('haskell'");
+		expect(source).toContain("monacoApi.languages.setLanguageConfiguration('haskell'");
+		expect(source).toContain("monacoApi.languages.setMonarchTokensProvider('haskell'");
 		expect(source).toContain("tokenPostfix: '.haskell'");
 		expect(source).toContain("lineComment: '--'");
 		expect(source).toContain("blockComment: ['{-', '-}']");
@@ -76,8 +81,8 @@ describe('Monaco route source', () => {
 
 		expect(source).toContain("id: 'wat'");
 		expect(source).toContain("extensions: ['.wat', '.wast']");
-		expect(source).toContain("Monaco.languages.setLanguageConfiguration('wat'");
-		expect(source).toContain("Monaco.languages.setMonarchTokensProvider('wat'");
+		expect(source).toContain("monacoApi.languages.setLanguageConfiguration('wat'");
+		expect(source).toContain("monacoApi.languages.setMonarchTokensProvider('wat'");
 		expect(source).toContain("tokenPostfix: '.wat'");
 		expect(source).toContain("lineComment: ';;'");
 		expect(source).toContain("[/\\(;/, 'comment', '@comment']");
@@ -91,8 +96,8 @@ describe('Monaco route source', () => {
 
 		expect(source).toContain("id: 'lua'");
 		expect(source).toContain("extensions: ['.lua']");
-		expect(source).toContain("Monaco.languages.setLanguageConfiguration('lua'");
-		expect(source).toContain("Monaco.languages.setMonarchTokensProvider('lua'");
+		expect(source).toContain("monacoApi.languages.setLanguageConfiguration('lua'");
+		expect(source).toContain("monacoApi.languages.setMonarchTokensProvider('lua'");
 		expect(source).toContain("tokenPostfix: '.lua'");
 		expect(source).toContain("lineComment: '--'");
 		expect(source).toContain("blockComment: ['--[[', ']]']");
@@ -107,8 +112,8 @@ describe('Monaco route source', () => {
 		expect(source).toContain("id: 'octave'");
 		expect(source).toContain("aliases: ['Octave', 'MATLAB', 'octave', 'matlab']");
 		expect(source).toContain("extensions: ['.m']");
-		expect(source).toContain("Monaco.languages.setLanguageConfiguration('octave'");
-		expect(source).toContain("Monaco.languages.setMonarchTokensProvider('octave'");
+		expect(source).toContain("monacoApi.languages.setLanguageConfiguration('octave'");
+		expect(source).toContain("monacoApi.languages.setMonarchTokensProvider('octave'");
 		expect(source).toContain("tokenPostfix: '.octave'");
 		expect(source).toContain("lineComment: '%'");
 		expect(source).toContain("blockComment: ['%{', '%}']");
@@ -123,8 +128,8 @@ describe('Monaco route source', () => {
 		expect(source).toContain("id: 'erlang'");
 		expect(source).toContain("aliases: ['Erlang', 'erlang', 'erl']");
 		expect(source).toContain("extensions: ['.erl', '.hrl']");
-		expect(source).toContain("Monaco.languages.setLanguageConfiguration('erlang'");
-		expect(source).toContain("Monaco.languages.setMonarchTokensProvider('erlang'");
+		expect(source).toContain("monacoApi.languages.setLanguageConfiguration('erlang'");
+		expect(source).toContain("monacoApi.languages.setMonarchTokensProvider('erlang'");
 		expect(source).toContain("tokenPostfix: '.erlang'");
 		expect(source).toContain("lineComment: '%'");
 		expect(source).toContain("'receive'");
@@ -138,13 +143,13 @@ describe('Monaco route source', () => {
 
 		expect(source).toContain("id: 'prolog'");
 		expect(source).toContain("extensions: ['.prolog', '.pro']");
-		expect(source).toContain("Monaco.languages.setLanguageConfiguration('prolog'");
-		expect(source).toContain("Monaco.languages.setMonarchTokensProvider('prolog'");
+		expect(source).toContain("monacoApi.languages.setLanguageConfiguration('prolog'");
+		expect(source).toContain("monacoApi.languages.setMonarchTokensProvider('prolog'");
 		expect(source).toContain("tokenPostfix: '.prolog'");
 		expect(source).toContain("id: 'gleam'");
 		expect(source).toContain("extensions: ['.gleam']");
-		expect(source).toContain("Monaco.languages.setLanguageConfiguration('gleam'");
-		expect(source).toContain("Monaco.languages.setMonarchTokensProvider('gleam'");
+		expect(source).toContain("monacoApi.languages.setLanguageConfiguration('gleam'");
+		expect(source).toContain("monacoApi.languages.setMonarchTokensProvider('gleam'");
 		expect(source).toContain("tokenPostfix: '.gleam'");
 	});
 
@@ -155,13 +160,13 @@ describe('Monaco route source', () => {
 		);
 
 		expect(source).toContain("id: 'd'");
-		expect(source).toContain("Monaco.languages.setLanguageConfiguration('d'");
-		expect(source).toContain("Monaco.languages.setMonarchTokensProvider('d'");
+		expect(source).toContain("monacoApi.languages.setLanguageConfiguration('d'");
+		expect(source).toContain("monacoApi.languages.setMonarchTokensProvider('d'");
 		expect(source).toContain("tokenPostfix: '.d'");
 		expect(source).toContain("blockComment: ['/*', '*/']");
 		expect(source).toContain("id: 'zig'");
-		expect(source).toContain("Monaco.languages.setLanguageConfiguration('zig'");
-		expect(source).toContain("Monaco.languages.setMonarchTokensProvider('zig'");
+		expect(source).toContain("monacoApi.languages.setLanguageConfiguration('zig'");
+		expect(source).toContain("monacoApi.languages.setMonarchTokensProvider('zig'");
 		expect(source).toContain("tokenPostfix: '.zig'");
 		expect(source).toContain("lineComment: '//'");
 	});
