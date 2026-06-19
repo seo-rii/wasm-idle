@@ -76,6 +76,7 @@ export interface ErlangRuntimeAssetConfig {
 
 export interface TypeScriptRuntimeAssetConfig {
 	moduleUrl?: string;
+	libUrl?: string;
 }
 
 export interface WatRuntimeAssetConfig {

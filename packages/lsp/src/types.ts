@@ -33,10 +33,12 @@ export interface EditorLanguageServerRuntimeOptions {
 	typescript?: {
 		compilerOptions?: CompilerOptions;
 		extraLibs?: Record<string, string>;
+		libUrl?: string;
 	};
 	javascript?: {
 		compilerOptions?: CompilerOptions;
 		extraLibs?: Record<string, string>;
+		libUrl?: string;
 	};
 	wat?: {
 		features?: Record<string, boolean>;

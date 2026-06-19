@@ -9,6 +9,7 @@ import type { TypeScriptLanguage } from './service.js';
 export interface TypeScriptLanguageServerConfig {
 	compilerOptions?: CompilerOptions;
 	extraLibs?: Record<string, string>;
+	libUrl?: string;
 }
 
 export interface TypeScriptLanguageServerOptions extends EditorLanguageServerRuntimeOptions {
@@ -39,7 +40,8 @@ async function createLanguageServer(
 		initOptions: {
 			language,
 			compilerOptions: config.compilerOptions,
-			extraLibs: config.extraLibs
+			extraLibs: config.extraLibs,
+			libUrl: config.libUrl
 		},
 		onStatus: hostOptions?.onStatus
 	});

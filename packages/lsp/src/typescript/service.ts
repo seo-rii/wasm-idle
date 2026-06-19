@@ -19,6 +19,7 @@ export interface TypeScriptWorkerOptions {
 	compilerOptions?: ts.CompilerOptions;
 	extraLibs?: Record<string, string>;
 	libFiles?: Record<string, string>;
+	libUrl?: string;
 }
 
 type LoadTypeScriptLibs = () => Promise<Record<string, string>>;
@@ -100,8 +101,8 @@ const scriptKind = (fileName: string) => {
 	return ts.ScriptKind.TS;
 };
 
-async function loadBundledTypeScriptLibs() {
-	const response = await fetch(new URL('./typescript-libs.json.gz', import.meta.url));
+async function loadTypeScriptLibsFromUrl(url: string | URL) {
+	const response = await fetch(url);
 	if (!response.ok) {
 		throw new Error(`Failed to load TypeScript standard libraries: ${response.status}`);
 	}
@@ -118,6 +119,11 @@ async function loadBundledTypeScriptLibs() {
 		sourceStream.pipeThrough(new DecompressionStream('gzip'))
 	);
 	return (await decompressedResponse.json()) as Record<string, string>;
+}
+
+async function loadBundledTypeScriptLibs() {
+	const bundledLibsPath = './typescript-libs.json.gz';
+	return await loadTypeScriptLibsFromUrl(new URL(bundledLibsPath, import.meta.url));
 }
 
 export function createTypeScriptWorkerService(
@@ -225,7 +231,9 @@ export function createTypeScriptWorkerService(
 			language = config.language || defaultLanguage;
 			context = nextContext;
 			context.reportProgress('load-typescript-libs');
-			libFiles = config.libFiles || (await loadLibs());
+			libFiles =
+				config.libFiles ||
+				(await (config.libUrl ? loadTypeScriptLibsFromUrl(config.libUrl) : loadLibs()));
 			extraLibs = Object.fromEntries(
 				Object.entries(config.extraLibs || {}).map(([fileName, source]) => [
 					normalizePath(fileName),

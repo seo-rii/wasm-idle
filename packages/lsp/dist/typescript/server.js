@@ -13,7 +13,8 @@ async function createLanguageServer(language, options) {
         initOptions: {
             language,
             compilerOptions: config.compilerOptions,
-            extraLibs: config.extraLibs
+            extraLibs: config.extraLibs,
+            libUrl: config.libUrl
         },
         onStatus: hostOptions?.onStatus
     });

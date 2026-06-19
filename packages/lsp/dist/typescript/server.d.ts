@@ -4,6 +4,7 @@ import { type LanguageServerStatus } from '../worker-client.js';
 export interface TypeScriptLanguageServerConfig {
     compilerOptions?: CompilerOptions;
     extraLibs?: Record<string, string>;
+    libUrl?: string;
 }
 export interface TypeScriptLanguageServerOptions extends EditorLanguageServerRuntimeOptions {
     createWorker?: () => Worker;

@@ -39,4 +39,34 @@ describe('TypeScript worker service', () => {
 		expect(fetchMock).toHaveBeenCalledOnce();
 		expect(reportProgress).toHaveBeenCalledWith('load-typescript-libs');
 	});
+
+	it('loads standard libraries from an explicit URL when provided', async () => {
+		const libraries = {
+			'lib.es2022.full.d.ts': 'declare const console: { log(...args: unknown[]): void };'
+		};
+		const compressed = gzipSync(JSON.stringify(libraries), { level: 9, mtime: 0 });
+		const fetchMock = vi.fn(async (url: string | URL | Request) => {
+			expect(String(url)).toBe('/lsp/typescript-libs.json.gz');
+			return new Response(compressed, {
+				status: 200,
+				headers: {
+					'content-type': 'application/gzip'
+				}
+			});
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		const service = createTypeScriptWorkerService('typescript');
+
+		await service.initialize?.(
+			{ language: 'typescript', libUrl: '/lsp/typescript-libs.json.gz' },
+			{
+				documents: new Map(),
+				publishDiagnostics: vi.fn(),
+				reportProgress: vi.fn()
+			}
+		);
+
+		expect(fetchMock).toHaveBeenCalledOnce();
+	});
 });

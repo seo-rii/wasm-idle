@@ -6,6 +6,7 @@ export interface TypeScriptWorkerOptions {
     compilerOptions?: ts.CompilerOptions;
     extraLibs?: Record<string, string>;
     libFiles?: Record<string, string>;
+    libUrl?: string;
 }
 type LoadTypeScriptLibs = () => Promise<Record<string, string>>;
 export declare function createTypeScriptWorkerService(defaultLanguage: TypeScriptLanguage, loadLibs?: LoadTypeScriptLibs): WorkerLanguageService;
