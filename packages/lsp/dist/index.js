@@ -1,5 +1,5 @@
 export { getEditorLanguageServer } from './registry.js';
-export { resolveCppLanguageServerBaseUrl, resolveCppLanguageServerRuntimeAssetConfig, resolveGoLanguageServerCompilerUrl, resolveGleamLanguageServerBaseUrl, resolveGleamLanguageServerManifestUrl, resolveLuaLanguageServerModuleUrl, resolvePhpLanguageServerVersion, resolvePythonLanguageServerBaseUrl, resolveRustLanguageServerCompilerUrl, resolveZigLanguageServerCompilerUrl, resolveZigLanguageServerStdlibUrl } from './runtime.js';
+export { resolveCppLanguageServerBaseUrl, resolveCppLanguageServerRuntimeAssetConfig, resolveGoLanguageServerCompilerUrl, resolveGleamLanguageServerBaseUrl, resolveGleamLanguageServerManifestUrl, resolveHaskellLanguageServerBsdtarUrl, resolveHaskellLanguageServerModuleUrl, resolveHaskellLanguageServerRootfsUrl, resolveLuaLanguageServerModuleUrl, resolveOcamlLanguageServerManifestUrl, resolveOcamlLanguageServerModuleUrl, resolvePhpLanguageServerVersion, resolvePythonLanguageServerBaseUrl, resolveRustLanguageServerCompilerUrl, resolveZigLanguageServerCompilerUrl, resolveZigLanguageServerStdlibUrl } from './runtime.js';
 export { CLANGD_ASSETS, CLANGD_VIRTUAL_BASE_URL, loadLanguageToolAsset, normalizeBaseUrl, normalizeRootUrl, resolveRootToolBaseUrl } from './assets.js';
 export { CLANGD_CPP_FILE_PATH, CLANGD_CPP_FILE_URI, CLANGD_WORKSPACE_PATH, CLANGD_WORKSPACE_URI, createClangdCompileFlags, createClangdLanguageServer, getCppLanguageServer, normalizeClangdBaseUrl } from './clangd/index.js';
 export { createPythonLanguageServer, getPythonLanguageServer } from './python/index.js';
@@ -13,6 +13,8 @@ export { createAssemblyScriptWorkerService, getAssemblyScriptLanguageServer } fr
 export { createZigWorkerService, getZigLanguageServer } from './zig/index.js';
 export { createPhpWorkerService, getPhpLanguageServer } from './php/index.js';
 export { createLuaWorkerService, getLuaLanguageServer } from './lua/index.js';
+export { createOcamlWorkerService, getOcamlLanguageServer } from './ocaml/index.js';
+export { createHaskellWorkerService, getHaskellLanguageServer, parseHaskellDiagnostics } from './haskell/index.js';
 export { applyContentChanges, fullDocumentRange, offsetAt, pathToUri, positionAt, startWorkerLanguageServer, uriToPath } from './lsp.js';
 export { createWorkerLanguageServerClient } from './worker-client.js';
 //# sourceMappingURL=index.js.map

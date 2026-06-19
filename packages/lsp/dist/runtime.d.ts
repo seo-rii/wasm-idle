@@ -10,6 +10,11 @@ export declare function resolveGleamLanguageServerManifestUrl(options: EditorLan
 export declare function resolveZigLanguageServerCompilerUrl(options: EditorLanguageServerOptions | undefined, currentUrl?: string): string;
 export declare function resolveZigLanguageServerStdlibUrl(options: EditorLanguageServerOptions | undefined, currentUrl?: string): string;
 export declare function resolveLuaLanguageServerModuleUrl(options: EditorLanguageServerOptions | undefined, currentUrl?: string): string;
+export declare function resolveOcamlLanguageServerModuleUrl(options: EditorLanguageServerOptions | undefined, currentUrl?: string): string;
+export declare function resolveOcamlLanguageServerManifestUrl(options: EditorLanguageServerOptions | undefined, currentUrl?: string): string;
+export declare function resolveHaskellLanguageServerModuleUrl(options: EditorLanguageServerOptions | undefined, currentUrl?: string): string;
+export declare function resolveHaskellLanguageServerRootfsUrl(options: EditorLanguageServerOptions | undefined, currentUrl?: string): string;
+export declare function resolveHaskellLanguageServerBsdtarUrl(options: EditorLanguageServerOptions | undefined, currentUrl?: string): string;
 export declare function resolvePhpLanguageServerVersion(options: EditorLanguageServerOptions | undefined): string;
 export type { EditorLanguageServerRuntimeOptions };
 //# sourceMappingURL=runtime.d.ts.map

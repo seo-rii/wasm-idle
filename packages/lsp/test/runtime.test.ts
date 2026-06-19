@@ -6,9 +6,14 @@ import {
 	resolveGoLanguageServerCompilerUrl,
 	resolveGleamLanguageServerBaseUrl,
 	resolveGleamLanguageServerManifestUrl,
+	resolveHaskellLanguageServerBsdtarUrl,
+	resolveHaskellLanguageServerModuleUrl,
+	resolveHaskellLanguageServerRootfsUrl,
 	resolvePythonLanguageServerBaseUrl,
 	resolveDotnetLanguageServerModuleUrl,
 	resolveLuaLanguageServerModuleUrl,
+	resolveOcamlLanguageServerManifestUrl,
+	resolveOcamlLanguageServerModuleUrl,
 	resolvePhpLanguageServerVersion,
 	resolveRustLanguageServerCompilerUrl,
 	resolveZigLanguageServerCompilerUrl,
@@ -66,6 +71,40 @@ describe('lsp runtime asset resolution', () => {
 			)
 		).toBe('https://static.example.com/repl_20240807/wasm-lua/index.js');
 		expect(
+			resolveOcamlLanguageServerModuleUrl(
+				'https://static.example.com/repl_20240807',
+				'https://app.example.com/editor'
+			)
+		).toBe(
+			'https://static.example.com/repl_20240807/wasm-of-js-of-ocaml/browser-native/src/index.js'
+		);
+		expect(
+			resolveOcamlLanguageServerManifestUrl(
+				'https://static.example.com/repl_20240807',
+				'https://app.example.com/editor'
+			)
+		).toBe(
+			'https://static.example.com/repl_20240807/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json'
+		);
+		expect(
+			resolveHaskellLanguageServerModuleUrl(
+				'https://static.example.com/repl_20240807',
+				'https://app.example.com/editor'
+			)
+		).toBe('https://static.example.com/repl_20240807/wasm-haskell/dyld.mjs');
+		expect(
+			resolveHaskellLanguageServerRootfsUrl(
+				'https://static.example.com/repl_20240807',
+				'https://app.example.com/editor'
+			)
+		).toBe('https://static.example.com/repl_20240807/wasm-haskell/rootfs.tar.zst');
+		expect(
+			resolveHaskellLanguageServerBsdtarUrl(
+				'https://static.example.com/repl_20240807',
+				'https://app.example.com/editor'
+			)
+		).toBe('https://static.example.com/repl_20240807/wasm-haskell/bsdtar.wasm');
+		expect(
 			resolveGleamLanguageServerBaseUrl(
 				'https://static.example.com/repl_20240807',
 				'https://app.example.com/editor'
@@ -104,6 +143,15 @@ describe('lsp runtime asset resolution', () => {
 			lua: {
 				moduleUrl: 'https://lua.example.com/wasm-lua/index.js?v=20240807'
 			},
+			ocaml: {
+				moduleUrl: 'https://ocaml.example.com/index.js?v=20240807',
+				manifestUrl: 'https://ocaml.example.com/manifest.json?v=20240807'
+			},
+			haskell: {
+				moduleUrl: 'https://haskell.example.com/dyld.mjs?v=20240807',
+				rootfsUrl: 'https://haskell.example.com/rootfs.tar.zst?v=20240807',
+				bsdtarUrl: 'https://haskell.example.com/bsdtar.wasm?v=20240807'
+			},
 			php: {
 				version: '8.5'
 			},
@@ -134,6 +182,21 @@ describe('lsp runtime asset resolution', () => {
 		);
 		expect(resolveLuaLanguageServerModuleUrl(options)).toBe(
 			'https://lua.example.com/wasm-lua/index.js?v=20240807'
+		);
+		expect(resolveOcamlLanguageServerModuleUrl(options)).toBe(
+			'https://ocaml.example.com/index.js?v=20240807'
+		);
+		expect(resolveOcamlLanguageServerManifestUrl(options)).toBe(
+			'https://ocaml.example.com/manifest.json?v=20240807'
+		);
+		expect(resolveHaskellLanguageServerModuleUrl(options)).toBe(
+			'https://haskell.example.com/dyld.mjs?v=20240807'
+		);
+		expect(resolveHaskellLanguageServerRootfsUrl(options)).toBe(
+			'https://haskell.example.com/rootfs.tar.zst?v=20240807'
+		);
+		expect(resolveHaskellLanguageServerBsdtarUrl(options)).toBe(
+			'https://haskell.example.com/bsdtar.wasm?v=20240807'
 		);
 		expect(resolvePhpLanguageServerVersion(options)).toBe('8.5');
 		expect(resolveGleamLanguageServerBaseUrl(options)).toBe(
@@ -185,6 +248,23 @@ describe('lsp runtime asset resolution', () => {
 		expect(resolveLuaLanguageServerModuleUrl(undefined, 'https://app.example.com/editor')).toBe(
 			'https://app.example.com/wasm-lua/index.js'
 		);
+		expect(
+			resolveOcamlLanguageServerModuleUrl(undefined, 'https://app.example.com/editor')
+		).toBe('https://app.example.com/wasm-of-js-of-ocaml/browser-native/src/index.js');
+		expect(
+			resolveOcamlLanguageServerManifestUrl(undefined, 'https://app.example.com/editor')
+		).toBe(
+			'https://app.example.com/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json'
+		);
+		expect(
+			resolveHaskellLanguageServerModuleUrl(undefined, 'https://app.example.com/editor')
+		).toBe('https://app.example.com/wasm-haskell/dyld.mjs');
+		expect(
+			resolveHaskellLanguageServerRootfsUrl(undefined, 'https://app.example.com/editor')
+		).toBe('https://app.example.com/wasm-haskell/rootfs.tar.zst');
+		expect(
+			resolveHaskellLanguageServerBsdtarUrl(undefined, 'https://app.example.com/editor')
+		).toBe('https://app.example.com/wasm-haskell/bsdtar.wasm');
 		expect(resolvePhpLanguageServerVersion(undefined)).toBe('8.4');
 		expect(resolveGleamLanguageServerBaseUrl(undefined, 'https://app.example.com/editor')).toBe(
 			'https://app.example.com/wasm-gleam/'

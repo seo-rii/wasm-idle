@@ -56,7 +56,13 @@ vi.mock('../src/jsonrpc.js', () => ({
 	BrowserMessageWriter: mockState.MockWriter
 }));
 
-import { getLuaLanguageServer, getPhpLanguageServer, getZigLanguageServer } from '../src/index.js';
+import {
+	getHaskellLanguageServer,
+	getLuaLanguageServer,
+	getOcamlLanguageServer,
+	getPhpLanguageServer,
+	getZigLanguageServer
+} from '../src/index.js';
 
 describe('additional language server workers', () => {
 	beforeEach(() => {
@@ -110,6 +116,55 @@ describe('additional language server workers', () => {
 			type: 'init',
 			options: {
 				moduleUrl: 'https://static.example.com/repl_20240807/wasm-lua/index.js'
+			}
+		});
+
+		handle.dispose();
+	});
+
+	it('starts OCaml with browser-native compiler assets', async () => {
+		const handle = await getOcamlLanguageServer({
+			rootUrl: 'https://static.example.com/repl_20240807',
+			currentUrl: 'https://app.example.com/editor',
+			createWorker: () => new mockState.FakeWorker() as unknown as Worker
+		});
+
+		expect(mockState.workers[0]?.messages[0]).toEqual({
+			type: 'init',
+			options: {
+				moduleUrl:
+					'https://static.example.com/repl_20240807/wasm-of-js-of-ocaml/browser-native/src/index.js',
+				manifestUrl:
+					'https://static.example.com/repl_20240807/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json',
+				target: undefined,
+				effectsMode: undefined,
+				wasmBinaryenMode: undefined,
+				packages: undefined
+			}
+		});
+
+		handle.dispose();
+	});
+
+	it('starts Haskell with GHC browser runtime assets', async () => {
+		const handle = await getHaskellLanguageServer({
+			rootUrl: 'https://static.example.com/repl_20240807',
+			currentUrl: 'https://app.example.com/editor',
+			haskell: {
+				ghcArgs: '-fno-code -Wall -Wcompat'
+			},
+			createWorker: () => new mockState.FakeWorker() as unknown as Worker
+		});
+
+		expect(mockState.workers[0]?.messages[0]).toEqual({
+			type: 'init',
+			options: {
+				moduleUrl: 'https://static.example.com/repl_20240807/wasm-haskell/dyld.mjs',
+				rootfsUrl: 'https://static.example.com/repl_20240807/wasm-haskell/rootfs.tar.zst',
+				bsdtarUrl: 'https://static.example.com/repl_20240807/wasm-haskell/bsdtar.wasm',
+				mainSoPath: undefined,
+				searchDirs: undefined,
+				ghcArgs: '-fno-code -Wall -Wcompat'
 			}
 		});
 

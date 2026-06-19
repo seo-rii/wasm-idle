@@ -132,6 +132,8 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(/getZigLanguageServer/);
 		expect(source).toMatch(/getPhpLanguageServer/);
 		expect(source).toMatch(/getLuaLanguageServer/);
+		expect(source).toMatch(/getOcamlLanguageServer/);
+		expect(source).toMatch(/getHaskellLanguageServer/);
 		expect(source).toMatch(/typescript: \{ libUrl: typescriptLspLibUrl \}/);
 		expect(source).toMatch(/javascript: \{ libUrl: typescriptLspLibUrl \}/);
 		expect(source).not.toMatch(/clangd ready/);
@@ -315,6 +317,23 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).toMatch(/luaLspEnabled=\{lspEnabled && language === 'LUA'\}/);
 		expect(pageSource).toMatch(
 			/luaLspModuleUrl=\{language === 'LUA' \? runtimeAssets\.lua\?\.moduleUrl : undefined\}/
+		);
+		expect(pageSource).toMatch(/ocamlLspEnabled=\{lspEnabled && language === 'OCAML'\}/);
+		expect(pageSource).toMatch(
+			/ocamlLspModuleUrl=\{language === 'OCAML'\s+\?\s+runtimeAssets\.ocaml\?\.moduleUrl\s+:\s+undefined\}/
+		);
+		expect(pageSource).toMatch(
+			/ocamlLspManifestUrl=\{language === 'OCAML'\s+\?\s+runtimeAssets\.ocaml\?\.manifestUrl\s+:\s+undefined\}/
+		);
+		expect(pageSource).toMatch(/haskellLspEnabled=\{lspEnabled && language === 'HASKELL'\}/);
+		expect(pageSource).toMatch(
+			/haskellLspModuleUrl=\{language === 'HASKELL'\s+\?\s+runtimeAssets\.haskell\?\.moduleUrl\s+:\s+undefined\}/
+		);
+		expect(pageSource).toMatch(
+			/haskellLspRootfsUrl=\{language === 'HASKELL'\s+\?\s+runtimeAssets\.haskell\?\.rootfsUrl\s+:\s+undefined\}/
+		);
+		expect(pageSource).toMatch(
+			/haskellLspBsdtarUrl=\{language === 'HASKELL'\s+\?\s+runtimeAssets\.haskell\?\.bsdtarUrl\s+:\s+undefined\}/
 		);
 	});
 

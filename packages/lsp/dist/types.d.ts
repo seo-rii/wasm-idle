@@ -62,6 +62,22 @@ export interface EditorLanguageServerRuntimeOptions {
     lua?: {
         moduleUrl?: string;
     };
+    ocaml?: {
+        moduleUrl?: string;
+        manifestUrl?: string;
+        target?: 'js' | 'wasm';
+        effectsMode?: 'cps' | 'jspi';
+        wasmBinaryenMode?: 'fast' | 'full';
+        packages?: string[];
+    };
+    haskell?: {
+        moduleUrl?: string;
+        rootfsUrl?: string;
+        bsdtarUrl?: string;
+        mainSoPath?: string;
+        searchDirs?: string[];
+        ghcArgs?: string;
+    };
 }
 export type EditorLanguageServerOptions = string | EditorLanguageServerRuntimeOptions;
 //# sourceMappingURL=types.d.ts.map

@@ -35,6 +35,8 @@
 	type ZigLspStatus = LanguageServerStatus;
 	type PhpLspStatus = LanguageServerStatus;
 	type LuaLspStatus = LanguageServerStatus;
+	type OcamlLspStatus = LanguageServerStatus;
+	type HaskellLspStatus = LanguageServerStatus;
 
 	const ocamlKeywords = [
 		'and',
@@ -1477,6 +1479,8 @@
 	let zigLspStatus = $state<ZigLspStatus>({ state: 'disabled' });
 	let phpLspStatus = $state<PhpLspStatus>({ state: 'disabled' });
 	let luaLspStatus = $state<LuaLspStatus>({ state: 'disabled' });
+	let ocamlLspStatus = $state<OcamlLspStatus>({ state: 'disabled' });
+	let haskellLspStatus = $state<HaskellLspStatus>({ state: 'disabled' });
 	let model = $state<monaco.editor.ITextModel | undefined>();
 	let debugView = $state<MonacoDebugView | null>(null);
 	interface Props {
@@ -1508,6 +1512,13 @@
 		phpLspEnabled?: boolean;
 		luaLspEnabled?: boolean;
 		luaLspModuleUrl?: string;
+		ocamlLspEnabled?: boolean;
+		ocamlLspModuleUrl?: string;
+		ocamlLspManifestUrl?: string;
+		haskellLspEnabled?: boolean;
+		haskellLspModuleUrl?: string;
+		haskellLspRootfsUrl?: string;
+		haskellLspBsdtarUrl?: string;
 		breakpoints?: number[];
 		debugLocals?: DebugVariable[];
 		debugLanguage?: DebugLanguageAdapter | null;
@@ -1547,6 +1558,13 @@
 		phpLspEnabled = false,
 		luaLspEnabled = false,
 		luaLspModuleUrl,
+		ocamlLspEnabled = false,
+		ocamlLspModuleUrl,
+		ocamlLspManifestUrl,
+		haskellLspEnabled = false,
+		haskellLspModuleUrl,
+		haskellLspRootfsUrl,
+		haskellLspBsdtarUrl,
 		breakpoints = [],
 		debugLocals = [],
 		debugLanguage = null,
@@ -1646,6 +1664,11 @@
 			zigLspEnabled ? zigLspStdlibUrl || '' : '',
 			phpLspEnabled ? 'php-lsp-on' : '',
 			luaLspEnabled ? luaLspModuleUrl || '' : '',
+			ocamlLspEnabled ? ocamlLspModuleUrl || '' : '',
+			ocamlLspEnabled ? ocamlLspManifestUrl || '' : '',
+			haskellLspEnabled ? haskellLspModuleUrl || '' : '',
+			haskellLspEnabled ? haskellLspRootfsUrl || '' : '',
+			haskellLspEnabled ? haskellLspBsdtarUrl || '' : '',
 			activeLspLanguage,
 			lspEnabled ? 'lsp-on' : 'lsp-off',
 			typescriptLspLibUrl || ''
@@ -1667,6 +1690,8 @@
 				zigLspStatus = { state: 'disabled' };
 				phpLspStatus = { state: 'disabled' };
 				luaLspStatus = { state: 'disabled' };
+				ocamlLspStatus = { state: 'disabled' };
+				haskellLspStatus = { state: 'disabled' };
 				return null;
 			}
 			if (language === 'cpp') {
@@ -1916,6 +1941,58 @@
 					throw error;
 				}
 			}
+			if (activeLspLanguage === 'ocaml') {
+				if (!ocamlLspEnabled || !ocamlLspModuleUrl || !ocamlLspManifestUrl) {
+					ocamlLspStatus = { state: 'disabled' };
+					return null;
+				}
+				try {
+					const { getOcamlLanguageServer } = await import('@wasm-idle/lsp');
+					return (await getOcamlLanguageServer({
+						currentUrl,
+						ocaml: {
+							moduleUrl: ocamlLspModuleUrl,
+							manifestUrl: ocamlLspManifestUrl
+						},
+						onStatus: (status) => (ocamlLspStatus = status)
+					})) as unknown as IMonacoLspConnection;
+				} catch (error) {
+					ocamlLspStatus = {
+						state: 'error',
+						message: error instanceof Error ? error.message : String(error)
+					};
+					throw error;
+				}
+			}
+			if (activeLspLanguage === 'haskell') {
+				if (
+					!haskellLspEnabled ||
+					!haskellLspModuleUrl ||
+					!haskellLspRootfsUrl ||
+					!haskellLspBsdtarUrl
+				) {
+					haskellLspStatus = { state: 'disabled' };
+					return null;
+				}
+				try {
+					const { getHaskellLanguageServer } = await import('@wasm-idle/lsp');
+					return (await getHaskellLanguageServer({
+						currentUrl,
+						haskell: {
+							moduleUrl: haskellLspModuleUrl,
+							rootfsUrl: haskellLspRootfsUrl,
+							bsdtarUrl: haskellLspBsdtarUrl
+						},
+						onStatus: (status) => (haskellLspStatus = status)
+					})) as unknown as IMonacoLspConnection;
+				} catch (error) {
+					haskellLspStatus = {
+						state: 'error',
+						message: error instanceof Error ? error.message : String(error)
+					};
+					throw error;
+				}
+			}
 			return null;
 		})(lspConnectionKey)
 	);
@@ -1955,6 +2032,8 @@
 			zigLspStatus = { state: 'disabled' };
 			phpLspStatus = { state: 'disabled' };
 			luaLspStatus = { state: 'disabled' };
+			ocamlLspStatus = { state: 'disabled' };
+			haskellLspStatus = { state: 'disabled' };
 			return;
 		}
 		if (language !== 'cpp' || !clangdEnabled || !clangdBaseUrl) {
@@ -1994,6 +2073,23 @@
 		}
 		if (activeLspLanguage !== 'lua' || !luaLspEnabled || !luaLspModuleUrl) {
 			luaLspStatus = { state: 'disabled' };
+		}
+		if (
+			activeLspLanguage !== 'ocaml' ||
+			!ocamlLspEnabled ||
+			!ocamlLspModuleUrl ||
+			!ocamlLspManifestUrl
+		) {
+			ocamlLspStatus = { state: 'disabled' };
+		}
+		if (
+			activeLspLanguage !== 'haskell' ||
+			!haskellLspEnabled ||
+			!haskellLspModuleUrl ||
+			!haskellLspRootfsUrl ||
+			!haskellLspBsdtarUrl
+		) {
+			haskellLspStatus = { state: 'disabled' };
 		}
 	});
 

@@ -2471,6 +2471,23 @@
 				phpLspEnabled={lspEnabled && language === 'PHP'}
 				luaLspEnabled={lspEnabled && language === 'LUA'}
 				luaLspModuleUrl={language === 'LUA' ? runtimeAssets.lua?.moduleUrl : undefined}
+				ocamlLspEnabled={lspEnabled && language === 'OCAML'}
+				ocamlLspModuleUrl={language === 'OCAML'
+					? runtimeAssets.ocaml?.moduleUrl
+					: undefined}
+				ocamlLspManifestUrl={language === 'OCAML'
+					? runtimeAssets.ocaml?.manifestUrl
+					: undefined}
+				haskellLspEnabled={lspEnabled && language === 'HASKELL'}
+				haskellLspModuleUrl={language === 'HASKELL'
+					? runtimeAssets.haskell?.moduleUrl
+					: undefined}
+				haskellLspRootfsUrl={language === 'HASKELL'
+					? runtimeAssets.haskell?.rootfsUrl
+					: undefined}
+				haskellLspBsdtarUrl={language === 'HASKELL'
+					? runtimeAssets.haskell?.bsdtarUrl
+					: undefined}
 				typescriptLspLibUrl={lspEnabled &&
 				(language === 'JAVASCRIPT' || language === 'TYPESCRIPT')
 					? runtimeAssets.typescript?.libUrl

@@ -5,7 +5,12 @@ export {
 	resolveGoLanguageServerCompilerUrl,
 	resolveGleamLanguageServerBaseUrl,
 	resolveGleamLanguageServerManifestUrl,
+	resolveHaskellLanguageServerBsdtarUrl,
+	resolveHaskellLanguageServerModuleUrl,
+	resolveHaskellLanguageServerRootfsUrl,
 	resolveLuaLanguageServerModuleUrl,
+	resolveOcamlLanguageServerManifestUrl,
+	resolveOcamlLanguageServerModuleUrl,
 	resolvePhpLanguageServerVersion,
 	resolvePythonLanguageServerBaseUrl,
 	resolveRustLanguageServerCompilerUrl,
@@ -128,6 +133,24 @@ export {
 	type LuaLanguageServerOptions,
 	type LuaWorkerOptions
 } from './lua/index.js';
+export {
+	createOcamlWorkerService,
+	getOcamlLanguageServer,
+	type OcamlLanguageServerBinaryenMode,
+	type OcamlLanguageServerConfig,
+	type OcamlLanguageServerEffectsMode,
+	type OcamlLanguageServerOptions,
+	type OcamlLanguageServerTarget,
+	type OcamlWorkerOptions
+} from './ocaml/index.js';
+export {
+	createHaskellWorkerService,
+	getHaskellLanguageServer,
+	parseHaskellDiagnostics,
+	type HaskellLanguageServerConfig,
+	type HaskellLanguageServerOptions,
+	type HaskellWorkerOptions
+} from './haskell/index.js';
 export {
 	applyContentChanges,
 	fullDocumentRange,

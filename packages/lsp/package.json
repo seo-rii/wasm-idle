@@ -74,6 +74,16 @@
 			"types": "./dist/lua/index.d.ts",
 			"import": "./dist/lua/index.js",
 			"default": "./dist/lua/index.js"
+		},
+		"./ocaml": {
+			"types": "./dist/ocaml/index.d.ts",
+			"import": "./dist/ocaml/index.js",
+			"default": "./dist/ocaml/index.js"
+		},
+		"./haskell": {
+			"types": "./dist/haskell/index.d.ts",
+			"import": "./dist/haskell/index.js",
+			"default": "./dist/haskell/index.js"
 		}
 	},
 	"files": [

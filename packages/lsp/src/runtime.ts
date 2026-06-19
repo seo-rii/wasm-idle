@@ -197,6 +197,106 @@ export function resolveLuaLanguageServerModuleUrl(
 	return resolveFileUrl('/wasm-lua/index.js', currentUrl);
 }
 
+export function resolveOcamlLanguageServerModuleUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	const path = '/wasm-of-js-of-ocaml/browser-native/src/index.js';
+	if (typeof options === 'string') {
+		return resolveFileUrl(`${normalizeRootUrl(options) || ''}${path}`, currentUrl);
+	}
+	if (options?.ocaml?.moduleUrl) {
+		return resolveFileUrl(options.ocaml.moduleUrl, currentUrl);
+	}
+	if (options?.rootUrl) {
+		return resolveFileUrl(`${normalizeRootUrl(options.rootUrl) || ''}${path}`, currentUrl);
+	}
+	return resolveFileUrl(path, currentUrl);
+}
+
+export function resolveOcamlLanguageServerManifestUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	const path = '/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json';
+	if (typeof options === 'string') {
+		return resolveFileUrl(`${normalizeRootUrl(options) || ''}${path}`, currentUrl);
+	}
+	if (options?.ocaml?.manifestUrl) {
+		return resolveFileUrl(options.ocaml.manifestUrl, currentUrl);
+	}
+	if (options?.rootUrl) {
+		return resolveFileUrl(`${normalizeRootUrl(options.rootUrl) || ''}${path}`, currentUrl);
+	}
+	return resolveFileUrl(path, currentUrl);
+}
+
+export function resolveHaskellLanguageServerModuleUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	if (typeof options === 'string') {
+		return resolveFileUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-haskell/dyld.mjs`,
+			currentUrl
+		);
+	}
+	if (options?.haskell?.moduleUrl) {
+		return resolveFileUrl(options.haskell.moduleUrl, currentUrl);
+	}
+	if (options?.rootUrl) {
+		return resolveFileUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-haskell/dyld.mjs`,
+			currentUrl
+		);
+	}
+	return resolveFileUrl('/wasm-haskell/dyld.mjs', currentUrl);
+}
+
+export function resolveHaskellLanguageServerRootfsUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	if (typeof options === 'string') {
+		return resolveFileUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-haskell/rootfs.tar.zst`,
+			currentUrl
+		);
+	}
+	if (options?.haskell?.rootfsUrl) {
+		return resolveFileUrl(options.haskell.rootfsUrl, currentUrl);
+	}
+	if (options?.rootUrl) {
+		return resolveFileUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-haskell/rootfs.tar.zst`,
+			currentUrl
+		);
+	}
+	return resolveFileUrl('/wasm-haskell/rootfs.tar.zst', currentUrl);
+}
+
+export function resolveHaskellLanguageServerBsdtarUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	if (typeof options === 'string') {
+		return resolveFileUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-haskell/bsdtar.wasm`,
+			currentUrl
+		);
+	}
+	if (options?.haskell?.bsdtarUrl) {
+		return resolveFileUrl(options.haskell.bsdtarUrl, currentUrl);
+	}
+	if (options?.rootUrl) {
+		return resolveFileUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-haskell/bsdtar.wasm`,
+			currentUrl
+		);
+	}
+	return resolveFileUrl('/wasm-haskell/bsdtar.wasm', currentUrl);
+}
+
 export function resolvePhpLanguageServerVersion(options: EditorLanguageServerOptions | undefined) {
 	return typeof options === 'object' && options.php?.version ? options.php.version : '8.4';
 }

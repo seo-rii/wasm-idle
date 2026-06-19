@@ -10,6 +10,8 @@ import { getWatLanguageServer } from './wat/server.js';
 import { getZigLanguageServer } from './zig/server.js';
 import { getPhpLanguageServer } from './php/server.js';
 import { getLuaLanguageServer } from './lua/server.js';
+import { getOcamlLanguageServer } from './ocaml/server.js';
+import { getHaskellLanguageServer } from './haskell/server.js';
 export async function getEditorLanguageServer(language, options) {
     const normalized = language.toLowerCase();
     if (normalized === 'c' || normalized === 'cpp') {
@@ -59,6 +61,12 @@ export async function getEditorLanguageServer(language, options) {
     }
     if (normalized === 'lua') {
         return getLuaLanguageServer(options);
+    }
+    if (normalized === 'ocaml' || normalized === 'ml') {
+        return getOcamlLanguageServer(options);
+    }
+    if (normalized === 'haskell' || normalized === 'hs') {
+        return getHaskellLanguageServer(options);
     }
     return null;
 }
