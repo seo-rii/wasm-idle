@@ -6,6 +6,7 @@ import { defineConfig, type Plugin } from 'vite';
 const require = createRequire(import.meta.url);
 const phpWasmWebRoot = dirname(require.resolve('@php-wasm/web/package.json'));
 const phpWasmIcuData = join(phpWasmWebRoot, 'shared/icu.dat');
+const wasmIdleCoreEntry = require.resolve('@wasm-idle/core');
 
 function phpWasmIcuDataResolver(): Plugin {
 	return {
@@ -26,13 +27,13 @@ function phpWasmIcuDataResolver(): Plugin {
 export default defineConfig({
 	plugins: [phpWasmIcuDataResolver(), sveltekit()],
 	assetsInclude: [/\.dat$/, /\.wasm$/, /\.so$/, /\.la$/],
+	resolve: {
+		alias: {
+			'@wasm-idle/core': wasmIdleCoreEntry
+		}
+	},
 	optimizeDeps: {
-		exclude: [
-			'@php-wasm/web',
-			'@seorii/monaco',
-			'@seorii/monaco/workers',
-			'monaco-editor'
-		]
+		exclude: ['@php-wasm/web', '@seorii/monaco', '@seorii/monaco/workers', 'monaco-editor']
 	},
 	worker: { format: 'es', plugins: () => [phpWasmIcuDataResolver()] },
 	server: {
