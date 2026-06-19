@@ -53,6 +53,18 @@ export interface EditorLanguageServerRuntimeOptions {
 	assemblyscript?: {
 		extraFiles?: Record<string, string>;
 	};
+	zig?: {
+		compilerUrl?: string;
+		stdlibUrl?: string;
+		targetTriple?: 'wasm64-wasi';
+		compileArgs?: string[];
+	};
+	php?: {
+		version?: string;
+	};
+	lua?: {
+		moduleUrl?: string;
+	};
 }
 
 export type EditorLanguageServerOptions = string | EditorLanguageServerRuntimeOptions;

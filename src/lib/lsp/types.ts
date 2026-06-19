@@ -7,5 +7,9 @@ export type {
 	GoLanguageServerTarget,
 	GleamWorkerOptions,
 	LanguageServerStatus,
-	RustLanguageServerTargetTriple
+	LuaWorkerOptions,
+	PhpWorkerOptions,
+	RustLanguageServerTargetTriple,
+	ZigLanguageServerTargetTriple,
+	ZigWorkerOptions
 } from '@wasm-idle/lsp';

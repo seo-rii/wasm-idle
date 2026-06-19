@@ -129,6 +129,9 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(/getJavaScriptLanguageServer/);
 		expect(source).toMatch(/getAssemblyScriptLanguageServer/);
 		expect(source).toMatch(/getWatLanguageServer/);
+		expect(source).toMatch(/getZigLanguageServer/);
+		expect(source).toMatch(/getPhpLanguageServer/);
+		expect(source).toMatch(/getLuaLanguageServer/);
 		expect(source).toMatch(/typescript: \{ libUrl: typescriptLspLibUrl \}/);
 		expect(source).toMatch(/javascript: \{ libUrl: typescriptLspLibUrl \}/);
 		expect(source).not.toMatch(/clangd ready/);
@@ -300,6 +303,18 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).toMatch(/rustLspEnabled=\{lspEnabled && language === 'RUST'\}/);
 		expect(pageSource).toMatch(
 			/rustLspCompilerUrl=\{language === 'RUST'\s+\?\s+runtimeAssets\.rust\?\.compilerUrl\s+:\s+undefined\}/
+		);
+		expect(pageSource).toMatch(/zigLspEnabled=\{lspEnabled && language === 'ZIG'\}/);
+		expect(pageSource).toMatch(
+			/zigLspCompilerUrl=\{language === 'ZIG'\s+\?\s+runtimeAssets\.zig\?\.compilerUrl\s+:\s+undefined\}/
+		);
+		expect(pageSource).toMatch(
+			/zigLspStdlibUrl=\{language === 'ZIG'\s+\?\s+runtimeAssets\.zig\?\.stdlibUrl\s+:\s+undefined\}/
+		);
+		expect(pageSource).toMatch(/phpLspEnabled=\{lspEnabled && language === 'PHP'\}/);
+		expect(pageSource).toMatch(/luaLspEnabled=\{lspEnabled && language === 'LUA'\}/);
+		expect(pageSource).toMatch(
+			/luaLspModuleUrl=\{language === 'LUA' \? runtimeAssets\.lua\?\.moduleUrl : undefined\}/
 		);
 	});
 

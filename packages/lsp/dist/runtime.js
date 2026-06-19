@@ -86,4 +86,43 @@ export function resolveGleamLanguageServerManifestUrl(options, currentUrl = '') 
     }
     return resolveFileUrl(`${resolveGleamLanguageServerBaseUrl(options, currentUrl)}source-manifest.v1.json`, currentUrl);
 }
+export function resolveZigLanguageServerCompilerUrl(options, currentUrl = '') {
+    if (typeof options === 'string') {
+        return resolveFileUrl(`${normalizeRootUrl(options) || ''}/wasm-zig/zig_small.wasm`, currentUrl);
+    }
+    if (options?.zig?.compilerUrl) {
+        return resolveFileUrl(options.zig.compilerUrl, currentUrl);
+    }
+    if (options?.rootUrl) {
+        return resolveFileUrl(`${normalizeRootUrl(options.rootUrl) || ''}/wasm-zig/zig_small.wasm`, currentUrl);
+    }
+    return resolveFileUrl('/wasm-zig/zig_small.wasm', currentUrl);
+}
+export function resolveZigLanguageServerStdlibUrl(options, currentUrl = '') {
+    if (typeof options === 'string') {
+        return resolveFileUrl(`${normalizeRootUrl(options) || ''}/wasm-zig/std.zip`, currentUrl);
+    }
+    if (options?.zig?.stdlibUrl) {
+        return resolveFileUrl(options.zig.stdlibUrl, currentUrl);
+    }
+    if (options?.rootUrl) {
+        return resolveFileUrl(`${normalizeRootUrl(options.rootUrl) || ''}/wasm-zig/std.zip`, currentUrl);
+    }
+    return resolveFileUrl('/wasm-zig/std.zip', currentUrl);
+}
+export function resolveLuaLanguageServerModuleUrl(options, currentUrl = '') {
+    if (typeof options === 'string') {
+        return resolveFileUrl(`${normalizeRootUrl(options) || ''}/wasm-lua/index.js`, currentUrl);
+    }
+    if (options?.lua?.moduleUrl) {
+        return resolveFileUrl(options.lua.moduleUrl, currentUrl);
+    }
+    if (options?.rootUrl) {
+        return resolveFileUrl(`${normalizeRootUrl(options.rootUrl) || ''}/wasm-lua/index.js`, currentUrl);
+    }
+    return resolveFileUrl('/wasm-lua/index.js', currentUrl);
+}
+export function resolvePhpLanguageServerVersion(options) {
+    return typeof options === 'object' && options.php?.version ? options.php.version : '8.4';
+}
 //# sourceMappingURL=runtime.js.map

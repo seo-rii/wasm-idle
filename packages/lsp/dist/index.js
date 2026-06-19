@@ -1,5 +1,5 @@
 export { getEditorLanguageServer } from './registry.js';
-export { resolveCppLanguageServerBaseUrl, resolveCppLanguageServerRuntimeAssetConfig, resolveGoLanguageServerCompilerUrl, resolveGleamLanguageServerBaseUrl, resolveGleamLanguageServerManifestUrl, resolvePythonLanguageServerBaseUrl, resolveRustLanguageServerCompilerUrl } from './runtime.js';
+export { resolveCppLanguageServerBaseUrl, resolveCppLanguageServerRuntimeAssetConfig, resolveGoLanguageServerCompilerUrl, resolveGleamLanguageServerBaseUrl, resolveGleamLanguageServerManifestUrl, resolveLuaLanguageServerModuleUrl, resolvePhpLanguageServerVersion, resolvePythonLanguageServerBaseUrl, resolveRustLanguageServerCompilerUrl, resolveZigLanguageServerCompilerUrl, resolveZigLanguageServerStdlibUrl } from './runtime.js';
 export { CLANGD_ASSETS, CLANGD_VIRTUAL_BASE_URL, loadLanguageToolAsset, normalizeBaseUrl, normalizeRootUrl, resolveRootToolBaseUrl } from './assets.js';
 export { CLANGD_CPP_FILE_PATH, CLANGD_CPP_FILE_URI, CLANGD_WORKSPACE_PATH, CLANGD_WORKSPACE_URI, createClangdCompileFlags, createClangdLanguageServer, getCppLanguageServer, normalizeClangdBaseUrl } from './clangd/index.js';
 export { createPythonLanguageServer, getPythonLanguageServer } from './python/index.js';
@@ -10,6 +10,9 @@ export { createTypeScriptWorkerService, getJavaScriptLanguageServer, getTypeScri
 export { createWatWorkerService, getWatLanguageServer } from './wat/index.js';
 export { createDotnetWorkerService, getCSharpLanguageServer, getFSharpLanguageServer, getVisualBasicLanguageServer, resolveDotnetLanguageServerModuleUrl } from './dotnet/index.js';
 export { createAssemblyScriptWorkerService, getAssemblyScriptLanguageServer } from './assemblyscript/index.js';
+export { createZigWorkerService, getZigLanguageServer } from './zig/index.js';
+export { createPhpWorkerService, getPhpLanguageServer } from './php/index.js';
+export { createLuaWorkerService, getLuaLanguageServer } from './lua/index.js';
 export { applyContentChanges, fullDocumentRange, offsetAt, pathToUri, positionAt, startWorkerLanguageServer, uriToPath } from './lsp.js';
 export { createWorkerLanguageServerClient } from './worker-client.js';
 //# sourceMappingURL=index.js.map

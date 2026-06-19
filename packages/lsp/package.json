@@ -59,6 +59,21 @@
 			"types": "./dist/assemblyscript/index.d.ts",
 			"import": "./dist/assemblyscript/index.js",
 			"default": "./dist/assemblyscript/index.js"
+		},
+		"./zig": {
+			"types": "./dist/zig/index.d.ts",
+			"import": "./dist/zig/index.js",
+			"default": "./dist/zig/index.js"
+		},
+		"./php": {
+			"types": "./dist/php/index.d.ts",
+			"import": "./dist/php/index.js",
+			"default": "./dist/php/index.js"
+		},
+		"./lua": {
+			"types": "./dist/lua/index.d.ts",
+			"import": "./dist/lua/index.js",
+			"default": "./dist/lua/index.js"
 		}
 	},
 	"files": [
@@ -70,6 +85,8 @@
 		"test": "vitest run"
 	},
 	"dependencies": {
+		"@bjorn3/browser_wasi_shim": "^0.4.2",
+		"@zip.js/zip.js": "^2.8.26",
 		"assemblyscript": "0.28.17",
 		"pyodide": "0.29.3",
 		"typescript": "^6.0.2",

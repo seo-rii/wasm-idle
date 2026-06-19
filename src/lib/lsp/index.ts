@@ -5,8 +5,12 @@ export {
 	resolveGoLanguageServerCompilerUrl,
 	resolveGleamLanguageServerBaseUrl,
 	resolveGleamLanguageServerManifestUrl,
+	resolveLuaLanguageServerModuleUrl,
+	resolvePhpLanguageServerVersion,
 	resolvePythonLanguageServerBaseUrl,
-	resolveRustLanguageServerCompilerUrl
+	resolveRustLanguageServerCompilerUrl,
+	resolveZigLanguageServerCompilerUrl,
+	resolveZigLanguageServerStdlibUrl
 } from '@wasm-idle/lsp';
 export { getCppLanguageServer } from '@wasm-idle/lsp';
 export { getGoLanguageServer } from '@wasm-idle/lsp';
@@ -18,14 +22,21 @@ export {
 	getCSharpLanguageServer,
 	getFSharpLanguageServer,
 	getJavaScriptLanguageServer,
+	getLuaLanguageServer,
+	getPhpLanguageServer,
 	getTypeScriptLanguageServer,
 	getVisualBasicLanguageServer,
-	getWatLanguageServer
+	getWatLanguageServer,
+	getZigLanguageServer
 } from '@wasm-idle/lsp';
 export type {
 	EditorLanguageServerHandle,
 	EditorLanguageServerRuntimeOptions,
 	GoLanguageServerTarget,
 	LanguageServerStatus,
-	RustLanguageServerTargetTriple
+	LuaWorkerOptions,
+	PhpWorkerOptions,
+	RustLanguageServerTargetTriple,
+	ZigLanguageServerTargetTriple,
+	ZigWorkerOptions
 } from './types';

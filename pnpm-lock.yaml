@@ -201,6 +201,12 @@ importers:
 
   packages/lsp:
     dependencies:
+      '@bjorn3/browser_wasi_shim':
+        specifier: ^0.4.2
+        version: 0.4.2
+      '@zip.js/zip.js':
+        specifier: ^2.8.26
+        version: 2.8.26
       assemblyscript:
         specifier: 0.28.17
         version: 0.28.17

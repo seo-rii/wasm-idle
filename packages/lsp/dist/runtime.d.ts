@@ -7,5 +7,9 @@ export declare function resolveRustLanguageServerCompilerUrl(options: EditorLang
 export declare function resolveGoLanguageServerCompilerUrl(options: EditorLanguageServerOptions | undefined, currentUrl?: string): string;
 export declare function resolveGleamLanguageServerBaseUrl(options: EditorLanguageServerOptions | undefined, currentUrl?: string): string;
 export declare function resolveGleamLanguageServerManifestUrl(options: EditorLanguageServerOptions | undefined, currentUrl?: string): string;
+export declare function resolveZigLanguageServerCompilerUrl(options: EditorLanguageServerOptions | undefined, currentUrl?: string): string;
+export declare function resolveZigLanguageServerStdlibUrl(options: EditorLanguageServerOptions | undefined, currentUrl?: string): string;
+export declare function resolveLuaLanguageServerModuleUrl(options: EditorLanguageServerOptions | undefined, currentUrl?: string): string;
+export declare function resolvePhpLanguageServerVersion(options: EditorLanguageServerOptions | undefined): string;
 export type { EditorLanguageServerRuntimeOptions };
 //# sourceMappingURL=runtime.d.ts.map

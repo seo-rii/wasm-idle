@@ -8,7 +8,11 @@ import {
 	resolveGleamLanguageServerManifestUrl,
 	resolvePythonLanguageServerBaseUrl,
 	resolveDotnetLanguageServerModuleUrl,
-	resolveRustLanguageServerCompilerUrl
+	resolveLuaLanguageServerModuleUrl,
+	resolvePhpLanguageServerVersion,
+	resolveRustLanguageServerCompilerUrl,
+	resolveZigLanguageServerCompilerUrl,
+	resolveZigLanguageServerStdlibUrl
 } from '../src/index.js';
 
 describe('lsp runtime asset resolution', () => {
@@ -44,6 +48,24 @@ describe('lsp runtime asset resolution', () => {
 			)
 		).toBe('https://static.example.com/repl_20240807/wasm-dotnet/index.js');
 		expect(
+			resolveZigLanguageServerCompilerUrl(
+				'https://static.example.com/repl_20240807',
+				'https://app.example.com/editor'
+			)
+		).toBe('https://static.example.com/repl_20240807/wasm-zig/zig_small.wasm');
+		expect(
+			resolveZigLanguageServerStdlibUrl(
+				'https://static.example.com/repl_20240807',
+				'https://app.example.com/editor'
+			)
+		).toBe('https://static.example.com/repl_20240807/wasm-zig/std.zip');
+		expect(
+			resolveLuaLanguageServerModuleUrl(
+				'https://static.example.com/repl_20240807',
+				'https://app.example.com/editor'
+			)
+		).toBe('https://static.example.com/repl_20240807/wasm-lua/index.js');
+		expect(
 			resolveGleamLanguageServerBaseUrl(
 				'https://static.example.com/repl_20240807',
 				'https://app.example.com/editor'
@@ -75,6 +97,16 @@ describe('lsp runtime asset resolution', () => {
 			dotnet: {
 				moduleUrl: 'https://dotnet.example.com/wasm-dotnet/index.js?v=20240807'
 			},
+			zig: {
+				compilerUrl: 'https://zig.example.com/zig_small.wasm?v=20240807',
+				stdlibUrl: 'https://zig.example.com/std.zip?v=20240807'
+			},
+			lua: {
+				moduleUrl: 'https://lua.example.com/wasm-lua/index.js?v=20240807'
+			},
+			php: {
+				version: '8.5'
+			},
 			gleam: {
 				baseUrl: 'https://gleam.example.com/wasm-gleam/',
 				manifestUrl: 'https://gleam.example.com/manifest.json'
@@ -94,6 +126,16 @@ describe('lsp runtime asset resolution', () => {
 		expect(resolveDotnetLanguageServerModuleUrl(options)).toBe(
 			'https://dotnet.example.com/wasm-dotnet/index.js?v=20240807'
 		);
+		expect(resolveZigLanguageServerCompilerUrl(options)).toBe(
+			'https://zig.example.com/zig_small.wasm?v=20240807'
+		);
+		expect(resolveZigLanguageServerStdlibUrl(options)).toBe(
+			'https://zig.example.com/std.zip?v=20240807'
+		);
+		expect(resolveLuaLanguageServerModuleUrl(options)).toBe(
+			'https://lua.example.com/wasm-lua/index.js?v=20240807'
+		);
+		expect(resolvePhpLanguageServerVersion(options)).toBe('8.5');
 		expect(resolveGleamLanguageServerBaseUrl(options)).toBe(
 			'https://gleam.example.com/wasm-gleam/'
 		);
@@ -134,6 +176,16 @@ describe('lsp runtime asset resolution', () => {
 		expect(
 			resolveDotnetLanguageServerModuleUrl(undefined, 'https://app.example.com/editor')
 		).toBe('https://app.example.com/wasm-dotnet/index.js');
+		expect(
+			resolveZigLanguageServerCompilerUrl(undefined, 'https://app.example.com/editor')
+		).toBe('https://app.example.com/wasm-zig/zig_small.wasm');
+		expect(resolveZigLanguageServerStdlibUrl(undefined, 'https://app.example.com/editor')).toBe(
+			'https://app.example.com/wasm-zig/std.zip'
+		);
+		expect(resolveLuaLanguageServerModuleUrl(undefined, 'https://app.example.com/editor')).toBe(
+			'https://app.example.com/wasm-lua/index.js'
+		);
+		expect(resolvePhpLanguageServerVersion(undefined)).toBe('8.4');
 		expect(resolveGleamLanguageServerBaseUrl(undefined, 'https://app.example.com/editor')).toBe(
 			'https://app.example.com/wasm-gleam/'
 		);

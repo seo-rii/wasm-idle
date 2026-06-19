@@ -5,8 +5,12 @@ export {
 	resolveGoLanguageServerCompilerUrl,
 	resolveGleamLanguageServerBaseUrl,
 	resolveGleamLanguageServerManifestUrl,
+	resolveLuaLanguageServerModuleUrl,
+	resolvePhpLanguageServerVersion,
 	resolvePythonLanguageServerBaseUrl,
-	resolveRustLanguageServerCompilerUrl
+	resolveRustLanguageServerCompilerUrl,
+	resolveZigLanguageServerCompilerUrl,
+	resolveZigLanguageServerStdlibUrl
 } from './runtime.js';
 export {
 	CLANGD_ASSETS,
@@ -102,6 +106,28 @@ export {
 	type AssemblyScriptLanguageServerOptions,
 	type AssemblyScriptWorkerOptions
 } from './assemblyscript/index.js';
+export {
+	createZigWorkerService,
+	getZigLanguageServer,
+	type ZigLanguageServerConfig,
+	type ZigLanguageServerOptions,
+	type ZigLanguageServerTargetTriple,
+	type ZigWorkerOptions
+} from './zig/index.js';
+export {
+	createPhpWorkerService,
+	getPhpLanguageServer,
+	type PhpLanguageServerConfig,
+	type PhpLanguageServerOptions,
+	type PhpWorkerOptions
+} from './php/index.js';
+export {
+	createLuaWorkerService,
+	getLuaLanguageServer,
+	type LuaLanguageServerConfig,
+	type LuaLanguageServerOptions,
+	type LuaWorkerOptions
+} from './lua/index.js';
 export {
 	applyContentChanges,
 	fullDocumentRange,

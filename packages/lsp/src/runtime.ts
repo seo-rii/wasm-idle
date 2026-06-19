@@ -137,4 +137,68 @@ export function resolveGleamLanguageServerManifestUrl(
 	);
 }
 
+export function resolveZigLanguageServerCompilerUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	if (typeof options === 'string') {
+		return resolveFileUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-zig/zig_small.wasm`,
+			currentUrl
+		);
+	}
+	if (options?.zig?.compilerUrl) {
+		return resolveFileUrl(options.zig.compilerUrl, currentUrl);
+	}
+	if (options?.rootUrl) {
+		return resolveFileUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-zig/zig_small.wasm`,
+			currentUrl
+		);
+	}
+	return resolveFileUrl('/wasm-zig/zig_small.wasm', currentUrl);
+}
+
+export function resolveZigLanguageServerStdlibUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	if (typeof options === 'string') {
+		return resolveFileUrl(`${normalizeRootUrl(options) || ''}/wasm-zig/std.zip`, currentUrl);
+	}
+	if (options?.zig?.stdlibUrl) {
+		return resolveFileUrl(options.zig.stdlibUrl, currentUrl);
+	}
+	if (options?.rootUrl) {
+		return resolveFileUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-zig/std.zip`,
+			currentUrl
+		);
+	}
+	return resolveFileUrl('/wasm-zig/std.zip', currentUrl);
+}
+
+export function resolveLuaLanguageServerModuleUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	if (typeof options === 'string') {
+		return resolveFileUrl(`${normalizeRootUrl(options) || ''}/wasm-lua/index.js`, currentUrl);
+	}
+	if (options?.lua?.moduleUrl) {
+		return resolveFileUrl(options.lua.moduleUrl, currentUrl);
+	}
+	if (options?.rootUrl) {
+		return resolveFileUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-lua/index.js`,
+			currentUrl
+		);
+	}
+	return resolveFileUrl('/wasm-lua/index.js', currentUrl);
+}
+
+export function resolvePhpLanguageServerVersion(options: EditorLanguageServerOptions | undefined) {
+	return typeof options === 'object' && options.php?.version ? options.php.version : '8.4';
+}
+
 export type { EditorLanguageServerRuntimeOptions };

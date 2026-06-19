@@ -7,6 +7,9 @@ import { getPythonLanguageServer } from './python/server.js';
 import { getRustLanguageServer } from './rust/server.js';
 import { getJavaScriptLanguageServer, getTypeScriptLanguageServer } from './typescript/server.js';
 import { getWatLanguageServer } from './wat/server.js';
+import { getZigLanguageServer } from './zig/server.js';
+import { getPhpLanguageServer } from './php/server.js';
+import { getLuaLanguageServer } from './lua/server.js';
 export async function getEditorLanguageServer(language, options) {
     const normalized = language.toLowerCase();
     if (normalized === 'c' || normalized === 'cpp') {
@@ -47,6 +50,15 @@ export async function getEditorLanguageServer(language, options) {
     }
     if (normalized === 'assemblyscript' || normalized === 'as') {
         return getAssemblyScriptLanguageServer(options);
+    }
+    if (normalized === 'zig') {
+        return getZigLanguageServer(options);
+    }
+    if (normalized === 'php') {
+        return getPhpLanguageServer(options);
+    }
+    if (normalized === 'lua') {
+        return getLuaLanguageServer(options);
     }
     return null;
 }
