@@ -31,6 +31,7 @@ export interface RuntimeAssetKeySource {
 	gleam?: { baseUrl?: string; workerUrl?: string; manifestUrl?: string };
 	perl?: { baseUrl?: string; workerUrl?: string };
 	tcl?: { baseUrl?: string; workerUrl?: string };
+	awk?: { baseUrl?: string; workerUrl?: string };
 	sqlite?: { wasmUrl?: string };
 	php?: { version?: string };
 }
@@ -85,6 +86,8 @@ export function createRuntimeAssetsKey(runtimeAssets: RuntimeAssetKeyInput): str
 		perlWorkerUrl: runtimeAssets.perl?.workerUrl || '',
 		tclBaseUrl: runtimeAssets.tcl?.baseUrl || '',
 		tclWorkerUrl: runtimeAssets.tcl?.workerUrl || '',
+		awkBaseUrl: runtimeAssets.awk?.baseUrl || '',
+		awkWorkerUrl: runtimeAssets.awk?.workerUrl || '',
 		sqliteWasmUrl: runtimeAssets.sqlite?.wasmUrl || '',
 		phpVersion: runtimeAssets.php?.version || ''
 	});

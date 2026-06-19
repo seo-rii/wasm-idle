@@ -141,6 +141,13 @@ vi.mock('$lib/playground/tcl', () => {
 	};
 });
 
+vi.mock('$lib/playground/awk', () => {
+	moduleLoads.add('AWK');
+	return {
+		default: createMockSandboxClass('AWK')
+	};
+});
+
 vi.mock('$lib/playground/sqlite', () => {
 	moduleLoads.add('SQLITE');
 	return {
@@ -643,7 +650,7 @@ End Module`;
 		expect(sandboxInstances.get('PROLOG')).toHaveLength(1);
 	});
 
-	it('routes Gleam, Perl, and Tcl requests through their static worker wasm implementations', async () => {
+	it('routes Gleam, Perl, Tcl, and AWK requests through their static worker wasm implementations', async () => {
 		const runtimeAssets = {
 			rootUrl: '/absproxy/5173',
 			gleam: {
@@ -658,6 +665,10 @@ End Module`;
 			tcl: {
 				baseUrl: '/absproxy/5173/wasm-tcl/',
 				workerUrl: '/absproxy/5173/wasm-tcl/runner-worker.js?v=test'
+			},
+			awk: {
+				baseUrl: '/absproxy/5173/wasm-awk/',
+				workerUrl: '/absproxy/5173/wasm-awk/runner-worker.js?v=test'
 			}
 		};
 		const binding = createPlaygroundBinding(runtimeAssets);
@@ -665,17 +676,21 @@ End Module`;
 		const gleam = await binding.load('GLEAM');
 		const perl = await binding.load('PERL');
 		const tcl = await binding.load('TCLSH');
+		const awk = await binding.load('GAWK');
 
 		await gleam.load('pub fn main() { Nil }', true, [], {}, progress);
 		await perl.load('print "hello\\n";', true, [], {}, progress);
 		await tcl.load('puts "hello"', true, [], {}, progress);
+		await awk.load('{ print }', true, [], {}, progress);
 
 		expect(gleam.runtimeAssets).toEqual(runtimeAssets);
 		expect(perl.runtimeAssets).toEqual(runtimeAssets);
 		expect(tcl.runtimeAssets).toEqual(runtimeAssets);
+		expect(awk.runtimeAssets).toEqual(runtimeAssets);
 		expect(sandboxInstances.get('GLEAM')).toHaveLength(1);
 		expect(sandboxInstances.get('PERL')).toHaveLength(1);
 		expect(sandboxInstances.get('TCL')).toHaveLength(1);
+		expect(sandboxInstances.get('AWK')).toHaveLength(1);
 		expect(sandboxInstances.get('GLEAM')?.[0]?.loadCalls).toEqual([
 			[runtimeAssets, 'pub fn main() { Nil }', true, [], {}, progress]
 		]);
@@ -684,6 +699,9 @@ End Module`;
 		]);
 		expect(sandboxInstances.get('TCL')?.[0]?.loadCalls).toEqual([
 			[runtimeAssets, 'puts "hello"', true, [], {}, progress]
+		]);
+		expect(sandboxInstances.get('AWK')?.[0]?.loadCalls).toEqual([
+			[runtimeAssets, '{ print }', true, [], {}, progress]
 		]);
 	});
 

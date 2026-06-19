@@ -5,6 +5,7 @@
     "pyodide/pyodide.asm.wasm",
     "teavm/compiler.wasm",
     "teavm/runtime-classlib-teavm.bin",
+    "wasm-awk/goawk.wasm",
     "wasm-d/runtime/bin/ldc2.wasm",
     "wasm-d/runtime/bin/lld.data",
     "wasm-d/runtime/bin/lld.wasm",
@@ -250,6 +251,7 @@
     "wasm-typescript/index.js": 3766162,
     "webr/5da864032a1d2d4e/libRlapack.so": 1769888,
     "wasm-tcl/tcl/wacl-library.data": 2307994,
-    "wasm-tcl/tcl/wacl.wasm": 1884110
+    "wasm-tcl/tcl/wacl.wasm": 1884110,
+    "wasm-awk/goawk.wasm": 4679032
   }
 }

@@ -1,0 +1,10 @@
+{
+	"name": "@wasm-idle/runtime-awk",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"build": "node scripts/build.mjs",
+		"check": "go test ./internal/..."
+	}
+}

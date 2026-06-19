@@ -32,6 +32,7 @@ const COMPRESSIBLE_TOP_LEVEL_DIRS = [
 	'clangd',
 	'pyodide',
 	'teavm',
+	'wasm-awk',
 	'wasm-d',
 	'wasm-dotnet',
 	'wasm-elixir',

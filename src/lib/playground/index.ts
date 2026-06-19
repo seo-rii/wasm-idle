@@ -26,6 +26,7 @@ export const supportedLanguages = [
 	'GLEAM',
 	'PERL',
 	'TCL',
+	'AWK',
 	'TINYGO',
 	'OCAML',
 	'JAVASCRIPT',
@@ -154,6 +155,12 @@ async function playground(language: string, runtimeAssets?: SandboxRuntimeAssets
 			sandbox = new Tcl();
 			break;
 		}
+		case 'AWK':
+		case 'GAWK': {
+			const { default: Awk } = await import('$lib/playground/awk');
+			sandbox = new Awk();
+			break;
+		}
 		case 'TINYGO': {
 			const { default: TinyGo } = await import('$lib/playground/tinygo');
 			sandbox = new TinyGo();
@@ -274,6 +281,9 @@ async function playground(language: string, runtimeAssets?: SandboxRuntimeAssets
 		if (language === 'PERL') sandboxCache['PERL'] = sandbox;
 		if (language === 'TCL' || language === 'TCLSH') {
 			sandboxCache['TCL'] = sandboxCache['TCLSH'] = sandbox;
+		}
+		if (language === 'AWK' || language === 'GAWK') {
+			sandboxCache['AWK'] = sandboxCache['GAWK'] = sandbox;
 		}
 		if (language === 'TINYGO') sandboxCache['TINYGO'] = sandbox;
 		if (language === 'OCAML') sandboxCache['OCAML'] = sandbox;

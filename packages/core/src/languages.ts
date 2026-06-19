@@ -26,6 +26,8 @@ export type WasmIdleLanguageId =
 	| 'PERL'
 	| 'TCL'
 	| 'TCLSH'
+	| 'AWK'
+	| 'GAWK'
 	| 'TINYGO'
 	| 'OCAML'
 	| 'JAVASCRIPT'
@@ -69,6 +71,7 @@ export const supportedLanguageIds = [
 	'GLEAM',
 	'PERL',
 	'TCL',
+	'AWK',
 	'TINYGO',
 	'OCAML',
 	'JAVASCRIPT',
@@ -99,6 +102,7 @@ export const DEFAULT_DEFERRED_PROGRESS_LANGUAGES = new Set<string>([
 	'GLEAM',
 	'PERL',
 	'TCL',
+	'AWK',
 	'OCAML',
 	'JAVASCRIPT',
 	'TYPESCRIPT',
@@ -124,6 +128,7 @@ const LANGUAGE_ALIASES: Record<string, string> = {
 	SWIPL: 'PROLOG',
 	SWI: 'PROLOG',
 	TCLSH: 'TCL',
+	GAWK: 'AWK',
 	DLANG: 'D',
 	JS: 'JAVASCRIPT',
 	AS: 'ASSEMBLYSCRIPT',

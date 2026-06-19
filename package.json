@@ -37,6 +37,7 @@
 		"test:browser:gleam": "WASM_IDLE_RUN_REAL_BROWSER_GLEAM=1 pnpm exec vitest run src/lib/playground/static-worker-runtimes.playwright.test.ts",
 		"test:browser:perl": "WASM_IDLE_RUN_REAL_BROWSER_PERL=1 pnpm exec vitest run src/lib/playground/static-worker-runtimes.playwright.test.ts",
 		"test:browser:tcl": "WASM_IDLE_RUN_REAL_BROWSER_TCL=1 pnpm exec vitest run src/lib/playground/static-worker-runtimes.playwright.test.ts",
+		"test:browser:awk": "WASM_IDLE_RUN_REAL_BROWSER_AWK=1 pnpm exec vitest run src/lib/playground/static-worker-runtimes.playwright.test.ts",
 		"test:browser:playwright": "WASM_IDLE_RUN_REAL_BROWSER_RUST=1 pnpm exec vitest run src/lib/playground/rust.playwright.test.ts",
 		"test:browser:tinygo": "WASM_IDLE_RUN_REAL_BROWSER_TINYGO=1 pnpm exec vitest run src/lib/playground/tinygo.playwright.test.ts",
 		"sync:runtime": "node scripts/sync-runtime.mjs",
@@ -59,6 +60,7 @@
 		"sync:wasm-gleam": "node scripts/sync-runtime.mjs wasm-gleam",
 		"sync:wasm-perl": "node scripts/sync-runtime.mjs wasm-perl",
 		"sync:wasm-tcl": "node scripts/sync-runtime.mjs wasm-tcl",
+		"sync:wasm-awk": "node scripts/sync-runtime.mjs wasm-awk",
 		"sync:webr": "node scripts/sync-runtime.mjs webr",
 		"compress:static-runtimes": "node scripts/compress-static-runtime-assets.mjs static",
 		"compress:build-runtimes": "node scripts/compress-static-runtime-assets.mjs build",
@@ -70,7 +72,7 @@
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"lint": "prettier --check . && eslint .",
 		"format": "prettier --write .",
-		"page": "npm run sync:wasm-of-js-of-ocaml && npm run sync:wasm-typescript && npm run sync:wasm-octave && npm run sync:wasm-prolog && npm run sync:wasm-gleam && npm run sync:wasm-perl && npm run sync:wasm-tcl && npm run compress:static-runtimes && npm run build && npm run compress:build-runtimes && node gh-pages.js"
+		"page": "npm run sync:wasm-of-js-of-ocaml && npm run sync:wasm-typescript && npm run sync:wasm-octave && npm run sync:wasm-prolog && npm run sync:wasm-gleam && npm run sync:wasm-perl && npm run sync:wasm-tcl && npm run sync:wasm-awk && npm run compress:static-runtimes && npm run build && npm run compress:build-runtimes && node gh-pages.js"
 	},
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",

@@ -11,7 +11,9 @@ const { publicEnv } = vi.hoisted(() => ({
 		PUBLIC_WASM_PERL_BASE_URL: '',
 		PUBLIC_WASM_PERL_WORKER_URL: '',
 		PUBLIC_WASM_TCL_BASE_URL: '',
-		PUBLIC_WASM_TCL_WORKER_URL: ''
+		PUBLIC_WASM_TCL_WORKER_URL: '',
+		PUBLIC_WASM_AWK_BASE_URL: '',
+		PUBLIC_WASM_AWK_WORKER_URL: ''
 	}
 }));
 let onPostMessage: ((worker: MockWorker, message: any) => void) | null = null;
@@ -48,6 +50,7 @@ vi.mock('$env/dynamic/public', () => ({
 }));
 
 import Gleam from './gleam';
+import Awk from './awk';
 import Perl from './perl';
 import Prolog from './prolog';
 import Tcl from './tcl';
@@ -174,6 +177,33 @@ describe('static worker backed language sandboxes', () => {
 				args: ['demo'],
 				stdin: 'ok\n',
 				activePath: 'main.tcl'
+			})
+		);
+	});
+
+	it('loads AWK runtime urls and forwards stdin to the GoAWK worker', async () => {
+		const sandbox = new Awk();
+		await sandbox.load({
+			awk: {
+				baseUrl: '/wasm-awk/',
+				workerUrl: '/wasm-awk/runner-worker.js?v=test'
+			}
+		});
+		await expect(
+			sandbox.run('{ print $0 }', false, true, undefined, ['demo=1'], {
+				stdin: 'ok\n'
+			})
+		).resolves.toBe(true);
+
+		expect(workerInstances[0].url).toBe(
+			'http://localhost:3000/wasm-awk/runner-worker.js?v=test'
+		);
+		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				baseUrl: 'http://localhost:3000/wasm-awk/',
+				args: ['demo=1'],
+				stdin: 'ok\n',
+				activePath: 'main.awk'
 			})
 		);
 	});

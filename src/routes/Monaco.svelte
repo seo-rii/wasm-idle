@@ -32,6 +32,9 @@
 	type TypeScriptLspStatus = LanguageServerStatus;
 	type AssemblyScriptLspStatus = LanguageServerStatus;
 	type WatLspStatus = LanguageServerStatus;
+	type ZigLspStatus = LanguageServerStatus;
+	type PhpLspStatus = LanguageServerStatus;
+	type LuaLspStatus = LanguageServerStatus;
 
 	const ocamlKeywords = [
 		'and',
@@ -1338,6 +1341,129 @@
 		}
 	} satisfies monaco.languages.IMonarchLanguage;
 
+	const awkLanguageConfiguration = {
+		comments: {
+			lineComment: '#'
+		},
+		brackets: [
+			['{', '}'],
+			['[', ']'],
+			['(', ')']
+		],
+		autoClosingPairs: [
+			{ open: '{', close: '}' },
+			{ open: '[', close: ']' },
+			{ open: '(', close: ')' },
+			{ open: '"', close: '"' },
+			{ open: '/', close: '/' }
+		],
+		surroundingPairs: [
+			{ open: '{', close: '}' },
+			{ open: '[', close: ']' },
+			{ open: '(', close: ')' },
+			{ open: '"', close: '"' },
+			{ open: '/', close: '/' }
+		]
+	} satisfies monaco.languages.LanguageConfiguration;
+
+	const awkMonarchTokens = {
+		defaultToken: '',
+		tokenPostfix: '.awk',
+		keywords: [
+			'BEGIN',
+			'END',
+			'BEGINFILE',
+			'ENDFILE',
+			'break',
+			'continue',
+			'delete',
+			'do',
+			'else',
+			'exit',
+			'for',
+			'function',
+			'if',
+			'in',
+			'next',
+			'nextfile',
+			'print',
+			'printf',
+			'return',
+			'while'
+		],
+		builtins: [
+			'atan2',
+			'close',
+			'cos',
+			'exp',
+			'fflush',
+			'gsub',
+			'index',
+			'int',
+			'length',
+			'log',
+			'match',
+			'rand',
+			'sin',
+			'split',
+			'sprintf',
+			'sqrt',
+			'srand',
+			'sub',
+			'substr',
+			'system',
+			'tolower',
+			'toupper'
+		],
+		variables: [
+			'ARGC',
+			'ARGV',
+			'CONVFMT',
+			'ENVIRON',
+			'FILENAME',
+			'FNR',
+			'FS',
+			'NF',
+			'NR',
+			'OFMT',
+			'OFS',
+			'ORS',
+			'RLENGTH',
+			'RS',
+			'RSTART',
+			'SUBSEP'
+		],
+		tokenizer: {
+			root: [
+				[/#.*$/, 'comment'],
+				[/"([^"\\]|\\.)*$/, 'string.invalid'],
+				[/"/, 'string', '@string'],
+				[/\/([^\\/]|\\.)+\/[a-zA-Z]*/, 'regexp'],
+				[/\$[0-9]+/, 'variable.predefined'],
+				[/[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?/, 'number'],
+				[
+					/[A-Za-z_][\w]*/,
+					{
+						cases: {
+							'@keywords': 'keyword',
+							'@builtins': 'predefined',
+							'@variables': 'variable.predefined',
+							'@default': 'identifier'
+						}
+					}
+				],
+				[/[{}()[\]]/, '@brackets'],
+				[/[;,.]/, 'delimiter'],
+				[/[=><!~?:+\-*/%^|&]+/, 'operator']
+			],
+			string: [
+				[/[^\\"]+/, 'string'],
+				[/\\./, 'string.escape'],
+				[/"/, 'string', '@pop']
+			]
+		}
+	} satisfies monaco.languages.IMonarchLanguage;
+
 	export const editorValue = () => editor?.getValue() || '';
 
 	let clangdStatus = $state<ClangdStatus>({ state: 'disabled' });
@@ -1348,6 +1474,9 @@
 	let typescriptLspStatus = $state<TypeScriptLspStatus>({ state: 'disabled' });
 	let assemblyScriptLspStatus = $state<AssemblyScriptLspStatus>({ state: 'disabled' });
 	let watLspStatus = $state<WatLspStatus>({ state: 'disabled' });
+	let zigLspStatus = $state<ZigLspStatus>({ state: 'disabled' });
+	let phpLspStatus = $state<PhpLspStatus>({ state: 'disabled' });
+	let luaLspStatus = $state<LuaLspStatus>({ state: 'disabled' });
 	let model = $state<monaco.editor.ITextModel | undefined>();
 	let debugView = $state<MonacoDebugView | null>(null);
 	interface Props {
@@ -1373,6 +1502,12 @@
 		rustLspEnabled?: boolean;
 		rustLspCompilerUrl?: string;
 		typescriptLspLibUrl?: string;
+		zigLspEnabled?: boolean;
+		zigLspCompilerUrl?: string;
+		zigLspStdlibUrl?: string;
+		phpLspEnabled?: boolean;
+		luaLspEnabled?: boolean;
+		luaLspModuleUrl?: string;
 		breakpoints?: number[];
 		debugLocals?: DebugVariable[];
 		debugLanguage?: DebugLanguageAdapter | null;
@@ -1406,6 +1541,12 @@
 		rustLspEnabled = false,
 		rustLspCompilerUrl,
 		typescriptLspLibUrl,
+		zigLspEnabled = false,
+		zigLspCompilerUrl,
+		zigLspStdlibUrl,
+		phpLspEnabled = false,
+		luaLspEnabled = false,
+		luaLspModuleUrl,
 		breakpoints = [],
 		debugLocals = [],
 		debugLanguage = null,
@@ -1450,6 +1591,7 @@
 				| 'gleam'
 				| 'perl'
 				| 'tcl'
+				| 'awk'
 				| 'ocaml'
 				| 'javascript'
 				| 'typescript'
@@ -1500,6 +1642,10 @@
 			goTarget,
 			rustLspEnabled ? rustLspCompilerUrl || '' : '',
 			rustTargetTriple,
+			zigLspEnabled ? zigLspCompilerUrl || '' : '',
+			zigLspEnabled ? zigLspStdlibUrl || '' : '',
+			phpLspEnabled ? 'php-lsp-on' : '',
+			luaLspEnabled ? luaLspModuleUrl || '' : '',
 			activeLspLanguage,
 			lspEnabled ? 'lsp-on' : 'lsp-off',
 			typescriptLspLibUrl || ''
@@ -1518,6 +1664,9 @@
 				typescriptLspStatus = { state: 'disabled' };
 				assemblyScriptLspStatus = { state: 'disabled' };
 				watLspStatus = { state: 'disabled' };
+				zigLspStatus = { state: 'disabled' };
+				phpLspStatus = { state: 'disabled' };
+				luaLspStatus = { state: 'disabled' };
 				return null;
 			}
 			if (language === 'cpp') {
@@ -1703,6 +1852,70 @@
 					throw error;
 				}
 			}
+			if (activeLspLanguage === 'zig') {
+				if (!zigLspEnabled || !zigLspCompilerUrl || !zigLspStdlibUrl) {
+					zigLspStatus = { state: 'disabled' };
+					return null;
+				}
+				try {
+					const { getZigLanguageServer } = await import('@wasm-idle/lsp');
+					return (await getZigLanguageServer({
+						currentUrl,
+						zig: {
+							compilerUrl: zigLspCompilerUrl,
+							stdlibUrl: zigLspStdlibUrl
+						},
+						onStatus: (status) => (zigLspStatus = status)
+					})) as unknown as IMonacoLspConnection;
+				} catch (error) {
+					zigLspStatus = {
+						state: 'error',
+						message: error instanceof Error ? error.message : String(error)
+					};
+					throw error;
+				}
+			}
+			if (activeLspLanguage === 'php') {
+				if (!phpLspEnabled) {
+					phpLspStatus = { state: 'disabled' };
+					return null;
+				}
+				try {
+					const { getPhpLanguageServer } = await import('@wasm-idle/lsp');
+					return (await getPhpLanguageServer({
+						currentUrl,
+						onStatus: (status) => (phpLspStatus = status)
+					})) as unknown as IMonacoLspConnection;
+				} catch (error) {
+					phpLspStatus = {
+						state: 'error',
+						message: error instanceof Error ? error.message : String(error)
+					};
+					throw error;
+				}
+			}
+			if (activeLspLanguage === 'lua') {
+				if (!luaLspEnabled || !luaLspModuleUrl) {
+					luaLspStatus = { state: 'disabled' };
+					return null;
+				}
+				try {
+					const { getLuaLanguageServer } = await import('@wasm-idle/lsp');
+					return (await getLuaLanguageServer({
+						currentUrl,
+						lua: {
+							moduleUrl: luaLspModuleUrl
+						},
+						onStatus: (status) => (luaLspStatus = status)
+					})) as unknown as IMonacoLspConnection;
+				} catch (error) {
+					luaLspStatus = {
+						state: 'error',
+						message: error instanceof Error ? error.message : String(error)
+					};
+					throw error;
+				}
+			}
 			return null;
 		})(lspConnectionKey)
 	);
@@ -1739,6 +1952,9 @@
 			typescriptLspStatus = { state: 'disabled' };
 			assemblyScriptLspStatus = { state: 'disabled' };
 			watLspStatus = { state: 'disabled' };
+			zigLspStatus = { state: 'disabled' };
+			phpLspStatus = { state: 'disabled' };
+			luaLspStatus = { state: 'disabled' };
 			return;
 		}
 		if (language !== 'cpp' || !clangdEnabled || !clangdBaseUrl) {
@@ -1764,6 +1980,20 @@
 		}
 		if (activeLspLanguage !== 'wat') {
 			watLspStatus = { state: 'disabled' };
+		}
+		if (
+			activeLspLanguage !== 'zig' ||
+			!zigLspEnabled ||
+			!zigLspCompilerUrl ||
+			!zigLspStdlibUrl
+		) {
+			zigLspStatus = { state: 'disabled' };
+		}
+		if (activeLspLanguage !== 'php' || !phpLspEnabled) {
+			phpLspStatus = { state: 'disabled' };
+		}
+		if (activeLspLanguage !== 'lua' || !luaLspEnabled || !luaLspModuleUrl) {
+			luaLspStatus = { state: 'disabled' };
 		}
 	});
 
@@ -2036,6 +2266,15 @@
 			}
 			Monaco.languages.setLanguageConfiguration('gleam', gleamLanguageConfiguration);
 			Monaco.languages.setMonarchTokensProvider('gleam', gleamMonarchTokens);
+			if (!Monaco.languages.getLanguages().some(({ id }) => id === 'awk')) {
+				Monaco.languages.register({
+					id: 'awk',
+					aliases: ['AWK', 'awk', 'gawk'],
+					extensions: ['.awk', '.gawk']
+				});
+			}
+			Monaco.languages.setLanguageConfiguration('awk', awkLanguageConfiguration);
+			Monaco.languages.setMonarchTokensProvider('awk', awkMonarchTokens);
 			if (!Monaco.languages.getLanguages().some(({ id }) => id === 'octave')) {
 				Monaco.languages.register({
 					id: 'octave',

@@ -139,6 +139,11 @@ export interface TclRuntimeAssetConfig {
 	workerUrl?: string;
 }
 
+export interface AwkRuntimeAssetConfig {
+	baseUrl?: string;
+	workerUrl?: string;
+}
+
 export interface SqliteRuntimeAssetConfig {
 	wasmUrl?: string;
 }
@@ -174,6 +179,7 @@ export interface PlaygroundRuntimeAssets {
 	gleam?: GleamRuntimeAssetConfig;
 	perl?: PerlRuntimeAssetConfig;
 	tcl?: TclRuntimeAssetConfig;
+	awk?: AwkRuntimeAssetConfig;
 	sqlite?: SqliteRuntimeAssetConfig;
 	php?: PhpRuntimeAssetConfig;
 }
@@ -1414,6 +1420,68 @@ export function resolveTclRuntimeAssetConfig(
 	return {
 		baseUrl: resolveTclBaseUrl(options, currentUrl),
 		workerUrl: resolveTclWorkerUrl(options, currentUrl)
+	};
+}
+
+export function resolveAwkBaseUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredBaseUrl =
+		(typeof options === 'object' && options?.awk?.baseUrl) ||
+		(publicEnv.PUBLIC_WASM_AWK_BASE_URL || '').trim();
+
+	if (configuredBaseUrl) {
+		return normalizeBaseUrl(configuredBaseUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return normalizeBaseUrl(`${normalizeRootUrl(options) || ''}/wasm-awk/`, currentUrl);
+	}
+
+	if (options?.rootUrl) {
+		return normalizeBaseUrl(`${normalizeRootUrl(options.rootUrl) || ''}/wasm-awk/`, currentUrl);
+	}
+
+	return normalizeBaseUrl('/wasm-awk/', currentUrl);
+}
+
+export function resolveAwkWorkerUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredWorkerUrl =
+		(typeof options === 'object' && options?.awk?.workerUrl) ||
+		(publicEnv.PUBLIC_WASM_AWK_WORKER_URL || '').trim();
+
+	if (configuredWorkerUrl) {
+		return resolveConfiguredUrl(configuredWorkerUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-awk/runner-worker.js`,
+			currentUrl
+		);
+	}
+
+	if (options?.rootUrl) {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-awk/runner-worker.js`,
+			currentUrl
+		);
+	}
+
+	return resolveConfiguredUrl('/wasm-awk/runner-worker.js', currentUrl);
+}
+
+export function resolveAwkRuntimeAssetConfig(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	return {
+		baseUrl: resolveAwkBaseUrl(options, currentUrl),
+		workerUrl: resolveAwkWorkerUrl(options, currentUrl)
 	};
 }
 

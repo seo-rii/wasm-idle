@@ -35,6 +35,8 @@ const { publicEnv } = vi.hoisted(() => ({
 		PUBLIC_WASM_PERL_WORKER_URL: '',
 		PUBLIC_WASM_TCL_BASE_URL: '',
 		PUBLIC_WASM_TCL_WORKER_URL: '',
+		PUBLIC_WASM_AWK_BASE_URL: '',
+		PUBLIC_WASM_AWK_WORKER_URL: '',
 		PUBLIC_WASM_SQLITE_WASM_URL: '',
 		PUBLIC_WASM_PHP_VERSION: ''
 	}
@@ -679,9 +681,10 @@ describe('runtime asset config resolution', () => {
 		});
 	});
 
-	it('derives default Prolog, Gleam, Perl, and Tcl runtime urls from the shared root path', async () => {
+	it('derives default Prolog, Gleam, Perl, Tcl, and AWK runtime urls from the shared root path', async () => {
 		vi.resetModules();
 		const {
+			resolveAwkRuntimeAssetConfig,
 			resolveGleamRuntimeAssetConfig,
 			resolvePerlRuntimeAssetConfig,
 			resolvePrologRuntimeAssetConfig,
@@ -709,6 +712,10 @@ describe('runtime asset config resolution', () => {
 			baseUrl: 'https://example.com/absproxy/5173/wasm-tcl/',
 			workerUrl: 'https://example.com/absproxy/5173/wasm-tcl/runner-worker.js'
 		});
+		expect(resolveAwkRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual({
+			baseUrl: 'https://example.com/absproxy/5173/wasm-awk/',
+			workerUrl: 'https://example.com/absproxy/5173/wasm-awk/runner-worker.js'
+		});
 	});
 
 	it('prefers explicit static worker runtime urls over public env overrides', async () => {
@@ -717,7 +724,9 @@ describe('runtime asset config resolution', () => {
 		publicEnv.PUBLIC_WASM_GLEAM_BASE_URL = 'https://env.example.com/gleam/';
 		publicEnv.PUBLIC_WASM_PERL_BASE_URL = 'https://env.example.com/perl/';
 		publicEnv.PUBLIC_WASM_TCL_BASE_URL = 'https://env.example.com/tcl/';
+		publicEnv.PUBLIC_WASM_AWK_BASE_URL = 'https://env.example.com/awk/';
 		const {
+			resolveAwkRuntimeAssetConfig,
 			resolveGleamRuntimeAssetConfig,
 			resolvePerlRuntimeAssetConfig,
 			resolvePrologRuntimeAssetConfig,
@@ -766,6 +775,15 @@ describe('runtime asset config resolution', () => {
 		).toEqual({
 			baseUrl: 'https://example.com/runtime/tcl/',
 			workerUrl: 'https://example.com/runtime/tcl/worker.js'
+		});
+		expect(
+			resolveAwkRuntimeAssetConfig(
+				{ awk: { baseUrl: '/runtime/awk', workerUrl: '/runtime/awk/worker.js' } },
+				'https://example.com/app'
+			)
+		).toEqual({
+			baseUrl: 'https://example.com/runtime/awk/',
+			workerUrl: 'https://example.com/runtime/awk/worker.js'
 		});
 	});
 

@@ -16,6 +16,7 @@ export type EditorDefaultLanguage =
 	| 'gleam'
 	| 'perl'
 	| 'tcl'
+	| 'awk'
 	| 'ocaml'
 	| 'javascript'
 	| 'typescript'
@@ -48,6 +49,7 @@ export const editorDefaults: Record<
 	| 'gleam'
 	| 'perl'
 	| 'tcl'
+	| 'awk'
 	| 'ocaml'
 	| 'javascript'
 	| 'typescript'
@@ -317,6 +319,25 @@ if {[gets stdin line] >= 0 && [string is integer -strict [string trim $line]]} {
 }
 
 puts "factorial_plus_bonus=[expr {[factorial $n] + $bonus}]"`,
+	awk: `BEGIN {
+    bonus = 3
+}
+
+function factorial(n) {
+    return n <= 1 ? 1 : n * factorial(n - 1)
+}
+
+{
+    n = ($1 ~ /^-?[0-9]+$/) ? int($1) : 4
+    print "factorial_plus_bonus=" (factorial(n) + bonus)
+    exit
+}
+
+END {
+    if (NR == 0) {
+        print "factorial_plus_bonus=" (factorial(4) + bonus)
+    }
+}`,
 	ocaml: `let bonus = 3
 
 let rec factorial n =
@@ -634,6 +655,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.gleam ||
 		source === editorDefaults.perl ||
 		source === editorDefaults.tcl ||
+		source === editorDefaults.awk ||
 		source === editorDefaults.ocaml ||
 		source === editorDefaults.javascript ||
 		source === editorDefaults.typescript ||

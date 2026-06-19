@@ -38,6 +38,9 @@ const tclStdinSource = `gets stdin line
 puts "main=[expr {$line + 5}]"
 `;
 
+const awkStdinSource = `{ print "main=" ($1 + 5) }
+`;
+
 async function withPreviewServer(
 	syncScripts: string[],
 	timeoutMs: number,
@@ -161,6 +164,30 @@ describe('wasm-idle static worker language browser integrations', () => {
 					language: 'TCL',
 					runTimeoutMs: Number(process.env.WASM_IDLE_TCL_RUN_TIMEOUT_MS || '240000'),
 					source: tclStdinSource,
+					stdinText: '68\n'
+				});
+				expect(summary.activeState.crossOriginIsolated).toBe(true);
+				expect(summary.activeState.sharedArrayBuffer).toBe(true);
+				expect(summary.activeState.serviceWorkerControlled).toBe(true);
+				expect(summary.pageErrors).toEqual([]);
+				expect(summary.transcript).toContain('main=73');
+				expect(summary.transcript).toContain('Process finished after');
+			}
+		);
+	}, 960_000);
+
+	it('runs real GoAWK wasm and connects stdin on the page path', async () => {
+		if (process.env.WASM_IDLE_RUN_REAL_BROWSER_AWK !== '1') return;
+		await withPreviewServer(
+			['sync:wasm-awk'],
+			Number(process.env.WASM_IDLE_AWK_PREP_TIMEOUT_MS || '900000'),
+			async (browserUrl) => {
+				const summary = await runStdinBrowserProbe({
+					browserUrl,
+					expectedOutput: 'main=73',
+					language: 'AWK',
+					runTimeoutMs: Number(process.env.WASM_IDLE_AWK_RUN_TIMEOUT_MS || '240000'),
+					source: awkStdinSource,
 					stdinText: '68\n'
 				});
 				expect(summary.activeState.crossOriginIsolated).toBe(true);
