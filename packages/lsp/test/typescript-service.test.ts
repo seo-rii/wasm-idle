@@ -1,6 +1,6 @@
 import { gzipSync } from 'node:zlib';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { LspDocumentContext } from '../src/lsp';
+import type { LspDocument, LspDocumentContext } from '../src/lsp';
 import { createTypeScriptWorkerService } from '../src/typescript/service';
 
 describe('TypeScript worker service', () => {
@@ -68,5 +68,90 @@ describe('TypeScript worker service', () => {
 		);
 
 		expect(fetchMock).toHaveBeenCalledOnce();
+	});
+
+	it('returns TypeScript diagnostics, completions, and hover details from the language service', async () => {
+		const invalidDocument: LspDocument = {
+			uri: 'file:///workspace/main.ts',
+			languageId: 'typescript',
+			version: 1,
+			text: 'const value: string = ;\n'
+		};
+		const completionDocument: LspDocument = {
+			uri: 'file:///workspace/completion.ts',
+			languageId: 'typescript',
+			version: 1,
+			text: 'const alpha = 1;\nconst beta = al'
+		};
+		const context: LspDocumentContext = {
+			documents: new Map([
+				[invalidDocument.uri, invalidDocument],
+				[completionDocument.uri, completionDocument]
+			]),
+			publishDiagnostics: vi.fn(),
+			reportProgress: vi.fn()
+		};
+		const service = createTypeScriptWorkerService('typescript', async () => ({
+			'lib.es2022.full.d.ts': ''
+		}));
+
+		await service.initialize?.(
+			{
+				language: 'typescript',
+				compilerOptions: {
+					noLib: true
+				}
+			},
+			context
+		);
+
+		const diagnostics = await service.diagnostics?.(invalidDocument, context);
+		const completions = (await service.completion?.(
+			completionDocument,
+			{ line: 1, character: 15 },
+			context
+		)) as { items: Array<{ label: string }> };
+		const hover = await service.hover?.(completionDocument, { line: 0, character: 7 }, context);
+
+		expect(diagnostics?.some((diagnostic) => diagnostic.message.includes('Expression expected'))).toBe(
+			true
+		);
+		expect(completions.items.some((item) => item.label === 'alpha')).toBe(true);
+		expect(hover?.contents.value).toContain('const alpha');
+	});
+
+	it('uses checked JavaScript mode for JavaScript documents', async () => {
+		const document: LspDocument = {
+			uri: 'file:///workspace/main.js',
+			languageId: 'javascript',
+			version: 1,
+			text: 'const amount = 1;\nconst next = amo'
+		};
+		const context: LspDocumentContext = {
+			documents: new Map([[document.uri, document]]),
+			publishDiagnostics: vi.fn(),
+			reportProgress: vi.fn()
+		};
+		const service = createTypeScriptWorkerService('javascript', async () => ({
+			'lib.es2022.full.d.ts': ''
+		}));
+
+		await service.initialize?.(
+			{
+				language: 'javascript',
+				compilerOptions: {
+					noLib: true
+				}
+			},
+			context
+		);
+
+		const completions = (await service.completion?.(
+			document,
+			{ line: 1, character: 16 },
+			context
+		)) as { items: Array<{ label: string }> };
+
+		expect(completions.items.some((item) => item.label === 'amount')).toBe(true);
 	});
 });

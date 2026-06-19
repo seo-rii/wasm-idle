@@ -142,8 +142,8 @@ function parseAssemblyScriptDiagnostics(message: string): LspDiagnostic[] {
 	const pattern =
 		/(ERROR|WARNING)\s+(TS\d+):\s*([^\n]+)[\s\S]*?└─ in ([^(]+)\((\d+),(\d+)\)/gu;
 	for (const match of message.matchAll(pattern)) {
-		const line = Math.max(0, Number(match[4]) - 1);
-		const character = Math.max(0, Number(match[5]) - 1);
+		const line = Math.max(0, Number(match[5]) - 1);
+		const character = Math.max(0, Number(match[6]) - 1);
 		diagnostics.push({
 			range: {
 				start: { line, character },

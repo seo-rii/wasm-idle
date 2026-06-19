@@ -7,6 +7,7 @@ import {
 	resolveGleamLanguageServerBaseUrl,
 	resolveGleamLanguageServerManifestUrl,
 	resolvePythonLanguageServerBaseUrl,
+	resolveDotnetLanguageServerModuleUrl,
 	resolveRustLanguageServerCompilerUrl
 } from '../src/index.js';
 
@@ -37,6 +38,12 @@ describe('lsp runtime asset resolution', () => {
 			)
 		).toBe('https://static.example.com/repl_20240807/wasm-go/index.js');
 		expect(
+			resolveDotnetLanguageServerModuleUrl(
+				'https://static.example.com/repl_20240807',
+				'https://app.example.com/editor'
+			)
+		).toBe('https://static.example.com/repl_20240807/wasm-dotnet/index.js');
+		expect(
 			resolveGleamLanguageServerBaseUrl(
 				'https://static.example.com/repl_20240807',
 				'https://app.example.com/editor'
@@ -65,6 +72,9 @@ describe('lsp runtime asset resolution', () => {
 			go: {
 				compilerUrl: 'https://go.example.com/wasm-go/index.js?v=20240807'
 			},
+			dotnet: {
+				moduleUrl: 'https://dotnet.example.com/wasm-dotnet/index.js?v=20240807'
+			},
 			gleam: {
 				baseUrl: 'https://gleam.example.com/wasm-gleam/',
 				manifestUrl: 'https://gleam.example.com/manifest.json'
@@ -80,6 +90,9 @@ describe('lsp runtime asset resolution', () => {
 		);
 		expect(resolveGoLanguageServerCompilerUrl(options)).toBe(
 			'https://go.example.com/wasm-go/index.js?v=20240807'
+		);
+		expect(resolveDotnetLanguageServerModuleUrl(options)).toBe(
+			'https://dotnet.example.com/wasm-dotnet/index.js?v=20240807'
 		);
 		expect(resolveGleamLanguageServerBaseUrl(options)).toBe(
 			'https://gleam.example.com/wasm-gleam/'
@@ -118,6 +131,9 @@ describe('lsp runtime asset resolution', () => {
 		expect(
 			resolveGoLanguageServerCompilerUrl(undefined, 'https://app.example.com/editor')
 		).toBe('https://app.example.com/wasm-go/index.js');
+		expect(
+			resolveDotnetLanguageServerModuleUrl(undefined, 'https://app.example.com/editor')
+		).toBe('https://app.example.com/wasm-dotnet/index.js');
 		expect(resolveGleamLanguageServerBaseUrl(undefined, 'https://app.example.com/editor')).toBe(
 			'https://app.example.com/wasm-gleam/'
 		);
