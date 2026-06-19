@@ -134,6 +134,13 @@ vi.mock('$lib/playground/perl', () => {
 	};
 });
 
+vi.mock('$lib/playground/tcl', () => {
+	moduleLoads.add('TCL');
+	return {
+		default: createMockSandboxClass('TCL')
+	};
+});
+
 vi.mock('$lib/playground/sqlite', () => {
 	moduleLoads.add('SQLITE');
 	return {
@@ -636,7 +643,7 @@ End Module`;
 		expect(sandboxInstances.get('PROLOG')).toHaveLength(1);
 	});
 
-	it('routes Gleam and Perl requests through their static worker wasm implementations', async () => {
+	it('routes Gleam, Perl, and Tcl requests through their static worker wasm implementations', async () => {
 		const runtimeAssets = {
 			rootUrl: '/absproxy/5173',
 			gleam: {
@@ -647,25 +654,36 @@ End Module`;
 			perl: {
 				baseUrl: '/absproxy/5173/wasm-perl/',
 				workerUrl: '/absproxy/5173/wasm-perl/runner-worker.js?v=test'
+			},
+			tcl: {
+				baseUrl: '/absproxy/5173/wasm-tcl/',
+				workerUrl: '/absproxy/5173/wasm-tcl/runner-worker.js?v=test'
 			}
 		};
 		const binding = createPlaygroundBinding(runtimeAssets);
 		const progress = { set() {} };
 		const gleam = await binding.load('GLEAM');
 		const perl = await binding.load('PERL');
+		const tcl = await binding.load('TCLSH');
 
 		await gleam.load('pub fn main() { Nil }', true, [], {}, progress);
 		await perl.load('print "hello\\n";', true, [], {}, progress);
+		await tcl.load('puts "hello"', true, [], {}, progress);
 
 		expect(gleam.runtimeAssets).toEqual(runtimeAssets);
 		expect(perl.runtimeAssets).toEqual(runtimeAssets);
+		expect(tcl.runtimeAssets).toEqual(runtimeAssets);
 		expect(sandboxInstances.get('GLEAM')).toHaveLength(1);
 		expect(sandboxInstances.get('PERL')).toHaveLength(1);
+		expect(sandboxInstances.get('TCL')).toHaveLength(1);
 		expect(sandboxInstances.get('GLEAM')?.[0]?.loadCalls).toEqual([
 			[runtimeAssets, 'pub fn main() { Nil }', true, [], {}, progress]
 		]);
 		expect(sandboxInstances.get('PERL')?.[0]?.loadCalls).toEqual([
 			[runtimeAssets, 'print "hello\\n";', true, [], {}, progress]
+		]);
+		expect(sandboxInstances.get('TCL')?.[0]?.loadCalls).toEqual([
+			[runtimeAssets, 'puts "hello"', true, [], {}, progress]
 		]);
 	});
 

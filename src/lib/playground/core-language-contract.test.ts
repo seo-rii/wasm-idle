@@ -93,17 +93,20 @@ describe('core language contract', () => {
 		expect(isDeferredProgressLanguage('erl')).toBe(true);
 	});
 
-	it('exposes Prolog, Gleam, and Perl as deferred browser runtime languages', () => {
+	it('exposes Prolog, Gleam, Perl, and Tcl as deferred browser runtime languages', () => {
 		expect(supportedLanguageIds).toContain('PROLOG');
 		expect(supportedLanguageIds).toContain('GLEAM');
 		expect(supportedLanguageIds).toContain('PERL');
+		expect(supportedLanguageIds).toContain('TCL');
 		expect(normalizeLanguageId('swipl')).toBe('PROLOG');
 		expect(normalizeLanguageId('swi')).toBe('PROLOG');
 		expect(normalizeLanguageId('gleam')).toBe('GLEAM');
 		expect(normalizeLanguageId('perl')).toBe('PERL');
+		expect(normalizeLanguageId('tclsh')).toBe('TCL');
 		expect(isDeferredProgressLanguage('swipl')).toBe(true);
 		expect(isDeferredProgressLanguage('gleam')).toBe(true);
 		expect(isDeferredProgressLanguage('perl')).toBe(true);
+		expect(isDeferredProgressLanguage('tclsh')).toBe(true);
 	});
 
 	it('exposes VB.NET aliases as a deferred browser runtime language', () => {
@@ -192,6 +195,10 @@ describe('core language contract', () => {
 			perl: {
 				baseUrl: '/wasm-perl/',
 				workerUrl: '/wasm-perl/runner-worker.js?v=test'
+			},
+			tcl: {
+				baseUrl: '/wasm-tcl/',
+				workerUrl: '/wasm-tcl/runner-worker.js?v=test'
 			}
 		});
 
@@ -202,6 +209,8 @@ describe('core language contract', () => {
 		expect(key).toContain('"gleamManifestUrl":"/wasm-gleam/source-manifest.v1.json?v=test"');
 		expect(key).toContain('"perlBaseUrl":"/wasm-perl/"');
 		expect(key).toContain('"perlWorkerUrl":"/wasm-perl/runner-worker.js?v=test"');
+		expect(key).toContain('"tclBaseUrl":"/wasm-tcl/"');
+		expect(key).toContain('"tclWorkerUrl":"/wasm-tcl/runner-worker.js?v=test"');
 	});
 
 	it('includes WAT module urls in runtime asset cache keys', () => {

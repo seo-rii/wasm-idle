@@ -134,6 +134,11 @@ export interface PerlRuntimeAssetConfig {
 	workerUrl?: string;
 }
 
+export interface TclRuntimeAssetConfig {
+	baseUrl?: string;
+	workerUrl?: string;
+}
+
 export interface SqliteRuntimeAssetConfig {
 	wasmUrl?: string;
 }
@@ -168,6 +173,7 @@ export interface PlaygroundRuntimeAssets {
 	prolog?: PrologRuntimeAssetConfig;
 	gleam?: GleamRuntimeAssetConfig;
 	perl?: PerlRuntimeAssetConfig;
+	tcl?: TclRuntimeAssetConfig;
 	sqlite?: SqliteRuntimeAssetConfig;
 	php?: PhpRuntimeAssetConfig;
 }
@@ -1346,6 +1352,68 @@ export function resolvePerlRuntimeAssetConfig(
 	return {
 		baseUrl: resolvePerlBaseUrl(options, currentUrl),
 		workerUrl: resolvePerlWorkerUrl(options, currentUrl)
+	};
+}
+
+export function resolveTclBaseUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredBaseUrl =
+		(typeof options === 'object' && options?.tcl?.baseUrl) ||
+		(publicEnv.PUBLIC_WASM_TCL_BASE_URL || '').trim();
+
+	if (configuredBaseUrl) {
+		return normalizeBaseUrl(configuredBaseUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return normalizeBaseUrl(`${normalizeRootUrl(options) || ''}/wasm-tcl/`, currentUrl);
+	}
+
+	if (options?.rootUrl) {
+		return normalizeBaseUrl(`${normalizeRootUrl(options.rootUrl) || ''}/wasm-tcl/`, currentUrl);
+	}
+
+	return normalizeBaseUrl('/wasm-tcl/', currentUrl);
+}
+
+export function resolveTclWorkerUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredWorkerUrl =
+		(typeof options === 'object' && options?.tcl?.workerUrl) ||
+		(publicEnv.PUBLIC_WASM_TCL_WORKER_URL || '').trim();
+
+	if (configuredWorkerUrl) {
+		return resolveConfiguredUrl(configuredWorkerUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-tcl/runner-worker.js`,
+			currentUrl
+		);
+	}
+
+	if (options?.rootUrl) {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-tcl/runner-worker.js`,
+			currentUrl
+		);
+	}
+
+	return resolveConfiguredUrl('/wasm-tcl/runner-worker.js', currentUrl);
+}
+
+export function resolveTclRuntimeAssetConfig(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	return {
+		baseUrl: resolveTclBaseUrl(options, currentUrl),
+		workerUrl: resolveTclWorkerUrl(options, currentUrl)
 	};
 }
 

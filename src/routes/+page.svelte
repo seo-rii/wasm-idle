@@ -29,6 +29,7 @@
 	import { WASM_PERL_ASSET_VERSION } from '$lib/playground/wasmPerlVersion';
 	import { WASM_R_ASSET_VERSION } from '$lib/playground/wasmRVersion';
 	import { WASM_RUST_ASSET_VERSION } from '$lib/playground/wasmRustVersion';
+	import { WASM_TCL_ASSET_VERSION } from '$lib/playground/wasmTclVersion';
 	import { WASM_TINYGO_ASSET_VERSION } from '$lib/playground/wasmTinyGoVersion';
 	import { WASM_TYPESCRIPT_ASSET_VERSION } from '$lib/playground/wasmTypeScriptVersion';
 	import { WASM_WAT_ASSET_VERSION } from '$lib/playground/wasmWatVersion';
@@ -71,6 +72,7 @@
 		| 'PROLOG'
 		| 'GLEAM'
 		| 'PERL'
+		| 'TCL'
 		| 'OCAML'
 		| 'TINYGO'
 		| 'JAVASCRIPT'
@@ -129,6 +131,7 @@
 		'PROLOG',
 		'GLEAM',
 		'PERL',
+		'TCL',
 		'OCAML',
 		'TINYGO',
 		'JAVASCRIPT',
@@ -161,6 +164,7 @@
 		PROLOG: 'Prolog',
 		GLEAM: 'Gleam',
 		PERL: 'Perl',
+		TCL: 'Tcl',
 		OCAML: 'OCaml',
 		TINYGO: 'TinyGo',
 		JAVASCRIPT: 'JavaScript',
@@ -234,6 +238,12 @@
 			workerUrl: path
 				? `${path}/wasm-perl/runner-worker.js?v=${WASM_PERL_ASSET_VERSION}`
 				: `/wasm-perl/runner-worker.js?v=${WASM_PERL_ASSET_VERSION}`
+		},
+		tcl: {
+			baseUrl: path ? `${path}/wasm-tcl/` : '/wasm-tcl/',
+			workerUrl: path
+				? `${path}/wasm-tcl/runner-worker.js?v=${WASM_TCL_ASSET_VERSION}`
+				: `/wasm-tcl/runner-worker.js?v=${WASM_TCL_ASSET_VERSION}`
 		},
 		ocaml: {
 			moduleUrl: path
@@ -374,45 +384,49 @@
 															? 'gleam'
 															: language === 'PERL'
 																? 'perl'
-																: language === 'OCAML'
-																	? 'ocaml'
-																	: language === 'JAVASCRIPT'
-																		? 'javascript'
-																		: language === 'TYPESCRIPT'
-																			? 'typescript'
+																: language === 'TCL'
+																	? 'tcl'
+																	: language === 'OCAML'
+																		? 'ocaml'
+																		: language === 'JAVASCRIPT'
+																			? 'javascript'
 																			: language ===
-																				  'ASSEMBLYSCRIPT'
+																				  'TYPESCRIPT'
 																				? 'typescript'
-																				: language === 'WAT'
-																					? 'wat'
+																				: language ===
+																					  'ASSEMBLYSCRIPT'
+																					? 'typescript'
 																					: language ===
-																						  'ZIG'
-																						? 'zig'
+																						  'WAT'
+																						? 'wat'
 																						: language ===
-																							  'LUA'
-																							? 'lua'
+																							  'ZIG'
+																							? 'zig'
 																							: language ===
-																								  'LISP'
-																								? 'lisp'
+																								  'LUA'
+																								? 'lua'
 																								: language ===
-																									  'RUBY'
-																									? 'ruby'
+																									  'LISP'
+																									? 'lisp'
 																									: language ===
-																										  'HASKELL'
-																										? 'haskell'
+																										  'RUBY'
+																										? 'ruby'
 																										: language ===
-																											  'R'
-																											? 'r'
+																											  'HASKELL'
+																											? 'haskell'
 																											: language ===
-																												  'OCTAVE'
-																												? 'octave'
+																												  'R'
+																												? 'r'
 																												: language ===
-																													  'SQLITE'
-																													? 'sql'
+																													  'OCTAVE'
+																													? 'octave'
 																													: language ===
-																														  'PHP'
-																														? 'php'
-																														: 'go'
+																														  'SQLITE'
+																														? 'sql'
+																														: language ===
+																															  'PHP'
+																															? 'php'
+																															: 'go'
 	);
 	const compact = $derived(examplePaneWidth > 0 && examplePaneWidth <= 760);
 	const activeFile = $derived(files.find((file) => file.path === activePath) ?? files[0]);
@@ -598,6 +612,7 @@
 			'.gleam': 'GLEAM',
 			'.pl': 'PERL',
 			'.pm': 'PERL',
+			'.tcl': 'TCL',
 			'.ml': 'OCAML',
 			'.mli': 'OCAML',
 			'.js': 'JAVASCRIPT',
@@ -644,6 +659,7 @@
 			PROLOG: 'main.prolog',
 			GLEAM: 'main.gleam',
 			PERL: 'main.pl',
+			TCL: 'main.tcl',
 			OCAML: 'main.ml',
 			TINYGO: 'main.go',
 			JAVASCRIPT: 'main.js',
@@ -680,6 +696,7 @@
 			PROLOG: 'prolog',
 			GLEAM: 'gleam',
 			PERL: 'perl',
+			TCL: 'tcl',
 			OCAML: 'ocaml',
 			TINYGO: 'go',
 			JAVASCRIPT: 'javascript',
@@ -1172,6 +1189,8 @@
 			swi: 'PROLOG',
 			gleam: 'GLEAM',
 			perl: 'PERL',
+			tcl: 'TCL',
+			tclsh: 'TCL',
 			ocaml: 'OCAML',
 			tinygo: 'TINYGO',
 			javascript: 'JAVASCRIPT',
@@ -1844,6 +1863,7 @@
 						<option value="PROLOG">Prolog</option>
 						<option value="GLEAM">Gleam</option>
 						<option value="PERL">Perl</option>
+						<option value="TCL">Tcl</option>
 						<option value="OCAML">OCaml</option>
 						<option value="TINYGO">TinyGo</option>
 						<option value="JAVASCRIPT">JavaScript</option>
@@ -1861,7 +1881,7 @@
 						<option value="PHP">PHP</option>
 					</select>
 				</label>
-				{#if language === 'JAVA' || language === 'RUST' || language === 'GO' || language === 'D' || language === 'CSHARP' || language === 'FSHARP' || language === 'VBNET' || language === 'PROLOG' || language === 'GLEAM' || language === 'PERL' || language === 'TINYGO' || language === 'JAVASCRIPT' || language === 'TYPESCRIPT' || language === 'LUA' || language === 'ZIG' || language === 'LISP' || language === 'RUBY' || language === 'HASKELL' || language === 'R' || language === 'OCTAVE' || language === 'PHP'}
+				{#if language === 'JAVA' || language === 'RUST' || language === 'GO' || language === 'D' || language === 'CSHARP' || language === 'FSHARP' || language === 'VBNET' || language === 'PROLOG' || language === 'GLEAM' || language === 'PERL' || language === 'TCL' || language === 'TINYGO' || language === 'JAVASCRIPT' || language === 'TYPESCRIPT' || language === 'LUA' || language === 'ZIG' || language === 'LISP' || language === 'RUBY' || language === 'HASKELL' || language === 'R' || language === 'OCTAVE' || language === 'PHP'}
 					<label class="args-chip">
 						<span class="material-symbols-outlined">list_alt</span>
 						<input bind:value={argsInput} placeholder="3 4 5" spellcheck={false} />
@@ -2037,6 +2057,12 @@
 			<p class="hint">
 				Perl runs through bundled WebPerl WebAssembly assets. Use `&lt;STDIN&gt;` for line
 				input and pass CLI args here.
+			</p>
+		{/if}
+		{#if language === 'TCL'}
+			<p class="hint">
+				Tcl runs through bundled Wacl WebAssembly assets. Use `gets stdin line` for line
+				input and read CLI args from `$argv`.
 			</p>
 		{/if}
 		{#if language === 'TINYGO'}

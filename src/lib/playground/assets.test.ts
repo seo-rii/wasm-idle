@@ -33,6 +33,8 @@ const { publicEnv } = vi.hoisted(() => ({
 		PUBLIC_WASM_GLEAM_MANIFEST_URL: '',
 		PUBLIC_WASM_PERL_BASE_URL: '',
 		PUBLIC_WASM_PERL_WORKER_URL: '',
+		PUBLIC_WASM_TCL_BASE_URL: '',
+		PUBLIC_WASM_TCL_WORKER_URL: '',
 		PUBLIC_WASM_SQLITE_WASM_URL: '',
 		PUBLIC_WASM_PHP_VERSION: ''
 	}
@@ -677,12 +679,13 @@ describe('runtime asset config resolution', () => {
 		});
 	});
 
-	it('derives default Prolog, Gleam, and Perl runtime urls from the shared root path', async () => {
+	it('derives default Prolog, Gleam, Perl, and Tcl runtime urls from the shared root path', async () => {
 		vi.resetModules();
 		const {
 			resolveGleamRuntimeAssetConfig,
 			resolvePerlRuntimeAssetConfig,
-			resolvePrologRuntimeAssetConfig
+			resolvePrologRuntimeAssetConfig,
+			resolveTclRuntimeAssetConfig
 		} = await import('./assets');
 
 		expect(
@@ -702,6 +705,10 @@ describe('runtime asset config resolution', () => {
 			baseUrl: 'https://example.com/absproxy/5173/wasm-perl/',
 			workerUrl: 'https://example.com/absproxy/5173/wasm-perl/runner-worker.js'
 		});
+		expect(resolveTclRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual({
+			baseUrl: 'https://example.com/absproxy/5173/wasm-tcl/',
+			workerUrl: 'https://example.com/absproxy/5173/wasm-tcl/runner-worker.js'
+		});
 	});
 
 	it('prefers explicit static worker runtime urls over public env overrides', async () => {
@@ -709,10 +716,12 @@ describe('runtime asset config resolution', () => {
 		publicEnv.PUBLIC_WASM_PROLOG_BASE_URL = 'https://env.example.com/prolog/';
 		publicEnv.PUBLIC_WASM_GLEAM_BASE_URL = 'https://env.example.com/gleam/';
 		publicEnv.PUBLIC_WASM_PERL_BASE_URL = 'https://env.example.com/perl/';
+		publicEnv.PUBLIC_WASM_TCL_BASE_URL = 'https://env.example.com/tcl/';
 		const {
 			resolveGleamRuntimeAssetConfig,
 			resolvePerlRuntimeAssetConfig,
-			resolvePrologRuntimeAssetConfig
+			resolvePrologRuntimeAssetConfig,
+			resolveTclRuntimeAssetConfig
 		} = await import('./assets');
 
 		expect(
@@ -748,6 +757,15 @@ describe('runtime asset config resolution', () => {
 		).toEqual({
 			baseUrl: 'https://example.com/runtime/perl/',
 			workerUrl: 'https://example.com/runtime/perl/worker.js'
+		});
+		expect(
+			resolveTclRuntimeAssetConfig(
+				{ tcl: { baseUrl: '/runtime/tcl', workerUrl: '/runtime/tcl/worker.js' } },
+				'https://example.com/app'
+			)
+		).toEqual({
+			baseUrl: 'https://example.com/runtime/tcl/',
+			workerUrl: 'https://example.com/runtime/tcl/worker.js'
 		});
 	});
 

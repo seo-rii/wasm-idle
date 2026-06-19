@@ -34,6 +34,10 @@ chomp $line;
 print "main=", $line + 5, "\\n";
 `;
 
+const tclStdinSource = `gets stdin line
+puts "main=[expr {$line + 5}]"
+`;
+
 async function withPreviewServer(
 	syncScripts: string[],
 	timeoutMs: number,
@@ -133,6 +137,30 @@ describe('wasm-idle static worker language browser integrations', () => {
 					language: 'PERL',
 					runTimeoutMs: Number(process.env.WASM_IDLE_PERL_RUN_TIMEOUT_MS || '240000'),
 					source: perlStdinSource,
+					stdinText: '68\n'
+				});
+				expect(summary.activeState.crossOriginIsolated).toBe(true);
+				expect(summary.activeState.sharedArrayBuffer).toBe(true);
+				expect(summary.activeState.serviceWorkerControlled).toBe(true);
+				expect(summary.pageErrors).toEqual([]);
+				expect(summary.transcript).toContain('main=73');
+				expect(summary.transcript).toContain('Process finished after');
+			}
+		);
+	}, 960_000);
+
+	it('runs real Wacl Tcl wasm and connects stdin on the page path', async () => {
+		if (process.env.WASM_IDLE_RUN_REAL_BROWSER_TCL !== '1') return;
+		await withPreviewServer(
+			['sync:wasm-tcl'],
+			Number(process.env.WASM_IDLE_TCL_PREP_TIMEOUT_MS || '900000'),
+			async (browserUrl) => {
+				const summary = await runStdinBrowserProbe({
+					browserUrl,
+					expectedOutput: 'main=73',
+					language: 'TCL',
+					runTimeoutMs: Number(process.env.WASM_IDLE_TCL_RUN_TIMEOUT_MS || '240000'),
+					source: tclStdinSource,
 					stdinText: '68\n'
 				});
 				expect(summary.activeState.crossOriginIsolated).toBe(true);

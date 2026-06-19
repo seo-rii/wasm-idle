@@ -1449,6 +1449,7 @@
 				| 'prolog'
 				| 'gleam'
 				| 'perl'
+				| 'tcl'
 				| 'ocaml'
 				| 'javascript'
 				| 'typescript'
@@ -1917,6 +1918,10 @@
 				case 'perl':
 					languageContribution =
 						import('monaco-editor/esm/vs/basic-languages/perl/perl.contribution.js');
+					break;
+				case 'tcl':
+					languageContribution =
+						import('monaco-editor/esm/vs/basic-languages/tcl/tcl.contribution.js');
 					break;
 				case 'php':
 					languageContribution =

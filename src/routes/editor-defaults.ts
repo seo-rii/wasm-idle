@@ -15,6 +15,7 @@ export type EditorDefaultLanguage =
 	| 'prolog'
 	| 'gleam'
 	| 'perl'
+	| 'tcl'
 	| 'ocaml'
 	| 'javascript'
 	| 'typescript'
@@ -46,6 +47,7 @@ export const editorDefaults: Record<
 	| 'prolog'
 	| 'gleam'
 	| 'perl'
+	| 'tcl'
 	| 'ocaml'
 	| 'javascript'
 	| 'typescript'
@@ -299,6 +301,22 @@ my $line = <STDIN>;
 chomp($line //= "");
 my $n = $line =~ /^-?\\d+$/ ? int($line) : 4;
 print "factorial_plus_bonus=", factorial($n) + BONUS, "\\n";`,
+	tcl: `set bonus 3
+
+proc factorial {n} {
+    if {$n <= 1} {
+        return 1
+    }
+    return [expr {$n * [factorial [expr {$n - 1}]]}]
+}
+
+if {[gets stdin line] >= 0 && [string is integer -strict [string trim $line]]} {
+    set n [string trim $line]
+} else {
+    set n 4
+}
+
+puts "factorial_plus_bonus=[expr {[factorial $n] + $bonus}]"`,
 	ocaml: `let bonus = 3
 
 let rec factorial n =
@@ -615,6 +633,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.prolog ||
 		source === editorDefaults.gleam ||
 		source === editorDefaults.perl ||
+		source === editorDefaults.tcl ||
 		source === editorDefaults.ocaml ||
 		source === editorDefaults.javascript ||
 		source === editorDefaults.typescript ||

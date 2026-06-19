@@ -44,6 +44,7 @@ const COMPRESSIBLE_TOP_LEVEL_DIRS = [
 	'wasm-perl',
 	'wasm-prolog',
 	'wasm-rust',
+	'wasm-tcl',
 	'wasm-tinygo',
 	'wasm-typescript',
 	'wasm-wat',

@@ -9,7 +9,9 @@ const { publicEnv } = vi.hoisted(() => ({
 		PUBLIC_WASM_GLEAM_WORKER_URL: '',
 		PUBLIC_WASM_GLEAM_MANIFEST_URL: '',
 		PUBLIC_WASM_PERL_BASE_URL: '',
-		PUBLIC_WASM_PERL_WORKER_URL: ''
+		PUBLIC_WASM_PERL_WORKER_URL: '',
+		PUBLIC_WASM_TCL_BASE_URL: '',
+		PUBLIC_WASM_TCL_WORKER_URL: ''
 	}
 }));
 let onPostMessage: ((worker: MockWorker, message: any) => void) | null = null;
@@ -48,6 +50,7 @@ vi.mock('$env/dynamic/public', () => ({
 import Gleam from './gleam';
 import Perl from './perl';
 import Prolog from './prolog';
+import Tcl from './tcl';
 
 describe('static worker backed language sandboxes', () => {
 	beforeEach(() => {
@@ -144,6 +147,33 @@ describe('static worker backed language sandboxes', () => {
 				baseUrl: 'http://localhost:3000/wasm-perl/',
 				stdin: 'ok\n',
 				activePath: 'main.pl'
+			})
+		);
+	});
+
+	it('loads Tcl runtime urls and forwards stdin to the Wacl worker', async () => {
+		const sandbox = new Tcl();
+		await sandbox.load({
+			tcl: {
+				baseUrl: '/wasm-tcl/',
+				workerUrl: '/wasm-tcl/runner-worker.js?v=test'
+			}
+		});
+		await expect(
+			sandbox.run('gets stdin line; puts $line', false, true, undefined, ['demo'], {
+				stdin: 'ok\n'
+			})
+		).resolves.toBe(true);
+
+		expect(workerInstances[0].url).toBe(
+			'http://localhost:3000/wasm-tcl/runner-worker.js?v=test'
+		);
+		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				baseUrl: 'http://localhost:3000/wasm-tcl/',
+				args: ['demo'],
+				stdin: 'ok\n',
+				activePath: 'main.tcl'
 			})
 		);
 	});
