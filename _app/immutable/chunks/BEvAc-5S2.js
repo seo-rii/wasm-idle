@@ -1,1 +1,0 @@
-import{t as e}from"./BcgnSMxp.js";import{t}from"./CowFvHG_.js";t({id:`vb`,extensions:[`.vb`],aliases:[`Visual Basic`,`vb`],loader:()=>e(()=>import(`./ILQaTX1C2.js`),[],import.meta.url)});

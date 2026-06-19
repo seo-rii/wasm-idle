@@ -14,6 +14,8 @@ const runtimeAssetAliases = [
 		to: 'wasm-rust/runtime/'
 	}
 ];
+const dynamicModuleCacheName = 'wasm-idle-dynamic-modules-v1';
+const dynamicModulePathPrefix = '__wasm_idle_dynamic_modules__/';
 let compressedRuntimeAssetManifestPromise = null;
 
 function shouldBypassIsolationHeaders(url) {
@@ -150,6 +152,23 @@ async function fetchRuntimeAssetAlias(request, url) {
 	);
 }
 
+async function fetchDynamicModule(request, url) {
+	if (request.method !== 'GET') return null;
+	if (!relativePathInScope(url).startsWith(dynamicModulePathPrefix)) return null;
+	const cache = await caches.open(dynamicModuleCacheName);
+	const response = await cache.match(request);
+	return (
+		response ||
+		new Response('Generated module is no longer available.', {
+			status: 404,
+			statusText: 'Not Found',
+			headers: {
+				'content-type': 'text/plain; charset=utf-8'
+			}
+		})
+	);
+}
+
 function withIsolationHeaders(response) {
 	const newHeaders = new Headers(response.headers);
 	newHeaders.set('Cross-Origin-Embedder-Policy', 'require-corp');
@@ -172,6 +191,7 @@ self.addEventListener('fetch', function (event) {
 		Promise.resolve()
 			.then(async function () {
 				return (
+					(await fetchDynamicModule(event.request, url)) ||
 					(await fetchRuntimeAssetAlias(event.request, url)) ||
 					(await fetchCompressedRuntimeAsset(event.request, url)) ||
 					fetch(event.request)

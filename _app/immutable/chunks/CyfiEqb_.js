@@ -1,0 +1,1 @@
+import{t as e}from"./BcgnSMxp.js";import{t}from"./CG-z3oXZ.js";t({id:`php`,extensions:[`.php`,`.php4`,`.php5`,`.phtml`,`.ctp`],aliases:[`PHP`,`php`],mimetypes:[`application/x-php`],loader:()=>e(()=>import(`./C39-J_aY2.js`),[],import.meta.url)});

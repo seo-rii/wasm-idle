@@ -1,0 +1,1 @@
+function e(e){return Array.isArray(e)?[...e]:[]}function t(t,n=[],r={}){return t===`C`||t===`CPP`?{compileArgs:e(r.compileArgs??n),programArgs:e(r.programArgs)}:{compileArgs:e(r.compileArgs),programArgs:e(r.programArgs??n)}}export{t};
