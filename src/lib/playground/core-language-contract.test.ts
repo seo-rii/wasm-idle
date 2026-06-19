@@ -35,6 +35,31 @@ describe('core language contract', () => {
 		);
 	});
 
+	it('includes folder-backed runtime base urls and loader presence in runtime asset cache keys', () => {
+		const loader = () => undefined;
+		const key = JSON.parse(
+			createRuntimeAssetsKey({
+				rootUrl: '/repl',
+				python: { baseUrl: '/pyodide/test/', loader },
+				java: { baseUrl: '/teavm/test/' },
+				clang: { baseUrl: '/clang/test/', loader },
+				clangd: { baseUrl: '/clangd/test/' }
+			}) || '{}'
+		);
+
+		expect(key).toMatchObject({
+			rootUrl: '/repl',
+			pythonBaseUrl: '/pyodide/test/',
+			hasPythonLoader: true,
+			javaBaseUrl: '/teavm/test/',
+			hasJavaLoader: false,
+			clangBaseUrl: '/clang/test/',
+			hasClangLoader: true,
+			clangdBaseUrl: '/clangd/test/',
+			hasClangdLoader: false
+		});
+	});
+
 	it('exposes Zig as a deferred browser runtime language', () => {
 		expect(supportedLanguageIds).toContain('ZIG');
 		expect(normalizeLanguageId('zig')).toBe('ZIG');

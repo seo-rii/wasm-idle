@@ -241,10 +241,19 @@ export const CLANG_RUNTIME_LOAD_ASSETS = [
 
 export const CLANGD_RUNTIME_LOAD_ASSETS = ['clangd.js', 'clangd.wasm.gz'] as const;
 
-const PYTHON_VIRTUAL_BASE_URL = 'https://wasm-idle.invalid/python/';
-const JAVA_VIRTUAL_BASE_URL = 'https://wasm-idle.invalid/java/';
-const CLANG_VIRTUAL_BASE_URL = 'https://wasm-idle.invalid/clang/';
-const CLANGD_VIRTUAL_BASE_URL = 'https://wasm-idle.invalid/clangd/';
+export const RUNTIME_LOAD_ASSETS = {
+	python: PYTHON_RUNTIME_LOAD_ASSETS,
+	java: JAVA_RUNTIME_LOAD_ASSETS,
+	clang: CLANG_RUNTIME_LOAD_ASSETS,
+	clangd: CLANGD_RUNTIME_LOAD_ASSETS
+} satisfies Record<RuntimeAssetRuntime, readonly string[]>;
+
+interface RuntimeAssetFolderConfig {
+	folder: string;
+	virtualBaseUrl: string;
+	resolveRootBaseUrl?: (rootUrl: string, currentUrl: string) => string;
+	resolveConfiguredBaseUrl?: (baseUrl: string, currentUrl: string) => string;
+}
 
 const normalizeBaseUrl = (baseUrl: string, currentUrl = '') => {
 	const normalized = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
@@ -257,203 +266,96 @@ const resolveConfiguredUrl = (url: string, currentUrl = '') =>
 const normalizeRootUrl = (rootUrl: string) =>
 	rootUrl.endsWith('/') ? rootUrl.slice(0, -1) : rootUrl;
 
-const resolvePythonBaseUrl = (rootUrl = '', currentUrl = '') =>
-	normalizeBaseUrl(`${normalizeRootUrl(rootUrl) || ''}/pyodide/`, currentUrl);
+const resolveFolderRuntimeBaseUrl = (folder: string, rootUrl = '', currentUrl = '') =>
+	normalizeBaseUrl(`${normalizeRootUrl(rootUrl) || ''}/${folder}/`, currentUrl);
 
-const resolvePythonRuntimeAssetConfig = (
-	options: string | PlaygroundRuntimeAssets | undefined,
+const normalizeTeaVmConfiguredBaseUrl = (baseUrl: string, currentUrl = '') =>
+	currentUrl
+		? new URL(normalizeTeaVmBaseUrl(baseUrl), currentUrl).href
+		: normalizeTeaVmBaseUrl(baseUrl);
+
+const RUNTIME_ASSET_FOLDERS = {
+	python: {
+		folder: 'pyodide',
+		virtualBaseUrl: 'https://wasm-idle.invalid/python/'
+	},
+	java: {
+		folder: 'teavm',
+		virtualBaseUrl: 'https://wasm-idle.invalid/java/',
+		resolveRootBaseUrl: resolveTeaVmBaseUrl,
+		resolveConfiguredBaseUrl: normalizeTeaVmConfiguredBaseUrl
+	},
+	clang: {
+		folder: 'clang',
+		virtualBaseUrl: 'https://wasm-idle.invalid/clang/'
+	},
+	clangd: {
+		folder: 'clangd',
+		virtualBaseUrl: 'https://wasm-idle.invalid/clangd/'
+	}
+} satisfies Record<RuntimeAssetRuntime, RuntimeAssetFolderConfig>;
+
+const resolveRuntimeRootBaseUrl = (
+	config: RuntimeAssetFolderConfig,
+	rootUrl = '',
 	currentUrl = ''
-): ResolvedRuntimeAssetConfig => {
-	if (typeof options === 'string') {
-		return {
-			baseUrl: resolvePythonBaseUrl(options, currentUrl),
-			useAssetBridge: false
-		};
-	}
+) =>
+	config.resolveRootBaseUrl?.(rootUrl, currentUrl) ||
+	resolveFolderRuntimeBaseUrl(config.folder, rootUrl, currentUrl);
 
-	const runtimeConfig = options?.python;
-	if (runtimeConfig?.baseUrl) {
-		return {
-			baseUrl: normalizeBaseUrl(runtimeConfig.baseUrl, currentUrl),
-			loader: runtimeConfig.loader,
-			useAssetBridge: !!runtimeConfig.loader
-		};
-	}
-
-	if (options?.rootUrl) {
-		return {
-			baseUrl: resolvePythonBaseUrl(options.rootUrl, currentUrl),
-			loader: runtimeConfig?.loader,
-			useAssetBridge: !!runtimeConfig?.loader
-		};
-	}
-
-	if (runtimeConfig?.loader) {
-		return {
-			baseUrl: PYTHON_VIRTUAL_BASE_URL,
-			loader: runtimeConfig.loader,
-			useAssetBridge: true
-		};
-	}
-
-	return {
-		baseUrl: resolvePythonBaseUrl('', currentUrl),
-		useAssetBridge: false
-	};
-};
-
-const resolveJavaBaseUrl = (rootUrl = '', currentUrl = '') =>
-	resolveTeaVmBaseUrl(rootUrl, currentUrl);
-
-const resolveJavaRuntimeAssetConfig = (
-	options: string | PlaygroundRuntimeAssets | undefined,
+const resolveRuntimeConfiguredBaseUrl = (
+	config: RuntimeAssetFolderConfig,
+	baseUrl: string,
 	currentUrl = ''
-): ResolvedRuntimeAssetConfig => {
-	if (typeof options === 'string') {
-		return {
-			baseUrl: resolveJavaBaseUrl(options, currentUrl),
-			useAssetBridge: false
-		};
-	}
-
-	const runtimeConfig = options?.java;
-	if (runtimeConfig?.baseUrl) {
-		return {
-			baseUrl: currentUrl
-				? new URL(normalizeTeaVmBaseUrl(runtimeConfig.baseUrl), currentUrl).href
-				: normalizeTeaVmBaseUrl(runtimeConfig.baseUrl),
-			loader: runtimeConfig.loader,
-			useAssetBridge: !!runtimeConfig.loader
-		};
-	}
-
-	if (options?.rootUrl) {
-		return {
-			baseUrl: resolveJavaBaseUrl(options.rootUrl, currentUrl),
-			loader: runtimeConfig?.loader,
-			useAssetBridge: !!runtimeConfig?.loader
-		};
-	}
-
-	if (runtimeConfig?.loader) {
-		return {
-			baseUrl: JAVA_VIRTUAL_BASE_URL,
-			loader: runtimeConfig.loader,
-			useAssetBridge: true
-		};
-	}
-
-	return {
-		baseUrl: resolveJavaBaseUrl('', currentUrl),
-		useAssetBridge: false
-	};
-};
-
-const resolveClangRuntimeAssetConfig = (
-	options: string | PlaygroundRuntimeAssets | undefined,
-	currentUrl = ''
-): ResolvedRuntimeAssetConfig => {
-	if (typeof options === 'string') {
-		return {
-			baseUrl: normalizeBaseUrl(`${normalizeRootUrl(options) || ''}/clang/`, currentUrl),
-			useAssetBridge: false
-		};
-	}
-
-	const runtimeConfig = options?.clang;
-	if (runtimeConfig?.baseUrl) {
-		return {
-			baseUrl: normalizeBaseUrl(runtimeConfig.baseUrl, currentUrl),
-			loader: runtimeConfig.loader,
-			useAssetBridge: !!runtimeConfig.loader
-		};
-	}
-
-	if (options?.rootUrl) {
-		return {
-			baseUrl: normalizeBaseUrl(
-				`${normalizeRootUrl(options.rootUrl) || ''}/clang/`,
-				currentUrl
-			),
-			loader: runtimeConfig?.loader,
-			useAssetBridge: !!runtimeConfig?.loader
-		};
-	}
-
-	if (runtimeConfig?.loader) {
-		return {
-			baseUrl: CLANG_VIRTUAL_BASE_URL,
-			loader: runtimeConfig.loader,
-			useAssetBridge: true
-		};
-	}
-
-	return {
-		baseUrl: normalizeBaseUrl('/clang/', currentUrl),
-		useAssetBridge: false
-	};
-};
-
-const resolveClangdRuntimeAssetConfig = (
-	options: string | PlaygroundRuntimeAssets | undefined,
-	currentUrl = ''
-): ResolvedRuntimeAssetConfig => {
-	if (typeof options === 'string') {
-		return {
-			baseUrl: normalizeBaseUrl(`${normalizeRootUrl(options) || ''}/clangd/`, currentUrl),
-			useAssetBridge: false
-		};
-	}
-
-	const runtimeConfig = options?.clangd;
-	if (runtimeConfig?.baseUrl) {
-		return {
-			baseUrl: normalizeBaseUrl(runtimeConfig.baseUrl, currentUrl),
-			loader: runtimeConfig.loader,
-			useAssetBridge: !!runtimeConfig.loader
-		};
-	}
-
-	if (options?.rootUrl) {
-		return {
-			baseUrl: normalizeBaseUrl(
-				`${normalizeRootUrl(options.rootUrl) || ''}/clangd/`,
-				currentUrl
-			),
-			loader: runtimeConfig?.loader,
-			useAssetBridge: !!runtimeConfig?.loader
-		};
-	}
-
-	if (runtimeConfig?.loader) {
-		return {
-			baseUrl: CLANGD_VIRTUAL_BASE_URL,
-			loader: runtimeConfig.loader,
-			useAssetBridge: true
-		};
-	}
-
-	return {
-		baseUrl: normalizeBaseUrl('/clangd/', currentUrl),
-		useAssetBridge: false
-	};
-};
+) =>
+	config.resolveConfiguredBaseUrl?.(baseUrl, currentUrl) || normalizeBaseUrl(baseUrl, currentUrl);
 
 export function resolveRuntimeAssetConfig(
 	runtime: RuntimeAssetRuntime,
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ): ResolvedRuntimeAssetConfig {
-	switch (runtime) {
-		case 'python':
-			return resolvePythonRuntimeAssetConfig(options, currentUrl);
-		case 'java':
-			return resolveJavaRuntimeAssetConfig(options, currentUrl);
-		case 'clang':
-			return resolveClangRuntimeAssetConfig(options, currentUrl);
-		case 'clangd':
-			return resolveClangdRuntimeAssetConfig(options, currentUrl);
+	const runtimeFolder = RUNTIME_ASSET_FOLDERS[runtime];
+	if (typeof options === 'string') {
+		return {
+			baseUrl: resolveRuntimeRootBaseUrl(runtimeFolder, options, currentUrl),
+			useAssetBridge: false
+		};
 	}
+
+	const runtimeConfig = options?.[runtime];
+	if (runtimeConfig?.baseUrl) {
+		return {
+			baseUrl: resolveRuntimeConfiguredBaseUrl(
+				runtimeFolder,
+				runtimeConfig.baseUrl,
+				currentUrl
+			),
+			loader: runtimeConfig.loader,
+			useAssetBridge: !!runtimeConfig.loader
+		};
+	}
+
+	if (options?.rootUrl) {
+		return {
+			baseUrl: resolveRuntimeRootBaseUrl(runtimeFolder, options.rootUrl, currentUrl),
+			loader: runtimeConfig?.loader,
+			useAssetBridge: !!runtimeConfig?.loader
+		};
+	}
+
+	if (runtimeConfig?.loader) {
+		return {
+			baseUrl: runtimeFolder.virtualBaseUrl,
+			loader: runtimeConfig.loader,
+			useAssetBridge: true
+		};
+	}
+
+	return {
+		baseUrl: resolveRuntimeRootBaseUrl(runtimeFolder, '', currentUrl),
+		useAssetBridge: false
+	};
 }
 
 export function resolveRustCompilerUrl(

@@ -38,57 +38,94 @@ export interface RuntimeAssetKeySource {
 
 export type RuntimeAssetKeyInput = string | RuntimeAssetKeySource | undefined;
 
+type RuntimeAssetName = Exclude<keyof RuntimeAssetKeySource, 'rootUrl'>;
+
+interface RuntimeAssetKeyField {
+	runtime: RuntimeAssetName;
+	property: string;
+	key: string;
+	serialize?: (value: unknown) => string | boolean;
+}
+
+const hasValue = (value: unknown) => !!value;
+
+const joinStringList = (value: unknown) => (Array.isArray(value) ? value.join('\0') : '');
+
+const RUNTIME_ASSET_KEY_FIELDS = [
+	{ runtime: 'python', property: 'baseUrl', key: 'pythonBaseUrl' },
+	{ runtime: 'python', property: 'loader', key: 'hasPythonLoader', serialize: hasValue },
+	{ runtime: 'java', property: 'baseUrl', key: 'javaBaseUrl' },
+	{ runtime: 'java', property: 'loader', key: 'hasJavaLoader', serialize: hasValue },
+	{ runtime: 'clang', property: 'baseUrl', key: 'clangBaseUrl' },
+	{ runtime: 'clang', property: 'loader', key: 'hasClangLoader', serialize: hasValue },
+	{ runtime: 'clangd', property: 'baseUrl', key: 'clangdBaseUrl' },
+	{ runtime: 'clangd', property: 'loader', key: 'hasClangdLoader', serialize: hasValue },
+	{ runtime: 'rust', property: 'compilerUrl', key: 'rustCompilerUrl' },
+	{ runtime: 'go', property: 'compilerUrl', key: 'goCompilerUrl' },
+	{ runtime: 'd', property: 'moduleUrl', key: 'dModuleUrl' },
+	{ runtime: 'dotnet', property: 'moduleUrl', key: 'dotnetModuleUrl' },
+	{ runtime: 'elixir', property: 'bundleUrl', key: 'elixirBundleUrl' },
+	{ runtime: 'erlang', property: 'bundleUrl', key: 'erlangBundleUrl' },
+	{ runtime: 'ocaml', property: 'moduleUrl', key: 'ocamlModuleUrl' },
+	{ runtime: 'ocaml', property: 'manifestUrl', key: 'ocamlManifestUrl' },
+	{ runtime: 'tinygo', property: 'appUrl', key: 'tinygoAppUrl' },
+	{ runtime: 'tinygo', property: 'moduleUrl', key: 'tinygoModuleUrl' },
+	{ runtime: 'typescript', property: 'moduleUrl', key: 'typeScriptModuleUrl' },
+	{ runtime: 'wat', property: 'moduleUrl', key: 'watModuleUrl' },
+	{ runtime: 'lua', property: 'moduleUrl', key: 'luaModuleUrl' },
+	{ runtime: 'haskell', property: 'moduleUrl', key: 'haskellModuleUrl' },
+	{ runtime: 'haskell', property: 'rootfsUrl', key: 'haskellRootfsUrl' },
+	{ runtime: 'haskell', property: 'bsdtarUrl', key: 'haskellBsdtarUrl' },
+	{ runtime: 'haskell', property: 'mainSoPath', key: 'haskellMainSoPath' },
+	{
+		runtime: 'haskell',
+		property: 'searchDirs',
+		key: 'haskellSearchDirs',
+		serialize: joinStringList
+	},
+	{ runtime: 'zig', property: 'compilerUrl', key: 'zigCompilerUrl' },
+	{ runtime: 'zig', property: 'stdlibUrl', key: 'zigStdlibUrl' },
+	{ runtime: 'lisp', property: 'moduleUrl', key: 'lispModuleUrl' },
+	{ runtime: 'ruby', property: 'wasmUrl', key: 'rubyWasmUrl' },
+	{ runtime: 'r', property: 'baseUrl', key: 'rBaseUrl' },
+	{ runtime: 'octave', property: 'baseUrl', key: 'octaveBaseUrl' },
+	{ runtime: 'octave', property: 'workerUrl', key: 'octaveWorkerUrl' },
+	{ runtime: 'octave', property: 'manifestUrl', key: 'octaveManifestUrl' },
+	{ runtime: 'prolog', property: 'baseUrl', key: 'prologBaseUrl' },
+	{ runtime: 'prolog', property: 'workerUrl', key: 'prologWorkerUrl' },
+	{ runtime: 'gleam', property: 'baseUrl', key: 'gleamBaseUrl' },
+	{ runtime: 'gleam', property: 'workerUrl', key: 'gleamWorkerUrl' },
+	{ runtime: 'gleam', property: 'manifestUrl', key: 'gleamManifestUrl' },
+	{ runtime: 'perl', property: 'baseUrl', key: 'perlBaseUrl' },
+	{ runtime: 'perl', property: 'workerUrl', key: 'perlWorkerUrl' },
+	{ runtime: 'tcl', property: 'baseUrl', key: 'tclBaseUrl' },
+	{ runtime: 'tcl', property: 'workerUrl', key: 'tclWorkerUrl' },
+	{ runtime: 'awk', property: 'baseUrl', key: 'awkBaseUrl' },
+	{ runtime: 'awk', property: 'workerUrl', key: 'awkWorkerUrl' },
+	{ runtime: 'sqlite', property: 'wasmUrl', key: 'sqliteWasmUrl' },
+	{ runtime: 'php', property: 'version', key: 'phpVersion' }
+] satisfies RuntimeAssetKeyField[];
+
+const runtimeAssetRecord = (runtimeAssets: RuntimeAssetKeySource, runtime: RuntimeAssetName) =>
+	runtimeAssets[runtime] as Record<string, unknown> | undefined;
+
+const readRuntimeAssetKeyField = (
+	runtimeAssets: RuntimeAssetKeySource,
+	field: RuntimeAssetKeyField
+) => {
+	const value = runtimeAssetRecord(runtimeAssets, field.runtime)?.[field.property];
+	if (field.serialize) return field.serialize(value);
+	return typeof value === 'string' ? value : '';
+};
+
 export function createRuntimeAssetsKey(runtimeAssets: RuntimeAssetKeyInput): string | undefined {
 	if (typeof runtimeAssets === 'string') return runtimeAssets;
 	if (!runtimeAssets) return undefined;
-	return JSON.stringify({
-		rootUrl: runtimeAssets.rootUrl || '',
-		pythonBaseUrl: runtimeAssets.python?.baseUrl || '',
-		hasPythonLoader: !!runtimeAssets.python?.loader,
-		javaBaseUrl: runtimeAssets.java?.baseUrl || '',
-		hasJavaLoader: !!runtimeAssets.java?.loader,
-		clangBaseUrl: runtimeAssets.clang?.baseUrl || '',
-		hasClangLoader: !!runtimeAssets.clang?.loader,
-		clangdBaseUrl: runtimeAssets.clangd?.baseUrl || '',
-		hasClangdLoader: !!runtimeAssets.clangd?.loader,
-		rustCompilerUrl: runtimeAssets.rust?.compilerUrl || '',
-		goCompilerUrl: runtimeAssets.go?.compilerUrl || '',
-		dModuleUrl: runtimeAssets.d?.moduleUrl || '',
-		dotnetModuleUrl: runtimeAssets.dotnet?.moduleUrl || '',
-		elixirBundleUrl: runtimeAssets.elixir?.bundleUrl || '',
-		erlangBundleUrl: runtimeAssets.erlang?.bundleUrl || '',
-		ocamlModuleUrl: runtimeAssets.ocaml?.moduleUrl || '',
-		ocamlManifestUrl: runtimeAssets.ocaml?.manifestUrl || '',
-		tinygoAppUrl: runtimeAssets.tinygo?.appUrl || '',
-		tinygoModuleUrl: runtimeAssets.tinygo?.moduleUrl || '',
-		typeScriptModuleUrl: runtimeAssets.typescript?.moduleUrl || '',
-		watModuleUrl: runtimeAssets.wat?.moduleUrl || '',
-		luaModuleUrl: runtimeAssets.lua?.moduleUrl || '',
-		haskellModuleUrl: runtimeAssets.haskell?.moduleUrl || '',
-		haskellRootfsUrl: runtimeAssets.haskell?.rootfsUrl || '',
-		haskellBsdtarUrl: runtimeAssets.haskell?.bsdtarUrl || '',
-		haskellMainSoPath: runtimeAssets.haskell?.mainSoPath || '',
-		haskellSearchDirs: runtimeAssets.haskell?.searchDirs?.join('\0') || '',
-		zigCompilerUrl: runtimeAssets.zig?.compilerUrl || '',
-		zigStdlibUrl: runtimeAssets.zig?.stdlibUrl || '',
-		lispModuleUrl: runtimeAssets.lisp?.moduleUrl || '',
-		rubyWasmUrl: runtimeAssets.ruby?.wasmUrl || '',
-		rBaseUrl: runtimeAssets.r?.baseUrl || '',
-		octaveBaseUrl: runtimeAssets.octave?.baseUrl || '',
-		octaveWorkerUrl: runtimeAssets.octave?.workerUrl || '',
-		octaveManifestUrl: runtimeAssets.octave?.manifestUrl || '',
-		prologBaseUrl: runtimeAssets.prolog?.baseUrl || '',
-		prologWorkerUrl: runtimeAssets.prolog?.workerUrl || '',
-		gleamBaseUrl: runtimeAssets.gleam?.baseUrl || '',
-		gleamWorkerUrl: runtimeAssets.gleam?.workerUrl || '',
-		gleamManifestUrl: runtimeAssets.gleam?.manifestUrl || '',
-		perlBaseUrl: runtimeAssets.perl?.baseUrl || '',
-		perlWorkerUrl: runtimeAssets.perl?.workerUrl || '',
-		tclBaseUrl: runtimeAssets.tcl?.baseUrl || '',
-		tclWorkerUrl: runtimeAssets.tcl?.workerUrl || '',
-		awkBaseUrl: runtimeAssets.awk?.baseUrl || '',
-		awkWorkerUrl: runtimeAssets.awk?.workerUrl || '',
-		sqliteWasmUrl: runtimeAssets.sqlite?.wasmUrl || '',
-		phpVersion: runtimeAssets.php?.version || ''
-	});
+	const keyParts: Record<string, string | boolean> = {
+		rootUrl: runtimeAssets.rootUrl || ''
+	};
+	for (const field of RUNTIME_ASSET_KEY_FIELDS) {
+		keyParts[field.key] = readRuntimeAssetKeyField(runtimeAssets, field);
+	}
+	return JSON.stringify(keyParts);
 }

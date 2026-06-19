@@ -46,9 +46,20 @@ vi.mock('$env/dynamic/public', () => ({
 	env: publicEnv
 }));
 
-import { resolveRuntimeAssetConfig } from './assets';
+import { RUNTIME_LOAD_ASSETS, resolveRuntimeAssetConfig } from './assets';
 
 describe('runtime asset config resolution', () => {
+	it('indexes folder-backed runtime load assets by runtime id', () => {
+		expect(Object.keys(RUNTIME_LOAD_ASSETS).sort()).toEqual([
+			'clang',
+			'clangd',
+			'java',
+			'python'
+		]);
+		expect(RUNTIME_LOAD_ASSETS.clang).toContain('bin/clang.zip');
+		expect(RUNTIME_LOAD_ASSETS.clangd).toContain('clangd.wasm.gz');
+	});
+
 	it('derives the default python asset base url from the legacy root path', () => {
 		expect(
 			resolveRuntimeAssetConfig('python', '/absproxy/5173', 'https://example.com/app')

@@ -1,8 +1,5 @@
 import {
-	CLANGD_RUNTIME_LOAD_ASSETS,
-	CLANG_RUNTIME_LOAD_ASSETS,
-	JAVA_RUNTIME_LOAD_ASSETS,
-	PYTHON_RUNTIME_LOAD_ASSETS,
+	RUNTIME_LOAD_ASSETS,
 	type ResolvedRuntimeAssetConfig,
 	type RuntimeAssetLoaderResult,
 	type RuntimeAssetRuntime
@@ -34,15 +31,7 @@ const transferBuffer = (bytes: Uint8Array) =>
 		: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
 
 const expectedAssetsForRuntime = (runtime: RuntimeAssetRuntime) =>
-	new Set<string>(
-		runtime === 'python'
-			? [...PYTHON_RUNTIME_LOAD_ASSETS]
-			: runtime === 'java'
-				? [...JAVA_RUNTIME_LOAD_ASSETS]
-				: runtime === 'clang'
-					? [...CLANG_RUNTIME_LOAD_ASSETS]
-					: [...CLANGD_RUNTIME_LOAD_ASSETS]
-	);
+	new Set<string>(RUNTIME_LOAD_ASSETS[runtime]);
 
 class RuntimeLoadProgress {
 	private readonly fractions = new Map<string, number>();
