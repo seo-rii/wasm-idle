@@ -38,6 +38,12 @@
 		outgoing: number;
 		methods: string[];
 	}
+	type MonacoLspStatusView = {
+		label: string;
+		state: 'loading' | 'ready' | 'error';
+		text: string;
+		title: string;
+	};
 	interface LspRoute {
 		languages: readonly string[];
 		manualDocumentSync?: boolean;
@@ -1945,6 +1951,7 @@
 		debugLanguage?: DebugLanguageAdapter | null;
 		compilerDiagnostics?: CompilerDiagnostic[];
 		pausedLine?: number | null;
+		lspStatus?: MonacoLspStatusView | null;
 		onCursorLineChange?: (line: number | null) => void;
 		onRunToCursor?: (line: number | null) => void;
 		onBreakpointsChange?: (lines: number[]) => void;
@@ -1992,6 +1999,7 @@
 		debugLanguage = null,
 		compilerDiagnostics = [],
 		pausedLine = null,
+		lspStatus = $bindable<MonacoLspStatusView | null>(null),
 		onCursorLineChange,
 		onRunToCursor,
 		onBreakpointsChange
@@ -2094,6 +2102,97 @@
 			typescriptLspLibUrl || ''
 		].join('\n')
 	);
+	const activeLspStatusView = $derived.by<MonacoLspStatusView | null>(() => {
+		if (!lspEnabled) return null;
+		let label = '';
+		let status: LanguageServerStatus | null = null;
+		switch (activeLspLanguage) {
+			case 'cpp':
+				label = 'C++ LSP';
+				status = clangdStatus;
+				break;
+			case 'python':
+				label = 'Python LSP';
+				status = pythonLspStatus;
+				break;
+			case 'csharp':
+				label = 'C# LSP';
+				status = dotnetLspStatus;
+				break;
+			case 'fsharp':
+				label = 'F# LSP';
+				status = dotnetLspStatus;
+				break;
+			case 'vb':
+				label = 'VB.NET LSP';
+				status = dotnetLspStatus;
+				break;
+			case 'gleam':
+				label = 'Gleam LSP';
+				status = gleamLspStatus;
+				break;
+			case 'go':
+				label = 'Go LSP';
+				status = goLspStatus;
+				break;
+			case 'rust':
+				label = 'Rust LSP';
+				status = rustLspStatus;
+				break;
+			case 'typescript':
+				label = 'TypeScript LSP';
+				status = typescriptLspStatus;
+				break;
+			case 'javascript':
+				label = 'JavaScript LSP';
+				status = typescriptLspStatus;
+				break;
+			case 'assemblyscript':
+				label = 'AssemblyScript LSP';
+				status = assemblyScriptLspStatus;
+				break;
+			case 'wat':
+				label = 'WAT LSP';
+				status = watLspStatus;
+				break;
+			case 'zig':
+				label = 'Zig LSP';
+				status = zigLspStatus;
+				break;
+			case 'php':
+				label = 'PHP LSP';
+				status = phpLspStatus;
+				break;
+			case 'lua':
+				label = 'Lua LSP';
+				status = luaLspStatus;
+				break;
+			case 'ocaml':
+				label = 'OCaml LSP';
+				status = ocamlLspStatus;
+				break;
+			case 'haskell':
+				label = 'Haskell LSP';
+				status = haskellLspStatus;
+				break;
+		}
+		if (!status || status.state === 'disabled') return null;
+		if (status.state === 'loading') {
+			const pieces = ['loading'];
+			if (status.stage) pieces.push(status.stage.replace(/[-_]+/gu, ' '));
+			if (typeof status.loaded === 'number' && typeof status.total === 'number') {
+				pieces.push(`${status.loaded}/${status.total}`);
+			}
+			const text = `${label} ${pieces.join(' ')}`;
+			return { label, state: 'loading', text, title: text };
+		}
+		if (status.state === 'ready') {
+			const text = `${label} ready`;
+			return { label, state: 'ready', text, title: text };
+		}
+		const text = `${label} failed`;
+		return { label, state: 'error', text, title: `${text}: ${status.message}` };
+	});
 	const withMonacoDocumentSync = (connection: IMonacoLspConnection): IMonacoLspConnection => {
 		if (!isServerHandleConnection(connection)) return connection;
 		const activeModel = model || editor?.getModel();
@@ -2504,6 +2603,7 @@
 				return null;
 			}
 			try {
+				route.setStatus({ state: 'loading', stage: 'startup' });
 				const connection = await route.load(currentUrl);
 				return route.manualDocumentSync ? withMonacoDocumentSync(connection) : connection;
 			} catch (error) {
@@ -2577,6 +2677,10 @@
 			ocaml: ocamlLspStatus,
 			haskell: haskellLspStatus
 		};
+	});
+
+	$effect(() => {
+		lspStatus = activeLspStatusView;
 	});
 
 	const handleEditorInput = (event: IMonacoInputEvent) => {
@@ -2851,6 +2955,7 @@
 			testGlobal.__wasmIdleMonacoApi = null;
 			testGlobal.__wasmIdleMonacoLspStatus = null;
 			testGlobal.__wasmIdleMonacoLspTraffic = null;
+			lspStatus = null;
 			if (!model?.isDisposed()) model?.dispose();
 			model = undefined;
 			editor = null;

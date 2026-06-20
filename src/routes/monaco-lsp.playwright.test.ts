@@ -386,6 +386,22 @@ async function waitForLspReady(page: Page, testCase: LspBrowserCase) {
 	);
 }
 
+async function waitForVisibleLspStatus(page: Page) {
+	await page.waitForFunction(
+		() => {
+			const status = document.querySelector('[data-lsp-state]') as HTMLElement | null;
+			const state = status?.dataset.lspState || '';
+			return Boolean(
+				status &&
+					/^(loading|ready|error)$/u.test(state) &&
+					status.textContent?.includes('LSP')
+			);
+		},
+		undefined,
+		{ timeout: 10_000 }
+	);
+}
+
 async function readDiagnosticCounts(page: Page): Promise<MonacoDiagnosticCounts> {
 	return await page.evaluate((selector) => {
 		const testGlobal = globalThis as typeof globalThis & MonacoTestGlobal;
@@ -460,6 +476,7 @@ async function runLspCase(
 			.catch((error: unknown) => error)
 	);
 	await enableLsp(page);
+	await waitForVisibleLspStatus(page);
 	await waitForLspReady(page, testCase);
 	await replaceEditorSource(page, testCase.source);
 

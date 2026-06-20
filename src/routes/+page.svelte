@@ -136,6 +136,12 @@
 		version: number;
 		workspaces: Record<PlaygroundLanguage, LanguageWorkspace>;
 	};
+	type EditorLspStatusView = {
+		label: string;
+		state: 'loading' | 'ready' | 'error';
+		text: string;
+		title: string;
+	};
 
 	const WORKSPACE_STORAGE_KEY = 'wasm-idle:example-workspace:v3';
 	const SHARE_PREFIX = 'workspace=';
@@ -526,6 +532,7 @@
 		progress = $state(-1),
 		stdinInput = $state(''),
 		init = $state(false),
+		editorLspStatus = $state<EditorLspStatusView | null>(null),
 		examplePane = $state<HTMLElement | null>(null),
 		examplePaneWidth = $state(0),
 		terminalPaneWidth = $state<number | null>(null),
@@ -2609,6 +2616,23 @@
 				</div>
 			{/each}
 			<div class="workspace-status">
+				{#if editorLspStatus}
+					<span
+						class="lsp-status lsp-status--{editorLspStatus.state}"
+						data-lsp-state={editorLspStatus.state}
+						title={editorLspStatus.title}
+						aria-live="polite"
+					>
+						{#if editorLspStatus.state === 'loading'}
+							<span class="lsp-status__spinner" aria-hidden="true"></span>
+						{:else}
+							<span class="material-symbols-outlined" aria-hidden="true">
+								{editorLspStatus.state === 'error' ? 'error' : 'check_circle'}
+							</span>
+						{/if}
+						<span>{editorLspStatus.text}</span>
+					</span>
+				{/if}
 				<span>{saveStatus}</span>
 				<span>{activeLines} lines</span>
 				<span>{activeBytes} bytes</span>
@@ -2657,6 +2681,7 @@
 				{debugLanguage}
 				{compilerDiagnostics}
 				pausedLine={debug.pausedLine}
+				bind:lspStatus={editorLspStatus}
 				onCursorLineChange={debug.setCursorLine}
 				onRunToCursor={debug.runToCursor}
 				onBreakpointsChange={debug.setBreakpoints}
@@ -2885,6 +2910,64 @@
 		color: #94a3b8;
 		font-size: 11px;
 		white-space: nowrap;
+	}
+
+	.lsp-status {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		max-width: min(260px, 42vw);
+		min-height: 22px;
+		padding: 0 8px;
+		border: 1px solid rgba(148, 163, 184, 0.28);
+		border-radius: 999px;
+		background: rgba(15, 23, 42, 0.72);
+		color: #cbd5e1;
+		font-weight: 650;
+		overflow: hidden;
+	}
+
+	.lsp-status > span:last-child {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.lsp-status .material-symbols-outlined {
+		flex: 0 0 auto;
+		font-size: 14px;
+	}
+
+	.lsp-status--loading {
+		border-color: rgba(56, 189, 248, 0.4);
+		color: #bae6fd;
+	}
+
+	.lsp-status--ready {
+		border-color: rgba(34, 197, 94, 0.34);
+		color: #bbf7d0;
+	}
+
+	.lsp-status--error {
+		border-color: rgba(248, 113, 113, 0.42);
+		color: #fecaca;
+	}
+
+	.lsp-status__spinner {
+		flex: 0 0 auto;
+		width: 10px;
+		height: 10px;
+		border: 2px solid rgba(186, 230, 253, 0.28);
+		border-top-color: currentColor;
+		border-radius: 999px;
+		animation: lsp-status-spin 0.8s linear infinite;
+	}
+
+	@keyframes lsp-status-spin {
+		to {
+			transform: rotate(360deg);
+		}
 	}
 
 	.drag-active::after {
@@ -3720,7 +3803,7 @@
 			min-width: 108px;
 		}
 
-		.workspace-status span:nth-child(n + 2) {
+		.workspace-status span:nth-child(n + 2):not(.lsp-status) {
 			display: none;
 		}
 
