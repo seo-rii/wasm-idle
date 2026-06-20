@@ -72,7 +72,8 @@ async function preloadClangdAssets(
 async function createServer(
 	assetConfig: ResolvedLanguageToolAssetConfig,
 	createWorker: () => Worker,
-	onStatus?: (status: ClangdStatus) => void
+	onStatus?: (status: ClangdStatus) => void,
+	debug = false
 ) {
 	onStatus?.({ state: 'loading' });
 	const preloaded = await preloadClangdAssets(assetConfig, onStatus);
@@ -116,6 +117,7 @@ async function createServer(
 		{
 			type: 'init',
 			baseUrl: assetConfig.baseUrl,
+			...(debug ? { debug } : {}),
 			...(preloaded ? { assets: preloaded.assets } : {})
 		},
 		preloaded?.transfer || []
@@ -128,14 +130,23 @@ export async function createClangdLanguageServer(
 	options?: EditorLanguageServerOptions | ClangdLanguageServerOptions
 ): Promise<EditorLanguageServerHandle> {
 	const hostOptions = isClangdLanguageServerOptions(options) ? options : undefined;
+	const current = hostOptions?.currentUrl ?? currentUrl();
 	const assetConfig = resolveCppLanguageServerRuntimeAssetConfig(
 		options,
-		hostOptions?.currentUrl ?? currentUrl()
+		current
 	);
+	const debug = (() => {
+		try {
+			return new URL(current).searchParams.get('lsp-test') === '1';
+		} catch {
+			return false;
+		}
+	})();
 	const worker = await createServer(
 		assetConfig,
 		hostOptions?.createWorker || createDefaultClangdWorker,
-		hostOptions?.onStatus
+		hostOptions?.onStatus,
+		debug
 	);
 	const reader = new BrowserMessageReader(worker);
 	const writer = new BrowserMessageWriter(worker);

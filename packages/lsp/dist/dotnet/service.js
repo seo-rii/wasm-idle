@@ -254,6 +254,7 @@ const loadDotnetModule = async (moduleUrl) => (await import(/* @vite-ignore */ m
 export function createDotnetWorkerService(defaultLanguage, loadModule = loadDotnetModule) {
     let language = defaultLanguage;
     let compiler;
+    let debug = false;
     let reportProgress = () => { };
     const diagnosticSource = () => language === 'csharp' ? 'roslyn-csharp' : language === 'fsharp' ? 'fsharp' : 'roslyn-vb';
     const serverName = () => defaultLanguage === 'csharp'
@@ -289,21 +290,34 @@ export function createDotnetWorkerService(defaultLanguage, loadModule = loadDotn
         async initialize(options, context) {
             const config = options;
             language = config.language || defaultLanguage;
+            debug = config.debug === true;
             reportProgress = context.reportProgress;
             reportProgress('load-dotnet-runtime');
+            if (debug) {
+                console.debug(`[wasm-idle:dotnet-lsp] initialize language=${language} moduleUrl=${config.moduleUrl}`);
+            }
             const module = await loadModule(config.moduleUrl);
             if (typeof module.createDotnetCompiler !== 'function') {
                 throw new Error('wasm-dotnet module must export createDotnetCompiler');
             }
             compiler = module.createDotnetCompiler();
+            if (debug)
+                console.debug('[wasm-idle:dotnet-lsp] compiler ready');
         },
         async diagnostics(document) {
+            if (debug) {
+                console.debug(`[wasm-idle:dotnet-lsp] compile start language=${language} uri=${document.uri} bytes=${document.text.length}`);
+            }
             const result = await compiler.compile({
                 code: document.text,
                 language,
                 target: 'browser-wasm',
                 prepare: true,
+                log: debug,
                 onProgress(progress) {
+                    if (debug) {
+                        console.debug(`[wasm-idle:dotnet-lsp] compile progress stage=${progress.stage || 'compile'} completed=${progress.completed ?? ''} total=${progress.total ?? ''}`);
+                    }
                     reportProgress(progress.stage || 'compile', progress.completed, progress.total);
                 }
             });
@@ -318,6 +332,9 @@ export function createDotnetWorkerService(defaultLanguage, loadModule = loadDotn
                     source: diagnosticSource(),
                     message: result.stderr
                 });
+            }
+            if (debug) {
+                console.debug(`[wasm-idle:dotnet-lsp] compile done success=${String(result.success)} diagnostics=${diagnostics.length} stderr=${result.stderr ? result.stderr.slice(0, 160) : ''}`);
             }
             return diagnostics;
         },

@@ -37,7 +37,7 @@ async function preloadClangdAssets(assetConfig, onStatus) {
         transfer: [clangdJs, clangdWasmGz]
     };
 }
-async function createServer(assetConfig, createWorker, onStatus) {
+async function createServer(assetConfig, createWorker, onStatus, debug = false) {
     onStatus?.({ state: 'loading' });
     const preloaded = await preloadClangdAssets(assetConfig, onStatus);
     let resolveReady = () => { };
@@ -79,6 +79,7 @@ async function createServer(assetConfig, createWorker, onStatus) {
     worker.postMessage({
         type: 'init',
         baseUrl: assetConfig.baseUrl,
+        ...(debug ? { debug } : {}),
         ...(preloaded ? { assets: preloaded.assets } : {})
     }, preloaded?.transfer || []);
     await ready;
@@ -86,8 +87,17 @@ async function createServer(assetConfig, createWorker, onStatus) {
 }
 export async function createClangdLanguageServer(options) {
     const hostOptions = isClangdLanguageServerOptions(options) ? options : undefined;
-    const assetConfig = resolveCppLanguageServerRuntimeAssetConfig(options, hostOptions?.currentUrl ?? currentUrl());
-    const worker = await createServer(assetConfig, hostOptions?.createWorker || createDefaultClangdWorker, hostOptions?.onStatus);
+    const current = hostOptions?.currentUrl ?? currentUrl();
+    const assetConfig = resolveCppLanguageServerRuntimeAssetConfig(options, current);
+    const debug = (() => {
+        try {
+            return new URL(current).searchParams.get('lsp-test') === '1';
+        }
+        catch {
+            return false;
+        }
+    })();
+    const worker = await createServer(assetConfig, hostOptions?.createWorker || createDefaultClangdWorker, hostOptions?.onStatus, debug);
     const reader = new BrowserMessageReader(worker);
     const writer = new BrowserMessageWriter(worker);
     return {

@@ -10,6 +10,7 @@ export interface DotnetCompilerRuntimeOptions {
   dotnetJsUrl?: string | URL;
   mainAssemblyName?: string;
   dotnetModule?: unknown;
+  diagnosticTracing?: boolean;
 }
 
 export interface DotnetCompilerRuntime {
@@ -20,12 +21,16 @@ export interface DotnetCompilerRuntime {
 }
 
 type DotnetBuilder = {
+  withConfig?: (config: Record<string, unknown>) => DotnetBuilder;
   withDiagnosticTracing?: (enabled: boolean) => DotnetBuilder;
   create: () => Promise<{
     getAssemblyExports?: (
       assemblyName: string,
     ) => Promise<Record<string, unknown>>;
     getConfig?: () => { mainAssemblyName?: string };
+    INTERNAL?: {
+      loadLazyAssembly?: (assemblyName: string) => Promise<boolean>;
+    };
   }>;
 };
 
@@ -38,6 +43,15 @@ type RuntimeBridge = {
 
 let runtimePromise: Promise<DotnetCompilerRuntime> | null = null;
 let runtimeKey = "";
+
+const lazyCompilerAssembliesByLanguage = {
+  csharp: ["Microsoft.CodeAnalysis.wasm", "Microsoft.CodeAnalysis.CSharp.wasm"],
+  fsharp: ["FSharp.Core.wasm", "FSharp.Compiler.Service.wasm"],
+  vbnet: [
+    "Microsoft.CodeAnalysis.wasm",
+    "Microsoft.CodeAnalysis.VisualBasic.wasm",
+  ],
+} as const;
 
 function resolveRuntimeBaseUrl(options: DotnetCompilerRuntimeOptions) {
   return new URL(options.runtimeBaseUrl || "./runtime/", import.meta.url);
@@ -106,6 +120,24 @@ async function callJson<T>(
   return JSON.parse(response) as T;
 }
 
+function createLazyAssemblyLoader(
+  runtime: Awaited<ReturnType<DotnetBuilder["create"]>>,
+) {
+  const loadLazyAssembly = runtime.INTERNAL?.loadLazyAssembly;
+  const loadedAssemblies = new Map<string, Promise<unknown>>();
+  return async (language: DotnetRuntimeCompileRequest["language"]) => {
+    if (typeof loadLazyAssembly !== "function") return;
+    for (const assembly of lazyCompilerAssembliesByLanguage[language] || []) {
+      let promise = loadedAssemblies.get(assembly);
+      if (!promise) {
+        promise = loadLazyAssembly(assembly);
+        loadedAssemblies.set(assembly, promise);
+      }
+      await promise;
+    }
+  };
+}
+
 export function resetDotnetCompilerRuntimeForTests() {
   runtimePromise = null;
   runtimeKey = "";
@@ -115,15 +147,20 @@ export async function loadDotnetCompilerRuntime(
   options: DotnetCompilerRuntimeOptions = {},
 ): Promise<DotnetCompilerRuntime> {
   const dotnetJsUrl = resolveDotnetJsUrl(options);
-  const key = `${dotnetJsUrl}\n${options.mainAssemblyName || ""}\n${options.dotnetModule ? "injected" : ""}`;
+  const key = `${dotnetJsUrl}\n${options.mainAssemblyName || ""}\n${options.dotnetModule ? "injected" : ""}\n${options.diagnosticTracing ? "trace" : ""}`;
   if (runtimePromise && runtimeKey === key) return await runtimePromise;
   runtimeKey = key;
   runtimePromise = (async () => {
     const dotnetModule =
       options.dotnetModule || (await import(/* @vite-ignore */ dotnetJsUrl));
     let builder = getDotnetBuilder(dotnetModule);
+    if (builder.withConfig) {
+      builder = builder.withConfig({
+        jsThreadBlockingMode: "DangerousAllowBlockingWait",
+      });
+    }
     if (builder.withDiagnosticTracing) {
-      builder = builder.withDiagnosticTracing(false);
+      builder = builder.withDiagnosticTracing(Boolean(options.diagnosticTracing));
     }
     const runtime = await builder.create();
     if (typeof runtime.getAssemblyExports !== "function") {
@@ -142,8 +179,10 @@ export async function loadDotnetCompilerRuntime(
     if (!compile || !run) {
       throw new Error("wasm-dotnet compiler bridge is incomplete.");
     }
+    const loadLazyCompilerAssemblies = createLazyAssemblyLoader(runtime);
     return {
-      compile(request) {
+      async compile(request) {
+        await loadLazyCompilerAssemblies(request.language);
         return callJson<DotnetRuntimeCompileResponse>(
           compile.bind(bridge),
           request,

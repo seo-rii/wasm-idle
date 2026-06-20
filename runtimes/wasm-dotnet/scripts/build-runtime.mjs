@@ -2,6 +2,7 @@ import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { patchRuntime } from "./patch-runtime.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const project = resolve(
@@ -21,6 +22,7 @@ const buildSource = resolve(
   "dotnet/WasmDotnet.Compiler/bin/Release/net9.0/browser-wasm",
 );
 const dotnetRoot = process.env.DOTNET_ROOT || "/home/seorii/.dotnet";
+const dotnetExecutable = process.env.DOTNET || resolve(dotnetRoot, "dotnet");
 const frameworkReferencePackRoot = resolve(
   dotnetRoot,
   "packs/Microsoft.NETCore.App.Ref",
@@ -68,10 +70,17 @@ async function resolvePackageCompileAssembly(packageId, assemblyName) {
   return resolve(packagesRoot, library.path, compilePath);
 }
 
-const result = spawnSync("dotnet", ["publish", project, "-c", "Release"], {
+const result = spawnSync(dotnetExecutable, ["publish", project, "-c", "Release"], {
   cwd: root,
   stdio: "inherit",
 });
+
+if (result.error) {
+  console.error(
+    `Failed to run dotnet publish with ${dotnetExecutable}: ${result.error.message}`,
+  );
+  process.exit(1);
+}
 
 if (result.status !== 0) {
   process.exit(result.status ?? 1);
@@ -124,6 +133,7 @@ await writeFile(
   resolve(referenceTarget, "manifest.json"),
   `${JSON.stringify({ assemblies: referenceAssemblies }, null, 2)}\n`,
 );
+await patchRuntime({ runtimeDir: runtimeTarget });
 console.log(
   `Copied browser-wasm runtime from ${runtimeSource} to ${runtimeTarget}`,
 );

@@ -9,7 +9,7 @@ import type { Sandbox } from '$lib/playground/sandbox';
 type DotnetSandboxLanguage = 'FSHARP' | 'CSHARP' | 'VBNET';
 type DotnetCompileLanguage = 'fsharp' | 'csharp' | 'vbnet';
 type DotnetRuntimeModule = {
-	createDotnetCompiler: () => {
+	createDotnetCompiler: (options?: { loadReferences?: boolean }) => {
 		compile(request: {
 			code: string;
 			language: DotnetCompileLanguage;
@@ -78,9 +78,10 @@ class Dotnet implements Sandbox {
 
 	private shouldRunOnMainThread() {
 		return (
-			typeof globalThis.crossOriginIsolated === 'boolean' &&
-			globalThis.crossOriginIsolated &&
-			typeof globalThis.SharedArrayBuffer === 'function'
+			typeof window !== 'undefined' &&
+			globalThis.crossOriginIsolated === true &&
+			typeof SharedArrayBuffer !== 'undefined' &&
+			navigator.serviceWorker?.controller != null
 		);
 	}
 

@@ -63,6 +63,7 @@ export function startWorkerLanguageServer(service, scope = globalThis) {
     let initialized = false;
     let ready = false;
     let shutdown = false;
+    let debug = false;
     const send = (message) => scope.postMessage(message);
     const respond = (id, result) => send({ jsonrpc: '2.0', id, result });
     const respondError = (id, code, message, data) => send({
@@ -94,15 +95,34 @@ export function startWorkerLanguageServer(service, scope = globalThis) {
             return;
         const version = (diagnosticVersions.get(document.uri) || 0) + 1;
         diagnosticVersions.set(document.uri, version);
+        if (debug) {
+            console.debug(`[wasm-idle:lsp-worker:${service.name}] schedule diagnostics uri=${document.uri} version=${document.version} bytes=${document.text.length}`);
+        }
         setTimeout(async () => {
             try {
+                if (diagnosticVersions.get(document.uri) !== version ||
+                    documents.get(document.uri)?.version !== document.version) {
+                    if (debug) {
+                        console.debug(`[wasm-idle:lsp-worker:${service.name}] diagnostics skipped stale uri=${document.uri} version=${document.version}`);
+                    }
+                    return;
+                }
+                if (debug) {
+                    console.debug(`[wasm-idle:lsp-worker:${service.name}] diagnostics start uri=${document.uri} version=${document.version}`);
+                }
                 const diagnostics = await service.diagnostics?.(document, context);
+                if (debug) {
+                    console.debug(`[wasm-idle:lsp-worker:${service.name}] diagnostics done uri=${document.uri} version=${document.version} count=${diagnostics?.length || 0}`);
+                }
                 if (diagnosticVersions.get(document.uri) === version &&
                     documents.get(document.uri)?.version === document.version) {
                     publishDiagnostics(document.uri, diagnostics || []);
                 }
             }
             catch (error) {
+                if (debug) {
+                    console.error(`[wasm-idle:lsp-worker:${service.name}] diagnostics failed`, error);
+                }
                 if (diagnosticVersions.get(document.uri) !== version)
                     return;
                 publishDiagnostics(document.uri, [
@@ -151,6 +171,18 @@ export function startWorkerLanguageServer(service, scope = globalThis) {
             }
             const document = getDocument(params);
             if (!document) {
+                switch (message.method) {
+                    case 'textDocument/completion':
+                    case 'textDocument/hover':
+                    case 'textDocument/definition':
+                    case 'textDocument/signatureHelp':
+                        respond(id, null);
+                        return;
+                    case 'textDocument/documentSymbol':
+                    case 'textDocument/formatting':
+                        respond(id, []);
+                        return;
+                }
                 respondError(id, -32602, 'Text document is not open');
                 return;
             }
@@ -200,19 +232,27 @@ export function startWorkerLanguageServer(service, scope = globalThis) {
                     version: Number(textDocument.version || 0),
                     text: textDocument.text || ''
                 };
+                if (debug) {
+                    console.debug(`[wasm-idle:lsp-worker:${service.name}] didOpen uri=${document.uri} version=${document.version} bytes=${document.text.length}`);
+                }
                 documents.set(document.uri, document);
                 scheduleDiagnostics(document);
                 return;
             }
             case 'textDocument/didChange': {
                 const current = getDocument(params);
-                if (!current)
+                const textDocument = params.textDocument || {};
+                const uri = textDocument.uri;
+                if (!current && typeof uri !== 'string')
                     return;
                 const document = {
-                    ...current,
-                    version: Number(params.textDocument?.version ?? current.version + 1),
-                    text: applyContentChanges(current.text, params.contentChanges || [])
+                    ...(current || { uri, languageId: '', version: 0, text: '' }),
+                    version: Number(textDocument.version ?? (current?.version ?? 0) + 1),
+                    text: applyContentChanges(current?.text || '', params.contentChanges || [])
                 };
+                if (debug) {
+                    console.debug(`[wasm-idle:lsp-worker:${service.name}] didChange uri=${document.uri} version=${document.version} bytes=${document.text.length}`);
+                }
                 documents.set(document.uri, document);
                 scheduleDiagnostics(document);
                 return;
@@ -245,6 +285,12 @@ export function startWorkerLanguageServer(service, scope = globalThis) {
             if (initialized)
                 return;
             initialized = true;
+            const initOptions = message.options;
+            debug =
+                !!initOptions && typeof initOptions === 'object' && initOptions.debug === true;
+            if (debug) {
+                console.debug(`[wasm-idle:lsp-worker:${service.name}] init`);
+            }
             void Promise.resolve(service.initialize?.(message.options, context))
                 .then(() => {
                 ready = true;
@@ -258,7 +304,7 @@ export function startWorkerLanguageServer(service, scope = globalThis) {
         }
         if (message.jsonrpc !== '2.0' || !message.method)
             return;
-        if ('id' in message) {
+        if (message.id !== undefined) {
             void handleRequest(message);
         }
         else {

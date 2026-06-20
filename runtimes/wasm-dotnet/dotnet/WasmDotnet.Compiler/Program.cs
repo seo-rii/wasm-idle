@@ -269,7 +269,11 @@ public static partial class CompilerHost
             disabled,
             null);
         var result = await FSharpAsync.StartAsTask(checker.Compile(argv.ToArray(), null), null, null);
-        var diagnostics = result.Item1.Select(ToDiagnostic).ToArray();
+        var diagnostics = new CompilerDiagnostic[result.Item1.Length];
+        for (var index = 0; index < result.Item1.Length; index++)
+        {
+            diagnostics[index] = ToDiagnostic(result.Item1[index]);
+        }
         if (result.Item2 is not null || !File.Exists(outputPath))
         {
             return new CompileResult
@@ -290,35 +294,61 @@ public static partial class CompilerHost
 
     private static IEnumerable<MetadataReference> MetadataReferences(ReferenceAssembly[]? references)
     {
+        IEnumerable<MetadataReference> metadataReferences;
         if (references is { Length: > 0 })
         {
-            return references.Select(reference =>
+            metadataReferences = references.Select(reference =>
                 MetadataReference.CreateFromImage(Convert.FromBase64String(reference.BytesBase64 ?? "")));
         }
+        else
+        {
+            metadataReferences = TrustedPlatformReferencePaths().Select(path => MetadataReference.CreateFromFile(path));
+        }
 
-        return TrustedPlatformReferencePaths().Select(path => MetadataReference.CreateFromFile(path));
+        var hostAssemblyPath = HostAssemblyReferencePath();
+        if (!string.IsNullOrWhiteSpace(hostAssemblyPath))
+        {
+            metadataReferences = metadataReferences.Concat([MetadataReference.CreateFromFile(hostAssemblyPath)]);
+        }
+        return metadataReferences;
     }
 
     private static string[] ReferenceAssemblyPaths(string workDir, ReferenceAssembly[]? references)
     {
+        string[] paths;
         if (references is not { Length: > 0 })
         {
-            return TrustedPlatformReferencePaths();
+            paths = TrustedPlatformReferencePaths();
+        }
+        else
+        {
+            var referenceDir = Path.Combine(workDir, "ref");
+            Directory.CreateDirectory(referenceDir);
+            paths = references.Select(reference =>
+            {
+                var fileName = Path.GetFileName(reference.Name);
+                if (string.IsNullOrWhiteSpace(fileName))
+                {
+                    fileName = $"{Guid.NewGuid():N}.dll";
+                }
+                var path = Path.Combine(referenceDir, fileName);
+                File.WriteAllBytes(path, Convert.FromBase64String(reference.BytesBase64 ?? ""));
+                return path;
+            }).ToArray();
         }
 
-        var referenceDir = Path.Combine(workDir, "ref");
-        Directory.CreateDirectory(referenceDir);
-        return references.Select(reference =>
+        var hostAssemblyPath = HostAssemblyReferencePath();
+        if (!string.IsNullOrWhiteSpace(hostAssemblyPath) && !paths.Contains(hostAssemblyPath))
         {
-            var fileName = Path.GetFileName(reference.Name);
-            if (string.IsNullOrWhiteSpace(fileName))
-            {
-                fileName = $"{Guid.NewGuid():N}.dll";
-            }
-            var path = Path.Combine(referenceDir, fileName);
-            File.WriteAllBytes(path, Convert.FromBase64String(reference.BytesBase64 ?? ""));
-            return path;
-        }).ToArray();
+            paths = paths.Append(hostAssemblyPath).ToArray();
+        }
+        return paths;
+    }
+
+    private static string? HostAssemblyReferencePath()
+    {
+        var path = AssemblyLocation(typeof(CompilerHost).Assembly);
+        return !string.IsNullOrWhiteSpace(path) && File.Exists(path) ? path : null;
     }
 
     private static string[] TrustedPlatformReferencePaths()

@@ -13,11 +13,19 @@ export function resolveDotnetLanguageServerModuleUrl(options, baseUrl = '') {
 async function createLanguageServer(language, options) {
     const hostOptions = typeof options === 'object' ? options : undefined;
     const baseUrl = hostOptions?.currentUrl ?? currentUrl();
+    let debug = false;
+    try {
+        debug = new URL(baseUrl).searchParams.get('lsp-test') === '1';
+    }
+    catch {
+        debug = false;
+    }
     return await createWorkerLanguageServerClient({
         createWorker: hostOptions?.createWorker || createDefaultWorker,
         initOptions: {
             language,
-            moduleUrl: resolveDotnetLanguageServerModuleUrl(options, baseUrl)
+            moduleUrl: resolveDotnetLanguageServerModuleUrl(options, baseUrl),
+            debug
         },
         onStatus: hostOptions?.onStatus
     });

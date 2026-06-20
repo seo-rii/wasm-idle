@@ -5,6 +5,7 @@ export type DotnetLanguage = 'csharp' | 'fsharp' | 'vbnet';
 export interface DotnetWorkerOptions {
 	language: DotnetLanguage;
 	moduleUrl: string;
+	debug?: boolean;
 }
 
 interface DotnetDiagnostic {
@@ -27,12 +28,13 @@ interface DotnetCompiler {
 		language: DotnetLanguage;
 		target: 'browser-wasm';
 		prepare?: boolean;
+		log?: boolean;
 		onProgress?: (progress: { stage?: string; completed?: number; total?: number }) => void;
 	}): Promise<DotnetCompilerResult>;
 }
 
 interface DotnetRuntimeModule {
-	createDotnetCompiler(): DotnetCompiler;
+	createDotnetCompiler(options?: { loadReferences?: boolean }): DotnetCompiler;
 }
 
 type LoadDotnetModule = (moduleUrl: string) => Promise<DotnetRuntimeModule>;
@@ -301,6 +303,7 @@ export function createDotnetWorkerService(
 ): WorkerLanguageService {
 	let language = defaultLanguage;
 	let compiler: DotnetCompiler;
+	let debug = false;
 	let reportProgress: (stage: string, loaded?: number, total?: number) => void = () => {};
 
 	const diagnosticSource = () =>
@@ -346,21 +349,39 @@ export function createDotnetWorkerService(
 		async initialize(options, context) {
 			const config = options as DotnetWorkerOptions;
 			language = config.language || defaultLanguage;
+			debug = config.debug === true;
 			reportProgress = context.reportProgress;
 			reportProgress('load-dotnet-runtime');
+			if (debug) {
+				console.debug(
+					`[wasm-idle:dotnet-lsp] initialize language=${language} moduleUrl=${config.moduleUrl}`
+				);
+			}
 			const module = await loadModule(config.moduleUrl);
 			if (typeof module.createDotnetCompiler !== 'function') {
 				throw new Error('wasm-dotnet module must export createDotnetCompiler');
 			}
 			compiler = module.createDotnetCompiler();
+			if (debug) console.debug('[wasm-idle:dotnet-lsp] compiler ready');
 		},
 		async diagnostics(document: LspDocument) {
+			if (debug) {
+				console.debug(
+					`[wasm-idle:dotnet-lsp] compile start language=${language} uri=${document.uri} bytes=${document.text.length}`
+				);
+			}
 			const result = await compiler.compile({
 				code: document.text,
 				language,
 				target: 'browser-wasm',
 				prepare: true,
+				log: debug,
 				onProgress(progress) {
+					if (debug) {
+						console.debug(
+							`[wasm-idle:dotnet-lsp] compile progress stage=${progress.stage || 'compile'} completed=${progress.completed ?? ''} total=${progress.total ?? ''}`
+						);
+					}
 					reportProgress(progress.stage || 'compile', progress.completed, progress.total);
 				}
 			});
@@ -375,6 +396,11 @@ export function createDotnetWorkerService(
 					source: diagnosticSource(),
 					message: result.stderr
 				});
+			}
+			if (debug) {
+				console.debug(
+					`[wasm-idle:dotnet-lsp] compile done success=${String(result.success)} diagnostics=${diagnostics.length} stderr=${result.stderr ? result.stderr.slice(0, 160) : ''}`
+				);
 			}
 			return diagnostics;
 		},

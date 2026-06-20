@@ -1,5 +1,6 @@
 import { BrowserMessageReader, BrowserMessageWriter } from './jsonrpc.js';
 import type { EditorLanguageServerHandle } from './types.js';
+import type { MessageReader } from 'vscode-jsonrpc';
 
 export type LanguageServerStatus =
 	| { state: 'disabled' }
@@ -67,10 +68,26 @@ export async function createWorkerLanguageServerClient(
 	}
 
 	const reader = new BrowserMessageReader(worker);
+	const filteredReader: MessageReader = {
+		onError: reader.onError,
+		onClose: reader.onClose,
+		onPartialMessage: reader.onPartialMessage,
+		listen(callback) {
+			return reader.listen((message) => {
+				const record = message as { jsonrpc?: unknown } | null;
+				if (record && typeof record === 'object' && record.jsonrpc === '2.0') {
+					callback(message);
+				}
+			});
+		},
+		dispose() {
+			reader.dispose();
+		}
+	};
 	const writer = new BrowserMessageWriter(worker);
 	options.onStatus?.({ state: 'ready' });
 	return {
-		transport: { reader, writer },
+		transport: { reader: filteredReader, writer },
 		dispose: () => {
 			worker.terminate();
 			reader.dispose();

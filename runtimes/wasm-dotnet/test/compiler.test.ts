@@ -1,7 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { compileDotnet, createDotnetCompiler, parseDotnetDiagnostics } from '../src/compiler.js';
+import { resetDotnetCompilerRuntimeForTests } from '../src/runtime-loader.js';
 
 describe('compileDotnet', () => {
+	beforeEach(() => {
+		resetDotnetCompilerRuntimeForTests();
+	});
+
 	it('compiles F# source through the browser runtime bridge', async () => {
 		const requests: unknown[] = [];
 		const result = await compileDotnet(
@@ -41,15 +46,29 @@ describe('compileDotnet', () => {
 	});
 
 	it('compiles C# source through the browser runtime bridge', async () => {
+		const configs: unknown[] = [];
+		const lazyAssemblies: string[] = [];
 		const requests: unknown[] = [];
+		const tracing: boolean[] = [];
 		const compiler = createDotnetCompiler({
 			dotnetModule: {
 				dotnet: {
-					withDiagnosticTracing() {
+					withConfig(config: unknown) {
+						configs.push(config);
+						return this;
+					},
+					withDiagnosticTracing(enabled: boolean) {
+						tracing.push(enabled);
 						return this;
 					},
 					async create() {
 						return {
+							INTERNAL: {
+								async loadLazyAssembly(name: string) {
+									lazyAssemblies.push(name);
+									return true;
+								}
+							},
 							getConfig: () => ({
 								mainAssemblyName: 'WasmDotnet.Compiler.dll'
 							}),
@@ -99,6 +118,68 @@ describe('compileDotnet', () => {
 				target: 'browser-wasm'
 			})
 		]);
+		expect(lazyAssemblies).toEqual([
+			'Microsoft.CodeAnalysis.wasm',
+			'Microsoft.CodeAnalysis.CSharp.wasm'
+		]);
+		expect(configs).toEqual([
+			{
+				jsThreadBlockingMode: 'DangerousAllowBlockingWait'
+			}
+		]);
+		expect(tracing).toEqual([false]);
+	});
+
+	it('enables runtime diagnostic tracing for explicit compile requests', async () => {
+		const tracing: boolean[] = [];
+		const compiler = createDotnetCompiler({
+			dotnetModule: {
+				dotnet: {
+					withDiagnosticTracing(enabled: boolean) {
+						tracing.push(enabled);
+						return this;
+					},
+					async create() {
+						return {
+							getConfig: () => ({
+								mainAssemblyName: 'WasmDotnet.Compiler.dll'
+							}),
+							async getAssemblyExports() {
+								return {
+									WasmDotnet: {
+										Compiler: {
+											CompilerHost: {
+												Compile() {
+													return JSON.stringify({
+														success: true,
+														assemblyId: 'asm-csharp'
+													});
+												},
+												Run() {
+													return JSON.stringify({ exitCode: 0 });
+												}
+											}
+										}
+									}
+								};
+							}
+						};
+					}
+				}
+			}
+		});
+
+		await expect(
+			compiler.compile({
+				code: 'Console.WriteLine("hello");',
+				language: 'csharp',
+				log: true,
+				runtimeDiagnosticTracing: true
+			})
+		).resolves.toMatchObject({
+			success: true
+		});
+		expect(tracing).toEqual([true]);
 	});
 
 	it('compiles VB.NET source through the browser runtime bridge', async () => {

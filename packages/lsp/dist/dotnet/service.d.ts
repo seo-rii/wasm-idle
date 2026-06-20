@@ -3,6 +3,7 @@ export type DotnetLanguage = 'csharp' | 'fsharp' | 'vbnet';
 export interface DotnetWorkerOptions {
     language: DotnetLanguage;
     moduleUrl: string;
+    debug?: boolean;
 }
 interface DotnetDiagnostic {
     lineNumber?: number;
@@ -22,6 +23,7 @@ interface DotnetCompiler {
         language: DotnetLanguage;
         target: 'browser-wasm';
         prepare?: boolean;
+        log?: boolean;
         onProgress?: (progress: {
             stage?: string;
             completed?: number;
@@ -30,7 +32,9 @@ interface DotnetCompiler {
     }): Promise<DotnetCompilerResult>;
 }
 interface DotnetRuntimeModule {
-    createDotnetCompiler(): DotnetCompiler;
+    createDotnetCompiler(options?: {
+        loadReferences?: boolean;
+    }): DotnetCompiler;
 }
 type LoadDotnetModule = (moduleUrl: string) => Promise<DotnetRuntimeModule>;
 export declare function createDotnetWorkerService(defaultLanguage: DotnetLanguage, loadModule?: LoadDotnetModule): WorkerLanguageService;

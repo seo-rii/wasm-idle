@@ -34,11 +34,18 @@ async function createLanguageServer(
 	const hostOptions =
 		typeof options === 'object' ? (options as DotnetLanguageServerOptions) : undefined;
 	const baseUrl = hostOptions?.currentUrl ?? currentUrl();
+	let debug = false;
+	try {
+		debug = new URL(baseUrl).searchParams.get('lsp-test') === '1';
+	} catch {
+		debug = false;
+	}
 	return await createWorkerLanguageServerClient({
 		createWorker: hostOptions?.createWorker || createDefaultWorker,
 		initOptions: {
 			language,
-			moduleUrl: resolveDotnetLanguageServerModuleUrl(options, baseUrl)
+			moduleUrl: resolveDotnetLanguageServerModuleUrl(options, baseUrl),
+			debug
 		},
 		onStatus: hostOptions?.onStatus
 	});

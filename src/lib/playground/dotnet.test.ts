@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const workerInstances: MockWorker[] = [];
 const { publicEnv } = vi.hoisted(() => ({
@@ -63,6 +63,10 @@ describe('Dotnet sandbox', () => {
 		workerInstances.length = 0;
 		publicEnv.PUBLIC_WASM_DOTNET_MODULE_URL = '/wasm-dotnet/index.js';
 		suppressAutoLoadAck = false;
+	});
+
+	afterEach(() => {
+		vi.unstubAllGlobals();
 	});
 
 	it('loads the dotnet worker and forwards diagnostics plus run output', async () => {
@@ -138,6 +142,23 @@ describe('Dotnet sandbox', () => {
 				args: ['7'],
 				stdin: '7\n',
 				log: true
+			})
+		);
+	});
+
+	it('keeps C# execution in the worker when SharedArrayBuffer is available', async () => {
+		vi.stubGlobal('crossOriginIsolated', true);
+		vi.stubGlobal('SharedArrayBuffer', class SharedArrayBuffer {});
+		const sandbox = new Dotnet('CSHARP');
+
+		await sandbox.load('/absproxy/5173');
+		await expect(sandbox.run('Console.WriteLine("hello");', false)).resolves.toBe(true);
+
+		expect(workerInstances).toHaveLength(1);
+		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
+			2,
+			expect.objectContaining({
+				language: 'csharp'
 			})
 		);
 	});

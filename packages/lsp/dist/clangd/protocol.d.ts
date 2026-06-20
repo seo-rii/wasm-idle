@@ -6,6 +6,7 @@ export interface ClangdWorkerInitMessage {
     type: 'init';
     baseUrl: string;
     assets?: ClangdPreloadedAssets;
+    debug?: boolean;
 }
 export interface ClangdWorkerSyncFileMessage {
     type: 'sync-file';

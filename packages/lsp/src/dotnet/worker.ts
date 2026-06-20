@@ -4,6 +4,7 @@ import { createDotnetWorkerService } from './service.js';
 const workerGlobal = globalThis as any;
 const rawPostMessage = workerGlobal.postMessage.bind(workerGlobal);
 
+workerGlobal.dotnetSidecar = true;
 workerGlobal.document ??= {
 	addEventListener() {},
 	baseURI: workerGlobal.location?.href || '',
@@ -15,13 +16,6 @@ workerGlobal.document ??= {
 		return [];
 	},
 	removeEventListener() {}
-};
-
-workerGlobal.postMessage = (message: unknown, transfer?: Transferable[]) => {
-	const record = message as { jsonrpc?: unknown } | null;
-	if (record && typeof record === 'object' && record.jsonrpc === '2.0') {
-		rawPostMessage(message, transfer);
-	}
 };
 
 startWorkerLanguageServer(createDotnetWorkerService('csharp'), {

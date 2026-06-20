@@ -27,6 +27,7 @@ export interface BrowserDotnetCompileRequest {
 	target?: DotnetTarget;
 	args?: string[];
 	log?: boolean;
+	runtimeDiagnosticTracing?: boolean;
 	prepare?: boolean;
 	onProgress?: (progress: BrowserDotnetCompileProgress) => void;
 }

@@ -8,6 +8,26 @@ const jsonStream = new JsonStream();
 let resolveStdinReady = () => { };
 const stdinChunks = [];
 const currentStdinChunk = [];
+let debugEnabled = false;
+let stderrBuffer = '';
+const describeMessage = (data) => {
+    const record = data;
+    if (!record || typeof record !== 'object')
+        return typeof data;
+    if (typeof record.method === 'string')
+        return record.method;
+    if (record.id !== undefined)
+        return `response:${String(record.id)}`;
+    return 'unknown';
+};
+const isJsonRpcMessage = (data) => {
+    const record = data;
+    return !!record && typeof record === 'object' && record.jsonrpc === '2.0';
+};
+const debugLog = (...args) => {
+    if (debugEnabled)
+        console.debug('[wasm-idle:clangd-worker]', ...args);
+};
 const stdin = () => {
     if (currentStdinChunk.length === 0) {
         if (stdinChunks.length === 0)
@@ -15,7 +35,7 @@ const stdin = () => {
         const nextChunk = stdinChunks.shift();
         if (!nextChunk)
             return null;
-        currentStdinChunk.push(...textEncoder.encode(nextChunk), null);
+        currentStdinChunk.push(...textEncoder.encode(nextChunk));
     }
     return currentStdinChunk.shift() ?? null;
 };
@@ -30,10 +50,23 @@ let writer = null;
 let clangdRuntime = null;
 const stdout = (charCode) => {
     const json = jsonStream.insert(charCode);
-    if (json && writer)
-        writer.write(JSON.parse(json));
+    if (!json || !writer)
+        return;
+    const message = JSON.parse(json);
+    debugLog('stdout', describeMessage(message));
+    writer.write(message);
 };
-const stderr = () => { };
+const stderr = (charCode) => {
+    if (!debugEnabled)
+        return;
+    if (charCode === 10 || charCode === 13) {
+        if (stderrBuffer)
+            debugLog('stderr', stderrBuffer);
+        stderrBuffer = '';
+        return;
+    }
+    stderrBuffer += String.fromCharCode(charCode);
+};
 const onAbort = () => {
     writer?.end();
     self.reportError?.('clangd aborted');
@@ -74,6 +107,8 @@ self.addEventListener('message', async (event) => {
     if (event.data?.type !== 'init')
         return;
     const baseUrl = normalizeClangdBaseUrl(event.data.baseUrl || '/clangd') + '/';
+    debugEnabled = !!event.data.debug;
+    debugLog('init', baseUrl);
     try {
         const jsBytes = event.data.assets?.clangdJs
             ? new Uint8Array(event.data.assets.clangdJs)
@@ -112,14 +147,23 @@ self.addEventListener('message', async (event) => {
                 Add: createClangdCompileFlags()
             }
         }));
-        clangdRuntime.callMain([]);
+        debugLog('callMain start');
+        const callMainResult = clangdRuntime.callMain([]);
+        debugLog('callMain returned', callMainResult);
         writer = new BrowserMessageWriter(self);
         const reader = new BrowserMessageReader(self);
         reader.listen((data) => {
+            if (!isJsonRpcMessage(data)) {
+                debugLog('ignored control message', describeMessage(data));
+                return;
+            }
+            debugLog('stdin message', describeMessage(data));
             const body = JSON.stringify(data).replace(/[\u007F-\uFFFF]/g, (character) => {
                 return '\\u' + character.codePointAt(0)?.toString(16).padStart(4, '0');
             });
-            stdinChunks.push(`Content-Length: ${body.length}\r\n`, '\r\n', body);
+            const bodyByteLength = textEncoder.encode(body).byteLength;
+            stdinChunks.push(`Content-Length: ${bodyByteLength}\r\n\r\n${body}`);
+            debugLog('stdin queued bytes', bodyByteLength);
             resolveStdinReady();
         });
         self.postMessage({ type: 'ready', value: wasmBytes.byteLength });

@@ -43,10 +43,26 @@ export async function createWorkerLanguageServerClient(options) {
         throw error;
     }
     const reader = new BrowserMessageReader(worker);
+    const filteredReader = {
+        onError: reader.onError,
+        onClose: reader.onClose,
+        onPartialMessage: reader.onPartialMessage,
+        listen(callback) {
+            return reader.listen((message) => {
+                const record = message;
+                if (record && typeof record === 'object' && record.jsonrpc === '2.0') {
+                    callback(message);
+                }
+            });
+        },
+        dispose() {
+            reader.dispose();
+        }
+    };
     const writer = new BrowserMessageWriter(worker);
     options.onStatus?.({ state: 'ready' });
     return {
-        transport: { reader, writer },
+        transport: { reader: filteredReader, writer },
         dispose: () => {
             worker.terminate();
             reader.dispose();

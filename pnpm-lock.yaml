@@ -101,6 +101,9 @@ importers:
       vscode-jsonrpc:
         specifier: ^8.2.1
         version: 8.2.1
+      waforth:
+        specifier: 0.20.1
+        version: 0.20.1
       webr:
         specifier: 0.6.0
         version: 0.6.0
@@ -357,6 +360,8 @@ importers:
         specifier: ^6.0.2
         version: 6.0.2
 
+  runtimes/wasm-awk: {}
+
   runtimes/wasm-clang:
     dependencies:
       '@bjorn3/browser_wasi_shim':
@@ -403,8 +408,6 @@ importers:
       vitest:
         specifier: ^4.0.18
         version: 4.1.4(@types/node@24.12.4)(jsdom@29.0.2)(vite@8.0.8(@types/node@24.12.4)(esbuild@0.27.3)(terser@5.47.1)(tsx@4.22.3))
-
-  runtimes/wasm-awk: {}
 
   runtimes/wasm-dotnet:
     devDependencies:
@@ -3817,6 +3820,10 @@ packages:
     resolution: {integrity: sha512-ba+dRL/75VQQY7RkU/CgriGbkoWAfS8TDyUlJfJhJ8KhtXgMl5dhNvoPNUcQ9IWRhW8u41glMSuZeTvsYq2rRg==}
     hasBin: true
 
+  waforth@0.20.1:
+    resolution: {integrity: sha512-0RDEqb+BdOmFUahTTD9MSkckR30fgJlQBMUOJeH6aX19f+byV0dyytJNsv0QzOpbGLh12mFL98voPTIzuMitMA==}
+    hasBin: true
+
   wasm-feature-detect@1.8.0:
     resolution: {integrity: sha512-zksaLKM2fVlnB5jQQDqKXXwYHLQUVH9es+5TOOHwGOVJOCeRBCiPjwSg+3tN2AdTCzjgli4jijCH290kXb/zWQ==}
 
@@ -7081,6 +7088,8 @@ snapshots:
       xml-name-validator: 5.0.0
 
   wabt@1.0.39: {}
+
+  waforth@0.20.1: {}
 
   wasm-feature-detect@1.8.0: {}
 

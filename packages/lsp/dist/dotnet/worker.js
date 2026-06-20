@@ -2,6 +2,7 @@ import { startWorkerLanguageServer } from '../lsp.js';
 import { createDotnetWorkerService } from './service.js';
 const workerGlobal = globalThis;
 const rawPostMessage = workerGlobal.postMessage.bind(workerGlobal);
+workerGlobal.dotnetSidecar = true;
 workerGlobal.document ??= {
     addEventListener() { },
     baseURI: workerGlobal.location?.href || '',
@@ -13,12 +14,6 @@ workerGlobal.document ??= {
         return [];
     },
     removeEventListener() { }
-};
-workerGlobal.postMessage = (message, transfer) => {
-    const record = message;
-    if (record && typeof record === 'object' && record.jsonrpc === '2.0') {
-        rawPostMessage(message, transfer);
-    }
 };
 startWorkerLanguageServer(createDotnetWorkerService('csharp'), {
     addEventListener: workerGlobal.addEventListener.bind(workerGlobal),

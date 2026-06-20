@@ -17,7 +17,7 @@ workerSelf.document ??= {
 type DotnetCompileLanguage = 'fsharp' | 'csharp' | 'vbnet';
 
 type DotnetRuntimeModule = {
-	createDotnetCompiler: () => {
+	createDotnetCompiler: (options?: { loadReferences?: boolean }) => {
 		compile(request: {
 			code: string;
 			language: DotnetCompileLanguage;
