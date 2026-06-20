@@ -1,0 +1,6 @@
+{
+  "format": "wasm-pascal-runtime-build-v1",
+  "runtime": "pas2js",
+  "pas2jsVersion": "3.2.1",
+  "pas2jsCommit": "9ac46614dc82"
+}

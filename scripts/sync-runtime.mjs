@@ -139,6 +139,13 @@ const RUNTIMES = [
 		targetArg: 'targetDir'
 	},
 	{
+		name: 'wasm-pascal',
+		module: './sync-wasm-pascal.mjs',
+		exportName: 'syncWasmPascalAssets',
+		sourceArg: 'sourceDir',
+		targetArg: 'targetDir'
+	},
+	{
 		name: 'wasm-of-js-of-ocaml',
 		module: './sync-wasm-of-js-of-ocaml.mjs',
 		exportName: 'syncWasmOfJsOfOcamlDist',

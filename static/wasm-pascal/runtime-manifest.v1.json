@@ -1,0 +1,13 @@
+{
+  "format": "wasm-pascal-runtime-manifest-v1",
+  "runtime": "pas2js",
+  "pas2jsVersion": "3.2.1",
+  "pas2jsCommit": "9ac46614dc82",
+  "fingerprint": "2e1fae07df7c7c09",
+  "files": [
+    "compiler.js",
+    "rtl.js",
+    "runtime-build.json",
+    "system.pas"
+  ]
+}

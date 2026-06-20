@@ -148,6 +148,13 @@ vi.mock('$lib/playground/awk', () => {
 	};
 });
 
+vi.mock('$lib/playground/pascal', () => {
+	moduleLoads.add('PASCAL');
+	return {
+		default: createMockSandboxClass('PASCAL')
+	};
+});
+
 vi.mock('$lib/playground/sqlite', () => {
 	moduleLoads.add('SQLITE');
 	return {
@@ -650,7 +657,7 @@ End Module`;
 		expect(sandboxInstances.get('PROLOG')).toHaveLength(1);
 	});
 
-	it('routes Gleam, Perl, Tcl, and AWK requests through their static worker wasm implementations', async () => {
+	it('routes Gleam, Perl, Tcl, AWK, and Pascal requests through their static worker wasm implementations', async () => {
 		const runtimeAssets = {
 			rootUrl: '/absproxy/5173',
 			gleam: {
@@ -669,6 +676,10 @@ End Module`;
 			awk: {
 				baseUrl: '/absproxy/5173/wasm-awk/',
 				workerUrl: '/absproxy/5173/wasm-awk/runner-worker.js?v=test'
+			},
+			pascal: {
+				baseUrl: '/absproxy/5173/wasm-pascal/',
+				workerUrl: '/absproxy/5173/wasm-pascal/runner-worker.js?v=test'
 			}
 		};
 		const binding = createPlaygroundBinding(runtimeAssets);
@@ -677,20 +688,24 @@ End Module`;
 		const perl = await binding.load('PERL');
 		const tcl = await binding.load('TCLSH');
 		const awk = await binding.load('GAWK');
+		const pascal = await binding.load('PAS');
 
 		await gleam.load('pub fn main() { Nil }', true, [], {}, progress);
 		await perl.load('print "hello\\n";', true, [], {}, progress);
 		await tcl.load('puts "hello"', true, [], {}, progress);
 		await awk.load('{ print }', true, [], {}, progress);
+		await pascal.load('program main; begin WriteLn(1); end.', true, [], {}, progress);
 
 		expect(gleam.runtimeAssets).toEqual(runtimeAssets);
 		expect(perl.runtimeAssets).toEqual(runtimeAssets);
 		expect(tcl.runtimeAssets).toEqual(runtimeAssets);
 		expect(awk.runtimeAssets).toEqual(runtimeAssets);
+		expect(pascal.runtimeAssets).toEqual(runtimeAssets);
 		expect(sandboxInstances.get('GLEAM')).toHaveLength(1);
 		expect(sandboxInstances.get('PERL')).toHaveLength(1);
 		expect(sandboxInstances.get('TCL')).toHaveLength(1);
 		expect(sandboxInstances.get('AWK')).toHaveLength(1);
+		expect(sandboxInstances.get('PASCAL')).toHaveLength(1);
 		expect(sandboxInstances.get('GLEAM')?.[0]?.loadCalls).toEqual([
 			[runtimeAssets, 'pub fn main() { Nil }', true, [], {}, progress]
 		]);
@@ -702,6 +717,9 @@ End Module`;
 		]);
 		expect(sandboxInstances.get('AWK')?.[0]?.loadCalls).toEqual([
 			[runtimeAssets, '{ print }', true, [], {}, progress]
+		]);
+		expect(sandboxInstances.get('PASCAL')?.[0]?.loadCalls).toEqual([
+			[runtimeAssets, 'program main; begin WriteLn(1); end.', true, [], {}, progress]
 		]);
 	});
 

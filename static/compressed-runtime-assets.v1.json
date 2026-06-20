@@ -48,6 +48,7 @@
     "wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-metadce.browser.js",
     "wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-opt.browser.js",
     "wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm_of_ocaml.bc.browser.js",
+    "wasm-pascal/compiler.js",
     "wasm-perl/emperl.data",
     "wasm-perl/emperl.wasm",
     "wasm-prolog/swipl-web.data",
@@ -252,6 +253,7 @@
     "webr/5da864032a1d2d4e/libRlapack.so": 1769888,
     "wasm-tcl/tcl/wacl-library.data": 2307994,
     "wasm-tcl/tcl/wacl.wasm": 1884110,
-    "wasm-awk/goawk.wasm": 4679032
+    "wasm-awk/goawk.wasm": 4679032,
+    "wasm-pascal/compiler.js": 3332860
   }
 }

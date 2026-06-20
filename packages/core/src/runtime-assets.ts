@@ -32,6 +32,7 @@ export interface RuntimeAssetKeySource {
 	perl?: { baseUrl?: string; workerUrl?: string };
 	tcl?: { baseUrl?: string; workerUrl?: string };
 	awk?: { baseUrl?: string; workerUrl?: string };
+	pascal?: { baseUrl?: string; workerUrl?: string };
 	sqlite?: { wasmUrl?: string };
 	php?: { version?: string };
 }
@@ -102,6 +103,8 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	{ runtime: 'tcl', property: 'workerUrl', key: 'tclWorkerUrl' },
 	{ runtime: 'awk', property: 'baseUrl', key: 'awkBaseUrl' },
 	{ runtime: 'awk', property: 'workerUrl', key: 'awkWorkerUrl' },
+	{ runtime: 'pascal', property: 'baseUrl', key: 'pascalBaseUrl' },
+	{ runtime: 'pascal', property: 'workerUrl', key: 'pascalWorkerUrl' },
 	{ runtime: 'sqlite', property: 'wasmUrl', key: 'sqliteWasmUrl' },
 	{ runtime: 'php', property: 'version', key: 'phpVersion' }
 ] satisfies RuntimeAssetKeyField[];

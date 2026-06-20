@@ -13,7 +13,9 @@ const { publicEnv } = vi.hoisted(() => ({
 		PUBLIC_WASM_TCL_BASE_URL: '',
 		PUBLIC_WASM_TCL_WORKER_URL: '',
 		PUBLIC_WASM_AWK_BASE_URL: '',
-		PUBLIC_WASM_AWK_WORKER_URL: ''
+		PUBLIC_WASM_AWK_WORKER_URL: '',
+		PUBLIC_WASM_PASCAL_BASE_URL: '',
+		PUBLIC_WASM_PASCAL_WORKER_URL: ''
 	}
 }));
 let onPostMessage: ((worker: MockWorker, message: any) => void) | null = null;
@@ -52,6 +54,7 @@ vi.mock('$env/dynamic/public', () => ({
 import Gleam from './gleam';
 import Awk from './awk';
 import Perl from './perl';
+import Pascal from './pascal';
 import Prolog from './prolog';
 import Tcl from './tcl';
 
@@ -204,6 +207,39 @@ describe('static worker backed language sandboxes', () => {
 				args: ['demo=1'],
 				stdin: 'ok\n',
 				activePath: 'main.awk'
+			})
+		);
+	});
+
+	it('loads Pascal runtime urls and forwards stdin to the pas2js worker', async () => {
+		const sandbox = new Pascal();
+		await sandbox.load({
+			pascal: {
+				baseUrl: '/wasm-pascal/',
+				workerUrl: '/wasm-pascal/runner-worker.js?v=test'
+			}
+		});
+		await expect(
+			sandbox.run(
+				'program main; var n: integer; begin ReadLn(n); WriteLn(n); end.',
+				false,
+				true,
+				undefined,
+				[],
+				{
+					stdin: 'ok\n'
+				}
+			)
+		).resolves.toBe(true);
+
+		expect(workerInstances[0].url).toBe(
+			'http://localhost:3000/wasm-pascal/runner-worker.js?v=test'
+		);
+		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				baseUrl: 'http://localhost:3000/wasm-pascal/',
+				stdin: 'ok\n',
+				activePath: 'main.pas'
 			})
 		);
 	});

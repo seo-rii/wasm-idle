@@ -17,6 +17,7 @@ export type EditorDefaultLanguage =
 	| 'perl'
 	| 'tcl'
 	| 'awk'
+	| 'pascal'
 	| 'ocaml'
 	| 'javascript'
 	| 'typescript'
@@ -50,6 +51,7 @@ export const editorDefaults: Record<
 	| 'perl'
 	| 'tcl'
 	| 'awk'
+	| 'pascal'
 	| 'ocaml'
 	| 'javascript'
 	| 'typescript'
@@ -333,11 +335,36 @@ function factorial(n) {
     exit
 }
 
-END {
-    if (NR == 0) {
-        print "factorial_plus_bonus=" (factorial(4) + bonus)
-    }
-}`,
+	END {
+	    if (NR == 0) {
+	        print "factorial_plus_bonus=" (factorial(4) + bonus)
+	    }
+	}`,
+	pascal: `program Main;
+
+const
+  Bonus = 3;
+
+function Factorial(N: Integer): Integer;
+begin
+  if N <= 1 then
+    Factorial := 1
+  else
+    Factorial := N * Factorial(N - 1);
+end;
+
+var
+  Line: String;
+  Code: Integer;
+  N: Integer;
+
+begin
+  ReadLn(Line);
+  Val(Line, N, Code);
+  if Code <> 0 then
+    N := 4;
+  WriteLn('factorial_plus_bonus=', Factorial(N) + Bonus);
+end.`,
 	ocaml: `let bonus = 3
 
 let rec factorial n =
@@ -656,6 +683,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.perl ||
 		source === editorDefaults.tcl ||
 		source === editorDefaults.awk ||
+		source === editorDefaults.pascal ||
 		source === editorDefaults.ocaml ||
 		source === editorDefaults.javascript ||
 		source === editorDefaults.typescript ||

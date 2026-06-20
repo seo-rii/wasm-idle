@@ -134,6 +134,13 @@ const sandboxRoutes = [
 		}
 	},
 	{
+		aliases: ['PASCAL', 'PAS', 'FPC'],
+		load: async () => {
+			const { default: Pascal } = await import('$lib/playground/pascal');
+			return new Pascal();
+		}
+	},
+	{
 		aliases: ['TINYGO'],
 		load: async () => {
 			const { default: TinyGo } = await import('$lib/playground/tinygo');
@@ -264,6 +271,7 @@ export const supportedLanguages = [
 	'PERL',
 	'TCL',
 	'AWK',
+	'PASCAL',
 	'TINYGO',
 	'OCAML',
 	'JAVASCRIPT',

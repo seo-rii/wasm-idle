@@ -37,6 +37,8 @@ const { publicEnv } = vi.hoisted(() => ({
 		PUBLIC_WASM_TCL_WORKER_URL: '',
 		PUBLIC_WASM_AWK_BASE_URL: '',
 		PUBLIC_WASM_AWK_WORKER_URL: '',
+		PUBLIC_WASM_PASCAL_BASE_URL: '',
+		PUBLIC_WASM_PASCAL_WORKER_URL: '',
 		PUBLIC_WASM_SQLITE_WASM_URL: '',
 		PUBLIC_WASM_PHP_VERSION: ''
 	}
@@ -692,11 +694,12 @@ describe('runtime asset config resolution', () => {
 		});
 	});
 
-	it('derives default Prolog, Gleam, Perl, Tcl, and AWK runtime urls from the shared root path', async () => {
+	it('derives default Prolog, Gleam, Perl, Tcl, AWK, and Pascal runtime urls from the shared root path', async () => {
 		vi.resetModules();
 		const {
 			resolveAwkRuntimeAssetConfig,
 			resolveGleamRuntimeAssetConfig,
+			resolvePascalRuntimeAssetConfig,
 			resolvePerlRuntimeAssetConfig,
 			resolvePrologRuntimeAssetConfig,
 			resolveTclRuntimeAssetConfig
@@ -727,6 +730,12 @@ describe('runtime asset config resolution', () => {
 			baseUrl: 'https://example.com/absproxy/5173/wasm-awk/',
 			workerUrl: 'https://example.com/absproxy/5173/wasm-awk/runner-worker.js'
 		});
+		expect(
+			resolvePascalRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')
+		).toEqual({
+			baseUrl: 'https://example.com/absproxy/5173/wasm-pascal/',
+			workerUrl: 'https://example.com/absproxy/5173/wasm-pascal/runner-worker.js'
+		});
 	});
 
 	it('prefers explicit static worker runtime urls over public env overrides', async () => {
@@ -736,9 +745,11 @@ describe('runtime asset config resolution', () => {
 		publicEnv.PUBLIC_WASM_PERL_BASE_URL = 'https://env.example.com/perl/';
 		publicEnv.PUBLIC_WASM_TCL_BASE_URL = 'https://env.example.com/tcl/';
 		publicEnv.PUBLIC_WASM_AWK_BASE_URL = 'https://env.example.com/awk/';
+		publicEnv.PUBLIC_WASM_PASCAL_BASE_URL = 'https://env.example.com/pascal/';
 		const {
 			resolveAwkRuntimeAssetConfig,
 			resolveGleamRuntimeAssetConfig,
+			resolvePascalRuntimeAssetConfig,
 			resolvePerlRuntimeAssetConfig,
 			resolvePrologRuntimeAssetConfig,
 			resolveTclRuntimeAssetConfig
@@ -795,6 +806,15 @@ describe('runtime asset config resolution', () => {
 		).toEqual({
 			baseUrl: 'https://example.com/runtime/awk/',
 			workerUrl: 'https://example.com/runtime/awk/worker.js'
+		});
+		expect(
+			resolvePascalRuntimeAssetConfig(
+				{ pascal: { baseUrl: '/runtime/pascal', workerUrl: '/runtime/pascal/worker.js' } },
+				'https://example.com/app'
+			)
+		).toEqual({
+			baseUrl: 'https://example.com/runtime/pascal/',
+			workerUrl: 'https://example.com/runtime/pascal/worker.js'
 		});
 	});
 

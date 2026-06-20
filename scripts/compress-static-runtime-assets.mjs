@@ -42,6 +42,7 @@ const COMPRESSIBLE_TOP_LEVEL_DIRS = [
 	'wasm-lisp',
 	'wasm-octave',
 	'wasm-of-js-of-ocaml',
+	'wasm-pascal',
 	'wasm-perl',
 	'wasm-prolog',
 	'wasm-rust',

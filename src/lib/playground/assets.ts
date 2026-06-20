@@ -144,6 +144,11 @@ export interface AwkRuntimeAssetConfig {
 	workerUrl?: string;
 }
 
+export interface PascalRuntimeAssetConfig {
+	baseUrl?: string;
+	workerUrl?: string;
+}
+
 export interface SqliteRuntimeAssetConfig {
 	wasmUrl?: string;
 }
@@ -180,6 +185,7 @@ export interface PlaygroundRuntimeAssets {
 	perl?: PerlRuntimeAssetConfig;
 	tcl?: TclRuntimeAssetConfig;
 	awk?: AwkRuntimeAssetConfig;
+	pascal?: PascalRuntimeAssetConfig;
 	sqlite?: SqliteRuntimeAssetConfig;
 	php?: PhpRuntimeAssetConfig;
 }
@@ -1384,6 +1390,71 @@ export function resolveAwkRuntimeAssetConfig(
 	return {
 		baseUrl: resolveAwkBaseUrl(options, currentUrl),
 		workerUrl: resolveAwkWorkerUrl(options, currentUrl)
+	};
+}
+
+export function resolvePascalBaseUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredBaseUrl =
+		(typeof options === 'object' && options?.pascal?.baseUrl) ||
+		(publicEnv.PUBLIC_WASM_PASCAL_BASE_URL || '').trim();
+
+	if (configuredBaseUrl) {
+		return normalizeBaseUrl(configuredBaseUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return normalizeBaseUrl(`${normalizeRootUrl(options) || ''}/wasm-pascal/`, currentUrl);
+	}
+
+	if (options?.rootUrl) {
+		return normalizeBaseUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-pascal/`,
+			currentUrl
+		);
+	}
+
+	return normalizeBaseUrl('/wasm-pascal/', currentUrl);
+}
+
+export function resolvePascalWorkerUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredWorkerUrl =
+		(typeof options === 'object' && options?.pascal?.workerUrl) ||
+		(publicEnv.PUBLIC_WASM_PASCAL_WORKER_URL || '').trim();
+
+	if (configuredWorkerUrl) {
+		return resolveConfiguredUrl(configuredWorkerUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-pascal/runner-worker.js`,
+			currentUrl
+		);
+	}
+
+	if (options?.rootUrl) {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-pascal/runner-worker.js`,
+			currentUrl
+		);
+	}
+
+	return resolveConfiguredUrl('/wasm-pascal/runner-worker.js', currentUrl);
+}
+
+export function resolvePascalRuntimeAssetConfig(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	return {
+		baseUrl: resolvePascalBaseUrl(options, currentUrl),
+		workerUrl: resolvePascalWorkerUrl(options, currentUrl)
 	};
 }
 

@@ -78,6 +78,7 @@
 			import('monaco-editor/esm/vs/basic-languages/typescript/typescript.contribution.js'),
 		typescript: () =>
 			import('monaco-editor/esm/vs/basic-languages/typescript/typescript.contribution.js'),
+		pascal: () => import('monaco-editor/esm/vs/basic-languages/pascal/pascal.contribution.js'),
 		perl: () => import('monaco-editor/esm/vs/basic-languages/perl/perl.contribution.js'),
 		tcl: () => import('monaco-editor/esm/vs/basic-languages/tcl/tcl.contribution.js'),
 		php: () => import('monaco-editor/esm/vs/basic-languages/php/php.contribution.js'),
@@ -1656,6 +1657,7 @@
 				| 'perl'
 				| 'tcl'
 				| 'awk'
+				| 'pascal'
 				| 'ocaml'
 				| 'javascript'
 				| 'typescript'

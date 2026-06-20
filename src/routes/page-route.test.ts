@@ -402,6 +402,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/<option value="PROLOG">Prolog<\/option>/);
 		expect(source).toMatch(/<option value="GLEAM">Gleam<\/option>/);
 		expect(source).toMatch(/<option value="PERL">Perl<\/option>/);
+		expect(source).toMatch(/<option value="PASCAL">Pascal<\/option>/);
 		expect(source).toMatch(/<option value="OCAML">OCaml<\/option>/);
 		expect(source).toMatch(/<option value="TINYGO">TinyGo<\/option>/);
 		expect(source).toMatch(/<option value="JAVASCRIPT">JavaScript<\/option>/);

@@ -118,23 +118,27 @@ describe('core language contract', () => {
 		expect(isDeferredProgressLanguage('erl')).toBe(true);
 	});
 
-	it('exposes Prolog, Gleam, Perl, Tcl, and AWK as deferred browser runtime languages', () => {
+	it('exposes Prolog, Gleam, Perl, Tcl, AWK, and Pascal as deferred browser runtime languages', () => {
 		expect(supportedLanguageIds).toContain('PROLOG');
 		expect(supportedLanguageIds).toContain('GLEAM');
 		expect(supportedLanguageIds).toContain('PERL');
 		expect(supportedLanguageIds).toContain('TCL');
 		expect(supportedLanguageIds).toContain('AWK');
+		expect(supportedLanguageIds).toContain('PASCAL');
 		expect(normalizeLanguageId('swipl')).toBe('PROLOG');
 		expect(normalizeLanguageId('swi')).toBe('PROLOG');
 		expect(normalizeLanguageId('gleam')).toBe('GLEAM');
 		expect(normalizeLanguageId('perl')).toBe('PERL');
 		expect(normalizeLanguageId('tclsh')).toBe('TCL');
 		expect(normalizeLanguageId('gawk')).toBe('AWK');
+		expect(normalizeLanguageId('pas')).toBe('PASCAL');
+		expect(normalizeLanguageId('fpc')).toBe('PASCAL');
 		expect(isDeferredProgressLanguage('swipl')).toBe(true);
 		expect(isDeferredProgressLanguage('gleam')).toBe(true);
 		expect(isDeferredProgressLanguage('perl')).toBe(true);
 		expect(isDeferredProgressLanguage('tclsh')).toBe(true);
 		expect(isDeferredProgressLanguage('gawk')).toBe(true);
+		expect(isDeferredProgressLanguage('pas')).toBe(true);
 	});
 
 	it('exposes VB.NET aliases as a deferred browser runtime language', () => {
@@ -143,6 +147,19 @@ describe('core language contract', () => {
 		expect(normalizeLanguageId('vb')).toBe('VBNET');
 		expect(normalizeLanguageId('visualbasic')).toBe('VBNET');
 		expect(isDeferredProgressLanguage('vb')).toBe(true);
+	});
+
+	it('includes Pascal static worker urls in runtime asset cache keys', () => {
+		const key = createRuntimeAssetsKey({
+			rootUrl: '/repl',
+			pascal: {
+				baseUrl: '/wasm-pascal/',
+				workerUrl: '/wasm-pascal/runner-worker.js?v=test'
+			}
+		});
+
+		expect(key).toContain('"pascalBaseUrl":"/wasm-pascal/"');
+		expect(key).toContain('"pascalWorkerUrl":"/wasm-pascal/runner-worker.js?v=test"');
 	});
 
 	it('exposes D aliases as a deferred browser runtime language', () => {

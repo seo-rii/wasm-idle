@@ -28,6 +28,7 @@
 	import { WASM_OCTAVE_ASSET_VERSION } from '$lib/playground/wasmOctaveVersion';
 	import { WASM_PROLOG_ASSET_VERSION } from '$lib/playground/wasmPrologVersion';
 	import { WASM_GLEAM_ASSET_VERSION } from '$lib/playground/wasmGleamVersion';
+	import { WASM_PASCAL_ASSET_VERSION } from '$lib/playground/wasmPascalVersion';
 	import { WASM_PERL_ASSET_VERSION } from '$lib/playground/wasmPerlVersion';
 	import { WASM_R_ASSET_VERSION } from '$lib/playground/wasmRVersion';
 	import { WASM_RUST_ASSET_VERSION } from '$lib/playground/wasmRustVersion';
@@ -77,6 +78,7 @@
 		| 'PERL'
 		| 'TCL'
 		| 'AWK'
+		| 'PASCAL'
 		| 'OCAML'
 		| 'TINYGO'
 		| 'JAVASCRIPT'
@@ -147,6 +149,7 @@
 		'PERL',
 		'TCL',
 		'AWK',
+		'PASCAL',
 		'OCAML',
 		'TINYGO',
 		'JAVASCRIPT',
@@ -181,6 +184,7 @@
 		PERL: 'Perl',
 		TCL: 'Tcl',
 		AWK: 'AWK',
+		PASCAL: 'Pascal',
 		OCAML: 'OCaml',
 		TINYGO: 'TinyGo',
 		JAVASCRIPT: 'JavaScript',
@@ -215,6 +219,7 @@
 		PERL: 'perl',
 		TCL: 'tcl',
 		AWK: 'awk',
+		PASCAL: 'pascal',
 		OCAML: 'ocaml',
 		TINYGO: 'go',
 		JAVASCRIPT: 'javascript',
@@ -381,6 +386,12 @@
 			workerUrl: path
 				? `${path}/wasm-awk/runner-worker.js?v=${WASM_AWK_ASSET_VERSION}`
 				: `/wasm-awk/runner-worker.js?v=${WASM_AWK_ASSET_VERSION}`
+		},
+		pascal: {
+			baseUrl: path ? `${path}/wasm-pascal/` : '/wasm-pascal/',
+			workerUrl: path
+				? `${path}/wasm-pascal/runner-worker.js?v=${WASM_PASCAL_ASSET_VERSION}`
+				: `/wasm-pascal/runner-worker.js?v=${WASM_PASCAL_ASSET_VERSION}`
 		},
 		ocaml: {
 			moduleUrl: path
@@ -722,6 +733,8 @@
 			'.tcl': 'TCL',
 			'.awk': 'AWK',
 			'.gawk': 'AWK',
+			'.pas': 'PASCAL',
+			'.pp': 'PASCAL',
 			'.ml': 'OCAML',
 			'.mli': 'OCAML',
 			'.js': 'JAVASCRIPT',
@@ -770,6 +783,7 @@
 			PERL: 'main.pl',
 			TCL: 'main.tcl',
 			AWK: 'main.awk',
+			PASCAL: 'main.pas',
 			OCAML: 'main.ml',
 			TINYGO: 'main.go',
 			JAVASCRIPT: 'main.js',
@@ -808,6 +822,7 @@
 			PERL: 'perl',
 			TCL: 'tcl',
 			AWK: 'awk',
+			PASCAL: 'pascal',
 			OCAML: 'ocaml',
 			TINYGO: 'go',
 			JAVASCRIPT: 'javascript',
@@ -1304,6 +1319,9 @@
 			tclsh: 'TCL',
 			awk: 'AWK',
 			gawk: 'AWK',
+			pascal: 'PASCAL',
+			pas: 'PASCAL',
+			fpc: 'PASCAL',
 			ocaml: 'OCAML',
 			tinygo: 'TINYGO',
 			javascript: 'JAVASCRIPT',
@@ -1948,6 +1966,7 @@
 						<option value="PERL">Perl</option>
 						<option value="TCL">Tcl</option>
 						<option value="AWK">AWK</option>
+						<option value="PASCAL">Pascal</option>
 						<option value="OCAML">OCaml</option>
 						<option value="TINYGO">TinyGo</option>
 						<option value="JAVASCRIPT">JavaScript</option>
@@ -2153,6 +2172,12 @@
 			<p class="hint">
 				AWK runs through bundled GoAWK WebAssembly assets. Input records are read from stdin
 				by default; CLI args are exposed through `ARGV` and `var=value` assignments.
+			</p>
+		{/if}
+		{#if language === 'PASCAL'}
+			<p class="hint">
+				Pascal compiles in the browser with bundled `pas2js` assets and runs the generated
+				JavaScript locally. Use `ReadLn` for line input.
 			</p>
 		{/if}
 		{#if language === 'TINYGO'}

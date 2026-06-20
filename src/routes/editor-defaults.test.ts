@@ -31,6 +31,7 @@ describe('editor defaults', () => {
 		expect(editorDefaults.gleam).toContain('import wasm_idle/stdin');
 		expect(editorDefaults.gleam).toContain('stdin.read_line()');
 		expect(editorDefaults.perl).toContain('my $line = <STDIN>;');
+		expect(editorDefaults.pascal).toContain('ReadLn(Line);');
 		expect(editorDefaults.ocaml).toContain('read_line ()');
 		expect(editorDefaults.javascript).toContain("require('fs')");
 		expect(editorDefaults.javascript).toContain('readLineSync(0)');
@@ -77,6 +78,7 @@ describe('editor defaults', () => {
 		expect(resolveEditorDefaultSource('prolog', 'wasm32-wasip1')).toBe(editorDefaults.prolog);
 		expect(resolveEditorDefaultSource('gleam', 'wasm32-wasip1')).toBe(editorDefaults.gleam);
 		expect(resolveEditorDefaultSource('perl', 'wasm32-wasip1')).toBe(editorDefaults.perl);
+		expect(resolveEditorDefaultSource('pascal', 'wasm32-wasip1')).toBe(editorDefaults.pascal);
 		expect(resolveEditorDefaultSource('ocaml', 'wasm32-wasip1')).toBe(editorDefaults.ocaml);
 		expect(resolveEditorDefaultSource('javascript', 'wasm32-wasip1')).toBe(
 			editorDefaults.javascript
@@ -108,6 +110,7 @@ describe('editor defaults', () => {
 		expect(isEditorDefaultSource(editorDefaults.prolog)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.gleam)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.perl)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.pascal)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.ocaml)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.javascript)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.typescript)).toBe(true);
