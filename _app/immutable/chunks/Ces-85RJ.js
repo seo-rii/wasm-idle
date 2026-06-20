@@ -1,0 +1,1 @@
+import{t as e}from"./BcgnSMxp.js";import{t}from"./CG-z3oXZ.js";t({id:`csharp`,extensions:[`.cs`,`.csx`,`.cake`],aliases:[`C#`,`csharp`],loader:()=>e(()=>import(`./BXM3IfED.js`),[],import.meta.url)});

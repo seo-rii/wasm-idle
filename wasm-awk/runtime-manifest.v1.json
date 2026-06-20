@@ -1,0 +1,12 @@
+{
+  "format": "wasm-awk-runtime-manifest-v1",
+  "runtime": "GoAWK",
+  "goVersion": "go1.25.3",
+  "goawkVersion": "v1.31.0",
+  "fingerprint": "2e6c9ebaea291c23",
+  "files": [
+    "goawk.wasm",
+    "runtime-build.json",
+    "wasm_exec.js"
+  ]
+}

@@ -1,0 +1,1 @@
+import{x as e}from"./D3TI9BGT2.js";import{t}from"./BP57npRn2.js";var n=class extends t{constructor(){super({languageId:`PASCAL`,displayName:`Pascal`,defaultActivePath:`main.pas`,readStdinPattern:/\bReadLn\s*\(/i,resolveRuntimeAssets(t,n){return e(t,n)}})}};export{n as default};

@@ -1,0 +1,19 @@
+{
+  "format": "wasm-bqn-runtime-manifest-v1",
+  "runtime": "dzaima-cbqn",
+  "build": {
+    "emscripten": "3.1.8",
+    "options": [
+      "ENVIRONMENT=worker",
+      "MODULARIZE=1",
+      "EXPORT_ES6=1",
+      "FORCE_FILESYSTEM=1"
+    ]
+  },
+  "fingerprint": "e16e152b08acaef9",
+  "files": [
+    "BQN.js",
+    "BQN.wasm.gz",
+    "LICENSE-GPLv3.txt"
+  ]
+}

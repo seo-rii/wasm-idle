@@ -1,1 +1,0 @@
-import{n as e,t}from"./CP616X-r.js";export{t as conf,e as language};

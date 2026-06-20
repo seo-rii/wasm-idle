@@ -1,0 +1,23 @@
+{
+  "format": "wasm-janet-runtime-manifest-v1",
+  "runtime": "janet-lang-janet",
+  "build": {
+    "emscripten": "3.1.8",
+    "options": [
+      "ENVIRONMENT=worker",
+      "MODULARIZE=1",
+      "EXPORT_ES6=1",
+      "FORCE_FILESYSTEM=1",
+      "INVOKE_RUN=0",
+      "EXIT_RUNTIME=1",
+      "JANET_REDUCED_OS"
+    ],
+    "runner": "scripts/runtime-build/wasm-janet-runner.c"
+  },
+  "fingerprint": "c158ab59d0310501",
+  "files": [
+    "LICENSE.txt",
+    "janet.js",
+    "janet.wasm"
+  ]
+}
