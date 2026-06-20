@@ -105,7 +105,7 @@ describe('Monaco route debug sync', () => {
 			/\$effect\(\(\) => \{\s+const activeModel = model \|\| editor\?\.getModel\(\);[\s\S]*if \(!isEditorDefaultSource\(currentValue\) && !isLegacyEditorDefaultSource\(currentValue\)\) \{[\s\S]*activeModel\.setValue\(defaultValue\);[\s\S]*\}\s+\}\);/s
 		);
 		expect(source).toMatch(
-			/const defaultValue = \$derived\(\s+resolveEditorDefaultSource\([\s\S]*'c'[\s\S]*'cpp'[\s\S]*'python'[\s\S]*'java'[\s\S]*'go'[\s\S]*'d'[\s\S]*'csharp'[\s\S]*'fsharp'[\s\S]*'vbnet'[\s\S]*'elixir'[\s\S]*'erlang'[\s\S]*'prolog'[\s\S]*'gleam'[\s\S]*'perl'[\s\S]*'pascal'[\s\S]*'ocaml'[\s\S]*'ruby'[\s\S]*'sqlite'[\s\S]*'php'[\s\S]*'rust'[\s\S]*rustTargetTriple[\s\S]*\)\s+\);/s
+			/const defaultValue = \$derived\(\s+resolveEditorDefaultSource\([\s\S]*'c'[\s\S]*'cpp'[\s\S]*'python'[\s\S]*'java'[\s\S]*'go'[\s\S]*'d'[\s\S]*'csharp'[\s\S]*'fsharp'[\s\S]*'vbnet'[\s\S]*'elixir'[\s\S]*'erlang'[\s\S]*'prolog'[\s\S]*'gleam'[\s\S]*'perl'[\s\S]*'pascal'[\s\S]*'bqn'[\s\S]*'janet'[\s\S]*'ocaml'[\s\S]*'ruby'[\s\S]*'sqlite'[\s\S]*'php'[\s\S]*'rust'[\s\S]*rustTargetTriple[\s\S]*\)\s+\);/s
 		);
 		expect(source).toMatch(/id: 'd'/);
 		expect(source).toMatch(/aliases: \['D', 'd'\]/);
@@ -135,7 +135,11 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(/function disableAllLspStatuses\(\) \{/);
 		expect(source).toMatch(/if \(!lspEnabled\) \{\s+disableAllLspStatuses\(\);/);
 		expect(source).toMatch(/const route = lspRoutes\.find/);
-		expect(source).toMatch(/return await route\.load\(currentUrl\);/);
+		expect(source).toMatch(/const connection = await route\.load\(currentUrl\);/);
+		expect(source).toMatch(
+			/return route\.manualDocumentSync \? withMonacoDocumentSync\(connection\) : connection;/
+		);
+		expect(source).toMatch(/manualDocumentSync: true/);
 		expect(source).toMatch(
 			/const \{ getCppLanguageServer \} = await import\('@wasm-idle\/lsp'\);/
 		);
@@ -176,6 +180,10 @@ describe('Monaco route debug sync', () => {
 		expect(resolveEditorDefaultSource('gleam', 'wasm32-wasip1')).toBe(editorDefaults.gleam);
 		expect(resolveEditorDefaultSource('perl', 'wasm32-wasip1')).toBe(editorDefaults.perl);
 		expect(resolveEditorDefaultSource('pascal', 'wasm32-wasip1')).toBe(editorDefaults.pascal);
+		expect(resolveEditorDefaultSource('forth', 'wasm32-wasip1')).toBe(editorDefaults.forth);
+		expect(resolveEditorDefaultSource('j', 'wasm32-wasip1')).toBe(editorDefaults.j);
+		expect(resolveEditorDefaultSource('bqn', 'wasm32-wasip1')).toBe(editorDefaults.bqn);
+		expect(resolveEditorDefaultSource('janet', 'wasm32-wasip1')).toBe(editorDefaults.janet);
 		expect(resolveEditorDefaultSource('lua', 'wasm32-wasip1')).toBe(editorDefaults.lua);
 		expect(resolveEditorDefaultSource('sqlite', 'wasm32-wasip1')).toBe(editorDefaults.sqlite);
 		expect(resolveEditorDefaultSource('php', 'wasm32-wasip1')).toBe(editorDefaults.php);
@@ -197,6 +205,10 @@ describe('Monaco route debug sync', () => {
 		expect(editorDefaults.gleam).toContain('stdin.read_line()');
 		expect(editorDefaults.perl).toContain('my $line = <STDIN>;');
 		expect(editorDefaults.pascal).toContain('ReadLn(Line);');
+		expect(editorDefaults.forth).toContain('KEY DUP 10 <>');
+		expect(editorDefaults.j).toContain('1!:1 [ 1');
+		expect(editorDefaults.bqn).toContain('•GetLine @');
+		expect(editorDefaults.janet).toContain('(getline)');
 		expect(editorDefaults.lua).toContain('io.read("*l")');
 		expect(editorDefaults.haskell).toContain('putStrLn');
 		expect(editorDefaults.r).toContain('readLines(stdin(), n = 1');
@@ -215,6 +227,10 @@ describe('Monaco route debug sync', () => {
 		expect(isEditorDefaultSource(editorDefaults.gleam)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.perl)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.pascal)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.forth)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.j)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.bqn)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.janet)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.lua)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.haskell)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.r)).toBe(true);
@@ -256,6 +272,7 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).toMatch(/<option value="PROLOG">Prolog<\/option>/);
 		expect(pageSource).toMatch(/<option value="GLEAM">Gleam<\/option>/);
 		expect(pageSource).toMatch(/<option value="PERL">Perl<\/option>/);
+		expect(pageSource).toMatch(/<option value="JANET">Janet<\/option>/);
 		expect(pageSource).toMatch(/<option value="OCAML">OCaml<\/option>/);
 		expect(pageSource).toMatch(/<option value="TINYGO">TinyGo<\/option>/);
 		expect(pageSource).toMatch(/<option value="JAVASCRIPT">JavaScript<\/option>/);

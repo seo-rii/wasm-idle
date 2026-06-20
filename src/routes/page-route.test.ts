@@ -98,6 +98,12 @@ describe('example route debug actions', () => {
 			/import \{ WASM_GO_ASSET_VERSION \} from '\$lib\/playground\/wasmGoVersion';/
 		);
 		expect(source).toMatch(
+			/import \{ WASM_BQN_ASSET_VERSION \} from '\$lib\/playground\/wasmBqnVersion';/
+		);
+		expect(source).toMatch(
+			/import \{ WASM_JANET_ASSET_VERSION \} from '\$lib\/playground\/wasmJanetVersion';/
+		);
+		expect(source).toMatch(
 			/import \{ WASM_D_ASSET_VERSION \} from '\$lib\/playground\/wasmDVersion';/
 		);
 		expect(source).toMatch(
@@ -179,6 +185,9 @@ describe('example route debug actions', () => {
 		);
 		expect(source).toMatch(
 			/perl: \{\s+baseUrl: path\s+\?\s+`\$\{path\}\/wasm-perl\/`\s+:\s+'\/wasm-perl\/',\s+workerUrl: path\s+\?\s+`\$\{path\}\/wasm-perl\/runner-worker\.js\?v=\$\{WASM_PERL_ASSET_VERSION\}`\s+:\s+`\/wasm-perl\/runner-worker\.js\?v=\$\{WASM_PERL_ASSET_VERSION\}`\s+\}/s
+		);
+		expect(source).toMatch(
+			/janet: \{\s+baseUrl: path\s+\?\s+`\$\{path\}\/wasm-janet\/`\s+:\s+'\/wasm-janet\/',\s+workerUrl: path\s+\?\s+`\$\{path\}\/wasm-janet\/runner-worker\.js\?v=\$\{WASM_JANET_ASSET_VERSION\}`\s+:\s+`\/wasm-janet\/runner-worker\.js\?v=\$\{WASM_JANET_ASSET_VERSION\}`\s+\}/s
 		);
 		expect(source).toMatch(
 			/ocaml: \{\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-of-js-of-ocaml\/browser-native\/src\/index\.js\?v=\$\{WASM_OCAML_ASSET_VERSION\}`\s+:\s+`\/wasm-of-js-of-ocaml\/browser-native\/src\/index\.js\?v=\$\{WASM_OCAML_ASSET_VERSION\}`,\s+manifestUrl: path\s+\?\s+`\$\{path\}\/wasm-of-js-of-ocaml\/browser-native-bundle\/browser-native-manifest\.v1\.json\?v=\$\{WASM_OCAML_ASSET_VERSION\}`\s+:\s+`\/wasm-of-js-of-ocaml\/browser-native-bundle\/browser-native-manifest\.v1\.json\?v=\$\{WASM_OCAML_ASSET_VERSION\}`\s+\}/s
@@ -282,6 +291,8 @@ describe('example route debug actions', () => {
 		expectEditorLanguage('RUBY', 'ruby');
 		expectEditorLanguage('HASKELL', 'haskell');
 		expectEditorLanguage('R', 'r');
+		expectEditorLanguage('BQN', 'bqn');
+		expectEditorLanguage('JANET', 'janet');
 		expect(source).toMatch(/RUST: \(\) => \(\{ rustTargetTriple \}\)/);
 		expect(source).toMatch(/\.\.\.languageExecutionOptions/);
 		expect(source).toMatch(/<select id="rust-target-triple" bind:value=\{rustTargetTriple\}>/);
@@ -403,6 +414,10 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/<option value="GLEAM">Gleam<\/option>/);
 		expect(source).toMatch(/<option value="PERL">Perl<\/option>/);
 		expect(source).toMatch(/<option value="PASCAL">Pascal<\/option>/);
+		expect(source).toMatch(/<option value="FORTH">Forth<\/option>/);
+		expect(source).toMatch(/<option value="J">J<\/option>/);
+		expect(source).toMatch(/<option value="BQN">BQN<\/option>/);
+		expect(source).toMatch(/<option value="JANET">Janet<\/option>/);
 		expect(source).toMatch(/<option value="OCAML">OCaml<\/option>/);
 		expect(source).toMatch(/<option value="TINYGO">TinyGo<\/option>/);
 		expect(source).toMatch(/<option value="JAVASCRIPT">JavaScript<\/option>/);
@@ -592,6 +607,34 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/LUA: 'lua'/);
 		expect(source).toMatch(/Lua runs through the bundled `wasmoon` Lua VM/);
 		expect(source).toMatch(/backed by its local wasm payload/);
+	});
+
+	it('surfaces BQN through the CBQN wasm worker runtime contract', () => {
+		expect(source).toMatch(/bqn: \{/);
+		expect(source).toMatch(/WASM_BQN_ASSET_VERSION/);
+		expect(source).toMatch(/wasm-bqn\/runner-worker\.js\?v=\$\{WASM_BQN_ASSET_VERSION\}/);
+		expect(source).toMatch(/<option value="BQN">BQN<\/option>/);
+		expect(source).toMatch(/bqn: 'BQN'/);
+		expectEditorLanguage('BQN', 'bqn');
+		expect(source).toMatch(/'.bqn': 'BQN'/);
+		expect(source).toMatch(/BQN: 'main\.bqn'/);
+		expect(source).toMatch(/BQN: 'bqn'/);
+		expect(source).toMatch(/BQN runs through bundled CBQN WebAssembly assets/);
+		expect(source).toMatch(/`•GetLine @`/);
+	});
+
+	it('surfaces Janet through the upstream Janet VM wasm worker runtime contract', () => {
+		expect(source).toMatch(/janet: \{/);
+		expect(source).toMatch(/WASM_JANET_ASSET_VERSION/);
+		expect(source).toMatch(/wasm-janet\/runner-worker\.js\?v=\$\{WASM_JANET_ASSET_VERSION\}/);
+		expect(source).toMatch(/<option value="JANET">Janet<\/option>/);
+		expect(source).toMatch(/janet: 'JANET'/);
+		expectEditorLanguage('JANET', 'janet');
+		expect(source).toMatch(/'.janet': 'JANET'/);
+		expect(source).toMatch(/JANET: 'main\.janet'/);
+		expect(source).toMatch(/JANET: 'janet'/);
+		expect(source).toMatch(/Janet runs through the upstream Janet VM compiled to WebAssembly/);
+		expect(source).toMatch(/Use `getline` or[\s\S]*`file\/read stdin :line`/);
 	});
 
 	it('surfaces Zig through bundled wasm compiler assets and the browser runtime hint', () => {

@@ -17,11 +17,15 @@
 	import type { PlaygroundRuntimeAssets } from '$lib/playground/assets';
 	import type { DebugLanguageAdapter } from '$lib';
 	import { WASM_AWK_ASSET_VERSION } from '$lib/playground/wasmAwkVersion';
+	import { WASM_BQN_ASSET_VERSION } from '$lib/playground/wasmBqnVersion';
 	import { WASM_D_ASSET_VERSION } from '$lib/playground/wasmDVersion';
 	import { WASM_DOTNET_ASSET_VERSION } from '$lib/playground/wasmDotnetVersion';
 	import { WASM_ELIXIR_ASSET_VERSION } from '$lib/playground/wasmElixirVersion';
+	import { WASM_FORTH_ASSET_VERSION } from '$lib/playground/wasmForthVersion';
 	import { WASM_GO_ASSET_VERSION } from '$lib/playground/wasmGoVersion';
 	import { WASM_HASKELL_ASSET_VERSION } from '$lib/playground/wasmHaskellVersion';
+	import { WASM_J_ASSET_VERSION } from '$lib/playground/wasmJVersion';
+	import { WASM_JANET_ASSET_VERSION } from '$lib/playground/wasmJanetVersion';
 	import { WASM_LUA_ASSET_VERSION } from '$lib/playground/wasmLuaVersion';
 	import { WASM_LISP_ASSET_VERSION } from '$lib/playground/wasmLispVersion';
 	import { WASM_OCAML_ASSET_VERSION } from '$lib/playground/wasmOcamlVersion';
@@ -79,6 +83,10 @@
 		| 'TCL'
 		| 'AWK'
 		| 'PASCAL'
+		| 'FORTH'
+		| 'J'
+		| 'BQN'
+		| 'JANET'
 		| 'OCAML'
 		| 'TINYGO'
 		| 'JAVASCRIPT'
@@ -150,6 +158,10 @@
 		'TCL',
 		'AWK',
 		'PASCAL',
+		'FORTH',
+		'J',
+		'BQN',
+		'JANET',
 		'OCAML',
 		'TINYGO',
 		'JAVASCRIPT',
@@ -185,6 +197,10 @@
 		TCL: 'Tcl',
 		AWK: 'AWK',
 		PASCAL: 'Pascal',
+		FORTH: 'Forth',
+		J: 'J',
+		BQN: 'BQN',
+		JANET: 'Janet',
 		OCAML: 'OCaml',
 		TINYGO: 'TinyGo',
 		JAVASCRIPT: 'JavaScript',
@@ -220,6 +236,10 @@
 		TCL: 'tcl',
 		AWK: 'awk',
 		PASCAL: 'pascal',
+		FORTH: 'forth',
+		J: 'j',
+		BQN: 'bqn',
+		JANET: 'janet',
 		OCAML: 'ocaml',
 		TINYGO: 'go',
 		JAVASCRIPT: 'javascript',
@@ -393,6 +413,30 @@
 				? `${path}/wasm-pascal/runner-worker.js?v=${WASM_PASCAL_ASSET_VERSION}`
 				: `/wasm-pascal/runner-worker.js?v=${WASM_PASCAL_ASSET_VERSION}`
 		},
+		forth: {
+			baseUrl: path ? `${path}/wasm-forth/` : '/wasm-forth/',
+			workerUrl: path
+				? `${path}/wasm-forth/runner-worker.js?v=${WASM_FORTH_ASSET_VERSION}`
+				: `/wasm-forth/runner-worker.js?v=${WASM_FORTH_ASSET_VERSION}`
+		},
+		j: {
+			baseUrl: path ? `${path}/wasm-j/` : '/wasm-j/',
+			workerUrl: path
+				? `${path}/wasm-j/runner-worker.js?v=${WASM_J_ASSET_VERSION}`
+				: `/wasm-j/runner-worker.js?v=${WASM_J_ASSET_VERSION}`
+		},
+		bqn: {
+			baseUrl: path ? `${path}/wasm-bqn/` : '/wasm-bqn/',
+			workerUrl: path
+				? `${path}/wasm-bqn/runner-worker.js?v=${WASM_BQN_ASSET_VERSION}`
+				: `/wasm-bqn/runner-worker.js?v=${WASM_BQN_ASSET_VERSION}`
+		},
+		janet: {
+			baseUrl: path ? `${path}/wasm-janet/` : '/wasm-janet/',
+			workerUrl: path
+				? `${path}/wasm-janet/runner-worker.js?v=${WASM_JANET_ASSET_VERSION}`
+				: `/wasm-janet/runner-worker.js?v=${WASM_JANET_ASSET_VERSION}`
+		},
 		ocaml: {
 			moduleUrl: path
 				? `${path}/wasm-of-js-of-ocaml/browser-native/src/index.js?v=${WASM_OCAML_ASSET_VERSION}`
@@ -519,7 +563,7 @@
 	const argsLabel = $derived(argsLabels[language] ?? 'Args');
 	const monacoLspLanguage = $derived(lspLanguageOverrides[language] ?? editorLanguage);
 	const activeRuntimeLspCapability = $derived(runtimeLspCapabilities[language] ?? null);
-	const clangdLspEnabled = $derived(lspEnabled && clangdRequested);
+	const clangdLspEnabled = $derived(lspEnabled && (clangdRequested || language === 'CPP'));
 	const dotnetLspEnabled = $derived(lspEnabled && dotnetLspLanguages.has(language));
 	const dotnetLspModuleUrl = $derived(
 		dotnetLspEnabled ? runtimeAssets.dotnet?.moduleUrl : undefined
@@ -735,6 +779,14 @@
 			'.gawk': 'AWK',
 			'.pas': 'PASCAL',
 			'.pp': 'PASCAL',
+			'.fth': 'FORTH',
+			'.forth': 'FORTH',
+			'.4th': 'FORTH',
+			'.ijs': 'J',
+			'.ijt': 'J',
+			'.ijx': 'J',
+			'.bqn': 'BQN',
+			'.janet': 'JANET',
 			'.ml': 'OCAML',
 			'.mli': 'OCAML',
 			'.js': 'JAVASCRIPT',
@@ -784,6 +836,10 @@
 			TCL: 'main.tcl',
 			AWK: 'main.awk',
 			PASCAL: 'main.pas',
+			FORTH: 'main.fth',
+			J: 'main.ijs',
+			BQN: 'main.bqn',
+			JANET: 'main.janet',
 			OCAML: 'main.ml',
 			TINYGO: 'main.go',
 			JAVASCRIPT: 'main.js',
@@ -823,6 +879,10 @@
 			TCL: 'tcl',
 			AWK: 'awk',
 			PASCAL: 'pascal',
+			FORTH: 'forth',
+			J: 'j',
+			BQN: 'bqn',
+			JANET: 'janet',
 			OCAML: 'ocaml',
 			TINYGO: 'go',
 			JAVASCRIPT: 'javascript',
@@ -1322,6 +1382,11 @@
 			pascal: 'PASCAL',
 			pas: 'PASCAL',
 			fpc: 'PASCAL',
+			forth: 'FORTH',
+			gforth: 'FORTH',
+			j: 'J',
+			bqn: 'BQN',
+			janet: 'JANET',
 			ocaml: 'OCAML',
 			tinygo: 'TINYGO',
 			javascript: 'JAVASCRIPT',
@@ -1967,6 +2032,10 @@
 						<option value="TCL">Tcl</option>
 						<option value="AWK">AWK</option>
 						<option value="PASCAL">Pascal</option>
+						<option value="FORTH">Forth</option>
+						<option value="J">J</option>
+						<option value="BQN">BQN</option>
+						<option value="JANET">Janet</option>
 						<option value="OCAML">OCaml</option>
 						<option value="TINYGO">TinyGo</option>
 						<option value="JAVASCRIPT">JavaScript</option>
@@ -2178,6 +2247,29 @@
 			<p class="hint">
 				Pascal compiles in the browser with bundled `pas2js` assets and runs the generated
 				JavaScript locally. Use `ReadLn` for line input.
+			</p>
+		{/if}
+		{#if language === 'FORTH'}
+			<p class="hint">
+				Forth runs through bundled WAForth WebAssembly assets. Use `KEY`, `ACCEPT`, or
+				`REFILL` for stdin.
+			</p>
+		{/if}
+		{#if language === 'J'}
+			<p class="hint">
+				J runs through the official J playground WebAssembly runtime. Use `1!:1 [ 1` to
+				read stdin.
+			</p>
+		{/if}
+		{#if language === 'BQN'}
+			<p class="hint">
+				BQN runs through bundled CBQN WebAssembly assets. Use `•GetLine @` for line input.
+			</p>
+		{/if}
+		{#if language === 'JANET'}
+			<p class="hint">
+				Janet runs through the upstream Janet VM compiled to WebAssembly. Use `getline` or
+				`file/read stdin :line` for line input.
 			</p>
 		{/if}
 		{#if language === 'TINYGO'}

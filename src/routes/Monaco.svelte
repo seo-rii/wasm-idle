@@ -11,7 +11,9 @@
 	import type {
 		IMonacoInputEvent,
 		IMonacoLspConnection,
+		IMonacoLspMessage,
 		IMonacoLspProvider,
+		IMonacoLspServerHandle,
 		IMonacoSetting
 	} from '@seorii/monaco';
 	import type { LanguageServerStatus } from '@wasm-idle/lsp';
@@ -25,8 +27,20 @@
 
 	type DotnetLspLanguage = 'csharp' | 'fsharp' | 'vbnet';
 	type MonacoLanguageContributionLoader = () => Promise<unknown>;
+	type MonacoTestGlobal = typeof globalThis & {
+		__wasmIdleMonacoApi?: typeof monaco | null;
+		__wasmIdleMonacoEditor?: monaco.editor.IStandaloneCodeEditor | null;
+		__wasmIdleMonacoLspStatus?: Record<string, LanguageServerStatus> | null;
+		__wasmIdleMonacoLspTraffic?: MonacoLspTraffic | null;
+	};
+	interface MonacoLspTraffic {
+		incoming: number;
+		outgoing: number;
+		methods: string[];
+	}
 	interface LspRoute {
 		languages: readonly string[];
+		manualDocumentSync?: boolean;
 		isEnabled: () => boolean;
 		setStatus: (status: LanguageServerStatus) => void;
 		load: (currentUrl: string) => Promise<IMonacoLspConnection>;
@@ -89,6 +103,42 @@
 		sql: () => import('monaco-editor/esm/vs/basic-languages/sql/sql.contribution.js'),
 		vb: () => import('monaco-editor/esm/vs/basic-languages/vb/vb.contribution.js')
 	};
+	const monacoTestHooksEnabled = () => {
+		try {
+			return new URL(globalThis.location?.href || '').searchParams.get('lsp-test') === '1';
+		} catch {
+			return false;
+		}
+	};
+	const recordLspTraffic = (direction: 'in' | 'out', message: IMonacoLspMessage) => {
+		if (!monacoTestHooksEnabled()) return;
+		const testGlobal = globalThis as MonacoTestGlobal;
+		const traffic =
+			testGlobal.__wasmIdleMonacoLspTraffic ||
+			(testGlobal.__wasmIdleMonacoLspTraffic = {
+				incoming: 0,
+				outgoing: 0,
+				methods: []
+			});
+		if (direction === 'in') traffic.incoming += 1;
+		else traffic.outgoing += 1;
+		const record = message as unknown as Record<string, unknown>;
+		const method =
+			typeof record.method === 'string'
+				? record.method
+				: record.id !== undefined
+					? 'response'
+					: 'unknown';
+		const params = record.params as Record<string, unknown> | undefined;
+		const textDocument = params?.textDocument as Record<string, unknown> | undefined;
+		const uri = typeof textDocument?.uri === 'string' ? ` ${textDocument.uri}` : '';
+		traffic.methods.push(`${direction}:${method}${uri}`);
+		if (traffic.methods.length > 80) traffic.methods.splice(0, traffic.methods.length - 80);
+	};
+	const isServerHandleConnection = (
+		connection: IMonacoLspConnection
+	): connection is IMonacoLspServerHandle =>
+		typeof connection === 'object' && connection !== null && 'transport' in connection;
 
 	const ocamlKeywords = [
 		'and',
@@ -823,6 +873,90 @@
 		}
 	} satisfies monaco.languages.IMonarchLanguage;
 
+	const janetLanguageConfiguration = {
+		comments: {
+			lineComment: '#'
+		},
+		brackets: [
+			['(', ')'],
+			['[', ']'],
+			['{', '}']
+		],
+		autoClosingPairs: [
+			{ open: '(', close: ')' },
+			{ open: '[', close: ']' },
+			{ open: '{', close: '}' },
+			{ open: '"', close: '"' }
+		],
+		surroundingPairs: [
+			{ open: '(', close: ')' },
+			{ open: '[', close: ']' },
+			{ open: '{', close: '}' },
+			{ open: '"', close: '"' }
+		]
+	} satisfies monaco.languages.LanguageConfiguration;
+
+	const janetMonarchTokens = {
+		defaultToken: '',
+		tokenPostfix: '.janet',
+		keywords: [
+			'break',
+			'def',
+			'defglobal',
+			'defmacro',
+			'defn',
+			'do',
+			'each',
+			'eachk',
+			'fn',
+			'for',
+			'if',
+			'import',
+			'let',
+			'loop',
+			'macex',
+			'quote',
+			'try',
+			'var',
+			'when',
+			'while'
+		],
+		builtins: [
+			'file/read',
+			'getline',
+			'print',
+			'printf',
+			'scan-number',
+			'string/trim'
+		],
+		tokenizer: {
+			root: [
+				[/#!.*$/, 'comment'],
+				[/#.*$/, 'comment'],
+				[/@"/, 'string', '@string'],
+				[/"/, 'string', '@string'],
+				[/:(?:[^\s()[\]{}";]+)/, 'type.identifier'],
+				[/[-+]?(?:\d+\.\d+|\d+)(?:[eE][-+]?\d+)?/, 'number'],
+				[/[()[\]{}]/, '@brackets'],
+				[
+					/[^\s()[\]{}";]+/,
+					{
+						cases: {
+							'@keywords': 'keyword',
+							'@builtins': 'predefined',
+							'@default': 'identifier'
+						}
+					}
+				]
+			],
+			string: [
+				[/[^\\"]+/, 'string'],
+				[/\\./, 'string.escape'],
+				[/"/, 'string', '@pop']
+			]
+		}
+	} satisfies monaco.languages.IMonarchLanguage;
+
 	const watLanguageConfiguration = {
 		comments: {
 			lineComment: ';;'
@@ -1518,6 +1652,239 @@
 		}
 	} satisfies monaco.languages.IMonarchLanguage;
 
+	const forthLanguageConfiguration = {
+		comments: {
+			lineComment: '\\'
+		},
+		brackets: [['(', ')']],
+		autoClosingPairs: [
+			{ open: '(', close: ')' },
+			{ open: '"', close: '"' }
+		],
+		surroundingPairs: [
+			{ open: '(', close: ')' },
+			{ open: '"', close: '"' }
+		]
+	} satisfies monaco.languages.LanguageConfiguration;
+
+	const forthMonarchTokens = {
+		defaultToken: '',
+		ignoreCase: true,
+		tokenPostfix: '.forth',
+		keywords: [
+			':',
+			';',
+			'begin',
+			'until',
+			'while',
+			'repeat',
+			'if',
+			'else',
+			'then',
+			'do',
+			'loop',
+			'constant',
+			'variable',
+			'create',
+			'does>',
+			'immediate',
+			'recurse'
+		],
+		builtins: [
+			'accept',
+			'cr',
+			'drop',
+			'dup',
+			'emit',
+			'key',
+			'over',
+			'refill',
+			'rot',
+			'swap',
+			'tuck',
+			'type',
+			'words'
+		],
+		operators: [
+			'+',
+			'-',
+			'*',
+			'/',
+			'/mod',
+			'<',
+			'<=',
+			'=',
+			'<>',
+			'>',
+			'>=',
+			'and',
+			'invert',
+			'mod',
+			'or',
+			'xor'
+		],
+		tokenizer: {
+			root: [
+				[/\\.*$/, 'comment'],
+				[/\([^)]*\)/, 'comment'],
+				[/\."/, 'keyword', '@string'],
+				[/S"/, 'keyword', '@string'],
+				[/[-+]?\d+/, 'number'],
+				[
+					/[^\s()[\]"\\]+/,
+					{
+						cases: {
+							'@keywords': 'keyword',
+							'@builtins': 'type.identifier',
+							'@operators': 'operator',
+							'@default': 'identifier'
+						}
+					}
+				],
+				[/[()[\]]/, '@brackets']
+			],
+			string: [
+				[/[^\\"]+/, 'string'],
+				[/\\./, 'string.escape'],
+				[/"/, 'string', '@pop']
+			]
+		}
+	} satisfies monaco.languages.IMonarchLanguage;
+
+	const jLanguageConfiguration = {
+		comments: {
+			lineComment: 'NB.'
+		},
+		brackets: [
+			['(', ')'],
+			['[', ']'],
+			['{', '}']
+		],
+		autoClosingPairs: [
+			{ open: '(', close: ')' },
+			{ open: '[', close: ']' },
+			{ open: '{', close: '}' },
+			{ open: "'", close: "'" },
+			{ open: '"', close: '"' }
+		],
+		surroundingPairs: [
+			{ open: '(', close: ')' },
+			{ open: '[', close: ']' },
+			{ open: '{', close: '}' },
+			{ open: "'", close: "'" },
+			{ open: '"', close: '"' }
+		]
+	} satisfies monaco.languages.LanguageConfiguration;
+
+	const jMonarchTokens = {
+		defaultToken: '',
+		tokenPostfix: '.j',
+		keywords: ['assert.', 'break.', 'case.', 'catch.', 'do.', 'else.', 'elseif.', 'end.', 'for.', 'if.', 'return.', 'select.', 'throw.', 'try.', 'while.'],
+		builtins: ['cocurrent', 'coinsert', 'coname', 'load', 'require', 'smoutput'],
+		tokenizer: {
+			root: [
+				[/NB\..*$/, 'comment'],
+				[/'/, 'string', '@string'],
+				[/\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/, 'number'],
+				[
+					/[A-Za-z_][A-Za-z0-9_]*(?:\.)?/,
+					{
+						cases: {
+							'@keywords': 'keyword',
+							'@builtins': 'type.identifier',
+							'@default': 'identifier'
+						}
+					}
+				],
+				[/[(){}[\]]/, '@brackets'],
+				[/[=:+\-*/%<>^$~|,;#.?!@&`\\]+/, 'operator']
+			],
+			string: [
+				[/[^']+/, 'string'],
+				[/''/, 'string.escape'],
+				[/'/, 'string', '@pop']
+			]
+		}
+	} satisfies monaco.languages.IMonarchLanguage;
+
+	const bqnLanguageConfiguration = {
+		comments: {
+			lineComment: '#'
+		},
+		brackets: [
+			['(', ')'],
+			['[', ']'],
+			['{', '}'],
+			['⟨', '⟩']
+		],
+		autoClosingPairs: [
+			{ open: '(', close: ')' },
+			{ open: '[', close: ']' },
+			{ open: '{', close: '}' },
+			{ open: '⟨', close: '⟩' },
+			{ open: '"', close: '"' }
+		],
+		surroundingPairs: [
+			{ open: '(', close: ')' },
+			{ open: '[', close: ']' },
+			{ open: '{', close: '}' },
+			{ open: '⟨', close: '⟩' },
+			{ open: '"', close: '"' }
+		]
+	} satisfies monaco.languages.LanguageConfiguration;
+
+	const bqnMonarchTokens = {
+		defaultToken: '',
+		tokenPostfix: '.bqn',
+		builtins: [
+			'•BQN',
+			'•Fmt',
+			'•GetLine',
+			'•Out',
+			'•ParseFloat',
+			'•Repr',
+			'•Show',
+			'•ToUTF8',
+			'•term.OutRaw'
+		],
+		systemVariables: ['𝕩', '𝕨', '𝕊', '𝕤', '𝔽', '𝔾'],
+		tokenizer: {
+			root: [
+				[/#.*$/, 'comment'],
+				[/"([^"\\]|\\.)*$/, 'string.invalid'],
+				[/"/, 'string', '@string'],
+				[/¯?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/, 'number'],
+				[
+					/•[A-Za-z._][A-Za-z0-9._]*/,
+					{
+						cases: {
+							'@builtins': 'type.identifier',
+							'@default': 'predefined'
+						}
+					}
+				],
+				[
+					/[𝕩𝕨𝕊𝕤𝔽𝔾]/,
+					{
+						cases: {
+							'@systemVariables': 'variable.predefined',
+							'@default': 'identifier'
+						}
+					}
+				],
+				[/[A-Za-z_][A-Za-z0-9_]*/, 'identifier'],
+				[/[(){}[\]⟨⟩]/, '@brackets'],
+				[/[⋄,;]/, 'delimiter'],
+				[/[-+×÷⋆√⌊⌈|¬∧∨<>≠=≤≥≡≢⊣⊢⥊∾≍⋈↑↓↕«»⌽⍉\/⍋⍒⊏⊑⊐⊒∊⍷⊔!˙˜˘¨⌜⁼´˝`∘○⊸⟜⌾⊘◶⎉⚇⍟⎊←↩?:]+/, 'operator']
+			],
+			string: [
+				[/[^\\"]+/, 'string'],
+				[/\\./, 'string.escape'],
+				[/"/, 'string', '@pop']
+			]
+		}
+	} satisfies monaco.languages.IMonarchLanguage;
+
 	export const editorValue = () => editor?.getValue() || '';
 
 	let clangdStatus = $state<LanguageServerStatus>({ state: 'disabled' });
@@ -1658,6 +2025,10 @@
 				| 'tcl'
 				| 'awk'
 				| 'pascal'
+				| 'forth'
+				| 'j'
+				| 'bqn'
+				| 'janet'
 				| 'ocaml'
 				| 'javascript'
 				| 'typescript'
@@ -1723,9 +2094,157 @@
 			typescriptLspLibUrl || ''
 		].join('\n')
 	);
+	const withMonacoDocumentSync = (connection: IMonacoLspConnection): IMonacoLspConnection => {
+		if (!isServerHandleConnection(connection)) return connection;
+		const activeModel = model || editor?.getModel();
+		if (!activeModel) return connection;
+
+		const originalReader = connection.transport.reader;
+		const originalWriter = connection.transport.writer;
+		const documentUri = activeModel.uri.toString(true).toLowerCase();
+		const workspaceUri = documentUri.replace(/\/[^/]*$/u, '') || 'file:///workspace';
+		let disposed = false;
+		let opened = false;
+		let openTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
+		let modelContentDisposable: monaco.IDisposable | null = null;
+		const send = (message: IMonacoLspMessage) => {
+			recordLspTraffic('out', message);
+			void originalWriter.write(message).catch(() => {});
+		};
+		const openDocument = () => {
+			if (disposed || opened || activeModel.isDisposed()) return;
+			opened = true;
+			send({
+				jsonrpc: '2.0',
+				method: 'textDocument/didOpen',
+				params: {
+					textDocument: {
+						uri: documentUri,
+						languageId: activeModel.getLanguageId(),
+						version: activeModel.getVersionId(),
+						text: activeModel.getValue()
+					}
+				}
+			} as IMonacoLspMessage);
+			modelContentDisposable = activeModel.onDidChangeContent(() => {
+				if (disposed || activeModel.isDisposed()) return;
+				send({
+					jsonrpc: '2.0',
+					method: 'textDocument/didChange',
+					params: {
+						textDocument: {
+							uri: documentUri,
+							version: activeModel.getVersionId()
+						},
+						contentChanges: [{ text: activeModel.getValue() }]
+					}
+				} as IMonacoLspMessage);
+			});
+		};
+		const scheduleOpenDocument = (delay = 0) => {
+			if (openTimer !== null) globalThis.clearTimeout(openTimer);
+			openTimer = globalThis.setTimeout(() => {
+				openTimer = null;
+				openDocument();
+			}, delay);
+		};
+
+		return {
+			transport: {
+				reader: {
+					listen(callback) {
+						const disposable = originalReader.listen((message) => {
+							recordLspTraffic('in', message);
+							callback(message);
+						});
+						scheduleOpenDocument(2000);
+						return disposable;
+					},
+					onClose: originalReader.onClose?.bind(originalReader),
+					dispose: originalReader.dispose?.bind(originalReader)
+				},
+				writer: {
+					write(message) {
+						const record = message as unknown as Record<string, unknown>;
+						const outgoing =
+							record &&
+							typeof record === 'object' &&
+							record.method === 'initialize' &&
+							record.params &&
+							typeof record.params === 'object'
+								? ({
+										...record,
+										params: {
+											...(record.params as Record<string, unknown>),
+											rootUri: workspaceUri,
+											workspaceFolders: [
+												{ uri: workspaceUri, name: 'workspace' }
+											]
+										}
+									} as unknown as IMonacoLspMessage)
+								: message;
+						const outgoingRecord = outgoing as unknown as Record<string, unknown>;
+						const method =
+							outgoingRecord && typeof outgoingRecord.method === 'string'
+								? outgoingRecord.method
+								: '';
+						const params =
+							outgoingRecord && typeof outgoingRecord.params === 'object'
+								? (outgoingRecord.params as Record<string, unknown>)
+								: null;
+						const textDocument =
+							params && typeof params.textDocument === 'object'
+								? (params.textDocument as Record<string, unknown>)
+								: null;
+						const outgoingUri =
+							typeof textDocument?.uri === 'string'
+								? textDocument.uri.toLowerCase()
+								: '';
+						if (outgoingUri === documentUri) {
+							if (method === 'textDocument/didOpen') {
+								if (opened) return Promise.resolve();
+								opened = true;
+								if (openTimer !== null) {
+									globalThis.clearTimeout(openTimer);
+									openTimer = null;
+								}
+							} else if (
+								method === 'textDocument/didChange' &&
+								modelContentDisposable
+							) {
+								return Promise.resolve();
+							} else if (method === 'textDocument/didClose') {
+								opened = false;
+								modelContentDisposable?.dispose();
+								modelContentDisposable = null;
+							}
+						}
+						recordLspTraffic('out', outgoing);
+						const result = originalWriter.write(outgoing);
+						if (method === 'initialized') {
+							scheduleOpenDocument(1200);
+						}
+						return result;
+					},
+					dispose: originalWriter.dispose?.bind(originalWriter),
+					end: originalWriter.end?.bind(originalWriter)
+				},
+				dispose: connection.transport.dispose?.bind(connection.transport)
+			},
+			dispose() {
+				disposed = true;
+				if (openTimer !== null) globalThis.clearTimeout(openTimer);
+				openTimer = null;
+				modelContentDisposable?.dispose();
+				modelContentDisposable = null;
+				connection.dispose?.();
+			}
+		};
+	};
 	const lspRoutes: LspRoute[] = [
 		{
 			languages: ['cpp'],
+			manualDocumentSync: true,
 			isEnabled: () => clangdEnabled && !!clangdBaseUrl,
 			setStatus: (status) => (clangdStatus = status),
 			load: async (currentUrl) => {
@@ -1741,6 +2260,7 @@
 		},
 		{
 			languages: ['python'],
+			manualDocumentSync: true,
 			isEnabled: () => true,
 			setStatus: (status) => (pythonLspStatus = status),
 			load: async (currentUrl) => {
@@ -1754,6 +2274,7 @@
 		},
 		{
 			languages: ['csharp', 'fsharp', 'vb'],
+			manualDocumentSync: true,
 			isEnabled: () => dotnetLspEnabled && !!dotnetLspModuleUrl && !!dotnetLspLanguage,
 			setStatus: (status) => (dotnetLspStatus = status),
 			load: async (currentUrl) => {
@@ -1779,6 +2300,7 @@
 		},
 		{
 			languages: ['gleam'],
+			manualDocumentSync: true,
 			isEnabled: () => gleamLspEnabled && !!gleamLspBaseUrl,
 			setStatus: (status) => (gleamLspStatus = status),
 			load: async (currentUrl) => {
@@ -1795,6 +2317,7 @@
 		},
 		{
 			languages: ['go'],
+			manualDocumentSync: true,
 			isEnabled: () => goLspEnabled && !!goLspCompilerUrl,
 			setStatus: (status) => (goLspStatus = status),
 			load: async (currentUrl) => {
@@ -1811,6 +2334,7 @@
 		},
 		{
 			languages: ['rust'],
+			manualDocumentSync: true,
 			isEnabled: () => rustLspEnabled && !!rustLspCompilerUrl,
 			setStatus: (status) => (rustLspStatus = status),
 			load: async (currentUrl) => {
@@ -1827,6 +2351,7 @@
 		},
 		{
 			languages: ['typescript', 'javascript'],
+			manualDocumentSync: true,
 			isEnabled: () => true,
 			setStatus: (status) => (typescriptLspStatus = status),
 			load: async (currentUrl) => {
@@ -1848,6 +2373,7 @@
 		},
 		{
 			languages: ['assemblyscript'],
+			manualDocumentSync: true,
 			isEnabled: () => true,
 			setStatus: (status) => (assemblyScriptLspStatus = status),
 			load: async (currentUrl) => {
@@ -1860,6 +2386,7 @@
 		},
 		{
 			languages: ['wat'],
+			manualDocumentSync: true,
 			isEnabled: () => true,
 			setStatus: (status) => (watLspStatus = status),
 			load: async (currentUrl) => {
@@ -1872,6 +2399,7 @@
 		},
 		{
 			languages: ['zig'],
+			manualDocumentSync: true,
 			isEnabled: () => zigLspEnabled && !!zigLspCompilerUrl && !!zigLspStdlibUrl,
 			setStatus: (status) => (zigLspStatus = status),
 			load: async (currentUrl) => {
@@ -1888,6 +2416,7 @@
 		},
 		{
 			languages: ['php'],
+			manualDocumentSync: true,
 			isEnabled: () => phpLspEnabled,
 			setStatus: (status) => (phpLspStatus = status),
 			load: async (currentUrl) => {
@@ -1900,6 +2429,7 @@
 		},
 		{
 			languages: ['lua'],
+			manualDocumentSync: true,
 			isEnabled: () => luaLspEnabled && !!luaLspModuleUrl,
 			setStatus: (status) => (luaLspStatus = status),
 			load: async (currentUrl) => {
@@ -1915,6 +2445,7 @@
 		},
 		{
 			languages: ['ocaml'],
+			manualDocumentSync: true,
 			isEnabled: () => ocamlLspEnabled && !!ocamlLspModuleUrl && !!ocamlLspManifestUrl,
 			setStatus: (status) => (ocamlLspStatus = status),
 			load: async (currentUrl) => {
@@ -1931,6 +2462,7 @@
 		},
 		{
 			languages: ['haskell'],
+			manualDocumentSync: true,
 			isEnabled: () =>
 				haskellLspEnabled &&
 				!!haskellLspModuleUrl &&
@@ -1972,7 +2504,8 @@
 				return null;
 			}
 			try {
-				return await route.load(currentUrl);
+				const connection = await route.load(currentUrl);
+				return route.manualDocumentSync ? withMonacoDocumentSync(connection) : connection;
 			} catch (error) {
 				route.setStatus({
 					state: 'error',
@@ -2019,7 +2552,32 @@
 
 	const handleEditorLoad = (nextEditor: monaco.editor.IStandaloneCodeEditor) => {
 		editor = nextEditor;
+		if (monacoTestHooksEnabled()) {
+			(globalThis as MonacoTestGlobal).__wasmIdleMonacoEditor = nextEditor;
+		}
 	};
+
+	$effect(() => {
+		if (!monacoTestHooksEnabled()) return;
+		const testGlobal = globalThis as MonacoTestGlobal;
+		testGlobal.__wasmIdleMonacoApi = Monaco;
+		testGlobal.__wasmIdleMonacoLspStatus = {
+			clangd: clangdStatus,
+			python: pythonLspStatus,
+			dotnet: dotnetLspStatus,
+			gleam: gleamLspStatus,
+			go: goLspStatus,
+			rust: rustLspStatus,
+			typescript: typescriptLspStatus,
+			assemblyscript: assemblyScriptLspStatus,
+			wat: watLspStatus,
+			zig: zigLspStatus,
+			php: phpLspStatus,
+			lua: luaLspStatus,
+			ocaml: ocamlLspStatus,
+			haskell: haskellLspStatus
+		};
+	});
 
 	const handleEditorInput = (event: IMonacoInputEvent) => {
 		if (!applyingValue) onChange?.(event.value);
@@ -2212,6 +2770,42 @@
 			}
 			monacoApi.languages.setLanguageConfiguration('awk', awkLanguageConfiguration);
 			monacoApi.languages.setMonarchTokensProvider('awk', awkMonarchTokens);
+			if (!monacoApi.languages.getLanguages().some(({ id }) => id === 'forth')) {
+				monacoApi.languages.register({
+					id: 'forth',
+					aliases: ['Forth', 'forth', 'gforth'],
+					extensions: ['.fth', '.forth', '.4th']
+				});
+			}
+			monacoApi.languages.setLanguageConfiguration('forth', forthLanguageConfiguration);
+			monacoApi.languages.setMonarchTokensProvider('forth', forthMonarchTokens);
+			if (!monacoApi.languages.getLanguages().some(({ id }) => id === 'j')) {
+				monacoApi.languages.register({
+					id: 'j',
+					aliases: ['J', 'j'],
+					extensions: ['.ijs', '.ijt', '.ijx']
+				});
+			}
+			monacoApi.languages.setLanguageConfiguration('j', jLanguageConfiguration);
+			monacoApi.languages.setMonarchTokensProvider('j', jMonarchTokens);
+			if (!monacoApi.languages.getLanguages().some(({ id }) => id === 'bqn')) {
+				monacoApi.languages.register({
+					id: 'bqn',
+					aliases: ['BQN', 'bqn'],
+					extensions: ['.bqn']
+				});
+			}
+			monacoApi.languages.setLanguageConfiguration('bqn', bqnLanguageConfiguration);
+			monacoApi.languages.setMonarchTokensProvider('bqn', bqnMonarchTokens);
+			if (!monacoApi.languages.getLanguages().some(({ id }) => id === 'janet')) {
+				monacoApi.languages.register({
+					id: 'janet',
+					aliases: ['Janet', 'janet'],
+					extensions: ['.janet']
+				});
+			}
+			monacoApi.languages.setLanguageConfiguration('janet', janetLanguageConfiguration);
+			monacoApi.languages.setMonarchTokensProvider('janet', janetMonarchTokens);
 			if (!monacoApi.languages.getLanguages().some(({ id }) => id === 'octave')) {
 				monacoApi.languages.register({
 					id: 'octave',
@@ -2250,6 +2844,13 @@
 			const activeModel = model || editor?.getModel();
 			if (Monaco && activeModel)
 				Monaco.editor.setModelMarkers(activeModel, 'wasm-idle-compiler', []);
+			const testGlobal = globalThis as MonacoTestGlobal;
+			if (testGlobal.__wasmIdleMonacoEditor === editor) {
+				testGlobal.__wasmIdleMonacoEditor = null;
+			}
+			testGlobal.__wasmIdleMonacoApi = null;
+			testGlobal.__wasmIdleMonacoLspStatus = null;
+			testGlobal.__wasmIdleMonacoLspTraffic = null;
 			if (!model?.isDisposed()) model?.dispose();
 			model = undefined;
 			editor = null;

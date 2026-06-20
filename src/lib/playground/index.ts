@@ -141,6 +141,34 @@ const sandboxRoutes = [
 		}
 	},
 	{
+		aliases: ['FORTH', 'GFORTH'],
+		load: async () => {
+			const { default: Forth } = await import('$lib/playground/forth');
+			return new Forth();
+		}
+	},
+	{
+		aliases: ['J'],
+		load: async () => {
+			const { default: J } = await import('$lib/playground/j');
+			return new J();
+		}
+	},
+	{
+		aliases: ['BQN'],
+		load: async () => {
+			const { default: Bqn } = await import('$lib/playground/bqn');
+			return new Bqn();
+		}
+	},
+	{
+		aliases: ['JANET'],
+		load: async () => {
+			const { default: Janet } = await import('$lib/playground/janet');
+			return new Janet();
+		}
+	},
+	{
 		aliases: ['TINYGO'],
 		load: async () => {
 			const { default: TinyGo } = await import('$lib/playground/tinygo');
@@ -272,6 +300,10 @@ export const supportedLanguages = [
 	'TCL',
 	'AWK',
 	'PASCAL',
+	'FORTH',
+	'J',
+	'BQN',
+	'JANET',
 	'TINYGO',
 	'OCAML',
 	'JAVASCRIPT',

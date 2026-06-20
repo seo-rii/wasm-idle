@@ -155,6 +155,34 @@ vi.mock('$lib/playground/pascal', () => {
 	};
 });
 
+vi.mock('$lib/playground/forth', () => {
+	moduleLoads.add('FORTH');
+	return {
+		default: createMockSandboxClass('FORTH')
+	};
+});
+
+vi.mock('$lib/playground/j', () => {
+	moduleLoads.add('J');
+	return {
+		default: createMockSandboxClass('J')
+	};
+});
+
+vi.mock('$lib/playground/bqn', () => {
+	moduleLoads.add('BQN');
+	return {
+		default: createMockSandboxClass('BQN')
+	};
+});
+
+vi.mock('$lib/playground/janet', () => {
+	moduleLoads.add('JANET');
+	return {
+		default: createMockSandboxClass('JANET')
+	};
+});
+
 vi.mock('$lib/playground/sqlite', () => {
 	moduleLoads.add('SQLITE');
 	return {
@@ -266,7 +294,7 @@ vi.mock('$lib/playground/clang', () => {
 	};
 });
 
-import playground, { createPlaygroundBinding } from './index';
+import playground, { createPlaygroundBinding, supportedLanguages } from './index';
 
 const moduleLoadsAfterFactoryImport = new Set(moduleLoads);
 
@@ -278,6 +306,12 @@ describe('playground runtime binding', () => {
 
 	it('does not load language sandbox modules when the playground factory is imported', () => {
 		expect([...moduleLoadsAfterFactoryImport]).toEqual([]);
+	});
+
+	it('lists static worker languages in the exported supported language registry', () => {
+		expect(supportedLanguages).toEqual(
+			expect.arrayContaining(['FORTH', 'J', 'BQN', 'JANET'])
+		);
 	});
 
 	it('keeps the legacy sandbox load signature when runtime assets are not bound', async () => {
@@ -657,7 +691,7 @@ End Module`;
 		expect(sandboxInstances.get('PROLOG')).toHaveLength(1);
 	});
 
-	it('routes Gleam, Perl, Tcl, AWK, and Pascal requests through their static worker wasm implementations', async () => {
+	it('routes Gleam, Perl, Tcl, AWK, Pascal, Forth, J, BQN, and Janet requests through their static worker wasm implementations', async () => {
 		const runtimeAssets = {
 			rootUrl: '/absproxy/5173',
 			gleam: {
@@ -680,6 +714,22 @@ End Module`;
 			pascal: {
 				baseUrl: '/absproxy/5173/wasm-pascal/',
 				workerUrl: '/absproxy/5173/wasm-pascal/runner-worker.js?v=test'
+			},
+			forth: {
+				baseUrl: '/absproxy/5173/wasm-forth/',
+				workerUrl: '/absproxy/5173/wasm-forth/runner-worker.js?v=test'
+			},
+			j: {
+				baseUrl: '/absproxy/5173/wasm-j/',
+				workerUrl: '/absproxy/5173/wasm-j/runner-worker.js?v=test'
+			},
+			bqn: {
+				baseUrl: '/absproxy/5173/wasm-bqn/',
+				workerUrl: '/absproxy/5173/wasm-bqn/runner-worker.js?v=test'
+			},
+			janet: {
+				baseUrl: '/absproxy/5173/wasm-janet/',
+				workerUrl: '/absproxy/5173/wasm-janet/runner-worker.js?v=test'
 			}
 		};
 		const binding = createPlaygroundBinding(runtimeAssets);
@@ -689,23 +739,39 @@ End Module`;
 		const tcl = await binding.load('TCLSH');
 		const awk = await binding.load('GAWK');
 		const pascal = await binding.load('PAS');
+		const forth = await binding.load('GFORTH');
+		const j = await binding.load('J');
+		const bqn = await binding.load('BQN');
+		const janet = await binding.load('JANET');
 
 		await gleam.load('pub fn main() { Nil }', true, [], {}, progress);
 		await perl.load('print "hello\\n";', true, [], {}, progress);
 		await tcl.load('puts "hello"', true, [], {}, progress);
 		await awk.load('{ print }', true, [], {}, progress);
 		await pascal.load('program main; begin WriteLn(1); end.', true, [], {}, progress);
+		await forth.load('KEY EMIT', true, [], {}, progress);
+		await j.load('smoutput 1', true, [], {}, progress);
+		await bqn.load('1+1', true, [], {}, progress);
+		await janet.load('(print "hello")', true, [], {}, progress);
 
 		expect(gleam.runtimeAssets).toEqual(runtimeAssets);
 		expect(perl.runtimeAssets).toEqual(runtimeAssets);
 		expect(tcl.runtimeAssets).toEqual(runtimeAssets);
 		expect(awk.runtimeAssets).toEqual(runtimeAssets);
 		expect(pascal.runtimeAssets).toEqual(runtimeAssets);
+		expect(forth.runtimeAssets).toEqual(runtimeAssets);
+		expect(j.runtimeAssets).toEqual(runtimeAssets);
+		expect(bqn.runtimeAssets).toEqual(runtimeAssets);
+		expect(janet.runtimeAssets).toEqual(runtimeAssets);
 		expect(sandboxInstances.get('GLEAM')).toHaveLength(1);
 		expect(sandboxInstances.get('PERL')).toHaveLength(1);
 		expect(sandboxInstances.get('TCL')).toHaveLength(1);
 		expect(sandboxInstances.get('AWK')).toHaveLength(1);
 		expect(sandboxInstances.get('PASCAL')).toHaveLength(1);
+		expect(sandboxInstances.get('FORTH')).toHaveLength(1);
+		expect(sandboxInstances.get('J')).toHaveLength(1);
+		expect(sandboxInstances.get('BQN')).toHaveLength(1);
+		expect(sandboxInstances.get('JANET')).toHaveLength(1);
 		expect(sandboxInstances.get('GLEAM')?.[0]?.loadCalls).toEqual([
 			[runtimeAssets, 'pub fn main() { Nil }', true, [], {}, progress]
 		]);
@@ -720,6 +786,18 @@ End Module`;
 		]);
 		expect(sandboxInstances.get('PASCAL')?.[0]?.loadCalls).toEqual([
 			[runtimeAssets, 'program main; begin WriteLn(1); end.', true, [], {}, progress]
+		]);
+		expect(sandboxInstances.get('FORTH')?.[0]?.loadCalls).toEqual([
+			[runtimeAssets, 'KEY EMIT', true, [], {}, progress]
+		]);
+		expect(sandboxInstances.get('J')?.[0]?.loadCalls).toEqual([
+			[runtimeAssets, 'smoutput 1', true, [], {}, progress]
+		]);
+		expect(sandboxInstances.get('BQN')?.[0]?.loadCalls).toEqual([
+			[runtimeAssets, '1+1', true, [], {}, progress]
+		]);
+		expect(sandboxInstances.get('JANET')?.[0]?.loadCalls).toEqual([
+			[runtimeAssets, '(print "hello")', true, [], {}, progress]
 		]);
 	});
 

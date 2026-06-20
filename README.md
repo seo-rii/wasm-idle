@@ -3,7 +3,7 @@
 ![wasm-idle](static/image.jpeg)
 
 Executes C, C++, Python, Java, Rust, Go, D, C#, F#, VB.NET, Elixir, Erlang, Prolog,
-Gleam, Perl, Tcl, AWK, OCaml, TinyGo, JavaScript, TypeScript, AssemblyScript, WAT,
+Gleam, Perl, Tcl, AWK, Forth, J, BQN, Janet, OCaml, TinyGo, JavaScript, TypeScript, AssemblyScript, WAT,
 Lua, Zig, Scheme, Ruby, Haskell, R, Octave, SQLite, and PHP code.
 
 Refer to src/lib/clang.
@@ -41,6 +41,10 @@ highlighting only. `Debug` means wasm-idle's trace/debug controls, not a native 
 | Perl           | Perl WASM worker                     | Yes   | syntax               | -     |
 | Tcl            | Wacl Tcl WASM worker                 | Yes   | syntax               | -     |
 | AWK            | GoAWK WASM worker                    | Yes   | syntax               | -     |
+| Forth          | WAForth WASM worker                  | Yes   | syntax               | -     |
+| J              | J playground WASM worker             | Yes   | syntax               | -     |
+| BQN            | CBQN WASM worker                     | Yes   | syntax               | -     |
+| Janet          | Janet VM WASM worker                 | Yes   | syntax               | -     |
 | OCaml          | wasm-of-js-of-ocaml / js_of_ocaml    | Yes   | syntax               | -     |
 | TinyGo         | wasm-tinygo                          | Yes   | syntax               | -     |
 | JavaScript     | wasm-typescript / TypeScript service | Yes   | TypeScript LSP       | -     |
@@ -71,6 +75,7 @@ left in place, but the default development path is inside this repo:
 - `runtimes/*`: imported runtime/compiler packages such as `wasm-rust`,
   `wasm-of-js-of-ocaml`, `wasm-go`, `wasm-tinygo`, `wasm-dotnet`, `wasm-typescript`,
   `wasm-wat`, `wasm-lua`, `wasm-lisp`, `wasm-elixir`, `wasm-tcl`, `wasm-awk`,
+  `wasm-forth`, `wasm-j`, `wasm-bqn`, `wasm-janet`,
   `pyodide`, `teavm`, `assemblyscript`, `ruby`, `r`, `php`, and `js-sandbox`.
 - `static/wasm-zig` and `static/wasm-haskell`: bundled browser compiler assets synced from
   upstream asset builds rather than local workspace packages.
@@ -327,6 +332,10 @@ const runtimeAssets: PlaygroundRuntimeAssets = {
 		moduleUrl: 'https://cdn.example.com/wasm-haskell/dyld.mjs',
 		rootfsUrl: 'https://cdn.example.com/wasm-haskell/rootfs.tar.zst',
 		bsdtarUrl: 'https://cdn.example.com/wasm-haskell/bsdtar.wasm'
+	},
+	janet: {
+		baseUrl: 'https://cdn.example.com/wasm-janet/',
+		workerUrl: 'https://cdn.example.com/wasm-janet/runner-worker.js'
 	}
 };
 ```
@@ -369,4 +378,4 @@ await sandbox.load('print("hi")', false);
 
 Powered by [wasm-clang](https://github.com/binji/wasm-clang), Pyodide, TeaVM, `wasm-rust`,
 `wasm-tinygo`, `wasm-dotnet`, `wasm-of-js-of-ocaml`, `wasm-typescript`, `wasm-lisp`,
-`wasm-wat`, `wasm-lua`, `wasm-zig`, AtomVM/Popcorn, and `ghc-in-browser`.
+`wasm-wat`, `wasm-lua`, `wasm-zig`, CBQN, Janet, AtomVM/Popcorn, and `ghc-in-browser`.

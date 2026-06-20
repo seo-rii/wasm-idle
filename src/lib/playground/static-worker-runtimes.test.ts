@@ -15,7 +15,15 @@ const { publicEnv } = vi.hoisted(() => ({
 		PUBLIC_WASM_AWK_BASE_URL: '',
 		PUBLIC_WASM_AWK_WORKER_URL: '',
 		PUBLIC_WASM_PASCAL_BASE_URL: '',
-		PUBLIC_WASM_PASCAL_WORKER_URL: ''
+		PUBLIC_WASM_PASCAL_WORKER_URL: '',
+		PUBLIC_WASM_FORTH_BASE_URL: '',
+		PUBLIC_WASM_FORTH_WORKER_URL: '',
+		PUBLIC_WASM_J_BASE_URL: '',
+		PUBLIC_WASM_J_WORKER_URL: '',
+		PUBLIC_WASM_BQN_BASE_URL: '',
+		PUBLIC_WASM_BQN_WORKER_URL: '',
+		PUBLIC_WASM_JANET_BASE_URL: '',
+		PUBLIC_WASM_JANET_WORKER_URL: ''
 	}
 }));
 let onPostMessage: ((worker: MockWorker, message: any) => void) | null = null;
@@ -53,6 +61,10 @@ vi.mock('$env/dynamic/public', () => ({
 
 import Gleam from './gleam';
 import Awk from './awk';
+import Bqn from './bqn';
+import Forth from './forth';
+import J from './j';
+import Janet from './janet';
 import Perl from './perl';
 import Pascal from './pascal';
 import Prolog from './prolog';
@@ -240,6 +252,113 @@ describe('static worker backed language sandboxes', () => {
 				baseUrl: 'http://localhost:3000/wasm-pascal/',
 				stdin: 'ok\n',
 				activePath: 'main.pas'
+			})
+		);
+	});
+
+	it('loads Forth runtime urls and forwards stdin to the WAForth worker', async () => {
+		const sandbox = new Forth();
+		await sandbox.load({
+			forth: {
+				baseUrl: '/wasm-forth/',
+				workerUrl: '/wasm-forth/runner-worker.js?v=test'
+			}
+		});
+		await expect(
+			sandbox.run('KEY EMIT', false, true, undefined, [], {
+				stdin: 'ok\n'
+			})
+		).resolves.toBe(true);
+
+		expect(workerInstances[0].url).toBe(
+			'http://localhost:3000/wasm-forth/runner-worker.js?v=test'
+		);
+		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				baseUrl: 'http://localhost:3000/wasm-forth/',
+				stdin: 'ok\n',
+				activePath: 'main.fth'
+			})
+		);
+	});
+
+	it('loads J runtime urls and forwards stdin to the official J wasm worker', async () => {
+		const sandbox = new J();
+		await sandbox.load({
+			j: {
+				baseUrl: '/wasm-j/',
+				workerUrl: '/wasm-j/runner-worker.js?v=test'
+			}
+		});
+		await expect(
+			sandbox.run('input =: 1!:1 [ 1', false, true, undefined, [], {
+				stdin: 'ok\n'
+			})
+		).resolves.toBe(true);
+
+		expect(workerInstances[0].url).toBe(
+			'http://localhost:3000/wasm-j/runner-worker.js?v=test'
+		);
+		expect(workerInstances[0].options).toEqual({ type: 'module' });
+		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				baseUrl: 'http://localhost:3000/wasm-j/',
+				stdin: 'ok\n',
+				activePath: 'main.ijs'
+			})
+		);
+	});
+
+	it('loads BQN runtime urls and forwards stdin to the CBQN worker', async () => {
+		const sandbox = new Bqn();
+		await sandbox.load({
+			bqn: {
+				baseUrl: '/wasm-bqn/',
+				workerUrl: '/wasm-bqn/runner-worker.js?v=test'
+			}
+		});
+		await expect(
+			sandbox.run('5+•ParseFloat •GetLine @', false, true, undefined, [], {
+				stdin: '68\n'
+			})
+		).resolves.toBe(true);
+
+		expect(workerInstances[0].url).toBe(
+			'http://localhost:3000/wasm-bqn/runner-worker.js?v=test'
+		);
+		expect(workerInstances[0].options).toEqual({ type: 'module' });
+		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				baseUrl: 'http://localhost:3000/wasm-bqn/',
+				stdin: '68\n',
+				activePath: 'main.bqn'
+			})
+		);
+	});
+
+	it('loads Janet runtime urls and forwards stdin to the upstream Janet worker', async () => {
+		const sandbox = new Janet();
+		await sandbox.load({
+			janet: {
+				baseUrl: '/wasm-janet/',
+				workerUrl: '/wasm-janet/runner-worker.js?v=test'
+			}
+		});
+		await expect(
+			sandbox.run('(print (getline))', false, true, undefined, [], {
+				stdin: 'ok\n'
+			})
+		).resolves.toBe(true);
+
+		expect(workerInstances[0].url).toBe(
+			'http://localhost:3000/wasm-janet/runner-worker.js?v=test'
+		);
+		expect(workerInstances[0].options).toEqual({ type: 'module' });
+		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				baseUrl: 'http://localhost:3000/wasm-janet/',
+				stdin: 'ok\n',
+				activePath: 'main.janet'
 			})
 		);
 	});

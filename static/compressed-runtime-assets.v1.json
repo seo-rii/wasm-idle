@@ -6,6 +6,7 @@
     "teavm/compiler.wasm",
     "teavm/runtime-classlib-teavm.bin",
     "wasm-awk/goawk.wasm",
+    "wasm-bqn/BQN.wasm",
     "wasm-d/runtime/bin/ldc2.wasm",
     "wasm-d/runtime/bin/lld.data",
     "wasm-d/runtime/bin/lld.wasm",
@@ -23,6 +24,7 @@
     "wasm-go/runtime/tools/compile.wasm",
     "wasm-go/runtime/tools/link.wasm",
     "wasm-haskell/bsdtar.wasm",
+    "wasm-j/jamalgam.wasm",
     "wasm-lisp/vendor/jco/obj/js-component-bindgen-component.core.wasm",
     "wasm-lisp/vendor/jco/obj/wasm-tools.core.wasm",
     "wasm-octave/runtime/bin/octave-cli.wasm",
@@ -254,6 +256,10 @@
     "wasm-tcl/tcl/wacl-library.data": 2307994,
     "wasm-tcl/tcl/wacl.wasm": 1884110,
     "wasm-awk/goawk.wasm": 4679032,
-    "wasm-pascal/compiler.js": 3332860
+    "wasm-pascal/compiler.js": 3332860,
+    "wasm-dotnet/runtime/FSharp.Compiler.Service.wasm": 11899161,
+    "wasm-dotnet/runtime/Microsoft.CodeAnalysis.CSharp.wasm": 5116185,
+    "wasm-j/jamalgam.wasm": 4832581,
+    "wasm-bqn/BQN.wasm": 1175370
   }
 }

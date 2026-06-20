@@ -170,4 +170,64 @@ describe('Monaco route source', () => {
 		expect(source).toContain("tokenPostfix: '.zig'");
 		expect(source).toContain("lineComment: '//'");
 	});
+
+	it('registers a Forth Monaco language with comments and tokenizer support', async () => {
+		const source = await readFile(
+			path.resolve(process.cwd(), 'src/routes/Monaco.svelte'),
+			'utf8'
+		);
+
+		expect(source).toContain("id: 'forth'");
+		expect(source).toContain("extensions: ['.fth', '.forth', '.4th']");
+		expect(source).toContain("monacoApi.languages.setLanguageConfiguration('forth'");
+		expect(source).toContain("monacoApi.languages.setMonarchTokensProvider('forth'");
+		expect(source).toContain("tokenPostfix: '.forth'");
+		expect(source).toContain("lineComment: '\\\\'");
+		expect(source).toContain("'key'");
+	});
+
+	it('registers a J Monaco language with comments and tokenizer support', async () => {
+		const source = await readFile(
+			path.resolve(process.cwd(), 'src/routes/Monaco.svelte'),
+			'utf8'
+		);
+
+		expect(source).toContain("id: 'j'");
+		expect(source).toContain("extensions: ['.ijs', '.ijt', '.ijx']");
+		expect(source).toContain("monacoApi.languages.setLanguageConfiguration('j'");
+		expect(source).toContain("monacoApi.languages.setMonarchTokensProvider('j'");
+		expect(source).toContain("tokenPostfix: '.j'");
+		expect(source).toContain("lineComment: 'NB.'");
+		expect(source).toContain("'smoutput'");
+	});
+
+	it('registers a BQN Monaco language with comments and tokenizer support', async () => {
+		const source = await readFile(
+			path.resolve(process.cwd(), 'src/routes/Monaco.svelte'),
+			'utf8'
+		);
+
+		expect(source).toContain("id: 'bqn'");
+		expect(source).toContain("extensions: ['.bqn']");
+		expect(source).toContain("monacoApi.languages.setLanguageConfiguration('bqn'");
+		expect(source).toContain("monacoApi.languages.setMonarchTokensProvider('bqn'");
+		expect(source).toContain("tokenPostfix: '.bqn'");
+		expect(source).toContain("lineComment: '#'");
+		expect(source).toContain("'•GetLine'");
+	});
+
+	it('registers a Janet Monaco language with comments and tokenizer support', async () => {
+		const source = await readFile(
+			path.resolve(process.cwd(), 'src/routes/Monaco.svelte'),
+			'utf8'
+		);
+
+		expect(source).toContain("id: 'janet'");
+		expect(source).toContain("extensions: ['.janet']");
+		expect(source).toContain("monacoApi.languages.setLanguageConfiguration('janet'");
+		expect(source).toContain("monacoApi.languages.setMonarchTokensProvider('janet'");
+		expect(source).toContain("tokenPostfix: '.janet'");
+		expect(source).toContain("lineComment: '#'");
+		expect(source).toContain("'getline'");
+	});
 });

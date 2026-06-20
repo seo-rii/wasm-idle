@@ -1,0 +1,1 @@
+export const WASM_FORTH_ASSET_VERSION = "b5eb53321b148b18";

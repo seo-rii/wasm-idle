@@ -149,6 +149,26 @@ export interface PascalRuntimeAssetConfig {
 	workerUrl?: string;
 }
 
+export interface ForthRuntimeAssetConfig {
+	baseUrl?: string;
+	workerUrl?: string;
+}
+
+export interface JRuntimeAssetConfig {
+	baseUrl?: string;
+	workerUrl?: string;
+}
+
+export interface BqnRuntimeAssetConfig {
+	baseUrl?: string;
+	workerUrl?: string;
+}
+
+export interface JanetRuntimeAssetConfig {
+	baseUrl?: string;
+	workerUrl?: string;
+}
+
 export interface SqliteRuntimeAssetConfig {
 	wasmUrl?: string;
 }
@@ -186,6 +206,10 @@ export interface PlaygroundRuntimeAssets {
 	tcl?: TclRuntimeAssetConfig;
 	awk?: AwkRuntimeAssetConfig;
 	pascal?: PascalRuntimeAssetConfig;
+	forth?: ForthRuntimeAssetConfig;
+	j?: JRuntimeAssetConfig;
+	bqn?: BqnRuntimeAssetConfig;
+	janet?: JanetRuntimeAssetConfig;
 	sqlite?: SqliteRuntimeAssetConfig;
 	php?: PhpRuntimeAssetConfig;
 }
@@ -1455,6 +1479,257 @@ export function resolvePascalRuntimeAssetConfig(
 	return {
 		baseUrl: resolvePascalBaseUrl(options, currentUrl),
 		workerUrl: resolvePascalWorkerUrl(options, currentUrl)
+	};
+}
+
+export function resolveForthBaseUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredBaseUrl =
+		(typeof options === 'object' && options?.forth?.baseUrl) ||
+		(publicEnv.PUBLIC_WASM_FORTH_BASE_URL || '').trim();
+
+	if (configuredBaseUrl) {
+		return normalizeBaseUrl(configuredBaseUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return normalizeBaseUrl(`${normalizeRootUrl(options) || ''}/wasm-forth/`, currentUrl);
+	}
+
+	if (options?.rootUrl) {
+		return normalizeBaseUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-forth/`,
+			currentUrl
+		);
+	}
+
+	return normalizeBaseUrl('/wasm-forth/', currentUrl);
+}
+
+export function resolveForthWorkerUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredWorkerUrl =
+		(typeof options === 'object' && options?.forth?.workerUrl) ||
+		(publicEnv.PUBLIC_WASM_FORTH_WORKER_URL || '').trim();
+
+	if (configuredWorkerUrl) {
+		return resolveConfiguredUrl(configuredWorkerUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-forth/runner-worker.js`,
+			currentUrl
+		);
+	}
+
+	if (options?.rootUrl) {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-forth/runner-worker.js`,
+			currentUrl
+		);
+	}
+
+	return resolveConfiguredUrl('/wasm-forth/runner-worker.js', currentUrl);
+}
+
+export function resolveForthRuntimeAssetConfig(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	return {
+		baseUrl: resolveForthBaseUrl(options, currentUrl),
+		workerUrl: resolveForthWorkerUrl(options, currentUrl)
+	};
+}
+
+export function resolveJBaseUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredBaseUrl =
+		(typeof options === 'object' && options?.j?.baseUrl) ||
+		(publicEnv.PUBLIC_WASM_J_BASE_URL || '').trim();
+
+	if (configuredBaseUrl) {
+		return normalizeBaseUrl(configuredBaseUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return normalizeBaseUrl(`${normalizeRootUrl(options) || ''}/wasm-j/`, currentUrl);
+	}
+
+	if (options?.rootUrl) {
+		return normalizeBaseUrl(`${normalizeRootUrl(options.rootUrl) || ''}/wasm-j/`, currentUrl);
+	}
+
+	return normalizeBaseUrl('/wasm-j/', currentUrl);
+}
+
+export function resolveJWorkerUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredWorkerUrl =
+		(typeof options === 'object' && options?.j?.workerUrl) ||
+		(publicEnv.PUBLIC_WASM_J_WORKER_URL || '').trim();
+
+	if (configuredWorkerUrl) {
+		return resolveConfiguredUrl(configuredWorkerUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-j/runner-worker.js`,
+			currentUrl
+		);
+	}
+
+	if (options?.rootUrl) {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-j/runner-worker.js`,
+			currentUrl
+		);
+	}
+
+	return resolveConfiguredUrl('/wasm-j/runner-worker.js', currentUrl);
+}
+
+export function resolveJRuntimeAssetConfig(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	return {
+		baseUrl: resolveJBaseUrl(options, currentUrl),
+		workerUrl: resolveJWorkerUrl(options, currentUrl)
+	};
+}
+
+export function resolveBqnBaseUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredBaseUrl =
+		(typeof options === 'object' && options?.bqn?.baseUrl) ||
+		(publicEnv.PUBLIC_WASM_BQN_BASE_URL || '').trim();
+
+	if (configuredBaseUrl) {
+		return normalizeBaseUrl(configuredBaseUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return normalizeBaseUrl(`${normalizeRootUrl(options) || ''}/wasm-bqn/`, currentUrl);
+	}
+
+	if (options?.rootUrl) {
+		return normalizeBaseUrl(`${normalizeRootUrl(options.rootUrl) || ''}/wasm-bqn/`, currentUrl);
+	}
+
+	return normalizeBaseUrl('/wasm-bqn/', currentUrl);
+}
+
+export function resolveBqnWorkerUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredWorkerUrl =
+		(typeof options === 'object' && options?.bqn?.workerUrl) ||
+		(publicEnv.PUBLIC_WASM_BQN_WORKER_URL || '').trim();
+
+	if (configuredWorkerUrl) {
+		return resolveConfiguredUrl(configuredWorkerUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-bqn/runner-worker.js`,
+			currentUrl
+		);
+	}
+
+	if (options?.rootUrl) {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-bqn/runner-worker.js`,
+			currentUrl
+		);
+	}
+
+	return resolveConfiguredUrl('/wasm-bqn/runner-worker.js', currentUrl);
+}
+
+export function resolveBqnRuntimeAssetConfig(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	return {
+		baseUrl: resolveBqnBaseUrl(options, currentUrl),
+		workerUrl: resolveBqnWorkerUrl(options, currentUrl)
+	};
+}
+
+export function resolveJanetBaseUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredBaseUrl =
+		(typeof options === 'object' && options?.janet?.baseUrl) ||
+		(publicEnv.PUBLIC_WASM_JANET_BASE_URL || '').trim();
+
+	if (configuredBaseUrl) {
+		return normalizeBaseUrl(configuredBaseUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return normalizeBaseUrl(`${normalizeRootUrl(options) || ''}/wasm-janet/`, currentUrl);
+	}
+
+	if (options?.rootUrl) {
+		return normalizeBaseUrl(`${normalizeRootUrl(options.rootUrl) || ''}/wasm-janet/`, currentUrl);
+	}
+
+	return normalizeBaseUrl('/wasm-janet/', currentUrl);
+}
+
+export function resolveJanetWorkerUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredWorkerUrl =
+		(typeof options === 'object' && options?.janet?.workerUrl) ||
+		(publicEnv.PUBLIC_WASM_JANET_WORKER_URL || '').trim();
+
+	if (configuredWorkerUrl) {
+		return resolveConfiguredUrl(configuredWorkerUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-janet/runner-worker.js`,
+			currentUrl
+		);
+	}
+
+	if (options?.rootUrl) {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-janet/runner-worker.js`,
+			currentUrl
+		);
+	}
+
+	return resolveConfiguredUrl('/wasm-janet/runner-worker.js', currentUrl);
+}
+
+export function resolveJanetRuntimeAssetConfig(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	return {
+		baseUrl: resolveJanetBaseUrl(options, currentUrl),
+		workerUrl: resolveJanetWorkerUrl(options, currentUrl)
 	};
 }
 

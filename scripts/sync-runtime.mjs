@@ -146,6 +146,34 @@ const RUNTIMES = [
 		targetArg: 'targetDir'
 	},
 	{
+		name: 'wasm-forth',
+		module: './sync-wasm-forth.mjs',
+		exportName: 'syncWasmForthAssets',
+		sourceArg: 'sourceFile',
+		targetArg: 'targetDir'
+	},
+	{
+		name: 'wasm-j',
+		module: './sync-wasm-j.mjs',
+		exportName: 'syncWasmJAssets',
+		sourceArg: 'sourceDir',
+		targetArg: 'targetDir'
+	},
+	{
+		name: 'wasm-bqn',
+		module: './sync-wasm-bqn.mjs',
+		exportName: 'syncWasmBqnAssets',
+		sourceArg: 'sourceDir',
+		targetArg: 'targetDir'
+	},
+	{
+		name: 'wasm-janet',
+		module: './sync-wasm-janet.mjs',
+		exportName: 'syncWasmJanetAssets',
+		sourceArg: 'sourceDir',
+		targetArg: 'targetDir'
+	},
+	{
 		name: 'wasm-of-js-of-ocaml',
 		module: './sync-wasm-of-js-of-ocaml.mjs',
 		exportName: 'syncWasmOfJsOfOcamlDist',

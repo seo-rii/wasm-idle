@@ -18,6 +18,10 @@ export type EditorDefaultLanguage =
 	| 'tcl'
 	| 'awk'
 	| 'pascal'
+	| 'forth'
+	| 'j'
+	| 'bqn'
+	| 'janet'
 	| 'ocaml'
 	| 'javascript'
 	| 'typescript'
@@ -52,6 +56,10 @@ export const editorDefaults: Record<
 	| 'tcl'
 	| 'awk'
 	| 'pascal'
+	| 'forth'
+	| 'j'
+	| 'bqn'
+	| 'janet'
 	| 'ocaml'
 	| 'javascript'
 	| 'typescript'
@@ -365,6 +373,51 @@ begin
     N := 4;
   WriteLn('factorial_plus_bonus=', Factorial(N) + Bonus);
 end.`,
+	forth: `: READ-NUMBER ( -- n )
+  0
+  BEGIN
+    KEY DUP 10 <> OVER 13 <> AND
+  WHILE
+    48 - SWAP 10 * +
+  REPEAT
+  DROP
+;
+
+: FACTORIAL ( n -- n! )
+  1 SWAP
+  BEGIN
+    DUP 1 >
+  WHILE
+    TUCK * SWAP 1 -
+  REPEAT
+  DROP
+;
+
+: PRINT-UINT ( n -- )
+  0 <# #S #> TYPE
+;
+
+: RUN
+  READ-NUMBER FACTORIAL 3 + ." factorial_plus_bonus=" PRINT-UINT CR
+;
+
+RUN`,
+	j: `input =: 1!:1 [ 1
+n =: ". input
+smoutput 'factorial_plus_bonus=', ": 3 + ! n`,
+bqn: `bonus ← 3
+Factorial ← {𝕩≤1 ? 1 ; 𝕩 × 𝕊 𝕩-1}
+n ← •ParseFloat •GetLine @
+bonus + Factorial n`,
+	janet: `(def bonus 3)
+
+(defn factorial [n]
+  (if (<= n 1)
+    1
+    (* n (factorial (- n 1)))))
+
+(def n (scan-number (string/trim (getline))))
+(print "factorial_plus_bonus=" (+ bonus (factorial n)))`,
 	ocaml: `let bonus = 3
 
 let rec factorial n =
@@ -684,6 +737,10 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.tcl ||
 		source === editorDefaults.awk ||
 		source === editorDefaults.pascal ||
+		source === editorDefaults.forth ||
+		source === editorDefaults.j ||
+		source === editorDefaults.bqn ||
+		source === editorDefaults.janet ||
 		source === editorDefaults.ocaml ||
 		source === editorDefaults.javascript ||
 		source === editorDefaults.typescript ||

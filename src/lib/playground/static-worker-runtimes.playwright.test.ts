@@ -52,6 +52,39 @@ begin
 end.
 `;
 
+const forthStdinSource = `: READ-NUMBER ( -- n )
+  0
+  BEGIN
+    KEY DUP 10 <> OVER 13 <> AND
+  WHILE
+    48 - SWAP 10 * +
+  REPEAT
+  DROP
+;
+
+: PRINT-UINT ( n -- )
+  0 <# #S #> TYPE
+;
+
+: RUN
+  READ-NUMBER 5 + ." main=" PRINT-UINT CR
+;
+
+RUN
+`;
+
+const jStdinSource = `input =: 1!:1 [ 1
+n =: ". input
+smoutput 'main=', ": n + 5
+`;
+
+const bqnStdinSource = `5 + •ParseFloat •GetLine @
+`;
+
+const janetStdinSource = `(def n (scan-number (string/trim (getline))))
+(print "main=" (+ n 5))
+`;
+
 async function withPreviewServer(
 	syncScripts: string[],
 	timeoutMs: number,
@@ -223,6 +256,102 @@ describe('wasm-idle static worker language browser integrations', () => {
 					language: 'PASCAL',
 					runTimeoutMs: Number(process.env.WASM_IDLE_PASCAL_RUN_TIMEOUT_MS || '240000'),
 					source: pascalStdinSource,
+					stdinText: '68\n'
+				});
+				expect(summary.activeState.crossOriginIsolated).toBe(true);
+				expect(summary.activeState.sharedArrayBuffer).toBe(true);
+				expect(summary.activeState.serviceWorkerControlled).toBe(true);
+				expect(summary.pageErrors).toEqual([]);
+				expect(summary.transcript).toContain('main=73');
+				expect(summary.transcript).toContain('Process finished after');
+			}
+		);
+	}, 960_000);
+
+	it('runs real WAForth wasm and connects stdin on the page path', async () => {
+		if (process.env.WASM_IDLE_RUN_REAL_BROWSER_FORTH !== '1') return;
+		await withPreviewServer(
+			['sync:wasm-forth'],
+			Number(process.env.WASM_IDLE_FORTH_PREP_TIMEOUT_MS || '900000'),
+			async (browserUrl) => {
+				const summary = await runStdinBrowserProbe({
+					browserUrl,
+					expectedOutput: 'main=73',
+					language: 'FORTH',
+					runTimeoutMs: Number(process.env.WASM_IDLE_FORTH_RUN_TIMEOUT_MS || '240000'),
+					source: forthStdinSource,
+					stdinText: '68\n'
+				});
+				expect(summary.activeState.crossOriginIsolated).toBe(true);
+				expect(summary.activeState.sharedArrayBuffer).toBe(true);
+				expect(summary.activeState.serviceWorkerControlled).toBe(true);
+				expect(summary.pageErrors).toEqual([]);
+				expect(summary.transcript).toContain('main=73');
+				expect(summary.transcript).toContain('Process finished after');
+			}
+		);
+	}, 960_000);
+
+	it('runs real J playground wasm and connects stdin on the page path', async () => {
+		if (process.env.WASM_IDLE_RUN_REAL_BROWSER_J !== '1') return;
+		await withPreviewServer(
+			['sync:wasm-j'],
+			Number(process.env.WASM_IDLE_J_PREP_TIMEOUT_MS || '900000'),
+			async (browserUrl) => {
+				const summary = await runStdinBrowserProbe({
+					browserUrl,
+					expectedOutput: 'main=73',
+					language: 'J',
+					runTimeoutMs: Number(process.env.WASM_IDLE_J_RUN_TIMEOUT_MS || '240000'),
+					source: jStdinSource,
+					stdinText: '68\n'
+				});
+				expect(summary.activeState.crossOriginIsolated).toBe(true);
+				expect(summary.activeState.sharedArrayBuffer).toBe(true);
+				expect(summary.activeState.serviceWorkerControlled).toBe(true);
+				expect(summary.pageErrors).toEqual([]);
+				expect(summary.transcript).toContain('main=73');
+				expect(summary.transcript).toContain('Process finished after');
+			}
+		);
+	}, 960_000);
+
+	it('runs real CBQN wasm and connects stdin on the page path', async () => {
+		if (process.env.WASM_IDLE_RUN_REAL_BROWSER_BQN !== '1') return;
+		await withPreviewServer(
+			['sync:wasm-bqn'],
+			Number(process.env.WASM_IDLE_BQN_PREP_TIMEOUT_MS || '900000'),
+			async (browserUrl) => {
+				const summary = await runStdinBrowserProbe({
+					browserUrl,
+					expectedOutput: '73',
+					language: 'BQN',
+					runTimeoutMs: Number(process.env.WASM_IDLE_BQN_RUN_TIMEOUT_MS || '240000'),
+					source: bqnStdinSource,
+					stdinText: '68\n'
+				});
+				expect(summary.activeState.crossOriginIsolated).toBe(true);
+				expect(summary.activeState.sharedArrayBuffer).toBe(true);
+				expect(summary.activeState.serviceWorkerControlled).toBe(true);
+				expect(summary.pageErrors).toEqual([]);
+				expect(summary.transcript).toContain('73');
+				expect(summary.transcript).toContain('Process finished after');
+			}
+		);
+	}, 960_000);
+
+	it('runs real Janet VM wasm and connects stdin on the page path', async () => {
+		if (process.env.WASM_IDLE_RUN_REAL_BROWSER_JANET !== '1') return;
+		await withPreviewServer(
+			['sync:wasm-janet'],
+			Number(process.env.WASM_IDLE_JANET_PREP_TIMEOUT_MS || '900000'),
+			async (browserUrl) => {
+				const summary = await runStdinBrowserProbe({
+					browserUrl,
+					expectedOutput: 'main=73',
+					language: 'JANET',
+					runTimeoutMs: Number(process.env.WASM_IDLE_JANET_RUN_TIMEOUT_MS || '240000'),
+					source: janetStdinSource,
 					stdinText: '68\n'
 				});
 				expect(summary.activeState.crossOriginIsolated).toBe(true);

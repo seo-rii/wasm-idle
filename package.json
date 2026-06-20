@@ -39,6 +39,10 @@
 		"test:browser:tcl": "WASM_IDLE_RUN_REAL_BROWSER_TCL=1 pnpm exec vitest run src/lib/playground/static-worker-runtimes.playwright.test.ts",
 		"test:browser:awk": "WASM_IDLE_RUN_REAL_BROWSER_AWK=1 pnpm exec vitest run src/lib/playground/static-worker-runtimes.playwright.test.ts",
 		"test:browser:pascal": "WASM_IDLE_RUN_REAL_BROWSER_PASCAL=1 pnpm exec vitest run src/lib/playground/static-worker-runtimes.playwright.test.ts",
+		"test:browser:forth": "WASM_IDLE_RUN_REAL_BROWSER_FORTH=1 pnpm exec vitest run src/lib/playground/static-worker-runtimes.playwright.test.ts",
+		"test:browser:j": "WASM_IDLE_RUN_REAL_BROWSER_J=1 pnpm exec vitest run src/lib/playground/static-worker-runtimes.playwright.test.ts",
+		"test:browser:bqn": "WASM_IDLE_RUN_REAL_BROWSER_BQN=1 pnpm exec vitest run src/lib/playground/static-worker-runtimes.playwright.test.ts",
+		"test:browser:janet": "WASM_IDLE_RUN_REAL_BROWSER_JANET=1 pnpm exec vitest run src/lib/playground/static-worker-runtimes.playwright.test.ts",
 		"test:browser:playwright": "WASM_IDLE_RUN_REAL_BROWSER_RUST=1 pnpm exec vitest run src/lib/playground/rust.playwright.test.ts",
 		"test:browser:tinygo": "WASM_IDLE_RUN_REAL_BROWSER_TINYGO=1 pnpm exec vitest run src/lib/playground/tinygo.playwright.test.ts",
 		"sync:runtime": "node scripts/sync-runtime.mjs",
@@ -63,6 +67,10 @@
 		"sync:wasm-tcl": "node scripts/sync-runtime.mjs wasm-tcl",
 		"sync:wasm-awk": "node scripts/sync-runtime.mjs wasm-awk",
 		"sync:wasm-pascal": "node scripts/sync-runtime.mjs wasm-pascal",
+		"sync:wasm-forth": "node scripts/sync-runtime.mjs wasm-forth",
+		"sync:wasm-j": "node scripts/sync-runtime.mjs wasm-j",
+		"sync:wasm-bqn": "node scripts/sync-runtime.mjs wasm-bqn",
+		"sync:wasm-janet": "node scripts/sync-runtime.mjs wasm-janet",
 		"sync:webr": "node scripts/sync-runtime.mjs webr",
 		"compress:static-runtimes": "node scripts/compress-static-runtime-assets.mjs static",
 		"compress:build-runtimes": "node scripts/compress-static-runtime-assets.mjs build",
@@ -74,7 +82,7 @@
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"lint": "prettier --check . && eslint .",
 		"format": "prettier --write .",
-		"page": "npm run sync:wasm-of-js-of-ocaml && npm run sync:wasm-typescript && npm run sync:wasm-octave && npm run sync:wasm-prolog && npm run sync:wasm-gleam && npm run sync:wasm-perl && npm run sync:wasm-tcl && npm run sync:wasm-awk && npm run sync:wasm-pascal && npm run compress:static-runtimes && npm run build && npm run compress:build-runtimes && node gh-pages.js"
+		"page": "npm run sync:wasm-of-js-of-ocaml && npm run sync:wasm-typescript && npm run sync:wasm-octave && npm run sync:wasm-prolog && npm run sync:wasm-gleam && npm run sync:wasm-perl && npm run sync:wasm-tcl && npm run sync:wasm-awk && npm run sync:wasm-pascal && npm run sync:wasm-forth && npm run sync:wasm-j && npm run sync:wasm-bqn && npm run sync:wasm-janet && npm run compress:static-runtimes && npm run build && npm run compress:build-runtimes && node gh-pages.js"
 	},
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",
@@ -139,6 +147,7 @@
 		"sql.js": "^1.14.1",
 		"swipl-wasm": "8.0.1",
 		"vscode-jsonrpc": "^8.2.1",
+		"waforth": "0.20.1",
 		"webr": "0.6.0"
 	},
 	"files": [

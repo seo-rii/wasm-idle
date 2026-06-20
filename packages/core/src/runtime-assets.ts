@@ -33,6 +33,10 @@ export interface RuntimeAssetKeySource {
 	tcl?: { baseUrl?: string; workerUrl?: string };
 	awk?: { baseUrl?: string; workerUrl?: string };
 	pascal?: { baseUrl?: string; workerUrl?: string };
+	forth?: { baseUrl?: string; workerUrl?: string };
+	j?: { baseUrl?: string; workerUrl?: string };
+	bqn?: { baseUrl?: string; workerUrl?: string };
+	janet?: { baseUrl?: string; workerUrl?: string };
 	sqlite?: { wasmUrl?: string };
 	php?: { version?: string };
 }
@@ -105,6 +109,14 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	{ runtime: 'awk', property: 'workerUrl', key: 'awkWorkerUrl' },
 	{ runtime: 'pascal', property: 'baseUrl', key: 'pascalBaseUrl' },
 	{ runtime: 'pascal', property: 'workerUrl', key: 'pascalWorkerUrl' },
+	{ runtime: 'forth', property: 'baseUrl', key: 'forthBaseUrl' },
+	{ runtime: 'forth', property: 'workerUrl', key: 'forthWorkerUrl' },
+	{ runtime: 'j', property: 'baseUrl', key: 'jBaseUrl' },
+	{ runtime: 'j', property: 'workerUrl', key: 'jWorkerUrl' },
+	{ runtime: 'bqn', property: 'baseUrl', key: 'bqnBaseUrl' },
+	{ runtime: 'bqn', property: 'workerUrl', key: 'bqnWorkerUrl' },
+	{ runtime: 'janet', property: 'baseUrl', key: 'janetBaseUrl' },
+	{ runtime: 'janet', property: 'workerUrl', key: 'janetWorkerUrl' },
 	{ runtime: 'sqlite', property: 'wasmUrl', key: 'sqliteWasmUrl' },
 	{ runtime: 'php', property: 'version', key: 'phpVersion' }
 ] satisfies RuntimeAssetKeyField[];

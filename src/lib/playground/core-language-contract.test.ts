@@ -118,13 +118,17 @@ describe('core language contract', () => {
 		expect(isDeferredProgressLanguage('erl')).toBe(true);
 	});
 
-	it('exposes Prolog, Gleam, Perl, Tcl, AWK, and Pascal as deferred browser runtime languages', () => {
+	it('exposes Prolog, Gleam, Perl, Tcl, AWK, Pascal, Forth, J, BQN, and Janet as deferred browser runtime languages', () => {
 		expect(supportedLanguageIds).toContain('PROLOG');
 		expect(supportedLanguageIds).toContain('GLEAM');
 		expect(supportedLanguageIds).toContain('PERL');
 		expect(supportedLanguageIds).toContain('TCL');
 		expect(supportedLanguageIds).toContain('AWK');
 		expect(supportedLanguageIds).toContain('PASCAL');
+		expect(supportedLanguageIds).toContain('FORTH');
+		expect(supportedLanguageIds).toContain('J');
+		expect(supportedLanguageIds).toContain('BQN');
+		expect(supportedLanguageIds).toContain('JANET');
 		expect(normalizeLanguageId('swipl')).toBe('PROLOG');
 		expect(normalizeLanguageId('swi')).toBe('PROLOG');
 		expect(normalizeLanguageId('gleam')).toBe('GLEAM');
@@ -133,12 +137,17 @@ describe('core language contract', () => {
 		expect(normalizeLanguageId('gawk')).toBe('AWK');
 		expect(normalizeLanguageId('pas')).toBe('PASCAL');
 		expect(normalizeLanguageId('fpc')).toBe('PASCAL');
+		expect(normalizeLanguageId('gforth')).toBe('FORTH');
 		expect(isDeferredProgressLanguage('swipl')).toBe(true);
 		expect(isDeferredProgressLanguage('gleam')).toBe(true);
 		expect(isDeferredProgressLanguage('perl')).toBe(true);
 		expect(isDeferredProgressLanguage('tclsh')).toBe(true);
 		expect(isDeferredProgressLanguage('gawk')).toBe(true);
 		expect(isDeferredProgressLanguage('pas')).toBe(true);
+		expect(isDeferredProgressLanguage('gforth')).toBe(true);
+		expect(isDeferredProgressLanguage('j')).toBe(true);
+		expect(isDeferredProgressLanguage('bqn')).toBe(true);
+		expect(isDeferredProgressLanguage('janet')).toBe(true);
 	});
 
 	it('exposes VB.NET aliases as a deferred browser runtime language', () => {
@@ -149,17 +158,41 @@ describe('core language contract', () => {
 		expect(isDeferredProgressLanguage('vb')).toBe(true);
 	});
 
-	it('includes Pascal static worker urls in runtime asset cache keys', () => {
+	it('includes static worker urls in runtime asset cache keys', () => {
 		const key = createRuntimeAssetsKey({
 			rootUrl: '/repl',
 			pascal: {
 				baseUrl: '/wasm-pascal/',
 				workerUrl: '/wasm-pascal/runner-worker.js?v=test'
+			},
+			forth: {
+				baseUrl: '/wasm-forth/',
+				workerUrl: '/wasm-forth/runner-worker.js?v=test'
+			},
+			j: {
+				baseUrl: '/wasm-j/',
+				workerUrl: '/wasm-j/runner-worker.js?v=test'
+			},
+			bqn: {
+				baseUrl: '/wasm-bqn/',
+				workerUrl: '/wasm-bqn/runner-worker.js?v=test'
+			},
+			janet: {
+				baseUrl: '/wasm-janet/',
+				workerUrl: '/wasm-janet/runner-worker.js?v=test'
 			}
 		});
 
 		expect(key).toContain('"pascalBaseUrl":"/wasm-pascal/"');
 		expect(key).toContain('"pascalWorkerUrl":"/wasm-pascal/runner-worker.js?v=test"');
+		expect(key).toContain('"forthBaseUrl":"/wasm-forth/"');
+		expect(key).toContain('"forthWorkerUrl":"/wasm-forth/runner-worker.js?v=test"');
+		expect(key).toContain('"jBaseUrl":"/wasm-j/"');
+		expect(key).toContain('"jWorkerUrl":"/wasm-j/runner-worker.js?v=test"');
+		expect(key).toContain('"bqnBaseUrl":"/wasm-bqn/"');
+		expect(key).toContain('"bqnWorkerUrl":"/wasm-bqn/runner-worker.js?v=test"');
+		expect(key).toContain('"janetBaseUrl":"/wasm-janet/"');
+		expect(key).toContain('"janetWorkerUrl":"/wasm-janet/runner-worker.js?v=test"');
 	});
 
 	it('exposes D aliases as a deferred browser runtime language', () => {

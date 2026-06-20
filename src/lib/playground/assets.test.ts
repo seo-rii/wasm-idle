@@ -39,6 +39,14 @@ const { publicEnv } = vi.hoisted(() => ({
 		PUBLIC_WASM_AWK_WORKER_URL: '',
 		PUBLIC_WASM_PASCAL_BASE_URL: '',
 		PUBLIC_WASM_PASCAL_WORKER_URL: '',
+		PUBLIC_WASM_FORTH_BASE_URL: '',
+		PUBLIC_WASM_FORTH_WORKER_URL: '',
+		PUBLIC_WASM_J_BASE_URL: '',
+		PUBLIC_WASM_J_WORKER_URL: '',
+		PUBLIC_WASM_BQN_BASE_URL: '',
+		PUBLIC_WASM_BQN_WORKER_URL: '',
+		PUBLIC_WASM_JANET_BASE_URL: '',
+		PUBLIC_WASM_JANET_WORKER_URL: '',
 		PUBLIC_WASM_SQLITE_WASM_URL: '',
 		PUBLIC_WASM_PHP_VERSION: ''
 	}
@@ -694,11 +702,15 @@ describe('runtime asset config resolution', () => {
 		});
 	});
 
-	it('derives default Prolog, Gleam, Perl, Tcl, AWK, and Pascal runtime urls from the shared root path', async () => {
+	it('derives default static worker runtime urls from the shared root path', async () => {
 		vi.resetModules();
 		const {
 			resolveAwkRuntimeAssetConfig,
+			resolveForthRuntimeAssetConfig,
 			resolveGleamRuntimeAssetConfig,
+			resolveJRuntimeAssetConfig,
+			resolveJanetRuntimeAssetConfig,
+			resolveBqnRuntimeAssetConfig,
 			resolvePascalRuntimeAssetConfig,
 			resolvePerlRuntimeAssetConfig,
 			resolvePrologRuntimeAssetConfig,
@@ -736,6 +748,24 @@ describe('runtime asset config resolution', () => {
 			baseUrl: 'https://example.com/absproxy/5173/wasm-pascal/',
 			workerUrl: 'https://example.com/absproxy/5173/wasm-pascal/runner-worker.js'
 		});
+		expect(resolveForthRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual(
+			{
+				baseUrl: 'https://example.com/absproxy/5173/wasm-forth/',
+				workerUrl: 'https://example.com/absproxy/5173/wasm-forth/runner-worker.js'
+			}
+		);
+		expect(resolveJRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual({
+			baseUrl: 'https://example.com/absproxy/5173/wasm-j/',
+			workerUrl: 'https://example.com/absproxy/5173/wasm-j/runner-worker.js'
+		});
+		expect(resolveBqnRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual({
+			baseUrl: 'https://example.com/absproxy/5173/wasm-bqn/',
+			workerUrl: 'https://example.com/absproxy/5173/wasm-bqn/runner-worker.js'
+		});
+		expect(resolveJanetRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual({
+			baseUrl: 'https://example.com/absproxy/5173/wasm-janet/',
+			workerUrl: 'https://example.com/absproxy/5173/wasm-janet/runner-worker.js'
+		});
 	});
 
 	it('prefers explicit static worker runtime urls over public env overrides', async () => {
@@ -746,9 +776,17 @@ describe('runtime asset config resolution', () => {
 		publicEnv.PUBLIC_WASM_TCL_BASE_URL = 'https://env.example.com/tcl/';
 		publicEnv.PUBLIC_WASM_AWK_BASE_URL = 'https://env.example.com/awk/';
 		publicEnv.PUBLIC_WASM_PASCAL_BASE_URL = 'https://env.example.com/pascal/';
+		publicEnv.PUBLIC_WASM_FORTH_BASE_URL = 'https://env.example.com/forth/';
+		publicEnv.PUBLIC_WASM_J_BASE_URL = 'https://env.example.com/j/';
+		publicEnv.PUBLIC_WASM_BQN_BASE_URL = 'https://env.example.com/bqn/';
+		publicEnv.PUBLIC_WASM_JANET_BASE_URL = 'https://env.example.com/janet/';
 		const {
 			resolveAwkRuntimeAssetConfig,
+			resolveBqnRuntimeAssetConfig,
+			resolveForthRuntimeAssetConfig,
 			resolveGleamRuntimeAssetConfig,
+			resolveJRuntimeAssetConfig,
+			resolveJanetRuntimeAssetConfig,
 			resolvePascalRuntimeAssetConfig,
 			resolvePerlRuntimeAssetConfig,
 			resolvePrologRuntimeAssetConfig,
@@ -815,6 +853,42 @@ describe('runtime asset config resolution', () => {
 		).toEqual({
 			baseUrl: 'https://example.com/runtime/pascal/',
 			workerUrl: 'https://example.com/runtime/pascal/worker.js'
+		});
+		expect(
+			resolveForthRuntimeAssetConfig(
+				{ forth: { baseUrl: '/runtime/forth', workerUrl: '/runtime/forth/worker.js' } },
+				'https://example.com/app'
+			)
+		).toEqual({
+			baseUrl: 'https://example.com/runtime/forth/',
+			workerUrl: 'https://example.com/runtime/forth/worker.js'
+		});
+		expect(
+			resolveJRuntimeAssetConfig(
+				{ j: { baseUrl: '/runtime/j', workerUrl: '/runtime/j/worker.js' } },
+				'https://example.com/app'
+			)
+		).toEqual({
+			baseUrl: 'https://example.com/runtime/j/',
+			workerUrl: 'https://example.com/runtime/j/worker.js'
+		});
+		expect(
+			resolveBqnRuntimeAssetConfig(
+				{ bqn: { baseUrl: '/runtime/bqn', workerUrl: '/runtime/bqn/worker.js' } },
+				'https://example.com/app'
+			)
+		).toEqual({
+			baseUrl: 'https://example.com/runtime/bqn/',
+			workerUrl: 'https://example.com/runtime/bqn/worker.js'
+		});
+		expect(
+			resolveJanetRuntimeAssetConfig(
+				{ janet: { baseUrl: '/runtime/janet', workerUrl: '/runtime/janet/worker.js' } },
+				'https://example.com/app'
+			)
+		).toEqual({
+			baseUrl: 'https://example.com/runtime/janet/',
+			workerUrl: 'https://example.com/runtime/janet/worker.js'
 		});
 	});
 

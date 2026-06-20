@@ -31,6 +31,11 @@ export type WasmIdleLanguageId =
 	| 'PASCAL'
 	| 'PAS'
 	| 'FPC'
+	| 'FORTH'
+	| 'GFORTH'
+	| 'J'
+	| 'BQN'
+	| 'JANET'
 	| 'TINYGO'
 	| 'OCAML'
 	| 'JAVASCRIPT'
@@ -76,6 +81,10 @@ export const supportedLanguageIds = [
 	'TCL',
 	'AWK',
 	'PASCAL',
+	'FORTH',
+	'J',
+	'BQN',
+	'JANET',
 	'TINYGO',
 	'OCAML',
 	'JAVASCRIPT',
@@ -108,6 +117,10 @@ export const DEFAULT_DEFERRED_PROGRESS_LANGUAGES = new Set<string>([
 	'TCL',
 	'AWK',
 	'PASCAL',
+	'FORTH',
+	'J',
+	'BQN',
+	'JANET',
 	'OCAML',
 	'JAVASCRIPT',
 	'TYPESCRIPT',
@@ -136,6 +149,7 @@ const LANGUAGE_ALIASES: Record<string, string> = {
 	GAWK: 'AWK',
 	PAS: 'PASCAL',
 	FPC: 'PASCAL',
+	GFORTH: 'FORTH',
 	DLANG: 'D',
 	JS: 'JAVASCRIPT',
 	AS: 'ASSEMBLYSCRIPT',

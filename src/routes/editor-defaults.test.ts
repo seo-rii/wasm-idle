@@ -32,6 +32,14 @@ describe('editor defaults', () => {
 		expect(editorDefaults.gleam).toContain('stdin.read_line()');
 		expect(editorDefaults.perl).toContain('my $line = <STDIN>;');
 		expect(editorDefaults.pascal).toContain('ReadLn(Line);');
+		expect(editorDefaults.forth).toContain('KEY DUP 10 <>');
+		expect(editorDefaults.forth).toContain('factorial_plus_bonus=');
+		expect(editorDefaults.j).toContain('1!:1 [ 1');
+		expect(editorDefaults.j).toContain('factorial_plus_bonus=');
+		expect(editorDefaults.bqn).toContain('•GetLine @');
+		expect(editorDefaults.bqn).toContain('Factorial');
+		expect(editorDefaults.janet).toContain('(getline)');
+		expect(editorDefaults.janet).toContain('factorial_plus_bonus=');
 		expect(editorDefaults.ocaml).toContain('read_line ()');
 		expect(editorDefaults.javascript).toContain("require('fs')");
 		expect(editorDefaults.javascript).toContain('readLineSync(0)');
@@ -79,6 +87,10 @@ describe('editor defaults', () => {
 		expect(resolveEditorDefaultSource('gleam', 'wasm32-wasip1')).toBe(editorDefaults.gleam);
 		expect(resolveEditorDefaultSource('perl', 'wasm32-wasip1')).toBe(editorDefaults.perl);
 		expect(resolveEditorDefaultSource('pascal', 'wasm32-wasip1')).toBe(editorDefaults.pascal);
+		expect(resolveEditorDefaultSource('forth', 'wasm32-wasip1')).toBe(editorDefaults.forth);
+		expect(resolveEditorDefaultSource('j', 'wasm32-wasip1')).toBe(editorDefaults.j);
+		expect(resolveEditorDefaultSource('bqn', 'wasm32-wasip1')).toBe(editorDefaults.bqn);
+		expect(resolveEditorDefaultSource('janet', 'wasm32-wasip1')).toBe(editorDefaults.janet);
 		expect(resolveEditorDefaultSource('ocaml', 'wasm32-wasip1')).toBe(editorDefaults.ocaml);
 		expect(resolveEditorDefaultSource('javascript', 'wasm32-wasip1')).toBe(
 			editorDefaults.javascript
@@ -111,6 +123,10 @@ describe('editor defaults', () => {
 		expect(isEditorDefaultSource(editorDefaults.gleam)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.perl)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.pascal)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.forth)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.j)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.bqn)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.janet)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.ocaml)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.javascript)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.typescript)).toBe(true);
