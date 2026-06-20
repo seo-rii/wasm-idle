@@ -1,1 +1,1 @@
-export const WASM_AWK_ASSET_VERSION = '8f22595e633f684b';
+export const WASM_AWK_ASSET_VERSION = "2e6c9ebaea291c23";
