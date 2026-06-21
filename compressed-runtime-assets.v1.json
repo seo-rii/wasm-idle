@@ -32,10 +32,11 @@
     "_app/immutable/workers/assets/php_8_5-CKiimKxC.wasm",
     "_app/immutable/workers/assets/php_8_5-Dk-Fs6uY.wasm",
     "_app/immutable/workers/assets/ruby_stdlib-C40Yu-vu.wasm",
+    "_app/immutable/workers/chunks/D8s0pdc6.js",
     "_app/immutable/workers/chunks/UK7fNjua.js",
     "_app/immutable/workers/css.worker-mBjWAuNU.js",
     "_app/immutable/workers/ts.worker-lXkfX6QA.js",
-    "_app/immutable/workers/worker-DrmgxqUe.js",
+    "_app/immutable/workers/worker-DpI21QV3.js",
     "clangd/clangd.wasm",
     "pyodide/pyodide.asm.js",
     "pyodide/pyodide.asm.wasm",
@@ -291,7 +292,7 @@
     "webr/5da864032a1d2d4e/libRlapack.so": 1769888,
     "wasm-tcl/tcl/wacl-library.data": 2307994,
     "wasm-tcl/tcl/wacl.wasm": 1884110,
-    "wasm-awk/goawk.wasm": 4679032,
+    "wasm-awk/goawk.wasm": 4678893,
     "wasm-pascal/compiler.js": 3332860,
     "wasm-dotnet/runtime/FSharp.Compiler.Service.wasm": 11899161,
     "wasm-dotnet/runtime/Microsoft.CodeAnalysis.CSharp.wasm": 5116185,
@@ -329,9 +330,10 @@
     "_app/immutable/workers/assets/php_8_5-CKiimKxC.wasm": 23527192,
     "_app/immutable/workers/assets/php_8_5-Dk-Fs6uY.wasm": 24104251,
     "_app/immutable/workers/assets/ruby_stdlib-C40Yu-vu.wasm": 30608059,
+    "_app/immutable/workers/chunks/D8s0pdc6.js": 8949374,
     "_app/immutable/workers/chunks/UK7fNjua.js": 13500477,
     "_app/immutable/workers/css.worker-mBjWAuNU.js": 1054724,
     "_app/immutable/workers/ts.worker-lXkfX6QA.js": 6894253,
-    "_app/immutable/workers/worker-DrmgxqUe.js": 3483081
+    "_app/immutable/workers/worker-DpI21QV3.js": 3483311
   }
 }
