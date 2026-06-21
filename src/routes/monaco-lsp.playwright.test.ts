@@ -199,6 +199,30 @@ const lspBrowserCases = [
 		source: 'main :: IO ()\nmain = print missing\n',
 		aliases: ['hs'],
 		timeoutMs: 300_000
+	},
+	{
+		language: 'SQLITE',
+		label: 'SQLite',
+		fileName: 'main.sql',
+		source: 'SELECT FROM numbers;\n',
+		aliases: ['sql'],
+		timeoutMs: 120_000
+	},
+	{
+		language: 'PROLOG',
+		label: 'Prolog',
+		fileName: 'main.prolog',
+		source: 'main :-\n  writeln(\n',
+		aliases: ['swipl'],
+		timeoutMs: 180_000
+	},
+	{
+		language: 'RUBY',
+		label: 'Ruby',
+		fileName: 'main.rb',
+		source: 'def main\n  puts(\n',
+		aliases: ['rb'],
+		timeoutMs: 240_000
 	}
 ] satisfies LspBrowserCase[];
 
@@ -212,7 +236,7 @@ const urlMatches = (url: string, pattern: string | RegExp) =>
 	typeof pattern === 'string' ? url.includes(pattern) : pattern.test(url);
 
 const requestLooksLspRelated = (url: string) =>
-	/\/(?:lsp|pyodide|wasm-(?:dotnet|gleam|go|haskell|lua|of-js-of-ocaml|rust|typescript|wat|zig))\//u.test(
+	/\/(?:lsp|pyodide|wasm-(?:dotnet|gleam|go|haskell|lua|of-js-of-ocaml|prolog|rust|typescript|wat|zig))\//u.test(
 		url
 	);
 
@@ -233,7 +257,10 @@ const lspStatusKeyByLanguage: Record<string, string> = {
 	PHP: 'php',
 	LUA: 'lua',
 	OCAML: 'ocaml',
-	HASKELL: 'haskell'
+	HASKELL: 'haskell',
+	SQLITE: 'sql',
+	PROLOG: 'prolog',
+	RUBY: 'ruby'
 };
 
 const withLspTestQuery = (browserUrl: string) => {

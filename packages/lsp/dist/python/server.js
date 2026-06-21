@@ -1,12 +1,14 @@
 import { BrowserMessageReader, BrowserMessageWriter } from '../jsonrpc.js';
 import { resolvePythonLanguageServerBaseUrl } from '../runtime.js';
+import { createLanguageServerProgressReporter } from '../worker-client.js';
 const currentUrl = () => globalThis.location?.href || '';
 const createDefaultPythonLspWorker = () => new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
 function isPythonLanguageServerOptions(options) {
     return typeof options === 'object' && !!options;
 }
 async function createServer(pyodideBaseUrl, createWorker, onStatus) {
-    onStatus?.({ state: 'loading' });
+    const status = createLanguageServerProgressReporter(onStatus);
+    status.loading();
     let resolveReady = () => { };
     let rejectReady = (_error) => { };
     const ready = new Promise((resolve, reject) => {
@@ -21,12 +23,12 @@ async function createServer(pyodideBaseUrl, createWorker, onStatus) {
     const readyListener = (event) => {
         switch (event.data?.type) {
             case 'progress': {
-                onStatus?.({ state: 'loading', stage: event.data.stage });
+                status.progress({ stage: event.data.stage });
                 break;
             }
             case 'ready': {
                 cleanup();
-                onStatus?.({ state: 'ready' });
+                status.ready();
                 resolveReady();
                 break;
             }

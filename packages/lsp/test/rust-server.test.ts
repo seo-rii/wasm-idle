@@ -89,12 +89,17 @@ describe('getRustLanguageServer', () => {
 				edition: undefined
 			}
 		});
-		expect(status).toHaveBeenCalledWith({ state: 'loading' });
+		expect(status).toHaveBeenCalledWith({
+			state: 'loading',
+			stage: 'startup',
+			loaded: 0,
+			total: 1
+		});
 		expect(status).toHaveBeenCalledWith({
 			state: 'loading',
 			stage: 'load-rust-compiler',
-			loaded: undefined,
-			total: undefined
+			loaded: 0.08,
+			total: 1
 		});
 		expect(status).toHaveBeenCalledWith({ state: 'ready' });
 

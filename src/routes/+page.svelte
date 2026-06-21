@@ -58,6 +58,8 @@
 		isLegacyEditorDefaultSource,
 		resolveEditorDefaultSource
 	} from './editor-defaults';
+	import rubyStdlibWasmUrl from '@ruby/3.4-wasm-wasi/dist/ruby+stdlib.wasm?url';
+	import sqliteWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
 
 	type WorkspaceFile = {
 		path: string;
@@ -111,7 +113,10 @@
 		| 'php'
 		| 'lua'
 		| 'ocaml'
-		| 'haskell';
+		| 'haskell'
+		| 'sql'
+		| 'prolog'
+		| 'ruby';
 
 	type LanguageWorkspace = {
 		activePath: string;
@@ -141,6 +146,7 @@
 		state: 'loading' | 'ready' | 'error';
 		text: string;
 		title: string;
+		progressPercent: number | null;
 	};
 
 	const WORKSPACE_STORAGE_KEY = 'wasm-idle:example-workspace:v3';
@@ -288,7 +294,10 @@
 		PHP: 'php',
 		LUA: 'lua',
 		OCAML: 'ocaml',
-		HASKELL: 'haskell'
+		HASKELL: 'haskell',
+		SQLITE: 'sql',
+		PROLOG: 'prolog',
+		RUBY: 'ruby'
 	};
 	const argsHelpLanguages = new Set<PlaygroundLanguage>([
 		'JAVA',
@@ -487,6 +496,9 @@
 				? `${path}/wasm-lisp/index.js?v=${WASM_LISP_ASSET_VERSION}`
 				: `/wasm-lisp/index.js?v=${WASM_LISP_ASSET_VERSION}`
 		},
+		ruby: {
+			wasmUrl: rubyStdlibWasmUrl
+		},
 		haskell: {
 			moduleUrl: path
 				? `${path}/wasm-haskell/dyld.mjs?v=${WASM_HASKELL_ASSET_VERSION}`
@@ -511,6 +523,9 @@
 			manifestUrl: path
 				? `${path}/wasm-octave/runtime/runtime-manifest.v1.json?v=${WASM_OCTAVE_ASSET_VERSION}`
 				: `/wasm-octave/runtime/runtime-manifest.v1.json?v=${WASM_OCTAVE_ASSET_VERSION}`
+		},
+		sqlite: {
+			wasmUrl: sqliteWasmUrl
 		}
 	}));
 	const playground = $derived.by(() => createPlaygroundBinding(runtimeAssets));
@@ -609,6 +624,17 @@
 	const haskellLspBsdtarUrl = $derived(
 		haskellLspEnabled ? runtimeAssets.haskell?.bsdtarUrl : undefined
 	);
+	const sqlLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'sql');
+	const sqlLspWasmUrl = $derived(sqlLspEnabled ? runtimeAssets.sqlite?.wasmUrl : undefined);
+	const prologLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'prolog');
+	const prologLspBaseUrl = $derived(
+		prologLspEnabled ? runtimeAssets.prolog?.baseUrl : undefined
+	);
+	const prologLspWorkerUrl = $derived(
+		prologLspEnabled ? runtimeAssets.prolog?.workerUrl : undefined
+	);
+	const rubyLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'ruby');
+	const rubyLspWasmUrl = $derived(rubyLspEnabled ? runtimeAssets.ruby?.wasmUrl : undefined);
 	const pythonLspBaseUrl = $derived(path ? `${path}/pyodide/` : '/pyodide/');
 	const typescriptLspLibUrl = $derived(
 		lspEnabled && typescriptLspLanguages.has(language)
@@ -2630,7 +2656,30 @@
 								{editorLspStatus.state === 'error' ? 'error' : 'check_circle'}
 							</span>
 						{/if}
-						<span>{editorLspStatus.text}</span>
+						<span class="lsp-status__text">{editorLspStatus.text}</span>
+						{#if editorLspStatus.state === 'loading'}
+							{#if editorLspStatus.progressPercent === null}
+								<span
+									class="lsp-status__progress lsp-status__progress--indeterminate"
+									role="progressbar"
+									aria-label={`${editorLspStatus.label} loading progress`}
+								>
+									<span class="lsp-status__progress-fill"></span>
+								</span>
+							{:else}
+								<span
+									class="lsp-status__progress"
+									role="progressbar"
+									aria-label={`${editorLspStatus.label} loading progress`}
+									aria-valuemin="0"
+									aria-valuemax="100"
+									aria-valuenow={editorLspStatus.progressPercent}
+									style={`--lsp-progress-scale: ${editorLspStatus.progressPercent / 100};`}
+								>
+									<span class="lsp-status__progress-fill"></span>
+								</span>
+							{/if}
+						{/if}
 					</span>
 				{/if}
 				<span>{saveStatus}</span>
@@ -2674,6 +2723,13 @@
 				{haskellLspModuleUrl}
 				{haskellLspRootfsUrl}
 				{haskellLspBsdtarUrl}
+				{sqlLspEnabled}
+				{sqlLspWasmUrl}
+				{prologLspEnabled}
+				{prologLspBaseUrl}
+				{prologLspWorkerUrl}
+				{rubyLspEnabled}
+				{rubyLspWasmUrl}
 				{pythonLspBaseUrl}
 				{typescriptLspLibUrl}
 				breakpoints={debug.effectiveBreakpoints}
@@ -2913,12 +2969,13 @@
 	}
 
 	.lsp-status {
+		position: relative;
 		display: inline-flex;
 		align-items: center;
 		gap: 6px;
 		max-width: min(260px, 42vw);
-		min-height: 22px;
-		padding: 0 8px;
+		min-height: 24px;
+		padding: 0 8px 3px;
 		border: 1px solid rgba(148, 163, 184, 0.28);
 		border-radius: 999px;
 		background: rgba(15, 23, 42, 0.72);
@@ -2927,7 +2984,7 @@
 		overflow: hidden;
 	}
 
-	.lsp-status > span:last-child {
+	.lsp-status__text {
 		min-width: 0;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -2964,9 +3021,42 @@
 		animation: lsp-status-spin 0.8s linear infinite;
 	}
 
+	.lsp-status__progress {
+		position: absolute;
+		right: 8px;
+		bottom: 3px;
+		left: 8px;
+		height: 2px;
+		overflow: hidden;
+		border-radius: 999px;
+		background: rgba(125, 211, 252, 0.2);
+	}
+
+	.lsp-status__progress-fill {
+		display: block;
+		width: 100%;
+		height: 100%;
+		border-radius: inherit;
+		background: currentColor;
+		transform: scaleX(var(--lsp-progress-scale, 0));
+		transform-origin: left center;
+	}
+
+	.lsp-status__progress--indeterminate .lsp-status__progress-fill {
+		width: 42%;
+		transform: translateX(-120%);
+		animation: lsp-status-progress 1.1s ease-in-out infinite;
+	}
+
 	@keyframes lsp-status-spin {
 		to {
 			transform: rotate(360deg);
+		}
+	}
+
+	@keyframes lsp-status-progress {
+		to {
+			transform: translateX(260%);
 		}
 	}
 
@@ -3803,7 +3893,7 @@
 			min-width: 108px;
 		}
 
-		.workspace-status span:nth-child(n + 2):not(.lsp-status) {
+		.workspace-status > span:nth-child(n + 2):not(.lsp-status) {
 			display: none;
 		}
 

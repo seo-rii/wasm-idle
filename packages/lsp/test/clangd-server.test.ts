@@ -82,7 +82,12 @@ describe('getCppLanguageServer', () => {
 			type: 'init',
 			baseUrl: 'https://static.example.com/repl_20240807/clangd/'
 		});
-		expect(status).toHaveBeenCalledWith({ state: 'loading' });
+		expect(status).toHaveBeenCalledWith({
+			state: 'loading',
+			stage: 'startup',
+			loaded: 0,
+			total: 1
+		});
 		expect(status).toHaveBeenCalledWith({ state: 'loading', loaded: 2, total: 3 });
 		expect(status).toHaveBeenCalledWith({ state: 'ready' });
 

@@ -64,7 +64,23 @@ export function startWorkerLanguageServer(service, scope = globalThis) {
     let ready = false;
     let shutdown = false;
     let debug = false;
+    let fallbackProgress = 0;
     const send = (message) => scope.postMessage(message);
+    const sendProgress = (stage, loaded, total) => {
+        if (ready)
+            return;
+        if (typeof loaded === 'number' &&
+            Number.isFinite(loaded) &&
+            typeof total === 'number' &&
+            Number.isFinite(total) &&
+            total > 0) {
+            fallbackProgress = Math.max(fallbackProgress, Math.min(loaded / total, 0.95));
+            send({ type: 'progress', stage, loaded, total });
+            return;
+        }
+        fallbackProgress = fallbackProgress === 0 ? 0.08 : Math.min(fallbackProgress + 0.18, 0.95);
+        send({ type: 'progress', stage, loaded: fallbackProgress, total: 1 });
+    };
     const respond = (id, result) => send({ jsonrpc: '2.0', id, result });
     const respondError = (id, code, message, data) => send({
         jsonrpc: '2.0',
@@ -80,14 +96,7 @@ export function startWorkerLanguageServer(service, scope = globalThis) {
         documents,
         publishDiagnostics,
         reportProgress(stage, loaded, total) {
-            if (ready)
-                return;
-            send({
-                type: 'progress',
-                stage,
-                ...(loaded === undefined ? {} : { loaded }),
-                ...(total === undefined ? {} : { total })
-            });
+            sendProgress(stage, loaded, total);
         }
     };
     const scheduleDiagnostics = (document) => {
@@ -291,8 +300,10 @@ export function startWorkerLanguageServer(service, scope = globalThis) {
             if (debug) {
                 console.debug(`[wasm-idle:lsp-worker:${service.name}] init`);
             }
+            sendProgress('startup', 0, 1);
             void Promise.resolve(service.initialize?.(message.options, context))
                 .then(() => {
+                sendProgress('ready', 1, 1);
                 ready = true;
                 send({ type: 'ready' });
             })

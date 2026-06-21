@@ -88,12 +88,17 @@ describe('getGoLanguageServer', () => {
 				target: 'wasip2/wasm'
 			}
 		});
-		expect(status).toHaveBeenCalledWith({ state: 'loading' });
+		expect(status).toHaveBeenCalledWith({
+			state: 'loading',
+			stage: 'startup',
+			loaded: 0,
+			total: 1
+		});
 		expect(status).toHaveBeenCalledWith({
 			state: 'loading',
 			stage: 'load-go-compiler',
-			loaded: undefined,
-			total: undefined
+			loaded: 0.08,
+			total: 1
 		});
 		expect(status).toHaveBeenCalledWith({ state: 'ready' });
 

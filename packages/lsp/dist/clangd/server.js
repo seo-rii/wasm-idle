@@ -1,6 +1,7 @@
 import { BrowserMessageReader, BrowserMessageWriter } from '../jsonrpc.js';
 import { CLANGD_ASSETS, loadLanguageToolAsset } from '../assets.js';
 import { resolveCppLanguageServerRuntimeAssetConfig } from '../runtime.js';
+import { createLanguageServerProgressReporter } from '../worker-client.js';
 const currentUrl = () => globalThis.location?.href || '';
 const createDefaultClangdWorker = () => new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
 function isClangdLanguageServerOptions(options) {
@@ -38,7 +39,8 @@ async function preloadClangdAssets(assetConfig, onStatus) {
     };
 }
 async function createServer(assetConfig, createWorker, onStatus, debug = false) {
-    onStatus?.({ state: 'loading' });
+    const status = createLanguageServerProgressReporter(onStatus);
+    status.loading();
     const preloaded = await preloadClangdAssets(assetConfig, onStatus);
     let resolveReady = () => { };
     let rejectReady = (_error) => { };
@@ -54,12 +56,12 @@ async function createServer(assetConfig, createWorker, onStatus, debug = false) 
     const readyListener = (event) => {
         switch (event.data?.type) {
             case 'progress': {
-                onStatus?.({ state: 'loading', loaded: event.data.value, total: event.data.max });
+                status.progress({ loaded: event.data.value, total: event.data.max });
                 break;
             }
             case 'ready': {
                 cleanup();
-                onStatus?.({ state: 'ready' });
+                status.ready();
                 resolveReady();
                 break;
             }

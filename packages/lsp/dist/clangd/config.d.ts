@@ -6,6 +6,7 @@ export type ClangdStatus = {
     state: 'disabled';
 } | {
     state: 'loading';
+    stage?: string;
     loaded?: number;
     total?: number;
 } | {

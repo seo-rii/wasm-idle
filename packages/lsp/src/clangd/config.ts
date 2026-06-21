@@ -5,7 +5,7 @@ export const CLANGD_CPP_FILE_URI = `file://${CLANGD_CPP_FILE_PATH}`;
 
 export type ClangdStatus =
 	| { state: 'disabled' }
-	| { state: 'loading'; loaded?: number; total?: number }
+	| { state: 'loading'; stage?: string; loaded?: number; total?: number }
 	| { state: 'ready' }
 	| { state: 'error'; message: string };
 

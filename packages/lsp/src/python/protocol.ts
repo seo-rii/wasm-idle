@@ -1,6 +1,6 @@
 export type PythonLspStatus =
 	| { state: 'disabled' }
-	| { state: 'loading'; stage?: string }
+	| { state: 'loading'; stage?: string; loaded?: number; total?: number }
 	| { state: 'ready' }
 	| { state: 'error'; message: string };
 

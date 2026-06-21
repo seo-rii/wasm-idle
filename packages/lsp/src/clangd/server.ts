@@ -10,6 +10,7 @@ import type {
 	EditorLanguageServerOptions,
 	EditorLanguageServerRuntimeOptions
 } from '../types.js';
+import { createLanguageServerProgressReporter } from '../worker-client.js';
 import type { ClangdStatus } from './config.js';
 import type { ClangdPreloadedAssets, ClangdWorkerOutboundMessage } from './protocol.js';
 
@@ -75,7 +76,8 @@ async function createServer(
 	onStatus?: (status: ClangdStatus) => void,
 	debug = false
 ) {
-	onStatus?.({ state: 'loading' });
+	const status = createLanguageServerProgressReporter(onStatus);
+	status.loading();
 	const preloaded = await preloadClangdAssets(assetConfig, onStatus);
 	let resolveReady = () => {};
 	let rejectReady = (_error: Error) => {};
@@ -91,12 +93,12 @@ async function createServer(
 	const readyListener = (event: MessageEvent<ClangdWorkerOutboundMessage>) => {
 		switch (event.data?.type) {
 			case 'progress': {
-				onStatus?.({ state: 'loading', loaded: event.data.value, total: event.data.max });
+				status.progress({ loaded: event.data.value, total: event.data.max });
 				break;
 			}
 			case 'ready': {
 				cleanup();
-				onStatus?.({ state: 'ready' });
+				status.ready();
 				resolveReady();
 				break;
 			}

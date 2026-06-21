@@ -43,6 +43,7 @@
 		state: 'loading' | 'ready' | 'error';
 		text: string;
 		title: string;
+		progressPercent: number | null;
 	};
 	interface LspRoute {
 		languages: readonly string[];
@@ -1907,6 +1908,9 @@
 	let luaLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let ocamlLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let haskellLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let sqlLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let prologLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let rubyLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let model = $state<monaco.editor.ITextModel | undefined>();
 	let debugView = $state<MonacoDebugView | null>(null);
 	interface Props {
@@ -1945,6 +1949,13 @@
 		haskellLspModuleUrl?: string;
 		haskellLspRootfsUrl?: string;
 		haskellLspBsdtarUrl?: string;
+		sqlLspEnabled?: boolean;
+		sqlLspWasmUrl?: string;
+		prologLspEnabled?: boolean;
+		prologLspBaseUrl?: string;
+		prologLspWorkerUrl?: string;
+		rubyLspEnabled?: boolean;
+		rubyLspWasmUrl?: string;
 		pythonLspBaseUrl?: string;
 		breakpoints?: number[];
 		debugLocals?: DebugVariable[];
@@ -1993,6 +2004,13 @@
 		haskellLspModuleUrl,
 		haskellLspRootfsUrl,
 		haskellLspBsdtarUrl,
+		sqlLspEnabled = false,
+		sqlLspWasmUrl,
+		prologLspEnabled = false,
+		prologLspBaseUrl,
+		prologLspWorkerUrl,
+		rubyLspEnabled = false,
+		rubyLspWasmUrl,
 		pythonLspBaseUrl,
 		breakpoints = [],
 		debugLocals = [],
@@ -2096,6 +2114,10 @@
 			haskellLspEnabled ? haskellLspModuleUrl || '' : '',
 			haskellLspEnabled ? haskellLspRootfsUrl || '' : '',
 			haskellLspEnabled ? haskellLspBsdtarUrl || '' : '',
+			sqlLspEnabled ? sqlLspWasmUrl || '' : '',
+			prologLspEnabled ? prologLspBaseUrl || '' : '',
+			prologLspEnabled ? prologLspWorkerUrl || '' : '',
+			rubyLspEnabled ? rubyLspWasmUrl || '' : '',
 			pythonLspBaseUrl || '',
 			activeLspLanguage,
 			lspEnabled ? 'lsp-on' : 'lsp-off',
@@ -2175,23 +2197,56 @@
 				label = 'Haskell LSP';
 				status = haskellLspStatus;
 				break;
+			case 'sql':
+				label = 'SQL LSP';
+				status = sqlLspStatus;
+				break;
+			case 'prolog':
+				label = 'Prolog LSP';
+				status = prologLspStatus;
+				break;
+			case 'ruby':
+				label = 'Ruby LSP';
+				status = rubyLspStatus;
+				break;
 		}
 		if (!status || status.state === 'disabled') return null;
 		if (status.state === 'loading') {
 			const pieces = ['loading'];
+			const titlePieces = [`${label} loading`];
+			let progressPercent: number | null = null;
 			if (status.stage) pieces.push(status.stage.replace(/[-_]+/gu, ' '));
-			if (typeof status.loaded === 'number' && typeof status.total === 'number') {
-				pieces.push(`${status.loaded}/${status.total}`);
+			if (
+				typeof status.loaded === 'number' &&
+				Number.isFinite(status.loaded) &&
+				typeof status.total === 'number' &&
+				Number.isFinite(status.total) &&
+				status.total > 0
+			) {
+				const fraction = Math.max(0, Math.min(status.loaded / status.total, 1));
+				progressPercent = Math.round(fraction * 100);
+				pieces.push(`${progressPercent}%`);
+				titlePieces.push(`${progressPercent}%`);
+				if (status.total !== 1) titlePieces.push(`${status.loaded}/${status.total}`);
+			}
+			if (status.stage) {
+				titlePieces.push(status.stage.replace(/[-_]+/gu, ' '));
 			}
 			const text = `${label} ${pieces.join(' ')}`;
-			return { label, state: 'loading', text, title: text };
+			return { label, state: 'loading', text, title: titlePieces.join(' - '), progressPercent };
 		}
 		if (status.state === 'ready') {
 			const text = `${label} ready`;
-			return { label, state: 'ready', text, title: text };
+			return { label, state: 'ready', text, title: text, progressPercent: null };
 		}
 		const text = `${label} failed`;
-		return { label, state: 'error', text, title: `${text}: ${status.message}` };
+		return {
+			label,
+			state: 'error',
+			text,
+			title: `${text}: ${status.message}`,
+			progressPercent: null
+		};
 	});
 	const withMonacoDocumentSync = (connection: IMonacoLspConnection): IMonacoLspConnection => {
 		if (!isServerHandleConnection(connection)) return connection;
@@ -2580,6 +2635,56 @@
 					onStatus: (status) => (haskellLspStatus = status)
 				})) as unknown as IMonacoLspConnection;
 			}
+		},
+		{
+			languages: ['sql'],
+			manualDocumentSync: true,
+			isEnabled: () => sqlLspEnabled && !!sqlLspWasmUrl,
+			setStatus: (status) => (sqlLspStatus = status),
+			load: async (currentUrl) => {
+				const { getSqlLanguageServer } = await import('@wasm-idle/lsp');
+				return (await getSqlLanguageServer({
+					currentUrl,
+					sql: {
+						dialect: 'sqlite',
+						wasmUrl: sqlLspWasmUrl || ''
+					},
+					onStatus: (status) => (sqlLspStatus = status)
+				})) as unknown as IMonacoLspConnection;
+			}
+		},
+		{
+			languages: ['prolog'],
+			manualDocumentSync: true,
+			isEnabled: () => prologLspEnabled && !!prologLspBaseUrl && !!prologLspWorkerUrl,
+			setStatus: (status) => (prologLspStatus = status),
+			load: async (currentUrl) => {
+				const { getPrologLanguageServer } = await import('@wasm-idle/lsp');
+				return (await getPrologLanguageServer({
+					currentUrl,
+					prolog: {
+						baseUrl: prologLspBaseUrl || '',
+						workerUrl: prologLspWorkerUrl || ''
+					},
+					onStatus: (status) => (prologLspStatus = status)
+				})) as unknown as IMonacoLspConnection;
+			}
+		},
+		{
+			languages: ['ruby'],
+			manualDocumentSync: true,
+			isEnabled: () => rubyLspEnabled && !!rubyLspWasmUrl,
+			setStatus: (status) => (rubyLspStatus = status),
+			load: async (currentUrl) => {
+				const { getRubyLanguageServer } = await import('@wasm-idle/lsp');
+				return (await getRubyLanguageServer({
+					currentUrl,
+					ruby: {
+						wasmUrl: rubyLspWasmUrl || ''
+					},
+					onStatus: (status) => (rubyLspStatus = status)
+				})) as unknown as IMonacoLspConnection;
+			}
 		}
 	];
 
@@ -2603,7 +2708,7 @@
 				return null;
 			}
 			try {
-				route.setStatus({ state: 'loading', stage: 'startup' });
+				route.setStatus({ state: 'loading', stage: 'startup', loaded: 0, total: 1 });
 				const connection = await route.load(currentUrl);
 				return route.manualDocumentSync ? withMonacoDocumentSync(connection) : connection;
 			} catch (error) {
@@ -2675,7 +2780,10 @@
 			php: phpLspStatus,
 			lua: luaLspStatus,
 			ocaml: ocamlLspStatus,
-			haskell: haskellLspStatus
+			haskell: haskellLspStatus,
+			sql: sqlLspStatus,
+			prolog: prologLspStatus,
+			ruby: rubyLspStatus
 		};
 	});
 

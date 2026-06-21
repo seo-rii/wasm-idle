@@ -80,8 +80,18 @@ describe('getPythonLanguageServer', () => {
 			type: 'init',
 			pyodideBaseUrl: 'https://static.example.com/repl_20240807/pyodide/'
 		});
-		expect(status).toHaveBeenCalledWith({ state: 'loading' });
-		expect(status).toHaveBeenCalledWith({ state: 'loading', stage: 'load-pyodide' });
+		expect(status).toHaveBeenCalledWith({
+			state: 'loading',
+			stage: 'startup',
+			loaded: 0,
+			total: 1
+		});
+		expect(status).toHaveBeenCalledWith({
+			state: 'loading',
+			stage: 'load-pyodide',
+			loaded: 0.08,
+			total: 1
+		});
 		expect(status).toHaveBeenCalledWith({ state: 'ready' });
 
 		handle.dispose();

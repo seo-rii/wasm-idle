@@ -167,8 +167,25 @@ export function startWorkerLanguageServer(
 	let ready = false;
 	let shutdown = false;
 	let debug = false;
+	let fallbackProgress = 0;
 
 	const send = (message: unknown) => scope.postMessage(message);
+	const sendProgress = (stage: string, loaded?: number, total?: number) => {
+		if (ready) return;
+		if (
+			typeof loaded === 'number' &&
+			Number.isFinite(loaded) &&
+			typeof total === 'number' &&
+			Number.isFinite(total) &&
+			total > 0
+		) {
+			fallbackProgress = Math.max(fallbackProgress, Math.min(loaded / total, 0.95));
+			send({ type: 'progress', stage, loaded, total });
+			return;
+		}
+		fallbackProgress = fallbackProgress === 0 ? 0.08 : Math.min(fallbackProgress + 0.18, 0.95);
+		send({ type: 'progress', stage, loaded: fallbackProgress, total: 1 });
+	};
 	const respond = (id: string | number | null, result: unknown) =>
 		send({ jsonrpc: '2.0', id, result });
 	const respondError = (
@@ -192,13 +209,7 @@ export function startWorkerLanguageServer(
 		documents,
 		publishDiagnostics,
 		reportProgress(stage, loaded, total) {
-			if (ready) return;
-			send({
-				type: 'progress',
-				stage,
-				...(loaded === undefined ? {} : { loaded }),
-				...(total === undefined ? {} : { total })
-			});
+			sendProgress(stage, loaded, total);
 		}
 	};
 
@@ -431,8 +442,10 @@ export function startWorkerLanguageServer(
 			if (debug) {
 				console.debug(`[wasm-idle:lsp-worker:${service.name}] init`);
 			}
+			sendProgress('startup', 0, 1);
 			void Promise.resolve(service.initialize?.(message.options, context))
 				.then(() => {
+					sendProgress('ready', 1, 1);
 					ready = true;
 					send({ type: 'ready' });
 				})

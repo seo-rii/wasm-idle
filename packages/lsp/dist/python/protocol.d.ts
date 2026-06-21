@@ -3,6 +3,8 @@ export type PythonLspStatus = {
 } | {
     state: 'loading';
     stage?: string;
+    loaded?: number;
+    total?: number;
 } | {
     state: 'ready';
 } | {

@@ -5,6 +5,7 @@ import type {
 	EditorLanguageServerOptions,
 	EditorLanguageServerRuntimeOptions
 } from '../types.js';
+import { createLanguageServerProgressReporter } from '../worker-client.js';
 import type { PythonLspStatus, PythonLspWorkerOutboundMessage } from './protocol.js';
 
 export interface PythonLanguageServerOptions extends EditorLanguageServerRuntimeOptions {
@@ -29,7 +30,8 @@ async function createServer(
 	createWorker: () => Worker,
 	onStatus?: (status: PythonLspStatus) => void
 ) {
-	onStatus?.({ state: 'loading' });
+	const status = createLanguageServerProgressReporter(onStatus);
+	status.loading();
 	let resolveReady = () => {};
 	let rejectReady = (_error: Error) => {};
 	const ready = new Promise<void>((resolve, reject) => {
@@ -44,12 +46,12 @@ async function createServer(
 	const readyListener = (event: MessageEvent<PythonLspWorkerOutboundMessage>) => {
 		switch (event.data?.type) {
 			case 'progress': {
-				onStatus?.({ state: 'loading', stage: event.data.stage });
+				status.progress({ stage: event.data.stage });
 				break;
 			}
 			case 'ready': {
 				cleanup();
-				onStatus?.({ state: 'ready' });
+				status.ready();
 				resolveReady();
 				break;
 			}

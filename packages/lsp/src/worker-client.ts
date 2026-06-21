@@ -8,6 +8,12 @@ export type LanguageServerStatus =
 	| { state: 'ready' }
 	| { state: 'error'; message: string };
 
+export interface LanguageServerProgressUpdate {
+	stage?: string;
+	loaded?: number;
+	total?: number;
+}
+
 export interface WorkerLanguageServerClientOptions {
 	createWorker: () => Worker;
 	initOptions?: unknown;
@@ -22,10 +28,54 @@ interface WorkerControlMessage {
 	total?: number;
 }
 
+export function createLanguageServerProgressReporter(
+	onStatus?: (status: LanguageServerStatus) => void
+) {
+	let fallbackLoaded = 0;
+	const loading = (stage = 'startup') => {
+		fallbackLoaded = 0;
+		onStatus?.({ state: 'loading', stage, loaded: 0, total: 1 });
+	};
+	const progress = ({ stage, loaded, total }: LanguageServerProgressUpdate = {}) => {
+		if (
+			typeof loaded === 'number' &&
+			Number.isFinite(loaded) &&
+			typeof total === 'number' &&
+			Number.isFinite(total) &&
+			total > 0
+		) {
+			fallbackLoaded = Math.max(fallbackLoaded, Math.min(loaded / total, 0.92));
+			onStatus?.({
+				state: 'loading',
+				...(stage ? { stage } : {}),
+				loaded,
+				total
+			});
+			return;
+		}
+		fallbackLoaded = fallbackLoaded === 0 ? 0.08 : Math.min(fallbackLoaded + 0.18, 0.92);
+		onStatus?.({
+			state: 'loading',
+			...(stage ? { stage } : {}),
+			loaded: fallbackLoaded,
+			total: 1
+		});
+	};
+
+	return {
+		loading,
+		progress,
+		ready: () => onStatus?.({ state: 'ready' }),
+		error: (message: string) => onStatus?.({ state: 'error', message }),
+		disabled: () => onStatus?.({ state: 'disabled' })
+	};
+}
+
 export async function createWorkerLanguageServerClient(
 	options: WorkerLanguageServerClientOptions
 ): Promise<EditorLanguageServerHandle> {
-	options.onStatus?.({ state: 'loading' });
+	const status = createLanguageServerProgressReporter(options.onStatus);
+	status.loading();
 	const worker = options.createWorker();
 	try {
 		await new Promise<void>((resolve, reject) => {
@@ -36,8 +86,7 @@ export async function createWorkerLanguageServerClient(
 			const handleMessage = (event: MessageEvent<WorkerControlMessage>) => {
 				switch (event.data?.type) {
 					case 'progress':
-						options.onStatus?.({
-							state: 'loading',
+						status.progress({
 							stage: event.data.stage,
 							loaded: event.data.loaded,
 							total: event.data.total
@@ -63,7 +112,7 @@ export async function createWorkerLanguageServerClient(
 	} catch (error) {
 		worker.terminate();
 		const message = error instanceof Error ? error.message : String(error);
-		options.onStatus?.({ state: 'error', message });
+		status.error(message);
 		throw error;
 	}
 
@@ -85,14 +134,14 @@ export async function createWorkerLanguageServerClient(
 		}
 	};
 	const writer = new BrowserMessageWriter(worker);
-	options.onStatus?.({ state: 'ready' });
+	status.ready();
 	return {
 		transport: { reader: filteredReader, writer },
 		dispose: () => {
 			worker.terminate();
 			reader.dispose();
 			writer.dispose();
-			options.onStatus?.({ state: 'disabled' });
+			status.disabled();
 		}
 	};
 }

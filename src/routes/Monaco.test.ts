@@ -132,6 +132,7 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(/import type \{ LanguageServerStatus \} from '@wasm-idle\/lsp';/);
 		expect(source).not.toMatch(/^\s*import \{[^\n]*\} from '@wasm-idle\/lsp';/m);
 		expect(source).toMatch(/type MonacoLspStatusView = \{/);
+		expect(source).toMatch(/progressPercent: number \| null;/);
 		expect(source).toMatch(/lspStatus\?: MonacoLspStatusView \| null;/);
 		expect(source).toMatch(
 			/lspStatus = \$bindable<MonacoLspStatusView \| null>\(null\),/
@@ -139,7 +140,11 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(
 			/const activeLspStatusView = \$derived\.by<MonacoLspStatusView \| null>\(\(\) => \{/
 		);
-		expect(source).toMatch(/route\.setStatus\(\{ state: 'loading', stage: 'startup' \}\);/);
+		expect(source).toMatch(
+			/route\.setStatus\(\{ state: 'loading', stage: 'startup', loaded: 0, total: 1 \}\);/
+		);
+		expect(source).toMatch(/const fraction = Math\.max\(0, Math\.min\(status\.loaded \/ status\.total, 1\)\);/);
+		expect(source).toMatch(/progressPercent = Math\.round\(fraction \* 100\);/);
 		expect(source).toMatch(/lspStatus = activeLspStatusView;/);
 		expect(source).toMatch(/const lspRoutes: LspRoute\[] = \[/);
 		expect(source).toMatch(/function disableAllLspStatuses\(\) \{/);
@@ -346,11 +351,15 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).toMatch(/lspEnabled = \$state\(false\),/);
 		expect(pageSource).toMatch(/id="lsp-toggle"/);
 		expect(pageSource).toMatch(/type EditorLspStatusView = \{/);
+		expect(pageSource).toMatch(/progressPercent: number \| null;/);
 		expect(pageSource).toMatch(
 			/editorLspStatus = \$state<EditorLspStatusView \| null>\(null\),/
 		);
 		expect(pageSource).toMatch(/class="lsp-status lsp-status--\{editorLspStatus\.state\}"/);
 		expect(pageSource).toMatch(/data-lsp-state=\{editorLspStatus\.state\}/);
+		expect(pageSource).toMatch(/class="lsp-status__progress"/);
+		expect(pageSource).toMatch(/role="progressbar"/);
+		expect(pageSource).toMatch(/--lsp-progress-scale: \$\{editorLspStatus\.progressPercent \/ 100\};/);
 		expect(pageSource).toMatch(/bind:lspStatus=\{editorLspStatus\}/);
 		expect(pageSource).toMatch(/version: 5,/);
 		expect(pageSource).toMatch(

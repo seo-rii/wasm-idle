@@ -114,6 +114,48 @@ describe('startWorkerLanguageServer', () => {
 		expect(scope.messages).toContainEqual({ jsonrpc: '2.0', id: 2, result: null });
 	});
 
+	it('reports numeric progress for worker initialization stages', async () => {
+		const scope = new FakeWorkerScope();
+
+		startWorkerLanguageServer(
+			{
+				name: 'test-lsp',
+				initialize(_options, context) {
+					context.reportProgress('load-test-runtime');
+					context.reportProgress('download-test-runtime', 3, 6);
+				}
+			},
+			scope
+		);
+		scope.dispatch({ type: 'init' });
+
+		await vi.waitFor(() => expect(scope.messages).toContainEqual({ type: 'ready' }));
+		expect(scope.messages).toContainEqual({
+			type: 'progress',
+			stage: 'startup',
+			loaded: 0,
+			total: 1
+		});
+		expect(scope.messages).toContainEqual({
+			type: 'progress',
+			stage: 'load-test-runtime',
+			loaded: 0.08,
+			total: 1
+		});
+		expect(scope.messages).toContainEqual({
+			type: 'progress',
+			stage: 'download-test-runtime',
+			loaded: 3,
+			total: 6
+		});
+		expect(scope.messages).toContainEqual({
+			type: 'progress',
+			stage: 'ready',
+			loaded: 1,
+			total: 1
+		});
+	});
+
 	it('treats structured-clone notifications with id undefined as notifications', async () => {
 		const scope = new FakeWorkerScope();
 		const diagnostics = vi.fn<WorkerLanguageService['diagnostics']>(() => []);
