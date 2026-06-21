@@ -124,7 +124,7 @@
 		"@php-wasm/web": "3.1.34",
 		"@ruby/3.4-wasm-wasi": "2.9.3-2.9.4",
 		"@ruby/wasm-wasi": "2.9.3-2.9.4",
-		"@seorii/monaco": "0.1.0",
+		"@seorii/monaco": "0.1.1",
 		"@swmansion/popcorn": "0.2.2",
 		"@types/sql.js": "^1.4.11",
 		"@wasm-idle/core": "workspace:*",

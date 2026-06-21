@@ -129,21 +129,23 @@ describe('Monaco route debug sync', () => {
 			/debugActionBindings = attachMonacoDebugActions\(activeEditor, \{\s+onCursorLineChange,\s+onRunToCursor\s+\}\);/s
 		);
 		expect(source).toMatch(/debugActionBindings\?\.dispose\(\);/);
-		expect(source).toMatch(/import type \{ LanguageServerStatus \} from '@wasm-idle\/lsp';/);
+		expect(source).toMatch(
+			/import type \{ EditorLanguageServerHandle, LanguageServerStatus \} from '@wasm-idle\/lsp';/
+		);
 		expect(source).not.toMatch(/^\s*import \{[^\n]*\} from '@wasm-idle\/lsp';/m);
 		expect(source).toMatch(/type MonacoLspStatusView = \{/);
 		expect(source).toMatch(/progressPercent: number \| null;/);
 		expect(source).toMatch(/lspStatus\?: MonacoLspStatusView \| null;/);
-		expect(source).toMatch(
-			/lspStatus = \$bindable<MonacoLspStatusView \| null>\(null\),/
-		);
+		expect(source).toMatch(/lspStatus = \$bindable<MonacoLspStatusView \| null>\(null\),/);
 		expect(source).toMatch(
 			/const activeLspStatusView = \$derived\.by<MonacoLspStatusView \| null>\(\(\) => \{/
 		);
 		expect(source).toMatch(
 			/route\.setStatus\(\{ state: 'loading', stage: 'startup', loaded: 0, total: 1 \}\);/
 		);
-		expect(source).toMatch(/const fraction = Math\.max\(0, Math\.min\(status\.loaded \/ status\.total, 1\)\);/);
+		expect(source).toMatch(
+			/const fraction = Math\.max\(0, Math\.min\(status\.loaded \/ status\.total, 1\)\);/
+		);
 		expect(source).toMatch(/progressPercent = Math\.round\(fraction \* 100\);/);
 		expect(source).toMatch(/lspStatus = activeLspStatusView;/);
 		expect(source).toMatch(/const lspRoutes: LspRoute\[] = \[/);
@@ -151,10 +153,11 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(/if \(!lspEnabled\) \{\s+disableAllLspStatuses\(\);/);
 		expect(source).toMatch(/const route = lspRoutes\.find/);
 		expect(source).toMatch(/const connection = await route\.load\(currentUrl\);/);
-		expect(source).toMatch(
-			/return route\.manualDocumentSync \? withMonacoDocumentSync\(connection\) : connection;/
-		);
-		expect(source).toMatch(/manualDocumentSync: true/);
+		expect(source).toMatch(/return connection as unknown as Exclude/);
+		expect(source).not.toMatch(/manualDocumentSync/);
+		expect(source).not.toMatch(/withMonacoDocumentSync/);
+		expect(source).not.toMatch(/recordLspTraffic/);
+		expect(source).not.toMatch(/lspOptions=\{/);
 		expect(source).toMatch(
 			/const \{ getCppLanguageServer \} = await import\('@wasm-idle\/lsp'\);/
 		);
@@ -359,7 +362,9 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).toMatch(/data-lsp-state=\{editorLspStatus\.state\}/);
 		expect(pageSource).toMatch(/class="lsp-status__progress"/);
 		expect(pageSource).toMatch(/role="progressbar"/);
-		expect(pageSource).toMatch(/--lsp-progress-scale: \$\{editorLspStatus\.progressPercent \/ 100\};/);
+		expect(pageSource).toMatch(
+			/--lsp-progress-scale: \$\{editorLspStatus\.progressPercent \/ 100\};/
+		);
 		expect(pageSource).toMatch(/bind:lspStatus=\{editorLspStatus\}/);
 		expect(pageSource).toMatch(/version: 5,/);
 		expect(pageSource).toMatch(
@@ -409,7 +414,7 @@ describe('Monaco route debug sync', () => {
 		const viteConfig = await readFile(path.resolve(process.cwd(), 'vite.config.ts'), 'utf8');
 		const libIndex = await readFile(path.resolve(process.cwd(), 'src/lib/index.ts'), 'utf8');
 
-		expect(packageJson.dependencies?.['@seorii/monaco']).toBe('0.1.0');
+		expect(packageJson.dependencies?.['@seorii/monaco']).toBe('0.1.1');
 		expect(packageJson.dependencies).not.toHaveProperty('@hancomac/monaco-languageclient');
 		expect(viteConfig).not.toContain('@hancomac/monaco-languageclient');
 		expect(viteConfig).not.toContain('vscode-compatibility');

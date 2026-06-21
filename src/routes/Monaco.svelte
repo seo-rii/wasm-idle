@@ -10,13 +10,11 @@
 	import type MonacoEditorComponent from '@seorii/monaco';
 	import type {
 		IMonacoInputEvent,
-		IMonacoLspConnection,
-		IMonacoLspMessage,
 		IMonacoLspProvider,
-		IMonacoLspServerHandle,
+		IMonacoLspProviderResult,
 		IMonacoSetting
 	} from '@seorii/monaco';
-	import type { LanguageServerStatus } from '@wasm-idle/lsp';
+	import type { EditorLanguageServerHandle, LanguageServerStatus } from '@wasm-idle/lsp';
 	import type monaco from 'monaco-editor';
 	import { onMount, untrack } from 'svelte';
 	import {
@@ -31,13 +29,7 @@
 		__wasmIdleMonacoApi?: typeof monaco | null;
 		__wasmIdleMonacoEditor?: monaco.editor.IStandaloneCodeEditor | null;
 		__wasmIdleMonacoLspStatus?: Record<string, LanguageServerStatus> | null;
-		__wasmIdleMonacoLspTraffic?: MonacoLspTraffic | null;
 	};
-	interface MonacoLspTraffic {
-		incoming: number;
-		outgoing: number;
-		methods: string[];
-	}
 	type MonacoLspStatusView = {
 		label: string;
 		state: 'loading' | 'ready' | 'error';
@@ -47,10 +39,9 @@
 	};
 	interface LspRoute {
 		languages: readonly string[];
-		manualDocumentSync?: boolean;
 		isEnabled: () => boolean;
 		setStatus: (status: LanguageServerStatus) => void;
-		load: (currentUrl: string) => Promise<IMonacoLspConnection>;
+		load: (currentUrl: string) => Promise<EditorLanguageServerHandle>;
 	}
 
 	const dotnetLspLanguages: Record<string, DotnetLspLanguage> = {
@@ -117,36 +108,6 @@
 			return false;
 		}
 	};
-	const recordLspTraffic = (direction: 'in' | 'out', message: IMonacoLspMessage) => {
-		if (!monacoTestHooksEnabled()) return;
-		const testGlobal = globalThis as MonacoTestGlobal;
-		const traffic =
-			testGlobal.__wasmIdleMonacoLspTraffic ||
-			(testGlobal.__wasmIdleMonacoLspTraffic = {
-				incoming: 0,
-				outgoing: 0,
-				methods: []
-			});
-		if (direction === 'in') traffic.incoming += 1;
-		else traffic.outgoing += 1;
-		const record = message as unknown as Record<string, unknown>;
-		const method =
-			typeof record.method === 'string'
-				? record.method
-				: record.id !== undefined
-					? 'response'
-					: 'unknown';
-		const params = record.params as Record<string, unknown> | undefined;
-		const textDocument = params?.textDocument as Record<string, unknown> | undefined;
-		const uri = typeof textDocument?.uri === 'string' ? ` ${textDocument.uri}` : '';
-		traffic.methods.push(`${direction}:${method}${uri}`);
-		if (traffic.methods.length > 80) traffic.methods.splice(0, traffic.methods.length - 80);
-	};
-	const isServerHandleConnection = (
-		connection: IMonacoLspConnection
-	): connection is IMonacoLspServerHandle =>
-		typeof connection === 'object' && connection !== null && 'transport' in connection;
-
 	const ocamlKeywords = [
 		'and',
 		'as',
@@ -928,14 +889,7 @@
 			'when',
 			'while'
 		],
-		builtins: [
-			'file/read',
-			'getline',
-			'print',
-			'printf',
-			'scan-number',
-			'string/trim'
-		],
+		builtins: ['file/read', 'getline', 'print', 'printf', 'scan-number', 'string/trim'],
 		tokenizer: {
 			root: [
 				[/#!.*$/, 'comment'],
@@ -1786,7 +1740,23 @@
 	const jMonarchTokens = {
 		defaultToken: '',
 		tokenPostfix: '.j',
-		keywords: ['assert.', 'break.', 'case.', 'catch.', 'do.', 'else.', 'elseif.', 'end.', 'for.', 'if.', 'return.', 'select.', 'throw.', 'try.', 'while.'],
+		keywords: [
+			'assert.',
+			'break.',
+			'case.',
+			'catch.',
+			'do.',
+			'else.',
+			'elseif.',
+			'end.',
+			'for.',
+			'if.',
+			'return.',
+			'select.',
+			'throw.',
+			'try.',
+			'while.'
+		],
 		builtins: ['cocurrent', 'coinsert', 'coname', 'load', 'require', 'smoutput'],
 		tokenizer: {
 			root: [
@@ -1882,7 +1852,10 @@
 				[/[A-Za-z_][A-Za-z0-9_]*/, 'identifier'],
 				[/[(){}[\]⟨⟩]/, '@brackets'],
 				[/[⋄,;]/, 'delimiter'],
-				[/[-+×÷⋆√⌊⌈|¬∧∨<>≠=≤≥≡≢⊣⊢⥊∾≍⋈↑↓↕«»⌽⍉\/⍋⍒⊏⊑⊐⊒∊⍷⊔!˙˜˘¨⌜⁼´˝`∘○⊸⟜⌾⊘◶⎉⚇⍟⎊←↩?:]+/, 'operator']
+				[
+					/[-+×÷⋆√⌊⌈|¬∧∨<>≠=≤≥≡≢⊣⊢⥊∾≍⋈↑↓↕«»⌽⍉\/⍋⍒⊏⊑⊐⊒∊⍷⊔!˙˜˘¨⌜⁼´˝`∘○⊸⟜⌾⊘◶⎉⚇⍟⎊←↩?:]+/,
+					'operator'
+				]
 			],
 			string: [
 				[/[^\\"]+/, 'string'],
@@ -2233,7 +2206,13 @@
 				titlePieces.push(status.stage.replace(/[-_]+/gu, ' '));
 			}
 			const text = `${label} ${pieces.join(' ')}`;
-			return { label, state: 'loading', text, title: titlePieces.join(' - '), progressPercent };
+			return {
+				label,
+				state: 'loading',
+				text,
+				title: titlePieces.join(' - '),
+				progressPercent
+			};
 		}
 		if (status.state === 'ready') {
 			const text = `${label} ready`;
@@ -2248,157 +2227,9 @@
 			progressPercent: null
 		};
 	});
-	const withMonacoDocumentSync = (connection: IMonacoLspConnection): IMonacoLspConnection => {
-		if (!isServerHandleConnection(connection)) return connection;
-		const activeModel = model || editor?.getModel();
-		if (!activeModel) return connection;
-
-		const originalReader = connection.transport.reader;
-		const originalWriter = connection.transport.writer;
-		const documentUri = activeModel.uri.toString(true).toLowerCase();
-		const workspaceUri = documentUri.replace(/\/[^/]*$/u, '') || 'file:///workspace';
-		let disposed = false;
-		let opened = false;
-		let openTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
-		let modelContentDisposable: monaco.IDisposable | null = null;
-		const send = (message: IMonacoLspMessage) => {
-			recordLspTraffic('out', message);
-			void originalWriter.write(message).catch(() => {});
-		};
-		const openDocument = () => {
-			if (disposed || opened || activeModel.isDisposed()) return;
-			opened = true;
-			send({
-				jsonrpc: '2.0',
-				method: 'textDocument/didOpen',
-				params: {
-					textDocument: {
-						uri: documentUri,
-						languageId: activeModel.getLanguageId(),
-						version: activeModel.getVersionId(),
-						text: activeModel.getValue()
-					}
-				}
-			} as IMonacoLspMessage);
-			modelContentDisposable = activeModel.onDidChangeContent(() => {
-				if (disposed || activeModel.isDisposed()) return;
-				send({
-					jsonrpc: '2.0',
-					method: 'textDocument/didChange',
-					params: {
-						textDocument: {
-							uri: documentUri,
-							version: activeModel.getVersionId()
-						},
-						contentChanges: [{ text: activeModel.getValue() }]
-					}
-				} as IMonacoLspMessage);
-			});
-		};
-		const scheduleOpenDocument = (delay = 0) => {
-			if (openTimer !== null) globalThis.clearTimeout(openTimer);
-			openTimer = globalThis.setTimeout(() => {
-				openTimer = null;
-				openDocument();
-			}, delay);
-		};
-
-		return {
-			transport: {
-				reader: {
-					listen(callback) {
-						const disposable = originalReader.listen((message) => {
-							recordLspTraffic('in', message);
-							callback(message);
-						});
-						scheduleOpenDocument(2000);
-						return disposable;
-					},
-					onClose: originalReader.onClose?.bind(originalReader),
-					dispose: originalReader.dispose?.bind(originalReader)
-				},
-				writer: {
-					write(message) {
-						const record = message as unknown as Record<string, unknown>;
-						const outgoing =
-							record &&
-							typeof record === 'object' &&
-							record.method === 'initialize' &&
-							record.params &&
-							typeof record.params === 'object'
-								? ({
-										...record,
-										params: {
-											...(record.params as Record<string, unknown>),
-											rootUri: workspaceUri,
-											workspaceFolders: [
-												{ uri: workspaceUri, name: 'workspace' }
-											]
-										}
-									} as unknown as IMonacoLspMessage)
-								: message;
-						const outgoingRecord = outgoing as unknown as Record<string, unknown>;
-						const method =
-							outgoingRecord && typeof outgoingRecord.method === 'string'
-								? outgoingRecord.method
-								: '';
-						const params =
-							outgoingRecord && typeof outgoingRecord.params === 'object'
-								? (outgoingRecord.params as Record<string, unknown>)
-								: null;
-						const textDocument =
-							params && typeof params.textDocument === 'object'
-								? (params.textDocument as Record<string, unknown>)
-								: null;
-						const outgoingUri =
-							typeof textDocument?.uri === 'string'
-								? textDocument.uri.toLowerCase()
-								: '';
-						if (outgoingUri === documentUri) {
-							if (method === 'textDocument/didOpen') {
-								if (opened) return Promise.resolve();
-								opened = true;
-								if (openTimer !== null) {
-									globalThis.clearTimeout(openTimer);
-									openTimer = null;
-								}
-							} else if (
-								method === 'textDocument/didChange' &&
-								modelContentDisposable
-							) {
-								return Promise.resolve();
-							} else if (method === 'textDocument/didClose') {
-								opened = false;
-								modelContentDisposable?.dispose();
-								modelContentDisposable = null;
-							}
-						}
-						recordLspTraffic('out', outgoing);
-						const result = originalWriter.write(outgoing);
-						if (method === 'initialized') {
-							scheduleOpenDocument(1200);
-						}
-						return result;
-					},
-					dispose: originalWriter.dispose?.bind(originalWriter),
-					end: originalWriter.end?.bind(originalWriter)
-				},
-				dispose: connection.transport.dispose?.bind(connection.transport)
-			},
-			dispose() {
-				disposed = true;
-				if (openTimer !== null) globalThis.clearTimeout(openTimer);
-				openTimer = null;
-				modelContentDisposable?.dispose();
-				modelContentDisposable = null;
-				connection.dispose?.();
-			}
-		};
-	};
 	const lspRoutes: LspRoute[] = [
 		{
 			languages: ['cpp'],
-			manualDocumentSync: true,
 			isEnabled: () => clangdEnabled && !!clangdBaseUrl,
 			setStatus: (status) => (clangdStatus = status),
 			load: async (currentUrl) => {
@@ -2409,26 +2240,24 @@
 					onStatus: (status) => (clangdStatus = status)
 				});
 				handle.syncFile?.(normalizedFilePath);
-				return handle as unknown as IMonacoLspConnection;
+				return handle;
 			}
 		},
 		{
 			languages: ['python'],
-			manualDocumentSync: true,
 			isEnabled: () => true,
 			setStatus: (status) => (pythonLspStatus = status),
 			load: async (currentUrl) => {
 				const { getPythonLanguageServer } = await import('@wasm-idle/lsp');
-				return (await getPythonLanguageServer({
+				return await getPythonLanguageServer({
 					currentUrl,
 					python: { baseUrl: pythonLspBaseUrl },
 					onStatus: (status) => (pythonLspStatus = status)
-				})) as unknown as IMonacoLspConnection;
+				});
 			}
 		},
 		{
 			languages: ['csharp', 'fsharp', 'vb'],
-			manualDocumentSync: true,
 			isEnabled: () => dotnetLspEnabled && !!dotnetLspModuleUrl && !!dotnetLspLanguage,
 			setStatus: (status) => (dotnetLspStatus = status),
 			load: async (currentUrl) => {
@@ -2445,178 +2274,167 @@
 					fsharp: getFSharpLanguageServer,
 					vbnet: getVisualBasicLanguageServer
 				}[activeDotnetLanguage];
-				return (await load({
+				return await load({
 					currentUrl,
 					dotnet: { moduleUrl: dotnetLspModuleUrl || '' },
 					onStatus: (status) => (dotnetLspStatus = status)
-				})) as unknown as IMonacoLspConnection;
+				});
 			}
 		},
 		{
 			languages: ['gleam'],
-			manualDocumentSync: true,
 			isEnabled: () => gleamLspEnabled && !!gleamLspBaseUrl,
 			setStatus: (status) => (gleamLspStatus = status),
 			load: async (currentUrl) => {
 				const { getGleamLanguageServer } = await import('@wasm-idle/lsp');
-				return (await getGleamLanguageServer({
+				return await getGleamLanguageServer({
 					currentUrl,
 					gleam: {
 						baseUrl: gleamLspBaseUrl || '',
 						manifestUrl: gleamLspManifestUrl
 					},
 					onStatus: (status) => (gleamLspStatus = status)
-				})) as unknown as IMonacoLspConnection;
+				});
 			}
 		},
 		{
 			languages: ['go'],
-			manualDocumentSync: true,
 			isEnabled: () => goLspEnabled && !!goLspCompilerUrl,
 			setStatus: (status) => (goLspStatus = status),
 			load: async (currentUrl) => {
 				const { getGoLanguageServer } = await import('@wasm-idle/lsp');
-				return (await getGoLanguageServer({
+				return await getGoLanguageServer({
 					currentUrl,
 					go: {
 						compilerUrl: goLspCompilerUrl || '',
 						target: goTarget
 					},
 					onStatus: (status) => (goLspStatus = status)
-				})) as unknown as IMonacoLspConnection;
+				});
 			}
 		},
 		{
 			languages: ['rust'],
-			manualDocumentSync: true,
 			isEnabled: () => rustLspEnabled && !!rustLspCompilerUrl,
 			setStatus: (status) => (rustLspStatus = status),
 			load: async (currentUrl) => {
 				const { getRustLanguageServer } = await import('@wasm-idle/lsp');
-				return (await getRustLanguageServer({
+				return await getRustLanguageServer({
 					currentUrl,
 					rust: {
 						compilerUrl: rustLspCompilerUrl || '',
 						targetTriple: rustTargetTriple
 					},
 					onStatus: (status) => (rustLspStatus = status)
-				})) as unknown as IMonacoLspConnection;
+				});
 			}
 		},
 		{
 			languages: ['typescript', 'javascript'],
-			manualDocumentSync: true,
 			isEnabled: () => true,
 			setStatus: (status) => (typescriptLspStatus = status),
 			load: async (currentUrl) => {
 				const { getJavaScriptLanguageServer, getTypeScriptLanguageServer } =
 					await import('@wasm-idle/lsp');
 				if (activeLspLanguage === 'javascript') {
-					return (await getJavaScriptLanguageServer({
+					return await getJavaScriptLanguageServer({
 						currentUrl,
 						javascript: { libUrl: typescriptLspLibUrl },
 						onStatus: (status) => (typescriptLspStatus = status)
-					})) as unknown as IMonacoLspConnection;
+					});
 				}
-				return (await getTypeScriptLanguageServer({
+				return await getTypeScriptLanguageServer({
 					currentUrl,
 					typescript: { libUrl: typescriptLspLibUrl },
 					onStatus: (status) => (typescriptLspStatus = status)
-				})) as unknown as IMonacoLspConnection;
+				});
 			}
 		},
 		{
 			languages: ['assemblyscript'],
-			manualDocumentSync: true,
 			isEnabled: () => true,
 			setStatus: (status) => (assemblyScriptLspStatus = status),
 			load: async (currentUrl) => {
 				const { getAssemblyScriptLanguageServer } = await import('@wasm-idle/lsp');
-				return (await getAssemblyScriptLanguageServer({
+				return await getAssemblyScriptLanguageServer({
 					currentUrl,
 					onStatus: (status) => (assemblyScriptLspStatus = status)
-				})) as unknown as IMonacoLspConnection;
+				});
 			}
 		},
 		{
 			languages: ['wat'],
-			manualDocumentSync: true,
 			isEnabled: () => true,
 			setStatus: (status) => (watLspStatus = status),
 			load: async (currentUrl) => {
 				const { getWatLanguageServer } = await import('@wasm-idle/lsp');
-				return (await getWatLanguageServer({
+				return await getWatLanguageServer({
 					currentUrl,
 					onStatus: (status) => (watLspStatus = status)
-				})) as unknown as IMonacoLspConnection;
+				});
 			}
 		},
 		{
 			languages: ['zig'],
-			manualDocumentSync: true,
 			isEnabled: () => zigLspEnabled && !!zigLspCompilerUrl && !!zigLspStdlibUrl,
 			setStatus: (status) => (zigLspStatus = status),
 			load: async (currentUrl) => {
 				const { getZigLanguageServer } = await import('@wasm-idle/lsp');
-				return (await getZigLanguageServer({
+				return await getZigLanguageServer({
 					currentUrl,
 					zig: {
 						compilerUrl: zigLspCompilerUrl || '',
 						stdlibUrl: zigLspStdlibUrl || ''
 					},
 					onStatus: (status) => (zigLspStatus = status)
-				})) as unknown as IMonacoLspConnection;
+				});
 			}
 		},
 		{
 			languages: ['php'],
-			manualDocumentSync: true,
 			isEnabled: () => phpLspEnabled,
 			setStatus: (status) => (phpLspStatus = status),
 			load: async (currentUrl) => {
 				const { getPhpLanguageServer } = await import('@wasm-idle/lsp');
-				return (await getPhpLanguageServer({
+				return await getPhpLanguageServer({
 					currentUrl,
 					onStatus: (status) => (phpLspStatus = status)
-				})) as unknown as IMonacoLspConnection;
+				});
 			}
 		},
 		{
 			languages: ['lua'],
-			manualDocumentSync: true,
 			isEnabled: () => luaLspEnabled && !!luaLspModuleUrl,
 			setStatus: (status) => (luaLspStatus = status),
 			load: async (currentUrl) => {
 				const { getLuaLanguageServer } = await import('@wasm-idle/lsp');
-				return (await getLuaLanguageServer({
+				return await getLuaLanguageServer({
 					currentUrl,
 					lua: {
 						moduleUrl: luaLspModuleUrl || ''
 					},
 					onStatus: (status) => (luaLspStatus = status)
-				})) as unknown as IMonacoLspConnection;
+				});
 			}
 		},
 		{
 			languages: ['ocaml'],
-			manualDocumentSync: true,
 			isEnabled: () => ocamlLspEnabled && !!ocamlLspModuleUrl && !!ocamlLspManifestUrl,
 			setStatus: (status) => (ocamlLspStatus = status),
 			load: async (currentUrl) => {
 				const { getOcamlLanguageServer } = await import('@wasm-idle/lsp');
-				return (await getOcamlLanguageServer({
+				return await getOcamlLanguageServer({
 					currentUrl,
 					ocaml: {
 						moduleUrl: ocamlLspModuleUrl || '',
 						manifestUrl: ocamlLspManifestUrl || ''
 					},
 					onStatus: (status) => (ocamlLspStatus = status)
-				})) as unknown as IMonacoLspConnection;
+				});
 			}
 		},
 		{
 			languages: ['haskell'],
-			manualDocumentSync: true,
 			isEnabled: () =>
 				haskellLspEnabled &&
 				!!haskellLspModuleUrl &&
@@ -2625,7 +2443,7 @@
 			setStatus: (status) => (haskellLspStatus = status),
 			load: async (currentUrl) => {
 				const { getHaskellLanguageServer } = await import('@wasm-idle/lsp');
-				return (await getHaskellLanguageServer({
+				return await getHaskellLanguageServer({
 					currentUrl,
 					haskell: {
 						moduleUrl: haskellLspModuleUrl || '',
@@ -2633,57 +2451,54 @@
 						bsdtarUrl: haskellLspBsdtarUrl || ''
 					},
 					onStatus: (status) => (haskellLspStatus = status)
-				})) as unknown as IMonacoLspConnection;
+				});
 			}
 		},
 		{
 			languages: ['sql'],
-			manualDocumentSync: true,
 			isEnabled: () => sqlLspEnabled && !!sqlLspWasmUrl,
 			setStatus: (status) => (sqlLspStatus = status),
 			load: async (currentUrl) => {
 				const { getSqlLanguageServer } = await import('@wasm-idle/lsp');
-				return (await getSqlLanguageServer({
+				return await getSqlLanguageServer({
 					currentUrl,
 					sql: {
 						dialect: 'sqlite',
 						wasmUrl: sqlLspWasmUrl || ''
 					},
 					onStatus: (status) => (sqlLspStatus = status)
-				})) as unknown as IMonacoLspConnection;
+				});
 			}
 		},
 		{
 			languages: ['prolog'],
-			manualDocumentSync: true,
 			isEnabled: () => prologLspEnabled && !!prologLspBaseUrl && !!prologLspWorkerUrl,
 			setStatus: (status) => (prologLspStatus = status),
 			load: async (currentUrl) => {
 				const { getPrologLanguageServer } = await import('@wasm-idle/lsp');
-				return (await getPrologLanguageServer({
+				return await getPrologLanguageServer({
 					currentUrl,
 					prolog: {
 						baseUrl: prologLspBaseUrl || '',
 						workerUrl: prologLspWorkerUrl || ''
 					},
 					onStatus: (status) => (prologLspStatus = status)
-				})) as unknown as IMonacoLspConnection;
+				});
 			}
 		},
 		{
 			languages: ['ruby'],
-			manualDocumentSync: true,
 			isEnabled: () => rubyLspEnabled && !!rubyLspWasmUrl,
 			setStatus: (status) => (rubyLspStatus = status),
 			load: async (currentUrl) => {
 				const { getRubyLanguageServer } = await import('@wasm-idle/lsp');
-				return (await getRubyLanguageServer({
+				return await getRubyLanguageServer({
 					currentUrl,
 					ruby: {
 						wasmUrl: rubyLspWasmUrl || ''
 					},
 					onStatus: (status) => (rubyLspStatus = status)
-				})) as unknown as IMonacoLspConnection;
+				});
 			}
 		}
 	];
@@ -2710,7 +2525,7 @@
 			try {
 				route.setStatus({ state: 'loading', stage: 'startup', loaded: 0, total: 1 });
 				const connection = await route.load(currentUrl);
-				return route.manualDocumentSync ? withMonacoDocumentSync(connection) : connection;
+				return connection as unknown as Exclude<IMonacoLspProviderResult, null | undefined>;
 			} catch (error) {
 				route.setStatus({
 					state: 'error',
@@ -3062,7 +2877,6 @@
 			}
 			testGlobal.__wasmIdleMonacoApi = null;
 			testGlobal.__wasmIdleMonacoLspStatus = null;
-			testGlobal.__wasmIdleMonacoLspTraffic = null;
 			lspStatus = null;
 			if (!model?.isDisposed()) model?.dispose();
 			model = undefined;
