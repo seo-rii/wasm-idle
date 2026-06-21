@@ -1,0 +1,1 @@
+{"version":3,"file":"service.d.ts","sourceRoot":"","sources":["../../src/graphql/service.ts"],"names":[],"mappings":"AACA,OAAO,EAIN,KAAK,qBAAqB,EAC1B,MAAM,WAAW,CAAC;AAEnB,MAAM,WAAW,oBAAoB;IACpC,MAAM,CAAC,EAAE,MAAM,CAAC;CAChB;AAwDD,wBAAgB,0BAA0B,IAAI,qBAAqB,CAkFlE"}

@@ -1,5 +1,6 @@
 import type { MessageReader, MessageWriter } from 'vscode-jsonrpc';
 import type { CompilerOptions } from 'typescript';
+import type { DuckDBBundles } from '@duckdb/duckdb-wasm';
 import type { LanguageToolAssetConfig } from './assets.js';
 export interface EditorLanguageServerTransport {
     reader: MessageReader;
@@ -77,6 +78,26 @@ export interface EditorLanguageServerRuntimeOptions {
         mainSoPath?: string;
         searchDirs?: string[];
         ghcArgs?: string;
+    };
+    sql?: {
+        dialect?: 'sql' | 'sqlite' | 'duckdb';
+        wasmUrl?: string;
+        duckdbBundles?: DuckDBBundles;
+    };
+    graphql?: {
+        schema?: string;
+    };
+    fortran?: {
+        analyzerUrl?: string;
+        parserWasmUrl?: string;
+        grammarUrl?: string;
+    };
+    prolog?: {
+        baseUrl?: string;
+        workerUrl?: string;
+    };
+    ruby?: {
+        wasmUrl?: string;
     };
 }
 export type EditorLanguageServerOptions = string | EditorLanguageServerRuntimeOptions;

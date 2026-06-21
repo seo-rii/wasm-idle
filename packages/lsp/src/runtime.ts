@@ -301,4 +301,52 @@ export function resolvePhpLanguageServerVersion(options: EditorLanguageServerOpt
 	return typeof options === 'object' && options.php?.version ? options.php.version : '8.4';
 }
 
+export function resolvePrologLanguageServerBaseUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	if (typeof options === 'string') {
+		return resolveFileUrl(`${normalizeRootUrl(options) || ''}/wasm-prolog/`, currentUrl);
+	}
+	if (options?.prolog?.baseUrl) {
+		return resolveFileUrl(options.prolog.baseUrl, currentUrl);
+	}
+	if (options?.rootUrl) {
+		return resolveFileUrl(`${normalizeRootUrl(options.rootUrl) || ''}/wasm-prolog/`, currentUrl);
+	}
+	return resolveFileUrl('/wasm-prolog/', currentUrl);
+}
+
+export function resolvePrologLanguageServerWorkerUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	if (typeof options === 'string') {
+		return resolveFileUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-prolog/runner-worker.js`,
+			currentUrl
+		);
+	}
+	if (options?.prolog?.workerUrl) {
+		return resolveFileUrl(options.prolog.workerUrl, currentUrl);
+	}
+	if (options?.rootUrl) {
+		return resolveFileUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-prolog/runner-worker.js`,
+			currentUrl
+		);
+	}
+	return resolveFileUrl('/wasm-prolog/runner-worker.js', currentUrl);
+}
+
+export function resolveRubyLanguageServerWasmUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	if (typeof options === 'object' && options.ruby?.wasmUrl) {
+		return resolveFileUrl(options.ruby.wasmUrl, currentUrl);
+	}
+	return '';
+}
+
 export type { EditorLanguageServerRuntimeOptions };

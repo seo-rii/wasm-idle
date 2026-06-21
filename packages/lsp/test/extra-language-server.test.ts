@@ -57,10 +57,16 @@ vi.mock('../src/jsonrpc.js', () => ({
 }));
 
 import {
+	getFortranLanguageServer,
+	getGraphqlLanguageServer,
 	getHaskellLanguageServer,
 	getLuaLanguageServer,
 	getOcamlLanguageServer,
 	getPhpLanguageServer,
+	getPrologLanguageServer,
+	getRubyLanguageServer,
+	getDuckDbLanguageServer,
+	getSqlLanguageServer,
 	getZigLanguageServer
 } from '../src/index.js';
 
@@ -165,6 +171,113 @@ describe('additional language server workers', () => {
 				mainSoPath: undefined,
 				searchDirs: undefined,
 				ghcArgs: '-fno-code -Wall -Wcompat'
+			}
+		});
+
+		handle.dispose();
+	});
+
+	it('starts SQL with SQLite wasm assets', async () => {
+		const handle = await getSqlLanguageServer({
+			sql: { wasmUrl: '/assets/sql-wasm.wasm' },
+			createWorker: () => new mockState.FakeWorker() as unknown as Worker
+		});
+
+		expect(mockState.workers[0]?.messages[0]).toEqual({
+			type: 'init',
+			options: {
+				dialect: 'sqlite',
+				wasmUrl: '/assets/sql-wasm.wasm'
+			}
+		});
+
+		handle.dispose();
+	});
+
+	it('starts DuckDB with DuckDB wasm bundles', async () => {
+		const duckdbBundles = {
+			mvp: {
+				mainModule: '/duckdb-mvp.wasm',
+				mainWorker: '/duckdb-browser-mvp.worker.js'
+			}
+		};
+		const handle = await getDuckDbLanguageServer({
+			sql: { duckdbBundles },
+			createWorker: () => new mockState.FakeWorker() as unknown as Worker
+		});
+
+		expect(mockState.workers[0]?.messages[0]).toEqual({
+			type: 'init',
+			options: {
+				dialect: 'duckdb',
+				wasmUrl: undefined,
+				duckdbBundles
+			}
+		});
+
+		handle.dispose();
+	});
+
+	it('starts GraphQL with an optional schema', async () => {
+		const handle = await getGraphqlLanguageServer({
+			graphql: { schema: 'type Query { hello: String }' },
+			createWorker: () => new mockState.FakeWorker() as unknown as Worker
+		});
+
+		expect(mockState.workers[0]?.messages[0]).toEqual({
+			type: 'init',
+			options: {
+				schema: 'type Query { hello: String }'
+			}
+		});
+
+		handle.dispose();
+	});
+
+	it('starts Fortran with an optional analyzer URL', async () => {
+		const handle = await getFortranLanguageServer({
+			fortran: { analyzerUrl: '/wasm-fortran/analyzer.js' },
+			createWorker: () => new mockState.FakeWorker() as unknown as Worker
+		});
+
+		expect(mockState.workers[0]?.messages[0]).toEqual({
+			type: 'init',
+			options: {
+				analyzerUrl: '/wasm-fortran/analyzer.js'
+			}
+		});
+
+		handle.dispose();
+	});
+
+	it('starts Prolog with folder-backed SWI-Prolog worker assets', async () => {
+		const handle = await getPrologLanguageServer({
+			rootUrl: 'https://static.example.com/repl_20240807',
+			currentUrl: 'https://app.example.com/editor',
+			createWorker: () => new mockState.FakeWorker() as unknown as Worker
+		});
+
+		expect(mockState.workers[0]?.messages[0]).toEqual({
+			type: 'init',
+			options: {
+				baseUrl: 'https://static.example.com/repl_20240807/wasm-prolog/',
+				workerUrl: 'https://static.example.com/repl_20240807/wasm-prolog/runner-worker.js'
+			}
+		});
+
+		handle.dispose();
+	});
+
+	it('starts Ruby with an explicitly provided Ruby WASM URL', async () => {
+		const handle = await getRubyLanguageServer({
+			ruby: { wasmUrl: '/assets/ruby+stdlib.wasm' },
+			createWorker: () => new mockState.FakeWorker() as unknown as Worker
+		});
+
+		expect(mockState.workers[0]?.messages[0]).toEqual({
+			type: 'init',
+			options: {
+				wasmUrl: '/assets/ruby+stdlib.wasm'
 			}
 		});
 

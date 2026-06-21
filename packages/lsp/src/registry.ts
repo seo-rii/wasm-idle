@@ -17,6 +17,11 @@ import { getPhpLanguageServer } from './php/server.js';
 import { getLuaLanguageServer } from './lua/server.js';
 import { getOcamlLanguageServer } from './ocaml/server.js';
 import { getHaskellLanguageServer } from './haskell/server.js';
+import { getFortranLanguageServer } from './fortran/server.js';
+import { getGraphqlLanguageServer } from './graphql/server.js';
+import { getPrologLanguageServer } from './prolog/server.js';
+import { getRubyLanguageServer } from './ruby/server.js';
+import { getDuckDbLanguageServer, getSqlLanguageServer } from './sql/server.js';
 
 export async function getEditorLanguageServer(
 	language: string,
@@ -95,6 +100,30 @@ export async function getEditorLanguageServer(
 
 	if (normalized === 'haskell' || normalized === 'hs') {
 		return getHaskellLanguageServer(options);
+	}
+
+	if (normalized === 'sql' || normalized === 'sqlite') {
+		return getSqlLanguageServer(options);
+	}
+
+	if (normalized === 'duckdb') {
+		return getDuckDbLanguageServer(options);
+	}
+
+	if (normalized === 'graphql' || normalized === 'gql') {
+		return getGraphqlLanguageServer(options);
+	}
+
+	if (normalized === 'fortran' || normalized === 'f90' || normalized === 'f95') {
+		return getFortranLanguageServer(options);
+	}
+
+	if (normalized === 'prolog' || normalized === 'swipl') {
+		return getPrologLanguageServer(options);
+	}
+
+	if (normalized === 'ruby' || normalized === 'rb') {
+		return getRubyLanguageServer(options);
 	}
 
 	return null;

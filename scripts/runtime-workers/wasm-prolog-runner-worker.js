@@ -65,11 +65,43 @@ self.onmessage = async (event) => {
 		stdin,
 		activePath = 'main.prolog',
 		workspaceFiles = [],
+		diagnose = false,
 		log
 	} = event.data || {};
+	let diagnosticOutput = '';
+	const originalConsole = diagnose
+		? {
+				log: console.log.bind(console),
+				warn: console.warn.bind(console),
+				error: console.error.bind(console)
+			}
+		: null;
+	const appendDiagnosticOutput = (...args) => {
+		if (!diagnose) return;
+		const output = args
+			.map((value) => (typeof value === 'string' ? value : value?.message || String(value)))
+			.join(' ');
+		if (output) diagnosticOutput += output.endsWith('\n') ? output : `${output}\n`;
+	};
+	if (originalConsole) {
+		console.log = (...args) => {
+			appendDiagnosticOutput(...args);
+			originalConsole.log(...args);
+		};
+		console.warn = (...args) => {
+			appendDiagnosticOutput(...args);
+			originalConsole.warn(...args);
+		};
+		console.error = (...args) => {
+			appendDiagnosticOutput(...args);
+			originalConsole.error(...args);
+		};
+	}
 	try {
 		if (log) {
-			console.log(`[wasm-idle:prolog-worker] run start baseUrl=${baseUrl}`);
+			console.log(
+				`[wasm-idle:prolog-worker] ${diagnose ? 'diagnose' : 'run'} start baseUrl=${baseUrl}`
+			);
 		}
 		importScripts(assetUrl(baseUrl, 'swipl-web.js'));
 		const swipl = await self.SWIPL({
@@ -78,10 +110,14 @@ self.onmessage = async (event) => {
 				return assetUrl(baseUrl, path);
 			},
 			print(text) {
-				postOutput(String(text));
+				const output = String(text);
+				if (diagnose) diagnosticOutput += `${output}\n`;
+				postOutput(output);
 			},
 			printErr(text) {
-				postOutput(String(text));
+				const output = String(text);
+				if (diagnose) diagnosticOutput += `${output}\n`;
+				postOutput(output);
 			},
 			stdin: createStdinReader(stdin)
 		});
@@ -90,7 +126,11 @@ self.onmessage = async (event) => {
 			writeWorkspaceFile(swipl.FS, file.path, file.content);
 		}
 		const mainPath = writeWorkspaceFile(swipl.FS, activePath, code);
-		const query = `consult(${prologString(mainPath)}), (current_predicate(main/0) -> main ; true).`;
+		const query = diagnose
+			? `setup_call_cleanup(open_string(${prologString(
+					code
+				)}, Stream), (repeat, read_term(Stream, Term, [syntax_errors(error)]), (Term == end_of_file -> ! ; fail)), close(Stream)).`
+			: `consult(${prologString(mainPath)}), (current_predicate(main/0) -> main ; true).`;
 		const goal = swipl.prolog.query(query);
 		try {
 			const result = goal.once();
@@ -98,8 +138,11 @@ self.onmessage = async (event) => {
 		} finally {
 			goal.close?.();
 		}
+		if (diagnose && /\b(?:error|warning)\b|syntax error/iu.test(diagnosticOutput)) {
+			throw new Error(diagnosticOutput.trim());
+		}
 		if (log) {
-			console.log('[wasm-idle:prolog-worker] run settled');
+			console.log(`[wasm-idle:prolog-worker] ${diagnose ? 'diagnose' : 'run'} settled`);
 		}
 		self.postMessage({ results: true });
 	} catch (error) {
@@ -107,5 +150,11 @@ self.onmessage = async (event) => {
 			console.error('[wasm-idle:prolog-worker] failed', error);
 		}
 		self.postMessage({ error: error?.message || String(error) });
+	} finally {
+		if (originalConsole) {
+			console.log = originalConsole.log;
+			console.warn = originalConsole.warn;
+			console.error = originalConsole.error;
+		}
 	}
 };

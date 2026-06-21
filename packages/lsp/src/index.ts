@@ -12,7 +12,10 @@ export {
 	resolveOcamlLanguageServerManifestUrl,
 	resolveOcamlLanguageServerModuleUrl,
 	resolvePhpLanguageServerVersion,
+	resolvePrologLanguageServerBaseUrl,
+	resolvePrologLanguageServerWorkerUrl,
 	resolvePythonLanguageServerBaseUrl,
+	resolveRubyLanguageServerWasmUrl,
 	resolveRustLanguageServerCompilerUrl,
 	resolveZigLanguageServerCompilerUrl,
 	resolveZigLanguageServerStdlibUrl
@@ -151,6 +154,55 @@ export {
 	type HaskellLanguageServerOptions,
 	type HaskellWorkerOptions
 } from './haskell/index.js';
+export {
+	createSqlWorkerService,
+	getDuckDbLanguageServer,
+	getSqlLanguageServer,
+	type LoadSqlEngine,
+	type SqlEngine,
+	type SqlEngineDiagnostic,
+	type SqlLanguageServerConfig,
+	type SqlLanguageServerDialect,
+	type SqlLanguageServerOptions,
+	type SqlWorkerOptions
+} from './sql/index.js';
+export {
+	createGraphqlWorkerService,
+	getGraphqlLanguageServer,
+	type GraphqlLanguageServerConfig,
+	type GraphqlLanguageServerOptions,
+	type GraphqlWorkerOptions
+} from './graphql/index.js';
+export {
+	createFortranWorkerService,
+	getFortranLanguageServer,
+	type FortranAnalyzer,
+	type FortranAnalyzerDiagnostic,
+	type FortranLanguageServerConfig,
+	type FortranLanguageServerOptions,
+	type FortranWorkerOptions,
+	type LoadFortranAnalyzer
+} from './fortran/index.js';
+export {
+	createPrologWorkerService,
+	getPrologLanguageServer,
+	type PrologDiagnosticRunnerRequest,
+	type PrologDiagnosticRunnerResult,
+	type PrologLanguageServerConfig,
+	type PrologLanguageServerOptions,
+	type PrologWorkerOptions,
+	type RunPrologDiagnostics
+} from './prolog/index.js';
+export {
+	createRubyWorkerService,
+	getRubyLanguageServer,
+	type LoadRubySyntaxChecker,
+	type RubyLanguageServerConfig,
+	type RubyLanguageServerOptions,
+	type RubySyntaxChecker,
+	type RubySyntaxDiagnostic,
+	type RubyWorkerOptions
+} from './ruby/index.js';
 export {
 	applyContentChanges,
 	fullDocumentRange,

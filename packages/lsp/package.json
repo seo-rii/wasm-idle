@@ -84,6 +84,31 @@
 			"types": "./dist/haskell/index.d.ts",
 			"import": "./dist/haskell/index.js",
 			"default": "./dist/haskell/index.js"
+		},
+		"./sql": {
+			"types": "./dist/sql/index.d.ts",
+			"import": "./dist/sql/index.js",
+			"default": "./dist/sql/index.js"
+		},
+		"./graphql": {
+			"types": "./dist/graphql/index.d.ts",
+			"import": "./dist/graphql/index.js",
+			"default": "./dist/graphql/index.js"
+		},
+		"./fortran": {
+			"types": "./dist/fortran/index.d.ts",
+			"import": "./dist/fortran/index.js",
+			"default": "./dist/fortran/index.js"
+		},
+		"./prolog": {
+			"types": "./dist/prolog/index.d.ts",
+			"import": "./dist/prolog/index.js",
+			"default": "./dist/prolog/index.js"
+		},
+		"./ruby": {
+			"types": "./dist/ruby/index.d.ts",
+			"import": "./dist/ruby/index.js",
+			"default": "./dist/ruby/index.js"
 		}
 	},
 	"files": [
@@ -96,15 +121,22 @@
 	},
 	"dependencies": {
 		"@bjorn3/browser_wasi_shim": "^0.4.2",
+		"@duckdb/duckdb-wasm": "1.33.1-dev45.0",
+		"@lumis-sh/wasm-fortran": "0.26.1",
+		"@ruby/wasm-wasi": "2.9.3-2.9.4",
 		"@zip.js/zip.js": "^2.8.26",
 		"assemblyscript": "0.28.17",
+		"graphql": "^17.0.1",
 		"pyodide": "0.29.3",
+		"sql.js": "^1.14.1",
 		"typescript": "^6.0.2",
+		"vscode-jsonrpc": "^8.2.1",
 		"wabt": "^1.0.39",
-		"vscode-jsonrpc": "^8.2.1"
+		"web-tree-sitter": "0.26.9"
 	},
 	"devDependencies": {
 		"@types/node": "^25.6.0",
+		"@types/sql.js": "^1.4.11",
 		"vitest": "^4.1.4"
 	}
 }

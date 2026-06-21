@@ -16,5 +16,8 @@ export declare function resolveHaskellLanguageServerModuleUrl(options: EditorLan
 export declare function resolveHaskellLanguageServerRootfsUrl(options: EditorLanguageServerOptions | undefined, currentUrl?: string): string;
 export declare function resolveHaskellLanguageServerBsdtarUrl(options: EditorLanguageServerOptions | undefined, currentUrl?: string): string;
 export declare function resolvePhpLanguageServerVersion(options: EditorLanguageServerOptions | undefined): string;
+export declare function resolvePrologLanguageServerBaseUrl(options: EditorLanguageServerOptions | undefined, currentUrl?: string): string;
+export declare function resolvePrologLanguageServerWorkerUrl(options: EditorLanguageServerOptions | undefined, currentUrl?: string): string;
+export declare function resolveRubyLanguageServerWasmUrl(options: EditorLanguageServerOptions | undefined, currentUrl?: string): string;
 export type { EditorLanguageServerRuntimeOptions };
 //# sourceMappingURL=runtime.d.ts.map
