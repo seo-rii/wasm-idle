@@ -108,6 +108,25 @@ export function resolveGoLanguageServerCompilerUrl(
 	return resolveFileUrl('/wasm-go/index.js', currentUrl);
 }
 
+export function resolveDLanguageServerModuleUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	if (typeof options === 'string') {
+		return resolveFileUrl(`${normalizeRootUrl(options) || ''}/wasm-d/index.js`, currentUrl);
+	}
+	if (options?.d?.moduleUrl) {
+		return resolveFileUrl(options.d.moduleUrl, currentUrl);
+	}
+	if (options?.rootUrl) {
+		return resolveFileUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-d/index.js`,
+			currentUrl
+		);
+	}
+	return resolveFileUrl('/wasm-d/index.js', currentUrl);
+}
+
 export function resolveGleamLanguageServerBaseUrl(
 	options: EditorLanguageServerOptions | undefined,
 	currentUrl = ''

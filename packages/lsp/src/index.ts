@@ -2,6 +2,7 @@ export { getEditorLanguageServer } from './registry.js';
 export {
 	resolveCppLanguageServerBaseUrl,
 	resolveCppLanguageServerRuntimeAssetConfig,
+	resolveDLanguageServerModuleUrl,
 	resolveElixirLanguageServerBundleUrl,
 	resolveElixirLanguageServerWorkerUrl,
 	resolveErlangLanguageServerBundleUrl,
@@ -91,6 +92,14 @@ export {
 	type GoLanguageServerTarget,
 	type GoWorkerOptions
 } from './go/index.js';
+export {
+	createDWorkerService,
+	getDLanguageServer,
+	type DLanguageServerConfig,
+	type DLanguageServerOptions,
+	type DWorkerOptions,
+	type LoadDCompilerHost
+} from './d/index.js';
 export {
 	createGleamWorkerService,
 	getGleamLanguageServer,

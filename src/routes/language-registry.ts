@@ -51,6 +51,7 @@ export type RuntimeLspCapability =
 	| 'elixir'
 	| 'erlang'
 	| 'gleam'
+	| 'd'
 	| 'go'
 	| 'rust'
 	| 'zig'
@@ -245,6 +246,7 @@ export const runtimeLspCapabilities: Partial<Record<PlaygroundLanguage, RuntimeL
 	ELIXIR: 'elixir',
 	ERLANG: 'erlang',
 	GLEAM: 'gleam',
+	D: 'd',
 	GO: 'go',
 	RUST: 'rust',
 	ZIG: 'zig',

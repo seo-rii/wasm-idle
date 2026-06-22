@@ -1,5 +1,6 @@
 import { getAssemblyScriptLanguageServer } from './assemblyscript/server.js';
 import { getCppLanguageServer } from './clangd/server.js';
+import { getDLanguageServer } from './d/server.js';
 import {
 	getCSharpLanguageServer,
 	getFSharpLanguageServer,
@@ -60,6 +61,10 @@ export async function getEditorLanguageServer(
 
 	if (normalized === 'go' || normalized === 'golang') {
 		return getGoLanguageServer(options);
+	}
+
+	if (normalized === 'd') {
+		return getDLanguageServer(options);
 	}
 
 	if (normalized === 'gleam') {

@@ -1976,6 +1976,7 @@
 	let elixirLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let erlangLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let gleamLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let dLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let goLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let rustLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let typescriptLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
@@ -2026,6 +2027,8 @@
 		gleamLspEnabled?: boolean;
 		gleamLspBaseUrl?: string;
 		gleamLspManifestUrl?: string;
+		dLspEnabled?: boolean;
+		dLspModuleUrl?: string;
 		goLspEnabled?: boolean;
 		goLspCompilerUrl?: string;
 		rustLspEnabled?: boolean;
@@ -2104,6 +2107,8 @@
 		gleamLspEnabled = false,
 		gleamLspBaseUrl,
 		gleamLspManifestUrl,
+		dLspEnabled = false,
+		dLspModuleUrl,
 		goLspEnabled = false,
 		goLspCompilerUrl,
 		rustLspEnabled = false,
@@ -2252,6 +2257,7 @@
 			erlangLspEnabled ? erlangLspWorkerUrl || '' : '',
 			gleamLspEnabled ? gleamLspBaseUrl || '' : '',
 			gleamLspEnabled ? gleamLspManifestUrl || '' : '',
+			dLspEnabled ? dLspModuleUrl || '' : '',
 			goLspEnabled ? goLspCompilerUrl || '' : '',
 			goTarget,
 			rustLspEnabled ? rustLspCompilerUrl || '' : '',
@@ -2326,6 +2332,10 @@
 			case 'gleam':
 				label = 'Gleam LSP';
 				status = gleamLspStatus;
+				break;
+			case 'd':
+				label = 'D LSP';
+				status = dLspStatus;
 				break;
 			case 'go':
 				label = 'Go LSP';
@@ -2591,6 +2601,21 @@
 						manifestUrl: gleamLspManifestUrl
 					},
 					onStatus: (status) => (gleamLspStatus = status)
+				});
+			}
+		},
+		{
+			languages: ['d'],
+			isEnabled: () => dLspEnabled && !!dLspModuleUrl,
+			setStatus: (status) => (dLspStatus = status),
+			load: async (currentUrl) => {
+				const { getDLanguageServer } = await import('@wasm-idle/lsp');
+				return await getDLanguageServer({
+					currentUrl,
+					d: {
+						moduleUrl: dLspModuleUrl || ''
+					},
+					onStatus: (status) => (dLspStatus = status)
 				});
 			}
 		},
@@ -3061,6 +3086,7 @@
 			elixir: elixirLspStatus,
 			erlang: erlangLspStatus,
 			gleam: gleamLspStatus,
+			d: dLspStatus,
 			go: goLspStatus,
 			rust: rustLspStatus,
 			typescript: typescriptLspStatus,

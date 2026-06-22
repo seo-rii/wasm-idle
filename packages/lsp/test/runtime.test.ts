@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	resolveCppLanguageServerBaseUrl,
 	resolveCppLanguageServerRuntimeAssetConfig,
+	resolveDLanguageServerModuleUrl,
 	resolveElixirLanguageServerBundleUrl,
 	resolveElixirLanguageServerWorkerUrl,
 	resolveErlangLanguageServerBundleUrl,
@@ -67,6 +68,12 @@ describe('lsp runtime asset resolution', () => {
 				'https://app.example.com/editor'
 			)
 		).toBe('https://static.example.com/repl_20240807/wasm-dotnet/index.js');
+		expect(
+			resolveDLanguageServerModuleUrl(
+				'https://static.example.com/repl_20240807',
+				'https://app.example.com/editor'
+			)
+		).toBe('https://static.example.com/repl_20240807/wasm-d/index.js');
 		expect(
 			resolveZigLanguageServerCompilerUrl(
 				'https://static.example.com/repl_20240807',
@@ -231,6 +238,10 @@ describe('lsp runtime asset resolution', () => {
 			dotnet: {
 				moduleUrl: 'https://dotnet.example.com/wasm-dotnet/index.js?v=20240807'
 			},
+			d: {
+				moduleUrl: 'https://d.example.com/wasm-d/index.js?v=20240807',
+				compileArgs: ['-preview=dip1000']
+			},
 			zig: {
 				compilerUrl: 'https://zig.example.com/zig_small.wasm?v=20240807',
 				stdlibUrl: 'https://zig.example.com/std.zip?v=20240807'
@@ -299,6 +310,9 @@ describe('lsp runtime asset resolution', () => {
 		);
 		expect(resolveDotnetLanguageServerModuleUrl(options)).toBe(
 			'https://dotnet.example.com/wasm-dotnet/index.js?v=20240807'
+		);
+		expect(resolveDLanguageServerModuleUrl(options)).toBe(
+			'https://d.example.com/wasm-d/index.js?v=20240807'
 		);
 		expect(resolveZigLanguageServerCompilerUrl(options)).toBe(
 			'https://zig.example.com/zig_small.wasm?v=20240807'
@@ -406,6 +420,9 @@ describe('lsp runtime asset resolution', () => {
 		expect(
 			resolveDotnetLanguageServerModuleUrl(undefined, 'https://app.example.com/editor')
 		).toBe('https://app.example.com/wasm-dotnet/index.js');
+		expect(resolveDLanguageServerModuleUrl(undefined, 'https://app.example.com/editor')).toBe(
+			'https://app.example.com/wasm-d/index.js'
+		);
 		expect(
 			resolveZigLanguageServerCompilerUrl(undefined, 'https://app.example.com/editor')
 		).toBe('https://app.example.com/wasm-zig/zig_small.wasm');

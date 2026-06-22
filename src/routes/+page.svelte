@@ -385,6 +385,8 @@
 	const gleamLspManifestUrl = $derived(
 		gleamLspEnabled ? runtimeAssets.gleam?.manifestUrl : undefined
 	);
+	const dLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'd');
+	const dLspModuleUrl = $derived(dLspEnabled ? runtimeAssets.d?.moduleUrl : undefined);
 	const goLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'go');
 	const goLspCompilerUrl = $derived(goLspEnabled ? runtimeAssets.go?.compilerUrl : undefined);
 	const rustLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'rust');
@@ -2622,6 +2624,8 @@
 				{gleamLspEnabled}
 				{gleamLspBaseUrl}
 				{gleamLspManifestUrl}
+				{dLspEnabled}
+				{dLspModuleUrl}
 				{goLspEnabled}
 				{goLspCompilerUrl}
 				{rustLspEnabled}

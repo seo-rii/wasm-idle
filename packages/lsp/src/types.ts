@@ -32,6 +32,10 @@ export interface EditorLanguageServerRuntimeOptions {
 		compilerUrl?: string;
 		target?: 'wasip1/wasm' | 'wasip2/wasm' | 'wasip3/wasm' | 'js/wasm';
 	};
+	d?: {
+		moduleUrl?: string;
+		compileArgs?: string[];
+	};
 	typescript?: {
 		compilerOptions?: CompilerOptions;
 		extraLibs?: Record<string, string>;

@@ -42,6 +42,7 @@ describe('language registry', () => {
 	it('keeps runtime-backed LSP capabilities aligned with editor-only languages', () => {
 		expect(runtimeLspCapabilities.RUST).toBe('rust');
 		expect(runtimeLspCapabilities.GO).toBe('go');
+		expect(runtimeLspCapabilities.D).toBe('d');
 		expect(runtimeLspCapabilities.ELIXIR).toBe('elixir');
 		expect(runtimeLspCapabilities.ERLANG).toBe('erlang');
 		expect(runtimeLspCapabilities.SQLITE).toBe('sql');

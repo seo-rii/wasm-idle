@@ -205,6 +205,7 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(/getFSharpLanguageServer/);
 		expect(source).toMatch(/getVisualBasicLanguageServer/);
 		expect(source).toMatch(/getGleamLanguageServer/);
+		expect(source).toMatch(/getDLanguageServer/);
 		expect(source).toMatch(/getGoLanguageServer/);
 		expect(source).toMatch(/getRustLanguageServer/);
 		expect(source).toMatch(/getTypeScriptLanguageServer/);
@@ -232,6 +233,7 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(/getAwkLanguageServer/);
 		expect(source).toMatch(/getPerlLanguageServer/);
 		expect(source).toMatch(/languages: \['c', 'cpp'\]/);
+		expect(source).toMatch(/languages: \['d'\]/);
 		expect(source).toMatch(/languages: \['r'\]/);
 		expect(source).toMatch(/languages: \['octave'\]/);
 		expect(source).toMatch(/languages: \['awk'\]/);
@@ -416,6 +418,7 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).toMatch(/const monacoLspLanguage = \$derived/);
 		expect(runtimeLspCapabilities.RUST).toBe('rust');
 		expect(runtimeLspCapabilities.GO).toBe('go');
+		expect(runtimeLspCapabilities.D).toBe('d');
 		expect(runtimeLspCapabilities.ELIXIR).toBe('elixir');
 		expect(runtimeLspCapabilities.ERLANG).toBe('erlang');
 		expect(runtimeLspCapabilities.R).toBe('r');
@@ -498,6 +501,7 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).toMatch(/dotnetLspLanguages\.has\(language\)/);
 		for (const capability of [
 			'gleam',
+			'd',
 			'go',
 			'rust',
 			'zig',
@@ -515,6 +519,7 @@ describe('Monaco route debug sync', () => {
 			'dotnetLspModuleUrl',
 			'gleamLspBaseUrl',
 			'gleamLspManifestUrl',
+			'dLspModuleUrl',
 			'goLspCompilerUrl',
 			'rustLspCompilerUrl',
 			'zigLspCompilerUrl',

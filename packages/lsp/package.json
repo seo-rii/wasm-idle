@@ -30,6 +30,11 @@
 			"import": "./dist/go/index.js",
 			"default": "./dist/go/index.js"
 		},
+		"./d": {
+			"types": "./dist/d/index.d.ts",
+			"import": "./dist/d/index.js",
+			"default": "./dist/d/index.js"
+		},
 		"./typescript": {
 			"types": "./dist/typescript/index.d.ts",
 			"import": "./dist/typescript/index.js",

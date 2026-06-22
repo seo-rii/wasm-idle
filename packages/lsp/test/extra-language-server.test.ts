@@ -78,6 +78,7 @@ import {
 	getRLanguageServer,
 	getRubyLanguageServer,
 	getDuckDbLanguageServer,
+	getDLanguageServer,
 	getSqlLanguageServer,
 	getTomlLanguageServer,
 	getWasmLanguageServer,
@@ -173,6 +174,25 @@ describe('additional language server workers', () => {
 			type: 'init',
 			options: {
 				moduleUrl: 'https://static.example.com/repl_20240807/wasm-lua/index.js'
+			}
+		});
+
+		handle.dispose();
+	});
+
+	it('starts D with the wasm-d module URL', async () => {
+		const handle = await getDLanguageServer({
+			rootUrl: 'https://static.example.com/repl_20240807',
+			currentUrl: 'https://app.example.com/editor',
+			d: { compileArgs: ['-preview=dip1000'] },
+			createWorker: () => new mockState.FakeWorker() as unknown as Worker
+		});
+
+		expect(mockState.workers[0]?.messages[0]).toEqual({
+			type: 'init',
+			options: {
+				moduleUrl: 'https://static.example.com/repl_20240807/wasm-d/index.js',
+				compileArgs: ['-preview=dip1000']
 			}
 		});
 
