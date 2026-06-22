@@ -54,7 +54,22 @@ The runtime has two different binary contracts:
 - `clang.zip` and `lld.zip` each contain one raw WASI WebAssembly module named `clang` and `lld`.
 - `clangd/clangd.js` and `clangd/clangd.wasm.gz` are an Emscripten pthread build of `clangd`.
 
-Build clang/lld as WASI modules and clangd as an Emscripten worker module, then package the outputs:
+To build and package the toolchain in one pass:
+
+```bash
+LLVM_VERSION=22.1.8 \
+WASI_SDK_VERSION=33 \
+EMSDK_VERSION=6.0.0 \
+pnpm --dir runtimes/wasm-clang build:toolchain
+```
+
+This clones LLVM, downloads the matching WASI SDK sysroot and compiler-rt archive, builds
+`clang`/`wasm-ld` as raw WASI modules, builds `clangd` as an Emscripten worker module, stages the
+current libc++ headers under `include/c++/v1`, and writes the packaged runtime assets.
+Use `WASM_CLANG_TOOLCHAIN_WORK_DIR` and `WASM_CLANG_TOOLCHAIN_OUT_DIR` to override the build cache
+and output directories.
+
+If you already have toolchain outputs from another build, package them directly:
 
 ```bash
 pnpm --dir runtimes/wasm-clang package:toolchain -- \

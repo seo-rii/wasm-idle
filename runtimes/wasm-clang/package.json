@@ -23,6 +23,7 @@
 		"build": "rm -rf dist && tsc -p tsconfig.build.json && node ./scripts/prepare-runtime.mjs",
 		"check": "tsc -p tsconfig.json --noEmit",
 		"test": "vitest run --config vitest.config.ts",
+		"build:toolchain": "node ./scripts/build-toolchain.mjs",
 		"prepare:runtime": "node ./scripts/prepare-runtime.mjs",
 		"package:toolchain": "node ./scripts/package-toolchain.mjs",
 		"smoke:runtime": "node ./scripts/smoke-runtime.mjs",
