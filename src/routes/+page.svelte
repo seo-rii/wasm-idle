@@ -387,6 +387,9 @@
 	);
 	const dLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'd');
 	const dLspModuleUrl = $derived(dLspEnabled ? runtimeAssets.d?.moduleUrl : undefined);
+	const tclLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'tcl');
+	const tclLspBaseUrl = $derived(tclLspEnabled ? runtimeAssets.tcl?.baseUrl : undefined);
+	const tclLspWorkerUrl = $derived(tclLspEnabled ? runtimeAssets.tcl?.workerUrl : undefined);
 	const goLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'go');
 	const goLspCompilerUrl = $derived(goLspEnabled ? runtimeAssets.go?.compilerUrl : undefined);
 	const rustLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'rust');
@@ -2626,6 +2629,9 @@
 				{gleamLspManifestUrl}
 				{dLspEnabled}
 				{dLspModuleUrl}
+				{tclLspEnabled}
+				{tclLspBaseUrl}
+				{tclLspWorkerUrl}
 				{goLspEnabled}
 				{goLspCompilerUrl}
 				{rustLspEnabled}

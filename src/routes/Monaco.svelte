@@ -1977,6 +1977,7 @@
 	let erlangLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let gleamLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let dLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let tclLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let goLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let rustLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let typescriptLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
@@ -2029,6 +2030,9 @@
 		gleamLspManifestUrl?: string;
 		dLspEnabled?: boolean;
 		dLspModuleUrl?: string;
+		tclLspEnabled?: boolean;
+		tclLspBaseUrl?: string;
+		tclLspWorkerUrl?: string;
 		goLspEnabled?: boolean;
 		goLspCompilerUrl?: string;
 		rustLspEnabled?: boolean;
@@ -2109,6 +2113,9 @@
 		gleamLspManifestUrl,
 		dLspEnabled = false,
 		dLspModuleUrl,
+		tclLspEnabled = false,
+		tclLspBaseUrl,
+		tclLspWorkerUrl,
 		goLspEnabled = false,
 		goLspCompilerUrl,
 		rustLspEnabled = false,
@@ -2258,6 +2265,8 @@
 			gleamLspEnabled ? gleamLspBaseUrl || '' : '',
 			gleamLspEnabled ? gleamLspManifestUrl || '' : '',
 			dLspEnabled ? dLspModuleUrl || '' : '',
+			tclLspEnabled ? tclLspBaseUrl || '' : '',
+			tclLspEnabled ? tclLspWorkerUrl || '' : '',
 			goLspEnabled ? goLspCompilerUrl || '' : '',
 			goTarget,
 			rustLspEnabled ? rustLspCompilerUrl || '' : '',
@@ -2336,6 +2345,10 @@
 			case 'd':
 				label = 'D LSP';
 				status = dLspStatus;
+				break;
+			case 'tcl':
+				label = 'Tcl LSP';
+				status = tclLspStatus;
 				break;
 			case 'go':
 				label = 'Go LSP';
@@ -2616,6 +2629,22 @@
 						moduleUrl: dLspModuleUrl || ''
 					},
 					onStatus: (status) => (dLspStatus = status)
+				});
+			}
+		},
+		{
+			languages: ['tcl'],
+			isEnabled: () => tclLspEnabled && !!tclLspBaseUrl && !!tclLspWorkerUrl,
+			setStatus: (status) => (tclLspStatus = status),
+			load: async (currentUrl) => {
+				const { getTclLanguageServer } = await import('@wasm-idle/lsp');
+				return await getTclLanguageServer({
+					currentUrl,
+					tcl: {
+						baseUrl: tclLspBaseUrl || '',
+						workerUrl: tclLspWorkerUrl || ''
+					},
+					onStatus: (status) => (tclLspStatus = status)
 				});
 			}
 		},
@@ -3087,6 +3116,7 @@
 			erlang: erlangLspStatus,
 			gleam: gleamLspStatus,
 			d: dLspStatus,
+			tcl: tclLspStatus,
 			go: goLspStatus,
 			rust: rustLspStatus,
 			typescript: typescriptLspStatus,

@@ -55,6 +55,8 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(/erlangLspEnabled\?: boolean;/);
 		expect(source).toMatch(/gleamLspEnabled\?: boolean;/);
 		expect(source).toMatch(/gleamLspEnabled = false,/);
+		expect(source).toMatch(/tclLspEnabled\?: boolean;/);
+		expect(source).toMatch(/tclLspEnabled = false,/);
 		expect(source).toMatch(/goLspEnabled\?: boolean;/);
 		expect(source).toMatch(/goLspEnabled = false,/);
 		expect(source).toMatch(/rustLspEnabled\?: boolean;/);
@@ -206,6 +208,7 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(/getVisualBasicLanguageServer/);
 		expect(source).toMatch(/getGleamLanguageServer/);
 		expect(source).toMatch(/getDLanguageServer/);
+		expect(source).toMatch(/getTclLanguageServer/);
 		expect(source).toMatch(/getGoLanguageServer/);
 		expect(source).toMatch(/getRustLanguageServer/);
 		expect(source).toMatch(/getTypeScriptLanguageServer/);
@@ -234,6 +237,7 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(/getPerlLanguageServer/);
 		expect(source).toMatch(/languages: \['c', 'cpp'\]/);
 		expect(source).toMatch(/languages: \['d'\]/);
+		expect(source).toMatch(/languages: \['tcl'\]/);
 		expect(source).toMatch(/languages: \['r'\]/);
 		expect(source).toMatch(/languages: \['octave'\]/);
 		expect(source).toMatch(/languages: \['awk'\]/);
@@ -419,6 +423,7 @@ describe('Monaco route debug sync', () => {
 		expect(runtimeLspCapabilities.RUST).toBe('rust');
 		expect(runtimeLspCapabilities.GO).toBe('go');
 		expect(runtimeLspCapabilities.D).toBe('d');
+		expect(runtimeLspCapabilities.TCL).toBe('tcl');
 		expect(runtimeLspCapabilities.ELIXIR).toBe('elixir');
 		expect(runtimeLspCapabilities.ERLANG).toBe('erlang');
 		expect(runtimeLspCapabilities.R).toBe('r');
@@ -502,6 +507,7 @@ describe('Monaco route debug sync', () => {
 		for (const capability of [
 			'gleam',
 			'd',
+			'tcl',
 			'go',
 			'rust',
 			'zig',
@@ -520,6 +526,8 @@ describe('Monaco route debug sync', () => {
 			'gleamLspBaseUrl',
 			'gleamLspManifestUrl',
 			'dLspModuleUrl',
+			'tclLspBaseUrl',
+			'tclLspWorkerUrl',
 			'goLspCompilerUrl',
 			'rustLspCompilerUrl',
 			'zigLspCompilerUrl',

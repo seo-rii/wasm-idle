@@ -53,8 +53,9 @@ function waitForWacl(wacl) {
 }
 
 self.onmessage = async (event) => {
-	const { baseUrl, code, args = [], stdin, activePath = 'main.tcl', log } = event.data || {};
+	const { baseUrl, code, args = [], stdin, activePath = 'main.tcl', diagnose = false, log } = event.data || {};
 	const postOutput = (text) => {
+		if (diagnose) return;
 		if (text) self.postMessage({ output: text });
 	};
 	try {

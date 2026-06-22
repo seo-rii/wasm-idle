@@ -52,6 +52,7 @@ export type RuntimeLspCapability =
 	| 'erlang'
 	| 'gleam'
 	| 'd'
+	| 'tcl'
 	| 'go'
 	| 'rust'
 	| 'zig'
@@ -247,6 +248,7 @@ export const runtimeLspCapabilities: Partial<Record<PlaygroundLanguage, RuntimeL
 	ERLANG: 'erlang',
 	GLEAM: 'gleam',
 	D: 'd',
+	TCL: 'tcl',
 	GO: 'go',
 	RUST: 'rust',
 	ZIG: 'zig',
@@ -343,6 +345,7 @@ export const diagnosticMarkerLanguages = new Set([
 	'erlang',
 	'prolog',
 	'gleam',
+	'tcl',
 	'perl',
 	'awk',
 	'ocaml',

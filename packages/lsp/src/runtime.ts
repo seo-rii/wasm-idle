@@ -635,4 +635,42 @@ export function resolvePerlLanguageServerWorkerUrl(
 	return resolveFileUrl('/wasm-perl/runner-worker.js', currentUrl);
 }
 
+export function resolveTclLanguageServerBaseUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	if (typeof options === 'string') {
+		return resolveFileUrl(`${normalizeRootUrl(options) || ''}/wasm-tcl/`, currentUrl);
+	}
+	if (options?.tcl?.baseUrl) {
+		return normalizeBaseUrl(options.tcl.baseUrl, currentUrl);
+	}
+	if (options?.rootUrl) {
+		return resolveFileUrl(`${normalizeRootUrl(options.rootUrl) || ''}/wasm-tcl/`, currentUrl);
+	}
+	return normalizeBaseUrl('/wasm-tcl/', currentUrl);
+}
+
+export function resolveTclLanguageServerWorkerUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	if (typeof options === 'string') {
+		return resolveFileUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-tcl/runner-worker.js`,
+			currentUrl
+		);
+	}
+	if (options?.tcl?.workerUrl) {
+		return resolveFileUrl(options.tcl.workerUrl, currentUrl);
+	}
+	if (options?.rootUrl) {
+		return resolveFileUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-tcl/runner-worker.js`,
+			currentUrl
+		);
+	}
+	return resolveFileUrl('/wasm-tcl/runner-worker.js', currentUrl);
+}
+
 export type { EditorLanguageServerRuntimeOptions };

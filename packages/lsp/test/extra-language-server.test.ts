@@ -80,6 +80,7 @@ import {
 	getDuckDbLanguageServer,
 	getDLanguageServer,
 	getSqlLanguageServer,
+	getTclLanguageServer,
 	getTomlLanguageServer,
 	getWasmLanguageServer,
 	getYamlLanguageServer,
@@ -193,6 +194,24 @@ describe('additional language server workers', () => {
 			options: {
 				moduleUrl: 'https://static.example.com/repl_20240807/wasm-d/index.js',
 				compileArgs: ['-preview=dip1000']
+			}
+		});
+
+		handle.dispose();
+	});
+
+	it('starts Tcl with Wacl worker assets', async () => {
+		const handle = await getTclLanguageServer({
+			rootUrl: 'https://static.example.com/repl_20240807',
+			currentUrl: 'https://app.example.com/editor',
+			createWorker: () => new mockState.FakeWorker() as unknown as Worker
+		});
+
+		expect(mockState.workers[0]?.messages[0]).toEqual({
+			type: 'init',
+			options: {
+				baseUrl: 'https://static.example.com/repl_20240807/wasm-tcl/',
+				workerUrl: 'https://static.example.com/repl_20240807/wasm-tcl/runner-worker.js'
 			}
 		});
 

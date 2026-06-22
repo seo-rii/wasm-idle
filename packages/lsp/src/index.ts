@@ -33,6 +33,8 @@ export {
 	resolveRLanguageServerBaseUrl,
 	resolveRubyLanguageServerWasmUrl,
 	resolveRustLanguageServerCompilerUrl,
+	resolveTclLanguageServerBaseUrl,
+	resolveTclLanguageServerWorkerUrl,
 	resolveZigLanguageServerCompilerUrl,
 	resolveZigLanguageServerStdlibUrl
 } from './runtime.js';
@@ -100,6 +102,16 @@ export {
 	type DWorkerOptions,
 	type LoadDCompilerHost
 } from './d/index.js';
+export {
+	createTclWorkerService,
+	getTclLanguageServer,
+	type RunTclDiagnostics,
+	type TclDiagnosticRunnerRequest,
+	type TclDiagnosticRunnerResult,
+	type TclLanguageServerConfig,
+	type TclLanguageServerOptions,
+	type TclWorkerOptions
+} from './tcl/index.js';
 export {
 	createGleamWorkerService,
 	getGleamLanguageServer,

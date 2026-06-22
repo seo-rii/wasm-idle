@@ -138,6 +138,10 @@ export interface EditorLanguageServerRuntimeOptions {
 		baseUrl?: string;
 		workerUrl?: string;
 	};
+	tcl?: {
+		baseUrl?: string;
+		workerUrl?: string;
+	};
 	document?: {
 		language?: DocumentLanguageId;
 	};

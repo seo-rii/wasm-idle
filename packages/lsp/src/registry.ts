@@ -12,6 +12,7 @@ import { getGleamLanguageServer } from './gleam/server.js';
 import { getGoLanguageServer } from './go/server.js';
 import { getPythonLanguageServer } from './python/server.js';
 import { getRustLanguageServer } from './rust/server.js';
+import { getTclLanguageServer } from './tcl/server.js';
 import { getJavaScriptLanguageServer, getTypeScriptLanguageServer } from './typescript/server.js';
 import type { EditorLanguageServerHandle, EditorLanguageServerOptions } from './types.js';
 import { getWatLanguageServer } from './wat/server.js';
@@ -65,6 +66,10 @@ export async function getEditorLanguageServer(
 
 	if (normalized === 'd') {
 		return getDLanguageServer(options);
+	}
+
+	if (normalized === 'tcl' || normalized === 'tclsh') {
+		return getTclLanguageServer(options);
 	}
 
 	if (normalized === 'gleam') {

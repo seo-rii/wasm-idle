@@ -35,6 +35,11 @@
 			"import": "./dist/d/index.js",
 			"default": "./dist/d/index.js"
 		},
+		"./tcl": {
+			"types": "./dist/tcl/index.d.ts",
+			"import": "./dist/tcl/index.js",
+			"default": "./dist/tcl/index.js"
+		},
 		"./typescript": {
 			"types": "./dist/typescript/index.d.ts",
 			"import": "./dist/typescript/index.js",

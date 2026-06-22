@@ -32,6 +32,8 @@ import {
 	resolvePhpLanguageServerVersion,
 	resolveRLanguageServerBaseUrl,
 	resolveRustLanguageServerCompilerUrl,
+	resolveTclLanguageServerBaseUrl,
+	resolveTclLanguageServerWorkerUrl,
 	resolveZigLanguageServerCompilerUrl,
 	resolveZigLanguageServerStdlibUrl
 } from '../src/index.js';
@@ -74,6 +76,18 @@ describe('lsp runtime asset resolution', () => {
 				'https://app.example.com/editor'
 			)
 		).toBe('https://static.example.com/repl_20240807/wasm-d/index.js');
+		expect(
+			resolveTclLanguageServerBaseUrl(
+				'https://static.example.com/repl_20240807',
+				'https://app.example.com/editor'
+			)
+		).toBe('https://static.example.com/repl_20240807/wasm-tcl/');
+		expect(
+			resolveTclLanguageServerWorkerUrl(
+				'https://static.example.com/repl_20240807',
+				'https://app.example.com/editor'
+			)
+		).toBe('https://static.example.com/repl_20240807/wasm-tcl/runner-worker.js');
 		expect(
 			resolveZigLanguageServerCompilerUrl(
 				'https://static.example.com/repl_20240807',
@@ -242,6 +256,10 @@ describe('lsp runtime asset resolution', () => {
 				moduleUrl: 'https://d.example.com/wasm-d/index.js?v=20240807',
 				compileArgs: ['-preview=dip1000']
 			},
+			tcl: {
+				baseUrl: 'https://tcl.example.com/wasm-tcl/',
+				workerUrl: 'https://tcl.example.com/runner-worker.js?v=20240807'
+			},
 			zig: {
 				compilerUrl: 'https://zig.example.com/zig_small.wasm?v=20240807',
 				stdlibUrl: 'https://zig.example.com/std.zip?v=20240807'
@@ -313,6 +331,10 @@ describe('lsp runtime asset resolution', () => {
 		);
 		expect(resolveDLanguageServerModuleUrl(options)).toBe(
 			'https://d.example.com/wasm-d/index.js?v=20240807'
+		);
+		expect(resolveTclLanguageServerBaseUrl(options)).toBe('https://tcl.example.com/wasm-tcl/');
+		expect(resolveTclLanguageServerWorkerUrl(options)).toBe(
+			'https://tcl.example.com/runner-worker.js?v=20240807'
 		);
 		expect(resolveZigLanguageServerCompilerUrl(options)).toBe(
 			'https://zig.example.com/zig_small.wasm?v=20240807'
@@ -422,6 +444,12 @@ describe('lsp runtime asset resolution', () => {
 		).toBe('https://app.example.com/wasm-dotnet/index.js');
 		expect(resolveDLanguageServerModuleUrl(undefined, 'https://app.example.com/editor')).toBe(
 			'https://app.example.com/wasm-d/index.js'
+		);
+		expect(resolveTclLanguageServerBaseUrl(undefined, 'https://app.example.com/editor')).toBe(
+			'https://app.example.com/wasm-tcl/'
+		);
+		expect(resolveTclLanguageServerWorkerUrl(undefined, 'https://app.example.com/editor')).toBe(
+			'https://app.example.com/wasm-tcl/runner-worker.js'
 		);
 		expect(
 			resolveZigLanguageServerCompilerUrl(undefined, 'https://app.example.com/editor')
