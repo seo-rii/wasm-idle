@@ -34,6 +34,9 @@ export type EditorDefaultLanguage =
 	| 'haskell'
 	| 'r'
 	| 'octave'
+	| 'fortran'
+	| 'graphql'
+	| 'duckdb'
 	| 'sqlite'
 	| 'php'
 	| 'rust';
@@ -72,6 +75,9 @@ export const editorDefaults: Record<
 	| 'haskell'
 	| 'r'
 	| 'octave'
+	| 'fortran'
+	| 'graphql'
+	| 'duckdb'
 	| 'sqlite'
 	| 'php',
 	string
@@ -405,7 +411,7 @@ RUN`,
 	j: `input =: 1!:1 [ 1
 n =: ". input
 smoutput 'factorial_plus_bonus=', ": 3 + ! n`,
-bqn: `bonus ← 3
+	bqn: `bonus ← 3
 Factorial ← {𝕩≤1 ? 1 ; 𝕩 × 𝕊 𝕩-1}
 n ← •ParseFloat •GetLine @
 bonus + Factorial n`,
@@ -579,7 +585,24 @@ if (isnan(n))
     n = 4;
 endif
 
-printf("factorial_plus_bonus=%d\\n", factorial(n) + bonus);`,
+	printf("factorial_plus_bonus=%d\\n", factorial(n) + bonus);`,
+	fortran: `program main
+    implicit none
+    integer :: bonus
+
+    bonus = 3
+    print *, "factorial_plus_bonus=", 24 + bonus
+end program main`,
+	graphql: `query Greeting {
+    hello
+}`,
+	duckdb: `WITH numbers AS (
+    SELECT range AS n
+    FROM range(1, 5)
+)
+SELECT 'factorial_plus_bonus=' || CAST(24 + 3 AS VARCHAR) AS result
+FROM numbers
+LIMIT 1;`,
 	sqlite: `CREATE TABLE numbers (n INTEGER NOT NULL);
 INSERT INTO numbers VALUES (1), (2), (3), (4);
 
@@ -753,6 +776,9 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.haskell ||
 		source === editorDefaults.r ||
 		source === editorDefaults.octave ||
+		source === editorDefaults.fortran ||
+		source === editorDefaults.graphql ||
+		source === editorDefaults.duckdb ||
 		source === editorDefaults.sqlite ||
 		source === editorDefaults.php ||
 		source === rustEditorDefaults['wasm32-wasip1'] ||

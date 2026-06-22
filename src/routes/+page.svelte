@@ -102,6 +102,9 @@
 		| 'HASKELL'
 		| 'R'
 		| 'OCTAVE'
+		| 'FORTRAN'
+		| 'GRAPHQL'
+		| 'DUCKDB'
 		| 'SQLITE'
 		| 'PHP';
 
@@ -187,6 +190,9 @@
 		'HASKELL',
 		'R',
 		'OCTAVE',
+		'FORTRAN',
+		'GRAPHQL',
+		'DUCKDB',
 		'SQLITE',
 		'PHP'
 	];
@@ -226,6 +232,9 @@
 		HASKELL: 'Haskell',
 		R: 'R',
 		OCTAVE: 'Octave',
+		FORTRAN: 'Fortran',
+		GRAPHQL: 'GraphQL',
+		DUCKDB: 'DuckDB',
 		SQLITE: 'SQLite',
 		PHP: 'PHP'
 	};
@@ -265,6 +274,9 @@
 		HASKELL: 'haskell',
 		R: 'r',
 		OCTAVE: 'octave',
+		FORTRAN: 'fortran',
+		GRAPHQL: 'graphql',
+		DUCKDB: 'sql',
 		SQLITE: 'sql',
 		PHP: 'php'
 	};
@@ -281,11 +293,14 @@
 		PYTHON: 'Pyodide Trace'
 	};
 	const debugLspLanguages = new Set<PlaygroundLanguage>(['CPP']);
+	const clangdLspLanguages = new Set<PlaygroundLanguage>(['C', 'CPP']);
 	const dotnetLspLanguages = new Set<PlaygroundLanguage>(['CSHARP', 'FSHARP', 'VBNET']);
 	const typescriptLspLanguages = new Set<PlaygroundLanguage>(['JAVASCRIPT', 'TYPESCRIPT']);
 	const lspLanguageOverrides: Partial<Record<PlaygroundLanguage, string>> = {
-		ASSEMBLYSCRIPT: 'assemblyscript'
+		ASSEMBLYSCRIPT: 'assemblyscript',
+		DUCKDB: 'duckdb'
 	};
+	const editorOnlyLanguages = new Set<PlaygroundLanguage>(['FORTRAN', 'GRAPHQL', 'DUCKDB']);
 	const runtimeLspCapabilities: Partial<Record<PlaygroundLanguage, RuntimeLspCapability>> = {
 		GLEAM: 'gleam',
 		GO: 'go',
@@ -582,10 +597,13 @@
 		() => executionOptionResolvers[language]?.() ?? {}
 	);
 	const editorLanguage = $derived(editorLanguages[language]);
+	const executionAvailable = $derived(!editorOnlyLanguages.has(language));
 	const argsLabel = $derived(argsLabels[language] ?? 'Args');
 	const monacoLspLanguage = $derived(lspLanguageOverrides[language] ?? editorLanguage);
 	const activeRuntimeLspCapability = $derived(runtimeLspCapabilities[language] ?? null);
-	const clangdLspEnabled = $derived(lspEnabled && (clangdRequested || language === 'CPP'));
+	const clangdLspEnabled = $derived(
+		lspEnabled && (clangdRequested || clangdLspLanguages.has(language))
+	);
 	const dotnetLspEnabled = $derived(lspEnabled && dotnetLspLanguages.has(language));
 	const dotnetLspModuleUrl = $derived(
 		dotnetLspEnabled ? runtimeAssets.dotnet?.moduleUrl : undefined
@@ -627,9 +645,7 @@
 	const sqlLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'sql');
 	const sqlLspWasmUrl = $derived(sqlLspEnabled ? runtimeAssets.sqlite?.wasmUrl : undefined);
 	const prologLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'prolog');
-	const prologLspBaseUrl = $derived(
-		prologLspEnabled ? runtimeAssets.prolog?.baseUrl : undefined
-	);
+	const prologLspBaseUrl = $derived(prologLspEnabled ? runtimeAssets.prolog?.baseUrl : undefined);
 	const prologLspWorkerUrl = $derived(
 		prologLspEnabled ? runtimeAssets.prolog?.workerUrl : undefined
 	);
@@ -842,6 +858,13 @@
 			'.lhs': 'HASKELL',
 			'.r': 'R',
 			'.m': 'OCTAVE',
+			'.f': 'FORTRAN',
+			'.f90': 'FORTRAN',
+			'.f95': 'FORTRAN',
+			'.for': 'FORTRAN',
+			'.graphql': 'GRAPHQL',
+			'.gql': 'GRAPHQL',
+			'.duckdb': 'DUCKDB',
 			'.sql': 'SQLITE',
 			'.sqlite': 'SQLITE',
 			'.php': 'PHP'
@@ -886,6 +909,9 @@
 			HASKELL: 'main.hs',
 			R: 'main.R',
 			OCTAVE: 'main.m',
+			FORTRAN: 'main.f90',
+			GRAPHQL: 'main.graphql',
+			DUCKDB: 'main.duckdb',
 			SQLITE: 'main.sql',
 			PHP: 'main.php'
 		};
@@ -929,6 +955,9 @@
 			HASKELL: 'haskell',
 			R: 'r',
 			OCTAVE: 'octave',
+			FORTRAN: 'fortran',
+			GRAPHQL: 'graphql',
+			DUCKDB: 'duckdb',
 			SQLITE: 'sqlite',
 			PHP: 'php'
 		} as const satisfies Record<
@@ -1442,6 +1471,12 @@
 			r: 'R',
 			octave: 'OCTAVE',
 			matlab: 'OCTAVE',
+			fortran: 'FORTRAN',
+			f90: 'FORTRAN',
+			f95: 'FORTRAN',
+			graphql: 'GRAPHQL',
+			gql: 'GRAPHQL',
+			duckdb: 'DUCKDB',
 			sqlite: 'SQLITE',
 			sql: 'SQLITE',
 			php: 'PHP'
@@ -1455,6 +1490,7 @@
 
 	async function exec(enableDebug = false) {
 		if (!editor || !terminal || !activeFile) return;
+		if (!executionAvailable) return;
 		if (enableDebug && !debugLanguage) return;
 		if (enableDebug && !sharedBufferAvailable) return;
 		if (runningMode) return;
@@ -1920,7 +1956,7 @@
 						<button
 							class="action-button action-button--run"
 							onclick={() => exec(false)}
-							disabled={runningMode === 'debug'}
+							disabled={runningMode === 'debug' || !executionAvailable}
 						>
 							<span class="material-symbols-outlined">play_arrow</span>
 							<span>Run</span>
@@ -2082,6 +2118,9 @@
 						<option value="HASKELL">Haskell</option>
 						<option value="R">R</option>
 						<option value="OCTAVE">Octave</option>
+						<option value="FORTRAN">Fortran</option>
+						<option value="GRAPHQL">GraphQL</option>
+						<option value="DUCKDB">DuckDB</option>
 						<option value="SQLITE">SQLite</option>
 						<option value="PHP">PHP</option>
 					</select>
@@ -2290,8 +2329,8 @@
 		{/if}
 		{#if language === 'J'}
 			<p class="hint">
-				J runs through the official J playground WebAssembly runtime. Use `1!:1 [ 1` to
-				read stdin.
+				J runs through the official J playground WebAssembly runtime. Use `1!:1 [ 1` to read
+				stdin.
 			</p>
 		{/if}
 		{#if language === 'BQN'}

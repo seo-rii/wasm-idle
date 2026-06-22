@@ -55,6 +55,7 @@
 	};
 	const debugViewLanguages = new Set(['cpp']);
 	const diagnosticMarkerLanguages = new Set([
+		'c',
 		'java',
 		'python',
 		'rust',
@@ -85,6 +86,8 @@
 		csharp: () => import('monaco-editor/esm/vs/basic-languages/csharp/csharp.contribution.js'),
 		elixir: () => import('monaco-editor/esm/vs/basic-languages/elixir/elixir.contribution.js'),
 		go: () => import('monaco-editor/esm/vs/basic-languages/go/go.contribution.js'),
+		graphql: () =>
+			import('monaco-editor/esm/vs/basic-languages/graphql/graphql.contribution.js'),
 		java: () => import('monaco-editor/esm/vs/basic-languages/java/java.contribution.js'),
 		javascript: () =>
 			import('monaco-editor/esm/vs/basic-languages/typescript/typescript.contribution.js'),
@@ -1865,6 +1868,97 @@
 		}
 	} satisfies monaco.languages.IMonarchLanguage;
 
+	const fortranLanguageConfiguration = {
+		comments: {
+			lineComment: '!'
+		},
+		brackets: [
+			['(', ')'],
+			['[', ']']
+		],
+		autoClosingPairs: [
+			{ open: '(', close: ')' },
+			{ open: '[', close: ']' },
+			{ open: '"', close: '"' },
+			{ open: "'", close: "'" }
+		],
+		surroundingPairs: [
+			{ open: '(', close: ')' },
+			{ open: '[', close: ']' },
+			{ open: '"', close: '"' },
+			{ open: "'", close: "'" }
+		]
+	} satisfies monaco.languages.LanguageConfiguration;
+
+	const fortranMonarchTokens = {
+		ignoreCase: true,
+		keywords: [
+			'allocate',
+			'call',
+			'case',
+			'character',
+			'contains',
+			'deallocate',
+			'do',
+			'else',
+			'elsewhere',
+			'end',
+			'enddo',
+			'endif',
+			'function',
+			'if',
+			'implicit',
+			'integer',
+			'interface',
+			'logical',
+			'module',
+			'none',
+			'parameter',
+			'print',
+			'program',
+			'real',
+			'return',
+			'select',
+			'stop',
+			'subroutine',
+			'then',
+			'type',
+			'use',
+			'where',
+			'while'
+		],
+		tokenizer: {
+			root: [
+				[/!.*$/, 'comment'],
+				[/"/, 'string', '@doubleQuotedString'],
+				[/'/, 'string', '@singleQuotedString'],
+				[/\b\d+(?:\.\d+)?(?:[eEdD][+-]?\d+)?\b/, 'number'],
+				[
+					/[A-Za-z_][A-Za-z0-9_]*/,
+					{
+						cases: {
+							'@keywords': 'keyword',
+							'@default': 'identifier'
+						}
+					}
+				],
+				[/[()[\]]/, '@brackets'],
+				[/[,:;%]/, 'delimiter'],
+				[/[=><+\-*/]+/, 'operator']
+			],
+			doubleQuotedString: [
+				[/[^"\n]+/, 'string'],
+				[/""/, 'string.escape'],
+				[/"/, 'string', '@pop']
+			],
+			singleQuotedString: [
+				[/[^'\n]+/, 'string'],
+				[/''/, 'string.escape'],
+				[/'/, 'string', '@pop']
+			]
+		}
+	} satisfies monaco.languages.IMonarchLanguage;
+
 	export const editorValue = () => editor?.getValue() || '';
 
 	let clangdStatus = $state<LanguageServerStatus>({ state: 'disabled' });
@@ -1881,6 +1975,9 @@
 	let luaLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let ocamlLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let haskellLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let fortranLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let graphqlLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let duckdbLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let sqlLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let prologLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let rubyLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
@@ -2002,7 +2099,9 @@
 	const dotnetLspLanguage = $derived<DotnetLspLanguage | null>(
 		dotnetLspLanguages[language] ?? null
 	);
-	const defaultLanguage = $derived(defaultLanguageAliases[language] ?? language);
+	const defaultLanguage = $derived(
+		lspLanguage === 'duckdb' ? 'duckdb' : (defaultLanguageAliases[language] ?? language)
+	);
 	const activeLspLanguage = $derived(lspLanguage || language);
 	const defaultValue = $derived(
 		resolveEditorDefaultSource(
@@ -2040,6 +2139,9 @@
 				| 'haskell'
 				| 'r'
 				| 'octave'
+				| 'fortran'
+				| 'graphql'
+				| 'duckdb'
 				| 'sqlite'
 				| 'php'
 				| 'rust',
@@ -2102,6 +2204,10 @@
 		let label = '';
 		let status: LanguageServerStatus | null = null;
 		switch (activeLspLanguage) {
+			case 'c':
+				label = 'C LSP';
+				status = clangdStatus;
+				break;
 			case 'cpp':
 				label = 'C++ LSP';
 				status = clangdStatus;
@@ -2170,6 +2276,18 @@
 				label = 'Haskell LSP';
 				status = haskellLspStatus;
 				break;
+			case 'fortran':
+				label = 'Fortran LSP';
+				status = fortranLspStatus;
+				break;
+			case 'graphql':
+				label = 'GraphQL LSP';
+				status = graphqlLspStatus;
+				break;
+			case 'duckdb':
+				label = 'DuckDB LSP';
+				status = duckdbLspStatus;
+				break;
 			case 'sql':
 				label = 'SQL LSP';
 				status = sqlLspStatus;
@@ -2229,7 +2347,7 @@
 	});
 	const lspRoutes: LspRoute[] = [
 		{
-			languages: ['cpp'],
+			languages: ['c', 'cpp'],
 			isEnabled: () => clangdEnabled && !!clangdBaseUrl,
 			setStatus: (status) => (clangdStatus = status),
 			load: async (currentUrl) => {
@@ -2455,6 +2573,42 @@
 			}
 		},
 		{
+			languages: ['fortran'],
+			isEnabled: () => true,
+			setStatus: (status) => (fortranLspStatus = status),
+			load: async (currentUrl) => {
+				const { getFortranLanguageServer } = await import('@wasm-idle/lsp');
+				return await getFortranLanguageServer({
+					currentUrl,
+					onStatus: (status) => (fortranLspStatus = status)
+				});
+			}
+		},
+		{
+			languages: ['graphql'],
+			isEnabled: () => true,
+			setStatus: (status) => (graphqlLspStatus = status),
+			load: async (currentUrl) => {
+				const { getGraphqlLanguageServer } = await import('@wasm-idle/lsp');
+				return await getGraphqlLanguageServer({
+					currentUrl,
+					onStatus: (status) => (graphqlLspStatus = status)
+				});
+			}
+		},
+		{
+			languages: ['duckdb'],
+			isEnabled: () => true,
+			setStatus: (status) => (duckdbLspStatus = status),
+			load: async (currentUrl) => {
+				const { getDuckDbLanguageServer } = await import('@wasm-idle/lsp');
+				return await getDuckDbLanguageServer({
+					currentUrl,
+					onStatus: (status) => (duckdbLspStatus = status)
+				});
+			}
+		},
+		{
 			languages: ['sql'],
 			isEnabled: () => sqlLspEnabled && !!sqlLspWasmUrl,
 			setStatus: (status) => (sqlLspStatus = status),
@@ -2596,6 +2750,9 @@
 			lua: luaLspStatus,
 			ocaml: ocamlLspStatus,
 			haskell: haskellLspStatus,
+			fortran: fortranLspStatus,
+			graphql: graphqlLspStatus,
+			duckdb: duckdbLspStatus,
 			sql: sqlLspStatus,
 			prolog: prologLspStatus,
 			ruby: rubyLspStatus
@@ -2851,6 +3008,15 @@
 			}
 			monacoApi.languages.setLanguageConfiguration('haskell', haskellLanguageConfiguration);
 			monacoApi.languages.setMonarchTokensProvider('haskell', haskellMonarchTokens);
+			if (!monacoApi.languages.getLanguages().some(({ id }) => id === 'fortran')) {
+				monacoApi.languages.register({
+					id: 'fortran',
+					aliases: ['Fortran', 'fortran', 'f90'],
+					extensions: ['.f', '.for', '.f90', '.f95']
+				});
+			}
+			monacoApi.languages.setLanguageConfiguration('fortran', fortranLanguageConfiguration);
+			monacoApi.languages.setMonarchTokensProvider('fortran', fortranMonarchTokens);
 			if (!monacoApi.languages.getLanguages().some(({ id }) => id === 'lisp')) {
 				monacoApi.languages.register({
 					id: 'lisp',

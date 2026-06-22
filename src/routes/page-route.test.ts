@@ -30,7 +30,7 @@ describe('example route debug actions', () => {
 			/\{#if runningMode === 'debug'\}\s+<button class="action-button action-button--stop" onclick=\{stopExecution\}>/s
 		);
 		expect(source).toMatch(/<span>Stop Debug<\/span>/);
-		expect(source).toMatch(/disabled=\{runningMode === 'debug'\}/);
+		expect(source).toMatch(/disabled=\{runningMode === 'debug' \|\| !executionAvailable\}/);
 		expect(source).toMatch(/async function sendTerminalEof\(\) \{/);
 		expect(source).toMatch(/await terminal\.eof\?\.\(\);/);
 		expect(source).toMatch(/title="Send EOF"/);
@@ -293,6 +293,9 @@ describe('example route debug actions', () => {
 		expectEditorLanguage('R', 'r');
 		expectEditorLanguage('BQN', 'bqn');
 		expectEditorLanguage('JANET', 'janet');
+		expectEditorLanguage('FORTRAN', 'fortran');
+		expectEditorLanguage('GRAPHQL', 'graphql');
+		expectEditorLanguage('DUCKDB', 'sql');
 		expect(source).toMatch(/RUST: \(\) => \(\{ rustTargetTriple \}\)/);
 		expect(source).toMatch(/\.\.\.languageExecutionOptions/);
 		expect(source).toMatch(/<select id="rust-target-triple" bind:value=\{rustTargetTriple\}>/);
@@ -745,6 +748,30 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/SQLITE: 'sqlite'/);
 		expect(source).toMatch(/SQLite runs through bundled sql\.js WebAssembly assets/);
 		expect(source).toMatch(/SELECT results are printed as tab-separated tables/);
+	});
+
+	it('surfaces editor-only Fortran, GraphQL, and DuckDB LSP workspaces', () => {
+		for (const [language, label] of [
+			['FORTRAN', 'Fortran'],
+			['GRAPHQL', 'GraphQL'],
+			['DUCKDB', 'DuckDB']
+		]) {
+			expect(source).toMatch(new RegExp(`<option value="${language}">${label}<\\/option>`));
+		}
+		expect(source).toMatch(
+			/const editorOnlyLanguages = new Set<PlaygroundLanguage>\(\['FORTRAN', 'GRAPHQL', 'DUCKDB'\]\);/
+		);
+		expect(source).toMatch(
+			/const executionAvailable = \$derived\(!editorOnlyLanguages\.has\(language\)\);/
+		);
+		expect(source).toMatch(/if \(!executionAvailable\) return;/);
+		expect(source).toMatch(/DUCKDB: 'duckdb'/);
+		expect(source).toMatch(/fortran: 'FORTRAN'/);
+		expect(source).toMatch(/graphql: 'GRAPHQL'/);
+		expect(source).toMatch(/duckdb: 'DUCKDB'/);
+		expect(source).toMatch(/FORTRAN: 'main\.f90'/);
+		expect(source).toMatch(/GRAPHQL: 'main\.graphql'/);
+		expect(source).toMatch(/DUCKDB: 'main\.duckdb'/);
 	});
 
 	it('surfaces PHP through the php-wasm browser runtime contract', () => {

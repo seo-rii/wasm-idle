@@ -8,6 +8,8 @@ const typescriptLibDir = path.resolve(packageRoot, 'node_modules', 'typescript',
 const typescriptOutputDir = path.resolve(packageRoot, 'dist', 'typescript');
 const pythonSourceDir = path.resolve(packageRoot, 'src', 'python', 'package');
 const pythonOutputDir = path.resolve(packageRoot, 'dist', 'python', 'package');
+const duckdbDistDir = path.resolve(packageRoot, 'node_modules', '@duckdb', 'duckdb-wasm', 'dist');
+const sqlOutputDir = path.resolve(packageRoot, 'dist', 'sql');
 
 await mkdir(typescriptOutputDir, { recursive: true });
 const libraryFiles = (await readdir(typescriptLibDir))
@@ -30,3 +32,10 @@ await rm(path.join(typescriptOutputDir, 'typescript-libs.json'), { force: true }
 
 await mkdir(path.dirname(pythonOutputDir), { recursive: true });
 await cp(pythonSourceDir, pythonOutputDir, { recursive: true });
+
+await mkdir(sqlOutputDir, { recursive: true });
+await Promise.all(
+	['duckdb-mvp.wasm', 'duckdb-browser-mvp.worker.js'].map((fileName) =>
+		cp(path.join(duckdbDistDir, fileName), path.join(sqlOutputDir, fileName))
+	)
+);

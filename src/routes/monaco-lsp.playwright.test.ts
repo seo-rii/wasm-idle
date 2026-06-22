@@ -81,6 +81,38 @@ const lspBrowserCases = [
 		timeoutMs: 240_000
 	},
 	{
+		language: 'C',
+		label: 'C',
+		fileName: 'main.c',
+		source: 'int main(void) {\n    int n = "nope";\n    return n;\n}\n',
+		aliases: ['clang'],
+		statusKey: 'clangd',
+		timeoutMs: 240_000
+	},
+	{
+		language: 'FORTRAN',
+		label: 'Fortran',
+		fileName: 'main.f90',
+		source: 'program main\n  integer :: n\n  n =\nend program main\n',
+		aliases: ['f90'],
+		timeoutMs: 180_000
+	},
+	{
+		language: 'GRAPHQL',
+		label: 'GraphQL',
+		fileName: 'main.graphql',
+		source: 'query Broken {\n  hello(\n}\n',
+		aliases: ['gql'],
+		timeoutMs: 120_000
+	},
+	{
+		language: 'DUCKDB',
+		label: 'DuckDB',
+		fileName: 'main.duckdb',
+		source: 'SELECT FROM range(5);\n',
+		timeoutMs: 240_000
+	},
+	{
 		language: 'TYPESCRIPT',
 		label: 'TypeScript',
 		fileName: 'main.ts',
@@ -244,6 +276,10 @@ const lspStatusKeyByLanguage: Record<string, string> = {
 	TYPESCRIPT: 'typescript',
 	JAVASCRIPT: 'typescript',
 	CPP: 'clangd',
+	C: 'clangd',
+	FORTRAN: 'fortran',
+	GRAPHQL: 'graphql',
+	DUCKDB: 'duckdb',
 	PYTHON: 'python',
 	ASSEMBLYSCRIPT: 'assemblyscript',
 	WAT: 'wat',

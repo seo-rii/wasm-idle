@@ -76,6 +76,7 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(/oninput=\{handleEditorInput\}/);
 		expect(source).toMatch(/const diagnosticMarkerLanguages = new Set\(\[/);
 		for (const markerLanguage of [
+			'c',
 			'java',
 			'rust',
 			'go',
@@ -98,9 +99,7 @@ describe('Monaco route debug sync', () => {
 		]) {
 			expect(source).toContain(`'${markerLanguage}'`);
 		}
-		expect(source).toMatch(
-			/const defaultLanguage = \$derived\(defaultLanguageAliases\[language\] \?\? language\);/
-		);
+		expect(source).toMatch(/lspLanguage === 'duckdb' \? 'duckdb'/);
 		expect(source).toMatch(
 			/\$effect\(\(\) => \{\s+const activeModel = model \|\| editor\?\.getModel\(\);[\s\S]*if \(!isEditorDefaultSource\(currentValue\) && !isLegacyEditorDefaultSource\(currentValue\)\) \{[\s\S]*activeModel\.setValue\(defaultValue\);[\s\S]*\}\s+\}\);/s
 		);
@@ -177,6 +176,17 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(/getLuaLanguageServer/);
 		expect(source).toMatch(/getOcamlLanguageServer/);
 		expect(source).toMatch(/getHaskellLanguageServer/);
+		expect(source).toMatch(/getFortranLanguageServer/);
+		expect(source).toMatch(/getGraphqlLanguageServer/);
+		expect(source).toMatch(/getDuckDbLanguageServer/);
+		expect(source).toMatch(/languages: \['c', 'cpp'\]/);
+		expect(source).toMatch(/languages: \['fortran'\]/);
+		expect(source).toMatch(/languages: \['graphql'\]/);
+		expect(source).toMatch(/languages: \['duckdb'\]/);
+		expect(source).toMatch(/id: 'fortran'/);
+		expect(source).toMatch(
+			/monacoApi\.languages\.setMonarchTokensProvider\('fortran', fortranMonarchTokens\);/
+		);
 		expect(source).toMatch(/typescript: \{ libUrl: typescriptLspLibUrl \}/);
 		expect(source).toMatch(/javascript: \{ libUrl: typescriptLspLibUrl \}/);
 		expect(source).not.toMatch(/clangd ready/);
@@ -204,6 +214,9 @@ describe('Monaco route debug sync', () => {
 		expect(resolveEditorDefaultSource('janet', 'wasm32-wasip1')).toBe(editorDefaults.janet);
 		expect(resolveEditorDefaultSource('lua', 'wasm32-wasip1')).toBe(editorDefaults.lua);
 		expect(resolveEditorDefaultSource('sqlite', 'wasm32-wasip1')).toBe(editorDefaults.sqlite);
+		expect(resolveEditorDefaultSource('fortran', 'wasm32-wasip1')).toBe(editorDefaults.fortran);
+		expect(resolveEditorDefaultSource('graphql', 'wasm32-wasip1')).toBe(editorDefaults.graphql);
+		expect(resolveEditorDefaultSource('duckdb', 'wasm32-wasip1')).toBe(editorDefaults.duckdb);
 		expect(resolveEditorDefaultSource('php', 'wasm32-wasip1')).toBe(editorDefaults.php);
 		expect(editorDefaults.c).toContain('puts("Hello, WebAssembly!")');
 		expect(editorDefaults.go).toContain("ReadString('\\n')");
@@ -253,6 +266,9 @@ describe('Monaco route debug sync', () => {
 		expect(isEditorDefaultSource(editorDefaults.haskell)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.r)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.octave)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.fortran)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.graphql)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.duckdb)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.sqlite)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.php)).toBe(true);
 		expect(isEditorDefaultSource(rustEditorDefaults['wasm32-wasip1'])).toBe(true);
@@ -272,6 +288,9 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).toMatch(/clangdRequested = \$state\(false\),/);
 		expect(pageSource).toMatch(
 			/const debugLspLanguages = new Set<PlaygroundLanguage>\(\['CPP'\]\);/
+		);
+		expect(pageSource).toMatch(
+			/const clangdLspLanguages = new Set<PlaygroundLanguage>\(\['C', 'CPP'\]\);/
 		);
 		expect(pageSource).toMatch(
 			/if \(enableDebug && debugLspLanguages\.has\(language\)\) clangdRequested = true;/
@@ -302,6 +321,9 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).toMatch(/<option value="HASKELL">Haskell<\/option>/);
 		expect(pageSource).toMatch(/<option value="R">R<\/option>/);
 		expect(pageSource).toMatch(/<option value="OCTAVE">Octave<\/option>/);
+		expect(pageSource).toMatch(/<option value="FORTRAN">Fortran<\/option>/);
+		expect(pageSource).toMatch(/<option value="GRAPHQL">GraphQL<\/option>/);
+		expect(pageSource).toMatch(/<option value="DUCKDB">DuckDB<\/option>/);
 		expect(pageSource).toMatch(/language=\{editorLanguage\}/);
 		expect(pageSource).toMatch(/lspLanguage=\{monacoLspLanguage\}/);
 		expect(pageSource).toMatch(/filePath=\{activePath\}/);

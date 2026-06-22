@@ -24,7 +24,10 @@ export interface SqlEngineDiagnostic {
 }
 
 export interface SqlEngine {
-	validate(code: string, fileName: string): Promise<SqlEngineDiagnostic[]> | SqlEngineDiagnostic[];
+	validate(
+		code: string,
+		fileName: string
+	): Promise<SqlEngineDiagnostic[]> | SqlEngineDiagnostic[];
 	dispose?: () => void | Promise<void>;
 }
 
@@ -100,7 +103,8 @@ const SQL_HOVER: Record<string, string> = {
 const wordAt = (text: string, position: LspPosition) => {
 	const line = text.split('\n')[position.line] || '';
 	const character = Math.max(0, Math.min(position.character, line.length));
-	const left = line.slice(0, character).match(/[A-Za-z_][A-Za-z0-9_]*(?:\s+[A-Za-z_]+)?$/u)?.[0] || '';
+	const left =
+		line.slice(0, character).match(/[A-Za-z_][A-Za-z0-9_]*(?:\s+[A-Za-z_]+)?$/u)?.[0] || '';
 	const right = line.slice(character).match(/^[A-Za-z0-9_]*/u)?.[0] || '';
 	return `${left}${right}`.trim().toLowerCase();
 };
@@ -138,7 +142,14 @@ const diagnosticFor = (text: string, diagnostic: SqlEngineDiagnostic): LspDiagno
 async function loadSqlJsEngine(options: SqlWorkerOptions): Promise<SqlEngine> {
 	if (options.dialect === 'duckdb') {
 		const duckdb = await import('@duckdb/duckdb-wasm');
-		const bundle = await duckdb.selectBundle(options.duckdbBundles || duckdb.getJsDelivrBundles());
+		const bundle = await duckdb.selectBundle(
+			options.duckdbBundles || {
+				mvp: {
+					mainModule: new URL('./duckdb-mvp.wasm', import.meta.url).href,
+					mainWorker: new URL('./duckdb-browser-mvp.worker.js', import.meta.url).href
+				}
+			}
+		);
 		if (!bundle.mainWorker) {
 			throw new Error('DuckDB selected bundle does not include a browser worker');
 		}
@@ -229,7 +240,9 @@ export function createSqlWorkerService(
 			const config = (options || {}) as SqlWorkerOptions;
 			dialect = config.dialect || dialect;
 			context.reportProgress(
-				dialect === 'duckdb' ? 'load-duckdb-language-service' : 'load-sqlite-language-service'
+				dialect === 'duckdb'
+					? 'load-duckdb-language-service'
+					: 'load-sqlite-language-service'
 			);
 			engine = await loadEngine(config);
 		},
@@ -242,7 +255,9 @@ export function createSqlWorkerService(
 				document.text,
 				document.uri.split('/').pop() || 'main.sql'
 			);
-			lastDiagnostics = diagnostics.map((diagnostic) => diagnosticFor(document.text, diagnostic));
+			lastDiagnostics = diagnostics.map((diagnostic) =>
+				diagnosticFor(document.text, diagnostic)
+			);
 			return lastDiagnostics;
 		},
 		completion() {
