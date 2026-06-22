@@ -312,11 +312,37 @@ const lspBrowserCases = [
 	}
 ] satisfies LspBrowserCase[];
 
+const lspBrowserMatrixGroups = {
+	'cpp-python': ['CPP', 'C', 'PYTHON'],
+	document: ['JSON', 'YAML', 'TOML', 'HTML', 'CSS', 'MARKDOWN'],
+	'runtime-small': [
+		'ASSEMBLYSCRIPT',
+		'WAT',
+		'GO',
+		'GLEAM',
+		'PASCAL',
+		'PHP',
+		'LUA',
+		'PROLOG',
+		'RUBY'
+	],
+	'runtime-heavy': ['DUCKDB', 'RUST', 'ZIG', 'OCAML', 'HASKELL'],
+	dotnet: ['CSHARP', 'FSHARP', 'VBNET']
+} satisfies Record<string, string[]>;
+
 const normalizeFilterToken = (value: string) =>
 	value
 		.trim()
 		.toLowerCase()
 		.replace(/[^a-z0-9]+/gu, '');
+
+const filterTokensFor = (value: string) =>
+	new Set(
+		value
+			.split(/[,\s]+/u)
+			.map(normalizeFilterToken)
+			.filter(Boolean)
+	);
 
 const urlMatches = (url: string, pattern: string | RegExp) =>
 	typeof pattern === 'string' ? url.includes(pattern) : pattern.test(url);
@@ -373,27 +399,39 @@ const lspStatusKeyFor = (testCase: LspBrowserCase) =>
 
 function selectedCases() {
 	const rawFilter = process.env.WASM_IDLE_LSP_BROWSER_LANGUAGES || '';
+	const rawGroups = process.env.WASM_IDLE_LSP_BROWSER_GROUPS || '';
 	const includeKnownFailures = process.env.WASM_IDLE_LSP_BROWSER_INCLUDE_KNOWN_FAILURES === '1';
-	const tokens = new Set(
-		rawFilter
-			.split(/[,\s]+/u)
-			.map(normalizeFilterToken)
-			.filter(Boolean)
-	);
-	if (!tokens.size) {
+	const tokens = filterTokensFor(rawFilter);
+	const groupTokens = filterTokensFor(rawGroups);
+	if (!tokens.size && !groupTokens.size) {
 		return includeKnownFailures
 			? lspBrowserCases
 			: lspBrowserCases.filter((testCase) => !testCase.knownFailure);
 	}
-	return lspBrowserCases.filter((testCase) => {
-		const identifiers = [
-			testCase.language,
-			testCase.label,
-			testCase.fileName,
-			...(testCase.aliases || [])
-		].map(normalizeFilterToken);
-		return identifiers.some((identifier) => tokens.has(identifier));
-	});
+	const selectedLanguages = new Set<string>();
+	for (const [group, languages] of Object.entries(lspBrowserMatrixGroups)) {
+		if (!groupTokens.has(normalizeFilterToken(group))) continue;
+		for (const language of languages) selectedLanguages.add(language);
+	}
+	let cases = lspBrowserCases;
+	if (groupTokens.size) {
+		cases = cases.filter((testCase) => selectedLanguages.has(testCase.language));
+		if (!tokens.size && !includeKnownFailures) {
+			cases = cases.filter((testCase) => !testCase.knownFailure);
+		}
+	}
+	if (tokens.size) {
+		cases = cases.filter((testCase) => {
+			const identifiers = [
+				testCase.language,
+				testCase.label,
+				testCase.fileName,
+				...(testCase.aliases || [])
+			].map(normalizeFilterToken);
+			return identifiers.some((identifier) => tokens.has(identifier));
+		});
+	}
+	return cases;
 }
 
 async function prepareBrowserContext(context: BrowserContext, browserUrl: string) {
@@ -664,6 +702,60 @@ async function collectPageDebugInfo(page: Page) {
 }
 
 describe('Monaco LSP browser integration', () => {
+	it('selects browser LSP cases by named matrix group', () => {
+		const previousLanguages = process.env.WASM_IDLE_LSP_BROWSER_LANGUAGES;
+		const previousGroups = process.env.WASM_IDLE_LSP_BROWSER_GROUPS;
+		const previousKnownFailures = process.env.WASM_IDLE_LSP_BROWSER_INCLUDE_KNOWN_FAILURES;
+		try {
+			delete process.env.WASM_IDLE_LSP_BROWSER_LANGUAGES;
+			delete process.env.WASM_IDLE_LSP_BROWSER_INCLUDE_KNOWN_FAILURES;
+			process.env.WASM_IDLE_LSP_BROWSER_GROUPS = 'cpp-python';
+			expect(selectedCases().map((testCase) => testCase.language)).toEqual([
+				'CPP',
+				'C',
+				'PYTHON'
+			]);
+
+			process.env.WASM_IDLE_LSP_BROWSER_GROUPS = 'document';
+			expect(selectedCases().map((testCase) => testCase.language)).toEqual([
+				'JSON',
+				'YAML',
+				'TOML',
+				'HTML',
+				'CSS',
+				'MARKDOWN'
+			]);
+
+			process.env.WASM_IDLE_LSP_BROWSER_GROUPS = 'runtime-small';
+			expect(selectedCases().map((testCase) => testCase.language)).toContain('PASCAL');
+
+			process.env.WASM_IDLE_LSP_BROWSER_GROUPS = 'runtime-heavy';
+			expect(selectedCases().map((testCase) => testCase.language)).toEqual([
+				'DUCKDB',
+				'RUST',
+				'ZIG',
+				'OCAML',
+				'HASKELL'
+			]);
+		} finally {
+			if (previousLanguages === undefined) {
+				delete process.env.WASM_IDLE_LSP_BROWSER_LANGUAGES;
+			} else {
+				process.env.WASM_IDLE_LSP_BROWSER_LANGUAGES = previousLanguages;
+			}
+			if (previousGroups === undefined) {
+				delete process.env.WASM_IDLE_LSP_BROWSER_GROUPS;
+			} else {
+				process.env.WASM_IDLE_LSP_BROWSER_GROUPS = previousGroups;
+			}
+			if (previousKnownFailures === undefined) {
+				delete process.env.WASM_IDLE_LSP_BROWSER_INCLUDE_KNOWN_FAILURES;
+			} else {
+				process.env.WASM_IDLE_LSP_BROWSER_INCLUDE_KNOWN_FAILURES = previousKnownFailures;
+			}
+		}
+	});
+
 	it(
 		'renders browser diagnostics for the Monaco LSP matrix',
 		async () => {
