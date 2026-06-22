@@ -216,6 +216,14 @@ const lspBrowserCases = [
 		source: 'pub fn main() {\n  1 +\n}\n'
 	},
 	{
+		language: 'PASCAL',
+		label: 'Pascal',
+		fileName: 'main.pas',
+		source: 'program Demo;\nbegin\n  UnknownThing;\nend.\n',
+		aliases: ['pas', 'fpc'],
+		timeoutMs: 180_000
+	},
+	{
 		language: 'CSHARP',
 		label: 'C#',
 		fileName: 'Program.cs',
@@ -314,7 +322,7 @@ const urlMatches = (url: string, pattern: string | RegExp) =>
 	typeof pattern === 'string' ? url.includes(pattern) : pattern.test(url);
 
 const requestLooksLspRelated = (url: string) =>
-	/\/(?:lsp|pyodide|wasm-(?:dotnet|gleam|go|haskell|lua|of-js-of-ocaml|prolog|rust|typescript|wat|zig))\//u.test(
+	/\/(?:lsp|pyodide|wasm-(?:dotnet|gleam|go|haskell|lua|of-js-of-ocaml|pascal|prolog|rust|typescript|wat|zig))\//u.test(
 		url
 	);
 
@@ -338,6 +346,7 @@ const lspStatusKeyByLanguage: Record<string, string> = {
 	RUST: 'rust',
 	GO: 'go',
 	GLEAM: 'gleam',
+	PASCAL: 'pascal',
 	CSHARP: 'dotnet',
 	FSHARP: 'dotnet',
 	VBNET: 'dotnet',

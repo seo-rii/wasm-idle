@@ -80,14 +80,14 @@ function runGeneratedJavaScript(source, stdin) {
 }
 
 self.onmessage = async (event) => {
-	const { baseUrl, code, stdin, log } = event.data || {};
+	const { baseUrl, code, stdin, log, diagnose = false } = event.data || {};
 	try {
 		if (log) console.log(`[wasm-idle:pascal-worker] run start baseUrl=${baseUrl}`);
 		const compiler = await loadCompiler(baseUrl);
 		compiler.setFile('system.pas', await fetchText(assetUrl(baseUrl, 'system.pas')));
 		compiler.setFile('rtl.js', await fetchText(assetUrl(baseUrl, 'rtl.js')));
 		const generated = compiler.compile(String(code || ''));
-		runGeneratedJavaScript(generated, stdin);
+		if (!diagnose) runGeneratedJavaScript(generated, stdin);
 		if (log) console.log('[wasm-idle:pascal-worker] run settled');
 		self.postMessage({ results: true });
 	} catch (error) {

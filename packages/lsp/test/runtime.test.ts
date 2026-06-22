@@ -22,6 +22,8 @@ import {
 	resolvePythonLanguageServerBaseUrl,
 	resolvePerlLanguageServerBaseUrl,
 	resolvePerlLanguageServerWorkerUrl,
+	resolvePascalLanguageServerBaseUrl,
+	resolvePascalLanguageServerWorkerUrl,
 	resolveDotnetLanguageServerModuleUrl,
 	resolveLuaLanguageServerModuleUrl,
 	resolveOctaveLanguageServerBaseUrl,
@@ -88,6 +90,18 @@ describe('lsp runtime asset resolution', () => {
 				'https://app.example.com/editor'
 			)
 		).toBe('https://static.example.com/repl_20240807/wasm-tcl/runner-worker.js');
+		expect(
+			resolvePascalLanguageServerBaseUrl(
+				'https://static.example.com/repl_20240807',
+				'https://app.example.com/editor'
+			)
+		).toBe('https://static.example.com/repl_20240807/wasm-pascal/');
+		expect(
+			resolvePascalLanguageServerWorkerUrl(
+				'https://static.example.com/repl_20240807',
+				'https://app.example.com/editor'
+			)
+		).toBe('https://static.example.com/repl_20240807/wasm-pascal/runner-worker.js');
 		expect(
 			resolveZigLanguageServerCompilerUrl(
 				'https://static.example.com/repl_20240807',
@@ -260,6 +274,10 @@ describe('lsp runtime asset resolution', () => {
 				baseUrl: 'https://tcl.example.com/wasm-tcl/',
 				workerUrl: 'https://tcl.example.com/runner-worker.js?v=20240807'
 			},
+			pascal: {
+				baseUrl: 'https://pascal.example.com/wasm-pascal/',
+				workerUrl: 'https://pascal.example.com/runner-worker.js?v=20240807'
+			},
 			zig: {
 				compilerUrl: 'https://zig.example.com/zig_small.wasm?v=20240807',
 				stdlibUrl: 'https://zig.example.com/std.zip?v=20240807'
@@ -335,6 +353,12 @@ describe('lsp runtime asset resolution', () => {
 		expect(resolveTclLanguageServerBaseUrl(options)).toBe('https://tcl.example.com/wasm-tcl/');
 		expect(resolveTclLanguageServerWorkerUrl(options)).toBe(
 			'https://tcl.example.com/runner-worker.js?v=20240807'
+		);
+		expect(resolvePascalLanguageServerBaseUrl(options)).toBe(
+			'https://pascal.example.com/wasm-pascal/'
+		);
+		expect(resolvePascalLanguageServerWorkerUrl(options)).toBe(
+			'https://pascal.example.com/runner-worker.js?v=20240807'
 		);
 		expect(resolveZigLanguageServerCompilerUrl(options)).toBe(
 			'https://zig.example.com/zig_small.wasm?v=20240807'
@@ -452,6 +476,12 @@ describe('lsp runtime asset resolution', () => {
 			'https://app.example.com/wasm-tcl/runner-worker.js'
 		);
 		expect(
+			resolvePascalLanguageServerBaseUrl(undefined, 'https://app.example.com/editor')
+		).toBe('https://app.example.com/wasm-pascal/');
+		expect(
+			resolvePascalLanguageServerWorkerUrl(undefined, 'https://app.example.com/editor')
+		).toBe('https://app.example.com/wasm-pascal/runner-worker.js');
+		expect(
 			resolveZigLanguageServerCompilerUrl(undefined, 'https://app.example.com/editor')
 		).toBe('https://app.example.com/wasm-zig/zig_small.wasm');
 		expect(resolveZigLanguageServerStdlibUrl(undefined, 'https://app.example.com/editor')).toBe(
@@ -460,9 +490,9 @@ describe('lsp runtime asset resolution', () => {
 		expect(resolveLuaLanguageServerModuleUrl(undefined, 'https://app.example.com/editor')).toBe(
 			'https://app.example.com/wasm-lua/index.js'
 		);
-		expect(
-			resolveJanetLanguageServerBaseUrl(undefined, 'https://app.example.com/editor')
-		).toBe('https://app.example.com/wasm-janet/');
+		expect(resolveJanetLanguageServerBaseUrl(undefined, 'https://app.example.com/editor')).toBe(
+			'https://app.example.com/wasm-janet/'
+		);
 		expect(
 			resolveJanetLanguageServerWorkerUrl(undefined, 'https://app.example.com/editor')
 		).toBe('https://app.example.com/wasm-janet/runner-worker.js');

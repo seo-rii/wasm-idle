@@ -44,6 +44,7 @@ describe('language registry', () => {
 		expect(runtimeLspCapabilities.GO).toBe('go');
 		expect(runtimeLspCapabilities.D).toBe('d');
 		expect(runtimeLspCapabilities.TCL).toBe('tcl');
+		expect(runtimeLspCapabilities.PASCAL).toBe('pascal');
 		expect(runtimeLspCapabilities.ELIXIR).toBe('elixir');
 		expect(runtimeLspCapabilities.ERLANG).toBe('erlang');
 		expect(runtimeLspCapabilities.SQLITE).toBe('sql');
@@ -80,6 +81,7 @@ describe('language registry', () => {
 		expect(diagnosticMarkerLanguages.has('awk')).toBe(true);
 		expect(diagnosticMarkerLanguages.has('octave')).toBe(true);
 		expect(diagnosticMarkerLanguages.has('tcl')).toBe(true);
+		expect(diagnosticMarkerLanguages.has('pascal')).toBe(true);
 		expect(diagnosticMarkerLanguages.has('wasm')).toBe(true);
 		expect(diagnosticMarkerLanguages.has('janet')).toBe(true);
 		expect(diagnosticMarkerLanguages.has('lisp')).toBe(true);

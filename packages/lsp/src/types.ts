@@ -142,6 +142,10 @@ export interface EditorLanguageServerRuntimeOptions {
 		baseUrl?: string;
 		workerUrl?: string;
 	};
+	pascal?: {
+		baseUrl?: string;
+		workerUrl?: string;
+	};
 	document?: {
 		language?: DocumentLanguageId;
 	};

@@ -1978,6 +1978,7 @@
 	let gleamLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let dLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let tclLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let pascalLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let goLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let rustLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let typescriptLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
@@ -2033,6 +2034,9 @@
 		tclLspEnabled?: boolean;
 		tclLspBaseUrl?: string;
 		tclLspWorkerUrl?: string;
+		pascalLspEnabled?: boolean;
+		pascalLspBaseUrl?: string;
+		pascalLspWorkerUrl?: string;
 		goLspEnabled?: boolean;
 		goLspCompilerUrl?: string;
 		rustLspEnabled?: boolean;
@@ -2116,6 +2120,9 @@
 		tclLspEnabled = false,
 		tclLspBaseUrl,
 		tclLspWorkerUrl,
+		pascalLspEnabled = false,
+		pascalLspBaseUrl,
+		pascalLspWorkerUrl,
 		goLspEnabled = false,
 		goLspCompilerUrl,
 		rustLspEnabled = false,
@@ -2267,6 +2274,8 @@
 			dLspEnabled ? dLspModuleUrl || '' : '',
 			tclLspEnabled ? tclLspBaseUrl || '' : '',
 			tclLspEnabled ? tclLspWorkerUrl || '' : '',
+			pascalLspEnabled ? pascalLspBaseUrl || '' : '',
+			pascalLspEnabled ? pascalLspWorkerUrl || '' : '',
 			goLspEnabled ? goLspCompilerUrl || '' : '',
 			goTarget,
 			rustLspEnabled ? rustLspCompilerUrl || '' : '',
@@ -2349,6 +2358,10 @@
 			case 'tcl':
 				label = 'Tcl LSP';
 				status = tclLspStatus;
+				break;
+			case 'pascal':
+				label = 'Pascal LSP';
+				status = pascalLspStatus;
 				break;
 			case 'go':
 				label = 'Go LSP';
@@ -2649,6 +2662,22 @@
 			}
 		},
 		{
+			languages: ['pascal'],
+			isEnabled: () => pascalLspEnabled && !!pascalLspBaseUrl && !!pascalLspWorkerUrl,
+			setStatus: (status) => (pascalLspStatus = status),
+			load: async (currentUrl) => {
+				const { getPascalLanguageServer } = await import('@wasm-idle/lsp');
+				return await getPascalLanguageServer({
+					currentUrl,
+					pascal: {
+						baseUrl: pascalLspBaseUrl || '',
+						workerUrl: pascalLspWorkerUrl || ''
+					},
+					onStatus: (status) => (pascalLspStatus = status)
+				});
+			}
+		},
+		{
 			languages: ['go'],
 			isEnabled: () => goLspEnabled && !!goLspCompilerUrl,
 			setStatus: (status) => (goLspStatus = status),
@@ -2752,81 +2781,81 @@
 					onStatus: (status) => (zigLspStatus = status)
 				});
 			}
-			},
-			{
-				languages: ['php'],
-				isEnabled: () => phpLspEnabled,
-				setStatus: (status) => (phpLspStatus = status),
-				load: async (currentUrl) => {
-					const { getPhpLanguageServer } = await import('@wasm-idle/lsp');
-					return await getPhpLanguageServer({
-						currentUrl,
-						onStatus: (status) => (phpLspStatus = status)
-					});
-				}
-			},
-			{
-				languages: ['lua'],
-				isEnabled: () => luaLspEnabled && !!luaLspModuleUrl,
-				setStatus: (status) => (luaLspStatus = status),
-				load: async (currentUrl) => {
-					const { getLuaLanguageServer } = await import('@wasm-idle/lsp');
-					return await getLuaLanguageServer({
-						currentUrl,
-						lua: {
-							moduleUrl: luaLspModuleUrl || ''
-						},
-						onStatus: (status) => (luaLspStatus = status)
-					});
-				}
-			},
-			{
-				languages: ['janet'],
-				isEnabled: () => janetLspEnabled && !!janetLspBaseUrl && !!janetLspWorkerUrl,
-				setStatus: (status) => (janetLspStatus = status),
-				load: async (currentUrl) => {
-					const { getJanetLanguageServer } = await import('@wasm-idle/lsp');
-					return await getJanetLanguageServer({
-						currentUrl,
-						janet: {
-							baseUrl: janetLspBaseUrl || '',
-							workerUrl: janetLspWorkerUrl || ''
-						},
-						onStatus: (status) => (janetLspStatus = status)
-					});
-				}
-			},
-			{
-				languages: ['lisp'],
-				isEnabled: () => lispLspEnabled && !!lispLspModuleUrl,
-				setStatus: (status) => (lispLspStatus = status),
-				load: async (currentUrl) => {
-					const { getLispLanguageServer } = await import('@wasm-idle/lsp');
-					return await getLispLanguageServer({
-						currentUrl,
-						lisp: {
-							moduleUrl: lispLspModuleUrl || ''
-						},
-						onStatus: (status) => (lispLspStatus = status)
-					});
-				}
-			},
-			{
-				languages: ['ocaml'],
-				isEnabled: () => ocamlLspEnabled && !!ocamlLspModuleUrl && !!ocamlLspManifestUrl,
-				setStatus: (status) => (ocamlLspStatus = status),
-				load: async (currentUrl) => {
-					const { getOcamlLanguageServer } = await import('@wasm-idle/lsp');
-					return await getOcamlLanguageServer({
-						currentUrl,
-						ocaml: {
-							moduleUrl: ocamlLspModuleUrl || '',
-							manifestUrl: ocamlLspManifestUrl || ''
-						},
-						onStatus: (status) => (ocamlLspStatus = status)
-					});
-				}
-			},
+		},
+		{
+			languages: ['php'],
+			isEnabled: () => phpLspEnabled,
+			setStatus: (status) => (phpLspStatus = status),
+			load: async (currentUrl) => {
+				const { getPhpLanguageServer } = await import('@wasm-idle/lsp');
+				return await getPhpLanguageServer({
+					currentUrl,
+					onStatus: (status) => (phpLspStatus = status)
+				});
+			}
+		},
+		{
+			languages: ['lua'],
+			isEnabled: () => luaLspEnabled && !!luaLspModuleUrl,
+			setStatus: (status) => (luaLspStatus = status),
+			load: async (currentUrl) => {
+				const { getLuaLanguageServer } = await import('@wasm-idle/lsp');
+				return await getLuaLanguageServer({
+					currentUrl,
+					lua: {
+						moduleUrl: luaLspModuleUrl || ''
+					},
+					onStatus: (status) => (luaLspStatus = status)
+				});
+			}
+		},
+		{
+			languages: ['janet'],
+			isEnabled: () => janetLspEnabled && !!janetLspBaseUrl && !!janetLspWorkerUrl,
+			setStatus: (status) => (janetLspStatus = status),
+			load: async (currentUrl) => {
+				const { getJanetLanguageServer } = await import('@wasm-idle/lsp');
+				return await getJanetLanguageServer({
+					currentUrl,
+					janet: {
+						baseUrl: janetLspBaseUrl || '',
+						workerUrl: janetLspWorkerUrl || ''
+					},
+					onStatus: (status) => (janetLspStatus = status)
+				});
+			}
+		},
+		{
+			languages: ['lisp'],
+			isEnabled: () => lispLspEnabled && !!lispLspModuleUrl,
+			setStatus: (status) => (lispLspStatus = status),
+			load: async (currentUrl) => {
+				const { getLispLanguageServer } = await import('@wasm-idle/lsp');
+				return await getLispLanguageServer({
+					currentUrl,
+					lisp: {
+						moduleUrl: lispLspModuleUrl || ''
+					},
+					onStatus: (status) => (lispLspStatus = status)
+				});
+			}
+		},
+		{
+			languages: ['ocaml'],
+			isEnabled: () => ocamlLspEnabled && !!ocamlLspModuleUrl && !!ocamlLspManifestUrl,
+			setStatus: (status) => (ocamlLspStatus = status),
+			load: async (currentUrl) => {
+				const { getOcamlLanguageServer } = await import('@wasm-idle/lsp');
+				return await getOcamlLanguageServer({
+					currentUrl,
+					ocaml: {
+						moduleUrl: ocamlLspModuleUrl || '',
+						manifestUrl: ocamlLspManifestUrl || ''
+					},
+					onStatus: (status) => (ocamlLspStatus = status)
+				});
+			}
+		},
 		{
 			languages: ['haskell'],
 			isEnabled: () =>
@@ -3117,6 +3146,7 @@
 			gleam: gleamLspStatus,
 			d: dLspStatus,
 			tcl: tclLspStatus,
+			pascal: pascalLspStatus,
 			go: goLspStatus,
 			rust: rustLspStatus,
 			typescript: typescriptLspStatus,

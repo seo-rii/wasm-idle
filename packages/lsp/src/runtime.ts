@@ -673,4 +673,45 @@ export function resolveTclLanguageServerWorkerUrl(
 	return resolveFileUrl('/wasm-tcl/runner-worker.js', currentUrl);
 }
 
+export function resolvePascalLanguageServerBaseUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	if (typeof options === 'string') {
+		return resolveFileUrl(`${normalizeRootUrl(options) || ''}/wasm-pascal/`, currentUrl);
+	}
+	if (options?.pascal?.baseUrl) {
+		return normalizeBaseUrl(options.pascal.baseUrl, currentUrl);
+	}
+	if (options?.rootUrl) {
+		return resolveFileUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-pascal/`,
+			currentUrl
+		);
+	}
+	return normalizeBaseUrl('/wasm-pascal/', currentUrl);
+}
+
+export function resolvePascalLanguageServerWorkerUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	if (typeof options === 'string') {
+		return resolveFileUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-pascal/runner-worker.js`,
+			currentUrl
+		);
+	}
+	if (options?.pascal?.workerUrl) {
+		return resolveFileUrl(options.pascal.workerUrl, currentUrl);
+	}
+	if (options?.rootUrl) {
+		return resolveFileUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-pascal/runner-worker.js`,
+			currentUrl
+		);
+	}
+	return resolveFileUrl('/wasm-pascal/runner-worker.js', currentUrl);
+}
+
 export type { EditorLanguageServerRuntimeOptions };

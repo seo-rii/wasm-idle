@@ -40,6 +40,11 @@
 			"import": "./dist/tcl/index.js",
 			"default": "./dist/tcl/index.js"
 		},
+		"./pascal": {
+			"types": "./dist/pascal/index.d.ts",
+			"import": "./dist/pascal/index.js",
+			"default": "./dist/pascal/index.js"
+		},
 		"./typescript": {
 			"types": "./dist/typescript/index.d.ts",
 			"import": "./dist/typescript/index.js",

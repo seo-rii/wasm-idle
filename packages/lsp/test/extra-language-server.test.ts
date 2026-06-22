@@ -74,6 +74,7 @@ import {
 	getPhpLanguageServer,
 	getPrologLanguageServer,
 	getAwkLanguageServer,
+	getPascalLanguageServer,
 	getPerlLanguageServer,
 	getRLanguageServer,
 	getRubyLanguageServer,
@@ -212,6 +213,24 @@ describe('additional language server workers', () => {
 			options: {
 				baseUrl: 'https://static.example.com/repl_20240807/wasm-tcl/',
 				workerUrl: 'https://static.example.com/repl_20240807/wasm-tcl/runner-worker.js'
+			}
+		});
+
+		handle.dispose();
+	});
+
+	it('starts Pascal with pas2js worker assets', async () => {
+		const handle = await getPascalLanguageServer({
+			rootUrl: 'https://static.example.com/repl_20240807',
+			currentUrl: 'https://app.example.com/editor',
+			createWorker: () => new mockState.FakeWorker() as unknown as Worker
+		});
+
+		expect(mockState.workers[0]?.messages[0]).toEqual({
+			type: 'init',
+			options: {
+				baseUrl: 'https://static.example.com/repl_20240807/wasm-pascal/',
+				workerUrl: 'https://static.example.com/repl_20240807/wasm-pascal/runner-worker.js'
 			}
 		});
 

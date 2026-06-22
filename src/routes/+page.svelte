@@ -390,6 +390,11 @@
 	const tclLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'tcl');
 	const tclLspBaseUrl = $derived(tclLspEnabled ? runtimeAssets.tcl?.baseUrl : undefined);
 	const tclLspWorkerUrl = $derived(tclLspEnabled ? runtimeAssets.tcl?.workerUrl : undefined);
+	const pascalLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'pascal');
+	const pascalLspBaseUrl = $derived(pascalLspEnabled ? runtimeAssets.pascal?.baseUrl : undefined);
+	const pascalLspWorkerUrl = $derived(
+		pascalLspEnabled ? runtimeAssets.pascal?.workerUrl : undefined
+	);
 	const goLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'go');
 	const goLspCompilerUrl = $derived(goLspEnabled ? runtimeAssets.go?.compilerUrl : undefined);
 	const rustLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'rust');
@@ -438,9 +443,7 @@
 	const rLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'r');
 	const rLspBaseUrl = $derived(rLspEnabled ? runtimeAssets.r?.baseUrl : undefined);
 	const octaveLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'octave');
-	const octaveLspBaseUrl = $derived(
-		octaveLspEnabled ? runtimeAssets.octave?.baseUrl : undefined
-	);
+	const octaveLspBaseUrl = $derived(octaveLspEnabled ? runtimeAssets.octave?.baseUrl : undefined);
 	const octaveLspWorkerUrl = $derived(
 		octaveLspEnabled ? runtimeAssets.octave?.workerUrl : undefined
 	);
@@ -2632,6 +2635,9 @@
 				{tclLspEnabled}
 				{tclLspBaseUrl}
 				{tclLspWorkerUrl}
+				{pascalLspEnabled}
+				{pascalLspBaseUrl}
+				{pascalLspWorkerUrl}
 				{goLspEnabled}
 				{goLspCompilerUrl}
 				{rustLspEnabled}

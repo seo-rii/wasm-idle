@@ -57,6 +57,8 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(/gleamLspEnabled = false,/);
 		expect(source).toMatch(/tclLspEnabled\?: boolean;/);
 		expect(source).toMatch(/tclLspEnabled = false,/);
+		expect(source).toMatch(/pascalLspEnabled\?: boolean;/);
+		expect(source).toMatch(/pascalLspEnabled = false,/);
 		expect(source).toMatch(/goLspEnabled\?: boolean;/);
 		expect(source).toMatch(/goLspEnabled = false,/);
 		expect(source).toMatch(/rustLspEnabled\?: boolean;/);
@@ -97,6 +99,7 @@ describe('Monaco route debug sync', () => {
 			'prolog',
 			'gleam',
 			'perl',
+			'pascal',
 			'awk',
 			'ocaml',
 			'wat',
@@ -146,6 +149,8 @@ describe('Monaco route debug sync', () => {
 		);
 		expect(source).toMatch(/let wasmLspStatus = \$state<LanguageServerStatus>/);
 		expect(source).toMatch(/label = 'WASM LSP';/);
+		expect(source).toMatch(/let pascalLspStatus = \$state<LanguageServerStatus>/);
+		expect(source).toMatch(/label = 'Pascal LSP';/);
 		expect(source).toMatch(
 			/const \{ getWasmLanguageServer \} = await import\('@wasm-idle\/lsp'\);/
 		);
@@ -209,6 +214,7 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(/getGleamLanguageServer/);
 		expect(source).toMatch(/getDLanguageServer/);
 		expect(source).toMatch(/getTclLanguageServer/);
+		expect(source).toMatch(/getPascalLanguageServer/);
 		expect(source).toMatch(/getGoLanguageServer/);
 		expect(source).toMatch(/getRustLanguageServer/);
 		expect(source).toMatch(/getTypeScriptLanguageServer/);
@@ -238,6 +244,7 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(/languages: \['c', 'cpp'\]/);
 		expect(source).toMatch(/languages: \['d'\]/);
 		expect(source).toMatch(/languages: \['tcl'\]/);
+		expect(source).toMatch(/languages: \['pascal'\]/);
 		expect(source).toMatch(/languages: \['r'\]/);
 		expect(source).toMatch(/languages: \['octave'\]/);
 		expect(source).toMatch(/languages: \['awk'\]/);
@@ -424,6 +431,7 @@ describe('Monaco route debug sync', () => {
 		expect(runtimeLspCapabilities.GO).toBe('go');
 		expect(runtimeLspCapabilities.D).toBe('d');
 		expect(runtimeLspCapabilities.TCL).toBe('tcl');
+		expect(runtimeLspCapabilities.PASCAL).toBe('pascal');
 		expect(runtimeLspCapabilities.ELIXIR).toBe('elixir');
 		expect(runtimeLspCapabilities.ERLANG).toBe('erlang');
 		expect(runtimeLspCapabilities.R).toBe('r');

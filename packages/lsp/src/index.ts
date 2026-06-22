@@ -30,6 +30,8 @@ export {
 	resolveAwkLanguageServerWorkerUrl,
 	resolvePerlLanguageServerBaseUrl,
 	resolvePerlLanguageServerWorkerUrl,
+	resolvePascalLanguageServerBaseUrl,
+	resolvePascalLanguageServerWorkerUrl,
 	resolveRLanguageServerBaseUrl,
 	resolveRubyLanguageServerWasmUrl,
 	resolveRustLanguageServerCompilerUrl,
@@ -112,6 +114,16 @@ export {
 	type TclLanguageServerOptions,
 	type TclWorkerOptions
 } from './tcl/index.js';
+export {
+	createPascalWorkerService,
+	getPascalLanguageServer,
+	type PascalDiagnosticRunnerRequest,
+	type PascalDiagnosticRunnerResult,
+	type PascalLanguageServerConfig,
+	type PascalLanguageServerOptions,
+	type PascalWorkerOptions,
+	type RunPascalDiagnostics
+} from './pascal/index.js';
 export {
 	createGleamWorkerService,
 	getGleamLanguageServer,
