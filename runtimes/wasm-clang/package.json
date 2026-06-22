@@ -1,47 +1,47 @@
 {
-  "name": "wasm-clang",
-  "version": "0.1.0",
-  "private": true,
-  "type": "module",
-  "description": "Browser-loadable clang runtime module for future wasm-idle integration",
-  "exports": {
-    ".": {
-      "import": "./dist/index.js",
-      "default": "./dist/index.js",
-      "types": "./dist/index.d.ts"
-    },
-    "./clangd": {
-      "import": "./dist/clangd/index.js",
-      "default": "./dist/clangd/index.js",
-      "types": "./dist/clangd/index.d.ts"
-    }
-  },
-  "files": [
-    "dist"
-  ],
-  "scripts": {
-    "build": "rm -rf dist && tsc -p tsconfig.build.json && node ./scripts/prepare-runtime.mjs",
-    "check": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run --config vitest.config.ts",
-    "prepare:runtime": "node ./scripts/prepare-runtime.mjs",
-    "package:toolchain": "node ./scripts/package-toolchain.mjs",
-    "smoke:runtime": "node ./scripts/smoke-runtime.mjs",
-    "validate:runtime": "npm run build && npm run smoke:runtime"
-  },
-  "dependencies": {
-    "@wasm-idle/clang-common": "workspace:*",
-    "@bjorn3/browser_wasi_shim": "^0.4.2",
-    "@zip.js/zip.js": "^2.8.23",
-    "tslib": "^2.8.1",
-    "vscode-jsonrpc": "^8.2.1"
-  },
-  "peerDependencies": {
-    "monaco-editor": "^0.55.1"
-  },
-  "devDependencies": {
-    "@types/node": "^24.6.1",
-    "monaco-editor": "^0.55.1",
-    "typescript": "^5.9.3",
-    "vitest": "^4.1.1"
-  }
+	"name": "wasm-clang",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"description": "Browser-loadable clang runtime module for future wasm-idle integration",
+	"exports": {
+		".": {
+			"import": "./dist/index.js",
+			"default": "./dist/index.js",
+			"types": "./dist/index.d.ts"
+		},
+		"./clangd": {
+			"import": "./dist/clangd/index.js",
+			"default": "./dist/clangd/index.js",
+			"types": "./dist/clangd/index.d.ts"
+		}
+	},
+	"files": [
+		"dist"
+	],
+	"scripts": {
+		"build": "rm -rf dist && tsc -p tsconfig.build.json && node ./scripts/prepare-runtime.mjs",
+		"check": "tsc -p tsconfig.json --noEmit",
+		"test": "vitest run --config vitest.config.ts",
+		"prepare:runtime": "node ./scripts/prepare-runtime.mjs",
+		"package:toolchain": "node ./scripts/package-toolchain.mjs",
+		"smoke:runtime": "node ./scripts/smoke-runtime.mjs",
+		"validate:runtime": "npm run build && npm run smoke:runtime"
+	},
+	"dependencies": {
+		"@wasm-idle/clang-common": "workspace:*",
+		"@bjorn3/browser_wasi_shim": "^0.4.2",
+		"@zip.js/zip.js": "^2.8.23",
+		"tslib": "^2.8.1",
+		"vscode-jsonrpc": "^8.2.1"
+	},
+	"peerDependencies": {
+		"monaco-editor": "^0.55.1"
+	},
+	"devDependencies": {
+		"@types/node": "^24.6.1",
+		"monaco-editor": "^0.55.1",
+		"typescript": "^5.9.3",
+		"vitest": "^4.1.1"
+	}
 }

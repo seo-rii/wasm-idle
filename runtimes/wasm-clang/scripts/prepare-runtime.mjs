@@ -5,7 +5,8 @@ import { fileURLToPath } from 'node:url';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SOURCE_DIR = path.resolve(
-	process.env.WASM_CLANG_RUNTIME_SOURCE_DIR || path.resolve(REPO_ROOT, 'artifacts', 'runtime-source')
+	process.env.WASM_CLANG_RUNTIME_SOURCE_DIR ||
+		path.resolve(REPO_ROOT, 'artifacts', 'runtime-source')
 );
 const TARGET_DIR = path.resolve(REPO_ROOT, 'dist', 'runtime');
 const TARGET_BIN_DIR = path.resolve(TARGET_DIR, 'bin');

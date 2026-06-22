@@ -155,7 +155,9 @@ async function resolveSysrootTarBytes(sysrootPath, tempDir) {
 	}
 	if (sysrootPath.endsWith('.tar.zip')) return await readSingleZipEntry(sysrootPath);
 	if (sysrootPath.endsWith('.tar')) return await fs.readFile(sysrootPath);
-	throw new Error(`Unsupported sysroot input. Expected directory, .tar, or .tar.zip: ${sysrootPath}`);
+	throw new Error(
+		`Unsupported sysroot input. Expected directory, .tar, or .tar.zip: ${sysrootPath}`
+	);
 }
 
 async function resolveClangdWasmGzip(filePath) {
@@ -205,10 +207,18 @@ async function main() {
 
 		await fs.mkdir(path.join(targetDir, 'clangd'), { recursive: true });
 		const assetHashes = {
-			'clang.zip': sha256(await zipSingleFile(path.join(targetDir, 'clang.zip'), 'clang', clangBytes)),
-			'lld.zip': sha256(await zipSingleFile(path.join(targetDir, 'lld.zip'), 'lld', lldBytes)),
+			'clang.zip': sha256(
+				await zipSingleFile(path.join(targetDir, 'clang.zip'), 'clang', clangBytes)
+			),
+			'lld.zip': sha256(
+				await zipSingleFile(path.join(targetDir, 'lld.zip'), 'lld', lldBytes)
+			),
 			'sysroot.tar.zip': sha256(
-				await zipSingleFile(path.join(targetDir, 'sysroot.tar.zip'), 'sysroot.tar', sysrootTarBytes)
+				await zipSingleFile(
+					path.join(targetDir, 'sysroot.tar.zip'),
+					'sysroot.tar',
+					sysrootTarBytes
+				)
 			),
 			'memfs.zip': sha256(memfsBytes),
 			'clangd/clangd.js': sha256(clangdJsBytes),
@@ -229,7 +239,10 @@ async function main() {
 			generatedAt: new Date().toISOString(),
 			assets: assetHashes
 		};
-		await fs.writeFile(path.join(targetDir, 'toolchain.json'), JSON.stringify(metadata, null, 2) + '\n');
+		await fs.writeFile(
+			path.join(targetDir, 'toolchain.json'),
+			JSON.stringify(metadata, null, 2) + '\n'
+		);
 		console.log(`Packaged wasm-clang toolchain assets in ${targetDir}`);
 		console.log(`Runtime version: ${version}`);
 	} finally {
