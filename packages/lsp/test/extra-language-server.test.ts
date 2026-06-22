@@ -65,6 +65,8 @@ import {
 	getHaskellLanguageServer,
 	getHtmlLanguageServer,
 	getJsonLanguageServer,
+	getJanetLanguageServer,
+	getLispLanguageServer,
 	getLuaLanguageServer,
 	getMarkdownLanguageServer,
 	getOcamlLanguageServer,
@@ -170,6 +172,41 @@ describe('additional language server workers', () => {
 			type: 'init',
 			options: {
 				moduleUrl: 'https://static.example.com/repl_20240807/wasm-lua/index.js'
+			}
+		});
+
+		handle.dispose();
+	});
+
+	it('starts Janet with folder-backed Janet worker assets', async () => {
+		const handle = await getJanetLanguageServer({
+			rootUrl: 'https://static.example.com/repl_20240807',
+			currentUrl: 'https://app.example.com/editor',
+			createWorker: () => new mockState.FakeWorker() as unknown as Worker
+		});
+
+		expect(mockState.workers[0]?.messages[0]).toEqual({
+			type: 'init',
+			options: {
+				baseUrl: 'https://static.example.com/repl_20240807/wasm-janet/',
+				workerUrl: 'https://static.example.com/repl_20240807/wasm-janet/runner-worker.js'
+			}
+		});
+
+		handle.dispose();
+	});
+
+	it('starts Scheme with the wasm-lisp module URL', async () => {
+		const handle = await getLispLanguageServer({
+			rootUrl: 'https://static.example.com/repl_20240807',
+			currentUrl: 'https://app.example.com/editor',
+			createWorker: () => new mockState.FakeWorker() as unknown as Worker
+		});
+
+		expect(mockState.workers[0]?.messages[0]).toEqual({
+			type: 'init',
+			options: {
+				moduleUrl: 'https://static.example.com/repl_20240807/wasm-lisp/index.js'
 			}
 		});
 

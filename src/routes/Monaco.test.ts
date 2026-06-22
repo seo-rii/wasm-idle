@@ -100,6 +100,7 @@ describe('Monaco route debug sync', () => {
 			'wat',
 			'wasm',
 			'lua',
+			'janet',
 			'lisp',
 			'haskell',
 			'r',
@@ -213,6 +214,8 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(/getZigLanguageServer/);
 		expect(source).toMatch(/getPhpLanguageServer/);
 		expect(source).toMatch(/getLuaLanguageServer/);
+		expect(source).toMatch(/getJanetLanguageServer/);
+		expect(source).toMatch(/getLispLanguageServer/);
 		expect(source).toMatch(/getOcamlLanguageServer/);
 		expect(source).toMatch(/getHaskellLanguageServer/);
 		expect(source).toMatch(/getFortranLanguageServer/);
@@ -231,6 +234,8 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(/languages: \['r'\]/);
 		expect(source).toMatch(/languages: \['awk'\]/);
 		expect(source).toMatch(/languages: \['perl'\]/);
+		expect(source).toMatch(/languages: \['janet'\]/);
+		expect(source).toMatch(/languages: \['lisp'\]/);
 		expect(source).toMatch(/languages: \['fortran'\]/);
 		expect(source).toMatch(/languages: \['graphql'\]/);
 		expect(source).toMatch(/languages: \['duckdb'\]/);
@@ -415,6 +420,8 @@ describe('Monaco route debug sync', () => {
 		expect(runtimeLspCapabilities.AWK).toBe('awk');
 		expect(runtimeLspCapabilities.PERL).toBe('perl');
 		expect(runtimeLspCapabilities.WASM).toBe('wasm');
+		expect(runtimeLspCapabilities.JANET).toBe('janet');
+		expect(runtimeLspCapabilities.LISP).toBe('lisp');
 		expect(pageSource).toMatch(
 			/const typescriptLspLibUrl = \$derived\(\s+lspEnabled && typescriptLspLanguages\.has\(language\)/
 		);
@@ -486,7 +493,18 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).toMatch(/clangdEnabled=\{clangdLspEnabled\}/);
 		expect(pageSource).toMatch(/const dotnetLspEnabled = \$derived/);
 		expect(pageSource).toMatch(/dotnetLspLanguages\.has\(language\)/);
-		for (const capability of ['gleam', 'go', 'rust', 'zig', 'php', 'lua', 'ocaml', 'haskell']) {
+		for (const capability of [
+			'gleam',
+			'go',
+			'rust',
+			'zig',
+			'php',
+			'lua',
+			'janet',
+			'lisp',
+			'ocaml',
+			'haskell'
+		]) {
 			expect(pageSource).toContain(`activeRuntimeLspCapability === '${capability}'`);
 		}
 		for (const prop of [
@@ -498,6 +516,9 @@ describe('Monaco route debug sync', () => {
 			'zigLspCompilerUrl',
 			'zigLspStdlibUrl',
 			'luaLspModuleUrl',
+			'janetLspBaseUrl',
+			'janetLspWorkerUrl',
+			'lispLspModuleUrl',
 			'ocamlLspModuleUrl',
 			'ocamlLspManifestUrl',
 			'haskellLspModuleUrl',

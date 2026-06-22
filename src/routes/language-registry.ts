@@ -56,6 +56,8 @@ export type RuntimeLspCapability =
 	| 'zig'
 	| 'php'
 	| 'lua'
+	| 'janet'
+	| 'lisp'
 	| 'ocaml'
 	| 'haskell'
 	| 'sql'
@@ -247,6 +249,8 @@ export const runtimeLspCapabilities: Partial<Record<PlaygroundLanguage, RuntimeL
 	ZIG: 'zig',
 	PHP: 'php',
 	LUA: 'lua',
+	JANET: 'janet',
+	LISP: 'lisp',
 	OCAML: 'ocaml',
 	HASKELL: 'haskell',
 	SQLITE: 'sql',
@@ -343,6 +347,7 @@ export const diagnosticMarkerLanguages = new Set([
 	'wat',
 	'wasm',
 	'lua',
+	'janet',
 	'zig',
 	'lisp',
 	'haskell',

@@ -397,6 +397,13 @@
 	const phpLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'php');
 	const luaLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'lua');
 	const luaLspModuleUrl = $derived(luaLspEnabled ? runtimeAssets.lua?.moduleUrl : undefined);
+	const janetLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'janet');
+	const janetLspBaseUrl = $derived(janetLspEnabled ? runtimeAssets.janet?.baseUrl : undefined);
+	const janetLspWorkerUrl = $derived(
+		janetLspEnabled ? runtimeAssets.janet?.workerUrl : undefined
+	);
+	const lispLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'lisp');
+	const lispLspModuleUrl = $derived(lispLspEnabled ? runtimeAssets.lisp?.moduleUrl : undefined);
 	const ocamlLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'ocaml');
 	const ocamlLspModuleUrl = $derived(
 		ocamlLspEnabled ? runtimeAssets.ocaml?.moduleUrl : undefined
@@ -2615,6 +2622,11 @@
 				{phpLspEnabled}
 				{luaLspEnabled}
 				{luaLspModuleUrl}
+				{janetLspEnabled}
+				{janetLspBaseUrl}
+				{janetLspWorkerUrl}
+				{lispLspEnabled}
+				{lispLspModuleUrl}
 				{ocamlLspEnabled}
 				{ocamlLspModuleUrl}
 				{ocamlLspManifestUrl}

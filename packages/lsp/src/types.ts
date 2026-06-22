@@ -75,6 +75,13 @@ export interface EditorLanguageServerRuntimeOptions {
 	lua?: {
 		moduleUrl?: string;
 	};
+	janet?: {
+		baseUrl?: string;
+		workerUrl?: string;
+	};
+	lisp?: {
+		moduleUrl?: string;
+	};
 	ocaml?: {
 		moduleUrl?: string;
 		manifestUrl?: string;

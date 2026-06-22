@@ -13,6 +13,9 @@ import {
 	resolveHaskellLanguageServerBsdtarUrl,
 	resolveHaskellLanguageServerModuleUrl,
 	resolveHaskellLanguageServerRootfsUrl,
+	resolveJanetLanguageServerBaseUrl,
+	resolveJanetLanguageServerWorkerUrl,
+	resolveLispLanguageServerModuleUrl,
 	resolveAwkLanguageServerBaseUrl,
 	resolveAwkLanguageServerWorkerUrl,
 	resolvePythonLanguageServerBaseUrl,
@@ -79,6 +82,24 @@ describe('lsp runtime asset resolution', () => {
 				'https://app.example.com/editor'
 			)
 		).toBe('https://static.example.com/repl_20240807/wasm-lua/index.js');
+		expect(
+			resolveJanetLanguageServerBaseUrl(
+				'https://static.example.com/repl_20240807',
+				'https://app.example.com/editor'
+			)
+		).toBe('https://static.example.com/repl_20240807/wasm-janet/');
+		expect(
+			resolveJanetLanguageServerWorkerUrl(
+				'https://static.example.com/repl_20240807',
+				'https://app.example.com/editor'
+			)
+		).toBe('https://static.example.com/repl_20240807/wasm-janet/runner-worker.js');
+		expect(
+			resolveLispLanguageServerModuleUrl(
+				'https://static.example.com/repl_20240807',
+				'https://app.example.com/editor'
+			)
+		).toBe('https://static.example.com/repl_20240807/wasm-lisp/index.js');
 		expect(
 			resolveOcamlLanguageServerModuleUrl(
 				'https://static.example.com/repl_20240807',
@@ -194,6 +215,13 @@ describe('lsp runtime asset resolution', () => {
 			lua: {
 				moduleUrl: 'https://lua.example.com/wasm-lua/index.js?v=20240807'
 			},
+			janet: {
+				baseUrl: 'https://janet.example.com/wasm-janet/',
+				workerUrl: 'https://janet.example.com/runner-worker.js?v=20240807'
+			},
+			lisp: {
+				moduleUrl: 'https://lisp.example.com/wasm-lisp/index.js?v=20240807'
+			},
 			ocaml: {
 				moduleUrl: 'https://ocaml.example.com/index.js?v=20240807',
 				manifestUrl: 'https://ocaml.example.com/manifest.json?v=20240807'
@@ -252,6 +280,15 @@ describe('lsp runtime asset resolution', () => {
 		);
 		expect(resolveLuaLanguageServerModuleUrl(options)).toBe(
 			'https://lua.example.com/wasm-lua/index.js?v=20240807'
+		);
+		expect(resolveJanetLanguageServerBaseUrl(options)).toBe(
+			'https://janet.example.com/wasm-janet/'
+		);
+		expect(resolveJanetLanguageServerWorkerUrl(options)).toBe(
+			'https://janet.example.com/runner-worker.js?v=20240807'
+		);
+		expect(resolveLispLanguageServerModuleUrl(options)).toBe(
+			'https://lisp.example.com/wasm-lisp/index.js?v=20240807'
 		);
 		expect(resolveOcamlLanguageServerModuleUrl(options)).toBe(
 			'https://ocaml.example.com/index.js?v=20240807'
@@ -341,6 +378,15 @@ describe('lsp runtime asset resolution', () => {
 		expect(resolveLuaLanguageServerModuleUrl(undefined, 'https://app.example.com/editor')).toBe(
 			'https://app.example.com/wasm-lua/index.js'
 		);
+		expect(
+			resolveJanetLanguageServerBaseUrl(undefined, 'https://app.example.com/editor')
+		).toBe('https://app.example.com/wasm-janet/');
+		expect(
+			resolveJanetLanguageServerWorkerUrl(undefined, 'https://app.example.com/editor')
+		).toBe('https://app.example.com/wasm-janet/runner-worker.js');
+		expect(
+			resolveLispLanguageServerModuleUrl(undefined, 'https://app.example.com/editor')
+		).toBe('https://app.example.com/wasm-lisp/index.js');
 		expect(
 			resolveOcamlLanguageServerModuleUrl(undefined, 'https://app.example.com/editor')
 		).toBe('https://app.example.com/wasm-of-js-of-ocaml/browser-native/src/index.js');

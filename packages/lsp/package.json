@@ -90,6 +90,16 @@
 			"import": "./dist/lua/index.js",
 			"default": "./dist/lua/index.js"
 		},
+		"./janet": {
+			"types": "./dist/janet/index.d.ts",
+			"import": "./dist/janet/index.js",
+			"default": "./dist/janet/index.js"
+		},
+		"./lisp": {
+			"types": "./dist/lisp/index.d.ts",
+			"import": "./dist/lisp/index.js",
+			"default": "./dist/lisp/index.js"
+		},
 		"./ocaml": {
 			"types": "./dist/ocaml/index.d.ts",
 			"import": "./dist/ocaml/index.js",

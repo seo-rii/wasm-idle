@@ -261,6 +261,63 @@ export function resolveLuaLanguageServerModuleUrl(
 	return resolveFileUrl('/wasm-lua/index.js', currentUrl);
 }
 
+export function resolveJanetLanguageServerBaseUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	if (typeof options === 'string') {
+		return resolveFileUrl(`${normalizeRootUrl(options) || ''}/wasm-janet/`, currentUrl);
+	}
+	if (options?.janet?.baseUrl) {
+		return resolveFileUrl(options.janet.baseUrl, currentUrl);
+	}
+	if (options?.rootUrl) {
+		return resolveFileUrl(`${normalizeRootUrl(options.rootUrl) || ''}/wasm-janet/`, currentUrl);
+	}
+	return resolveFileUrl('/wasm-janet/', currentUrl);
+}
+
+export function resolveJanetLanguageServerWorkerUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	if (typeof options === 'string') {
+		return resolveFileUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-janet/runner-worker.js`,
+			currentUrl
+		);
+	}
+	if (options?.janet?.workerUrl) {
+		return resolveFileUrl(options.janet.workerUrl, currentUrl);
+	}
+	if (options?.rootUrl) {
+		return resolveFileUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-janet/runner-worker.js`,
+			currentUrl
+		);
+	}
+	return resolveFileUrl('/wasm-janet/runner-worker.js', currentUrl);
+}
+
+export function resolveLispLanguageServerModuleUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	if (typeof options === 'string') {
+		return resolveFileUrl(`${normalizeRootUrl(options) || ''}/wasm-lisp/index.js`, currentUrl);
+	}
+	if (options?.lisp?.moduleUrl) {
+		return resolveFileUrl(options.lisp.moduleUrl, currentUrl);
+	}
+	if (options?.rootUrl) {
+		return resolveFileUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-lisp/index.js`,
+			currentUrl
+		);
+	}
+	return resolveFileUrl('/wasm-lisp/index.js', currentUrl);
+}
+
 export function resolveOcamlLanguageServerModuleUrl(
 	options: EditorLanguageServerOptions | undefined,
 	currentUrl = ''

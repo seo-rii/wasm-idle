@@ -12,6 +12,9 @@ export {
 	resolveHaskellLanguageServerBsdtarUrl,
 	resolveHaskellLanguageServerModuleUrl,
 	resolveHaskellLanguageServerRootfsUrl,
+	resolveJanetLanguageServerBaseUrl,
+	resolveJanetLanguageServerWorkerUrl,
+	resolveLispLanguageServerModuleUrl,
 	resolveLuaLanguageServerModuleUrl,
 	resolveOcamlLanguageServerManifestUrl,
 	resolveOcamlLanguageServerModuleUrl,
@@ -162,6 +165,22 @@ export {
 	type LuaLanguageServerOptions,
 	type LuaWorkerOptions
 } from './lua/index.js';
+export {
+	createJanetWorkerService,
+	getJanetLanguageServer,
+	type JanetDiagnosticRunnerRequest,
+	type JanetDiagnosticRunnerResult,
+	type JanetLanguageServerOptions,
+	type JanetWorkerOptions,
+	type RunJanetDiagnostics
+} from './janet/index.js';
+export {
+	createLispWorkerService,
+	getLispLanguageServer,
+	type LispLanguageServerOptions,
+	type LispWorkerOptions,
+	type LoadLispCompiler
+} from './lisp/index.js';
 export {
 	createOcamlWorkerService,
 	getOcamlLanguageServer,

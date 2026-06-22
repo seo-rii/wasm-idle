@@ -18,6 +18,8 @@ import { getWasmLanguageServer } from './wasm/server.js';
 import { getZigLanguageServer } from './zig/server.js';
 import { getPhpLanguageServer } from './php/server.js';
 import { getLuaLanguageServer } from './lua/server.js';
+import { getJanetLanguageServer } from './janet/server.js';
+import { getLispLanguageServer } from './lisp/server.js';
 import { getOcamlLanguageServer } from './ocaml/server.js';
 import { getHaskellLanguageServer } from './haskell/server.js';
 import { getFortranLanguageServer } from './fortran/server.js';
@@ -118,6 +120,14 @@ export async function getEditorLanguageServer(
 
 	if (normalized === 'lua') {
 		return getLuaLanguageServer(options);
+	}
+
+	if (normalized === 'janet') {
+		return getJanetLanguageServer(options);
+	}
+
+	if (normalized === 'lisp' || normalized === 'scheme' || normalized === 'scm') {
+		return getLispLanguageServer(options);
 	}
 
 	if (normalized === 'ocaml' || normalized === 'ml') {
