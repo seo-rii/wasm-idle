@@ -196,8 +196,10 @@ self.onmessage = async (event: { data: any }) => {
 
 		const source = sourceFromWorkspace(code, activePath, workspaceFiles);
 		const bytes = decodeWasmBytes(source);
+		const wasmBuffer = new ArrayBuffer(bytes.byteLength);
+		new Uint8Array(wasmBuffer).set(bytes);
 		if (prepare) {
-			await WebAssembly.compile(bytes);
+			await WebAssembly.compile(wasmBuffer);
 			postMessage({ results: true });
 			return;
 		}
@@ -218,7 +220,7 @@ self.onmessage = async (event: { data: any }) => {
 			if (text) postMessage({ output: text });
 		});
 		const wasiRuntime = new WASI(args, ['USER=wasm-idle'], [stdinReader, stdout, stderr]);
-		const compiledModule = await WebAssembly.compile(bytes);
+		const compiledModule = await WebAssembly.compile(wasmBuffer);
 		const importModules = WebAssembly.Module.imports(compiledModule).map(
 			(entry) => entry.module
 		);
