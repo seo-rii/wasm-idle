@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import Clang from '$lib/clang';
 
-function createClangHarness() {
+function createClangHarness(options: { mockLink?: boolean } = {}) {
 	const stdout = vi.fn();
 	const clang = Object.assign(Object.create(Clang.prototype), {
 		ready: Promise.resolve(),
@@ -21,7 +21,7 @@ function createClangHarness() {
 		getModule: vi.fn(async () => ({ id: 'module' })),
 		run: vi.fn(async () => null),
 		hostLogAsync: vi.fn(async (_label: string, promise: Promise<any>) => await promise),
-		link: vi.fn(async () => null)
+		...(options.mockLink === false ? {} : { link: vi.fn(async () => null) })
 	}) as Clang;
 
 	return { clang, stdout };
@@ -64,6 +64,30 @@ describe('Clang compile/debug flow', () => {
 
 		const compileArgs = vi.mocked(clang.run).mock.calls[0]?.slice(2) ?? [];
 		expect(compileArgs).toContain('-std=gnu++2a');
+	});
+
+	it('passes the clang resource directory and include directory to cc1', async () => {
+		const { clang } = createClangHarness();
+
+		await clang.compile({
+			input: 'main.cc',
+			code: 'int main() {}',
+			obj: 'main.o'
+		});
+
+		const compileArgs = vi.mocked(clang.run).mock.calls[0]?.slice(2) ?? [];
+		expect(compileArgs).toContain('-resource-dir');
+		expect(compileArgs).toContain('/lib/clang/8.0.1');
+		expect(compileArgs).toContain('/lib/clang/8.0.1/include');
+	});
+
+	it('links compiler-rt through the configured library directory constant', async () => {
+		const { clang } = createClangHarness({ mockLink: false });
+
+		await clang.link('main.o', 'main.wasm');
+
+		const linkArgs = vi.mocked(clang.run).mock.calls[0]?.slice(2) ?? [];
+		expect(linkArgs).toContain('-Llib/clang/8.0.1/lib/wasi');
 	});
 
 	it('instruments debug builds with source line hooks', async () => {

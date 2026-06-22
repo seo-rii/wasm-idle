@@ -1,6 +1,6 @@
 import { Memory } from '$lib/clang/memory';
-import { bindNew } from '$lib/clang/apply';
-import { AbortError, assert } from '$lib/clang/error';
+import { bindNew } from '@wasm-idle/clang-common/apply';
+import { AbortError, assert } from '@wasm-idle/clang-common/error';
 import { compile } from '$lib/clang/wasm';
 import { memfsUrl } from '$lib/clang/url';
 import type { Writable } from 'svelte/store';

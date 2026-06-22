@@ -1,7 +1,6 @@
 {
 	"name": "@wasm-idle/runtime-php",
-	"version": "0.0.0",
-	"private": true,
+	"version": "0.1.0",
 	"type": "module",
 	"description": "PHP WebAssembly runtime helpers for wasm-idle",
 	"exports": {

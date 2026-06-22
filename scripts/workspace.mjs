@@ -11,7 +11,7 @@ const GROUPS = ['packages', 'runtimes', 'apps'];
 function usage() {
 	console.log(`Usage:
   node scripts/workspace.mjs list [--group packages|runtimes|apps]
-  node scripts/workspace.mjs run <script> [--group packages|runtimes|apps] [--filter name] [--if-present] [--continue]
+  node scripts/workspace.mjs run <script> [--group packages|runtimes|apps] [--filter name] [--public] [--if-present] [--continue]
 `);
 }
 
@@ -62,6 +62,41 @@ async function discoverWorkspacePackages(groupFilter) {
 	});
 }
 
+function topologicallySortPackages(packages) {
+	const packageByName = new Map(packages.map((pkg) => [pkg.name, pkg]));
+	const visited = new Set();
+	const visiting = new Set();
+	const sorted = [];
+
+	const visit = (pkg) => {
+		if (visited.has(pkg.name)) return;
+		if (visiting.has(pkg.name)) {
+			throw new Error(`Workspace dependency cycle detected at ${pkg.name}.`);
+		}
+		visiting.add(pkg.name);
+		const dependencyNames = [
+			...Object.entries(pkg.manifest.dependencies || {}),
+			...Object.entries(pkg.manifest.devDependencies || {}),
+			...Object.entries(pkg.manifest.optionalDependencies || {})
+		]
+			.filter(
+				([, version]) => typeof version === 'string' && version.startsWith('workspace:')
+			)
+			.map(([name]) => name)
+			.sort();
+		for (const dependencyName of dependencyNames) {
+			const dependency = packageByName.get(dependencyName);
+			if (dependency) visit(dependency);
+		}
+		visiting.delete(pkg.name);
+		visited.add(pkg.name);
+		sorted.push(pkg);
+	};
+
+	for (const pkg of packages) visit(pkg);
+	return sorted;
+}
+
 function pnpmCommand() {
 	return process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 }
@@ -90,7 +125,9 @@ async function list(args) {
 	const packages = await discoverWorkspacePackages(group);
 	for (const pkg of packages) {
 		const scriptNames = Object.keys(pkg.manifest.scripts || {}).sort();
-		console.log(`${pkg.group}/${path.basename(pkg.dir)}\t${pkg.name}\t${scriptNames.join(', ')}`);
+		console.log(
+			`${pkg.group}/${path.basename(pkg.dir)}\t${pkg.name}\t${scriptNames.join(', ')}`
+		);
 	}
 }
 
@@ -103,6 +140,7 @@ async function run(args) {
 	}
 	const group = readFlag(args, '--group');
 	const filter = readFlag(args, '--filter');
+	const publicOnly = Boolean(readFlag(args, '--public'));
 	const ifPresent = Boolean(readFlag(args, '--if-present'));
 	const keepGoing = Boolean(readFlag(args, '--continue'));
 	if (group && !GROUPS.includes(group)) {
@@ -111,12 +149,19 @@ async function run(args) {
 	let packages = await discoverWorkspacePackages(group);
 	if (filter) {
 		packages = packages.filter(
-			(pkg) => pkg.name === filter || path.basename(pkg.dir) === filter || pkg.name.includes(filter)
+			(pkg) =>
+				pkg.name === filter ||
+				path.basename(pkg.dir) === filter ||
+				pkg.name.includes(filter)
 		);
+	}
+	if (publicOnly) {
+		packages = packages.filter((pkg) => pkg.manifest.private !== true);
 	}
 	if (packages.length === 0) {
 		throw new Error('No workspace packages matched.');
 	}
+	packages = topologicallySortPackages(packages);
 	let failed = false;
 	for (const pkg of packages) {
 		if (!pkg.manifest.scripts?.[script]) {

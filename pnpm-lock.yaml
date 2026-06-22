@@ -41,6 +41,9 @@ importers:
       '@types/sql.js':
         specifier: ^1.4.11
         version: 1.4.11
+      '@wasm-idle/clang-common':
+        specifier: workspace:*
+        version: link:packages/clang-common
       '@wasm-idle/core':
         specifier: workspace:*
         version: link:packages/core
@@ -196,6 +199,15 @@ importers:
         specifier: ^4.1.4
         version: 4.1.4(@types/node@25.6.0)(jsdom@29.0.2)(vite@8.0.8(@types/node@25.6.0)(esbuild@0.28.0)(terser@5.47.1)(tsx@4.22.3))
 
+  packages/clang-common:
+    devDependencies:
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.2
+      vitest:
+        specifier: ^4.1.4
+        version: 4.1.4(@types/node@25.6.0)(jsdom@29.0.2)(vite@8.0.8(@types/node@25.6.0)(esbuild@0.28.0)(terser@5.47.1)(tsx@4.22.3))
+
   packages/core:
     devDependencies:
       typescript:
@@ -216,6 +228,9 @@ importers:
       '@ruby/wasm-wasi':
         specifier: 2.9.3-2.9.4
         version: 2.9.3-2.9.4
+      '@wasm-idle/clang-common':
+        specifier: workspace:*
+        version: link:../clang-common
       '@zip.js/zip.js':
         specifier: ^2.8.26
         version: 2.8.26
@@ -388,6 +403,9 @@ importers:
       '@bjorn3/browser_wasi_shim':
         specifier: ^0.4.2
         version: 0.4.2
+      '@wasm-idle/clang-common':
+        specifier: workspace:*
+        version: link:../../packages/clang-common
       '@zip.js/zip.js':
         specifier: ^2.8.23
         version: 2.8.26

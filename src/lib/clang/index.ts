@@ -6,28 +6,14 @@ import type {
 } from '$lib/playground/options';
 import App from '$lib/clang/app';
 import { MemFS, untar } from '$lib/clang/memory';
-import { green, yellow, normal } from '$lib/clang/color';
+import { green, yellow, normal } from '@wasm-idle/clang-common/color';
 import { compile, readBuffer } from '$lib/clang/wasm';
 import { clangUrl, lldUrl, rootUrl } from '$lib/clang/url';
-import { installGccCompatibilityHeaders } from '$lib/clang/gccCompat';
+import { installGccCompatibilityHeaders } from '@wasm-idle/clang-common/gcc-compat';
 import { derived, type Writable, writable } from 'svelte/store';
 
-const clangCommonArgs = [
-	'-disable-free',
-	'-isysroot',
-	'/',
-	'-internal-isystem',
-	'/include/c++/v1',
-	'-internal-isystem',
-	'/include',
-	'-internal-isystem',
-	'/lib/clang/8.0.1/include',
-	'-ferror-limit',
-	'19',
-	'-fmessage-length',
-	'80',
-	'-fcolor-diagnostics'
-];
+const defaultClangResourceDir = '/lib/clang/8.0.1';
+const defaultCompilerRuntimeLibDir = 'lib/clang/8.0.1/lib/wasi';
 
 const defaultCppStandardArg = '-std=gnu++2a';
 const defaultCStandardArg = '-std=gnu11';
@@ -1163,10 +1149,26 @@ export default class Clang {
 		this.addWorkspaceFiles(options.workspaceFiles, input);
 		this.memfs.addFile(input, code);
 		const clang = await this.getModule(clangUrl(this.path));
+		const clangResourceIncludeDir = `${defaultClangResourceDir}/include`;
 		const compilerArgs = [
 			'-cc1',
 			'-emit-obj',
-			...clangCommonArgs,
+			'-disable-free',
+			'-isysroot',
+			'/',
+			'-internal-isystem',
+			'/include/c++/v1',
+			'-internal-isystem',
+			'/include',
+			'-resource-dir',
+			defaultClangResourceDir,
+			'-internal-isystem',
+			clangResourceIncludeDir,
+			'-ferror-limit',
+			'19',
+			'-fmessage-length',
+			'80',
+			'-fcolor-diagnostics',
 			'-O' + opt,
 			'-o',
 			obj,
@@ -1207,7 +1209,7 @@ export default class Clang {
 			'-lc++',
 			'-lc++abi',
 			'-lm',
-			`-Llib/clang/8.0.1/lib/wasi`,
+			`-L${defaultCompilerRuntimeLibDir}`,
 			'-lclang_rt.builtins-wasm32',
 			'-o',
 			wasm

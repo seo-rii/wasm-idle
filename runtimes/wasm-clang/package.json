@@ -20,16 +20,16 @@
     "dist"
   ],
   "scripts": {
-    "bootstrap:assets": "node ./scripts/bootstrap-from-wasm-idle.mjs",
     "build": "rm -rf dist && tsc -p tsconfig.build.json && node ./scripts/prepare-runtime.mjs",
-    "build:from-wasm-idle": "npm run bootstrap:assets && npm run build",
     "check": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --config vitest.config.ts",
     "prepare:runtime": "node ./scripts/prepare-runtime.mjs",
+    "package:toolchain": "node ./scripts/package-toolchain.mjs",
     "smoke:runtime": "node ./scripts/smoke-runtime.mjs",
     "validate:runtime": "npm run build && npm run smoke:runtime"
   },
   "dependencies": {
+    "@wasm-idle/clang-common": "workspace:*",
     "@bjorn3/browser_wasi_shim": "^0.4.2",
     "@zip.js/zip.js": "^2.8.23",
     "tslib": "^2.8.1",

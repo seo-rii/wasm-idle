@@ -4,10 +4,17 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const SOURCE_DIR = path.resolve(REPO_ROOT, 'artifacts', 'runtime-source');
+const SOURCE_DIR = path.resolve(
+	process.env.WASM_CLANG_RUNTIME_SOURCE_DIR || path.resolve(REPO_ROOT, 'artifacts', 'runtime-source')
+);
 const TARGET_DIR = path.resolve(REPO_ROOT, 'dist', 'runtime');
 const TARGET_BIN_DIR = path.resolve(TARGET_DIR, 'bin');
 const TARGET_CLANGD_DIR = path.resolve(TARGET_DIR, 'clangd');
+const LEGACY_TOOLCHAIN = {
+	version: 'legacy-wasm-idle-clang-assets',
+	resourceDir: '/lib/clang/8.0.1',
+	compilerRuntimeLibDir: 'lib/clang/8.0.1/lib/wasi'
+};
 
 const assets = [
 	{ source: 'clang.zip', target: ['bin', 'clang.zip'] },
@@ -20,6 +27,16 @@ const assets = [
 
 await fs.mkdir(TARGET_BIN_DIR, { recursive: true });
 await fs.mkdir(TARGET_CLANGD_DIR, { recursive: true });
+
+const toolchain = await fs
+	.readFile(path.resolve(SOURCE_DIR, 'toolchain.json'), 'utf8')
+	.then((contents) => JSON.parse(contents))
+	.catch((error) => {
+		if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+			return LEGACY_TOOLCHAIN;
+		}
+		throw error;
+	});
 
 const buildAssets = [];
 for (const asset of assets) {
@@ -37,7 +54,7 @@ for (const asset of assets) {
 
 const manifest = {
 	manifestVersion: 1,
-	version: 'legacy-wasm-idle-clang-assets',
+	version: typeof toolchain.version === 'string' ? toolchain.version : LEGACY_TOOLCHAIN.version,
 	defaultTarget: 'wasm32-wasi',
 	compiler: {
 		memfs: {
@@ -54,7 +71,15 @@ const manifest = {
 		},
 		sysroot: {
 			asset: 'bin/sysroot.tar.zip'
-		}
+		},
+		resourceDir:
+			typeof toolchain.resourceDir === 'string'
+				? toolchain.resourceDir
+				: LEGACY_TOOLCHAIN.resourceDir,
+		compilerRuntimeLibDir:
+			typeof toolchain.compilerRuntimeLibDir === 'string'
+				? toolchain.compilerRuntimeLibDir
+				: LEGACY_TOOLCHAIN.compilerRuntimeLibDir
 	},
 	clangd: {
 		js: 'clangd/clangd.js',
@@ -73,6 +98,7 @@ const manifest = {
 const buildInfo = {
 	generatedAt: new Date().toISOString(),
 	source: 'artifacts/runtime-source',
+	toolchain,
 	assets: buildAssets
 };
 

@@ -6,7 +6,7 @@ import {
 } from 'vscode-jsonrpc/lib/browser/main.js';
 
 import { resolveRuntimeAssetUrls } from '../runtime-assets.js';
-import { writeGccCompatibilityHeaders } from '../gcc-compat.js';
+import { writeGccCompatibilityHeaders } from '@wasm-idle/clang-common/gcc-compat';
 import {
 	loadRuntimeManifest,
 	resolveRuntimeManifestUrl
@@ -17,7 +17,7 @@ import {
 	createClangdCompileFlags,
 	normalizeClangdBaseUrl
 } from './config.js';
-import { JsonStream } from './json-stream.js';
+import { JsonStream } from '@wasm-idle/clang-common/json-stream';
 import type {
 	ClangdWorkerInboundMessage
 } from './protocol.js';

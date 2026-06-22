@@ -3,14 +3,14 @@ import {
 	BrowserMessageWriter,
 	type BrowserMessageWriter as BrowserMessageWriterInstance
 } from '../jsonrpc.js';
-import { writeGccCompatibilityHeaders } from './gcc-compat.js';
+import { writeGccCompatibilityHeaders } from '@wasm-idle/clang-common/gcc-compat';
 import {
 	CLANGD_CPP_FILE_PATH,
 	CLANGD_WORKSPACE_PATH,
 	createClangdCompileFlags,
 	normalizeClangdBaseUrl
 } from './config.js';
-import { JsonStream } from './json-stream.js';
+import { JsonStream } from '@wasm-idle/clang-common/json-stream';
 import type { ClangdWorkerInboundMessage } from './protocol.js';
 
 interface ClangdWorkerScope {

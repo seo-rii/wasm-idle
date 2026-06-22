@@ -6,6 +6,13 @@ const THIS_FILE = fileURLToPath(import.meta.url);
 
 const RUNTIMES = [
 	{
+		name: 'wasm-clang',
+		module: './sync-wasm-clang.mjs',
+		exportName: 'syncWasmClangDist',
+		sourceArg: 'sourceDir',
+		targetArg: 'staticDir'
+	},
+	{
 		name: 'wasm-rust',
 		module: './sync-wasm-rust.mjs',
 		exportName: 'syncWasmRustDist',

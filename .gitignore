@@ -9,13 +9,17 @@ node_modules
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 dist/
-!packages/lsp/dist/
-!packages/lsp/dist/**
 
 # Local build caches and generated sync outputs
 .cache/
 static/.cache/
+static/clang/bin/
+static/clangd/
 static/wasm-of-js-of-ocaml/
+static/wasm-d/runtime/bin/lld.data.gz
+static/wasm-d/runtime/bin/lld.wasm.gz
+static/wasm-rust/runtime/llvm/lld.data.gz
+static/wasm-rust/runtime/llvm/lld.wasm.gz
 scripts/*.d.mts
 src/routes/editor-defaults.d.ts
 static/wasm-d/runtime/bin/ldc2.wasm

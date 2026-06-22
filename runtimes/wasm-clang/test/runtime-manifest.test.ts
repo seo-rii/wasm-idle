@@ -12,7 +12,9 @@ describe('runtime manifest', () => {
 				memfs: { asset: 'bin/memfs.zip', argv0: 'memfs' },
 				clang: { asset: 'bin/clang.zip', argv0: 'clang' },
 				lld: { asset: 'bin/lld.zip', argv0: 'wasm-ld' },
-				sysroot: { asset: 'bin/sysroot.tar.zip' }
+				sysroot: { asset: 'bin/sysroot.tar.zip' },
+				resourceDir: '/lib/clang/22.1.8',
+				compilerRuntimeLibDir: 'lib/clang/22.1.8/lib/wasi'
 			},
 			clangd: {
 				js: 'clangd/clangd.js',
@@ -28,6 +30,8 @@ describe('runtime manifest', () => {
 
 		expect(manifest.defaultTarget).toBe('wasm32-wasi');
 		expect(manifest.compiler.clang.argv0).toBe('clang');
+		expect(manifest.compiler.resourceDir).toBe('/lib/clang/22.1.8');
+		expect(manifest.compiler.compilerRuntimeLibDir).toBe('lib/clang/22.1.8/lib/wasi');
 		expect(manifest.clangd.wasm).toBe('clangd/clangd.wasm.gz');
 		expect(manifest.targets['wasm32-wasi'].artifactFormat).toBe('wasi-core-wasm');
 	});

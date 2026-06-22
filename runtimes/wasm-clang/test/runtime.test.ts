@@ -2,7 +2,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import Clang from '../src/runtime.js';
 
-function createClangHarness() {
+function createClangHarness(
+	compilerConfig?: any,
+	options: { mockLink?: boolean } = {}
+) {
 	const stdout = vi.fn();
 	const clang = Object.assign(Object.create(Clang.prototype), {
 		ready: Promise.resolve(),
@@ -15,6 +18,7 @@ function createClangHarness() {
 		lastArtifactPath: 'main.wasm',
 		traceStartedAt: 0,
 		path: '',
+		compilerConfig,
 		memfs: {
 			addFile: vi.fn(),
 			getFileContents: vi.fn(() => new Uint8Array([0x00]))
@@ -22,7 +26,7 @@ function createClangHarness() {
 		getModule: vi.fn(async () => ({ id: 'module' })),
 		run: vi.fn(async () => null),
 		hostLogAsync: vi.fn(async (_label: string, promise: Promise<any>) => await promise),
-		link: vi.fn(async () => null)
+		...(options.mockLink === false ? {} : { link: vi.fn(async () => null) })
 	}) as Clang;
 
 	return { clang, stdout };
@@ -65,6 +69,36 @@ describe('Clang compile/debug flow', () => {
 
 		const compileArgs = vi.mocked(clang.run).mock.calls[0]?.slice(2) ?? [];
 		expect(compileArgs).toContain('-std=gnu++2a');
+	});
+
+	it('uses the manifest clang resource directory for compiler headers', async () => {
+		const { clang } = createClangHarness({
+			resourceDir: '/lib/clang/22.1.8'
+		});
+
+		await clang.compile({
+			input: 'main.cc',
+			code: 'int main() {}',
+			obj: 'main.o'
+		});
+
+		const compileArgs = vi.mocked(clang.run).mock.calls[0]?.slice(2) ?? [];
+		expect(compileArgs).toContain('-resource-dir');
+		expect(compileArgs).toContain('/lib/clang/22.1.8');
+		expect(compileArgs).toContain('/lib/clang/22.1.8/include');
+		expect(compileArgs).not.toContain('/lib/clang/8.0.1/include');
+	});
+
+	it('uses the manifest compiler-rt library directory while linking', async () => {
+		const { clang } = createClangHarness({
+			compilerRuntimeLibDir: 'lib/clang/22.1.8/lib/wasi'
+		}, { mockLink: false });
+
+		await clang.link('main.o', 'main.wasm');
+
+		const linkArgs = vi.mocked(clang.run).mock.calls[0]?.slice(2) ?? [];
+		expect(linkArgs).toContain('-Llib/clang/22.1.8/lib/wasi');
+		expect(linkArgs).not.toContain('-Llib/clang/8.0.1/lib/wasi');
 	});
 
 	it('instruments debug builds with source line hooks', async () => {

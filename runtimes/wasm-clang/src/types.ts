@@ -191,6 +191,8 @@ export interface RuntimeCompilerConfig {
 		asset: string;
 		runtimeRoot?: string;
 	};
+	resourceDir?: string;
+	compilerRuntimeLibDir?: string;
 	defaultCppStandard?: string;
 	defaultCStandard?: string;
 }

@@ -1,13 +1,12 @@
 # wasm-clang
 
-`wasm-clang` packages the existing browser clang runtime that currently lives inside `wasm-idle`
-into a TypeScript module with bundled runtime assets.
+`wasm-clang` owns the browser Clang runtime and its bundled runtime assets.
 
 Current status:
 
 - the package stays `private` while the `wasm-idle` integration is being split out
 - the repository includes vendored runtime assets under `artifacts/runtime-source/`
-- the default build is self-contained and does not require a sibling `wasm-idle` checkout
+- the default build is self-contained
 
 Current scope:
 
@@ -22,25 +21,18 @@ Current scope:
 ## Build
 
 ```bash
-cd wasm-clang
-npm install
-npm run build
+pnpm install
+pnpm --dir packages/clang-common build
+pnpm --dir runtimes/wasm-clang build
 ```
 
 This build consumes the committed runtime sources under `artifacts/runtime-source/` and writes the
 JavaScript bundle plus packaged runtime assets to `dist/`.
 
-If you need to refresh those vendored assets from a sibling `../wasm-idle` checkout, run:
-
-```bash
-npm run build:from-wasm-idle
-```
-
 ## Runtime assets
 
-The initial runtime source was seeded from the current `wasm-idle/static/clang/bin/` and
-`wasm-idle/static/clangd/` bundles so the package can be integrated first. The build copies those
-vendored assets into `dist/runtime/bin/` and `dist/runtime/clangd/`, then writes:
+The committed `artifacts/runtime-source/` directory is the source of truth. The build copies those
+assets into `dist/runtime/bin/` and `dist/runtime/clangd/`, then writes:
 
 - `dist/runtime/runtime-manifest.v1.json`
 - `dist/runtime/runtime-build.json`
@@ -55,6 +47,43 @@ By default, the runtime resolves assets relative to the built module:
 If you host the assets somewhere else, pass `runtimeBaseUrl` to
 `preloadBrowserClangRuntime()` and `createClangCompiler()`.
 
+## Refreshing The Toolchain
+
+The runtime has two different binary contracts:
+
+- `clang.zip` and `lld.zip` each contain one raw WASI WebAssembly module named `clang` and `lld`.
+- `clangd/clangd.js` and `clangd/clangd.wasm.gz` are an Emscripten pthread build of `clangd`.
+
+Build clang/lld as WASI modules and clangd as an Emscripten worker module, then package the outputs:
+
+```bash
+pnpm --dir runtimes/wasm-clang package:toolchain -- \
+  --clang-wasm /path/to/clang.wasm \
+  --lld-wasm /path/to/wasm-ld.wasm \
+  --sysroot /path/to/wasi-sysroot \
+  --clangd-js /path/to/clangd.js \
+  --clangd-wasm /path/to/clangd.wasm \
+  --llvm-version 22.1.8 \
+  --wasi-sdk-version 33 \
+  --emsdk-version 6.0.0
+```
+
+The script writes `artifacts/runtime-source/toolchain.json` next to the packaged assets. The normal
+build reads that file and emits matching `resourceDir` and `compilerRuntimeLibDir` values into
+`dist/runtime/runtime-manifest.v1.json`.
+
+After packaging a new toolchain, run:
+
+```bash
+pnpm --dir packages/clang-common build
+pnpm --dir runtimes/wasm-clang validate:runtime
+pnpm sync:wasm-clang
+```
+
+The current clangd build references are `guyutongxue/clangd-in-browser` for the Emscripten clangd
+shape and `WebAssembly/wasi-sdk` for sysroot layout. Cib-style clang builds are useful as historical
+reference, but they must be adapted to this runtime's raw WASI module contract before packaging.
+
 ## Additional wrappers
 
 For editor/LSP integration, import the clangd language-server transport from the package subpath
@@ -64,7 +93,7 @@ and pass the returned reader/writer pair to your editor client:
 import { createClangdLanguageServer } from 'wasm-clang/clangd';
 
 const clangd = await createClangdLanguageServer({
-  baseUrl: new URL('./dist/runtime/', import.meta.url).href
+	baseUrl: new URL('./dist/runtime/', import.meta.url).href
 });
 ```
 
@@ -79,29 +108,29 @@ import { createBrowserClangDebugDriver } from './dist/index.js';
 
 ```ts
 import createClangCompiler, {
-  executeBrowserClangArtifact,
-  preloadBrowserClangRuntime
+	executeBrowserClangArtifact,
+	preloadBrowserClangRuntime
 } from './dist/index.js';
 
 await preloadBrowserClangRuntime({
-  runtimeBaseUrl: new URL('./dist/runtime/', import.meta.url)
+	runtimeBaseUrl: new URL('./dist/runtime/', import.meta.url)
 });
 
 const compiler = await createClangCompiler({
-  runtimeBaseUrl: new URL('./dist/runtime/', import.meta.url)
+	runtimeBaseUrl: new URL('./dist/runtime/', import.meta.url)
 });
 const result = await compiler.compile({
-  language: 'CPP',
-  fileName: 'hello.cpp',
-  debug: true,
-  breakpoints: [2],
-  pauseOnEntry: true,
-  code: '#include <iostream>\nint main(){ std::cout << "hi\\n"; }'
+	language: 'CPP',
+	fileName: 'hello.cpp',
+	debug: true,
+	breakpoints: [2],
+	pauseOnEntry: true,
+	code: '#include <iostream>\nint main(){ std::cout << "hi\\n"; }'
 });
 
 if (result.success && result.artifact) {
-  const runtime = await executeBrowserClangArtifact(result.artifact);
-  console.log(runtime.stdout);
+	const runtime = await executeBrowserClangArtifact(result.artifact);
+	console.log(runtime.stdout);
 }
 ```
 
@@ -109,5 +138,5 @@ if (result.success && result.artifact) {
 runtime so later compiler instances can reuse browser fetch/wasm caching, but it does not hand
 back a persistent compiler session.
 
-The next step is to switch `wasm-idle` to import this package instead of keeping its own private
-clang source/runtime copy.
+The root application generates its legacy `static/clang/` and `static/clangd/` paths from this
+package with `pnpm sync:wasm-clang`.

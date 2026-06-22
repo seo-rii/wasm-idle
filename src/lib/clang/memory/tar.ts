@@ -1,6 +1,6 @@
 import type { MemFS } from '$lib/clang/memory';
-import { readStr, readOct } from '$lib/clang/encode';
-import { assert } from '$lib/clang/error';
+import { readOct, readStr } from '@wasm-idle/clang-common/encode';
+import { assert } from '@wasm-idle/clang-common/error';
 
 interface EntryInit {
 	filename: string;

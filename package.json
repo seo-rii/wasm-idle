@@ -10,17 +10,20 @@
 		"apps/*"
 	],
 	"scripts": {
-		"dev": "vite dev",
-		"build:preview": "vite build",
-		"build": "vite build && npm run package",
+		"dev": "pnpm run prepare:app && vite dev",
+		"build:preview": "pnpm run prepare:app && vite build",
+		"build": "pnpm run prepare:app && vite build && pnpm run package:root",
 		"workspace:list": "node scripts/workspace.mjs list",
 		"workspace:build": "node scripts/workspace.mjs run build --if-present",
 		"workspace:check": "node scripts/workspace.mjs run check --if-present",
 		"build:runtimes": "node scripts/workspace.mjs run build --group runtimes --if-present",
 		"check:runtimes": "node scripts/workspace.mjs run check --group runtimes --if-present",
 		"build:packages": "node scripts/workspace.mjs run build --group packages --if-present",
-		"check:packages": "node scripts/workspace.mjs run check --group packages --if-present",
-		"audit:runtimes": "node scripts/audit-runtime-migration.mjs",
+		"check:packages": "pnpm run build:packages && node scripts/workspace.mjs run check --group packages --if-present",
+		"build:publish-deps": "node scripts/workspace.mjs run build --public --if-present",
+		"prepare:clang-assets": "pnpm --dir packages/clang-common build && pnpm run prepare:clang-assets:built",
+		"prepare:clang-assets:built": "pnpm --dir runtimes/wasm-clang build && pnpm run sync:wasm-clang",
+		"prepare:app": "pnpm run build:publish-deps && pnpm run prepare:clang-assets:built",
 		"preview": "vite preview",
 		"probe:go-browser": "node scripts/probe-go-browser.mjs",
 		"probe:ocaml-browser": "node scripts/probe-ocaml-browser.mjs",
@@ -47,6 +50,7 @@
 		"test:browser:tinygo": "WASM_IDLE_RUN_REAL_BROWSER_TINYGO=1 pnpm exec vitest run src/lib/playground/tinygo.playwright.test.ts",
 		"sync:runtime": "node scripts/sync-runtime.mjs",
 		"sync:runtimes": "node scripts/sync-runtime.mjs all",
+		"sync:wasm-clang": "node scripts/sync-wasm-clang.mjs",
 		"sync:wasm-of-js-of-ocaml": "node scripts/sync-runtime.mjs wasm-of-js-of-ocaml",
 		"sync:wasm-dotnet": "node scripts/sync-runtime.mjs wasm-dotnet",
 		"sync:wasm-d": "node scripts/sync-runtime.mjs wasm-d",
@@ -74,15 +78,20 @@
 		"sync:webr": "node scripts/sync-runtime.mjs webr",
 		"compress:static-runtimes": "node scripts/compress-static-runtime-assets.mjs static",
 		"compress:build-runtimes": "node scripts/compress-static-runtime-assets.mjs build",
-		"package": "svelte-kit sync && svelte-package && publint",
-		"prepublishOnly": "npm run package",
+		"build:page-runtimes": "node scripts/prepare-page-runtimes.mjs",
+		"sync:page-runtimes": "pnpm run sync:wasm-of-js-of-ocaml && pnpm run sync:wasm-typescript && pnpm run sync:wasm-octave && pnpm run sync:wasm-prolog && pnpm run sync:wasm-gleam && pnpm run sync:wasm-perl && pnpm run sync:wasm-tcl && pnpm run sync:wasm-awk && pnpm run sync:wasm-pascal && pnpm run sync:wasm-forth && pnpm run sync:wasm-j && pnpm run sync:wasm-bqn && pnpm run sync:wasm-janet",
+		"page:build": "pnpm run build:page-runtimes && pnpm run sync:page-runtimes && pnpm run compress:static-runtimes && pnpm run build && pnpm run compress:build-runtimes",
+		"package:root": "svelte-kit sync && svelte-package && publint",
+		"package": "pnpm run build:publish-deps && pnpm run package:root",
+		"prepack": "pnpm run package",
+		"verify:package": "node scripts/verify-package.mjs",
 		"test": "vitest run",
 		"test:watch": "vitest",
-		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+		"check": "pnpm run build:publish-deps && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+		"check:watch": "pnpm run build:publish-deps && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"lint": "prettier --check . && eslint .",
 		"format": "prettier --write .",
-		"page": "npm run sync:wasm-of-js-of-ocaml && npm run sync:wasm-typescript && npm run sync:wasm-octave && npm run sync:wasm-prolog && npm run sync:wasm-gleam && npm run sync:wasm-perl && npm run sync:wasm-tcl && npm run sync:wasm-awk && npm run sync:wasm-pascal && npm run sync:wasm-forth && npm run sync:wasm-j && npm run sync:wasm-bqn && npm run sync:wasm-janet && npm run compress:static-runtimes && npm run build && npm run compress:build-runtimes && node gh-pages.js"
+		"page": "pnpm run page:build && node gh-pages.js"
 	},
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",
@@ -127,6 +136,7 @@
 		"@seorii/monaco": "0.1.1",
 		"@swmansion/popcorn": "0.2.2",
 		"@types/sql.js": "^1.4.11",
+		"@wasm-idle/clang-common": "workspace:*",
 		"@wasm-idle/core": "workspace:*",
 		"@wasm-idle/lsp": "workspace:*",
 		"@wasm-idle/runtime-assemblyscript": "workspace:*",
@@ -161,7 +171,9 @@
 	"exports": {
 		".": {
 			"types": "./dist/index.d.ts",
-			"svelte": "./dist/index.js"
+			"svelte": "./dist/index.js",
+			"import": "./dist/index.js",
+			"default": "./dist/index.js"
 		}
 	},
 	"svelte": "./dist/index.js",

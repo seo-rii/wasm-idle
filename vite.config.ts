@@ -1,12 +1,16 @@
 import { sveltekit } from '@sveltejs/kit/vite';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { defineConfig, type Plugin } from 'vite';
 
 const require = createRequire(import.meta.url);
 const phpWasmWebRoot = dirname(require.resolve('@php-wasm/web/package.json'));
 const phpWasmIcuData = join(phpWasmWebRoot, 'shared/icu.dat');
-const wasmIdleCoreEntry = require.resolve('@wasm-idle/core');
+const wasmIdleCoreEntry = join(
+	dirname(fileURLToPath(import.meta.url)),
+	'packages/core/src/index.ts'
+);
 
 function phpWasmIcuDataResolver(): Plugin {
 	return {

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import App from '$lib/clang/app';
-import { NotImplemented, ProcExit } from '$lib/clang/error';
+import { NotImplemented, ProcExit } from '@wasm-idle/clang-common/error';
 import { evaluateDebugExpression } from '$lib/debug/expression';
 import Memory from '$lib/clang/memory/memory';
 import * as wasmModule from '$lib/clang/wasm';

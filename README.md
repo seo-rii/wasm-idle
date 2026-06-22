@@ -63,11 +63,12 @@ highlighting only. `Debug` means wasm-idle's trace/debug controls, not a native 
 
 ## Monorepo layout
 
-`wasm-idle` is now managed as a pnpm workspace. The existing sibling repositories are intentionally
-left in place, but the default development path is inside this repo:
+`wasm-idle` is managed as a pnpm workspace. Workspace builds, tests, and sync commands use only
+source and artifacts inside this checkout:
 
 - `packages/core`: framework-neutral contracts, runtime asset keys, progress helpers, and playground
   binding helpers.
+- `packages/clang-common`: shared Clang/GCC compatibility headers and stream helpers.
 - `packages/svelte`: Svelte store/binding helpers around `@wasm-idle/core`.
 - `packages/react`: React hooks around `@wasm-idle/core`.
 - `packages/vue`: Vue composables around `@wasm-idle/core`.
@@ -93,15 +94,19 @@ pnpm build:runtimes
 pnpm check:runtimes
 pnpm sync:runtime list
 pnpm sync:runtimes
-pnpm audit:runtimes
 ```
 
-The sync scripts now default to `runtimes/<name>/dist`. To sync from one of the preserved sibling
-repositories, pass explicit source and target paths to the underlying script, for example:
+The sync scripts default to `runtimes/<name>/dist`; optional source and target arguments are for
+alternate build directories inside the current checkout.
+
+Published packages are built in workspace dependency order. Before publishing, run:
 
 ```bash
-node scripts/sync-wasm-rust.mjs ../wasm-rust/dist static/wasm-rust
+pnpm verify:package
 ```
+
+The smoke check packs the root library and its public workspace dependencies, installs the tarballs
+into a temporary project, and imports each public entry point.
 
 Java uses TeaVM's browser compiler/runtime. TeaVM compiler/runtime/classlib assets are bundled under `static/teavm/` by default, and the asset base URL can be overridden with `PUBLIC_TEAVM_BASE_URL`.
 
@@ -130,10 +135,11 @@ so the browser starter and stdin coverage use `io:get_line`/`io:format` only.
 
 ## Rust browser integration
 
-The demo app now bundles a local `wasm-rust` browser compiler under `static/wasm-rust/` and points the example `Terminal` at `/wasm-rust/index.js` by default. Refresh that bundle after rebuilding the sibling `wasm-rust` project with:
+The demo app bundles the workspace `wasm-rust` browser compiler under `static/wasm-rust/` and points
+the example `Terminal` at `/wasm-rust/index.js` by default. Refresh it with:
 
 ```bash
-cd wasm-idle
+pnpm --dir runtimes/wasm-rust build
 pnpm run sync:wasm-rust
 ```
 
@@ -143,17 +149,14 @@ storage.
 
 ## TinyGo browser integration
 
-The demo app can also vendor the sibling `wasm-tinygo` browser build under `static/wasm-tinygo/`
+The demo app can also vendor the workspace `wasm-tinygo` browser build under `static/wasm-tinygo/`
 and load its `runtime.js` entry directly inside the TinyGo playground sandbox. The example page
 uses the bundled browser runtime by default, including on `localhost` during `vite dev` /
 `vite preview`. Refresh the
-bundled runtime assets after rebuilding the sibling `wasm-tinygo` project with:
+bundled runtime assets after rebuilding the workspace project with:
 
 ```bash
-cd wasm-tinygo
-npm run build
-
-cd ../wasm-idle
+pnpm --dir runtimes/wasm-tinygo build
 pnpm run sync:wasm-tinygo
 ```
 
@@ -168,18 +171,15 @@ produce non-runnable preview artifacts until the matching execution path is avai
 
 ## C# / F# / VB.NET / .NET browser integration
 
-The demo app vendors the sibling `wasm-dotnet` browser module under `static/wasm-dotnet/` and exposes
+The demo app vendors the workspace `wasm-dotnet` browser module under `static/wasm-dotnet/` and exposes
 C# as `CSHARP`, F# as `FSHARP`, and VB.NET as `VBNET` in the shared playground selector. Refresh the
-browser module after rebuilding the sibling project with:
+browser module after rebuilding the workspace project with:
 
 ```bash
-cd wasm-dotnet
-npm run build
+pnpm --dir runtimes/wasm-dotnet build
 dotnet workload install wasm-tools
 dotnet workload install wasm-experimental
-npm run build:runtime
-
-cd ../wasm-idle
+pnpm --dir runtimes/wasm-dotnet build:runtime
 pnpm run sync:wasm-dotnet
 ```
 
@@ -233,7 +233,7 @@ The TinyGo probe follows the same pattern. The browser path should load the vend
 The TinyGo browser commands currently default to `vite dev`.
 If Rust ever reports `invalid metadata files for crate core` or `Unsupported archive identifier`,
 the browser almost always fetched a stale or wrong `wasm-rust` sysroot asset. Hard refresh the page
-and resync `static/wasm-rust/` from the sibling `wasm-rust/dist/`.
+and rebuild then resync `static/wasm-rust/` from `runtimes/wasm-rust/dist/`.
 When browser-rustc does retry, it now emits a visible warning instead of only a debug-level
 transition into attempt `2/5`, `3/5`, and so on.
 When the Rust `log` option is enabled, those compile-time `wasm-rust` progress and retry lines are
@@ -340,7 +340,7 @@ const runtimeAssets: PlaygroundRuntimeAssets = {
 };
 ```
 
-Python custom loaders receive file names under the Pyodide asset root and can serve both core assets and package files. TeaVM custom loaders receive file names under the TeaVM asset root. Clang custom loaders receive `bin/memfs.zip`, `bin/clang.zip`, `bin/lld.zip`, and `bin/sysroot.tar.zip`; clangd custom loaders receive `clangd.js` and `clangd.wasm.gz`, with the worker decompressing the gzip payload before instantiation. Rust expects a browser-loadable compiler module URL; that module is responsible for serving its own nested runtime assets. C# and F# expect a browser-loadable `wasm-dotnet` module with its static .NET `browser-wasm` runtime assets. TinyGo expects a browser-loadable runtime module. The browser runtime now ships a direct-mode execution path that can produce and run the bundled TinyGo WASI artifact locally, alongside its sibling `tools/go-probe.wasm` and vendored emception assets. TinyGo also accepts a runtime asset loader + pack bundle in `runtimeAssets.tinygo` when you need to serve runtime assets out of a single compressed archive. Compressed TeaVM runtime assets are no longer unpacked inside the library; provide the final file URL or handle decompression in your own loader.
+Python custom loaders receive file names under the Pyodide asset root and can serve both core assets and package files. TeaVM custom loaders receive file names under the TeaVM asset root. Clang custom loaders receive `bin/memfs.zip`, `bin/clang.zip`, `bin/lld.zip`, and `bin/sysroot.tar.zip`; clangd custom loaders receive `clangd.js` and `clangd.wasm.gz`, with the worker decompressing the gzip payload before instantiation. Rust expects a browser-loadable compiler module URL; that module is responsible for serving its own nested runtime assets. C# and F# expect a browser-loadable `wasm-dotnet` module with its static .NET `browser-wasm` runtime assets. TinyGo expects a browser-loadable runtime module. The browser runtime now ships a direct-mode execution path that can produce and run the bundled TinyGo WASI artifact locally, alongside `tools/go-probe.wasm` and vendored emception assets. TinyGo also accepts a runtime asset loader + pack bundle in `runtimeAssets.tinygo` when you need to serve runtime assets out of a single compressed archive. Compressed TeaVM runtime assets are no longer unpacked inside the library; provide the final file URL or handle decompression in your own loader.
 
 If you want a host app to reuse the same runtime asset configuration for both `<Terminal>` and direct `playground(...)` access, bind it once:
 

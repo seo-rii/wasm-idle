@@ -50,6 +50,17 @@ function parseCompilerConfig(value: unknown): RuntimeCompilerConfig {
 			asset: expectString(sysroot.asset, 'root.compiler.sysroot.asset'),
 			...(typeof sysroot.runtimeRoot === 'string' ? { runtimeRoot: sysroot.runtimeRoot } : {})
 		},
+		...(compiler.resourceDir !== undefined
+			? { resourceDir: expectString(compiler.resourceDir, 'root.compiler.resourceDir') }
+			: {}),
+		...(compiler.compilerRuntimeLibDir !== undefined
+			? {
+					compilerRuntimeLibDir: expectString(
+						compiler.compilerRuntimeLibDir,
+						'root.compiler.compilerRuntimeLibDir'
+					)
+				}
+			: {}),
 		...(typeof compiler.defaultCppStandard === 'string'
 			? { defaultCppStandard: compiler.defaultCppStandard }
 			: {}),

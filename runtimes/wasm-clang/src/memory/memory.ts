@@ -1,4 +1,4 @@
-import { readStr, readStrR } from '../encode.js';
+import { readStr, readStrR } from '@wasm-idle/clang-common/encode';
 
 export default class Memory {
 	memory: WebAssembly.Memory;

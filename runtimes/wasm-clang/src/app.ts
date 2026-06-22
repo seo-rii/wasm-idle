@@ -4,11 +4,11 @@ import type {
 	DebugVariable,
 	DebugVariableMetadata
 } from './types.js';
-import { bindNew } from './apply.js';
+import { bindNew } from '@wasm-idle/clang-common/apply';
 import { type MemFS } from './memory/index.js';
 import Memory from './memory/memory.js';
 import { getInstance } from './wasm.js';
-import { AbortError, NotImplemented, ProcExit } from './error.js';
+import { AbortError, NotImplemented, ProcExit } from '@wasm-idle/clang-common/error';
 import {
 	evaluateDebugExpressionWithResolver,
 	parseStoredDebugValue,

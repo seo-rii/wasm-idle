@@ -1,8 +1,8 @@
 import type { DebugFrame, DebugVariable, DebugVariableMetadata } from '$lib/playground/options';
-import { bindNew } from '$lib/clang/apply';
+import { bindNew } from '@wasm-idle/clang-common/apply';
 import { Memory, type MemFS } from '$lib/clang/memory';
 import { getInstance } from '$lib/clang/wasm';
-import { AbortError, NotImplemented, ProcExit } from '$lib/clang/error';
+import { AbortError, NotImplemented, ProcExit } from '@wasm-idle/clang-common/error';
 import {
 	evaluateDebugExpressionWithResolver,
 	parseStoredDebugValue,

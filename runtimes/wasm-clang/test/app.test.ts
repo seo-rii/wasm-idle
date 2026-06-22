@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import App from '../src/app.js';
-import { NotImplemented, ProcExit } from '../src/error.js';
+import { NotImplemented, ProcExit } from '@wasm-idle/clang-common/error';
 import { evaluateDebugExpression } from '../src/debug/expression.js';
 import Memory from '../src/memory/memory.js';
 import * as wasmModule from '../src/wasm.js';

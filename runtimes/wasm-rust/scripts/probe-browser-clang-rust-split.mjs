@@ -8,7 +8,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const execFileAsync = promisify(execFile);
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const workspaceRoot = path.resolve(projectRoot, '..');
+const repoRoot = path.resolve(projectRoot, '..', '..');
 const rustToolchainRoot =
 	process.env.WASM_RUST_NATIVE_TOOLCHAIN_ROOT ||
 	path.join(os.homedir(), '.rustup', 'toolchains', 'nightly-2024-04-12-x86_64-unknown-linux-gnu');
@@ -16,9 +16,7 @@ const rustcPath = path.join(rustToolchainRoot, 'bin', 'rustc');
 const rustLldPath = path.join(rustToolchainRoot, 'lib', 'rustlib', 'x86_64-unknown-linux-gnu', 'bin', 'rust-lld');
 const rustTargetTriple = process.env.WASM_RUST_NATIVE_TARGET_TRIPLE || 'wasm32-wasip1';
 const sampleProgram = process.env.WASM_RUST_SAMPLE_PROGRAM || 'fn main() { println!("hi"); }';
-const wasmIdleRoot =
-	process.env.WASM_RUST_WASM_IDLE_ROOT || path.join(workspaceRoot, 'wasm-idle');
-const staticRoot = path.join(wasmIdleRoot, 'static');
+const staticRoot = path.join(repoRoot, 'static');
 const wabtInterpPath =
 	process.env.WASM_RUST_WABT_INTERP ||
 	path.join(projectRoot, 'node_modules', '.bin', 'wasm-interp');
@@ -56,7 +54,7 @@ async function withPatchedFetch(run) {
 }
 
 async function importBrowserClang() {
-	const modulePath = pathToFileURL(path.join(wasmIdleRoot, 'dist', 'clang', 'index.js')).href;
+	const modulePath = pathToFileURL(path.join(repoRoot, 'dist', 'clang', 'index.js')).href;
 	const mod = await import(modulePath);
 	return mod.default;
 }

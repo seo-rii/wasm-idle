@@ -1,6 +1,6 @@
 import Memory from './memory.js';
-import { bindNew } from '../apply.js';
-import { AbortError, assert } from '../error.js';
+import { bindNew } from '@wasm-idle/clang-common/apply';
+import { AbortError, assert } from '@wasm-idle/clang-common/error';
 import { compile } from '../wasm.js';
 import { memfsUrl } from '../url.js';
 import type { ProgressSink } from '../types.js';

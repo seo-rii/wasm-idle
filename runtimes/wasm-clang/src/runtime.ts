@@ -6,13 +6,14 @@ import type {
 	DebugPauseReason,
 	DebugStructFieldMetadata,
 	ProgressSink,
+	RuntimeCompilerConfig,
 	DebugVariable,
 	DebugVariableMetadata
 } from './types.js';
 import App from './app.js';
-import { installGccCompatibilityHeaders } from './gcc-compat.js';
+import { installGccCompatibilityHeaders } from '@wasm-idle/clang-common/gcc-compat';
 import { MemFS, untar } from './memory/index.js';
-import { green, yellow, normal } from './color.js';
+import { green, yellow, normal } from '@wasm-idle/clang-common/color';
 import { createCombinedProgress, type CombinedProgressSlots } from './progress.js';
 import {
 	resolveRuntimeAssetUrls,
@@ -33,22 +34,8 @@ if (typeof globalThis.document === 'undefined') {
 	} as unknown as Document;
 }
 
-const clangCommonArgs = [
-	'-disable-free',
-	'-isysroot',
-	'/',
-	'-internal-isystem',
-	'/include/c++/v1',
-	'-internal-isystem',
-	'/include',
-	'-internal-isystem',
-	'/lib/clang/8.0.1/include',
-	'-ferror-limit',
-	'19',
-	'-fmessage-length',
-	'80',
-	'-fcolor-diagnostics'
-];
+const defaultClangResourceDir = '/lib/clang/8.0.1';
+const defaultCompilerRuntimeLibDir = 'lib/clang/8.0.1/lib/wasi';
 
 const defaultCppStandardArg = '-std=gnu++2a';
 const defaultCStandardArg = '-std=gnu11';
@@ -216,6 +203,7 @@ class Clang {
 	lastBuildKey = '';
 	path: string;
 	assetUrls: RuntimeAssetUrls;
+	compilerConfig?: RuntimeCompilerConfig;
 	wasm?: WebAssembly.Module;
 	lastArtifactPath = 'main.wasm';
 	traceStartedAt = 0;
@@ -232,6 +220,7 @@ class Clang {
 			DEFAULT_BROWSER_CLANG_RUNTIME_PATH
 		).toString();
 		this.assetUrls = resolveRuntimeAssetUrls(this.path, options.manifest);
+		this.compilerConfig = options.manifest?.compiler;
 		this.onDebugEvent = options.onDebugEvent;
 		this.progress = createCombinedProgress((value) => options.progress?.(value));
 
@@ -1141,10 +1130,27 @@ class Clang {
 		await this.ready;
 		this.memfs.addFile(input, code);
 		const clang = await this.getModule(this.assetUrls?.clang || clangUrl(this.path));
+		const clangResourceDir = this.compilerConfig?.resourceDir || defaultClangResourceDir;
+		const clangResourceIncludeDir = `${clangResourceDir.replace(/\/+$/, '')}/include`;
 		const compilerArgs = [
 			'-cc1',
 			'-emit-obj',
-			...clangCommonArgs,
+			'-disable-free',
+			'-isysroot',
+			'/',
+			'-internal-isystem',
+			'/include/c++/v1',
+			'-internal-isystem',
+			'/include',
+			'-resource-dir',
+			clangResourceDir,
+			'-internal-isystem',
+			clangResourceIncludeDir,
+			'-ferror-limit',
+			'19',
+			'-fmessage-length',
+			'80',
+			'-fcolor-diagnostics',
 			'-O' + opt,
 			'-o',
 			obj,
@@ -1161,6 +1167,8 @@ class Clang {
 	async link(obj: string, wasm: string, debug = false) {
 		const stackSize = 1024 * 1024;
 		const libdir = 'lib/wasm32-wasi';
+		const compilerRuntimeLibDir =
+			this.compilerConfig?.compilerRuntimeLibDir || defaultCompilerRuntimeLibDir;
 		const crt1 = `${libdir}/crt1.o`;
 		await this.ready;
 		const lld = await this.getModule(this.assetUrls?.lld || lldUrl(this.path));
@@ -1181,7 +1189,7 @@ class Clang {
 			'-lc++',
 			'-lc++abi',
 			'-lm',
-			`-Llib/clang/8.0.1/lib/wasi`,
+			`-L${compilerRuntimeLibDir}`,
 			'-lclang_rt.builtins-wasm32',
 			'-o',
 			wasm

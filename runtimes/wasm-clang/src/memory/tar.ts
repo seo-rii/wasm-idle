@@ -1,5 +1,5 @@
 import type MemFS from './memFs.js';
-import { readStr, readOct } from '../encode.js';
+import { readOct, readStr } from '@wasm-idle/clang-common/encode';
 
 interface EntryInit {
 	filename: string;

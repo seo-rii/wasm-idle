@@ -1,1 +1,0 @@
-{"version":3,"file":"service.d.ts","sourceRoot":"","sources":["../../src/go/service.ts"],"names":[],"mappings":"AAAA,OAAO,EAIN,KAAK,qBAAqB,EAC1B,MAAM,WAAW,CAAC;AAEnB,MAAM,MAAM,sBAAsB,GAAG,aAAa,GAAG,aAAa,GAAG,aAAa,GAAG,SAAS,CAAC;AAE/F,MAAM,WAAW,eAAe;IAC/B,WAAW,EAAE,MAAM,CAAC;IACpB,MAAM,CAAC,EAAE,sBAAsB,CAAC;CAChC;AAoED,wBAAgB,qBAAqB,IAAI,qBAAqB,CAwD7D"}
