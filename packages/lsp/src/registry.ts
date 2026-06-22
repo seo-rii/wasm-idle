@@ -22,6 +22,14 @@ import { getGraphqlLanguageServer } from './graphql/server.js';
 import { getPrologLanguageServer } from './prolog/server.js';
 import { getRubyLanguageServer } from './ruby/server.js';
 import { getDuckDbLanguageServer, getSqlLanguageServer } from './sql/server.js';
+import {
+	getCssLanguageServer,
+	getHtmlLanguageServer,
+	getJsonLanguageServer,
+	getMarkdownLanguageServer,
+	getTomlLanguageServer,
+	getYamlLanguageServer
+} from './document/server.js';
 
 export async function getEditorLanguageServer(
 	language: string,
@@ -124,6 +132,30 @@ export async function getEditorLanguageServer(
 
 	if (normalized === 'ruby' || normalized === 'rb') {
 		return getRubyLanguageServer(options);
+	}
+
+	if (normalized === 'json' || normalized === 'jsonc') {
+		return getJsonLanguageServer(options);
+	}
+
+	if (normalized === 'yaml' || normalized === 'yml') {
+		return getYamlLanguageServer(options);
+	}
+
+	if (normalized === 'toml') {
+		return getTomlLanguageServer(options);
+	}
+
+	if (normalized === 'html' || normalized === 'htm') {
+		return getHtmlLanguageServer(options);
+	}
+
+	if (normalized === 'css') {
+		return getCssLanguageServer(options);
+	}
+
+	if (normalized === 'markdown' || normalized === 'md') {
+		return getMarkdownLanguageServer(options);
 	}
 
 	return null;

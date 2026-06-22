@@ -204,6 +204,20 @@ export {
 	type RubyWorkerOptions
 } from './ruby/index.js';
 export {
+	createDocumentWorkerService,
+	getCssLanguageServer,
+	getDocumentLanguageServer,
+	getHtmlLanguageServer,
+	getJsonLanguageServer,
+	getMarkdownLanguageServer,
+	getTomlLanguageServer,
+	getYamlLanguageServer,
+	type DocumentLanguageId,
+	type DocumentLanguageServerConfig,
+	type DocumentLanguageServerOptions,
+	type DocumentWorkerOptions
+} from './document/index.js';
+export {
 	applyContentChanges,
 	fullDocumentRange,
 	offsetAt,

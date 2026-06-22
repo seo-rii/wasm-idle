@@ -57,16 +57,22 @@ vi.mock('../src/jsonrpc.js', () => ({
 }));
 
 import {
+	getCssLanguageServer,
 	getFortranLanguageServer,
 	getGraphqlLanguageServer,
 	getHaskellLanguageServer,
+	getHtmlLanguageServer,
+	getJsonLanguageServer,
 	getLuaLanguageServer,
+	getMarkdownLanguageServer,
 	getOcamlLanguageServer,
 	getPhpLanguageServer,
 	getPrologLanguageServer,
 	getRubyLanguageServer,
 	getDuckDbLanguageServer,
 	getSqlLanguageServer,
+	getTomlLanguageServer,
+	getYamlLanguageServer,
 	getZigLanguageServer
 } from '../src/index.js';
 
@@ -282,5 +288,27 @@ describe('additional language server workers', () => {
 		});
 
 		handle.dispose();
+	});
+
+	it('starts document language servers with their language id', async () => {
+		const load = [
+			[getJsonLanguageServer, 'json'],
+			[getYamlLanguageServer, 'yaml'],
+			[getTomlLanguageServer, 'toml'],
+			[getHtmlLanguageServer, 'html'],
+			[getCssLanguageServer, 'css'],
+			[getMarkdownLanguageServer, 'markdown']
+		] as const;
+
+		for (const [getLanguageServer, language] of load) {
+			const handle = await getLanguageServer({
+				createWorker: () => new mockState.FakeWorker() as unknown as Worker
+			});
+			expect(mockState.workers.at(-1)?.messages[0]).toEqual({
+				type: 'init',
+				options: { language }
+			});
+			handle.dispose();
+		}
 	});
 });

@@ -109,6 +109,41 @@
 			"types": "./dist/ruby/index.d.ts",
 			"import": "./dist/ruby/index.js",
 			"default": "./dist/ruby/index.js"
+		},
+		"./document": {
+			"types": "./dist/document/index.d.ts",
+			"import": "./dist/document/index.js",
+			"default": "./dist/document/index.js"
+		},
+		"./json": {
+			"types": "./dist/document/index.d.ts",
+			"import": "./dist/document/index.js",
+			"default": "./dist/document/index.js"
+		},
+		"./yaml": {
+			"types": "./dist/document/index.d.ts",
+			"import": "./dist/document/index.js",
+			"default": "./dist/document/index.js"
+		},
+		"./toml": {
+			"types": "./dist/document/index.d.ts",
+			"import": "./dist/document/index.js",
+			"default": "./dist/document/index.js"
+		},
+		"./html": {
+			"types": "./dist/document/index.d.ts",
+			"import": "./dist/document/index.js",
+			"default": "./dist/document/index.js"
+		},
+		"./css": {
+			"types": "./dist/document/index.d.ts",
+			"import": "./dist/document/index.js",
+			"default": "./dist/document/index.js"
+		},
+		"./markdown": {
+			"types": "./dist/document/index.d.ts",
+			"import": "./dist/document/index.js",
+			"default": "./dist/document/index.js"
 		}
 	},
 	"files": [
@@ -120,22 +155,31 @@
 		"test": "vitest run"
 	},
 	"dependencies": {
-		"@wasm-idle/clang-common": "workspace:*",
 		"@bjorn3/browser_wasi_shim": "^0.4.2",
 		"@duckdb/duckdb-wasm": "1.33.1-dev45.0",
 		"@lumis-sh/wasm-fortran": "0.26.1",
 		"@ruby/wasm-wasi": "2.9.3-2.9.4",
+		"@wasm-idle/clang-common": "workspace:*",
 		"@zip.js/zip.js": "^2.8.26",
 		"assemblyscript": "0.28.17",
 		"graphql": "^17.0.1",
+		"markdown-it": "^14.2.0",
 		"pyodide": "0.29.3",
+		"smol-toml": "^1.7.0",
 		"sql.js": "^1.14.1",
 		"typescript": "^6.0.2",
+		"vscode-css-languageservice": "^6.3.10",
+		"vscode-html-languageservice": "^5.6.2",
+		"vscode-json-languageservice": "^5.7.2",
 		"vscode-jsonrpc": "^8.2.1",
+		"vscode-languageserver-textdocument": "^1.0.12",
+		"vscode-languageserver-types": "^3.18.0",
 		"wabt": "^1.0.39",
-		"web-tree-sitter": "0.26.9"
+		"web-tree-sitter": "0.26.9",
+		"yaml": "^2.9.0"
 	},
 	"devDependencies": {
+		"@types/markdown-it": "^14.1.2",
 		"@types/node": "^25.6.0",
 		"@types/sql.js": "^1.4.11",
 		"vitest": "^4.1.4"

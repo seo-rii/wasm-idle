@@ -2,6 +2,7 @@ import type { MessageReader, MessageWriter } from 'vscode-jsonrpc';
 import type { CompilerOptions } from 'typescript';
 import type { DuckDBBundles } from '@duckdb/duckdb-wasm';
 import type { LanguageToolAssetConfig } from './assets.js';
+import type { DocumentLanguageId } from './document/service.js';
 
 export interface EditorLanguageServerTransport {
 	reader: MessageReader;
@@ -101,6 +102,9 @@ export interface EditorLanguageServerRuntimeOptions {
 	};
 	ruby?: {
 		wasmUrl?: string;
+	};
+	document?: {
+		language?: DocumentLanguageId;
 	};
 }
 
