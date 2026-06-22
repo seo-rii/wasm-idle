@@ -436,6 +436,9 @@ importers:
       '@bjorn3/browser_wasi_shim':
         specifier: ^0.4.2
         version: 0.4.2
+      '@seo-rii/wasm-llvm':
+        specifier: github:seo-rii/wasm-llvm
+        version: https://codeload.github.com/seo-rii/wasm-llvm/tar.gz/20eafc4163579db6cbe0c2df4a9a1ec9e3bf091e
       '@wasm-idle/clang-common':
         specifier: workspace:*
         version: link:../../packages/clang-common
@@ -1797,6 +1800,11 @@ packages:
 
   '@ruby/wasm-wasi@2.9.3-2.9.4':
     resolution: {integrity: sha512-WxW9wON/TIf+8Ktng8qDJeV/6iH8kw+YwxOsOyXdAdLJgfYDPAXOqpIVd/96y2C9V8VJ2yqZm/IRv6nLeV6EKg==}
+
+  '@seo-rii/wasm-llvm@https://codeload.github.com/seo-rii/wasm-llvm/tar.gz/20eafc4163579db6cbe0c2df4a9a1ec9e3bf091e':
+    resolution: {tarball: https://codeload.github.com/seo-rii/wasm-llvm/tar.gz/20eafc4163579db6cbe0c2df4a9a1ec9e3bf091e}
+    version: 0.1.0
+    engines: {node: '>=20'}
 
   '@seorii/monaco@0.1.1':
     resolution: {integrity: sha512-NeeptucSfpTNGvZf4qqzXjN079peKpR90MQ5nacarwPaUkxvtF/wWEmcvTySMNPJV9GEx+ClC616IGUcXXlItQ==}
@@ -5147,6 +5155,10 @@ snapshots:
     dependencies:
       '@bjorn3/browser_wasi_shim': 0.4.2
       tslib: 2.8.1
+
+  '@seo-rii/wasm-llvm@https://codeload.github.com/seo-rii/wasm-llvm/tar.gz/20eafc4163579db6cbe0c2df4a9a1ec9e3bf091e':
+    dependencies:
+      '@zip.js/zip.js': 2.8.26
 
   '@seorii/monaco@0.1.1(svelte@5.55.4(@typescript-eslint/types@8.58.2))':
     dependencies:

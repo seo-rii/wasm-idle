@@ -1,13 +1,14 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const SOURCE_DIR = path.resolve(
-	process.env.WASM_CLANG_RUNTIME_SOURCE_DIR ||
-		path.resolve(REPO_ROOT, 'artifacts', 'runtime-source')
-);
+const require = createRequire(import.meta.url);
+const LOCAL_RUNTIME_SOURCE_DIR = path.resolve(REPO_ROOT, 'artifacts', 'runtime-source');
+const WASM_LLVM_PACKAGE_RUNTIME_SOURCE = '@seo-rii/wasm-llvm/artifacts/runtime-source';
+const SOURCE_DIR = resolveSourceDir();
 const TARGET_DIR = path.resolve(REPO_ROOT, 'dist', 'runtime');
 const TARGET_BIN_DIR = path.resolve(TARGET_DIR, 'bin');
 const TARGET_CLANGD_DIR = path.resolve(TARGET_DIR, 'clangd');
@@ -25,6 +26,21 @@ const assets = [
 	{ source: 'clangd/clangd.js', target: ['clangd', 'clangd.js'] },
 	{ source: 'clangd/clangd.wasm.gz', target: ['clangd', 'clangd.wasm.gz'] }
 ];
+
+function resolveSourceDir() {
+	if (process.env.WASM_CLANG_RUNTIME_SOURCE_DIR) {
+		return path.resolve(process.env.WASM_CLANG_RUNTIME_SOURCE_DIR);
+	}
+	try {
+		return path.dirname(require.resolve(`${WASM_LLVM_PACKAGE_RUNTIME_SOURCE}/toolchain.json`));
+	} catch {
+		try {
+			return path.dirname(require.resolve('@seo-rii/wasm-llvm/runtime-source'));
+		} catch {
+			return LOCAL_RUNTIME_SOURCE_DIR;
+		}
+	}
+}
 
 await fs.mkdir(TARGET_BIN_DIR, { recursive: true });
 await fs.mkdir(TARGET_CLANGD_DIR, { recursive: true });
@@ -98,7 +114,7 @@ const manifest = {
 
 const buildInfo = {
 	generatedAt: new Date().toISOString(),
-	source: 'artifacts/runtime-source',
+	source: SOURCE_DIR,
 	toolchain,
 	assets: buildAssets
 };
