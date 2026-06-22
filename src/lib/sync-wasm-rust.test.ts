@@ -20,13 +20,16 @@ async function writeFixtureFile(baseDir: string, relativePath: string, contents:
 
 describe('syncWasmRustDist', () => {
 	afterEach(async () => {
-		await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+		await Promise.all(
+			tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true }))
+		);
 	});
 
 	it('copies the built wasm-rust browser bundle into the target directory', async () => {
 		const sourceDir = await makeTempDir();
 		const targetDir = await makeTempDir();
 		const versionModulePath = path.join(await makeTempDir(), 'wasmRustVersion.ts');
+		const sharedLldDir = await makeTempDir();
 
 		await writeFixtureFile(sourceDir, 'index.js', 'export default "compiler";\n');
 		await writeFixtureFile(
@@ -50,7 +53,11 @@ describe('syncWasmRustDist', () => {
 				''
 			].join('\n')
 		);
-		await writeFixtureFile(sourceDir, 'runtime/runtime-manifest.v3.json', '{"manifestVersion":3}\n');
+		await writeFixtureFile(
+			sourceDir,
+			'runtime/runtime-manifest.v3.json',
+			'{"manifestVersion":3,"targets":{"wasm32-wasip1":{"compile":{"llvm":{"lldWasm":"llvm/lld.wasm.gz","lldData":"llvm/lld.data.gz"}}}}}\n'
+		);
 		await writeFixtureFile(sourceDir, 'runtime/rustc/rustc.wasm.gz', 'gzip-rustc');
 		await writeFixtureFile(
 			sourceDir,
@@ -65,6 +72,8 @@ describe('syncWasmRustDist', () => {
 		await writeFixtureFile(sourceDir, 'runtime/llvm/llc.wasm.gz', 'gzip-llc');
 		await writeFixtureFile(sourceDir, 'runtime/llvm/lld.wasm.gz', 'gzip-lld-wasm');
 		await writeFixtureFile(sourceDir, 'runtime/llvm/lld.data.gz', 'gzip-lld-data');
+		await writeFixtureFile(sharedLldDir, 'lld.wasm.gz', 'gzip-lld-wasm');
+		await writeFixtureFile(sharedLldDir, 'lld.data.gz', 'gzip-lld-data');
 		await writeFixtureFile(sourceDir, 'types.d.ts', 'export type Ignored = true;\n');
 		await writeFixtureFile(
 			sourceDir,
@@ -77,37 +86,56 @@ describe('syncWasmRustDist', () => {
 			'vendor/browser_wasi_shim/fs_mem.js',
 			'export class PreopenDirectory {}\n'
 		);
-		await writeFixtureFile(sourceDir, 'vendor/browser_wasi_shim/wasi.js', 'export default class WASI {}\n');
-		await writeFixtureFile(sourceDir, 'vendor/browser_wasi_shim/wasi_defs.js', 'export const ERRNO_SUCCESS = 0;\n');
-		await writeFixtureFile(sourceDir, 'vendor/browser_wasi_shim/tsconfig.tsbuildinfo', 'ignored');
+		await writeFixtureFile(
+			sourceDir,
+			'vendor/browser_wasi_shim/wasi.js',
+			'export default class WASI {}\n'
+		);
+		await writeFixtureFile(
+			sourceDir,
+			'vendor/browser_wasi_shim/wasi_defs.js',
+			'export const ERRNO_SUCCESS = 0;\n'
+		);
+		await writeFixtureFile(
+			sourceDir,
+			'vendor/browser_wasi_shim/tsconfig.tsbuildinfo',
+			'ignored'
+		);
 
-		const result = await syncWasmRustDist({ sourceDir, targetDir, versionModulePath });
+		const result = await syncWasmRustDist({
+			sourceDir,
+			targetDir,
+			versionModulePath,
+			sharedLldDir
+		});
 
 		await expect(readFile(path.join(targetDir, 'index.js'), 'utf8')).resolves.toContain(
 			'compiler'
 		);
 		await expect(
 			readFile(path.join(targetDir, 'browser-execution.js'), 'utf8')
-		).resolves.toContain("./vendor/browser_wasi_shim/fd.js");
+		).resolves.toContain('./vendor/browser_wasi_shim/fd.js');
 		await expect(
 			readFile(path.join(targetDir, 'browser-execution.js'), 'utf8')
-		).resolves.toContain("./vendor/browser_wasi_shim/fs_mem.js");
+		).resolves.toContain('./vendor/browser_wasi_shim/fs_mem.js');
 		await expect(
 			readFile(path.join(targetDir, 'browser-execution.js'), 'utf8')
-		).resolves.toContain("./vendor/browser_wasi_shim/wasi.js");
+		).resolves.toContain('./vendor/browser_wasi_shim/wasi.js');
 		await expect(
 			readFile(path.join(targetDir, 'browser-execution.js'), 'utf8')
-		).resolves.toContain("./vendor/browser_wasi_shim/wasi_defs.js");
-		await expect(
-			readFile(path.join(targetDir, 'rustc-runtime.js'), 'utf8')
-		).resolves.toContain("./vendor/browser_wasi_shim/index.js");
+		).resolves.toContain('./vendor/browser_wasi_shim/wasi_defs.js');
+		await expect(readFile(path.join(targetDir, 'rustc-runtime.js'), 'utf8')).resolves.toContain(
+			'./vendor/browser_wasi_shim/index.js'
+		);
 		await expect(
 			readFile(path.join(targetDir, 'runtime/runtime-manifest.v3.json'), 'utf8')
-		).resolves.toContain('"manifestVersion":3');
+		).resolves.toContain('../../shared/emscripten-lld/lld.wasm.gz');
 		await expect(
 			readFile(path.join(targetDir, 'runtime/rustc/rustc.wasm.gz'), 'utf8')
 		).resolves.toBe('gzip-rustc');
-		await expect(readFile(path.join(targetDir, 'runtime/rustc/rustc.wasm'), 'utf8')).rejects.toThrow();
+		await expect(
+			readFile(path.join(targetDir, 'runtime/rustc/rustc.wasm'), 'utf8')
+		).rejects.toThrow();
 		await expect(
 			readFile(
 				path.join(targetDir, 'runtime/packs/sysroot/wasm32-wasip1.index.json.gz'),
@@ -123,18 +151,24 @@ describe('syncWasmRustDist', () => {
 		await expect(
 			readFile(path.join(targetDir, 'runtime/packs/link/wasm32-wasip1.pack'), 'utf8')
 		).rejects.toThrow();
-		await expect(readFile(path.join(targetDir, 'runtime/llvm/llc.wasm.gz'), 'utf8')).resolves.toBe(
-			'gzip-llc'
-		);
-		await expect(readFile(path.join(targetDir, 'runtime/llvm/llc.wasm'), 'utf8')).rejects.toThrow();
+		await expect(
+			readFile(path.join(targetDir, 'runtime/llvm/llc.wasm.gz'), 'utf8')
+		).resolves.toBe('gzip-llc');
+		await expect(
+			readFile(path.join(targetDir, 'runtime/llvm/llc.wasm'), 'utf8')
+		).rejects.toThrow();
 		await expect(
 			readFile(path.join(targetDir, 'runtime/llvm/lld.wasm.gz'), 'utf8')
-		).resolves.toBe('gzip-lld-wasm');
-		await expect(readFile(path.join(targetDir, 'runtime/llvm/lld.wasm'), 'utf8')).rejects.toThrow();
+		).rejects.toThrow();
+		await expect(
+			readFile(path.join(targetDir, 'runtime/llvm/lld.wasm'), 'utf8')
+		).rejects.toThrow();
 		await expect(
 			readFile(path.join(targetDir, 'runtime/llvm/lld.data.gz'), 'utf8')
-		).resolves.toBe('gzip-lld-data');
-		await expect(readFile(path.join(targetDir, 'runtime/llvm/lld.data'), 'utf8')).rejects.toThrow();
+		).rejects.toThrow();
+		await expect(
+			readFile(path.join(targetDir, 'runtime/llvm/lld.data'), 'utf8')
+		).rejects.toThrow();
 		await expect(readFile(path.join(targetDir, 'types.d.ts'), 'utf8')).rejects.toThrow();
 		await expect(
 			readFile(path.join(targetDir, 'vendor/browser_wasi_shim/tsconfig.tsbuildinfo'), 'utf8')

@@ -2,6 +2,10 @@ import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promi
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+	rewriteSharedEmscriptenLldAssets,
+	validateSharedEmscriptenLldAssets
+} from './shared-emscripten-lld.mjs';
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const THIS_DIR = path.dirname(THIS_FILE);
@@ -15,6 +19,7 @@ const DEFAULT_VERSION_MODULE_PATH = path.resolve(
 	'playground',
 	'wasmRustVersion.ts'
 );
+const DEFAULT_SHARED_LLD_DIR = path.resolve(REPO_ROOT, 'static', 'shared', 'emscripten-lld');
 
 /**
  * @param {string} sourcePath
@@ -66,7 +71,9 @@ async function listFiles(rootDir) {
 }
 
 function toImportPath(fromFilePath, targetPath) {
-	const relativePath = path.relative(path.dirname(fromFilePath), targetPath).replaceAll(path.sep, '/');
+	const relativePath = path
+		.relative(path.dirname(fromFilePath), targetPath)
+		.replaceAll(path.sep, '/');
 	return relativePath.startsWith('.') ? relativePath : `./${relativePath}`;
 }
 
@@ -133,15 +140,18 @@ async function rewriteBrowserWasiShimImports(rootDir) {
 /**
  * @param {string} sourceDir
  */
-async function computeBundleFingerprint(sourceDir) {
+async function computeBundleFingerprint(sourceDir, additionalFiles = []) {
 	const hash = createHash('sha256');
 	for (const filePath of await listFiles(sourceDir)) {
-		const fileStats = await stat(filePath);
 		hash.update(path.relative(sourceDir, filePath));
 		hash.update('\0');
-		hash.update(String(fileStats.size));
+		hash.update(await readFile(filePath));
+		hash.update('\n');
+	}
+	for (const filePath of additionalFiles) {
+		hash.update(`shared/${path.basename(filePath)}`);
 		hash.update('\0');
-		hash.update(String(Math.trunc(fileStats.mtimeMs)));
+		hash.update(await readFile(filePath));
 		hash.update('\n');
 	}
 	return hash.digest('hex').slice(0, 16);
@@ -153,21 +163,30 @@ async function computeBundleFingerprint(sourceDir) {
  */
 async function writeVersionModule(versionModulePath, fingerprint) {
 	await mkdir(path.dirname(versionModulePath), { recursive: true });
-	const moduleSource =
-		`export const WASM_RUST_ASSET_VERSION = ${JSON.stringify(fingerprint)};\n`;
+	const moduleSource = `export const WASM_RUST_ASSET_VERSION = ${JSON.stringify(fingerprint)};\n`;
 	const current = await readFile(versionModulePath, 'utf8').catch(() => '');
 	if (current === moduleSource) return;
 	await writeFile(versionModulePath, moduleSource, 'utf8');
 }
 
 /**
- * @param {{ sourceDir?: string; targetDir?: string; versionModulePath?: string }} [options]
+ * @typedef {object} SyncWasmRustDistOptions
+ * @property {string} [sourceDir]
+ * @property {string} [targetDir]
+ * @property {string} [versionModulePath]
+ * @property {string} [sharedLldDir]
  */
-export async function syncWasmRustDist({
-	sourceDir = DEFAULT_SOURCE_DIR,
-	targetDir = DEFAULT_TARGET_DIR,
-	versionModulePath = DEFAULT_VERSION_MODULE_PATH
-} = {}) {
+
+/**
+ * @param {SyncWasmRustDistOptions} [options]
+ */
+export async function syncWasmRustDist(options = {}) {
+	const {
+		sourceDir = DEFAULT_SOURCE_DIR,
+		targetDir = DEFAULT_TARGET_DIR,
+		versionModulePath = DEFAULT_VERSION_MODULE_PATH,
+		sharedLldDir = DEFAULT_SHARED_LLD_DIR
+	} = options;
 	const sourceStats = await stat(sourceDir).catch(() => null);
 	if (!sourceStats?.isDirectory()) {
 		throw new Error(
@@ -180,12 +199,32 @@ export async function syncWasmRustDist({
 	if (!entryModuleStats?.isFile()) {
 		throw new Error(`wasm-rust dist entry was not found at ${entryModulePath}.`);
 	}
+	const hasSharedLldAssets = await validateSharedEmscriptenLldAssets({
+		sourceAssetDir: path.join(sourceDir, 'runtime', 'llvm'),
+		sharedAssetDir: sharedLldDir
+	});
 
 	await rm(targetDir, { recursive: true, force: true });
 	await mkdir(targetDir, { recursive: true });
 	await copyDirectory(sourceDir, targetDir);
 	await rewriteBrowserWasiShimImports(targetDir);
-	const fingerprint = await computeBundleFingerprint(targetDir);
+	if (hasSharedLldAssets) {
+		await rewriteSharedEmscriptenLldAssets({
+			targetAssetDir: path.join(targetDir, 'runtime', 'llvm'),
+			manifestPath: path.join(targetDir, 'runtime', 'runtime-manifest.v3.json'),
+			localWasmAsset: 'llvm/lld.wasm.gz',
+			localDataAsset: 'llvm/lld.data.gz'
+		});
+	}
+	const fingerprint = await computeBundleFingerprint(
+		targetDir,
+		hasSharedLldAssets
+			? [
+					path.join(sharedLldDir, 'lld.wasm.gz'),
+					path.join(sharedLldDir, 'lld.data.gz')
+				]
+			: []
+	);
 	await writeVersionModule(versionModulePath, fingerprint);
 
 	return {

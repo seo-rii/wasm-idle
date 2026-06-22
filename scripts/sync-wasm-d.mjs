@@ -2,6 +2,10 @@ import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promi
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+	rewriteSharedEmscriptenLldAssets,
+	validateSharedEmscriptenLldAssets
+} from './shared-emscripten-lld.mjs';
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const THIS_DIR = path.dirname(THIS_FILE);
@@ -15,6 +19,7 @@ const DEFAULT_VERSION_MODULE_PATH = path.resolve(
 	'playground',
 	'wasmDVersion.ts'
 );
+const DEFAULT_SHARED_LLD_DIR = path.resolve(REPO_ROOT, 'static', 'shared', 'emscripten-lld');
 
 function shouldSkipCopy(sourcePath) {
 	return sourcePath.endsWith('.d.ts') || sourcePath.endsWith('.tsbuildinfo');
@@ -50,10 +55,16 @@ async function listFiles(rootDir) {
 	return files.sort();
 }
 
-async function computeBundleFingerprint(sourceDir) {
+async function computeBundleFingerprint(sourceDir, additionalFiles = []) {
 	const hash = createHash('sha256');
 	for (const filePath of await listFiles(sourceDir)) {
 		hash.update(path.relative(sourceDir, filePath));
+		hash.update('\0');
+		hash.update(await readFile(filePath));
+		hash.update('\n');
+	}
+	for (const filePath of additionalFiles) {
+		hash.update(`shared/${path.basename(filePath)}`);
 		hash.update('\0');
 		hash.update(await readFile(filePath));
 		hash.update('\n');
@@ -81,7 +92,8 @@ async function writeVersionModule(versionModulePath, fingerprint) {
 export async function syncWasmDDist({
 	sourceDir = DEFAULT_SOURCE_DIR,
 	targetDir = DEFAULT_TARGET_DIR,
-	versionModulePath = DEFAULT_VERSION_MODULE_PATH
+	versionModulePath = DEFAULT_VERSION_MODULE_PATH,
+	sharedLldDir = DEFAULT_SHARED_LLD_DIR
 } = {}) {
 	const sourceStats = await stat(sourceDir).catch(() => null);
 	if (!sourceStats?.isDirectory()) {
@@ -105,12 +117,25 @@ export async function syncWasmDDist({
 		if (!fileStats?.isFile())
 			throw new Error(`wasm-d dist file was not found at ${absolutePath}.`);
 	}
+	await validateSharedEmscriptenLldAssets({
+		sourceAssetDir: path.join(sourceDir, 'runtime', 'bin'),
+		sharedAssetDir: sharedLldDir
+	});
 
 	await rm(targetDir, { recursive: true, force: true });
 	await mkdir(targetDir, { recursive: true });
 	await copyDirectory(sourceDir, targetDir);
 	await normalizeTextAssets(targetDir);
-	const fingerprint = await computeBundleFingerprint(targetDir);
+	await rewriteSharedEmscriptenLldAssets({
+		targetAssetDir: path.join(targetDir, 'runtime', 'bin'),
+		manifestPath: path.join(targetDir, 'runtime', 'runtime-manifest.v1.json'),
+		localWasmAsset: 'bin/lld.wasm.gz',
+		localDataAsset: 'bin/lld.data.gz'
+	});
+	const fingerprint = await computeBundleFingerprint(targetDir, [
+		path.join(sharedLldDir, 'lld.wasm.gz'),
+		path.join(sharedLldDir, 'lld.data.gz')
+	]);
 	await writeVersionModule(versionModulePath, fingerprint);
 	return { sourceDir, targetDir, fingerprint, versionModulePath };
 }
