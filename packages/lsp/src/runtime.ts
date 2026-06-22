@@ -137,6 +137,70 @@ export function resolveGleamLanguageServerManifestUrl(
 	);
 }
 
+export function resolveElixirLanguageServerBundleUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	if (typeof options === 'string') {
+		return resolveFileUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-elixir/bundle.avm`,
+			currentUrl
+		);
+	}
+	if (options?.elixir?.bundleUrl) {
+		return resolveFileUrl(options.elixir.bundleUrl, currentUrl);
+	}
+	if (options?.rootUrl) {
+		return resolveFileUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-elixir/bundle.avm`,
+			currentUrl
+		);
+	}
+	return resolveFileUrl('/wasm-elixir/bundle.avm', currentUrl);
+}
+
+export function resolveElixirLanguageServerWorkerUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	return typeof options === 'object' && options.elixir?.workerUrl
+		? resolveFileUrl(options.elixir.workerUrl, currentUrl)
+		: '';
+}
+
+export function resolveErlangLanguageServerBundleUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	if (typeof options === 'string') {
+		return resolveFileUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-elixir/bundle.avm`,
+			currentUrl
+		);
+	}
+	if (options?.erlang?.bundleUrl) {
+		return resolveFileUrl(options.erlang.bundleUrl, currentUrl);
+	}
+	if (options?.elixir?.bundleUrl) {
+		return resolveFileUrl(options.elixir.bundleUrl, currentUrl);
+	}
+	if (options?.rootUrl) {
+		return resolveFileUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-elixir/bundle.avm`,
+			currentUrl
+		);
+	}
+	return resolveFileUrl('/wasm-elixir/bundle.avm', currentUrl);
+}
+
+export function resolveErlangLanguageServerWorkerUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	if (typeof options !== 'object') return '';
+	return resolveFileUrl(options.erlang?.workerUrl || options.elixir?.workerUrl || '', currentUrl);
+}
+
 export function resolveZigLanguageServerCompilerUrl(
 	options: EditorLanguageServerOptions | undefined,
 	currentUrl = ''
@@ -312,7 +376,10 @@ export function resolvePrologLanguageServerBaseUrl(
 		return resolveFileUrl(options.prolog.baseUrl, currentUrl);
 	}
 	if (options?.rootUrl) {
-		return resolveFileUrl(`${normalizeRootUrl(options.rootUrl) || ''}/wasm-prolog/`, currentUrl);
+		return resolveFileUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-prolog/`,
+			currentUrl
+		);
 	}
 	return resolveFileUrl('/wasm-prolog/', currentUrl);
 }

@@ -48,6 +48,8 @@ export type PlaygroundLanguage =
 	| 'MARKDOWN';
 
 export type RuntimeLspCapability =
+	| 'elixir'
+	| 'erlang'
 	| 'gleam'
 	| 'go'
 	| 'rust'
@@ -237,6 +239,8 @@ export const editorOnlyLanguages = new Set<PlaygroundLanguage>([
 	'MARKDOWN'
 ]);
 export const runtimeLspCapabilities: Partial<Record<PlaygroundLanguage, RuntimeLspCapability>> = {
+	ELIXIR: 'elixir',
+	ERLANG: 'erlang',
 	GLEAM: 'gleam',
 	GO: 'go',
 	RUST: 'rust',
@@ -327,6 +331,7 @@ export const diagnosticMarkerLanguages = new Set([
 	'csharp',
 	'fsharp',
 	'vb',
+	'elixir',
 	'erlang',
 	'prolog',
 	'gleam',

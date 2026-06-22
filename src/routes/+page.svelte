@@ -53,6 +53,7 @@
 	import type { TerminalControl } from '$lib/terminal';
 	import type monaco from 'monaco-editor';
 	import { executeTerminalRun } from './execute';
+	import elixirRuntimeWorkerUrl from '$lib/playground/worker/elixir?worker&url';
 	import {
 		isEditorDefaultSource,
 		isLegacyEditorDefaultSource,
@@ -367,6 +368,17 @@
 	const dotnetLspEnabled = $derived(lspEnabled && dotnetLspLanguages.has(language));
 	const dotnetLspModuleUrl = $derived(
 		dotnetLspEnabled ? runtimeAssets.dotnet?.moduleUrl : undefined
+	);
+	const elixirLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'elixir');
+	const elixirLspBundleUrl = $derived(
+		elixirLspEnabled ? runtimeAssets.elixir?.bundleUrl : undefined
+	);
+	const erlangLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'erlang');
+	const erlangLspBundleUrl = $derived(
+		erlangLspEnabled ? runtimeAssets.erlang?.bundleUrl : undefined
+	);
+	const beamLspWorkerUrl = $derived(
+		elixirLspEnabled || erlangLspEnabled ? elixirRuntimeWorkerUrl : undefined
 	);
 	const gleamLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'gleam');
 	const gleamLspBaseUrl = $derived(gleamLspEnabled ? runtimeAssets.gleam?.baseUrl : undefined);
@@ -2584,6 +2596,12 @@
 				{clangdBaseUrl}
 				{dotnetLspEnabled}
 				{dotnetLspModuleUrl}
+				{elixirLspEnabled}
+				{elixirLspBundleUrl}
+				elixirLspWorkerUrl={beamLspWorkerUrl}
+				{erlangLspEnabled}
+				{erlangLspBundleUrl}
+				erlangLspWorkerUrl={beamLspWorkerUrl}
 				{gleamLspEnabled}
 				{gleamLspBaseUrl}
 				{gleamLspManifestUrl}

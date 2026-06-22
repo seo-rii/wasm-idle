@@ -60,6 +60,16 @@
 			"import": "./dist/gleam/index.js",
 			"default": "./dist/gleam/index.js"
 		},
+		"./elixir": {
+			"types": "./dist/elixir/index.d.ts",
+			"import": "./dist/elixir/index.js",
+			"default": "./dist/elixir/index.js"
+		},
+		"./erlang": {
+			"types": "./dist/erlang/index.d.ts",
+			"import": "./dist/erlang/index.js",
+			"default": "./dist/erlang/index.js"
+		},
 		"./assemblyscript": {
 			"types": "./dist/assemblyscript/index.d.ts",
 			"import": "./dist/assemblyscript/index.js",

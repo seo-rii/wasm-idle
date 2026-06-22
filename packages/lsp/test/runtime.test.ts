@@ -3,6 +3,10 @@ import { describe, expect, it } from 'vitest';
 import {
 	resolveCppLanguageServerBaseUrl,
 	resolveCppLanguageServerRuntimeAssetConfig,
+	resolveElixirLanguageServerBundleUrl,
+	resolveElixirLanguageServerWorkerUrl,
+	resolveErlangLanguageServerBundleUrl,
+	resolveErlangLanguageServerWorkerUrl,
 	resolveGoLanguageServerCompilerUrl,
 	resolveGleamLanguageServerBaseUrl,
 	resolveGleamLanguageServerManifestUrl,
@@ -122,6 +126,18 @@ describe('lsp runtime asset resolution', () => {
 			)
 		).toBe('https://static.example.com/repl_20240807/wasm-gleam/source-manifest.v1.json');
 		expect(
+			resolveElixirLanguageServerBundleUrl(
+				'https://static.example.com/repl_20240807',
+				'https://app.example.com/editor'
+			)
+		).toBe('https://static.example.com/repl_20240807/wasm-elixir/bundle.avm');
+		expect(
+			resolveErlangLanguageServerBundleUrl(
+				'https://static.example.com/repl_20240807',
+				'https://app.example.com/editor'
+			)
+		).toBe('https://static.example.com/repl_20240807/wasm-elixir/bundle.avm');
+		expect(
 			resolveAwkLanguageServerBaseUrl(
 				'https://static.example.com/repl_20240807',
 				'https://app.example.com/editor'
@@ -194,6 +210,14 @@ describe('lsp runtime asset resolution', () => {
 				baseUrl: 'https://gleam.example.com/wasm-gleam/',
 				manifestUrl: 'https://gleam.example.com/manifest.json'
 			},
+			elixir: {
+				bundleUrl: 'https://beam.example.com/bundle.avm?v=20240807',
+				workerUrl: 'https://app.example.com/assets/elixir-worker.js'
+			},
+			erlang: {
+				bundleUrl: 'https://erlang.example.com/bundle.avm?v=20240807',
+				workerUrl: 'https://app.example.com/assets/erlang-worker.js'
+			},
 			awk: {
 				baseUrl: 'https://awk.example.com/wasm-awk/',
 				workerUrl: 'https://awk.example.com/runner-worker.js?v=20240807'
@@ -250,6 +274,18 @@ describe('lsp runtime asset resolution', () => {
 		);
 		expect(resolveGleamLanguageServerManifestUrl(options)).toBe(
 			'https://gleam.example.com/manifest.json'
+		);
+		expect(resolveElixirLanguageServerBundleUrl(options)).toBe(
+			'https://beam.example.com/bundle.avm?v=20240807'
+		);
+		expect(resolveElixirLanguageServerWorkerUrl(options)).toBe(
+			'https://app.example.com/assets/elixir-worker.js'
+		);
+		expect(resolveErlangLanguageServerBundleUrl(options)).toBe(
+			'https://erlang.example.com/bundle.avm?v=20240807'
+		);
+		expect(resolveErlangLanguageServerWorkerUrl(options)).toBe(
+			'https://app.example.com/assets/erlang-worker.js'
 		);
 		expect(resolveAwkLanguageServerBaseUrl(options)).toBe('https://awk.example.com/wasm-awk/');
 		expect(resolveAwkLanguageServerWorkerUrl(options)).toBe(
@@ -329,6 +365,18 @@ describe('lsp runtime asset resolution', () => {
 		expect(
 			resolveGleamLanguageServerManifestUrl(undefined, 'https://app.example.com/editor')
 		).toBe('https://app.example.com/wasm-gleam/source-manifest.v1.json');
+		expect(
+			resolveElixirLanguageServerBundleUrl(undefined, 'https://app.example.com/editor')
+		).toBe('https://app.example.com/wasm-elixir/bundle.avm');
+		expect(
+			resolveErlangLanguageServerBundleUrl(undefined, 'https://app.example.com/editor')
+		).toBe('https://app.example.com/wasm-elixir/bundle.avm');
+		expect(
+			resolveElixirLanguageServerWorkerUrl(undefined, 'https://app.example.com/editor')
+		).toBe('');
+		expect(
+			resolveErlangLanguageServerWorkerUrl(undefined, 'https://app.example.com/editor')
+		).toBe('');
 		expect(resolveAwkLanguageServerBaseUrl(undefined, 'https://app.example.com/editor')).toBe(
 			'https://app.example.com/wasm-awk/'
 		);
@@ -338,9 +386,9 @@ describe('lsp runtime asset resolution', () => {
 		expect(resolvePerlLanguageServerBaseUrl(undefined, 'https://app.example.com/editor')).toBe(
 			'https://app.example.com/wasm-perl/'
 		);
-		expect(resolvePerlLanguageServerWorkerUrl(undefined, 'https://app.example.com/editor')).toBe(
-			'https://app.example.com/wasm-perl/runner-worker.js'
-		);
+		expect(
+			resolvePerlLanguageServerWorkerUrl(undefined, 'https://app.example.com/editor')
+		).toBe('https://app.example.com/wasm-perl/runner-worker.js');
 		expect(resolveRLanguageServerBaseUrl(undefined, 'https://app.example.com/editor')).toBe(
 			'https://app.example.com/webr/'
 		);

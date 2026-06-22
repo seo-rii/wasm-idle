@@ -51,6 +51,8 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(/clangdEnabled = false,/);
 		expect(source).toMatch(/dotnetLspEnabled\?: boolean;/);
 		expect(source).toMatch(/dotnetLspEnabled = false,/);
+		expect(source).toMatch(/elixirLspEnabled\?: boolean;/);
+		expect(source).toMatch(/erlangLspEnabled\?: boolean;/);
 		expect(source).toMatch(/gleamLspEnabled\?: boolean;/);
 		expect(source).toMatch(/gleamLspEnabled = false,/);
 		expect(source).toMatch(/goLspEnabled\?: boolean;/);
@@ -88,6 +90,7 @@ describe('Monaco route debug sync', () => {
 			'csharp',
 			'fsharp',
 			'vb',
+			'elixir',
 			'erlang',
 			'prolog',
 			'gleam',
@@ -142,6 +145,14 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(/label = 'WASM LSP';/);
 		expect(source).toMatch(
 			/const \{ getWasmLanguageServer \} = await import\('@wasm-idle\/lsp'\);/
+		);
+		expect(source).toMatch(/label = 'Elixir LSP';/);
+		expect(source).toMatch(/label = 'Erlang LSP';/);
+		expect(source).toMatch(
+			/const \{ getElixirLanguageServer \} = await import\('@wasm-idle\/lsp'\);/
+		);
+		expect(source).toMatch(
+			/const \{ getErlangLanguageServer \} = await import\('@wasm-idle\/lsp'\);/
 		);
 		expect(source).toMatch(
 			/const nextDebugView = new MonacoDebugView\(monacoApi, activeEditor, onBreakpointsChange\);[\s\S]*debugView = nextDebugView;/s
@@ -398,6 +409,8 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).toMatch(/const monacoLspLanguage = \$derived/);
 		expect(runtimeLspCapabilities.RUST).toBe('rust');
 		expect(runtimeLspCapabilities.GO).toBe('go');
+		expect(runtimeLspCapabilities.ELIXIR).toBe('elixir');
+		expect(runtimeLspCapabilities.ERLANG).toBe('erlang');
 		expect(runtimeLspCapabilities.R).toBe('r');
 		expect(runtimeLspCapabilities.AWK).toBe('awk');
 		expect(runtimeLspCapabilities.PERL).toBe('perl');
@@ -414,6 +427,13 @@ describe('Monaco route debug sync', () => {
 			/<select id="ocaml-binaryen-mode" bind:value=\{ocamlWasmBinaryenMode\}>/
 		);
 		expect(pageSource).toMatch(/WASM_ELIXIR_ASSET_VERSION/);
+		expect(pageSource).toMatch(
+			/import elixirRuntimeWorkerUrl from '\$lib\/playground\/worker\/elixir\?worker&url';/
+		);
+		expect(pageSource).toMatch(/const elixirLspEnabled = \$derived/);
+		expect(pageSource).toMatch(/const erlangLspEnabled = \$derived/);
+		expect(pageSource).toMatch(/elixirLspWorkerUrl=\{beamLspWorkerUrl\}/);
+		expect(pageSource).toMatch(/erlangLspWorkerUrl=\{beamLspWorkerUrl\}/);
 		expect(pageSource).toMatch(/wasm-elixir\/bundle\.avm\?v=\$\{WASM_ELIXIR_ASSET_VERSION\}/);
 		expect(pageSource).toMatch(/WASM_OCAML_ASSET_VERSION/);
 		expect(pageSource).toMatch(/WASM_TYPESCRIPT_ASSET_VERSION/);

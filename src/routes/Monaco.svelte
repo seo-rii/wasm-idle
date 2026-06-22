@@ -1973,6 +1973,8 @@
 	let clangdStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let pythonLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let dotnetLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let elixirLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let erlangLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let gleamLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let goLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let rustLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
@@ -2012,6 +2014,12 @@
 		clangdBaseUrl?: string;
 		dotnetLspEnabled?: boolean;
 		dotnetLspModuleUrl?: string;
+		elixirLspEnabled?: boolean;
+		elixirLspBundleUrl?: string;
+		elixirLspWorkerUrl?: string;
+		erlangLspEnabled?: boolean;
+		erlangLspBundleUrl?: string;
+		erlangLspWorkerUrl?: string;
 		gleamLspEnabled?: boolean;
 		gleamLspBaseUrl?: string;
 		gleamLspManifestUrl?: string;
@@ -2075,6 +2083,12 @@
 		clangdBaseUrl,
 		dotnetLspEnabled = false,
 		dotnetLspModuleUrl,
+		elixirLspEnabled = false,
+		elixirLspBundleUrl,
+		elixirLspWorkerUrl,
+		erlangLspEnabled = false,
+		erlangLspBundleUrl,
+		erlangLspWorkerUrl,
 		gleamLspEnabled = false,
 		gleamLspBaseUrl,
 		gleamLspManifestUrl,
@@ -2211,6 +2225,10 @@
 			normalizedFilePath,
 			clangdEnabled ? clangdBaseUrl || '' : '',
 			dotnetLspEnabled ? dotnetLspModuleUrl || '' : '',
+			elixirLspEnabled ? elixirLspBundleUrl || '' : '',
+			elixirLspEnabled ? elixirLspWorkerUrl || '' : '',
+			erlangLspEnabled ? erlangLspBundleUrl || '' : '',
+			erlangLspEnabled ? erlangLspWorkerUrl || '' : '',
 			gleamLspEnabled ? gleamLspBaseUrl || '' : '',
 			gleamLspEnabled ? gleamLspManifestUrl || '' : '',
 			goLspEnabled ? goLspCompilerUrl || '' : '',
@@ -2269,6 +2287,14 @@
 			case 'vb':
 				label = 'VB.NET LSP';
 				status = dotnetLspStatus;
+				break;
+			case 'elixir':
+				label = 'Elixir LSP';
+				status = elixirLspStatus;
+				break;
+			case 'erlang':
+				label = 'Erlang LSP';
+				status = erlangLspStatus;
 				break;
 			case 'gleam':
 				label = 'Gleam LSP';
@@ -2478,6 +2504,38 @@
 					currentUrl,
 					dotnet: { moduleUrl: dotnetLspModuleUrl || '' },
 					onStatus: (status) => (dotnetLspStatus = status)
+				});
+			}
+		},
+		{
+			languages: ['elixir'],
+			isEnabled: () => elixirLspEnabled && !!elixirLspBundleUrl && !!elixirLspWorkerUrl,
+			setStatus: (status) => (elixirLspStatus = status),
+			load: async (currentUrl) => {
+				const { getElixirLanguageServer } = await import('@wasm-idle/lsp');
+				return await getElixirLanguageServer({
+					currentUrl,
+					elixir: {
+						bundleUrl: elixirLspBundleUrl || '',
+						workerUrl: elixirLspWorkerUrl || ''
+					},
+					onStatus: (status) => (elixirLspStatus = status)
+				});
+			}
+		},
+		{
+			languages: ['erlang'],
+			isEnabled: () => erlangLspEnabled && !!erlangLspBundleUrl && !!erlangLspWorkerUrl,
+			setStatus: (status) => (erlangLspStatus = status),
+			load: async (currentUrl) => {
+				const { getErlangLanguageServer } = await import('@wasm-idle/lsp');
+				return await getErlangLanguageServer({
+					currentUrl,
+					erlang: {
+						bundleUrl: erlangLspBundleUrl || '',
+						workerUrl: erlangLspWorkerUrl || ''
+					},
+					onStatus: (status) => (erlangLspStatus = status)
 				});
 			}
 		},
@@ -2909,6 +2967,8 @@
 			clangd: clangdStatus,
 			python: pythonLspStatus,
 			dotnet: dotnetLspStatus,
+			elixir: elixirLspStatus,
+			erlang: erlangLspStatus,
 			gleam: gleamLspStatus,
 			go: goLspStatus,
 			rust: rustLspStatus,

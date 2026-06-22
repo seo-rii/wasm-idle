@@ -58,6 +58,8 @@ vi.mock('../src/jsonrpc.js', () => ({
 
 import {
 	getCssLanguageServer,
+	getElixirLanguageServer,
+	getErlangLanguageServer,
 	getFortranLanguageServer,
 	getGraphqlLanguageServer,
 	getHaskellLanguageServer,
@@ -119,6 +121,42 @@ describe('additional language server workers', () => {
 		});
 
 		handle.dispose();
+	});
+
+	it('starts Elixir and Erlang with AtomVM bundle and worker URLs', async () => {
+		const options = {
+			elixir: {
+				bundleUrl: '/wasm-elixir/bundle.avm?v=123',
+				workerUrl: '/assets/elixir-worker.js'
+			},
+			erlang: {
+				bundleUrl: '/wasm-elixir/bundle.avm?v=123',
+				workerUrl: '/assets/elixir-worker.js'
+			},
+			createWorker: () => new mockState.FakeWorker() as unknown as Worker
+		};
+
+		const elixir = await getElixirLanguageServer(options);
+		expect(mockState.workers[0]?.messages[0]).toEqual({
+			type: 'init',
+			options: {
+				language: 'elixir',
+				bundleUrl: '/wasm-elixir/bundle.avm?v=123',
+				workerUrl: '/assets/elixir-worker.js'
+			}
+		});
+		elixir.dispose();
+
+		const erlang = await getErlangLanguageServer(options);
+		expect(mockState.workers[1]?.messages[0]).toEqual({
+			type: 'init',
+			options: {
+				language: 'erlang',
+				bundleUrl: '/wasm-elixir/bundle.avm?v=123',
+				workerUrl: '/assets/elixir-worker.js'
+			}
+		});
+		erlang.dispose();
 	});
 
 	it('starts Lua with the wasm-lua module URL', async () => {

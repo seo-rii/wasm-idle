@@ -48,6 +48,14 @@ export interface EditorLanguageServerRuntimeOptions {
 	dotnet?: {
 		moduleUrl?: string;
 	};
+	elixir?: {
+		bundleUrl?: string;
+		workerUrl?: string;
+	};
+	erlang?: {
+		bundleUrl?: string;
+		workerUrl?: string;
+	};
 	gleam?: {
 		baseUrl?: string;
 		manifestUrl?: string;

@@ -5,6 +5,8 @@ import {
 	getFSharpLanguageServer,
 	getVisualBasicLanguageServer
 } from './dotnet/server.js';
+import { getElixirLanguageServer } from './elixir/server.js';
+import { getErlangLanguageServer } from './erlang/server.js';
 import { getGleamLanguageServer } from './gleam/server.js';
 import { getGoLanguageServer } from './go/server.js';
 import { getPythonLanguageServer } from './python/server.js';
@@ -59,6 +61,14 @@ export async function getEditorLanguageServer(
 
 	if (normalized === 'gleam') {
 		return getGleamLanguageServer(options);
+	}
+
+	if (normalized === 'elixir' || normalized === 'ex' || normalized === 'exs') {
+		return getElixirLanguageServer(options);
+	}
+
+	if (normalized === 'erlang' || normalized === 'erl' || normalized === 'hrl') {
+		return getErlangLanguageServer(options);
 	}
 
 	if (normalized === 'typescript' || normalized === 'ts') {

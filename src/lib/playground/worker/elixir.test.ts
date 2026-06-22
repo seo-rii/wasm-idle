@@ -300,6 +300,55 @@ describe('Elixir worker', () => {
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: 'ok' });
 	});
 
+	it('uses AtomVM eval actions for Elixir and Erlang diagnostics without executing user code', async () => {
+		await import('./elixir');
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				bundleUrl: '/runtime/elixir/bundle.avm',
+				log: true
+			}
+		});
+		await Promise.resolve();
+
+		await (globalThis as any).self.onmessage({
+			data: {
+				bundleUrl: '/runtime/elixir/bundle.avm',
+				code: 'IO.puts("hello")',
+				diagnose: true,
+				language: 'ELIXIR',
+				log: false
+			}
+		});
+		await Promise.resolve();
+
+		expect(lastModule.current.rawCall).toHaveBeenLastCalledWith(
+			'main',
+			JSON.stringify(['eval_elixir', 'Code.string_to_quoted!("IO.puts(\\"hello\\")")'])
+		);
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
+
+		await (globalThis as any).self.onmessage({
+			data: {
+				bundleUrl: '/runtime/elixir/bundle.avm',
+				code: 'main() -> ok.',
+				diagnose: true,
+				language: 'ERLANG',
+				log: false
+			}
+		});
+		await Promise.resolve();
+
+		expect(lastModule.current.rawCall).toHaveBeenLastCalledWith(
+			'main',
+			JSON.stringify([
+				'eval_erlang',
+				'{ok, WasmIdleTokens, _} = erl_scan:string("main() -> ok."), erl_parse:parse_exprs(WasmIdleTokens).'
+			])
+		);
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
+	});
+
 	it('compiles Erlang modules and invokes main/0 after loading the module', async () => {
 		const buffer = new SharedArrayBuffer(1024);
 		const source = `-module(main).

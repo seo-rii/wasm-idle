@@ -42,6 +42,8 @@ describe('language registry', () => {
 	it('keeps runtime-backed LSP capabilities aligned with editor-only languages', () => {
 		expect(runtimeLspCapabilities.RUST).toBe('rust');
 		expect(runtimeLspCapabilities.GO).toBe('go');
+		expect(runtimeLspCapabilities.ELIXIR).toBe('elixir');
+		expect(runtimeLspCapabilities.ERLANG).toBe('erlang');
 		expect(runtimeLspCapabilities.SQLITE).toBe('sql');
 		expect(runtimeLspCapabilities.PROLOG).toBe('prolog');
 		expect(runtimeLspCapabilities.RUBY).toBe('ruby');
@@ -66,6 +68,7 @@ describe('language registry', () => {
 		expect(defaultLanguageAliases.sql).toBe('sqlite');
 		expect(diagnosticMarkerLanguages.has('cpp')).toBe(true);
 		expect(diagnosticMarkerLanguages.has('python')).toBe(true);
+		expect(diagnosticMarkerLanguages.has('elixir')).toBe(true);
 		for (const language of ['json', 'yaml', 'toml', 'html', 'css', 'markdown']) {
 			expect(diagnosticMarkerLanguages.has(language)).toBe(true);
 		}

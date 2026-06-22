@@ -420,6 +420,7 @@ self.onmessage = async (event: { data: any }) => {
 		bundleUrl: nextBundleUrl,
 		buffer,
 		code,
+		diagnose = false,
 		prepare,
 		stdin,
 		language = 'ELIXIR',
@@ -434,6 +435,9 @@ self.onmessage = async (event: { data: any }) => {
 			return;
 		}
 
+		if (nextBundleUrl && bundleUrl !== nextBundleUrl) {
+			bundleUrl = nextBundleUrl;
+		}
 		if (!bundleUrl) {
 			throw new Error('Elixir runtime not loaded');
 		}
@@ -644,156 +648,175 @@ self.onmessage = async (event: { data: any }) => {
 				}
 				rewritten += replacement;
 				cursor = closeParenIndex + 1;
-				}
-				evalCode = rewritten;
 			}
-			if (evalLanguage === 'ERLANG' && currentStdinBuffer && /\bio:/.test(code)) {
-				let bufferedInput = '';
-				let reachedEof = false;
-				const pullStdinChunk = () => {
-					if (reachedEof) return false;
-					const nextChunk = waitForBufferedStdin(currentStdinBuffer, () =>
-						postMessage({ buffer: true })
-					);
-					if (nextChunk === null) {
-						reachedEof = true;
-						return false;
+			evalCode = rewritten;
+		}
+		if (evalLanguage === 'ERLANG' && currentStdinBuffer && /\bio:/.test(code)) {
+			let bufferedInput = '';
+			let reachedEof = false;
+			const pullStdinChunk = () => {
+				if (reachedEof) return false;
+				const nextChunk = waitForBufferedStdin(currentStdinBuffer, () =>
+					postMessage({ buffer: true })
+				);
+				if (nextChunk === null) {
+					reachedEof = true;
+					return false;
+				}
+				bufferedInput += nextChunk;
+				return true;
+			};
+			const readLineLiteral = () => {
+				while (true) {
+					const newlineIndex = bufferedInput.indexOf('\n');
+					if (newlineIndex !== -1) {
+						const line = bufferedInput.slice(0, newlineIndex + 1);
+						bufferedInput = bufferedInput.slice(newlineIndex + 1);
+						return JSON.stringify(line);
 					}
-					bufferedInput += nextChunk;
-					return true;
-				};
-				const readLineLiteral = () => {
-					while (true) {
-						const newlineIndex = bufferedInput.indexOf('\n');
-						if (newlineIndex !== -1) {
-							const line = bufferedInput.slice(0, newlineIndex + 1);
-							bufferedInput = bufferedInput.slice(newlineIndex + 1);
-							return JSON.stringify(line);
+					if (!pullStdinChunk()) {
+						if (!bufferedInput) {
+							return 'eof';
 						}
-						if (!pullStdinChunk()) {
-							if (!bufferedInput) {
-								return 'eof';
-							}
-							const remainder = bufferedInput;
-							bufferedInput = '';
-							return JSON.stringify(remainder);
-						}
+						const remainder = bufferedInput;
+						bufferedInput = '';
+						return JSON.stringify(remainder);
 					}
-				};
-				const readCountLiteral = (count: number) => {
-					if (count === 0) {
-						return JSON.stringify('');
-					}
-					while (bufferedInput.length < count && pullStdinChunk()) {
-						// Keep requesting chunks until the requested count or EOF is available.
-					}
-					if (!bufferedInput) {
-						return 'eof';
-					}
-					const consumed = bufferedInput.slice(0, Math.min(count, bufferedInput.length));
-					bufferedInput = bufferedInput.slice(consumed.length);
-					return JSON.stringify(consumed);
-				};
-				const wrapWithPromptOutput = (
-					promptArg: string,
-					valueExpr: string,
-					deviceArg?: string
-				) =>
-					deviceArg
-						? `((fun(WasmIdleDevice, WasmIdlePrompt) -> _ = WasmIdleDevice, io:format("~s", [WasmIdlePrompt]), ${valueExpr} end)(${deviceArg}, ${promptArg}))`
-						: `((fun(WasmIdlePrompt) -> io:format("~s", [WasmIdlePrompt]), ${valueExpr} end)(${promptArg}))`;
-				let rewritten = '';
-				let cursor = 0;
-				while (cursor < code.length) {
-					const current = code[cursor];
-					if (current === '"' || current === "'") {
-						const nextCursor = skipQuotedLiteral(code, cursor);
-						rewritten += code.slice(cursor, nextCursor);
-						cursor = nextCursor;
-						continue;
-					}
-					if (current === '%') {
-						const newlineIndex = code.indexOf('\n', cursor);
-						if (newlineIndex === -1) {
-							rewritten += code.slice(cursor);
-							break;
-						}
-						rewritten += code.slice(cursor, newlineIndex + 1);
-						cursor = newlineIndex + 1;
-						continue;
-					}
-					const callName = erlangStdinCallNames.find((candidate) => {
-						if (!code.startsWith(candidate, cursor)) {
-							return false;
-						}
-						const previous = code[cursor - 1] || '';
-						return !/[A-Za-z0-9_:@]/.test(previous);
-					});
-					if (!callName) {
-						rewritten += current;
-						cursor += 1;
-						continue;
-					}
-					let openParenIndex = cursor + callName.length;
-					while (/\s/.test(code[openParenIndex] || '')) {
-						openParenIndex += 1;
-					}
-					if (code[openParenIndex] !== '(') {
-						rewritten += current;
-						cursor += 1;
-						continue;
-					}
-					const closeParenIndex = findClosingParen(code, openParenIndex);
-					if (closeParenIndex === -1) {
+				}
+			};
+			const readCountLiteral = (count: number) => {
+				if (count === 0) {
+					return JSON.stringify('');
+				}
+				while (bufferedInput.length < count && pullStdinChunk()) {
+					// Keep requesting chunks until the requested count or EOF is available.
+				}
+				if (!bufferedInput) {
+					return 'eof';
+				}
+				const consumed = bufferedInput.slice(0, Math.min(count, bufferedInput.length));
+				bufferedInput = bufferedInput.slice(consumed.length);
+				return JSON.stringify(consumed);
+			};
+			const wrapWithPromptOutput = (
+				promptArg: string,
+				valueExpr: string,
+				deviceArg?: string
+			) =>
+				deviceArg
+					? `((fun(WasmIdleDevice, WasmIdlePrompt) -> _ = WasmIdleDevice, io:format("~s", [WasmIdlePrompt]), ${valueExpr} end)(${deviceArg}, ${promptArg}))`
+					: `((fun(WasmIdlePrompt) -> io:format("~s", [WasmIdlePrompt]), ${valueExpr} end)(${promptArg}))`;
+			let rewritten = '';
+			let cursor = 0;
+			while (cursor < code.length) {
+				const current = code[cursor];
+				if (current === '"' || current === "'") {
+					const nextCursor = skipQuotedLiteral(code, cursor);
+					rewritten += code.slice(cursor, nextCursor);
+					cursor = nextCursor;
+					continue;
+				}
+				if (current === '%') {
+					const newlineIndex = code.indexOf('\n', cursor);
+					if (newlineIndex === -1) {
 						rewritten += code.slice(cursor);
 						break;
 					}
-					const originalCall = code.slice(cursor, closeParenIndex + 1);
-					const args = splitTopLevelArgs(code.slice(openParenIndex + 1, closeParenIndex));
-					let replacement = originalCall;
-					if (callName === 'io:get_line' && (args.length === 1 || args.length === 2)) {
-						replacement =
-							args.length === 2
-								? wrapWithPromptOutput(args[1], readLineLiteral(), args[0])
-								: wrapWithPromptOutput(args[0], readLineLiteral());
-					} else if (
-						callName === 'io:get_chars' &&
-						(args.length === 2 || args.length === 3)
-					) {
-						const count = parseLiteralCount(args[args.length - 1]);
-						if (count === null) {
-							throw new Error(
-								'io:get_chars stdin bridge requires a literal non-negative count'
-							);
-						}
-						replacement =
-							args.length === 3
-								? wrapWithPromptOutput(args[1], readCountLiteral(count), args[0])
-								: wrapWithPromptOutput(args[0], readCountLiteral(count));
-					}
-					rewritten += replacement;
-					cursor = closeParenIndex + 1;
+					rewritten += code.slice(cursor, newlineIndex + 1);
+					cursor = newlineIndex + 1;
+					continue;
 				}
-				evalCode = rewritten;
+				const callName = erlangStdinCallNames.find((candidate) => {
+					if (!code.startsWith(candidate, cursor)) {
+						return false;
+					}
+					const previous = code[cursor - 1] || '';
+					return !/[A-Za-z0-9_:@]/.test(previous);
+				});
+				if (!callName) {
+					rewritten += current;
+					cursor += 1;
+					continue;
+				}
+				let openParenIndex = cursor + callName.length;
+				while (/\s/.test(code[openParenIndex] || '')) {
+					openParenIndex += 1;
+				}
+				if (code[openParenIndex] !== '(') {
+					rewritten += current;
+					cursor += 1;
+					continue;
+				}
+				const closeParenIndex = findClosingParen(code, openParenIndex);
+				if (closeParenIndex === -1) {
+					rewritten += code.slice(cursor);
+					break;
+				}
+				const originalCall = code.slice(cursor, closeParenIndex + 1);
+				const args = splitTopLevelArgs(code.slice(openParenIndex + 1, closeParenIndex));
+				let replacement = originalCall;
+				if (callName === 'io:get_line' && (args.length === 1 || args.length === 2)) {
+					replacement =
+						args.length === 2
+							? wrapWithPromptOutput(args[1], readLineLiteral(), args[0])
+							: wrapWithPromptOutput(args[0], readLineLiteral());
+				} else if (
+					callName === 'io:get_chars' &&
+					(args.length === 2 || args.length === 3)
+				) {
+					const count = parseLiteralCount(args[args.length - 1]);
+					if (count === null) {
+						throw new Error(
+							'io:get_chars stdin bridge requires a literal non-negative count'
+						);
+					}
+					replacement =
+						args.length === 3
+							? wrapWithPromptOutput(args[1], readCountLiteral(count), args[0])
+							: wrapWithPromptOutput(args[0], readCountLiteral(count));
+				}
+				rewritten += replacement;
+				cursor = closeParenIndex + 1;
 			}
-			let response: string;
-			if (evalLanguage === 'ERLANG') {
-				const moduleMatch = evalCode.match(
-					/^\s*-module\(\s*([a-z][A-Za-z0-9_@]*|'(?:[^'\\]|\\.)+')\s*\)\s*\./m
-				);
+			evalCode = rewritten;
+		}
+		let response: string;
+		if (evalLanguage === 'ERLANG') {
+			const moduleMatch = evalCode.match(
+				/^\s*-module\(\s*([a-z][A-Za-z0-9_@]*|'(?:[^'\\]|\\.)+')\s*\)\s*\./m
+			);
+			if (diagnose) {
 				if (moduleMatch) {
 					await runtime.module.call(runtime.process, ['eval_erlang_module', evalCode]);
-					response = await runtime.module.call(runtime.process, [
-						'eval_erlang',
-						`${moduleMatch[1]}:main().`
-					]);
 				} else {
-					response = await runtime.module.call(runtime.process, ['eval_erlang', evalCode]);
+					await runtime.module.call(runtime.process, [
+						'eval_erlang',
+						`{ok, WasmIdleTokens, _} = erl_scan:string(${JSON.stringify(code)}), erl_parse:parse_exprs(WasmIdleTokens).`
+					]);
 				}
-			} else {
-				response = await runtime.module.call(runtime.process, ['eval_elixir', evalCode]);
+				postMessage({ results: true });
+				return;
 			}
-			const rendered = runtime.module.deserialize(response);
+			if (moduleMatch) {
+				await runtime.module.call(runtime.process, ['eval_erlang_module', evalCode]);
+				response = await runtime.module.call(runtime.process, [
+					'eval_erlang',
+					`${moduleMatch[1]}:main().`
+				]);
+			} else {
+				response = await runtime.module.call(runtime.process, ['eval_erlang', evalCode]);
+			}
+		} else if (diagnose) {
+			await runtime.module.call(runtime.process, [
+				'eval_elixir',
+				`Code.string_to_quoted!(${JSON.stringify(code)})`
+			]);
+			postMessage({ results: true });
+			return;
+		} else {
+			response = await runtime.module.call(runtime.process, ['eval_elixir', evalCode]);
+		}
+		const rendered = runtime.module.deserialize(response);
 		if (typeof rendered === 'string') {
 			postMessage({ results: rendered });
 			return;

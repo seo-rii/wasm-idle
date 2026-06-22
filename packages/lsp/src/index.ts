@@ -2,6 +2,10 @@ export { getEditorLanguageServer } from './registry.js';
 export {
 	resolveCppLanguageServerBaseUrl,
 	resolveCppLanguageServerRuntimeAssetConfig,
+	resolveElixirLanguageServerBundleUrl,
+	resolveElixirLanguageServerWorkerUrl,
+	resolveErlangLanguageServerBundleUrl,
+	resolveErlangLanguageServerWorkerUrl,
 	resolveGoLanguageServerCompilerUrl,
 	resolveGleamLanguageServerBaseUrl,
 	resolveGleamLanguageServerManifestUrl,
@@ -88,6 +92,17 @@ export {
 	type GleamLanguageServerOptions,
 	type GleamWorkerOptions
 } from './gleam/index.js';
+export {
+	createBeamWorkerService,
+	getElixirLanguageServer,
+	type BeamDiagnosticRunnerRequest,
+	type BeamDiagnosticRunnerResult,
+	type BeamLanguageServerLanguage,
+	type BeamWorkerOptions,
+	type ElixirLanguageServerOptions,
+	type RunBeamDiagnostics
+} from './elixir/index.js';
+export { getErlangLanguageServer, type ErlangLanguageServerOptions } from './erlang/index.js';
 export {
 	createTypeScriptWorkerService,
 	getJavaScriptLanguageServer,
