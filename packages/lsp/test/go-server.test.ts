@@ -97,7 +97,7 @@ describe('getGoLanguageServer', () => {
 		expect(status).toHaveBeenCalledWith({
 			state: 'loading',
 			stage: 'load-go-compiler',
-			loaded: 0.08,
+			loaded: 0.45,
 			total: 1
 		});
 		expect(status).toHaveBeenCalledWith({ state: 'ready' });

@@ -1,4 +1,5 @@
 import { BrowserMessageReader, BrowserMessageWriter } from './jsonrpc.js';
+import { isProgressValue, nextFallbackProgress, progressRatio } from './progress.js';
 import type { EditorLanguageServerHandle } from './types.js';
 import type { MessageReader } from 'vscode-jsonrpc';
 
@@ -37,14 +38,8 @@ export function createLanguageServerProgressReporter(
 		onStatus?.({ state: 'loading', stage, loaded: 0, total: 1 });
 	};
 	const progress = ({ stage, loaded, total }: LanguageServerProgressUpdate = {}) => {
-		if (
-			typeof loaded === 'number' &&
-			Number.isFinite(loaded) &&
-			typeof total === 'number' &&
-			Number.isFinite(total) &&
-			total > 0
-		) {
-			fallbackLoaded = Math.max(fallbackLoaded, Math.min(loaded / total, 0.92));
+		if (isProgressValue(loaded) && isProgressValue(total) && total > 0) {
+			fallbackLoaded = Math.max(fallbackLoaded, progressRatio(loaded, total, 0.92));
 			onStatus?.({
 				state: 'loading',
 				...(stage ? { stage } : {}),
@@ -53,7 +48,7 @@ export function createLanguageServerProgressReporter(
 			});
 			return;
 		}
-		fallbackLoaded = fallbackLoaded === 0 ? 0.08 : Math.min(fallbackLoaded + 0.18, 0.92);
+		fallbackLoaded = nextFallbackProgress(fallbackLoaded, stage, 0.92);
 		onStatus?.({
 			state: 'loading',
 			...(stage ? { stage } : {}),

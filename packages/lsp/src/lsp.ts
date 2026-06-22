@@ -1,3 +1,5 @@
+import { isProgressValue, nextFallbackProgress, progressRatio } from './progress.js';
+
 export interface LspPosition {
 	line: number;
 	character: number;
@@ -172,18 +174,12 @@ export function startWorkerLanguageServer(
 	const send = (message: unknown) => scope.postMessage(message);
 	const sendProgress = (stage: string, loaded?: number, total?: number) => {
 		if (ready) return;
-		if (
-			typeof loaded === 'number' &&
-			Number.isFinite(loaded) &&
-			typeof total === 'number' &&
-			Number.isFinite(total) &&
-			total > 0
-		) {
-			fallbackProgress = Math.max(fallbackProgress, Math.min(loaded / total, 0.95));
+		if (isProgressValue(loaded) && isProgressValue(total) && total > 0) {
+			fallbackProgress = Math.max(fallbackProgress, progressRatio(loaded, total, 0.95));
 			send({ type: 'progress', stage, loaded, total });
 			return;
 		}
-		fallbackProgress = fallbackProgress === 0 ? 0.08 : Math.min(fallbackProgress + 0.18, 0.95);
+		fallbackProgress = nextFallbackProgress(fallbackProgress, stage, 0.95);
 		send({ type: 'progress', stage, loaded: fallbackProgress, total: 1 });
 	};
 	const respond = (id: string | number | null, result: unknown) =>

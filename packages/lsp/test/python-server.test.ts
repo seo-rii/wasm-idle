@@ -89,7 +89,7 @@ describe('getPythonLanguageServer', () => {
 		expect(status).toHaveBeenCalledWith({
 			state: 'loading',
 			stage: 'load-pyodide',
-			loaded: 0.08,
+			loaded: 0.35,
 			total: 1
 		});
 		expect(status).toHaveBeenCalledWith({ state: 'ready' });

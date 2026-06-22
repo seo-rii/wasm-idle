@@ -139,7 +139,7 @@ describe('startWorkerLanguageServer', () => {
 		expect(scope.messages).toContainEqual({
 			type: 'progress',
 			stage: 'load-test-runtime',
-			loaded: 0.08,
+			loaded: 0.45,
 			total: 1
 		});
 		expect(scope.messages).toContainEqual({
