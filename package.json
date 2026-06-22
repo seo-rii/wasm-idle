@@ -86,6 +86,8 @@
 		"prepack": "pnpm run package",
 		"verify:package": "node scripts/verify-package.mjs",
 		"test": "vitest run",
+		"test:lsp:browser:smoke": "WASM_IDLE_RUN_REAL_BROWSER_LSP=1 WASM_IDLE_LSP_BROWSER_LANGUAGES=CPP pnpm exec vitest run src/routes/monaco-lsp.playwright.test.ts",
+		"test:lsp:browser:full": "WASM_IDLE_RUN_REAL_BROWSER_LSP=1 pnpm exec vitest run src/routes/monaco-lsp.playwright.test.ts",
 		"test:watch": "vitest",
 		"check": "pnpm run build:publish-deps && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "pnpm run build:publish-deps && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
