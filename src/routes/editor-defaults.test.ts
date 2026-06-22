@@ -59,6 +59,12 @@ describe('editor defaults', () => {
 		expect(editorDefaults.sqlite).toContain('factorial_plus_bonus=');
 		expect(editorDefaults.php).toContain("file_get_contents('php://input')");
 		expect(editorDefaults.php).toContain('factorial_plus_bonus=');
+		expect(editorDefaults.json).toContain('"lsp": true');
+		expect(editorDefaults.yaml).toContain('lsp: true');
+		expect(editorDefaults.toml).toContain('lsp = true');
+		expect(editorDefaults.html).toContain('<!doctype html>');
+		expect(editorDefaults.css).toContain('font-family: system-ui');
+		expect(editorDefaults.markdown).toContain('# wasm-idle');
 		expect(editorDefaults.zig).toContain('std.io.getStdIn().reader()');
 		expect(editorDefaults.zig).toContain('factorial_plus_bonus={d}');
 		expect(editorDefaults.lisp).toContain('(define (factorial n)');
@@ -105,6 +111,14 @@ describe('editor defaults', () => {
 		expect(resolveEditorDefaultSource('octave', 'wasm32-wasip1')).toBe(editorDefaults.octave);
 		expect(resolveEditorDefaultSource('sqlite', 'wasm32-wasip1')).toBe(editorDefaults.sqlite);
 		expect(resolveEditorDefaultSource('php', 'wasm32-wasip1')).toBe(editorDefaults.php);
+		expect(resolveEditorDefaultSource('json', 'wasm32-wasip1')).toBe(editorDefaults.json);
+		expect(resolveEditorDefaultSource('yaml', 'wasm32-wasip1')).toBe(editorDefaults.yaml);
+		expect(resolveEditorDefaultSource('toml', 'wasm32-wasip1')).toBe(editorDefaults.toml);
+		expect(resolveEditorDefaultSource('html', 'wasm32-wasip1')).toBe(editorDefaults.html);
+		expect(resolveEditorDefaultSource('css', 'wasm32-wasip1')).toBe(editorDefaults.css);
+		expect(resolveEditorDefaultSource('markdown', 'wasm32-wasip1')).toBe(
+			editorDefaults.markdown
+		);
 		expect(resolveEditorDefaultSource('zig', 'wasm32-wasip1')).toBe(editorDefaults.zig);
 		expect(resolveEditorDefaultSource('lisp', 'wasm32-wasip1')).toBe(editorDefaults.lisp);
 		expect(resolveEditorDefaultSource('haskell', 'wasm32-wasip1')).toBe(editorDefaults.haskell);
@@ -137,6 +151,12 @@ describe('editor defaults', () => {
 		expect(isEditorDefaultSource(editorDefaults.octave)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.sqlite)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.php)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.json)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.yaml)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.toml)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.html)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.css)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.markdown)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.zig)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.lisp)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.haskell)).toBe(true);

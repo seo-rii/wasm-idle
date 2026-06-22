@@ -1905,6 +1905,48 @@
 		}
 	} satisfies monaco.languages.IMonarchLanguage;
 
+	const tomlLanguageConfiguration = {
+		comments: {
+			lineComment: '#'
+		},
+		brackets: [
+			['[', ']'],
+			['{', '}']
+		],
+		autoClosingPairs: [
+			{ open: '[', close: ']' },
+			{ open: '{', close: '}' },
+			{ open: '"', close: '"' },
+			{ open: "'", close: "'" }
+		],
+		surroundingPairs: [
+			{ open: '[', close: ']' },
+			{ open: '{', close: '}' },
+			{ open: '"', close: '"' },
+			{ open: "'", close: "'" }
+		]
+	} satisfies monaco.languages.LanguageConfiguration;
+
+	const tomlMonarchTokens = {
+		defaultToken: '',
+		tokenPostfix: '.toml',
+		tokenizer: {
+			root: [
+				[/#.*$/, 'comment'],
+				[/^\s*\[[^\]]+\]/, 'type.identifier'],
+				[/[A-Za-z0-9_-]+(?=\s*=)/, 'attribute.name'],
+				[/"([^"\\]|\\.)*$/, 'string.invalid'],
+				[/"([^"\\]|\\.)*"/, 'string'],
+				[/'[^']*'/, 'string'],
+				[/\b(?:true|false)\b/, 'keyword'],
+				[/\b\d{4}-\d{2}-\d{2}(?:[Tt ][0-9:.+-Zz]+)?\b/, 'number'],
+				[/[-+]?\b\d+(?:\.\d+)?(?:[eE][-+]?\d+)?\b/, 'number'],
+				[/[=,.]/, 'delimiter'],
+				[/[\[\]{}]/, '@brackets']
+			]
+		}
+	} satisfies monaco.languages.IMonarchLanguage;
+
 	export const editorValue = () => editor?.getValue() || '';
 
 	let clangdStatus = $state<LanguageServerStatus>({ state: 'disabled' });
@@ -1927,6 +1969,7 @@
 	let sqlLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let prologLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let rubyLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let documentLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let model = $state<monaco.editor.ITextModel | undefined>();
 	let debugView = $state<MonacoDebugView | null>(null);
 	interface Props {
@@ -2090,6 +2133,12 @@
 				| 'duckdb'
 				| 'sqlite'
 				| 'php'
+				| 'json'
+				| 'yaml'
+				| 'toml'
+				| 'html'
+				| 'css'
+				| 'markdown'
 				| 'rust',
 			rustTargetTriple
 		)
@@ -2245,6 +2294,30 @@
 			case 'ruby':
 				label = 'Ruby LSP';
 				status = rubyLspStatus;
+				break;
+			case 'json':
+				label = 'JSON LSP';
+				status = documentLspStatus;
+				break;
+			case 'yaml':
+				label = 'YAML LSP';
+				status = documentLspStatus;
+				break;
+			case 'toml':
+				label = 'TOML LSP';
+				status = documentLspStatus;
+				break;
+			case 'html':
+				label = 'HTML LSP';
+				status = documentLspStatus;
+				break;
+			case 'css':
+				label = 'CSS LSP';
+				status = documentLspStatus;
+				break;
+			case 'markdown':
+				label = 'Markdown LSP';
+				status = documentLspStatus;
 				break;
 		}
 		if (!status || status.state === 'disabled') return null;
@@ -2600,6 +2673,34 @@
 					onStatus: (status) => (rubyLspStatus = status)
 				});
 			}
+		},
+		{
+			languages: ['json', 'yaml', 'toml', 'html', 'css', 'markdown'],
+			isEnabled: () => true,
+			setStatus: (status) => (documentLspStatus = status),
+			load: async (currentUrl) => {
+				const {
+					getCssLanguageServer,
+					getHtmlLanguageServer,
+					getJsonLanguageServer,
+					getMarkdownLanguageServer,
+					getTomlLanguageServer,
+					getYamlLanguageServer
+				} = await import('@wasm-idle/lsp');
+				const load = {
+					json: getJsonLanguageServer,
+					yaml: getYamlLanguageServer,
+					toml: getTomlLanguageServer,
+					html: getHtmlLanguageServer,
+					css: getCssLanguageServer,
+					markdown: getMarkdownLanguageServer
+				}[activeLspLanguage as 'json' | 'yaml' | 'toml' | 'html' | 'css' | 'markdown'];
+				if (!load) throw new Error(`Unsupported document LSP language: ${activeLspLanguage}`);
+				return await load({
+					currentUrl,
+					onStatus: (status) => (documentLspStatus = status)
+				});
+			}
 		}
 	];
 
@@ -2701,7 +2802,13 @@
 			duckdb: duckdbLspStatus,
 			sql: sqlLspStatus,
 			prolog: prologLspStatus,
-			ruby: rubyLspStatus
+			ruby: rubyLspStatus,
+			json: documentLspStatus,
+			yaml: documentLspStatus,
+			toml: documentLspStatus,
+			html: documentLspStatus,
+			css: documentLspStatus,
+			markdown: documentLspStatus
 		};
 	});
 
@@ -2963,6 +3070,15 @@
 			}
 			monacoApi.languages.setLanguageConfiguration('fortran', fortranLanguageConfiguration);
 			monacoApi.languages.setMonarchTokensProvider('fortran', fortranMonarchTokens);
+			if (!monacoApi.languages.getLanguages().some(({ id }) => id === 'toml')) {
+				monacoApi.languages.register({
+					id: 'toml',
+					aliases: ['TOML', 'toml'],
+					extensions: ['.toml']
+				});
+			}
+			monacoApi.languages.setLanguageConfiguration('toml', tomlLanguageConfiguration);
+			monacoApi.languages.setMonarchTokensProvider('toml', tomlMonarchTokens);
 			if (!monacoApi.languages.getLanguages().some(({ id }) => id === 'lisp')) {
 				monacoApi.languages.register({
 					id: 'lisp',

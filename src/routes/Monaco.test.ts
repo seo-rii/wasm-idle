@@ -99,7 +99,13 @@ describe('Monaco route debug sync', () => {
 			'haskell',
 			'r',
 			'octave',
-			'cpp'
+			'cpp',
+			'json',
+			'yaml',
+			'toml',
+			'html',
+			'css',
+			'markdown'
 		]) {
 			expect(diagnosticMarkerLanguages.has(markerLanguage)).toBe(true);
 		}
@@ -183,16 +189,30 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(/getFortranLanguageServer/);
 		expect(source).toMatch(/getGraphqlLanguageServer/);
 		expect(source).toMatch(/getDuckDbLanguageServer/);
+		expect(source).toMatch(/getJsonLanguageServer/);
+		expect(source).toMatch(/getYamlLanguageServer/);
+		expect(source).toMatch(/getTomlLanguageServer/);
+		expect(source).toMatch(/getHtmlLanguageServer/);
+		expect(source).toMatch(/getCssLanguageServer/);
+		expect(source).toMatch(/getMarkdownLanguageServer/);
 		expect(source).toMatch(/languages: \['c', 'cpp'\]/);
 		expect(source).toMatch(/languages: \['fortran'\]/);
 		expect(source).toMatch(/languages: \['graphql'\]/);
 		expect(source).toMatch(/languages: \['duckdb'\]/);
+		expect(source).toMatch(/languages: \['json', 'yaml', 'toml', 'html', 'css', 'markdown'\]/);
 		expect(source).toMatch(/id: 'fortran'/);
 		expect(source).toMatch(
 			/monacoApi\.languages\.setMonarchTokensProvider\('fortran', fortranMonarchTokens\);/
 		);
+		expect(source).toMatch(/id: 'toml'/);
+		expect(source).toMatch(
+			/monacoApi\.languages\.setMonarchTokensProvider\('toml', tomlMonarchTokens\);/
+		);
 		expect(source).toMatch(/typescript: \{ libUrl: typescriptLspLibUrl \}/);
 		expect(source).toMatch(/javascript: \{ libUrl: typescriptLspLibUrl \}/);
+		for (const statusKey of ['json', 'yaml', 'toml', 'html', 'css', 'markdown']) {
+			expect(source).toMatch(new RegExp(`${statusKey}: documentLspStatus`));
+		}
 		expect(source).not.toMatch(/clangd ready/);
 		expect(source).not.toMatch(/clangd loading/);
 		expect(source).not.toMatch(/clangd failed:/);
@@ -222,6 +242,14 @@ describe('Monaco route debug sync', () => {
 		expect(resolveEditorDefaultSource('graphql', 'wasm32-wasip1')).toBe(editorDefaults.graphql);
 		expect(resolveEditorDefaultSource('duckdb', 'wasm32-wasip1')).toBe(editorDefaults.duckdb);
 		expect(resolveEditorDefaultSource('php', 'wasm32-wasip1')).toBe(editorDefaults.php);
+		expect(resolveEditorDefaultSource('json', 'wasm32-wasip1')).toBe(editorDefaults.json);
+		expect(resolveEditorDefaultSource('yaml', 'wasm32-wasip1')).toBe(editorDefaults.yaml);
+		expect(resolveEditorDefaultSource('toml', 'wasm32-wasip1')).toBe(editorDefaults.toml);
+		expect(resolveEditorDefaultSource('html', 'wasm32-wasip1')).toBe(editorDefaults.html);
+		expect(resolveEditorDefaultSource('css', 'wasm32-wasip1')).toBe(editorDefaults.css);
+		expect(resolveEditorDefaultSource('markdown', 'wasm32-wasip1')).toBe(
+			editorDefaults.markdown
+		);
 		expect(editorDefaults.c).toContain('puts("Hello, WebAssembly!")');
 		expect(editorDefaults.go).toContain("ReadString('\\n')");
 		expect(editorDefaults.d).toContain('stdin.readln()');
@@ -275,6 +303,12 @@ describe('Monaco route debug sync', () => {
 		expect(isEditorDefaultSource(editorDefaults.duckdb)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.sqlite)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.php)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.json)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.yaml)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.toml)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.html)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.css)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.markdown)).toBe(true);
 		expect(isEditorDefaultSource(rustEditorDefaults['wasm32-wasip1'])).toBe(true);
 		expect(isLegacyEditorDefaultSource(legacyBrokenTinyGoEditorDefault)).toBe(true);
 		expect(isLegacyEditorDefaultSource(legacyBrokenFsharpEditorDefault)).toBe(true);
@@ -325,6 +359,12 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).toMatch(/<option value="FORTRAN">Fortran<\/option>/);
 		expect(pageSource).toMatch(/<option value="GRAPHQL">GraphQL<\/option>/);
 		expect(pageSource).toMatch(/<option value="DUCKDB">DuckDB<\/option>/);
+		expect(pageSource).toMatch(/<option value="JSON">JSON<\/option>/);
+		expect(pageSource).toMatch(/<option value="YAML">YAML<\/option>/);
+		expect(pageSource).toMatch(/<option value="TOML">TOML<\/option>/);
+		expect(pageSource).toMatch(/<option value="HTML">HTML<\/option>/);
+		expect(pageSource).toMatch(/<option value="CSS">CSS<\/option>/);
+		expect(pageSource).toMatch(/<option value="MARKDOWN">Markdown<\/option>/);
 		expect(pageSource).toMatch(/language=\{editorLanguage\}/);
 		expect(pageSource).toMatch(/lspLanguage=\{monacoLspLanguage\}/);
 		expect(pageSource).toMatch(/filePath=\{activePath\}/);

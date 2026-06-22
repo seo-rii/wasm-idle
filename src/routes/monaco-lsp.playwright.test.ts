@@ -113,6 +113,52 @@ const lspBrowserCases = [
 		timeoutMs: 240_000
 	},
 	{
+		language: 'JSON',
+		label: 'JSON',
+		fileName: 'main.json',
+		source: '{ "name": }\n',
+		aliases: ['jsonc'],
+		timeoutMs: 120_000
+	},
+	{
+		language: 'YAML',
+		label: 'YAML',
+		fileName: 'main.yaml',
+		source: 'items: [1\n',
+		aliases: ['yml'],
+		timeoutMs: 120_000
+	},
+	{
+		language: 'TOML',
+		label: 'TOML',
+		fileName: 'main.toml',
+		source: 'items = [1\n',
+		timeoutMs: 120_000
+	},
+	{
+		language: 'HTML',
+		label: 'HTML',
+		fileName: 'index.html',
+		source: '<main><h1>Hello</main>\n',
+		aliases: ['htm'],
+		timeoutMs: 120_000
+	},
+	{
+		language: 'CSS',
+		label: 'CSS',
+		fileName: 'styles.css',
+		source: '.main {\n  color: ;\n}\n',
+		timeoutMs: 120_000
+	},
+	{
+		language: 'MARKDOWN',
+		label: 'Markdown',
+		fileName: 'README.md',
+		source: '# Intro\n\n[missing][ref]\n\n[link](#nope)\n',
+		aliases: ['md'],
+		timeoutMs: 120_000
+	},
+	{
 		language: 'TYPESCRIPT',
 		label: 'TypeScript',
 		fileName: 'main.ts',
@@ -280,6 +326,12 @@ const lspStatusKeyByLanguage: Record<string, string> = {
 	FORTRAN: 'fortran',
 	GRAPHQL: 'graphql',
 	DUCKDB: 'duckdb',
+	JSON: 'json',
+	YAML: 'yaml',
+	TOML: 'toml',
+	HTML: 'html',
+	CSS: 'css',
+	MARKDOWN: 'markdown',
 	PYTHON: 'python',
 	ASSEMBLYSCRIPT: 'assemblyscript',
 	WAT: 'wat',

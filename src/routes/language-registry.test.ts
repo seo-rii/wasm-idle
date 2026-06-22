@@ -48,6 +48,10 @@ describe('language registry', () => {
 		expect(editorOnlyLanguages.has('FORTRAN')).toBe(true);
 		expect(editorOnlyLanguages.has('GRAPHQL')).toBe(true);
 		expect(editorOnlyLanguages.has('DUCKDB')).toBe(true);
+		for (const language of ['JSON', 'YAML', 'TOML', 'HTML', 'CSS', 'MARKDOWN'] as const) {
+			expect(editorOnlyLanguages.has(language)).toBe(true);
+			expect(runtimeLspCapabilities[language]).toBeUndefined();
+		}
 	});
 
 	it('keeps Monaco-specific aliases and marker languages centralized', () => {
@@ -58,6 +62,9 @@ describe('language registry', () => {
 		expect(defaultLanguageAliases.sql).toBe('sqlite');
 		expect(diagnosticMarkerLanguages.has('cpp')).toBe(true);
 		expect(diagnosticMarkerLanguages.has('python')).toBe(true);
+		for (const language of ['json', 'yaml', 'toml', 'html', 'css', 'markdown']) {
+			expect(diagnosticMarkerLanguages.has(language)).toBe(true);
+		}
 	});
 
 	it('keeps compiler diagnostic support visible for compiled languages', () => {

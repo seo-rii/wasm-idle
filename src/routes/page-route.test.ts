@@ -302,6 +302,12 @@ describe('example route debug actions', () => {
 		expectEditorLanguage('FORTRAN', 'fortran');
 		expectEditorLanguage('GRAPHQL', 'graphql');
 		expectEditorLanguage('DUCKDB', 'sql');
+		expectEditorLanguage('JSON', 'json');
+		expectEditorLanguage('YAML', 'yaml');
+		expectEditorLanguage('TOML', 'toml');
+		expectEditorLanguage('HTML', 'html');
+		expectEditorLanguage('CSS', 'css');
+		expectEditorLanguage('MARKDOWN', 'markdown');
 		expect(source).toMatch(/RUST: \(\) => \(\{ rustTargetTriple \}\)/);
 		expect(source).toMatch(/\.\.\.languageExecutionOptions/);
 		expect(source).toMatch(/<select id="rust-target-triple" bind:value=\{rustTargetTriple\}>/);
@@ -754,17 +760,33 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/SELECT results are printed as tab-separated tables/);
 	});
 
-	it('surfaces editor-only Fortran, GraphQL, and DuckDB LSP workspaces', () => {
+	it('surfaces editor-only LSP workspaces', () => {
 		for (const [language, label] of [
 			['FORTRAN', 'Fortran'],
 			['GRAPHQL', 'GraphQL'],
-			['DUCKDB', 'DuckDB']
+			['DUCKDB', 'DuckDB'],
+			['JSON', 'JSON'],
+			['YAML', 'YAML'],
+			['TOML', 'TOML'],
+			['HTML', 'HTML'],
+			['CSS', 'CSS'],
+			['MARKDOWN', 'Markdown']
 		]) {
 			expect(source).toMatch(new RegExp(`<option value="${language}">${label}<\\/option>`));
 		}
-		expect(editorOnlyLanguages.has('FORTRAN')).toBe(true);
-		expect(editorOnlyLanguages.has('GRAPHQL')).toBe(true);
-		expect(editorOnlyLanguages.has('DUCKDB')).toBe(true);
+		for (const language of [
+			'FORTRAN',
+			'GRAPHQL',
+			'DUCKDB',
+			'JSON',
+			'YAML',
+			'TOML',
+			'HTML',
+			'CSS',
+			'MARKDOWN'
+		] as const) {
+			expect(editorOnlyLanguages.has(language)).toBe(true);
+		}
 		expect(source).toMatch(
 			/const executionAvailable = \$derived\(!editorOnlyLanguages\.has\(language\)\);/
 		);
@@ -773,9 +795,35 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/fortran: 'FORTRAN'/);
 		expect(source).toMatch(/graphql: 'GRAPHQL'/);
 		expect(source).toMatch(/duckdb: 'DUCKDB'/);
+		expect(source).toMatch(/json: 'JSON'/);
+		expect(source).toMatch(/jsonc: 'JSON'/);
+		expect(source).toMatch(/yaml: 'YAML'/);
+		expect(source).toMatch(/yml: 'YAML'/);
+		expect(source).toMatch(/toml: 'TOML'/);
+		expect(source).toMatch(/html: 'HTML'/);
+		expect(source).toMatch(/htm: 'HTML'/);
+		expect(source).toMatch(/css: 'CSS'/);
+		expect(source).toMatch(/markdown: 'MARKDOWN'/);
+		expect(source).toMatch(/md: 'MARKDOWN'/);
 		expect(source).toMatch(/FORTRAN: 'main\.f90'/);
 		expect(source).toMatch(/GRAPHQL: 'main\.graphql'/);
 		expect(source).toMatch(/DUCKDB: 'main\.duckdb'/);
+		expect(source).toMatch(/JSON: 'main\.json'/);
+		expect(source).toMatch(/YAML: 'main\.yaml'/);
+		expect(source).toMatch(/TOML: 'main\.toml'/);
+		expect(source).toMatch(/HTML: 'index\.html'/);
+		expect(source).toMatch(/CSS: 'styles\.css'/);
+		expect(source).toMatch(/MARKDOWN: 'README\.md'/);
+		expect(source).toMatch(/'.json': 'JSON'/);
+		expect(source).toMatch(/'.jsonc': 'JSON'/);
+		expect(source).toMatch(/'.yaml': 'YAML'/);
+		expect(source).toMatch(/'.yml': 'YAML'/);
+		expect(source).toMatch(/'.toml': 'TOML'/);
+		expect(source).toMatch(/'.html': 'HTML'/);
+		expect(source).toMatch(/'.htm': 'HTML'/);
+		expect(source).toMatch(/'.css': 'CSS'/);
+		expect(source).toMatch(/'.md': 'MARKDOWN'/);
+		expect(source).toMatch(/'.markdown': 'MARKDOWN'/);
 	});
 
 	it('surfaces PHP through the php-wasm browser runtime contract', () => {

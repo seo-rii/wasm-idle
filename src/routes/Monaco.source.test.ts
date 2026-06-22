@@ -26,12 +26,18 @@ describe('Monaco route source', () => {
 		expect(registrySource).toContain(
 			'monaco-editor/esm/vs/basic-languages/typescript/typescript.contribution.js'
 		);
+		expect(registrySource).toContain(
+			'monaco-editor/esm/vs/language/json/monaco.contribution.js'
+		);
 		for (const language of [
 			'cpp',
 			'csharp',
+			'css',
 			'elixir',
 			'go',
+			'html',
 			'java',
+			'markdown',
 			'perl',
 			'php',
 			'python',
@@ -40,7 +46,8 @@ describe('Monaco route source', () => {
 			'rust',
 			'sql',
 			'typescript',
-			'vb'
+			'vb',
+			'yaml'
 		]) {
 			expect(registrySource).toContain(
 				`monaco-editor/esm/vs/basic-languages/${language}/${language}.contribution.js`
@@ -173,6 +180,20 @@ describe('Monaco route source', () => {
 		expect(source).toContain("monacoApi.languages.setMonarchTokensProvider('zig'");
 		expect(source).toContain("tokenPostfix: '.zig'");
 		expect(source).toContain("lineComment: '//'");
+	});
+
+	it('registers a TOML Monaco language with tokenizer support', async () => {
+		const source = await readFile(
+			path.resolve(process.cwd(), 'src/routes/Monaco.svelte'),
+			'utf8'
+		);
+
+		expect(source).toContain("id: 'toml'");
+		expect(source).toContain("extensions: ['.toml']");
+		expect(source).toContain("monacoApi.languages.setLanguageConfiguration('toml'");
+		expect(source).toContain("monacoApi.languages.setMonarchTokensProvider('toml'");
+		expect(source).toContain("tokenPostfix: '.toml'");
+		expect(source).toContain("lineComment: '#'");
 	});
 
 	it('registers a Forth Monaco language with comments and tokenizer support', async () => {

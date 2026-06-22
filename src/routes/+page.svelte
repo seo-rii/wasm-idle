@@ -627,7 +627,17 @@
 			'.duckdb': 'DUCKDB',
 			'.sql': 'SQLITE',
 			'.sqlite': 'SQLITE',
-			'.php': 'PHP'
+			'.php': 'PHP',
+			'.json': 'JSON',
+			'.jsonc': 'JSON',
+			'.yaml': 'YAML',
+			'.yml': 'YAML',
+			'.toml': 'TOML',
+			'.html': 'HTML',
+			'.htm': 'HTML',
+			'.css': 'CSS',
+			'.md': 'MARKDOWN',
+			'.markdown': 'MARKDOWN'
 		};
 		return match[ext] || null;
 	}
@@ -673,7 +683,13 @@
 			GRAPHQL: 'main.graphql',
 			DUCKDB: 'main.duckdb',
 			SQLITE: 'main.sql',
-			PHP: 'main.php'
+			PHP: 'main.php',
+			JSON: 'main.json',
+			YAML: 'main.yaml',
+			TOML: 'main.toml',
+			HTML: 'index.html',
+			CSS: 'styles.css',
+			MARKDOWN: 'README.md'
 		};
 		return match[nextLanguage];
 	}
@@ -719,7 +735,13 @@
 			GRAPHQL: 'graphql',
 			DUCKDB: 'duckdb',
 			SQLITE: 'sqlite',
-			PHP: 'php'
+			PHP: 'php',
+			JSON: 'json',
+			YAML: 'yaml',
+			TOML: 'toml',
+			HTML: 'html',
+			CSS: 'css',
+			MARKDOWN: 'markdown'
 		} as const satisfies Record<
 			PlaygroundLanguage,
 			Parameters<typeof resolveEditorDefaultSource>[0]
@@ -1239,7 +1261,17 @@
 			duckdb: 'DUCKDB',
 			sqlite: 'SQLITE',
 			sql: 'SQLITE',
-			php: 'PHP'
+			php: 'PHP',
+			json: 'JSON',
+			jsonc: 'JSON',
+			yaml: 'YAML',
+			yml: 'YAML',
+			toml: 'TOML',
+			html: 'HTML',
+			htm: 'HTML',
+			css: 'CSS',
+			markdown: 'MARKDOWN',
+			md: 'MARKDOWN'
 		};
 		return aliases[normalized] ?? null;
 	}
@@ -1883,6 +1915,12 @@
 						<option value="DUCKDB">DuckDB</option>
 						<option value="SQLITE">SQLite</option>
 						<option value="PHP">PHP</option>
+						<option value="JSON">JSON</option>
+						<option value="YAML">YAML</option>
+						<option value="TOML">TOML</option>
+						<option value="HTML">HTML</option>
+						<option value="CSS">CSS</option>
+						<option value="MARKDOWN">Markdown</option>
 					</select>
 				</label>
 				{#if argsHelpLanguages.has(language)}

@@ -39,6 +39,12 @@ export type EditorDefaultLanguage =
 	| 'duckdb'
 	| 'sqlite'
 	| 'php'
+	| 'json'
+	| 'yaml'
+	| 'toml'
+	| 'html'
+	| 'css'
+	| 'markdown'
 	| 'rust';
 
 export const editorDefaults: Record<
@@ -79,7 +85,13 @@ export const editorDefaults: Record<
 	| 'graphql'
 	| 'duckdb'
 	| 'sqlite'
-	| 'php',
+	| 'php'
+	| 'json'
+	| 'yaml'
+	| 'toml'
+	| 'html'
+	| 'css'
+	| 'markdown',
 	string
 > = {
 	c: `#include <stdio.h>
@@ -624,9 +636,54 @@ function factorial(int $n): int {
     return $n <= 1 ? 1 : $n * factorial($n - 1);
 }
 
-$input = trim(file_get_contents('php://input'));
-$n = is_numeric($input) ? intval($input) : (isset($argv[1]) ? intval($argv[1]) : 4);
-echo "factorial_plus_bonus=" . (factorial($n) + BONUS) . "\\n";
+	$input = trim(file_get_contents('php://input'));
+	$n = is_numeric($input) ? intval($input) : (isset($argv[1]) ? intval($argv[1]) : 4);
+	echo "factorial_plus_bonus=" . (factorial($n) + BONUS) . "\\n";
+	`,
+	json: `{
+    "name": "wasm-idle",
+    "languages": ["JSON", "YAML", "TOML"],
+    "lsp": true
+}`,
+	yaml: `name: wasm-idle
+languages:
+  - JSON
+  - YAML
+  - TOML
+lsp: true
+`,
+	toml: `name = "wasm-idle"
+languages = ["JSON", "YAML", "TOML"]
+lsp = true
+`,
+	html: `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>wasm-idle</title>
+  </head>
+  <body>
+    <main>
+      <h1>Hello from wasm-idle</h1>
+    </main>
+  </body>
+</html>`,
+	css: `:root {
+  color-scheme: light dark;
+}
+
+main {
+  max-width: 64rem;
+  margin: 0 auto;
+  font-family: system-ui, sans-serif;
+}`,
+markdown: `# wasm-idle
+
+Edit Markdown with browser-hosted LSP features.
+
+## Links
+
+[Project](#wasm-idle)
 `
 };
 
@@ -781,6 +838,12 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.duckdb ||
 		source === editorDefaults.sqlite ||
 		source === editorDefaults.php ||
+		source === editorDefaults.json ||
+		source === editorDefaults.yaml ||
+		source === editorDefaults.toml ||
+		source === editorDefaults.html ||
+		source === editorDefaults.css ||
+		source === editorDefaults.markdown ||
 		source === rustEditorDefaults['wasm32-wasip1'] ||
 		source === rustEditorDefaults['wasm32-wasip2'] ||
 		source === rustEditorDefaults['wasm32-wasip3']

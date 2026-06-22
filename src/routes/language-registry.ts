@@ -38,7 +38,13 @@ export type PlaygroundLanguage =
 	| 'GRAPHQL'
 	| 'DUCKDB'
 	| 'SQLITE'
-	| 'PHP';
+	| 'PHP'
+	| 'JSON'
+	| 'YAML'
+	| 'TOML'
+	| 'HTML'
+	| 'CSS'
+	| 'MARKDOWN';
 
 export type RuntimeLspCapability =
 	| 'gleam'
@@ -97,7 +103,13 @@ export const playgroundLanguages: PlaygroundLanguage[] = [
 	'GRAPHQL',
 	'DUCKDB',
 	'SQLITE',
-	'PHP'
+	'PHP',
+	'JSON',
+	'YAML',
+	'TOML',
+	'HTML',
+	'CSS',
+	'MARKDOWN'
 ];
 
 export const languageLabels: Record<PlaygroundLanguage, string> = {
@@ -140,7 +152,13 @@ export const languageLabels: Record<PlaygroundLanguage, string> = {
 	GRAPHQL: 'GraphQL',
 	DUCKDB: 'DuckDB',
 	SQLITE: 'SQLite',
-	PHP: 'PHP'
+	PHP: 'PHP',
+	JSON: 'JSON',
+	YAML: 'YAML',
+	TOML: 'TOML',
+	HTML: 'HTML',
+	CSS: 'CSS',
+	MARKDOWN: 'Markdown'
 };
 
 export const editorLanguages: Record<PlaygroundLanguage, string> = {
@@ -183,7 +201,13 @@ export const editorLanguages: Record<PlaygroundLanguage, string> = {
 	GRAPHQL: 'graphql',
 	DUCKDB: 'sql',
 	SQLITE: 'sql',
-	PHP: 'php'
+	PHP: 'php',
+	JSON: 'json',
+	YAML: 'yaml',
+	TOML: 'toml',
+	HTML: 'html',
+	CSS: 'css',
+	MARKDOWN: 'markdown'
 };
 
 export const debugLspLanguages = new Set<PlaygroundLanguage>(['CPP']);
@@ -194,7 +218,17 @@ export const lspLanguageOverrides: Partial<Record<PlaygroundLanguage, string>> =
 	ASSEMBLYSCRIPT: 'assemblyscript',
 	DUCKDB: 'duckdb'
 };
-export const editorOnlyLanguages = new Set<PlaygroundLanguage>(['FORTRAN', 'GRAPHQL', 'DUCKDB']);
+export const editorOnlyLanguages = new Set<PlaygroundLanguage>([
+	'FORTRAN',
+	'GRAPHQL',
+	'DUCKDB',
+	'JSON',
+	'YAML',
+	'TOML',
+	'HTML',
+	'CSS',
+	'MARKDOWN'
+]);
 export const runtimeLspCapabilities: Partial<Record<PlaygroundLanguage, RuntimeLspCapability>> = {
 	GLEAM: 'gleam',
 	GO: 'go',
@@ -296,18 +330,29 @@ export const diagnosticMarkerLanguages = new Set([
 	'haskell',
 	'r',
 	'octave',
-	'cpp'
+	'cpp',
+	'json',
+	'yaml',
+	'toml',
+	'html',
+	'css',
+	'markdown'
 ]);
 export const monacoLanguageContributionLoaders: Record<string, MonacoLanguageContributionLoader> = {
 	c: () => import('monaco-editor/esm/vs/basic-languages/cpp/cpp.contribution.js'),
 	cpp: () => import('monaco-editor/esm/vs/basic-languages/cpp/cpp.contribution.js'),
 	csharp: () => import('monaco-editor/esm/vs/basic-languages/csharp/csharp.contribution.js'),
+	css: () => import('monaco-editor/esm/vs/basic-languages/css/css.contribution.js'),
 	elixir: () => import('monaco-editor/esm/vs/basic-languages/elixir/elixir.contribution.js'),
 	go: () => import('monaco-editor/esm/vs/basic-languages/go/go.contribution.js'),
 	graphql: () => import('monaco-editor/esm/vs/basic-languages/graphql/graphql.contribution.js'),
+	html: () => import('monaco-editor/esm/vs/basic-languages/html/html.contribution.js'),
 	java: () => import('monaco-editor/esm/vs/basic-languages/java/java.contribution.js'),
 	javascript: () =>
 		import('monaco-editor/esm/vs/basic-languages/typescript/typescript.contribution.js'),
+	json: () => import('monaco-editor/esm/vs/language/json/monaco.contribution.js'),
+	markdown: () =>
+		import('monaco-editor/esm/vs/basic-languages/markdown/markdown.contribution.js'),
 	typescript: () =>
 		import('monaco-editor/esm/vs/basic-languages/typescript/typescript.contribution.js'),
 	pascal: () => import('monaco-editor/esm/vs/basic-languages/pascal/pascal.contribution.js'),
@@ -319,5 +364,6 @@ export const monacoLanguageContributionLoaders: Record<string, MonacoLanguageCon
 	ruby: () => import('monaco-editor/esm/vs/basic-languages/ruby/ruby.contribution.js'),
 	rust: () => import('monaco-editor/esm/vs/basic-languages/rust/rust.contribution.js'),
 	sql: () => import('monaco-editor/esm/vs/basic-languages/sql/sql.contribution.js'),
-	vb: () => import('monaco-editor/esm/vs/basic-languages/vb/vb.contribution.js')
+	vb: () => import('monaco-editor/esm/vs/basic-languages/vb/vb.contribution.js'),
+	yaml: () => import('monaco-editor/esm/vs/basic-languages/yaml/yaml.contribution.js')
 };
