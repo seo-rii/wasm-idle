@@ -8,9 +8,13 @@ describe('Monaco route source', () => {
 			path.resolve(process.cwd(), 'src/routes/Monaco.svelte'),
 			'utf8'
 		);
+		const registrySource = await readFile(
+			path.resolve(process.cwd(), 'src/routes/language-registry.ts'),
+			'utf8'
+		);
 
-		expect(source).toMatch(
-			/const monacoLanguageContributionLoaders(?:: Record<string, MonacoLanguageContributionLoader>)? = \{/
+		expect(registrySource).toMatch(
+			/export const monacoLanguageContributionLoaders(?:: Record<string, MonacoLanguageContributionLoader>)? = \{/
 		);
 		expect(source).toContain(
 			'monacoLanguageContributionLoaders[language]?.() ?? Promise.resolve()'
@@ -19,7 +23,7 @@ describe('Monaco route source', () => {
 		expect(source).not.toMatch(
 			/Promise\.all\(\[\s*import\('monaco-editor\/esm\/vs\/basic-languages\/cpp\/cpp\.contribution\.js'\)/
 		);
-		expect(source).toContain(
+		expect(registrySource).toContain(
 			'monaco-editor/esm/vs/basic-languages/typescript/typescript.contribution.js'
 		);
 		for (const language of [
@@ -38,7 +42,7 @@ describe('Monaco route source', () => {
 			'typescript',
 			'vb'
 		]) {
-			expect(source).toContain(
+			expect(registrySource).toContain(
 				`monaco-editor/esm/vs/basic-languages/${language}/${language}.contribution.js`
 			);
 		}

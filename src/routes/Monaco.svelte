@@ -22,9 +22,15 @@
 		isLegacyEditorDefaultSource,
 		resolveEditorDefaultSource
 	} from './editor-defaults';
+	import {
+		debugViewLanguages,
+		defaultLanguageAliases,
+		diagnosticMarkerLanguages,
+		dotnetMonacoLspLanguages,
+		monacoLanguageContributionLoaders,
+		type DotnetLspLanguage
+	} from './language-registry';
 
-	type DotnetLspLanguage = 'csharp' | 'fsharp' | 'vbnet';
-	type MonacoLanguageContributionLoader = () => Promise<unknown>;
 	type MonacoTestGlobal = typeof globalThis & {
 		__wasmIdleMonacoApi?: typeof monaco | null;
 		__wasmIdleMonacoEditor?: monaco.editor.IStandaloneCodeEditor | null;
@@ -44,66 +50,6 @@
 		load: (currentUrl: string) => Promise<EditorLanguageServerHandle>;
 	}
 
-	const dotnetLspLanguages: Record<string, DotnetLspLanguage> = {
-		csharp: 'csharp',
-		fsharp: 'fsharp',
-		vb: 'vbnet'
-	};
-	const defaultLanguageAliases: Record<string, string> = {
-		vb: 'vbnet',
-		sql: 'sqlite'
-	};
-	const debugViewLanguages = new Set(['cpp']);
-	const diagnosticMarkerLanguages = new Set([
-		'c',
-		'java',
-		'python',
-		'rust',
-		'go',
-		'd',
-		'csharp',
-		'fsharp',
-		'vb',
-		'erlang',
-		'prolog',
-		'gleam',
-		'perl',
-		'ocaml',
-		'javascript',
-		'typescript',
-		'wat',
-		'lua',
-		'zig',
-		'lisp',
-		'haskell',
-		'r',
-		'octave',
-		'cpp'
-	]);
-	const monacoLanguageContributionLoaders: Record<string, MonacoLanguageContributionLoader> = {
-		c: () => import('monaco-editor/esm/vs/basic-languages/cpp/cpp.contribution.js'),
-		cpp: () => import('monaco-editor/esm/vs/basic-languages/cpp/cpp.contribution.js'),
-		csharp: () => import('monaco-editor/esm/vs/basic-languages/csharp/csharp.contribution.js'),
-		elixir: () => import('monaco-editor/esm/vs/basic-languages/elixir/elixir.contribution.js'),
-		go: () => import('monaco-editor/esm/vs/basic-languages/go/go.contribution.js'),
-		graphql: () =>
-			import('monaco-editor/esm/vs/basic-languages/graphql/graphql.contribution.js'),
-		java: () => import('monaco-editor/esm/vs/basic-languages/java/java.contribution.js'),
-		javascript: () =>
-			import('monaco-editor/esm/vs/basic-languages/typescript/typescript.contribution.js'),
-		typescript: () =>
-			import('monaco-editor/esm/vs/basic-languages/typescript/typescript.contribution.js'),
-		pascal: () => import('monaco-editor/esm/vs/basic-languages/pascal/pascal.contribution.js'),
-		perl: () => import('monaco-editor/esm/vs/basic-languages/perl/perl.contribution.js'),
-		tcl: () => import('monaco-editor/esm/vs/basic-languages/tcl/tcl.contribution.js'),
-		php: () => import('monaco-editor/esm/vs/basic-languages/php/php.contribution.js'),
-		python: () => import('monaco-editor/esm/vs/basic-languages/python/python.contribution.js'),
-		r: () => import('monaco-editor/esm/vs/basic-languages/r/r.contribution.js'),
-		ruby: () => import('monaco-editor/esm/vs/basic-languages/ruby/ruby.contribution.js'),
-		rust: () => import('monaco-editor/esm/vs/basic-languages/rust/rust.contribution.js'),
-		sql: () => import('monaco-editor/esm/vs/basic-languages/sql/sql.contribution.js'),
-		vb: () => import('monaco-editor/esm/vs/basic-languages/vb/vb.contribution.js')
-	};
 	const monacoTestHooksEnabled = () => {
 		try {
 			return new URL(globalThis.location?.href || '').searchParams.get('lsp-test') === '1';
@@ -2097,7 +2043,7 @@
 	let applyingValue = false;
 	let debugActionBindings: { dispose(): void } | null = null;
 	const dotnetLspLanguage = $derived<DotnetLspLanguage | null>(
-		dotnetLspLanguages[language] ?? null
+		dotnetMonacoLspLanguages[language] ?? null
 	);
 	const defaultLanguage = $derived(
 		lspLanguage === 'duckdb' ? 'duckdb' : (defaultLanguageAliases[language] ?? language)

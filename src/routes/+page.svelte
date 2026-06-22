@@ -58,6 +58,22 @@
 		isLegacyEditorDefaultSource,
 		resolveEditorDefaultSource
 	} from './editor-defaults';
+	import {
+		argsHelpLanguages,
+		argsLabels,
+		clangdLspLanguages,
+		compilerDiagnosticLanguages,
+		debugLspLanguages,
+		dotnetLspLanguages,
+		editorLanguages,
+		editorOnlyLanguages,
+		languageLabels,
+		lspLanguageOverrides,
+		playgroundLanguages,
+		runtimeLspCapabilities,
+		typescriptLspLanguages,
+		type PlaygroundLanguage
+	} from './language-registry';
 	import rubyStdlibWasmUrl from '@ruby/3.4-wasm-wasi/dist/ruby+stdlib.wasm?url';
 	import sqliteWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
 
@@ -65,61 +81,6 @@
 		path: string;
 		content: string;
 	};
-
-	type PlaygroundLanguage =
-		| 'C'
-		| 'CPP'
-		| 'PYTHON'
-		| 'JAVA'
-		| 'RUST'
-		| 'GO'
-		| 'D'
-		| 'CSHARP'
-		| 'FSHARP'
-		| 'VBNET'
-		| 'ELIXIR'
-		| 'ERLANG'
-		| 'PROLOG'
-		| 'GLEAM'
-		| 'PERL'
-		| 'TCL'
-		| 'AWK'
-		| 'PASCAL'
-		| 'FORTH'
-		| 'J'
-		| 'BQN'
-		| 'JANET'
-		| 'OCAML'
-		| 'TINYGO'
-		| 'JAVASCRIPT'
-		| 'TYPESCRIPT'
-		| 'ASSEMBLYSCRIPT'
-		| 'WAT'
-		| 'LUA'
-		| 'ZIG'
-		| 'LISP'
-		| 'RUBY'
-		| 'HASKELL'
-		| 'R'
-		| 'OCTAVE'
-		| 'FORTRAN'
-		| 'GRAPHQL'
-		| 'DUCKDB'
-		| 'SQLITE'
-		| 'PHP';
-
-	type RuntimeLspCapability =
-		| 'gleam'
-		| 'go'
-		| 'rust'
-		| 'zig'
-		| 'php'
-		| 'lua'
-		| 'ocaml'
-		| 'haskell'
-		| 'sql'
-		| 'prolog'
-		| 'ruby';
 
 	type LanguageWorkspace = {
 		activePath: string;
@@ -154,132 +115,6 @@
 
 	const WORKSPACE_STORAGE_KEY = 'wasm-idle:example-workspace:v3';
 	const SHARE_PREFIX = 'workspace=';
-	const playgroundLanguages: PlaygroundLanguage[] = [
-		'C',
-		'CPP',
-		'PYTHON',
-		'JAVA',
-		'RUST',
-		'GO',
-		'D',
-		'CSHARP',
-		'FSHARP',
-		'VBNET',
-		'ELIXIR',
-		'ERLANG',
-		'PROLOG',
-		'GLEAM',
-		'PERL',
-		'TCL',
-		'AWK',
-		'PASCAL',
-		'FORTH',
-		'J',
-		'BQN',
-		'JANET',
-		'OCAML',
-		'TINYGO',
-		'JAVASCRIPT',
-		'TYPESCRIPT',
-		'ASSEMBLYSCRIPT',
-		'WAT',
-		'LUA',
-		'ZIG',
-		'LISP',
-		'RUBY',
-		'HASKELL',
-		'R',
-		'OCTAVE',
-		'FORTRAN',
-		'GRAPHQL',
-		'DUCKDB',
-		'SQLITE',
-		'PHP'
-	];
-	const languageLabels: Record<PlaygroundLanguage, string> = {
-		C: 'C',
-		CPP: 'C++',
-		PYTHON: 'Python',
-		JAVA: 'Java',
-		RUST: 'Rust',
-		GO: 'Go',
-		D: 'D',
-		CSHARP: 'C#',
-		FSHARP: 'F#',
-		VBNET: 'VB.NET',
-		ELIXIR: 'Elixir',
-		ERLANG: 'Erlang',
-		PROLOG: 'Prolog',
-		GLEAM: 'Gleam',
-		PERL: 'Perl',
-		TCL: 'Tcl',
-		AWK: 'AWK',
-		PASCAL: 'Pascal',
-		FORTH: 'Forth',
-		J: 'J',
-		BQN: 'BQN',
-		JANET: 'Janet',
-		OCAML: 'OCaml',
-		TINYGO: 'TinyGo',
-		JAVASCRIPT: 'JavaScript',
-		TYPESCRIPT: 'TypeScript',
-		ASSEMBLYSCRIPT: 'AssemblyScript',
-		WAT: 'WAT',
-		LUA: 'Lua',
-		ZIG: 'Zig',
-		LISP: 'Scheme',
-		RUBY: 'Ruby',
-		HASKELL: 'Haskell',
-		R: 'R',
-		OCTAVE: 'Octave',
-		FORTRAN: 'Fortran',
-		GRAPHQL: 'GraphQL',
-		DUCKDB: 'DuckDB',
-		SQLITE: 'SQLite',
-		PHP: 'PHP'
-	};
-	const editorLanguages: Record<PlaygroundLanguage, string> = {
-		C: 'c',
-		CPP: 'cpp',
-		PYTHON: 'python',
-		JAVA: 'java',
-		RUST: 'rust',
-		GO: 'go',
-		D: 'd',
-		CSHARP: 'csharp',
-		FSHARP: 'fsharp',
-		VBNET: 'vb',
-		ELIXIR: 'elixir',
-		ERLANG: 'erlang',
-		PROLOG: 'prolog',
-		GLEAM: 'gleam',
-		PERL: 'perl',
-		TCL: 'tcl',
-		AWK: 'awk',
-		PASCAL: 'pascal',
-		FORTH: 'forth',
-		J: 'j',
-		BQN: 'bqn',
-		JANET: 'janet',
-		OCAML: 'ocaml',
-		TINYGO: 'go',
-		JAVASCRIPT: 'javascript',
-		TYPESCRIPT: 'typescript',
-		ASSEMBLYSCRIPT: 'typescript',
-		WAT: 'wat',
-		LUA: 'lua',
-		ZIG: 'zig',
-		LISP: 'lisp',
-		RUBY: 'ruby',
-		HASKELL: 'haskell',
-		R: 'r',
-		OCTAVE: 'octave',
-		FORTRAN: 'fortran',
-		GRAPHQL: 'graphql',
-		DUCKDB: 'sql',
-		SQLITE: 'sql',
-		PHP: 'php'
-	};
 	const debugLanguageAdapters: Partial<Record<PlaygroundLanguage, DebugLanguageAdapter>> = {
 		CPP: cppDebugLanguageAdapter,
 		GO: goDebugLanguageAdapter,
@@ -292,81 +127,6 @@
 		RUST: 'Rust Trace',
 		PYTHON: 'Pyodide Trace'
 	};
-	const debugLspLanguages = new Set<PlaygroundLanguage>(['CPP']);
-	const clangdLspLanguages = new Set<PlaygroundLanguage>(['C', 'CPP']);
-	const dotnetLspLanguages = new Set<PlaygroundLanguage>(['CSHARP', 'FSHARP', 'VBNET']);
-	const typescriptLspLanguages = new Set<PlaygroundLanguage>(['JAVASCRIPT', 'TYPESCRIPT']);
-	const lspLanguageOverrides: Partial<Record<PlaygroundLanguage, string>> = {
-		ASSEMBLYSCRIPT: 'assemblyscript',
-		DUCKDB: 'duckdb'
-	};
-	const editorOnlyLanguages = new Set<PlaygroundLanguage>(['FORTRAN', 'GRAPHQL', 'DUCKDB']);
-	const runtimeLspCapabilities: Partial<Record<PlaygroundLanguage, RuntimeLspCapability>> = {
-		GLEAM: 'gleam',
-		GO: 'go',
-		RUST: 'rust',
-		ZIG: 'zig',
-		PHP: 'php',
-		LUA: 'lua',
-		OCAML: 'ocaml',
-		HASKELL: 'haskell',
-		SQLITE: 'sql',
-		PROLOG: 'prolog',
-		RUBY: 'ruby'
-	};
-	const argsHelpLanguages = new Set<PlaygroundLanguage>([
-		'JAVA',
-		'RUST',
-		'GO',
-		'D',
-		'CSHARP',
-		'FSHARP',
-		'VBNET',
-		'PROLOG',
-		'GLEAM',
-		'PERL',
-		'TCL',
-		'AWK',
-		'TINYGO',
-		'JAVASCRIPT',
-		'TYPESCRIPT',
-		'LUA',
-		'ZIG',
-		'LISP',
-		'RUBY',
-		'HASKELL',
-		'R',
-		'OCTAVE',
-		'PHP'
-	]);
-	const argsLabels: Partial<Record<PlaygroundLanguage, string>> = {
-		HASKELL: 'GHC Args'
-	};
-	const compilerDiagnosticLanguages = new Set<PlaygroundLanguage>([
-		'JAVA',
-		'RUST',
-		'GO',
-		'D',
-		'CSHARP',
-		'FSHARP',
-		'VBNET',
-		'PROLOG',
-		'GLEAM',
-		'PERL',
-		'TINYGO',
-		'OCAML',
-		'JAVASCRIPT',
-		'TYPESCRIPT',
-		'ASSEMBLYSCRIPT',
-		'WAT',
-		'LUA',
-		'ZIG',
-		'LISP',
-		'RUBY',
-		'HASKELL',
-		'SQLITE',
-		'PHP'
-	]);
 
 	let path = $derived(
 		page.url.pathname.endsWith('/') ? page.url.pathname.slice(0, -1) : page.url.pathname

@@ -13,6 +13,13 @@ import {
 	resolveEditorDefaultSource,
 	rustEditorDefaults
 } from './editor-defaults';
+import {
+	clangdLspLanguages,
+	debugLspLanguages,
+	diagnosticMarkerLanguages,
+	monacoLanguageContributionLoaders,
+	runtimeLspCapabilities
+} from './language-registry';
 
 describe('Monaco route debug sync', () => {
 	it('keeps the debug view reactive and applies markers immediately after creation', () => {
@@ -57,9 +64,7 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(
 			/import \{\s+isEditorDefaultSource,\s+isLegacyEditorDefaultSource,\s+resolveEditorDefaultSource\s+\} from '\.\/editor-defaults';/s
 		);
-		expect(source).toContain(
-			"pascal: () => import('monaco-editor/esm/vs/basic-languages/pascal/pascal.contribution.js')"
-		);
+		expect(monacoLanguageContributionLoaders.pascal).toEqual(expect.any(Function));
 		expect(source).toMatch(
 			/monacoApi\.editor\.setModelMarkers\(activeModel, 'wasm-idle-compiler', markers\);/
 		);
@@ -74,7 +79,6 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(/<MonacoEditor[\s\S]*lsp=\{resolveLspConnection\}/);
 		expect(source).toMatch(/onload=\{handleEditorLoad\}/);
 		expect(source).toMatch(/oninput=\{handleEditorInput\}/);
-		expect(source).toMatch(/const diagnosticMarkerLanguages = new Set\(\[/);
 		for (const markerLanguage of [
 			'c',
 			'java',
@@ -97,7 +101,7 @@ describe('Monaco route debug sync', () => {
 			'octave',
 			'cpp'
 		]) {
-			expect(source).toContain(`'${markerLanguage}'`);
+			expect(diagnosticMarkerLanguages.has(markerLanguage)).toBe(true);
 		}
 		expect(source).toMatch(/lspLanguage === 'duckdb' \? 'duckdb'/);
 		expect(source).toMatch(
@@ -286,12 +290,9 @@ describe('Monaco route debug sync', () => {
 			})
 		).not.toThrow();
 		expect(pageSource).toMatch(/clangdRequested = \$state\(false\),/);
-		expect(pageSource).toMatch(
-			/const debugLspLanguages = new Set<PlaygroundLanguage>\(\['CPP'\]\);/
-		);
-		expect(pageSource).toMatch(
-			/const clangdLspLanguages = new Set<PlaygroundLanguage>\(\['C', 'CPP'\]\);/
-		);
+		expect(debugLspLanguages.has('CPP')).toBe(true);
+		expect(clangdLspLanguages.has('C')).toBe(true);
+		expect(clangdLspLanguages.has('CPP')).toBe(true);
 		expect(pageSource).toMatch(
 			/if \(enableDebug && debugLspLanguages\.has\(language\)\) clangdRequested = true;/
 		);
@@ -328,9 +329,8 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).toMatch(/lspLanguage=\{monacoLspLanguage\}/);
 		expect(pageSource).toMatch(/filePath=\{activePath\}/);
 		expect(pageSource).toMatch(/const monacoLspLanguage = \$derived/);
-		expect(pageSource).toMatch(
-			/const runtimeLspCapabilities(?:: Partial<Record<PlaygroundLanguage, RuntimeLspCapability>>)? = \{/
-		);
+		expect(runtimeLspCapabilities.RUST).toBe('rust');
+		expect(runtimeLspCapabilities.GO).toBe('go');
 		expect(pageSource).toMatch(
 			/const typescriptLspLibUrl = \$derived\(\s+lspEnabled && typescriptLspLanguages\.has\(language\)/
 		);

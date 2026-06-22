@@ -2,11 +2,17 @@ import layoutSource from './+layout.svelte?raw';
 import source from './+page.svelte?raw';
 import { compile } from 'svelte/compiler';
 import { describe, expect, it } from 'vitest';
+import {
+	argsHelpLanguages,
+	argsLabels,
+	compilerDiagnosticLanguages,
+	editorLanguages,
+	editorOnlyLanguages,
+	type PlaygroundLanguage
+} from './language-registry';
 
-const expectEditorLanguage = (language: string, editorLanguage: string) => {
-	expect(source).toMatch(
-		new RegExp(`const editorLanguages:[\\s\\S]*${language}: '${editorLanguage}'`)
-	);
+const expectEditorLanguage = (language: PlaygroundLanguage, editorLanguage: string) => {
+	expect(editorLanguages[language]).toBe(editorLanguage);
 };
 
 describe('example route debug actions', () => {
@@ -436,7 +442,6 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/<option value="OCTAVE">Octave<\/option>/);
 		expect(source).toMatch(/<option value="SQLITE">SQLite<\/option>/);
 		expect(source).toMatch(/<option value="PHP">PHP<\/option>/);
-		expect(source).toMatch(/const argsHelpLanguages = new Set<PlaygroundLanguage>\(\[/);
 		expect(source).toMatch(/\{#if argsHelpLanguages\.has\(language\)\}/);
 		for (const argsLanguage of [
 			'JAVA',
@@ -462,8 +467,8 @@ describe('example route debug actions', () => {
 			'R',
 			'OCTAVE',
 			'PHP'
-		]) {
-			expect(source).toContain(`'${argsLanguage}'`);
+		] as const) {
+			expect(argsHelpLanguages.has(argsLanguage)).toBe(true);
 		}
 		expect(source).toMatch(/Go uses the bundled `wasm-go` browser compiler runtime/);
 		expect(source).toMatch(
@@ -500,8 +505,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/'.d': 'D'/);
 		expect(source).toMatch(/D: 'main\.d'/);
 		expect(source).toMatch(/D: 'd'/);
-		expect(source).toMatch(/const compilerDiagnosticLanguages = new Set<PlaygroundLanguage>/);
-		expect(source).toMatch(/compilerDiagnosticLanguages[\s\S]*'D'/);
+		expect(compilerDiagnosticLanguages.has('D')).toBe(true);
 		expect(source).toMatch(/D compiles in the browser with the bundled LDC WASI compiler/);
 		expect(source).toMatch(/Emscripten LLD\s+linker assets/);
 		expect(source).toMatch(/executes the emitted WASI artifact locally/);
@@ -529,7 +533,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/'.vb': 'VBNET'/);
 		expect(source).toMatch(/VBNET: 'Program\.vb'/);
 		expect(source).toMatch(/VBNET: 'vbnet'/);
-		expect(source).toMatch(/compilerDiagnosticLanguages[\s\S]*'VBNET'/);
+		expect(compilerDiagnosticLanguages.has('VBNET')).toBe(true);
 		expect(source).toMatch(/isEditorDefaultSource\(content\)/);
 		expect(source).toMatch(/isLegacyEditorDefaultSource\(content\)/);
 		expect(source).toMatch(
@@ -700,7 +704,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/'.hs': 'HASKELL'/);
 		expect(source).toMatch(/HASKELL: 'main\.hs'/);
 		expect(source).toMatch(/HASKELL: 'haskell'/);
-		expect(source).toMatch(/HASKELL: 'GHC Args'/);
+		expect(argsLabels.HASKELL).toBe('GHC Args');
 		expect(source).toMatch(/<span>\{argsLabel\}<\/span>/);
 		expect(source).toMatch(/Haskell loads a wasm GHC\/GHCi root filesystem/);
 		expect(source).toMatch(/program stdin is currently treated as EOF/);
@@ -758,9 +762,9 @@ describe('example route debug actions', () => {
 		]) {
 			expect(source).toMatch(new RegExp(`<option value="${language}">${label}<\\/option>`));
 		}
-		expect(source).toMatch(
-			/const editorOnlyLanguages = new Set<PlaygroundLanguage>\(\['FORTRAN', 'GRAPHQL', 'DUCKDB'\]\);/
-		);
+		expect(editorOnlyLanguages.has('FORTRAN')).toBe(true);
+		expect(editorOnlyLanguages.has('GRAPHQL')).toBe(true);
+		expect(editorOnlyLanguages.has('DUCKDB')).toBe(true);
 		expect(source).toMatch(
 			/const executionAvailable = \$derived\(!editorOnlyLanguages\.has\(language\)\);/
 		);
