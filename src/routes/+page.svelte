@@ -432,6 +432,16 @@
 	const rubyLspWasmUrl = $derived(rubyLspEnabled ? runtimeAssets.ruby?.wasmUrl : undefined);
 	const rLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'r');
 	const rLspBaseUrl = $derived(rLspEnabled ? runtimeAssets.r?.baseUrl : undefined);
+	const octaveLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'octave');
+	const octaveLspBaseUrl = $derived(
+		octaveLspEnabled ? runtimeAssets.octave?.baseUrl : undefined
+	);
+	const octaveLspWorkerUrl = $derived(
+		octaveLspEnabled ? runtimeAssets.octave?.workerUrl : undefined
+	);
+	const octaveLspManifestUrl = $derived(
+		octaveLspEnabled ? runtimeAssets.octave?.manifestUrl : undefined
+	);
 	const awkLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'awk');
 	const awkLspBaseUrl = $derived(awkLspEnabled ? runtimeAssets.awk?.baseUrl : undefined);
 	const awkLspWorkerUrl = $derived(awkLspEnabled ? runtimeAssets.awk?.workerUrl : undefined);
@@ -2643,6 +2653,10 @@
 				{rubyLspWasmUrl}
 				{rLspEnabled}
 				{rLspBaseUrl}
+				{octaveLspEnabled}
+				{octaveLspBaseUrl}
+				{octaveLspWorkerUrl}
+				{octaveLspManifestUrl}
 				{awkLspEnabled}
 				{awkLspBaseUrl}
 				{awkLspWorkerUrl}

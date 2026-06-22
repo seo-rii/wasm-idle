@@ -82,6 +82,11 @@ export interface EditorLanguageServerRuntimeOptions {
 	lisp?: {
 		moduleUrl?: string;
 	};
+	octave?: {
+		baseUrl?: string;
+		workerUrl?: string;
+		manifestUrl?: string;
+	};
 	ocaml?: {
 		moduleUrl?: string;
 		manifestUrl?: string;

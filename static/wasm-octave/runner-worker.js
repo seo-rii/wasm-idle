@@ -158,6 +158,7 @@ function buildRunnerSource(activePath, args, hasInjectedStdin) {
 }
 
 function outputLine(text) {
+	if (currentRun?.diagnose) return;
 	self.postMessage({ output: `${String(text)}\n` });
 }
 
@@ -227,11 +228,13 @@ self.onmessage = async (event) => {
 		stdin,
 		activePath = 'main.m',
 		workspaceFiles = [],
+		diagnose = false,
 		log
 	} = event.data || {};
 
 	currentRun = {
 		hadExecutionError: false,
+		diagnose: !!diagnose,
 		sent: false,
 		userError: ''
 	};
@@ -266,7 +269,7 @@ self.onmessage = async (event) => {
 			printErr(text) {
 				const message = String(text);
 				if (isKnownOctaveShutdownError(message)) return;
-				if (/^error:/i.test(message)) {
+				if (/^error:/i.test(message) || /\b(?:parse|syntax)\s+error\b/i.test(message)) {
 					currentRun.hadExecutionError = true;
 					currentRun.userError = currentRun.userError
 						? `${currentRun.userError}\n${message}`

@@ -23,6 +23,9 @@ import {
 	resolvePerlLanguageServerWorkerUrl,
 	resolveDotnetLanguageServerModuleUrl,
 	resolveLuaLanguageServerModuleUrl,
+	resolveOctaveLanguageServerBaseUrl,
+	resolveOctaveLanguageServerManifestUrl,
+	resolveOctaveLanguageServerWorkerUrl,
 	resolveOcamlLanguageServerManifestUrl,
 	resolveOcamlLanguageServerModuleUrl,
 	resolvePhpLanguageServerVersion,
@@ -100,6 +103,26 @@ describe('lsp runtime asset resolution', () => {
 				'https://app.example.com/editor'
 			)
 		).toBe('https://static.example.com/repl_20240807/wasm-lisp/index.js');
+		expect(
+			resolveOctaveLanguageServerBaseUrl(
+				'https://static.example.com/repl_20240807',
+				'https://app.example.com/editor'
+			)
+		).toBe('https://static.example.com/repl_20240807/wasm-octave/runtime/');
+		expect(
+			resolveOctaveLanguageServerWorkerUrl(
+				'https://static.example.com/repl_20240807',
+				'https://app.example.com/editor'
+			)
+		).toBe('https://static.example.com/repl_20240807/wasm-octave/runner-worker.js');
+		expect(
+			resolveOctaveLanguageServerManifestUrl(
+				'https://static.example.com/repl_20240807',
+				'https://app.example.com/editor'
+			)
+		).toBe(
+			'https://static.example.com/repl_20240807/wasm-octave/runtime/runtime-manifest.v1.json'
+		);
 		expect(
 			resolveOcamlLanguageServerModuleUrl(
 				'https://static.example.com/repl_20240807',
@@ -222,6 +245,11 @@ describe('lsp runtime asset resolution', () => {
 			lisp: {
 				moduleUrl: 'https://lisp.example.com/wasm-lisp/index.js?v=20240807'
 			},
+			octave: {
+				baseUrl: 'https://octave.example.com/runtime/',
+				workerUrl: 'https://octave.example.com/runner-worker.js?v=20240807',
+				manifestUrl: 'https://octave.example.com/runtime/manifest.json?v=20240807'
+			},
 			ocaml: {
 				moduleUrl: 'https://ocaml.example.com/index.js?v=20240807',
 				manifestUrl: 'https://ocaml.example.com/manifest.json?v=20240807'
@@ -289,6 +317,15 @@ describe('lsp runtime asset resolution', () => {
 		);
 		expect(resolveLispLanguageServerModuleUrl(options)).toBe(
 			'https://lisp.example.com/wasm-lisp/index.js?v=20240807'
+		);
+		expect(resolveOctaveLanguageServerBaseUrl(options)).toBe(
+			'https://octave.example.com/runtime/'
+		);
+		expect(resolveOctaveLanguageServerWorkerUrl(options)).toBe(
+			'https://octave.example.com/runner-worker.js?v=20240807'
+		);
+		expect(resolveOctaveLanguageServerManifestUrl(options)).toBe(
+			'https://octave.example.com/runtime/manifest.json?v=20240807'
 		);
 		expect(resolveOcamlLanguageServerModuleUrl(options)).toBe(
 			'https://ocaml.example.com/index.js?v=20240807'
@@ -387,6 +424,15 @@ describe('lsp runtime asset resolution', () => {
 		expect(
 			resolveLispLanguageServerModuleUrl(undefined, 'https://app.example.com/editor')
 		).toBe('https://app.example.com/wasm-lisp/index.js');
+		expect(
+			resolveOctaveLanguageServerBaseUrl(undefined, 'https://app.example.com/editor')
+		).toBe('https://app.example.com/wasm-octave/runtime/');
+		expect(
+			resolveOctaveLanguageServerWorkerUrl(undefined, 'https://app.example.com/editor')
+		).toBe('https://app.example.com/wasm-octave/runner-worker.js');
+		expect(
+			resolveOctaveLanguageServerManifestUrl(undefined, 'https://app.example.com/editor')
+		).toBe('https://app.example.com/wasm-octave/runtime/runtime-manifest.v1.json');
 		expect(
 			resolveOcamlLanguageServerModuleUrl(undefined, 'https://app.example.com/editor')
 		).toBe('https://app.example.com/wasm-of-js-of-ocaml/browser-native/src/index.js');

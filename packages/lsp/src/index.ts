@@ -16,6 +16,9 @@ export {
 	resolveJanetLanguageServerWorkerUrl,
 	resolveLispLanguageServerModuleUrl,
 	resolveLuaLanguageServerModuleUrl,
+	resolveOctaveLanguageServerBaseUrl,
+	resolveOctaveLanguageServerManifestUrl,
+	resolveOctaveLanguageServerWorkerUrl,
 	resolveOcamlLanguageServerManifestUrl,
 	resolveOcamlLanguageServerModuleUrl,
 	resolvePhpLanguageServerVersion,
@@ -181,6 +184,16 @@ export {
 	type LispWorkerOptions,
 	type LoadLispCompiler
 } from './lisp/index.js';
+export {
+	createOctaveWorkerService,
+	getOctaveLanguageServer,
+	type OctaveDiagnosticRunnerRequest,
+	type OctaveDiagnosticRunnerResult,
+	type OctaveLanguageServerConfig,
+	type OctaveLanguageServerOptions,
+	type OctaveWorkerOptions,
+	type RunOctaveDiagnostics
+} from './octave/index.js';
 export {
 	createOcamlWorkerService,
 	getOcamlLanguageServer,

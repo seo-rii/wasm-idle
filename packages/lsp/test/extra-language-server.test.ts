@@ -70,6 +70,7 @@ import {
 	getLuaLanguageServer,
 	getMarkdownLanguageServer,
 	getOcamlLanguageServer,
+	getOctaveLanguageServer,
 	getPhpLanguageServer,
 	getPrologLanguageServer,
 	getAwkLanguageServer,
@@ -207,6 +208,26 @@ describe('additional language server workers', () => {
 			type: 'init',
 			options: {
 				moduleUrl: 'https://static.example.com/repl_20240807/wasm-lisp/index.js'
+			}
+		});
+
+		handle.dispose();
+	});
+
+	it('starts Octave with browser Octave runtime assets', async () => {
+		const handle = await getOctaveLanguageServer({
+			rootUrl: 'https://static.example.com/repl_20240807',
+			currentUrl: 'https://app.example.com/editor',
+			createWorker: () => new mockState.FakeWorker() as unknown as Worker
+		});
+
+		expect(mockState.workers[0]?.messages[0]).toEqual({
+			type: 'init',
+			options: {
+				baseUrl: 'https://static.example.com/repl_20240807/wasm-octave/runtime/',
+				workerUrl: 'https://static.example.com/repl_20240807/wasm-octave/runner-worker.js',
+				manifestUrl:
+					'https://static.example.com/repl_20240807/wasm-octave/runtime/runtime-manifest.v1.json'
 			}
 		});
 

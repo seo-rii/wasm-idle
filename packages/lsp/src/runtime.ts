@@ -318,6 +318,57 @@ export function resolveLispLanguageServerModuleUrl(
 	return resolveFileUrl('/wasm-lisp/index.js', currentUrl);
 }
 
+export function resolveOctaveLanguageServerBaseUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	if (typeof options === 'string') {
+		return resolveRootToolBaseUrl(options, '/wasm-octave/runtime/', currentUrl);
+	}
+	if (options?.octave?.baseUrl) {
+		return normalizeBaseUrl(options.octave.baseUrl, currentUrl);
+	}
+	if (options?.rootUrl) {
+		return resolveRootToolBaseUrl(options.rootUrl, '/wasm-octave/runtime/', currentUrl);
+	}
+	return normalizeBaseUrl('/wasm-octave/runtime/', currentUrl);
+}
+
+export function resolveOctaveLanguageServerWorkerUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	if (typeof options === 'string') {
+		return resolveFileUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-octave/runner-worker.js`,
+			currentUrl
+		);
+	}
+	if (options?.octave?.workerUrl) {
+		return resolveFileUrl(options.octave.workerUrl, currentUrl);
+	}
+	if (options?.rootUrl) {
+		return resolveFileUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-octave/runner-worker.js`,
+			currentUrl
+		);
+	}
+	return resolveFileUrl('/wasm-octave/runner-worker.js', currentUrl);
+}
+
+export function resolveOctaveLanguageServerManifestUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	if (typeof options === 'object' && options.octave?.manifestUrl) {
+		return resolveFileUrl(options.octave.manifestUrl, currentUrl);
+	}
+	return resolveFileUrl(
+		`${resolveOctaveLanguageServerBaseUrl(options, currentUrl)}runtime-manifest.v1.json`,
+		currentUrl
+	);
+}
+
 export function resolveOcamlLanguageServerModuleUrl(
 	options: EditorLanguageServerOptions | undefined,
 	currentUrl = ''

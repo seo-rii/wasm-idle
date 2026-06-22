@@ -1996,6 +1996,7 @@
 	let prologLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let rubyLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let rLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let octaveLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let awkLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let perlLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let documentLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
@@ -2057,6 +2058,10 @@
 		rubyLspWasmUrl?: string;
 		rLspEnabled?: boolean;
 		rLspBaseUrl?: string;
+		octaveLspEnabled?: boolean;
+		octaveLspBaseUrl?: string;
+		octaveLspWorkerUrl?: string;
+		octaveLspManifestUrl?: string;
 		awkLspEnabled?: boolean;
 		awkLspBaseUrl?: string;
 		awkLspWorkerUrl?: string;
@@ -2131,6 +2136,10 @@
 		rubyLspWasmUrl,
 		rLspEnabled = false,
 		rLspBaseUrl,
+		octaveLspEnabled = false,
+		octaveLspBaseUrl,
+		octaveLspWorkerUrl,
+		octaveLspManifestUrl,
 		awkLspEnabled = false,
 		awkLspBaseUrl,
 		awkLspWorkerUrl,
@@ -2264,6 +2273,9 @@
 			prologLspEnabled ? prologLspWorkerUrl || '' : '',
 			rubyLspEnabled ? rubyLspWasmUrl || '' : '',
 			rLspEnabled ? rLspBaseUrl || '' : '',
+			octaveLspEnabled ? octaveLspBaseUrl || '' : '',
+			octaveLspEnabled ? octaveLspWorkerUrl || '' : '',
+			octaveLspEnabled ? octaveLspManifestUrl || '' : '',
 			awkLspEnabled ? awkLspBaseUrl || '' : '',
 			awkLspEnabled ? awkLspWorkerUrl || '' : '',
 			perlLspEnabled ? perlLspBaseUrl || '' : '',
@@ -2398,6 +2410,10 @@
 			case 'r':
 				label = 'R LSP';
 				status = rLspStatus;
+				break;
+			case 'octave':
+				label = 'Octave LSP';
+				status = octaveLspStatus;
 				break;
 			case 'awk':
 				label = 'AWK LSP';
@@ -2877,6 +2893,27 @@
 			}
 		},
 		{
+			languages: ['octave'],
+			isEnabled: () =>
+				octaveLspEnabled &&
+				!!octaveLspBaseUrl &&
+				!!octaveLspWorkerUrl &&
+				!!octaveLspManifestUrl,
+			setStatus: (status) => (octaveLspStatus = status),
+			load: async (currentUrl) => {
+				const { getOctaveLanguageServer } = await import('@wasm-idle/lsp');
+				return await getOctaveLanguageServer({
+					currentUrl,
+					octave: {
+						baseUrl: octaveLspBaseUrl || '',
+						workerUrl: octaveLspWorkerUrl || '',
+						manifestUrl: octaveLspManifestUrl || ''
+					},
+					onStatus: (status) => (octaveLspStatus = status)
+				});
+			}
+		},
+		{
 			languages: ['awk'],
 			isEnabled: () => awkLspEnabled && !!awkLspBaseUrl && !!awkLspWorkerUrl,
 			setStatus: (status) => (awkLspStatus = status),
@@ -3044,6 +3081,7 @@
 			prolog: prologLspStatus,
 			ruby: rubyLspStatus,
 			r: rLspStatus,
+			octave: octaveLspStatus,
 			awk: awkLspStatus,
 			perl: perlLspStatus,
 			json: documentLspStatus,

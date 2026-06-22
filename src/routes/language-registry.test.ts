@@ -48,6 +48,7 @@ describe('language registry', () => {
 		expect(runtimeLspCapabilities.PROLOG).toBe('prolog');
 		expect(runtimeLspCapabilities.RUBY).toBe('ruby');
 		expect(runtimeLspCapabilities.R).toBe('r');
+		expect(runtimeLspCapabilities.OCTAVE).toBe('octave');
 		expect(runtimeLspCapabilities.AWK).toBe('awk');
 		expect(runtimeLspCapabilities.PERL).toBe('perl');
 		expect(runtimeLspCapabilities.WASM).toBe('wasm');
@@ -75,6 +76,7 @@ describe('language registry', () => {
 			expect(diagnosticMarkerLanguages.has(language)).toBe(true);
 		}
 		expect(diagnosticMarkerLanguages.has('awk')).toBe(true);
+		expect(diagnosticMarkerLanguages.has('octave')).toBe(true);
 		expect(diagnosticMarkerLanguages.has('wasm')).toBe(true);
 		expect(diagnosticMarkerLanguages.has('janet')).toBe(true);
 		expect(diagnosticMarkerLanguages.has('lisp')).toBe(true);

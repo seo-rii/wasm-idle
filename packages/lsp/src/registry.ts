@@ -20,6 +20,7 @@ import { getPhpLanguageServer } from './php/server.js';
 import { getLuaLanguageServer } from './lua/server.js';
 import { getJanetLanguageServer } from './janet/server.js';
 import { getLispLanguageServer } from './lisp/server.js';
+import { getOctaveLanguageServer } from './octave/server.js';
 import { getOcamlLanguageServer } from './ocaml/server.js';
 import { getHaskellLanguageServer } from './haskell/server.js';
 import { getFortranLanguageServer } from './fortran/server.js';
@@ -128,6 +129,10 @@ export async function getEditorLanguageServer(
 
 	if (normalized === 'lisp' || normalized === 'scheme' || normalized === 'scm') {
 		return getLispLanguageServer(options);
+	}
+
+	if (normalized === 'octave' || normalized === 'matlab' || normalized === 'm') {
+		return getOctaveLanguageServer(options);
 	}
 
 	if (normalized === 'ocaml' || normalized === 'ml') {

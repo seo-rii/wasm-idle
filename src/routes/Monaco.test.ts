@@ -228,10 +228,12 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(/getCssLanguageServer/);
 		expect(source).toMatch(/getMarkdownLanguageServer/);
 		expect(source).toMatch(/getRLanguageServer/);
+		expect(source).toMatch(/getOctaveLanguageServer/);
 		expect(source).toMatch(/getAwkLanguageServer/);
 		expect(source).toMatch(/getPerlLanguageServer/);
 		expect(source).toMatch(/languages: \['c', 'cpp'\]/);
 		expect(source).toMatch(/languages: \['r'\]/);
+		expect(source).toMatch(/languages: \['octave'\]/);
 		expect(source).toMatch(/languages: \['awk'\]/);
 		expect(source).toMatch(/languages: \['perl'\]/);
 		expect(source).toMatch(/languages: \['janet'\]/);
@@ -417,6 +419,7 @@ describe('Monaco route debug sync', () => {
 		expect(runtimeLspCapabilities.ELIXIR).toBe('elixir');
 		expect(runtimeLspCapabilities.ERLANG).toBe('erlang');
 		expect(runtimeLspCapabilities.R).toBe('r');
+		expect(runtimeLspCapabilities.OCTAVE).toBe('octave');
 		expect(runtimeLspCapabilities.AWK).toBe('awk');
 		expect(runtimeLspCapabilities.PERL).toBe('perl');
 		expect(runtimeLspCapabilities.WASM).toBe('wasm');
@@ -503,7 +506,8 @@ describe('Monaco route debug sync', () => {
 			'janet',
 			'lisp',
 			'ocaml',
-			'haskell'
+			'haskell',
+			'octave'
 		]) {
 			expect(pageSource).toContain(`activeRuntimeLspCapability === '${capability}'`);
 		}
@@ -523,7 +527,10 @@ describe('Monaco route debug sync', () => {
 			'ocamlLspManifestUrl',
 			'haskellLspModuleUrl',
 			'haskellLspRootfsUrl',
-			'haskellLspBsdtarUrl'
+			'haskellLspBsdtarUrl',
+			'octaveLspBaseUrl',
+			'octaveLspWorkerUrl',
+			'octaveLspManifestUrl'
 		]) {
 			expect(pageSource).toContain(`{${prop}}`);
 		}

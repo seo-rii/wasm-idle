@@ -64,6 +64,7 @@ export type RuntimeLspCapability =
 	| 'prolog'
 	| 'ruby'
 	| 'r'
+	| 'octave'
 	| 'awk'
 	| 'perl'
 	| 'wasm';
@@ -257,6 +258,7 @@ export const runtimeLspCapabilities: Partial<Record<PlaygroundLanguage, RuntimeL
 	PROLOG: 'prolog',
 	RUBY: 'ruby',
 	R: 'r',
+	OCTAVE: 'octave',
 	AWK: 'awk',
 	PERL: 'perl',
 	WASM: 'wasm'
