@@ -75,7 +75,7 @@ const lspBrowserCases = [
 		language: 'CPP',
 		label: 'C++',
 		fileName: 'main.cpp',
-		source: '#include <iostream>\n\nint main() {\n    int n = "nope";\n    std::cout << n << "\\n";\n}\n',
+		source: '#include <bits/stdc++.h>\n\nint main() {\n    int n = "nope";\n    std::cout << n << "\\n";\n}\n',
 		aliases: ['c++', 'cpp', 'clangd'],
 		statusKey: 'clangd',
 		timeoutMs: 240_000
@@ -555,8 +555,8 @@ async function waitForVisibleLspStatus(page: Page) {
 			const state = status?.dataset.lspState || '';
 			return Boolean(
 				status &&
-					/^(loading|ready|error)$/u.test(state) &&
-					status.textContent?.includes('LSP')
+				/^(loading|ready|error)$/u.test(state) &&
+				status.textContent?.includes('LSP')
 			);
 		},
 		undefined,
