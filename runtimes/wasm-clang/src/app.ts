@@ -17,6 +17,19 @@ import {
 import { flushQueuedStdin, readBufferedStdin } from './stdin-buffer.js';
 
 const ESUCCESS = 0;
+const WASI_RIGHT_FD_READ = 1 << 1;
+const WASI_RIGHT_FD_SEEK = 1 << 2;
+const WASI_RIGHT_FD_SYNC = 1 << 4;
+const WASI_RIGHT_FD_TELL = 1 << 5;
+const WASI_RIGHT_FD_WRITE = 1 << 6;
+const WASI_RIGHT_FD_FILESTAT_GET = 1 << 21;
+const WASI_RIGHT_FD_FILESTAT_SET_SIZE = 1 << 22;
+const WASI_O_CREAT = 1 << 0;
+const WASI_O_TRUNC = 1 << 3;
+const WASI_FILETYPE_REGULAR_FILE = 4;
+const WASI_SEEK_SET = 0;
+const WASI_SEEK_CUR = 1;
+const WASI_SEEK_END = 2;
 const RAF_PROC_EXIT_CODE = 0xc0c0a;
 
 interface DebugSession {
@@ -67,16 +80,24 @@ export default class App {
 	exports: any;
 	trace: (message: string) => void = () => {};
 	debugSession?: DebugSession;
+	useJsReadOverlay = false;
+	useJsSourceReadOverlay = false;
 
 	argv: string[];
 	environ: { [key: string]: string };
 	handles = new Map<number, any>();
 	nextHandle = 0;
+	nextSyntheticInode = 1;
+	syntheticInodes = new Map<string, number>();
+	readFileHandles = new Map<number, { path: string; contents: Uint8Array; position: number }>();
+	writeFileHandles = new Map<number, { path: string; contents: Uint8Array; position: number; size: number }>();
 
 	constructor(module: WebAssembly.Module, memfs: MemFS, name: string, ...args: string[]) {
 		this.argv = [name, ...args];
 		this.environ = { USER: 'wasm-clang' };
 		this.memfs = memfs;
+		this.useJsReadOverlay = name === 'wasm-ld' || name === 'ld.lld' || name === 'lld';
+		this.useJsSourceReadOverlay = name === 'clang' || name === 'clang++';
 
 		const env = bindNew(
 			this,
@@ -99,9 +120,25 @@ export default class App {
 				'args_get',
 				'random_get',
 				'clock_time_get',
-				'poll_oneoff'
+				'poll_oneoff',
+				'fd_filestat_set_times',
+				'path_link',
+				'path_rename'
 			),
-			...this.memfs.exports
+			...this.memfs.exports,
+			...bindNew(
+				this,
+				'path_open',
+				'path_filestat_get',
+				'fd_fdstat_get',
+				'fd_filestat_get',
+				'fd_filestat_set_size',
+				'fd_read',
+				'fd_pread',
+				'fd_seek',
+				'fd_write',
+				'fd_close'
+			)
 		};
 
 		// Rust/WASI modules import `wasi_snapshot_preview1`, while older toolchains here still use
@@ -157,6 +194,350 @@ export default class App {
 	proc_exit(code: number) {
 		this.trace(`proc_exit_throw(code=${code})`);
 		throw new ProcExit(code);
+	}
+
+	private toNumber(value: number | bigint) {
+		return typeof value === 'bigint' ? Number(value) : value;
+	}
+
+	private writeU32(ptr: number, value: number) {
+		this.mem.view.setUint32(ptr, value >>> 0, true);
+	}
+
+	private writeU64(ptr: number, value: number | bigint) {
+		const wide = BigInt(value);
+		this.mem.view.setUint32(ptr, Number(wide & 0xffffffffn), true);
+		this.mem.view.setUint32(ptr + 4, Number((wide >> 32n) & 0xffffffffn), true);
+	}
+
+	private readMemfsFile(path: string) {
+		const candidates = [
+			path,
+			path.replace(/^\/+/, ''),
+			path.replace(/^\.\//, ''),
+			path.replace(/^\/+/, '').replace(/^\.\//, '')
+		];
+		for (const candidate of candidates) {
+			try {
+				return Uint8Array.from(this.memfs.getFileContents(candidate));
+			} catch {
+				// Try the next normalized spelling.
+			}
+		}
+		return null;
+	}
+
+	private shouldUseJsReadForPath(path: string) {
+		if (this.useJsReadOverlay) return true;
+		return this.useJsSourceReadOverlay;
+	}
+
+	private syntheticInodeForPath(path: string) {
+		const normalized = path.replace(/^\/+/, '').replace(/^\.\//, '');
+		const key = normalized || path;
+		let inode = this.syntheticInodes.get(key);
+		if (!inode) {
+			inode = this.nextSyntheticInode++;
+			this.syntheticInodes.set(key, inode);
+		}
+		return inode;
+	}
+
+	private copyFileToIovs(
+		contents: Uint8Array,
+		position: number,
+		iovs: number,
+		iovsLen: number,
+		nread: number
+	) {
+		this.mem.check();
+		let copied = 0;
+		for (let index = 0; index < iovsLen; index += 1) {
+			const buffer = this.mem.read32(iovs);
+			iovs += 4;
+			const length = this.mem.read32(iovs);
+			iovs += 4;
+			if (length <= 0) continue;
+			const available = Math.max(0, contents.length - position);
+			const chunkLength = Math.min(length, available);
+			if (chunkLength > 0) {
+				this.mem.write(buffer, contents.subarray(position, position + chunkLength));
+				position += chunkLength;
+				copied += chunkLength;
+			}
+			if (chunkLength < length) break;
+		}
+		this.writeU32(nread, copied);
+		return { copied, position };
+	}
+
+	private writeRegularFileStat(statPtr: number, size: number, path: string) {
+		this.mem.check();
+		this.writeU64(statPtr, 1);
+		this.writeU64(statPtr + 8, this.syntheticInodeForPath(path));
+		this.mem.write8(statPtr + 16, WASI_FILETYPE_REGULAR_FILE);
+		this.writeU64(statPtr + 24, 1);
+		this.writeU64(statPtr + 32, size);
+		this.writeU64(statPtr + 40, 0);
+		this.writeU64(statPtr + 48, 0);
+		this.writeU64(statPtr + 56, 0);
+	}
+
+	private seekPosition(current: number, size: number, offset: number | bigint, whence: number) {
+		const numericOffset = this.toNumber(offset);
+		if (whence === WASI_SEEK_SET) return Math.max(0, numericOffset);
+		if (whence === WASI_SEEK_CUR) return Math.max(0, current + numericOffset);
+		if (whence === WASI_SEEK_END) return Math.max(0, size + numericOffset);
+		return null;
+	}
+
+	private ensureWriteCapacity(
+		handle: { contents: Uint8Array; position: number; size: number },
+		capacity: number
+	) {
+		if (handle.contents.length >= capacity) return;
+		let nextCapacity = Math.max(1024, handle.contents.length);
+		while (nextCapacity < capacity) nextCapacity *= 2;
+		const next = new Uint8Array(nextCapacity);
+		next.set(handle.contents.subarray(0, handle.size));
+		handle.contents = next;
+	}
+
+	private atomicOutputTarget(path: string) {
+		const match = path.match(/^(.+)-[0-9a-f]+(\.[^.]+)\.tmp$/);
+		if (!match) return null;
+		return `${match[1]}${match[2]}`;
+	}
+
+	path_open(
+		dirfd: number,
+		dirflags: number,
+		pathPtr: number,
+		pathLen: number,
+		oflags: number,
+		fsRightsBase: number | bigint,
+		fsRightsInheriting: number | bigint,
+		fdflags: number,
+		openedFd: number
+	) {
+		this.mem.check();
+		const path = this.mem.readStr(pathPtr, pathLen);
+		const rights = this.toNumber(fsRightsBase);
+		const writesFile =
+			(rights & WASI_RIGHT_FD_WRITE) !== 0 ||
+			(oflags & (WASI_O_CREAT | WASI_O_TRUNC)) !== 0;
+		const result = this.memfs.exports.path_open(
+			dirfd,
+			dirflags,
+			pathPtr,
+			pathLen,
+			oflags,
+			fsRightsBase,
+			fsRightsInheriting,
+			fdflags,
+			openedFd
+		);
+		if (result !== ESUCCESS) return result;
+
+		const fd = this.mem.read32(openedFd);
+		if (writesFile) {
+			const existing = (oflags & WASI_O_TRUNC) === 0 ? this.readMemfsFile(path) : null;
+			const contents = existing ? Uint8Array.from(existing) : new Uint8Array(0);
+			this.writeFileHandles.set(fd, {
+				path,
+				contents,
+				position: 0,
+				size: contents.length
+			});
+			this.readFileHandles.delete(fd);
+			this.trace(`path_open_write(fd=${fd}, path=${JSON.stringify(path)}, size=${contents.length})`);
+			return result;
+		}
+
+		if (!this.shouldUseJsReadForPath(path) || (rights & WASI_RIGHT_FD_READ) === 0) {
+			return result;
+		}
+
+		const contents = this.readMemfsFile(path);
+		if (!contents) return result;
+
+		this.readFileHandles.set(fd, { path, contents, position: 0 });
+		this.trace(`path_open_read(fd=${fd}, path=${JSON.stringify(path)}, size=${contents.length})`);
+		return result;
+	}
+
+	path_filestat_get(
+		dirfd: number,
+		flags: number,
+		pathPtr: number,
+		pathLen: number,
+		statPtr: number
+	) {
+		this.mem.check();
+		const path = this.mem.readStr(pathPtr, pathLen);
+		if (!this.shouldUseJsReadForPath(path)) {
+			return this.memfs.exports.path_filestat_get(dirfd, flags, pathPtr, pathLen, statPtr);
+		}
+
+		const contents = this.readMemfsFile(path);
+		if (!contents) {
+			return this.memfs.exports.path_filestat_get(dirfd, flags, pathPtr, pathLen, statPtr);
+		}
+		this.writeRegularFileStat(statPtr, contents.length, path);
+		this.trace(`path_filestat_get(path=${JSON.stringify(path)}, size=${contents.length})`);
+		return ESUCCESS;
+	}
+
+	fd_fdstat_get(fd: number, fdstatPtr: number) {
+		const handle = this.readFileHandles.get(fd) || this.writeFileHandles.get(fd);
+		if (!handle) return this.memfs.exports.fd_fdstat_get(fd, fdstatPtr);
+		const rights = this.writeFileHandles.has(fd)
+			? WASI_RIGHT_FD_WRITE |
+				WASI_RIGHT_FD_SEEK |
+				WASI_RIGHT_FD_TELL |
+				WASI_RIGHT_FD_SYNC |
+				WASI_RIGHT_FD_FILESTAT_GET |
+				WASI_RIGHT_FD_FILESTAT_SET_SIZE
+			: WASI_RIGHT_FD_READ | WASI_RIGHT_FD_SEEK | WASI_RIGHT_FD_TELL | WASI_RIGHT_FD_FILESTAT_GET;
+
+		this.mem.check();
+		this.mem.write8(fdstatPtr, WASI_FILETYPE_REGULAR_FILE);
+		this.mem.write8(fdstatPtr + 1, 0);
+		this.mem.write8(fdstatPtr + 2, 0);
+		this.mem.write8(fdstatPtr + 3, 0);
+		this.writeU64(fdstatPtr + 8, rights);
+		this.writeU64(fdstatPtr + 16, 0);
+		this.trace(`fd_fdstat_get(fd=${fd}, path=${JSON.stringify(handle.path)})`);
+		return ESUCCESS;
+	}
+
+	fd_filestat_get(fd: number, statPtr: number) {
+		const writeHandle = this.writeFileHandles.get(fd);
+		const readHandle = this.readFileHandles.get(fd);
+		const handle = writeHandle || readHandle;
+		if (!handle) return this.memfs.exports.fd_filestat_get(fd, statPtr);
+
+		const size = writeHandle ? writeHandle.size : readHandle?.contents.length || 0;
+		this.writeRegularFileStat(statPtr, size, handle.path);
+		this.trace(
+			`fd_filestat_get(fd=${fd}, path=${JSON.stringify(handle.path)}, size=${size})`
+		);
+		return ESUCCESS;
+	}
+
+	fd_filestat_set_size(fd: number, size: number | bigint) {
+		const handle = this.writeFileHandles.get(fd);
+		if (!handle) return this.memfs.exports.fd_filestat_set_size(fd, size);
+
+		const nextSize = this.toNumber(size);
+		this.ensureWriteCapacity(handle, nextSize);
+		if (nextSize > handle.size) handle.contents.fill(0, handle.size, nextSize);
+		handle.size = nextSize;
+		if (handle.position > nextSize) handle.position = nextSize;
+		this.trace(`fd_filestat_set_size(fd=${fd}, size=${nextSize})`);
+		return ESUCCESS;
+	}
+
+	fd_read(fd: number, iovs: number, iovsLen: number, nread: number) {
+		const handle = this.readFileHandles.get(fd);
+		if (!handle) return this.memfs.exports.fd_read(fd, iovs, iovsLen, nread);
+		const result = this.copyFileToIovs(handle.contents, handle.position, iovs, iovsLen, nread);
+		handle.position = result.position;
+		this.trace(`fd_read(fd=${fd}, bytes=${result.copied})`);
+		return ESUCCESS;
+	}
+
+	fd_pread(fd: number, iovs: number, iovsLen: number, offset: number | bigint, nread: number) {
+		const handle = this.readFileHandles.get(fd);
+		if (!handle) return this.memfs.exports.fd_pread(fd, iovs, iovsLen, offset, nread);
+		const result = this.copyFileToIovs(
+			handle.contents,
+			this.toNumber(offset),
+			iovs,
+			iovsLen,
+			nread
+		);
+		this.trace(`fd_pread(fd=${fd}, offset=${this.toNumber(offset)}, bytes=${result.copied})`);
+		return ESUCCESS;
+	}
+
+	fd_seek(fd: number, offset: number | bigint, whence: number, newOffset: number) {
+		const writeHandle = this.writeFileHandles.get(fd);
+		if (writeHandle) {
+			const position = this.seekPosition(writeHandle.position, writeHandle.size, offset, whence);
+			if (position == null) {
+				return this.memfs.exports.fd_seek(fd, offset, whence, newOffset);
+			}
+			writeHandle.position = position;
+			this.mem.check();
+			this.writeU64(newOffset, writeHandle.position);
+			this.trace(`fd_seek_write(fd=${fd}, offset=${this.toNumber(offset)}, whence=${whence})`);
+			return ESUCCESS;
+		}
+
+		const handle = this.readFileHandles.get(fd);
+		if (!handle) {
+			return this.memfs.exports.fd_seek(fd, offset, whence, newOffset);
+		}
+
+		const position = this.seekPosition(handle.position, handle.contents.length, offset, whence);
+		if (position == null) {
+			return this.memfs.exports.fd_seek(fd, offset, whence, newOffset);
+		}
+		handle.position = position;
+		this.mem.check();
+		this.writeU64(newOffset, handle.position);
+		this.trace(`fd_seek(fd=${fd}, offset=${this.toNumber(offset)}, whence=${whence})`);
+		return ESUCCESS;
+	}
+
+	fd_write(fd: number, iovs: number, iovsLen: number, nwritten: number) {
+		const handle = this.writeFileHandles.get(fd);
+		if (!handle) {
+			return this.memfs.exports.fd_write(fd, iovs, iovsLen, nwritten);
+		}
+
+		this.mem.check();
+		let copied = 0;
+		for (let index = 0; index < iovsLen; index += 1) {
+			const buffer = this.mem.read32(iovs);
+			iovs += 4;
+			const length = this.mem.read32(iovs);
+			iovs += 4;
+			if (length <= 0) continue;
+			this.ensureWriteCapacity(handle, handle.position + length);
+			handle.contents.set(
+				new Uint8Array(this.mem.buffer, buffer, length),
+				handle.position
+			);
+			handle.position += length;
+			handle.size = Math.max(handle.size, handle.position);
+			copied += length;
+		}
+		this.writeU32(nwritten, copied);
+		this.trace(`fd_write(fd=${fd}, bytes=${copied})`);
+		return ESUCCESS;
+	}
+
+	fd_close(fd: number) {
+		if (this.readFileHandles.has(fd)) {
+			this.readFileHandles.delete(fd);
+			this.trace(`fd_close_read(fd=${fd})`);
+		}
+		const writeHandle = this.writeFileHandles.get(fd);
+		if (writeHandle) {
+			this.writeFileHandles.delete(fd);
+			const closeResult = this.memfs.exports.fd_close(fd);
+			const contents = writeHandle.contents.subarray(0, writeHandle.size);
+			this.memfs.addFile(writeHandle.path, contents);
+			const target = this.atomicOutputTarget(writeHandle.path);
+			if (target) this.memfs.addFile(target, contents);
+			this.trace(
+				`fd_close_write(fd=${fd}, path=${JSON.stringify(writeHandle.path)}, size=${writeHandle.size}, close=${closeResult}, target=${JSON.stringify(target)})`
+			);
+			return ESUCCESS;
+		}
+		return this.memfs.exports.fd_close(fd);
 	}
 
 	debugEvaluate(expression: string) {
@@ -282,7 +663,10 @@ export default class App {
 			}
 			const globalVariable = activeGlobals.find((variable) => variable.name === name);
 			if (globalVariable) {
-				return resolveVariableValue(globalVariable, session.globalValues.get(globalVariable.slot));
+				return resolveVariableValue(
+					globalVariable,
+					session.globalValues.get(globalVariable.slot)
+				);
 			}
 			throw new Error('unavailable');
 		});
@@ -654,14 +1038,18 @@ export default class App {
 				return ESUCCESS;
 			}
 			if (command === 5) {
-				const expression = session.watchBuffer ? readBufferedStdin(session.watchBuffer) : '';
+				const expression = session.watchBuffer
+					? readBufferedStdin(session.watchBuffer)
+					: '';
 				let result = '?';
 				try {
 					result = expression ? this.debugEvaluate(expression) : '?';
 				} catch (error) {
-					result = error instanceof Error && error.message === 'unavailable' ? '?' : 'error';
+					result =
+						error instanceof Error && error.message === 'unavailable' ? '?' : 'error';
 				}
-				if (session.watchResultBuffer) flushQueuedStdin([result], session.watchResultBuffer);
+				if (session.watchResultBuffer)
+					flushQueuedStdin([result], session.watchResultBuffer);
 			}
 		}
 	}
@@ -873,5 +1261,43 @@ export default class App {
 
 	poll_oneoff() {
 		throw new NotImplemented('wasi_unstable', 'poll_oneoff');
+	}
+
+	fd_filestat_set_times() {
+		this.trace('fd_filestat_set_times()');
+		return ESUCCESS;
+	}
+
+	path_link(
+		_oldFd: number,
+		_oldFlags: number,
+		oldPath: number,
+		oldPathLen: number,
+		_newFd: number,
+		newPath: number,
+		newPathLen: number
+	) {
+		this.mem.check();
+		const source = this.mem.readStr(oldPath, oldPathLen).replace(/^\/+/, '');
+		const target = this.mem.readStr(newPath, newPathLen).replace(/^\/+/, '');
+		this.trace(`path_link(source=${JSON.stringify(source)}, target=${JSON.stringify(target)})`);
+		this.memfs.addFile(target, new Uint8Array(this.memfs.getFileContents(source)));
+		return ESUCCESS;
+	}
+
+	path_rename(
+		_oldFd: number,
+		oldPath: number,
+		oldPathLen: number,
+		_newFd: number,
+		newPath: number,
+		newPathLen: number
+	) {
+		this.mem.check();
+		const source = this.mem.readStr(oldPath, oldPathLen).replace(/^\/+/, '');
+		const target = this.mem.readStr(newPath, newPathLen).replace(/^\/+/, '');
+		this.trace(`path_rename(source=${JSON.stringify(source)}, target=${JSON.stringify(target)})`);
+		this.memfs.addFile(target, new Uint8Array(this.memfs.getFileContents(source)));
+		return ESUCCESS;
 	}
 }

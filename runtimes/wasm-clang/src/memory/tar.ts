@@ -24,13 +24,13 @@ type Entry = EntryInit & {
 };
 
 type FileEntry = Entry & {
-	type: '0';
 	contents: Uint8Array;
 };
 
 function* readEntry(buffer: Uint8Array | ArrayBufferLike) {
 	const u8 = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
 	let offset = 0;
+	let nextFilename = '';
 
 	const str = (len: number) => {
 			offset += len;
@@ -69,11 +69,22 @@ function* readEntry(buffer: Uint8Array | ArrayBufferLike) {
 
 		align();
 
-		if (entry.type === '0') {
-			entry.contents = u8.subarray(offset, offset + entry.size);
+		if (entry.size > 0 || entry.type === '0' || entry.type === '' || entry.type === 'L') {
+			const contents = u8.subarray(offset, offset + entry.size);
+			entry.contents = contents;
 			offset += entry.size;
 			align();
 		}
+
+		if (entry.type === 'L') {
+			if (entry.contents) nextFilename = readStr(entry.contents, 0, entry.size);
+			continue;
+		}
+
+		entry.filename =
+			nextFilename ||
+			(entry.filenamePrefix ? `${entry.filenamePrefix}/${entry.filename}` : entry.filename);
+		nextFilename = '';
 		yield entry;
 	}
 }
@@ -81,6 +92,7 @@ function* readEntry(buffer: Uint8Array | ArrayBufferLike) {
 export default function untar(buffer: Uint8Array | ArrayBufferLike, memfs: MemFS) {
 	for (const entry of readEntry(buffer)) {
 		switch (entry.type) {
+			case '': // Regular file.
 			case '0': // Regular file.
 				memfs.addFile(entry.filename, (entry as FileEntry).contents);
 				break;
