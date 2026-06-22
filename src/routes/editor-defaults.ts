@@ -27,6 +27,7 @@ export type EditorDefaultLanguage =
 	| 'typescript'
 	| 'assemblyscript'
 	| 'wat'
+	| 'wasm'
 	| 'lua'
 	| 'zig'
 	| 'lisp'
@@ -74,6 +75,7 @@ export const editorDefaults: Record<
 	| 'typescript'
 	| 'assemblyscript'
 	| 'wat'
+	| 'wasm'
 	| 'lua'
 	| 'zig'
 	| 'lisp'
@@ -509,6 +511,7 @@ export function factorial_plus_bonus(): i32 {
     i32.add
   )
 )`,
+	wasm: `AGFzbQEAAAABBQFgAAF/AwIBAAcKAQZhbnN3ZXIAAAoGAQQAQSoL`,
 	lua: `local bonus = 3
 
 local function factorial(n)
@@ -677,7 +680,7 @@ main {
   margin: 0 auto;
   font-family: system-ui, sans-serif;
 }`,
-markdown: `# wasm-idle
+	markdown: `# wasm-idle
 
 Edit Markdown with browser-hosted LSP features.
 
@@ -826,6 +829,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.typescript ||
 		source === editorDefaults.assemblyscript ||
 		source === editorDefaults.wat ||
+		source === editorDefaults.wasm ||
 		source === editorDefaults.lua ||
 		source === editorDefaults.zig ||
 		source === editorDefaults.lisp ||

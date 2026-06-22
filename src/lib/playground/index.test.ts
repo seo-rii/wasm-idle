@@ -190,6 +190,13 @@ vi.mock('$lib/playground/sqlite', () => {
 	};
 });
 
+vi.mock('$lib/playground/duckdb', () => {
+	moduleLoads.add('DUCKDB');
+	return {
+		default: createMockSandboxClass('DUCKDB')
+	};
+});
+
 vi.mock('$lib/playground/php', () => {
 	moduleLoads.add('PHP');
 	return {
@@ -258,6 +265,13 @@ vi.mock('$lib/playground/wat', () => {
 	};
 });
 
+vi.mock('$lib/playground/wasm', () => {
+	moduleLoads.add('WASM');
+	return {
+		default: createMockSandboxClass('WASM')
+	};
+});
+
 vi.mock('$lib/playground/lua', () => {
 	moduleLoads.add('LUA');
 	return {
@@ -310,7 +324,7 @@ describe('playground runtime binding', () => {
 
 	it('lists static worker languages in the exported supported language registry', () => {
 		expect(supportedLanguages).toEqual(
-			expect.arrayContaining(['FORTH', 'J', 'BQN', 'JANET'])
+			expect.arrayContaining(['FORTH', 'J', 'BQN', 'JANET', 'DUCKDB', 'WASM'])
 		);
 	});
 
@@ -928,6 +942,23 @@ End Module`;
 		]);
 	});
 
+	it('routes WASM aliases through the binary WebAssembly sandbox implementation', async () => {
+		const binding = createPlaygroundBinding('/absproxy/5173');
+		const progress = { set() {} };
+		const code = 'AGFzbQEAAAABBQFgAAF/AwIBAAcKAQZhbnN3ZXIAAAoGAQQAQSoL';
+		const sandbox = await binding.load('WASM32');
+
+		await sandbox.load(code, true, ['demo'], {}, progress);
+
+		expect(sandbox.runtimeAssets).toBe('/absproxy/5173');
+		expect(sandboxInstances.get('WASM')).toHaveLength(1);
+		expect(sandboxInstances.get('WASM')?.[0]?.loadCalls).toEqual([
+			['/absproxy/5173', code, true, ['demo'], {}, progress]
+		]);
+		expect((await binding.load('WASM')).runtimeAssets).toBe('/absproxy/5173');
+		expect(sandboxInstances.get('WASM')).toHaveLength(1);
+	});
+
 	it('routes Lua requests through the wasm-lua sandbox implementation', async () => {
 		const binding = createPlaygroundBinding({
 			rootUrl: '/absproxy/5173',
@@ -1093,6 +1124,21 @@ End Module`;
 		]);
 		expect((await binding.load('SQLITE')).runtimeAssets).toEqual(runtimeAssets);
 		expect(sandboxInstances.get('SQLITE')).toHaveLength(1);
+	});
+
+	it('routes DuckDB requests through the DuckDB wasm sandbox implementation', async () => {
+		const binding = createPlaygroundBinding('/absproxy/5173');
+		const progress = { set() {} };
+		const code = 'select 42 as answer;';
+		const sandbox = await binding.load('DUCKDB');
+
+		await sandbox.load(code, true, [], {}, progress);
+
+		expect(sandbox.runtimeAssets).toBe('/absproxy/5173');
+		expect(sandboxInstances.get('DUCKDB')).toHaveLength(1);
+		expect(sandboxInstances.get('DUCKDB')?.[0]?.loadCalls).toEqual([
+			['/absproxy/5173', code, true, [], {}, progress]
+		]);
 	});
 
 	it('routes PHP requests through the PHP wasm sandbox implementation', async () => {

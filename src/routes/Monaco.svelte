@@ -949,6 +949,27 @@
 		}
 	} satisfies monaco.languages.IMonarchLanguage;
 
+	const wasmLanguageConfiguration = {
+		comments: {
+			lineComment: '#'
+		}
+	} satisfies monaco.languages.LanguageConfiguration;
+
+	const wasmMonarchTokens = {
+		defaultToken: '',
+		tokenPostfix: '.wasm',
+		tokenizer: {
+			root: [
+				[/#.*$/, 'comment'],
+				[/^data:[^,]+,/, 'keyword'],
+				[/^(?:base64|wasm):/i, 'keyword'],
+				[/0x[0-9A-Fa-f]+/, 'number.hex'],
+				[/[0-9A-Fa-f]{2,}/, 'number.hex'],
+				[/[A-Za-z0-9+/=_-]+/, 'string']
+			]
+		}
+	} satisfies monaco.languages.IMonarchLanguage;
+
 	const luaLanguageConfiguration = {
 		comments: {
 			lineComment: '--',
@@ -2121,6 +2142,7 @@
 				| 'typescript'
 				| 'assemblyscript'
 				| 'wat'
+				| 'wasm'
 				| 'lua'
 				| 'zig'
 				| 'lisp'
@@ -2962,6 +2984,15 @@
 			}
 			monacoApi.languages.setLanguageConfiguration('wat', watLanguageConfiguration);
 			monacoApi.languages.setMonarchTokensProvider('wat', watMonarchTokens);
+			if (!monacoApi.languages.getLanguages().some(({ id }) => id === 'wasm')) {
+				monacoApi.languages.register({
+					id: 'wasm',
+					aliases: ['WASM', 'WebAssembly Binary', 'wasm'],
+					extensions: ['.wasm']
+				});
+			}
+			monacoApi.languages.setLanguageConfiguration('wasm', wasmLanguageConfiguration);
+			monacoApi.languages.setMonarchTokensProvider('wasm', wasmMonarchTokens);
 			if (!monacoApi.languages.getLanguages().some(({ id }) => id === 'lua')) {
 				monacoApi.languages.register({
 					id: 'lua',

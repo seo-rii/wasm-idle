@@ -14,6 +14,9 @@ importers:
       '@bjorn3/browser_wasi_shim':
         specifier: ^0.4.2
         version: 0.4.2
+      '@duckdb/duckdb-wasm':
+        specifier: 1.33.1-dev45.0
+        version: 1.33.1-dev45.0
       '@lezer/rust':
         specifier: ^1.0.2
         version: 1.0.2

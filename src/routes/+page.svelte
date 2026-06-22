@@ -606,6 +606,7 @@
 			'.cts': 'TYPESCRIPT',
 			'.wat': 'WAT',
 			'.wast': 'WAT',
+			'.wasm': 'WASM',
 			'.lua': 'LUA',
 			'.zig': 'ZIG',
 			'.scm': 'LISP',
@@ -672,6 +673,7 @@
 			TYPESCRIPT: 'main.ts',
 			ASSEMBLYSCRIPT: 'main.as.ts',
 			WAT: 'main.wat',
+			WASM: 'main.wasm',
 			LUA: 'main.lua',
 			ZIG: 'main.zig',
 			LISP: 'main.scm',
@@ -724,6 +726,7 @@
 			TYPESCRIPT: 'typescript',
 			ASSEMBLYSCRIPT: 'assemblyscript',
 			WAT: 'wat',
+			WASM: 'wasm',
 			LUA: 'lua',
 			ZIG: 'zig',
 			LISP: 'lisp',
@@ -1113,6 +1116,20 @@
 		for (const file of fileList) {
 			if (file.name.toLowerCase().endsWith('.zip')) {
 				imported.push(...(await importZip(file)));
+			} else if (file.name.toLowerCase().endsWith('.wasm')) {
+				const bytes = new Uint8Array(await file.arrayBuffer());
+				let binary = '';
+				for (let index = 0; index < bytes.length; index += 0x8000) {
+					binary += String.fromCharCode(...bytes.slice(index, index + 0x8000));
+				}
+				imported.push(
+					addWorkspaceFile(
+						(file as File & { webkitRelativePath?: string }).webkitRelativePath ||
+							file.name,
+						`data:application/wasm;base64,${btoa(binary)}`,
+						false
+					)
+				);
 			} else {
 				imported.push(
 					addWorkspaceFile(
@@ -1241,6 +1258,8 @@
 			as: 'ASSEMBLYSCRIPT',
 			wat: 'WAT',
 			wast: 'WAT',
+			wasm: 'WASM',
+			wasm32: 'WASM',
 			lua: 'LUA',
 			zig: 'ZIG',
 			lisp: 'LISP',
@@ -1903,6 +1922,7 @@
 						<option value="TYPESCRIPT">TypeScript</option>
 						<option value="ASSEMBLYSCRIPT">AssemblyScript</option>
 						<option value="WAT">WAT</option>
+						<option value="WASM">WASM</option>
 						<option value="LUA">Lua</option>
 						<option value="ZIG">Zig</option>
 						<option value="LISP">Scheme</option>
@@ -2177,6 +2197,14 @@
 				`-1` after EOF.
 			</p>
 		{/if}
+		{#if language === 'WASM'}
+			<p class="hint">
+				WASM executes a WebAssembly binary from base64, hex, or a `data:application/wasm`
+				URL. Uploading a `.wasm` file stores it as base64 in the workspace. `_start`,
+				`main`, or zero-argument numeric exports run automatically; WASI preview1 stdin,
+				stdout, stderr, and `env.readByte` are wired to the terminal.
+			</p>
+		{/if}
 		{#if language === 'LUA'}
 			<p class="hint">
 				Lua runs through the bundled `wasmoon` Lua VM, backed by its local wasm payload.
@@ -2207,6 +2235,14 @@
 			<p class="hint">
 				SQLite runs through bundled sql.js WebAssembly assets against a fresh in-memory
 				database on every run. SELECT results are printed as tab-separated tables.
+			</p>
+		{/if}
+		{#if language === 'DUCKDB'}
+			<p class="hint">
+				DuckDB runs through `@duckdb/duckdb-wasm` in a browser worker against a fresh
+				in-memory database on every run. Workspace `.csv`, `.json`, `.parquet`, `.sql`, and
+				`.duckdb` files are registered before the active query; SELECT results are printed
+				as tab-separated tables.
 			</p>
 		{/if}
 		{#if language === 'PHP'}

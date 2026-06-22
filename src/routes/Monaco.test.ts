@@ -113,9 +113,14 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(
 			/\$effect\(\(\) => \{\s+const activeModel = model \|\| editor\?\.getModel\(\);[\s\S]*if \(!isEditorDefaultSource\(currentValue\) && !isLegacyEditorDefaultSource\(currentValue\)\) \{[\s\S]*activeModel\.setValue\(defaultValue\);[\s\S]*\}\s+\}\);/s
 		);
-		expect(source).toMatch(
-			/const defaultValue = \$derived\(\s+resolveEditorDefaultSource\([\s\S]*'c'[\s\S]*'cpp'[\s\S]*'python'[\s\S]*'java'[\s\S]*'go'[\s\S]*'d'[\s\S]*'csharp'[\s\S]*'fsharp'[\s\S]*'vbnet'[\s\S]*'elixir'[\s\S]*'erlang'[\s\S]*'prolog'[\s\S]*'gleam'[\s\S]*'perl'[\s\S]*'pascal'[\s\S]*'bqn'[\s\S]*'janet'[\s\S]*'ocaml'[\s\S]*'ruby'[\s\S]*'sqlite'[\s\S]*'php'[\s\S]*'rust'[\s\S]*rustTargetTriple[\s\S]*\)\s+\);/s
+		const defaultValueBlock = source.slice(
+			source.indexOf('const defaultValue = $derived'),
+			source.indexOf('const normalizedFilePath')
 		);
+		for (const defaultLanguage of ['wat', 'wasm', 'duckdb', 'sqlite', 'rust']) {
+			expect(defaultValueBlock).toContain(`| '${defaultLanguage}'`);
+		}
+		expect(defaultValueBlock).toContain('rustTargetTriple');
 		expect(source).toMatch(/id: 'd'/);
 		expect(source).toMatch(/aliases: \['D', 'd'\]/);
 		expect(source).toMatch(/extensions: \['\.d'\]/);
@@ -124,6 +129,12 @@ describe('Monaco route debug sync', () => {
 		);
 		expect(source).toMatch(
 			/monacoApi\.languages\.setMonarchTokensProvider\('zig', zigMonarchTokens\);/
+		);
+		expect(source).toMatch(/id: 'wasm'/);
+		expect(source).toMatch(/aliases: \['WASM', 'WebAssembly Binary', 'wasm'\]/);
+		expect(source).toMatch(/extensions: \['\.wasm'\]/);
+		expect(source).toMatch(
+			/monacoApi\.languages\.setMonarchTokensProvider\('wasm', wasmMonarchTokens\);/
 		);
 		expect(source).toMatch(
 			/const nextDebugView = new MonacoDebugView\(monacoApi, activeEditor, onBreakpointsChange\);[\s\S]*debugView = nextDebugView;/s
@@ -237,6 +248,8 @@ describe('Monaco route debug sync', () => {
 		expect(resolveEditorDefaultSource('bqn', 'wasm32-wasip1')).toBe(editorDefaults.bqn);
 		expect(resolveEditorDefaultSource('janet', 'wasm32-wasip1')).toBe(editorDefaults.janet);
 		expect(resolveEditorDefaultSource('lua', 'wasm32-wasip1')).toBe(editorDefaults.lua);
+		expect(resolveEditorDefaultSource('wat', 'wasm32-wasip1')).toBe(editorDefaults.wat);
+		expect(resolveEditorDefaultSource('wasm', 'wasm32-wasip1')).toBe(editorDefaults.wasm);
 		expect(resolveEditorDefaultSource('sqlite', 'wasm32-wasip1')).toBe(editorDefaults.sqlite);
 		expect(resolveEditorDefaultSource('fortran', 'wasm32-wasip1')).toBe(editorDefaults.fortran);
 		expect(resolveEditorDefaultSource('graphql', 'wasm32-wasip1')).toBe(editorDefaults.graphql);
@@ -301,6 +314,7 @@ describe('Monaco route debug sync', () => {
 		expect(isEditorDefaultSource(editorDefaults.fortran)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.graphql)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.duckdb)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.wasm)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.sqlite)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.php)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.json)).toBe(true);

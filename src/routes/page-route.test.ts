@@ -608,6 +608,20 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/Zero-argument numeric exports are called automatically/);
 	});
 
+	it('surfaces WASM through the binary WebAssembly runner contract', () => {
+		expect(source).toMatch(/<option value="WASM">WASM<\/option>/);
+		expect(source).toMatch(/wasm: 'WASM'/);
+		expect(source).toMatch(/wasm32: 'WASM'/);
+		expectEditorLanguage('WASM', 'wasm');
+		expect(source).toMatch(/'.wasm': 'WASM'/);
+		expect(source).toMatch(/WASM: 'main\.wasm'/);
+		expect(source).toMatch(/WASM: 'wasm'/);
+		expect(source).toMatch(
+			/WASM executes a WebAssembly binary from base64, hex, or a `data:application\/wasm`/
+		);
+		expect(source).toMatch(/WASI preview1 stdin/);
+	});
+
 	it('surfaces Lua through the wasm-lua browser runtime contract', () => {
 		expect(source).toMatch(/lua: \{/);
 		expect(source).toMatch(/WASM_LUA_ASSET_VERSION/);
@@ -760,11 +774,22 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/SELECT results are printed as tab-separated tables/);
 	});
 
+	it('surfaces DuckDB through the bundled DuckDB-Wasm worker runtime contract', () => {
+		expect(source).toMatch(/<option value="DUCKDB">DuckDB<\/option>/);
+		expect(source).toMatch(/duckdb: 'DUCKDB'/);
+		expectEditorLanguage('DUCKDB', 'sql');
+		expect(source).toMatch(/'.duckdb': 'DUCKDB'/);
+		expect(source).toMatch(/DUCKDB: 'main\.duckdb'/);
+		expect(source).toMatch(/DUCKDB: 'duckdb'/);
+		expect(source).toMatch(/DuckDB runs through `@duckdb\/duckdb-wasm`/);
+		expect(source).toMatch(/SELECT results are printed as tab-separated tables/);
+		expect(editorOnlyLanguages.has('DUCKDB')).toBe(false);
+	});
+
 	it('surfaces editor-only LSP workspaces', () => {
 		for (const [language, label] of [
 			['FORTRAN', 'Fortran'],
 			['GRAPHQL', 'GraphQL'],
-			['DUCKDB', 'DuckDB'],
 			['JSON', 'JSON'],
 			['YAML', 'YAML'],
 			['TOML', 'TOML'],
@@ -777,7 +802,6 @@ describe('example route debug actions', () => {
 		for (const language of [
 			'FORTRAN',
 			'GRAPHQL',
-			'DUCKDB',
 			'JSON',
 			'YAML',
 			'TOML',
@@ -791,10 +815,8 @@ describe('example route debug actions', () => {
 			/const executionAvailable = \$derived\(!editorOnlyLanguages\.has\(language\)\);/
 		);
 		expect(source).toMatch(/if \(!executionAvailable\) return;/);
-		expect(source).toMatch(/DUCKDB: 'duckdb'/);
 		expect(source).toMatch(/fortran: 'FORTRAN'/);
 		expect(source).toMatch(/graphql: 'GRAPHQL'/);
-		expect(source).toMatch(/duckdb: 'DUCKDB'/);
 		expect(source).toMatch(/json: 'JSON'/);
 		expect(source).toMatch(/jsonc: 'JSON'/);
 		expect(source).toMatch(/yaml: 'YAML'/);
@@ -807,7 +829,6 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/md: 'MARKDOWN'/);
 		expect(source).toMatch(/FORTRAN: 'main\.f90'/);
 		expect(source).toMatch(/GRAPHQL: 'main\.graphql'/);
-		expect(source).toMatch(/DUCKDB: 'main\.duckdb'/);
 		expect(source).toMatch(/JSON: 'main\.json'/);
 		expect(source).toMatch(/YAML: 'main\.yaml'/);
 		expect(source).toMatch(/TOML: 'main\.toml'/);

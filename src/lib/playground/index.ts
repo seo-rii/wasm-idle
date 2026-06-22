@@ -211,6 +211,13 @@ const sandboxRoutes = [
 		}
 	},
 	{
+		aliases: ['WASM', 'WASM32'],
+		load: async () => {
+			const { default: Wasm } = await import('$lib/playground/wasm');
+			return new Wasm();
+		}
+	},
+	{
 		aliases: ['LUA'],
 		load: async () => {
 			const { default: Lua } = await import('$lib/playground/lua');
@@ -257,6 +264,13 @@ const sandboxRoutes = [
 		load: async () => {
 			const { default: Octave } = await import('$lib/playground/octave');
 			return new Octave();
+		}
+	},
+	{
+		aliases: ['DUCKDB'],
+		load: async () => {
+			const { default: DuckDB } = await import('$lib/playground/duckdb');
+			return new DuckDB();
 		}
 	},
 	{
@@ -310,6 +324,7 @@ export const supportedLanguages = [
 	'TYPESCRIPT',
 	'ASSEMBLYSCRIPT',
 	'WAT',
+	'WASM',
 	'LUA',
 	'ZIG',
 	'LISP',
@@ -317,6 +332,7 @@ export const supportedLanguages = [
 	'HASKELL',
 	'R',
 	'OCTAVE',
+	'DUCKDB',
 	'SQLITE',
 	'PHP'
 ];

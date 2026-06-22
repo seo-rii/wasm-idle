@@ -45,6 +45,8 @@ export type WasmIdleLanguageId =
 	| 'ASSEMBLYSCRIPT'
 	| 'AS'
 	| 'WAT'
+	| 'WASM'
+	| 'WASM32'
 	| 'LUA'
 	| 'ZIG'
 	| 'LISP'
@@ -57,6 +59,7 @@ export type WasmIdleLanguageId =
 	| 'R'
 	| 'OCTAVE'
 	| 'MATLAB'
+	| 'DUCKDB'
 	| 'SQLITE'
 	| 'SQL'
 	| 'PHP';
@@ -91,6 +94,7 @@ export const supportedLanguageIds = [
 	'TYPESCRIPT',
 	'ASSEMBLYSCRIPT',
 	'WAT',
+	'WASM',
 	'LUA',
 	'ZIG',
 	'LISP',
@@ -98,6 +102,7 @@ export const supportedLanguageIds = [
 	'HASKELL',
 	'R',
 	'OCTAVE',
+	'DUCKDB',
 	'SQLITE',
 	'PHP'
 ] as const;
@@ -126,6 +131,7 @@ export const DEFAULT_DEFERRED_PROGRESS_LANGUAGES = new Set<string>([
 	'TYPESCRIPT',
 	'ASSEMBLYSCRIPT',
 	'WAT',
+	'WASM',
 	'LUA',
 	'ZIG',
 	'LISP',
@@ -133,6 +139,7 @@ export const DEFAULT_DEFERRED_PROGRESS_LANGUAGES = new Set<string>([
 	'HASKELL',
 	'R',
 	'OCTAVE',
+	'DUCKDB',
 	'SQLITE',
 	'PHP'
 ]);
@@ -160,7 +167,8 @@ const LANGUAGE_ALIASES: Record<string, string> = {
 	SCM: 'LISP',
 	TS: 'TYPESCRIPT',
 	MATLAB: 'OCTAVE',
-	SQL: 'SQLITE'
+	SQL: 'SQLITE',
+	WASM32: 'WASM'
 };
 
 export function normalizeLanguageId(language: string): string {

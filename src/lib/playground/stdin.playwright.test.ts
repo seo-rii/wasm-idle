@@ -25,6 +25,9 @@ const watStdinSource = `(module
   )
 )`;
 
+const wasmStdinSource =
+	'AGFzbQEAAAABBQFgAAF/AhABA2VudghyZWFkQnl0ZQAAAwIBAAcIAQRtYWluAAEKBgEEABAACw==';
+
 const rubyStdinSource = `line = STDIN.gets&.strip || ""
 puts "main=#{line}"`;
 
@@ -32,6 +35,8 @@ const rStdinSource = `line <- readLines(stdin(), n = 1, warn = FALSE)
 cat(sprintf("main=%s\\n", trimws(line[[1]])))`;
 
 const sqliteOutputSource = `SELECT 'main=73' AS result;`;
+
+const duckdbOutputSource = `SELECT 'main=73' AS result;`;
 
 const phpStdinSource = `<?php
 $input = trim(file_get_contents('php://input'));
@@ -114,6 +119,16 @@ describe('wasm-idle browser stdin connection', () => {
 				});
 				expect(watSummary.transcript).toContain('main=75');
 
+				const wasmSummary = await runStdinBrowserProbe({
+					browserUrl: previewServer.browserUrl,
+					expectedOutput: 'main=75',
+					language: 'WASM',
+					runTimeoutMs: Number(process.env.WASM_IDLE_STDIN_RUN_TIMEOUT_MS || '180000'),
+					source: wasmStdinSource,
+					stdinText: 'K\n'
+				});
+				expect(wasmSummary.transcript).toContain('main=75');
+
 				const rubySummary = await runStdinBrowserProbe({
 					browserUrl: previewServer.browserUrl,
 					expectedOutput: 'main=73',
@@ -143,6 +158,16 @@ describe('wasm-idle browser stdin connection', () => {
 					stdinText: ''
 				});
 				expect(sqliteSummary.transcript).toContain('main=73');
+
+				const duckdbSummary = await runStdinBrowserProbe({
+					browserUrl: previewServer.browserUrl,
+					expectedOutput: 'main=73',
+					language: 'DUCKDB',
+					runTimeoutMs: Number(process.env.WASM_IDLE_STDIN_RUN_TIMEOUT_MS || '180000'),
+					source: duckdbOutputSource,
+					stdinText: ''
+				});
+				expect(duckdbSummary.transcript).toContain('main=73');
 
 				const phpSummary = await runStdinBrowserProbe({
 					browserUrl: previewServer.browserUrl,

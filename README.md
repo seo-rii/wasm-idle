@@ -3,8 +3,9 @@
 ![wasm-idle](static/image.jpeg)
 
 Executes C, C++, Python, Java, Rust, Go, D, C#, F#, VB.NET, Elixir, Erlang, Prolog,
-Gleam, Perl, Tcl, AWK, Forth, J, BQN, Janet, OCaml, TinyGo, JavaScript, TypeScript, AssemblyScript, WAT,
-Lua, Zig, Scheme, Ruby, Haskell, R, Octave, SQLite, and PHP code.
+Gleam, Perl, Tcl, AWK, Forth, J, BQN, Janet, OCaml, TinyGo, JavaScript, TypeScript,
+AssemblyScript, WAT, WASM, Lua, Zig, Scheme, Ruby, Haskell, R, Octave, SQLite, DuckDB,
+and PHP code.
 
 Refer to src/lib/clang.
 
@@ -51,6 +52,7 @@ highlighting only. `Debug` means wasm-idle's trace/debug controls, not a native 
 | TypeScript     | wasm-typescript / TypeScript service | Yes   | TypeScript LSP       | -     |
 | AssemblyScript | AssemblyScript compiler              | Yes   | AssemblyScript LSP   | -     |
 | WAT            | WABT                                 | Yes   | WAT LSP              | -     |
+| WASM           | Browser WebAssembly + WASI shim      | Yes   | syntax               | -     |
 | Lua            | Wasmoon                              | Yes   | syntax               | -     |
 | Zig            | zig_small.wasm                       | Yes   | syntax               | -     |
 | Scheme         | Puppy Scheme / wasm-lisp             | Yes   | syntax               | -     |
@@ -59,6 +61,7 @@ highlighting only. `Debug` means wasm-idle's trace/debug controls, not a native 
 | R              | WebR                                 | Yes   | syntax               | -     |
 | Octave         | wasm-octave                          | Yes   | syntax               | -     |
 | SQLite         | sql.js                               | n/a   | syntax               | -     |
+| DuckDB         | DuckDB-Wasm                          | Files | DuckDB LSP           | -     |
 | PHP            | php-wasm                             | Yes   | syntax               | -     |
 
 ## Monorepo layout
@@ -255,6 +258,12 @@ pass `runtimeAssets.tinygo.moduleUrl` at runtime. The older `PUBLIC_WASM_TINYGO_
 `runtimeAssets.tinygo.appUrl` document path is still accepted and normalized to `runtime.js`.
 WAT uses the bundled `static/wasm-wat/` WABT browser module by default. Override it with
 `PUBLIC_WASM_WAT_MODULE_URL`, or pass `runtimeAssets.wat.moduleUrl`.
+WASM executes binary WebAssembly modules directly through the browser WebAssembly API. The editor
+accepts base64, hex, or `data:application/wasm` content, and the worker connects WASI preview1
+stdin/stdout/stderr plus the `env.readByte` import used by the WAT runner.
+DuckDB uses `@duckdb/duckdb-wasm` in a browser worker against a fresh in-memory database per run.
+Workspace files are registered before the active query; terminal input is registered as `stdin.txt`
+and `/dev/stdin` for queries that load it as a file.
 Lua uses the bundled `static/wasm-lua/` wasmoon browser module plus its local `glue.wasm`
 payload by default. Override it with `PUBLIC_WASM_LUA_MODULE_URL`, or pass
 `runtimeAssets.lua.moduleUrl`.

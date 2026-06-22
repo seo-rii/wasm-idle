@@ -47,7 +47,7 @@ describe('language registry', () => {
 		expect(runtimeLspCapabilities.RUBY).toBe('ruby');
 		expect(editorOnlyLanguages.has('FORTRAN')).toBe(true);
 		expect(editorOnlyLanguages.has('GRAPHQL')).toBe(true);
-		expect(editorOnlyLanguages.has('DUCKDB')).toBe(true);
+		expect(editorOnlyLanguages.has('DUCKDB')).toBe(false);
 		for (const language of ['JSON', 'YAML', 'TOML', 'HTML', 'CSS', 'MARKDOWN'] as const) {
 			expect(editorOnlyLanguages.has(language)).toBe(true);
 			expect(runtimeLspCapabilities[language]).toBeUndefined();

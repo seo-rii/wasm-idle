@@ -144,6 +144,7 @@ export const languageLabels: Record<PlaygroundLanguage, string> = {
 	LUA: 'Lua',
 	ZIG: 'Zig',
 	LISP: 'Scheme',
+	WASM: 'WASM',
 	RUBY: 'Ruby',
 	HASKELL: 'Haskell',
 	R: 'R',
@@ -193,6 +194,7 @@ export const editorLanguages: Record<PlaygroundLanguage, string> = {
 	LUA: 'lua',
 	ZIG: 'zig',
 	LISP: 'lisp',
+	WASM: 'wasm',
 	RUBY: 'ruby',
 	HASKELL: 'haskell',
 	R: 'r',
@@ -221,7 +223,6 @@ export const lspLanguageOverrides: Partial<Record<PlaygroundLanguage, string>> =
 export const editorOnlyLanguages = new Set<PlaygroundLanguage>([
 	'FORTRAN',
 	'GRAPHQL',
-	'DUCKDB',
 	'JSON',
 	'YAML',
 	'TOML',

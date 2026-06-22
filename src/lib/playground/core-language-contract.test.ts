@@ -72,6 +72,13 @@ describe('core language contract', () => {
 		expect(isDeferredProgressLanguage('wat')).toBe(true);
 	});
 
+	it('exposes WASM aliases as a deferred browser runtime language', () => {
+		expect(supportedLanguageIds).toContain('WASM');
+		expect(normalizeLanguageId('wasm')).toBe('WASM');
+		expect(normalizeLanguageId('wasm32')).toBe('WASM');
+		expect(isDeferredProgressLanguage('wasm32')).toBe(true);
+	});
+
 	it('exposes Lua as a deferred browser runtime language', () => {
 		expect(supportedLanguageIds).toContain('LUA');
 		expect(normalizeLanguageId('lua')).toBe('LUA');
@@ -103,6 +110,12 @@ describe('core language contract', () => {
 		expect(normalizeLanguageId('sqlite')).toBe('SQLITE');
 		expect(normalizeLanguageId('sql')).toBe('SQLITE');
 		expect(isDeferredProgressLanguage('sql')).toBe(true);
+	});
+
+	it('exposes DuckDB as a deferred browser runtime language', () => {
+		expect(supportedLanguageIds).toContain('DUCKDB');
+		expect(normalizeLanguageId('duckdb')).toBe('DUCKDB');
+		expect(isDeferredProgressLanguage('duckdb')).toBe(true);
 	});
 
 	it('exposes PHP as a deferred browser runtime language', () => {
