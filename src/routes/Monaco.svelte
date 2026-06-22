@@ -1990,6 +1990,9 @@
 	let sqlLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let prologLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let rubyLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let rLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let awkLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let perlLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let documentLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let model = $state<monaco.editor.ITextModel | undefined>();
 	let debugView = $state<MonacoDebugView | null>(null);
@@ -2036,6 +2039,14 @@
 		prologLspWorkerUrl?: string;
 		rubyLspEnabled?: boolean;
 		rubyLspWasmUrl?: string;
+		rLspEnabled?: boolean;
+		rLspBaseUrl?: string;
+		awkLspEnabled?: boolean;
+		awkLspBaseUrl?: string;
+		awkLspWorkerUrl?: string;
+		perlLspEnabled?: boolean;
+		perlLspBaseUrl?: string;
+		perlLspWorkerUrl?: string;
 		pythonLspBaseUrl?: string;
 		breakpoints?: number[];
 		debugLocals?: DebugVariable[];
@@ -2091,6 +2102,14 @@
 		prologLspWorkerUrl,
 		rubyLspEnabled = false,
 		rubyLspWasmUrl,
+		rLspEnabled = false,
+		rLspBaseUrl,
+		awkLspEnabled = false,
+		awkLspBaseUrl,
+		awkLspWorkerUrl,
+		perlLspEnabled = false,
+		perlLspBaseUrl,
+		perlLspWorkerUrl,
 		pythonLspBaseUrl,
 		breakpoints = [],
 		debugLocals = [],
@@ -2210,6 +2229,11 @@
 			prologLspEnabled ? prologLspBaseUrl || '' : '',
 			prologLspEnabled ? prologLspWorkerUrl || '' : '',
 			rubyLspEnabled ? rubyLspWasmUrl || '' : '',
+			rLspEnabled ? rLspBaseUrl || '' : '',
+			awkLspEnabled ? awkLspBaseUrl || '' : '',
+			awkLspEnabled ? awkLspWorkerUrl || '' : '',
+			perlLspEnabled ? perlLspBaseUrl || '' : '',
+			perlLspEnabled ? perlLspWorkerUrl || '' : '',
 			pythonLspBaseUrl || '',
 			activeLspLanguage,
 			lspEnabled ? 'lsp-on' : 'lsp-off',
@@ -2316,6 +2340,18 @@
 			case 'ruby':
 				label = 'Ruby LSP';
 				status = rubyLspStatus;
+				break;
+			case 'r':
+				label = 'R LSP';
+				status = rLspStatus;
+				break;
+			case 'awk':
+				label = 'AWK LSP';
+				status = awkLspStatus;
+				break;
+			case 'perl':
+				label = 'Perl LSP';
+				status = perlLspStatus;
 				break;
 			case 'json':
 				label = 'JSON LSP';
@@ -2697,6 +2733,53 @@
 			}
 		},
 		{
+			languages: ['r'],
+			isEnabled: () => rLspEnabled && !!rLspBaseUrl,
+			setStatus: (status) => (rLspStatus = status),
+			load: async (currentUrl) => {
+				const { getRLanguageServer } = await import('@wasm-idle/lsp');
+				return await getRLanguageServer({
+					currentUrl,
+					r: {
+						baseUrl: rLspBaseUrl || ''
+					},
+					onStatus: (status) => (rLspStatus = status)
+				});
+			}
+		},
+		{
+			languages: ['awk'],
+			isEnabled: () => awkLspEnabled && !!awkLspBaseUrl && !!awkLspWorkerUrl,
+			setStatus: (status) => (awkLspStatus = status),
+			load: async (currentUrl) => {
+				const { getAwkLanguageServer } = await import('@wasm-idle/lsp');
+				return await getAwkLanguageServer({
+					currentUrl,
+					awk: {
+						baseUrl: awkLspBaseUrl || '',
+						workerUrl: awkLspWorkerUrl || ''
+					},
+					onStatus: (status) => (awkLspStatus = status)
+				});
+			}
+		},
+		{
+			languages: ['perl'],
+			isEnabled: () => perlLspEnabled && !!perlLspBaseUrl && !!perlLspWorkerUrl,
+			setStatus: (status) => (perlLspStatus = status),
+			load: async (currentUrl) => {
+				const { getPerlLanguageServer } = await import('@wasm-idle/lsp');
+				return await getPerlLanguageServer({
+					currentUrl,
+					perl: {
+						baseUrl: perlLspBaseUrl || '',
+						workerUrl: perlLspWorkerUrl || ''
+					},
+					onStatus: (status) => (perlLspStatus = status)
+				});
+			}
+		},
+		{
 			languages: ['json', 'yaml', 'toml', 'html', 'css', 'markdown'],
 			isEnabled: () => true,
 			setStatus: (status) => (documentLspStatus = status),
@@ -2717,7 +2800,8 @@
 					css: getCssLanguageServer,
 					markdown: getMarkdownLanguageServer
 				}[activeLspLanguage as 'json' | 'yaml' | 'toml' | 'html' | 'css' | 'markdown'];
-				if (!load) throw new Error(`Unsupported document LSP language: ${activeLspLanguage}`);
+				if (!load)
+					throw new Error(`Unsupported document LSP language: ${activeLspLanguage}`);
 				return await load({
 					currentUrl,
 					onStatus: (status) => (documentLspStatus = status)
@@ -2825,6 +2909,9 @@
 			sql: sqlLspStatus,
 			prolog: prologLspStatus,
 			ruby: rubyLspStatus,
+			r: rLspStatus,
+			awk: awkLspStatus,
+			perl: perlLspStatus,
 			json: documentLspStatus,
 			yaml: documentLspStatus,
 			toml: documentLspStatus,

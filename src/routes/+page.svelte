@@ -411,6 +411,14 @@
 	);
 	const rubyLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'ruby');
 	const rubyLspWasmUrl = $derived(rubyLspEnabled ? runtimeAssets.ruby?.wasmUrl : undefined);
+	const rLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'r');
+	const rLspBaseUrl = $derived(rLspEnabled ? runtimeAssets.r?.baseUrl : undefined);
+	const awkLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'awk');
+	const awkLspBaseUrl = $derived(awkLspEnabled ? runtimeAssets.awk?.baseUrl : undefined);
+	const awkLspWorkerUrl = $derived(awkLspEnabled ? runtimeAssets.awk?.workerUrl : undefined);
+	const perlLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'perl');
+	const perlLspBaseUrl = $derived(perlLspEnabled ? runtimeAssets.perl?.baseUrl : undefined);
+	const perlLspWorkerUrl = $derived(perlLspEnabled ? runtimeAssets.perl?.workerUrl : undefined);
 	const pythonLspBaseUrl = $derived(path ? `${path}/pyodide/` : '/pyodide/');
 	const typescriptLspLibUrl = $derived(
 		lspEnabled && typescriptLspLanguages.has(language)
@@ -2603,6 +2611,14 @@
 				{prologLspWorkerUrl}
 				{rubyLspEnabled}
 				{rubyLspWasmUrl}
+				{rLspEnabled}
+				{rLspBaseUrl}
+				{awkLspEnabled}
+				{awkLspBaseUrl}
+				{awkLspWorkerUrl}
+				{perlLspEnabled}
+				{perlLspBaseUrl}
+				{perlLspWorkerUrl}
 				{pythonLspBaseUrl}
 				{typescriptLspLibUrl}
 				breakpoints={debug.effectiveBreakpoints}

@@ -45,6 +45,9 @@ describe('language registry', () => {
 		expect(runtimeLspCapabilities.SQLITE).toBe('sql');
 		expect(runtimeLspCapabilities.PROLOG).toBe('prolog');
 		expect(runtimeLspCapabilities.RUBY).toBe('ruby');
+		expect(runtimeLspCapabilities.R).toBe('r');
+		expect(runtimeLspCapabilities.AWK).toBe('awk');
+		expect(runtimeLspCapabilities.PERL).toBe('perl');
 		expect(editorOnlyLanguages.has('FORTRAN')).toBe(true);
 		expect(editorOnlyLanguages.has('GRAPHQL')).toBe(true);
 		expect(editorOnlyLanguages.has('DUCKDB')).toBe(false);
@@ -65,6 +68,7 @@ describe('language registry', () => {
 		for (const language of ['json', 'yaml', 'toml', 'html', 'css', 'markdown']) {
 			expect(diagnosticMarkerLanguages.has(language)).toBe(true);
 		}
+		expect(diagnosticMarkerLanguages.has('awk')).toBe(true);
 	});
 
 	it('keeps compiler diagnostic support visible for compiled languages', () => {

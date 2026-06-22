@@ -57,7 +57,10 @@ export type RuntimeLspCapability =
 	| 'haskell'
 	| 'sql'
 	| 'prolog'
-	| 'ruby';
+	| 'ruby'
+	| 'r'
+	| 'awk'
+	| 'perl';
 
 export type DotnetLspLanguage = 'csharp' | 'fsharp' | 'vbnet';
 
@@ -141,10 +144,10 @@ export const languageLabels: Record<PlaygroundLanguage, string> = {
 	TYPESCRIPT: 'TypeScript',
 	ASSEMBLYSCRIPT: 'AssemblyScript',
 	WAT: 'WAT',
+	WASM: 'WASM',
 	LUA: 'Lua',
 	ZIG: 'Zig',
 	LISP: 'Scheme',
-	WASM: 'WASM',
 	RUBY: 'Ruby',
 	HASKELL: 'Haskell',
 	R: 'R',
@@ -191,10 +194,10 @@ export const editorLanguages: Record<PlaygroundLanguage, string> = {
 	TYPESCRIPT: 'typescript',
 	ASSEMBLYSCRIPT: 'typescript',
 	WAT: 'wat',
+	WASM: 'wasm',
 	LUA: 'lua',
 	ZIG: 'zig',
 	LISP: 'lisp',
-	WASM: 'wasm',
 	RUBY: 'ruby',
 	HASKELL: 'haskell',
 	R: 'r',
@@ -241,7 +244,10 @@ export const runtimeLspCapabilities: Partial<Record<PlaygroundLanguage, RuntimeL
 	HASKELL: 'haskell',
 	SQLITE: 'sql',
 	PROLOG: 'prolog',
-	RUBY: 'ruby'
+	RUBY: 'ruby',
+	R: 'r',
+	AWK: 'awk',
+	PERL: 'perl'
 };
 export const argsHelpLanguages = new Set<PlaygroundLanguage>([
 	'JAVA',
@@ -321,6 +327,7 @@ export const diagnosticMarkerLanguages = new Set([
 	'prolog',
 	'gleam',
 	'perl',
+	'awk',
 	'ocaml',
 	'javascript',
 	'typescript',

@@ -92,6 +92,7 @@ describe('Monaco route debug sync', () => {
 			'prolog',
 			'gleam',
 			'perl',
+			'awk',
 			'ocaml',
 			'wat',
 			'lua',
@@ -206,7 +207,13 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(/getHtmlLanguageServer/);
 		expect(source).toMatch(/getCssLanguageServer/);
 		expect(source).toMatch(/getMarkdownLanguageServer/);
+		expect(source).toMatch(/getRLanguageServer/);
+		expect(source).toMatch(/getAwkLanguageServer/);
+		expect(source).toMatch(/getPerlLanguageServer/);
 		expect(source).toMatch(/languages: \['c', 'cpp'\]/);
+		expect(source).toMatch(/languages: \['r'\]/);
+		expect(source).toMatch(/languages: \['awk'\]/);
+		expect(source).toMatch(/languages: \['perl'\]/);
 		expect(source).toMatch(/languages: \['fortran'\]/);
 		expect(source).toMatch(/languages: \['graphql'\]/);
 		expect(source).toMatch(/languages: \['duckdb'\]/);
@@ -385,6 +392,9 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).toMatch(/const monacoLspLanguage = \$derived/);
 		expect(runtimeLspCapabilities.RUST).toBe('rust');
 		expect(runtimeLspCapabilities.GO).toBe('go');
+		expect(runtimeLspCapabilities.R).toBe('r');
+		expect(runtimeLspCapabilities.AWK).toBe('awk');
+		expect(runtimeLspCapabilities.PERL).toBe('perl');
 		expect(pageSource).toMatch(
 			/const typescriptLspLibUrl = \$derived\(\s+lspEnabled && typescriptLspLanguages\.has\(language\)/
 		);
