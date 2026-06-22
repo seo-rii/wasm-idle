@@ -110,6 +110,21 @@
 			"import": "./dist/ruby/index.js",
 			"default": "./dist/ruby/index.js"
 		},
+		"./r": {
+			"types": "./dist/r/index.d.ts",
+			"import": "./dist/r/index.js",
+			"default": "./dist/r/index.js"
+		},
+		"./awk": {
+			"types": "./dist/awk/index.d.ts",
+			"import": "./dist/awk/index.js",
+			"default": "./dist/awk/index.js"
+		},
+		"./perl": {
+			"types": "./dist/perl/index.d.ts",
+			"import": "./dist/perl/index.js",
+			"default": "./dist/perl/index.js"
+		},
 		"./document": {
 			"types": "./dist/document/index.d.ts",
 			"import": "./dist/document/index.js",
@@ -175,6 +190,7 @@
 		"vscode-languageserver-textdocument": "^1.0.12",
 		"vscode-languageserver-types": "^3.18.0",
 		"wabt": "^1.0.39",
+		"webr": "0.6.0",
 		"web-tree-sitter": "0.26.9",
 		"yaml": "^2.9.0"
 	},

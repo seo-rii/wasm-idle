@@ -103,6 +103,17 @@ export interface EditorLanguageServerRuntimeOptions {
 	ruby?: {
 		wasmUrl?: string;
 	};
+	r?: {
+		baseUrl?: string;
+	};
+	awk?: {
+		baseUrl?: string;
+		workerUrl?: string;
+	};
+	perl?: {
+		baseUrl?: string;
+		workerUrl?: string;
+	};
 	document?: {
 		language?: DocumentLanguageId;
 	};

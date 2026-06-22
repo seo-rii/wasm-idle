@@ -15,6 +15,11 @@ export {
 	resolvePrologLanguageServerBaseUrl,
 	resolvePrologLanguageServerWorkerUrl,
 	resolvePythonLanguageServerBaseUrl,
+	resolveAwkLanguageServerBaseUrl,
+	resolveAwkLanguageServerWorkerUrl,
+	resolvePerlLanguageServerBaseUrl,
+	resolvePerlLanguageServerWorkerUrl,
+	resolveRLanguageServerBaseUrl,
 	resolveRubyLanguageServerWasmUrl,
 	resolveRustLanguageServerCompilerUrl,
 	resolveZigLanguageServerCompilerUrl,
@@ -203,6 +208,36 @@ export {
 	type RubySyntaxDiagnostic,
 	type RubyWorkerOptions
 } from './ruby/index.js';
+export {
+	createRWorkerService,
+	getRLanguageServer,
+	type LoadRSyntaxParser,
+	type RLanguageServerConfig,
+	type RLanguageServerOptions,
+	type RSyntaxDiagnostic,
+	type RSyntaxParser,
+	type RWorkerOptions
+} from './r/index.js';
+export {
+	createAwkWorkerService,
+	getAwkLanguageServer,
+	type AwkDiagnosticRunnerRequest,
+	type AwkDiagnosticRunnerResult,
+	type AwkLanguageServerConfig,
+	type AwkLanguageServerOptions,
+	type AwkWorkerOptions,
+	type RunAwkDiagnostics
+} from './awk/index.js';
+export {
+	createPerlWorkerService,
+	getPerlLanguageServer,
+	type PerlDiagnosticRunnerRequest,
+	type PerlDiagnosticRunnerResult,
+	type PerlLanguageServerConfig,
+	type PerlLanguageServerOptions,
+	type PerlWorkerOptions,
+	type RunPerlDiagnostics
+} from './perl/index.js';
 export {
 	createDocumentWorkerService,
 	getCssLanguageServer,

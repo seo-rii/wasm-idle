@@ -349,4 +349,96 @@ export function resolveRubyLanguageServerWasmUrl(
 	return '';
 }
 
+export function resolveRLanguageServerBaseUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	if (typeof options === 'string') {
+		return resolveFileUrl(`${normalizeRootUrl(options) || ''}/webr/`, currentUrl);
+	}
+	if (options?.r?.baseUrl) {
+		return resolveFileUrl(options.r.baseUrl, currentUrl);
+	}
+	if (options?.rootUrl) {
+		return resolveFileUrl(`${normalizeRootUrl(options.rootUrl) || ''}/webr/`, currentUrl);
+	}
+	return resolveFileUrl('/webr/', currentUrl);
+}
+
+export function resolveAwkLanguageServerBaseUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	if (typeof options === 'string') {
+		return resolveFileUrl(`${normalizeRootUrl(options) || ''}/wasm-awk/`, currentUrl);
+	}
+	if (options?.awk?.baseUrl) {
+		return resolveFileUrl(options.awk.baseUrl, currentUrl);
+	}
+	if (options?.rootUrl) {
+		return resolveFileUrl(`${normalizeRootUrl(options.rootUrl) || ''}/wasm-awk/`, currentUrl);
+	}
+	return resolveFileUrl('/wasm-awk/', currentUrl);
+}
+
+export function resolveAwkLanguageServerWorkerUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	if (typeof options === 'string') {
+		return resolveFileUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-awk/runner-worker.js`,
+			currentUrl
+		);
+	}
+	if (options?.awk?.workerUrl) {
+		return resolveFileUrl(options.awk.workerUrl, currentUrl);
+	}
+	if (options?.rootUrl) {
+		return resolveFileUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-awk/runner-worker.js`,
+			currentUrl
+		);
+	}
+	return resolveFileUrl('/wasm-awk/runner-worker.js', currentUrl);
+}
+
+export function resolvePerlLanguageServerBaseUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	if (typeof options === 'string') {
+		return resolveFileUrl(`${normalizeRootUrl(options) || ''}/wasm-perl/`, currentUrl);
+	}
+	if (options?.perl?.baseUrl) {
+		return resolveFileUrl(options.perl.baseUrl, currentUrl);
+	}
+	if (options?.rootUrl) {
+		return resolveFileUrl(`${normalizeRootUrl(options.rootUrl) || ''}/wasm-perl/`, currentUrl);
+	}
+	return resolveFileUrl('/wasm-perl/', currentUrl);
+}
+
+export function resolvePerlLanguageServerWorkerUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	if (typeof options === 'string') {
+		return resolveFileUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-perl/runner-worker.js`,
+			currentUrl
+		);
+	}
+	if (options?.perl?.workerUrl) {
+		return resolveFileUrl(options.perl.workerUrl, currentUrl);
+	}
+	if (options?.rootUrl) {
+		return resolveFileUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-perl/runner-worker.js`,
+			currentUrl
+		);
+	}
+	return resolveFileUrl('/wasm-perl/runner-worker.js', currentUrl);
+}
+
 export type { EditorLanguageServerRuntimeOptions };

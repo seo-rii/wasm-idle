@@ -21,6 +21,9 @@ import { getFortranLanguageServer } from './fortran/server.js';
 import { getGraphqlLanguageServer } from './graphql/server.js';
 import { getPrologLanguageServer } from './prolog/server.js';
 import { getRubyLanguageServer } from './ruby/server.js';
+import { getRLanguageServer } from './r/server.js';
+import { getAwkLanguageServer } from './awk/server.js';
+import { getPerlLanguageServer } from './perl/server.js';
 import { getDuckDbLanguageServer, getSqlLanguageServer } from './sql/server.js';
 import {
 	getCssLanguageServer,
@@ -132,6 +135,18 @@ export async function getEditorLanguageServer(
 
 	if (normalized === 'ruby' || normalized === 'rb') {
 		return getRubyLanguageServer(options);
+	}
+
+	if (normalized === 'r') {
+		return getRLanguageServer(options);
+	}
+
+	if (normalized === 'awk' || normalized === 'gawk') {
+		return getAwkLanguageServer(options);
+	}
+
+	if (normalized === 'perl' || normalized === 'pl') {
+		return getPerlLanguageServer(options);
 	}
 
 	if (normalized === 'json' || normalized === 'jsonc') {

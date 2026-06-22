@@ -282,6 +282,9 @@ importers:
       web-tree-sitter:
         specifier: 0.26.9
         version: 0.26.9
+      webr:
+        specifier: 0.6.0
+        version: 0.6.0
       yaml:
         specifier: ^2.9.0
         version: 2.9.0
