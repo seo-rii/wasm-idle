@@ -1,0 +1,1 @@
+import{r as e}from"./Dl7ookPV2.js";import{t}from"./BVj3g9PZ2.js";var n=class extends t{constructor(){super({languageId:`BQN`,displayName:`BQN`,defaultActivePath:`main.bqn`,moduleWorker:!0,readStdinPattern:/•GetLine|stdin/iu,resolveRuntimeAssets(t,n){return e(t,n)}})}};export{n as default};

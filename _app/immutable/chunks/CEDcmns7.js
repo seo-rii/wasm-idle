@@ -1,1 +1,0 @@
-import{n as e,t}from"./DjZpBSJX.js";export{t as conf,e as language};

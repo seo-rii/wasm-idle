@@ -1,1 +1,0 @@
-import{t as e}from"./BcgnSMxp.js";import{t}from"./CG-z3oXZ.js";t({id:`go`,extensions:[`.go`],aliases:[`Go`],loader:()=>e(()=>import(`./DFmjY7EG.js`),[],import.meta.url)});

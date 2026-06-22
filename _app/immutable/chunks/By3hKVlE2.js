@@ -1,0 +1,1 @@
+function e(e){return Array.isArray(e)?[...e]:[]}var t=new Set([`C`,`CPP`]);function n(n,r=[],i={}){return t.has(n)?{compileArgs:e(i.compileArgs??r),programArgs:e(i.programArgs)}:{compileArgs:e(i.compileArgs),programArgs:e(i.programArgs??r)}}export{n as t};

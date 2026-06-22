@@ -1,5 +1,6 @@
 {
   "assets": [
+    "_app/immutable/workers/assets/duckdb-mvp-CNulJfH-.wasm",
     "_app/immutable/workers/assets/icu-_xyRJXmL.dat",
     "_app/immutable/workers/assets/intl-6bIFBCA1.so",
     "_app/immutable/workers/assets/intl-B35anQGF.so",
@@ -298,6 +299,7 @@
     "wasm-dotnet/runtime/Microsoft.CodeAnalysis.CSharp.wasm": 5116185,
     "wasm-j/jamalgam.wasm": 4832581,
     "wasm-bqn/BQN.wasm": 1175370,
+    "_app/immutable/workers/assets/duckdb-mvp-CNulJfH-.wasm": 41086840,
     "_app/immutable/workers/assets/icu-_xyRJXmL.dat": 30782896,
     "_app/immutable/workers/assets/intl-6bIFBCA1.so": 5414052,
     "_app/immutable/workers/assets/intl-B35anQGF.so": 7705154,

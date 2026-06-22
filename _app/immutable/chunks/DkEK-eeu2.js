@@ -1,0 +1,2 @@
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["./umIySquk.js","./BC4fxCog.js","./DYVMcvGx.js","./CXRTL7Xe.js","../assets/editor.DV6jjE6F.css","./C9PiFVsH.js","../assets/toggleHighContrast.FmGBn3YN.css"])))=>i.map(i=>d[i]);
+import{t as e}from"./BcgnSMxp.js";import{t}from"./CG-z3oXZ.js";t({id:`typescript`,extensions:[`.ts`,`.tsx`,`.cts`,`.mts`],aliases:[`TypeScript`,`ts`,`typescript`],mimetypes:[`text/typescript`],loader:()=>e(()=>import(`./umIySquk.js`),__vite__mapDeps([0,1,2,3,4,5,6]),import.meta.url)});

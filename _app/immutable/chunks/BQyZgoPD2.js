@@ -1,1 +1,0 @@
-import{n as e}from"./CXRTL7Xe.js";import{h as t,m as n}from"./DYVMcvGx.js";function r(){return n}var i=e((()=>{t(),globalThis.MonacoEnvironment?.globalAPI&&(globalThis.monaco=r())}));export{i as n,r as t};

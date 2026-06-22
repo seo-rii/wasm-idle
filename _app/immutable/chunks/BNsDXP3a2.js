@@ -1,1 +1,0 @@
-import{t as e}from"./BcgnSMxp.js";import{t}from"./CG-z3oXZ.js";t({id:`rust`,extensions:[`.rs`,`.rlib`],aliases:[`Rust`,`rust`],loader:()=>e(()=>import(`./Bi5WCsvv.js`),[],import.meta.url)});
