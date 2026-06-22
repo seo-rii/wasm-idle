@@ -1,32 +1,31 @@
 import {
 	positionAt,
 	type LspDiagnostic,
-	type LspDocument,
 	type LspPosition,
 	type WorkerLanguageService
 } from '../lsp.js';
-import { runRuntimeWorkerDiagnostics } from '../runtime-worker.js';
+import {
+	createStaticWorkerDiagnostics,
+	type StaticWorkerDiagnosticRequest,
+	type StaticWorkerDiagnosticRunner
+} from '../static-worker-service.js';
 
 export interface TclWorkerOptions {
 	baseUrl: string;
 	workerUrl: string;
 }
 
-export interface TclDiagnosticRunnerRequest {
-	baseUrl: string;
-	workerUrl: string;
-	code: string;
-	activePath: string;
-}
+export type TclDiagnosticRunnerRequest = StaticWorkerDiagnosticRequest<TclWorkerOptions>;
 
 export interface TclDiagnosticRunnerResult {
 	error?: string;
 	output?: string;
 }
 
-export type RunTclDiagnostics = (
-	request: TclDiagnosticRunnerRequest
-) => Promise<TclDiagnosticRunnerResult>;
+export type RunTclDiagnostics = StaticWorkerDiagnosticRunner<
+	TclWorkerOptions,
+	TclDiagnosticRunnerResult
+>;
 
 const TCL_COMMANDS = [
 	'append',
@@ -75,22 +74,6 @@ const TCL_HOVER: Record<string, string> = {
 	switch: 'Matches a value against patterns.'
 };
 
-const defaultRunDiagnostics: RunTclDiagnostics = (request) =>
-	runRuntimeWorkerDiagnostics({
-		workerUrl: request.workerUrl,
-		timeoutMessage: 'Tcl diagnostics timed out',
-		message: {
-			run: true,
-			baseUrl: request.baseUrl,
-			code: request.code,
-			args: [],
-			stdin: '',
-			activePath: request.activePath,
-			diagnose: true,
-			log: false
-		}
-	});
-
 const wordAt = (text: string, position: LspPosition) => {
 	const line = text.split('\n')[position.line] || '';
 	const character = Math.max(0, Math.min(position.character, line.length));
@@ -119,11 +102,33 @@ const diagnosticFromMessage = (message: string): LspDiagnostic => {
 };
 
 export function createTclWorkerService(
-	runDiagnostics: RunTclDiagnostics = defaultRunDiagnostics
+	runDiagnostics?: RunTclDiagnostics
 ): WorkerLanguageService {
-	let config: TclWorkerOptions | null = null;
-	let lastKey = '';
-	let lastDiagnostics: LspDiagnostic[] = [];
+	const workerDiagnostics = createStaticWorkerDiagnostics<
+		TclWorkerOptions,
+		TclDiagnosticRunnerResult
+	>({
+		languageName: 'Tcl',
+		loadProgressStage: 'load-tcl-runtime',
+		diagnosticsProgressStage: 'tcl-diagnostics',
+		defaultActivePath: 'main.tcl',
+		timeoutMessage: 'Tcl diagnostics timed out',
+		runDiagnostics,
+		createMessage: (request) => ({
+			run: true,
+			baseUrl: request.baseUrl,
+			code: request.code,
+			args: [],
+			stdin: '',
+			activePath: request.activePath,
+			diagnose: true,
+			log: false
+		}),
+		diagnosticsFromResult: (result) => {
+			const message = (result.error || result.output || '').trim();
+			return message ? [diagnosticFromMessage(message)] : [];
+		}
+	});
 
 	return {
 		name: 'wasm-idle-tcl-lsp',
@@ -133,31 +138,8 @@ export function createTclWorkerService(
 			hoverProvider: true,
 			documentSymbolProvider: true
 		},
-		initialize(options, context) {
-			const nextConfig = (options || {}) as TclWorkerOptions;
-			if (!nextConfig.baseUrl || !nextConfig.workerUrl) {
-				throw new Error('Tcl language server requires baseUrl and workerUrl');
-			}
-			context.reportProgress('load-tcl-runtime');
-			config = nextConfig;
-		},
-		async diagnostics(document: LspDocument, context) {
-			if (!config || !document.text.trim()) return [];
-			const activePath = document.uri.split('/').pop() || 'main.tcl';
-			const key = `${config.baseUrl}\n${config.workerUrl}\n${activePath}\n${document.text}`;
-			if (key === lastKey) return lastDiagnostics;
-			context.reportProgress('tcl-diagnostics');
-			lastKey = key;
-			const result = await runDiagnostics({
-				baseUrl: config.baseUrl,
-				workerUrl: config.workerUrl,
-				code: document.text,
-				activePath
-			});
-			const message = (result.error || result.output || '').trim();
-			lastDiagnostics = message ? [diagnosticFromMessage(message)] : [];
-			return lastDiagnostics;
-		},
+		initialize: workerDiagnostics.initialize,
+		diagnostics: workerDiagnostics.diagnostics,
 		completion() {
 			return {
 				isIncomplete: false,

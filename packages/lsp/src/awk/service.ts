@@ -1,32 +1,31 @@
 import {
 	positionAt,
 	type LspDiagnostic,
-	type LspDocument,
 	type LspPosition,
 	type WorkerLanguageService
 } from '../lsp.js';
-import { runRuntimeWorkerDiagnostics } from '../runtime-worker.js';
+import {
+	createStaticWorkerDiagnostics,
+	type StaticWorkerDiagnosticRequest,
+	type StaticWorkerDiagnosticRunner
+} from '../static-worker-service.js';
 
 export interface AwkWorkerOptions {
 	baseUrl: string;
 	workerUrl: string;
 }
 
-export interface AwkDiagnosticRunnerRequest {
-	baseUrl: string;
-	workerUrl: string;
-	code: string;
-	activePath: string;
-}
+export type AwkDiagnosticRunnerRequest = StaticWorkerDiagnosticRequest<AwkWorkerOptions>;
 
 export interface AwkDiagnosticRunnerResult {
 	error?: string;
 	output?: string;
 }
 
-export type RunAwkDiagnostics = (
-	request: AwkDiagnosticRunnerRequest
-) => Promise<AwkDiagnosticRunnerResult>;
+export type RunAwkDiagnostics = StaticWorkerDiagnosticRunner<
+	AwkWorkerOptions,
+	AwkDiagnosticRunnerResult
+>;
 
 const AWK_KEYWORDS = [
 	'BEGIN',
@@ -117,25 +116,31 @@ const diagnosticFromMessage = (message: string): LspDiagnostic => {
 	};
 };
 
-export function createAwkWorkerService(
-	runDiagnostics: RunAwkDiagnostics = (request) =>
-		runRuntimeWorkerDiagnostics({
-			workerUrl: request.workerUrl,
-			timeoutMessage: 'AWK diagnostics timed out',
-			message: {
-				baseUrl: request.baseUrl,
-				code: request.code,
-				activePath: request.activePath,
-				args: [],
-				stdin: '',
-				diagnose: true,
-				log: false
-			}
-		})
-): WorkerLanguageService {
-	let config: AwkWorkerOptions | null = null;
-	let lastKey = '';
-	let lastDiagnostics: LspDiagnostic[] = [];
+export function createAwkWorkerService(runDiagnostics?: RunAwkDiagnostics): WorkerLanguageService {
+	const workerDiagnostics = createStaticWorkerDiagnostics<
+		AwkWorkerOptions,
+		AwkDiagnosticRunnerResult
+	>({
+		languageName: 'AWK',
+		loadProgressStage: 'load-awk-runtime',
+		diagnosticsProgressStage: 'awk-diagnostics',
+		defaultActivePath: 'main.awk',
+		timeoutMessage: 'AWK diagnostics timed out',
+		runDiagnostics,
+		createMessage: (request) => ({
+			baseUrl: request.baseUrl,
+			code: request.code,
+			activePath: request.activePath,
+			args: [],
+			stdin: '',
+			diagnose: true,
+			log: false
+		}),
+		diagnosticsFromResult: (result) => {
+			const message = (result.error || result.output || '').trim();
+			return message ? [diagnosticFromMessage(message)] : [];
+		}
+	});
 
 	return {
 		name: 'wasm-idle-awk-lsp',
@@ -145,31 +150,8 @@ export function createAwkWorkerService(
 			hoverProvider: true,
 			documentSymbolProvider: true
 		},
-		initialize(options, context) {
-			const nextConfig = (options || {}) as AwkWorkerOptions;
-			if (!nextConfig.baseUrl || !nextConfig.workerUrl) {
-				throw new Error('AWK language server requires baseUrl and workerUrl');
-			}
-			context.reportProgress('load-awk-runtime');
-			config = nextConfig;
-		},
-		async diagnostics(document: LspDocument, context) {
-			if (!config || !document.text.trim()) return [];
-			const activePath = document.uri.split('/').pop() || 'main.awk';
-			const key = `${config.baseUrl}\n${config.workerUrl}\n${activePath}\n${document.text}`;
-			if (key === lastKey) return lastDiagnostics;
-			context.reportProgress('awk-diagnostics');
-			lastKey = key;
-			const result = await runDiagnostics({
-				baseUrl: config.baseUrl,
-				workerUrl: config.workerUrl,
-				code: document.text,
-				activePath
-			});
-			const message = (result.error || result.output || '').trim();
-			lastDiagnostics = message ? [diagnosticFromMessage(message)] : [];
-			return lastDiagnostics;
-		},
+		initialize: workerDiagnostics.initialize,
+		diagnostics: workerDiagnostics.diagnostics,
 		completion() {
 			return {
 				isIncomplete: false,

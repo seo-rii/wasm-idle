@@ -2,32 +2,32 @@ import {
 	positionAt,
 	uriToPath,
 	type LspDiagnostic,
-	type LspDocument,
 	type LspPosition,
 	type WorkerLanguageService
 } from '../lsp.js';
-import { runRuntimeWorkerDiagnostics } from '../runtime-worker.js';
+import {
+	createStaticWorkerDiagnostics,
+	type StaticWorkerDiagnosticRequest,
+	type StaticWorkerDiagnosticRunner
+} from '../static-worker-service.js';
 
 export interface PascalWorkerOptions {
 	baseUrl: string;
 	workerUrl: string;
 }
 
-export interface PascalDiagnosticRunnerRequest {
-	baseUrl: string;
-	workerUrl: string;
-	code: string;
-	activePath: string;
-}
+export type PascalDiagnosticRunnerRequest =
+	StaticWorkerDiagnosticRequest<PascalWorkerOptions>;
 
 export interface PascalDiagnosticRunnerResult {
 	error?: string;
 	output?: string;
 }
 
-export type RunPascalDiagnostics = (
-	request: PascalDiagnosticRunnerRequest
-) => Promise<PascalDiagnosticRunnerResult>;
+export type RunPascalDiagnostics = StaticWorkerDiagnosticRunner<
+	PascalWorkerOptions,
+	PascalDiagnosticRunnerResult
+>;
 
 const PASCAL_KEYWORDS = [
 	'and',
@@ -100,60 +100,32 @@ const PASCAL_HOVER: Record<string, string> = {
 };
 
 export function createPascalWorkerService(
-	runDiagnostics: RunPascalDiagnostics = (request) =>
-		runRuntimeWorkerDiagnostics({
-			workerUrl: request.workerUrl,
-			timeoutMessage: 'Pascal diagnostics timed out',
-			message: {
-				baseUrl: request.baseUrl,
-				code: request.code,
-				args: [],
-				stdin: '',
-				activePath: request.activePath,
-				diagnose: true,
-				log: false
-			}
-		})
+	runDiagnostics?: RunPascalDiagnostics
 ): WorkerLanguageService {
-	let config: PascalWorkerOptions | null = null;
-	let lastKey = '';
-	let lastDiagnostics: LspDiagnostic[] = [];
-
-	return {
-		name: 'wasm-idle-pascal-lsp',
-		diagnosticDelay: 600,
-		capabilities: {
-			completionProvider: { triggerCharacters: ['.'] },
-			hoverProvider: true,
-			documentSymbolProvider: true
-		},
-		initialize(options, context) {
-			const nextConfig = (options || {}) as PascalWorkerOptions;
-			if (!nextConfig.baseUrl || !nextConfig.workerUrl) {
-				throw new Error('Pascal language server requires baseUrl and workerUrl');
-			}
-			context.reportProgress('load-pascal-runtime');
-			config = nextConfig;
-		},
-		async diagnostics(document: LspDocument, context) {
-			if (!config || !document.text.trim()) return [];
-			const activePath =
-				uriToPath(document.uri).split('/').filter(Boolean).pop() || 'main.pas';
-			const key = `${config.baseUrl}\n${config.workerUrl}\n${activePath}\n${document.text}`;
-			if (key === lastKey) return lastDiagnostics;
-			context.reportProgress('pascal-diagnostics');
-			lastKey = key;
-			const result = await runDiagnostics({
-				baseUrl: config.baseUrl,
-				workerUrl: config.workerUrl,
-				code: document.text,
-				activePath
-			});
+	const workerDiagnostics = createStaticWorkerDiagnostics<
+		PascalWorkerOptions,
+		PascalDiagnosticRunnerResult
+	>({
+		languageName: 'Pascal',
+		loadProgressStage: 'load-pascal-runtime',
+		diagnosticsProgressStage: 'pascal-diagnostics',
+		defaultActivePath: 'main.pas',
+		timeoutMessage: 'Pascal diagnostics timed out',
+		runDiagnostics,
+		createMessage: (request) => ({
+			baseUrl: request.baseUrl,
+			code: request.code,
+			args: [],
+			stdin: '',
+			activePath: request.activePath,
+			diagnose: true,
+			log: false
+		}),
+		activePathFromDocument: (document) =>
+			uriToPath(document.uri).split('/').filter(Boolean).pop() || 'main.pas',
+		diagnosticsFromResult: (result, document) => {
 			const message = (result.error || result.output || '').trim();
-			if (!message) {
-				lastDiagnostics = [];
-				return lastDiagnostics;
-			}
+			if (!message) return [];
 			const parsedDiagnostics: Array<LspDiagnostic & { hasLocation?: boolean }> = [];
 			for (const lineText of message.split(/\r\n|\n|\r/u)) {
 				const trimmed = lineText.trim();
@@ -184,26 +156,36 @@ export function createPascalWorkerService(
 			const hasLocatedDiagnostic = parsedDiagnostics.some(
 				(diagnostic) => diagnostic.hasLocation
 			);
-			lastDiagnostics = (
+			const diagnostics = (
 				hasLocatedDiagnostic
 					? parsedDiagnostics.filter((diagnostic) => diagnostic.hasLocation)
 					: parsedDiagnostics
 			).map(({ hasLocation: _hasLocation, ...diagnostic }) => diagnostic);
-			if (!lastDiagnostics.length) {
-				lastDiagnostics = [
-					{
-						range: {
-							start: positionAt(document.text, 0),
-							end: positionAt(document.text, Math.min(document.text.length, 1))
-						},
-						severity: 1,
-						source: 'pascal',
-						message
-					}
-				];
-			}
-			return lastDiagnostics;
+			if (diagnostics.length) return diagnostics;
+			return [
+				{
+					range: {
+						start: positionAt(document.text, 0),
+						end: positionAt(document.text, Math.min(document.text.length, 1))
+					},
+					severity: 1,
+					source: 'pascal',
+					message
+				}
+			];
+		}
+	});
+
+	return {
+		name: 'wasm-idle-pascal-lsp',
+		diagnosticDelay: 600,
+		capabilities: {
+			completionProvider: { triggerCharacters: ['.'] },
+			hoverProvider: true,
+			documentSymbolProvider: true
 		},
+		initialize: workerDiagnostics.initialize,
+		diagnostics: workerDiagnostics.diagnostics,
 		completion() {
 			return {
 				isIncomplete: false,

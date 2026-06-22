@@ -1,32 +1,31 @@
 import {
 	positionAt,
 	type LspDiagnostic,
-	type LspDocument,
 	type LspPosition,
 	type WorkerLanguageService
 } from '../lsp.js';
-import { runRuntimeWorkerDiagnostics } from '../runtime-worker.js';
+import {
+	createStaticWorkerDiagnostics,
+	type StaticWorkerDiagnosticRequest,
+	type StaticWorkerDiagnosticRunner
+} from '../static-worker-service.js';
 
 export interface PerlWorkerOptions {
 	baseUrl: string;
 	workerUrl: string;
 }
 
-export interface PerlDiagnosticRunnerRequest {
-	baseUrl: string;
-	workerUrl: string;
-	code: string;
-	activePath: string;
-}
+export type PerlDiagnosticRunnerRequest = StaticWorkerDiagnosticRequest<PerlWorkerOptions>;
 
 export interface PerlDiagnosticRunnerResult {
 	error?: string;
 	output?: string;
 }
 
-export type RunPerlDiagnostics = (
-	request: PerlDiagnosticRunnerRequest
-) => Promise<PerlDiagnosticRunnerResult>;
+export type RunPerlDiagnostics = StaticWorkerDiagnosticRunner<
+	PerlWorkerOptions,
+	PerlDiagnosticRunnerResult
+>;
 
 const PERL_KEYWORDS = [
 	'continue',
@@ -110,23 +109,32 @@ const diagnosticFromMessage = (message: string): LspDiagnostic => {
 	};
 };
 
-export function createPerlWorkerService(
-	runDiagnostics: RunPerlDiagnostics = (request) =>
-		runRuntimeWorkerDiagnostics({
-			workerUrl: request.workerUrl,
-			timeoutMessage: 'Perl diagnostics timed out',
-			message: {
-				baseUrl: request.baseUrl,
-				code: request.code,
-				activePath: request.activePath,
-				diagnose: true,
-				log: false
-			}
-		})
-): WorkerLanguageService {
-	let config: PerlWorkerOptions | null = null;
-	let lastKey = '';
-	let lastDiagnostics: LspDiagnostic[] = [];
+export function createPerlWorkerService(runDiagnostics?: RunPerlDiagnostics): WorkerLanguageService {
+	const workerDiagnostics = createStaticWorkerDiagnostics<
+		PerlWorkerOptions,
+		PerlDiagnosticRunnerResult
+	>({
+		languageName: 'Perl',
+		loadProgressStage: 'load-perl-runtime',
+		diagnosticsProgressStage: 'perl-diagnostics',
+		defaultActivePath: 'main.pl',
+		timeoutMessage: 'Perl diagnostics timed out',
+		runDiagnostics,
+		createMessage: (request) => ({
+			baseUrl: request.baseUrl,
+			code: request.code,
+			activePath: request.activePath,
+			diagnose: true,
+			log: false
+		}),
+		diagnosticsFromResult: (result) => {
+			const output = (result.output || '').trim();
+			const error = (result.error || '').trim();
+			const message =
+				error && !/^Perl exited with status \d+\.$/u.test(error) ? error : output || error;
+			return message ? [diagnosticFromMessage(message)] : [];
+		}
+	});
 
 	return {
 		name: 'wasm-idle-perl-lsp',
@@ -136,34 +144,8 @@ export function createPerlWorkerService(
 			hoverProvider: true,
 			documentSymbolProvider: true
 		},
-		initialize(options, context) {
-			const nextConfig = (options || {}) as PerlWorkerOptions;
-			if (!nextConfig.baseUrl || !nextConfig.workerUrl) {
-				throw new Error('Perl language server requires baseUrl and workerUrl');
-			}
-			context.reportProgress('load-perl-runtime');
-			config = nextConfig;
-		},
-		async diagnostics(document: LspDocument, context) {
-			if (!config || !document.text.trim()) return [];
-			const activePath = document.uri.split('/').pop() || 'main.pl';
-			const key = `${config.baseUrl}\n${config.workerUrl}\n${activePath}\n${document.text}`;
-			if (key === lastKey) return lastDiagnostics;
-			context.reportProgress('perl-diagnostics');
-			lastKey = key;
-			const result = await runDiagnostics({
-				baseUrl: config.baseUrl,
-				workerUrl: config.workerUrl,
-				code: document.text,
-				activePath
-			});
-			const output = (result.output || '').trim();
-			const error = (result.error || '').trim();
-			const message =
-				error && !/^Perl exited with status \d+\.$/u.test(error) ? error : output || error;
-			lastDiagnostics = message ? [diagnosticFromMessage(message)] : [];
-			return lastDiagnostics;
-		},
+		initialize: workerDiagnostics.initialize,
+		diagnostics: workerDiagnostics.diagnostics,
 		completion() {
 			return {
 				isIncomplete: false,

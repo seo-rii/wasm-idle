@@ -1,32 +1,32 @@
 import {
 	positionAt,
 	type LspDiagnostic,
-	type LspDocument,
 	type LspPosition,
 	type WorkerLanguageService
 } from '../lsp.js';
-import { runRuntimeWorkerDiagnostics } from '../runtime-worker.js';
+import {
+	createStaticWorkerDiagnostics,
+	type StaticWorkerDiagnosticRequest,
+	type StaticWorkerDiagnosticRunner
+} from '../static-worker-service.js';
 
 export interface JanetWorkerOptions {
 	baseUrl: string;
 	workerUrl: string;
 }
 
-export interface JanetDiagnosticRunnerRequest {
-	baseUrl: string;
-	workerUrl: string;
-	code: string;
-	activePath: string;
-}
+export type JanetDiagnosticRunnerRequest =
+	StaticWorkerDiagnosticRequest<JanetWorkerOptions>;
 
 export interface JanetDiagnosticRunnerResult {
 	error?: string;
 	output?: string;
 }
 
-export type RunJanetDiagnostics = (
-	request: JanetDiagnosticRunnerRequest
-) => Promise<JanetDiagnosticRunnerResult>;
+export type RunJanetDiagnostics = StaticWorkerDiagnosticRunner<
+	JanetWorkerOptions,
+	JanetDiagnosticRunnerResult
+>;
 
 const JANET_KEYWORDS = [
 	'break',
@@ -79,21 +79,6 @@ const JANET_HOVER: Record<string, string> = {
 	'file/read': 'Reads a file or stream into memory.'
 };
 
-const defaultRunDiagnostics: RunJanetDiagnostics = (request) =>
-	runRuntimeWorkerDiagnostics({
-		workerUrl: request.workerUrl,
-		timeoutMessage: 'Janet diagnostics timed out',
-		message: {
-			baseUrl: request.baseUrl,
-			code: request.code,
-			activePath: request.activePath,
-			args: [],
-			stdin: '',
-			diagnose: true,
-			log: false
-		}
-	});
-
 const wordAt = (text: string, position: LspPosition) => {
 	const line = text.split('\n')[position.line] || '';
 	const character = Math.max(0, Math.min(position.character, line.length));
@@ -134,11 +119,32 @@ const symbol = (text: string, name: string, offset: number, length: number) => {
 };
 
 export function createJanetWorkerService(
-	runDiagnostics: RunJanetDiagnostics = defaultRunDiagnostics
+	runDiagnostics?: RunJanetDiagnostics
 ): WorkerLanguageService {
-	let config: JanetWorkerOptions | null = null;
-	let lastKey = '';
-	let lastDiagnostics: LspDiagnostic[] = [];
+	const workerDiagnostics = createStaticWorkerDiagnostics<
+		JanetWorkerOptions,
+		JanetDiagnosticRunnerResult
+	>({
+		languageName: 'Janet',
+		loadProgressStage: 'load-janet-runtime',
+		diagnosticsProgressStage: 'janet-diagnostics',
+		defaultActivePath: 'main.janet',
+		timeoutMessage: 'Janet diagnostics timed out',
+		runDiagnostics,
+		createMessage: (request) => ({
+			baseUrl: request.baseUrl,
+			code: request.code,
+			activePath: request.activePath,
+			args: [],
+			stdin: '',
+			diagnose: true,
+			log: false
+		}),
+		diagnosticsFromResult: (result) => {
+			const message = (result.error || result.output || '').trim();
+			return message ? [diagnosticFromMessage(message)] : [];
+		}
+	});
 
 	return {
 		name: 'wasm-idle-janet-lsp',
@@ -148,31 +154,8 @@ export function createJanetWorkerService(
 			hoverProvider: true,
 			documentSymbolProvider: true
 		},
-		initialize(options, context) {
-			const nextConfig = (options || {}) as JanetWorkerOptions;
-			if (!nextConfig.baseUrl || !nextConfig.workerUrl) {
-				throw new Error('Janet language server requires baseUrl and workerUrl');
-			}
-			context.reportProgress('load-janet-runtime');
-			config = nextConfig;
-		},
-		async diagnostics(document: LspDocument, context) {
-			if (!config || !document.text.trim()) return [];
-			const activePath = document.uri.split('/').pop() || 'main.janet';
-			const key = `${config.baseUrl}\n${config.workerUrl}\n${activePath}\n${document.text}`;
-			if (key === lastKey) return lastDiagnostics;
-			context.reportProgress('janet-diagnostics');
-			lastKey = key;
-			const result = await runDiagnostics({
-				baseUrl: config.baseUrl,
-				workerUrl: config.workerUrl,
-				code: document.text,
-				activePath
-			});
-			const message = (result.error || result.output || '').trim();
-			lastDiagnostics = message ? [diagnosticFromMessage(message)] : [];
-			return lastDiagnostics;
-		},
+		initialize: workerDiagnostics.initialize,
+		diagnostics: workerDiagnostics.diagnostics,
 		completion() {
 			return {
 				isIncomplete: false,

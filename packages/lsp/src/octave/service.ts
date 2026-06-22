@@ -1,11 +1,14 @@
 import {
 	positionAt,
 	type LspDiagnostic,
-	type LspDocument,
 	type LspPosition,
 	type WorkerLanguageService
 } from '../lsp.js';
-import { runRuntimeWorkerDiagnostics } from '../runtime-worker.js';
+import {
+	createStaticWorkerDiagnostics,
+	type StaticWorkerDiagnosticRequest,
+	type StaticWorkerDiagnosticRunner
+} from '../static-worker-service.js';
 
 export interface OctaveWorkerOptions {
 	baseUrl: string;
@@ -13,22 +16,18 @@ export interface OctaveWorkerOptions {
 	manifestUrl: string;
 }
 
-export interface OctaveDiagnosticRunnerRequest {
-	baseUrl: string;
-	workerUrl: string;
-	manifestUrl: string;
-	code: string;
-	activePath: string;
-}
+export type OctaveDiagnosticRunnerRequest =
+	StaticWorkerDiagnosticRequest<OctaveWorkerOptions>;
 
 export interface OctaveDiagnosticRunnerResult {
 	error?: string;
 	output?: string;
 }
 
-export type RunOctaveDiagnostics = (
-	request: OctaveDiagnosticRunnerRequest
-) => Promise<OctaveDiagnosticRunnerResult>;
+export type RunOctaveDiagnostics = StaticWorkerDiagnosticRunner<
+	OctaveWorkerOptions,
+	OctaveDiagnosticRunnerResult
+>;
 
 const OCTAVE_KEYWORDS = [
 	'break',
@@ -82,24 +81,6 @@ const OCTAVE_HOVER: Record<string, string> = {
 	strtrim: 'Removes leading and trailing whitespace.'
 };
 
-const defaultRunDiagnostics: RunOctaveDiagnostics = (request) =>
-	runRuntimeWorkerDiagnostics({
-		workerUrl: request.workerUrl,
-		timeoutMessage: 'Octave diagnostics timed out',
-		message: {
-			run: true,
-			baseUrl: request.baseUrl,
-			manifestUrl: request.manifestUrl,
-			code: request.code,
-			args: [],
-			stdin: '',
-			activePath: request.activePath,
-			workspaceFiles: [],
-			diagnose: true,
-			log: false
-		}
-	});
-
 const wordAt = (text: string, position: LspPosition) => {
 	const line = text.split('\n')[position.line] || '';
 	const character = Math.max(0, Math.min(position.character, line.length));
@@ -140,11 +121,40 @@ const symbol = (text: string, name: string, offset: number, length: number) => {
 };
 
 export function createOctaveWorkerService(
-	runDiagnostics: RunOctaveDiagnostics = defaultRunDiagnostics
+	runDiagnostics?: RunOctaveDiagnostics
 ): WorkerLanguageService {
-	let config: OctaveWorkerOptions | null = null;
-	let lastKey = '';
-	let lastDiagnostics: LspDiagnostic[] = [];
+	const workerDiagnostics = createStaticWorkerDiagnostics<
+		OctaveWorkerOptions,
+		OctaveDiagnosticRunnerResult
+	>({
+		languageName: 'Octave',
+		loadProgressStage: 'load-octave-runtime',
+		diagnosticsProgressStage: 'octave-diagnostics',
+		defaultActivePath: 'main.m',
+		timeoutMessage: 'Octave diagnostics timed out',
+		runDiagnostics,
+		validateConfig: (config) =>
+			!config.baseUrl || !config.workerUrl || !config.manifestUrl
+				? 'Octave language server requires baseUrl, workerUrl, and manifestUrl'
+				: null,
+		cacheKeyParts: (config) => [config.baseUrl, config.workerUrl, config.manifestUrl],
+		createMessage: (request) => ({
+			run: true,
+			baseUrl: request.baseUrl,
+			manifestUrl: request.manifestUrl,
+			code: request.code,
+			args: [],
+			stdin: '',
+			activePath: request.activePath,
+			workspaceFiles: [],
+			diagnose: true,
+			log: false
+		}),
+		diagnosticsFromResult: (result) => {
+			const message = (result.error || result.output || '').trim();
+			return message ? [diagnosticFromMessage(message)] : [];
+		}
+	});
 
 	return {
 		name: 'wasm-idle-octave-lsp',
@@ -154,32 +164,8 @@ export function createOctaveWorkerService(
 			hoverProvider: true,
 			documentSymbolProvider: true
 		},
-		initialize(options, context) {
-			const nextConfig = (options || {}) as OctaveWorkerOptions;
-			if (!nextConfig.baseUrl || !nextConfig.workerUrl || !nextConfig.manifestUrl) {
-				throw new Error('Octave language server requires baseUrl, workerUrl, and manifestUrl');
-			}
-			context.reportProgress('load-octave-runtime');
-			config = nextConfig;
-		},
-		async diagnostics(document: LspDocument, context) {
-			if (!config || !document.text.trim()) return [];
-			const activePath = document.uri.split('/').pop() || 'main.m';
-			const key = `${config.baseUrl}\n${config.workerUrl}\n${config.manifestUrl}\n${activePath}\n${document.text}`;
-			if (key === lastKey) return lastDiagnostics;
-			context.reportProgress('octave-diagnostics');
-			lastKey = key;
-			const result = await runDiagnostics({
-				baseUrl: config.baseUrl,
-				workerUrl: config.workerUrl,
-				manifestUrl: config.manifestUrl,
-				code: document.text,
-				activePath
-			});
-			const message = (result.error || result.output || '').trim();
-			lastDiagnostics = message ? [diagnosticFromMessage(message)] : [];
-			return lastDiagnostics;
-		},
+		initialize: workerDiagnostics.initialize,
+		diagnostics: workerDiagnostics.diagnostics,
 		completion() {
 			return {
 				isIncomplete: false,

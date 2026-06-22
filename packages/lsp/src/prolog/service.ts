@@ -1,29 +1,31 @@
 import {
 	type LspDiagnostic,
-	type LspDocument,
 	type LspPosition,
 	type WorkerLanguageService
 } from '../lsp.js';
+import {
+	createStaticWorkerDiagnostics,
+	type StaticWorkerDiagnosticRequest,
+	type StaticWorkerDiagnosticRunner
+} from '../static-worker-service.js';
 
 export interface PrologWorkerOptions {
 	baseUrl: string;
 	workerUrl: string;
 }
 
-export interface PrologDiagnosticRunnerRequest {
-	baseUrl: string;
-	workerUrl: string;
-	code: string;
-	activePath: string;
-}
+export type PrologDiagnosticRunnerRequest =
+	StaticWorkerDiagnosticRequest<PrologWorkerOptions>;
 
 export interface PrologDiagnosticRunnerResult {
 	error?: string;
+	output?: string;
 }
 
-export type RunPrologDiagnostics = (
-	request: PrologDiagnosticRunnerRequest
-) => Promise<PrologDiagnosticRunnerResult>;
+export type RunPrologDiagnostics = StaticWorkerDiagnosticRunner<
+	PrologWorkerOptions,
+	PrologDiagnosticRunnerResult
+>;
 
 const PROLOG_KEYWORDS = [
 	':-',
@@ -58,34 +60,6 @@ const PROLOG_HOVER: Record<string, string> = {
 	writeln: 'Writes a term followed by a newline.'
 };
 
-function runInWorker(request: PrologDiagnosticRunnerRequest): Promise<PrologDiagnosticRunnerResult> {
-	return new Promise((resolve, reject) => {
-		const worker = new Worker(request.workerUrl);
-		const timeout = setTimeout(() => {
-			worker.terminate();
-			reject(new Error('Prolog diagnostics timed out'));
-		}, 5000);
-		worker.onerror = (event) => {
-			clearTimeout(timeout);
-			worker.terminate();
-			reject(event.error || new Error(event.message || 'Prolog worker failed'));
-		};
-		worker.onmessage = (event: MessageEvent<PrologDiagnosticRunnerResult & { results?: boolean }>) => {
-			if (!event.data?.results && !event.data?.error) return;
-			clearTimeout(timeout);
-			worker.terminate();
-			resolve({ error: event.data.error });
-		};
-		worker.postMessage({
-			baseUrl: request.baseUrl,
-			code: request.code,
-			activePath: request.activePath,
-			diagnose: true,
-			log: false
-		});
-	});
-}
-
 const wordAt = (text: string, position: LspPosition) => {
 	const line = text.split('\n')[position.line] || '';
 	const character = Math.max(0, Math.min(position.character, line.length));
@@ -111,11 +85,27 @@ const diagnosticFromError = (message: string): LspDiagnostic => {
 };
 
 export function createPrologWorkerService(
-	runDiagnostics: RunPrologDiagnostics = runInWorker
+	runDiagnostics?: RunPrologDiagnostics
 ): WorkerLanguageService {
-	let config: PrologWorkerOptions | null = null;
-	let lastKey = '';
-	let lastDiagnostics: LspDiagnostic[] = [];
+	const workerDiagnostics = createStaticWorkerDiagnostics<
+		PrologWorkerOptions,
+		PrologDiagnosticRunnerResult
+	>({
+		languageName: 'Prolog',
+		loadProgressStage: 'load-prolog-runtime',
+		defaultActivePath: 'main.prolog',
+		timeoutMessage: 'Prolog diagnostics timed out',
+		runDiagnostics,
+		createMessage: (request) => ({
+			baseUrl: request.baseUrl,
+			code: request.code,
+			activePath: request.activePath,
+			diagnose: true,
+			log: false
+		}),
+		diagnosticsFromResult: (result) =>
+			result.error ? [diagnosticFromError(result.error)] : []
+	});
 
 	return {
 		name: 'wasm-idle-prolog-lsp',
@@ -124,29 +114,8 @@ export function createPrologWorkerService(
 			completionProvider: { triggerCharacters: [':', '?'] },
 			hoverProvider: true
 		},
-		initialize(options, context) {
-			const nextConfig = (options || {}) as PrologWorkerOptions;
-			if (!nextConfig.baseUrl || !nextConfig.workerUrl) {
-				throw new Error('Prolog language server requires baseUrl and workerUrl');
-			}
-			context.reportProgress('load-prolog-runtime');
-			config = nextConfig;
-		},
-		async diagnostics(document: LspDocument) {
-			if (!config || !document.text.trim()) return [];
-			const activePath = document.uri.split('/').pop() || 'main.prolog';
-			const key = `${config.baseUrl}\n${config.workerUrl}\n${activePath}\n${document.text}`;
-			if (key === lastKey) return lastDiagnostics;
-			lastKey = key;
-			const result = await runDiagnostics({
-				baseUrl: config.baseUrl,
-				workerUrl: config.workerUrl,
-				code: document.text,
-				activePath
-			});
-			lastDiagnostics = result.error ? [diagnosticFromError(result.error)] : [];
-			return lastDiagnostics;
-		},
+		initialize: workerDiagnostics.initialize,
+		diagnostics: workerDiagnostics.diagnostics,
 		completion() {
 			return {
 				isIncomplete: false,
