@@ -1979,6 +1979,7 @@
 	let typescriptLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let assemblyScriptLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let watLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
+	let wasmLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let zigLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let phpLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let luaLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
@@ -2297,6 +2298,10 @@
 				label = 'WAT LSP';
 				status = watLspStatus;
 				break;
+			case 'wasm':
+				label = 'WASM LSP';
+				status = wasmLspStatus;
+				break;
 			case 'zig':
 				label = 'Zig LSP';
 				status = zigLspStatus;
@@ -2566,6 +2571,18 @@
 				return await getWatLanguageServer({
 					currentUrl,
 					onStatus: (status) => (watLspStatus = status)
+				});
+			}
+		},
+		{
+			languages: ['wasm'],
+			isEnabled: () => true,
+			setStatus: (status) => (wasmLspStatus = status),
+			load: async (currentUrl) => {
+				const { getWasmLanguageServer } = await import('@wasm-idle/lsp');
+				return await getWasmLanguageServer({
+					currentUrl,
+					onStatus: (status) => (wasmLspStatus = status)
 				});
 			}
 		},
@@ -2898,6 +2915,7 @@
 			typescript: typescriptLspStatus,
 			assemblyscript: assemblyScriptLspStatus,
 			wat: watLspStatus,
+			wasm: wasmLspStatus,
 			zig: zigLspStatus,
 			php: phpLspStatus,
 			lua: luaLspStatus,

@@ -45,6 +45,11 @@
 			"import": "./dist/wat/index.js",
 			"default": "./dist/wat/index.js"
 		},
+		"./wasm": {
+			"types": "./dist/wasm/index.d.ts",
+			"import": "./dist/wasm/index.js",
+			"default": "./dist/wasm/index.js"
+		},
 		"./dotnet": {
 			"types": "./dist/dotnet/index.d.ts",
 			"import": "./dist/dotnet/index.js",

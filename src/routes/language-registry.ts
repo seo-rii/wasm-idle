@@ -27,6 +27,7 @@ export type PlaygroundLanguage =
 	| 'TYPESCRIPT'
 	| 'ASSEMBLYSCRIPT'
 	| 'WAT'
+	| 'WASM'
 	| 'LUA'
 	| 'ZIG'
 	| 'LISP'
@@ -60,7 +61,8 @@ export type RuntimeLspCapability =
 	| 'ruby'
 	| 'r'
 	| 'awk'
-	| 'perl';
+	| 'perl'
+	| 'wasm';
 
 export type DotnetLspLanguage = 'csharp' | 'fsharp' | 'vbnet';
 
@@ -95,6 +97,7 @@ export const playgroundLanguages: PlaygroundLanguage[] = [
 	'TYPESCRIPT',
 	'ASSEMBLYSCRIPT',
 	'WAT',
+	'WASM',
 	'LUA',
 	'ZIG',
 	'LISP',
@@ -247,7 +250,8 @@ export const runtimeLspCapabilities: Partial<Record<PlaygroundLanguage, RuntimeL
 	RUBY: 'ruby',
 	R: 'r',
 	AWK: 'awk',
-	PERL: 'perl'
+	PERL: 'perl',
+	WASM: 'wasm'
 };
 export const argsHelpLanguages = new Set<PlaygroundLanguage>([
 	'JAVA',
@@ -332,6 +336,7 @@ export const diagnosticMarkerLanguages = new Set([
 	'javascript',
 	'typescript',
 	'wat',
+	'wasm',
 	'lua',
 	'zig',
 	'lisp',

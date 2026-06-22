@@ -48,6 +48,7 @@ describe('language registry', () => {
 		expect(runtimeLspCapabilities.R).toBe('r');
 		expect(runtimeLspCapabilities.AWK).toBe('awk');
 		expect(runtimeLspCapabilities.PERL).toBe('perl');
+		expect(runtimeLspCapabilities.WASM).toBe('wasm');
 		expect(editorOnlyLanguages.has('FORTRAN')).toBe(true);
 		expect(editorOnlyLanguages.has('GRAPHQL')).toBe(true);
 		expect(editorOnlyLanguages.has('DUCKDB')).toBe(false);
@@ -69,6 +70,7 @@ describe('language registry', () => {
 			expect(diagnosticMarkerLanguages.has(language)).toBe(true);
 		}
 		expect(diagnosticMarkerLanguages.has('awk')).toBe(true);
+		expect(diagnosticMarkerLanguages.has('wasm')).toBe(true);
 	});
 
 	it('keeps compiler diagnostic support visible for compiled languages', () => {

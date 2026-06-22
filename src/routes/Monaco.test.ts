@@ -95,6 +95,7 @@ describe('Monaco route debug sync', () => {
 			'awk',
 			'ocaml',
 			'wat',
+			'wasm',
 			'lua',
 			'lisp',
 			'haskell',
@@ -136,6 +137,11 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(/extensions: \['\.wasm'\]/);
 		expect(source).toMatch(
 			/monacoApi\.languages\.setMonarchTokensProvider\('wasm', wasmMonarchTokens\);/
+		);
+		expect(source).toMatch(/let wasmLspStatus = \$state<LanguageServerStatus>/);
+		expect(source).toMatch(/label = 'WASM LSP';/);
+		expect(source).toMatch(
+			/const \{ getWasmLanguageServer \} = await import\('@wasm-idle\/lsp'\);/
 		);
 		expect(source).toMatch(
 			/const nextDebugView = new MonacoDebugView\(monacoApi, activeEditor, onBreakpointsChange\);[\s\S]*debugView = nextDebugView;/s
@@ -395,6 +401,7 @@ describe('Monaco route debug sync', () => {
 		expect(runtimeLspCapabilities.R).toBe('r');
 		expect(runtimeLspCapabilities.AWK).toBe('awk');
 		expect(runtimeLspCapabilities.PERL).toBe('perl');
+		expect(runtimeLspCapabilities.WASM).toBe('wasm');
 		expect(pageSource).toMatch(
 			/const typescriptLspLibUrl = \$derived\(\s+lspEnabled && typescriptLspLanguages\.has\(language\)/
 		);

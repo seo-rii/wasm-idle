@@ -75,6 +75,7 @@ import {
 	getDuckDbLanguageServer,
 	getSqlLanguageServer,
 	getTomlLanguageServer,
+	getWasmLanguageServer,
 	getYamlLanguageServer,
 	getZigLanguageServer
 } from '../src/index.js';
@@ -272,6 +273,19 @@ describe('additional language server workers', () => {
 				baseUrl: 'https://static.example.com/repl_20240807/wasm-prolog/',
 				workerUrl: 'https://static.example.com/repl_20240807/wasm-prolog/runner-worker.js'
 			}
+		});
+
+		handle.dispose();
+	});
+
+	it('starts WASM without external runtime assets', async () => {
+		const handle = await getWasmLanguageServer({
+			createWorker: () => new mockState.FakeWorker() as unknown as Worker
+		});
+
+		expect(mockState.workers[0]?.messages[0]).toEqual({
+			type: 'init',
+			options: {}
 		});
 
 		handle.dispose();

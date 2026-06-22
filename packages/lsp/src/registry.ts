@@ -12,6 +12,7 @@ import { getRustLanguageServer } from './rust/server.js';
 import { getJavaScriptLanguageServer, getTypeScriptLanguageServer } from './typescript/server.js';
 import type { EditorLanguageServerHandle, EditorLanguageServerOptions } from './types.js';
 import { getWatLanguageServer } from './wat/server.js';
+import { getWasmLanguageServer } from './wasm/server.js';
 import { getZigLanguageServer } from './zig/server.js';
 import { getPhpLanguageServer } from './php/server.js';
 import { getLuaLanguageServer } from './lua/server.js';
@@ -70,6 +71,10 @@ export async function getEditorLanguageServer(
 
 	if (normalized === 'wat' || normalized === 'webassembly') {
 		return getWatLanguageServer(options);
+	}
+
+	if (normalized === 'wasm' || normalized === 'wasm32' || normalized === 'webassembly-binary') {
+		return getWasmLanguageServer(options);
 	}
 
 	if (normalized === 'csharp' || normalized === 'c#' || normalized === 'cs') {

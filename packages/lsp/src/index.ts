@@ -104,6 +104,12 @@ export {
 	type WatWorkerOptions
 } from './wat/index.js';
 export {
+	createWasmWorkerService,
+	decodeWasmSource,
+	getWasmLanguageServer,
+	type WasmLanguageServerOptions
+} from './wasm/index.js';
+export {
 	createDotnetWorkerService,
 	getCSharpLanguageServer,
 	getFSharpLanguageServer,
