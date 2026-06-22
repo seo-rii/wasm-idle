@@ -68,6 +68,9 @@ import {
 	getOcamlLanguageServer,
 	getPhpLanguageServer,
 	getPrologLanguageServer,
+	getAwkLanguageServer,
+	getPerlLanguageServer,
+	getRLanguageServer,
 	getRubyLanguageServer,
 	getDuckDbLanguageServer,
 	getSqlLanguageServer,
@@ -284,6 +287,60 @@ describe('additional language server workers', () => {
 			type: 'init',
 			options: {
 				wasmUrl: '/assets/ruby+stdlib.wasm'
+			}
+		});
+
+		handle.dispose();
+	});
+
+	it('starts R with bundled WebR assets', async () => {
+		const handle = await getRLanguageServer({
+			rootUrl: 'https://static.example.com/repl_20240807',
+			currentUrl: 'https://app.example.com/editor',
+			r: { baseUrl: 'https://static.example.com/repl_20240807/webr/0.6.0/' },
+			createWorker: () => new mockState.FakeWorker() as unknown as Worker
+		});
+
+		expect(mockState.workers[0]?.messages[0]).toEqual({
+			type: 'init',
+			options: {
+				baseUrl: 'https://static.example.com/repl_20240807/webr/0.6.0/'
+			}
+		});
+
+		handle.dispose();
+	});
+
+	it('starts AWK with GoAWK worker assets', async () => {
+		const handle = await getAwkLanguageServer({
+			rootUrl: 'https://static.example.com/repl_20240807',
+			currentUrl: 'https://app.example.com/editor',
+			createWorker: () => new mockState.FakeWorker() as unknown as Worker
+		});
+
+		expect(mockState.workers[0]?.messages[0]).toEqual({
+			type: 'init',
+			options: {
+				baseUrl: 'https://static.example.com/repl_20240807/wasm-awk/',
+				workerUrl: 'https://static.example.com/repl_20240807/wasm-awk/runner-worker.js'
+			}
+		});
+
+		handle.dispose();
+	});
+
+	it('starts Perl with WebPerl worker assets', async () => {
+		const handle = await getPerlLanguageServer({
+			rootUrl: 'https://static.example.com/repl_20240807',
+			currentUrl: 'https://app.example.com/editor',
+			createWorker: () => new mockState.FakeWorker() as unknown as Worker
+		});
+
+		expect(mockState.workers[0]?.messages[0]).toEqual({
+			type: 'init',
+			options: {
+				baseUrl: 'https://static.example.com/repl_20240807/wasm-perl/',
+				workerUrl: 'https://static.example.com/repl_20240807/wasm-perl/runner-worker.js'
 			}
 		});
 

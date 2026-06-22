@@ -9,12 +9,17 @@ import {
 	resolveHaskellLanguageServerBsdtarUrl,
 	resolveHaskellLanguageServerModuleUrl,
 	resolveHaskellLanguageServerRootfsUrl,
+	resolveAwkLanguageServerBaseUrl,
+	resolveAwkLanguageServerWorkerUrl,
 	resolvePythonLanguageServerBaseUrl,
+	resolvePerlLanguageServerBaseUrl,
+	resolvePerlLanguageServerWorkerUrl,
 	resolveDotnetLanguageServerModuleUrl,
 	resolveLuaLanguageServerModuleUrl,
 	resolveOcamlLanguageServerManifestUrl,
 	resolveOcamlLanguageServerModuleUrl,
 	resolvePhpLanguageServerVersion,
+	resolveRLanguageServerBaseUrl,
 	resolveRustLanguageServerCompilerUrl,
 	resolveZigLanguageServerCompilerUrl,
 	resolveZigLanguageServerStdlibUrl
@@ -116,6 +121,36 @@ describe('lsp runtime asset resolution', () => {
 				'https://app.example.com/editor'
 			)
 		).toBe('https://static.example.com/repl_20240807/wasm-gleam/source-manifest.v1.json');
+		expect(
+			resolveAwkLanguageServerBaseUrl(
+				'https://static.example.com/repl_20240807',
+				'https://app.example.com/editor'
+			)
+		).toBe('https://static.example.com/repl_20240807/wasm-awk/');
+		expect(
+			resolveAwkLanguageServerWorkerUrl(
+				'https://static.example.com/repl_20240807',
+				'https://app.example.com/editor'
+			)
+		).toBe('https://static.example.com/repl_20240807/wasm-awk/runner-worker.js');
+		expect(
+			resolvePerlLanguageServerBaseUrl(
+				'https://static.example.com/repl_20240807',
+				'https://app.example.com/editor'
+			)
+		).toBe('https://static.example.com/repl_20240807/wasm-perl/');
+		expect(
+			resolvePerlLanguageServerWorkerUrl(
+				'https://static.example.com/repl_20240807',
+				'https://app.example.com/editor'
+			)
+		).toBe('https://static.example.com/repl_20240807/wasm-perl/runner-worker.js');
+		expect(
+			resolveRLanguageServerBaseUrl(
+				'https://static.example.com/repl_20240807',
+				'https://app.example.com/editor'
+			)
+		).toBe('https://static.example.com/repl_20240807/webr/');
 	});
 
 	it('prefers explicit per-language overrides', () => {
@@ -158,6 +193,17 @@ describe('lsp runtime asset resolution', () => {
 			gleam: {
 				baseUrl: 'https://gleam.example.com/wasm-gleam/',
 				manifestUrl: 'https://gleam.example.com/manifest.json'
+			},
+			awk: {
+				baseUrl: 'https://awk.example.com/wasm-awk/',
+				workerUrl: 'https://awk.example.com/runner-worker.js?v=20240807'
+			},
+			perl: {
+				baseUrl: 'https://perl.example.com/wasm-perl/',
+				workerUrl: 'https://perl.example.com/runner-worker.js?v=20240807'
+			},
+			r: {
+				baseUrl: 'https://r.example.com/webr/0.6.0/'
 			}
 		};
 
@@ -205,6 +251,17 @@ describe('lsp runtime asset resolution', () => {
 		expect(resolveGleamLanguageServerManifestUrl(options)).toBe(
 			'https://gleam.example.com/manifest.json'
 		);
+		expect(resolveAwkLanguageServerBaseUrl(options)).toBe('https://awk.example.com/wasm-awk/');
+		expect(resolveAwkLanguageServerWorkerUrl(options)).toBe(
+			'https://awk.example.com/runner-worker.js?v=20240807'
+		);
+		expect(resolvePerlLanguageServerBaseUrl(options)).toBe(
+			'https://perl.example.com/wasm-perl/'
+		);
+		expect(resolvePerlLanguageServerWorkerUrl(options)).toBe(
+			'https://perl.example.com/runner-worker.js?v=20240807'
+		);
+		expect(resolveRLanguageServerBaseUrl(options)).toBe('https://r.example.com/webr/0.6.0/');
 	});
 
 	it('preserves cpp loader configuration for clangd worker assets', () => {
@@ -272,5 +329,20 @@ describe('lsp runtime asset resolution', () => {
 		expect(
 			resolveGleamLanguageServerManifestUrl(undefined, 'https://app.example.com/editor')
 		).toBe('https://app.example.com/wasm-gleam/source-manifest.v1.json');
+		expect(resolveAwkLanguageServerBaseUrl(undefined, 'https://app.example.com/editor')).toBe(
+			'https://app.example.com/wasm-awk/'
+		);
+		expect(resolveAwkLanguageServerWorkerUrl(undefined, 'https://app.example.com/editor')).toBe(
+			'https://app.example.com/wasm-awk/runner-worker.js'
+		);
+		expect(resolvePerlLanguageServerBaseUrl(undefined, 'https://app.example.com/editor')).toBe(
+			'https://app.example.com/wasm-perl/'
+		);
+		expect(resolvePerlLanguageServerWorkerUrl(undefined, 'https://app.example.com/editor')).toBe(
+			'https://app.example.com/wasm-perl/runner-worker.js'
+		);
+		expect(resolveRLanguageServerBaseUrl(undefined, 'https://app.example.com/editor')).toBe(
+			'https://app.example.com/webr/'
+		);
 	});
 });
