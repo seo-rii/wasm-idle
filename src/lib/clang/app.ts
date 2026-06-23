@@ -93,7 +93,10 @@ export default class App {
 				'args_get',
 				'random_get',
 				'clock_time_get',
-				'poll_oneoff'
+				'poll_oneoff',
+				'fd_filestat_set_times',
+				'path_link',
+				'path_rename'
 			),
 			...this.memfs.exports
 		};
@@ -867,5 +870,43 @@ export default class App {
 
 	poll_oneoff() {
 		throw new NotImplemented('wasi_unstable', 'poll_oneoff');
+	}
+
+	fd_filestat_set_times() {
+		this.trace('fd_filestat_set_times()');
+		return ESUCCESS;
+	}
+
+	path_link(
+		_oldFd: number,
+		_oldFlags: number,
+		oldPath: number,
+		oldPathLen: number,
+		_newFd: number,
+		newPath: number,
+		newPathLen: number
+	) {
+		this.mem.check();
+		const source = this.mem.readStr(oldPath, oldPathLen).replace(/^\/+/, '');
+		const target = this.mem.readStr(newPath, newPathLen).replace(/^\/+/, '');
+		this.trace(`path_link(source=${JSON.stringify(source)}, target=${JSON.stringify(target)})`);
+		this.memfs.addFile(target, new Uint8Array(this.memfs.getFileContents(source)));
+		return ESUCCESS;
+	}
+
+	path_rename(
+		_oldFd: number,
+		oldPath: number,
+		oldPathLen: number,
+		_newFd: number,
+		newPath: number,
+		newPathLen: number
+	) {
+		this.mem.check();
+		const source = this.mem.readStr(oldPath, oldPathLen).replace(/^\/+/, '');
+		const target = this.mem.readStr(newPath, newPathLen).replace(/^\/+/, '');
+		this.trace(`path_rename(source=${JSON.stringify(source)}, target=${JSON.stringify(target)})`);
+		this.memfs.addFile(target, new Uint8Array(this.memfs.getFileContents(source)));
+		return ESUCCESS;
 	}
 }

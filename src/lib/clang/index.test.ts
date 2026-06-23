@@ -79,6 +79,9 @@ describe('Clang compile/debug flow', () => {
 		expect(compileArgs).toContain('-resource-dir');
 		expect(compileArgs).toContain('/lib/clang/8.0.1');
 		expect(compileArgs).toContain('/lib/clang/8.0.1/include');
+		expect(compileArgs).toContain('-triple');
+		expect(compileArgs).toContain('wasm32-wasi');
+		expect(compileArgs).not.toContain('-fmessage-length');
 	});
 
 	it('links compiler-rt through the configured library directory constant', async () => {
@@ -88,6 +91,8 @@ describe('Clang compile/debug flow', () => {
 
 		const linkArgs = vi.mocked(clang.run).mock.calls[0]?.slice(2) ?? [];
 		expect(linkArgs).toContain('-Llib/clang/8.0.1/lib/wasi');
+		expect(linkArgs).toContain('-Llib/wasm32-wasi/noeh');
+		expect(linkArgs).not.toContain('--no-threads');
 	});
 
 	it('instruments debug builds with source line hooks', async () => {

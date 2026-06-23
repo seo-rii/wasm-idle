@@ -1148,42 +1148,63 @@ export default class Clang {
 		await this.ready;
 		this.addWorkspaceFiles(options.workspaceFiles, input);
 		this.memfs.addFile(input, code);
+		this.memfs.addFile(obj, new Uint8Array(0));
 		const clang = await this.getModule(clangUrl(this.path));
 		const clangResourceIncludeDir = `${defaultClangResourceDir}/include`;
+		const includeArgs =
+			language === 'CPP'
+				? [
+						'-internal-isystem',
+						'/include/c++/v1',
+						'-internal-isystem',
+						clangResourceIncludeDir,
+						'-internal-isystem',
+						'/include/wasm32-wasi',
+						'-internal-isystem',
+						'/include'
+					]
+				: [
+						'-internal-isystem',
+						clangResourceIncludeDir,
+						'-internal-isystem',
+						'/include/wasm32-wasi',
+						'-internal-isystem',
+						'/include'
+					];
 		const compilerArgs = [
 			'-cc1',
+			'-triple',
+			'wasm32-wasi',
 			'-emit-obj',
 			'-disable-free',
 			'-isysroot',
 			'/',
-			'-internal-isystem',
-			'/include/c++/v1',
-			'-internal-isystem',
-			'/include',
 			'-resource-dir',
 			defaultClangResourceDir,
-			'-internal-isystem',
-			clangResourceIncludeDir,
+			...includeArgs,
 			'-ferror-limit',
 			'19',
-			'-fmessage-length',
-			'80',
 			'-fcolor-diagnostics',
 			'-O' + opt,
 			'-o',
 			obj,
 			standardArg,
-			'-I',
-			'.',
-			'-I',
-			'/',
 			'-x',
 			languageArg,
 			input,
 			...compileArgs
 		];
 		this.trace(`compile ${input} -> ${obj}`);
-		return await this.run(clang, true, 'clang', ...compilerArgs);
+		try {
+			return await this.run(clang, true, 'clang', ...compilerArgs);
+		} catch (error) {
+			const artifact = Uint8Array.from(this.memfs.getFileContents(obj));
+			if (artifact.length > 0) {
+				this.trace(`recover ${obj} after clang output stream exit`);
+				return null;
+			}
+			throw error;
+		}
 	}
 
 	async link(obj: string, wasm: string, debug = false) {
@@ -1197,11 +1218,11 @@ export default class Clang {
 			lld,
 			this.log,
 			'wasm-ld',
-			'--no-threads',
 			'--export-dynamic', // TODO required?
 			...(debug ? ['--allow-undefined'] : []),
 			'-z',
 			`stack-size=${stackSize}`,
+			`-L${libdir}/noeh`,
 			`-L${libdir}`,
 			crt1,
 			obj,

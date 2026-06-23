@@ -26,10 +26,38 @@ describe('App debug tracing', () => {
 					clock_time_get: expect.any(Function)
 				}),
 				wasi_snapshot_preview1: expect.objectContaining({
-					clock_time_get: expect.any(Function)
+					clock_time_get: expect.any(Function),
+					fd_filestat_set_times: expect.any(Function),
+					path_link: expect.any(Function),
+					path_rename: expect.any(Function)
 				})
 			})
 		);
+	});
+
+	it('accepts newer preview1 filesystem calls used by clang output modules', () => {
+		const memory = new Memory(new WebAssembly.Memory({ initial: 1 }));
+		const trace = vi.fn();
+		const memfs = {
+			addFile: vi.fn(),
+			getFileContents: vi.fn(() => new Uint8Array([1, 2, 3]))
+		};
+		const app = Object.assign(Object.create(App.prototype), {
+			mem: memory,
+			memfs,
+			trace
+		}) as App;
+		memory.write(16, 'source.o');
+		memory.write(32, 'target.o');
+		memory.write(48, 'renamed.o');
+
+		expect(app.fd_filestat_set_times()).toBe(0);
+		expect(app.path_link(3, 0, 16, 'source.o'.length, 3, 32, 'target.o'.length)).toBe(0);
+		expect(app.path_rename(3, 16, 'source.o'.length, 3, 48, 'renamed.o'.length)).toBe(0);
+		expect(trace).toHaveBeenCalledWith('fd_filestat_set_times()');
+		expect(memfs.getFileContents).toHaveBeenCalledWith('source.o');
+		expect(memfs.addFile).toHaveBeenCalledWith('target.o', new Uint8Array([1, 2, 3]));
+		expect(memfs.addFile).toHaveBeenCalledWith('renamed.o', new Uint8Array([1, 2, 3]));
 	});
 
 	it('traces normal proc_exit without treating it as an error', async () => {
