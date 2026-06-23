@@ -3,7 +3,7 @@
 ![wasm-idle](static/image.jpeg)
 
 Executes C, C++, Python, Java, Rust, Go, D, C#, F#, VB.NET, Elixir, Erlang, Prolog,
-Gleam, Perl, Tcl, AWK, Forth, J, BQN, Janet, Julia, Nim, OCaml, TinyGo, JavaScript, TypeScript,
+Gleam, Perl, Tcl, AWK, Pascal, Forth, J, BQN, Janet, Julia, Nim, TinyGo, OCaml, JavaScript, TypeScript,
 AssemblyScript, WAT, WASM, Lua, Zig, Scheme, Ruby, Haskell, R, Octave, SQLite, DuckDB,
 and PHP code.
 
@@ -14,57 +14,59 @@ Refer to src/lib/clang.
 wasm-idle language support must run user code through the real language implementation in the
 browser, normally via a WebAssembly compiler, interpreter, or runtime. Do not add handwritten
 parsers, translators, emulators, or "subset" executors as language support. A language should be
-listed only after normal user code runs on that actual runtime and stdin/stdout behavior is covered
-by tests.
+listed only after normal user code runs on that actual runtime and stdin/stdout behavior, or a
+documented stdin limitation, is covered by tests.
 
 ## Support matrix
 
-All entries run in the browser through real runtime, compiler, or interpreter implementations.
-`Editor support` lists browser LSP/compiler diagnostics when wired; `syntax` means Monaco syntax
-highlighting only. `Debug` means wasm-idle's trace/debug controls, not a native debugger.
+All execution entries run in the browser through real runtime, compiler, or interpreter
+implementations. `Editor support` lists browser LSP/compiler diagnostics when wired; `syntax`
+means Monaco syntax highlighting only. `Debug` means wasm-idle's trace/debug controls, not a
+native debugger.
 
-| Language       | Browser runtime/compiler             | Stdin | Editor support       | Debug |
-| -------------- | ------------------------------------ | ----- | -------------------- | ----- |
-| C              | wasm-clang / Clang WASI              | Yes   | clangd               | -     |
-| C++            | wasm-clang / Clang WASI              | Yes   | clangd               | Trace |
-| Python         | Pyodide                              | Yes   | Python LSP           | Trace |
-| Java           | TeaVM                                | Yes   | syntax               | -     |
-| Rust           | wasm-rust / browser rustc            | Yes   | rustc diagnostics    | Trace |
-| Go             | wasm-go / browser Go compiler        | Yes   | compiler diagnostics | Trace |
-| D              | wasm-d                               | Yes   | syntax               | -     |
-| C#             | wasm-dotnet                          | Yes   | compiler diagnostics | -     |
-| F#             | wasm-dotnet                          | Yes   | compiler diagnostics | -     |
-| VB.NET         | wasm-dotnet                          | Yes   | compiler diagnostics | -     |
-| Elixir         | AtomVM / Popcorn                     | Yes   | syntax               | -     |
-| Erlang         | AtomVM / Popcorn                     | Yes   | syntax               | -     |
-| Prolog         | SWI-Prolog WASM worker               | Yes   | syntax               | -     |
-| Gleam          | Gleam precompiled browser runtime    | Yes   | compiler diagnostics | -     |
-| Perl           | Perl WASM worker                     | Yes   | syntax               | -     |
-| Tcl            | Wacl Tcl WASM worker                 | Yes   | syntax               | -     |
-| AWK            | GoAWK WASM worker                    | Yes   | syntax               | -     |
-| Forth          | WAForth WASM worker                  | Yes   | syntax               | -     |
-| J              | J playground WASM worker             | Yes   | syntax               | -     |
-| BQN            | CBQN WASM worker                     | Yes   | syntax               | -     |
-| Janet          | Janet VM WASM worker                 | Yes   | syntax               | -     |
-| Julia          | Julia 1.0.4 WASM worker              | Yes   | syntax               | -     |
-| Nim            | Nim 2.2.4 WASM + clang/lld WASM      | Yes   | syntax               | -     |
-| OCaml          | wasm-of-js-of-ocaml / js_of_ocaml    | Yes   | syntax               | -     |
-| TinyGo         | wasm-tinygo                          | Yes   | syntax               | -     |
-| JavaScript     | wasm-typescript / TypeScript service | Yes   | TypeScript LSP       | -     |
-| TypeScript     | wasm-typescript / TypeScript service | Yes   | TypeScript LSP       | -     |
-| AssemblyScript | AssemblyScript compiler              | Yes   | AssemblyScript LSP   | -     |
-| WAT            | WABT                                 | Yes   | WAT LSP              | -     |
-| WASM           | Browser WebAssembly + WASI shim      | Yes   | syntax               | -     |
-| Lua            | Wasmoon                              | Yes   | syntax               | -     |
-| Zig            | zig_small.wasm                       | Yes   | syntax               | -     |
-| Scheme         | Puppy Scheme / wasm-lisp             | Yes   | syntax               | -     |
-| Ruby           | CRuby WASI                           | Yes   | syntax               | -     |
-| Haskell        | ghc-in-browser                       | Yes   | syntax               | -     |
-| R              | WebR                                 | Yes   | syntax               | -     |
-| Octave         | wasm-octave                          | Yes   | syntax               | -     |
-| SQLite         | sql.js                               | n/a   | syntax               | -     |
-| DuckDB         | DuckDB-Wasm                          | Files | DuckDB LSP           | -     |
-| PHP            | php-wasm                             | Yes   | syntax               | -     |
+| Language       | Browser runtime/compiler             | Stdin   | Editor support       | Debug |
+| -------------- | ------------------------------------ | ------- | -------------------- | ----- |
+| C              | wasm-clang / Clang WASI              | Blocked | clangd               | -     |
+| C++            | wasm-clang / Clang WASI              | Blocked | clangd               | Trace |
+| Python         | Pyodide                              | Yes     | Python LSP           | Trace |
+| Java           | TeaVM                                | Yes     | syntax               | -     |
+| Rust           | wasm-rust / browser rustc            | Yes     | rustc diagnostics    | Trace |
+| Go             | wasm-go / browser Go compiler        | Yes     | compiler diagnostics | Trace |
+| D              | wasm-d                               | Yes     | syntax               | -     |
+| C#             | wasm-dotnet                          | Yes     | compiler diagnostics | -     |
+| F#             | wasm-dotnet                          | Blocked | compiler diagnostics | -     |
+| VB.NET         | wasm-dotnet                          | Yes     | compiler diagnostics | -     |
+| Elixir         | AtomVM / Popcorn                     | Yes     | syntax               | -     |
+| Erlang         | AtomVM / Popcorn                     | Yes     | syntax               | -     |
+| Prolog         | SWI-Prolog WASM worker               | Yes     | syntax               | -     |
+| Gleam          | Gleam precompiled browser runtime    | Yes     | compiler diagnostics | -     |
+| Perl           | Perl WASM worker                     | Yes     | syntax               | -     |
+| Tcl            | Wacl Tcl WASM worker                 | Yes     | syntax               | -     |
+| AWK            | GoAWK WASM worker                    | Yes     | syntax               | -     |
+| Pascal         | pas2js worker                        | Yes     | syntax               | -     |
+| Forth          | WAForth WASM worker                  | Yes     | syntax               | -     |
+| J              | J playground WASM worker             | Yes     | syntax               | -     |
+| BQN            | CBQN WASM worker                     | Yes     | syntax               | -     |
+| Janet          | Janet VM WASM worker                 | Yes     | syntax               | -     |
+| Julia          | Julia 1.0.4 WASM worker              | Yes     | syntax               | -     |
+| Nim            | Nim 2.2.4 WASM + clang/lld WASM      | Yes     | syntax               | -     |
+| TinyGo         | wasm-tinygo                          | Yes     | syntax               | -     |
+| OCaml          | wasm-of-js-of-ocaml / js_of_ocaml    | Yes     | syntax               | -     |
+| JavaScript     | wasm-typescript / TypeScript service | Yes     | TypeScript LSP       | -     |
+| TypeScript     | wasm-typescript / TypeScript service | Yes     | TypeScript LSP       | -     |
+| AssemblyScript | AssemblyScript compiler              | Yes     | AssemblyScript LSP   | -     |
+| WAT            | WABT                                 | Yes     | WAT LSP              | -     |
+| WASM           | Browser WebAssembly + WASI shim      | Yes     | syntax               | -     |
+| Lua            | Wasmoon                              | Yes     | syntax               | -     |
+| Zig            | zig_small.wasm                       | Yes     | syntax               | -     |
+| Scheme         | Puppy Scheme / wasm-lisp             | No      | syntax               | -     |
+| Ruby           | CRuby WASI                           | Yes     | syntax               | -     |
+| Haskell        | ghc-in-browser                       | Blocked | syntax               | -     |
+| R              | WebR                                 | Yes     | syntax               | -     |
+| Octave         | wasm-octave                          | Yes     | syntax               | -     |
+| DuckDB         | DuckDB-Wasm                          | Files   | DuckDB LSP           | -     |
+| SQLite         | sql.js                               | n/a     | syntax               | -     |
+| PHP            | php-wasm                             | Yes     | syntax               | -     |
 
 ## Monorepo layout
 

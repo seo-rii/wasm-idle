@@ -83,6 +83,8 @@
 		"compress:static-runtimes": "node scripts/compress-static-runtime-assets.mjs static",
 		"compress:build-runtimes": "node scripts/compress-static-runtime-assets.mjs build",
 		"build:page-runtimes": "node scripts/prepare-page-runtimes.mjs",
+		"support:matrix": "node scripts/support-matrix.mjs write",
+		"check:support-matrix": "node scripts/support-matrix.mjs check",
 		"sync:page-runtimes": "pnpm run sync:wasm-of-js-of-ocaml && pnpm run sync:wasm-typescript && pnpm run sync:wasm-octave && pnpm run sync:wasm-prolog && pnpm run sync:wasm-gleam && pnpm run sync:wasm-perl && pnpm run sync:wasm-tcl && pnpm run sync:wasm-awk && pnpm run sync:wasm-pascal && pnpm run sync:wasm-forth && pnpm run sync:wasm-j && pnpm run sync:wasm-bqn && pnpm run sync:wasm-janet && pnpm run sync:wasm-julia && pnpm run sync:wasm-nim",
 		"page:build": "pnpm run build:page-runtimes && pnpm run sync:page-runtimes && pnpm run compress:static-runtimes && pnpm run build && pnpm run compress:build-runtimes",
 		"package:root": "svelte-kit sync && svelte-package && publint",
