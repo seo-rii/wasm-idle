@@ -74,7 +74,7 @@ async function createJanetRuntime(baseUrl, stdin, stdout, stderr) {
 }
 
 self.onmessage = async (event) => {
-	const { baseUrl, code, stdin, activePath, diagnose, log } = event.data || {};
+	const { baseUrl, code, stdin, activePath, log } = event.data || {};
 	const stdout = [];
 	const stderr = [];
 	try {
@@ -82,11 +82,11 @@ self.onmessage = async (event) => {
 		const module = await createJanetRuntime(baseUrl, stdin, stdout, stderr);
 		const sourcePath = `/${activePath || 'main.janet'}`;
 		module.FS.writeFile(sourcePath, String(code || ''));
-		const status = module.callMain(diagnose ? ['-c', sourcePath, '/out.jimage'] : [sourcePath]);
-		if (stderr.length > 0 || (typeof status === 'number' && status !== 0)) {
+		const status = module.callMain([sourcePath]);
+		if (stderr.length > 0 || status !== 0) {
 			throw new Error(stderr.join('\n') || `Janet exited with status ${status}.`);
 		}
-		if (!diagnose) postOutput(stdout);
+		postOutput(stdout);
 		if (log) console.log('[wasm-idle:janet-worker] run settled');
 		self.postMessage({ results: true });
 	} catch (error) {

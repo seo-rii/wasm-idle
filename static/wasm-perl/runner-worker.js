@@ -20,7 +20,7 @@ function postOutput(text) {
 }
 
 self.onmessage = async (event) => {
-	const { baseUrl, code, args = [], stdin, activePath = 'main.pl', diagnose, log } = event.data || {};
+	const { baseUrl, code, args = [], stdin, activePath = 'main.pl', log } = event.data || {};
 	try {
 		if (log) {
 			console.log(`[wasm-idle:perl-worker] run start baseUrl=${baseUrl}`);
@@ -86,9 +86,7 @@ self.onmessage = async (event) => {
 							true,
 							true
 						);
-						const status = globalThis.Module.callMain(
-							diagnose ? ['-c', fileName] : [fileName, ...args]
-						);
+						const status = globalThis.Module.callMain([fileName, ...args]);
 						flushStdout();
 						flushStderr();
 						if (typeof status === 'number' && status !== 0) {

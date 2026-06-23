@@ -1,1 +1,1 @@
-export const WASM_OCTAVE_ASSET_VERSION = "a776c4feb552005a";
+export const WASM_OCTAVE_ASSET_VERSION = "f49d4dc8ecd1a208";
