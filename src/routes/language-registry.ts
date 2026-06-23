@@ -362,6 +362,7 @@ export const diagnosticMarkerLanguages = new Set([
 	'wasm',
 	'lua',
 	'janet',
+	'julia',
 	'zig',
 	'lisp',
 	'haskell',
@@ -386,7 +387,6 @@ export const monacoLanguageContributionLoaders: Record<string, MonacoLanguageCon
 	graphql: () => import('monaco-editor/esm/vs/basic-languages/graphql/graphql.contribution.js'),
 	html: () => import('monaco-editor/esm/vs/basic-languages/html/html.contribution.js'),
 	java: () => import('monaco-editor/esm/vs/basic-languages/java/java.contribution.js'),
-	julia: () => import('monaco-editor/esm/vs/basic-languages/julia/julia.contribution.js'),
 	javascript: () =>
 		import('monaco-editor/esm/vs/basic-languages/typescript/typescript.contribution.js'),
 	json: () => import('monaco-editor/esm/vs/language/json/monaco.contribution.js'),

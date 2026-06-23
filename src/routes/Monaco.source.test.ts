@@ -255,4 +255,18 @@ describe('Monaco route source', () => {
 		expect(source).toContain("lineComment: '#'");
 		expect(source).toContain("'getline'");
 	});
+
+	it('registers a Julia Monaco language with comments and tokenizer support', async () => {
+		const source = await readFile(
+			path.resolve(process.cwd(), 'src/routes/Monaco.svelte'),
+			'utf8'
+		);
+
+		expect(source).toContain("id: 'julia'");
+		expect(source).toContain("extensions: ['.jl']");
+		expect(source).toContain("monacoApi.languages.setLanguageConfiguration('julia'");
+		expect(source).toContain("monacoApi.languages.setMonarchTokensProvider('julia'");
+		expect(source).toContain("tokenPostfix: '.julia'");
+		expect(source).toContain("'readline'");
+	});
 });

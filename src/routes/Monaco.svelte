@@ -867,6 +867,100 @@
 		}
 	} satisfies monaco.languages.IMonarchLanguage;
 
+	const juliaLanguageConfiguration = {
+		comments: {
+			lineComment: '#'
+		},
+		brackets: [
+			['(', ')'],
+			['[', ']'],
+			['{', '}']
+		],
+		autoClosingPairs: [
+			{ open: '(', close: ')' },
+			{ open: '[', close: ']' },
+			{ open: '{', close: '}' },
+			{ open: '"', close: '"' },
+			{ open: '"""', close: '"""' }
+		],
+		surroundingPairs: [
+			{ open: '(', close: ')' },
+			{ open: '[', close: ']' },
+			{ open: '{', close: '}' },
+			{ open: '"', close: '"' }
+		]
+	} satisfies monaco.languages.LanguageConfiguration;
+
+	const juliaMonarchTokens = {
+		defaultToken: '',
+		tokenPostfix: '.julia',
+		keywords: [
+			'abstract',
+			'baremodule',
+			'begin',
+			'break',
+			'catch',
+			'const',
+			'continue',
+			'do',
+			'else',
+			'elseif',
+			'end',
+			'export',
+			'finally',
+			'for',
+			'function',
+			'global',
+			'if',
+			'import',
+			'let',
+			'local',
+			'macro',
+			'module',
+			'mutable',
+			'primitive',
+			'quote',
+			'return',
+			'struct',
+			'try',
+			'type',
+			'using',
+			'while'
+		],
+		builtins: ['eachline', 'parse', 'print', 'println', 'read', 'readline', 'readlines', 'stdin'],
+		tokenizer: {
+			root: [
+				[/#=.*=#/, 'comment'],
+				[/#.*$/, 'comment'],
+				[/"""/, 'string', '@tripleString'],
+				[/"/, 'string', '@string'],
+				[/:(?:[A-Za-z_]\w*)/, 'type.identifier'],
+				[/[-+]?(?:\d+\.\d*|\.\d+|\d+)(?:[eEfF][-+]?\d+)?/, 'number'],
+				[/[()[\]{}]/, '@brackets'],
+				[
+					/[A-Za-z_]\w*!?/,
+					{
+						cases: {
+							'@keywords': 'keyword',
+							'@builtins': 'predefined',
+							'@default': 'identifier'
+						}
+					}
+				]
+			],
+			string: [
+				[/[^\\"]+/, 'string'],
+				[/\\./, 'string.escape'],
+				[/"/, 'string', '@pop']
+			],
+			tripleString: [
+				[/[^"]+/, 'string'],
+				[/"""/, 'string', '@pop'],
+				[/"/, 'string']
+			]
+		}
+	} satisfies monaco.languages.IMonarchLanguage;
+
 	const watLanguageConfiguration = {
 		comments: {
 			lineComment: ';;'
@@ -3404,6 +3498,15 @@
 			}
 			monacoApi.languages.setLanguageConfiguration('janet', janetLanguageConfiguration);
 			monacoApi.languages.setMonarchTokensProvider('janet', janetMonarchTokens);
+			if (!monacoApi.languages.getLanguages().some(({ id }) => id === 'julia')) {
+				monacoApi.languages.register({
+					id: 'julia',
+					aliases: ['Julia', 'julia'],
+					extensions: ['.jl']
+				});
+			}
+			monacoApi.languages.setLanguageConfiguration('julia', juliaLanguageConfiguration);
+			monacoApi.languages.setMonarchTokensProvider('julia', juliaMonarchTokens);
 			if (!monacoApi.languages.getLanguages().some(({ id }) => id === 'octave')) {
 				monacoApi.languages.register({
 					id: 'octave',

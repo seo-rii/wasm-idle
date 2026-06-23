@@ -106,6 +106,7 @@ describe('Monaco route debug sync', () => {
 			'wasm',
 			'lua',
 			'janet',
+			'julia',
 			'lisp',
 			'haskell',
 			'r',
@@ -258,6 +259,10 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(
 			/monacoApi\.languages\.setMonarchTokensProvider\('fortran', fortranMonarchTokens\);/
 		);
+		expect(source).toMatch(/id: 'julia'/);
+		expect(source).toMatch(
+			/monacoApi\.languages\.setMonarchTokensProvider\('julia', juliaMonarchTokens\);/
+		);
 		expect(source).toMatch(/id: 'toml'/);
 		expect(source).toMatch(
 			/monacoApi\.languages\.setMonarchTokensProvider\('toml', tomlMonarchTokens\);/
@@ -352,6 +357,7 @@ describe('Monaco route debug sync', () => {
 		expect(isEditorDefaultSource(editorDefaults.j)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.bqn)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.janet)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.julia)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.lua)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.haskell)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.r)).toBe(true);

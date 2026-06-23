@@ -86,9 +86,10 @@ describe('language registry', () => {
 		expect(diagnosticMarkerLanguages.has('pascal')).toBe(true);
 		expect(diagnosticMarkerLanguages.has('wasm')).toBe(true);
 		expect(diagnosticMarkerLanguages.has('janet')).toBe(true);
+		expect(diagnosticMarkerLanguages.has('julia')).toBe(true);
 		expect(diagnosticMarkerLanguages.has('lisp')).toBe(true);
 		expect(diagnosticMarkerLanguages.has('fortran')).toBe(true);
-		expect(monacoLanguageContributionLoaders.julia).toBeTruthy();
+		expect(monacoLanguageContributionLoaders.julia).toBeUndefined();
 	});
 
 	it('keeps compiler diagnostic support visible for compiled languages', () => {
