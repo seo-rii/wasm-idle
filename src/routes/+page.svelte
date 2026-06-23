@@ -28,6 +28,7 @@
 	import { WASM_J_ASSET_VERSION } from '$lib/playground/wasmJVersion';
 	import { WASM_JANET_ASSET_VERSION } from '$lib/playground/wasmJanetVersion';
 	import { WASM_JULIA_ASSET_VERSION } from '$lib/playground/wasmJuliaVersion';
+	import { WASM_NIM_ASSET_VERSION } from '$lib/playground/wasmNimVersion';
 	import { WASM_LUA_ASSET_VERSION } from '$lib/playground/wasmLuaVersion';
 	import { WASM_LISP_ASSET_VERSION } from '$lib/playground/wasmLispVersion';
 	import { WASM_OCAML_ASSET_VERSION } from '$lib/playground/wasmOcamlVersion';
@@ -235,6 +236,12 @@
 			workerUrl: path
 				? `${path}/wasm-julia/runner-worker.js?v=${WASM_JULIA_ASSET_VERSION}`
 				: `/wasm-julia/runner-worker.js?v=${WASM_JULIA_ASSET_VERSION}`
+		},
+		nim: {
+			baseUrl: path ? `${path}/wasm-nim/` : '/wasm-nim/',
+			workerUrl: path
+				? `${path}/wasm-nim/runner-worker.js?v=${WASM_NIM_ASSET_VERSION}`
+				: `/wasm-nim/runner-worker.js?v=${WASM_NIM_ASSET_VERSION}`
 		},
 		ocaml: {
 			moduleUrl: path
@@ -658,6 +665,8 @@
 			'.bqn': 'BQN',
 			'.janet': 'JANET',
 			'.jl': 'JULIA',
+			'.nim': 'NIM',
+			'.nims': 'NIM',
 			'.ml': 'OCAML',
 			'.mli': 'OCAML',
 			'.js': 'JAVASCRIPT',
@@ -730,6 +739,7 @@
 			BQN: 'main.bqn',
 			JANET: 'main.janet',
 			JULIA: 'main.jl',
+			NIM: 'main.nim',
 			OCAML: 'main.ml',
 			TINYGO: 'main.go',
 			JAVASCRIPT: 'main.js',
@@ -784,6 +794,7 @@
 			BQN: 'bqn',
 			JANET: 'janet',
 			JULIA: 'julia',
+			NIM: 'nim',
 			OCAML: 'ocaml',
 			TINYGO: 'go',
 			JAVASCRIPT: 'javascript',
@@ -1314,6 +1325,8 @@
 			janet: 'JANET',
 			julia: 'JULIA',
 			jl: 'JULIA',
+			nim: 'NIM',
+			nimrod: 'NIM',
 			ocaml: 'OCAML',
 			tinygo: 'TINYGO',
 			javascript: 'JAVASCRIPT',
@@ -1983,6 +1996,7 @@
 						<option value="BQN">BQN</option>
 						<option value="JANET">Janet</option>
 						<option value="JULIA">Julia</option>
+						<option value="NIM">Nim</option>
 						<option value="OCAML">OCaml</option>
 						<option value="TINYGO">TinyGo</option>
 						<option value="JAVASCRIPT">JavaScript</option>
@@ -2234,6 +2248,12 @@
 				Julia runs through the bundled Julia 1.0.4 WebAssembly runtime. Use `readline()` for
 				line input; the worker connects terminal stdin with a Julia `IOBuffer` before running
 				the source.
+			</p>
+		{/if}
+		{#if language === 'NIM'}
+			<p class="hint">
+				Nim runs through the bundled Nim 2.2.4 WebAssembly compiler, then links generated C
+				with clang/lld WebAssembly assets. Use `readLine(stdin)` for line input.
 			</p>
 		{/if}
 		{#if language === 'TINYGO'}

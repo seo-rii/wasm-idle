@@ -190,6 +190,13 @@ vi.mock('$lib/playground/julia', () => {
 	};
 });
 
+vi.mock('$lib/playground/nim', () => {
+	moduleLoads.add('NIM');
+	return {
+		default: createMockSandboxClass('NIM')
+	};
+});
+
 vi.mock('$lib/playground/sqlite', () => {
 	moduleLoads.add('SQLITE');
 	return {
@@ -331,7 +338,7 @@ describe('playground runtime binding', () => {
 
 	it('lists static worker languages in the exported supported language registry', () => {
 		expect(supportedLanguages).toEqual(
-			expect.arrayContaining(['FORTH', 'J', 'BQN', 'JANET', 'JULIA', 'DUCKDB', 'WASM'])
+			expect.arrayContaining(['FORTH', 'J', 'BQN', 'JANET', 'JULIA', 'NIM', 'DUCKDB', 'WASM'])
 		);
 	});
 
@@ -712,7 +719,7 @@ End Module`;
 		expect(sandboxInstances.get('PROLOG')).toHaveLength(1);
 	});
 
-	it('routes Gleam, Perl, Tcl, AWK, Pascal, Forth, J, BQN, Janet, and Julia requests through their static worker wasm implementations', async () => {
+	it('routes Gleam, Perl, Tcl, AWK, Pascal, Forth, J, BQN, Janet, Julia, and Nim requests through their static worker wasm implementations', async () => {
 		const runtimeAssets = {
 			rootUrl: '/absproxy/5173',
 			gleam: {
@@ -755,6 +762,10 @@ End Module`;
 			julia: {
 				baseUrl: '/absproxy/5173/wasm-julia/',
 				workerUrl: '/absproxy/5173/wasm-julia/runner-worker.js?v=test'
+			},
+			nim: {
+				baseUrl: '/absproxy/5173/wasm-nim/',
+				workerUrl: '/absproxy/5173/wasm-nim/runner-worker.js?v=test'
 			}
 		};
 		const binding = createPlaygroundBinding(runtimeAssets);
@@ -769,6 +780,7 @@ End Module`;
 		const bqn = await binding.load('BQN');
 		const janet = await binding.load('JANET');
 		const julia = await binding.load('JL');
+		const nim = await binding.load('NIMROD');
 
 		await gleam.load('pub fn main() { Nil }', true, [], {}, progress);
 		await perl.load('print "hello\\n";', true, [], {}, progress);
@@ -780,6 +792,7 @@ End Module`;
 		await bqn.load('1+1', true, [], {}, progress);
 		await janet.load('(print "hello")', true, [], {}, progress);
 		await julia.load('println("hello")', true, [], {}, progress);
+		await nim.load('echo "hello"', true, [], {}, progress);
 
 		expect(gleam.runtimeAssets).toEqual(runtimeAssets);
 		expect(perl.runtimeAssets).toEqual(runtimeAssets);
@@ -791,6 +804,7 @@ End Module`;
 		expect(bqn.runtimeAssets).toEqual(runtimeAssets);
 		expect(janet.runtimeAssets).toEqual(runtimeAssets);
 		expect(julia.runtimeAssets).toEqual(runtimeAssets);
+		expect(nim.runtimeAssets).toEqual(runtimeAssets);
 		expect(sandboxInstances.get('GLEAM')).toHaveLength(1);
 		expect(sandboxInstances.get('PERL')).toHaveLength(1);
 		expect(sandboxInstances.get('TCL')).toHaveLength(1);
@@ -801,6 +815,7 @@ End Module`;
 		expect(sandboxInstances.get('BQN')).toHaveLength(1);
 		expect(sandboxInstances.get('JANET')).toHaveLength(1);
 		expect(sandboxInstances.get('JULIA')).toHaveLength(1);
+		expect(sandboxInstances.get('NIM')).toHaveLength(1);
 		expect(sandboxInstances.get('GLEAM')?.[0]?.loadCalls).toEqual([
 			[runtimeAssets, 'pub fn main() { Nil }', true, [], {}, progress]
 		]);
@@ -830,6 +845,9 @@ End Module`;
 		]);
 		expect(sandboxInstances.get('JULIA')?.[0]?.loadCalls).toEqual([
 			[runtimeAssets, 'println("hello")', true, [], {}, progress]
+		]);
+		expect(sandboxInstances.get('NIM')?.[0]?.loadCalls).toEqual([
+			[runtimeAssets, 'echo "hello"', true, [], {}, progress]
 		]);
 	});
 

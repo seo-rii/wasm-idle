@@ -3,7 +3,7 @@
 ![wasm-idle](static/image.jpeg)
 
 Executes C, C++, Python, Java, Rust, Go, D, C#, F#, VB.NET, Elixir, Erlang, Prolog,
-Gleam, Perl, Tcl, AWK, Forth, J, BQN, Janet, Julia, OCaml, TinyGo, JavaScript, TypeScript,
+Gleam, Perl, Tcl, AWK, Forth, J, BQN, Janet, Julia, Nim, OCaml, TinyGo, JavaScript, TypeScript,
 AssemblyScript, WAT, WASM, Lua, Zig, Scheme, Ruby, Haskell, R, Octave, SQLite, DuckDB,
 and PHP code.
 
@@ -47,6 +47,7 @@ highlighting only. `Debug` means wasm-idle's trace/debug controls, not a native 
 | BQN            | CBQN WASM worker                     | Yes   | syntax               | -     |
 | Janet          | Janet VM WASM worker                 | Yes   | syntax               | -     |
 | Julia          | Julia 1.0.4 WASM worker              | Yes   | syntax               | -     |
+| Nim            | Nim 2.2.4 WASM + clang/lld WASM      | Yes   | syntax               | -     |
 | OCaml          | wasm-of-js-of-ocaml / js_of_ocaml    | Yes   | syntax               | -     |
 | TinyGo         | wasm-tinygo                          | Yes   | syntax               | -     |
 | JavaScript     | wasm-typescript / TypeScript service | Yes   | TypeScript LSP       | -     |
@@ -82,7 +83,7 @@ source and artifacts inside this checkout:
   `wasm-wat`, `wasm-lua`, `wasm-lisp`, `wasm-elixir`, `wasm-tcl`, `wasm-awk`,
   `wasm-forth`, `wasm-j`, `wasm-bqn`, `wasm-janet`,
   `pyodide`, `teavm`, `assemblyscript`, `ruby`, `r`, `php`, and `js-sandbox`.
-- `static/wasm-zig`, `static/wasm-haskell`, and `static/wasm-julia`: bundled browser runtime and
+- `static/wasm-zig`, `static/wasm-haskell`, `static/wasm-julia`, and `static/wasm-nim`: bundled browser runtime and
   compiler assets synced from
   upstream asset builds rather than local workspace packages.
 - `tools/*`: migrated local toolchain projects that are too broad or infrastructure-heavy to run as
@@ -144,6 +145,15 @@ Julia browser execution uses the `@chriskoch/julia-wasm` Julia 1.0.4 asset bundl
 ```bash
 cd wasm-idle
 pnpm run sync:wasm-julia
+```
+
+Nim browser execution uses the `benagastov/Nim-WASM-Compiler` asset pipeline under
+`static/wasm-nim/`: Nim 2.2.4 compiled to WebAssembly emits C, then bundled clang/lld WebAssembly
+assets link a runnable WASI module. Refresh the vendored worker/runtime assets with:
+
+```bash
+cd wasm-idle
+pnpm run sync:wasm-nim
 ```
 
 ## Rust browser integration
@@ -359,6 +369,10 @@ const runtimeAssets: PlaygroundRuntimeAssets = {
 	julia: {
 		baseUrl: 'https://cdn.example.com/wasm-julia/',
 		workerUrl: 'https://cdn.example.com/wasm-julia/runner-worker.js'
+	},
+	nim: {
+		baseUrl: 'https://cdn.example.com/wasm-nim/',
+		workerUrl: 'https://cdn.example.com/wasm-nim/runner-worker.js'
 	}
 };
 ```

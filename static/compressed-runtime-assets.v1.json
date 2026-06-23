@@ -8,6 +8,7 @@
     "wasm-awk/goawk.wasm",
     "wasm-bqn/BQN.wasm",
     "wasm-d/runtime/bin/ldc2.wasm",
+    "wasm-d/runtime/toolchain/toolchain.tar",
     "wasm-dotnet/runtime/FSharp.Compiler.Service.wasm",
     "wasm-dotnet/runtime/FSharp.Core.wasm",
     "wasm-dotnet/runtime/Microsoft.CodeAnalysis.CSharp.wasm",
@@ -28,6 +29,11 @@
     "wasm-julia/julia.wasm",
     "wasm-lisp/vendor/jco/obj/js-component-bindgen-component.core.wasm",
     "wasm-lisp/vendor/jco/obj/wasm-tools.core.wasm",
+    "wasm-nim/clang/clang.wasm",
+    "wasm-nim/clang/lld.wasm",
+    "wasm-nim/clang/sysroot.tar",
+    "wasm-nim/nim/nim-bundle.js",
+    "wasm-nim/nim/nim.wasm",
     "wasm-octave/runtime/bin/octave-cli.wasm",
     "wasm-octave/runtime/lib/octave/10.3.0/liboctave.so",
     "wasm-octave/runtime/lib/octave/10.3.0/liboctinterp.so",
@@ -262,6 +268,11 @@
     "wasm-bqn/BQN.wasm": 1175370,
     "wasm-fortran/lfortran.wasm": 15249121,
     "wasm-julia/julia.data": 42960896,
-    "wasm-julia/julia.wasm": 2573366
+    "wasm-julia/julia.wasm": 2573366,
+    "wasm-nim/clang/clang.wasm": 31214472,
+    "wasm-nim/clang/lld.wasm": 19490094,
+    "wasm-nim/nim/nim-bundle.js": 6566418,
+    "wasm-nim/nim/nim.wasm": 4812366,
+    "wasm-nim/clang/sysroot.tar": 9297920
   }
 }

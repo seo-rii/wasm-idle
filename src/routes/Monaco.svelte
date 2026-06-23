@@ -961,6 +961,129 @@
 		}
 	} satisfies monaco.languages.IMonarchLanguage;
 
+	const nimLanguageConfiguration = {
+		comments: {
+			lineComment: '#'
+		},
+		brackets: [
+			['(', ')'],
+			['[', ']'],
+			['{', '}']
+		],
+		autoClosingPairs: [
+			{ open: '(', close: ')' },
+			{ open: '[', close: ']' },
+			{ open: '{', close: '}' },
+			{ open: '"', close: '"' },
+			{ open: '"""', close: '"""' }
+		],
+		surroundingPairs: [
+			{ open: '(', close: ')' },
+			{ open: '[', close: ']' },
+			{ open: '{', close: '}' },
+			{ open: '"', close: '"' }
+		]
+	} satisfies monaco.languages.LanguageConfiguration;
+
+	const nimMonarchTokens = {
+		defaultToken: '',
+		tokenPostfix: '.nim',
+		keywords: [
+			'addr',
+			'and',
+			'as',
+			'asm',
+			'bind',
+			'block',
+			'break',
+			'case',
+			'cast',
+			'concept',
+			'const',
+			'continue',
+			'converter',
+			'defer',
+			'discard',
+			'distinct',
+			'do',
+			'elif',
+			'else',
+			'end',
+			'enum',
+			'except',
+			'export',
+			'finally',
+			'for',
+			'from',
+			'func',
+			'if',
+			'import',
+			'in',
+			'include',
+			'interface',
+			'is',
+			'isnot',
+			'iterator',
+			'let',
+			'macro',
+			'method',
+			'mixin',
+			'not',
+			'notin',
+			'object',
+			'of',
+			'or',
+			'out',
+			'proc',
+			'ptr',
+			'raise',
+			'ref',
+			'return',
+			'static',
+			'template',
+			'try',
+			'tuple',
+			'type',
+			'using',
+			'var',
+			'when',
+			'while',
+			'xor',
+			'yield'
+		],
+		builtins: ['echo', 'parseInt', 'readAll', 'readLine', 'stdin', 'stdout', 'stderr'],
+		tokenizer: {
+			root: [
+				[/#.*$/, 'comment'],
+				[/"""/, 'string', '@tripleString'],
+				[/"/, 'string', '@string'],
+				[/\b(?:true|false|nil)\b/, 'constant'],
+				[/[-+]?(?:\d+\.\d*|\.\d+|\d+)(?:[eE][-+]?\d+)?/, 'number'],
+				[/[()[\]{}]/, '@brackets'],
+				[
+					/[A-Za-z_]\w*\*?/,
+					{
+						cases: {
+							'@keywords': 'keyword',
+							'@builtins': 'predefined',
+							'@default': 'identifier'
+						}
+					}
+				]
+			],
+			string: [
+				[/[^\\"]+/, 'string'],
+				[/\\./, 'string.escape'],
+				[/"/, 'string', '@pop']
+			],
+			tripleString: [
+				[/[^"]+/, 'string'],
+				[/"""/, 'string', '@pop'],
+				[/"/, 'string']
+			]
+		}
+	} satisfies monaco.languages.IMonarchLanguage;
+
 	const watLanguageConfiguration = {
 		comments: {
 			lineComment: ';;'
@@ -3507,6 +3630,15 @@
 			}
 			monacoApi.languages.setLanguageConfiguration('julia', juliaLanguageConfiguration);
 			monacoApi.languages.setMonarchTokensProvider('julia', juliaMonarchTokens);
+			if (!monacoApi.languages.getLanguages().some(({ id }) => id === 'nim')) {
+				monacoApi.languages.register({
+					id: 'nim',
+					aliases: ['Nim', 'nim', 'nimrod'],
+					extensions: ['.nim', '.nims']
+				});
+			}
+			monacoApi.languages.setLanguageConfiguration('nim', nimLanguageConfiguration);
+			monacoApi.languages.setMonarchTokensProvider('nim', nimMonarchTokens);
 			if (!monacoApi.languages.getLanguages().some(({ id }) => id === 'octave')) {
 				monacoApi.languages.register({
 					id: 'octave',

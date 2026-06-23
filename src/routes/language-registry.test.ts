@@ -74,6 +74,7 @@ describe('language registry', () => {
 		expect(dotnetMonacoLspLanguages.vb).toBe('vbnet');
 		expect(defaultLanguageAliases.vb).toBe('vbnet');
 		expect(defaultLanguageAliases.sql).toBe('sqlite');
+		expect(defaultLanguageAliases.nimrod).toBe('nim');
 		expect(diagnosticMarkerLanguages.has('cpp')).toBe(true);
 		expect(diagnosticMarkerLanguages.has('python')).toBe(true);
 		expect(diagnosticMarkerLanguages.has('elixir')).toBe(true);
@@ -87,9 +88,11 @@ describe('language registry', () => {
 		expect(diagnosticMarkerLanguages.has('wasm')).toBe(true);
 		expect(diagnosticMarkerLanguages.has('janet')).toBe(true);
 		expect(diagnosticMarkerLanguages.has('julia')).toBe(true);
+		expect(diagnosticMarkerLanguages.has('nim')).toBe(true);
 		expect(diagnosticMarkerLanguages.has('lisp')).toBe(true);
 		expect(diagnosticMarkerLanguages.has('fortran')).toBe(true);
 		expect(monacoLanguageContributionLoaders.julia).toBeUndefined();
+		expect(monacoLanguageContributionLoaders.nim).toBeUndefined();
 	});
 
 	it('keeps compiler diagnostic support visible for compiled languages', () => {

@@ -23,6 +23,7 @@ export type EditorDefaultLanguage =
 	| 'bqn'
 	| 'janet'
 	| 'julia'
+	| 'nim'
 	| 'ocaml'
 	| 'javascript'
 	| 'typescript'
@@ -72,6 +73,7 @@ export const editorDefaults: Record<
 	| 'bqn'
 	| 'janet'
 	| 'julia'
+	| 'nim'
 	| 'ocaml'
 	| 'javascript'
 	| 'typescript'
@@ -453,6 +455,21 @@ if n === nothing
 end
 
 println("factorial_plus_bonus=", factorial(n) + bonus)`,
+	nim: `import strutils
+
+const bonus = 3
+
+proc factorial(n: int): int =
+  if n <= 1: 1 else: n * factorial(n - 1)
+
+let line = stdin.readLine()
+let n =
+  try:
+    parseInt(line.strip())
+  except ValueError:
+    4
+
+echo "factorial_plus_bonus=", factorial(n) + bonus`,
 	ocaml: `let bonus = 3
 
 let rec factorial n =
@@ -840,6 +857,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.bqn ||
 		source === editorDefaults.janet ||
 		source === editorDefaults.julia ||
+		source === editorDefaults.nim ||
 		source === editorDefaults.ocaml ||
 		source === editorDefaults.javascript ||
 		source === editorDefaults.typescript ||

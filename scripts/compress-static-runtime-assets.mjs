@@ -24,6 +24,7 @@ const COMPRESSIBLE_EXTENSIONS = new Set([
 	'.pdb',
 	'.so',
 	'.symbols',
+	'.tar',
 	'.wasm'
 ]);
 const PRECOMPRESSED_EXTENSIONS = new Set(['.br', '.brotli', '.gz', '.tgz', '.zip', '.zst']);

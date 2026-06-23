@@ -22,6 +22,7 @@ export type PlaygroundLanguage =
 	| 'BQN'
 	| 'JANET'
 	| 'JULIA'
+	| 'NIM'
 	| 'OCAML'
 	| 'TINYGO'
 	| 'JAVASCRIPT'
@@ -101,6 +102,7 @@ export const playgroundLanguages: PlaygroundLanguage[] = [
 	'BQN',
 	'JANET',
 	'JULIA',
+	'NIM',
 	'OCAML',
 	'TINYGO',
 	'JAVASCRIPT',
@@ -152,6 +154,7 @@ export const languageLabels: Record<PlaygroundLanguage, string> = {
 	BQN: 'BQN',
 	JANET: 'Janet',
 	JULIA: 'Julia',
+	NIM: 'Nim',
 	OCAML: 'OCaml',
 	TINYGO: 'TinyGo',
 	JAVASCRIPT: 'JavaScript',
@@ -203,6 +206,7 @@ export const editorLanguages: Record<PlaygroundLanguage, string> = {
 	BQN: 'bqn',
 	JANET: 'janet',
 	JULIA: 'julia',
+	NIM: 'nim',
 	OCAML: 'ocaml',
 	TINYGO: 'go',
 	JAVASCRIPT: 'javascript',
@@ -333,6 +337,7 @@ export const dotnetMonacoLspLanguages: Record<string, DotnetLspLanguage> = {
 	vb: 'vbnet'
 };
 export const defaultLanguageAliases: Record<string, string> = {
+	nimrod: 'nim',
 	vb: 'vbnet',
 	sql: 'sqlite'
 };
@@ -363,6 +368,7 @@ export const diagnosticMarkerLanguages = new Set([
 	'lua',
 	'janet',
 	'julia',
+	'nim',
 	'zig',
 	'lisp',
 	'haskell',

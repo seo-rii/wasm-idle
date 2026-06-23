@@ -25,7 +25,9 @@ const { publicEnv } = vi.hoisted(() => ({
 		PUBLIC_WASM_JANET_BASE_URL: '',
 		PUBLIC_WASM_JANET_WORKER_URL: '',
 		PUBLIC_WASM_JULIA_BASE_URL: '',
-		PUBLIC_WASM_JULIA_WORKER_URL: ''
+		PUBLIC_WASM_JULIA_WORKER_URL: '',
+		PUBLIC_WASM_NIM_BASE_URL: '',
+		PUBLIC_WASM_NIM_WORKER_URL: ''
 	}
 }));
 let onPostMessage: ((worker: MockWorker, message: any) => void) | null = null;
@@ -68,6 +70,7 @@ import Forth from './forth';
 import J from './j';
 import Janet from './janet';
 import Julia from './julia';
+import Nim from './nim';
 import Perl from './perl';
 import Pascal from './pascal';
 import Prolog from './prolog';
@@ -388,6 +391,33 @@ describe('static worker backed language sandboxes', () => {
 				baseUrl: 'http://localhost:3000/wasm-julia/',
 				stdin: 'ok\n',
 				activePath: 'main.jl'
+			})
+		);
+	});
+
+	it('loads Nim runtime urls and forwards stdin to the Nim wasm compiler worker', async () => {
+		const sandbox = new Nim();
+		await sandbox.load({
+			nim: {
+				baseUrl: '/wasm-nim/',
+				workerUrl: '/wasm-nim/runner-worker.js?v=test'
+			}
+		});
+		await expect(
+			sandbox.run('echo stdin.readLine()', false, true, undefined, ['demo'], {
+				stdin: 'ok\n'
+			})
+		).resolves.toBe(true);
+
+		expect(workerInstances[0].url).toBe(
+			'http://localhost:3000/wasm-nim/runner-worker.js?v=test'
+		);
+		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				baseUrl: 'http://localhost:3000/wasm-nim/',
+				args: ['demo'],
+				stdin: 'ok\n',
+				activePath: 'main.nim'
 			})
 		);
 	});

@@ -93,6 +93,18 @@ end
 println("main=", n + 5)
 `;
 
+const nimStdinSource = `import strutils
+
+let line = stdin.readLine()
+let n =
+  try:
+    parseInt(line.strip())
+  except ValueError:
+    0
+
+echo "main=", n + 5
+`;
+
 async function withPreviewServer(
 	syncScripts: string[],
 	timeoutMs: number,
@@ -384,6 +396,30 @@ describe('wasm-idle static worker language browser integrations', () => {
 					language: 'JULIA',
 					runTimeoutMs: Number(process.env.WASM_IDLE_JULIA_RUN_TIMEOUT_MS || '240000'),
 					source: juliaStdinSource,
+					stdinText: '68\n'
+				});
+				expect(summary.activeState.crossOriginIsolated).toBe(true);
+				expect(summary.activeState.sharedArrayBuffer).toBe(true);
+				expect(summary.activeState.serviceWorkerControlled).toBe(true);
+				expect(summary.pageErrors).toEqual([]);
+				expect(summary.transcript).toContain('main=73');
+				expect(summary.transcript).toContain('Process finished after');
+			}
+		);
+	}, 960_000);
+
+	it('runs real Nim wasm compiler output and connects stdin on the page path', async () => {
+		if (process.env.WASM_IDLE_RUN_REAL_BROWSER_NIM !== '1') return;
+		await withPreviewServer(
+			['sync:wasm-nim'],
+			Number(process.env.WASM_IDLE_NIM_PREP_TIMEOUT_MS || '900000'),
+			async (browserUrl) => {
+				const summary = await runStdinBrowserProbe({
+					browserUrl,
+					expectedOutput: 'main=73',
+					language: 'NIM',
+					runTimeoutMs: Number(process.env.WASM_IDLE_NIM_RUN_TIMEOUT_MS || '420000'),
+					source: nimStdinSource,
 					stdinText: '68\n'
 				});
 				expect(summary.activeState.crossOriginIsolated).toBe(true);

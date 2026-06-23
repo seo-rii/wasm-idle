@@ -107,6 +107,7 @@ describe('Monaco route debug sync', () => {
 			'lua',
 			'janet',
 			'julia',
+			'nim',
 			'lisp',
 			'haskell',
 			'r',
@@ -263,6 +264,10 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(
 			/monacoApi\.languages\.setMonarchTokensProvider\('julia', juliaMonarchTokens\);/
 		);
+		expect(source).toMatch(/id: 'nim'/);
+		expect(source).toMatch(
+			/monacoApi\.languages\.setMonarchTokensProvider\('nim', nimMonarchTokens\);/
+		);
 		expect(source).toMatch(/id: 'toml'/);
 		expect(source).toMatch(
 			/monacoApi\.languages\.setMonarchTokensProvider\('toml', tomlMonarchTokens\);/
@@ -296,6 +301,7 @@ describe('Monaco route debug sync', () => {
 		expect(resolveEditorDefaultSource('bqn', 'wasm32-wasip1')).toBe(editorDefaults.bqn);
 		expect(resolveEditorDefaultSource('janet', 'wasm32-wasip1')).toBe(editorDefaults.janet);
 		expect(resolveEditorDefaultSource('julia', 'wasm32-wasip1')).toBe(editorDefaults.julia);
+		expect(resolveEditorDefaultSource('nim', 'wasm32-wasip1')).toBe(editorDefaults.nim);
 		expect(resolveEditorDefaultSource('lua', 'wasm32-wasip1')).toBe(editorDefaults.lua);
 		expect(resolveEditorDefaultSource('wat', 'wasm32-wasip1')).toBe(editorDefaults.wat);
 		expect(resolveEditorDefaultSource('wasm', 'wasm32-wasip1')).toBe(editorDefaults.wasm);
@@ -335,6 +341,7 @@ describe('Monaco route debug sync', () => {
 		expect(editorDefaults.bqn).toContain('•GetLine @');
 		expect(editorDefaults.janet).toContain('(getline)');
 		expect(editorDefaults.julia).toContain('readline()');
+		expect(editorDefaults.nim).toContain('stdin.readLine()');
 		expect(editorDefaults.lua).toContain('io.read("*l")');
 		expect(editorDefaults.haskell).toContain('putStrLn');
 		expect(editorDefaults.r).toContain('readLines(stdin(), n = 1');
@@ -358,6 +365,7 @@ describe('Monaco route debug sync', () => {
 		expect(isEditorDefaultSource(editorDefaults.bqn)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.janet)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.julia)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.nim)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.lua)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.haskell)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.r)).toBe(true);
@@ -411,6 +419,7 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).toMatch(/<option value="PERL">Perl<\/option>/);
 		expect(pageSource).toMatch(/<option value="JANET">Janet<\/option>/);
 		expect(pageSource).toMatch(/<option value="JULIA">Julia<\/option>/);
+		expect(pageSource).toMatch(/<option value="NIM">Nim<\/option>/);
 		expect(pageSource).toMatch(/<option value="OCAML">OCaml<\/option>/);
 		expect(pageSource).toMatch(/<option value="TINYGO">TinyGo<\/option>/);
 		expect(pageSource).toMatch(/<option value="JAVASCRIPT">JavaScript<\/option>/);

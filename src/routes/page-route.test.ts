@@ -113,6 +113,9 @@ describe('example route debug actions', () => {
 			/import \{ WASM_JULIA_ASSET_VERSION \} from '\$lib\/playground\/wasmJuliaVersion';/
 		);
 		expect(source).toMatch(
+			/import \{ WASM_NIM_ASSET_VERSION \} from '\$lib\/playground\/wasmNimVersion';/
+		);
+		expect(source).toMatch(
 			/import \{ WASM_D_ASSET_VERSION \} from '\$lib\/playground\/wasmDVersion';/
 		);
 		expect(source).toMatch(
@@ -200,6 +203,9 @@ describe('example route debug actions', () => {
 		);
 		expect(source).toMatch(
 			/julia: \{\s+baseUrl: path\s+\?\s+`\$\{path\}\/wasm-julia\/`\s+:\s+'\/wasm-julia\/',\s+workerUrl: path\s+\?\s+`\$\{path\}\/wasm-julia\/runner-worker\.js\?v=\$\{WASM_JULIA_ASSET_VERSION\}`\s+:\s+`\/wasm-julia\/runner-worker\.js\?v=\$\{WASM_JULIA_ASSET_VERSION\}`\s+\}/s
+		);
+		expect(source).toMatch(
+			/nim: \{\s+baseUrl: path\s+\?\s+`\$\{path\}\/wasm-nim\/`\s+:\s+'\/wasm-nim\/',\s+workerUrl: path\s+\?\s+`\$\{path\}\/wasm-nim\/runner-worker\.js\?v=\$\{WASM_NIM_ASSET_VERSION\}`\s+:\s+`\/wasm-nim\/runner-worker\.js\?v=\$\{WASM_NIM_ASSET_VERSION\}`\s+\}/s
 		);
 		expect(source).toMatch(
 			/ocaml: \{\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-of-js-of-ocaml\/browser-native\/src\/index\.js\?v=\$\{WASM_OCAML_ASSET_VERSION\}`\s+:\s+`\/wasm-of-js-of-ocaml\/browser-native\/src\/index\.js\?v=\$\{WASM_OCAML_ASSET_VERSION\}`,\s+manifestUrl: path\s+\?\s+`\$\{path\}\/wasm-of-js-of-ocaml\/browser-native-bundle\/browser-native-manifest\.v1\.json\?v=\$\{WASM_OCAML_ASSET_VERSION\}`\s+:\s+`\/wasm-of-js-of-ocaml\/browser-native-bundle\/browser-native-manifest\.v1\.json\?v=\$\{WASM_OCAML_ASSET_VERSION\}`\s+\}/s
@@ -683,6 +689,21 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/JULIA: 'julia'/);
 		expect(source).toMatch(/Julia runs through the bundled Julia 1\.0\.4 WebAssembly runtime/);
 		expect(source).toMatch(/Use `readline\(\)`/);
+	});
+
+	it('surfaces Nim through the Nim wasm compiler worker runtime contract', () => {
+		expect(source).toMatch(/nim: \{/);
+		expect(source).toMatch(/WASM_NIM_ASSET_VERSION/);
+		expect(source).toMatch(/wasm-nim\/runner-worker\.js\?v=\$\{WASM_NIM_ASSET_VERSION\}/);
+		expect(source).toMatch(/<option value="NIM">Nim<\/option>/);
+		expect(source).toMatch(/nim: 'NIM'/);
+		expect(source).toMatch(/nimrod: 'NIM'/);
+		expectEditorLanguage('NIM', 'nim');
+		expect(source).toMatch(/'.nim': 'NIM'/);
+		expect(source).toMatch(/NIM: 'main\.nim'/);
+		expect(source).toMatch(/NIM: 'nim'/);
+		expect(source).toMatch(/Nim runs through the bundled Nim 2\.2\.4 WebAssembly compiler/);
+		expect(source).toMatch(/Use `readLine\(stdin\)`/);
 	});
 
 	it('surfaces Zig through bundled wasm compiler assets and the browser runtime hint', () => {
