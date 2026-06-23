@@ -22,6 +22,7 @@ export type EditorDefaultLanguage =
 	| 'j'
 	| 'bqn'
 	| 'janet'
+	| 'julia'
 	| 'ocaml'
 	| 'javascript'
 	| 'typescript'
@@ -70,6 +71,7 @@ export const editorDefaults: Record<
 	| 'j'
 	| 'bqn'
 	| 'janet'
+	| 'julia'
 	| 'ocaml'
 	| 'javascript'
 	| 'typescript'
@@ -438,6 +440,19 @@ bonus + Factorial n`,
 
 (def n (scan-number (string/trim (getline))))
 (print "factorial_plus_bonus=" (+ bonus (factorial n)))`,
+	julia: `const bonus = 3
+
+function factorial(n)
+    n <= 1 ? 1 : n * factorial(n - 1)
+end
+
+line = readline()
+n = tryparse(Int, strip(line))
+if n === nothing
+    n = 4
+end
+
+println("factorial_plus_bonus=", factorial(n) + bonus)`,
 	ocaml: `let bonus = 3
 
 let rec factorial n =
@@ -824,6 +839,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.j ||
 		source === editorDefaults.bqn ||
 		source === editorDefaults.janet ||
+		source === editorDefaults.julia ||
 		source === editorDefaults.ocaml ||
 		source === editorDefaults.javascript ||
 		source === editorDefaults.typescript ||

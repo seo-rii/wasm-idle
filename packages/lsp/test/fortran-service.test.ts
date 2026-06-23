@@ -57,33 +57,18 @@ describe('createFortranWorkerService', () => {
 		expect(context.reportProgress).toHaveBeenCalledWith('load-fortran-analyzer');
 	});
 
-	it('passes Tree-sitter analyzer asset options when no external analyzer is configured', async () => {
-		const loadAnalyzer = vi.fn(async () => ({
-			analyze: vi.fn(() => [])
-		}));
-		const service = createFortranWorkerService(loadAnalyzer);
-		const document: LspDocument = {
-			uri: 'file:///workspace/main.f90',
-			languageId: 'fortran',
-			version: 1,
-			text: 'program main\nend program main\n'
-		};
+	it('requires an external analyzer instead of falling back to a bundled parser', async () => {
+		const service = createFortranWorkerService();
 		const context: LspDocumentContext = {
-			documents: new Map([[document.uri, document]]),
+			documents: new Map(),
 			publishDiagnostics: vi.fn(),
 			reportProgress: vi.fn()
 		};
 
-		await service.initialize?.(
-			{ parserWasmUrl: '/tree-sitter.wasm', grammarUrl: '/tree-sitter-fortran.wasm' },
-			context
+		await expect(service.initialize?.({}, context)).rejects.toThrow(
+			'Fortran language server requires analyzerUrl'
 		);
-		await service.diagnostics?.(document, context);
 
-		expect(loadAnalyzer).toHaveBeenCalledWith({
-			parserWasmUrl: '/tree-sitter.wasm',
-			grammarUrl: '/tree-sitter-fortran.wasm'
-		});
-		expect(context.reportProgress).toHaveBeenCalledWith('load-fortran-language-service');
+		expect(context.reportProgress).toHaveBeenCalledWith('load-fortran-analyzer');
 	});
 });

@@ -110,6 +110,9 @@ describe('example route debug actions', () => {
 			/import \{ WASM_JANET_ASSET_VERSION \} from '\$lib\/playground\/wasmJanetVersion';/
 		);
 		expect(source).toMatch(
+			/import \{ WASM_JULIA_ASSET_VERSION \} from '\$lib\/playground\/wasmJuliaVersion';/
+		);
+		expect(source).toMatch(
 			/import \{ WASM_D_ASSET_VERSION \} from '\$lib\/playground\/wasmDVersion';/
 		);
 		expect(source).toMatch(
@@ -194,6 +197,9 @@ describe('example route debug actions', () => {
 		);
 		expect(source).toMatch(
 			/janet: \{\s+baseUrl: path\s+\?\s+`\$\{path\}\/wasm-janet\/`\s+:\s+'\/wasm-janet\/',\s+workerUrl: path\s+\?\s+`\$\{path\}\/wasm-janet\/runner-worker\.js\?v=\$\{WASM_JANET_ASSET_VERSION\}`\s+:\s+`\/wasm-janet\/runner-worker\.js\?v=\$\{WASM_JANET_ASSET_VERSION\}`\s+\}/s
+		);
+		expect(source).toMatch(
+			/julia: \{\s+baseUrl: path\s+\?\s+`\$\{path\}\/wasm-julia\/`\s+:\s+'\/wasm-julia\/',\s+workerUrl: path\s+\?\s+`\$\{path\}\/wasm-julia\/runner-worker\.js\?v=\$\{WASM_JULIA_ASSET_VERSION\}`\s+:\s+`\/wasm-julia\/runner-worker\.js\?v=\$\{WASM_JULIA_ASSET_VERSION\}`\s+\}/s
 		);
 		expect(source).toMatch(
 			/ocaml: \{\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-of-js-of-ocaml\/browser-native\/src\/index\.js\?v=\$\{WASM_OCAML_ASSET_VERSION\}`\s+:\s+`\/wasm-of-js-of-ocaml\/browser-native\/src\/index\.js\?v=\$\{WASM_OCAML_ASSET_VERSION\}`,\s+manifestUrl: path\s+\?\s+`\$\{path\}\/wasm-of-js-of-ocaml\/browser-native-bundle\/browser-native-manifest\.v1\.json\?v=\$\{WASM_OCAML_ASSET_VERSION\}`\s+:\s+`\/wasm-of-js-of-ocaml\/browser-native-bundle\/browser-native-manifest\.v1\.json\?v=\$\{WASM_OCAML_ASSET_VERSION\}`\s+\}/s
@@ -662,6 +668,21 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/JANET: 'janet'/);
 		expect(source).toMatch(/Janet runs through the upstream Janet VM compiled to WebAssembly/);
 		expect(source).toMatch(/Use `getline` or[\s\S]*`file\/read stdin :line`/);
+	});
+
+	it('surfaces Julia through the Julia wasm worker runtime contract', () => {
+		expect(source).toMatch(/julia: \{/);
+		expect(source).toMatch(/WASM_JULIA_ASSET_VERSION/);
+		expect(source).toMatch(/wasm-julia\/runner-worker\.js\?v=\$\{WASM_JULIA_ASSET_VERSION\}/);
+		expect(source).toMatch(/<option value="JULIA">Julia<\/option>/);
+		expect(source).toMatch(/julia: 'JULIA'/);
+		expect(source).toMatch(/jl: 'JULIA'/);
+		expectEditorLanguage('JULIA', 'julia');
+		expect(source).toMatch(/'.jl': 'JULIA'/);
+		expect(source).toMatch(/JULIA: 'main\.jl'/);
+		expect(source).toMatch(/JULIA: 'julia'/);
+		expect(source).toMatch(/Julia runs through the bundled Julia 1\.0\.4 WebAssembly runtime/);
+		expect(source).toMatch(/Use `readline\(\)`/);
 	});
 
 	it('surfaces Zig through bundled wasm compiler assets and the browser runtime hint', () => {

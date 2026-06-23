@@ -11,6 +11,7 @@ import {
 	editorOnlyLanguages,
 	languageLabels,
 	lspLanguageOverrides,
+	monacoLanguageContributionLoaders,
 	playgroundLanguages,
 	runtimeLspCapabilities,
 	typescriptLspLanguages
@@ -57,6 +58,7 @@ describe('language registry', () => {
 		expect(runtimeLspCapabilities.WASM).toBe('wasm');
 		expect(runtimeLspCapabilities.JANET).toBe('janet');
 		expect(runtimeLspCapabilities.LISP).toBe('lisp');
+		expect(runtimeLspCapabilities.FORTRAN).toBe('fortran');
 		expect(editorOnlyLanguages.has('FORTRAN')).toBe(true);
 		expect(editorOnlyLanguages.has('GRAPHQL')).toBe(true);
 		expect(editorOnlyLanguages.has('DUCKDB')).toBe(false);
@@ -85,6 +87,8 @@ describe('language registry', () => {
 		expect(diagnosticMarkerLanguages.has('wasm')).toBe(true);
 		expect(diagnosticMarkerLanguages.has('janet')).toBe(true);
 		expect(diagnosticMarkerLanguages.has('lisp')).toBe(true);
+		expect(diagnosticMarkerLanguages.has('fortran')).toBe(true);
+		expect(monacoLanguageContributionLoaders.julia).toBeTruthy();
 	});
 
 	it('keeps compiler diagnostic support visible for compiled languages', () => {

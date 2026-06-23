@@ -21,11 +21,13 @@
 	import { WASM_D_ASSET_VERSION } from '$lib/playground/wasmDVersion';
 	import { WASM_DOTNET_ASSET_VERSION } from '$lib/playground/wasmDotnetVersion';
 	import { WASM_ELIXIR_ASSET_VERSION } from '$lib/playground/wasmElixirVersion';
+	import { WASM_FORTRAN_ASSET_VERSION } from '$lib/playground/wasmFortranVersion';
 	import { WASM_FORTH_ASSET_VERSION } from '$lib/playground/wasmForthVersion';
 	import { WASM_GO_ASSET_VERSION } from '$lib/playground/wasmGoVersion';
 	import { WASM_HASKELL_ASSET_VERSION } from '$lib/playground/wasmHaskellVersion';
 	import { WASM_J_ASSET_VERSION } from '$lib/playground/wasmJVersion';
 	import { WASM_JANET_ASSET_VERSION } from '$lib/playground/wasmJanetVersion';
+	import { WASM_JULIA_ASSET_VERSION } from '$lib/playground/wasmJuliaVersion';
 	import { WASM_LUA_ASSET_VERSION } from '$lib/playground/wasmLuaVersion';
 	import { WASM_LISP_ASSET_VERSION } from '$lib/playground/wasmLispVersion';
 	import { WASM_OCAML_ASSET_VERSION } from '$lib/playground/wasmOcamlVersion';
@@ -228,6 +230,12 @@
 				? `${path}/wasm-janet/runner-worker.js?v=${WASM_JANET_ASSET_VERSION}`
 				: `/wasm-janet/runner-worker.js?v=${WASM_JANET_ASSET_VERSION}`
 		},
+		julia: {
+			baseUrl: path ? `${path}/wasm-julia/` : '/wasm-julia/',
+			workerUrl: path
+				? `${path}/wasm-julia/runner-worker.js?v=${WASM_JULIA_ASSET_VERSION}`
+				: `/wasm-julia/runner-worker.js?v=${WASM_JULIA_ASSET_VERSION}`
+		},
 		ocaml: {
 			moduleUrl: path
 				? `${path}/wasm-of-js-of-ocaml/browser-native/src/index.js?v=${WASM_OCAML_ASSET_VERSION}`
@@ -285,6 +293,11 @@
 			bsdtarUrl: path
 				? `${path}/wasm-haskell/bsdtar.wasm?v=${WASM_HASKELL_ASSET_VERSION}`
 				: `/wasm-haskell/bsdtar.wasm?v=${WASM_HASKELL_ASSET_VERSION}`
+		},
+		fortran: {
+			analyzerUrl: path
+				? `${path}/wasm-fortran/analyzer.js?v=${WASM_FORTRAN_ASSET_VERSION}`
+				: `/wasm-fortran/analyzer.js?v=${WASM_FORTRAN_ASSET_VERSION}`
 		},
 		r: {
 			baseUrl: path
@@ -404,7 +417,6 @@
 	const zigLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'zig');
 	const zigLspCompilerUrl = $derived(zigLspEnabled ? runtimeAssets.zig?.compilerUrl : undefined);
 	const zigLspStdlibUrl = $derived(zigLspEnabled ? runtimeAssets.zig?.stdlibUrl : undefined);
-	const phpLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'php');
 	const luaLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'lua');
 	const luaLspModuleUrl = $derived(luaLspEnabled ? runtimeAssets.lua?.moduleUrl : undefined);
 	const janetLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'janet');
@@ -430,6 +442,10 @@
 	);
 	const haskellLspBsdtarUrl = $derived(
 		haskellLspEnabled ? runtimeAssets.haskell?.bsdtarUrl : undefined
+	);
+	const fortranLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'fortran');
+	const fortranLspAnalyzerUrl = $derived(
+		fortranLspEnabled ? runtimeAssets.fortran?.analyzerUrl : undefined
 	);
 	const sqlLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'sql');
 	const sqlLspWasmUrl = $derived(sqlLspEnabled ? runtimeAssets.sqlite?.wasmUrl : undefined);
@@ -641,6 +657,7 @@
 			'.ijx': 'J',
 			'.bqn': 'BQN',
 			'.janet': 'JANET',
+			'.jl': 'JULIA',
 			'.ml': 'OCAML',
 			'.mli': 'OCAML',
 			'.js': 'JAVASCRIPT',
@@ -712,6 +729,7 @@
 			J: 'main.ijs',
 			BQN: 'main.bqn',
 			JANET: 'main.janet',
+			JULIA: 'main.jl',
 			OCAML: 'main.ml',
 			TINYGO: 'main.go',
 			JAVASCRIPT: 'main.js',
@@ -765,6 +783,7 @@
 			J: 'j',
 			BQN: 'bqn',
 			JANET: 'janet',
+			JULIA: 'julia',
 			OCAML: 'ocaml',
 			TINYGO: 'go',
 			JAVASCRIPT: 'javascript',
@@ -1293,6 +1312,8 @@
 			j: 'J',
 			bqn: 'BQN',
 			janet: 'JANET',
+			julia: 'JULIA',
+			jl: 'JULIA',
 			ocaml: 'OCAML',
 			tinygo: 'TINYGO',
 			javascript: 'JAVASCRIPT',
@@ -1961,6 +1982,7 @@
 						<option value="J">J</option>
 						<option value="BQN">BQN</option>
 						<option value="JANET">Janet</option>
+						<option value="JULIA">Julia</option>
 						<option value="OCAML">OCaml</option>
 						<option value="TINYGO">TinyGo</option>
 						<option value="JAVASCRIPT">JavaScript</option>
@@ -2205,6 +2227,13 @@
 			<p class="hint">
 				Janet runs through the upstream Janet VM compiled to WebAssembly. Use `getline` or
 				`file/read stdin :line` for line input.
+			</p>
+		{/if}
+		{#if language === 'JULIA'}
+			<p class="hint">
+				Julia runs through the bundled Julia 1.0.4 WebAssembly runtime. Use `readline()` for
+				line input; the worker connects terminal stdin with a Julia `IOBuffer` before running
+				the source.
 			</p>
 		{/if}
 		{#if language === 'TINYGO'}
@@ -2645,7 +2674,6 @@
 				{zigLspEnabled}
 				{zigLspCompilerUrl}
 				{zigLspStdlibUrl}
-				{phpLspEnabled}
 				{luaLspEnabled}
 				{luaLspModuleUrl}
 				{janetLspEnabled}
@@ -2660,6 +2688,7 @@
 				{haskellLspModuleUrl}
 				{haskellLspRootfsUrl}
 				{haskellLspBsdtarUrl}
+				{fortranLspAnalyzerUrl}
 				{sqlLspEnabled}
 				{sqlLspWasmUrl}
 				{prologLspEnabled}

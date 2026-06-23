@@ -73,9 +73,6 @@ export interface EditorLanguageServerRuntimeOptions {
 		targetTriple?: 'wasm64-wasi';
 		compileArgs?: string[];
 	};
-	php?: {
-		version?: string;
-	};
 	lua?: {
 		moduleUrl?: string;
 	};
@@ -117,8 +114,6 @@ export interface EditorLanguageServerRuntimeOptions {
 	};
 	fortran?: {
 		analyzerUrl?: string;
-		parserWasmUrl?: string;
-		grammarUrl?: string;
 	};
 	prolog?: {
 		baseUrl?: string;

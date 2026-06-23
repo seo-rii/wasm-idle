@@ -78,25 +78,20 @@ describe('document language worker service', () => {
 		expect(hover).toBeTruthy();
 	});
 
-	it('uses the VS Code HTML language service and reports unbalanced tags', async () => {
+	it('uses the VS Code HTML language service without custom diagnostics', async () => {
 		const service = createDocumentWorkerService();
 		const testContext = context();
 		await service.initialize?.({ language: 'html' }, testContext);
 		const htmlDocument = document('html', '<main><h1>Hello</main>');
 
 		const diagnostics = await service.diagnostics?.(htmlDocument, testContext);
-		const balancedDiagnostics = await service.diagnostics?.(
-			document('html', '<main><br/></main>'),
-			testContext
-		);
 		const completions = (await service.completion?.(
 			document('html', '<'),
 			{ line: 0, character: 1 },
 			testContext
 		)) as { items: Array<{ label: string }> };
 
-		expect(diagnostics?.some((diagnostic) => diagnostic.source === 'html')).toBe(true);
-		expect(balancedDiagnostics).toEqual([]);
+		expect(diagnostics).toEqual([]);
 		expect(completions.items.some((item) => item.label === 'html')).toBe(true);
 	});
 

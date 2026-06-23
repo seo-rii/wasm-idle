@@ -8,6 +8,7 @@ import {
 	resolveElixirLanguageServerWorkerUrl,
 	resolveErlangLanguageServerBundleUrl,
 	resolveErlangLanguageServerWorkerUrl,
+	resolveFortranLanguageServerAnalyzerUrl,
 	resolveGoLanguageServerCompilerUrl,
 	resolveGleamLanguageServerBaseUrl,
 	resolveGleamLanguageServerManifestUrl,
@@ -31,7 +32,6 @@ import {
 	resolveOctaveLanguageServerWorkerUrl,
 	resolveOcamlLanguageServerManifestUrl,
 	resolveOcamlLanguageServerModuleUrl,
-	resolvePhpLanguageServerVersion,
 	resolveRLanguageServerBaseUrl,
 	resolveRustLanguageServerCompilerUrl,
 	resolveTclLanguageServerBaseUrl,
@@ -306,9 +306,6 @@ describe('lsp runtime asset resolution', () => {
 				rootfsUrl: 'https://haskell.example.com/rootfs.tar.zst?v=20240807',
 				bsdtarUrl: 'https://haskell.example.com/bsdtar.wasm?v=20240807'
 			},
-			php: {
-				version: '8.5'
-			},
 			gleam: {
 				baseUrl: 'https://gleam.example.com/wasm-gleam/',
 				manifestUrl: 'https://gleam.example.com/manifest.json'
@@ -402,7 +399,6 @@ describe('lsp runtime asset resolution', () => {
 		expect(resolveHaskellLanguageServerBsdtarUrl(options)).toBe(
 			'https://haskell.example.com/bsdtar.wasm?v=20240807'
 		);
-		expect(resolvePhpLanguageServerVersion(options)).toBe('8.5');
 		expect(resolveGleamLanguageServerBaseUrl(options)).toBe(
 			'https://gleam.example.com/wasm-gleam/'
 		);
@@ -525,7 +521,9 @@ describe('lsp runtime asset resolution', () => {
 		expect(
 			resolveHaskellLanguageServerBsdtarUrl(undefined, 'https://app.example.com/editor')
 		).toBe('https://app.example.com/wasm-haskell/bsdtar.wasm');
-		expect(resolvePhpLanguageServerVersion(undefined)).toBe('8.4');
+		expect(
+			resolveFortranLanguageServerAnalyzerUrl(undefined, 'https://app.example.com/editor')
+		).toBe('https://app.example.com/wasm-fortran/analyzer.js');
 		expect(resolveGleamLanguageServerBaseUrl(undefined, 'https://app.example.com/editor')).toBe(
 			'https://app.example.com/wasm-gleam/'
 		);

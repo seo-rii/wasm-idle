@@ -23,7 +23,9 @@ const { publicEnv } = vi.hoisted(() => ({
 		PUBLIC_WASM_BQN_BASE_URL: '',
 		PUBLIC_WASM_BQN_WORKER_URL: '',
 		PUBLIC_WASM_JANET_BASE_URL: '',
-		PUBLIC_WASM_JANET_WORKER_URL: ''
+		PUBLIC_WASM_JANET_WORKER_URL: '',
+		PUBLIC_WASM_JULIA_BASE_URL: '',
+		PUBLIC_WASM_JULIA_WORKER_URL: ''
 	}
 }));
 let onPostMessage: ((worker: MockWorker, message: any) => void) | null = null;
@@ -65,6 +67,7 @@ import Bqn from './bqn';
 import Forth from './forth';
 import J from './j';
 import Janet from './janet';
+import Julia from './julia';
 import Perl from './perl';
 import Pascal from './pascal';
 import Prolog from './prolog';
@@ -359,6 +362,32 @@ describe('static worker backed language sandboxes', () => {
 				baseUrl: 'http://localhost:3000/wasm-janet/',
 				stdin: 'ok\n',
 				activePath: 'main.janet'
+			})
+		);
+	});
+
+	it('loads Julia runtime urls and forwards stdin to the Julia wasm worker', async () => {
+		const sandbox = new Julia();
+		await sandbox.load({
+			julia: {
+				baseUrl: '/wasm-julia/',
+				workerUrl: '/wasm-julia/runner-worker.js?v=test'
+			}
+		});
+		await expect(
+			sandbox.run('println(readline())', false, true, undefined, [], {
+				stdin: 'ok\n'
+			})
+		).resolves.toBe(true);
+
+		expect(workerInstances[0].url).toBe(
+			'http://localhost:3000/wasm-julia/runner-worker.js?v=test'
+		);
+		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				baseUrl: 'http://localhost:3000/wasm-julia/',
+				stdin: 'ok\n',
+				activePath: 'main.jl'
 			})
 		);
 	});

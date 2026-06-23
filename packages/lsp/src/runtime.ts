@@ -488,8 +488,23 @@ export function resolveHaskellLanguageServerBsdtarUrl(
 	return resolveFileUrl('/wasm-haskell/bsdtar.wasm', currentUrl);
 }
 
-export function resolvePhpLanguageServerVersion(options: EditorLanguageServerOptions | undefined) {
-	return typeof options === 'object' && options.php?.version ? options.php.version : '8.4';
+export function resolveFortranLanguageServerAnalyzerUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	if (typeof options === 'string') {
+		return resolveFileUrl(`${normalizeRootUrl(options) || ''}/wasm-fortran/analyzer.js`, currentUrl);
+	}
+	if (options?.fortran?.analyzerUrl) {
+		return resolveFileUrl(options.fortran.analyzerUrl, currentUrl);
+	}
+	if (options?.rootUrl) {
+		return resolveFileUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-fortran/analyzer.js`,
+			currentUrl
+		);
+	}
+	return resolveFileUrl('/wasm-fortran/analyzer.js', currentUrl);
 }
 
 export function resolvePrologLanguageServerBaseUrl(

@@ -47,6 +47,8 @@ const { publicEnv } = vi.hoisted(() => ({
 		PUBLIC_WASM_BQN_WORKER_URL: '',
 		PUBLIC_WASM_JANET_BASE_URL: '',
 		PUBLIC_WASM_JANET_WORKER_URL: '',
+		PUBLIC_WASM_JULIA_BASE_URL: '',
+		PUBLIC_WASM_JULIA_WORKER_URL: '',
 		PUBLIC_WASM_SQLITE_WASM_URL: '',
 		PUBLIC_WASM_PHP_VERSION: ''
 	}
@@ -710,6 +712,7 @@ describe('runtime asset config resolution', () => {
 			resolveGleamRuntimeAssetConfig,
 			resolveJRuntimeAssetConfig,
 			resolveJanetRuntimeAssetConfig,
+			resolveJuliaRuntimeAssetConfig,
 			resolveBqnRuntimeAssetConfig,
 			resolvePascalRuntimeAssetConfig,
 			resolvePerlRuntimeAssetConfig,
@@ -766,6 +769,10 @@ describe('runtime asset config resolution', () => {
 			baseUrl: 'https://example.com/absproxy/5173/wasm-janet/',
 			workerUrl: 'https://example.com/absproxy/5173/wasm-janet/runner-worker.js'
 		});
+		expect(resolveJuliaRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual({
+			baseUrl: 'https://example.com/absproxy/5173/wasm-julia/',
+			workerUrl: 'https://example.com/absproxy/5173/wasm-julia/runner-worker.js'
+		});
 	});
 
 	it('prefers explicit static worker runtime urls over public env overrides', async () => {
@@ -780,6 +787,7 @@ describe('runtime asset config resolution', () => {
 		publicEnv.PUBLIC_WASM_J_BASE_URL = 'https://env.example.com/j/';
 		publicEnv.PUBLIC_WASM_BQN_BASE_URL = 'https://env.example.com/bqn/';
 		publicEnv.PUBLIC_WASM_JANET_BASE_URL = 'https://env.example.com/janet/';
+		publicEnv.PUBLIC_WASM_JULIA_BASE_URL = 'https://env.example.com/julia/';
 		const {
 			resolveAwkRuntimeAssetConfig,
 			resolveBqnRuntimeAssetConfig,
@@ -787,6 +795,7 @@ describe('runtime asset config resolution', () => {
 			resolveGleamRuntimeAssetConfig,
 			resolveJRuntimeAssetConfig,
 			resolveJanetRuntimeAssetConfig,
+			resolveJuliaRuntimeAssetConfig,
 			resolvePascalRuntimeAssetConfig,
 			resolvePerlRuntimeAssetConfig,
 			resolvePrologRuntimeAssetConfig,
@@ -889,6 +898,15 @@ describe('runtime asset config resolution', () => {
 		).toEqual({
 			baseUrl: 'https://example.com/runtime/janet/',
 			workerUrl: 'https://example.com/runtime/janet/worker.js'
+		});
+		expect(
+			resolveJuliaRuntimeAssetConfig(
+				{ julia: { baseUrl: '/runtime/julia', workerUrl: '/runtime/julia/worker.js' } },
+				'https://example.com/app'
+			)
+		).toEqual({
+			baseUrl: 'https://example.com/runtime/julia/',
+			workerUrl: 'https://example.com/runtime/julia/worker.js'
 		});
 	});
 

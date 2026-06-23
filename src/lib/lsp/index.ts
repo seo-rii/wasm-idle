@@ -11,7 +11,6 @@ export {
 	resolveLuaLanguageServerModuleUrl,
 	resolveOcamlLanguageServerManifestUrl,
 	resolveOcamlLanguageServerModuleUrl,
-	resolvePhpLanguageServerVersion,
 	resolvePythonLanguageServerBaseUrl,
 	resolveRustLanguageServerCompilerUrl,
 	resolveZigLanguageServerCompilerUrl,
@@ -30,7 +29,6 @@ export {
 	getJavaScriptLanguageServer,
 	getLuaLanguageServer,
 	getOcamlLanguageServer,
-	getPhpLanguageServer,
 	getTypeScriptLanguageServer,
 	getVisualBasicLanguageServer,
 	getWatLanguageServer,
@@ -47,7 +45,6 @@ export type {
 	OcamlLanguageServerEffectsMode,
 	OcamlLanguageServerTarget,
 	OcamlWorkerOptions,
-	PhpWorkerOptions,
 	RustLanguageServerTargetTriple,
 	ZigLanguageServerTargetTriple,
 	ZigWorkerOptions

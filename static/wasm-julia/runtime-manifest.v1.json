@@ -1,0 +1,13 @@
+{
+  "format": "wasm-julia-runtime-manifest-v1",
+  "runtime": "chriskoch-julia-wasm",
+  "package": "@chriskoch/julia-wasm@1.0.4",
+  "fingerprint": "4d20f92d72865074",
+  "files": [
+    "LICENSE.md",
+    "julia.data.gz",
+    "julia.js",
+    "julia.wasm.gz",
+    "readme.md"
+  ]
+}

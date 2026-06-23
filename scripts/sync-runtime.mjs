@@ -181,6 +181,20 @@ const RUNTIMES = [
 		targetArg: 'targetDir'
 	},
 	{
+		name: 'wasm-julia',
+		module: './sync-wasm-julia.mjs',
+		exportName: 'syncWasmJuliaAssets',
+		sourceArg: 'sourceDir',
+		targetArg: 'targetDir'
+	},
+	{
+		name: 'wasm-nim',
+		module: './sync-wasm-nim.mjs',
+		exportName: 'syncWasmNimAssets',
+		sourceArg: 'sourceDir',
+		targetArg: 'targetDir'
+	},
+	{
 		name: 'wasm-of-js-of-ocaml',
 		module: './sync-wasm-of-js-of-ocaml.mjs',
 		exportName: 'syncWasmOfJsOfOcamlDist',

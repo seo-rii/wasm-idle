@@ -40,6 +40,8 @@ describe('editor defaults', () => {
 		expect(editorDefaults.bqn).toContain('Factorial');
 		expect(editorDefaults.janet).toContain('(getline)');
 		expect(editorDefaults.janet).toContain('factorial_plus_bonus=');
+		expect(editorDefaults.julia).toContain('readline()');
+		expect(editorDefaults.julia).toContain('factorial_plus_bonus=');
 		expect(editorDefaults.ocaml).toContain('read_line ()');
 		expect(editorDefaults.javascript).toContain("require('fs')");
 		expect(editorDefaults.javascript).toContain('readLineSync(0)');
@@ -97,6 +99,7 @@ describe('editor defaults', () => {
 		expect(resolveEditorDefaultSource('j', 'wasm32-wasip1')).toBe(editorDefaults.j);
 		expect(resolveEditorDefaultSource('bqn', 'wasm32-wasip1')).toBe(editorDefaults.bqn);
 		expect(resolveEditorDefaultSource('janet', 'wasm32-wasip1')).toBe(editorDefaults.janet);
+		expect(resolveEditorDefaultSource('julia', 'wasm32-wasip1')).toBe(editorDefaults.julia);
 		expect(resolveEditorDefaultSource('ocaml', 'wasm32-wasip1')).toBe(editorDefaults.ocaml);
 		expect(resolveEditorDefaultSource('javascript', 'wasm32-wasip1')).toBe(
 			editorDefaults.javascript
@@ -141,6 +144,7 @@ describe('editor defaults', () => {
 		expect(isEditorDefaultSource(editorDefaults.j)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.bqn)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.janet)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.julia)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.ocaml)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.javascript)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.typescript)).toBe(true);

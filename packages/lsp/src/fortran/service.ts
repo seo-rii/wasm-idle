@@ -4,12 +4,9 @@ import {
 	type LspPosition,
 	type WorkerLanguageService
 } from '../lsp.js';
-import type { Node as TreeSitterNode } from 'web-tree-sitter';
 
 export interface FortranWorkerOptions {
 	analyzerUrl?: string;
-	parserWasmUrl?: string;
-	grammarUrl?: string;
 }
 
 export interface FortranAnalyzerDiagnostic {
@@ -25,9 +22,6 @@ export interface FortranAnalyzer {
 }
 
 export type LoadFortranAnalyzer = (options: FortranWorkerOptions) => Promise<FortranAnalyzer>;
-
-const TREE_SITTER_WASM_URL =
-	'https://cdn.jsdelivr.net/npm/web-tree-sitter@0.26.9/web-tree-sitter.wasm';
 
 const FORTRAN_KEYWORDS = [
 	'program',
@@ -68,49 +62,7 @@ const FORTRAN_HOVER: Record<string, string> = {
 
 async function loadExternalAnalyzer(options: FortranWorkerOptions): Promise<FortranAnalyzer> {
 	if (!options.analyzerUrl) {
-		const [{ Parser, Language }, grammarWasm] = await Promise.all([
-			import('web-tree-sitter'),
-			import('@lumis-sh/wasm-fortran').then((module) => module.default)
-		]);
-		await Parser.init({
-			locateFile(path) {
-				return path.endsWith('.wasm') ? options.parserWasmUrl || TREE_SITTER_WASM_URL : path;
-			}
-		});
-		const parser = new Parser();
-		const language = await Language.load(options.grammarUrl || grammarWasm);
-		parser.setLanguage(language);
-		return {
-			analyze(code) {
-				const tree = parser.parse(code);
-				if (!tree) {
-					return [
-						{
-							message: 'Fortran parser did not produce a syntax tree',
-							severity: 'error'
-						}
-					];
-				}
-				try {
-					if (!tree.rootNode.hasError) return [];
-					const diagnostics: FortranAnalyzerDiagnostic[] = [];
-					collectTreeSitterDiagnostics(tree.rootNode, diagnostics);
-					return diagnostics.length > 0
-						? diagnostics
-						: [
-								{
-									message: 'Fortran syntax error',
-									severity: 'error'
-								}
-							];
-				} finally {
-					tree.delete();
-				}
-			},
-			dispose() {
-				parser.delete();
-			}
-		};
+		throw new Error('Fortran language server requires analyzerUrl');
 	}
 	const module = await import(/* @vite-ignore */ options.analyzerUrl);
 	const factory =
@@ -123,29 +75,6 @@ async function loadExternalAnalyzer(options: FortranWorkerOptions): Promise<Fort
 		throw new Error('Fortran analyzer module must export createFortranAnalyzer or a default factory');
 	}
 	return await factory();
-}
-
-function collectTreeSitterDiagnostics(
-	node: TreeSitterNode,
-	diagnostics: FortranAnalyzerDiagnostic[]
-) {
-	if (node.isError || node.isMissing) {
-		const preview = node.text.replace(/\s+/gu, ' ').trim();
-		diagnostics.push({
-			lineNumber: node.startPosition.row + 1,
-			columnNumber: node.startPosition.column + 1,
-			severity: 'error',
-			message: node.isMissing
-				? `Missing Fortran syntax: ${node.type}`
-				: preview
-					? `Unexpected Fortran syntax near "${preview.slice(0, 80)}"`
-					: 'Unexpected Fortran syntax'
-		});
-		return;
-	}
-	for (const child of node.children) {
-		if (child.hasError) collectTreeSitterDiagnostics(child, diagnostics);
-	}
 }
 
 const wordAt = (text: string, position: LspPosition) => {
@@ -188,7 +117,7 @@ export function createFortranWorkerService(
 		},
 		async initialize(options, context) {
 			const config = (options || {}) as FortranWorkerOptions;
-			context.reportProgress(config.analyzerUrl ? 'load-fortran-analyzer' : 'load-fortran-language-service');
+			context.reportProgress('load-fortran-analyzer');
 			analyzer = await loadAnalyzer(config);
 		},
 		async diagnostics(document) {

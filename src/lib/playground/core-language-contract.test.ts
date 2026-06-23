@@ -131,7 +131,7 @@ describe('core language contract', () => {
 		expect(isDeferredProgressLanguage('erl')).toBe(true);
 	});
 
-	it('exposes Prolog, Gleam, Perl, Tcl, AWK, Pascal, Forth, J, BQN, and Janet as deferred browser runtime languages', () => {
+	it('exposes Prolog, Gleam, Perl, Tcl, AWK, Pascal, Forth, J, BQN, Janet, and Julia as deferred browser runtime languages', () => {
 		expect(supportedLanguageIds).toContain('PROLOG');
 		expect(supportedLanguageIds).toContain('GLEAM');
 		expect(supportedLanguageIds).toContain('PERL');
@@ -142,6 +142,7 @@ describe('core language contract', () => {
 		expect(supportedLanguageIds).toContain('J');
 		expect(supportedLanguageIds).toContain('BQN');
 		expect(supportedLanguageIds).toContain('JANET');
+		expect(supportedLanguageIds).toContain('JULIA');
 		expect(normalizeLanguageId('swipl')).toBe('PROLOG');
 		expect(normalizeLanguageId('swi')).toBe('PROLOG');
 		expect(normalizeLanguageId('gleam')).toBe('GLEAM');
@@ -151,6 +152,7 @@ describe('core language contract', () => {
 		expect(normalizeLanguageId('pas')).toBe('PASCAL');
 		expect(normalizeLanguageId('fpc')).toBe('PASCAL');
 		expect(normalizeLanguageId('gforth')).toBe('FORTH');
+		expect(normalizeLanguageId('jl')).toBe('JULIA');
 		expect(isDeferredProgressLanguage('swipl')).toBe(true);
 		expect(isDeferredProgressLanguage('gleam')).toBe(true);
 		expect(isDeferredProgressLanguage('perl')).toBe(true);
@@ -161,6 +163,7 @@ describe('core language contract', () => {
 		expect(isDeferredProgressLanguage('j')).toBe(true);
 		expect(isDeferredProgressLanguage('bqn')).toBe(true);
 		expect(isDeferredProgressLanguage('janet')).toBe(true);
+		expect(isDeferredProgressLanguage('julia')).toBe(true);
 	});
 
 	it('exposes VB.NET aliases as a deferred browser runtime language', () => {
@@ -193,6 +196,10 @@ describe('core language contract', () => {
 			janet: {
 				baseUrl: '/wasm-janet/',
 				workerUrl: '/wasm-janet/runner-worker.js?v=test'
+			},
+			julia: {
+				baseUrl: '/wasm-julia/',
+				workerUrl: '/wasm-julia/runner-worker.js?v=test'
 			}
 		});
 
@@ -206,6 +213,8 @@ describe('core language contract', () => {
 		expect(key).toContain('"bqnWorkerUrl":"/wasm-bqn/runner-worker.js?v=test"');
 		expect(key).toContain('"janetBaseUrl":"/wasm-janet/"');
 		expect(key).toContain('"janetWorkerUrl":"/wasm-janet/runner-worker.js?v=test"');
+		expect(key).toContain('"juliaBaseUrl":"/wasm-julia/"');
+		expect(key).toContain('"juliaWorkerUrl":"/wasm-julia/runner-worker.js?v=test"');
 	});
 
 	it('exposes D aliases as a deferred browser runtime language', () => {

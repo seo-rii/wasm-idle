@@ -95,6 +95,10 @@ export interface HaskellRuntimeAssetConfig {
 	searchDirs?: string[];
 }
 
+export interface FortranRuntimeAssetConfig {
+	analyzerUrl?: string;
+}
+
 export interface ZigRuntimeAssetConfig {
 	compilerUrl?: string;
 	stdlibUrl?: string;
@@ -169,6 +173,16 @@ export interface JanetRuntimeAssetConfig {
 	workerUrl?: string;
 }
 
+export interface JuliaRuntimeAssetConfig {
+	baseUrl?: string;
+	workerUrl?: string;
+}
+
+export interface NimRuntimeAssetConfig {
+	baseUrl?: string;
+	workerUrl?: string;
+}
+
 export interface SqliteRuntimeAssetConfig {
 	wasmUrl?: string;
 }
@@ -195,6 +209,7 @@ export interface PlaygroundRuntimeAssets {
 	wat?: WatRuntimeAssetConfig;
 	lua?: LuaRuntimeAssetConfig;
 	haskell?: HaskellRuntimeAssetConfig;
+	fortran?: FortranRuntimeAssetConfig;
 	zig?: ZigRuntimeAssetConfig;
 	lisp?: LispRuntimeAssetConfig;
 	ruby?: RubyRuntimeAssetConfig;
@@ -210,6 +225,8 @@ export interface PlaygroundRuntimeAssets {
 	j?: JRuntimeAssetConfig;
 	bqn?: BqnRuntimeAssetConfig;
 	janet?: JanetRuntimeAssetConfig;
+	julia?: JuliaRuntimeAssetConfig;
+	nim?: NimRuntimeAssetConfig;
 	sqlite?: SqliteRuntimeAssetConfig;
 	php?: PhpRuntimeAssetConfig;
 }
@@ -1730,6 +1747,133 @@ export function resolveJanetRuntimeAssetConfig(
 	return {
 		baseUrl: resolveJanetBaseUrl(options, currentUrl),
 		workerUrl: resolveJanetWorkerUrl(options, currentUrl)
+	};
+}
+
+export function resolveJuliaBaseUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredBaseUrl =
+		(typeof options === 'object' && options?.julia?.baseUrl) ||
+		(publicEnv.PUBLIC_WASM_JULIA_BASE_URL || '').trim();
+
+	if (configuredBaseUrl) {
+		return normalizeBaseUrl(configuredBaseUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return normalizeBaseUrl(`${normalizeRootUrl(options) || ''}/wasm-julia/`, currentUrl);
+	}
+
+	if (options?.rootUrl) {
+		return normalizeBaseUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-julia/`,
+			currentUrl
+		);
+	}
+
+	return normalizeBaseUrl('/wasm-julia/', currentUrl);
+}
+
+export function resolveJuliaWorkerUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredWorkerUrl =
+		(typeof options === 'object' && options?.julia?.workerUrl) ||
+		(publicEnv.PUBLIC_WASM_JULIA_WORKER_URL || '').trim();
+
+	if (configuredWorkerUrl) {
+		return resolveConfiguredUrl(configuredWorkerUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-julia/runner-worker.js`,
+			currentUrl
+		);
+	}
+
+	if (options?.rootUrl) {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-julia/runner-worker.js`,
+			currentUrl
+		);
+	}
+
+	return resolveConfiguredUrl('/wasm-julia/runner-worker.js', currentUrl);
+}
+
+export function resolveJuliaRuntimeAssetConfig(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	return {
+		baseUrl: resolveJuliaBaseUrl(options, currentUrl),
+		workerUrl: resolveJuliaWorkerUrl(options, currentUrl)
+	};
+}
+
+export function resolveNimBaseUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredBaseUrl =
+		(typeof options === 'object' && options?.nim?.baseUrl) ||
+		(publicEnv.PUBLIC_WASM_NIM_BASE_URL || '').trim();
+
+	if (configuredBaseUrl) {
+		return normalizeBaseUrl(configuredBaseUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return normalizeBaseUrl(`${normalizeRootUrl(options) || ''}/wasm-nim/`, currentUrl);
+	}
+
+	if (options?.rootUrl) {
+		return normalizeBaseUrl(`${normalizeRootUrl(options.rootUrl) || ''}/wasm-nim/`, currentUrl);
+	}
+
+	return normalizeBaseUrl('/wasm-nim/', currentUrl);
+}
+
+export function resolveNimWorkerUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredWorkerUrl =
+		(typeof options === 'object' && options?.nim?.workerUrl) ||
+		(publicEnv.PUBLIC_WASM_NIM_WORKER_URL || '').trim();
+
+	if (configuredWorkerUrl) {
+		return resolveConfiguredUrl(configuredWorkerUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-nim/runner-worker.js`,
+			currentUrl
+		);
+	}
+
+	if (options?.rootUrl) {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-nim/runner-worker.js`,
+			currentUrl
+		);
+	}
+
+	return resolveConfiguredUrl('/wasm-nim/runner-worker.js', currentUrl);
+}
+
+export function resolveNimRuntimeAssetConfig(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	return {
+		baseUrl: resolveNimBaseUrl(options, currentUrl),
+		workerUrl: resolveNimWorkerUrl(options, currentUrl)
 	};
 }
 

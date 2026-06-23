@@ -169,6 +169,20 @@ const sandboxRoutes = [
 		}
 	},
 	{
+		aliases: ['JULIA', 'JL'],
+		load: async () => {
+			const { default: Julia } = await import('$lib/playground/julia');
+			return new Julia();
+		}
+	},
+	{
+		aliases: ['NIM', 'NIMROD'],
+		load: async () => {
+			const { default: Nim } = await import('$lib/playground/nim');
+			return new Nim();
+		}
+	},
+	{
 		aliases: ['TINYGO'],
 		load: async () => {
 			const { default: TinyGo } = await import('$lib/playground/tinygo');
@@ -318,6 +332,8 @@ export const supportedLanguages = [
 	'J',
 	'BQN',
 	'JANET',
+	'JULIA',
+	'NIM',
 	'TINYGO',
 	'OCAML',
 	'JAVASCRIPT',

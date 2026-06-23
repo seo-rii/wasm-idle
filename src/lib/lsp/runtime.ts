@@ -1,6 +1,7 @@
 export {
 	resolveCppLanguageServerBaseUrl,
 	resolveCppLanguageServerRuntimeAssetConfig,
+	resolveFortranLanguageServerAnalyzerUrl,
 	resolveGoLanguageServerCompilerUrl,
 	resolveHaskellLanguageServerBsdtarUrl,
 	resolveHaskellLanguageServerModuleUrl,
@@ -8,7 +9,6 @@ export {
 	resolveLuaLanguageServerModuleUrl,
 	resolveOcamlLanguageServerManifestUrl,
 	resolveOcamlLanguageServerModuleUrl,
-	resolvePhpLanguageServerVersion,
 	resolvePythonLanguageServerBaseUrl,
 	resolveRustLanguageServerCompilerUrl,
 	resolveZigLanguageServerCompilerUrl,

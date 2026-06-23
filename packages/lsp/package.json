@@ -95,11 +95,6 @@
 			"import": "./dist/zig/index.js",
 			"default": "./dist/zig/index.js"
 		},
-		"./php": {
-			"types": "./dist/php/index.d.ts",
-			"import": "./dist/php/index.js",
-			"default": "./dist/php/index.js"
-		},
 		"./lua": {
 			"types": "./dist/lua/index.d.ts",
 			"import": "./dist/lua/index.js",
@@ -217,7 +212,6 @@
 	"dependencies": {
 		"@bjorn3/browser_wasi_shim": "^0.4.2",
 		"@duckdb/duckdb-wasm": "1.33.1-dev45.0",
-		"@lumis-sh/wasm-fortran": "0.26.1",
 		"@ruby/wasm-wasi": "2.9.3-2.9.4",
 		"@wasm-idle/clang-common": "workspace:*",
 		"@zip.js/zip.js": "^2.8.26",
@@ -236,7 +230,6 @@
 		"vscode-languageserver-types": "^3.18.0",
 		"wabt": "^1.0.39",
 		"webr": "0.6.0",
-		"web-tree-sitter": "0.26.9",
 		"yaml": "^2.9.0"
 	},
 	"devDependencies": {

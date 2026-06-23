@@ -90,14 +90,6 @@ const lspBrowserCases = [
 		timeoutMs: 240_000
 	},
 	{
-		language: 'FORTRAN',
-		label: 'Fortran',
-		fileName: 'main.f90',
-		source: 'program main\n  integer :: n\n  n =\nend program main\n',
-		aliases: ['f90'],
-		timeoutMs: 180_000
-	},
-	{
 		language: 'GRAPHQL',
 		label: 'GraphQL',
 		fileName: 'main.graphql',
@@ -258,12 +250,6 @@ const lspBrowserCases = [
 		timeoutMs: 240_000
 	},
 	{
-		language: 'PHP',
-		label: 'PHP',
-		fileName: 'main.php',
-		source: '<?php\nfunction main() {\n    echo "hello";\n'
-	},
-	{
 		language: 'LUA',
 		label: 'Lua',
 		fileName: 'main.lua',
@@ -284,6 +270,15 @@ const lspBrowserCases = [
 		fileName: 'main.hs',
 		source: 'main :: IO ()\nmain = print missing\n',
 		aliases: ['hs'],
+		timeoutMs: 300_000
+	},
+	{
+		language: 'FORTRAN',
+		label: 'Fortran',
+		fileName: 'main.f90',
+		source: 'program main\ninteger :: x\nx = "abc"\nend program main\n',
+		aliases: ['f90', 'f95'],
+		expectedResponses: ['/wasm-fortran/lfortran.wasm', '/wasm-fortran/lfortran.data'],
 		timeoutMs: 300_000
 	},
 	{
@@ -321,12 +316,11 @@ const lspBrowserMatrixGroups = {
 		'GO',
 		'GLEAM',
 		'PASCAL',
-		'PHP',
 		'LUA',
 		'PROLOG',
 		'RUBY'
 	],
-	'runtime-heavy': ['DUCKDB', 'RUST', 'ZIG', 'OCAML', 'HASKELL'],
+	'runtime-heavy': ['DUCKDB', 'RUST', 'ZIG', 'OCAML', 'HASKELL', 'FORTRAN'],
 	dotnet: ['CSHARP', 'FSHARP', 'VBNET']
 } satisfies Record<string, string[]>;
 
@@ -348,7 +342,7 @@ const urlMatches = (url: string, pattern: string | RegExp) =>
 	typeof pattern === 'string' ? url.includes(pattern) : pattern.test(url);
 
 const requestLooksLspRelated = (url: string) =>
-	/\/(?:lsp|pyodide|wasm-(?:dotnet|gleam|go|haskell|lua|of-js-of-ocaml|pascal|prolog|rust|typescript|wat|zig))\//u.test(
+	/\/(?:lsp|pyodide|wasm-(?:dotnet|fortran|gleam|go|haskell|lua|of-js-of-ocaml|pascal|prolog|rust|typescript|wat|zig))\//u.test(
 		url
 	);
 
@@ -357,7 +351,6 @@ const lspStatusKeyByLanguage: Record<string, string> = {
 	JAVASCRIPT: 'typescript',
 	CPP: 'clangd',
 	C: 'clangd',
-	FORTRAN: 'fortran',
 	GRAPHQL: 'graphql',
 	DUCKDB: 'duckdb',
 	JSON: 'json',
@@ -381,6 +374,7 @@ const lspStatusKeyByLanguage: Record<string, string> = {
 	LUA: 'lua',
 	OCAML: 'ocaml',
 	HASKELL: 'haskell',
+	FORTRAN: 'fortran',
 	SQLITE: 'sql',
 	PROLOG: 'prolog',
 	RUBY: 'ruby'
@@ -735,7 +729,8 @@ describe('Monaco LSP browser integration', () => {
 				'RUST',
 				'ZIG',
 				'OCAML',
-				'HASKELL'
+				'HASKELL',
+				'FORTRAN'
 			]);
 		} finally {
 			if (previousLanguages === undefined) {

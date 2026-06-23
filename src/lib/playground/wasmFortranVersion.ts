@@ -1,0 +1,1 @@
+export const WASM_FORTRAN_ASSET_VERSION = '22ff077a4';

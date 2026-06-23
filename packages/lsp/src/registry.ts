@@ -19,7 +19,6 @@ import type { EditorLanguageServerHandle, EditorLanguageServerOptions } from './
 import { getWatLanguageServer } from './wat/server.js';
 import { getWasmLanguageServer } from './wasm/server.js';
 import { getZigLanguageServer } from './zig/server.js';
-import { getPhpLanguageServer } from './php/server.js';
 import { getLuaLanguageServer } from './lua/server.js';
 import { getJanetLanguageServer } from './janet/server.js';
 import { getLispLanguageServer } from './lisp/server.js';
@@ -128,10 +127,6 @@ export async function getEditorLanguageServer(
 
 	if (normalized === 'zig') {
 		return getZigLanguageServer(options);
-	}
-
-	if (normalized === 'php') {
-		return getPhpLanguageServer(options);
 	}
 
 	if (normalized === 'lua') {

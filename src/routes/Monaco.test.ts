@@ -222,7 +222,6 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(/getAssemblyScriptLanguageServer/);
 		expect(source).toMatch(/getWatLanguageServer/);
 		expect(source).toMatch(/getZigLanguageServer/);
-		expect(source).toMatch(/getPhpLanguageServer/);
 		expect(source).toMatch(/getLuaLanguageServer/);
 		expect(source).toMatch(/getJanetLanguageServer/);
 		expect(source).toMatch(/getLispLanguageServer/);
@@ -291,6 +290,7 @@ describe('Monaco route debug sync', () => {
 		expect(resolveEditorDefaultSource('j', 'wasm32-wasip1')).toBe(editorDefaults.j);
 		expect(resolveEditorDefaultSource('bqn', 'wasm32-wasip1')).toBe(editorDefaults.bqn);
 		expect(resolveEditorDefaultSource('janet', 'wasm32-wasip1')).toBe(editorDefaults.janet);
+		expect(resolveEditorDefaultSource('julia', 'wasm32-wasip1')).toBe(editorDefaults.julia);
 		expect(resolveEditorDefaultSource('lua', 'wasm32-wasip1')).toBe(editorDefaults.lua);
 		expect(resolveEditorDefaultSource('wat', 'wasm32-wasip1')).toBe(editorDefaults.wat);
 		expect(resolveEditorDefaultSource('wasm', 'wasm32-wasip1')).toBe(editorDefaults.wasm);
@@ -329,6 +329,7 @@ describe('Monaco route debug sync', () => {
 		expect(editorDefaults.j).toContain('1!:1 [ 1');
 		expect(editorDefaults.bqn).toContain('•GetLine @');
 		expect(editorDefaults.janet).toContain('(getline)');
+		expect(editorDefaults.julia).toContain('readline()');
 		expect(editorDefaults.lua).toContain('io.read("*l")');
 		expect(editorDefaults.haskell).toContain('putStrLn');
 		expect(editorDefaults.r).toContain('readLines(stdin(), n = 1');
@@ -403,6 +404,7 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).toMatch(/<option value="GLEAM">Gleam<\/option>/);
 		expect(pageSource).toMatch(/<option value="PERL">Perl<\/option>/);
 		expect(pageSource).toMatch(/<option value="JANET">Janet<\/option>/);
+		expect(pageSource).toMatch(/<option value="JULIA">Julia<\/option>/);
 		expect(pageSource).toMatch(/<option value="OCAML">OCaml<\/option>/);
 		expect(pageSource).toMatch(/<option value="TINYGO">TinyGo<\/option>/);
 		expect(pageSource).toMatch(/<option value="JAVASCRIPT">JavaScript<\/option>/);
@@ -441,6 +443,7 @@ describe('Monaco route debug sync', () => {
 		expect(runtimeLspCapabilities.WASM).toBe('wasm');
 		expect(runtimeLspCapabilities.JANET).toBe('janet');
 		expect(runtimeLspCapabilities.LISP).toBe('lisp');
+		expect(runtimeLspCapabilities.FORTRAN).toBe('fortran');
 		expect(pageSource).toMatch(
 			/const typescriptLspLibUrl = \$derived\(\s+lspEnabled && typescriptLspLanguages\.has\(language\)/
 		);
@@ -519,7 +522,6 @@ describe('Monaco route debug sync', () => {
 			'go',
 			'rust',
 			'zig',
-			'php',
 			'lua',
 			'janet',
 			'lisp',

@@ -13,7 +13,6 @@ export type {
 	OcamlLanguageServerEffectsMode,
 	OcamlLanguageServerTarget,
 	OcamlWorkerOptions,
-	PhpWorkerOptions,
 	RustLanguageServerTargetTriple,
 	ZigLanguageServerTargetTriple,
 	ZigWorkerOptions

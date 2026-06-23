@@ -60,6 +60,7 @@ import {
 	getCssLanguageServer,
 	getElixirLanguageServer,
 	getErlangLanguageServer,
+	getEditorLanguageServer,
 	getFortranLanguageServer,
 	getGraphqlLanguageServer,
 	getHaskellLanguageServer,
@@ -71,7 +72,6 @@ import {
 	getMarkdownLanguageServer,
 	getOcamlLanguageServer,
 	getOctaveLanguageServer,
-	getPhpLanguageServer,
 	getPrologLanguageServer,
 	getAwkLanguageServer,
 	getPascalLanguageServer,
@@ -107,22 +107,6 @@ describe('additional language server workers', () => {
 				stdlibUrl: 'https://static.example.com/repl_20240807/wasm-zig/std.zip',
 				targetTriple: undefined,
 				compileArgs: undefined
-			}
-		});
-
-		handle.dispose();
-	});
-
-	it('starts PHP with its configured version', async () => {
-		const handle = await getPhpLanguageServer({
-			php: { version: '8.5' },
-			createWorker: () => new mockState.FakeWorker() as unknown as Worker
-		});
-
-		expect(mockState.workers[0]?.messages[0]).toEqual({
-			type: 'init',
-			options: {
-				version: '8.5'
 			}
 		});
 
@@ -398,7 +382,7 @@ describe('additional language server workers', () => {
 		handle.dispose();
 	});
 
-	it('starts Fortran with an optional analyzer URL', async () => {
+	it('starts Fortran with a configured analyzer URL', async () => {
 		const handle = await getFortranLanguageServer({
 			fortran: { analyzerUrl: '/wasm-fortran/analyzer.js' },
 			createWorker: () => new mockState.FakeWorker() as unknown as Worker
@@ -412,6 +396,38 @@ describe('additional language server workers', () => {
 		});
 
 		handle.dispose();
+	});
+
+	it('starts Fortran with the bundled analyzer by default', async () => {
+		const handle = await getFortranLanguageServer({
+			currentUrl: 'https://app.example.com/editor',
+			createWorker: () => new mockState.FakeWorker() as unknown as Worker
+		});
+
+		expect(mockState.workers[0]?.messages[0]).toEqual({
+			type: 'init',
+			options: {
+				analyzerUrl: 'https://app.example.com/wasm-fortran/analyzer.js'
+			}
+		});
+
+		handle.dispose();
+	});
+
+	it('registers Fortran through the generic registry with the bundled analyzer', async () => {
+		const handle = await getEditorLanguageServer('f90', {
+			currentUrl: 'https://app.example.com/editor',
+			createWorker: () => new mockState.FakeWorker() as unknown as Worker
+		});
+
+		expect(mockState.workers[0]?.messages[0]).toEqual({
+			type: 'init',
+			options: {
+				analyzerUrl: 'https://app.example.com/wasm-fortran/analyzer.js'
+			}
+		});
+
+		handle?.dispose();
 	});
 
 	it('starts Prolog with folder-backed SWI-Prolog worker assets', async () => {

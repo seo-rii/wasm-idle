@@ -3,7 +3,7 @@
 ![wasm-idle](static/image.jpeg)
 
 Executes C, C++, Python, Java, Rust, Go, D, C#, F#, VB.NET, Elixir, Erlang, Prolog,
-Gleam, Perl, Tcl, AWK, Forth, J, BQN, Janet, OCaml, TinyGo, JavaScript, TypeScript,
+Gleam, Perl, Tcl, AWK, Forth, J, BQN, Janet, Julia, OCaml, TinyGo, JavaScript, TypeScript,
 AssemblyScript, WAT, WASM, Lua, Zig, Scheme, Ruby, Haskell, R, Octave, SQLite, DuckDB,
 and PHP code.
 
@@ -46,6 +46,7 @@ highlighting only. `Debug` means wasm-idle's trace/debug controls, not a native 
 | J              | J playground WASM worker             | Yes   | syntax               | -     |
 | BQN            | CBQN WASM worker                     | Yes   | syntax               | -     |
 | Janet          | Janet VM WASM worker                 | Yes   | syntax               | -     |
+| Julia          | Julia 1.0.4 WASM worker              | Yes   | syntax               | -     |
 | OCaml          | wasm-of-js-of-ocaml / js_of_ocaml    | Yes   | syntax               | -     |
 | TinyGo         | wasm-tinygo                          | Yes   | syntax               | -     |
 | JavaScript     | wasm-typescript / TypeScript service | Yes   | TypeScript LSP       | -     |
@@ -81,7 +82,8 @@ source and artifacts inside this checkout:
   `wasm-wat`, `wasm-lua`, `wasm-lisp`, `wasm-elixir`, `wasm-tcl`, `wasm-awk`,
   `wasm-forth`, `wasm-j`, `wasm-bqn`, `wasm-janet`,
   `pyodide`, `teavm`, `assemblyscript`, `ruby`, `r`, `php`, and `js-sandbox`.
-- `static/wasm-zig` and `static/wasm-haskell`: bundled browser compiler assets synced from
+- `static/wasm-zig`, `static/wasm-haskell`, and `static/wasm-julia`: bundled browser runtime and
+  compiler assets synced from
   upstream asset builds rather than local workspace packages.
 - `tools/*`: migrated local toolchain projects that are too broad or infrastructure-heavy to run as
   normal runtime workspace packages. `tools/dool` contains the Docker judge backend for Elixir and
@@ -135,6 +137,14 @@ Erlang support uses Popcorn's upstream `eval_erlang` and `eval_erlang_module` pa
 handwritten wasm-idle subset, but it inherits AtomVM/Popcorn runtime limits and is not full
 Erlang/OTP ERTS coverage. Some OTP paths that rely on missing NIFs can fail in the current bundle,
 so the browser starter and stdin coverage use `io:get_line`/`io:format` only.
+
+Julia browser execution uses the `@chriskoch/julia-wasm` Julia 1.0.4 asset bundle under
+`static/wasm-julia/`. Refresh the vendored worker/runtime assets with:
+
+```bash
+cd wasm-idle
+pnpm run sync:wasm-julia
+```
 
 ## Rust browser integration
 
@@ -345,6 +355,10 @@ const runtimeAssets: PlaygroundRuntimeAssets = {
 	janet: {
 		baseUrl: 'https://cdn.example.com/wasm-janet/',
 		workerUrl: 'https://cdn.example.com/wasm-janet/runner-worker.js'
+	},
+	julia: {
+		baseUrl: 'https://cdn.example.com/wasm-julia/',
+		workerUrl: 'https://cdn.example.com/wasm-julia/runner-worker.js'
 	}
 };
 ```

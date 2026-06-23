@@ -21,6 +21,7 @@ export type PlaygroundLanguage =
 	| 'J'
 	| 'BQN'
 	| 'JANET'
+	| 'JULIA'
 	| 'OCAML'
 	| 'TINYGO'
 	| 'JAVASCRIPT'
@@ -57,12 +58,12 @@ export type RuntimeLspCapability =
 	| 'go'
 	| 'rust'
 	| 'zig'
-	| 'php'
 	| 'lua'
 	| 'janet'
 	| 'lisp'
 	| 'ocaml'
 	| 'haskell'
+	| 'fortran'
 	| 'sql'
 	| 'prolog'
 	| 'ruby'
@@ -99,6 +100,7 @@ export const playgroundLanguages: PlaygroundLanguage[] = [
 	'J',
 	'BQN',
 	'JANET',
+	'JULIA',
 	'OCAML',
 	'TINYGO',
 	'JAVASCRIPT',
@@ -149,6 +151,7 @@ export const languageLabels: Record<PlaygroundLanguage, string> = {
 	J: 'J',
 	BQN: 'BQN',
 	JANET: 'Janet',
+	JULIA: 'Julia',
 	OCAML: 'OCaml',
 	TINYGO: 'TinyGo',
 	JAVASCRIPT: 'JavaScript',
@@ -199,6 +202,7 @@ export const editorLanguages: Record<PlaygroundLanguage, string> = {
 	J: 'j',
 	BQN: 'bqn',
 	JANET: 'janet',
+	JULIA: 'julia',
 	OCAML: 'ocaml',
 	TINYGO: 'go',
 	JAVASCRIPT: 'javascript',
@@ -254,12 +258,12 @@ export const runtimeLspCapabilities: Partial<Record<PlaygroundLanguage, RuntimeL
 	GO: 'go',
 	RUST: 'rust',
 	ZIG: 'zig',
-	PHP: 'php',
 	LUA: 'lua',
 	JANET: 'janet',
 	LISP: 'lisp',
 	OCAML: 'ocaml',
 	HASKELL: 'haskell',
+	FORTRAN: 'fortran',
 	SQLITE: 'sql',
 	PROLOG: 'prolog',
 	RUBY: 'ruby',
@@ -361,6 +365,7 @@ export const diagnosticMarkerLanguages = new Set([
 	'zig',
 	'lisp',
 	'haskell',
+	'fortran',
 	'r',
 	'octave',
 	'cpp',
@@ -381,6 +386,7 @@ export const monacoLanguageContributionLoaders: Record<string, MonacoLanguageCon
 	graphql: () => import('monaco-editor/esm/vs/basic-languages/graphql/graphql.contribution.js'),
 	html: () => import('monaco-editor/esm/vs/basic-languages/html/html.contribution.js'),
 	java: () => import('monaco-editor/esm/vs/basic-languages/java/java.contribution.js'),
+	julia: () => import('monaco-editor/esm/vs/basic-languages/julia/julia.contribution.js'),
 	javascript: () =>
 		import('monaco-editor/esm/vs/basic-languages/typescript/typescript.contribution.js'),
 	json: () => import('monaco-editor/esm/vs/language/json/monaco.contribution.js'),

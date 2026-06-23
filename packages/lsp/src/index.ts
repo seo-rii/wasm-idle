@@ -7,6 +7,7 @@ export {
 	resolveElixirLanguageServerWorkerUrl,
 	resolveErlangLanguageServerBundleUrl,
 	resolveErlangLanguageServerWorkerUrl,
+	resolveFortranLanguageServerAnalyzerUrl,
 	resolveGoLanguageServerCompilerUrl,
 	resolveGleamLanguageServerBaseUrl,
 	resolveGleamLanguageServerManifestUrl,
@@ -22,7 +23,6 @@ export {
 	resolveOctaveLanguageServerWorkerUrl,
 	resolveOcamlLanguageServerManifestUrl,
 	resolveOcamlLanguageServerModuleUrl,
-	resolvePhpLanguageServerVersion,
 	resolvePrologLanguageServerBaseUrl,
 	resolvePrologLanguageServerWorkerUrl,
 	resolvePythonLanguageServerBaseUrl,
@@ -187,13 +187,6 @@ export {
 	type ZigLanguageServerTargetTriple,
 	type ZigWorkerOptions
 } from './zig/index.js';
-export {
-	createPhpWorkerService,
-	getPhpLanguageServer,
-	type PhpLanguageServerConfig,
-	type PhpLanguageServerOptions,
-	type PhpWorkerOptions
-} from './php/index.js';
 export {
 	createLuaWorkerService,
 	getLuaLanguageServer,

@@ -1986,7 +1986,6 @@
 	let watLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let wasmLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let zigLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
-	let phpLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let luaLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let janetLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
 	let lispLspStatus = $state<LanguageServerStatus>({ state: 'disabled' });
@@ -2045,7 +2044,6 @@
 		zigLspEnabled?: boolean;
 		zigLspCompilerUrl?: string;
 		zigLspStdlibUrl?: string;
-		phpLspEnabled?: boolean;
 		luaLspEnabled?: boolean;
 		luaLspModuleUrl?: string;
 		janetLspEnabled?: boolean;
@@ -2060,6 +2058,7 @@
 		haskellLspModuleUrl?: string;
 		haskellLspRootfsUrl?: string;
 		haskellLspBsdtarUrl?: string;
+		fortranLspAnalyzerUrl?: string;
 		sqlLspEnabled?: boolean;
 		sqlLspWasmUrl?: string;
 		prologLspEnabled?: boolean;
@@ -2131,7 +2130,6 @@
 		zigLspEnabled = false,
 		zigLspCompilerUrl,
 		zigLspStdlibUrl,
-		phpLspEnabled = false,
 		luaLspEnabled = false,
 		luaLspModuleUrl,
 		janetLspEnabled = false,
@@ -2146,6 +2144,7 @@
 		haskellLspModuleUrl,
 		haskellLspRootfsUrl,
 		haskellLspBsdtarUrl,
+		fortranLspAnalyzerUrl,
 		sqlLspEnabled = false,
 		sqlLspWasmUrl,
 		prologLspEnabled = false,
@@ -2282,7 +2281,6 @@
 			rustTargetTriple,
 			zigLspEnabled ? zigLspCompilerUrl || '' : '',
 			zigLspEnabled ? zigLspStdlibUrl || '' : '',
-			phpLspEnabled ? 'php-lsp-on' : '',
 			luaLspEnabled ? luaLspModuleUrl || '' : '',
 			janetLspEnabled ? janetLspBaseUrl || '' : '',
 			janetLspEnabled ? janetLspWorkerUrl || '' : '',
@@ -2292,6 +2290,7 @@
 			haskellLspEnabled ? haskellLspModuleUrl || '' : '',
 			haskellLspEnabled ? haskellLspRootfsUrl || '' : '',
 			haskellLspEnabled ? haskellLspBsdtarUrl || '' : '',
+			fortranLspAnalyzerUrl || '',
 			sqlLspEnabled ? sqlLspWasmUrl || '' : '',
 			prologLspEnabled ? prologLspBaseUrl || '' : '',
 			prologLspEnabled ? prologLspWorkerUrl || '' : '',
@@ -2394,10 +2393,6 @@
 			case 'zig':
 				label = 'Zig LSP';
 				status = zigLspStatus;
-				break;
-			case 'php':
-				label = 'PHP LSP';
-				status = phpLspStatus;
 				break;
 			case 'lua':
 				label = 'Lua LSP';
@@ -2783,18 +2778,6 @@
 			}
 		},
 		{
-			languages: ['php'],
-			isEnabled: () => phpLspEnabled,
-			setStatus: (status) => (phpLspStatus = status),
-			load: async (currentUrl) => {
-				const { getPhpLanguageServer } = await import('@wasm-idle/lsp');
-				return await getPhpLanguageServer({
-					currentUrl,
-					onStatus: (status) => (phpLspStatus = status)
-				});
-			}
-		},
-		{
 			languages: ['lua'],
 			isEnabled: () => luaLspEnabled && !!luaLspModuleUrl,
 			setStatus: (status) => (luaLspStatus = status),
@@ -2879,12 +2862,15 @@
 		},
 		{
 			languages: ['fortran'],
-			isEnabled: () => true,
+			isEnabled: () => !!fortranLspAnalyzerUrl,
 			setStatus: (status) => (fortranLspStatus = status),
 			load: async (currentUrl) => {
 				const { getFortranLanguageServer } = await import('@wasm-idle/lsp');
 				return await getFortranLanguageServer({
 					currentUrl,
+					fortran: {
+						analyzerUrl: fortranLspAnalyzerUrl
+					},
 					onStatus: (status) => (fortranLspStatus = status)
 				});
 			}
@@ -3154,7 +3140,6 @@
 			wat: watLspStatus,
 			wasm: wasmLspStatus,
 			zig: zigLspStatus,
-			php: phpLspStatus,
 			lua: luaLspStatus,
 			janet: janetLspStatus,
 			lisp: lispLspStatus,

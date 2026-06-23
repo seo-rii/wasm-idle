@@ -225,9 +225,6 @@ importers:
       '@duckdb/duckdb-wasm':
         specifier: 1.33.1-dev45.0
         version: 1.33.1-dev45.0
-      '@lumis-sh/wasm-fortran':
-        specifier: 0.26.1
-        version: 0.26.1
       '@ruby/wasm-wasi':
         specifier: 2.9.3-2.9.4
         version: 2.9.3-2.9.4
@@ -279,9 +276,6 @@ importers:
       wabt:
         specifier: ^1.0.39
         version: 1.0.39
-      web-tree-sitter:
-        specifier: 0.26.9
-        version: 0.26.9
       webr:
         specifier: 0.6.0
         version: 0.6.0
@@ -1260,9 +1254,6 @@ packages:
 
   '@live-codes/gleam-precompiled@0.5.0':
     resolution: {integrity: sha512-qHHxbRk71+Q2ze5U1SHKEvcam/zCELxNioa94IEqmy+A4GtvgBVIRqwu2e4gdpqqgPY5WdE7hKURVn1OVlJ8mA==}
-
-  '@lumis-sh/wasm-fortran@0.26.1':
-    resolution: {integrity: sha512-5JEPftGvUOnDobTaLvb9ln02CzxnAJ8gFsE2cd5XgoeQOjt36NvEw2Wq0LVL4987Nbmk9swmg6eyWj6VtsLDJg==}
 
   '@marijn/find-cluster-break@1.0.2':
     resolution: {integrity: sha512-l0h88YhZFyKdXIFNfSWpyjStDjGHwZ/U7iobcK1cQQD8sejsONdQtTVU+1wVN1PBw40PiiHB1vA5S7VTfQiP9g==}
@@ -4097,9 +4088,6 @@ packages:
     resolution: {integrity: sha512-FlRLb15WwAOz1A9OQDbf6oOKKSiefi5VK0ZRF2wgH9xk3o5SnU11tNPaOnQuAh1Ucr66cwwvVXaeVRaFdRBt5g==}
     hasBin: true
 
-  web-tree-sitter@0.26.9:
-    resolution: {integrity: sha512-YJwSHANl6XFgeEjB8nitgj0qZYt5gkIesJ4w2srS2wcLB4GUa4xcOkM0YaMsU6WNR53YVIkDSY7Ej4pf3IXtCA==}
-
   webidl-conversions@8.0.1:
     resolution: {integrity: sha512-BMhLD/Sw+GbJC21C/UgyaZX41nPt8bUTg+jWyDeg7e7YN4xOM05YPSIXceACnXVtqyEw/LMClUQMtMZ+PGGpqQ==}
     engines: {node: '>=20'}
@@ -4673,8 +4661,6 @@ snapshots:
       '@lezer/lr': 1.4.10
 
   '@live-codes/gleam-precompiled@0.5.0': {}
-
-  '@lumis-sh/wasm-fortran@0.26.1': {}
 
   '@marijn/find-cluster-break@1.0.2': {}
 
@@ -7580,8 +7566,6 @@ snapshots:
   wasmoon@1.16.0:
     dependencies:
       '@types/emscripten': 1.39.10
-
-  web-tree-sitter@0.26.9: {}
 
   webidl-conversions@8.0.1: {}
 

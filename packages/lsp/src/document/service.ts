@@ -1,8 +1,5 @@
 import { getCSSLanguageService } from 'vscode-css-languageservice';
-import {
-	getLanguageService as getHtmlLanguageService,
-	TokenType
-} from 'vscode-html-languageservice';
+import { getLanguageService as getHtmlLanguageService } from 'vscode-html-languageservice';
 import { getLanguageService as getJsonLanguageService } from 'vscode-json-languageservice';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { DiagnosticSeverity, type Diagnostic, type TextEdit } from 'vscode-languageserver-types';
@@ -156,82 +153,6 @@ const tomlDiagnostics = (document: LspDocument): LspDiagnostic[] => {
 			}
 		];
 	}
-};
-
-const voidHtmlElements = new Set([
-	'area',
-	'base',
-	'br',
-	'col',
-	'embed',
-	'hr',
-	'img',
-	'input',
-	'link',
-	'meta',
-	'param',
-	'source',
-	'track',
-	'wbr'
-]);
-
-const htmlDiagnostics = (document: LspDocument): LspDiagnostic[] => {
-	const scanner = htmlLanguageService.createScanner(document.text);
-	const stack: Array<{ tag: string; offset: number }> = [];
-	const diagnostics: LspDiagnostic[] = [];
-	let currentStartTagPushed = false;
-
-	for (;;) {
-		const token = scanner.scan();
-		if (token === TokenType.EOS) break;
-		if (token === TokenType.StartTag) {
-			const tag = scanner.getTokenText().toLowerCase();
-			currentStartTagPushed = !voidHtmlElements.has(tag);
-			if (currentStartTagPushed) stack.push({ tag, offset: scanner.getTokenOffset() });
-			continue;
-		}
-		if (token === TokenType.StartTagSelfClose) {
-			if (currentStartTagPushed) stack.pop();
-			currentStartTagPushed = false;
-			continue;
-		}
-		if (token === TokenType.StartTagClose) {
-			currentStartTagPushed = false;
-			continue;
-		}
-		if (token !== TokenType.EndTag) continue;
-		currentStartTagPushed = false;
-		const tag = scanner.getTokenText().toLowerCase();
-		const index = stack.map((entry) => entry.tag).lastIndexOf(tag);
-		if (index === -1) {
-			diagnostics.push({
-				range: oneCharacterRange(document.text, scanner.getTokenOffset()),
-				severity: 1,
-				source: 'html',
-				message: `Unexpected closing tag </${tag}>.`
-			});
-			continue;
-		}
-		for (const entry of stack.splice(index + 1)) {
-			diagnostics.push({
-				range: oneCharacterRange(document.text, entry.offset),
-				severity: 1,
-				source: 'html',
-				message: `Missing closing tag </${entry.tag}>.`
-			});
-		}
-		stack.pop();
-	}
-
-	for (const entry of stack) {
-		diagnostics.push({
-			range: oneCharacterRange(document.text, entry.offset),
-			severity: 1,
-			source: 'html',
-			message: `Missing closing tag </${entry.tag}>.`
-		});
-	}
-	return diagnostics;
 };
 
 const markdownSlug = (value: string) =>
@@ -419,7 +340,7 @@ export function createDocumentWorkerService(): WorkerLanguageService {
 					.doValidation(textDocument, stylesheet)
 					.map((diagnostic) => diagnosticFrom(diagnostic, 'css'));
 			}
-			if (language === 'html') return htmlDiagnostics(document);
+			if (language === 'html') return [];
 			if (language === 'yaml') return yamlDiagnostics(document);
 			if (language === 'toml') return tomlDiagnostics(document);
 			return markdownDiagnostics(document);

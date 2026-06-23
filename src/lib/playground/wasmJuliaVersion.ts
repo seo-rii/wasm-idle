@@ -1,0 +1,1 @@
+export const WASM_JULIA_ASSET_VERSION = "4d20f92d72865074";
