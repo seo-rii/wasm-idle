@@ -32,8 +32,8 @@ async function fetchRuntimeText(baseUrl, path) {
 	return textDecoder.decode(await fetchRuntimeBytes(baseUrl, path));
 }
 
-function postProgress(percent) {
-	self.postMessage({ progress: { percent } });
+function postProgress(percent, stage) {
+	self.postMessage({ progress: { percent, stage } });
 }
 
 function splitLines(text) {
@@ -200,9 +200,9 @@ static int wasm_idle_errno;
 }
 
 async function buildWasm({ baseUrl, code, stdout, stderr }) {
-	postProgress(5);
+	postProgress(5, 'Loading Nim compiler');
 	const nim = await loadNimCompiler(baseUrl, stdout, stderr);
-	postProgress(20);
+	postProgress(20, 'Translating Nim to C');
 	const { cacheDir, cFiles } = compileNimToC(nim, code, stdout, stderr);
 	const nimbaseContent = await fetchRuntimeText(baseUrl, 'nim/nimbase.h');
 	const files = cFiles.map((file, index) => ({
@@ -212,14 +212,14 @@ async function buildWasm({ baseUrl, code, stdout, stderr }) {
 			nimbaseContent
 		)
 	}));
-	postProgress(35);
+	postProgress(35, 'Preparing Nim C output');
 	const clangModule = await import(assetUrl(baseUrl, 'clang/clang.js'));
 	const clangLogs = [];
 	const originalLog = console.log;
 	try {
 		console.log = (...args) => clangLogs.push(args.map(String).join(' '));
 		await clangModule.init({ path: assetUrl(baseUrl, 'clang').replace(/\/$/, '') });
-		postProgress(50);
+		postProgress(50, 'Compiling and linking Nim output');
 		const result = await clangModule.compileEachLink(files, 'app.wasm');
 		if (result && result.ok === false && result.error) {
 			throw new Error(result.error);
@@ -230,7 +230,7 @@ async function buildWasm({ baseUrl, code, stdout, stderr }) {
 	} finally {
 		console.log = originalLog;
 	}
-	postProgress(75);
+	postProgress(75, 'Loading Nim executable');
 	const output = await clangModule.getFile('app.wasm');
 	if (!output?.ok || !output.bytes) {
 		throw new Error(output?.error || 'Nim build did not produce app.wasm.');
@@ -441,7 +441,7 @@ self.onmessage = async (event) => {
 			stdout: compilerStdout,
 			stderr: compilerStderr
 		});
-		postProgress(85);
+		postProgress(85, 'Running Nim program');
 		const result = await createWasiRunner({
 			stdin: stdin || '',
 			args: Array.isArray(args) ? args : [],
@@ -452,7 +452,7 @@ self.onmessage = async (event) => {
 		if (result.code !== 0) {
 			throw new Error(`Nim program exited with status ${result.code}.`);
 		}
-		postProgress(100);
+		postProgress(100, 'Nim run complete');
 		if (log) console.log('[wasm-idle:nim-worker] run settled');
 		self.postMessage({ results: true });
 	} catch (error) {

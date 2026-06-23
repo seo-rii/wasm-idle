@@ -54,10 +54,11 @@ describe('executeTerminalRun', () => {
 
 	it('marks loading complete before execute starts', async () => {
 		const values: number[] = [];
+		const stages: Array<string | undefined> = [];
 		const terminal = {
 			clear: vi.fn(async () => {}),
 			prepare: vi.fn(async (_language, _code, _log, progress) => {
-				progress?.set?.(0.5);
+				progress?.set?.(0.5, 'Compiling and linking Nim output');
 				return true;
 			}),
 			run: vi.fn(async () => 'ok')
@@ -68,13 +69,15 @@ describe('executeTerminalRun', () => {
 			language: 'PYTHON',
 			code: 'print(1)',
 			progress: {
-				set(value: number) {
+				set(value: number, stage?: string) {
 					values.push(value);
+					stages.push(stage);
 				}
 			}
 		});
 
 		expect(values).toEqual([0.5, 1]);
+		expect(stages).toEqual(['Compiling and linking Nim output', undefined]);
 		expect(terminal.run).toHaveBeenCalledWith('PYTHON', 'print(1)', true, undefined, [], {});
 	});
 });

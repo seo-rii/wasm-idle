@@ -341,6 +341,7 @@
 		language = $state<PlaygroundLanguage>('CPP'),
 		runningMode = $state<'run' | 'debug' | null>(null),
 		progress = $state(-1),
+		progressStage = $state(''),
 		stdinInput = $state(''),
 		init = $state(false),
 		editorLspStatus = $state<EditorLspStatusView | null>(null),
@@ -507,8 +508,9 @@
 	);
 
 	const progressRef = {
-		set(value: number) {
+		set(value: number, stage?: string) {
 			progress = value;
+			if (stage) progressStage = stage;
 		}
 	};
 
@@ -528,7 +530,9 @@
 	const progressValue = $derived(progress < 0 ? 0 : progress > 1 ? 1 : progress);
 	const progressPercent = $derived(Math.round(progressValue * 100));
 	const progressLabel = $derived(
-		runningMode === 'debug' ? 'Preparing debug session' : 'Loading runtime'
+		runningMode === 'debug'
+			? 'Preparing debug session'
+			: progressStage || 'Loading runtime'
 	);
 	const examplePaneHorizontalPadding = 40;
 	const panelResizerWidth = 14;
@@ -1407,6 +1411,7 @@
 		}
 		try {
 			progress = 0;
+			progressStage = '';
 			const preloadedStdin = sharedBufferAvailable ? undefined : stdinInput;
 			await executeTerminalRun({
 				terminal,
@@ -1430,6 +1435,7 @@
 			});
 		} finally {
 			progress = -1;
+			progressStage = '';
 			runningMode = null;
 			if (!debug.paused) debug.reset();
 		}

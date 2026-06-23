@@ -421,4 +421,24 @@ describe('static worker backed language sandboxes', () => {
 			})
 		);
 	});
+
+	it('forwards structured static worker progress stages to the progress sink', async () => {
+		onPostMessage = (worker, _message) => {
+			queueMicrotask(() => {
+				worker.onmessage?.({
+					data: {
+						progress: { percent: 50, stage: 'Compiling and linking Nim output' }
+					}
+				} as MessageEvent<any>);
+				worker.onmessage?.({ data: { results: true } } as MessageEvent<any>);
+			});
+		};
+		const progress = { set: vi.fn() };
+		const sandbox = new Nim();
+		await sandbox.load('/absproxy/5173');
+
+		await expect(sandbox.run('echo "ok"', false, true, progress)).resolves.toBe(true);
+
+		expect(progress.set).toHaveBeenCalledWith(0.5, 'Compiling and linking Nim output');
+	});
 });

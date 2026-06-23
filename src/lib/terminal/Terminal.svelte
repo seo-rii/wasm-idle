@@ -212,7 +212,7 @@
 			language: string,
 			code: string,
 			log = true,
-			prog?: { set?: (value: number) => void },
+			prog?: { set?: (value: number, stage?: string) => void },
 			args: string[] = [],
 			options: SandboxExecutionOptions = {}
 		) {
@@ -240,7 +240,7 @@
 			language: string,
 			code: string,
 			log = true,
-			prog?: { set?: (value: number) => void },
+			prog?: { set?: (value: number, stage?: string) => void },
 			args: string[] = [],
 			options: SandboxExecutionOptions = {}
 		) {

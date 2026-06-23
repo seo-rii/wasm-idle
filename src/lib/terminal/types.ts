@@ -8,7 +8,7 @@ import type {
 } from '$lib/playground/options';
 
 export interface ProgressLike {
-	set?: (value: number) => void;
+	set?: (value: number, stage?: string) => void;
 }
 
 export interface TerminalControl {

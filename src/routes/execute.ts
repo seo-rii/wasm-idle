@@ -6,7 +6,7 @@ interface TerminalRunner {
 		language: string,
 		code: string,
 		log?: boolean,
-		prog?: { set?: (value: number) => void },
+		prog?: { set?: (value: number, stage?: string) => void },
 		args?: string[],
 		options?: SandboxExecutionOptions
 	) => Promise<boolean>;
@@ -14,7 +14,7 @@ interface TerminalRunner {
 		language: string,
 		code: string,
 		log?: boolean,
-		prog?: { set?: (value: number) => void },
+		prog?: { set?: (value: number, stage?: string) => void },
 		args?: string[],
 		options?: SandboxExecutionOptions
 	) => Promise<boolean | string>;
@@ -25,7 +25,7 @@ interface ExecuteTerminalRunOptions {
 	language: string;
 	code: string;
 	log?: boolean;
-	progress?: { set?: (value: number) => void };
+	progress?: { set?: (value: number, stage?: string) => void };
 	args?: string[];
 	options?: SandboxExecutionOptions;
 }

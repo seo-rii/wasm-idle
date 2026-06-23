@@ -130,4 +130,8 @@ describe('Terminal source', () => {
 		expect(source).toMatch(/progressBands\.prepare\[0\]/);
 		expect(source).toMatch(/progressBands\.prepare\[1\]/);
 	});
+
+	it('allows runtime progress stages to flow through the terminal progress sink', () => {
+		expect(source).toMatch(/prog\?: \{ set\?: \(value: number, stage\?: string\) => void \}/);
+	});
 });

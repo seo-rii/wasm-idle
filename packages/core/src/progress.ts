@@ -1,7 +1,7 @@
 import { isDeferredProgressLanguage } from './languages.js';
 
 export interface ProgressLike {
-	set?: (value: number) => void;
+	set?: (value: number, stage?: string) => void;
 }
 
 export function phaseProgress(
@@ -11,14 +11,20 @@ export function phaseProgress(
 ): ProgressLike | undefined {
 	if (!progress) return undefined;
 	return {
-		set(value: number) {
+		set(value: number, stage?: string) {
 			const clamped = Number.isFinite(value) ? Math.min(Math.max(value, 0), 1) : 0;
-			progress.set?.(start + (end - start) * clamped);
+			progress.set?.(start + (end - start) * clamped, stage);
 		}
 	};
 }
 
 export function progressBandsForLanguage(language: string) {
+	if (language.trim().toUpperCase() === 'NIM' || language.trim().toUpperCase() === 'NIMROD') {
+		return {
+			load: [0, 0.02] as const,
+			prepare: [0.02, 0.995] as const
+		};
+	}
 	return isDeferredProgressLanguage(language)
 		? {
 				load: [0, 0.05] as const,

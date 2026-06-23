@@ -29,7 +29,7 @@ type StaticWorkerMessage = {
 	results?: boolean | string;
 	error?: string;
 	diagnostic?: CompilerDiagnostic;
-	progress?: { percent?: number };
+	progress?: { percent?: number; stage?: string };
 };
 
 export class StaticWorkerRuntimeSandbox implements Sandbox {
@@ -56,7 +56,9 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 		_log = true,
 		_args: string[] = [],
 		_options: SandboxExecutionOptions = {},
-		progress?: { set?: (value: number) => void } | import('svelte/store').Writable<number>
+		progress?:
+			| { set?: (value: number, stage?: string) => void }
+			| import('svelte/store').Writable<number>
 	) {
 		return new Promise<void>((resolve) => {
 			this.pendingInput = [];
@@ -126,7 +128,9 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 		code: string,
 		prepare: boolean,
 		_log = true,
-		_prog?: { set?: (value: number) => void } | import('svelte/store').Writable<number>,
+		_prog?:
+			| { set?: (value: number, stage?: string) => void }
+			| import('svelte/store').Writable<number>,
 		args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
@@ -167,7 +171,10 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 						if (_uid !== this.uid) return;
 						const { output, results, error, diagnostic, progress } = event.data;
 						if (progress && typeof progress.percent === 'number') {
-							_prog?.set?.(Math.max(0, Math.min(progress.percent / 100, 1)));
+							_prog?.set?.(
+								Math.max(0, Math.min(progress.percent / 100, 1)),
+								progress.stage
+							);
 						}
 						if (output) this.output?.(output);
 						if (diagnostic) this.oncompilerdiagnostic?.(diagnostic);

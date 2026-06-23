@@ -1,1 +1,1 @@
-export const WASM_NIM_ASSET_VERSION = "ace187a96fc387b2";
+export const WASM_NIM_ASSET_VERSION = "d2ab03ac4c375c4c";
