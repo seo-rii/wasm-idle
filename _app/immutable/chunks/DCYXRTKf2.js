@@ -1,1 +1,0 @@
-import{t as e}from"./BcgnSMxp.js";import{t}from"./CG-z3oXZ.js";t({id:`ruby`,extensions:[`.rb`,`.rbx`,`.rjs`,`.gemspec`,`.pp`],filenames:[`rakefile`,`Gemfile`],aliases:[`Ruby`,`rb`],loader:()=>e(()=>import(`./Dowe3a7c.js`),[],import.meta.url)});

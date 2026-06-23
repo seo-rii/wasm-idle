@@ -1,1 +1,0 @@
-import{t as e}from"./BcgnSMxp.js";import{t}from"./CG-z3oXZ.js";t({id:`graphql`,extensions:[`.graphql`,`.gql`],aliases:[`GraphQL`,`graphql`,`gql`],mimetypes:[`application/graphql`],loader:()=>e(()=>import(`./DFarj7sO.js`),[],import.meta.url)});

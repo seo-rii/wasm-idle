@@ -29,8 +29,8 @@
           "llc": "llvm/llc.js",
           "llcWasm": "llvm/llc.wasm.gz",
           "lld": "llvm/lld.js",
-          "lldWasm": "llvm/lld.wasm.gz",
-          "lldData": "llvm/lld.data.gz"
+          "lldWasm": "../../shared/emscripten-lld/lld.wasm.gz",
+          "lldData": "../../shared/emscripten-lld/lld.data.gz"
         },
         "link": {
           "args": [
@@ -101,8 +101,8 @@
           "llc": "llvm/llc.js",
           "llcWasm": "llvm/llc.wasm.gz",
           "lld": "llvm/lld.js",
-          "lldWasm": "llvm/lld.wasm.gz",
-          "lldData": "llvm/lld.data.gz"
+          "lldWasm": "../../shared/emscripten-lld/lld.wasm.gz",
+          "lldData": "../../shared/emscripten-lld/lld.data.gz"
         },
         "link": {
           "args": [
@@ -175,8 +175,8 @@
           "llc": "llvm/llc.js",
           "llcWasm": "llvm/llc.wasm.gz",
           "lld": "llvm/lld.js",
-          "lldWasm": "llvm/lld.wasm.gz",
-          "lldData": "llvm/lld.data.gz"
+          "lldWasm": "../../shared/emscripten-lld/lld.wasm.gz",
+          "lldData": "../../shared/emscripten-lld/lld.data.gz"
         },
         "link": {
           "args": [

@@ -1,1 +1,0 @@
-import{t as e}from"./BcgnSMxp.js";import{t}from"./CG-z3oXZ.js";t({id:`r`,extensions:[`.r`,`.rhistory`,`.rmd`,`.rprofile`,`.rt`],aliases:[`R`,`r`],loader:()=>e(()=>import(`./SjYlPwEP.js`),[],import.meta.url)});

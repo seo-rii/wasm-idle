@@ -1,0 +1,14 @@
+LFortran WebAssembly analyzer assets
+
+Source repository: https://github.com/lfortran/wasm_builds
+Vendored build: dev/22ff077a4
+LFortran version: 0.63.0-866-g22ff077a4
+Created upstream: 2026-06-22 17:55:48.577540
+
+Files copied unchanged from the upstream build:
+- lfortran.js
+- lfortran.wasm
+- lfortran.data
+
+The analyzer.js and analyzer-worker.js files in this directory are wasm-idle
+wrappers that load the LFortran build and expose diagnostics for Monaco LSP.

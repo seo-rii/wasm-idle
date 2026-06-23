@@ -20,11 +20,11 @@
         "asset": "bin/lld.js"
       },
       "wasm": {
-        "asset": "bin/lld.wasm.gz",
+        "asset": "../../shared/emscripten-lld/lld.wasm.gz",
         "compression": "gzip"
       },
       "data": {
-        "asset": "bin/lld.data.gz",
+        "asset": "../../shared/emscripten-lld/lld.data.gz",
         "compression": "gzip"
       }
     }

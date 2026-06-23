@@ -1,0 +1,1 @@
+import{g as e}from"./BG9u-Hyj2.js";import{t}from"./DE1WiEx92.js";var n=class extends t{constructor(){super({displayName:`Julia`,languageId:`JULIA`,defaultActivePath:`main.jl`,readStdinPattern:/\b(?:readline|readlines|read|eachline|stdin)\b/i,resolveRuntimeAssets:e})}};export{n as default};

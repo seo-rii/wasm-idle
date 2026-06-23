@@ -1,1 +1,0 @@
-import{n as e}from"./Dl7ookPV2.js";import{t}from"./BVj3g9PZ2.js";var n=class extends t{constructor(){super({languageId:`AWK`,displayName:`AWK`,defaultActivePath:`main.awk`,readStdinPattern:/\bgetline\b|\$[0-9]|\b(NR|FNR|NF)\b|(^|\n)\s*(?:\/|[!$({]|[A-Za-z_]\w*\s*(?:\(|==|!=|~|!~|<|>|<=|>=))/,resolveRuntimeAssets(t,n){return e(t,n)}})}};export{n as default};

@@ -1,0 +1,18 @@
+{
+  "format": "wasm-nim-runtime-manifest-v1",
+  "runtime": "benagastov-nim-wasm-compiler",
+  "repository": "https://github.com/benagastov/Nim-WASM-Compiler.git",
+  "fingerprint": "ace187a96fc387b2",
+  "files": [
+    "LICENSE",
+    "README.md",
+    "clang/clang.js",
+    "clang/clang.wasm.gz",
+    "clang/lld.wasm.gz",
+    "clang/memfs.wasm",
+    "clang/sysroot.tar.gz",
+    "nim/nim-bundle.js.gz",
+    "nim/nim.wasm.gz",
+    "nim/nimbase.h"
+  ]
+}

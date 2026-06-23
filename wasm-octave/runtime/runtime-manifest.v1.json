@@ -3,7 +3,7 @@
   "version": "10.3.0",
   "package": "octave-10.3.0-pl5321h996e327_3.tar.bz2",
   "packageUrl": "https://repo.prefix.dev/emscripten-forge-4x/emscripten-wasm32/octave-10.3.0-pl5321h996e327_3.tar.bz2",
-  "fingerprint": "a776c4feb552005a",
+  "fingerprint": "f49d4dc8ecd1a208",
   "entryScript": "bin/octave-cli-10.3.0.js",
   "entryWasm": "bin/octave-cli.wasm",
   "files": [

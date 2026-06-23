@@ -1,0 +1,1 @@
+function e(e){return new Worker(``+new URL(`../workers/wasm-B7Fc6Feb.js`,import.meta.url).href,{type:`module`,name:e?.name})}export{e as default};
