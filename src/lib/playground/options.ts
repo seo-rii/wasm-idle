@@ -73,6 +73,7 @@ export interface SandboxExecutionOptions {
 	pauseOnEntry?: boolean;
 	stdin?: string;
 	activePath?: string;
+	debugPath?: string;
 	workspaceFiles?: SandboxWorkspaceFile[];
 	compileArgs?: string[];
 	programArgs?: string[];

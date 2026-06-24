@@ -66,6 +66,33 @@ print(f"{left + right}:{is_even(left + right)}")`;
 		expect(outputs).toContain('10:True\n');
 	});
 
+	it('forwards separate execution and debug paths to the worker', async () => {
+		const sandbox = new Python();
+		sandbox.output = () => {};
+
+		await sandbox.load('/');
+		await expect(
+			sandbox.run('print("wrapped")', false, false, undefined, [], {
+				debug: true,
+				activePath: 'Main.py',
+				debugPath: 'User.py',
+				workspaceFiles: [{ path: 'User.py', content: 'print("user")' }]
+			})
+		).resolves.toBe(true);
+
+		expect(workerInstances).toHaveLength(1);
+		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
+			2,
+			expect.objectContaining({
+				code: 'print("wrapped")',
+				debug: true,
+				activePath: 'Main.py',
+				debugPath: 'User.py',
+				workspaceFiles: [{ path: 'User.py', content: 'print("user")' }]
+			})
+		);
+	});
+
 	it('forwards Python runtime errors', async () => {
 		const sandbox = new Python();
 		const worker = new MockWorker();

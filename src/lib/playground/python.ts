@@ -13,10 +13,7 @@ import {
 	resetBufferedStdin,
 	waitForBufferedSequenceChange
 } from '$lib/playground/stdinBuffer';
-import {
-	createWasmIdleSharedBuffer,
-	requireSharedArrayBuffer
-} from '$lib/playground/sharedBuffer';
+import { createWasmIdleSharedBuffer, requireSharedArrayBuffer } from '$lib/playground/sharedBuffer';
 
 class Python implements Sandbox {
 	ts = Date.now();
@@ -191,6 +188,7 @@ class Python implements Sandbox {
 				breakpoints: [...(options.breakpoints || [])],
 				pauseOnEntry: !!options.pauseOnEntry,
 				activePath: options.activePath,
+				debugPath: options.debugPath,
 				workspaceFiles: options.workspaceFiles
 			});
 		});

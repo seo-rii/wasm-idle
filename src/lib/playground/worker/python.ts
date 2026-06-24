@@ -246,6 +246,7 @@ self.onmessage = async (event: any) => {
 		breakpoints = [],
 		pauseOnEntry = false,
 		activePath,
+		debugPath,
 		workspaceFiles
 	} = event.data;
 	if (load) {
@@ -376,7 +377,11 @@ self.onmessage = async (event: any) => {
 		self[debugWriteWatchName] = (value: string) => {
 			flushQueuedStdin([value], watchResultBufferPyodide);
 		};
-		const userFilename = normalizeWorkspacePath(activePath || '') || '__wasm_idle_user__.py';
+		const executionFilename =
+			normalizeWorkspacePath(activePath || '') || '__wasm_idle_user__.py';
+		const debugFilename = normalizeWorkspacePath(debugPath || '') || executionFilename;
+		const executionFilenameLiteral = JSON.stringify(executionFilename);
+		const debugFilenameLiteral = JSON.stringify(debugFilename);
 		const normalizedBreakpoints = JSON.stringify(
 			[...(Array.isArray(breakpoints) ? breakpoints : [])]
 				.map((value) => Number(value))
@@ -424,7 +429,7 @@ def __wasm_idle_debug_depth(frame):
     depth = 0
     current = frame
     while current is not None:
-        if current.f_code.co_filename == "${userFilename}":
+        if current.f_code.co_filename == ${debugFilenameLiteral}:
             depth += 1
         current = current.f_back
     return depth
@@ -488,7 +493,7 @@ def __wasm_idle_debug_stack(frame):
     stack = []
     current = frame
     while current is not None:
-        if current.f_code.co_filename == "${userFilename}":
+        if current.f_code.co_filename == ${debugFilenameLiteral}:
             stack.append({"functionName": current.f_code.co_name, "line": current.f_lineno})
         current = current.f_back
     return stack
@@ -501,7 +506,7 @@ def __wasm_idle_debug_trace(frame, event, arg):
     global __wasm_idle_debug_next_line
     global __wasm_idle_debug_step_out_depth
 
-    if frame.f_code.co_filename != "${userFilename}":
+    if frame.f_code.co_filename != ${debugFilenameLiteral}:
         return None
     if event != "line":
         return __wasm_idle_debug_trace
@@ -567,7 +572,7 @@ sys.settrace(__wasm_idle_debug_trace)
 try:
     __wasm_idle_globals = {"__name__": "__main__"}
     __wasm_idle_result = eval(
-        compile(${JSON.stringify(code)}, "${userFilename}", "exec", flags = ast.PyCF_ALLOW_TOP_LEVEL_AWAIT),
+        compile(${JSON.stringify(code)}, ${executionFilenameLiteral}, "exec", flags = ast.PyCF_ALLOW_TOP_LEVEL_AWAIT),
         __wasm_idle_globals,
         __wasm_idle_globals,
     )
