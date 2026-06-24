@@ -530,9 +530,7 @@
 	const progressValue = $derived(progress < 0 ? 0 : progress > 1 ? 1 : progress);
 	const progressPercent = $derived(Math.round(progressValue * 100));
 	const progressLabel = $derived(
-		runningMode === 'debug'
-			? 'Preparing debug session'
-			: progressStage || 'Loading runtime'
+		runningMode === 'debug' ? 'Preparing debug session' : progressStage || 'Loading runtime'
 	);
 	const examplePaneHorizontalPadding = 40;
 	const panelResizerWidth = 14;
@@ -564,6 +562,7 @@
 		writeTerminalInput: (text: string, eof?: boolean) => Promise<void>;
 		getEditorValue: () => string;
 		setEditorValue: (text: string) => Promise<boolean>;
+		setPreloadedStdin: (text: string) => void;
 	};
 	let browserDebugHookVersion = 0;
 	type WasmRustRuntimeModule = {
@@ -1749,6 +1748,9 @@
 				updateActiveContent(text);
 				await Promise.resolve();
 				return editor.getValue() === text && activeFile?.content === text;
+			},
+			setPreloadedStdin(text: string) {
+				stdinInput = text;
 			}
 		};
 		target.__wasmIdleDebug = debugApi;
@@ -2252,8 +2254,8 @@
 		{#if language === 'JULIA'}
 			<p class="hint">
 				Julia runs through the bundled Julia 1.0.4 WebAssembly runtime. Use `readline()` for
-				line input; the worker connects terminal stdin with a Julia `IOBuffer` before running
-				the source.
+				line input; the worker connects terminal stdin with a Julia `IOBuffer` before
+				running the source.
 			</p>
 		{/if}
 		{#if language === 'NIM'}

@@ -8,6 +8,7 @@ const DEFAULT_SOURCE_DIR = path.join(REPO_ROOT, 'runtimes', 'wasm-clang', 'dist'
 const DEFAULT_STATIC_DIR = path.join(REPO_ROOT, 'static');
 
 const ASSETS = [
+	['runtime-manifest.v1.json', 'clang/runtime-manifest.v1.json'],
 	['bin/clang.zip', 'clang/bin/clang.zip'],
 	['bin/lld.zip', 'clang/bin/lld.zip'],
 	['bin/memfs.zip', 'clang/bin/memfs.zip'],
@@ -31,8 +32,10 @@ export async function syncWasmClangDist({
 	}
 
 	const clangBinDir = path.join(staticDir, 'clang', 'bin');
+	const clangManifestPath = path.join(staticDir, 'clang', 'runtime-manifest.v1.json');
 	const clangdDir = path.join(staticDir, 'clangd');
 	await rm(clangBinDir, { recursive: true, force: true });
+	await rm(clangManifestPath, { force: true });
 	await rm(clangdDir, { recursive: true, force: true });
 
 	for (const [source, target] of ASSETS) {

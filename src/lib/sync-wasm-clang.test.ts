@@ -7,6 +7,7 @@ import { syncWasmClangDist } from '../../scripts/sync-wasm-clang.mjs';
 
 const tempDirs: string[] = [];
 const assets = [
+	'runtime-manifest.v1.json',
 	'bin/clang.zip',
 	'bin/lld.zip',
 	'bin/memfs.zip',
@@ -45,6 +46,9 @@ describe('syncWasmClangDist', () => {
 
 		await syncWasmClangDist({ sourceDir, staticDir });
 
+		await expect(
+			readFile(path.join(staticDir, 'clang', 'runtime-manifest.v1.json'), 'utf8')
+		).resolves.toBe('fixture:runtime-manifest.v1.json');
 		await expect(
 			readFile(path.join(staticDir, 'clang', 'bin', 'clang.zip'), 'utf8')
 		).resolves.toBe('fixture:bin/clang.zip');

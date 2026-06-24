@@ -132,14 +132,21 @@ function resolveClangLanguageArgs(
 	};
 }
 
+const normalizeWorkspacePath = (path: string) =>
+	path
+		.replaceAll('\\', '/')
+		.split('/')
+		.filter((part) => part && part !== '.' && part !== '..')
+		.join('/');
+
 export function resolveBuildArtifactNames(language: ClangSourceLanguage, fileName?: string) {
-	const normalizedFileName = fileName?.replace(/\\/g, '/').split('/').filter(Boolean).pop() || '';
+	const normalizedFileName = normalizeWorkspacePath(fileName || '');
 	const defaultStem = 'main';
 	const input =
 		normalizedFileName && /\.[A-Za-z0-9_-]+$/.test(normalizedFileName)
 			? normalizedFileName
 			: `${normalizedFileName || defaultStem}.${language === 'C' ? 'c' : 'cc'}`;
-	const stem = input.replace(/\.[^.]+$/, '') || defaultStem;
+	const stem = (input.split('/').pop() || input).replace(/\.[^.]+$/, '') || defaultStem;
 	return {
 		input,
 		obj: `${stem}.o`,
@@ -270,8 +277,31 @@ class Clang {
 		return module;
 	}
 
+	addWorkspaceDirectories(path: string, addedDirectories = new Set<string>()) {
+		const parts = normalizeWorkspacePath(path).split('/').slice(0, -1);
+		let directory = '';
+		for (const part of parts) {
+			directory = directory ? `${directory}/${part}` : part;
+			if (!addedDirectories.has(directory)) {
+				this.memfs.addDirectory(directory);
+				addedDirectories.add(directory);
+			}
+		}
+	}
+
+	addWorkspaceFiles(files: { path: string; content: string }[] = [], activePath = '') {
+		const addedDirectories = new Set<string>();
+		const normalizedActivePath = normalizeWorkspacePath(activePath);
+		for (const file of files) {
+			const safePath = normalizeWorkspacePath(file.path);
+			if (!safePath || safePath === normalizedActivePath) continue;
+			this.addWorkspaceDirectories(safePath, addedDirectories);
+			this.memfs.addFile(safePath, toUtf8(file.content));
+		}
+	}
+
 	async compile(options: any) {
-		const input = options.input;
+		const input = normalizeWorkspacePath(options.input || 'main.cc') || 'main.cc';
 		let source = options.code;
 		const obj = options.obj;
 		const language: ClangSourceLanguage = options.language === 'C' ? 'C' : 'CPP';
@@ -1116,6 +1146,8 @@ class Clang {
 		const code = toUtf8(source);
 
 		await this.ready;
+		this.addWorkspaceFiles(options.workspaceFiles, input);
+		this.addWorkspaceDirectories(input);
 		this.memfs.addFile(input, code);
 		this.memfs.addFile(obj, new Uint8Array(0));
 		const clang = await this.getModule(this.assetUrls?.clang || clangUrl(this.path));
@@ -1258,6 +1290,8 @@ class Clang {
 		const {
 			language = 'CPP',
 			fileName,
+			activePath,
+			workspaceFiles = [],
 			args = [],
 			compileArgs = args,
 			debug = false,
@@ -1270,7 +1304,11 @@ class Clang {
 			watchBuffer,
 			watchResultBuffer
 		} = options;
-		const { input, obj, wasm } = resolveBuildArtifactNames(language, fileName);
+		const requestedInput =
+			normalizeWorkspacePath(activePath || '') ||
+			normalizeWorkspacePath(fileName || '') ||
+			undefined;
+		const { input, obj, wasm } = resolveBuildArtifactNames(language, requestedInput);
 		this.beginTrace(debug);
 		this.debugBreakpoints = new Set(debug ? breakpoints : []);
 		this.debugPauseOnEntry = debug && pauseOnEntry;
@@ -1285,6 +1323,7 @@ class Clang {
 			wasm,
 			language,
 			compileArgs,
+			workspaceFiles,
 			cppVersion,
 			cVersion,
 			debug
@@ -1299,6 +1338,7 @@ class Clang {
 			obj,
 			language,
 			compileArgs,
+			workspaceFiles,
 			cppVersion,
 			cVersion,
 			debug
@@ -1317,6 +1357,8 @@ class Clang {
 		const {
 			language = 'CPP',
 			fileName,
+			activePath,
+			workspaceFiles = [],
 			args = [],
 			compileArgs = args,
 			programArgs = [],
@@ -1331,11 +1373,17 @@ class Clang {
 			watchResultBuffer
 		} = options;
 		this.debug = debug;
-		const { wasm } = resolveBuildArtifactNames(language, fileName);
+		const requestedInput =
+			normalizeWorkspacePath(activePath || '') ||
+			normalizeWorkspacePath(fileName || '') ||
+			undefined;
+		const { wasm } = resolveBuildArtifactNames(language, requestedInput);
 		return await this.run(
 			await this.compileLink(code, {
 				language,
 				fileName,
+				activePath,
+				workspaceFiles,
 				compileArgs,
 				debug,
 				breakpoints,

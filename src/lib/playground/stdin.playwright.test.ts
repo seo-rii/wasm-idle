@@ -104,6 +104,26 @@ pub fn main() !void {
     try std.io.getStdOut().writer().print("main={d}\\n", .{n + 5});
 }`;
 
+const cStdinSource = `#include <stdio.h>
+
+int main(void) {
+    int n = 0;
+    if (scanf("%d", &n) != 1) {
+        n = 0;
+    }
+    printf("main=%d\\n", n + 5);
+    return 0;
+}`;
+
+const cppStdinSource = `#include <iostream>
+
+int main() {
+    int n = 0;
+    std::cin >> n;
+    std::cout << "main=" << (n + 5) << "\\n";
+    return 0;
+}`;
+
 let previewBuildReady: Promise<void> | null = null;
 
 async function withBrowserPreview(action: (browserUrl: string) => Promise<void>) {
@@ -325,6 +345,39 @@ describe('wasm-idle browser stdin connection', () => {
 				stdinText: '73\n'
 			});
 			expect(summary.transcript).toContain('main=73');
+		});
+	}, 700_000);
+
+	it('passes C and C++ stdin through the browser wasm-clang runtime path', async () => {
+		if (
+			process.env.WASM_IDLE_RUN_REAL_BROWSER_STDIN !== '1' &&
+			process.env.WASM_IDLE_RUN_REAL_BROWSER_CLANG_STDIN !== '1'
+		) {
+			return;
+		}
+
+		await withBrowserPreview(async (browserUrl) => {
+			const cSummary = await runStdinBrowserProbe({
+				browserUrl,
+				expectedOutput: 'main=73',
+				language: 'C',
+				requireSharedArrayBuffer: false,
+				runTimeoutMs: Number(process.env.WASM_IDLE_STDIN_RUN_TIMEOUT_MS || '420000'),
+				source: cStdinSource,
+				stdinText: '68\n'
+			});
+			expect(cSummary.transcript).toContain('main=73');
+
+			const cppSummary = await runStdinBrowserProbe({
+				browserUrl,
+				expectedOutput: 'main=73',
+				language: 'CPP',
+				requireSharedArrayBuffer: false,
+				runTimeoutMs: Number(process.env.WASM_IDLE_STDIN_RUN_TIMEOUT_MS || '420000'),
+				source: cppStdinSource,
+				stdinText: '68\n'
+			});
+			expect(cppSummary.transcript).toContain('main=73');
 		});
 	}, 700_000);
 

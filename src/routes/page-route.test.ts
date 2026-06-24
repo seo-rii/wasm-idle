@@ -360,7 +360,7 @@ describe('example route debug actions', () => {
 
 	it('exposes a browser debug hook that writes terminal stdin through the bound control', () => {
 		expect(source).toMatch(
-			/type WasmIdleDebugApi = \{\s+writeTerminalInput: \(text: string, eof\?: boolean\) => Promise<void>;\s+getEditorValue: \(\) => string;\s+setEditorValue: \(text: string\) => Promise<boolean>;\s+\};/s
+			/type WasmIdleDebugApi = \{\s+writeTerminalInput: \(text: string, eof\?: boolean\) => Promise<void>;\s+getEditorValue: \(\) => string;\s+setEditorValue: \(text: string\) => Promise<boolean>;\s+setPreloadedStdin: \(text: string\) => void;\s+\};/s
 		);
 		expect(source).toMatch(/let browserDebugHookVersion = 0;/);
 		expect(source).toMatch(/const debugHookVersion = \+\+browserDebugHookVersion;/);
@@ -377,6 +377,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(
 			/async setEditorValue\(text: string\) \{\s+if \(!editor\) return false;\s+editor\.setValue\(text\);\s+updateActiveContent\(text\);\s+await Promise\.resolve\(\);\s+return editor\.getValue\(\) === text && activeFile\?\.content === text;\s+\}/s
 		);
+		expect(source).toMatch(/setPreloadedStdin\(text: string\) \{\s+stdinInput = text;\s+\}/s);
 	});
 
 	it('keeps browser stdin helper wiring separate from the shared debug controller', () => {

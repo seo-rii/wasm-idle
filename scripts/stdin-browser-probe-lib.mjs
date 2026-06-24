@@ -71,6 +71,7 @@ async function readProbeSummary(page, activeState, pageErrors, consoleMessages) 
  * @property {string} [chromiumExecutable]
  * @property {string} expectedOutput
  * @property {string} language
+ * @property {boolean} [requireSharedArrayBuffer]
  * @property {number} [runTimeoutMs]
  * @property {boolean} [sendEof]
  * @property {string} source
@@ -86,6 +87,7 @@ export async function runStdinBrowserProbe(options) {
 		chromiumExecutable = '',
 		expectedOutput = '',
 		language = '',
+		requireSharedArrayBuffer = true,
 		runTimeoutMs = 120_000,
 		sendEof = false,
 		source = '',
@@ -131,13 +133,15 @@ export async function runStdinBrowserProbe(options) {
 		await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
 		await page.waitForTimeout(2_000);
 
+		const isProbeReady = (
+			/** @type {{ crossOriginIsolated: boolean; sharedArrayBuffer: boolean; serviceWorkerControlled: boolean }} */ state
+		) =>
+			state.serviceWorkerControlled &&
+			(!requireSharedArrayBuffer || (state.crossOriginIsolated && state.sharedArrayBuffer));
+
 		let activeState = await readActiveState(page);
 		for (let attempt = 0; attempt < 4; attempt += 1) {
-			if (
-				activeState.crossOriginIsolated &&
-				activeState.sharedArrayBuffer &&
-				activeState.serviceWorkerControlled
-			) {
+			if (isProbeReady(activeState)) {
 				break;
 			}
 			await page.evaluate(async () => {
@@ -155,11 +159,7 @@ export async function runStdinBrowserProbe(options) {
 			await page.waitForTimeout(2_500 + attempt * 500);
 			activeState = await readActiveState(page);
 		}
-		if (
-			!activeState.crossOriginIsolated ||
-			!activeState.sharedArrayBuffer ||
-			!activeState.serviceWorkerControlled
-		) {
+		if (!isProbeReady(activeState)) {
 			throw new Error(
 				`page is not ready for stdin browser probe\n${JSON.stringify(
 					await readProbeSummary(page, activeState, pageErrors, consoleMessages),
@@ -172,6 +172,7 @@ export async function runStdinBrowserProbe(options) {
 		await page.evaluate(() => localStorage.clear());
 		await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
 		await page.waitForSelector('select', { state: 'attached', timeout: runTimeoutMs });
+		activeState = await readActiveState(page);
 		await page.waitForFunction(
 			() =>
 				typeof (/** @type {any} */ (window).__wasmIdleDebug?.getEditorValue) ===
@@ -288,11 +289,32 @@ export async function runStdinBrowserProbe(options) {
 				)}`
 			);
 		}
+		activeState = await readActiveState(page);
+		const usePreloadedStdin = !activeState.sharedArrayBuffer;
+		if (usePreloadedStdin) {
+			const stdinPrepared = await page.evaluate((text) => {
+				const api = /** @type {any} */ (window).__wasmIdleDebug;
+				if (typeof api?.setPreloadedStdin !== 'function') return false;
+				api.setPreloadedStdin(text);
+				return true;
+			}, stdinText);
+			if (!stdinPrepared) {
+				throw new Error(
+					`stdin browser probe could not prepare preloaded stdin\n${JSON.stringify(
+						await readProbeSummary(page, activeState, pageErrors, consoleMessages),
+						null,
+						2
+					)}`
+				);
+			}
+		}
 		await page.locator('button.action-button--run').first().click();
-		await page.evaluate(async (text) => {
-			await /** @type {any} */ (window).__wasmIdleDebug.writeTerminalInput(text, false);
-		}, stdinText);
-		if (sendEof) {
+		if (!usePreloadedStdin) {
+			await page.evaluate(async (text) => {
+				await /** @type {any} */ (window).__wasmIdleDebug.writeTerminalInput(text, false);
+			}, stdinText);
+		}
+		if (sendEof && !usePreloadedStdin) {
 			await page.waitForTimeout(500);
 			await page.evaluate(async () => {
 				await /** @type {any} */ (window).__wasmIdleDebug.writeTerminalInput('', true);

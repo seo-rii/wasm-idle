@@ -148,17 +148,27 @@ export const supportMatrixRows = [
 		language: 'C',
 		ids: ['C'],
 		runtime: 'wasm-clang / Clang WASI',
-		stdin: 'Blocked',
+		stdin: 'Yes',
 		editorSupport: 'clangd',
-		debug: '-'
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/stdin.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_CLANG_STDIN',
+			language: 'C'
+		}
 	},
 	{
 		language: 'C++',
 		ids: ['CPP'],
 		runtime: 'wasm-clang / Clang WASI',
-		stdin: 'Blocked',
+		stdin: 'Yes',
 		editorSupport: 'clangd',
-		debug: 'Trace'
+		debug: 'Trace',
+		browserTest: {
+			file: 'src/lib/playground/stdin.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_CLANG_STDIN',
+			language: 'CPP'
+		}
 	},
 	{
 		language: 'Python',
@@ -687,7 +697,7 @@ const runtimeDetailsByLanguage = new Map([
 			packageBase: `${workspacePackage('runtimes/wasm-clang')} / Clang 22.1.8 WASI sysroot`,
 			execution:
 				`${code('clang')} for ${code('wasm32-wasi')}; default ${code('-std=gnu11')}; ` +
-				`WASI preview1 execution is wired but stdin is currently blocked`,
+				`WASI preview1 execution supports ${code('stdin')} and ${code('programArgs')}`,
 			customization:
 				`${code('runtimeAssets.clang.baseUrl')}/${code('loader')} or ${code('rootUrl')}; ` +
 				`${code('compileArgs')}, ${code('programArgs')}, ${code('cVersion')}, ` +
@@ -700,7 +710,7 @@ const runtimeDetailsByLanguage = new Map([
 			packageBase: `${workspacePackage('runtimes/wasm-clang')} / Clang 22.1.8 WASI sysroot`,
 			execution:
 				`${code('clang++')} for ${code('wasm32-wasi')}; default ${code('-std=gnu++2a')}; ` +
-				`trace debug uses wasm-idle controls; stdin is currently blocked`,
+				`trace debug uses wasm-idle controls; supports ${code('stdin')} and ${code('programArgs')}`,
 			customization:
 				`${code('runtimeAssets.clang.baseUrl')}/${code('loader')} or ${code('rootUrl')}; ` +
 				`${code('compileArgs')}, ${code('programArgs')}, ${code('cppVersion')}, ` +

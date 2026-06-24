@@ -1,11 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import Clang from '../src/runtime.js';
+import Clang, { resolveBuildArtifactNames } from '../src/runtime.js';
 
-function createClangHarness(
-	compilerConfig?: any,
-	options: { mockLink?: boolean } = {}
-) {
+function createClangHarness(compilerConfig?: any, options: { mockLink?: boolean } = {}) {
 	const stdout = vi.fn();
 	const clang = Object.assign(Object.create(Clang.prototype), {
 		ready: Promise.resolve(),
@@ -20,6 +17,7 @@ function createClangHarness(
 		path: '',
 		compilerConfig,
 		memfs: {
+			addDirectory: vi.fn(),
 			addFile: vi.fn(),
 			getFileContents: vi.fn(() => new Uint8Array([0x00]))
 		},
@@ -35,6 +33,19 @@ function createClangHarness(
 describe('Clang compile/debug flow', () => {
 	afterEach(() => {
 		vi.restoreAllMocks();
+	});
+
+	it('keeps workspace paths for inputs while deriving flat artifact names', () => {
+		expect(resolveBuildArtifactNames('CPP', 'src/main.cpp')).toEqual({
+			input: 'src/main.cpp',
+			obj: 'main.o',
+			wasm: 'main.wasm'
+		});
+		expect(resolveBuildArtifactNames('C', 'src')).toEqual({
+			input: 'src.c',
+			obj: 'src.o',
+			wasm: 'src.wasm'
+		});
 	});
 
 	it('uses the requested C++ standard and disables optimization for debug runs', async () => {
@@ -90,9 +101,12 @@ describe('Clang compile/debug flow', () => {
 	});
 
 	it('uses the manifest compiler-rt library directory while linking', async () => {
-		const { clang } = createClangHarness({
-			compilerRuntimeLibDir: 'lib/clang/22.1.8/lib/wasi'
-		}, { mockLink: false });
+		const { clang } = createClangHarness(
+			{
+				compilerRuntimeLibDir: 'lib/clang/22.1.8/lib/wasi'
+			},
+			{ mockLink: false }
+		);
 
 		await clang.link('main.o', 'main.wasm');
 
@@ -179,9 +193,7 @@ int main() {
 		expect(instrumentedSource).toContain('std::cerr.setf(std::ios::unitbuf);');
 		expect(instrumentedSource).toContain('setvbuf(stdout, nullptr, _IONBF, 0);');
 		expect(instrumentedSource).toContain('setvbuf(stderr, nullptr, _IONBF, 0);');
-		expect(instrumentedSource.match(/setvbuf\(stdout, nullptr, _IONBF, 0\);/g)).toHaveLength(
-			1
-		);
+		expect(instrumentedSource.match(/setvbuf\(stdout, nullptr, _IONBF, 0\);/g)).toHaveLength(1);
 	});
 
 	it('tracks outer loop mutations without emitting out-of-scope loop variable hooks', async () => {
@@ -618,6 +630,7 @@ int main() {
 			obj: 'hello.o',
 			language: 'CPP',
 			compileArgs: ['-DTEST=1'],
+			workspaceFiles: [],
 			cppVersion: undefined,
 			cVersion: undefined,
 			debug: false
@@ -625,6 +638,53 @@ int main() {
 		expect(vi.mocked(clang.link)).toHaveBeenCalledWith('hello.o', 'hello.wasm', false);
 		expect(clang.lastArtifactPath).toBe('hello.wasm');
 		expect(compileWasm).toHaveBeenCalledTimes(1);
+	});
+
+	it('uses the active workspace path and adds sibling workspace files', async () => {
+		const compileSpy = vi.spyOn(Clang.prototype, 'compile');
+		vi.spyOn(WebAssembly, 'compile').mockResolvedValue({
+			id: 'workspace-module'
+		} as unknown as WebAssembly.Module);
+		const { clang } = createClangHarness();
+
+		await clang.compileLink('#include "../include/add.h"\nint main() { return add(1, 2); }', {
+			activePath: 'src/main.cpp',
+			workspaceFiles: [
+				{ path: 'src/main.cpp', content: 'stale active copy' },
+				{ path: 'include/add.h', content: 'int add(int a, int b) { return a + b; }' }
+			]
+		});
+
+		expect(compileSpy).toHaveBeenCalledWith({
+			input: 'src/main.cpp',
+			code: '#include "../include/add.h"\nint main() { return add(1, 2); }',
+			obj: 'main.o',
+			language: 'CPP',
+			compileArgs: [],
+			workspaceFiles: [
+				{ path: 'src/main.cpp', content: 'stale active copy' },
+				{ path: 'include/add.h', content: 'int add(int a, int b) { return a + b; }' }
+			],
+			cppVersion: undefined,
+			cVersion: undefined,
+			debug: false
+		});
+		expect(vi.mocked(clang.memfs.addDirectory)).toHaveBeenCalledWith('include');
+		expect(vi.mocked(clang.memfs.addDirectory)).toHaveBeenCalledWith('src');
+		expect(vi.mocked(clang.memfs.addFile)).toHaveBeenCalledWith(
+			'include/add.h',
+			expect.stringContaining('int add')
+		);
+		expect(vi.mocked(clang.memfs.addFile)).not.toHaveBeenCalledWith(
+			'src/main.cpp',
+			'stale active copy'
+		);
+		expect(vi.mocked(clang.memfs.addFile)).toHaveBeenCalledWith(
+			'src/main.cpp',
+			expect.stringContaining('#include "../include/add.h"')
+		);
+		expect(vi.mocked(clang.link)).toHaveBeenCalledWith('main.o', 'main.wasm', false);
+		expect(clang.lastArtifactPath).toBe('main.wasm');
 	});
 
 	it('passes runtime program args to the compiled wasm module', async () => {
@@ -642,6 +702,8 @@ int main() {
 		expect(vi.mocked(clang.compileLink)).toHaveBeenCalledWith('int main() {}', {
 			language: 'CPP',
 			fileName: 'hello.cpp',
+			activePath: undefined,
+			workspaceFiles: [],
 			compileArgs: ['-DTEST=1'],
 			debug: false,
 			breakpoints: [],
@@ -649,7 +711,9 @@ int main() {
 			cppVersion: undefined,
 			cVersion: undefined,
 			debugBuffer: undefined,
-			interruptBuffer: undefined
+			interruptBuffer: undefined,
+			watchBuffer: undefined,
+			watchResultBuffer: undefined
 		});
 		const runArgs = vi.mocked(clang.run).mock.calls[0];
 		expect(runArgs?.[0]).toBe(wasmModule);

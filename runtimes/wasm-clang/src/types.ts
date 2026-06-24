@@ -167,6 +167,8 @@ export interface BrowserClangRuntimeRunOptions {
 	args?: string[];
 	compileArgs?: string[];
 	programArgs?: string[];
+	activePath?: string;
+	workspaceFiles?: Array<{ path: string; content: string }>;
 	cppVersion?: string;
 	cVersion?: string;
 	debug?: boolean;

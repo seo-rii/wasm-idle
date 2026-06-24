@@ -1,4 +1,4 @@
-import type Clang from '$lib/clang';
+import type { BrowserClangRuntime as Clang } from 'wasm-clang';
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
 import { isSharedBufferBackedView } from '$lib/playground/sharedBuffer';
 import {
@@ -23,8 +23,10 @@ let hasInitialStdinClang = false;
 let initialStdinClang: string | null = null;
 
 async function loadClang(path: string, log: boolean) {
-	const { default: Clang } = await import('$lib/clang');
-	clang = new Clang({
+	const { BrowserClangRuntime, loadRuntimeManifest, resolveRuntimeManifestUrl } =
+		await import('wasm-clang');
+	const manifest = await loadRuntimeManifest(resolveRuntimeManifestUrl(path));
+	clang = new BrowserClangRuntime({
 		stdout: (output) => postMessage({ output }),
 		onDebugEvent: (debugEvent) => postMessage({ debugEvent }),
 		stdin: () => {
@@ -33,11 +35,14 @@ async function loadClang(path: string, log: boolean) {
 				initialStdinClang = null;
 				return chunk ?? '';
 			}
-			return waitForBufferedStdin(stdinBufferClang, () => postMessage({ buffer: true })) ?? '';
+			return (
+				waitForBufferedStdin(stdinBufferClang, () => postMessage({ buffer: true })) ?? ''
+			);
 		},
 		progress: (value) => postMessage({ progress: value }),
 		log,
-		path
+		runtimeBaseUrl: path,
+		manifest
 	});
 }
 

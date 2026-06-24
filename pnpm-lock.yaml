@@ -110,6 +110,9 @@ importers:
       waforth:
         specifier: 0.20.1
         version: 0.20.1
+      wasm-clang:
+        specifier: workspace:*
+        version: link:runtimes/wasm-clang
       webr:
         specifier: 0.6.0
         version: 0.6.0
