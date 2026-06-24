@@ -1,10 +1,127 @@
+import { readFileSync } from 'node:fs';
 import fs from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import ts from 'typescript';
 
 const SUPPORT_MATRIX_START = '## Support matrix';
 const SUPPORT_MATRIX_END = '## Monorepo layout';
+const THIS_DIR = path.dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = path.resolve(THIS_DIR, '..');
+const requirePackage = createRequire(import.meta.url);
+
+/** @param {string} relativePath */
+function readJsonFile(filePath) {
+	try {
+		return JSON.parse(readFileSync(filePath, 'utf8'));
+	} catch {
+		return null;
+	}
+}
+
+/** @param {string} relativePath */
+function readRepoJson(relativePath) {
+	return readJsonFile(path.join(REPO_ROOT, relativePath));
+}
+
+const rootPackage = readRepoJson('package.json') || {};
+
+/**
+ * @param {string} packageName
+ */
+function installedPackageVersion(packageName) {
+	try {
+		const packageJson = requirePackage(`${packageName}/package.json`);
+		if (typeof packageJson.version === 'string') return packageJson.version;
+	} catch {
+		// Some packages do not export package.json; fall back to the resolved entry point.
+	}
+	try {
+		let directory = path.dirname(requirePackage.resolve(packageName));
+		while (directory !== path.dirname(directory)) {
+			const packageJson = readJsonFile(path.join(directory, 'package.json'));
+			if (packageJson?.name === packageName && typeof packageJson.version === 'string') {
+				return packageJson.version;
+			}
+			directory = path.dirname(directory);
+		}
+	} catch {
+		return '';
+	}
+	return '';
+}
+
+/**
+ * @param {string} packageName
+ */
+function packageVersion(packageName) {
+	return (
+		installedPackageVersion(packageName) ||
+		rootPackage.dependencies?.[packageName] ||
+		rootPackage.devDependencies?.[packageName] ||
+		'unknown'
+	);
+}
+
+/**
+ * @param {string} packageName
+ */
+function npmPackage(packageName) {
+	return `${packageName}@${packageVersion(packageName)}`;
+}
+
+/**
+ * @param {string} relativePath
+ */
+function workspacePackage(relativePath) {
+	const packageJson = readRepoJson(`${relativePath}/package.json`) || {};
+	return `${packageJson.name || relativePath}@${packageJson.version || 'unversioned'}`;
+}
+
+/**
+ * @param {string} relativePath
+ * @param {string} packageName
+ */
+function workspaceDependency(relativePath, packageName) {
+	const packageJson = readRepoJson(`${relativePath}/package.json`) || {};
+	const installedPackageJson = readRepoJson(
+		`${relativePath}/node_modules/${packageName}/package.json`
+	);
+	const version =
+		installedPackageJson?.version ||
+		packageJson.dependencies?.[packageName] ||
+		packageJson.devDependencies?.[packageName] ||
+		packageVersion(packageName);
+	return `${packageName}@${version}`;
+}
+
+/**
+ * @param {string} relativePath
+ * @param {string[]} fieldPath
+ */
+function manifestValue(relativePath, fieldPath) {
+	let value = readRepoJson(relativePath);
+	for (const field of fieldPath) {
+		if (!value || typeof value !== 'object') return '';
+		value = value[field];
+	}
+	return typeof value === 'string' || typeof value === 'number' ? String(value) : '';
+}
+
+/**
+ * @param {string} text
+ */
+function code(text) {
+	return `\`${text}\``;
+}
+
+/**
+ * @param {string[]} values
+ */
+function codeList(values) {
+	return values.map(code).join(', ');
+}
 
 /**
  * @typedef {{
@@ -543,6 +660,473 @@ export const supportMatrixRows = [
 ];
 
 /**
+ * @typedef {{
+ *   packageBase: string;
+ *   execution: string;
+ *   customization: string;
+ * }} RuntimeDetail
+ */
+
+/**
+ * @param {string} runtimeKey
+ * @param {string} envKey
+ */
+function staticWorkerCustomizationFor(runtimeKey, envKey = runtimeKey.toUpperCase()) {
+	return (
+		`${code(`runtimeAssets.${runtimeKey}.baseUrl`)}/${code(`runtimeAssets.${runtimeKey}.workerUrl`)} ` +
+		`or ${code(`PUBLIC_WASM_${envKey}_BASE_URL`)}/${code(`PUBLIC_WASM_${envKey}_WORKER_URL`)}; ` +
+		`${code('programArgs')}, ${code('activePath')}, ${code('workspaceFiles')}`
+	);
+}
+
+/** @type {Map<string, RuntimeDetail>} */
+const runtimeDetailsByLanguage = new Map([
+	[
+		'C',
+		{
+			packageBase: `${workspacePackage('runtimes/wasm-clang')} / Clang 22.1.8 WASI sysroot`,
+			execution:
+				`${code('clang')} for ${code('wasm32-wasi')}; default ${code('-std=gnu11')}; ` +
+				`WASI preview1 execution is wired but stdin is currently blocked`,
+			customization:
+				`${code('runtimeAssets.clang.baseUrl')}/${code('loader')} or ${code('rootUrl')}; ` +
+				`${code('compileArgs')}, ${code('programArgs')}, ${code('cVersion')}, ` +
+				`${code('activePath')}, ${code('workspaceFiles')}`
+		}
+	],
+	[
+		'C++',
+		{
+			packageBase: `${workspacePackage('runtimes/wasm-clang')} / Clang 22.1.8 WASI sysroot`,
+			execution:
+				`${code('clang++')} for ${code('wasm32-wasi')}; default ${code('-std=gnu++2a')}; ` +
+				`trace debug uses wasm-idle controls; stdin is currently blocked`,
+			customization:
+				`${code('runtimeAssets.clang.baseUrl')}/${code('loader')} or ${code('rootUrl')}; ` +
+				`${code('compileArgs')}, ${code('programArgs')}, ${code('cppVersion')}, ` +
+				`${code('activePath')}, ${code('workspaceFiles')}`
+		}
+	],
+	[
+		'Python',
+		{
+			packageBase: `${workspacePackage('runtimes/pyodide')} / ${npmPackage('pyodide')}`,
+			execution:
+				`Pyodide worker loads ${code('pyodide.asm.js')}, ${code('pyodide.asm.wasm')}, ` +
+				`${code('python_stdlib.zip')}; supports ${code('stdin')} and ${code('programArgs')}`,
+			customization: `${code('runtimeAssets.python.baseUrl')}/${code('loader')} or ${code('rootUrl')}`
+		}
+	],
+	[
+		'Java',
+		{
+			packageBase: `${workspacePackage('runtimes/teavm')} / TeaVM compiler assets`,
+			execution:
+				`${code('compiler.wasm')} compiles Java to browser WASM/JS; ` +
+				`supports ${code('stdin')} and ${code('programArgs')}`,
+			customization: `${code('runtimeAssets.java.baseUrl')}/${code('loader')} or ${code('rootUrl')}`
+		}
+	],
+	[
+		'Rust',
+		{
+			packageBase:
+				`${workspacePackage('runtimes/wasm-rust')} / ` +
+				manifestValue('static/wasm-rust/runtime/runtime-manifest.v3.json', ['version']),
+			execution: `default target ${code('wasm32-wasip1')}; selectable ${codeList([
+				'wasm32-wasip1',
+				'wasm32-wasip2',
+				'wasm32-wasip3'
+			])}; supports ${code('stdin')} and ${code('programArgs')}`,
+			customization:
+				`${code('runtimeAssets.rust.compilerUrl')} or ${code('PUBLIC_WASM_RUST_COMPILER_URL')}; ` +
+				`${code('rootUrl')}, ${code('rustTargetTriple')}, ${code('programArgs')}`
+		}
+	],
+	[
+		'Go',
+		{
+			packageBase:
+				`${workspacePackage('runtimes/wasm-go')} / ` +
+				manifestValue('static/wasm-go/runtime/runtime-manifest.v1.json', ['goVersion']),
+			execution: `default target ${code('wasip1/wasm')}; selectable ${codeList([
+				'wasip1/wasm',
+				'wasip2/wasm',
+				'wasip3/wasm',
+				'js/wasm'
+			])}; supports ${code('stdin')} and ${code('programArgs')}`,
+			customization:
+				`${code('runtimeAssets.go.compilerUrl')} or ${code('PUBLIC_WASM_GO_COMPILER_URL')}; ` +
+				`${code('goTarget')}, ${code('programArgs')}`
+		}
+	],
+	[
+		'D',
+		{
+			packageBase:
+				`${workspacePackage('runtimes/wasm-d')} / ` +
+				manifestValue('static/wasm-d/runtime/runtime-manifest.v1.json', ['version']),
+			execution:
+				`${code('ldc2 -conf=/toolchain/etc/ldc2.conf -mtriple=wasm32-wasi -c')} then ` +
+				`${code('wasm-ld')} to WASI preview1; supports ${code('stdin')} and ${code('programArgs')}`,
+			customization:
+				`${code('runtimeAssets.d.moduleUrl')} or ${code('PUBLIC_WASM_D_MODULE_URL')}; ` +
+				`${code('activePath')}, ${code('programArgs')}`
+		}
+	],
+	[
+		'C#',
+		{
+			packageBase: `${workspacePackage('runtimes/wasm-dotnet')} / browser-wasm .NET module`,
+			execution:
+				`${code('language=csharp')} compile target ${code('browser-wasm')}; ` +
+				`supports ${code('stdin')} and ${code('programArgs')}`,
+			customization: `${code('runtimeAssets.dotnet.moduleUrl')} or ${code('PUBLIC_WASM_DOTNET_MODULE_URL')}`
+		}
+	],
+	[
+		'F#',
+		{
+			packageBase: `${workspacePackage('runtimes/wasm-dotnet')} / browser-wasm .NET module`,
+			execution: `${code('language=fsharp')} compile target ${code('browser-wasm')}; stdin is currently blocked`,
+			customization:
+				`${code('runtimeAssets.dotnet.moduleUrl')} or ${code('PUBLIC_WASM_DOTNET_MODULE_URL')}; ` +
+				`${code('programArgs')}`
+		}
+	],
+	[
+		'VB.NET',
+		{
+			packageBase: `${workspacePackage('runtimes/wasm-dotnet')} / browser-wasm .NET module`,
+			execution:
+				`${code('language=vbnet')} compile target ${code('browser-wasm')}; ` +
+				`supports ${code('stdin')} and ${code('programArgs')}`,
+			customization: `${code('runtimeAssets.dotnet.moduleUrl')} or ${code('PUBLIC_WASM_DOTNET_MODULE_URL')}`
+		}
+	],
+	[
+		'Elixir',
+		{
+			packageBase: `wasm-elixir asset bundle / ${npmPackage('@swmansion/popcorn')}`,
+			execution: `Popcorn/AtomVM bundle ${code('bundle.avm')}; supports ${code('stdin')}`,
+			customization: `${code('runtimeAssets.elixir.bundleUrl')} or ${code('PUBLIC_WASM_ELIXIR_BUNDLE_URL')}`
+		}
+	],
+	[
+		'Erlang',
+		{
+			packageBase: `wasm-elixir asset bundle / ${npmPackage('@swmansion/popcorn')}`,
+			execution: `Popcorn/AtomVM bundle ${code('bundle.avm')}; supports ${code('stdin')}`,
+			customization:
+				`${code('runtimeAssets.erlang.bundleUrl')} or ${code('PUBLIC_WASM_ERLANG_BUNDLE_URL')}; ` +
+				`falls back to Elixir bundle URL`
+		}
+	],
+	[
+		'Prolog',
+		{
+			packageBase: `${npmPackage('swipl-wasm')} synced into ${code('static/wasm-prolog')}`,
+			execution: `static worker runs SWI-Prolog; supports ${code('stdin')} and ${code('programArgs')}`,
+			customization: staticWorkerCustomizationFor('prolog')
+		}
+	],
+	[
+		'Gleam',
+		{
+			packageBase: `${npmPackage('@live-codes/gleam-precompiled')} static worker`,
+			execution: `Gleam worker compiles/runs browser output with source manifest; supports ${code('stdin')}`,
+			customization:
+				`${code('runtimeAssets.gleam.baseUrl')}/${code('workerUrl')}/${code('manifestUrl')} or ` +
+				`${code('PUBLIC_WASM_GLEAM_*')}; ${code('programArgs')}, ${code('workspaceFiles')}`
+		}
+	],
+	[
+		'Perl',
+		{
+			packageBase:
+				`WebPerl ${manifestValue('static/wasm-perl/runtime-manifest.v1.json', ['version'])} ` +
+				`(${manifestValue('static/wasm-perl/runtime-manifest.v1.json', ['package'])})`,
+			execution: `static worker runs ${code('emperl')}; supports ${code('stdin')} and ${code('programArgs')}`,
+			customization: staticWorkerCustomizationFor('perl')
+		}
+	],
+	[
+		'Tcl',
+		{
+			packageBase:
+				`Wacl Tcl ${manifestValue('static/wasm-tcl/runtime-manifest.v1.json', ['version'])} ` +
+				`(${manifestValue('static/wasm-tcl/runtime-manifest.v1.json', ['package'])})`,
+			execution: `static worker runs Wacl Tcl; supports ${code('stdin')} and ${code('programArgs')}`,
+			customization: staticWorkerCustomizationFor('tcl', 'TCL')
+		}
+	],
+	[
+		'AWK',
+		{
+			packageBase:
+				`GoAWK ${manifestValue('static/wasm-awk/runtime-manifest.v1.json', ['goawkVersion'])} / ` +
+				manifestValue('static/wasm-awk/runtime-manifest.v1.json', ['goVersion']),
+			execution: `static worker runs ${code('goawk.wasm')}; supports ${code('stdin')} and ${code('programArgs')}`,
+			customization: staticWorkerCustomizationFor('awk', 'AWK')
+		}
+	],
+	[
+		'Pascal',
+		{
+			packageBase:
+				`pas2js ${manifestValue('static/wasm-pascal/runtime-manifest.v1.json', ['pas2jsVersion'])} ` +
+				`(${manifestValue('static/wasm-pascal/runtime-manifest.v1.json', ['pas2jsCommit'])})`,
+			execution: `static worker compiles with pas2js then runs JS; supports ${code('stdin')}`,
+			customization: staticWorkerCustomizationFor('pascal')
+		}
+	],
+	[
+		'Forth',
+		{
+			packageBase: `${npmPackage('waforth')} / static worker`,
+			execution: `WAForth worker; supports ${code('stdin')} and ${code('programArgs')}`,
+			customization: staticWorkerCustomizationFor('forth')
+		}
+	],
+	[
+		'J',
+		{
+			packageBase: `${manifestValue('static/wasm-j/runtime-manifest.v1.json', ['runtime']) || 'jsoftware-j-playground'} static worker`,
+			execution: `J playground worker; supports ${code('stdin')} and ${code('programArgs')}`,
+			customization: staticWorkerCustomizationFor('j', 'J')
+		}
+	],
+	[
+		'BQN',
+		{
+			packageBase:
+				`CBQN static worker / Emscripten ` +
+				manifestValue('static/wasm-bqn/runtime-manifest.v1.json', ['build', 'emscripten']),
+			execution: `CBQN worker; supports ${code('stdin')} and ${code('programArgs')}`,
+			customization: staticWorkerCustomizationFor('bqn', 'BQN')
+		}
+	],
+	[
+		'Janet',
+		{
+			packageBase:
+				`Janet static worker / Emscripten ` +
+				manifestValue('static/wasm-janet/runtime-manifest.v1.json', [
+					'build',
+					'emscripten'
+				]),
+			execution: `Janet VM worker; supports ${code('stdin')} and ${code('programArgs')}`,
+			customization: staticWorkerCustomizationFor('janet')
+		}
+	],
+	[
+		'Julia',
+		{
+			packageBase: manifestValue('static/wasm-julia/runtime-manifest.v1.json', ['package']),
+			execution: `Julia WASM worker; supports ${code('stdin')} and ${code('programArgs')}`,
+			customization: staticWorkerCustomizationFor('julia')
+		}
+	],
+	[
+		'Nim',
+		{
+			packageBase: `Nim 2.2.4 / benagastov Nim-WASM-Compiler with clang/lld WASM`,
+			execution: `static worker compiles Nim to C, then clang/lld to WASM; supports ${code('stdin')}`,
+			customization: staticWorkerCustomizationFor('nim')
+		}
+	],
+	[
+		'TinyGo',
+		{
+			packageBase: `${workspacePackage('runtimes/wasm-tinygo')} / TinyGo 0.40.1 browser toolchain`,
+			execution: `default target ${code('wasm')}; selectable ${codeList([
+				'wasm',
+				'wasip1',
+				'wasip2',
+				'wasip3'
+			])}; supports ${code('stdin')} and ${code('programArgs')}`,
+			customization:
+				`${code('runtimeAssets.tinygo.moduleUrl')}/${code('appUrl')}/${code('assetLoader')}/${code('assetPacks')}; ` +
+				`${code('PUBLIC_WASM_TINYGO_*')}, ${code('tinygoTarget')}, ${code('programArgs')}`
+		}
+	],
+	[
+		'OCaml',
+		{
+			packageBase: `${workspacePackage('runtimes/wasm-of-js-of-ocaml')} / js_of_ocaml + wasm_of_ocaml`,
+			execution:
+				`default backend ${code('wasm')}; selectable ${codeList(['wasm', 'js'])}; ` +
+				`${code('ocamlWasmBinaryenMode')} ${codeList(['fast', 'full'])}; supports ${code('stdin')}`,
+			customization:
+				`${code('runtimeAssets.ocaml.moduleUrl')}/${code('manifestUrl')} or ` +
+				`${code('PUBLIC_WASM_OCAML_*')}; ${code('ocamlBackend')}`
+		}
+	],
+	[
+		'JavaScript',
+		{
+			packageBase: `${workspacePackage('runtimes/wasm-typescript')} / ${workspaceDependency(
+				'runtimes/wasm-typescript',
+				'@swc/wasm-typescript'
+			)}`,
+			execution: `TypeScript service transpiles JS/TS and runs in browser sandbox; supports ${code('stdin')} and ${code('programArgs')}`,
+			customization:
+				`${code('runtimeAssets.typescript.moduleUrl')}/${code('libUrl')} or ` +
+				`${code('PUBLIC_WASM_TYPESCRIPT_MODULE_URL')}`
+		}
+	],
+	[
+		'TypeScript',
+		{
+			packageBase: `${workspacePackage('runtimes/wasm-typescript')} / ${workspaceDependency(
+				'runtimes/wasm-typescript',
+				'@swc/wasm-typescript'
+			)}`,
+			execution: `TypeScript service transpiles then runs in browser sandbox; supports ${code('stdin')} and ${code('programArgs')}`,
+			customization:
+				`${code('runtimeAssets.typescript.moduleUrl')}/${code('libUrl')} or ` +
+				`${code('PUBLIC_WASM_TYPESCRIPT_MODULE_URL')}`
+		}
+	],
+	[
+		'AssemblyScript',
+		{
+			packageBase:
+				`${workspacePackage('runtimes/assemblyscript')} / ${npmPackage('assemblyscript')} + ` +
+				npmPackage('@assemblyscript/loader'),
+			execution: `AssemblyScript compiler emits WASM and runs through WASI/browser imports; supports ${code('stdin')}`,
+			customization: `${code('programArgs')}, ${code('stdin')}; compiler assets come from bundled package`
+		}
+	],
+	[
+		'WAT',
+		{
+			packageBase: `${workspacePackage('runtimes/wasm-wat')} / ${workspaceDependency(
+				'runtimes/wasm-wat',
+				'wabt'
+			)}`,
+			execution: `WABT parses WAT to WASM then runs through WASI shim; supports ${code('stdin')} and ${code('programArgs')}`,
+			customization:
+				`${code('runtimeAssets.wat.moduleUrl')} or ${code('PUBLIC_WASM_WAT_MODULE_URL')}; ` +
+				`${code('programArgs')}`
+		}
+	],
+	[
+		'WASM',
+		{
+			packageBase: `Browser WebAssembly + ${npmPackage('@bjorn3/browser_wasi_shim')}`,
+			execution: `loads provided WASM bytes and executes with WASI preview1 imports; supports ${code('stdin')} and ${code('programArgs')}`,
+			customization: `${code('programArgs')}, ${code('stdin')}, ${code('activePath')}`
+		}
+	],
+	[
+		'Lua',
+		{
+			packageBase: `${workspacePackage('runtimes/wasm-lua')} / ${workspaceDependency(
+				'runtimes/wasm-lua',
+				'wasmoon'
+			)}`,
+			execution: `Wasmoon Lua VM; supports ${code('stdin')} and ${code('programArgs')}`,
+			customization:
+				`${code('runtimeAssets.lua.moduleUrl')} or ${code('PUBLIC_WASM_LUA_MODULE_URL')}; ` +
+				`${code('programArgs')}`
+		}
+	],
+	[
+		'Zig',
+		{
+			packageBase: `static wasm-zig assets / ${code('zig_small.wasm')} + stdlib zip`,
+			execution:
+				`default target ${code('wasm64-wasi')}; Zig compile args are appended; supports ` +
+				`${code('stdin')}, ${code('compileArgs')}, ${code('programArgs')}`,
+			customization:
+				`${code('runtimeAssets.zig.compilerUrl')}/${code('stdlibUrl')} or ${code('PUBLIC_WASM_ZIG_*')}; ` +
+				`${code('zigTargetTriple')}, ${code('activePath')}, ${code('workspaceFiles')}`
+		}
+	],
+	[
+		'Scheme',
+		{
+			packageBase: `${workspacePackage('runtimes/wasm-lisp')} / Puppy Scheme WASM component`,
+			execution: `Puppy Scheme compiler/runtime; stdin is not wired`,
+			customization:
+				`${code('runtimeAssets.lisp.moduleUrl')} or ${code('PUBLIC_WASM_LISP_MODULE_URL')}; ` +
+				`${code('programArgs')}`
+		}
+	],
+	[
+		'Ruby',
+		{
+			packageBase: `${workspacePackage('runtimes/ruby')} / ${npmPackage('@ruby/3.4-wasm-wasi')}`,
+			execution: `CRuby 3.4 WASI runtime; supports ${code('stdin')} and ${code('programArgs')}`,
+			customization:
+				`${code('runtimeAssets.ruby.wasmUrl')} or ${code('PUBLIC_WASM_RUBY_WASM_URL')}; ` +
+				`${code('programArgs')}`
+		}
+	],
+	[
+		'Haskell',
+		{
+			packageBase: `ghc-in-browser / GHC 9.14.0.20251031 WASI rootfs`,
+			execution:
+				`loads ${code('dyld.mjs')}, ${code('rootfs.tar.zst')}, ${code('bsdtar.wasm')}; ` +
+				`${code('compileArgs')} become GHC args, otherwise legacy ${code('args')} become GHC args`,
+			customization:
+				`${code('runtimeAssets.haskell.moduleUrl')}/${code('rootfsUrl')}/${code('bsdtarUrl')}; ` +
+				`${code('mainSoPath')}, ${code('searchDirs')}, ${code('activePath')}, ${code('workspaceFiles')}`
+		}
+	],
+	[
+		'R',
+		{
+			packageBase: `${workspacePackage('runtimes/r')} / ${npmPackage('webr')}`,
+			execution: `WebR worker; supports ${code('stdin')} and ${code('programArgs')}`,
+			customization: `${code('runtimeAssets.r.baseUrl')} or ${code('PUBLIC_WASM_R_BASE_URL')}`
+		}
+	],
+	[
+		'Octave',
+		{
+			packageBase:
+				`Octave ${manifestValue('static/wasm-octave/runtime/runtime-manifest.v1.json', ['version'])} ` +
+				`(${manifestValue('static/wasm-octave/runtime/runtime-manifest.v1.json', ['package'])})`,
+			execution: `Octave CLI Emscripten worker; supports ${code('stdin')} and ${code('programArgs')}`,
+			customization:
+				`${code('runtimeAssets.octave.baseUrl')}/${code('workerUrl')}/${code('manifestUrl')} or ` +
+				`${code('PUBLIC_WASM_OCTAVE_*')}`
+		}
+	],
+	[
+		'DuckDB',
+		{
+			packageBase: npmPackage('@duckdb/duckdb-wasm'),
+			execution: `DuckDB-Wasm query engine; stdin is treated as SQL/file input rather than terminal stdin`,
+			customization: `${code('stdin')} for query text/files; no separate runtime asset override`
+		}
+	],
+	[
+		'SQLite',
+		{
+			packageBase: npmPackage('sql.js'),
+			execution: `sql.js executes SQL in browser memory; terminal stdin is not applicable`,
+			customization: `${code('runtimeAssets.sqlite.wasmUrl')} or ${code('PUBLIC_WASM_SQLITE_WASM_URL')}`
+		}
+	],
+	[
+		'PHP',
+		{
+			packageBase:
+				`${workspacePackage('runtimes/php')} / ${npmPackage('@php-wasm/web')} + ` +
+				npmPackage('@php-wasm/universal'),
+			execution: `php-wasm runtime, default PHP version ${code('8.4')}; supports ${code('stdin')} and ${code('programArgs')}`,
+			customization:
+				`${code('runtimeAssets.php.version')} or ${code('PUBLIC_WASM_PHP_VERSION')}; ` +
+				`${code('programArgs')}`
+		}
+	]
+]);
+
+/**
  * @param {string} value
  * @param {number} width
  */
@@ -579,6 +1163,40 @@ export function renderSupportMatrixTable(rows = supportMatrixRows) {
 /**
  * @param {readonly SupportMatrixRow[]} rows
  */
+export function renderRuntimeDetailsTable(rows = supportMatrixRows) {
+	const headers = [
+		'Language / IDs',
+		'Package/version base',
+		'Execution defaults / flags',
+		'Customization'
+	];
+	const tableRows = rows.map((row) => {
+		const detail = runtimeDetailsByLanguage.get(row.language);
+		if (!detail) throw new Error(`Missing runtime detail row for ${row.language}`);
+		return [
+			`${row.language}<br>${codeList(row.ids)}`,
+			detail.packageBase,
+			detail.execution,
+			detail.customization
+		];
+	});
+	const widths = headers.map((header, index) =>
+		Math.max(header.length, ...tableRows.map((row) => row[index].length))
+	);
+	const headerLine = `| ${headers.map((header, index) => padCell(header, widths[index])).join(' | ')} |`;
+	const dividerLine = `| ${widths.map((width) => '-'.repeat(width)).join(' | ')} |`;
+	return [
+		headerLine,
+		dividerLine,
+		...tableRows.map(
+			(row) => `| ${row.map((cell, index) => padCell(cell, widths[index])).join(' | ')} |`
+		)
+	].join('\n');
+}
+
+/**
+ * @param {readonly SupportMatrixRow[]} rows
+ */
 export function renderSupportMatrixSection(rows = supportMatrixRows) {
 	return `${SUPPORT_MATRIX_START}
 
@@ -588,6 +1206,16 @@ means Monaco syntax highlighting only. \`Debug\` means wasm-idle's trace/debug c
 native debugger.
 
 ${renderSupportMatrixTable(rows)}
+
+### Runtime details
+
+\`Package/version base\` names the browser-side npm package, workspace runtime wrapper, or
+static runtime manifest that backs each row. \`Execution defaults / flags\` lists the default
+targets and flags wasm-idle applies, plus the public per-run options that change execution.
+\`Customization\` lists the \`runtimeAssets\` fields and matching \`PUBLIC_WASM_*\` env overrides
+when they exist.
+
+${renderRuntimeDetailsTable(rows)}
 `;
 }
 
@@ -685,6 +1313,16 @@ export async function validateSupportMatrix(rootDir = process.cwd()) {
 	const matrixIds = supportMatrixRows.flatMap((row) => row.ids);
 	if (new Set(matrixIds).size !== matrixIds.length) {
 		throw new Error('support matrix rows contain duplicate language ids');
+	}
+	for (const row of supportMatrixRows) {
+		if (!runtimeDetailsByLanguage.has(row.language)) {
+			throw new Error(`${row.language} must declare runtime detail metadata`);
+		}
+	}
+	for (const language of runtimeDetailsByLanguage.keys()) {
+		if (!supportMatrixRows.some((row) => row.language === language)) {
+			throw new Error(`${language} runtime detail metadata has no support matrix row`);
+		}
 	}
 	assertSameSet(
 		matrixIds,
