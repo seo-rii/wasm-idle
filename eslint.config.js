@@ -28,7 +28,20 @@ export default [
 		}
 	},
 	{
-		ignores: ['build/', '.svelte-kit/', 'dist/']
+		ignores: [
+			'.DS_Store',
+			'node_modules/',
+			'build/',
+			'.svelte-kit/',
+			'package/',
+			'dist/',
+			'.env',
+			'.env.*',
+			'pnpm-lock.yaml',
+			'package-lock.json',
+			'yarn.lock',
+			'runtimes/wasm-clang/artifacts/'
+		]
 	},
 	{
 		rules: {
