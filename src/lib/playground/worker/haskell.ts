@@ -7,12 +7,14 @@ import {
 	wasi
 } from '@bjorn3/browser_wasi_shim';
 import type { SandboxWorkspaceFile } from '$lib/playground/options';
+import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
 
-declare var self: any;
+declare const self: any;
 
 type HaskellRuntime = {
 	mainFunc: (ghcArgs: string, source: string) => Promise<void> | void;
 	rootfs: PreopenDirectory;
+	stdin: HaskellStdin;
 };
 
 let moduleUrl = '';
@@ -23,6 +25,99 @@ let searchDirs = ['/tmp/clib', '/tmp/hslib/lib/wasm32-wasi-ghc-9.14.0.20251031-i
 let loadedAssetKey = '';
 let runtimePromise: Promise<HaskellRuntime> | null = null;
 let activeStderrCollector: ((line: string) => void) | null = null;
+const encoder = new TextEncoder();
+
+class HaskellStdin {
+	private fixedStdin = false;
+	private initialStdinPending = false;
+	private initialStdin: string | null = null;
+	private buffer: Int32Array | null = null;
+	private chunk = new Uint8Array(0);
+	private offset = 0;
+	private log = false;
+
+	reset({
+		stdin,
+		buffer,
+		log
+	}: {
+		stdin: string | undefined;
+		buffer: ArrayBufferLike | undefined;
+		log: boolean;
+	}) {
+		this.fixedStdin = typeof stdin === 'string';
+		this.initialStdinPending = this.fixedStdin;
+		this.initialStdin = typeof stdin === 'string' ? stdin : null;
+		this.buffer = buffer ? new Int32Array(buffer) : null;
+		this.chunk = new Uint8Array(0);
+		this.offset = 0;
+		this.log = log;
+	}
+
+	fd_fdstat_get() {
+		const fdstat = new wasi.Fdstat(wasi.FILETYPE_CHARACTER_DEVICE, 0);
+		fdstat.fs_rights_base = BigInt(wasi.RIGHTS_FD_READ);
+		fdstat.fs_rights_inherited = 0n;
+		return { ret: wasi.ERRNO_SUCCESS, fdstat };
+	}
+
+	fd_filestat_get() {
+		return {
+			ret: wasi.ERRNO_SUCCESS,
+			filestat: new wasi.Filestat(0n, wasi.FILETYPE_CHARACTER_DEVICE, 0n)
+		};
+	}
+
+	fd_read(size: number) {
+		if (this.offset >= this.chunk.length) {
+			const nextChunk = this.readNextChunk();
+			if (nextChunk === null) {
+				this.chunk = new Uint8Array(0);
+				this.offset = 0;
+				return { ret: wasi.ERRNO_SUCCESS, data: new Uint8Array(0) };
+			}
+			this.chunk = encoder.encode(nextChunk);
+			this.offset = 0;
+		}
+
+		const end = Math.min(this.offset + size, this.chunk.length);
+		const data = this.chunk.slice(this.offset, end);
+		this.offset = end;
+		return { ret: wasi.ERRNO_SUCCESS, data };
+	}
+
+	private readNextChunk() {
+		if (this.initialStdinPending) {
+			this.initialStdinPending = false;
+			const chunk = this.initialStdin ?? '';
+			this.initialStdin = null;
+			this.logRead(chunk);
+			return chunk;
+		}
+		if (this.fixedStdin) {
+			this.logRead(null);
+			return null;
+		}
+		if (!this.buffer) {
+			this.logRead(null);
+			return null;
+		}
+		const chunk = waitForBufferedStdin(this.buffer, () => postMessage({ buffer: true }));
+		this.logRead(chunk);
+		return chunk;
+	}
+
+	private logRead(chunk: string | null) {
+		if (!this.log) return;
+		if (chunk === null) {
+			console.log('[wasm-idle:haskell-stdin] fd_read(bytes=0, eof=true)');
+			return;
+		}
+		console.log(
+			`[wasm-idle:haskell-stdin] fd_read(bytes=${encoder.encode(chunk).byteLength}, text=${JSON.stringify(chunk)})`
+		);
+	}
+}
 
 type PendingSymlink = {
 	target: string;
@@ -217,8 +312,10 @@ async function createRuntime() {
 		) {
 			throw new Error('wasm-haskell module must export main and DyLDBrowserHost');
 		}
+		const stdin = new HaskellStdin();
 		const host = new dyldModule.DyLDBrowserHost({
 			rootfs,
+			stdin,
 			stdout: outputLine,
 			stderr(line: string) {
 				activeStderrCollector?.(line);
@@ -241,7 +338,7 @@ async function createRuntime() {
 			throw new Error('wasm-haskell myMain did not return a callable function');
 		}
 		postProgress(100);
-		return { mainFunc, rootfs };
+		return { mainFunc, rootfs, stdin };
 	})();
 	return await runtimePromise;
 }
@@ -291,6 +388,8 @@ self.onmessage = async (event: { data: any }) => {
 		searchDirs: nextSearchDirs,
 		code,
 		prepare,
+		buffer,
+		stdin,
 		ghcArgs = '',
 		activePath = 'main.hs',
 		workspaceFiles = [],
@@ -323,6 +422,7 @@ self.onmessage = async (event: { data: any }) => {
 
 		const runtime = await createRuntime();
 		const source = normalizeWorkspaceSource(code, activePath, workspaceFiles);
+		runtime.stdin.reset({ stdin, buffer, log: !!log });
 		let stderrText = '';
 		try {
 			activeStderrCollector = (line: string) => {
@@ -338,7 +438,7 @@ self.onmessage = async (event: { data: any }) => {
 			for (const diagnostic of parseHaskellDiagnostics(stderrText)) {
 				postMessage({ diagnostic });
 			}
-			throw new Error(stderrText.trim() || formatError(error));
+			throw new Error(stderrText.trim() || formatError(error), { cause: error });
 		} finally {
 			activeStderrCollector = null;
 		}

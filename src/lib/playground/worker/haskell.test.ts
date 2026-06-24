@@ -228,6 +228,7 @@ describe('Haskell worker', () => {
 			'/tmp/hslib/lib/wasm32-wasi-ghc'
 		]);
 		expect((globalThis as any).__lastDyldOptions.mainSoPath).toBe('/tmp/libplayground001.so');
+		expect(typeof (globalThis as any).__lastHostOptions.stdin.fd_read).toBe('function');
 		expect((globalThis as any).__lastLibdir).toBe('/tmp/hslib/lib');
 		expect((globalThis as any).__lastMainCall).toEqual({
 			ghcArgs: '-Wall',
@@ -236,6 +237,60 @@ describe('Haskell worker', () => {
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ load: true });
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
 			output: 'hello from haskell\n'
+		});
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
+	});
+
+	it('connects run stdin to the dyld browser host fd0 implementation', async () => {
+		const moduleUrl = createMockDyldModule(`
+			const decoder = new TextDecoder();
+			export class DyLDBrowserHost {
+				constructor(options) {
+					globalThis.__lastHostOptions = options;
+					this.options = options;
+				}
+			}
+
+			export async function main(options) {
+				return {
+					exportFuncs: {
+						async myMain() {
+							return async () => {
+								const first = options.rpc.options.stdin.fd_read(2).data;
+								const second = options.rpc.options.stdin.fd_read(64).data;
+								const eof = options.rpc.options.stdin.fd_read(64).data;
+								options.rpc.options.stdout(
+									'stdin=' + JSON.stringify(decoder.decode(first) + decoder.decode(second)) + ';eof=' + eof.byteLength
+								);
+							};
+						}
+					}
+				};
+			}
+		`);
+
+		await import('./haskell');
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				moduleUrl,
+				rootfsUrl: '/wasm-haskell/rootfs.tar.zst',
+				bsdtarUrl: '/wasm-haskell/bsdtar.wasm'
+			}
+		});
+		await Promise.resolve();
+
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: 'main = getLine >>= putStrLn',
+				prepare: false,
+				stdin: '68\n'
+			}
+		});
+		await Promise.resolve();
+
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			output: 'stdin="68\\n";eof=0\n'
 		});
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
 	});

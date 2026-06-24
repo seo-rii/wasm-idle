@@ -48,6 +48,12 @@ const wasmStdinSource =
 const rubyStdinSource = `line = STDIN.gets&.strip || ""
 puts "main=#{line}"`;
 
+const haskellStdinSource = `main :: IO ()
+main = do
+  line <- getLine
+  let n = read line :: Int
+  putStrLn ("main=" ++ show (n + 5))`;
+
 const rStdinSource = `line <- readLines(stdin(), n = 1, warn = FALSE)
 cat(sprintf("main=%s\\n", trimws(line[[1]])))`;
 
@@ -211,6 +217,16 @@ describe('wasm-idle browser stdin connection', () => {
 				stdinText: '73\n'
 			});
 			expect(rubySummary.transcript).toContain('main=73');
+
+			const haskellSummary = await runStdinBrowserProbe({
+				browserUrl: browserUrl,
+				expectedOutput: 'main=73',
+				language: 'HASKELL',
+				runTimeoutMs: Number(process.env.WASM_IDLE_STDIN_RUN_TIMEOUT_MS || '420000'),
+				source: haskellStdinSource,
+				stdinText: '68\n'
+			});
+			expect(haskellSummary.transcript).toContain('main=73');
 
 			const rSummary = await runStdinBrowserProbe({
 				browserUrl: browserUrl,

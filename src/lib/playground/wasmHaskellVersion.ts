@@ -1,1 +1,1 @@
-export const WASM_HASKELL_ASSET_VERSION = '424868b823fd231c';
+export const WASM_HASKELL_ASSET_VERSION = 'cc696e7ad9025c3c';

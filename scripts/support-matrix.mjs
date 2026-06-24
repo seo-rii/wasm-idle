@@ -466,9 +466,14 @@ export const supportMatrixRows = [
 		language: 'Haskell',
 		ids: ['HASKELL'],
 		runtime: 'ghc-in-browser',
-		stdin: 'Blocked',
+		stdin: 'Yes',
 		editorSupport: 'syntax',
-		debug: '-'
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/stdin.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_STDIN',
+			language: 'HASKELL'
+		}
 	},
 	{
 		language: 'R',
@@ -549,13 +554,7 @@ function padCell(value, width) {
  * @param {readonly SupportMatrixRow[]} rows
  */
 export function renderSupportMatrixTable(rows = supportMatrixRows) {
-	const headers = [
-		'Language',
-		'Browser runtime/compiler',
-		'Stdin',
-		'Editor support',
-		'Debug'
-	];
+	const headers = ['Language', 'Browser runtime/compiler', 'Stdin', 'Editor support', 'Debug'];
 	const tableRows = rows.map((row) => [
 		row.language,
 		row.runtime,
@@ -616,7 +615,9 @@ function extractStringArrayFromExportedConst(source, fileName, exportName) {
 				) {
 					values = declaration.initializer.elements.map((element) => {
 						if (!ts.isStringLiteral(element)) {
-							throw new Error(`${exportName} in ${fileName} must contain string literals only`);
+							throw new Error(
+								`${exportName} in ${fileName} must contain string literals only`
+							);
 						}
 						return element.text;
 					});

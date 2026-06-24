@@ -61,7 +61,7 @@ native debugger.
 | Zig            | zig_small.wasm                       | Yes     | syntax               | -     |
 | Scheme         | Puppy Scheme / wasm-lisp             | No      | syntax               | -     |
 | Ruby           | CRuby WASI                           | Yes     | syntax               | -     |
-| Haskell        | ghc-in-browser                       | Blocked | syntax               | -     |
+| Haskell        | ghc-in-browser                       | Yes     | syntax               | -     |
 | R              | WebR                                 | Yes     | syntax               | -     |
 | Octave         | wasm-octave                          | Yes     | syntax               | -     |
 | DuckDB         | DuckDB-Wasm                          | Files   | DuckDB LSP           | -     |
@@ -307,7 +307,8 @@ WAT modules can import `env.readByte(): i32` for byte-oriented stdin; it returns
 Haskell uses the bundled `static/wasm-haskell/` `ghc-in-browser` assets by default. Override them
 with `PUBLIC_WASM_HASKELL_MODULE_URL`, `PUBLIC_WASM_HASKELL_ROOTFS_URL`, and
 `PUBLIC_WASM_HASKELL_BSDTAR_URL`, or pass `runtimeAssets.haskell`. The worker extracts the wasm GHC
-root filesystem, loads `dyld.mjs`, and invokes the browser GHC/GHCi entry point locally.
+root filesystem, loads `dyld.mjs`, and invokes the browser GHC/GHCi entry point locally. Browser
+stdin is wired into the dyld WASI fd0, so `getLine` reads terminal input.
 
 The Rust browser path now executes returned artifacts through the target-appropriate runtime inside
 the Rust worker:

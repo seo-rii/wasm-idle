@@ -39,6 +39,34 @@ describe('syncWasmHaskellAssets', () => {
 			'dyld.mjs',
 			`const wasi = await import("https://esm.sh/gh/haskell-wasm/browser_wasi_shim");
 const fallback = new wasi.PreopenDirectory("/", [["tmp", new wasi.Directory([])]]);
+class DyLDBrowserHost {
+  // Continuations to output a single line to stdout/stderr
+  stdout;
+  stderr;
+
+  constructor({ rootfs, stdout, stderr }) {
+    this.rootfs = rootfs;
+    this.stdout = stdout;
+    this.stderr = stderr;
+  }
+}
+class DyLD {
+  #rpc;
+  constructor({ args, rpc }) {
+    this.#rpc = rpc;
+    this.#wasi = new wasi.WASI(
+      args,
+      [],
+      [
+          new wasi.OpenFile(
+            new wasi.File(new Uint8Array(), { readonly: true })
+          ),
+          wasi.ConsoleStdout.lineBuffered((msg) => this.#rpc.stdout(msg))
+      ],
+      { debug: false }
+    );
+  }
+}
 export { wasi, fallback };
 `
 		);
@@ -59,6 +87,10 @@ export { wasi, fallback };
 		await expect(readFile(path.join(targetDir, 'dyld.mjs'), 'utf8')).resolves.toContain(
 			'new wasi.PreopenDirectory("/", new Map([["tmp", new wasi.Directory(new Map())]]))'
 		);
+		const dyldSource = await readFile(path.join(targetDir, 'dyld.mjs'), 'utf8');
+		expect(dyldSource).toContain('constructor({ rootfs, stdout, stderr, stdin })');
+		expect(dyldSource).toContain('this.stdin = stdin');
+		expect(dyldSource).toContain('this.#rpc instanceof DyLDBrowserHost && this.#rpc.stdin');
 		await expect(readFile(path.join(targetDir, 'prelude.mjs'), 'utf8')).resolves.toContain(
 			'prelude'
 		);

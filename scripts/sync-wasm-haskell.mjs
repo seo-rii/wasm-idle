@@ -79,6 +79,30 @@ function patchDyldSource(source) {
 		.replaceAll(
 			'new wasi.PreopenDirectory("/", [["tmp", new wasi.Directory([])]])',
 			'new wasi.PreopenDirectory("/", new Map([["tmp", new wasi.Directory(new Map())]]))'
+		)
+		.replace(
+			`  // Continuations to output a single line to stdout/stderr
+  stdout;
+  stderr;`,
+			`  // Continuations to output a single line to stdout/stderr
+  stdout;
+  stderr;
+  // Optional fd0 implementation supplied by the browser worker.
+  stdin;`
+		)
+		.replace(
+			'  constructor({ rootfs, stdout, stderr }) {\n    this.rootfs =',
+			'  constructor({ rootfs, stdout, stderr, stdin }) {\n    this.stdin = stdin;\n    this.rootfs ='
+		)
+		.replace(
+			`          new wasi.OpenFile(
+            new wasi.File(new Uint8Array(), { readonly: true })
+          ),`,
+			`          this.#rpc instanceof DyLDBrowserHost && this.#rpc.stdin
+            ? this.#rpc.stdin
+            : new wasi.OpenFile(
+                new wasi.File(new Uint8Array(), { readonly: true })
+              ),`
 		);
 }
 

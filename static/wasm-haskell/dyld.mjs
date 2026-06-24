@@ -387,6 +387,8 @@ export class DyLDBrowserHost {
   // Continuations to output a single line to stdout/stderr
   stdout;
   stderr;
+  // Optional fd0 implementation supplied by the browser worker.
+  stdin;
 
   // Given canonicalized absolute file path, returns the File object,
   // or null if absent
@@ -398,7 +400,8 @@ export class DyLDBrowserHost {
     return ret === 0 ? entry : null;
   }
 
-  constructor({ rootfs, stdout, stderr }) {
+  constructor({ rootfs, stdout, stderr, stdin }) {
+    this.stdin = stdin;
     this.rootfs = rootfs
       ? rootfs
       : new wasi.PreopenDirectory("/", new Map([["tmp", new wasi.Directory(new Map())]]));
@@ -894,9 +897,11 @@ class DyLD {
         args,
         [],
         [
-          new wasi.OpenFile(
-            new wasi.File(new Uint8Array(), { readonly: true })
-          ),
+          this.#rpc instanceof DyLDBrowserHost && this.#rpc.stdin
+            ? this.#rpc.stdin
+            : new wasi.OpenFile(
+                new wasi.File(new Uint8Array(), { readonly: true })
+              ),
           wasi.ConsoleStdout.lineBuffered((msg) => this.#rpc.stdout(msg)),
           wasi.ConsoleStdout.lineBuffered((msg) => this.#rpc.stderr(msg)),
           // for ghci browser mode, default to an empty rootfs with
