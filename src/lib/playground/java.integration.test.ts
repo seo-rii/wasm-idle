@@ -1,23 +1,45 @@
-// @ts-nocheck
 // @vitest-environment node
 
 import { readFile } from 'node:fs/promises';
+import { gunzip } from 'node:zlib';
+import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
 import { prepareJavaStdinInjection } from './javaStdin';
+
+const gunzipAsync = promisify(gunzip);
+
+const readStaticAsset = async (relativePath: string) => {
+	const assetUrl = new URL(`../../../static/teavm/${relativePath}`, import.meta.url);
+	const plain = await readFile(assetUrl).catch(() => null);
+	if (plain) return plain;
+	return await gunzipAsync(
+		await readFile(new URL(`../../../static/teavm/${relativePath}.gz`, import.meta.url))
+	);
+};
+
+function installJavaStdinWindow(readByte: () => number) {
+	const runtimeGlobal = globalThis as Record<string, unknown>;
+	const hadWindow = Object.prototype.hasOwnProperty.call(runtimeGlobal, 'window');
+	const previousWindow = runtimeGlobal.window;
+	runtimeGlobal.window = {
+		wasmIdleJavaStdin: { readByte }
+	};
+	return () => {
+		if (hadWindow) {
+			runtimeGlobal.window = previousWindow;
+		} else {
+			delete runtimeGlobal.window;
+		}
+	};
+}
 
 const loadTeaVmArtifacts = async () => {
 	const runtime = await import(
 		new URL('../../../static/teavm/compiler.wasm-runtime.js', import.meta.url).href
 	);
-	const compilerWasm = new Uint8Array(
-		await readFile(new URL('../../../static/teavm/compiler.wasm', import.meta.url))
-	);
-	const sdk = new Int8Array(
-		await readFile(new URL('../../../static/teavm/compile-classlib-teavm.bin', import.meta.url))
-	);
-	const runtimeClasslib = new Int8Array(
-		await readFile(new URL('../../../static/teavm/runtime-classlib-teavm.bin', import.meta.url))
-	);
+	const compilerWasm = new Uint8Array(await readStaticAsset('compiler.wasm'));
+	const sdk = new Int8Array(await readStaticAsset('compile-classlib-teavm.bin'));
+	const runtimeClasslib = new Int8Array(await readStaticAsset('runtime-classlib-teavm.bin'));
 
 	return { runtime, compilerWasm, sdk, runtimeClasslib };
 };
@@ -59,9 +81,9 @@ describe('TeaVM Java stdin integration', () => {
 		outputCompiler.addOutputClassFile('Main.class', mainClassFile);
 
 		expect(Array.from(outputCompiler.detectMainClasses())).toEqual(['Main']);
-		expect(
-			outputCompiler.generateWebAssembly({ outputName: 'app', mainClass: 'Main' })
-		).toBe(true);
+		expect(outputCompiler.generateWebAssembly({ outputName: 'app', mainClass: 'Main' })).toBe(
+			true
+		);
 		expect(diagnostics).toEqual([]);
 
 		const wasm = new Uint8Array(outputCompiler.getWebAssemblyOutputFile('app.wasm'));
@@ -194,15 +216,7 @@ public class Main {
 
 		const wasm = new Uint8Array(compiler.getWebAssemblyOutputFile('app.wasm'));
 		const outputs: string[] = [];
-		(
-			globalThis as typeof globalThis & {
-				window?: { wasmIdleJavaStdin: { readByte: () => number } };
-			}
-		).window = {
-			wasmIdleJavaStdin: {
-				readByte: () => -1
-			}
-		};
+		const restoreWindow = installJavaStdinWindow(() => -1);
 
 		try {
 			const module = await runtime.load(wasm, {
@@ -222,11 +236,7 @@ public class Main {
 
 			module.exports.main([]);
 		} finally {
-			delete (
-				globalThis as typeof globalThis & {
-					window?: { wasmIdleJavaStdin: { readByte: () => number } };
-				}
-			).window;
+			restoreWindow();
 		}
 
 		expect(outputs.join('')).toBe('sum=10\n');
@@ -261,15 +271,7 @@ public class Main {
 		const wasm = new Uint8Array(compiler.getWebAssemblyOutputFile('app.wasm'));
 		const outputs: string[] = [];
 		const bytes = ['A', 'B', 'C'].map((value) => value.charCodeAt(0));
-		(
-			globalThis as typeof globalThis & {
-				window?: { wasmIdleJavaStdin: { readByte: () => number } };
-			}
-		).window = {
-			wasmIdleJavaStdin: {
-				readByte: () => bytes.shift() ?? -1
-			}
-		};
+		const restoreWindow = installJavaStdinWindow(() => bytes.shift() ?? -1);
 
 		try {
 			const module = await runtime.load(wasm, {
@@ -289,11 +291,7 @@ public class Main {
 
 			module.exports.main([]);
 		} finally {
-			delete (
-				globalThis as typeof globalThis & {
-					window?: { wasmIdleJavaStdin: { readByte: () => number } };
-				}
-			).window;
+			restoreWindow();
 		}
 
 		expect(outputs.join('')).toBe('ABC\n');
@@ -372,15 +370,7 @@ public class Main {
 
 			const wasm = new Uint8Array(compiler.getWebAssemblyOutputFile('app.wasm'));
 			const outputs: string[] = [];
-			(
-				globalThis as typeof globalThis & {
-					window?: { wasmIdleJavaStdin: { readByte: () => number } };
-				}
-			).window = {
-				wasmIdleJavaStdin: {
-					readByte: () => -1
-				}
-			};
+			const restoreWindow = installJavaStdinWindow(() => -1);
 
 			try {
 				const module = await runtime.load(wasm, {
@@ -400,11 +390,7 @@ public class Main {
 
 				module.exports.main([]);
 			} finally {
-				delete (
-					globalThis as typeof globalThis & {
-						window?: { wasmIdleJavaStdin: { readByte: () => number } };
-					}
-				).window;
+				restoreWindow();
 			}
 
 			expect(outputs.join('')).toBe('3\n');

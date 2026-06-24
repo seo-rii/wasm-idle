@@ -1,5 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { gunzip } from 'node:zlib';
+import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
 import {
 	ConsoleStdout,
@@ -14,6 +16,7 @@ import { ZipReader, Uint8ArrayReader, Uint8ArrayWriter } from '@zip.js/zip.js';
 const staticDir = path.resolve(process.cwd(), 'static/wasm-zig');
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
+const gunzipAsync = promisify(gunzip);
 type WasiStartInstance = { exports: { memory: WebAssembly.Memory; _start: () => unknown } };
 
 function instantiateResult(
@@ -57,10 +60,17 @@ async function unzipStdDirectory(source: Uint8Array) {
 	return stdDirectory;
 }
 
+async function readStaticAsset(fileName: string) {
+	const plainPath = path.join(staticDir, fileName);
+	const plain = await readFile(plainPath).catch(() => null);
+	if (plain) return plain;
+	return await gunzipAsync(await readFile(`${plainPath}.gz`));
+}
+
 describe('bundled wasm-zig runtime', () => {
 	it('compiles a Zig program to WASI and runs it with the browser WASI shim', async () => {
 		const [compilerBytes, stdDirectory] = await Promise.all([
-			readFile(path.join(staticDir, 'zig_small.wasm')),
+			readStaticAsset('zig_small.wasm'),
 			readFile(path.join(staticDir, 'std.zip')).then((data) => unzipStdDirectory(data))
 		]);
 		const workDir = new Map<string, File>([

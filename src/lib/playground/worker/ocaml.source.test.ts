@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 
 describe('OCaml worker source', () => {
 	it('keeps partial stdin bytes buffered instead of dropping the rest of a chunk', () => {
-		expect(source).toContain('let stdinChunkOcaml = new Uint8Array(0);');
+		expect(source).toContain(
+			"let stdinChunkOcaml = typeof stdin === 'string' ? stdinEncoder.encode(stdin) : new Uint8Array(0);"
+		);
 		expect(source).toContain('let stdinChunkOffsetOcaml = 0;');
 		expect(source).toContain('const readOcamlStdinBytes = (requestedBytes: number) => {');
 		expect(source).toContain('stdinChunkOcaml = stdinEncoder.encode(chunk);');
