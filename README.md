@@ -120,6 +120,18 @@ when they exist.
 | SQLite<br>`SQLITE`                 | sql.js@1.14.1                                                                                     | sql.js executes SQL in browser memory; terminal stdin is not applicable                                                             | `runtimeAssets.sqlite.wasmUrl` or `PUBLIC_WASM_SQLITE_WASM_URL`                                                                                                                 |
 | PHP<br>`PHP`                       | @wasm-idle/runtime-php@0.1.0 / @php-wasm/web@3.1.34 + @php-wasm/universal@3.1.34                  | php-wasm runtime, default PHP version `8.4`; supports `stdin` and `programArgs`                                                     | `runtimeAssets.php.version` or `PUBLIC_WASM_PHP_VERSION`; `programArgs`                                                                                                         |
 
+### Blocked candidates
+
+These languages are intentionally not part of the execution support matrix yet. They should stay
+out of `supportedLanguages` until the blocker is resolved with a real browser runtime/compiler and
+stdin/stdout coverage.
+
+| Candidate   | Candidate IDs                       | Current evidence                                                                                                | Blocker                                                                                                                                                  | Required follow-up                                                                                                                                   |
+| ----------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Fortran     | `FORTRAN`, `F90`, `F95`             | `static/wasm-fortran` packages LFortran analyzer assets; `emit_wasm_from_source` works for stdout-only programs | `read(*,*)` currently aborts LFortran WASM/WAT codegen and the C backend reports `visit_FileRead() not implemented`; C++ backend leaves `FIXME: READ`    | Package a real browser Fortran compiler/runtime with stdin-capable codegen, then add browser stdin coverage before moving it out of editor-only mode |
+| Objective-C | `OBJC`, `OBJECTIVEC`, `OBJECTIVE_C` | `wasm-clang` contains clang frontend/clangd Objective-C parser support                                          | No browser/WASI `libobjc` or Foundation/GNUstep runtime assets are packaged; `-x objective-c` alone would only expose a misleading partial language path | Build or vendor a real Objective-C runtime and Foundation/GNUstep strategy for WASI/browser, then add compile-run stdin coverage                     |
+| Crystal     | `CRYSTAL`                           | No browser Crystal compiler/runtime assets are packaged in this repository                                      | Crystal cannot be treated as syntax-only or as a wasm-idle-authored translator/subset                                                                    | Find or build a browser-hosted real Crystal compiler/runtime path with stdin/stdout coverage before registering the language                         |
+
 ## Monorepo layout
 
 `wasm-idle` is managed as a pnpm workspace. Workspace builds, tests, and sync commands use only

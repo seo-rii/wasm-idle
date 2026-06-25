@@ -140,6 +140,14 @@ function codeList(values) {
  *   debug: string;
  *   browserTest?: BrowserSupportTest;
  * }} SupportMatrixRow
+ *
+ * @typedef {{
+ *   language: string;
+ *   candidateIds: string[];
+ *   currentEvidence: string;
+ *   blocker: string;
+ *   requiredFollowUp: string;
+ * }} BlockedCandidateRow
  */
 
 /** @type {SupportMatrixRow[]} */
@@ -666,6 +674,42 @@ export const supportMatrixRows = [
 			env: 'WASM_IDLE_RUN_REAL_BROWSER_STDIN',
 			language: 'PHP'
 		}
+	}
+];
+
+/** @type {BlockedCandidateRow[]} */
+export const blockedCandidateRows = [
+	{
+		language: 'Fortran',
+		candidateIds: ['FORTRAN', 'F90', 'F95'],
+		currentEvidence:
+			`${code('static/wasm-fortran')} packages LFortran analyzer assets; ` +
+			`${code('emit_wasm_from_source')} works for stdout-only programs`,
+		blocker:
+			`${code('read(*,*)')} currently aborts LFortran WASM/WAT codegen and the C backend reports ` +
+			`${code('visit_FileRead() not implemented')}; C++ backend leaves ${code('FIXME: READ')}`,
+		requiredFollowUp:
+			'Package a real browser Fortran compiler/runtime with stdin-capable codegen, then add browser stdin coverage before moving it out of editor-only mode'
+	},
+	{
+		language: 'Objective-C',
+		candidateIds: ['OBJC', 'OBJECTIVEC', 'OBJECTIVE_C'],
+		currentEvidence: `${code('wasm-clang')} contains clang frontend/clangd Objective-C parser support`,
+		blocker:
+			`No browser/WASI ${code('libobjc')} or Foundation/GNUstep runtime assets are packaged; ` +
+			`${code('-x objective-c')} alone would only expose a misleading partial language path`,
+		requiredFollowUp:
+			'Build or vendor a real Objective-C runtime and Foundation/GNUstep strategy for WASI/browser, then add compile-run stdin coverage'
+	},
+	{
+		language: 'Crystal',
+		candidateIds: ['CRYSTAL'],
+		currentEvidence:
+			'No browser Crystal compiler/runtime assets are packaged in this repository',
+		blocker:
+			'Crystal cannot be treated as syntax-only or as a wasm-idle-authored translator/subset',
+		requiredFollowUp:
+			'Find or build a browser-hosted real Crystal compiler/runtime path with stdin/stdout coverage before registering the language'
 	}
 ];
 
@@ -1204,6 +1248,36 @@ export function renderRuntimeDetailsTable(rows = supportMatrixRows) {
 	].join('\n');
 }
 
+/** @param {readonly BlockedCandidateRow[]} rows */
+export function renderBlockedCandidatesTable(rows = blockedCandidateRows) {
+	const headers = [
+		'Candidate',
+		'Candidate IDs',
+		'Current evidence',
+		'Blocker',
+		'Required follow-up'
+	];
+	const tableRows = rows.map((row) => [
+		row.language,
+		codeList(row.candidateIds),
+		row.currentEvidence,
+		row.blocker,
+		row.requiredFollowUp
+	]);
+	const widths = headers.map((header, index) =>
+		Math.max(header.length, ...tableRows.map((row) => row[index].length))
+	);
+	const headerLine = `| ${headers.map((header, index) => padCell(header, widths[index])).join(' | ')} |`;
+	const dividerLine = `| ${widths.map((width) => '-'.repeat(width)).join(' | ')} |`;
+	return [
+		headerLine,
+		dividerLine,
+		...tableRows.map(
+			(row) => `| ${row.map((cell, index) => padCell(cell, widths[index])).join(' | ')} |`
+		)
+	].join('\n');
+}
+
 /**
  * @param {readonly SupportMatrixRow[]} rows
  */
@@ -1226,6 +1300,14 @@ targets and flags wasm-idle applies, plus the public per-run options that change
 when they exist.
 
 ${renderRuntimeDetailsTable(rows)}
+
+### Blocked candidates
+
+These languages are intentionally not part of the execution support matrix yet. They should stay
+out of \`supportedLanguages\` until the blocker is resolved with a real browser runtime/compiler and
+stdin/stdout coverage.
+
+${renderBlockedCandidatesTable()}
 `;
 }
 
@@ -1321,8 +1403,14 @@ function replaceReadmeSupportMatrixSection(readme, nextSection) {
 /** @param {string} rootDir */
 export async function validateSupportMatrix(rootDir = process.cwd()) {
 	const matrixIds = supportMatrixRows.flatMap((row) => row.ids);
+	const blockedCandidateIds = blockedCandidateRows.flatMap((row) => row.candidateIds);
 	if (new Set(matrixIds).size !== matrixIds.length) {
 		throw new Error('support matrix rows contain duplicate language ids');
+	}
+	for (const blockedId of blockedCandidateIds) {
+		if (matrixIds.includes(blockedId)) {
+			throw new Error(`${blockedId} is still listed as a blocked candidate`);
+		}
 	}
 	for (const row of supportMatrixRows) {
 		if (!runtimeDetailsByLanguage.has(row.language)) {
