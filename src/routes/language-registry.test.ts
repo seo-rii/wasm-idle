@@ -59,7 +59,7 @@ describe('language registry', () => {
 		expect(runtimeLspCapabilities.JANET).toBe('janet');
 		expect(runtimeLspCapabilities.LISP).toBe('lisp');
 		expect(runtimeLspCapabilities.FORTRAN).toBe('fortran');
-		expect(editorOnlyLanguages.has('FORTRAN')).toBe(true);
+		expect(editorOnlyLanguages.has('FORTRAN')).toBe(false);
 		expect(editorOnlyLanguages.has('GRAPHQL')).toBe(true);
 		expect(editorOnlyLanguages.has('DUCKDB')).toBe(false);
 		for (const language of ['JSON', 'YAML', 'TOML', 'HTML', 'CSS', 'MARKDOWN'] as const) {

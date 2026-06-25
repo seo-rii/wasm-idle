@@ -183,6 +183,13 @@ const sandboxRoutes = [
 		}
 	},
 	{
+		aliases: ['FORTRAN', 'F77'],
+		load: async () => {
+			const { default: Fortran } = await import('$lib/playground/fortran');
+			return new Fortran();
+		}
+	},
+	{
 		aliases: ['TINYGO'],
 		load: async () => {
 			const { default: TinyGo } = await import('$lib/playground/tinygo');
@@ -334,6 +341,7 @@ export const supportedLanguages = [
 	'JANET',
 	'JULIA',
 	'NIM',
+	'FORTRAN',
 	'TINYGO',
 	'OCAML',
 	'JAVASCRIPT',

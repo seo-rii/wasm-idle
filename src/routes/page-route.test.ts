@@ -830,8 +830,9 @@ describe('example route debug actions', () => {
 	});
 
 	it('surfaces editor-only LSP workspaces', () => {
+		expect(source).toMatch(/<option value="FORTRAN">Fortran<\/option>/);
+		expect(editorOnlyLanguages.has('FORTRAN')).toBe(false);
 		for (const [language, label] of [
-			['FORTRAN', 'Fortran'],
 			['GRAPHQL', 'GraphQL'],
 			['JSON', 'JSON'],
 			['YAML', 'YAML'],
@@ -843,7 +844,6 @@ describe('example route debug actions', () => {
 			expect(source).toMatch(new RegExp(`<option value="${language}">${label}<\\/option>`));
 		}
 		for (const language of [
-			'FORTRAN',
 			'GRAPHQL',
 			'JSON',
 			'YAML',
@@ -870,7 +870,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/css: 'CSS'/);
 		expect(source).toMatch(/markdown: 'MARKDOWN'/);
 		expect(source).toMatch(/md: 'MARKDOWN'/);
-		expect(source).toMatch(/FORTRAN: 'main\.f90'/);
+		expect(source).toMatch(/FORTRAN: 'main\.f'/);
 		expect(source).toMatch(/GRAPHQL: 'main\.graphql'/);
 		expect(source).toMatch(/JSON: 'main\.json'/);
 		expect(source).toMatch(/YAML: 'main\.yaml'/);

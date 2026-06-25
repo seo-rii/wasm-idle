@@ -302,6 +302,16 @@
 				: `/wasm-haskell/bsdtar.wasm?v=${WASM_HASKELL_ASSET_VERSION}`
 		},
 		fortran: {
+			baseUrl: path ? `${path}/wasm-fortran/` : '/wasm-fortran/',
+			f2cWasmUrl: path
+				? `${path}/wasm-fortran/f2c.wasm?v=${WASM_FORTRAN_ASSET_VERSION}`
+				: `/wasm-fortran/f2c.wasm?v=${WASM_FORTRAN_ASSET_VERSION}`,
+			libf2cUrl: path
+				? `${path}/wasm-fortran/libf2c.a?v=${WASM_FORTRAN_ASSET_VERSION}`
+				: `/wasm-fortran/libf2c.a?v=${WASM_FORTRAN_ASSET_VERSION}`,
+			f2cHeaderUrl: path
+				? `${path}/wasm-fortran/f2c.h?v=${WASM_FORTRAN_ASSET_VERSION}`
+				: `/wasm-fortran/f2c.h?v=${WASM_FORTRAN_ASSET_VERSION}`,
 			analyzerUrl: path
 				? `${path}/wasm-fortran/analyzer.js?v=${WASM_FORTRAN_ASSET_VERSION}`
 				: `/wasm-fortran/analyzer.js?v=${WASM_FORTRAN_ASSET_VERSION}`
@@ -757,7 +767,7 @@
 			HASKELL: 'main.hs',
 			R: 'main.R',
 			OCTAVE: 'main.m',
-			FORTRAN: 'main.f90',
+			FORTRAN: 'main.f',
 			GRAPHQL: 'main.graphql',
 			DUCKDB: 'main.duckdb',
 			SQLITE: 'main.sql',

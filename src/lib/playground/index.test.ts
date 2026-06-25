@@ -197,6 +197,13 @@ vi.mock('$lib/playground/nim', () => {
 	};
 });
 
+vi.mock('$lib/playground/fortran', () => {
+	moduleLoads.add('FORTRAN');
+	return {
+		default: createMockSandboxClass('FORTRAN')
+	};
+});
+
 vi.mock('$lib/playground/sqlite', () => {
 	moduleLoads.add('SQLITE');
 	return {
@@ -338,7 +345,17 @@ describe('playground runtime binding', () => {
 
 	it('lists static worker languages in the exported supported language registry', () => {
 		expect(supportedLanguages).toEqual(
-			expect.arrayContaining(['FORTH', 'J', 'BQN', 'JANET', 'JULIA', 'NIM', 'DUCKDB', 'WASM'])
+			expect.arrayContaining([
+				'FORTH',
+				'J',
+				'BQN',
+				'JANET',
+				'JULIA',
+				'NIM',
+				'FORTRAN',
+				'DUCKDB',
+				'WASM'
+			])
 		);
 	});
 

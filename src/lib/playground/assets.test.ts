@@ -21,6 +21,11 @@ const { publicEnv } = vi.hoisted(() => ({
 		PUBLIC_WASM_HASKELL_MODULE_URL: '',
 		PUBLIC_WASM_HASKELL_ROOTFS_URL: '',
 		PUBLIC_WASM_HASKELL_BSDTAR_URL: '',
+		PUBLIC_WASM_FORTRAN_BASE_URL: '',
+		PUBLIC_WASM_FORTRAN_F2C_WASM_URL: '',
+		PUBLIC_WASM_FORTRAN_LIBF2C_URL: '',
+		PUBLIC_WASM_FORTRAN_F2C_HEADER_URL: '',
+		PUBLIC_WASM_FORTRAN_ANALYZER_URL: '',
 		PUBLIC_WASM_RUBY_WASM_URL: '',
 		PUBLIC_WASM_R_BASE_URL: '',
 		PUBLIC_WASM_OCTAVE_BASE_URL: '',
@@ -60,7 +65,11 @@ vi.mock('$env/dynamic/public', () => ({
 	env: publicEnv
 }));
 
-import { RUNTIME_LOAD_ASSETS, resolveRuntimeAssetConfig } from './assets';
+import {
+	RUNTIME_LOAD_ASSETS,
+	resolveFortranRuntimeAssetConfig,
+	resolveRuntimeAssetConfig
+} from './assets';
 
 describe('runtime asset config resolution', () => {
 	it('indexes folder-backed runtime load assets by runtime id', () => {
@@ -768,14 +777,18 @@ describe('runtime asset config resolution', () => {
 			baseUrl: 'https://example.com/absproxy/5173/wasm-bqn/',
 			workerUrl: 'https://example.com/absproxy/5173/wasm-bqn/runner-worker.js'
 		});
-		expect(resolveJanetRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual({
-			baseUrl: 'https://example.com/absproxy/5173/wasm-janet/',
-			workerUrl: 'https://example.com/absproxy/5173/wasm-janet/runner-worker.js'
-		});
-		expect(resolveJuliaRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual({
-			baseUrl: 'https://example.com/absproxy/5173/wasm-julia/',
-			workerUrl: 'https://example.com/absproxy/5173/wasm-julia/runner-worker.js'
-		});
+		expect(resolveJanetRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual(
+			{
+				baseUrl: 'https://example.com/absproxy/5173/wasm-janet/',
+				workerUrl: 'https://example.com/absproxy/5173/wasm-janet/runner-worker.js'
+			}
+		);
+		expect(resolveJuliaRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual(
+			{
+				baseUrl: 'https://example.com/absproxy/5173/wasm-julia/',
+				workerUrl: 'https://example.com/absproxy/5173/wasm-julia/runner-worker.js'
+			}
+		);
 		expect(resolveNimRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual({
 			baseUrl: 'https://example.com/absproxy/5173/wasm-nim/',
 			workerUrl: 'https://example.com/absproxy/5173/wasm-nim/runner-worker.js'
@@ -1036,5 +1049,66 @@ describe('runtime asset config resolution', () => {
 		expect(resolveHaskellBsdtarUrl('/absproxy/5173', 'https://example.com/app')).toBe(
 			'https://example.com/absproxy/5173/wasm-haskell/bsdtar.wasm'
 		);
+	});
+
+	it('derives default Fortran asset urls from the shared root path', () => {
+		expect(
+			resolveFortranRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')
+		).toEqual({
+			baseUrl: 'https://example.com/absproxy/5173/wasm-fortran/',
+			f2cWasmUrl: 'https://example.com/absproxy/5173/wasm-fortran/f2c.wasm',
+			libf2cUrl: 'https://example.com/absproxy/5173/wasm-fortran/libf2c.a',
+			f2cHeaderUrl: 'https://example.com/absproxy/5173/wasm-fortran/f2c.h',
+			analyzerUrl: 'https://example.com/absproxy/5173/wasm-fortran/analyzer.js'
+		});
+	});
+
+	it('prefers explicit Fortran asset urls over public env overrides', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_FORTRAN_BASE_URL = 'https://env.example.com/fortran/';
+		publicEnv.PUBLIC_WASM_FORTRAN_F2C_WASM_URL = 'https://env.example.com/f2c.wasm';
+		publicEnv.PUBLIC_WASM_FORTRAN_LIBF2C_URL = 'https://env.example.com/libf2c.a';
+		publicEnv.PUBLIC_WASM_FORTRAN_F2C_HEADER_URL = 'https://env.example.com/f2c.h';
+		publicEnv.PUBLIC_WASM_FORTRAN_ANALYZER_URL = 'https://env.example.com/analyzer.js';
+		const { resolveFortranRuntimeAssetConfig } = await import('./assets');
+
+		expect(
+			resolveFortranRuntimeAssetConfig(
+				{
+					fortran: {
+						baseUrl: '/runtime/fortran/',
+						f2cWasmUrl: '/runtime/fortran/f2c.wasm?v=test',
+						libf2cUrl: '/runtime/fortran/libf2c.a?v=test',
+						f2cHeaderUrl: '/runtime/fortran/f2c.h?v=test',
+						analyzerUrl: '/runtime/fortran/analyzer.js?v=test'
+					}
+				},
+				'https://example.com/app'
+			)
+		).toEqual({
+			baseUrl: 'https://example.com/runtime/fortran/',
+			f2cWasmUrl: 'https://example.com/runtime/fortran/f2c.wasm?v=test',
+			libf2cUrl: 'https://example.com/runtime/fortran/libf2c.a?v=test',
+			f2cHeaderUrl: 'https://example.com/runtime/fortran/f2c.h?v=test',
+			analyzerUrl: 'https://example.com/runtime/fortran/analyzer.js?v=test'
+		});
+	});
+
+	it('falls back to PUBLIC_WASM_FORTRAN_BASE_URL for unconfigured Fortran asset urls', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_FORTRAN_BASE_URL = 'https://env.example.com/fortran';
+		publicEnv.PUBLIC_WASM_FORTRAN_F2C_WASM_URL = '';
+		publicEnv.PUBLIC_WASM_FORTRAN_LIBF2C_URL = '';
+		publicEnv.PUBLIC_WASM_FORTRAN_F2C_HEADER_URL = '';
+		publicEnv.PUBLIC_WASM_FORTRAN_ANALYZER_URL = '';
+		const { resolveFortranRuntimeAssetConfig } = await import('./assets');
+
+		expect(resolveFortranRuntimeAssetConfig(undefined, 'https://example.com/app')).toEqual({
+			baseUrl: 'https://env.example.com/fortran/',
+			f2cWasmUrl: 'https://env.example.com/fortran/f2c.wasm',
+			libf2cUrl: 'https://env.example.com/fortran/libf2c.a',
+			f2cHeaderUrl: 'https://env.example.com/fortran/f2c.h',
+			analyzerUrl: 'https://env.example.com/fortran/analyzer.js'
+		});
 	});
 });

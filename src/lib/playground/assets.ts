@@ -96,6 +96,10 @@ export interface HaskellRuntimeAssetConfig {
 }
 
 export interface FortranRuntimeAssetConfig {
+	baseUrl?: string;
+	f2cWasmUrl?: string;
+	libf2cUrl?: string;
+	f2cHeaderUrl?: string;
 	analyzerUrl?: string;
 }
 
@@ -263,6 +267,14 @@ export interface ResolvedRuntimeAssetConfig {
 	baseUrl: string;
 	loader?: RuntimeAssetLoader;
 	useAssetBridge: boolean;
+}
+
+export interface ResolvedFortranRuntimeAssetConfig {
+	baseUrl: string;
+	f2cWasmUrl: string;
+	libf2cUrl: string;
+	f2cHeaderUrl: string;
+	analyzerUrl: string;
 }
 
 export const PYTHON_RUNTIME_LOAD_ASSETS = [
@@ -889,6 +901,122 @@ export function resolveHaskellBsdtarUrl(
 	}
 
 	return '';
+}
+
+export function resolveFortranBaseUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredBaseUrl =
+		(typeof options === 'object' && options?.fortran?.baseUrl) ||
+		(publicEnv.PUBLIC_WASM_FORTRAN_BASE_URL || '').trim();
+
+	if (configuredBaseUrl) {
+		return normalizeBaseUrl(configuredBaseUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return normalizeBaseUrl(`${normalizeRootUrl(options) || ''}/wasm-fortran/`, currentUrl);
+	}
+
+	if (options?.rootUrl) {
+		return normalizeBaseUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-fortran/`,
+			currentUrl
+		);
+	}
+
+	return normalizeBaseUrl('/wasm-fortran/', currentUrl);
+}
+
+function resolveFortranAssetUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl: string,
+	configKey: keyof Pick<
+		FortranRuntimeAssetConfig,
+		'f2cWasmUrl' | 'libf2cUrl' | 'f2cHeaderUrl' | 'analyzerUrl'
+	>,
+	envKey: string,
+	defaultAsset: string
+) {
+	const env = publicEnv as Record<string, string | undefined>;
+	const configuredUrl =
+		(typeof options === 'object' && options?.fortran?.[configKey]) ||
+		(env[envKey] || '').trim();
+
+	if (configuredUrl) {
+		return resolveConfiguredUrl(configuredUrl, currentUrl);
+	}
+
+	return resolveConfiguredUrl(
+		new URL(defaultAsset, resolveFortranBaseUrl(options, currentUrl)).href,
+		currentUrl
+	);
+}
+
+export function resolveFortranF2cWasmUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	return resolveFortranAssetUrl(
+		options,
+		currentUrl,
+		'f2cWasmUrl',
+		'PUBLIC_WASM_FORTRAN_F2C_WASM_URL',
+		'f2c.wasm'
+	);
+}
+
+export function resolveFortranLibf2cUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	return resolveFortranAssetUrl(
+		options,
+		currentUrl,
+		'libf2cUrl',
+		'PUBLIC_WASM_FORTRAN_LIBF2C_URL',
+		'libf2c.a'
+	);
+}
+
+export function resolveFortranF2cHeaderUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	return resolveFortranAssetUrl(
+		options,
+		currentUrl,
+		'f2cHeaderUrl',
+		'PUBLIC_WASM_FORTRAN_F2C_HEADER_URL',
+		'f2c.h'
+	);
+}
+
+export function resolveFortranAnalyzerUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	return resolveFortranAssetUrl(
+		options,
+		currentUrl,
+		'analyzerUrl',
+		'PUBLIC_WASM_FORTRAN_ANALYZER_URL',
+		'analyzer.js'
+	);
+}
+
+export function resolveFortranRuntimeAssetConfig(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+): ResolvedFortranRuntimeAssetConfig {
+	return {
+		baseUrl: resolveFortranBaseUrl(options, currentUrl),
+		f2cWasmUrl: resolveFortranF2cWasmUrl(options, currentUrl),
+		libf2cUrl: resolveFortranLibf2cUrl(options, currentUrl),
+		f2cHeaderUrl: resolveFortranF2cHeaderUrl(options, currentUrl),
+		analyzerUrl: resolveFortranAnalyzerUrl(options, currentUrl)
+	};
 }
 
 export function resolveZigStdlibUrl(
@@ -1705,7 +1833,10 @@ export function resolveJanetBaseUrl(
 	}
 
 	if (options?.rootUrl) {
-		return normalizeBaseUrl(`${normalizeRootUrl(options.rootUrl) || ''}/wasm-janet/`, currentUrl);
+		return normalizeBaseUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-janet/`,
+			currentUrl
+		);
 	}
 
 	return normalizeBaseUrl('/wasm-janet/', currentUrl);

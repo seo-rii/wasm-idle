@@ -243,7 +243,6 @@ export const lspLanguageOverrides: Partial<Record<PlaygroundLanguage, string>> =
 	DUCKDB: 'duckdb'
 };
 export const editorOnlyLanguages = new Set<PlaygroundLanguage>([
-	'FORTRAN',
 	'GRAPHQL',
 	'JSON',
 	'YAML',

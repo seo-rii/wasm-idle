@@ -1,4 +1,4 @@
-LFortran WebAssembly analyzer assets
+Fortran WebAssembly runtime and analyzer assets
 
 Source repository: https://github.com/lfortran/wasm_builds
 Vendored build: dev/22ff077a4
@@ -12,3 +12,17 @@ Files copied unchanged from the upstream build:
 
 The analyzer.js and analyzer-worker.js files in this directory are wasm-idle
 wrappers that load the LFortran build and expose diagnostics for Monaco LSP.
+
+Runtime compiler chain:
+- f2c.wasm: Netlib f2c 2022-09-09, compiled to wasm32-wasi with the wasm-idle
+  wasm-clang runtime.
+- libf2c.a and f2c.h: @cowasm/f2c 1.0.0 WebAssembly libf2c package.
+- LICENSE-f2c.txt: Netlib f2c Notice file.
+
+f2c source archive:
+https://github.com/sagemathinc/f2c/archive/refs/tags/2022-09-09.tar.gz
+SHA-256:
+881ae23331283c9461ca54b445487fa30adc41a2868592f1fba9c10a0ddcbbd2
+
+@cowasm/f2c package:
+https://www.npmjs.com/package/@cowasm/f2c

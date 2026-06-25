@@ -11,7 +11,7 @@ const THIS_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(THIS_DIR, '..');
 const requirePackage = createRequire(import.meta.url);
 
-/** @param {string} relativePath */
+/** @param {string} filePath */
 function readJsonFile(filePath) {
 	try {
 		return JSON.parse(readFileSync(filePath, 'utf8'));
@@ -611,6 +611,19 @@ export const supportMatrixRows = [
 		}
 	},
 	{
+		language: 'Fortran',
+		ids: ['FORTRAN'],
+		runtime: 'f2c + wasm-clang',
+		stdin: 'Yes',
+		editorSupport: 'Fortran LSP',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/stdin.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_FORTRAN',
+			language: 'FORTRAN'
+		}
+	},
+	{
 		language: 'R',
 		ids: ['R'],
 		runtime: 'WebR',
@@ -680,16 +693,16 @@ export const supportMatrixRows = [
 /** @type {BlockedCandidateRow[]} */
 export const blockedCandidateRows = [
 	{
-		language: 'Fortran',
-		candidateIds: ['FORTRAN', 'F90', 'F95'],
+		language: 'Modern Fortran',
+		candidateIds: ['F90', 'F95'],
 		currentEvidence:
-			`${code('static/wasm-fortran')} packages LFortran analyzer assets; ` +
-			`${code('emit_wasm_from_source')} works for stdout-only programs`,
+			`${code('FORTRAN')} now runs through f2c/libf2c, while ` +
+			`${code('static/wasm-fortran')} still packages LFortran analyzer assets`,
 		blocker:
-			`${code('read(*,*)')} currently aborts LFortran WASM/WAT codegen and the C backend reports ` +
-			`${code('visit_FileRead() not implemented')}; C++ backend leaves ${code('FIXME: READ')}`,
+			`LFortran WASM/WAT stdin codegen still aborts and the C backend reports ` +
+			`${code('visit_FileRead() not implemented')}; f2c covers Fortran 77-style code but is not a full modern Fortran compiler`,
 		requiredFollowUp:
-			'Package a real browser Fortran compiler/runtime with stdin-capable codegen, then add browser stdin coverage before moving it out of editor-only mode'
+			'Package a real browser modern Fortran compiler/runtime with stdin-capable codegen before advertising F90/F95 as first-class runtimes'
 	},
 	{
 		language: 'Objective-C',
@@ -1128,6 +1141,21 @@ const runtimeDetailsByLanguage = new Map([
 			customization:
 				`${code('runtimeAssets.haskell.moduleUrl')}/${code('rootfsUrl')}/${code('bsdtarUrl')}; ` +
 				`${code('mainSoPath')}, ${code('searchDirs')}, ${code('activePath')}, ${code('workspaceFiles')}`
+		}
+	],
+	[
+		'Fortran',
+		{
+			packageBase: `Netlib f2c 2022-09-09 + ${code('@cowasm/f2c 1.0.0')} libf2c + wasm-clang`,
+			execution:
+				`runs ${code('f2c.wasm')} in WASI, compiles generated C with wasm-clang, links ` +
+				`${code('libf2c.a')}, then executes the resulting WASI module with ${code('stdin')} and ` +
+				`${code('programArgs')}`,
+			customization:
+				`${code('runtimeAssets.fortran.baseUrl')}/${code('f2cWasmUrl')}/${code('libf2cUrl')}/` +
+				`${code('f2cHeaderUrl')}/${code('analyzerUrl')} or ${code('PUBLIC_WASM_FORTRAN_*')}; ` +
+				`${code('runtimeAssets.clang.baseUrl')}/${code('loader')} for the C backend; ` +
+				`${code('activePath')}, ${code('workspaceFiles')}, ${code('compileArgs')}`
 		}
 	],
 	[

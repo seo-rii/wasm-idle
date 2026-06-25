@@ -124,6 +124,12 @@ int main() {
     return 0;
 }`;
 
+const fortranStdinSource = `      PROGRAM MAIN
+      INTEGER N
+      READ *, N
+      PRINT *, 'main=', N + 5
+      END`;
+
 let previewBuildReady: Promise<void> | null = null;
 
 async function withBrowserPreview(action: (browserUrl: string) => Promise<void>) {
@@ -378,6 +384,29 @@ describe('wasm-idle browser stdin connection', () => {
 				stdinText: '68\n'
 			});
 			expect(cppSummary.transcript).toContain('main=73');
+		});
+	}, 700_000);
+
+	it('passes Fortran stdin through the browser f2c and wasm-clang runtime path', async () => {
+		if (
+			process.env.WASM_IDLE_RUN_REAL_BROWSER_STDIN !== '1' &&
+			process.env.WASM_IDLE_RUN_REAL_BROWSER_FORTRAN !== '1'
+		) {
+			return;
+		}
+
+		await withBrowserPreview(async (browserUrl) => {
+			const summary = await runStdinBrowserProbe({
+				browserUrl,
+				expectedOutput: 'main=',
+				language: 'FORTRAN',
+				requireSharedArrayBuffer: false,
+				runTimeoutMs: Number(process.env.WASM_IDLE_STDIN_RUN_TIMEOUT_MS || '420000'),
+				source: fortranStdinSource,
+				stdinText: '68\n'
+			});
+			expect(summary.transcript).toContain('main=');
+			expect(summary.transcript).toContain('73');
 		});
 	}, 700_000);
 

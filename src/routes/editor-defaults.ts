@@ -633,13 +633,11 @@ if (isnan(n))
 endif
 
 	printf("factorial_plus_bonus=%d\\n", factorial(n) + bonus);`,
-	fortran: `program main
-    implicit none
-    integer :: bonus
-
-    bonus = 3
-    print *, "factorial_plus_bonus=", 24 + bonus
-end program main`,
+	fortran: `      PROGRAM MAIN
+      INTEGER BONUS
+      BONUS = 3
+      PRINT *, 'factorial_plus_bonus=', 24 + BONUS
+      END`,
 	graphql: `query Greeting {
     hello
 }`,

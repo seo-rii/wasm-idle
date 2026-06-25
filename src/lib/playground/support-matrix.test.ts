@@ -22,9 +22,10 @@ describe('README support matrix', () => {
 			.map((row) => row.language);
 
 		expect(rowsMissingBrowserIo).toEqual([]);
-		expect(supportMatrixRows.find((row) => row.language === 'C')?.stdin).toBe('Blocked');
-		expect(supportMatrixRows.find((row) => row.language === 'C++')?.stdin).toBe('Blocked');
+		expect(supportMatrixRows.find((row) => row.language === 'C')?.stdin).toBe('Yes');
+		expect(supportMatrixRows.find((row) => row.language === 'C++')?.stdin).toBe('Yes');
 		expect(supportMatrixRows.find((row) => row.language === 'F#')?.stdin).toBe('Blocked');
+		expect(supportMatrixRows.find((row) => row.language === 'Fortran')?.stdin).toBe('Yes');
 		expect(supportMatrixRows.find((row) => row.language === 'Haskell')?.stdin).toBe('Yes');
 		expect(supportMatrixRows.find((row) => row.language === 'Scheme')?.stdin).toBe('No');
 	});
