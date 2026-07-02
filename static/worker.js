@@ -6,7 +6,8 @@ self.addEventListener('activate', (event) => {
 	event.waitUntil(self.clients.claim());
 });
 
-const gzipVirtualExtensions = /\.(a|avm|bin|data|dat|dll|js|mjs|oct|pdb|so|symbols|wasm)$/i;
+const gzipVirtualExtensions =
+	/\.(a|avm|bin|data|dat|dll|js|json|mjs|o|oct|pdb|so|symbols|wasm)$/i;
 const precompressedExtension = /\.(br|brotli|gz|tgz|zip|zst)$/i;
 const runtimeAssetAliases = [
 	{

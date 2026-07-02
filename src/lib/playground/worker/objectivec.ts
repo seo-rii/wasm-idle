@@ -120,9 +120,35 @@ const resolveInputPath = (activePath?: string) => {
 	return /\.[A-Za-z0-9_-]+$/.test(normalized) ? normalized : `${normalized}.m`;
 };
 
+function hasGzipContentEncoding(response: Response) {
+	const contentEncoding = response.headers.get('content-encoding') || '';
+	return contentEncoding
+		.toLowerCase()
+		.split(',')
+		.map((value) => value.trim())
+		.includes('gzip');
+}
+
+async function inflateGzipResponse(response: Response, label: string) {
+	if (hasGzipContentEncoding(response)) {
+		return new Uint8Array(await response.arrayBuffer());
+	}
+	if (!response.body || typeof DecompressionStream !== 'function') {
+		throw new Error(`${label} is gzip-compressed, but DecompressionStream is unavailable.`);
+	}
+	const decompressed = response.body.pipeThrough(new DecompressionStream('gzip'));
+	return new Uint8Array(await new Response(decompressed).arrayBuffer());
+}
+
 async function fetchBytes(url: string, label: string) {
 	const response = await fetch(url);
-	if (!response.ok) throw new Error(`Failed to load ${label}: ${response.status}`);
+	if (!response.ok) {
+		const compressedResponse = await fetch(`${url}.gz`).catch(() => null);
+		if (!compressedResponse?.ok) {
+			throw new Error(`Failed to load ${label}: ${response.status}`);
+		}
+		return inflateGzipResponse(compressedResponse, label);
+	}
 	return new Uint8Array(await response.arrayBuffer());
 }
 

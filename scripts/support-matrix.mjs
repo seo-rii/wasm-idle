@@ -786,13 +786,15 @@ const runtimeDetailsByLanguage = new Map([
 			execution:
 				`${code('clang -x objective-c -fobjc-runtime=gnustep-2.0 -fblocks')} for ` +
 				`${code('wasm32-wasi')}; links ${code('libobjc.a')}, ${code('libgnustep-base.a')}, ` +
-				`and ${code('libffi.a')} for Foundation plus a constructor wrapper for Objective-C ` +
+				`and ${code('libffi.a')} when Foundation is imported; Foundation headers are inlined ` +
+				`from ${code('foundation-headers.json')}; includes a constructor wrapper for Objective-C ` +
 				`class registration; auto-compiles ${code('.m')} and ${code('.c')} workspace sources; ` +
-				`supports ${code('stdin')} and ${code('programArgs')}`,
+				`supports ${code('stdin')} and ${code('programArgs')}; large Objective-C assets may be ` +
+				`served as gzip-only ${code('.gz')} files through the service worker or worker fallback`,
 			customization:
 				`${code('runtimeAssets.objectivec.baseUrl')}/${code('libobjcUrl')}/` +
-				`${code('headersUrl')}/${code('libgnustepBaseUrl')}/${code('foundationHeadersUrl')}/` +
-				`${code('libffiUrl')} ` +
+				`${code('headersUrl')}/${code('libgnustepBaseUrl')}/${code('libgnustepBaseObjectUrl')}/` +
+				`${code('foundationHeadersUrl')}/${code('libffiUrl')} ` +
 				`or ${code('PUBLIC_WASM_OBJECTIVEC_*')}; ${code('runtimeAssets.clang.baseUrl')}/` +
 				`${code('loader')} for the clang toolchain; ${code('activePath')}, ` +
 				`${code('workspaceFiles')}, ${code('compileArgs')}`

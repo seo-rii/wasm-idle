@@ -27,6 +27,25 @@ function bytes(value: string) {
 	return new TextEncoder().encode(value);
 }
 
+function responseBytesForObjectiveCAsset(url: string) {
+	if (url.endsWith('foundation-headers.json')) {
+		return bytes(
+			JSON.stringify({
+				'Foundation/Foundation.h': '@interface NSObject @end',
+				'sys/socket.h': 'struct sockaddr;',
+				'stdio.h': 'int mock_scanf(const char *format, ...);'
+			})
+		);
+	}
+	if (url.endsWith('headers.json')) {
+		return bytes(JSON.stringify({ 'include/objc/runtime.h': 'typedef void *id;' }));
+	}
+	if (url.endsWith('libgnustep-base.a')) return bytes('mock-libgnustep');
+	if (url.endsWith('libgnustep-base.o')) return bytes('mock-libgnustep-object');
+	if (url.endsWith('libffi.a')) return bytes('mock-libffi');
+	return bytes('mock-libobjc');
+}
+
 vi.mock('wasm-clang', () => {
 	class MockBrowserClangRuntime {
 		assetUrls = {
@@ -93,26 +112,64 @@ describe('Objective-C worker', () => {
 			vi.fn(async (url: string) => ({
 				ok: true,
 				arrayBuffer: async () => {
-					if (url.endsWith('foundation-headers.json')) {
-						return bytes(
-							JSON.stringify({
-								'Foundation/Foundation.h': '@interface NSObject @end',
-								'sys/socket.h': 'struct sockaddr;',
-								'stdio.h': 'int mock_scanf(const char *format, ...);'
-							})
-						).buffer;
-					}
-					if (url.endsWith('headers.json')) {
-						return bytes(
-							JSON.stringify({ 'include/objc/runtime.h': 'typedef void *id;' })
-						).buffer;
-					}
-					if (url.endsWith('libgnustep-base.a')) return bytes('mock-libgnustep').buffer;
-					if (url.endsWith('libgnustep-base.o')) return bytes('mock-libgnustep').buffer;
-					if (url.endsWith('libffi.a')) return bytes('mock-libffi').buffer;
-					return bytes('mock-libobjc').buffer;
+					return responseBytesForObjectiveCAsset(url).buffer;
 				}
 			}))
+		);
+	});
+
+	it('loads gzip-only Objective-C startup assets through original asset urls', async () => {
+		const fetchedUrls: string[] = [];
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (url: string) => {
+				fetchedUrls.push(url);
+				if (!url.endsWith('.gz')) {
+					return {
+						ok: false,
+						status: 404,
+						arrayBuffer: async () => new ArrayBuffer(0)
+					};
+				}
+				const uncompressed = responseBytesForObjectiveCAsset(url.slice(0, -'.gz'.length));
+				return {
+					body: null,
+					headers: new Headers({ 'content-encoding': 'gzip' }),
+					ok: true,
+					status: 200,
+					arrayBuffer: async () => uncompressed.buffer
+				};
+			})
+		);
+
+		await import('./objectivec');
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				log: false,
+				clangAssets: { baseUrl: 'http://localhost/clang/', useAssetBridge: false },
+				objectivecAssets: {
+					libobjcUrl: 'http://localhost/wasm-objectivec/libobjc.a',
+					headersUrl: 'http://localhost/wasm-objectivec/headers.json',
+					libgnustepBaseUrl: 'http://localhost/wasm-objectivec/libgnustep-base.a',
+					libgnustepBaseObjectUrl: 'http://localhost/wasm-objectivec/libgnustep-base.o',
+					foundationHeadersUrl:
+						'http://localhost/wasm-objectivec/foundation-headers.json',
+					libffiUrl: 'http://localhost/wasm-objectivec/libffi.a'
+				}
+			}
+		});
+
+		expect(fetchedUrls).toEqual(
+			expect.arrayContaining([
+				'http://localhost/wasm-objectivec/libobjc.a',
+				'http://localhost/wasm-objectivec/libobjc.a.gz',
+				'http://localhost/wasm-objectivec/headers.json',
+				'http://localhost/wasm-objectivec/headers.json.gz'
+			])
+		);
+		expect(Array.from(runtimeInstances[0]?.memfs.files.get('libobjc.a') as Uint8Array)).toEqual(
+			Array.from(bytes('mock-libobjc'))
 		);
 	});
 
