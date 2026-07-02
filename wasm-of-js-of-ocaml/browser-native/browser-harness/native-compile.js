@@ -119,7 +119,8 @@ async function runGeneratedProgram(programSource, options) {
             }
             return null;
         };
-        globalThis[assetResolverKey] = resolveAsset;
+        globalThis[assetResolverKey] =
+            resolveAsset;
         window.fetch = (async (input, init) => {
             const requestUrl = typeof input === 'string'
                 ? input

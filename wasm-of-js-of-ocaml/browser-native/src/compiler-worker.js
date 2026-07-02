@@ -5,7 +5,9 @@ export function createCompileHandler(options = {}) {
         const stdoutParts = [];
         const stderrParts = [];
         const diagnostics = [];
-        const toolchainRoot = (options.toolchainRoot || manifest?.toolchainRoot || '/toolchain').replace(/\/+$/, '');
+        const toolchainRoot = (options.toolchainRoot ||
+            manifest?.toolchainRoot ||
+            '/toolchain').replace(/\/+$/, '');
         const inputEntries = Object.entries(request.files || {});
         if (inputEntries.length === 0) {
             return {
@@ -39,14 +41,19 @@ export function createCompileHandler(options = {}) {
         const normalizedEntries = inputEntries
             .map(([filePath, source]) => {
             const normalized = filePath.replace(/\\/g, '/').replace(/^\/+/, '');
-            if (!normalized || normalized.split('/').some((segment) => !segment || segment === '.' || segment === '..')) {
+            if (!normalized ||
+                normalized
+                    .split('/')
+                    .some((segment) => !segment || segment === '.' || segment === '..')) {
                 throw new Error(`invalid workspace file path: ${filePath}`);
             }
             return [normalized, source];
         })
             .sort(([left], [right]) => left.localeCompare(right));
         const entry = request.entry.replace(/\\/g, '/').replace(/^\/+/, '');
-        const packages = [...new Set((request.packages || []).map((value) => value.trim()).filter(Boolean))];
+        const packages = [
+            ...new Set((request.packages || []).map((value) => value.trim()).filter(Boolean))
+        ];
         const entryFileName = entry.split('/').at(-1) || entry;
         const entryStem = entryFileName.replace(/\.(ml|mli)$/, '') || 'program';
         const effectsMode = request.effectsMode || 'cps';
@@ -94,14 +101,7 @@ export function createCompileHandler(options = {}) {
             compilePlan.push({
                 stage: 'wasm_of_ocaml',
                 cwd: '/workspace',
-                argv: [
-                    'wasm_of_ocaml',
-                    bytecodeOutput,
-                    '-o',
-                    jsOutput,
-                    '--effects',
-                    effectsMode
-                ]
+                argv: ['wasm_of_ocaml', bytecodeOutput, '-o', jsOutput, '--effects', effectsMode]
             });
             if (request.sourcemap) {
                 diagnostics.push({
@@ -196,7 +196,9 @@ export function createCompileHandler(options = {}) {
                     }
                     lineIndex = cursor - 1;
                     const primaryMessageIndex = messageLines.findIndex((messageLine) => messageLine.startsWith('Error:') || messageLine.startsWith('Warning'));
-                    const relevantMessageLines = primaryMessageIndex >= 0 ? messageLines.slice(primaryMessageIndex) : messageLines;
+                    const relevantMessageLines = primaryMessageIndex >= 0
+                        ? messageLines.slice(primaryMessageIndex)
+                        : messageLines;
                     let message = relevantMessageLines.join(' ').trim();
                     let severity = 'other';
                     if (message.startsWith('Error:')) {
@@ -275,7 +277,8 @@ export function createCompileHandler(options = {}) {
     };
 }
 const workerLikeGlobal = globalThis;
-if (typeof workerLikeGlobal.addEventListener === 'function' && typeof workerLikeGlobal.postMessage === 'function') {
+if (typeof workerLikeGlobal.addEventListener === 'function' &&
+    typeof workerLikeGlobal.postMessage === 'function') {
     const handleCompile = createCompileHandler();
     workerLikeGlobal.addEventListener('message', async (event) => {
         const message = event.data;

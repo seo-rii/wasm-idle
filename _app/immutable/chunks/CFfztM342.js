@@ -1,0 +1,1 @@
+import{n as e,t}from"./BSvG-PZP2.js";export{t as conf,e as language};

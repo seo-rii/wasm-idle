@@ -34,7 +34,8 @@ export function createNodeHostSystemDispatcher(options) {
                 });
                 const translatedCwd = invocation.cwd === '/workspace' || invocation.cwd === '/tmp'
                     ? path.join(stagingRoot, invocation.cwd.slice(1))
-                    : invocation.cwd.startsWith('/workspace/') || invocation.cwd.startsWith('/tmp/')
+                    : invocation.cwd.startsWith('/workspace/') ||
+                        invocation.cwd.startsWith('/tmp/')
                         ? path.join(stagingRoot, invocation.cwd.slice(1))
                         : invocation.cwd;
                 await mkdir(translatedCwd, { recursive: true });
@@ -89,7 +90,9 @@ export function createNodeHostSystemDispatcher(options) {
                             if (!entry.isFile()) {
                                 continue;
                             }
-                            const relativePath = path.relative(stagingRoot, absolutePath).replace(/\\/g, '/');
+                            const relativePath = path
+                                .relative(stagingRoot, absolutePath)
+                                .replace(/\\/g, '/');
                             invocation.fs.writeFile(`/${relativePath}`, new Uint8Array(await readFile(absolutePath)));
                         }
                     }

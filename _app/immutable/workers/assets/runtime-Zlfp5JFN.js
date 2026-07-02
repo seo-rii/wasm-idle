@@ -1,0 +1,1181 @@
+import App from './app.js';
+import { installGccCompatibilityHeaders } from '@wasm-idle/clang-common/gcc-compat';
+import { MemFS, untar } from './memory/index.js';
+import { green, yellow, normal } from '@wasm-idle/clang-common/color';
+import { createCombinedProgress } from './progress.js';
+import { resolveRuntimeAssetUrls } from './runtime-assets.js';
+import { compile, readBuffer } from './wasm.js';
+import { clangUrl, DEFAULT_BROWSER_CLANG_RUNTIME_PATH, lldUrl } from './url.js';
+if (typeof globalThis.document === 'undefined') {
+    globalThis.document = {
+        querySelectorAll: (() => [])
+    };
+}
+const defaultClangResourceDir = '/lib/clang/8.0.1';
+const defaultCompilerRuntimeLibDir = 'lib/clang/8.0.1/lib/wasi';
+const defaultCppStandardArg = '-std=gnu++2a';
+const defaultCStandardArg = '-std=gnu11';
+function normalizeStandardCode(value) {
+    return (value || '').trim().toUpperCase().replaceAll(/\s+/g, '');
+}
+function resolveCppStandardArg(version) {
+    switch (normalizeStandardCode(version)) {
+        case '03':
+        case 'CPP03':
+        case 'C++03':
+        case 'GNU++03':
+        case 'GNUC++03':
+            return '-std=gnu++03';
+        case '11':
+        case 'CPP11':
+        case 'C++11':
+        case 'GNU++11':
+        case 'GNUC++11':
+            return '-std=gnu++11';
+        case '14':
+        case 'CPP14':
+        case 'C++14':
+        case 'GNU++14':
+        case 'GNUC++14':
+            return '-std=gnu++14';
+        case '17':
+        case 'CPP17':
+        case 'C++17':
+        case 'GNU++17':
+        case 'GNUC++17':
+            return '-std=gnu++17';
+        case '20':
+        case '23':
+        case '26':
+        case 'CPP20':
+        case 'CPP23':
+        case 'CPP26':
+        case 'C++20':
+        case 'C++23':
+        case 'C++26':
+        case 'GNU++20':
+        case 'GNU++23':
+        case 'GNU++26':
+        case 'GNUC++20':
+        case 'GNUC++23':
+        case 'GNUC++26':
+            return defaultCppStandardArg;
+        default:
+            return defaultCppStandardArg;
+    }
+}
+function resolveCStandardArg(version) {
+    switch (normalizeStandardCode(version)) {
+        case '99':
+        case 'C99':
+        case 'GNU99':
+        case 'GNUC99':
+            return '-std=gnu99';
+        case '11':
+        case 'C11':
+        case 'GNU11':
+        case 'GNUC11':
+            return '-std=gnu11';
+        case '17':
+        case '18':
+        case 'C17':
+        case 'C18':
+        case 'GNU17':
+        case 'GNU18':
+        case 'GNUC17':
+        case 'GNUC18':
+            return '-std=gnu17';
+        default:
+            return defaultCStandardArg;
+    }
+}
+function resolveClangLanguageArgs(language, options) {
+    if (language === 'C') {
+        return {
+            languageArg: 'c',
+            standardArg: resolveCStandardArg(options.cVersion)
+        };
+    }
+    return {
+        languageArg: 'c++',
+        standardArg: resolveCppStandardArg(options.cppVersion)
+    };
+}
+const normalizeWorkspacePath = (path) => path
+    .replaceAll('\\', '/')
+    .split('/')
+    .filter((part) => part && part !== '.' && part !== '..')
+    .join('/');
+export function resolveBuildArtifactNames(language, fileName) {
+    const normalizedFileName = normalizeWorkspacePath(fileName || '');
+    const defaultStem = 'main';
+    const input = normalizedFileName && /\.[A-Za-z0-9_-]+$/.test(normalizedFileName)
+        ? normalizedFileName
+        : `${normalizedFileName || defaultStem}.${language === 'C' ? 'c' : 'cc'}`;
+    const stem = (input.split('/').pop() || input).replace(/\.[^.]+$/, '') || defaultStem;
+    return {
+        input,
+        obj: `${stem}.o`,
+        wasm: `${stem}.wasm`
+    };
+}
+const toUtf8 = (text) => {
+    const surrogate = encodeURIComponent(text);
+    let result = '';
+    for (let i = 0; i < surrogate.length;) {
+        const character = surrogate[i];
+        i += 1;
+        if (character == '%') {
+            const hex = surrogate.substring(i, (i += 2));
+            if (hex)
+                result += String.fromCharCode(parseInt(hex, 16));
+        }
+        else {
+            result += character;
+        }
+    }
+    return result;
+};
+class Clang {
+    ready;
+    memfs;
+    stdout;
+    moduleCache;
+    showTiming;
+    log;
+    debug = false;
+    debugBreakpoints = new Set();
+    debugPauseOnEntry = false;
+    debugBuffer;
+    debugInterruptBuffer;
+    debugWatchBuffer;
+    debugWatchResultBuffer;
+    onDebugEvent;
+    debugVariableMetadata = {};
+    debugGlobalMetadata = [];
+    debugFunctionMetadata = {};
+    lastBuildKey = '';
+    path;
+    assetUrls;
+    compilerConfig;
+    wasm;
+    lastArtifactPath = 'main.wasm';
+    traceStartedAt = 0;
+    progress;
+    constructor(options = {}) {
+        this.moduleCache = {};
+        this.stdout = options.stdout || (() => { });
+        this.showTiming = options.showTiming || false;
+        this.log = options.log || false;
+        this.path = (options.runtimeBaseUrl ||
+            options.path ||
+            DEFAULT_BROWSER_CLANG_RUNTIME_PATH).toString();
+        this.assetUrls = resolveRuntimeAssetUrls(this.path, options.manifest);
+        this.compilerConfig = options.manifest?.compiler;
+        this.onDebugEvent = options.onDebugEvent;
+        this.progress = createCombinedProgress((value) => options.progress?.(value));
+        this.memfs = new MemFS({
+            stdout: this.stdout,
+            stdin: options.stdin || (() => ''),
+            path: this.path,
+            memfsModuleUrl: this.assetUrls.memfs,
+            progress: this.progress.memfs,
+            trace: (message) => this.trace(message)
+        });
+        this.getModule(this.assetUrls.clang, this.progress.clang);
+        this.getModule(this.assetUrls.lld, this.progress.lld);
+        this.ready = this.memfs.ready.then(async () => {
+            await this.hostLogAsync(`Untarring ${this.assetUrls.sysroot}`, readBuffer(this.assetUrls.sysroot).then((buffer) => untar(buffer, this.memfs)));
+            installGccCompatibilityHeaders(this.memfs);
+        });
+    }
+    hostLog(message) {
+        if (!this.log)
+            return;
+        const yellowArrow = `${yellow}>${normal} `;
+        this.stdout(`${yellowArrow}${message}`);
+    }
+    beginTrace(debug) {
+        this.debug = debug;
+        this.traceStartedAt = Date.now();
+    }
+    trace(message) {
+        if (!this.debug || !this.log)
+            return;
+        const elapsed = Date.now() - this.traceStartedAt;
+        this.stdout(`\x1b[2m[debug +${elapsed}ms] ${message}\x1b[0m\n`);
+    }
+    async hostLogAsync(message, promise) {
+        const start = +new Date();
+        this.hostLog(`${message}...`);
+        const result = await promise;
+        const end = +new Date();
+        if (this.log)
+            this.stdout(' done.');
+        if (this.showTiming)
+            this.stdout(` ${green}(${end - start}ms)${normal}\n`);
+        if (this.log)
+            this.stdout('\n');
+        return result;
+    }
+    async getModule(name, progress) {
+        if (this.moduleCache[name])
+            return this.moduleCache[name];
+        const module = await this.hostLogAsync(`Fetching and compiling ${name}`, compile(name, progress));
+        this.moduleCache[name] = module;
+        return module;
+    }
+    addWorkspaceDirectories(path, addedDirectories = new Set()) {
+        const parts = normalizeWorkspacePath(path).split('/').slice(0, -1);
+        let directory = '';
+        for (const part of parts) {
+            directory = directory ? `${directory}/${part}` : part;
+            if (!addedDirectories.has(directory)) {
+                this.memfs.addDirectory(directory);
+                addedDirectories.add(directory);
+            }
+        }
+    }
+    addWorkspaceFiles(files = [], activePath = '') {
+        const addedDirectories = new Set();
+        const normalizedActivePath = normalizeWorkspacePath(activePath);
+        for (const file of files) {
+            const safePath = normalizeWorkspacePath(file.path);
+            if (!safePath || safePath === normalizedActivePath)
+                continue;
+            this.addWorkspaceDirectories(safePath, addedDirectories);
+            this.memfs.addFile(safePath, toUtf8(file.content));
+        }
+    }
+    async compile(options) {
+        const input = normalizeWorkspacePath(options.input || 'main.cc') || 'main.cc';
+        let source = options.code;
+        const obj = options.obj;
+        const language = options.language === 'C' ? 'C' : 'CPP';
+        const compileArgs = options.compileArgs ?? options.args ?? [];
+        const { languageArg, standardArg } = resolveClangLanguageArgs(language, options);
+        const debug = !!options.debug;
+        const opt = debug ? '0' : options.opt || '2';
+        if (debug) {
+            const lines = source.split('\n');
+            let braceDepth = 0;
+            let functionDepth = 0;
+            let currentFunctionId = 0;
+            let nextFunctionId = 1;
+            let nextVariableSlot = 1;
+            let currentFunctionVariables = new Map();
+            let globalVariables = new Map();
+            let currentFunctionContainers = new Map();
+            let inBlockComment = false;
+            let pendingFunctionHeader;
+            const debugStructTypes = new Map();
+            let structName = '';
+            let structFields = [];
+            let structInBlockComment = false;
+            for (const rawLine of lines) {
+                let structLine = rawLine;
+                if (structInBlockComment) {
+                    const commentEnd = structLine.indexOf('*/');
+                    if (commentEnd === -1)
+                        continue;
+                    structLine = structLine.slice(commentEnd + 2);
+                    structInBlockComment = false;
+                }
+                const commentStart = structLine.indexOf('/*');
+                if (commentStart !== -1) {
+                    const commentEnd = structLine.indexOf('*/', commentStart + 2);
+                    if (commentEnd === -1) {
+                        structInBlockComment = true;
+                        structLine = structLine.slice(0, commentStart);
+                    }
+                    else {
+                        structLine =
+                            structLine.slice(0, commentStart) + structLine.slice(commentEnd + 2);
+                    }
+                }
+                const lineComment = structLine.indexOf('//');
+                if (lineComment !== -1)
+                    structLine = structLine.slice(0, lineComment);
+                const normalizedStructLine = structLine.trim();
+                if (!structName) {
+                    const structMatch = normalizedStructLine.match(/^struct\s+([A-Za-z_]\w*)\s*\{$/);
+                    if (structMatch?.[1]) {
+                        structName = structMatch[1];
+                        structFields = [];
+                    }
+                    continue;
+                }
+                if (normalizedStructLine === '};') {
+                    let structOffset = 0;
+                    let structAlignment = 1;
+                    const resolvedFields = [];
+                    for (const field of structFields) {
+                        const fieldSize = field.kind === 'double'
+                            ? 8
+                            : field.kind === 'bool' || field.kind === 'char'
+                                ? 1
+                                : 4;
+                        if (structOffset % fieldSize !== 0) {
+                            structOffset += fieldSize - (structOffset % fieldSize);
+                        }
+                        resolvedFields.push({
+                            name: field.name,
+                            kind: field.kind,
+                            offset: structOffset
+                        });
+                        structOffset += fieldSize;
+                        structAlignment = Math.max(structAlignment, fieldSize);
+                    }
+                    if (structOffset % structAlignment !== 0) {
+                        structOffset += structAlignment - (structOffset % structAlignment);
+                    }
+                    debugStructTypes.set(structName, {
+                        fields: resolvedFields,
+                        size: Math.max(structOffset, 1)
+                    });
+                    structName = '';
+                    structFields = [];
+                    continue;
+                }
+                const structFieldMatch = normalizedStructLine.match(/^(?:const\s+)?(?:(?:unsigned|signed)\s+)?(?:(?:short|long long|long)\s+)?(int|float|double|bool|char)\s+(.+);$/);
+                if (!structFieldMatch)
+                    continue;
+                for (const declaration of structFieldMatch[2].split(',')) {
+                    const declarator = declaration.split('=')[0]?.trim() || '';
+                    if (!declarator || /[*&\[]/.test(declarator))
+                        continue;
+                    const name = declarator.match(/([A-Za-z_]\w*)\s*$/)?.[1];
+                    if (!name)
+                        continue;
+                    structFields.push({
+                        name,
+                        kind: structFieldMatch[1]
+                    });
+                }
+            }
+            this.debugVariableMetadata = {};
+            this.debugGlobalMetadata = [];
+            this.debugFunctionMetadata = {};
+            const globalInitialization = [];
+            const instrumented = [
+                '#include <cstdio>',
+                '#include <iostream>',
+                '#include <map>',
+                '#include <set>',
+                '#include <string>',
+                '#include <type_traits>',
+                '#include <vector>',
+                'extern "C" __attribute__((import_module("env"), import_name("__wasm_idle_debug_enter"))) void __wasm_idle_debug_enter(int functionId, int line);',
+                'extern "C" __attribute__((import_module("env"), import_name("__wasm_idle_debug_leave"))) void __wasm_idle_debug_leave(int functionId);',
+                'extern "C" __attribute__((import_module("env"), import_name("__wasm_idle_debug_value_num"))) void __wasm_idle_debug_value_num(int functionId, int slot, double value);',
+                'extern "C" __attribute__((import_module("env"), import_name("__wasm_idle_debug_value_bool"))) void __wasm_idle_debug_value_bool(int functionId, int slot, int value);',
+                'extern "C" __attribute__((import_module("env"), import_name("__wasm_idle_debug_value_addr"))) void __wasm_idle_debug_value_addr(int functionId, int slot, int value);',
+                'extern "C" __attribute__((import_module("env"), import_name("__wasm_idle_debug_value_text"))) void __wasm_idle_debug_value_text(int functionId, int slot, const char* ptr, int len);',
+                'template <typename T>',
+                'static inline std::string __wasm_idle_debug_format_value(const T& value) {',
+                '    if constexpr (std::is_same_v<T, bool>) return value ? "true" : "false";',
+                `    else if constexpr (std::is_same_v<T, char>) return std::string("'") + value + "'";`,
+                '    else if constexpr (std::is_same_v<T, signed char> || std::is_same_v<T, unsigned char>) return std::to_string((int)value);',
+                '    else if constexpr (std::is_integral_v<T> || std::is_floating_point_v<T>) return std::to_string(value);',
+                '    else return "?";',
+                '}',
+                'template <typename T>',
+                'static inline void __wasm_idle_debug_emit_vector(int functionId, int slot, const std::vector<T>& values) {',
+                '    std::string text = "[";',
+                '    int count = 0;',
+                '    for (const auto& value : values) {',
+                '        if (count > 0) text += ", ";',
+                '        if (count >= 8) { text += "..."; break; }',
+                '        text += __wasm_idle_debug_format_value(value);',
+                '        count += 1;',
+                '    }',
+                '    text += "]";',
+                '    __wasm_idle_debug_value_text(functionId, slot, text.c_str(), (int)text.size());',
+                '}',
+                'template <typename T>',
+                'static inline void __wasm_idle_debug_emit_set(int functionId, int slot, const std::set<T>& values) {',
+                '    std::string text = "{";',
+                '    int count = 0;',
+                '    for (const auto& value : values) {',
+                '        if (count > 0) text += ", ";',
+                '        if (count >= 8) { text += "..."; break; }',
+                '        text += __wasm_idle_debug_format_value(value);',
+                '        count += 1;',
+                '    }',
+                '    text += "}";',
+                '    __wasm_idle_debug_value_text(functionId, slot, text.c_str(), (int)text.size());',
+                '}',
+                'template <typename K, typename V>',
+                'static inline void __wasm_idle_debug_emit_map(int functionId, int slot, const std::map<K, V>& values) {',
+                '    std::string text = "{";',
+                '    int count = 0;',
+                '    for (const auto& entry : values) {',
+                '        if (count > 0) text += ", ";',
+                '        if (count >= 8) { text += "..."; break; }',
+                '        text += __wasm_idle_debug_format_value(entry.first);',
+                '        text += ": ";',
+                '        text += __wasm_idle_debug_format_value(entry.second);',
+                '        count += 1;',
+                '    }',
+                '    text += "}";',
+                '    __wasm_idle_debug_value_text(functionId, slot, text.c_str(), (int)text.size());',
+                '}',
+                'extern "C" __attribute__((import_module("env"), import_name("__wasm_idle_debug_line"))) void __wasm_idle_debug_line(int functionId, int line);'
+            ];
+            for (let index = 0; index < lines.length; index += 1) {
+                const line = lines[index];
+                const indent = line.match(/^\s*/)?.[0] || '';
+                let rewrittenLine = line;
+                let analysisLine = line;
+                if (inBlockComment) {
+                    const commentEnd = analysisLine.indexOf('*/');
+                    if (commentEnd === -1) {
+                        instrumented.push(line);
+                        continue;
+                    }
+                    analysisLine = analysisLine.slice(commentEnd + 2);
+                    inBlockComment = false;
+                }
+                const commentStart = analysisLine.indexOf('/*');
+                if (commentStart !== -1) {
+                    const commentEnd = analysisLine.indexOf('*/', commentStart + 2);
+                    if (commentEnd === -1) {
+                        inBlockComment = true;
+                        analysisLine = analysisLine.slice(0, commentStart);
+                    }
+                    else {
+                        analysisLine =
+                            analysisLine.slice(0, commentStart) +
+                                analysisLine.slice(commentEnd + 2);
+                    }
+                }
+                const lineComment = analysisLine.indexOf('//');
+                if (lineComment !== -1)
+                    analysisLine = analysisLine.slice(0, lineComment);
+                const normalized = analysisLine.trim();
+                const inFunctionBody = functionDepth > 0 && braceDepth >= functionDepth;
+                const isTopLevelDeclarationContext = functionDepth === 0 &&
+                    braceDepth === 0 &&
+                    !normalized.includes('(') &&
+                    !normalized.startsWith('#');
+                const controlHeaderWithoutInlineBlock = /^(while|if|for)\s*\(/.test(normalized) && !normalized.includes('{');
+                const leadingInstrumentation = [];
+                const trailingInstrumentation = [];
+                const declaredContainerNames = new Set();
+                const globalDeclarationMatch = isTopLevelDeclarationContext &&
+                    normalized.match(/^(?:const\s+)?(?:(?:unsigned|signed)\s+)?(?:(?:short|long long|long)\s+)?(int|float|double|bool|char)\s+(.+);$/);
+                if (globalDeclarationMatch) {
+                    const kind = globalDeclarationMatch[1] === 'bool' ? 'bool' : 'number';
+                    const declarations = [];
+                    let declarationBuffer = '';
+                    let declarationBraceDepth = 0;
+                    for (const character of globalDeclarationMatch[2]) {
+                        if (character === ',' && declarationBraceDepth === 0) {
+                            if (declarationBuffer.trim())
+                                declarations.push(declarationBuffer.trim());
+                            declarationBuffer = '';
+                            continue;
+                        }
+                        if (character === '{')
+                            declarationBraceDepth += 1;
+                        if (character === '}')
+                            declarationBraceDepth = Math.max(0, declarationBraceDepth - 1);
+                        declarationBuffer += character;
+                    }
+                    if (declarationBuffer.trim())
+                        declarations.push(declarationBuffer.trim());
+                    for (const declaration of declarations) {
+                        const [left] = declaration.split('=');
+                        const declarator = left?.trim() || '';
+                        if (/[*&\[]/.test(declarator))
+                            continue;
+                        const name = declarator.match(/([A-Za-z_]\w*)\s*$/)?.[1];
+                        if (!name)
+                            continue;
+                        const slot = nextVariableSlot++;
+                        globalVariables.set(name, {
+                            slot,
+                            kind,
+                            fromLine: index + 1,
+                            toLine: Number.MAX_SAFE_INTEGER
+                        });
+                        this.debugGlobalMetadata = [
+                            ...this.debugGlobalMetadata,
+                            {
+                                slot,
+                                name,
+                                kind,
+                                fromLine: index + 1,
+                                toLine: Number.MAX_SAFE_INTEGER
+                            }
+                        ];
+                        globalInitialization.push(`${kind === 'bool' ? '__wasm_idle_debug_value_bool' : '__wasm_idle_debug_value_num'}(0, ${slot}, ${name});`);
+                    }
+                }
+                const globalStructArrayMatch = isTopLevelDeclarationContext &&
+                    normalized.match(/^(?:const\s+)?([A-Za-z_]\w*)\s+([A-Za-z_]\w*)\s*\[(\d+)\]\s*(?:=.*)?;$/);
+                if (globalStructArrayMatch) {
+                    const structType = debugStructTypes.get(globalStructArrayMatch[1]);
+                    if (structType) {
+                        const slot = nextVariableSlot++;
+                        this.debugGlobalMetadata = [
+                            ...this.debugGlobalMetadata,
+                            {
+                                slot,
+                                name: globalStructArrayMatch[2],
+                                kind: 'array',
+                                length: Number(globalStructArrayMatch[3]),
+                                dimensions: [Number(globalStructArrayMatch[3])],
+                                structFields: structType.fields,
+                                structSize: structType.size,
+                                fromLine: index + 1,
+                                toLine: Number.MAX_SAFE_INTEGER
+                            }
+                        ];
+                        globalInitialization.push(`__wasm_idle_debug_value_addr(0, ${slot}, (int)((unsigned long long)(${globalStructArrayMatch[2]})));`);
+                    }
+                }
+                if (inFunctionBody &&
+                    normalized &&
+                    !normalized.startsWith('#') &&
+                    normalized !== '{' &&
+                    normalized !== '}' &&
+                    !normalized.startsWith('else') &&
+                    !normalized.startsWith('case ') &&
+                    normalized !== 'case' &&
+                    !normalized.startsWith('default') &&
+                    !normalized.startsWith('catch') &&
+                    !/^(public|private|protected)\s*:/.test(normalized) &&
+                    !normalized.endsWith(':') &&
+                    !normalized.includes(' else ')) {
+                    leadingInstrumentation.push(`${indent}__wasm_idle_debug_line(${currentFunctionId}, ${index + 1});`);
+                    const declarationMatch = normalized.match(/^(?:const\s+)?(?:(?:unsigned|signed)\s+)?(?:(?:short|long long|long)\s+)?(int|float|double|bool|char)\s+(.+);$/);
+                    const containerDeclarationMatch = normalized.match(/^(?:const\s+)?(?:(?:std::)?(vector|set|map))\s*<(.+)>\s+([A-Za-z_]\w*)\s*(?:=.*)?;$/);
+                    if (containerDeclarationMatch && currentFunctionId) {
+                        const slot = nextVariableSlot++;
+                        const container = containerDeclarationMatch[1];
+                        const name = containerDeclarationMatch[3];
+                        declaredContainerNames.add(name);
+                        currentFunctionContainers.set(name, {
+                            slot,
+                            container,
+                            fromLine: index + 1,
+                            toLine: Number.MAX_SAFE_INTEGER
+                        });
+                        this.debugVariableMetadata[currentFunctionId] = [
+                            ...(this.debugVariableMetadata[currentFunctionId] || []),
+                            {
+                                slot,
+                                name,
+                                kind: 'text',
+                                fromLine: index + 1,
+                                toLine: Number.MAX_SAFE_INTEGER
+                            }
+                        ];
+                        trailingInstrumentation.push(`${indent}__wasm_idle_debug_emit_${container}(${currentFunctionId}, ${slot}, ${name});`);
+                    }
+                    if (declarationMatch && currentFunctionId) {
+                        const kind = declarationMatch[1] === 'bool' ? 'bool' : 'number';
+                        const declarations = [];
+                        let declarationBuffer = '';
+                        let declarationParenDepth = 0;
+                        let declarationBraceDepth = 0;
+                        for (const character of declarationMatch[2]) {
+                            if (character === ',' &&
+                                declarationParenDepth === 0 &&
+                                declarationBraceDepth === 0) {
+                                if (declarationBuffer.trim())
+                                    declarations.push(declarationBuffer.trim());
+                                declarationBuffer = '';
+                                continue;
+                            }
+                            if (character === '(')
+                                declarationParenDepth += 1;
+                            if (character === ')')
+                                declarationParenDepth = Math.max(0, declarationParenDepth - 1);
+                            if (character === '{')
+                                declarationBraceDepth += 1;
+                            if (character === '}')
+                                declarationBraceDepth = Math.max(0, declarationBraceDepth - 1);
+                            declarationBuffer += character;
+                        }
+                        if (declarationBuffer.trim())
+                            declarations.push(declarationBuffer.trim());
+                        for (const declaration of declarations) {
+                            const [left] = declaration.split('=');
+                            const declarator = left?.trim() || '';
+                            const arrayDimensions = [];
+                            for (const match of declarator.matchAll(/\[(\d+)\]/g)) {
+                                arrayDimensions.push(Number(match[1]));
+                            }
+                            const arrayName = declarator.match(/([A-Za-z_]\w*)\s*(?=\[\d+\])/);
+                            if (arrayDimensions.length && arrayName) {
+                                const slot = nextVariableSlot++;
+                                this.debugVariableMetadata[currentFunctionId] = [
+                                    ...(this.debugVariableMetadata[currentFunctionId] || []),
+                                    {
+                                        slot,
+                                        name: arrayName[1],
+                                        kind: 'array',
+                                        elementKind: declarationMatch[1],
+                                        length: arrayDimensions[0],
+                                        dimensions: arrayDimensions,
+                                        fromLine: index + 1,
+                                        toLine: Number.MAX_SAFE_INTEGER
+                                    }
+                                ];
+                                trailingInstrumentation.push(`${indent}__wasm_idle_debug_value_addr(${currentFunctionId}, ${slot}, (int)((unsigned long long)(${arrayName[1]})));`);
+                                continue;
+                            }
+                            if (/[*&]/.test(declarator))
+                                continue;
+                            const name = declarator.match(/([A-Za-z_]\w*)\s*(?:\[[^\]]*\])?$/)?.[1];
+                            if (!name)
+                                continue;
+                            if (!currentFunctionVariables.has(name)) {
+                                const slot = nextVariableSlot++;
+                                currentFunctionVariables.set(name, {
+                                    slot,
+                                    kind,
+                                    fromLine: index + 1,
+                                    toLine: Number.MAX_SAFE_INTEGER
+                                });
+                                this.debugVariableMetadata[currentFunctionId] = [
+                                    ...(this.debugVariableMetadata[currentFunctionId] || []),
+                                    {
+                                        slot,
+                                        name,
+                                        kind,
+                                        fromLine: index + 1,
+                                        toLine: Number.MAX_SAFE_INTEGER
+                                    }
+                                ];
+                            }
+                            if (declaration.includes('=')) {
+                                const variable = currentFunctionVariables.get(name);
+                                if (variable) {
+                                    trailingInstrumentation.push(`${indent}${variable.kind === 'bool' ? '__wasm_idle_debug_value_bool' : '__wasm_idle_debug_value_num'}(${currentFunctionId}, ${variable.slot}, ${name});`);
+                                }
+                            }
+                        }
+                    }
+                    const forDeclarationMatch = normalized.match(/^for\s*\(\s*(?:const\s+)?(?:(?:unsigned|signed)\s+)?(?:(?:short|long long|long)\s+)?(int|float|double|bool|char)\s+([A-Za-z_]\w*)\s*=/);
+                    if (forDeclarationMatch && currentFunctionId) {
+                        const kind = forDeclarationMatch[1] === 'bool' ? 'bool' : 'number';
+                        const name = forDeclarationMatch[2];
+                        if (!currentFunctionVariables.has(name)) {
+                            const slot = nextVariableSlot++;
+                            currentFunctionVariables.set(name, {
+                                slot,
+                                kind,
+                                fromLine: index + 1,
+                                toLine: Number.MAX_SAFE_INTEGER
+                            });
+                            this.debugVariableMetadata[currentFunctionId] = [
+                                ...(this.debugVariableMetadata[currentFunctionId] || []),
+                                {
+                                    slot,
+                                    name,
+                                    kind,
+                                    fromLine: index + 1,
+                                    toLine: Number.MAX_SAFE_INTEGER
+                                }
+                            ];
+                        }
+                    }
+                    if (!controlHeaderWithoutInlineBlock) {
+                        for (const [name, container] of currentFunctionContainers) {
+                            if (declaredContainerNames.has(name))
+                                continue;
+                            const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                            if (!new RegExp(`\\b${escapedName}\\b`).test(normalized))
+                                continue;
+                            trailingInstrumentation.push(`${indent}__wasm_idle_debug_emit_${container.container}(${currentFunctionId}, ${container.slot}, ${name});`);
+                        }
+                        for (const [name, variable] of currentFunctionVariables) {
+                            const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                            if (normalized.startsWith('for') && variable.toLine === index + 1)
+                                continue;
+                            if (new RegExp(`(?:^|[^\\w])(?:\\+\\+|--)\\s*${escapedName}\\b`).test(normalized) ||
+                                new RegExp(`\\b${escapedName}\\s*(?:[+\\-*/%]?=|\\+\\+|--)`).test(normalized) ||
+                                new RegExp(`&\\s*${escapedName}\\b`).test(normalized) ||
+                                new RegExp(`\\b(?:cin|std::cin)\\b[^;]*>>\\s*${escapedName}\\b`).test(normalized)) {
+                                trailingInstrumentation.push(`${indent}${variable.kind === 'bool' ? '__wasm_idle_debug_value_bool' : '__wasm_idle_debug_value_num'}(${currentFunctionId}, ${variable.slot}, ${name});`);
+                            }
+                        }
+                        for (const [name, variable] of globalVariables) {
+                            if (currentFunctionVariables.has(name) ||
+                                currentFunctionContainers.has(name))
+                                continue;
+                            const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                            if (new RegExp(`(?:^|[^\\w])(?:\\+\\+|--)\\s*${escapedName}\\b`).test(normalized) ||
+                                new RegExp(`\\b${escapedName}\\s*(?:[+\\-*/%]?=|\\+\\+|--)`).test(normalized) ||
+                                new RegExp(`&\\s*${escapedName}\\b`).test(normalized) ||
+                                new RegExp(`\\b(?:cin|std::cin)\\b[^;]*>>\\s*${escapedName}\\b`).test(normalized)) {
+                                trailingInstrumentation.push(`${indent}${variable.kind === 'bool' ? '__wasm_idle_debug_value_bool' : '__wasm_idle_debug_value_num'}(0, ${variable.slot}, ${name});`);
+                            }
+                        }
+                    }
+                    if (/^return\b/.test(normalized))
+                        leadingInstrumentation.push(`${indent}__wasm_idle_debug_leave(${currentFunctionId});`);
+                }
+                if (functionDepth > 0 && braceDepth === functionDepth && normalized === '}') {
+                    leadingInstrumentation.push(`${indent}__wasm_idle_debug_leave(${currentFunctionId});`);
+                }
+                if (inFunctionBody &&
+                    currentFunctionId &&
+                    (/^(while|if)\s*\(/.test(normalized) || /^for\s*\(/.test(normalized))) {
+                    const keywordMatch = normalized.match(/^(while|if|for)\b/);
+                    const keyword = keywordMatch?.[1];
+                    const keywordIndex = line.indexOf(keyword || '');
+                    const openIndex = keywordIndex >= 0 ? line.indexOf('(', keywordIndex) : -1;
+                    if (openIndex >= 0) {
+                        let closeIndex = -1;
+                        let parenDepth = 0;
+                        for (let cursor = openIndex; cursor < line.length; cursor += 1) {
+                            const character = line[cursor];
+                            if (character === '(')
+                                parenDepth += 1;
+                            if (character === ')') {
+                                parenDepth -= 1;
+                                if (parenDepth === 0) {
+                                    closeIndex = cursor;
+                                    break;
+                                }
+                            }
+                            for (const [name, variable] of globalVariables) {
+                                if (currentFunctionVariables.has(name) ||
+                                    currentFunctionContainers.has(name))
+                                    continue;
+                                const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                                if (new RegExp(`(?:^|[^\\w])(?:\\+\\+|--)\\s*${escapedName}\\b`).test(normalized) ||
+                                    new RegExp(`\\b${escapedName}\\s*(?:[+\\-*/%]?=|\\+\\+|--)`).test(normalized) ||
+                                    new RegExp(`&\\s*${escapedName}\\b`).test(normalized)) {
+                                    trailingInstrumentation.push(`${indent}${variable.kind === 'bool' ? '__wasm_idle_debug_value_bool' : '__wasm_idle_debug_value_num'}(0, ${variable.slot}, ${name});`);
+                                }
+                            }
+                        }
+                        if (closeIndex > openIndex) {
+                            const conditionSource = line.slice(openIndex + 1, closeIndex);
+                            if (keyword === 'for') {
+                                const segments = [];
+                                let segmentBuffer = '';
+                                let segmentDepth = 0;
+                                for (const character of conditionSource) {
+                                    if (character === ';' && segmentDepth === 0) {
+                                        segments.push(segmentBuffer);
+                                        segmentBuffer = '';
+                                        continue;
+                                    }
+                                    if (character === '(')
+                                        segmentDepth += 1;
+                                    if (character === ')')
+                                        segmentDepth = Math.max(0, segmentDepth - 1);
+                                    segmentBuffer += character;
+                                }
+                                segments.push(segmentBuffer);
+                                if (segments.length === 3 && segments[1]?.trim()) {
+                                    const initSource = segments[0].trim();
+                                    const updateSource = segments[2].trim();
+                                    const initHooks = [];
+                                    const conditionHooks = [];
+                                    const updateHooks = [];
+                                    const initLooksLikeDeclaration = /^(?:const\s+)?(?:(?:unsigned|signed)\s+)?(?:(?:short|long long|long)\s+)?(?:int|float|double|bool|char)\b/.test(initSource);
+                                    for (const [name, variable] of currentFunctionVariables) {
+                                        const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                                        const mutationPattern = new RegExp(`(?:^|[^\\w])(?:\\+\\+|--)\\s*${escapedName}\\b|\\b${escapedName}\\s*(?:[+\\-*/%]?=|\\+\\+|--)`);
+                                        if (!initLooksLikeDeclaration &&
+                                            mutationPattern.test(initSource)) {
+                                            initHooks.push(`${variable.kind === 'bool' ? '__wasm_idle_debug_value_bool' : '__wasm_idle_debug_value_num'}(${currentFunctionId}, ${variable.slot}, ${name})`);
+                                        }
+                                        if (initLooksLikeDeclaration &&
+                                            mutationPattern.test(initSource)) {
+                                            conditionHooks.push(`${variable.kind === 'bool' ? '__wasm_idle_debug_value_bool' : '__wasm_idle_debug_value_num'}(${currentFunctionId}, ${variable.slot}, ${name})`);
+                                        }
+                                        if (mutationPattern.test(updateSource)) {
+                                            updateHooks.push(`${variable.kind === 'bool' ? '__wasm_idle_debug_value_bool' : '__wasm_idle_debug_value_num'}(${currentFunctionId}, ${variable.slot}, ${name})`);
+                                        }
+                                    }
+                                    const instrumentedInit = initHooks.length && initSource
+                                        ? `(${initSource}, ${initHooks.join(', ')})`
+                                        : segments[0];
+                                    const instrumentedUpdate = updateHooks.length && updateSource
+                                        ? `(${updateSource}, ${updateHooks.join(', ')})`
+                                        : segments[2];
+                                    rewrittenLine =
+                                        line.slice(0, openIndex + 1) +
+                                            `${instrumentedInit}; (${conditionHooks.length ? `${conditionHooks.join(', ')}, ` : ''}__wasm_idle_debug_line(${currentFunctionId}, ${index + 1}), (${segments[1].trim()})); ${instrumentedUpdate}` +
+                                            line.slice(closeIndex);
+                                }
+                            }
+                            else {
+                                rewrittenLine =
+                                    line.slice(0, openIndex + 1) +
+                                        `(__wasm_idle_debug_line(${currentFunctionId}, ${index + 1}), (${conditionSource.trim()}))` +
+                                        line.slice(closeIndex);
+                            }
+                        }
+                    }
+                }
+                instrumented.push(...leadingInstrumentation);
+                instrumented.push(rewrittenLine);
+                instrumented.push(...trailingInstrumentation);
+                const startsInlineFunctionBody = functionDepth === 0 &&
+                    normalized.includes('(') &&
+                    normalized.includes(')') &&
+                    normalized.includes('{') &&
+                    !/^(if|for|while|switch|catch)\b/.test(normalized) &&
+                    !/^(class|struct|namespace|enum|union)\b/.test(normalized);
+                const startsPendingFunctionBody = functionDepth === 0 && !!pendingFunctionHeader && normalized === '{';
+                braceDepth += (analysisLine.match(/{/g) || []).length;
+                braceDepth -= (analysisLine.match(/}/g) || []).length;
+                if (startsInlineFunctionBody || startsPendingFunctionBody) {
+                    functionDepth = braceDepth;
+                    currentFunctionId = nextFunctionId++;
+                    let functionName = 'anonymous';
+                    if (startsInlineFunctionBody) {
+                        const beforeParen = normalized.slice(0, normalized.indexOf('(')).trim();
+                        functionName = beforeParen.split(/\s+/).pop() || functionName;
+                    }
+                    else if (pendingFunctionHeader) {
+                        functionName = pendingFunctionHeader.functionName || functionName;
+                    }
+                    this.debugFunctionMetadata[currentFunctionId] = functionName;
+                    nextVariableSlot = 1;
+                    currentFunctionVariables = new Map();
+                    currentFunctionContainers = new Map();
+                    instrumented.push(`${indent}    __wasm_idle_debug_enter(${currentFunctionId}, ${index + 1});`);
+                    if (functionName === 'main') {
+                        instrumented.push(`${indent}    std::cout.setf(std::ios::unitbuf);`);
+                        instrumented.push(`${indent}    std::cerr.setf(std::ios::unitbuf);`);
+                        instrumented.push(`${indent}    setvbuf(stdout, nullptr, _IONBF, 0);`);
+                        instrumented.push(`${indent}    setvbuf(stderr, nullptr, _IONBF, 0);`);
+                    }
+                    const parameterSource = startsInlineFunctionBody
+                        ? normalized.slice(normalized.indexOf('(') + 1, normalized.lastIndexOf(')'))
+                        : pendingFunctionHeader?.parameters || '';
+                    for (const parameter of parameterSource
+                        .split(',')
+                        .map((value) => value.trim())
+                        .filter(Boolean)) {
+                        const cleaned = parameter.split('=')[0]?.trim() || '';
+                        const containerParameterMatch = cleaned.match(/^(?:const\s+)?(?:(?:std::)?(vector|set|map)\s*<.+>)\s*&?\s*([A-Za-z_]\w*)\s*$/);
+                        if (containerParameterMatch) {
+                            const slot = nextVariableSlot++;
+                            const container = containerParameterMatch[1];
+                            const name = containerParameterMatch[2];
+                            currentFunctionContainers.set(name, {
+                                slot,
+                                container,
+                                fromLine: index + 1,
+                                toLine: Number.MAX_SAFE_INTEGER
+                            });
+                            this.debugVariableMetadata[currentFunctionId] = [
+                                ...(this.debugVariableMetadata[currentFunctionId] || []),
+                                {
+                                    slot,
+                                    name,
+                                    kind: 'text',
+                                    fromLine: index + 1,
+                                    toLine: Number.MAX_SAFE_INTEGER
+                                }
+                            ];
+                            instrumented.push(`${indent}    __wasm_idle_debug_emit_${container}(${currentFunctionId}, ${slot}, ${name});`);
+                            continue;
+                        }
+                        const parameterArrayDimensions = [];
+                        for (const match of cleaned.matchAll(/\[(\d+)\]/g)) {
+                            parameterArrayDimensions.push(Number(match[1]));
+                        }
+                        const parameterArrayName = cleaned.match(/([A-Za-z_]\w*)\s*(?=\[\d+\])/);
+                        if (parameterArrayDimensions.length &&
+                            parameterArrayName &&
+                            /\b(int|float|double|bool|char)\b/.test(cleaned)) {
+                            const slot = nextVariableSlot++;
+                            this.debugVariableMetadata[currentFunctionId] = [
+                                ...(this.debugVariableMetadata[currentFunctionId] || []),
+                                {
+                                    slot,
+                                    name: parameterArrayName[1],
+                                    kind: 'array',
+                                    elementKind: (cleaned.match(/\b(int|float|double|bool|char)\b/)?.[1] || 'int'),
+                                    length: parameterArrayDimensions[0],
+                                    dimensions: parameterArrayDimensions,
+                                    fromLine: index + 1,
+                                    toLine: Number.MAX_SAFE_INTEGER
+                                }
+                            ];
+                            instrumented.push(`${indent}    __wasm_idle_debug_value_addr(${currentFunctionId}, ${slot}, (int)((unsigned long long)(${parameterArrayName[1]})));`);
+                            continue;
+                        }
+                        if (/[*&\[]/.test(cleaned))
+                            continue;
+                        const nameMatch = cleaned.match(/([A-Za-z_]\w*)\s*(?:\[[^\]]*\])?\s*$/);
+                        if (!nameMatch)
+                            continue;
+                        const name = nameMatch[1];
+                        const kind = /\bbool\b/.test(cleaned)
+                            ? 'bool'
+                            : /\b(?:int|float|double|char|short|long)\b/.test(cleaned)
+                                ? 'number'
+                                : '';
+                        if (!kind)
+                            continue;
+                        const slot = nextVariableSlot++;
+                        currentFunctionVariables.set(name, {
+                            slot,
+                            kind,
+                            fromLine: index + 1,
+                            toLine: Number.MAX_SAFE_INTEGER
+                        });
+                        this.debugVariableMetadata[currentFunctionId] = [
+                            ...(this.debugVariableMetadata[currentFunctionId] || []),
+                            {
+                                slot,
+                                name,
+                                kind,
+                                fromLine: index + 1,
+                                toLine: Number.MAX_SAFE_INTEGER
+                            }
+                        ];
+                        instrumented.push(`${indent}    ${kind === 'bool' ? '__wasm_idle_debug_value_bool' : '__wasm_idle_debug_value_num'}(${currentFunctionId}, ${slot}, ${name});`);
+                    }
+                    pendingFunctionHeader = undefined;
+                }
+                else if (functionDepth === 0 &&
+                    normalized.includes('(') &&
+                    normalized.includes(')') &&
+                    !normalized.includes('{') &&
+                    !normalized.endsWith(';') &&
+                    !/^(if|for|while|switch|catch)\b/.test(normalized) &&
+                    !/^(class|struct|namespace|enum|union)\b/.test(normalized)) {
+                    const beforeParen = normalized.slice(0, normalized.indexOf('(')).trim();
+                    pendingFunctionHeader = {
+                        functionName: beforeParen.split(/\s+/).pop() || 'anonymous',
+                        parameters: normalized.slice(normalized.indexOf('(') + 1, normalized.lastIndexOf(')'))
+                    };
+                }
+                else if (normalized && normalized !== '{') {
+                    pendingFunctionHeader = undefined;
+                }
+                if (functionDepth > 0 && braceDepth < functionDepth) {
+                    functionDepth = 0;
+                    currentFunctionId = 0;
+                    currentFunctionVariables = new Map();
+                    currentFunctionContainers = new Map();
+                }
+            }
+            if (globalInitialization.length) {
+                instrumented.push('struct __wasm_idle_debug_globals_init {');
+                instrumented.push('    __wasm_idle_debug_globals_init() {');
+                instrumented.push(...globalInitialization.map((line) => `        ${line}`));
+                instrumented.push('    }');
+                instrumented.push('} __wasm_idle_debug_globals_init_instance;');
+            }
+            source = instrumented.join('\n');
+        }
+        else {
+            this.debugVariableMetadata = {};
+            this.debugGlobalMetadata = [];
+        }
+        const code = toUtf8(source);
+        await this.ready;
+        this.addWorkspaceFiles(options.workspaceFiles, input);
+        this.addWorkspaceDirectories(input);
+        this.memfs.addFile(input, code);
+        this.memfs.addFile(obj, new Uint8Array(0));
+        const clang = await this.getModule(this.assetUrls?.clang || clangUrl(this.path));
+        const clangResourceDir = this.compilerConfig?.resourceDir || defaultClangResourceDir;
+        const clangResourceIncludeDir = `${clangResourceDir.replace(/\/+$/, '')}/include`;
+        const includeArgs = language === 'CPP'
+            ? [
+                '-internal-isystem',
+                '/include/c++/v1',
+                '-internal-isystem',
+                clangResourceIncludeDir,
+                '-internal-isystem',
+                '/include/wasm32-wasi',
+                '-internal-isystem',
+                '/include'
+            ]
+            : [
+                '-internal-isystem',
+                clangResourceIncludeDir,
+                '-internal-isystem',
+                '/include/wasm32-wasi',
+                '-internal-isystem',
+                '/include'
+            ];
+        const compilerArgs = [
+            '-cc1',
+            '-triple',
+            'wasm32-wasi',
+            '-emit-obj',
+            '-disable-free',
+            '-isysroot',
+            '/',
+            '-resource-dir',
+            clangResourceDir,
+            ...includeArgs,
+            '-ferror-limit',
+            '19',
+            '-fcolor-diagnostics',
+            '-O' + opt,
+            '-o',
+            obj,
+            standardArg,
+            '-x',
+            languageArg,
+            input,
+            ...compileArgs
+        ];
+        this.trace(`compile ${input} -> ${obj}`);
+        try {
+            return await this.run(clang, true, 'clang', ...compilerArgs);
+        }
+        catch (error) {
+            const artifact = Uint8Array.from(this.memfs.getFileContents(obj));
+            if (artifact.length > 0) {
+                // The WASI-hosted LLVM stream can report a close-time error after writing a valid
+                // object; keep the current build moving only when this run produced the object.
+                this.trace(`recover ${obj} after clang output stream exit`);
+                return null;
+            }
+            throw error;
+        }
+    }
+    async link(obj, wasm, debug = false) {
+        const stackSize = 1024 * 1024;
+        const libdir = 'lib/wasm32-wasi';
+        const compilerRuntimeLibDir = this.compilerConfig?.compilerRuntimeLibDir || defaultCompilerRuntimeLibDir;
+        const crt1 = `${libdir}/crt1.o`;
+        await this.ready;
+        const lld = await this.getModule(this.assetUrls?.lld || lldUrl(this.path));
+        this.trace(`link ${obj} -> ${wasm}`);
+        return await this.run(lld, this.log, 'wasm-ld', '--export-dynamic', // TODO required?
+        ...(debug ? ['--allow-undefined'] : []), '-z', `stack-size=${stackSize}`, `-L${libdir}/noeh`, `-L${libdir}`, crt1, obj, '-lc', '-lc++', '-lc++abi', '-lm', `-L${compilerRuntimeLibDir}`, '-lclang_rt.builtins-wasm32', '-o', wasm);
+    }
+    async run(module, out, ...args) {
+        this.memfs.out = out;
+        this.hostLog(`${args.join(' ')}\n`);
+        this.trace(`run ${args.join(' ')}`);
+        const start = +new Date();
+        const app = new App(module, this.memfs, args[0], ...args.slice(1));
+        app.trace = (message) => this.trace(message);
+        app.debugSession = {
+            buffer: this.debugBuffer,
+            interruptBuffer: this.debugInterruptBuffer,
+            watchBuffer: this.debugWatchBuffer,
+            watchResultBuffer: this.debugWatchResultBuffer,
+            breakpoints: new Set(this.debugBreakpoints),
+            breakpointVersion: 0,
+            pauseOnEntry: this.debugPauseOnEntry,
+            stepArmed: this.debugPauseOnEntry,
+            nextLineArmed: false,
+            stepOutArmed: false,
+            callDepth: 0,
+            stepOutDepth: 0,
+            currentFunctionId: 0,
+            currentLine: 0,
+            resumeSkipActive: false,
+            resumeSkipFunctionId: 0,
+            resumeSkipLine: 0,
+            nextLineFunctionId: 0,
+            nextLineLine: 0,
+            variableMetadata: this.debugVariableMetadata,
+            globalVariableMetadata: this.debugGlobalMetadata,
+            functionMetadata: this.debugFunctionMetadata,
+            frames: [],
+            globalValues: new Map(),
+            onPause: (event) => this.onDebugEvent?.(event)
+        };
+        const instantiate = +new Date();
+        const stillRunning = await app.run();
+        const end = +new Date();
+        if (this.log)
+            this.stdout('\n');
+        if (this.showTiming)
+            this.stdout(`${green}(${start - instantiate}ms/${end - instantiate}ms)${normal}\n`);
+        return stillRunning ? app : null;
+    }
+    async compileLink(code, options = {}) {
+        const { language = 'CPP', fileName, activePath, workspaceFiles = [], args = [], compileArgs = args, debug = false, breakpoints = [], pauseOnEntry = false, cppVersion, cVersion, debugBuffer, interruptBuffer, watchBuffer, watchResultBuffer } = options;
+        const requestedInput = normalizeWorkspacePath(activePath || '') ||
+            normalizeWorkspacePath(fileName || '') ||
+            undefined;
+        const { input, obj, wasm } = resolveBuildArtifactNames(language, requestedInput);
+        this.beginTrace(debug);
+        this.debugBreakpoints = new Set(debug ? breakpoints : []);
+        this.debugPauseOnEntry = debug && pauseOnEntry;
+        this.debugBuffer = debugBuffer;
+        this.debugInterruptBuffer = interruptBuffer;
+        this.debugWatchBuffer = watchBuffer;
+        this.debugWatchResultBuffer = watchResultBuffer;
+        this.lastArtifactPath = wasm;
+        const buildKey = JSON.stringify({
+            code,
+            input,
+            wasm,
+            language,
+            compileArgs,
+            workspaceFiles,
+            cppVersion,
+            cVersion,
+            debug
+        });
+        if (this.lastBuildKey === buildKey) {
+            this.trace(`reuse ${wasm}`);
+            return this.wasm;
+        }
+        await this.compile({
+            input,
+            code,
+            obj,
+            language,
+            compileArgs,
+            workspaceFiles,
+            cppVersion,
+            cVersion,
+            debug
+        });
+        await this.link(obj, wasm, debug);
+        this.lastBuildKey = buildKey;
+        const wasmBytes = Uint8Array.from(this.memfs.getFileContents(wasm));
+        return (this.wasm = await this.hostLogAsync(`Compiling ${wasm}`, WebAssembly.compile(wasmBytes)));
+    }
+    async compileLinkRun(code, options = {}) {
+        const { language = 'CPP', fileName, activePath, workspaceFiles = [], args = [], compileArgs = args, programArgs = [], debug = false, breakpoints = [], pauseOnEntry = false, cppVersion, cVersion, debugBuffer, interruptBuffer, watchBuffer, watchResultBuffer } = options;
+        this.debug = debug;
+        const requestedInput = normalizeWorkspacePath(activePath || '') ||
+            normalizeWorkspacePath(fileName || '') ||
+            undefined;
+        const { wasm } = resolveBuildArtifactNames(language, requestedInput);
+        return await this.run(await this.compileLink(code, {
+            language,
+            fileName,
+            activePath,
+            workspaceFiles,
+            compileArgs,
+            debug,
+            breakpoints,
+            pauseOnEntry,
+            cppVersion,
+            cVersion,
+            debugBuffer,
+            interruptBuffer,
+            watchBuffer,
+            watchResultBuffer
+        }), true, wasm, ...programArgs);
+    }
+}
+export async function createClangCompiler(options = {}) {
+    const compiler = new Clang(options);
+    await compiler.ready;
+    return compiler;
+}
+export async function preloadBrowserClangRuntime(options = {}) {
+    return createClangCompiler(options);
+}
+export { Clang, DEFAULT_BROWSER_CLANG_RUNTIME_PATH };
+export default Clang;
+//# sourceMappingURL=runtime.js.map

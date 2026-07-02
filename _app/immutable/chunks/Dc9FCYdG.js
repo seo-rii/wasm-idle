@@ -1,1 +1,0 @@
-import{l as e}from"./BG9u-Hyj2.js";import{t}from"./DE1WiEx92.js";var n=class extends t{constructor(){super({languageId:`GLEAM`,displayName:`Gleam`,defaultActivePath:`main.gleam`,moduleWorker:!0,readStdinPattern:/\bwasm_idle\/stdin\b|\bstdin\.read_line\s*\(/,resolveRuntimeAssets(t,n){return e(t,n)}})}};export{n as default};

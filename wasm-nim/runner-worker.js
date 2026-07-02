@@ -22,7 +22,9 @@ async function fetchRuntimeBytes(baseUrl, path, options) {
 		.map((value) => value.trim());
 	if (contentEncoding.includes('gzip')) return compressedResponse.arrayBuffer();
 	if (typeof DecompressionStream !== 'function') {
-		throw new Error('Nim runtime asset is gzip-compressed, but DecompressionStream is unavailable.');
+		throw new Error(
+			'Nim runtime asset is gzip-compressed, but DecompressionStream is unavailable.'
+		);
 	}
 	const decompressed = compressedResponse.body.pipeThrough(new DecompressionStream('gzip'));
 	return new Response(decompressed).arrayBuffer();
@@ -32,8 +34,8 @@ async function fetchRuntimeText(baseUrl, path) {
 	return textDecoder.decode(await fetchRuntimeBytes(baseUrl, path));
 }
 
-function postProgress(percent) {
-	self.postMessage({ progress: { percent } });
+function postProgress(percent, stage) {
+	self.postMessage({ progress: { percent, stage } });
 }
 
 function splitLines(text) {
@@ -138,7 +140,9 @@ function compileNimToC({ FS, callMain }, code, stdout, stderr) {
 		);
 	}
 
-	const cFiles = entries.filter((file) => file.endsWith('.nim.c') || file.endsWith('.nim.cpp')).sort();
+	const cFiles = entries
+		.filter((file) => file.endsWith('.nim.c') || file.endsWith('.nim.cpp'))
+		.sort();
 	if (cFiles.length === 0) {
 		throw new Error(
 			`Nim did not emit C files.${returnCode ? ` Exit code: ${returnCode}.` : ''}\n${stderr.join(
@@ -200,9 +204,9 @@ static int wasm_idle_errno;
 }
 
 async function buildWasm({ baseUrl, code, stdout, stderr }) {
-	postProgress(5);
+	postProgress(5, 'Loading Nim compiler');
 	const nim = await loadNimCompiler(baseUrl, stdout, stderr);
-	postProgress(20);
+	postProgress(20, 'Translating Nim to C');
 	const { cacheDir, cFiles } = compileNimToC(nim, code, stdout, stderr);
 	const nimbaseContent = await fetchRuntimeText(baseUrl, 'nim/nimbase.h');
 	const files = cFiles.map((file, index) => ({
@@ -212,25 +216,27 @@ async function buildWasm({ baseUrl, code, stdout, stderr }) {
 			nimbaseContent
 		)
 	}));
-	postProgress(35);
+	postProgress(35, 'Preparing Nim C output');
 	const clangModule = await import(assetUrl(baseUrl, 'clang/clang.js'));
 	const clangLogs = [];
 	const originalLog = console.log;
 	try {
 		console.log = (...args) => clangLogs.push(args.map(String).join(' '));
 		await clangModule.init({ path: assetUrl(baseUrl, 'clang').replace(/\/$/, '') });
-		postProgress(50);
+		postProgress(50, 'Compiling and linking Nim output');
 		const result = await clangModule.compileEachLink(files, 'app.wasm');
 		if (result && result.ok === false && result.error) {
 			throw new Error(result.error);
 		}
 	} catch (error) {
 		const logText = clangLogs.flatMap(splitLines).slice(-40).join('\n');
-		throw new Error(`Nim clang/lld build failed: ${error?.message || error}${logText ? `\n${logText}` : ''}`);
+		throw new Error(
+			`Nim clang/lld build failed: ${error?.message || error}${logText ? `\n${logText}` : ''}`
+		);
 	} finally {
 		console.log = originalLog;
 	}
-	postProgress(75);
+	postProgress(75, 'Loading Nim executable');
 	const output = await clangModule.getFile('app.wasm');
 	if (!output?.ok || !output.bytes) {
 		throw new Error(output?.error || 'Nim build did not produce app.wasm.');
@@ -373,7 +379,9 @@ function createWasiRunner({ stdin = '', args = [], activePath = 'main.nim' }) {
 			const target = u8().subarray(bufferPtr, bufferPtr + length);
 			if (globalThis.crypto?.getRandomValues) {
 				for (let offset = 0; offset < length; offset += 65536) {
-					crypto.getRandomValues(target.subarray(offset, Math.min(offset + 65536, length)));
+					crypto.getRandomValues(
+						target.subarray(offset, Math.min(offset + 65536, length))
+					);
 				}
 			} else {
 				for (let index = 0; index < length; index += 1) target[index] = Math.random() * 256;
@@ -393,7 +401,8 @@ function createWasiRunner({ stdin = '', args = [], activePath = 'main.nim' }) {
 		const imports = {};
 		for (const { module: moduleName, name, kind } of WebAssembly.Module.imports(module)) {
 			imports[moduleName] = imports[moduleName] || {};
-			if (kind === 'function') imports[moduleName][name] = importsImpl[name] || (() => errnoSuccess);
+			if (kind === 'function')
+				imports[moduleName][name] = importsImpl[name] || (() => errnoSuccess);
 		}
 		return imports;
 	}
@@ -441,7 +450,7 @@ self.onmessage = async (event) => {
 			stdout: compilerStdout,
 			stderr: compilerStderr
 		});
-		postProgress(85);
+		postProgress(85, 'Running Nim program');
 		const result = await createWasiRunner({
 			stdin: stdin || '',
 			args: Array.isArray(args) ? args : [],
@@ -452,11 +461,14 @@ self.onmessage = async (event) => {
 		if (result.code !== 0) {
 			throw new Error(`Nim program exited with status ${result.code}.`);
 		}
-		postProgress(100);
+		postProgress(100, 'Nim run complete');
 		if (log) console.log('[wasm-idle:nim-worker] run settled');
 		self.postMessage({ results: true });
 	} catch (error) {
-		const compilerOutput = [...compilerStderr.flatMap(splitLines), ...compilerStdout.flatMap(splitLines)]
+		const compilerOutput = [
+			...compilerStderr.flatMap(splitLines),
+			...compilerStdout.flatMap(splitLines)
+		]
 			.slice(-60)
 			.join('\n');
 		const message = `${error?.message || error}${compilerOutput ? `\n${compilerOutput}` : ''}`;

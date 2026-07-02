@@ -110,7 +110,8 @@ function findMount(runtimeGlobal, targetPath) {
         const normalizedRoot = ensureTrailingSlash(normalizePath(mount.root));
         if (normalizedTarget === normalizedRoot.slice(0, -1) ||
             normalizedTarget.startsWith(normalizedRoot)) {
-            if (!bestMatch || normalizedRoot.length > ensureTrailingSlash(normalizePath(bestMatch.root)).length) {
+            if (!bestMatch ||
+                normalizedRoot.length > ensureTrailingSlash(normalizePath(bestMatch.root)).length) {
                 bestMatch = mount;
             }
         }
@@ -147,7 +148,8 @@ function describeVirtualFile(runtimeGlobal, targetPath) {
     const entry = mount.content[relativePath] || lookedUpEntry;
     const entryRecord = entry;
     const constructorName = entry && typeof entry === 'object' && 'constructor' in entry
-        ? String(entry.constructor?.name || '(anonymous)')
+        ? String(entry.constructor?.name ||
+            '(anonymous)')
         : typeof entry;
     return [
         `target=${normalizedTarget}`,
@@ -361,7 +363,12 @@ function runBinaryenTool(runtimeGlobal, command, toolUrls) {
         const rootMount = getMounts(runtimeGlobal).find((mount) => normalizePath(mount.root) === '/');
         pushBinaryenBridgeMessage(runtimeGlobal, `binaryen static command: ${command}\nmounts: ${getMounts(runtimeGlobal)
             .map((mount) => mount.root)
-            .join(', ') || '(none)'}\nroot tmp keys: ${rootMount ? Object.keys(rootMount.content).filter((key) => key.includes('tmp')).slice(0, 20).join(', ') || '(none)' : '(missing root)'}\ninputs: ${parsed.inputPaths.sort().join(', ') || '(none)'}\noutputs: ${parsed.outputPaths.sort().join(', ') || '(none)'}`);
+            .join(', ') || '(none)'}\nroot tmp keys: ${rootMount
+            ? Object.keys(rootMount.content)
+                .filter((key) => key.includes('tmp'))
+                .slice(0, 20)
+                .join(', ') || '(none)'
+            : '(missing root)'}\ninputs: ${parsed.inputPaths.sort().join(', ') || '(none)'}\noutputs: ${parsed.outputPaths.sort().join(', ') || '(none)'}`);
     }
     const runtimeEnv = runtimeGlobal['jsoo_env'] || {};
     if (runtimeEnv['WASM_OF_JS_OF_OCAML_BROWSER_FAST_BINARYEN'] === '1' &&
@@ -690,10 +697,14 @@ self.addEventListener('message', async (event) => {
                         },
                         spawnSync: (command, argsOrOptions, maybeOptions) => {
                             const args = Array.isArray(argsOrOptions) ? argsOrOptions : [];
-                            const options = (Array.isArray(argsOrOptions) ? maybeOptions : argsOrOptions) || {};
+                            const options = (Array.isArray(argsOrOptions) ? maybeOptions : argsOrOptions) ||
+                                {};
                             const commandLine = options && options.shell === true
                                 ? String(command)
-                                : [String(command), ...args.map((arg) => JSON.stringify(arg))].join(' ');
+                                : [
+                                    String(command),
+                                    ...args.map((arg) => JSON.stringify(arg))
+                                ].join(' ');
                             const status = runBinaryenTool(runtimeGlobal, commandLine, request.binaryenTools);
                             return {
                                 status,
@@ -886,7 +897,12 @@ self.addEventListener('message', async (event) => {
             type: 'tool-result',
             exitCode,
             stdout: stdoutParts.join('\n'),
-            stderr: [normalizedStderr, ...((runtimeSlots['__wasm_bridge_messages'] || []).filter(Boolean))].filter(Boolean).join('\n'),
+            stderr: [
+                normalizedStderr,
+                ...(runtimeSlots['__wasm_bridge_messages'] || []).filter(Boolean)
+            ]
+                .filter(Boolean)
+                .join('\n'),
             files: listVirtualFiles(runtimeGlobal, request.outputPrefixes)
         };
         if (thrown) {

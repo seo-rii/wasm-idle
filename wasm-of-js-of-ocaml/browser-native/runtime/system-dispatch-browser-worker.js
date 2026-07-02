@@ -43,7 +43,10 @@ function expandOcamlfindInvocation(argv, packageMap) {
         if (argument === '-package') {
             const value = argv[index + 1] || '';
             index += 1;
-            for (const packageName of value.split(',').map((entry) => entry.trim()).filter(Boolean)) {
+            for (const packageName of value
+                .split(',')
+                .map((entry) => entry.trim())
+                .filter(Boolean)) {
                 packages.push(packageName);
             }
             continue;
@@ -60,7 +63,9 @@ function expandOcamlfindInvocation(argv, packageMap) {
         toToolchainPath(manifestPackage.rootPath)
     ]);
     const archiveArgs = linkpkg
-        ? resolvedPackages.flatMap((manifestPackage) => manifestPackage.archiveBytePath ? [toToolchainPath(manifestPackage.archiveBytePath)] : [])
+        ? resolvedPackages.flatMap((manifestPackage) => manifestPackage.archiveBytePath
+            ? [toToolchainPath(manifestPackage.archiveBytePath)]
+            : [])
         : [];
     const firstSourceIndex = forwardedArgs.findIndex((argument) => isSourceArg(argument));
     const beforeSources = firstSourceIndex >= 0 ? forwardedArgs.slice(0, firstSourceIndex) : forwardedArgs;
@@ -197,7 +202,9 @@ export function createBrowserWorkerSystemDispatcher(options) {
             toolArgv = expandedInvocation.argv;
             packageClosure = expandedInvocation.packages;
         }
-        else if (argv[0] === 'ocamlc' || argv[0] === 'js_of_ocaml' || argv[0] === 'wasm_of_ocaml') {
+        else if (argv[0] === 'ocamlc' ||
+            argv[0] === 'js_of_ocaml' ||
+            argv[0] === 'wasm_of_ocaml') {
             commandName = argv[0];
             toolArgv = argv.slice(1);
         }
@@ -227,7 +234,8 @@ export function createBrowserWorkerSystemDispatcher(options) {
                     throw new Error(`failed to fetch browser-native runtime pack index: ${packIndexResponse.status}`);
                 }
                 const packIndex = (await packIndexResponse.json());
-                if (packIndex.format !== 'wasm-of-js-of-ocaml-browser-native-runtime-pack-index-v1' ||
+                if (packIndex.format !==
+                    'wasm-of-js-of-ocaml-browser-native-runtime-pack-index-v1' ||
                     !Array.isArray(packIndex.entries) ||
                     packIndex.fileCount !== packIndex.entries.length ||
                     typeof packIndex.totalBytes !== 'number') {
@@ -240,13 +248,13 @@ export function createBrowserWorkerSystemDispatcher(options) {
                     throw new Error(`failed to fetch browser-native runtime pack asset: ${packAssetResponse.status}`);
                 }
                 let packBytes = new Uint8Array(await packAssetResponse.arrayBuffer());
-                if (packBytes.byteLength >= 2 &&
-                    packBytes[0] === 0x1f &&
-                    packBytes[1] === 0x8b) {
+                if (packBytes.byteLength >= 2 && packBytes[0] === 0x1f && packBytes[1] === 0x8b) {
                     if (typeof DecompressionStream !== 'function') {
                         throw new Error("failed to decompress browser-native runtime pack: this browser does not support DecompressionStream('gzip')");
                     }
-                    const decompressedResponse = new Response(new Blob([packBytes.buffer]).stream().pipeThrough(new DecompressionStream('gzip')));
+                    const decompressedResponse = new Response(new Blob([packBytes.buffer])
+                        .stream()
+                        .pipeThrough(new DecompressionStream('gzip')));
                     packBytes = new Uint8Array(await decompressedResponse.arrayBuffer());
                 }
                 if (packIndex.fileCount !== options.manifest.runtimePack.fileCount ||
@@ -295,7 +303,8 @@ export function createBrowserWorkerSystemDispatcher(options) {
         });
         const toolReportedSuccess = (commandName === 'js_of_ocaml' || commandName === 'wasm_of_ocaml') &&
             result.files.some((file) => file.path.endsWith('.js')) &&
-            ((result.thrown || '').includes('tool-exit:0') || result.stderr.includes('tool-exit:0'));
+            ((result.thrown || '').includes('tool-exit:0') ||
+                result.stderr.includes('tool-exit:0'));
         const normalizedExitCode = toolReportedSuccess ? 0 : result.exitCode;
         const normalizedThrown = toolReportedSuccess && (result.thrown || '').includes('tool-exit:0')
             ? undefined

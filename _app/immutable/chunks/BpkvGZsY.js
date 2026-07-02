@@ -1,0 +1,1 @@
+import{g as e}from"./B2W9EBES2.js";import{t}from"./DqEHNKEd2.js";var n=class extends t{constructor(){super({displayName:`Janet`,languageId:`JANET`,defaultActivePath:`main.janet`,moduleWorker:!0,readStdinPattern:/\b(?:getline|stdin|file\/read)\b/i,resolveRuntimeAssets:e})}};export{n as default};

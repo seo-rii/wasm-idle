@@ -1,0 +1,49 @@
+{
+	"libobjc2": {
+		"url": "https://github.com/gnustep/libobjc2.git",
+		"ref": "v2.3",
+		"commit": "e877e782fb965c4e870d2ecf6aff58dddc6290ae"
+	},
+	"robinMap": {
+		"url": "https://github.com/Tessil/robin-map.git",
+		"ref": "v1.4.0",
+		"commit": "4ec1bf19c6a96125ea22062f38c2cf5b958e448e"
+	},
+	"clangRuntime": {
+		"baseUrl": "file:///home/seorii/dev/hancomac/wasm-idle/static/clang/",
+		"manifestUrl": "file:///home/seorii/dev/hancomac/wasm-idle/static/clang/runtime-manifest.v1.json"
+	},
+	"target": "wasm32-wasi",
+	"notes": [
+		"GNUstep libobjc2 is compiled with single-threaded WASI compatibility shims.",
+		"User code links a constructor wrapper that calls clang Objective-C module load functions.",
+		"WASM cannot host executable trampolines, so block-to-IMP bridge APIs return null."
+	],
+	"sources": [
+		"alias_table.c",
+		"builtin_classes.c",
+		"caps.c",
+		"category_loader.c",
+		"class_table.c",
+		"dtable.c",
+		"encoding2.c",
+		"gc_none.c",
+		"hooks.c",
+		"ivar.c",
+		"loader.c",
+		"protocol.c",
+		"runtime.c",
+		"sarray2.c",
+		"selector_table.cc",
+		"sendmsg2.c",
+		"NSBlocks.m",
+		"associate.m",
+		"blocks_runtime_np.m",
+		"properties.m",
+		"mutation.m",
+		"fast_paths.m",
+		"blocks_runtime.m",
+		"arc.mm",
+		"block_to_imp_wasm.c"
+	]
+}

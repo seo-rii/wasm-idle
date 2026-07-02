@@ -1,1 +1,0 @@
-import{n as e,t}from"./Be3bsgl_2.js";export{t as conf,e as language};
