@@ -43,7 +43,11 @@ describe('createAssemblyScriptWorkerService', () => {
 		);
 
 		const diagnostics = await service.diagnostics?.(document, context);
-		const completions = await service.completion?.(document, { line: 0, character: 24 }, context);
+		const completions = await service.completion?.(
+			document,
+			{ line: 0, character: 24 },
+			context
+		);
 		const hover = await service.hover?.(document, { line: 0, character: 23 }, context);
 
 		expect(main).toHaveBeenCalledOnce();

@@ -1,25 +1,19 @@
 {
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "lib": ["ES2022", "DOM", "WebWorker"],
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "allowSyntheticDefaultImports": true,
-    "declaration": true,
-    "sourceMap": true,
-    "rootDir": ".",
-    "outDir": "./dist",
-    "types": ["node", "vitest/globals"]
-  },
-  "include": [
-    "src/**/*.ts",
-    "src/**/*.d.ts",
-    "test/**/*.ts"
-  ],
-  "exclude": [
-    "src/clang/**/*.ts"
-  ]
+	"compilerOptions": {
+		"target": "ES2022",
+		"module": "NodeNext",
+		"moduleResolution": "NodeNext",
+		"lib": ["ES2022", "DOM", "WebWorker"],
+		"strict": true,
+		"esModuleInterop": true,
+		"skipLibCheck": true,
+		"allowSyntheticDefaultImports": true,
+		"declaration": true,
+		"sourceMap": true,
+		"rootDir": ".",
+		"outDir": "./dist",
+		"types": ["node", "vitest/globals"]
+	},
+	"include": ["src/**/*.ts", "src/**/*.d.ts", "test/**/*.ts"],
+	"exclude": ["src/clang/**/*.ts"]
 }

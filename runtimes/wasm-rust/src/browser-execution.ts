@@ -122,23 +122,20 @@ async function runPreview1WasiModule(
 	const wasiInstance = new WASI(
 		['main.wasm', ...(options.args || [])],
 		Object.entries(options.env || {}).map(([key, value]) => `${key}=${value}`),
-		[
-			new StdinFd(stdin),
-			stdout,
-			stderr,
-			new PreopenDirectory('/tmp', new Map())
-		]
+		[new StdinFd(stdin), stdout, stderr, new PreopenDirectory('/tmp', new Map())]
 	);
 	const module = await WebAssembly.compile(bytes);
 	const instance = await WebAssembly.instantiate(module, {
 		wasi_snapshot_preview1: wasiInstance.wasiImport
 	});
-	const exitCode = wasiInstance.start(instance as unknown as {
-		exports: {
-			memory: WebAssembly.Memory;
-			_start: () => unknown;
-		};
-	});
+	const exitCode = wasiInstance.start(
+		instance as unknown as {
+			exports: {
+				memory: WebAssembly.Memory;
+				_start: () => unknown;
+			};
+		}
+	);
 	return {
 		exitCode,
 		stdout: stdout.getText(),
@@ -155,7 +152,11 @@ async function runPreview2Component(
 	const stdin = new BufferedExecutionInput(options.stdin);
 	const stdout = new CaptureFd(options.stdout);
 	const stderr = new CaptureFd(options.stderr);
-	const transpiled = await transpilePreview2Component(bytes, runtimeBaseUrl, 'wasm-rust-component');
+	const transpiled = await transpilePreview2Component(
+		bytes,
+		runtimeBaseUrl,
+		'wasm-rust-component'
+	);
 	const entryName = Array.from(transpiled.files.keys()).find((name) => name.endsWith('.js'));
 	if (!entryName) {
 		throw new Error('jco transpile did not generate a JavaScript entry file');
@@ -182,9 +183,7 @@ async function runPreview2Component(
 	});
 
 	try {
-		const componentModule = (await import(
-			/* @vite-ignore */ entryUrl
-		)) as {
+		const componentModule = (await import(/* @vite-ignore */ entryUrl)) as {
 			instantiate: (
 				getCoreModule: (name: string) => Promise<WebAssembly.Module>,
 				imports: Record<string, unknown>,
@@ -206,18 +205,15 @@ async function runPreview2Component(
 				(value) => value && typeof value === 'object' && typeof value.run === 'function'
 			);
 		if (!runExport || typeof runExport.run !== 'function') {
-			throw new Error('transpiled preview2 component is missing a runnable wasi:cli/run export');
+			throw new Error(
+				'transpiled preview2 component is missing a runnable wasi:cli/run export'
+			);
 		}
 		let exitCode = 0;
 		try {
 			await runExport.run();
 		} catch (error) {
-			if (
-				error &&
-				typeof error === 'object' &&
-				'exitError' in error &&
-				'code' in error
-			) {
+			if (error && typeof error === 'object' && 'exitError' in error && 'code' in error) {
 				exitCode = Number((error as { code: number }).code);
 			} else {
 				throw error;

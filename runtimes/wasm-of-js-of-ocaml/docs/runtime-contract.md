@@ -7,17 +7,17 @@
 The browser-facing API is defined by `src/types.ts`.
 
 ```ts
-type CompileTarget = "js" | "wasm";
-type WasmBinaryenMode = "fast" | "full";
+type CompileTarget = 'js' | 'wasm';
+type WasmBinaryenMode = 'fast' | 'full';
 
 type CompileRequest = {
-  files: Record<string, string>;
-  entry: string;
-  target: CompileTarget;
-  packages?: string[];
-  effectsMode?: "cps" | "jspi";
-  wasmBinaryenMode?: WasmBinaryenMode;
-  sourcemap?: boolean;
+	files: Record<string, string>;
+	entry: string;
+	target: CompileTarget;
+	packages?: string[];
+	effectsMode?: 'cps' | 'jspi';
+	wasmBinaryenMode?: WasmBinaryenMode;
+	sourcemap?: boolean;
 };
 ```
 

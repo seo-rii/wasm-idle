@@ -4,20 +4,18 @@ import { parseRuntimePrecompressionScopes } from '../scripts/prepare-runtime.mjs
 
 describe('runtime compression config', () => {
 	it('expands all into every supported runtime compression scope', () => {
-		expect([...parseRuntimePrecompressionScopes('all', 'WASM_RUST_PRECOMPRESS_SCOPES')]).toEqual([
-			'rustc',
-			'llvm',
-			'packs'
-		]);
+		expect([
+			...parseRuntimePrecompressionScopes('all', 'WASM_RUST_PRECOMPRESS_SCOPES')
+		]).toEqual(['rustc', 'llvm', 'packs']);
 	});
 
 	it('allows disabling runtime precompression entirely', () => {
-		expect([...parseRuntimePrecompressionScopes('none', 'WASM_RUST_PRECOMPRESS_SCOPES')]).toEqual(
-			[]
-		);
-		expect(
-			[...parseRuntimePrecompressionScopes('rustc,llvm', 'WASM_RUST_PRECOMPRESS_SCOPES')]
-		).toEqual(['rustc', 'llvm']);
+		expect([
+			...parseRuntimePrecompressionScopes('none', 'WASM_RUST_PRECOMPRESS_SCOPES')
+		]).toEqual([]);
+		expect([
+			...parseRuntimePrecompressionScopes('rustc,llvm', 'WASM_RUST_PRECOMPRESS_SCOPES')
+		]).toEqual(['rustc', 'llvm']);
 	});
 
 	it('rejects invalid runtime compression scope combinations', () => {

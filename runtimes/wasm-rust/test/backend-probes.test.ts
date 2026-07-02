@@ -79,30 +79,26 @@ function parseJsonOutput(stdout: string, stderr = '') {
 }
 
 describe('real-rust backend probes', () => {
-	it(
-		'records the current wasm-idle clang incompatibility with Rust 1.79 LLVM IR',
-		async () => {
-			const probeError = (await runNode(
-				[
-					'--loader',
-					'./scripts/node-js-extension-loader.mjs',
-					'./scripts/probe-browser-clang-rust-split.mjs'
-				],
-				{},
-				{ timeoutMs: 30_000 }
-			).catch((error) => error)) as NodeJS.ErrnoException & {
-				stdout?: string;
-				stderr?: string;
-			};
-			if (!probeError) {
-				throw new Error('expected browser clang incompatibility probe to fail');
-			}
-			const output = probeError.stderr?.trim() || probeError.stdout?.trim() || '';
-			expect(output).toContain('"success": false');
-			expect(output).toContain('Failed to lower Rust LLVM IR with browser clang');
-		},
-		30_000
-	);
+	it('records the current wasm-idle clang incompatibility with Rust 1.79 LLVM IR', async () => {
+		const probeError = (await runNode(
+			[
+				'--loader',
+				'./scripts/node-js-extension-loader.mjs',
+				'./scripts/probe-browser-clang-rust-split.mjs'
+			],
+			{},
+			{ timeoutMs: 30_000 }
+		).catch((error) => error)) as NodeJS.ErrnoException & {
+			stdout?: string;
+			stderr?: string;
+		};
+		if (!probeError) {
+			throw new Error('expected browser clang incompatibility probe to fail');
+		}
+		const output = probeError.stderr?.trim() || probeError.stdout?.trim() || '';
+		expect(output).toContain('"success": false');
+		expect(output).toContain('Failed to lower Rust LLVM IR with browser clang');
+	}, 30_000);
 
 	it('links Rust 1.79 textual LLVM IR through llvm-wasm llc/lld when available', async () => {
 		try {
@@ -125,9 +121,7 @@ describe('real-rust backend probes', () => {
 		expect(result.wasmBytes).toBeGreaterThan(1024);
 	});
 
-	it(
-		'links browser-produced Rust bitcode through llvm-wasm when the real rustc.wasm toolchain is available',
-		async () => {
+	it('links browser-produced Rust bitcode through llvm-wasm when the real rustc.wasm toolchain is available', async () => {
 		if (process.env.WASM_RUST_RUN_REAL_RUSTC_SPLIT_PROBE !== '1') {
 			return;
 		}
@@ -141,13 +135,16 @@ describe('real-rust backend probes', () => {
 			return;
 		}
 
-		const { stdout, stderr } = await runNode(['./scripts/probe-browser-rustc-llvm-wasm-split.mjs'], {
-			WASM_RUST_LLVM_WASM_ROOT: llvmWasmRoot,
-			WASM_RUST_RUSTC_ROOT: realRustcRoot,
-			WASM_RUST_TOOLCHAIN_ROOT: realRustcRoot,
-			WASM_RUST_MATCHING_NATIVE_TOOLCHAIN_ROOT: matchingNativeToolchainRoot,
-			WASM_RUST_BROWSER_PROBE_TIMEOUT_MS: '60000'
-		});
+		const { stdout, stderr } = await runNode(
+			['./scripts/probe-browser-rustc-llvm-wasm-split.mjs'],
+			{
+				WASM_RUST_LLVM_WASM_ROOT: llvmWasmRoot,
+				WASM_RUST_RUSTC_ROOT: realRustcRoot,
+				WASM_RUST_TOOLCHAIN_ROOT: realRustcRoot,
+				WASM_RUST_MATCHING_NATIVE_TOOLCHAIN_ROOT: matchingNativeToolchainRoot,
+				WASM_RUST_BROWSER_PROBE_TIMEOUT_MS: '60000'
+			}
+		);
 		const result = parseJsonOutput(stdout, stderr) as {
 			success: boolean;
 			stdout: string;
@@ -159,9 +156,9 @@ describe('real-rust backend probes', () => {
 		expect(result.success).toBe(true);
 		expect(result.stdout).toBe('hi\n');
 		expect(result.wasmBytes).toBeGreaterThan(1024);
-		expect(result.imports.every((entry) => entry.module === 'wasi_snapshot_preview1')).toBe(true);
+		expect(result.imports.every((entry) => entry.module === 'wasi_snapshot_preview1')).toBe(
+			true
+		);
 		expect(result.bitcodePath.endsWith('.no-opt.bc')).toBe(true);
-		},
-		180_000
-	);
+	}, 180_000);
 });

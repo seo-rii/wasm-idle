@@ -59,7 +59,9 @@ async function fileExists(filePath) {
  * @param {string} file
  */
 async function targetRuntimeFileExists(dir, file) {
-	return (await fileExists(path.join(dir, file))) || (await fileExists(path.join(dir, `${file}.gz`)));
+	return (
+		(await fileExists(path.join(dir, file))) || (await fileExists(path.join(dir, `${file}.gz`)))
+	);
 }
 
 /**
@@ -68,7 +70,9 @@ async function targetRuntimeFileExists(dir, file) {
 async function sourceLooksUsable(sourceDir) {
 	const staticDir = await resolveStaticSourceDir(sourceDir).catch(() => '');
 	if (!staticDir) return false;
-	const results = await Promise.all(RUNTIME_FILES.map((file) => fileExists(path.join(staticDir, file))));
+	const results = await Promise.all(
+		RUNTIME_FILES.map((file) => fileExists(path.join(staticDir, file)))
+	);
 	return results.every(Boolean);
 }
 
@@ -76,7 +80,9 @@ async function sourceLooksUsable(sourceDir) {
  * @param {string} targetDir
  */
 async function targetLooksUsable(targetDir) {
-	const results = await Promise.all(RUNTIME_FILES.map((file) => targetRuntimeFileExists(targetDir, file)));
+	const results = await Promise.all(
+		RUNTIME_FILES.map((file) => targetRuntimeFileExists(targetDir, file))
+	);
 	return results.every(Boolean);
 }
 
@@ -248,9 +254,17 @@ export async function syncWasmNimAssets({
 	const resolvedTargetDir = path.resolve(targetDir);
 	const resolvedSourceDir = await resolveSourceDir(sourceDir, resolvedTargetDir);
 	if (resolvedSourceDir) {
-		const nimBundleSource = await readFile(path.join(resolvedSourceDir, 'nim', 'nim-bundle.js'), 'utf8');
-		if (!nimBundleSource.includes('__NIM_USER_CODE__') || !nimBundleSource.includes('callMain')) {
-			throw new Error('nim-bundle.js does not look like the expected browser Nim compiler bundle.');
+		const nimBundleSource = await readFile(
+			path.join(resolvedSourceDir, 'nim', 'nim-bundle.js'),
+			'utf8'
+		);
+		if (
+			!nimBundleSource.includes('__NIM_USER_CODE__') ||
+			!nimBundleSource.includes('callMain')
+		) {
+			throw new Error(
+				'nim-bundle.js does not look like the expected browser Nim compiler bundle.'
+			);
 		}
 		await rm(resolvedTargetDir, { recursive: true, force: true });
 		await mkdir(resolvedTargetDir, { recursive: true });
@@ -259,7 +273,11 @@ export async function syncWasmNimAssets({
 			const targetPath = path.join(resolvedTargetDir, file);
 			await mkdir(path.dirname(targetPath), { recursive: true });
 			if (file === 'clang/clang.js') {
-				await writeFile(targetPath, patchClangJs(await readFile(sourcePath, 'utf8')), 'utf8');
+				await writeFile(
+					targetPath,
+					patchClangJs(await readFile(sourcePath, 'utf8')),
+					'utf8'
+				);
 			} else {
 				await cp(sourcePath, targetPath);
 			}
@@ -276,7 +294,9 @@ export async function syncWasmNimAssets({
 	await cp(workerSourcePath, path.join(resolvedTargetDir, 'runner-worker.js'));
 	const copiedFiles = await collectFingerprintFiles(resolvedTargetDir);
 	if (
-		!RUNTIME_FILES.every((file) => copiedFiles.includes(file) || copiedFiles.includes(`${file}.gz`))
+		!RUNTIME_FILES.every(
+			(file) => copiedFiles.includes(file) || copiedFiles.includes(`${file}.gz`)
+		)
 	) {
 		throw new Error(`Nim runtime target is missing one of: ${RUNTIME_FILES.join(', ')}`);
 	}

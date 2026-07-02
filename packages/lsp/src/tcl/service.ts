@@ -101,9 +101,7 @@ const diagnosticFromMessage = (message: string): LspDiagnostic => {
 	};
 };
 
-export function createTclWorkerService(
-	runDiagnostics?: RunTclDiagnostics
-): WorkerLanguageService {
+export function createTclWorkerService(runDiagnostics?: RunTclDiagnostics): WorkerLanguageService {
 	const workerDiagnostics = createStaticWorkerDiagnostics<
 		TclWorkerOptions,
 		TclDiagnosticRunnerResult

@@ -7,7 +7,11 @@ import {
 	parseRuntimeManifest,
 	resolveTargetManifest
 } from '../src/runtime-manifest.js';
-import { createRuntimeManifest, createRuntimeManifestV2, createRuntimeManifestV3 } from './helpers.js';
+import {
+	createRuntimeManifest,
+	createRuntimeManifestV2,
+	createRuntimeManifestV3
+} from './helpers.js';
 
 describe('runtime manifest edge cases', () => {
 	it('rejects malformed runtime manifest fields', () => {
@@ -124,21 +128,29 @@ describe('runtime manifest edge cases', () => {
 
 	it('fails when runtime-manifest fetch returns a non-ok response', async () => {
 		await expect(
-			loadRuntimeManifest('https://example.com/runtime-manifest.json', async () => ({
-				ok: false,
-				status: 500,
-				statusText: 'Internal Server Error'
-			}) as Response)
+			loadRuntimeManifest(
+				'https://example.com/runtime-manifest.json',
+				async () =>
+					({
+						ok: false,
+						status: 500,
+						statusText: 'Internal Server Error'
+					}) as Response
+			)
 		).rejects.toMatchObject({
 			manifestUrl: 'https://example.com/runtime-manifest.json',
 			status: 500
 		});
 		await expect(
-			loadRuntimeManifest('https://example.com/runtime-manifest.json', async () => ({
-				ok: false,
-				status: 500,
-				statusText: 'Internal Server Error'
-			}) as Response)
+			loadRuntimeManifest(
+				'https://example.com/runtime-manifest.json',
+				async () =>
+					({
+						ok: false,
+						status: 500,
+						statusText: 'Internal Server Error'
+					}) as Response
+			)
 		).rejects.toThrow(
 			'failed to load wasm-rust runtime manifest from https://example.com/runtime-manifest.json (HTTP 500 Internal Server Error)'
 		);

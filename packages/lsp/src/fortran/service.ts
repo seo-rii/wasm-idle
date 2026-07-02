@@ -17,7 +17,10 @@ export interface FortranAnalyzerDiagnostic {
 }
 
 export interface FortranAnalyzer {
-	analyze(code: string, fileName: string): Promise<FortranAnalyzerDiagnostic[]> | FortranAnalyzerDiagnostic[];
+	analyze(
+		code: string,
+		fileName: string
+	): Promise<FortranAnalyzerDiagnostic[]> | FortranAnalyzerDiagnostic[];
 	dispose?: () => void | Promise<void>;
 }
 
@@ -72,7 +75,9 @@ async function loadExternalAnalyzer(options: FortranWorkerOptions): Promise<Fort
 				? module.default
 				: null;
 	if (!factory) {
-		throw new Error('Fortran analyzer module must export createFortranAnalyzer or a default factory');
+		throw new Error(
+			'Fortran analyzer module must export createFortranAnalyzer or a default factory'
+		);
 	}
 	return await factory();
 }
@@ -155,7 +160,8 @@ export function createFortranWorkerService(
 		},
 		documentSymbols(document: LspDocument) {
 			const symbols = [];
-			const pattern = /^\s*(program|module|subroutine|function)\s+([A-Za-z_][A-Za-z0-9_]*)/gimu;
+			const pattern =
+				/^\s*(program|module|subroutine|function)\s+([A-Za-z_][A-Za-z0-9_]*)/gimu;
 			for (const match of document.text.matchAll(pattern)) {
 				const offset = match.index || 0;
 				const before = document.text.slice(0, offset);
@@ -170,7 +176,10 @@ export function createFortranWorkerService(
 					},
 					selectionRange: {
 						start: { line, character: character + match[0].indexOf(match[2]) },
-						end: { line, character: character + match[0].indexOf(match[2]) + match[2].length }
+						end: {
+							line,
+							character: character + match[0].indexOf(match[2]) + match[2].length
+						}
 					}
 				});
 			}

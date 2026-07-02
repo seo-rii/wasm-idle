@@ -9,6 +9,7 @@ import {
 import {
 	executeBrowserClangArtifact,
 	createBrowserWasiHost,
+	type BrowserExecutionImportContext,
 	type BrowserExecutionOptions,
 	type BrowserExecutionResult,
 	type BrowserWasiHost
@@ -54,14 +55,12 @@ export type {
 	SupportedClangTarget
 } from './types.js';
 export type {
+	BrowserExecutionImportContext,
 	BrowserExecutionOptions,
 	BrowserExecutionResult,
-	BrowserWasiHost,
+	BrowserWasiHost
 } from './browser-execution.js';
-export type {
-	CreateClangCompilerOptions,
-	PreloadBrowserClangRuntimeOptions,
-} from './compiler.js';
+export type { CreateClangCompilerOptions, PreloadBrowserClangRuntimeOptions } from './compiler.js';
 export type { RuntimeAssetUrls } from './runtime-assets.js';
 export type {
 	BrowserClangDebugRunRequest,

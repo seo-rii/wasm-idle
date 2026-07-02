@@ -40,10 +40,11 @@ test('browser-native bundle includes static Binaryen tool assets and patch metad
 	});
 	assert.ok(Array.isArray(patch));
 	assert.equal(patch.length, 3);
-	assert.deepEqual(
-		patch.map((entry) => entry.tool).sort(),
-		['wasm-merge', 'wasm-metadce', 'wasm-opt']
-	);
+	assert.deepEqual(patch.map((entry) => entry.tool).sort(), [
+		'wasm-merge',
+		'wasm-metadce',
+		'wasm-opt'
+	]);
 	for (const entry of patch) {
 		assert.equal(typeof entry.sourcePath, 'string');
 		assert.equal(typeof entry.outPath, 'string');
@@ -92,10 +93,7 @@ test('browser-native bundle records runtime pack metadata', async () => {
 	const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
 
 	assert.ok(manifest.runtimePack, 'missing browser-native runtime pack metadata');
-	assert.equal(
-		manifest.runtimePack.format,
-		'wasm-of-js-of-ocaml-browser-native-runtime-pack-v1'
-	);
+	assert.equal(manifest.runtimePack.format, 'wasm-of-js-of-ocaml-browser-native-runtime-pack-v1');
 	assert.equal(
 		manifest.runtimePack.asset,
 		'/.cache/browser-native-bundle/browser-native-runtime-pack.v1.bin.gz'
@@ -127,11 +125,15 @@ test('browser-native runtime pack index includes stdlib and yojson entries', asy
 	assert.equal(runtimePackIndex.fileCount, manifest.runtimePack.fileCount);
 	assert.equal(runtimePackIndex.totalBytes, manifest.runtimePack.totalBytes);
 	assert.ok(
-		runtimePackIndex.entries.some((entry) => entry.runtimePath === '/static/toolchain/lib/ocaml/stdlib.cma'),
+		runtimePackIndex.entries.some(
+			(entry) => entry.runtimePath === '/static/toolchain/lib/ocaml/stdlib.cma'
+		),
 		'expected stdlib.cma in browser-native runtime pack'
 	);
 	assert.ok(
-		runtimePackIndex.entries.some((entry) => entry.runtimePath === '/static/toolchain/lib/yojson/yojson.cma'),
+		runtimePackIndex.entries.some(
+			(entry) => entry.runtimePath === '/static/toolchain/lib/yojson/yojson.cma'
+		),
 		'expected yojson.cma in browser-native runtime pack'
 	);
 });

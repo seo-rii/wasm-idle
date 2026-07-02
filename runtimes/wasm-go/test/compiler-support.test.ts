@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-	collectGoFileImports,
-	resolveStdlibDependencies
-} from '../src/compiler-support.js';
+import { collectGoFileImports, resolveStdlibDependencies } from '../src/compiler-support.js';
 import type { RuntimeStdlibIndex } from '../src/types.js';
 
 describe('compiler support helpers', () => {

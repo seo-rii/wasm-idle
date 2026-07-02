@@ -8,10 +8,10 @@ This file records the current checked-in state only. Historical investigation de
 - `wasm-rust` now uses the real-rustc split browser pipeline in `src/`.
 - The standalone Chromium harness succeeds end to end without `wasm-idle`.
 - The shipped browser runtime is target-aware through `runtime-manifest.v3.json`.
-  - `wasm32-wasip1` returns a preview1 core wasm artifact.
-  - `wasm32-wasip2` returns a preview2 component artifact.
-  - `wasm32-wasip3` currently uses the same transitional preview2-style component runtime when the
-    bundle was prepared from the patched custom toolchain.
+    - `wasm32-wasip1` returns a preview1 core wasm artifact.
+    - `wasm32-wasip2` returns a preview2 component artifact.
+    - `wasm32-wasip3` currently uses the same transitional preview2-style component runtime when the
+      bundle was prepared from the patched custom toolchain.
 - `wasm-idle` now consumes the returned Rust artifact through `browser_wasi_shim` on its Rust worker
   path instead of the generic `App` host.
 - The shipped module returns a runnable WASI `wasm` artifact through the browser compiler contract.
@@ -32,10 +32,10 @@ This file records the current checked-in state only. Historical investigation de
   `RUST_MIN_STACK=8388608` plus current required `env` shims, which materially improved helper
   startup stability.
 - `dist/` is the distributable output:
-  - `dist/index.js`
-  - `dist/compiler-worker.js`
-  - `dist/rustc-thread-worker.js`
-  - `dist/runtime/runtime-manifest.v3.json`
+    - `dist/index.js`
+    - `dist/compiler-worker.js`
+    - `dist/rustc-thread-worker.js`
+    - `dist/runtime/runtime-manifest.v3.json`
 
 ## Last verified results
 
@@ -54,19 +54,19 @@ Latest verified outcome:
 - `tsc --noEmit` passed
 - standalone Chromium harness probe passed for transitional `wasm32-wasip3`
 - final browser probe results included:
-  - `wasm32-wasip1`
-    - `compile.success: true`
-    - `runtime.exitCode: 0`
-    - `runtime.stdout: "hi\n"`
-  - richer `wasm32-wasip2`
-    - `compile.success: true`
-    - `runtime.exitCode: 0`
-    - `runtime.stdout` contains `preview2_component=preview2-cli`
-    - `runtime.stdout` contains `factorial_plus_bonus=27`
-  - transitional `wasm32-wasip3`
-    - `compile.success: true`
-    - `runtime.exitCode: 0`
-    - `runtime.stdout: "hi\n"`
+    - `wasm32-wasip1`
+        - `compile.success: true`
+        - `runtime.exitCode: 0`
+        - `runtime.stdout: "hi\n"`
+    - richer `wasm32-wasip2`
+        - `compile.success: true`
+        - `runtime.exitCode: 0`
+        - `runtime.stdout` contains `preview2_component=preview2-cli`
+        - `runtime.stdout` contains `factorial_plus_bonus=27`
+    - transitional `wasm32-wasip3`
+        - `compile.success: true`
+        - `runtime.exitCode: 0`
+        - `runtime.stdout: "hi\n"`
 - the linked `wasm-idle` localhost route also succeeded for every shipped Rust target in its synced
   manifest, including `wasm32-wasip3`
 
@@ -83,8 +83,8 @@ Current product behavior:
 - mirrored `.no-opt.bc` recovery plus `llvm-wasm` linking is what makes the standalone browser path
   reliable enough today
 - `wasm32-wasip3` is still a transitional browser target
-  - toolchain and packaging work with the patched custom Rust build
-  - browser execution still assumes WASIp2-style browser imports
+    - toolchain and packaging work with the patched custom Rust build
+    - browser execution still assumes WASIp2-style browser imports
 
 ## Next decision
 

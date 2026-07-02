@@ -82,7 +82,8 @@ describe('OCaml worker', () => {
 			data: {
 				load: true,
 				moduleUrl: compilerModuleUrl,
-				manifestUrl: 'https://example.test/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json'
+				manifestUrl:
+					'https://example.test/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json'
 			}
 		});
 		await Promise.resolve();
@@ -140,7 +141,8 @@ describe('OCaml worker', () => {
 			data: {
 				load: true,
 				moduleUrl: compilerModuleUrl,
-				manifestUrl: 'https://example.test/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json'
+				manifestUrl:
+					'https://example.test/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json'
 			}
 		});
 		await Promise.resolve();
@@ -205,7 +207,8 @@ describe('OCaml worker', () => {
 			data: {
 				load: true,
 				moduleUrl: compilerModuleUrl,
-				manifestUrl: 'https://example.test/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json'
+				manifestUrl:
+					'https://example.test/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json'
 			}
 		});
 		await Promise.resolve();
@@ -288,7 +291,8 @@ describe('OCaml worker', () => {
 			data: {
 				load: true,
 				moduleUrl: compilerModuleUrl,
-				manifestUrl: 'https://example.test/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json'
+				manifestUrl:
+					'https://example.test/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json'
 			}
 		});
 		await Promise.resolve();
@@ -351,7 +355,8 @@ describe('OCaml worker', () => {
 			data: {
 				load: true,
 				moduleUrl: compilerModuleUrl,
-				manifestUrl: 'https://example.test/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json'
+				manifestUrl:
+					'https://example.test/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json'
 			}
 		});
 		await Promise.resolve();
@@ -415,7 +420,8 @@ describe('OCaml worker', () => {
 			data: {
 				load: true,
 				moduleUrl: compilerModuleUrl,
-				manifestUrl: 'https://example.test/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json'
+				manifestUrl:
+					'https://example.test/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json'
 			}
 		});
 		await Promise.resolve();

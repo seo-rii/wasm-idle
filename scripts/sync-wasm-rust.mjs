@@ -219,10 +219,7 @@ export async function syncWasmRustDist(options = {}) {
 	const fingerprint = await computeBundleFingerprint(
 		targetDir,
 		hasSharedLldAssets
-			? [
-					path.join(sharedLldDir, 'lld.wasm.gz'),
-					path.join(sharedLldDir, 'lld.data.gz')
-				]
+			? [path.join(sharedLldDir, 'lld.wasm.gz'), path.join(sharedLldDir, 'lld.data.gz')]
 			: []
 	);
 	await writeVersionModule(versionModulePath, fingerprint);

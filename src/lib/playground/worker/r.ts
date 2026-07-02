@@ -188,7 +188,9 @@ self.onmessage = async (event: { data: any }) => {
 		);
 
 		if (log) {
-			console.log(`[wasm-idle:r-worker] eval start bytes=${code.length} activePath=${activePath}`);
+			console.log(
+				`[wasm-idle:r-worker] eval start bytes=${code.length} activePath=${activePath}`
+			);
 		}
 		const captured = await webR.globalShelter.captureR(buildRunnerSource(activePath, args), {
 			captureStreams: true,

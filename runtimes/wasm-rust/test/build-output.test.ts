@@ -7,7 +7,11 @@ import { gunzipSync } from 'node:zlib';
 
 import { describe, expect, it } from 'vitest';
 
-import { createRuntimeManifest, createRuntimeManifestV2, createRuntimeManifestV3 } from './helpers.js';
+import {
+	createRuntimeManifest,
+	createRuntimeManifestV2,
+	createRuntimeManifestV3
+} from './helpers.js';
 import {
 	defaultRuntimeTargetTriples,
 	defaultRustcMemoryInitialPages,
@@ -97,7 +101,9 @@ async function hasCompatibleWasiSdk() {
 		return pathExists(path.join(configuredRoot, 'bin', 'wasm-component-ld'));
 	}
 	for (const candidate of [
-		...(await collectNestedWasiSdkRoots(path.dirname(path.dirname(prepareRuntimeWasmRustcRoot)))),
+		...(await collectNestedWasiSdkRoots(
+			path.dirname(path.dirname(prepareRuntimeWasmRustcRoot))
+		)),
 		...(await collectNestedWasiSdkRoots(path.join(os.homedir(), '.cache')))
 	]) {
 		if (await pathExists(path.join(candidate, 'bin', 'wasm-component-ld'))) {
@@ -108,7 +114,9 @@ async function hasCompatibleWasiSdk() {
 }
 
 async function hasTargetSysroot(targetTriple: string) {
-	return pathExists(path.join(prepareRuntimeWasmRustcRoot, 'lib', 'rustlib', targetTriple, 'lib'));
+	return pathExists(
+		path.join(prepareRuntimeWasmRustcRoot, 'lib', 'rustlib', targetTriple, 'lib')
+	);
 }
 
 describe('prepare-runtime defaults', () => {
@@ -143,11 +151,7 @@ describe('prepare-runtime defaults', () => {
 
 	it('accepts a prebuilt runtime bundle only when supported manifest assets are present', async () => {
 		for (const [manifestFileName, manifestContents, missingAssetRelativePath] of [
-			[
-				'runtime-manifest.json',
-				createRuntimeManifest(),
-				'link/alloc.o'
-			],
+			['runtime-manifest.json', createRuntimeManifest(), 'link/alloc.o'],
 			[
 				'runtime-manifest.v2.json',
 				createRuntimeManifestV2(),
@@ -159,22 +163,33 @@ describe('prepare-runtime defaults', () => {
 				'packs/link/wasm32-wasip1.index.json.gz'
 			]
 		] as const) {
-			const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'wasm-rust-runtime-fallback-'));
+			const tempRoot = await fs.mkdtemp(
+				path.join(os.tmpdir(), 'wasm-rust-runtime-fallback-')
+			);
 			const tempRuntimeRoot = path.join(tempRoot, 'runtime');
 			await fs.mkdir(path.join(tempRuntimeRoot, 'rustc'), { recursive: true });
 			await fs.mkdir(path.join(tempRuntimeRoot, 'llvm'), { recursive: true });
 			await fs.mkdir(path.join(tempRuntimeRoot, 'link'), { recursive: true });
 			await fs.mkdir(path.join(tempRuntimeRoot, 'packs', 'sysroot'), { recursive: true });
 			await fs.mkdir(path.join(tempRuntimeRoot, 'packs', 'link'), { recursive: true });
-			await fs.mkdir(path.join(tempRuntimeRoot, 'sysroot', 'lib', 'rustlib', 'wasm32-wasip1', 'lib'), {
-				recursive: true
-			});
-			await fs.mkdir(path.join(tempRuntimeRoot, 'sysroot', 'lib', 'rustlib', 'wasm32-wasip2', 'lib'), {
-				recursive: true
-			});
-			await fs.mkdir(path.join(tempRuntimeRoot, 'sysroot', 'lib', 'rustlib', 'wasm32-wasip3', 'lib'), {
-				recursive: true
-			});
+			await fs.mkdir(
+				path.join(tempRuntimeRoot, 'sysroot', 'lib', 'rustlib', 'wasm32-wasip1', 'lib'),
+				{
+					recursive: true
+				}
+			);
+			await fs.mkdir(
+				path.join(tempRuntimeRoot, 'sysroot', 'lib', 'rustlib', 'wasm32-wasip2', 'lib'),
+				{
+					recursive: true
+				}
+			);
+			await fs.mkdir(
+				path.join(tempRuntimeRoot, 'sysroot', 'lib', 'rustlib', 'wasm32-wasip3', 'lib'),
+				{
+					recursive: true
+				}
+			);
 			await fs.writeFile(path.join(tempRuntimeRoot, 'rustc', 'rustc.wasm'), 'rustc');
 			await fs.writeFile(path.join(tempRuntimeRoot, 'rustc', 'rustc.wasm.gz'), 'rustc');
 			await fs.writeFile(path.join(tempRuntimeRoot, 'llvm', 'llc.js'), 'llc');
@@ -210,31 +225,64 @@ describe('prepare-runtime defaults', () => {
 				path.join(tempRuntimeRoot, 'packs', 'sysroot', 'wasm32-wasip3.index.json.gz'),
 				'index'
 			);
-			await fs.writeFile(path.join(tempRuntimeRoot, 'packs', 'link', 'wasm32-wasip1.pack.gz'), 'pack');
+			await fs.writeFile(
+				path.join(tempRuntimeRoot, 'packs', 'link', 'wasm32-wasip1.pack.gz'),
+				'pack'
+			);
 			await fs.writeFile(
 				path.join(tempRuntimeRoot, 'packs', 'link', 'wasm32-wasip1.index.json.gz'),
 				'index'
 			);
-			await fs.writeFile(path.join(tempRuntimeRoot, 'packs', 'link', 'wasm32-wasip2.pack.gz'), 'pack');
+			await fs.writeFile(
+				path.join(tempRuntimeRoot, 'packs', 'link', 'wasm32-wasip2.pack.gz'),
+				'pack'
+			);
 			await fs.writeFile(
 				path.join(tempRuntimeRoot, 'packs', 'link', 'wasm32-wasip2.index.json.gz'),
 				'index'
 			);
-			await fs.writeFile(path.join(tempRuntimeRoot, 'packs', 'link', 'wasm32-wasip3.pack.gz'), 'pack');
+			await fs.writeFile(
+				path.join(tempRuntimeRoot, 'packs', 'link', 'wasm32-wasip3.pack.gz'),
+				'pack'
+			);
 			await fs.writeFile(
 				path.join(tempRuntimeRoot, 'packs', 'link', 'wasm32-wasip3.index.json.gz'),
 				'index'
 			);
 			await fs.writeFile(
-				path.join(tempRuntimeRoot, 'sysroot', 'lib', 'rustlib', 'wasm32-wasip1', 'lib', 'libstd.rlib'),
+				path.join(
+					tempRuntimeRoot,
+					'sysroot',
+					'lib',
+					'rustlib',
+					'wasm32-wasip1',
+					'lib',
+					'libstd.rlib'
+				),
 				'std'
 			);
 			await fs.writeFile(
-				path.join(tempRuntimeRoot, 'sysroot', 'lib', 'rustlib', 'wasm32-wasip2', 'lib', 'libstd.rlib'),
+				path.join(
+					tempRuntimeRoot,
+					'sysroot',
+					'lib',
+					'rustlib',
+					'wasm32-wasip2',
+					'lib',
+					'libstd.rlib'
+				),
 				'std'
 			);
 			await fs.writeFile(
-				path.join(tempRuntimeRoot, 'sysroot', 'lib', 'rustlib', 'wasm32-wasip3', 'lib', 'libstd.rlib'),
+				path.join(
+					tempRuntimeRoot,
+					'sysroot',
+					'lib',
+					'rustlib',
+					'wasm32-wasip3',
+					'lib',
+					'libstd.rlib'
+				),
 				'std'
 			);
 			await fs.writeFile(
@@ -249,14 +297,19 @@ describe('prepare-runtime defaults', () => {
 	});
 
 	it('keeps runtime default values documented in browser/compiler references', async () => {
-		const browserCompilerDoc = await fs.readFile(path.join(projectRoot, 'docs', 'browser-compiler.md'), 'utf8');
+		const browserCompilerDoc = await fs.readFile(
+			path.join(projectRoot, 'docs', 'browser-compiler.md'),
+			'utf8'
+		);
 		const environmentDoc = await fs.readFile(
 			path.join(projectRoot, 'docs', 'environment-variables.md'),
 			'utf8'
 		);
 		const targetTripleList = defaultRuntimeTargetTriples.join(',');
 
-		expect(browserCompilerDoc).toContain(`initial pages: \`${defaultRustcMemoryInitialPages}\``);
+		expect(browserCompilerDoc).toContain(
+			`initial pages: \`${defaultRustcMemoryInitialPages}\``
+		);
 		expect(browserCompilerDoc).toContain(`default is \`${targetTripleList}\``);
 		expect(environmentDoc).toContain(`default: \`${targetTripleList}\``);
 	});
@@ -294,7 +347,10 @@ builtBrowserBundle('built browser bundle', () => {
 	});
 
 	it('keeps preview2 browser imports off the full preview2 browser index in the shipped runtime', async () => {
-		const contents = await fs.readFile(path.join(distRoot, 'browser-component-tools.js'), 'utf8');
+		const contents = await fs.readFile(
+			path.join(distRoot, 'browser-component-tools.js'),
+			'utf8'
+		);
 		expect(contents).not.toContain('lib/common/instantiation.js');
 		expect(contents).not.toContain('lib/browser/index.js');
 		expect(contents).toContain('lib/browser/cli.js');
@@ -376,19 +432,27 @@ builtBrowserBundle('built browser bundle', () => {
 			expect(v3Manifest.targets['wasm32-wasip3'].artifactFormat).toBe('component');
 			expect(v3Manifest.targets['wasm32-wasip3'].execution.kind).toBe('preview2-component');
 		}
-		await expect(fs.access(path.join(runtimeRoot, 'runtime-manifest.v2.json'))).rejects.toThrow();
+		await expect(
+			fs.access(path.join(runtimeRoot, 'runtime-manifest.v2.json'))
+		).rejects.toThrow();
 		await expect(fs.access(path.join(runtimeRoot, 'runtime-manifest.json'))).rejects.toThrow();
 		for (const [targetTriple, targetConfig] of Object.entries(v3Manifest.targets)) {
-			expect(targetConfig.compile.link.args.some((entry) => entry.startsWith('/tmp/'))).toBe(false);
+			expect(targetConfig.compile.link.args.some((entry) => entry.startsWith('/tmp/'))).toBe(
+				false
+			);
 			expect(targetConfig.compile.llvm.llc).toBe('llvm/llc.js');
 			expect(targetConfig.compile.llvm.llcWasm).toBe('llvm/llc.wasm.gz');
 			expect(targetConfig.compile.llvm.lld).toBe('llvm/lld.js');
 			expect(targetConfig.compile.llvm.lldWasm).toBe('llvm/lld.wasm.gz');
 			expect(targetConfig.compile.llvm.lldData).toBe('llvm/lld.data.gz');
 			expect(targetConfig.sysrootPack.asset).toBe(`packs/sysroot/${targetTriple}.pack.gz`);
-			expect(targetConfig.sysrootPack.index).toBe(`packs/sysroot/${targetTriple}.index.json.gz`);
+			expect(targetConfig.sysrootPack.index).toBe(
+				`packs/sysroot/${targetTriple}.index.json.gz`
+			);
 			expect(targetConfig.compile.link.pack.asset).toBe(`packs/link/${targetTriple}.pack.gz`);
-			expect(targetConfig.compile.link.pack.index).toBe(`packs/link/${targetTriple}.index.json.gz`);
+			expect(targetConfig.compile.link.pack.index).toBe(
+				`packs/link/${targetTriple}.index.json.gz`
+			);
 			for (const assetPath of [
 				targetConfig.sysrootPack.asset,
 				targetConfig.sysrootPack.index,
@@ -437,11 +501,17 @@ builtBrowserBundle('built browser bundle', () => {
 			await expect(fs.access(path.join(runtimeRoot, assetPath))).rejects.toThrow();
 		}
 		const runtimeFiles = await listFiles(runtimeRoot);
-		expect(runtimeFiles.some((filePath) => filePath.includes('/x86_64-unknown-linux-gnu/'))).toBe(false);
+		expect(
+			runtimeFiles.some((filePath) => filePath.includes('/x86_64-unknown-linux-gnu/'))
+		).toBe(false);
 		expect(runtimeFiles.some((filePath) => filePath.endsWith('.old'))).toBe(false);
-		expect(runtimeFiles.some((filePath) => filePath.includes('/sysroot/lib/rustlib/'))).toBe(false);
+		expect(runtimeFiles.some((filePath) => filePath.includes('/sysroot/lib/rustlib/'))).toBe(
+			false
+		);
 		expect(runtimeFiles.some((filePath) => filePath.includes('/runtime/link/'))).toBe(false);
-		await expect(fs.access(path.join(runtimeRoot, 'rustc', 'rustc.wasm.gz'))).resolves.toBeUndefined();
+		await expect(
+			fs.access(path.join(runtimeRoot, 'rustc', 'rustc.wasm.gz'))
+		).resolves.toBeUndefined();
 		await expect(fs.access(path.join(runtimeRoot, 'rustc', 'rustc.wasm'))).rejects.toThrow();
 	});
 
@@ -491,7 +561,8 @@ builtBrowserBundle('built browser bundle', () => {
 		expect(runtimeBytes).toBeLessThanOrEqual(340_000_000 + targetTriples.length * 120_000_000);
 
 		for (const [targetTriple, targetConfig] of Object.entries(manifest.targets)) {
-			const assetBytes = targetConfig.sysrootPack.totalBytes + targetConfig.compile.link.pack.totalBytes;
+			const assetBytes =
+				targetConfig.sysrootPack.totalBytes + targetConfig.compile.link.pack.totalBytes;
 			const requestAssets = new Set([
 				targetConfig.sysrootPack.asset,
 				targetConfig.sysrootPack.index,

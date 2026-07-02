@@ -114,7 +114,10 @@ const ASSEMBLYSCRIPT_HOVER: Record<string, string> = {
 };
 
 const normalizeFileName = (value: string) =>
-	value.replaceAll('\\', '/').replace(/^\/workspace\//u, '').replace(/^\/+/u, '');
+	value
+		.replaceAll('\\', '/')
+		.replace(/^\/workspace\//u, '')
+		.replace(/^\/+/u, '');
 
 const createStringSink = () => {
 	let value = '';
@@ -139,8 +142,7 @@ const wordAt = (text: string, position: LspPosition) => {
 
 function parseAssemblyScriptDiagnostics(message: string): LspDiagnostic[] {
 	const diagnostics: LspDiagnostic[] = [];
-	const pattern =
-		/(ERROR|WARNING)\s+(TS\d+):\s*([^\n]+)[\s\S]*?└─ in ([^(]+)\((\d+),(\d+)\)/gu;
+	const pattern = /(ERROR|WARNING)\s+(TS\d+):\s*([^\n]+)[\s\S]*?└─ in ([^(]+)\((\d+),(\d+)\)/gu;
 	for (const match of message.matchAll(pattern)) {
 		const line = Math.max(0, Number(match[5]) - 1);
 		const character = Math.max(0, Number(match[6]) - 1);
@@ -196,9 +198,9 @@ export function createAssemblyScriptWorkerService(
 		async initialize(options, nextContext) {
 			context = nextContext;
 			extraFiles = Object.fromEntries(
-				Object.entries((options as AssemblyScriptWorkerOptions | undefined)?.extraFiles || {}).map(
-					([fileName, source]) => [normalizeFileName(fileName), source]
-				)
+				Object.entries(
+					(options as AssemblyScriptWorkerOptions | undefined)?.extraFiles || {}
+				).map(([fileName, source]) => [normalizeFileName(fileName), source])
 			);
 			context.reportProgress('load-assemblyscript');
 			compiler = await loadCompiler();

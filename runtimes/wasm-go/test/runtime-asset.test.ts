@@ -101,8 +101,10 @@ describe('runtime assets', () => {
 
 	it('rejects html responses masquerading as assets', async () => {
 		await expect(
-			fetchRuntimeAssetBytes('https://example.invalid/tools/compile.wasm', 'compile.wasm', async () =>
-				new Response('<!doctype html><html></html>')
+			fetchRuntimeAssetBytes(
+				'https://example.invalid/tools/compile.wasm',
+				'compile.wasm',
+				async () => new Response('<!doctype html><html></html>')
 			)
 		).rejects.toThrow(/expected a wasm-go runtime asset but got HTML instead/);
 	});

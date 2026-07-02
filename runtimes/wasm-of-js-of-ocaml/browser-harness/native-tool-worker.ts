@@ -170,7 +170,10 @@ function findMount(runtimeGlobal: RuntimeGlobal, targetPath: string) {
 			normalizedTarget === normalizedRoot.slice(0, -1) ||
 			normalizedTarget.startsWith(normalizedRoot)
 		) {
-			if (!bestMatch || normalizedRoot.length > ensureTrailingSlash(normalizePath(bestMatch.root)).length) {
+			if (
+				!bestMatch ||
+				normalizedRoot.length > ensureTrailingSlash(normalizePath(bestMatch.root)).length
+			) {
 				bestMatch = mount;
 			}
 		}
@@ -191,7 +194,12 @@ function readVirtualFile(runtimeGlobal: RuntimeGlobal, targetPath: string) {
 	const entry = (mount.content[relativePath] || lookedUpEntry) as
 		| {
 				length?: () => number;
-				read?: (offset: number, buffer: Uint8Array, start: number, length: number) => number;
+				read?: (
+					offset: number,
+					buffer: Uint8Array,
+					start: number,
+					length: number
+				) => number;
 		  }
 		| undefined;
 	if (!entry || typeof entry.length !== 'function' || typeof entry.read !== 'function') {
@@ -217,12 +225,20 @@ function describeVirtualFile(runtimeGlobal: RuntimeGlobal, targetPath: string) {
 	const entryRecord = entry as
 		| {
 				length?: () => number;
-				read?: (offset: number, buffer: Uint8Array, start: number, length: number) => number;
+				read?: (
+					offset: number,
+					buffer: Uint8Array,
+					start: number,
+					length: number
+				) => number;
 		  }
 		| undefined;
 	const constructorName =
 		entry && typeof entry === 'object' && 'constructor' in entry
-			? String((entry as { constructor?: { name?: string } }).constructor?.name || '(anonymous)')
+			? String(
+					(entry as { constructor?: { name?: string } }).constructor?.name ||
+						'(anonymous)'
+				)
 			: typeof entry;
 	return [
 		`target=${normalizedTarget}`,
@@ -244,7 +260,12 @@ function listVirtualFiles(runtimeGlobal: RuntimeGlobal, prefixes: string[]) {
 			const candidate = entry as
 				| {
 						length?: () => number;
-						read?: (offset: number, buffer: Uint8Array, start: number, length: number) => number;
+						read?: (
+							offset: number,
+							buffer: Uint8Array,
+							start: number,
+							length: number
+						) => number;
 				  }
 				| undefined;
 			if (
@@ -455,20 +476,31 @@ function runBinaryenTool(
 		(parsed.toolName === 'wasm-opt'
 			? toolUrls.wasm_opt
 			: parsed.toolName === 'wasm-merge'
-			? toolUrls.wasm_merge
-			: parsed.toolName === 'wasm-metadce'
-				? toolUrls.wasm_metadce
-				: '') || '';
+				? toolUrls.wasm_merge
+				: parsed.toolName === 'wasm-metadce'
+					? toolUrls.wasm_metadce
+					: '') || '';
 	if (!toolUrl) {
 		throw new Error(`unsupported static Binaryen tool: ${parsed.toolName}`);
 	}
 	if (isBinaryenBridgeDebugEnabled(runtimeGlobal)) {
-		const rootMount = getMounts(runtimeGlobal).find((mount) => normalizePath(mount.root) === '/');
+		const rootMount = getMounts(runtimeGlobal).find(
+			(mount) => normalizePath(mount.root) === '/'
+		);
 		pushBinaryenBridgeMessage(
 			runtimeGlobal,
-			`binaryen static command: ${command}\nmounts: ${getMounts(runtimeGlobal)
-				.map((mount) => mount.root)
-				.join(', ') || '(none)'}\nroot tmp keys: ${rootMount ? Object.keys(rootMount.content).filter((key) => key.includes('tmp')).slice(0, 20).join(', ') || '(none)' : '(missing root)'}\ninputs: ${parsed.inputPaths.sort().join(', ') || '(none)'}\noutputs: ${parsed.outputPaths.sort().join(', ') || '(none)'}`
+			`binaryen static command: ${command}\nmounts: ${
+				getMounts(runtimeGlobal)
+					.map((mount) => mount.root)
+					.join(', ') || '(none)'
+			}\nroot tmp keys: ${
+				rootMount
+					? Object.keys(rootMount.content)
+							.filter((key) => key.includes('tmp'))
+							.slice(0, 20)
+							.join(', ') || '(none)'
+					: '(missing root)'
+			}\ninputs: ${parsed.inputPaths.sort().join(', ') || '(none)'}\noutputs: ${parsed.outputPaths.sort().join(', ') || '(none)'}`
 		);
 	}
 	const runtimeEnv = (runtimeGlobal['jsoo_env'] as Record<string, string> | undefined) || {};
@@ -476,7 +508,8 @@ function runBinaryenTool(
 		runtimeEnv['WASM_OF_JS_OF_OCAML_BROWSER_FAST_BINARYEN'] === '1' &&
 		(parsed.toolName === 'wasm-metadce' || parsed.toolName === 'wasm-opt')
 	) {
-		const inputWasmPath = parsed.inputPaths.find((filePath) => filePath.endsWith('.wasm')) || '';
+		const inputWasmPath =
+			parsed.inputPaths.find((filePath) => filePath.endsWith('.wasm')) || '';
 		const outputWasmPath =
 			parsed.outputPaths.find((filePath) => filePath.endsWith('.wasm')) ||
 			parsed.outputPaths[0] ||
@@ -541,9 +574,7 @@ function runBinaryenTool(
 			runtimeGlobal['__binaryen_cli_quit'] = (status: number) => {
 				throw new ToolExit(status);
 			};
-			new Function(
-				`${loadBinaryenToolSource(toolUrl)}\n//# sourceURL=${toolUrl}`
-			)();
+			new Function(`${loadBinaryenToolSource(toolUrl)}\n//# sourceURL=${toolUrl}`)();
 			const cliRuntime = runtimeGlobal['__binaryen_cli_runtime'] as
 				| {
 						FS?: Record<string, unknown>;
@@ -649,21 +680,25 @@ function runBinaryenTool(
 						typeof fs.readdir === 'function'
 							? (() => {
 									try {
-										return (fs.readdir as (path: string) => string[])('/').join(', ');
+										return (fs.readdir as (path: string) => string[])('/').join(
+											', '
+										);
 									} catch {
 										return '(unavailable)';
 									}
-							  })()
+								})()
 							: '(unsupported)';
 					const tmpListing =
 						typeof fs.readdir === 'function'
 							? (() => {
 									try {
-										return (fs.readdir as (path: string) => string[])('/tmp').join(', ');
+										return (fs.readdir as (path: string) => string[])(
+											'/tmp'
+										).join(', ');
 									} catch {
 										return '(unavailable)';
 									}
-							  })()
+								})()
 							: '(unsupported)';
 					pushBinaryenBridgeMessage(
 						runtimeGlobal,
@@ -686,14 +721,14 @@ function runBinaryenTool(
 			exitCode = 0;
 		}
 
-	if (exitCode !== 0 || isBinaryenBridgeDebugEnabled(runtimeGlobal)) {
-		pushBinaryenBridgeMessage(runtimeGlobal, `binaryen exit: ${exitCode}`);
-	}
-	if (exitCode !== 0 && stdoutParts.length > 0) {
-		pushBinaryenBridgeMessage(runtimeGlobal, stdoutParts.join('\n'));
-	} else if (exitCode !== 0 && redirectedStdout) {
-		pushBinaryenBridgeMessage(runtimeGlobal, redirectedStdout.trimEnd());
-	}
+		if (exitCode !== 0 || isBinaryenBridgeDebugEnabled(runtimeGlobal)) {
+			pushBinaryenBridgeMessage(runtimeGlobal, `binaryen exit: ${exitCode}`);
+		}
+		if (exitCode !== 0 && stdoutParts.length > 0) {
+			pushBinaryenBridgeMessage(runtimeGlobal, stdoutParts.join('\n'));
+		} else if (exitCode !== 0 && redirectedStdout) {
+			pushBinaryenBridgeMessage(runtimeGlobal, redirectedStdout.trimEnd());
+		}
 		if (exitCode !== 0 && stderrParts.length > 0 && parsed.stderrRedirect !== '/dev/null') {
 			pushBinaryenBridgeMessage(runtimeGlobal, stderrParts.join('\n'));
 		}
@@ -704,7 +739,7 @@ function runBinaryenTool(
 			| {
 					FS?: {
 						quit?: () => void;
-				  };
+					};
 			  }
 			| undefined;
 		try {
@@ -804,9 +839,9 @@ self.addEventListener('message', async (event: MessageEvent<RunToolRequest>) => 
 		const toolSource = patchToolSource(await toolResponse.text());
 		const patchedToolSource = toolSource;
 
-			runtimeSlots['__jsoo_mounts'] = [];
-			runtimeSlots['__jsoo_created_files'] = {};
-			runtimeSlots['jsoo_env'] = { ...request.env };
+		runtimeSlots['__jsoo_mounts'] = [];
+		runtimeSlots['__jsoo_created_files'] = {};
+		runtimeSlots['jsoo_env'] = { ...request.env };
 		runtimeSlots['jsoo_fs_tmp'] = preloadFiles;
 		runtimeSlots['process'] = {
 			argv: ['browser', request.toolUrl.split('/').at(-1) || 'tool', ...request.argv],
@@ -821,32 +856,33 @@ self.addEventListener('message', async (event: MessageEvent<RunToolRequest>) => 
 		runtimeSlots['print'] = (...args: unknown[]) => {
 			stdoutParts.push(args.map((value) => String(value)).join(' '));
 		};
-			runtimeSlots['printErr'] = (...args: unknown[]) => {
-				stderrParts.push(args.map((value) => String(value)).join(' '));
+		runtimeSlots['printErr'] = (...args: unknown[]) => {
+			stderrParts.push(args.map((value) => String(value)).join(' '));
+		};
+		if (request.env['WASM_OF_JS_DEBUG_BINARYEN'] === '1') {
+			pushBinaryenBridgeMessage(
+				runtimeGlobal,
+				`mount roots: ${getMounts(runtimeGlobal)
+					.map((mount) => mount.root)
+					.join(', ')}`
+			);
+		}
+		if (request.systemBridge === 'binaryen') {
+			runtimeSlots['__wasm_bridge_messages'] = [];
+			runtimeSlots['__wasm_bridge_debug'] = request.env['WASM_OF_JS_DEBUG_BINARYEN'] === '1';
+			runtimeSlots['__wasm_of_js_system_command'] = (command: string) => {
+				if (runtimeSlots['__wasm_bridge_debug'] === true) {
+					pushBinaryenBridgeMessage(
+						runtimeGlobal,
+						`binaryen system command invoked: ${command}`
+					);
+				}
+				return runBinaryenTool(runtimeGlobal, command, request.binaryenTools);
 			};
-			if (request.env['WASM_OF_JS_DEBUG_BINARYEN'] === '1') {
-				pushBinaryenBridgeMessage(
-					runtimeGlobal,
-					`mount roots: ${getMounts(runtimeGlobal)
-						.map((mount) => mount.root)
-						.join(', ')}`
-				);
-			}
-					if (request.systemBridge === 'binaryen') {
-					runtimeSlots['__wasm_bridge_messages'] = [];
-					runtimeSlots['__wasm_bridge_debug'] = request.env['WASM_OF_JS_DEBUG_BINARYEN'] === '1';
-					runtimeSlots['__wasm_of_js_system_command'] = (command: string) => {
-					if (runtimeSlots['__wasm_bridge_debug'] === true) {
-						pushBinaryenBridgeMessage(
-							runtimeGlobal,
-							`binaryen system command invoked: ${command}`
-							);
-						}
-						return runBinaryenTool(runtimeGlobal, command, request.binaryenTools);
-					};
-					const browserRequire = Object.assign((specifier: string) => {
-						if (specifier === 'node:child_process') {
-							return {
+			const browserRequire = Object.assign(
+				(specifier: string) => {
+					if (specifier === 'node:child_process') {
+						return {
 							execSync: (command: string) => {
 								const exitCode = runBinaryenTool(
 									runtimeGlobal,
@@ -854,7 +890,9 @@ self.addEventListener('message', async (event: MessageEvent<RunToolRequest>) => 
 									request.binaryenTools
 								);
 								if (exitCode !== 0) {
-									const error = new Error(`execSync failed with exit code ${exitCode}`);
+									const error = new Error(
+										`execSync failed with exit code ${exitCode}`
+									);
 									(error as Error & { status?: number }).status = exitCode;
 									throw error;
 								}
@@ -867,11 +905,15 @@ self.addEventListener('message', async (event: MessageEvent<RunToolRequest>) => 
 							) => {
 								const args = Array.isArray(argsOrOptions) ? argsOrOptions : [];
 								const options =
-									(Array.isArray(argsOrOptions) ? maybeOptions : argsOrOptions) || {};
+									(Array.isArray(argsOrOptions) ? maybeOptions : argsOrOptions) ||
+									{};
 								const commandLine =
 									options && options.shell === true
 										? String(command)
-										: [String(command), ...args.map((arg) => JSON.stringify(arg))].join(' ');
+										: [
+												String(command),
+												...args.map((arg) => JSON.stringify(arg))
+											].join(' ');
 								const status = runBinaryenTool(
 									runtimeGlobal,
 									commandLine,
@@ -882,147 +924,151 @@ self.addEventListener('message', async (event: MessageEvent<RunToolRequest>) => 
 									signal: null,
 									error: null
 								};
+							}
+						};
+					}
+					if (specifier === 'node:path') {
+						const isUrlPath = (value: string) => /^[a-zA-Z]+:\/\//.test(value);
+						const normalizeRelativePath = (value: string) => {
+							const normalized = normalizePath(`/${value}`);
+							return normalized === '/' ? '.' : normalized.slice(1);
+						};
+						const normalizeBrowserPath = (value: string) => {
+							if (isUrlPath(value)) {
+								const url = new URL(value);
+								url.pathname = normalizePath(url.pathname);
+								return url.toString();
+							}
+							return value.startsWith('/')
+								? normalizePath(value)
+								: normalizeRelativePath(value);
+						};
+						const joinBrowserPath = (...parts: string[]) => {
+							const filtered = parts.filter(Boolean);
+							if (filtered.length === 0) {
+								return '.';
+							}
+							const [rawFirstPart, ...restParts] = filtered;
+							const firstPart = rawFirstPart || '';
+							if (isUrlPath(firstPart)) {
+								const base = firstPart.endsWith('/') ? firstPart : `${firstPart}/`;
+								return new URL(restParts.join('/'), base).toString();
+							}
+							const joined = filtered.join('/');
+							return firstPart.startsWith('/')
+								? normalizePath(joined)
+								: normalizeRelativePath(joined);
+						};
+						const dirnameBrowserPath = (value: string) => {
+							if (isUrlPath(value)) {
+								const url = new URL(value);
+								url.pathname = url.pathname.replace(/\/[^/]*$/, '/') || '/';
+								return url.toString().replace(/\/$/, '');
+							}
+							const normalized = normalizeBrowserPath(value);
+							const absolutePath = value.startsWith('/')
+								? normalized
+								: `/${normalized === '.' ? '' : normalized}`;
+							const directory = absolutePath.replace(/\/[^/]*$/, '') || '/';
+							return value.startsWith('/')
+								? directory
+								: directory === '/'
+									? '.'
+									: directory.slice(1);
+						};
+						const basenameBrowserPath = (value: string) => {
+							const normalized = normalizeBrowserPath(value).replace(/\/+$/, '');
+							return normalized.split('/').pop() || '';
+						};
+						const resolvePosixPath = (...parts: string[]) => {
+							const segments: string[] = [];
+							for (const part of parts) {
+								if (!part) {
+									continue;
 								}
-							};
-						}
-						if (specifier === 'node:path') {
-							const isUrlPath = (value: string) => /^[a-zA-Z]+:\/\//.test(value);
-							const normalizeRelativePath = (value: string) => {
-								const normalized = normalizePath(`/${value}`);
-								return normalized === '/' ? '.' : normalized.slice(1);
-							};
-							const normalizeBrowserPath = (value: string) => {
-								if (isUrlPath(value)) {
-									const url = new URL(value);
-									url.pathname = normalizePath(url.pathname);
-									return url.toString();
-								}
-								return value.startsWith('/')
-									? normalizePath(value)
-									: normalizeRelativePath(value);
-							};
-							const joinBrowserPath = (...parts: string[]) => {
-								const filtered = parts.filter(Boolean);
-								if (filtered.length === 0) {
-									return '.';
-								}
-								const [rawFirstPart, ...restParts] = filtered;
-								const firstPart = rawFirstPart || '';
-								if (isUrlPath(firstPart)) {
-									const base = firstPart.endsWith('/') ? firstPart : `${firstPart}/`;
-									return new URL(restParts.join('/'), base).toString();
-								}
-								const joined = filtered.join('/');
-								return firstPart.startsWith('/')
-									? normalizePath(joined)
-									: normalizeRelativePath(joined);
-							};
-							const dirnameBrowserPath = (value: string) => {
-								if (isUrlPath(value)) {
-									const url = new URL(value);
-									url.pathname = url.pathname.replace(/\/[^/]*$/, '/') || '/';
-									return url.toString().replace(/\/$/, '');
-								}
-								const normalized = normalizeBrowserPath(value);
-								const absolutePath = value.startsWith('/')
-									? normalized
-									: `/${normalized === '.' ? '' : normalized}`;
-								const directory = absolutePath.replace(/\/[^/]*$/, '') || '/';
-								return value.startsWith('/')
-									? directory
-									: directory === '/'
-										? '.'
-										: directory.slice(1);
-							};
-							const basenameBrowserPath = (value: string) => {
-								const normalized = normalizeBrowserPath(value).replace(/\/+$/, '');
-								return normalized.split('/').pop() || '';
-							};
-							const resolvePosixPath = (...parts: string[]) => {
-								const segments: string[] = [];
-								for (const part of parts) {
-									if (!part) {
+								const normalizedPart = normalizePath(part);
+								for (const segment of normalizedPart.split('/')) {
+									if (!segment) {
 										continue;
 									}
-									const normalizedPart = normalizePath(part);
-									for (const segment of normalizedPart.split('/')) {
-										if (!segment) {
-											continue;
-										}
-										segments.push(segment);
-									}
+									segments.push(segment);
 								}
-								return `/${segments.join('/')}`.replace(/\/+$/, '') || '/';
-							};
-							const relativePosixPath = (from: string, to: string) => {
-								const fromParts = normalizePath(from).split('/').filter(Boolean);
-								const toParts = normalizePath(to).split('/').filter(Boolean);
-								let index = 0;
-								while (fromParts[index] && fromParts[index] === toParts[index]) {
-									index += 1;
+							}
+							return `/${segments.join('/')}`.replace(/\/+$/, '') || '/';
+						};
+						const relativePosixPath = (from: string, to: string) => {
+							const fromParts = normalizePath(from).split('/').filter(Boolean);
+							const toParts = normalizePath(to).split('/').filter(Boolean);
+							let index = 0;
+							while (fromParts[index] && fromParts[index] === toParts[index]) {
+								index += 1;
+							}
+							const up = new Array(fromParts.length - index).fill('..');
+							const down = toParts.slice(index);
+							return [...up, ...down].join('/') || '.';
+						};
+						return {
+							isAbsolute: (value: string) =>
+								value.startsWith('/') || isUrlPath(value),
+							normalize: normalizeBrowserPath,
+							dirname: dirnameBrowserPath,
+							basename: basenameBrowserPath,
+							join: joinBrowserPath,
+							posix: {
+								resolve: (...parts: string[]) => resolvePosixPath(...parts),
+								relative: (from: string, to: string) => relativePosixPath(from, to)
+							}
+						};
+					}
+					if (specifier === 'node:tty') {
+						return {
+							isatty: () => false
+						};
+					}
+					if (specifier === 'node:crypto') {
+						return {
+							randomFillSync: (view: Uint8Array) => {
+								globalThis.crypto.getRandomValues(view);
+								return view;
+							}
+						};
+					}
+					if (specifier === 'node:fs/promises') {
+						return {
+							readFile: async (filePath: string) => {
+								const response = await fetch(filePath, {
+									cache: 'no-store',
+									credentials: 'same-origin'
+								});
+								if (!response.ok) {
+									throw new Error(`failed to read browser file: ${filePath}`);
 								}
-								const up = new Array(fromParts.length - index).fill('..');
-								const down = toParts.slice(index);
-								return [...up, ...down].join('/') || '.';
-							};
-							return {
-								isAbsolute: (value: string) => value.startsWith('/') || isUrlPath(value),
-								normalize: normalizeBrowserPath,
-								dirname: dirnameBrowserPath,
-								basename: basenameBrowserPath,
-								join: joinBrowserPath,
-								posix: {
-									resolve: (...parts: string[]) => resolvePosixPath(...parts),
-									relative: (from: string, to: string) => relativePosixPath(from, to)
-								}
-							};
-						}
-						if (specifier === 'node:tty') {
-							return {
-								isatty: () => false
-							};
-						}
-						if (specifier === 'node:crypto') {
-							return {
-								randomFillSync: (view: Uint8Array) => {
-									globalThis.crypto.getRandomValues(view);
-									return view;
-								}
-							};
-						}
-						if (specifier === 'node:fs/promises') {
-							return {
-								readFile: async (filePath: string) => {
-									const response = await fetch(filePath, {
-										cache: 'no-store',
-										credentials: 'same-origin'
-									});
-									if (!response.ok) {
-										throw new Error(`failed to read browser file: ${filePath}`);
-									}
-									return new Uint8Array(await response.arrayBuffer());
-								}
-							};
-						}
-						if (specifier === 'node:os') {
-							return {
-								tmpdir: () => '/tmp'
-							};
-						}
-						if (specifier === 'node:util') {
-							return {
-								getSystemErrorMap: () => new Map<number, [string, string]>(),
-								getSystemErrorMessage: (errno: number) => `Unknown system error ${errno}`
-							};
-						}
-						throw new Error(`unsupported require in browser tool worker: ${specifier}`);
-					}, {
-						main: {
-							filename: request.toolUrl
-						}
-					});
-					runtimeSlots['require'] = browserRequire;
+								return new Uint8Array(await response.arrayBuffer());
+							}
+						};
+					}
+					if (specifier === 'node:os') {
+						return {
+							tmpdir: () => '/tmp'
+						};
+					}
+					if (specifier === 'node:util') {
+						return {
+							getSystemErrorMap: () => new Map<number, [string, string]>(),
+							getSystemErrorMessage: (errno: number) =>
+								`Unknown system error ${errno}`
+						};
+					}
+					throw new Error(`unsupported require in browser tool worker: ${specifier}`);
+				},
+				{
+					main: {
+						filename: request.toolUrl
+					}
 				}
+			);
+			runtimeSlots['require'] = browserRequire;
+		}
 		globalThis.console = {
 			...originalConsole,
 			log: (...args: unknown[]) => {
@@ -1068,7 +1114,14 @@ self.addEventListener('message', async (event: MessageEvent<RunToolRequest>) => 
 			type: 'tool-result',
 			exitCode,
 			stdout: stdoutParts.join('\n'),
-			stderr: [normalizedStderr, ...(((runtimeSlots['__wasm_bridge_messages'] as string[] | undefined) || []).filter(Boolean))].filter(Boolean).join('\n'),
+			stderr: [
+				normalizedStderr,
+				...((runtimeSlots['__wasm_bridge_messages'] as string[] | undefined) || []).filter(
+					Boolean
+				)
+			]
+				.filter(Boolean)
+				.join('\n'),
 			files: listVirtualFiles(runtimeGlobal, request.outputPrefixes)
 		};
 		if (thrown) {
@@ -1151,16 +1204,16 @@ self.addEventListener('message', async (event: MessageEvent<RunToolRequest>) => 
 		} else {
 			runtimeSlots['__binaryen_cli_runtime'] = originalBinaryenCliRuntime;
 		}
-			if (typeof originalBinaryenCliQuit === 'undefined') {
-				delete runtimeSlots['__binaryen_cli_quit'];
-			} else {
-				runtimeSlots['__binaryen_cli_quit'] = originalBinaryenCliQuit;
-			}
-			if (typeof originalCreatedFiles === 'undefined') {
-				delete runtimeSlots['__jsoo_created_files'];
-			} else {
-				runtimeSlots['__jsoo_created_files'] = originalCreatedFiles;
-			}
-			delete runtimeSlots['__wasm_of_js_system_command'];
+		if (typeof originalBinaryenCliQuit === 'undefined') {
+			delete runtimeSlots['__binaryen_cli_quit'];
+		} else {
+			runtimeSlots['__binaryen_cli_quit'] = originalBinaryenCliQuit;
 		}
-	});
+		if (typeof originalCreatedFiles === 'undefined') {
+			delete runtimeSlots['__jsoo_created_files'];
+		} else {
+			runtimeSlots['__jsoo_created_files'] = originalCreatedFiles;
+		}
+		delete runtimeSlots['__wasm_of_js_system_command'];
+	}
+});

@@ -109,7 +109,9 @@ const diagnosticFromMessage = (message: string): LspDiagnostic => {
 	};
 };
 
-export function createPerlWorkerService(runDiagnostics?: RunPerlDiagnostics): WorkerLanguageService {
+export function createPerlWorkerService(
+	runDiagnostics?: RunPerlDiagnostics
+): WorkerLanguageService {
 	const workerDiagnostics = createStaticWorkerDiagnostics<
 		PerlWorkerOptions,
 		PerlDiagnosticRunnerResult

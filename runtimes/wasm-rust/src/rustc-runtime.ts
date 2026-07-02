@@ -107,7 +107,11 @@ class OpenMirroredBitcodeFile extends Fd {
 			return wasi.ERRNO_NOSPC;
 		}
 		if (Number(size) < Atomics.load(this.file.state, BITCODE_LENGTH_INDEX)) {
-			this.file.bytes.fill(0, Number(size), Atomics.load(this.file.state, BITCODE_LENGTH_INDEX));
+			this.file.bytes.fill(
+				0,
+				Number(size),
+				Atomics.load(this.file.state, BITCODE_LENGTH_INDEX)
+			);
 		}
 		Atomics.store(this.file.state, BITCODE_LENGTH_INDEX, Number(size));
 		Atomics.add(this.file.state, BITCODE_WRITE_SEQUENCE_INDEX, 1);
@@ -129,7 +133,10 @@ class OpenMirroredBitcodeFile extends Fd {
 	}
 
 	fd_pread(size: number, offset: bigint) {
-		const end = Math.min(Atomics.load(this.file.state, BITCODE_LENGTH_INDEX), Number(offset) + size);
+		const end = Math.min(
+			Atomics.load(this.file.state, BITCODE_LENGTH_INDEX),
+			Number(offset) + size
+		);
 		return {
 			ret: wasi.ERRNO_SUCCESS,
 			data: this.file.bytes.slice(Number(offset), end)

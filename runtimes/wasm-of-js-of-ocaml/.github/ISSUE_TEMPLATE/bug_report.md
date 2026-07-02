@@ -1,9 +1,9 @@
 ---
 name: Bug report
 about: Report a reproducible compiler, bundle, or browser-native issue
-title: "fix: "
+title: 'fix: '
 labels: bug
-assignees: ""
+assignees: ''
 ---
 
 ## Summary

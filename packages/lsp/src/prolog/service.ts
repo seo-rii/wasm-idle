@@ -1,8 +1,4 @@
-import {
-	type LspDiagnostic,
-	type LspPosition,
-	type WorkerLanguageService
-} from '../lsp.js';
+import { type LspDiagnostic, type LspPosition, type WorkerLanguageService } from '../lsp.js';
 import {
 	createStaticWorkerDiagnostics,
 	type StaticWorkerDiagnosticRequest,
@@ -14,8 +10,7 @@ export interface PrologWorkerOptions {
 	workerUrl: string;
 }
 
-export type PrologDiagnosticRunnerRequest =
-	StaticWorkerDiagnosticRequest<PrologWorkerOptions>;
+export type PrologDiagnosticRunnerRequest = StaticWorkerDiagnosticRequest<PrologWorkerOptions>;
 
 export interface PrologDiagnosticRunnerResult {
 	error?: string;
@@ -52,7 +47,7 @@ const PROLOG_KEYWORDS = [
 
 const PROLOG_HOVER: Record<string, string> = {
 	':-': 'Introduces a rule body or directive.',
-	'is': 'Evaluates an arithmetic expression and unifies the result.',
+	is: 'Evaluates an arithmetic expression and unifies the result.',
 	fail: 'Always fails.',
 	true: 'Always succeeds.',
 	consult: 'Loads Prolog source code.',
@@ -103,8 +98,7 @@ export function createPrologWorkerService(
 			diagnose: true,
 			log: false
 		}),
-		diagnosticsFromResult: (result) =>
-			result.error ? [diagnosticFromError(result.error)] : []
+		diagnosticsFromResult: (result) => (result.error ? [diagnosticFromError(result.error)] : [])
 	});
 
 	return {

@@ -3,6 +3,7 @@ import type { RustTargetTriple } from '$lib/playground/options';
 export type EditorDefaultLanguage =
 	| 'c'
 	| 'cpp'
+	| 'objectivec'
 	| 'python'
 	| 'java'
 	| 'go'
@@ -53,6 +54,7 @@ export type EditorDefaultLanguage =
 export const editorDefaults: Record<
 	| 'c'
 	| 'cpp'
+	| 'objectivec'
 	| 'python'
 	| 'java'
 	| 'go'
@@ -118,6 +120,31 @@ int main() {
     int n = 4;
     if (!(std::cin >> n)) n = 4;
     std::cout << "factorial_plus_bonus=" << factorial(n) + bonus << "\\n";
+}`,
+	objectivec: `#include <stdio.h>
+#include <objc/runtime.h>
+
+__attribute__((objc_root_class))
+@interface FactorialRunner {
+    Class isa;
+}
+- (int)factorial:(int)n;
+@end
+
+@implementation FactorialRunner
+- (int)factorial:(int)n {
+    return n <= 1 ? 1 : n * [self factorial:n - 1];
+}
+@end
+
+int main(void) {
+    int n = 4;
+    if (scanf("%d", &n) != 1) {
+        n = 4;
+    }
+    id runner = class_createInstance(objc_getClass("FactorialRunner"), 0);
+    printf("factorial_plus_bonus=%d\\n", [runner factorial:n] + 3);
+    return 0;
 }`,
 	python: `BONUS = 3
 

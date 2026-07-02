@@ -76,7 +76,10 @@ function createFakeLlvmModules() {
 								}
 							},
 							async callMain() {
-								lldFiles.set('/work/main.wasm', new Uint8Array([0x00, 0x61, 0x73, 0x6d]));
+								lldFiles.set(
+									'/work/main.wasm',
+									new Uint8Array([0x00, 0x61, 0x73, 0x6d])
+								);
 							}
 						};
 					}
@@ -206,7 +209,10 @@ describe('browser linker asset loading', () => {
 		expect(progressEvents.some((event) => event.bytesCompleted !== undefined)).toBe(true);
 		expect(
 			progressEvents.some(
-				(event) => event.stage === 'link' && event.bytesCompleted !== undefined && event.bytesCompleted < (event.bytesTotal || 0)
+				(event) =>
+					event.stage === 'link' &&
+					event.bytesCompleted !== undefined &&
+					event.bytesCompleted < (event.bytesTotal || 0)
 			)
 		).toBe(true);
 	});
@@ -260,10 +266,14 @@ describe('browser linker asset loading', () => {
 				fetchImpl: async (assetUrl) => {
 					requestedUrls.push(String(assetUrl));
 					if (String(assetUrl).endsWith('/llvm/llc.wasm.gz')) {
-						return new Response(gzipSync(new Uint8Array([0x00, 0x61, 0x73, 0x6d, 0x01])));
+						return new Response(
+							gzipSync(new Uint8Array([0x00, 0x61, 0x73, 0x6d, 0x01]))
+						);
 					}
 					if (String(assetUrl).endsWith('/llvm/lld.wasm.gz')) {
-						return new Response(gzipSync(new Uint8Array([0x00, 0x61, 0x73, 0x6d, 0x02])));
+						return new Response(
+							gzipSync(new Uint8Array([0x00, 0x61, 0x73, 0x6d, 0x02]))
+						);
 					}
 					if (String(assetUrl).endsWith('/llvm/lld.data.gz')) {
 						return new Response(gzipSync(new Uint8Array([9, 8, 7])));
@@ -304,16 +314,15 @@ describe('browser linker asset loading', () => {
 			'https://example.test/runtime/packs/link/wasm32-wasip1.index.json.gz',
 			'https://example.test/runtime/packs/link/wasm32-wasip1.pack.gz'
 		]);
-		expect([...((modules.getLlcInitOptions()?.wasmBinary || new Uint8Array()) as Uint8Array)]).toEqual([
-			0x00, 0x61, 0x73, 0x6d, 0x01
-		]);
-		expect(
-			[
-				...new Uint8Array(
-					modules.getLldInitOptions()?.getPreloadedPackage?.('lld.data', 3) || new ArrayBuffer(0)
-				)
-			]
-		).toEqual([9, 8, 7]);
+		expect([
+			...((modules.getLlcInitOptions()?.wasmBinary || new Uint8Array()) as Uint8Array)
+		]).toEqual([0x00, 0x61, 0x73, 0x6d, 0x01]);
+		expect([
+			...new Uint8Array(
+				modules.getLldInitOptions()?.getPreloadedPackage?.('lld.data', 3) ||
+					new ArrayBuffer(0)
+			)
+		]).toEqual([9, 8, 7]);
 		expect([...modules.writtenPaths.keys()]).toEqual(
 			expect.arrayContaining([
 				'/work/main.o',

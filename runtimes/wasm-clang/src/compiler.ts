@@ -1,8 +1,5 @@
 import Runtime from './runtime.js';
-import {
-	loadRuntimeManifest,
-	resolveRuntimeManifestUrl
-} from './runtime-manifest.js';
+import { loadRuntimeManifest, resolveRuntimeManifestUrl } from './runtime-manifest.js';
 import type {
 	BrowserClangArtifact,
 	BrowserClangCompileProgress,
@@ -80,12 +77,7 @@ function extractCompilerDiagnostics(output: string): CompilerDiagnostic[] {
 			fileName: match[1] || undefined,
 			lineNumber: Number(match[2]),
 			columnNumber: match[3] ? Number(match[3]) : undefined,
-			severity:
-				match[4] === 'warning'
-					? 'warning'
-					: match[4] === 'note'
-						? 'other'
-						: 'error',
+			severity: match[4] === 'warning' ? 'warning' : match[4] === 'note' ? 'other' : 'error',
 			message: match[5]
 		});
 	}
@@ -101,7 +93,9 @@ function createLogResult(records: CompilerLogRecord[], enabled: boolean) {
 		: {};
 }
 
-async function resolveManifest(options: CreateClangCompilerOptions | PreloadBrowserClangRuntimeOptions) {
+async function resolveManifest(
+	options: CreateClangCompilerOptions | PreloadBrowserClangRuntimeOptions
+) {
 	if (options.manifest) {
 		return options.manifest;
 	}

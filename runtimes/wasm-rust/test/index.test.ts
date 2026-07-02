@@ -111,11 +111,15 @@ describe('wasm-rust compiler contract', () => {
 				expect.stringMatching(/runtime\/llvm\/lld\.js\?v=test-runtime-v3$/),
 				expect.stringMatching(/vendor\/jco\/src\/browser\.js\?v=test-runtime-v3$/),
 				expect.stringMatching(/vendor\/jco\/obj\/wasm-tools\.js\?v=test-runtime-v3$/),
-				expect.stringMatching(/vendor\/preview2-shim\/lib\/browser\/cli\.js\?v=test-runtime-v3$/),
+				expect.stringMatching(
+					/vendor\/preview2-shim\/lib\/browser\/cli\.js\?v=test-runtime-v3$/
+				),
 				expect.stringMatching(
 					/vendor\/preview2-shim\/lib\/browser\/filesystem\.js\?v=test-runtime-v3$/
 				),
-				expect.stringMatching(/vendor\/preview2-shim\/lib\/browser\/io\.js\?v=test-runtime-v3$/),
+				expect.stringMatching(
+					/vendor\/preview2-shim\/lib\/browser\/io\.js\?v=test-runtime-v3$/
+				),
 				expect.stringMatching(
 					/vendor\/preview2-shim\/lib\/browser\/random\.js\?v=test-runtime-v3$/
 				),
@@ -125,7 +129,9 @@ describe('wasm-rust compiler contract', () => {
 				expect.stringMatching(
 					/vendor\/preview2-shim\/lib\/browser\/sockets\.js\?v=test-runtime-v3$/
 				),
-				expect.stringMatching(/vendor\/preview2-shim\/lib\/browser\/http\.js\?v=test-runtime-v3$/)
+				expect.stringMatching(
+					/vendor\/preview2-shim\/lib\/browser\/http\.js\?v=test-runtime-v3$/
+				)
 			])
 		);
 	});

@@ -75,7 +75,9 @@ describe('browser harness runtime helpers', () => {
 		);
 
 		try {
-			await expect(resolveHarnessTargetTriples(projectRoot)).resolves.toEqual(['wasm32-wasip1']);
+			await expect(resolveHarnessTargetTriples(projectRoot)).resolves.toEqual([
+				'wasm32-wasip1'
+			]);
 		} finally {
 			await fs.rm(projectRoot, { recursive: true, force: true });
 		}

@@ -35,9 +35,9 @@ Latest validated outcome from that wrapper:
 - Chromium harness probe succeeds
 - Chromium Vitest harness succeeds
 - final hello-world result is:
-  - `compile.success: true`
-  - `runtime.exitCode: 0`
-  - `runtime.stdout: "hi\n"`
+    - `compile.success: true`
+    - `runtime.exitCode: 0`
+    - `runtime.stdout: "hi\n"`
 
 Observed during the same successful run:
 
@@ -211,11 +211,11 @@ Useful flags:
 Unless overridden, the checked-in scripts expect:
 
 - browser-host rustc bundle:
-  - `$HOME/.cache/wasm-rust-real-rustc-20260317/rust/dist-emit-ir`
+    - `$HOME/.cache/wasm-rust-real-rustc-20260317/rust/dist-emit-ir`
 - matching native stage2 toolchain:
-  - `$HOME/.cache/wasm-rust-real-rustc-20260317/rust/build/x86_64-unknown-linux-gnu/stage2`
+    - `$HOME/.cache/wasm-rust-real-rustc-20260317/rust/build/x86_64-unknown-linux-gnu/stage2`
 - `llvm-wasm` cache:
-  - `$HOME/.cache/llvm-wasm-20260319`
+    - `$HOME/.cache/llvm-wasm-20260319`
 
 ## Environment overrides
 

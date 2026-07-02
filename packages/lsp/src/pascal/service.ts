@@ -16,8 +16,7 @@ export interface PascalWorkerOptions {
 	workerUrl: string;
 }
 
-export type PascalDiagnosticRunnerRequest =
-	StaticWorkerDiagnosticRequest<PascalWorkerOptions>;
+export type PascalDiagnosticRunnerRequest = StaticWorkerDiagnosticRequest<PascalWorkerOptions>;
 
 export interface PascalDiagnosticRunnerResult {
 	error?: string;

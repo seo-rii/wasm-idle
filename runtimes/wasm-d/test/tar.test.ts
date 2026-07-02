@@ -19,7 +19,11 @@ function createTar(files: Record<string, string>) {
 		writeString(header, 100, 8, octal(0o644, 8));
 		writeString(header, 124, 12, octal(body.byteLength, 12));
 		header[156] = '0'.charCodeAt(0);
-		chunks.push(header, body, new Uint8Array(Math.ceil(body.byteLength / 512) * 512 - body.byteLength));
+		chunks.push(
+			header,
+			body,
+			new Uint8Array(Math.ceil(body.byteLength / 512) * 512 - body.byteLength)
+		);
 	}
 	chunks.push(new Uint8Array(1024));
 	const total = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);

@@ -31,6 +31,7 @@
 	import { WASM_NIM_ASSET_VERSION } from '$lib/playground/wasmNimVersion';
 	import { WASM_LUA_ASSET_VERSION } from '$lib/playground/wasmLuaVersion';
 	import { WASM_LISP_ASSET_VERSION } from '$lib/playground/wasmLispVersion';
+	import { WASM_OBJECTIVEC_ASSET_VERSION } from '$lib/playground/wasmObjectiveCVersion';
 	import { WASM_OCAML_ASSET_VERSION } from '$lib/playground/wasmOcamlVersion';
 	import { WASM_OCTAVE_ASSET_VERSION } from '$lib/playground/wasmOctaveVersion';
 	import { WASM_PROLOG_ASSET_VERSION } from '$lib/playground/wasmPrologVersion';
@@ -316,6 +317,27 @@
 				? `${path}/wasm-fortran/analyzer.js?v=${WASM_FORTRAN_ASSET_VERSION}`
 				: `/wasm-fortran/analyzer.js?v=${WASM_FORTRAN_ASSET_VERSION}`
 		},
+		objectivec: {
+			baseUrl: path ? `${path}/wasm-objectivec/` : '/wasm-objectivec/',
+			libobjcUrl: path
+				? `${path}/wasm-objectivec/libobjc.a?v=${WASM_OBJECTIVEC_ASSET_VERSION}`
+				: `/wasm-objectivec/libobjc.a?v=${WASM_OBJECTIVEC_ASSET_VERSION}`,
+			headersUrl: path
+				? `${path}/wasm-objectivec/headers.json?v=${WASM_OBJECTIVEC_ASSET_VERSION}`
+				: `/wasm-objectivec/headers.json?v=${WASM_OBJECTIVEC_ASSET_VERSION}`,
+			libgnustepBaseUrl: path
+				? `${path}/wasm-objectivec/libgnustep-base.a?v=${WASM_OBJECTIVEC_ASSET_VERSION}`
+				: `/wasm-objectivec/libgnustep-base.a?v=${WASM_OBJECTIVEC_ASSET_VERSION}`,
+			libgnustepBaseObjectUrl: path
+				? `${path}/wasm-objectivec/libgnustep-base.o?v=${WASM_OBJECTIVEC_ASSET_VERSION}`
+				: `/wasm-objectivec/libgnustep-base.o?v=${WASM_OBJECTIVEC_ASSET_VERSION}`,
+			foundationHeadersUrl: path
+				? `${path}/wasm-objectivec/foundation-headers.json?v=${WASM_OBJECTIVEC_ASSET_VERSION}`
+				: `/wasm-objectivec/foundation-headers.json?v=${WASM_OBJECTIVEC_ASSET_VERSION}`,
+			libffiUrl: path
+				? `${path}/wasm-objectivec/libffi.a?v=${WASM_OBJECTIVEC_ASSET_VERSION}`
+				: `/wasm-objectivec/libffi.a?v=${WASM_OBJECTIVEC_ASSET_VERSION}`
+		},
 		r: {
 			baseUrl: path
 				? `${path}/webr/${WASM_R_ASSET_VERSION}/`
@@ -572,6 +594,7 @@
 		writeTerminalInput: (text: string, eof?: boolean) => Promise<void>;
 		getEditorValue: () => string;
 		setEditorValue: (text: string) => Promise<boolean>;
+		setWorkspaceFiles: (files: WorkspaceFile[], activePath?: string) => Promise<boolean>;
 		setPreloadedStdin: (text: string) => void;
 	};
 	let browserDebugHookVersion = 0;
@@ -638,11 +661,13 @@
 	function languageForPath(filePath: string): PlaygroundLanguage | null {
 		if (filePath.toLowerCase().endsWith('.as.ts')) return 'ASSEMBLYSCRIPT';
 		const ext = extension(filePath);
+		if ((ext === '.m' || ext === '.h') && language === 'OBJC') return 'OBJC';
 		const match: Record<string, PlaygroundLanguage> = {
 			'.c': 'C',
 			'.cc': 'CPP',
 			'.cpp': 'CPP',
 			'.cxx': 'CPP',
+			'.objc': 'OBJC',
 			'.h': 'CPP',
 			'.hpp': 'CPP',
 			'.java': 'JAVA',
@@ -731,6 +756,7 @@
 		const match: Record<PlaygroundLanguage, string> = {
 			C: 'main.c',
 			CPP: 'main.cpp',
+			OBJC: 'main.m',
 			JAVA: 'Main.java',
 			PYTHON: 'main.py',
 			RUST: 'main.rs',
@@ -786,6 +812,7 @@
 		const defaultLanguage = {
 			C: 'c',
 			CPP: 'cpp',
+			OBJC: 'objectivec',
 			PYTHON: 'python',
 			JAVA: 'java',
 			RUST: 'rust',
@@ -1302,6 +1329,10 @@
 			c: 'C',
 			cpp: 'CPP',
 			cxx: 'CPP',
+			objc: 'OBJC',
+			objectivec: 'OBJC',
+			'objective-c': 'OBJC',
+			objective_c: 'OBJC',
 			java: 'JAVA',
 			rust: 'RUST',
 			go: 'GO',
@@ -1759,6 +1790,23 @@
 				await Promise.resolve();
 				return editor.getValue() === text && activeFile?.content === text;
 			},
+			async setWorkspaceFiles(nextFiles: WorkspaceFile[], nextActivePath?: string) {
+				const nextActiveFilePath =
+					normalizePath(nextActivePath || activePath) || defaultPathForLanguage();
+				const activeContent = editor?.getValue() || activeFile?.content || '';
+				const sanitizedFiles = sanitizeFiles(nextFiles).filter(
+					(file) => file.path !== nextActiveFilePath
+				);
+				files = [{ path: nextActiveFilePath, content: activeContent }, ...sanitizedFiles];
+				activePath = nextActiveFilePath;
+				openTabs = [nextActiveFilePath];
+				updateActiveContent(activeContent);
+				await Promise.resolve();
+				return (
+					activePath === nextActiveFilePath &&
+					files.some((file) => file.path === nextActiveFilePath)
+				);
+			},
 			setPreloadedStdin(text: string) {
 				stdinInput = text;
 			}
@@ -1993,6 +2041,7 @@
 					<select id="language-select" value={language} onchange={handleLanguageChange}>
 						<option value="C">C</option>
 						<option value="CPP">C++</option>
+						<option value="OBJC">Objective-C</option>
 						<option value="PYTHON">Python</option>
 						<option value="JAVA">Java</option>
 						<option value="RUST">Rust</option>

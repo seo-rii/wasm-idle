@@ -83,7 +83,9 @@ export function createGraphqlWorkerService(): WorkerLanguageService {
 		diagnostics(document: LspDocument) {
 			if (!document.text.trim()) return [];
 			try {
-				const ast = parse(new Source(document.text, document.uri.split('/').pop() || 'main.graphql'));
+				const ast = parse(
+					new Source(document.text, document.uri.split('/').pop() || 'main.graphql')
+				);
 				return schema ? validate(schema, ast).map(diagnosticFor) : [];
 			} catch (error) {
 				return error instanceof GraphQLError
@@ -124,7 +126,8 @@ export function createGraphqlWorkerService(): WorkerLanguageService {
 		},
 		documentSymbols(document) {
 			const symbols = [];
-			const pattern = /^\s*(query|mutation|subscription|fragment|type|interface|enum|input|scalar|union)\s+([_A-Za-z][_0-9A-Za-z]*)/gmu;
+			const pattern =
+				/^\s*(query|mutation|subscription|fragment|type|interface|enum|input|scalar|union)\s+([_A-Za-z][_0-9A-Za-z]*)/gmu;
 			for (const match of document.text.matchAll(pattern)) {
 				const offset = match.index || 0;
 				const before = document.text.slice(0, offset);
@@ -139,7 +142,10 @@ export function createGraphqlWorkerService(): WorkerLanguageService {
 					},
 					selectionRange: {
 						start: { line, character: character + match[0].indexOf(match[2]) },
-						end: { line, character: character + match[0].indexOf(match[2]) + match[2].length }
+						end: {
+							line,
+							character: character + match[0].indexOf(match[2]) + match[2].length
+						}
 					}
 				});
 			}

@@ -24,6 +24,19 @@ export interface BrowserExecutionOptions {
 	stdout?: (chunk: string) => void;
 	stderr?: (chunk: string) => void;
 	files?: Array<{ path: string; contents: string | Uint8Array | ArrayBuffer }>;
+	extraImports?:
+		| WebAssembly.Imports
+		| ((
+				context: BrowserExecutionImportContext
+		  ) => WebAssembly.Imports | Promise<WebAssembly.Imports>);
+}
+
+export interface BrowserExecutionImportContext {
+	host: BrowserWasiHost;
+	module: WebAssembly.Module;
+	instance: {
+		current: WebAssembly.Instance | null;
+	};
 }
 
 export interface BrowserWasiHost {
@@ -207,7 +220,9 @@ export async function executeBrowserClangArtifact(
 	options: BrowserExecutionOptions = {}
 ): Promise<BrowserExecutionResult> {
 	if (artifact.target !== 'wasm32-wasi' || artifact.format !== 'wasi-core-wasm') {
-		throw new Error('wasm-clang currently executes only wasm32-wasi preview1 core wasm artifacts.');
+		throw new Error(
+			'wasm-clang currently executes only wasm32-wasi preview1 core wasm artifacts.'
+		);
 	}
 	const host = createBrowserWasiHost({
 		...options,
@@ -215,18 +230,29 @@ export async function executeBrowserClangArtifact(
 	});
 	const wasiInstance = new WASI(host.args, host.envEntries, host.fds, { debug: false });
 	const bytes =
-		artifact.bytes instanceof Uint8Array ? new Uint8Array(artifact.bytes) : new Uint8Array(artifact.bytes);
+		artifact.bytes instanceof Uint8Array
+			? new Uint8Array(artifact.bytes)
+			: new Uint8Array(artifact.bytes);
 	const module = artifact.wasm || (await WebAssembly.compile(bytes));
+	const instanceRef: BrowserExecutionImportContext['instance'] = { current: null };
+	const extraImports =
+		typeof options.extraImports === 'function'
+			? await options.extraImports({ host, module, instance: instanceRef })
+			: options.extraImports || {};
 	const instance = await WebAssembly.instantiate(module, {
+		...extraImports,
 		wasi_unstable: wasiInstance.wasiImport,
 		wasi_snapshot_preview1: wasiInstance.wasiImport
 	});
-	const exitCode = wasiInstance.start(instance as unknown as {
-		exports: {
-			memory: WebAssembly.Memory;
-			_start: () => unknown;
-		};
-	});
+	instanceRef.current = instance;
+	const exitCode = wasiInstance.start(
+		instance as unknown as {
+			exports: {
+				memory: WebAssembly.Memory;
+				_start: () => unknown;
+			};
+		}
+	);
 	return {
 		exitCode,
 		stdout: host.stdout.getText(),

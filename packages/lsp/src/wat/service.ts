@@ -115,10 +115,10 @@ const WAT_HOVER: Record<string, string> = {
 	'i32.const': 'Pushes a 32-bit integer constant.',
 	'i64.const': 'Pushes a 64-bit integer constant.',
 	call: 'Calls a function directly.',
-	'call_indirect': 'Calls a function through a table.',
+	call_indirect: 'Calls a function through a table.',
 	block: 'Begins a structured block.',
 	loop: 'Begins a structured loop.',
-	'br_if': 'Conditionally branches to a label.',
+	br_if: 'Conditionally branches to a label.',
 	memory: 'Defines or imports linear memory.'
 };
 
@@ -169,7 +169,11 @@ export function createWatWorkerService(): WorkerLanguageService {
 	let wabt: Awaited<ReturnType<typeof wabtFactory>>;
 
 	const parse = (document: LspDocument) =>
-		wabt.parseWat(document.uri.split('/').pop() || 'main.wat', document.text, features as never);
+		wabt.parseWat(
+			document.uri.split('/').pop() || 'main.wat',
+			document.text,
+			features as never
+		);
 
 	return {
 		name: 'wasm-idle-wat-lsp',

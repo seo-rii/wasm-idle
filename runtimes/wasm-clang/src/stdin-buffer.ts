@@ -9,7 +9,11 @@ const controlViewOf = (buffer: SharedArrayBuffer | Int32Array) =>
 	buffer instanceof Int32Array ? buffer : new Int32Array(buffer);
 
 const payloadViewOf = (control: Int32Array) =>
-	new Uint8Array(control.buffer, control.byteOffset + HEADER_BYTES, control.byteLength - HEADER_BYTES);
+	new Uint8Array(
+		control.buffer,
+		control.byteOffset + HEADER_BYTES,
+		control.byteLength - HEADER_BYTES
+	);
 
 const splitChunk = (input: string, maxBytes: number) => {
 	const encoded = encoder.encode(input);
@@ -117,4 +121,3 @@ export const resetBufferedStdin = (buffer: SharedArrayBuffer | Int32Array) => {
 	Atomics.store(control, SEQUENCE_INDEX, 0);
 	Atomics.store(control, LENGTH_INDEX, 0);
 };
-

@@ -331,7 +331,10 @@ export function createDocumentWorkerService(): WorkerLanguageService {
 			if (language === 'json') {
 				const textDocument = documentFrom(document);
 				const jsonDocument = jsonLanguageService.parseJSONDocument(textDocument);
-				const diagnostics = await jsonLanguageService.doValidation(textDocument, jsonDocument);
+				const diagnostics = await jsonLanguageService.doValidation(
+					textDocument,
+					jsonDocument
+				);
 				return diagnostics.map((diagnostic) => diagnosticFrom(diagnostic, 'json'));
 			}
 			if (language === 'css') {

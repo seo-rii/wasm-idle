@@ -1,7 +1,4 @@
-import {
-	resolveJRuntimeAssetConfig,
-	type PlaygroundRuntimeAssets
-} from '$lib/playground/assets';
+import { resolveJRuntimeAssetConfig, type PlaygroundRuntimeAssets } from '$lib/playground/assets';
 import { StaticWorkerRuntimeSandbox } from '$lib/playground/staticWorkerRuntime';
 
 class J extends StaticWorkerRuntimeSandbox {

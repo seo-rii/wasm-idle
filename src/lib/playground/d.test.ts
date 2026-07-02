@@ -96,9 +96,7 @@ void main() {
 				}
 			})
 		).resolves.toBe(true);
-		await expect(sandbox.run(code, false, true, undefined, ['one', 'two'])).resolves.toBe(
-			true
-		);
+		await expect(sandbox.run(code, false, true, undefined, ['one', 'two'])).resolves.toBe(true);
 
 		expect(workerInstances).toHaveLength(1);
 		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
@@ -186,9 +184,7 @@ void main() {
 			});
 		});
 
-		await expect(
-			sandbox.run(`void main() {}`, false)
-		).resolves.toBe(true);
+		await expect(sandbox.run(`void main() {}`, false)).resolves.toBe(true);
 
 		expect(readBufferedStdin(runMessage.buffer)).toBe('42\n');
 	});

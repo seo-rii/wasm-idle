@@ -113,9 +113,9 @@ describe('TypeScript worker service', () => {
 		)) as { items: Array<{ label: string }> };
 		const hover = await service.hover?.(completionDocument, { line: 0, character: 7 }, context);
 
-		expect(diagnostics?.some((diagnostic) => diagnostic.message.includes('Expression expected'))).toBe(
-			true
-		);
+		expect(
+			diagnostics?.some((diagnostic) => diagnostic.message.includes('Expression expected'))
+		).toBe(true);
 		expect(completions.items.some((item) => item.label === 'alpha')).toBe(true);
 		expect(hover?.contents.value).toContain('const alpha');
 	});

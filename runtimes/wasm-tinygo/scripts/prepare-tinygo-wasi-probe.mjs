@@ -1,10 +1,10 @@
-import { cp, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
-import path from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { cp, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { ensureTinyGoSourceReady } from './fetch-tinygo-source.mjs'
+import { ensureTinyGoSourceReady } from './fetch-tinygo-source.mjs';
 
-const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 const goenvLLVMDefaultSource = `//go:build !wasip1
 
@@ -19,7 +19,7 @@ import (
 func llvmVersionMajor() string {
 \treturn strings.Split(llvm.Version, ".")[0]
 }
-`
+`;
 
 const goenvLLVMWasip1Source = `//go:build wasip1
 
@@ -33,7 +33,7 @@ func llvmVersionMajor() string {
 \t}
 \treturn "20"
 }
-`
+`;
 
 const tinyGoWasiProbeMainSource = `package main
 
@@ -102,7 +102,7 @@ func main() {
 \t\tos.Exit(1)
 \t}
 }
-`
+`;
 
 const tinyGoWasiFrontendProbeMainSource = `package main
 
@@ -228,7 +228,7 @@ func main() {
 \t\tos.Exit(1)
 \t}
 }
-`
+`;
 
 const cgoProcessWasip1Source = `//go:build wasip1
 
@@ -255,7 +255,7 @@ func Process(files []*ast.File, dir, importPath string, fset *token.FileSet, cfl
 \t}
 \treturn nil, nil, nil, nil, nil, nil
 }
-`
+`;
 
 const loaderLoadFromPackageJSONWasip1Source = `//go:build wasip1
 
@@ -329,28 +329,28 @@ func LoadFromPackageJSON(config *compileopts.Config, packages []PackageJSON, typ
 
 \treturn p, nil
 }
-`
+`;
 
 const patchGoenv = async (patchedRoot) => {
-  const goenvPath = path.join(patchedRoot, 'goenv', 'goenv.go')
-  const original = await readFile(goenvPath, 'utf8')
-  let patched = original
-  if (patched.includes('\n\t"tinygo.org/x/go-llvm"')) {
-    patched = patched.replace('\n\t"tinygo.org/x/go-llvm"', '')
-  }
-  if (patched.includes('strings.Split(llvm.Version, ".")[0]')) {
-    patched = patched.replaceAll('strings.Split(llvm.Version, ".")[0]', 'llvmVersionMajor()')
-  } else if (!patched.includes('llvmVersionMajor()')) {
-    throw new Error('failed to patch TinyGo goenv.go: llvm version lookup not found')
-  }
-  const goEnvGuardTarget = 'goEnvVarsOnce.Do(func() {'
-  if (!patched.includes(goEnvGuardTarget)) {
-    throw new Error('failed to patch TinyGo goenv.go: go env guard target not found')
-  }
-  if (!patched.includes('if runtime.GOOS == "wasip1" {')) {
-    patched = patched.replace(
-      goEnvGuardTarget,
-      `${goEnvGuardTarget}
+	const goenvPath = path.join(patchedRoot, 'goenv', 'goenv.go');
+	const original = await readFile(goenvPath, 'utf8');
+	let patched = original;
+	if (patched.includes('\n\t"tinygo.org/x/go-llvm"')) {
+		patched = patched.replace('\n\t"tinygo.org/x/go-llvm"', '');
+	}
+	if (patched.includes('strings.Split(llvm.Version, ".")[0]')) {
+		patched = patched.replaceAll('strings.Split(llvm.Version, ".")[0]', 'llvmVersionMajor()');
+	} else if (!patched.includes('llvmVersionMajor()')) {
+		throw new Error('failed to patch TinyGo goenv.go: llvm version lookup not found');
+	}
+	const goEnvGuardTarget = 'goEnvVarsOnce.Do(func() {';
+	if (!patched.includes(goEnvGuardTarget)) {
+		throw new Error('failed to patch TinyGo goenv.go: go env guard target not found');
+	}
+	if (!patched.includes('if runtime.GOOS == "wasip1" {')) {
+		patched = patched.replace(
+			goEnvGuardTarget,
+			`${goEnvGuardTarget}
 \t\tif runtime.GOOS == "wasip1" {
 \t\t\tgoEnvVars.GOPATH = os.Getenv("GOPATH")
 \t\t\tgoEnvVars.GOROOT = os.Getenv("GOROOT")
@@ -359,119 +359,134 @@ const patchGoenv = async (patchedRoot) => {
 \t\t\t\tgoEnvVars.GOVERSION = "go1.24.0"
 \t\t\t}
 \t\t\treturn
-\t\t}`,
-    )
-  }
-  await writeFile(goenvPath, patched)
-  await writeFile(path.join(patchedRoot, 'goenv', 'llvm_version_default.go'), goenvLLVMDefaultSource)
-  await writeFile(path.join(patchedRoot, 'goenv', 'llvm_version_wasip1.go'), goenvLLVMWasip1Source)
-}
+\t\t}`
+		);
+	}
+	await writeFile(goenvPath, patched);
+	await writeFile(
+		path.join(patchedRoot, 'goenv', 'llvm_version_default.go'),
+		goenvLLVMDefaultSource
+	);
+	await writeFile(
+		path.join(patchedRoot, 'goenv', 'llvm_version_wasip1.go'),
+		goenvLLVMWasip1Source
+	);
+};
 
 const patchCgoForWasip1 = async (patchedRoot) => {
-  const cgoDir = path.join(patchedRoot, 'cgo')
-  const fileNames = ['cgo.go', 'cgo_go122.go', 'const.go', 'security.go', 'sync.go']
-  for (const fileName of fileNames) {
-    const filePath = path.join(cgoDir, fileName)
-    const original = await readFile(filePath, 'utf8')
-    if (original.startsWith('//go:build')) {
-      const patched = original.replace(/^\/\/go:build (.+)$/m, '//go:build !wasip1 && $1')
-      await writeFile(filePath, patched)
-      continue
-    }
-    await writeFile(filePath, `//go:build !wasip1\n\n${original}`)
-  }
-  await writeFile(path.join(cgoDir, 'process_wasip1.go'), cgoProcessWasip1Source)
-}
+	const cgoDir = path.join(patchedRoot, 'cgo');
+	const fileNames = ['cgo.go', 'cgo_go122.go', 'const.go', 'security.go', 'sync.go'];
+	for (const fileName of fileNames) {
+		const filePath = path.join(cgoDir, fileName);
+		const original = await readFile(filePath, 'utf8');
+		if (original.startsWith('//go:build')) {
+			const patched = original.replace(/^\/\/go:build (.+)$/m, '//go:build !wasip1 && $1');
+			await writeFile(filePath, patched);
+			continue;
+		}
+		await writeFile(filePath, `//go:build !wasip1\n\n${original}`);
+	}
+	await writeFile(path.join(cgoDir, 'process_wasip1.go'), cgoProcessWasip1Source);
+};
 
 const patchLoaderForWasip1 = async (patchedRoot) => {
-  await writeFile(path.join(patchedRoot, 'loader', 'loadjson_wasip1.go'), loaderLoadFromPackageJSONWasip1Source)
-}
+	await writeFile(
+		path.join(patchedRoot, 'loader', 'loadjson_wasip1.go'),
+		loaderLoadFromPackageJSONWasip1Source
+	);
+};
 
 const writeCommand = async (patchedRoot, commandName, source) => {
-  const commandDir = path.join(patchedRoot, 'cmd', commandName)
-  await mkdir(commandDir, { recursive: true })
-  await writeFile(path.join(commandDir, 'main.go'), source)
-}
+	const commandDir = path.join(patchedRoot, 'cmd', commandName);
+	await mkdir(commandDir, { recursive: true });
+	await writeFile(path.join(commandDir, 'main.go'), source);
+};
 
 const preparePatchedSource = async ({ cacheDir, patches }) => {
-  const source = await ensureTinyGoSourceReady()
-  const patchedRoot = cacheDir
-  const stagedRoot = `${cacheDir}.next-${process.pid}-${Date.now()}`
-  const staleRoot = `${cacheDir}.stale-${process.pid}-${Date.now()}`
-  await rm(stagedRoot, { recursive: true, force: true })
-  await cp(source.rootPath, stagedRoot, { recursive: true })
-  let movedExistingCache = false
-  let swappedStagedCache = false
-  try {
-    for (const patch of patches) {
-      await patch(stagedRoot)
-    }
-    try {
-      await rename(patchedRoot, staleRoot)
-      movedExistingCache = true
-    } catch (error) {
-      if (error?.code !== 'ENOENT') {
-        throw error
-      }
-    }
-    try {
-      await rename(stagedRoot, patchedRoot)
-      swappedStagedCache = true
-    } catch (error) {
-      if (movedExistingCache) {
-        await rename(staleRoot, patchedRoot).catch(() => {})
-      }
-      throw error
-    }
-  } finally {
-    if (!swappedStagedCache) {
-      await rm(stagedRoot, { recursive: true, force: true })
-    }
-    if (movedExistingCache) {
-      await rm(staleRoot, { recursive: true, force: true }).catch(() => {})
-    }
-  }
-  return {
-    patchedRoot,
-    sourceRef: source.sourceRef,
-    sourceUrl: source.sourceUrl,
-    sourceVersion: source.sourceVersion,
-  }
-}
+	const source = await ensureTinyGoSourceReady();
+	const patchedRoot = cacheDir;
+	const stagedRoot = `${cacheDir}.next-${process.pid}-${Date.now()}`;
+	const staleRoot = `${cacheDir}.stale-${process.pid}-${Date.now()}`;
+	await rm(stagedRoot, { recursive: true, force: true });
+	await cp(source.rootPath, stagedRoot, { recursive: true });
+	let movedExistingCache = false;
+	let swappedStagedCache = false;
+	try {
+		for (const patch of patches) {
+			await patch(stagedRoot);
+		}
+		try {
+			await rename(patchedRoot, staleRoot);
+			movedExistingCache = true;
+		} catch (error) {
+			if (error?.code !== 'ENOENT') {
+				throw error;
+			}
+		}
+		try {
+			await rename(stagedRoot, patchedRoot);
+			swappedStagedCache = true;
+		} catch (error) {
+			if (movedExistingCache) {
+				await rename(staleRoot, patchedRoot).catch(() => {});
+			}
+			throw error;
+		}
+	} finally {
+		if (!swappedStagedCache) {
+			await rm(stagedRoot, { recursive: true, force: true });
+		}
+		if (movedExistingCache) {
+			await rm(staleRoot, { recursive: true, force: true }).catch(() => {});
+		}
+	}
+	return {
+		patchedRoot,
+		sourceRef: source.sourceRef,
+		sourceUrl: source.sourceUrl,
+		sourceVersion: source.sourceVersion
+	};
+};
 
 export const prepareTinyGoWasiProbeSource = async () =>
-  await preparePatchedSource({
-    cacheDir:
-      process.env.WASM_TINYGO_WASI_PROBE_SOURCE_ROOT ??
-      path.join(rootDir, '.cache', 'tinygo-src-wasi-probe'),
-    patches: [
-      patchGoenv,
-      async (patchedRoot) => {
-        await writeCommand(patchedRoot, 'tinygo-wasi-probe', tinyGoWasiProbeMainSource)
-      },
-    ],
-  })
+	await preparePatchedSource({
+		cacheDir:
+			process.env.WASM_TINYGO_WASI_PROBE_SOURCE_ROOT ??
+			path.join(rootDir, '.cache', 'tinygo-src-wasi-probe'),
+		patches: [
+			patchGoenv,
+			async (patchedRoot) => {
+				await writeCommand(patchedRoot, 'tinygo-wasi-probe', tinyGoWasiProbeMainSource);
+			}
+		]
+	});
 
 export const prepareTinyGoWasiFrontendProbeSource = async () =>
-  await preparePatchedSource({
-    cacheDir:
-      process.env.WASM_TINYGO_WASI_FRONTEND_PROBE_SOURCE_ROOT ??
-      path.join(rootDir, '.cache', 'tinygo-src-wasi-frontend-probe'),
-    patches: [
-      patchGoenv,
-      patchCgoForWasip1,
-      patchLoaderForWasip1,
-      async (patchedRoot) => {
-        await writeCommand(patchedRoot, 'tinygo-wasi-frontend-probe', tinyGoWasiFrontendProbeMainSource)
-      },
-    ],
-  })
+	await preparePatchedSource({
+		cacheDir:
+			process.env.WASM_TINYGO_WASI_FRONTEND_PROBE_SOURCE_ROOT ??
+			path.join(rootDir, '.cache', 'tinygo-src-wasi-frontend-probe'),
+		patches: [
+			patchGoenv,
+			patchCgoForWasip1,
+			patchLoaderForWasip1,
+			async (patchedRoot) => {
+				await writeCommand(
+					patchedRoot,
+					'tinygo-wasi-frontend-probe',
+					tinyGoWasiFrontendProbeMainSource
+				);
+			}
+		]
+	});
 
 const run = async () => {
-  const result = await prepareTinyGoWasiProbeSource()
-  console.log(`Prepared TinyGo WASI probe source at ${path.relative(rootDir, result.patchedRoot)}`)
-}
+	const result = await prepareTinyGoWasiProbeSource();
+	console.log(
+		`Prepared TinyGo WASI probe source at ${path.relative(rootDir, result.patchedRoot)}`
+	);
+};
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
-  await run()
+	await run();
 }

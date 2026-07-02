@@ -1,7 +1,4 @@
-import {
-	resolveBqnRuntimeAssetConfig,
-	type PlaygroundRuntimeAssets
-} from '$lib/playground/assets';
+import { resolveBqnRuntimeAssetConfig, type PlaygroundRuntimeAssets } from '$lib/playground/assets';
 import { StaticWorkerRuntimeSandbox } from '$lib/playground/staticWorkerRuntime';
 
 class Bqn extends StaticWorkerRuntimeSandbox {

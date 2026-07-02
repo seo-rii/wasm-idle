@@ -173,7 +173,9 @@ async function main() {
 		}
 		const outputIndex = translatedLinkArgs.findIndex((arg) => arg === '-o');
 		if (outputIndex === -1 || outputIndex + 1 >= translatedLinkArgs.length) {
-			throw new Error(`Missing -o in translated link args: ${JSON.stringify(translatedLinkArgs)}`);
+			throw new Error(
+				`Missing -o in translated link args: ${JSON.stringify(translatedLinkArgs)}`
+			);
 		}
 		translatedLinkArgs[outputIndex + 1] = '/work/main.wasm';
 

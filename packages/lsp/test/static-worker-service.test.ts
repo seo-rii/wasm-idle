@@ -50,9 +50,9 @@ describe('createStaticWorkerDiagnostics', () => {
 		};
 		const context = contextFor(document);
 
-		expect(() =>
-			diagnostics.initialize?.({ baseUrl: '/demo/' }, context)
-		).toThrow('Demo language server requires baseUrl and workerUrl');
+		expect(() => diagnostics.initialize?.({ baseUrl: '/demo/' }, context)).toThrow(
+			'Demo language server requires baseUrl and workerUrl'
+		);
 
 		diagnostics.initialize?.(
 			{ baseUrl: '/demo/', workerUrl: '/demo/runner-worker.js' },

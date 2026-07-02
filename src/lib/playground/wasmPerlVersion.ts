@@ -1,1 +1,1 @@
-export const WASM_PERL_ASSET_VERSION = "956357f4f64f1f43";
+export const WASM_PERL_ASSET_VERSION = '956357f4f64f1f43';

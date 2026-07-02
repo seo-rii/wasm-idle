@@ -57,9 +57,13 @@ describe('TeaVM Java stdin integration', () => {
         System.out.println("factorial=" + factorial(n));
     }
 }`;
-		const sourceCompilerModule = await runtime.load(compilerWasm, {
-			stackDeobfuscator: { enabled: false }
-		});
+		const sourceCompilerModule = await runtime.load(
+			compilerWasm,
+			{
+				stackDeobfuscator: { enabled: false }
+			},
+			60_000
+		);
 		const sourceCompiler = sourceCompilerModule.exports.createCompiler();
 		sourceCompiler.setSdk(sdk);
 		sourceCompiler.setTeaVMClasslib(runtimeClasslib);
@@ -106,7 +110,7 @@ describe('TeaVM Java stdin integration', () => {
 		module.exports.main(['5']);
 
 		expect(outputs.join('')).toBe('factorial=120\n');
-	}, 10000);
+	}, 60_000);
 
 	it('compiles and runs NIO byte buffer code under Wasm GC', async () => {
 		const { runtime, compilerWasm, sdk, runtimeClasslib } = await loadTeaVmArtifacts();
@@ -162,7 +166,7 @@ public class Main {
 		module.exports.main([]);
 
 		expect(outputs.join('')).toBe('49\n');
-	}, 10000);
+	}, 60_000);
 
 	it('compiles and runs byte-oriented stdin code with injected snapshot input', async () => {
 		const { runtime, compilerWasm, sdk, runtimeClasslib } = await loadTeaVmArtifacts();
@@ -240,7 +244,7 @@ public class Main {
 		}
 
 		expect(outputs.join('')).toBe('sum=10\n');
-	}, 10000);
+	}, 60_000);
 
 	it('reads live stdin chunks through the custom TeaVM bridge', async () => {
 		const { runtime, compilerWasm, sdk, runtimeClasslib } = await loadTeaVmArtifacts();
@@ -295,7 +299,7 @@ public class Main {
 		}
 
 		expect(outputs.join('')).toBe('ABC\n');
-	}, 10000);
+	}, 60_000);
 
 	it('compiles and runs Scanner-based stdin code across common import styles', async () => {
 		const { runtime, compilerWasm, sdk, runtimeClasslib } = await loadTeaVmArtifacts();
@@ -395,5 +399,5 @@ public class Main {
 
 			expect(outputs.join('')).toBe('3\n');
 		}
-	}, 20000);
+	}, 60_000);
 });

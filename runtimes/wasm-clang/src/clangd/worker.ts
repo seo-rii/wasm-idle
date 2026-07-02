@@ -1,16 +1,10 @@
 /// <reference lib="WebWorker" />
 
-import {
-	BrowserMessageReader,
-	BrowserMessageWriter
-} from 'vscode-jsonrpc/lib/browser/main.js';
+import { BrowserMessageReader, BrowserMessageWriter } from 'vscode-jsonrpc/lib/browser/main.js';
 
 import { resolveRuntimeAssetUrls } from '../runtime-assets.js';
 import { writeGccCompatibilityHeaders } from '@wasm-idle/clang-common/gcc-compat';
-import {
-	loadRuntimeManifest,
-	resolveRuntimeManifestUrl
-} from '../runtime-manifest.js';
+import { loadRuntimeManifest, resolveRuntimeManifestUrl } from '../runtime-manifest.js';
 import {
 	CLANGD_CPP_FILE_PATH,
 	CLANGD_WORKSPACE_PATH,
@@ -18,9 +12,7 @@ import {
 	normalizeClangdBaseUrl
 } from './config.js';
 import { JsonStream } from '@wasm-idle/clang-common/json-stream';
-import type {
-	ClangdWorkerInboundMessage
-} from './protocol.js';
+import type { ClangdWorkerInboundMessage } from './protocol.js';
 
 declare const self: DedicatedWorkerGlobalScope & { reportError?: (message: string) => void };
 

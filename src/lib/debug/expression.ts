@@ -312,7 +312,8 @@ const formatDebugExpressionValueInternal = (
 				formatDebugExpressionValueInternal(value.get(resolvedIndex), true, depth + 1)
 			);
 		}
-		const isTruncated = value.truncated || (value.length != null && value.length > previewLength);
+		const isTruncated =
+			value.truncated || (value.length != null && value.length > previewLength);
 		return `[${items.join(', ')}${isTruncated ? ', ...' : ''}]`;
 	}
 	if (isDebugExpressionObjectValue(value)) {
@@ -370,7 +371,8 @@ export const evaluateDebugExpressionWithResolver = (
 			if (!value.has(name)) throw new Error('unavailable');
 			return value.get(name);
 		}
-		if (typeof value !== 'object' || !Object.hasOwn(value, name)) throw new Error('unavailable');
+		if (typeof value !== 'object' || !Object.hasOwn(value, name))
+			throw new Error('unavailable');
 		return value[name]!;
 	};
 	let cursor = 0;
@@ -502,7 +504,8 @@ export const evaluateDebugExpressionWithResolver = (
 		let left = parseCompare();
 		while (true) {
 			const operator = tokens[cursor];
-			if (operator?.type !== 'operator' || !['==', '!='].includes(operator.value)) return left;
+			if (operator?.type !== 'operator' || !['==', '!='].includes(operator.value))
+				return left;
 			cursor += 1;
 			const right = parseCompare();
 			if (operator.value === '==') left = left === right;

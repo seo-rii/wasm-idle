@@ -103,6 +103,16 @@ export interface FortranRuntimeAssetConfig {
 	analyzerUrl?: string;
 }
 
+export interface ObjectiveCRuntimeAssetConfig {
+	baseUrl?: string;
+	libobjcUrl?: string;
+	headersUrl?: string;
+	libgnustepBaseUrl?: string;
+	libgnustepBaseObjectUrl?: string;
+	foundationHeadersUrl?: string;
+	libffiUrl?: string;
+}
+
 export interface ZigRuntimeAssetConfig {
 	compilerUrl?: string;
 	stdlibUrl?: string;
@@ -214,6 +224,7 @@ export interface PlaygroundRuntimeAssets {
 	lua?: LuaRuntimeAssetConfig;
 	haskell?: HaskellRuntimeAssetConfig;
 	fortran?: FortranRuntimeAssetConfig;
+	objectivec?: ObjectiveCRuntimeAssetConfig;
 	zig?: ZigRuntimeAssetConfig;
 	lisp?: LispRuntimeAssetConfig;
 	ruby?: RubyRuntimeAssetConfig;
@@ -275,6 +286,16 @@ export interface ResolvedFortranRuntimeAssetConfig {
 	libf2cUrl: string;
 	f2cHeaderUrl: string;
 	analyzerUrl: string;
+}
+
+export interface ResolvedObjectiveCRuntimeAssetConfig {
+	baseUrl: string;
+	libobjcUrl: string;
+	headersUrl: string;
+	libgnustepBaseUrl: string;
+	libgnustepBaseObjectUrl: string;
+	foundationHeadersUrl: string;
+	libffiUrl: string;
 }
 
 export const PYTHON_RUNTIME_LOAD_ASSETS = [
@@ -1016,6 +1037,155 @@ export function resolveFortranRuntimeAssetConfig(
 		libf2cUrl: resolveFortranLibf2cUrl(options, currentUrl),
 		f2cHeaderUrl: resolveFortranF2cHeaderUrl(options, currentUrl),
 		analyzerUrl: resolveFortranAnalyzerUrl(options, currentUrl)
+	};
+}
+
+export function resolveObjectiveCBaseUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredBaseUrl =
+		(typeof options === 'object' && options?.objectivec?.baseUrl) ||
+		(publicEnv.PUBLIC_WASM_OBJECTIVEC_BASE_URL || '').trim();
+
+	if (configuredBaseUrl) {
+		return normalizeBaseUrl(configuredBaseUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return normalizeBaseUrl(`${normalizeRootUrl(options) || ''}/wasm-objectivec/`, currentUrl);
+	}
+
+	if (options?.rootUrl) {
+		return normalizeBaseUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-objectivec/`,
+			currentUrl
+		);
+	}
+
+	return normalizeBaseUrl('/wasm-objectivec/', currentUrl);
+}
+
+function resolveObjectiveCAssetUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl: string,
+	configKey: keyof Pick<
+		ObjectiveCRuntimeAssetConfig,
+		| 'libobjcUrl'
+		| 'headersUrl'
+		| 'libgnustepBaseUrl'
+		| 'libgnustepBaseObjectUrl'
+		| 'foundationHeadersUrl'
+		| 'libffiUrl'
+	>,
+	envKey: string,
+	defaultAsset: string
+) {
+	const env = publicEnv as Record<string, string | undefined>;
+	const configuredUrl =
+		(typeof options === 'object' && options?.objectivec?.[configKey]) ||
+		(env[envKey] || '').trim();
+
+	if (configuredUrl) {
+		return resolveConfiguredUrl(configuredUrl, currentUrl);
+	}
+
+	return resolveConfiguredUrl(
+		new URL(defaultAsset, resolveObjectiveCBaseUrl(options, currentUrl)).href,
+		currentUrl
+	);
+}
+
+export function resolveObjectiveCLibobjcUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	return resolveObjectiveCAssetUrl(
+		options,
+		currentUrl,
+		'libobjcUrl',
+		'PUBLIC_WASM_OBJECTIVEC_LIBOBJC_URL',
+		'libobjc.a'
+	);
+}
+
+export function resolveObjectiveCHeadersUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	return resolveObjectiveCAssetUrl(
+		options,
+		currentUrl,
+		'headersUrl',
+		'PUBLIC_WASM_OBJECTIVEC_HEADERS_URL',
+		'headers.json'
+	);
+}
+
+export function resolveObjectiveCLibgnustepBaseUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	return resolveObjectiveCAssetUrl(
+		options,
+		currentUrl,
+		'libgnustepBaseUrl',
+		'PUBLIC_WASM_OBJECTIVEC_GNUSTEP_BASE_URL',
+		'libgnustep-base.a'
+	);
+}
+
+export function resolveObjectiveCLibgnustepBaseObjectUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	return resolveObjectiveCAssetUrl(
+		options,
+		currentUrl,
+		'libgnustepBaseObjectUrl',
+		'PUBLIC_WASM_OBJECTIVEC_GNUSTEP_BASE_OBJECT_URL',
+		'libgnustep-base.o'
+	);
+}
+
+export function resolveObjectiveCFoundationHeadersUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	return resolveObjectiveCAssetUrl(
+		options,
+		currentUrl,
+		'foundationHeadersUrl',
+		'PUBLIC_WASM_OBJECTIVEC_FOUNDATION_HEADERS_URL',
+		'foundation-headers.json'
+	);
+}
+
+export function resolveObjectiveCLibffiUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	return resolveObjectiveCAssetUrl(
+		options,
+		currentUrl,
+		'libffiUrl',
+		'PUBLIC_WASM_OBJECTIVEC_LIBFFI_URL',
+		'libffi.a'
+	);
+}
+
+export function resolveObjectiveCRuntimeAssetConfig(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+): ResolvedObjectiveCRuntimeAssetConfig {
+	return {
+		baseUrl: resolveObjectiveCBaseUrl(options, currentUrl),
+		libobjcUrl: resolveObjectiveCLibobjcUrl(options, currentUrl),
+		headersUrl: resolveObjectiveCHeadersUrl(options, currentUrl),
+		libgnustepBaseUrl: resolveObjectiveCLibgnustepBaseUrl(options, currentUrl),
+		libgnustepBaseObjectUrl: resolveObjectiveCLibgnustepBaseObjectUrl(options, currentUrl),
+		foundationHeadersUrl: resolveObjectiveCFoundationHeadersUrl(options, currentUrl),
+		libffiUrl: resolveObjectiveCLibffiUrl(options, currentUrl)
 	};
 }
 

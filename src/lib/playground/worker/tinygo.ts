@@ -40,7 +40,9 @@ class TinyGoStdin extends Fd {
 		}
 
 		if (stdinChunkOffsetTinyGo >= stdinChunkTinyGo.length) {
-			const nextChunk = waitForBufferedStdin(stdinBufferTinyGo, () => postMessage({ buffer: true }));
+			const nextChunk = waitForBufferedStdin(stdinBufferTinyGo, () =>
+				postMessage({ buffer: true })
+			);
 			if (nextChunk === null) {
 				stdinChunkTinyGo = new Uint8Array(0);
 				stdinChunkOffsetTinyGo = 0;
@@ -121,7 +123,9 @@ self.onmessage = async (event: { data: any }) => {
 					typeof exportsObject._initialize === 'function')
 			) {
 				wasiRuntime.initialize(
-					instance as { exports: { memory: WebAssembly.Memory; _initialize?: () => unknown } }
+					instance as {
+						exports: { memory: WebAssembly.Memory; _initialize?: () => unknown };
+					}
 				);
 				if (
 					typeof exportsObject._initialize !== 'function' &&

@@ -124,6 +124,84 @@ int main() {
     return 0;
 }`;
 
+const objectiveCStdinSource = `#include <stdio.h>
+#include <objc/runtime.h>
+#include "Reader.h"
+
+int main(void) {
+    id reader = class_createInstance(objc_getClass("Reader"), 0);
+    printf("main=%d\\n", [reader value]);
+    return 0;
+}`;
+
+const objectiveCReaderHeaderSource = `#include <objc/runtime.h>
+
+__attribute__((objc_root_class))
+@interface Reader {
+    Class isa;
+}
+- (int)value;
+@end`;
+
+const objectiveCReaderImplementationSource = `#include <stdio.h>
+#include "Reader.h"
+
+@implementation Reader
+- (int)value {
+    int n = 0;
+    if (scanf("%d", &n) != 1) {
+        n = 0;
+    }
+    return n + 5;
+}
+@end`;
+
+const objectiveCFoundationStdinSource = `#include <stdio.h>
+#import <Foundation/NSString.h>
+
+int main(void) {
+    int n = 0;
+    if (scanf("%d", &n) != 1) {
+        n = 0;
+    }
+    int value = n + 5;
+    char buffer[] = "main=00";
+    buffer[5] = (char)('0' + (value / 10) % 10);
+    buffer[6] = (char)('0' + value % 10);
+    NSString *line = [[NSString alloc] initWithUTF8String:buffer];
+    printf("%s\\n", [line UTF8String]);
+    [line release];
+    return 0;
+}`;
+
+const objectiveCFoundationNSObjectStdinSource = `#include <stdio.h>
+#include <objc/runtime.h>
+#import <Foundation/NSObject.h>
+
+int main(void) {
+    int n = 0;
+    if (scanf("%d", &n) != 1) {
+        n = 0;
+    }
+    NSObject *object = [[NSObject alloc] init];
+    printf("main=%d class=%s\\n", n + 5, object_getClassName(object));
+    [object release];
+    return 0;
+}`;
+
+const objectiveCFoundationConstantStringStdinSource = `#include <stdio.h>
+#import <Foundation/NSString.h>
+
+int main(void) {
+    int n = 0;
+    if (scanf("%d", &n) != 1) {
+        n = 0;
+    }
+    NSString *line = @"main";
+    printf("%s=%d\\n", [line UTF8String], n + 5);
+    return 0;
+}`;
+
 const fortranStdinSource = `      PROGRAM MAIN
       INTEGER N
       READ *, N
@@ -351,6 +429,8 @@ describe('wasm-idle browser stdin connection', () => {
 				stdinText: '73\n'
 			});
 			expect(summary.transcript).toContain('main=73');
+			expect(summary.transcript).not.toContain('IO failure on output stream');
+			expect(summary.transcript).not.toContain('unreachable');
 		});
 	}, 700_000);
 
@@ -384,6 +464,99 @@ describe('wasm-idle browser stdin connection', () => {
 				stdinText: '68\n'
 			});
 			expect(cppSummary.transcript).toContain('main=73');
+		});
+	}, 700_000);
+
+	it('passes Objective-C stdin through the browser wasm-clang and libobjc2 runtime path', async () => {
+		if (
+			process.env.WASM_IDLE_RUN_REAL_BROWSER_STDIN !== '1' &&
+			process.env.WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC !== '1'
+		) {
+			return;
+		}
+
+		await withBrowserPreview(async (browserUrl) => {
+			const summary = await runStdinBrowserProbe({
+				activePath: 'main.m',
+				browserUrl,
+				expectedOutput: 'main=73',
+				language: 'OBJC',
+				requireSharedArrayBuffer: false,
+				runTimeoutMs: Number(process.env.WASM_IDLE_STDIN_RUN_TIMEOUT_MS || '420000'),
+				source: objectiveCStdinSource,
+				stdinText: '68\n',
+				workspaceFiles: [
+					{ path: 'Reader.h', content: objectiveCReaderHeaderSource },
+					{ path: 'Reader.m', content: objectiveCReaderImplementationSource }
+				]
+			});
+			expect(summary.transcript).toContain('main=73');
+		});
+	}, 700_000);
+
+	it('passes Objective-C Foundation stdin through the browser wasm-clang and GNUstep runtime path', async () => {
+		if (process.env.WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC_FOUNDATION_INIT !== '1') {
+			return;
+		}
+
+		await withBrowserPreview(async (browserUrl) => {
+			const summary = await runStdinBrowserProbe({
+				activePath: 'main.m',
+				browserUrl,
+				expectedOutput: 'main=73',
+				language: 'OBJC',
+				requireSharedArrayBuffer: false,
+				runTimeoutMs: Number(process.env.WASM_IDLE_STDIN_RUN_TIMEOUT_MS || '420000'),
+				source: objectiveCFoundationStdinSource,
+				stdinText: '68\n'
+			});
+			expect(summary.transcript).toContain('main=73');
+		});
+	}, 700_000);
+
+	it('passes Objective-C Foundation NSObject stdin through the browser GNUstep runtime path', async () => {
+		if (
+			process.env.WASM_IDLE_RUN_REAL_BROWSER_STDIN !== '1' &&
+			process.env.WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC !== '1'
+		) {
+			return;
+		}
+
+		await withBrowserPreview(async (browserUrl) => {
+			const summary = await runStdinBrowserProbe({
+				activePath: 'main.m',
+				browserUrl,
+				expectedOutput: 'main=73',
+				language: 'OBJC',
+				requireSharedArrayBuffer: false,
+				runTimeoutMs: Number(process.env.WASM_IDLE_STDIN_RUN_TIMEOUT_MS || '420000'),
+				source: objectiveCFoundationNSObjectStdinSource,
+				stdinText: '68\n'
+			});
+			expect(summary.transcript).toContain('main=73');
+		});
+	}, 700_000);
+
+	it('passes Objective-C Foundation constant NSString stdin through the browser GNUstep runtime path', async () => {
+		if (
+			process.env.WASM_IDLE_RUN_REAL_BROWSER_STDIN !== '1' &&
+			process.env.WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC !== '1'
+		) {
+			return;
+		}
+
+		await withBrowserPreview(async (browserUrl) => {
+			const summary = await runStdinBrowserProbe({
+				activePath: 'main.m',
+				browserUrl,
+				expectedOutput: 'main=73',
+				language: 'OBJC',
+				requireSharedArrayBuffer: false,
+				runTimeoutMs: Number(process.env.WASM_IDLE_STDIN_RUN_TIMEOUT_MS || '420000'),
+				source: objectiveCFoundationConstantStringStdinSource,
+				stdinText: '68\n'
+			});
+			expect(summary.transcript).toContain('main=73');
 		});
 	}, 700_000);
 

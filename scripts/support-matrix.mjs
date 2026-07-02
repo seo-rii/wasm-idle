@@ -179,6 +179,19 @@ export const supportMatrixRows = [
 		}
 	},
 	{
+		language: 'Objective-C',
+		ids: ['OBJC'],
+		runtime: 'GNUstep libobjc2 + wasm-clang',
+		stdin: 'Yes',
+		editorSupport: 'clangd',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/stdin.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC',
+			language: 'OBJC'
+		}
+	},
+	{
 		language: 'Python',
 		ids: ['PYTHON3', 'PYPY3'],
 		runtime: 'Pyodide',
@@ -705,16 +718,6 @@ export const blockedCandidateRows = [
 			'Package a real browser modern Fortran compiler/runtime with stdin-capable codegen before advertising F90/F95 as first-class runtimes'
 	},
 	{
-		language: 'Objective-C',
-		candidateIds: ['OBJC', 'OBJECTIVEC', 'OBJECTIVE_C'],
-		currentEvidence: `${code('wasm-clang')} contains clang frontend/clangd Objective-C parser support`,
-		blocker:
-			`No browser/WASI ${code('libobjc')} or Foundation/GNUstep runtime assets are packaged; ` +
-			`${code('-x objective-c')} alone would only expose a misleading partial language path`,
-		requiredFollowUp:
-			'Build or vendor a real Objective-C runtime and Foundation/GNUstep strategy for WASI/browser, then add compile-run stdin coverage'
-	},
-	{
 		language: 'Crystal',
 		candidateIds: ['CRYSTAL'],
 		currentEvidence:
@@ -772,6 +775,27 @@ const runtimeDetailsByLanguage = new Map([
 				`${code('runtimeAssets.clang.baseUrl')}/${code('loader')} or ${code('rootUrl')}; ` +
 				`${code('compileArgs')}, ${code('programArgs')}, ${code('cppVersion')}, ` +
 				`${code('activePath')}, ${code('workspaceFiles')}`
+		}
+	],
+	[
+		'Objective-C',
+		{
+			packageBase:
+				`GNUstep libobjc2 v2.3 (${code('static/wasm-objectivec/libobjc.a')}) + ` +
+				`${workspacePackage('runtimes/wasm-clang')}`,
+			execution:
+				`${code('clang -x objective-c -fobjc-runtime=gnustep-2.0 -fblocks')} for ` +
+				`${code('wasm32-wasi')}; links ${code('libobjc.a')}, ${code('libgnustep-base.a')}, ` +
+				`and ${code('libffi.a')} for Foundation plus a constructor wrapper for Objective-C ` +
+				`class registration; auto-compiles ${code('.m')} and ${code('.c')} workspace sources; ` +
+				`supports ${code('stdin')} and ${code('programArgs')}`,
+			customization:
+				`${code('runtimeAssets.objectivec.baseUrl')}/${code('libobjcUrl')}/` +
+				`${code('headersUrl')}/${code('libgnustepBaseUrl')}/${code('foundationHeadersUrl')}/` +
+				`${code('libffiUrl')} ` +
+				`or ${code('PUBLIC_WASM_OBJECTIVEC_*')}; ${code('runtimeAssets.clang.baseUrl')}/` +
+				`${code('loader')} for the clang toolchain; ${code('activePath')}, ` +
+				`${code('workspaceFiles')}, ${code('compileArgs')}`
 		}
 	],
 	[

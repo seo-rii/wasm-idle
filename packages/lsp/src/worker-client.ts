@@ -93,7 +93,9 @@ export async function createWorkerLanguageServerClient(
 						return;
 					case 'error':
 						cleanup();
-						reject(new Error(event.data.message || 'Language server failed to initialize'));
+						reject(
+							new Error(event.data.message || 'Language server failed to initialize')
+						);
 				}
 			};
 			const handleError = (event: ErrorEvent) => {

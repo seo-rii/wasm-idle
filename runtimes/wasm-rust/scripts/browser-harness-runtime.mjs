@@ -3,7 +3,14 @@ import os from 'node:os';
 import path from 'node:path';
 
 export function parseTargetTripleList(value) {
-	return [...new Set(value.split(',').map((entry) => entry.trim()).filter(Boolean))];
+	return [
+		...new Set(
+			value
+				.split(',')
+				.map((entry) => entry.trim())
+				.filter(Boolean)
+		)
+	];
 }
 
 export async function resolveHarnessTargetTriples(projectRoot, env = process.env) {
@@ -24,15 +31,15 @@ export async function resolveHarnessTargetTriples(projectRoot, env = process.env
 		} catch {}
 	}
 	const legacyManifest = JSON.parse(
-		await fs.readFile(path.join(projectRoot, 'dist', 'runtime', 'runtime-manifest.json'), 'utf8')
+		await fs.readFile(
+			path.join(projectRoot, 'dist', 'runtime', 'runtime-manifest.json'),
+			'utf8'
+		)
 	);
 	return [legacyManifest.targetTriple || 'wasm32-wasip1'];
 }
 
-export async function resolveChromiumExecutable(
-	env = process.env,
-	homeDirectory = os.homedir()
-) {
+export async function resolveChromiumExecutable(env = process.env, homeDirectory = os.homedir()) {
 	if (env.WASM_RUST_CHROMIUM_EXECUTABLE) {
 		return env.WASM_RUST_CHROMIUM_EXECUTABLE;
 	}

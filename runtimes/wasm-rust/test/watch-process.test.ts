@@ -32,7 +32,12 @@ async function waitForFile(filePath: string) {
 				return;
 			}
 		} catch (error) {
-			if (!error || typeof error !== 'object' || !('code' in error) || error.code !== 'ENOENT') {
+			if (
+				!error ||
+				typeof error !== 'object' ||
+				!('code' in error) ||
+				error.code !== 'ENOENT'
+			) {
 				throw error;
 			}
 		}
@@ -43,7 +48,9 @@ async function waitForFile(filePath: string) {
 
 describe('watch-process', () => {
 	afterEach(async () => {
-		await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
+		await Promise.all(
+			tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true }))
+		);
 	});
 
 	it('waits for a pid file and exits with the recorded exit status', async () => {
@@ -61,10 +68,26 @@ describe('watch-process', () => {
 		);
 
 		await expect(
-			execFileAsync('node', ['./scripts/watch-process.mjs', '--pid-file', pidFile, '--exit-file', exitFile, '--log-file', logFile, '--timeout-seconds', '5', '--poll-ms', '50'], {
-				cwd: projectRoot,
-				maxBuffer: 8 * 1024 * 1024
-			})
+			execFileAsync(
+				'node',
+				[
+					'./scripts/watch-process.mjs',
+					'--pid-file',
+					pidFile,
+					'--exit-file',
+					exitFile,
+					'--log-file',
+					logFile,
+					'--timeout-seconds',
+					'5',
+					'--poll-ms',
+					'50'
+				],
+				{
+					cwd: projectRoot,
+					maxBuffer: 8 * 1024 * 1024
+				}
+			)
 		).rejects.toMatchObject({
 			code: 17,
 			stdout: expect.stringContaining('WATCH_STATUS=exited')
@@ -88,10 +111,24 @@ describe('watch-process', () => {
 
 		try {
 			await expect(
-				execFileAsync('node', ['./scripts/watch-process.mjs', '--pid-file', pidFile, '--exit-file', exitFile, '--timeout-seconds', '1', '--poll-ms', '50'], {
-					cwd: projectRoot,
-					maxBuffer: 8 * 1024 * 1024
-				})
+				execFileAsync(
+					'node',
+					[
+						'./scripts/watch-process.mjs',
+						'--pid-file',
+						pidFile,
+						'--exit-file',
+						exitFile,
+						'--timeout-seconds',
+						'1',
+						'--poll-ms',
+						'50'
+					],
+					{
+						cwd: projectRoot,
+						maxBuffer: 8 * 1024 * 1024
+					}
+				)
 			).rejects.toMatchObject({
 				code: 124,
 				stdout: expect.stringContaining('WATCH_STATUS=timeout')
@@ -115,14 +152,18 @@ describe('watch-process', () => {
 			{ cwd: projectRoot, stdio: 'ignore' }
 		);
 
-		const { stdout } = await execFileAsync('node', ['./scripts/watch-process.mjs', '--timeout-seconds', '5', '--poll-ms', '50'], {
-			cwd: projectRoot,
-			env: {
-				...process.env,
-				WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root
-			},
-			maxBuffer: 8 * 1024 * 1024
-		});
+		const { stdout } = await execFileAsync(
+			'node',
+			['./scripts/watch-process.mjs', '--timeout-seconds', '5', '--poll-ms', '50'],
+			{
+				cwd: projectRoot,
+				env: {
+					...process.env,
+					WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root
+				},
+				maxBuffer: 8 * 1024 * 1024
+			}
+		);
 		await waitForChildExit(worker);
 		expect(stdout).toContain('WATCH_STATUS=exited');
 		expect(stdout).toContain(`WATCH_PID_FILE=${pidFile}`);

@@ -64,23 +64,27 @@ async function runBrowserRustcProbe(tempRoot) {
 		let processStatus = 'completed';
 
 		try {
-			const { stdout, stderr } = await execFileAsync('node', ['./scripts/probe-rustc-wasm.mjs'], {
-				cwd: projectRoot,
-				timeout: browserProbeTimeoutMs,
-				env: {
-					...process.env,
-					WASM_RUST_NODE_FS: '1',
-					WASM_RUST_REAL_THREADS: '1',
-					WASM_RUST_KEEP_HOST_ROOT: '1',
-					WASM_RUST_HOST_ROOT_PATH: hostRootPath,
-					WASM_RUST_MEMORY_INITIAL_PAGES: memoryInitialPages,
-					WASM_RUST_MEMORY_MAXIMUM_PAGES: memoryMaximumPages,
-					WASM_RUST_RUSTC_ROOT: defaultWasmRustcRoot,
-					WASM_RUST_TOOLCHAIN_ROOT: defaultToolchainRoot,
-					WASM_RUST_COMMAND_ARGS_JSON: JSON.stringify(commandArgs)
-				},
-				maxBuffer: 64 * 1024 * 1024
-			});
+			const { stdout, stderr } = await execFileAsync(
+				'node',
+				['./scripts/probe-rustc-wasm.mjs'],
+				{
+					cwd: projectRoot,
+					timeout: browserProbeTimeoutMs,
+					env: {
+						...process.env,
+						WASM_RUST_NODE_FS: '1',
+						WASM_RUST_REAL_THREADS: '1',
+						WASM_RUST_KEEP_HOST_ROOT: '1',
+						WASM_RUST_HOST_ROOT_PATH: hostRootPath,
+						WASM_RUST_MEMORY_INITIAL_PAGES: memoryInitialPages,
+						WASM_RUST_MEMORY_MAXIMUM_PAGES: memoryMaximumPages,
+						WASM_RUST_RUSTC_ROOT: defaultWasmRustcRoot,
+						WASM_RUST_TOOLCHAIN_ROOT: defaultToolchainRoot,
+						WASM_RUST_COMMAND_ARGS_JSON: JSON.stringify(commandArgs)
+					},
+					maxBuffer: 64 * 1024 * 1024
+				}
+			);
 			browserProbe = {
 				stdout,
 				stderr,
@@ -120,10 +124,7 @@ async function runBrowserRustcProbe(tempRoot) {
 				processStatus,
 				timedOut,
 				workContents: [],
-				stderr:
-					browserProbe?.json?.stderr ||
-					browserProbe?.stderr ||
-					''
+				stderr: browserProbe?.json?.stderr || browserProbe?.stderr || ''
 			});
 			continue;
 		}
@@ -151,10 +152,7 @@ async function runBrowserRustcProbe(tempRoot) {
 			processStatus,
 			timedOut,
 			workContents,
-			stderr:
-				browserProbe?.json?.stderr ||
-				browserProbe?.stderr ||
-				''
+			stderr: browserProbe?.json?.stderr || browserProbe?.stderr || ''
 		});
 	}
 
@@ -193,22 +191,19 @@ async function buildNativeLinkInputs(tempRoot) {
 	);
 
 	try {
-		execFileSync(
-			rustcPath,
-			[
-				'--sysroot',
-				matchingNativeToolchainRoot,
-				'--target',
-				targetTriple,
-				'-Clinker=' + wrapperPath,
-				'-Cpanic=abort',
-				'-Ccodegen-units=1',
-				'-Csave-temps',
-				sourcePath,
-				'-o',
-				nativeWasmPath
-			]
-		);
+		execFileSync(rustcPath, [
+			'--sysroot',
+			matchingNativeToolchainRoot,
+			'--target',
+			targetTriple,
+			'-Clinker=' + wrapperPath,
+			'-Cpanic=abort',
+			'-Ccodegen-units=1',
+			'-Csave-temps',
+			sourcePath,
+			'-o',
+			nativeWasmPath
+		]);
 	} catch (error) {
 		try {
 			await fs.access(linkArgsPath);
@@ -246,7 +241,10 @@ async function linkWithLlvmWasm({
 	const lldData = readFileSync(path.join(llvmWasmRoot, 'lld.data'));
 	const lld = await Lld({
 		getPreloadedPackage() {
-			return lldData.buffer.slice(lldData.byteOffset, lldData.byteOffset + lldData.byteLength);
+			return lldData.buffer.slice(
+				lldData.byteOffset,
+				lldData.byteOffset + lldData.byteLength
+			);
 		}
 	});
 
@@ -268,7 +266,13 @@ async function linkWithLlvmWasm({
 	await addFile('/work/main.o', null, browserMainObject);
 	await addFile('/work/alloc.o', allocatorObjectPath);
 
-	const rustLibDir = path.join(matchingNativeToolchainRoot, 'lib', 'rustlib', targetTriple, 'lib');
+	const rustLibDir = path.join(
+		matchingNativeToolchainRoot,
+		'lib',
+		'rustlib',
+		targetTriple,
+		'lib'
+	);
 	const mainObjectArg = nativeLinkArgs.find((arg) => arg.endsWith('-cgu.0.rcgu.o'));
 	const fileMap = new Map([
 		[mainObjectArg, '/work/main.o'],
@@ -388,7 +392,8 @@ async function main() {
 					browserProbeTimedOut: browserCompile.timedOut,
 					browserProbeExit: browserCompile.browserProbe?.json?.exitCode ?? null,
 					browserProbeClassification:
-						browserCompile.browserProbe?.json?.classification ?? 'timeout_with_artifacts',
+						browserCompile.browserProbe?.json?.classification ??
+						'timeout_with_artifacts',
 					browserWorkContents: browserCompile.workContents,
 					bitcodePath: browserCompile.bitcodePath,
 					threadLogs: browserCompile.threadLogs,

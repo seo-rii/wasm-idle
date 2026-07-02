@@ -22,7 +22,9 @@ async function fetchRuntimeBytes(baseUrl, path) {
 	const encoded = contentEncoding.includes('gzip');
 	if (encoded) return compressedResponse.arrayBuffer();
 	if (typeof DecompressionStream !== 'function') {
-		throw new Error('J runtime asset is gzip-compressed, but DecompressionStream is unavailable.');
+		throw new Error(
+			'J runtime asset is gzip-compressed, but DecompressionStream is unavailable.'
+		);
 	}
 	const decompressed = compressedResponse.body.pipeThrough(new DecompressionStream('gzip'));
 	return new Response(decompressed).arrayBuffer();
@@ -74,7 +76,9 @@ async function createJRuntime(baseUrl, stdin) {
 
 function runJLineByLine(jdo, code) {
 	let output = '';
-	for (const line of String(code || '').replace(/\r\n?/gu, '\n').split('\n')) {
+	for (const line of String(code || '')
+		.replace(/\r\n?/gu, '\n')
+		.split('\n')) {
 		if (!line.trim()) continue;
 		const chunk = normalizeChunk(jdo(line));
 		if (chunk) output += `${chunk.endsWith('\n') ? chunk : `${chunk}\n`}`;

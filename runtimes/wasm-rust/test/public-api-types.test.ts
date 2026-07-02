@@ -20,9 +20,7 @@ afterEach(async () => {
 });
 
 describe('public api type contracts', () => {
-	it(
-		'allows factory options and execute helper overloads for TypeScript consumers',
-		async () => {
+	it('allows factory options and execute helper overloads for TypeScript consumers', async () => {
 		const tempFile = path.join(
 			repoRoot,
 			'src',
@@ -66,21 +64,11 @@ await executeBrowserRustArtifact(artifact, 'https://example.com/runtime/', {
 		);
 
 		await expect(
-			execFileAsync(
-				'pnpm',
-				[
-					'exec',
-					'tsc',
-					'-p',
-					'tsconfig.json',
-					'--noEmit'
-				],
-				{ cwd: repoRoot }
-			)
+			execFileAsync('pnpm', ['exec', 'tsc', '-p', 'tsconfig.json', '--noEmit'], {
+				cwd: repoRoot
+			})
 		).resolves.toMatchObject({
 			stderr: ''
 		});
-		},
-		15_000
-	);
+	}, 15_000);
 });

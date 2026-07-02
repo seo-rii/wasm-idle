@@ -205,18 +205,17 @@ function expectNumber(value: unknown, label: string): number {
 }
 
 function expectStringArray(value: unknown, label: string): string[] {
-	if (!Array.isArray(value) || value.some((entry) => typeof entry !== 'string' || entry.length === 0)) {
+	if (
+		!Array.isArray(value) ||
+		value.some((entry) => typeof entry !== 'string' || entry.length === 0)
+	) {
 		throw new Error(`invalid ${label} in wasm-rust runtime manifest`);
 	}
 	return value as string[];
 }
 
 function expectTargetTriple(value: unknown, label: string): SupportedTargetTriple {
-	if (
-		value !== 'wasm32-wasip1' &&
-		value !== 'wasm32-wasip2' &&
-		value !== 'wasm32-wasip3'
-	) {
+	if (value !== 'wasm32-wasip1' && value !== 'wasm32-wasip2' && value !== 'wasm32-wasip3') {
 		throw new Error(`invalid ${label} in wasm-rust runtime manifest`);
 	}
 	return value;
@@ -303,19 +302,27 @@ function normalizeRuntimeLlvmConfig(
 
 function parseLinkConfig(value: unknown, label: string): RuntimeLinkConfig {
 	const object = expectObject(value, label);
-	const pack = object.pack === undefined ? undefined : parseRuntimeAssetPack(object.pack, `${label}.pack`);
+	const pack =
+		object.pack === undefined ? undefined : parseRuntimeAssetPack(object.pack, `${label}.pack`);
 	const files =
-		object.files === undefined ? undefined : expectAssetFileArray(object.files, `${label}.files`);
+		object.files === undefined
+			? undefined
+			: expectAssetFileArray(object.files, `${label}.files`);
 	const allocatorObjectRuntimePath =
 		object.allocatorObjectRuntimePath === undefined
 			? undefined
-			: expectString(object.allocatorObjectRuntimePath, `${label}.allocatorObjectRuntimePath`);
+			: expectString(
+					object.allocatorObjectRuntimePath,
+					`${label}.allocatorObjectRuntimePath`
+				);
 	const allocatorObjectAsset =
 		object.allocatorObjectAsset === undefined
 			? undefined
 			: expectString(object.allocatorObjectAsset, `${label}.allocatorObjectAsset`);
 	if (!pack && (!allocatorObjectRuntimePath || !allocatorObjectAsset || !files)) {
-		throw new Error(`invalid ${label}: missing legacy link asset fields in wasm-rust runtime manifest`);
+		throw new Error(
+			`invalid ${label}: missing legacy link asset fields in wasm-rust runtime manifest`
+		);
 	}
 	return {
 		args: expectStringArray(object.args, `${label}.args`),
@@ -408,14 +415,19 @@ function parseVersionedTargets(
 	root: Record<string, unknown>
 ): Partial<Record<SupportedTargetTriple, Omit<RuntimeTargetConfig, 'targetTriple'>>> {
 	const targets = expectObject(root.targets, 'targets');
-	const parsedTargets: Partial<Record<SupportedTargetTriple, Omit<RuntimeTargetConfig, 'targetTriple'>>> =
-		{};
+	const parsedTargets: Partial<
+		Record<SupportedTargetTriple, Omit<RuntimeTargetConfig, 'targetTriple'>>
+	> = {};
 	for (const targetTriple of ['wasm32-wasip1', 'wasm32-wasip2', 'wasm32-wasip3'] as const) {
 		const targetValue = targets[targetTriple];
 		if (targetValue === undefined) {
 			continue;
 		}
-		const parsedTarget = parseRuntimeTargetConfig(targetValue, `targets.${targetTriple}`, targetTriple);
+		const parsedTarget = parseRuntimeTargetConfig(
+			targetValue,
+			`targets.${targetTriple}`,
+			targetTriple
+		);
 		parsedTargets[targetTriple] = {
 			artifactFormat: parsedTarget.artifactFormat,
 			...(parsedTarget.sysrootFiles
@@ -443,7 +455,10 @@ export function parseRuntimeManifest(value: unknown): RuntimeManifest {
 			manifestVersion: 3,
 			version: expectString(root.version, 'version'),
 			hostTriple: expectString(root.hostTriple, 'hostTriple'),
-			defaultTargetTriple: expectTargetTriple(root.defaultTargetTriple, 'defaultTargetTriple'),
+			defaultTargetTriple: expectTargetTriple(
+				root.defaultTargetTriple,
+				'defaultTargetTriple'
+			),
 			compiler: parseCompilerConfig(root.compiler, 'compiler'),
 			targets: parseVersionedTargets(root)
 		};
@@ -454,7 +469,10 @@ export function parseRuntimeManifest(value: unknown): RuntimeManifest {
 			manifestVersion: 2,
 			version: expectString(root.version, 'version'),
 			hostTriple: expectString(root.hostTriple, 'hostTriple'),
-			defaultTargetTriple: expectTargetTriple(root.defaultTargetTriple, 'defaultTargetTriple'),
+			defaultTargetTriple: expectTargetTriple(
+				root.defaultTargetTriple,
+				'defaultTargetTriple'
+			),
 			compiler: parseCompilerConfig(root.compiler, 'compiler'),
 			targets: parseVersionedTargets(root)
 		};
@@ -467,7 +485,10 @@ export function parseRuntimeManifest(value: unknown): RuntimeManifest {
 		targetTriple: expectTargetTriple(root.targetTriple, 'targetTriple'),
 		rustcWasm: expectString(root.rustcWasm, 'rustcWasm'),
 		workerBitcodeFile: expectString(root.workerBitcodeFile, 'workerBitcodeFile'),
-		workerSharedOutputBytes: expectNumber(root.workerSharedOutputBytes, 'workerSharedOutputBytes'),
+		workerSharedOutputBytes: expectNumber(
+			root.workerSharedOutputBytes,
+			'workerSharedOutputBytes'
+		),
 		compileTimeoutMs: expectNumber(root.compileTimeoutMs, 'compileTimeoutMs'),
 		artifactIdleMs: expectNumber(root.artifactIdleMs, 'artifactIdleMs'),
 		rustcMemory: parseRustcMemory(root.rustcMemory, 'rustcMemory'),

@@ -92,16 +92,20 @@ export function createNodeSystemDispatcher(
 		const result = await new Promise<SystemDispatchResult>((resolve, reject) => {
 			const stdoutParts: Uint8Array[] = [];
 			const stderrParts: Uint8Array[] = [];
-			const child = spawn(options.commands?.[commandName] || commandName, argv.slice(1).map(translatePath), {
-				cwd: translatePath(context.cwd),
-				env: {
-					...process.env,
-					TMPDIR: tempDirRoot,
-					...(options.env || {}),
-					...(context.env || {})
-				},
-				stdio: ['ignore', 'pipe', 'pipe']
-			});
+			const child = spawn(
+				options.commands?.[commandName] || commandName,
+				argv.slice(1).map(translatePath),
+				{
+					cwd: translatePath(context.cwd),
+					env: {
+						...process.env,
+						TMPDIR: tempDirRoot,
+						...(options.env || {}),
+						...(context.env || {})
+					},
+					stdio: ['ignore', 'pipe', 'pipe']
+				}
+			);
 			child.stdout.on('data', (chunk: Uint8Array) => {
 				stdoutParts.push(chunk);
 			});
@@ -120,12 +124,18 @@ export function createNodeSystemDispatcher(
 
 		for (const absolutePath of await walkFiles(workspaceRoot)) {
 			const relativePath = path.relative(workspaceRoot, absolutePath).replace(/\\/g, '/');
-			context.fs.writeFile(`/workspace/${relativePath}`, new Uint8Array(await readFile(absolutePath)));
+			context.fs.writeFile(
+				`/workspace/${relativePath}`,
+				new Uint8Array(await readFile(absolutePath))
+			);
 		}
 
 		for (const absolutePath of await walkFiles(tempDirRoot)) {
 			const relativePath = path.relative(tempDirRoot, absolutePath).replace(/\\/g, '/');
-			context.fs.writeFile(`/tmp/${relativePath}`, new Uint8Array(await readFile(absolutePath)));
+			context.fs.writeFile(
+				`/tmp/${relativePath}`,
+				new Uint8Array(await readFile(absolutePath))
+			);
 		}
 
 		if (!options.keepTempDirs) {
@@ -135,4 +145,3 @@ export function createNodeSystemDispatcher(
 		return result;
 	};
 }
-

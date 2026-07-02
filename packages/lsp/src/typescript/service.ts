@@ -181,10 +181,7 @@ export function createTypeScriptWorkerService(
 		getNewLine: () => '\n'
 	};
 
-	const convertDiagnostic = (
-		document: LspDocument,
-		diagnostic: ts.Diagnostic
-	): LspDiagnostic => {
+	const convertDiagnostic = (document: LspDocument, diagnostic: ts.Diagnostic): LspDiagnostic => {
 		const start = diagnostic.start ?? 0;
 		const length = diagnostic.length ?? 1;
 		return {
@@ -211,7 +208,10 @@ export function createTypeScriptWorkerService(
 	};
 
 	return {
-		name: defaultLanguage === 'typescript' ? 'wasm-idle-typescript-lsp' : 'wasm-idle-javascript-lsp',
+		name:
+			defaultLanguage === 'typescript'
+				? 'wasm-idle-typescript-lsp'
+				: 'wasm-idle-javascript-lsp',
 		version: ts.version,
 		capabilities: {
 			completionProvider: {
@@ -288,9 +288,7 @@ export function createTypeScriptWorkerService(
 						sortText: entry.sortText,
 						insertText: entry.insertText,
 						detail: details ? displayParts(details.displayParts) : undefined,
-						documentation: details
-							? displayParts(details.documentation)
-							: undefined
+						documentation: details ? displayParts(details.documentation) : undefined
 					};
 				})
 			};
@@ -335,7 +333,9 @@ export function createTypeScriptWorkerService(
 				signatures: help.items.map((item) => ({
 					label: `${displayParts(item.prefixDisplayParts)}${item.parameters
 						.map((parameter) => displayParts(parameter.displayParts))
-						.join(displayParts(item.separatorDisplayParts))}${displayParts(item.suffixDisplayParts)}`,
+						.join(
+							displayParts(item.separatorDisplayParts)
+						)}${displayParts(item.suffixDisplayParts)}`,
 					documentation: displayParts(item.documentation),
 					parameters: item.parameters.map((parameter) => ({
 						label: displayParts(parameter.displayParts),
@@ -361,7 +361,10 @@ export function createTypeScriptWorkerService(
 						)
 					},
 					selectionRange: {
-						start: positionAt(document.text, child.nameSpan?.start || child.spans[0]?.start || 0),
+						start: positionAt(
+							document.text,
+							child.nameSpan?.start || child.spans[0]?.start || 0
+						),
 						end: positionAt(
 							document.text,
 							(child.nameSpan?.start || child.spans[0]?.start || 0) +

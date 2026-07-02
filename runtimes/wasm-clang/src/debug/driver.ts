@@ -1,28 +1,23 @@
 import Runtime from '../runtime.js';
-import type {
-	BrowserClangRuntimeOptions,
-	BrowserClangRuntimeRunOptions
-} from '../types.js';
+import type { BrowserClangRuntimeOptions, BrowserClangRuntimeRunOptions } from '../types.js';
 import {
 	BrowserClangDebugController,
 	type CreateBrowserClangDebugControllerOptions
 } from './controller.js';
 
 export interface CreateBrowserClangDebugDriverOptions
-	extends BrowserClangRuntimeOptions,
-		CreateBrowserClangDebugControllerOptions {}
+	extends BrowserClangRuntimeOptions, CreateBrowserClangDebugControllerOptions {}
 
-export interface BrowserClangDebugRunRequest
-	extends Omit<
-		BrowserClangRuntimeRunOptions,
-		| 'debug'
-		| 'breakpoints'
-		| 'pauseOnEntry'
-		| 'debugBuffer'
-		| 'interruptBuffer'
-		| 'watchBuffer'
-		| 'watchResultBuffer'
-	> {
+export interface BrowserClangDebugRunRequest extends Omit<
+	BrowserClangRuntimeRunOptions,
+	| 'debug'
+	| 'breakpoints'
+	| 'pauseOnEntry'
+	| 'debugBuffer'
+	| 'interruptBuffer'
+	| 'watchBuffer'
+	| 'watchResultBuffer'
+> {
 	code: string;
 	breakpoints?: number[];
 	pauseOnEntry?: boolean;

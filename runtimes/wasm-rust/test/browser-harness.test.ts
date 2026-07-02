@@ -71,56 +71,50 @@ describe('browser harness probe', () => {
 		expect(harnessHtml).toContain('<link rel="icon" href="data:," />');
 	});
 
-	it(
-		'compiles and runs hello world in Chromium when the real browser runtime is available',
-		async () => {
-			if (process.env.WASM_RUST_RUN_REAL_BROWSER_HARNESS !== '1') {
-				return;
-			}
+	it('compiles and runs hello world in Chromium when the real browser runtime is available', async () => {
+		if (process.env.WASM_RUST_RUN_REAL_BROWSER_HARNESS !== '1') {
+			return;
+		}
 
-			const { stdout, stderr } = await runNode(['./scripts/probe-browser-harness.mjs']);
-			const result = JSON.parse((stdout.trim() || stderr.trim()) as string) as {
-				success: boolean;
-				targets: Array<{
-					targetTriple: string;
-					ok: boolean;
-					result: {
-						compile: { success: boolean; format: string | null };
-						runtime: { stdout: string; exitCode: number | null } | null;
-					};
-				}>;
-			};
+		const { stdout, stderr } = await runNode(['./scripts/probe-browser-harness.mjs']);
+		const result = JSON.parse((stdout.trim() || stderr.trim()) as string) as {
+			success: boolean;
+			targets: Array<{
+				targetTriple: string;
+				ok: boolean;
+				result: {
+					compile: { success: boolean; format: string | null };
+					runtime: { stdout: string; exitCode: number | null } | null;
+				};
+			}>;
+		};
 
-			expect(result.success).toBe(true);
-			expect(result.targets.length).toBeGreaterThan(0);
-			for (const targetResult of result.targets) {
-				expect(targetResult.ok).toBe(true);
-				expect(targetResult.result.compile.success).toBe(true);
-				expect(targetResult.result.runtime?.stdout).toBe('hi\n');
-				expect(targetResult.result.runtime?.exitCode).toBe(0);
-				if (targetResult.targetTriple === 'wasm32-wasip2') {
-					expect(targetResult.result.compile.format).toBe('component');
-				}
-				if (targetResult.targetTriple === 'wasm32-wasip1') {
-					expect(targetResult.result.compile.format).toBe('core-wasm');
-				}
+		expect(result.success).toBe(true);
+		expect(result.targets.length).toBeGreaterThan(0);
+		for (const targetResult of result.targets) {
+			expect(targetResult.ok).toBe(true);
+			expect(targetResult.result.compile.success).toBe(true);
+			expect(targetResult.result.runtime?.stdout).toBe('hi\n');
+			expect(targetResult.result.runtime?.exitCode).toBe(0);
+			if (targetResult.targetTriple === 'wasm32-wasip2') {
+				expect(targetResult.result.compile.format).toBe('component');
 			}
-		},
-		780_000
-	);
+			if (targetResult.targetTriple === 'wasm32-wasip1') {
+				expect(targetResult.result.compile.format).toBe('core-wasm');
+			}
+		}
+	}, 780_000);
 
-	it(
-		'compiles and runs the richer wasm-idle wasip2 sample in Chromium',
-		async () => {
-			if (process.env.WASM_RUST_RUN_REAL_BROWSER_HARNESS !== '1') {
-				return;
-			}
-			const availableTargetTriples = await resolveHarnessTargetTriples(projectRoot);
-			if (!availableTargetTriples.includes('wasm32-wasip2')) {
-				return;
-			}
+	it('compiles and runs the richer wasm-idle wasip2 sample in Chromium', async () => {
+		if (process.env.WASM_RUST_RUN_REAL_BROWSER_HARNESS !== '1') {
+			return;
+		}
+		const availableTargetTriples = await resolveHarnessTargetTriples(projectRoot);
+		if (!availableTargetTriples.includes('wasm32-wasip2')) {
+			return;
+		}
 
-			const sampleProgram = `
+		const sampleProgram = `
 #[cfg(not(target_env = "p2"))]
 compile_error!("This example requires wasm32-wasip2.");
 
@@ -143,32 +137,30 @@ fn main() {
 }
 `.trim();
 
-			const { stdout, stderr } = await runNode(['./scripts/probe-browser-harness.mjs'], {
-				WASM_RUST_SAMPLE_PROGRAM: sampleProgram,
-				WASM_RUST_BROWSER_HARNESS_TARGET_TRIPLES: 'wasm32-wasip2'
-			});
-			const result = JSON.parse((stdout.trim() || stderr.trim()) as string) as {
-				success: boolean;
-				targets: Array<{
-					targetTriple: string;
-					ok: boolean;
-					result: {
-						compile: { success: boolean; format: string | null };
-						runtime: { stdout: string; exitCode: number | null } | null;
-					};
-				}>;
-			};
+		const { stdout, stderr } = await runNode(['./scripts/probe-browser-harness.mjs'], {
+			WASM_RUST_SAMPLE_PROGRAM: sampleProgram,
+			WASM_RUST_BROWSER_HARNESS_TARGET_TRIPLES: 'wasm32-wasip2'
+		});
+		const result = JSON.parse((stdout.trim() || stderr.trim()) as string) as {
+			success: boolean;
+			targets: Array<{
+				targetTriple: string;
+				ok: boolean;
+				result: {
+					compile: { success: boolean; format: string | null };
+					runtime: { stdout: string; exitCode: number | null } | null;
+				};
+			}>;
+		};
 
-			expect(result.success).toBe(true);
-			expect(result.targets).toHaveLength(1);
-			expect(result.targets[0]?.targetTriple).toBe('wasm32-wasip2');
-			expect(result.targets[0]?.ok).toBe(true);
-			expect(result.targets[0]?.result.compile.success).toBe(true);
-			expect(result.targets[0]?.result.compile.format).toBe('component');
-			expect(result.targets[0]?.result.runtime?.stdout).toContain('preview2_component=');
-			expect(result.targets[0]?.result.runtime?.stdout).toContain('factorial_plus_bonus=');
-			expect(result.targets[0]?.result.runtime?.exitCode).toBe(0);
-		},
-		780_000
-	);
+		expect(result.success).toBe(true);
+		expect(result.targets).toHaveLength(1);
+		expect(result.targets[0]?.targetTriple).toBe('wasm32-wasip2');
+		expect(result.targets[0]?.ok).toBe(true);
+		expect(result.targets[0]?.result.compile.success).toBe(true);
+		expect(result.targets[0]?.result.compile.format).toBe('component');
+		expect(result.targets[0]?.result.runtime?.stdout).toContain('preview2_component=');
+		expect(result.targets[0]?.result.runtime?.stdout).toContain('factorial_plus_bonus=');
+		expect(result.targets[0]?.result.runtime?.exitCode).toBe(0);
+	}, 780_000);
 });

@@ -133,10 +133,7 @@ export async function createClangdLanguageServer(
 ): Promise<EditorLanguageServerHandle> {
 	const hostOptions = isClangdLanguageServerOptions(options) ? options : undefined;
 	const current = hostOptions?.currentUrl ?? currentUrl();
-	const assetConfig = resolveCppLanguageServerRuntimeAssetConfig(
-		options,
-		current
-	);
+	const assetConfig = resolveCppLanguageServerRuntimeAssetConfig(options, current);
 	const debug = (() => {
 		try {
 			return new URL(current).searchParams.get('lsp-test') === '1';

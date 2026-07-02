@@ -9,10 +9,13 @@ const REPO_ROOT = path.resolve(THIS_DIR, '..');
 const emptyNodeBuiltinPlugin = {
 	name: 'empty-node-builtins',
 	setup(esbuild) {
-		esbuild.onResolve({ filter: /^(fs|node:fs|path|node:path|os|node:os|crypto|node:crypto)$/ }, (args) => ({
-			path: args.path,
-			namespace: 'empty-node-builtin'
-		}));
+		esbuild.onResolve(
+			{ filter: /^(fs|node:fs|path|node:path|os|node:os|crypto|node:crypto)$/ },
+			(args) => ({
+				path: args.path,
+				namespace: 'empty-node-builtin'
+			})
+		);
 		esbuild.onLoad({ filter: /.*/, namespace: 'empty-node-builtin' }, () => ({
 			loader: 'js',
 			contents: `

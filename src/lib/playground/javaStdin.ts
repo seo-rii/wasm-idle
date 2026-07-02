@@ -241,9 +241,8 @@ export const prepareJavaStdinInjection = (
 			};
 		}
 		const transformedCode = code
-			.replace(
-				/^[ \t]*import[ \t]+java\.util\.Scanner[ \t]*;[ \t]*$/gm,
-				(match) => match.replace(/[^\r\n]/g, ' ')
+			.replace(/^[ \t]*import[ \t]+java\.util\.Scanner[ \t]*;[ \t]*$/gm, (match) =>
+				match.replace(/[^\r\n]/g, ' ')
 			)
 			.replaceAll(/\bjava\.util\.Scanner\b/g, 'Scanner');
 		return {
@@ -263,9 +262,8 @@ export const prepareJavaStdinInjection = (
 	let transformedCode = code.replaceAll('System.in', `${JAVA_STDIN_HELPER_CLASS}.open()`);
 	if (usesScanner) {
 		transformedCode = transformedCode
-			.replace(
-				/^[ \t]*import[ \t]+java\.util\.Scanner[ \t]*;[ \t]*$/gm,
-				(match) => match.replace(/[^\r\n]/g, ' ')
+			.replace(/^[ \t]*import[ \t]+java\.util\.Scanner[ \t]*;[ \t]*$/gm, (match) =>
+				match.replace(/[^\r\n]/g, ' ')
 			)
 			.replaceAll(/\bjava\.util\.Scanner\b/g, 'Scanner');
 		transformedCode = `${transformedCode.trimEnd()}\n\n${JAVA_SCANNER_COMPAT_SHIM}\n`;

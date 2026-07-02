@@ -19,10 +19,7 @@ const resolveConfig = (
 	options: EditorLanguageServerOptions | undefined,
 	language: DocumentLanguageId
 ) => ({
-	language:
-		typeof options === 'object'
-			? options.document?.language || language
-			: language
+	language: typeof options === 'object' ? options.document?.language || language : language
 });
 
 export async function getDocumentLanguageServer(

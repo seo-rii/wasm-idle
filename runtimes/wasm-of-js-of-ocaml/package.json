@@ -1,46 +1,46 @@
 {
-  "name": "wasm-of-js-of-ocaml",
-  "version": "0.1.0",
-  "private": true,
-  "license": "MIT",
-  "type": "module",
-  "description": "Browser-loadable frozen OCaml bytecode toolchain scaffold for js_of_ocaml and wasm_of_ocaml",
-  "exports": {
-    ".": {
-      "import": "./dist/src/index.js",
-      "default": "./dist/src/index.js",
-      "types": "./dist/src/index.d.ts"
-    },
-    "./node": {
-      "import": "./dist/src/node.js",
-      "default": "./dist/src/node.js",
-      "types": "./dist/src/node.d.ts"
-    }
-  },
-  "files": [
-    "dist"
-  ],
-  "scripts": {
-    "bootstrap:host-tools": "bash ./scripts/bootstrap-host-tools.sh",
-    "build": "rm -rf dist browser-harness/dist && tsc -p tsconfig.json && tsc -p tsconfig.browser-harness.json",
-    "check": "tsc -p tsconfig.json --noEmit",
-    "prepare:browser-native": "node ./scripts/prepare-browser-native.mjs",
-    "serve:browser-harness": "node ./scripts/browser-harness-server.mjs",
-    "test": "npm run test:host-pipeline",
-    "test:browser-native-bundle": "node --test ./tests/browser-native-bundle.test.mjs ./tests/browser-native-bridge-contract.test.mjs",
-    "test:browser-native": "playwright test",
-    "test:ci": "npm run build && npm run test:host-pipeline && npm run prepare:browser-native -- --force && npm run test:browser-native-bundle && npm run test:browser-native",
-    "test:host-pipeline": "node --test ./tests/host-pipeline.test.mjs",
-    "toolchain:bootstrap": "bash ./scripts/bootstrap-switch.sh",
-    "toolchain:collect": "node ./scripts/collect-toolchain.mjs",
-    "toolchain:patch-findlib": "node ./scripts/patch-findlib-conf.mjs",
-    "prepare:runtime": "node ./scripts/prepare-runtime.mjs",
-    "validate:host-pipeline": "node ./scripts/validate-host-pipeline.mjs"
-  },
-  "devDependencies": {
-    "@playwright/test": "^1.59.1",
-    "@types/node": "^24.6.1",
-    "binaryen": "^129.0.0",
-    "typescript": "^5.9.3"
-  }
+	"name": "wasm-of-js-of-ocaml",
+	"version": "0.1.0",
+	"private": true,
+	"license": "MIT",
+	"type": "module",
+	"description": "Browser-loadable frozen OCaml bytecode toolchain scaffold for js_of_ocaml and wasm_of_ocaml",
+	"exports": {
+		".": {
+			"import": "./dist/src/index.js",
+			"default": "./dist/src/index.js",
+			"types": "./dist/src/index.d.ts"
+		},
+		"./node": {
+			"import": "./dist/src/node.js",
+			"default": "./dist/src/node.js",
+			"types": "./dist/src/node.d.ts"
+		}
+	},
+	"files": [
+		"dist"
+	],
+	"scripts": {
+		"bootstrap:host-tools": "bash ./scripts/bootstrap-host-tools.sh",
+		"build": "rm -rf dist browser-harness/dist && tsc -p tsconfig.json && tsc -p tsconfig.browser-harness.json",
+		"check": "tsc -p tsconfig.json --noEmit",
+		"prepare:browser-native": "node ./scripts/prepare-browser-native.mjs",
+		"serve:browser-harness": "node ./scripts/browser-harness-server.mjs",
+		"test": "npm run test:host-pipeline",
+		"test:browser-native-bundle": "node --test ./tests/browser-native-bundle.test.mjs ./tests/browser-native-bridge-contract.test.mjs",
+		"test:browser-native": "playwright test",
+		"test:ci": "npm run build && npm run test:host-pipeline && npm run prepare:browser-native -- --force && npm run test:browser-native-bundle && npm run test:browser-native",
+		"test:host-pipeline": "node --test ./tests/host-pipeline.test.mjs",
+		"toolchain:bootstrap": "bash ./scripts/bootstrap-switch.sh",
+		"toolchain:collect": "node ./scripts/collect-toolchain.mjs",
+		"toolchain:patch-findlib": "node ./scripts/patch-findlib-conf.mjs",
+		"prepare:runtime": "node ./scripts/prepare-runtime.mjs",
+		"validate:host-pipeline": "node ./scripts/validate-host-pipeline.mjs"
+	},
+	"devDependencies": {
+		"@playwright/test": "^1.59.1",
+		"@types/node": "^24.6.1",
+		"binaryen": "^129.0.0",
+		"typescript": "^5.9.3"
+	}
 }

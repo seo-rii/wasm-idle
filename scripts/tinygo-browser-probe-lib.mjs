@@ -184,7 +184,7 @@ export async function runTinyGoBrowserProbe({
 			.length;
 		await page.waitForFunction(
 			() =>
-				typeof /** @type {any} */ (window).__wasmIdleDebug?.writeTerminalInput ===
+				typeof (/** @type {any} */ (window).__wasmIdleDebug?.writeTerminalInput) ===
 				'function'
 		);
 		await page.evaluate(async (text) => {

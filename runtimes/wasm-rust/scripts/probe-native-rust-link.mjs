@@ -19,12 +19,14 @@ const DEFAULT_SYSROOT_ROOT =
 	process.env.WASM_RUST_RUSTC_ROOT ||
 	path.join(os.homedir(), '.cache', 'wasm-rust-real-rustc-20260317', 'rust', 'dist-emit-ir');
 const SAMPLE_PROGRAM = process.env.WASM_RUST_SAMPLE_PROGRAM || 'fn main() { println!("hi"); }\n';
-const TARGET_TRIPLES = [...new Set(
-	(process.env.WASM_RUST_NATIVE_TARGET_TRIPLES || 'wasm32-wasip1,wasm32-wasip2')
-		.split(',')
-		.map((entry) => entry.trim())
-		.filter(Boolean)
-)];
+const TARGET_TRIPLES = [
+	...new Set(
+		(process.env.WASM_RUST_NATIVE_TARGET_TRIPLES || 'wasm32-wasip1,wasm32-wasip2')
+			.split(',')
+			.map((entry) => entry.trim())
+			.filter(Boolean)
+	)
+];
 
 async function pathExists(targetPath) {
 	try {
@@ -87,10 +89,7 @@ async function captureLinkRecipe(toolchainRoot, sysrootRoot, targetTriple) {
 		targetTriple,
 		tempDir,
 		objectFiles: (await fs.readdir(tempDir)).filter((entry) => entry.endsWith('.o')).sort(),
-		linkerArgs: (await fs.readFile(argsPath, 'utf8'))
-			.trim()
-			.split('\n')
-			.filter(Boolean)
+		linkerArgs: (await fs.readFile(argsPath, 'utf8')).trim().split('\n').filter(Boolean)
 	};
 }
 
@@ -100,7 +99,11 @@ async function main() {
 		try {
 			results.push({
 				success: true,
-				...(await captureLinkRecipe(DEFAULT_TOOLCHAIN_ROOT, DEFAULT_SYSROOT_ROOT, targetTriple))
+				...(await captureLinkRecipe(
+					DEFAULT_TOOLCHAIN_ROOT,
+					DEFAULT_SYSROOT_ROOT,
+					targetTriple
+				))
 			});
 		} catch (error) {
 			results.push({

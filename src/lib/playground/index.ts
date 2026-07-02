@@ -36,6 +36,13 @@ const sandboxRoutes = [
 		}
 	},
 	{
+		aliases: ['OBJC', 'OBJECTIVEC', 'OBJECTIVE_C', 'OBJECTIVE-C'],
+		load: async () => {
+			const { default: ObjectiveC } = await import('$lib/playground/objectivec');
+			return new ObjectiveC();
+		}
+	},
+	{
 		aliases: ['JAVA'],
 		load: async () => {
 			const { default: Java } = await import('$lib/playground/java');
@@ -320,6 +327,7 @@ export const supportedLanguages = [
 	'PYPY3',
 	'C',
 	'CPP',
+	'OBJC',
 	'JAVA',
 	'RUST',
 	'GO',

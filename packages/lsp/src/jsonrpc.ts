@@ -5,8 +5,12 @@ import type {
 } from 'vscode-jsonrpc/lib/browser/main.js';
 
 const browserJsonrpc = jsonrpc as unknown as {
-	BrowserMessageReader: new (port: MessagePort | Worker | unknown) => BrowserMessageReaderInstance;
-	BrowserMessageWriter: new (port: MessagePort | Worker | unknown) => BrowserMessageWriterInstance;
+	BrowserMessageReader: new (
+		port: MessagePort | Worker | unknown
+	) => BrowserMessageReaderInstance;
+	BrowserMessageWriter: new (
+		port: MessagePort | Worker | unknown
+	) => BrowserMessageWriterInstance;
 };
 
 export const BrowserMessageReader = browserJsonrpc.BrowserMessageReader;

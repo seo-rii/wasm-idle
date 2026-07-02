@@ -302,9 +302,7 @@ describe('static worker backed language sandboxes', () => {
 			})
 		).resolves.toBe(true);
 
-		expect(workerInstances[0].url).toBe(
-			'http://localhost:3000/wasm-j/runner-worker.js?v=test'
-		);
+		expect(workerInstances[0].url).toBe('http://localhost:3000/wasm-j/runner-worker.js?v=test');
 		expect(workerInstances[0].options).toEqual({ type: 'module' });
 		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
 			expect.objectContaining({

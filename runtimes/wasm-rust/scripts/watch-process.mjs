@@ -12,9 +12,11 @@ const root =
 
 const options = {
 	pid: undefined,
-	pidFile: process.env.WASM_RUST_BUILD_PID_FILE || path.join(root, 'wasm-rust-custom-toolchain.pid'),
+	pidFile:
+		process.env.WASM_RUST_BUILD_PID_FILE || path.join(root, 'wasm-rust-custom-toolchain.pid'),
 	exitFile:
-		process.env.WASM_RUST_BUILD_EXIT_FILE || path.join(root, 'wasm-rust-custom-toolchain.exit.txt'),
+		process.env.WASM_RUST_BUILD_EXIT_FILE ||
+		path.join(root, 'wasm-rust-custom-toolchain.exit.txt'),
 	logFile: process.env.WASM_RUST_BUILD_LOG || path.join(root, 'wasm-rust-custom-toolchain.log'),
 	timeoutSeconds: Number.parseInt(process.env.WASM_RUST_WATCH_TIMEOUT_SECONDS || '300', 10),
 	pollMs: Number.parseInt(process.env.WASM_RUST_WATCH_POLL_MS || '1000', 10),

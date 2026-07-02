@@ -51,7 +51,9 @@ export default class MemFS {
 		this.ready = compile(options.memfsModuleUrl || memfsUrl(options.path), options.progress)
 			.then(
 				(module) =>
-					WebAssembly.instantiate(module, { env }) as unknown as Promise<WebAssembly.Instance>
+					WebAssembly.instantiate(module, {
+						env
+					}) as unknown as Promise<WebAssembly.Instance>
 			)
 			.then((instance) => {
 				this.instance = instance;

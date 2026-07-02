@@ -39,7 +39,8 @@ const matchingNativeToolchainRoot =
 	path.join(defaultRustcCacheRoot, 'build', 'x86_64-unknown-linux-gnu', 'stage2');
 const matchingNativeSysrootRoot =
 	process.env.WASM_RUST_MATCHING_NATIVE_SYSROOT_ROOT || wasmRustcRoot;
-const llvmWasmRoot = process.env.WASM_RUST_LLVM_WASM_ROOT || path.join(cacheRoot, 'llvm-wasm-20260319');
+const llvmWasmRoot =
+	process.env.WASM_RUST_LLVM_WASM_ROOT || path.join(cacheRoot, 'llvm-wasm-20260319');
 const configuredWasiSdkRoot =
 	process.env.WASM_RUST_WASI_SDK_ROOT || process.env.WASI_SDK_PATH || '';
 const configuredTargetTriples = parseTargetTripleList(
@@ -55,22 +56,18 @@ const defaultTargetTriple = parseTargetTriple(
 	'WASM_RUST_DEFAULT_TARGET_TRIPLE'
 );
 const allowMissingTargets = process.env.WASM_RUST_ALLOW_MISSING_TARGETS !== '0';
-const allowPrebuiltRuntimeFallback =
-	process.env.WASM_RUST_ALLOW_PREBUILT_RUNTIME_FALLBACK === '1';
+const allowPrebuiltRuntimeFallback = process.env.WASM_RUST_ALLOW_PREBUILT_RUNTIME_FALLBACK === '1';
 const hostTriple = process.env.WASM_RUST_HOST_TRIPLE || 'x86_64-unknown-linux-gnu';
-const sampleProgram =
-	process.env.WASM_RUST_SAMPLE_PROGRAM || 'fn main() { println!("hi"); }';
+const sampleProgram = process.env.WASM_RUST_SAMPLE_PROGRAM || 'fn main() { println!("hi"); }';
 const bitcodeFileName =
-	process.env.WASM_RUST_BITCODE_FILE_NAME ||
-	'main.main.1ca70c240d7de168-cgu.0.rcgu.no-opt.bc';
+	process.env.WASM_RUST_BITCODE_FILE_NAME || 'main.main.1ca70c240d7de168-cgu.0.rcgu.no-opt.bc';
 const rustcMemoryInitialPages = Number(
 	process.env.WASM_RUST_RUSTC_MEMORY_INITIAL_PAGES || String(defaultRustcMemoryInitialPages)
 );
 const rustcMemoryMaximumPages = Number(
 	process.env.WASM_RUST_RUSTC_MEMORY_MAXIMUM_PAGES || String(defaultRustcMemoryMaximumPages)
 );
-const runtimeVersion =
-	process.env.WASM_RUST_RUNTIME_VERSION || 'rust-1.79.0-dev-browser-split-v3';
+const runtimeVersion = process.env.WASM_RUST_RUNTIME_VERSION || 'rust-1.79.0-dev-browser-split-v3';
 const isDirectExecution = process.argv[1]
 	? import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
 	: false;
@@ -82,11 +79,7 @@ if (!configuredTargetTriples.includes(defaultTargetTriple)) {
 }
 
 function parseTargetTriple(value, label) {
-	if (
-		value !== 'wasm32-wasip1' &&
-		value !== 'wasm32-wasip2' &&
-		value !== 'wasm32-wasip3'
-	) {
+	if (value !== 'wasm32-wasip1' && value !== 'wasm32-wasip2' && value !== 'wasm32-wasip3') {
 		throw new Error(`invalid ${label}: ${value}`);
 	}
 	return value;
@@ -174,7 +167,9 @@ async function isReusablePrebuiltRuntimeBundle(runtimeRootPath) {
 		[1, 'runtime-manifest.json']
 	]) {
 		try {
-			manifest = JSON.parse(await fs.readFile(path.join(runtimeRootPath, manifestFileName), 'utf8'));
+			manifest = JSON.parse(
+				await fs.readFile(path.join(runtimeRootPath, manifestFileName), 'utf8')
+			);
 			manifestVersion = candidateVersion;
 			break;
 		} catch {}
@@ -205,7 +200,10 @@ async function isReusablePrebuiltRuntimeBundle(runtimeRootPath) {
 		referencedAssets.add(manifest.llvm.lld);
 		referencedAssets.add(manifest.llvm.lldWasm || 'llvm/lld.wasm');
 		referencedAssets.add(manifest.llvm.lldData || 'llvm/lld.data');
-		if (typeof manifest.link.allocatorObjectAsset === 'string' && manifest.link.allocatorObjectAsset.length > 0) {
+		if (
+			typeof manifest.link.allocatorObjectAsset === 'string' &&
+			manifest.link.allocatorObjectAsset.length > 0
+		) {
 			referencedAssets.add(manifest.link.allocatorObjectAsset);
 		}
 		for (const assetFile of manifest.sysrootFiles) {
@@ -225,15 +223,24 @@ async function isReusablePrebuiltRuntimeBundle(runtimeRootPath) {
 		if (targets.length === 0) {
 			return false;
 		}
-		if (typeof manifest.compiler?.rustcWasm !== 'string' || manifest.compiler.rustcWasm.length === 0) {
+		if (
+			typeof manifest.compiler?.rustcWasm !== 'string' ||
+			manifest.compiler.rustcWasm.length === 0
+		) {
 			return false;
 		}
 		referencedAssets.add(manifest.compiler.rustcWasm);
 		for (const targetConfig of targets) {
-			if (typeof targetConfig?.compile?.llvm?.llc !== 'string' || targetConfig.compile.llvm.llc.length === 0) {
+			if (
+				typeof targetConfig?.compile?.llvm?.llc !== 'string' ||
+				targetConfig.compile.llvm.llc.length === 0
+			) {
 				return false;
 			}
-			if (typeof targetConfig.compile.llvm.lld !== 'string' || targetConfig.compile.llvm.lld.length === 0) {
+			if (
+				typeof targetConfig.compile.llvm.lld !== 'string' ||
+				targetConfig.compile.llvm.lld.length === 0
+			) {
 				return false;
 			}
 			referencedAssets.add(targetConfig.compile.llvm.llc);
@@ -253,7 +260,10 @@ async function isReusablePrebuiltRuntimeBundle(runtimeRootPath) {
 				referencedAssets.add(targetConfig.sysrootPack.asset);
 				referencedAssets.add(targetConfig.sysrootPack.index);
 			} else {
-				if (!Array.isArray(targetConfig.sysrootFiles) || targetConfig.sysrootFiles.length === 0) {
+				if (
+					!Array.isArray(targetConfig.sysrootFiles) ||
+					targetConfig.sysrootFiles.length === 0
+				) {
 					return false;
 				}
 				for (const assetFile of targetConfig.sysrootFiles) {
@@ -342,7 +352,10 @@ async function listFiles(rootPath) {
 async function copyTree(sourceRoot, targetRoot) {
 	const files = await listFiles(sourceRoot);
 	for (const filePath of files) {
-		await copyFileIfNeeded(filePath, path.join(targetRoot, path.relative(sourceRoot, filePath)));
+		await copyFileIfNeeded(
+			filePath,
+			path.join(targetRoot, path.relative(sourceRoot, filePath))
+		);
 	}
 	return files;
 }
@@ -435,7 +448,11 @@ async function copyBrowserVendorAssets() {
 			if (!next.includes(rule.specifier)) {
 				continue;
 			}
-			next = replaceQuotedSpecifier(next, rule.specifier, toImportPath(filePath, rule.targetPath));
+			next = replaceQuotedSpecifier(
+				next,
+				rule.specifier,
+				toImportPath(filePath, rule.targetPath)
+			);
 		}
 		if (next !== current) {
 			await fs.writeFile(filePath, next);
@@ -500,7 +517,9 @@ async function patchRustcMemoryMaximum(rustcTargetPath) {
 			if (kind === 1) {
 				const elementType = rustcBytes[cursor++];
 				if (elementType !== 0x60) {
-					throw new Error(`unexpected rustc.wasm table import element type ${elementType}`);
+					throw new Error(
+						`unexpected rustc.wasm table import element type ${elementType}`
+					);
 				}
 				readLeb();
 				readLeb();
@@ -732,7 +751,9 @@ async function captureNativeLinkInputs(targetTriple) {
 		(entry) => entry.endsWith('.rcgu.o') && !entry.includes('-cgu.0.')
 	);
 	if (!allocatorObjectName) {
-		throw new Error(`failed to locate allocator shim object for ${targetTriple} in ${tempRoot}`);
+		throw new Error(
+			`failed to locate allocator shim object for ${targetTriple} in ${tempRoot}`
+		);
 	}
 
 	const nativeLinkArgs = (await fs.readFile(linkArgsPath, 'utf8'))
@@ -786,7 +807,7 @@ async function resolveWasiSdkLibcPath(targetTriple, wasiSdkSupport) {
 			? ['wasm32-wasip3', 'wasm32-wasip2', 'wasm32-wasip1', 'wasm32-wasi']
 			: targetTriple === 'wasm32-wasip2'
 				? ['wasm32-wasip2', 'wasm32-wasip1', 'wasm32-wasi']
-			: ['wasm32-wasip1', 'wasm32-wasi'];
+				: ['wasm32-wasip1', 'wasm32-wasi'];
 	for (const directoryName of candidateDirectories) {
 		const candidate = path.join(sysrootLibRoot, directoryName, 'libc.a');
 		if (await pathExists(candidate)) {
@@ -815,7 +836,9 @@ function maybeTranslateMappedPath(arg, mappingRoots) {
 		if (arg === mapping.sourceRoot || arg.startsWith(mapping.sourceRoot + path.sep)) {
 			const relativePath = path.relative(mapping.sourceRoot, arg).replaceAll(path.sep, '/');
 			return {
-				runtimePath: relativePath ? `${mapping.runtimeRoot}/${relativePath}` : mapping.runtimeRoot,
+				runtimePath: relativePath
+					? `${mapping.runtimeRoot}/${relativePath}`
+					: mapping.runtimeRoot,
 				asset:
 					relativePath && mapping.assetRoot
 						? `${mapping.assetRoot}/${relativePath}`
@@ -839,10 +862,7 @@ function sanitizeLinkArgsForBrowser(targetTriple, args) {
 			index += 1;
 			continue;
 		}
-		if (
-			current.startsWith('--adapt=') ||
-			current.startsWith('--wasi-adapter=')
-		) {
+		if (current.startsWith('--adapt=') || current.startsWith('--wasi-adapter=')) {
 			continue;
 		}
 		if (bareFlags.has(current)) {
@@ -1006,11 +1026,7 @@ async function buildLinkManifest({
 	};
 }
 
-async function buildRuntimePackReference({
-	packAsset,
-	indexAsset,
-	entries
-}) {
+async function buildRuntimePackReference({ packAsset, indexAsset, entries }) {
 	const packPath = path.join(runtimeRoot, packAsset);
 	const indexPath = path.join(runtimeRoot, indexAsset);
 	const index = await writeRuntimePack({
@@ -1043,10 +1059,7 @@ async function main() {
 		}
 	}
 	if (missingFoundationalRuntimeInputs.length > 0) {
-		if (
-			allowPrebuiltRuntimeFallback &&
-			(await isReusablePrebuiltRuntimeBundle(runtimeRoot))
-		) {
+		if (allowPrebuiltRuntimeFallback && (await isReusablePrebuiltRuntimeBundle(runtimeRoot))) {
 			console.warn(
 				`[wasm-rust] reusing prebuilt dist/runtime bundle because prepare-runtime inputs are unavailable: ${missingFoundationalRuntimeInputs.join(', ')}`
 			);
@@ -1064,13 +1077,19 @@ async function main() {
 	await patchRustcMemoryMaximum(rustcTargetPath);
 	const rustcRuntimeAsset = await maybePrecompressRuntimeAsset(rustcTargetPath, 'rustc');
 
-	await copyFileIfNeeded(path.join(llvmWasmRoot, 'llc.js'), path.join(runtimeRoot, 'llvm', 'llc.js'));
+	await copyFileIfNeeded(
+		path.join(llvmWasmRoot, 'llc.js'),
+		path.join(runtimeRoot, 'llvm', 'llc.js')
+	);
 	const llcWasmRuntimeAsset = await (async () => {
 		const llcWasmPath = path.join(runtimeRoot, 'llvm', 'llc.wasm');
 		await copyFileIfNeeded(path.join(llvmWasmRoot, 'llc.wasm'), llcWasmPath);
 		return await maybePrecompressRuntimeAsset(llcWasmPath, 'llvm');
 	})();
-	await copyFileIfNeeded(path.join(llvmWasmRoot, 'lld.js'), path.join(runtimeRoot, 'llvm', 'lld.js'));
+	await copyFileIfNeeded(
+		path.join(llvmWasmRoot, 'lld.js'),
+		path.join(runtimeRoot, 'llvm', 'lld.js')
+	);
 	const lldWasmRuntimeAsset = await (async () => {
 		const lldWasmPath = path.join(runtimeRoot, 'llvm', 'lld.wasm');
 		await copyFileIfNeeded(path.join(llvmWasmRoot, 'lld.wasm'), lldWasmPath);
@@ -1128,8 +1147,7 @@ async function main() {
 			throw new Error(message);
 		}
 		if (isComponentTarget(targetTriple) && !wasiSdkSupport) {
-			const message =
-				`${targetTriple} packaging requires WASM_RUST_WASI_SDK_ROOT pointing to wasi-sdk >= 22 with wasm-component-ld`;
+			const message = `${targetTriple} packaging requires WASM_RUST_WASI_SDK_ROOT pointing to wasi-sdk >= 22 with wasm-component-ld`;
 			if (allowMissingTargets && targetTriple !== defaultTargetTriple) {
 				console.warn(`[wasm-rust] skipping ${targetTriple}: ${message}`);
 				continue;
@@ -1138,7 +1156,8 @@ async function main() {
 		}
 
 		const sysrootFiles = await listFiles(targetLibSource);
-		const { allocatorObjectPath, nativeLinkArgs, tempRoot } = await captureNativeLinkInputs(targetTriple);
+		const { allocatorObjectPath, nativeLinkArgs, tempRoot } =
+			await captureNativeLinkInputs(targetTriple);
 		const { args, packEntries } = await buildLinkManifest({
 			nativeLinkArgs,
 			allocatorObjectPath,
@@ -1190,7 +1209,9 @@ async function main() {
 	}
 
 	if (!targets[defaultTargetTriple]) {
-		throw new Error(`default target ${defaultTargetTriple} is unavailable after runtime packaging`);
+		throw new Error(
+			`default target ${defaultTargetTriple} is unavailable after runtime packaging`
+		);
 	}
 
 	const runtimeManifestV3 = {

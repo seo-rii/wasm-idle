@@ -27,7 +27,9 @@ async function createMissingRipgrepShim(root: string) {
 
 describe('wasm32-wasip3 build pipeline', () => {
 	afterEach(async () => {
-		await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
+		await Promise.all(
+			tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true }))
+		);
 	});
 
 	it('prepares a rust source checkout that already contains wasm32-wasip3 target support', async () => {
@@ -35,21 +37,36 @@ describe('wasm32-wasip3 build pipeline', () => {
 		const remoteRoot = path.join(root, 'remote-rust');
 		const preparedRoot = path.join(root, 'prepared-rust');
 
-		await fs.mkdir(path.join(remoteRoot, 'compiler', 'rustc_target', 'src', 'spec', 'targets'), {
-			recursive: true
-		});
+		await fs.mkdir(
+			path.join(remoteRoot, 'compiler', 'rustc_target', 'src', 'spec', 'targets'),
+			{
+				recursive: true
+			}
+		);
 		await fs.writeFile(
-			path.join(remoteRoot, 'compiler', 'rustc_target', 'src', 'spec', 'targets', 'wasm32_wasip3.rs'),
+			path.join(
+				remoteRoot,
+				'compiler',
+				'rustc_target',
+				'src',
+				'spec',
+				'targets',
+				'wasm32_wasip3.rs'
+			),
 			'// target is present\n'
 		);
 		await execFileAsync('git', ['init', '--initial-branch=main', remoteRoot], {
 			cwd: projectRoot,
 			maxBuffer: 8 * 1024 * 1024
 		});
-		await execFileAsync('git', ['-C', remoteRoot, 'config', 'user.email', 'wasm-rust@example.com'], {
-			cwd: projectRoot,
-			maxBuffer: 8 * 1024 * 1024
-		});
+		await execFileAsync(
+			'git',
+			['-C', remoteRoot, 'config', 'user.email', 'wasm-rust@example.com'],
+			{
+				cwd: projectRoot,
+				maxBuffer: 8 * 1024 * 1024
+			}
+		);
 		await execFileAsync('git', ['-C', remoteRoot, 'config', 'user.name', 'wasm-rust'], {
 			cwd: projectRoot,
 			maxBuffer: 8 * 1024 * 1024
@@ -69,18 +86,22 @@ describe('wasm32-wasip3 build pipeline', () => {
 			})
 		).stdout.trim();
 
-		const { stdout } = await execFileAsync('bash', ['./scripts/prepare-wasip3-rust-source.sh'], {
-			cwd: projectRoot,
-			env: {
-				...process.env,
-				WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
-				WASM_RUST_RUST_SOURCE_ROOT: preparedRoot,
-				WASM_RUST_SKIP_BROWSER_PATCHED_SOURCE: '1',
-				WASM_RUST_RUST_SOURCE_REMOTE: remoteRoot,
-				WASM_RUST_RUST_SOURCE_REF: 'main'
-			},
-			maxBuffer: 8 * 1024 * 1024
-		});
+		const { stdout } = await execFileAsync(
+			'bash',
+			['./scripts/prepare-wasip3-rust-source.sh'],
+			{
+				cwd: projectRoot,
+				env: {
+					...process.env,
+					WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
+					WASM_RUST_RUST_SOURCE_ROOT: preparedRoot,
+					WASM_RUST_SKIP_BROWSER_PATCHED_SOURCE: '1',
+					WASM_RUST_RUST_SOURCE_REMOTE: remoteRoot,
+					WASM_RUST_RUST_SOURCE_REF: 'main'
+				},
+				maxBuffer: 8 * 1024 * 1024
+			}
+		);
 		const lines = stdout
 			.trim()
 			.split('\n')
@@ -93,7 +114,18 @@ describe('wasm32-wasip3 build pipeline', () => {
 		expect(lines.WASM_RUST_RUST_SOURCE_ROOT).toBe(preparedRoot);
 		expect(lines.WASM_RUST_RUST_SOURCE_REV).toBe(expectedRevision);
 		await expect(
-			fs.readFile(path.join(preparedRoot, 'compiler', 'rustc_target', 'src', 'spec', 'targets', 'wasm32_wasip3.rs'), 'utf8')
+			fs.readFile(
+				path.join(
+					preparedRoot,
+					'compiler',
+					'rustc_target',
+					'src',
+					'spec',
+					'targets',
+					'wasm32_wasip3.rs'
+				),
+				'utf8'
+			)
 		).resolves.toContain('target is present');
 	});
 
@@ -102,24 +134,44 @@ describe('wasm32-wasip3 build pipeline', () => {
 		const browserPatchedRoot = path.join(root, 'browser-patched-rust');
 		const preparedRoot = path.join(root, 'prepared-rust');
 
-		await fs.mkdir(path.join(browserPatchedRoot, 'compiler', 'rustc_target', 'src', 'spec', 'targets'), {
-			recursive: true
-		});
-		await fs.mkdir(path.join(browserPatchedRoot, 'compiler', 'rustc_mir_build', 'src', 'build'), {
-			recursive: true
-		});
-		await fs.mkdir(path.join(browserPatchedRoot, 'src', 'bootstrap', 'src', 'core', 'build_steps'), {
-			recursive: true
-		});
+		await fs.mkdir(
+			path.join(browserPatchedRoot, 'compiler', 'rustc_target', 'src', 'spec', 'targets'),
+			{
+				recursive: true
+			}
+		);
+		await fs.mkdir(
+			path.join(browserPatchedRoot, 'compiler', 'rustc_mir_build', 'src', 'build'),
+			{
+				recursive: true
+			}
+		);
+		await fs.mkdir(
+			path.join(browserPatchedRoot, 'src', 'bootstrap', 'src', 'core', 'build_steps'),
+			{
+				recursive: true
+			}
+		);
 		await fs.mkdir(path.join(browserPatchedRoot, 'library', 'std', 'src', 'sys', 'pal'), {
 			recursive: true
 		});
 		await fs.mkdir(path.join(browserPatchedRoot, 'library', 'std', 'src', 'os'), {
 			recursive: true
 		});
-		await fs.writeFile(path.join(browserPatchedRoot, 'config.wasm-rust-browser.toml'), '[build]\n');
 		await fs.writeFile(
-			path.join(browserPatchedRoot, 'compiler', 'rustc_target', 'src', 'spec', 'targets', 'wasm32_wasip2.rs'),
+			path.join(browserPatchedRoot, 'config.wasm-rust-browser.toml'),
+			'[build]\n'
+		);
+		await fs.writeFile(
+			path.join(
+				browserPatchedRoot,
+				'compiler',
+				'rustc_target',
+				'src',
+				'spec',
+				'targets',
+				'wasm32_wasip2.rs'
+			),
 			'// existing wasip2 target\n'
 		);
 		await fs.writeFile(
@@ -131,7 +183,15 @@ describe('wasm32-wasip3 build pipeline', () => {
 			'pub fn preserved_build_module() {}\n'
 		);
 		await fs.writeFile(
-			path.join(browserPatchedRoot, 'src', 'bootstrap', 'src', 'core', 'build_steps', 'compile.rs'),
+			path.join(
+				browserPatchedRoot,
+				'src',
+				'bootstrap',
+				'src',
+				'core',
+				'build_steps',
+				'compile.rs'
+			),
 			`use crate::core::builder::TargetSelection;
 fn demo(target: TargetSelection, builder: &Builder<'_>, cargo: &mut Cargo) {
     let srcdir = builder
@@ -170,16 +230,20 @@ fn demo(target: TargetSelection, builder: &Builder<'_>, cargo: &mut Cargo) {
 			'utf8'
 		);
 
-		const { stdout } = await execFileAsync('bash', ['./scripts/prepare-wasip3-rust-source.sh'], {
-			cwd: projectRoot,
-			env: {
-				...process.env,
-				WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
-				WASM_RUST_RUST_SOURCE_ROOT: preparedRoot,
-				WASM_RUST_BROWSER_PATCHED_SOURCE_ROOT: browserPatchedRoot
-			},
-			maxBuffer: 8 * 1024 * 1024
-		});
+		const { stdout } = await execFileAsync(
+			'bash',
+			['./scripts/prepare-wasip3-rust-source.sh'],
+			{
+				cwd: projectRoot,
+				env: {
+					...process.env,
+					WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
+					WASM_RUST_RUST_SOURCE_ROOT: preparedRoot,
+					WASM_RUST_BROWSER_PATCHED_SOURCE_ROOT: browserPatchedRoot
+				},
+				maxBuffer: 8 * 1024 * 1024
+			}
+		);
 		const lines = stdout
 			.trim()
 			.split('\n')
@@ -191,23 +255,54 @@ fn demo(target: TargetSelection, builder: &Builder<'_>, cargo: &mut Cargo) {
 
 		expect(lines.WASM_RUST_RUST_SOURCE_ROOT).toBe(preparedRoot);
 		await expect(
-			fs.readFile(path.join(preparedRoot, 'compiler', 'rustc_target', 'src', 'spec', 'targets', 'wasm32_wasip3.rs'), 'utf8')
+			fs.readFile(
+				path.join(
+					preparedRoot,
+					'compiler',
+					'rustc_target',
+					'src',
+					'spec',
+					'targets',
+					'wasm32_wasip3.rs'
+				),
+				'utf8'
+			)
 		).resolves.toContain('target.options.env = "p3".into();');
-		await expect(fs.readFile(path.join(preparedRoot, 'compiler', 'rustc_target', 'src', 'spec', 'mod.rs'), 'utf8')).resolves.toContain(
-			'("wasm32-wasip3", wasm32_wasip3),'
-		);
 		await expect(
-			fs.readFile(path.join(preparedRoot, 'compiler', 'rustc_mir_build', 'src', 'build', 'mod.rs'), 'utf8')
+			fs.readFile(
+				path.join(preparedRoot, 'compiler', 'rustc_target', 'src', 'spec', 'mod.rs'),
+				'utf8'
+			)
+		).resolves.toContain('("wasm32-wasip3", wasm32_wasip3),');
+		await expect(
+			fs.readFile(
+				path.join(preparedRoot, 'compiler', 'rustc_mir_build', 'src', 'build', 'mod.rs'),
+				'utf8'
+			)
 		).resolves.toContain('preserved_build_module');
 		await expect(
-			fs.readFile(path.join(preparedRoot, 'src', 'bootstrap', 'src', 'core', 'build_steps', 'compile.rs'), 'utf8')
+			fs.readFile(
+				path.join(
+					preparedRoot,
+					'src',
+					'bootstrap',
+					'src',
+					'core',
+					'build_steps',
+					'compile.rs'
+				),
+				'utf8'
+			)
 		).resolves.toContain('if target == "wasm32-wasip3" { "wasm32-wasip2".to_string() } else {');
 		await expect(
-			fs.readFile(path.join(preparedRoot, 'library', 'std', 'src', 'sys', 'pal', 'mod.rs'), 'utf8')
+			fs.readFile(
+				path.join(preparedRoot, 'library', 'std', 'src', 'sys', 'pal', 'mod.rs'),
+				'utf8'
+			)
 		).resolves.toContain('target_env = "p3"');
-		await expect(fs.readFile(path.join(preparedRoot, 'library', 'std', 'src', 'os', 'mod.rs'), 'utf8')).resolves.toContain(
-			'target_env = "p3"'
-		);
+		await expect(
+			fs.readFile(path.join(preparedRoot, 'library', 'std', 'src', 'os', 'mod.rs'), 'utf8')
+		).resolves.toContain('target_env = "p3"');
 	});
 
 	it('prepares a cargo overlay that patches libc for wasm32-wasip3 builds', async () => {
@@ -217,21 +312,31 @@ fn demo(target: TargetSelection, builder: &Builder<'_>, cargo: &mut Cargo) {
 		const libcSourceRoot = path.join(registrySrcRoot, 'libc-0.2.183');
 
 		await fs.mkdir(path.join(libcSourceRoot, 'src'), { recursive: true });
-		await fs.writeFile(path.join(libcSourceRoot, 'Cargo.toml'), '[package]\nname = "libc"\nversion = "0.2.183"\n');
+		await fs.writeFile(
+			path.join(libcSourceRoot, 'Cargo.toml'),
+			'[package]\nname = "libc"\nversion = "0.2.183"\n'
+		);
 		await fs.writeFile(path.join(libcSourceRoot, 'src', 'lib.rs'), 'pub fn patched() {}\n');
 		await fs.mkdir(path.join(baseCargoHome, 'registry'), { recursive: true });
-		await fs.writeFile(path.join(baseCargoHome, 'credentials.toml'), '[registry]\ntoken = "demo"\n');
+		await fs.writeFile(
+			path.join(baseCargoHome, 'credentials.toml'),
+			'[registry]\ntoken = "demo"\n'
+		);
 
-		const { stdout } = await execFileAsync('bash', ['./scripts/prepare-wasip3-libc-overlay.sh'], {
-			cwd: projectRoot,
-			env: {
-				...process.env,
-				WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
-				WASM_RUST_BASE_CARGO_HOME: baseCargoHome,
-				WASM_RUST_CARGO_REGISTRY_SRC_ROOT: path.join(baseCargoHome, 'registry', 'src')
-			},
-			maxBuffer: 8 * 1024 * 1024
-		});
+		const { stdout } = await execFileAsync(
+			'bash',
+			['./scripts/prepare-wasip3-libc-overlay.sh'],
+			{
+				cwd: projectRoot,
+				env: {
+					...process.env,
+					WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
+					WASM_RUST_BASE_CARGO_HOME: baseCargoHome,
+					WASM_RUST_CARGO_REGISTRY_SRC_ROOT: path.join(baseCargoHome, 'registry', 'src')
+				},
+				maxBuffer: 8 * 1024 * 1024
+			}
+		);
 		const lines = stdout
 			.trim()
 			.split('\n')
@@ -245,16 +350,18 @@ fn demo(target: TargetSelection, builder: &Builder<'_>, cargo: &mut Cargo) {
 		const patchedCargoHome = lines.WASM_RUST_WASIP3_CARGO_HOME;
 
 		expect(patchedSource).toContain(path.join(root, 'wasip3-libc-overlay'));
-		await expect(fs.readFile(path.join(patchedSource, 'Cargo.toml'), 'utf8')).resolves.toContain(
-			'version = "0.2.183"'
-		);
-		await expect(fs.readFile(path.join(patchedCargoHome, 'config.toml'), 'utf8')).resolves.toContain(
-			`libc = { path = "${patchedSource}" }`
-		);
+		await expect(
+			fs.readFile(path.join(patchedSource, 'Cargo.toml'), 'utf8')
+		).resolves.toContain('version = "0.2.183"');
+		await expect(
+			fs.readFile(path.join(patchedCargoHome, 'config.toml'), 'utf8')
+		).resolves.toContain(`libc = { path = "${patchedSource}" }`);
 		await expect(fs.lstat(path.join(patchedCargoHome, 'registry'))).resolves.toMatchObject({
 			isSymbolicLink: expect.any(Function)
 		});
-		expect((await fs.lstat(path.join(patchedCargoHome, 'registry'))).isSymbolicLink()).toBe(true);
+		expect((await fs.lstat(path.join(patchedCargoHome, 'registry'))).isSymbolicLink()).toBe(
+			true
+		);
 	});
 
 	it('rewrites the patched libc package version to match the Rust library lock when needed', async () => {
@@ -270,20 +377,27 @@ fn demo(target: TargetSelection, builder: &Builder<'_>, cargo: &mut Cargo) {
 			'[[package]]\nname = "libc"\nversion = "0.2.178"\n'
 		);
 		await fs.mkdir(path.join(libcSourceRoot, 'src'), { recursive: true });
-		await fs.writeFile(path.join(libcSourceRoot, 'Cargo.toml'), '[package]\nname = "libc"\nversion = "0.2.183"\n');
+		await fs.writeFile(
+			path.join(libcSourceRoot, 'Cargo.toml'),
+			'[package]\nname = "libc"\nversion = "0.2.183"\n'
+		);
 		await fs.writeFile(path.join(libcSourceRoot, 'src', 'lib.rs'), 'pub fn patched() {}\n');
 
-		const { stdout } = await execFileAsync('bash', ['./scripts/prepare-wasip3-libc-overlay.sh'], {
-			cwd: projectRoot,
-			env: {
-				...process.env,
-				WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
-				WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
-				WASM_RUST_BASE_CARGO_HOME: baseCargoHome,
-				WASM_RUST_CARGO_REGISTRY_SRC_ROOT: path.join(baseCargoHome, 'registry', 'src')
-			},
-			maxBuffer: 8 * 1024 * 1024
-		});
+		const { stdout } = await execFileAsync(
+			'bash',
+			['./scripts/prepare-wasip3-libc-overlay.sh'],
+			{
+				cwd: projectRoot,
+				env: {
+					...process.env,
+					WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
+					WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
+					WASM_RUST_BASE_CARGO_HOME: baseCargoHome,
+					WASM_RUST_CARGO_REGISTRY_SRC_ROOT: path.join(baseCargoHome, 'registry', 'src')
+				},
+				maxBuffer: 8 * 1024 * 1024
+			}
+		);
 		const lines = stdout
 			.trim()
 			.split('\n')
@@ -293,10 +407,12 @@ fn demo(target: TargetSelection, builder: &Builder<'_>, cargo: &mut Cargo) {
 				return acc;
 			}, {});
 
-		expect(lines.WASM_RUST_WASIP3_LIBC_PATCH_SOURCE).toContain(path.join(root, 'wasip3-libc-overlay', 'libc-0.2.178'));
-		await expect(fs.readFile(path.join(lines.WASM_RUST_WASIP3_LIBC_PATCH_SOURCE, 'Cargo.toml'), 'utf8')).resolves.toContain(
-			'version = "0.2.178"'
+		expect(lines.WASM_RUST_WASIP3_LIBC_PATCH_SOURCE).toContain(
+			path.join(root, 'wasip3-libc-overlay', 'libc-0.2.178')
 		);
+		await expect(
+			fs.readFile(path.join(lines.WASM_RUST_WASIP3_LIBC_PATCH_SOURCE, 'Cargo.toml'), 'utf8')
+		).resolves.toContain('version = "0.2.178"');
 	});
 
 	it('rewrites the patched libc package version to match the Rust workspace lock when the library lock is absent', async () => {
@@ -312,20 +428,27 @@ fn demo(target: TargetSelection, builder: &Builder<'_>, cargo: &mut Cargo) {
 			'[[package]]\nname = "libc"\nversion = "0.2.153"\n'
 		);
 		await fs.mkdir(path.join(libcSourceRoot, 'src'), { recursive: true });
-		await fs.writeFile(path.join(libcSourceRoot, 'Cargo.toml'), '[package]\nname = "libc"\nversion = "0.2.183"\n');
+		await fs.writeFile(
+			path.join(libcSourceRoot, 'Cargo.toml'),
+			'[package]\nname = "libc"\nversion = "0.2.183"\n'
+		);
 		await fs.writeFile(path.join(libcSourceRoot, 'src', 'lib.rs'), 'pub fn patched() {}\n');
 
-		const { stdout } = await execFileAsync('bash', ['./scripts/prepare-wasip3-libc-overlay.sh'], {
-			cwd: projectRoot,
-			env: {
-				...process.env,
-				WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
-				WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
-				WASM_RUST_BASE_CARGO_HOME: baseCargoHome,
-				WASM_RUST_CARGO_REGISTRY_SRC_ROOT: path.join(baseCargoHome, 'registry', 'src')
-			},
-			maxBuffer: 8 * 1024 * 1024
-		});
+		const { stdout } = await execFileAsync(
+			'bash',
+			['./scripts/prepare-wasip3-libc-overlay.sh'],
+			{
+				cwd: projectRoot,
+				env: {
+					...process.env,
+					WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
+					WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
+					WASM_RUST_BASE_CARGO_HOME: baseCargoHome,
+					WASM_RUST_CARGO_REGISTRY_SRC_ROOT: path.join(baseCargoHome, 'registry', 'src')
+				},
+				maxBuffer: 8 * 1024 * 1024
+			}
+		);
 		const lines = stdout
 			.trim()
 			.split('\n')
@@ -335,10 +458,12 @@ fn demo(target: TargetSelection, builder: &Builder<'_>, cargo: &mut Cargo) {
 				return acc;
 			}, {});
 
-		expect(lines.WASM_RUST_WASIP3_LIBC_PATCH_SOURCE).toContain(path.join(root, 'wasip3-libc-overlay', 'libc-0.2.153'));
-		await expect(fs.readFile(path.join(lines.WASM_RUST_WASIP3_LIBC_PATCH_SOURCE, 'Cargo.toml'), 'utf8')).resolves.toContain(
-			'version = "0.2.153"'
+		expect(lines.WASM_RUST_WASIP3_LIBC_PATCH_SOURCE).toContain(
+			path.join(root, 'wasip3-libc-overlay', 'libc-0.2.153')
 		);
+		await expect(
+			fs.readFile(path.join(lines.WASM_RUST_WASIP3_LIBC_PATCH_SOURCE, 'Cargo.toml'), 'utf8')
+		).resolves.toContain('version = "0.2.153"');
 	});
 
 	it('materializes the patched libc source from a downloaded crate when the cargo cache misses', async () => {
@@ -348,24 +473,34 @@ fn demo(target: TargetSelection, builder: &Builder<'_>, cargo: &mut Cargo) {
 		const cratePath = path.join(root, 'libc-0.2.183.crate');
 
 		await fs.mkdir(path.join(archiveSourceRoot, 'src'), { recursive: true });
-		await fs.writeFile(path.join(archiveSourceRoot, 'Cargo.toml'), '[package]\nname = "libc"\nversion = "0.2.183"\n');
-		await fs.writeFile(path.join(archiveSourceRoot, 'src', 'lib.rs'), 'pub fn downloaded() {}\n');
+		await fs.writeFile(
+			path.join(archiveSourceRoot, 'Cargo.toml'),
+			'[package]\nname = "libc"\nversion = "0.2.183"\n'
+		);
+		await fs.writeFile(
+			path.join(archiveSourceRoot, 'src', 'lib.rs'),
+			'pub fn downloaded() {}\n'
+		);
 		await execFileAsync('tar', ['-czf', cratePath, '-C', archiveRoot, 'libc-0.2.183'], {
 			cwd: projectRoot,
 			maxBuffer: 8 * 1024 * 1024
 		});
 
-		const { stdout } = await execFileAsync('bash', ['./scripts/prepare-wasip3-libc-overlay.sh'], {
-			cwd: projectRoot,
-			env: {
-				...process.env,
-				WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
-				WASM_RUST_BASE_CARGO_HOME: path.join(root, 'base-cargo-home'),
-				WASM_RUST_CARGO_REGISTRY_SRC_ROOT: path.join(root, 'missing-registry-src'),
-				WASM_RUST_WASIP3_LIBC_DOWNLOAD_URL: `file://${cratePath}`
-			},
-			maxBuffer: 8 * 1024 * 1024
-		});
+		const { stdout } = await execFileAsync(
+			'bash',
+			['./scripts/prepare-wasip3-libc-overlay.sh'],
+			{
+				cwd: projectRoot,
+				env: {
+					...process.env,
+					WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
+					WASM_RUST_BASE_CARGO_HOME: path.join(root, 'base-cargo-home'),
+					WASM_RUST_CARGO_REGISTRY_SRC_ROOT: path.join(root, 'missing-registry-src'),
+					WASM_RUST_WASIP3_LIBC_DOWNLOAD_URL: `file://${cratePath}`
+				},
+				maxBuffer: 8 * 1024 * 1024
+			}
+		);
 		const lines = stdout
 			.trim()
 			.split('\n')
@@ -375,9 +510,12 @@ fn demo(target: TargetSelection, builder: &Builder<'_>, cargo: &mut Cargo) {
 				return acc;
 			}, {});
 
-		await expect(fs.readFile(path.join(lines.WASM_RUST_WASIP3_LIBC_PATCH_SOURCE, 'src', 'lib.rs'), 'utf8')).resolves.toContain(
-			'downloaded'
-		);
+		await expect(
+			fs.readFile(
+				path.join(lines.WASM_RUST_WASIP3_LIBC_PATCH_SOURCE, 'src', 'lib.rs'),
+				'utf8'
+			)
+		).resolves.toContain('downloaded');
 	});
 
 	it('wires the libc cargo overlay into the custom toolchain build when wasm32-wasip3 is requested', async () => {
@@ -397,7 +535,10 @@ fn demo(target: TargetSelection, builder: &Builder<'_>, cargo: &mut Cargo) {
 		const recordedThreadCxxFlagsPath = path.join(root, 'recorded-thread-cxxflags.txt');
 
 		await fs.mkdir(path.join(libcSourceRoot, 'src'), { recursive: true });
-		await fs.writeFile(path.join(libcSourceRoot, 'Cargo.toml'), '[package]\nname = "libc"\nversion = "0.2.183"\n');
+		await fs.writeFile(
+			path.join(libcSourceRoot, 'Cargo.toml'),
+			'[package]\nname = "libc"\nversion = "0.2.183"\n'
+		);
 		await fs.writeFile(path.join(libcSourceRoot, 'src', 'lib.rs'), 'pub fn patched() {}\n');
 		await fs.mkdir(llvmBuildDir, { recursive: true });
 		await fs.mkdir(fakeBinDir, { recursive: true });
@@ -409,7 +550,15 @@ fn demo(target: TargetSelection, builder: &Builder<'_>, cargo: &mut Cargo) {
 		await fs.mkdir(rustRoot, { recursive: true });
 		await fs.writeFile(configPath, '[build]\n');
 		await fs.writeFile(
-			path.join(rustRoot, 'compiler', 'rustc_target', 'src', 'spec', 'targets', 'wasm32_wasip3.rs'),
+			path.join(
+				rustRoot,
+				'compiler',
+				'rustc_target',
+				'src',
+				'spec',
+				'targets',
+				'wasm32_wasip3.rs'
+			),
 			'// target is present\n'
 		);
 		await fs.writeFile(
@@ -431,48 +580,68 @@ printf '%s\\n' "\${CXXFLAGS_wasm32_wasip1_threads:-}" > ${JSON.stringify(recorde
 		);
 		await fs.chmod(path.join(rustRoot, 'x.py'), 0o755);
 		await fs.chmod(path.join(fakeBinDir, 'cmake'), 0o755);
-		for (const toolName of ['clang', 'clang++', 'llvm-ar', 'llvm-ranlib', 'wasm-component-ld']) {
+		for (const toolName of [
+			'clang',
+			'clang++',
+			'llvm-ar',
+			'llvm-ranlib',
+			'wasm-component-ld'
+		]) {
 			const toolPath = path.join(fakeWasiSdkRoot, 'bin', toolName);
-			await fs.writeFile(toolPath, '#!/usr/bin/env bash\nset -euo pipefail\nexit 0\n', 'utf8');
+			await fs.writeFile(
+				toolPath,
+				'#!/usr/bin/env bash\nset -euo pipefail\nexit 0\n',
+				'utf8'
+			);
 			await fs.chmod(toolPath, 0o755);
 		}
 
-		await execFileAsync('bash', ['./scripts/build-custom-rustc-toolchain.sh', '--', '--foreground'], {
-			cwd: projectRoot,
-			env: {
-				...process.env,
-				PATH: `${fakeBinDir}:${process.env.PATH || ''}`,
-				WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
-				WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
-				WASM_RUST_RUST_CONFIG: configPath,
-				WASM_RUST_LLVM_BUILD_DIR: llvmBuildDir,
-				WASM_RUST_INSTALL_TARGETS: 'x86_64-unknown-linux-gnu,wasm32-wasip3',
-				WASM_RUST_WASI_SDK_ROOT: fakeWasiSdkRoot,
-				WASM_RUST_BASE_CARGO_HOME: baseCargoHome,
-				WASM_RUST_CARGO_REGISTRY_SRC_ROOT: path.join(baseCargoHome, 'registry', 'src')
-			},
-			maxBuffer: 8 * 1024 * 1024
-		});
+		await execFileAsync(
+			'bash',
+			['./scripts/build-custom-rustc-toolchain.sh', '--', '--foreground'],
+			{
+				cwd: projectRoot,
+				env: {
+					...process.env,
+					PATH: `${fakeBinDir}:${process.env.PATH || ''}`,
+					WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
+					WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
+					WASM_RUST_RUST_CONFIG: configPath,
+					WASM_RUST_LLVM_BUILD_DIR: llvmBuildDir,
+					WASM_RUST_INSTALL_TARGETS: 'x86_64-unknown-linux-gnu,wasm32-wasip3',
+					WASM_RUST_WASI_SDK_ROOT: fakeWasiSdkRoot,
+					WASM_RUST_BASE_CARGO_HOME: baseCargoHome,
+					WASM_RUST_CARGO_REGISTRY_SRC_ROOT: path.join(baseCargoHome, 'registry', 'src')
+				},
+				maxBuffer: 8 * 1024 * 1024
+			}
+		);
 
 		const recordedCargoHome = (await fs.readFile(recordedCargoHomePath, 'utf8')).trim();
 		const generatedConfigPath = (await fs.readFile(recordedConfigPath, 'utf8')).trim();
 		const recordedPath = (await fs.readFile(recordedPathPath, 'utf8')).trim();
 		const recordedThreadCFlags = (await fs.readFile(recordedThreadCFlagsPath, 'utf8')).trim();
-		const recordedThreadCxxFlags = (await fs.readFile(recordedThreadCxxFlagsPath, 'utf8')).trim();
+		const recordedThreadCxxFlags = (
+			await fs.readFile(recordedThreadCxxFlagsPath, 'utf8')
+		).trim();
 		expect(recordedCargoHome).toContain(path.join(root, 'wasip3-libc-overlay', 'cargo-home'));
-		expect(generatedConfigPath).toContain(path.join(root, 'config.wasm-rust-browser.effective.toml'));
+		expect(generatedConfigPath).toContain(
+			path.join(root, 'config.wasm-rust-browser.effective.toml')
+		);
 		expect(recordedPath.split(':')[0]).toBe(path.join(fakeWasiSdkRoot, 'bin'));
 		expect(recordedThreadCFlags).toContain('--target=wasm32-wasip1-threads');
 		expect(recordedThreadCFlags).toContain('-DBYTE_ORDER=__BYTE_ORDER__');
 		expect(recordedThreadCxxFlags).toContain('--target=wasm32-wasip1-threads');
 		expect(recordedThreadCxxFlags).toContain('-DBYTE_ORDER=__BYTE_ORDER__');
-		await expect(fs.readFile(path.join(recordedCargoHome, 'config.toml'), 'utf8')).resolves.toContain(
-			'libc = { path ='
-		);
+		await expect(
+			fs.readFile(path.join(recordedCargoHome, 'config.toml'), 'utf8')
+		).resolves.toContain('libc = { path =');
 		await expect(fs.readFile(generatedConfigPath, 'utf8')).resolves.toContain(
 			'target = ["x86_64-unknown-linux-gnu", "wasm32-wasip3"]'
 		);
-		await expect(fs.readFile(generatedConfigPath, 'utf8')).resolves.toContain("[target.'wasm32-wasip3']");
+		await expect(fs.readFile(generatedConfigPath, 'utf8')).resolves.toContain(
+			"[target.'wasm32-wasip3']"
+		);
 		await expect(fs.readFile(generatedConfigPath, 'utf8')).resolves.toContain(
 			`linker = "${path.join(fakeWasiSdkRoot, 'bin', 'wasm-component-ld')}"`
 		);
@@ -528,17 +697,22 @@ exit 0
 		);
 		await fs.chmod(path.join(rustRoot, 'x.py'), 0o755);
 
-		await execFileAsync('bash', ['./scripts/build-custom-rustc-toolchain.sh', '--', '--foreground'], {
-			cwd: projectRoot,
-			env: {
-				...process.env,
-				WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
-				WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
-				WASM_RUST_RUST_CONFIG: configPath,
-				WASM_RUST_INSTALL_TARGETS: 'x86_64-unknown-linux-gnu,wasm32-wasip1,wasm32-wasip2'
-			},
-			maxBuffer: 8 * 1024 * 1024
-		});
+		await execFileAsync(
+			'bash',
+			['./scripts/build-custom-rustc-toolchain.sh', '--', '--foreground'],
+			{
+				cwd: projectRoot,
+				env: {
+					...process.env,
+					WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
+					WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
+					WASM_RUST_RUST_CONFIG: configPath,
+					WASM_RUST_INSTALL_TARGETS:
+						'x86_64-unknown-linux-gnu,wasm32-wasip1,wasm32-wasip2'
+				},
+				maxBuffer: 8 * 1024 * 1024
+			}
+		);
 
 		const generatedConfigPath = (await fs.readFile(recordedConfigPath, 'utf8')).trim();
 		await expect(fs.readFile(generatedConfigPath, 'utf8')).resolves.toContain(
@@ -559,15 +733,25 @@ exit 0
 		const configPath = path.join(rustRoot, 'config.wasm-rust-browser.toml');
 		const recordedCmakeCallsPath = path.join(root, 'recorded-cmake-calls.txt');
 
-		await fs.mkdir(path.join(llvmBuildDir, 'tools', 'llvm-cxxfilt', 'CMakeFiles', 'llvm-cxxfilt.dir'), {
-			recursive: true
-		});
+		await fs.mkdir(
+			path.join(llvmBuildDir, 'tools', 'llvm-cxxfilt', 'CMakeFiles', 'llvm-cxxfilt.dir'),
+			{
+				recursive: true
+			}
+		);
 		await fs.mkdir(path.join(llvmBuildDir, 'bin'), { recursive: true });
 		await fs.mkdir(fakeBinDir, { recursive: true });
 		await fs.mkdir(rustRoot, { recursive: true });
 		await fs.writeFile(path.join(llvmBuildDir, 'Makefile'), 'all:\n');
 		await fs.writeFile(
-			path.join(llvmBuildDir, 'tools', 'llvm-cxxfilt', 'CMakeFiles', 'llvm-cxxfilt.dir', 'link.txt'),
+			path.join(
+				llvmBuildDir,
+				'tools',
+				'llvm-cxxfilt',
+				'CMakeFiles',
+				'llvm-cxxfilt.dir',
+				'link.txt'
+			),
 			'placeholder\n'
 		);
 		await fs.writeFile(configPath, '[build]\n');
@@ -598,19 +782,23 @@ exit 0
 		await fs.chmod(path.join(rustRoot, 'x.py'), 0o755);
 		await fs.chmod(path.join(fakeBinDir, 'cmake'), 0o755);
 
-		await execFileAsync('bash', ['./scripts/build-custom-rustc-toolchain.sh', '--', '--foreground'], {
-			cwd: projectRoot,
-			env: {
-				...process.env,
-				PATH: `${fakeBinDir}:${process.env.PATH || ''}`,
-				WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
-				WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
-				WASM_RUST_RUST_CONFIG: configPath,
-				WASM_RUST_LLVM_BUILD_DIR: llvmBuildDir,
-				WASM_RUST_INSTALL_TARGETS: 'x86_64-unknown-linux-gnu'
-			},
-			maxBuffer: 8 * 1024 * 1024
-		});
+		await execFileAsync(
+			'bash',
+			['./scripts/build-custom-rustc-toolchain.sh', '--', '--foreground'],
+			{
+				cwd: projectRoot,
+				env: {
+					...process.env,
+					PATH: `${fakeBinDir}:${process.env.PATH || ''}`,
+					WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
+					WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
+					WASM_RUST_RUST_CONFIG: configPath,
+					WASM_RUST_LLVM_BUILD_DIR: llvmBuildDir,
+					WASM_RUST_INSTALL_TARGETS: 'x86_64-unknown-linux-gnu'
+				},
+				maxBuffer: 8 * 1024 * 1024
+			}
+		);
 
 		const cmakeCalls = (await fs.readFile(recordedCmakeCallsPath, 'utf8'))
 			.trim()
@@ -618,7 +806,9 @@ exit 0
 			.filter(Boolean);
 		expect(cmakeCalls[0]).toContain('--build . --target llvm-cxxfilt --config Release -- -j 1');
 		expect(cmakeCalls[1]).toContain('--build . --target install --config Release -- -j 8');
-		await expect(fs.access(path.join(llvmBuildDir, 'bin', 'llvm-cxxfilt'))).resolves.toBeUndefined();
+		await expect(
+			fs.access(path.join(llvmBuildDir, 'bin', 'llvm-cxxfilt'))
+		).resolves.toBeUndefined();
 	});
 
 	it('drops a stale LLVM build dir when CMakeCache.txt points at a different source or build path', async () => {
@@ -648,23 +838,29 @@ exit 0
 		);
 		await fs.chmod(path.join(rustRoot, 'x.py'), 0o755);
 
-		await execFileAsync('bash', ['./scripts/build-custom-rustc-toolchain.sh', '--', '--foreground'], {
-			cwd: projectRoot,
-			env: {
-				...process.env,
-				PATH: `${fakeBinDir}:${process.env.PATH || ''}`,
-				WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
-				WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
-				WASM_RUST_RUST_CONFIG: configPath,
-				WASM_RUST_LLVM_BUILD_DIR: llvmBuildDir,
-				WASM_RUST_BUILD_LOG: logPath,
-				WASM_RUST_INSTALL_TARGETS: 'x86_64-unknown-linux-gnu'
-			},
-			maxBuffer: 8 * 1024 * 1024
-		});
+		await execFileAsync(
+			'bash',
+			['./scripts/build-custom-rustc-toolchain.sh', '--', '--foreground'],
+			{
+				cwd: projectRoot,
+				env: {
+					...process.env,
+					PATH: `${fakeBinDir}:${process.env.PATH || ''}`,
+					WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
+					WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
+					WASM_RUST_RUST_CONFIG: configPath,
+					WASM_RUST_LLVM_BUILD_DIR: llvmBuildDir,
+					WASM_RUST_BUILD_LOG: logPath,
+					WASM_RUST_INSTALL_TARGETS: 'x86_64-unknown-linux-gnu'
+				},
+				maxBuffer: 8 * 1024 * 1024
+			}
+		);
 
 		await expect(fs.access(llvmBuildDir)).rejects.toBeDefined();
-		await expect(fs.readFile(logPath, 'utf8')).resolves.toContain('was removed because CMakeCache.txt points at stale llvm source dir');
+		await expect(fs.readFile(logPath, 'utf8')).resolves.toContain(
+			'was removed because CMakeCache.txt points at stale llvm source dir'
+		);
 	});
 
 	it('removes duplicate installed rustlib artifacts before rerunning x.py install', async () => {
@@ -681,8 +877,16 @@ exit 0
 		await fs.writeFile(configPath, '[build]\n\n[install]\nprefix = "dist-emit-ir"\n');
 		await fs.writeFile(olderLibPath, 'older\n');
 		await fs.writeFile(newerLibPath, 'newer\n');
-		await fs.utimes(olderLibPath, new Date('2026-03-20T00:00:00Z'), new Date('2026-03-20T00:00:00Z'));
-		await fs.utimes(newerLibPath, new Date('2026-03-21T00:00:00Z'), new Date('2026-03-21T00:00:00Z'));
+		await fs.utimes(
+			olderLibPath,
+			new Date('2026-03-20T00:00:00Z'),
+			new Date('2026-03-20T00:00:00Z')
+		);
+		await fs.utimes(
+			newerLibPath,
+			new Date('2026-03-21T00:00:00Z'),
+			new Date('2026-03-21T00:00:00Z')
+		);
 		await fs.writeFile(
 			path.join(rustRoot, 'x.py'),
 			'#!/usr/bin/env bash\nset -euo pipefail\nexit 0\n',
@@ -690,22 +894,28 @@ exit 0
 		);
 		await fs.chmod(path.join(rustRoot, 'x.py'), 0o755);
 
-		await execFileAsync('bash', ['./scripts/build-custom-rustc-toolchain.sh', '--', '--foreground'], {
-			cwd: projectRoot,
-			env: {
-				...process.env,
-				WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
-				WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
-				WASM_RUST_RUST_CONFIG: configPath,
-				WASM_RUST_INSTALL_TARGETS: 'wasm32-wasip1',
-				WASM_RUST_BUILD_LOG: logPath
-			},
-			maxBuffer: 8 * 1024 * 1024
-		});
+		await execFileAsync(
+			'bash',
+			['./scripts/build-custom-rustc-toolchain.sh', '--', '--foreground'],
+			{
+				cwd: projectRoot,
+				env: {
+					...process.env,
+					WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
+					WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
+					WASM_RUST_RUST_CONFIG: configPath,
+					WASM_RUST_INSTALL_TARGETS: 'wasm32-wasip1',
+					WASM_RUST_BUILD_LOG: logPath
+				},
+				maxBuffer: 8 * 1024 * 1024
+			}
+		);
 
 		await expect(fs.access(olderLibPath)).rejects.toBeDefined();
 		await expect(fs.readFile(newerLibPath, 'utf8')).resolves.toBe('newer\n');
-		await expect(fs.readFile(logPath, 'utf8')).resolves.toContain('removed 1 duplicate installed rustlib artifact');
+		await expect(fs.readFile(logPath, 'utf8')).resolves.toContain(
+			'removed 1 duplicate installed rustlib artifact'
+		);
 	});
 
 	it('generates an x.py config when building from a fresh upstream checkout without a custom config file', async () => {
@@ -721,7 +931,10 @@ exit 0
 		const logPath = path.join(root, 'wasm-rust-custom-toolchain.log');
 
 		await fs.mkdir(path.join(libcSourceRoot, 'src'), { recursive: true });
-		await fs.writeFile(path.join(libcSourceRoot, 'Cargo.toml'), '[package]\nname = "libc"\nversion = "0.2.183"\n');
+		await fs.writeFile(
+			path.join(libcSourceRoot, 'Cargo.toml'),
+			'[package]\nname = "libc"\nversion = "0.2.183"\n'
+		);
 		await fs.writeFile(path.join(libcSourceRoot, 'src', 'lib.rs'), 'pub fn patched() {}\n');
 		await fs.mkdir(path.join(fakeWasiSdkRoot, 'bin'), { recursive: true });
 		await fs.mkdir(path.join(fakeWasiSdkRoot, 'share', 'wasi-sysroot'), { recursive: true });
@@ -729,7 +942,15 @@ exit 0
 			recursive: true
 		});
 		await fs.writeFile(
-			path.join(rustRoot, 'compiler', 'rustc_target', 'src', 'spec', 'targets', 'wasm32_wasip3.rs'),
+			path.join(
+				rustRoot,
+				'compiler',
+				'rustc_target',
+				'src',
+				'spec',
+				'targets',
+				'wasm32_wasip3.rs'
+			),
 			'// target is present\n'
 		);
 		await fs.writeFile(
@@ -741,35 +962,56 @@ printf '%s\\n' "$3" > ${JSON.stringify(recordedConfigPath)}
 			'utf8'
 		);
 		await fs.chmod(path.join(rustRoot, 'x.py'), 0o755);
-		for (const toolName of ['clang', 'clang++', 'llvm-ar', 'llvm-ranlib', 'wasm-component-ld']) {
+		for (const toolName of [
+			'clang',
+			'clang++',
+			'llvm-ar',
+			'llvm-ranlib',
+			'wasm-component-ld'
+		]) {
 			const toolPath = path.join(fakeWasiSdkRoot, 'bin', toolName);
-			await fs.writeFile(toolPath, '#!/usr/bin/env bash\nset -euo pipefail\nexit 0\n', 'utf8');
+			await fs.writeFile(
+				toolPath,
+				'#!/usr/bin/env bash\nset -euo pipefail\nexit 0\n',
+				'utf8'
+			);
 			await fs.chmod(toolPath, 0o755);
 		}
 
-		await execFileAsync('bash', ['./scripts/build-custom-rustc-toolchain.sh', '--', '--foreground'], {
-			cwd: projectRoot,
-			env: {
-				...process.env,
-				WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
-				WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
-				WASM_RUST_RUST_CONFIG: missingConfigPath,
-				WASM_RUST_LLVM_BUILD_DIR: llvmBuildDir,
-				WASM_RUST_INSTALL_TARGETS: 'x86_64-unknown-linux-gnu,wasm32-wasip1,wasm32-wasip2,wasm32-wasip3',
-				WASM_RUST_WASI_SDK_ROOT: fakeWasiSdkRoot,
-				WASM_RUST_BASE_CARGO_HOME: baseCargoHome,
-				WASM_RUST_CARGO_REGISTRY_SRC_ROOT: path.join(baseCargoHome, 'registry', 'src')
-			},
-			maxBuffer: 8 * 1024 * 1024
-		});
+		await execFileAsync(
+			'bash',
+			['./scripts/build-custom-rustc-toolchain.sh', '--', '--foreground'],
+			{
+				cwd: projectRoot,
+				env: {
+					...process.env,
+					WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
+					WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
+					WASM_RUST_RUST_CONFIG: missingConfigPath,
+					WASM_RUST_LLVM_BUILD_DIR: llvmBuildDir,
+					WASM_RUST_INSTALL_TARGETS:
+						'x86_64-unknown-linux-gnu,wasm32-wasip1,wasm32-wasip2,wasm32-wasip3',
+					WASM_RUST_WASI_SDK_ROOT: fakeWasiSdkRoot,
+					WASM_RUST_BASE_CARGO_HOME: baseCargoHome,
+					WASM_RUST_CARGO_REGISTRY_SRC_ROOT: path.join(baseCargoHome, 'registry', 'src')
+				},
+				maxBuffer: 8 * 1024 * 1024
+			}
+		);
 
 		const generatedConfigPath = (await fs.readFile(recordedConfigPath, 'utf8')).trim();
-		expect(generatedConfigPath).toContain(path.join(root, 'config.wasm-rust-browser.effective.toml'));
-		await expect(fs.readFile(generatedConfigPath, 'utf8')).resolves.toContain('host = ["wasm32-wasip1-threads"]');
+		expect(generatedConfigPath).toContain(
+			path.join(root, 'config.wasm-rust-browser.effective.toml')
+		);
+		await expect(fs.readFile(generatedConfigPath, 'utf8')).resolves.toContain(
+			'host = ["wasm32-wasip1-threads"]'
+		);
 		await expect(fs.readFile(generatedConfigPath, 'utf8')).resolves.toContain(
 			'target = ["x86_64-unknown-linux-gnu", "wasm32-wasip1", "wasm32-wasip2", "wasm32-wasip3"]'
 		);
-		await expect(fs.readFile(generatedConfigPath, 'utf8')).resolves.toContain("[target.'wasm32-wasip2']");
+		await expect(fs.readFile(generatedConfigPath, 'utf8')).resolves.toContain(
+			"[target.'wasm32-wasip2']"
+		);
 		await expect(fs.readFile(logPath, 'utf8')).resolves.toContain(
 			'skipping resume step and starting from x.py install'
 		);
@@ -799,22 +1041,28 @@ printf '%s\\n' "\${CXXFLAGS_wasm32_wasip1_threads:-}" > ${JSON.stringify(recorde
 		);
 		await fs.chmod(path.join(rustRoot, 'x.py'), 0o755);
 
-		await execFileAsync('bash', ['./scripts/build-custom-rustc-toolchain.sh', '--', '--foreground'], {
-			cwd: projectRoot,
-			env: {
-				...process.env,
-				WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
-				WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
-				WASM_RUST_RUST_CONFIG: configPath,
-				WASM_RUST_LLVM_BUILD_DIR: llvmBuildDir,
-				WASM_RUST_INSTALL_TARGETS: 'x86_64-unknown-linux-gnu'
-			},
-			maxBuffer: 8 * 1024 * 1024
-		});
+		await execFileAsync(
+			'bash',
+			['./scripts/build-custom-rustc-toolchain.sh', '--', '--foreground'],
+			{
+				cwd: projectRoot,
+				env: {
+					...process.env,
+					WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
+					WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
+					WASM_RUST_RUST_CONFIG: configPath,
+					WASM_RUST_LLVM_BUILD_DIR: llvmBuildDir,
+					WASM_RUST_INSTALL_TARGETS: 'x86_64-unknown-linux-gnu'
+				},
+				maxBuffer: 8 * 1024 * 1024
+			}
+		);
 
 		const generatedConfigPath = (await fs.readFile(recordedConfigPath, 'utf8')).trim();
 		await expect(fs.readFile(generatedConfigPath, 'utf8')).resolves.toContain('cflags = "-O2"');
-		await expect(fs.readFile(generatedConfigPath, 'utf8')).resolves.toContain('cxxflags = "-O3"');
+		await expect(fs.readFile(generatedConfigPath, 'utf8')).resolves.toContain(
+			'cxxflags = "-O3"'
+		);
 		await expect(fs.readFile(recordedThreadCFlagsPath, 'utf8')).resolves.toContain(
 			'--target=wasm32-wasip1-threads -DBYTE_ORDER=__BYTE_ORDER__ -DBIG_ENDIAN=__ORDER_BIG_ENDIAN__ -DLITTLE_ENDIAN=__ORDER_LITTLE_ENDIAN__'
 		);
@@ -854,19 +1102,23 @@ printf '%s\\n' "\${CXXFLAGS_wasm32_wasip1_threads:-}" > ${JSON.stringify(recorde
 		);
 		await fs.chmod(path.join(rustRoot, 'x.py'), 0o755);
 
-		await execFileAsync('bash', ['./scripts/build-custom-rustc-toolchain.sh', '--', '--foreground'], {
-			cwd: projectRoot,
-			env: {
-				...process.env,
-				PATH: `${fakeBinDir}:${process.env.PATH || ''}`,
-				WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
-				WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
-				WASM_RUST_RUST_CONFIG: configPath,
-				WASM_RUST_LLVM_BUILD_DIR: llvmBuildDir,
-				WASM_RUST_INSTALL_TARGETS: 'x86_64-unknown-linux-gnu'
-			},
-			maxBuffer: 8 * 1024 * 1024
-		});
+		await execFileAsync(
+			'bash',
+			['./scripts/build-custom-rustc-toolchain.sh', '--', '--foreground'],
+			{
+				cwd: projectRoot,
+				env: {
+					...process.env,
+					PATH: `${fakeBinDir}:${process.env.PATH || ''}`,
+					WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
+					WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
+					WASM_RUST_RUST_CONFIG: configPath,
+					WASM_RUST_LLVM_BUILD_DIR: llvmBuildDir,
+					WASM_RUST_INSTALL_TARGETS: 'x86_64-unknown-linux-gnu'
+				},
+				maxBuffer: 8 * 1024 * 1024
+			}
+		);
 
 		await expect(fs.readFile(recordedThreadCFlagsPath, 'utf8')).resolves.toBe('\n');
 		await expect(fs.readFile(recordedThreadCxxFlagsPath, 'utf8')).resolves.toBe('\n');
@@ -909,26 +1161,28 @@ exit 99
 		await fs.chmod(path.join(rustRoot, 'x.py'), 0o755);
 		await fs.chmod(path.join(fakeBinDir, 'cmake'), 0o755);
 
-		await execFileAsync('bash', ['./scripts/build-custom-rustc-toolchain.sh', '--', '--foreground'], {
-			cwd: projectRoot,
-			env: {
-				...process.env,
-				PATH: `${fakeBinDir}:${process.env.PATH || ''}`,
-				WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
-				WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
-				WASM_RUST_RUST_CONFIG: configPath,
-				WASM_RUST_LLVM_BUILD_DIR: llvmBuildDir,
-				WASM_RUST_INSTALL_TARGETS: 'x86_64-unknown-linux-gnu'
-			},
-			maxBuffer: 8 * 1024 * 1024
-		});
+		await execFileAsync(
+			'bash',
+			['./scripts/build-custom-rustc-toolchain.sh', '--', '--foreground'],
+			{
+				cwd: projectRoot,
+				env: {
+					...process.env,
+					PATH: `${fakeBinDir}:${process.env.PATH || ''}`,
+					WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
+					WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
+					WASM_RUST_RUST_CONFIG: configPath,
+					WASM_RUST_LLVM_BUILD_DIR: llvmBuildDir,
+					WASM_RUST_INSTALL_TARGETS: 'x86_64-unknown-linux-gnu'
+				},
+				maxBuffer: 8 * 1024 * 1024
+			}
+		);
 
 		await expect(fs.readFile(recordedConfigPath, 'utf8')).resolves.toContain(
 			path.join(root, 'config.wasm-rust-browser.effective.toml')
 		);
-		await expect(fs.readFile(logPath, 'utf8')).resolves.toContain(
-			'LLVM build dir'
-		);
+		await expect(fs.readFile(logPath, 'utf8')).resolves.toContain('LLVM build dir');
 		await expect(fs.readFile(logPath, 'utf8')).resolves.toContain(
 			'was removed because it lacks a generated build script; skipping resume step and starting from x.py install'
 		);
@@ -979,19 +1233,23 @@ exit 99
 		await fs.chmod(path.join(rustRoot, 'x.py'), 0o755);
 		await fs.chmod(path.join(fakeBinDir, 'cmake'), 0o755);
 
-		await execFileAsync('bash', ['./scripts/build-custom-rustc-toolchain.sh', '--', '--foreground'], {
-			cwd: projectRoot,
-			env: {
-				...process.env,
-				PATH: `${fakeBinDir}:${process.env.PATH || ''}`,
-				WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
-				WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
-				WASM_RUST_RUST_CONFIG: configPath,
-				WASM_RUST_LLVM_BUILD_DIR: llvmBuildDir,
-				WASM_RUST_INSTALL_TARGETS: 'x86_64-unknown-linux-gnu'
-			},
-			maxBuffer: 8 * 1024 * 1024
-		});
+		await execFileAsync(
+			'bash',
+			['./scripts/build-custom-rustc-toolchain.sh', '--', '--foreground'],
+			{
+				cwd: projectRoot,
+				env: {
+					...process.env,
+					PATH: `${fakeBinDir}:${process.env.PATH || ''}`,
+					WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
+					WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
+					WASM_RUST_RUST_CONFIG: configPath,
+					WASM_RUST_LLVM_BUILD_DIR: llvmBuildDir,
+					WASM_RUST_INSTALL_TARGETS: 'x86_64-unknown-linux-gnu'
+				},
+				maxBuffer: 8 * 1024 * 1024
+			}
+		);
 
 		await expect(fs.readFile(recordedConfigPath, 'utf8')).resolves.toContain(
 			path.join(root, 'config.wasm-rust-browser.effective.toml')
@@ -1014,7 +1272,13 @@ exit 99
 		const configPath = path.join(rustRoot, 'config.wasm-rust-browser.toml');
 		const logPath = path.join(root, 'wasm-rust-custom-toolchain.log');
 		const recordedIncrementalPath = path.join(root, 'recorded-cargo-incremental.txt');
-		const staleIncrementalDir = path.join(rustRoot, 'build', 'stage1-rustc', 'release', 'incremental');
+		const staleIncrementalDir = path.join(
+			rustRoot,
+			'build',
+			'stage1-rustc',
+			'release',
+			'incremental'
+		);
 
 		await fs.mkdir(staleIncrementalDir, { recursive: true });
 		await fs.mkdir(llvmBuildDir, { recursive: true });
@@ -1031,18 +1295,22 @@ printf '%s\\n' "\${CARGO_INCREMENTAL:-}" > ${JSON.stringify(recordedIncrementalP
 		);
 		await fs.chmod(path.join(rustRoot, 'x.py'), 0o755);
 
-		await execFileAsync('bash', ['./scripts/build-custom-rustc-toolchain.sh', '--', '--foreground'], {
-			cwd: projectRoot,
-			env: {
-				...process.env,
-				WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
-				WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
-				WASM_RUST_RUST_CONFIG: configPath,
-				WASM_RUST_LLVM_BUILD_DIR: llvmBuildDir,
-				WASM_RUST_INSTALL_TARGETS: 'x86_64-unknown-linux-gnu'
-			},
-			maxBuffer: 8 * 1024 * 1024
-		});
+		await execFileAsync(
+			'bash',
+			['./scripts/build-custom-rustc-toolchain.sh', '--', '--foreground'],
+			{
+				cwd: projectRoot,
+				env: {
+					...process.env,
+					WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
+					WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
+					WASM_RUST_RUST_CONFIG: configPath,
+					WASM_RUST_LLVM_BUILD_DIR: llvmBuildDir,
+					WASM_RUST_INSTALL_TARGETS: 'x86_64-unknown-linux-gnu'
+				},
+				maxBuffer: 8 * 1024 * 1024
+			}
+		);
 
 		await expect(fs.readFile(recordedIncrementalPath, 'utf8')).resolves.toContain('0');
 		await expect(fs.stat(staleIncrementalDir)).rejects.toMatchObject({
@@ -1084,19 +1352,23 @@ printf '%s\\n' "\${CARGO_INCREMENTAL:-}" > ${JSON.stringify(recordedIncrementalP
 		);
 		await fs.chmod(path.join(rustRoot, 'x.py'), 0o755);
 
-		await execFileAsync('bash', ['./scripts/build-custom-rustc-toolchain.sh', '--', '--foreground'], {
-			cwd: projectRoot,
-			env: {
-				...process.env,
-				WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
-				WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
-				WASM_RUST_RUST_CONFIG: configPath,
-				WASM_RUST_LLVM_BUILD_DIR: llvmBuildDir,
-				WASM_RUST_INSTALL_TARGETS: 'x86_64-unknown-linux-gnu',
-				WASM_RUST_BUILD_HOST_TARGET: 'x86_64-unknown-linux-gnu'
-			},
-			maxBuffer: 8 * 1024 * 1024
-		});
+		await execFileAsync(
+			'bash',
+			['./scripts/build-custom-rustc-toolchain.sh', '--', '--foreground'],
+			{
+				cwd: projectRoot,
+				env: {
+					...process.env,
+					WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
+					WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
+					WASM_RUST_RUST_CONFIG: configPath,
+					WASM_RUST_LLVM_BUILD_DIR: llvmBuildDir,
+					WASM_RUST_INSTALL_TARGETS: 'x86_64-unknown-linux-gnu',
+					WASM_RUST_BUILD_HOST_TARGET: 'x86_64-unknown-linux-gnu'
+				},
+				maxBuffer: 8 * 1024 * 1024
+			}
+		);
 
 		for (const stalePath of staleStage1Paths) {
 			await expect(fs.stat(stalePath)).rejects.toMatchObject({
@@ -1133,20 +1405,24 @@ printf '%s\\n' "\${CARGO_INCREMENTAL:-}" > ${JSON.stringify(recordedIncrementalP
 		);
 		await fs.chmod(path.join(rustRoot, 'x.py'), 0o755);
 
-		await execFileAsync('bash', ['./scripts/build-custom-rustc-toolchain.sh', '--', '--foreground'], {
-			cwd: projectRoot,
-			env: {
-				...process.env,
-				PATH: `${fakeBinDir}:${process.env.PATH || ''}`,
-				WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
-				WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
-				WASM_RUST_RUST_CONFIG: configPath,
-				WASM_RUST_LLVM_BUILD_DIR: llvmBuildDir,
-				WASM_RUST_INSTALL_TARGETS: 'x86_64-unknown-linux-gnu',
-				WASM_RUST_BUILD_HOST_TARGET: 'x86_64-unknown-linux-gnu'
-			},
-			maxBuffer: 8 * 1024 * 1024
-		});
+		await execFileAsync(
+			'bash',
+			['./scripts/build-custom-rustc-toolchain.sh', '--', '--foreground'],
+			{
+				cwd: projectRoot,
+				env: {
+					...process.env,
+					PATH: `${fakeBinDir}:${process.env.PATH || ''}`,
+					WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
+					WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
+					WASM_RUST_RUST_CONFIG: configPath,
+					WASM_RUST_LLVM_BUILD_DIR: llvmBuildDir,
+					WASM_RUST_INSTALL_TARGETS: 'x86_64-unknown-linux-gnu',
+					WASM_RUST_BUILD_HOST_TARGET: 'x86_64-unknown-linux-gnu'
+				},
+				maxBuffer: 8 * 1024 * 1024
+			}
+		);
 
 		await expect(fs.stat(staleNativeLlvmDir)).rejects.toMatchObject({
 			code: 'ENOENT'
@@ -1167,7 +1443,10 @@ printf '%s\\n' "\${CARGO_INCREMENTAL:-}" > ${JSON.stringify(recordedIncrementalP
 		const staleStage1RustcDir = path.join(buildHostRoot, 'stage1-rustc');
 		const orphanBootstrap = spawn(
 			'bash',
-			['-lc', `exec -a '${path.join(rustRoot, 'build', 'bootstrap', 'debug', 'bootstrap')}' sleep 300`],
+			[
+				'-lc',
+				`exec -a '${path.join(rustRoot, 'build', 'bootstrap', 'debug', 'bootstrap')}' sleep 300`
+			],
 			{ stdio: 'ignore' }
 		);
 
@@ -1187,19 +1466,23 @@ printf '%s\\n' "\${CARGO_INCREMENTAL:-}" > ${JSON.stringify(recordedIncrementalP
 		await fs.chmod(stage1RustcPath, 0o755);
 
 		try {
-			await execFileAsync('bash', ['./scripts/build-custom-rustc-toolchain.sh', '--', '--foreground'], {
-				cwd: projectRoot,
-				env: {
-					...process.env,
-					WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
-					WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
-					WASM_RUST_RUST_CONFIG: configPath,
-					WASM_RUST_LLVM_BUILD_DIR: llvmBuildDir,
-					WASM_RUST_INSTALL_TARGETS: 'x86_64-unknown-linux-gnu',
-					WASM_RUST_BUILD_HOST_TARGET: 'x86_64-unknown-linux-gnu'
-				},
-				maxBuffer: 8 * 1024 * 1024
-			});
+			await execFileAsync(
+				'bash',
+				['./scripts/build-custom-rustc-toolchain.sh', '--', '--foreground'],
+				{
+					cwd: projectRoot,
+					env: {
+						...process.env,
+						WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
+						WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
+						WASM_RUST_RUST_CONFIG: configPath,
+						WASM_RUST_LLVM_BUILD_DIR: llvmBuildDir,
+						WASM_RUST_INSTALL_TARGETS: 'x86_64-unknown-linux-gnu',
+						WASM_RUST_BUILD_HOST_TARGET: 'x86_64-unknown-linux-gnu'
+					},
+					maxBuffer: 8 * 1024 * 1024
+				}
+			);
 		} finally {
 			orphanBootstrap.kill('SIGKILL');
 		}
@@ -1284,19 +1567,23 @@ wait "$child"
 		);
 		await fs.chmod(path.join(rustRoot, 'x.py'), 0o755);
 
-		const firstRun = await execFileAsync('bash', ['./scripts/build-custom-rustc-toolchain.sh'], {
-			cwd: projectRoot,
-			env: {
-				...process.env,
-				WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
-				WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
-				WASM_RUST_RUST_CONFIG: configPath,
-				WASM_RUST_LLVM_BUILD_DIR: llvmBuildDir,
-				WASM_RUST_INSTALL_TARGETS: 'x86_64-unknown-linux-gnu',
-				WASM_RUST_BUILD_HOST_TARGET: 'x86_64-unknown-linux-gnu'
-			},
-			maxBuffer: 8 * 1024 * 1024
-		});
+		const firstRun = await execFileAsync(
+			'bash',
+			['./scripts/build-custom-rustc-toolchain.sh'],
+			{
+				cwd: projectRoot,
+				env: {
+					...process.env,
+					WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
+					WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
+					WASM_RUST_RUST_CONFIG: configPath,
+					WASM_RUST_LLVM_BUILD_DIR: llvmBuildDir,
+					WASM_RUST_INSTALL_TARGETS: 'x86_64-unknown-linux-gnu',
+					WASM_RUST_BUILD_HOST_TARGET: 'x86_64-unknown-linux-gnu'
+				},
+				maxBuffer: 8 * 1024 * 1024
+			}
+		);
 		const activePid = Number.parseInt(firstRun.stdout.trim(), 10);
 		expect(Number.isInteger(activePid)).toBe(true);
 		await expect(fs.readFile(snapshotPath, 'utf8')).resolves.toContain(
@@ -1323,19 +1610,23 @@ wait "$child"
 			}
 		}
 
-		const secondRun = await execFileAsync('bash', ['./scripts/build-custom-rustc-toolchain.sh'], {
-			cwd: projectRoot,
-			env: {
-				...process.env,
-				WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
-				WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
-				WASM_RUST_RUST_CONFIG: configPath,
-				WASM_RUST_LLVM_BUILD_DIR: llvmBuildDir,
-				WASM_RUST_INSTALL_TARGETS: 'x86_64-unknown-linux-gnu',
-				WASM_RUST_BUILD_HOST_TARGET: 'x86_64-unknown-linux-gnu'
-			},
-			maxBuffer: 8 * 1024 * 1024
-		});
+		const secondRun = await execFileAsync(
+			'bash',
+			['./scripts/build-custom-rustc-toolchain.sh'],
+			{
+				cwd: projectRoot,
+				env: {
+					...process.env,
+					WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
+					WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
+					WASM_RUST_RUST_CONFIG: configPath,
+					WASM_RUST_LLVM_BUILD_DIR: llvmBuildDir,
+					WASM_RUST_INSTALL_TARGETS: 'x86_64-unknown-linux-gnu',
+					WASM_RUST_BUILD_HOST_TARGET: 'x86_64-unknown-linux-gnu'
+				},
+				maxBuffer: 8 * 1024 * 1024
+			}
+		);
 		expect(Number.parseInt(secondRun.stdout.trim(), 10)).toBe(stablePid);
 		await expect(fs.readFile(logPath, 'utf8')).resolves.toContain(
 			'reusing existing detached build instead of spawning a duplicate'
@@ -1440,19 +1731,23 @@ exit 0
 		);
 		await fs.chmod(path.join(rustRoot, 'x.py'), 0o755);
 
-		await execFileAsync('bash', ['./scripts/build-custom-rustc-toolchain.sh', '--', '--foreground'], {
-			cwd: projectRoot,
-			env: {
-				...process.env,
-				WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
-				WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
-				WASM_RUST_RUST_CONFIG: configPath,
-				WASM_RUST_LLVM_BUILD_DIR: llvmBuildDir,
-				WASM_RUST_INSTALL_TARGETS: 'x86_64-unknown-linux-gnu',
-				WASM_RUST_BUILD_HOST_TARGET: 'x86_64-unknown-linux-gnu'
-			},
-			maxBuffer: 8 * 1024 * 1024
-		});
+		await execFileAsync(
+			'bash',
+			['./scripts/build-custom-rustc-toolchain.sh', '--', '--foreground'],
+			{
+				cwd: projectRoot,
+				env: {
+					...process.env,
+					WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
+					WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
+					WASM_RUST_RUST_CONFIG: configPath,
+					WASM_RUST_LLVM_BUILD_DIR: llvmBuildDir,
+					WASM_RUST_INSTALL_TARGETS: 'x86_64-unknown-linux-gnu',
+					WASM_RUST_BUILD_HOST_TARGET: 'x86_64-unknown-linux-gnu'
+				},
+				maxBuffer: 8 * 1024 * 1024
+			}
+		);
 
 		await expect(fs.readFile(attemptsPath, 'utf8')).resolves.toContain('2');
 		await expect(fs.readFile(logPath, 'utf8')).resolves.toContain(

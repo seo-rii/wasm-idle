@@ -1,9 +1,6 @@
 import { componentizeCoreWasmToPreview2Component } from './browser-component-tools.js';
 import { fetchRuntimeAssetBytes } from './runtime-asset.js';
-import {
-	clearRuntimeAssetPackCache,
-	loadRuntimePackEntries
-} from './runtime-asset-store.js';
+import { clearRuntimeAssetPackCache, loadRuntimePackEntries } from './runtime-asset-store.js';
 import {
 	resolveRuntimeAssetUrl,
 	type NormalizedRuntimeManifest,
@@ -222,8 +219,9 @@ export async function linkBitcodeWithLlvmWasm(
 	}>(resolveRuntimeAssetUrl(runtimeBaseUrl, target.compile.llvm.lld));
 	const prefetchedLinkAssets = new Map<string, Uint8Array>();
 	let prefetchedLinkAssetsPromise: Promise<void> | null = null;
-	let packedLinkEntriesPromise: Promise<Awaited<ReturnType<typeof loadRuntimePackEntries>>> | null =
-		null;
+	let packedLinkEntriesPromise: Promise<
+		Awaited<ReturnType<typeof loadRuntimePackEntries>>
+	> | null = null;
 	if (target.compile.link.pack) {
 		packedLinkEntriesPromise = loadRuntimePackEntries(
 			runtimeBaseUrl,
@@ -407,18 +405,15 @@ export async function linkBitcodeWithLlvmWasm(
 		emitProgress('link', 2, 2, 'llvm-wasm link finished');
 		if (target.compile.kind === 'llvm-wasm+component-encoder') {
 			emitProgress('componentize', 0, 1, 'encoding preview2 component');
-			const component = await componentizeCoreWasm(
-				coreWasm,
-				runtimeBaseUrl,
-				(progress) =>
-					emitProgress(
-						'componentize',
-						0,
-						1,
-						'encoding preview2 component',
-						progress.loaded,
-						progress.total
-					)
+			const component = await componentizeCoreWasm(coreWasm, runtimeBaseUrl, (progress) =>
+				emitProgress(
+					'componentize',
+					0,
+					1,
+					'encoding preview2 component',
+					progress.loaded,
+					progress.total
+				)
 			);
 			emitProgress('componentize', 1, 1, 'preview2 component ready');
 			return {

@@ -18,9 +18,7 @@ export interface PreloadBrowserRustRuntimeOptions {
 
 const rustRuntimePreloadCache = new Map<string, Promise<void>>();
 
-export async function preloadBrowserRustRuntime(
-	options: PreloadBrowserRustRuntimeOptions = {}
-) {
+export async function preloadBrowserRustRuntime(options: PreloadBrowserRustRuntimeOptions = {}) {
 	const defaultImportRuntimeModule = <T>(assetUrl: string) =>
 		import(/* @vite-ignore */ assetUrl) as Promise<T>;
 	const runPreload = async () => {
@@ -30,19 +28,27 @@ export async function preloadBrowserRustRuntime(
 		const preloadAsset = async (assetUrl: string, assetLabel: string) => {
 			const response = await fetchImpl(assetUrl);
 			if (!response.ok) {
-				throw new Error(`failed to preload ${assetLabel} from ${assetUrl} (status ${response.status})`);
+				throw new Error(
+					`failed to preload ${assetLabel} from ${assetUrl} (status ${response.status})`
+				);
 			}
 			await response.arrayBuffer();
 		};
 		const { manifest, targetConfig, versionedModuleBaseUrl, versionedRuntimeBaseUrl } =
-			await loadBundledRuntimeContext(options.dependencies?.loadManifest, options.targetTriple);
+			await loadBundledRuntimeContext(
+				options.dependencies?.loadManifest,
+				options.targetTriple
+			);
 		const assetPreloads = [
 			preloadAsset(
 				resolveVersionedAssetUrl(versionedModuleBaseUrl, './compiler-worker.js').toString(),
 				'wasm-rust compiler worker'
 			),
 			preloadAsset(
-				resolveVersionedAssetUrl(versionedModuleBaseUrl, './rustc-thread-worker.js').toString(),
+				resolveVersionedAssetUrl(
+					versionedModuleBaseUrl,
+					'./rustc-thread-worker.js'
+				).toString(),
 				'wasm-rust rustc thread worker'
 			),
 			preloadAsset(
@@ -95,11 +101,17 @@ export async function preloadBrowserRustRuntime(
 		if (targetConfig.compile.link.pack) {
 			assetPreloads.push(
 				preloadAsset(
-					resolveRuntimeAssetUrl(versionedRuntimeBaseUrl, targetConfig.compile.link.pack.index),
+					resolveRuntimeAssetUrl(
+						versionedRuntimeBaseUrl,
+						targetConfig.compile.link.pack.index
+					),
 					`wasm-rust runtime asset ${targetConfig.compile.link.pack.index}`
 				),
 				preloadAsset(
-					resolveRuntimeAssetUrl(versionedRuntimeBaseUrl, targetConfig.compile.link.pack.asset),
+					resolveRuntimeAssetUrl(
+						versionedRuntimeBaseUrl,
+						targetConfig.compile.link.pack.asset
+					),
 					`wasm-rust runtime asset ${targetConfig.compile.link.pack.asset}`
 				)
 			);
@@ -125,8 +137,12 @@ export async function preloadBrowserRustRuntime(
 			}
 		}
 		const modulePreloads = [
-			importRuntimeModule(resolveRuntimeAssetUrl(versionedRuntimeBaseUrl, targetConfig.compile.llvm.llc)),
-			importRuntimeModule(resolveRuntimeAssetUrl(versionedRuntimeBaseUrl, targetConfig.compile.llvm.lld))
+			importRuntimeModule(
+				resolveRuntimeAssetUrl(versionedRuntimeBaseUrl, targetConfig.compile.llvm.llc)
+			),
+			importRuntimeModule(
+				resolveRuntimeAssetUrl(versionedRuntimeBaseUrl, targetConfig.compile.llvm.lld)
+			)
 		];
 		if (
 			targetConfig.compile.kind === 'llvm-wasm+component-encoder' ||
@@ -135,7 +151,9 @@ export async function preloadBrowserRustRuntime(
 			for (const assetPath of PREVIEW2_COMPONENT_RUNTIME_ASSETS) {
 				if (assetPath.endsWith('.js')) {
 					modulePreloads.push(
-						importRuntimeModule(resolveRuntimeAssetUrl(versionedRuntimeBaseUrl, assetPath))
+						importRuntimeModule(
+							resolveRuntimeAssetUrl(versionedRuntimeBaseUrl, assetPath)
+						)
 					);
 					continue;
 				}

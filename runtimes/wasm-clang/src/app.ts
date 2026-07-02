@@ -90,7 +90,10 @@ export default class App {
 	nextSyntheticInode = 1;
 	syntheticInodes = new Map<string, number>();
 	readFileHandles = new Map<number, { path: string; contents: Uint8Array; position: number }>();
-	writeFileHandles = new Map<number, { path: string; contents: Uint8Array; position: number; size: number }>();
+	writeFileHandles = new Map<
+		number,
+		{ path: string; contents: Uint8Array; position: number; size: number }
+	>();
 
 	constructor(module: WebAssembly.Module, memfs: MemFS, name: string, ...args: string[]) {
 		this.argv = [name, ...args];
@@ -324,8 +327,7 @@ export default class App {
 		const path = this.mem.readStr(pathPtr, pathLen);
 		const rights = this.toNumber(fsRightsBase);
 		const writesFile =
-			(rights & WASI_RIGHT_FD_WRITE) !== 0 ||
-			(oflags & (WASI_O_CREAT | WASI_O_TRUNC)) !== 0;
+			(rights & WASI_RIGHT_FD_WRITE) !== 0 || (oflags & (WASI_O_CREAT | WASI_O_TRUNC)) !== 0;
 		const result = this.memfs.exports.path_open(
 			dirfd,
 			dirflags,
@@ -350,7 +352,9 @@ export default class App {
 				size: contents.length
 			});
 			this.readFileHandles.delete(fd);
-			this.trace(`path_open_write(fd=${fd}, path=${JSON.stringify(path)}, size=${contents.length})`);
+			this.trace(
+				`path_open_write(fd=${fd}, path=${JSON.stringify(path)}, size=${contents.length})`
+			);
 			return result;
 		}
 
@@ -362,7 +366,9 @@ export default class App {
 		if (!contents) return result;
 
 		this.readFileHandles.set(fd, { path, contents, position: 0 });
-		this.trace(`path_open_read(fd=${fd}, path=${JSON.stringify(path)}, size=${contents.length})`);
+		this.trace(
+			`path_open_read(fd=${fd}, path=${JSON.stringify(path)}, size=${contents.length})`
+		);
 		return result;
 	}
 
@@ -398,7 +404,10 @@ export default class App {
 				WASI_RIGHT_FD_SYNC |
 				WASI_RIGHT_FD_FILESTAT_GET |
 				WASI_RIGHT_FD_FILESTAT_SET_SIZE
-			: WASI_RIGHT_FD_READ | WASI_RIGHT_FD_SEEK | WASI_RIGHT_FD_TELL | WASI_RIGHT_FD_FILESTAT_GET;
+			: WASI_RIGHT_FD_READ |
+				WASI_RIGHT_FD_SEEK |
+				WASI_RIGHT_FD_TELL |
+				WASI_RIGHT_FD_FILESTAT_GET;
 
 		this.mem.check();
 		this.mem.write8(fdstatPtr, WASI_FILETYPE_REGULAR_FILE);
@@ -419,9 +428,7 @@ export default class App {
 
 		const size = writeHandle ? writeHandle.size : readHandle?.contents.length || 0;
 		this.writeRegularFileStat(statPtr, size, handle.path);
-		this.trace(
-			`fd_filestat_get(fd=${fd}, path=${JSON.stringify(handle.path)}, size=${size})`
-		);
+		this.trace(`fd_filestat_get(fd=${fd}, path=${JSON.stringify(handle.path)}, size=${size})`);
 		return ESUCCESS;
 	}
 
@@ -464,14 +471,21 @@ export default class App {
 	fd_seek(fd: number, offset: number | bigint, whence: number, newOffset: number) {
 		const writeHandle = this.writeFileHandles.get(fd);
 		if (writeHandle) {
-			const position = this.seekPosition(writeHandle.position, writeHandle.size, offset, whence);
+			const position = this.seekPosition(
+				writeHandle.position,
+				writeHandle.size,
+				offset,
+				whence
+			);
 			if (position == null) {
 				return this.memfs.exports.fd_seek(fd, offset, whence, newOffset);
 			}
 			writeHandle.position = position;
 			this.mem.check();
 			this.writeU64(newOffset, writeHandle.position);
-			this.trace(`fd_seek_write(fd=${fd}, offset=${this.toNumber(offset)}, whence=${whence})`);
+			this.trace(
+				`fd_seek_write(fd=${fd}, offset=${this.toNumber(offset)}, whence=${whence})`
+			);
 			return ESUCCESS;
 		}
 
@@ -506,10 +520,7 @@ export default class App {
 			iovs += 4;
 			if (length <= 0) continue;
 			this.ensureWriteCapacity(handle, handle.position + length);
-			handle.contents.set(
-				new Uint8Array(this.mem.buffer, buffer, length),
-				handle.position
-			);
+			handle.contents.set(new Uint8Array(this.mem.buffer, buffer, length), handle.position);
 			handle.position += length;
 			handle.size = Math.max(handle.size, handle.position);
 			copied += length;
@@ -1296,7 +1307,9 @@ export default class App {
 		this.mem.check();
 		const source = this.mem.readStr(oldPath, oldPathLen).replace(/^\/+/, '');
 		const target = this.mem.readStr(newPath, newPathLen).replace(/^\/+/, '');
-		this.trace(`path_rename(source=${JSON.stringify(source)}, target=${JSON.stringify(target)})`);
+		this.trace(
+			`path_rename(source=${JSON.stringify(source)}, target=${JSON.stringify(target)})`
+		);
 		this.memfs.addFile(target, new Uint8Array(this.memfs.getFileContents(source)));
 		return ESUCCESS;
 	}

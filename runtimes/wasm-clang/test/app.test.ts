@@ -288,8 +288,18 @@ describe('App debug tracing', () => {
 				},
 				frames: [
 					{ functionId: 1, functionName: 'main', line: 17, values: new Map() },
-					{ functionId: 2, functionName: 'factorial', line: 6, values: new Map([[1, '4']]) },
-					{ functionId: 2, functionName: 'factorial', line: 6, values: new Map([[1, '3']]) }
+					{
+						functionId: 2,
+						functionName: 'factorial',
+						line: 6,
+						values: new Map([[1, '4']])
+					},
+					{
+						functionId: 2,
+						functionName: 'factorial',
+						line: 6,
+						values: new Map([[1, '3']])
+					}
 				],
 				globalValues: new Map(),
 				onPause

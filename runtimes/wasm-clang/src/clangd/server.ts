@@ -1,13 +1,7 @@
-import {
-	BrowserMessageReader,
-	BrowserMessageWriter
-} from 'vscode-jsonrpc/lib/browser/main.js';
+import { BrowserMessageReader, BrowserMessageWriter } from 'vscode-jsonrpc/lib/browser/main.js';
 
 import { normalizeClangdBaseUrl, type ClangdStatus } from './config.js';
-import type {
-	ClangdWorkerOutboundMessage,
-	ClangdWorkerSyncFileMessage
-} from './protocol.js';
+import type { ClangdWorkerOutboundMessage, ClangdWorkerSyncFileMessage } from './protocol.js';
 
 export interface ClangdLanguageServerHandle {
 	transport: {

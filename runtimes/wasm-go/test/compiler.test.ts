@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-	compileGo,
-	createGoCompiler,
-	preloadBrowserGoRuntime
-} from '../src/compiler.js';
+import { compileGo, createGoCompiler, preloadBrowserGoRuntime } from '../src/compiler.js';
 import { createCompileRequest, createRuntimeManifest } from './helpers.js';
 
 describe('compiler facade', () => {

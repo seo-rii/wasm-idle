@@ -13,7 +13,11 @@ const controlViewOf = (buffer: StdinBuffer) =>
 	buffer instanceof Int32Array ? buffer : new Int32Array(buffer);
 
 const payloadViewOf = (control: Int32Array) =>
-	new Uint8Array(control.buffer, control.byteOffset + HEADER_BYTES, control.byteLength - HEADER_BYTES);
+	new Uint8Array(
+		control.buffer,
+		control.byteOffset + HEADER_BYTES,
+		control.byteLength - HEADER_BYTES
+	);
 
 const splitChunk = (input: string, maxBytes: number) => {
 	const encoded = encoder.encode(input);
@@ -104,7 +108,10 @@ export const flushBufferedEof = (buffer: StdinBuffer) => {
 	Atomics.notify(control, SEQUENCE_INDEX);
 };
 
-export const waitForBufferedStdin = (buffer: Int32Array | null | undefined, requestInput: () => void) => {
+export const waitForBufferedStdin = (
+	buffer: Int32Array | null | undefined,
+	requestInput: () => void
+) => {
 	if (!buffer || !isSharedBufferBackedView(buffer)) return null;
 	const sequence = Atomics.load(buffer, SEQUENCE_INDEX);
 	requestInput();

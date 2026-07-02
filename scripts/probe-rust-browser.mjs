@@ -11,10 +11,8 @@ const runTimeoutMs = Number(process.env.WASM_IDLE_RUST_RUN_TIMEOUT_MS || '300000
 const chromiumExecutable = process.env.WASM_IDLE_CHROMIUM_EXECUTABLE || '';
 const stdinText = process.env.WASM_IDLE_RUST_STDIN || '5\n';
 const sendEof = process.env.WASM_IDLE_RUST_SEND_EOF === '1';
-const expectedOutput =
-	process.env.WASM_IDLE_RUST_EXPECTED_OUTPUT || 'factorial_plus_bonus=123';
-const serverMode =
-	process.env.WASM_IDLE_BROWSER_SERVER_MODE === 'dev' ? 'dev' : 'preview';
+const expectedOutput = process.env.WASM_IDLE_RUST_EXPECTED_OUTPUT || 'factorial_plus_bonus=123';
+const serverMode = process.env.WASM_IDLE_BROWSER_SERVER_MODE === 'dev' ? 'dev' : 'preview';
 
 await runWithBrowserProbeSessionLock(async () => {
 	let previewServer = null;

@@ -35,16 +35,34 @@ function parseCompilerConfig(value: unknown): RuntimeCompilerConfig {
 	const sysroot = expectObject(compiler.sysroot, 'root.compiler.sysroot');
 	return {
 		memfs: {
-			asset: expectString(expectObject(compiler.memfs, 'root.compiler.memfs').asset, 'root.compiler.memfs.asset'),
-			argv0: expectString(expectObject(compiler.memfs, 'root.compiler.memfs').argv0, 'root.compiler.memfs.argv0')
+			asset: expectString(
+				expectObject(compiler.memfs, 'root.compiler.memfs').asset,
+				'root.compiler.memfs.asset'
+			),
+			argv0: expectString(
+				expectObject(compiler.memfs, 'root.compiler.memfs').argv0,
+				'root.compiler.memfs.argv0'
+			)
 		},
 		clang: {
-			asset: expectString(expectObject(compiler.clang, 'root.compiler.clang').asset, 'root.compiler.clang.asset'),
-			argv0: expectString(expectObject(compiler.clang, 'root.compiler.clang').argv0, 'root.compiler.clang.argv0')
+			asset: expectString(
+				expectObject(compiler.clang, 'root.compiler.clang').asset,
+				'root.compiler.clang.asset'
+			),
+			argv0: expectString(
+				expectObject(compiler.clang, 'root.compiler.clang').argv0,
+				'root.compiler.clang.argv0'
+			)
 		},
 		lld: {
-			asset: expectString(expectObject(compiler.lld, 'root.compiler.lld').asset, 'root.compiler.lld.asset'),
-			argv0: expectString(expectObject(compiler.lld, 'root.compiler.lld').argv0, 'root.compiler.lld.argv0')
+			asset: expectString(
+				expectObject(compiler.lld, 'root.compiler.lld').asset,
+				'root.compiler.lld.asset'
+			),
+			argv0: expectString(
+				expectObject(compiler.lld, 'root.compiler.lld').argv0,
+				'root.compiler.lld.argv0'
+			)
 		},
 		sysroot: {
 			asset: expectString(sysroot.asset, 'root.compiler.sysroot.asset'),
@@ -125,7 +143,8 @@ export async function loadRuntimeManifest(
 	manifestUrl: string | URL = DEFAULT_RUNTIME_MANIFEST_URL,
 	fetchImpl: typeof fetch = fetch
 ): Promise<RuntimeManifestV1> {
-	const resolvedUrl = manifestUrl instanceof URL ? manifestUrl : new URL(manifestUrl, import.meta.url);
+	const resolvedUrl =
+		manifestUrl instanceof URL ? manifestUrl : new URL(manifestUrl, import.meta.url);
 	if (resolvedUrl.protocol === 'file:') {
 		const [{ readFile }, { fileURLToPath }] = await Promise.all([
 			import('node:fs/promises'),

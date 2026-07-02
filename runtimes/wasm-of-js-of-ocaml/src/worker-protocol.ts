@@ -20,4 +20,3 @@ export type CompileWorkerMessage =
 	| CompileWorkerRequestMessage
 	| CompileWorkerResultMessage
 	| CompileWorkerErrorMessage;
-

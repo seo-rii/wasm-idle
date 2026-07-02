@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { BrowserExecutionImportContext } from '../src/browser-execution.js';
 
 const wasiCtorCalls: Array<{
 	args: string[];
@@ -112,26 +113,52 @@ describe('browser execution', () => {
 		const wasmBytes = new Uint8Array([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]);
 		const precompiledModule = await WebAssembly.compile(wasmBytes);
 		const compileSpy = vi.spyOn(WebAssembly, 'compile');
-		const instantiateSpy = vi
-			.spyOn(WebAssembly, 'instantiate')
-			.mockResolvedValue({
-				exports: {
-					memory: new WebAssembly.Memory({ initial: 1 }),
-					_start: () => {}
-				}
-			} as unknown as WebAssembly.Instance);
+		const instantiated = {
+			exports: {
+				memory: new WebAssembly.Memory({ initial: 1 }),
+				_start: () => {}
+			}
+		} as unknown as WebAssembly.Instance;
+		const instantiateSpy = vi.spyOn(WebAssembly, 'instantiate').mockResolvedValue(instantiated);
 		wasiStart.mockReturnValue(0);
+		let importContext: BrowserExecutionImportContext | undefined;
 
-		const result = await executeBrowserClangArtifact({
-			bytes: wasmBytes,
-			wasm: precompiledModule,
-			target: 'wasm32-wasi',
-			format: 'wasi-core-wasm',
-			fileName: 'hello.wasm'
-		});
+		const result = await executeBrowserClangArtifact(
+			{
+				bytes: wasmBytes,
+				wasm: precompiledModule,
+				target: 'wasm32-wasi',
+				format: 'wasi-core-wasm',
+				fileName: 'hello.wasm'
+			},
+			{
+				extraImports: (context) => {
+					importContext = context;
+					return {
+						env: {
+							host_probe: () => (context.instance.current === instantiated ? 7 : 0)
+						}
+					};
+				}
+			}
+		);
 
 		expect(compileSpy).not.toHaveBeenCalled();
-		expect(instantiateSpy).toHaveBeenCalledWith(precompiledModule, expect.any(Object));
+		expect(instantiateSpy).toHaveBeenCalledWith(
+			precompiledModule,
+			expect.objectContaining({
+				env: expect.objectContaining({
+					host_probe: expect.any(Function)
+				}),
+				wasi_unstable: expect.any(Object),
+				wasi_snapshot_preview1: expect.any(Object)
+			})
+		);
+		expect(importContext).toBeDefined();
+		const context = importContext as BrowserExecutionImportContext;
+		expect(context.host.args).toEqual(['hello.wasm']);
+		expect(context.module).toBe(precompiledModule);
+		expect(context.instance.current).toBe(instantiated);
 		expect(wasiCtorCalls[0]?.args).toEqual(['hello.wasm']);
 		expect(result).toMatchObject({
 			exitCode: 0,

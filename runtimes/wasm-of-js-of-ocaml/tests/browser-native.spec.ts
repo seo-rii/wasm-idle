@@ -56,10 +56,12 @@ test('browser-native harness executes hello, yojson, and diagnostics fixtures', 
 
 	await page.goto('/');
 
-	await expect.poll(async () => await page.locator('#status').textContent(), {
-		timeout: 180_000,
-		message: 'expected browser-native harness to finish successfully'
-	}).toBe('Browser-native compile succeeded.');
+	await expect
+		.poll(async () => await page.locator('#status').textContent(), {
+			timeout: 180_000,
+			message: 'expected browser-native harness to finish successfully'
+		})
+		.toBe('Browser-native compile succeeded.');
 
 	const outputText = await page.locator('#output').textContent();
 	expect(outputText).toBeTruthy();
@@ -120,7 +122,9 @@ test('browser-native harness executes hello, yojson, and diagnostics fixtures', 
 	expect(output.hello.wasm.stderr).not.toContain('binaryen bridge exit: 0');
 	expect(output.hello.wasm.stderr).not.toContain('binaryen bridge http');
 	expect(
-		output.hello.wasm.runtimeOutput.some((line) => line.startsWith('asset resolve: hello.assets/'))
+		output.hello.wasm.runtimeOutput.some((line) =>
+			line.startsWith('asset resolve: hello.assets/')
+		)
 	).toBe(true);
 	expect(output.hello.wasm.runtimeOutput).toContain('wasm instantiateStreaming');
 	expect(output.hello.wasm.runtimeOutput).toContain('runtime promise resolved');
@@ -221,9 +225,9 @@ test('browser-native harness executes hello, yojson, and diagnostics fixtures', 
 	expect(
 		fullBinaryenToolPaths.some((pathname) => pathname.endsWith('/wasm-merge.browser.js'))
 	).toBe(true);
-	expect(fullBinaryenToolPaths.some((pathname) => pathname.endsWith('/wasm-opt.browser.js'))).toBe(
-		true
-	);
+	expect(
+		fullBinaryenToolPaths.some((pathname) => pathname.endsWith('/wasm-opt.browser.js'))
+	).toBe(true);
 	expect(
 		fullBinaryenToolPaths.some((pathname) => pathname.endsWith('/wasm-metadce.browser.js'))
 	).toBe(true);

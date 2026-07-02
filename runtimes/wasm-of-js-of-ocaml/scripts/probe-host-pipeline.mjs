@@ -11,7 +11,8 @@ const [{ compile }, { createNodeSystemDispatcher }] = await Promise.all([
 ]);
 
 const opamRoot =
-	process.env.OPAMROOT || path.join(process.env.HOME || '', '.cache', 'wasm-of-js-of-ocaml', 'opam');
+	process.env.OPAMROOT ||
+	path.join(process.env.HOME || '', '.cache', 'wasm-of-js-of-ocaml', 'opam');
 const switchName = process.env.WASM_OF_JS_OF_OCAML_SWITCH || 'wasm-of-js-of-ocaml';
 const binaryenBinDir =
 	process.env.WASM_OF_JS_OF_OCAML_BINARYEN_BIN_DIR ||

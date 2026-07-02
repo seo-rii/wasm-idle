@@ -2,9 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const assetsDir = path.resolve(
-	'/home/seorii/dev/hancomac/wasm-idle/static/wasm-tinygo/assets'
-);
+const assetsDir = path.resolve('/home/seorii/dev/hancomac/wasm-idle/static/wasm-tinygo/assets');
 const toolsDir = path.resolve('/home/seorii/dev/hancomac/wasm-idle/static/wasm-tinygo/tools');
 
 describe('bundled wasm-tinygo runtime', () => {
@@ -26,6 +24,8 @@ describe('bundled wasm-tinygo runtime', () => {
 		expect(runtimeChunkSource).toContain(
 			'tinygo compiler module loaded from tools/tinygo-compiler.wasm'
 		);
-		expect(runtimeChunkSource).toContain('frontend bootstrap tool plan skipped: backend lowering is active');
+		expect(runtimeChunkSource).toContain(
+			'frontend bootstrap tool plan skipped: backend lowering is active'
+		);
 	});
 });

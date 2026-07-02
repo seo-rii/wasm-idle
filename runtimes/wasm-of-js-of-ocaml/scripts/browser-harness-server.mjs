@@ -39,11 +39,15 @@ async function ensureBrowserNativeBundle() {
 		return;
 	} catch {
 		await new Promise((resolve, reject) => {
-			const child = spawn(process.execPath, [path.join(projectRoot, 'scripts', 'prepare-browser-native.mjs')], {
-				cwd: projectRoot,
-				env: process.env,
-				stdio: 'inherit'
-			});
+			const child = spawn(
+				process.execPath,
+				[path.join(projectRoot, 'scripts', 'prepare-browser-native.mjs')],
+				{
+					cwd: projectRoot,
+					env: process.env,
+					stdio: 'inherit'
+				}
+			);
 			child.on('error', reject);
 			child.on('close', (code) => {
 				if (code === 0) {
@@ -58,10 +62,14 @@ async function ensureBrowserNativeBundle() {
 
 async function resolveSwitchPrefix(opamBin, opamRoot, switchName) {
 	return await new Promise((resolve, reject) => {
-		const processRef = spawn(opamBin, ['var', 'prefix', '--root', opamRoot, '--switch', switchName], {
-			env: process.env,
-			stdio: ['ignore', 'pipe', 'pipe']
-		});
+		const processRef = spawn(
+			opamBin,
+			['var', 'prefix', '--root', opamRoot, '--switch', switchName],
+			{
+				env: process.env,
+				stdio: ['ignore', 'pipe', 'pipe']
+			}
+		);
 		const stdoutParts = [];
 		const stderrParts = [];
 		processRef.stdout.on('data', (chunk) => {
@@ -74,7 +82,10 @@ async function resolveSwitchPrefix(opamBin, opamRoot, switchName) {
 		processRef.on('close', (code) => {
 			if (code !== 0) {
 				reject(
-					new Error(Buffer.concat(stderrParts).toString('utf8') || `opam var prefix failed with ${code}`)
+					new Error(
+						Buffer.concat(stderrParts).toString('utf8') ||
+							`opam var prefix failed with ${code}`
+					)
 				);
 				return;
 			}
@@ -173,7 +184,9 @@ const server = http.createServer(async (request, response) => {
 			: absolutePath;
 		const body = await readFile(filePath);
 		response.writeHead(200, {
-			'content-type': contentTypes.get(path.extname(filePath).toLowerCase()) || 'application/octet-stream',
+			'content-type':
+				contentTypes.get(path.extname(filePath).toLowerCase()) ||
+				'application/octet-stream',
 			'content-length': body.byteLength,
 			'cache-control': 'no-store'
 		});

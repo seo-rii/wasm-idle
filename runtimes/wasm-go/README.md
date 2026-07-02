@@ -71,12 +71,12 @@ That sequence:
 
 ## Target Support
 
-| Target | Planner | In-process execution | Notes |
-| --- | --- | --- | --- |
-| `wasip1/wasm` | yes | yes | primary packaged/runtime target |
-| `wasip2/wasm` | yes | yes | uses native `GOOS=wasip2` when the toolchain supports it, otherwise aliases to `wasip1` |
-| `wasip3/wasm` | yes | yes | uses native `GOOS=wasip3` when the toolchain supports it, otherwise aliases to `wasip1` |
-| `js/wasm` | yes | yes | packaged with `wasm_exec.js` and a dedicated `js` stdlib sysroot |
+| Target        | Planner | In-process execution | Notes                                                                                   |
+| ------------- | ------- | -------------------- | --------------------------------------------------------------------------------------- |
+| `wasip1/wasm` | yes     | yes                  | primary packaged/runtime target                                                         |
+| `wasip2/wasm` | yes     | yes                  | uses native `GOOS=wasip2` when the toolchain supports it, otherwise aliases to `wasip1` |
+| `wasip3/wasm` | yes     | yes                  | uses native `GOOS=wasip3` when the toolchain supports it, otherwise aliases to `wasip1` |
+| `js/wasm`     | yes     | yes                  | packaged with `wasm_exec.js` and a dedicated `js` stdlib sysroot                        |
 
 ## Library Contract
 
@@ -88,7 +88,7 @@ import createGoCompiler from './dist/index.js';
 
 const compiler = await createGoCompiler();
 const result = await compiler.compile({
-  code: `package main
+	code: `package main
 
 import "fmt"
 
@@ -96,7 +96,7 @@ func main() {
   fmt.Println("hello from wasm-go")
 }
 `,
-  target: 'wasip1/wasm'
+	target: 'wasip1/wasm'
 });
 ```
 

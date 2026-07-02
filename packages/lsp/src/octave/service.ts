@@ -16,8 +16,7 @@ export interface OctaveWorkerOptions {
 	manifestUrl: string;
 }
 
-export type OctaveDiagnosticRunnerRequest =
-	StaticWorkerDiagnosticRequest<OctaveWorkerOptions>;
+export type OctaveDiagnosticRunnerRequest = StaticWorkerDiagnosticRequest<OctaveWorkerOptions>;
 
 export interface OctaveDiagnosticRunnerResult {
 	error?: string;

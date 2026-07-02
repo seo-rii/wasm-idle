@@ -47,40 +47,43 @@ export function createNodeHostSystemDispatcher(options: NodeHostDispatcherOption
 				const translatedCwd =
 					invocation.cwd === '/workspace' || invocation.cwd === '/tmp'
 						? path.join(stagingRoot, invocation.cwd.slice(1))
-						: invocation.cwd.startsWith('/workspace/') || invocation.cwd.startsWith('/tmp/')
+						: invocation.cwd.startsWith('/workspace/') ||
+							  invocation.cwd.startsWith('/tmp/')
 							? path.join(stagingRoot, invocation.cwd.slice(1))
 							: invocation.cwd;
 				await mkdir(translatedCwd, { recursive: true });
 
-				const result = await new Promise<{ exitCode: number; stdout: string; stderr: string }>(
-					(resolve, reject) => {
-						const stdoutParts: Buffer[] = [];
-						const stderrParts: Buffer[] = [];
-						const child = spawn(commandPath, translatedArgv, {
-							cwd: translatedCwd,
-							env: {
-								...process.env,
-								...(options.extraEnv || {}),
-								...invocation.env,
-								PATH: `${options.binaryenBin ? `${options.binaryenBin}:` : ''}${path.join(switchPrefix, 'bin')}:${process.env.PATH || ''}`
-							}
+				const result = await new Promise<{
+					exitCode: number;
+					stdout: string;
+					stderr: string;
+				}>((resolve, reject) => {
+					const stdoutParts: Buffer[] = [];
+					const stderrParts: Buffer[] = [];
+					const child = spawn(commandPath, translatedArgv, {
+						cwd: translatedCwd,
+						env: {
+							...process.env,
+							...(options.extraEnv || {}),
+							...invocation.env,
+							PATH: `${options.binaryenBin ? `${options.binaryenBin}:` : ''}${path.join(switchPrefix, 'bin')}:${process.env.PATH || ''}`
+						}
+					});
+					child.stdout.on('data', (chunk) => {
+						stdoutParts.push(Buffer.from(chunk));
+					});
+					child.stderr.on('data', (chunk) => {
+						stderrParts.push(Buffer.from(chunk));
+					});
+					child.on('error', reject);
+					child.on('close', (code) => {
+						resolve({
+							exitCode: code ?? 1,
+							stdout: Buffer.concat(stdoutParts).toString('utf8'),
+							stderr: Buffer.concat(stderrParts).toString('utf8')
 						});
-						child.stdout.on('data', (chunk) => {
-							stdoutParts.push(Buffer.from(chunk));
-						});
-						child.stderr.on('data', (chunk) => {
-							stderrParts.push(Buffer.from(chunk));
-						});
-						child.on('error', reject);
-						child.on('close', (code) => {
-							resolve({
-								exitCode: code ?? 1,
-								stdout: Buffer.concat(stdoutParts).toString('utf8'),
-								stderr: Buffer.concat(stderrParts).toString('utf8')
-							});
-						});
-					}
-				);
+					});
+				});
 
 				const directories = ['workspace', 'tmp'];
 				for (const rootEntry of directories) {
@@ -90,9 +93,7 @@ export function createNodeHostSystemDispatcher(options: NodeHostDispatcherOption
 						if (!currentPath) {
 							continue;
 						}
-						let entries:
-							| Array<import('node:fs').Dirent>
-							| undefined;
+						let entries: Array<import('node:fs').Dirent> | undefined;
 						try {
 							entries = await readdir(currentPath, { withFileTypes: true });
 						} catch {
@@ -107,8 +108,13 @@ export function createNodeHostSystemDispatcher(options: NodeHostDispatcherOption
 							if (!entry.isFile()) {
 								continue;
 							}
-							const relativePath = path.relative(stagingRoot, absolutePath).replace(/\\/g, '/');
-							invocation.fs.writeFile(`/${relativePath}`, new Uint8Array(await readFile(absolutePath)));
+							const relativePath = path
+								.relative(stagingRoot, absolutePath)
+								.replace(/\\/g, '/');
+							invocation.fs.writeFile(
+								`/${relativePath}`,
+								new Uint8Array(await readFile(absolutePath))
+							);
 						}
 					}
 				}

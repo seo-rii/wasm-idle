@@ -116,11 +116,11 @@ async function instantiateThreadWorkerRuntime(
 			if (request.type === 'thread-pool-init') {
 				const slot = reserveIdleThreadPoolSlot(
 					request.poolBuffers
-					.map((buffer, index) => ({
-						index,
-						slotState: new Int32Array(buffer)
-					}))
-					.filter((entry) => entry.index !== request.slotIndex)
+						.map((buffer, index) => ({
+							index,
+							slotState: new Int32Array(buffer)
+						}))
+						.filter((entry) => entry.index !== request.slotIndex)
 				);
 				if (!slot) {
 					return spawnDedicatedWorker();
@@ -181,8 +181,7 @@ async function startThreadWorker(request: RustcThreadWorkerRequest) {
 		postMessage({
 			type: 'thread-log',
 			threadId: request.threadId,
-			phase: 'enter-wasi-thread-start'
-			,
+			phase: 'enter-wasi-thread-start',
 			detail: describeStartArgMemory(request.memory, request.startArg)
 		} satisfies RustcThreadWorkerLogMessage);
 	}

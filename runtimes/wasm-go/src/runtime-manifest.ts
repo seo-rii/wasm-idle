@@ -41,7 +41,10 @@ function expectString(value: unknown, label: string): string {
 }
 
 function expectStringArray(value: unknown, label: string): string[] {
-	if (!Array.isArray(value) || value.some((entry) => typeof entry !== 'string' || entry.length === 0)) {
+	if (
+		!Array.isArray(value) ||
+		value.some((entry) => typeof entry !== 'string' || entry.length === 0)
+	) {
 		throw new Error(`invalid ${label} in wasm-go runtime manifest`);
 	}
 	return value as string[];
@@ -132,7 +135,10 @@ function parseRuntimeToolConfig(value: unknown, label: string): RuntimeToolConfi
 		asset: expectString(object.asset, `${label}.asset`),
 		argv0: expectString(object.argv0, `${label}.argv0`),
 		memory: {
-			initialPages: expectPositiveInteger(memory.initialPages, `${label}.memory.initialPages`),
+			initialPages: expectPositiveInteger(
+				memory.initialPages,
+				`${label}.memory.initialPages`
+			),
 			maximumPages: expectPositiveInteger(memory.maximumPages, `${label}.memory.maximumPages`)
 		}
 	};
@@ -166,16 +172,16 @@ function parseRuntimeCompilerConfig(value: unknown, label: string): RuntimeCompi
 	return {
 		compile: parseRuntimeToolConfig(object.compile, `${label}.compile`),
 		link: parseRuntimeToolConfig(object.link, `${label}.link`),
-		compileTimeoutMs: expectPositiveInteger(object.compileTimeoutMs, `${label}.compileTimeoutMs`),
+		compileTimeoutMs: expectPositiveInteger(
+			object.compileTimeoutMs,
+			`${label}.compileTimeoutMs`
+		),
 		linkTimeoutMs: expectPositiveInteger(object.linkTimeoutMs, `${label}.linkTimeoutMs`),
 		host: parseRuntimeHostConfig(object.host, `${label}.host`)
 	};
 }
 
-function parseExecutionConfig(
-	value: unknown,
-	label: string
-): RuntimeTargetExecutionConfig {
+function parseExecutionConfig(value: unknown, label: string): RuntimeTargetExecutionConfig {
 	const object = expectObject(value, label);
 	if (object.kind !== 'wasi-preview1' && object.kind !== 'js-wasm-exec') {
 		throw new Error(`invalid ${label}.kind in wasm-go runtime manifest`);
@@ -234,13 +240,23 @@ function parseTargetConfig(
 		goarch,
 		artifactFormat: expectArtifactFormat(object.artifactFormat, `${label}.artifactFormat`),
 		...(object.sysrootFiles !== undefined
-			? { sysrootFiles: parseRuntimeAssetFileArray(object.sysrootFiles, `${label}.sysrootFiles`) }
+			? {
+					sysrootFiles: parseRuntimeAssetFileArray(
+						object.sysrootFiles,
+						`${label}.sysrootFiles`
+					)
+				}
 			: {}),
 		...(object.sysrootPack !== undefined
 			? { sysrootPack: parseRuntimePackReference(object.sysrootPack, `${label}.sysrootPack`) }
 			: {}),
 		...(object.stdlibIndex !== undefined
-			? { stdlibIndex: parseRuntimeStdlibIndexAsset(object.stdlibIndex, `${label}.stdlibIndex`) }
+			? {
+					stdlibIndex: parseRuntimeStdlibIndexAsset(
+						object.stdlibIndex,
+						`${label}.stdlibIndex`
+					)
+				}
 			: {}),
 		execution: parseExecutionConfig(object.execution, `${label}.execution`),
 		planner: parseRuntimePlannerConfig(object.planner, `${label}.planner`)

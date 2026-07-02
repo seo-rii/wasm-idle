@@ -21,13 +21,19 @@ export interface CompileHandlerOptions {
 }
 
 export function createCompileHandler(options: CompileHandlerOptions = {}) {
-	return async (request: CompileRequest, manifest?: ToolchainManifest): Promise<CompileResult> => {
+	return async (
+		request: CompileRequest,
+		manifest?: ToolchainManifest
+	): Promise<CompileResult> => {
 		const fs = options.createFileSystem ? options.createFileSystem() : new MemoryFileSystem();
 		const stdoutParts: string[] = [];
 		const stderrParts: string[] = [];
 		const diagnostics: CompileDiagnostic[] = [];
-		const toolchainRoot =
-			(options.toolchainRoot || manifest?.toolchainRoot || '/toolchain').replace(/\/+$/, '');
+		const toolchainRoot = (
+			options.toolchainRoot ||
+			manifest?.toolchainRoot ||
+			'/toolchain'
+		).replace(/\/+$/, '');
 		const inputEntries = Object.entries(request.files || {});
 		if (inputEntries.length === 0) {
 			return {
@@ -62,14 +68,21 @@ export function createCompileHandler(options: CompileHandlerOptions = {}) {
 		const normalizedEntries = inputEntries
 			.map(([filePath, source]) => {
 				const normalized = filePath.replace(/\\/g, '/').replace(/^\/+/, '');
-				if (!normalized || normalized.split('/').some((segment) => !segment || segment === '.' || segment === '..')) {
+				if (
+					!normalized ||
+					normalized
+						.split('/')
+						.some((segment) => !segment || segment === '.' || segment === '..')
+				) {
 					throw new Error(`invalid workspace file path: ${filePath}`);
 				}
 				return [normalized, source] as const;
 			})
 			.sort(([left], [right]) => left.localeCompare(right));
 		const entry = request.entry.replace(/\\/g, '/').replace(/^\/+/, '');
-		const packages = [...new Set((request.packages || []).map((value) => value.trim()).filter(Boolean))];
+		const packages = [
+			...new Set((request.packages || []).map((value) => value.trim()).filter(Boolean))
+		];
 		const entryFileName = entry.split('/').at(-1) || entry;
 		const entryStem = entryFileName.replace(/\.(ml|mli)$/, '') || 'program';
 		const effectsMode = request.effectsMode || 'cps';
@@ -118,20 +131,14 @@ export function createCompileHandler(options: CompileHandlerOptions = {}) {
 			compilePlan.push({
 				stage: 'wasm_of_ocaml',
 				cwd: '/workspace',
-				argv: [
-					'wasm_of_ocaml',
-					bytecodeOutput,
-					'-o',
-					jsOutput,
-					'--effects',
-					effectsMode
-				]
+				argv: ['wasm_of_ocaml', bytecodeOutput, '-o', jsOutput, '--effects', effectsMode]
 			});
 			if (request.sourcemap) {
 				diagnostics.push({
 					file: entry,
 					severity: 'warning',
-					message: 'browser preset keeps wasm_of_ocaml sourcemaps disabled during bring-up'
+					message:
+						'browser preset keeps wasm_of_ocaml sourcemaps disabled during bring-up'
 				});
 				stderrParts.push(
 					'warning: browser preset keeps wasm_of_ocaml sourcemaps disabled during bring-up'
@@ -227,7 +234,11 @@ export function createCompileHandler(options: CompileHandlerOptions = {}) {
 					let cursor = lineIndex + 1;
 					for (; cursor < stderrLines.length; cursor += 1) {
 						const messageLine = stderrLines[cursor] || '';
-						if (/^File "([^"]+)", line (\d+), characters (\d+)-(\d+):$/.test(messageLine)) {
+						if (
+							/^File "([^"]+)", line (\d+), characters (\d+)-(\d+):$/.test(
+								messageLine
+							)
+						) {
 							break;
 						}
 						if (!messageLine.trim() && messageLines.length === 0) {
@@ -245,7 +256,9 @@ export function createCompileHandler(options: CompileHandlerOptions = {}) {
 							messageLine.startsWith('Error:') || messageLine.startsWith('Warning')
 					);
 					const relevantMessageLines =
-						primaryMessageIndex >= 0 ? messageLines.slice(primaryMessageIndex) : messageLines;
+						primaryMessageIndex >= 0
+							? messageLines.slice(primaryMessageIndex)
+							: messageLines;
 					let message = relevantMessageLines.join(' ').trim();
 					let severity: CompileDiagnostic['severity'] = 'other';
 					if (message.startsWith('Error:')) {
@@ -327,11 +340,17 @@ export function createCompileHandler(options: CompileHandlerOptions = {}) {
 }
 
 const workerLikeGlobal = globalThis as typeof globalThis & {
-	addEventListener?: (type: 'message', listener: (event: MessageEvent<CompileWorkerMessage>) => void) => void;
+	addEventListener?: (
+		type: 'message',
+		listener: (event: MessageEvent<CompileWorkerMessage>) => void
+	) => void;
 	postMessage?: (message: CompileWorkerMessage) => void;
 };
 
-if (typeof workerLikeGlobal.addEventListener === 'function' && typeof workerLikeGlobal.postMessage === 'function') {
+if (
+	typeof workerLikeGlobal.addEventListener === 'function' &&
+	typeof workerLikeGlobal.postMessage === 'function'
+) {
 	const handleCompile = createCompileHandler();
 	workerLikeGlobal.addEventListener('message', async (event) => {
 		const message = event.data;

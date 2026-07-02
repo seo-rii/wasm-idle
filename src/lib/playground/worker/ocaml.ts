@@ -282,7 +282,8 @@ async function executeCompileResult(result: CompileResult, log = false, stdin?: 
 	const sourceDir = programArtifact.path.replace(/\/[^/]+$/, '');
 	const createdObjectUrls: string[] = [];
 	const stdinEncoder = new TextEncoder();
-	let stdinChunkOcaml = typeof stdin === 'string' ? stdinEncoder.encode(stdin) : new Uint8Array(0);
+	let stdinChunkOcaml =
+		typeof stdin === 'string' ? stdinEncoder.encode(stdin) : new Uint8Array(0);
 	let stdinChunkOffsetOcaml = 0;
 	const originalConsole = globalThis.console;
 	const originalFetch = globalThis.fetch.bind(globalThis);

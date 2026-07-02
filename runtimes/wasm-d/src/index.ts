@@ -1,8 +1,4 @@
-import {
-	compileD,
-	createDCompiler,
-	type CreateDCompilerOptions
-} from './compiler.js';
+import { compileD, createDCompiler, type CreateDCompilerOptions } from './compiler.js';
 import { executeBrowserDArtifact } from './browser-execution.js';
 import { loadRuntimeManifest, parseRuntimeManifest } from './runtime-manifest.js';
 import { parseTar } from './tar.js';

@@ -1,6 +1,7 @@
 export type PlaygroundLanguage =
 	| 'C'
 	| 'CPP'
+	| 'OBJC'
 	| 'PYTHON'
 	| 'JAVA'
 	| 'RUST'
@@ -81,6 +82,7 @@ type MonacoLanguageContributionLoader = () => Promise<unknown>;
 export const playgroundLanguages: PlaygroundLanguage[] = [
 	'C',
 	'CPP',
+	'OBJC',
 	'PYTHON',
 	'JAVA',
 	'RUST',
@@ -133,6 +135,7 @@ export const playgroundLanguages: PlaygroundLanguage[] = [
 export const languageLabels: Record<PlaygroundLanguage, string> = {
 	C: 'C',
 	CPP: 'C++',
+	OBJC: 'Objective-C',
 	PYTHON: 'Python',
 	JAVA: 'Java',
 	RUST: 'Rust',
@@ -185,6 +188,7 @@ export const languageLabels: Record<PlaygroundLanguage, string> = {
 export const editorLanguages: Record<PlaygroundLanguage, string> = {
 	C: 'c',
 	CPP: 'cpp',
+	OBJC: 'objective-c',
 	PYTHON: 'python',
 	JAVA: 'java',
 	RUST: 'rust',
@@ -235,7 +239,7 @@ export const editorLanguages: Record<PlaygroundLanguage, string> = {
 };
 
 export const debugLspLanguages = new Set<PlaygroundLanguage>(['CPP']);
-export const clangdLspLanguages = new Set<PlaygroundLanguage>(['C', 'CPP']);
+export const clangdLspLanguages = new Set<PlaygroundLanguage>(['C', 'CPP', 'OBJC']);
 export const dotnetLspLanguages = new Set<PlaygroundLanguage>(['CSHARP', 'FSHARP', 'VBNET']);
 export const typescriptLspLanguages = new Set<PlaygroundLanguage>(['JAVASCRIPT', 'TYPESCRIPT']);
 export const lspLanguageOverrides: Partial<Record<PlaygroundLanguage, string>> = {
@@ -277,6 +281,7 @@ export const runtimeLspCapabilities: Partial<Record<PlaygroundLanguage, RuntimeL
 	WASM: 'wasm'
 };
 export const argsHelpLanguages = new Set<PlaygroundLanguage>([
+	'OBJC',
 	'JAVA',
 	'RUST',
 	'GO',
@@ -305,6 +310,7 @@ export const argsLabels: Partial<Record<PlaygroundLanguage, string>> = {
 	HASKELL: 'GHC Args'
 };
 export const compilerDiagnosticLanguages = new Set<PlaygroundLanguage>([
+	'OBJC',
 	'JAVA',
 	'RUST',
 	'GO',
@@ -337,12 +343,17 @@ export const dotnetMonacoLspLanguages: Record<string, DotnetLspLanguage> = {
 };
 export const defaultLanguageAliases: Record<string, string> = {
 	nimrod: 'nim',
+	objc: 'objective-c',
+	objectivec: 'objective-c',
+	'objective-c': 'objective-c',
+	objective_c: 'objective-c',
 	vb: 'vbnet',
 	sql: 'sqlite'
 };
 export const debugViewLanguages = new Set(['cpp']);
 export const diagnosticMarkerLanguages = new Set([
 	'c',
+	'objective-c',
 	'java',
 	'python',
 	'rust',
@@ -385,6 +396,8 @@ export const diagnosticMarkerLanguages = new Set([
 export const monacoLanguageContributionLoaders: Record<string, MonacoLanguageContributionLoader> = {
 	c: () => import('monaco-editor/esm/vs/basic-languages/cpp/cpp.contribution.js'),
 	cpp: () => import('monaco-editor/esm/vs/basic-languages/cpp/cpp.contribution.js'),
+	'objective-c': () =>
+		import('monaco-editor/esm/vs/basic-languages/objective-c/objective-c.contribution.js'),
 	csharp: () => import('monaco-editor/esm/vs/basic-languages/csharp/csharp.contribution.js'),
 	css: () => import('monaco-editor/esm/vs/basic-languages/css/css.contribution.js'),
 	elixir: () => import('monaco-editor/esm/vs/basic-languages/elixir/elixir.contribution.js'),

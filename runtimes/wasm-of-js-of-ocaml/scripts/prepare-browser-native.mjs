@@ -14,7 +14,9 @@ const projectRoot = path.resolve(scriptsDir, '..');
 function parseArgs(argv) {
 	const options = {
 		force: false,
-		opamBin: process.env.WASM_OF_JS_OF_OCAML_OPAM_BIN || path.join(projectRoot, '.cache', 'opam-2.2.1'),
+		opamBin:
+			process.env.WASM_OF_JS_OF_OCAML_OPAM_BIN ||
+			path.join(projectRoot, '.cache', 'opam-2.2.1'),
 		opamRoot:
 			process.env.WASM_OF_JS_OF_OCAML_OPAM_ROOT ||
 			path.join(process.env.HOME || process.cwd(), '.cache', 'wasm-of-js-of-ocaml', 'opam'),
@@ -253,7 +255,11 @@ async function writeRuntimePack(packEntries, assetPath, indexPath) {
 	}
 	writer.end();
 	await finished(writer);
-	await pipeline(createReadStream(packPath), createGzip({ level: 9 }), createWriteStream(assetPath));
+	await pipeline(
+		createReadStream(packPath),
+		createGzip({ level: 9 }),
+		createWriteStream(assetPath)
+	);
 	await rm(packPath, { force: true });
 	await writeFile(
 		indexPath,
@@ -286,7 +292,9 @@ async function patchVersionDuneToAvoidGitProbe(sourceDir) {
 	const versionDunePath = path.join(sourceDir, 'tools', 'version', 'dune');
 	const versionDuneSource = await readFile(versionDunePath, 'utf8');
 	const placeholderMatch = versionDuneSource.match(/let placeholder = "([^"]+)"/);
-	const patchedVersionMatch = versionDuneSource.match(/\n\s*"([^"]+)"\s*\n\s*let \(\) = send dyn/);
+	const patchedVersionMatch = versionDuneSource.match(
+		/\n\s*"([^"]+)"\s*\n\s*let \(\) = send dyn/
+	);
 	const placeholderVersion = placeholderMatch?.[1] || patchedVersionMatch?.[1];
 	if (!placeholderVersion) {
 		throw new Error(`failed to locate placeholder version in ${versionDunePath}`);
@@ -421,10 +429,7 @@ async function patchBinaryenBrowserTool(toolName, outPath) {
 			syncInstantiatePattern,
 			'function getWasmBinary(binaryFile){return getBinarySync(binaryFile)}function instantiateArrayBuffer(binaryFile,imports){try{var binary=getWasmBinary(binaryFile);var module=new WebAssembly.Module(binary);var instance=new WebAssembly.Instance(module,imports);return{instance,module}}catch(reason){err(`failed to synchronously prepare wasm: ${reason}`);abort(reason)}}function instantiateAsync(binary,binaryFile,imports){return instantiateArrayBuffer(binaryFile,imports)}function getWasmImports'
 		)
-		.replace(
-			/async function createWasm\(\)/,
-			'function createWasm()'
-		)
+		.replace(/async function createWasm\(\)/, 'function createWasm()')
 		.replace(
 			/var result=await instantiateAsync\(wasmBinary,wasmBinaryFile,info\);/,
 			'var result=instantiateAsync(wasmBinary,wasmBinaryFile,info);'
@@ -437,7 +442,11 @@ async function patchBinaryenBrowserTool(toolName, outPath) {
 		runtimeBootstrapPattern,
 		'globalThis.__binaryen_cli_runtime={FS,Module,run,callMain};createWasm();'
 	);
-	if (!patched.includes('globalThis.__binaryen_cli_runtime={FS,Module,run,callMain};createWasm();')) {
+	if (
+		!patched.includes(
+			'globalThis.__binaryen_cli_runtime={FS,Module,run,callMain};createWasm();'
+		)
+	) {
 		throw new Error(`failed to expose Binaryen CLI runtime for ${sourcePath}`);
 	}
 	if (patched !== original || !(await pathExists(outPath))) {
@@ -480,8 +489,22 @@ const manifestPath = path.join(outDir, 'browser-native-manifest.v1.json');
 await mkdir(toolsDir, { recursive: true });
 await mkdir(ocamlLibOutDir, { recursive: true });
 
-const jsOfOcamlBytecodePath = path.join(sourceDir, '_build', 'default', 'compiler', 'bin-js_of_ocaml', 'js_of_ocaml.bc');
-const wasmOfOcamlBytecodePath = path.join(sourceDir, '_build', 'default', 'compiler', 'bin-wasm_of_ocaml', 'wasm_of_ocaml.bc');
+const jsOfOcamlBytecodePath = path.join(
+	sourceDir,
+	'_build',
+	'default',
+	'compiler',
+	'bin-js_of_ocaml',
+	'js_of_ocaml.bc'
+);
+const wasmOfOcamlBytecodePath = path.join(
+	sourceDir,
+	'_build',
+	'default',
+	'compiler',
+	'bin-wasm_of_ocaml',
+	'wasm_of_ocaml.bc'
+);
 const jsOfOcamlNativePath = path.join(switchPrefix, 'bin', 'js_of_ocaml');
 const ocamlcBytecodePath = path.join(switchPrefix, 'bin', 'ocamlc.byte');
 const ocamlLibSourceDir = path.join(switchPrefix, 'lib', 'ocaml');
@@ -494,30 +517,76 @@ const browserPackageNames = [
 ].sort((left, right) => left.localeCompare(right));
 
 if (options.force || !(await pathExists(jsOfOcamlBytecodePath))) {
-	await run(options.opamBin, ['exec', '--root', options.opamRoot, '--switch', options.switchName, '--', 'dune', 'build', 'compiler/bin-js_of_ocaml/js_of_ocaml.bc'], {
-		cwd: sourceDir
-	});
+	await run(
+		options.opamBin,
+		[
+			'exec',
+			'--root',
+			options.opamRoot,
+			'--switch',
+			options.switchName,
+			'--',
+			'dune',
+			'build',
+			'compiler/bin-js_of_ocaml/js_of_ocaml.bc'
+		],
+		{
+			cwd: sourceDir
+		}
+	);
 }
 
 if (options.force || !(await pathExists(wasmOfOcamlBytecodePath))) {
-	await run(options.opamBin, ['exec', '--root', options.opamRoot, '--switch', options.switchName, '--', 'dune', 'build', 'compiler/bin-wasm_of_ocaml/wasm_of_ocaml.bc'], {
-		cwd: sourceDir,
-		env: {
-			PATH: `${path.join(projectRoot, '.cache', 'binaryen-version_129', 'bin')}:${process.env.PATH || ''}`
+	await run(
+		options.opamBin,
+		[
+			'exec',
+			'--root',
+			options.opamRoot,
+			'--switch',
+			options.switchName,
+			'--',
+			'dune',
+			'build',
+			'compiler/bin-wasm_of_ocaml/wasm_of_ocaml.bc'
+		],
+		{
+			cwd: sourceDir,
+			env: {
+				PATH: `${path.join(projectRoot, '.cache', 'binaryen-version_129', 'bin')}:${process.env.PATH || ''}`
+			}
 		}
-	});
+	);
 }
 
 if (options.force || !(await pathExists(ocamlcOutPath))) {
-	await run(jsOfOcamlNativePath, ['--target-env', 'browser', ocamlcBytecodePath, '-o', ocamlcOutPath]);
+	await run(jsOfOcamlNativePath, [
+		'--target-env',
+		'browser',
+		ocamlcBytecodePath,
+		'-o',
+		ocamlcOutPath
+	]);
 }
 
 if (options.force || !(await pathExists(jsooOutPath))) {
-	await run(jsOfOcamlNativePath, ['--target-env', 'browser', jsOfOcamlBytecodePath, '-o', jsooOutPath]);
+	await run(jsOfOcamlNativePath, [
+		'--target-env',
+		'browser',
+		jsOfOcamlBytecodePath,
+		'-o',
+		jsooOutPath
+	]);
 }
 
 if (options.force || !(await pathExists(wasmooOutPath))) {
-	await run(jsOfOcamlNativePath, ['--target-env', 'browser', wasmOfOcamlBytecodePath, '-o', wasmooOutPath]);
+	await run(jsOfOcamlNativePath, [
+		'--target-env',
+		'browser',
+		wasmOfOcamlBytecodePath,
+		'-o',
+		wasmooOutPath
+	]);
 }
 const wasmOfOcamlPatch = await patchWasmOfOcamlBrowserTool(wasmooOutPath);
 const wasmOptPatch = await patchBinaryenBrowserTool('wasm-opt', wasmOptOutPath);
@@ -545,7 +614,11 @@ if (options.force || !(await pathExists(findlibConfOutPath))) {
 		switchPrefix.replace(/\/+$/, ''),
 		'/static/toolchain'
 	);
-	await writeFile(findlibConfOutPath, rewrittenFindlibConf.endsWith('\n') ? rewrittenFindlibConf : `${rewrittenFindlibConf}\n`, 'utf8');
+	await writeFile(
+		findlibConfOutPath,
+		rewrittenFindlibConf.endsWith('\n') ? rewrittenFindlibConf : `${rewrittenFindlibConf}\n`,
+		'utf8'
+	);
 }
 
 const ocamlLibFiles = await collectManifestFiles(

@@ -1,4 +1,9 @@
-import { compile, type CompileArtifact, type CompileDiagnostic, type CompileRequest } from '../src/index.js';
+import {
+	compile,
+	type CompileArtifact,
+	type CompileDiagnostic,
+	type CompileRequest
+} from '../src/index.js';
 import {
 	createBrowserWorkerSystemDispatcher,
 	fetchBrowserNativeManifest,
@@ -54,7 +59,10 @@ function getManifest() {
 	return manifestPromise;
 }
 
-function inferCompileStage(request: CompileRequest, diagnostics: CompileDiagnostic[]): NativeCompileStage {
+function inferCompileStage(
+	request: CompileRequest,
+	diagnostics: CompileDiagnostic[]
+): NativeCompileStage {
 	if (diagnostics.length > 0) {
 		return 'ocamlc';
 	}
@@ -69,10 +77,7 @@ function isBinaryArtifact(
 
 function normalizeAssetLoader(programSource: string, runtimePromiseKey: string) {
 	let normalizedSource = programSource.includes('($=>async a=>{')
-		? programSource.replace(
-				'($=>async a=>{',
-				`globalThis.${runtimePromiseKey}=($=>async a=>{`
-			)
+		? programSource.replace('($=>async a=>{', `globalThis.${runtimePromiseKey}=($=>async a=>{`)
 		: programSource;
 	const assetLoaderPattern =
 		/function ([A-Za-z$_][\w$]*)\(([A-Za-z$_][\w$]*)\)\{const ([A-Za-z$_][\w$]*)=([A-Za-z$_][\w$]*)\?new URL\(\2,\4\):\2;return fetch\(\3\)\}/;
@@ -100,9 +105,13 @@ async function runGeneratedProgram(
 	const runtimeOutput: string[] = [];
 	const originalConsole = window.console;
 	const originalFetch = window.fetch;
-	const originalInstantiate = WebAssembly.instantiate.bind(WebAssembly) as typeof WebAssembly.instantiate;
+	const originalInstantiate = WebAssembly.instantiate.bind(
+		WebAssembly
+	) as typeof WebAssembly.instantiate;
 	const originalInstantiateStreaming = WebAssembly.instantiateStreaming
-		? (WebAssembly.instantiateStreaming.bind(WebAssembly) as typeof WebAssembly.instantiateStreaming)
+		? (WebAssembly.instantiateStreaming.bind(
+				WebAssembly
+			) as typeof WebAssembly.instantiateStreaming)
 		: undefined;
 	const runtimePromiseKey = '__wasm_of_js_of_ocaml_runtime_promise';
 	const assetResolverKey = '__wasm_of_js_of_ocaml_resolve_asset';
@@ -164,9 +173,7 @@ async function runGeneratedProgram(
 	}
 
 	if (assetEntries.length > 0) {
-		const resolveAsset = (
-			requestedAsset: string
-		) => {
+		const resolveAsset = (requestedAsset: string) => {
 			const candidates = [];
 			candidates.push(String(requestedAsset));
 			try {
@@ -192,7 +199,8 @@ async function runGeneratedProgram(
 
 			return null;
 		};
-		(globalThis as typeof globalThis & Record<string, unknown>)[assetResolverKey] = resolveAsset;
+		(globalThis as typeof globalThis & Record<string, unknown>)[assetResolverKey] =
+			resolveAsset;
 		window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
 			const requestUrl =
 				typeof input === 'string'
@@ -319,7 +327,9 @@ async function compileSingleFileFixture(options: {
 }) {
 	const fixtureResponse = await fetch(options.fixtureUrl, { cache: 'no-store' });
 	if (!fixtureResponse.ok) {
-		throw new Error(`failed to fetch fixture: ${options.fixtureUrl} (${fixtureResponse.status})`);
+		throw new Error(
+			`failed to fetch fixture: ${options.fixtureUrl} (${fixtureResponse.status})`
+		);
 	}
 	const source = await fixtureResponse.text();
 	return await compileRequestNative({

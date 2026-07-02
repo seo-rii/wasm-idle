@@ -80,9 +80,9 @@ describe('syncWasmNimAssets', () => {
 			versionModulePath
 		});
 
-		await expect(readFile(path.join(targetDir, 'nim/nim-bundle.js'), 'utf8')).resolves.toContain(
-			'__NIM_USER_CODE__'
-		);
+		await expect(
+			readFile(path.join(targetDir, 'nim/nim-bundle.js'), 'utf8')
+		).resolves.toContain('__NIM_USER_CODE__');
 		await expect(readFile(path.join(targetDir, 'clang/clang.wasm'), 'utf8')).resolves.toBe(
 			'clang-wasm'
 		);

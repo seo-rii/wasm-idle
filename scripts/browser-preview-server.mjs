@@ -22,7 +22,11 @@ export const DEFAULT_BROWSER_BASE_PATH = (() => {
 		return '/absproxy/5173/';
 	}
 })();
-const BROWSER_PREPARATION_LOCK_DIR = path.join(REPO_ROOT, '.svelte-kit', 'browser-preview-prep.lock');
+const BROWSER_PREPARATION_LOCK_DIR = path.join(
+	REPO_ROOT,
+	'.svelte-kit',
+	'browser-preview-prep.lock'
+);
 const BROWSER_PROBE_SESSION_LOCK_DIR = path.join(
 	REPO_ROOT,
 	'.svelte-kit',
@@ -48,11 +52,7 @@ async function withFilesystemLock(lockDir, timeoutMs, action) {
 			mkdirSync(lockDir, { recursive: false });
 			break;
 		} catch (error) {
-			if (
-				!(error instanceof Error) ||
-				!('code' in error) ||
-				error.code !== 'EEXIST'
-			) {
+			if (!(error instanceof Error) || !('code' in error) || error.code !== 'EEXIST') {
 				throw error;
 			}
 			try {
@@ -192,14 +192,19 @@ async function probeHttp(url) {
 				if (code !== 0) {
 					reject(
 						new Error(
-							stderr.trim() || `curl exited with code ${code ?? 'unknown'} while probing ${url}`
+							stderr.trim() ||
+								`curl exited with code ${code ?? 'unknown'} while probing ${url}`
 						)
 					);
 					return;
 				}
 				const statusCode = Number.parseInt(stdout.trim(), 10);
 				if (!Number.isFinite(statusCode)) {
-					reject(new Error(`failed to parse curl status while probing ${url}: ${stdout.trim()}`));
+					reject(
+						new Error(
+							`failed to parse curl status while probing ${url}: ${stdout.trim()}`
+						)
+					);
 					return;
 				}
 				resolve(statusCode);

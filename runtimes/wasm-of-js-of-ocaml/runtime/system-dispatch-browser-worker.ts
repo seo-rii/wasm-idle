@@ -141,7 +141,10 @@ function expandOcamlfindInvocation(
 		if (argument === '-package') {
 			const value = argv[index + 1] || '';
 			index += 1;
-			for (const packageName of value.split(',').map((entry) => entry.trim()).filter(Boolean)) {
+			for (const packageName of value
+				.split(',')
+				.map((entry) => entry.trim())
+				.filter(Boolean)) {
 				packages.push(packageName);
 			}
 			continue;
@@ -160,7 +163,9 @@ function expandOcamlfindInvocation(
 	]);
 	const archiveArgs = linkpkg
 		? resolvedPackages.flatMap((manifestPackage) =>
-				manifestPackage.archiveBytePath ? [toToolchainPath(manifestPackage.archiveBytePath)] : []
+				manifestPackage.archiveBytePath
+					? [toToolchainPath(manifestPackage.archiveBytePath)]
+					: []
 			)
 		: [];
 	const firstSourceIndex = forwardedArgs.findIndex((argument) => isSourceArg(argument));
@@ -268,9 +273,12 @@ export async function runBrowserNativeTool(request: {
 	systemBridge?: 'binaryen';
 	binaryenTools?: BrowserNativeManifest['binaryenTools'];
 }) {
-	const worker = new Worker(new URL('../browser-harness/native-tool-worker.js', import.meta.url), {
-		type: 'module'
-	});
+	const worker = new Worker(
+		new URL('../browser-harness/native-tool-worker.js', import.meta.url),
+		{
+			type: 'module'
+		}
+	);
 
 	try {
 		return await new Promise<BrowserToolResult>((resolve, reject) => {
@@ -303,25 +311,26 @@ export async function runBrowserNativeTool(request: {
 				},
 				{ once: true }
 			);
-			worker.postMessage({
-				type: 'run-tool',
-				toolUrl: request.toolUrl,
-				argv: request.argv,
-				env: request.env,
-				preloadFiles: request.preloadFiles,
-				outputPrefixes: request.outputPrefixes,
-				...(request.systemBridge ? { systemBridge: request.systemBridge } : {}),
-				...(request.binaryenTools ? { binaryenTools: request.binaryenTools } : {})
-			}, transferPreloadBuffers);
+			worker.postMessage(
+				{
+					type: 'run-tool',
+					toolUrl: request.toolUrl,
+					argv: request.argv,
+					env: request.env,
+					preloadFiles: request.preloadFiles,
+					outputPrefixes: request.outputPrefixes,
+					...(request.systemBridge ? { systemBridge: request.systemBridge } : {}),
+					...(request.binaryenTools ? { binaryenTools: request.binaryenTools } : {})
+				},
+				transferPreloadBuffers
+			);
 		});
 	} finally {
 		worker.terminate();
 	}
 }
 
-export function createBrowserWorkerSystemDispatcher(options: {
-	manifest: BrowserNativeManifest;
-}) {
+export function createBrowserWorkerSystemDispatcher(options: { manifest: BrowserNativeManifest }) {
 	const packageMap = new Map(
 		options.manifest.packages.map((manifestPackage) => [manifestPackage.name, manifestPackage])
 	);
@@ -341,7 +350,11 @@ export function createBrowserWorkerSystemDispatcher(options: {
 			commandName = expandedInvocation.command;
 			toolArgv = expandedInvocation.argv;
 			packageClosure = expandedInvocation.packages;
-		} else if (argv[0] === 'ocamlc' || argv[0] === 'js_of_ocaml' || argv[0] === 'wasm_of_ocaml') {
+		} else if (
+			argv[0] === 'ocamlc' ||
+			argv[0] === 'js_of_ocaml' ||
+			argv[0] === 'wasm_of_ocaml'
+		) {
 			commandName = argv[0];
 			toolArgv = argv.slice(1);
 		} else {
@@ -383,7 +396,8 @@ export function createBrowserWorkerSystemDispatcher(options: {
 					}>;
 				};
 				if (
-					packIndex.format !== 'wasm-of-js-of-ocaml-browser-native-runtime-pack-index-v1' ||
+					packIndex.format !==
+						'wasm-of-js-of-ocaml-browser-native-runtime-pack-index-v1' ||
 					!Array.isArray(packIndex.entries) ||
 					packIndex.fileCount !== packIndex.entries.length ||
 					typeof packIndex.totalBytes !== 'number'
@@ -399,20 +413,16 @@ export function createBrowserWorkerSystemDispatcher(options: {
 					);
 				}
 				let packBytes = new Uint8Array(await packAssetResponse.arrayBuffer());
-				if (
-					packBytes.byteLength >= 2 &&
-					packBytes[0] === 0x1f &&
-					packBytes[1] === 0x8b
-				) {
+				if (packBytes.byteLength >= 2 && packBytes[0] === 0x1f && packBytes[1] === 0x8b) {
 					if (typeof DecompressionStream !== 'function') {
 						throw new Error(
 							"failed to decompress browser-native runtime pack: this browser does not support DecompressionStream('gzip')"
 						);
 					}
 					const decompressedResponse = new Response(
-						new Blob([packBytes.buffer]).stream().pipeThrough(
-							new DecompressionStream('gzip')
-						)
+						new Blob([packBytes.buffer])
+							.stream()
+							.pipeThrough(new DecompressionStream('gzip'))
 					);
 					packBytes = new Uint8Array(await decompressedResponse.arrayBuffer());
 				}
@@ -474,19 +484,19 @@ export function createBrowserWorkerSystemDispatcher(options: {
 		const toolReportedSuccess =
 			(commandName === 'js_of_ocaml' || commandName === 'wasm_of_ocaml') &&
 			result.files.some((file) => file.path.endsWith('.js')) &&
-			((result.thrown || '').includes('tool-exit:0') || result.stderr.includes('tool-exit:0'));
+			((result.thrown || '').includes('tool-exit:0') ||
+				result.stderr.includes('tool-exit:0'));
 		const normalizedExitCode = toolReportedSuccess ? 0 : result.exitCode;
 		const normalizedThrown =
 			toolReportedSuccess && (result.thrown || '').includes('tool-exit:0')
 				? undefined
 				: result.thrown;
-		const normalizedStderr =
-			toolReportedSuccess
-				? result.stderr
-						.split('\n')
-						.filter((line) => !line.includes('tool-exit:0'))
-						.join('\n')
-				: result.stderr;
+		const normalizedStderr = toolReportedSuccess
+			? result.stderr
+					.split('\n')
+					.filter((line) => !line.includes('tool-exit:0'))
+					.join('\n')
+			: result.stderr;
 
 		for (const file of result.files) {
 			context.fs.writeFile(file.path, file.data);

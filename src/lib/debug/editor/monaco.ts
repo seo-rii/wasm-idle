@@ -64,7 +64,9 @@ export class MonacoDebugView {
 		locals: DebugVariable[],
 		adapter: DebugLanguageAdapter | null
 	) {
-		const lineMaxColumn = pausedLine ? this.editor.getModel()?.getLineMaxColumn(pausedLine) || 1 : 1;
+		const lineMaxColumn = pausedLine
+			? this.editor.getModel()?.getLineMaxColumn(pausedLine) || 1
+			: 1;
 		if (pausedLine) {
 			const fontInfo = this.editor.getOption(this.Monaco.editor.EditorOption.fontInfo);
 			if (!this.pausedLineWidgetNode) {
@@ -103,7 +105,12 @@ export class MonacoDebugView {
 			pausedLine && inlineLocals.length
 				? [
 						{
-							range: new this.Monaco.Range(pausedLine, lineMaxColumn, pausedLine, lineMaxColumn),
+							range: new this.Monaco.Range(
+								pausedLine,
+								lineMaxColumn,
+								pausedLine,
+								lineMaxColumn
+							),
 							options: {
 								showIfCollapsed: true,
 								after: {

@@ -310,16 +310,7 @@ const lspBrowserCases = [
 const lspBrowserMatrixGroups = {
 	'cpp-python': ['CPP', 'C', 'PYTHON'],
 	document: ['JSON', 'YAML', 'TOML', 'HTML', 'CSS', 'MARKDOWN'],
-	'runtime-small': [
-		'ASSEMBLYSCRIPT',
-		'WAT',
-		'GO',
-		'GLEAM',
-		'PASCAL',
-		'LUA',
-		'PROLOG',
-		'RUBY'
-	],
+	'runtime-small': ['ASSEMBLYSCRIPT', 'WAT', 'GO', 'GLEAM', 'PASCAL', 'LUA', 'PROLOG', 'RUBY'],
 	'runtime-heavy': ['DUCKDB', 'RUST', 'ZIG', 'OCAML', 'HASKELL', 'FORTRAN'],
 	dotnet: ['CSHARP', 'FSHARP', 'VBNET']
 } satisfies Record<string, string[]>;

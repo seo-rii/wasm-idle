@@ -279,7 +279,10 @@ export default class App {
 			}
 			const globalVariable = activeGlobals.find((variable) => variable.name === name);
 			if (globalVariable) {
-				return resolveVariableValue(globalVariable, session.globalValues.get(globalVariable.slot));
+				return resolveVariableValue(
+					globalVariable,
+					session.globalValues.get(globalVariable.slot)
+				);
 			}
 			throw new Error('unavailable');
 		});
@@ -651,14 +654,18 @@ export default class App {
 				return ESUCCESS;
 			}
 			if (command === 5) {
-				const expression = session.watchBuffer ? readBufferedStdin(session.watchBuffer) : '';
+				const expression = session.watchBuffer
+					? readBufferedStdin(session.watchBuffer)
+					: '';
 				let result = '?';
 				try {
 					result = expression ? this.debugEvaluate(expression) : '?';
 				} catch (error) {
-					result = error instanceof Error && error.message === 'unavailable' ? '?' : 'error';
+					result =
+						error instanceof Error && error.message === 'unavailable' ? '?' : 'error';
 				}
-				if (session.watchResultBuffer) flushQueuedStdin([result], session.watchResultBuffer);
+				if (session.watchResultBuffer)
+					flushQueuedStdin([result], session.watchResultBuffer);
 			}
 		}
 	}
@@ -905,7 +912,9 @@ export default class App {
 		this.mem.check();
 		const source = this.mem.readStr(oldPath, oldPathLen).replace(/^\/+/, '');
 		const target = this.mem.readStr(newPath, newPathLen).replace(/^\/+/, '');
-		this.trace(`path_rename(source=${JSON.stringify(source)}, target=${JSON.stringify(target)})`);
+		this.trace(
+			`path_rename(source=${JSON.stringify(source)}, target=${JSON.stringify(target)})`
+		);
 		this.memfs.addFile(target, new Uint8Array(this.memfs.getFileContents(source)));
 		return ESUCCESS;
 	}

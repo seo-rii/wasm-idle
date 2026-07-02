@@ -1,4 +1,4 @@
-좋은 방향이다. 표준 준수를 우선한다면, 이 프로젝트는 “브라우저용 새 Go 구현”이 아니라 업스트림 Go toolchain을 브라우저에 이식하는 작업으로 정의하는 게 맞다. 기준 버전은 Go 1.26.1로 고정하는 걸 권한다. Go 1.24에서 go:wasmexport, WASI reactor/library, wasm 지원 파일의 lib/wasm 이동이 있었고, Go 1.26에서는 wasm의 작은 힙 구간 메모리 사용이 더 줄었다. 또 js/wasm 산출물은 같은 major 계열의 wasm_exec.js와 맞춰 써야 한다. �
+좋은 방향이다. 표준 준수를 우선한다면, 이 프로젝트는 “브라우저용 새 Go 구현”이 아니라 업스트림 Go toolchain을 브라우저에 이식하는 작업으로 정의하는 게 맞다. 기준 버전은 Go 1.26.1로 고정하는 걸 권한다. Go 1.24에서 go:wasmexport, WASI reactor/library, wasm 지원 파일의 lib/wasm 이동이 있었고, Go 1.26에서는 wasm의 작은 힙 구간 메모리 사용이 더 줄었다. 또 js/wasm 산출물은 같은 major 계열의 wasm*exec.js와 맞춰 써야 한다. �
 Go.dev +3
 내가 권하는 한 줄 설계는 이것이다.
 업스트림 cmd/compile + cmd/link를 그대로 wasm으로 옮기고, 브라우저 쪽은 WASI 호스트 + 빌드 플래너 + 캐시만 만든다.
@@ -55,7 +55,7 @@ compile.wasm
 link.wasm
 stdlib-wasip1.sysroot
 stdlib-js.sysroot(초기엔 비워도 됨)
-wasm_exec.js
+wasm*exec.js
 “같은 toolchain 버전으로 빌드된 자산만 섞어 쓴다”를 규칙으로 고정한다. js/wasm 쪽은 공식적으로도 wasm_exec.js와 major 버전 일치가 요구된다. �
 Go.dev +2
 1단계: 브라우저 WASI substrate
@@ -101,9 +101,9 @@ Go.dev +3
 Go.dev +3
 표준 라이브러리 지원 우선순위
 1순위: pure Go / host-neutral
-fmt, errors, bytes, strings, unicode/*, cmp, slices, sort, context, encoding/json, regexp, math/*
+fmt, errors, bytes, strings, unicode/*, cmp, slices, sort, context, encoding/json, regexp, math/_
 2순위: wasip1 host-backed
-os, io/fs, path/filepath, archive/*, compress/*, time, crypto/rand
+os, io/fs, path/filepath, archive/_, compress/\*, time, crypto/rand
 plain wasip1에서는 소켓 열기가 완전하지 않아 HTTP 서버는 후순위로 둔다. �
 Go.dev
 3순위: js/wasm browser-backed
@@ -120,73 +120,74 @@ plain wasip1에서의 full socket server
 핵심은 지원률 숫자를 말하지 말고, wasip1/wasm과 js/wasm 각각의 패키지/기능 매트릭스를 따로 공개하는 것이다. 이게 가장 정직하고 표준적이다. �
 Go.dev +2
 테스트 전략
+
 1. differential compiler tests
-같은 소스 코퍼스를 native Go 1.26.1과 브라우저 compiler에 모두 넣고 비교한다.
-비교 대상은
-성공/실패 여부
-stderr 텍스트
-line/column
-실행 stdout/stderr
-종료 코드
-초반에는 wasm 바이너리 바이트 비교보다 진단/행동 비교를 우선하라. �
-Go.dev +2
+   같은 소스 코퍼스를 native Go 1.26.1과 브라우저 compiler에 모두 넣고 비교한다.
+   비교 대상은
+   성공/실패 여부
+   stderr 텍스트
+   line/column
+   실행 stdout/stderr
+   종료 코드
+   초반에는 wasm 바이너리 바이트 비교보다 진단/행동 비교를 우선하라. �
+   Go.dev +2
 2. 언어 회귀 코퍼스
-generics, type inference, method set, interface satisfaction, init order, defer/panic/recover, maps/channels/select, unsafe, go:embed를 묶은 고정 코퍼스를 만든다.
-표준 준수 목표라면 이 코퍼스가 제품의 진짜 KPI다.
+   generics, type inference, method set, interface satisfaction, init order, defer/panic/recover, maps/channels/select, unsafe, go:embed를 묶은 고정 코퍼스를 만든다.
+   표준 준수 목표라면 이 코퍼스가 제품의 진짜 KPI다.
 3. stdlib 대상 allowlist 테스트
-wasip1에서는 fmt, bytes, encoding/json, regexp, os, io/fs, time, crypto/rand부터 패키지별 allowlist를 만든다.
-공식 설명상 wasip1은 stdlib 테스트를 통과하지만, plain socket opening은 빠져 있으니 네트워크 서버 패키지는 같은 버킷에 넣지 않는 게 맞다. �
-Go.dev +1
+   wasip1에서는 fmt, bytes, encoding/json, regexp, os, io/fs, time, crypto/rand부터 패키지별 allowlist를 만든다.
+   공식 설명상 wasip1은 stdlib 테스트를 통과하지만, plain socket opening은 빠져 있으니 네트워크 서버 패키지는 같은 버킷에 넣지 않는 게 맞다. �
+   Go.dev +1
 4. module/proxy integrity tests
-.mod, .info, .zip happy path
-checksum mismatch
-go.sum 누락/불일치
-404/410 처리
-캐시 hit/miss와 재검증
-프록시 체인을 넣을 거면 comma fallback과 pipe fallback도 별도 테스트한다. 공식 모듈 레퍼런스에 이 규칙이 적혀 있다. �
-Go.dev
+   .mod, .info, .zip happy path
+   checksum mismatch
+   go.sum 누락/불일치
+   404/410 처리
+   캐시 hit/miss와 재검증
+   프록시 체인을 넣을 거면 comma fallback과 pipe fallback도 별도 테스트한다. 공식 모듈 레퍼런스에 이 규칙이 적혀 있다. �
+   Go.dev
 5. target-specific host tests
-wasip1
-/ root 매핑 전/후 os.Getwd, ReadDir, missing file 에러
-crypto/rand 동작
-host call 동안 goroutine 전체 block 성질
-js/wasm
-js.FuncOf callback 안에서 blocking call
-callback 안에서 http.Get/fetch를 새 goroutine 없이 호출하는 negative test
-js.fetch:* 헤더 전달 테스트 �
-Go.dev +3
+   wasip1
+   / root 매핑 전/후 os.Getwd, ReadDir, missing file 에러
+   crypto/rand 동작
+   host call 동안 goroutine 전체 block 성질
+   js/wasm
+   js.FuncOf callback 안에서 blocking call
+   callback 안에서 http.Get/fetch를 새 goroutine 없이 호출하는 negative test
+   js.fetch:\* 헤더 전달 테스트 �
+   Go.dev +3
 6. browser integration tests
-Node만으로 끝내지 말고 실제 Chromium + Playwright를 돌려라.
-말씀한 seo-rii 스타일과 가장 잘 맞는 건 이 레이어다. wasm-idle도 실제 Chromium 경로에서 browser probe와 Playwright 테스트를 돌리고, stdin 한 줄 입력/EOF/terminal transcript를 회귀 테스트로 잡고 있다.
-Go 쪽도 js/wasm은 공식 위키에 wasmbrowsertest 방식이 정리돼 있으니, browser test runner를 1급 시민으로 두는 게 좋다. �
-GitHub +1
+   Node만으로 끝내지 말고 실제 Chromium + Playwright를 돌려라.
+   말씀한 seo-rii 스타일과 가장 잘 맞는 건 이 레이어다. wasm-idle도 실제 Chromium 경로에서 browser probe와 Playwright 테스트를 돌리고, stdin 한 줄 입력/EOF/terminal transcript를 회귀 테스트로 잡고 있다.
+   Go 쪽도 js/wasm은 공식 위키에 wasmbrowsertest 방식이 정리돼 있으니, browser test runner를 1급 시민으로 두는 게 좋다. �
+   GitHub +1
 7. scheduler/cache tests
-빌드 스케줄러·캐시 무효화·취소/재시도 로직이 Go로 작성된다면 testing/synctest를 쓰는 게 좋다.
-Go 1.25부터 testing/synctest는 표준 라이브러리 정식 기능이고, 가상 시간과 bubble 모델로 동시성 테스트를 안정화해 준다. �
-Go.dev
+   빌드 스케줄러·캐시 무효화·취소/재시도 로직이 Go로 작성된다면 testing/synctest를 쓰는 게 좋다.
+   Go 1.25부터 testing/synctest는 표준 라이브러리 정식 기능이고, 가상 시간과 bubble 모델로 동시성 테스트를 안정화해 준다. �
+   Go.dev
 8. unsupported-feature tests
-import "C"
-plugin
-os/exec
-plain wasip1에서 socket listen
-미지원 build tags
-이런 입력이 들어왔을 때 침묵 실패가 아니라 명확한 에러가 나오는지 테스트해야 한다.
+   import "C"
+   plugin
+   os/exec
+   plain wasip1에서 socket listen
+   미지원 build tags
+   이런 입력이 들어왔을 때 침묵 실패가 아니라 명확한 에러가 나오는지 테스트해야 한다.
 9. performance budgets
-cold boot
-warm rebuild
-첫 module fetch
-stdlib-heavy 프로젝트 첫 빌드
-메모리 상한
-이건 최적화 이전에도 baseline을 잡아둬야 한다. Go 1.26의 wasm 메모리 개선 덕을 보겠지만, 브라우저 안 컴파일은 여전히 무겁다. �
-Go.dev
-마지막으로, 함정 네 가지
-첫째, go/parser/go/types 기반으로 새 컴파일러를 만들지 말 것. 공식 compiler README 자체가 그 패키지들이 실제 컴파일러에서 mostly unused라고 말한다. 표준 준수는 업스트림 compiler를 재사용할 때 가장 빨리 얻는다. �
-Go.dev
-둘째, cmd/go를 너무 일찍 넣지 말 것. go는 단순 컴파일러가 아니라 build/run/test/mod/work/tool 전체를 관리한다. 먼저 compile/link/module graph를 고정하고, 마지막에 go UX를 흉내 내는 편이 맞다. �
-Go.dev +2
-셋째, wasip1과 js/wasm을 하나의 “Go in browser”로 뭉개지 말 것. 파일/stdio/fs 중심 세계와 DOM/fetch 중심 세계는 다르다. capability matrix를 분리 공개해야 한다. wasip1은 full socket opening이 없고, js/wasm은 syscall/js 제약이 있다. �
-Go.dev +2
-넷째, 버전 섞어 쓰지 말 것. 특히 js/wasm은 wasm_exec.js와 toolchain 계열을 맞춰야 하고, Go 1.24 이후 wasm 지원 파일 위치도 바뀌었다. �
-Go.dev +1
-이 순서대로 가면 13단계에서 이미 **“브라우저 안에서 돌아가는 진짜 Go 컴파일러 + 링크 + 실행기”**가 생기고, 46단계에서 stdlib와 웹앱 모드가 붙는다. 표준 준수라는 목표에는 이 경로가 가장 곧다.
-다음 단계는 이 스펙을 바탕으로 폴더 구조, manifest 형식, importcfg 생성 규칙, 캐시 키 설계까지 내려서 실제 구현 문서로 고정하는 것이다.
+   cold boot
+   warm rebuild
+   첫 module fetch
+   stdlib-heavy 프로젝트 첫 빌드
+   메모리 상한
+   이건 최적화 이전에도 baseline을 잡아둬야 한다. Go 1.26의 wasm 메모리 개선 덕을 보겠지만, 브라우저 안 컴파일은 여전히 무겁다. �
+   Go.dev
+   마지막으로, 함정 네 가지
+   첫째, go/parser/go/types 기반으로 새 컴파일러를 만들지 말 것. 공식 compiler README 자체가 그 패키지들이 실제 컴파일러에서 mostly unused라고 말한다. 표준 준수는 업스트림 compiler를 재사용할 때 가장 빨리 얻는다. �
+   Go.dev
+   둘째, cmd/go를 너무 일찍 넣지 말 것. go는 단순 컴파일러가 아니라 build/run/test/mod/work/tool 전체를 관리한다. 먼저 compile/link/module graph를 고정하고, 마지막에 go UX를 흉내 내는 편이 맞다. �
+   Go.dev +2
+   셋째, wasip1과 js/wasm을 하나의 “Go in browser”로 뭉개지 말 것. 파일/stdio/fs 중심 세계와 DOM/fetch 중심 세계는 다르다. capability matrix를 분리 공개해야 한다. wasip1은 full socket opening이 없고, js/wasm은 syscall/js 제약이 있다. �
+   Go.dev +2
+   넷째, 버전 섞어 쓰지 말 것. 특히 js/wasm은 wasm_exec.js와 toolchain 계열을 맞춰야 하고, Go 1.24 이후 wasm 지원 파일 위치도 바뀌었다. �
+   Go.dev +1
+   이 순서대로 가면 13단계에서 이미 **“브라우저 안에서 돌아가는 진짜 Go 컴파일러 + 링크 + 실행기”**가 생기고, 46단계에서 stdlib와 웹앱 모드가 붙는다. 표준 준수라는 목표에는 이 경로가 가장 곧다.
+   다음 단계는 이 스펙을 바탕으로 폴더 구조, manifest 형식, importcfg 생성 규칙, 캐시 키 설계까지 내려서 실제 구현 문서로 고정하는 것이다.

@@ -1,10 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import {
-	createSqlWorkerService,
-	type LspDocument,
-	type LspDocumentContext
-} from '../src/index.js';
+import { createSqlWorkerService, type LspDocument, type LspDocumentContext } from '../src/index.js';
 
 describe('createSqlWorkerService', () => {
 	it('validates through the configured SQL engine and provides editor features', async () => {

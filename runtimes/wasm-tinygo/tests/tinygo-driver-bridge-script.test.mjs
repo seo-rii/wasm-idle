@@ -1,21 +1,23 @@
-import test from 'node:test'
-import assert from 'node:assert/strict'
-import { spawn } from 'node:child_process'
-import { chmod, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import path from 'node:path'
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
+import { chmod, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 
 test('probe-tinygo-driver-bridge writes a normalized bridge manifest', async (t) => {
-  const tempDir = await mkdtemp(path.join(tmpdir(), 'wasm-tinygo-driver-bridge-script-'))
-  t.after(async () => {
-    await rm(tempDir, { recursive: true, force: true })
-  })
+	const tempDir = await mkdtemp(path.join(tmpdir(), 'wasm-tinygo-driver-bridge-script-'));
+	t.after(async () => {
+		await rm(tempDir, { recursive: true, force: true });
+	});
 
-  const fakeBinDir = path.join(tempDir, 'bin')
-  await mkdir(fakeBinDir, { recursive: true })
+	const fakeBinDir = path.join(tempDir, 'bin');
+	await mkdir(fakeBinDir, { recursive: true });
 
-const fakeGoPath = path.join(fakeBinDir, 'go')
-  await writeFile(fakeGoPath, `#!/bin/sh
+	const fakeGoPath = path.join(fakeBinDir, 'go');
+	await writeFile(
+		fakeGoPath,
+		`#!/bin/sh
 set -eu
 node - <<'NODE'
 const fs = require('node:fs')
@@ -230,11 +232,14 @@ fs.writeFileSync(process.env.WASM_TINYGO_RESULT_PATH, JSON.stringify({
   },
 }, null, 2))
 NODE
-`)
-  await chmod(fakeGoPath, 0o755)
+`
+	);
+	await chmod(fakeGoPath, 0o755);
 
-  const fakeTinyGoPath = path.join(fakeBinDir, 'tinygo')
-  await writeFile(fakeTinyGoPath, `#!/bin/sh
+	const fakeTinyGoPath = path.join(fakeBinDir, 'tinygo');
+	await writeFile(
+		fakeTinyGoPath,
+		`#!/bin/sh
 set -eu
 if [ "$1" = "info" ]; then
   cat <<'EOF'
@@ -289,338 +294,359 @@ for arg in "$@"; do
 done
 mkdir -p "$(dirname "$out")"
 printf '\\000asm\\001\\000\\000\\000' > "$out"
-`)
-  await chmod(fakeTinyGoPath, 0o755)
+`
+	);
+	await chmod(fakeTinyGoPath, 0o755);
 
-  const fakeTinyGoRoot = path.join(tempDir, 'tinygo-root')
-  await mkdir(path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys'), { recursive: true })
-  await mkdir(path.join(fakeTinyGoRoot, 'src', 'device', 'arm'), { recursive: true })
-  await writeFile(path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys', 'zversion.go'), 'package sys\n')
-  await writeFile(path.join(fakeTinyGoRoot, 'src', 'device', 'arm', 'arm.go'), 'package arm\n')
+	const fakeTinyGoRoot = path.join(tempDir, 'tinygo-root');
+	await mkdir(path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys'), {
+		recursive: true
+	});
+	await mkdir(path.join(fakeTinyGoRoot, 'src', 'device', 'arm'), { recursive: true });
+	await writeFile(
+		path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys', 'zversion.go'),
+		'package sys\n'
+	);
+	await writeFile(path.join(fakeTinyGoRoot, 'src', 'device', 'arm', 'arm.go'), 'package arm\n');
 
-  const workspaceDir = path.join(tempDir, 'workspace')
-  await mkdir(workspaceDir, { recursive: true })
-  const entryPath = path.join(workspaceDir, 'main.go')
-  const outputPath = path.join(workspaceDir, 'out.wasm')
-  const requestPath = path.join(workspaceDir, 'tinygo-request.json')
-  const bridgeManifestPath = path.join(workspaceDir, 'tinygo-driver-bridge.json')
-  const frontendEnvRecordPath = path.join(workspaceDir, 'tinygo-frontend-env.json')
+	const workspaceDir = path.join(tempDir, 'workspace');
+	await mkdir(workspaceDir, { recursive: true });
+	const entryPath = path.join(workspaceDir, 'main.go');
+	const outputPath = path.join(workspaceDir, 'out.wasm');
+	const requestPath = path.join(workspaceDir, 'tinygo-request.json');
+	const bridgeManifestPath = path.join(workspaceDir, 'tinygo-driver-bridge.json');
+	const frontendEnvRecordPath = path.join(workspaceDir, 'tinygo-frontend-env.json');
 
-  await writeFile(entryPath, 'package main\n\nfunc main() {}\n')
-  await writeFile(requestPath, JSON.stringify({
-    command: 'build',
-    planner: 'tinygo',
-    entry: entryPath,
-    optimize: 'z',
-    output: outputPath,
-    panic: 'trap',
-    scheduler: 'tasks',
-    target: 'wasip1',
-  }))
+	await writeFile(entryPath, 'package main\n\nfunc main() {}\n');
+	await writeFile(
+		requestPath,
+		JSON.stringify({
+			command: 'build',
+			planner: 'tinygo',
+			entry: entryPath,
+			optimize: 'z',
+			output: outputPath,
+			panic: 'trap',
+			scheduler: 'tasks',
+			target: 'wasip1'
+		})
+	);
 
-  const cwd = new URL('..', import.meta.url).pathname
-  const scriptPath = new URL('../scripts/probe-tinygo-driver-bridge.mjs', import.meta.url).pathname
-  const child = spawn(process.execPath, [scriptPath], {
-    cwd,
-    env: {
-      ...process.env,
-      WASM_TINYGO_DRIVER_BRIDGE_MANIFEST_PATH: bridgeManifestPath,
-      WASM_TINYGO_FRONTEND_ENV_RECORD_PATH: frontendEnvRecordPath,
-      WASM_TINYGO_GO_BIN: fakeGoPath,
-      WASM_TINYGO_HOST_PROBE_REQUEST_PATH: requestPath,
-      WASM_TINYGO_HOST_PROBE_SKIP_RUNTIME: '1',
-      WASM_TINYGO_TINYGOROOT: fakeTinyGoRoot,
-      WASM_TINYGO_TINYGO_BIN: fakeTinyGoPath,
-    },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
+	const cwd = new URL('..', import.meta.url).pathname;
+	const scriptPath = new URL('../scripts/probe-tinygo-driver-bridge.mjs', import.meta.url)
+		.pathname;
+	const child = spawn(process.execPath, [scriptPath], {
+		cwd,
+		env: {
+			...process.env,
+			WASM_TINYGO_DRIVER_BRIDGE_MANIFEST_PATH: bridgeManifestPath,
+			WASM_TINYGO_FRONTEND_ENV_RECORD_PATH: frontendEnvRecordPath,
+			WASM_TINYGO_GO_BIN: fakeGoPath,
+			WASM_TINYGO_HOST_PROBE_REQUEST_PATH: requestPath,
+			WASM_TINYGO_HOST_PROBE_SKIP_RUNTIME: '1',
+			WASM_TINYGO_TINYGOROOT: fakeTinyGoRoot,
+			WASM_TINYGO_TINYGO_BIN: fakeTinyGoPath
+		},
+		stdio: ['ignore', 'pipe', 'pipe']
+	});
 
-  let output = ''
-  child.stdout.on('data', (chunk) => {
-    output += chunk.toString()
-  })
-  child.stderr.on('data', (chunk) => {
-    output += chunk.toString()
-  })
+	let output = '';
+	child.stdout.on('data', (chunk) => {
+		output += chunk.toString();
+	});
+	child.stderr.on('data', (chunk) => {
+		output += chunk.toString();
+	});
 
-  const exitCode = await new Promise((resolve, reject) => {
-    child.once('error', reject)
-    child.once('close', resolve)
-  })
+	const exitCode = await new Promise((resolve, reject) => {
+		child.once('error', reject);
+		child.once('close', resolve);
+	});
 
-  assert.equal(exitCode, 0, output)
-  const manifest = JSON.parse(await readFile(bridgeManifestPath, 'utf8'))
-  assert.equal(manifest.target, 'wasip1')
-  assert.equal(manifest.llvmTriple, 'wasm32-unknown-wasi')
-  assert.equal(manifest.scheduler, 'tasks')
-  assert.equal(manifest.artifactOutputPath, outputPath)
-  assert.equal(manifest.entryFile, entryPath)
-  assert.deepEqual(manifest.entryPackage, {
-    dir: workspaceDir,
-    goFiles: ['main.go'],
-    importPath: 'example.com/fake',
-    imports: ['fmt'],
-    name: 'main',
-  })
-  assert.deepEqual(manifest.packageGraph, [
-    {
-      depOnly: false,
-      dir: workspaceDir,
-      goFiles: ['main.go'],
-      importPath: 'example.com/fake',
-      imports: ['fmt'],
-      modulePath: 'example.com/fake',
-      name: 'main',
-      standard: false,
-    },
-    {
-      depOnly: true,
-      dir: '/working/.tinygo-root/src/fmt',
-      goFiles: ['print.go'],
-      importPath: 'fmt',
-      imports: ['errors'],
-      modulePath: '',
-      name: 'fmt',
-      standard: true,
-    },
-  ])
-  assert.deepEqual(manifest.frontendAnalysisInput, {
-    buildContext: {
-      target: 'wasip1',
-      llvmTarget: 'wasm32-unknown-wasi',
-      goos: 'wasip1',
-      goarch: 'wasm',
-      gc: 'precise',
-      scheduler: 'tasks',
-      buildTags: ['gc.precise', 'scheduler.tasks', 'tinygo.wasm'],
-      modulePath: 'example.com/fake',
-    },
-    entryFile: entryPath,
-    modulePath: 'example.com/fake',
-    sourceSelection: {
-      program: [entryPath],
-      allCompile: [entryPath, '/working/.tinygo-root/src/fmt/print.go'],
-    },
-    toolchain: {
-      target: 'wasip1',
-      llvmTarget: 'wasm32-unknown-wasi',
-      artifactOutputPath: outputPath,
-    },
-    packageGraph: [
-      {
-        depOnly: false,
-        dir: workspaceDir,
-        files: { goFiles: ['main.go'] },
-        importPath: 'example.com/fake',
-        imports: ['fmt'],
-        modulePath: 'example.com/fake',
-        name: 'main',
-        standard: false,
-      },
-      {
-        depOnly: true,
-        dir: '/working/.tinygo-root/src/fmt',
-        files: { goFiles: ['print.go'] },
-        importPath: 'fmt',
-        imports: ['errors'],
-        modulePath: '',
-        name: 'fmt',
-        standard: true,
-      },
-    ],
-  })
-  assert.deepEqual(manifest.frontendHandoff, {
-    artifactOutputPath: outputPath,
-    bridgeEntryGoFiles: [entryPath],
-    bridgeEntryImportPath: 'example.com/fake',
-    bridgeEntryImports: ['fmt'],
-    bridgeEntryPackageDir: workspaceDir,
-    bridgeEntryPackageName: 'main',
-    bridgePackageCount: 1,
-    bridgePackageGraphImportPaths: ['fmt'],
-    compileUnitCount: 2,
-    compileUnitFileCount: 2,
-    compileUnitImportPaths: ['fmt'],
-    bridgeFileCount: 2,
-    coveredFileCount: 2,
-    coveredPackageCount: 1,
-    depOnlyPackageCount: 1,
-    entryFile: entryPath,
-    graphPackageCount: 2,
-    llvmTarget: 'wasm32-unknown-wasi',
-    localPackageCount: 1,
-    programFiles: [entryPath],
-    programImportAlias: 'direct',
-    programImportPath: 'example.com/fake',
-    programPackageDir: workspaceDir,
-    programPackageName: 'main',
-    standardPackageCount: 1,
-    target: 'wasip1',
-  })
-  assert.equal(manifest.frontendAnalysis, undefined)
-  assert.deepEqual(manifest.frontendAnalysisInput, {
-    buildContext: {
-      target: 'wasip1',
-      llvmTarget: 'wasm32-unknown-wasi',
-      goos: 'wasip1',
-      goarch: 'wasm',
-      gc: 'precise',
-      scheduler: 'tasks',
-      buildTags: ['gc.precise', 'scheduler.tasks', 'tinygo.wasm'],
-      modulePath: 'example.com/fake',
-    },
-    entryFile: entryPath,
-    modulePath: 'example.com/fake',
-    sourceSelection: {
-      program: [entryPath],
-      allCompile: [entryPath, '/working/.tinygo-root/src/fmt/print.go'],
-    },
-    toolchain: {
-      artifactOutputPath: outputPath,
-      llvmTarget: 'wasm32-unknown-wasi',
-      target: 'wasip1',
-    },
-    packageGraph: [
-      {
-        depOnly: false,
-        dir: workspaceDir,
-        files: { goFiles: ['main.go'] },
-        importPath: 'example.com/fake',
-        imports: ['fmt'],
-        modulePath: 'example.com/fake',
-        name: 'main',
-        standard: false,
-      },
-      {
-        depOnly: true,
-        dir: '/working/.tinygo-root/src/fmt',
-        files: { goFiles: ['print.go'] },
-        importPath: 'fmt',
-        imports: ['errors'],
-        modulePath: '',
-        name: 'fmt',
-        standard: true,
-      },
-    ],
-  })
-  assert.deepEqual(manifest.frontendRealAdapter, {
-    buildContext: {
-      buildTags: ['gc.precise', 'scheduler.tasks', 'tinygo.wasm'],
-      gc: 'precise',
-      goarch: 'wasm',
-      goos: 'wasip1',
-      llvmTarget: 'wasm32-unknown-wasi',
-      modulePath: 'example.com/fake',
-      scheduler: 'tasks',
-      target: 'wasip1',
-    },
-    allCompileFiles: [entryPath, '/working/.tinygo-root/src/fmt/print.go'],
-    compileGroups: [
-      { files: [entryPath], name: 'program' },
-      { files: [], name: 'imported' },
-      { files: ['/working/.tinygo-root/src/fmt/print.go'], name: 'stdlib' },
-      { files: [entryPath, '/working/.tinygo-root/src/fmt/print.go'], name: 'all-compile' },
-    ],
-    compileUnitManifestPath: '/working/tinygo-compile-unit.json',
-    compileUnits: [
-      {
-        depOnly: false,
-        files: [entryPath],
-        importPath: 'example.com/fake',
-        imports: ['fmt'],
-        kind: 'program',
-        modulePath: 'example.com/fake',
-        packageDir: workspaceDir,
-        packageName: 'main',
-        standard: false,
-      },
-      {
-        depOnly: true,
-        files: ['/working/.tinygo-root/src/fmt/print.go'],
-        importPath: 'fmt',
-        imports: ['errors'],
-        kind: 'stdlib',
-        modulePath: '',
-        packageDir: '/working/.tinygo-root/src/fmt',
-        packageName: 'fmt',
-        standard: true,
-      },
-    ],
-    entryFile: entryPath,
-    packageGraph: [
-      {
-        depOnly: false,
-        dir: workspaceDir,
-        files: { goFiles: ['main.go'] },
-        importPath: 'example.com/fake',
-        imports: ['fmt'],
-        modulePath: 'example.com/fake',
-        name: 'main',
-        standard: false,
-      },
-      {
-        depOnly: true,
-        dir: '/working/.tinygo-root/src/fmt',
-        files: { goFiles: ['print.go'] },
-        importPath: 'fmt',
-        imports: ['errors'],
-        modulePath: '',
-        name: 'fmt',
-        standard: true,
-      },
-    ],
-    toolchain: {
-      llvmTarget: 'wasm32-unknown-wasi',
-      target: 'wasip1',
-    },
-  })
-  assert.deepEqual(manifest.realFrontendAnalysis, manifest.frontendRealAdapter)
-  assert.equal(manifest.hostArtifact.artifactKind, 'probe')
-  assert.equal(manifest.hostArtifact.bytesBase64, 'AGFzbQEAAAA=')
-  assert.deepEqual(manifest.hostArtifact.command.slice(0, 9), [
-    fakeTinyGoPath,
-    'build',
-    '-target',
-    'wasip1',
-    '-opt',
-    'z',
-    '-scheduler',
-    'tasks',
-    '-panic',
-  ])
-  assert.equal(manifest.hostArtifact.command[9], 'trap')
-  assert.equal(manifest.hostArtifact.command[10], '-o')
-  assert.match(manifest.hostArtifact.command[11], /tinygo-bridge-execution\.wasm$/)
-  assert.equal(manifest.hostArtifact.command[12], entryPath)
-  assert.equal(manifest.hostArtifact.entrypoint, null)
-  assert.deepEqual(manifest.hostArtifact.logs, [])
-  assert.equal(manifest.hostArtifact.path, outputPath)
-  assert.equal(manifest.hostArtifact.reason, 'missing-wasi-entrypoint')
-  assert.equal(manifest.hostArtifact.runnable, false)
-  assert.equal(manifest.hostArtifact.size, 8)
-  assert.equal(manifest.hostArtifact.target, 'wasip1')
-  assert.deepEqual(manifest.driverBuildTags, ['gc.precise', 'scheduler.tasks', 'tinygo.wasm'])
-  assert.deepEqual(manifest.hostBuildTags, ['gc.precise', 'purego', 'scheduler.tasks', 'tinygo', 'tinygo.unicore', 'tinygo.wasm'])
-  assert.equal(manifest.driverResultPath, path.join(workspaceDir, 'tinygo-result.json'))
-  assert.equal(manifest.hostProbeManifestPath, path.join(workspaceDir, 'tinygo-host-probe.json'))
-  assert.deepEqual(JSON.parse(await readFile(frontendEnvRecordPath, 'utf8')), {
-    analysisPath: null,
-    inputPath: path.join(workspaceDir, 'tinygo-frontend-input.json'),
-    realAdapterPath: path.join(workspaceDir, 'tinygo-frontend-real-adapter.json'),
-  })
-})
+	assert.equal(exitCode, 0, output);
+	const manifest = JSON.parse(await readFile(bridgeManifestPath, 'utf8'));
+	assert.equal(manifest.target, 'wasip1');
+	assert.equal(manifest.llvmTriple, 'wasm32-unknown-wasi');
+	assert.equal(manifest.scheduler, 'tasks');
+	assert.equal(manifest.artifactOutputPath, outputPath);
+	assert.equal(manifest.entryFile, entryPath);
+	assert.deepEqual(manifest.entryPackage, {
+		dir: workspaceDir,
+		goFiles: ['main.go'],
+		importPath: 'example.com/fake',
+		imports: ['fmt'],
+		name: 'main'
+	});
+	assert.deepEqual(manifest.packageGraph, [
+		{
+			depOnly: false,
+			dir: workspaceDir,
+			goFiles: ['main.go'],
+			importPath: 'example.com/fake',
+			imports: ['fmt'],
+			modulePath: 'example.com/fake',
+			name: 'main',
+			standard: false
+		},
+		{
+			depOnly: true,
+			dir: '/working/.tinygo-root/src/fmt',
+			goFiles: ['print.go'],
+			importPath: 'fmt',
+			imports: ['errors'],
+			modulePath: '',
+			name: 'fmt',
+			standard: true
+		}
+	]);
+	assert.deepEqual(manifest.frontendAnalysisInput, {
+		buildContext: {
+			target: 'wasip1',
+			llvmTarget: 'wasm32-unknown-wasi',
+			goos: 'wasip1',
+			goarch: 'wasm',
+			gc: 'precise',
+			scheduler: 'tasks',
+			buildTags: ['gc.precise', 'scheduler.tasks', 'tinygo.wasm'],
+			modulePath: 'example.com/fake'
+		},
+		entryFile: entryPath,
+		modulePath: 'example.com/fake',
+		sourceSelection: {
+			program: [entryPath],
+			allCompile: [entryPath, '/working/.tinygo-root/src/fmt/print.go']
+		},
+		toolchain: {
+			target: 'wasip1',
+			llvmTarget: 'wasm32-unknown-wasi',
+			artifactOutputPath: outputPath
+		},
+		packageGraph: [
+			{
+				depOnly: false,
+				dir: workspaceDir,
+				files: { goFiles: ['main.go'] },
+				importPath: 'example.com/fake',
+				imports: ['fmt'],
+				modulePath: 'example.com/fake',
+				name: 'main',
+				standard: false
+			},
+			{
+				depOnly: true,
+				dir: '/working/.tinygo-root/src/fmt',
+				files: { goFiles: ['print.go'] },
+				importPath: 'fmt',
+				imports: ['errors'],
+				modulePath: '',
+				name: 'fmt',
+				standard: true
+			}
+		]
+	});
+	assert.deepEqual(manifest.frontendHandoff, {
+		artifactOutputPath: outputPath,
+		bridgeEntryGoFiles: [entryPath],
+		bridgeEntryImportPath: 'example.com/fake',
+		bridgeEntryImports: ['fmt'],
+		bridgeEntryPackageDir: workspaceDir,
+		bridgeEntryPackageName: 'main',
+		bridgePackageCount: 1,
+		bridgePackageGraphImportPaths: ['fmt'],
+		compileUnitCount: 2,
+		compileUnitFileCount: 2,
+		compileUnitImportPaths: ['fmt'],
+		bridgeFileCount: 2,
+		coveredFileCount: 2,
+		coveredPackageCount: 1,
+		depOnlyPackageCount: 1,
+		entryFile: entryPath,
+		graphPackageCount: 2,
+		llvmTarget: 'wasm32-unknown-wasi',
+		localPackageCount: 1,
+		programFiles: [entryPath],
+		programImportAlias: 'direct',
+		programImportPath: 'example.com/fake',
+		programPackageDir: workspaceDir,
+		programPackageName: 'main',
+		standardPackageCount: 1,
+		target: 'wasip1'
+	});
+	assert.equal(manifest.frontendAnalysis, undefined);
+	assert.deepEqual(manifest.frontendAnalysisInput, {
+		buildContext: {
+			target: 'wasip1',
+			llvmTarget: 'wasm32-unknown-wasi',
+			goos: 'wasip1',
+			goarch: 'wasm',
+			gc: 'precise',
+			scheduler: 'tasks',
+			buildTags: ['gc.precise', 'scheduler.tasks', 'tinygo.wasm'],
+			modulePath: 'example.com/fake'
+		},
+		entryFile: entryPath,
+		modulePath: 'example.com/fake',
+		sourceSelection: {
+			program: [entryPath],
+			allCompile: [entryPath, '/working/.tinygo-root/src/fmt/print.go']
+		},
+		toolchain: {
+			artifactOutputPath: outputPath,
+			llvmTarget: 'wasm32-unknown-wasi',
+			target: 'wasip1'
+		},
+		packageGraph: [
+			{
+				depOnly: false,
+				dir: workspaceDir,
+				files: { goFiles: ['main.go'] },
+				importPath: 'example.com/fake',
+				imports: ['fmt'],
+				modulePath: 'example.com/fake',
+				name: 'main',
+				standard: false
+			},
+			{
+				depOnly: true,
+				dir: '/working/.tinygo-root/src/fmt',
+				files: { goFiles: ['print.go'] },
+				importPath: 'fmt',
+				imports: ['errors'],
+				modulePath: '',
+				name: 'fmt',
+				standard: true
+			}
+		]
+	});
+	assert.deepEqual(manifest.frontendRealAdapter, {
+		buildContext: {
+			buildTags: ['gc.precise', 'scheduler.tasks', 'tinygo.wasm'],
+			gc: 'precise',
+			goarch: 'wasm',
+			goos: 'wasip1',
+			llvmTarget: 'wasm32-unknown-wasi',
+			modulePath: 'example.com/fake',
+			scheduler: 'tasks',
+			target: 'wasip1'
+		},
+		allCompileFiles: [entryPath, '/working/.tinygo-root/src/fmt/print.go'],
+		compileGroups: [
+			{ files: [entryPath], name: 'program' },
+			{ files: [], name: 'imported' },
+			{ files: ['/working/.tinygo-root/src/fmt/print.go'], name: 'stdlib' },
+			{ files: [entryPath, '/working/.tinygo-root/src/fmt/print.go'], name: 'all-compile' }
+		],
+		compileUnitManifestPath: '/working/tinygo-compile-unit.json',
+		compileUnits: [
+			{
+				depOnly: false,
+				files: [entryPath],
+				importPath: 'example.com/fake',
+				imports: ['fmt'],
+				kind: 'program',
+				modulePath: 'example.com/fake',
+				packageDir: workspaceDir,
+				packageName: 'main',
+				standard: false
+			},
+			{
+				depOnly: true,
+				files: ['/working/.tinygo-root/src/fmt/print.go'],
+				importPath: 'fmt',
+				imports: ['errors'],
+				kind: 'stdlib',
+				modulePath: '',
+				packageDir: '/working/.tinygo-root/src/fmt',
+				packageName: 'fmt',
+				standard: true
+			}
+		],
+		entryFile: entryPath,
+		packageGraph: [
+			{
+				depOnly: false,
+				dir: workspaceDir,
+				files: { goFiles: ['main.go'] },
+				importPath: 'example.com/fake',
+				imports: ['fmt'],
+				modulePath: 'example.com/fake',
+				name: 'main',
+				standard: false
+			},
+			{
+				depOnly: true,
+				dir: '/working/.tinygo-root/src/fmt',
+				files: { goFiles: ['print.go'] },
+				importPath: 'fmt',
+				imports: ['errors'],
+				modulePath: '',
+				name: 'fmt',
+				standard: true
+			}
+		],
+		toolchain: {
+			llvmTarget: 'wasm32-unknown-wasi',
+			target: 'wasip1'
+		}
+	});
+	assert.deepEqual(manifest.realFrontendAnalysis, manifest.frontendRealAdapter);
+	assert.equal(manifest.hostArtifact.artifactKind, 'probe');
+	assert.equal(manifest.hostArtifact.bytesBase64, 'AGFzbQEAAAA=');
+	assert.deepEqual(manifest.hostArtifact.command.slice(0, 9), [
+		fakeTinyGoPath,
+		'build',
+		'-target',
+		'wasip1',
+		'-opt',
+		'z',
+		'-scheduler',
+		'tasks',
+		'-panic'
+	]);
+	assert.equal(manifest.hostArtifact.command[9], 'trap');
+	assert.equal(manifest.hostArtifact.command[10], '-o');
+	assert.match(manifest.hostArtifact.command[11], /tinygo-bridge-execution\.wasm$/);
+	assert.equal(manifest.hostArtifact.command[12], entryPath);
+	assert.equal(manifest.hostArtifact.entrypoint, null);
+	assert.deepEqual(manifest.hostArtifact.logs, []);
+	assert.equal(manifest.hostArtifact.path, outputPath);
+	assert.equal(manifest.hostArtifact.reason, 'missing-wasi-entrypoint');
+	assert.equal(manifest.hostArtifact.runnable, false);
+	assert.equal(manifest.hostArtifact.size, 8);
+	assert.equal(manifest.hostArtifact.target, 'wasip1');
+	assert.deepEqual(manifest.driverBuildTags, ['gc.precise', 'scheduler.tasks', 'tinygo.wasm']);
+	assert.deepEqual(manifest.hostBuildTags, [
+		'gc.precise',
+		'purego',
+		'scheduler.tasks',
+		'tinygo',
+		'tinygo.unicore',
+		'tinygo.wasm'
+	]);
+	assert.equal(manifest.driverResultPath, path.join(workspaceDir, 'tinygo-result.json'));
+	assert.equal(manifest.hostProbeManifestPath, path.join(workspaceDir, 'tinygo-host-probe.json'));
+	assert.deepEqual(JSON.parse(await readFile(frontendEnvRecordPath, 'utf8')), {
+		analysisPath: null,
+		inputPath: path.join(workspaceDir, 'tinygo-frontend-input.json'),
+		realAdapterPath: path.join(workspaceDir, 'tinygo-frontend-real-adapter.json')
+	});
+});
 
 test('probe-tinygo-driver-bridge passes a packageGraph-only input to frontend-analysis', async (t) => {
-  const tempDir = await mkdtemp(path.join(tmpdir(), 'wasm-tinygo-driver-bridge-script-analysis-only-'))
-  t.after(async () => {
-    await rm(tempDir, { recursive: true, force: true })
-  })
+	const tempDir = await mkdtemp(
+		path.join(tmpdir(), 'wasm-tinygo-driver-bridge-script-analysis-only-')
+	);
+	t.after(async () => {
+		await rm(tempDir, { recursive: true, force: true });
+	});
 
-  const fakeBinDir = path.join(tempDir, 'bin')
-  await mkdir(fakeBinDir, { recursive: true })
+	const fakeBinDir = path.join(tempDir, 'bin');
+	await mkdir(fakeBinDir, { recursive: true });
 
-  const fakeGoPath = path.join(fakeBinDir, 'go')
-  await writeFile(fakeGoPath, `#!/bin/sh
+	const fakeGoPath = path.join(fakeBinDir, 'go');
+	await writeFile(
+		fakeGoPath,
+		`#!/bin/sh
 set -eu
 node - <<'NODE'
 const fs = require('node:fs')
@@ -786,11 +812,14 @@ fs.writeFileSync(process.env.WASM_TINYGO_RESULT_PATH, JSON.stringify({
   },
 }, null, 2))
 NODE
-`)
-  await chmod(fakeGoPath, 0o755)
+`
+	);
+	await chmod(fakeGoPath, 0o755);
 
-  const fakeTinyGoPath = path.join(fakeBinDir, 'tinygo')
-  await writeFile(fakeTinyGoPath, `#!/bin/sh
+	const fakeTinyGoPath = path.join(fakeBinDir, 'tinygo');
+	await writeFile(
+		fakeTinyGoPath,
+		`#!/bin/sh
 set -eu
 if [ "$1" = "info" ]; then
   cat <<'EOF'
@@ -845,101 +874,115 @@ for arg in "$@"; do
 done
 mkdir -p "$(dirname "$out")"
 printf '\\000asm\\001\\000\\000\\000' > "$out"
-`)
-  await chmod(fakeTinyGoPath, 0o755)
+`
+	);
+	await chmod(fakeTinyGoPath, 0o755);
 
-  const fakeTinyGoRoot = path.join(tempDir, 'tinygo-root')
-  await mkdir(path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys'), { recursive: true })
-  await mkdir(path.join(fakeTinyGoRoot, 'src', 'device', 'arm'), { recursive: true })
-  await writeFile(path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys', 'zversion.go'), 'package sys\n')
-  await writeFile(path.join(fakeTinyGoRoot, 'src', 'device', 'arm', 'arm.go'), 'package arm\n')
+	const fakeTinyGoRoot = path.join(tempDir, 'tinygo-root');
+	await mkdir(path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys'), {
+		recursive: true
+	});
+	await mkdir(path.join(fakeTinyGoRoot, 'src', 'device', 'arm'), { recursive: true });
+	await writeFile(
+		path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys', 'zversion.go'),
+		'package sys\n'
+	);
+	await writeFile(path.join(fakeTinyGoRoot, 'src', 'device', 'arm', 'arm.go'), 'package arm\n');
 
-  const workspaceDir = path.join(tempDir, 'workspace')
-  await mkdir(workspaceDir, { recursive: true })
-  const entryPath = path.join(workspaceDir, 'main.go')
-  const outputPath = path.join(workspaceDir, 'out.wasm')
-  const requestPath = path.join(workspaceDir, 'tinygo-request.json')
-  const bridgeManifestPath = path.join(workspaceDir, 'tinygo-driver-bridge.json')
+	const workspaceDir = path.join(tempDir, 'workspace');
+	await mkdir(workspaceDir, { recursive: true });
+	const entryPath = path.join(workspaceDir, 'main.go');
+	const outputPath = path.join(workspaceDir, 'out.wasm');
+	const requestPath = path.join(workspaceDir, 'tinygo-request.json');
+	const bridgeManifestPath = path.join(workspaceDir, 'tinygo-driver-bridge.json');
 
-  await writeFile(entryPath, 'package main\n\nfunc main() {}\n')
-  await writeFile(requestPath, JSON.stringify({
-    command: 'build',
-    planner: 'tinygo',
-    entry: entryPath,
-    optimize: 'z',
-    output: outputPath,
-    panic: 'trap',
-    scheduler: 'tasks',
-    target: 'wasip1',
-  }))
+	await writeFile(entryPath, 'package main\n\nfunc main() {}\n');
+	await writeFile(
+		requestPath,
+		JSON.stringify({
+			command: 'build',
+			planner: 'tinygo',
+			entry: entryPath,
+			optimize: 'z',
+			output: outputPath,
+			panic: 'trap',
+			scheduler: 'tasks',
+			target: 'wasip1'
+		})
+	);
 
-  const cwd = new URL('..', import.meta.url).pathname
-  const scriptPath = new URL('../scripts/probe-tinygo-driver-bridge.mjs', import.meta.url).pathname
-  const child = spawn(process.execPath, [scriptPath], {
-    cwd,
-    env: {
-      ...process.env,
-      WASM_TINYGO_DRIVER_BRIDGE_MANIFEST_PATH: bridgeManifestPath,
-      WASM_TINYGO_DRIVER_BRIDGE_INCLUDE_FRONTEND_ANALYSIS: '1',
-      WASM_TINYGO_GO_BIN: fakeGoPath,
-      WASM_TINYGO_HOST_PROBE_REQUEST_PATH: requestPath,
-      WASM_TINYGO_HOST_PROBE_SKIP_RUNTIME: '1',
-      WASM_TINYGO_TINYGOROOT: fakeTinyGoRoot,
-      WASM_TINYGO_TINYGO_BIN: fakeTinyGoPath,
-    },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
+	const cwd = new URL('..', import.meta.url).pathname;
+	const scriptPath = new URL('../scripts/probe-tinygo-driver-bridge.mjs', import.meta.url)
+		.pathname;
+	const child = spawn(process.execPath, [scriptPath], {
+		cwd,
+		env: {
+			...process.env,
+			WASM_TINYGO_DRIVER_BRIDGE_MANIFEST_PATH: bridgeManifestPath,
+			WASM_TINYGO_DRIVER_BRIDGE_INCLUDE_FRONTEND_ANALYSIS: '1',
+			WASM_TINYGO_GO_BIN: fakeGoPath,
+			WASM_TINYGO_HOST_PROBE_REQUEST_PATH: requestPath,
+			WASM_TINYGO_HOST_PROBE_SKIP_RUNTIME: '1',
+			WASM_TINYGO_TINYGOROOT: fakeTinyGoRoot,
+			WASM_TINYGO_TINYGO_BIN: fakeTinyGoPath
+		},
+		stdio: ['ignore', 'pipe', 'pipe']
+	});
 
-  let output = ''
-  child.stdout.on('data', (chunk) => {
-    output += chunk.toString()
-  })
-  child.stderr.on('data', (chunk) => {
-    output += chunk.toString()
-  })
+	let output = '';
+	child.stdout.on('data', (chunk) => {
+		output += chunk.toString();
+	});
+	child.stderr.on('data', (chunk) => {
+		output += chunk.toString();
+	});
 
-  const exitCode = await new Promise((resolve, reject) => {
-    child.once('error', reject)
-    child.once('close', resolve)
-  })
+	const exitCode = await new Promise((resolve, reject) => {
+		child.once('error', reject);
+		child.once('close', resolve);
+	});
 
-  assert.equal(exitCode, 0, output)
-  const manifest = JSON.parse(await readFile(bridgeManifestPath, 'utf8'))
-  assert.deepEqual(manifest.frontendAnalysis.compileUnits, [
-    {
-      depOnly: false,
-      kind: 'program',
-      importPath: 'example.com/fake',
-      imports: ['fmt'],
-      packageName: 'main',
-      packageDir: workspaceDir,
-      files: [entryPath],
-      standard: false,
-    },
-    {
-      depOnly: true,
-      kind: 'stdlib',
-      importPath: 'fmt',
-      imports: ['errors'],
-      packageName: 'fmt',
-      packageDir: '/working/.tinygo-root/src/fmt',
-      files: ['/working/.tinygo-root/src/fmt/print.go'],
-      standard: true,
-    },
-  ])
-})
+	assert.equal(exitCode, 0, output);
+	const manifest = JSON.parse(await readFile(bridgeManifestPath, 'utf8'));
+	assert.deepEqual(manifest.frontendAnalysis.compileUnits, [
+		{
+			depOnly: false,
+			kind: 'program',
+			importPath: 'example.com/fake',
+			imports: ['fmt'],
+			packageName: 'main',
+			packageDir: workspaceDir,
+			files: [entryPath],
+			standard: false
+		},
+		{
+			depOnly: true,
+			kind: 'stdlib',
+			importPath: 'fmt',
+			imports: ['errors'],
+			packageName: 'fmt',
+			packageDir: '/working/.tinygo-root/src/fmt',
+			files: ['/working/.tinygo-root/src/fmt/print.go'],
+			standard: true
+		}
+	]);
+});
 
 test('probe-tinygo-driver-bridge falls back to frontend compile units when tinygo list returns no package graph', async (t) => {
-  const tempDir = await mkdtemp(path.join(tmpdir(), 'wasm-tinygo-driver-bridge-script-empty-list-'))
-  t.after(async () => {
-    await rm(tempDir, { recursive: true, force: true })
-  })
+	const tempDir = await mkdtemp(
+		path.join(tmpdir(), 'wasm-tinygo-driver-bridge-script-empty-list-')
+	);
+	t.after(async () => {
+		await rm(tempDir, { recursive: true, force: true });
+	});
 
-  const fakeBinDir = path.join(tempDir, 'bin')
-  await mkdir(fakeBinDir, { recursive: true })
+	const fakeBinDir = path.join(tempDir, 'bin');
+	await mkdir(fakeBinDir, { recursive: true });
 
-  const fakeGoPath = path.join(fakeBinDir, 'go')
-  await writeFile(fakeGoPath, `#!/bin/sh
+	const fakeGoPath = path.join(fakeBinDir, 'go');
+	await writeFile(
+		fakeGoPath,
+		`#!/bin/sh
 set -eu
 node - <<'NODE'
 const fs = require('node:fs')
@@ -1107,11 +1150,14 @@ fs.writeFileSync(process.env.WASM_TINYGO_RESULT_PATH, JSON.stringify({
   },
 }, null, 2))
 NODE
-`)
-  await chmod(fakeGoPath, 0o755)
+`
+	);
+	await chmod(fakeGoPath, 0o755);
 
-  const fakeTinyGoPath = path.join(fakeBinDir, 'tinygo')
-  await writeFile(fakeTinyGoPath, `#!/bin/sh
+	const fakeTinyGoPath = path.join(fakeBinDir, 'tinygo');
+	await writeFile(
+		fakeTinyGoPath,
+		`#!/bin/sh
 set -eu
 if [ "$1" = "info" ]; then
   cat <<'EOF'
@@ -1137,193 +1183,203 @@ for arg in "$@"; do
 done
 mkdir -p "$(dirname "$out")"
 printf '\\000asm\\001\\000\\000\\000' > "$out"
-`)
-  await chmod(fakeTinyGoPath, 0o755)
+`
+	);
+	await chmod(fakeTinyGoPath, 0o755);
 
-  const fakeTinyGoRoot = path.join(tempDir, 'tinygo-root')
-  await mkdir(path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys'), { recursive: true })
-  await mkdir(path.join(fakeTinyGoRoot, 'src', 'device', 'arm'), { recursive: true })
-  await writeFile(path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys', 'zversion.go'), 'package sys\n')
-  await writeFile(path.join(fakeTinyGoRoot, 'src', 'device', 'arm', 'arm.go'), 'package arm\n')
+	const fakeTinyGoRoot = path.join(tempDir, 'tinygo-root');
+	await mkdir(path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys'), {
+		recursive: true
+	});
+	await mkdir(path.join(fakeTinyGoRoot, 'src', 'device', 'arm'), { recursive: true });
+	await writeFile(
+		path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys', 'zversion.go'),
+		'package sys\n'
+	);
+	await writeFile(path.join(fakeTinyGoRoot, 'src', 'device', 'arm', 'arm.go'), 'package arm\n');
 
-  const workspaceDir = path.join(tempDir, 'workspace')
-  await mkdir(workspaceDir, { recursive: true })
-  const entryPath = path.join(workspaceDir, 'main.go')
-  const outputPath = path.join(workspaceDir, 'out.wasm')
-  const requestPath = path.join(workspaceDir, 'tinygo-request.json')
-  const bridgeManifestPath = path.join(workspaceDir, 'tinygo-driver-bridge.json')
+	const workspaceDir = path.join(tempDir, 'workspace');
+	await mkdir(workspaceDir, { recursive: true });
+	const entryPath = path.join(workspaceDir, 'main.go');
+	const outputPath = path.join(workspaceDir, 'out.wasm');
+	const requestPath = path.join(workspaceDir, 'tinygo-request.json');
+	const bridgeManifestPath = path.join(workspaceDir, 'tinygo-driver-bridge.json');
 
-  await writeFile(entryPath, 'package main\n\nfunc main() {}\n')
-  await writeFile(requestPath, JSON.stringify({
-    command: 'build',
-    planner: 'tinygo',
-    entry: entryPath,
-    optimize: 'z',
-    output: outputPath,
-    panic: 'trap',
-    target: 'wasm',
-  }))
+	await writeFile(entryPath, 'package main\n\nfunc main() {}\n');
+	await writeFile(
+		requestPath,
+		JSON.stringify({
+			command: 'build',
+			planner: 'tinygo',
+			entry: entryPath,
+			optimize: 'z',
+			output: outputPath,
+			panic: 'trap',
+			target: 'wasm'
+		})
+	);
 
-  const cwd = new URL('..', import.meta.url).pathname
-  const scriptPath = new URL('../scripts/probe-tinygo-driver-bridge.mjs', import.meta.url).pathname
-  const child = spawn(process.execPath, [scriptPath], {
-    cwd,
-    env: {
-      ...process.env,
-      WASM_TINYGO_DRIVER_BRIDGE_MANIFEST_PATH: bridgeManifestPath,
-      WASM_TINYGO_DRIVER_BRIDGE_INCLUDE_FRONTEND_ANALYSIS: '1',
-      WASM_TINYGO_GO_BIN: fakeGoPath,
-      WASM_TINYGO_HOST_PROBE_REQUEST_PATH: requestPath,
-      WASM_TINYGO_HOST_PROBE_SKIP_RUNTIME: '1',
-      WASM_TINYGO_TINYGOROOT: fakeTinyGoRoot,
-      WASM_TINYGO_TINYGO_BIN: fakeTinyGoPath,
-    },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
+	const cwd = new URL('..', import.meta.url).pathname;
+	const scriptPath = new URL('../scripts/probe-tinygo-driver-bridge.mjs', import.meta.url)
+		.pathname;
+	const child = spawn(process.execPath, [scriptPath], {
+		cwd,
+		env: {
+			...process.env,
+			WASM_TINYGO_DRIVER_BRIDGE_MANIFEST_PATH: bridgeManifestPath,
+			WASM_TINYGO_DRIVER_BRIDGE_INCLUDE_FRONTEND_ANALYSIS: '1',
+			WASM_TINYGO_GO_BIN: fakeGoPath,
+			WASM_TINYGO_HOST_PROBE_REQUEST_PATH: requestPath,
+			WASM_TINYGO_HOST_PROBE_SKIP_RUNTIME: '1',
+			WASM_TINYGO_TINYGOROOT: fakeTinyGoRoot,
+			WASM_TINYGO_TINYGO_BIN: fakeTinyGoPath
+		},
+		stdio: ['ignore', 'pipe', 'pipe']
+	});
 
-  let output = ''
-  child.stdout.on('data', (chunk) => {
-    output += chunk.toString()
-  })
-  child.stderr.on('data', (chunk) => {
-    output += chunk.toString()
-  })
+	let output = '';
+	child.stdout.on('data', (chunk) => {
+		output += chunk.toString();
+	});
+	child.stderr.on('data', (chunk) => {
+		output += chunk.toString();
+	});
 
-  const exitCode = await new Promise((resolve, reject) => {
-    child.once('error', reject)
-    child.once('close', resolve)
-  })
+	const exitCode = await new Promise((resolve, reject) => {
+		child.once('error', reject);
+		child.once('close', resolve);
+	});
 
-  assert.equal(exitCode, 0, output)
-  const manifest = JSON.parse(await readFile(bridgeManifestPath, 'utf8'))
-  assert.deepEqual(manifest.entryPackage, {
-    dir: workspaceDir,
-    goFiles: ['main.go'],
-    importPath: 'command-line-arguments',
-    imports: [],
-    name: 'main',
-  })
-  assert.deepEqual(manifest.packageGraph, [
-    {
-      depOnly: false,
-      dir: workspaceDir,
-      goFiles: ['main.go'],
-      importPath: 'command-line-arguments',
-      imports: [],
-      modulePath: 'example.com/bridge',
-      name: 'main',
-      standard: false,
-    },
-  ])
-  assert.deepEqual(manifest.frontendAnalysis, {
-    allCompileFiles: [entryPath],
-    buildContext: {
-      target: 'wasm',
-      llvmTarget: 'wasm32-unknown-wasi',
-      goos: 'js',
-      goarch: 'wasm',
-      gc: 'precise',
-      scheduler: 'asyncify',
-      buildTags: ['gc.precise', 'scheduler.asyncify', 'tinygo.wasm'],
-      modulePath: 'example.com/bridge',
-    },
-    compileGroups: [
-      { files: [entryPath], name: 'program' },
-    ],
-    compileUnitManifestPath: '/working/tinygo-compile-unit.json',
-    compileUnits: [
-      {
-        depOnly: false,
-        files: [entryPath],
-        kind: 'program',
-        importPath: 'command-line-arguments',
-        imports: [],
-        packageDir: workspaceDir,
-        packageName: 'main',
-        standard: false,
-      },
-    ],
-    entryFile: entryPath,
-    packageGraph: [
-      {
-        depOnly: false,
-        dir: workspaceDir,
-        files: { goFiles: ['main.go'] },
-        importPath: 'command-line-arguments',
-        imports: [],
-        modulePath: 'example.com/bridge',
-        name: 'main',
-        standard: false,
-      },
-    ],
-    toolchain: {
-      llvmTarget: 'wasm32-unknown-wasi',
-      target: 'wasm',
-    },
-  })
-  assert.deepEqual(manifest.frontendRealAdapter, {
-    buildContext: {
-      buildTags: ['gc.precise', 'scheduler.asyncify', 'tinygo.wasm'],
-      gc: 'precise',
-      goarch: 'wasm',
-      goos: 'js',
-      llvmTarget: 'wasm32-unknown-wasi',
-      modulePath: 'example.com/bridge',
-      scheduler: 'asyncify',
-      target: 'wasm',
-    },
-    allCompileFiles: [entryPath],
-    compileGroups: [
-      { files: [entryPath], name: 'program' },
-      { files: [], name: 'imported' },
-      { files: [], name: 'stdlib' },
-      { files: [entryPath], name: 'all-compile' },
-    ],
-    compileUnitManifestPath: '/working/tinygo-compile-unit.json',
-    compileUnits: [
-      {
-        depOnly: false,
-        files: [entryPath],
-        importPath: 'command-line-arguments',
-        imports: [],
-        kind: 'program',
-        packageDir: workspaceDir,
-        packageName: 'main',
-        standard: false,
-      },
-    ],
-    entryFile: entryPath,
-    packageGraph: [
-      {
-        depOnly: false,
-        dir: workspaceDir,
-        files: { goFiles: ['main.go'] },
-        importPath: 'command-line-arguments',
-        imports: [],
-        modulePath: 'example.com/bridge',
-        name: 'main',
-        standard: false,
-      },
-    ],
-    toolchain: {
-      llvmTarget: 'wasm32-unknown-wasi',
-      target: 'wasm',
-    },
-  })
-  assert.deepEqual(manifest.realFrontendAnalysis, manifest.frontendRealAdapter)
-})
+	assert.equal(exitCode, 0, output);
+	const manifest = JSON.parse(await readFile(bridgeManifestPath, 'utf8'));
+	assert.deepEqual(manifest.entryPackage, {
+		dir: workspaceDir,
+		goFiles: ['main.go'],
+		importPath: 'command-line-arguments',
+		imports: [],
+		name: 'main'
+	});
+	assert.deepEqual(manifest.packageGraph, [
+		{
+			depOnly: false,
+			dir: workspaceDir,
+			goFiles: ['main.go'],
+			importPath: 'command-line-arguments',
+			imports: [],
+			modulePath: 'example.com/bridge',
+			name: 'main',
+			standard: false
+		}
+	]);
+	assert.deepEqual(manifest.frontendAnalysis, {
+		allCompileFiles: [entryPath],
+		buildContext: {
+			target: 'wasm',
+			llvmTarget: 'wasm32-unknown-wasi',
+			goos: 'js',
+			goarch: 'wasm',
+			gc: 'precise',
+			scheduler: 'asyncify',
+			buildTags: ['gc.precise', 'scheduler.asyncify', 'tinygo.wasm'],
+			modulePath: 'example.com/bridge'
+		},
+		compileGroups: [{ files: [entryPath], name: 'program' }],
+		compileUnitManifestPath: '/working/tinygo-compile-unit.json',
+		compileUnits: [
+			{
+				depOnly: false,
+				files: [entryPath],
+				kind: 'program',
+				importPath: 'command-line-arguments',
+				imports: [],
+				packageDir: workspaceDir,
+				packageName: 'main',
+				standard: false
+			}
+		],
+		entryFile: entryPath,
+		packageGraph: [
+			{
+				depOnly: false,
+				dir: workspaceDir,
+				files: { goFiles: ['main.go'] },
+				importPath: 'command-line-arguments',
+				imports: [],
+				modulePath: 'example.com/bridge',
+				name: 'main',
+				standard: false
+			}
+		],
+		toolchain: {
+			llvmTarget: 'wasm32-unknown-wasi',
+			target: 'wasm'
+		}
+	});
+	assert.deepEqual(manifest.frontendRealAdapter, {
+		buildContext: {
+			buildTags: ['gc.precise', 'scheduler.asyncify', 'tinygo.wasm'],
+			gc: 'precise',
+			goarch: 'wasm',
+			goos: 'js',
+			llvmTarget: 'wasm32-unknown-wasi',
+			modulePath: 'example.com/bridge',
+			scheduler: 'asyncify',
+			target: 'wasm'
+		},
+		allCompileFiles: [entryPath],
+		compileGroups: [
+			{ files: [entryPath], name: 'program' },
+			{ files: [], name: 'imported' },
+			{ files: [], name: 'stdlib' },
+			{ files: [entryPath], name: 'all-compile' }
+		],
+		compileUnitManifestPath: '/working/tinygo-compile-unit.json',
+		compileUnits: [
+			{
+				depOnly: false,
+				files: [entryPath],
+				importPath: 'command-line-arguments',
+				imports: [],
+				kind: 'program',
+				packageDir: workspaceDir,
+				packageName: 'main',
+				standard: false
+			}
+		],
+		entryFile: entryPath,
+		packageGraph: [
+			{
+				depOnly: false,
+				dir: workspaceDir,
+				files: { goFiles: ['main.go'] },
+				importPath: 'command-line-arguments',
+				imports: [],
+				modulePath: 'example.com/bridge',
+				name: 'main',
+				standard: false
+			}
+		],
+		toolchain: {
+			llvmTarget: 'wasm32-unknown-wasi',
+			target: 'wasm'
+		}
+	});
+	assert.deepEqual(manifest.realFrontendAnalysis, manifest.frontendRealAdapter);
+});
 
 test('probe-tinygo-driver-bridge can skip frontend-analysis and write an adapter-only bridge manifest', async (t) => {
-  const tempDir = await mkdtemp(path.join(tmpdir(), 'wasm-tinygo-driver-bridge-adapter-only-'))
-  t.after(async () => {
-    await rm(tempDir, { recursive: true, force: true })
-  })
+	const tempDir = await mkdtemp(path.join(tmpdir(), 'wasm-tinygo-driver-bridge-adapter-only-'));
+	t.after(async () => {
+		await rm(tempDir, { recursive: true, force: true });
+	});
 
-  const fakeBinDir = path.join(tempDir, 'bin')
-  await mkdir(fakeBinDir, { recursive: true })
+	const fakeBinDir = path.join(tempDir, 'bin');
+	await mkdir(fakeBinDir, { recursive: true });
 
-  const fakeGoPath = path.join(fakeBinDir, 'go')
-  await writeFile(fakeGoPath, `#!/bin/sh
+	const fakeGoPath = path.join(fakeBinDir, 'go');
+	await writeFile(
+		fakeGoPath,
+		`#!/bin/sh
 set -eu
 node - <<'NODE'
 const fs = require('node:fs')
@@ -1486,11 +1542,14 @@ fs.writeFileSync(process.env.WASM_TINYGO_RESULT_PATH, JSON.stringify({
   },
 }, null, 2))
 NODE
-`)
-  await chmod(fakeGoPath, 0o755)
+`
+	);
+	await chmod(fakeGoPath, 0o755);
 
-  const fakeTinyGoPath = path.join(fakeBinDir, 'tinygo')
-  await writeFile(fakeTinyGoPath, `#!/bin/sh
+	const fakeTinyGoPath = path.join(fakeBinDir, 'tinygo');
+	await writeFile(
+		fakeTinyGoPath,
+		`#!/bin/sh
 set -eu
 if [ "$1" = "info" ]; then
   cat <<'EOF'
@@ -1545,91 +1604,105 @@ for arg in "$@"; do
 done
 mkdir -p "$(dirname "$out")"
 printf '\\000asm\\001\\000\\000\\000' > "$out"
-`)
-  await chmod(fakeTinyGoPath, 0o755)
+`
+	);
+	await chmod(fakeTinyGoPath, 0o755);
 
-  const fakeTinyGoRoot = path.join(tempDir, 'tinygo-root')
-  await mkdir(path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys'), { recursive: true })
-  await mkdir(path.join(fakeTinyGoRoot, 'src', 'device', 'arm'), { recursive: true })
-  await writeFile(path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys', 'zversion.go'), 'package sys\n')
-  await writeFile(path.join(fakeTinyGoRoot, 'src', 'device', 'arm', 'arm.go'), 'package arm\n')
+	const fakeTinyGoRoot = path.join(tempDir, 'tinygo-root');
+	await mkdir(path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys'), {
+		recursive: true
+	});
+	await mkdir(path.join(fakeTinyGoRoot, 'src', 'device', 'arm'), { recursive: true });
+	await writeFile(
+		path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys', 'zversion.go'),
+		'package sys\n'
+	);
+	await writeFile(path.join(fakeTinyGoRoot, 'src', 'device', 'arm', 'arm.go'), 'package arm\n');
 
-  const workspaceDir = path.join(tempDir, 'workspace')
-  await mkdir(workspaceDir, { recursive: true })
-  const entryPath = path.join(workspaceDir, 'main.go')
-  const outputPath = path.join(workspaceDir, 'out.wasm')
-  const requestPath = path.join(workspaceDir, 'tinygo-request.json')
-  const bridgeManifestPath = path.join(workspaceDir, 'tinygo-driver-bridge.json')
-  const frontendEnvRecordPath = path.join(workspaceDir, 'tinygo-frontend-env.json')
+	const workspaceDir = path.join(tempDir, 'workspace');
+	await mkdir(workspaceDir, { recursive: true });
+	const entryPath = path.join(workspaceDir, 'main.go');
+	const outputPath = path.join(workspaceDir, 'out.wasm');
+	const requestPath = path.join(workspaceDir, 'tinygo-request.json');
+	const bridgeManifestPath = path.join(workspaceDir, 'tinygo-driver-bridge.json');
+	const frontendEnvRecordPath = path.join(workspaceDir, 'tinygo-frontend-env.json');
 
-  await writeFile(entryPath, 'package main\n\nfunc main() {}\n')
-  await writeFile(requestPath, JSON.stringify({
-    command: 'build',
-    planner: 'tinygo',
-    entry: entryPath,
-    optimize: 'z',
-    output: outputPath,
-    panic: 'trap',
-    scheduler: 'tasks',
-    target: 'wasip1',
-  }))
+	await writeFile(entryPath, 'package main\n\nfunc main() {}\n');
+	await writeFile(
+		requestPath,
+		JSON.stringify({
+			command: 'build',
+			planner: 'tinygo',
+			entry: entryPath,
+			optimize: 'z',
+			output: outputPath,
+			panic: 'trap',
+			scheduler: 'tasks',
+			target: 'wasip1'
+		})
+	);
 
-  const cwd = new URL('..', import.meta.url).pathname
-  const scriptPath = new URL('../scripts/probe-tinygo-driver-bridge.mjs', import.meta.url).pathname
-  const child = spawn(process.execPath, [scriptPath], {
-    cwd,
-    env: {
-      ...process.env,
-      WASM_TINYGO_DRIVER_BRIDGE_MANIFEST_PATH: bridgeManifestPath,
-      WASM_TINYGO_DRIVER_BRIDGE_SKIP_FRONTEND_ANALYSIS: '1',
-      WASM_TINYGO_FRONTEND_ENV_RECORD_PATH: frontendEnvRecordPath,
-      WASM_TINYGO_GO_BIN: fakeGoPath,
-      WASM_TINYGO_HOST_PROBE_REQUEST_PATH: requestPath,
-      WASM_TINYGO_HOST_PROBE_SKIP_RUNTIME: '1',
-      WASM_TINYGO_TINYGOROOT: fakeTinyGoRoot,
-      WASM_TINYGO_TINYGO_BIN: fakeTinyGoPath,
-    },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
+	const cwd = new URL('..', import.meta.url).pathname;
+	const scriptPath = new URL('../scripts/probe-tinygo-driver-bridge.mjs', import.meta.url)
+		.pathname;
+	const child = spawn(process.execPath, [scriptPath], {
+		cwd,
+		env: {
+			...process.env,
+			WASM_TINYGO_DRIVER_BRIDGE_MANIFEST_PATH: bridgeManifestPath,
+			WASM_TINYGO_DRIVER_BRIDGE_SKIP_FRONTEND_ANALYSIS: '1',
+			WASM_TINYGO_FRONTEND_ENV_RECORD_PATH: frontendEnvRecordPath,
+			WASM_TINYGO_GO_BIN: fakeGoPath,
+			WASM_TINYGO_HOST_PROBE_REQUEST_PATH: requestPath,
+			WASM_TINYGO_HOST_PROBE_SKIP_RUNTIME: '1',
+			WASM_TINYGO_TINYGOROOT: fakeTinyGoRoot,
+			WASM_TINYGO_TINYGO_BIN: fakeTinyGoPath
+		},
+		stdio: ['ignore', 'pipe', 'pipe']
+	});
 
-  let output = ''
-  child.stdout.on('data', (chunk) => {
-    output += chunk.toString()
-  })
-  child.stderr.on('data', (chunk) => {
-    output += chunk.toString()
-  })
+	let output = '';
+	child.stdout.on('data', (chunk) => {
+		output += chunk.toString();
+	});
+	child.stderr.on('data', (chunk) => {
+		output += chunk.toString();
+	});
 
-  const exitCode = await new Promise((resolve, reject) => {
-    child.once('error', reject)
-    child.once('close', resolve)
-  })
+	const exitCode = await new Promise((resolve, reject) => {
+		child.once('error', reject);
+		child.once('close', resolve);
+	});
 
-  assert.equal(exitCode, 0, output)
-  const manifest = JSON.parse(await readFile(bridgeManifestPath, 'utf8'))
-  assert.equal(manifest.frontendAnalysis, undefined)
-  assert.deepEqual(manifest.realFrontendAnalysis, manifest.frontendRealAdapter)
-  assert.equal(manifest.frontendRealAdapter.toolchain.target, 'wasip1')
-  assert.equal(manifest.frontendRealAdapter.toolchain.llvmTarget, 'wasm32-unknown-wasi')
-  assert.equal(manifest.frontendHandoff.compileUnitCount, 2)
-  assert.deepEqual(JSON.parse(await readFile(frontendEnvRecordPath, 'utf8')), {
-    analysisPath: null,
-    inputPath: path.join(workspaceDir, 'tinygo-frontend-input.json'),
-    realAdapterPath: path.join(workspaceDir, 'tinygo-frontend-real-adapter.json'),
-  })
-})
+	assert.equal(exitCode, 0, output);
+	const manifest = JSON.parse(await readFile(bridgeManifestPath, 'utf8'));
+	assert.equal(manifest.frontendAnalysis, undefined);
+	assert.deepEqual(manifest.realFrontendAnalysis, manifest.frontendRealAdapter);
+	assert.equal(manifest.frontendRealAdapter.toolchain.target, 'wasip1');
+	assert.equal(manifest.frontendRealAdapter.toolchain.llvmTarget, 'wasm32-unknown-wasi');
+	assert.equal(manifest.frontendHandoff.compileUnitCount, 2);
+	assert.deepEqual(JSON.parse(await readFile(frontendEnvRecordPath, 'utf8')), {
+		analysisPath: null,
+		inputPath: path.join(workspaceDir, 'tinygo-frontend-input.json'),
+		realAdapterPath: path.join(workspaceDir, 'tinygo-frontend-real-adapter.json')
+	});
+});
 
 test('probe-tinygo-driver-bridge prefers frontend analysis packageGraph when tinygo list returns no package graph', async (t) => {
-  const tempDir = await mkdtemp(path.join(tmpdir(), 'wasm-tinygo-driver-bridge-script-analysis-graph-fallback-'))
-  t.after(async () => {
-    await rm(tempDir, { recursive: true, force: true })
-  })
+	const tempDir = await mkdtemp(
+		path.join(tmpdir(), 'wasm-tinygo-driver-bridge-script-analysis-graph-fallback-')
+	);
+	t.after(async () => {
+		await rm(tempDir, { recursive: true, force: true });
+	});
 
-  const fakeBinDir = path.join(tempDir, 'bin')
-  await mkdir(fakeBinDir, { recursive: true })
+	const fakeBinDir = path.join(tempDir, 'bin');
+	await mkdir(fakeBinDir, { recursive: true });
 
-  const fakeGoPath = path.join(fakeBinDir, 'go')
-  await writeFile(fakeGoPath, `#!/bin/sh
+	const fakeGoPath = path.join(fakeBinDir, 'go');
+	await writeFile(
+		fakeGoPath,
+		`#!/bin/sh
 set -eu
 node - <<'NODE'
 const fs = require('node:fs')
@@ -1792,11 +1865,14 @@ fs.writeFileSync(process.env.WASM_TINYGO_RESULT_PATH, JSON.stringify({
   },
 }, null, 2))
 NODE
-`)
-  await chmod(fakeGoPath, 0o755)
+`
+	);
+	await chmod(fakeGoPath, 0o755);
 
-  const fakeTinyGoPath = path.join(fakeBinDir, 'tinygo')
-  await writeFile(fakeTinyGoPath, `#!/bin/sh
+	const fakeTinyGoPath = path.join(fakeBinDir, 'tinygo');
+	await writeFile(
+		fakeTinyGoPath,
+		`#!/bin/sh
 set -eu
 if [ "$1" = "info" ]; then
   cat <<'EOF'
@@ -1822,97 +1898,111 @@ for arg in "$@"; do
 done
 mkdir -p "$(dirname "$out")"
 printf '\\000asm\\001\\000\\000\\000' > "$out"
-`)
-  await chmod(fakeTinyGoPath, 0o755)
+`
+	);
+	await chmod(fakeTinyGoPath, 0o755);
 
-  const fakeTinyGoRoot = path.join(tempDir, 'tinygo-root')
-  await mkdir(path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys'), { recursive: true })
-  await mkdir(path.join(fakeTinyGoRoot, 'src', 'device', 'arm'), { recursive: true })
-  await writeFile(path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys', 'zversion.go'), 'package sys\n')
-  await writeFile(path.join(fakeTinyGoRoot, 'src', 'device', 'arm', 'arm.go'), 'package arm\n')
+	const fakeTinyGoRoot = path.join(tempDir, 'tinygo-root');
+	await mkdir(path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys'), {
+		recursive: true
+	});
+	await mkdir(path.join(fakeTinyGoRoot, 'src', 'device', 'arm'), { recursive: true });
+	await writeFile(
+		path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys', 'zversion.go'),
+		'package sys\n'
+	);
+	await writeFile(path.join(fakeTinyGoRoot, 'src', 'device', 'arm', 'arm.go'), 'package arm\n');
 
-  const workspaceDir = path.join(tempDir, 'workspace')
-  await mkdir(workspaceDir, { recursive: true })
-  const entryPath = path.join(workspaceDir, 'main.go')
-  const outputPath = path.join(workspaceDir, 'out.wasm')
-  const requestPath = path.join(workspaceDir, 'tinygo-request.json')
-  const bridgeManifestPath = path.join(workspaceDir, 'tinygo-driver-bridge.json')
+	const workspaceDir = path.join(tempDir, 'workspace');
+	await mkdir(workspaceDir, { recursive: true });
+	const entryPath = path.join(workspaceDir, 'main.go');
+	const outputPath = path.join(workspaceDir, 'out.wasm');
+	const requestPath = path.join(workspaceDir, 'tinygo-request.json');
+	const bridgeManifestPath = path.join(workspaceDir, 'tinygo-driver-bridge.json');
 
-  await writeFile(entryPath, 'package main\n\nfunc main() {}\n')
-  await writeFile(requestPath, JSON.stringify({
-    command: 'build',
-    planner: 'tinygo',
-    entry: entryPath,
-    optimize: 'z',
-    output: outputPath,
-    panic: 'trap',
-    target: 'wasm',
-  }))
+	await writeFile(entryPath, 'package main\n\nfunc main() {}\n');
+	await writeFile(
+		requestPath,
+		JSON.stringify({
+			command: 'build',
+			planner: 'tinygo',
+			entry: entryPath,
+			optimize: 'z',
+			output: outputPath,
+			panic: 'trap',
+			target: 'wasm'
+		})
+	);
 
-  const cwd = new URL('..', import.meta.url).pathname
-  const scriptPath = new URL('../scripts/probe-tinygo-driver-bridge.mjs', import.meta.url).pathname
-  const child = spawn(process.execPath, [scriptPath], {
-    cwd,
-    env: {
-      ...process.env,
-      WASM_TINYGO_DRIVER_BRIDGE_MANIFEST_PATH: bridgeManifestPath,
-      WASM_TINYGO_DRIVER_BRIDGE_INCLUDE_FRONTEND_ANALYSIS: '1',
-      WASM_TINYGO_GO_BIN: fakeGoPath,
-      WASM_TINYGO_HOST_PROBE_REQUEST_PATH: requestPath,
-      WASM_TINYGO_HOST_PROBE_SKIP_RUNTIME: '1',
-      WASM_TINYGO_TINYGOROOT: fakeTinyGoRoot,
-      WASM_TINYGO_TINYGO_BIN: fakeTinyGoPath,
-    },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
+	const cwd = new URL('..', import.meta.url).pathname;
+	const scriptPath = new URL('../scripts/probe-tinygo-driver-bridge.mjs', import.meta.url)
+		.pathname;
+	const child = spawn(process.execPath, [scriptPath], {
+		cwd,
+		env: {
+			...process.env,
+			WASM_TINYGO_DRIVER_BRIDGE_MANIFEST_PATH: bridgeManifestPath,
+			WASM_TINYGO_DRIVER_BRIDGE_INCLUDE_FRONTEND_ANALYSIS: '1',
+			WASM_TINYGO_GO_BIN: fakeGoPath,
+			WASM_TINYGO_HOST_PROBE_REQUEST_PATH: requestPath,
+			WASM_TINYGO_HOST_PROBE_SKIP_RUNTIME: '1',
+			WASM_TINYGO_TINYGOROOT: fakeTinyGoRoot,
+			WASM_TINYGO_TINYGO_BIN: fakeTinyGoPath
+		},
+		stdio: ['ignore', 'pipe', 'pipe']
+	});
 
-  let output = ''
-  child.stdout.on('data', (chunk) => {
-    output += chunk.toString()
-  })
-  child.stderr.on('data', (chunk) => {
-    output += chunk.toString()
-  })
+	let output = '';
+	child.stdout.on('data', (chunk) => {
+		output += chunk.toString();
+	});
+	child.stderr.on('data', (chunk) => {
+		output += chunk.toString();
+	});
 
-  const exitCode = await new Promise((resolve, reject) => {
-    child.once('error', reject)
-    child.once('close', resolve)
-  })
+	const exitCode = await new Promise((resolve, reject) => {
+		child.once('error', reject);
+		child.once('close', resolve);
+	});
 
-  assert.equal(exitCode, 0, output)
-  const manifest = JSON.parse(await readFile(bridgeManifestPath, 'utf8'))
-  assert.deepEqual(manifest.entryPackage, {
-    dir: workspaceDir,
-    goFiles: ['main.go'],
-    importPath: 'example.com/analysisgraph',
-    imports: [],
-    name: 'main',
-  })
-  assert.deepEqual(manifest.packageGraph, [
-    {
-      depOnly: false,
-      dir: workspaceDir,
-      goFiles: ['main.go'],
-      importPath: 'example.com/analysisgraph',
-      imports: [],
-      modulePath: 'example.com/analysisgraph',
-      name: 'main',
-      standard: false,
-    },
-  ])
-})
+	assert.equal(exitCode, 0, output);
+	const manifest = JSON.parse(await readFile(bridgeManifestPath, 'utf8'));
+	assert.deepEqual(manifest.entryPackage, {
+		dir: workspaceDir,
+		goFiles: ['main.go'],
+		importPath: 'example.com/analysisgraph',
+		imports: [],
+		name: 'main'
+	});
+	assert.deepEqual(manifest.packageGraph, [
+		{
+			depOnly: false,
+			dir: workspaceDir,
+			goFiles: ['main.go'],
+			importPath: 'example.com/analysisgraph',
+			imports: [],
+			modulePath: 'example.com/analysisgraph',
+			name: 'main',
+			standard: false
+		}
+	]);
+});
 
 test('probe-tinygo-driver-bridge fails when tinygo list exits non-zero', async (t) => {
-  const tempDir = await mkdtemp(path.join(tmpdir(), 'wasm-tinygo-driver-bridge-script-list-failure-'))
-  t.after(async () => {
-    await rm(tempDir, { recursive: true, force: true })
-  })
+	const tempDir = await mkdtemp(
+		path.join(tmpdir(), 'wasm-tinygo-driver-bridge-script-list-failure-')
+	);
+	t.after(async () => {
+		await rm(tempDir, { recursive: true, force: true });
+	});
 
-  const fakeBinDir = path.join(tempDir, 'bin')
-  await mkdir(fakeBinDir, { recursive: true })
+	const fakeBinDir = path.join(tempDir, 'bin');
+	await mkdir(fakeBinDir, { recursive: true });
 
-  const fakeGoPath = path.join(fakeBinDir, 'go')
-  await writeFile(fakeGoPath, `#!/bin/sh
+	const fakeGoPath = path.join(fakeBinDir, 'go');
+	await writeFile(
+		fakeGoPath,
+		`#!/bin/sh
 set -eu
 node - <<'NODE'
 const fs = require('node:fs')
@@ -1983,11 +2073,14 @@ fs.writeFileSync(process.env.WASM_TINYGO_RESULT_PATH, JSON.stringify({
   },
 }, null, 2))
 NODE
-`)
-  await chmod(fakeGoPath, 0o755)
+`
+	);
+	await chmod(fakeGoPath, 0o755);
 
-  const fakeTinyGoPath = path.join(fakeBinDir, 'tinygo')
-  await writeFile(fakeTinyGoPath, `#!/bin/sh
+	const fakeTinyGoPath = path.join(fakeBinDir, 'tinygo');
+	await writeFile(
+		fakeTinyGoPath,
+		`#!/bin/sh
 set -eu
 if [ "$1" = "info" ]; then
   cat <<'EOF'
@@ -2014,80 +2107,94 @@ for arg in "$@"; do
 done
 mkdir -p "$(dirname "$out")"
 printf '\\000asm\\001\\000\\000\\000' > "$out"
-`)
-  await chmod(fakeTinyGoPath, 0o755)
+`
+	);
+	await chmod(fakeTinyGoPath, 0o755);
 
-  const fakeTinyGoRoot = path.join(tempDir, 'tinygo-root')
-  await mkdir(path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys'), { recursive: true })
-  await mkdir(path.join(fakeTinyGoRoot, 'src', 'device', 'arm'), { recursive: true })
-  await writeFile(path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys', 'zversion.go'), 'package sys\n')
-  await writeFile(path.join(fakeTinyGoRoot, 'src', 'device', 'arm', 'arm.go'), 'package arm\n')
+	const fakeTinyGoRoot = path.join(tempDir, 'tinygo-root');
+	await mkdir(path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys'), {
+		recursive: true
+	});
+	await mkdir(path.join(fakeTinyGoRoot, 'src', 'device', 'arm'), { recursive: true });
+	await writeFile(
+		path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys', 'zversion.go'),
+		'package sys\n'
+	);
+	await writeFile(path.join(fakeTinyGoRoot, 'src', 'device', 'arm', 'arm.go'), 'package arm\n');
 
-  const workspaceDir = path.join(tempDir, 'workspace')
-  await mkdir(workspaceDir, { recursive: true })
-  const entryPath = path.join(workspaceDir, 'main.go')
-  const outputPath = path.join(workspaceDir, 'out.wasm')
-  const requestPath = path.join(workspaceDir, 'tinygo-request.json')
-  const bridgeManifestPath = path.join(workspaceDir, 'tinygo-driver-bridge.json')
+	const workspaceDir = path.join(tempDir, 'workspace');
+	await mkdir(workspaceDir, { recursive: true });
+	const entryPath = path.join(workspaceDir, 'main.go');
+	const outputPath = path.join(workspaceDir, 'out.wasm');
+	const requestPath = path.join(workspaceDir, 'tinygo-request.json');
+	const bridgeManifestPath = path.join(workspaceDir, 'tinygo-driver-bridge.json');
 
-  await writeFile(entryPath, 'package main\n\nfunc main() {}\n')
-  await writeFile(requestPath, JSON.stringify({
-    command: 'build',
-    planner: 'tinygo',
-    entry: entryPath,
-    optimize: 'z',
-    output: outputPath,
-    panic: 'trap',
-    scheduler: 'tasks',
-    target: 'wasip1',
-  }))
+	await writeFile(entryPath, 'package main\n\nfunc main() {}\n');
+	await writeFile(
+		requestPath,
+		JSON.stringify({
+			command: 'build',
+			planner: 'tinygo',
+			entry: entryPath,
+			optimize: 'z',
+			output: outputPath,
+			panic: 'trap',
+			scheduler: 'tasks',
+			target: 'wasip1'
+		})
+	);
 
-  const cwd = new URL('..', import.meta.url).pathname
-  const scriptPath = new URL('../scripts/probe-tinygo-driver-bridge.mjs', import.meta.url).pathname
-  const child = spawn(process.execPath, [scriptPath], {
-    cwd,
-    env: {
-      ...process.env,
-      WASM_TINYGO_DRIVER_BRIDGE_MANIFEST_PATH: bridgeManifestPath,
-      WASM_TINYGO_DRIVER_BRIDGE_INCLUDE_FRONTEND_ANALYSIS: '1',
-      WASM_TINYGO_GO_BIN: fakeGoPath,
-      WASM_TINYGO_HOST_PROBE_REQUEST_PATH: requestPath,
-      WASM_TINYGO_HOST_PROBE_SKIP_RUNTIME: '1',
-      WASM_TINYGO_TINYGOROOT: fakeTinyGoRoot,
-      WASM_TINYGO_TINYGO_BIN: fakeTinyGoPath,
-    },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
+	const cwd = new URL('..', import.meta.url).pathname;
+	const scriptPath = new URL('../scripts/probe-tinygo-driver-bridge.mjs', import.meta.url)
+		.pathname;
+	const child = spawn(process.execPath, [scriptPath], {
+		cwd,
+		env: {
+			...process.env,
+			WASM_TINYGO_DRIVER_BRIDGE_MANIFEST_PATH: bridgeManifestPath,
+			WASM_TINYGO_DRIVER_BRIDGE_INCLUDE_FRONTEND_ANALYSIS: '1',
+			WASM_TINYGO_GO_BIN: fakeGoPath,
+			WASM_TINYGO_HOST_PROBE_REQUEST_PATH: requestPath,
+			WASM_TINYGO_HOST_PROBE_SKIP_RUNTIME: '1',
+			WASM_TINYGO_TINYGOROOT: fakeTinyGoRoot,
+			WASM_TINYGO_TINYGO_BIN: fakeTinyGoPath
+		},
+		stdio: ['ignore', 'pipe', 'pipe']
+	});
 
-  let output = ''
-  child.stdout.on('data', (chunk) => {
-    output += chunk.toString()
-  })
-  child.stderr.on('data', (chunk) => {
-    output += chunk.toString()
-  })
+	let output = '';
+	child.stdout.on('data', (chunk) => {
+		output += chunk.toString();
+	});
+	child.stderr.on('data', (chunk) => {
+		output += chunk.toString();
+	});
 
-  const exitCode = await new Promise((resolve, reject) => {
-    child.once('error', reject)
-    child.once('close', resolve)
-  })
+	const exitCode = await new Promise((resolve, reject) => {
+		child.once('error', reject);
+		child.once('close', resolve);
+	});
 
-  assert.equal(exitCode, 9, output)
-  assert.match(output, /fake tinygo list failure/)
-  assert.match(output, /tinygo list failed during driver bridge verification/)
-})
+	assert.equal(exitCode, 9, output);
+	assert.match(output, /fake tinygo list failure/);
+	assert.match(output, /tinygo list failed during driver bridge verification/);
+});
 
 test('probe-tinygo-driver-bridge canonicalizes frontend-analysis input buildContext from host facts', async (t) => {
-  const tempDir = await mkdtemp(path.join(tmpdir(), 'wasm-tinygo-driver-bridge-script-analysis-input-build-context-'))
-  t.after(async () => {
-    await rm(tempDir, { recursive: true, force: true })
-  })
+	const tempDir = await mkdtemp(
+		path.join(tmpdir(), 'wasm-tinygo-driver-bridge-script-analysis-input-build-context-')
+	);
+	t.after(async () => {
+		await rm(tempDir, { recursive: true, force: true });
+	});
 
-  const fakeBinDir = path.join(tempDir, 'bin')
-  await mkdir(fakeBinDir, { recursive: true })
+	const fakeBinDir = path.join(tempDir, 'bin');
+	await mkdir(fakeBinDir, { recursive: true });
 
-  const fakeGoPath = path.join(fakeBinDir, 'go')
-  await writeFile(fakeGoPath, `#!/bin/sh
+	const fakeGoPath = path.join(fakeBinDir, 'go');
+	await writeFile(
+		fakeGoPath,
+		`#!/bin/sh
 set -eu
 node - <<'NODE'
 const fs = require('node:fs')
@@ -2253,11 +2360,14 @@ fs.writeFileSync(process.env.WASM_TINYGO_RESULT_PATH, JSON.stringify({
   },
 }, null, 2))
 NODE
-`)
-  await chmod(fakeGoPath, 0o755)
+`
+	);
+	await chmod(fakeGoPath, 0o755);
 
-  const fakeTinyGoPath = path.join(fakeBinDir, 'tinygo')
-  await writeFile(fakeTinyGoPath, `#!/bin/sh
+	const fakeTinyGoPath = path.join(fakeBinDir, 'tinygo');
+	await writeFile(
+		fakeTinyGoPath,
+		`#!/bin/sh
 set -eu
 if [ "$1" = "info" ]; then
   cat <<'EOF'
@@ -2286,91 +2396,105 @@ for arg in "$@"; do
 done
 mkdir -p "$(dirname "$out")"
 printf '\\000asm\\001\\000\\000\\000' > "$out"
-`)
-  await chmod(fakeTinyGoPath, 0o755)
+`
+	);
+	await chmod(fakeTinyGoPath, 0o755);
 
-  const fakeTinyGoRoot = path.join(tempDir, 'tinygo-root')
-  await mkdir(path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys'), { recursive: true })
-  await mkdir(path.join(fakeTinyGoRoot, 'src', 'device', 'arm'), { recursive: true })
-  await writeFile(path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys', 'zversion.go'), 'package sys\n')
-  await writeFile(path.join(fakeTinyGoRoot, 'src', 'device', 'arm', 'arm.go'), 'package arm\n')
+	const fakeTinyGoRoot = path.join(tempDir, 'tinygo-root');
+	await mkdir(path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys'), {
+		recursive: true
+	});
+	await mkdir(path.join(fakeTinyGoRoot, 'src', 'device', 'arm'), { recursive: true });
+	await writeFile(
+		path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys', 'zversion.go'),
+		'package sys\n'
+	);
+	await writeFile(path.join(fakeTinyGoRoot, 'src', 'device', 'arm', 'arm.go'), 'package arm\n');
 
-  const workspaceDir = path.join(tempDir, 'workspace')
-  await mkdir(workspaceDir, { recursive: true })
-  const entryPath = path.join(workspaceDir, 'main.go')
-  const outputPath = path.join(workspaceDir, 'out.wasm')
-  const requestPath = path.join(workspaceDir, 'tinygo-request.json')
-  const bridgeManifestPath = path.join(workspaceDir, 'tinygo-driver-bridge.json')
+	const workspaceDir = path.join(tempDir, 'workspace');
+	await mkdir(workspaceDir, { recursive: true });
+	const entryPath = path.join(workspaceDir, 'main.go');
+	const outputPath = path.join(workspaceDir, 'out.wasm');
+	const requestPath = path.join(workspaceDir, 'tinygo-request.json');
+	const bridgeManifestPath = path.join(workspaceDir, 'tinygo-driver-bridge.json');
 
-  await writeFile(path.join(workspaceDir, 'go.mod'), 'module example.com/canonical\n\ngo 1.22\n')
-  await writeFile(entryPath, 'package main\n\nfunc main() {}\n')
-  await writeFile(requestPath, JSON.stringify({
-    command: 'build',
-    planner: 'tinygo',
-    entry: entryPath,
-    optimize: 'z',
-    output: outputPath,
-    panic: 'trap',
-    scheduler: 'asyncify',
-    target: 'wasm',
-  }))
+	await writeFile(path.join(workspaceDir, 'go.mod'), 'module example.com/canonical\n\ngo 1.22\n');
+	await writeFile(entryPath, 'package main\n\nfunc main() {}\n');
+	await writeFile(
+		requestPath,
+		JSON.stringify({
+			command: 'build',
+			planner: 'tinygo',
+			entry: entryPath,
+			optimize: 'z',
+			output: outputPath,
+			panic: 'trap',
+			scheduler: 'asyncify',
+			target: 'wasm'
+		})
+	);
 
-  const cwd = new URL('..', import.meta.url).pathname
-  const scriptPath = new URL('../scripts/probe-tinygo-driver-bridge.mjs', import.meta.url).pathname
-  const child = spawn(process.execPath, [scriptPath], {
-    cwd,
-    env: {
-      ...process.env,
-      WASM_TINYGO_DRIVER_BRIDGE_MANIFEST_PATH: bridgeManifestPath,
-      WASM_TINYGO_DRIVER_BRIDGE_INCLUDE_FRONTEND_ANALYSIS: '1',
-      WASM_TINYGO_GO_BIN: fakeGoPath,
-      WASM_TINYGO_HOST_PROBE_REQUEST_PATH: requestPath,
-      WASM_TINYGO_HOST_PROBE_SKIP_RUNTIME: '1',
-      WASM_TINYGO_TINYGOROOT: fakeTinyGoRoot,
-      WASM_TINYGO_TINYGO_BIN: fakeTinyGoPath,
-    },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
+	const cwd = new URL('..', import.meta.url).pathname;
+	const scriptPath = new URL('../scripts/probe-tinygo-driver-bridge.mjs', import.meta.url)
+		.pathname;
+	const child = spawn(process.execPath, [scriptPath], {
+		cwd,
+		env: {
+			...process.env,
+			WASM_TINYGO_DRIVER_BRIDGE_MANIFEST_PATH: bridgeManifestPath,
+			WASM_TINYGO_DRIVER_BRIDGE_INCLUDE_FRONTEND_ANALYSIS: '1',
+			WASM_TINYGO_GO_BIN: fakeGoPath,
+			WASM_TINYGO_HOST_PROBE_REQUEST_PATH: requestPath,
+			WASM_TINYGO_HOST_PROBE_SKIP_RUNTIME: '1',
+			WASM_TINYGO_TINYGOROOT: fakeTinyGoRoot,
+			WASM_TINYGO_TINYGO_BIN: fakeTinyGoPath
+		},
+		stdio: ['ignore', 'pipe', 'pipe']
+	});
 
-  let output = ''
-  child.stdout.on('data', (chunk) => {
-    output += chunk.toString()
-  })
-  child.stderr.on('data', (chunk) => {
-    output += chunk.toString()
-  })
+	let output = '';
+	child.stdout.on('data', (chunk) => {
+		output += chunk.toString();
+	});
+	child.stderr.on('data', (chunk) => {
+		output += chunk.toString();
+	});
 
-  const exitCode = await new Promise((resolve, reject) => {
-    child.once('error', reject)
-    child.once('close', resolve)
-  })
+	const exitCode = await new Promise((resolve, reject) => {
+		child.once('error', reject);
+		child.once('close', resolve);
+	});
 
-  assert.equal(exitCode, 0, output)
+	assert.equal(exitCode, 0, output);
 
-  const manifest = JSON.parse(await readFile(bridgeManifestPath, 'utf8'))
-  assert.deepEqual(manifest.frontendAnalysis?.buildContext, {
-    target: 'wasm',
-    llvmTarget: 'wasm32-unknown-wasi',
-    goos: 'wasip1',
-    goarch: 'wasm',
-    gc: 'precise',
-    scheduler: 'asyncify',
-    buildTags: ['gc.precise', 'scheduler.asyncify', 'tinygo.wasm'],
-    modulePath: 'example.com/canonical',
-  })
-})
+	const manifest = JSON.parse(await readFile(bridgeManifestPath, 'utf8'));
+	assert.deepEqual(manifest.frontendAnalysis?.buildContext, {
+		target: 'wasm',
+		llvmTarget: 'wasm32-unknown-wasi',
+		goos: 'wasip1',
+		goarch: 'wasm',
+		gc: 'precise',
+		scheduler: 'asyncify',
+		buildTags: ['gc.precise', 'scheduler.asyncify', 'tinygo.wasm'],
+		modulePath: 'example.com/canonical'
+	});
+});
 
 test('probe-tinygo-driver-bridge canonicalizes frontend-analysis input toolchain from host facts', async (t) => {
-  const tempDir = await mkdtemp(path.join(tmpdir(), 'wasm-tinygo-driver-bridge-script-analysis-input-toolchain-'))
-  t.after(async () => {
-    await rm(tempDir, { recursive: true, force: true })
-  })
+	const tempDir = await mkdtemp(
+		path.join(tmpdir(), 'wasm-tinygo-driver-bridge-script-analysis-input-toolchain-')
+	);
+	t.after(async () => {
+		await rm(tempDir, { recursive: true, force: true });
+	});
 
-  const fakeBinDir = path.join(tempDir, 'bin')
-  await mkdir(fakeBinDir, { recursive: true })
+	const fakeBinDir = path.join(tempDir, 'bin');
+	await mkdir(fakeBinDir, { recursive: true });
 
-  const fakeGoPath = path.join(fakeBinDir, 'go')
-  await writeFile(fakeGoPath, `#!/bin/sh
+	const fakeGoPath = path.join(fakeBinDir, 'go');
+	await writeFile(
+		fakeGoPath,
+		`#!/bin/sh
 set -eu
 node - <<'NODE'
 const fs = require('node:fs')
@@ -2525,11 +2649,14 @@ fs.writeFileSync(process.env.WASM_TINYGO_RESULT_PATH, JSON.stringify({
   },
 }, null, 2))
 NODE
-`)
-  await chmod(fakeGoPath, 0o755)
+`
+	);
+	await chmod(fakeGoPath, 0o755);
 
-  const fakeTinyGoPath = path.join(fakeBinDir, 'tinygo')
-  await writeFile(fakeTinyGoPath, `#!/bin/sh
+	const fakeTinyGoPath = path.join(fakeBinDir, 'tinygo');
+	await writeFile(
+		fakeTinyGoPath,
+		`#!/bin/sh
 set -eu
 if [ "$1" = "info" ]; then
   cat <<'EOF'
@@ -2558,84 +2685,98 @@ for arg in "$@"; do
 done
 mkdir -p "$(dirname "$out")"
 printf '\\000asm\\001\\000\\000\\000' > "$out"
-`)
-  await chmod(fakeTinyGoPath, 0o755)
+`
+	);
+	await chmod(fakeTinyGoPath, 0o755);
 
-  const fakeTinyGoRoot = path.join(tempDir, 'tinygo-root')
-  await mkdir(path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys'), { recursive: true })
-  await mkdir(path.join(fakeTinyGoRoot, 'src', 'device', 'arm'), { recursive: true })
-  await writeFile(path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys', 'zversion.go'), 'package sys\n')
-  await writeFile(path.join(fakeTinyGoRoot, 'src', 'device', 'arm', 'arm.go'), 'package arm\n')
+	const fakeTinyGoRoot = path.join(tempDir, 'tinygo-root');
+	await mkdir(path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys'), {
+		recursive: true
+	});
+	await mkdir(path.join(fakeTinyGoRoot, 'src', 'device', 'arm'), { recursive: true });
+	await writeFile(
+		path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys', 'zversion.go'),
+		'package sys\n'
+	);
+	await writeFile(path.join(fakeTinyGoRoot, 'src', 'device', 'arm', 'arm.go'), 'package arm\n');
 
-  const workspaceDir = path.join(tempDir, 'workspace')
-  await mkdir(workspaceDir, { recursive: true })
-  const entryPath = path.join(workspaceDir, 'main.go')
-  const outputPath = path.join(workspaceDir, 'out.wasm')
-  const requestPath = path.join(workspaceDir, 'tinygo-request.json')
-  const bridgeManifestPath = path.join(workspaceDir, 'tinygo-driver-bridge.json')
+	const workspaceDir = path.join(tempDir, 'workspace');
+	await mkdir(workspaceDir, { recursive: true });
+	const entryPath = path.join(workspaceDir, 'main.go');
+	const outputPath = path.join(workspaceDir, 'out.wasm');
+	const requestPath = path.join(workspaceDir, 'tinygo-request.json');
+	const bridgeManifestPath = path.join(workspaceDir, 'tinygo-driver-bridge.json');
 
-  await writeFile(path.join(workspaceDir, 'go.mod'), 'module example.com/toolchain\n\ngo 1.22\n')
-  await writeFile(entryPath, 'package main\n\nfunc main() {}\n')
-  await writeFile(requestPath, JSON.stringify({
-    command: 'build',
-    planner: 'tinygo',
-    entry: entryPath,
-    optimize: 'z',
-    output: outputPath,
-    panic: 'trap',
-    target: 'wasm',
-  }))
+	await writeFile(path.join(workspaceDir, 'go.mod'), 'module example.com/toolchain\n\ngo 1.22\n');
+	await writeFile(entryPath, 'package main\n\nfunc main() {}\n');
+	await writeFile(
+		requestPath,
+		JSON.stringify({
+			command: 'build',
+			planner: 'tinygo',
+			entry: entryPath,
+			optimize: 'z',
+			output: outputPath,
+			panic: 'trap',
+			target: 'wasm'
+		})
+	);
 
-  const cwd = new URL('..', import.meta.url).pathname
-  const scriptPath = new URL('../scripts/probe-tinygo-driver-bridge.mjs', import.meta.url).pathname
-  const child = spawn(process.execPath, [scriptPath], {
-    cwd,
-    env: {
-      ...process.env,
-      WASM_TINYGO_DRIVER_BRIDGE_MANIFEST_PATH: bridgeManifestPath,
-      WASM_TINYGO_DRIVER_BRIDGE_INCLUDE_FRONTEND_ANALYSIS: '1',
-      WASM_TINYGO_GO_BIN: fakeGoPath,
-      WASM_TINYGO_HOST_PROBE_REQUEST_PATH: requestPath,
-      WASM_TINYGO_HOST_PROBE_SKIP_RUNTIME: '1',
-      WASM_TINYGO_TINYGOROOT: fakeTinyGoRoot,
-      WASM_TINYGO_TINYGO_BIN: fakeTinyGoPath,
-    },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
+	const cwd = new URL('..', import.meta.url).pathname;
+	const scriptPath = new URL('../scripts/probe-tinygo-driver-bridge.mjs', import.meta.url)
+		.pathname;
+	const child = spawn(process.execPath, [scriptPath], {
+		cwd,
+		env: {
+			...process.env,
+			WASM_TINYGO_DRIVER_BRIDGE_MANIFEST_PATH: bridgeManifestPath,
+			WASM_TINYGO_DRIVER_BRIDGE_INCLUDE_FRONTEND_ANALYSIS: '1',
+			WASM_TINYGO_GO_BIN: fakeGoPath,
+			WASM_TINYGO_HOST_PROBE_REQUEST_PATH: requestPath,
+			WASM_TINYGO_HOST_PROBE_SKIP_RUNTIME: '1',
+			WASM_TINYGO_TINYGOROOT: fakeTinyGoRoot,
+			WASM_TINYGO_TINYGO_BIN: fakeTinyGoPath
+		},
+		stdio: ['ignore', 'pipe', 'pipe']
+	});
 
-  let output = ''
-  child.stdout.on('data', (chunk) => {
-    output += chunk.toString()
-  })
-  child.stderr.on('data', (chunk) => {
-    output += chunk.toString()
-  })
+	let output = '';
+	child.stdout.on('data', (chunk) => {
+		output += chunk.toString();
+	});
+	child.stderr.on('data', (chunk) => {
+		output += chunk.toString();
+	});
 
-  const exitCode = await new Promise((resolve, reject) => {
-    child.once('error', reject)
-    child.once('close', resolve)
-  })
+	const exitCode = await new Promise((resolve, reject) => {
+		child.once('error', reject);
+		child.once('close', resolve);
+	});
 
-  assert.equal(exitCode, 0, output)
-  const manifest = JSON.parse(await readFile(bridgeManifestPath, 'utf8'))
-  assert.deepEqual(manifest.frontendAnalysis?.toolchain, {
-    target: 'wasm',
-    llvmTarget: 'wasm32-unknown-wasi',
-    artifactOutputPath: outputPath,
-  })
-})
+	assert.equal(exitCode, 0, output);
+	const manifest = JSON.parse(await readFile(bridgeManifestPath, 'utf8'));
+	assert.deepEqual(manifest.frontendAnalysis?.toolchain, {
+		target: 'wasm',
+		llvmTarget: 'wasm32-unknown-wasi',
+		artifactOutputPath: outputPath
+	});
+});
 
 test('probe-tinygo-driver-bridge canonicalizes alias-only tinygo list program packages from frontend analysis packageGraph', async (t) => {
-  const tempDir = await mkdtemp(path.join(tmpdir(), 'wasm-tinygo-driver-bridge-script-program-alias-canonicalization-'))
-  t.after(async () => {
-    await rm(tempDir, { recursive: true, force: true })
-  })
+	const tempDir = await mkdtemp(
+		path.join(tmpdir(), 'wasm-tinygo-driver-bridge-script-program-alias-canonicalization-')
+	);
+	t.after(async () => {
+		await rm(tempDir, { recursive: true, force: true });
+	});
 
-  const fakeBinDir = path.join(tempDir, 'bin')
-  await mkdir(fakeBinDir, { recursive: true })
+	const fakeBinDir = path.join(tempDir, 'bin');
+	await mkdir(fakeBinDir, { recursive: true });
 
-  const fakeGoPath = path.join(fakeBinDir, 'go')
-  await writeFile(fakeGoPath, `#!/bin/sh
+	const fakeGoPath = path.join(fakeBinDir, 'go');
+	await writeFile(
+		fakeGoPath,
+		`#!/bin/sh
 set -eu
 node - <<'NODE'
 const fs = require('node:fs')
@@ -2850,11 +2991,14 @@ fs.writeFileSync(process.env.WASM_TINYGO_RESULT_PATH, JSON.stringify({
   },
 }, null, 2))
 NODE
-`)
-  await chmod(fakeGoPath, 0o755)
+`
+	);
+	await chmod(fakeGoPath, 0o755);
 
-  const fakeTinyGoPath = path.join(fakeBinDir, 'tinygo')
-  await writeFile(fakeTinyGoPath, `#!/bin/sh
+	const fakeTinyGoPath = path.join(fakeBinDir, 'tinygo');
+	await writeFile(
+		fakeTinyGoPath,
+		`#!/bin/sh
 set -eu
 if [ "$1" = "info" ]; then
   cat <<'EOF'
@@ -2907,109 +3051,123 @@ for arg in "$@"; do
 done
 mkdir -p "$(dirname "$out")"
 printf '\\000asm\\001\\000\\000\\000' > "$out"
-`)
-  await chmod(fakeTinyGoPath, 0o755)
+`
+	);
+	await chmod(fakeTinyGoPath, 0o755);
 
-  const fakeTinyGoRoot = path.join(tempDir, 'tinygo-root')
-  await mkdir(path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys'), { recursive: true })
-  await mkdir(path.join(fakeTinyGoRoot, 'src', 'device', 'arm'), { recursive: true })
-  await mkdir(path.join(fakeTinyGoRoot, 'src', 'fmt'), { recursive: true })
-  await writeFile(path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys', 'zversion.go'), 'package sys\n')
-  await writeFile(path.join(fakeTinyGoRoot, 'src', 'device', 'arm', 'arm.go'), 'package arm\n')
-  await writeFile(path.join(fakeTinyGoRoot, 'src', 'fmt', 'print.go'), 'package fmt\n')
+	const fakeTinyGoRoot = path.join(tempDir, 'tinygo-root');
+	await mkdir(path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys'), {
+		recursive: true
+	});
+	await mkdir(path.join(fakeTinyGoRoot, 'src', 'device', 'arm'), { recursive: true });
+	await mkdir(path.join(fakeTinyGoRoot, 'src', 'fmt'), { recursive: true });
+	await writeFile(
+		path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys', 'zversion.go'),
+		'package sys\n'
+	);
+	await writeFile(path.join(fakeTinyGoRoot, 'src', 'device', 'arm', 'arm.go'), 'package arm\n');
+	await writeFile(path.join(fakeTinyGoRoot, 'src', 'fmt', 'print.go'), 'package fmt\n');
 
-  const workspaceDir = path.join(tempDir, 'workspace')
-  await mkdir(workspaceDir, { recursive: true })
-  const entryPath = path.join(workspaceDir, 'main.go')
-  const outputPath = path.join(workspaceDir, 'out.wasm')
-  const requestPath = path.join(workspaceDir, 'tinygo-request.json')
-  const bridgeManifestPath = path.join(workspaceDir, 'tinygo-driver-bridge.json')
+	const workspaceDir = path.join(tempDir, 'workspace');
+	await mkdir(workspaceDir, { recursive: true });
+	const entryPath = path.join(workspaceDir, 'main.go');
+	const outputPath = path.join(workspaceDir, 'out.wasm');
+	const requestPath = path.join(workspaceDir, 'tinygo-request.json');
+	const bridgeManifestPath = path.join(workspaceDir, 'tinygo-driver-bridge.json');
 
-  await writeFile(entryPath, 'package main\n\nimport "fmt"\n\nfunc main() { fmt.Println() }\n')
-  await writeFile(requestPath, JSON.stringify({
-    command: 'build',
-    planner: 'tinygo',
-    entry: entryPath,
-    optimize: 'z',
-    output: outputPath,
-    panic: 'trap',
-    target: 'wasm',
-  }))
+	await writeFile(entryPath, 'package main\n\nimport "fmt"\n\nfunc main() { fmt.Println() }\n');
+	await writeFile(
+		requestPath,
+		JSON.stringify({
+			command: 'build',
+			planner: 'tinygo',
+			entry: entryPath,
+			optimize: 'z',
+			output: outputPath,
+			panic: 'trap',
+			target: 'wasm'
+		})
+	);
 
-  const cwd = new URL('..', import.meta.url).pathname
-  const scriptPath = new URL('../scripts/probe-tinygo-driver-bridge.mjs', import.meta.url).pathname
-  const child = spawn(process.execPath, [scriptPath], {
-    cwd,
-    env: {
-      ...process.env,
-      WASM_TINYGO_DRIVER_BRIDGE_MANIFEST_PATH: bridgeManifestPath,
-      WASM_TINYGO_DRIVER_BRIDGE_INCLUDE_FRONTEND_ANALYSIS: '1',
-      WASM_TINYGO_GO_BIN: fakeGoPath,
-      WASM_TINYGO_HOST_PROBE_REQUEST_PATH: requestPath,
-      WASM_TINYGO_HOST_PROBE_SKIP_RUNTIME: '1',
-      WASM_TINYGO_TINYGOROOT: fakeTinyGoRoot,
-      WASM_TINYGO_TINYGO_BIN: fakeTinyGoPath,
-    },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
+	const cwd = new URL('..', import.meta.url).pathname;
+	const scriptPath = new URL('../scripts/probe-tinygo-driver-bridge.mjs', import.meta.url)
+		.pathname;
+	const child = spawn(process.execPath, [scriptPath], {
+		cwd,
+		env: {
+			...process.env,
+			WASM_TINYGO_DRIVER_BRIDGE_MANIFEST_PATH: bridgeManifestPath,
+			WASM_TINYGO_DRIVER_BRIDGE_INCLUDE_FRONTEND_ANALYSIS: '1',
+			WASM_TINYGO_GO_BIN: fakeGoPath,
+			WASM_TINYGO_HOST_PROBE_REQUEST_PATH: requestPath,
+			WASM_TINYGO_HOST_PROBE_SKIP_RUNTIME: '1',
+			WASM_TINYGO_TINYGOROOT: fakeTinyGoRoot,
+			WASM_TINYGO_TINYGO_BIN: fakeTinyGoPath
+		},
+		stdio: ['ignore', 'pipe', 'pipe']
+	});
 
-  let output = ''
-  child.stdout.on('data', (chunk) => {
-    output += chunk.toString()
-  })
-  child.stderr.on('data', (chunk) => {
-    output += chunk.toString()
-  })
+	let output = '';
+	child.stdout.on('data', (chunk) => {
+		output += chunk.toString();
+	});
+	child.stderr.on('data', (chunk) => {
+		output += chunk.toString();
+	});
 
-  const exitCode = await new Promise((resolve, reject) => {
-    child.once('error', reject)
-    child.once('close', resolve)
-  })
+	const exitCode = await new Promise((resolve, reject) => {
+		child.once('error', reject);
+		child.once('close', resolve);
+	});
 
-  assert.equal(exitCode, 0, output)
-  const manifest = JSON.parse(await readFile(bridgeManifestPath, 'utf8'))
-  assert.deepEqual(manifest.entryPackage, {
-    dir: workspaceDir,
-    goFiles: ['main.go'],
-    importPath: 'example.com/canonicalized',
-    imports: ['fmt'],
-    name: 'main',
-  })
-  assert.deepEqual(manifest.packageGraph, [
-    {
-      depOnly: false,
-      dir: workspaceDir,
-      goFiles: ['main.go'],
-      importPath: 'example.com/canonicalized',
-      imports: ['fmt'],
-      modulePath: 'example.com/canonicalized',
-      name: 'main',
-      standard: false,
-    },
-    {
-      depOnly: true,
-      dir: '/working/.tinygo-root/src/fmt',
-      goFiles: ['print.go'],
-      importPath: 'fmt',
-      imports: [],
-      modulePath: '',
-      name: 'fmt',
-      standard: true,
-    },
-  ])
-})
+	assert.equal(exitCode, 0, output);
+	const manifest = JSON.parse(await readFile(bridgeManifestPath, 'utf8'));
+	assert.deepEqual(manifest.entryPackage, {
+		dir: workspaceDir,
+		goFiles: ['main.go'],
+		importPath: 'example.com/canonicalized',
+		imports: ['fmt'],
+		name: 'main'
+	});
+	assert.deepEqual(manifest.packageGraph, [
+		{
+			depOnly: false,
+			dir: workspaceDir,
+			goFiles: ['main.go'],
+			importPath: 'example.com/canonicalized',
+			imports: ['fmt'],
+			modulePath: 'example.com/canonicalized',
+			name: 'main',
+			standard: false
+		},
+		{
+			depOnly: true,
+			dir: '/working/.tinygo-root/src/fmt',
+			goFiles: ['print.go'],
+			importPath: 'fmt',
+			imports: [],
+			modulePath: '',
+			name: 'fmt',
+			standard: true
+		}
+	]);
+});
 
 test('probe-tinygo-driver-bridge canonicalizes frontend-analysis input packageGraph from host tinygo list facts', async (t) => {
-  const tempDir = await mkdtemp(path.join(tmpdir(), 'wasm-tinygo-driver-bridge-script-analysis-input-package-graph-'))
-  t.after(async () => {
-    await rm(tempDir, { recursive: true, force: true })
-  })
+	const tempDir = await mkdtemp(
+		path.join(tmpdir(), 'wasm-tinygo-driver-bridge-script-analysis-input-package-graph-')
+	);
+	t.after(async () => {
+		await rm(tempDir, { recursive: true, force: true });
+	});
 
-  const fakeBinDir = path.join(tempDir, 'bin')
-  await mkdir(fakeBinDir, { recursive: true })
+	const fakeBinDir = path.join(tempDir, 'bin');
+	await mkdir(fakeBinDir, { recursive: true });
 
-  const fakeGoPath = path.join(fakeBinDir, 'go')
-  await writeFile(fakeGoPath, `#!/bin/sh
+	const fakeGoPath = path.join(fakeBinDir, 'go');
+	await writeFile(
+		fakeGoPath,
+		`#!/bin/sh
 set -eu
 node - <<'NODE'
 const fs = require('node:fs')
@@ -3206,11 +3364,14 @@ fs.writeFileSync(process.env.WASM_TINYGO_RESULT_PATH, JSON.stringify({
   },
 }, null, 2))
 NODE
-`)
-  await chmod(fakeGoPath, 0o755)
+`
+	);
+	await chmod(fakeGoPath, 0o755);
 
-  const fakeTinyGoPath = path.join(fakeBinDir, 'tinygo')
-  await writeFile(fakeTinyGoPath, `#!/bin/sh
+	const fakeTinyGoPath = path.join(fakeBinDir, 'tinygo');
+	await writeFile(
+		fakeTinyGoPath,
+		`#!/bin/sh
 set -eu
 if [ "$1" = "info" ]; then
   cat <<'EOF'
@@ -3240,102 +3401,122 @@ for arg in "$@"; do
 done
 mkdir -p "$(dirname "$out")"
 printf '\\000asm\\001\\000\\000\\000' > "$out"
-`)
-  await chmod(fakeTinyGoPath, 0o755)
+`
+	);
+	await chmod(fakeTinyGoPath, 0o755);
 
-  const fakeTinyGoRoot = path.join(tempDir, 'tinygo-root')
-  await mkdir(path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys'), { recursive: true })
-  await mkdir(path.join(fakeTinyGoRoot, 'src', 'device', 'arm'), { recursive: true })
-  await writeFile(path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys', 'zversion.go'), 'package sys\n')
-  await writeFile(path.join(fakeTinyGoRoot, 'src', 'device', 'arm', 'arm.go'), 'package arm\n')
+	const fakeTinyGoRoot = path.join(tempDir, 'tinygo-root');
+	await mkdir(path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys'), {
+		recursive: true
+	});
+	await mkdir(path.join(fakeTinyGoRoot, 'src', 'device', 'arm'), { recursive: true });
+	await writeFile(
+		path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys', 'zversion.go'),
+		'package sys\n'
+	);
+	await writeFile(path.join(fakeTinyGoRoot, 'src', 'device', 'arm', 'arm.go'), 'package arm\n');
 
-  const workspaceDir = path.join(tempDir, 'workspace')
-  await mkdir(workspaceDir, { recursive: true })
-  const entryPath = path.join(workspaceDir, 'main.go')
-  const outputPath = path.join(workspaceDir, 'out.wasm')
-  const requestPath = path.join(workspaceDir, 'tinygo-request.json')
-  const bridgeManifestPath = path.join(workspaceDir, 'tinygo-driver-bridge.json')
+	const workspaceDir = path.join(tempDir, 'workspace');
+	await mkdir(workspaceDir, { recursive: true });
+	const entryPath = path.join(workspaceDir, 'main.go');
+	const outputPath = path.join(workspaceDir, 'out.wasm');
+	const requestPath = path.join(workspaceDir, 'tinygo-request.json');
+	const bridgeManifestPath = path.join(workspaceDir, 'tinygo-driver-bridge.json');
 
-  await writeFile(path.join(workspaceDir, 'go.mod'), 'module example.com/packagegraph\n\ngo 1.22\n')
-  await writeFile(entryPath, 'package main\n\nimport "fmt"\n\nfunc main() { fmt.Println("ok") }\n')
-  await writeFile(requestPath, JSON.stringify({
-    command: 'build',
-    planner: 'tinygo',
-    entry: entryPath,
-    optimize: 'z',
-    output: outputPath,
-    panic: 'trap',
-    target: 'wasm',
-  }))
+	await writeFile(
+		path.join(workspaceDir, 'go.mod'),
+		'module example.com/packagegraph\n\ngo 1.22\n'
+	);
+	await writeFile(
+		entryPath,
+		'package main\n\nimport "fmt"\n\nfunc main() { fmt.Println("ok") }\n'
+	);
+	await writeFile(
+		requestPath,
+		JSON.stringify({
+			command: 'build',
+			planner: 'tinygo',
+			entry: entryPath,
+			optimize: 'z',
+			output: outputPath,
+			panic: 'trap',
+			target: 'wasm'
+		})
+	);
 
-  const cwd = new URL('..', import.meta.url).pathname
-  const scriptPath = new URL('../scripts/probe-tinygo-driver-bridge.mjs', import.meta.url).pathname
-  const child = spawn(process.execPath, [scriptPath], {
-    cwd,
-    env: {
-      ...process.env,
-      WASM_TINYGO_DRIVER_BRIDGE_MANIFEST_PATH: bridgeManifestPath,
-      WASM_TINYGO_DRIVER_BRIDGE_INCLUDE_FRONTEND_ANALYSIS: '1',
-      WASM_TINYGO_GO_BIN: fakeGoPath,
-      WASM_TINYGO_HOST_PROBE_REQUEST_PATH: requestPath,
-      WASM_TINYGO_HOST_PROBE_SKIP_RUNTIME: '1',
-      WASM_TINYGO_TINYGOROOT: fakeTinyGoRoot,
-      WASM_TINYGO_TINYGO_BIN: fakeTinyGoPath,
-    },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
+	const cwd = new URL('..', import.meta.url).pathname;
+	const scriptPath = new URL('../scripts/probe-tinygo-driver-bridge.mjs', import.meta.url)
+		.pathname;
+	const child = spawn(process.execPath, [scriptPath], {
+		cwd,
+		env: {
+			...process.env,
+			WASM_TINYGO_DRIVER_BRIDGE_MANIFEST_PATH: bridgeManifestPath,
+			WASM_TINYGO_DRIVER_BRIDGE_INCLUDE_FRONTEND_ANALYSIS: '1',
+			WASM_TINYGO_GO_BIN: fakeGoPath,
+			WASM_TINYGO_HOST_PROBE_REQUEST_PATH: requestPath,
+			WASM_TINYGO_HOST_PROBE_SKIP_RUNTIME: '1',
+			WASM_TINYGO_TINYGOROOT: fakeTinyGoRoot,
+			WASM_TINYGO_TINYGO_BIN: fakeTinyGoPath
+		},
+		stdio: ['ignore', 'pipe', 'pipe']
+	});
 
-  let output = ''
-  child.stdout.on('data', (chunk) => {
-    output += chunk.toString()
-  })
-  child.stderr.on('data', (chunk) => {
-    output += chunk.toString()
-  })
+	let output = '';
+	child.stdout.on('data', (chunk) => {
+		output += chunk.toString();
+	});
+	child.stderr.on('data', (chunk) => {
+		output += chunk.toString();
+	});
 
-  const exitCode = await new Promise((resolve, reject) => {
-    child.once('error', reject)
-    child.once('close', resolve)
-  })
+	const exitCode = await new Promise((resolve, reject) => {
+		child.once('error', reject);
+		child.once('close', resolve);
+	});
 
-  assert.equal(exitCode, 0, output)
+	assert.equal(exitCode, 0, output);
 
-  const manifest = JSON.parse(await readFile(bridgeManifestPath, 'utf8'))
-  assert.deepEqual(manifest.frontendAnalysis?.packageGraph, [
-    {
-      depOnly: false,
-      dir: workspaceDir,
-      files: { goFiles: ['main.go'] },
-      importPath: 'example.com/packagegraph',
-      imports: ['fmt'],
-      modulePath: 'example.com/packagegraph',
-      name: 'main',
-      standard: false,
-    },
-    {
-      depOnly: true,
-      dir: '/working/.tinygo-root/src/fmt',
-      files: { goFiles: ['print.go'] },
-      importPath: 'fmt',
-      imports: ['errors'],
-      modulePath: '',
-      name: 'fmt',
-      standard: true,
-    },
-  ])
-})
+	const manifest = JSON.parse(await readFile(bridgeManifestPath, 'utf8'));
+	assert.deepEqual(manifest.frontendAnalysis?.packageGraph, [
+		{
+			depOnly: false,
+			dir: workspaceDir,
+			files: { goFiles: ['main.go'] },
+			importPath: 'example.com/packagegraph',
+			imports: ['fmt'],
+			modulePath: 'example.com/packagegraph',
+			name: 'main',
+			standard: false
+		},
+		{
+			depOnly: true,
+			dir: '/working/.tinygo-root/src/fmt',
+			files: { goFiles: ['print.go'] },
+			importPath: 'fmt',
+			imports: ['errors'],
+			modulePath: '',
+			name: 'fmt',
+			standard: true
+		}
+	]);
+});
 
 test('probe-tinygo-driver-bridge rejects mismatched frontend-analysis buildContext instead of patching it', async (t) => {
-  const tempDir = await mkdtemp(path.join(tmpdir(), 'wasm-tinygo-driver-bridge-script-analysis-mismatch-'))
-  t.after(async () => {
-    await rm(tempDir, { recursive: true, force: true })
-  })
+	const tempDir = await mkdtemp(
+		path.join(tmpdir(), 'wasm-tinygo-driver-bridge-script-analysis-mismatch-')
+	);
+	t.after(async () => {
+		await rm(tempDir, { recursive: true, force: true });
+	});
 
-  const fakeBinDir = path.join(tempDir, 'bin')
-  await mkdir(fakeBinDir, { recursive: true })
+	const fakeBinDir = path.join(tempDir, 'bin');
+	await mkdir(fakeBinDir, { recursive: true });
 
-  const fakeGoPath = path.join(fakeBinDir, 'go')
-  await writeFile(fakeGoPath, `#!/bin/sh
+	const fakeGoPath = path.join(fakeBinDir, 'go');
+	await writeFile(
+		fakeGoPath,
+		`#!/bin/sh
 set -eu
 node - <<'NODE'
 const fs = require('node:fs')
@@ -3481,11 +3662,14 @@ fs.writeFileSync(process.env.WASM_TINYGO_RESULT_PATH, JSON.stringify({
   },
 }, null, 2))
 NODE
-`)
-  await chmod(fakeGoPath, 0o755)
+`
+	);
+	await chmod(fakeGoPath, 0o755);
 
-  const fakeTinyGoPath = path.join(fakeBinDir, 'tinygo')
-  await writeFile(fakeTinyGoPath, `#!/bin/sh
+	const fakeTinyGoPath = path.join(fakeBinDir, 'tinygo');
+	await writeFile(
+		fakeTinyGoPath,
+		`#!/bin/sh
 set -eu
 if [ "$1" = "info" ]; then
   cat <<'EOF'
@@ -3514,79 +3698,93 @@ for arg in "$@"; do
 done
 mkdir -p "$(dirname "$out")"
 printf '\\000asm\\001\\000\\000\\000' > "$out"
-`)
-  await chmod(fakeTinyGoPath, 0o755)
+`
+	);
+	await chmod(fakeTinyGoPath, 0o755);
 
-  const fakeTinyGoRoot = path.join(tempDir, 'tinygo-root')
-  await mkdir(path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys'), { recursive: true })
-  await mkdir(path.join(fakeTinyGoRoot, 'src', 'device', 'arm'), { recursive: true })
-  await writeFile(path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys', 'zversion.go'), 'package sys\n')
-  await writeFile(path.join(fakeTinyGoRoot, 'src', 'device', 'arm', 'arm.go'), 'package arm\n')
+	const fakeTinyGoRoot = path.join(tempDir, 'tinygo-root');
+	await mkdir(path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys'), {
+		recursive: true
+	});
+	await mkdir(path.join(fakeTinyGoRoot, 'src', 'device', 'arm'), { recursive: true });
+	await writeFile(
+		path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys', 'zversion.go'),
+		'package sys\n'
+	);
+	await writeFile(path.join(fakeTinyGoRoot, 'src', 'device', 'arm', 'arm.go'), 'package arm\n');
 
-  const workspaceDir = path.join(tempDir, 'workspace')
-  await mkdir(workspaceDir, { recursive: true })
-  const entryPath = path.join(workspaceDir, 'main.go')
-  const outputPath = path.join(workspaceDir, 'out.wasm')
-  const requestPath = path.join(workspaceDir, 'tinygo-request.json')
-  const bridgeManifestPath = path.join(workspaceDir, 'tinygo-driver-bridge.json')
+	const workspaceDir = path.join(tempDir, 'workspace');
+	await mkdir(workspaceDir, { recursive: true });
+	const entryPath = path.join(workspaceDir, 'main.go');
+	const outputPath = path.join(workspaceDir, 'out.wasm');
+	const requestPath = path.join(workspaceDir, 'tinygo-request.json');
+	const bridgeManifestPath = path.join(workspaceDir, 'tinygo-driver-bridge.json');
 
-  await writeFile(path.join(workspaceDir, 'go.mod'), 'module example.com/mismatch\n\ngo 1.22\n')
-  await writeFile(entryPath, 'package main\n\nfunc main() {}\n')
-  await writeFile(requestPath, JSON.stringify({
-    command: 'build',
-    planner: 'tinygo',
-    entry: entryPath,
-    optimize: 'z',
-    output: outputPath,
-    panic: 'trap',
-    target: 'wasm',
-  }))
+	await writeFile(path.join(workspaceDir, 'go.mod'), 'module example.com/mismatch\n\ngo 1.22\n');
+	await writeFile(entryPath, 'package main\n\nfunc main() {}\n');
+	await writeFile(
+		requestPath,
+		JSON.stringify({
+			command: 'build',
+			planner: 'tinygo',
+			entry: entryPath,
+			optimize: 'z',
+			output: outputPath,
+			panic: 'trap',
+			target: 'wasm'
+		})
+	);
 
-  const cwd = new URL('..', import.meta.url).pathname
-  const scriptPath = new URL('../scripts/probe-tinygo-driver-bridge.mjs', import.meta.url).pathname
-  const child = spawn(process.execPath, [scriptPath], {
-    cwd,
-    env: {
-      ...process.env,
-      WASM_TINYGO_DRIVER_BRIDGE_MANIFEST_PATH: bridgeManifestPath,
-      WASM_TINYGO_DRIVER_BRIDGE_INCLUDE_FRONTEND_ANALYSIS: '1',
-      WASM_TINYGO_GO_BIN: fakeGoPath,
-      WASM_TINYGO_HOST_PROBE_REQUEST_PATH: requestPath,
-      WASM_TINYGO_HOST_PROBE_SKIP_RUNTIME: '1',
-      WASM_TINYGO_TINYGOROOT: fakeTinyGoRoot,
-      WASM_TINYGO_TINYGO_BIN: fakeTinyGoPath,
-    },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
+	const cwd = new URL('..', import.meta.url).pathname;
+	const scriptPath = new URL('../scripts/probe-tinygo-driver-bridge.mjs', import.meta.url)
+		.pathname;
+	const child = spawn(process.execPath, [scriptPath], {
+		cwd,
+		env: {
+			...process.env,
+			WASM_TINYGO_DRIVER_BRIDGE_MANIFEST_PATH: bridgeManifestPath,
+			WASM_TINYGO_DRIVER_BRIDGE_INCLUDE_FRONTEND_ANALYSIS: '1',
+			WASM_TINYGO_GO_BIN: fakeGoPath,
+			WASM_TINYGO_HOST_PROBE_REQUEST_PATH: requestPath,
+			WASM_TINYGO_HOST_PROBE_SKIP_RUNTIME: '1',
+			WASM_TINYGO_TINYGOROOT: fakeTinyGoRoot,
+			WASM_TINYGO_TINYGO_BIN: fakeTinyGoPath
+		},
+		stdio: ['ignore', 'pipe', 'pipe']
+	});
 
-  let output = ''
-  child.stdout.on('data', (chunk) => {
-    output += chunk.toString()
-  })
-  child.stderr.on('data', (chunk) => {
-    output += chunk.toString()
-  })
+	let output = '';
+	child.stdout.on('data', (chunk) => {
+		output += chunk.toString();
+	});
+	child.stderr.on('data', (chunk) => {
+		output += chunk.toString();
+	});
 
-  const exitCode = await new Promise((resolve, reject) => {
-    child.once('error', reject)
-    child.once('close', resolve)
-  })
+	const exitCode = await new Promise((resolve, reject) => {
+		child.once('error', reject);
+		child.once('close', resolve);
+	});
 
-  assert.equal(exitCode, 1, output)
-  assert.match(output, /frontend analysis buildContext did not match real TinyGo driver bridge/)
-})
+	assert.equal(exitCode, 1, output);
+	assert.match(output, /frontend analysis buildContext did not match real TinyGo driver bridge/);
+});
 
 test('probe-tinygo-driver-bridge rejects mismatched frontend-analysis compileUnits instead of accepting them', async (t) => {
-  const tempDir = await mkdtemp(path.join(tmpdir(), 'wasm-tinygo-driver-bridge-script-analysis-compileunits-'))
-  t.after(async () => {
-    await rm(tempDir, { recursive: true, force: true })
-  })
+	const tempDir = await mkdtemp(
+		path.join(tmpdir(), 'wasm-tinygo-driver-bridge-script-analysis-compileunits-')
+	);
+	t.after(async () => {
+		await rm(tempDir, { recursive: true, force: true });
+	});
 
-  const fakeBinDir = path.join(tempDir, 'bin')
-  await mkdir(fakeBinDir, { recursive: true })
+	const fakeBinDir = path.join(tempDir, 'bin');
+	await mkdir(fakeBinDir, { recursive: true });
 
-  const fakeGoPath = path.join(fakeBinDir, 'go')
-  await writeFile(fakeGoPath, `#!/bin/sh
+	const fakeGoPath = path.join(fakeBinDir, 'go');
+	await writeFile(
+		fakeGoPath,
+		`#!/bin/sh
 set -eu
 node - <<'NODE'
 const fs = require('node:fs')
@@ -3750,11 +3948,14 @@ fs.writeFileSync(process.env.WASM_TINYGO_RESULT_PATH, JSON.stringify({
   },
 }, null, 2))
 NODE
-`)
-  await chmod(fakeGoPath, 0o755)
+`
+	);
+	await chmod(fakeGoPath, 0o755);
 
-  const fakeTinyGoPath = path.join(fakeBinDir, 'tinygo')
-  await writeFile(fakeTinyGoPath, `#!/bin/sh
+	const fakeTinyGoPath = path.join(fakeBinDir, 'tinygo');
+	await writeFile(
+		fakeTinyGoPath,
+		`#!/bin/sh
 set -eu
 if [ "$1" = "info" ]; then
   cat <<'EOF'
@@ -3809,77 +4010,91 @@ for arg in "$@"; do
 done
 mkdir -p "$(dirname "$out")"
 printf '\\000asm\\001\\000\\000\\000' > "$out"
-`)
-  await chmod(fakeTinyGoPath, 0o755)
+`
+	);
+	await chmod(fakeTinyGoPath, 0o755);
 
-  const fakeTinyGoRoot = path.join(tempDir, 'tinygo-root')
-  await mkdir(path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys'), { recursive: true })
-  await mkdir(path.join(fakeTinyGoRoot, 'src', 'device', 'arm'), { recursive: true })
-  await writeFile(path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys', 'zversion.go'), 'package sys\n')
-  await writeFile(path.join(fakeTinyGoRoot, 'src', 'device', 'arm', 'arm.go'), 'package arm\n')
+	const fakeTinyGoRoot = path.join(tempDir, 'tinygo-root');
+	await mkdir(path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys'), {
+		recursive: true
+	});
+	await mkdir(path.join(fakeTinyGoRoot, 'src', 'device', 'arm'), { recursive: true });
+	await writeFile(
+		path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys', 'zversion.go'),
+		'package sys\n'
+	);
+	await writeFile(path.join(fakeTinyGoRoot, 'src', 'device', 'arm', 'arm.go'), 'package arm\n');
 
-  const workspaceDir = path.join(tempDir, 'workspace')
-  await mkdir(workspaceDir, { recursive: true })
-  const entryPath = path.join(workspaceDir, 'main.go')
-  const outputPath = path.join(workspaceDir, 'out.wasm')
-  const requestPath = path.join(workspaceDir, 'tinygo-request.json')
+	const workspaceDir = path.join(tempDir, 'workspace');
+	await mkdir(workspaceDir, { recursive: true });
+	const entryPath = path.join(workspaceDir, 'main.go');
+	const outputPath = path.join(workspaceDir, 'out.wasm');
+	const requestPath = path.join(workspaceDir, 'tinygo-request.json');
 
-  await writeFile(entryPath, 'package main\n\nfunc main() {}\n')
-  await writeFile(requestPath, JSON.stringify({
-    command: 'build',
-    planner: 'tinygo',
-    entry: entryPath,
-    optimize: 'z',
-    output: outputPath,
-    panic: 'trap',
-    scheduler: 'asyncify',
-    target: 'wasip1',
-  }))
+	await writeFile(entryPath, 'package main\n\nfunc main() {}\n');
+	await writeFile(
+		requestPath,
+		JSON.stringify({
+			command: 'build',
+			planner: 'tinygo',
+			entry: entryPath,
+			optimize: 'z',
+			output: outputPath,
+			panic: 'trap',
+			scheduler: 'asyncify',
+			target: 'wasip1'
+		})
+	);
 
-  const cwd = new URL('..', import.meta.url).pathname
-  const scriptPath = new URL('../scripts/probe-tinygo-driver-bridge.mjs', import.meta.url).pathname
-  const child = spawn(process.execPath, [scriptPath], {
-    cwd,
-    env: {
-      ...process.env,
-      WASM_TINYGO_DRIVER_BRIDGE_INCLUDE_FRONTEND_ANALYSIS: '1',
-      WASM_TINYGO_GO_BIN: fakeGoPath,
-      WASM_TINYGO_HOST_PROBE_REQUEST_PATH: requestPath,
-      WASM_TINYGO_HOST_PROBE_SKIP_RUNTIME: '1',
-      WASM_TINYGO_TINYGOROOT: fakeTinyGoRoot,
-      WASM_TINYGO_TINYGO_BIN: fakeTinyGoPath,
-    },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
+	const cwd = new URL('..', import.meta.url).pathname;
+	const scriptPath = new URL('../scripts/probe-tinygo-driver-bridge.mjs', import.meta.url)
+		.pathname;
+	const child = spawn(process.execPath, [scriptPath], {
+		cwd,
+		env: {
+			...process.env,
+			WASM_TINYGO_DRIVER_BRIDGE_INCLUDE_FRONTEND_ANALYSIS: '1',
+			WASM_TINYGO_GO_BIN: fakeGoPath,
+			WASM_TINYGO_HOST_PROBE_REQUEST_PATH: requestPath,
+			WASM_TINYGO_HOST_PROBE_SKIP_RUNTIME: '1',
+			WASM_TINYGO_TINYGOROOT: fakeTinyGoRoot,
+			WASM_TINYGO_TINYGO_BIN: fakeTinyGoPath
+		},
+		stdio: ['ignore', 'pipe', 'pipe']
+	});
 
-  let output = ''
-  child.stdout.on('data', (chunk) => {
-    output += chunk.toString()
-  })
-  child.stderr.on('data', (chunk) => {
-    output += chunk.toString()
-  })
+	let output = '';
+	child.stdout.on('data', (chunk) => {
+		output += chunk.toString();
+	});
+	child.stderr.on('data', (chunk) => {
+		output += chunk.toString();
+	});
 
-  const exitCode = await new Promise((resolve, reject) => {
-    child.once('error', reject)
-    child.once('close', resolve)
-  })
+	const exitCode = await new Promise((resolve, reject) => {
+		child.once('error', reject);
+		child.once('close', resolve);
+	});
 
-  assert.equal(exitCode, 1, output)
-  assert.match(output, /frontend analysis compileUnits did not match real TinyGo driver bridge/)
-})
+	assert.equal(exitCode, 1, output);
+	assert.match(output, /frontend analysis compileUnits did not match real TinyGo driver bridge/);
+});
 
 test('probe-tinygo-driver-bridge rejects mismatched frontend-real-adapter buildContext instead of accepting it', async (t) => {
-  const tempDir = await mkdtemp(path.join(tmpdir(), 'wasm-tinygo-driver-bridge-script-real-adapter-mismatch-'))
-  t.after(async () => {
-    await rm(tempDir, { recursive: true, force: true })
-  })
+	const tempDir = await mkdtemp(
+		path.join(tmpdir(), 'wasm-tinygo-driver-bridge-script-real-adapter-mismatch-')
+	);
+	t.after(async () => {
+		await rm(tempDir, { recursive: true, force: true });
+	});
 
-  const fakeBinDir = path.join(tempDir, 'bin')
-  await mkdir(fakeBinDir, { recursive: true })
+	const fakeBinDir = path.join(tempDir, 'bin');
+	await mkdir(fakeBinDir, { recursive: true });
 
-  const fakeGoPath = path.join(fakeBinDir, 'go')
-  await writeFile(fakeGoPath, `#!/bin/sh
+	const fakeGoPath = path.join(fakeBinDir, 'go');
+	await writeFile(
+		fakeGoPath,
+		`#!/bin/sh
 set -eu
 node - <<'NODE'
 const fs = require('node:fs')
@@ -4027,11 +4242,14 @@ fs.writeFileSync(process.env.WASM_TINYGO_RESULT_PATH, JSON.stringify({
   },
 }, null, 2))
 NODE
-`)
-  await chmod(fakeGoPath, 0o755)
+`
+	);
+	await chmod(fakeGoPath, 0o755);
 
-  const fakeTinyGoPath = path.join(fakeBinDir, 'tinygo')
-  await writeFile(fakeTinyGoPath, `#!/bin/sh
+	const fakeTinyGoPath = path.join(fakeBinDir, 'tinygo');
+	await writeFile(
+		fakeTinyGoPath,
+		`#!/bin/sh
 set -eu
 if [ "$1" = "info" ]; then
   cat <<'EOF'
@@ -4060,79 +4278,99 @@ for arg in "$@"; do
 done
 mkdir -p "$(dirname "$out")"
 printf '\\000asm\\001\\000\\000\\000' > "$out"
-`)
-  await chmod(fakeTinyGoPath, 0o755)
+`
+	);
+	await chmod(fakeTinyGoPath, 0o755);
 
-  const fakeTinyGoRoot = path.join(tempDir, 'tinygo-root')
-  await mkdir(path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys'), { recursive: true })
-  await mkdir(path.join(fakeTinyGoRoot, 'src', 'device', 'arm'), { recursive: true })
-  await writeFile(path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys', 'zversion.go'), 'package sys\n')
-  await writeFile(path.join(fakeTinyGoRoot, 'src', 'device', 'arm', 'arm.go'), 'package arm\n')
+	const fakeTinyGoRoot = path.join(tempDir, 'tinygo-root');
+	await mkdir(path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys'), {
+		recursive: true
+	});
+	await mkdir(path.join(fakeTinyGoRoot, 'src', 'device', 'arm'), { recursive: true });
+	await writeFile(
+		path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys', 'zversion.go'),
+		'package sys\n'
+	);
+	await writeFile(path.join(fakeTinyGoRoot, 'src', 'device', 'arm', 'arm.go'), 'package arm\n');
 
-  const workspaceDir = path.join(tempDir, 'workspace')
-  await mkdir(workspaceDir, { recursive: true })
-  const entryPath = path.join(workspaceDir, 'main.go')
-  const outputPath = path.join(workspaceDir, 'out.wasm')
-  const requestPath = path.join(workspaceDir, 'tinygo-request.json')
-  const bridgeManifestPath = path.join(workspaceDir, 'tinygo-driver-bridge.json')
+	const workspaceDir = path.join(tempDir, 'workspace');
+	await mkdir(workspaceDir, { recursive: true });
+	const entryPath = path.join(workspaceDir, 'main.go');
+	const outputPath = path.join(workspaceDir, 'out.wasm');
+	const requestPath = path.join(workspaceDir, 'tinygo-request.json');
+	const bridgeManifestPath = path.join(workspaceDir, 'tinygo-driver-bridge.json');
 
-  await writeFile(path.join(workspaceDir, 'go.mod'), 'module example.com/real-adapter-mismatch\n\ngo 1.22\n')
-  await writeFile(entryPath, 'package main\n\nfunc main() {}\n')
-  await writeFile(requestPath, JSON.stringify({
-    command: 'build',
-    planner: 'tinygo',
-    entry: entryPath,
-    optimize: 'z',
-    output: outputPath,
-    panic: 'trap',
-    target: 'wasm',
-  }))
+	await writeFile(
+		path.join(workspaceDir, 'go.mod'),
+		'module example.com/real-adapter-mismatch\n\ngo 1.22\n'
+	);
+	await writeFile(entryPath, 'package main\n\nfunc main() {}\n');
+	await writeFile(
+		requestPath,
+		JSON.stringify({
+			command: 'build',
+			planner: 'tinygo',
+			entry: entryPath,
+			optimize: 'z',
+			output: outputPath,
+			panic: 'trap',
+			target: 'wasm'
+		})
+	);
 
-  const cwd = new URL('..', import.meta.url).pathname
-  const scriptPath = new URL('../scripts/probe-tinygo-driver-bridge.mjs', import.meta.url).pathname
-  const child = spawn(process.execPath, [scriptPath], {
-    cwd,
-    env: {
-      ...process.env,
-      WASM_TINYGO_DRIVER_BRIDGE_MANIFEST_PATH: bridgeManifestPath,
-      WASM_TINYGO_DRIVER_BRIDGE_INCLUDE_FRONTEND_ANALYSIS: '1',
-      WASM_TINYGO_GO_BIN: fakeGoPath,
-      WASM_TINYGO_HOST_PROBE_REQUEST_PATH: requestPath,
-      WASM_TINYGO_HOST_PROBE_SKIP_RUNTIME: '1',
-      WASM_TINYGO_TINYGOROOT: fakeTinyGoRoot,
-      WASM_TINYGO_TINYGO_BIN: fakeTinyGoPath,
-    },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
+	const cwd = new URL('..', import.meta.url).pathname;
+	const scriptPath = new URL('../scripts/probe-tinygo-driver-bridge.mjs', import.meta.url)
+		.pathname;
+	const child = spawn(process.execPath, [scriptPath], {
+		cwd,
+		env: {
+			...process.env,
+			WASM_TINYGO_DRIVER_BRIDGE_MANIFEST_PATH: bridgeManifestPath,
+			WASM_TINYGO_DRIVER_BRIDGE_INCLUDE_FRONTEND_ANALYSIS: '1',
+			WASM_TINYGO_GO_BIN: fakeGoPath,
+			WASM_TINYGO_HOST_PROBE_REQUEST_PATH: requestPath,
+			WASM_TINYGO_HOST_PROBE_SKIP_RUNTIME: '1',
+			WASM_TINYGO_TINYGOROOT: fakeTinyGoRoot,
+			WASM_TINYGO_TINYGO_BIN: fakeTinyGoPath
+		},
+		stdio: ['ignore', 'pipe', 'pipe']
+	});
 
-  let output = ''
-  child.stdout.on('data', (chunk) => {
-    output += chunk.toString()
-  })
-  child.stderr.on('data', (chunk) => {
-    output += chunk.toString()
-  })
+	let output = '';
+	child.stdout.on('data', (chunk) => {
+		output += chunk.toString();
+	});
+	child.stderr.on('data', (chunk) => {
+		output += chunk.toString();
+	});
 
-  const exitCode = await new Promise((resolve, reject) => {
-    child.once('error', reject)
-    child.once('close', resolve)
-  })
+	const exitCode = await new Promise((resolve, reject) => {
+		child.once('error', reject);
+		child.once('close', resolve);
+	});
 
-  assert.equal(exitCode, 1, output)
-  assert.match(output, /frontend analysis buildContext did not match real TinyGo analysis adapter/)
-})
+	assert.equal(exitCode, 1, output);
+	assert.match(
+		output,
+		/frontend analysis buildContext did not match real TinyGo analysis adapter/
+	);
+});
 
 test('probe-tinygo-driver-bridge rejects frontend-real-adapter package drift against frontend-analysis', async (t) => {
-  const tempDir = await mkdtemp(path.join(tmpdir(), 'wasm-tinygo-driver-bridge-script-real-adapter-seam-mismatch-'))
-  t.after(async () => {
-    await rm(tempDir, { recursive: true, force: true })
-  })
+	const tempDir = await mkdtemp(
+		path.join(tmpdir(), 'wasm-tinygo-driver-bridge-script-real-adapter-seam-mismatch-')
+	);
+	t.after(async () => {
+		await rm(tempDir, { recursive: true, force: true });
+	});
 
-  const fakeBinDir = path.join(tempDir, 'bin')
-  await mkdir(fakeBinDir, { recursive: true })
+	const fakeBinDir = path.join(tempDir, 'bin');
+	await mkdir(fakeBinDir, { recursive: true });
 
-  const fakeGoPath = path.join(fakeBinDir, 'go')
-  await writeFile(fakeGoPath, `#!/bin/sh
+	const fakeGoPath = path.join(fakeBinDir, 'go');
+	await writeFile(
+		fakeGoPath,
+		`#!/bin/sh
 set -eu
 node - <<'NODE'
 const fs = require('node:fs')
@@ -4373,11 +4611,14 @@ fs.writeFileSync(process.env.WASM_TINYGO_RESULT_PATH, JSON.stringify({
   },
 }, null, 2))
 NODE
-`)
-  await chmod(fakeGoPath, 0o755)
+`
+	);
+	await chmod(fakeGoPath, 0o755);
 
-  const fakeTinyGoPath = path.join(fakeBinDir, 'tinygo')
-  await writeFile(fakeTinyGoPath, `#!/bin/sh
+	const fakeTinyGoPath = path.join(fakeBinDir, 'tinygo');
+	await writeFile(
+		fakeTinyGoPath,
+		`#!/bin/sh
 set -eu
 if [ "$1" = "info" ]; then
   cat <<'EOF'
@@ -4407,64 +4648,80 @@ for arg in "$@"; do
 done
 mkdir -p "$(dirname "$out")"
 printf '\\000asm\\001\\000\\000\\000' > "$out"
-`)
-  await chmod(fakeTinyGoPath, 0o755)
+`
+	);
+	await chmod(fakeTinyGoPath, 0o755);
 
-  const fakeTinyGoRoot = path.join(tempDir, 'tinygo-root')
-  await mkdir(path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys'), { recursive: true })
-  await mkdir(path.join(fakeTinyGoRoot, 'src', 'device', 'arm'), { recursive: true })
-  await writeFile(path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys', 'zversion.go'), 'package sys\n')
-  await writeFile(path.join(fakeTinyGoRoot, 'src', 'device', 'arm', 'arm.go'), 'package arm\n')
+	const fakeTinyGoRoot = path.join(tempDir, 'tinygo-root');
+	await mkdir(path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys'), {
+		recursive: true
+	});
+	await mkdir(path.join(fakeTinyGoRoot, 'src', 'device', 'arm'), { recursive: true });
+	await writeFile(
+		path.join(fakeTinyGoRoot, 'src', 'runtime', 'internal', 'sys', 'zversion.go'),
+		'package sys\n'
+	);
+	await writeFile(path.join(fakeTinyGoRoot, 'src', 'device', 'arm', 'arm.go'), 'package arm\n');
 
-  const workspaceDir = path.join(tempDir, 'workspace')
-  await mkdir(workspaceDir, { recursive: true })
-  const entryPath = path.join(workspaceDir, 'main.go')
-  const outputPath = path.join(workspaceDir, 'out.wasm')
-  const requestPath = path.join(workspaceDir, 'tinygo-request.json')
-  const bridgeManifestPath = path.join(workspaceDir, 'tinygo-driver-bridge.json')
+	const workspaceDir = path.join(tempDir, 'workspace');
+	await mkdir(workspaceDir, { recursive: true });
+	const entryPath = path.join(workspaceDir, 'main.go');
+	const outputPath = path.join(workspaceDir, 'out.wasm');
+	const requestPath = path.join(workspaceDir, 'tinygo-request.json');
+	const bridgeManifestPath = path.join(workspaceDir, 'tinygo-driver-bridge.json');
 
-  await writeFile(path.join(workspaceDir, 'go.mod'), 'module example.com/seamdrift\n\ngo 1.22\n')
-  await writeFile(entryPath, 'package main\n\nimport "fmt"\n\nfunc main() { fmt.Println("ok") }\n')
-  await writeFile(requestPath, JSON.stringify({
-    command: 'build',
-    planner: 'tinygo',
-    entry: entryPath,
-    optimize: 'z',
-    output: outputPath,
-    panic: 'trap',
-    target: 'wasm',
-  }))
+	await writeFile(path.join(workspaceDir, 'go.mod'), 'module example.com/seamdrift\n\ngo 1.22\n');
+	await writeFile(
+		entryPath,
+		'package main\n\nimport "fmt"\n\nfunc main() { fmt.Println("ok") }\n'
+	);
+	await writeFile(
+		requestPath,
+		JSON.stringify({
+			command: 'build',
+			planner: 'tinygo',
+			entry: entryPath,
+			optimize: 'z',
+			output: outputPath,
+			panic: 'trap',
+			target: 'wasm'
+		})
+	);
 
-  const cwd = new URL('..', import.meta.url).pathname
-  const scriptPath = new URL('../scripts/probe-tinygo-driver-bridge.mjs', import.meta.url).pathname
-  const child = spawn(process.execPath, [scriptPath], {
-    cwd,
-    env: {
-      ...process.env,
-      WASM_TINYGO_DRIVER_BRIDGE_MANIFEST_PATH: bridgeManifestPath,
-      WASM_TINYGO_DRIVER_BRIDGE_INCLUDE_FRONTEND_ANALYSIS: '1',
-      WASM_TINYGO_GO_BIN: fakeGoPath,
-      WASM_TINYGO_HOST_PROBE_REQUEST_PATH: requestPath,
-      WASM_TINYGO_HOST_PROBE_SKIP_RUNTIME: '1',
-      WASM_TINYGO_TINYGOROOT: fakeTinyGoRoot,
-      WASM_TINYGO_TINYGO_BIN: fakeTinyGoPath,
-    },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
+	const cwd = new URL('..', import.meta.url).pathname;
+	const scriptPath = new URL('../scripts/probe-tinygo-driver-bridge.mjs', import.meta.url)
+		.pathname;
+	const child = spawn(process.execPath, [scriptPath], {
+		cwd,
+		env: {
+			...process.env,
+			WASM_TINYGO_DRIVER_BRIDGE_MANIFEST_PATH: bridgeManifestPath,
+			WASM_TINYGO_DRIVER_BRIDGE_INCLUDE_FRONTEND_ANALYSIS: '1',
+			WASM_TINYGO_GO_BIN: fakeGoPath,
+			WASM_TINYGO_HOST_PROBE_REQUEST_PATH: requestPath,
+			WASM_TINYGO_HOST_PROBE_SKIP_RUNTIME: '1',
+			WASM_TINYGO_TINYGOROOT: fakeTinyGoRoot,
+			WASM_TINYGO_TINYGO_BIN: fakeTinyGoPath
+		},
+		stdio: ['ignore', 'pipe', 'pipe']
+	});
 
-  let output = ''
-  child.stdout.on('data', (chunk) => {
-    output += chunk.toString()
-  })
-  child.stderr.on('data', (chunk) => {
-    output += chunk.toString()
-  })
+	let output = '';
+	child.stdout.on('data', (chunk) => {
+		output += chunk.toString();
+	});
+	child.stderr.on('data', (chunk) => {
+		output += chunk.toString();
+	});
 
-  const exitCode = await new Promise((resolve, reject) => {
-    child.once('error', reject)
-    child.once('close', resolve)
-  })
+	const exitCode = await new Promise((resolve, reject) => {
+		child.once('error', reject);
+		child.once('close', resolve);
+	});
 
-  assert.equal(exitCode, 1, output)
-  assert.match(output, /frontend analysis program package did not match real TinyGo analysis adapter/)
-})
+	assert.equal(exitCode, 1, output);
+	assert.match(
+		output,
+		/frontend analysis program package did not match real TinyGo analysis adapter/
+	);
+});

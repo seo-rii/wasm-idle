@@ -433,8 +433,7 @@ export function startWorkerLanguageServer(
 			if (initialized) return;
 			initialized = true;
 			const initOptions = message.options as { debug?: unknown } | null | undefined;
-			debug =
-				!!initOptions && typeof initOptions === 'object' && initOptions.debug === true;
+			debug = !!initOptions && typeof initOptions === 'object' && initOptions.debug === true;
 			if (debug) {
 				console.debug(`[wasm-idle:lsp-worker:${service.name}] init`);
 			}

@@ -51,7 +51,9 @@ const opamBin =
 const validateTarget = process.env.WASM_OF_JS_OF_OCAML_VALIDATE_TARGET || 'both';
 const binaryenBin =
 	process.env.WASM_OF_JS_OF_OCAML_BINARYEN_BIN ||
-	(await readFile(path.join(projectRoot, '.cache', 'binaryen-version_129', 'bin', 'wasm-merge')).then(
+	(await readFile(
+		path.join(projectRoot, '.cache', 'binaryen-version_129', 'bin', 'wasm-merge')
+	).then(
 		() => path.join(projectRoot, '.cache', 'binaryen-version_129', 'bin'),
 		() => undefined
 	));
@@ -107,7 +109,11 @@ if (validateTarget === 'wasm' || validateTarget === 'both') {
 	if (!wasmResult.artifacts.some((artifact) => artifact.kind === 'js')) {
 		throw new Error('wasm pipeline succeeded without a JavaScript loader artifact');
 	}
-	if (!wasmResult.artifacts.some((artifact) => artifact.kind === 'wasm' || artifact.path.endsWith('.wasm'))) {
+	if (
+		!wasmResult.artifacts.some(
+			(artifact) => artifact.kind === 'wasm' || artifact.path.endsWith('.wasm')
+		)
+	) {
 		throw new Error('wasm pipeline succeeded without a wasm asset');
 	}
 	wasmArtifacts = wasmResult.artifacts.map((artifact) => ({
@@ -121,7 +127,10 @@ console.log(
 		{
 			validateTarget,
 			switchPrefix: prefix,
-			jsArtifacts: jsResult.artifacts.map((artifact) => ({ path: artifact.path, kind: artifact.kind })),
+			jsArtifacts: jsResult.artifacts.map((artifact) => ({
+				path: artifact.path,
+				kind: artifact.kind
+			})),
 			wasmArtifacts
 		},
 		null,

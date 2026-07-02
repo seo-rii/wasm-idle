@@ -927,7 +927,16 @@
 			'using',
 			'while'
 		],
-		builtins: ['eachline', 'parse', 'print', 'println', 'read', 'readline', 'readlines', 'stdin'],
+		builtins: [
+			'eachline',
+			'parse',
+			'print',
+			'println',
+			'read',
+			'readline',
+			'readlines',
+			'stdin'
+		],
 		tokenizer: {
 			root: [
 				[/#=.*=#/, 'comment'],

@@ -229,7 +229,9 @@ async function ensureExtractedToolchain(cacheDir, archiveInfo) {
 async function listFilesRecursive(rootDir) {
 	const entries = [];
 	async function walk(currentDir) {
-		for (const dirent of await (await import('node:fs/promises')).readdir(currentDir, {
+		for (const dirent of await (
+			await import('node:fs/promises')
+		).readdir(currentDir, {
 			withFileTypes: true
 		})) {
 			const absolutePath = path.join(currentDir, dirent.name);
@@ -278,17 +280,10 @@ async function buildStdlibIndex(goBinary, pkgDir, env) {
 		archiveFiles
 			.filter((absolutePath) => absolutePath.endsWith('.a'))
 			.map((absolutePath) =>
-				path
-					.relative(pkgDir, absolutePath)
-					.replace(/\\/g, '/')
-					.slice(0, -'.a'.length)
+				path.relative(pkgDir, absolutePath).replace(/\\/g, '/').slice(0, -'.a'.length)
 			)
 	);
-	const stdout = await runCommandCapture(
-		goBinary,
-		['list', '-deps', '-json', 'std'],
-		{ env }
-	);
+	const stdout = await runCommandCapture(goBinary, ['list', '-deps', '-json', 'std'], { env });
 	const packages = parseJsonObjectStream(stdout)
 		.filter((entry) => archiveImportPaths.has(entry.ImportPath))
 		.map((entry) => ({
@@ -342,7 +337,9 @@ async function main() {
 		GOWORK: 'off',
 		GOCACHE: gocacheDir
 	};
-	const requestedTargets = (process.env.WASM_GO_RUNTIME_TARGETS || defaultRequestedTargets.join(','))
+	const requestedTargets = (
+		process.env.WASM_GO_RUNTIME_TARGETS || defaultRequestedTargets.join(',')
+	)
 		.split(',')
 		.map((entry) => entry.trim())
 		.filter((entry) => entry.length > 0);
@@ -405,12 +402,28 @@ async function main() {
 	const linkWasmPath = path.join(buildTempDir, 'out', 'tools', 'link.wasm');
 	await runCommand(
 		toolchain.goBinary,
-		['build', '-trimpath', '-buildvcs=false', '-ldflags=-buildid=', '-o', compileWasmPath, 'cmd/compile'],
+		[
+			'build',
+			'-trimpath',
+			'-buildvcs=false',
+			'-ldflags=-buildid=',
+			'-o',
+			compileWasmPath,
+			'cmd/compile'
+		],
 		{ env }
 	);
 	await runCommand(
 		toolchain.goBinary,
-		['build', '-trimpath', '-buildvcs=false', '-ldflags=-buildid=', '-o', linkWasmPath, 'cmd/link'],
+		[
+			'build',
+			'-trimpath',
+			'-buildvcs=false',
+			'-ldflags=-buildid=',
+			'-o',
+			linkWasmPath,
+			'cmd/link'
+		],
 		{ env }
 	);
 	const runtimeBundles = new Map();
@@ -592,7 +605,10 @@ async function main() {
 				{
 					goos: plan.goos,
 					sysrootKey: plan.sysrootKey,
-					aliasedTo: plan.goos === 'wasip1' && plan.target !== 'wasip1/wasm' ? 'wasip1/wasm' : null
+					aliasedTo:
+						plan.goos === 'wasip1' && plan.target !== 'wasip1/wasm'
+							? 'wasip1/wasm'
+							: null
 				}
 			])
 		),

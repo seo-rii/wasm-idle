@@ -24,7 +24,10 @@ test('browser-native worker runs static Binaryen tools without the Binaryen API 
 
 	assert.match(workerSource, /type BinaryenToolUrls = \{/);
 	assert.match(workerSource, /request\.binaryenTools/);
-	assert.match(workerSource, /runBinaryenTool\(runtimeGlobal,\s*command,\s*request\.binaryenTools\)/);
+	assert.match(
+		workerSource,
+		/runBinaryenTool\(runtimeGlobal,\s*command,\s*request\.binaryenTools\)/
+	);
 	assert.doesNotMatch(workerSource, /\/api\/binaryen-command/);
 	assert.doesNotMatch(workerSource, /__binaryen_tool_source_cache/);
 	assert.match(workerSource, /function loadBinaryenToolSource\(toolUrl: string\)/);
@@ -34,7 +37,10 @@ test('browser-native worker runs static Binaryen tools without the Binaryen API 
 	);
 	assert.match(workerSource, /activeBinaryenCliRuntime\?\.FS\?\.quit\?\.\(\);/);
 	assert.match(workerSource, /WASM_OF_JS_OF_OCAML_BROWSER_FAST_BINARYEN/);
-	assert.match(workerSource, /parsed\.toolName === 'wasm-metadce' \|\| parsed\.toolName === 'wasm-opt'/);
+	assert.match(
+		workerSource,
+		/parsed\.toolName === 'wasm-metadce' \|\| parsed\.toolName === 'wasm-opt'/
+	);
 	assert.match(dispatcherSource, /binaryenTools\?: \{/);
 	assert.match(dispatcherSource, /options\.manifest\.binaryenTools/);
 	assert.match(dispatcherSource, /env\['WASM_OF_JS_OF_OCAML_BROWSER_FAST_BINARYEN'\] \|\| '1'/);
@@ -63,9 +69,6 @@ test('browser-native dispatcher transfers transient preload buffers to the tool 
 		'utf8'
 	);
 
-	assert.match(
-		dispatcherSource,
-		/const transferPreloadBuffers = request\.preloadFiles\.flatMap/
-	);
+	assert.match(dispatcherSource, /const transferPreloadBuffers = request\.preloadFiles\.flatMap/);
 	assert.match(dispatcherSource, /}, transferPreloadBuffers\);/);
 });

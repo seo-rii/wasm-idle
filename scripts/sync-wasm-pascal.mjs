@@ -104,7 +104,11 @@ export async function syncWasmPascalAssets({
 		const targetPath = path.join(targetDir, fileName);
 		if (/\.(?:js|json|pas)$/u.test(fileName)) {
 			const source = await readFile(sourcePath, 'utf8');
-			await writeFile(targetPath, source.replace(/[ \t]+$/gmu, '').replace(/\n+$/u, '\n'), 'utf8');
+			await writeFile(
+				targetPath,
+				source.replace(/[ \t]+$/gmu, '').replace(/\n+$/u, '\n'),
+				'utf8'
+			);
 		} else {
 			await cp(sourcePath, targetPath);
 		}

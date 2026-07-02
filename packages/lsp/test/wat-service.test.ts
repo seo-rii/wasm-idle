@@ -39,7 +39,11 @@ describe('createWatWorkerService', () => {
 			{ tabSize: 2, insertSpaces: true },
 			context
 		);
-		const completions = await service.completion?.(document, { line: 0, character: 1 }, context);
+		const completions = await service.completion?.(
+			document,
+			{ line: 0, character: 1 },
+			context
+		);
 		const hover = await service.hover?.(document, { line: 0, character: 3 }, context);
 
 		expect(formatting?.[0]?.newText).toContain('i32.const 42');

@@ -15,7 +15,8 @@ export function normalizeGuestPath(value: string) {
 	const segments: string[] = [];
 	for (const segment of absolute.split('/')) {
 		if (!segment || segment === '.') continue;
-		if (segment === '..') throw new Error(`wasm-d does not allow guest path traversal: ${value}`);
+		if (segment === '..')
+			throw new Error(`wasm-d does not allow guest path traversal: ${value}`);
 		segments.push(segment);
 	}
 	return `/${segments.join('/')}`;
@@ -186,10 +187,7 @@ export async function runWasiModule(
 	const root = options.root || new Directory(new Map());
 	const stdout = new CaptureFd(options.stdout);
 	const stderr = new CaptureFd(options.stderr);
-	const env = new Map<string, string>([
-		['PWD', '/'],
-		...Object.entries(options.env || {})
-	]);
+	const env = new Map<string, string>([['PWD', '/'], ...Object.entries(options.env || {})]);
 	const wasiInstance = new WASI(
 		[options.programName || 'program.wasm', ...(options.args || [])],
 		Array.from(env.entries()).map(([key, value]) => `${key}=${value}`),
@@ -212,12 +210,14 @@ export async function runWasiModule(
 		wasi_snapshot_preview1: wasiInstance.wasiImport,
 		wasi_unstable: wasiInstance.wasiImport
 	});
-	const exitCode = wasiInstance.start(instance as unknown as {
-		exports: {
-			memory: WebAssembly.Memory;
-			_start: () => unknown;
-		};
-	});
+	const exitCode = wasiInstance.start(
+		instance as unknown as {
+			exports: {
+				memory: WebAssembly.Memory;
+				_start: () => unknown;
+			};
+		}
+	);
 	return {
 		exitCode,
 		stdout: stdout.getText(),

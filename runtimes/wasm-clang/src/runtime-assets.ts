@@ -1,8 +1,4 @@
-import {
-	resolveRuntimeBaseUrl,
-	resolveVersionedAssetUrl,
-	runtimeManifestUrl
-} from './url.js';
+import { resolveRuntimeBaseUrl, resolveVersionedAssetUrl, runtimeManifestUrl } from './url.js';
 import type { RuntimeManifestV1 } from './types.js';
 
 export interface RuntimeAssetUrls {

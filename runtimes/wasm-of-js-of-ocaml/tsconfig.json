@@ -4,14 +4,14 @@
 		"lib": ["ES2022", "DOM", "WebWorker"],
 		"types": ["node"],
 		"module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "strict": true,
-    "exactOptionalPropertyTypes": true,
-    "noUncheckedIndexedAccess": true,
-    "declaration": true,
-    "outDir": "dist",
-    "rootDir": ".",
-    "skipLibCheck": true
-  },
-  "include": ["src/**/*.ts", "runtime/**/*.ts"]
+		"moduleResolution": "NodeNext",
+		"strict": true,
+		"exactOptionalPropertyTypes": true,
+		"noUncheckedIndexedAccess": true,
+		"declaration": true,
+		"outDir": "dist",
+		"rootDir": ".",
+		"skipLibCheck": true
+	},
+	"include": ["src/**/*.ts", "runtime/**/*.ts"]
 }

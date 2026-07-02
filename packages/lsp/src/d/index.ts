@@ -3,8 +3,4 @@ export {
 	type DLanguageServerConfig,
 	type DLanguageServerOptions
 } from './server.js';
-export {
-	createDWorkerService,
-	type DWorkerOptions,
-	type LoadDCompilerHost
-} from './service.js';
+export { createDWorkerService, type DWorkerOptions, type LoadDCompilerHost } from './service.js';

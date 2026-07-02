@@ -74,9 +74,9 @@ describe('syncWasmBqnAssets', () => {
 		await expect(readFile(path.join(targetDir, 'runner-worker.js'), 'utf8')).resolves.toContain(
 			'self.onmessage'
 		);
-		await expect(readFile(path.join(targetDir, 'LICENSE-GPLv3.txt'), 'utf8')).resolves.toContain(
-			'GNU GENERAL PUBLIC LICENSE'
-		);
+		await expect(
+			readFile(path.join(targetDir, 'LICENSE-GPLv3.txt'), 'utf8')
+		).resolves.toContain('GNU GENERAL PUBLIC LICENSE');
 		const manifest = JSON.parse(
 			await readFile(path.join(targetDir, 'runtime-manifest.v1.json'), 'utf8')
 		) as { format: string; runtime: string; files: string[] };
@@ -98,7 +98,11 @@ describe('syncWasmBqnAssets', () => {
 			'runner-worker.js',
 			'self.onmessage = () => { self.postMessage({ results: true }); };\n'
 		);
-		await writeFixtureFile(targetDir, 'BQN.js', 'export default Module; cbqn_runLine; FS.init;\n');
+		await writeFixtureFile(
+			targetDir,
+			'BQN.js',
+			'export default Module; cbqn_runLine; FS.init;\n'
+		);
 		await writeFixtureFile(targetDir, 'BQN.wasm.gz', 'compressed-wasm');
 		process.env.WASM_BQN_SOURCE_DIR = path.join(await makeTempDir(), 'missing');
 

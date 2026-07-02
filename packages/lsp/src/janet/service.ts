@@ -15,8 +15,7 @@ export interface JanetWorkerOptions {
 	workerUrl: string;
 }
 
-export type JanetDiagnosticRunnerRequest =
-	StaticWorkerDiagnosticRequest<JanetWorkerOptions>;
+export type JanetDiagnosticRunnerRequest = StaticWorkerDiagnosticRequest<JanetWorkerOptions>;
 
 export interface JanetDiagnosticRunnerResult {
 	error?: string;
@@ -84,8 +83,7 @@ const wordAt = (text: string, position: LspPosition) => {
 	const character = Math.max(0, Math.min(position.character, line.length));
 	return (
 		(line.slice(0, character).match(/[A-Za-z_*+\-!?/<>=][A-Za-z0-9_*+\-!?/<>=]*$/u)?.[0] ||
-			'') +
-		(line.slice(character).match(/^[A-Za-z0-9_*+\-!?/<>=]*/u)?.[0] || '')
+			'') + (line.slice(character).match(/^[A-Za-z0-9_*+\-!?/<>=]*/u)?.[0] || '')
 	);
 };
 
@@ -186,7 +184,8 @@ export function createJanetWorkerService(
 		},
 		documentSymbols(document) {
 			const symbols = [];
-			const pattern = /^\s*\((?:defn?|defmacro)\s+([A-Za-z_*+\-!?/<>=][A-Za-z0-9_*+\-!?/<>=]*)/gmu;
+			const pattern =
+				/^\s*\((?:defn?|defmacro)\s+([A-Za-z_*+\-!?/<>=][A-Za-z0-9_*+\-!?/<>=]*)/gmu;
 			for (const match of document.text.matchAll(pattern)) {
 				symbols.push(symbol(document.text, match[1], match.index || 0, match[0].length));
 			}

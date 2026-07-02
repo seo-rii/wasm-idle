@@ -87,7 +87,10 @@ describe('runtime pack', () => {
 				bytes: [0x00, 0x61, 0x73, 0x6d]
 			}
 		]);
-		expect(progressEvents.map((event) => event.loaded)).toEqual([3, gzippedPackBytes.byteLength]);
+		expect(progressEvents.map((event) => event.loaded)).toEqual([
+			3,
+			gzippedPackBytes.byteLength
+		]);
 		expect(progressEvents.at(-1)?.total).toBe(gzippedPackBytes.byteLength);
 	});
 

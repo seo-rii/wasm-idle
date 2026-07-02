@@ -118,4 +118,3 @@ await writeFile(
 );
 
 process.stdout.write(`${path.join(options.outDir, 'toolchain-manifest.v1.json')}\n`);
-

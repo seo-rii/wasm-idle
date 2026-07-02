@@ -44,7 +44,9 @@ async function fileExists(filePath) {
  * @param {string} file
  */
 async function targetRuntimeFileExists(dir, file) {
-	return (await fileExists(path.join(dir, file))) || (await fileExists(path.join(dir, `${file}.gz`)));
+	return (
+		(await fileExists(path.join(dir, file))) || (await fileExists(path.join(dir, `${file}.gz`)))
+	);
 }
 
 /**
@@ -173,7 +175,11 @@ export async function syncWasmJAssets({
 	}
 	await cp(workerSourcePath, path.join(resolvedTargetDir, 'runner-worker.js'));
 	const copiedFiles = await collectFingerprintFiles(resolvedTargetDir);
-	if (!RUNTIME_FILES.every((file) => copiedFiles.includes(file) || copiedFiles.includes(`${file}.gz`))) {
+	if (
+		!RUNTIME_FILES.every(
+			(file) => copiedFiles.includes(file) || copiedFiles.includes(`${file}.gz`)
+		)
+	) {
 		throw new Error(`J runtime target is missing one of: ${RUNTIME_FILES.join(', ')}`);
 	}
 	const fingerprint = await computeFingerprint(resolvedTargetDir, copiedFiles);

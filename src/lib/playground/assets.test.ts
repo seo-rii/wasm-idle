@@ -26,6 +26,13 @@ const { publicEnv } = vi.hoisted(() => ({
 		PUBLIC_WASM_FORTRAN_LIBF2C_URL: '',
 		PUBLIC_WASM_FORTRAN_F2C_HEADER_URL: '',
 		PUBLIC_WASM_FORTRAN_ANALYZER_URL: '',
+		PUBLIC_WASM_OBJECTIVEC_BASE_URL: '',
+		PUBLIC_WASM_OBJECTIVEC_LIBOBJC_URL: '',
+		PUBLIC_WASM_OBJECTIVEC_HEADERS_URL: '',
+		PUBLIC_WASM_OBJECTIVEC_GNUSTEP_BASE_URL: '',
+		PUBLIC_WASM_OBJECTIVEC_GNUSTEP_BASE_OBJECT_URL: '',
+		PUBLIC_WASM_OBJECTIVEC_FOUNDATION_HEADERS_URL: '',
+		PUBLIC_WASM_OBJECTIVEC_LIBFFI_URL: '',
 		PUBLIC_WASM_RUBY_WASM_URL: '',
 		PUBLIC_WASM_R_BASE_URL: '',
 		PUBLIC_WASM_OCTAVE_BASE_URL: '',
@@ -68,6 +75,7 @@ vi.mock('$env/dynamic/public', () => ({
 import {
 	RUNTIME_LOAD_ASSETS,
 	resolveFortranRuntimeAssetConfig,
+	resolveObjectiveCRuntimeAssetConfig,
 	resolveRuntimeAssetConfig
 } from './assets';
 
@@ -1109,6 +1117,87 @@ describe('runtime asset config resolution', () => {
 			libf2cUrl: 'https://env.example.com/fortran/libf2c.a',
 			f2cHeaderUrl: 'https://env.example.com/fortran/f2c.h',
 			analyzerUrl: 'https://env.example.com/fortran/analyzer.js'
+		});
+	});
+
+	it('derives default Objective-C asset urls from the shared root path', () => {
+		expect(
+			resolveObjectiveCRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')
+		).toEqual({
+			baseUrl: 'https://example.com/absproxy/5173/wasm-objectivec/',
+			libobjcUrl: 'https://example.com/absproxy/5173/wasm-objectivec/libobjc.a',
+			headersUrl: 'https://example.com/absproxy/5173/wasm-objectivec/headers.json',
+			libgnustepBaseUrl:
+				'https://example.com/absproxy/5173/wasm-objectivec/libgnustep-base.a',
+			libgnustepBaseObjectUrl:
+				'https://example.com/absproxy/5173/wasm-objectivec/libgnustep-base.o',
+			foundationHeadersUrl:
+				'https://example.com/absproxy/5173/wasm-objectivec/foundation-headers.json',
+			libffiUrl: 'https://example.com/absproxy/5173/wasm-objectivec/libffi.a'
+		});
+	});
+
+	it('prefers explicit Objective-C asset urls over public env overrides', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_OBJECTIVEC_BASE_URL = 'https://env.example.com/objectivec/';
+		publicEnv.PUBLIC_WASM_OBJECTIVEC_LIBOBJC_URL = 'https://env.example.com/libobjc.a';
+		publicEnv.PUBLIC_WASM_OBJECTIVEC_HEADERS_URL = 'https://env.example.com/headers.json';
+		publicEnv.PUBLIC_WASM_OBJECTIVEC_GNUSTEP_BASE_URL =
+			'https://env.example.com/libgnustep-base.a';
+		publicEnv.PUBLIC_WASM_OBJECTIVEC_GNUSTEP_BASE_OBJECT_URL =
+			'https://env.example.com/libgnustep-base.o';
+		publicEnv.PUBLIC_WASM_OBJECTIVEC_FOUNDATION_HEADERS_URL =
+			'https://env.example.com/foundation-headers.json';
+		publicEnv.PUBLIC_WASM_OBJECTIVEC_LIBFFI_URL = 'https://env.example.com/libffi.a';
+		const { resolveObjectiveCRuntimeAssetConfig } = await import('./assets');
+
+		expect(
+			resolveObjectiveCRuntimeAssetConfig(
+				{
+					objectivec: {
+						baseUrl: '/runtime/objectivec/',
+						libobjcUrl: '/runtime/objectivec/libobjc.a?v=test',
+						headersUrl: '/runtime/objectivec/headers.json?v=test',
+						libgnustepBaseUrl: '/runtime/objectivec/libgnustep-base.a?v=test',
+						libgnustepBaseObjectUrl: '/runtime/objectivec/libgnustep-base.o?v=test',
+						foundationHeadersUrl: '/runtime/objectivec/foundation-headers.json?v=test',
+						libffiUrl: '/runtime/objectivec/libffi.a?v=test'
+					}
+				},
+				'https://example.com/app'
+			)
+		).toEqual({
+			baseUrl: 'https://example.com/runtime/objectivec/',
+			libobjcUrl: 'https://example.com/runtime/objectivec/libobjc.a?v=test',
+			headersUrl: 'https://example.com/runtime/objectivec/headers.json?v=test',
+			libgnustepBaseUrl: 'https://example.com/runtime/objectivec/libgnustep-base.a?v=test',
+			libgnustepBaseObjectUrl:
+				'https://example.com/runtime/objectivec/libgnustep-base.o?v=test',
+			foundationHeadersUrl:
+				'https://example.com/runtime/objectivec/foundation-headers.json?v=test',
+			libffiUrl: 'https://example.com/runtime/objectivec/libffi.a?v=test'
+		});
+	});
+
+	it('falls back to PUBLIC_WASM_OBJECTIVEC_BASE_URL for unconfigured Objective-C asset urls', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_OBJECTIVEC_BASE_URL = 'https://env.example.com/objectivec';
+		publicEnv.PUBLIC_WASM_OBJECTIVEC_LIBOBJC_URL = '';
+		publicEnv.PUBLIC_WASM_OBJECTIVEC_HEADERS_URL = '';
+		publicEnv.PUBLIC_WASM_OBJECTIVEC_GNUSTEP_BASE_URL = '';
+		publicEnv.PUBLIC_WASM_OBJECTIVEC_GNUSTEP_BASE_OBJECT_URL = '';
+		publicEnv.PUBLIC_WASM_OBJECTIVEC_FOUNDATION_HEADERS_URL = '';
+		publicEnv.PUBLIC_WASM_OBJECTIVEC_LIBFFI_URL = '';
+		const { resolveObjectiveCRuntimeAssetConfig } = await import('./assets');
+
+		expect(resolveObjectiveCRuntimeAssetConfig(undefined, 'https://example.com/app')).toEqual({
+			baseUrl: 'https://env.example.com/objectivec/',
+			libobjcUrl: 'https://env.example.com/objectivec/libobjc.a',
+			headersUrl: 'https://env.example.com/objectivec/headers.json',
+			libgnustepBaseUrl: 'https://env.example.com/objectivec/libgnustep-base.a',
+			libgnustepBaseObjectUrl: 'https://env.example.com/objectivec/libgnustep-base.o',
+			foundationHeadersUrl: 'https://env.example.com/objectivec/foundation-headers.json',
+			libffiUrl: 'https://env.example.com/objectivec/libffi.a'
 		});
 	});
 });

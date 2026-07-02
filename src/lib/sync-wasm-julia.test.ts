@@ -41,7 +41,11 @@ describe('syncWasmJuliaAssets', () => {
 			'runner-worker.js',
 			'self.onmessage = () => {};\n'
 		);
-		await writeFixtureFile(sourceDir, 'julia.js', '_jl_eval_string; WebAssembly.instantiate;\n');
+		await writeFixtureFile(
+			sourceDir,
+			'julia.js',
+			'_jl_eval_string; WebAssembly.instantiate;\n'
+		);
 		await writeFixtureFile(sourceDir, 'julia.wasm', 'wasm');
 		await writeFixtureFile(sourceDir, 'julia.data', 'data');
 		await writeFixtureFile(sourceDir, 'LICENSE.md', 'MIT License\n');
@@ -82,12 +86,20 @@ describe('syncWasmJuliaAssets', () => {
 			'runner-worker.js',
 			'self.onmessage = () => { self.postMessage({ results: true }); };\n'
 		);
-		await writeFixtureFile(targetDir, 'julia.js', '_jl_eval_string; WebAssembly.instantiate;\n');
+		await writeFixtureFile(
+			targetDir,
+			'julia.js',
+			'_jl_eval_string; WebAssembly.instantiate;\n'
+		);
 		await writeFixtureFile(targetDir, 'julia.wasm.gz', 'compressed-wasm');
 		await writeFixtureFile(targetDir, 'julia.data.gz', 'compressed-data');
 		process.env.WASM_JULIA_SOURCE_DIR = path.join(await makeTempDir(), 'missing');
 
-		const result = await syncWasmJuliaAssets({ targetDir, workerSourcePath, versionModulePath });
+		const result = await syncWasmJuliaAssets({
+			targetDir,
+			workerSourcePath,
+			versionModulePath
+		});
 
 		await expect(readFile(path.join(targetDir, 'julia.wasm.gz'), 'utf8')).resolves.toBe(
 			'compressed-wasm'

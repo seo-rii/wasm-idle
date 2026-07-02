@@ -161,24 +161,19 @@ describe('compileRust progress contract', () => {
 			);
 		}
 		expect(
-			progressEvents.some(
-				(event) => event.stage === 'await-bitcode' && event.completed === 1
-			)
+			progressEvents.some((event) => event.stage === 'await-bitcode' && event.completed === 1)
 		).toBe(true);
 		expect(
-			progressEvents.find(
-				(event) => event.stage === 'await-bitcode' && event.completed === 0
-			)?.percent
+			progressEvents.find((event) => event.stage === 'await-bitcode' && event.completed === 0)
+				?.percent
 		).toBeLessThan(60);
 		expect(
-			progressEvents.find(
-				(event) => event.stage === 'link' && event.bytesCompleted === 128
-			)?.percent
+			progressEvents.find((event) => event.stage === 'link' && event.bytesCompleted === 128)
+				?.percent
 		).toBeGreaterThan(68);
 		expect(
-			progressEvents.find(
-				(event) => event.stage === 'link' && event.bytesCompleted === 128
-			)?.percent
+			progressEvents.find((event) => event.stage === 'link' && event.bytesCompleted === 128)
+				?.percent
 		).toBeLessThan(95);
 		expect(
 			progressEvents.find(
@@ -243,9 +238,9 @@ describe('compileRust progress contract', () => {
 		);
 
 		expect(result.success).toBe(true);
-		expect(
-			progressEvents.some((event) => event.stage === 'retry' && event.attempt === 2)
-		).toBe(true);
+		expect(progressEvents.some((event) => event.stage === 'retry' && event.attempt === 2)).toBe(
+			true
+		);
 		for (let index = 1; index < progressEvents.length; index += 1) {
 			expect(progressEvents[index]?.percent).toBeGreaterThanOrEqual(
 				progressEvents[index - 1]?.percent || 0

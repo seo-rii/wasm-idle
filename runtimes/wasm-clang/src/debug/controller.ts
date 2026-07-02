@@ -1,7 +1,4 @@
-import type {
-	DebugCommand,
-	BrowserClangRuntimeRunOptions
-} from '../types.js';
+import type { DebugCommand, BrowserClangRuntimeRunOptions } from '../types.js';
 import {
 	bufferedSequence,
 	flushQueuedStdin,
@@ -46,8 +43,10 @@ export class BrowserClangDebugController {
 		);
 		const watchBufferBytes = Math.max(
 			Int32Array.BYTES_PER_ELEMENT * 4,
-			Math.ceil((options.watchBufferBytes || DEFAULT_DEBUG_WATCH_BUFFER_BYTES) / Int32Array.BYTES_PER_ELEMENT) *
-				Int32Array.BYTES_PER_ELEMENT
+			Math.ceil(
+				(options.watchBufferBytes || DEFAULT_DEBUG_WATCH_BUFFER_BYTES) /
+					Int32Array.BYTES_PER_ELEMENT
+			) * Int32Array.BYTES_PER_ELEMENT
 		);
 
 		this.debugBuffer = new Int32Array(
@@ -113,8 +112,11 @@ export class BrowserClangDebugController {
 		flushQueuedStdin([expression], this.watchBuffer);
 		this.notify(5);
 		return (
-			(await waitForBufferedSequenceChange(this.watchResultBuffer, previousSequence, timeoutMs)) ??
-			'?'
+			(await waitForBufferedSequenceChange(
+				this.watchResultBuffer,
+				previousSequence,
+				timeoutMs
+			)) ?? '?'
 		);
 	}
 

@@ -15,8 +15,9 @@ export interface DLanguageServerOptions extends EditorLanguageServerRuntimeOptio
 const createDefaultWorker = () =>
 	new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
 
-const resolveConfig = (options: EditorLanguageServerOptions | DLanguageServerOptions | undefined) =>
-	typeof options === 'object' ? options.d || {} : {};
+const resolveConfig = (
+	options: EditorLanguageServerOptions | DLanguageServerOptions | undefined
+) => (typeof options === 'object' ? options.d || {} : {});
 
 export async function getDLanguageServer(
 	options?: EditorLanguageServerOptions | DLanguageServerOptions

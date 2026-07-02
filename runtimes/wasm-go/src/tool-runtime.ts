@@ -1,10 +1,7 @@
 import { Directory, File, OpenFile, PreopenDirectory, WASI } from '@bjorn3/browser_wasi_shim';
 
 import { resolveVersionedAssetUrl } from './asset-url.js';
-import {
-	fetchRuntimeAssetBytes,
-	loadRuntimePackEntries
-} from './runtime-asset.js';
+import { fetchRuntimeAssetBytes, loadRuntimePackEntries } from './runtime-asset.js';
 import {
 	CaptureFd,
 	ensureGuestDirectory,
@@ -28,10 +25,8 @@ async function loadSysrootFiles(
 ) {
 	if (plan.sysrootPack) {
 		return await loadRuntimePackEntries(runtimeBaseUrl, plan.sysrootPack, fetchImpl, {
-			index: (loaded, total) =>
-				reportAssetProgress?.(plan.sysrootPack!.index, loaded, total),
-			asset: (loaded, total) =>
-				reportAssetProgress?.(plan.sysrootPack!.asset, loaded, total)
+			index: (loaded, total) => reportAssetProgress?.(plan.sysrootPack!.index, loaded, total),
+			asset: (loaded, total) => reportAssetProgress?.(plan.sysrootPack!.asset, loaded, total)
 		});
 	}
 	return await Promise.all(
@@ -48,10 +43,7 @@ async function loadSysrootFiles(
 	);
 }
 
-function collectInputFiles(
-	invocation: BrowserGoToolInvocation,
-	plan: BrowserGoBuildPlan
-) {
+function collectInputFiles(invocation: BrowserGoToolInvocation, plan: BrowserGoBuildPlan) {
 	const files: BrowserGoWorkspaceFile[] = [...invocation.inputFiles];
 	if (invocation.tool === 'link' && plan.link) {
 		const compileOutput = plan.compile.outputPath;
@@ -71,7 +63,12 @@ export async function executeGoToolInvocation(
 ): Promise<BrowserGoToolResult> {
 	const root = new Directory(new Map());
 	ensureGuestDirectory(root, '/tmp');
-	for (const entry of await loadSysrootFiles(plan, runtimeBaseUrl, fetchImpl, reportAssetProgress)) {
+	for (const entry of await loadSysrootFiles(
+		plan,
+		runtimeBaseUrl,
+		fetchImpl,
+		reportAssetProgress
+	)) {
 		writeGuestFile(root, entry.runtimePath, entry.bytes, true);
 	}
 	for (const file of collectInputFiles(invocation, plan)) {
@@ -105,12 +102,14 @@ export async function executeGoToolInvocation(
 	const instance = await WebAssembly.instantiate(module, {
 		wasi_snapshot_preview1: wasiInstance.wasiImport
 	});
-	const exitCode = wasiInstance.start(instance as unknown as {
-		exports: {
-			memory: WebAssembly.Memory;
-			_start: () => unknown;
-		};
-	});
+	const exitCode = wasiInstance.start(
+		instance as unknown as {
+			exports: {
+				memory: WebAssembly.Memory;
+				_start: () => unknown;
+			};
+		}
+	);
 	const outputBytes = readGuestFile(root, invocation.outputPath);
 	return {
 		exitCode,

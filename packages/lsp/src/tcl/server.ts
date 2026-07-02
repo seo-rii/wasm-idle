@@ -1,7 +1,4 @@
-import {
-	resolveTclLanguageServerBaseUrl,
-	resolveTclLanguageServerWorkerUrl
-} from '../runtime.js';
+import { resolveTclLanguageServerBaseUrl, resolveTclLanguageServerWorkerUrl } from '../runtime.js';
 import type { EditorLanguageServerOptions, EditorLanguageServerRuntimeOptions } from '../types.js';
 import { createWorkerLanguageServerClient, type LanguageServerStatus } from '../worker-client.js';
 

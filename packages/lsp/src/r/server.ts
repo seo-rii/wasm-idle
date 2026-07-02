@@ -17,7 +17,8 @@ const createDefaultWorker = () =>
 export async function getRLanguageServer(
 	options?: EditorLanguageServerOptions | RLanguageServerOptions
 ) {
-	const hostOptions = typeof options === 'object' ? (options as RLanguageServerOptions) : undefined;
+	const hostOptions =
+		typeof options === 'object' ? (options as RLanguageServerOptions) : undefined;
 	return await createWorkerLanguageServerClient({
 		createWorker: hostOptions?.createWorker || createDefaultWorker,
 		initOptions: {

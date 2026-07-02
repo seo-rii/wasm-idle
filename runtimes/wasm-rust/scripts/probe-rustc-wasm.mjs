@@ -17,8 +17,12 @@ import {
 import { NodePreopenDirectory } from './wasi-node-fs.mjs';
 
 const DEFAULT_WASM_RUSTC_ROOT = '/tmp/wasm-rustc-20260315';
-const DEFAULT_TOOLCHAIN_ROOT =
-	path.join(os.homedir(), '.rustup', 'toolchains', 'nightly-2024-04-12-x86_64-unknown-linux-gnu');
+const DEFAULT_TOOLCHAIN_ROOT = path.join(
+	os.homedir(),
+	'.rustup',
+	'toolchains',
+	'nightly-2024-04-12-x86_64-unknown-linux-gnu'
+);
 const DEFAULT_TARGET_TRIPLE = 'wasm32-wasip1';
 const EXPECTED_TOOLCHAIN_VERSION = 'rustc 1.79.0-nightly (a07f3eb43 2024-04-11)';
 const EXPECTED_WASM_RUSTC_VERSION = 'rustc 1.79.0-dev';
@@ -184,7 +188,12 @@ async function patchTargetStdlib(toolchainRoot, targetTriple) {
 	};
 }
 
-async function buildSysrootDirectory(wasmRustcRoot, toolchainRoot, targetTriple, patchTargetMetadata) {
+async function buildSysrootDirectory(
+	wasmRustcRoot,
+	toolchainRoot,
+	targetTriple,
+	patchTargetMetadata
+) {
 	const hostRustlib = await dirFromFs(path.join(wasmRustcRoot, 'lib', 'rustlib'));
 	let patchedMetadata = null;
 	let targetRoot = path.join(toolchainRoot, 'lib', 'rustlib', targetTriple);
@@ -195,16 +204,7 @@ async function buildSysrootDirectory(wasmRustcRoot, toolchainRoot, targetTriple,
 	const targetDirectory = await dirFromFs(targetRoot);
 	hostRustlib.contents.set(targetTriple, targetDirectory);
 	const sysrootDir = new Directory(
-		new Map([
-			[
-				'lib',
-				new Directory(
-					new Map([
-						['rustlib', hostRustlib]
-					])
-				)
-			]
-		])
+		new Map([['lib', new Directory(new Map([['rustlib', hostRustlib]]))]])
 	);
 	return { sysrootDir, patchedMetadata };
 }
@@ -267,8 +267,7 @@ async function instantiateThreadContext({
 			`[wasm-rust-thread] context:start nodeFs=${USE_NODE_FS ? '1' : '0'} hostRoot=${hostRootPath ?? 'null'}`
 		);
 	}
-	const module =
-		rustcModule ?? (await WebAssembly.compile(await fs.readFile(rustcWasmPath)));
+	const module = rustcModule ?? (await WebAssembly.compile(await fs.readFile(rustcWasmPath)));
 	if (THREAD_DEBUG) {
 		console.error('[wasm-rust-thread] context:module-ready');
 	}
@@ -292,9 +291,7 @@ async function instantiateThreadContext({
 					patchTargetMetadata
 				);
 				const workDir = new Directory(
-					new Map([
-						['main.rs', new File(new TextEncoder().encode(sampleProgram))]
-					])
+					new Map([['main.rs', new File(new TextEncoder().encode(sampleProgram))]])
 				);
 				const rootDir = new Directory(
 					new Map([
@@ -525,14 +522,14 @@ async function runThreadWorkerEntry() {
 		}
 		parentPort?.postMessage({ ok: true, threadId });
 	} catch (error) {
-			await writeThreadLog('fail', {
-				name: error?.name || 'Error',
-				message: error?.message || String(error),
-				stack: String(error?.stack || '')
-					.split('\n')
-					.slice(0, 12)
-					.join('\n')
-			});
+		await writeThreadLog('fail', {
+			name: error?.name || 'Error',
+			message: error?.message || String(error),
+			stack: String(error?.stack || '')
+				.split('\n')
+				.slice(0, 12)
+				.join('\n')
+		});
 		if (THREAD_DEBUG) {
 			console.error(`[wasm-rust-thread] fail ${threadId} ${error?.message || String(error)}`);
 		}
@@ -588,8 +585,7 @@ async function instantiateRustc({
 				targetTriple,
 				patchTargetMetadata,
 				sampleProgram,
-				threadCounterBuffer
-				,
+				threadCounterBuffer,
 				hostRootPath,
 				workHostPath
 			})
@@ -640,9 +636,7 @@ async function runProbe({
 		const workDir = USE_NODE_FS
 			? null
 			: new Directory(
-					new Map([
-						['main.rs', new File(new TextEncoder().encode(SAMPLE_PROGRAM))]
-					])
+					new Map([['main.rs', new File(new TextEncoder().encode(SAMPLE_PROGRAM))]])
 				);
 		const stdin = new OpenFile(new File(new Uint8Array(), { readonly: true }));
 		const stdout = new CaptureFd(teeStdio ? process.stdout : null);

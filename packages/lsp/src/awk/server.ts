@@ -1,7 +1,4 @@
-import {
-	resolveAwkLanguageServerBaseUrl,
-	resolveAwkLanguageServerWorkerUrl
-} from '../runtime.js';
+import { resolveAwkLanguageServerBaseUrl, resolveAwkLanguageServerWorkerUrl } from '../runtime.js';
 import type { EditorLanguageServerOptions, EditorLanguageServerRuntimeOptions } from '../types.js';
 import { createWorkerLanguageServerClient, type LanguageServerStatus } from '../worker-client.js';
 

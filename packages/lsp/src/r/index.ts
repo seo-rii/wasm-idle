@@ -1,4 +1,8 @@
-export { getRLanguageServer, type RLanguageServerConfig, type RLanguageServerOptions } from './server.js';
+export {
+	getRLanguageServer,
+	type RLanguageServerConfig,
+	type RLanguageServerOptions
+} from './server.js';
 export {
 	createRWorkerService,
 	type LoadRSyntaxParser,

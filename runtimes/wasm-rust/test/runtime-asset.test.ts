@@ -49,7 +49,9 @@ describe('runtime asset fetch fallback', () => {
 						}
 					})
 			)
-		).rejects.toThrow(/stale or wrong wasm-rust bundle|rewrote a missing nested asset request/i);
+		).rejects.toThrow(
+			/stale or wrong wasm-rust bundle|rewrote a missing nested asset request/i
+		);
 	});
 
 	it('accepts already-decoded gzip assets without trying to decompress them again', async () => {

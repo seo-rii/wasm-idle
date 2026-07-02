@@ -71,4 +71,3 @@ await writeFile(
 );
 
 process.stdout.write(`${path.join(options.outDir, 'browser-toolchain-manifest.v1.json')}\n`);
-

@@ -45,7 +45,7 @@ describe('ci script contract', () => {
 		expect(fastScript).toContain('test/build-output.test.ts');
 		expect(fastScript).toContain('test/runtime-compression-config.test.ts');
 		expect(fastScript).toContain('test/rustc-runtime.test.ts');
-		expect(workflow).toContain('gh release download --pattern \'wasm-rust-*.tgz\'');
+		expect(workflow).toContain("gh release download --pattern 'wasm-rust-*.tgz'");
 		expect(workflow).toContain("WASM_RUST_ALLOW_PREBUILT_RUNTIME_FALLBACK: '1'");
 		expect(packageJson.scripts?.['test:ci:browser:clean-room']).toBe(
 			'pnpm run build:js && pnpm run probe:browser-harness && pnpm run test:browser:vitest && pnpm run test:browser:playwright'

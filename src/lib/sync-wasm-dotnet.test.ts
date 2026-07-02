@@ -20,7 +20,9 @@ async function writeFixtureFile(baseDir: string, relativePath: string, contents:
 
 describe('syncWasmDotnetDist', () => {
 	afterEach(async () => {
-		await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+		await Promise.all(
+			tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true }))
+		);
 	});
 
 	it('copies the built wasm-dotnet bundle into the target directory', async () => {
@@ -39,16 +41,18 @@ describe('syncWasmDotnetDist', () => {
 
 		const result = await syncWasmDotnetDist({ sourceDir, targetDir, versionModulePath });
 
-		await expect(readFile(path.join(targetDir, 'index.js'), 'utf8')).resolves.toContain('dotnet');
+		await expect(readFile(path.join(targetDir, 'index.js'), 'utf8')).resolves.toContain(
+			'dotnet'
+		);
 		await expect(readFile(path.join(targetDir, 'compiler.js'), 'utf8')).resolves.toContain(
 			'compile = true'
 		);
-		await expect(readFile(path.join(targetDir, 'runtime/blazor.boot.json'), 'utf8')).resolves.toContain(
-			'"resources"'
-		);
-		await expect(readFile(path.join(targetDir, 'runtime/dotnet.js'), 'utf8')).resolves.toContain(
-			'dotnet'
-		);
+		await expect(
+			readFile(path.join(targetDir, 'runtime/blazor.boot.json'), 'utf8')
+		).resolves.toContain('"resources"');
+		await expect(
+			readFile(path.join(targetDir, 'runtime/dotnet.js'), 'utf8')
+		).resolves.toContain('dotnet');
 		await expect(
 			readFile(path.join(targetDir, 'runtime/ref/manifest.json'), 'utf8')
 		).resolves.toContain('"assemblies"');
@@ -72,9 +76,9 @@ describe('syncWasmDotnetDist', () => {
 		await writeFixtureFile(sourceDir, 'index.js', 'export default "dotnet";\n');
 		await writeFixtureFile(targetDir, 'existing-runtime.txt', 'keep me');
 
-		await expect(syncWasmDotnetDist({ sourceDir, targetDir, versionModulePath })).rejects.toThrow(
-			'wasm-dotnet runtime directory was not found'
-		);
+		await expect(
+			syncWasmDotnetDist({ sourceDir, targetDir, versionModulePath })
+		).rejects.toThrow('wasm-dotnet runtime directory was not found');
 		await expect(readFile(path.join(targetDir, 'existing-runtime.txt'), 'utf8')).resolves.toBe(
 			'keep me'
 		);

@@ -151,7 +151,10 @@ describe('WAT sandbox', () => {
 		const sandbox = new Wat();
 		await sandbox.load('/absproxy/5173');
 
-		const runPromise = sandbox.run('(module (import "env" "readByte" (func $readByte (result i32))))', false);
+		const runPromise = sandbox.run(
+			'(module (import "env" "readByte" (func $readByte (result i32))))',
+			false
+		);
 		await vi.dynamicImportSettled();
 		const worker = workerInstances[0];
 		const runMessage = worker.postMessage.mock.calls.at(-1)?.[0];
@@ -169,7 +172,10 @@ describe('WAT sandbox', () => {
 		const sandbox = new Wat();
 		await sandbox.load('/absproxy/5173');
 
-		const runPromise = sandbox.run('(module (import "env" "readByte" (func $readByte (result i32))))', false);
+		const runPromise = sandbox.run(
+			'(module (import "env" "readByte" (func $readByte (result i32))))',
+			false
+		);
 		await vi.dynamicImportSettled();
 		const worker = workerInstances[0];
 		const runMessage = worker.postMessage.mock.calls.at(-1)?.[0];

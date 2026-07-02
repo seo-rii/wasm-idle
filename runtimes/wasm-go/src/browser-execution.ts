@@ -10,7 +10,11 @@ import {
 
 import { resolveVersionedAssetUrl } from './asset-url.js';
 import { fetchRuntimeAssetBytes } from './runtime-asset.js';
-import { loadRuntimeManifest, normalizeRuntimeManifest, resolveTargetManifest } from './runtime-manifest.js';
+import {
+	loadRuntimeManifest,
+	normalizeRuntimeManifest,
+	resolveTargetManifest
+} from './runtime-manifest.js';
 import type {
 	BrowserGoArtifact,
 	BrowserGoSourceFile,
@@ -31,7 +35,9 @@ export interface BrowserExecutionOptions {
 	stdin?: () => string | Uint8Array | ArrayBuffer | null;
 	stdout?: (chunk: string) => void;
 	stderr?: (chunk: string) => void;
-	files?: Array<BrowserGoSourceFile | { path: string; contents: string | Uint8Array | ArrayBuffer }>;
+	files?: Array<
+		BrowserGoSourceFile | { path: string; contents: string | Uint8Array | ArrayBuffer }
+	>;
 	manifest?: RuntimeManifestV1 | NormalizedRuntimeManifest;
 	runtimeManifestUrl?: string | URL;
 	runtimeBaseUrl?: string | URL;
@@ -64,7 +70,9 @@ function createRuntimeFetch(): typeof fetch {
 			return new Response(await readFile(fileURLToPath(url)));
 		} catch (error) {
 			const code =
-				error && typeof error === 'object' && 'code' in error ? (error as { code?: string }).code : '';
+				error && typeof error === 'object' && 'code' in error
+					? (error as { code?: string }).code
+					: '';
 			return new Response(null, {
 				status: code === 'ENOENT' ? 404 : 500
 			});
@@ -175,7 +183,9 @@ export async function executeBrowserGoArtifact(
 			: await loadRuntimeManifest(runtimeManifestUrl, fetchImpl);
 		const target = resolveTargetManifest(manifest, artifact.target);
 		if (target.execution.kind !== 'js-wasm-exec' || !target.execution.wasmExecJs) {
-			throw new Error(`wasm-go target ${artifact.target} is not configured for wasm_exec.js execution.`);
+			throw new Error(
+				`wasm-go target ${artifact.target} is not configured for wasm_exec.js execution.`
+			);
 		}
 		const wasmExecSource = new TextDecoder().decode(
 			toStandaloneBytes(
@@ -243,7 +253,12 @@ export async function executeBrowserGoArtifact(
 			chmod(_path: string, _mode: number, callback: (error: Error | null) => void) {
 				callback(enosys());
 			},
-			chown(_path: string, _uid: number, _gid: number, callback: (error: Error | null) => void) {
+			chown(
+				_path: string,
+				_uid: number,
+				_gid: number,
+				callback: (error: Error | null) => void
+			) {
 				callback(enosys());
 			},
 			close(_fd: number, callback: (error: Error | null) => void) {
@@ -252,7 +267,12 @@ export async function executeBrowserGoArtifact(
 			fchmod(_fd: number, _mode: number, callback: (error: Error | null) => void) {
 				callback(enosys());
 			},
-			fchown(_fd: number, _uid: number, _gid: number, callback: (error: Error | null) => void) {
+			fchown(
+				_fd: number,
+				_uid: number,
+				_gid: number,
+				callback: (error: Error | null) => void
+			) {
 				callback(enosys());
 			},
 			fstat(_fd: number, callback: (error: Error | null) => void) {
@@ -264,7 +284,12 @@ export async function executeBrowserGoArtifact(
 			ftruncate(_fd: number, _length: number, callback: (error: Error | null) => void) {
 				callback(enosys());
 			},
-			lchown(_path: string, _uid: number, _gid: number, callback: (error: Error | null) => void) {
+			lchown(
+				_path: string,
+				_uid: number,
+				_gid: number,
+				callback: (error: Error | null) => void
+			) {
 				callback(enosys());
 			},
 			link(_path: string, _link: string, callback: (error: Error | null) => void) {
@@ -276,7 +301,12 @@ export async function executeBrowserGoArtifact(
 			mkdir(_path: string, _perm: number, callback: (error: Error | null) => void) {
 				callback(enosys());
 			},
-			open(_path: string, _flags: number, _mode: number, callback: (error: Error | null) => void) {
+			open(
+				_path: string,
+				_flags: number,
+				_mode: number,
+				callback: (error: Error | null) => void
+			) {
 				callback(enosys());
 			},
 			read(
@@ -366,7 +396,9 @@ export async function executeBrowserGoArtifact(
 				go.importObject
 			)) as WebAssembly.Instance | WebAssembly.WebAssemblyInstantiatedSource;
 			await go.run(
-				('instance' in instantiated ? instantiated.instance : instantiated) as WebAssembly.Instance
+				('instance' in instantiated
+					? instantiated.instance
+					: instantiated) as WebAssembly.Instance
 			);
 		} finally {
 			if (previousGo === undefined) {
@@ -392,7 +424,9 @@ export async function executeBrowserGoArtifact(
 			artifact.target !== 'wasip3/wasm') ||
 		artifact.format !== 'wasi-core-wasm'
 	) {
-		throw new Error('wasm-go currently executes only wasi core-wasm or js/wasm artifacts in-process.');
+		throw new Error(
+			'wasm-go currently executes only wasi core-wasm or js/wasm artifacts in-process.'
+		);
 	}
 	const host = createBrowserWasiHost(options);
 	const wasiInstance = new WASI(host.args, host.envEntries, host.fds, { debug: false });
@@ -404,12 +438,14 @@ export async function executeBrowserGoArtifact(
 	const instance = await WebAssembly.instantiate(module, {
 		wasi_snapshot_preview1: wasiInstance.wasiImport
 	});
-	const exitCode = wasiInstance.start(instance as unknown as {
-		exports: {
-			memory: WebAssembly.Memory;
-			_start: () => unknown;
-		};
-	});
+	const exitCode = wasiInstance.start(
+		instance as unknown as {
+			exports: {
+				memory: WebAssembly.Memory;
+				_start: () => unknown;
+			};
+		}
+	);
 	return {
 		exitCode,
 		stdout: host.stdout.getText(),

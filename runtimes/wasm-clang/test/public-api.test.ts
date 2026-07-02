@@ -253,14 +253,14 @@ describe('public wasm-clang API contract', () => {
 		]);
 	});
 
-		it('reuses the provided compiled module and artifact file name during execution', async () => {
-			const compileSpy = vi.spyOn(WebAssembly, 'compile');
-			const instantiateSpy = vi.spyOn(WebAssembly, 'instantiate').mockResolvedValue({
-				exports: {
-					memory: new WebAssembly.Memory({ initial: 1 }),
-					_start() {}
-				}
-			} as unknown as WebAssembly.Instance);
+	it('reuses the provided compiled module and artifact file name during execution', async () => {
+		const compileSpy = vi.spyOn(WebAssembly, 'compile');
+		const instantiateSpy = vi.spyOn(WebAssembly, 'instantiate').mockResolvedValue({
+			exports: {
+				memory: new WebAssembly.Memory({ initial: 1 }),
+				_start() {}
+			}
+		} as unknown as WebAssembly.Instance);
 		const module = new WebAssembly.Module(wasmFixture.bytes);
 
 		const result = await executeBrowserClangArtifact({

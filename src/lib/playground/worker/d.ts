@@ -127,7 +127,9 @@ self.onmessage = async (event: { data: any }) => {
 			if (!result.success) {
 				throw new Error(
 					result.stderr ||
-						result.diagnostics?.map((diagnostic: any) => diagnostic.message).join('\n') ||
+						result.diagnostics
+							?.map((diagnostic: any) => diagnostic.message)
+							.join('\n') ||
 						'D compilation failed'
 				);
 			}
@@ -164,7 +166,9 @@ self.onmessage = async (event: { data: any }) => {
 					}
 					return chunk;
 				}
-				const chunk = waitForBufferedStdin(stdinBufferD!, () => postMessage({ buffer: true }));
+				const chunk = waitForBufferedStdin(stdinBufferD!, () =>
+					postMessage({ buffer: true })
+				);
 				if (chunk == null) {
 					if (log) console.log('[wasm-idle:d-stdin] read(bytes=0, eof=true)');
 					return null;

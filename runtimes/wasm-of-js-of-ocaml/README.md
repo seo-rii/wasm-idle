@@ -103,10 +103,10 @@ if (!result.success) {
 
 `wasmBinaryenMode` controls the browser `wasm_of_ocaml` Binaryen bridge:
 
-| Mode | Behavior | Use Case |
-| --- | --- | --- |
-| `fast` | Default. Runs the required static `wasm-merge` bridge and skips high-memory `wasm-metadce` / `wasm-opt` passes by copying the wasm through. | Browser stability and lower memory use. |
-| `full` | Runs the static local `wasm-merge`, `wasm-metadce`, and `wasm-opt` browser assets. | Smaller optimized wasm output when memory headroom is available. |
+| Mode   | Behavior                                                                                                                                    | Use Case                                                         |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `fast` | Default. Runs the required static `wasm-merge` bridge and skips high-memory `wasm-metadce` / `wasm-opt` passes by copying the wasm through. | Browser stability and lower memory use.                          |
+| `full` | Runs the static local `wasm-merge`, `wasm-metadce`, and `wasm-opt` browser assets.                                                          | Smaller optimized wasm output when memory headroom is available. |
 
 ## Repository Layout
 

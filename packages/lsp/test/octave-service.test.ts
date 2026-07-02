@@ -30,7 +30,8 @@ describe('createOctaveWorkerService', () => {
 			{
 				baseUrl: 'https://static.example.com/wasm-octave/runtime/',
 				workerUrl: 'https://static.example.com/wasm-octave/runner-worker.js',
-				manifestUrl: 'https://static.example.com/wasm-octave/runtime/runtime-manifest.v1.json'
+				manifestUrl:
+					'https://static.example.com/wasm-octave/runtime/runtime-manifest.v1.json'
 			},
 			context
 		);
@@ -59,7 +60,8 @@ describe('createOctaveWorkerService', () => {
 				},
 				severity: 1,
 				source: 'octave',
-				message: 'error: parse error near line 2 of file /workspace/main.m\n\n  syntax error'
+				message:
+					'error: parse error near line 2 of file /workspace/main.m\n\n  syntax error'
 			}
 		]);
 		expect(completions?.items.some((item) => item.label === 'function')).toBe(true);

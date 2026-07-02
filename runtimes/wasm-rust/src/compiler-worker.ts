@@ -30,10 +30,7 @@ export function validateRuntimeAssetBytes(assetPath: string, bytes: Uint8Array) 
 	) {
 		return;
 	}
-	const preview = new TextDecoder()
-		.decode(bytes.slice(0, 64))
-		.replaceAll(/\s+/g, ' ')
-		.trim();
+	const preview = new TextDecoder().decode(bytes.slice(0, 64)).replaceAll(/\s+/g, ' ').trim();
 	throw new Error(
 		`invalid wasm-rust runtime asset ${assetPath}: expected an ar archive but got ${JSON.stringify(preview || 'non-archive bytes')}. This usually means the browser loaded a stale or wrong wasm-rust bundle; hard refresh and resync the runtime assets.`
 	);
@@ -103,22 +100,17 @@ async function compileRustInWorker(request: CompileWorkerRequest) {
 		request.manifest.compiler.rustcWasm
 	);
 	const sysrootPack = target.sysrootPack;
-	const sysrootAssetTotal =
-		sysrootPack?.fileCount || target.sysrootFiles?.length || 0;
+	const sysrootAssetTotal = sysrootPack?.fileCount || target.sysrootFiles?.length || 0;
 	const packedSysrootEntriesPromise = sysrootPack
-		? loadRuntimePackEntries(
-				request.runtimeBaseUrl,
-				sysrootPack,
-				fetch,
-				(progress) =>
-					emitCompileWorkerProgress(request, {
-						stage: 'fetch-sysroot',
-						completed: 0,
-						total: sysrootAssetTotal,
-						message: `fetching ${sysrootAssetTotal} sysroot assets from pack`,
-						bytesCompleted: progress.loaded,
-						bytesTotal: progress.total ?? sysrootPack.totalBytes
-					})
+		? loadRuntimePackEntries(request.runtimeBaseUrl, sysrootPack, fetch, (progress) =>
+				emitCompileWorkerProgress(request, {
+					stage: 'fetch-sysroot',
+					completed: 0,
+					total: sysrootAssetTotal,
+					message: `fetching ${sysrootAssetTotal} sysroot assets from pack`,
+					bytesCompleted: progress.loaded,
+					bytesTotal: progress.total ?? sysrootPack.totalBytes
+				})
 			)
 		: null;
 	emitCompileWorkerProgress(request, {
@@ -154,9 +146,7 @@ async function compileRustInWorker(request: CompileWorkerRequest) {
 		bytesCompleted: rustcBytes.byteLength,
 		bytesTotal: rustcBytes.byteLength
 	});
-	const rustcModulePromise = WebAssembly.compile(
-		new Uint8Array(rustcBytes).buffer
-	);
+	const rustcModulePromise = WebAssembly.compile(new Uint8Array(rustcBytes).buffer);
 	let fetchedSysrootFiles = 0;
 	let fetchedSysrootBytes = 0;
 	let rustcModule: WebAssembly.Module;
@@ -180,14 +170,14 @@ async function compileRustInWorker(request: CompileWorkerRequest) {
 			new Uint8Array(sharedBuffer).set(entry.bytes);
 			fetchedSysrootFiles += 1;
 			fetchedSysrootBytes += entry.bytes.byteLength;
-				emitCompileWorkerProgress(request, {
-					stage: 'fetch-sysroot',
-					completed: fetchedSysrootFiles,
-					total: sysrootAssetTotal,
-					message: `fetched sysroot asset ${entry.runtimePath}`,
-					bytesCompleted: fetchedSysrootBytes,
-					...(target.sysrootPack ? { bytesTotal: target.sysrootPack.totalBytes } : {})
-				});
+			emitCompileWorkerProgress(request, {
+				stage: 'fetch-sysroot',
+				completed: fetchedSysrootFiles,
+				total: sysrootAssetTotal,
+				message: `fetched sysroot asset ${entry.runtimePath}`,
+				bytesCompleted: fetchedSysrootBytes,
+				...(target.sysrootPack ? { bytesTotal: target.sysrootPack.totalBytes } : {})
+			});
 			if (
 				request.request.log &&
 				(fetchedSysrootFiles === 1 ||
@@ -322,30 +312,34 @@ async function compileRustInWorker(request: CompileWorkerRequest) {
 				threadWorkerUrl.searchParams.set('log', '1');
 			}
 			const worker = createModuleWorker(threadWorkerUrl);
-			worker.addEventListener('message', (event: MessageEvent<RustcThreadWorkerLogMessage>) => {
-				if (event.data?.type !== 'thread-log') {
-					return;
-				}
-				if (event.data.phase === 'pool-error' || event.data.phase === 'error') {
-					if (request.request.log) {
-						emitCompileWorkerLog(
-							request,
-							`[wasm-rust:compiler-worker] thread=${event.data.threadId} phase=${event.data.phase}${event.data.detail ? ` detail=${event.data.detail}` : ''}`
-						);
+			worker.addEventListener(
+				'message',
+				(event: MessageEvent<RustcThreadWorkerLogMessage>) => {
+					if (event.data?.type !== 'thread-log') {
+						return;
 					}
-					reportThreadFailure(
-						event.data.detail || `rustc browser helper thread ${event.data.threadId} failed`
+					if (event.data.phase === 'pool-error' || event.data.phase === 'error') {
+						if (request.request.log) {
+							emitCompileWorkerLog(
+								request,
+								`[wasm-rust:compiler-worker] thread=${event.data.threadId} phase=${event.data.phase}${event.data.detail ? ` detail=${event.data.detail}` : ''}`
+							);
+						}
+						reportThreadFailure(
+							event.data.detail ||
+								`rustc browser helper thread ${event.data.threadId} failed`
+						);
+						return;
+					}
+					if (!request.request.log) {
+						return;
+					}
+					emitCompileWorkerLog(
+						request,
+						`[wasm-rust:compiler-worker] thread=${event.data.threadId} phase=${event.data.phase}${event.data.detail ? ` detail=${event.data.detail}` : ''}`
 					);
-					return;
 				}
-				if (!request.request.log) {
-					return;
-				}
-				emitCompileWorkerLog(
-					request,
-					`[wasm-rust:compiler-worker] thread=${event.data.threadId} phase=${event.data.phase}${event.data.detail ? ` detail=${event.data.detail}` : ''}`
-				);
-			});
+			);
 			worker.addEventListener('error', (event) => {
 				emitCompileWorkerLog(
 					request,
@@ -360,7 +354,9 @@ async function compileRustInWorker(request: CompileWorkerRequest) {
 					request,
 					`[wasm-rust:compiler-worker] pool=${slotIndex} worker messageerror during startup`
 				);
-				reportThreadFailure(`rustc thread pool slot ${slotIndex} messageerror during startup`);
+				reportThreadFailure(
+					`rustc thread pool slot ${slotIndex} messageerror during startup`
+				);
 				Atomics.store(slotState, 0, -1);
 				Atomics.notify(slotState, 0);
 			});
@@ -388,7 +384,10 @@ async function compileRustInWorker(request: CompileWorkerRequest) {
 			if (Atomics.load(slotState, 0) < 0) {
 				throw new Error(`rustc thread pool slot ${slotIndex} failed to initialize`);
 			}
-			emitCompileWorkerLog(request, `[wasm-rust:compiler-worker] pool=${slotIndex} initialized`);
+			emitCompileWorkerLog(
+				request,
+				`[wasm-rust:compiler-worker] pool=${slotIndex} initialized`
+			);
 			initializedThreadPoolSlots += 1;
 			emitCompileWorkerProgress(request, {
 				stage: 'init-thread-pool',
@@ -452,7 +451,8 @@ async function compileRustInWorker(request: CompileWorkerRequest) {
 			failureKind
 				? ({
 						type: 'error',
-						message: combinedStderr || 'browser rustc failed before producing LLVM bitcode',
+						message:
+							combinedStderr || 'browser rustc failed before producing LLVM bitcode',
 						failureKind,
 						exitCode,
 						stdout: stdout.getText(),
@@ -504,17 +504,17 @@ if (typeof globalThis.addEventListener === 'function') {
 		if (event.data?.type !== 'compile') {
 			return;
 		}
-	void compileRustInWorker(event.data).catch((error) => {
-		emitCompileWorkerLog(
-			event.data,
-			`[wasm-rust:compiler-worker] unhandled failure ${error instanceof Error ? error.message : String(error)}`
-		);
-		const message = error instanceof Error ? error.message : String(error);
-		const failureKind = classifyRetryableFailureKind(message);
-		postMessage({
-			type: 'error',
-			message,
-			...(failureKind ? { failureKind } : {})
+		void compileRustInWorker(event.data).catch((error) => {
+			emitCompileWorkerLog(
+				event.data,
+				`[wasm-rust:compiler-worker] unhandled failure ${error instanceof Error ? error.message : String(error)}`
+			);
+			const message = error instanceof Error ? error.message : String(error);
+			const failureKind = classifyRetryableFailureKind(message);
+			postMessage({
+				type: 'error',
+				message,
+				...(failureKind ? { failureKind } : {})
 			} satisfies CompileWorkerMessage);
 		});
 	});

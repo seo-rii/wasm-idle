@@ -248,11 +248,14 @@ export function createDotnetCompiler(
 					loadDotnetCompilerRuntime({
 						...options,
 						...runtimeOptions,
-						diagnosticTracing: Boolean(options.diagnosticTracing || runtimeOptions.diagnosticTracing)
+						diagnosticTracing: Boolean(
+							options.diagnosticTracing || runtimeOptions.diagnosticTracing
+						)
 					}),
-				loadReferences: options.dotnetModule || options.loadReferences === false
-					? async () => []
-					: (language) => loadDotnetReferenceAssemblies(options, language)
+				loadReferences:
+					options.dotnetModule || options.loadReferences === false
+						? async () => []
+						: (language) => loadDotnetReferenceAssemblies(options, language)
 			});
 		}
 	};

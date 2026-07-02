@@ -400,7 +400,8 @@ function createFsModule(options: BrowserTypeScriptExecutionOptions) {
 		const normalized = normalizePath(rawPath);
 		if (writes.has(normalized)) return writes.get(normalized)!;
 		if (files.has(normalized)) return files.get(normalized)!;
-		if (!normalized.startsWith('/') && files.has(`/${normalized}`)) return files.get(`/${normalized}`)!;
+		if (!normalized.startsWith('/') && files.has(`/${normalized}`))
+			return files.get(`/${normalized}`)!;
 		throw makeNodeError('ENOENT', 'open', rawPath);
 	}
 
@@ -424,7 +425,10 @@ function createFsModule(options: BrowserTypeScriptExecutionOptions) {
 		const rawPath = toFileString(pathLike);
 		const normalized = normalizePath(rawPath);
 		const encoding = resolveEncoding(encodingOption) || 'utf8';
-		writes.set(normalized, typeof data === 'string' ? Buffer.from(data, encoding).toString() : data);
+		writes.set(
+			normalized,
+			typeof data === 'string' ? Buffer.from(data, encoding).toString() : data
+		);
 	}
 
 	function existsSync(pathLike: string | number | URL) {

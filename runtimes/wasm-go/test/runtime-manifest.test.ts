@@ -93,8 +93,9 @@ describe('runtime manifest', () => {
 	});
 
 	it('loads the manifest through fetch', async () => {
-		const loaded = await loadRuntimeManifest('https://example.invalid/runtime-manifest.v1.json', async () =>
-			new Response(JSON.stringify(createRuntimeManifest()))
+		const loaded = await loadRuntimeManifest(
+			'https://example.invalid/runtime-manifest.v1.json',
+			async () => new Response(JSON.stringify(createRuntimeManifest()))
 		);
 
 		expect(loaded.defaultTarget).toBe('wasip1/wasm');

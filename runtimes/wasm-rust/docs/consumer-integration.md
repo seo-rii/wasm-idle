@@ -95,15 +95,15 @@ The returned artifact is target-aware and should be executed with the matching h
 Recommended behavior:
 
 - for `artifact.targetTriple === 'wasm32-wasip1'`
-  - provide `wasi_snapshot_preview1`
-  - use a stricter preview1 WASI host such as `@bjorn3/browser_wasi_shim`
+    - provide `wasi_snapshot_preview1`
+    - use a stricter preview1 WASI host such as `@bjorn3/browser_wasi_shim`
 - for `artifact.targetTriple === 'wasm32-wasip2'`
-  - execute the component through `preview2-shim` plus `jco`-transpiled bindings
+    - execute the component through `preview2-shim` plus `jco`-transpiled bindings
 - for `artifact.targetTriple === 'wasm32-wasip3'`
-  - currently execute it through the same `preview2-shim` plus `jco` transitional component path
-  - this only works while emitted browser imports still stay on WASIp2 interfaces
-  - if upstream starts emitting real preview3 browser imports, the consumer should reject that
-    artifact until a browser-safe preview3 shim exists
+    - currently execute it through the same `preview2-shim` plus `jco` transitional component path
+    - this only works while emitted browser imports still stay on WASIp2 interfaces
+    - if upstream starts emitting real preview3 browser imports, the consumer should reject that
+      artifact until a browser-safe preview3 shim exists
 - treat successful `compile()` as authoritative even if the browser console showed transient internal
   retry warnings before success
 
@@ -127,14 +127,14 @@ Important implications:
   crashes
 - if `compile()` returns `success: true`, the recovered path is considered valid
 - when `log: true` is enabled, compile-time browser-rustc logs are returned in `result.logs`
-  - `result.logRecords` exposes the same lines with preserved `level` metadata
-  - consumers can forward those logs into their terminal before running the final wasm artifact
-  - the browser console is no longer the only place to inspect retry and worker log lines
+    - `result.logRecords` exposes the same lines with preserved `level` metadata
+    - consumers can forward those logs into their terminal before running the final wasm artifact
+    - the browser console is no longer the only place to inspect retry and worker log lines
 - when `onProgress` is provided, progress bar state should come from that callback instead of
   parsing stdout/log text
 - `extendedTimeout: true` is the current public timeout knob
-  - the legacy `prepare: true` alias still works, but it only means "raise the compile timeout
-    floor to 120s"; it does not run a separate prewarm or preparation phase
+    - the legacy `prepare: true` alias still works, but it only means "raise the compile timeout
+      floor to 120s"; it does not run a separate prewarm or preparation phase
 
 ## Stdin behavior
 
@@ -144,9 +144,9 @@ the consumer runtime and by the Rust program itself.
 Two common cases:
 
 - line-based programs using `read_line`, `Scanner`, `>>`, etc.
-  - pressing Enter should be enough
+    - pressing Enter should be enough
 - read-to-end programs using `read_to_string` or equivalent
-  - the consumer should expose an EOF action such as `Ctrl+D` or a button
+    - the consumer should expose an EOF action such as `Ctrl+D` or a button
 
 Concrete callback contract:
 

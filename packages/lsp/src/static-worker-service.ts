@@ -38,10 +38,7 @@ export interface StaticWorkerDiagnosticsOptions<
 	timeoutMessage: string;
 	runDiagnostics?: StaticWorkerDiagnosticRunner<TConfig, TResult>;
 	createMessage: (request: StaticWorkerDiagnosticRequest<TConfig>) => Record<string, unknown>;
-	diagnosticsFromResult: (
-		result: TResult,
-		document: LspDocument
-	) => LspDiagnostic[];
+	diagnosticsFromResult: (result: TResult, document: LspDocument) => LspDiagnostic[];
 	validateConfig?: (config: TConfig) => string | null | undefined;
 	cacheKeyParts?: (config: TConfig) => readonly string[];
 	activePathFromDocument?: (document: LspDocument) => string;

@@ -4,6 +4,10 @@ export type WasmIdleLanguageId =
 	| 'PYPY3'
 	| 'C'
 	| 'CPP'
+	| 'OBJC'
+	| 'OBJECTIVEC'
+	| 'OBJECTIVE_C'
+	| 'OBJECTIVE-C'
 	| 'JAVA'
 	| 'RUST'
 	| 'GO'
@@ -73,6 +77,7 @@ export const supportedLanguageIds = [
 	'PYPY3',
 	'C',
 	'CPP',
+	'OBJC',
 	'JAVA',
 	'RUST',
 	'GO',
@@ -114,6 +119,7 @@ export const supportedLanguageIds = [
 ] as const;
 
 export const DEFAULT_DEFERRED_PROGRESS_LANGUAGES = new Set<string>([
+	'OBJC',
 	'RUST',
 	'GO',
 	'D',
@@ -157,6 +163,9 @@ const LANGUAGE_ALIASES: Record<string, string> = {
 	'F#': 'FSHARP',
 	VB: 'VBNET',
 	VISUALBASIC: 'VBNET',
+	OBJECTIVEC: 'OBJC',
+	OBJECTIVE_C: 'OBJC',
+	'OBJECTIVE-C': 'OBJC',
 	ERL: 'ERLANG',
 	SWIPL: 'PROLOG',
 	SWI: 'PROLOG',

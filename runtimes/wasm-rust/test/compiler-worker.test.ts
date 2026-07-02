@@ -20,7 +20,10 @@ describe('compiler-worker runtime asset validation', () => {
 
 	it('ignores non-archive runtime assets', () => {
 		expect(() =>
-			validateRuntimeAssetBytes('rustc/rustc.wasm.gz', new Uint8Array([0x00, 0x61, 0x73, 0x6d]))
+			validateRuntimeAssetBytes(
+				'rustc/rustc.wasm.gz',
+				new Uint8Array([0x00, 0x61, 0x73, 0x6d])
+			)
 		).not.toThrow();
 	});
 
@@ -43,7 +46,9 @@ describe('compiler-worker runtime asset validation', () => {
 
 		await expect(
 			fetchRuntimeAssetBytes(
-				new URL('https://example.test/wasm-rust/runtime/sysroot/lib/rustlib/wasm32-wasip1/lib/libcore.rlib'),
+				new URL(
+					'https://example.test/wasm-rust/runtime/sysroot/lib/rustlib/wasm32-wasip1/lib/libcore.rlib'
+				),
 				'wasm-rust sysroot asset sysroot/lib/rustlib/wasm32-wasip1/lib/libcore.rlib'
 			)
 		).rejects.toThrowError(
@@ -55,10 +60,11 @@ describe('compiler-worker runtime asset validation', () => {
 		const rustcBytes = new Uint8Array([0x00, 0x61, 0x73, 0x6d, 0x01]);
 		vi.stubGlobal(
 			'fetch',
-			vi.fn(async () =>
-				new Response(gzipSync(rustcBytes), {
-					status: 200
-				})
+			vi.fn(
+				async () =>
+					new Response(gzipSync(rustcBytes), {
+						status: 200
+					})
 			)
 		);
 

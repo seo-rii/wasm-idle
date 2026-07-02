@@ -201,8 +201,7 @@ export function createRWorkerService(
 		},
 		documentSymbols(document) {
 			const symbols = [];
-			const pattern =
-				/^\s*([A-Za-z.][A-Za-z0-9._]*)\s*(?:<-|=)\s*function\s*\(/gmu;
+			const pattern = /^\s*([A-Za-z.][A-Za-z0-9._]*)\s*(?:<-|=)\s*function\s*\(/gmu;
 			for (const match of document.text.matchAll(pattern)) {
 				const offset = match.index || 0;
 				const start = positionAt(document.text, offset);

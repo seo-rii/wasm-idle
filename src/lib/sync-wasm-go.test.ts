@@ -20,7 +20,9 @@ async function writeFixtureFile(baseDir: string, relativePath: string, contents:
 
 describe('syncWasmGoDist', () => {
 	afterEach(async () => {
-		await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+		await Promise.all(
+			tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true }))
+		);
 	});
 
 	it('copies the built wasm-go bundle into the target directory', async () => {
@@ -40,12 +42,20 @@ describe('syncWasmGoDist', () => {
 			'vendor/browser_wasi_shim/index.js',
 			'export const WASI = class WASI {};\n'
 		);
-		await writeFixtureFile(sourceDir, 'runtime/runtime-manifest.v1.json', '{"manifestVersion":1}\n');
+		await writeFixtureFile(
+			sourceDir,
+			'runtime/runtime-manifest.v1.json',
+			'{"manifestVersion":1}\n'
+		);
 		await writeFixtureFile(sourceDir, 'runtime/runtime-build.json', '{"goVersion":"1.26.1"}\n');
 		await writeFixtureFile(sourceDir, 'runtime/tools/compile.wasm.gz', 'gzip-compile');
 		await writeFixtureFile(sourceDir, 'runtime/sysroot/js.pack.gz', 'gzip-js-pack');
 		await writeFixtureFile(sourceDir, 'runtime/sysroot/wasip1.index.json.gz', 'gzip-index');
-		await writeFixtureFile(sourceDir, 'runtime/sysroot/wasip1.stdlib-index.json.gz', 'gzip-stdlib');
+		await writeFixtureFile(
+			sourceDir,
+			'runtime/sysroot/wasip1.stdlib-index.json.gz',
+			'gzip-stdlib'
+		);
 		await writeFixtureFile(sourceDir, 'wasi-guest.js', 'export const guest = true;\n');
 		await writeFixtureFile(sourceDir, 'types.d.ts', 'export type Ignored = true;\n');
 		await writeFixtureFile(sourceDir, 'vendor/tsconfig.tsbuildinfo', 'ignored');
@@ -58,7 +68,7 @@ describe('syncWasmGoDist', () => {
 		);
 		await expect(
 			readFile(path.join(targetDir, 'browser-execution.js'), 'utf8')
-		).resolves.toContain("./vendor/browser_wasi_shim/index.js");
+		).resolves.toContain('./vendor/browser_wasi_shim/index.js');
 		await expect(
 			readFile(path.join(targetDir, 'vendor/browser_wasi_shim/index.js'), 'utf8')
 		).resolves.toContain('export const WASI');
@@ -84,7 +94,9 @@ describe('syncWasmGoDist', () => {
 			'export const guest = true;'
 		);
 		await expect(readFile(path.join(targetDir, 'types.d.ts'), 'utf8')).rejects.toThrow();
-		await expect(readFile(path.join(targetDir, 'vendor/tsconfig.tsbuildinfo'), 'utf8')).rejects.toThrow();
+		await expect(
+			readFile(path.join(targetDir, 'vendor/tsconfig.tsbuildinfo'), 'utf8')
+		).rejects.toThrow();
 		await expect(readFile(versionModulePath, 'utf8')).resolves.toContain(
 			`export const WASM_GO_ASSET_VERSION = ${JSON.stringify(result.fingerprint)};`
 		);
@@ -101,7 +113,11 @@ describe('syncWasmGoDist', () => {
 			'vendor/browser_wasi_shim/index.js',
 			'export const WASI = class WASI {};\n'
 		);
-		await writeFixtureFile(sourceDir, 'runtime/runtime-manifest.v1.json', '{"manifestVersion":1}\n');
+		await writeFixtureFile(
+			sourceDir,
+			'runtime/runtime-manifest.v1.json',
+			'{"manifestVersion":1}\n'
+		);
 		await writeFixtureFile(sourceDir, 'runtime/runtime-build.json', '{"goVersion":"1.26.1"}\n');
 		await writeFixtureFile(targetDir, 'stale.txt', 'remove me');
 
@@ -147,7 +163,11 @@ describe('syncWasmGoDist', () => {
 		const versionModulePath = path.join(await makeTempDir(), 'wasmGoVersion.ts');
 
 		await writeFixtureFile(sourceDir, 'index.js', 'export default 1;\n');
-		await writeFixtureFile(sourceDir, 'runtime/runtime-manifest.v1.json', '{"manifestVersion":1}\n');
+		await writeFixtureFile(
+			sourceDir,
+			'runtime/runtime-manifest.v1.json',
+			'{"manifestVersion":1}\n'
+		);
 		await writeFixtureFile(sourceDir, 'runtime/runtime-build.json', '{"goVersion":"1.26.1"}\n');
 
 		await expect(syncWasmGoDist({ sourceDir, targetDir, versionModulePath })).rejects.toThrow(

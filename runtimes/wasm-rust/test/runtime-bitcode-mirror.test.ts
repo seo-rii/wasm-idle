@@ -33,9 +33,7 @@ describe('mirrored bitcode file', () => {
 		);
 		expect(
 			workDirectory.path_link(manifest.compiler.workerBitcodeFile, tempUnlink.inode_obj, true)
-		).toBe(
-			wasi.ERRNO_SUCCESS
-		);
+		).toBe(wasi.ERRNO_SUCCESS);
 
 		const mirrored = readMirroredBitcode(sharedBitcodeBuffer);
 		expect(mirrored.overflowed).toBe(false);
@@ -108,9 +106,7 @@ describe('mirrored bitcode file', () => {
 		);
 		expect(
 			workDirectory.path_link(manifest.compiler.workerBitcodeFile, tempUnlink.inode_obj, true)
-		).toBe(
-			wasi.ERRNO_SUCCESS
-		);
+		).toBe(wasi.ERRNO_SUCCESS);
 
 		const mirrored = readMirroredBitcode(sharedBitcodeBuffer);
 		expect(mirrored.overflowed).toBe(false);

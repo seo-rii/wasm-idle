@@ -77,7 +77,9 @@ describe('createPreview2ImportObject', () => {
 						case '../vendor/preview2-shim/lib/browser/random.js':
 							return randomModule;
 						default:
-							throw new Error(`unexpected preview2 browser module load: ${assetPath}`);
+							throw new Error(
+								`unexpected preview2 browser module load: ${assetPath}`
+							);
 					}
 				}
 			}
@@ -95,20 +97,26 @@ describe('createPreview2ImportObject', () => {
 		expect(cliModule._setStdout).toHaveBeenCalledTimes(1);
 		expect(cliModule._setStderr).toHaveBeenCalledTimes(1);
 		expect(
-			(importObject['wasi:cli/environment'] as {
-				getEnvironment: () => Array<[string, string]>;
-				getArguments: () => string[];
-			}).getEnvironment()
+			(
+				importObject['wasi:cli/environment'] as {
+					getEnvironment: () => Array<[string, string]>;
+					getArguments: () => string[];
+				}
+			).getEnvironment()
 		).toEqual([['FOO', 'bar']]);
 		expect(
-			(importObject['wasi:cli/environment@0.2.3'] as {
-				getArguments: () => string[];
-			}).getArguments()
+			(
+				importObject['wasi:cli/environment@0.2.3'] as {
+					getArguments: () => string[];
+				}
+			).getArguments()
 		).toEqual(['component.wasm', 'preview2-cli']);
 		expect(
-			(importObject['wasi:filesystem/preopens'] as {
-				getDirectories: () => unknown[];
-			}).getDirectories()
+			(
+				importObject['wasi:filesystem/preopens'] as {
+					getDirectories: () => unknown[];
+				}
+			).getDirectories()
 		).toEqual([]);
 		expect(importObject['wasi:filesystem/types']).toBe(filesystemModule.types);
 		expect(importObject['wasi:io/streams']).toBe(ioModule.streams);

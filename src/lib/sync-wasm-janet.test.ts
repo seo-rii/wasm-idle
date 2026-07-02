@@ -94,11 +94,19 @@ describe('syncWasmJanetAssets', () => {
 			'runner-worker.js',
 			'self.onmessage = () => { self.postMessage({ results: true }); };\n'
 		);
-		await writeFixtureFile(targetDir, 'janet.js', 'export default Module; callMain; FS.init;\n');
+		await writeFixtureFile(
+			targetDir,
+			'janet.js',
+			'export default Module; callMain; FS.init;\n'
+		);
 		await writeFixtureFile(targetDir, 'janet.wasm', 'wasm');
 		process.env.WASM_JANET_SOURCE_DIR = path.join(await makeTempDir(), 'missing');
 
-		const result = await syncWasmJanetAssets({ targetDir, workerSourcePath, versionModulePath });
+		const result = await syncWasmJanetAssets({
+			targetDir,
+			workerSourcePath,
+			versionModulePath
+		});
 
 		await expect(readFile(path.join(targetDir, 'janet.wasm'), 'utf8')).resolves.toBe('wasm');
 		await expect(readFile(path.join(targetDir, 'runner-worker.js'), 'utf8')).resolves.toContain(

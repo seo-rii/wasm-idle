@@ -1,73 +1,73 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>wasm-of-js-of-ocaml harness</title>
-    <link rel="icon" href="data:," />
-    <style>
-      :root {
-        color-scheme: light;
-        --bg: #f4f1ea;
-        --ink: #1e1a17;
-        --panel: #fffdf9;
-        --edge: #d6cfc3;
-        --accent: #8b5e34;
-      }
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>wasm-of-js-of-ocaml harness</title>
+		<link rel="icon" href="data:," />
+		<style>
+			:root {
+				color-scheme: light;
+				--bg: #f4f1ea;
+				--ink: #1e1a17;
+				--panel: #fffdf9;
+				--edge: #d6cfc3;
+				--accent: #8b5e34;
+			}
 
-      body {
-        margin: 0;
-        background: radial-gradient(circle at top, #fff7ea 0%, var(--bg) 48%, #ebe2d5 100%);
-        color: var(--ink);
-        font-family: Georgia, "Iowan Old Style", "Times New Roman", serif;
-      }
+			body {
+				margin: 0;
+				background: radial-gradient(circle at top, #fff7ea 0%, var(--bg) 48%, #ebe2d5 100%);
+				color: var(--ink);
+				font-family: Georgia, 'Iowan Old Style', 'Times New Roman', serif;
+			}
 
-      main {
-        max-width: 960px;
-        margin: 0 auto;
-        padding: 48px 20px 72px;
-      }
+			main {
+				max-width: 960px;
+				margin: 0 auto;
+				padding: 48px 20px 72px;
+			}
 
-      h1 {
-        margin: 0 0 12px;
-        font-size: clamp(2rem, 4vw, 3.6rem);
-        line-height: 1;
-      }
+			h1 {
+				margin: 0 0 12px;
+				font-size: clamp(2rem, 4vw, 3.6rem);
+				line-height: 1;
+			}
 
-      p {
-        margin: 0 0 20px;
-        max-width: 56rem;
-      }
+			p {
+				margin: 0 0 20px;
+				max-width: 56rem;
+			}
 
-      .panel {
-        background: color-mix(in srgb, var(--panel) 92%, white 8%);
-        border: 1px solid var(--edge);
-        border-radius: 18px;
-        padding: 20px;
-        box-shadow: 0 18px 50px rgba(50, 35, 18, 0.08);
-      }
+			.panel {
+				background: color-mix(in srgb, var(--panel) 92%, white 8%);
+				border: 1px solid var(--edge);
+				border-radius: 18px;
+				padding: 20px;
+				box-shadow: 0 18px 50px rgba(50, 35, 18, 0.08);
+			}
 
-      pre {
-        margin: 0;
-        overflow: auto;
-        white-space: pre-wrap;
-        word-break: break-word;
-        font-family: "SFMono-Regular", ui-monospace, monospace;
-      }
-    </style>
-  </head>
-  <body>
-    <main>
-      <h1>Browser Toolchain Harness</h1>
-      <p>
-        This harness loads a prebuilt frozen toolchain bundle and runs browser-native
-        hello, package, and diagnostics fixtures through the shared compile API.
-      </p>
-      <section class="panel">
-        <p id="status">Loading...</p>
-        <pre id="output">loading fixture...</pre>
-      </section>
-    </main>
-    <script type="module" src="/browser-harness/dist/browser-harness/main.js"></script>
-  </body>
+			pre {
+				margin: 0;
+				overflow: auto;
+				white-space: pre-wrap;
+				word-break: break-word;
+				font-family: 'SFMono-Regular', ui-monospace, monospace;
+			}
+		</style>
+	</head>
+	<body>
+		<main>
+			<h1>Browser Toolchain Harness</h1>
+			<p>
+				This harness loads a prebuilt frozen toolchain bundle and runs browser-native hello,
+				package, and diagnostics fixtures through the shared compile API.
+			</p>
+			<section class="panel">
+				<p id="status">Loading...</p>
+				<pre id="output">loading fixture...</pre>
+			</section>
+		</main>
+		<script type="module" src="/browser-harness/dist/browser-harness/main.js"></script>
+	</body>
 </html>

@@ -30,9 +30,7 @@ function resolveRequestedPath(requestUrl) {
 	const decodedPath = decodeURIComponent(url.pathname);
 	const relativePath =
 		decodedPath === '/' ? 'browser-harness/index.html' : decodedPath.replace(/^\/+/, '');
-	const normalizedPath = relativePath.endsWith('/')
-		? `${relativePath}index.html`
-		: relativePath;
+	const normalizedPath = relativePath.endsWith('/') ? `${relativePath}index.html` : relativePath;
 	const absolutePath = path.resolve(projectRoot, normalizedPath);
 	if (!absolutePath.startsWith(projectRoot + path.sep) && absolutePath !== projectRoot) {
 		return null;
@@ -58,11 +56,14 @@ export async function startBrowserHarnessServer({ host = '127.0.0.1', port = 0 }
 
 		try {
 			const stats = await fs.stat(absolutePath);
-			const filePath = stats.isDirectory() ? path.join(absolutePath, 'index.html') : absolutePath;
+			const filePath = stats.isDirectory()
+				? path.join(absolutePath, 'index.html')
+				: absolutePath;
 			const body = await fs.readFile(filePath);
 			response.writeHead(200, {
 				'Content-Type':
-					contentTypes.get(path.extname(filePath).toLowerCase()) || 'application/octet-stream',
+					contentTypes.get(path.extname(filePath).toLowerCase()) ||
+					'application/octet-stream',
 				'Content-Length': body.byteLength
 			});
 			response.end(body);

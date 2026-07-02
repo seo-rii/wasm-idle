@@ -1,9 +1,9 @@
 ---
 name: Feature request
 about: Propose a package, runtime, API, or tooling improvement
-title: "feat: "
+title: 'feat: '
 labels: enhancement
-assignees: ""
+assignees: ''
 ---
 
 ## Goal

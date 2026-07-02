@@ -8,11 +8,18 @@ export async function resolve(specifier, context, defaultResolve) {
 	try {
 		return await defaultResolve(specifier, context, defaultResolve);
 	} catch (error) {
-		if (error?.code !== 'ERR_MODULE_NOT_FOUND' && error?.code !== 'ERR_UNSUPPORTED_DIR_IMPORT') {
+		if (
+			error?.code !== 'ERR_MODULE_NOT_FOUND' &&
+			error?.code !== 'ERR_UNSUPPORTED_DIR_IMPORT'
+		) {
 			throw error;
 		}
 
-		if (!specifier.startsWith('./') && !specifier.startsWith('../') && !specifier.startsWith('/')) {
+		if (
+			!specifier.startsWith('./') &&
+			!specifier.startsWith('../') &&
+			!specifier.startsWith('/')
+		) {
 			throw error;
 		}
 
@@ -26,7 +33,11 @@ export async function resolve(specifier, context, defaultResolve) {
 		try {
 			const resolvedStat = await stat(resolvedPath);
 			if (resolvedStat.isDirectory()) {
-				return defaultResolve(pathToFileURL(path.join(resolvedPath, 'index.js')).href, context, defaultResolve);
+				return defaultResolve(
+					pathToFileURL(path.join(resolvedPath, 'index.js')).href,
+					context,
+					defaultResolve
+				);
 			}
 		} catch {}
 

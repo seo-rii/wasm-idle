@@ -1,12 +1,12 @@
 import type { DebugLanguageAdapter } from '$lib/debug/language';
-	import type {
-		DebugCommand,
-		DebugFrame,
-		DebugSessionEvent,
-		DebugVariable
-	} from '$lib/playground/options';
-	import type { TerminalControl } from '$lib/terminal';
-	import { fromStore, get, writable } from 'svelte/store';
+import type {
+	DebugCommand,
+	DebugFrame,
+	DebugSessionEvent,
+	DebugVariable
+} from '$lib/playground/options';
+import type { TerminalControl } from '$lib/terminal';
+import { fromStore, get, writable } from 'svelte/store';
 
 export type DebugWatchValue = {
 	expression: string;
@@ -65,7 +65,8 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 	function getEffectiveBreakpoints() {
 		const lines = [...get(breakpointsStore)];
 		const runToCursorLine = get(runToCursorLineStore);
-		if (runToCursorLine !== null && !lines.includes(runToCursorLine)) lines.push(runToCursorLine);
+		if (runToCursorLine !== null && !lines.includes(runToCursorLine))
+			lines.push(runToCursorLine);
 		return lines.sort((left, right) => left - right);
 	}
 
@@ -108,12 +109,17 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 				try {
 					return {
 						expression,
-						value: adapter ? adapter.evaluateExpression(expression, localVariables) : 'error'
+						value: adapter
+							? adapter.evaluateExpression(expression, localVariables)
+							: 'error'
 					};
 				} catch (error) {
 					return {
 						expression,
-						value: error instanceof Error && error.message === 'unavailable' ? '?' : 'error'
+						value:
+							error instanceof Error && error.message === 'unavailable'
+								? '?'
+								: 'error'
 					};
 				}
 			})

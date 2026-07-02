@@ -1,9 +1,6 @@
 import type { CompilerOptions } from 'typescript';
 import type { EditorLanguageServerOptions, EditorLanguageServerRuntimeOptions } from '../types.js';
-import {
-	createWorkerLanguageServerClient,
-	type LanguageServerStatus
-} from '../worker-client.js';
+import { createWorkerLanguageServerClient, type LanguageServerStatus } from '../worker-client.js';
 import type { TypeScriptLanguage } from './service.js';
 
 export interface TypeScriptLanguageServerConfig {

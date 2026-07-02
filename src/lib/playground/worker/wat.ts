@@ -10,14 +10,14 @@ let loadedModuleUrl = '';
 let runtimePromise: Promise<{
 	compiler: any;
 	executeBrowserWatArtifact: (
-			artifact: any,
-			options?: {
-				stdout?: (chunk: string) => void;
-				stderr?: (chunk: string) => void;
-				files?: SandboxWorkspaceFile[];
-				activePath?: string;
-				imports?: WebAssembly.Imports;
-			}
+		artifact: any,
+		options?: {
+			stdout?: (chunk: string) => void;
+			stderr?: (chunk: string) => void;
+			files?: SandboxWorkspaceFile[];
+			activePath?: string;
+			imports?: WebAssembly.Imports;
+		}
 	) => Promise<{
 		exitCode: number | null;
 		stdout: string;
@@ -194,27 +194,27 @@ self.onmessage = async (event: { data: any }) => {
 			return;
 		}
 
-			const stdinReader = new WatStdin(
-				stdin,
-				buffer ? new Int32Array(buffer) : null,
-				Boolean(log)
-			);
-			const execution = await runtime.executeBrowserWatArtifact(compiledArtifact, {
-				files: workspaceFiles,
-				activePath,
-				imports: {
-					env: {
-						readByte() {
-							return stdinReader.readByte();
-						}
+		const stdinReader = new WatStdin(
+			stdin,
+			buffer ? new Int32Array(buffer) : null,
+			Boolean(log)
+		);
+		const execution = await runtime.executeBrowserWatArtifact(compiledArtifact, {
+			files: workspaceFiles,
+			activePath,
+			imports: {
+				env: {
+					readByte() {
+						return stdinReader.readByte();
 					}
-				},
-				stdout: (output) => {
-					if (output) postMessage({ output });
-				},
-				stderr: (output) => {
-					if (output) postMessage({ output });
 				}
+			},
+			stdout: (output) => {
+				if (output) postMessage({ output });
+			},
+			stderr: (output) => {
+				if (output) postMessage({ output });
+			}
 		});
 		if (execution.exitCode !== 0) {
 			throw new Error(

@@ -85,7 +85,7 @@ const LISP_HOVER: Record<string, string> = {
 	lambda: 'Creates an anonymous procedure.',
 	let: 'Creates local bindings.',
 	'let*': 'Creates sequential local bindings.',
-	'letrec': 'Creates recursive local bindings.',
+	letrec: 'Creates recursive local bindings.',
 	cond: 'Branches through ordered tests.',
 	display: 'Writes a value to the current output port.',
 	newline: 'Writes a line break.',
@@ -141,8 +141,7 @@ const wordAt = (text: string, position: LspPosition) => {
 	const character = Math.max(0, Math.min(position.character, line.length));
 	return (
 		(line.slice(0, character).match(/[A-Za-z_*+\-!?/<>=][A-Za-z0-9_*+\-!?/<>=]*$/u)?.[0] ||
-			'') +
-		(line.slice(character).match(/^[A-Za-z0-9_*+\-!?/<>=]*/u)?.[0] || '')
+			'') + (line.slice(character).match(/^[A-Za-z0-9_*+\-!?/<>=]*/u)?.[0] || '')
 	);
 };
 

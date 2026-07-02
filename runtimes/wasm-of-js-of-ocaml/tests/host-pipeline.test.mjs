@@ -64,13 +64,17 @@ test(
 	'host pipeline validator emits JavaScript and wasm artifacts',
 	{ timeout: 180_000 },
 	async () => {
-		const result = await runCommand(process.execPath, ['./scripts/validate-host-pipeline.mjs'], {
-			cwd: projectRoot,
-			env: {
-				...process.env,
-				WASM_OF_JS_OF_OCAML_VALIDATE_TARGET: 'both'
+		const result = await runCommand(
+			process.execPath,
+			['./scripts/validate-host-pipeline.mjs'],
+			{
+				cwd: projectRoot,
+				env: {
+					...process.env,
+					WASM_OF_JS_OF_OCAML_VALIDATE_TARGET: 'both'
+				}
 			}
-		});
+		);
 		const summary = JSON.parse(result.stdout);
 		assert.equal(summary.validateTarget, 'both');
 		assert.ok(
@@ -133,7 +137,10 @@ test('host pipeline surfaces diagnostics for compile failures', async () => {
 	);
 
 	assert.equal(result.success, false, 'expected the diagnostics fixture to fail');
-	assert.ok(result.stderr.includes('Error:'), 'expected compiler stderr to include the OCaml error');
+	assert.ok(
+		result.stderr.includes('Error:'),
+		'expected compiler stderr to include the OCaml error'
+	);
 	assert.ok(result.diagnostics.length > 0, 'expected at least one diagnostic');
 	assert.equal(result.diagnostics[0]?.file, 'type_error.ml');
 	assert.equal(result.diagnostics[0]?.severity, 'error');

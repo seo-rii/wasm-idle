@@ -11,9 +11,7 @@ const runtimeDir = path.join(distRoot, 'runtime');
 const packEntriesCache = new Map();
 
 async function loadRuntimeManifest() {
-	return JSON.parse(
-		await readFile(path.join(runtimeDir, 'runtime-manifest.v1.json'), 'utf8')
-	);
+	return JSON.parse(await readFile(path.join(runtimeDir, 'runtime-manifest.v1.json'), 'utf8'));
 }
 
 async function loadPackEntries(packAsset, indexAsset) {

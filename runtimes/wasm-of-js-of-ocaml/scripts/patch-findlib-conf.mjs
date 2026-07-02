@@ -36,7 +36,8 @@ function parseArgs(argv) {
 			continue;
 		}
 		if (argument === '--help') {
-			process.stdout.write(`Usage: node scripts/patch-findlib-conf.mjs --input <path> --output <path> [options]
+			process.stdout
+				.write(`Usage: node scripts/patch-findlib-conf.mjs --input <path> --output <path> [options]
 
 Options:
   --source-prefix <path>  Absolute source prefix to rewrite
@@ -87,4 +88,3 @@ const rewritten = input
 await mkdir(path.dirname(options.output), { recursive: true });
 await writeFile(options.output, rewritten.endsWith('\n') ? rewritten : `${rewritten}\n`, 'utf8');
 process.stdout.write(`${options.output}\n`);
-

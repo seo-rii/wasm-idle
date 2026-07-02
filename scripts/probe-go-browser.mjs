@@ -12,8 +12,7 @@ const chromiumExecutable = process.env.WASM_IDLE_CHROMIUM_EXECUTABLE || '';
 const stdinText = process.env.WASM_IDLE_GO_STDIN || '5\n';
 const expectedOutput = process.env.WASM_IDLE_GO_EXPECTED_OUTPUT || 'factorial_plus_bonus=123';
 const target = process.env.WASM_IDLE_GO_TARGET || 'wasip1/wasm';
-const serverMode =
-	process.env.WASM_IDLE_BROWSER_SERVER_MODE === 'dev' ? 'dev' : 'preview';
+const serverMode = process.env.WASM_IDLE_BROWSER_SERVER_MODE === 'dev' ? 'dev' : 'preview';
 
 await runWithBrowserProbeSessionLock(async () => {
 	let previewServer = null;

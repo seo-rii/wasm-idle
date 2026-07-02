@@ -44,7 +44,11 @@ export function parseTar(bytes: Uint8Array | ArrayBuffer): TarEntry[] {
 		offset += Math.ceil(size / 512) * 512;
 		if (!path) continue;
 		if (typeflag === '5' || path.endsWith('/')) {
-			entries.push({ path: path.replace(/\/$/, ''), type: 'directory', bytes: new Uint8Array() });
+			entries.push({
+				path: path.replace(/\/$/, ''),
+				type: 'directory',
+				bytes: new Uint8Array()
+			});
 			continue;
 		}
 		if (typeflag === '0' || typeflag === '\0' || typeflag === '') {

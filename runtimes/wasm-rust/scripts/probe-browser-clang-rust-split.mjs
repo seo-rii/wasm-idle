@@ -13,7 +13,14 @@ const rustToolchainRoot =
 	process.env.WASM_RUST_NATIVE_TOOLCHAIN_ROOT ||
 	path.join(os.homedir(), '.rustup', 'toolchains', 'nightly-2024-04-12-x86_64-unknown-linux-gnu');
 const rustcPath = path.join(rustToolchainRoot, 'bin', 'rustc');
-const rustLldPath = path.join(rustToolchainRoot, 'lib', 'rustlib', 'x86_64-unknown-linux-gnu', 'bin', 'rust-lld');
+const rustLldPath = path.join(
+	rustToolchainRoot,
+	'lib',
+	'rustlib',
+	'x86_64-unknown-linux-gnu',
+	'bin',
+	'rust-lld'
+);
 const rustTargetTriple = process.env.WASM_RUST_NATIVE_TARGET_TRIPLE || 'wasm32-wasip1';
 const sampleProgram = process.env.WASM_RUST_SAMPLE_PROGRAM || 'fn main() { println!("hi"); }';
 const staticRoot = path.join(repoRoot, 'static');
@@ -29,7 +36,9 @@ async function withPatchedFetch(run) {
 	const originalFetch = globalThis.fetch;
 	globalThis.fetch = async (input, init) => {
 		const requestUrl =
-			typeof input === 'string' || input instanceof URL ? new URL(input.toString()) : new URL(input.url);
+			typeof input === 'string' || input instanceof URL
+				? new URL(input.toString())
+				: new URL(input.url);
 		const filePath = path.join(staticRoot, requestUrl.pathname);
 		try {
 			const body = await fs.readFile(filePath);
@@ -119,13 +128,13 @@ async function prepareRustArtifacts(workDir) {
 		);
 	}
 
-		return {
-			sourcePath,
-			linkerLogPath,
-			llvmIrPath,
-			noOptBitcodePath: path.join(workDir, noOptBitcodeName),
-			allocatorObjectPath: path.join(workDir, tempObjectNames[0])
-		};
+	return {
+		sourcePath,
+		linkerLogPath,
+		llvmIrPath,
+		noOptBitcodePath: path.join(workDir, noOptBitcodeName),
+		allocatorObjectPath: path.join(workDir, tempObjectNames[0])
+	};
 }
 
 function translateLinkArgs(args, fileMap) {
@@ -162,9 +171,31 @@ async function addFileWithParents(clang, memfsPath, contents) {
 async function lowerBitcodeToObject(clang, clangModule, bitcodePath, llvmIrPath, objectPath) {
 	const attempts = [
 		['clang', '--target=wasm32-wasi', '-c', bitcodePath, '-o', objectPath],
-		['clang', '-cc1', '-triple', 'wasm32-wasi', '-emit-obj', '-x', 'ir', bitcodePath, '-o', objectPath],
+		[
+			'clang',
+			'-cc1',
+			'-triple',
+			'wasm32-wasi',
+			'-emit-obj',
+			'-x',
+			'ir',
+			bitcodePath,
+			'-o',
+			objectPath
+		],
 		['clang', '--target=wasm32-wasi', '-c', llvmIrPath, '-o', objectPath],
-		['clang', '-cc1', '-triple', 'wasm32-wasi', '-emit-obj', '-x', 'ir', llvmIrPath, '-o', objectPath]
+		[
+			'clang',
+			'-cc1',
+			'-triple',
+			'wasm32-wasi',
+			'-emit-obj',
+			'-x',
+			'ir',
+			llvmIrPath,
+			'-o',
+			objectPath
+		]
 	];
 
 	const failures = [];
@@ -196,19 +227,17 @@ async function lowerBitcodeToObject(clang, clangModule, bitcodePath, llvmIrPath,
 		}
 	}
 
-	throw new Error(`Failed to lower Rust LLVM IR with browser clang: ${JSON.stringify(failures, null, 2)}`);
+	throw new Error(
+		`Failed to lower Rust LLVM IR with browser clang: ${JSON.stringify(failures, null, 2)}`
+	);
 }
 
 async function main() {
 	const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'wasm-rust-browser-split-'));
 	const outputLog = [];
 	try {
-		const {
-			linkerLogPath,
-			llvmIrPath,
-			noOptBitcodePath,
-			allocatorObjectPath
-		} = await prepareRustArtifacts(tempRoot);
+		const { linkerLogPath, llvmIrPath, noOptBitcodePath, allocatorObjectPath } =
+			await prepareRustArtifacts(tempRoot);
 		const linkArgs = (await fs.readFile(linkerLogPath, 'utf8'))
 			.split('\n')
 			.map((line) => line.trim())
@@ -225,8 +254,12 @@ async function main() {
 			await instance.ready;
 			return instance;
 		});
-		const clangModule = await withPatchedFetch(() => clang.getModule('http://wasm-idle.local/clang/bin/clang.zip'));
-		const lldModule = await withPatchedFetch(() => clang.getModule('http://wasm-idle.local/clang/bin/lld.zip'));
+		const clangModule = await withPatchedFetch(() =>
+			clang.getModule('http://wasm-idle.local/clang/bin/clang.zip')
+		);
+		const lldModule = await withPatchedFetch(() =>
+			clang.getModule('http://wasm-idle.local/clang/bin/lld.zip')
+		);
 
 		const llvmIrMemfsPath = 'work/main.ll';
 		const bitcodeMemfsPath = 'work/main.no-opt.bc';
@@ -267,7 +300,9 @@ async function main() {
 			(arg, index) => arg.endsWith('.rcgu.o') && index !== mainObjectArgIndex
 		);
 		if (mainObjectArgIndex === -1 || allocatorArgIndex === -1) {
-			throw new Error(`Failed to identify Rust object arguments in link args: ${JSON.stringify(linkArgs)}`);
+			throw new Error(
+				`Failed to identify Rust object arguments in link args: ${JSON.stringify(linkArgs)}`
+			);
 		}
 		fileMap.set(linkArgs[mainObjectArgIndex], browserObjectMemfsPath);
 		fileMap.set(linkArgs[allocatorArgIndex], allocatorMemfsPath);
@@ -291,7 +326,9 @@ async function main() {
 		}
 		const outputIndex = translatedLinkArgs.findIndex((arg) => arg === '-o');
 		if (outputIndex === -1 || outputIndex + 1 >= translatedLinkArgs.length) {
-			throw new Error(`Missing -o in translated link args: ${JSON.stringify(translatedLinkArgs)}`);
+			throw new Error(
+				`Missing -o in translated link args: ${JSON.stringify(translatedLinkArgs)}`
+			);
 		}
 		translatedLinkArgs[outputIndex + 1] = linkedWasmMemfsPath;
 		await clang.run(lldModule, true, 'wasm-ld', ...translatedLinkArgs.slice(1));

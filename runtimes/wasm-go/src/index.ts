@@ -6,9 +6,7 @@ import {
 	type CreateGoCompilerOptions,
 	type PreloadBrowserGoRuntimeOptions
 } from './compiler.js';
-import {
-	createBrowserGoBuildPlan
-} from './build-planner.js';
+import { createBrowserGoBuildPlan } from './build-planner.js';
 import {
 	executeBrowserGoArtifact,
 	createBrowserWasiHost,

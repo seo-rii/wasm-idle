@@ -34,7 +34,9 @@ export async function syncPyodidePackage({
 	for (const asset of PYODIDE_CORE_ASSETS) {
 		const assetStats = await stat(path.join(sourceDir, asset)).catch(() => null);
 		if (!assetStats?.isFile()) {
-			throw new Error(`Required Pyodide asset was not found at ${path.join(sourceDir, asset)}.`);
+			throw new Error(
+				`Required Pyodide asset was not found at ${path.join(sourceDir, asset)}.`
+			);
 		}
 	}
 

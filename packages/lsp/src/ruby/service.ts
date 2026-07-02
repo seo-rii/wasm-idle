@@ -92,7 +92,9 @@ async function loadRubyWasmChecker(options: RubyWorkerOptions): Promise<RubySynt
 	}
 	const response = await fetch(options.wasmUrl);
 	if (!response.ok) {
-		throw new Error(`Failed to load Ruby WASM asset: ${response.status} ${response.statusText}`);
+		throw new Error(
+			`Failed to load Ruby WASM asset: ${response.status} ${response.statusText}`
+		);
 	}
 	const module = await WebAssembly.compile(await response.arrayBuffer());
 
@@ -108,7 +110,11 @@ async function loadRubyWasmChecker(options: RubyWorkerOptions): Promise<RubySynt
 			const wasi = new WASI(
 				['ruby.wasm'],
 				[],
-				[new OpenFile(new File([])), new OpenFile(new File([])), new OpenFile(new File([]))],
+				[
+					new OpenFile(new File([])),
+					new OpenFile(new File([])),
+					new OpenFile(new File([]))
+				],
 				{ debug: false }
 			);
 			const { vm } = await RubyVM.instantiateModule({
@@ -227,7 +233,10 @@ export function createRubyWorkerService(
 					},
 					selectionRange: {
 						start: { line, character: character + match[0].indexOf(match[2]) },
-						end: { line, character: character + match[0].indexOf(match[2]) + match[2].length }
+						end: {
+							line,
+							character: character + match[0].indexOf(match[2]) + match[2].length
+						}
 					}
 				});
 			}

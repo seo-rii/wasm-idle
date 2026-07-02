@@ -66,7 +66,9 @@ class R implements Sandbox {
 				};
 				this.worker.onmessage = (event: MessageEvent<any>) => {
 					if (event.data?.progress && typeof event.data.progress.percent === 'number') {
-						progress?.set?.(Math.max(0, Math.min(event.data.progress.percent / 100, 1)));
+						progress?.set?.(
+							Math.max(0, Math.min(event.data.progress.percent / 100, 1))
+						);
 					}
 					if (event.data?.load) {
 						progress?.set?.(1);

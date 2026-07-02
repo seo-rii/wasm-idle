@@ -133,6 +133,11 @@ export interface BrowserExecutionOptions {
 	stdout?: (chunk: string) => void;
 	stderr?: (chunk: string) => void;
 	files?: Array<{ path: string; contents: string | Uint8Array | ArrayBuffer }>;
+	extraImports?:
+		| WebAssembly.Imports
+		| ((
+				context: import('./browser-execution.js').BrowserExecutionImportContext
+		  ) => WebAssembly.Imports | Promise<WebAssembly.Imports>);
 }
 
 export interface BrowserExecutionResult {

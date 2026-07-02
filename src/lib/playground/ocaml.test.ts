@@ -50,7 +50,9 @@ class MockWorker {
 			this.onmessage?.({
 				data: {
 					output:
-						message.target === 'js' ? 'hello from ocaml js\n' : 'hello from ocaml wasm\n',
+						message.target === 'js'
+							? 'hello from ocaml js\n'
+							: 'hello from ocaml wasm\n',
 					results: true
 				}
 			} as MessageEvent<any>)
@@ -118,7 +120,9 @@ describe('OCaml sandbox', () => {
 			1,
 			expect.objectContaining({
 				load: true,
-				moduleUrl: expect.stringMatching(/\/wasm-of-js-of-ocaml\/browser-native\/src\/index\.js$/),
+				moduleUrl: expect.stringMatching(
+					/\/wasm-of-js-of-ocaml\/browser-native\/src\/index\.js$/
+				),
 				manifestUrl: expect.stringMatching(
 					/\/wasm-of-js-of-ocaml\/browser-native-bundle\/browser-native-manifest\.v1\.json$/
 				)
@@ -195,7 +199,9 @@ describe('OCaml sandbox', () => {
 		publicEnv.PUBLIC_WASM_OCAML_MANIFEST_URL = '';
 		const sandbox = new Ocaml();
 
-		await expect(sandbox.load({ rootUrl: '' })).rejects.toContain('OCaml runtime is not configured');
+		await expect(sandbox.load({ rootUrl: '' })).rejects.toContain(
+			'OCaml runtime is not configured'
+		);
 	});
 
 	it('writes queued terminal input when the OCaml worker requests stdin', async () => {
@@ -217,7 +223,9 @@ describe('OCaml sandbox', () => {
 			});
 		});
 
-		await expect(sandbox.run('let () = print_endline (read_line ())', false)).resolves.toBe(true);
+		await expect(sandbox.run('let () = print_endline (read_line ())', false)).resolves.toBe(
+			true
+		);
 
 		expect(readBufferedStdin(runMessage.buffer)).toBe('42\n');
 	});
@@ -242,7 +250,10 @@ describe('OCaml sandbox', () => {
 		});
 
 		await expect(
-			sandbox.run('let () = print_endline (try read_line () with End_of_file -> "eof")', false)
+			sandbox.run(
+				'let () = print_endline (try read_line () with End_of_file -> "eof")',
+				false
+			)
 		).resolves.toBe(true);
 
 		expect(readBufferedStdin(runMessage.buffer)).toBeNull();

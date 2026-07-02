@@ -360,7 +360,7 @@ describe('example route debug actions', () => {
 
 	it('exposes a browser debug hook that writes terminal stdin through the bound control', () => {
 		expect(source).toMatch(
-			/type WasmIdleDebugApi = \{\s+writeTerminalInput: \(text: string, eof\?: boolean\) => Promise<void>;\s+getEditorValue: \(\) => string;\s+setEditorValue: \(text: string\) => Promise<boolean>;\s+setPreloadedStdin: \(text: string\) => void;\s+\};/s
+			/type WasmIdleDebugApi = \{\s+writeTerminalInput: \(text: string, eof\?: boolean\) => Promise<void>;\s+getEditorValue: \(\) => string;\s+setEditorValue: \(text: string\) => Promise<boolean>;\s+setWorkspaceFiles: \(files: WorkspaceFile\[], activePath\?: string\) => Promise<boolean>;\s+setPreloadedStdin: \(text: string\) => void;\s+\};/s
 		);
 		expect(source).toMatch(/let browserDebugHookVersion = 0;/);
 		expect(source).toMatch(/const debugHookVersion = \+\+browserDebugHookVersion;/);

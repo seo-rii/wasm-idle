@@ -19,11 +19,11 @@ with the upstream-required `libc` patch.
 - The richer `wasm32-wasip2` browser regression now covers component args/stdin output such as
   `preview2_component=preview2-cli` and `factorial_plus_bonus=27`.
 - The result is returned through the `wasm-idle` browser compiler contract:
-  - module exports `default`, `createRustCompiler`, `preloadBrowserRustRuntime`, and
-    `executeBrowserRustArtifact`
-  - factory returns `{ compile(request) }`
-  - `compile()` resolves to `{ success, stdout?, stderr?, diagnostics?, logs?, logRecords?, artifact }`
-  - `artifact` contains `wasm`, `targetTriple`, and `format`
+    - module exports `default`, `createRustCompiler`, `preloadBrowserRustRuntime`, and
+      `executeBrowserRustArtifact`
+    - factory returns `{ compile(request) }`
+    - `compile()` resolves to `{ success, stdout?, stderr?, diagnostics?, logs?, logRecords?, artifact }`
+    - `artifact` contains `wasm`, `targetTriple`, and `format`
 
 Current scope:
 
@@ -116,18 +116,18 @@ And `pnpm run test:ci:browser` expands to:
 Latest verified browser result:
 
 - `wasm32-wasip1`
-  - `compile.success: true`
-  - `runtime.exitCode: 0`
-  - `runtime.stdout: "hi\n"`
+    - `compile.success: true`
+    - `runtime.exitCode: 0`
+    - `runtime.stdout: "hi\n"`
 - `wasm32-wasip2`
-  - `compile.success: true`
-  - `runtime.exitCode: 0`
-  - `runtime.stdout` contains `preview2_component=preview2-cli`
-  - `runtime.stdout` contains `factorial_plus_bonus=27`
+    - `compile.success: true`
+    - `runtime.exitCode: 0`
+    - `runtime.stdout` contains `preview2_component=preview2-cli`
+    - `runtime.stdout` contains `factorial_plus_bonus=27`
 - `wasm32-wasip3`
-  - `compile.success: true`
-  - `runtime.exitCode: 0`
-  - `runtime.stdout: "hi\n"`
+    - `compile.success: true`
+    - `runtime.exitCode: 0`
+    - `runtime.stdout: "hi\n"`
 
 ## API
 
@@ -248,44 +248,44 @@ pnpm run probe:browser-harness
 ## Scripts
 
 - `pnpm build`
-  - builds TypeScript and prepares runtime assets under `dist/runtime/`
+    - builds TypeScript and prepares runtime assets under `dist/runtime/`
 - `pnpm run release:upload -- --tag <tag> [asset...]`
-  - uploads one or more assets to a GitHub release with `gh`, and can create the release first
+    - uploads one or more assets to a GitHub release with `gh`, and can create the release first
 - `pnpm test`
-  - runs the normal test suite
+    - runs the normal test suite
 - `pnpm run test:ci:browser`
-  - canonical browser CI lane: `build + probe + browser vitest + browser playwright`
-  - clean GitHub runners hydrate the latest release `dist/runtime` bundle first and let
-    `prepare-runtime` reuse it when local toolchain caches are unavailable
+    - canonical browser CI lane: `build + probe + browser vitest + browser playwright`
+    - clean GitHub runners hydrate the latest release `dist/runtime` bundle first and let
+      `prepare-runtime` reuse it when local toolchain caches are unavailable
 - `pnpm run test:ci:browser:clean-room`
-  - clean-room browser lane for CI: rebuilds only the JS bundle and validates it against a freshly
-    hydrated release runtime without enabling prebuilt-runtime fallback
+    - clean-room browser lane for CI: rebuilds only the JS bundle and validates it against a freshly
+      hydrated release runtime without enabling prebuilt-runtime fallback
 - `pnpm run validate:standalone-browser`
-  - full repo-owned validation: `test:ci:fast` followed by `test:ci:browser`
+    - full repo-owned validation: `test:ci:fast` followed by `test:ci:browser`
 - `pnpm run serve:browser-harness`
-  - local COOP/COEP harness server
+    - local COOP/COEP harness server
 - `pnpm run probe:browser-harness`
-  - Playwright Chromium probe for the harness
+    - Playwright Chromium probe for the harness
 - `pnpm run test:browser:playwright`
-  - direct Vitest integration test that launches Playwright/Chromium in-process
+    - direct Vitest integration test that launches Playwright/Chromium in-process
 - `pnpm run probe:browser-rustc-llvm-wasm-split`
-  - low-level browser split-pipeline probe
+    - low-level browser split-pipeline probe
 - `pnpm run probe:llvm-wasm-rust-split`
-  - backend-only `llvm-wasm` link probe
+    - backend-only `llvm-wasm` link probe
 - `pnpm run toolchain:prepare:wasip3-libc`
-  - materializes a cargo-home overlay that patches Rust's build to use a newer `libc` crate for
-    `wasm32-wasip3`
+    - materializes a cargo-home overlay that patches Rust's build to use a newer `libc` crate for
+      `wasm32-wasip3`
 - `pnpm run toolchain:prepare:wasip3-source`
-  - clones or updates a Rust source checkout that already contains `wasm32-wasip3` target support
+    - clones or updates a Rust source checkout that already contains `wasm32-wasip3` target support
 - `pnpm run toolchain:build:custom:wasip3`
-  - rebuilds the custom browser toolchain with `wasm32-wasip3` enabled through that cargo overlay
-  - accepts `pnpm run toolchain:build:custom:wasip3 -- --foreground` when you want to block on the
-    current shell instead of spawning a background build
+    - rebuilds the custom browser toolchain with `wasm32-wasip3` enabled through that cargo overlay
+    - accepts `pnpm run toolchain:build:custom:wasip3 -- --foreground` when you want to block on the
+      current shell instead of spawning a background build
 - `pnpm run toolchain:bootstrap:wasip3`
-  - runs the source-checkout preparation step and then starts the patched custom toolchain build
+    - runs the source-checkout preparation step and then starts the patched custom toolchain build
 - `pnpm run prepare:runtime:wasip3`
-  - packages a runtime bundle that includes `wasm32-wasip1`, `wasm32-wasip2`, and
-    `wasm32-wasip3` by default, failing fast when the patched sysroot is missing
+    - packages a runtime bundle that includes `wasm32-wasip1`, `wasm32-wasip2`, and
+      `wasm32-wasip3` by default, failing fast when the patched sysroot is missing
 
 ## GitHub release upload
 
@@ -320,27 +320,27 @@ Notes:
 ## Project layout
 
 - `src/`
-  - browser compiler, runtime, workers, and linker
+    - browser compiler, runtime, workers, and linker
 - `browser-harness/`
-  - standalone debug and validation page
+    - standalone debug and validation page
 - `scripts/`
-  - reproducible probes, server, and runtime preparation
+    - reproducible probes, server, and runtime preparation
 - `test/`
-  - unit, integration, and browser-facing regressions
+    - unit, integration, and browser-facing regressions
 - `docs/`
-  - architecture notes and reproduction details
+    - architecture notes and reproduction details
 
 ## Documentation
 
 - [docs/browser-compiler.md](./docs/browser-compiler.md)
-  - architecture, invariants, transient browser behavior, latest browser validation evidence
+    - architecture, invariants, transient browser behavior, latest browser validation evidence
 - [docs/consumer-integration.md](./docs/consumer-integration.md)
-  - stable browser-consumer contract, runtime expectations, retry semantics, vendored-asset refresh flow
+    - stable browser-consumer contract, runtime expectations, retry semantics, vendored-asset refresh flow
 - [docs/reproduction.md](./docs/reproduction.md)
-  - exact reproduction commands, cache/toolchain expectations, environment overrides
+    - exact reproduction commands, cache/toolchain expectations, environment overrides
 - [docs/environment-variables.md](./docs/environment-variables.md)
-  - consolidated runtime packaging, browser validation, and wasip3 bootstrap knobs
+    - consolidated runtime packaging, browser validation, and wasip3 bootstrap knobs
 - [PROGRESS.md](./PROGRESS.md)
-  - current verified state, open limitation, and next decision
+    - current verified state, open limitation, and next decision
 - [docs/real-rustc-history.md](./docs/real-rustc-history.md)
-  - historical real-rustc blocker chain and the remaining runtime limitation
+    - historical real-rustc blocker chain and the remaining runtime limitation

@@ -1,114 +1,114 @@
 name: CI
 
 on:
-  push:
-    branches:
-      - main
-  pull_request:
+    push:
+        branches:
+            - main
+    pull_request:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+    group: ${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
 
 permissions:
-  contents: read
+    contents: read
 
 jobs:
-  verify:
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
+    verify:
+        runs-on: ubuntu-latest
+        timeout-minutes: 45
 
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
+        steps:
+            - name: Check out repository
+              uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
+            - name: Set up Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: npm
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
+            - name: Set up Go
+              uses: actions/setup-go@v5
+              with:
+                  go-version-file: go.mod
 
-      - name: Detect optional TinyGo bridge coverage
-        id: detect
-        shell: bash
-        run: |
-          if [ -f scripts/fetch-tinygo-toolchain.mjs ] && [ -f scripts/tinygo-toolchain-paths.mjs ] && [ -f scripts/probe-tinygo-host.mjs ] && [ -f scripts/probe-tinygo-driver-bridge.mjs ] && [ -f tests/tinygo-driver-bridge.test.ts ]; then
-            echo "tinygo_bridge=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "tinygo_bridge=false" >> "$GITHUB_OUTPUT"
-          fi
+            - name: Detect optional TinyGo bridge coverage
+              id: detect
+              shell: bash
+              run: |
+                  if [ -f scripts/fetch-tinygo-toolchain.mjs ] && [ -f scripts/tinygo-toolchain-paths.mjs ] && [ -f scripts/probe-tinygo-host.mjs ] && [ -f scripts/probe-tinygo-driver-bridge.mjs ] && [ -f tests/tinygo-driver-bridge.test.ts ]; then
+                    echo "tinygo_bridge=true" >> "$GITHUB_OUTPUT"
+                  else
+                    echo "tinygo_bridge=false" >> "$GITHUB_OUTPUT"
+                  fi
 
-          if [ -f tests/browser-smoke.test.mjs ] && [ -f scripts/fetch-tinygo-toolchain.mjs ] && [ -f scripts/tinygo-toolchain-paths.mjs ] && [ -f scripts/probe-tinygo-driver-bridge.mjs ]; then
-            echo "browser=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "browser=false" >> "$GITHUB_OUTPUT"
-          fi
+                  if [ -f tests/browser-smoke.test.mjs ] && [ -f scripts/fetch-tinygo-toolchain.mjs ] && [ -f scripts/tinygo-toolchain-paths.mjs ] && [ -f scripts/probe-tinygo-driver-bridge.mjs ]; then
+                    echo "browser=true" >> "$GITHUB_OUTPUT"
+                  else
+                    echo "browser=false" >> "$GITHUB_OUTPUT"
+                  fi
 
-      - name: Cache TinyGo toolchain
-        if: steps.detect.outputs.tinygo_bridge == 'true' || steps.detect.outputs.browser == 'true'
-        uses: actions/cache@v4
-        with:
-          path: .cache/tinygo-toolchain
-          key: ${{ runner.os }}-tinygo-${{ hashFiles('scripts/fetch-tinygo-toolchain.mjs', 'scripts/tinygo-toolchain-paths.mjs') }}
+            - name: Cache TinyGo toolchain
+              if: steps.detect.outputs.tinygo_bridge == 'true' || steps.detect.outputs.browser == 'true'
+              uses: actions/cache@v4
+              with:
+                  path: .cache/tinygo-toolchain
+                  key: ${{ runner.os }}-tinygo-${{ hashFiles('scripts/fetch-tinygo-toolchain.mjs', 'scripts/tinygo-toolchain-paths.mjs') }}
 
-      - name: Install npm dependencies
-        run: npm ci
+            - name: Install npm dependencies
+              run: npm ci
 
-      - name: Run type check
-        run: npm run check
+            - name: Run type check
+              run: npm run check
 
-      - name: Run emception file tests
-        run: node --test tests/emception-files.test.ts
+            - name: Run emception file tests
+              run: node --test tests/emception-files.test.ts
 
-      - name: Run TinyGo compiler build regressions
-        run: node --test tests/build-tinygo-compiler.test.mjs
+            - name: Run TinyGo compiler build regressions
+              run: node --test tests/build-tinygo-compiler.test.mjs
 
-      - name: Prepare browser and WASI assets
-        run: npm run prepare:assets
+            - name: Prepare browser and WASI assets
+              run: npm run prepare:assets
 
-      - name: Run WASI driver tests
-        run: node --test --test-concurrency=1 tests/driver-wasi.test.mjs
+            - name: Run WASI driver tests
+              run: node --test --test-concurrency=1 tests/driver-wasi.test.mjs
 
-      - name: Install Playwright dependency
-        if: steps.detect.outputs.browser == 'true'
-        shell: bash
-        run: |
-          if ! npm ls playwright --depth=0 >/dev/null 2>&1; then
-            npm install --no-save playwright@1.58.2
-          fi
+            - name: Install Playwright dependency
+              if: steps.detect.outputs.browser == 'true'
+              shell: bash
+              run: |
+                  if ! npm ls playwright --depth=0 >/dev/null 2>&1; then
+                    npm install --no-save playwright@1.58.2
+                  fi
 
-      - name: Install Chromium
-        if: steps.detect.outputs.browser == 'true'
-        run: npx playwright install --with-deps chromium
+            - name: Install Chromium
+              if: steps.detect.outputs.browser == 'true'
+              run: npx playwright install --with-deps chromium
 
-      - name: Enable local TinyGo bridge npm scripts for browser smoke
-        if: steps.detect.outputs.browser == 'true'
-        run: |
-          npm pkg set scripts.prepare:tinygo="node ./scripts/fetch-tinygo-toolchain.mjs"
-          npm pkg set scripts.probe:tinygo-driver-bridge="npm run prepare:tinygo && node ./scripts/probe-tinygo-driver-bridge.mjs"
+            - name: Enable local TinyGo bridge npm scripts for browser smoke
+              if: steps.detect.outputs.browser == 'true'
+              run: |
+                  npm pkg set scripts.prepare:tinygo="node ./scripts/fetch-tinygo-toolchain.mjs"
+                  npm pkg set scripts.probe:tinygo-driver-bridge="npm run prepare:tinygo && node ./scripts/probe-tinygo-driver-bridge.mjs"
 
-      - name: Run TinyGo bridge integration
-        if: steps.detect.outputs.tinygo_bridge == 'true'
-        run: |
-          node ./scripts/fetch-tinygo-toolchain.mjs
-          node --test tests/tinygo-driver-bridge.test.ts
+            - name: Run TinyGo bridge integration
+              if: steps.detect.outputs.tinygo_bridge == 'true'
+              run: |
+                  node ./scripts/fetch-tinygo-toolchain.mjs
+                  node --test tests/tinygo-driver-bridge.test.ts
 
-      - name: Run browser smoke
-        if: steps.detect.outputs.browser == 'true'
-        run: node --test tests/browser-smoke.test.mjs
+            - name: Run browser smoke
+              if: steps.detect.outputs.browser == 'true'
+              run: node --test tests/browser-smoke.test.mjs
 
-      - name: Report skipped optional coverage
-        if: steps.detect.outputs.tinygo_bridge != 'true' || steps.detect.outputs.browser != 'true'
-        shell: bash
-        run: |
-          if [ "${{ steps.detect.outputs.tinygo_bridge }}" != "true" ]; then
-            echo "Skipping TinyGo bridge integration because the probe scripts or test files are not committed on this ref."
-          fi
-          if [ "${{ steps.detect.outputs.browser }}" != "true" ]; then
-            echo "Skipping browser smoke because the TinyGo bridge probe files are not committed on this ref."
-          fi
+            - name: Report skipped optional coverage
+              if: steps.detect.outputs.tinygo_bridge != 'true' || steps.detect.outputs.browser != 'true'
+              shell: bash
+              run: |
+                  if [ "${{ steps.detect.outputs.tinygo_bridge }}" != "true" ]; then
+                    echo "Skipping TinyGo bridge integration because the probe scripts or test files are not committed on this ref."
+                  fi
+                  if [ "${{ steps.detect.outputs.browser }}" != "true" ]; then
+                    echo "Skipping browser smoke because the TinyGo bridge probe files are not committed on this ref."
+                  fi

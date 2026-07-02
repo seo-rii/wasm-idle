@@ -1,14 +1,35 @@
 .DS_Store
 node_modules
+/.cache
 /build
 /.svelte-kit
 /package
 .env
 .env.*
 !.env.example
+dist
+coverage
 
 # Ignore files for PNPM, NPM and YARN
 pnpm-lock.yaml
 package-lock.json
 yarn.lock
+
+# Generated app/runtime assets.
+static/
+
+# Workspace package outputs and toolchain snapshots.
+runtimes/*/dist/
+runtimes/*/node_modules/
 runtimes/wasm-clang/artifacts/
+runtimes/wasm-dotnet/dotnet/**/bin/
+runtimes/wasm-dotnet/dotnet/**/obj/
+runtimes/wasm-elixir/assets/
+runtimes/wasm-elixir/vendor/
+runtimes/wasm-of-js-of-ocaml/.cache/
+runtimes/wasm-of-js-of-ocaml/browser-harness/dist/
+runtimes/wasm-of-js-of-ocaml/dist/
+runtimes/wasm-of-js-of-ocaml/toolchain/
+runtimes/wasm-tinygo/public/vendor/
+tools/dool/
+**/RISK_REGISTER.md

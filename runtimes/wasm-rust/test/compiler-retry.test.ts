@@ -163,7 +163,9 @@ describe('compileRust retry behavior', () => {
 				}
 			])
 		);
-		expect(result.logs?.indexOf('[wasm-rust:compiler-worker] first attempt warmup')).toBeLessThan(
+		expect(
+			result.logs?.indexOf('[wasm-rust:compiler-worker] first attempt warmup')
+		).toBeLessThan(
 			result.logs?.indexOf('[wasm-rust] browser rustc attempt 1/5 failed; retrying') ?? -1
 		);
 	});
@@ -236,7 +238,8 @@ describe('compileRust retry behavior', () => {
 			Atomics.store(state, 2, 1);
 			currentWorker.emitMessage({
 				type: 'error',
-				message: 'browser rustc helper thread failed before producing LLVM bitcode: memory access out of bounds'
+				message:
+					'browser rustc helper thread failed before producing LLVM bitcode: memory access out of bounds'
 			});
 			setTimeout(() => {
 				mirrorBitcode(message.sharedBitcodeBuffer, bitcode, 2);
@@ -616,7 +619,9 @@ describe('compileRust retry behavior', () => {
 
 		expect(result.success).toBe(true);
 		expect(result.stdout).toContain('worker stdout');
-		expect(result.stdout).not.toContain('[wasm-rust] worker errored with mirrored bitcode present');
+		expect(result.stdout).not.toContain(
+			'[wasm-rust] worker errored with mirrored bitcode present'
+		);
 		expect(result.logs).toBeUndefined();
 		expect(result.diagnostics).toBeUndefined();
 		expect(result.artifact).toEqual({

@@ -58,7 +58,9 @@ function createRuntimeFetch(): typeof fetch {
 			return new Response(await readFile(fileURLToPath(url)));
 		} catch (error) {
 			const code =
-				error && typeof error === 'object' && 'code' in error ? (error as { code?: string }).code : '';
+				error && typeof error === 'object' && 'code' in error
+					? (error as { code?: string }).code
+					: '';
 			return new Response(null, {
 				status: code === 'ENOENT' ? 404 : 500
 			});
@@ -263,9 +265,7 @@ function success(
 	};
 }
 
-export async function preloadBrowserGoRuntime(
-	options: PreloadBrowserGoRuntimeOptions = {}
-) {
+export async function preloadBrowserGoRuntime(options: PreloadBrowserGoRuntimeOptions = {}) {
 	const fetchImpl = options.fetchImpl || createRuntimeFetch();
 	const { manifest, runtimeBaseUrl } = await resolveCompilerRuntime(options, {
 		fetchImpl
@@ -273,7 +273,11 @@ export async function preloadBrowserGoRuntime(
 	const target = resolveTargetManifest(manifest, options.target);
 	const fetchedAssets: string[] = [];
 	const preloadAsset = async (assetPath: string, label: string) => {
-		await fetchRuntimeAssetBytes(resolveVersionedAssetUrl(runtimeBaseUrl, assetPath), label, fetchImpl);
+		await fetchRuntimeAssetBytes(
+			resolveVersionedAssetUrl(runtimeBaseUrl, assetPath),
+			label,
+			fetchImpl
+		);
 		fetchedAssets.push(resolveVersionedAssetUrl(runtimeBaseUrl, assetPath).toString());
 	};
 	await preloadAsset(manifest.compiler.compile.asset, 'compile.wasm');
@@ -281,8 +285,12 @@ export async function preloadBrowserGoRuntime(
 	if (options.includeSysroot !== false) {
 		if (target.sysrootPack) {
 			await loadRuntimePackEntries(runtimeBaseUrl, target.sysrootPack, fetchImpl);
-			fetchedAssets.push(resolveVersionedAssetUrl(runtimeBaseUrl, target.sysrootPack.index).toString());
-			fetchedAssets.push(resolveVersionedAssetUrl(runtimeBaseUrl, target.sysrootPack.asset).toString());
+			fetchedAssets.push(
+				resolveVersionedAssetUrl(runtimeBaseUrl, target.sysrootPack.index).toString()
+			);
+			fetchedAssets.push(
+				resolveVersionedAssetUrl(runtimeBaseUrl, target.sysrootPack.asset).toString()
+			);
 		} else {
 			for (const entry of target.sysrootFiles || []) {
 				await preloadAsset(entry.asset, `sysroot asset ${entry.runtimePath}`);
@@ -403,10 +411,14 @@ export async function compileGo(
 		emitManifestAssetProgress('runtime-manifest.v1.json', loaded, total);
 	const reportPlanAssetProgress = createStageAssetProgressReporter('plan', progress, 0.45);
 	progress('manifest', 0, 1, 'loading runtime manifest');
-	const { manifest, runtimeBaseUrl } = await resolveCompilerRuntime(options, {
-		...dependencies,
-		fetchImpl
-	}, reportManifestAssetProgress);
+	const { manifest, runtimeBaseUrl } = await resolveCompilerRuntime(
+		options,
+		{
+			...dependencies,
+			fetchImpl
+		},
+		reportManifestAssetProgress
+	);
 	progress('manifest', 1, 1, `loaded runtime manifest for ${manifest.defaultTarget}`);
 	progress('plan', 0, 1, 'resolving compile inputs');
 	const resolvedRequest = await resolveCompileRequest(
@@ -446,8 +458,7 @@ export async function compileGo(
 		plan.compile.toolAsset,
 		plan.sysrootPack || plan.sysrootFiles?.length ? 0.18 : 0.45
 	);
-	const compileStageExecutionWeight =
-		plan.sysrootPack || plan.sysrootFiles?.length ? 0.22 : 0.55;
+	const compileStageExecutionWeight = plan.sysrootPack || plan.sysrootFiles?.length ? 0.22 : 0.55;
 	const emitCompileStage = (message: string) => {
 		let completed = compileStageExecutionFraction * compileStageExecutionWeight;
 		for (const [asset, fraction] of compileStageFractions) {
@@ -484,9 +495,12 @@ export async function compileGo(
 	};
 	const runTool =
 		dependencies.runTool ||
-		((invocation: BrowserGoToolInvocation, context?: {
-			reportAssetProgress?: (asset: string, loaded: number, total?: number) => void;
-		}) =>
+		((
+			invocation: BrowserGoToolInvocation,
+			context?: {
+				reportAssetProgress?: (asset: string, loaded: number, total?: number) => void;
+			}
+		) =>
 			executeGoToolInvocation(
 				invocation,
 				plan,
@@ -506,11 +520,7 @@ export async function compileGo(
 			reportAssetProgress: updateCompileAssetProgress
 		});
 	} catch (error) {
-		return failure(
-			error instanceof Error ? error.message : String(error),
-			logs.records,
-			plan
-		);
+		return failure(error instanceof Error ? error.message : String(error), logs.records, plan);
 	}
 	const compileOutputs = normalizeToolOutputs(compileResult.outputs);
 	if (useDetailedRuntimeProgress) {

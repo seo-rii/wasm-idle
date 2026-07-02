@@ -78,14 +78,18 @@ function syncTargetSelector(manifest) {
 }
 
 async function runWasiModule(wasmArtifact) {
-	return executeBrowserRustArtifact(wasmArtifact, new URL('/dist/runtime/', window.location.href).toString());
+	return executeBrowserRustArtifact(
+		wasmArtifact,
+		new URL('/dist/runtime/', window.location.href).toString()
+	);
 }
 
 function readHarnessOptions(baseManifest, overrides = {}) {
 	return {
 		code: overrides.code ?? sourceInput.value,
 		edition: overrides.edition ?? editionInput.value,
-		targetTriple: overrides.targetTriple ?? targetTripleInput.value ?? baseManifest.defaultTargetTriple,
+		targetTriple:
+			overrides.targetTriple ?? targetTripleInput.value ?? baseManifest.defaultTargetTriple,
 		compileTimeoutMs:
 			overrides.compileTimeoutMs ??
 			readNumericInput(compileTimeoutInput, baseManifest.compiler.compileTimeoutMs),
@@ -182,7 +186,8 @@ async function runWasmRustHarness(overrides = {}) {
 
 	state.lastResult = result;
 	resultPanel.textContent = JSON.stringify(result, null, 2);
-	runPill.textContent = result.compile.success && result.runtime?.exitCode === 0 ? 'status: ok' : 'status: failed';
+	runPill.textContent =
+		result.compile.success && result.runtime?.exitCode === 0 ? 'status: ok' : 'status: failed';
 	appendLog(`run finished in ${result.elapsedMs}ms`);
 	return result;
 }

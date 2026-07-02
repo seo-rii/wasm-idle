@@ -103,7 +103,11 @@ class DetachedFileInode extends Inode {
 	}
 
 	stat() {
-		return new wasi.Filestat(this.ino, wasi.FILETYPE_REGULAR_FILE, BigInt(this.data.byteLength));
+		return new wasi.Filestat(
+			this.ino,
+			wasi.FILETYPE_REGULAR_FILE,
+			BigInt(this.data.byteLength)
+		);
 	}
 }
 
@@ -129,7 +133,13 @@ class NodeFileInode extends Inode {
 		try {
 			return {
 				ret: wasi.ERRNO_SUCCESS,
-				fd_obj: new NodeOpenFile(this.hostPath, this.readonly, oflags, fsRightsBase, fdFlags)
+				fd_obj: new NodeOpenFile(
+					this.hostPath,
+					this.readonly,
+					oflags,
+					fsRightsBase,
+					fdFlags
+				)
 			};
 		} catch (error) {
 			return { ret: errnoToWasi(error), fd_obj: null };
@@ -151,7 +161,13 @@ class NodeDirectoryInode extends Inode {
 	path_open(oflags, fsRightsBase, fdFlags) {
 		return {
 			ret: wasi.ERRNO_SUCCESS,
-			fd_obj: new NodeOpenDirectory(this.hostPath, this.readonly, oflags, fsRightsBase, fdFlags)
+			fd_obj: new NodeOpenDirectory(
+				this.hostPath,
+				this.readonly,
+				oflags,
+				fsRightsBase,
+				fdFlags
+			)
 		};
 	}
 
@@ -310,7 +326,9 @@ export class NodeOpenFile extends Fd {
 		}
 		traceFs(`fd_write ${this.hostPath} bytes=${data.byteLength}`);
 		const position =
-			(this.fdFlags & wasi.FDFLAGS_APPEND) === wasi.FDFLAGS_APPEND ? null : Number(this.filePos);
+			(this.fdFlags & wasi.FDFLAGS_APPEND) === wasi.FDFLAGS_APPEND
+				? null
+				: Number(this.filePos);
 		const bytesWritten = fs.writeSync(this.fd, data, 0, data.byteLength, position);
 		this.filePos += BigInt(bytesWritten);
 		return { ret: wasi.ERRNO_SUCCESS, nwritten: bytesWritten };
@@ -340,7 +358,12 @@ export class NodeOpenDirectory extends Fd {
 		if (cookie === 0n) {
 			return {
 				ret: wasi.ERRNO_SUCCESS,
-				dirent: new wasi.Dirent(1n, hostFilestat(this.hostPath).ino, '.', wasi.FILETYPE_DIRECTORY)
+				dirent: new wasi.Dirent(
+					1n,
+					hostFilestat(this.hostPath).ino,
+					'.',
+					wasi.FILETYPE_DIRECTORY
+				)
 			};
 		}
 		if (cookie === 1n) {
@@ -455,7 +478,10 @@ export class NodeOpenDirectory extends Fd {
 		}
 		try {
 			if ((oflags & wasi.OFLAGS_DIRECTORY) === wasi.OFLAGS_DIRECTORY) {
-				if (!fs.existsSync(resolved.hostPath) && (oflags & wasi.OFLAGS_CREAT) === wasi.OFLAGS_CREAT) {
+				if (
+					!fs.existsSync(resolved.hostPath) &&
+					(oflags & wasi.OFLAGS_CREAT) === wasi.OFLAGS_CREAT
+				) {
 					if (this.readonly) {
 						return { ret: wasi.ERRNO_PERM, fd_obj: null };
 					}
@@ -476,7 +502,13 @@ export class NodeOpenDirectory extends Fd {
 				if (this.readonly) {
 					return { ret: wasi.ERRNO_PERM, fd_obj: null };
 				}
-				fs.closeSync(fs.openSync(resolved.hostPath, fs.constants.O_CREAT | fs.constants.O_RDWR, 0o666));
+				fs.closeSync(
+					fs.openSync(
+						resolved.hostPath,
+						fs.constants.O_CREAT | fs.constants.O_RDWR,
+						0o666
+					)
+				);
 			}
 			return inodeForHostPath(resolved.hostPath, this.readonly).path_open(
 				oflags,

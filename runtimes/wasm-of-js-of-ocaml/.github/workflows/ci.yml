@@ -1,128 +1,128 @@
 name: CI
 
 on:
-  push:
-  pull_request:
+    push:
+    pull_request:
 
 permissions:
-  contents: read
+    contents: read
 
 env:
-  WASM_OF_JS_OF_OCAML_OPAM_BIN: ${{ github.workspace }}/.cache/opam-2.2.1
-  WASM_OF_JS_OF_OCAML_BINARYEN_BIN: ${{ github.workspace }}/.cache/binaryen-version_129/bin
-  WASM_OF_JS_OF_OCAML_INSTALL_WASM_COMPILER: 1
+    WASM_OF_JS_OF_OCAML_OPAM_BIN: ${{ github.workspace }}/.cache/opam-2.2.1
+    WASM_OF_JS_OF_OCAML_BINARYEN_BIN: ${{ github.workspace }}/.cache/binaryen-version_129/bin
+    WASM_OF_JS_OF_OCAML_INSTALL_WASM_COMPILER: 1
 
 jobs:
-  host-pipeline:
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v4
+    host-pipeline:
+        runs-on: ubuntu-latest
+        timeout-minutes: 60
+        steps:
+            - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: npm
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential bubblewrap git libgmp-dev m4 pkg-config rsync unzip
+            - name: Install system dependencies
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y build-essential bubblewrap git libgmp-dev m4 pkg-config rsync unzip
 
-      - name: Restore host cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            .cache
-            ~/.cache/wasm-of-js-of-ocaml/opam
-          key: ${{ runner.os }}-wasm-of-js-of-ocaml-host-${{ hashFiles('package-lock.json', 'scripts/*.sh', 'scripts/*.mjs', 'toolchain/**/*', 'browser-harness/**/*', 'src/**/*', 'runtime/**/*', 'tests/**/*', 'tsconfig*.json') }}
-          restore-keys: |
-            ${{ runner.os }}-wasm-of-js-of-ocaml-host-
+            - name: Restore host cache
+              uses: actions/cache@v4
+              with:
+                  path: |
+                      .cache
+                      ~/.cache/wasm-of-js-of-ocaml/opam
+                  key: ${{ runner.os }}-wasm-of-js-of-ocaml-host-${{ hashFiles('package-lock.json', 'scripts/*.sh', 'scripts/*.mjs', 'toolchain/**/*', 'browser-harness/**/*', 'src/**/*', 'runtime/**/*', 'tests/**/*', 'tsconfig*.json') }}
+                  restore-keys: |
+                      ${{ runner.os }}-wasm-of-js-of-ocaml-host-
 
-      - name: Install npm dependencies
-        run: npm ci
+            - name: Install npm dependencies
+              run: npm ci
 
-      - name: Bootstrap host tools
-        run: npm run bootstrap:host-tools
+            - name: Bootstrap host tools
+              run: npm run bootstrap:host-tools
 
-      - name: Bootstrap opam switch
-        run: PATH="$PWD/.cache/binaryen-version_129/bin:$PATH" npm run toolchain:bootstrap
+            - name: Bootstrap opam switch
+              run: PATH="$PWD/.cache/binaryen-version_129/bin:$PATH" npm run toolchain:bootstrap
 
-      - name: Build TypeScript bundles
-        run: npm run build
+            - name: Build TypeScript bundles
+              run: npm run build
 
-      - name: Validate host pipeline
-        run: npm run test:host-pipeline
+            - name: Validate host pipeline
+              run: npm run test:host-pipeline
 
-      - name: Upload host diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: host-pipeline-artifacts
-          path: |
-            .cache/browser-native-bundle/browser-native-manifest.v1.json
-          if-no-files-found: ignore
+            - name: Upload host diagnostics
+              if: failure()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: host-pipeline-artifacts
+                  path: |
+                      .cache/browser-native-bundle/browser-native-manifest.v1.json
+                  if-no-files-found: ignore
 
-  browser-native:
-    needs: host-pipeline
-    runs-on: ubuntu-latest
-    timeout-minutes: 75
-    steps:
-      - uses: actions/checkout@v4
+    browser-native:
+        needs: host-pipeline
+        runs-on: ubuntu-latest
+        timeout-minutes: 75
+        steps:
+            - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: npm
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential bubblewrap git libgmp-dev m4 pkg-config rsync unzip
+            - name: Install system dependencies
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y build-essential bubblewrap git libgmp-dev m4 pkg-config rsync unzip
 
-      - name: Restore browser cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            .cache
-            ~/.cache/ms-playwright
-            ~/.cache/wasm-of-js-of-ocaml/opam
-          key: ${{ runner.os }}-wasm-of-js-of-ocaml-browser-${{ hashFiles('package-lock.json', 'scripts/*.sh', 'scripts/*.mjs', 'toolchain/**/*', 'browser-harness/**/*', 'src/**/*', 'runtime/**/*', 'tests/**/*', 'tsconfig*.json', '.github/workflows/ci.yml') }}
-          restore-keys: |
-            ${{ runner.os }}-wasm-of-js-of-ocaml-browser-
-            ${{ runner.os }}-wasm-of-js-of-ocaml-host-
+            - name: Restore browser cache
+              uses: actions/cache@v4
+              with:
+                  path: |
+                      .cache
+                      ~/.cache/ms-playwright
+                      ~/.cache/wasm-of-js-of-ocaml/opam
+                  key: ${{ runner.os }}-wasm-of-js-of-ocaml-browser-${{ hashFiles('package-lock.json', 'scripts/*.sh', 'scripts/*.mjs', 'toolchain/**/*', 'browser-harness/**/*', 'src/**/*', 'runtime/**/*', 'tests/**/*', 'tsconfig*.json', '.github/workflows/ci.yml') }}
+                  restore-keys: |
+                      ${{ runner.os }}-wasm-of-js-of-ocaml-browser-
+                      ${{ runner.os }}-wasm-of-js-of-ocaml-host-
 
-      - name: Install npm dependencies
-        run: npm ci
+            - name: Install npm dependencies
+              run: npm ci
 
-      - name: Bootstrap host tools
-        run: npm run bootstrap:host-tools
+            - name: Bootstrap host tools
+              run: npm run bootstrap:host-tools
 
-      - name: Bootstrap opam switch
-        run: PATH="$PWD/.cache/binaryen-version_129/bin:$PATH" npm run toolchain:bootstrap
+            - name: Bootstrap opam switch
+              run: PATH="$PWD/.cache/binaryen-version_129/bin:$PATH" npm run toolchain:bootstrap
 
-      - name: Build TypeScript bundles
-        run: npm run build
+            - name: Build TypeScript bundles
+              run: npm run build
 
-      - name: Prepare browser-native bundle
-        run: npm run prepare:browser-native -- --force
+            - name: Prepare browser-native bundle
+              run: npm run prepare:browser-native -- --force
 
-      - name: Validate browser-native bundle metadata
-        run: npm run test:browser-native-bundle
+            - name: Validate browser-native bundle metadata
+              run: npm run test:browser-native-bundle
 
-      - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
+            - name: Install Playwright Chromium
+              run: npx playwright install --with-deps chromium
 
-      - name: Run browser-native Playwright test
-        run: npm run test:browser-native
+            - name: Run browser-native Playwright test
+              run: npm run test:browser-native
 
-      - name: Upload browser diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: browser-native-artifacts
-          path: |
-            .cache/browser-native-bundle/browser-native-manifest.v1.json
-            playwright-report
-            test-results
-          if-no-files-found: ignore
+            - name: Upload browser diagnostics
+              if: failure()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: browser-native-artifacts
+                  path: |
+                      .cache/browser-native-bundle/browser-native-manifest.v1.json
+                      playwright-report
+                      test-results
+                  if-no-files-found: ignore

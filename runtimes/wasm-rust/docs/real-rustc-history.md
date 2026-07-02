@@ -49,8 +49,8 @@ Concrete symptom:
 
 - browser-hosted `rustc.wasm` worker threads can still fail intermittently during LLVM work with
   errors like:
-  - `memory access out of bounds`
-  - `operation does not support unaligned accesses`
+    - `memory access out of bounds`
+    - `operation does not support unaligned accesses`
 
 Current product behavior:
 
@@ -121,21 +121,21 @@ Blocker type at the time:
 The branch did not build cleanly for a WASI-hosted LLVM toolchain. Repeated blockers included:
 
 - missing or unsupported Unix APIs on WASI:
-  - `getsid`
-  - `pipe`
-  - `fork`
-  - `execv`
-  - `munmap`
-  - `getpid`
-  - `strsignal`
-  - `realpath`
-  - `fchown`
-  - `netdb.h`
-  - signal support
+    - `getsid`
+    - `pipe`
+    - `fork`
+    - `execv`
+    - `munmap`
+    - `getpid`
+    - `strsignal`
+    - `realpath`
+    - `fchown`
+    - `netdb.h`
+    - signal support
 - shared-library/link-model assumptions incompatible with wasm:
-  - `--version-script`
-  - `-z defs`
-  - Unix rpath logic
+    - `--version-script`
+    - `-z defs`
+    - Unix rpath logic
 
 Resolution:
 

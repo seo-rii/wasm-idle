@@ -41,11 +41,7 @@ describe('MonacoDebugView', () => {
 				}
 			}
 		};
-		const view = new MonacoDebugView(
-			Monaco as never,
-			editor as never,
-			undefined
-		);
+		const view = new MonacoDebugView(Monaco as never, editor as never, undefined);
 
 		view.setPauseState(
 			8,
@@ -74,8 +70,9 @@ describe('MonacoDebugView', () => {
 	});
 
 	it('registers cursor sync and run-to-cursor actions together for host editors', () => {
-		let cursorHandler: ((event: { position?: { lineNumber?: number | null } | null }) => void) | null =
-			null;
+		let cursorHandler:
+			| ((event: { position?: { lineNumber?: number | null } | null }) => void)
+			| null = null;
 		const cursorDispose = vi.fn();
 		const actionDispose = vi.fn();
 		const onCursorLineChange = vi.fn();
@@ -85,8 +82,8 @@ describe('MonacoDebugView', () => {
 				(
 					handler: (event: { position?: { lineNumber?: number | null } | null }) => void
 				) => {
-				cursorHandler = handler;
-				return { dispose: cursorDispose };
+					cursorHandler = handler;
+					return { dispose: cursorDispose };
 				}
 			),
 			getPosition: vi.fn(() => ({ lineNumber: 13 })),
@@ -114,9 +111,9 @@ describe('MonacoDebugView', () => {
 		if (!cursorHandler) {
 			throw new Error('expected cursor handler');
 		}
-		(
-			cursorHandler as (event: { position?: { lineNumber?: number | null } | null }) => void
-		)({ position: { lineNumber: 21 } });
+		(cursorHandler as (event: { position?: { lineNumber?: number | null } | null }) => void)({
+			position: { lineNumber: 21 }
+		});
 		expect(onCursorLineChange).toHaveBeenNthCalledWith(2, 21);
 
 		bindings.dispose();

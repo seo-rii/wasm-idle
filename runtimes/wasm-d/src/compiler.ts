@@ -196,7 +196,6 @@ async function compileDObject(
 		}
 	});
 	if (options.log || request.log) {
-		// eslint-disable-next-line no-console
 		console.debug('[wasm-d] ldc2 exit', compileResult.exitCode);
 	}
 	return {

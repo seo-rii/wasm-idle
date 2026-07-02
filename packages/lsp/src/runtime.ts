@@ -493,7 +493,10 @@ export function resolveFortranLanguageServerAnalyzerUrl(
 	currentUrl = ''
 ) {
 	if (typeof options === 'string') {
-		return resolveFileUrl(`${normalizeRootUrl(options) || ''}/wasm-fortran/analyzer.js`, currentUrl);
+		return resolveFileUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-fortran/analyzer.js`,
+			currentUrl
+		);
 	}
 	if (options?.fortran?.analyzerUrl) {
 		return resolveFileUrl(options.fortran.analyzerUrl, currentUrl);

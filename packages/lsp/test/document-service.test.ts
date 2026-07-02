@@ -40,7 +40,10 @@ describe('document language worker service', () => {
 		const testContext = context();
 		await service.initialize?.({ language: 'yaml' }, testContext);
 
-		const diagnostics = await service.diagnostics?.(document('yaml', 'items: [1\n'), testContext);
+		const diagnostics = await service.diagnostics?.(
+			document('yaml', 'items: [1\n'),
+			testContext
+		);
 
 		expect(diagnostics).toEqual([
 			expect.objectContaining({
@@ -55,7 +58,10 @@ describe('document language worker service', () => {
 		const testContext = context();
 		await service.initialize?.({ language: 'toml' }, testContext);
 
-		const diagnostics = await service.diagnostics?.(document('toml', 'items = [1\n'), testContext);
+		const diagnostics = await service.diagnostics?.(
+			document('toml', 'items = [1\n'),
+			testContext
+		);
 
 		expect(diagnostics).toEqual([
 			expect.objectContaining({
@@ -108,7 +114,11 @@ describe('document language worker service', () => {
 		const symbols = (await service.documentSymbols?.(markdownDocument, testContext)) as Array<{
 			name: string;
 		}>;
-		const hover = await service.hover?.(markdownDocument, { line: 0, character: 2 }, testContext);
+		const hover = await service.hover?.(
+			markdownDocument,
+			{ line: 0, character: 2 },
+			testContext
+		);
 
 		expect(diagnostics?.map((diagnostic) => diagnostic.source)).toEqual(['markdown']);
 		expect(diagnostics?.[0]?.message).toContain('No heading matches #nope');

@@ -1,8 +1,5 @@
 import type { EditorLanguageServerOptions, EditorLanguageServerRuntimeOptions } from '../types.js';
-import {
-	createWorkerLanguageServerClient,
-	type LanguageServerStatus
-} from '../worker-client.js';
+import { createWorkerLanguageServerClient, type LanguageServerStatus } from '../worker-client.js';
 
 export interface WatLanguageServerOptions extends EditorLanguageServerRuntimeOptions {
 	createWorker?: () => Worker;

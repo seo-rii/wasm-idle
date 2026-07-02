@@ -20,7 +20,9 @@ class MockWorker {
 			return;
 		}
 		if (message.prepare) {
-			queueMicrotask(() => this.onmessage?.({ data: { results: true } } as MessageEvent<any>));
+			queueMicrotask(() =>
+				this.onmessage?.({ data: { results: true } } as MessageEvent<any>)
+			);
 			return;
 		}
 		queueMicrotask(() =>

@@ -63,7 +63,10 @@ async function bootstrapPythonBridge(pyodideBaseUrl: string) {
 		try {
 			await pyodide.loadPackage('jedi');
 		} catch (error) {
-			console.warn('Python LSP semantic features disabled because jedi failed to load', error);
+			console.warn(
+				'Python LSP semantic features disabled because jedi failed to load',
+				error
+			);
 		}
 		installPythonServerPackage(pyodide);
 

@@ -67,6 +67,7 @@ async function readProbeSummary(page, activeState, pageErrors, consoleMessages) 
 
 /**
  * @typedef {object} StdinBrowserProbeOptions
+ * @property {string} [activePath]
  * @property {string} browserUrl
  * @property {string} [chromiumExecutable]
  * @property {string} expectedOutput
@@ -76,6 +77,7 @@ async function readProbeSummary(page, activeState, pageErrors, consoleMessages) 
  * @property {boolean} [sendEof]
  * @property {string} source
  * @property {string} stdinText
+ * @property {{ path: string; content: string }[]} [workspaceFiles]
  */
 
 /**
@@ -83,6 +85,7 @@ async function readProbeSummary(page, activeState, pageErrors, consoleMessages) 
  */
 export async function runStdinBrowserProbe(options) {
 	const {
+		activePath = '',
 		browserUrl = '',
 		chromiumExecutable = '',
 		expectedOutput = '',
@@ -91,7 +94,8 @@ export async function runStdinBrowserProbe(options) {
 		runTimeoutMs = 120_000,
 		sendEof = false,
 		source = '',
-		stdinText = ''
+		stdinText = '',
+		workspaceFiles = []
 	} = options;
 	if (!browserUrl) {
 		throw new Error('runStdinBrowserProbe requires a browserUrl');
@@ -267,6 +271,35 @@ export async function runStdinBrowserProbe(options) {
 					null,
 					2
 				)}`
+			);
+		}
+		if (workspaceFiles.length > 0 || activePath) {
+			const workspaceConfigured = await page.evaluate(
+				async ({ nextActivePath, nextFiles }) => {
+					const api = /** @type {any} */ (window).__wasmIdleDebug;
+					if (typeof api?.setWorkspaceFiles !== 'function') return false;
+					return await api.setWorkspaceFiles(nextFiles, nextActivePath);
+				},
+				{ nextActivePath: activePath, nextFiles: workspaceFiles }
+			);
+			if (!workspaceConfigured) {
+				throw new Error(
+					`stdin browser probe could not configure workspace files\n${JSON.stringify(
+						await readProbeSummary(page, activeState, pageErrors, consoleMessages),
+						null,
+						2
+					)}`
+				);
+			}
+			await page.waitForFunction(
+				(expectedSource) =>
+					/** @type {any} */ (window).__wasmIdleDebug?.getEditorValue?.() ===
+					expectedSource,
+				source,
+				{
+					polling: 100,
+					timeout: runTimeoutMs
+				}
 			);
 		}
 		await page.waitForSelector('[data-testid="terminal-debug-output"]', { state: 'attached' });

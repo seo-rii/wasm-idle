@@ -27,7 +27,9 @@ function normalizeWorkspacePath(path: string) {
 	return normalized;
 }
 
-function normalizeSourceFiles(files: NonNullable<BrowserGoCompileRequest['files']>): BrowserGoSourceFile[] {
+function normalizeSourceFiles(
+	files: NonNullable<BrowserGoCompileRequest['files']>
+): BrowserGoSourceFile[] {
 	const entries = Array.isArray(files)
 		? files.map((file) => [file.path, file.contents] as const)
 		: Object.entries(files);
@@ -93,14 +95,18 @@ interface NormalizedEmbedPattern {
 	}>;
 }
 
-function normalizeEmbeds(embeds: GoEmbedPattern[], workspaceRoot: string): NormalizedEmbedPattern[] {
+function normalizeEmbeds(
+	embeds: GoEmbedPattern[],
+	workspaceRoot: string
+): NormalizedEmbedPattern[] {
 	return [...embeds]
 		.map((entry) => ({
 			pattern: entry.pattern,
 			files: [...entry.files]
 				.map((file) => ({
 					path: normalizeWorkspacePath(file.path),
-					sourcePath: file.sourcePath || createAbsoluteWorkspacePath(workspaceRoot, file.path)
+					sourcePath:
+						file.sourcePath || createAbsoluteWorkspacePath(workspaceRoot, file.path)
 				}))
 				.sort(
 					(left, right) =>
@@ -171,7 +177,10 @@ export function createBrowserGoBuildPlan(
 		files: normalizedFiles,
 		packageImportPath
 	};
-	const targetConfig = resolveTargetManifest(manifest, normalizeRequestedTarget(normalizedRequest));
+	const targetConfig = resolveTargetManifest(
+		manifest,
+		normalizeRequestedTarget(normalizedRequest)
+	);
 	const sourceFiles = normalizeSourceFiles(normalizedFiles);
 	const dependencies = normalizeDependencies(normalizedRequest.dependencies || []);
 	const packageKind = normalizedRequest.packageKind || 'main';
@@ -181,8 +190,7 @@ export function createBrowserGoBuildPlan(
 		normalizedRequest.embeds && normalizedRequest.embeds.length > 0
 			? normalizeEmbeds(normalizedRequest.embeds, workspaceRoot)
 			: [];
-	const embedcfg =
-		normalizedEmbeds.length > 0 ? createEmbedConfig(normalizedEmbeds) : undefined;
+	const embedcfg = normalizedEmbeds.length > 0 ? createEmbedConfig(normalizedEmbeds) : undefined;
 	const generatedFiles: BrowserGoGeneratedFile[] = [
 		buildGeneratedFile(targetConfig.planner.importcfgPath, importcfg)
 	];
@@ -279,10 +287,10 @@ export function createBrowserGoBuildPlan(
 				})
 			)}`
 		: undefined;
-		return {
-			target: targetConfig.target,
-			goVersion: manifest.goVersion,
-			packageImportPath,
+	return {
+		target: targetConfig.target,
+		goVersion: manifest.goVersion,
+		packageImportPath,
 		packageKind,
 		artifactFormat: packageKind === 'main' ? targetConfig.artifactFormat : 'go-archive',
 		workspaceRoot,

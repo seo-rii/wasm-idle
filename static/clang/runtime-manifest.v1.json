@@ -1,36 +1,36 @@
 {
-	"manifestVersion": 1,
-	"version": "llvmorg-22.1.8",
-	"defaultTarget": "wasm32-wasi",
-	"compiler": {
-		"memfs": {
-			"asset": "bin/memfs.zip",
-			"argv0": "memfs"
-		},
-		"clang": {
-			"asset": "bin/clang.zip",
-			"argv0": "clang"
-		},
-		"lld": {
-			"asset": "bin/lld.zip",
-			"argv0": "wasm-ld"
-		},
-		"sysroot": {
-			"asset": "bin/sysroot.tar.zip"
-		},
-		"resourceDir": "/lib/clang/22",
-		"compilerRuntimeLibDir": "lib/clang/22/lib/wasi"
-	},
-	"clangd": {
-		"js": "clangd/clangd.js",
-		"wasm": "clangd/clangd.wasm.gz"
-	},
-	"targets": {
-		"wasm32-wasi": {
-			"artifactFormat": "wasi-core-wasm",
-			"execution": {
-				"kind": "wasi-preview1"
-			}
-		}
-	}
+  "manifestVersion": 1,
+  "version": "llvmorg-22.1.8",
+  "defaultTarget": "wasm32-wasi",
+  "compiler": {
+    "memfs": {
+      "asset": "bin/memfs.zip",
+      "argv0": "memfs"
+    },
+    "clang": {
+      "asset": "bin/clang.zip",
+      "argv0": "clang"
+    },
+    "lld": {
+      "asset": "bin/lld.zip",
+      "argv0": "wasm-ld"
+    },
+    "sysroot": {
+      "asset": "bin/sysroot.tar.zip"
+    },
+    "resourceDir": "/lib/clang/22",
+    "compilerRuntimeLibDir": "lib/clang/22/lib/wasi"
+  },
+  "clangd": {
+    "js": "clangd/clangd.js",
+    "wasm": "clangd/clangd.wasm.gz"
+  },
+  "targets": {
+    "wasm32-wasi": {
+      "artifactFormat": "wasi-core-wasm",
+      "execution": {
+        "kind": "wasi-preview1"
+      }
+    }
+  }
 }

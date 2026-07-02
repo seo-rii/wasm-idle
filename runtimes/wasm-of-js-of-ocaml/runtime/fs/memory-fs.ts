@@ -136,4 +136,3 @@ export class MemoryFileSystem {
 		return `/tmp/${prefix}-${this.tempCounter}${extension}`;
 	}
 }
-
