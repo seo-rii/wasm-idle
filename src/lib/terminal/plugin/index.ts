@@ -18,5 +18,6 @@ export default async function registerAllPlugins(term: Terminal) {
 	};
 
 	for (const plugin in plugins) term.loadAddon((<any>plugins)[plugin]);
+	term.unicode.activeVersion = '11';
 	return plugins;
 }

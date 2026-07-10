@@ -21,7 +21,7 @@
 	} from '@wasm-idle/core';
 	import { onMount } from 'svelte';
 	import '@xterm/xterm/css/xterm.css';
-	import type { Terminal as TerminalType } from '@xterm/xterm';
+	import type { IUnicodeHandling, Terminal as TerminalType } from '@xterm/xterm';
 
 	interface Props {
 		dark?: boolean;
@@ -61,6 +61,7 @@
 		debugOutput = $state(''),
 		finish = true,
 		input = '',
+		inputCursor = 0,
 		pendingSandboxInput: string[] = [],
 		pendingSandboxEof = false,
 		sandbox: BoundSandbox,
@@ -100,6 +101,7 @@
 		sandboxAcceptingInput = false;
 		if (sandbox && requiresSandboxReset) await sandbox.clear();
 		input = '';
+		inputCursor = 0;
 		finish = false;
 		if (!sandbox || requiresSandboxReset) {
 			sandbox = currentPlayground
@@ -171,8 +173,53 @@
 
 	function appendInputText(text: string) {
 		if (!text) return;
-		input += text;
+		const inputCharacters = getInputCharacters(input);
+		const insertedCharacters = getInputCharacters(text);
+		const inputTail = inputCharacters.slice(inputCursor).join('');
+		inputCharacters.splice(inputCursor, 0, ...insertedCharacters);
+		input = inputCharacters.join('');
+		inputCursor += insertedCharacters.length;
 		term?.write(text);
+		if (inputTail && term) {
+			term.write(inputTail);
+			const inputTailCellWidth = getInputCellWidth(inputTail);
+			if (inputTailCellWidth > 0) term.write(`\x1b[${inputTailCellWidth}D`);
+		}
+	}
+
+	function getInputCharacters(text: string) {
+		const intlWithSegmenter = Intl as typeof Intl & {
+			Segmenter?: new (
+				locales?: string | string[],
+				options?: { granularity?: 'grapheme' | 'word' | 'sentence' }
+			) => { segment(input: string): Iterable<{ segment: string }> };
+		};
+		return intlWithSegmenter.Segmenter
+			? Array.from(
+					new intlWithSegmenter.Segmenter(undefined, {
+						granularity: 'grapheme'
+					}).segment(text),
+					({ segment }) => segment
+				)
+			: Array.from(text);
+	}
+
+	function getInputCellWidth(text: string) {
+		if (!text) return 0;
+		const unicode = term?.unicode as
+			| (IUnicodeHandling & {
+					getStringCellWidth?: (text: string) => number;
+					wcwidth?: (codepoint: number) => 0 | 1 | 2;
+			  })
+			| undefined;
+		return (
+			unicode?.getStringCellWidth?.(text) ??
+			Array.from(text).reduce(
+				(width, character) =>
+					width + (unicode?.wcwidth?.(character.codePointAt(0) || 0) ?? 1),
+				0
+			)
+		);
 	}
 
 	function submitCurrentInput() {
@@ -181,6 +228,7 @@
 		if (sandbox && sandboxAcceptingInput) sandbox.write?.(submittedInput);
 		else pendingSandboxInput.push(submittedInput);
 		input = '';
+		inputCursor = 0;
 	}
 
 	function applyPastedText(text: string) {
@@ -203,6 +251,7 @@
 			if (term) term.options.cursorBlink = false;
 			debugOutput = '';
 			input = '';
+			inputCursor = 0;
 			sandboxAcceptingInput = false;
 			pendingSandboxEof = false;
 			first = true;
@@ -325,7 +374,35 @@
 			term.onData((data: string) => {
 				if (!term || finish) return;
 				let pendingText = '';
-				for (const chunk of data) {
+				for (let i = 0; i < data.length; ) {
+					const escapeSequence = data.slice(i).match(/^\x1b(?:\[[0-9;?]*[ABCD]|O[ABCD])/);
+					if (escapeSequence) {
+						if (pendingText) {
+							appendInputText(pendingText);
+							pendingText = '';
+						}
+						const direction = escapeSequence[0].at(-1);
+						const inputCharacters = getInputCharacters(input);
+						if (direction === 'D' && inputCursor > 0) {
+							const inputCharacter = inputCharacters[inputCursor - 1];
+							const inputCharacterCellWidth = getInputCellWidth(inputCharacter);
+							if (inputCharacterCellWidth > 0)
+								term.write(`\x1b[${inputCharacterCellWidth}D`);
+							inputCursor--;
+						} else if (direction === 'C' && inputCursor < inputCharacters.length) {
+							const inputCharacter = inputCharacters[inputCursor];
+							const inputCharacterCellWidth = getInputCellWidth(inputCharacter);
+							if (inputCharacterCellWidth > 0)
+								term.write(`\x1b[${inputCharacterCellWidth}C`);
+							inputCursor++;
+						}
+						i += escapeSequence[0].length;
+						continue;
+					}
+					const codePoint = data.codePointAt(i);
+					if (codePoint === undefined) break;
+					const chunk = String.fromCodePoint(codePoint);
+					i += chunk.length;
 					if (chunk === '\r' || chunk === '\n') {
 						if (pendingText) {
 							appendInputText(pendingText);
@@ -339,9 +416,25 @@
 							appendInputText(pendingText);
 							pendingText = '';
 						}
-						if (term.buffer.active.cursorX > 0 && input.length > 0) {
-							term.write('\b \b');
-							input = Array.from(input).slice(0, -1).join('');
+						if (inputCursor > 0) {
+							const inputCharacters = getInputCharacters(input);
+							const removedInput = inputCharacters.splice(inputCursor - 1, 1)[0];
+							if (removedInput) {
+								inputCursor--;
+								const inputTail = inputCharacters.slice(inputCursor).join('');
+								const removedInputCellWidth = getInputCellWidth(removedInput);
+								const inputTailCellWidth = getInputCellWidth(inputTail);
+								if (removedInputCellWidth > 0)
+									term.write(`\x1b[${removedInputCellWidth}D`);
+								if (inputTail) term.write(inputTail);
+								if (removedInputCellWidth > 0)
+									term.write(' '.repeat(removedInputCellWidth));
+								const cursorReturnCellWidth =
+									inputTailCellWidth + removedInputCellWidth;
+								if (cursorReturnCellWidth > 0)
+									term.write(`\x1b[${cursorReturnCellWidth}D`);
+								input = inputCharacters.join('');
+							}
 						}
 						continue;
 					}

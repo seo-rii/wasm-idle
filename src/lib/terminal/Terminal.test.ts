@@ -1,4 +1,5 @@
 import source from './Terminal.svelte?raw';
+import pluginSource from './plugin/index.ts?raw';
 import Theme from './theme';
 import { compile } from 'svelte/compiler';
 import { describe, expect, it } from 'vitest';
@@ -53,12 +54,36 @@ describe('Terminal source', () => {
 		expect(source).toMatch(/term\.onData\(\(data: string\) => \{/);
 		expect(source).toMatch(/if \(chunk === '\\r' \|\| chunk === '\\n'\)/);
 		expect(source).toMatch(/if \(chunk === '\\u007f'\)/);
-		expect(source).toMatch(/input = Array\.from\(input\)\.slice\(0, -1\)\.join\(''\);/);
+		expect(source).toMatch(/inputCursor = 0,/);
+		expect(source).toMatch(/function getInputCharacters\(text: string\)/);
+		expect(source).toMatch(/function getInputCellWidth\(text: string\)/);
+		expect(source).toMatch(
+			/const removedInput = inputCharacters\.splice\(inputCursor - 1, 1\)\[0\];/
+		);
+		expect(source).toMatch(
+			/inputCharacters\.splice\(inputCursor, 0, \.\.\.insertedCharacters\);/
+		);
+		expect(source).toContain('term.write(`\\x1b[${cursorReturnCellWidth}D`);');
 		expect(source).toMatch(/if \(\(chunk\.codePointAt\(0\) \|\| 0\) >= 0x20\) \{/);
 		expect(source).not.toMatch(
 			/const printable = !ev\.altKey && !ev\.ctrlKey && !ev\.metaKey;/
 		);
 		expect(source).not.toMatch(/else if \(printable\) \{/);
+	});
+
+	it('consumes arrow-key escape sequences for local cursor movement', () => {
+		expect(source).toMatch(
+			/data\.slice\(i\)\.match\(\/\^\\x1b\(\?:\\\[\[0-9;\?\]\*\[ABCD\]\|O\[ABCD\]\)\/\)/
+		);
+		expect(source).toMatch(/direction === 'D' && inputCursor > 0/);
+		expect(source).toMatch(/direction === 'C' && inputCursor < inputCharacters\.length/);
+		expect(source).toMatch(/term\.write\(`\\x1b\[\$\{inputCharacterCellWidth\}D`\);/);
+		expect(source).toMatch(/term\.write\(`\\x1b\[\$\{inputCharacterCellWidth\}C`\);/);
+		expect(source).not.toMatch(/for \(const chunk of data\)/);
+	});
+
+	it('activates xterm Unicode 11 width rules for CJK terminal cells', () => {
+		expect(pluginSource).toMatch(/term\.unicode\.activeVersion = '11';/);
 	});
 
 	it('keeps a hidden transcript mirror for browser debugging and Playwright assertions', () => {
