@@ -43,6 +43,9 @@
 		title: string;
 		progressPercent: number | null;
 	};
+	type MonacoLspProviderContext = {
+		signal?: AbortSignal;
+	};
 	interface LspRoute {
 		languages: readonly string[];
 		isEnabled: () => boolean;
@@ -3275,8 +3278,8 @@
 		for (const route of lspRoutes) route.setStatus({ state: 'disabled' });
 	}
 	const resolveLspConnection = $derived<IMonacoLspProvider>(
-		((key) => async () => {
-			if (key !== lspConnectionKey) return null;
+		((key) => async (_providerLanguage: string, context?: MonacoLspProviderContext) => {
+			if (context?.signal?.aborted || key !== lspConnectionKey) return null;
 			const currentUrl = globalThis.location?.href || '';
 			if (!lspEnabled) {
 				disableAllLspStatuses();
@@ -3293,8 +3296,13 @@
 			try {
 				route.setStatus({ state: 'loading', stage: 'startup', loaded: 0, total: 1 });
 				const connection = await route.load(currentUrl);
+				if (context?.signal?.aborted || key !== lspConnectionKey) {
+					connection.dispose();
+					return null;
+				}
 				return connection as unknown as Exclude<IMonacoLspProviderResult, null | undefined>;
 			} catch (error) {
+				if (context?.signal?.aborted || key !== lspConnectionKey) return null;
 				route.setStatus({
 					state: 'error',
 					message: error instanceof Error ? error.message : String(error)
