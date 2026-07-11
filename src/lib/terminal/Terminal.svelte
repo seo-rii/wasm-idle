@@ -21,7 +21,7 @@
 	} from '@wasm-idle/core';
 	import { onMount } from 'svelte';
 	import '@xterm/xterm/css/xterm.css';
-	import type { IUnicodeHandling, Terminal as TerminalType } from '@xterm/xterm';
+	import type { Terminal as TerminalType } from '@xterm/xterm';
 
 	interface Props {
 		dark?: boolean;
@@ -206,12 +206,19 @@
 
 	function getInputCellWidth(text: string) {
 		if (!text) return 0;
-		const unicode = term?.unicode as
-			| (IUnicodeHandling & {
-					getStringCellWidth?: (text: string) => number;
-					wcwidth?: (codepoint: number) => 0 | 1 | 2;
-			  })
-			| undefined;
+		// The public Unicode API selects a provider but does not expose its width functions.
+		const unicode = (
+			term as
+				| (TerminalType & {
+						_core?: {
+							unicodeService?: {
+								getStringCellWidth?: (text: string) => number;
+								wcwidth?: (codepoint: number) => 0 | 1 | 2;
+							};
+						};
+				  })
+				| undefined
+		)?._core?.unicodeService;
 		return (
 			unicode?.getStringCellWidth?.(text) ??
 			Array.from(text).reduce(
