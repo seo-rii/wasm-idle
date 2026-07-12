@@ -13,8 +13,17 @@ import { resolveChromiumExecutable } from '../../../scripts/rust-browser-probe-l
 
 const javascriptStdinSource = `const fs = require('fs');
 console.log('ready-for-hangul-input');
-const line = fs.readLineSync(0);
-console.log(\`main=\${line.trimEnd()}\`);`;
+const cursorLine = fs.readLineSync(0);
+console.log(\`main=\${cursorLine.trimEnd()}\`);
+console.log('ready-for-mixed-backspace');
+const backspaceLine = fs.readLineSync(0);
+console.log(\`mixed=\${JSON.stringify(backspaceLine.trimEnd())}\`);
+console.log('ready-for-composition-backspace-resume');
+const resumedCompositionLine = fs.readLineSync(0);
+console.log(\`resumed=\${JSON.stringify(resumedCompositionLine.trimEnd())}\`);
+console.log('ready-for-composition-clear-retype');
+const retypedCompositionLine = fs.readLineSync(0);
+console.log(\`retyped=\${JSON.stringify(retypedCompositionLine.trimEnd())}\`);`;
 
 describe('terminal Hangul input in Chromium', () => {
 	it('keeps IME composition, CJK cursor movement, and Backspace aligned before Enter', async () => {
@@ -260,6 +269,383 @@ describe('terminal Hangul input in Chromium', () => {
 					'';
 				expect(transcript).toContain('main=한글');
 				expect(transcript).not.toContain('main=한끝글');
+				await page.waitForFunction(() =>
+					document
+						.querySelector('[data-testid="terminal-debug-output"]')
+						?.textContent?.includes('ready-for-mixed-backspace')
+				);
+
+				await textarea.evaluate((element) => {
+					(element as HTMLTextAreaElement).value = '';
+				});
+				await textarea.focus();
+				await textarea.evaluate((element) => {
+					const input = element as HTMLTextAreaElement;
+					input.dispatchEvent(
+						new CompositionEvent('compositionstart', { bubbles: true, data: '' })
+					);
+					input.dispatchEvent(
+						new CompositionEvent('compositionupdate', { bubbles: true, data: '' })
+					);
+				});
+				await page.waitForTimeout(50);
+				const mixedCursorBaseline = await page
+					.locator('.composition-view')
+					.evaluate((element) =>
+						Number.parseFloat((element as HTMLElement).style.left || '0')
+					);
+				await textarea.evaluate((element) => {
+					const input = element as HTMLTextAreaElement;
+					input.dispatchEvent(
+						new CompositionEvent('compositionend', { bubbles: true, data: '' })
+					);
+				});
+				await page.waitForTimeout(50);
+				const emptyInputScreen = await page.locator('.xterm-screen').screenshot();
+
+				await textarea.focus();
+				await page.keyboard.type('12');
+				await textarea.evaluate((element) => {
+					const input = element as HTMLTextAreaElement;
+					input.dispatchEvent(
+						new CompositionEvent('compositionstart', { bubbles: true, data: '' })
+					);
+					input.value += '한글';
+					input.dispatchEvent(
+						new CompositionEvent('compositionupdate', { bubbles: true, data: '한글' })
+					);
+					input.dispatchEvent(
+						new InputEvent('input', {
+							bubbles: true,
+							data: '한글',
+							inputType: 'insertCompositionText'
+						})
+					);
+				});
+				await page.waitForTimeout(50);
+
+				const rapidBackspaceCursorLefts = await textarea.evaluate((element) => {
+					const input = element as HTMLTextAreaElement;
+					const compositionView = input
+						.closest('.xterm')
+						?.querySelector<HTMLElement>('.composition-view');
+					const cursorLefts: number[] = [];
+					for (let index = 0; index < 4; index += 1) {
+						const keydown = new KeyboardEvent('keydown', {
+							bubbles: true,
+							cancelable: true,
+							code: 'Backspace',
+							key: 'Backspace'
+						});
+						Object.defineProperties(keydown, {
+							keyCode: { value: 8 },
+							which: { value: 8 }
+						});
+						input.dispatchEvent(keydown);
+						input.dispatchEvent(
+							new KeyboardEvent('keyup', {
+								bubbles: true,
+								code: 'Backspace',
+								key: 'Backspace'
+							})
+						);
+						input.dispatchEvent(
+							new CompositionEvent('compositionstart', { bubbles: true, data: '' })
+						);
+						input.dispatchEvent(
+							new CompositionEvent('compositionupdate', { bubbles: true, data: '' })
+						);
+						cursorLefts.push(Number.parseFloat(compositionView?.style.left || '0'));
+						input.dispatchEvent(
+							new CompositionEvent('compositionend', { bubbles: true, data: '' })
+						);
+					}
+					return cursorLefts;
+				});
+				expect(
+					rapidBackspaceCursorLefts.map((cursorLeft) =>
+						Math.round((cursorLeft - mixedCursorBaseline) / cursorMeasurement.cellWidth)
+					)
+				).toEqual([4, 2, 1, 0]);
+
+				await page.waitForTimeout(50);
+				const erasedInputScreen = await page.locator('.xterm-screen').screenshot();
+				expect(erasedInputScreen.equals(emptyInputScreen)).toBe(true);
+				await page.keyboard.press('Enter');
+				await page.waitForFunction(() =>
+					document
+						.querySelector('[data-testid="terminal-debug-output"]')
+						?.textContent?.includes('mixed=""')
+				);
+				const mixedTranscript =
+					(await page.locator('[data-testid="terminal-debug-output"]').textContent()) ||
+					'';
+				expect(mixedTranscript).toContain('mixed=""');
+
+				await page.waitForFunction(() =>
+					document
+						.querySelector('[data-testid="terminal-debug-output"]')
+						?.textContent?.includes('ready-for-composition-backspace-resume')
+				);
+				await textarea.evaluate((element) => {
+					const input = element as HTMLTextAreaElement;
+					input.value = '';
+					input.dispatchEvent(
+						new CompositionEvent('compositionstart', { bubbles: true, data: '' })
+					);
+					input.value = '한그';
+					input.dispatchEvent(
+						new CompositionEvent('compositionupdate', {
+							bubbles: true,
+							data: '한그'
+						})
+					);
+					input.dispatchEvent(
+						new InputEvent('input', {
+							bubbles: true,
+							data: '한그',
+							inputType: 'insertCompositionText'
+						})
+					);
+				});
+				await page.waitForTimeout(50);
+				expect(
+					await page.locator('.composition-view').evaluate((element) => ({
+						active: element.classList.contains('active'),
+						text: element.textContent
+					}))
+				).toEqual({ active: true, text: '한그' });
+
+				await textarea.evaluate((element) => {
+					const input = element as HTMLTextAreaElement;
+					const keydown = new KeyboardEvent('keydown', {
+						bubbles: true,
+						cancelable: true,
+						code: 'Backspace',
+						isComposing: true,
+						key: 'Backspace'
+					});
+					Object.defineProperties(keydown, {
+						keyCode: { value: 229 },
+						which: { value: 229 }
+					});
+					input.dispatchEvent(keydown);
+					input.value = '한ㄱ';
+					input.dispatchEvent(
+						new CompositionEvent('compositionupdate', {
+							bubbles: true,
+							data: '한ㄱ'
+						})
+					);
+					input.dispatchEvent(
+						new InputEvent('input', {
+							bubbles: true,
+							data: null,
+							inputType: 'deleteCompositionText'
+						})
+					);
+					input.dispatchEvent(
+						new KeyboardEvent('keyup', {
+							bubbles: true,
+							code: 'Backspace',
+							isComposing: true,
+							key: 'Backspace'
+						})
+					);
+				});
+				await page.waitForTimeout(50);
+				expect(
+					await page.locator('.composition-view').evaluate((element) => ({
+						active: element.classList.contains('active'),
+						text: element.textContent
+					}))
+				).toEqual({ active: true, text: '한ㄱ' });
+
+				await textarea.evaluate((element) => {
+					const input = element as HTMLTextAreaElement;
+					input.value = '한글';
+					input.dispatchEvent(
+						new CompositionEvent('compositionupdate', {
+							bubbles: true,
+							data: '한글'
+						})
+					);
+					input.dispatchEvent(
+						new InputEvent('input', {
+							bubbles: true,
+							data: '한글',
+							inputType: 'insertCompositionText'
+						})
+					);
+				});
+				await page.waitForTimeout(50);
+				expect(
+					await page.locator('.composition-view').evaluate((element) => ({
+						active: element.classList.contains('active'),
+						text: element.textContent
+					}))
+				).toEqual({ active: true, text: '한글' });
+				await textarea.evaluate((element) => {
+					const input = element as HTMLTextAreaElement;
+					input.dispatchEvent(
+						new CompositionEvent('compositionend', { bubbles: true, data: '한글' })
+					);
+					input.dispatchEvent(
+						new InputEvent('input', {
+							bubbles: true,
+							data: '한글',
+							inputType: 'insertCompositionText'
+						})
+					);
+				});
+				await page.waitForTimeout(50);
+				await page.keyboard.press('Enter');
+				await page.waitForFunction(() =>
+					document
+						.querySelector('[data-testid="terminal-debug-output"]')
+						?.textContent?.includes('resumed="한글"')
+				);
+
+				await page.waitForFunction(() =>
+					document
+						.querySelector('[data-testid="terminal-debug-output"]')
+						?.textContent?.includes('ready-for-composition-clear-retype')
+				);
+				await textarea.evaluate((element) => {
+					const input = element as HTMLTextAreaElement;
+					input.value = '';
+					input.blur();
+				});
+				await page.waitForTimeout(50);
+				const beforeCancelledComposition = await page.locator('.xterm-screen').screenshot();
+				await textarea.focus();
+				await textarea.evaluate((element) => {
+					const input = element as HTMLTextAreaElement;
+					input.dispatchEvent(
+						new CompositionEvent('compositionstart', { bubbles: true, data: '' })
+					);
+					input.value = '한';
+					input.dispatchEvent(
+						new CompositionEvent('compositionupdate', { bubbles: true, data: '한' })
+					);
+					input.dispatchEvent(
+						new InputEvent('input', {
+							bubbles: true,
+							data: '한',
+							inputType: 'insertCompositionText'
+						})
+					);
+				});
+				await page.waitForTimeout(50);
+				for (const shortenedComposition of ['하', 'ㅎ', '']) {
+					await textarea.evaluate((element, composition) => {
+						const input = element as HTMLTextAreaElement;
+						const keydown = new KeyboardEvent('keydown', {
+							bubbles: true,
+							cancelable: true,
+							code: 'Backspace',
+							isComposing: true,
+							key: 'Backspace'
+						});
+						Object.defineProperties(keydown, {
+							keyCode: { value: 229 },
+							which: { value: 229 }
+						});
+						input.dispatchEvent(keydown);
+						input.value = composition;
+						input.dispatchEvent(
+							new CompositionEvent('compositionupdate', {
+								bubbles: true,
+								data: composition
+							})
+						);
+						input.dispatchEvent(
+							new InputEvent('input', {
+								bubbles: true,
+								data: null,
+								inputType: 'deleteCompositionText'
+							})
+						);
+						input.dispatchEvent(
+							new KeyboardEvent('keyup', {
+								bubbles: true,
+								code: 'Backspace',
+								isComposing: true,
+								key: 'Backspace'
+							})
+						);
+					}, shortenedComposition);
+					await page.waitForTimeout(50);
+					expect(
+						await page.locator('.composition-view').evaluate((element) => ({
+							active: element.classList.contains('active'),
+							text: element.textContent
+						}))
+					).toEqual({ active: true, text: shortenedComposition });
+				}
+				await textarea.evaluate((element) => {
+					const input = element as HTMLTextAreaElement;
+					input.dispatchEvent(
+						new CompositionEvent('compositionend', { bubbles: true, data: '' })
+					);
+					input.blur();
+				});
+				await page.waitForTimeout(50);
+				expect(
+					await page
+						.locator('.composition-view')
+						.evaluate((element) => element.classList.contains('active'))
+				).toBe(false);
+				const afterCancelledComposition = await page.locator('.xterm-screen').screenshot();
+				expect(afterCancelledComposition.equals(beforeCancelledComposition)).toBe(true);
+
+				await textarea.focus();
+				await textarea.evaluate((element) => {
+					const input = element as HTMLTextAreaElement;
+					input.dispatchEvent(
+						new CompositionEvent('compositionstart', { bubbles: true, data: '' })
+					);
+					input.value = '다시';
+					input.dispatchEvent(
+						new CompositionEvent('compositionupdate', {
+							bubbles: true,
+							data: '다시'
+						})
+					);
+					input.dispatchEvent(
+						new InputEvent('input', {
+							bubbles: true,
+							data: '다시',
+							inputType: 'insertCompositionText'
+						})
+					);
+				});
+				await page.waitForTimeout(50);
+				await textarea.evaluate((element) => {
+					const input = element as HTMLTextAreaElement;
+					input.dispatchEvent(
+						new CompositionEvent('compositionend', { bubbles: true, data: '다시' })
+					);
+					input.dispatchEvent(
+						new InputEvent('input', {
+							bubbles: true,
+							data: '다시',
+							inputType: 'insertCompositionText'
+						})
+					);
+				});
+				await page.waitForTimeout(50);
+				await page.keyboard.press('Enter');
+				await page.waitForFunction(() =>
+					document
+						.querySelector('[data-testid="terminal-debug-output"]')
+						?.textContent?.includes('retyped="다시"')
+				);
+				const compositionTranscript =
+					(await page.locator('[data-testid="terminal-debug-output"]').textContent()) ||
+					'';
+				expect(compositionTranscript).toContain('resumed="한글"');
+				expect(compositionTranscript).toContain('retyped="다시"');
 			} finally {
 				await context.close();
 				await browser.close();

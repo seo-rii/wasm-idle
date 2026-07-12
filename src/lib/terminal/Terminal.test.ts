@@ -63,7 +63,9 @@ describe('Terminal source', () => {
 		expect(source).toMatch(
 			/inputCharacters\.splice\(inputCursor, 0, \.\.\.insertedCharacters\);/
 		);
-		expect(source).toContain('term.write(`\\x1b[${cursorReturnCellWidth}D`);');
+		expect(source).toContain('backspaceEcho += `\\x1b[${cursorReturnCellWidth}D`;');
+		expect(source).toContain('if (backspaceEcho) term.write(backspaceEcho);');
+		expect(source).not.toContain('term.write(`\\x1b[${cursorReturnCellWidth}D`);');
 		expect(source).toMatch(/if \(\(chunk\.codePointAt\(0\) \|\| 0\) >= 0x20\) \{/);
 		expect(source).not.toMatch(
 			/const printable = !ev\.altKey && !ev\.ctrlKey && !ev\.metaKey;/

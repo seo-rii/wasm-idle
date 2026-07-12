@@ -431,15 +431,17 @@
 								const inputTail = inputCharacters.slice(inputCursor).join('');
 								const removedInputCellWidth = getInputCellWidth(removedInput);
 								const inputTailCellWidth = getInputCellWidth(inputTail);
+								let backspaceEcho = '';
 								if (removedInputCellWidth > 0)
-									term.write(`\x1b[${removedInputCellWidth}D`);
-								if (inputTail) term.write(inputTail);
+									backspaceEcho += `\x1b[${removedInputCellWidth}D`;
+								if (inputTail) backspaceEcho += inputTail;
 								if (removedInputCellWidth > 0)
-									term.write(' '.repeat(removedInputCellWidth));
+									backspaceEcho += ' '.repeat(removedInputCellWidth);
 								const cursorReturnCellWidth =
 									inputTailCellWidth + removedInputCellWidth;
 								if (cursorReturnCellWidth > 0)
-									term.write(`\x1b[${cursorReturnCellWidth}D`);
+									backspaceEcho += `\x1b[${cursorReturnCellWidth}D`;
+								if (backspaceEcho) term.write(backspaceEcho);
 								input = inputCharacters.join('');
 							}
 						}
