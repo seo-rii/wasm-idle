@@ -74,7 +74,8 @@ describe('Bash sandbox', () => {
 			stdin: '68\n'
 		});
 		expect(output.join('')).toBe('main=73 arg=demo\n');
-		expect(free).toHaveBeenCalledOnce();
+		expect(free).not.toHaveBeenCalled();
+		expect(sandbox.stdinWriter).toBeNull();
 	});
 
 	it('connects write and eof to a running Bash stdin stream', async () => {

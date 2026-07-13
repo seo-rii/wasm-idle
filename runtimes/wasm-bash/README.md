@@ -1,29 +1,28 @@
 # wasm-bash
 
-This runtime packages the real GNU Bash WebAssembly binary published as
-[`sharrattj/bash@1.0.17`](https://wasmer.io/sharrattj/bash/releases) for offline browser use.
-The sync step reproducibly converts the pinned WAPM binary to `bash.webc` with Wasmer CLI 7.2.0.
-The playground loads that local package with `@wasmer/sdk` and executes its WASIX entrypoint; it
-does not query the Wasmer registry at runtime.
+This package builds real GNU Bash for WASIX and packages it as a local WEBc asset for the
+wasm-idle browser playground. The browser never queries the Wasmer registry at runtime.
 
-Run `pnpm --dir runtimes/wasm-bash build` to download and verify the upstream WAPM archive, extract
-`bash.wasm`, build `bash.webc`, and write the runtime metadata and GNU GPL license to
-`static/wasm-bash`. Run the
-`check` script to verify an existing bundle without changing it.
+Run `pnpm --dir runtimes/wasm-bash build` to download the pinned inputs, compile Bash, and write
+the verified bundle to `runtimes/wasm-bash/dist`. The root `sync:wasm-bash` task validates that
+bundle before atomically copying it to `static/wasm-bash` and updating the asset fingerprint.
+`pnpm --dir runtimes/wasm-bash check` verifies an existing dist without rebuilding it.
 
-The standalone binary provides Bash builtins. The upstream package declares
-`sharrattj/coreutils@1.0.16` as a separate dependency, which is intentionally not bundled here;
-external utilities such as `cat`, `sed`, and `ls` are therefore not available yet.
+The build currently supports Linux x86-64 hosts. End users do not need the build toolchain because
+the checked-in browser asset is self-contained.
 
 ## Provenance
 
-- Package: `sharrattj/bash@1.0.17`
-- Archive SHA-256: `850c5d4257336a3ec8d7ab1b1b7e01e1e76f3fb0566196b0091989860cf20d74`
-- `bash.wasm` SHA-256: `305e2a460068b45cca21583a6619c008dedea0b71c052e29446eb88b9c4438a9`
-- `bash.webc` SHA-256: `7609fd1e023758d73096b042d9be3adb9e23c9aa357b272b84b9b4fd69b65311`
+- Source: `wasix-org/bash` commit `fc8096485478055f4fcf31402004fdd8ff6b72b7`
+- Runtime package version: `wasmer/bash@1.0.25`
+- WASIX sysroot: `v2024-07-08.1`
+- Compiler: WASI SDK 20.0 / LLVM 16.0.0
+- Optimizer: Binaryen 108 with upstream `--asyncify --fpcast-emu`, followed by `--strip-debug`
 - WEBc builder: Wasmer CLI 7.2.0
-- License: GNU GPL version 3 or later, as declared by GNU Bash
+- License: GNU GPL version 3 or later
 
-The exact source revision used by the third-party Wasmer package is not recorded in its package
-metadata. Do not publish this binary outside the project until corresponding-source availability
-has been confirmed with the package publisher.
+Every archive URL and SHA-256, the final Wasm and WEBc hashes, and the allowed Wasm feature set are
+recorded in `runtime-build.json`.
+
+The bundle contains Bash builtins only. External utilities such as `cat`, `sed`, and `ls` are not
+included because the separate coreutils package is not yet bundled.

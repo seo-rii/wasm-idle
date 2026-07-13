@@ -149,7 +149,8 @@ class Bash implements Sandbox {
 					return;
 				}
 				this.instance = instance;
-				this.stdinWriter = instance.stdin?.getWriter() || null;
+				this.stdinWriter =
+					suppliedStdin === undefined ? instance.stdin?.getWriter() || null : null;
 				await this.flushPendingInput();
 
 				const stdoutDone = instance.stdout.pipeTo(
@@ -179,7 +180,6 @@ class Bash implements Sandbox {
 				this.activeReject = null;
 				this.stdinWriter = null;
 				this.instance = null;
-				instance.free();
 				if (!result.ok) {
 					reject(`Bash exited with status ${result.code}.`);
 					return;

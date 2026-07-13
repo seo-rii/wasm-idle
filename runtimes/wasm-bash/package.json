@@ -4,7 +4,7 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"build": "node scripts/sync-runtime.mjs",
-		"check": "node scripts/sync-runtime.mjs --check"
+		"build": "node scripts/prepare-runtime.mjs",
+		"check": "node scripts/prepare-runtime.mjs --check"
 	}
 }

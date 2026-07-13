@@ -1475,7 +1475,8 @@
 		try {
 			progress = 0;
 			progressStage = '';
-			const preloadedStdin = sharedBufferAvailable ? undefined : stdinInput;
+			const preloadedStdin =
+				sharedBufferAvailable && language !== 'BASH' ? undefined : stdinInput;
 			await executeTerminalRun({
 				terminal,
 				language,
@@ -2019,15 +2020,15 @@
 					</button>
 				</div>
 			</div>
-			{#if !sharedBufferAvailable}
+			{#if !sharedBufferAvailable || language === 'BASH'}
 				<div class="stdin-panel">
 					<div>
 						<strong>Preloaded stdin</strong>
-						<span
-							>SharedArrayBuffer is unavailable here, so terminal input cannot be sent
-							while the program is running. Enter stdin before Run; extra reads
-							receive EOF.</span
-						>
+						<span>
+							{language === 'BASH'
+								? 'The Bash WASIX package accepts stdin when the process starts. Enter it before Run; extra reads receive EOF.'
+								: 'SharedArrayBuffer is unavailable here, so terminal input cannot be sent while the program is running. Enter stdin before Run; extra reads receive EOF.'}
+						</span>
 					</div>
 					<textarea
 						bind:value={stdinInput}
@@ -2308,8 +2309,9 @@
 		{#if language === 'BASH'}
 			<p class="hint">
 				Bash runs locally through the bundled GNU Bash WASIX binary and Wasmer browser
-				runtime. Use `read -r` for stdin and `$1`, `$2`, … for CLI args. Bash builtins are
-				available; external coreutils are not bundled yet.
+				runtime. Enter stdin in the preloaded input panel, use `read -r` to consume it, and
+				read CLI args from `$1`, `$2`, …. Bash builtins are available; external coreutils
+				are not bundled yet.
 			</p>
 		{/if}
 		{#if language === 'PASCAL'}

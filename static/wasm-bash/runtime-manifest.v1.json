@@ -1,0 +1,13 @@
+{
+  "format": "wasm-bash-runtime-manifest-v1",
+  "runtime": "GNU Bash",
+  "package": "wasmer/bash",
+  "packageVersion": "1.0.25",
+  "sourceRevision": "fc8096485478055f4fcf31402004fdd8ff6b72b7",
+  "fingerprint": "1b38ad9169fbbaee",
+  "files": [
+    "LICENSE.txt",
+    "bash.webc",
+    "runtime-build.json"
+  ]
+}

@@ -83,16 +83,18 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/<span class="material-symbols-outlined">play_circle<\/span>/);
 	});
 
-	it('preloads stdin instead of reloading when SharedArrayBuffer is unavailable', () => {
+	it('preloads stdin when SharedArrayBuffer is unavailable or Bash is selected', () => {
 		expect(source).not.toMatch(/location\.reload\(\)/);
 		expect(source).toMatch(
 			/const sharedBufferAvailable = \$derived\(\s*!browser \|\| isSharedArrayBufferAvailable\(\)\s*\);/s
 		);
 		expect(source).toMatch(
-			/const preloadedStdin = sharedBufferAvailable \? undefined : stdinInput;/
+			/const preloadedStdin =\s+sharedBufferAvailable && language !== 'BASH' \? undefined : stdinInput;/s
 		);
 		expect(source).toMatch(/stdin: preloadedStdin/);
-		expect(source).toMatch(/\{#if !sharedBufferAvailable\}\s+<div class="stdin-panel">/s);
+		expect(source).toMatch(
+			/\{#if !sharedBufferAvailable \|\| language === 'BASH'\}\s+<div class="stdin-panel">/s
+		);
 		expect(source).toMatch(/bind:value=\{stdinInput\}/);
 		expect(source).toMatch(
 			/disabled=\{!!runningMode \|\| !debugLanguage \|\| !sharedBufferAvailable\}/

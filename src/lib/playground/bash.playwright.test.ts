@@ -46,14 +46,16 @@ describe('wasm-idle Bash browser playwright integration', () => {
 					);
 
 			try {
-				const summary = await runStdinBrowserProbe({
+				const probeOptions = {
 					browserUrl: previewServer.browserUrl,
 					expectedOutput: 'main=73',
 					language: 'BASH',
+					preloadStdin: true,
 					runTimeoutMs: Number(process.env.WASM_IDLE_BASH_RUN_TIMEOUT_MS || '180000'),
 					source: bashStdinSource,
 					stdinText: '68\n'
-				});
+				};
+				const summary = await runStdinBrowserProbe(probeOptions);
 
 				expect(summary.activeState.crossOriginIsolated).toBe(true);
 				expect(summary.activeState.sharedArrayBuffer).toBe(true);

@@ -30,11 +30,21 @@ function filterBenignPageErrors(pageErrors) {
  * @param {import('playwright-core').Page} page
  */
 async function readActiveState(page) {
-	return await page.evaluate(() => ({
-		crossOriginIsolated,
-		sharedArrayBuffer: typeof SharedArrayBuffer !== 'undefined',
-		serviceWorkerControlled: !!navigator.serviceWorker?.controller
-	}));
+	let lastError;
+	for (let attempt = 0; attempt < 12; attempt += 1) {
+		try {
+			return await page.evaluate(() => ({
+				crossOriginIsolated,
+				sharedArrayBuffer: typeof SharedArrayBuffer !== 'undefined',
+				serviceWorkerControlled: !!navigator.serviceWorker?.controller
+			}));
+		} catch (error) {
+			lastError = error;
+			if (!String(error).includes('Execution context was destroyed')) throw error;
+			await page.waitForTimeout(250);
+		}
+	}
+	throw lastError;
 }
 
 /**
@@ -72,6 +82,7 @@ async function readProbeSummary(page, activeState, pageErrors, consoleMessages) 
  * @property {string} [chromiumExecutable]
  * @property {string} expectedOutput
  * @property {string} language
+ * @property {boolean} [preloadStdin]
  * @property {boolean} [requireSharedArrayBuffer]
  * @property {number} [runTimeoutMs]
  * @property {boolean} [sendEof]
@@ -81,7 +92,7 @@ async function readProbeSummary(page, activeState, pageErrors, consoleMessages) 
  */
 
 /**
- * @param {StdinBrowserProbeOptions} options
+ * @param {StdinBrowserProbeOptions & { preloadStdin?: boolean }} options
  */
 export async function runStdinBrowserProbe(options) {
 	const {
@@ -90,6 +101,7 @@ export async function runStdinBrowserProbe(options) {
 		chromiumExecutable = '',
 		expectedOutput = '',
 		language = '',
+		preloadStdin = false,
 		requireSharedArrayBuffer = true,
 		runTimeoutMs = 120_000,
 		sendEof = false,
@@ -323,7 +335,7 @@ export async function runStdinBrowserProbe(options) {
 			);
 		}
 		activeState = await readActiveState(page);
-		const usePreloadedStdin = !activeState.sharedArrayBuffer;
+		const usePreloadedStdin = preloadStdin || !activeState.sharedArrayBuffer;
 		if (usePreloadedStdin) {
 			const stdinPrepared = await page.evaluate((text) => {
 				const api = /** @type {any} */ (window).__wasmIdleDebug;
@@ -381,6 +393,14 @@ export async function runStdinBrowserProbe(options) {
 				{ cause: error }
 			);
 		}
+		await page.waitForFunction(
+			() =>
+				(document.querySelector('[data-testid="terminal-debug-output"]')?.textContent || '').includes(
+					'Process finished after'
+				),
+			undefined,
+			{ polling: 100, timeout: runTimeoutMs }
+		);
 
 		const summary = await readProbeSummary(page, activeState, pageErrors, consoleMessages);
 		const relevantPageErrors = filterBenignPageErrors(summary.pageErrors);
