@@ -148,6 +148,13 @@ const sandboxRoutes = [
 		}
 	},
 	{
+		aliases: ['CLOJURESCRIPT', 'CLJS'],
+		load: async () => {
+			const { default: ClojureScript } = await import('$lib/playground/clojurescript');
+			return new ClojureScript();
+		}
+	},
+	{
 		aliases: ['FORTH', 'GFORTH'],
 		load: async () => {
 			const { default: Forth } = await import('$lib/playground/forth');
@@ -357,6 +364,7 @@ export const supportedLanguages = [
 	'JULIA',
 	'NIM',
 	'BASH',
+	'CLOJURESCRIPT',
 	'FORTRAN',
 	'TINYGO',
 	'OCAML',

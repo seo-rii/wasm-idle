@@ -187,6 +187,23 @@ describe('core language contract', () => {
 		expect(key).toContain('"bashWebcUrl":"/wasm-bash/bash.webc?v=test"');
 	});
 
+	it('exposes ClojureScript aliases and static worker urls', () => {
+		expect(supportedLanguageIds).toContain('CLOJURESCRIPT');
+		expect(normalizeLanguageId('clojurescript')).toBe('CLOJURESCRIPT');
+		expect(normalizeLanguageId('cljs')).toBe('CLOJURESCRIPT');
+		expect(isDeferredProgressLanguage('cljs')).toBe(true);
+		const key = createRuntimeAssetsKey({
+			clojurescript: {
+				baseUrl: '/wasm-clojurescript/',
+				workerUrl: '/wasm-clojurescript/runner-worker.js?v=test'
+			}
+		});
+		expect(key).toContain('"clojurescriptBaseUrl":"/wasm-clojurescript/"');
+		expect(key).toContain(
+			'"clojurescriptWorkerUrl":"/wasm-clojurescript/runner-worker.js?v=test"'
+		);
+	});
+
 	it('includes Swift runtime urls in runtime asset cache keys before registration', () => {
 		const key = createRuntimeAssetsKey({
 			rootUrl: '/repl',

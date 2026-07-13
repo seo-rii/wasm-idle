@@ -486,6 +486,19 @@ export const supportMatrixRows = [
 		}
 	},
 	{
+		language: 'ClojureScript',
+		ids: ['CLOJURESCRIPT'],
+		runtime: 'cljs.js self-hosted compiler',
+		stdin: 'Yes',
+		editorSupport: 'syntax',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/static-worker-runtimes.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_CLOJURESCRIPT',
+			language: 'CLOJURESCRIPT'
+		}
+	},
+	{
 		language: 'TinyGo',
 		ids: ['TINYGO'],
 		runtime: 'wasm-tinygo',
@@ -1059,6 +1072,20 @@ const runtimeDetailsByLanguage = new Map([
 				`runs the pinned ${code('bash.webc')} locally with the Wasmer package entrypoint; supports ` +
 				`${code('stdin')}, ${code('programArgs')}, ${code('activePath')}, and ${code('workspaceFiles')}`,
 			customization: `${code('runtimeAssets.bash.webcUrl')} or ${code('rootUrl')}; ${code('programArgs')}`
+		}
+	],
+	[
+		'ClojureScript',
+		{
+			packageBase:
+				`${workspacePackage('runtimes/wasm-clojurescript')} / ClojureScript ` +
+				manifestValue('static/wasm-clojurescript/runtime-manifest.v1.json', [
+					'clojureScriptVersion'
+				]),
+			execution:
+				`static worker compiles and evaluates with the official ${code('cljs.js')} self-hosted compiler; ` +
+				`supports ${code('stdin')}, ${code('programArgs')}, ${code('activePath')}, and ${code('workspaceFiles')}`,
+			customization: staticWorkerCustomizationFor('clojurescript', 'CLOJURESCRIPT')
 		}
 	],
 	[

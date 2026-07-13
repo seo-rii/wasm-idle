@@ -1,0 +1,10 @@
+{
+	"name": "@wasm-idle/runtime-clojurescript",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"build": "node scripts/prepare-runtime.mjs",
+		"check": "node scripts/prepare-runtime.mjs --check"
+	}
+}

@@ -26,6 +26,7 @@ export type EditorDefaultLanguage =
 	| 'julia'
 	| 'nim'
 	| 'bash'
+	| 'clojurescript'
 	| 'ocaml'
 	| 'javascript'
 	| 'typescript'
@@ -78,6 +79,7 @@ export const editorDefaults: Record<
 	| 'julia'
 	| 'nim'
 	| 'bash'
+	| 'clojurescript'
 	| 'ocaml'
 	| 'javascript'
 	| 'typescript'
@@ -512,6 +514,21 @@ factorial() {
 IFS= read -r input || input=''
 n="\${input:-\${1:-4}}"
 printf 'factorial_plus_bonus=%d\\n' "$(( $(factorial "$n") + bonus ))"`,
+	clojurescript: `(ns wasm-idle.main
+  (:require [wasm-idle.runtime :as runtime]))
+
+(def bonus 3)
+
+(defn factorial [n]
+  (if (<= n 1)
+    1
+    (* n (factorial (dec n)))))
+
+(let [line (runtime/read-line)
+      arg (first (runtime/args))
+      parsed (js/parseInt (or line arg "4") 10)
+      n (if (js/isNaN parsed) 4 parsed)]
+  (println (str "factorial_plus_bonus=" (+ (factorial n) bonus))))`,
 	ocaml: `let bonus = 3
 
 let rec factorial n =
@@ -899,6 +916,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.julia ||
 		source === editorDefaults.nim ||
 		source === editorDefaults.bash ||
+		source === editorDefaults.clojurescript ||
 		source === editorDefaults.ocaml ||
 		source === editorDefaults.javascript ||
 		source === editorDefaults.typescript ||

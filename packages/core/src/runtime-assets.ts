@@ -40,6 +40,7 @@ export interface RuntimeAssetKeySource {
 	julia?: { baseUrl?: string; workerUrl?: string };
 	nim?: { baseUrl?: string; workerUrl?: string };
 	bash?: { webcUrl?: string };
+	clojurescript?: { baseUrl?: string; workerUrl?: string };
 	swift?: { baseUrl?: string; workerUrl?: string; manifestUrl?: string };
 	sqlite?: { wasmUrl?: string };
 	php?: { version?: string };
@@ -126,6 +127,8 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	{ runtime: 'nim', property: 'baseUrl', key: 'nimBaseUrl' },
 	{ runtime: 'nim', property: 'workerUrl', key: 'nimWorkerUrl' },
 	{ runtime: 'bash', property: 'webcUrl', key: 'bashWebcUrl' },
+	{ runtime: 'clojurescript', property: 'baseUrl', key: 'clojurescriptBaseUrl' },
+	{ runtime: 'clojurescript', property: 'workerUrl', key: 'clojurescriptWorkerUrl' },
 	{ runtime: 'swift', property: 'baseUrl', key: 'swiftBaseUrl' },
 	{ runtime: 'swift', property: 'workerUrl', key: 'swiftWorkerUrl' },
 	{ runtime: 'swift', property: 'manifestUrl', key: 'swiftManifestUrl' },

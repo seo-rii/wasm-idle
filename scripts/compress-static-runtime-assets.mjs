@@ -39,6 +39,7 @@ const COMPRESSIBLE_TOP_LEVEL_DIRS = [
 	'wasm-awk',
 	'wasm-bash',
 	'wasm-bqn',
+	'wasm-clojurescript',
 	'wasm-d',
 	'wasm-dotnet',
 	'wasm-elixir',

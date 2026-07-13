@@ -204,6 +204,13 @@ vi.mock('$lib/playground/bash', () => {
 	};
 });
 
+vi.mock('$lib/playground/clojurescript', () => {
+	moduleLoads.add('CLOJURESCRIPT');
+	return {
+		default: createMockSandboxClass('CLOJURESCRIPT')
+	};
+});
+
 vi.mock('$lib/playground/swift', () => {
 	moduleLoads.add('SWIFT');
 	return {
@@ -367,6 +374,7 @@ describe('playground runtime binding', () => {
 				'JULIA',
 				'NIM',
 				'BASH',
+				'CLOJURESCRIPT',
 				'FORTRAN',
 				'DUCKDB',
 				'WASM'
@@ -384,6 +392,12 @@ describe('playground runtime binding', () => {
 		const sandbox = await playground('SH');
 		expect(sandboxInstances.get('BASH')).toHaveLength(1);
 		expect(moduleLoads).toContain('BASH');
+	});
+
+	it('routes the CLJS alias through the ClojureScript sandbox', async () => {
+		const sandbox = await playground('CLJS');
+		expect(sandboxInstances.get('CLOJURESCRIPT')).toHaveLength(1);
+		expect(moduleLoads).toContain('CLOJURESCRIPT');
 	});
 
 	it('keeps the legacy sandbox load signature when runtime assets are not bound', async () => {

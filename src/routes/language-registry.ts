@@ -25,6 +25,7 @@ export type PlaygroundLanguage =
 	| 'JULIA'
 	| 'NIM'
 	| 'BASH'
+	| 'CLOJURESCRIPT'
 	| 'OCAML'
 	| 'TINYGO'
 	| 'JAVASCRIPT'
@@ -107,6 +108,7 @@ export const playgroundLanguages: PlaygroundLanguage[] = [
 	'JULIA',
 	'NIM',
 	'BASH',
+	'CLOJURESCRIPT',
 	'OCAML',
 	'TINYGO',
 	'JAVASCRIPT',
@@ -161,6 +163,7 @@ export const languageLabels: Record<PlaygroundLanguage, string> = {
 	JULIA: 'Julia',
 	NIM: 'Nim',
 	BASH: 'Bash',
+	CLOJURESCRIPT: 'ClojureScript',
 	OCAML: 'OCaml',
 	TINYGO: 'TinyGo',
 	JAVASCRIPT: 'JavaScript',
@@ -215,6 +218,7 @@ export const editorLanguages: Record<PlaygroundLanguage, string> = {
 	JULIA: 'julia',
 	NIM: 'nim',
 	BASH: 'shell',
+	CLOJURESCRIPT: 'clojure',
 	OCAML: 'ocaml',
 	TINYGO: 'go',
 	JAVASCRIPT: 'javascript',
@@ -299,6 +303,7 @@ export const argsHelpLanguages = new Set<PlaygroundLanguage>([
 	'TCL',
 	'AWK',
 	'BASH',
+	'CLOJURESCRIPT',
 	'TINYGO',
 	'JAVASCRIPT',
 	'TYPESCRIPT',
@@ -404,6 +409,7 @@ export const monacoLanguageContributionLoaders: Record<string, MonacoLanguageCon
 	'objective-c': () =>
 		import('monaco-editor/esm/vs/basic-languages/objective-c/objective-c.contribution.js'),
 	csharp: () => import('monaco-editor/esm/vs/basic-languages/csharp/csharp.contribution.js'),
+	clojure: () => import('monaco-editor/esm/vs/basic-languages/clojure/clojure.contribution.js'),
 	css: () => import('monaco-editor/esm/vs/basic-languages/css/css.contribution.js'),
 	elixir: () => import('monaco-editor/esm/vs/basic-languages/elixir/elixir.contribution.js'),
 	go: () => import('monaco-editor/esm/vs/basic-languages/go/go.contribution.js'),

@@ -450,6 +450,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/<option value="GLEAM">Gleam<\/option>/);
 		expect(source).toMatch(/<option value="PERL">Perl<\/option>/);
 		expect(source).toMatch(/<option value="PASCAL">Pascal<\/option>/);
+		expect(source).toMatch(/<option value="CLOJURESCRIPT">ClojureScript<\/option>/);
 		expect(source).toMatch(/<option value="FORTH">Forth<\/option>/);
 		expect(source).toMatch(/<option value="J">J<\/option>/);
 		expect(source).toMatch(/<option value="BQN">BQN<\/option>/);

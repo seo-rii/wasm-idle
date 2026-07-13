@@ -201,6 +201,11 @@ export interface BashRuntimeAssetConfig {
 	webcUrl?: string;
 }
 
+export interface ClojureScriptRuntimeAssetConfig {
+	baseUrl?: string;
+	workerUrl?: string;
+}
+
 export interface SwiftRuntimeAssetConfig {
 	baseUrl?: string;
 	workerUrl?: string;
@@ -253,6 +258,7 @@ export interface PlaygroundRuntimeAssets {
 	julia?: JuliaRuntimeAssetConfig;
 	nim?: NimRuntimeAssetConfig;
 	bash?: BashRuntimeAssetConfig;
+	clojurescript?: ClojureScriptRuntimeAssetConfig;
 	swift?: SwiftRuntimeAssetConfig;
 	sqlite?: SqliteRuntimeAssetConfig;
 	php?: PhpRuntimeAssetConfig;
@@ -1806,6 +1812,64 @@ export function resolvePascalRuntimeAssetConfig(
 	return {
 		baseUrl: resolvePascalBaseUrl(options, currentUrl),
 		workerUrl: resolvePascalWorkerUrl(options, currentUrl)
+	};
+}
+
+export function resolveClojureScriptBaseUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredBaseUrl =
+		(typeof options === 'object' && options?.clojurescript?.baseUrl) ||
+		(publicEnv.PUBLIC_WASM_CLOJURESCRIPT_BASE_URL || '').trim();
+
+	if (configuredBaseUrl) return normalizeBaseUrl(configuredBaseUrl, currentUrl);
+	if (typeof options === 'string') {
+		return normalizeBaseUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-clojurescript/`,
+			currentUrl
+		);
+	}
+	if (options?.rootUrl) {
+		return normalizeBaseUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-clojurescript/`,
+			currentUrl
+		);
+	}
+	return normalizeBaseUrl('/wasm-clojurescript/', currentUrl);
+}
+
+export function resolveClojureScriptWorkerUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredWorkerUrl =
+		(typeof options === 'object' && options?.clojurescript?.workerUrl) ||
+		(publicEnv.PUBLIC_WASM_CLOJURESCRIPT_WORKER_URL || '').trim();
+
+	if (configuredWorkerUrl) return resolveConfiguredUrl(configuredWorkerUrl, currentUrl);
+	if (typeof options === 'string') {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-clojurescript/runner-worker.js`,
+			currentUrl
+		);
+	}
+	if (options?.rootUrl) {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-clojurescript/runner-worker.js`,
+			currentUrl
+		);
+	}
+	return resolveConfiguredUrl('/wasm-clojurescript/runner-worker.js', currentUrl);
+}
+
+export function resolveClojureScriptRuntimeAssetConfig(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	return {
+		baseUrl: resolveClojureScriptBaseUrl(options, currentUrl),
+		workerUrl: resolveClojureScriptWorkerUrl(options, currentUrl)
 	};
 }
 

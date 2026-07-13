@@ -16,6 +16,8 @@ const { publicEnv } = vi.hoisted(() => ({
 		PUBLIC_WASM_AWK_WORKER_URL: '',
 		PUBLIC_WASM_PASCAL_BASE_URL: '',
 		PUBLIC_WASM_PASCAL_WORKER_URL: '',
+		PUBLIC_WASM_CLOJURESCRIPT_BASE_URL: '',
+		PUBLIC_WASM_CLOJURESCRIPT_WORKER_URL: '',
 		PUBLIC_WASM_FORTH_BASE_URL: '',
 		PUBLIC_WASM_FORTH_WORKER_URL: '',
 		PUBLIC_WASM_J_BASE_URL: '',
@@ -66,6 +68,7 @@ vi.mock('$env/dynamic/public', () => ({
 import Gleam from './gleam';
 import Awk from './awk';
 import Bqn from './bqn';
+import ClojureScript from './clojurescript';
 import Forth from './forth';
 import J from './j';
 import Janet from './janet';
@@ -258,6 +261,40 @@ describe('static worker backed language sandboxes', () => {
 				baseUrl: 'http://localhost:3000/wasm-pascal/',
 				stdin: 'ok\n',
 				activePath: 'main.pas'
+			})
+		);
+	});
+
+	it('loads ClojureScript runtime urls and forwards stdin, args, and workspace files', async () => {
+		const sandbox = new ClojureScript();
+		const code = `(ns wasm-idle.main (:require [wasm-idle.runtime :as runtime]))
+(println (runtime/read-line))`;
+		await sandbox.load({
+			clojurescript: {
+				baseUrl: '/wasm-clojurescript/',
+				workerUrl: '/wasm-clojurescript/runner-worker.js?v=test'
+			}
+		});
+		await expect(
+			sandbox.run(code, false, true, undefined, ['demo'], {
+				activePath: 'src/wasm_idle/main.cljs',
+				stdin: '68\n',
+				workspaceFiles: [{ path: 'src/demo.cljs', content: '(ns demo)' }]
+			})
+		).resolves.toBe(true);
+
+		expect(workerInstances[0].url).toBe(
+			'http://localhost:3000/wasm-clojurescript/runner-worker.js?v=test'
+		);
+		expect(workerInstances[0].options).toBeUndefined();
+		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				baseUrl: 'http://localhost:3000/wasm-clojurescript/',
+				code,
+				args: ['demo'],
+				stdin: '68\n',
+				activePath: 'src/wasm_idle/main.cljs',
+				workspaceFiles: [{ path: 'src/demo.cljs', content: '(ns demo)' }]
 			})
 		);
 	});

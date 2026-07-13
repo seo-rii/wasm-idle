@@ -44,6 +44,9 @@ describe('editor defaults', () => {
 		expect(editorDefaults.julia).toContain('factorial_plus_bonus=');
 		expect(editorDefaults.nim).toContain('stdin.readLine()');
 		expect(editorDefaults.nim).toContain('factorial_plus_bonus=');
+		expect(editorDefaults.clojurescript).toContain('[wasm-idle.runtime :as runtime]');
+		expect(editorDefaults.clojurescript).toContain('(runtime/read-line)');
+		expect(editorDefaults.clojurescript).toContain('(runtime/args)');
 		expect(editorDefaults.ocaml).toContain('read_line ()');
 		expect(editorDefaults.javascript).toContain("require('fs')");
 		expect(editorDefaults.javascript).toContain('readLineSync(0)');
@@ -103,6 +106,9 @@ describe('editor defaults', () => {
 		expect(resolveEditorDefaultSource('janet', 'wasm32-wasip1')).toBe(editorDefaults.janet);
 		expect(resolveEditorDefaultSource('julia', 'wasm32-wasip1')).toBe(editorDefaults.julia);
 		expect(resolveEditorDefaultSource('nim', 'wasm32-wasip1')).toBe(editorDefaults.nim);
+		expect(resolveEditorDefaultSource('clojurescript', 'wasm32-wasip1')).toBe(
+			editorDefaults.clojurescript
+		);
 		expect(resolveEditorDefaultSource('ocaml', 'wasm32-wasip1')).toBe(editorDefaults.ocaml);
 		expect(resolveEditorDefaultSource('javascript', 'wasm32-wasip1')).toBe(
 			editorDefaults.javascript
@@ -149,6 +155,7 @@ describe('editor defaults', () => {
 		expect(isEditorDefaultSource(editorDefaults.janet)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.julia)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.nim)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.clojurescript)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.ocaml)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.javascript)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.typescript)).toBe(true);

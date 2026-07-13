@@ -52,6 +52,13 @@ begin
 end.
 `;
 
+const clojureScriptStdinSource = `(ns wasm-idle.main
+  (:require [wasm-idle.runtime :as runtime]))
+
+(let [n (js/parseInt (runtime/read-line) 10)]
+  (println (str "main=" (+ n 5))))
+`;
+
 const forthStdinSource = `: READ-NUMBER ( -- n )
   0
   BEGIN
@@ -276,6 +283,32 @@ describe('wasm-idle static worker language browser integrations', () => {
 					language: 'PASCAL',
 					runTimeoutMs: Number(process.env.WASM_IDLE_PASCAL_RUN_TIMEOUT_MS || '240000'),
 					source: pascalStdinSource,
+					stdinText: '68\n'
+				});
+				expect(summary.activeState.crossOriginIsolated).toBe(true);
+				expect(summary.activeState.sharedArrayBuffer).toBe(true);
+				expect(summary.activeState.serviceWorkerControlled).toBe(true);
+				expect(summary.pageErrors).toEqual([]);
+				expect(summary.transcript).toContain('main=73');
+				expect(summary.transcript).toContain('Process finished after');
+			}
+		);
+	}, 960_000);
+
+	it('runs the real self-hosted ClojureScript compiler and connects stdin', async () => {
+		if (process.env.WASM_IDLE_RUN_REAL_BROWSER_CLOJURESCRIPT !== '1') return;
+		await withPreviewServer(
+			['sync:wasm-clojurescript'],
+			Number(process.env.WASM_IDLE_CLOJURESCRIPT_PREP_TIMEOUT_MS || '900000'),
+			async (browserUrl) => {
+				const summary = await runStdinBrowserProbe({
+					browserUrl,
+					expectedOutput: 'main=73',
+					language: 'CLOJURESCRIPT',
+					runTimeoutMs: Number(
+						process.env.WASM_IDLE_CLOJURESCRIPT_RUN_TIMEOUT_MS || '240000'
+					),
+					source: clojureScriptStdinSource,
 					stdinText: '68\n'
 				});
 				expect(summary.activeState.crossOriginIsolated).toBe(true);

@@ -18,6 +18,7 @@
 	import type { DebugLanguageAdapter } from '$lib';
 	import { WASM_AWK_ASSET_VERSION } from '$lib/playground/wasmAwkVersion';
 	import { WASM_BASH_ASSET_VERSION } from '$lib/playground/wasmBashVersion';
+	import { WASM_CLOJURESCRIPT_ASSET_VERSION } from '$lib/playground/wasmClojureScriptVersion';
 	import { WASM_BQN_ASSET_VERSION } from '$lib/playground/wasmBqnVersion';
 	import { WASM_D_ASSET_VERSION } from '$lib/playground/wasmDVersion';
 	import { WASM_DOTNET_ASSET_VERSION } from '$lib/playground/wasmDotnetVersion';
@@ -250,6 +251,12 @@
 			webcUrl: path
 				? `${path}/wasm-bash/bash.webc?v=${WASM_BASH_ASSET_VERSION}`
 				: `/wasm-bash/bash.webc?v=${WASM_BASH_ASSET_VERSION}`
+		},
+		clojurescript: {
+			baseUrl: path ? `${path}/wasm-clojurescript/` : '/wasm-clojurescript/',
+			workerUrl: path
+				? `${path}/wasm-clojurescript/runner-worker.js?v=${WASM_CLOJURESCRIPT_ASSET_VERSION}`
+				: `/wasm-clojurescript/runner-worker.js?v=${WASM_CLOJURESCRIPT_ASSET_VERSION}`
 		},
 		swift: {
 			baseUrl: path ? `${path}/wasm-swift/` : '/wasm-swift/',
@@ -723,6 +730,8 @@
 			'.nims': 'NIM',
 			'.sh': 'BASH',
 			'.bash': 'BASH',
+			'.cljs': 'CLOJURESCRIPT',
+			'.cljc': 'CLOJURESCRIPT',
 			'.ml': 'OCAML',
 			'.mli': 'OCAML',
 			'.js': 'JAVASCRIPT',
@@ -798,6 +807,7 @@
 			JULIA: 'main.jl',
 			NIM: 'main.nim',
 			BASH: 'main.sh',
+			CLOJURESCRIPT: 'main.cljs',
 			OCAML: 'main.ml',
 			TINYGO: 'main.go',
 			JAVASCRIPT: 'main.js',
@@ -855,6 +865,7 @@
 			JULIA: 'julia',
 			NIM: 'nim',
 			BASH: 'bash',
+			CLOJURESCRIPT: 'clojurescript',
 			OCAML: 'ocaml',
 			TINYGO: 'go',
 			JAVASCRIPT: 'javascript',
@@ -1394,6 +1405,8 @@
 			bash: 'BASH',
 			sh: 'BASH',
 			shell: 'BASH',
+			clojurescript: 'CLOJURESCRIPT',
+			cljs: 'CLOJURESCRIPT',
 			ocaml: 'OCAML',
 			tinygo: 'TINYGO',
 			javascript: 'JAVASCRIPT',
@@ -2089,6 +2102,7 @@
 						<option value="JULIA">Julia</option>
 						<option value="NIM">Nim</option>
 						<option value="BASH">Bash</option>
+						<option value="CLOJURESCRIPT">ClojureScript</option>
 						<option value="OCAML">OCaml</option>
 						<option value="TINYGO">TinyGo</option>
 						<option value="JAVASCRIPT">JavaScript</option>
@@ -2312,6 +2326,13 @@
 				runtime. Enter stdin in the preloaded input panel, use `read -r` to consume it, and
 				read CLI args from `$1`, `$2`, …. Bash builtins are available; external coreutils
 				are not bundled yet.
+			</p>
+		{/if}
+		{#if language === 'CLOJURESCRIPT'}
+			<p class="hint">
+				ClojureScript is compiled and evaluated locally with the official self-hosted
+				`cljs.js` compiler. Require `[wasm-idle.runtime :as runtime]` for `read-line`,
+				`stdin`, and `args` helpers.
 			</p>
 		{/if}
 		{#if language === 'PASCAL'}

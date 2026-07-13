@@ -421,6 +421,8 @@ importers:
 
   runtimes/wasm-bash: {}
 
+  runtimes/wasm-clojurescript: {}
+
   runtimes/wasm-d:
     dependencies:
       '@bjorn3/browser_wasi_shim':

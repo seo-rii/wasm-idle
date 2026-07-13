@@ -1,0 +1,13 @@
+{
+  "format": "wasm-clojurescript-runtime-build-v1",
+  "runtime": "cljs.js",
+  "clojureScriptVersion": "1.12.134",
+  "clojureToolsVersion": "1.12.4.1618",
+  "jdkVersion": "21.0.11+10",
+  "jdkArchiveSha256": "4b2220e232a97997b436ca6ab15cbf70171ecff52958a46159dfa5a8c44ca4de",
+  "clojureToolsArchiveSha256": "13769da6d63a98deb2024378ae1a64e4ee211ac1035340dfca7a6944c41cde21",
+  "target": "webworker",
+  "optimizations": "simple",
+  "compilerSha256": "1ae6dfa7899488cc42c43507b182e1fdac62e16e089492320fa96e6bbff0cf67",
+  "compilerBytes": 6587761
+}

@@ -57,6 +57,14 @@ describe('language registry', () => {
 		expect(monacoLanguageContributionLoaders.shell).toBeTypeOf('function');
 	});
 
+	it('registers ClojureScript with Clojure syntax and CLI args', () => {
+		expect(playgroundLanguages).toContain('CLOJURESCRIPT');
+		expect(languageLabels.CLOJURESCRIPT).toBe('ClojureScript');
+		expect(editorLanguages.CLOJURESCRIPT).toBe('clojure');
+		expect(argsHelpLanguages.has('CLOJURESCRIPT')).toBe(true);
+		expect(monacoLanguageContributionLoaders.clojure).toBeTypeOf('function');
+	});
+
 	it('keeps runtime-backed LSP capabilities aligned with editor-only languages', () => {
 		expect(runtimeLspCapabilities.RUST).toBe('rust');
 		expect(runtimeLspCapabilities.GO).toBe('go');
