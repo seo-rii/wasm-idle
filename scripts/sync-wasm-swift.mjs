@@ -49,11 +49,16 @@ const OPTIONAL_SOURCE_FILES = [
 ];
 const BASELINE_RECEIPT_SNAPSHOT_PATTERN = /^upstream-baseline-[A-Za-z0-9._+-]+\.snapshot\.json$/u;
 
+/** @param {string} filePath */
 async function fileExists(filePath) {
 	const fileStats = await stat(filePath).catch(() => null);
 	return !!fileStats?.isFile();
 }
 
+/**
+ * @param {string} sourceDir
+ * @param {string} relativePath
+ */
 async function resolveSourceRuntimeFile(sourceDir, relativePath) {
 	const filePath = path.join(sourceDir, relativePath);
 	if (await fileExists(filePath)) return { sourcePath: filePath, targetPath: relativePath };
@@ -66,6 +71,7 @@ async function resolveSourceRuntimeFile(sourceDir, relativePath) {
 	return null;
 }
 
+/** @param {string} buildInfoPath */
 async function readBuildInfo(buildInfoPath) {
 	const source = await readFile(buildInfoPath, 'utf8').catch(() => '');
 	if (!source) {
@@ -81,6 +87,7 @@ async function readBuildInfo(buildInfoPath) {
 	return parsed;
 }
 
+/** @param {any} buildInfo */
 function assertBuildInfoProvenance(buildInfo) {
 	if (typeof buildInfo.source !== 'string' || buildInfo.source.trim().length === 0) {
 		throw new Error(
@@ -91,6 +98,7 @@ function assertBuildInfoProvenance(buildInfo) {
 
 export { validateSwiftRuntimeBuildInfo };
 
+/** @param {string} sourceDir */
 async function assertRequiredFiles(sourceDir) {
 	for (const relativePath of REQUIRED_RUNTIME_FILES) {
 		if (!(await resolveSourceRuntimeFile(sourceDir, relativePath))) {
@@ -102,6 +110,7 @@ async function assertRequiredFiles(sourceDir) {
 	}
 }
 
+/** @param {string} sourceDir */
 async function assertRunnerWorkerContract(sourceDir) {
 	const runnerWorkerPath = path.join(sourceDir, 'runner-worker.js');
 	const errors = validateSwiftRunnerWorkerSource(await readFile(runnerWorkerPath, 'utf8'));
@@ -112,6 +121,7 @@ async function assertRunnerWorkerContract(sourceDir) {
 	}
 }
 
+/** @param {string} sourceDir */
 async function assertRuntimeFileSignatures(sourceDir) {
 	const errors = await validateSwiftRuntimeFileSignatures(sourceDir);
 	if (errors.length > 0) {
@@ -119,6 +129,10 @@ async function assertRuntimeFileSignatures(sourceDir) {
 	}
 }
 
+/**
+ * @param {string} sourceDir
+ * @param {any} buildInfo
+ */
 async function assertSourceManifest(sourceDir, buildInfo) {
 	const manifestPath = path.join(sourceDir, 'runtime-manifest.v1.json');
 	if (!(await fileExists(manifestPath))) {
@@ -153,6 +167,10 @@ async function assertSourceManifest(sourceDir, buildInfo) {
 	}
 }
 
+/**
+ * @param {string} sourceDir
+ * @param {any} buildInfo
+ */
 async function assertSdkChecksum(sourceDir, buildInfo) {
 	const errors = await validateSwiftRuntimeSdkChecksum(buildInfo, {
 		bundleDir: sourceDir,
@@ -163,6 +181,10 @@ async function assertSdkChecksum(sourceDir, buildInfo) {
 	}
 }
 
+/**
+ * @param {string} sourceDir
+ * @param {string} targetDir
+ */
 async function copyRuntimeFiles(sourceDir, targetDir) {
 	await mkdir(targetDir, { recursive: true });
 	for (const relativePath of REQUIRED_RUNTIME_FILES) {
@@ -183,6 +205,10 @@ async function copyRuntimeFiles(sourceDir, targetDir) {
 	}
 }
 
+/**
+ * @param {string} sourceDir
+ * @param {string} targetDir
+ */
 function assertSafeTargetPath(sourceDir, targetDir) {
 	const normalizedSourceDir = path.resolve(sourceDir);
 	const normalizedTargetDir = path.resolve(targetDir);
@@ -194,12 +220,17 @@ function assertSafeTargetPath(sourceDir, targetDir) {
 	}
 }
 
+/** @param {string} targetDir */
 async function createSyncTempDir(targetDir) {
 	const parentDir = path.dirname(path.resolve(targetDir));
 	await mkdir(parentDir, { recursive: true });
 	return mkdtemp(path.join(parentDir, '.wasm-swift-sync-'));
 }
 
+/**
+ * @param {string} versionModulePath
+ * @param {string} fingerprint
+ */
 async function writeVersionModule(versionModulePath, fingerprint) {
 	await mkdir(path.dirname(versionModulePath), { recursive: true });
 	const moduleSource = `export const WASM_SWIFT_ASSET_VERSION = '${fingerprint}';\n`;
@@ -207,6 +238,11 @@ async function writeVersionModule(versionModulePath, fingerprint) {
 	if (current !== moduleSource) await writeFile(versionModulePath, moduleSource, 'utf8');
 }
 
+/**
+ * @param {string} filePath
+ * @param {any} fallback
+ * @returns {Promise<any>}
+ */
 async function readJsonFile(filePath, fallback) {
 	try {
 		return JSON.parse(await readFile(filePath, 'utf8'));
@@ -215,10 +251,22 @@ async function readJsonFile(filePath, fallback) {
 	}
 }
 
+/** @param {import('node:crypto').BinaryLike} bytes */
 function sha256Hex(bytes) {
 	return createHash('sha256').update(bytes).digest('hex');
 }
 
+/**
+ * @param {{
+ *   sourceDir: string;
+ *   targetDir: string;
+ *   writeDir?: string;
+ *   buildInfoSource: string;
+ *   buildInfo: any;
+ *   manifest: any;
+ *   versionModulePath: string;
+ * }} options
+ */
 async function writeSyncReceipt({
 	sourceDir,
 	targetDir,
@@ -247,6 +295,10 @@ async function writeSyncReceipt({
 	return receipt;
 }
 
+/**
+ * @param {string} targetDir
+ * @param {any} manifest
+ */
 async function syncCompressedManifestForGzipOnlyAssets(targetDir, manifest) {
 	const rootDir = path.dirname(targetDir);
 	const bundleName = path.basename(targetDir);
@@ -261,7 +313,9 @@ async function syncCompressedManifestForGzipOnlyAssets(targetDir, manifest) {
 	}
 	const manifestPath = path.join(rootDir, COMPRESSED_RUNTIME_ASSET_MANIFEST);
 	const existingManifest = await readJsonFile(manifestPath, {});
-	const existingAssets = Array.isArray(existingManifest.assets) ? existingManifest.assets : [];
+	const existingAssets = /** @type {string[]} */ (
+		Array.isArray(existingManifest.assets) ? existingManifest.assets : []
+	);
 	if (
 		gzipOnlyAssets.length === 0 &&
 		!existingAssets.some((asset) => asset.startsWith(swiftAssetPrefix))
@@ -272,6 +326,7 @@ async function syncCompressedManifestForGzipOnlyAssets(targetDir, manifest) {
 		existingManifest.sizes && typeof existingManifest.sizes === 'object'
 			? existingManifest.sizes
 			: {};
+	/** @type {Record<string, number>} */
 	const sizes = {};
 	const assets = [
 		...new Set([
@@ -281,8 +336,11 @@ async function syncCompressedManifestForGzipOnlyAssets(targetDir, manifest) {
 	].sort();
 	for (const asset of assets) {
 		const runtimePath = asset.slice(swiftAssetPrefix.length);
+		const manifestFiles = /** @type {Array<{ path: string; bytes: number }>} */ (
+			manifest.files
+		);
 		const runtimeEntry = asset.startsWith(swiftAssetPrefix)
-			? manifest.files.find((entry) => entry.path === runtimePath)
+			? manifestFiles.find((entry) => entry.path === runtimePath)
 			: null;
 		const size = runtimeEntry?.bytes ?? existingSizes[asset];
 		if (Number.isFinite(size)) sizes[asset] = size;
@@ -295,6 +353,7 @@ async function syncCompressedManifestForGzipOnlyAssets(targetDir, manifest) {
 	return gzipOnlyAssets;
 }
 
+/** @param {string[]} argv */
 export function parseSyncWasmSwiftArgs(argv) {
 	const positional = [];
 	for (const arg of argv) {
@@ -323,6 +382,14 @@ function usage() {
 	].join('\n');
 }
 
+/**
+ * @param {{
+ *   sourceDir?: string;
+ *   targetDir?: string;
+ *   buildInfoPath?: string;
+ *   versionModulePath?: string;
+ * }} options
+ */
 export async function syncWasmSwiftAssets({
 	sourceDir = DEFAULT_SOURCE_DIR,
 	targetDir = DEFAULT_TARGET_DIR,
@@ -346,8 +413,11 @@ export async function syncWasmSwiftAssets({
 	await assertSourceManifest(normalizedSourceDir, buildInfo);
 	await assertSdkChecksum(normalizedSourceDir, buildInfo);
 	let tempTargetDir = await createSyncTempDir(normalizedTargetDir);
+	/** @type {string} */
 	let fingerprint;
+	/** @type {any} */
 	let manifest;
+	/** @type {any} */
 	let receipt;
 	try {
 		await copyRuntimeFiles(normalizedSourceDir, tempTargetDir);
