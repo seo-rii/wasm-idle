@@ -1,0 +1,29 @@
+{
+  "manifestVersion": 1,
+  "version": "gnucobol-3.2-wasi-preview1-v1",
+  "frontend": {
+    "asset": "cobc.zip",
+    "argv0": "cobc"
+  },
+  "rootfs": {
+    "asset": "rootfs.tar.zip"
+  },
+  "cSysroot": {
+    "asset": "c-sysroot.tar.zip"
+  },
+  "profile": {
+    "name": "gnucobol-wasi-clang",
+    "version": 1,
+    "gnucobolVersion": "3.2",
+    "gmpVersion": "6.3.0",
+    "frontendTarget": "wasm32-wasi",
+    "backend": "wasm-llvm-clang",
+    "unsupported": [
+      "dynamic CALL",
+      "CALL SYSTEM",
+      "fork",
+      "SCREEN SECTION",
+      "indexed I/O"
+    ]
+  }
+}

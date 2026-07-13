@@ -41,6 +41,7 @@ export type EditorDefaultLanguage =
 	| 'r'
 	| 'octave'
 	| 'fortran'
+	| 'cobol'
 	| 'graphql'
 	| 'duckdb'
 	| 'sqlite'
@@ -94,6 +95,7 @@ export const editorDefaults: Record<
 	| 'r'
 	| 'octave'
 	| 'fortran'
+	| 'cobol'
 	| 'graphql'
 	| 'duckdb'
 	| 'sqlite'
@@ -697,6 +699,26 @@ endif
       BONUS = 3
       PRINT *, 'factorial_plus_bonus=', 24 + BONUS
       END`,
+	cobol: `identification division.
+program-id. main.
+data division.
+working-storage section.
+01 input-value pic x(16).
+01 n pic 9(4) value 4.
+01 counter pic 9(4).
+01 factorial-value pic 9(9) value 1.
+01 result-value pic z(8)9.
+procedure division.
+accept input-value.
+if input-value not = spaces
+    move function numval(input-value) to n
+end-if.
+perform varying counter from 2 by 1 until counter > n
+    multiply counter by factorial-value
+end-perform.
+add 3 to factorial-value giving result-value.
+display "factorial_plus_bonus=" result-value.
+stop run.`,
 	graphql: `query Greeting {
     hello
 }`,
@@ -931,6 +953,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.r ||
 		source === editorDefaults.octave ||
 		source === editorDefaults.fortran ||
+		source === editorDefaults.cobol ||
 		source === editorDefaults.graphql ||
 		source === editorDefaults.duckdb ||
 		source === editorDefaults.sqlite ||

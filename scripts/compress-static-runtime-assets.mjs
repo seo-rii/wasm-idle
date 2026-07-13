@@ -40,6 +40,7 @@ const COMPRESSIBLE_TOP_LEVEL_DIRS = [
 	'wasm-bash',
 	'wasm-bqn',
 	'wasm-clojurescript',
+	'wasm-cobol',
 	'wasm-d',
 	'wasm-dotnet',
 	'wasm-elixir',

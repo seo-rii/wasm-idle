@@ -26,6 +26,7 @@ const { publicEnv } = vi.hoisted(() => ({
 		PUBLIC_WASM_FORTRAN_LIBF2C_URL: '',
 		PUBLIC_WASM_FORTRAN_F2C_HEADER_URL: '',
 		PUBLIC_WASM_FORTRAN_ANALYZER_URL: '',
+		PUBLIC_WASM_COBOL_BASE_URL: '',
 		PUBLIC_WASM_OBJECTIVEC_BASE_URL: '',
 		PUBLIC_WASM_OBJECTIVEC_LIBOBJC_URL: '',
 		PUBLIC_WASM_OBJECTIVEC_HEADERS_URL: '',
@@ -77,6 +78,7 @@ vi.mock('$env/dynamic/public', () => ({
 
 import {
 	RUNTIME_LOAD_ASSETS,
+	resolveCobolBaseUrl,
 	resolveFortranRuntimeAssetConfig,
 	resolveObjectiveCRuntimeAssetConfig,
 	resolveRuntimeAssetConfig
@@ -1148,6 +1150,25 @@ describe('runtime asset config resolution', () => {
 			f2cHeaderUrl: 'https://example.com/absproxy/5173/wasm-fortran/f2c.h',
 			analyzerUrl: 'https://example.com/absproxy/5173/wasm-fortran/analyzer.js'
 		});
+	});
+
+	it('derives the COBOL runtime base url from the shared root path', () => {
+		expect(resolveCobolBaseUrl('/absproxy/5173', 'https://example.com/app')).toBe(
+			'https://example.com/absproxy/5173/wasm-cobol/'
+		);
+	});
+
+	it('prefers an explicit COBOL runtime base url over the public env override', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_COBOL_BASE_URL = 'https://env.example.com/cobol/';
+		const { resolveCobolBaseUrl } = await import('./assets');
+
+		expect(
+			resolveCobolBaseUrl(
+				{ cobol: { baseUrl: '/runtime/cobol/' } },
+				'https://example.com/app'
+			)
+		).toBe('https://example.com/runtime/cobol/');
 	});
 
 	it('prefers explicit Fortran asset urls over public env overrides', async () => {

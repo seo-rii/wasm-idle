@@ -211,6 +211,13 @@ const sandboxRoutes = [
 		}
 	},
 	{
+		aliases: ['COBOL', 'COB', 'CBL', 'GNUCOBOL'],
+		load: async () => {
+			const { default: Cobol } = await import('$lib/playground/cobol');
+			return new Cobol();
+		}
+	},
+	{
 		aliases: ['TINYGO'],
 		load: async () => {
 			const { default: TinyGo } = await import('$lib/playground/tinygo');
@@ -366,6 +373,7 @@ export const supportedLanguages = [
 	'BASH',
 	'CLOJURESCRIPT',
 	'FORTRAN',
+	'COBOL',
 	'TINYGO',
 	'OCAML',
 	'JAVASCRIPT',

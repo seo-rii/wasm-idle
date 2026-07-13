@@ -65,6 +65,15 @@ describe('language registry', () => {
 		expect(monacoLanguageContributionLoaders.clojure).toBeTypeOf('function');
 	});
 
+	it('registers COBOL with its browser runtime and editor syntax', () => {
+		expect(playgroundLanguages).toContain('COBOL');
+		expect(languageLabels.COBOL).toBe('COBOL');
+		expect(editorLanguages.COBOL).toBe('cobol');
+		expect(editorOnlyLanguages.has('COBOL')).toBe(false);
+		expect(argsHelpLanguages.has('COBOL')).toBe(true);
+		expect(diagnosticMarkerLanguages.has('cobol')).toBe(true);
+	});
+
 	it('keeps runtime-backed LSP capabilities aligned with editor-only languages', () => {
 		expect(runtimeLspCapabilities.RUST).toBe('rust');
 		expect(runtimeLspCapabilities.GO).toBe('go');

@@ -265,6 +265,10 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(
 			/monacoApi\.languages\.setMonarchTokensProvider\('fortran', fortranMonarchTokens\);/
 		);
+		expect(source).toMatch(/id: 'cobol'/);
+		expect(source).toMatch(
+			/monacoApi\.languages\.setMonarchTokensProvider\('cobol', cobolMonarchTokens\);/
+		);
 		expect(source).toMatch(/id: 'julia'/);
 		expect(source).toMatch(
 			/monacoApi\.languages\.setMonarchTokensProvider\('julia', juliaMonarchTokens\);/
@@ -312,6 +316,7 @@ describe('Monaco route debug sync', () => {
 		expect(resolveEditorDefaultSource('wasm', 'wasm32-wasip1')).toBe(editorDefaults.wasm);
 		expect(resolveEditorDefaultSource('sqlite', 'wasm32-wasip1')).toBe(editorDefaults.sqlite);
 		expect(resolveEditorDefaultSource('fortran', 'wasm32-wasip1')).toBe(editorDefaults.fortran);
+		expect(resolveEditorDefaultSource('cobol', 'wasm32-wasip1')).toBe(editorDefaults.cobol);
 		expect(resolveEditorDefaultSource('graphql', 'wasm32-wasip1')).toBe(editorDefaults.graphql);
 		expect(resolveEditorDefaultSource('duckdb', 'wasm32-wasip1')).toBe(editorDefaults.duckdb);
 		expect(resolveEditorDefaultSource('php', 'wasm32-wasip1')).toBe(editorDefaults.php);
@@ -376,6 +381,7 @@ describe('Monaco route debug sync', () => {
 		expect(isEditorDefaultSource(editorDefaults.r)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.octave)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.fortran)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.cobol)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.graphql)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.duckdb)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.wasm)).toBe(true);
@@ -437,6 +443,7 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).toMatch(/<option value="R">R<\/option>/);
 		expect(pageSource).toMatch(/<option value="OCTAVE">Octave<\/option>/);
 		expect(pageSource).toMatch(/<option value="FORTRAN">Fortran<\/option>/);
+		expect(pageSource).toMatch(/<option value="COBOL">COBOL<\/option>/);
 		expect(pageSource).toMatch(/<option value="GRAPHQL">GraphQL<\/option>/);
 		expect(pageSource).toMatch(/<option value="DUCKDB">DuckDB<\/option>/);
 		expect(pageSource).toMatch(/<option value="JSON">JSON<\/option>/);

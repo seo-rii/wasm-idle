@@ -1,0 +1,28 @@
+{
+  "toolchain": {
+    "version": "gnucobol-3.2-wasi-preview1-v1",
+    "gnucobolVersion": "3.2",
+    "gmpVersion": "6.3.0",
+    "wasiSdkVersion": "33.0",
+    "frontendLlvmVersion": "22.1.0",
+    "frontendTarget": "wasm32-wasi",
+    "backend": "wasm-llvm-clang"
+  },
+  "assets": [
+    {
+      "asset": "cobc.zip",
+      "size": 593654,
+      "sha256": "5542e707141f26c67d3fbfc4d9eeffe24a6156b127e1611cfa1fcdb9d0468367"
+    },
+    {
+      "asset": "rootfs.tar.zip",
+      "size": 526587,
+      "sha256": "76ae48729b174471f98af32f7dbd95cd4af3410342a5017f44aaad9fbdedfd74"
+    },
+    {
+      "asset": "c-sysroot.tar.zip",
+      "size": 1209308,
+      "sha256": "b890d6c48db2054e5d2e1c4fa4c6e393ab7f86272b340130e7e15f1f24da02a8"
+    }
+  ]
+}

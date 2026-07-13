@@ -103,6 +103,10 @@ export interface FortranRuntimeAssetConfig {
 	analyzerUrl?: string;
 }
 
+export interface CobolRuntimeAssetConfig {
+	baseUrl?: string;
+}
+
 export interface ObjectiveCRuntimeAssetConfig {
 	baseUrl?: string;
 	libobjcUrl?: string;
@@ -239,6 +243,7 @@ export interface PlaygroundRuntimeAssets {
 	lua?: LuaRuntimeAssetConfig;
 	haskell?: HaskellRuntimeAssetConfig;
 	fortran?: FortranRuntimeAssetConfig;
+	cobol?: CobolRuntimeAssetConfig;
 	objectivec?: ObjectiveCRuntimeAssetConfig;
 	zig?: ZigRuntimeAssetConfig;
 	lisp?: LispRuntimeAssetConfig;
@@ -1056,6 +1061,32 @@ export function resolveFortranRuntimeAssetConfig(
 		f2cHeaderUrl: resolveFortranF2cHeaderUrl(options, currentUrl),
 		analyzerUrl: resolveFortranAnalyzerUrl(options, currentUrl)
 	};
+}
+
+export function resolveCobolBaseUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredBaseUrl =
+		(typeof options === 'object' && options?.cobol?.baseUrl) ||
+		(publicEnv.PUBLIC_WASM_COBOL_BASE_URL || '').trim();
+
+	if (configuredBaseUrl) {
+		return normalizeBaseUrl(configuredBaseUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return normalizeBaseUrl(`${normalizeRootUrl(options) || ''}/wasm-cobol/`, currentUrl);
+	}
+
+	if (options?.rootUrl) {
+		return normalizeBaseUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-cobol/`,
+			currentUrl
+		);
+	}
+
+	return normalizeBaseUrl('/wasm-cobol/', currentUrl);
 }
 
 export function resolveObjectiveCBaseUrl(

@@ -2155,6 +2155,98 @@
 		}
 	} satisfies monaco.languages.IMonarchLanguage;
 
+	const cobolLanguageConfiguration = {
+		comments: {
+			lineComment: '*>'
+		},
+		autoClosingPairs: [
+			{ open: '"', close: '"' },
+			{ open: "'", close: "'" },
+			{ open: '(', close: ')' }
+		],
+		surroundingPairs: [
+			{ open: '"', close: '"' },
+			{ open: "'", close: "'" },
+			{ open: '(', close: ')' }
+		]
+	} satisfies monaco.languages.LanguageConfiguration;
+
+	const cobolMonarchTokens = {
+		ignoreCase: true,
+		keywords: [
+			'accept',
+			'add',
+			'call',
+			'compute',
+			'configuration',
+			'data',
+			'display',
+			'divide',
+			'division',
+			'else',
+			'end-add',
+			'end-if',
+			'end-perform',
+			'environment',
+			'evaluate',
+			'function',
+			'identification',
+			'if',
+			'move',
+			'multiply',
+			'perform',
+			'procedure',
+			'program-id',
+			'section',
+			'stop',
+			'subtract',
+			'then',
+			'until',
+			'varying',
+			'working-storage'
+		],
+		typeKeywords: [
+			'binary',
+			'comp',
+			'comp-3',
+			'occurs',
+			'pic',
+			'picture',
+			'redefines',
+			'usage'
+		],
+		tokenizer: {
+			root: [
+				[/\*>.*$/, 'comment'],
+				[/"/, 'string', '@doubleQuotedString'],
+				[/'/, 'string', '@singleQuotedString'],
+				[/\b\d+(?:\.\d+)?\b/, 'number'],
+				[
+					/[A-Za-z][A-Za-z0-9-]*/,
+					{
+						cases: {
+							'@keywords': 'keyword',
+							'@typeKeywords': 'type',
+							'@default': 'identifier'
+						}
+					}
+				],
+				[/[().,:]/, 'delimiter'],
+				[/[=><+\-*/]+/, 'operator']
+			],
+			doubleQuotedString: [
+				[/[^"\n]+/, 'string'],
+				[/""/, 'string.escape'],
+				[/"/, 'string', '@pop']
+			],
+			singleQuotedString: [
+				[/[^'\n]+/, 'string'],
+				[/''/, 'string.escape'],
+				[/'/, 'string', '@pop']
+			]
+		}
+	} satisfies monaco.languages.IMonarchLanguage;
+
 	const tomlLanguageConfiguration = {
 		comments: {
 			lineComment: '#'
@@ -3683,6 +3775,15 @@
 			}
 			monacoApi.languages.setLanguageConfiguration('fortran', fortranLanguageConfiguration);
 			monacoApi.languages.setMonarchTokensProvider('fortran', fortranMonarchTokens);
+			if (!monacoApi.languages.getLanguages().some(({ id }) => id === 'cobol')) {
+				monacoApi.languages.register({
+					id: 'cobol',
+					aliases: ['COBOL', 'GnuCOBOL', 'cobol'],
+					extensions: ['.cob', '.cbl', '.cpy']
+				});
+			}
+			monacoApi.languages.setLanguageConfiguration('cobol', cobolLanguageConfiguration);
+			monacoApi.languages.setMonarchTokensProvider('cobol', cobolMonarchTokens);
 			if (!monacoApi.languages.getLanguages().some(({ id }) => id === 'toml')) {
 				monacoApi.languages.register({
 					id: 'toml',

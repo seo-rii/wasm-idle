@@ -41,6 +41,7 @@ export type PlaygroundLanguage =
 	| 'R'
 	| 'OCTAVE'
 	| 'FORTRAN'
+	| 'COBOL'
 	| 'GRAPHQL'
 	| 'DUCKDB'
 	| 'SQLITE'
@@ -124,6 +125,7 @@ export const playgroundLanguages: PlaygroundLanguage[] = [
 	'R',
 	'OCTAVE',
 	'FORTRAN',
+	'COBOL',
 	'GRAPHQL',
 	'DUCKDB',
 	'SQLITE',
@@ -179,6 +181,7 @@ export const languageLabels: Record<PlaygroundLanguage, string> = {
 	R: 'R',
 	OCTAVE: 'Octave',
 	FORTRAN: 'Fortran',
+	COBOL: 'COBOL',
 	GRAPHQL: 'GraphQL',
 	DUCKDB: 'DuckDB',
 	SQLITE: 'SQLite',
@@ -234,6 +237,7 @@ export const editorLanguages: Record<PlaygroundLanguage, string> = {
 	R: 'r',
 	OCTAVE: 'octave',
 	FORTRAN: 'fortran',
+	COBOL: 'cobol',
 	GRAPHQL: 'graphql',
 	DUCKDB: 'sql',
 	SQLITE: 'sql',
@@ -314,7 +318,8 @@ export const argsHelpLanguages = new Set<PlaygroundLanguage>([
 	'HASKELL',
 	'R',
 	'OCTAVE',
-	'PHP'
+	'PHP',
+	'COBOL'
 ]);
 export const argsLabels: Partial<Record<PlaygroundLanguage, string>> = {
 	HASKELL: 'GHC Args'
@@ -393,6 +398,7 @@ export const diagnosticMarkerLanguages = new Set([
 	'lisp',
 	'haskell',
 	'fortran',
+	'cobol',
 	'r',
 	'octave',
 	'cpp',

@@ -15,7 +15,7 @@ describe('LLVM runtime package scripts', () => {
 		const pkg = await readRootPackage();
 
 		expect(pkg.dependencies?.['@seo-rii/wasm-llvm']).toBe(
-			'github:seo-rii/wasm-llvm#6a32a19'
+			'github:seo-rii/wasm-llvm#22ba6c3'
 		);
 		expect(pkg.dependencies?.['wasm-clang']).toBeUndefined();
 		expect(pkg.dependencies?.['@wasm-idle/clang-common']).toBeUndefined();

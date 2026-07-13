@@ -208,6 +208,16 @@ const fortranStdinSource = `      PROGRAM MAIN
       PRINT *, 'main=', N + 5
       END`;
 
+const cobolStdinSource = `identification division.
+program-id. main.
+data division.
+working-storage section.
+01 input-value pic x(20).
+procedure division.
+accept input-value.
+display "main=" input-value.
+stop run.`;
+
 let previewBuildReady: Promise<void> | null = null;
 
 async function withBrowserPreview(action: (browserUrl: string) => Promise<void>) {
@@ -580,6 +590,29 @@ describe('wasm-idle browser stdin connection', () => {
 			});
 			expect(summary.transcript).toContain('main=');
 			expect(summary.transcript).toContain('73');
+		});
+	}, 700_000);
+
+	it('passes COBOL stdin through the browser GnuCOBOL and wasm-llvm runtime path', async () => {
+		if (
+			process.env.WASM_IDLE_RUN_REAL_BROWSER_STDIN !== '1' &&
+			process.env.WASM_IDLE_RUN_REAL_BROWSER_COBOL !== '1'
+		) {
+			return;
+		}
+
+		await withBrowserPreview(async (browserUrl) => {
+			const summary = await runStdinBrowserProbe({
+				activePath: 'main.cob',
+				browserUrl,
+				expectedOutput: 'main=73',
+				language: 'COBOL',
+				requireSharedArrayBuffer: false,
+				runTimeoutMs: Number(process.env.WASM_IDLE_STDIN_RUN_TIMEOUT_MS || '420000'),
+				source: cobolStdinSource,
+				stdinText: '73\n'
+			});
+			expect(summary.transcript).toContain('main=73');
 		});
 	}, 700_000);
 

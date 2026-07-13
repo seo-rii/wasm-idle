@@ -320,6 +320,7 @@ describe('example route debug actions', () => {
 		expectEditorLanguage('BQN', 'bqn');
 		expectEditorLanguage('JANET', 'janet');
 		expectEditorLanguage('FORTRAN', 'fortran');
+		expectEditorLanguage('COBOL', 'cobol');
 		expectEditorLanguage('GRAPHQL', 'graphql');
 		expectEditorLanguage('DUCKDB', 'sql');
 		expectEditorLanguage('JSON', 'json');
@@ -836,6 +837,18 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/DuckDB runs through `@duckdb\/duckdb-wasm`/);
 		expect(source).toMatch(/SELECT results are printed as tab-separated tables/);
 		expect(editorOnlyLanguages.has('DUCKDB')).toBe(false);
+	});
+
+	it('surfaces COBOL through the GnuCOBOL wasm-llvm runtime contract', () => {
+		expect(source).toMatch(/<option value="COBOL">COBOL<\/option>/);
+		expect(source).toMatch(/cobol: 'COBOL'/);
+		expect(source).toMatch(/gnucobol: 'COBOL'/);
+		expect(source).toMatch(/'.cob': 'COBOL'/);
+		expect(source).toMatch(/COBOL: 'main\.cob'/);
+		expect(source).toMatch(/COBOL: 'cobol'/);
+		expect(source).toMatch(/GnuCOBOL 3\.2/);
+		expect(source).toMatch(/Use `ACCEPT` for stdin and `DISPLAY` for stdout/);
+		expect(editorOnlyLanguages.has('COBOL')).toBe(false);
 	});
 
 	it('surfaces editor-only LSP workspaces', () => {

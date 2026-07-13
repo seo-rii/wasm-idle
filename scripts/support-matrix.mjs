@@ -663,6 +663,19 @@ export const supportMatrixRows = [
 		}
 	},
 	{
+		language: 'COBOL',
+		ids: ['COBOL'],
+		runtime: 'GnuCOBOL 3.2 + @seo-rii/wasm-llvm',
+		stdin: 'Yes',
+		editorSupport: 'syntax',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/stdin.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_COBOL',
+			language: 'COBOL'
+		}
+	},
+	{
 		language: 'R',
 		ids: ['R'],
 		runtime: 'WebR',
@@ -1240,6 +1253,20 @@ const runtimeDetailsByLanguage = new Map([
 			customization:
 				`${code('runtimeAssets.fortran.baseUrl')}/${code('f2cWasmUrl')}/${code('libf2cUrl')}/` +
 				`${code('f2cHeaderUrl')}/${code('analyzerUrl')} or ${code('PUBLIC_WASM_FORTRAN_*')}; ` +
+				`${code('runtimeAssets.clang.baseUrl')}/${code('loader')} for the C backend; ` +
+				`${code('activePath')}, ${code('workspaceFiles')}, ${code('compileArgs')}`
+		}
+	],
+	[
+		'COBOL',
+		{
+			packageBase: `GnuCOBOL 3.2 + GMP 6.3.0 + ${npmPackage('@seo-rii/wasm-llvm')}`,
+			execution:
+				`translates free-format COBOL with the real GnuCOBOL ${code('cobc')} frontend, compiles ` +
+				`the generated C with wasm-llvm, links libcob/GMP, and executes the resulting WASI module ` +
+				`with ${code('stdin')} and ${code('programArgs')}`,
+			customization:
+				`${code('runtimeAssets.cobol.baseUrl')} or ${code('PUBLIC_WASM_COBOL_BASE_URL')}; ` +
 				`${code('runtimeAssets.clang.baseUrl')}/${code('loader')} for the C backend; ` +
 				`${code('activePath')}, ${code('workspaceFiles')}, ${code('compileArgs')}`
 		}

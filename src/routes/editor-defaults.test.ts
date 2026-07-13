@@ -62,6 +62,8 @@ describe('editor defaults', () => {
 		expect(editorDefaults.r).toContain('factorial_plus_bonus=%d');
 		expect(editorDefaults.octave).toContain('fgetl(stdin)');
 		expect(editorDefaults.octave).toContain('factorial_plus_bonus=%d');
+		expect(editorDefaults.cobol).toContain('accept input-value');
+		expect(editorDefaults.cobol).toContain('display "factorial_plus_bonus="');
 		expect(editorDefaults.sqlite).toContain('CREATE TABLE numbers');
 		expect(editorDefaults.sqlite).toContain('factorial_plus_bonus=');
 		expect(editorDefaults.php).toContain("file_get_contents('php://input')");
@@ -121,6 +123,7 @@ describe('editor defaults', () => {
 		expect(resolveEditorDefaultSource('haskell', 'wasm32-wasip1')).toBe(editorDefaults.haskell);
 		expect(resolveEditorDefaultSource('r', 'wasm32-wasip1')).toBe(editorDefaults.r);
 		expect(resolveEditorDefaultSource('octave', 'wasm32-wasip1')).toBe(editorDefaults.octave);
+		expect(resolveEditorDefaultSource('cobol', 'wasm32-wasip1')).toBe(editorDefaults.cobol);
 		expect(resolveEditorDefaultSource('sqlite', 'wasm32-wasip1')).toBe(editorDefaults.sqlite);
 		expect(resolveEditorDefaultSource('php', 'wasm32-wasip1')).toBe(editorDefaults.php);
 		expect(resolveEditorDefaultSource('json', 'wasm32-wasip1')).toBe(editorDefaults.json);
@@ -164,6 +167,7 @@ describe('editor defaults', () => {
 		expect(isEditorDefaultSource(editorDefaults.haskell)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.r)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.octave)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.cobol)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.sqlite)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.php)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.json)).toBe(true);

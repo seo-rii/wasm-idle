@@ -225,6 +225,13 @@ vi.mock('$lib/playground/fortran', () => {
 	};
 });
 
+vi.mock('$lib/playground/cobol', () => {
+	moduleLoads.add('COBOL');
+	return {
+		default: createMockSandboxClass('COBOL')
+	};
+});
+
 vi.mock('$lib/playground/sqlite', () => {
 	moduleLoads.add('SQLITE');
 	return {
@@ -376,6 +383,7 @@ describe('playground runtime binding', () => {
 				'BASH',
 				'CLOJURESCRIPT',
 				'FORTRAN',
+				'COBOL',
 				'DUCKDB',
 				'WASM'
 			])
@@ -398,6 +406,13 @@ describe('playground runtime binding', () => {
 		const sandbox = await playground('CLJS');
 		expect(sandboxInstances.get('CLOJURESCRIPT')).toHaveLength(1);
 		expect(moduleLoads).toContain('CLOJURESCRIPT');
+	});
+
+	it('routes GnuCOBOL aliases through the COBOL sandbox', async () => {
+		await playground('GNUCOBOL');
+		expect(await playground('COB')).toBe(await playground('CBL'));
+		expect(sandboxInstances.get('COBOL')).toHaveLength(1);
+		expect(moduleLoads).toContain('COBOL');
 	});
 
 	it('keeps the legacy sandbox load signature when runtime assets are not bound', async () => {

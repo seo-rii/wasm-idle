@@ -204,6 +204,24 @@ describe('core language contract', () => {
 		);
 	});
 
+	it('exposes COBOL aliases as a deferred browser runtime language', () => {
+		expect(supportedLanguageIds).toContain('COBOL');
+		expect(normalizeLanguageId('cobol')).toBe('COBOL');
+		expect(normalizeLanguageId('cob')).toBe('COBOL');
+		expect(normalizeLanguageId('cbl')).toBe('COBOL');
+		expect(normalizeLanguageId('gnucobol')).toBe('COBOL');
+		expect(isDeferredProgressLanguage('gnucobol')).toBe(true);
+	});
+
+	it('includes the COBOL runtime base url in runtime asset cache keys', () => {
+		const key = createRuntimeAssetsKey({
+			rootUrl: '/repl',
+			cobol: { baseUrl: '/wasm-cobol/' }
+		});
+
+		expect(key).toContain('"cobolBaseUrl":"/wasm-cobol/"');
+	});
+
 	it('includes Swift runtime urls in runtime asset cache keys before registration', () => {
 		const key = createRuntimeAssetsKey({
 			rootUrl: '/repl',

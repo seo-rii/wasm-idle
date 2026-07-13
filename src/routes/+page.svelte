@@ -340,6 +340,9 @@
 				? `${path}/wasm-fortran/analyzer.js?v=${WASM_FORTRAN_ASSET_VERSION}`
 				: `/wasm-fortran/analyzer.js?v=${WASM_FORTRAN_ASSET_VERSION}`
 		},
+		cobol: {
+			baseUrl: path ? `${path}/wasm-cobol/` : '/wasm-cobol/'
+		},
 		objectivec: {
 			baseUrl: path ? `${path}/wasm-objectivec/` : '/wasm-objectivec/',
 			libobjcUrl: path
@@ -759,6 +762,9 @@
 			'.f90': 'FORTRAN',
 			'.f95': 'FORTRAN',
 			'.for': 'FORTRAN',
+			'.cob': 'COBOL',
+			'.cbl': 'COBOL',
+			'.cpy': 'COBOL',
 			'.graphql': 'GRAPHQL',
 			'.gql': 'GRAPHQL',
 			'.duckdb': 'DUCKDB',
@@ -823,6 +829,7 @@
 			R: 'main.R',
 			OCTAVE: 'main.m',
 			FORTRAN: 'main.f',
+			COBOL: 'main.cob',
 			GRAPHQL: 'main.graphql',
 			DUCKDB: 'main.duckdb',
 			SQLITE: 'main.sql',
@@ -881,6 +888,7 @@
 			R: 'r',
 			OCTAVE: 'octave',
 			FORTRAN: 'fortran',
+			COBOL: 'cobol',
 			GRAPHQL: 'graphql',
 			DUCKDB: 'duckdb',
 			SQLITE: 'sqlite',
@@ -1434,6 +1442,10 @@
 			fortran: 'FORTRAN',
 			f90: 'FORTRAN',
 			f95: 'FORTRAN',
+			cobol: 'COBOL',
+			cob: 'COBOL',
+			cbl: 'COBOL',
+			gnucobol: 'COBOL',
 			graphql: 'GRAPHQL',
 			gql: 'GRAPHQL',
 			duckdb: 'DUCKDB',
@@ -2118,6 +2130,7 @@
 						<option value="R">R</option>
 						<option value="OCTAVE">Octave</option>
 						<option value="FORTRAN">Fortran</option>
+						<option value="COBOL">COBOL</option>
 						<option value="GRAPHQL">GraphQL</option>
 						<option value="DUCKDB">DuckDB</option>
 						<option value="SQLITE">SQLite</option>
@@ -2333,6 +2346,12 @@
 				ClojureScript is compiled and evaluated locally with the official self-hosted
 				`cljs.js` compiler. Require `[wasm-idle.runtime :as runtime]` for `read-line`,
 				`stdin`, and `args` helpers.
+			</p>
+		{/if}
+		{#if language === 'COBOL'}
+			<p class="hint">
+				COBOL compiles locally with GnuCOBOL 3.2, then wasm-llvm compiles and links the
+				generated C to WebAssembly. Use `ACCEPT` for stdin and `DISPLAY` for stdout.
 			</p>
 		{/if}
 		{#if language === 'PASCAL'}

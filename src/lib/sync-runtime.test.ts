@@ -9,6 +9,15 @@ import {
 } from '../../scripts/sync-runtime.mjs';
 
 describe('sync-runtime registry', () => {
+	it('registers the wasm-llvm COBOL asset synchronizer', () => {
+		expect(RUNTIMES.find((runtime) => runtime.name === 'wasm-cobol')).toMatchObject({
+			module: './sync-wasm-cobol.mjs',
+			exportName: 'syncWasmCobolAssets',
+			sourceArg: 'sourceDir',
+			targetArg: 'targetDir'
+		});
+	});
+
 	it('marks Swift as a manual runtime candidate', () => {
 		const swiftRuntime = RUNTIMES.find((runtime) => runtime.name === 'wasm-swift');
 
