@@ -1,4 +1,4 @@
-import type { BrowserClangRuntime as Clang } from 'wasm-clang';
+import type { BrowserClangRuntime as Clang } from '@seo-rii/wasm-llvm/runtime/clang';
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
 import { isSharedBufferBackedView } from '$lib/playground/sharedBuffer';
 import {
@@ -24,7 +24,7 @@ let initialStdinClang: string | null = null;
 
 async function loadClang(path: string, log: boolean) {
 	const { BrowserClangRuntime, loadRuntimeManifest, resolveRuntimeManifestUrl } =
-		await import('wasm-clang');
+		await import('@seo-rii/wasm-llvm/runtime/clang');
 	const manifest = await loadRuntimeManifest(resolveRuntimeManifestUrl(path));
 	clang = new BrowserClangRuntime({
 		stdout: (output) => postMessage({ output }),

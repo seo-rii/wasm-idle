@@ -197,6 +197,16 @@ export interface NimRuntimeAssetConfig {
 	workerUrl?: string;
 }
 
+export interface BashRuntimeAssetConfig {
+	webcUrl?: string;
+}
+
+export interface SwiftRuntimeAssetConfig {
+	baseUrl?: string;
+	workerUrl?: string;
+	manifestUrl?: string;
+}
+
 export interface SqliteRuntimeAssetConfig {
 	wasmUrl?: string;
 }
@@ -242,6 +252,8 @@ export interface PlaygroundRuntimeAssets {
 	janet?: JanetRuntimeAssetConfig;
 	julia?: JuliaRuntimeAssetConfig;
 	nim?: NimRuntimeAssetConfig;
+	bash?: BashRuntimeAssetConfig;
+	swift?: SwiftRuntimeAssetConfig;
 	sqlite?: SqliteRuntimeAssetConfig;
 	php?: PhpRuntimeAssetConfig;
 }
@@ -2175,6 +2187,121 @@ export function resolveNimRuntimeAssetConfig(
 	return {
 		baseUrl: resolveNimBaseUrl(options, currentUrl),
 		workerUrl: resolveNimWorkerUrl(options, currentUrl)
+	};
+}
+
+export function resolveSwiftBaseUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredBaseUrl =
+		(typeof options === 'object' && options?.swift?.baseUrl) ||
+		(publicEnv.PUBLIC_WASM_SWIFT_BASE_URL || '').trim();
+
+	if (configuredBaseUrl) {
+		return normalizeBaseUrl(configuredBaseUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return normalizeBaseUrl(`${normalizeRootUrl(options) || ''}/wasm-swift/`, currentUrl);
+	}
+
+	if (options?.rootUrl) {
+		return normalizeBaseUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-swift/`,
+			currentUrl
+		);
+	}
+
+	return normalizeBaseUrl('/wasm-swift/', currentUrl);
+}
+
+export function resolveSwiftWorkerUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredWorkerUrl =
+		(typeof options === 'object' && options?.swift?.workerUrl) ||
+		(publicEnv.PUBLIC_WASM_SWIFT_WORKER_URL || '').trim();
+
+	if (configuredWorkerUrl) {
+		return resolveConfiguredUrl(configuredWorkerUrl, currentUrl);
+	}
+
+	const configuredBaseUrl =
+		(typeof options === 'object' && options?.swift?.baseUrl) ||
+		(publicEnv.PUBLIC_WASM_SWIFT_BASE_URL || '').trim();
+	if (configuredBaseUrl) {
+		return resolveConfiguredUrl(
+			`${normalizeBaseUrl(configuredBaseUrl, currentUrl)}runner-worker.js`,
+			currentUrl
+		);
+	}
+
+	if (typeof options === 'string') {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-swift/runner-worker.js`,
+			currentUrl
+		);
+	}
+
+	if (options?.rootUrl) {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-swift/runner-worker.js`,
+			currentUrl
+		);
+	}
+
+	return resolveConfiguredUrl('/wasm-swift/runner-worker.js', currentUrl);
+}
+
+export function resolveSwiftManifestUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredManifestUrl =
+		(typeof options === 'object' && options?.swift?.manifestUrl) ||
+		(publicEnv.PUBLIC_WASM_SWIFT_MANIFEST_URL || '').trim();
+
+	if (configuredManifestUrl) {
+		return resolveConfiguredUrl(configuredManifestUrl, currentUrl);
+	}
+
+	const configuredBaseUrl =
+		(typeof options === 'object' && options?.swift?.baseUrl) ||
+		(publicEnv.PUBLIC_WASM_SWIFT_BASE_URL || '').trim();
+	if (configuredBaseUrl) {
+		return resolveConfiguredUrl(
+			`${normalizeBaseUrl(configuredBaseUrl, currentUrl)}runtime-manifest.v1.json`,
+			currentUrl
+		);
+	}
+
+	if (typeof options === 'string') {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-swift/runtime-manifest.v1.json`,
+			currentUrl
+		);
+	}
+
+	if (options?.rootUrl) {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-swift/runtime-manifest.v1.json`,
+			currentUrl
+		);
+	}
+
+	return resolveConfiguredUrl('/wasm-swift/runtime-manifest.v1.json', currentUrl);
+}
+
+export function resolveSwiftRuntimeAssetConfig(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	return {
+		baseUrl: resolveSwiftBaseUrl(options, currentUrl),
+		workerUrl: resolveSwiftWorkerUrl(options, currentUrl),
+		manifestUrl: resolveSwiftManifestUrl(options, currentUrl)
 	};
 }
 

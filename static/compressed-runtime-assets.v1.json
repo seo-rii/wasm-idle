@@ -6,6 +6,7 @@
     "teavm/compiler.wasm",
     "teavm/runtime-classlib-teavm.bin",
     "wasm-awk/goawk.wasm",
+    "wasm-bash/bash.wasm",
     "wasm-bqn/BQN.wasm",
     "wasm-d/runtime/bin/ldc2.wasm",
     "wasm-d/runtime/toolchain/toolchain.tar",
@@ -289,6 +290,7 @@
     "wasm-nim/clang/sysroot.tar": 9297920,
     "wasm-objectivec/foundation-headers.json": 1581430,
     "wasm-objectivec/libgnustep-base.a": 15218578,
-    "wasm-objectivec/libgnustep-base.o": 13557556
+    "wasm-objectivec/libgnustep-base.o": 13557556,
+    "wasm-bash/bash.wasm": 1846970
   }
 }

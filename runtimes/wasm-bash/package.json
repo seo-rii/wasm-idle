@@ -1,0 +1,10 @@
+{
+	"name": "@wasm-idle/runtime-bash",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"build": "node scripts/sync-runtime.mjs",
+		"check": "node scripts/sync-runtime.mjs --check"
+	}
+}

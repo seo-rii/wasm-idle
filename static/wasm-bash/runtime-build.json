@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "package": "sharrattj/bash",
+  "version": "1.0.17",
+  "archiveUrl": "https://cdn.wasmer.io/packages/sharrattj/bash/bash-1.0.17-330845c0-bb63-4b39-bda6-f458beab4198.tar.gz",
+  "archiveSha256": "850c5d4257336a3ec8d7ab1b1b7e01e1e76f3fb0566196b0091989860cf20d74",
+  "wasmSha256": "305e2a460068b45cca21583a6619c008dedea0b71c052e29446eb88b9c4438a9",
+  "wasmBytes": 1846970,
+  "webcSha256": "7609fd1e023758d73096b042d9be3adb9e23c9aa357b272b84b9b4fd69b65311",
+  "webcBytes": 1848178,
+  "wasmerVersion": "7.2.0",
+  "wasmerArchiveUrl": "https://github.com/wasmerio/wasmer/releases/download/v7.2.0/wasmer-linux-amd64.tar.gz",
+  "wasmerArchiveSha256": "fce71a4b0d504b9925e2461d1368b24cce60001111edb3fa871df8187a8a40f2",
+  "abi": "wasix_32v1",
+  "license": "GPL-3.0-or-later",
+  "licenseUrl": "https://raw.githubusercontent.com/wasix-org/bash/45d5deb5068db53d00d440fc27b1374e89b221d5/COPYING",
+  "licenseSha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+  "sourceRepository": "https://github.com/wasix-org/bash",
+  "sourceRevisionCandidate": "45d5deb5068db53d00d440fc27b1374e89b221d5",
+  "correspondingSourceStatus": "The legacy WAPM package does not declare the exact source revision; the listed revision is the latest publisher commit before the package date.",
+  "limitations": [
+    "The sharrattj/coreutils dependency is not bundled."
+  ]
+}

@@ -63,6 +63,9 @@ const { publicEnv } = vi.hoisted(() => ({
 		PUBLIC_WASM_JULIA_WORKER_URL: '',
 		PUBLIC_WASM_NIM_BASE_URL: '',
 		PUBLIC_WASM_NIM_WORKER_URL: '',
+		PUBLIC_WASM_SWIFT_BASE_URL: '',
+		PUBLIC_WASM_SWIFT_WORKER_URL: '',
+		PUBLIC_WASM_SWIFT_MANIFEST_URL: '',
 		PUBLIC_WASM_SQLITE_WASM_URL: '',
 		PUBLIC_WASM_PHP_VERSION: ''
 	}
@@ -733,6 +736,7 @@ describe('runtime asset config resolution', () => {
 			resolveJanetRuntimeAssetConfig,
 			resolveJuliaRuntimeAssetConfig,
 			resolveNimRuntimeAssetConfig,
+			resolveSwiftRuntimeAssetConfig,
 			resolveBqnRuntimeAssetConfig,
 			resolvePascalRuntimeAssetConfig,
 			resolvePerlRuntimeAssetConfig,
@@ -801,6 +805,13 @@ describe('runtime asset config resolution', () => {
 			baseUrl: 'https://example.com/absproxy/5173/wasm-nim/',
 			workerUrl: 'https://example.com/absproxy/5173/wasm-nim/runner-worker.js'
 		});
+		expect(resolveSwiftRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual(
+			{
+				baseUrl: 'https://example.com/absproxy/5173/wasm-swift/',
+				workerUrl: 'https://example.com/absproxy/5173/wasm-swift/runner-worker.js',
+				manifestUrl: 'https://example.com/absproxy/5173/wasm-swift/runtime-manifest.v1.json'
+			}
+		);
 	});
 
 	it('prefers explicit static worker runtime urls over public env overrides', async () => {
@@ -817,6 +828,7 @@ describe('runtime asset config resolution', () => {
 		publicEnv.PUBLIC_WASM_JANET_BASE_URL = 'https://env.example.com/janet/';
 		publicEnv.PUBLIC_WASM_JULIA_BASE_URL = 'https://env.example.com/julia/';
 		publicEnv.PUBLIC_WASM_NIM_BASE_URL = 'https://env.example.com/nim/';
+		publicEnv.PUBLIC_WASM_SWIFT_BASE_URL = 'https://env.example.com/swift/';
 		const {
 			resolveAwkRuntimeAssetConfig,
 			resolveBqnRuntimeAssetConfig,
@@ -826,6 +838,7 @@ describe('runtime asset config resolution', () => {
 			resolveJanetRuntimeAssetConfig,
 			resolveJuliaRuntimeAssetConfig,
 			resolveNimRuntimeAssetConfig,
+			resolveSwiftRuntimeAssetConfig,
 			resolvePascalRuntimeAssetConfig,
 			resolvePerlRuntimeAssetConfig,
 			resolvePrologRuntimeAssetConfig,
@@ -946,6 +959,72 @@ describe('runtime asset config resolution', () => {
 		).toEqual({
 			baseUrl: 'https://example.com/runtime/nim/',
 			workerUrl: 'https://example.com/runtime/nim/worker.js'
+		});
+		expect(
+			resolveSwiftRuntimeAssetConfig(
+				{
+					swift: {
+						baseUrl: '/runtime/swift',
+						workerUrl: '/runtime/swift/worker.js',
+						manifestUrl: '/runtime/swift/manifest.json'
+					}
+				},
+				'https://example.com/app'
+			)
+		).toEqual({
+			baseUrl: 'https://example.com/runtime/swift/',
+			workerUrl: 'https://example.com/runtime/swift/worker.js',
+			manifestUrl: 'https://example.com/runtime/swift/manifest.json'
+		});
+	});
+
+	it('derives Swift worker and manifest urls from an explicit Swift base url', async () => {
+		const { resolveSwiftRuntimeAssetConfig } = await import('./assets');
+
+		expect(
+			resolveSwiftRuntimeAssetConfig(
+				{
+					rootUrl: '/ignored',
+					swift: {
+						baseUrl: 'https://cdn.example.com/swift-runtime/releases/abc123'
+					}
+				},
+				'https://example.com/app'
+			)
+		).toEqual({
+			baseUrl: 'https://cdn.example.com/swift-runtime/releases/abc123/',
+			workerUrl: 'https://cdn.example.com/swift-runtime/releases/abc123/runner-worker.js',
+			manifestUrl:
+				'https://cdn.example.com/swift-runtime/releases/abc123/runtime-manifest.v1.json'
+		});
+	});
+
+	it('falls back to PUBLIC_WASM_SWIFT urls when no Swift runtime config is provided', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_SWIFT_BASE_URL = 'https://cdn.example.com/swift-runtime';
+		publicEnv.PUBLIC_WASM_SWIFT_WORKER_URL = 'https://cdn.example.com/swift-worker.js?v=abc';
+		publicEnv.PUBLIC_WASM_SWIFT_MANIFEST_URL =
+			'https://cdn.example.com/swift-runtime/runtime-manifest.v1.json?v=abc';
+		const { resolveSwiftRuntimeAssetConfig } = await import('./assets');
+
+		expect(resolveSwiftRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual({
+			baseUrl: 'https://cdn.example.com/swift-runtime/',
+			workerUrl: 'https://cdn.example.com/swift-worker.js?v=abc',
+			manifestUrl: 'https://cdn.example.com/swift-runtime/runtime-manifest.v1.json?v=abc'
+		});
+	});
+
+	it('derives Swift worker and manifest urls from PUBLIC_WASM_SWIFT_BASE_URL', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_SWIFT_BASE_URL = 'https://cdn.example.com/swift-runtime';
+		publicEnv.PUBLIC_WASM_SWIFT_WORKER_URL = '';
+		publicEnv.PUBLIC_WASM_SWIFT_MANIFEST_URL = '';
+		const { resolveSwiftRuntimeAssetConfig } = await import('./assets');
+
+		expect(resolveSwiftRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual({
+			baseUrl: 'https://cdn.example.com/swift-runtime/',
+			workerUrl: 'https://cdn.example.com/swift-runtime/runner-worker.js',
+			manifestUrl: 'https://cdn.example.com/swift-runtime/runtime-manifest.v1.json'
 		});
 	});
 

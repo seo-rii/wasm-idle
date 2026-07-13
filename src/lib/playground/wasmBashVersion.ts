@@ -1,0 +1,1 @@
+export const WASM_BASH_ASSET_VERSION = '7609fd1e023758d7';

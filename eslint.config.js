@@ -58,7 +58,6 @@ export default [
 			'static/',
 			'runtimes/*/dist/',
 			'runtimes/*/node_modules/',
-			'runtimes/wasm-clang/artifacts/',
 			'runtimes/wasm-dotnet/dotnet/**/bin/',
 			'runtimes/wasm-dotnet/dotnet/**/obj/',
 			'runtimes/wasm-elixir/assets/',

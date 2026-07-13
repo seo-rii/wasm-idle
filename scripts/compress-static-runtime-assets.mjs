@@ -27,7 +27,8 @@ const COMPRESSIBLE_EXTENSIONS = new Set([
 	'.so',
 	'.symbols',
 	'.tar',
-	'.wasm'
+	'.wasm',
+	'.webc'
 ]);
 const PRECOMPRESSED_EXTENSIONS = new Set(['.br', '.brotli', '.gz', '.tgz', '.zip', '.zst']);
 const COMPRESSIBLE_TOP_LEVEL_DIRS = [
@@ -36,6 +37,7 @@ const COMPRESSIBLE_TOP_LEVEL_DIRS = [
 	'pyodide',
 	'teavm',
 	'wasm-awk',
+	'wasm-bash',
 	'wasm-bqn',
 	'wasm-d',
 	'wasm-dotnet',
@@ -57,6 +59,7 @@ const COMPRESSIBLE_TOP_LEVEL_DIRS = [
 	'wasm-perl',
 	'wasm-prolog',
 	'wasm-rust',
+	'wasm-swift',
 	'wasm-tcl',
 	'wasm-tinygo',
 	'wasm-typescript',

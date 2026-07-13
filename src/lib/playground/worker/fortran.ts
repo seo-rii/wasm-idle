@@ -6,14 +6,17 @@ import {
 	handleWorkerAssetMessage,
 	type WorkerRuntimeAssetConfig
 } from '$lib/playground/worker/assets';
-import type { BrowserClangArtifact, BrowserClangRuntime as Clang } from 'wasm-clang';
+import type {
+	BrowserClangArtifact,
+	BrowserClangRuntime as Clang
+} from '@seo-rii/wasm-llvm/runtime/clang';
 import {
 	BrowserClangRuntime,
 	createBrowserWasiHost,
 	executeBrowserClangArtifact,
 	loadRuntimeManifest,
 	resolveRuntimeManifestUrl
-} from 'wasm-clang';
+} from '@seo-rii/wasm-llvm/runtime/clang';
 
 declare var self: any;
 self.document = {

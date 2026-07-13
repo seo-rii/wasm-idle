@@ -67,7 +67,7 @@ describe('syncWasmClangDist', () => {
 		await writeFile(path.join(staticDir, 'clangd', 'clangd.js'), 'existing');
 
 		await expect(syncWasmClangDist({ sourceDir, staticDir })).rejects.toThrow(
-			'Build it first with'
+			'Reinstall @seo-rii/wasm-llvm before syncing'
 		);
 		await expect(readFile(path.join(staticDir, 'clangd', 'clangd.js'), 'utf8')).resolves.toBe(
 			'existing'

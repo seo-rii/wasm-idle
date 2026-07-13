@@ -80,7 +80,7 @@ try {
 			'--input-type=module',
 			'--eval',
 			[
-				"await import('@wasm-idle/clang-common/gcc-compat');",
+				"await import('@seo-rii/wasm-llvm/runtime/core/gcc-compat');",
 				"await import('@wasm-idle/lsp/clangd');",
 				"await import('@wasm-idle/runtime-assemblyscript');",
 				"await import('@wasm-idle/runtime-php');",

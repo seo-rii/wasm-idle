@@ -35,6 +35,9 @@ importers:
       '@ruby/wasm-wasi':
         specifier: 2.9.3-2.9.4
         version: 2.9.3-2.9.4
+      '@seo-rii/wasm-llvm':
+        specifier: github:seo-rii/wasm-llvm#3ead733
+        version: https://codeload.github.com/seo-rii/wasm-llvm/tar.gz/3ead7333be65309d90d791c6a9370931b9c91144
       '@seorii/monaco':
         specifier: 0.1.1
         version: 0.1.1(svelte@5.55.4(@typescript-eslint/types@8.58.2))
@@ -44,9 +47,6 @@ importers:
       '@types/sql.js':
         specifier: ^1.4.11
         version: 1.4.11
-      '@wasm-idle/clang-common':
-        specifier: workspace:*
-        version: link:packages/clang-common
       '@wasm-idle/core':
         specifier: workspace:*
         version: link:packages/core
@@ -59,6 +59,9 @@ importers:
       '@wasm-idle/runtime-php':
         specifier: workspace:*
         version: link:runtimes/php
+      '@wasmer/sdk':
+        specifier: 0.9.0
+        version: 0.9.0
       '@xterm/addon-canvas':
         specifier: ^0.7.0
         version: 0.7.0(@xterm/xterm@6.0.0)
@@ -110,9 +113,6 @@ importers:
       waforth:
         specifier: 0.20.1
         version: 0.20.1
-      wasm-clang:
-        specifier: workspace:*
-        version: link:runtimes/wasm-clang
       webr:
         specifier: 0.6.0
         version: 0.6.0
@@ -205,15 +205,6 @@ importers:
         specifier: ^4.1.4
         version: 4.1.4(@types/node@25.6.0)(jsdom@29.0.2)(vite@8.0.8(@types/node@25.6.0)(esbuild@0.28.0)(terser@5.47.1)(tsx@4.22.3)(yaml@2.9.0))
 
-  packages/clang-common:
-    devDependencies:
-      typescript:
-        specifier: ^6.0.2
-        version: 6.0.2
-      vitest:
-        specifier: ^4.1.4
-        version: 4.1.4(@types/node@25.6.0)(jsdom@29.0.2)(vite@8.0.8(@types/node@25.6.0)(esbuild@0.28.0)(terser@5.47.1)(tsx@4.22.3)(yaml@2.9.0))
-
   packages/core:
     devDependencies:
       typescript:
@@ -231,9 +222,9 @@ importers:
       '@ruby/wasm-wasi':
         specifier: 2.9.3-2.9.4
         version: 2.9.3-2.9.4
-      '@wasm-idle/clang-common':
-        specifier: workspace:*
-        version: link:../clang-common
+      '@seo-rii/wasm-llvm':
+        specifier: github:seo-rii/wasm-llvm#3ead733
+        version: https://codeload.github.com/seo-rii/wasm-llvm/tar.gz/3ead7333be65309d90d791c6a9370931b9c91144
       '@zip.js/zip.js':
         specifier: ^2.8.26
         version: 2.8.26
@@ -428,39 +419,7 @@ importers:
 
   runtimes/wasm-awk: {}
 
-  runtimes/wasm-clang:
-    dependencies:
-      '@bjorn3/browser_wasi_shim':
-        specifier: ^0.4.2
-        version: 0.4.2
-      '@seo-rii/wasm-llvm':
-        specifier: github:seo-rii/wasm-llvm
-        version: https://codeload.github.com/seo-rii/wasm-llvm/tar.gz/20eafc4163579db6cbe0c2df4a9a1ec9e3bf091e
-      '@wasm-idle/clang-common':
-        specifier: workspace:*
-        version: link:../../packages/clang-common
-      '@zip.js/zip.js':
-        specifier: ^2.8.23
-        version: 2.8.26
-      tslib:
-        specifier: ^2.8.1
-        version: 2.8.1
-      vscode-jsonrpc:
-        specifier: ^8.2.1
-        version: 8.2.1
-    devDependencies:
-      '@types/node':
-        specifier: ^24.6.1
-        version: 24.12.4
-      monaco-editor:
-        specifier: ^0.55.1
-        version: 0.55.1
-      typescript:
-        specifier: ^5.9.3
-        version: 5.9.3
-      vitest:
-        specifier: ^4.1.1
-        version: 4.1.4(@types/node@24.12.4)(jsdom@29.0.2)(vite@8.0.8(@types/node@24.12.4)(esbuild@0.28.0)(terser@5.47.1)(tsx@4.22.3)(yaml@2.9.0))
+  runtimes/wasm-bash: {}
 
   runtimes/wasm-d:
     dependencies:
@@ -1795,9 +1754,9 @@ packages:
   '@ruby/wasm-wasi@2.9.3-2.9.4':
     resolution: {integrity: sha512-WxW9wON/TIf+8Ktng8qDJeV/6iH8kw+YwxOsOyXdAdLJgfYDPAXOqpIVd/96y2C9V8VJ2yqZm/IRv6nLeV6EKg==}
 
-  '@seo-rii/wasm-llvm@https://codeload.github.com/seo-rii/wasm-llvm/tar.gz/20eafc4163579db6cbe0c2df4a9a1ec9e3bf091e':
-    resolution: {tarball: https://codeload.github.com/seo-rii/wasm-llvm/tar.gz/20eafc4163579db6cbe0c2df4a9a1ec9e3bf091e}
-    version: 0.1.0
+  '@seo-rii/wasm-llvm@https://codeload.github.com/seo-rii/wasm-llvm/tar.gz/3ead7333be65309d90d791c6a9370931b9c91144':
+    resolution: {tarball: https://codeload.github.com/seo-rii/wasm-llvm/tar.gz/3ead7333be65309d90d791c6a9370931b9c91144}
+    version: 0.2.0
     engines: {node: '>=20'}
 
   '@seorii/monaco@0.1.1':
@@ -2099,6 +2058,9 @@ packages:
 
   '@vue/shared@3.5.34':
     resolution: {integrity: sha512-24uqU4OIiX29ryC3MeWid/Xf2fa2EFRUVLb77nRhk+UrTVrh/XiGtFAFmJBAtBRbjwNdsPRP+jj/OL27Eg1NDA==}
+
+  '@wasmer/sdk@0.9.0':
+    resolution: {integrity: sha512-k/CY19NfeLCjA9ZpX69JAoZKiuMT3hKjDFJYWdRGkCdfig9NtC9Op7Gpg2LeezuuQKd4WaSSq8bpSMdHw1BMgg==}
 
   '@wolfy1339/lru-cache@11.0.2-patch.1':
     resolution: {integrity: sha512-BgYZfL2ADCXKOw2wJtkM3slhHotawWkgIRRxq4wEybnZQPjvAp71SPX35xepMykTw8gXlzWcWPTY31hlbnRsDA==}
@@ -4091,6 +4053,9 @@ packages:
     resolution: {integrity: sha512-FlRLb15WwAOz1A9OQDbf6oOKKSiefi5VK0ZRF2wgH9xk3o5SnU11tNPaOnQuAh1Ucr66cwwvVXaeVRaFdRBt5g==}
     hasBin: true
 
+  web-worker@1.5.0:
+    resolution: {integrity: sha512-RiMReJrTAiA+mBjGONMnjVDP2u3p9R1vkcGz6gDIrOMT3oGuYwX2WRMYI9ipkphSuE5XKEhydbhNEJh4NY9mlw==}
+
   webidl-conversions@8.0.1:
     resolution: {integrity: sha512-BMhLD/Sw+GbJC21C/UgyaZX41nPt8bUTg+jWyDeg7e7YN4xOM05YPSIXceACnXVtqyEw/LMClUQMtMZ+PGGpqQ==}
     engines: {node: '>=20'}
@@ -5145,8 +5110,9 @@ snapshots:
       '@bjorn3/browser_wasi_shim': 0.4.2
       tslib: 2.8.1
 
-  '@seo-rii/wasm-llvm@https://codeload.github.com/seo-rii/wasm-llvm/tar.gz/20eafc4163579db6cbe0c2df4a9a1ec9e3bf091e':
+  '@seo-rii/wasm-llvm@https://codeload.github.com/seo-rii/wasm-llvm/tar.gz/3ead7333be65309d90d791c6a9370931b9c91144':
     dependencies:
+      '@bjorn3/browser_wasi_shim': 0.4.2
       '@zip.js/zip.js': 2.8.26
 
   '@seorii/monaco@0.1.1(svelte@5.55.4(@typescript-eslint/types@8.58.2))':
@@ -5529,6 +5495,10 @@ snapshots:
       vue: 3.5.34(typescript@6.0.2)
 
   '@vue/shared@3.5.34': {}
+
+  '@wasmer/sdk@0.9.0':
+    dependencies:
+      web-worker: 1.5.0
 
   '@wolfy1339/lru-cache@11.0.2-patch.1': {}
 
@@ -7569,6 +7539,8 @@ snapshots:
   wasmoon@1.16.0:
     dependencies:
       '@types/emscripten': 1.39.10
+
+  web-worker@1.5.0: {}
 
   webidl-conversions@8.0.1: {}
 

@@ -1,10 +1,9 @@
-#!/usr/bin/env node
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 
-const RUNTIMES = [
+export const RUNTIMES = [
 	{
 		name: 'wasm-clang',
 		module: './sync-wasm-clang.mjs',
@@ -88,6 +87,14 @@ const RUNTIMES = [
 		exportName: 'syncWasmTinyGoDist',
 		sourceArg: 'sourceDir',
 		targetArg: 'targetDir'
+	},
+	{
+		name: 'wasm-swift',
+		module: './sync-wasm-swift.mjs',
+		exportName: 'syncWasmSwiftAssets',
+		sourceArg: 'sourceDir',
+		targetArg: 'targetDir',
+		manual: true
 	},
 	{
 		name: 'wasm-elixir',
@@ -195,6 +202,13 @@ const RUNTIMES = [
 		targetArg: 'targetDir'
 	},
 	{
+		name: 'wasm-bash',
+		module: './sync-wasm-bash.mjs',
+		exportName: 'syncWasmBashAssets',
+		sourceArg: 'sourceDir',
+		targetArg: 'targetDir'
+	},
+	{
 		name: 'wasm-of-js-of-ocaml',
 		module: './sync-wasm-of-js-of-ocaml.mjs',
 		exportName: 'syncWasmOfJsOfOcamlDist',
@@ -203,14 +217,37 @@ const RUNTIMES = [
 	}
 ];
 
+export function runtimeListLine(runtime) {
+	return `${runtime.name}${runtime.manual ? '\tmanual' : ''}`;
+}
+
+export function runtimesForAll({ includeManual = false } = {}) {
+	return RUNTIMES.filter((candidate) => includeManual || !candidate.manual);
+}
+
+export function assertRuntimeSyncArgs(args) {
+	if (args.length > 2) {
+		throw new Error('runtime sync accepts at most sourceDir and targetDir arguments');
+	}
+	for (const arg of args) {
+		if (arg.startsWith('-')) throw new Error(`Unknown option for runtime sync: ${arg}`);
+	}
+}
+
+export function assertAllRuntimeSyncArgs(args) {
+	if (args.length > 0) {
+		throw new Error(`Unknown option for all runtime sync: ${args[0]}`);
+	}
+}
+
 function usage() {
 	console.log(`Usage:
   node scripts/sync-runtime.mjs list
-  node scripts/sync-runtime.mjs all [--continue]
+  node scripts/sync-runtime.mjs all [--continue] [--include-manual]
   node scripts/sync-runtime.mjs <runtime> [sourceDir] [targetDir]
 
 Runtime names:
-  ${RUNTIMES.map((runtime) => runtime.name).join('\n  ')}
+  ${RUNTIMES.map((runtime) => `${runtime.name}${runtime.manual ? ' (manual)' : ''}`).join('\n  ')}
 `);
 }
 
@@ -241,13 +278,17 @@ async function syncRuntime(runtime, sourceDir, targetDir) {
 async function main() {
 	const [command, ...args] = process.argv.slice(2);
 	if (!command || command === 'list') {
-		for (const runtime of RUNTIMES) console.log(runtime.name);
+		for (const runtime of RUNTIMES) {
+			console.log(runtimeListLine(runtime));
+		}
 		return;
 	}
 	if (command === 'all') {
 		const keepGoing = takeFlag(args, '--continue');
+		const includeManual = takeFlag(args, '--include-manual');
+		assertAllRuntimeSyncArgs(args);
 		let failed = false;
-		for (const runtime of RUNTIMES) {
+		for (const runtime of runtimesForAll({ includeManual })) {
 			try {
 				await syncRuntime(runtime);
 			} catch (error) {
@@ -268,6 +309,7 @@ async function main() {
 		process.exitCode = 1;
 		return;
 	}
+	assertRuntimeSyncArgs(args);
 	await syncRuntime(runtime, args[0], args[1]);
 }
 

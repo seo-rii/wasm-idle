@@ -12,7 +12,7 @@ import {
 	loadRuntimeManifest,
 	resolveRuntimeManifestUrl,
 	type BrowserClangArtifact
-} from 'wasm-clang';
+} from '@seo-rii/wasm-llvm/runtime/clang';
 
 const textDecoder = new TextDecoder();
 

@@ -39,6 +39,8 @@ export interface RuntimeAssetKeySource {
 	janet?: { baseUrl?: string; workerUrl?: string };
 	julia?: { baseUrl?: string; workerUrl?: string };
 	nim?: { baseUrl?: string; workerUrl?: string };
+	bash?: { webcUrl?: string };
+	swift?: { baseUrl?: string; workerUrl?: string; manifestUrl?: string };
 	sqlite?: { wasmUrl?: string };
 	php?: { version?: string };
 }
@@ -123,6 +125,10 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	{ runtime: 'julia', property: 'workerUrl', key: 'juliaWorkerUrl' },
 	{ runtime: 'nim', property: 'baseUrl', key: 'nimBaseUrl' },
 	{ runtime: 'nim', property: 'workerUrl', key: 'nimWorkerUrl' },
+	{ runtime: 'bash', property: 'webcUrl', key: 'bashWebcUrl' },
+	{ runtime: 'swift', property: 'baseUrl', key: 'swiftBaseUrl' },
+	{ runtime: 'swift', property: 'workerUrl', key: 'swiftWorkerUrl' },
+	{ runtime: 'swift', property: 'manifestUrl', key: 'swiftManifestUrl' },
 	{ runtime: 'sqlite', property: 'wasmUrl', key: 'sqliteWasmUrl' },
 	{ runtime: 'php', property: 'version', key: 'phpVersion' }
 ] satisfies RuntimeAssetKeyField[];

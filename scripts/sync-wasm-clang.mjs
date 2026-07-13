@@ -1,10 +1,14 @@
 import { cp, mkdir, rm, stat } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const REPO_ROOT = path.resolve(path.dirname(THIS_FILE), '..');
-const DEFAULT_SOURCE_DIR = path.join(REPO_ROOT, 'runtimes', 'wasm-clang', 'dist', 'runtime');
+const require = createRequire(import.meta.url);
+const DEFAULT_SOURCE_DIR = path.dirname(
+	require.resolve('@seo-rii/wasm-llvm/runtime/clang/assets/runtime-manifest.v1.json')
+);
 const DEFAULT_STATIC_DIR = path.join(REPO_ROOT, 'static');
 
 const ASSETS = [
@@ -26,7 +30,7 @@ export async function syncWasmClangDist({
 		const sourceStats = await stat(sourcePath).catch(() => null);
 		if (!sourceStats?.isFile()) {
 			throw new Error(
-				`wasm-clang runtime asset was not found at ${sourcePath}. Build it first with "pnpm --dir runtimes/wasm-clang build".`
+				`wasm-llvm Clang runtime asset was not found at ${sourcePath}. Reinstall @seo-rii/wasm-llvm before syncing.`
 			);
 		}
 	}
@@ -53,5 +57,5 @@ if (process.argv[1] && path.resolve(process.argv[1]) === THIS_FILE) {
 		sourceDir: sourceDirArg ? path.resolve(sourceDirArg) : DEFAULT_SOURCE_DIR,
 		staticDir: staticDirArg ? path.resolve(staticDirArg) : DEFAULT_STATIC_DIR
 	});
-	console.log(`Synced wasm-clang from ${result.sourceDir} to ${result.staticDir}`);
+	console.log(`Synced wasm-llvm Clang assets from ${result.sourceDir} to ${result.staticDir}`);
 }
