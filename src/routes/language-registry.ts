@@ -24,6 +24,7 @@ export type PlaygroundLanguage =
 	| 'JANET'
 	| 'JULIA'
 	| 'NIM'
+	| 'BASH'
 	| 'OCAML'
 	| 'TINYGO'
 	| 'JAVASCRIPT'
@@ -105,6 +106,7 @@ export const playgroundLanguages: PlaygroundLanguage[] = [
 	'JANET',
 	'JULIA',
 	'NIM',
+	'BASH',
 	'OCAML',
 	'TINYGO',
 	'JAVASCRIPT',
@@ -158,6 +160,7 @@ export const languageLabels: Record<PlaygroundLanguage, string> = {
 	JANET: 'Janet',
 	JULIA: 'Julia',
 	NIM: 'Nim',
+	BASH: 'Bash',
 	OCAML: 'OCaml',
 	TINYGO: 'TinyGo',
 	JAVASCRIPT: 'JavaScript',
@@ -211,6 +214,7 @@ export const editorLanguages: Record<PlaygroundLanguage, string> = {
 	JANET: 'janet',
 	JULIA: 'julia',
 	NIM: 'nim',
+	BASH: 'shell',
 	OCAML: 'ocaml',
 	TINYGO: 'go',
 	JAVASCRIPT: 'javascript',
@@ -294,6 +298,7 @@ export const argsHelpLanguages = new Set<PlaygroundLanguage>([
 	'PERL',
 	'TCL',
 	'AWK',
+	'BASH',
 	'TINYGO',
 	'JAVASCRIPT',
 	'TYPESCRIPT',
@@ -419,6 +424,7 @@ export const monacoLanguageContributionLoaders: Record<string, MonacoLanguageCon
 	python: () => import('monaco-editor/esm/vs/basic-languages/python/python.contribution.js'),
 	r: () => import('monaco-editor/esm/vs/basic-languages/r/r.contribution.js'),
 	ruby: () => import('monaco-editor/esm/vs/basic-languages/ruby/ruby.contribution.js'),
+	shell: () => import('monaco-editor/esm/vs/basic-languages/shell/shell.contribution.js'),
 	rust: () => import('monaco-editor/esm/vs/basic-languages/rust/rust.contribution.js'),
 	sql: () => import('monaco-editor/esm/vs/basic-languages/sql/sql.contribution.js'),
 	vb: () => import('monaco-editor/esm/vs/basic-languages/vb/vb.contribution.js'),

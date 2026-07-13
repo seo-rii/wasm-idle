@@ -486,6 +486,7 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).toMatch(/wasm-elixir\/bundle\.avm\?v=\$\{WASM_ELIXIR_ASSET_VERSION\}/);
 		expect(pageSource).toMatch(/WASM_OCAML_ASSET_VERSION/);
 		expect(pageSource).toMatch(/WASM_TYPESCRIPT_ASSET_VERSION/);
+		expect(pageSource).toMatch(/WASM_SWIFT_ASSET_VERSION/);
 		expect(pageSource).toMatch(
 			/lsp\/typescript-libs\.json\.gz\?v=\$\{WASM_TYPESCRIPT_ASSET_VERSION\}/
 		);
@@ -503,6 +504,9 @@ describe('Monaco route debug sync', () => {
 		);
 		expect(pageSource).toMatch(
 			/wasm-of-js-of-ocaml\/browser-native-bundle\/browser-native-manifest\.v1\.json\?v=\$\{WASM_OCAML_ASSET_VERSION\}/
+		);
+		expect(pageSource).toMatch(
+			/wasm-swift\/runtime-manifest\.v1\.json\?v=\$\{WASM_SWIFT_ASSET_VERSION\}/
 		);
 		expect(pageSource).toMatch(
 			/\{#each availableRustTargetTriples as targetTriple \(targetTriple\)\}\s+<option value=\{targetTriple\}>\{targetTriple\}<\/option>\s+\{\/each\}/s
@@ -604,5 +608,21 @@ describe('Monaco route debug sync', () => {
 		expect(viteConfig).not.toContain('vscode-compatibility');
 		expect(libIndex).not.toContain('$lib/lsp');
 		expect(libIndex).not.toContain('@wasm-idle/lsp');
+	});
+
+	it('serves the app with cross-origin isolation headers for browser compiler runtimes', async () => {
+		const viteConfig = await readFile(path.resolve(process.cwd(), 'vite.config.ts'), 'utf8');
+		const pagesHeaders = await readFile(path.resolve(process.cwd(), 'static/_headers'), 'utf8');
+
+		for (const sourceText of [viteConfig, pagesHeaders]) {
+			expect(sourceText).toContain('Cross-Origin-Opener-Policy');
+			expect(sourceText).toContain('same-origin');
+			expect(sourceText).toContain('Cross-Origin-Embedder-Policy');
+			expect(sourceText).toContain('require-corp');
+			expect(sourceText).toContain('Cross-Origin-Resource-Policy');
+		}
+		expect(viteConfig).toContain('server:');
+		expect(viteConfig).toContain('preview:');
+		expect(pagesHeaders).toContain('/*');
 	});
 });

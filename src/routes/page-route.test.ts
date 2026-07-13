@@ -116,6 +116,9 @@ describe('example route debug actions', () => {
 			/import \{ WASM_NIM_ASSET_VERSION \} from '\$lib\/playground\/wasmNimVersion';/
 		);
 		expect(source).toMatch(
+			/import \{ WASM_SWIFT_ASSET_VERSION \} from '\$lib\/playground\/wasmSwiftVersion';/
+		);
+		expect(source).toMatch(
 			/import \{ WASM_D_ASSET_VERSION \} from '\$lib\/playground\/wasmDVersion';/
 		);
 		expect(source).toMatch(
@@ -206,6 +209,9 @@ describe('example route debug actions', () => {
 		);
 		expect(source).toMatch(
 			/nim: \{\s+baseUrl: path\s+\?\s+`\$\{path\}\/wasm-nim\/`\s+:\s+'\/wasm-nim\/',\s+workerUrl: path\s+\?\s+`\$\{path\}\/wasm-nim\/runner-worker\.js\?v=\$\{WASM_NIM_ASSET_VERSION\}`\s+:\s+`\/wasm-nim\/runner-worker\.js\?v=\$\{WASM_NIM_ASSET_VERSION\}`\s+\}/s
+		);
+		expect(source).toMatch(
+			/swift: \{\s+baseUrl: path\s+\?\s+`\$\{path\}\/wasm-swift\/`\s+:\s+'\/wasm-swift\/',\s+workerUrl: path\s+\?\s+`\$\{path\}\/wasm-swift\/runner-worker\.js\?v=\$\{WASM_SWIFT_ASSET_VERSION\}`\s+:\s+`\/wasm-swift\/runner-worker\.js\?v=\$\{WASM_SWIFT_ASSET_VERSION\}`,\s+manifestUrl: path\s+\?\s+`\$\{path\}\/wasm-swift\/runtime-manifest\.v1\.json\?v=\$\{WASM_SWIFT_ASSET_VERSION\}`\s+:\s+`\/wasm-swift\/runtime-manifest\.v1\.json\?v=\$\{WASM_SWIFT_ASSET_VERSION\}`\s+\}/s
 		);
 		expect(source).toMatch(
 			/ocaml: \{\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-of-js-of-ocaml\/browser-native\/src\/index\.js\?v=\$\{WASM_OCAML_ASSET_VERSION\}`\s+:\s+`\/wasm-of-js-of-ocaml\/browser-native\/src\/index\.js\?v=\$\{WASM_OCAML_ASSET_VERSION\}`,\s+manifestUrl: path\s+\?\s+`\$\{path\}\/wasm-of-js-of-ocaml\/browser-native-bundle\/browser-native-manifest\.v1\.json\?v=\$\{WASM_OCAML_ASSET_VERSION\}`\s+:\s+`\/wasm-of-js-of-ocaml\/browser-native-bundle\/browser-native-manifest\.v1\.json\?v=\$\{WASM_OCAML_ASSET_VERSION\}`\s+\}/s

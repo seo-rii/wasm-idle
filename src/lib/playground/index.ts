@@ -190,6 +190,13 @@ const sandboxRoutes = [
 		}
 	},
 	{
+		aliases: ['BASH', 'SH', 'SHELL'],
+		load: async () => {
+			const { default: Bash } = await import('$lib/playground/bash');
+			return new Bash();
+		}
+	},
+	{
 		aliases: ['FORTRAN', 'F77'],
 		load: async () => {
 			const { default: Fortran } = await import('$lib/playground/fortran');
@@ -349,6 +356,7 @@ export const supportedLanguages = [
 	'JANET',
 	'JULIA',
 	'NIM',
+	'BASH',
 	'FORTRAN',
 	'TINYGO',
 	'OCAML',

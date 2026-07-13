@@ -169,6 +169,39 @@ describe('core language contract', () => {
 		expect(isDeferredProgressLanguage('nim')).toBe(true);
 	});
 
+	it('keeps Swift out of the core runtime registry until a verified browser compiler bundle exists', () => {
+		expect(supportedLanguageIds).not.toContain('SWIFT');
+		expect(isDeferredProgressLanguage('swift')).toBe(false);
+	});
+
+	it('exposes Bash aliases as a deferred browser runtime language', () => {
+		expect(supportedLanguageIds).toContain('BASH');
+		expect(normalizeLanguageId('bash')).toBe('BASH');
+		expect(normalizeLanguageId('sh')).toBe('BASH');
+		expect(normalizeLanguageId('shell')).toBe('BASH');
+		expect(isDeferredProgressLanguage('sh')).toBe(true);
+	});
+
+	it('includes the Bash WEBc url in runtime asset cache keys', () => {
+		const key = createRuntimeAssetsKey({ bash: { webcUrl: '/wasm-bash/bash.webc?v=test' } });
+		expect(key).toContain('"bashWebcUrl":"/wasm-bash/bash.webc?v=test"');
+	});
+
+	it('includes Swift runtime urls in runtime asset cache keys before registration', () => {
+		const key = createRuntimeAssetsKey({
+			rootUrl: '/repl',
+			swift: {
+				baseUrl: '/wasm-swift/',
+				workerUrl: '/wasm-swift/runner-worker.js?v=test',
+				manifestUrl: '/wasm-swift/runtime-manifest.v1.json?v=test'
+			}
+		});
+
+		expect(key).toContain('"swiftBaseUrl":"/wasm-swift/"');
+		expect(key).toContain('"swiftWorkerUrl":"/wasm-swift/runner-worker.js?v=test"');
+		expect(key).toContain('"swiftManifestUrl":"/wasm-swift/runtime-manifest.v1.json?v=test"');
+	});
+
 	it('exposes VB.NET aliases as a deferred browser runtime language', () => {
 		expect(supportedLanguageIds).toContain('VBNET');
 		expect(normalizeLanguageId('vbnet')).toBe('VBNET');

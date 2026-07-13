@@ -17,6 +17,7 @@
 	import type { PlaygroundRuntimeAssets } from '$lib/playground/assets';
 	import type { DebugLanguageAdapter } from '$lib';
 	import { WASM_AWK_ASSET_VERSION } from '$lib/playground/wasmAwkVersion';
+	import { WASM_BASH_ASSET_VERSION } from '$lib/playground/wasmBashVersion';
 	import { WASM_BQN_ASSET_VERSION } from '$lib/playground/wasmBqnVersion';
 	import { WASM_D_ASSET_VERSION } from '$lib/playground/wasmDVersion';
 	import { WASM_DOTNET_ASSET_VERSION } from '$lib/playground/wasmDotnetVersion';
@@ -40,6 +41,7 @@
 	import { WASM_PERL_ASSET_VERSION } from '$lib/playground/wasmPerlVersion';
 	import { WASM_R_ASSET_VERSION } from '$lib/playground/wasmRVersion';
 	import { WASM_RUST_ASSET_VERSION } from '$lib/playground/wasmRustVersion';
+	import { WASM_SWIFT_ASSET_VERSION } from '$lib/playground/wasmSwiftVersion';
 	import { WASM_TCL_ASSET_VERSION } from '$lib/playground/wasmTclVersion';
 	import { WASM_TINYGO_ASSET_VERSION } from '$lib/playground/wasmTinyGoVersion';
 	import { WASM_TYPESCRIPT_ASSET_VERSION } from '$lib/playground/wasmTypeScriptVersion';
@@ -243,6 +245,20 @@
 			workerUrl: path
 				? `${path}/wasm-nim/runner-worker.js?v=${WASM_NIM_ASSET_VERSION}`
 				: `/wasm-nim/runner-worker.js?v=${WASM_NIM_ASSET_VERSION}`
+		},
+		bash: {
+			webcUrl: path
+				? `${path}/wasm-bash/bash.webc?v=${WASM_BASH_ASSET_VERSION}`
+				: `/wasm-bash/bash.webc?v=${WASM_BASH_ASSET_VERSION}`
+		},
+		swift: {
+			baseUrl: path ? `${path}/wasm-swift/` : '/wasm-swift/',
+			workerUrl: path
+				? `${path}/wasm-swift/runner-worker.js?v=${WASM_SWIFT_ASSET_VERSION}`
+				: `/wasm-swift/runner-worker.js?v=${WASM_SWIFT_ASSET_VERSION}`,
+			manifestUrl: path
+				? `${path}/wasm-swift/runtime-manifest.v1.json?v=${WASM_SWIFT_ASSET_VERSION}`
+				: `/wasm-swift/runtime-manifest.v1.json?v=${WASM_SWIFT_ASSET_VERSION}`
 		},
 		ocaml: {
 			moduleUrl: path
@@ -705,6 +721,8 @@
 			'.jl': 'JULIA',
 			'.nim': 'NIM',
 			'.nims': 'NIM',
+			'.sh': 'BASH',
+			'.bash': 'BASH',
 			'.ml': 'OCAML',
 			'.mli': 'OCAML',
 			'.js': 'JAVASCRIPT',
@@ -779,6 +797,7 @@
 			JANET: 'main.janet',
 			JULIA: 'main.jl',
 			NIM: 'main.nim',
+			BASH: 'main.sh',
 			OCAML: 'main.ml',
 			TINYGO: 'main.go',
 			JAVASCRIPT: 'main.js',
@@ -835,6 +854,7 @@
 			JANET: 'janet',
 			JULIA: 'julia',
 			NIM: 'nim',
+			BASH: 'bash',
 			OCAML: 'ocaml',
 			TINYGO: 'go',
 			JAVASCRIPT: 'javascript',
@@ -1371,6 +1391,9 @@
 			jl: 'JULIA',
 			nim: 'NIM',
 			nimrod: 'NIM',
+			bash: 'BASH',
+			sh: 'BASH',
+			shell: 'BASH',
 			ocaml: 'OCAML',
 			tinygo: 'TINYGO',
 			javascript: 'JAVASCRIPT',
@@ -2064,6 +2087,7 @@
 						<option value="JANET">Janet</option>
 						<option value="JULIA">Julia</option>
 						<option value="NIM">Nim</option>
+						<option value="BASH">Bash</option>
 						<option value="OCAML">OCaml</option>
 						<option value="TINYGO">TinyGo</option>
 						<option value="JAVASCRIPT">JavaScript</option>
@@ -2279,6 +2303,13 @@
 			<p class="hint">
 				AWK runs through bundled GoAWK WebAssembly assets. Input records are read from stdin
 				by default; CLI args are exposed through `ARGV` and `var=value` assignments.
+			</p>
+		{/if}
+		{#if language === 'BASH'}
+			<p class="hint">
+				Bash runs locally through the bundled GNU Bash WASIX binary and Wasmer browser
+				runtime. Use `read -r` for stdin and `$1`, `$2`, … for CLI args. Bash builtins are
+				available; external coreutils are not bundled yet.
 			</p>
 		{/if}
 		{#if language === 'PASCAL'}

@@ -44,6 +44,9 @@ export type WasmIdleLanguageId =
 	| 'JL'
 	| 'NIM'
 	| 'NIMROD'
+	| 'BASH'
+	| 'SH'
+	| 'SHELL'
 	| 'TINYGO'
 	| 'OCAML'
 	| 'JAVASCRIPT'
@@ -99,6 +102,7 @@ export const supportedLanguageIds = [
 	'JANET',
 	'JULIA',
 	'NIM',
+	'BASH',
 	'TINYGO',
 	'OCAML',
 	'JAVASCRIPT',
@@ -140,6 +144,7 @@ export const DEFAULT_DEFERRED_PROGRESS_LANGUAGES = new Set<string>([
 	'JANET',
 	'JULIA',
 	'NIM',
+	'BASH',
 	'OCAML',
 	'JAVASCRIPT',
 	'TYPESCRIPT',
@@ -176,6 +181,8 @@ const LANGUAGE_ALIASES: Record<string, string> = {
 	GFORTH: 'FORTH',
 	JL: 'JULIA',
 	NIMROD: 'NIM',
+	SH: 'BASH',
+	SHELL: 'BASH',
 	DLANG: 'D',
 	JS: 'JAVASCRIPT',
 	AS: 'ASSEMBLYSCRIPT',

@@ -197,6 +197,20 @@ vi.mock('$lib/playground/nim', () => {
 	};
 });
 
+vi.mock('$lib/playground/bash', () => {
+	moduleLoads.add('BASH');
+	return {
+		default: createMockSandboxClass('BASH')
+	};
+});
+
+vi.mock('$lib/playground/swift', () => {
+	moduleLoads.add('SWIFT');
+	return {
+		default: createMockSandboxClass('SWIFT')
+	};
+});
+
 vi.mock('$lib/playground/fortran', () => {
 	moduleLoads.add('FORTRAN');
 	return {
@@ -352,11 +366,24 @@ describe('playground runtime binding', () => {
 				'JANET',
 				'JULIA',
 				'NIM',
+				'BASH',
 				'FORTRAN',
 				'DUCKDB',
 				'WASM'
 			])
 		);
+	});
+
+	it('keeps Swift unavailable until a verified browser compiler bundle is registered', async () => {
+		expect(supportedLanguages).not.toContain('SWIFT');
+		await expect(playground('SWIFT')).rejects.toThrow('Unsupported language: SWIFT');
+		expect([...moduleLoads]).not.toContain('SWIFT');
+	});
+
+	it('routes Bash aliases through the Bash sandbox', async () => {
+		const sandbox = await playground('SH');
+		expect(sandboxInstances.get('BASH')).toHaveLength(1);
+		expect(moduleLoads).toContain('BASH');
 	});
 
 	it('keeps the legacy sandbox load signature when runtime assets are not bound', async () => {

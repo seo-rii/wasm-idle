@@ -25,6 +25,7 @@ export type EditorDefaultLanguage =
 	| 'janet'
 	| 'julia'
 	| 'nim'
+	| 'bash'
 	| 'ocaml'
 	| 'javascript'
 	| 'typescript'
@@ -76,6 +77,7 @@ export const editorDefaults: Record<
 	| 'janet'
 	| 'julia'
 	| 'nim'
+	| 'bash'
 	| 'ocaml'
 	| 'javascript'
 	| 'typescript'
@@ -497,6 +499,19 @@ let n =
     4
 
 echo "factorial_plus_bonus=", factorial(n) + bonus`,
+	bash: `bonus=3
+
+factorial() {
+    if (( $1 <= 1 )); then
+        printf '1'
+    else
+        printf '%d' "$(( $1 * $(factorial $(( $1 - 1 ))) ))"
+    fi
+}
+
+IFS= read -r input || input=''
+n="\${input:-\${1:-4}}"
+printf 'factorial_plus_bonus=%d\\n' "$(( $(factorial "$n") + bonus ))"`,
 	ocaml: `let bonus = 3
 
 let rec factorial n =
@@ -883,6 +898,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.janet ||
 		source === editorDefaults.julia ||
 		source === editorDefaults.nim ||
+		source === editorDefaults.bash ||
 		source === editorDefaults.ocaml ||
 		source === editorDefaults.javascript ||
 		source === editorDefaults.typescript ||

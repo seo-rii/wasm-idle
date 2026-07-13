@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+	argsHelpLanguages,
 	clangdLspLanguages,
 	compilerDiagnosticLanguages,
 	debugLspLanguages,
@@ -27,6 +28,14 @@ describe('language registry', () => {
 		}
 	});
 
+	it('keeps Swift out of the page language registry until runtime readiness is satisfied', () => {
+		expect(playgroundLanguages).not.toContain('SWIFT');
+		expect('SWIFT' in languageLabels).toBe(false);
+		expect('SWIFT' in editorLanguages).toBe(false);
+		expect((runtimeLspCapabilities as Record<string, unknown>).SWIFT).toBeUndefined();
+		expect(compilerDiagnosticLanguages.has('SWIFT' as never)).toBe(false);
+	});
+
 	it('keeps LSP language routing metadata explicit', () => {
 		expect(debugLspLanguages.has('CPP')).toBe(true);
 		expect(clangdLspLanguages.has('C')).toBe(true);
@@ -38,6 +47,14 @@ describe('language registry', () => {
 		expect(typescriptLspLanguages.has('TYPESCRIPT')).toBe(true);
 		expect(lspLanguageOverrides.ASSEMBLYSCRIPT).toBe('assemblyscript');
 		expect(lspLanguageOverrides.DUCKDB).toBe('duckdb');
+	});
+
+	it('registers Bash with shell syntax and CLI args', () => {
+		expect(playgroundLanguages).toContain('BASH');
+		expect(languageLabels.BASH).toBe('Bash');
+		expect(editorLanguages.BASH).toBe('shell');
+		expect(argsHelpLanguages.has('BASH')).toBe(true);
+		expect(monacoLanguageContributionLoaders.shell).toBeTypeOf('function');
 	});
 
 	it('keeps runtime-backed LSP capabilities aligned with editor-only languages', () => {

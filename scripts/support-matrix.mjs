@@ -155,7 +155,7 @@ export const supportMatrixRows = [
 	{
 		language: 'C',
 		ids: ['C'],
-		runtime: 'wasm-clang / Clang WASI',
+		runtime: '@seo-rii/wasm-llvm / Clang WASI',
 		stdin: 'Yes',
 		editorSupport: 'clangd',
 		debug: '-',
@@ -168,7 +168,7 @@ export const supportMatrixRows = [
 	{
 		language: 'C++',
 		ids: ['CPP'],
-		runtime: 'wasm-clang / Clang WASI',
+		runtime: '@seo-rii/wasm-llvm / Clang WASI',
 		stdin: 'Yes',
 		editorSupport: 'clangd',
 		debug: 'Trace',
@@ -181,7 +181,7 @@ export const supportMatrixRows = [
 	{
 		language: 'Objective-C',
 		ids: ['OBJC'],
-		runtime: 'GNUstep libobjc2 + wasm-clang',
+		runtime: 'GNUstep libobjc2 + @seo-rii/wasm-llvm',
 		stdin: 'Yes',
 		editorSupport: 'clangd',
 		debug: '-',
@@ -473,6 +473,19 @@ export const supportMatrixRows = [
 		}
 	},
 	{
+		language: 'Bash',
+		ids: ['BASH'],
+		runtime: 'GNU Bash WASIX / Wasmer SDK',
+		stdin: 'Yes',
+		editorSupport: 'syntax',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/bash.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_BASH',
+			language: 'BASH'
+		}
+	},
+	{
 		language: 'TinyGo',
 		ids: ['TINYGO'],
 		runtime: 'wasm-tinygo',
@@ -626,7 +639,7 @@ export const supportMatrixRows = [
 	{
 		language: 'Fortran',
 		ids: ['FORTRAN'],
-		runtime: 'f2c + wasm-clang',
+		runtime: 'f2c + @seo-rii/wasm-llvm',
 		stdin: 'Yes',
 		editorSupport: 'Fortran LSP',
 		debug: '-',
@@ -726,6 +739,16 @@ export const blockedCandidateRows = [
 			'Crystal cannot be treated as syntax-only or as a wasm-idle-authored translator/subset',
 		requiredFollowUp:
 			'Find or build a browser-hosted real Crystal compiler/runtime path with stdin/stdout coverage before registering the language'
+	},
+	{
+		language: 'Swift',
+		candidateIds: ['SWIFT'],
+		currentEvidence:
+			'Swift.org documents Wasm support through a native Swift 6.x toolchain plus a Wasm SDK, and SwiftWasm Pad uses a backend compile service; no browser-hosted swiftc/SwiftPM runtime asset is packaged here',
+		blocker:
+			'Swift cannot be implemented as a wasm-idle-authored parser/runtime subset or as a remote compile service; the playground needs a redistributable browser-hosted real Swift compiler path',
+		requiredFollowUp:
+			'Build or source a browser-hosted Swift compiler/SwiftPM runtime bundle, prove stdin/stdout execution for generated WASI modules, then register SWIFT as a first-class runtime'
 	}
 ];
 
@@ -754,7 +777,7 @@ const runtimeDetailsByLanguage = new Map([
 	[
 		'C',
 		{
-			packageBase: `${workspacePackage('runtimes/wasm-clang')} / Clang 22.1.8 WASI sysroot`,
+			packageBase: `${npmPackage('@seo-rii/wasm-llvm')} / Clang 22.1.8 WASI sysroot`,
 			execution:
 				`${code('clang')} for ${code('wasm32-wasi')}; default ${code('-std=gnu11')}; ` +
 				`WASI preview1 execution supports ${code('stdin')} and ${code('programArgs')}`,
@@ -767,7 +790,7 @@ const runtimeDetailsByLanguage = new Map([
 	[
 		'C++',
 		{
-			packageBase: `${workspacePackage('runtimes/wasm-clang')} / Clang 22.1.8 WASI sysroot`,
+			packageBase: `${npmPackage('@seo-rii/wasm-llvm')} / Clang 22.1.8 WASI sysroot`,
 			execution:
 				`${code('clang++')} for ${code('wasm32-wasi')}; default ${code('-std=gnu++2a')}; ` +
 				`trace debug uses wasm-idle controls; supports ${code('stdin')} and ${code('programArgs')}`,
@@ -782,7 +805,7 @@ const runtimeDetailsByLanguage = new Map([
 		{
 			packageBase:
 				`GNUstep libobjc2 v2.3 (${code('static/wasm-objectivec/libobjc.a')}) + ` +
-				`${workspacePackage('runtimes/wasm-clang')}`,
+				`${npmPackage('@seo-rii/wasm-llvm')}`,
 			execution:
 				`${code('clang -x objective-c -fobjc-runtime=gnustep-2.0 -fblocks')} for ` +
 				`${code('wasm32-wasi')}; links ${code('libobjc.a')}, ${code('libgnustep-base.a')}, ` +
@@ -1029,6 +1052,16 @@ const runtimeDetailsByLanguage = new Map([
 		}
 	],
 	[
+		'Bash',
+		{
+			packageBase: `${workspacePackage('runtimes/wasm-bash')} / GNU Bash WASIX + ${npmPackage('@wasmer/sdk')}`,
+			execution:
+				`runs the pinned ${code('bash.webc')} locally with the Wasmer package entrypoint; supports ` +
+				`${code('stdin')}, ${code('programArgs')}, ${code('activePath')}, and ${code('workspaceFiles')}`,
+			customization: `${code('runtimeAssets.bash.webcUrl')} or ${code('rootUrl')}; ${code('programArgs')}`
+		}
+	],
+	[
 		'TinyGo',
 		{
 			packageBase: `${workspacePackage('runtimes/wasm-tinygo')} / TinyGo 0.40.1 browser toolchain`,
@@ -1172,9 +1205,9 @@ const runtimeDetailsByLanguage = new Map([
 	[
 		'Fortran',
 		{
-			packageBase: `Netlib f2c 2022-09-09 + ${code('@cowasm/f2c 1.0.0')} libf2c + wasm-clang`,
+			packageBase: `Netlib f2c 2022-09-09 + ${code('@cowasm/f2c 1.0.0')} libf2c + ${npmPackage('@seo-rii/wasm-llvm')}`,
 			execution:
-				`runs ${code('f2c.wasm')} in WASI, compiles generated C with wasm-clang, links ` +
+				`runs ${code('f2c.wasm')} in WASI, compiles generated C with wasm-llvm, links ` +
 				`${code('libf2c.a')}, then executes the resulting WASI module with ${code('stdin')} and ` +
 				`${code('programArgs')}`,
 			customization:
