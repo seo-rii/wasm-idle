@@ -95,10 +95,18 @@ describe('syncWasmNimAssets', () => {
 		expect(clangWorker).not.toContain('finalResult=await s.run(inst,h.out)');
 		const manifest = JSON.parse(
 			await readFile(path.join(targetDir, 'runtime-manifest.v1.json'), 'utf8')
-		) as { format: string; runtime: string; files: string[] };
+		) as {
+			format: string;
+			runtime: string;
+			repositoryCommit: string;
+			llvmProfile: { id: string; llvmVersion: string };
+			files: string[];
+		};
 		expect(manifest).toMatchObject({
 			format: 'wasm-nim-runtime-manifest-v1',
-			runtime: 'benagastov-nim-wasm-compiler'
+			runtime: 'benagastov-nim-wasm-compiler',
+			repositoryCommit: 'ca3471ae124b40b51268da6e202753dfa061731c',
+			llvmProfile: { id: 'nim-llvm8', llvmVersion: '8.0.1' }
 		});
 		expect(manifest.files).toContain('nim/nim.wasm');
 		expect(manifest.files).toContain('clang/clang.js');

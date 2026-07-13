@@ -2,6 +2,13 @@
   "format": "wasm-nim-runtime-manifest-v1",
   "runtime": "benagastov-nim-wasm-compiler",
   "repository": "https://github.com/benagastov/Nim-WASM-Compiler.git",
+  "repositoryCommit": "ca3471ae124b40b51268da6e202753dfa061731c",
+  "llvmProfile": {
+    "id": "nim-llvm8",
+    "profileVersion": 1,
+    "nimVersion": "2.2.4",
+    "llvmVersion": "8.0.1"
+  },
   "fingerprint": "06890c693abcdd01",
   "files": [
     "LICENSE",

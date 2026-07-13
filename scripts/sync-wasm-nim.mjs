@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
+import { NIM_LLVM_PROFILE, validateNimLlvmProfile } from '@seo-rii/wasm-llvm/runtime/nim';
 
 const execFileAsync = promisify(execFile);
 
@@ -26,6 +27,7 @@ const DEFAULT_VERSION_MODULE_PATH = path.resolve(
 	'wasmNimVersion.ts'
 );
 const UPSTREAM_REPOSITORY = 'https://github.com/benagastov/Nim-WASM-Compiler.git';
+const UPSTREAM_COMMIT = 'ca3471ae124b40b51268da6e202753dfa061731c';
 const RUNTIME_FILES = [
 	'nim/nim-bundle.js',
 	'nim/nim.wasm',
@@ -167,6 +169,13 @@ async function writeRuntimeManifest(targetDir, fingerprint, files) {
 		format: 'wasm-nim-runtime-manifest-v1',
 		runtime: 'benagastov-nim-wasm-compiler',
 		repository: UPSTREAM_REPOSITORY,
+		repositoryCommit: UPSTREAM_COMMIT,
+		llvmProfile: {
+			id: NIM_LLVM_PROFILE.id,
+			profileVersion: NIM_LLVM_PROFILE.version,
+			nimVersion: NIM_LLVM_PROFILE.nimVersion,
+			llvmVersion: NIM_LLVM_PROFILE.llvmVersion
+		},
 		fingerprint,
 		files: files.filter((file) => file !== 'runner-worker.js').sort()
 	};
@@ -219,8 +228,21 @@ function patchClangJs(source) {
 
 async function downloadRepositorySource() {
 	const tempDir = await mkdtemp(path.join(tmpdir(), 'wasm-idle-nim-'));
-	await execFileAsync('git', ['clone', '--depth', '1', UPSTREAM_REPOSITORY, 'source'], {
+	await execFileAsync('git', ['init', 'source'], {
 		cwd: tempDir,
+		maxBuffer: 1024 * 1024
+	});
+	const repositoryDir = path.join(tempDir, 'source');
+	await execFileAsync('git', ['remote', 'add', 'origin', UPSTREAM_REPOSITORY], {
+		cwd: repositoryDir,
+		maxBuffer: 1024 * 1024
+	});
+	await execFileAsync('git', ['fetch', '--depth', '1', 'origin', UPSTREAM_COMMIT], {
+		cwd: repositoryDir,
+		maxBuffer: 1024 * 1024
+	});
+	await execFileAsync('git', ['checkout', '--detach', 'FETCH_HEAD'], {
+		cwd: repositoryDir,
 		maxBuffer: 1024 * 1024
 	});
 	return path.join(tempDir, 'source', 'demo', 'static');
@@ -254,6 +276,7 @@ export async function syncWasmNimAssets({
 	const resolvedTargetDir = path.resolve(targetDir);
 	const resolvedSourceDir = await resolveSourceDir(sourceDir, resolvedTargetDir);
 	if (resolvedSourceDir) {
+		await validateNimLlvmProfile(resolvedSourceDir);
 		const nimBundleSource = await readFile(
 			path.join(resolvedSourceDir, 'nim', 'nim-bundle.js'),
 			'utf8'
@@ -291,6 +314,7 @@ export async function syncWasmNimAssets({
 	} else {
 		await mkdir(resolvedTargetDir, { recursive: true });
 	}
+	await validateNimLlvmProfile(resolvedTargetDir);
 	await cp(workerSourcePath, path.join(resolvedTargetDir, 'runner-worker.js'));
 	const copiedFiles = await collectFingerprintFiles(resolvedTargetDir);
 	if (
