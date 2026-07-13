@@ -74,7 +74,7 @@ describe('syncWasmJuliaAssets', () => {
 			files: ['LICENSE.md', 'julia.data', 'julia.js', 'julia.wasm']
 		});
 		await expect(readFile(versionModulePath, 'utf8')).resolves.toContain(
-			`export const WASM_JULIA_ASSET_VERSION = ${JSON.stringify(result.fingerprint)};`
+			`export const WASM_JULIA_ASSET_VERSION = '${result.fingerprint}';`
 		);
 	});
 

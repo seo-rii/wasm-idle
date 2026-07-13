@@ -1,1 +1,1 @@
-export const WASM_BQN_ASSET_VERSION = 'e16e152b08acaef9';
+export const WASM_BQN_ASSET_VERSION = '726b5f478d20f86f';

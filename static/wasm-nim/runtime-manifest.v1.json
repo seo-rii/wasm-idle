@@ -2,7 +2,7 @@
   "format": "wasm-nim-runtime-manifest-v1",
   "runtime": "benagastov-nim-wasm-compiler",
   "repository": "https://github.com/benagastov/Nim-WASM-Compiler.git",
-  "fingerprint": "d2ab03ac4c375c4c",
+  "fingerprint": "06890c693abcdd01",
   "files": [
     "LICENSE",
     "README.md",

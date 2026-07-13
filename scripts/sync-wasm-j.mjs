@@ -74,7 +74,7 @@ async function targetLooksUsable(targetDir) {
  */
 async function writeVersionModule(versionModulePath, fingerprint) {
 	await mkdir(path.dirname(versionModulePath), { recursive: true });
-	const moduleSource = `export const WASM_J_ASSET_VERSION = ${JSON.stringify(fingerprint)};\n`;
+	const moduleSource = `export const WASM_J_ASSET_VERSION = '${fingerprint}';\n`;
 	const current = await readFile(versionModulePath, 'utf8').catch(() => '');
 	if (current !== moduleSource) await writeFile(versionModulePath, moduleSource, 'utf8');
 }

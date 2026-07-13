@@ -3,7 +3,7 @@
   "runtime": "GoAWK",
   "goVersion": "go1.25.3",
   "goawkVersion": "v1.31.0",
-  "fingerprint": "00636bd7d2c8355b",
+  "fingerprint": "db40f024f6235c84",
   "files": [
     "goawk.wasm",
     "runtime-build.json",

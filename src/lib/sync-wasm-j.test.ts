@@ -71,7 +71,7 @@ describe('syncWasmJAssets', () => {
 			files: ['jamalgam.js', 'jamalgam.wasm']
 		});
 		await expect(readFile(versionModulePath, 'utf8')).resolves.toContain(
-			`export const WASM_J_ASSET_VERSION = ${JSON.stringify(result.fingerprint)};`
+			`export const WASM_J_ASSET_VERSION = '${result.fingerprint}';`
 		);
 	});
 

@@ -22,7 +22,9 @@ async function fetchRuntimeBytes(baseUrl, path) {
 		.map((value) => value.trim());
 	if (contentEncoding.includes('gzip')) return compressedResponse.arrayBuffer();
 	if (typeof DecompressionStream !== 'function') {
-		throw new Error('BQN runtime asset is gzip-compressed, but DecompressionStream is unavailable.');
+		throw new Error(
+			'BQN runtime asset is gzip-compressed, but DecompressionStream is unavailable.'
+		);
 	}
 	const decompressed = compressedResponse.body.pipeThrough(new DecompressionStream('gzip'));
 	return new Response(decompressed).arrayBuffer();

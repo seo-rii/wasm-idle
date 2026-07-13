@@ -82,7 +82,7 @@ describe('syncWasmJanetAssets', () => {
 			files: ['LICENSE.txt', 'janet.js', 'janet.wasm']
 		});
 		await expect(readFile(versionModulePath, 'utf8')).resolves.toContain(
-			`export const WASM_JANET_ASSET_VERSION = ${JSON.stringify(result.fingerprint)};`
+			`export const WASM_JANET_ASSET_VERSION = '${result.fingerprint}';`
 		);
 	});
 

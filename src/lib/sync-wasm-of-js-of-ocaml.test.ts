@@ -114,7 +114,7 @@ describe('syncWasmOfJsOfOcamlDist', () => {
 			'/wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-merge.browser.js'
 		);
 		await expect(readFile(versionModulePath, 'utf8')).resolves.toContain(
-			`export const WASM_OCAML_ASSET_VERSION = ${JSON.stringify(result.fingerprint)};`
+			`export const WASM_OCAML_ASSET_VERSION = '${result.fingerprint}';`
 		);
 	});
 

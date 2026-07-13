@@ -103,7 +103,7 @@ describe('syncWasmNimAssets', () => {
 		expect(manifest.files).toContain('nim/nim.wasm');
 		expect(manifest.files).toContain('clang/clang.js');
 		await expect(readFile(versionModulePath, 'utf8')).resolves.toContain(
-			`export const WASM_NIM_ASSET_VERSION = ${JSON.stringify(result.fingerprint)};`
+			`export const WASM_NIM_ASSET_VERSION = '${result.fingerprint}';`
 		);
 	});
 

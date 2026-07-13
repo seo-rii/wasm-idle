@@ -22,7 +22,9 @@ async function fetchRuntimeBytes(baseUrl, path, options) {
 		.map((value) => value.trim());
 	if (contentEncoding.includes('gzip')) return compressedResponse.arrayBuffer();
 	if (typeof DecompressionStream !== 'function') {
-		throw new Error('Nim runtime asset is gzip-compressed, but DecompressionStream is unavailable.');
+		throw new Error(
+			'Nim runtime asset is gzip-compressed, but DecompressionStream is unavailable.'
+		);
 	}
 	const decompressed = compressedResponse.body.pipeThrough(new DecompressionStream('gzip'));
 	return new Response(decompressed).arrayBuffer();
@@ -138,7 +140,9 @@ function compileNimToC({ FS, callMain }, code, stdout, stderr) {
 		);
 	}
 
-	const cFiles = entries.filter((file) => file.endsWith('.nim.c') || file.endsWith('.nim.cpp')).sort();
+	const cFiles = entries
+		.filter((file) => file.endsWith('.nim.c') || file.endsWith('.nim.cpp'))
+		.sort();
 	if (cFiles.length === 0) {
 		throw new Error(
 			`Nim did not emit C files.${returnCode ? ` Exit code: ${returnCode}.` : ''}\n${stderr.join(
@@ -226,7 +230,9 @@ async function buildWasm({ baseUrl, code, stdout, stderr }) {
 		}
 	} catch (error) {
 		const logText = clangLogs.flatMap(splitLines).slice(-40).join('\n');
-		throw new Error(`Nim clang/lld build failed: ${error?.message || error}${logText ? `\n${logText}` : ''}`);
+		throw new Error(
+			`Nim clang/lld build failed: ${error?.message || error}${logText ? `\n${logText}` : ''}`
+		);
 	} finally {
 		console.log = originalLog;
 	}
@@ -373,7 +379,9 @@ function createWasiRunner({ stdin = '', args = [], activePath = 'main.nim' }) {
 			const target = u8().subarray(bufferPtr, bufferPtr + length);
 			if (globalThis.crypto?.getRandomValues) {
 				for (let offset = 0; offset < length; offset += 65536) {
-					crypto.getRandomValues(target.subarray(offset, Math.min(offset + 65536, length)));
+					crypto.getRandomValues(
+						target.subarray(offset, Math.min(offset + 65536, length))
+					);
 				}
 			} else {
 				for (let index = 0; index < length; index += 1) target[index] = Math.random() * 256;
@@ -393,7 +401,8 @@ function createWasiRunner({ stdin = '', args = [], activePath = 'main.nim' }) {
 		const imports = {};
 		for (const { module: moduleName, name, kind } of WebAssembly.Module.imports(module)) {
 			imports[moduleName] = imports[moduleName] || {};
-			if (kind === 'function') imports[moduleName][name] = importsImpl[name] || (() => errnoSuccess);
+			if (kind === 'function')
+				imports[moduleName][name] = importsImpl[name] || (() => errnoSuccess);
 		}
 		return imports;
 	}
@@ -456,7 +465,10 @@ self.onmessage = async (event) => {
 		if (log) console.log('[wasm-idle:nim-worker] run settled');
 		self.postMessage({ results: true });
 	} catch (error) {
-		const compilerOutput = [...compilerStderr.flatMap(splitLines), ...compilerStdout.flatMap(splitLines)]
+		const compilerOutput = [
+			...compilerStderr.flatMap(splitLines),
+			...compilerStdout.flatMap(splitLines)
+		]
 			.slice(-60)
 			.join('\n');
 		const message = `${error?.message || error}${compilerOutput ? `\n${compilerOutput}` : ''}`;

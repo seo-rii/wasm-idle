@@ -86,7 +86,7 @@ describe('syncWasmBqnAssets', () => {
 			files: ['BQN.js', 'BQN.wasm', 'LICENSE-GPLv3.txt']
 		});
 		await expect(readFile(versionModulePath, 'utf8')).resolves.toContain(
-			`export const WASM_BQN_ASSET_VERSION = ${JSON.stringify(result.fingerprint)};`
+			`export const WASM_BQN_ASSET_VERSION = '${result.fingerprint}';`
 		);
 	});
 
