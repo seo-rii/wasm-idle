@@ -18,6 +18,39 @@ async function writeFixtureFile(baseDir: string, relativePath: string, contents:
 	await writeFile(targetPath, contents, 'utf8');
 }
 
+async function writeRustLlvmProfileFixture(sourceDir: string, includeLld = false) {
+	await writeFixtureFile(
+		sourceDir,
+		'runtime/runtime-manifest.v3.json',
+		JSON.stringify({
+			manifestVersion: 3,
+			version: 'rust-1.79.0-dev-browser-split-v3',
+			compiler: { rustcWasm: 'rustc/rustc.wasm.gz' },
+			targets: {
+				'wasm32-wasip1': {
+					compile: {
+						llvm: {
+							llc: 'llvm/llc.js',
+							llcWasm: 'llvm/llc.wasm.gz',
+							lld: 'llvm/lld.js',
+							lldWasm: 'llvm/lld.wasm.gz',
+							lldData: 'llvm/lld.data.gz'
+						}
+					}
+				}
+			}
+		})
+	);
+	await writeFixtureFile(sourceDir, 'runtime/rustc/rustc.wasm.gz', 'gzip-rustc');
+	await writeFixtureFile(sourceDir, 'runtime/llvm/llc.js', 'llc-js');
+	await writeFixtureFile(sourceDir, 'runtime/llvm/llc.wasm.gz', 'gzip-llc');
+	await writeFixtureFile(sourceDir, 'runtime/llvm/lld.js', 'lld-js');
+	if (includeLld) {
+		await writeFixtureFile(sourceDir, 'runtime/llvm/lld.wasm.gz', 'gzip-lld-wasm');
+		await writeFixtureFile(sourceDir, 'runtime/llvm/lld.data.gz', 'gzip-lld-data');
+	}
+}
+
 describe('syncWasmRustDist', () => {
 	afterEach(async () => {
 		await Promise.all(
@@ -30,6 +63,7 @@ describe('syncWasmRustDist', () => {
 		const targetDir = await makeTempDir();
 		const versionModulePath = path.join(await makeTempDir(), 'wasmRustVersion.ts');
 		const sharedLldDir = await makeTempDir();
+		const canonicalLldDir = await makeTempDir();
 
 		await writeFixtureFile(sourceDir, 'index.js', 'export default "compiler";\n');
 		await writeFixtureFile(
@@ -53,12 +87,7 @@ describe('syncWasmRustDist', () => {
 				''
 			].join('\n')
 		);
-		await writeFixtureFile(
-			sourceDir,
-			'runtime/runtime-manifest.v3.json',
-			'{"manifestVersion":3,"targets":{"wasm32-wasip1":{"compile":{"llvm":{"lldWasm":"llvm/lld.wasm.gz","lldData":"llvm/lld.data.gz"}}}}}\n'
-		);
-		await writeFixtureFile(sourceDir, 'runtime/rustc/rustc.wasm.gz', 'gzip-rustc');
+		await writeRustLlvmProfileFixture(sourceDir, true);
 		await writeFixtureFile(
 			sourceDir,
 			'runtime/packs/sysroot/wasm32-wasip1.index.json.gz',
@@ -69,11 +98,9 @@ describe('syncWasmRustDist', () => {
 			'runtime/packs/link/wasm32-wasip1.pack.gz',
 			'gzip-link-pack'
 		);
-		await writeFixtureFile(sourceDir, 'runtime/llvm/llc.wasm.gz', 'gzip-llc');
-		await writeFixtureFile(sourceDir, 'runtime/llvm/lld.wasm.gz', 'gzip-lld-wasm');
-		await writeFixtureFile(sourceDir, 'runtime/llvm/lld.data.gz', 'gzip-lld-data');
-		await writeFixtureFile(sharedLldDir, 'lld.wasm.gz', 'gzip-lld-wasm');
-		await writeFixtureFile(sharedLldDir, 'lld.data.gz', 'gzip-lld-data');
+		await writeFixtureFile(canonicalLldDir, 'lld.js', 'lld-js');
+		await writeFixtureFile(canonicalLldDir, 'lld.wasm.gz', 'gzip-lld-wasm');
+		await writeFixtureFile(canonicalLldDir, 'lld.data.gz', 'gzip-lld-data');
 		await writeFixtureFile(sourceDir, 'types.d.ts', 'export type Ignored = true;\n');
 		await writeFixtureFile(
 			sourceDir,
@@ -106,8 +133,12 @@ describe('syncWasmRustDist', () => {
 			sourceDir,
 			targetDir,
 			versionModulePath,
-			sharedLldDir
+			sharedLldDir,
+			canonicalLldDir
 		});
+		await expect(readFile(path.join(sharedLldDir, 'lld.data.gz'), 'utf8')).resolves.toBe(
+			'gzip-lld-data'
+		);
 
 		await expect(readFile(path.join(targetDir, 'index.js'), 'utf8')).resolves.toContain(
 			'compiler'
@@ -130,6 +161,12 @@ describe('syncWasmRustDist', () => {
 		await expect(
 			readFile(path.join(targetDir, 'runtime/runtime-manifest.v3.json'), 'utf8')
 		).resolves.toContain('../../shared/emscripten-lld/lld.wasm.gz');
+		await expect(
+			readFile(path.join(targetDir, 'runtime/runtime-manifest.v3.json'), 'utf8')
+		).resolves.toContain('../../shared/emscripten-lld/lld.js');
+		await expect(
+			readFile(path.join(targetDir, 'runtime/llvm/lld.js'), 'utf8')
+		).rejects.toThrow();
 		await expect(
 			readFile(path.join(targetDir, 'runtime/rustc/rustc.wasm.gz'), 'utf8')
 		).resolves.toBe('gzip-rustc');
@@ -184,6 +221,7 @@ describe('syncWasmRustDist', () => {
 		const versionModulePath = path.join(await makeTempDir(), 'wasmRustVersion.ts');
 
 		await writeFixtureFile(sourceDir, 'index.js', 'export default 1;\n');
+		await writeRustLlvmProfileFixture(sourceDir);
 		await writeFixtureFile(targetDir, 'stale.txt', 'remove me');
 
 		await syncWasmRustDist({ sourceDir, targetDir, versionModulePath });
@@ -215,6 +253,7 @@ describe('syncWasmRustDist', () => {
 			"import { Fd } from '@bjorn3/browser_wasi_shim/dist/fd.js';\nexport { Fd };\n"
 		);
 		await writeFixtureFile(sourceDir, 'index.js', 'export default 1;\n');
+		await writeRustLlvmProfileFixture(sourceDir);
 
 		await expect(syncWasmRustDist({ sourceDir, targetDir, versionModulePath })).rejects.toThrow(
 			'vendored browser_wasi_shim'

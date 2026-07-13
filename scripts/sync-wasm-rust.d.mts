@@ -1,11 +1,12 @@
 /**
- * @param {{ sourceDir?: string; targetDir?: string; versionModulePath?: string; sharedLldDir?: string }} [options]
+ * @param {{ sourceDir?: string; targetDir?: string; versionModulePath?: string; sharedLldDir?: string; canonicalLldDir?: string }} [options]
  */
-export function syncWasmRustDist({ sourceDir, targetDir, versionModulePath, sharedLldDir }?: {
+export function syncWasmRustDist({ sourceDir, targetDir, versionModulePath, sharedLldDir, canonicalLldDir }?: {
     sourceDir?: string;
     targetDir?: string;
     versionModulePath?: string;
     sharedLldDir?: string;
+    canonicalLldDir?: string;
 }): Promise<{
     sourceDir: string;
     targetDir: string;

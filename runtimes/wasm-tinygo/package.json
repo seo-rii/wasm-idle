@@ -18,7 +18,7 @@
 		"build": "tsc && vite build --base ./",
 		"preview": "vite preview",
 		"check": "tsc --noEmit",
-		"test:host": "node --test tests/bootstrap-exports.test.ts tests/build-go-probe.test.mjs tests/build-tinygo-compiler.test.mjs tests/build-tinygo-upstream-probe.test.mjs tests/build-tinygo-upstream-frontend-probe.test.mjs tests/compile-unit.test.ts tests/emception-files.test.mjs tests/fetch-emception-worker.test.mjs tests/fetch-tinygo-source.test.mjs tests/fetch-tinygo-toolchain.test.mjs tests/lowered-exports.test.ts tests/patch-emception-worker.test.mjs tests/tinygo-driver-bridge-script.test.mjs tests/tinygo-host.test.mjs",
+		"test:host": "node --test tests/bootstrap-exports.test.ts tests/build-go-probe.test.mjs tests/build-tinygo-compiler.test.mjs tests/build-tinygo-upstream-probe.test.mjs tests/build-tinygo-upstream-frontend-probe.test.mjs tests/compile-unit.test.ts tests/emception-files.test.mjs tests/fetch-emception-worker.test.mjs tests/fetch-tinygo-source.test.mjs tests/fetch-tinygo-toolchain.test.mjs tests/lowered-exports.test.ts tests/patch-emception-worker.test.mjs tests/runtime-boundaries.test.mjs tests/tinygo-driver-bridge-script.test.mjs tests/tinygo-host.test.mjs",
 		"test:tinygo-host": "npm run prepare:tinygo && node ./scripts/probe-tinygo-driver-bridge.mjs && node --test tests/tinygo-driver-bridge.test.ts",
 		"test:wasi": "node --test --test-concurrency=1 tests/driver-wasi.test.mjs",
 		"test:browser": "node --test tests/browser-smoke.test.mjs"
@@ -28,6 +28,7 @@
 		"vite": "^8.0.0"
 	},
 	"dependencies": {
+		"@seo-rii/wasm-llvm": "github:seo-rii/wasm-llvm#6a32a19",
 		"@bjorn3/browser_wasi_shim": "^0.4.2",
 		"comlink": "^4.4.2"
 	}

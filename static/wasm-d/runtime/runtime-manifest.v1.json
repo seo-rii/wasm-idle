@@ -17,7 +17,7 @@
       "kind": "emscripten-lld",
       "argv0": "wasm-ld",
       "js": {
-        "asset": "bin/lld.js"
+        "asset": "../../shared/emscripten-lld/lld.js"
       },
       "wasm": {
         "asset": "../../shared/emscripten-lld/lld.wasm.gz",

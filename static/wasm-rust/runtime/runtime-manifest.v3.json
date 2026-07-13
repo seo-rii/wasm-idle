@@ -28,7 +28,7 @@
         "llvm": {
           "llc": "llvm/llc.js",
           "llcWasm": "llvm/llc.wasm.gz",
-          "lld": "llvm/lld.js",
+          "lld": "../../shared/emscripten-lld/lld.js",
           "lldWasm": "../../shared/emscripten-lld/lld.wasm.gz",
           "lldData": "../../shared/emscripten-lld/lld.data.gz"
         },
@@ -100,7 +100,7 @@
         "llvm": {
           "llc": "llvm/llc.js",
           "llcWasm": "llvm/llc.wasm.gz",
-          "lld": "llvm/lld.js",
+          "lld": "../../shared/emscripten-lld/lld.js",
           "lldWasm": "../../shared/emscripten-lld/lld.wasm.gz",
           "lldData": "../../shared/emscripten-lld/lld.data.gz"
         },
@@ -174,7 +174,7 @@
         "llvm": {
           "llc": "llvm/llc.js",
           "llcWasm": "llvm/llc.wasm.gz",
-          "lld": "llvm/lld.js",
+          "lld": "../../shared/emscripten-lld/lld.js",
           "lldWasm": "../../shared/emscripten-lld/lld.wasm.gz",
           "lldData": "../../shared/emscripten-lld/lld.data.gz"
         },

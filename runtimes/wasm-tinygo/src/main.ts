@@ -245,21 +245,6 @@ const setPhase = (
 const browserBaseUrl = new URL(import.meta.env.BASE_URL, window.location.href).href;
 const runtime = createTinyGoBrowserRuntime({
 	baseUrl: browserBaseUrl,
-	rustRuntimeBaseUrl: new URL('vendor/wasm-rust-runtime/', browserBaseUrl).toString(),
-	rustRuntimeAssetPacks: [
-		{
-			index: 'packs/sysroot/wasm32-wasip1.index.json.gz',
-			asset: 'packs/sysroot/wasm32-wasip1.pack.gz',
-			fileCount: 30,
-			totalBytes: 70715949
-		},
-		{
-			index: 'packs/link/wasm32-wasip1.index.json.gz',
-			asset: 'packs/link/wasm32-wasip1.pack.gz',
-			fileCount: 20,
-			totalBytes: 51389541
-		}
-	],
 	initialLogs: [
 		'wasm-tinygo bootstrap ready',
 		'Plan the TinyGo build first, then execute the generated plan with emception'

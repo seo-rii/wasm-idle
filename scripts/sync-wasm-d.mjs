@@ -1,15 +1,20 @@
 import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+	EMSCRIPTEN_LLD_PROFILE,
 	rewriteSharedEmscriptenLldAssets,
+	syncCanonicalEmscriptenLldAssets,
 	validateSharedEmscriptenLldAssets
-} from './shared-emscripten-lld.mjs';
+} from '@seo-rii/wasm-llvm/runtime/emscripten-lld';
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const THIS_DIR = path.dirname(THIS_FILE);
 const REPO_ROOT = path.resolve(THIS_DIR, '..');
+const require = createRequire(import.meta.url);
+const WASM_LLVM_ROOT = path.dirname(require.resolve('@seo-rii/wasm-llvm/package.json'));
 const DEFAULT_SOURCE_DIR = path.resolve(REPO_ROOT, 'runtimes', 'wasm-d', 'dist');
 const DEFAULT_TARGET_DIR = path.resolve(REPO_ROOT, 'static', 'wasm-d');
 const DEFAULT_VERSION_MODULE_PATH = path.resolve(
@@ -20,6 +25,12 @@ const DEFAULT_VERSION_MODULE_PATH = path.resolve(
 	'wasmDVersion.ts'
 );
 const DEFAULT_SHARED_LLD_DIR = path.resolve(REPO_ROOT, 'static', 'shared', 'emscripten-lld');
+const DEFAULT_CANONICAL_LLD_DIR = path.resolve(
+	WASM_LLVM_ROOT,
+	'runtime',
+	'emscripten-lld',
+	'assets'
+);
 
 function shouldSkipCopy(sourcePath) {
 	return sourcePath.endsWith('.d.ts') || sourcePath.endsWith('.tsbuildinfo');
@@ -72,15 +83,6 @@ async function computeBundleFingerprint(sourceDir, additionalFiles = []) {
 	return hash.digest('hex').slice(0, 16);
 }
 
-async function normalizeTextAssets(targetDir) {
-	const lldJsPath = path.join(targetDir, 'runtime', 'bin', 'lld.js');
-	const lldJs = await readFile(lldJsPath, 'utf8');
-	const normalizedLldJs = lldJs.replace(/[ \t]+$/gm, '');
-	if (normalizedLldJs !== lldJs) {
-		await writeFile(lldJsPath, normalizedLldJs, 'utf8');
-	}
-}
-
 async function writeVersionModule(versionModulePath, fingerprint) {
 	await mkdir(path.dirname(versionModulePath), { recursive: true });
 	const moduleSource = `export const WASM_D_ASSET_VERSION = ${JSON.stringify(fingerprint)};\n`;
@@ -89,11 +91,22 @@ async function writeVersionModule(versionModulePath, fingerprint) {
 	await writeFile(versionModulePath, moduleSource, 'utf8');
 }
 
+/**
+ * @typedef {object} SyncWasmDDistOptions
+ * @property {string} [sourceDir]
+ * @property {string} [targetDir]
+ * @property {string} [versionModulePath]
+ * @property {string} [sharedLldDir]
+ * @property {string} [canonicalLldDir]
+ */
+
+/** @param {SyncWasmDDistOptions} [options] */
 export async function syncWasmDDist({
 	sourceDir = DEFAULT_SOURCE_DIR,
 	targetDir = DEFAULT_TARGET_DIR,
 	versionModulePath = DEFAULT_VERSION_MODULE_PATH,
-	sharedLldDir = DEFAULT_SHARED_LLD_DIR
+	sharedLldDir = DEFAULT_SHARED_LLD_DIR,
+	canonicalLldDir = DEFAULT_CANONICAL_LLD_DIR
 } = {}) {
 	const sourceStats = await stat(sourceDir).catch(() => null);
 	if (!sourceStats?.isDirectory()) {
@@ -119,20 +132,47 @@ export async function syncWasmDDist({
 	}
 	await validateSharedEmscriptenLldAssets({
 		sourceAssetDir: path.join(sourceDir, 'runtime', 'bin'),
-		sharedAssetDir: sharedLldDir
+		sharedAssetDir: canonicalLldDir
+	});
+	await syncCanonicalEmscriptenLldAssets({
+		canonicalAssetDir: canonicalLldDir,
+		targetAssetDir: sharedLldDir
 	});
 
 	await rm(targetDir, { recursive: true, force: true });
 	await mkdir(targetDir, { recursive: true });
 	await copyDirectory(sourceDir, targetDir);
-	await normalizeTextAssets(targetDir);
 	await rewriteSharedEmscriptenLldAssets({
 		targetAssetDir: path.join(targetDir, 'runtime', 'bin'),
 		manifestPath: path.join(targetDir, 'runtime', 'runtime-manifest.v1.json'),
+		localJsAsset: 'bin/lld.js',
 		localWasmAsset: 'bin/lld.wasm.gz',
 		localDataAsset: 'bin/lld.data.gz'
 	});
+	const manifestPath = path.join(targetDir, 'runtime', 'runtime-manifest.v1.json');
+	const runtimeBuildPath = path.join(targetDir, 'runtime', 'runtime-build.json');
+	const runtimeBuild = JSON.parse(await readFile(runtimeBuildPath, 'utf8'));
+	if (Array.isArray(runtimeBuild.assets)) {
+		runtimeBuild.assets = runtimeBuild.assets.filter(
+			(entry) =>
+				!['bin/lld.js', 'bin/lld.wasm.gz', 'bin/lld.data.gz'].includes(entry?.asset)
+		);
+	}
+	runtimeBuild.manifestSha256 = createHash('sha256')
+		.update(await readFile(manifestPath))
+		.digest('hex');
+	runtimeBuild.sharedLlvmProfiles = [
+		{
+			id: EMSCRIPTEN_LLD_PROFILE.id,
+			profileVersion: EMSCRIPTEN_LLD_PROFILE.version,
+			llvmVersion: EMSCRIPTEN_LLD_PROFILE.llvmVersion,
+			llvmCommit: EMSCRIPTEN_LLD_PROFILE.llvmCommit,
+			assets: EMSCRIPTEN_LLD_PROFILE.assets
+		}
+	];
+	await writeFile(runtimeBuildPath, `${JSON.stringify(runtimeBuild, null, 2)}\n`, 'utf8');
 	const fingerprint = await computeBundleFingerprint(targetDir, [
+		path.join(sharedLldDir, 'lld.js'),
 		path.join(sharedLldDir, 'lld.wasm.gz'),
 		path.join(sharedLldDir, 'lld.data.gz')
 	]);

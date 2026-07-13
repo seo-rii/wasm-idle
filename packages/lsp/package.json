@@ -213,7 +213,7 @@
 		"@bjorn3/browser_wasi_shim": "^0.4.2",
 		"@duckdb/duckdb-wasm": "1.33.1-dev45.0",
 		"@ruby/wasm-wasi": "2.9.3-2.9.4",
-		"@seo-rii/wasm-llvm": "github:seo-rii/wasm-llvm#3ead733",
+		"@seo-rii/wasm-llvm": "github:seo-rii/wasm-llvm#6a32a19",
 		"@zip.js/zip.js": "^2.8.26",
 		"assemblyscript": "0.28.17",
 		"graphql": "^17.0.1",

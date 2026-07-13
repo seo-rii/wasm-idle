@@ -30,27 +30,45 @@ describe('syncWasmDDist', () => {
 		const sourceDir = await makeTempDir();
 		const targetDir = await makeTempDir();
 		const sharedLldDir = await makeTempDir();
+		const canonicalLldDir = await makeTempDir();
 		const versionModulePath = path.join(await makeTempDir(), 'wasmDVersion.ts');
 		for (const file of [
 			'index.js',
-			'runtime/runtime-build.json',
 			'runtime/bin/ldc2.wasm.gz',
-			'runtime/bin/lld.js',
 			'runtime/toolchain/toolchain.tar.gz'
 		]) {
 			await writeFixtureFile(sourceDir, file);
 		}
+		await writeFixtureFile(sourceDir, 'runtime/bin/lld.js', 'shared-js');
 		await writeFixtureFile(sourceDir, 'runtime/bin/lld.wasm.gz', 'shared-wasm');
 		await writeFixtureFile(sourceDir, 'runtime/bin/lld.data.gz', 'shared-data');
-		await writeFixtureFile(sharedLldDir, 'lld.wasm.gz', 'shared-wasm');
-		await writeFixtureFile(sharedLldDir, 'lld.data.gz', 'shared-data');
+		await writeFixtureFile(canonicalLldDir, 'lld.js', 'shared-js');
+		await writeFixtureFile(canonicalLldDir, 'lld.wasm.gz', 'shared-wasm');
+		await writeFixtureFile(canonicalLldDir, 'lld.data.gz', 'shared-data');
+		await writeFixtureFile(
+			sourceDir,
+			'runtime/runtime-build.json',
+			'{"assets":[{"asset":"bin/lld.js"},{"asset":"bin/lld.wasm.gz"},{"asset":"bin/lld.data.gz"},{"asset":"bin/ldc2.wasm.gz"}]}\n'
+		);
 		await writeFixtureFile(
 			sourceDir,
 			'runtime/runtime-manifest.v1.json',
-			'{"manifestVersion":1,"compiler":{"linker":{"wasm":{"asset":"bin/lld.wasm.gz"},"data":{"asset":"bin/lld.data.gz"}}}}\n'
+			'{"manifestVersion":1,"compiler":{"linker":{"js":{"asset":"bin/lld.js"},"wasm":{"asset":"bin/lld.wasm.gz"},"data":{"asset":"bin/lld.data.gz"}}}}\n'
 		);
 
-		await syncWasmDDist({ sourceDir, targetDir, versionModulePath, sharedLldDir });
+		await syncWasmDDist({
+			sourceDir,
+			targetDir,
+			versionModulePath,
+			sharedLldDir,
+			canonicalLldDir
+		});
+		await expect(readFile(path.join(sharedLldDir, 'lld.wasm.gz'), 'utf8')).resolves.toBe(
+			'shared-wasm'
+		);
+		await expect(readFile(path.join(sharedLldDir, 'lld.js'), 'utf8')).resolves.toBe(
+			'shared-js'
+		);
 
 		const manifest = await readFile(
 			path.join(targetDir, 'runtime/runtime-manifest.v1.json'),
@@ -58,6 +76,15 @@ describe('syncWasmDDist', () => {
 		);
 		expect(manifest).toContain('../../shared/emscripten-lld/lld.wasm.gz');
 		expect(manifest).toContain('../../shared/emscripten-lld/lld.data.gz');
+		expect(manifest).toContain('../../shared/emscripten-lld/lld.js');
+		const runtimeBuild = JSON.parse(
+			await readFile(path.join(targetDir, 'runtime/runtime-build.json'), 'utf8')
+		) as { assets: Array<{ asset: string }>; sharedLlvmProfiles: Array<{ id: string }> };
+		expect(runtimeBuild.assets).toEqual([{ asset: 'bin/ldc2.wasm.gz' }]);
+		expect(runtimeBuild.sharedLlvmProfiles).toEqual([
+			expect.objectContaining({ id: 'emscripten-lld' })
+		]);
+		await expect(readFile(path.join(targetDir, 'runtime/bin/lld.js'))).rejects.toThrow();
 		await expect(readFile(path.join(targetDir, 'runtime/bin/lld.wasm.gz'))).rejects.toThrow();
 		await expect(readFile(path.join(targetDir, 'runtime/bin/lld.data.gz'))).rejects.toThrow();
 	});
@@ -66,24 +93,32 @@ describe('syncWasmDDist', () => {
 		const sourceDir = await makeTempDir();
 		const targetDir = await makeTempDir();
 		const sharedLldDir = await makeTempDir();
+		const canonicalLldDir = await makeTempDir();
 		const versionModulePath = path.join(await makeTempDir(), 'wasmDVersion.ts');
 		for (const file of [
 			'index.js',
 			'runtime/runtime-manifest.v1.json',
-			'runtime/runtime-build.json',
 			'runtime/bin/ldc2.wasm.gz',
-			'runtime/bin/lld.js',
 			'runtime/toolchain/toolchain.tar.gz'
 		]) {
 			await writeFixtureFile(sourceDir, file);
 		}
+		await writeFixtureFile(sourceDir, 'runtime/runtime-build.json', '{}\n');
+		await writeFixtureFile(sourceDir, 'runtime/bin/lld.js', 'shared-js');
 		await writeFixtureFile(sourceDir, 'runtime/bin/lld.wasm.gz', 'different');
 		await writeFixtureFile(sourceDir, 'runtime/bin/lld.data.gz', 'shared-data');
-		await writeFixtureFile(sharedLldDir, 'lld.wasm.gz', 'shared-wasm');
-		await writeFixtureFile(sharedLldDir, 'lld.data.gz', 'shared-data');
+		await writeFixtureFile(canonicalLldDir, 'lld.js', 'shared-js');
+		await writeFixtureFile(canonicalLldDir, 'lld.wasm.gz', 'shared-wasm');
+		await writeFixtureFile(canonicalLldDir, 'lld.data.gz', 'shared-data');
 
 		await expect(
-			syncWasmDDist({ sourceDir, targetDir, versionModulePath, sharedLldDir })
+			syncWasmDDist({
+				sourceDir,
+				targetDir,
+				versionModulePath,
+				sharedLldDir,
+				canonicalLldDir
+			})
 		).rejects.toThrow('differs from the canonical asset');
 	});
 });

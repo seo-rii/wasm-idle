@@ -36,8 +36,8 @@ importers:
         specifier: 2.9.3-2.9.4
         version: 2.9.3-2.9.4
       '@seo-rii/wasm-llvm':
-        specifier: github:seo-rii/wasm-llvm#3ead733
-        version: https://codeload.github.com/seo-rii/wasm-llvm/tar.gz/3ead7333be65309d90d791c6a9370931b9c91144
+        specifier: github:seo-rii/wasm-llvm#6a32a19
+        version: https://codeload.github.com/seo-rii/wasm-llvm/tar.gz/6a32a19647471133bc266459443c0359037502d8
       '@seorii/monaco':
         specifier: 0.1.1
         version: 0.1.1(svelte@5.55.4(@typescript-eslint/types@8.58.2))
@@ -223,8 +223,8 @@ importers:
         specifier: 2.9.3-2.9.4
         version: 2.9.3-2.9.4
       '@seo-rii/wasm-llvm':
-        specifier: github:seo-rii/wasm-llvm#3ead733
-        version: https://codeload.github.com/seo-rii/wasm-llvm/tar.gz/3ead7333be65309d90d791c6a9370931b9c91144
+        specifier: github:seo-rii/wasm-llvm#6a32a19
+        version: https://codeload.github.com/seo-rii/wasm-llvm/tar.gz/6a32a19647471133bc266459443c0359037502d8
       '@zip.js/zip.js':
         specifier: ^2.8.26
         version: 2.8.26
@@ -559,6 +559,9 @@ importers:
       '@bjorn3/browser_wasi_shim':
         specifier: ^0.4.2
         version: 0.4.2
+      '@seo-rii/wasm-llvm':
+        specifier: github:seo-rii/wasm-llvm#6a32a19
+        version: https://codeload.github.com/seo-rii/wasm-llvm/tar.gz/6a32a19647471133bc266459443c0359037502d8
       comlink:
         specifier: ^4.4.2
         version: 4.4.2
@@ -1754,9 +1757,9 @@ packages:
   '@ruby/wasm-wasi@2.9.3-2.9.4':
     resolution: {integrity: sha512-WxW9wON/TIf+8Ktng8qDJeV/6iH8kw+YwxOsOyXdAdLJgfYDPAXOqpIVd/96y2C9V8VJ2yqZm/IRv6nLeV6EKg==}
 
-  '@seo-rii/wasm-llvm@https://codeload.github.com/seo-rii/wasm-llvm/tar.gz/3ead7333be65309d90d791c6a9370931b9c91144':
-    resolution: {tarball: https://codeload.github.com/seo-rii/wasm-llvm/tar.gz/3ead7333be65309d90d791c6a9370931b9c91144}
-    version: 0.2.0
+  '@seo-rii/wasm-llvm@https://codeload.github.com/seo-rii/wasm-llvm/tar.gz/6a32a19647471133bc266459443c0359037502d8':
+    resolution: {tarball: https://codeload.github.com/seo-rii/wasm-llvm/tar.gz/6a32a19647471133bc266459443c0359037502d8}
+    version: 0.4.0
     engines: {node: '>=20'}
 
   '@seorii/monaco@0.1.1':
@@ -5110,7 +5113,7 @@ snapshots:
       '@bjorn3/browser_wasi_shim': 0.4.2
       tslib: 2.8.1
 
-  '@seo-rii/wasm-llvm@https://codeload.github.com/seo-rii/wasm-llvm/tar.gz/3ead7333be65309d90d791c6a9370931b9c91144':
+  '@seo-rii/wasm-llvm@https://codeload.github.com/seo-rii/wasm-llvm/tar.gz/6a32a19647471133bc266459443c0359037502d8':
     dependencies:
       '@bjorn3/browser_wasi_shim': 0.4.2
       '@zip.js/zip.js': 2.8.26

@@ -1,7 +1,7 @@
 {
   "generatedAt": "2026-06-15T02:41:23.841Z",
   "source": "../ldc-wasm/dist/wasm-idle",
-  "manifestSha256": "af8bd2ef54e114e06e91dafcba5e043fb8e70e32fb19ffddb9d5c46d235e0544",
+  "manifestSha256": "753d692583884d60491d34c2ffe91839dda752c32f0241cb48197e16533c8b28",
   "sourceAssets": [
     "bin/ldc2.wasm",
     "bin/lld.data",
@@ -18,24 +18,22 @@
       "sha256": "69ce5776b5edcb48d167d1004986a0f0dd0131cd3c9c871d52b8077ee997c5f3"
     },
     {
-      "asset": "bin/lld.js",
-      "size": 91650,
-      "sha256": "095fb1add8ddf8188677d36b44e25ac97d8a21e8cac0346dc2b1bf0b7fc7a0cf"
-    },
-    {
-      "asset": "bin/lld.wasm.gz",
-      "size": 21649502,
-      "sha256": "a1402830fd7756a8d122a773cb2ac2eba07245cc97891759ed4cf5b10cc73608"
-    },
-    {
-      "asset": "bin/lld.data.gz",
-      "size": 2673035,
-      "sha256": "369220e5714722229163d3ef9ecc39b3da29f9897cf596a39ce2818eb938a4df"
-    },
-    {
       "asset": "toolchain/toolchain.tar.gz",
       "size": 8081223,
       "sha256": "d14e32f6ce3d54a6f1e76864572b45e608e85a70d925583544868ffac3c4b54f"
+    }
+  ],
+  "sharedLlvmProfiles": [
+    {
+      "id": "emscripten-lld",
+      "profileVersion": 2,
+      "llvmVersion": "16.0.4",
+      "llvmCommit": "ae42196bc493ffe877a7e3dff8be32035dea4d07",
+      "assets": [
+        "lld.js",
+        "lld.wasm.gz",
+        "lld.data.gz"
+      ]
     }
   ]
 }
