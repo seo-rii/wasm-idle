@@ -6,7 +6,7 @@ describe('runtime compression config', () => {
 	it('expands all into every supported runtime compression scope', () => {
 		expect([
 			...parseRuntimePrecompressionScopes('all', 'WASM_RUST_PRECOMPRESS_SCOPES')
-		]).toEqual(['rustc', 'llvm', 'packs']);
+		]).toEqual(['rustc', 'llvm', 'packs', 'vendor']);
 	});
 
 	it('allows disabling runtime precompression entirely', () => {
@@ -14,8 +14,8 @@ describe('runtime compression config', () => {
 			...parseRuntimePrecompressionScopes('none', 'WASM_RUST_PRECOMPRESS_SCOPES')
 		]).toEqual([]);
 		expect([
-			...parseRuntimePrecompressionScopes('rustc,llvm', 'WASM_RUST_PRECOMPRESS_SCOPES')
-		]).toEqual(['rustc', 'llvm']);
+			...parseRuntimePrecompressionScopes('rustc,llvm,vendor', 'WASM_RUST_PRECOMPRESS_SCOPES')
+		]).toEqual(['rustc', 'llvm', 'vendor']);
 	});
 
 	it('rejects invalid runtime compression scope combinations', () => {

@@ -1,0 +1,73 @@
+{
+	"schemaVersion": 1,
+	"producerId": "@seo-rii/wasm-llvm/rust-browser",
+	"manifestSha256": "cfb6854a2c0b6d5102969ffa7b2b82c87aa416742a48ba436cbeb445c33f83b8",
+	"sourceDateEpoch": 1783912447,
+	"runtimeVersion": "rust-1.99.0-browser-integrated-v1",
+	"environment": {
+		"platform": "linux/amd64",
+		"baseImage": "debian:bookworm-slim@sha256:1def178129dfb5f24db43afbf2fcac04530012e3264ba4ff81c71184e17a9ee4",
+		"debianSnapshot": "20260623T000000Z",
+		"cmake": {
+			"version": "4.0.3",
+			"sha256": "585ae9e013107bc8e7c7c9ce872cbdcbdff569e675b07ef57aacfb88c886faac"
+		},
+		"node": {
+			"version": "24.1.0",
+			"sha256": "76b77c43f97a7c4cf60917e24c5e212faaf8ca664e433759ef98d12f268b6b49"
+		}
+	},
+	"hostTools": [
+		{ "command": "cmake", "args": ["--version"], "firstLine": "cmake version 4.0.3" },
+		{ "command": "ninja", "args": ["--version"], "firstLine": "1.11.1" },
+		{ "command": "make", "args": ["--version"], "firstLine": "GNU Make 4.3" },
+		{
+			"command": "cc",
+			"args": ["--version"],
+			"firstLine": "cc (Debian 12.2.0-14+deb12u1) 12.2.0"
+		},
+		{
+			"command": "c++",
+			"args": ["--version"],
+			"firstLine": "c++ (Debian 12.2.0-14+deb12u1) 12.2.0"
+		},
+		{ "command": "python3", "args": ["--version"], "firstLine": "Python 3.11.2" },
+		{ "command": "node", "args": ["--version"], "firstLine": "v24.1.0" },
+		{ "command": "git", "args": ["--version"], "firstLine": "git version 2.39.5" },
+		{ "command": "tar", "args": ["--version"], "firstLine": "tar (GNU tar) 1.34" }
+	],
+	"sources": {
+		"gcc": {
+			"commit": "ae91b5dd14920ff9671db8ff80c0d763d25f977f",
+			"patchSha256": "aabd4a44cbfc0b5bcf907be0112aa3211315611116c48ca201cb706206f6862e",
+			"patchedTree": "7399d99d53c2bacf61ac77a1d68938d4fecfc1eb",
+			"tree": "f5687c013f8dd061ea3de9c71537578ba4fdf727"
+		},
+		"llvm": {
+			"commit": "52ed14fcd56afc30f9cccd8ca8ce237c2eef7e04",
+			"patchSha256": "29f9a340415928eab8dd6647eb518f86fdf7706fdd3184ceef4d92d802b98ce8",
+			"patchedTree": "1e6e38a99d610309b558f2498f017b135b97f0f9",
+			"tree": "65bd4bfb3d72ef2b38735fb667fabe129aa1a422"
+		},
+		"rust": {
+			"commit": "48c2cee70232ecc3a6a8e285b2e15620b39f82a7",
+			"patchSha256": "6d42704d70505fcf806fcbfc163d313b24851f1b094c5728cd4bc24470542937",
+			"patchedTree": "e3f2e1b2a38e4a34c2296c6d4c1f90575b6c5625",
+			"tree": "719276ca1fd84c6493b80aeb9de8dc8be7b369c6",
+			"submodules": [
+				{
+					"path": "library/backtrace",
+					"repository": "https://github.com/rust-lang/backtrace-rs.git",
+					"commit": "d902726a1dcdc1e1c66f73d1162181b5423c645b",
+					"tree": "7f55c64f163ee354275bc92f21496620737401eb"
+				}
+			]
+		},
+		"wasiLibc": {
+			"commit": "08799da37ae52955427ebec1336b49d6a8eb5051",
+			"patchSha256": "ca188f20d2224f13bc6f9c6dd0fe9e566969cdfba5a84d96eff75da08eabcd3f",
+			"patchedTree": "bcd12db43aaaed7e71f71bda01da78c71444b420",
+			"tree": "4cebd20feab168e1e5a3b88060e8825fbdf921cf"
+		}
+	}
+}

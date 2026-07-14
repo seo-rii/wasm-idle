@@ -1,8 +1,11 @@
 import { resolveVersionedAssetUrl } from './asset-url.js';
 import { PREVIEW2_COMPONENT_RUNTIME_ASSETS } from './browser-component-tools.js';
 import { loadBundledRuntimeContext } from './compiler-runtime.js';
-import { resolveRuntimeAssetUrl } from './runtime-manifest.js';
-import { loadRuntimeManifest } from './runtime-manifest.js';
+import {
+	isIntegratedCompilerOutput,
+	loadRuntimeManifest,
+	resolveRuntimeAssetUrl
+} from './runtime-manifest.js';
 import type { SupportedTargetTriple } from './types.js';
 
 export interface PreloadBrowserRustRuntimeDependencies {
@@ -54,29 +57,33 @@ export async function preloadBrowserRustRuntime(options: PreloadBrowserRustRunti
 			preloadAsset(
 				resolveRuntimeAssetUrl(versionedRuntimeBaseUrl, manifest.compiler.rustcWasm),
 				`wasm-rust runtime asset ${manifest.compiler.rustcWasm}`
-			),
-			preloadAsset(
-				resolveRuntimeAssetUrl(
-					versionedRuntimeBaseUrl,
-					targetConfig.compile.llvm.llcWasm || 'llvm/llc.wasm'
-				),
-				`wasm-rust runtime asset ${targetConfig.compile.llvm.llcWasm || 'llvm/llc.wasm'}`
-			),
-			preloadAsset(
-				resolveRuntimeAssetUrl(
-					versionedRuntimeBaseUrl,
-					targetConfig.compile.llvm.lldWasm || 'llvm/lld.wasm'
-				),
-				`wasm-rust runtime asset ${targetConfig.compile.llvm.lldWasm || 'llvm/lld.wasm'}`
-			),
-			preloadAsset(
-				resolveRuntimeAssetUrl(
-					versionedRuntimeBaseUrl,
-					targetConfig.compile.llvm.lldData || 'llvm/lld.data'
-				),
-				`wasm-rust runtime asset ${targetConfig.compile.llvm.lldData || 'llvm/lld.data'}`
 			)
 		];
+		if (!isIntegratedCompilerOutput(targetConfig.compile)) {
+			assetPreloads.push(
+				preloadAsset(
+					resolveRuntimeAssetUrl(
+						versionedRuntimeBaseUrl,
+						targetConfig.compile.llvm.llcWasm || 'llvm/llc.wasm'
+					),
+					`wasm-rust runtime asset ${targetConfig.compile.llvm.llcWasm || 'llvm/llc.wasm'}`
+				),
+				preloadAsset(
+					resolveRuntimeAssetUrl(
+						versionedRuntimeBaseUrl,
+						targetConfig.compile.llvm.lldWasm || 'llvm/lld.wasm'
+					),
+					`wasm-rust runtime asset ${targetConfig.compile.llvm.lldWasm || 'llvm/lld.wasm'}`
+				),
+				preloadAsset(
+					resolveRuntimeAssetUrl(
+						versionedRuntimeBaseUrl,
+						targetConfig.compile.llvm.lldData || 'llvm/lld.data'
+					),
+					`wasm-rust runtime asset ${targetConfig.compile.llvm.lldData || 'llvm/lld.data'}`
+				)
+			);
+		}
 		if (targetConfig.sysrootPack) {
 			assetPreloads.push(
 				preloadAsset(
@@ -98,54 +105,58 @@ export async function preloadBrowserRustRuntime(options: PreloadBrowserRustRunti
 				);
 			}
 		}
-		if (targetConfig.compile.link.pack) {
-			assetPreloads.push(
-				preloadAsset(
-					resolveRuntimeAssetUrl(
-						versionedRuntimeBaseUrl,
-						targetConfig.compile.link.pack.index
-					),
-					`wasm-rust runtime asset ${targetConfig.compile.link.pack.index}`
-				),
-				preloadAsset(
-					resolveRuntimeAssetUrl(
-						versionedRuntimeBaseUrl,
-						targetConfig.compile.link.pack.asset
-					),
-					`wasm-rust runtime asset ${targetConfig.compile.link.pack.asset}`
-				)
-			);
-		} else {
-			if (targetConfig.compile.link.allocatorObjectAsset) {
+		const modulePreloads: Array<Promise<unknown>> = [];
+		if (!isIntegratedCompilerOutput(targetConfig.compile)) {
+			if (targetConfig.compile.link.pack) {
 				assetPreloads.push(
 					preloadAsset(
 						resolveRuntimeAssetUrl(
 							versionedRuntimeBaseUrl,
-							targetConfig.compile.link.allocatorObjectAsset
+							targetConfig.compile.link.pack.index
 						),
-						`wasm-rust runtime asset ${targetConfig.compile.link.allocatorObjectAsset}`
-					)
-				);
-			}
-			for (const entry of targetConfig.compile.link.files || []) {
-				assetPreloads.push(
+						`wasm-rust runtime asset ${targetConfig.compile.link.pack.index}`
+					),
 					preloadAsset(
-						resolveRuntimeAssetUrl(versionedRuntimeBaseUrl, entry.asset),
-						`wasm-rust runtime asset ${entry.asset}`
+						resolveRuntimeAssetUrl(
+							versionedRuntimeBaseUrl,
+							targetConfig.compile.link.pack.asset
+						),
+						`wasm-rust runtime asset ${targetConfig.compile.link.pack.asset}`
 					)
 				);
+			} else {
+				if (targetConfig.compile.link.allocatorObjectAsset) {
+					assetPreloads.push(
+						preloadAsset(
+							resolveRuntimeAssetUrl(
+								versionedRuntimeBaseUrl,
+								targetConfig.compile.link.allocatorObjectAsset
+							),
+							`wasm-rust runtime asset ${targetConfig.compile.link.allocatorObjectAsset}`
+						)
+					);
+				}
+				for (const entry of targetConfig.compile.link.files || []) {
+					assetPreloads.push(
+						preloadAsset(
+							resolveRuntimeAssetUrl(versionedRuntimeBaseUrl, entry.asset),
+							`wasm-rust runtime asset ${entry.asset}`
+						)
+					);
+				}
 			}
+			modulePreloads.push(
+				importRuntimeModule(
+					resolveRuntimeAssetUrl(versionedRuntimeBaseUrl, targetConfig.compile.llvm.llc)
+				),
+				importRuntimeModule(
+					resolveRuntimeAssetUrl(versionedRuntimeBaseUrl, targetConfig.compile.llvm.lld)
+				)
+			);
 		}
-		const modulePreloads = [
-			importRuntimeModule(
-				resolveRuntimeAssetUrl(versionedRuntimeBaseUrl, targetConfig.compile.llvm.llc)
-			),
-			importRuntimeModule(
-				resolveRuntimeAssetUrl(versionedRuntimeBaseUrl, targetConfig.compile.llvm.lld)
-			)
-		];
 		if (
 			targetConfig.compile.kind === 'llvm-wasm+component-encoder' ||
+			targetConfig.compile.kind === 'integrated-rustc+component-encoder' ||
 			targetConfig.execution.kind === 'preview2-component'
 		) {
 			for (const assetPath of PREVIEW2_COMPONENT_RUNTIME_ASSETS) {

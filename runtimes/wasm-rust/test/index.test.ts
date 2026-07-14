@@ -10,6 +10,7 @@ import createRustCompiler, {
 } from '../src/index.js';
 import {
 	FakeWorker,
+	createIntegratedRuntimeManifestV3,
 	createRuntimeManifest,
 	createRuntimeManifestV3,
 	mirrorBitcode
@@ -132,6 +133,43 @@ describe('wasm-rust compiler contract', () => {
 				expect.stringMatching(
 					/vendor\/preview2-shim\/lib\/browser\/http\.js\?v=test-runtime-v3$/
 				)
+			])
+		);
+	});
+
+	it('preloads integrated rustc without requesting split LLVM assets', async () => {
+		const fetchedUrls: string[] = [];
+		const importedUrls: string[] = [];
+
+		await preloadBrowserRustRuntime({
+			targetTriple: 'wasm32-wasip3',
+			dependencies: {
+				loadManifest: async () => createIntegratedRuntimeManifestV3(),
+				fetchImpl: async (assetUrl) => {
+					fetchedUrls.push(assetUrl.toString());
+					return new Response(new Uint8Array([1, 2, 3]));
+				},
+				importRuntimeModule: async (assetUrl) => {
+					importedUrls.push(assetUrl);
+					return {};
+				}
+			}
+		});
+
+		expect(fetchedUrls.some((url) => url.includes('/llvm/'))).toBe(false);
+		expect(fetchedUrls.some((url) => url.includes('/packs/link/'))).toBe(false);
+		expect(importedUrls.some((url) => url.includes('/llvm/'))).toBe(false);
+		expect(fetchedUrls).toEqual(
+			expect.arrayContaining([
+				expect.stringMatching(/rustc\/rustc\.wasm\.gz/),
+				expect.stringMatching(/packs\/sysroot\/wasm32-wasip3\.pack\.gz/),
+				expect.stringMatching(/wasi_snapshot_preview1\.command\.wasm/)
+			])
+		);
+		expect(importedUrls).toEqual(
+			expect.arrayContaining([
+				expect.stringMatching(/vendor\/jco\/obj\/wasm-tools\.js/),
+				expect.stringMatching(/vendor\/preview2-shim\/lib\/browser\/cli\.js/)
 			])
 		);
 	});

@@ -3,9 +3,27 @@
 This document collects the day-to-day `WASM_RUST_*` knobs that affect packaged runtime builds,
 browser validation, and the optional `wasm32-wasip3` toolchain bootstrap flow.
 
+## Reproducible producer packaging
+
+- `WASM_RUST_PRODUCER_OUTPUT_ROOT`
+    - required by `pnpm run build:producer` and `pnpm run prepare:runtime:producer`
+    - points to the `output` directory created by `wasm-llvm/producer/rust-browser`
+    - must contain `producer-receipt.json`, `rust/bin/rustc.wasm`, and the pinned target sysroots
+    - every receipt field, build environment, tool version, source and submodule pin, file path,
+      byte length, and SHA-256 is verified against `producer-lock.json`; extra files are rejected
+
+The producer's own source, patch, build-tool, container, and clean-work-directory controls live in
+`wasm-llvm`. This repository intentionally exposes no override that can weaken the receipt or lock
+validation.
+
+`compiler.workerSharedWorkspaceBytes` is a runtime-manifest field rather than an environment
+variable. The producer package defaults it to 128 MiB for the helper-worker `/work` and `/tmp`
+filesystem; increase it in a custom manifest for larger compilation workloads.
+
 ## Runtime packaging defaults
 
-These are the main inputs for `pnpm build` and `pnpm run prepare:runtime`.
+These are the main inputs for the historical split-backend `pnpm build` and
+`pnpm run prepare:runtime` path. New source builds should use the producer path above.
 
 - `WASM_RUST_RUSTC_ROOT`
     - path to the browser-hosted `rustc.wasm` install root
@@ -33,7 +51,10 @@ These are the main inputs for `pnpm build` and `pnpm run prepare:runtime`.
     - default: permissive mode
 - `WASM_RUST_PRECOMPRESS_SCOPES`
     - compression scopes for emitted assets
-    - supported values: `all`, `none`, or comma-separated subsets such as `rustc,llvm`
+    - supported values: `all`, `none`, or comma-separated subsets of
+      `rustc,llvm,packs,vendor`
+    - `all` is the default and gzip-compresses the two large JCO core Wasm modules as well as rustc
+      and sysroot packs
 - `WASM_RUST_RUNTIME_VERSION`
     - version string written into `runtime-manifest.v3.json`
 - `WASM_RUST_BITCODE_FILE_NAME`
@@ -73,6 +94,12 @@ These control the repo-owned Chromium validation path.
     - disabled by default
     - when set to `1`, `prepare-runtime.mjs` may reuse an already-built `dist/runtime` bundle if all
       manifest-referenced assets are present
+- `WASM_RUST_PREBUILT_RUNTIME_ROOT`
+    - optional source runtime directory used only when
+      `WASM_RUST_ALLOW_PREBUILT_RUNTIME_FALLBACK=1` and `dist/runtime` cannot be reused
+    - the source manifest and every referenced asset must be present
+    - external LLVM references, such as the app's shared LLD assets, are copied into the restored
+      `dist/runtime/llvm` directory and rewritten to local manifest paths
 
 ## wasip3 bootstrap and source patching
 

@@ -71,12 +71,28 @@ describe('browser harness probe', () => {
 		expect(harnessHtml).toContain('<link rel="icon" href="data:," />');
 	});
 
-	it('compiles and runs hello world in Chromium when the real browser runtime is available', async () => {
+	it('compiles and reads stdin in Chromium for every producer target', async () => {
 		if (process.env.WASM_RUST_RUN_REAL_BROWSER_HARNESS !== '1') {
 			return;
 		}
 
-		const { stdout, stderr } = await runNode(['./scripts/probe-browser-harness.mjs']);
+		const sampleProgram = `
+use std::env;
+use std::io::{self, Read};
+
+fn main() {
+    let mut input = String::new();
+    io::stdin().read_to_string(&mut input).unwrap();
+    let label = env::args().nth(1).unwrap();
+    println!("{}:{}", label, input.trim().to_uppercase());
+}
+`.trim();
+		const { stdout, stderr } = await runNode(['./scripts/probe-browser-harness.mjs'], {
+			WASM_RUST_SAMPLE_PROGRAM: sampleProgram,
+			WASM_RUST_BROWSER_HARNESS_STDIN: 'producer stdin\n',
+			WASM_RUST_BROWSER_HARNESS_PROGRAM_ARGS: JSON.stringify(['browser']),
+			WASM_RUST_BROWSER_HARNESS_EXPECT_STDOUT: 'browser:PRODUCER STDIN\n'
+		});
 		const result = JSON.parse((stdout.trim() || stderr.trim()) as string) as {
 			success: boolean;
 			targets: Array<{
@@ -94,7 +110,7 @@ describe('browser harness probe', () => {
 		for (const targetResult of result.targets) {
 			expect(targetResult.ok).toBe(true);
 			expect(targetResult.result.compile.success).toBe(true);
-			expect(targetResult.result.runtime?.stdout).toBe('hi\n');
+			expect(targetResult.result.runtime?.stdout).toBe('browser:PRODUCER STDIN\n');
 			expect(targetResult.result.runtime?.exitCode).toBe(0);
 			if (targetResult.targetTriple === 'wasm32-wasip2') {
 				expect(targetResult.result.compile.format).toBe('component');

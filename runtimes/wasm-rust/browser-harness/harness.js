@@ -77,10 +77,22 @@ function syncTargetSelector(manifest) {
 	}
 }
 
-async function runWasiModule(wasmArtifact) {
+async function runWasiModule(wasmArtifact, options) {
+	let stdinConsumed = false;
 	return executeBrowserRustArtifact(
 		wasmArtifact,
-		new URL('/dist/runtime/', window.location.href).toString()
+		new URL('/dist/runtime/', window.location.href).toString(),
+		{
+			args: options.args,
+			stdin:
+				options.stdin === undefined
+					? undefined
+					: () => {
+							if (stdinConsumed) return null;
+							stdinConsumed = true;
+							return options.stdin;
+						}
+		}
 	);
 }
 
@@ -102,6 +114,8 @@ function readHarnessOptions(baseManifest, overrides = {}) {
 		maximumPages:
 			overrides.maximumPages ??
 			readNumericInput(memoryMaximumInput, baseManifest.compiler.rustcMemory.maximumPages),
+		args: overrides.args ?? [],
+		stdin: overrides.stdin,
 		log: overrides.log ?? enableLogsInput.checked
 	};
 }
@@ -176,7 +190,7 @@ async function runWasmRustHarness(overrides = {}) {
 
 	if (compileResult.success && compileResult.artifact?.wasm) {
 		appendLog('compile succeeded; executing WASI module in browser');
-		result.runtime = await runWasiModule(compileResult.artifact);
+		result.runtime = await runWasiModule(compileResult.artifact, options);
 	} else {
 		appendLog(
 			`compile failed: ${compileResult.stderr || 'missing artifact from compiler result'}`,

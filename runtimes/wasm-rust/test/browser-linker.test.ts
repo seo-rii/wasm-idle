@@ -4,7 +4,11 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { clearLinkAssetCache, linkBitcodeWithLlvmWasm } from '../src/browser-linker.js';
 import { normalizeRuntimeManifest, resolveTargetManifest } from '../src/runtime-manifest.js';
-import { createRuntimeManifest, createRuntimeManifestV3 } from './helpers.js';
+import {
+	createIntegratedRuntimeManifestV3,
+	createRuntimeManifest,
+	createRuntimeManifestV3
+} from './helpers.js';
 
 interface FakeLlvmInitOptions {
 	locateFile(file: string): string;
@@ -117,6 +121,59 @@ function createNormalizedPackTarget() {
 describe('browser linker asset loading', () => {
 	beforeEach(() => {
 		clearLinkAssetCache();
+	});
+
+	it('returns the wasm linked by integrated rustc without loading split LLVM', async () => {
+		const manifest = normalizeRuntimeManifest(createIntegratedRuntimeManifestV3());
+		const target = resolveTargetManifest(manifest, 'wasm32-wasip1');
+		const linkedWasm = new Uint8Array([0x00, 0x61, 0x73, 0x6d, 0x01]);
+
+		const artifact = await linkBitcodeWithLlvmWasm(
+			linkedWasm,
+			manifest,
+			target,
+			'https://example.test/runtime/',
+			{
+				fetchImpl: async () => {
+					throw new Error('integrated output must not fetch split LLVM assets');
+				},
+				importRuntimeModule: async () => {
+					throw new Error('integrated output must not import split LLVM modules');
+				}
+			}
+		);
+
+		expect(artifact).toEqual({
+			wasm: linkedWasm,
+			targetTriple: 'wasm32-wasip1',
+			format: 'core-wasm'
+		});
+	});
+
+	it('componentizes integrated rustc output for wasip2 and wasip3 targets', async () => {
+		const manifest = normalizeRuntimeManifest(createIntegratedRuntimeManifestV3());
+		const target = resolveTargetManifest(manifest, 'wasm32-wasip3');
+		const linkedWasm = new Uint8Array([0x00, 0x61, 0x73, 0x6d]);
+		const component = new Uint8Array([0x00, 0x61, 0x73, 0x6d, 0x0d]);
+
+		const artifact = await linkBitcodeWithLlvmWasm(
+			linkedWasm,
+			manifest,
+			target,
+			'https://example.test/runtime/',
+			{
+				componentizeCoreWasm: async (received) => {
+					expect(received).toEqual(linkedWasm);
+					return component;
+				}
+			}
+		);
+
+		expect(artifact).toEqual({
+			wasm: component,
+			targetTriple: 'wasm32-wasip3',
+			format: 'component'
+		});
 	});
 
 	it('prefetches link assets in parallel before writing them into lld', async () => {

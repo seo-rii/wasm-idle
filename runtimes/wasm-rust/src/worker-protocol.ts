@@ -16,6 +16,7 @@ export interface CompileWorkerRequest {
 	manifest: NormalizedRuntimeManifest;
 	request: BrowserRustCompileWorkerRequest;
 	sharedBitcodeBuffer: SharedArrayBuffer;
+	sharedWorkspaceBuffer: SharedArrayBuffer;
 	sharedStatusBuffer: SharedArrayBuffer;
 }
 
@@ -79,6 +80,7 @@ export interface RustcThreadWorkerRequest {
 	sourceCode: string;
 	log: boolean;
 	sharedBitcodeBuffer: SharedArrayBuffer;
+	sharedWorkspaceBuffer: SharedArrayBuffer;
 	sharedStatusBuffer: SharedArrayBuffer;
 	threadCounterBuffer: SharedArrayBuffer;
 	sysrootAssets: SharedRuntimeAssetFile[];
@@ -97,6 +99,7 @@ export interface RustcThreadPoolInitRequest {
 	sourceCode: string;
 	log: boolean;
 	sharedBitcodeBuffer: SharedArrayBuffer;
+	sharedWorkspaceBuffer: SharedArrayBuffer;
 	sharedStatusBuffer: SharedArrayBuffer;
 	threadCounterBuffer: SharedArrayBuffer;
 	sysrootAssets: SharedRuntimeAssetFile[];

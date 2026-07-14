@@ -39,7 +39,8 @@ async function instantiateThreadWorkerRuntime(
 		request.manifest,
 		request.sysrootAssets,
 		request.sourceCode,
-		request.sharedBitcodeBuffer
+		request.sharedBitcodeBuffer,
+		request.sharedWorkspaceBuffer
 	);
 	if (request.log) {
 		postMessage({
@@ -94,6 +95,7 @@ async function instantiateThreadWorkerRuntime(
 					sourceCode: request.sourceCode,
 					log: request.log,
 					sharedBitcodeBuffer: request.sharedBitcodeBuffer,
+					sharedWorkspaceBuffer: request.sharedWorkspaceBuffer,
 					sharedStatusBuffer: request.sharedStatusBuffer,
 					threadCounterBuffer: request.threadCounterBuffer,
 					sysrootAssets: request.sysrootAssets,

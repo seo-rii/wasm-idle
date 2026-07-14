@@ -1,23 +1,22 @@
 # wasm-rust
 
-`wasm-rust` is a browser-loadable ESM Rust compiler module.
+`wasm-rust` is a browser-loadable ESM module around the full upstream Rust 1.99 compiler produced by
+`wasm-llvm/producer/rust-browser`. The browser-hosted `rustc.wasm` contains its matching LLVM 22
+code generator and in-process LLD; it does not use the historical split `llvm-wasm` `llc`/`lld`
+backend and is not a handwritten parser, interpreter, or language subset.
 
-It is designed to be consumed by `wasm-idle`, but it also owns its own standalone browser harness and
-validation flow. The compiler uses a real `rustc.wasm` frontend and a packaged `llvm-wasm`
-`llc`/`lld` backend to return either a runnable preview1 core wasm artifact (`wasm32-wasip1`) or a
-preview2-style component artifact (`wasm32-wasip2` and transitional `wasm32-wasip3`). An
-experimental `wasm32-wasip3` pipeline is also available when the custom Rust toolchain is rebuilt
-with the upstream-required `libc` patch.
+It is designed to be consumed by `wasm-idle`, but it also owns a standalone Chromium harness and
+validation flow. `wasm32-wasip1` returns a runnable Preview 1 core Wasm module. `wasm32-wasip2` and
+`wasm32-wasip3` are compiled by the same rustc and component-encoded for browser execution.
 
 ## Status
 
 - Browser compile and run works in Chromium.
-- The minimal regression target `fn main() { println!("hi"); }` compiles in the browser and prints
-  `hi\n`.
-- Browser compile and run is verified for `wasm32-wasip1`, `wasm32-wasip2`, and transitional
-  `wasm32-wasip3` when the runtime bundle was prepared from the patched custom toolchain.
-- The richer `wasm32-wasip2` browser regression now covers component args/stdin output such as
-  `preview2_component=preview2-cli` and `factorial_plus_bonus=27`.
+- Browser compile, stdin, and execution are verified in Chromium for `wasm32-wasip1`,
+  `wasm32-wasip2`, and `wasm32-wasip3` from the receipt-backed producer bundle.
+- The standalone stdin regression reads to EOF and verifies exact `PRODUCER STDIN\n` output for all
+  three targets. The wasm-idle page regression separately verifies line-based stdin, component
+  args, target-specific output, and lazy runtime loading.
 - The result is returned through the `wasm-idle` browser compiler contract:
     - module exports `default`, `createRustCompiler`, `preloadBrowserRustRuntime`, and
       `executeBrowserRustArtifact`
@@ -25,74 +24,31 @@ with the upstream-required `libc` patch.
     - `compile()` resolves to `{ success, stdout?, stderr?, diagnostics?, logs?, logRecords?, artifact }`
     - `artifact` contains `wasm`, `targetTriple`, and `format`
 
-Current scope:
-
-- single-file `bin`
-- editions `2021` and `2024`
-- targets `wasm32-wasip1` and `wasm32-wasip2`
-- experimental `wasm32-wasip3` when the shipped runtime bundle was prepared from a patched custom
-  toolchain
-- the default packaging target list still attempts `wasm32-wasip3`, but permissive packaging skips
-  it with a warning unless the patched sysroot and compatible `wasi-sdk` are actually present
-- no Cargo dependency resolution
-- cross-origin-isolated browser environment required
+The compiler is upstream rustc rather than a reduced language implementation. The current browser
+API accepts one `bin` source file, editions `2021` or `2024`, and the three bundled WASI targets. It
+does not yet expose Cargo dependency resolution or a multi-file crate graph. A cross-origin-isolated
+browser environment is required for Rust compiler threads.
 
 ## Quick start
 
-Build the shipped runtime bundle:
+Build the canonical compiler from pinned source and package its attested output:
 
 ```bash
-cd /path/to/wasm-rust
-pnpm build
+cd /path/to/wasm-llvm
+npm run producer:rust:verify
+WASM_LLVM_RUST_BROWSER_WORK_DIR=/path/to/work NINJA_JOBS=8 \
+  npm run producer:rust:build
+
+cd /path/to/wasm-idle/runtimes/wasm-rust
+WASM_RUST_PRODUCER_OUTPUT_ROOT=/path/to/work/output \
+  pnpm run build:producer
 ```
 
-`pnpm build` now auto-detects a cached `wasi-sdk >= 22` under the toolchain cache root and
-`$HOME/.cache/wasm-rust*/wasi-sdk-*`, so `wasm32-wasip2` is included again on this workspace
-without exporting `WASM_RUST_WASI_SDK_ROOT` manually.
-The default `rustc.wasm` and `llvm-wasm` cache roots also follow `$HOME/.cache/...` unless the
-matching `WASM_RUST_*` overrides are set.
-The default packaging target list also includes `wasm32-wasip3`, but permissive mode only keeps it
-in the emitted bundle when the patched toolchain inputs are available.
-
-Package the dual-target runtime bundle, including `wasm32-wasip2`:
-
-```bash
-cd /path/to/wasm-rust
-pnpm run prepare:runtime:wasip2
-```
-
-Set `WASM_RUST_WASI_SDK_ROOT` only when you want to override that auto-detected cache path.
-
-Prepare the patched toolchain inputs needed for `wasm32-wasip3`:
-
-```bash
-cd /path/to/wasm-rust
-pnpm run toolchain:prepare:wasip3-source
-pnpm run toolchain:prepare:wasip3-libc
-WASM_RUST_WASI_SDK_ROOT=/path/to/wasi-sdk-22-or-newer \
-pnpm run toolchain:build:custom:wasip3 -- --foreground
-WASM_RUST_WASI_SDK_ROOT=/path/to/wasi-sdk-22-or-newer \
-pnpm run prepare:runtime:wasip3
-```
-
-The `wasm32-wasip3` flow is still conditional on the upstream Rust limitation documented on
-2025-10-01: the Rust checkout used for the custom toolchain must already contain `wasm32-wasip3`
-target support, and the build must be forced through a newer `libc` crate via the generated cargo
-overlay. When `wasm32-wasip3` is requested, the build script also generates an effective
-`x.py` config that updates `[build].target` and appends a `target.'wasm32-wasip3'` section from
-`WASM_RUST_WASI_SDK_ROOT` if the base config does not already contain one. The same script also
-prepends `WASM_RUST_WASI_SDK_ROOT/bin` to `PATH` so Rust bootstrap sanity checks can resolve
-`wasm-component-ld`.
-
-For the shortest repo-owned path, use:
-
-```bash
-cd /path/to/wasm-rust
-WASM_RUST_WASI_SDK_ROOT=/path/to/wasi-sdk-22-or-newer \
-pnpm run toolchain:bootstrap:wasip3 -- --foreground
-WASM_RUST_WASI_SDK_ROOT=/path/to/wasi-sdk-22-or-newer \
-pnpm run prepare:runtime:wasip3
-```
+For a no-cache audit, use `producer:rust:container-rebuild` with a new empty work directory. The
+consumer rejects any output whose receipt, exact file set, source and submodule pins, patch hashes,
+tool versions, or environment differs from `producer-lock.json`. The older split-backend packaging
+commands remain for historical recovery and are documented in `docs/reproduction.md`; they are not
+the canonical source build.
 
 Run the full standalone validation sequence:
 
@@ -118,16 +74,15 @@ Latest verified browser result:
 - `wasm32-wasip1`
     - `compile.success: true`
     - `runtime.exitCode: 0`
-    - `runtime.stdout: "hi\n"`
+    - `runtime.stdout: "PRODUCER STDIN\n"`
 - `wasm32-wasip2`
     - `compile.success: true`
     - `runtime.exitCode: 0`
-    - `runtime.stdout` contains `preview2_component=preview2-cli`
-    - `runtime.stdout` contains `factorial_plus_bonus=27`
+    - `runtime.stdout: "PRODUCER STDIN\n"`
 - `wasm32-wasip3`
     - `compile.success: true`
     - `runtime.exitCode: 0`
-    - `runtime.stdout: "hi\n"`
+    - `runtime.stdout: "PRODUCER STDIN\n"`
 
 ## API
 
@@ -199,15 +154,18 @@ Result shape:
 
 ## How it works
 
-1. `rustc.wasm` compiles Rust source in a browser worker.
-2. The worker mirrors the emitted `.no-opt.bc` into shared memory.
-3. `llvm-wasm` `llc` and `lld` lower and link that bitcode in the browser.
-4. The final artifact is returned to the caller as either preview1 core wasm or a preview2
-   component, depending on `targetTriple`.
+1. The receipt-backed `rustc.wasm` compiles Rust source in a browser worker with its integrated
+   LLVM 22 code generator.
+2. Rust compiler helper workers share `/work` and `/tmp` through a bounded `SharedArrayBuffer`
+   workspace so temporary objects and metadata are visible to the main rustc instance.
+3. The WASI rustc invokes its statically linked LLD entry point and emits `/work/main.wasm`.
+4. Preview 1 returns that core module. Preview 2 and Preview 3 pass it through the bundled component
+   tooling and return a component artifact.
 
 For `wasm32-wasip3`, the current browser runtime is transitional:
 
-- packaging and compile support are wired through the patched custom toolchain flow above
+- packaging and compile support come from the same receipt-backed integrated rustc producer as the
+  Preview 1 and Preview 2 targets
 - emitted artifacts are still expected to use WASIp2-style browser imports for now
 - if upstream starts emitting real preview3 browser imports, the runtime will reject them until a
   browser-safe preview3 shim exists
@@ -216,9 +174,8 @@ Important runtime notes:
 
 - `SharedArrayBuffer` and wasm threads are required.
 - The shipped browser harness serves COOP/COEP headers for that reason.
-- The packaged `rustc.wasm` host injects the required `env` function shims and
-  `RUST_MIN_STACK=8388608` so current browser helper threads start reliably enough to mirror LLVM
-  bitcode.
+- The runtime manifest defaults the shared compiler workspace to 128 MiB through
+  `workerSharedWorkspaceBytes`; deployments can raise it when compiling unusually large sources.
 - The compiler currently retries transient browser-rustc worker failures up to five attempts.
 - Retry transitions are intentionally surfaced as warnings when `compile({ log: true })` is used.
 - Helper-thread startup is handshake-based before a pooled worker returns its thread id. This keeps
@@ -248,13 +205,15 @@ pnpm run probe:browser-harness
 ## Scripts
 
 - `pnpm build`
-    - builds TypeScript and prepares runtime assets under `dist/runtime/`
+    - builds TypeScript and prepares the historical split-backend runtime under `dist/runtime/`
+- `pnpm run build:producer`
+    - builds TypeScript and packages the pinned, receipt-verified integrated rustc producer output
 - `pnpm run release:upload -- --tag <tag> [asset...]`
     - uploads one or more assets to a GitHub release with `gh`, and can create the release first
 - `pnpm test`
     - runs the normal test suite
 - `pnpm run test:ci:browser`
-    - canonical browser CI lane: `build + probe + browser vitest + browser playwright`
+    - split-backend compatibility lane: `build + probe + browser vitest + browser playwright`
     - clean GitHub runners hydrate the latest release `dist/runtime` bundle first and let
       `prepare-runtime` reuse it when local toolchain caches are unavailable
 - `pnpm run test:ci:browser:clean-room`
@@ -272,6 +231,10 @@ pnpm run probe:browser-harness
     - low-level browser split-pipeline probe
 - `pnpm run probe:llvm-wasm-rust-split`
     - backend-only `llvm-wasm` link probe
+
+The following `wasip3` toolchain scripts belong to the historical split-backend path. They are not
+inputs to `build:producer` or evidence for the receipt-backed integrated runtime:
+
 - `pnpm run toolchain:prepare:wasip3-libc`
     - materializes a cargo-home overlay that patches Rust's build to use a newer `libc` crate for
       `wasm32-wasip3`

@@ -8,6 +8,7 @@ import {
 	resolveTargetManifest
 } from '../src/runtime-manifest.js';
 import {
+	createIntegratedRuntimeManifestV3,
 	createRuntimeManifest,
 	createRuntimeManifestV2,
 	createRuntimeManifestV3
@@ -106,6 +107,20 @@ describe('runtime manifest edge cases', () => {
 				}
 			})
 		).toThrow(/missing legacy link asset fields/);
+	});
+
+	it('accepts integrated rustc targets without split LLVM or link assets', () => {
+		const manifest = normalizeRuntimeManifest(
+			parseRuntimeManifest(createIntegratedRuntimeManifestV3())
+		);
+
+		expect(manifest.compiler.workerBitcodeFile).toBe('main.wasm');
+		expect(manifest.targets['wasm32-wasip1']?.compile).toEqual({
+			kind: 'integrated-rustc'
+		});
+		expect(manifest.targets['wasm32-wasip3']?.compile).toEqual({
+			kind: 'integrated-rustc+component-encoder'
+		});
 	});
 
 	it('fails to resolve an unavailable target from the normalized manifest', () => {

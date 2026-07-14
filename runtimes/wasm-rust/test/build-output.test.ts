@@ -20,6 +20,7 @@ import {
 	llvmWasmRoot as prepareRuntimeLlvmWasmRoot,
 	matchingNativeToolchainRoot as prepareRuntimeMatchingNativeToolchainRoot,
 	projectRoot as prepareRuntimeProjectRoot,
+	restorePrebuiltRuntimeBundle,
 	runtimeRoot as prepareRuntimeRuntimeRoot,
 	wasmRustcRoot as prepareRuntimeWasmRustcRoot
 } from '../scripts/prepare-runtime.mjs';
@@ -29,7 +30,7 @@ const distRoot = path.join(projectRoot, 'dist');
 const builtBrowserBundle =
 	process.env.WASM_RUST_SKIP_DIST_TESTS === '1'
 		? describe.skip
-		: existsSync(distRoot)
+		: existsSync(path.join(distRoot, 'runtime', 'runtime-manifest.v3.json'))
 			? describe
 			: describe.skip;
 
@@ -296,6 +297,70 @@ describe('prepare-runtime defaults', () => {
 		}
 	});
 
+	it('restores a prebuilt runtime and localizes shared LLVM assets', async () => {
+		const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'wasm-rust-runtime-restore-'));
+		try {
+			const sourceRuntimeRoot = path.join(tempRoot, 'static', 'wasm-rust', 'runtime');
+			const sharedLlvmRoot = path.join(tempRoot, 'static', 'shared', 'emscripten-lld');
+			const restoredRuntimeRoot = path.join(tempRoot, 'dist', 'runtime');
+			const manifest = createRuntimeManifestV3();
+			for (const targetConfig of Object.values(manifest.targets)) {
+				targetConfig.compile.llvm.lld = '../../shared/emscripten-lld/lld.js';
+				targetConfig.compile.llvm.lldWasm = '../../shared/emscripten-lld/lld.wasm.gz';
+				targetConfig.compile.llvm.lldData = '../../shared/emscripten-lld/lld.data.gz';
+			}
+
+			const localAssets = new Set([manifest.compiler.rustcWasm]);
+			for (const targetConfig of Object.values(manifest.targets)) {
+				localAssets.add(targetConfig.sysrootPack.asset);
+				localAssets.add(targetConfig.sysrootPack.index);
+				localAssets.add(targetConfig.compile.llvm.llc);
+				localAssets.add(targetConfig.compile.llvm.llcWasm);
+				localAssets.add(targetConfig.compile.link.pack.asset);
+				localAssets.add(targetConfig.compile.link.pack.index);
+			}
+			for (const assetReference of localAssets) {
+				const assetPath = path.join(sourceRuntimeRoot, assetReference);
+				await fs.mkdir(path.dirname(assetPath), { recursive: true });
+				await fs.writeFile(assetPath, assetReference);
+			}
+			for (const fileName of ['lld.js', 'lld.wasm.gz', 'lld.data.gz']) {
+				await fs.mkdir(sharedLlvmRoot, { recursive: true });
+				await fs.writeFile(path.join(sharedLlvmRoot, fileName), `shared ${fileName}`);
+			}
+			await fs.writeFile(
+				path.join(sourceRuntimeRoot, 'runtime-manifest.v3.json'),
+				JSON.stringify(manifest, null, 2)
+			);
+
+			expect(await isReusablePrebuiltRuntimeBundle(sourceRuntimeRoot)).toBe(true);
+			await expect(
+				restorePrebuiltRuntimeBundle(sourceRuntimeRoot, restoredRuntimeRoot)
+			).resolves.toEqual({
+				externalLlvmAssetCount: 3,
+				manifestFileName: 'runtime-manifest.v3.json'
+			});
+			expect(await isReusablePrebuiltRuntimeBundle(restoredRuntimeRoot)).toBe(true);
+
+			const restoredManifest = JSON.parse(
+				await fs.readFile(
+					path.join(restoredRuntimeRoot, 'runtime-manifest.v3.json'),
+					'utf8'
+				)
+			);
+			for (const targetConfig of Object.values(restoredManifest.targets) as any[]) {
+				expect(targetConfig.compile.llvm.lld).toBe('llvm/lld.js');
+				expect(targetConfig.compile.llvm.lldWasm).toBe('llvm/lld.wasm.gz');
+				expect(targetConfig.compile.llvm.lldData).toBe('llvm/lld.data.gz');
+			}
+			await expect(
+				fs.readFile(path.join(restoredRuntimeRoot, 'llvm', 'lld.wasm.gz'), 'utf8')
+			).resolves.toBe('shared lld.wasm.gz');
+		} finally {
+			await fs.rm(tempRoot, { recursive: true, force: true });
+		}
+	});
+
 	it('keeps runtime default values documented in browser/compiler references', async () => {
 		const browserCompilerDoc = await fs.readFile(
 			path.join(projectRoot, 'docs', 'browser-compiler.md'),
@@ -339,6 +404,27 @@ builtBrowserBundle('built browser bundle', () => {
 		await expect(
 			fs.access(path.join(distRoot, 'vendor', 'jco', 'src', 'browser.js'))
 		).resolves.toBeUndefined();
+	});
+
+	it('precompresses the large JCO core modules in the default producer bundle', async () => {
+		for (const [moduleName, fileName] of [
+			['js-component-bindgen-component.js', 'js-component-bindgen-component.core.wasm'],
+			['wasm-tools.js', 'wasm-tools.core.wasm']
+		] as const) {
+			const assetPath = path.join(distRoot, 'vendor', 'jco', 'obj', fileName);
+			await expect(fs.access(`${assetPath}.gz`)).resolves.toBeUndefined();
+			await expect(fs.access(assetPath)).rejects.toThrow();
+			const moduleSource = await fs.readFile(
+				path.join(distRoot, 'vendor', 'jco', 'obj', moduleName),
+				'utf8'
+			);
+			expect(moduleSource).toContain("from '../../../runtime-asset.js'");
+			expect(moduleSource).toContain("assetUrl.pathname.endsWith('.core.wasm')");
+			expect(moduleSource).not.toMatch(/[ \t]+$/m);
+			expect(moduleSource).not.toContain(
+				'return fetch(url).then(WebAssembly.compileStreaming);'
+			);
+		}
 	});
 
 	it('keeps edition 2024 enabled for the rebuilt rustc.wasm toolchain', async () => {
@@ -394,14 +480,15 @@ builtBrowserBundle('built browser bundle', () => {
 						kind: string;
 					};
 					compile: {
-						llvm: {
+						kind: string;
+						llvm?: {
 							llc: string;
 							llcWasm: string;
 							lld: string;
 							lldWasm: string;
 							lldData: string;
 						};
-						link: {
+						link?: {
 							args: string[];
 							pack: {
 								asset: string;
@@ -417,7 +504,10 @@ builtBrowserBundle('built browser bundle', () => {
 
 		expect(v3Manifest.manifestVersion).toBe(3);
 		expect(v3Manifest.defaultTargetTriple).toBe('wasm32-wasip1');
-		expect(v3Manifest.compiler.compileTimeoutMs).toBe(120_000);
+		const hasIntegratedTarget = Object.values(v3Manifest.targets).some((targetConfig) =>
+			targetConfig.compile.kind.startsWith('integrated-rustc')
+		);
+		expect(v3Manifest.compiler.compileTimeoutMs).toBe(hasIntegratedTarget ? 180_000 : 120_000);
 		expect(v3Manifest.compiler.rustcWasm).toBe('rustc/rustc.wasm.gz');
 		expect(v3Manifest.targets['wasm32-wasip1']?.artifactFormat).toBe('core-wasm');
 		if (await hasCompatibleWasiSdk()) {
@@ -437,28 +527,35 @@ builtBrowserBundle('built browser bundle', () => {
 		).rejects.toThrow();
 		await expect(fs.access(path.join(runtimeRoot, 'runtime-manifest.json'))).rejects.toThrow();
 		for (const [targetTriple, targetConfig] of Object.entries(v3Manifest.targets)) {
-			expect(targetConfig.compile.link.args.some((entry) => entry.startsWith('/tmp/'))).toBe(
-				false
-			);
-			expect(targetConfig.compile.llvm.llc).toBe('llvm/llc.js');
-			expect(targetConfig.compile.llvm.llcWasm).toBe('llvm/llc.wasm.gz');
-			expect(targetConfig.compile.llvm.lld).toBe('llvm/lld.js');
-			expect(targetConfig.compile.llvm.lldWasm).toBe('llvm/lld.wasm.gz');
-			expect(targetConfig.compile.llvm.lldData).toBe('llvm/lld.data.gz');
 			expect(targetConfig.sysrootPack.asset).toBe(`packs/sysroot/${targetTriple}.pack.gz`);
 			expect(targetConfig.sysrootPack.index).toBe(
 				`packs/sysroot/${targetTriple}.index.json.gz`
 			);
-			expect(targetConfig.compile.link.pack.asset).toBe(`packs/link/${targetTriple}.pack.gz`);
-			expect(targetConfig.compile.link.pack.index).toBe(
-				`packs/link/${targetTriple}.index.json.gz`
-			);
-			for (const assetPath of [
-				targetConfig.sysrootPack.asset,
-				targetConfig.sysrootPack.index,
-				targetConfig.compile.link.pack.asset,
-				targetConfig.compile.link.pack.index
-			]) {
+			const assetPaths = [targetConfig.sysrootPack.asset, targetConfig.sysrootPack.index];
+			if (targetConfig.compile.kind.startsWith('integrated-rustc')) {
+				expect(targetConfig.compile.llvm).toBeUndefined();
+				expect(targetConfig.compile.link).toBeUndefined();
+			} else {
+				expect(
+					targetConfig.compile.link?.args.some((entry) => entry.startsWith('/tmp/'))
+				).toBe(false);
+				expect(targetConfig.compile.llvm?.llc).toBe('llvm/llc.js');
+				expect(targetConfig.compile.llvm?.llcWasm).toBe('llvm/llc.wasm.gz');
+				expect(targetConfig.compile.llvm?.lld).toBe('llvm/lld.js');
+				expect(targetConfig.compile.llvm?.lldWasm).toBe('llvm/lld.wasm.gz');
+				expect(targetConfig.compile.llvm?.lldData).toBe('llvm/lld.data.gz');
+				expect(targetConfig.compile.link?.pack?.asset).toBe(
+					`packs/link/${targetTriple}.pack.gz`
+				);
+				expect(targetConfig.compile.link?.pack?.index).toBe(
+					`packs/link/${targetTriple}.index.json.gz`
+				);
+				assetPaths.push(
+					targetConfig.compile.link!.pack!.asset,
+					targetConfig.compile.link!.pack!.index
+				);
+			}
+			for (const assetPath of assetPaths) {
 				await expect(fs.access(path.join(runtimeRoot, assetPath))).resolves.toBeUndefined();
 			}
 			await expect(
@@ -495,7 +592,9 @@ builtBrowserBundle('built browser bundle', () => {
 			).toBe(true);
 		}
 		for (const assetPath of ['llvm/llc.wasm.gz', 'llvm/lld.wasm.gz', 'llvm/lld.data.gz']) {
-			await expect(fs.access(path.join(runtimeRoot, assetPath))).resolves.toBeUndefined();
+			const expectation = expect(fs.access(path.join(runtimeRoot, assetPath)));
+			if (hasIntegratedTarget) await expectation.rejects.toThrow();
+			else await expectation.resolves.toBeUndefined();
 		}
 		for (const assetPath of ['llvm/llc.wasm', 'llvm/lld.wasm', 'llvm/lld.data']) {
 			await expect(fs.access(path.join(runtimeRoot, assetPath))).rejects.toThrow();
@@ -541,7 +640,7 @@ builtBrowserBundle('built browser bundle', () => {
 						totalBytes: number;
 					};
 					compile: {
-						link: {
+						link?: {
 							pack: {
 								asset: string;
 								index: string;
@@ -561,17 +660,17 @@ builtBrowserBundle('built browser bundle', () => {
 		expect(runtimeBytes).toBeLessThanOrEqual(340_000_000 + targetTriples.length * 120_000_000);
 
 		for (const [targetTriple, targetConfig] of Object.entries(manifest.targets)) {
+			const linkPack = targetConfig.compile.link?.pack;
 			const assetBytes =
-				targetConfig.sysrootPack.totalBytes + targetConfig.compile.link.pack.totalBytes;
+				targetConfig.sysrootPack.totalBytes + (linkPack?.totalBytes || 0);
 			const requestAssets = new Set([
 				targetConfig.sysrootPack.asset,
 				targetConfig.sysrootPack.index,
-				targetConfig.compile.link.pack.asset,
-				targetConfig.compile.link.pack.index
+				...(linkPack ? [linkPack.asset, linkPack.index] : [])
 			]);
 
 			expect(
-				targetConfig.sysrootPack.fileCount + targetConfig.compile.link.pack.fileCount,
+				targetConfig.sysrootPack.fileCount + (linkPack?.fileCount || 0),
 				`${targetTriple} packed file budget`
 			).toBeLessThanOrEqual(2_500);
 			expect(requestAssets.size, `${targetTriple} request budget`).toBeLessThanOrEqual(4);

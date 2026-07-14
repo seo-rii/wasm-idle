@@ -277,6 +277,32 @@ export function createRuntimeManifestV3(overrides: Record<string, unknown> = {})
 	};
 }
 
+export function createIntegratedRuntimeManifestV3() {
+	const manifest = createRuntimeManifestV3();
+	return {
+		...manifest,
+		version: 'test-integrated-runtime-v3',
+		compiler: {
+			...manifest.compiler,
+			workerBitcodeFile: 'main.wasm'
+		},
+		targets: Object.fromEntries(
+			Object.entries(manifest.targets).map(([targetTriple, targetConfig]) => [
+				targetTriple,
+				{
+					...targetConfig,
+					compile: {
+						kind:
+							targetTriple === 'wasm32-wasip1'
+								? 'integrated-rustc'
+								: 'integrated-rustc+component-encoder'
+					}
+				}
+			])
+		)
+	};
+}
+
 export function createCompileWorkerErrorMessage(error: string): CompileWorkerMessage {
 	return {
 		type: 'error',

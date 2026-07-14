@@ -2,7 +2,13 @@ import { gzipSync } from 'node:zlib';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { fetchRuntimeAssetBytes, validateRuntimeAssetBytes } from '../src/compiler-worker.js';
+import {
+	buildRustcArguments,
+	fetchRuntimeAssetBytes,
+	validateRuntimeAssetBytes
+} from '../src/compiler-worker.js';
+import { normalizeRuntimeManifest } from '../src/runtime-manifest.js';
+import { createIntegratedRuntimeManifestV3 } from './helpers.js';
 
 describe('compiler-worker runtime asset validation', () => {
 	afterEach(() => {
@@ -74,5 +80,21 @@ describe('compiler-worker runtime asset validation', () => {
 				'rustc.wasm'
 			)
 		).resolves.toEqual(rustcBytes);
+	});
+
+	it('asks integrated rustc to link directly into the mirrored wasm output', () => {
+		const manifest = normalizeRuntimeManifest(createIntegratedRuntimeManifestV3());
+		const args = buildRustcArguments(
+			{
+				code: 'fn main() {}',
+				targetTriple: 'wasm32-wasip1'
+			},
+			manifest
+		);
+
+		expect(args).toContain('--emit=link');
+		expect(args).toContain('/work/main.wasm');
+		expect(args).not.toContain('-Csave-temps');
+		expect(args).not.toContain('--emit=obj');
 	});
 });

@@ -3,9 +3,99 @@ import { describe, expect, it } from 'vitest';
 
 import { normalizeRuntimeManifest } from '../src/runtime-manifest.js';
 import { buildPreopenedDirectories, readMirroredBitcode } from '../src/rustc-runtime.js';
+import { SharedWorkspaceFile } from '../src/shared-workspace.js';
 import { createRuntimeManifest } from './helpers.js';
 
 describe('mirrored bitcode file', () => {
+	it('shares temporary directories and files between rustc worker filesystems', async () => {
+		const sharedBitcodeBuffer = new SharedArrayBuffer(16 + 256);
+		const sharedWorkspaceBuffer = new SharedArrayBuffer(8 * 1024 * 1024);
+		const manifest = normalizeRuntimeManifest(createRuntimeManifest());
+		const mainRuntime = await buildPreopenedDirectories(
+			manifest,
+			[],
+			'fn main() {}',
+			sharedBitcodeBuffer,
+			sharedWorkspaceBuffer
+		);
+		const helperRuntime = await buildPreopenedDirectories(
+			manifest,
+			[],
+			'fn main() {}',
+			sharedBitcodeBuffer,
+			sharedWorkspaceBuffer
+		);
+		const mainWorkDirectory = mainRuntime.fds[5] as any;
+		const helperWorkDirectory = helperRuntime.fds[5] as any;
+		const objectBytes = new Uint8Array([0x7f, 0x45, 0x4c, 0x46]);
+
+		expect(mainWorkDirectory.path_create_directory('rmeta-test')).toBe(
+			wasi.ERRNO_SUCCESS
+		);
+		const precreatedObject = mainWorkDirectory.path_open(
+			0,
+			'main.rcgu.o',
+			wasi.OFLAGS_CREAT,
+			BigInt(wasi.RIGHTS_FD_WRITE),
+			0n,
+			0
+		);
+		expect(precreatedObject.ret).toBe(wasi.ERRNO_SUCCESS);
+		expect(helperWorkDirectory.path_filestat_get(0, 'main.rcgu.o').ret).toBe(
+			wasi.ERRNO_NOENT
+		);
+		const helperFile = helperWorkDirectory.path_open(
+			0,
+			'rmeta-test/full.rmeta',
+			wasi.OFLAGS_CREAT,
+			BigInt(wasi.RIGHTS_FD_WRITE),
+			0n,
+			0
+		);
+		expect(helperFile.ret).toBe(wasi.ERRNO_SUCCESS);
+		expect(helperFile.fd_obj.fd_write(objectBytes).ret).toBe(wasi.ERRNO_SUCCESS);
+
+		const mainFile = mainWorkDirectory.path_open(
+			0,
+			'rmeta-test/full.rmeta',
+			0,
+			BigInt(wasi.RIGHTS_FD_READ),
+			0n,
+			0
+		);
+		expect(mainFile.ret).toBe(wasi.ERRNO_SUCCESS);
+		expect(mainFile.fd_obj.fd_read(objectBytes.byteLength).data).toEqual(objectBytes);
+	});
+
+	it('appears absent until first write so rustc does not infer read-only POSIX permissions', async () => {
+		const sharedBitcodeBuffer = new SharedArrayBuffer(16 + 256);
+		const manifest = normalizeRuntimeManifest(createRuntimeManifest());
+		const { fds } = await buildPreopenedDirectories(
+			manifest,
+			[],
+			'fn main() {}',
+			sharedBitcodeBuffer,
+			new SharedArrayBuffer(4 * 1024 * 1024)
+		);
+		const workDirectory = fds[5] as any;
+		const outputPath = manifest.compiler.workerBitcodeFile;
+
+		expect(workDirectory.path_filestat_get(0, outputPath).ret).toBe(wasi.ERRNO_NOENT);
+		const opened = workDirectory.path_open(
+			0,
+			outputPath,
+			wasi.OFLAGS_TRUNC,
+			BigInt(wasi.RIGHTS_FD_WRITE),
+			0n,
+			0
+		);
+		expect(opened.ret).toBe(wasi.ERRNO_SUCCESS);
+		expect(opened.fd_obj.fd_write(new Uint8Array([0x00, 0x61, 0x73, 0x6d])).ret).toBe(
+			wasi.ERRNO_SUCCESS
+		);
+		expect(workDirectory.path_filestat_get(0, outputPath).ret).toBe(wasi.ERRNO_SUCCESS);
+	});
+
 	it('preserves the shared mirror when rustc renames a temp bitcode file into place', async () => {
 		const sharedBitcodeBuffer = new SharedArrayBuffer(16 + 256);
 		const manifest = normalizeRuntimeManifest(createRuntimeManifest());
@@ -13,7 +103,8 @@ describe('mirrored bitcode file', () => {
 			manifest,
 			[],
 			'fn main() { println!("hi"); }',
-			sharedBitcodeBuffer
+			sharedBitcodeBuffer,
+			new SharedArrayBuffer(4 * 1024 * 1024)
 		);
 		const workDirectory = fds[5] as any;
 		const tempFileName = 'rmeta-temp.bc';
@@ -26,7 +117,7 @@ describe('mirrored bitcode file', () => {
 
 		const tempUnlink = workDirectory.path_unlink(tempFileName);
 		expect(tempUnlink.ret).toBe(wasi.ERRNO_SUCCESS);
-		expect(tempUnlink.inode_obj).toBeInstanceOf(File);
+		expect(tempUnlink.inode_obj).toBeInstanceOf(SharedWorkspaceFile);
 
 		expect(workDirectory.path_unlink_file(manifest.compiler.workerBitcodeFile)).toBe(
 			wasi.ERRNO_SUCCESS
@@ -47,7 +138,8 @@ describe('mirrored bitcode file', () => {
 			manifest,
 			[],
 			'fn main() { println!("hi"); }',
-			sharedBitcodeBuffer
+			sharedBitcodeBuffer,
+			new SharedArrayBuffer(4 * 1024 * 1024)
 		);
 		const rootDirectory = fds[6] as any;
 		const tempFileName = 'work/rmeta-temp.bc';
@@ -59,7 +151,7 @@ describe('mirrored bitcode file', () => {
 
 		const tempUnlink = rootDirectory.path_unlink(tempFileName);
 		expect(tempUnlink.ret).toBe(wasi.ERRNO_SUCCESS);
-		expect(tempUnlink.inode_obj).toBeInstanceOf(File);
+		expect(tempUnlink.inode_obj).toBeInstanceOf(SharedWorkspaceFile);
 
 		expect(rootDirectory.path_unlink_file(`work/${manifest.compiler.workerBitcodeFile}`)).toBe(
 			wasi.ERRNO_SUCCESS
@@ -84,7 +176,8 @@ describe('mirrored bitcode file', () => {
 			manifest,
 			[],
 			'fn main() { println!("hi"); }',
-			sharedBitcodeBuffer
+			sharedBitcodeBuffer,
+			new SharedArrayBuffer(4 * 1024 * 1024)
 		);
 		const rootDirectory = fds[6] as any;
 		const openedWork = rootDirectory.path_open(0, 'work', 0, 0n, 0n, 0);
@@ -99,7 +192,7 @@ describe('mirrored bitcode file', () => {
 
 		const tempUnlink = workDirectory.path_unlink(tempFileName);
 		expect(tempUnlink.ret).toBe(wasi.ERRNO_SUCCESS);
-		expect(tempUnlink.inode_obj).toBeInstanceOf(File);
+		expect(tempUnlink.inode_obj).toBeInstanceOf(SharedWorkspaceFile);
 
 		expect(workDirectory.path_unlink_file(manifest.compiler.workerBitcodeFile)).toBe(
 			wasi.ERRNO_SUCCESS

@@ -41,6 +41,7 @@ const matchingNativeSysrootRoot =
 	process.env.WASM_RUST_MATCHING_NATIVE_SYSROOT_ROOT || wasmRustcRoot;
 const llvmWasmRoot =
 	process.env.WASM_RUST_LLVM_WASM_ROOT || path.join(cacheRoot, 'llvm-wasm-20260319');
+const configuredPrebuiltRuntimeRoot = process.env.WASM_RUST_PREBUILT_RUNTIME_ROOT || '';
 const configuredWasiSdkRoot =
 	process.env.WASM_RUST_WASI_SDK_ROOT || process.env.WASI_SDK_PATH || '';
 const configuredTargetTriples = parseTargetTripleList(
@@ -116,9 +117,10 @@ function parseRuntimePrecompressionScopes(value, label) {
 			scopes.add('rustc');
 			scopes.add('llvm');
 			scopes.add('packs');
+			scopes.add('vendor');
 			continue;
 		}
-		if (entry !== 'rustc' && entry !== 'llvm' && entry !== 'packs') {
+		if (entry !== 'rustc' && entry !== 'llvm' && entry !== 'packs' && entry !== 'vendor') {
 			throw new Error(`invalid ${label}: ${entry}`);
 		}
 		scopes.add(entry);
@@ -130,15 +132,22 @@ function shouldPrecompressRuntimeAsset(scope) {
 	return configuredPrecompressionScopes.has(scope);
 }
 
-async function maybePrecompressRuntimeAsset(assetPath, scope) {
+async function maybePrecompressAssetFile(assetPath, scope) {
 	if (!shouldPrecompressRuntimeAsset(scope)) {
-		return relativeAssetPath(runtimeRoot, assetPath);
+		return assetPath;
 	}
 	const sourceBytes = await fs.readFile(assetPath);
 	const compressedAssetPath = `${assetPath}.gz`;
 	await fs.writeFile(compressedAssetPath, gzipSync(sourceBytes, { level: 9 }));
 	await fs.rm(assetPath, { force: true });
-	return relativeAssetPath(runtimeRoot, compressedAssetPath);
+	return compressedAssetPath;
+}
+
+async function maybePrecompressRuntimeAsset(assetPath, scope) {
+	return relativeAssetPath(
+		runtimeRoot,
+		await maybePrecompressAssetFile(assetPath, scope)
+	);
 }
 
 function relativeAssetPath(root, fullPath) {
@@ -158,25 +167,31 @@ async function pathExists(targetPath) {
 	}
 }
 
-async function isReusablePrebuiltRuntimeBundle(runtimeRootPath) {
-	let manifest = null;
-	let manifestVersion = 0;
+async function readSupportedRuntimeManifest(runtimeRootPath) {
 	for (const [candidateVersion, manifestFileName] of [
 		[3, 'runtime-manifest.v3.json'],
 		[2, 'runtime-manifest.v2.json'],
 		[1, 'runtime-manifest.json']
 	]) {
 		try {
-			manifest = JSON.parse(
-				await fs.readFile(path.join(runtimeRootPath, manifestFileName), 'utf8')
-			);
-			manifestVersion = candidateVersion;
-			break;
+			return {
+				manifest: JSON.parse(
+					await fs.readFile(path.join(runtimeRootPath, manifestFileName), 'utf8')
+				),
+				manifestFileName,
+				manifestVersion: candidateVersion
+			};
 		} catch {}
 	}
-	if (!manifest) {
+	return null;
+}
+
+async function isReusablePrebuiltRuntimeBundle(runtimeRootPath) {
+	const manifestRecord = await readSupportedRuntimeManifest(runtimeRootPath);
+	if (!manifestRecord) {
 		return false;
 	}
+	const { manifest, manifestVersion } = manifestRecord;
 	const referencedAssets = new Set();
 	if (manifestVersion === 1) {
 		if (typeof manifest.rustcWasm !== 'string' || manifest.rustcWasm.length === 0) {
@@ -231,23 +246,28 @@ async function isReusablePrebuiltRuntimeBundle(runtimeRootPath) {
 		}
 		referencedAssets.add(manifest.compiler.rustcWasm);
 		for (const targetConfig of targets) {
-			if (
-				typeof targetConfig?.compile?.llvm?.llc !== 'string' ||
-				targetConfig.compile.llvm.llc.length === 0
-			) {
-				return false;
+			const integratedOutput =
+				targetConfig?.compile?.kind === 'integrated-rustc' ||
+				targetConfig?.compile?.kind === 'integrated-rustc+component-encoder';
+			if (!integratedOutput) {
+				if (
+					typeof targetConfig?.compile?.llvm?.llc !== 'string' ||
+					targetConfig.compile.llvm.llc.length === 0
+				) {
+					return false;
+				}
+				if (
+					typeof targetConfig.compile.llvm.lld !== 'string' ||
+					targetConfig.compile.llvm.lld.length === 0
+				) {
+					return false;
+				}
+				referencedAssets.add(targetConfig.compile.llvm.llc);
+				referencedAssets.add(targetConfig.compile.llvm.llcWasm || 'llvm/llc.wasm');
+				referencedAssets.add(targetConfig.compile.llvm.lld);
+				referencedAssets.add(targetConfig.compile.llvm.lldWasm || 'llvm/lld.wasm');
+				referencedAssets.add(targetConfig.compile.llvm.lldData || 'llvm/lld.data');
 			}
-			if (
-				typeof targetConfig.compile.llvm.lld !== 'string' ||
-				targetConfig.compile.llvm.lld.length === 0
-			) {
-				return false;
-			}
-			referencedAssets.add(targetConfig.compile.llvm.llc);
-			referencedAssets.add(targetConfig.compile.llvm.llcWasm || 'llvm/llc.wasm');
-			referencedAssets.add(targetConfig.compile.llvm.lld);
-			referencedAssets.add(targetConfig.compile.llvm.lldWasm || 'llvm/lld.wasm');
-			referencedAssets.add(targetConfig.compile.llvm.lldData || 'llvm/lld.data');
 			if (targetConfig.sysrootPack) {
 				if (
 					typeof targetConfig.sysrootPack.asset !== 'string' ||
@@ -272,6 +292,9 @@ async function isReusablePrebuiltRuntimeBundle(runtimeRootPath) {
 					}
 					referencedAssets.add(assetFile.asset);
 				}
+			}
+			if (integratedOutput) {
+				continue;
 			}
 			if (targetConfig.compile.link?.pack) {
 				if (
@@ -360,6 +383,83 @@ async function copyTree(sourceRoot, targetRoot) {
 	return files;
 }
 
+async function restorePrebuiltRuntimeBundle(sourceRuntimeRoot, targetRuntimeRoot) {
+	const resolvedSourceRoot = path.resolve(sourceRuntimeRoot);
+	const resolvedTargetRoot = path.resolve(targetRuntimeRoot);
+	if (resolvedSourceRoot === resolvedTargetRoot) {
+		throw new Error('prebuilt runtime source and destination must be different directories');
+	}
+	if (!(await isReusablePrebuiltRuntimeBundle(resolvedSourceRoot))) {
+		throw new Error(`prebuilt runtime bundle is incomplete: ${resolvedSourceRoot}`);
+	}
+
+	const manifestRecord = await readSupportedRuntimeManifest(resolvedSourceRoot);
+	if (!manifestRecord) {
+		throw new Error(`prebuilt runtime manifest is unavailable: ${resolvedSourceRoot}`);
+	}
+	const restoredManifest = structuredClone(manifestRecord.manifest);
+	const externalLlvmAssets = new Map();
+	const llvmConfigs =
+		manifestRecord.manifestVersion === 1
+			? [restoredManifest.llvm]
+			: Object.values(restoredManifest.targets || {}).map(
+					(targetConfig) => targetConfig?.compile?.llvm
+				);
+	for (const llvmConfig of llvmConfigs) {
+		if (!llvmConfig || typeof llvmConfig !== 'object') {
+			continue;
+		}
+		for (const [property, fallback] of [
+			['llc', 'llvm/llc.js'],
+			['llcWasm', 'llvm/llc.wasm'],
+			['lld', 'llvm/lld.js'],
+			['lldWasm', 'llvm/lld.wasm'],
+			['lldData', 'llvm/lld.data']
+		]) {
+			const assetReference = llvmConfig[property] || fallback;
+			if (typeof assetReference !== 'string' || assetReference.length === 0) {
+				continue;
+			}
+			const sourcePath = path.resolve(resolvedSourceRoot, assetReference);
+			const relativeSourcePath = path.relative(resolvedSourceRoot, sourcePath);
+			if (
+				relativeSourcePath === '' ||
+				(!relativeSourcePath.startsWith(`..${path.sep}`) && relativeSourcePath !== '..')
+			) {
+				continue;
+			}
+			const localReference = `llvm/${path.basename(assetReference)}`;
+			const previousSourcePath = externalLlvmAssets.get(localReference);
+			if (previousSourcePath && previousSourcePath !== sourcePath) {
+				throw new Error(
+					`prebuilt runtime maps multiple external assets to ${localReference}: ${previousSourcePath}, ${sourcePath}`
+				);
+			}
+			externalLlvmAssets.set(localReference, sourcePath);
+			llvmConfig[property] = localReference;
+		}
+	}
+
+	await fs.rm(resolvedTargetRoot, { recursive: true, force: true });
+	await ensureDirectory(resolvedTargetRoot);
+	await copyTree(resolvedSourceRoot, resolvedTargetRoot);
+	for (const [localReference, sourcePath] of externalLlvmAssets) {
+		await copyFileIfNeeded(sourcePath, path.join(resolvedTargetRoot, localReference));
+	}
+	await fs.writeFile(
+		path.join(resolvedTargetRoot, manifestRecord.manifestFileName),
+		JSON.stringify(restoredManifest, null, 2) + '\n'
+	);
+
+	if (!(await isReusablePrebuiltRuntimeBundle(resolvedTargetRoot))) {
+		throw new Error(`restored prebuilt runtime bundle is incomplete: ${resolvedTargetRoot}`);
+	}
+	return {
+		externalLlvmAssetCount: externalLlvmAssets.size,
+		manifestFileName: manifestRecord.manifestFileName
+	};
+}
+
 function toImportPath(fromFilePath, targetPath) {
 	const relativePath = path
 		.relative(path.dirname(fromFilePath), targetPath)
@@ -393,6 +493,27 @@ async function copyBrowserVendorAssets() {
 		path.join(jcoRoot, 'lib', 'wasi_snapshot_preview1.command.wasm'),
 		path.join(jcoVendorRoot, 'lib', 'wasi_snapshot_preview1.command.wasm')
 	);
+	for (const fileName of ['js-component-bindgen-component.js', 'wasm-tools.js']) {
+		const filePath = path.join(jcoVendorRoot, 'obj', fileName);
+		const source = await fs.readFile(filePath, 'utf8');
+		const compileStreaming = '  return fetch(url).then(WebAssembly.compileStreaming);';
+		if (!source.includes(compileStreaming)) {
+			throw new Error(`JCO browser module no longer has the expected core Wasm loader: ${filePath}`);
+		}
+		const runtimeAssetImport = toImportPath(
+			filePath,
+			path.join(distRoot, 'runtime-asset.js')
+		);
+		const rewrittenSource =
+			`import { fetchRuntimeAssetBytes } from '${runtimeAssetImport}';\n${source.replace(
+				compileStreaming,
+				`  const assetUrl = new URL(url);\n  if (assetUrl.pathname.endsWith('.core.wasm')) assetUrl.pathname += '.gz';\n  return WebAssembly.compile(await fetchRuntimeAssetBytes(assetUrl, 'JCO core Wasm', fetch, false));`
+			)}`;
+		await fs.writeFile(
+			filePath,
+			rewrittenSource.replace(/[ \t]+$/gm, '')
+		);
+	}
 
 	const distFiles = await listFiles(distRoot);
 	const replacementTargets = [
@@ -457,6 +578,13 @@ async function copyBrowserVendorAssets() {
 		if (next !== current) {
 			await fs.writeFile(filePath, next);
 		}
+	}
+
+	for (const fileName of [
+		'js-component-bindgen-component.core.wasm',
+		'wasm-tools.core.wasm'
+	]) {
+		await maybePrecompressAssetFile(path.join(jcoVendorRoot, 'obj', fileName), 'vendor');
 	}
 }
 
@@ -1059,14 +1187,26 @@ async function main() {
 		}
 	}
 	if (missingFoundationalRuntimeInputs.length > 0) {
-		if (allowPrebuiltRuntimeFallback && (await isReusablePrebuiltRuntimeBundle(runtimeRoot))) {
-			console.warn(
-				`[wasm-rust] reusing prebuilt dist/runtime bundle because prepare-runtime inputs are unavailable: ${missingFoundationalRuntimeInputs.join(', ')}`
-			);
-			return;
+		if (allowPrebuiltRuntimeFallback) {
+			if (await isReusablePrebuiltRuntimeBundle(runtimeRoot)) {
+				console.warn(
+					`[wasm-rust] reusing prebuilt dist/runtime bundle because prepare-runtime inputs are unavailable: ${missingFoundationalRuntimeInputs.join(', ')}`
+				);
+				return;
+			}
+			if (configuredPrebuiltRuntimeRoot) {
+				const restored = await restorePrebuiltRuntimeBundle(
+					configuredPrebuiltRuntimeRoot,
+					runtimeRoot
+				);
+				console.warn(
+					`[wasm-rust] restored ${restored.manifestFileName} from ${path.resolve(configuredPrebuiltRuntimeRoot)} because prepare-runtime inputs are unavailable; localized ${restored.externalLlvmAssetCount} external LLVM assets`
+				);
+				return;
+			}
 		}
 		throw new Error(
-			`missing runtime preparation inputs: ${missingFoundationalRuntimeInputs.join(', ')}`
+			`missing runtime preparation inputs: ${missingFoundationalRuntimeInputs.join(', ')}. To explicitly recover a complete prebuilt bundle, set WASM_RUST_ALLOW_PREBUILT_RUNTIME_FALLBACK=1 and WASM_RUST_PREBUILT_RUNTIME_ROOT=/path/to/runtime.`
 		);
 	}
 	await fs.rm(runtimeRoot, { recursive: true, force: true });
@@ -1234,15 +1374,22 @@ if (isDirectExecution) {
 }
 
 export {
+	buildRuntimePackReference,
+	copyBrowserVendorAssets,
+	copyFileIfNeeded,
 	defaultRuntimeTargetTriples,
 	defaultRustcMemoryInitialPages,
 	defaultRustcMemoryMaximumPages,
 	distRoot,
+	ensureDirectory,
 	isReusablePrebuiltRuntimeBundle,
 	llvmWasmRoot,
 	matchingNativeToolchainRoot,
+	maybePrecompressRuntimeAsset,
+	patchRustcMemoryMaximum,
 	parseRuntimePrecompressionScopes,
 	projectRoot,
+	restorePrebuiltRuntimeBundle,
 	runtimeRoot,
 	wasmRustcRoot
 };

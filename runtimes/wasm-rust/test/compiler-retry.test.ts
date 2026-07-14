@@ -4,6 +4,7 @@ import { compileRust } from '../src/compiler.js';
 import { markWorkerFailure } from '../src/worker-status.js';
 import {
 	FakeWorker,
+	createIntegratedRuntimeManifestV3,
 	createRuntimeManifest,
 	createRuntimeManifestV2,
 	mirrorBitcode
@@ -687,5 +688,48 @@ describe('compileRust retry behavior', () => {
 			])
 		);
 		expect(result.stdout).toBe('worker stdout\n');
+	});
+
+	it('describes integrated rustc output without referring to split LLVM linking', async () => {
+		let clock = 0;
+		const linkedWasm = new Uint8Array([0, 97, 115, 109]);
+		const worker = new FakeWorker((message, currentWorker) => {
+			mirrorBitcode(message.sharedBitcodeBuffer, linkedWasm);
+			currentWorker.emitMessage({
+				type: 'result',
+				exitCode: 0,
+				stdout: '',
+				stderr: ''
+			});
+		});
+
+		const result = await compileRust(
+			{
+				code: 'fn main() {}',
+				targetTriple: 'wasm32-wasip1',
+				log: true
+			},
+			{
+				loadManifest: async () => createIntegratedRuntimeManifestV3(),
+				createWorker: () => worker,
+				now: () => clock,
+				sleep: async (milliseconds) => {
+					await Promise.resolve();
+					clock += milliseconds;
+				},
+				linkBitcode: async (output) => ({
+					wasm: output,
+					targetTriple: 'wasm32-wasip1',
+					format: 'core-wasm'
+				})
+			}
+		);
+
+		expect(result.success).toBe(true);
+		expect(result.logs).toContain(
+			'[wasm-rust] worker settled with mirrored linked WebAssembly artifact; finalizing integrated rustc output'
+		);
+		expect(result.logs?.some((message) => message.includes('llvm-wasm'))).toBe(false);
+		expect(result.logs?.some((message) => message.includes('mirrored bitcode'))).toBe(false);
 	});
 });

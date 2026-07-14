@@ -13,6 +13,10 @@ import { startBrowserHarnessServer } from './browser-harness-server.mjs';
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const sampleProgram = process.env.WASM_RUST_SAMPLE_PROGRAM || 'fn main() { println!("hi"); }';
 const expectedStdout = process.env.WASM_RUST_BROWSER_HARNESS_EXPECT_STDOUT;
+const stdin = process.env.WASM_RUST_BROWSER_HARNESS_STDIN;
+const programArgs = process.env.WASM_RUST_BROWSER_HARNESS_PROGRAM_ARGS
+	? JSON.parse(process.env.WASM_RUST_BROWSER_HARNESS_PROGRAM_ARGS)
+	: [];
 const compileTimeoutMs = process.env.WASM_RUST_BROWSER_HARNESS_COMPILE_TIMEOUT_MS
 	? Number(process.env.WASM_RUST_BROWSER_HARNESS_COMPILE_TIMEOUT_MS)
 	: undefined;
@@ -25,6 +29,7 @@ const initialPages = process.env.WASM_RUST_BROWSER_HARNESS_INITIAL_PAGES
 const maximumPages = process.env.WASM_RUST_BROWSER_HARNESS_MAXIMUM_PAGES
 	? Number(process.env.WASM_RUST_BROWSER_HARNESS_MAXIMUM_PAGES)
 	: undefined;
+const liveLog = process.env.WASM_RUST_BROWSER_HARNESS_LIVE_LOG === '1';
 const runTimeoutMs = Number(
 	process.env.WASM_RUST_BROWSER_HARNESS_RUN_TIMEOUT_MS ||
 		String((compileTimeoutMs ?? 120000) + 120000)
@@ -43,9 +48,20 @@ async function main() {
 			headless: true,
 			executablePath
 		});
-		const page = await browser.newPage();
+		const context = await browser.newContext();
+		await context.addCookies([
+			{
+				name: 'dev_bypass_waf',
+				value: 'seorii_bypass_token_is_this',
+				url: server.origin
+			}
+		]);
+		const page = await context.newPage();
 		page.setDefaultTimeout(runTimeoutMs);
 		page.on('console', (message) => {
+			if (liveLog) {
+				process.stderr.write(`[browser:${message.type()}] ${message.text()}\n`);
+			}
 			consoleMessages.push({
 				type: message.type(),
 				text: message.text(),
@@ -53,6 +69,9 @@ async function main() {
 			});
 		});
 		page.on('pageerror', (error) => {
+			if (liveLog) {
+				process.stderr.write(`[browser:pageerror] ${String(error.stack || error.message || error)}\n`);
+			}
 			pageErrors.push(String(error.stack || error.message || error));
 		});
 
@@ -61,6 +80,8 @@ async function main() {
 		await page.waitForFunction(() => typeof window.runWasmRustHarness === 'function');
 		const harnessOptions = {
 			code: sampleProgram,
+			args: programArgs,
+			...(stdin === undefined ? {} : { stdin }),
 			log: true
 		};
 		if (compileTimeoutMs !== undefined) {

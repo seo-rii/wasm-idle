@@ -30,6 +30,12 @@ describe('ci script contract', () => {
 			'WASM_RUST_PRECOMPRESS_SCOPES=all pnpm run build'
 		);
 		expect(packageJson.scripts?.['build:js']).toBe('tsc -p tsconfig.json');
+		expect(packageJson.scripts?.['build:producer']).toBe(
+			'pnpm run build:js && pnpm run prepare:runtime:producer'
+		);
+		expect(packageJson.scripts?.['build:prebuilt']).toBe(
+			'WASM_RUST_ALLOW_PREBUILT_RUNTIME_FALLBACK=1 pnpm run build'
+		);
 		expect(packageJson.scripts?.['build:uncompressed']).toBe(
 			'WASM_RUST_PRECOMPRESS_SCOPES=none pnpm run build'
 		);
@@ -38,6 +44,9 @@ describe('ci script contract', () => {
 		);
 		expect(packageJson.scripts?.['prepare:runtime:uncompressed']).toBe(
 			'WASM_RUST_PRECOMPRESS_SCOPES=none node scripts/prepare-runtime.mjs'
+		);
+		expect(packageJson.scripts?.['prepare:runtime:producer']).toBe(
+			'node scripts/prepare-producer-runtime.mjs'
 		);
 		expect(fastScript).toContain('WASM_RUST_SKIP_DIST_TESTS=1');
 		expect(fastScript).not.toContain('pnpm build');
@@ -93,6 +102,28 @@ describe('ci script contract', () => {
 		expect(browserCompilerDoc).toMatch(
 			/falls back to older `v2` and legacy `v1` manifests only when the newer\s+manifest file is missing/
 		);
-		expect(readme).toContain('default packaging target list still attempts `wasm32-wasip3`');
+		expect(readme).toContain('the three bundled WASI targets');
+		expect(readme).toContain('receipt-backed producer bundle');
+	});
+
+	it('documents the locked full-compiler producer path', async () => {
+		const reproductionDoc = await readFile(
+			path.join(projectRoot, 'docs/reproduction.md'),
+			'utf8'
+		);
+		const environmentDoc = await readFile(
+			path.join(projectRoot, 'docs/environment-variables.md'),
+			'utf8'
+		);
+
+		expect(reproductionDoc).toContain('npm run producer:rust:container-rebuild');
+		expect(reproductionDoc).toContain('pnpm run build:producer');
+		expect(reproductionDoc).toMatch(
+			/It is not\s+a handwritten parser, interpreter, or language subset\./
+		);
+		expect(reproductionDoc).toContain('no prebuilt browser compiler or');
+		expect(reproductionDoc).toContain('every patch-created source file');
+		expect(environmentDoc).toContain('`WASM_RUST_PRODUCER_OUTPUT_ROOT`');
+		expect(environmentDoc).toContain('extra files are rejected');
 	});
 });

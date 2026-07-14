@@ -8,7 +8,7 @@ import type {
 } from './worker-protocol.js';
 import { createModuleWorker } from './module-worker.js';
 import { classifyRetryableFailureKind } from './retryable-failure-kind.js';
-import { resolveTargetManifest } from './runtime-manifest.js';
+import { isIntegratedCompilerOutput, resolveTargetManifest } from './runtime-manifest.js';
 import { buildPreopenedDirectories, instantiateRustcInstance } from './rustc-runtime.js';
 import {
 	dispatchThreadPoolSlotAndWait,
@@ -38,12 +38,13 @@ export function validateRuntimeAssetBytes(assetPath: string, bytes: Uint8Array) 
 
 export { fetchRuntimeAssetBytes };
 
-function buildRustcArguments(
+export function buildRustcArguments(
 	request: CompileWorkerRequest['request'],
 	manifest: CompileWorkerRequest['manifest']
 ) {
 	const edition = request.edition || '2024';
 	const target = resolveTargetManifest(manifest, request.targetTriple);
+	const integratedOutput = isIntegratedCompilerOutput(target.compile);
 	return [
 		'rustc',
 		'-Zthreads=1',
@@ -60,11 +61,11 @@ function buildRustcArguments(
 		edition,
 		'-Cpanic=abort',
 		'-Ccodegen-units=1',
-		'-Cno-prepopulate-passes',
-		'-Csave-temps',
-		'--emit=obj',
+		...(integratedOutput
+			? ['--emit=link']
+			: ['-Cno-prepopulate-passes', '-Csave-temps', '--emit=obj']),
 		'-o',
-		'/work/main.o'
+		integratedOutput ? '/work/main.wasm' : '/work/main.o'
 	];
 }
 
@@ -271,7 +272,8 @@ async function compileRustInWorker(request: CompileWorkerRequest) {
 		request.manifest,
 		sysrootAssets,
 		request.request.code,
-		request.sharedBitcodeBuffer
+		request.sharedBitcodeBuffer,
+		request.sharedWorkspaceBuffer
 	);
 	emitCompileWorkerLog(request, '[wasm-rust:compiler-worker] preopened directories ready');
 	emitCompileWorkerProgress(request, {
@@ -367,6 +369,7 @@ async function compileRustInWorker(request: CompileWorkerRequest) {
 				sourceCode: request.request.code,
 				log: Boolean(request.request.log),
 				sharedBitcodeBuffer: request.sharedBitcodeBuffer,
+				sharedWorkspaceBuffer: request.sharedWorkspaceBuffer,
 				sharedStatusBuffer: request.sharedStatusBuffer,
 				threadCounterBuffer: threadCounter.buffer as SharedArrayBuffer,
 				sysrootAssets,

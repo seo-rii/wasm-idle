@@ -118,6 +118,55 @@ pnpm exec vitest run test/backend-probes.test.ts \
 
 ## Runtime packaging
 
+### Reproducible source producer
+
+The canonical source build is owned by `wasm-llvm/producer/rust-browser`. It builds the full
+upstream Rust compiler, its matching LLVM code generator, and LLD for the browser host. It is not
+a handwritten parser, interpreter, or language subset.
+
+Run the producer from a fresh empty work directory using its digest-pinned container:
+
+```bash
+cd /path/to/wasm-llvm
+NINJA_JOBS=8 \
+  npm run producer:rust:container-rebuild -- /path/to/new-empty-work-directory
+```
+
+The command verifies pinned source commits and Git trees, the required Rust submodule, checked-in
+patch hashes, every patch-created source file, the exact post-patch trees, downloaded bootstrap
+inputs, and the build toolchain. The five Rust stage0 host-tool archives are explicit URL/size/hash
+inputs used only to bootstrap the source-built stage2 compiler; no prebuilt browser compiler or
+runtime is copied into the output. The output is written to
+`/path/to/new-empty-work-directory/output` with `producer-receipt.json`, which contains a SHA-256
+and size for every output file.
+
+Package that verified output in this repository:
+
+```bash
+cd /path/to/wasm-idle/runtimes/wasm-rust
+WASM_RUST_PRODUCER_OUTPUT_ROOT=/path/to/new-empty-work-directory/output \
+  pnpm run build:producer
+```
+
+`build:producer` rejects a producer whose receipt, source or submodule pins, build environment,
+tool versions, manifest hash, asset hashes, or exact file set differs from `producer-lock.json`.
+The resulting runtime uses the integrated Rust LLVM backend and LLD. `wasm32-wasip1` emits core
+Wasm directly; `wasm32-wasip2` and `wasm32-wasip3` are component-encoded after compilation.
+Compiler helper workers share temporary files through a manifest-sized `SharedArrayBuffer`
+workspace (`compiler.workerSharedWorkspaceBytes`, 128 MiB by default).
+
+The standalone Chromium probe compiles the same stdin program for every shipped target and checks
+its exact output:
+
+```bash
+WASM_RUST_SAMPLE_PROGRAM='use std::io::{self, Read}; fn main() { let mut input = String::new(); io::stdin().read_to_string(&mut input).unwrap(); println!("{}", input.trim().to_uppercase()); }' \
+WASM_RUST_BROWSER_HARNESS_STDIN=$'producer stdin\n' \
+WASM_RUST_BROWSER_HARNESS_EXPECT_STDOUT=$'PRODUCER STDIN\n' \
+  pnpm run probe:browser-harness
+```
+
+### Legacy split-backend packaging
+
 Rebuild the shipped runtime assets:
 
 ```bash
@@ -129,6 +178,19 @@ This runs:
 
 - `tsc -p tsconfig.json`
 - `node scripts/prepare-runtime.mjs`
+
+If the producer caches were removed but a complete current runtime bundle is still available, an
+explicit recovery build can reconstruct `dist/runtime` without silently selecting an older release:
+
+```bash
+cd /path/to/wasm-rust
+WASM_RUST_PREBUILT_RUNTIME_ROOT=/path/to/static/wasm-rust/runtime \
+pnpm run build:prebuilt
+```
+
+The recovery build validates all manifest references and localizes shared LLVM assets into the
+rebuilt directory. It rebuilds the JavaScript package around preserved compiler output; it does not
+recompile Rust or LLVM from source and is not a substitute for a producer rebuild.
 
 Rebuild a patched custom toolchain and ship a runtime bundle that also contains
 `wasm32-wasip3`:
@@ -221,6 +283,7 @@ Unless overridden, the checked-in scripts expect:
 
 Useful overrides:
 
+- `WASM_RUST_PRODUCER_OUTPUT_ROOT`
 - `WASM_RUST_RUSTC_ROOT`
 - `WASM_RUST_MATCHING_NATIVE_TOOLCHAIN_ROOT`
 - `WASM_RUST_LLVM_WASM_ROOT`

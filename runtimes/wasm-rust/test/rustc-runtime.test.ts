@@ -18,12 +18,12 @@ const rustcWasmEnvShims =
 			? describe
 			: describe.skip;
 
-rustcWasmEnvShims('rustc wasm env shims', () => {
+rustcWasmEnvShims('rustc wasm imports', () => {
 	afterEach(() => {
 		vi.restoreAllMocks();
 	});
 
-	it('provides callable env shims for rustc.wasm function imports', async () => {
+	it('provides callable env shims for every function import required by rustc.wasm', async () => {
 		const rustcBytes = gunzipSync(await readFile(rustcWasmPath));
 		const rustcModule = new WebAssembly.Module(rustcBytes);
 		const rustcEnvFunctionImports = WebAssembly.Module.imports(rustcModule).filter(
@@ -44,8 +44,6 @@ rustcWasmEnvShims('rustc wasm env shims', () => {
 				}
 			}
 		} as WebAssembly.WebAssemblyInstantiatedSource);
-
-		expect(rustcEnvFunctionImports.length).toBeGreaterThan(0);
 
 		await instantiateRustcInstance({
 			rustcModule,

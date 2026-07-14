@@ -17,6 +17,7 @@ export interface RuntimeCompilerConfig {
 	rustcWasm: string;
 	workerBitcodeFile: string;
 	workerSharedOutputBytes: number;
+	workerSharedWorkspaceBytes: number;
 	compileTimeoutMs: number;
 	artifactIdleMs: number;
 	rustcMemory: {
@@ -33,7 +34,7 @@ export interface RuntimeLinkConfig {
 	pack?: RuntimeAssetPackReference;
 }
 
-export interface RuntimeTargetCompileConfig {
+export interface RuntimeLlvmCompileConfig {
 	kind: 'llvm-wasm' | 'llvm-wasm+component-encoder';
 	llvm: {
 		llc: string;
@@ -43,6 +44,20 @@ export interface RuntimeTargetCompileConfig {
 		lldData?: string;
 	};
 	link: RuntimeLinkConfig;
+}
+
+export interface RuntimeIntegratedCompileConfig {
+	kind: 'integrated-rustc' | 'integrated-rustc+component-encoder';
+}
+
+export type RuntimeTargetCompileConfig = RuntimeLlvmCompileConfig | RuntimeIntegratedCompileConfig;
+
+export function isIntegratedCompilerOutput(
+	compile: RuntimeTargetCompileConfig
+): compile is RuntimeIntegratedCompileConfig {
+	return (
+		compile.kind === 'integrated-rustc' || compile.kind === 'integrated-rustc+component-encoder'
+	);
 }
 
 export interface RuntimeTargetExecutionConfig {
@@ -229,7 +244,12 @@ function expectArtifactFormat(value: unknown, label: string): BrowserRustArtifac
 }
 
 function expectCompileKind(value: unknown, label: string): RuntimeTargetCompileConfig['kind'] {
-	if (value !== 'llvm-wasm' && value !== 'llvm-wasm+component-encoder') {
+	if (
+		value !== 'llvm-wasm' &&
+		value !== 'llvm-wasm+component-encoder' &&
+		value !== 'integrated-rustc' &&
+		value !== 'integrated-rustc+component-encoder'
+	) {
 		throw new Error(`invalid ${label} in wasm-rust runtime manifest`);
 	}
 	return value;
@@ -282,6 +302,13 @@ function parseCompilerConfig(value: unknown, label: string): RuntimeCompilerConf
 			object.workerSharedOutputBytes,
 			`${label}.workerSharedOutputBytes`
 		),
+		workerSharedWorkspaceBytes:
+			object.workerSharedWorkspaceBytes === undefined
+				? 128 * 1024 * 1024
+				: expectNumber(
+						object.workerSharedWorkspaceBytes,
+						`${label}.workerSharedWorkspaceBytes`
+					),
 		compileTimeoutMs: expectNumber(object.compileTimeoutMs, `${label}.compileTimeoutMs`),
 		artifactIdleMs: expectNumber(object.artifactIdleMs, `${label}.artifactIdleMs`),
 		rustcMemory: parseRustcMemory(object.rustcMemory, `${label}.rustcMemory`)
@@ -289,8 +316,8 @@ function parseCompilerConfig(value: unknown, label: string): RuntimeCompilerConf
 }
 
 function normalizeRuntimeLlvmConfig(
-	llvm: RuntimeTargetCompileConfig['llvm']
-): RuntimeTargetCompileConfig['llvm'] {
+	llvm: RuntimeLlvmCompileConfig['llvm']
+): RuntimeLlvmCompileConfig['llvm'] {
 	return {
 		llc: llvm.llc,
 		llcWasm: llvm.llcWasm || 'llvm/llc.wasm',
@@ -356,7 +383,7 @@ function parseRuntimeTargetConfig(
 ): RuntimeTargetConfig {
 	const object = expectObject(value, label);
 	const compile = expectObject(object.compile, `${label}.compile`);
-	const llvm = expectObject(compile.llvm, `${label}.compile.llvm`);
+	const compileKind = expectCompileKind(compile.kind, `${label}.compile.kind`);
 	const execution = expectObject(object.execution, `${label}.execution`);
 	const sysrootFiles =
 		object.sysrootFiles === undefined
@@ -369,21 +396,16 @@ function parseRuntimeTargetConfig(
 	if (!sysrootFiles && !sysrootPack) {
 		throw new Error(`invalid ${label}: missing sysroot assets in wasm-rust runtime manifest`);
 	}
-	return {
-		targetTriple,
-		artifactFormat: expectArtifactFormat(object.artifactFormat, `${label}.artifactFormat`),
-		...(sysrootFiles
-			? {
-					sysrootFiles
-				}
-			: {}),
-		...(sysrootPack
-			? {
-					sysrootPack
-				}
-			: {}),
-		compile: {
-			kind: expectCompileKind(compile.kind, `${label}.compile.kind`),
+	let parsedCompile: RuntimeTargetCompileConfig;
+	if (
+		compileKind === 'integrated-rustc' ||
+		compileKind === 'integrated-rustc+component-encoder'
+	) {
+		parsedCompile = { kind: compileKind };
+	} else {
+		const llvm = expectObject(compile.llvm, `${label}.compile.llvm`);
+		parsedCompile = {
+			kind: compileKind,
 			llvm: {
 				llc: expectString(llvm.llc, `${label}.compile.llvm.llc`),
 				...(llvm.llcWasm === undefined
@@ -404,7 +426,22 @@ function parseRuntimeTargetConfig(
 						})
 			},
 			link: parseLinkConfig(compile.link, `${label}.compile.link`)
-		},
+		};
+	}
+	return {
+		targetTriple,
+		artifactFormat: expectArtifactFormat(object.artifactFormat, `${label}.artifactFormat`),
+		...(sysrootFiles
+			? {
+					sysrootFiles
+				}
+			: {}),
+		...(sysrootPack
+			? {
+					sysrootPack
+				}
+			: {}),
+		compile: parsedCompile,
 		execution: {
 			kind: expectExecutionKind(execution.kind, `${label}.execution.kind`)
 		}
@@ -529,10 +566,12 @@ export function normalizeRuntimeManifest(
 			}
 			targets[targetTriple] = {
 				...targetConfig,
-				compile: {
-					...targetConfig.compile,
-					llvm: normalizeRuntimeLlvmConfig(targetConfig.compile.llvm)
-				}
+				compile: isIntegratedCompilerOutput(targetConfig.compile)
+					? targetConfig.compile
+					: {
+							...targetConfig.compile,
+							llvm: normalizeRuntimeLlvmConfig(targetConfig.compile.llvm)
+						}
 			};
 		}
 		return {
@@ -562,10 +601,12 @@ export function normalizeRuntimeManifest(
 							sysrootPack: targetConfig.sysrootPack
 						}
 					: {}),
-				compile: {
-					...targetConfig.compile,
-					llvm: normalizeRuntimeLlvmConfig(targetConfig.compile.llvm)
-				},
+				compile: isIntegratedCompilerOutput(targetConfig.compile)
+					? targetConfig.compile
+					: {
+							...targetConfig.compile,
+							llvm: normalizeRuntimeLlvmConfig(targetConfig.compile.llvm)
+						},
 				execution: targetConfig.execution
 			};
 		}
@@ -588,6 +629,7 @@ export function normalizeRuntimeManifest(
 			rustcWasm: value.rustcWasm,
 			workerBitcodeFile: value.workerBitcodeFile,
 			workerSharedOutputBytes: value.workerSharedOutputBytes,
+			workerSharedWorkspaceBytes: 128 * 1024 * 1024,
 			compileTimeoutMs: value.compileTimeoutMs,
 			artifactIdleMs: value.artifactIdleMs,
 			rustcMemory: value.rustcMemory

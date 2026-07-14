@@ -32,7 +32,15 @@ describe('browser harness direct Playwright integration', () => {
 		const pageErrors: string[] = [];
 
 		try {
-			const page = await browser.newPage();
+			const context = await browser.newContext();
+			await context.addCookies([
+				{
+					name: 'dev_bypass_waf',
+					value: 'seorii_bypass_token_is_this',
+					url: server.origin
+				}
+			]);
+			const page = await context.newPage();
 			page.setDefaultTimeout(runTimeoutMs);
 			page.on('console', (message) => {
 				consoleMessages.push({
@@ -96,6 +104,9 @@ describe('browser harness direct Playwright integration', () => {
 						(message.text.includes(
 							'mirrored bitcode settled; linking through llvm-wasm'
 						) ||
+							message.text.includes(
+								'mirrored linked WebAssembly artifact; finalizing integrated rustc output'
+							) ||
 							message.text.includes(
 								'compile succeeded; executing WASI module in browser'
 							))
