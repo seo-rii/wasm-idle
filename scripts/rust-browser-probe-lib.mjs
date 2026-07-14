@@ -239,6 +239,14 @@ export async function runRustBrowserProbe({
 		executablePath
 	});
 	const context = await browser.newContext();
+	await context.addCookies([
+		{
+			name: 'dev_bypass_waf',
+			value: 'seorii_bypass_token_is_this',
+			url: new URL(browserUrl).origin,
+			sameSite: 'Lax'
+		}
+	]);
 
 	const page = await context.newPage();
 	page.setDefaultTimeout(runTimeoutMs);
@@ -247,6 +255,8 @@ export async function runRustBrowserProbe({
 	const consoleMessages = [];
 	/** @type {string[]} */
 	const pageErrors = [];
+	/** @type {string[]} */
+	const requestUrls = [];
 	page.on('console', (message) => {
 		consoleMessages.push({
 			type: message.type(),
@@ -255,6 +265,9 @@ export async function runRustBrowserProbe({
 	});
 	page.on('pageerror', (error) => {
 		pageErrors.push(String(error.stack || error.message || error));
+	});
+	page.on('request', (request) => {
+		requestUrls.push(request.url());
 	});
 
 	try {
@@ -316,16 +329,37 @@ export async function runRustBrowserProbe({
 			);
 		}
 
-		await page.locator('select').selectOption('RUST');
-		await page.locator('#rust-target-triple').selectOption(targetTriple);
-		await page.waitForFunction(
-			() => typeof window.__wasmIdleDebug?.setEditorValue === 'function'
-		);
+		const prematureRuntimeRequests = requestUrls.filter((requestUrl) => {
+			const pathname = new URL(requestUrl).pathname;
+			return pathname.includes('/wasm-rust/') || pathname.includes('/lsp/');
+		});
+		if (prematureRuntimeRequests.length > 0) {
+			throw new Error(
+				`Rust or LSP assets loaded before Rust was selected:\n${prematureRuntimeRequests.join('\n')}`
+			);
+		}
+
 		const source = rustSourceForTarget(targetTriple);
-		const editorValueSet = await page.evaluate(async (text) => {
-			return await window.__wasmIdleDebug.setEditorValue(text);
-		}, source);
-		if (!editorValueSet) {
+		const rustBrowserUrl = new URL(browserUrl);
+		rustBrowserUrl.searchParams.set('lang', 'RUST');
+		rustBrowserUrl.searchParams.set('rustTargetTriple', targetTriple);
+		rustBrowserUrl.searchParams.set('code64', Buffer.from(source).toString('base64url'));
+		await page.goto(rustBrowserUrl.toString(), { waitUntil: 'domcontentloaded' });
+		try {
+			await page.waitForFunction(
+				({ expectedSource, expectedTarget }) => {
+					const language = document.querySelector('select');
+					const target = document.querySelector('#rust-target-triple');
+					return (
+						language?.value === 'RUST' &&
+						target?.value === expectedTarget &&
+						window.__wasmIdleDebug?.getEditorValue() === expectedSource
+					);
+				},
+				{ expectedSource: source, expectedTarget: targetTriple },
+				{ polling: 250, timeout: runTimeoutMs }
+			);
+		} catch (error) {
 			const summary = await readProbeSummary(
 				page,
 				activeState,
@@ -334,7 +368,7 @@ export async function runRustBrowserProbe({
 				browserUrl
 			);
 			throw new Error(
-				`rust browser probe could not write editor contents\n${JSON.stringify(summary, null, 2)}`
+				`rust browser probe could not write editor contents: ${error instanceof Error ? error.message : String(error)}\n${JSON.stringify(summary, null, 2)}`
 			);
 		}
 		const logToggle = page.locator('#log-toggle');
@@ -349,6 +383,12 @@ export async function runRustBrowserProbe({
 				.catch(() => '')) || '';
 		const initialFinishedCount = (initialTranscript.match(/Process finished after/g) || [])
 			.length;
+		const editorSource = await page.evaluate(() => window.__wasmIdleDebug?.getEditorValue() || '');
+		if (editorSource !== source) {
+			throw new Error(
+				`Rust editor source changed after ${targetTriple} selection settled`
+			);
+		}
 		await page.locator('button.action-button--run').first().click();
 		await page.waitForFunction(
 			() => typeof window.__wasmIdleDebug?.writeTerminalInput === 'function'

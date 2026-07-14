@@ -8,7 +8,7 @@ import {
 	syncCanonicalEmscriptenLldAssets,
 	validateSharedEmscriptenLldAssets
 } from '@seo-rii/wasm-llvm/runtime/emscripten-lld';
-import { validateRustLlvmProfile } from '@seo-rii/wasm-llvm/runtime/rust';
+import * as rustRuntimeContract from '@seo-rii/wasm-llvm/runtime/rust';
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const THIS_DIR = path.dirname(THIS_FILE);
@@ -212,11 +212,61 @@ export async function syncWasmRustDist(options = {}) {
 	if (!entryModuleStats?.isFile()) {
 		throw new Error(`wasm-rust dist entry was not found at ${entryModulePath}.`);
 	}
-	const rustLlvmProfile = await validateRustLlvmProfile(sourceDir);
-	const hasSharedLldAssets = await validateSharedEmscriptenLldAssets({
-		sourceAssetDir: rustLlvmProfile.llvmAssetDir,
-		sharedAssetDir: canonicalLldDir
-	});
+	const manifestPath = path.join(sourceDir, 'runtime', 'runtime-manifest.v3.json');
+	const runtimeManifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+	const runtimeTargets = Object.entries(runtimeManifest.targets || {});
+	const integratedRuntime =
+		runtimeTargets.length > 0 &&
+		runtimeTargets.every(([, target]) => target?.compile?.kind?.startsWith('integrated-rustc'));
+	let rustRuntimeProfile;
+	if (integratedRuntime) {
+		if (
+			runtimeManifest.manifestVersion !== 3 ||
+			runtimeManifest.version !== 'rust-1.99.0-browser-integrated-v1' ||
+			runtimeManifest.compiler?.rustcWasm !== 'rustc/rustc.wasm.gz' ||
+			runtimeManifest.producer?.id !== '@seo-rii/wasm-llvm/rust-browser' ||
+			!runtimeManifest.producer?.manifestSha256?.match(/^[0-9a-f]{64}$/)
+		) {
+			throw new Error('wasm-rust integrated producer manifest is invalid');
+		}
+		for (const [target, config] of runtimeTargets) {
+			if (!config.sysrootPack?.asset || !config.sysrootPack.index) {
+				throw new Error(`wasm-rust integrated sysroot pack is missing for ${target}`);
+			}
+			for (const relativePath of [config.sysrootPack.asset, config.sysrootPack.index]) {
+				const fileStats = await stat(path.join(sourceDir, 'runtime', relativePath)).catch(
+					() => null
+				);
+				if (!fileStats?.isFile()) {
+					throw new Error(`wasm-rust integrated asset was not found: ${relativePath}`);
+				}
+			}
+		}
+		const rustcStats = await stat(
+			path.join(sourceDir, 'runtime', runtimeManifest.compiler.rustcWasm)
+		).catch(() => null);
+		if (!rustcStats?.isFile()) {
+			throw new Error(`wasm-rust integrated rustc asset was not found`);
+		}
+		rustRuntimeProfile = {
+			profile: { id: 'rustc-integrated-llvm', version: 1 },
+			manifestPath,
+			llvmAssetDir: null,
+			hasEmscriptenLld: false
+		};
+	} else {
+		const validateRuntimeProfile =
+			rustRuntimeContract.validateRustRuntimeProfile ||
+			rustRuntimeContract.validateRustLlvmProfile;
+		rustRuntimeProfile = await validateRuntimeProfile(sourceDir);
+	}
+	const hasSharedLldAssets =
+		rustRuntimeProfile.hasEmscriptenLld && rustRuntimeProfile.llvmAssetDir
+			? await validateSharedEmscriptenLldAssets({
+					sourceAssetDir: rustRuntimeProfile.llvmAssetDir,
+					sharedAssetDir: canonicalLldDir
+				})
+			: false;
 	if (hasSharedLldAssets) {
 		await syncCanonicalEmscriptenLldAssets({
 			canonicalAssetDir: canonicalLldDir,

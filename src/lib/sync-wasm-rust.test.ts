@@ -232,6 +232,60 @@ describe('syncWasmRustDist', () => {
 		await expect(readFile(path.join(targetDir, 'stale.txt'), 'utf8')).rejects.toThrow();
 	});
 
+	it('syncs an integrated producer runtime without shared LLVM assets', async () => {
+		const sourceDir = await makeTempDir();
+		const targetDir = await makeTempDir();
+		const versionModulePath = path.join(await makeTempDir(), 'wasmRustVersion.ts');
+		const sharedLldDir = await makeTempDir();
+
+		await writeFixtureFile(sourceDir, 'index.js', 'export default "integrated";\n');
+		await writeFixtureFile(
+			sourceDir,
+			'runtime/runtime-manifest.v3.json',
+			JSON.stringify({
+				manifestVersion: 3,
+				version: 'rust-1.99.0-browser-integrated-v1',
+				producer: {
+					id: '@seo-rii/wasm-llvm/rust-browser',
+					manifestSha256: 'a'.repeat(64),
+					runner: 'container'
+				},
+				compiler: { rustcWasm: 'rustc/rustc.wasm.gz' },
+				targets: {
+					'wasm32-wasip1': {
+						sysrootPack: {
+							asset: 'packs/sysroot/wasm32-wasip1.pack.gz',
+							index: 'packs/sysroot/wasm32-wasip1.index.json.gz'
+						},
+						compile: { kind: 'integrated-rustc' }
+					}
+				}
+			})
+		);
+		await writeFixtureFile(sourceDir, 'runtime/rustc/rustc.wasm.gz', 'rustc');
+		await writeFixtureFile(sourceDir, 'runtime/packs/sysroot/wasm32-wasip1.pack.gz', 'pack');
+		await writeFixtureFile(
+			sourceDir,
+			'runtime/packs/sysroot/wasm32-wasip1.index.json.gz',
+			'index'
+		);
+
+		await syncWasmRustDist({
+			sourceDir,
+			targetDir,
+			versionModulePath,
+			sharedLldDir
+		});
+
+		await expect(
+			readFile(path.join(targetDir, 'runtime/rustc/rustc.wasm.gz'), 'utf8')
+		).resolves.toBe('rustc');
+		await expect(
+			readFile(path.join(targetDir, 'runtime/llvm/llc.js'), 'utf8')
+		).rejects.toThrow();
+		await expect(readFile(path.join(sharedLldDir, 'lld.js'), 'utf8')).rejects.toThrow();
+	});
+
 	it('fails with a build hint when the wasm-rust dist directory does not exist', async () => {
 		const targetDir = await makeTempDir();
 		const sourceDir = path.join(await makeTempDir(), 'missing-dist');
