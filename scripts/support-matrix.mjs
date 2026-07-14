@@ -874,15 +874,22 @@ const runtimeDetailsByLanguage = new Map([
 		{
 			packageBase:
 				`${workspacePackage('runtimes/wasm-rust')} / ` +
-				manifestValue('static/wasm-rust/runtime/runtime-manifest.v3.json', ['version']),
-			execution: `default target ${code('wasm32-wasip1')}; selectable ${codeList([
-				'wasm32-wasip1',
-				'wasm32-wasip2',
-				'wasm32-wasip3'
-			])}; supports ${code('stdin')} and ${code('programArgs')}`,
+				`${manifestValue('static/wasm-rust/runtime/runtime-manifest.v3.json', ['version'])} + ` +
+				`integrated LLVM/LLD 22.1.8 from ${code('@seo-rii/wasm-llvm')} producer`,
+			execution:
+				`browser host ${code('wasm32-wasip1-threads')}; ` +
+				`${code('rustc -Zthreads=1 -Zcodegen-backend=llvm --crate-type=bin --edition=2024 -Cpanic=abort -Ccodegen-units=1 --emit=link')}; ` +
+				`default target ${code('wasm32-wasip1')}, selectable ${codeList([
+					'wasm32-wasip1',
+					'wasm32-wasip2',
+					'wasm32-wasip3'
+				])}; Preview 1 emits core Wasm and Preview 2/3 are component-encoded; ` +
+				`supports ${code('stdin')} and ${code('programArgs')}`,
 			customization:
 				`${code('runtimeAssets.rust.compilerUrl')} or ${code('PUBLIC_WASM_RUST_COMPILER_URL')}; ` +
-				`${code('rootUrl')}, ${code('rustTargetTriple')}, ${code('programArgs')}`
+				`${code('rootUrl')}, ${code('rustTargetTriple')}, ${code('programArgs')}; ` +
+				`compiler requests accept ${code('edition')}, ${code('crateType')}, ${code('extendedTimeout')}, ${code('log')}, and ${code('onProgress')}; ` +
+				`runtime manifest controls compiler memory, timeout, and shared workspace size`
 		}
 	],
 	[
