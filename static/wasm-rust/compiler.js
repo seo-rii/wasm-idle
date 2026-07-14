@@ -5,6 +5,7 @@ import { preloadBrowserRustRuntime } from './compiler-preload.js';
 import { loadBundledRuntimeContext } from './compiler-runtime.js';
 import { createModuleWorker } from './module-worker.js';
 import { classifyRetryableFailureKind } from './retryable-failure-kind.js';
+import { isIntegratedCompilerOutput } from './runtime-manifest.js';
 import { readMirroredBitcode } from './rustc-runtime.js';
 import { readWorkerFailure, WORKER_STATUS_BUFFER_BYTES } from './worker-status.js';
 export { preloadBrowserRustRuntime };
@@ -94,8 +95,7 @@ export async function compileRust(request, dependencies = {}) {
                             payload.bytesTotal;
             }
             else {
-                percent =
-                    startPercent + ((endPercent - startPercent) * safeCompleted) / safeTotal;
+                percent = startPercent + ((endPercent - startPercent) * safeCompleted) / safeTotal;
             }
             percent = Math.min(99, Math.max(lastProgressPercent, percent));
         }
@@ -129,7 +129,14 @@ export async function compileRust(request, dependencies = {}) {
     });
     try {
         const { manifest, targetConfig, versionedModuleBaseUrl, versionedRuntimeBaseUrl } = await loadBundledRuntimeContext(dependencies.loadManifest, request.targetTriple);
-        const compileTimeoutMs = request.prepare
+        const integratedCompilerOutput = isIntegratedCompilerOutput(targetConfig.compile);
+        const mirroredOutputName = integratedCompilerOutput
+            ? 'linked WebAssembly artifact'
+            : 'LLVM bitcode';
+        const outputFinalizationName = integratedCompilerOutput
+            ? 'integrated rustc output finalization'
+            : 'llvm-wasm link';
+        const compileTimeoutMs = request.extendedTimeout || request.prepare
             ? Math.max(manifest.compiler.compileTimeoutMs, 120_000)
             : manifest.compiler.compileTimeoutMs;
         emitCompileProgress('manifest', 1, {
@@ -139,7 +146,7 @@ export async function compileRust(request, dependencies = {}) {
         });
         recordPersistentCompileLog(`[wasm-rust] manifest loaded target=${targetConfig.targetTriple} timeout=${compileTimeoutMs}ms idle=${manifest.compiler.artifactIdleMs}ms memory=${manifest.compiler.rustcMemory.initialPages}/${manifest.compiler.rustcMemory.maximumPages}`);
         const helperThreadFailureGraceMs = Math.max(1_000, Math.min(4_000, manifest.compiler.artifactIdleMs * 2));
-        let lastFailure = makeFailure('browser rustc failed before emitting LLVM bitcode');
+        let lastFailure = makeFailure(`browser rustc failed before emitting ${mirroredOutputName}`);
         const { onProgress: _ignoredOnProgress, ...workerRequest } = request;
         for (let attempt = 1; attempt <= maxBrowserAttempts; attempt += 1) {
             const attemptCompileLogs = [];
@@ -151,9 +158,9 @@ export async function compileRust(request, dependencies = {}) {
             };
             const workerUrl = resolveVersionedAssetUrl(versionedModuleBaseUrl, './compiler-worker.js');
             workerUrl.searchParams.set('attempt', String(attempt));
-            const worker = (dependencies.createWorker ||
-                ((url) => createModuleWorker(url)))(workerUrl);
+            const worker = (dependencies.createWorker || ((url) => createModuleWorker(url)))(workerUrl);
             const sharedBitcodeBuffer = new SharedArrayBuffer(16 + manifest.compiler.workerSharedOutputBytes);
+            const sharedWorkspaceBuffer = new SharedArrayBuffer(manifest.compiler.workerSharedWorkspaceBytes);
             const sharedStatusBuffer = new SharedArrayBuffer(WORKER_STATUS_BUFFER_BYTES);
             const workerResult = new Promise((resolve, reject) => {
                 const handleMessage = (event) => {
@@ -183,13 +190,14 @@ export async function compileRust(request, dependencies = {}) {
                 manifest,
                 request: workerRequest,
                 sharedBitcodeBuffer,
+                sharedWorkspaceBuffer,
                 sharedStatusBuffer
             });
             recordAttemptCompileLog(`[wasm-rust] compile worker started attempt=${attempt}/${maxBrowserAttempts}`);
             emitCompileProgress('await-bitcode', attempt, {
                 completed: 0,
                 total: 1,
-                message: `waiting for mirrored LLVM bitcode attempt ${attempt}/${maxBrowserAttempts}`
+                message: `waiting for mirrored ${mirroredOutputName} attempt ${attempt}/${maxBrowserAttempts}`
             });
             const deadline = now() + compileTimeoutMs;
             let lastSequence = 0;
@@ -226,7 +234,9 @@ export async function compileRust(request, dependencies = {}) {
                         if (shouldDeferWorkerFailure) {
                             deferredWorkerError = raced.message;
                             pendingHelperThreadFailure =
-                                raced.message.stderr || raced.message.message || pendingHelperThreadFailure;
+                                raced.message.stderr ||
+                                    raced.message.message ||
+                                    pendingHelperThreadFailure;
                             pendingHelperThreadFailureObservedAt = now();
                             continue;
                         }
@@ -249,7 +259,8 @@ export async function compileRust(request, dependencies = {}) {
                     pendingHelperThreadFailureObservedAt = now();
                 }
                 if (mirrored.length === 0 && pendingHelperThreadFailure) {
-                    if (now() - pendingHelperThreadFailureObservedAt >= helperThreadFailureGraceMs) {
+                    if (now() - pendingHelperThreadFailureObservedAt >=
+                        helperThreadFailureGraceMs) {
                         if (deferredWorkerError) {
                             settledMessage = deferredWorkerError;
                             deferredWorkerError = null;
@@ -272,22 +283,25 @@ export async function compileRust(request, dependencies = {}) {
                     recordAttemptCompileLog(`[wasm-rust] mirrored artifact updated seq=${mirrored.writeSequence} bytes=${mirrored.length} overflowed=${mirrored.overflowed}`);
                     continue;
                 }
-                if (mirrored.length > 0 && now() - lastSequenceChange >= manifest.compiler.artifactIdleMs) {
+                if (mirrored.length > 0 &&
+                    now() - lastSequenceChange >= manifest.compiler.artifactIdleMs) {
                     worker.terminate();
                     if (mirrored.overflowed) {
-                        attemptResult = makeFailure('wasm-rust mirrored bitcode buffer overflowed before backend linking');
+                        attemptResult = makeFailure(`wasm-rust mirrored output buffer overflowed before ${outputFinalizationName}`);
                         break;
                     }
-                    recordAttemptCompileLog('[wasm-rust] mirrored bitcode settled; linking through llvm-wasm');
+                    recordAttemptCompileLog(integratedCompilerOutput
+                        ? '[wasm-rust] mirrored linked WebAssembly artifact settled; finalizing integrated rustc output'
+                        : '[wasm-rust] mirrored bitcode settled; linking through llvm-wasm');
                     emitCompileProgress('await-bitcode', attempt, {
                         completed: 1,
                         total: 1,
-                        message: 'mirrored LLVM bitcode ready'
+                        message: `mirrored ${mirroredOutputName} ready`
                     });
                     emitCompileProgress('link', attempt, {
                         completed: 0,
                         total: 1,
-                        message: 'linking mirrored LLVM bitcode'
+                        message: `running ${outputFinalizationName}`
                     });
                     let artifact;
                     try {
@@ -296,8 +310,8 @@ export async function compileRust(request, dependencies = {}) {
                         });
                     }
                     catch (error) {
-                        recordAttemptCompileLog(`[wasm-rust] llvm-wasm link failed after mirrored bitcode: ${error instanceof Error ? error.message : String(error)}`, 'error');
-                        attemptResult = makeFailure(`browser rustc emitted LLVM bitcode but llvm-wasm link failed: ${error instanceof Error ? error.message : String(error)}`);
+                        recordAttemptCompileLog(`[wasm-rust] ${outputFinalizationName} failed after mirrored output: ${error instanceof Error ? error.message : String(error)}`, 'error');
+                        attemptResult = makeFailure(`browser rustc emitted ${mirroredOutputName} but ${outputFinalizationName} failed: ${error instanceof Error ? error.message : String(error)}`);
                         break;
                     }
                     flushAttemptCompileLogs(attemptCompileLogs);
@@ -322,16 +336,16 @@ export async function compileRust(request, dependencies = {}) {
                 worker.terminate();
                 const mirrored = readMirroredBitcode(sharedBitcodeBuffer);
                 if (mirrored.length > 0 && !mirrored.overflowed) {
-                    recordAttemptCompileLog('[wasm-rust] compile timeout reached after mirrored bitcode appeared; proceeding to llvm-wasm link', 'debug');
+                    recordAttemptCompileLog(`[wasm-rust] compile timeout reached after mirrored ${mirroredOutputName} appeared; proceeding to ${outputFinalizationName}`, 'debug');
                     emitCompileProgress('await-bitcode', attempt, {
                         completed: 1,
                         total: 1,
-                        message: 'mirrored LLVM bitcode ready after timeout'
+                        message: `mirrored ${mirroredOutputName} ready after timeout`
                     });
                     emitCompileProgress('link', attempt, {
                         completed: 0,
                         total: 1,
-                        message: 'linking mirrored LLVM bitcode'
+                        message: `running ${outputFinalizationName}`
                     });
                     let artifact;
                     try {
@@ -340,8 +354,8 @@ export async function compileRust(request, dependencies = {}) {
                         });
                     }
                     catch (error) {
-                        recordAttemptCompileLog(`[wasm-rust] llvm-wasm link failed after timeout fallback: ${error instanceof Error ? error.message : String(error)}`, 'error');
-                        attemptResult = makeFailure(`browser rustc emitted LLVM bitcode but llvm-wasm link failed: ${error instanceof Error ? error.message : String(error)}`);
+                        recordAttemptCompileLog(`[wasm-rust] ${outputFinalizationName} failed after timeout fallback: ${error instanceof Error ? error.message : String(error)}`, 'error');
+                        attemptResult = makeFailure(`browser rustc emitted ${mirroredOutputName} but ${outputFinalizationName} failed: ${error instanceof Error ? error.message : String(error)}`);
                         break;
                     }
                     flushAttemptCompileLogs(attemptCompileLogs);
@@ -356,12 +370,12 @@ export async function compileRust(request, dependencies = {}) {
                     }, readCompileLogs(), readCompileLogRecords());
                 }
                 if (mirrored.overflowed) {
-                    attemptResult = makeFailure('wasm-rust mirrored bitcode buffer overflowed before backend linking');
+                    attemptResult = makeFailure(`wasm-rust mirrored output buffer overflowed before ${outputFinalizationName}`);
                 }
                 else {
-                    recordAttemptCompileLog('[wasm-rust] compile timed out before mirrored bitcode appeared', 'debug');
+                    recordAttemptCompileLog(`[wasm-rust] compile timed out before mirrored ${mirroredOutputName} appeared`, 'debug');
                     attemptFailureKind = 'compile-timeout';
-                    attemptResult = makeFailure('browser rustc timed out before producing LLVM bitcode');
+                    attemptResult = makeFailure(`browser rustc timed out before producing ${mirroredOutputName}`);
                 }
             }
             if (!attemptResult && settledMessage) {
@@ -369,16 +383,16 @@ export async function compileRust(request, dependencies = {}) {
                 const mirrored = readMirroredBitcode(sharedBitcodeBuffer);
                 if (settledMessage.type === 'error') {
                     if (mirrored.length > 0 && !mirrored.overflowed) {
-                        recordAttemptCompileLog('[wasm-rust] worker errored with mirrored bitcode present; linking through llvm-wasm');
+                        recordAttemptCompileLog(`[wasm-rust] worker errored with mirrored ${mirroredOutputName} present; proceeding to ${outputFinalizationName}`);
                         emitCompileProgress('await-bitcode', attempt, {
                             completed: 1,
                             total: 1,
-                            message: 'mirrored LLVM bitcode ready after worker error'
+                            message: `mirrored ${mirroredOutputName} ready after worker error`
                         });
                         emitCompileProgress('link', attempt, {
                             completed: 0,
                             total: 1,
-                            message: 'linking mirrored LLVM bitcode'
+                            message: `running ${outputFinalizationName}`
                         });
                         try {
                             const artifact = await (dependencies.linkBitcode || linkBitcodeWithLlvmWasm)(mirrored.bytes, manifest, targetConfig, versionedRuntimeBaseUrl.toString(), {
@@ -402,12 +416,12 @@ export async function compileRust(request, dependencies = {}) {
                             }, readCompileLogs(), readCompileLogRecords());
                         }
                         catch (error) {
-                            recordAttemptCompileLog(`[wasm-rust] llvm-wasm link failed after worker error: ${error instanceof Error ? error.message : String(error)}`, 'error');
-                            attemptResult = makeFailure(`browser rustc emitted LLVM bitcode but llvm-wasm link failed: ${error instanceof Error ? error.message : String(error)}`, settledMessage.diagnostics, settledMessage.stdout);
+                            recordAttemptCompileLog(`[wasm-rust] ${outputFinalizationName} failed after worker error: ${error instanceof Error ? error.message : String(error)}`, 'error');
+                            attemptResult = makeFailure(`browser rustc emitted ${mirroredOutputName} but ${outputFinalizationName} failed: ${error instanceof Error ? error.message : String(error)}`, settledMessage.diagnostics, settledMessage.stdout);
                         }
                     }
                     else if (mirrored.overflowed) {
-                        attemptResult = makeFailure('wasm-rust mirrored bitcode buffer overflowed before backend linking', undefined, settledMessage.stdout);
+                        attemptResult = makeFailure(`wasm-rust mirrored output buffer overflowed before ${outputFinalizationName}`, undefined, settledMessage.stdout);
                     }
                     else {
                         attemptFailureKind =
@@ -417,16 +431,18 @@ export async function compileRust(request, dependencies = {}) {
                     }
                 }
                 else if (mirrored.length > 0 && !mirrored.overflowed) {
-                    recordAttemptCompileLog('[wasm-rust] worker settled with mirrored bitcode; linking through llvm-wasm');
+                    recordAttemptCompileLog(integratedCompilerOutput
+                        ? '[wasm-rust] worker settled with mirrored linked WebAssembly artifact; finalizing integrated rustc output'
+                        : '[wasm-rust] worker settled with mirrored bitcode; linking through llvm-wasm');
                     emitCompileProgress('await-bitcode', attempt, {
                         completed: 1,
                         total: 1,
-                        message: 'mirrored LLVM bitcode ready after worker exit'
+                        message: `mirrored ${mirroredOutputName} ready after worker exit`
                     });
                     emitCompileProgress('link', attempt, {
                         completed: 0,
                         total: 1,
-                        message: 'linking mirrored LLVM bitcode'
+                        message: `running ${outputFinalizationName}`
                     });
                     let artifact = null;
                     try {
@@ -435,12 +451,12 @@ export async function compileRust(request, dependencies = {}) {
                         });
                     }
                     catch (error) {
-                        recordAttemptCompileLog(`[wasm-rust] llvm-wasm link failed after worker settled: ${error instanceof Error ? error.message : String(error)}`, 'error');
-                        attemptResult = makeFailure(`browser rustc emitted LLVM bitcode but llvm-wasm link failed: ${error instanceof Error ? error.message : String(error)}`, settledMessage.diagnostics, settledMessage.stdout);
+                        recordAttemptCompileLog(`[wasm-rust] ${outputFinalizationName} failed after worker settled: ${error instanceof Error ? error.message : String(error)}`, 'error');
+                        attemptResult = makeFailure(`browser rustc emitted ${mirroredOutputName} but ${outputFinalizationName} failed: ${error instanceof Error ? error.message : String(error)}`, settledMessage.diagnostics, settledMessage.stdout);
                     }
                     if (!attemptResult) {
                         if (!artifact) {
-                            attemptResult = makeFailure('browser rustc emitted LLVM bitcode but llvm-wasm returned no wasm artifact', settledMessage.diagnostics, settledMessage.stdout);
+                            attemptResult = makeFailure(`browser rustc emitted ${mirroredOutputName} but ${outputFinalizationName} returned no wasm artifact`, settledMessage.diagnostics, settledMessage.stdout);
                             continue;
                         }
                         flushAttemptCompileLogs(attemptCompileLogs);
@@ -462,14 +478,15 @@ export async function compileRust(request, dependencies = {}) {
                     }
                 }
                 else if (mirrored.overflowed) {
-                    attemptResult = makeFailure('wasm-rust mirrored bitcode buffer overflowed before backend linking', undefined, settledMessage.stdout);
+                    attemptResult = makeFailure(`wasm-rust mirrored output buffer overflowed before ${outputFinalizationName}`, undefined, settledMessage.stdout);
                 }
                 else {
-                    attemptResult = makeFailure(settledMessage.stderr || 'browser rustc failed before emitting LLVM bitcode', settledMessage.diagnostics, settledMessage.stdout);
+                    attemptResult = makeFailure(settledMessage.stderr ||
+                        `browser rustc failed before emitting ${mirroredOutputName}`, settledMessage.diagnostics, settledMessage.stdout);
                 }
             }
             if (!attemptResult) {
-                attemptResult = makeFailure('browser rustc failed before emitting LLVM bitcode');
+                attemptResult = makeFailure(`browser rustc failed before emitting ${mirroredOutputName}`);
             }
             lastFailure = attemptResult;
             const attemptStderr = attemptResult.stderr || '';

@@ -1,10 +1,10 @@
-"use jco";
+import { fetchRuntimeAssetBytes } from '../../../runtime-asset.js';
+"use components";
 import { environment, exit as exit$1, stderr, stdin, stdout, terminalInput, terminalOutput, terminalStderr, terminalStdin, terminalStdout } from '../../preview2-shim/lib/browser/cli.js';
 import { preopens, types } from '../../preview2-shim/lib/browser/filesystem.js';
 import { error, streams } from '../../preview2-shim/lib/browser/io.js';
 import { random } from '../../preview2-shim/lib/browser/random.js';
 const { getEnvironment } = environment;
-getEnvironment._isHostProvided = true;
 
 if (getEnvironment=== undefined) {
   const err = new Error("unexpectedly undefined local import 'getEnvironment', was 'getEnvironment' available at instantiation?");
@@ -12,8 +12,8 @@ if (getEnvironment=== undefined) {
   throw err;
 }
 
+getEnvironment._isHostProvided = true;
 const { exit } = exit$1;
-exit._isHostProvided = true;
 
 if (exit=== undefined) {
   const err = new Error("unexpectedly undefined local import 'exit', was 'exit' available at instantiation?");
@@ -21,8 +21,8 @@ if (exit=== undefined) {
   throw err;
 }
 
+exit._isHostProvided = true;
 const { getStderr } = stderr;
-getStderr._isHostProvided = true;
 
 if (getStderr=== undefined) {
   const err = new Error("unexpectedly undefined local import 'getStderr', was 'getStderr' available at instantiation?");
@@ -30,8 +30,8 @@ if (getStderr=== undefined) {
   throw err;
 }
 
+getStderr._isHostProvided = true;
 const { getStdin } = stdin;
-getStdin._isHostProvided = true;
 
 if (getStdin=== undefined) {
   const err = new Error("unexpectedly undefined local import 'getStdin', was 'getStdin' available at instantiation?");
@@ -39,8 +39,8 @@ if (getStdin=== undefined) {
   throw err;
 }
 
+getStdin._isHostProvided = true;
 const { getStdout } = stdout;
-getStdout._isHostProvided = true;
 
 if (getStdout=== undefined) {
   const err = new Error("unexpectedly undefined local import 'getStdout', was 'getStdout' available at instantiation?");
@@ -48,8 +48,8 @@ if (getStdout=== undefined) {
   throw err;
 }
 
+getStdout._isHostProvided = true;
 const { TerminalInput } = terminalInput;
-TerminalInput._isHostProvided = true;
 
 if (TerminalInput=== undefined) {
   const err = new Error("unexpectedly undefined local import 'TerminalInput', was 'TerminalInput' available at instantiation?");
@@ -57,8 +57,8 @@ if (TerminalInput=== undefined) {
   throw err;
 }
 
+TerminalInput._isHostProvided = true;
 const { TerminalOutput } = terminalOutput;
-TerminalOutput._isHostProvided = true;
 
 if (TerminalOutput=== undefined) {
   const err = new Error("unexpectedly undefined local import 'TerminalOutput', was 'TerminalOutput' available at instantiation?");
@@ -66,8 +66,8 @@ if (TerminalOutput=== undefined) {
   throw err;
 }
 
+TerminalOutput._isHostProvided = true;
 const { getTerminalStderr } = terminalStderr;
-getTerminalStderr._isHostProvided = true;
 
 if (getTerminalStderr=== undefined) {
   const err = new Error("unexpectedly undefined local import 'getTerminalStderr', was 'getTerminalStderr' available at instantiation?");
@@ -75,8 +75,8 @@ if (getTerminalStderr=== undefined) {
   throw err;
 }
 
+getTerminalStderr._isHostProvided = true;
 const { getTerminalStdin } = terminalStdin;
-getTerminalStdin._isHostProvided = true;
 
 if (getTerminalStdin=== undefined) {
   const err = new Error("unexpectedly undefined local import 'getTerminalStdin', was 'getTerminalStdin' available at instantiation?");
@@ -84,8 +84,8 @@ if (getTerminalStdin=== undefined) {
   throw err;
 }
 
+getTerminalStdin._isHostProvided = true;
 const { getTerminalStdout } = terminalStdout;
-getTerminalStdout._isHostProvided = true;
 
 if (getTerminalStdout=== undefined) {
   const err = new Error("unexpectedly undefined local import 'getTerminalStdout', was 'getTerminalStdout' available at instantiation?");
@@ -93,8 +93,8 @@ if (getTerminalStdout=== undefined) {
   throw err;
 }
 
+getTerminalStdout._isHostProvided = true;
 const { getDirectories } = preopens;
-getDirectories._isHostProvided = true;
 
 if (getDirectories=== undefined) {
   const err = new Error("unexpectedly undefined local import 'getDirectories', was 'getDirectories' available at instantiation?");
@@ -102,10 +102,10 @@ if (getDirectories=== undefined) {
   throw err;
 }
 
+getDirectories._isHostProvided = true;
 const { Descriptor,
   DirectoryEntryStream,
   filesystemErrorCode } = types;
-Descriptor._isHostProvided = true;
 
 if (Descriptor=== undefined) {
   const err = new Error("unexpectedly undefined local import 'Descriptor', was 'Descriptor' available at instantiation?");
@@ -113,7 +113,7 @@ if (Descriptor=== undefined) {
   throw err;
 }
 
-DirectoryEntryStream._isHostProvided = true;
+Descriptor._isHostProvided = true;
 
 if (DirectoryEntryStream=== undefined) {
   const err = new Error("unexpectedly undefined local import 'DirectoryEntryStream', was 'DirectoryEntryStream' available at instantiation?");
@@ -121,7 +121,7 @@ if (DirectoryEntryStream=== undefined) {
   throw err;
 }
 
-filesystemErrorCode._isHostProvided = true;
+DirectoryEntryStream._isHostProvided = true;
 
 if (filesystemErrorCode=== undefined) {
   const err = new Error("unexpectedly undefined local import 'filesystemErrorCode', was 'filesystemErrorCode' available at instantiation?");
@@ -129,8 +129,8 @@ if (filesystemErrorCode=== undefined) {
   throw err;
 }
 
+filesystemErrorCode._isHostProvided = true;
 const { Error: Error$1 } = error;
-Error$1._isHostProvided = true;
 
 if (Error$1=== undefined) {
   const err = new Error("unexpectedly undefined local import 'Error$1', was 'Error' available at instantiation?");
@@ -138,9 +138,9 @@ if (Error$1=== undefined) {
   throw err;
 }
 
+Error$1._isHostProvided = true;
 const { InputStream,
   OutputStream } = streams;
-InputStream._isHostProvided = true;
 
 if (InputStream=== undefined) {
   const err = new Error("unexpectedly undefined local import 'InputStream', was 'InputStream' available at instantiation?");
@@ -148,7 +148,7 @@ if (InputStream=== undefined) {
   throw err;
 }
 
-OutputStream._isHostProvided = true;
+InputStream._isHostProvided = true;
 
 if (OutputStream=== undefined) {
   const err = new Error("unexpectedly undefined local import 'OutputStream', was 'OutputStream' available at instantiation?");
@@ -156,8 +156,8 @@ if (OutputStream=== undefined) {
   throw err;
 }
 
+OutputStream._isHostProvided = true;
 const { getRandomBytes } = random;
-getRandomBytes._isHostProvided = true;
 
 if (getRandomBytes=== undefined) {
   const err = new Error("unexpectedly undefined local import 'getRandomBytes', was 'getRandomBytes' available at instantiation?");
@@ -165,6 +165,7 @@ if (getRandomBytes=== undefined) {
   throw err;
 }
 
+getRandomBytes._isHostProvided = true;
 
 function promiseWithResolvers() {
   if (Promise.withResolvers) {
@@ -179,6 +180,9 @@ function promiseWithResolvers() {
     return { promise, resolve, reject };
   }
 }
+const symbolDispose = Symbol.dispose || Symbol.for('dispose');
+const symbolAsyncIterator = Symbol.asyncIterator;
+const symbolIterator = Symbol.iterator;
 
 const _debugLog = (...args) => {
   if (!globalThis?.process?.env?.JCO_DEBUG) { return; }
@@ -209,7 +213,7 @@ function _withGlobalCurrentTaskMeta(args) {
   if (args.componentIdx === undefined) { throw new TypeError('missing component idx'); }
   if (!args.fn) { throw new TypeError('missing fn'); }
   const { taskID, componentIdx, fn } = args;
-  
+
   try {
     CURRENT_TASK_META[componentIdx] = { taskID, componentIdx };
     return fn();
@@ -231,7 +235,7 @@ async function _withGlobalCurrentTaskMetaAsync(args) {
   if (args.componentIdx === undefined) { throw new TypeError('missing component idx'); }
   if (!args.fn) { throw new TypeError('missing fn'); }
   const { taskID, componentIdx, fn } = args;
-  
+
   // If there is already an async task executing, we must wait for it
   // to complete before we can can run the closure we were given
   //
@@ -245,12 +249,12 @@ async function _withGlobalCurrentTaskMetaAsync(args) {
       await promise;
       current = CURRENT_TASK_META[componentIdx];
     }
-    
+
     // Since we've just waited for the component to not be locked, re-lock
     // exclusivity so we can run the fn below (likely a callee/callback)
     cstate.exclusiveLock();
   }
-  
+
   try {
     CURRENT_TASK_META[componentIdx] = { taskID, componentIdx };
     return await fn();
@@ -271,31 +275,31 @@ async function _clearCurrentTask(args) {
   if (args.taskID === undefined) { throw new TypeError('missing task ID'); }
   if (args.componentIdx === undefined) { throw new TypeError('missing component idx'); }
   const { taskID, componentIdx } = args;
-  
+
   const meta = CURRENT_TASK_META[componentIdx];
-  if (!meta) { throw new Error(`missing current task meta for component idx [${componentIdx}]`); }
-  
+  if (!meta) { throw new Error(`missing current task meta for component idx [${componentIdx}]n`); }
+
   if (meta.taskID !== taskID) {
     throw new Error(`task ID [${meta.taskID}] != requested ID [${taskID}]`);
   }
   if (meta.componentIdx !== componentIdx) {
     throw new Error(`component idx [${meta.componentIdx}] != requested idx [${componentIdx}]`);
   }
-  
+
   CURRENT_TASK_META[componentIdx] = null;
 }
 
 function lookupMemoriesForComponent(args) {
   const { componentIdx } = args ?? {};
   if (args.componentIdx === undefined) { throw new TypeError("missing component idx"); }
-  
+
   const metas = GLOBAL_COMPONENT_MEMORY_MAP.get(componentIdx);
   if (!metas) { return []; }
-  
+
   if (args.memoryIdx === undefined) {
     return Object.values(metas);
   }
-  
+
   const meta = metas[args.memoryIdx];
   return meta?.memory;
 }
@@ -309,20 +313,20 @@ function registerGlobalMemoryForComponent(args) {
     inner = {};
     GLOBAL_COMPONENT_MEMORY_MAP.set(componentIdx, inner);
   }
-  
+
   inner[memoryIdx] = { memory, memoryIdx, componentIdx };
 }
 
 class RepTable {
   #data = [0, null];
   #target;
-  
+
   constructor(args) {
     this.target = args?.target;
   }
-  
+
   data() { return this.#data; }
-  
+
   insert(val) {
     _debugLog('[RepTable#insert()] args', { val, target: this.target });
     const freeIdx = this.#data[0];
@@ -340,38 +344,38 @@ class RepTable {
     _debugLog('[RepTable#insert()] inserted', { val, target: this.target, rep: freeIdx });
     return freeIdx;
   }
-  
+
   get(rep) {
     _debugLog('[RepTable#get()] args', { rep, target: this.target });
     if (rep === 0) { throw new Error('invalid resource rep during get, (cannot be 0)'); }
-    
+
     const baseIdx = rep << 1;
     const val = this.#data[baseIdx];
     return val;
   }
-  
+
   contains(rep) {
     _debugLog('[RepTable#contains()] args', { rep, target: this.target });
     if (rep === 0) { throw new Error('invalid resource rep during contains, (cannot be 0)'); }
-    
+
     const baseIdx = rep << 1;
     return !!this.#data[baseIdx];
   }
-  
+
   remove(rep) {
     _debugLog('[RepTable#remove()] args', { rep, target: this.target });
     if (rep === 0) { throw new Error('invalid resource rep during remove, (cannot be 0)'); }
     if (this.#data.length === 2) { throw new Error('invalid'); }
-    
+
     const baseIdx = rep << 1;
     const val = this.#data[baseIdx];
-    
+
     this.#data[baseIdx] = this.#data[0];
     this.#data[0] = rep;
-    
+
     return val;
   }
-  
+
   clear() {
     _debugLog('[RepTable#clear()] args', { rep, target: this.target });
     this.#data = [0, null];
@@ -381,21 +385,62 @@ const _coinFlip = () => { return Math.random() > 0.5; };
 let SCOPE_ID = 0;
 const I32_MIN = -2_147_483_648;
 const I32_MAX = 2_147_483_647;
+
+function _isValidNumericPrimitive(ty, v) {
+  if (v === undefined || v === null) { return false; }
+  switch (ty) {
+    case 'bool':
+    return v === 0 || v === 1;
+    break;
+    case 'u8':
+    return v >= 0 && v <= 255;
+    break;
+    case 's8':
+    return v >= -128 && v <= 127;
+    break;
+    case 'u16':
+    return v >= 0 && v <= 65535;
+    break;
+    case 's16':
+    return v >= -32768 && v <= 32767;
+    case 'u32':
+    return v >= 0 && v <= 4_294_967_295;
+    case 's32':
+    return v >= -2_147_483_648 && v <= 2_147_483_647;
+    case 'u64':
+    return typeof v === 'bigint' && v >= 0 && v <= 18_446_744_073_709_551_615n;
+    case 's64':
+    return typeof v === 'bigint' && v >= -9223372036854775808n && v <= 9223372036854775807n;
+    break;
+    case 'f32':
+    case 'f64': return typeof v === 'number';
+    default:
+    return false;
+  }
+  return true;
+}
+
+function _requireValidNumericPrimitive(ty, v) {
+  if (v === undefined  || v === null || !_isValidNumericPrimitive(ty, v)) {
+    throw new TypeError(`invalid ${ty} value [${v}]`);
+  }
+  return true;
+}
 const _typeCheckValidI32 = (n) => typeof n === 'number' && n >= I32_MIN && n <= I32_MAX;
 
 const _typeCheckAsyncFn= (f) => {
   return f instanceof ASYNC_FN_CTOR;
 };
 
-const ASYNC_FN_CTOR = (async () => {}).constructor;
+let RESOURCE_CALL_BORROWS = [];const ASYNC_FN_CTOR = (async () => {}).constructor;
 
 function clearCurrentTask(componentIdx, taskID) {
   _debugLog('[clearCurrentTask()] args', { componentIdx, taskID });
-  
+
   if (componentIdx === undefined || componentIdx === null) {
     throw new Error('missing/invalid component instance index while ending current task');
   }
-  
+
   const tasks = ASYNC_TASKS_BY_COMPONENT_IDX.get(componentIdx);
   if (!tasks || !Array.isArray(tasks)) {
     throw new Error('missing/invalid tasks for component instance while ending task');
@@ -403,7 +448,7 @@ function clearCurrentTask(componentIdx, taskID) {
   if (tasks.length == 0) {
     throw new Error(`no current tasks for component instance [${componentIdx}] while ending task`);
   }
-  
+
   if (taskID !== undefined) {
     const last = tasks[tasks.length - 1];
     if (last.id !== taskID) {
@@ -411,10 +456,10 @@ function clearCurrentTask(componentIdx, taskID) {
       return;
     }
   }
-  
+
   ASYNC_CURRENT_TASK_IDS.pop();
   ASYNC_CURRENT_COMPONENT_IDXS.pop();
-  
+
   const taskMeta = tasks.pop();
   return taskMeta.task;
 }
@@ -436,7 +481,7 @@ function unpackCallbackResult(result) {
 
 class AsyncSubtask {
   static _ID = 0n;
-  
+
   static State = {
     STARTING: 0,
     STARTED: 1,
@@ -444,86 +489,86 @@ class AsyncSubtask {
     CANCELLED_BEFORE_STARTED: 3,
     CANCELLED_BEFORE_RETURNED: 4,
   };
-  
+
   #id;
   #state = AsyncSubtask.State.STARTING;
   #componentIdx;
-  
+
   #parentTask;
   #childTask = null;
-  
+
   #dropped = false;
   #cancelRequested = false;
-  
+
   #memoryIdx = null;
   #lenders = null;
-  
+
   #waitable = null;
-  
+
   #callbackFn = null;
   #callbackFnName = null;
-  
+
   #postReturnFn = null;
   #onProgressFn = null;
   #pendingEventFn = null;
-  
+
   #callMetadata = {};
-  
+
   #resolved = false;
-  
+
   #onResolveHandlers = [];
   #onStartHandlers = [];
-  
+
   #result = null;
   #resultSet = false;
-  
+
   fnName;
   target;
   isAsync;
   isManualAsync;
-  
+
   constructor(args) {
     if (typeof args.componentIdx !== 'number') {
       throw new Error('invalid componentIdx for subtask creation');
     }
     this.#componentIdx = args.componentIdx;
-    
+
     this.#id = ++AsyncSubtask._ID;
     this.fnName = args.fnName;
-    
+
     if (!args.parentTask) { throw new Error('missing parent task during subtask creation'); }
     this.#parentTask = args.parentTask;
-    
+
     if (args.childTask) { this.#childTask = args.childTask; }
-    
+
     if (args.memoryIdx) { this.#memoryIdx = args.memoryIdx; }
-    
+
     if (!args.waitable) { throw new Error("missing/invalid waitable"); }
     this.#waitable = args.waitable;
-    
+
     if (args.callMetadata) { this.#callMetadata = args.callMetadata; }
-    
+
     this.#lenders = [];
     this.target = args.target;
     this.isAsync = args.isAsync;
     this.isManualAsync = args.isManualAsync;
   }
-  
+
   id() { return this.#id; }
   parentTaskID() { return this.#parentTask?.id(); }
   childTaskID() { return this.#childTask?.id(); }
   state() { return this.#state; }
-  
+
   waitable() { return this.#waitable; }
   waitableRep() { return this.#waitable.idx(); }
-  
+
   join() { return this.#waitable.join(...arguments); }
   getPendingEvent() { return this.#waitable.getPendingEvent(...arguments); }
   hasPendingEvent() { return this.#waitable.hasPendingEvent(...arguments); }
   setPendingEvent() { return this.#waitable.setPendingEvent(...arguments); }
-  
+
   setTarget(tgt) { this.target = tgt; }
-  
+
   getResult() {
     if (!this.#resultSet) { throw new Error("subtask result has not been set") }
     return this.#result;
@@ -533,9 +578,9 @@ class AsyncSubtask {
     this.#result = v;
     this.#resultSet = true;
   }
-  
+
   componentIdx() { return this.#componentIdx; }
-  
+
   setChildTask(t) {
     if (!t) { throw new Error('cannot set missing/invalid child task on subtask'); }
     if (this.#childTask) { throw new Error('child task is already set on subtask'); }
@@ -543,40 +588,40 @@ class AsyncSubtask {
     this.#childTask = t;
   }
   getChildTask(t) { return this.#childTask; }
-  
+
   getParentTask() { return this.#parentTask; }
-  
+
   setCallbackFn(f, name) {
     if (!f) { return; }
     if (this.#callbackFn) { throw new Error('callback fn can only be set once'); }
     this.#callbackFn = f;
     this.#callbackFnName = name;
   }
-  
+
   getCallbackFnName() {
     if (!this.#callbackFn) { return undefined; }
     return this.#callbackFn.name;
   }
-  
+
   setPostReturnFn(f) {
     if (!f) { return; }
     if (this.#postReturnFn) { throw new Error('postReturn fn can only be set once'); }
     this.#postReturnFn = f;
   }
-  
+
   setOnProgressFn(f) {
     if (this.#onProgressFn) { throw new Error('on progress fn can only be set once'); }
     this.#onProgressFn = f;
   }
-  
+
   isNotStarted() {
     return this.#state == AsyncSubtask.State.STARTING;
   }
-  
+
   registerOnStartHandler(f) {
     this.#onStartHandlers.push(f);
   }
-  
+
   onStart(args) {
     _debugLog('[AsyncSubtask#onStart()] args', {
       componentIdx: this.#componentIdx,
@@ -584,13 +629,13 @@ class AsyncSubtask {
       parentTaskID: this.parentTaskID(),
       fnName: this.fnName,
     });
-    
+
     if (this.#onProgressFn) { this.#onProgressFn(); }
-    
+
     this.#state = AsyncSubtask.State.STARTED;
-    
+
     let result;
-    
+
     // If we have been provided a helper start function as a result of
     // component fusion performed by wasmtime tooling, then we can call that helper and lifts/lowers will
     // be performed for us.
@@ -600,19 +645,19 @@ class AsyncSubtask {
     if (this.#callMetadata.startFn) {
       result = this.#callMetadata.startFn.apply(null, args?.startFnParams ?? []);
     }
-    
+
     return result;
   }
-  
-  
+
+
   registerOnResolveHandler(f) {
     this.#onResolveHandlers.push(f);
   }
-  
+
   reject(subtaskErr) {
     this.#childTask?.reject(subtaskErr);
   }
-  
+
   onResolve(subtaskValue) {
     _debugLog('[AsyncSubtask#onResolve()] args', {
       componentIdx: this.#componentIdx,
@@ -623,18 +668,18 @@ class AsyncSubtask {
       parentTaskFnName: this.#parentTask?.entryFnName(),
       fnName: this.fnName,
     });
-    
+
     if (this.#resolved) {
       throw new Error('subtask has already been resolved');
     }
-    
+
     if (this.#onProgressFn) { this.#onProgressFn(); }
-    
+
     if (subtaskValue === null) {
       if (this.#cancelRequested) {
         throw new Error('cancel was not requested, but no value present at return');
       }
-      
+
       if (this.#state === AsyncSubtask.State.STARTING) {
         this.#state = AsyncSubtask.State.CANCELLED_BEFORE_STARTED;
       } else {
@@ -649,9 +694,9 @@ class AsyncSubtask {
       }
       this.#state = AsyncSubtask.State.RETURNED;
     }
-    
+
     this.setResult(subtaskValue);
-    
+
     for (const f of this.#onResolveHandlers) {
       try {
         f(subtaskValue);
@@ -660,9 +705,9 @@ class AsyncSubtask {
         throw err;
       }
     }
-    
+
     const callMetadata = this.getCallMetadata();
-    
+
     // TODO(fix): we should be able to easily have the caller's meomry
     // to lower into here, but it's not present in PrepareCall
     const memory = callMetadata.memory ?? this.#parentTask?.getReturnMemory() ?? lookupMemoriesForComponent({ componentIdx: this.#parentTask?.componentIdx() })[0];
@@ -676,19 +721,20 @@ class AsyncSubtask {
           realloc,
           vals: [subtaskValue],
           storagePtr: resultPtr,
+          stringEncoding: callMetadata.stringEncoding,
         });
       }
     }
-    
+
     this.#resolved = true;
     this.#parentTask.removeSubtask(this);
   }
-  
+
   getStateNumber() { return this.#state; }
   isReturned() { return this.#state === AsyncSubtask.State.RETURNED; }
-  
+
   getCallMetadata() { return this.#callMetadata; }
-  
+
   isResolved() {
     if (this.#state === AsyncSubtask.State.STARTING
     || this.#state === AsyncSubtask.State.STARTED) {
@@ -701,19 +747,19 @@ class AsyncSubtask {
     }
     throw new Error('unrecognized internal Subtask state [' + this.#state + ']');
   }
-  
+
   addLender(handle) {
     _debugLog('[AsyncSubtask#addLender()] args', { handle });
     if (!Number.isNumber(handle)) { throw new Error('missing/invalid lender handle [' + handle + ']'); }
-    
+
     if (this.#lenders.length === 0 || this.isResolved()) {
       throw new Error('subtask has no lendors or has already been resolved');
     }
-    
+
     handle.lends++;
     this.#lenders.push(handle);
   }
-  
+
   deliverResolve() {
     _debugLog('[AsyncSubtask#deliverResolve()] args', {
       lenders: this.#lenders,
@@ -723,19 +769,19 @@ class AsyncSubtask {
       resolved: this.isResolved(),
       resolveDelivered: this.resolveDelivered(),
     });
-    
+
     const cannotDeliverResolve = this.resolveDelivered() || !this.isResolved();
     if (cannotDeliverResolve) {
       throw new Error('subtask cannot deliver resolution twice, and the subtask must be resolved');
     }
-    
+
     for (const lender of this.#lenders) {
       lender.lends--;
     }
-    
+
     this.#lenders = null;
   }
-  
+
   resolveDelivered() {
     _debugLog('[AsyncSubtask#resolveDelivered()] args', { });
     if (this.#lenders === null && !this.isResolved()) {
@@ -743,7 +789,7 @@ class AsyncSubtask {
     }
     return this.#lenders === null;
   }
-  
+
   drop() {
     _debugLog('[AsyncSubtask#drop()] args', {
       componentIdx: this.#componentIdx,
@@ -760,7 +806,7 @@ class AsyncSubtask {
     if (this.#waitable) { this.#waitable.drop() }
     this.#dropped = true;
   }
-  
+
   #getComponentState() {
     const state = getOrCreateAsyncState(this.#componentIdx);
     if (!state) {
@@ -768,7 +814,7 @@ class AsyncSubtask {
     }
     return state;
   }
-  
+
   getWaitableHandleIdx() {
     _debugLog('[AsyncSubtask#getWaitableHandleIdx()] args', { });
     if (!this.#waitable) { throw new Error('missing/invalid waitable'); }
@@ -798,10 +844,10 @@ resultCountOrAsync,
     resultCountOrAsync,
   });
   const argArray = [...arguments];
-  
+
   // value passed in *may* be as large as u32::MAX which may be mangled into -2
   resultCountOrAsync >>>= 0;
-  
+
   let isAsync = false;
   let hasResultPointer = false;
   if (resultCountOrAsync === 2**32 - 1) {
@@ -813,21 +859,21 @@ resultCountOrAsync,
     isAsync = true;
     hasResultPointer = true;
   }
-  
+
   const currentCallerTaskMeta = getCurrentTask(callerComponentIdx);
   if (!currentCallerTaskMeta) {
     throw new Error('invalid/missing current task for caller during prepare call');
   }
-  
+
   const currentCallerTask = currentCallerTaskMeta.task;
   if (!currentCallerTask) {
     throw new Error('unexpectedly missing task in meta for caller during prepare call');
   }
-  
+
   if (currentCallerTask.componentIdx() !== callerComponentIdx) {
     throw new Error(`task component idx [${ currentCallerTask.componentIdx() }] !== [${ callerComponentIdx }] (callee ${ calleeComponentIdx })`);
   }
-  
+
   let getCalleeParamsFn;
   let resultPtr = null;
   let directParamsArr;
@@ -839,7 +885,7 @@ resultCountOrAsync,
     directParamsArr = argArray.slice(10);
     getCalleeParamsFn = () => directParamsArr;
   }
-  
+
   let encoding;
   switch (stringEncoding) {
     case 0:
@@ -854,7 +900,7 @@ resultCountOrAsync,
     default:
     throw new Error(`unrecognized string encoding enum [${stringEncoding}]`);
   }
-  
+
   const subtask = currentCallerTask.createSubtask({
     componentIdx: callerComponentIdx,
     parentTask: currentCallerTask,
@@ -865,9 +911,10 @@ resultCountOrAsync,
       resultPtr,
       returnFn,
       startFn,
+      stringEncoding,
     }
   });
-  
+
   const [newTask, newTaskID] = createNewCurrentTask({
     componentIdx: calleeComponentIdx,
     isAsync,
@@ -885,7 +932,7 @@ resultCountOrAsync,
   newTask.setReturnMemoryIdx(memoryIdx);
   newTask.setReturnMemory(getMemoryFn);
   subtask.setChildTask(newTask);
-  
+
   newTask.subtaskMeta = {
     subtask,
     calleeComponentIdx,
@@ -894,7 +941,7 @@ resultCountOrAsync,
     stringEncoding,
     isAsync,
   };
-  
+
   _setGlobalCurrentTaskMeta({
     taskID: newTask.id(),
     componentIdx: newTask.componentIdx(),
@@ -903,21 +950,21 @@ resultCountOrAsync,
 
 function _asyncStartCall(args, callee, paramCount, resultCount, flags) {
   const componentIdx = ASYNC_CURRENT_COMPONENT_IDXS.at(-1);
-  
+
   const globalTaskMeta = _getGlobalCurrentTaskMeta(componentIdx);
   if (!globalTaskMeta) { throw new Error('missing global current task globalTaskMeta'); }
   const taskID = globalTaskMeta.taskID;
-  
+
   _debugLog('[_asyncStartCall()] args', { args, componentIdx });
   const { getCallbackFn, callbackIdx, getPostReturnFn, postReturnIdx } = args;
-  
+
   const preparedTaskMeta = getCurrentTask(componentIdx, taskID);
   if (!preparedTaskMeta) { throw new Error('unexpectedly missing current task'); }
-  
+
   const preparedTask = preparedTaskMeta.task;
   if (!preparedTask) { throw new Error('unexpectedly missing current task'); }
   if (!preparedTask.subtaskMeta) { throw new Error('missing subtask meta from prepare'); }
-  
+
   const {
     subtask,
     returnMemoryIdx,
@@ -935,39 +982,39 @@ function _asyncStartCall(args, callee, paramCount, resultCount, flags) {
   if (calleeComponentIdx !== componentIdx) {
     throw new Error("mismatched componentIdx for async start call (does not match prepare)");
   }
-  
+
   const argArray = [...arguments];
-  
+
   if (resultCount < 0 || resultCount > 1) { throw new Error('invalid/unsupported result count'); }
-  
+
   const callbackFnName = 'callback_' + callbackIdx;
   const callbackFn = getCallbackFn();
   preparedTask.setCallbackFn(callbackFn, callbackFnName);
   preparedTask.setPostReturnFn(getPostReturnFn());
-  
+
   if (resultCount < 0 || resultCount > 1) {
     throw new Error(`unsupported result count [${ resultCount }]`);
   }
-  
+
   const params = preparedTask.getCalleeParams();
   if (paramCount !== params.length) {
     throw new Error(`unexpected callee param count [${ params.length }], _asyncStartCall invocation expected [${ paramCount }]`);
   }
-  
+
   const callerComponentState = getOrCreateAsyncState(subtask.componentIdx());
-  
+
   const calleeComponentState = getOrCreateAsyncState(preparedTask.componentIdx());
   const calleeBackpressure = calleeComponentState.hasBackpressure();
-  
+
   // Set up a handler on subtask completion to lower results from the call into the caller's memory region.
   //
   // NOTE: during fused guest->guest calls this handler is triggered, but does not actually perform
   // lowering manually, as fused modules provider helper functions that can
   subtask.registerOnResolveHandler((res) => {
     _debugLog('[_asyncStartCall()] handling subtask result', { res, subtaskID: subtask.id() });
-    
+
     let subtaskCallMeta = subtask.getCallMetadata();
-    
+
     // NOTE: in the case of guest -> guest async calls, there may be no memory/realloc present,
     // as the host will intermediate the value storage/movement between calls.
     //
@@ -975,30 +1022,30 @@ function _asyncStartCall(args, callee, paramCount, resultCount, flags) {
     if (subtaskCallMeta.memory || subtaskCallMeta.realloc) {
       throw new Error("call metadata unexpectedly contains memory/realloc for guest->guest call");
     }
-    
+
     const callerTask = subtask.getParentTask();
     const calleeTask = preparedTask;
     const callerMemoryIdx = callerTask.getReturnMemoryIdx();
     const callerComponentIdx = callerTask.componentIdx();
-    
+
     // If a helper function was provided we are likely in a fused guest->guest call,
     // and the result will be delivered (lift/lowered) via helper function
     if (subtaskCallMeta && subtaskCallMeta.returnFn) {
       _debugLog('[_asyncStartCall()] return function present while handling subtask result, returning early (skipping lower)');
-      
+
       // TODO: centralize calling of returnFn to *one place* (if possible)
       if (subtaskCallMeta.returnFnCalled) { return; }
-      
+
       subtaskCallMeta.returnFn.apply(null, [subtaskCallMeta.resultPtr]);
       return;
     }
-    
+
     // If there is no where to lower the results, exit early
     if (!subtaskCallMeta.resultPtr) {
       _debugLog('[_asyncStartCall()] no result ptr during subtask result handling, returning early (skipping lower)');
       return;
     }
-    
+
     let callerMemory;
     if (callerMemoryIdx !== null && callerMemoryIdx !== undefined) {
       callerMemory = lookupMemoriesForComponent({ componentIdx: callerComponentIdx, memoryIdx: callerMemoryIdx });
@@ -1007,34 +1054,35 @@ function _asyncStartCall(args, callee, paramCount, resultCount, flags) {
       if (callerMemories.length !== 1) { throw new Error(`unsupported amount of caller memories`); }
       callerMemory = callerMemories[0];
     }
-    
+
     if (!callerMemory) {
       _debugLog('[_asyncStartCall()] missing memory', { subtaskID: subtask.id(), res });
       throw new Error(`missing memory for to guest->guest call result (subtask [${subtask.id()}])`);
     }
-    
+
     const lowerFns = calleeTask.getReturnLowerFns();
     if (!lowerFns || lowerFns.length === 0) {
       _debugLog('[_asyncStartCall()] missing result lower metadata for guest->guest call', { subtaskID: subtask.id() });
       throw new Error(`missing result lower metadata for guest->guest call (subtask [${subtask.id()}])`);
     }
-    
+
     if (lowerFns.length !== 1) {
       _debugLog('[_asyncStartCall()] only single result reportetd for guest->guest call', { subtaskID: subtask.id() });
       throw new Error(`only single result supported for guest->guest calls (subtask [${subtask.id()}])`);
     }
-    
+
     _debugLog('[_asyncStartCall()] lowering results', { subtaskID: subtask.id() });
     lowerFns[0]({
       realloc: undefined,
       memory: callerMemory,
       vals: [res],
       storagePtr: subtaskCallMeta.resultPtr,
-      componentIdx: callerComponentIdx
+      componentIdx: callerComponentIdx,
+      stringEncoding: subtaskCallMeta.stringEncoding,
     });
-    
+
   });
-  
+
   subtask.setOnProgressFn(() => {
     subtask.setPendingEvent(() => {
       if (subtask.isResolved()) { subtask.deliverResolve(); }
@@ -1046,17 +1094,17 @@ function _asyncStartCall(args, callee, paramCount, resultCount, flags) {
       return event;
     });
   });
-  
+
   // Start the (event) driver loop that will resolve the task
   queueMicrotask(async () => {
     let startRes = subtask.onStart({ startFnParams: params });
     startRes = Array.isArray(startRes) ? startRes : [startRes];
-    
+
     await calleeComponentState.suspendTask({
       task: preparedTask,
       readyFn: () => !calleeComponentState.isExclusivelyLocked(),
     });
-    
+
     const started = await preparedTask.enter();
     if (!started) {
       _debugLog('[_asyncStartCall()] task failed early', {
@@ -1066,7 +1114,7 @@ function _asyncStartCall(args, callee, paramCount, resultCount, flags) {
       throw new Error("task failed to start");
       return;
     }
-    
+
     let callbackResult;
     try {
       let jspiCallee = WebAssembly.promising(callee);
@@ -1082,12 +1130,12 @@ function _asyncStartCall(args, callee, paramCount, resultCount, flags) {
       // NOTE: a good place to rejectt the parent task, if rejection API is enabled
       // subtask.reject(err);
       // subtask.getParentTask().reject(err);
-      
+
       subtask.getParentTask().setErrored(err);
-      
+
       return;
     }
-    
+
     // If there was no callback function, we're dealing with a sync function
     // that was lifted as async without one, there is only the callee.
     if (!callbackFn) {
@@ -1102,7 +1150,7 @@ function _asyncStartCall(args, callee, paramCount, resultCount, flags) {
       preparedTask.resolve([callbackResult]);
       return;
     }
-    
+
     let fnName = callbackFn.fnName;
     if (!fnName) {
       fnName = [
@@ -1115,7 +1163,7 @@ function _asyncStartCall(args, callee, paramCount, resultCount, flags) {
       '>',
       ].join("");
     }
-    
+
     try {
       _debugLog("[_asyncStartCall()] starting driver loop", {
         fnName,
@@ -1124,7 +1172,7 @@ function _asyncStartCall(args, callee, paramCount, resultCount, flags) {
         childTaskID: subtask.childTaskID(),
         parentTaskID: subtask.parentTaskID(),
       });
-      
+
       await _driverLoop({
         componentState: calleeComponentState,
         task: preparedTask,
@@ -1137,21 +1185,21 @@ function _asyncStartCall(args, callee, paramCount, resultCount, flags) {
     } catch (err) {
       _debugLog("[AsyncStartCall] drive loop call failure", { err });
     }
-    
+
   });
-  
+
   const subtaskState = subtask.getStateNumber();
   if (subtaskState < 0 || subtaskState > 2**5) {
     throw new Error('invalid subtask state, out of valid range');
   }
-  
+
   _debugLog('[_asyncStartCall()] returning subtask rep & state', {
     subtask: {
       rep: subtask.waitableRep(),
       state: subtaskState,
     }
   });
-  
+
   return Number(subtask.waitableRep()) << 4 | subtaskState;
 }
 
@@ -1162,48 +1210,48 @@ function _syncStartCall(callbackIdx) {
 
 class Waitable {
   #componentIdx;
-  
+
   #pendingEventFn = null;
-  
+
   #promise;
   #resolve;
   #reject;
-  
+
   #waitableSet = null;
-  
+
   #idx = null; // to component-global waitables
-  
+
   target;
-  
+
   constructor(args) {
     const { componentIdx, target } = args;
     this.#componentIdx = componentIdx;
     this.target = args.target;
     this.#resetPromise();
   }
-  
+
   componentIdx() { return this.#componentIdx; }
   isInSet() { return this.#waitableSet !== null; }
-  
+
   idx() { return this.#idx; }
   setIdx(idx) {
     if (idx === 0) { throw new Error("waitable idx cannot be zero"); }
     this.#idx = idx;
   }
-  
+
   setTarget(tgt) { this.target = tgt; }
-  
+
   #resetPromise() {
     const { promise, resolve, reject } = promiseWithResolvers()
     this.#promise = promise;
     this.#resolve = resolve;
     this.#reject = reject;
   }
-  
+
   resolve() { this.#resolve(); }
   reject(err) { this.#reject(err); }
   promise() { return this.#promise; }
-  
+
   hasPendingEvent() {
     // _debugLog('[Waitable#hasPendingEvent()]', {
       //     componentIdx: this.#componentIdx,
@@ -1213,7 +1261,7 @@ class Waitable {
       // });
       return this.#pendingEventFn !== null;
     }
-    
+
     setPendingEvent(fn) {
       _debugLog('[Waitable#setPendingEvent()] args', {
         waitable: this,
@@ -1221,7 +1269,7 @@ class Waitable {
       });
       this.#pendingEventFn = fn;
     }
-    
+
     getPendingEvent() {
       _debugLog('[Waitable#getPendingEvent()] args', {
         waitable: this,
@@ -1235,7 +1283,7 @@ class Waitable {
       this.#resetPromise();
       return e;
     }
-    
+
     join(waitableSet) {
       _debugLog('[Waitable#join()] args', {
         waitable: this,
@@ -1249,7 +1297,7 @@ class Waitable {
       waitableSet.addWaitable(this);
       this.#waitableSet = waitableSet;
     }
-    
+
     drop() {
       _debugLog('[Waitable#drop()] args', {
         componentIdx: this.#componentIdx,
@@ -1260,22 +1308,30 @@ class Waitable {
       }
       this.join(null);
     }
-    
+
   }
-  
+
   const ERR_CTX_TABLES = {};
-  
+
   let dv = new DataView(new ArrayBuffer());
   const dataView = mem => dv.buffer === mem.buffer ? dv : dv = new DataView(mem.buffer);
-  
-  const toUint64 = val => BigInt.asUintN(64, BigInt(val));
-  
+
+  function toUint64(val) {
+    const converted = BigInt(val)
+
+    return BigInt.asUintN(64, converted);
+  }
+
+
   function toUint32(val) {
+
     return val >>> 0;
   }
+
+  const utf16Decoder = new TextDecoder('utf-16');
   const TEXT_DECODER_UTF8 = new TextDecoder();
   const TEXT_ENCODER_UTF8 = new TextEncoder();
-  
+
   function _utf8AllocateAndEncode(s, realloc, memory) {
     if (typeof s !== 'string') {
       throw new TypeError('expected a string, received [' + typeof s + ']');
@@ -1287,10 +1343,10 @@ class Waitable {
     const res = { ptr, len: buf.length, codepoints: [...s].length };
     return res;
   }
-  
-  
+
+
   const T_FLAG = 1 << 30;
-  
+
   function rscTableCreateOwn(table, rep) {
     const free = table[0] & ~T_FLAG;
     if (free === 0) {
@@ -1303,7 +1359,7 @@ class Waitable {
     table[(free << 1) + 1] = rep | T_FLAG;
     return free;
   }
-  
+
   function rscTableRemove(table, handle) {
     const scope = table[handle << 1];
     const val = table[(handle << 1) + 1];
@@ -1316,9 +1372,9 @@ class Waitable {
     table[0] = handle | T_FLAG;
     return { rep, scope, own };
   }
-  
+
   let curResourceBorrows = [];
-  
+
   function getCurrentTask(componentIdx, taskID) {
     let usedGlobal = false;
     if (componentIdx === undefined || componentIdx === null) {
@@ -1326,20 +1382,20 @@ class Waitable {
       // componentIdx = ASYNC_CURRENT_COMPONENT_IDXS.at(-1);
       // usedGlobal = true;
     }
-    
+
     const taskMetas = ASYNC_TASKS_BY_COMPONENT_IDX.get(componentIdx);
     if (taskMetas === undefined || taskMetas.length === 0) { return undefined; }
-    
+
     if (taskID) {
       return taskMetas.find(meta => meta.task.id() === taskID);
     }
-    
+
     const taskMeta = taskMetas[taskMetas.length - 1];
     if (!taskMeta || !taskMeta.task) { return undefined; }
-    
+
     return taskMeta;
   }
-  
+
   function createNewCurrentTask(args) {
     _debugLog('[createNewCurrentTask()] args', args);
     const {
@@ -1362,7 +1418,7 @@ class Waitable {
     }
     let taskMetas = ASYNC_TASKS_BY_COMPONENT_IDX.get(componentIdx);
     const callbackFn = getCallbackFn ? getCallbackFn() : null;
-    
+
     const newTask = new AsyncTask({
       componentIdx,
       isAsync,
@@ -1375,28 +1431,28 @@ class Waitable {
       resultPtr,
       errHandling,
     });
-    
+
     const newTaskID = newTask.id();
     const newTaskMeta = { id: newTaskID, componentIdx, task: newTask };
-    
+
     // NOTE: do not track host tasks
     ASYNC_CURRENT_TASK_IDS.push(newTaskID);
     ASYNC_CURRENT_COMPONENT_IDXS.push(componentIdx);
-    
+
     if (!taskMetas) {
       taskMetas = [newTaskMeta];
       ASYNC_TASKS_BY_COMPONENT_IDX.set(componentIdx, [newTaskMeta]);
     } else {
       taskMetas.push(newTaskMeta);
     }
-    
+
     return [newTask, newTaskID];
   }
   const ASYNC_TASKS_BY_COMPONENT_IDX = new Map();
-  
+
   class AsyncTask {
     static _ID = 0n;
-    
+
     static State = {
       INITIAL: 'initial',
       CANCELLED: 'cancelled',
@@ -1404,83 +1460,85 @@ class Waitable {
       CANCEL_DELIVERED: 'cancel-delivered',
       RESOLVED: 'resolved',
     }
-    
+
     static BlockResult = {
       CANCELLED: 'block.cancelled',
       NOT_CANCELLED: 'block.not-cancelled',
     }
-    
+
     #id;
     #componentIdx;
     #state;
     #isAsync;
     #isManualAsync;
     #entryFnName = null;
-    
+
     #onResolveHandlers = [];
     #completionPromise = null;
     #rejected = false;
-    
+
     #exitPromise = null;
     #onExitHandlers = [];
-    
+
     #memoryIdx = null;
     #memory = null;
-    
+
     #callbackFn = null;
     #callbackFnName = null;
-    
+
     #postReturnFn = null;
-    
+
     #getCalleeParamsFn = null;
-    
+
     #stringEncoding = null;
-    
+
     #parentSubtask = null;
-    
+
     #needsExclusiveLock = false;
-    
+
     #errHandling;
-    
+
     #backpressurePromise;
     #backpressureWaiters = 0n;
-    
+
     #returnLowerFns = null;
-    
+
     #subtasks = [];
-    
+
     #entered = false;
     #exited = false;
     #errored = null;
-    
+
     cancelled = false;
     cancelRequested = false;
     alwaysTaskReturn = false;
-    
+
     returnCalls =  0;
     storage = [0, 0];
     borrowedHandles = {};
-    
+
+    tmpRetI64HighBits = 0|0;
+
     constructor(opts) {
       this.#id = ++AsyncTask._ID;
-      
+
       if (opts?.componentIdx === undefined) {
         throw new TypeError('missing component id during task creation');
       }
       this.#componentIdx = opts.componentIdx;
-      
+
       this.#state = AsyncTask.State.INITIAL;
       this.#isAsync = opts?.isAsync ?? false;
       this.#isManualAsync = opts?.isManualAsync ?? false;
       this.#entryFnName = opts.entryFnName;
-      
+
       const {
         promise: completionPromise,
         resolve: resolveCompletionPromise,
         reject: rejectCompletionPromise,
       } = promiseWithResolvers();
       this.#completionPromise = completionPromise;
-      
+
       this.#onResolveHandlers.push((results) => {
         if (this.#errored !== null) {
           rejectCompletionPromise(this.#errored);
@@ -1491,70 +1549,70 @@ class Waitable {
         }
         resolveCompletionPromise(results);
       });
-      
+
       const {
         promise: exitPromise,
         resolve: resolveExitPromise,
         reject: rejectExitPromise,
       } = promiseWithResolvers();
       this.#exitPromise = exitPromise;
-      
+
       this.#onExitHandlers.push(() => {
         resolveExitPromise();
       });
-      
+
       if (opts.callbackFn) { this.#callbackFn = opts.callbackFn; }
       if (opts.callbackFnName) { this.#callbackFnName = opts.callbackFnName; }
-      
+
       if (opts.getCalleeParamsFn) { this.#getCalleeParamsFn = opts.getCalleeParamsFn; }
-      
+
       if (opts.stringEncoding) { this.#stringEncoding = opts.stringEncoding; }
-      
+
       if (opts.parentSubtask) { this.#parentSubtask = opts.parentSubtask; }
-      
+
       this.#needsExclusiveLock = this.isSync() || !this.hasCallback();
-      
+
       if (opts.errHandling) { this.#errHandling = opts.errHandling; }
     }
-    
+
     taskState() { return this.#state; }
     id() { return this.#id; }
     componentIdx() { return this.#componentIdx; }
     entryFnName() { return this.#entryFnName; }
-    
+
     completionPromise() { return this.#completionPromise; }
     exitPromise() { return this.#exitPromise; }
-    
+
     isAsync() { return this.#isAsync; }
     isSync() { return !this.isAsync(); }
-    
+
     getErrHandling() { return this.#errHandling; }
-    
+
     hasCallback() { return this.#callbackFn !== null; }
-    
+
     getReturnMemoryIdx() { return this.#memoryIdx; }
     setReturnMemoryIdx(idx) {
       if (idx === null) { return; }
       this.#memoryIdx = idx;
     }
-    
+
     getReturnMemory() { return this.#memory; }
     setReturnMemory(m) {
       if (m === null) { return; }
       this.#memory = m;
     }
-    
+
     setReturnLowerFns(fns) { this.#returnLowerFns = fns; }
     getReturnLowerFns() { return this.#returnLowerFns; }
-    
+
     setParentSubtask(subtask) {
       if (!subtask || !(subtask instanceof AsyncSubtask)) { return }
       if (this.#parentSubtask) { throw new Error('parent subtask can only be set once'); }
       this.#parentSubtask = subtask;
     }
-    
+
     getParentSubtask() { return this.#parentSubtask; }
-    
+
     // TODO(threads): this is very inefficient, we can pass along a root task,
     // and ideally do not need this once thread support is in place
     getRootTask() {
@@ -1566,37 +1624,37 @@ class Waitable {
       }
       return task;
     }
-    
+
     setPostReturnFn(f) {
       if (!f) { return; }
       if (this.#postReturnFn) { throw new Error('postReturn fn can only be set once'); }
       this.#postReturnFn = f;
     }
-    
+
     setCallbackFn(f, name) {
       if (!f) { return; }
       if (this.#callbackFn) { throw new Error('callback fn can only be set once'); }
       this.#callbackFn = f;
       this.#callbackFnName = name;
     }
-    
+
     getCallbackFnName() {
       if (!this.#callbackFnName) { return undefined; }
       return this.#callbackFnName;
     }
-    
+
     async runCallbackFn(...args) {
       if (!this.#callbackFn) { throw new Error('on callback function has been set for task'); }
       return await this.#callbackFn.apply(null, args);
     }
-    
+
     getCalleeParams() {
       if (!this.#getCalleeParamsFn) { throw new Error('missing/invalid getCalleeParamsFn'); }
       return this.#getCalleeParamsFn();
     }
-    
+
     mayBlock() { return this.isAsync() || this.isResolvedState() }
-    
+
     mayEnter(task) {
       const cstate = getOrCreateAsyncState(this.#componentIdx);
       if (cstate.hasBackpressure()) {
@@ -1614,7 +1672,7 @@ class Waitable {
       }
       return true;
     }
-    
+
     enterSync() {
       if (this.needsExclusiveLock()) {
         const cstate = getOrCreateAsyncState(this.#componentIdx);
@@ -1622,72 +1680,72 @@ class Waitable {
       }
       return true;
     }
-    
+
     async enter(opts) {
       _debugLog('[AsyncTask#enter()] args', {
         taskID: this.#id,
         componentIdx: this.#componentIdx,
         subtaskID: this.getParentSubtask()?.id(),
       });
-      
+
       if (this.#entered) {
         throw new Error(`task with ID [${this.#id}] should not be entered twice`);
       }
-      
+
       const cstate = getOrCreateAsyncState(this.#componentIdx);
-      
+
       // If a task is either synchronous or host-provided (e.g. a host import, whether sync or async)
       // then we can avoid component-relevant tracking and immediately enter
       if (this.isSync() || opts?.isHost) {
         this.#entered = true;
-        
+
         // TODO(breaking): remove once manually-spccifying async fns is removed
         // It is currently possible for an actually sync export to be specified
         // as async via JSPI
         if (this.#isManualAsync) {
           if (this.needsExclusiveLock()) { cstate.exclusiveLock(); }
         }
-        
+
         return this.#entered;
       }
-      
+
       if (cstate.hasBackpressure()) {
         cstate.addBackpressureWaiter();
-        
+
         const result = await this.waitUntil({
           readyFn: () => !cstate.hasBackpressure(),
           cancellable: true,
         });
-        
+
         cstate.removeBackpressureWaiter();
-        
+
         if (result === AsyncTask.BlockResult.CANCELLED) {
           this.cancel();
           return false;
         }
       }
-      
+
       if (this.needsExclusiveLock()) { cstate.exclusiveLock(); }
-      
+
       this.#entered = true;
       return this.#entered;
     }
-    
+
     isRunningState() { return this.#state !== AsyncTask.State.RESOLVED; }
     isResolvedState() { return this.#state === AsyncTask.State.RESOLVED; }
     isResolved() { return this.#state === AsyncTask.State.RESOLVED; }
-    
+
     async waitUntil(opts) {
       const { readyFn, waitableSetRep, cancellable } = opts;
       _debugLog('[AsyncTask#waitUntil()] args', { taskID: this.#id, waitableSetRep, cancellable });
-      
+
       const state = getOrCreateAsyncState(this.#componentIdx);
       const wset = state.handles.get(waitableSetRep);
-      
+
       let event;
-      
+
       wset.incrementNumWaiting();
-      
+
       const keepGoing = await this.suspendUntil({
         readyFn: () => {
           const hasPendingEvent = wset.hasPendingEvent();
@@ -1696,7 +1754,7 @@ class Waitable {
         },
         cancellable,
       });
-      
+
       if (keepGoing) {
         event = wset.getPendingEvent();
       } else {
@@ -1706,16 +1764,16 @@ class Waitable {
           payload1: 0,
         };
       }
-      
+
       wset.decrementNumWaiting();
-      
+
       return event;
     }
-    
+
     async yieldUntil(opts) {
       const { readyFn, cancellable } = opts;
       _debugLog('[AsyncTask#yieldUntil()] args', { taskID: this.#id, cancellable });
-      
+
       const keepGoing = await this.suspendUntil({ readyFn, cancellable });
       if (keepGoing) {
         return {
@@ -1724,67 +1782,68 @@ class Waitable {
           payload1: 0,
         };
       }
-      
+
       return {
         code: ASYNC_EVENT_CODE.TASK_CANCELLED,
         payload0: 0,
         payload1: 0,
       };
     }
-    
+
     async suspendUntil(opts) {
       const { cancellable, readyFn } = opts;
       _debugLog('[AsyncTask#suspendUntil()] args', { cancellable });
-      
+
       const pendingCancelled = this.deliverPendingCancel({ cancellable });
       if (pendingCancelled) { return false; }
-      
+
       const completed = await this.immediateSuspendUntil({ readyFn, cancellable });
       return completed;
     }
-    
+
     // TODO(threads): equivalent to thread.suspend_until()
     async immediateSuspendUntil(opts) {
       const { cancellable, readyFn } = opts;
       _debugLog('[AsyncTask#immediateSuspendUntil()] args', { cancellable, readyFn });
-      
+
       const ready = readyFn();
       if (ready && ASYNC_DETERMINISM === 'random') {
-        const coinFlip = _coinFlip();
-        if (coinFlip) { return true }
+        // const coinFlip = _coinFlip();
+        // if (coinFlip) { return true }
+        return true;
       }
-      
+
       const keepGoing = await this.immediateSuspend({ cancellable, readyFn });
       return keepGoing;
     }
-    
+
     async immediateSuspend(opts) { // NOTE: equivalent to thread.suspend()
     // TODO(threads): store readyFn on the thread
     const { cancellable, readyFn } = opts;
     _debugLog('[AsyncTask#immediateSuspend()] args', { cancellable, readyFn });
-    
+
     const pendingCancelled = this.deliverPendingCancel({ cancellable });
     if (pendingCancelled) { return false; }
-    
+
     const cstate = getOrCreateAsyncState(this.#componentIdx);
     const keepGoing = await cstate.suspendTask({ task: this, readyFn });
     return keepGoing;
   }
-  
+
   deliverPendingCancel(opts) {
     const { cancellable } = opts;
     _debugLog('[AsyncTask#deliverPendingCancel()] args', { cancellable });
-    
+
     if (cancellable && this.#state === AsyncTask.State.PENDING_CANCEL) {
       this.#state = AsyncTask.State.CANCEL_DELIVERED;
       return true;
     }
-    
+
     return false;
   }
-  
+
   isCancelled() { return this.cancelled }
-  
+
   cancel(args) {
     _debugLog('[AsyncTask#cancel()] args', { });
     if (this.taskState() !== AsyncTask.State.CANCEL_DELIVERED) {
@@ -1795,7 +1854,7 @@ class Waitable {
     this.onResolve(args?.error ?? new Error('task cancelled'));
     this.#state = AsyncTask.State.RESOLVED;
   }
-  
+
   onResolve(taskValue) {
     const handlers = this.#onResolveHandlers;
     this.#onResolveHandlers = [];
@@ -1808,7 +1867,7 @@ class Waitable {
         throw err;
       }
     }
-    
+
     if (this.#parentSubtask) {
       const meta = this.#parentSubtask.getCallMetadata();
       // Run the rturn fn if it has not already been called -- this *should* have happened in
@@ -1825,7 +1884,7 @@ class Waitable {
         meta.returnFnCalled = true;
       }
     }
-    
+
     if (this.#postReturnFn) {
       _debugLog('[AsyncTask#onResolve()] running post return ', {
         componentIdx: this.#componentIdx,
@@ -1838,22 +1897,22 @@ class Waitable {
         throw err;
       }
     }
-    
+
     if (this.#parentSubtask) {
       this.#parentSubtask.onResolve(taskValue);
     }
   }
-  
+
   registerOnResolveHandler(f) {
     this.#onResolveHandlers.push(f);
   }
-  
+
   isRejected() { return this.#rejected; }
-  
+
   setErrored(err) {
     this.#errored = err;
   }
-  
+
   reject(taskErr) {
     _debugLog('[AsyncTask#reject()] args', {
       componentIdx: this.#componentIdx,
@@ -1864,24 +1923,24 @@ class Waitable {
       callbackFnName: this.#callbackFnName,
       errMsg: taskErr.message,
     });
-    
+
     if (this.isResolvedState() || this.#rejected) { return; }
-    
+
     for (const subtask of this.#subtasks) {
       subtask.reject(taskErr);
     }
-    
+
     this.#rejected = true;
     this.cancelRequested = true;
     this.#state = AsyncTask.State.PENDING_CANCEL;
     const cancelled = this.deliverPendingCancel({ cancellable: true });
-    
+
     // TODO: do cleanup here to reset the machinery so we can run again?
-    
-    
+
+
     this.cancel({ error: taskErr });
   }
-  
+
   resolve(results) {
     _debugLog('[AsyncTask#resolve()] args', {
       componentIdx: this.#componentIdx,
@@ -1889,17 +1948,17 @@ class Waitable {
       entryFnName: this.entryFnName(),
       callbackFnName: this.#callbackFnName,
     });
-    
+
     if (this.#state === AsyncTask.State.RESOLVED) {
       throw new Error(`(component [${this.#componentIdx}]) task [${this.#id}]  is already resolved (did you forget to wait for an import?)`);
     }
-    
+
     if (this.borrowedHandles.length > 0) {
       throw new Error('task still has borrow handles');
     }
-    
+
     this.#state = AsyncTask.State.RESOLVED;
-    
+
     switch (results.length) {
       case 0:
       this.onResolve(undefined);
@@ -1919,15 +1978,15 @@ class Waitable {
       throw new Error('unexpected number of results');
     }
   }
-  
+
   exit() {
     _debugLog('[AsyncTask#exit()]', {
       componentIdx: this.#componentIdx,
       taskID: this.#id,
     });
-    
+
     if (this.#exited)  { throw new Error("task has already exited"); }
-    
+
     if (this.#state !== AsyncTask.State.RESOLVED) {
       // TODO(fix): only fused, manually specified post returns seem to break this invariant,
       // as the TaskReturn trampoline is not activated it seems.
@@ -1946,21 +2005,21 @@ class Waitable {
       });
       this.#state = AsyncTask.State.RESOLVED;
     }
-    
+
     if (this.borrowedHandles > 0) {
       throw new Error('task [${this.#id}] exited without clearing borrowed handles');
     }
-    
+
     const state = getOrCreateAsyncState(this.#componentIdx);
     if (!state) { throw new Error('missing async state for component [' + this.#componentIdx + ']'); }
-    
+
     // Exempt the host from exclusive lock check
     if (this.#componentIdx !== -1 && this.needsExclusiveLock() && !state.isExclusivelyLocked()) {
       throw new Error(`task [${this.#id}] exit: component [${this.#componentIdx}] should have been exclusively locked`);
     }
-    
+
     state.exclusiveRelease();
-    
+
     for (const f of this.#onExitHandlers) {
       try {
         f();
@@ -1969,29 +2028,29 @@ class Waitable {
         throw err;
       }
     }
-    
+
     this.#exited = true;
     clearCurrentTask(this.#componentIdx, this.id());
   }
-  
+
   needsExclusiveLock() {
     return !this.#isAsync || this.hasCallback();
   }
-  
+
   createSubtask(args) {
     _debugLog('[AsyncTask#createSubtask()] args', args);
     const { componentIdx, childTask, callMetadata, fnName, isAsync, isManualAsync } = args;
-    
+
     const cstate = getOrCreateAsyncState(this.#componentIdx);
     if (!cstate) {
       throw new Error(`invalid/missing async state for component idx [${componentIdx}]`);
     }
-    
+
     const waitable = new Waitable({
       componentIdx: this.#componentIdx,
       target: `subtask (internal ID [${this.#id}])`,
     });
-    
+
     const newSubtask = new AsyncSubtask({
       componentIdx,
       childTask,
@@ -2006,25 +2065,25 @@ class Waitable {
     newSubtask.setTarget(`subtask (internal ID [${newSubtask.id()}], waitable [${waitable.idx()}], component [${componentIdx}])`);
     waitable.setIdx(cstate.handles.insert(newSubtask));
     waitable.setTarget(`waitable for subtask (waitable id [${waitable.idx()}], subtask internal ID [${newSubtask.id()}])`);
-    
+
     return newSubtask;
   }
-  
+
   getLatestSubtask() {
     return this.#subtasks.at(-1);
   }
-  
+
   getSubtaskByWaitableRep(rep) {
     if (rep === undefined) { throw new TypeError('missing rep'); }
     return this.#subtasks.find(s => s.waitableRep() === rep);
   }
-  
+
   currentSubtask() {
     _debugLog('[AsyncTask#currentSubtask()]');
     if (this.#subtasks.length === 0) { return undefined; }
     return this.#subtasks.at(-1);
   }
-  
+
   removeSubtask(subtask) {
     if (this.#subtasks.length === 0) { throw new Error('cannot end current subtask: no current subtask'); }
     this.#subtasks = this.#subtasks.filter(t => t !== subtask);
@@ -2048,29 +2107,72 @@ function _lowerImportBackwardsCompat(args) {
     getMemoryFn,
     getReallocFn,
     importFn,
+    stringEncoding,
   } = args;
-  
-  const { taskID } = _getGlobalCurrentTaskMeta(componentIdx);
-  
+
+  let meta = _getGlobalCurrentTaskMeta(componentIdx);
+  let createdTask;
+
+  // Some components depend on initialization logic (i.e. `_initialize` or some such
+  // core wasm export) that is embedded in the component, but is not executed or wizer'd
+  // away before the transpiled component is attempted to be used.
+  //
+  // These components execut their initialization logic *when they are imported* in the
+  // transpiled context -- so we may get a call to an export that is lowered without going
+  // through `CallWasm` or `CallInterface`.
+  //
+  if (!meta) {
+    if (funcTypeIsAsync || (isAsync && !isManualAsync)) {
+      throw new Error('p3 async wasm exports cannot use backwards compat auto-task init');
+    }
+
+    const [newTask, newTaskID] = createNewCurrentTask({
+      componentIdx,
+      isAsync,
+      isManualAsync,
+      callingWasmExport: false,
+    });
+    createdTask = newTask;
+
+    // Since we're managing the task creation ourselves we must clear ourselves
+    createdTask.registerOnResolveHandler(() => {
+      _clearCurrentTask({
+        taskID: task.id(),
+        componentIdx: task.componentIdx(),
+      });
+    });
+
+    _setGlobalCurrentTaskMeta({
+      componentIdx,
+      taskID: newTaskID,
+    });
+
+    meta = _getGlobalCurrentTaskMeta(componentIdx);
+  }
+
+  const { taskID } = meta;
+
   const taskMeta = getCurrentTask(componentIdx, taskID);
-  if (!taskMeta) { throw new Error('invalid/missing async task meta'); }
-  
+  if (!taskMeta) {
+    throw new Error('invalid/missing async task meta');
+  }
+
   const task = taskMeta.task;
   if (!task) { throw new Error('invalid/missing async task'); }
-  
+
   const cstate = getOrCreateAsyncState(componentIdx);
-  
+
   // TODO: re-enable this check -- postReturn can call imports though,
   // and that breaks things.
   //
   // if (!cstate.mayLeave) {
     //     throw new Error(`cannot leave instance [${componentIdx}]`);
     // }
-    
+
     if (!task.mayBlock() && funcTypeIsAsync && !isAsync) {
       throw new Error("non async exports cannot synchronously call async functions");
     }
-    
+
     // If there is an existing task, this should be part of a subtask
     const memory = getMemoryFn();
     const subtask = task.createSubtask({
@@ -2085,27 +2187,35 @@ function _lowerImportBackwardsCompat(args) {
         realloc: getReallocFn(),
         resultPtr: params[0],
         lowers: resultLowerFns,
+        stringEncoding,
       }
     });
     task.setReturnMemoryIdx(memoryIdx);
     task.setReturnMemory(getMemoryFn());
-    
+
     subtask.onStart();
-    
+
     // If dealing with a sync lowered sync function, we can directly return results
     //
     // TODO(breaking): remove once we get rid of manual async import specification,
     // as func types cannot be detected in that case only (and we don't need that w/ p3)
     if (!isManualAsync && !isAsync && !funcTypeIsAsync) {
+      if (createdTask) { createdTask.enterSync(); }
+
       const res = importFn(...params);
+
       // TODO(breaking): remove once we get rid of manual async import specification,
       // as func types cannot be detected in that case only (and we don't need that w/ p3)
       if (!funcTypeIsAsync && !subtask.isReturned()) {
         throw new Error('post-execution subtasks must either be async or returned');
       }
-      return subtask.getResult();
+
+      const syncRes = subtask.getResult();
+      if (createdTask) { createdTask.resolve([syncRes]); }
+
+      return syncRes;
     }
-    
+
     // Sync-lowered async functions requires async behavior because the callee *can* block,
     // but this call must *act* synchronously and return immediately with the result
     // (i.e. not returning until the work is done)
@@ -2122,14 +2232,14 @@ function _lowerImportBackwardsCompat(args) {
       });
       return promise;
     }
-    
+
     // NOTE: at this point we know that we are working with an async lowered import
-    
+
     const subtaskState = subtask.getStateNumber();
     if (subtaskState < 0 || subtaskState > 2**5) {
       throw new Error('invalid subtask state, out of valid range');
     }
-    
+
     subtask.setOnProgressFn(() => {
       subtask.setPendingEvent(() => {
         if (subtask.isResolved()) { subtask.deliverResolve(); }
@@ -2141,7 +2251,7 @@ function _lowerImportBackwardsCompat(args) {
         return event;
       });
     });
-    
+
     // This is a hack to maintain backwards compatibility with
     // manually-specified async imports, used in wasm exports that are
     // not actually async (but are specified as so).
@@ -2168,14 +2278,20 @@ function _lowerImportBackwardsCompat(args) {
     if (requiresManualAsyncResult) {
       manualAsyncResult = promiseWithResolvers();
     }
-    
+
     queueMicrotask(async () => {
       try {
         _debugLog('[_lowerImportBackwardsCompat()] calling lowered import', { importFn, params });
-        const res = await importFn(...params);
+        if (createdTask) { await createdTask.enter(); }
+
+        const asyncRes = await importFn(...params);
         if (requiresManualAsyncResult) {
           manualAsyncResult.resolve(subtask.getResult());
         }
+
+        if (createdTask) { createdTask.resolve([asyncRes]); }
+
+
       } catch (err) {
         _debugLog("[_lowerImportBackwardsCompat()] import fn error:", err);
         if (requiresManualAsyncResult) {
@@ -2184,84 +2300,89 @@ function _lowerImportBackwardsCompat(args) {
         throw err;
       }
     });
-    
+
     if (requiresManualAsyncResult) { return manualAsyncResult.promise; }
-    
+
     return Number(subtask.waitableRep()) << 4 | subtaskState;
   }
-  
+
   function _liftFlatU8(ctx) {
     _debugLog('[_liftFlatU8()] args', { ctx });
     let val;
-    
+
     if (ctx.useDirectParams) {
       if (ctx.params.length === 0) { throw new Error('expected at least a single i32 argument'); }
       val = ctx.params[0];
       ctx.params = ctx.params.slice(1);
       return [val, ctx];
     }
-    
-    if (ctx.storageLen !== undefined && ctx.storageLen < ctx.storagePtr + 1) {
-      throw new Error('not enough storage remaining for lift');
+
+    if (ctx.storageLen !== undefined && ctx.storageLen < 1) {
+      throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (u8 requires 1 byte)`);
     }
+
     val = new DataView(ctx.memory.buffer).getUint8(ctx.storagePtr, true);
+
     ctx.storagePtr += 1;
     if (ctx.storageLen !== undefined) { ctx.storageLen -= 1; }
-    
+
     return [val, ctx];
   }
-  
+
+
   function _liftFlatU16(ctx) {
     _debugLog('[_liftFlatU16()] args', { ctx });
     let val;
-    
+
     if (ctx.useDirectParams) {
       if (params.length === 0) { throw new Error('expected at least a single i32 argument'); }
       val = ctx.params[0];
       ctx.params = ctx.params.slice(1);
       return [val, ctx];
     }
-    
-    if (ctx.storageLen !== undefined && ctx.storageLen < ctx.storagePtr + 2) {
-      throw new Error('not enough storage remaining for lift');
+
+    if (ctx.storageLen !== undefined && ctx.storageLen < 2) {
+      throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (u16 requires 2 bytes)`);
     }
-    
+
     val = new DataView(ctx.memory.buffer).getUint16(ctx.storagePtr, true);
-    
+
     ctx.storagePtr += 2;
     if (ctx.storageLen !== undefined) { ctx.storageLen -= 2; }
-    
+
     const rem = ctx.storagePtr % 2;
     if (rem !== 0) { ctx.storagePtr += (2 - rem); }
-    
+
     return [val, ctx];
   }
-  
+
+
   function _liftFlatU32(ctx) {
     _debugLog('[_liftFlatU32()] args', { ctx });
     let val;
-    
+
     if (ctx.useDirectParams) {
       if (ctx.params.length === 0) { throw new Error('expected at least a single i34 argument'); }
       val = ctx.params[0];
       ctx.params = ctx.params.slice(1);
       return [val, ctx];
     }
-    
-    if (ctx.storageLen !== undefined && ctx.storageLen < ctx.storagePtr + 4) {
-      throw new Error('not enough storage remaining for lift');
+
+    if (ctx.storageLen !== undefined && ctx.storageLen < 4) {
+      throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (u32 requires 4 bytes)`);
     }
     val = new DataView(ctx.memory.buffer).getUint32(ctx.storagePtr, true);
     ctx.storagePtr += 4;
     if (ctx.storageLen !== undefined) { ctx.storageLen -= 4; }
-    
+
     return [val, ctx];
   }
-  
+
+
   function _liftFlatU64(ctx) {
     _debugLog('[_liftFlatU64()] args', { ctx });
     let val;
-    
+
     if (ctx.useDirectParams) {
       if (ctx.params.length === 0) { throw new Error('expected at least one single i64 argument'); }
       if (typeof ctx.params[0] !== 'bigint') { throw new Error('expected bigint'); }
@@ -2269,21 +2390,34 @@ function _lowerImportBackwardsCompat(args) {
       ctx.params = ctx.params.slice(1);
       return [val, ctx];
     }
-    
-    if (ctx.storageLen !== undefined && ctx.storageLen < ctx.storagePtr + 8) {
-      throw new Error('not enough storage remaining for lift');
+
+    if (ctx.storageLen !== undefined && ctx.storageLen < 8) {
+      throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (u64 requires 8 bytes)`);
     }
+
     val = new DataView(ctx.memory.buffer).getBigUint64(ctx.storagePtr, true);
     ctx.storagePtr += 8;
     if (ctx.storageLen !== undefined) { ctx.storageLen -= 8; }
-    
+
     return [val, ctx];
   }
-  
+
+
+  function _liftFlatStringAny(ctx) {
+    switch (ctx.stringEncoding) {
+      case 'utf8':
+      return _liftFlatStringUTF8(ctx);
+      case 'utf16':
+      return _liftFlatStringUTF16(ctx);
+      default:
+      throw new Error(`missing/unrecognized/unsupported string encoding [${ctx.stringEncoding}]`);
+    }
+  }
+
   function _liftFlatStringUTF8(ctx) {
     _debugLog('[_liftFlatStringUTF8()] args', { ctx });
     let val;
-    
+
     if (ctx.useDirectParams) {
       if (ctx.params.length < 2) { throw new Error('expected at least two u32 arguments'); }
       const offset = ctx.params[0];
@@ -2294,25 +2428,53 @@ function _lowerImportBackwardsCompat(args) {
       ctx.params = ctx.params.slice(2);
       return [val, ctx];
     }
-    
-    const start = new DataView(ctx.memory.buffer).getUint32(ctx.storagePtr, true);
-    const codeUnits = new DataView(ctx.memory.buffer).getUint32(ctx.storagePtr + 4, true);
-    val = TEXT_DECODER_UTF8.decode(new Uint8Array(ctx.memory.buffer, start, codeUnits));
-    
-    ctx.storagePtr += 8;
-    
+
     const rem = ctx.storagePtr % 4;
     if (rem !== 0) { ctx.storagePtr += (4 - rem); }
-    
+
+    const dv = new DataView(ctx.memory.buffer);
+    const start = dv.getUint32(ctx.storagePtr, true);
+    const codeUnits = dv.getUint32(ctx.storagePtr + 4, true);
+
+    val = TEXT_DECODER_UTF8.decode(new Uint8Array(ctx.memory.buffer, start, codeUnits));
+
+    ctx.storagePtr += 8;
+    if (ctx.storageLen !== undefined) { ctx.storagelen -= 8; }
+
     return [val, ctx];
   }
-  
+
+  function _liftFlatStringUTF16(ctx) {
+    _debugLog('[_liftFlatStringUTF16()] args', { ctx });
+    let val;
+
+    if (ctx.useDirectParams) {
+      if (ctx.params.length < 2) { throw new Error('expected at least two u32 arguments'); }
+      const offset = ctx.params[0];
+      if (!Number.isSafeInteger(offset)) {  throw new Error('invalid offset'); }
+      const len = ctx.params[1];
+      if (!Number.isSafeInteger(len)) {  throw new Error('invalid len'); }
+      val = utf16Decoder.decode(new DataView(ctx.memory.buffer, offset, len));
+      ctx.params = ctx.params.slice(2);
+      return [val, ctx];
+    }
+
+    const data = new DataView(ctx.memory.buffer)
+    const start = data.getUint32(ctx.storagePtr, vals[0], true);
+    const codeUnits = data.getUint32(ctx.storagePtr, vals[0] + 4, true);
+    val = utf16Decoder.decode(new Uint16Array(ctx.memory.buffer, start, codeUnits));
+    ctx.storagePtr = ctx.storagePtr + 2 * codeUnits;
+    if (ctx.storageLen !== undefined) { ctx.storageLen = ctx.storageLen - 2 * codeUnits }
+
+    return [val, ctx];
+  }
+
   function _liftFlatVariant(casesAndLiftFns) {
     return function _liftFlatVariantInner(ctx) {
       _debugLog('[_liftFlatVariant()] args', { ctx });
-      
+
       const origUseParams = ctx.useDirectParams;
-      
+
       let caseIdx;
       let liftRes;
       const originalPtr = ctx.storagePtr;
@@ -2328,14 +2490,14 @@ function _lowerImportBackwardsCompat(args) {
       }
       caseIdx = liftRes[0];
       ctx = liftRes[1];
-      
+
       const [ tag, liftFn, size32, align32, payloadOffset32 ] = casesAndLiftFns[caseIdx];
       if (payloadOffset32 === undefined) { throw new Error('unexpectedly missing payload offset'); }
-      
+
       if (originalPtr !== undefined) {
         ctx.storagePtr = originalPtr + payloadOffset32;
       }
-      
+
       let val;
       if (liftFn === null) {
         val = { tag };
@@ -2346,1488 +2508,1531 @@ function _lowerImportBackwardsCompat(args) {
         const [newVal, newCtx] = liftFn(ctx);
         val = { tag, val: newVal };
         ctx = newCtx;
-        
+
         // NOTE: Padding can be left over after doing the lift if it was less than
         // space left for the payload normally.
         if (ctx.storagePtr < originalPtr + size32) {
           ctx.storagePtr = originalPtr + size32;
         }
       }
-      
+
       const rem = ctx.storagePtr % align32;
       if (rem !== 0) { ctx.storagePtr += align32 - rem; }
-      
+
       return [val, ctx];
     }
   }
-  
-  function _liftFlatList(elemLiftFn, align32, knownLen) {
-    function _liftFlatListInner(ctx) {
-      _debugLog('[_liftFlatList()] args', { ctx });
-      
-      let metaPtr;
-      let dataPtr;
-      let len;
-      if (ctx.useDirectParams) {
-        if (knownLen) {
-          dataPtr = _liftFlatU32(ctx);
-        } else {
-          metaPtr = _liftFlatU32(ctx);
-        }
-      } else {
-        if (knownLen) {
-          dataPtr = _liftFlatU32(ctx);
-        } else {
-          metaPtr = _liftFlatU32(ctx);
-        }
-      }
-      
-      if (metaPtr) {
-        if (dataPtr !== undefined) { throw new Error('both meta and data pointers should not be set yet'); }
-        
-        if (ctx.useDirectParams) {
-          ctx.useDirectParams = false;
-          ctx.storagePtr = metaPtr;
-          ctx.storageLen = 8;
-          
-          dataPtr = _liftFlatU32(ctx);
-          len = _liftFlatU32(ctx);
-          
-          ctx.useDirectParams = true;
-          ctx.storagePtr = null;
-          ctx.storageLen = null;
-        } else {
-          dataPtr = _liftFlatU32(ctx);
-          len = _liftFlatU32(ctx);
-        }
-      }
-      
+
+  function _liftFlatList(meta) {
+    const { elemLiftFn, elemSize32, elemAlign32, knownLen } = meta;
+
+    const readValuesAndReset = (ctx, originalPtr, dataPtr, len) => {
+      ctx.storagePtr = dataPtr;
       const val = [];
       for (var i = 0; i < len; i++) {
         const [res, nextCtx] = elemLiftFn(ctx);
         val.push(res);
         ctx = nextCtx;
-        
-        const rem = ctx.storagePtr % align32;
-        if (rem !== 0) { newCtx.storagePtr += (align32 - rem); }
+
+        const rem = ctx.storagePtr % elemAlign32;
+        if (rem !== 0) { ctx.storagePtr += elemAlign32 - rem; }
       }
-      
+      if (originalPtr !== null) { ctx.storagePtr = originalPtr; }
       return [val, ctx];
-    }
-  }
-  
-  function _liftFlatFlags(cases) {
-    return function _liftFlatFlagsInner(ctx) {
-      _debugLog('[_liftFlatFlags()] args', { ctx });
-      throw new Error('flat lift for flags not yet implemented!');
-    }
-  }
-  
-  function _liftFlatResult(casesAndLiftFns) {
-    return function _liftFlatResultInner(ctx) {
-      _debugLog('[_liftFlatResult()] args', { ctx });
-      return _liftFlatVariant(casesAndLiftFns)(ctx);
-    }
-  }
-  
-  function _liftFlatBorrow(componentTableIdx, size, memory, vals, storagePtr, storageLen) {
-    _debugLog('[_liftFlatBorrow()] args', { size, memory, vals, storagePtr, storageLen });
-    throw new Error('flat lift for borrowed resources not yet implemented!');
-  }
-  
-  function _lowerFlatU8(ctx) {
-    _debugLog('[_lowerFlatU8()] args', ctx);
-    const { memory, realloc, vals, storagePtr, storageLen } = ctx;
-    if (vals.length !== 1) {
-      throw new Error('unexpected number (' + vals.length + ') of core vals (expected 1)');
-    }
-    if (vals[0] > 255 || vals[0] < 0) { throw new Error('invalid value for core value representing u8'); }
-    if (!memory) { throw new Error("missing memory for lower"); }
-    new DataView(memory.buffer).setUint32(storagePtr, vals[0], true);
-    
-    // TODO: ALIGNMENT IS WRONG?
-    
-    return 1;
-  }
-  
-  function _lowerFlatU16(memory, vals, storagePtr, storageLen) {
-    _debugLog('[_lowerFlatU16()] args', { memory, vals, storagePtr, storageLen });
-    if (vals.length !== 1) {
-      throw new Error('unexpected number (' + vals.length + ') of core vals (expected 1)');
-    }
-    if (vals[0] > 65_535 || vals[0] < 0) { throw new Error('invalid value for core value representing u16'); }
-    new DataView(memory.buffer).setUint16(storagePtr, vals[0], true);
-    return 2;
-  }
-  
-  function _lowerFlatU32(ctx) {
-    _debugLog('[_lowerFlatU32()] args', { ctx });
-    const { memory, realloc, vals, storagePtr, storageLen } = ctx;
-    if (vals.length !== 1) { throw new Error('expected single value to lower, got (' + vals.length + ')'); }
-    if (vals[0] > 4_294_967_295 || vals[0] < 0) { throw new Error('invalid value for core value representing u32'); }
-    
-    // TODO(refactor): fail loudly on misaligned flat lowers?
-    const rem = ctx.storagePtr % 4;
-    if (rem !== 0) { ctx.storagePtr += (4 - rem); }
-    
-    new DataView(memory.buffer).setUint32(storagePtr, vals[0], true);
-    
-    return 4;
-  }
-  
-  function _lowerFlatU64(memory, vals, storagePtr, storageLen) {
-    _debugLog('[_lowerFlatU64()] args', { memory, vals, storagePtr, storageLen });
-    if (vals.length !== 1) { throw new Error('unexpected number of core vals'); }
-    if (vals[0] > 18_446_744_073_709_551_615n || vals[0] < 0n) { throw new Error('invalid value for core value representing u64'); }
-    new DataView(memory.buffer).setBigUint64(storagePtr, vals[0], true);
-    return 8;
-  }
-  
-  function _lowerFlatStringUTF8(ctx) {
-    _debugLog('[_lowerFlatStringUTF8()] args', ctx);
-    
-    const { memory, realloc, vals, storagePtr, storageLen } = ctx;
-    
-    const s = vals[0];
-    const { ptr, len, codepoints } = _utf8AllocateAndEncode(vals[0], realloc, memory);
-    
-    const view = new DataView(memory.buffer);
-    view.setUint32(storagePtr, ptr, true);
-    view.setUint32(storagePtr + 4, codepoints, true);
-    
-    return len;
-  }
-  
-  function _lowerFlatRecord(fieldMetas) {
-    return (size, memory, vals, storagePtr, storageLen) => {
-      const params = [...arguments].slice(5);
-      _debugLog('[_lowerFlatRecord()] args', {
-        size,
-        memory,
-        vals,
-        storagePtr,
-        storageLen,
-        params,
-        fieldMetas
-      });
-      
-      const [start] = vals;
-      if (storageLen !== undefined && size !== undefined && size > storageLen) {
-        throw new Error('not enough storage remaining for record flat lower');
-      }
-      const data = new Uint8Array(memory.buffer, start, size);
-      new Uint8Array(memory.buffer, storagePtr, size).set(data);
-      return data.byteLength;
-    }
-  }
-  
-  function _lowerFlatVariant(lowerMetas) {
-    return function _lowerFlatVariantInner(ctx) {
-      _debugLog('[_lowerFlatVariant()] args', ctx);
-      
-      const { memory, realloc, vals, storageLen, componentIdx } = ctx;
-      let storagePtr = ctx.storagePtr;
-      
-      const { tag, val } = vals[0];
-      const disc = lowerMetas.findIndex(m => m[0] === tag);
-      if (disc === -1) {
-        throw new Error(`invalid variant tag/discriminant [${tag}] (valid tags: ${variantMetas.map(m => m[0])})`);
-      }
-      
-      const [ _tag, lowerFn, size32, align32, payloadOffset32 ] = lowerMetas[disc];
-      
-      const originalPtr = ctx.resultPtr;
-      ctx.vals = [disc];
-      let discLowerRes;
-      if (lowerMetas.length < 256) {
-        discLowerRes = _lowerFlatU8(ctx);
-      } else if (lowerMetas.length >= 256 && lowerMetas.length < 65536) {
-        discLowerRes = _lowerFlatU16(ctx);
-      } else if (lowerMetas.length >= 65536 && lowerMetas.length < 4_294_967_296) {
-        discLowerRes = _lowerFlatU32(ctx);
+    };
+
+    // TODO(fix): special case for u8/u16/etc into appropriate type
+
+    return function _liftFlatListInner(ctx) {
+      _debugLog('[_liftFlatList()] args', { ctx });
+
+      let liftResults;
+      if (knownLen !== undefined) { // list with known length
+
+      if (ctx.useDirectParams) {
+        // list with known length w/ direct params
+        const dataPtr = ctx.params[0];
+        ctx.params = ctx.params.slice(1);
+
+        // TODO(???): is it possible for all values to come in from params?
+
+        ctx.useDirectParams = false;
+        const originalPtr = ctx.storagePtr;
+        ctx.storageLen = knownLen * elemSize32;
+
+        liftResults = readValuesAndReset(ctx, originalPtr, dataPtr, knownLen);
+
+        ctx.useDirectParams = true;
+        ctx.storagePtr = null;
+        ctx.storageLen = null;
+
       } else {
-        throw new Error('unsupported number of cases [' + lowerMetas.legnth + ']');
+        ctx.storageLen = knownLen * elemSize32;
+        liftResults = readValuesAndReset(ctx, null, ctx.storagePtr, knownLen);
       }
-      
-      ctx.resultPtr = originalPtr + payloadOffset32;
-      
-      const payloadBytesWritten = lowerFn({
-        memory,
-        realloc,
-        vals: [val],
-        storagePtr,
-        storageLen,
-        componentIdx,
-      });
-      let bytesWritten = payloadOffset + payloadBytesWritten;
-      
-      const rem = ctx.storagePtr % align32;
-      if (rem !== 0) {
-        const pad = align32 - rem;
-        ctx.storagePtr += pad;
-        bytesWritten += pad;
-      }
-      
-      return bytesWritten;
+
+    } else { // unknown length list
+
+    if (ctx.useDirectParams) {
+      // unknown length list ptr w/ direct params
+      const dataPtr = ctx.params[0];
+      const len = ctx.params[1];
+      ctx.params = ctx.params.slice(2);
+
+      ctx.useDirectParams = false;
+      const originalPtr = ctx.storagePtr;
+      ctx.storageLen = len * elemSize32;
+
+      liftResults = readValuesAndReset(ctx, originalPtr, dataPtr, len);
+
+      ctx.useDirectParams = true;
+      ctx.storagePtr = null;
+      ctx.storageLen = null;
+
+    } else {
+      // unknown length list ptr w/ in-memory params
+      ctx.storageLen = 8;
+
+      const dataPtrLiftRes = _liftFlatU32(ctx);
+      const dataPtr = dataPtrLiftRes[0];
+      ctx = dataPtrLiftRes[1];
+
+      const lenLiftRes = _liftFlatU32(ctx);
+      const len = lenLiftRes[0];
+      ctx = lenLiftRes[1];
+
+      const originalPtr = ctx.storagePtr;
+      ctx.storagePtr = dataPtr;
+
+      ctx.storageLen = len * elemSize32;
+      liftResults = readValuesAndReset(ctx, originalPtr, dataPtr, len);
     }
   }
-  
-  function _lowerFlatList(args) {
-    const { elemLowerFn } = args;
-    if (!elemLowerFn) { throw new TypeError("missing/invalid element lower fn for list"); }
-    
-    return function _lowerFlatListInner(ctx) {
-      _debugLog('[_lowerFlatList()] args', { ctx });
-      
+
+  return liftResults;
+}
+}
+
+function _liftFlatFlags(meta) {
+  const { names, size32, align32, intSizeBytes } = meta;
+
+  return function _liftFlatFlagsInner(ctx) {
+    _debugLog('[_liftFlatFlags()] args', { ctx });
+
+    const val = {};
+
+    let liftRes;
+    let align;
+    switch (intSizeBytes) {
+      case 1:
+      liftRes = _liftFlatU8(ctx);
+      break;
+      case 2:
+      liftRes = _liftFlatU16(ctx);
+      break;
+      case 4:
+      liftRes = _liftFlatU32(ctx);
+      break;
+      default:
+      throw new Error('invalid flags size');
+    }
+    let bits = liftRes[0];
+    ctx = liftRes[1];
+
+    for (const name of names) {
+      val[name] = (bits & 1) === 1;
+      bits >>>= 1;
+    }
+
+    const rem = ctx.storagePtr % align32;
+    if (rem !== 0) { ctx.storagePtr += align32 - rem; }
+
+    return [val, ctx];
+  }
+}
+
+function _liftFlatResult(casesAndLiftFns) {
+  return function _liftFlatResultInner(ctx) {
+    _debugLog('[_liftFlatResult()] args', { ctx });
+    return _liftFlatVariant(casesAndLiftFns)(ctx);
+  }
+}
+
+function _liftFlatBorrow(componentTableIdx, size, memory, vals, storagePtr, storageLen) {
+  _debugLog('[_liftFlatBorrow()] args', { size, memory, vals, storagePtr, storageLen });
+  throw new Error('flat lift for borrowed resources is not supported!');
+}
+
+
+function _lowerFlatU8(ctx) {
+  _debugLog('[_lowerFlatU8()] args', ctx);
+
+  if (ctx.vals.length !== 1) {
+    throw new Error(`unexpected number [${ctx.vals.length}] of vals (expected 1)`);
+  }
+
+  _requireValidNumericPrimitive.bind('u8', ctx.vals[0]);
+
+  if (!ctx.memory) { throw new Error("missing memory for lower"); }
+  new DataView(ctx.memory.buffer).setUint32(ctx.storagePtr, ctx.vals[0], true);
+
+  ctx.storagePtr += 1;
+}
+
+function _lowerFlatU16(ctx) {
+  _debugLog('[_lowerFlatU16()] args', { ctx });
+
+  if (!ctx.memory) { throw new Error("missing memory for lower"); }
+  if (ctx.vals.length !== 1) {
+    throw new Error(`unexpected number [${ctx.vals.length}] of vals (expected 1)`);
+  }
+
+  const rem = ctx.storagePtr % 2;
+  if (rem !== 0) { ctx.storagePtr += (2 - rem); }
+
+  _requireValidNumericPrimitive.bind('u16', ctx.vals[0]);
+  new DataView(ctx.memory.buffer).setUint16(ctx.storagePtr, ctx.vals[0], true);
+
+  ctx.storagePtr += 2;
+}
+
+function _lowerFlatU32(ctx) {
+  _debugLog('[_lowerFlatU32()] args', { ctx });
+
+  if (ctx.vals.length !== 1) {
+    throw new Error(`expected single value to lower, got [${ctx.vals.length}]`);
+  }
+
+  const rem = ctx.storagePtr % 4;
+  if (rem !== 0) { ctx.storagePtr += (4 - rem); }
+
+  _requireValidNumericPrimitive.bind('u32', ctx.vals[0]);
+  new DataView(ctx.memory.buffer).setUint32(ctx.storagePtr, ctx.vals[0], true);
+
+  ctx.storagePtr += 4;
+}
+
+function _lowerFlatU64(ctx) {
+  _debugLog('[_lowerFlatU64()] args', { ctx });
+
+  if (ctx.vals.length !== 1) { throw new Error('unexpected number of vals'); }
+
+  const rem = ctx.storagePtr % 8;
+  if (rem !== 0) { ctx.storagePtr += (8 - rem); }
+
+  _requireValidNumericPrimitive.bind('u64', ctx.vals[0]);
+  new DataView(ctx.memory.buffer).setBigUint64(ctx.storagePtr, ctx.vals[0], true);
+
+  ctx.storagePtr += 8;
+}
+
+function _lowerFlatStringAny(ctx) {
+  switch (ctx.stringEncoding) {
+    case 'utf8':
+    return _lowerFlatStringUTF8(ctx);
+    case 'utf16':
+    return _lowerFlatStringUTF16(ctx);
+    default:
+    throw new Error(`missing/unrecognized/unsupported string encoding [${ctx.stringEncoding}]`);
+  }
+}
+
+function _lowerFlatStringUTF8(ctx) {
+  _debugLog('[_lowerFlatStringUTF8()] args', ctx);
+  if (!ctx.realloc) { throw new Error('missing realloc during flat string lower'); }
+
+  const s = ctx.vals[0];
+  const { ptr, codepoints } = _utf8AllocateAndEncode(ctx.vals[0], ctx.realloc, ctx.memory);
+
+  const view = new DataView(ctx.memory.buffer);
+  view.setUint32(ctx.storagePtr, ptr, true);
+  view.setUint32(ctx.storagePtr + 4, codepoints, true);
+
+  ctx.storagePtr += 8;
+}
+
+function _lowerFlatStringUTF16(ctx) {
+  _debugLog('[_lowerFlatStringUTF16()] args', { ctx });
+  if (!ctx.realloc) { throw new Error('missing realloc during flat string lower'); }
+
+  const s = ctx.vals[0];
+  const { ptr, len, codepoints } = _utf16AllocateAndEncode(ctx.vals[0], ctx.realloc, ctx.memory);
+
+  const view = new DataView(ctx.memory.buffer);
+  view.setUint32(ctx.storagePtr, ptr, true);
+  view.setUint32(ctx.storagePtr + 4, codepoints, true);
+
+  const bytes = new Uint16Array(ctx.memory.buffer, start, codeUnits);
+  if (ctx.memory.buffer.byteLength < start + bytes.byteLength) {
+    throw new Error('memory out of bounds');
+  }
+  if (ctx.storageLen !== undefined && ctx.storageLen !== bytes.byteLength) {
+    throw new Error(`storage length [${ctx.storageLen}] != [${bytes.byteLength}])`);
+  }
+  new Uint16Array(ctx.memory.buffer, ctx.storagePtr).set(bytes);
+
+  ctx.storagePtr += len;
+}
+
+function _lowerFlatRecord(fieldMetas) {
+  return function _lowerFlatRecordInner(ctx) {
+    _debugLog('[_lowerFlatRecord()] args', { ctx });
+
+    const r = ctx.vals[0];
+    for (const [tag, lowerFn, size32, align32 ] of fieldMetas) {
+      ctx.vals = [r[tag]];
+      lowerFn(ctx);
+    }
+  }
+}
+
+function _lowerFlatVariant(lowerMetas) {
+  let caseLookup = {};
+  for (const [idx, meta] of lowerMetas.entries()) {
+    let tag = meta[0];
+    caseLookup[tag] = { discriminant: idx, meta };
+  }
+
+  return function _lowerFlatVariantInner(ctx) {
+    _debugLog('[_lowerFlatVariant()] args', { ctx });
+
+    const { tag, val } = ctx.vals[0];
+    const variantCase = caseLookup[tag];
+    if (!variantCase) {
+      throw new Error(`missing tag [${tag}] (valid tags: ${Object.keys(caseLookup)})`);
+    }
+
+    const [ _tag, lowerFn, size32, align32, payloadOffset32 ] = variantCase.meta;
+
+    const originalPtr = ctx.storagePtr;
+    ctx.vals = [variantCase.discriminant];
+    let discLowerRes;
+    if (lowerMetas.length < 256) {
+      discLowerRes = _lowerFlatU8(ctx);
+    } else if (lowerMetas.length >= 256 && lowerMetas.length < 65536) {
+      discLowerRes = _lowerFlatU16(ctx);
+    } else if (lowerMetas.length >= 65536 && lowerMetas.length < 4_294_967_296) {
+      discLowerRes = _lowerFlatU32(ctx);
+    } else {
+      throw new Error(`unsupported number of cases [${lowerMetas.length}]`);
+    }
+
+    const payloadOffsetPtr = originalPtr + payloadOffset32;
+    ctx.storagePtr = payloadOffsetPtr;
+    ctx.vals = [val];
+    if (lowerFn) { lowerFn(ctx); }
+
+    let bytesWritten = ctx.storagePtr - payloadOffsetPtr;
+
+    const rem = ctx.storagePtr % align32;
+    if (rem !== 0) {
+      const pad = align32 - rem;
+      ctx.storagePtr += pad;
+      bytesWritten += pad;
+    }
+
+    ctx.storagePtr += bytesWritten;
+  }
+}
+
+function _lowerFlatList(meta) {
+  const {
+    elemLowerFn,
+    knownLen,
+    size32,
+    align32,
+    elemSize32,
+    elemAlign32,
+  } = meta;
+
+  if (!elemLowerFn) { throw new TypeError("missing/invalid element lower fn for list"); }
+
+  return function _lowerFlatListInner(ctx) {
+    _debugLog('[_lowerFlatList()] args', { ctx });
+
+    if (ctx.useDirectParams) {
       if (ctx.params.length < 2) { throw new Error('insufficient params left to lower list'); }
       const storagePtr = ctx.params[0];
       const elemCount = ctx.params[1];
       ctx.params = ctx.params.slice(2);
-      
-      if (ctx.useDirectParams) {
-        const list = ctx.vals[0];
-        if (!list) { throw new Error("missing direct param value"); }
-        
-        const elemLowerCtx = { storagePtr, memory: ctx.memory };
-        for (let idx = 0; idx < list.length; idx++) {
-          elemLowerCtx.vals = list.slice(idx, idx+1);
-          elemLowerCtx.storagePtr += elemLowerFn(elemLowerCtx);
-        }
-        
-        const bytesLowered = elemLowerCtx.storagePtr - ctx.storagePtr;
-        ctx.storagePtr = elemLowerCtx.storagePtr;
-        return bytesLowered;
-      }
-      
-      if (ctx.vals.length !== 2) {
-        throw new Error('indirect parameter loading must have a pointer and length as vals');
-      }
-      let [valStartPtr, valLen] = ctx.vals;
-      const totalSizeBytes = valLen * size;
-      if (ctx.storageLen !== undefined && totalSizeBytes > ctx.storageLen) {
-        throw new Error('not enough storage remaining for list flat lower');
-      }
-      
-      const data = new Uint8Array(memory.buffer, valStartPtr, totalSizeBytes);
-      new Uint8Array(memory.buffer, storagePtr, totalSizeBytes).set(data);
-      
-      return totalSizeBytes;
-    }
-  }
-  
-  function _lowerFlatTuple(size, memory, vals, storagePtr, storageLen) {
-    _debugLog('[_lowerFlatTuple()] args', { size, memory, vals, storagePtr, storageLen });
-    let [start, len] = vals;
-    if (storageLen !== undefined && len > storageLen) {
-      throw new Error('not enough storage remaining for tuple flat lower');
-    }
-    const data = new Uint8Array(memory.buffer, start, len);
-    new Uint8Array(memory.buffer, storagePtr, len).set(data);
-    return data.byteLength;
-  }
-  
-  function _lowerFlatFlags(memory, vals, storagePtr, storageLen) {
-    _debugLog('[_lowerFlatFlags()] args', { size, memory, vals, storagePtr, storageLen });
-    if (vals.length !== 1) { throw new Error('unexpected number of core vals'); }
-    new DataView(memory.buffer).setInt32(storagePtr, vals[0], true);
-    return 4;
-  }
-  
-  function _lowerFlatEnum(size, memory, vals, storagePtr, storageLen) {
-    _debugLog('[_lowerFlatEnum()] args', { size, memory, vals, storagePtr, storageLen });
-    let [start] = vals;
-    if (storageLen !== undefined && size !== undefined && size > storageLen) {
-      throw new Error('not enough storage remaining for enum flat lower');
-    }
-    const data = new Uint8Array(memory.buffer, start, size);
-    new Uint8Array(memory.buffer, storagePtr, size).set(data);
-    return data.byteLength;
-  }
-  
-  function _lowerFlatOption(lowerMetas) {
-    function _lowerFlatOptionInner(ctx) {
-      _debugLog('[_lowerFlatOption()] args', { ctx });
-      return _lowerFlatVariant(lowerMetas)(ctx);
-    }
-  }
-  
-  function _lowerFlatResult(lowerMetas) {
-    return function _lowerFlatResultInner(ctx) {
-      _debugLog('[_lowerFlatResult()] args', { lowerMetas });
-      return _lowerFlatVariant(lowerMetas)(ctx);
-    };
-  }
-  
-  function _lowerFlatOwn(size, memory, vals, storagePtr, storageLen) {
-    _debugLog('[_lowerFlatOwn()] args', { size, memory, vals, storagePtr, storageLen });
-    throw new Error('flat lower for owned resources not yet implemented!');
-  }
-  
-  const STREAMS = new RepTable({ target: 'global stream map' });
-  const ASYNC_STATE = new Map();
-  
-  function getOrCreateAsyncState(componentIdx, init) {
-    if (!ASYNC_STATE.has(componentIdx)) {
-      const newState = new ComponentAsyncState({ componentIdx });
-      ASYNC_STATE.set(componentIdx, newState);
-    }
-    return ASYNC_STATE.get(componentIdx);
-  }
-  
-  class ComponentAsyncState {
-    static EVENT_HANDLER_EVENTS = [ 'backpressure-change' ];
-    
-    #componentIdx;
-    #callingAsyncImport = false;
-    #syncImportWait = promiseWithResolvers();
-    #locked = false;
-    #parkedTasks = new Map();
-    #suspendedTasksByTaskID = new Map();
-    #suspendedTaskIDs = [];
-    #errored = null;
-    
-    #backpressure = 0;
-    #backpressureWaiters = 0n;
-    
-    #handlerMap = new Map();
-    #nextHandlerID = 0n;
-    
-    #tickLoop = null;
-    #tickLoopInterval = null;
-    
-    #onExclusiveReleaseHandlers = [];
-    
-    mayLeave = true;
-    
-    handles;
-    subtasks;
-    
-    constructor(args) {
-      this.#componentIdx = args.componentIdx;
-      this.handles = new RepTable({ target: `component [${this.#componentIdx}] handles (waitable objects)` });
-      this.subtasks = new RepTable({ target: `component [${this.#componentIdx}] subtasks` });
-    };
-    
-    componentIdx() { return this.#componentIdx; }
-    
-    errored() { return this.#errored !== null; }
-    setErrored(err) {
-      _debugLog('[ComponentAsyncState#setErrored()] component errored', { err, componentIdx: this.#componentIdx });
-      if (this.#errored) { return; }
-      if (!err) {
-        err = new Error('error elswehere (see other component instance error)')
-        err.componentIdx = this.#componentIdx;
-      }
-      this.#errored = err;
-    }
-    
-    callingSyncImport(val) {
-      if (val === undefined) { return this.#callingAsyncImport; }
-      if (typeof val !== 'boolean') { throw new TypeError('invalid setting for async import'); }
-      const prev = this.#callingAsyncImport;
-      this.#callingAsyncImport = val;
-      if (prev === true && this.#callingAsyncImport === false) {
-        this.#notifySyncImportEnd();
-      }
-    }
-    
-    #notifySyncImportEnd() {
-      const existing = this.#syncImportWait;
-      this.#syncImportWait = promiseWithResolvers();
-      existing.resolve();
-    }
-    
-    async waitForSyncImportCallEnd() {
-      await this.#syncImportWait.promise;
-    }
-    
-    setBackpressure(v) {
-      this.#backpressure = v;
-      return this.#backpressure
-    }
-    getBackpressure() { return this.#backpressure; }
-    
-    incrementBackpressure() {
-      const current = this.#backpressure;
-      if (current < 0 || current > 2**16) {
-        throw new Error(`invalid current backpressure value [${current}]`);
-      }
-      const newValue = this.getBackpressure() + 1;
-      if (newValue >= 2**16) {
-        throw new Error(`invalid new backpressure value [${newValue}], overflow`);
-      }
-      return this.setBackpressure(newValue);
-    }
-    
-    decrementBackpressure() {
-      const current = this.#backpressure;
-      if (current < 0 || current > 2**16) {
-        throw new Error(`invalid current backpressure value [${current}]`);
-      }
-      const newValue = Math.max(0, current - 1);
-      if (newValue < 0) {
-        throw new Error(`invalid new backpressure value [${newValue}], underflow`);
-      }
-      return this.setBackpressure(newValue);
-    }
-    hasBackpressure() { return this.#backpressure > 0; }
-    
-    waitForBackpressure() {
-      let backpressureCleared = false;
-      const cstate = this;
-      cstate.addBackpressureWaiter();
-      const handlerID = this.registerHandler({
-        event: 'backpressure-change',
-        fn: (bp) => {
-          if (bp === 0) {
-            cstate.removeHandler(handlerID);
-            backpressureCleared = true;
-          }
-        }
-      });
-      return new Promise((resolve) => {
-        const interval = setInterval(() => {
-          if (backpressureCleared) { return; }
-          clearInterval(interval);
-          cstate.removeBackpressureWaiter();
-          resolve(null);
-        }, 0);
-      });
-    }
-    
-    registerHandler(args) {
-      const { event, fn } = args;
-      if (!event) { throw new Error("missing handler event"); }
-      if (!fn) { throw new Error("missing handler fn"); }
-      
-      if (!ComponentAsyncState.EVENT_HANDLER_EVENTS.includes(event)) {
-        throw new Error(`unrecognized event handler [${event}]`);
-      }
-      
-      const handlerID = this.#nextHandlerID++;
-      let handlers = this.#handlerMap.get(event);
-      if (!handlers) {
-        handlers = [];
-        this.#handlerMap.set(event, handlers)
-      }
-      
-      handlers.push({ id: handlerID, fn, event });
-      return handlerID;
-    }
-    
-    removeHandler(args) {
-      const { event, handlerID } = args;
-      const registeredHandlers = this.#handlerMap.get(event);
-      if (!registeredHandlers) { return; }
-      const found = registeredHandlers.find(h => h.id === handlerID);
-      if (!found) { return; }
-      this.#handlerMap.set(event, this.#handlerMap.get(event).filter(h => h.id !== handlerID));
-    }
-    
-    getBackpressureWaiters() { return this.#backpressureWaiters; }
-    addBackpressureWaiter() { this.#backpressureWaiters++; }
-    removeBackpressureWaiter() {
-      this.#backpressureWaiters--;
-      if (this.#backpressureWaiters < 0) {
-        throw new Error("unexepctedly negative number of backpressure waiters");
-      }
-    }
-    
-    isExclusivelyLocked() { return this.#locked === true; }
-    setLocked(locked) {
-      this.#locked = locked;
-    }
-    
-    // TODO(fix): we might want to check for pre-locked status here, we should be deterministically
-    // going from locked -> unlocked and vice versa
-    exclusiveLock() {
-      _debugLog('[ComponentAsyncState#exclusiveLock()]', {
-        locked: this.#locked,
-        componentIdx: this.#componentIdx,
-      });
-      this.setLocked(true);
-    }
-    
-    exclusiveRelease() {
-      _debugLog('[ComponentAsyncState#exclusiveRelease()] args', {
-        locked: this.#locked,
-        componentIdx: this.#componentIdx,
-      });
-      this.setLocked(false);
-      
-      this.#onExclusiveReleaseHandlers = this.#onExclusiveReleaseHandlers.filter(v => !!v);
-      for (const [idx, f] of this.#onExclusiveReleaseHandlers.entries()) {
-        try {
-          this.#onExclusiveReleaseHandlers[idx] = null;
-          f();
-        } catch (err) {
-          _debugLog("error while executing handler for next exclusive release", err);
-          throw err;
-        }
-      }
-    }
-    
-    onNextExclusiveRelease(fn) {
-      _debugLog('[ComponentAsyncState#()onNextExclusiveRelease] registering');
-      this.#onExclusiveReleaseHandlers.push(fn);
-    }
-    
-    #getSuspendedTaskMeta(taskID) {
-      return this.#suspendedTasksByTaskID.get(taskID);
-    }
-    
-    #removeSuspendedTaskMeta(taskID) {
-      _debugLog('[ComponentAsyncState#removeSuspendedTaskMeta()] removing suspended task', { taskID });
-      const idx = this.#suspendedTaskIDs.findIndex(t => t === taskID);
-      const meta = this.#suspendedTasksByTaskID.get(taskID);
-      this.#suspendedTaskIDs[idx] = null;
-      this.#suspendedTasksByTaskID.delete(taskID);
-      return meta;
-    }
-    
-    #addSuspendedTaskMeta(meta) {
-      if (!meta) { throw new Error('missing task meta'); }
-      const taskID = meta.taskID;
-      this.#suspendedTasksByTaskID.set(taskID, meta);
-      this.#suspendedTaskIDs.push(taskID);
-      if (this.#suspendedTasksByTaskID.size < this.#suspendedTaskIDs.length - 10) {
-        this.#suspendedTaskIDs = this.#suspendedTaskIDs.filter(t => t !== null);
-      }
-    }
-    
-    // TODO(threads): readyFn is normally on the thread
-    suspendTask(args) {
-      const { task, readyFn } = args;
-      const taskID = task.id();
-      _debugLog('[ComponentAsyncState#suspendTask()]', {
-        taskID,
-        componentIdx: this.#componentIdx,
-        taskEntryFnName: task.entryFnName(),
-        subtask: task.getParentSubtask(),
-      });
-      
-      if (this.#getSuspendedTaskMeta(taskID)) {
-        throw new Error(`task [${taskID}] already suspended`);
-      }
-      
-      const { promise, resolve, reject } = promiseWithResolvers();
-      this.#addSuspendedTaskMeta({
-        task,
-        taskID,
-        readyFn,
-        resume: () => {
-          _debugLog('[ComponentAsyncState#suspendTask()] resuming suspended task', { taskID });
-          // TODO(threads): it's thread cancellation we should be checking for below, not task
-          resolve(!task.isCancelled());
-        },
-      });
-      
-      this.runTickLoop();
-      
-      return promise;
-    }
-    
-    resumeTaskByID(taskID) {
-      const meta = this.#removeSuspendedTaskMeta(taskID);
-      if (!meta) { return; }
-      if (meta.taskID !== taskID) { throw new Error('task ID does not match'); }
-      meta.resume();
-    }
-    
-    async runTickLoop() {
-      if (this.#tickLoop !== null) { return; }
-      this.#tickLoop = 1;
-      setTimeout(async () => {
-        let done = this.tick();
-        while (!done) {
-          await new Promise((resolve) => setTimeout(resolve, 30));
-          done = this.tick();
-        }
-        this.#tickLoop = null;
-      }, 10);
-    }
-    
-    tick() {
-      // _debugLog('[ComponentAsyncState#tick()]', { suspendedTaskIDs: this.#suspendedTaskIDs });
-      
-      const resumableTasks = this.#suspendedTaskIDs.filter(t => t !== null);
-      for (const taskID of resumableTasks) {
-        const meta = this.#suspendedTasksByTaskID.get(taskID);
-        if (!meta || !meta.readyFn) {
-          throw new Error(`missing/invalid task despite ID [${taskID}] being present`);
-        }
-        
-        // If the task failed via any means, allow the task to resume because
-        // it's been cancelled -- the callback should immediately exit as well
-        if (meta.task.isRejected()) {
-          _debugLog('[ComponentAsyncState#suspendTask()] detected task rejection, leaving early', { meta });
-          this.resumeTaskByID(taskID);
-          return;
-        }
-        
-        const isReady = meta.readyFn();
-        if (!isReady) { continue; }
-        
-        this.resumeTaskByID(taskID);
-      }
-      
-      return this.#suspendedTaskIDs.filter(t => t !== null).length === 0;
-    }
-    
-    addStreamEndToTable(args) {
-      _debugLog('[ComponentAsyncState#addStreamEnd()] args', args);
-      const { tableIdx, streamEnd } = args;
-      if (typeof streamEnd === 'number') { throw new Error("INSERTING BAD STREAMEND"); }
-      
-      let { table, componentIdx } = STREAM_TABLES[tableIdx];
-      if (componentIdx === undefined || !table) {
-        throw new Error(`invalid global stream table state for table [${tableIdx}]`);
-      }
-      
-      const handle = table.insert(streamEnd);
-      streamEnd.setHandle(handle);
-      streamEnd.setStreamTableIdx(tableIdx);
-      
-      const cstate = getOrCreateAsyncState(componentIdx);
-      const waitableIdx = cstate.handles.insert(streamEnd);
-      streamEnd.setWaitableIdx(waitableIdx);
-      
-      _debugLog('[ComponentAsyncState#addStreamEnd()] added stream end', {
-        tableIdx,
-        table,
-        handle,
-        streamEnd,
-        destComponentIdx: componentIdx,
-      });
-      
-      return { handle, waitableIdx };
-    }
-    
-    createWaitable(args) {
-      return new Waitable({ target: args?.target, });
-    }
-    
-    createStream(args) {
-      _debugLog('[ComponentAsyncState#createStream()] args', args);
-      const { tableIdx, elemMeta } = args;
-      if (tableIdx === undefined) { throw new Error("missing table idx while adding stream"); }
-      if (elemMeta === undefined) { throw new Error("missing element metadata while adding stream"); }
-      
-      const { table: localStreamTable, componentIdx } = STREAM_TABLES[tableIdx];
-      if (!localStreamTable) {
-        throw new Error(`missing global stream table lookup for table [${tableIdx}] while creating stream`);
-      }
-      if (componentIdx !== this.#componentIdx) {
-        throw new Error('component idx mismatch while creating stream');
-      }
-      
-      const readWaitable = this.createWaitable();
-      const writeWaitable = this.createWaitable();
-      
-      const stream = new InternalStream({
-        tableIdx,
-        componentIdx: this.#componentIdx,
-        elemMeta,
-        readWaitable,
-        writeWaitable,
-      });
-      stream.setGlobalStreamMapRep(STREAMS.insert(stream));
-      
-      const writeEnd = stream.writeEnd();
-      writeEnd.setWaitableIdx(this.handles.insert(writeEnd));
-      writeEnd.setHandle(localStreamTable.insert(writeEnd));
-      if (writeEnd.streamTableIdx() !== tableIdx) { throw new Error("unexpectedly mismatched stream table"); }
-      
-      const writeEndWaitableIdx = writeEnd.waitableIdx();
-      const writeEndHandle = writeEnd.handle();
-      writeWaitable.setTarget(`waitable for stream write end (waitable [${writeEndWaitableIdx}])`);
-      writeEnd.setTarget(`stream write end (waitable [${writeEndWaitableIdx}])`);
-      
-      const readEnd = stream.readEnd();
-      readEnd.setWaitableIdx(this.handles.insert(readEnd));
-      readEnd.setHandle(localStreamTable.insert(readEnd));
-      if (readEnd.streamTableIdx() !== tableIdx) { throw new Error("unexpectedly mismatched stream table"); }
-      
-      const readEndWaitableIdx = readEnd.waitableIdx();
-      const readEndHandle = readEnd.handle();
-      readWaitable.setTarget(`waitable for read end (waitable [${readEndWaitableIdx}])`);
-      readEnd.setTarget(`stream read end (waitable [${readEndWaitableIdx}])`);
-      
-      return {
-        writeEndWaitableIdx,
-        writeEndHandle,
-        readEndWaitableIdx,
-        readEndHandle,
+
+      const list = ctx.vals[0];
+      if (!list) { throw new Error("missing direct param value"); }
+
+      const lowerCtx = {
+        storagePtr,
+        memory: ctx.memory,
+        stringEncoding: ctx.stringEncoding,
       };
+      for (let idx = 0; idx < list.length; idx++) {
+        lowerCtx.vals = list.slice(idx, idx+1);
+        elemLowerFn(lowerCtx);
+      }
+
+      const bytesLowered = lowerCtx.storagePtr - ctx.storagePtr;
+      ctx.storagePtr = lowerCtx.storagePtr;
+
+      // TODO: implement parma-only known-length processing
+
+      ctx.storagePtr += bytesLowered;
+      return;
     }
-    
-    getStreamEnd(args) {
-      _debugLog('[ComponentAsyncState#getStreamEnd()] args', args);
-      const { tableIdx, streamEndHandle, streamEndWaitableIdx } = args;
-      if (tableIdx === undefined) { throw new Error('missing table idx while getting stream end'); }
-      
-      const { table, componentIdx } = STREAM_TABLES[tableIdx];
-      const cstate = getOrCreateAsyncState(componentIdx);
-      
-      let streamEnd;
-      if (streamEndWaitableIdx !== undefined) {
-        streamEnd = cstate.handles.get(streamEndWaitableIdx);
-      } else if (streamEndHandle !== undefined) {
-        if (!table) { throw new Error(`missing/invalid table [${tableIdx}] while getting stream end`); }
-        streamEnd = table.get(streamEndHandle);
-      } else {
-        throw new TypeError("must specify either waitable idx or handle to retrieve stream");
+
+    // TODO(fix): is it possible to get a vals that are a addr and length here from
+    // a component lower?
+
+    const elems = ctx.vals[0];
+    if (knownLen === undefined) {
+      // unknown length
+      if (!ctx.realloc) { throw new Error('missing realloc during flat string lower'); }
+      const dataPtr = ctx.realloc(0, 0, elemAlign32, elemSize32 * elems.length);
+
+      ctx.vals[0] = dataPtr;
+      _lowerFlatU32(ctx);
+
+      ctx.vals[0] = elems.length;
+      _lowerFlatU32(ctx);
+
+      const origPtr = ctx.storagePtr;
+      ctx.storagePtr = dataPtr;
+
+      ctx.storagePtr = dataPtr;
+      for (const elem of elems) {
+        ctx.vals = [elem];
+        elemLowerFn(ctx);
       }
-      
-      if (!streamEnd) {
-        throw new Error(`missing stream end (tableIdx [${tableIdx}], handle [${streamEndHandle}], waitableIdx [${streamEndWaitableIdx}])`);
+
+      ctx.storagePtr = origPtr;
+
+    } else {
+      // known length
+
+      if (elems.length !== knownLen) {
+        throw new TypeError(`invalid list input of length [${elems.length}], must be length [${knownLen}]`);
       }
-      if (tableIdx && streamEnd.streamTableIdx() !== tableIdx) {
-        throw new Error(`stream end table idx [${streamEnd.streamTableIdx()}] does not match [${tableIdx}]`);
+
+      for (const elem of elems) {
+        ctx.vals = [elem];
+        elemLowerFn(ctx);
       }
-      
-      return streamEnd;
     }
-    
-    deleteStreamEnd(args) {
-      _debugLog('[ComponentAsyncState#deleteStreamEnd()] args', args);
-      const { tableIdx, streamEndWaitableIdx } = args;
-      if (tableIdx === undefined) { throw new Error("missing table idx while removing stream end"); }
-      if (streamEndWaitableIdx === undefined) { throw new Error("missing stream idx while removing stream end"); }
-      
-      const { table, componentIdx } = STREAM_TABLES[tableIdx];
-      const cstate = getOrCreateAsyncState(componentIdx);
-      
-      const streamEnd = cstate.handles.get(streamEndWaitableIdx);
-      if (!streamEnd) {
-        throw new Error(`missing stream end [${streamEndWaitableIdx}] in component handles while deleting stream`);
-      }
-      if (streamEnd.streamTableIdx() !== tableIdx) {
-        throw new Error(`stream end table idx [${streamEnd.streamTableIdx()}] does not match [${tableIdx}]`);
-      }
-      
-      let removed = cstate.handles.remove(streamEnd.waitableIdx());
-      if (!removed) {
-        throw new Error(`failed to remove stream end [${streamEndWaitableIdx}] waitable obj in component [${componentIdx}]`);
-      }
-      
-      removed = table.remove(streamEnd.handle());
-      if (!removed) {
-        throw new Error(`failed to remove stream end with handle [${streamEnd.handle()}] from stream table [${tableIdx}] in component [${componentIdx}]`);
-      }
-      
-      return streamEnd;
-    }
-    
-    removeStreamEndFromTable(args) {
-      _debugLog('[ComponentAsyncState#removeStreamEndFromTable()] args', args);
-      
-      const { tableIdx, streamWaitableIdx } = args;
-      if (tableIdx === undefined) { throw new Error("missing table idx while removing stream end"); }
-      if (streamWaitableIdx === undefined) {
-        throw new Error("missing stream end waitable idx while removing stream end");
-      }
-      
-      const { table, componentIdx } = STREAM_TABLES[tableIdx];
-      if (!table) { throw new Error(`missing/invalid table [${tableIdx}] while removing stream end`); }
-      
-      const cstate = getOrCreateAsyncState(componentIdx);
-      
-      const streamEnd = cstate.handles.get(streamWaitableIdx);
-      if (!streamEnd) {
-        throw new Error(`missing stream end (handle [${streamWaitableIdx}], table [${tableIdx}])`);
-      }
-      const handle = streamEnd.handle();
-      
-      let removed = cstate.handles.remove(streamWaitableIdx);
-      if (!removed) {
-        throw new Error(`failed to remove streamEnd from handles (waitable idx [${streamWaitableIdx}]), component [${componentIdx}])`);
-      }
-      
-      removed = table.remove(handle);
-      if (!removed) {
-        throw new Error(`failed to remove streamEnd from table (handle [${handle}]), table [${tableIdx}], component [${componentIdx}])`);
-      }
-      
-      return streamEnd;
+
+    // TODO(fix): special case for u8/u16/etc, we can do a direct copy
+
+    const totalSizeBytes = elems.length * size32;
+    if (ctx.storageLen !== undefined && totalSizeBytes > ctx.storageLen) {
+      throw new Error('not enough storage remaining for list flat lower');
     }
   }
-  
-  const base64Compile = str => WebAssembly.compile(typeof Buffer !== 'undefined' ? Buffer.from(str, 'base64') : Uint8Array.from(atob(str), b => b.charCodeAt(0)));
-  
-  const isNode = typeof process !== 'undefined' && process.versions && process.versions.node;
-  let _fs;
-  async function fetchCompile (url) {
-    if (isNode) {
-      _fs = _fs || await import('node:fs/promises');
-      return WebAssembly.compile(await _fs.readFile(url));
-    }
-    return fetch(url).then(WebAssembly.compileStreaming);
-  }
-  
-  const symbolCabiDispose = Symbol.for('cabiDispose');
-  
-  const symbolRscHandle = Symbol('handle');
-  
-  const symbolRscRep = Symbol.for('cabiRep');
-  
-  const symbolDispose = Symbol.dispose || Symbol.for('dispose');
-  
-  const handleTables = [];
-  
-  class ComponentError extends Error {
-    constructor (value) {
-      const enumerable = typeof value !== 'string';
-      super(enumerable ? `${String(value)} (see error.payload)` : value);
-      Object.defineProperty(this, 'payload', { value, enumerable });
+}
+
+function _lowerFlatTuple(elemLowerMetas) {
+  return function _lowerFlatTupleInner(ctx) {
+    _debugLog('[_lowerFlatTuple()] args', { ctx });
+    const tuple = ctx.vals[0];
+    for (const [idx, [ lowerFn, size32, align32 ]]  of elemLowerMetas.entries()) {
+      ctx.vals = [tuple[idx]];
+      lowerFn(ctx);
     }
   }
-  
-  function getErrorPayload(e) {
-    if (e && hasOwnProperty.call(e, 'payload')) return e.payload;
-    if (e instanceof Error) throw e;
-    return e;
-  }
-  
-  function throwUninitialized() {
-    throw new TypeError('Wasm uninitialized use `await $init` first');
-  }
-  
-  const hasOwnProperty = Object.prototype.hasOwnProperty;
-  
-  const instantiateCore = WebAssembly.instantiate;
-  
-  
-  let exports0;
-  let exports1;
-  const handleTable2 = [T_FLAG, 0];
-  const captureTable2= new Map();
-  let captureCnt2 = 0;
-  handleTables[2] = handleTable2;
-  
-  const _trampoline5 = function() {
-    _debugLog('[iface="wasi:cli/stderr@0.2.3", function="get-stderr"] [Instruction::CallInterface] (sync, @ enter)');
-    let hostProvided = true;
-    
-    let parentTask;
-    let task;
-    let subtask;
-    
-    const createTask = () => {
-      const results = createNewCurrentTask({
-        componentIdx: -1, // 0,
-        isAsync: false,
-        entryFnName: 'getStderr',
-        getCallbackFn: () => null,
-        callbackFnName: 'null',
-        errHandling: 'none',
-        callingWasmExport: false,
-      });
-      task = results[0];
-    };
-    
-    taskCreation: {
-      parentTask = getCurrentTask(0)?.task;
-      if (!parentTask) {
-        createTask();
-        break taskCreation;
+}
+
+function _lowerFlatFlags(meta) {
+  const { names, size32, align32, intSizeBytes } = meta;
+
+  return function _lowerFlatFlagsInner(ctx) {
+    _debugLog('[_lowerFlatFlags()] args', { ctx });
+    if (ctx.vals.length !== 1) { throw new Error('unexpected number of vals'); }
+
+    let flagObj = ctx.vals[0];
+    let flagValue = 0;
+    for (const [idx, name] of names.entries()) {
+      if (flagObj[name] === true) {
+        flagValue |= 1 << idx;
       }
-      
-      createTask();
-      
-      if (hostProvided) {
-        subtask = parentTask.getLatestSubtask();
-        if (!subtask) {
-          throw new Error(`Missing subtask (in parent task [${parentTask.id()}]) for host import, has the import been lowered? (ensure asyncImports are set properly)`);
+    }
+
+    const rem = ctx.storagePtr % align32;
+    if (rem !== 0) { ctx.storagePtr += (align32 - rem); }
+
+    const dv = new DataView(ctx.memory.buffer);
+    if (intSizeBytes === 1) {
+      dv.setUint8(ctx.storagePtr, flagValue);
+    } else if (intSizeBytes === 2) {
+      dv.setUint16(ctx.storagePtr, flagValue);
+    } else if (intSizeBytes === 4) {
+      dv.setUint32(ctx.storagePtr, flagValue);
+    } else {
+      throw new Error(`unrecognized flag size [${intSizeBytes} bytes]`);
+    }
+
+    ctx.storagePtr += intSizeBytes;
+  }
+}
+
+function _lowerFlatEnum(lowerMetas) {
+  return function _lowerFlatEnumInner(ctx) {
+    _debugLog('[_lowerFlatEnum()] args', { ctx });
+
+    const v = ctx.vals[0];
+    const isNotEnumObject = typeof v !== 'object'
+    || Object.keys(v).length !== 2
+    || !('tag' in v);
+    if (isNotEnumObject) {
+      ctx.vals[0] = { tag: v };
+    }
+
+    _lowerFlatVariant(lowerMetas)(ctx);
+  }
+}
+
+function _lowerFlatOption(lowerMetas) {
+  return function _lowerFlatOptionInner(ctx) {
+    _debugLog('[_lowerFlatOption()] args', { ctx });
+
+    const v = ctx.vals[0];
+    if (v === null) {
+      ctx.vals[0] = { tag: 'none' };
+    } else {
+      const isNotOptionObject = typeof v !== 'object'
+      || Object.keys(v).length !== 2
+      || !('tag' in v)
+      || !(v.tag === 'some' || v.tag === 'none')
+      || !('val' in v);
+      if (isNotOptionObject) {
+        ctx.vals[0] = { tag: 'some', val: v };
+      }
+    }
+
+    _lowerFlatVariant(lowerMetas)(ctx);
+  }
+}
+
+function _lowerFlatResult(lowerMetas) {
+  return function _lowerFlatResultInner(ctx) {
+    _debugLog('[_lowerFlatResult()] args', { lowerMetas });
+
+    const v = ctx.vals[0];
+    const isNotResultObject = typeof v !== 'object'
+    || Object.keys(v).length !== 2
+    || !('tag' in v)
+    || !('ok' === v.tag || 'err' === v.tag)
+    || !('val' in v);
+    if (isNotResultObject) {
+      ctx.vals[0] = { tag: 'ok', val: v };
+    }
+
+    _lowerFlatVariant(lowerMetas)(ctx);
+  };
+}
+
+function _lowerFlatOwn(meta) {
+  const { lowerFn, componentIdx } = meta;
+
+  return function _lowerFlatOwnInner(ctx) {
+    _debugLog('[_lowerFlatOwn()] args', { ctx });
+    const { createFn } = ctx;
+
+    if (ctx.componentIdx !== componentIdx) {
+      throw new Error(`component index mismatch (expected [${componentIdx}], lift called from [${ctx.componentIdx}])`);
+    }
+
+    const obj = ctx.vals[0];
+    if (obj === undefined || obj === null) { throw new Error('missing resource'); }
+    const handle = lowerFn(obj);
+
+    ctx.vals[0] = handle;
+    _lowerFlatU32(ctx);
+  };
+}
+
+const STREAMS = new RepTable({ target: 'global stream map' });
+const ASYNC_STATE = new Map();
+
+function getOrCreateAsyncState(componentIdx, init) {
+  if (!ASYNC_STATE.has(componentIdx)) {
+    const newState = new ComponentAsyncState({ componentIdx });
+    ASYNC_STATE.set(componentIdx, newState);
+  }
+  return ASYNC_STATE.get(componentIdx);
+}
+
+class ComponentAsyncState {
+  static EVENT_HANDLER_EVENTS = [ 'backpressure-change' ];
+
+  #componentIdx;
+  #callingAsyncImport = false;
+  #syncImportWait = promiseWithResolvers();
+  #locked = false;
+  #parkedTasks = new Map();
+  #suspendedTasksByTaskID = new Map();
+  #suspendedTaskIDs = [];
+  #errored = null;
+
+  #backpressure = 0;
+  #backpressureWaiters = 0n;
+
+  #handlerMap = new Map();
+  #nextHandlerID = 0n;
+
+  #tickLoop = null;
+  #tickLoopInterval = null;
+
+  #onExclusiveReleaseHandlers = [];
+
+  mayLeave = true;
+
+  handles;
+  subtasks;
+
+  constructor(args) {
+    this.#componentIdx = args.componentIdx;
+    this.handles = new RepTable({ target: `component [${this.#componentIdx}] handles (waitable objects)` });
+    this.subtasks = new RepTable({ target: `component [${this.#componentIdx}] subtasks` });
+  };
+
+  componentIdx() { return this.#componentIdx; }
+
+  errored() { return this.#errored !== null; }
+  setErrored(err) {
+    _debugLog('[ComponentAsyncState#setErrored()] component errored', { err, componentIdx: this.#componentIdx });
+    if (this.#errored) { return; }
+    if (!err) {
+      err = new Error('error elswehere (see other component instance error)')
+      err.componentIdx = this.#componentIdx;
+    }
+    this.#errored = err;
+  }
+
+  callingSyncImport(val) {
+    if (val === undefined) { return this.#callingAsyncImport; }
+    if (typeof val !== 'boolean') { throw new TypeError('invalid setting for async import'); }
+    const prev = this.#callingAsyncImport;
+    this.#callingAsyncImport = val;
+    if (prev === true && this.#callingAsyncImport === false) {
+      this.#notifySyncImportEnd();
+    }
+  }
+
+  #notifySyncImportEnd() {
+    const existing = this.#syncImportWait;
+    this.#syncImportWait = promiseWithResolvers();
+    existing.resolve();
+  }
+
+  async waitForSyncImportCallEnd() {
+    await this.#syncImportWait.promise;
+  }
+
+  setBackpressure(v) {
+    this.#backpressure = v;
+    return this.#backpressure
+  }
+  getBackpressure() { return this.#backpressure; }
+
+  incrementBackpressure() {
+    const current = this.#backpressure;
+    if (current < 0 || current > 2**16) {
+      throw new Error(`invalid current backpressure value [${current}]`);
+    }
+    const newValue = this.getBackpressure() + 1;
+    if (newValue >= 2**16) {
+      throw new Error(`invalid new backpressure value [${newValue}], overflow`);
+    }
+    return this.setBackpressure(newValue);
+  }
+
+  decrementBackpressure() {
+    const current = this.#backpressure;
+    if (current < 0 || current > 2**16) {
+      throw new Error(`invalid current backpressure value [${current}]`);
+    }
+    const newValue = Math.max(0, current - 1);
+    if (newValue < 0) {
+      throw new Error(`invalid new backpressure value [${newValue}], underflow`);
+    }
+    return this.setBackpressure(newValue);
+  }
+  hasBackpressure() { return this.#backpressure > 0; }
+
+  waitForBackpressure() {
+    let backpressureCleared = false;
+    const cstate = this;
+    cstate.addBackpressureWaiter();
+    const handlerID = this.registerHandler({
+      event: 'backpressure-change',
+      fn: (bp) => {
+        if (bp === 0) {
+          cstate.removeHandler(handlerID);
+          backpressureCleared = true;
         }
-        task.setParentSubtask(subtask);
       }
-    }
-    
-    const started = task.enterSync();
-    let ret = _withGlobalCurrentTaskMeta({
-      componentIdx: task.componentIdx(),
-      taskID: task.id(),
-      fn: () => getStderr()
-    })
-    ;
-    if (!(ret instanceof OutputStream)) {
-      throw new TypeError('Resource error: Not a valid "OutputStream" resource.');
-    }
-    var handle0 = ret[symbolRscHandle];
-    if (!handle0) {
-      const rep = ret[symbolRscRep] || ++captureCnt2;
-      captureTable2.set(rep, ret);
-      handle0 = rscTableCreateOwn(handleTable2, rep);
-    }
-    _debugLog('[iface="wasi:cli/stderr@0.2.3", function="get-stderr"][Instruction::Return]', {
-      funcName: 'get-stderr',
-      paramCount: 1,
-      async: false,
-      postReturn: false
     });
-    task.resolve([handle0]);
-    task.exit();
-    return handle0;
-  }
-  _trampoline5.fnName = 'wasi:cli/stderr@0.2.3#getStderr';
-  const handleTable1 = [T_FLAG, 0];
-  const captureTable1= new Map();
-  let captureCnt1 = 0;
-  handleTables[1] = handleTable1;
-  
-  const _trampoline8 = function() {
-    _debugLog('[iface="wasi:cli/stdin@0.2.3", function="get-stdin"] [Instruction::CallInterface] (sync, @ enter)');
-    let hostProvided = true;
-    
-    let parentTask;
-    let task;
-    let subtask;
-    
-    const createTask = () => {
-      const results = createNewCurrentTask({
-        componentIdx: -1, // 0,
-        isAsync: false,
-        entryFnName: 'getStdin',
-        getCallbackFn: () => null,
-        callbackFnName: 'null',
-        errHandling: 'none',
-        callingWasmExport: false,
-      });
-      task = results[0];
-    };
-    
-    taskCreation: {
-      parentTask = getCurrentTask(0)?.task;
-      if (!parentTask) {
-        createTask();
-        break taskCreation;
-      }
-      
-      createTask();
-      
-      if (hostProvided) {
-        subtask = parentTask.getLatestSubtask();
-        if (!subtask) {
-          throw new Error(`Missing subtask (in parent task [${parentTask.id()}]) for host import, has the import been lowered? (ensure asyncImports are set properly)`);
-        }
-        task.setParentSubtask(subtask);
-      }
-    }
-    
-    const started = task.enterSync();
-    let ret = _withGlobalCurrentTaskMeta({
-      componentIdx: task.componentIdx(),
-      taskID: task.id(),
-      fn: () => getStdin()
-    })
-    ;
-    if (!(ret instanceof InputStream)) {
-      throw new TypeError('Resource error: Not a valid "InputStream" resource.');
-    }
-    var handle0 = ret[symbolRscHandle];
-    if (!handle0) {
-      const rep = ret[symbolRscRep] || ++captureCnt1;
-      captureTable1.set(rep, ret);
-      handle0 = rscTableCreateOwn(handleTable1, rep);
-    }
-    _debugLog('[iface="wasi:cli/stdin@0.2.3", function="get-stdin"][Instruction::Return]', {
-      funcName: 'get-stdin',
-      paramCount: 1,
-      async: false,
-      postReturn: false
+    return new Promise((resolve) => {
+      const interval = setInterval(() => {
+        if (backpressureCleared) { return; }
+        clearInterval(interval);
+        cstate.removeBackpressureWaiter();
+        resolve(null);
+      }, 0);
     });
-    task.resolve([handle0]);
-    task.exit();
-    return handle0;
   }
-  _trampoline8.fnName = 'wasi:cli/stdin@0.2.3#getStdin';
-  
-  const _trampoline9 = function() {
-    _debugLog('[iface="wasi:cli/stdout@0.2.3", function="get-stdout"] [Instruction::CallInterface] (sync, @ enter)');
-    let hostProvided = true;
-    
-    let parentTask;
-    let task;
-    let subtask;
-    
-    const createTask = () => {
-      const results = createNewCurrentTask({
-        componentIdx: -1, // 0,
-        isAsync: false,
-        entryFnName: 'getStdout',
-        getCallbackFn: () => null,
-        callbackFnName: 'null',
-        errHandling: 'none',
-        callingWasmExport: false,
-      });
-      task = results[0];
-    };
-    
-    taskCreation: {
-      parentTask = getCurrentTask(0)?.task;
-      if (!parentTask) {
-        createTask();
-        break taskCreation;
-      }
-      
-      createTask();
-      
-      if (hostProvided) {
-        subtask = parentTask.getLatestSubtask();
-        if (!subtask) {
-          throw new Error(`Missing subtask (in parent task [${parentTask.id()}]) for host import, has the import been lowered? (ensure asyncImports are set properly)`);
-        }
-        task.setParentSubtask(subtask);
-      }
+
+  registerHandler(args) {
+    const { event, fn } = args;
+    if (!event) { throw new Error("missing handler event"); }
+    if (!fn) { throw new Error("missing handler fn"); }
+
+    if (!ComponentAsyncState.EVENT_HANDLER_EVENTS.includes(event)) {
+      throw new Error(`unrecognized event handler [${event}]`);
     }
-    
-    const started = task.enterSync();
-    let ret = _withGlobalCurrentTaskMeta({
-      componentIdx: task.componentIdx(),
-      taskID: task.id(),
-      fn: () => getStdout()
-    })
-    ;
-    if (!(ret instanceof OutputStream)) {
-      throw new TypeError('Resource error: Not a valid "OutputStream" resource.');
+
+    const handlerID = this.#nextHandlerID++;
+    let handlers = this.#handlerMap.get(event);
+    if (!handlers) {
+      handlers = [];
+      this.#handlerMap.set(event, handlers)
     }
-    var handle0 = ret[symbolRscHandle];
-    if (!handle0) {
-      const rep = ret[symbolRscRep] || ++captureCnt2;
-      captureTable2.set(rep, ret);
-      handle0 = rscTableCreateOwn(handleTable2, rep);
+
+    handlers.push({ id: handlerID, fn, event });
+    return handlerID;
+  }
+
+  removeHandler(args) {
+    const { event, handlerID } = args;
+    const registeredHandlers = this.#handlerMap.get(event);
+    if (!registeredHandlers) { return; }
+    const found = registeredHandlers.find(h => h.id === handlerID);
+    if (!found) { return; }
+    this.#handlerMap.set(event, this.#handlerMap.get(event).filter(h => h.id !== handlerID));
+  }
+
+  getBackpressureWaiters() { return this.#backpressureWaiters; }
+  addBackpressureWaiter() { this.#backpressureWaiters++; }
+  removeBackpressureWaiter() {
+    this.#backpressureWaiters--;
+    if (this.#backpressureWaiters < 0) {
+      throw new Error("unexepctedly negative number of backpressure waiters");
     }
-    _debugLog('[iface="wasi:cli/stdout@0.2.3", function="get-stdout"][Instruction::Return]', {
-      funcName: 'get-stdout',
-      paramCount: 1,
-      async: false,
-      postReturn: false
+  }
+
+  isExclusivelyLocked() { return this.#locked === true; }
+  setLocked(locked) {
+    this.#locked = locked;
+  }
+
+  // TODO(fix): we might want to check for pre-locked status here, we should be deterministically
+  // going from locked -> unlocked and vice versa
+  exclusiveLock() {
+    _debugLog('[ComponentAsyncState#exclusiveLock()]', {
+      locked: this.#locked,
+      componentIdx: this.#componentIdx,
     });
-    task.resolve([handle0]);
-    task.exit();
-    return handle0;
+    this.setLocked(true);
   }
-  _trampoline9.fnName = 'wasi:cli/stdout@0.2.3#getStdout';
-  
-  const _trampoline10 = function(arg0) {
-    let variant0;
-    switch (arg0) {
-      case 0: {
-        variant0= {
-          tag: 'ok',
-          val: undefined
-        };
-        break;
-      }
-      case 1: {
-        variant0= {
-          tag: 'err',
-          val: undefined
-        };
-        break;
-      }
-      default: {
-        throw new TypeError('invalid variant discriminant for expected');
-      }
-    }
-    _debugLog('[iface="wasi:cli/exit@0.2.3", function="exit"] [Instruction::CallInterface] (sync, @ enter)');
-    let hostProvided = true;
-    
-    let parentTask;
-    let task;
-    let subtask;
-    
-    const createTask = () => {
-      const results = createNewCurrentTask({
-        componentIdx: -1, // 0,
-        isAsync: false,
-        entryFnName: 'exit',
-        getCallbackFn: () => null,
-        callbackFnName: 'null',
-        errHandling: 'none',
-        callingWasmExport: false,
-      });
-      task = results[0];
-    };
-    
-    taskCreation: {
-      parentTask = getCurrentTask(0)?.task;
-      if (!parentTask) {
-        createTask();
-        break taskCreation;
-      }
-      
-      createTask();
-      
-      if (hostProvided) {
-        subtask = parentTask.getLatestSubtask();
-        if (!subtask) {
-          throw new Error(`Missing subtask (in parent task [${parentTask.id()}]) for host import, has the import been lowered? (ensure asyncImports are set properly)`);
-        }
-        task.setParentSubtask(subtask);
-      }
-    }
-    
-    const started = task.enterSync();
-    let ret;_withGlobalCurrentTaskMeta({
-      componentIdx: task.componentIdx(),
-      taskID: task.id(),
-      fn: () => exit(variant0)
-    })
-    ;
-    _debugLog('[iface="wasi:cli/exit@0.2.3", function="exit"][Instruction::Return]', {
-      funcName: 'exit',
-      paramCount: 0,
-      async: false,
-      postReturn: false
+
+  exclusiveRelease() {
+    _debugLog('[ComponentAsyncState#exclusiveRelease()] args', {
+      locked: this.#locked,
+      componentIdx: this.#componentIdx,
     });
-    task.resolve([ret]);
-    task.exit();
+    this.setLocked(false);
+
+    this.#onExclusiveReleaseHandlers = this.#onExclusiveReleaseHandlers.filter(v => !!v);
+    for (const [idx, f] of this.#onExclusiveReleaseHandlers.entries()) {
+      try {
+        this.#onExclusiveReleaseHandlers[idx] = null;
+        f();
+      } catch (err) {
+        _debugLog("error while executing handler for next exclusive release", err);
+        throw err;
+      }
+    }
   }
-  _trampoline10.fnName = 'wasi:cli/exit@0.2.3#exit';
-  let exports2;
-  let memory0;
-  let realloc0;
-  let realloc0Async;
-  
-  const _trampoline11 = function(arg0) {
-    _debugLog('[iface="wasi:cli/environment@0.2.3", function="get-environment"] [Instruction::CallInterface] (sync, @ enter)');
-    let hostProvided = true;
-    
-    let parentTask;
-    let task;
-    let subtask;
-    
-    const createTask = () => {
-      const results = createNewCurrentTask({
-        componentIdx: -1, // 0,
-        isAsync: false,
-        entryFnName: 'getEnvironment',
-        getCallbackFn: () => null,
-        callbackFnName: 'null',
-        errHandling: 'none',
-        callingWasmExport: false,
-      });
-      task = results[0];
-    };
-    
-    taskCreation: {
-      parentTask = getCurrentTask(0)?.task;
-      if (!parentTask) {
-        createTask();
-        break taskCreation;
-      }
-      
-      createTask();
-      
-      if (hostProvided) {
-        subtask = parentTask.getLatestSubtask();
-        if (!subtask) {
-          throw new Error(`Missing subtask (in parent task [${parentTask.id()}]) for host import, has the import been lowered? (ensure asyncImports are set properly)`);
-        }
-        task.setParentSubtask(subtask);
-      }
+
+  onNextExclusiveRelease(fn) {
+    _debugLog('[ComponentAsyncState#()onNextExclusiveRelease] registering');
+    this.#onExclusiveReleaseHandlers.push(fn);
+  }
+
+  #getSuspendedTaskMeta(taskID) {
+    return this.#suspendedTasksByTaskID.get(taskID);
+  }
+
+  #removeSuspendedTaskMeta(taskID) {
+    _debugLog('[ComponentAsyncState#removeSuspendedTaskMeta()] removing suspended task', { taskID });
+    const idx = this.#suspendedTaskIDs.findIndex(t => t === taskID);
+    const meta = this.#suspendedTasksByTaskID.get(taskID);
+    this.#suspendedTaskIDs[idx] = null;
+    this.#suspendedTasksByTaskID.delete(taskID);
+    return meta;
+  }
+
+  #addSuspendedTaskMeta(meta) {
+    if (!meta) { throw new Error('missing task meta'); }
+    const taskID = meta.taskID;
+    this.#suspendedTasksByTaskID.set(taskID, meta);
+    this.#suspendedTaskIDs.push(taskID);
+    if (this.#suspendedTasksByTaskID.size < this.#suspendedTaskIDs.length - 10) {
+      this.#suspendedTaskIDs = this.#suspendedTaskIDs.filter(t => t !== null);
     }
-    
-    const started = task.enterSync();
-    let ret = _withGlobalCurrentTaskMeta({
-      componentIdx: task.componentIdx(),
-      taskID: task.id(),
-      fn: () => getEnvironment()
-    })
-    ;
-    var vec3 = ret;
-    var len3 = vec3.length;
-    var result3 = realloc0(0, 0, 4, len3 * 16);
-    for (let i = 0; i < vec3.length; i++) {
-      const e = vec3[i];
-      const base = result3 + i * 16;var [tuple0_0, tuple0_1] = e;
-      
-      var encodeRes = _utf8AllocateAndEncode(tuple0_0, realloc0, memory0);
-      var ptr1= encodeRes.ptr;
-      var len1 = encodeRes.len;
-      
-      dataView(memory0).setUint32(base + 4, len1, true);
-      dataView(memory0).setUint32(base + 0, ptr1, true);
-      
-      var encodeRes = _utf8AllocateAndEncode(tuple0_1, realloc0, memory0);
-      var ptr2= encodeRes.ptr;
-      var len2 = encodeRes.len;
-      
-      dataView(memory0).setUint32(base + 12, len2, true);
-      dataView(memory0).setUint32(base + 8, ptr2, true);
-    }
-    dataView(memory0).setUint32(arg0 + 4, len3, true);
-    dataView(memory0).setUint32(arg0 + 0, result3, true);
-    _debugLog('[iface="wasi:cli/environment@0.2.3", function="get-environment"][Instruction::Return]', {
-      funcName: 'get-environment',
-      paramCount: 0,
-      async: false,
-      postReturn: false
+  }
+
+  // TODO(threads): readyFn is normally on the thread
+  suspendTask(args) {
+    const { task, readyFn } = args;
+    const taskID = task.id();
+    _debugLog('[ComponentAsyncState#suspendTask()]', {
+      taskID,
+      componentIdx: this.#componentIdx,
+      taskEntryFnName: task.entryFnName(),
+      subtask: task.getParentSubtask(),
     });
-    task.resolve([ret]);
-    task.exit();
-  }
-  _trampoline11.fnName = 'wasi:cli/environment@0.2.3#getEnvironment';
-  const handleTable6 = [T_FLAG, 0];
-  const captureTable6= new Map();
-  let captureCnt6 = 0;
-  handleTables[6] = handleTable6;
-  
-  const _trampoline12 = function(arg0, arg1) {
-    var handle1 = arg0;
-    
-    var rep2 = handleTable6[(handle1 << 1) + 1] & ~T_FLAG;
-    var rsc0 = captureTable6.get(rep2);
-    if (!rsc0) {
-      rsc0 = Object.create(Descriptor.prototype);
-      Object.defineProperty(rsc0, symbolRscHandle, { writable: true, value: handle1});
-      Object.defineProperty(rsc0, symbolRscRep, { writable: true, value: rep2});
+
+    if (this.#getSuspendedTaskMeta(taskID)) {
+      throw new Error(`task [${taskID}] already suspended`);
     }
-    
-    curResourceBorrows.push(rsc0);
-    _debugLog('[iface="wasi:filesystem/types@0.2.3", function="[method]descriptor.get-flags"] [Instruction::CallInterface] (sync, @ enter)');
-    let hostProvided = true;
-    
-    let parentTask;
-    let task;
-    let subtask;
-    
-    const createTask = () => {
-      const results = createNewCurrentTask({
-        componentIdx: -1, // 0,
-        isAsync: false,
-        entryFnName: 'getFlags',
-        getCallbackFn: () => null,
-        callbackFnName: 'null',
-        errHandling: 'result-catch-handler',
-        callingWasmExport: false,
-      });
-      task = results[0];
-    };
-    
-    taskCreation: {
-      parentTask = getCurrentTask(0)?.task;
-      if (!parentTask) {
-        createTask();
-        break taskCreation;
+
+    const { promise, resolve, reject } = promiseWithResolvers();
+    this.#addSuspendedTaskMeta({
+      task,
+      taskID,
+      readyFn,
+      resume: () => {
+        _debugLog('[ComponentAsyncState#suspendTask()] resuming suspended task', { taskID });
+        // TODO(threads): it's thread cancellation we should be checking for below, not task
+        resolve(!task.isCancelled());
+      },
+    });
+
+    this.runTickLoop();
+
+    return promise;
+  }
+
+  resumeTaskByID(taskID) {
+    const meta = this.#removeSuspendedTaskMeta(taskID);
+    if (!meta) { return; }
+    if (meta.taskID !== taskID) { throw new Error('task ID does not match'); }
+    meta.resume();
+  }
+
+  async runTickLoop() {
+    if (this.#tickLoop !== null) { return; }
+    this.#tickLoop = 1;
+    setTimeout(async () => {
+      let done = this.tick();
+      while (!done) {
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        done = this.tick();
       }
-      
+      this.#tickLoop = null;
+    }, 10);
+  }
+
+  tick() {
+    // _debugLog('[ComponentAsyncState#tick()]', { suspendedTaskIDs: this.#suspendedTaskIDs });
+
+    const resumableTasks = this.#suspendedTaskIDs.filter(t => t !== null);
+    for (const taskID of resumableTasks) {
+      const meta = this.#suspendedTasksByTaskID.get(taskID);
+      if (!meta || !meta.readyFn) {
+        throw new Error(`missing/invalid task despite ID [${taskID}] being present`);
+      }
+
+      // If the task failed via any means, allow the task to resume because
+      // it's been cancelled -- the callback should immediately exit as well
+      if (meta.task.isRejected()) {
+        _debugLog('[ComponentAsyncState#suspendTask()] detected task rejection, leaving early', { meta });
+        this.resumeTaskByID(taskID);
+        return;
+      }
+
+      const isReady = meta.readyFn();
+      if (!isReady) { continue; }
+
+      this.resumeTaskByID(taskID);
+    }
+
+    return this.#suspendedTaskIDs.filter(t => t !== null).length === 0;
+  }
+
+  addStreamEndToTable(args) {
+    _debugLog('[ComponentAsyncState#addStreamEnd()] args', args);
+    const { tableIdx, streamEnd } = args;
+    if (typeof streamEnd === 'number') { throw new Error("INSERTING BAD STREAMEND"); }
+
+    let { table, componentIdx } = STREAM_TABLES[tableIdx];
+    if (componentIdx === undefined || !table) {
+      throw new Error(`invalid global stream table state for table [${tableIdx}]`);
+    }
+
+    const handle = table.insert(streamEnd);
+    streamEnd.setHandle(handle);
+    streamEnd.setStreamTableIdx(tableIdx);
+
+    const cstate = getOrCreateAsyncState(componentIdx);
+    const waitableIdx = cstate.handles.insert(streamEnd);
+    streamEnd.setWaitableIdx(waitableIdx);
+
+    _debugLog('[ComponentAsyncState#addStreamEnd()] added stream end', {
+      tableIdx,
+      table,
+      handle,
+      streamEnd,
+      destComponentIdx: componentIdx,
+    });
+
+    return { handle, waitableIdx };
+  }
+
+  createWaitable(args) {
+    return new Waitable({ target: args?.target, });
+  }
+
+  createReadableStreamEnd(args) {
+    _debugLog('[ComponentAsyncState#createStreamEnd()] args', args);
+    const { tableIdx, elemMeta, hostInjectFn } = args;
+
+    const { table: localStreamTable, componentIdx } = STREAM_TABLES[tableIdx];
+    if (!localStreamTable) {
+      throw new Error(`missing global stream table lookup for table [${tableIdx}] while creating stream`);
+    }
+    if (componentIdx !== this.#componentIdx) {
+      throw new Error('component idx mismatch while creating stream');
+    }
+
+    const waitable = this.createWaitable();
+    const streamEnd = new StreamReadableEnd({
+      tableIdx,
+      elemMeta,
+      hostInjectFn,
+      pendingBufferMeta: {},
+      target: `stream read end (lowered, @init)`,
+      waitable,
+    });
+
+    streamEnd.setWaitableIdx(this.handles.insert(streamEnd));
+    streamEnd.setHandle(localStreamTable.insert(streamEnd));
+    if (streamEnd.streamTableIdx() !== tableIdx) {
+      throw new Error("unexpectedly mismatched stream table");
+    }
+    const streamEndWaitableIdx = streamEnd.waitableIdx();
+    const streamEndHandle = streamEnd.handle();
+    waitable.setTarget(`waitable for stream read end (lowered, waitable [${streamEndWaitableIdx}])`);
+    streamEnd.setTarget(`stream read end (lowered, waitable [${streamEndWaitableIdx}])`);
+
+    return {
+      waitableIdx: streamEndWaitableIdx,
+      handle: streamEndHandle,
+      streamEnd,
+    };
+  }
+
+  createStream(args) {
+    _debugLog('[ComponentAsyncState#createStream()] args', args);
+    const { tableIdx, elemMeta, hostInjectFn } = args;
+    if (tableIdx === undefined) { throw new Error("missing table idx while adding stream"); }
+    if (elemMeta === undefined) { throw new Error("missing element metadata while adding stream"); }
+
+    const { table: localStreamTable, componentIdx } = STREAM_TABLES[tableIdx];
+    if (!localStreamTable) {
+      throw new Error(`missing global stream table lookup for table [${tableIdx}] while creating stream`);
+    }
+    if (componentIdx !== this.#componentIdx) {
+      throw new Error('component idx mismatch while creating stream');
+    }
+
+    const readWaitable = this.createWaitable();
+    const writeWaitable = this.createWaitable();
+
+    const stream = new InternalStream({
+      tableIdx,
+      elemMeta,
+      readWaitable,
+      writeWaitable,
+      hostInjectFn,
+    });
+    stream.setGlobalStreamMapRep(STREAMS.insert(stream));
+
+    const writeEnd = stream.writeEnd();
+    writeEnd.setWaitableIdx(this.handles.insert(writeEnd));
+    writeEnd.setHandle(localStreamTable.insert(writeEnd));
+    if (writeEnd.streamTableIdx() !== tableIdx) { throw new Error("unexpectedly mismatched stream table"); }
+
+    const writeEndWaitableIdx = writeEnd.waitableIdx();
+    const writeEndHandle = writeEnd.handle();
+    writeWaitable.setTarget(`waitable for stream write end (waitable [${writeEndWaitableIdx}])`);
+    writeEnd.setTarget(`stream write end (waitable [${writeEndWaitableIdx}])`);
+
+    const readEnd = stream.readEnd();
+    readEnd.setWaitableIdx(this.handles.insert(readEnd));
+    readEnd.setHandle(localStreamTable.insert(readEnd));
+    if (readEnd.streamTableIdx() !== tableIdx) { throw new Error("unexpectedly mismatched stream table"); }
+
+    const readEndWaitableIdx = readEnd.waitableIdx();
+    const readEndHandle = readEnd.handle();
+    readWaitable.setTarget(`waitable for read end (waitable [${readEndWaitableIdx}])`);
+    readEnd.setTarget(`stream read end (waitable [${readEndWaitableIdx}])`);
+
+    return {
+      writeEnd,
+      writeEndWaitableIdx,
+      writeEndHandle,
+      readEndWaitableIdx,
+      readEndHandle,
+      readEnd,
+    };
+  }
+
+  getStreamEnd(args) {
+    _debugLog('[ComponentAsyncState#getStreamEnd()] args', args);
+    const { tableIdx, streamEndHandle, streamEndWaitableIdx } = args;
+    if (tableIdx === undefined) {
+      throw new Error('missing table idx while getting stream end');
+    }
+
+    const { table, componentIdx } = STREAM_TABLES[tableIdx];
+    const cstate = getOrCreateAsyncState(componentIdx);
+
+    let streamEnd;
+    if (streamEndWaitableIdx !== undefined) {
+      streamEnd = cstate.handles.get(streamEndWaitableIdx);
+    } else if (streamEndHandle !== undefined) {
+      if (!table) { throw new Error(`missing/invalid table [${tableIdx}] while getting stream end`); }
+      streamEnd = table.get(streamEndHandle);
+    } else {
+      throw new TypeError("must specify either waitable idx or handle to retrieve stream");
+    }
+
+    if (!streamEnd) {
+      throw new Error(`missing stream end (tableIdx [${tableIdx}], handle [${streamEndHandle}], waitableIdx [${streamEndWaitableIdx}])`);
+    }
+    if (tableIdx && streamEnd.streamTableIdx() !== tableIdx) {
+      throw new Error(`stream end table idx [${streamEnd.streamTableIdx()}] does not match [${tableIdx}]`);
+    }
+
+    return streamEnd;
+  }
+
+  deleteStreamEnd(args) {
+    _debugLog('[ComponentAsyncState#deleteStreamEnd()] args', args);
+    const { tableIdx, streamEndWaitableIdx } = args;
+    if (tableIdx === undefined) { throw new Error("missing table idx while removing stream end"); }
+    if (streamEndWaitableIdx === undefined) { throw new Error("missing stream idx while removing stream end"); }
+
+    const { table, componentIdx } = STREAM_TABLES[tableIdx];
+    const cstate = getOrCreateAsyncState(componentIdx);
+
+    const streamEnd = cstate.handles.get(streamEndWaitableIdx);
+    if (!streamEnd) {
+      throw new Error(`missing stream end [${streamEndWaitableIdx}] in component handles while deleting stream`);
+    }
+    if (streamEnd.streamTableIdx() !== tableIdx) {
+      throw new Error(`stream end table idx [${streamEnd.streamTableIdx()}] does not match [${tableIdx}]`);
+    }
+
+    let removed = cstate.handles.remove(streamEnd.waitableIdx());
+    if (!removed) {
+      throw new Error(`failed to remove stream end [${streamEndWaitableIdx}] waitable obj in component [${componentIdx}]`);
+    }
+
+    removed = table.remove(streamEnd.handle());
+    if (!removed) {
+      throw new Error(`failed to remove stream end with handle [${streamEnd.handle()}] from stream table [${tableIdx}] in component [${componentIdx}]`);
+    }
+
+    return streamEnd;
+  }
+
+  removeStreamEndFromTable(args) {
+    _debugLog('[ComponentAsyncState#removeStreamEndFromTable()] args', args);
+
+    const { tableIdx, streamWaitableIdx } = args;
+    if (tableIdx === undefined) { throw new Error("missing table idx while removing stream end"); }
+    if (streamWaitableIdx === undefined) {
+      throw new Error("missing stream end waitable idx while removing stream end");
+    }
+
+    const { table, componentIdx } = STREAM_TABLES[tableIdx];
+    if (!table) { throw new Error(`missing/invalid table [${tableIdx}] while removing stream end`); }
+
+    const cstate = getOrCreateAsyncState(componentIdx);
+
+    const streamEnd = cstate.handles.get(streamWaitableIdx);
+    if (!streamEnd) {
+      throw new Error(`missing stream end (handle [${streamWaitableIdx}], table [${tableIdx}])`);
+    }
+    const handle = streamEnd.handle();
+
+    let removed = cstate.handles.remove(streamWaitableIdx);
+    if (!removed) {
+      throw new Error(`failed to remove streamEnd from handles (waitable idx [${streamWaitableIdx}]), component [${componentIdx}])`);
+    }
+
+    removed = table.remove(handle);
+    if (!removed) {
+      throw new Error(`failed to remove streamEnd from table (handle [${handle}]), table [${tableIdx}], component [${componentIdx}])`);
+    }
+
+    return streamEnd;
+  }
+
+  createFuture(args) {
+    _debugLog('[ComponentAsyncState#createFuture()] args', args);
+    const { tableIdx, elemMeta, hostInjectFn } = args;
+    if (tableIdx === undefined) { throw new Error("missing table idx while adding future"); }
+    if (elemMeta === undefined) { throw new Error("missing element metadata while adding future"); }
+
+    const { table: futureTable, componentIdx } = FUTURE_TABLES[tableIdx];
+    if (!futureTable) {
+      throw new Error(`missing global future table lookup for table [${tableIdx}] while creating future`);
+    }
+    if (componentIdx !== this.#componentIdx) {
+      throw new Error('component idx mismatch while creating future');
+    }
+
+    const readWaitable = this.createWaitable();
+    const writeWaitable = this.createWaitable();
+
+    const future = new InternalFuture({
+      tableIdx,
+      componentIdx: this.#componentIdx,
+      elemMeta,
+      readWaitable,
+      writeWaitable,
+      hostInjectFn,
+    });
+    future.setGlobalFutureMapRep(FUTURES.insert(future));
+
+    const writeEnd = future.writeEnd();
+    writeEnd.setWaitableIdx(this.handles.insert(writeEnd));
+    writeEnd.setHandle(futureTable.insert(writeEnd));
+    if (writeEnd.futureTableIdx() !== tableIdx) { throw new Error("unexpectedly mismatched future table"); }
+
+    const writeEndWaitableIdx = writeEnd.waitableIdx();
+    const writeEndHandle = writeEnd.handle();
+    writeWaitable.setTarget(`waitable for future write end (waitable [${writeEndWaitableIdx}])`);
+    writeEnd.setTarget(`future write end (waitable [${writeEndWaitableIdx}])`);
+
+    const readEnd = future.readEnd();
+    readEnd.setWaitableIdx(this.handles.insert(readEnd));
+    readEnd.setHandle(futureTable.insert(readEnd));
+    if (readEnd.futureTableIdx() !== tableIdx) { throw new Error("unexpectedly mismatched future table"); }
+
+    const readEndWaitableIdx = readEnd.waitableIdx();
+    const readEndHandle = readEnd.handle();
+    readWaitable.setTarget(`waitable for read end (waitable [${readEndWaitableIdx}])`);
+    readEnd.setTarget(`future read end (waitable [${readEndWaitableIdx}])`);
+
+    return {
+      writeEnd,
+      writeEndWaitableIdx,
+      writeEndHandle,
+      readEndWaitableIdx,
+      readEndHandle,
+      readEnd,
+    };
+  }
+
+  getFutureEnd(args) {
+    _debugLog('[ComponentAsyncState#getFutureEnd()] args', args);
+    const { tableIdx, futureEndHandle, futureEndWaitableIdx } = args;
+    if (tableIdx === undefined) {
+      throw new Error('missing table idx while getting future end');
+    }
+
+    const { table, componentIdx } = FUTURE_TABLES[tableIdx];
+    const cstate = getOrCreateAsyncState(componentIdx);
+
+    let futureEnd;
+    if (futureEndWaitableIdx !== undefined) {
+      futureEnd = cstate.handles.get(futureEndWaitableIdx);
+    } else if (futureEndHandle !== undefined) {
+      if (!table) { throw new Error(`missing/invalid table [${tableIdx}] while getting future end`); }
+      futureEnd = table.get(futureEndHandle);
+    } else {
+      throw new TypeError("must specify either waitable idx or handle to retrieve future");
+    }
+
+    if (!futureEnd) {
+      throw new Error(`missing future end (tableIdx [${tableIdx}], handle [${futureEndHandle}], waitableIdx [${futureEndWaitableIdx}])`);
+    }
+    if (tableIdx && futureEnd.futureTableIdx() !== tableIdx) {
+      throw new Error(`future end table idx [${futureEnd.futureTableIdx()}] does not match [${tableIdx}]`);
+    }
+
+    return futureEnd;
+  }
+
+  removeFutureEndFromTable(args) {
+    _debugLog('[ComponentAsyncState#removeFutureEndFromTable()] args', args);
+
+    const { tableIdx, futureWaitableIdx } = args;
+    if (tableIdx === undefined) { throw new Error("missing table idx while removing future end"); }
+    if (futureWaitableIdx === undefined) {
+      throw new Error("missing future end waitable idx while removing future end");
+    }
+
+    const { table, componentIdx } = FUTURE_TABLES[tableIdx];
+    if (!table) { throw new Error(`missing/invalid table [${tableIdx}] while removing future end`); }
+
+    const cstate = getOrCreateAsyncState(componentIdx);
+
+    const futureEnd = cstate.handles.get(futureWaitableIdx);
+    if (!futureEnd) {
+      throw new Error(`missing future end (handle [${futureWaitableIdx}], table [${tableIdx}])`);
+    }
+    const handle = futureEnd.handle();
+
+    let removed = cstate.handles.remove(futureWaitableIdx);
+    if (!removed) {
+      throw new Error(`failed to remove futureEnd from handles (waitable idx [${futureWaitableIdx}]), component [${componentIdx}])`);
+    }
+
+    removed = table.remove(handle);
+    if (!removed) {
+      throw new Error(`failed to remove futureEnd from table (handle [${handle}]), table [${tableIdx}], component [${componentIdx}])`);
+    }
+
+    return futureEnd;
+  }
+
+}
+
+const base64Compile = str => WebAssembly.compile(typeof Buffer !== 'undefined' ? Buffer.from(str, 'base64') : Uint8Array.from(atob(str), b => b.charCodeAt(0)));
+
+const isNode = typeof process !== 'undefined' && process.versions && process.versions.node;
+let _fs;
+async function fetchCompile (url) {
+  if (isNode) {
+    _fs = _fs || await import('node:fs/promises');
+    return WebAssembly.compile(await _fs.readFile(url));
+  }
+  const assetUrl = new URL(url);
+  if (assetUrl.pathname.endsWith('.core.wasm')) assetUrl.pathname += '.gz';
+  return WebAssembly.compile(await fetchRuntimeAssetBytes(assetUrl, 'JCO core Wasm', fetch, false));
+}
+
+const symbolCabiDispose = Symbol.for('cabiDispose');
+
+const symbolRscHandle = Symbol('handle');
+
+const symbolRscRep = Symbol.for('cabiRep');
+
+const handleTables = [];
+
+class ComponentError extends Error {
+  constructor (value) {
+    const enumerable = typeof value !== 'string';
+    super(enumerable ? `${String(value)} (see error.payload)` : value);
+    Object.defineProperty(this, 'payload', { value, enumerable });
+  }
+}
+
+function getErrorPayload(e) {
+  if (e && hasOwnProperty.call(e, 'payload')) return e.payload;
+  if (e instanceof Error) throw e;
+  return e;
+}
+
+const isLE = new Uint8Array(new Uint16Array([1]).buffer)[0] === 1;
+
+function throwUninitialized() {
+  throw new TypeError('Wasm uninitialized use `await $init` first');
+}
+
+const hasOwnProperty = Object.prototype.hasOwnProperty;
+
+const instantiateCore = WebAssembly.instantiate;
+
+
+let exports0;
+let exports1;
+const handleTable2 = [T_FLAG, 0];
+const captureTable2= new Map();
+let captureCnt2 = 0;
+handleTables[2] = handleTable2;
+
+const _trampoline5 = function() {
+  _debugLog('[iface="wasi:cli/stderr@0.2.3", function="get-stderr"] [Instruction::CallInterface] (sync, @ enter)');
+  let hostProvided = true;
+
+  let parentTask;
+  let task;
+  let subtask;
+
+  const createTask = () => {
+    const results = createNewCurrentTask({
+      componentIdx: -1, // 0,
+      isAsync: false,
+      entryFnName: 'getStderr',
+      getCallbackFn: () => null,
+      callbackFnName: 'null',
+      errHandling: 'none',
+      callingWasmExport: false,
+    });
+    task = results[0];
+  };
+
+  taskCreation: {
+    parentTask = getCurrentTask(0)?.task;
+    if (!parentTask) {
       createTask();
-      
-      if (hostProvided) {
-        subtask = parentTask.getLatestSubtask();
-        if (!subtask) {
-          throw new Error(`Missing subtask (in parent task [${parentTask.id()}]) for host import, has the import been lowered? (ensure asyncImports are set properly)`);
-        }
-        task.setParentSubtask(subtask);
-      }
+      break taskCreation;
     }
-    
-    const started = task.enterSync();
-    
-    let ret;
-    try {
-      ret = { tag: 'ok', val: _withGlobalCurrentTaskMeta({
-        componentIdx: task.componentIdx(),
-        taskID: task.id(),
-        fn: () => rsc0.getFlags()
-      })
-    };
-  } catch (e) {
-    ret = { tag: 'err', val: getErrorPayload(e) };
-  }
-  
-  for (const rsc of curResourceBorrows) {
-    rsc[symbolRscHandle] = undefined;
-  }
-  curResourceBorrows = [];
-  var variant5 = ret;
-  switch (variant5.tag) {
-    case 'ok': {
-      const e = variant5.val;
-      dataView(memory0).setInt8(arg1 + 0, 0, true);
-      let flags3 = 0;
-      if (typeof e === 'object' && e !== null) {
-        flags3 = Boolean(e.read) << 0 | Boolean(e.write) << 1 | Boolean(e.fileIntegritySync) << 2 | Boolean(e.dataIntegritySync) << 3 | Boolean(e.requestedWriteSync) << 4 | Boolean(e.mutateDirectory) << 5;
-      } else if (e !== null && e!== undefined) {
-        throw new TypeError('only an object, undefined or null can be converted to flags');
+
+    createTask();
+
+    if (hostProvided) {
+      subtask = parentTask.getLatestSubtask();
+      if (!subtask) {
+        throw new Error(`Missing subtask (in parent task [${parentTask.id()}]) for host import, has the import been lowered? (ensure asyncImports are set properly)`);
       }
-      dataView(memory0).setInt8(arg1 + 1, flags3, true);
+      task.setParentSubtask(subtask);
+    }
+  }
+
+  const started = task.enterSync();
+  let ret = _withGlobalCurrentTaskMeta({
+    componentIdx: task.componentIdx(),
+    taskID: task.id(),
+    fn: () => getStderr()
+  })
+  ;
+
+  if (!(ret instanceof OutputStream)) {
+    throw new TypeError('Resource error: Not a valid \"OutputStream\" resource.');
+  }
+  var handle0 = ret[symbolRscHandle];
+  if (!handle0) {
+    const rep = ret[symbolRscRep] || ++captureCnt2;
+    captureTable2.set(rep, ret);
+    handle0 = rscTableCreateOwn(handleTable2, rep);
+  }
+
+  _debugLog('[iface="wasi:cli/stderr@0.2.3", function="get-stderr"][Instruction::Return]', {
+    funcName: 'get-stderr',
+    paramCount: 1,
+    async: false,
+    postReturn: false
+  });
+  task.resolve([handle0]);
+  task.exit();
+  return handle0;
+}
+_trampoline5.fnName = 'wasi:cli/stderr@0.2.3#getStderr';
+const handleTable1 = [T_FLAG, 0];
+const captureTable1= new Map();
+let captureCnt1 = 0;
+handleTables[1] = handleTable1;
+
+const _trampoline8 = function() {
+  _debugLog('[iface="wasi:cli/stdin@0.2.3", function="get-stdin"] [Instruction::CallInterface] (sync, @ enter)');
+  let hostProvided = true;
+
+  let parentTask;
+  let task;
+  let subtask;
+
+  const createTask = () => {
+    const results = createNewCurrentTask({
+      componentIdx: -1, // 0,
+      isAsync: false,
+      entryFnName: 'getStdin',
+      getCallbackFn: () => null,
+      callbackFnName: 'null',
+      errHandling: 'none',
+      callingWasmExport: false,
+    });
+    task = results[0];
+  };
+
+  taskCreation: {
+    parentTask = getCurrentTask(0)?.task;
+    if (!parentTask) {
+      createTask();
+      break taskCreation;
+    }
+
+    createTask();
+
+    if (hostProvided) {
+      subtask = parentTask.getLatestSubtask();
+      if (!subtask) {
+        throw new Error(`Missing subtask (in parent task [${parentTask.id()}]) for host import, has the import been lowered? (ensure asyncImports are set properly)`);
+      }
+      task.setParentSubtask(subtask);
+    }
+  }
+
+  const started = task.enterSync();
+  let ret = _withGlobalCurrentTaskMeta({
+    componentIdx: task.componentIdx(),
+    taskID: task.id(),
+    fn: () => getStdin()
+  })
+  ;
+
+  if (!(ret instanceof InputStream)) {
+    throw new TypeError('Resource error: Not a valid \"InputStream\" resource.');
+  }
+  var handle0 = ret[symbolRscHandle];
+  if (!handle0) {
+    const rep = ret[symbolRscRep] || ++captureCnt1;
+    captureTable1.set(rep, ret);
+    handle0 = rscTableCreateOwn(handleTable1, rep);
+  }
+
+  _debugLog('[iface="wasi:cli/stdin@0.2.3", function="get-stdin"][Instruction::Return]', {
+    funcName: 'get-stdin',
+    paramCount: 1,
+    async: false,
+    postReturn: false
+  });
+  task.resolve([handle0]);
+  task.exit();
+  return handle0;
+}
+_trampoline8.fnName = 'wasi:cli/stdin@0.2.3#getStdin';
+
+const _trampoline9 = function() {
+  _debugLog('[iface="wasi:cli/stdout@0.2.3", function="get-stdout"] [Instruction::CallInterface] (sync, @ enter)');
+  let hostProvided = true;
+
+  let parentTask;
+  let task;
+  let subtask;
+
+  const createTask = () => {
+    const results = createNewCurrentTask({
+      componentIdx: -1, // 0,
+      isAsync: false,
+      entryFnName: 'getStdout',
+      getCallbackFn: () => null,
+      callbackFnName: 'null',
+      errHandling: 'none',
+      callingWasmExport: false,
+    });
+    task = results[0];
+  };
+
+  taskCreation: {
+    parentTask = getCurrentTask(0)?.task;
+    if (!parentTask) {
+      createTask();
+      break taskCreation;
+    }
+
+    createTask();
+
+    if (hostProvided) {
+      subtask = parentTask.getLatestSubtask();
+      if (!subtask) {
+        throw new Error(`Missing subtask (in parent task [${parentTask.id()}]) for host import, has the import been lowered? (ensure asyncImports are set properly)`);
+      }
+      task.setParentSubtask(subtask);
+    }
+  }
+
+  const started = task.enterSync();
+  let ret = _withGlobalCurrentTaskMeta({
+    componentIdx: task.componentIdx(),
+    taskID: task.id(),
+    fn: () => getStdout()
+  })
+  ;
+
+  if (!(ret instanceof OutputStream)) {
+    throw new TypeError('Resource error: Not a valid \"OutputStream\" resource.');
+  }
+  var handle0 = ret[symbolRscHandle];
+  if (!handle0) {
+    const rep = ret[symbolRscRep] || ++captureCnt2;
+    captureTable2.set(rep, ret);
+    handle0 = rscTableCreateOwn(handleTable2, rep);
+  }
+
+  _debugLog('[iface="wasi:cli/stdout@0.2.3", function="get-stdout"][Instruction::Return]', {
+    funcName: 'get-stdout',
+    paramCount: 1,
+    async: false,
+    postReturn: false
+  });
+  task.resolve([handle0]);
+  task.exit();
+  return handle0;
+}
+_trampoline9.fnName = 'wasi:cli/stdout@0.2.3#getStdout';
+
+const _trampoline10 = function(arg0) {
+  let variant0;
+  switch (arg0) {
+    case 0: {
+      variant0= {
+        tag: 'ok',
+        val: undefined
+      };
       break;
     }
-    case 'err': {
-      const e = variant5.val;
-      dataView(memory0).setInt8(arg1 + 0, 1, true);
-      var val4 = e;
-      let enum4;
-      switch (val4) {
-        case 'access': {
-          enum4 = 0;
-          break;
-        }
-        case 'would-block': {
-          enum4 = 1;
-          break;
-        }
-        case 'already': {
-          enum4 = 2;
-          break;
-        }
-        case 'bad-descriptor': {
-          enum4 = 3;
-          break;
-        }
-        case 'busy': {
-          enum4 = 4;
-          break;
-        }
-        case 'deadlock': {
-          enum4 = 5;
-          break;
-        }
-        case 'quota': {
-          enum4 = 6;
-          break;
-        }
-        case 'exist': {
-          enum4 = 7;
-          break;
-        }
-        case 'file-too-large': {
-          enum4 = 8;
-          break;
-        }
-        case 'illegal-byte-sequence': {
-          enum4 = 9;
-          break;
-        }
-        case 'in-progress': {
-          enum4 = 10;
-          break;
-        }
-        case 'interrupted': {
-          enum4 = 11;
-          break;
-        }
-        case 'invalid': {
-          enum4 = 12;
-          break;
-        }
-        case 'io': {
-          enum4 = 13;
-          break;
-        }
-        case 'is-directory': {
-          enum4 = 14;
-          break;
-        }
-        case 'loop': {
-          enum4 = 15;
-          break;
-        }
-        case 'too-many-links': {
-          enum4 = 16;
-          break;
-        }
-        case 'message-size': {
-          enum4 = 17;
-          break;
-        }
-        case 'name-too-long': {
-          enum4 = 18;
-          break;
-        }
-        case 'no-device': {
-          enum4 = 19;
-          break;
-        }
-        case 'no-entry': {
-          enum4 = 20;
-          break;
-        }
-        case 'no-lock': {
-          enum4 = 21;
-          break;
-        }
-        case 'insufficient-memory': {
-          enum4 = 22;
-          break;
-        }
-        case 'insufficient-space': {
-          enum4 = 23;
-          break;
-        }
-        case 'not-directory': {
-          enum4 = 24;
-          break;
-        }
-        case 'not-empty': {
-          enum4 = 25;
-          break;
-        }
-        case 'not-recoverable': {
-          enum4 = 26;
-          break;
-        }
-        case 'unsupported': {
-          enum4 = 27;
-          break;
-        }
-        case 'no-tty': {
-          enum4 = 28;
-          break;
-        }
-        case 'no-such-device': {
-          enum4 = 29;
-          break;
-        }
-        case 'overflow': {
-          enum4 = 30;
-          break;
-        }
-        case 'not-permitted': {
-          enum4 = 31;
-          break;
-        }
-        case 'pipe': {
-          enum4 = 32;
-          break;
-        }
-        case 'read-only': {
-          enum4 = 33;
-          break;
-        }
-        case 'invalid-seek': {
-          enum4 = 34;
-          break;
-        }
-        case 'text-file-busy': {
-          enum4 = 35;
-          break;
-        }
-        case 'cross-device': {
-          enum4 = 36;
-          break;
-        }
-        default: {
-          if ((e) instanceof Error) {
-            console.error(e);
-          }
-          
-          throw new TypeError(`"${val4}" is not one of the cases of error-code`);
-        }
-      }
-      dataView(memory0).setInt8(arg1 + 1, enum4, true);
+    case 1: {
+      variant0= {
+        tag: 'err',
+        val: undefined
+      };
       break;
     }
     default: {
-      throw new TypeError('invalid variant specified for result');
+      throw new TypeError('invalid variant discriminant for expected');
     }
   }
-  _debugLog('[iface="wasi:filesystem/types@0.2.3", function="[method]descriptor.get-flags"][Instruction::Return]', {
-    funcName: '[method]descriptor.get-flags',
+  _debugLog('[iface="wasi:cli/exit@0.2.3", function="exit"] [Instruction::CallInterface] (sync, @ enter)');
+  let hostProvided = true;
+
+  let parentTask;
+  let task;
+  let subtask;
+
+  const createTask = () => {
+    const results = createNewCurrentTask({
+      componentIdx: -1, // 0,
+      isAsync: false,
+      entryFnName: 'exit',
+      getCallbackFn: () => null,
+      callbackFnName: 'null',
+      errHandling: 'none',
+      callingWasmExport: false,
+    });
+    task = results[0];
+  };
+
+  taskCreation: {
+    parentTask = getCurrentTask(0)?.task;
+    if (!parentTask) {
+      createTask();
+      break taskCreation;
+    }
+
+    createTask();
+
+    if (hostProvided) {
+      subtask = parentTask.getLatestSubtask();
+      if (!subtask) {
+        throw new Error(`Missing subtask (in parent task [${parentTask.id()}]) for host import, has the import been lowered? (ensure asyncImports are set properly)`);
+      }
+      task.setParentSubtask(subtask);
+    }
+  }
+
+  const started = task.enterSync();
+  let ret;_withGlobalCurrentTaskMeta({
+    componentIdx: task.componentIdx(),
+    taskID: task.id(),
+    fn: () => exit(variant0)
+  })
+  ;
+  _debugLog('[iface="wasi:cli/exit@0.2.3", function="exit"][Instruction::Return]', {
+    funcName: 'exit',
     paramCount: 0,
     async: false,
     postReturn: false
@@ -3835,11 +4040,99 @@ function _lowerImportBackwardsCompat(args) {
   task.resolve([ret]);
   task.exit();
 }
-_trampoline12.fnName = 'wasi:filesystem/types@0.2.3#getFlags';
+_trampoline10.fnName = 'wasi:cli/exit@0.2.3#exit';
+let exports2;
+let memory0;
+let realloc0;
+let realloc0Async;
 
-const _trampoline13 = function(arg0, arg1) {
+const _trampoline11 = function(arg0) {
+  _debugLog('[iface="wasi:cli/environment@0.2.3", function="get-environment"] [Instruction::CallInterface] (sync, @ enter)');
+  let hostProvided = true;
+
+  let parentTask;
+  let task;
+  let subtask;
+
+  const createTask = () => {
+    const results = createNewCurrentTask({
+      componentIdx: -1, // 0,
+      isAsync: false,
+      entryFnName: 'getEnvironment',
+      getCallbackFn: () => null,
+      callbackFnName: 'null',
+      errHandling: 'none',
+      callingWasmExport: false,
+    });
+    task = results[0];
+  };
+
+  taskCreation: {
+    parentTask = getCurrentTask(0)?.task;
+    if (!parentTask) {
+      createTask();
+      break taskCreation;
+    }
+
+    createTask();
+
+    if (hostProvided) {
+      subtask = parentTask.getLatestSubtask();
+      if (!subtask) {
+        throw new Error(`Missing subtask (in parent task [${parentTask.id()}]) for host import, has the import been lowered? (ensure asyncImports are set properly)`);
+      }
+      task.setParentSubtask(subtask);
+    }
+  }
+
+  const started = task.enterSync();
+  let ret = _withGlobalCurrentTaskMeta({
+    componentIdx: task.componentIdx(),
+    taskID: task.id(),
+    fn: () => getEnvironment()
+  })
+  ;
+  var vec3 = ret;
+  var len3 = vec3.length;
+  var result3 = realloc0(0, 0, 4, len3 * 16);
+  for (let i = 0; i < vec3.length; i++) {
+    const e = vec3[i];
+    const base = result3 + i * 16;var [tuple0_0, tuple0_1] = e;
+
+    var encodeRes = _utf8AllocateAndEncode(tuple0_0, realloc0, memory0);
+    var ptr1= encodeRes.ptr;
+    var len1 = encodeRes.len;
+
+    dataView(memory0).setUint32(base + 4, len1, true);
+    dataView(memory0).setUint32(base + 0, ptr1, true);
+
+    var encodeRes = _utf8AllocateAndEncode(tuple0_1, realloc0, memory0);
+    var ptr2= encodeRes.ptr;
+    var len2 = encodeRes.len;
+
+    dataView(memory0).setUint32(base + 12, len2, true);
+    dataView(memory0).setUint32(base + 8, ptr2, true);
+  }
+  dataView(memory0).setUint32(arg0 + 4, len3, true);
+  dataView(memory0).setUint32(arg0 + 0, result3, true);
+  _debugLog('[iface="wasi:cli/environment@0.2.3", function="get-environment"][Instruction::Return]', {
+    funcName: 'get-environment',
+    paramCount: 0,
+    async: false,
+    postReturn: false
+  });
+  task.resolve([ret]);
+  task.exit();
+}
+_trampoline11.fnName = 'wasi:cli/environment@0.2.3#getEnvironment';
+const handleTable6 = [T_FLAG, 0];
+const captureTable6= new Map();
+let captureCnt6 = 0;
+handleTables[6] = handleTable6;
+
+const _trampoline12 = function(arg0, arg1) {
   var handle1 = arg0;
-  
+
   var rep2 = handleTable6[(handle1 << 1) + 1] & ~T_FLAG;
   var rsc0 = captureTable6.get(rep2);
   if (!rsc0) {
@@ -3847,15 +4140,280 @@ const _trampoline13 = function(arg0, arg1) {
     Object.defineProperty(rsc0, symbolRscHandle, { writable: true, value: handle1});
     Object.defineProperty(rsc0, symbolRscRep, { writable: true, value: rep2});
   }
-  
+
   curResourceBorrows.push(rsc0);
-  _debugLog('[iface="wasi:filesystem/types@0.2.3", function="[method]descriptor.get-type"] [Instruction::CallInterface] (sync, @ enter)');
+  _debugLog('[iface="wasi:filesystem/types@0.2.3", function="[method]descriptor.get-flags"] [Instruction::CallInterface] (sync, @ enter)');
   let hostProvided = true;
-  
+
   let parentTask;
   let task;
   let subtask;
-  
+
+  const createTask = () => {
+    const results = createNewCurrentTask({
+      componentIdx: -1, // 0,
+      isAsync: false,
+      entryFnName: 'getFlags',
+      getCallbackFn: () => null,
+      callbackFnName: 'null',
+      errHandling: 'result-catch-handler',
+      callingWasmExport: false,
+    });
+    task = results[0];
+  };
+
+  taskCreation: {
+    parentTask = getCurrentTask(0)?.task;
+    if (!parentTask) {
+      createTask();
+      break taskCreation;
+    }
+
+    createTask();
+
+    if (hostProvided) {
+      subtask = parentTask.getLatestSubtask();
+      if (!subtask) {
+        throw new Error(`Missing subtask (in parent task [${parentTask.id()}]) for host import, has the import been lowered? (ensure asyncImports are set properly)`);
+      }
+      task.setParentSubtask(subtask);
+    }
+  }
+
+  const started = task.enterSync();
+
+  let ret;
+  try {
+    ret = { tag: 'ok', val: _withGlobalCurrentTaskMeta({
+      componentIdx: task.componentIdx(),
+      taskID: task.id(),
+      fn: () => rsc0.getFlags()
+    })
+  };
+} catch (e) {
+  ret = { tag: 'err', val: getErrorPayload(e) };
+}
+
+for (const rsc of curResourceBorrows) {
+  rsc[symbolRscHandle] = undefined;
+}
+curResourceBorrows = [];
+var variant5 = ret;
+switch (variant5.tag) {
+  case 'ok': {
+    const e = variant5.val;
+    dataView(memory0).setInt8(arg1 + 0, 0, true);
+    let flags3 = 0;
+    if (typeof e === 'object' && e !== null) {
+      flags3 = Boolean(e.read) << 0 | Boolean(e.write) << 1 | Boolean(e.fileIntegritySync) << 2 | Boolean(e.dataIntegritySync) << 3 | Boolean(e.requestedWriteSync) << 4 | Boolean(e.mutateDirectory) << 5;
+    } else if (e !== null && e!== undefined) {
+      throw new TypeError('only an object, undefined or null can be converted to flags');
+    }
+    dataView(memory0).setInt8(arg1 + 1, flags3, true);
+
+    break;
+  }
+  case 'err': {
+    const e = variant5.val;
+    dataView(memory0).setInt8(arg1 + 0, 1, true);
+    var val4 = e;
+    let enum4;
+    switch (val4) {
+      case 'access': {
+        enum4 = 0;
+        break;
+      }
+      case 'would-block': {
+        enum4 = 1;
+        break;
+      }
+      case 'already': {
+        enum4 = 2;
+        break;
+      }
+      case 'bad-descriptor': {
+        enum4 = 3;
+        break;
+      }
+      case 'busy': {
+        enum4 = 4;
+        break;
+      }
+      case 'deadlock': {
+        enum4 = 5;
+        break;
+      }
+      case 'quota': {
+        enum4 = 6;
+        break;
+      }
+      case 'exist': {
+        enum4 = 7;
+        break;
+      }
+      case 'file-too-large': {
+        enum4 = 8;
+        break;
+      }
+      case 'illegal-byte-sequence': {
+        enum4 = 9;
+        break;
+      }
+      case 'in-progress': {
+        enum4 = 10;
+        break;
+      }
+      case 'interrupted': {
+        enum4 = 11;
+        break;
+      }
+      case 'invalid': {
+        enum4 = 12;
+        break;
+      }
+      case 'io': {
+        enum4 = 13;
+        break;
+      }
+      case 'is-directory': {
+        enum4 = 14;
+        break;
+      }
+      case 'loop': {
+        enum4 = 15;
+        break;
+      }
+      case 'too-many-links': {
+        enum4 = 16;
+        break;
+      }
+      case 'message-size': {
+        enum4 = 17;
+        break;
+      }
+      case 'name-too-long': {
+        enum4 = 18;
+        break;
+      }
+      case 'no-device': {
+        enum4 = 19;
+        break;
+      }
+      case 'no-entry': {
+        enum4 = 20;
+        break;
+      }
+      case 'no-lock': {
+        enum4 = 21;
+        break;
+      }
+      case 'insufficient-memory': {
+        enum4 = 22;
+        break;
+      }
+      case 'insufficient-space': {
+        enum4 = 23;
+        break;
+      }
+      case 'not-directory': {
+        enum4 = 24;
+        break;
+      }
+      case 'not-empty': {
+        enum4 = 25;
+        break;
+      }
+      case 'not-recoverable': {
+        enum4 = 26;
+        break;
+      }
+      case 'unsupported': {
+        enum4 = 27;
+        break;
+      }
+      case 'no-tty': {
+        enum4 = 28;
+        break;
+      }
+      case 'no-such-device': {
+        enum4 = 29;
+        break;
+      }
+      case 'overflow': {
+        enum4 = 30;
+        break;
+      }
+      case 'not-permitted': {
+        enum4 = 31;
+        break;
+      }
+      case 'pipe': {
+        enum4 = 32;
+        break;
+      }
+      case 'read-only': {
+        enum4 = 33;
+        break;
+      }
+      case 'invalid-seek': {
+        enum4 = 34;
+        break;
+      }
+      case 'text-file-busy': {
+        enum4 = 35;
+        break;
+      }
+      case 'cross-device': {
+        enum4 = 36;
+        break;
+      }
+      default: {
+        if ((e) instanceof Error) {
+          console.error(e);
+        }
+
+        throw new TypeError(`"${val4}" is not one of the cases of error-code`);
+      }
+    }
+    dataView(memory0).setInt8(arg1 + 1, enum4, true);
+
+    break;
+  }
+  default: {
+    _debugLog("ERROR: invalid value (expected result as object with 'tag' member)", { value: variant5, valueType: typeof variant5});
+    throw new TypeError('invalid variant specified for result');
+  }
+}
+_debugLog('[iface="wasi:filesystem/types@0.2.3", function="[method]descriptor.get-flags"][Instruction::Return]', {
+  funcName: '[method]descriptor.get-flags',
+  paramCount: 0,
+  async: false,
+  postReturn: false
+});
+task.resolve([ret]);
+task.exit();
+}
+_trampoline12.fnName = 'wasi:filesystem/types@0.2.3#getFlags';
+
+const _trampoline13 = function(arg0, arg1) {
+  var handle1 = arg0;
+
+  var rep2 = handleTable6[(handle1 << 1) + 1] & ~T_FLAG;
+  var rsc0 = captureTable6.get(rep2);
+  if (!rsc0) {
+    rsc0 = Object.create(Descriptor.prototype);
+    Object.defineProperty(rsc0, symbolRscHandle, { writable: true, value: handle1});
+    Object.defineProperty(rsc0, symbolRscRep, { writable: true, value: rep2});
+  }
+
+  curResourceBorrows.push(rsc0);
+  _debugLog('[iface="wasi:filesystem/types@0.2.3", function="[method]descriptor.get-type"] [Instruction::CallInterface] (sync, @ enter)');
+  let hostProvided = true;
+
+  let parentTask;
+  let task;
+  let subtask;
+
   const createTask = () => {
     const results = createNewCurrentTask({
       componentIdx: -1, // 0,
@@ -3868,16 +4426,16 @@ const _trampoline13 = function(arg0, arg1) {
     });
     task = results[0];
   };
-  
+
   taskCreation: {
     parentTask = getCurrentTask(0)?.task;
     if (!parentTask) {
       createTask();
       break taskCreation;
     }
-    
+
     createTask();
-    
+
     if (hostProvided) {
       subtask = parentTask.getLatestSubtask();
       if (!subtask) {
@@ -3886,9 +4444,9 @@ const _trampoline13 = function(arg0, arg1) {
       task.setParentSubtask(subtask);
     }
   }
-  
+
   const started = task.enterSync();
-  
+
   let ret;
   try {
     ret = { tag: 'ok', val: _withGlobalCurrentTaskMeta({
@@ -3949,11 +4507,12 @@ switch (variant5.tag) {
         if ((e) instanceof Error) {
           console.error(e);
         }
-        
+
         throw new TypeError(`"${val3}" is not one of the cases of descriptor-type`);
       }
     }
     dataView(memory0).setInt8(arg1 + 1, enum3, true);
+
     break;
   }
   case 'err': {
@@ -4114,14 +4673,16 @@ switch (variant5.tag) {
         if ((e) instanceof Error) {
           console.error(e);
         }
-        
+
         throw new TypeError(`"${val4}" is not one of the cases of error-code`);
       }
     }
     dataView(memory0).setInt8(arg1 + 1, enum4, true);
+
     break;
   }
   default: {
+    _debugLog("ERROR: invalid value (expected result as object with 'tag' member)", { value: variant5, valueType: typeof variant5});
     throw new TypeError('invalid variant specified for result');
   }
 }
@@ -4138,7 +4699,7 @@ _trampoline13.fnName = 'wasi:filesystem/types@0.2.3#getType';
 
 const _trampoline14 = function(arg0, arg1) {
   var handle1 = arg0;
-  
+
   var rep2 = handleTable6[(handle1 << 1) + 1] & ~T_FLAG;
   var rsc0 = captureTable6.get(rep2);
   if (!rsc0) {
@@ -4146,15 +4707,15 @@ const _trampoline14 = function(arg0, arg1) {
     Object.defineProperty(rsc0, symbolRscHandle, { writable: true, value: handle1});
     Object.defineProperty(rsc0, symbolRscRep, { writable: true, value: rep2});
   }
-  
+
   curResourceBorrows.push(rsc0);
   _debugLog('[iface="wasi:filesystem/types@0.2.3", function="[method]descriptor.metadata-hash"] [Instruction::CallInterface] (sync, @ enter)');
   let hostProvided = true;
-  
+
   let parentTask;
   let task;
   let subtask;
-  
+
   const createTask = () => {
     const results = createNewCurrentTask({
       componentIdx: -1, // 0,
@@ -4167,16 +4728,16 @@ const _trampoline14 = function(arg0, arg1) {
     });
     task = results[0];
   };
-  
+
   taskCreation: {
     parentTask = getCurrentTask(0)?.task;
     if (!parentTask) {
       createTask();
       break taskCreation;
     }
-    
+
     createTask();
-    
+
     if (hostProvided) {
       subtask = parentTask.getLatestSubtask();
       if (!subtask) {
@@ -4185,9 +4746,9 @@ const _trampoline14 = function(arg0, arg1) {
       task.setParentSubtask(subtask);
     }
   }
-  
+
   const started = task.enterSync();
-  
+
   let ret;
   try {
     ret = { tag: 'ok', val: _withGlobalCurrentTaskMeta({
@@ -4212,6 +4773,7 @@ switch (variant5.tag) {
     var {lower: v3_0, upper: v3_1 } = e;
     dataView(memory0).setBigInt64(arg1 + 8, toUint64(v3_0), true);
     dataView(memory0).setBigInt64(arg1 + 16, toUint64(v3_1), true);
+
     break;
   }
   case 'err': {
@@ -4372,14 +4934,16 @@ switch (variant5.tag) {
         if ((e) instanceof Error) {
           console.error(e);
         }
-        
+
         throw new TypeError(`"${val4}" is not one of the cases of error-code`);
       }
     }
     dataView(memory0).setInt8(arg1 + 8, enum4, true);
+
     break;
   }
   default: {
+    _debugLog("ERROR: invalid value (expected result as object with 'tag' member)", { value: variant5, valueType: typeof variant5});
     throw new TypeError('invalid variant specified for result');
   }
 }
@@ -4400,7 +4964,7 @@ handleTables[0] = handleTable0;
 
 const _trampoline15 = function(arg0, arg1) {
   var handle1 = arg0;
-  
+
   var rep2 = handleTable0[(handle1 << 1) + 1] & ~T_FLAG;
   var rsc0 = captureTable0.get(rep2);
   if (!rsc0) {
@@ -4408,15 +4972,15 @@ const _trampoline15 = function(arg0, arg1) {
     Object.defineProperty(rsc0, symbolRscHandle, { writable: true, value: handle1});
     Object.defineProperty(rsc0, symbolRscRep, { writable: true, value: rep2});
   }
-  
+
   curResourceBorrows.push(rsc0);
   _debugLog('[iface="wasi:filesystem/types@0.2.3", function="filesystem-error-code"] [Instruction::CallInterface] (sync, @ enter)');
   let hostProvided = true;
-  
+
   let parentTask;
   let task;
   let subtask;
-  
+
   const createTask = () => {
     const results = createNewCurrentTask({
       componentIdx: -1, // 0,
@@ -4429,16 +4993,16 @@ const _trampoline15 = function(arg0, arg1) {
     });
     task = results[0];
   };
-  
+
   taskCreation: {
     parentTask = getCurrentTask(0)?.task;
     if (!parentTask) {
       createTask();
       break taskCreation;
     }
-    
+
     createTask();
-    
+
     if (hostProvided) {
       subtask = parentTask.getLatestSubtask();
       if (!subtask) {
@@ -4447,7 +5011,7 @@ const _trampoline15 = function(arg0, arg1) {
       task.setParentSubtask(subtask);
     }
   }
-  
+
   const started = task.enterSync();
   let ret = _withGlobalCurrentTaskMeta({
     componentIdx: task.componentIdx(),
@@ -4620,7 +5184,7 @@ const _trampoline15 = function(arg0, arg1) {
         if ((e) instanceof Error) {
           console.error(e);
         }
-        
+
         throw new TypeError(`"${val3}" is not one of the cases of error-code`);
       }
     }
@@ -4639,7 +5203,7 @@ _trampoline15.fnName = 'wasi:filesystem/types@0.2.3#filesystemErrorCode';
 
 const _trampoline16 = function(arg0, arg1, arg2, arg3, arg4) {
   var handle1 = arg0;
-  
+
   var rep2 = handleTable6[(handle1 << 1) + 1] & ~T_FLAG;
   var rsc0 = captureTable6.get(rep2);
   if (!rsc0) {
@@ -4647,7 +5211,7 @@ const _trampoline16 = function(arg0, arg1, arg2, arg3, arg4) {
     Object.defineProperty(rsc0, symbolRscHandle, { writable: true, value: handle1});
     Object.defineProperty(rsc0, symbolRscRep, { writable: true, value: rep2});
   }
-  
+
   curResourceBorrows.push(rsc0);
   if ((arg1 & 4294967294) !== 0) {
     throw new TypeError('flags have extraneous bits set');
@@ -4660,11 +5224,11 @@ const _trampoline16 = function(arg0, arg1, arg2, arg3, arg4) {
   var result4 = TEXT_DECODER_UTF8.decode(new Uint8Array(memory0.buffer, ptr4, len4));
   _debugLog('[iface="wasi:filesystem/types@0.2.3", function="[method]descriptor.metadata-hash-at"] [Instruction::CallInterface] (sync, @ enter)');
   let hostProvided = true;
-  
+
   let parentTask;
   let task;
   let subtask;
-  
+
   const createTask = () => {
     const results = createNewCurrentTask({
       componentIdx: -1, // 0,
@@ -4677,16 +5241,16 @@ const _trampoline16 = function(arg0, arg1, arg2, arg3, arg4) {
     });
     task = results[0];
   };
-  
+
   taskCreation: {
     parentTask = getCurrentTask(0)?.task;
     if (!parentTask) {
       createTask();
       break taskCreation;
     }
-    
+
     createTask();
-    
+
     if (hostProvided) {
       subtask = parentTask.getLatestSubtask();
       if (!subtask) {
@@ -4695,9 +5259,9 @@ const _trampoline16 = function(arg0, arg1, arg2, arg3, arg4) {
       task.setParentSubtask(subtask);
     }
   }
-  
+
   const started = task.enterSync();
-  
+
   let ret;
   try {
     ret = { tag: 'ok', val: _withGlobalCurrentTaskMeta({
@@ -4722,6 +5286,7 @@ switch (variant7.tag) {
     var {lower: v5_0, upper: v5_1 } = e;
     dataView(memory0).setBigInt64(arg4 + 8, toUint64(v5_0), true);
     dataView(memory0).setBigInt64(arg4 + 16, toUint64(v5_1), true);
+
     break;
   }
   case 'err': {
@@ -4882,14 +5447,16 @@ switch (variant7.tag) {
         if ((e) instanceof Error) {
           console.error(e);
         }
-        
+
         throw new TypeError(`"${val6}" is not one of the cases of error-code`);
       }
     }
     dataView(memory0).setInt8(arg4 + 8, enum6, true);
+
     break;
   }
   default: {
+    _debugLog("ERROR: invalid value (expected result as object with 'tag' member)", { value: variant7, valueType: typeof variant7});
     throw new TypeError('invalid variant specified for result');
   }
 }
@@ -4906,7 +5473,7 @@ _trampoline16.fnName = 'wasi:filesystem/types@0.2.3#metadataHashAt';
 
 const _trampoline17 = function(arg0, arg1, arg2) {
   var handle1 = arg0;
-  
+
   var rep2 = handleTable6[(handle1 << 1) + 1] & ~T_FLAG;
   var rsc0 = captureTable6.get(rep2);
   if (!rsc0) {
@@ -4914,15 +5481,15 @@ const _trampoline17 = function(arg0, arg1, arg2) {
     Object.defineProperty(rsc0, symbolRscHandle, { writable: true, value: handle1});
     Object.defineProperty(rsc0, symbolRscRep, { writable: true, value: rep2});
   }
-  
+
   curResourceBorrows.push(rsc0);
   _debugLog('[iface="wasi:filesystem/types@0.2.3", function="[method]descriptor.read-via-stream"] [Instruction::CallInterface] (sync, @ enter)');
   let hostProvided = true;
-  
+
   let parentTask;
   let task;
   let subtask;
-  
+
   const createTask = () => {
     const results = createNewCurrentTask({
       componentIdx: -1, // 0,
@@ -4935,16 +5502,16 @@ const _trampoline17 = function(arg0, arg1, arg2) {
     });
     task = results[0];
   };
-  
+
   taskCreation: {
     parentTask = getCurrentTask(0)?.task;
     if (!parentTask) {
       createTask();
       break taskCreation;
     }
-    
+
     createTask();
-    
+
     if (hostProvided) {
       subtask = parentTask.getLatestSubtask();
       if (!subtask) {
@@ -4953,9 +5520,9 @@ const _trampoline17 = function(arg0, arg1, arg2) {
       task.setParentSubtask(subtask);
     }
   }
-  
+
   const started = task.enterSync();
-  
+
   let ret;
   try {
     ret = { tag: 'ok', val: _withGlobalCurrentTaskMeta({
@@ -4977,8 +5544,9 @@ switch (variant5.tag) {
   case 'ok': {
     const e = variant5.val;
     dataView(memory0).setInt8(arg2 + 0, 0, true);
+
     if (!(e instanceof InputStream)) {
-      throw new TypeError('Resource error: Not a valid "InputStream" resource.');
+      throw new TypeError('Resource error: Not a valid \"InputStream\" resource.');
     }
     var handle3 = e[symbolRscHandle];
     if (!handle3) {
@@ -4986,7 +5554,9 @@ switch (variant5.tag) {
       captureTable1.set(rep, e);
       handle3 = rscTableCreateOwn(handleTable1, rep);
     }
+
     dataView(memory0).setInt32(arg2 + 4, handle3, true);
+
     break;
   }
   case 'err': {
@@ -5147,14 +5717,16 @@ switch (variant5.tag) {
         if ((e) instanceof Error) {
           console.error(e);
         }
-        
+
         throw new TypeError(`"${val4}" is not one of the cases of error-code`);
       }
     }
     dataView(memory0).setInt8(arg2 + 4, enum4, true);
+
     break;
   }
   default: {
+    _debugLog("ERROR: invalid value (expected result as object with 'tag' member)", { value: variant5, valueType: typeof variant5});
     throw new TypeError('invalid variant specified for result');
   }
 }
@@ -5171,7 +5743,7 @@ _trampoline17.fnName = 'wasi:filesystem/types@0.2.3#readViaStream';
 
 const _trampoline18 = function(arg0, arg1, arg2) {
   var handle1 = arg0;
-  
+
   var rep2 = handleTable6[(handle1 << 1) + 1] & ~T_FLAG;
   var rsc0 = captureTable6.get(rep2);
   if (!rsc0) {
@@ -5179,15 +5751,15 @@ const _trampoline18 = function(arg0, arg1, arg2) {
     Object.defineProperty(rsc0, symbolRscHandle, { writable: true, value: handle1});
     Object.defineProperty(rsc0, symbolRscRep, { writable: true, value: rep2});
   }
-  
+
   curResourceBorrows.push(rsc0);
   _debugLog('[iface="wasi:filesystem/types@0.2.3", function="[method]descriptor.write-via-stream"] [Instruction::CallInterface] (sync, @ enter)');
   let hostProvided = true;
-  
+
   let parentTask;
   let task;
   let subtask;
-  
+
   const createTask = () => {
     const results = createNewCurrentTask({
       componentIdx: -1, // 0,
@@ -5200,16 +5772,16 @@ const _trampoline18 = function(arg0, arg1, arg2) {
     });
     task = results[0];
   };
-  
+
   taskCreation: {
     parentTask = getCurrentTask(0)?.task;
     if (!parentTask) {
       createTask();
       break taskCreation;
     }
-    
+
     createTask();
-    
+
     if (hostProvided) {
       subtask = parentTask.getLatestSubtask();
       if (!subtask) {
@@ -5218,9 +5790,9 @@ const _trampoline18 = function(arg0, arg1, arg2) {
       task.setParentSubtask(subtask);
     }
   }
-  
+
   const started = task.enterSync();
-  
+
   let ret;
   try {
     ret = { tag: 'ok', val: _withGlobalCurrentTaskMeta({
@@ -5242,8 +5814,9 @@ switch (variant5.tag) {
   case 'ok': {
     const e = variant5.val;
     dataView(memory0).setInt8(arg2 + 0, 0, true);
+
     if (!(e instanceof OutputStream)) {
-      throw new TypeError('Resource error: Not a valid "OutputStream" resource.');
+      throw new TypeError('Resource error: Not a valid \"OutputStream\" resource.');
     }
     var handle3 = e[symbolRscHandle];
     if (!handle3) {
@@ -5251,7 +5824,9 @@ switch (variant5.tag) {
       captureTable2.set(rep, e);
       handle3 = rscTableCreateOwn(handleTable2, rep);
     }
+
     dataView(memory0).setInt32(arg2 + 4, handle3, true);
+
     break;
   }
   case 'err': {
@@ -5412,14 +5987,16 @@ switch (variant5.tag) {
         if ((e) instanceof Error) {
           console.error(e);
         }
-        
+
         throw new TypeError(`"${val4}" is not one of the cases of error-code`);
       }
     }
     dataView(memory0).setInt8(arg2 + 4, enum4, true);
+
     break;
   }
   default: {
+    _debugLog("ERROR: invalid value (expected result as object with 'tag' member)", { value: variant5, valueType: typeof variant5});
     throw new TypeError('invalid variant specified for result');
   }
 }
@@ -5436,7 +6013,7 @@ _trampoline18.fnName = 'wasi:filesystem/types@0.2.3#writeViaStream';
 
 const _trampoline19 = function(arg0, arg1) {
   var handle1 = arg0;
-  
+
   var rep2 = handleTable6[(handle1 << 1) + 1] & ~T_FLAG;
   var rsc0 = captureTable6.get(rep2);
   if (!rsc0) {
@@ -5444,15 +6021,15 @@ const _trampoline19 = function(arg0, arg1) {
     Object.defineProperty(rsc0, symbolRscHandle, { writable: true, value: handle1});
     Object.defineProperty(rsc0, symbolRscRep, { writable: true, value: rep2});
   }
-  
+
   curResourceBorrows.push(rsc0);
   _debugLog('[iface="wasi:filesystem/types@0.2.3", function="[method]descriptor.append-via-stream"] [Instruction::CallInterface] (sync, @ enter)');
   let hostProvided = true;
-  
+
   let parentTask;
   let task;
   let subtask;
-  
+
   const createTask = () => {
     const results = createNewCurrentTask({
       componentIdx: -1, // 0,
@@ -5465,16 +6042,16 @@ const _trampoline19 = function(arg0, arg1) {
     });
     task = results[0];
   };
-  
+
   taskCreation: {
     parentTask = getCurrentTask(0)?.task;
     if (!parentTask) {
       createTask();
       break taskCreation;
     }
-    
+
     createTask();
-    
+
     if (hostProvided) {
       subtask = parentTask.getLatestSubtask();
       if (!subtask) {
@@ -5483,9 +6060,9 @@ const _trampoline19 = function(arg0, arg1) {
       task.setParentSubtask(subtask);
     }
   }
-  
+
   const started = task.enterSync();
-  
+
   let ret;
   try {
     ret = { tag: 'ok', val: _withGlobalCurrentTaskMeta({
@@ -5507,8 +6084,9 @@ switch (variant5.tag) {
   case 'ok': {
     const e = variant5.val;
     dataView(memory0).setInt8(arg1 + 0, 0, true);
+
     if (!(e instanceof OutputStream)) {
-      throw new TypeError('Resource error: Not a valid "OutputStream" resource.');
+      throw new TypeError('Resource error: Not a valid \"OutputStream\" resource.');
     }
     var handle3 = e[symbolRscHandle];
     if (!handle3) {
@@ -5516,7 +6094,9 @@ switch (variant5.tag) {
       captureTable2.set(rep, e);
       handle3 = rscTableCreateOwn(handleTable2, rep);
     }
+
     dataView(memory0).setInt32(arg1 + 4, handle3, true);
+
     break;
   }
   case 'err': {
@@ -5677,14 +6257,16 @@ switch (variant5.tag) {
         if ((e) instanceof Error) {
           console.error(e);
         }
-        
+
         throw new TypeError(`"${val4}" is not one of the cases of error-code`);
       }
     }
     dataView(memory0).setInt8(arg1 + 4, enum4, true);
+
     break;
   }
   default: {
+    _debugLog("ERROR: invalid value (expected result as object with 'tag' member)", { value: variant5, valueType: typeof variant5});
     throw new TypeError('invalid variant specified for result');
   }
 }
@@ -5705,7 +6287,7 @@ handleTables[5] = handleTable5;
 
 const _trampoline20 = function(arg0, arg1) {
   var handle1 = arg0;
-  
+
   var rep2 = handleTable6[(handle1 << 1) + 1] & ~T_FLAG;
   var rsc0 = captureTable6.get(rep2);
   if (!rsc0) {
@@ -5713,15 +6295,15 @@ const _trampoline20 = function(arg0, arg1) {
     Object.defineProperty(rsc0, symbolRscHandle, { writable: true, value: handle1});
     Object.defineProperty(rsc0, symbolRscRep, { writable: true, value: rep2});
   }
-  
+
   curResourceBorrows.push(rsc0);
   _debugLog('[iface="wasi:filesystem/types@0.2.3", function="[method]descriptor.read-directory"] [Instruction::CallInterface] (sync, @ enter)');
   let hostProvided = true;
-  
+
   let parentTask;
   let task;
   let subtask;
-  
+
   const createTask = () => {
     const results = createNewCurrentTask({
       componentIdx: -1, // 0,
@@ -5734,16 +6316,16 @@ const _trampoline20 = function(arg0, arg1) {
     });
     task = results[0];
   };
-  
+
   taskCreation: {
     parentTask = getCurrentTask(0)?.task;
     if (!parentTask) {
       createTask();
       break taskCreation;
     }
-    
+
     createTask();
-    
+
     if (hostProvided) {
       subtask = parentTask.getLatestSubtask();
       if (!subtask) {
@@ -5752,9 +6334,9 @@ const _trampoline20 = function(arg0, arg1) {
       task.setParentSubtask(subtask);
     }
   }
-  
+
   const started = task.enterSync();
-  
+
   let ret;
   try {
     ret = { tag: 'ok', val: _withGlobalCurrentTaskMeta({
@@ -5776,8 +6358,9 @@ switch (variant5.tag) {
   case 'ok': {
     const e = variant5.val;
     dataView(memory0).setInt8(arg1 + 0, 0, true);
+
     if (!(e instanceof DirectoryEntryStream)) {
-      throw new TypeError('Resource error: Not a valid "DirectoryEntryStream" resource.');
+      throw new TypeError('Resource error: Not a valid \"DirectoryEntryStream\" resource.');
     }
     var handle3 = e[symbolRscHandle];
     if (!handle3) {
@@ -5785,7 +6368,9 @@ switch (variant5.tag) {
       captureTable5.set(rep, e);
       handle3 = rscTableCreateOwn(handleTable5, rep);
     }
+
     dataView(memory0).setInt32(arg1 + 4, handle3, true);
+
     break;
   }
   case 'err': {
@@ -5946,14 +6531,16 @@ switch (variant5.tag) {
         if ((e) instanceof Error) {
           console.error(e);
         }
-        
+
         throw new TypeError(`"${val4}" is not one of the cases of error-code`);
       }
     }
     dataView(memory0).setInt8(arg1 + 4, enum4, true);
+
     break;
   }
   default: {
+    _debugLog("ERROR: invalid value (expected result as object with 'tag' member)", { value: variant5, valueType: typeof variant5});
     throw new TypeError('invalid variant specified for result');
   }
 }
@@ -5970,7 +6557,7 @@ _trampoline20.fnName = 'wasi:filesystem/types@0.2.3#readDirectory';
 
 const _trampoline21 = function(arg0, arg1) {
   var handle1 = arg0;
-  
+
   var rep2 = handleTable6[(handle1 << 1) + 1] & ~T_FLAG;
   var rsc0 = captureTable6.get(rep2);
   if (!rsc0) {
@@ -5978,15 +6565,15 @@ const _trampoline21 = function(arg0, arg1) {
     Object.defineProperty(rsc0, symbolRscHandle, { writable: true, value: handle1});
     Object.defineProperty(rsc0, symbolRscRep, { writable: true, value: rep2});
   }
-  
+
   curResourceBorrows.push(rsc0);
   _debugLog('[iface="wasi:filesystem/types@0.2.3", function="[method]descriptor.stat"] [Instruction::CallInterface] (sync, @ enter)');
   let hostProvided = true;
-  
+
   let parentTask;
   let task;
   let subtask;
-  
+
   const createTask = () => {
     const results = createNewCurrentTask({
       componentIdx: -1, // 0,
@@ -5999,16 +6586,16 @@ const _trampoline21 = function(arg0, arg1) {
     });
     task = results[0];
   };
-  
+
   taskCreation: {
     parentTask = getCurrentTask(0)?.task;
     if (!parentTask) {
       createTask();
       break taskCreation;
     }
-    
+
     createTask();
-    
+
     if (hostProvided) {
       subtask = parentTask.getLatestSubtask();
       if (!subtask) {
@@ -6017,9 +6604,9 @@ const _trampoline21 = function(arg0, arg1) {
       task.setParentSubtask(subtask);
     }
   }
-  
+
   const started = task.enterSync();
-  
+
   let ret;
   try {
     ret = { tag: 'ok', val: _withGlobalCurrentTaskMeta({
@@ -6081,7 +6668,7 @@ switch (variant12.tag) {
         if ((v3_0) instanceof Error) {
           console.error(v3_0);
         }
-        
+
         throw new TypeError(`"${val4}" is not one of the cases of descriptor-type`);
       }
     }
@@ -6118,6 +6705,7 @@ switch (variant12.tag) {
       dataView(memory0).setBigInt64(arg1 + 88, toUint64(v9_0), true);
       dataView(memory0).setInt32(arg1 + 96, toUint32(v9_1), true);
     }
+
     break;
   }
   case 'err': {
@@ -6278,14 +6866,16 @@ switch (variant12.tag) {
         if ((e) instanceof Error) {
           console.error(e);
         }
-        
+
         throw new TypeError(`"${val11}" is not one of the cases of error-code`);
       }
     }
     dataView(memory0).setInt8(arg1 + 8, enum11, true);
+
     break;
   }
   default: {
+    _debugLog("ERROR: invalid value (expected result as object with 'tag' member)", { value: variant12, valueType: typeof variant12});
     throw new TypeError('invalid variant specified for result');
   }
 }
@@ -6302,7 +6892,7 @@ _trampoline21.fnName = 'wasi:filesystem/types@0.2.3#stat';
 
 const _trampoline22 = function(arg0, arg1, arg2, arg3, arg4) {
   var handle1 = arg0;
-  
+
   var rep2 = handleTable6[(handle1 << 1) + 1] & ~T_FLAG;
   var rsc0 = captureTable6.get(rep2);
   if (!rsc0) {
@@ -6310,7 +6900,7 @@ const _trampoline22 = function(arg0, arg1, arg2, arg3, arg4) {
     Object.defineProperty(rsc0, symbolRscHandle, { writable: true, value: handle1});
     Object.defineProperty(rsc0, symbolRscRep, { writable: true, value: rep2});
   }
-  
+
   curResourceBorrows.push(rsc0);
   if ((arg1 & 4294967294) !== 0) {
     throw new TypeError('flags have extraneous bits set');
@@ -6323,11 +6913,11 @@ const _trampoline22 = function(arg0, arg1, arg2, arg3, arg4) {
   var result4 = TEXT_DECODER_UTF8.decode(new Uint8Array(memory0.buffer, ptr4, len4));
   _debugLog('[iface="wasi:filesystem/types@0.2.3", function="[method]descriptor.stat-at"] [Instruction::CallInterface] (sync, @ enter)');
   let hostProvided = true;
-  
+
   let parentTask;
   let task;
   let subtask;
-  
+
   const createTask = () => {
     const results = createNewCurrentTask({
       componentIdx: -1, // 0,
@@ -6340,16 +6930,16 @@ const _trampoline22 = function(arg0, arg1, arg2, arg3, arg4) {
     });
     task = results[0];
   };
-  
+
   taskCreation: {
     parentTask = getCurrentTask(0)?.task;
     if (!parentTask) {
       createTask();
       break taskCreation;
     }
-    
+
     createTask();
-    
+
     if (hostProvided) {
       subtask = parentTask.getLatestSubtask();
       if (!subtask) {
@@ -6358,9 +6948,9 @@ const _trampoline22 = function(arg0, arg1, arg2, arg3, arg4) {
       task.setParentSubtask(subtask);
     }
   }
-  
+
   const started = task.enterSync();
-  
+
   let ret;
   try {
     ret = { tag: 'ok', val: _withGlobalCurrentTaskMeta({
@@ -6422,7 +7012,7 @@ switch (variant14.tag) {
         if ((v5_0) instanceof Error) {
           console.error(v5_0);
         }
-        
+
         throw new TypeError(`"${val6}" is not one of the cases of descriptor-type`);
       }
     }
@@ -6459,6 +7049,7 @@ switch (variant14.tag) {
       dataView(memory0).setBigInt64(arg4 + 88, toUint64(v11_0), true);
       dataView(memory0).setInt32(arg4 + 96, toUint32(v11_1), true);
     }
+
     break;
   }
   case 'err': {
@@ -6619,14 +7210,16 @@ switch (variant14.tag) {
         if ((e) instanceof Error) {
           console.error(e);
         }
-        
+
         throw new TypeError(`"${val13}" is not one of the cases of error-code`);
       }
     }
     dataView(memory0).setInt8(arg4 + 8, enum13, true);
+
     break;
   }
   default: {
+    _debugLog("ERROR: invalid value (expected result as object with 'tag' member)", { value: variant14, valueType: typeof variant14});
     throw new TypeError('invalid variant specified for result');
   }
 }
@@ -6643,7 +7236,7 @@ _trampoline22.fnName = 'wasi:filesystem/types@0.2.3#statAt';
 
 const _trampoline23 = function(arg0, arg1, arg2, arg3, arg4, arg5, arg6) {
   var handle1 = arg0;
-  
+
   var rep2 = handleTable6[(handle1 << 1) + 1] & ~T_FLAG;
   var rsc0 = captureTable6.get(rep2);
   if (!rsc0) {
@@ -6651,7 +7244,7 @@ const _trampoline23 = function(arg0, arg1, arg2, arg3, arg4, arg5, arg6) {
     Object.defineProperty(rsc0, symbolRscHandle, { writable: true, value: handle1});
     Object.defineProperty(rsc0, symbolRscRep, { writable: true, value: rep2});
   }
-  
+
   curResourceBorrows.push(rsc0);
   if ((arg1 & 4294967294) !== 0) {
     throw new TypeError('flags have extraneous bits set');
@@ -6684,11 +7277,11 @@ const _trampoline23 = function(arg0, arg1, arg2, arg3, arg4, arg5, arg6) {
   };
   _debugLog('[iface="wasi:filesystem/types@0.2.3", function="[method]descriptor.open-at"] [Instruction::CallInterface] (sync, @ enter)');
   let hostProvided = true;
-  
+
   let parentTask;
   let task;
   let subtask;
-  
+
   const createTask = () => {
     const results = createNewCurrentTask({
       componentIdx: -1, // 0,
@@ -6701,16 +7294,16 @@ const _trampoline23 = function(arg0, arg1, arg2, arg3, arg4, arg5, arg6) {
     });
     task = results[0];
   };
-  
+
   taskCreation: {
     parentTask = getCurrentTask(0)?.task;
     if (!parentTask) {
       createTask();
       break taskCreation;
     }
-    
+
     createTask();
-    
+
     if (hostProvided) {
       subtask = parentTask.getLatestSubtask();
       if (!subtask) {
@@ -6719,9 +7312,9 @@ const _trampoline23 = function(arg0, arg1, arg2, arg3, arg4, arg5, arg6) {
       task.setParentSubtask(subtask);
     }
   }
-  
+
   const started = task.enterSync();
-  
+
   let ret;
   try {
     ret = { tag: 'ok', val: _withGlobalCurrentTaskMeta({
@@ -6743,8 +7336,9 @@ switch (variant9.tag) {
   case 'ok': {
     const e = variant9.val;
     dataView(memory0).setInt8(arg6 + 0, 0, true);
+
     if (!(e instanceof Descriptor)) {
-      throw new TypeError('Resource error: Not a valid "Descriptor" resource.');
+      throw new TypeError('Resource error: Not a valid \"Descriptor\" resource.');
     }
     var handle7 = e[symbolRscHandle];
     if (!handle7) {
@@ -6752,7 +7346,9 @@ switch (variant9.tag) {
       captureTable6.set(rep, e);
       handle7 = rscTableCreateOwn(handleTable6, rep);
     }
+
     dataView(memory0).setInt32(arg6 + 4, handle7, true);
+
     break;
   }
   case 'err': {
@@ -6913,14 +7509,16 @@ switch (variant9.tag) {
         if ((e) instanceof Error) {
           console.error(e);
         }
-        
+
         throw new TypeError(`"${val8}" is not one of the cases of error-code`);
       }
     }
     dataView(memory0).setInt8(arg6 + 4, enum8, true);
+
     break;
   }
   default: {
+    _debugLog("ERROR: invalid value (expected result as object with 'tag' member)", { value: variant9, valueType: typeof variant9});
     throw new TypeError('invalid variant specified for result');
   }
 }
@@ -6937,7 +7535,7 @@ _trampoline23.fnName = 'wasi:filesystem/types@0.2.3#openAt';
 
 const _trampoline24 = function(arg0, arg1) {
   var handle1 = arg0;
-  
+
   var rep2 = handleTable5[(handle1 << 1) + 1] & ~T_FLAG;
   var rsc0 = captureTable5.get(rep2);
   if (!rsc0) {
@@ -6945,15 +7543,15 @@ const _trampoline24 = function(arg0, arg1) {
     Object.defineProperty(rsc0, symbolRscHandle, { writable: true, value: handle1});
     Object.defineProperty(rsc0, symbolRscRep, { writable: true, value: rep2});
   }
-  
+
   curResourceBorrows.push(rsc0);
   _debugLog('[iface="wasi:filesystem/types@0.2.3", function="[method]directory-entry-stream.read-directory-entry"] [Instruction::CallInterface] (sync, @ enter)');
   let hostProvided = true;
-  
+
   let parentTask;
   let task;
   let subtask;
-  
+
   const createTask = () => {
     const results = createNewCurrentTask({
       componentIdx: -1, // 0,
@@ -6966,16 +7564,16 @@ const _trampoline24 = function(arg0, arg1) {
     });
     task = results[0];
   };
-  
+
   taskCreation: {
     parentTask = getCurrentTask(0)?.task;
     if (!parentTask) {
       createTask();
       break taskCreation;
     }
-    
+
     createTask();
-    
+
     if (hostProvided) {
       subtask = parentTask.getLatestSubtask();
       if (!subtask) {
@@ -6984,9 +7582,9 @@ const _trampoline24 = function(arg0, arg1) {
       task.setParentSubtask(subtask);
     }
   }
-  
+
   const started = task.enterSync();
-  
+
   let ret;
   try {
     ret = { tag: 'ok', val: _withGlobalCurrentTaskMeta({
@@ -7054,19 +7652,20 @@ switch (variant8.tag) {
           if ((v3_0) instanceof Error) {
             console.error(v3_0);
           }
-          
+
           throw new TypeError(`"${val4}" is not one of the cases of descriptor-type`);
         }
       }
       dataView(memory0).setInt8(arg1 + 8, enum4, true);
-      
+
       var encodeRes = _utf8AllocateAndEncode(v3_1, realloc0, memory0);
       var ptr5= encodeRes.ptr;
       var len5 = encodeRes.len;
-      
+
       dataView(memory0).setUint32(arg1 + 16, len5, true);
       dataView(memory0).setUint32(arg1 + 12, ptr5, true);
     }
+
     break;
   }
   case 'err': {
@@ -7227,14 +7826,16 @@ switch (variant8.tag) {
         if ((e) instanceof Error) {
           console.error(e);
         }
-        
+
         throw new TypeError(`"${val7}" is not one of the cases of error-code`);
       }
     }
     dataView(memory0).setInt8(arg1 + 4, enum7, true);
+
     break;
   }
   default: {
+    _debugLog("ERROR: invalid value (expected result as object with 'tag' member)", { value: variant8, valueType: typeof variant8});
     throw new TypeError('invalid variant specified for result');
   }
 }
@@ -7251,7 +7852,7 @@ _trampoline24.fnName = 'wasi:filesystem/types@0.2.3#readDirectoryEntry';
 
 const _trampoline25 = function(arg0, arg1, arg2) {
   var handle1 = arg0;
-  
+
   var rep2 = handleTable1[(handle1 << 1) + 1] & ~T_FLAG;
   var rsc0 = captureTable1.get(rep2);
   if (!rsc0) {
@@ -7259,15 +7860,15 @@ const _trampoline25 = function(arg0, arg1, arg2) {
     Object.defineProperty(rsc0, symbolRscHandle, { writable: true, value: handle1});
     Object.defineProperty(rsc0, symbolRscRep, { writable: true, value: rep2});
   }
-  
+
   curResourceBorrows.push(rsc0);
   _debugLog('[iface="wasi:io/streams@0.2.3", function="[method]input-stream.read"] [Instruction::CallInterface] (sync, @ enter)');
   let hostProvided = true;
-  
+
   let parentTask;
   let task;
   let subtask;
-  
+
   const createTask = () => {
     const results = createNewCurrentTask({
       componentIdx: -1, // 0,
@@ -7280,16 +7881,16 @@ const _trampoline25 = function(arg0, arg1, arg2) {
     });
     task = results[0];
   };
-  
+
   taskCreation: {
     parentTask = getCurrentTask(0)?.task;
     if (!parentTask) {
       createTask();
       break taskCreation;
     }
-    
+
     createTask();
-    
+
     if (hostProvided) {
       subtask = parentTask.getLatestSubtask();
       if (!subtask) {
@@ -7298,9 +7899,9 @@ const _trampoline25 = function(arg0, arg1, arg2) {
       task.setParentSubtask(subtask);
     }
   }
-  
+
   const started = task.enterSync();
-  
+
   let ret;
   try {
     ret = { tag: 'ok', val: _withGlobalCurrentTaskMeta({
@@ -7323,9 +7924,9 @@ switch (variant6.tag) {
     const e = variant6.val;
     dataView(memory0).setInt8(arg2 + 0, 0, true);
     var val3 = e;
-    var len3 = val3.byteLength;
+    var len3 = Array.isArray(val3) ? val3.length : val3.byteLength;
     var ptr3 = realloc0(0, 0, 1, len3 * 1);
-    
+
     let valData3;
     const valLenBytes3 = len3 * 1;
     if (Array.isArray(val3)) {
@@ -7333,18 +7934,20 @@ switch (variant6.tag) {
       let offset = 0;
       const dv3 = new DataView(memory0.buffer);
       for (const v of val3) {
+        _requireValidNumericPrimitive.bind(null, 'u8')(v);
         dv3.setUint8(ptr3+ offset, v, true);
         offset += 1;
       }
     } else {
       // TypedArray / ArrayBuffer-like, direct copy
       valData3 = new Uint8Array(val3.buffer || val3, val3.byteOffset, valLenBytes3);
-      const out3 = new Uint8Array(memory0.buffer, ptr3,valLenBytes3);
+      const out3 = new Uint8Array(memory0.buffer, ptr3, valLenBytes3);
       out3.set(valData3);
     }
-    
+
     dataView(memory0).setUint32(arg2 + 8, len3, true);
     dataView(memory0).setUint32(arg2 + 4, ptr3, true);
+
     break;
   }
   case 'err': {
@@ -7355,8 +7958,9 @@ switch (variant6.tag) {
       case 'last-operation-failed': {
         const e = variant5.val;
         dataView(memory0).setInt8(arg2 + 4, 0, true);
+
         if (!(e instanceof Error$1)) {
-          throw new TypeError('Resource error: Not a valid "Error" resource.');
+          throw new TypeError('Resource error: Not a valid \"Error\" resource.');
         }
         var handle4 = e[symbolRscHandle];
         if (!handle4) {
@@ -7364,6 +7968,7 @@ switch (variant6.tag) {
           captureTable0.set(rep, e);
           handle4 = rscTableCreateOwn(handleTable0, rep);
         }
+
         dataView(memory0).setInt32(arg2 + 8, handle4, true);
         break;
       }
@@ -7375,9 +7980,11 @@ switch (variant6.tag) {
         throw new TypeError(`invalid variant tag value \`${JSON.stringify(variant5.tag)}\` (received \`${variant5}\`) specified for \`StreamError\``);
       }
     }
+
     break;
   }
   default: {
+    _debugLog("ERROR: invalid value (expected result as object with 'tag' member)", { value: variant6, valueType: typeof variant6});
     throw new TypeError('invalid variant specified for result');
   }
 }
@@ -7394,7 +8001,7 @@ _trampoline25.fnName = 'wasi:io/streams@0.2.3#read';
 
 const _trampoline26 = function(arg0, arg1, arg2) {
   var handle1 = arg0;
-  
+
   var rep2 = handleTable1[(handle1 << 1) + 1] & ~T_FLAG;
   var rsc0 = captureTable1.get(rep2);
   if (!rsc0) {
@@ -7402,15 +8009,15 @@ const _trampoline26 = function(arg0, arg1, arg2) {
     Object.defineProperty(rsc0, symbolRscHandle, { writable: true, value: handle1});
     Object.defineProperty(rsc0, symbolRscRep, { writable: true, value: rep2});
   }
-  
+
   curResourceBorrows.push(rsc0);
   _debugLog('[iface="wasi:io/streams@0.2.3", function="[method]input-stream.blocking-read"] [Instruction::CallInterface] (sync, @ enter)');
   let hostProvided = true;
-  
+
   let parentTask;
   let task;
   let subtask;
-  
+
   const createTask = () => {
     const results = createNewCurrentTask({
       componentIdx: -1, // 0,
@@ -7423,16 +8030,16 @@ const _trampoline26 = function(arg0, arg1, arg2) {
     });
     task = results[0];
   };
-  
+
   taskCreation: {
     parentTask = getCurrentTask(0)?.task;
     if (!parentTask) {
       createTask();
       break taskCreation;
     }
-    
+
     createTask();
-    
+
     if (hostProvided) {
       subtask = parentTask.getLatestSubtask();
       if (!subtask) {
@@ -7441,9 +8048,9 @@ const _trampoline26 = function(arg0, arg1, arg2) {
       task.setParentSubtask(subtask);
     }
   }
-  
+
   const started = task.enterSync();
-  
+
   let ret;
   try {
     ret = { tag: 'ok', val: _withGlobalCurrentTaskMeta({
@@ -7466,9 +8073,9 @@ switch (variant6.tag) {
     const e = variant6.val;
     dataView(memory0).setInt8(arg2 + 0, 0, true);
     var val3 = e;
-    var len3 = val3.byteLength;
+    var len3 = Array.isArray(val3) ? val3.length : val3.byteLength;
     var ptr3 = realloc0(0, 0, 1, len3 * 1);
-    
+
     let valData3;
     const valLenBytes3 = len3 * 1;
     if (Array.isArray(val3)) {
@@ -7476,18 +8083,20 @@ switch (variant6.tag) {
       let offset = 0;
       const dv3 = new DataView(memory0.buffer);
       for (const v of val3) {
+        _requireValidNumericPrimitive.bind(null, 'u8')(v);
         dv3.setUint8(ptr3+ offset, v, true);
         offset += 1;
       }
     } else {
       // TypedArray / ArrayBuffer-like, direct copy
       valData3 = new Uint8Array(val3.buffer || val3, val3.byteOffset, valLenBytes3);
-      const out3 = new Uint8Array(memory0.buffer, ptr3,valLenBytes3);
+      const out3 = new Uint8Array(memory0.buffer, ptr3, valLenBytes3);
       out3.set(valData3);
     }
-    
+
     dataView(memory0).setUint32(arg2 + 8, len3, true);
     dataView(memory0).setUint32(arg2 + 4, ptr3, true);
+
     break;
   }
   case 'err': {
@@ -7498,8 +8107,9 @@ switch (variant6.tag) {
       case 'last-operation-failed': {
         const e = variant5.val;
         dataView(memory0).setInt8(arg2 + 4, 0, true);
+
         if (!(e instanceof Error$1)) {
-          throw new TypeError('Resource error: Not a valid "Error" resource.');
+          throw new TypeError('Resource error: Not a valid \"Error\" resource.');
         }
         var handle4 = e[symbolRscHandle];
         if (!handle4) {
@@ -7507,6 +8117,7 @@ switch (variant6.tag) {
           captureTable0.set(rep, e);
           handle4 = rscTableCreateOwn(handleTable0, rep);
         }
+
         dataView(memory0).setInt32(arg2 + 8, handle4, true);
         break;
       }
@@ -7518,9 +8129,11 @@ switch (variant6.tag) {
         throw new TypeError(`invalid variant tag value \`${JSON.stringify(variant5.tag)}\` (received \`${variant5}\`) specified for \`StreamError\``);
       }
     }
+
     break;
   }
   default: {
+    _debugLog("ERROR: invalid value (expected result as object with 'tag' member)", { value: variant6, valueType: typeof variant6});
     throw new TypeError('invalid variant specified for result');
   }
 }
@@ -7537,7 +8150,7 @@ _trampoline26.fnName = 'wasi:io/streams@0.2.3#blockingRead';
 
 const _trampoline27 = function(arg0, arg1) {
   var handle1 = arg0;
-  
+
   var rep2 = handleTable2[(handle1 << 1) + 1] & ~T_FLAG;
   var rsc0 = captureTable2.get(rep2);
   if (!rsc0) {
@@ -7545,15 +8158,15 @@ const _trampoline27 = function(arg0, arg1) {
     Object.defineProperty(rsc0, symbolRscHandle, { writable: true, value: handle1});
     Object.defineProperty(rsc0, symbolRscRep, { writable: true, value: rep2});
   }
-  
+
   curResourceBorrows.push(rsc0);
   _debugLog('[iface="wasi:io/streams@0.2.3", function="[method]output-stream.check-write"] [Instruction::CallInterface] (sync, @ enter)');
   let hostProvided = true;
-  
+
   let parentTask;
   let task;
   let subtask;
-  
+
   const createTask = () => {
     const results = createNewCurrentTask({
       componentIdx: -1, // 0,
@@ -7566,16 +8179,16 @@ const _trampoline27 = function(arg0, arg1) {
     });
     task = results[0];
   };
-  
+
   taskCreation: {
     parentTask = getCurrentTask(0)?.task;
     if (!parentTask) {
       createTask();
       break taskCreation;
     }
-    
+
     createTask();
-    
+
     if (hostProvided) {
       subtask = parentTask.getLatestSubtask();
       if (!subtask) {
@@ -7584,9 +8197,9 @@ const _trampoline27 = function(arg0, arg1) {
       task.setParentSubtask(subtask);
     }
   }
-  
+
   const started = task.enterSync();
-  
+
   let ret;
   try {
     ret = { tag: 'ok', val: _withGlobalCurrentTaskMeta({
@@ -7609,6 +8222,7 @@ switch (variant5.tag) {
     const e = variant5.val;
     dataView(memory0).setInt8(arg1 + 0, 0, true);
     dataView(memory0).setBigInt64(arg1 + 8, toUint64(e), true);
+
     break;
   }
   case 'err': {
@@ -7619,8 +8233,9 @@ switch (variant5.tag) {
       case 'last-operation-failed': {
         const e = variant4.val;
         dataView(memory0).setInt8(arg1 + 8, 0, true);
+
         if (!(e instanceof Error$1)) {
-          throw new TypeError('Resource error: Not a valid "Error" resource.');
+          throw new TypeError('Resource error: Not a valid \"Error\" resource.');
         }
         var handle3 = e[symbolRscHandle];
         if (!handle3) {
@@ -7628,6 +8243,7 @@ switch (variant5.tag) {
           captureTable0.set(rep, e);
           handle3 = rscTableCreateOwn(handleTable0, rep);
         }
+
         dataView(memory0).setInt32(arg1 + 12, handle3, true);
         break;
       }
@@ -7639,9 +8255,11 @@ switch (variant5.tag) {
         throw new TypeError(`invalid variant tag value \`${JSON.stringify(variant4.tag)}\` (received \`${variant4}\`) specified for \`StreamError\``);
       }
     }
+
     break;
   }
   default: {
+    _debugLog("ERROR: invalid value (expected result as object with 'tag' member)", { value: variant5, valueType: typeof variant5});
     throw new TypeError('invalid variant specified for result');
   }
 }
@@ -7658,7 +8276,7 @@ _trampoline27.fnName = 'wasi:io/streams@0.2.3#checkWrite';
 
 const _trampoline28 = function(arg0, arg1, arg2, arg3) {
   var handle1 = arg0;
-  
+
   var rep2 = handleTable2[(handle1 << 1) + 1] & ~T_FLAG;
   var rsc0 = captureTable2.get(rep2);
   if (!rsc0) {
@@ -7666,18 +8284,18 @@ const _trampoline28 = function(arg0, arg1, arg2, arg3) {
     Object.defineProperty(rsc0, symbolRscHandle, { writable: true, value: handle1});
     Object.defineProperty(rsc0, symbolRscRep, { writable: true, value: rep2});
   }
-  
+
   curResourceBorrows.push(rsc0);
   var ptr3 = arg1;
   var len3 = arg2;
   var result3 = new Uint8Array(memory0.buffer.slice(ptr3, ptr3 + len3 * 1));
   _debugLog('[iface="wasi:io/streams@0.2.3", function="[method]output-stream.write"] [Instruction::CallInterface] (sync, @ enter)');
   let hostProvided = true;
-  
+
   let parentTask;
   let task;
   let subtask;
-  
+
   const createTask = () => {
     const results = createNewCurrentTask({
       componentIdx: -1, // 0,
@@ -7690,16 +8308,16 @@ const _trampoline28 = function(arg0, arg1, arg2, arg3) {
     });
     task = results[0];
   };
-  
+
   taskCreation: {
     parentTask = getCurrentTask(0)?.task;
     if (!parentTask) {
       createTask();
       break taskCreation;
     }
-    
+
     createTask();
-    
+
     if (hostProvided) {
       subtask = parentTask.getLatestSubtask();
       if (!subtask) {
@@ -7708,9 +8326,9 @@ const _trampoline28 = function(arg0, arg1, arg2, arg3) {
       task.setParentSubtask(subtask);
     }
   }
-  
+
   const started = task.enterSync();
-  
+
   let ret;
   try {
     ret = { tag: 'ok', val: _withGlobalCurrentTaskMeta({
@@ -7732,6 +8350,7 @@ switch (variant6.tag) {
   case 'ok': {
     const e = variant6.val;
     dataView(memory0).setInt8(arg3 + 0, 0, true);
+
     break;
   }
   case 'err': {
@@ -7742,8 +8361,9 @@ switch (variant6.tag) {
       case 'last-operation-failed': {
         const e = variant5.val;
         dataView(memory0).setInt8(arg3 + 4, 0, true);
+
         if (!(e instanceof Error$1)) {
-          throw new TypeError('Resource error: Not a valid "Error" resource.');
+          throw new TypeError('Resource error: Not a valid \"Error\" resource.');
         }
         var handle4 = e[symbolRscHandle];
         if (!handle4) {
@@ -7751,6 +8371,7 @@ switch (variant6.tag) {
           captureTable0.set(rep, e);
           handle4 = rscTableCreateOwn(handleTable0, rep);
         }
+
         dataView(memory0).setInt32(arg3 + 8, handle4, true);
         break;
       }
@@ -7762,9 +8383,11 @@ switch (variant6.tag) {
         throw new TypeError(`invalid variant tag value \`${JSON.stringify(variant5.tag)}\` (received \`${variant5}\`) specified for \`StreamError\``);
       }
     }
+
     break;
   }
   default: {
+    _debugLog("ERROR: invalid value (expected result as object with 'tag' member)", { value: variant6, valueType: typeof variant6});
     throw new TypeError('invalid variant specified for result');
   }
 }
@@ -7781,7 +8404,7 @@ _trampoline28.fnName = 'wasi:io/streams@0.2.3#write';
 
 const _trampoline29 = function(arg0, arg1, arg2, arg3) {
   var handle1 = arg0;
-  
+
   var rep2 = handleTable2[(handle1 << 1) + 1] & ~T_FLAG;
   var rsc0 = captureTable2.get(rep2);
   if (!rsc0) {
@@ -7789,18 +8412,18 @@ const _trampoline29 = function(arg0, arg1, arg2, arg3) {
     Object.defineProperty(rsc0, symbolRscHandle, { writable: true, value: handle1});
     Object.defineProperty(rsc0, symbolRscRep, { writable: true, value: rep2});
   }
-  
+
   curResourceBorrows.push(rsc0);
   var ptr3 = arg1;
   var len3 = arg2;
   var result3 = new Uint8Array(memory0.buffer.slice(ptr3, ptr3 + len3 * 1));
   _debugLog('[iface="wasi:io/streams@0.2.3", function="[method]output-stream.blocking-write-and-flush"] [Instruction::CallInterface] (sync, @ enter)');
   let hostProvided = true;
-  
+
   let parentTask;
   let task;
   let subtask;
-  
+
   const createTask = () => {
     const results = createNewCurrentTask({
       componentIdx: -1, // 0,
@@ -7813,16 +8436,16 @@ const _trampoline29 = function(arg0, arg1, arg2, arg3) {
     });
     task = results[0];
   };
-  
+
   taskCreation: {
     parentTask = getCurrentTask(0)?.task;
     if (!parentTask) {
       createTask();
       break taskCreation;
     }
-    
+
     createTask();
-    
+
     if (hostProvided) {
       subtask = parentTask.getLatestSubtask();
       if (!subtask) {
@@ -7831,9 +8454,9 @@ const _trampoline29 = function(arg0, arg1, arg2, arg3) {
       task.setParentSubtask(subtask);
     }
   }
-  
+
   const started = task.enterSync();
-  
+
   let ret;
   try {
     ret = { tag: 'ok', val: _withGlobalCurrentTaskMeta({
@@ -7855,6 +8478,7 @@ switch (variant6.tag) {
   case 'ok': {
     const e = variant6.val;
     dataView(memory0).setInt8(arg3 + 0, 0, true);
+
     break;
   }
   case 'err': {
@@ -7865,8 +8489,9 @@ switch (variant6.tag) {
       case 'last-operation-failed': {
         const e = variant5.val;
         dataView(memory0).setInt8(arg3 + 4, 0, true);
+
         if (!(e instanceof Error$1)) {
-          throw new TypeError('Resource error: Not a valid "Error" resource.');
+          throw new TypeError('Resource error: Not a valid \"Error\" resource.');
         }
         var handle4 = e[symbolRscHandle];
         if (!handle4) {
@@ -7874,6 +8499,7 @@ switch (variant6.tag) {
           captureTable0.set(rep, e);
           handle4 = rscTableCreateOwn(handleTable0, rep);
         }
+
         dataView(memory0).setInt32(arg3 + 8, handle4, true);
         break;
       }
@@ -7885,9 +8511,11 @@ switch (variant6.tag) {
         throw new TypeError(`invalid variant tag value \`${JSON.stringify(variant5.tag)}\` (received \`${variant5}\`) specified for \`StreamError\``);
       }
     }
+
     break;
   }
   default: {
+    _debugLog("ERROR: invalid value (expected result as object with 'tag' member)", { value: variant6, valueType: typeof variant6});
     throw new TypeError('invalid variant specified for result');
   }
 }
@@ -7904,7 +8532,7 @@ _trampoline29.fnName = 'wasi:io/streams@0.2.3#blockingWriteAndFlush';
 
 const _trampoline30 = function(arg0, arg1) {
   var handle1 = arg0;
-  
+
   var rep2 = handleTable2[(handle1 << 1) + 1] & ~T_FLAG;
   var rsc0 = captureTable2.get(rep2);
   if (!rsc0) {
@@ -7912,15 +8540,15 @@ const _trampoline30 = function(arg0, arg1) {
     Object.defineProperty(rsc0, symbolRscHandle, { writable: true, value: handle1});
     Object.defineProperty(rsc0, symbolRscRep, { writable: true, value: rep2});
   }
-  
+
   curResourceBorrows.push(rsc0);
   _debugLog('[iface="wasi:io/streams@0.2.3", function="[method]output-stream.blocking-flush"] [Instruction::CallInterface] (sync, @ enter)');
   let hostProvided = true;
-  
+
   let parentTask;
   let task;
   let subtask;
-  
+
   const createTask = () => {
     const results = createNewCurrentTask({
       componentIdx: -1, // 0,
@@ -7933,16 +8561,16 @@ const _trampoline30 = function(arg0, arg1) {
     });
     task = results[0];
   };
-  
+
   taskCreation: {
     parentTask = getCurrentTask(0)?.task;
     if (!parentTask) {
       createTask();
       break taskCreation;
     }
-    
+
     createTask();
-    
+
     if (hostProvided) {
       subtask = parentTask.getLatestSubtask();
       if (!subtask) {
@@ -7951,9 +8579,9 @@ const _trampoline30 = function(arg0, arg1) {
       task.setParentSubtask(subtask);
     }
   }
-  
+
   const started = task.enterSync();
-  
+
   let ret;
   try {
     ret = { tag: 'ok', val: _withGlobalCurrentTaskMeta({
@@ -7975,6 +8603,7 @@ switch (variant5.tag) {
   case 'ok': {
     const e = variant5.val;
     dataView(memory0).setInt8(arg1 + 0, 0, true);
+
     break;
   }
   case 'err': {
@@ -7985,8 +8614,9 @@ switch (variant5.tag) {
       case 'last-operation-failed': {
         const e = variant4.val;
         dataView(memory0).setInt8(arg1 + 4, 0, true);
+
         if (!(e instanceof Error$1)) {
-          throw new TypeError('Resource error: Not a valid "Error" resource.');
+          throw new TypeError('Resource error: Not a valid \"Error\" resource.');
         }
         var handle3 = e[symbolRscHandle];
         if (!handle3) {
@@ -7994,6 +8624,7 @@ switch (variant5.tag) {
           captureTable0.set(rep, e);
           handle3 = rscTableCreateOwn(handleTable0, rep);
         }
+
         dataView(memory0).setInt32(arg1 + 8, handle3, true);
         break;
       }
@@ -8005,9 +8636,11 @@ switch (variant5.tag) {
         throw new TypeError(`invalid variant tag value \`${JSON.stringify(variant4.tag)}\` (received \`${variant4}\`) specified for \`StreamError\``);
       }
     }
+
     break;
   }
   default: {
+    _debugLog("ERROR: invalid value (expected result as object with 'tag' member)", { value: variant5, valueType: typeof variant5});
     throw new TypeError('invalid variant specified for result');
   }
 }
@@ -8025,11 +8658,11 @@ _trampoline30.fnName = 'wasi:io/streams@0.2.3#blockingFlush';
 const _trampoline31 = function(arg0, arg1) {
   _debugLog('[iface="wasi:random/random@0.2.3", function="get-random-bytes"] [Instruction::CallInterface] (sync, @ enter)');
   let hostProvided = true;
-  
+
   let parentTask;
   let task;
   let subtask;
-  
+
   const createTask = () => {
     const results = createNewCurrentTask({
       componentIdx: -1, // 0,
@@ -8042,16 +8675,16 @@ const _trampoline31 = function(arg0, arg1) {
     });
     task = results[0];
   };
-  
+
   taskCreation: {
     parentTask = getCurrentTask(0)?.task;
     if (!parentTask) {
       createTask();
       break taskCreation;
     }
-    
+
     createTask();
-    
+
     if (hostProvided) {
       subtask = parentTask.getLatestSubtask();
       if (!subtask) {
@@ -8060,7 +8693,7 @@ const _trampoline31 = function(arg0, arg1) {
       task.setParentSubtask(subtask);
     }
   }
-  
+
   const started = task.enterSync();
   let ret = _withGlobalCurrentTaskMeta({
     componentIdx: task.componentIdx(),
@@ -8069,9 +8702,9 @@ const _trampoline31 = function(arg0, arg1) {
   })
   ;
   var val0 = ret;
-  var len0 = val0.byteLength;
+  var len0 = Array.isArray(val0) ? val0.length : val0.byteLength;
   var ptr0 = realloc0(0, 0, 1, len0 * 1);
-  
+
   let valData0;
   const valLenBytes0 = len0 * 1;
   if (Array.isArray(val0)) {
@@ -8079,16 +8712,17 @@ const _trampoline31 = function(arg0, arg1) {
     let offset = 0;
     const dv0 = new DataView(memory0.buffer);
     for (const v of val0) {
+      _requireValidNumericPrimitive.bind(null, 'u8')(v);
       dv0.setUint8(ptr0+ offset, v, true);
       offset += 1;
     }
   } else {
     // TypedArray / ArrayBuffer-like, direct copy
     valData0 = new Uint8Array(val0.buffer || val0, val0.byteOffset, valLenBytes0);
-    const out0 = new Uint8Array(memory0.buffer, ptr0,valLenBytes0);
+    const out0 = new Uint8Array(memory0.buffer, ptr0, valLenBytes0);
     out0.set(valData0);
   }
-  
+
   dataView(memory0).setUint32(arg1 + 4, len0, true);
   dataView(memory0).setUint32(arg1 + 0, ptr0, true);
   _debugLog('[iface="wasi:random/random@0.2.3", function="get-random-bytes"][Instruction::Return]', {
@@ -8105,11 +8739,11 @@ _trampoline31.fnName = 'wasi:random/random@0.2.3#getRandomBytes';
 const _trampoline32 = function(arg0) {
   _debugLog('[iface="wasi:filesystem/preopens@0.2.3", function="get-directories"] [Instruction::CallInterface] (sync, @ enter)');
   let hostProvided = true;
-  
+
   let parentTask;
   let task;
   let subtask;
-  
+
   const createTask = () => {
     const results = createNewCurrentTask({
       componentIdx: -1, // 0,
@@ -8122,16 +8756,16 @@ const _trampoline32 = function(arg0) {
     });
     task = results[0];
   };
-  
+
   taskCreation: {
     parentTask = getCurrentTask(0)?.task;
     if (!parentTask) {
       createTask();
       break taskCreation;
     }
-    
+
     createTask();
-    
+
     if (hostProvided) {
       subtask = parentTask.getLatestSubtask();
       if (!subtask) {
@@ -8140,7 +8774,7 @@ const _trampoline32 = function(arg0) {
       task.setParentSubtask(subtask);
     }
   }
-  
+
   const started = task.enterSync();
   let ret = _withGlobalCurrentTaskMeta({
     componentIdx: task.componentIdx(),
@@ -8154,8 +8788,9 @@ const _trampoline32 = function(arg0) {
   for (let i = 0; i < vec3.length; i++) {
     const e = vec3[i];
     const base = result3 + i * 12;var [tuple0_0, tuple0_1] = e;
+
     if (!(tuple0_0 instanceof Descriptor)) {
-      throw new TypeError('Resource error: Not a valid "Descriptor" resource.');
+      throw new TypeError('Resource error: Not a valid \"Descriptor\" resource.');
     }
     var handle1 = tuple0_0[symbolRscHandle];
     if (!handle1) {
@@ -8163,12 +8798,13 @@ const _trampoline32 = function(arg0) {
       captureTable6.set(rep, tuple0_0);
       handle1 = rscTableCreateOwn(handleTable6, rep);
     }
+
     dataView(memory0).setInt32(base + 0, handle1, true);
-    
+
     var encodeRes = _utf8AllocateAndEncode(tuple0_1, realloc0, memory0);
     var ptr2= encodeRes.ptr;
     var len2 = encodeRes.len;
-    
+
     dataView(memory0).setUint32(base + 8, len2, true);
     dataView(memory0).setUint32(base + 4, ptr2, true);
   }
@@ -8192,11 +8828,11 @@ handleTables[3] = handleTable3;
 const _trampoline33 = function(arg0) {
   _debugLog('[iface="wasi:cli/terminal-stdin@0.2.3", function="get-terminal-stdin"] [Instruction::CallInterface] (sync, @ enter)');
   let hostProvided = true;
-  
+
   let parentTask;
   let task;
   let subtask;
-  
+
   const createTask = () => {
     const results = createNewCurrentTask({
       componentIdx: -1, // 0,
@@ -8209,16 +8845,16 @@ const _trampoline33 = function(arg0) {
     });
     task = results[0];
   };
-  
+
   taskCreation: {
     parentTask = getCurrentTask(0)?.task;
     if (!parentTask) {
       createTask();
       break taskCreation;
     }
-    
+
     createTask();
-    
+
     if (hostProvided) {
       subtask = parentTask.getLatestSubtask();
       if (!subtask) {
@@ -8227,7 +8863,7 @@ const _trampoline33 = function(arg0) {
       task.setParentSubtask(subtask);
     }
   }
-  
+
   const started = task.enterSync();
   let ret = _withGlobalCurrentTaskMeta({
     componentIdx: task.componentIdx(),
@@ -8241,8 +8877,9 @@ const _trampoline33 = function(arg0) {
   } else {
     const e = variant1;
     dataView(memory0).setInt8(arg0 + 0, 1, true);
+
     if (!(e instanceof TerminalInput)) {
-      throw new TypeError('Resource error: Not a valid "TerminalInput" resource.');
+      throw new TypeError('Resource error: Not a valid \"TerminalInput\" resource.');
     }
     var handle0 = e[symbolRscHandle];
     if (!handle0) {
@@ -8250,6 +8887,7 @@ const _trampoline33 = function(arg0) {
       captureTable3.set(rep, e);
       handle0 = rscTableCreateOwn(handleTable3, rep);
     }
+
     dataView(memory0).setInt32(arg0 + 4, handle0, true);
   }
   _debugLog('[iface="wasi:cli/terminal-stdin@0.2.3", function="get-terminal-stdin"][Instruction::Return]', {
@@ -8270,11 +8908,11 @@ handleTables[4] = handleTable4;
 const _trampoline34 = function(arg0) {
   _debugLog('[iface="wasi:cli/terminal-stdout@0.2.3", function="get-terminal-stdout"] [Instruction::CallInterface] (sync, @ enter)');
   let hostProvided = true;
-  
+
   let parentTask;
   let task;
   let subtask;
-  
+
   const createTask = () => {
     const results = createNewCurrentTask({
       componentIdx: -1, // 0,
@@ -8287,16 +8925,16 @@ const _trampoline34 = function(arg0) {
     });
     task = results[0];
   };
-  
+
   taskCreation: {
     parentTask = getCurrentTask(0)?.task;
     if (!parentTask) {
       createTask();
       break taskCreation;
     }
-    
+
     createTask();
-    
+
     if (hostProvided) {
       subtask = parentTask.getLatestSubtask();
       if (!subtask) {
@@ -8305,7 +8943,7 @@ const _trampoline34 = function(arg0) {
       task.setParentSubtask(subtask);
     }
   }
-  
+
   const started = task.enterSync();
   let ret = _withGlobalCurrentTaskMeta({
     componentIdx: task.componentIdx(),
@@ -8319,8 +8957,9 @@ const _trampoline34 = function(arg0) {
   } else {
     const e = variant1;
     dataView(memory0).setInt8(arg0 + 0, 1, true);
+
     if (!(e instanceof TerminalOutput)) {
-      throw new TypeError('Resource error: Not a valid "TerminalOutput" resource.');
+      throw new TypeError('Resource error: Not a valid \"TerminalOutput\" resource.');
     }
     var handle0 = e[symbolRscHandle];
     if (!handle0) {
@@ -8328,6 +8967,7 @@ const _trampoline34 = function(arg0) {
       captureTable4.set(rep, e);
       handle0 = rscTableCreateOwn(handleTable4, rep);
     }
+
     dataView(memory0).setInt32(arg0 + 4, handle0, true);
   }
   _debugLog('[iface="wasi:cli/terminal-stdout@0.2.3", function="get-terminal-stdout"][Instruction::Return]', {
@@ -8344,11 +8984,11 @@ _trampoline34.fnName = 'wasi:cli/terminal-stdout@0.2.3#getTerminalStdout';
 const _trampoline35 = function(arg0) {
   _debugLog('[iface="wasi:cli/terminal-stderr@0.2.3", function="get-terminal-stderr"] [Instruction::CallInterface] (sync, @ enter)');
   let hostProvided = true;
-  
+
   let parentTask;
   let task;
   let subtask;
-  
+
   const createTask = () => {
     const results = createNewCurrentTask({
       componentIdx: -1, // 0,
@@ -8361,16 +9001,16 @@ const _trampoline35 = function(arg0) {
     });
     task = results[0];
   };
-  
+
   taskCreation: {
     parentTask = getCurrentTask(0)?.task;
     if (!parentTask) {
       createTask();
       break taskCreation;
     }
-    
+
     createTask();
-    
+
     if (hostProvided) {
       subtask = parentTask.getLatestSubtask();
       if (!subtask) {
@@ -8379,7 +9019,7 @@ const _trampoline35 = function(arg0) {
       task.setParentSubtask(subtask);
     }
   }
-  
+
   const started = task.enterSync();
   let ret = _withGlobalCurrentTaskMeta({
     componentIdx: task.componentIdx(),
@@ -8393,8 +9033,9 @@ const _trampoline35 = function(arg0) {
   } else {
     const e = variant1;
     dataView(memory0).setInt8(arg0 + 0, 1, true);
+
     if (!(e instanceof TerminalOutput)) {
-      throw new TypeError('Resource error: Not a valid "TerminalOutput" resource.');
+      throw new TypeError('Resource error: Not a valid \"TerminalOutput\" resource.');
     }
     var handle0 = e[symbolRscHandle];
     if (!handle0) {
@@ -8402,6 +9043,7 @@ const _trampoline35 = function(arg0) {
       captureTable4.set(rep, e);
       handle0 = rscTableCreateOwn(handleTable4, rep);
     }
+
     dataView(memory0).setInt32(arg0 + 4, handle0, true);
   }
   _debugLog('[iface="wasi:cli/terminal-stderr@0.2.3", function="get-terminal-stderr"][Instruction::Return]', {
@@ -8421,1179 +9063,17 @@ let postReturn0;
 let postReturn0Async;
 let postReturn1;
 let postReturn1Async;
-function trampoline0(handle) {
-  const handleEntry = rscTableRemove(handleTable5, handle);
-  if (handleEntry.own) {
-    
-    const rsc = captureTable5.get(handleEntry.rep);
-    if (rsc) {
-      if (rsc[symbolDispose]) rsc[symbolDispose]();
-      captureTable5.delete(handleEntry.rep);
-    } else if (DirectoryEntryStream[symbolCabiDispose]) {
-      DirectoryEntryStream[symbolCabiDispose](handleEntry.rep);
-    }
-  }
-}
-function trampoline1(handle) {
-  const handleEntry = rscTableRemove(handleTable2, handle);
-  if (handleEntry.own) {
-    
-    const rsc = captureTable2.get(handleEntry.rep);
-    if (rsc) {
-      if (rsc[symbolDispose]) rsc[symbolDispose]();
-      captureTable2.delete(handleEntry.rep);
-    } else if (OutputStream[symbolCabiDispose]) {
-      OutputStream[symbolCabiDispose](handleEntry.rep);
-    }
-  }
-}
-function trampoline2(handle) {
-  const handleEntry = rscTableRemove(handleTable0, handle);
-  if (handleEntry.own) {
-    
-    const rsc = captureTable0.get(handleEntry.rep);
-    if (rsc) {
-      if (rsc[symbolDispose]) rsc[symbolDispose]();
-      captureTable0.delete(handleEntry.rep);
-    } else if (Error$1[symbolCabiDispose]) {
-      Error$1[symbolCabiDispose](handleEntry.rep);
-    }
-  }
-}
-function trampoline3(handle) {
-  const handleEntry = rscTableRemove(handleTable1, handle);
-  if (handleEntry.own) {
-    
-    const rsc = captureTable1.get(handleEntry.rep);
-    if (rsc) {
-      if (rsc[symbolDispose]) rsc[symbolDispose]();
-      captureTable1.delete(handleEntry.rep);
-    } else if (InputStream[symbolCabiDispose]) {
-      InputStream[symbolCabiDispose](handleEntry.rep);
-    }
-  }
-}
-function trampoline4(handle) {
-  const handleEntry = rscTableRemove(handleTable6, handle);
-  if (handleEntry.own) {
-    
-    const rsc = captureTable6.get(handleEntry.rep);
-    if (rsc) {
-      if (rsc[symbolDispose]) rsc[symbolDispose]();
-      captureTable6.delete(handleEntry.rep);
-    } else if (Descriptor[symbolCabiDispose]) {
-      Descriptor[symbolCabiDispose](handleEntry.rep);
-    }
-  }
-}
-let trampoline5 = _trampoline5.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 5,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline5.manuallyAsync,
-  paramLiftFns: [],
-  resultLowerFns: [_lowerFlatOwn.bind(null, 2)],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: null,
-  getMemoryFn: () => null,
-  getReallocFn: () => null,
-  importFn: _trampoline5,
-},
-)) : _lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 5,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline5.manuallyAsync,
-  paramLiftFns: [],
-  resultLowerFns: [_lowerFlatOwn.bind(null, 2)],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: null,
-  getMemoryFn: () => null,
-  getReallocFn: () => null,
-  importFn: _trampoline5,
-},
-);
-function trampoline6(handle) {
-  const handleEntry = rscTableRemove(handleTable3, handle);
-  if (handleEntry.own) {
-    
-    const rsc = captureTable3.get(handleEntry.rep);
-    if (rsc) {
-      if (rsc[symbolDispose]) rsc[symbolDispose]();
-      captureTable3.delete(handleEntry.rep);
-    } else if (TerminalInput[symbolCabiDispose]) {
-      TerminalInput[symbolCabiDispose](handleEntry.rep);
-    }
-  }
-}
-function trampoline7(handle) {
-  const handleEntry = rscTableRemove(handleTable4, handle);
-  if (handleEntry.own) {
-    
-    const rsc = captureTable4.get(handleEntry.rep);
-    if (rsc) {
-      if (rsc[symbolDispose]) rsc[symbolDispose]();
-      captureTable4.delete(handleEntry.rep);
-    } else if (TerminalOutput[symbolCabiDispose]) {
-      TerminalOutput[symbolCabiDispose](handleEntry.rep);
-    }
-  }
-}
-let trampoline8 = _trampoline8.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 8,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline8.manuallyAsync,
-  paramLiftFns: [],
-  resultLowerFns: [_lowerFlatOwn.bind(null, 1)],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: null,
-  getMemoryFn: () => null,
-  getReallocFn: () => null,
-  importFn: _trampoline8,
-},
-)) : _lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 8,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline8.manuallyAsync,
-  paramLiftFns: [],
-  resultLowerFns: [_lowerFlatOwn.bind(null, 1)],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: null,
-  getMemoryFn: () => null,
-  getReallocFn: () => null,
-  importFn: _trampoline8,
-},
-);
-let trampoline9 = _trampoline9.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 9,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline9.manuallyAsync,
-  paramLiftFns: [],
-  resultLowerFns: [_lowerFlatOwn.bind(null, 2)],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: null,
-  getMemoryFn: () => null,
-  getReallocFn: () => null,
-  importFn: _trampoline9,
-},
-)) : _lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 9,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline9.manuallyAsync,
-  paramLiftFns: [],
-  resultLowerFns: [_lowerFlatOwn.bind(null, 2)],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: null,
-  getMemoryFn: () => null,
-  getReallocFn: () => null,
-  importFn: _trampoline9,
-},
-);
-let trampoline10 = _trampoline10.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 10,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline10.manuallyAsync,
-  paramLiftFns: [_liftFlatResult([['ok', null, 0, 0, 0],['err', null, 0, 0, 0],])],
-  resultLowerFns: [],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: null,
-  getMemoryFn: () => null,
-  getReallocFn: () => null,
-  importFn: _trampoline10,
-},
-)) : _lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 10,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline10.manuallyAsync,
-  paramLiftFns: [_liftFlatResult([['ok', null, 0, 0, 0],['err', null, 0, 0, 0],])],
-  resultLowerFns: [],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: null,
-  getMemoryFn: () => null,
-  getReallocFn: () => null,
-  importFn: _trampoline10,
-},
-);
-let trampoline11 = _trampoline11.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 11,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline11.manuallyAsync,
-  paramLiftFns: [],
-  resultLowerFns: [_lowerFlatList({ elemLowerFn: _lowerFlatTuple.bind(null, 0), typeIdx: 0 })],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => realloc0,
-  importFn: _trampoline11,
-},
-)) : _lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 11,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline11.manuallyAsync,
-  paramLiftFns: [],
-  resultLowerFns: [_lowerFlatList({ elemLowerFn: _lowerFlatTuple.bind(null, 0), typeIdx: 0 })],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => realloc0,
-  importFn: _trampoline11,
-},
-);
-let trampoline12 = _trampoline12.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 12,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline12.manuallyAsync,
-  paramLiftFns: [_liftFlatBorrow.bind(null, 6)],
-  resultLowerFns: [_lowerFlatResult([[ 'ok', _lowerFlatFlags.bind(null, 0), 2, 1, 1 ],[ 'err', _lowerFlatEnum.bind(null, 0), 2, 1, 1 ],])],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => null,
-  importFn: _trampoline12,
-},
-)) : _lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 12,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline12.manuallyAsync,
-  paramLiftFns: [_liftFlatBorrow.bind(null, 6)],
-  resultLowerFns: [_lowerFlatResult([[ 'ok', _lowerFlatFlags.bind(null, 0), 2, 1, 1 ],[ 'err', _lowerFlatEnum.bind(null, 0), 2, 1, 1 ],])],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => null,
-  importFn: _trampoline12,
-},
-);
-let trampoline13 = _trampoline13.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 13,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline13.manuallyAsync,
-  paramLiftFns: [_liftFlatBorrow.bind(null, 6)],
-  resultLowerFns: [_lowerFlatResult([[ 'ok', _lowerFlatEnum.bind(null, 1), 2, 1, 1 ],[ 'err', _lowerFlatEnum.bind(null, 0), 2, 1, 1 ],])],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => null,
-  importFn: _trampoline13,
-},
-)) : _lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 13,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline13.manuallyAsync,
-  paramLiftFns: [_liftFlatBorrow.bind(null, 6)],
-  resultLowerFns: [_lowerFlatResult([[ 'ok', _lowerFlatEnum.bind(null, 1), 2, 1, 1 ],[ 'err', _lowerFlatEnum.bind(null, 0), 2, 1, 1 ],])],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => null,
-  importFn: _trampoline13,
-},
-);
-let trampoline14 = _trampoline14.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 14,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline14.manuallyAsync,
-  paramLiftFns: [_liftFlatBorrow.bind(null, 6)],
-  resultLowerFns: [_lowerFlatResult([[ 'ok', _lowerFlatRecord.bind(null, [['lower', _lowerFlatU64, 16, 8 ],['upper', _lowerFlatU64, 16, 8 ],]), 24, 8, 8 ],[ 'err', _lowerFlatEnum.bind(null, 0), 24, 8, 8 ],])],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => null,
-  importFn: _trampoline14,
-},
-)) : _lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 14,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline14.manuallyAsync,
-  paramLiftFns: [_liftFlatBorrow.bind(null, 6)],
-  resultLowerFns: [_lowerFlatResult([[ 'ok', _lowerFlatRecord.bind(null, [['lower', _lowerFlatU64, 16, 8 ],['upper', _lowerFlatU64, 16, 8 ],]), 24, 8, 8 ],[ 'err', _lowerFlatEnum.bind(null, 0), 24, 8, 8 ],])],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => null,
-  importFn: _trampoline14,
-},
-);
-let trampoline15 = _trampoline15.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 15,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline15.manuallyAsync,
-  paramLiftFns: [_liftFlatBorrow.bind(null, 0)],
-  resultLowerFns: [_lowerFlatOption([[ 'some', _lowerFlatEnum.bind(null, 0), 2, 1, 1 ],[ 'none', null, 2, 1, 1 ],])],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => null,
-  importFn: _trampoline15,
-},
-)) : _lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 15,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline15.manuallyAsync,
-  paramLiftFns: [_liftFlatBorrow.bind(null, 0)],
-  resultLowerFns: [_lowerFlatOption([[ 'some', _lowerFlatEnum.bind(null, 0), 2, 1, 1 ],[ 'none', null, 2, 1, 1 ],])],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => null,
-  importFn: _trampoline15,
-},
-);
-let trampoline16 = _trampoline16.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 16,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline16.manuallyAsync,
-  paramLiftFns: [_liftFlatBorrow.bind(null, 6),_liftFlatFlags.bind(null, 1),_liftFlatStringUTF8],
-  resultLowerFns: [_lowerFlatResult([[ 'ok', _lowerFlatRecord.bind(null, [['lower', _lowerFlatU64, 16, 8 ],['upper', _lowerFlatU64, 16, 8 ],]), 24, 8, 8 ],[ 'err', _lowerFlatEnum.bind(null, 0), 24, 8, 8 ],])],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => null,
-  importFn: _trampoline16,
-},
-)) : _lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 16,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline16.manuallyAsync,
-  paramLiftFns: [_liftFlatBorrow.bind(null, 6),_liftFlatFlags.bind(null, 1),_liftFlatStringUTF8],
-  resultLowerFns: [_lowerFlatResult([[ 'ok', _lowerFlatRecord.bind(null, [['lower', _lowerFlatU64, 16, 8 ],['upper', _lowerFlatU64, 16, 8 ],]), 24, 8, 8 ],[ 'err', _lowerFlatEnum.bind(null, 0), 24, 8, 8 ],])],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => null,
-  importFn: _trampoline16,
-},
-);
-let trampoline17 = _trampoline17.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 17,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline17.manuallyAsync,
-  paramLiftFns: [_liftFlatBorrow.bind(null, 6),_liftFlatU64],
-  resultLowerFns: [_lowerFlatResult([[ 'ok', _lowerFlatOwn.bind(null, 1), 8, 4, 4 ],[ 'err', _lowerFlatEnum.bind(null, 0), 8, 4, 4 ],])],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => null,
-  importFn: _trampoline17,
-},
-)) : _lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 17,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline17.manuallyAsync,
-  paramLiftFns: [_liftFlatBorrow.bind(null, 6),_liftFlatU64],
-  resultLowerFns: [_lowerFlatResult([[ 'ok', _lowerFlatOwn.bind(null, 1), 8, 4, 4 ],[ 'err', _lowerFlatEnum.bind(null, 0), 8, 4, 4 ],])],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => null,
-  importFn: _trampoline17,
-},
-);
-let trampoline18 = _trampoline18.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 18,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline18.manuallyAsync,
-  paramLiftFns: [_liftFlatBorrow.bind(null, 6),_liftFlatU64],
-  resultLowerFns: [_lowerFlatResult([[ 'ok', _lowerFlatOwn.bind(null, 2), 8, 4, 4 ],[ 'err', _lowerFlatEnum.bind(null, 0), 8, 4, 4 ],])],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => null,
-  importFn: _trampoline18,
-},
-)) : _lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 18,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline18.manuallyAsync,
-  paramLiftFns: [_liftFlatBorrow.bind(null, 6),_liftFlatU64],
-  resultLowerFns: [_lowerFlatResult([[ 'ok', _lowerFlatOwn.bind(null, 2), 8, 4, 4 ],[ 'err', _lowerFlatEnum.bind(null, 0), 8, 4, 4 ],])],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => null,
-  importFn: _trampoline18,
-},
-);
-let trampoline19 = _trampoline19.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 19,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline19.manuallyAsync,
-  paramLiftFns: [_liftFlatBorrow.bind(null, 6)],
-  resultLowerFns: [_lowerFlatResult([[ 'ok', _lowerFlatOwn.bind(null, 2), 8, 4, 4 ],[ 'err', _lowerFlatEnum.bind(null, 0), 8, 4, 4 ],])],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => null,
-  importFn: _trampoline19,
-},
-)) : _lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 19,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline19.manuallyAsync,
-  paramLiftFns: [_liftFlatBorrow.bind(null, 6)],
-  resultLowerFns: [_lowerFlatResult([[ 'ok', _lowerFlatOwn.bind(null, 2), 8, 4, 4 ],[ 'err', _lowerFlatEnum.bind(null, 0), 8, 4, 4 ],])],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => null,
-  importFn: _trampoline19,
-},
-);
-let trampoline20 = _trampoline20.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 20,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline20.manuallyAsync,
-  paramLiftFns: [_liftFlatBorrow.bind(null, 6)],
-  resultLowerFns: [_lowerFlatResult([[ 'ok', _lowerFlatOwn.bind(null, 5), 8, 4, 4 ],[ 'err', _lowerFlatEnum.bind(null, 0), 8, 4, 4 ],])],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => null,
-  importFn: _trampoline20,
-},
-)) : _lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 20,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline20.manuallyAsync,
-  paramLiftFns: [_liftFlatBorrow.bind(null, 6)],
-  resultLowerFns: [_lowerFlatResult([[ 'ok', _lowerFlatOwn.bind(null, 5), 8, 4, 4 ],[ 'err', _lowerFlatEnum.bind(null, 0), 8, 4, 4 ],])],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => null,
-  importFn: _trampoline20,
-},
-);
-let trampoline21 = _trampoline21.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 21,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline21.manuallyAsync,
-  paramLiftFns: [_liftFlatBorrow.bind(null, 6)],
-  resultLowerFns: [_lowerFlatResult([[ 'ok', _lowerFlatRecord.bind(null, [['type', _lowerFlatEnum.bind(null, 1), 96, 8 ],['linkCount', _lowerFlatU64, 96, 8 ],['size', _lowerFlatU64, 96, 8 ],['dataAccessTimestamp', _lowerFlatOption([[ 'some', _lowerFlatRecord.bind(null, [['seconds', _lowerFlatU64, 16, 8 ],['nanoseconds', _lowerFlatU32, 16, 8 ],]), 24, 8, 8 ],[ 'none', null, 24, 8, 8 ],]), 96, 8 ],['dataModificationTimestamp', _lowerFlatOption([[ 'some', _lowerFlatRecord.bind(null, [['seconds', _lowerFlatU64, 16, 8 ],['nanoseconds', _lowerFlatU32, 16, 8 ],]), 24, 8, 8 ],[ 'none', null, 24, 8, 8 ],]), 96, 8 ],['statusChangeTimestamp', _lowerFlatOption([[ 'some', _lowerFlatRecord.bind(null, [['seconds', _lowerFlatU64, 16, 8 ],['nanoseconds', _lowerFlatU32, 16, 8 ],]), 24, 8, 8 ],[ 'none', null, 24, 8, 8 ],]), 96, 8 ],]), 104, 8, 8 ],[ 'err', _lowerFlatEnum.bind(null, 0), 104, 8, 8 ],])],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => null,
-  importFn: _trampoline21,
-},
-)) : _lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 21,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline21.manuallyAsync,
-  paramLiftFns: [_liftFlatBorrow.bind(null, 6)],
-  resultLowerFns: [_lowerFlatResult([[ 'ok', _lowerFlatRecord.bind(null, [['type', _lowerFlatEnum.bind(null, 1), 96, 8 ],['linkCount', _lowerFlatU64, 96, 8 ],['size', _lowerFlatU64, 96, 8 ],['dataAccessTimestamp', _lowerFlatOption([[ 'some', _lowerFlatRecord.bind(null, [['seconds', _lowerFlatU64, 16, 8 ],['nanoseconds', _lowerFlatU32, 16, 8 ],]), 24, 8, 8 ],[ 'none', null, 24, 8, 8 ],]), 96, 8 ],['dataModificationTimestamp', _lowerFlatOption([[ 'some', _lowerFlatRecord.bind(null, [['seconds', _lowerFlatU64, 16, 8 ],['nanoseconds', _lowerFlatU32, 16, 8 ],]), 24, 8, 8 ],[ 'none', null, 24, 8, 8 ],]), 96, 8 ],['statusChangeTimestamp', _lowerFlatOption([[ 'some', _lowerFlatRecord.bind(null, [['seconds', _lowerFlatU64, 16, 8 ],['nanoseconds', _lowerFlatU32, 16, 8 ],]), 24, 8, 8 ],[ 'none', null, 24, 8, 8 ],]), 96, 8 ],]), 104, 8, 8 ],[ 'err', _lowerFlatEnum.bind(null, 0), 104, 8, 8 ],])],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => null,
-  importFn: _trampoline21,
-},
-);
-let trampoline22 = _trampoline22.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 22,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline22.manuallyAsync,
-  paramLiftFns: [_liftFlatBorrow.bind(null, 6),_liftFlatFlags.bind(null, 1),_liftFlatStringUTF8],
-  resultLowerFns: [_lowerFlatResult([[ 'ok', _lowerFlatRecord.bind(null, [['type', _lowerFlatEnum.bind(null, 1), 96, 8 ],['linkCount', _lowerFlatU64, 96, 8 ],['size', _lowerFlatU64, 96, 8 ],['dataAccessTimestamp', _lowerFlatOption([[ 'some', _lowerFlatRecord.bind(null, [['seconds', _lowerFlatU64, 16, 8 ],['nanoseconds', _lowerFlatU32, 16, 8 ],]), 24, 8, 8 ],[ 'none', null, 24, 8, 8 ],]), 96, 8 ],['dataModificationTimestamp', _lowerFlatOption([[ 'some', _lowerFlatRecord.bind(null, [['seconds', _lowerFlatU64, 16, 8 ],['nanoseconds', _lowerFlatU32, 16, 8 ],]), 24, 8, 8 ],[ 'none', null, 24, 8, 8 ],]), 96, 8 ],['statusChangeTimestamp', _lowerFlatOption([[ 'some', _lowerFlatRecord.bind(null, [['seconds', _lowerFlatU64, 16, 8 ],['nanoseconds', _lowerFlatU32, 16, 8 ],]), 24, 8, 8 ],[ 'none', null, 24, 8, 8 ],]), 96, 8 ],]), 104, 8, 8 ],[ 'err', _lowerFlatEnum.bind(null, 0), 104, 8, 8 ],])],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => null,
-  importFn: _trampoline22,
-},
-)) : _lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 22,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline22.manuallyAsync,
-  paramLiftFns: [_liftFlatBorrow.bind(null, 6),_liftFlatFlags.bind(null, 1),_liftFlatStringUTF8],
-  resultLowerFns: [_lowerFlatResult([[ 'ok', _lowerFlatRecord.bind(null, [['type', _lowerFlatEnum.bind(null, 1), 96, 8 ],['linkCount', _lowerFlatU64, 96, 8 ],['size', _lowerFlatU64, 96, 8 ],['dataAccessTimestamp', _lowerFlatOption([[ 'some', _lowerFlatRecord.bind(null, [['seconds', _lowerFlatU64, 16, 8 ],['nanoseconds', _lowerFlatU32, 16, 8 ],]), 24, 8, 8 ],[ 'none', null, 24, 8, 8 ],]), 96, 8 ],['dataModificationTimestamp', _lowerFlatOption([[ 'some', _lowerFlatRecord.bind(null, [['seconds', _lowerFlatU64, 16, 8 ],['nanoseconds', _lowerFlatU32, 16, 8 ],]), 24, 8, 8 ],[ 'none', null, 24, 8, 8 ],]), 96, 8 ],['statusChangeTimestamp', _lowerFlatOption([[ 'some', _lowerFlatRecord.bind(null, [['seconds', _lowerFlatU64, 16, 8 ],['nanoseconds', _lowerFlatU32, 16, 8 ],]), 24, 8, 8 ],[ 'none', null, 24, 8, 8 ],]), 96, 8 ],]), 104, 8, 8 ],[ 'err', _lowerFlatEnum.bind(null, 0), 104, 8, 8 ],])],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => null,
-  importFn: _trampoline22,
-},
-);
-let trampoline23 = _trampoline23.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 23,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline23.manuallyAsync,
-  paramLiftFns: [_liftFlatBorrow.bind(null, 6),_liftFlatFlags.bind(null, 1),_liftFlatStringUTF8,_liftFlatFlags.bind(null, 2),_liftFlatFlags.bind(null, 0)],
-  resultLowerFns: [_lowerFlatResult([[ 'ok', _lowerFlatOwn.bind(null, 6), 8, 4, 4 ],[ 'err', _lowerFlatEnum.bind(null, 0), 8, 4, 4 ],])],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => null,
-  importFn: _trampoline23,
-},
-)) : _lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 23,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline23.manuallyAsync,
-  paramLiftFns: [_liftFlatBorrow.bind(null, 6),_liftFlatFlags.bind(null, 1),_liftFlatStringUTF8,_liftFlatFlags.bind(null, 2),_liftFlatFlags.bind(null, 0)],
-  resultLowerFns: [_lowerFlatResult([[ 'ok', _lowerFlatOwn.bind(null, 6), 8, 4, 4 ],[ 'err', _lowerFlatEnum.bind(null, 0), 8, 4, 4 ],])],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => null,
-  importFn: _trampoline23,
-},
-);
-let trampoline24 = _trampoline24.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 24,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline24.manuallyAsync,
-  paramLiftFns: [_liftFlatBorrow.bind(null, 5)],
-  resultLowerFns: [_lowerFlatResult([[ 'ok', _lowerFlatOption([[ 'some', _lowerFlatRecord.bind(null, [['type', _lowerFlatEnum.bind(null, 1), 12, 4 ],['name', _lowerFlatStringUTF8, 12, 4 ],]), 16, 4, 4 ],[ 'none', null, 16, 4, 4 ],]), 20, 4, 4 ],[ 'err', _lowerFlatEnum.bind(null, 0), 20, 4, 4 ],])],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => realloc0,
-  importFn: _trampoline24,
-},
-)) : _lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 24,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline24.manuallyAsync,
-  paramLiftFns: [_liftFlatBorrow.bind(null, 5)],
-  resultLowerFns: [_lowerFlatResult([[ 'ok', _lowerFlatOption([[ 'some', _lowerFlatRecord.bind(null, [['type', _lowerFlatEnum.bind(null, 1), 12, 4 ],['name', _lowerFlatStringUTF8, 12, 4 ],]), 16, 4, 4 ],[ 'none', null, 16, 4, 4 ],]), 20, 4, 4 ],[ 'err', _lowerFlatEnum.bind(null, 0), 20, 4, 4 ],])],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => realloc0,
-  importFn: _trampoline24,
-},
-);
-let trampoline25 = _trampoline25.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 25,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline25.manuallyAsync,
-  paramLiftFns: [_liftFlatBorrow.bind(null, 1),_liftFlatU64],
-  resultLowerFns: [_lowerFlatResult([[ 'ok', _lowerFlatList({ elemLowerFn: _lowerFlatU8, typeIdx: 1 }), 12, 4, 4 ],[ 'err', _lowerFlatVariant([[ 'last-operation-failed', _lowerFlatOwn.bind(null, 0), 8, 4, 4 ],[ 'closed', null, 8, 4, 4 ],]), 12, 4, 4 ],])],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => realloc0,
-  importFn: _trampoline25,
-},
-)) : _lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 25,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline25.manuallyAsync,
-  paramLiftFns: [_liftFlatBorrow.bind(null, 1),_liftFlatU64],
-  resultLowerFns: [_lowerFlatResult([[ 'ok', _lowerFlatList({ elemLowerFn: _lowerFlatU8, typeIdx: 1 }), 12, 4, 4 ],[ 'err', _lowerFlatVariant([[ 'last-operation-failed', _lowerFlatOwn.bind(null, 0), 8, 4, 4 ],[ 'closed', null, 8, 4, 4 ],]), 12, 4, 4 ],])],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => realloc0,
-  importFn: _trampoline25,
-},
-);
-let trampoline26 = _trampoline26.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 26,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline26.manuallyAsync,
-  paramLiftFns: [_liftFlatBorrow.bind(null, 1),_liftFlatU64],
-  resultLowerFns: [_lowerFlatResult([[ 'ok', _lowerFlatList({ elemLowerFn: _lowerFlatU8, typeIdx: 1 }), 12, 4, 4 ],[ 'err', _lowerFlatVariant([[ 'last-operation-failed', _lowerFlatOwn.bind(null, 0), 8, 4, 4 ],[ 'closed', null, 8, 4, 4 ],]), 12, 4, 4 ],])],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => realloc0,
-  importFn: _trampoline26,
-},
-)) : _lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 26,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline26.manuallyAsync,
-  paramLiftFns: [_liftFlatBorrow.bind(null, 1),_liftFlatU64],
-  resultLowerFns: [_lowerFlatResult([[ 'ok', _lowerFlatList({ elemLowerFn: _lowerFlatU8, typeIdx: 1 }), 12, 4, 4 ],[ 'err', _lowerFlatVariant([[ 'last-operation-failed', _lowerFlatOwn.bind(null, 0), 8, 4, 4 ],[ 'closed', null, 8, 4, 4 ],]), 12, 4, 4 ],])],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => realloc0,
-  importFn: _trampoline26,
-},
-);
-let trampoline27 = _trampoline27.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 27,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline27.manuallyAsync,
-  paramLiftFns: [_liftFlatBorrow.bind(null, 2)],
-  resultLowerFns: [_lowerFlatResult([[ 'ok', _lowerFlatU64, 16, 8, 8 ],[ 'err', _lowerFlatVariant([[ 'last-operation-failed', _lowerFlatOwn.bind(null, 0), 8, 4, 4 ],[ 'closed', null, 8, 4, 4 ],]), 16, 8, 8 ],])],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => null,
-  importFn: _trampoline27,
-},
-)) : _lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 27,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline27.manuallyAsync,
-  paramLiftFns: [_liftFlatBorrow.bind(null, 2)],
-  resultLowerFns: [_lowerFlatResult([[ 'ok', _lowerFlatU64, 16, 8, 8 ],[ 'err', _lowerFlatVariant([[ 'last-operation-failed', _lowerFlatOwn.bind(null, 0), 8, 4, 4 ],[ 'closed', null, 8, 4, 4 ],]), 16, 8, 8 ],])],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => null,
-  importFn: _trampoline27,
-},
-);
-let trampoline28 = _trampoline28.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 28,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline28.manuallyAsync,
-  paramLiftFns: [_liftFlatBorrow.bind(null, 2),_liftFlatList.bind(null, 1)],
-  resultLowerFns: [_lowerFlatResult([[ 'ok', null, 12, 4, 4 ],[ 'err', _lowerFlatVariant([[ 'last-operation-failed', _lowerFlatOwn.bind(null, 0), 8, 4, 4 ],[ 'closed', null, 8, 4, 4 ],]), 12, 4, 4 ],])],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => null,
-  importFn: _trampoline28,
-},
-)) : _lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 28,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline28.manuallyAsync,
-  paramLiftFns: [_liftFlatBorrow.bind(null, 2),_liftFlatList.bind(null, 1)],
-  resultLowerFns: [_lowerFlatResult([[ 'ok', null, 12, 4, 4 ],[ 'err', _lowerFlatVariant([[ 'last-operation-failed', _lowerFlatOwn.bind(null, 0), 8, 4, 4 ],[ 'closed', null, 8, 4, 4 ],]), 12, 4, 4 ],])],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => null,
-  importFn: _trampoline28,
-},
-);
-let trampoline29 = _trampoline29.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 29,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline29.manuallyAsync,
-  paramLiftFns: [_liftFlatBorrow.bind(null, 2),_liftFlatList.bind(null, 1)],
-  resultLowerFns: [_lowerFlatResult([[ 'ok', null, 12, 4, 4 ],[ 'err', _lowerFlatVariant([[ 'last-operation-failed', _lowerFlatOwn.bind(null, 0), 8, 4, 4 ],[ 'closed', null, 8, 4, 4 ],]), 12, 4, 4 ],])],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => null,
-  importFn: _trampoline29,
-},
-)) : _lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 29,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline29.manuallyAsync,
-  paramLiftFns: [_liftFlatBorrow.bind(null, 2),_liftFlatList.bind(null, 1)],
-  resultLowerFns: [_lowerFlatResult([[ 'ok', null, 12, 4, 4 ],[ 'err', _lowerFlatVariant([[ 'last-operation-failed', _lowerFlatOwn.bind(null, 0), 8, 4, 4 ],[ 'closed', null, 8, 4, 4 ],]), 12, 4, 4 ],])],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => null,
-  importFn: _trampoline29,
-},
-);
-let trampoline30 = _trampoline30.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 30,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline30.manuallyAsync,
-  paramLiftFns: [_liftFlatBorrow.bind(null, 2)],
-  resultLowerFns: [_lowerFlatResult([[ 'ok', null, 12, 4, 4 ],[ 'err', _lowerFlatVariant([[ 'last-operation-failed', _lowerFlatOwn.bind(null, 0), 8, 4, 4 ],[ 'closed', null, 8, 4, 4 ],]), 12, 4, 4 ],])],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => null,
-  importFn: _trampoline30,
-},
-)) : _lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 30,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline30.manuallyAsync,
-  paramLiftFns: [_liftFlatBorrow.bind(null, 2)],
-  resultLowerFns: [_lowerFlatResult([[ 'ok', null, 12, 4, 4 ],[ 'err', _lowerFlatVariant([[ 'last-operation-failed', _lowerFlatOwn.bind(null, 0), 8, 4, 4 ],[ 'closed', null, 8, 4, 4 ],]), 12, 4, 4 ],])],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => null,
-  importFn: _trampoline30,
-},
-);
-let trampoline31 = _trampoline31.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 31,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline31.manuallyAsync,
-  paramLiftFns: [_liftFlatU64],
-  resultLowerFns: [_lowerFlatList({ elemLowerFn: _lowerFlatU8, typeIdx: 1 })],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => realloc0,
-  importFn: _trampoline31,
-},
-)) : _lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 31,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline31.manuallyAsync,
-  paramLiftFns: [_liftFlatU64],
-  resultLowerFns: [_lowerFlatList({ elemLowerFn: _lowerFlatU8, typeIdx: 1 })],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => realloc0,
-  importFn: _trampoline31,
-},
-);
-let trampoline32 = _trampoline32.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 32,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline32.manuallyAsync,
-  paramLiftFns: [],
-  resultLowerFns: [_lowerFlatList({ elemLowerFn: _lowerFlatTuple.bind(null, 30), typeIdx: 2 })],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => realloc0,
-  importFn: _trampoline32,
-},
-)) : _lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 32,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline32.manuallyAsync,
-  paramLiftFns: [],
-  resultLowerFns: [_lowerFlatList({ elemLowerFn: _lowerFlatTuple.bind(null, 30), typeIdx: 2 })],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => realloc0,
-  importFn: _trampoline32,
-},
-);
-let trampoline33 = _trampoline33.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 33,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline33.manuallyAsync,
-  paramLiftFns: [],
-  resultLowerFns: [_lowerFlatOption([[ 'some', _lowerFlatOwn.bind(null, 3), 8, 4, 4 ],[ 'none', null, 8, 4, 4 ],])],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => null,
-  importFn: _trampoline33,
-},
-)) : _lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 33,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline33.manuallyAsync,
-  paramLiftFns: [],
-  resultLowerFns: [_lowerFlatOption([[ 'some', _lowerFlatOwn.bind(null, 3), 8, 4, 4 ],[ 'none', null, 8, 4, 4 ],])],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => null,
-  importFn: _trampoline33,
-},
-);
-let trampoline34 = _trampoline34.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 34,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline34.manuallyAsync,
-  paramLiftFns: [],
-  resultLowerFns: [_lowerFlatOption([[ 'some', _lowerFlatOwn.bind(null, 4), 8, 4, 4 ],[ 'none', null, 8, 4, 4 ],])],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => null,
-  importFn: _trampoline34,
-},
-)) : _lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 34,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline34.manuallyAsync,
-  paramLiftFns: [],
-  resultLowerFns: [_lowerFlatOption([[ 'some', _lowerFlatOwn.bind(null, 4), 8, 4, 4 ],[ 'none', null, 8, 4, 4 ],])],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => null,
-  importFn: _trampoline34,
-},
-);
-let trampoline35 = _trampoline35.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 35,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline35.manuallyAsync,
-  paramLiftFns: [],
-  resultLowerFns: [_lowerFlatOption([[ 'some', _lowerFlatOwn.bind(null, 4), 8, 4, 4 ],[ 'none', null, 8, 4, 4 ],])],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => null,
-  importFn: _trampoline35,
-},
-)) : _lowerImportBackwardsCompat.bind(
-null,
-{
-  trampolineIdx: 35,
-  componentIdx: 0,
-  isAsync: false,
-  isManualAsync: _trampoline35.manuallyAsync,
-  paramLiftFns: [],
-  resultLowerFns: [_lowerFlatOption([[ 'some', _lowerFlatOwn.bind(null, 4), 8, 4, 4 ],[ 'none', null, 8, 4, 4 ],])],
-  funcTypeIsAsync: false,
-  getCallbackFn: () => null,
-  getPostReturnFn: () => null,
-  isCancellable: false,
-  memoryIdx: 0,
-  getMemoryFn: () => memory0,
-  getReallocFn: () => null,
-  importFn: _trampoline35,
-},
-);
+let postReturn2;
+let postReturn2Async;
 let toolsParse;
 
 function parse(arg0) {
   if (!_initialized) throwUninitialized();
-  
+
   var encodeRes = _utf8AllocateAndEncode(arg0, realloc1, memory0);
   var ptr0= encodeRes.ptr;
   var len0 = encodeRes.len;
-  
+
   _debugLog('[iface="local:wasm-tools/tools", function="parse"][Instruction::CallWasm] enter', {
     funcName: 'parse',
     paramCount: 2,
@@ -9601,7 +9081,7 @@ function parse(arg0) {
     postReturn: true,
   });
   const hostProvided = false;
-  
+
   const [task, _wasm_call_currentTaskID] = createNewCurrentTask({
     componentIdx: 0,
     isAsync: false,
@@ -9612,7 +9092,7 @@ function parse(arg0) {
     errHandling: 'throw-result-err',
     callingWasmExport: true,
   });
-  
+
   const started = task.enterSync();
   task.setReturnMemoryIdx(0);
   task.setReturnMemory(memory0);
@@ -9621,7 +9101,7 @@ function parse(arg0) {
     componentIdx: task.componentIdx(),
     fn: () => toolsParse(ptr0, len0),
   });
-  
+
   let variant3;
   switch (dataView(memory0).getUint8(ret + 0, true)) {
     case 0: {
@@ -9656,29 +9136,29 @@ function parse(arg0) {
   });
   const retCopy = variant3;
   task.resolve([retCopy.val]);
-  
+
   let cstate = getOrCreateAsyncState(0);
   cstate.mayLeave = false;
   postReturn0(ret);
   cstate.mayLeave = true;
   task.exit();
-  
-  
-  
+
+
+
   if (typeof retCopy === 'object' && retCopy.tag === 'err') {
     throw new ComponentError(retCopy.val);
   }
   return retCopy.val;
-  
+
 }
 let toolsPrint;
 
 function print(arg0) {
   if (!_initialized) throwUninitialized();
   var val0 = arg0;
-  var len0 = val0.byteLength;
+  var len0 = Array.isArray(val0) ? val0.length : val0.byteLength;
   var ptr0 = realloc1(0, 0, 1, len0 * 1);
-  
+
   let valData0;
   const valLenBytes0 = len0 * 1;
   if (Array.isArray(val0)) {
@@ -9686,16 +9166,17 @@ function print(arg0) {
     let offset = 0;
     const dv0 = new DataView(memory0.buffer);
     for (const v of val0) {
+      _requireValidNumericPrimitive.bind(null, 'u8')(v);
       dv0.setUint8(ptr0+ offset, v, true);
       offset += 1;
     }
   } else {
     // TypedArray / ArrayBuffer-like, direct copy
     valData0 = new Uint8Array(val0.buffer || val0, val0.byteOffset, valLenBytes0);
-    const out0 = new Uint8Array(memory0.buffer, ptr0,valLenBytes0);
+    const out0 = new Uint8Array(memory0.buffer, ptr0, valLenBytes0);
     out0.set(valData0);
   }
-  
+
   _debugLog('[iface="local:wasm-tools/tools", function="print"][Instruction::CallWasm] enter', {
     funcName: 'print',
     paramCount: 2,
@@ -9703,7 +9184,7 @@ function print(arg0) {
     postReturn: true,
   });
   const hostProvided = false;
-  
+
   const [task, _wasm_call_currentTaskID] = createNewCurrentTask({
     componentIdx: 0,
     isAsync: false,
@@ -9714,7 +9195,7 @@ function print(arg0) {
     errHandling: 'throw-result-err',
     callingWasmExport: true,
   });
-  
+
   const started = task.enterSync();
   task.setReturnMemoryIdx(0);
   task.setReturnMemory(memory0);
@@ -9723,7 +9204,7 @@ function print(arg0) {
     componentIdx: task.componentIdx(),
     fn: () => toolsPrint(ptr0, len0),
   });
-  
+
   let variant3;
   switch (dataView(memory0).getUint8(ret + 0, true)) {
     case 0: {
@@ -9758,29 +9239,29 @@ function print(arg0) {
   });
   const retCopy = variant3;
   task.resolve([retCopy.val]);
-  
+
   let cstate = getOrCreateAsyncState(0);
   cstate.mayLeave = false;
   postReturn0(ret);
   cstate.mayLeave = true;
   task.exit();
-  
-  
-  
+
+
+
   if (typeof retCopy === 'object' && retCopy.tag === 'err') {
     throw new ComponentError(retCopy.val);
   }
   return retCopy.val;
-  
+
 }
 let toolsComponentNew;
 
 function componentNew(arg0, arg1) {
   if (!_initialized) throwUninitialized();
   var val0 = arg0;
-  var len0 = val0.byteLength;
+  var len0 = Array.isArray(val0) ? val0.length : val0.byteLength;
   var ptr0 = realloc1(0, 0, 1, len0 * 1);
-  
+
   let valData0;
   const valLenBytes0 = len0 * 1;
   if (Array.isArray(val0)) {
@@ -9788,16 +9269,17 @@ function componentNew(arg0, arg1) {
     let offset = 0;
     const dv0 = new DataView(memory0.buffer);
     for (const v of val0) {
+      _requireValidNumericPrimitive.bind(null, 'u8')(v);
       dv0.setUint8(ptr0+ offset, v, true);
       offset += 1;
     }
   } else {
     // TypedArray / ArrayBuffer-like, direct copy
     valData0 = new Uint8Array(val0.buffer || val0, val0.byteOffset, valLenBytes0);
-    const out0 = new Uint8Array(memory0.buffer, ptr0,valLenBytes0);
+    const out0 = new Uint8Array(memory0.buffer, ptr0, valLenBytes0);
     out0.set(valData0);
   }
-  
+
   var variant5 = arg1;
   let variant5_0;
   let variant5_1;
@@ -9814,17 +9296,17 @@ function componentNew(arg0, arg1) {
     for (let i = 0; i < vec4.length; i++) {
       const e = vec4[i];
       const base = result4 + i * 16;var [tuple1_0, tuple1_1] = e;
-      
+
       var encodeRes = _utf8AllocateAndEncode(tuple1_0, realloc1, memory0);
       var ptr2= encodeRes.ptr;
       var len2 = encodeRes.len;
-      
+
       dataView(memory0).setUint32(base + 4, len2, true);
       dataView(memory0).setUint32(base + 0, ptr2, true);
       var val3 = tuple1_1;
-      var len3 = val3.byteLength;
+      var len3 = Array.isArray(val3) ? val3.length : val3.byteLength;
       var ptr3 = realloc1(0, 0, 1, len3 * 1);
-      
+
       let valData3;
       const valLenBytes3 = len3 * 1;
       if (Array.isArray(val3)) {
@@ -9832,16 +9314,17 @@ function componentNew(arg0, arg1) {
         let offset = 0;
         const dv3 = new DataView(memory0.buffer);
         for (const v of val3) {
+          _requireValidNumericPrimitive.bind(null, 'u8')(v);
           dv3.setUint8(ptr3+ offset, v, true);
           offset += 1;
         }
       } else {
         // TypedArray / ArrayBuffer-like, direct copy
         valData3 = new Uint8Array(val3.buffer || val3, val3.byteOffset, valLenBytes3);
-        const out3 = new Uint8Array(memory0.buffer, ptr3,valLenBytes3);
+        const out3 = new Uint8Array(memory0.buffer, ptr3, valLenBytes3);
         out3.set(valData3);
       }
-      
+
       dataView(memory0).setUint32(base + 12, len3, true);
       dataView(memory0).setUint32(base + 8, ptr3, true);
     }
@@ -9856,7 +9339,7 @@ function componentNew(arg0, arg1) {
     postReturn: true,
   });
   const hostProvided = false;
-  
+
   const [task, _wasm_call_currentTaskID] = createNewCurrentTask({
     componentIdx: 0,
     isAsync: false,
@@ -9867,7 +9350,7 @@ function componentNew(arg0, arg1) {
     errHandling: 'throw-result-err',
     callingWasmExport: true,
   });
-  
+
   const started = task.enterSync();
   task.setReturnMemoryIdx(0);
   task.setReturnMemory(memory0);
@@ -9876,7 +9359,7 @@ function componentNew(arg0, arg1) {
     componentIdx: task.componentIdx(),
     fn: () => toolsComponentNew(ptr0, len0, variant5_0, variant5_1, variant5_2),
   });
-  
+
   let variant8;
   switch (dataView(memory0).getUint8(ret + 0, true)) {
     case 0: {
@@ -9911,29 +9394,29 @@ function componentNew(arg0, arg1) {
   });
   const retCopy = variant8;
   task.resolve([retCopy.val]);
-  
+
   let cstate = getOrCreateAsyncState(0);
   cstate.mayLeave = false;
   postReturn0(ret);
   cstate.mayLeave = true;
   task.exit();
-  
-  
-  
+
+
+
   if (typeof retCopy === 'object' && retCopy.tag === 'err') {
     throw new ComponentError(retCopy.val);
   }
   return retCopy.val;
-  
+
 }
 let toolsComponentWit;
 
 function componentWit(arg0) {
   if (!_initialized) throwUninitialized();
   var val0 = arg0;
-  var len0 = val0.byteLength;
+  var len0 = Array.isArray(val0) ? val0.length : val0.byteLength;
   var ptr0 = realloc1(0, 0, 1, len0 * 1);
-  
+
   let valData0;
   const valLenBytes0 = len0 * 1;
   if (Array.isArray(val0)) {
@@ -9941,16 +9424,17 @@ function componentWit(arg0) {
     let offset = 0;
     const dv0 = new DataView(memory0.buffer);
     for (const v of val0) {
+      _requireValidNumericPrimitive.bind(null, 'u8')(v);
       dv0.setUint8(ptr0+ offset, v, true);
       offset += 1;
     }
   } else {
     // TypedArray / ArrayBuffer-like, direct copy
     valData0 = new Uint8Array(val0.buffer || val0, val0.byteOffset, valLenBytes0);
-    const out0 = new Uint8Array(memory0.buffer, ptr0,valLenBytes0);
+    const out0 = new Uint8Array(memory0.buffer, ptr0, valLenBytes0);
     out0.set(valData0);
   }
-  
+
   _debugLog('[iface="local:wasm-tools/tools", function="component-wit"][Instruction::CallWasm] enter', {
     funcName: 'component-wit',
     paramCount: 2,
@@ -9958,7 +9442,7 @@ function componentWit(arg0) {
     postReturn: true,
   });
   const hostProvided = false;
-  
+
   const [task, _wasm_call_currentTaskID] = createNewCurrentTask({
     componentIdx: 0,
     isAsync: false,
@@ -9969,7 +9453,7 @@ function componentWit(arg0) {
     errHandling: 'throw-result-err',
     callingWasmExport: true,
   });
-  
+
   const started = task.enterSync();
   task.setReturnMemoryIdx(0);
   task.setReturnMemory(memory0);
@@ -9978,7 +9462,7 @@ function componentWit(arg0) {
     componentIdx: task.componentIdx(),
     fn: () => toolsComponentWit(ptr0, len0),
   });
-  
+
   let variant3;
   switch (dataView(memory0).getUint8(ret + 0, true)) {
     case 0: {
@@ -10013,20 +9497,303 @@ function componentWit(arg0) {
   });
   const retCopy = variant3;
   task.resolve([retCopy.val]);
-  
+
   let cstate = getOrCreateAsyncState(0);
   cstate.mayLeave = false;
   postReturn0(ret);
   cstate.mayLeave = true;
   task.exit();
-  
-  
-  
+
+
+
   if (typeof retCopy === 'object' && retCopy.tag === 'err') {
     throw new ComponentError(retCopy.val);
   }
   return retCopy.val;
-  
+
+}
+let toolsComponentWitMetadataForWorld;
+
+function componentWitMetadataForWorld(arg0, arg1) {
+  if (!_initialized) throwUninitialized();
+  var variant2 = arg0;
+  let variant2_0;
+  let variant2_1;
+  let variant2_2;
+  switch (variant2.tag) {
+    case 'source': {
+      const e = variant2.val;
+
+      var encodeRes = _utf8AllocateAndEncode(e, realloc1, memory0);
+      var ptr0= encodeRes.ptr;
+      var len0 = encodeRes.len;
+
+      variant2_0 = 0;
+      variant2_1 = ptr0;
+      variant2_2 = len0;
+      break;
+    }
+    case 'path': {
+      const e = variant2.val;
+
+      var encodeRes = _utf8AllocateAndEncode(e, realloc1, memory0);
+      var ptr1= encodeRes.ptr;
+      var len1 = encodeRes.len;
+
+      variant2_0 = 1;
+      variant2_1 = ptr1;
+      variant2_2 = len1;
+      break;
+    }
+    default: {
+      throw new TypeError(`invalid variant tag value \`${JSON.stringify(variant2.tag)}\` (received \`${variant2}\`) specified for \`WitSpecifier\``);
+    }
+  }
+  var variant4 = arg1;
+  let variant4_0;
+  let variant4_1;
+  let variant4_2;
+  if (variant4 === null || variant4=== undefined) {
+    variant4_0 = 0;
+    variant4_1 = 0;
+    variant4_2 = 0;
+  } else {
+    const e = variant4;
+
+    var encodeRes = _utf8AllocateAndEncode(e, realloc1, memory0);
+    var ptr3= encodeRes.ptr;
+    var len3 = encodeRes.len;
+
+    variant4_0 = 1;
+    variant4_1 = ptr3;
+    variant4_2 = len3;
+  }
+  _debugLog('[iface="local:wasm-tools/tools", function="component-wit-metadata-for-world"][Instruction::CallWasm] enter', {
+    funcName: 'component-wit-metadata-for-world',
+    paramCount: 6,
+    async: false,
+    postReturn: true,
+  });
+  const hostProvided = false;
+
+  const [task, _wasm_call_currentTaskID] = createNewCurrentTask({
+    componentIdx: 0,
+    isAsync: false,
+    isManualAsync: false,
+    entryFnName: 'toolsComponentWitMetadataForWorld',
+    getCallbackFn: () => null,
+    callbackFnName: 'null',
+    errHandling: 'throw-result-err',
+    callingWasmExport: true,
+  });
+
+  const started = task.enterSync();
+  task.setReturnMemoryIdx(0);
+  task.setReturnMemory(memory0);
+  let ret =   _withGlobalCurrentTaskMeta({
+    taskID: task.id(),
+    componentIdx: task.componentIdx(),
+    fn: () => toolsComponentWitMetadataForWorld(variant2_0, variant2_1, variant2_2, variant4_0, variant4_1, variant4_2),
+  });
+
+  let variant24;
+  switch (dataView(memory0).getUint8(ret + 0, true)) {
+    case 0: {
+      var len13 = dataView(memory0).getUint32(ret + 8, true);
+      var base13 = dataView(memory0).getUint32(ret + 4, true);
+      var result13 = [];
+      for (let i = 0; i < len13; i++) {
+        const base = base13 + i * 80;
+        var ptr5 = dataView(memory0).getUint32(base + 0, true);
+        var len5 = dataView(memory0).getUint32(base + 4, true);
+        var result5 = TEXT_DECODER_UTF8.decode(new Uint8Array(memory0.buffer, ptr5, len5));
+        var ptr6 = dataView(memory0).getUint32(base + 8, true);
+        var len6 = dataView(memory0).getUint32(base + 12, true);
+        var result6 = TEXT_DECODER_UTF8.decode(new Uint8Array(memory0.buffer, ptr6, len6));
+        var ptr7 = dataView(memory0).getUint32(base + 16, true);
+        var len7 = dataView(memory0).getUint32(base + 20, true);
+        var result7 = TEXT_DECODER_UTF8.decode(new Uint8Array(memory0.buffer, ptr7, len7));
+        let variant12;
+        switch (dataView(memory0).getUint8(base + 24, true)) {
+          case 0: {
+            variant12 = undefined;
+            break;
+          }
+          case 1: {
+            let variant9;
+            switch (dataView(memory0).getUint8(base + 56, true)) {
+              case 0: {
+                variant9 = undefined;
+                break;
+              }
+              case 1: {
+                var ptr8 = dataView(memory0).getUint32(base + 60, true);
+                var len8 = dataView(memory0).getUint32(base + 64, true);
+                var result8 = TEXT_DECODER_UTF8.decode(new Uint8Array(memory0.buffer, ptr8, len8));
+                variant9 = result8;
+                break;
+              }
+              default: {
+                throw new TypeError('invalid variant discriminant for option');
+              }
+            }
+            let variant11;
+            switch (dataView(memory0).getUint8(base + 68, true)) {
+              case 0: {
+                variant11 = undefined;
+                break;
+              }
+              case 1: {
+                var ptr10 = dataView(memory0).getUint32(base + 72, true);
+                var len10 = dataView(memory0).getUint32(base + 76, true);
+                var result10 = TEXT_DECODER_UTF8.decode(new Uint8Array(memory0.buffer, ptr10, len10));
+                variant11 = result10;
+                break;
+              }
+              default: {
+                throw new TypeError('invalid variant discriminant for option');
+              }
+            }
+            variant12 = {
+              major: BigInt.asUintN(64, BigInt(dataView(memory0).getBigInt64(base + 32, true))),
+              minor: BigInt.asUintN(64, BigInt(dataView(memory0).getBigInt64(base + 40, true))),
+              patch: BigInt.asUintN(64, BigInt(dataView(memory0).getBigInt64(base + 48, true))),
+              pre: variant9,
+              build: variant11,
+            };
+            break;
+          }
+          default: {
+            throw new TypeError('invalid variant discriminant for option');
+          }
+        }
+        result13.push({
+          namespace: result5,
+          package: result6,
+          interface: result7,
+          version: variant12,
+        });
+      }
+      var len22 = dataView(memory0).getUint32(ret + 16, true);
+      var base22 = dataView(memory0).getUint32(ret + 12, true);
+      var result22 = [];
+      for (let i = 0; i < len22; i++) {
+        const base = base22 + i * 80;
+        var ptr14 = dataView(memory0).getUint32(base + 0, true);
+        var len14 = dataView(memory0).getUint32(base + 4, true);
+        var result14 = TEXT_DECODER_UTF8.decode(new Uint8Array(memory0.buffer, ptr14, len14));
+        var ptr15 = dataView(memory0).getUint32(base + 8, true);
+        var len15 = dataView(memory0).getUint32(base + 12, true);
+        var result15 = TEXT_DECODER_UTF8.decode(new Uint8Array(memory0.buffer, ptr15, len15));
+        var ptr16 = dataView(memory0).getUint32(base + 16, true);
+        var len16 = dataView(memory0).getUint32(base + 20, true);
+        var result16 = TEXT_DECODER_UTF8.decode(new Uint8Array(memory0.buffer, ptr16, len16));
+        let variant21;
+        switch (dataView(memory0).getUint8(base + 24, true)) {
+          case 0: {
+            variant21 = undefined;
+            break;
+          }
+          case 1: {
+            let variant18;
+            switch (dataView(memory0).getUint8(base + 56, true)) {
+              case 0: {
+                variant18 = undefined;
+                break;
+              }
+              case 1: {
+                var ptr17 = dataView(memory0).getUint32(base + 60, true);
+                var len17 = dataView(memory0).getUint32(base + 64, true);
+                var result17 = TEXT_DECODER_UTF8.decode(new Uint8Array(memory0.buffer, ptr17, len17));
+                variant18 = result17;
+                break;
+              }
+              default: {
+                throw new TypeError('invalid variant discriminant for option');
+              }
+            }
+            let variant20;
+            switch (dataView(memory0).getUint8(base + 68, true)) {
+              case 0: {
+                variant20 = undefined;
+                break;
+              }
+              case 1: {
+                var ptr19 = dataView(memory0).getUint32(base + 72, true);
+                var len19 = dataView(memory0).getUint32(base + 76, true);
+                var result19 = TEXT_DECODER_UTF8.decode(new Uint8Array(memory0.buffer, ptr19, len19));
+                variant20 = result19;
+                break;
+              }
+              default: {
+                throw new TypeError('invalid variant discriminant for option');
+              }
+            }
+            variant21 = {
+              major: BigInt.asUintN(64, BigInt(dataView(memory0).getBigInt64(base + 32, true))),
+              minor: BigInt.asUintN(64, BigInt(dataView(memory0).getBigInt64(base + 40, true))),
+              patch: BigInt.asUintN(64, BigInt(dataView(memory0).getBigInt64(base + 48, true))),
+              pre: variant18,
+              build: variant20,
+            };
+            break;
+          }
+          default: {
+            throw new TypeError('invalid variant discriminant for option');
+          }
+        }
+        result22.push({
+          namespace: result14,
+          package: result15,
+          interface: result16,
+          version: variant21,
+        });
+      }
+      variant24= {
+        tag: 'ok',
+        val: {
+          imports: result13,
+          exports: result22,
+        }
+      };
+      break;
+    }
+    case 1: {
+      var ptr23 = dataView(memory0).getUint32(ret + 4, true);
+      var len23 = dataView(memory0).getUint32(ret + 8, true);
+      var result23 = TEXT_DECODER_UTF8.decode(new Uint8Array(memory0.buffer, ptr23, len23));
+      variant24= {
+        tag: 'err',
+        val: result23
+      };
+      break;
+    }
+    default: {
+      throw new TypeError('invalid variant discriminant for expected');
+    }
+  }
+  _debugLog('[iface="local:wasm-tools/tools", function="component-wit-metadata-for-world"][Instruction::Return]', {
+    funcName: 'component-wit-metadata-for-world',
+    paramCount: 1,
+    async: false,
+    postReturn: true
+  });
+  const retCopy = variant24;
+  task.resolve([retCopy.val]);
+
+  let cstate = getOrCreateAsyncState(0);
+  cstate.mayLeave = false;
+  postReturn1(ret);
+  cstate.mayLeave = true;
+  task.exit();
+
+
+
+  if (typeof retCopy === 'object' && retCopy.tag === 'err') {
+    throw new ComponentError(retCopy.val);
+  }
+  return retCopy.val;
+
 }
 let toolsComponentEmbed;
 
@@ -10041,9 +9808,9 @@ function componentEmbed(arg0) {
     const e = variant3;
     dataView(memory0).setInt8(ptr0 + 0, 1, true);
     var val2 = e;
-    var len2 = val2.byteLength;
+    var len2 = Array.isArray(val2) ? val2.length : val2.byteLength;
     var ptr2 = realloc1(0, 0, 1, len2 * 1);
-    
+
     let valData2;
     const valLenBytes2 = len2 * 1;
     if (Array.isArray(val2)) {
@@ -10051,16 +9818,17 @@ function componentEmbed(arg0) {
       let offset = 0;
       const dv2 = new DataView(memory0.buffer);
       for (const v of val2) {
+        _requireValidNumericPrimitive.bind(null, 'u8')(v);
         dv2.setUint8(ptr2+ offset, v, true);
         offset += 1;
       }
     } else {
       // TypedArray / ArrayBuffer-like, direct copy
       valData2 = new Uint8Array(val2.buffer || val2, val2.byteOffset, valLenBytes2);
-      const out2 = new Uint8Array(memory0.buffer, ptr2,valLenBytes2);
+      const out2 = new Uint8Array(memory0.buffer, ptr2, valLenBytes2);
       out2.set(valData2);
     }
-    
+
     dataView(memory0).setUint32(ptr0 + 8, len2, true);
     dataView(memory0).setUint32(ptr0 + 4, ptr2, true);
   }
@@ -10070,11 +9838,11 @@ function componentEmbed(arg0) {
   } else {
     const e = variant5;
     dataView(memory0).setInt8(ptr0 + 12, 1, true);
-    
+
     var encodeRes = _utf8AllocateAndEncode(e, realloc1, memory0);
     var ptr4= encodeRes.ptr;
     var len4 = encodeRes.len;
-    
+
     dataView(memory0).setUint32(ptr0 + 20, len4, true);
     dataView(memory0).setUint32(ptr0 + 16, ptr4, true);
   }
@@ -10084,11 +9852,11 @@ function componentEmbed(arg0) {
   } else {
     const e = variant7;
     dataView(memory0).setInt8(ptr0 + 24, 1, true);
-    
+
     var encodeRes = _utf8AllocateAndEncode(e, realloc1, memory0);
     var ptr6= encodeRes.ptr;
     var len6 = encodeRes.len;
-    
+
     dataView(memory0).setUint32(ptr0 + 32, len6, true);
     dataView(memory0).setUint32(ptr0 + 28, ptr6, true);
   }
@@ -10117,7 +9885,7 @@ function componentEmbed(arg0) {
         if ((e) instanceof Error) {
           console.error(e);
         }
-        
+
         throw new TypeError(`"${val8}" is not one of the cases of string-encoding`);
       }
     }
@@ -10137,11 +9905,11 @@ function componentEmbed(arg0) {
   } else {
     const e = variant12;
     dataView(memory0).setInt8(ptr0 + 40, 1, true);
-    
+
     var encodeRes = _utf8AllocateAndEncode(e, realloc1, memory0);
     var ptr11= encodeRes.ptr;
     var len11 = encodeRes.len;
-    
+
     dataView(memory0).setUint32(ptr0 + 48, len11, true);
     dataView(memory0).setUint32(ptr0 + 44, ptr11, true);
   }
@@ -10157,11 +9925,11 @@ function componentEmbed(arg0) {
     for (let i = 0; i < vec19.length; i++) {
       const e = vec19[i];
       const base = result19 + i * 16;var [tuple13_0, tuple13_1] = e;
-      
+
       var encodeRes = _utf8AllocateAndEncode(tuple13_0, realloc1, memory0);
       var ptr14= encodeRes.ptr;
       var len14 = encodeRes.len;
-      
+
       dataView(memory0).setUint32(base + 4, len14, true);
       dataView(memory0).setUint32(base + 0, ptr14, true);
       var vec18 = tuple13_1;
@@ -10170,18 +9938,18 @@ function componentEmbed(arg0) {
       for (let i = 0; i < vec18.length; i++) {
         const e = vec18[i];
         const base = result18 + i * 16;var [tuple15_0, tuple15_1] = e;
-        
+
         var encodeRes = _utf8AllocateAndEncode(tuple15_0, realloc1, memory0);
         var ptr16= encodeRes.ptr;
         var len16 = encodeRes.len;
-        
+
         dataView(memory0).setUint32(base + 4, len16, true);
         dataView(memory0).setUint32(base + 0, ptr16, true);
-        
+
         var encodeRes = _utf8AllocateAndEncode(tuple15_1, realloc1, memory0);
         var ptr17= encodeRes.ptr;
         var len17 = encodeRes.len;
-        
+
         dataView(memory0).setUint32(base + 12, len17, true);
         dataView(memory0).setUint32(base + 8, ptr17, true);
       }
@@ -10211,7 +9979,7 @@ function componentEmbed(arg0) {
           var encodeRes = _utf8AllocateAndEncode(e, realloc1, memory0);
           var ptr21= encodeRes.ptr;
           var len21 = encodeRes.len;
-          
+
           dataView(memory0).setUint32(base + 4, len21, true);
           dataView(memory0).setUint32(base + 0, ptr21, true);
         }
@@ -10235,7 +10003,7 @@ function componentEmbed(arg0) {
     postReturn: true,
   });
   const hostProvided = false;
-  
+
   const [task, _wasm_call_currentTaskID] = createNewCurrentTask({
     componentIdx: 0,
     isAsync: false,
@@ -10246,7 +10014,7 @@ function componentEmbed(arg0) {
     errHandling: 'throw-result-err',
     callingWasmExport: true,
   });
-  
+
   const started = task.enterSync();
   task.setReturnMemoryIdx(0);
   task.setReturnMemory(memory0);
@@ -10255,7 +10023,7 @@ function componentEmbed(arg0) {
     componentIdx: task.componentIdx(),
     fn: () => toolsComponentEmbed(ptr0),
   });
-  
+
   let variant27;
   switch (dataView(memory0).getUint8(ret + 0, true)) {
     case 0: {
@@ -10290,29 +10058,29 @@ function componentEmbed(arg0) {
   });
   const retCopy = variant27;
   task.resolve([retCopy.val]);
-  
+
   let cstate = getOrCreateAsyncState(0);
   cstate.mayLeave = false;
   postReturn0(ret);
   cstate.mayLeave = true;
   task.exit();
-  
-  
-  
+
+
+
   if (typeof retCopy === 'object' && retCopy.tag === 'err') {
     throw new ComponentError(retCopy.val);
   }
   return retCopy.val;
-  
+
 }
 let toolsMetadataShow;
 
 function metadataShow(arg0) {
   if (!_initialized) throwUninitialized();
   var val0 = arg0;
-  var len0 = val0.byteLength;
+  var len0 = Array.isArray(val0) ? val0.length : val0.byteLength;
   var ptr0 = realloc1(0, 0, 1, len0 * 1);
-  
+
   let valData0;
   const valLenBytes0 = len0 * 1;
   if (Array.isArray(val0)) {
@@ -10320,16 +10088,17 @@ function metadataShow(arg0) {
     let offset = 0;
     const dv0 = new DataView(memory0.buffer);
     for (const v of val0) {
+      _requireValidNumericPrimitive.bind(null, 'u8')(v);
       dv0.setUint8(ptr0+ offset, v, true);
       offset += 1;
     }
   } else {
     // TypedArray / ArrayBuffer-like, direct copy
     valData0 = new Uint8Array(val0.buffer || val0, val0.byteOffset, valLenBytes0);
-    const out0 = new Uint8Array(memory0.buffer, ptr0,valLenBytes0);
+    const out0 = new Uint8Array(memory0.buffer, ptr0, valLenBytes0);
     out0.set(valData0);
   }
-  
+
   _debugLog('[iface="local:wasm-tools/tools", function="metadata-show"][Instruction::CallWasm] enter', {
     funcName: 'metadata-show',
     paramCount: 2,
@@ -10337,7 +10106,7 @@ function metadataShow(arg0) {
     postReturn: true,
   });
   const hostProvided = false;
-  
+
   const [task, _wasm_call_currentTaskID] = createNewCurrentTask({
     componentIdx: 0,
     isAsync: false,
@@ -10348,7 +10117,7 @@ function metadataShow(arg0) {
     errHandling: 'throw-result-err',
     callingWasmExport: true,
   });
-  
+
   const started = task.enterSync();
   task.setReturnMemoryIdx(0);
   task.setReturnMemory(memory0);
@@ -10357,7 +10126,7 @@ function metadataShow(arg0) {
     componentIdx: task.componentIdx(),
     fn: () => toolsMetadataShow(ptr0, len0),
   });
-  
+
   let variant12;
   switch (dataView(memory0).getUint8(ret + 0, true)) {
     case 0: {
@@ -10475,29 +10244,29 @@ function metadataShow(arg0) {
   });
   const retCopy = variant12;
   task.resolve([retCopy.val]);
-  
+
   let cstate = getOrCreateAsyncState(0);
   cstate.mayLeave = false;
-  postReturn1(ret);
+  postReturn2(ret);
   cstate.mayLeave = true;
   task.exit();
-  
-  
-  
+
+
+
   if (typeof retCopy === 'object' && retCopy.tag === 'err') {
     throw new ComponentError(retCopy.val);
   }
   return retCopy.val;
-  
+
 }
 let toolsMetadataAdd;
 
 function metadataAdd(arg0, arg1) {
   if (!_initialized) throwUninitialized();
   var val0 = arg0;
-  var len0 = val0.byteLength;
+  var len0 = Array.isArray(val0) ? val0.length : val0.byteLength;
   var ptr0 = realloc1(0, 0, 1, len0 * 1);
-  
+
   let valData0;
   const valLenBytes0 = len0 * 1;
   if (Array.isArray(val0)) {
@@ -10505,27 +10274,28 @@ function metadataAdd(arg0, arg1) {
     let offset = 0;
     const dv0 = new DataView(memory0.buffer);
     for (const v of val0) {
+      _requireValidNumericPrimitive.bind(null, 'u8')(v);
       dv0.setUint8(ptr0+ offset, v, true);
       offset += 1;
     }
   } else {
     // TypedArray / ArrayBuffer-like, direct copy
     valData0 = new Uint8Array(val0.buffer || val0, val0.byteOffset, valLenBytes0);
-    const out0 = new Uint8Array(memory0.buffer, ptr0,valLenBytes0);
+    const out0 = new Uint8Array(memory0.buffer, ptr0, valLenBytes0);
     out0.set(valData0);
   }
-  
+
   var vec7 = arg1;
   var len7 = vec7.length;
   var result7 = realloc1(0, 0, 4, len7 * 16);
   for (let i = 0; i < vec7.length; i++) {
     const e = vec7[i];
     const base = result7 + i * 16;var [tuple1_0, tuple1_1] = e;
-    
+
     var encodeRes = _utf8AllocateAndEncode(tuple1_0, realloc1, memory0);
     var ptr2= encodeRes.ptr;
     var len2 = encodeRes.len;
-    
+
     dataView(memory0).setUint32(base + 4, len2, true);
     dataView(memory0).setUint32(base + 0, ptr2, true);
     var vec6 = tuple1_1;
@@ -10534,18 +10304,18 @@ function metadataAdd(arg0, arg1) {
     for (let i = 0; i < vec6.length; i++) {
       const e = vec6[i];
       const base = result6 + i * 16;var [tuple3_0, tuple3_1] = e;
-      
+
       var encodeRes = _utf8AllocateAndEncode(tuple3_0, realloc1, memory0);
       var ptr4= encodeRes.ptr;
       var len4 = encodeRes.len;
-      
+
       dataView(memory0).setUint32(base + 4, len4, true);
       dataView(memory0).setUint32(base + 0, ptr4, true);
-      
+
       var encodeRes = _utf8AllocateAndEncode(tuple3_1, realloc1, memory0);
       var ptr5= encodeRes.ptr;
       var len5 = encodeRes.len;
-      
+
       dataView(memory0).setUint32(base + 12, len5, true);
       dataView(memory0).setUint32(base + 8, ptr5, true);
     }
@@ -10559,7 +10329,7 @@ function metadataAdd(arg0, arg1) {
     postReturn: true,
   });
   const hostProvided = false;
-  
+
   const [task, _wasm_call_currentTaskID] = createNewCurrentTask({
     componentIdx: 0,
     isAsync: false,
@@ -10570,7 +10340,7 @@ function metadataAdd(arg0, arg1) {
     errHandling: 'throw-result-err',
     callingWasmExport: true,
   });
-  
+
   const started = task.enterSync();
   task.setReturnMemoryIdx(0);
   task.setReturnMemory(memory0);
@@ -10579,7 +10349,7 @@ function metadataAdd(arg0, arg1) {
     componentIdx: task.componentIdx(),
     fn: () => toolsMetadataAdd(ptr0, len0, result7, len7),
   });
-  
+
   let variant10;
   switch (dataView(memory0).getUint8(ret + 0, true)) {
     case 0: {
@@ -10614,21 +10384,1639 @@ function metadataAdd(arg0, arg1) {
   });
   const retCopy = variant10;
   task.resolve([retCopy.val]);
-  
+
   let cstate = getOrCreateAsyncState(0);
   cstate.mayLeave = false;
   postReturn0(ret);
   cstate.mayLeave = true;
   task.exit();
-  
-  
-  
+
+
+
   if (typeof retCopy === 'object' && retCopy.tag === 'err') {
     throw new ComponentError(retCopy.val);
   }
   return retCopy.val;
-  
+
 }
+function trampoline0(handle) {
+  const handleEntry = rscTableRemove(handleTable5, handle);
+  if (handleEntry.own) {
+
+    const rsc = captureTable5.get(handleEntry.rep);
+    if (rsc) {
+      if (rsc[symbolDispose]) rsc[symbolDispose]();
+      captureTable5.delete(handleEntry.rep);
+    } else if (DirectoryEntryStream[symbolCabiDispose]) {
+      DirectoryEntryStream[symbolCabiDispose](handleEntry.rep);
+    }
+  }
+}
+function trampoline1(handle) {
+  const handleEntry = rscTableRemove(handleTable2, handle);
+  if (handleEntry.own) {
+
+    const rsc = captureTable2.get(handleEntry.rep);
+    if (rsc) {
+      if (rsc[symbolDispose]) rsc[symbolDispose]();
+      captureTable2.delete(handleEntry.rep);
+    } else if (OutputStream[symbolCabiDispose]) {
+      OutputStream[symbolCabiDispose](handleEntry.rep);
+    }
+  }
+}
+function trampoline2(handle) {
+  const handleEntry = rscTableRemove(handleTable0, handle);
+  if (handleEntry.own) {
+
+    const rsc = captureTable0.get(handleEntry.rep);
+    if (rsc) {
+      if (rsc[symbolDispose]) rsc[symbolDispose]();
+      captureTable0.delete(handleEntry.rep);
+    } else if (Error$1[symbolCabiDispose]) {
+      Error$1[symbolCabiDispose](handleEntry.rep);
+    }
+  }
+}
+function trampoline3(handle) {
+  const handleEntry = rscTableRemove(handleTable1, handle);
+  if (handleEntry.own) {
+
+    const rsc = captureTable1.get(handleEntry.rep);
+    if (rsc) {
+      if (rsc[symbolDispose]) rsc[symbolDispose]();
+      captureTable1.delete(handleEntry.rep);
+    } else if (InputStream[symbolCabiDispose]) {
+      InputStream[symbolCabiDispose](handleEntry.rep);
+    }
+  }
+}
+function trampoline4(handle) {
+  const handleEntry = rscTableRemove(handleTable6, handle);
+  if (handleEntry.own) {
+
+    const rsc = captureTable6.get(handleEntry.rep);
+    if (rsc) {
+      if (rsc[symbolDispose]) rsc[symbolDispose]();
+      captureTable6.delete(handleEntry.rep);
+    } else if (Descriptor[symbolCabiDispose]) {
+      Descriptor[symbolCabiDispose](handleEntry.rep);
+    }
+  }
+}
+let trampoline5 = _trampoline5.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 5,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline5.manuallyAsync,
+  paramLiftFns: [],
+  resultLowerFns: [_lowerFlatOwn({
+    componentIdx: 0,
+    lowerFn: () => { throw new Error('missing/invalid resource metadata'); }
+  })],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: null,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => null,
+  getReallocFn: () => null,
+  importFn: _trampoline5,
+},
+)) : _lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 5,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline5.manuallyAsync,
+  paramLiftFns: [],
+  resultLowerFns: [_lowerFlatOwn({
+    componentIdx: 0,
+    lowerFn: () => { throw new Error('missing/invalid resource metadata'); }
+  })],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: null,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => null,
+  getReallocFn: () => null,
+  importFn: _trampoline5,
+},
+);
+function trampoline6(handle) {
+  const handleEntry = rscTableRemove(handleTable3, handle);
+  if (handleEntry.own) {
+
+    const rsc = captureTable3.get(handleEntry.rep);
+    if (rsc) {
+      if (rsc[symbolDispose]) rsc[symbolDispose]();
+      captureTable3.delete(handleEntry.rep);
+    } else if (TerminalInput[symbolCabiDispose]) {
+      TerminalInput[symbolCabiDispose](handleEntry.rep);
+    }
+  }
+}
+function trampoline7(handle) {
+  const handleEntry = rscTableRemove(handleTable4, handle);
+  if (handleEntry.own) {
+
+    const rsc = captureTable4.get(handleEntry.rep);
+    if (rsc) {
+      if (rsc[symbolDispose]) rsc[symbolDispose]();
+      captureTable4.delete(handleEntry.rep);
+    } else if (TerminalOutput[symbolCabiDispose]) {
+      TerminalOutput[symbolCabiDispose](handleEntry.rep);
+    }
+  }
+}
+let trampoline8 = _trampoline8.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 8,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline8.manuallyAsync,
+  paramLiftFns: [],
+  resultLowerFns: [_lowerFlatOwn({
+    componentIdx: 0,
+    lowerFn: () => { throw new Error('missing/invalid resource metadata'); }
+  })],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: null,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => null,
+  getReallocFn: () => null,
+  importFn: _trampoline8,
+},
+)) : _lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 8,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline8.manuallyAsync,
+  paramLiftFns: [],
+  resultLowerFns: [_lowerFlatOwn({
+    componentIdx: 0,
+    lowerFn: () => { throw new Error('missing/invalid resource metadata'); }
+  })],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: null,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => null,
+  getReallocFn: () => null,
+  importFn: _trampoline8,
+},
+);
+let trampoline9 = _trampoline9.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 9,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline9.manuallyAsync,
+  paramLiftFns: [],
+  resultLowerFns: [_lowerFlatOwn({
+    componentIdx: 0,
+    lowerFn: () => { throw new Error('missing/invalid resource metadata'); }
+  })],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: null,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => null,
+  getReallocFn: () => null,
+  importFn: _trampoline9,
+},
+)) : _lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 9,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline9.manuallyAsync,
+  paramLiftFns: [],
+  resultLowerFns: [_lowerFlatOwn({
+    componentIdx: 0,
+    lowerFn: () => { throw new Error('missing/invalid resource metadata'); }
+  })],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: null,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => null,
+  getReallocFn: () => null,
+  importFn: _trampoline9,
+},
+);
+let trampoline10 = _trampoline10.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 10,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline10.manuallyAsync,
+  paramLiftFns: [_liftFlatResult([['ok', null, 0, 0, 0],['err', null, 0, 0, 0],])],
+  resultLowerFns: [],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: null,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => null,
+  getReallocFn: () => null,
+  importFn: _trampoline10,
+},
+)) : _lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 10,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline10.manuallyAsync,
+  paramLiftFns: [_liftFlatResult([['ok', null, 0, 0, 0],['err', null, 0, 0, 0],])],
+  resultLowerFns: [],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: null,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => null,
+  getReallocFn: () => null,
+  importFn: _trampoline10,
+},
+);
+let trampoline11 = _trampoline11.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 11,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline11.manuallyAsync,
+  paramLiftFns: [],
+  resultLowerFns: [_lowerFlatList({
+    elemLowerFn: _lowerFlatTuple([[_lowerFlatStringAny, 16, 4],[_lowerFlatStringAny, 16, 4],]),
+    elemSize32: 16,
+    elemAlign32: 4,
+  })],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => realloc0,
+  importFn: _trampoline11,
+},
+)) : _lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 11,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline11.manuallyAsync,
+  paramLiftFns: [],
+  resultLowerFns: [_lowerFlatList({
+    elemLowerFn: _lowerFlatTuple([[_lowerFlatStringAny, 16, 4],[_lowerFlatStringAny, 16, 4],]),
+    elemSize32: 16,
+    elemAlign32: 4,
+  })],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => realloc0,
+  importFn: _trampoline11,
+},
+);
+let trampoline12 = _trampoline12.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 12,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline12.manuallyAsync,
+  paramLiftFns: [_liftFlatBorrow.bind(null, 6)],
+  resultLowerFns: [_lowerFlatResult([
+  [ 'ok', _lowerFlatFlags({ names: ['read','write','file-integrity-sync','data-integrity-sync','requested-write-sync','mutate-directory'], size32: 1, align32: 1, intSizeBytes: 1 }), 2, 1, 1 ],
+  [ 'err', _lowerFlatEnum([['access', null, 1, 1, 1],['would-block', null, 1, 1, 1],['already', null, 1, 1, 1],['bad-descriptor', null, 1, 1, 1],['busy', null, 1, 1, 1],['deadlock', null, 1, 1, 1],['quota', null, 1, 1, 1],['exist', null, 1, 1, 1],['file-too-large', null, 1, 1, 1],['illegal-byte-sequence', null, 1, 1, 1],['in-progress', null, 1, 1, 1],['interrupted', null, 1, 1, 1],['invalid', null, 1, 1, 1],['io', null, 1, 1, 1],['is-directory', null, 1, 1, 1],['loop', null, 1, 1, 1],['too-many-links', null, 1, 1, 1],['message-size', null, 1, 1, 1],['name-too-long', null, 1, 1, 1],['no-device', null, 1, 1, 1],['no-entry', null, 1, 1, 1],['no-lock', null, 1, 1, 1],['insufficient-memory', null, 1, 1, 1],['insufficient-space', null, 1, 1, 1],['not-directory', null, 1, 1, 1],['not-empty', null, 1, 1, 1],['not-recoverable', null, 1, 1, 1],['unsupported', null, 1, 1, 1],['no-tty', null, 1, 1, 1],['no-such-device', null, 1, 1, 1],['overflow', null, 1, 1, 1],['not-permitted', null, 1, 1, 1],['pipe', null, 1, 1, 1],['read-only', null, 1, 1, 1],['invalid-seek', null, 1, 1, 1],['text-file-busy', null, 1, 1, 1],['cross-device', null, 1, 1, 1],]), 2, 1, 1 ],
+  ])
+  ],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => null,
+  importFn: _trampoline12,
+},
+)) : _lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 12,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline12.manuallyAsync,
+  paramLiftFns: [_liftFlatBorrow.bind(null, 6)],
+  resultLowerFns: [_lowerFlatResult([
+  [ 'ok', _lowerFlatFlags({ names: ['read','write','file-integrity-sync','data-integrity-sync','requested-write-sync','mutate-directory'], size32: 1, align32: 1, intSizeBytes: 1 }), 2, 1, 1 ],
+  [ 'err', _lowerFlatEnum([['access', null, 1, 1, 1],['would-block', null, 1, 1, 1],['already', null, 1, 1, 1],['bad-descriptor', null, 1, 1, 1],['busy', null, 1, 1, 1],['deadlock', null, 1, 1, 1],['quota', null, 1, 1, 1],['exist', null, 1, 1, 1],['file-too-large', null, 1, 1, 1],['illegal-byte-sequence', null, 1, 1, 1],['in-progress', null, 1, 1, 1],['interrupted', null, 1, 1, 1],['invalid', null, 1, 1, 1],['io', null, 1, 1, 1],['is-directory', null, 1, 1, 1],['loop', null, 1, 1, 1],['too-many-links', null, 1, 1, 1],['message-size', null, 1, 1, 1],['name-too-long', null, 1, 1, 1],['no-device', null, 1, 1, 1],['no-entry', null, 1, 1, 1],['no-lock', null, 1, 1, 1],['insufficient-memory', null, 1, 1, 1],['insufficient-space', null, 1, 1, 1],['not-directory', null, 1, 1, 1],['not-empty', null, 1, 1, 1],['not-recoverable', null, 1, 1, 1],['unsupported', null, 1, 1, 1],['no-tty', null, 1, 1, 1],['no-such-device', null, 1, 1, 1],['overflow', null, 1, 1, 1],['not-permitted', null, 1, 1, 1],['pipe', null, 1, 1, 1],['read-only', null, 1, 1, 1],['invalid-seek', null, 1, 1, 1],['text-file-busy', null, 1, 1, 1],['cross-device', null, 1, 1, 1],]), 2, 1, 1 ],
+  ])
+  ],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => null,
+  importFn: _trampoline12,
+},
+);
+let trampoline13 = _trampoline13.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 13,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline13.manuallyAsync,
+  paramLiftFns: [_liftFlatBorrow.bind(null, 6)],
+  resultLowerFns: [_lowerFlatResult([
+  [ 'ok', _lowerFlatEnum([['unknown', null, 1, 1, 1],['block-device', null, 1, 1, 1],['character-device', null, 1, 1, 1],['directory', null, 1, 1, 1],['fifo', null, 1, 1, 1],['symbolic-link', null, 1, 1, 1],['regular-file', null, 1, 1, 1],['socket', null, 1, 1, 1],]), 2, 1, 1 ],
+  [ 'err', _lowerFlatEnum([['access', null, 1, 1, 1],['would-block', null, 1, 1, 1],['already', null, 1, 1, 1],['bad-descriptor', null, 1, 1, 1],['busy', null, 1, 1, 1],['deadlock', null, 1, 1, 1],['quota', null, 1, 1, 1],['exist', null, 1, 1, 1],['file-too-large', null, 1, 1, 1],['illegal-byte-sequence', null, 1, 1, 1],['in-progress', null, 1, 1, 1],['interrupted', null, 1, 1, 1],['invalid', null, 1, 1, 1],['io', null, 1, 1, 1],['is-directory', null, 1, 1, 1],['loop', null, 1, 1, 1],['too-many-links', null, 1, 1, 1],['message-size', null, 1, 1, 1],['name-too-long', null, 1, 1, 1],['no-device', null, 1, 1, 1],['no-entry', null, 1, 1, 1],['no-lock', null, 1, 1, 1],['insufficient-memory', null, 1, 1, 1],['insufficient-space', null, 1, 1, 1],['not-directory', null, 1, 1, 1],['not-empty', null, 1, 1, 1],['not-recoverable', null, 1, 1, 1],['unsupported', null, 1, 1, 1],['no-tty', null, 1, 1, 1],['no-such-device', null, 1, 1, 1],['overflow', null, 1, 1, 1],['not-permitted', null, 1, 1, 1],['pipe', null, 1, 1, 1],['read-only', null, 1, 1, 1],['invalid-seek', null, 1, 1, 1],['text-file-busy', null, 1, 1, 1],['cross-device', null, 1, 1, 1],]), 2, 1, 1 ],
+  ])
+  ],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => null,
+  importFn: _trampoline13,
+},
+)) : _lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 13,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline13.manuallyAsync,
+  paramLiftFns: [_liftFlatBorrow.bind(null, 6)],
+  resultLowerFns: [_lowerFlatResult([
+  [ 'ok', _lowerFlatEnum([['unknown', null, 1, 1, 1],['block-device', null, 1, 1, 1],['character-device', null, 1, 1, 1],['directory', null, 1, 1, 1],['fifo', null, 1, 1, 1],['symbolic-link', null, 1, 1, 1],['regular-file', null, 1, 1, 1],['socket', null, 1, 1, 1],]), 2, 1, 1 ],
+  [ 'err', _lowerFlatEnum([['access', null, 1, 1, 1],['would-block', null, 1, 1, 1],['already', null, 1, 1, 1],['bad-descriptor', null, 1, 1, 1],['busy', null, 1, 1, 1],['deadlock', null, 1, 1, 1],['quota', null, 1, 1, 1],['exist', null, 1, 1, 1],['file-too-large', null, 1, 1, 1],['illegal-byte-sequence', null, 1, 1, 1],['in-progress', null, 1, 1, 1],['interrupted', null, 1, 1, 1],['invalid', null, 1, 1, 1],['io', null, 1, 1, 1],['is-directory', null, 1, 1, 1],['loop', null, 1, 1, 1],['too-many-links', null, 1, 1, 1],['message-size', null, 1, 1, 1],['name-too-long', null, 1, 1, 1],['no-device', null, 1, 1, 1],['no-entry', null, 1, 1, 1],['no-lock', null, 1, 1, 1],['insufficient-memory', null, 1, 1, 1],['insufficient-space', null, 1, 1, 1],['not-directory', null, 1, 1, 1],['not-empty', null, 1, 1, 1],['not-recoverable', null, 1, 1, 1],['unsupported', null, 1, 1, 1],['no-tty', null, 1, 1, 1],['no-such-device', null, 1, 1, 1],['overflow', null, 1, 1, 1],['not-permitted', null, 1, 1, 1],['pipe', null, 1, 1, 1],['read-only', null, 1, 1, 1],['invalid-seek', null, 1, 1, 1],['text-file-busy', null, 1, 1, 1],['cross-device', null, 1, 1, 1],]), 2, 1, 1 ],
+  ])
+  ],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => null,
+  importFn: _trampoline13,
+},
+);
+let trampoline14 = _trampoline14.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 14,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline14.manuallyAsync,
+  paramLiftFns: [_liftFlatBorrow.bind(null, 6)],
+  resultLowerFns: [_lowerFlatResult([
+  [ 'ok', _lowerFlatRecord([['lower', _lowerFlatU64, 16, 8 ],['upper', _lowerFlatU64, 16, 8 ],]), 24, 8, 8 ],
+  [ 'err', _lowerFlatEnum([['access', null, 1, 1, 1],['would-block', null, 1, 1, 1],['already', null, 1, 1, 1],['bad-descriptor', null, 1, 1, 1],['busy', null, 1, 1, 1],['deadlock', null, 1, 1, 1],['quota', null, 1, 1, 1],['exist', null, 1, 1, 1],['file-too-large', null, 1, 1, 1],['illegal-byte-sequence', null, 1, 1, 1],['in-progress', null, 1, 1, 1],['interrupted', null, 1, 1, 1],['invalid', null, 1, 1, 1],['io', null, 1, 1, 1],['is-directory', null, 1, 1, 1],['loop', null, 1, 1, 1],['too-many-links', null, 1, 1, 1],['message-size', null, 1, 1, 1],['name-too-long', null, 1, 1, 1],['no-device', null, 1, 1, 1],['no-entry', null, 1, 1, 1],['no-lock', null, 1, 1, 1],['insufficient-memory', null, 1, 1, 1],['insufficient-space', null, 1, 1, 1],['not-directory', null, 1, 1, 1],['not-empty', null, 1, 1, 1],['not-recoverable', null, 1, 1, 1],['unsupported', null, 1, 1, 1],['no-tty', null, 1, 1, 1],['no-such-device', null, 1, 1, 1],['overflow', null, 1, 1, 1],['not-permitted', null, 1, 1, 1],['pipe', null, 1, 1, 1],['read-only', null, 1, 1, 1],['invalid-seek', null, 1, 1, 1],['text-file-busy', null, 1, 1, 1],['cross-device', null, 1, 1, 1],]), 24, 8, 8 ],
+  ])
+  ],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => null,
+  importFn: _trampoline14,
+},
+)) : _lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 14,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline14.manuallyAsync,
+  paramLiftFns: [_liftFlatBorrow.bind(null, 6)],
+  resultLowerFns: [_lowerFlatResult([
+  [ 'ok', _lowerFlatRecord([['lower', _lowerFlatU64, 16, 8 ],['upper', _lowerFlatU64, 16, 8 ],]), 24, 8, 8 ],
+  [ 'err', _lowerFlatEnum([['access', null, 1, 1, 1],['would-block', null, 1, 1, 1],['already', null, 1, 1, 1],['bad-descriptor', null, 1, 1, 1],['busy', null, 1, 1, 1],['deadlock', null, 1, 1, 1],['quota', null, 1, 1, 1],['exist', null, 1, 1, 1],['file-too-large', null, 1, 1, 1],['illegal-byte-sequence', null, 1, 1, 1],['in-progress', null, 1, 1, 1],['interrupted', null, 1, 1, 1],['invalid', null, 1, 1, 1],['io', null, 1, 1, 1],['is-directory', null, 1, 1, 1],['loop', null, 1, 1, 1],['too-many-links', null, 1, 1, 1],['message-size', null, 1, 1, 1],['name-too-long', null, 1, 1, 1],['no-device', null, 1, 1, 1],['no-entry', null, 1, 1, 1],['no-lock', null, 1, 1, 1],['insufficient-memory', null, 1, 1, 1],['insufficient-space', null, 1, 1, 1],['not-directory', null, 1, 1, 1],['not-empty', null, 1, 1, 1],['not-recoverable', null, 1, 1, 1],['unsupported', null, 1, 1, 1],['no-tty', null, 1, 1, 1],['no-such-device', null, 1, 1, 1],['overflow', null, 1, 1, 1],['not-permitted', null, 1, 1, 1],['pipe', null, 1, 1, 1],['read-only', null, 1, 1, 1],['invalid-seek', null, 1, 1, 1],['text-file-busy', null, 1, 1, 1],['cross-device', null, 1, 1, 1],]), 24, 8, 8 ],
+  ])
+  ],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => null,
+  importFn: _trampoline14,
+},
+);
+let trampoline15 = _trampoline15.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 15,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline15.manuallyAsync,
+  paramLiftFns: [_liftFlatBorrow.bind(null, 0)],
+  resultLowerFns: [_lowerFlatOption([
+  [ 'none', null, 2, 1, 1 ],
+  [ 'some', _lowerFlatEnum([['access', null, 1, 1, 1],['would-block', null, 1, 1, 1],['already', null, 1, 1, 1],['bad-descriptor', null, 1, 1, 1],['busy', null, 1, 1, 1],['deadlock', null, 1, 1, 1],['quota', null, 1, 1, 1],['exist', null, 1, 1, 1],['file-too-large', null, 1, 1, 1],['illegal-byte-sequence', null, 1, 1, 1],['in-progress', null, 1, 1, 1],['interrupted', null, 1, 1, 1],['invalid', null, 1, 1, 1],['io', null, 1, 1, 1],['is-directory', null, 1, 1, 1],['loop', null, 1, 1, 1],['too-many-links', null, 1, 1, 1],['message-size', null, 1, 1, 1],['name-too-long', null, 1, 1, 1],['no-device', null, 1, 1, 1],['no-entry', null, 1, 1, 1],['no-lock', null, 1, 1, 1],['insufficient-memory', null, 1, 1, 1],['insufficient-space', null, 1, 1, 1],['not-directory', null, 1, 1, 1],['not-empty', null, 1, 1, 1],['not-recoverable', null, 1, 1, 1],['unsupported', null, 1, 1, 1],['no-tty', null, 1, 1, 1],['no-such-device', null, 1, 1, 1],['overflow', null, 1, 1, 1],['not-permitted', null, 1, 1, 1],['pipe', null, 1, 1, 1],['read-only', null, 1, 1, 1],['invalid-seek', null, 1, 1, 1],['text-file-busy', null, 1, 1, 1],['cross-device', null, 1, 1, 1],]), 2, 1, 1 ],
+  ])
+  ],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => null,
+  importFn: _trampoline15,
+},
+)) : _lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 15,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline15.manuallyAsync,
+  paramLiftFns: [_liftFlatBorrow.bind(null, 0)],
+  resultLowerFns: [_lowerFlatOption([
+  [ 'none', null, 2, 1, 1 ],
+  [ 'some', _lowerFlatEnum([['access', null, 1, 1, 1],['would-block', null, 1, 1, 1],['already', null, 1, 1, 1],['bad-descriptor', null, 1, 1, 1],['busy', null, 1, 1, 1],['deadlock', null, 1, 1, 1],['quota', null, 1, 1, 1],['exist', null, 1, 1, 1],['file-too-large', null, 1, 1, 1],['illegal-byte-sequence', null, 1, 1, 1],['in-progress', null, 1, 1, 1],['interrupted', null, 1, 1, 1],['invalid', null, 1, 1, 1],['io', null, 1, 1, 1],['is-directory', null, 1, 1, 1],['loop', null, 1, 1, 1],['too-many-links', null, 1, 1, 1],['message-size', null, 1, 1, 1],['name-too-long', null, 1, 1, 1],['no-device', null, 1, 1, 1],['no-entry', null, 1, 1, 1],['no-lock', null, 1, 1, 1],['insufficient-memory', null, 1, 1, 1],['insufficient-space', null, 1, 1, 1],['not-directory', null, 1, 1, 1],['not-empty', null, 1, 1, 1],['not-recoverable', null, 1, 1, 1],['unsupported', null, 1, 1, 1],['no-tty', null, 1, 1, 1],['no-such-device', null, 1, 1, 1],['overflow', null, 1, 1, 1],['not-permitted', null, 1, 1, 1],['pipe', null, 1, 1, 1],['read-only', null, 1, 1, 1],['invalid-seek', null, 1, 1, 1],['text-file-busy', null, 1, 1, 1],['cross-device', null, 1, 1, 1],]), 2, 1, 1 ],
+  ])
+  ],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => null,
+  importFn: _trampoline15,
+},
+);
+let trampoline16 = _trampoline16.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 16,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline16.manuallyAsync,
+  paramLiftFns: [_liftFlatBorrow.bind(null, 6),_liftFlatFlags({ names: ['symlink-follow'], size32: 1, align32: 1, intSizeBytes: 1 }),_liftFlatStringAny],
+  resultLowerFns: [_lowerFlatResult([
+  [ 'ok', _lowerFlatRecord([['lower', _lowerFlatU64, 16, 8 ],['upper', _lowerFlatU64, 16, 8 ],]), 24, 8, 8 ],
+  [ 'err', _lowerFlatEnum([['access', null, 1, 1, 1],['would-block', null, 1, 1, 1],['already', null, 1, 1, 1],['bad-descriptor', null, 1, 1, 1],['busy', null, 1, 1, 1],['deadlock', null, 1, 1, 1],['quota', null, 1, 1, 1],['exist', null, 1, 1, 1],['file-too-large', null, 1, 1, 1],['illegal-byte-sequence', null, 1, 1, 1],['in-progress', null, 1, 1, 1],['interrupted', null, 1, 1, 1],['invalid', null, 1, 1, 1],['io', null, 1, 1, 1],['is-directory', null, 1, 1, 1],['loop', null, 1, 1, 1],['too-many-links', null, 1, 1, 1],['message-size', null, 1, 1, 1],['name-too-long', null, 1, 1, 1],['no-device', null, 1, 1, 1],['no-entry', null, 1, 1, 1],['no-lock', null, 1, 1, 1],['insufficient-memory', null, 1, 1, 1],['insufficient-space', null, 1, 1, 1],['not-directory', null, 1, 1, 1],['not-empty', null, 1, 1, 1],['not-recoverable', null, 1, 1, 1],['unsupported', null, 1, 1, 1],['no-tty', null, 1, 1, 1],['no-such-device', null, 1, 1, 1],['overflow', null, 1, 1, 1],['not-permitted', null, 1, 1, 1],['pipe', null, 1, 1, 1],['read-only', null, 1, 1, 1],['invalid-seek', null, 1, 1, 1],['text-file-busy', null, 1, 1, 1],['cross-device', null, 1, 1, 1],]), 24, 8, 8 ],
+  ])
+  ],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => null,
+  importFn: _trampoline16,
+},
+)) : _lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 16,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline16.manuallyAsync,
+  paramLiftFns: [_liftFlatBorrow.bind(null, 6),_liftFlatFlags({ names: ['symlink-follow'], size32: 1, align32: 1, intSizeBytes: 1 }),_liftFlatStringAny],
+  resultLowerFns: [_lowerFlatResult([
+  [ 'ok', _lowerFlatRecord([['lower', _lowerFlatU64, 16, 8 ],['upper', _lowerFlatU64, 16, 8 ],]), 24, 8, 8 ],
+  [ 'err', _lowerFlatEnum([['access', null, 1, 1, 1],['would-block', null, 1, 1, 1],['already', null, 1, 1, 1],['bad-descriptor', null, 1, 1, 1],['busy', null, 1, 1, 1],['deadlock', null, 1, 1, 1],['quota', null, 1, 1, 1],['exist', null, 1, 1, 1],['file-too-large', null, 1, 1, 1],['illegal-byte-sequence', null, 1, 1, 1],['in-progress', null, 1, 1, 1],['interrupted', null, 1, 1, 1],['invalid', null, 1, 1, 1],['io', null, 1, 1, 1],['is-directory', null, 1, 1, 1],['loop', null, 1, 1, 1],['too-many-links', null, 1, 1, 1],['message-size', null, 1, 1, 1],['name-too-long', null, 1, 1, 1],['no-device', null, 1, 1, 1],['no-entry', null, 1, 1, 1],['no-lock', null, 1, 1, 1],['insufficient-memory', null, 1, 1, 1],['insufficient-space', null, 1, 1, 1],['not-directory', null, 1, 1, 1],['not-empty', null, 1, 1, 1],['not-recoverable', null, 1, 1, 1],['unsupported', null, 1, 1, 1],['no-tty', null, 1, 1, 1],['no-such-device', null, 1, 1, 1],['overflow', null, 1, 1, 1],['not-permitted', null, 1, 1, 1],['pipe', null, 1, 1, 1],['read-only', null, 1, 1, 1],['invalid-seek', null, 1, 1, 1],['text-file-busy', null, 1, 1, 1],['cross-device', null, 1, 1, 1],]), 24, 8, 8 ],
+  ])
+  ],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => null,
+  importFn: _trampoline16,
+},
+);
+let trampoline17 = _trampoline17.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 17,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline17.manuallyAsync,
+  paramLiftFns: [_liftFlatBorrow.bind(null, 6),_liftFlatU64],
+  resultLowerFns: [_lowerFlatResult([
+  [ 'ok', _lowerFlatOwn({
+    componentIdx: 0,
+    lowerFn: () => { throw new Error('missing/invalid resource metadata'); }
+  }), 8, 4, 4 ],
+  [ 'err', _lowerFlatEnum([['access', null, 1, 1, 1],['would-block', null, 1, 1, 1],['already', null, 1, 1, 1],['bad-descriptor', null, 1, 1, 1],['busy', null, 1, 1, 1],['deadlock', null, 1, 1, 1],['quota', null, 1, 1, 1],['exist', null, 1, 1, 1],['file-too-large', null, 1, 1, 1],['illegal-byte-sequence', null, 1, 1, 1],['in-progress', null, 1, 1, 1],['interrupted', null, 1, 1, 1],['invalid', null, 1, 1, 1],['io', null, 1, 1, 1],['is-directory', null, 1, 1, 1],['loop', null, 1, 1, 1],['too-many-links', null, 1, 1, 1],['message-size', null, 1, 1, 1],['name-too-long', null, 1, 1, 1],['no-device', null, 1, 1, 1],['no-entry', null, 1, 1, 1],['no-lock', null, 1, 1, 1],['insufficient-memory', null, 1, 1, 1],['insufficient-space', null, 1, 1, 1],['not-directory', null, 1, 1, 1],['not-empty', null, 1, 1, 1],['not-recoverable', null, 1, 1, 1],['unsupported', null, 1, 1, 1],['no-tty', null, 1, 1, 1],['no-such-device', null, 1, 1, 1],['overflow', null, 1, 1, 1],['not-permitted', null, 1, 1, 1],['pipe', null, 1, 1, 1],['read-only', null, 1, 1, 1],['invalid-seek', null, 1, 1, 1],['text-file-busy', null, 1, 1, 1],['cross-device', null, 1, 1, 1],]), 8, 4, 4 ],
+  ])
+  ],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => null,
+  importFn: _trampoline17,
+},
+)) : _lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 17,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline17.manuallyAsync,
+  paramLiftFns: [_liftFlatBorrow.bind(null, 6),_liftFlatU64],
+  resultLowerFns: [_lowerFlatResult([
+  [ 'ok', _lowerFlatOwn({
+    componentIdx: 0,
+    lowerFn: () => { throw new Error('missing/invalid resource metadata'); }
+  }), 8, 4, 4 ],
+  [ 'err', _lowerFlatEnum([['access', null, 1, 1, 1],['would-block', null, 1, 1, 1],['already', null, 1, 1, 1],['bad-descriptor', null, 1, 1, 1],['busy', null, 1, 1, 1],['deadlock', null, 1, 1, 1],['quota', null, 1, 1, 1],['exist', null, 1, 1, 1],['file-too-large', null, 1, 1, 1],['illegal-byte-sequence', null, 1, 1, 1],['in-progress', null, 1, 1, 1],['interrupted', null, 1, 1, 1],['invalid', null, 1, 1, 1],['io', null, 1, 1, 1],['is-directory', null, 1, 1, 1],['loop', null, 1, 1, 1],['too-many-links', null, 1, 1, 1],['message-size', null, 1, 1, 1],['name-too-long', null, 1, 1, 1],['no-device', null, 1, 1, 1],['no-entry', null, 1, 1, 1],['no-lock', null, 1, 1, 1],['insufficient-memory', null, 1, 1, 1],['insufficient-space', null, 1, 1, 1],['not-directory', null, 1, 1, 1],['not-empty', null, 1, 1, 1],['not-recoverable', null, 1, 1, 1],['unsupported', null, 1, 1, 1],['no-tty', null, 1, 1, 1],['no-such-device', null, 1, 1, 1],['overflow', null, 1, 1, 1],['not-permitted', null, 1, 1, 1],['pipe', null, 1, 1, 1],['read-only', null, 1, 1, 1],['invalid-seek', null, 1, 1, 1],['text-file-busy', null, 1, 1, 1],['cross-device', null, 1, 1, 1],]), 8, 4, 4 ],
+  ])
+  ],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => null,
+  importFn: _trampoline17,
+},
+);
+let trampoline18 = _trampoline18.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 18,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline18.manuallyAsync,
+  paramLiftFns: [_liftFlatBorrow.bind(null, 6),_liftFlatU64],
+  resultLowerFns: [_lowerFlatResult([
+  [ 'ok', _lowerFlatOwn({
+    componentIdx: 0,
+    lowerFn: () => { throw new Error('missing/invalid resource metadata'); }
+  }), 8, 4, 4 ],
+  [ 'err', _lowerFlatEnum([['access', null, 1, 1, 1],['would-block', null, 1, 1, 1],['already', null, 1, 1, 1],['bad-descriptor', null, 1, 1, 1],['busy', null, 1, 1, 1],['deadlock', null, 1, 1, 1],['quota', null, 1, 1, 1],['exist', null, 1, 1, 1],['file-too-large', null, 1, 1, 1],['illegal-byte-sequence', null, 1, 1, 1],['in-progress', null, 1, 1, 1],['interrupted', null, 1, 1, 1],['invalid', null, 1, 1, 1],['io', null, 1, 1, 1],['is-directory', null, 1, 1, 1],['loop', null, 1, 1, 1],['too-many-links', null, 1, 1, 1],['message-size', null, 1, 1, 1],['name-too-long', null, 1, 1, 1],['no-device', null, 1, 1, 1],['no-entry', null, 1, 1, 1],['no-lock', null, 1, 1, 1],['insufficient-memory', null, 1, 1, 1],['insufficient-space', null, 1, 1, 1],['not-directory', null, 1, 1, 1],['not-empty', null, 1, 1, 1],['not-recoverable', null, 1, 1, 1],['unsupported', null, 1, 1, 1],['no-tty', null, 1, 1, 1],['no-such-device', null, 1, 1, 1],['overflow', null, 1, 1, 1],['not-permitted', null, 1, 1, 1],['pipe', null, 1, 1, 1],['read-only', null, 1, 1, 1],['invalid-seek', null, 1, 1, 1],['text-file-busy', null, 1, 1, 1],['cross-device', null, 1, 1, 1],]), 8, 4, 4 ],
+  ])
+  ],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => null,
+  importFn: _trampoline18,
+},
+)) : _lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 18,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline18.manuallyAsync,
+  paramLiftFns: [_liftFlatBorrow.bind(null, 6),_liftFlatU64],
+  resultLowerFns: [_lowerFlatResult([
+  [ 'ok', _lowerFlatOwn({
+    componentIdx: 0,
+    lowerFn: () => { throw new Error('missing/invalid resource metadata'); }
+  }), 8, 4, 4 ],
+  [ 'err', _lowerFlatEnum([['access', null, 1, 1, 1],['would-block', null, 1, 1, 1],['already', null, 1, 1, 1],['bad-descriptor', null, 1, 1, 1],['busy', null, 1, 1, 1],['deadlock', null, 1, 1, 1],['quota', null, 1, 1, 1],['exist', null, 1, 1, 1],['file-too-large', null, 1, 1, 1],['illegal-byte-sequence', null, 1, 1, 1],['in-progress', null, 1, 1, 1],['interrupted', null, 1, 1, 1],['invalid', null, 1, 1, 1],['io', null, 1, 1, 1],['is-directory', null, 1, 1, 1],['loop', null, 1, 1, 1],['too-many-links', null, 1, 1, 1],['message-size', null, 1, 1, 1],['name-too-long', null, 1, 1, 1],['no-device', null, 1, 1, 1],['no-entry', null, 1, 1, 1],['no-lock', null, 1, 1, 1],['insufficient-memory', null, 1, 1, 1],['insufficient-space', null, 1, 1, 1],['not-directory', null, 1, 1, 1],['not-empty', null, 1, 1, 1],['not-recoverable', null, 1, 1, 1],['unsupported', null, 1, 1, 1],['no-tty', null, 1, 1, 1],['no-such-device', null, 1, 1, 1],['overflow', null, 1, 1, 1],['not-permitted', null, 1, 1, 1],['pipe', null, 1, 1, 1],['read-only', null, 1, 1, 1],['invalid-seek', null, 1, 1, 1],['text-file-busy', null, 1, 1, 1],['cross-device', null, 1, 1, 1],]), 8, 4, 4 ],
+  ])
+  ],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => null,
+  importFn: _trampoline18,
+},
+);
+let trampoline19 = _trampoline19.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 19,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline19.manuallyAsync,
+  paramLiftFns: [_liftFlatBorrow.bind(null, 6)],
+  resultLowerFns: [_lowerFlatResult([
+  [ 'ok', _lowerFlatOwn({
+    componentIdx: 0,
+    lowerFn: () => { throw new Error('missing/invalid resource metadata'); }
+  }), 8, 4, 4 ],
+  [ 'err', _lowerFlatEnum([['access', null, 1, 1, 1],['would-block', null, 1, 1, 1],['already', null, 1, 1, 1],['bad-descriptor', null, 1, 1, 1],['busy', null, 1, 1, 1],['deadlock', null, 1, 1, 1],['quota', null, 1, 1, 1],['exist', null, 1, 1, 1],['file-too-large', null, 1, 1, 1],['illegal-byte-sequence', null, 1, 1, 1],['in-progress', null, 1, 1, 1],['interrupted', null, 1, 1, 1],['invalid', null, 1, 1, 1],['io', null, 1, 1, 1],['is-directory', null, 1, 1, 1],['loop', null, 1, 1, 1],['too-many-links', null, 1, 1, 1],['message-size', null, 1, 1, 1],['name-too-long', null, 1, 1, 1],['no-device', null, 1, 1, 1],['no-entry', null, 1, 1, 1],['no-lock', null, 1, 1, 1],['insufficient-memory', null, 1, 1, 1],['insufficient-space', null, 1, 1, 1],['not-directory', null, 1, 1, 1],['not-empty', null, 1, 1, 1],['not-recoverable', null, 1, 1, 1],['unsupported', null, 1, 1, 1],['no-tty', null, 1, 1, 1],['no-such-device', null, 1, 1, 1],['overflow', null, 1, 1, 1],['not-permitted', null, 1, 1, 1],['pipe', null, 1, 1, 1],['read-only', null, 1, 1, 1],['invalid-seek', null, 1, 1, 1],['text-file-busy', null, 1, 1, 1],['cross-device', null, 1, 1, 1],]), 8, 4, 4 ],
+  ])
+  ],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => null,
+  importFn: _trampoline19,
+},
+)) : _lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 19,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline19.manuallyAsync,
+  paramLiftFns: [_liftFlatBorrow.bind(null, 6)],
+  resultLowerFns: [_lowerFlatResult([
+  [ 'ok', _lowerFlatOwn({
+    componentIdx: 0,
+    lowerFn: () => { throw new Error('missing/invalid resource metadata'); }
+  }), 8, 4, 4 ],
+  [ 'err', _lowerFlatEnum([['access', null, 1, 1, 1],['would-block', null, 1, 1, 1],['already', null, 1, 1, 1],['bad-descriptor', null, 1, 1, 1],['busy', null, 1, 1, 1],['deadlock', null, 1, 1, 1],['quota', null, 1, 1, 1],['exist', null, 1, 1, 1],['file-too-large', null, 1, 1, 1],['illegal-byte-sequence', null, 1, 1, 1],['in-progress', null, 1, 1, 1],['interrupted', null, 1, 1, 1],['invalid', null, 1, 1, 1],['io', null, 1, 1, 1],['is-directory', null, 1, 1, 1],['loop', null, 1, 1, 1],['too-many-links', null, 1, 1, 1],['message-size', null, 1, 1, 1],['name-too-long', null, 1, 1, 1],['no-device', null, 1, 1, 1],['no-entry', null, 1, 1, 1],['no-lock', null, 1, 1, 1],['insufficient-memory', null, 1, 1, 1],['insufficient-space', null, 1, 1, 1],['not-directory', null, 1, 1, 1],['not-empty', null, 1, 1, 1],['not-recoverable', null, 1, 1, 1],['unsupported', null, 1, 1, 1],['no-tty', null, 1, 1, 1],['no-such-device', null, 1, 1, 1],['overflow', null, 1, 1, 1],['not-permitted', null, 1, 1, 1],['pipe', null, 1, 1, 1],['read-only', null, 1, 1, 1],['invalid-seek', null, 1, 1, 1],['text-file-busy', null, 1, 1, 1],['cross-device', null, 1, 1, 1],]), 8, 4, 4 ],
+  ])
+  ],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => null,
+  importFn: _trampoline19,
+},
+);
+let trampoline20 = _trampoline20.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 20,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline20.manuallyAsync,
+  paramLiftFns: [_liftFlatBorrow.bind(null, 6)],
+  resultLowerFns: [_lowerFlatResult([
+  [ 'ok', _lowerFlatOwn({
+    componentIdx: 0,
+    lowerFn: () => { throw new Error('missing/invalid resource metadata'); }
+  }), 8, 4, 4 ],
+  [ 'err', _lowerFlatEnum([['access', null, 1, 1, 1],['would-block', null, 1, 1, 1],['already', null, 1, 1, 1],['bad-descriptor', null, 1, 1, 1],['busy', null, 1, 1, 1],['deadlock', null, 1, 1, 1],['quota', null, 1, 1, 1],['exist', null, 1, 1, 1],['file-too-large', null, 1, 1, 1],['illegal-byte-sequence', null, 1, 1, 1],['in-progress', null, 1, 1, 1],['interrupted', null, 1, 1, 1],['invalid', null, 1, 1, 1],['io', null, 1, 1, 1],['is-directory', null, 1, 1, 1],['loop', null, 1, 1, 1],['too-many-links', null, 1, 1, 1],['message-size', null, 1, 1, 1],['name-too-long', null, 1, 1, 1],['no-device', null, 1, 1, 1],['no-entry', null, 1, 1, 1],['no-lock', null, 1, 1, 1],['insufficient-memory', null, 1, 1, 1],['insufficient-space', null, 1, 1, 1],['not-directory', null, 1, 1, 1],['not-empty', null, 1, 1, 1],['not-recoverable', null, 1, 1, 1],['unsupported', null, 1, 1, 1],['no-tty', null, 1, 1, 1],['no-such-device', null, 1, 1, 1],['overflow', null, 1, 1, 1],['not-permitted', null, 1, 1, 1],['pipe', null, 1, 1, 1],['read-only', null, 1, 1, 1],['invalid-seek', null, 1, 1, 1],['text-file-busy', null, 1, 1, 1],['cross-device', null, 1, 1, 1],]), 8, 4, 4 ],
+  ])
+  ],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => null,
+  importFn: _trampoline20,
+},
+)) : _lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 20,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline20.manuallyAsync,
+  paramLiftFns: [_liftFlatBorrow.bind(null, 6)],
+  resultLowerFns: [_lowerFlatResult([
+  [ 'ok', _lowerFlatOwn({
+    componentIdx: 0,
+    lowerFn: () => { throw new Error('missing/invalid resource metadata'); }
+  }), 8, 4, 4 ],
+  [ 'err', _lowerFlatEnum([['access', null, 1, 1, 1],['would-block', null, 1, 1, 1],['already', null, 1, 1, 1],['bad-descriptor', null, 1, 1, 1],['busy', null, 1, 1, 1],['deadlock', null, 1, 1, 1],['quota', null, 1, 1, 1],['exist', null, 1, 1, 1],['file-too-large', null, 1, 1, 1],['illegal-byte-sequence', null, 1, 1, 1],['in-progress', null, 1, 1, 1],['interrupted', null, 1, 1, 1],['invalid', null, 1, 1, 1],['io', null, 1, 1, 1],['is-directory', null, 1, 1, 1],['loop', null, 1, 1, 1],['too-many-links', null, 1, 1, 1],['message-size', null, 1, 1, 1],['name-too-long', null, 1, 1, 1],['no-device', null, 1, 1, 1],['no-entry', null, 1, 1, 1],['no-lock', null, 1, 1, 1],['insufficient-memory', null, 1, 1, 1],['insufficient-space', null, 1, 1, 1],['not-directory', null, 1, 1, 1],['not-empty', null, 1, 1, 1],['not-recoverable', null, 1, 1, 1],['unsupported', null, 1, 1, 1],['no-tty', null, 1, 1, 1],['no-such-device', null, 1, 1, 1],['overflow', null, 1, 1, 1],['not-permitted', null, 1, 1, 1],['pipe', null, 1, 1, 1],['read-only', null, 1, 1, 1],['invalid-seek', null, 1, 1, 1],['text-file-busy', null, 1, 1, 1],['cross-device', null, 1, 1, 1],]), 8, 4, 4 ],
+  ])
+  ],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => null,
+  importFn: _trampoline20,
+},
+);
+let trampoline21 = _trampoline21.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 21,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline21.manuallyAsync,
+  paramLiftFns: [_liftFlatBorrow.bind(null, 6)],
+  resultLowerFns: [_lowerFlatResult([
+  [ 'ok', _lowerFlatRecord([['type', _lowerFlatEnum([['unknown', null, 1, 1, 1],['block-device', null, 1, 1, 1],['character-device', null, 1, 1, 1],['directory', null, 1, 1, 1],['fifo', null, 1, 1, 1],['symbolic-link', null, 1, 1, 1],['regular-file', null, 1, 1, 1],['socket', null, 1, 1, 1],]), 96, 8 ],['linkCount', _lowerFlatU64, 96, 8 ],['size', _lowerFlatU64, 96, 8 ],['dataAccessTimestamp', _lowerFlatOption([
+  [ 'none', null, 24, 8, 8 ],
+  [ 'some', _lowerFlatRecord([['seconds', _lowerFlatU64, 16, 8 ],['nanoseconds', _lowerFlatU32, 16, 8 ],]), 24, 8, 8 ],
+  ])
+  , 96, 8 ],['dataModificationTimestamp', _lowerFlatOption([
+  [ 'none', null, 24, 8, 8 ],
+  [ 'some', _lowerFlatRecord([['seconds', _lowerFlatU64, 16, 8 ],['nanoseconds', _lowerFlatU32, 16, 8 ],]), 24, 8, 8 ],
+  ])
+  , 96, 8 ],['statusChangeTimestamp', _lowerFlatOption([
+  [ 'none', null, 24, 8, 8 ],
+  [ 'some', _lowerFlatRecord([['seconds', _lowerFlatU64, 16, 8 ],['nanoseconds', _lowerFlatU32, 16, 8 ],]), 24, 8, 8 ],
+  ])
+  , 96, 8 ],]), 104, 8, 8 ],
+  [ 'err', _lowerFlatEnum([['access', null, 1, 1, 1],['would-block', null, 1, 1, 1],['already', null, 1, 1, 1],['bad-descriptor', null, 1, 1, 1],['busy', null, 1, 1, 1],['deadlock', null, 1, 1, 1],['quota', null, 1, 1, 1],['exist', null, 1, 1, 1],['file-too-large', null, 1, 1, 1],['illegal-byte-sequence', null, 1, 1, 1],['in-progress', null, 1, 1, 1],['interrupted', null, 1, 1, 1],['invalid', null, 1, 1, 1],['io', null, 1, 1, 1],['is-directory', null, 1, 1, 1],['loop', null, 1, 1, 1],['too-many-links', null, 1, 1, 1],['message-size', null, 1, 1, 1],['name-too-long', null, 1, 1, 1],['no-device', null, 1, 1, 1],['no-entry', null, 1, 1, 1],['no-lock', null, 1, 1, 1],['insufficient-memory', null, 1, 1, 1],['insufficient-space', null, 1, 1, 1],['not-directory', null, 1, 1, 1],['not-empty', null, 1, 1, 1],['not-recoverable', null, 1, 1, 1],['unsupported', null, 1, 1, 1],['no-tty', null, 1, 1, 1],['no-such-device', null, 1, 1, 1],['overflow', null, 1, 1, 1],['not-permitted', null, 1, 1, 1],['pipe', null, 1, 1, 1],['read-only', null, 1, 1, 1],['invalid-seek', null, 1, 1, 1],['text-file-busy', null, 1, 1, 1],['cross-device', null, 1, 1, 1],]), 104, 8, 8 ],
+  ])
+  ],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => null,
+  importFn: _trampoline21,
+},
+)) : _lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 21,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline21.manuallyAsync,
+  paramLiftFns: [_liftFlatBorrow.bind(null, 6)],
+  resultLowerFns: [_lowerFlatResult([
+  [ 'ok', _lowerFlatRecord([['type', _lowerFlatEnum([['unknown', null, 1, 1, 1],['block-device', null, 1, 1, 1],['character-device', null, 1, 1, 1],['directory', null, 1, 1, 1],['fifo', null, 1, 1, 1],['symbolic-link', null, 1, 1, 1],['regular-file', null, 1, 1, 1],['socket', null, 1, 1, 1],]), 96, 8 ],['linkCount', _lowerFlatU64, 96, 8 ],['size', _lowerFlatU64, 96, 8 ],['dataAccessTimestamp', _lowerFlatOption([
+  [ 'none', null, 24, 8, 8 ],
+  [ 'some', _lowerFlatRecord([['seconds', _lowerFlatU64, 16, 8 ],['nanoseconds', _lowerFlatU32, 16, 8 ],]), 24, 8, 8 ],
+  ])
+  , 96, 8 ],['dataModificationTimestamp', _lowerFlatOption([
+  [ 'none', null, 24, 8, 8 ],
+  [ 'some', _lowerFlatRecord([['seconds', _lowerFlatU64, 16, 8 ],['nanoseconds', _lowerFlatU32, 16, 8 ],]), 24, 8, 8 ],
+  ])
+  , 96, 8 ],['statusChangeTimestamp', _lowerFlatOption([
+  [ 'none', null, 24, 8, 8 ],
+  [ 'some', _lowerFlatRecord([['seconds', _lowerFlatU64, 16, 8 ],['nanoseconds', _lowerFlatU32, 16, 8 ],]), 24, 8, 8 ],
+  ])
+  , 96, 8 ],]), 104, 8, 8 ],
+  [ 'err', _lowerFlatEnum([['access', null, 1, 1, 1],['would-block', null, 1, 1, 1],['already', null, 1, 1, 1],['bad-descriptor', null, 1, 1, 1],['busy', null, 1, 1, 1],['deadlock', null, 1, 1, 1],['quota', null, 1, 1, 1],['exist', null, 1, 1, 1],['file-too-large', null, 1, 1, 1],['illegal-byte-sequence', null, 1, 1, 1],['in-progress', null, 1, 1, 1],['interrupted', null, 1, 1, 1],['invalid', null, 1, 1, 1],['io', null, 1, 1, 1],['is-directory', null, 1, 1, 1],['loop', null, 1, 1, 1],['too-many-links', null, 1, 1, 1],['message-size', null, 1, 1, 1],['name-too-long', null, 1, 1, 1],['no-device', null, 1, 1, 1],['no-entry', null, 1, 1, 1],['no-lock', null, 1, 1, 1],['insufficient-memory', null, 1, 1, 1],['insufficient-space', null, 1, 1, 1],['not-directory', null, 1, 1, 1],['not-empty', null, 1, 1, 1],['not-recoverable', null, 1, 1, 1],['unsupported', null, 1, 1, 1],['no-tty', null, 1, 1, 1],['no-such-device', null, 1, 1, 1],['overflow', null, 1, 1, 1],['not-permitted', null, 1, 1, 1],['pipe', null, 1, 1, 1],['read-only', null, 1, 1, 1],['invalid-seek', null, 1, 1, 1],['text-file-busy', null, 1, 1, 1],['cross-device', null, 1, 1, 1],]), 104, 8, 8 ],
+  ])
+  ],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => null,
+  importFn: _trampoline21,
+},
+);
+let trampoline22 = _trampoline22.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 22,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline22.manuallyAsync,
+  paramLiftFns: [_liftFlatBorrow.bind(null, 6),_liftFlatFlags({ names: ['symlink-follow'], size32: 1, align32: 1, intSizeBytes: 1 }),_liftFlatStringAny],
+  resultLowerFns: [_lowerFlatResult([
+  [ 'ok', _lowerFlatRecord([['type', _lowerFlatEnum([['unknown', null, 1, 1, 1],['block-device', null, 1, 1, 1],['character-device', null, 1, 1, 1],['directory', null, 1, 1, 1],['fifo', null, 1, 1, 1],['symbolic-link', null, 1, 1, 1],['regular-file', null, 1, 1, 1],['socket', null, 1, 1, 1],]), 96, 8 ],['linkCount', _lowerFlatU64, 96, 8 ],['size', _lowerFlatU64, 96, 8 ],['dataAccessTimestamp', _lowerFlatOption([
+  [ 'none', null, 24, 8, 8 ],
+  [ 'some', _lowerFlatRecord([['seconds', _lowerFlatU64, 16, 8 ],['nanoseconds', _lowerFlatU32, 16, 8 ],]), 24, 8, 8 ],
+  ])
+  , 96, 8 ],['dataModificationTimestamp', _lowerFlatOption([
+  [ 'none', null, 24, 8, 8 ],
+  [ 'some', _lowerFlatRecord([['seconds', _lowerFlatU64, 16, 8 ],['nanoseconds', _lowerFlatU32, 16, 8 ],]), 24, 8, 8 ],
+  ])
+  , 96, 8 ],['statusChangeTimestamp', _lowerFlatOption([
+  [ 'none', null, 24, 8, 8 ],
+  [ 'some', _lowerFlatRecord([['seconds', _lowerFlatU64, 16, 8 ],['nanoseconds', _lowerFlatU32, 16, 8 ],]), 24, 8, 8 ],
+  ])
+  , 96, 8 ],]), 104, 8, 8 ],
+  [ 'err', _lowerFlatEnum([['access', null, 1, 1, 1],['would-block', null, 1, 1, 1],['already', null, 1, 1, 1],['bad-descriptor', null, 1, 1, 1],['busy', null, 1, 1, 1],['deadlock', null, 1, 1, 1],['quota', null, 1, 1, 1],['exist', null, 1, 1, 1],['file-too-large', null, 1, 1, 1],['illegal-byte-sequence', null, 1, 1, 1],['in-progress', null, 1, 1, 1],['interrupted', null, 1, 1, 1],['invalid', null, 1, 1, 1],['io', null, 1, 1, 1],['is-directory', null, 1, 1, 1],['loop', null, 1, 1, 1],['too-many-links', null, 1, 1, 1],['message-size', null, 1, 1, 1],['name-too-long', null, 1, 1, 1],['no-device', null, 1, 1, 1],['no-entry', null, 1, 1, 1],['no-lock', null, 1, 1, 1],['insufficient-memory', null, 1, 1, 1],['insufficient-space', null, 1, 1, 1],['not-directory', null, 1, 1, 1],['not-empty', null, 1, 1, 1],['not-recoverable', null, 1, 1, 1],['unsupported', null, 1, 1, 1],['no-tty', null, 1, 1, 1],['no-such-device', null, 1, 1, 1],['overflow', null, 1, 1, 1],['not-permitted', null, 1, 1, 1],['pipe', null, 1, 1, 1],['read-only', null, 1, 1, 1],['invalid-seek', null, 1, 1, 1],['text-file-busy', null, 1, 1, 1],['cross-device', null, 1, 1, 1],]), 104, 8, 8 ],
+  ])
+  ],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => null,
+  importFn: _trampoline22,
+},
+)) : _lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 22,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline22.manuallyAsync,
+  paramLiftFns: [_liftFlatBorrow.bind(null, 6),_liftFlatFlags({ names: ['symlink-follow'], size32: 1, align32: 1, intSizeBytes: 1 }),_liftFlatStringAny],
+  resultLowerFns: [_lowerFlatResult([
+  [ 'ok', _lowerFlatRecord([['type', _lowerFlatEnum([['unknown', null, 1, 1, 1],['block-device', null, 1, 1, 1],['character-device', null, 1, 1, 1],['directory', null, 1, 1, 1],['fifo', null, 1, 1, 1],['symbolic-link', null, 1, 1, 1],['regular-file', null, 1, 1, 1],['socket', null, 1, 1, 1],]), 96, 8 ],['linkCount', _lowerFlatU64, 96, 8 ],['size', _lowerFlatU64, 96, 8 ],['dataAccessTimestamp', _lowerFlatOption([
+  [ 'none', null, 24, 8, 8 ],
+  [ 'some', _lowerFlatRecord([['seconds', _lowerFlatU64, 16, 8 ],['nanoseconds', _lowerFlatU32, 16, 8 ],]), 24, 8, 8 ],
+  ])
+  , 96, 8 ],['dataModificationTimestamp', _lowerFlatOption([
+  [ 'none', null, 24, 8, 8 ],
+  [ 'some', _lowerFlatRecord([['seconds', _lowerFlatU64, 16, 8 ],['nanoseconds', _lowerFlatU32, 16, 8 ],]), 24, 8, 8 ],
+  ])
+  , 96, 8 ],['statusChangeTimestamp', _lowerFlatOption([
+  [ 'none', null, 24, 8, 8 ],
+  [ 'some', _lowerFlatRecord([['seconds', _lowerFlatU64, 16, 8 ],['nanoseconds', _lowerFlatU32, 16, 8 ],]), 24, 8, 8 ],
+  ])
+  , 96, 8 ],]), 104, 8, 8 ],
+  [ 'err', _lowerFlatEnum([['access', null, 1, 1, 1],['would-block', null, 1, 1, 1],['already', null, 1, 1, 1],['bad-descriptor', null, 1, 1, 1],['busy', null, 1, 1, 1],['deadlock', null, 1, 1, 1],['quota', null, 1, 1, 1],['exist', null, 1, 1, 1],['file-too-large', null, 1, 1, 1],['illegal-byte-sequence', null, 1, 1, 1],['in-progress', null, 1, 1, 1],['interrupted', null, 1, 1, 1],['invalid', null, 1, 1, 1],['io', null, 1, 1, 1],['is-directory', null, 1, 1, 1],['loop', null, 1, 1, 1],['too-many-links', null, 1, 1, 1],['message-size', null, 1, 1, 1],['name-too-long', null, 1, 1, 1],['no-device', null, 1, 1, 1],['no-entry', null, 1, 1, 1],['no-lock', null, 1, 1, 1],['insufficient-memory', null, 1, 1, 1],['insufficient-space', null, 1, 1, 1],['not-directory', null, 1, 1, 1],['not-empty', null, 1, 1, 1],['not-recoverable', null, 1, 1, 1],['unsupported', null, 1, 1, 1],['no-tty', null, 1, 1, 1],['no-such-device', null, 1, 1, 1],['overflow', null, 1, 1, 1],['not-permitted', null, 1, 1, 1],['pipe', null, 1, 1, 1],['read-only', null, 1, 1, 1],['invalid-seek', null, 1, 1, 1],['text-file-busy', null, 1, 1, 1],['cross-device', null, 1, 1, 1],]), 104, 8, 8 ],
+  ])
+  ],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => null,
+  importFn: _trampoline22,
+},
+);
+let trampoline23 = _trampoline23.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 23,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline23.manuallyAsync,
+  paramLiftFns: [_liftFlatBorrow.bind(null, 6),_liftFlatFlags({ names: ['symlink-follow'], size32: 1, align32: 1, intSizeBytes: 1 }),_liftFlatStringAny,_liftFlatFlags({ names: ['create','directory','exclusive','truncate'], size32: 1, align32: 1, intSizeBytes: 1 }),_liftFlatFlags({ names: ['read','write','file-integrity-sync','data-integrity-sync','requested-write-sync','mutate-directory'], size32: 1, align32: 1, intSizeBytes: 1 })],
+  resultLowerFns: [_lowerFlatResult([
+  [ 'ok', _lowerFlatOwn({
+    componentIdx: 0,
+    lowerFn: () => { throw new Error('missing/invalid resource metadata'); }
+  }), 8, 4, 4 ],
+  [ 'err', _lowerFlatEnum([['access', null, 1, 1, 1],['would-block', null, 1, 1, 1],['already', null, 1, 1, 1],['bad-descriptor', null, 1, 1, 1],['busy', null, 1, 1, 1],['deadlock', null, 1, 1, 1],['quota', null, 1, 1, 1],['exist', null, 1, 1, 1],['file-too-large', null, 1, 1, 1],['illegal-byte-sequence', null, 1, 1, 1],['in-progress', null, 1, 1, 1],['interrupted', null, 1, 1, 1],['invalid', null, 1, 1, 1],['io', null, 1, 1, 1],['is-directory', null, 1, 1, 1],['loop', null, 1, 1, 1],['too-many-links', null, 1, 1, 1],['message-size', null, 1, 1, 1],['name-too-long', null, 1, 1, 1],['no-device', null, 1, 1, 1],['no-entry', null, 1, 1, 1],['no-lock', null, 1, 1, 1],['insufficient-memory', null, 1, 1, 1],['insufficient-space', null, 1, 1, 1],['not-directory', null, 1, 1, 1],['not-empty', null, 1, 1, 1],['not-recoverable', null, 1, 1, 1],['unsupported', null, 1, 1, 1],['no-tty', null, 1, 1, 1],['no-such-device', null, 1, 1, 1],['overflow', null, 1, 1, 1],['not-permitted', null, 1, 1, 1],['pipe', null, 1, 1, 1],['read-only', null, 1, 1, 1],['invalid-seek', null, 1, 1, 1],['text-file-busy', null, 1, 1, 1],['cross-device', null, 1, 1, 1],]), 8, 4, 4 ],
+  ])
+  ],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => null,
+  importFn: _trampoline23,
+},
+)) : _lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 23,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline23.manuallyAsync,
+  paramLiftFns: [_liftFlatBorrow.bind(null, 6),_liftFlatFlags({ names: ['symlink-follow'], size32: 1, align32: 1, intSizeBytes: 1 }),_liftFlatStringAny,_liftFlatFlags({ names: ['create','directory','exclusive','truncate'], size32: 1, align32: 1, intSizeBytes: 1 }),_liftFlatFlags({ names: ['read','write','file-integrity-sync','data-integrity-sync','requested-write-sync','mutate-directory'], size32: 1, align32: 1, intSizeBytes: 1 })],
+  resultLowerFns: [_lowerFlatResult([
+  [ 'ok', _lowerFlatOwn({
+    componentIdx: 0,
+    lowerFn: () => { throw new Error('missing/invalid resource metadata'); }
+  }), 8, 4, 4 ],
+  [ 'err', _lowerFlatEnum([['access', null, 1, 1, 1],['would-block', null, 1, 1, 1],['already', null, 1, 1, 1],['bad-descriptor', null, 1, 1, 1],['busy', null, 1, 1, 1],['deadlock', null, 1, 1, 1],['quota', null, 1, 1, 1],['exist', null, 1, 1, 1],['file-too-large', null, 1, 1, 1],['illegal-byte-sequence', null, 1, 1, 1],['in-progress', null, 1, 1, 1],['interrupted', null, 1, 1, 1],['invalid', null, 1, 1, 1],['io', null, 1, 1, 1],['is-directory', null, 1, 1, 1],['loop', null, 1, 1, 1],['too-many-links', null, 1, 1, 1],['message-size', null, 1, 1, 1],['name-too-long', null, 1, 1, 1],['no-device', null, 1, 1, 1],['no-entry', null, 1, 1, 1],['no-lock', null, 1, 1, 1],['insufficient-memory', null, 1, 1, 1],['insufficient-space', null, 1, 1, 1],['not-directory', null, 1, 1, 1],['not-empty', null, 1, 1, 1],['not-recoverable', null, 1, 1, 1],['unsupported', null, 1, 1, 1],['no-tty', null, 1, 1, 1],['no-such-device', null, 1, 1, 1],['overflow', null, 1, 1, 1],['not-permitted', null, 1, 1, 1],['pipe', null, 1, 1, 1],['read-only', null, 1, 1, 1],['invalid-seek', null, 1, 1, 1],['text-file-busy', null, 1, 1, 1],['cross-device', null, 1, 1, 1],]), 8, 4, 4 ],
+  ])
+  ],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => null,
+  importFn: _trampoline23,
+},
+);
+let trampoline24 = _trampoline24.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 24,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline24.manuallyAsync,
+  paramLiftFns: [_liftFlatBorrow.bind(null, 5)],
+  resultLowerFns: [_lowerFlatResult([
+  [ 'ok', _lowerFlatOption([
+  [ 'none', null, 16, 4, 4 ],
+  [ 'some', _lowerFlatRecord([['type', _lowerFlatEnum([['unknown', null, 1, 1, 1],['block-device', null, 1, 1, 1],['character-device', null, 1, 1, 1],['directory', null, 1, 1, 1],['fifo', null, 1, 1, 1],['symbolic-link', null, 1, 1, 1],['regular-file', null, 1, 1, 1],['socket', null, 1, 1, 1],]), 12, 4 ],['name', _lowerFlatStringAny, 12, 4 ],]), 16, 4, 4 ],
+  ])
+  , 20, 4, 4 ],
+  [ 'err', _lowerFlatEnum([['access', null, 1, 1, 1],['would-block', null, 1, 1, 1],['already', null, 1, 1, 1],['bad-descriptor', null, 1, 1, 1],['busy', null, 1, 1, 1],['deadlock', null, 1, 1, 1],['quota', null, 1, 1, 1],['exist', null, 1, 1, 1],['file-too-large', null, 1, 1, 1],['illegal-byte-sequence', null, 1, 1, 1],['in-progress', null, 1, 1, 1],['interrupted', null, 1, 1, 1],['invalid', null, 1, 1, 1],['io', null, 1, 1, 1],['is-directory', null, 1, 1, 1],['loop', null, 1, 1, 1],['too-many-links', null, 1, 1, 1],['message-size', null, 1, 1, 1],['name-too-long', null, 1, 1, 1],['no-device', null, 1, 1, 1],['no-entry', null, 1, 1, 1],['no-lock', null, 1, 1, 1],['insufficient-memory', null, 1, 1, 1],['insufficient-space', null, 1, 1, 1],['not-directory', null, 1, 1, 1],['not-empty', null, 1, 1, 1],['not-recoverable', null, 1, 1, 1],['unsupported', null, 1, 1, 1],['no-tty', null, 1, 1, 1],['no-such-device', null, 1, 1, 1],['overflow', null, 1, 1, 1],['not-permitted', null, 1, 1, 1],['pipe', null, 1, 1, 1],['read-only', null, 1, 1, 1],['invalid-seek', null, 1, 1, 1],['text-file-busy', null, 1, 1, 1],['cross-device', null, 1, 1, 1],]), 20, 4, 4 ],
+  ])
+  ],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => realloc0,
+  importFn: _trampoline24,
+},
+)) : _lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 24,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline24.manuallyAsync,
+  paramLiftFns: [_liftFlatBorrow.bind(null, 5)],
+  resultLowerFns: [_lowerFlatResult([
+  [ 'ok', _lowerFlatOption([
+  [ 'none', null, 16, 4, 4 ],
+  [ 'some', _lowerFlatRecord([['type', _lowerFlatEnum([['unknown', null, 1, 1, 1],['block-device', null, 1, 1, 1],['character-device', null, 1, 1, 1],['directory', null, 1, 1, 1],['fifo', null, 1, 1, 1],['symbolic-link', null, 1, 1, 1],['regular-file', null, 1, 1, 1],['socket', null, 1, 1, 1],]), 12, 4 ],['name', _lowerFlatStringAny, 12, 4 ],]), 16, 4, 4 ],
+  ])
+  , 20, 4, 4 ],
+  [ 'err', _lowerFlatEnum([['access', null, 1, 1, 1],['would-block', null, 1, 1, 1],['already', null, 1, 1, 1],['bad-descriptor', null, 1, 1, 1],['busy', null, 1, 1, 1],['deadlock', null, 1, 1, 1],['quota', null, 1, 1, 1],['exist', null, 1, 1, 1],['file-too-large', null, 1, 1, 1],['illegal-byte-sequence', null, 1, 1, 1],['in-progress', null, 1, 1, 1],['interrupted', null, 1, 1, 1],['invalid', null, 1, 1, 1],['io', null, 1, 1, 1],['is-directory', null, 1, 1, 1],['loop', null, 1, 1, 1],['too-many-links', null, 1, 1, 1],['message-size', null, 1, 1, 1],['name-too-long', null, 1, 1, 1],['no-device', null, 1, 1, 1],['no-entry', null, 1, 1, 1],['no-lock', null, 1, 1, 1],['insufficient-memory', null, 1, 1, 1],['insufficient-space', null, 1, 1, 1],['not-directory', null, 1, 1, 1],['not-empty', null, 1, 1, 1],['not-recoverable', null, 1, 1, 1],['unsupported', null, 1, 1, 1],['no-tty', null, 1, 1, 1],['no-such-device', null, 1, 1, 1],['overflow', null, 1, 1, 1],['not-permitted', null, 1, 1, 1],['pipe', null, 1, 1, 1],['read-only', null, 1, 1, 1],['invalid-seek', null, 1, 1, 1],['text-file-busy', null, 1, 1, 1],['cross-device', null, 1, 1, 1],]), 20, 4, 4 ],
+  ])
+  ],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => realloc0,
+  importFn: _trampoline24,
+},
+);
+let trampoline25 = _trampoline25.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 25,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline25.manuallyAsync,
+  paramLiftFns: [_liftFlatBorrow.bind(null, 1),_liftFlatU64],
+  resultLowerFns: [_lowerFlatResult([
+  [ 'ok', _lowerFlatList({
+    elemLowerFn: _lowerFlatU8,
+    elemSize32: 1,
+    elemAlign32: 1,
+  }), 12, 4, 4 ],
+  [ 'err', _lowerFlatVariant([[ 'last-operation-failed', _lowerFlatOwn({
+    componentIdx: 0,
+    lowerFn: () => { throw new Error('missing/invalid resource metadata'); }
+  }), 8, 4, 4 ],[ 'closed', null, 8, 4, 4 ],]), 12, 4, 4 ],
+  ])
+  ],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => realloc0,
+  importFn: _trampoline25,
+},
+)) : _lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 25,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline25.manuallyAsync,
+  paramLiftFns: [_liftFlatBorrow.bind(null, 1),_liftFlatU64],
+  resultLowerFns: [_lowerFlatResult([
+  [ 'ok', _lowerFlatList({
+    elemLowerFn: _lowerFlatU8,
+    elemSize32: 1,
+    elemAlign32: 1,
+  }), 12, 4, 4 ],
+  [ 'err', _lowerFlatVariant([[ 'last-operation-failed', _lowerFlatOwn({
+    componentIdx: 0,
+    lowerFn: () => { throw new Error('missing/invalid resource metadata'); }
+  }), 8, 4, 4 ],[ 'closed', null, 8, 4, 4 ],]), 12, 4, 4 ],
+  ])
+  ],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => realloc0,
+  importFn: _trampoline25,
+},
+);
+let trampoline26 = _trampoline26.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 26,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline26.manuallyAsync,
+  paramLiftFns: [_liftFlatBorrow.bind(null, 1),_liftFlatU64],
+  resultLowerFns: [_lowerFlatResult([
+  [ 'ok', _lowerFlatList({
+    elemLowerFn: _lowerFlatU8,
+    elemSize32: 1,
+    elemAlign32: 1,
+  }), 12, 4, 4 ],
+  [ 'err', _lowerFlatVariant([[ 'last-operation-failed', _lowerFlatOwn({
+    componentIdx: 0,
+    lowerFn: () => { throw new Error('missing/invalid resource metadata'); }
+  }), 8, 4, 4 ],[ 'closed', null, 8, 4, 4 ],]), 12, 4, 4 ],
+  ])
+  ],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => realloc0,
+  importFn: _trampoline26,
+},
+)) : _lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 26,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline26.manuallyAsync,
+  paramLiftFns: [_liftFlatBorrow.bind(null, 1),_liftFlatU64],
+  resultLowerFns: [_lowerFlatResult([
+  [ 'ok', _lowerFlatList({
+    elemLowerFn: _lowerFlatU8,
+    elemSize32: 1,
+    elemAlign32: 1,
+  }), 12, 4, 4 ],
+  [ 'err', _lowerFlatVariant([[ 'last-operation-failed', _lowerFlatOwn({
+    componentIdx: 0,
+    lowerFn: () => { throw new Error('missing/invalid resource metadata'); }
+  }), 8, 4, 4 ],[ 'closed', null, 8, 4, 4 ],]), 12, 4, 4 ],
+  ])
+  ],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => realloc0,
+  importFn: _trampoline26,
+},
+);
+let trampoline27 = _trampoline27.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 27,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline27.manuallyAsync,
+  paramLiftFns: [_liftFlatBorrow.bind(null, 2)],
+  resultLowerFns: [_lowerFlatResult([
+  [ 'ok', _lowerFlatU64, 16, 8, 8 ],
+  [ 'err', _lowerFlatVariant([[ 'last-operation-failed', _lowerFlatOwn({
+    componentIdx: 0,
+    lowerFn: () => { throw new Error('missing/invalid resource metadata'); }
+  }), 8, 4, 4 ],[ 'closed', null, 8, 4, 4 ],]), 16, 8, 8 ],
+  ])
+  ],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => null,
+  importFn: _trampoline27,
+},
+)) : _lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 27,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline27.manuallyAsync,
+  paramLiftFns: [_liftFlatBorrow.bind(null, 2)],
+  resultLowerFns: [_lowerFlatResult([
+  [ 'ok', _lowerFlatU64, 16, 8, 8 ],
+  [ 'err', _lowerFlatVariant([[ 'last-operation-failed', _lowerFlatOwn({
+    componentIdx: 0,
+    lowerFn: () => { throw new Error('missing/invalid resource metadata'); }
+  }), 8, 4, 4 ],[ 'closed', null, 8, 4, 4 ],]), 16, 8, 8 ],
+  ])
+  ],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => null,
+  importFn: _trampoline27,
+},
+);
+let trampoline28 = _trampoline28.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 28,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline28.manuallyAsync,
+  paramLiftFns: [_liftFlatBorrow.bind(null, 2),_liftFlatList({
+    elemLiftFn: _liftFlatU8,
+    elemAlign32: 1,
+    elemSize32: 1,
+  })],
+  resultLowerFns: [_lowerFlatResult([
+  [ 'ok', null, 12, 4, 4 ],
+  [ 'err', _lowerFlatVariant([[ 'last-operation-failed', _lowerFlatOwn({
+    componentIdx: 0,
+    lowerFn: () => { throw new Error('missing/invalid resource metadata'); }
+  }), 8, 4, 4 ],[ 'closed', null, 8, 4, 4 ],]), 12, 4, 4 ],
+  ])
+  ],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => null,
+  importFn: _trampoline28,
+},
+)) : _lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 28,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline28.manuallyAsync,
+  paramLiftFns: [_liftFlatBorrow.bind(null, 2),_liftFlatList({
+    elemLiftFn: _liftFlatU8,
+    elemAlign32: 1,
+    elemSize32: 1,
+  })],
+  resultLowerFns: [_lowerFlatResult([
+  [ 'ok', null, 12, 4, 4 ],
+  [ 'err', _lowerFlatVariant([[ 'last-operation-failed', _lowerFlatOwn({
+    componentIdx: 0,
+    lowerFn: () => { throw new Error('missing/invalid resource metadata'); }
+  }), 8, 4, 4 ],[ 'closed', null, 8, 4, 4 ],]), 12, 4, 4 ],
+  ])
+  ],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => null,
+  importFn: _trampoline28,
+},
+);
+let trampoline29 = _trampoline29.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 29,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline29.manuallyAsync,
+  paramLiftFns: [_liftFlatBorrow.bind(null, 2),_liftFlatList({
+    elemLiftFn: _liftFlatU8,
+    elemAlign32: 1,
+    elemSize32: 1,
+  })],
+  resultLowerFns: [_lowerFlatResult([
+  [ 'ok', null, 12, 4, 4 ],
+  [ 'err', _lowerFlatVariant([[ 'last-operation-failed', _lowerFlatOwn({
+    componentIdx: 0,
+    lowerFn: () => { throw new Error('missing/invalid resource metadata'); }
+  }), 8, 4, 4 ],[ 'closed', null, 8, 4, 4 ],]), 12, 4, 4 ],
+  ])
+  ],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => null,
+  importFn: _trampoline29,
+},
+)) : _lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 29,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline29.manuallyAsync,
+  paramLiftFns: [_liftFlatBorrow.bind(null, 2),_liftFlatList({
+    elemLiftFn: _liftFlatU8,
+    elemAlign32: 1,
+    elemSize32: 1,
+  })],
+  resultLowerFns: [_lowerFlatResult([
+  [ 'ok', null, 12, 4, 4 ],
+  [ 'err', _lowerFlatVariant([[ 'last-operation-failed', _lowerFlatOwn({
+    componentIdx: 0,
+    lowerFn: () => { throw new Error('missing/invalid resource metadata'); }
+  }), 8, 4, 4 ],[ 'closed', null, 8, 4, 4 ],]), 12, 4, 4 ],
+  ])
+  ],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => null,
+  importFn: _trampoline29,
+},
+);
+let trampoline30 = _trampoline30.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 30,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline30.manuallyAsync,
+  paramLiftFns: [_liftFlatBorrow.bind(null, 2)],
+  resultLowerFns: [_lowerFlatResult([
+  [ 'ok', null, 12, 4, 4 ],
+  [ 'err', _lowerFlatVariant([[ 'last-operation-failed', _lowerFlatOwn({
+    componentIdx: 0,
+    lowerFn: () => { throw new Error('missing/invalid resource metadata'); }
+  }), 8, 4, 4 ],[ 'closed', null, 8, 4, 4 ],]), 12, 4, 4 ],
+  ])
+  ],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => null,
+  importFn: _trampoline30,
+},
+)) : _lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 30,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline30.manuallyAsync,
+  paramLiftFns: [_liftFlatBorrow.bind(null, 2)],
+  resultLowerFns: [_lowerFlatResult([
+  [ 'ok', null, 12, 4, 4 ],
+  [ 'err', _lowerFlatVariant([[ 'last-operation-failed', _lowerFlatOwn({
+    componentIdx: 0,
+    lowerFn: () => { throw new Error('missing/invalid resource metadata'); }
+  }), 8, 4, 4 ],[ 'closed', null, 8, 4, 4 ],]), 12, 4, 4 ],
+  ])
+  ],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => null,
+  importFn: _trampoline30,
+},
+);
+let trampoline31 = _trampoline31.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 31,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline31.manuallyAsync,
+  paramLiftFns: [_liftFlatU64],
+  resultLowerFns: [_lowerFlatList({
+    elemLowerFn: _lowerFlatU8,
+    elemSize32: 1,
+    elemAlign32: 1,
+  })],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => realloc0,
+  importFn: _trampoline31,
+},
+)) : _lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 31,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline31.manuallyAsync,
+  paramLiftFns: [_liftFlatU64],
+  resultLowerFns: [_lowerFlatList({
+    elemLowerFn: _lowerFlatU8,
+    elemSize32: 1,
+    elemAlign32: 1,
+  })],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => realloc0,
+  importFn: _trampoline31,
+},
+);
+let trampoline32 = _trampoline32.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 32,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline32.manuallyAsync,
+  paramLiftFns: [],
+  resultLowerFns: [_lowerFlatList({
+    elemLowerFn: _lowerFlatTuple([[_lowerFlatOwn({
+      componentIdx: 0,
+      lowerFn: () => { throw new Error('missing/invalid resource metadata'); }
+    }), 12, 4],[_lowerFlatStringAny, 12, 4],]),
+    elemSize32: 12,
+    elemAlign32: 4,
+  })],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => realloc0,
+  importFn: _trampoline32,
+},
+)) : _lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 32,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline32.manuallyAsync,
+  paramLiftFns: [],
+  resultLowerFns: [_lowerFlatList({
+    elemLowerFn: _lowerFlatTuple([[_lowerFlatOwn({
+      componentIdx: 0,
+      lowerFn: () => { throw new Error('missing/invalid resource metadata'); }
+    }), 12, 4],[_lowerFlatStringAny, 12, 4],]),
+    elemSize32: 12,
+    elemAlign32: 4,
+  })],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => realloc0,
+  importFn: _trampoline32,
+},
+);
+let trampoline33 = _trampoline33.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 33,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline33.manuallyAsync,
+  paramLiftFns: [],
+  resultLowerFns: [_lowerFlatOption([
+  [ 'none', null, 8, 4, 4 ],
+  [ 'some', _lowerFlatOwn({
+    componentIdx: 0,
+    lowerFn: () => { throw new Error('missing/invalid resource metadata'); }
+  }), 8, 4, 4 ],
+  ])
+  ],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => null,
+  importFn: _trampoline33,
+},
+)) : _lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 33,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline33.manuallyAsync,
+  paramLiftFns: [],
+  resultLowerFns: [_lowerFlatOption([
+  [ 'none', null, 8, 4, 4 ],
+  [ 'some', _lowerFlatOwn({
+    componentIdx: 0,
+    lowerFn: () => { throw new Error('missing/invalid resource metadata'); }
+  }), 8, 4, 4 ],
+  ])
+  ],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => null,
+  importFn: _trampoline33,
+},
+);
+let trampoline34 = _trampoline34.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 34,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline34.manuallyAsync,
+  paramLiftFns: [],
+  resultLowerFns: [_lowerFlatOption([
+  [ 'none', null, 8, 4, 4 ],
+  [ 'some', _lowerFlatOwn({
+    componentIdx: 0,
+    lowerFn: () => { throw new Error('missing/invalid resource metadata'); }
+  }), 8, 4, 4 ],
+  ])
+  ],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => null,
+  importFn: _trampoline34,
+},
+)) : _lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 34,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline34.manuallyAsync,
+  paramLiftFns: [],
+  resultLowerFns: [_lowerFlatOption([
+  [ 'none', null, 8, 4, 4 ],
+  [ 'some', _lowerFlatOwn({
+    componentIdx: 0,
+    lowerFn: () => { throw new Error('missing/invalid resource metadata'); }
+  }), 8, 4, 4 ],
+  ])
+  ],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => null,
+  importFn: _trampoline34,
+},
+);
+let trampoline35 = _trampoline35.manuallyAsync ? new WebAssembly.Suspending(_lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 35,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline35.manuallyAsync,
+  paramLiftFns: [],
+  resultLowerFns: [_lowerFlatOption([
+  [ 'none', null, 8, 4, 4 ],
+  [ 'some', _lowerFlatOwn({
+    componentIdx: 0,
+    lowerFn: () => { throw new Error('missing/invalid resource metadata'); }
+  }), 8, 4, 4 ],
+  ])
+  ],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => null,
+  importFn: _trampoline35,
+},
+)) : _lowerImportBackwardsCompat.bind(
+null,
+{
+  trampolineIdx: 35,
+  componentIdx: 0,
+  isAsync: false,
+  isManualAsync: _trampoline35.manuallyAsync,
+  paramLiftFns: [],
+  resultLowerFns: [_lowerFlatOption([
+  [ 'none', null, 8, 4, 4 ],
+  [ 'some', _lowerFlatOwn({
+    componentIdx: 0,
+    lowerFn: () => { throw new Error('missing/invalid resource metadata'); }
+  }), 8, 4, 4 ],
+  ])
+  ],
+  funcTypeIsAsync: false,
+  getCallbackFn: () => null,
+  getPostReturnFn: () => null,
+  isCancellable: false,
+  memoryIdx: 0,
+  stringEncoding: 'utf8',
+  getMemoryFn: () => memory0,
+  getReallocFn: () => null,
+  importFn: _trampoline35,
+},
+);
 
 let _initialized = false;
 export const $init = (() => {
@@ -10732,13 +12120,13 @@ export const $init = (() => {
     }));
     memory0 = exports1.memory;
     realloc0 = exports2.cabi_import_realloc;
-    
+
     try {
       realloc0Async = WebAssembly.promising(exports2.cabi_import_realloc);
     } catch(err) {
       realloc0Async = exports2.cabi_import_realloc;
     }
-    
+
     ({ exports: exports3 } = yield instantiateCore(yield module3, {
       '': {
         $imports: exports0.$imports,
@@ -10784,34 +12172,43 @@ export const $init = (() => {
       },
     }));
     realloc1 = exports1.cabi_realloc;
-    
+
     try {
       realloc1Async = WebAssembly.promising(exports1.cabi_realloc);
     } catch(err) {
       realloc1Async = exports1.cabi_realloc;
     }
-    
+
     postReturn0 = exports1['cabi_post_local:wasm-tools/tools#component-embed'];
-    
+
     try {
       postReturn0Async = WebAssembly.promising(exports1['cabi_post_local:wasm-tools/tools#component-embed']);
     } catch(err) {
       postReturn0Async = exports1['cabi_post_local:wasm-tools/tools#component-embed'];
     }
-    
-    postReturn1 = exports1['cabi_post_local:wasm-tools/tools#metadata-show'];
-    
+
+    postReturn1 = exports1['cabi_post_local:wasm-tools/tools#component-wit-metadata-for-world'];
+
     try {
-      postReturn1Async = WebAssembly.promising(exports1['cabi_post_local:wasm-tools/tools#metadata-show']);
+      postReturn1Async = WebAssembly.promising(exports1['cabi_post_local:wasm-tools/tools#component-wit-metadata-for-world']);
     } catch(err) {
-      postReturn1Async = exports1['cabi_post_local:wasm-tools/tools#metadata-show'];
+      postReturn1Async = exports1['cabi_post_local:wasm-tools/tools#component-wit-metadata-for-world'];
     }
-    
+
+    postReturn2 = exports1['cabi_post_local:wasm-tools/tools#metadata-show'];
+
+    try {
+      postReturn2Async = WebAssembly.promising(exports1['cabi_post_local:wasm-tools/tools#metadata-show']);
+    } catch(err) {
+      postReturn2Async = exports1['cabi_post_local:wasm-tools/tools#metadata-show'];
+    }
+
     _initialized = true;
     toolsParse = exports1['local:wasm-tools/tools#parse'];
     toolsPrint = exports1['local:wasm-tools/tools#print'];
     toolsComponentNew = exports1['local:wasm-tools/tools#component-new'];
     toolsComponentWit = exports1['local:wasm-tools/tools#component-wit'];
+    toolsComponentWitMetadataForWorld = exports1['local:wasm-tools/tools#component-wit-metadata-for-world'];
     toolsComponentEmbed = exports1['local:wasm-tools/tools#component-embed'];
     toolsMetadataShow = exports1['local:wasm-tools/tools#metadata-show'];
     toolsMetadataAdd = exports1['local:wasm-tools/tools#metadata-add'];
@@ -10842,11 +12239,12 @@ const tools = {
   componentEmbed: componentEmbed,
   componentNew: componentNew,
   componentWit: componentWit,
+  componentWitMetadataForWorld: componentWitMetadataForWorld,
   metadataAdd: metadataAdd,
   metadataShow: metadataShow,
   parse: parse,
   print: print,
-  
+
 };
 
 export { tools,  }

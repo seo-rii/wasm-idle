@@ -3,17 +3,8 @@ import { PreopenDirectory } from './vendor/browser_wasi_shim/fs_mem.js';
 import WASI from './vendor/browser_wasi_shim/wasi.js';
 import * as wasi from './vendor/browser_wasi_shim/wasi_defs.js';
 import { resolveVersionedAssetUrl } from './asset-url.js';
+import { BufferedExecutionInput, toStandaloneBytes } from './browser-stdin.js';
 import { createPreview2ImportObject, transpilePreview2Component } from './browser-component-tools.js';
-function toStandaloneBytes(value) {
-    const source = value instanceof Uint8Array ? value : new Uint8Array(value);
-    return new Uint8Array(source);
-}
-function toTextBytes(value) {
-    if (typeof value === 'string') {
-        return new TextEncoder().encode(value);
-    }
-    return toStandaloneBytes(value);
-}
 class CaptureFd extends Fd {
     ino = Inode.issue_ino();
     decoder = new TextDecoder();
@@ -60,30 +51,6 @@ class CaptureFd extends Fd {
         return this.chunks.join('');
     }
 }
-class BufferedExecutionInput {
-    currentChunk = new Uint8Array(0);
-    currentOffset = 0;
-    readInput;
-    constructor(readInput) {
-        this.readInput = readInput;
-    }
-    read(size) {
-        while (this.currentOffset >= this.currentChunk.length) {
-            const nextChunk = this.readInput?.();
-            if (nextChunk == null) {
-                return new Uint8Array(0);
-            }
-            this.currentChunk = toTextBytes(nextChunk);
-            this.currentOffset = 0;
-            if (this.currentChunk.byteLength === 0) {
-                continue;
-            }
-        }
-        const data = this.currentChunk.slice(this.currentOffset, this.currentOffset + size);
-        this.currentOffset += data.byteLength;
-        return data;
-    }
-}
 class StdinFd extends Fd {
     ino = Inode.issue_ino();
     source;
@@ -117,12 +84,7 @@ async function runPreview1WasiModule(wasmArtifact, options = {}) {
     const stdin = new BufferedExecutionInput(options.stdin);
     const stdout = new CaptureFd(options.stdout);
     const stderr = new CaptureFd(options.stderr);
-    const wasiInstance = new WASI(['main.wasm', ...(options.args || [])], Object.entries(options.env || {}).map(([key, value]) => `${key}=${value}`), [
-        new StdinFd(stdin),
-        stdout,
-        stderr,
-        new PreopenDirectory('/tmp', new Map())
-    ]);
+    const wasiInstance = new WASI(['main.wasm', ...(options.args || [])], Object.entries(options.env || {}).map(([key, value]) => `${key}=${value}`), [new StdinFd(stdin), stdout, stderr, new PreopenDirectory('/tmp', new Map())]);
     const module = await WebAssembly.compile(bytes);
     const instance = await WebAssembly.instantiate(module, {
         wasi_snapshot_preview1: wasiInstance.wasiImport
@@ -163,8 +125,7 @@ async function runPreview2Component(componentBytes, runtimeBaseUrl, options = {}
         stderr: (chunk) => stderr.append(chunk)
     });
     try {
-        const componentModule = (await import(
-        /* @vite-ignore */ entryUrl));
+        const componentModule = (await import(/* @vite-ignore */ entryUrl));
         const instantiated = await componentModule.instantiate(async (name) => {
             const normalizedName = name.replace(/^[./]+/, '');
             const moduleBytes = transpiled.files.get(normalizedName) || transpiled.files.get(name);
@@ -184,10 +145,7 @@ async function runPreview2Component(componentBytes, runtimeBaseUrl, options = {}
             await runExport.run();
         }
         catch (error) {
-            if (error &&
-                typeof error === 'object' &&
-                'exitError' in error &&
-                'code' in error) {
+            if (error && typeof error === 'object' && 'exitError' in error && 'code' in error) {
                 exitCode = Number(error.code);
             }
             else {

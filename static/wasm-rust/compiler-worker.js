@@ -1,7 +1,7 @@
 import { resolveVersionedAssetUrl } from './asset-url.js';
 import { createModuleWorker } from './module-worker.js';
 import { classifyRetryableFailureKind } from './retryable-failure-kind.js';
-import { resolveTargetManifest } from './runtime-manifest.js';
+import { isIntegratedCompilerOutput, resolveTargetManifest } from './runtime-manifest.js';
 import { buildPreopenedDirectories, instantiateRustcInstance } from './rustc-runtime.js';
 import { dispatchThreadPoolSlotAndWait, reserveIdleThreadPoolSlot, THREAD_STARTUP_STATE_INSTANTIATED } from './thread-startup.js';
 import { fetchRuntimeAssetBytes } from './runtime-asset.js';
@@ -15,16 +15,14 @@ export function validateRuntimeAssetBytes(assetPath, bytes) {
         ARCHIVE_MAGIC.every((byte, index) => bytes[index] === byte)) {
         return;
     }
-    const preview = new TextDecoder()
-        .decode(bytes.slice(0, 64))
-        .replaceAll(/\s+/g, ' ')
-        .trim();
+    const preview = new TextDecoder().decode(bytes.slice(0, 64)).replaceAll(/\s+/g, ' ').trim();
     throw new Error(`invalid wasm-rust runtime asset ${assetPath}: expected an ar archive but got ${JSON.stringify(preview || 'non-archive bytes')}. This usually means the browser loaded a stale or wrong wasm-rust bundle; hard refresh and resync the runtime assets.`);
 }
 export { fetchRuntimeAssetBytes };
-function buildRustcArguments(request, manifest) {
+export function buildRustcArguments(request, manifest) {
     const edition = request.edition || '2024';
     const target = resolveTargetManifest(manifest, request.targetTriple);
+    const integratedOutput = isIntegratedCompilerOutput(target.compile);
     return [
         'rustc',
         '-Zthreads=1',
@@ -41,11 +39,11 @@ function buildRustcArguments(request, manifest) {
         edition,
         '-Cpanic=abort',
         '-Ccodegen-units=1',
-        '-Cno-prepopulate-passes',
-        '-Csave-temps',
-        '--emit=obj',
+        ...(integratedOutput
+            ? ['--emit=link']
+            : ['-Cno-prepopulate-passes', '-Csave-temps', '--emit=obj']),
         '-o',
-        '/work/main.o'
+        integratedOutput ? '/work/main.wasm' : '/work/main.o'
     ];
 }
 function emitCompileWorkerLog(request, message) {
@@ -204,7 +202,7 @@ async function compileRustInWorker(request) {
         total: 1,
         message: 'preparing in-memory filesystem'
     });
-    const { fds, stdout, stderr } = await buildPreopenedDirectories(request.manifest, sysrootAssets, request.request.code, request.sharedBitcodeBuffer);
+    const { fds, stdout, stderr } = await buildPreopenedDirectories(request.manifest, sysrootAssets, request.request.code, request.sharedBitcodeBuffer, request.sharedWorkspaceBuffer);
     emitCompileWorkerLog(request, '[wasm-rust:compiler-worker] preopened directories ready');
     emitCompileWorkerProgress(request, {
         stage: 'prepare-fs',
@@ -249,7 +247,8 @@ async function compileRustInWorker(request) {
                 if (request.request.log) {
                     emitCompileWorkerLog(request, `[wasm-rust:compiler-worker] thread=${event.data.threadId} phase=${event.data.phase}${event.data.detail ? ` detail=${event.data.detail}` : ''}`);
                 }
-                reportThreadFailure(event.data.detail || `rustc browser helper thread ${event.data.threadId} failed`);
+                reportThreadFailure(event.data.detail ||
+                    `rustc browser helper thread ${event.data.threadId} failed`);
                 return;
             }
             if (!request.request.log) {
@@ -276,6 +275,7 @@ async function compileRustInWorker(request) {
             sourceCode: request.request.code,
             log: Boolean(request.request.log),
             sharedBitcodeBuffer: request.sharedBitcodeBuffer,
+            sharedWorkspaceBuffer: request.sharedWorkspaceBuffer,
             sharedStatusBuffer: request.sharedStatusBuffer,
             threadCounterBuffer: threadCounter.buffer,
             sysrootAssets,

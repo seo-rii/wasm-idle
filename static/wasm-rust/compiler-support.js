@@ -49,6 +49,12 @@ export function validateCompileRequest(request) {
     if (!request.code || request.code.trim().length === 0) {
         return 'wasm-rust requires a non-empty Rust source file';
     }
+    if (request.channel !== undefined) {
+        return 'browser compiler channel selection is not supported yet; omit channel';
+    }
+    if (request.mode !== undefined) {
+        return 'browser compiler mode selection is not supported yet; omit mode';
+    }
     if (request.edition && !SUPPORTED_EDITIONS.has(request.edition)) {
         return `unsupported browser compiler edition: ${request.edition}`;
     }

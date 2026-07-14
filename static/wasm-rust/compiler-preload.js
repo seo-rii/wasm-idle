@@ -1,7 +1,7 @@
 import { resolveVersionedAssetUrl } from './asset-url.js';
 import { PREVIEW2_COMPONENT_RUNTIME_ASSETS } from './browser-component-tools.js';
 import { loadBundledRuntimeContext } from './compiler-runtime.js';
-import { resolveRuntimeAssetUrl } from './runtime-manifest.js';
+import { isIntegratedCompilerOutput, resolveRuntimeAssetUrl } from './runtime-manifest.js';
 const rustRuntimePreloadCache = new Map();
 export async function preloadBrowserRustRuntime(options = {}) {
     const defaultImportRuntimeModule = (assetUrl) => import(/* @vite-ignore */ assetUrl);
@@ -19,11 +19,11 @@ export async function preloadBrowserRustRuntime(options = {}) {
         const assetPreloads = [
             preloadAsset(resolveVersionedAssetUrl(versionedModuleBaseUrl, './compiler-worker.js').toString(), 'wasm-rust compiler worker'),
             preloadAsset(resolveVersionedAssetUrl(versionedModuleBaseUrl, './rustc-thread-worker.js').toString(), 'wasm-rust rustc thread worker'),
-            preloadAsset(resolveRuntimeAssetUrl(versionedRuntimeBaseUrl, manifest.compiler.rustcWasm), `wasm-rust runtime asset ${manifest.compiler.rustcWasm}`),
-            preloadAsset(resolveRuntimeAssetUrl(versionedRuntimeBaseUrl, targetConfig.compile.llvm.llcWasm || 'llvm/llc.wasm'), `wasm-rust runtime asset ${targetConfig.compile.llvm.llcWasm || 'llvm/llc.wasm'}`),
-            preloadAsset(resolveRuntimeAssetUrl(versionedRuntimeBaseUrl, targetConfig.compile.llvm.lldWasm || 'llvm/lld.wasm'), `wasm-rust runtime asset ${targetConfig.compile.llvm.lldWasm || 'llvm/lld.wasm'}`),
-            preloadAsset(resolveRuntimeAssetUrl(versionedRuntimeBaseUrl, targetConfig.compile.llvm.lldData || 'llvm/lld.data'), `wasm-rust runtime asset ${targetConfig.compile.llvm.lldData || 'llvm/lld.data'}`)
+            preloadAsset(resolveRuntimeAssetUrl(versionedRuntimeBaseUrl, manifest.compiler.rustcWasm), `wasm-rust runtime asset ${manifest.compiler.rustcWasm}`)
         ];
+        if (!isIntegratedCompilerOutput(targetConfig.compile)) {
+            assetPreloads.push(preloadAsset(resolveRuntimeAssetUrl(versionedRuntimeBaseUrl, targetConfig.compile.llvm.llcWasm || 'llvm/llc.wasm'), `wasm-rust runtime asset ${targetConfig.compile.llvm.llcWasm || 'llvm/llc.wasm'}`), preloadAsset(resolveRuntimeAssetUrl(versionedRuntimeBaseUrl, targetConfig.compile.llvm.lldWasm || 'llvm/lld.wasm'), `wasm-rust runtime asset ${targetConfig.compile.llvm.lldWasm || 'llvm/lld.wasm'}`), preloadAsset(resolveRuntimeAssetUrl(versionedRuntimeBaseUrl, targetConfig.compile.llvm.lldData || 'llvm/lld.data'), `wasm-rust runtime asset ${targetConfig.compile.llvm.lldData || 'llvm/lld.data'}`));
+        }
         if (targetConfig.sysrootPack) {
             assetPreloads.push(preloadAsset(resolveRuntimeAssetUrl(versionedRuntimeBaseUrl, targetConfig.sysrootPack.index), `wasm-rust runtime asset ${targetConfig.sysrootPack.index}`), preloadAsset(resolveRuntimeAssetUrl(versionedRuntimeBaseUrl, targetConfig.sysrootPack.asset), `wasm-rust runtime asset ${targetConfig.sysrootPack.asset}`));
         }
@@ -32,22 +32,23 @@ export async function preloadBrowserRustRuntime(options = {}) {
                 assetPreloads.push(preloadAsset(resolveRuntimeAssetUrl(versionedRuntimeBaseUrl, entry.asset), `wasm-rust runtime asset ${entry.asset}`));
             }
         }
-        if (targetConfig.compile.link.pack) {
-            assetPreloads.push(preloadAsset(resolveRuntimeAssetUrl(versionedRuntimeBaseUrl, targetConfig.compile.link.pack.index), `wasm-rust runtime asset ${targetConfig.compile.link.pack.index}`), preloadAsset(resolveRuntimeAssetUrl(versionedRuntimeBaseUrl, targetConfig.compile.link.pack.asset), `wasm-rust runtime asset ${targetConfig.compile.link.pack.asset}`));
-        }
-        else {
-            if (targetConfig.compile.link.allocatorObjectAsset) {
-                assetPreloads.push(preloadAsset(resolveRuntimeAssetUrl(versionedRuntimeBaseUrl, targetConfig.compile.link.allocatorObjectAsset), `wasm-rust runtime asset ${targetConfig.compile.link.allocatorObjectAsset}`));
+        const modulePreloads = [];
+        if (!isIntegratedCompilerOutput(targetConfig.compile)) {
+            if (targetConfig.compile.link.pack) {
+                assetPreloads.push(preloadAsset(resolveRuntimeAssetUrl(versionedRuntimeBaseUrl, targetConfig.compile.link.pack.index), `wasm-rust runtime asset ${targetConfig.compile.link.pack.index}`), preloadAsset(resolveRuntimeAssetUrl(versionedRuntimeBaseUrl, targetConfig.compile.link.pack.asset), `wasm-rust runtime asset ${targetConfig.compile.link.pack.asset}`));
             }
-            for (const entry of targetConfig.compile.link.files || []) {
-                assetPreloads.push(preloadAsset(resolveRuntimeAssetUrl(versionedRuntimeBaseUrl, entry.asset), `wasm-rust runtime asset ${entry.asset}`));
+            else {
+                if (targetConfig.compile.link.allocatorObjectAsset) {
+                    assetPreloads.push(preloadAsset(resolveRuntimeAssetUrl(versionedRuntimeBaseUrl, targetConfig.compile.link.allocatorObjectAsset), `wasm-rust runtime asset ${targetConfig.compile.link.allocatorObjectAsset}`));
+                }
+                for (const entry of targetConfig.compile.link.files || []) {
+                    assetPreloads.push(preloadAsset(resolveRuntimeAssetUrl(versionedRuntimeBaseUrl, entry.asset), `wasm-rust runtime asset ${entry.asset}`));
+                }
             }
+            modulePreloads.push(importRuntimeModule(resolveRuntimeAssetUrl(versionedRuntimeBaseUrl, targetConfig.compile.llvm.llc)), importRuntimeModule(resolveRuntimeAssetUrl(versionedRuntimeBaseUrl, targetConfig.compile.llvm.lld)));
         }
-        const modulePreloads = [
-            importRuntimeModule(resolveRuntimeAssetUrl(versionedRuntimeBaseUrl, targetConfig.compile.llvm.llc)),
-            importRuntimeModule(resolveRuntimeAssetUrl(versionedRuntimeBaseUrl, targetConfig.compile.llvm.lld))
-        ];
         if (targetConfig.compile.kind === 'llvm-wasm+component-encoder' ||
+            targetConfig.compile.kind === 'integrated-rustc+component-encoder' ||
             targetConfig.execution.kind === 'preview2-component') {
             for (const assetPath of PREVIEW2_COMPONENT_RUNTIME_ASSETS) {
                 if (assetPath.endsWith('.js')) {

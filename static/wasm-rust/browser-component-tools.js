@@ -215,11 +215,16 @@ export async function createPreview2ImportObject(runtimeBaseUrl, options = {}, d
             importObject[`wasi:cli/stderr${versionSuffix}`] = resolvedCliModule.stderr;
             importObject[`wasi:cli/stdin${versionSuffix}`] = resolvedCliModule.stdin;
             importObject[`wasi:cli/stdout${versionSuffix}`] = resolvedCliModule.stdout;
-            importObject[`wasi:cli/terminal-input${versionSuffix}`] = resolvedCliModule.terminalInput;
-            importObject[`wasi:cli/terminal-output${versionSuffix}`] = resolvedCliModule.terminalOutput;
-            importObject[`wasi:cli/terminal-stderr${versionSuffix}`] = resolvedCliModule.terminalStderr;
-            importObject[`wasi:cli/terminal-stdin${versionSuffix}`] = resolvedCliModule.terminalStdin;
-            importObject[`wasi:cli/terminal-stdout${versionSuffix}`] = resolvedCliModule.terminalStdout;
+            importObject[`wasi:cli/terminal-input${versionSuffix}`] =
+                resolvedCliModule.terminalInput;
+            importObject[`wasi:cli/terminal-output${versionSuffix}`] =
+                resolvedCliModule.terminalOutput;
+            importObject[`wasi:cli/terminal-stderr${versionSuffix}`] =
+                resolvedCliModule.terminalStderr;
+            importObject[`wasi:cli/terminal-stdin${versionSuffix}`] =
+                resolvedCliModule.terminalStdin;
+            importObject[`wasi:cli/terminal-stdout${versionSuffix}`] =
+                resolvedCliModule.terminalStdout;
         }
         if (requiredFamilies.has('filesystem') && resolvedFilesystemModule && preopens) {
             importObject[`wasi:filesystem/preopens${versionSuffix}`] = preopens;
@@ -233,24 +238,31 @@ export async function createPreview2ImportObject(runtimeBaseUrl, options = {}, d
         if (requiredFamilies.has('random') && resolvedRandomModule) {
             importObject[`wasi:random/random${versionSuffix}`] = resolvedRandomModule.random;
             importObject[`wasi:random/insecure${versionSuffix}`] = resolvedRandomModule.insecure;
-            importObject[`wasi:random/insecure-seed${versionSuffix}`] = resolvedRandomModule.insecureSeed;
+            importObject[`wasi:random/insecure-seed${versionSuffix}`] =
+                resolvedRandomModule.insecureSeed;
         }
         if (requiredFamilies.has('clocks') && resolvedClocksModule) {
-            importObject[`wasi:clocks/monotonic-clock${versionSuffix}`] = resolvedClocksModule.monotonicClock;
+            importObject[`wasi:clocks/monotonic-clock${versionSuffix}`] =
+                resolvedClocksModule.monotonicClock;
             importObject[`wasi:clocks/wall-clock${versionSuffix}`] = resolvedClocksModule.wallClock;
         }
         if (requiredFamilies.has('sockets') && resolvedSocketsModule) {
-            importObject[`wasi:sockets/instance-network${versionSuffix}`] = resolvedSocketsModule.instanceNetwork;
-            importObject[`wasi:sockets/ip-name-lookup${versionSuffix}`] = resolvedSocketsModule.ipNameLookup;
+            importObject[`wasi:sockets/instance-network${versionSuffix}`] =
+                resolvedSocketsModule.instanceNetwork;
+            importObject[`wasi:sockets/ip-name-lookup${versionSuffix}`] =
+                resolvedSocketsModule.ipNameLookup;
             importObject[`wasi:sockets/network${versionSuffix}`] = resolvedSocketsModule.network;
             importObject[`wasi:sockets/tcp${versionSuffix}`] = resolvedSocketsModule.tcp;
-            importObject[`wasi:sockets/tcp-create-socket${versionSuffix}`] = resolvedSocketsModule.tcpCreateSocket;
+            importObject[`wasi:sockets/tcp-create-socket${versionSuffix}`] =
+                resolvedSocketsModule.tcpCreateSocket;
             importObject[`wasi:sockets/udp${versionSuffix}`] = resolvedSocketsModule.udp;
-            importObject[`wasi:sockets/udp-create-socket${versionSuffix}`] = resolvedSocketsModule.udpCreateSocket;
+            importObject[`wasi:sockets/udp-create-socket${versionSuffix}`] =
+                resolvedSocketsModule.udpCreateSocket;
         }
         if (requiredFamilies.has('http') && resolvedHttpModule) {
             importObject[`wasi:http/types${versionSuffix}`] = resolvedHttpModule.types;
-            importObject[`wasi:http/outgoing-handler${versionSuffix}`] = resolvedHttpModule.outgoingHandler;
+            importObject[`wasi:http/outgoing-handler${versionSuffix}`] =
+                resolvedHttpModule.outgoingHandler;
         }
     }
     return importObject;
