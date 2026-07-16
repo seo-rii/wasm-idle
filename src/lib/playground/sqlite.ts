@@ -2,6 +2,7 @@ import { resolveSqliteWasmUrl, type PlaygroundRuntimeAssets } from '$lib/playgro
 import type { CompilerDiagnostic, SandboxExecutionOptions } from '$lib/playground/options';
 import type { Sandbox } from '$lib/playground/sandbox';
 import { WorkerSession } from '$lib/playground/workerSession';
+import { reportWorkerProgress } from '$lib/playground/workerProgress';
 
 class Sqlite implements Sandbox {
 	output: any = null;
@@ -79,9 +80,7 @@ class Sqlite implements Sandbox {
 				if (!this.worker) return reject('Worker not loaded');
 				if (_uid !== this.uid) return (this.worker.onmessage = null);
 				const { output, results, error, diagnostic, progress } = event.data;
-				if (progress && typeof progress.percent === 'number') {
-					_prog?.set?.(Math.max(0, Math.min(progress.percent / 100, 1)));
-				}
+				reportWorkerProgress(_prog, progress);
 				if (output) this.output?.(output);
 				if (diagnostic) this.oncompilerdiagnostic?.(diagnostic);
 				if (results) {

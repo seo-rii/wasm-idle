@@ -6,6 +6,7 @@ import {
 } from '$lib/playground/options';
 import type { Sandbox } from '$lib/playground/sandbox';
 import { WorkerSession } from '$lib/playground/workerSession';
+import { reportWorkerProgress } from '$lib/playground/workerProgress';
 
 type DotnetSandboxLanguage = 'FSHARP' | 'CSHARP' | 'VBNET';
 type DotnetCompileLanguage = 'fsharp' | 'csharp' | 'vbnet';
@@ -17,7 +18,7 @@ type DotnetRuntimeModule = {
 			target: 'browser-wasm';
 			prepare?: boolean;
 			log?: boolean;
-			onProgress?: (progress: { percent?: number }) => void;
+			onProgress?: (progress: { percent?: number; stage?: string }) => void;
 		}): Promise<{
 			success: boolean;
 			artifact?: unknown;
@@ -230,9 +231,7 @@ class Dotnet implements Sandbox {
 				if (this.worker !== worker) return reject('Worker not loaded');
 				if (_uid !== this.uid) return (worker.onmessage = null);
 				const { output, results, error, diagnostic, progress } = event.data;
-				if (progress && typeof progress.percent === 'number') {
-					_prog?.set?.(Math.max(0, Math.min(progress.percent / 100, 1)));
-				}
+				reportWorkerProgress(_prog, progress);
 				if (output) this.output?.(output);
 				if (diagnostic) this.oncompilerdiagnostic?.(diagnostic);
 				if (results) {
@@ -290,11 +289,7 @@ class Dotnet implements Sandbox {
 					target: 'browser-wasm',
 					prepare,
 					log: _log,
-					onProgress: (progress) => {
-						if (typeof progress.percent === 'number') {
-							_prog?.set?.(Math.max(0, Math.min(progress.percent / 100, 1)));
-						}
-					}
+					onProgress: (progress) => reportWorkerProgress(_prog, progress)
 				});
 				if (_uid !== this.uid) return false;
 				for (const diagnostic of result.diagnostics || []) {

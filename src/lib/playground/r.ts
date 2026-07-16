@@ -12,6 +12,7 @@ import {
 } from '$lib/playground/stdinBuffer';
 import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
 import { WorkerSession } from '$lib/playground/workerSession';
+import { reportWorkerProgress } from '$lib/playground/workerProgress';
 
 class R implements Sandbox {
 	output: any = null;
@@ -64,11 +65,7 @@ class R implements Sandbox {
 				this.worker = new (await import('$lib/playground/worker/r?worker')).default();
 				this.workerSession.attach(this.worker);
 				this.worker.onmessage = (event: MessageEvent<any>) => {
-					if (event.data?.progress && typeof event.data.progress.percent === 'number') {
-						progress?.set?.(
-							Math.max(0, Math.min(event.data.progress.percent / 100, 1))
-						);
-					}
+					reportWorkerProgress(progress, event.data?.progress);
 					if (event.data?.load) {
 						progress?.set?.(1);
 						resolve();
@@ -133,9 +130,7 @@ class R implements Sandbox {
 					this.waitingForInput = true;
 					this.flushPendingInput();
 				}
-				if (progress && typeof progress.percent === 'number') {
-					_prog?.set?.(Math.max(0, Math.min(progress.percent / 100, 1)));
-				}
+				reportWorkerProgress(_prog, progress);
 				if (output) this.output?.(output);
 				if (diagnostic) this.oncompilerdiagnostic?.(diagnostic);
 				if (results) {

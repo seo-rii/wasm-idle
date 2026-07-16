@@ -17,6 +17,7 @@ import {
 } from '$lib/playground/stdinBuffer';
 import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
 import { WorkerSession } from '$lib/playground/workerSession';
+import { reportWorkerProgress } from '$lib/playground/workerProgress';
 
 type RuntimeGlobal = Record<string, unknown>;
 type RuntimeAssetEntry = {
@@ -145,9 +146,7 @@ class Ocaml implements Sandbox {
 				if (!this.worker) return reject('Worker not loaded');
 				if (_uid !== this.uid) return (this.worker.onmessage = null);
 				const { output, results, error, diagnostic, progress, runtime } = event.data;
-				if (progress && typeof progress.percent === 'number') {
-					_prog?.set?.(Math.max(0, Math.min(progress.percent / 100, 1)));
-				}
+				reportWorkerProgress(_prog, progress);
 				if (event.data?.buffer) {
 					this.waitingForInput = true;
 					this.flushPendingInput();

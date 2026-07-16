@@ -15,6 +15,7 @@ import {
 } from '$lib/playground/stdinBuffer';
 import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
 import { WorkerSession } from '$lib/playground/workerSession';
+import { reportWorkerProgress } from '$lib/playground/workerProgress';
 
 type OctaveWorkerMessage = {
 	load?: true;
@@ -22,7 +23,7 @@ type OctaveWorkerMessage = {
 	results?: boolean;
 	error?: string;
 	buffer?: boolean;
-	progress?: { percent?: number };
+	progress?: { percent?: number; stage?: string };
 };
 
 class Octave implements Sandbox {
@@ -166,9 +167,7 @@ class Octave implements Sandbox {
 							this.waitingForInput = true;
 							this.flushPendingInput();
 						}
-						if (progress && typeof progress.percent === 'number') {
-							_prog?.set?.(Math.max(0, Math.min(progress.percent / 100, 1)));
-						}
+						reportWorkerProgress(_prog, progress);
 						if (output) this.output?.(output);
 						if (results) {
 							this.elapse = Date.now() - this.begin;

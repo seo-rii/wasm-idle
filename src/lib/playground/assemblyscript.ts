@@ -8,6 +8,7 @@ import {
 } from '$lib/playground/stdinBuffer';
 import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
 import { WorkerSession } from '$lib/playground/workerSession';
+import { reportWorkerProgress } from '$lib/playground/workerProgress';
 
 class AssemblyScriptSandbox implements Sandbox {
 	output: any = null;
@@ -111,9 +112,7 @@ class AssemblyScriptSandbox implements Sandbox {
 					this.waitingForInput = true;
 					this.flushPendingInput();
 				}
-				if (progress && typeof progress.percent === 'number') {
-					_prog?.set?.(Math.max(0, Math.min(progress.percent / 100, 1)));
-				}
+				reportWorkerProgress(_prog, progress);
 				if (output) this.output?.(output);
 				if (diagnostic) this.oncompilerdiagnostic?.(diagnostic);
 				if (results) {
