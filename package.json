@@ -21,9 +21,7 @@
 		"build:packages": "node scripts/workspace.mjs run build --group packages --if-present",
 		"check:packages": "pnpm run build:packages && node scripts/workspace.mjs run check --group packages --if-present",
 		"build:publish-deps": "node scripts/workspace.mjs run build --public --if-present",
-		"prepare:clang-assets": "pnpm run sync:wasm-clang",
-		"prepare:cobol-assets": "pnpm run sync:wasm-cobol",
-		"prepare:app": "pnpm run build:publish-deps && pnpm run prepare:clang-assets && pnpm run prepare:cobol-assets",
+		"prepare:app": "pnpm run build:publish-deps",
 		"preview": "vite preview",
 		"probe:go-browser": "node scripts/probe-go-browser.mjs",
 		"probe:ocaml-browser": "node scripts/probe-ocaml-browser.mjs",
@@ -57,9 +55,12 @@
 		"test:browser:swift": "pnpm exec vitest run src/lib/playground/swift.test.ts",
 		"test:browser:playwright": "WASM_IDLE_RUN_REAL_BROWSER_RUST=1 pnpm exec vitest run src/lib/playground/rust.playwright.test.ts",
 		"test:browser:tinygo": "WASM_IDLE_RUN_REAL_BROWSER_TINYGO=1 pnpm exec vitest run src/lib/playground/tinygo.playwright.test.ts",
+		"test:browser:languages:full": "node scripts/run-all-language-browser-tests.mjs",
+		"test:browser:audit:full": "node scripts/run-all-language-browser-tests.mjs --include-compressed-assets --include-lsp-full",
 		"sync:runtime": "node scripts/sync-runtime.mjs",
 		"sync:runtimes": "node scripts/sync-runtime.mjs all",
 		"sync:wasm-clang": "node scripts/sync-wasm-clang.mjs",
+		"sync:wasm-objectivec": "node scripts/sync-wasm-objectivec.mjs",
 		"sync:wasm-cobol": "node scripts/sync-runtime.mjs wasm-cobol",
 		"sync:wasm-of-js-of-ocaml": "node scripts/sync-runtime.mjs wasm-of-js-of-ocaml",
 		"sync:wasm-dotnet": "node scripts/sync-runtime.mjs wasm-dotnet",
@@ -157,14 +158,12 @@
 		"@php-wasm/web": "3.1.34",
 		"@ruby/3.4-wasm-wasi": "2.9.3-2.9.4",
 		"@ruby/wasm-wasi": "2.9.3-2.9.4",
-		"@seo-rii/wasm-llvm": "github:seo-rii/wasm-llvm#22ba6c3",
 		"@seorii/monaco": "0.1.1",
 		"@swmansion/popcorn": "0.2.2",
 		"@types/sql.js": "^1.4.11",
 		"@wasm-idle/core": "workspace:*",
+		"@wasm-idle/llvm-core": "workspace:*",
 		"@wasm-idle/lsp": "workspace:*",
-		"@wasm-idle/runtime-assemblyscript": "workspace:*",
-		"@wasm-idle/runtime-php": "workspace:*",
 		"@wasmer/sdk": "0.9.0",
 		"@xterm/addon-canvas": "^0.7.0",
 		"@xterm/addon-fit": "^0.11.0",
@@ -205,7 +204,6 @@
 	"types": "./dist/index.d.ts",
 	"pnpm": {
 		"onlyBuiltDependencies": [
-			"@seo-rii/wasm-llvm",
 			"esbuild"
 		]
 	}
