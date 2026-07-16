@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-06-15T10:44:48.793Z",
+  "generatedAt": "2026-07-16T16:32:22.716Z",
   "switchPrefix": "/home/seorii/.cache/wasm-of-js-of-ocaml/opam/wasm-of-js-of-ocaml-5.4.1",
   "findlibConf": "/wasm-of-js-of-ocaml/browser-native-bundle/findlib.conf",
   "tools": {
@@ -17,9 +17,15 @@
     "version_dune_static_placeholder": {
       "path": "/home/seorii/.cache/wasm-of-js-of-ocaml/opam/wasm-of-js-of-ocaml-5.4.1/.opam-switch/sources/js_of_ocaml-compiler.6.3.2/tools/version/dune",
       "placeholderVersion": "6.3.2",
-      "alreadyPatched": false,
-      "sourceSha256": "d87f844a1737ad4bc2ad89b6200303c80b18734e1ac802026daa7d359bb71101",
+      "alreadyPatched": true,
+      "sourceSha256": "493d9b2ad5a7d31050337a97cb79a92846d94f6ad81edf53f486cd5e52cb0a47",
       "patchedSha256": "493d9b2ad5a7d31050337a97cb79a92846d94f6ad81edf53f486cd5e52cb0a47"
+    },
+    "runtime_wasm_module_names": {
+      "path": "/home/seorii/.cache/wasm-of-js-of-ocaml/opam/wasm-of-js-of-ocaml-5.4.1/.opam-switch/sources/js_of_ocaml-compiler.6.3.2/runtime/wasm/args.ml",
+      "alreadyPatched": false,
+      "sourceSha256": "6083ed96628feb1c729d807ad5e003944fd84efae78b40761ee700208be967a6",
+      "patchedSha256": "b7ac9996b605530800166862724c49de5b236cb92f7c18408dbe47045e597982"
     },
     "wasm_of_ocaml_binaryen_bridge": {
       "tool": "wasm_of_ocaml.bc.browser.js",

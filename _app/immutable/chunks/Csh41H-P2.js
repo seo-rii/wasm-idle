@@ -1,0 +1,1 @@
+import{O as e}from"./Djg-jgGs.js";import{t}from"./BpMlv3VK.js";var n=class extends t{constructor(){super({languageId:`PERL`,displayName:`Perl`,defaultActivePath:`main.pl`,readStdinPattern:/<\s*STDIN\s*>|\bSTDIN\b|\breadline\b|<\s*>/,resolveRuntimeAssets(t,n){return e(t,n)}})}};export{n as default};

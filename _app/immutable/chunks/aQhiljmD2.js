@@ -1,1 +1,0 @@
-import{i as e}from"./BqJKHnYt.js";import{t}from"./C17Dgs_t.js";var n=class extends t{constructor(){super({languageId:`CLOJURESCRIPT`,displayName:`ClojureScript`,defaultActivePath:`main.cljs`,readStdinPattern:/\b(?:wasm-idle\.runtime\/)?(?:read-line|stdin)\b|\bread-line\b/,resolveRuntimeAssets(t,n){return e(t,n)}})}};export{n as default};

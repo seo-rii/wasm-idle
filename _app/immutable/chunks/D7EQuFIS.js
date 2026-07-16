@@ -1,0 +1,1 @@
+function e(e,t){if(typeof t==`number`){Number.isFinite(t)&&e?.set?.(Math.max(0,Math.min(t,1)));return}if(!t||typeof t!=`object`)return;let{percent:n,stage:r}=t;typeof n!=`number`||!Number.isFinite(n)||e?.set?.(Math.max(0,Math.min(n/100,1)),typeof r==`string`&&r?r:void 0)}export{e as t};
