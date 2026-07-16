@@ -1,7 +1,7 @@
 import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { gunzipSync } from 'node:zlib';
+import { gunzipSync, gzipSync } from 'node:zlib';
 import { afterEach, describe, expect, it } from 'vitest';
 import { compressStaticRuntimeAssets } from '../../scripts/compress-static-runtime-assets.mjs';
 
@@ -74,4 +74,107 @@ describe('compressStaticRuntimeAssets', () => {
 		expect(manifest.sizes['wasm-swift/swiftc.wasm']).toBe(1_000_001);
 		expect(manifest.sizes['wasm-swift/swiftpm.wasm']).toBe(1_000_001);
 	});
+
+	it('compresses generic runtime payloads and immutable Vite assets', async () => {
+		const rootDir = await makeTempDir();
+		const compressiblePaths = [
+			'wasm-bash/bash.webc',
+			'wasm-nim/sysroot.tar',
+			'wasm-octave/octave_interpreter.qch',
+			'wasm-octave/doc-cache',
+			'_app/immutable/assets/ruby-runtime.1234.wasm',
+			'_app/immutable/assets/duckdb-mvp.1234.wasm',
+			'_app/immutable/assets/wasmer.1234.wasm',
+			'_app/immutable/workers/compiler.1234.js'
+		];
+		for (const [index, relativePath] of compressiblePaths.entries()) {
+			await writeAsset(rootDir, relativePath, repeatedBytes(1_000_001, index));
+		}
+		await writeAsset(
+			rootDir,
+			'_app/immutable/chunks/application.1234.js',
+			repeatedBytes(1_000_001, 90)
+		);
+
+		const result = await compressStaticRuntimeAssets({ rootDir });
+
+		expect(
+			result.compressed
+				.map((entry) => relativeToPortablePath(rootDir, entry.originalPath))
+				.sort()
+		).toEqual([...compressiblePaths].sort());
+		for (const relativePath of compressiblePaths) {
+			await expect(stat(path.join(rootDir, relativePath))).rejects.toThrow();
+			await expect(stat(path.join(rootDir, `${relativePath}.gz`))).resolves.toBeTruthy();
+		}
+		await expect(
+			stat(path.join(rootDir, '_app/immutable/chunks/application.1234.js'))
+		).resolves.toMatchObject({ size: 1_000_001 });
+
+		const manifest = JSON.parse(
+			await readFile(path.join(rootDir, 'compressed-runtime-assets.v1.json'), 'utf8')
+		) as { assets: string[]; sizes: Record<string, number> };
+		expect(manifest.assets).toEqual([...compressiblePaths].sort());
+		expect(Object.keys(manifest.sizes).sort()).toEqual([...compressiblePaths].sort());
+		for (const relativePath of compressiblePaths) {
+			expect(manifest.sizes[relativePath]).toBe(1_000_001);
+		}
+	});
+
+	it('rebuilds complete and accurate sizes for existing gzip-only assets', async () => {
+		const rootDir = await makeTempDir();
+		const webcBytes = repeatedBytes(1_234, 1);
+		const extensionlessBytes = repeatedBytes(4_321, 2);
+		await writeAsset(rootDir, 'wasm-bash/bash.webc.gz', gzipSync(webcBytes));
+		await writeAsset(rootDir, 'wasm-octave/doc-cache.gz', gzipSync(extensionlessBytes));
+		await writeAsset(
+			rootDir,
+			'compressed-runtime-assets.v1.json',
+			new TextEncoder().encode(
+				JSON.stringify({
+					assets: ['wasm-bash/bash.webc', 'wasm-octave/doc-cache'],
+					sizes: { 'wasm-bash/bash.webc': 7, 'stale/runtime.wasm': 99 }
+				})
+			)
+		);
+
+		const result = await compressStaticRuntimeAssets({ rootDir });
+
+		expect(result.compressed).toEqual([]);
+		const manifest = JSON.parse(
+			await readFile(path.join(rootDir, 'compressed-runtime-assets.v1.json'), 'utf8')
+		) as { assets: string[]; sizes: Record<string, number> };
+		expect(manifest).toEqual({
+			assets: ['wasm-bash/bash.webc', 'wasm-octave/doc-cache'],
+			sizes: {
+				'wasm-bash/bash.webc': webcBytes.byteLength,
+				'wasm-octave/doc-cache': extensionlessBytes.byteLength
+			}
+		});
+	});
+
+	it('keeps original assets when the manifest cannot be committed', async () => {
+		const rootDir = await makeTempDir();
+		const assetPath = await writeAsset(
+			rootDir,
+			'wasm-swift/swiftc.wasm',
+			repeatedBytes(1_000_001, 4)
+		);
+		const manifestPath = path.join(rootDir, 'compressed-runtime-assets.v1.json');
+		await mkdir(manifestPath);
+
+		await expect(compressStaticRuntimeAssets({ rootDir })).rejects.toThrow();
+		await expect(stat(assetPath)).resolves.toMatchObject({ size: 1_000_001 });
+		await expect(stat(`${assetPath}.gz`)).resolves.toBeTruthy();
+
+		await rm(manifestPath, { recursive: true });
+		await expect(compressStaticRuntimeAssets({ rootDir })).resolves.toMatchObject({
+			manifestAssets: ['wasm-swift/swiftc.wasm']
+		});
+		await expect(stat(assetPath)).rejects.toThrow();
+	});
 });
+
+function relativeToPortablePath(rootDir: string, filePath: string) {
+	return path.relative(rootDir, filePath).split(path.sep).join('/');
+}

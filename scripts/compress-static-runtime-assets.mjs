@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
@@ -24,6 +24,7 @@ const COMPRESSIBLE_EXTENSIONS = new Set([
 	'.o',
 	'.oct',
 	'.pdb',
+	'.qch',
 	'.so',
 	'.symbols',
 	'.tar',
@@ -31,44 +32,7 @@ const COMPRESSIBLE_EXTENSIONS = new Set([
 	'.webc'
 ]);
 const PRECOMPRESSED_EXTENSIONS = new Set(['.br', '.brotli', '.gz', '.tgz', '.zip', '.zst']);
-const COMPRESSIBLE_TOP_LEVEL_DIRS = [
-	'clang',
-	'clangd',
-	'pyodide',
-	'teavm',
-	'wasm-awk',
-	'wasm-bash',
-	'wasm-bqn',
-	'wasm-clojurescript',
-	'wasm-cobol',
-	'wasm-d',
-	'wasm-dotnet',
-	'wasm-elixir',
-	'wasm-fortran',
-	'wasm-forth',
-	'wasm-go',
-	'wasm-gleam',
-	'wasm-haskell',
-	'wasm-j',
-	'wasm-janet',
-	'wasm-julia',
-	'wasm-lisp',
-	'wasm-nim',
-	'wasm-octave',
-	'wasm-objectivec',
-	'wasm-of-js-of-ocaml',
-	'wasm-pascal',
-	'wasm-perl',
-	'wasm-prolog',
-	'wasm-rust',
-	'wasm-swift',
-	'wasm-tcl',
-	'wasm-tinygo',
-	'wasm-typescript',
-	'wasm-wat',
-	'wasm-zig',
-	'webr'
-];
+const RUNTIME_TOP_LEVEL_DIRS = new Set(['clang', 'clangd', 'pyodide', 'teavm', 'webr']);
 
 function rootDirFromArg(value) {
 	if (!value || value === 'static') return STATIC_DIR;
@@ -82,13 +46,14 @@ function relativeToRoot(rootDir, filePath) {
 
 function isUnderCompressibleRuntime(rootDir, filePath) {
 	const relativePath = relativeToRoot(rootDir, filePath);
-	if (relativePath.startsWith('_app/immutable/workers/')) return true;
+	if (/^_app\/immutable\/(assets|workers)\//.test(relativePath)) return true;
 	const [topLevel] = relativePath.split('/');
-	return COMPRESSIBLE_TOP_LEVEL_DIRS.includes(topLevel);
+	return topLevel.startsWith('wasm-') || RUNTIME_TOP_LEVEL_DIRS.has(topLevel);
 }
 
 function hasCompressibleExtension(filePath) {
 	const extension = path.extname(filePath).toLowerCase();
+	if (!extension) return true;
 	if (PRECOMPRESSED_EXTENSIONS.has(extension)) return false;
 	return COMPRESSIBLE_EXTENSIONS.has(extension);
 }
@@ -114,16 +79,12 @@ async function collectFiles(rootDir) {
 	return files.sort();
 }
 
-async function collectCompressedManifestEntries(rootDir) {
-	const entries = [];
-	for (const filePath of await collectFiles(rootDir)) {
-		if (!filePath.endsWith('.gz')) continue;
-		const originalPath = filePath.slice(0, -'.gz'.length);
-		if (!isUnderCompressibleRuntime(rootDir, originalPath)) continue;
-		if (!hasCompressibleExtension(originalPath)) continue;
-		entries.push(relativeToRoot(rootDir, originalPath));
+function gzipOriginalSize(bytes, filePath) {
+	if (bytes.byteLength < 18 || bytes[0] !== 0x1f || bytes[1] !== 0x8b) {
+		throw new Error(`invalid gzip runtime asset at ${filePath}`);
 	}
-	return entries.sort();
+	// gzip ISIZE is exact for these single-member runtime assets, which are all below 4 GiB.
+	return bytes.readUInt32LE(bytes.byteLength - 4);
 }
 
 async function readExistingCompressedAssetManifest(rootDir) {
@@ -131,6 +92,33 @@ async function readExistingCompressedAssetManifest(rootDir) {
 		.then((value) => JSON.parse(value))
 		.catch(() => ({}));
 	return manifest && typeof manifest === 'object' ? manifest : {};
+}
+
+async function collectCompressedManifestEntries(rootDir, compressed) {
+	const existingManifest = await readExistingCompressedAssetManifest(rootDir);
+	const assetPaths = new Set(
+		(Array.isArray(existingManifest.assets) ? existingManifest.assets : []).filter(
+			(assetPath) => typeof assetPath === 'string'
+		)
+	);
+	for (const entry of compressed) {
+		assetPaths.add(relativeToRoot(rootDir, entry.originalPath));
+	}
+	const entries = [];
+	for (const assetPath of [...assetPaths].sort()) {
+		const originalPath = path.resolve(rootDir, assetPath);
+		if (relativeToRoot(rootDir, originalPath) !== assetPath) continue;
+		if (!isUnderCompressibleRuntime(rootDir, originalPath)) continue;
+		if (!hasCompressibleExtension(originalPath)) continue;
+		const compressedPath = `${originalPath}.gz`;
+		const compressedBytes = await readFile(compressedPath).catch(() => null);
+		if (!compressedBytes) continue;
+		entries.push({
+			assetPath,
+			originalSize: gzipOriginalSize(compressedBytes, compressedPath)
+		});
+	}
+	return entries;
 }
 
 function sha256(bytes) {
@@ -146,7 +134,6 @@ async function compressFile(filePath) {
 		await mkdir(path.dirname(compressedPath), { recursive: true });
 		await writeFile(compressedPath, compressedBytes);
 	}
-	await rm(filePath);
 	return {
 		compressedPath,
 		compressedSize: compressedBytes.byteLength,
@@ -156,24 +143,17 @@ async function compressFile(filePath) {
 }
 
 async function writeCompressedAssetManifest(rootDir, compressed) {
-	const assets = await collectCompressedManifestEntries(rootDir);
-	const existingManifest = await readExistingCompressedAssetManifest(rootDir);
-	const existingSizes =
-		existingManifest.sizes && typeof existingManifest.sizes === 'object'
-			? existingManifest.sizes
-			: {};
-	const sizes = {};
-	for (const [assetPath, size] of Object.entries(existingSizes)) {
-		if (assets.includes(assetPath) && Number.isFinite(size)) sizes[assetPath] = size;
-	}
-	for (const entry of compressed) {
-		sizes[relativeToRoot(rootDir, entry.originalPath)] = entry.originalSize;
-	}
+	const entries = await collectCompressedManifestEntries(rootDir, compressed);
+	const assets = entries.map((entry) => entry.assetPath);
+	const sizes = Object.fromEntries(entries.map((entry) => [entry.assetPath, entry.originalSize]));
+	const manifestPath = path.join(rootDir, MANIFEST_FILE_NAME);
+	const temporaryManifestPath = `${manifestPath}.tmp-${process.pid}`;
 	await writeFile(
-		path.join(rootDir, MANIFEST_FILE_NAME),
+		temporaryManifestPath,
 		`${JSON.stringify({ assets, sizes }, null, 2)}\n`,
 		'utf8'
 	);
+	await rename(temporaryManifestPath, manifestPath);
 	return assets;
 }
 
@@ -190,6 +170,9 @@ export async function compressStaticRuntimeAssets({ rootDir = STATIC_DIR } = {})
 		compressed.push(await compressFile(filePath));
 	}
 	const manifestAssets = await writeCompressedAssetManifest(rootDir, compressed);
+	for (const entry of compressed) {
+		await rm(entry.originalPath);
+	}
 	return { compressed, manifestAssets, rootDir };
 }
 

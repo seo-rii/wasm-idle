@@ -6,8 +6,6 @@ self.addEventListener('activate', (event) => {
 	event.waitUntil(self.clients.claim());
 });
 
-const gzipVirtualExtensions =
-	/\.(a|avm|bin|data|dat|dll|js|json|mjs|o|oct|pdb|so|symbols|wasm)$/i;
 const precompressedExtension = /\.(br|brotli|gz|tgz|zip|zst)$/i;
 const runtimeAssetAliases = [
 	{
@@ -57,8 +55,12 @@ async function shouldTryCompressedRuntimeAsset(request, url) {
 	if (request.method !== 'GET' && request.method !== 'HEAD') return false;
 	if (request.headers.has('range')) return false;
 	if (precompressedExtension.test(url.pathname)) return false;
-	if (!gzipVirtualExtensions.test(url.pathname)) return false;
 	return (await compressedRuntimeAssetManifest()).assets.has(relativePathInScope(url));
+}
+
+function originalContentLength(manifest, relativePath) {
+	const size = manifest.sizes[relativePath];
+	return Number.isSafeInteger(size) && size >= 0 ? size : null;
 }
 
 function contentTypeForPath(pathname) {
@@ -100,8 +102,8 @@ async function fetchCompressedRuntimeAsset(request, url) {
 		const headers = new Headers({
 			'content-type': contentTypeForPath(url.pathname)
 		});
-		const originalSize = manifest.sizes[relativePath];
-		if (Number.isFinite(originalSize)) headers.set('content-length', String(originalSize));
+		const originalSize = originalContentLength(manifest, relativePath);
+		if (originalSize !== null) headers.set('content-length', String(originalSize));
 		return new Response(null, {
 			status: 200,
 			statusText: 'OK',
@@ -124,6 +126,9 @@ async function fetchCompressedRuntimeAsset(request, url) {
 	headers.delete('content-encoding');
 	headers.delete('content-length');
 	headers.set('content-type', contentTypeForPath(url.pathname));
+	const manifest = await compressedRuntimeAssetManifest();
+	const originalSize = originalContentLength(manifest, relativePathInScope(url));
+	if (originalSize !== null) headers.set('content-length', String(originalSize));
 	const body = hasGzipContentEncoding(compressedResponse)
 		? compressedResponse.body
 		: compressedResponse.body.pipeThrough(new DecompressionStream('gzip'));
