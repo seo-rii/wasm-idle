@@ -15,6 +15,7 @@
 	import { base } from '$app/paths';
 	import { SvelteURL } from 'svelte/reactivity';
 	import type { PlaygroundRuntimeAssets } from '$lib/playground/assets';
+	import { createLoadingProgressController } from '$lib/playground/loadingProgress';
 	import type { DebugLanguageAdapter } from '$lib';
 	import { WASM_AWK_ASSET_VERSION } from '$lib/playground/wasmAwkVersion';
 	import { WASM_BASH_ASSET_VERSION } from '$lib/playground/wasmBashVersion';
@@ -400,6 +401,7 @@
 		runningMode = $state<'run' | 'debug' | null>(null),
 		progress = $state(-1),
 		progressStage = $state(''),
+		progressIndeterminate = $state(false),
 		stdinInput = $state(''),
 		init = $state(false),
 		editorLspStatus = $state<EditorLspStatusView | null>(null),
@@ -565,14 +567,14 @@
 		})
 	);
 
-	const progressRef = {
-		set(value: number, stage?: string) {
-			const next = Math.min(1, Math.max(0, value));
-			if (progress >= 0 && next < progress) return;
-			progress = next;
-			if (stage) progressStage = stage;
+	const loadingProgress = createLoadingProgressController({
+		onChange(state) {
+			progress = state.value;
+			progressStage = state.stage;
+			progressIndeterminate = state.indeterminate;
 		}
-	};
+	});
+	const progressRef = { set: loadingProgress.set };
 
 	const debugLanguage = $derived(debugLanguageAdapters[language] ?? null);
 	const debug = createDebugSessionController({
@@ -1500,8 +1502,7 @@
 			saveWorkspace();
 		}
 		try {
-			progress = 0;
-			progressStage = '';
+			loadingProgress.start(`Loading ${language} runtime`);
 			const preloadedStdin =
 				sharedBufferAvailable && language !== 'BASH' ? undefined : stdinInput;
 			await executeTerminalRun({
@@ -1525,8 +1526,7 @@
 				}
 			});
 		} finally {
-			progress = -1;
-			progressStage = '';
+			loadingProgress.reset();
 			runningMode = null;
 			if (!debug.paused) debug.reset();
 		}
@@ -2208,19 +2208,28 @@
 							<span class="material-symbols-outlined">downloading</span>
 							<strong>{progressLabel}</strong>
 						</div>
-						<span class="progress-percent">{progressPercent}%</span>
+						{#if !progressIndeterminate}
+							<span class="progress-percent">{progressPercent}%</span>
+						{/if}
 					</div>
 					<div
 						class="progress-track"
+						class:progress-track--indeterminate={progressIndeterminate}
 						role="progressbar"
 						aria-label={progressLabel}
 						aria-valuemin={0}
 						aria-valuemax={100}
-						aria-valuenow={progressPercent}
+						aria-valuenow={progressIndeterminate ? undefined : progressPercent}
+						aria-valuetext={progressIndeterminate
+							? progressLabel
+							: `${progressPercent}%`}
+						data-progress-mode={progressIndeterminate ? 'indeterminate' : 'determinate'}
 					>
 						<div
 							class="progress-fill"
-							style={`transform: scaleX(${progressValue})`}
+							style={progressIndeterminate
+								? undefined
+								: `transform: scaleX(${progressValue})`}
 						></div>
 					</div>
 				</div>
@@ -3412,6 +3421,24 @@
 		background: linear-gradient(90deg, #0f766e 0%, #14b8a6 52%, #34d399 100%);
 		box-shadow: 0 0 24px rgba(20, 184, 166, 0.28);
 		transition: transform 0.18s ease;
+	}
+
+	.progress-track--indeterminate .progress-fill {
+		width: 38%;
+		transform: translateX(-120%);
+		animation: progress-indeterminate 1.4s ease-in-out infinite;
+	}
+
+	@keyframes progress-indeterminate {
+		to {
+			transform: translateX(365%);
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.progress-track--indeterminate .progress-fill {
+			animation-duration: 3s;
+		}
 	}
 
 	.path-chip,

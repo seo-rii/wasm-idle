@@ -272,13 +272,19 @@
 			args: string[] = [],
 			options: SandboxExecutionOptions = {}
 		) {
-			prog?.set?.(0);
+			prog?.set?.(0, `Loading ${language} runtime`);
 			const progressBands = progressBandsForLanguage(language);
-			const loadProgress = phaseProgress(prog, progressBands.load[0], progressBands.load[1]);
+			const loadProgress = phaseProgress(
+				prog,
+				progressBands.load[0],
+				progressBands.load[1],
+				`Loading ${language} runtime`
+			);
 			const prepareProgress = phaseProgress(
 				prog,
 				progressBands.prepare[0],
-				progressBands.prepare[1]
+				progressBands.prepare[1],
+				`Preparing ${language} program`
 			);
 			await Promise.all([
 				initSandbox(language).then(() =>
@@ -286,11 +292,13 @@
 				),
 				initTerm(false)
 			]);
-			prepareProgress?.set?.(0);
-			return !!(await runSandbox(
+			prepareProgress?.set?.(0, `Preparing ${language} program`);
+			const prepared = !!(await runSandbox(
 				sandbox.run(code, true, log, prepareProgress, args, options),
 				false
 			));
+			if (prepared) prepareProgress?.set?.(1, `${language} runtime ready`);
+			return prepared;
 		},
 		async run(
 			language: string,

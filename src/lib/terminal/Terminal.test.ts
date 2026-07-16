@@ -151,14 +151,15 @@ describe('Terminal source', () => {
 		expect(source).toMatch(/\.finally\(\(\) => \{\s+sandboxAcceptingInput = false;/s);
 	});
 
-	it('uses rust-specific progress windows instead of jumping straight to the prepare band', () => {
-		expect(source).toMatch(/prog\?\.set\?\.\(0\);/);
+	it('uses the same bounded load and prepare progress phases for every language', () => {
+		expect(source).toMatch(/prog\?\.set\?\.\(0, `Loading \$\{language\} runtime`\);/);
 		expect(source).toMatch(/const progressBands = progressBandsForLanguage\(language\);/);
 		expect(source).toMatch(
-			/phaseProgress\(prog, progressBands\.load\[0\], progressBands\.load\[1\]\)/
+			/phaseProgress\(\s+prog,\s+progressBands\.load\[0\],\s+progressBands\.load\[1\],\s+`Loading \$\{language\} runtime`/s
 		);
 		expect(source).toMatch(/progressBands\.prepare\[0\]/);
 		expect(source).toMatch(/progressBands\.prepare\[1\]/);
+		expect(source).toMatch(/if \(prepared\) prepareProgress\?\.set\?\.\(1,/);
 	});
 
 	it('allows runtime progress stages to flow through the terminal progress sink', () => {
