@@ -1,6 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const workerInstances: MockWorker[] = [];
+const workerBootstrapBlobs = new Map<string, Blob>();
 const { publicEnv } = vi.hoisted(() => ({
 	publicEnv: {
 		PUBLIC_WASM_PROLOG_BASE_URL: '',
@@ -33,6 +34,8 @@ const { publicEnv } = vi.hoisted(() => ({
 	}
 }));
 let onPostMessage: ((worker: MockWorker, message: any) => void) | null = null;
+let autoStartWorkers = true;
+let workerBootstrapId = 0;
 
 class MockWorker {
 	onmessage: ((event: MessageEvent<any>) => void) | null = null;
@@ -56,6 +59,12 @@ class MockWorker {
 		public options?: WorkerOptions
 	) {
 		workerInstances.push(this);
+		queueMicrotask(() => {
+			if (!autoStartWorkers) return;
+			this.onmessage?.({
+				data: { __wasmIdleStaticWorkerReady: true }
+			} as MessageEvent<any>);
+		});
 	}
 }
 
@@ -79,13 +88,43 @@ import Pascal from './pascal';
 import Prolog from './prolog';
 import Tcl from './tcl';
 
+async function expectWorkerBootstrap(worker: MockWorker, targetUrl: string) {
+	expect(worker.url).toMatch(/^blob:wasm-idle-worker-/);
+	const bootstrap = workerBootstrapBlobs.get(worker.url);
+	expect(bootstrap).toBeDefined();
+	expect(await bootstrap!.text()).toContain(JSON.stringify(targetUrl));
+}
+
 describe('static worker backed language sandboxes', () => {
 	beforeEach(() => {
 		workerInstances.length = 0;
+		workerBootstrapBlobs.clear();
 		onPostMessage = null;
+		autoStartWorkers = true;
+		workerBootstrapId = 0;
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(
+				async () =>
+					new Response('/* static worker */', {
+						status: 200,
+						headers: { 'content-length': '19' }
+					})
+			)
+		);
+		vi.spyOn(URL, 'createObjectURL').mockImplementation((blob) => {
+			const url = `blob:wasm-idle-worker-${workerBootstrapId++}`;
+			workerBootstrapBlobs.set(url, blob as Blob);
+			return url;
+		});
+		vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
 		for (const key of Object.keys(publicEnv)) {
 			publicEnv[key as keyof typeof publicEnv] = '';
 		}
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
 	});
 
 	it('loads Prolog runtime urls and forwards stdin to the SWI-Prolog worker', async () => {
@@ -107,7 +146,8 @@ describe('static worker backed language sandboxes', () => {
 			})
 		).resolves.toBe(true);
 
-		expect(workerInstances[0].url).toBe(
+		await expectWorkerBootstrap(
+			workerInstances[0],
 			'http://localhost:3000/wasm-prolog/runner-worker.js?v=test'
 		);
 		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
@@ -138,7 +178,8 @@ describe('static worker backed language sandboxes', () => {
 			)
 		).resolves.toBe(true);
 
-		expect(workerInstances[0].url).toBe(
+		await expectWorkerBootstrap(
+			workerInstances[0],
 			'http://localhost:3000/absproxy/5173/wasm-gleam/runner-worker.js'
 		);
 		expect(workerInstances[0].options).toEqual({ type: 'module' });
@@ -166,7 +207,8 @@ describe('static worker backed language sandboxes', () => {
 			})
 		).resolves.toBe(true);
 
-		expect(workerInstances[0].url).toBe(
+		await expectWorkerBootstrap(
+			workerInstances[0],
 			'http://localhost:3000/wasm-perl/runner-worker.js?v=test'
 		);
 		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
@@ -192,7 +234,8 @@ describe('static worker backed language sandboxes', () => {
 			})
 		).resolves.toBe(true);
 
-		expect(workerInstances[0].url).toBe(
+		await expectWorkerBootstrap(
+			workerInstances[0],
 			'http://localhost:3000/wasm-tcl/runner-worker.js?v=test'
 		);
 		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
@@ -219,7 +262,8 @@ describe('static worker backed language sandboxes', () => {
 			})
 		).resolves.toBe(true);
 
-		expect(workerInstances[0].url).toBe(
+		await expectWorkerBootstrap(
+			workerInstances[0],
 			'http://localhost:3000/wasm-awk/runner-worker.js?v=test'
 		);
 		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
@@ -253,7 +297,8 @@ describe('static worker backed language sandboxes', () => {
 			)
 		).resolves.toBe(true);
 
-		expect(workerInstances[0].url).toBe(
+		await expectWorkerBootstrap(
+			workerInstances[0],
 			'http://localhost:3000/wasm-pascal/runner-worker.js?v=test'
 		);
 		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
@@ -283,7 +328,8 @@ describe('static worker backed language sandboxes', () => {
 			})
 		).resolves.toBe(true);
 
-		expect(workerInstances[0].url).toBe(
+		await expectWorkerBootstrap(
+			workerInstances[0],
 			'http://localhost:3000/wasm-clojurescript/runner-worker.js?v=test'
 		);
 		expect(workerInstances[0].options).toBeUndefined();
@@ -313,7 +359,8 @@ describe('static worker backed language sandboxes', () => {
 			})
 		).resolves.toBe(true);
 
-		expect(workerInstances[0].url).toBe(
+		await expectWorkerBootstrap(
+			workerInstances[0],
 			'http://localhost:3000/wasm-forth/runner-worker.js?v=test'
 		);
 		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
@@ -339,7 +386,10 @@ describe('static worker backed language sandboxes', () => {
 			})
 		).resolves.toBe(true);
 
-		expect(workerInstances[0].url).toBe('http://localhost:3000/wasm-j/runner-worker.js?v=test');
+		await expectWorkerBootstrap(
+			workerInstances[0],
+			'http://localhost:3000/wasm-j/runner-worker.js?v=test'
+		);
 		expect(workerInstances[0].options).toEqual({ type: 'module' });
 		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
 			expect.objectContaining({
@@ -364,7 +414,8 @@ describe('static worker backed language sandboxes', () => {
 			})
 		).resolves.toBe(true);
 
-		expect(workerInstances[0].url).toBe(
+		await expectWorkerBootstrap(
+			workerInstances[0],
 			'http://localhost:3000/wasm-bqn/runner-worker.js?v=test'
 		);
 		expect(workerInstances[0].options).toEqual({ type: 'module' });
@@ -391,7 +442,8 @@ describe('static worker backed language sandboxes', () => {
 			})
 		).resolves.toBe(true);
 
-		expect(workerInstances[0].url).toBe(
+		await expectWorkerBootstrap(
+			workerInstances[0],
 			'http://localhost:3000/wasm-janet/runner-worker.js?v=test'
 		);
 		expect(workerInstances[0].options).toEqual({ type: 'module' });
@@ -418,7 +470,8 @@ describe('static worker backed language sandboxes', () => {
 			})
 		).resolves.toBe(true);
 
-		expect(workerInstances[0].url).toBe(
+		await expectWorkerBootstrap(
+			workerInstances[0],
 			'http://localhost:3000/wasm-julia/runner-worker.js?v=test'
 		);
 		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
@@ -444,7 +497,8 @@ describe('static worker backed language sandboxes', () => {
 			})
 		).resolves.toBe(true);
 
-		expect(workerInstances[0].url).toBe(
+		await expectWorkerBootstrap(
+			workerInstances[0],
 			'http://localhost:3000/wasm-nim/runner-worker.js?v=test'
 		);
 		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
@@ -457,23 +511,130 @@ describe('static worker backed language sandboxes', () => {
 		);
 	});
 
-	it('forwards structured static worker progress stages to the progress sink', async () => {
+	it('keeps startup and runtime progress meaningful and monotonic until completion', async () => {
 		onPostMessage = (worker, _message) => {
 			queueMicrotask(() => {
 				worker.onmessage?.({
 					data: {
-						progress: { percent: 50, stage: 'Compiling and linking Nim output' }
+						progress: { percent: 70, stage: 'Compiling and linking Nim output' }
 					}
+				} as MessageEvent<any>);
+				worker.onmessage?.({
+					data: { progress: { percent: 20, stage: 'Late stale progress' } }
 				} as MessageEvent<any>);
 				worker.onmessage?.({ data: { results: true } } as MessageEvent<any>);
 			});
 		};
 		const progress = { set: vi.fn() };
 		const sandbox = new Nim();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load('/absproxy/5173', '', true, [], {}, progress);
+		await expect(sandbox.run('echo "ok"', true, true, progress)).resolves.toBe(true);
+
+		const startupValues = progress.set.mock.calls.map(([value]) => value as number);
+		expect(startupValues.length).toBeGreaterThan(2);
+		expect(Math.max(...startupValues)).toBeLessThan(1);
+		expect(workerInstances).toHaveLength(1);
+		const repeatedLoadProgress = { set: vi.fn() };
+		await sandbox.load('/absproxy/5173', '', true, [], {}, repeatedLoadProgress);
+		expect(repeatedLoadProgress.set).not.toHaveBeenCalled();
 
 		await expect(sandbox.run('echo "ok"', false, true, progress)).resolves.toBe(true);
 
-		expect(progress.set).toHaveBeenCalledWith(0.5, 'Compiling and linking Nim output');
+		const compileProgress = progress.set.mock.calls.find(
+			([, stage]) => stage === 'Compiling and linking Nim output'
+		);
+		expect(compileProgress?.[0]).toBeCloseTo(0.755);
+		expect(progress.set).not.toHaveBeenCalledWith(expect.any(Number), 'Late stale progress');
+		const allValues = progress.set.mock.calls.map(([value]) => value as number);
+		expect(allValues).toEqual([...allValues].sort((left, right) => left - right));
+		expect(allValues.at(-1)).toBe(1);
+	});
+
+	it('buffers every stdin chunk until EOF and preserves explicit empty stdin', async () => {
+		const sandbox = new Prolog();
+		const code = 'main :- read_line_to_string(user_input, Line), writeln(Line).';
+		await sandbox.load('/absproxy/5173');
+
+		const run = sandbox.run(code, false);
+		sandbox.write('first\n');
+		await Promise.resolve();
+		expect(workerInstances[0].postMessage).not.toHaveBeenCalled();
+		sandbox.write('second\n');
+		sandbox.eof();
+		await expect(run).resolves.toBe(true);
+
+		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				stdin: 'first\nsecond\n',
+				stdinEof: true
+			})
+		);
+
+		await sandbox.load('/absproxy/5173');
+		const explicitInputWithoutPattern = sandbox.run('writeln(ok).', false);
+		sandbox.write('still forwarded\n');
+		sandbox.eof();
+		await expect(explicitInputWithoutPattern).resolves.toBe(true);
+		expect(workerInstances[1].postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({ stdin: 'still forwarded\n', stdinEof: true })
+		);
+
+		await sandbox.load('/absproxy/5173');
+		await expect(sandbox.run(code, false, true, undefined, [], { stdin: '' })).resolves.toBe(
+			true
+		);
+		expect(workerInstances[2].postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({ stdin: '', stdinEof: true })
+		);
+	});
+
+	it('rejects worker script download and bootstrap import failures', async () => {
+		vi.mocked(fetch).mockResolvedValueOnce(new Response('', { status: 404 }));
+		const missingScript = new Prolog();
+		await expect(missingScript.load('/absproxy/5173')).rejects.toThrow(
+			'Prolog worker script failed to load: HTTP 404'
+		);
+		expect(workerInstances).toHaveLength(0);
+
+		autoStartWorkers = false;
+		const invalidScript = new Prolog();
+		const load = invalidScript.load('/absproxy/5173');
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
+		workerInstances[0].onerror?.(
+			new ErrorEvent('error', {
+				message: 'Unexpected token',
+				filename: '/wasm-prolog/runner-worker.js',
+				lineno: 3,
+				colno: 7
+			})
+		);
+		await expect(load).rejects.toThrow(
+			'Prolog worker script error: Unexpected token (/wasm-prolog/runner-worker.js:3:7)'
+		);
+		expect(workerInstances[0].terminate).toHaveBeenCalledOnce();
+	});
+
+	it('rejects the active run when its worker crashes', async () => {
+		const sandbox = new Prolog();
+		await sandbox.load('/absproxy/5173');
+		onPostMessage = (worker) => {
+			queueMicrotask(() => {
+				worker.onerror?.(
+					new ErrorEvent('error', {
+						message: 'runtime crashed',
+						filename: '/wasm-prolog/runner-worker.js',
+						lineno: 9,
+						colno: 2
+					})
+				);
+			});
+		};
+
+		await expect(
+			sandbox.run('writeln(ok).', false, true, undefined, [], { stdin: '' })
+		).rejects.toBe(
+			'Prolog worker script error: runtime crashed (/wasm-prolog/runner-worker.js:9:2)'
+		);
+		expect(workerInstances[0].terminate).toHaveBeenCalledOnce();
 	});
 });

@@ -17,6 +17,7 @@ import {
 	resetBufferedStdin
 } from '$lib/playground/stdinBuffer';
 import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
+import { WorkerSession } from '$lib/playground/workerSession';
 
 type TinyGoRuntimeHooks = {
 	boot(): Promise<void>;
@@ -82,7 +83,6 @@ class TinyGo implements Sandbox {
 	compiledArtifact: Uint8Array | null = null;
 	compiledArtifactExecutionError = '';
 	compiledCacheKey = '';
-	activeReject: ((reason: string) => void) | null = null;
 	waitingForInput = false;
 	pendingEof = false;
 	lastActivityLog = '';
@@ -94,58 +94,62 @@ class TinyGo implements Sandbox {
 	runtimeProgressEnd = 0;
 	runtimeProgressValue = 0;
 	runtimeProgressAssets = new Map<string, { loaded: number; total: number }>();
+	private readonly workerSession = new WorkerSession({
+		label: 'TinyGo',
+		onDispose: (worker) => {
+			if (this.worker === worker) delete this.worker;
+			this.exit = true;
+			this.waitingForInput = false;
+			this.pendingEof = false;
+		}
+	});
 
-	load(
+	async load(
 		runtimeAssets: string | PlaygroundRuntimeAssets = '',
 		_code = '',
 		_log = true,
 		_args: string[] = [],
 		_options: SandboxExecutionOptions = {},
 		progress?: { set?: (value: number) => void } | import('svelte/store').Writable<number>
-	) {
-		return new Promise<void>(async (resolve, reject) => {
-			this.pendingInput = [];
-			this.waitingForInput = false;
-			this.pendingEof = false;
-			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
-			const nextModuleUrl = resolveTinyGoModuleUrl(runtimeAssets, currentUrl);
-			const nextRustCompilerUrl = resolveRustCompilerUrl(runtimeAssets, currentUrl);
-			const nextRustRuntimeBaseUrl = nextRustCompilerUrl
-				? new URL('./runtime/', nextRustCompilerUrl).toString()
-				: '';
-			if (!nextModuleUrl) {
-				return reject(
-					'TinyGo runtime is not configured. Set PUBLIC_WASM_TINYGO_MODULE_URL or runtimeAssets.tinygo.moduleUrl.'
-				);
-			}
-			if (
-				(this.moduleUrl && this.moduleUrl !== nextModuleUrl) ||
-				this.rustRuntimeBaseUrl !== nextRustRuntimeBaseUrl
-			) {
-				this.disposeRuntime();
-				this.compiledArtifact = null;
-				this.compiledArtifactExecutionError = '';
-				this.compiledCacheKey = '';
-			}
-			const nextAssetLoader =
-				typeof runtimeAssets === 'object' ? runtimeAssets?.tinygo?.assetLoader : undefined;
-			const nextAssetPacks =
-				typeof runtimeAssets === 'object' ? runtimeAssets?.tinygo?.assetPacks : undefined;
-			this.moduleUrl = nextModuleUrl;
-			this.rustRuntimeBaseUrl = nextRustRuntimeBaseUrl;
-			this.assetLoader = nextAssetLoader;
-			this.assetPacks = nextAssetPacks;
-			try {
-				progress?.set?.(0.25);
-				await this.ensureWorker();
-				progress?.set?.(0.5);
-				await this.ensureRuntime();
-				progress?.set?.(1);
-				resolve();
-			} catch (error) {
-				reject(error instanceof Error ? error.message : String(error));
-			}
-		});
+	): Promise<void> {
+		this.pendingInput = [];
+		this.waitingForInput = false;
+		this.pendingEof = false;
+		const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
+		const nextModuleUrl = resolveTinyGoModuleUrl(runtimeAssets, currentUrl);
+		const nextRustCompilerUrl = resolveRustCompilerUrl(runtimeAssets, currentUrl);
+		const nextRustRuntimeBaseUrl = nextRustCompilerUrl
+			? new URL('./runtime/', nextRustCompilerUrl).toString()
+			: '';
+		if (!nextModuleUrl) {
+			throw new Error(
+				'TinyGo runtime is not configured. Set PUBLIC_WASM_TINYGO_MODULE_URL or runtimeAssets.tinygo.moduleUrl.'
+			);
+		}
+		if (
+			(this.moduleUrl && this.moduleUrl !== nextModuleUrl) ||
+			this.rustRuntimeBaseUrl !== nextRustRuntimeBaseUrl
+		) {
+			this.disposeRuntime();
+			this.compiledArtifact = null;
+			this.compiledArtifactExecutionError = '';
+			this.compiledCacheKey = '';
+		}
+		this.assetLoader =
+			typeof runtimeAssets === 'object' ? runtimeAssets?.tinygo?.assetLoader : undefined;
+		this.assetPacks =
+			typeof runtimeAssets === 'object' ? runtimeAssets?.tinygo?.assetPacks : undefined;
+		this.moduleUrl = nextModuleUrl;
+		this.rustRuntimeBaseUrl = nextRustRuntimeBaseUrl;
+		try {
+			progress?.set?.(0.25);
+			await this.ensureWorker();
+			progress?.set?.(0.5);
+			await this.ensureRuntime();
+			progress?.set?.(1);
+		} catch (error) {
+			throw new Error(error instanceof Error ? error.message : String(error));
+		}
 	}
 
 	write(input: string) {
@@ -178,26 +182,19 @@ class TinyGo implements Sandbox {
 			await this.loadPromise;
 			return;
 		}
-		this.loadPromise = new Promise<void>(async (resolve, reject) => {
-			this.worker = new (await import('$lib/playground/worker/tinygo?worker')).default();
-			this.worker.onerror = (event: ErrorEvent) => {
-				const location =
-					event.filename && event.lineno
-						? ` (${event.filename}:${event.lineno}:${event.colno})`
-						: '';
-				reject(
-					`TinyGo worker script error: ${event.message || 'unknown error'}${location}`
-				);
-			};
-			this.worker.onmessageerror = () => {
-				reject('TinyGo worker message deserialization failed');
-			};
-			this.worker.onmessage = (event: MessageEvent<any>) => {
-				if (event.data?.load) resolve();
-				if (event.data?.error) reject(event.data.error);
-			};
-			this.worker.postMessage({ load: true });
-		}).finally(() => {
+		this.loadPromise = (async () => {
+			const WorkerConstructor = (await import('$lib/playground/worker/tinygo?worker'))
+				.default;
+			this.worker = new WorkerConstructor();
+			await this.workerSession.waitForLoad(this.worker, (resolve, reject) => {
+				if (!this.worker) return reject('Worker not loaded');
+				this.worker.onmessage = (event: MessageEvent<any>) => {
+					if (event.data?.load) resolve();
+					if (event.data?.error) reject(event.data.error);
+				};
+				this.worker.postMessage({ load: true });
+			});
+		})().finally(() => {
 			this.loadPromise = null;
 		});
 		await this.loadPromise;
@@ -412,7 +409,7 @@ class TinyGo implements Sandbox {
 		}
 	}
 
-	run(
+	async run(
 		code: string,
 		prepare: boolean,
 		_log = true,
@@ -421,30 +418,31 @@ class TinyGo implements Sandbox {
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
 		this.exit = false;
-		return new Promise<boolean | string>(async (resolve, reject) => {
-			try {
-				this.begin = Date.now();
-				await this.ensureWorker();
-				const target = options.tinygoTarget || 'wasm';
-				await this.compileArtifact(code, target, _log, prepare ? _prog : undefined);
-				if (prepare) {
-					this.elapse = Date.now() - this.begin;
-					this.exit = true;
-					resolve(true);
-					return;
-				}
-				if (this.compiledArtifactExecutionError) {
-					throw new Error(this.compiledArtifactExecutionError);
-				}
-				if (!this.worker || !this.compiledArtifact) {
-					throw new Error('TinyGo runtime did not prepare an artifact');
-				}
-				const { programArgs } = resolveSandboxExecutionArgs('TINYGO', args, options);
-				const _uid = ++this.uid;
-				this.activeReject = reject;
-				this.worker.onmessage = (event: Event & { data: any }) => {
-					if (!this.worker) return reject('Worker not loaded');
-					if (_uid !== this.uid) return (this.worker.onmessage = null);
+		try {
+			this.begin = Date.now();
+			await this.ensureWorker();
+			const target = options.tinygoTarget || 'wasm';
+			await this.compileArtifact(code, target, _log, prepare ? _prog : undefined);
+			if (prepare) {
+				this.elapse = Date.now() - this.begin;
+				this.exit = true;
+				return true;
+			}
+			if (this.compiledArtifactExecutionError) {
+				throw new Error(this.compiledArtifactExecutionError);
+			}
+			if (!this.worker || !this.compiledArtifact) {
+				throw new Error('TinyGo runtime did not prepare an artifact');
+			}
+			const worker = this.worker;
+			const compiledArtifact = this.compiledArtifact;
+			const { programArgs } = resolveSandboxExecutionArgs('TINYGO', args, options);
+			const _uid = ++this.uid;
+			return await new Promise<boolean | string>((resolve, reject) => {
+				const operation = this.workerSession.beginRun(worker, reject);
+				worker.onmessage = (event: Event & { data: any }) => {
+					if (this.worker !== worker) return reject('Worker not loaded');
+					if (_uid !== this.uid) return (worker.onmessage = null);
 					const { output, results, error, buffer } = event.data;
 					if (buffer) {
 						this.waitingForInput = true;
@@ -456,7 +454,7 @@ class TinyGo implements Sandbox {
 						this.exit = true;
 						this.waitingForInput = false;
 						this.pendingEof = false;
-						this.activeReject = null;
+						this.workerSession.complete(operation);
 						resolve(results as string);
 					}
 					if (error) {
@@ -464,25 +462,24 @@ class TinyGo implements Sandbox {
 						this.exit = true;
 						this.waitingForInput = false;
 						this.pendingEof = false;
-						this.activeReject = null;
+						this.workerSession.complete(operation);
 						reject(error);
 					}
 				};
-				this.worker.postMessage({
-					artifact: new Uint8Array(this.compiledArtifact),
+				worker.postMessage({
+					artifact: new Uint8Array(compiledArtifact),
 					buffer: this.buffer,
 					args: programArgs,
 					log: _log
 				});
-			} catch (error) {
-				this.elapse = Date.now() - this.begin;
-				this.exit = true;
-				this.waitingForInput = false;
-				this.pendingEof = false;
-				this.activeReject = null;
-				reject(error instanceof Error ? error.message : String(error));
-			}
-		});
+			});
+		} catch (error) {
+			this.elapse = Date.now() - this.begin;
+			this.exit = true;
+			this.waitingForInput = false;
+			this.pendingEof = false;
+			throw error instanceof Error ? error.message : String(error);
+		}
 	}
 
 	kill() {
@@ -490,13 +487,10 @@ class TinyGo implements Sandbox {
 	}
 
 	terminate() {
-		this.activeReject?.('Process terminated');
-		this.activeReject = null;
 		this.waitingForInput = false;
 		this.pendingEof = false;
 		this.uid += 1;
-		this.worker?.terminate?.();
-		delete this.worker;
+		this.workerSession.terminate();
 		this.exit = true;
 	}
 

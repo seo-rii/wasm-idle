@@ -1,6 +1,4 @@
 import { instantiate, type ASUtil } from '@assemblyscript/loader';
-import { compileAssemblyScript } from '@wasm-idle/runtime-assemblyscript';
-import type { AssemblyScriptCompilerModule } from '@wasm-idle/runtime-assemblyscript';
 import type { SandboxWorkspaceFile } from '$lib/playground/options';
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
 
@@ -8,6 +6,21 @@ declare var self: any;
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
+
+interface AssemblyScriptCompilerModule {
+	main?: (
+		args: string[],
+		options: {
+			stdout: { write(chunk: Uint8Array | string): void; toString(): string };
+			stderr: { write(chunk: Uint8Array | string): void; toString(): string };
+			readFile(filePath: string): string | null;
+			writeFile(filePath: string, contents: Uint8Array | string): void;
+			listFiles(dirPath: string): string[];
+		}
+	) =>
+		| Promise<{ error?: Error; stdout?: unknown; stderr?: unknown }>
+		| { error?: Error; stdout?: unknown; stderr?: unknown };
+}
 
 let loaded = false;
 let compilerPromise: Promise<AssemblyScriptCompilerModule> | null = null;
@@ -153,16 +166,64 @@ self.onmessage = async (event: { data: any }) => {
 				files[file.path] = file.content;
 			}
 			files[activePath] = source;
-			const result = await compileAssemblyScript({
-				entry: activePath,
-				source,
-				files,
-				compiler: await compilerPromise,
-				runtime: 'incremental',
-				bindings: 'raw',
-				optimize: true,
-				exportRuntime: true
-			});
+			const compiler = await compilerPromise;
+			if (!compiler.main) {
+				throw new Error('AssemblyScript compiler main export was not found.');
+			}
+			const outputFiles: Record<string, Uint8Array | string> = {};
+			let stdoutText = '';
+			let stderrText = '';
+			const stdout = {
+				write(chunk: Uint8Array | string) {
+					stdoutText += typeof chunk === 'string' ? chunk : decoder.decode(chunk);
+				},
+				toString() {
+					return stdoutText;
+				}
+			};
+			const stderr = {
+				write(chunk: Uint8Array | string) {
+					stderrText += typeof chunk === 'string' ? chunk : decoder.decode(chunk);
+				},
+				toString() {
+					return stderrText;
+				}
+			};
+			const compileResult = await compiler.main(
+				[
+					activePath,
+					'--outFile',
+					'module.wasm',
+					'--runtime',
+					'incremental',
+					'--bindings',
+					'raw',
+					'--optimize',
+					'--exportRuntime'
+				],
+				{
+					stdout,
+					stderr,
+					readFile(filePath) {
+						return files[filePath] ?? null;
+					},
+					writeFile(filePath, contents) {
+						outputFiles[filePath] = contents;
+					},
+					listFiles(dirPath) {
+						const prefix = dirPath.endsWith('/') ? dirPath : `${dirPath}/`;
+						return Object.keys(files).filter((filePath) => filePath.startsWith(prefix));
+					}
+				}
+			);
+			const outputWasm = outputFiles['module.wasm'];
+			const result = {
+				error: compileResult.error,
+				stdout: String(compileResult.stdout ?? stdout),
+				stderr: String(compileResult.stderr ?? stderr),
+				wasm: typeof outputWasm === 'string' ? encoder.encode(outputWasm) : outputWasm,
+				files: outputFiles
+			};
 			if (log) {
 				console.log(
 					`[wasm-idle:assemblyscript-worker] compile settled success=${String(!result.error && Boolean(result.wasm))} stdout=${String(Boolean(result.stdout))} stderr=${String(Boolean(result.stderr))}`

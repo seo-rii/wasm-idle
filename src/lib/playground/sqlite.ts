@@ -1,6 +1,7 @@
 import { resolveSqliteWasmUrl, type PlaygroundRuntimeAssets } from '$lib/playground/assets';
 import type { CompilerDiagnostic, SandboxExecutionOptions } from '$lib/playground/options';
 import type { Sandbox } from '$lib/playground/sandbox';
+import { WorkerSession } from '$lib/playground/workerSession';
 
 class Sqlite implements Sandbox {
 	output: any = null;
@@ -10,8 +11,14 @@ class Sqlite implements Sandbox {
 	uid = 0;
 	exit = true;
 	wasmUrl = '';
-	activeReject: ((reason: string) => void) | null = null;
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
+	private readonly workerSession = new WorkerSession({
+		label: 'SQLite',
+		onDispose: (worker) => {
+			if (this.worker === worker) delete this.worker;
+			this.exit = true;
+		}
+	});
 
 	load(
 		runtimeAssets: string | PlaygroundRuntimeAssets = '',
@@ -21,29 +28,17 @@ class Sqlite implements Sandbox {
 		_options: SandboxExecutionOptions = {},
 		progress?: { set?: (value: number) => void } | import('svelte/store').Writable<number>
 	) {
-		return new Promise<void>(async (resolve, reject) => {
+		return this.workerSession.load(async (resolve, reject) => {
 			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
 			const nextWasmUrl = resolveSqliteWasmUrl(runtimeAssets, currentUrl);
 			const needsWorkerReset = !this.worker || this.wasmUrl !== nextWasmUrl;
 			this.wasmUrl = nextWasmUrl;
 			if (needsWorkerReset && this.worker) {
-				this.worker.terminate();
-				delete this.worker;
+				this.workerSession.reset();
 			}
 			if (!this.worker) {
 				this.worker = new (await import('$lib/playground/worker/sqlite?worker')).default();
-				this.worker.onerror = (event: ErrorEvent) => {
-					const location =
-						event.filename && event.lineno
-							? ` (${event.filename}:${event.lineno}:${event.colno})`
-							: '';
-					reject(
-						`SQLite worker script error: ${event.message || 'unknown error'}${location}`
-					);
-				};
-				this.worker.onmessageerror = () => {
-					reject('SQLite worker message deserialization failed');
-				};
+				this.workerSession.attach(this.worker);
 				this.worker.onmessage = (event: MessageEvent<any>) => {
 					if (event.data?.load) {
 						progress?.set?.(1);
@@ -79,7 +74,7 @@ class Sqlite implements Sandbox {
 		return new Promise<boolean | string>((resolve, reject) => {
 			if (!this.worker) return reject('Worker not loaded');
 			const _uid = ++this.uid;
-			this.activeReject = reject;
+			const operation = this.workerSession.beginRun(this.worker, reject);
 			const handler = (event: Event & { data: any }) => {
 				if (!this.worker) return reject('Worker not loaded');
 				if (_uid !== this.uid) return (this.worker.onmessage = null);
@@ -92,13 +87,13 @@ class Sqlite implements Sandbox {
 				if (results) {
 					this.elapse = Date.now() - this.begin;
 					this.exit = true;
-					this.activeReject = null;
+					this.workerSession.complete(operation);
 					resolve(results as string);
 				}
 				if (error) {
 					this.elapse = Date.now() - this.begin;
 					this.exit = true;
-					this.activeReject = null;
+					this.workerSession.complete(operation);
 					reject(error);
 				}
 			};
@@ -119,11 +114,8 @@ class Sqlite implements Sandbox {
 	}
 
 	terminate() {
-		this.activeReject?.('Process terminated');
-		this.activeReject = null;
 		this.uid += 1;
-		this.worker?.terminate?.();
-		delete this.worker;
+		this.workerSession.terminate();
 		this.exit = true;
 	}
 

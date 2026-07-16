@@ -52,7 +52,8 @@ class RuntimeLoadProgress {
 
 	update(asset: string, loaded: number, total?: number) {
 		if (!this.expectedAssets.has(asset)) return;
-		const fraction = total && total > 0 ? Math.min(loaded / total, 1) : loaded > 0 ? 1 : 0;
+		if (!total || total <= 0) return;
+		const fraction = Math.min(loaded / total, 1);
 		this.fractions.set(asset, fraction);
 		this.emit();
 	}
@@ -210,7 +211,12 @@ export class WorkerAssetBridge {
 	private async fetchAsset(url: string, asset: string): Promise<LoadedAsset> {
 		const response = await fetch(url);
 		if (!response.ok) throw new Error(`Failed to load ${asset}: ${response.status}`);
-		const contentLength = Number(response.headers.get('content-length') || 0) || undefined;
+		const contentLength =
+			Number(
+				response.headers.get('x-wasm-idle-original-content-length') ||
+					response.headers.get('content-length') ||
+					0
+			) || undefined;
 		const mimeType = response.headers.get('content-type') || undefined;
 		if (!response.body) {
 			const bytes = new Uint8Array(await response.arrayBuffer());

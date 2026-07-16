@@ -5,6 +5,8 @@ import {
 	type SandboxExecutionOptions
 } from '$lib/playground/options';
 import type { Sandbox } from '$lib/playground/sandbox';
+import wasmerThreadWorkerUrl from '$lib/playground/worker/wasmerThreadWorker?worker&url';
+import wasmerSdkUrl from '@wasmer/sdk?url';
 
 type BashRuntimeAssetConfig = PlaygroundRuntimeAssets & {
 	bash?: { webcUrl?: string };
@@ -52,11 +54,18 @@ class Bash implements Sandbox {
 		const normalizedRoot = rootUrl.endsWith('/') ? rootUrl.slice(0, -1) : rootUrl;
 		const nextWebcUrl = configured || `${normalizedRoot}/wasm-bash/bash.webc`;
 		this.webcUrl = currentUrl ? new URL(nextWebcUrl, currentUrl).href : nextWebcUrl;
+		const resolvedSdkUrl = currentUrl ? new URL(wasmerSdkUrl, currentUrl).href : wasmerSdkUrl;
+		const resolvedThreadWorkerUrl = currentUrl
+			? new URL(wasmerThreadWorkerUrl, currentUrl).href
+			: wasmerThreadWorkerUrl;
 
 		progress?.set?.(0.1, 'Loading Bash runtime');
 		if (!sdkPromise) {
 			sdkPromise = import('@wasmer/sdk').then(async (sdk) => {
-				await sdk.init();
+				await sdk.init({
+					sdkUrl: resolvedSdkUrl,
+					workerUrl: resolvedThreadWorkerUrl
+				});
 				return sdk;
 			});
 		}
@@ -133,66 +142,68 @@ class Bash implements Sandbox {
 			this.pendingEof = false;
 		}
 
-		return new Promise<boolean | string>(async (resolve, reject) => {
+		return new Promise<boolean | string>((resolve, reject) => {
 			this.activeReject = reject;
-			try {
-				const command = this.runtimePackage?.entrypoint;
-				if (!command) throw new Error('Bash WEBc package has no entrypoint');
-				const instance = await command.run({
-					args: ['-c', code, mountedActivePath, ...programArgs],
-					mount: { '/workspace': mountedFiles },
-					cwd: '/workspace',
-					...(suppliedStdin === undefined ? {} : { stdin: suppliedStdin })
-				});
-				if (runUid !== this.uid) {
-					instance.free();
-					return;
-				}
-				this.instance = instance;
-				this.stdinWriter =
-					suppliedStdin === undefined ? instance.stdin?.getWriter() || null : null;
-				await this.flushPendingInput();
+			void (async () => {
+				try {
+					const command = this.runtimePackage?.entrypoint;
+					if (!command) throw new Error('Bash WEBc package has no entrypoint');
+					const instance = await command.run({
+						args: ['-c', code, mountedActivePath, ...programArgs],
+						mount: { '/workspace': mountedFiles },
+						cwd: '/workspace',
+						...(suppliedStdin === undefined ? {} : { stdin: suppliedStdin })
+					});
+					if (runUid !== this.uid) {
+						instance.free();
+						return;
+					}
+					this.instance = instance;
+					this.stdinWriter =
+						suppliedStdin === undefined ? instance.stdin?.getWriter() || null : null;
+					await this.flushPendingInput();
 
-				const stdoutDone = instance.stdout.pipeTo(
-					new WritableStream({
-						write: (chunk) => {
-							if (runUid === this.uid) {
-								this.output?.(new TextDecoder().decode(chunk));
+					const stdoutDone = instance.stdout.pipeTo(
+						new WritableStream({
+							write: (chunk) => {
+								if (runUid === this.uid) {
+									this.output?.(new TextDecoder().decode(chunk));
+								}
 							}
-						}
-					})
-				);
-				const stderrDone = instance.stderr.pipeTo(
-					new WritableStream({
-						write: (chunk) => {
-							if (runUid === this.uid) {
-								this.output?.(new TextDecoder().decode(chunk));
+						})
+					);
+					const stderrDone = instance.stderr.pipeTo(
+						new WritableStream({
+							write: (chunk) => {
+								if (runUid === this.uid) {
+									this.output?.(new TextDecoder().decode(chunk));
+								}
 							}
-						}
-					})
-				);
-				const result = await instance.wait();
-				await Promise.allSettled([stdoutDone, stderrDone]);
-				if (runUid !== this.uid) return;
+						})
+					);
+					const result = await instance.wait();
+					await Promise.allSettled([stdoutDone, stderrDone]);
+					if (runUid !== this.uid) return;
 
-				this.elapse = Date.now() - this.begin;
-				this.exit = true;
-				this.activeReject = null;
-				this.stdinWriter = null;
-				this.instance = null;
-				if (!result.ok) {
-					reject(`Bash exited with status ${result.code}.`);
-					return;
+					this.elapse = Date.now() - this.begin;
+					this.exit = true;
+					this.activeReject = null;
+					this.stdinWriter = null;
+					this.instance = null;
+					if (!result.ok) {
+						reject(`Bash exited with status ${result.code}.`);
+						return;
+					}
+					resolve(true);
+				} catch (error) {
+					if (runUid !== this.uid) return;
+					this.exit = true;
+					this.activeReject = null;
+					this.stdinWriter = null;
+					this.instance = null;
+					reject(error instanceof Error ? error.message : String(error));
 				}
-				resolve(true);
-			} catch (error) {
-				if (runUid !== this.uid) return;
-				this.exit = true;
-				this.activeReject = null;
-				this.stdinWriter = null;
-				this.instance = null;
-				reject(error instanceof Error ? error.message : String(error));
-			}
+			})();
 		});
 	}
 

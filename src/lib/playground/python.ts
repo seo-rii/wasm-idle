@@ -14,6 +14,7 @@ import {
 	waitForBufferedSequenceChange
 } from '$lib/playground/stdinBuffer';
 import { createWasmIdleSharedBuffer, requireSharedArrayBuffer } from '$lib/playground/sharedBuffer';
+import { WorkerSession } from '$lib/playground/workerSession';
 
 class Python implements Sandbox {
 	ts = Date.now();
@@ -34,7 +35,17 @@ class Python implements Sandbox {
 	pendingEof = false;
 	exit = true;
 	assetBridge: WorkerAssetBridge | null = null;
-	activeReject: ((reason?: string) => void) | null = null;
+	private readonly workerSession = new WorkerSession({
+		label: 'Python',
+		onDispose: (worker) => {
+			if (this.worker === worker) delete this.worker;
+			this.assetBridge = null;
+			this.exit = true;
+			this.waitingForInput = false;
+			this.pendingEof = false;
+			this.ondebug?.({ type: 'stop' });
+		}
+	});
 
 	load(
 		runtimeAssets: string | PlaygroundRuntimeAssets = '',
@@ -44,7 +55,7 @@ class Python implements Sandbox {
 		_options: SandboxExecutionOptions = {},
 		progress?: { set?: (value: number) => void } | import('svelte/store').Writable<number>
 	) {
-		return new Promise<void>(async (resolve, reject) => {
+		return this.workerSession.load(async (resolve, reject) => {
 			this.pendingInput = [];
 			this.waitingForInput = false;
 			this.pendingEof = false;
@@ -56,12 +67,11 @@ class Python implements Sandbox {
 			const needsWorkerReset =
 				!this.worker || !this.assetBridge || !this.assetBridge.matches(assetConfig);
 			if (needsWorkerReset && this.worker) {
-				this.worker.terminate();
-				delete this.worker;
-				this.assetBridge = null;
+				this.workerSession.reset();
 			}
 			if (!this.worker) {
 				this.worker = new (await import('$lib/playground/worker/python?worker')).default();
+				this.workerSession.attach(this.worker);
 				this.assetBridge = new WorkerAssetBridge(
 					this.worker,
 					'python',
@@ -125,9 +135,9 @@ class Python implements Sandbox {
 	): Promise<boolean | string> {
 		if (options.debug) requireSharedArrayBuffer('Python debugging');
 		this.exit = false;
-		return new Promise<boolean | string>(async (resolve, reject) => {
+		return new Promise<boolean | string>((resolve, reject) => {
 			if (!this.worker) return reject('Worker not loaded');
-			this.activeReject = reject;
+			const operation = this.workerSession.beginRun(this.worker, reject);
 			const interrupt = new Uint8Array(this.interruptBuffer),
 				_uid = ++this.uid;
 			const handler = (event: Event & { data: any }) => {
@@ -156,7 +166,7 @@ class Python implements Sandbox {
 					this.exit = true;
 					this.waitingForInput = false;
 					this.pendingEof = false;
-					this.activeReject = null;
+					this.workerSession.complete(operation);
 					this.ondebug?.({ type: 'stop' });
 					resolve(results as string);
 				}
@@ -166,7 +176,7 @@ class Python implements Sandbox {
 					this.exit = true;
 					this.waitingForInput = false;
 					this.pendingEof = false;
-					this.activeReject = null;
+					this.workerSession.complete(operation);
 					this.ondebug?.({ type: 'stop' });
 					reject(error);
 				}
@@ -226,8 +236,6 @@ class Python implements Sandbox {
 	}
 
 	terminate() {
-		this.activeReject?.('Process terminated');
-		this.activeReject = null;
 		this.waitingForInput = false;
 		this.pendingEof = false;
 		this.uid += 1;
@@ -235,9 +243,7 @@ class Python implements Sandbox {
 		const control = new Int32Array(this.debugBuffer);
 		Atomics.add(control, 0, 1);
 		Atomics.notify(control, 0);
-		this.worker?.terminate?.();
-		delete this.worker;
-		this.assetBridge = null;
+		this.workerSession.terminate();
 		this.exit = true;
 	}
 
@@ -254,9 +260,7 @@ class Python implements Sandbox {
 		debugBuffer.fill(0);
 		await new Promise((resolve) => setTimeout(resolve, 200));
 		if (!this.exit) {
-			this.worker?.terminate?.();
-			delete this.worker;
-			this.assetBridge = null;
+			this.workerSession.terminate();
 			this.exit = true;
 		}
 	}

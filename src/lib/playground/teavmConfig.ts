@@ -6,8 +6,12 @@ const normalizePathPrefix = (pathPrefix: string) => {
 	return pathPrefix.endsWith('/') ? pathPrefix.slice(0, -1) : pathPrefix;
 };
 
-export const resolveTeaVmBaseUrl = (pathPrefix = '', currentUrl = '') => {
-	const configuredBaseUrl = (import.meta.env.PUBLIC_TEAVM_BASE_URL || '').trim();
+export const resolveTeaVmBaseUrl = (
+	pathPrefix = '',
+	currentUrl = '',
+	configuredBaseUrl = ''
+) => {
+	configuredBaseUrl = configuredBaseUrl.trim();
 	const baseUrl = configuredBaseUrl
 		? normalizeTeaVmBaseUrl(configuredBaseUrl)
 		: `${normalizePathPrefix(pathPrefix) || ''}/teavm/`;

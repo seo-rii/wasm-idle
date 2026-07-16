@@ -364,7 +364,7 @@ describe('TinyGo sandbox', () => {
 				sandbox.load({
 					tinygo: {}
 				})
-			).rejects.toContain(
+			).rejects.toThrow(
 				'TinyGo runtime is not configured. Set PUBLIC_WASM_TINYGO_MODULE_URL or runtimeAssets.tinygo.moduleUrl.'
 			);
 		} finally {

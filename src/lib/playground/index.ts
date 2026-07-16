@@ -4,7 +4,10 @@ import type {
 	Sandbox,
 	SandboxRuntimeAssets
 } from '$lib/playground/sandbox';
-import { createPlaygroundBinding as createCorePlaygroundBinding } from '@wasm-idle/core';
+import {
+	createPlaygroundBinding as createCorePlaygroundBinding,
+	supportedLanguageIds
+} from '@wasm-idle/core';
 
 const sandboxCache: { [key: string]: Sandbox } = {};
 
@@ -343,55 +346,7 @@ for (const route of sandboxRoutes) {
 	for (const alias of route.aliases) sandboxRouteByLanguage.set(alias, route);
 }
 
-export const supportedLanguages = [
-	'PYTHON3',
-	'PYPY3',
-	'C',
-	'CPP',
-	'OBJC',
-	'JAVA',
-	'RUST',
-	'GO',
-	'D',
-	'CSHARP',
-	'FSHARP',
-	'VBNET',
-	'ELIXIR',
-	'ERLANG',
-	'PROLOG',
-	'GLEAM',
-	'PERL',
-	'TCL',
-	'AWK',
-	'PASCAL',
-	'FORTH',
-	'J',
-	'BQN',
-	'JANET',
-	'JULIA',
-	'NIM',
-	'BASH',
-	'CLOJURESCRIPT',
-	'FORTRAN',
-	'COBOL',
-	'TINYGO',
-	'OCAML',
-	'JAVASCRIPT',
-	'TYPESCRIPT',
-	'ASSEMBLYSCRIPT',
-	'WAT',
-	'WASM',
-	'LUA',
-	'ZIG',
-	'LISP',
-	'RUBY',
-	'HASKELL',
-	'R',
-	'OCTAVE',
-	'DUCKDB',
-	'SQLITE',
-	'PHP'
-];
+export const supportedLanguages = [...supportedLanguageIds];
 
 export function createPlaygroundBinding(runtimeAssets: SandboxRuntimeAssets): PlaygroundBinding {
 	return createCorePlaygroundBinding(

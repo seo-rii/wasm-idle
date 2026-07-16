@@ -1,6 +1,7 @@
 import type { CompilerDiagnostic, SandboxExecutionOptions } from '$lib/playground/options';
 import type { PlaygroundRuntimeAssets } from '$lib/playground/assets';
 import type { Sandbox } from '$lib/playground/sandbox';
+import { WorkerSession } from '$lib/playground/workerSession';
 
 class DuckDB implements Sandbox {
 	output: any = null;
@@ -9,8 +10,14 @@ class DuckDB implements Sandbox {
 	elapse = 0;
 	uid = 0;
 	exit = true;
-	activeReject: ((reason: string) => void) | null = null;
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
+	private readonly workerSession = new WorkerSession({
+		label: 'DuckDB',
+		onDispose: (worker) => {
+			if (this.worker === worker) delete this.worker;
+			this.exit = true;
+		}
+	});
 
 	load(
 		_runtimeAssets: string | PlaygroundRuntimeAssets = '',
@@ -20,21 +27,10 @@ class DuckDB implements Sandbox {
 		_options: SandboxExecutionOptions = {},
 		progress?: { set?: (value: number) => void } | import('svelte/store').Writable<number>
 	) {
-		return new Promise<void>(async (resolve, reject) => {
+		return this.workerSession.load(async (resolve, reject) => {
 			if (!this.worker) {
 				this.worker = new (await import('$lib/playground/worker/duckdb?worker')).default();
-				this.worker.onerror = (event: ErrorEvent) => {
-					const location =
-						event.filename && event.lineno
-							? ` (${event.filename}:${event.lineno}:${event.colno})`
-							: '';
-					reject(
-						`DuckDB worker script error: ${event.message || 'unknown error'}${location}`
-					);
-				};
-				this.worker.onmessageerror = () => {
-					reject('DuckDB worker message deserialization failed');
-				};
+				this.workerSession.attach(this.worker);
 				this.worker.onmessage = (event: MessageEvent<any>) => {
 					if (event.data?.load) {
 						progress?.set?.(1);
@@ -69,7 +65,7 @@ class DuckDB implements Sandbox {
 		return new Promise<boolean | string>((resolve, reject) => {
 			if (!this.worker) return reject('Worker not loaded');
 			const _uid = ++this.uid;
-			this.activeReject = reject;
+			const operation = this.workerSession.beginRun(this.worker, reject);
 			const handler = (event: Event & { data: any }) => {
 				if (!this.worker) return reject('Worker not loaded');
 				if (_uid !== this.uid) return (this.worker.onmessage = null);
@@ -82,13 +78,13 @@ class DuckDB implements Sandbox {
 				if (results) {
 					this.elapse = Date.now() - this.begin;
 					this.exit = true;
-					this.activeReject = null;
+					this.workerSession.complete(operation);
 					resolve(results as string);
 				}
 				if (error) {
 					this.elapse = Date.now() - this.begin;
 					this.exit = true;
-					this.activeReject = null;
+					this.workerSession.complete(operation);
 					reject(error);
 				}
 			};
@@ -110,11 +106,8 @@ class DuckDB implements Sandbox {
 	}
 
 	terminate() {
-		this.activeReject?.('Process terminated');
-		this.activeReject = null;
 		this.uid += 1;
-		this.worker?.terminate?.();
-		delete this.worker;
+		this.workerSession.terminate();
 		this.exit = true;
 	}
 

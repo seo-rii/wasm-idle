@@ -1,6 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const workerInstances: MockWorker[] = [];
+const workerBootstrapBlobs = new Map<string, Blob>();
 const { publicEnv } = vi.hoisted(() => ({
 	publicEnv: {
 		PUBLIC_WASM_SWIFT_BASE_URL: '',
@@ -9,6 +10,7 @@ const { publicEnv } = vi.hoisted(() => ({
 	}
 }));
 let onPostMessage: ((worker: MockWorker, message: any) => void) | null = null;
+let workerBootstrapId = 0;
 
 class MockWorker {
 	onmessage: ((event: MessageEvent<any>) => void) | null = null;
@@ -32,6 +34,11 @@ class MockWorker {
 		public options?: WorkerOptions
 	) {
 		workerInstances.push(this);
+		queueMicrotask(() => {
+			this.onmessage?.({
+				data: { __wasmIdleStaticWorkerReady: true }
+			} as MessageEvent<any>);
+		});
 	}
 }
 
@@ -46,10 +53,32 @@ import Swift from './swift';
 describe('Swift sandbox', () => {
 	beforeEach(() => {
 		workerInstances.length = 0;
+		workerBootstrapBlobs.clear();
+		workerBootstrapId = 0;
 		publicEnv.PUBLIC_WASM_SWIFT_BASE_URL = '';
 		publicEnv.PUBLIC_WASM_SWIFT_WORKER_URL = '';
 		publicEnv.PUBLIC_WASM_SWIFT_MANIFEST_URL = '';
 		onPostMessage = null;
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(
+				async () =>
+					new Response('/* Swift worker */', {
+						status: 200,
+						headers: { 'content-length': '18' }
+					})
+			)
+		);
+		vi.spyOn(URL, 'createObjectURL').mockImplementation((blob) => {
+			const url = `blob:wasm-idle-swift-worker-${workerBootstrapId++}`;
+			workerBootstrapBlobs.set(url, blob as Blob);
+			return url;
+		});
+		vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
 	});
 
 	it('loads Swift runtime urls and forwards the static worker run payload', async () => {
@@ -80,7 +109,8 @@ describe('Swift sandbox', () => {
 		).resolves.toBe(true);
 
 		expect(workerInstances).toHaveLength(1);
-		expect(workerInstances[0].url).toBe(
+		expect(workerInstances[0].url).toMatch(/^blob:wasm-idle-swift-worker-/);
+		expect(await workerBootstrapBlobs.get(workerInstances[0].url)?.text()).toContain(
 			'http://localhost:3000/wasm-swift/runner-worker.js?v=test'
 		);
 		expect(workerInstances[0].options).toBeUndefined();
@@ -120,11 +150,14 @@ describe('Swift sandbox', () => {
 
 		const runPromise = sandbox.run('let line = readLine() ?? ""\nprint(line)', false);
 		await Promise.resolve();
-		expect(workerInstances).toHaveLength(0);
+		expect(workerInstances).toHaveLength(1);
+		expect(workerInstances[0].postMessage).not.toHaveBeenCalled();
 		sandbox.write('42\n');
+		sandbox.eof();
 
 		await expect(runPromise).resolves.toBe(true);
-		expect(workerInstances[0].url).toBe(
+		expect(workerInstances[0].url).toMatch(/^blob:wasm-idle-swift-worker-/);
+		expect(await workerBootstrapBlobs.get(workerInstances[0].url)?.text()).toContain(
 			'http://localhost:3000/absproxy/5173/wasm-swift/runner-worker.js'
 		);
 		expect(runMessage).toEqual(
@@ -154,7 +187,8 @@ describe('Swift sandbox', () => {
 
 		const runPromise = sandbox.run('let line = readLine() ?? ""\nprint(line)', false);
 		await Promise.resolve();
-		expect(workerInstances).toHaveLength(0);
+		expect(workerInstances).toHaveLength(1);
+		expect(workerInstances[0].postMessage).not.toHaveBeenCalled();
 		sandbox.eof();
 
 		await expect(runPromise).resolves.toBe(true);

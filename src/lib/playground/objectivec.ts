@@ -9,6 +9,7 @@ import type { SandboxExecutionOptions } from '$lib/playground/options';
 import { resolveSandboxExecutionArgs } from '$lib/playground/options';
 import type { Sandbox } from '$lib/playground/sandbox';
 import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
+import { WorkerSession } from '$lib/playground/workerSession';
 import {
 	flushBufferedEof,
 	flushQueuedStdin,
@@ -41,8 +42,18 @@ class ObjectiveC implements Sandbox {
 	pendingEof = false;
 	exit = true;
 	assetBridge: WorkerAssetBridge | null = null;
-	activeReject: ((reason?: string) => void) | null = null;
 	activeObjectiveCAssetsKey = '';
+	private readonly workerSession = new WorkerSession({
+		label: 'Objective-C',
+		onDispose: (worker) => {
+			if (this.worker === worker) delete this.worker;
+			this.assetBridge = null;
+			this.activeObjectiveCAssetsKey = '';
+			this.exit = true;
+			this.waitingForInput = false;
+			this.pendingEof = false;
+		}
+	});
 
 	load(
 		runtimeAssets: string | PlaygroundRuntimeAssets = '',
@@ -53,63 +64,57 @@ class ObjectiveC implements Sandbox {
 		progress?: { set?: (value: number) => void } | Writable<number>
 	) {
 		void options;
-		return new Promise<void>((resolve, reject) => {
-			void (async () => {
-				this.log = log;
-				this.pendingInput = [];
-				this.waitingForInput = false;
-				this.pendingEof = false;
-				const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
-				const clangAssets = resolveRuntimeAssetConfig('clang', runtimeAssets, currentUrl);
-				const objectivecAssets = resolveObjectiveCRuntimeAssetConfig(
-					runtimeAssets,
-					currentUrl
+		return this.workerSession.load(async (resolve, reject) => {
+			this.log = log;
+			this.pendingInput = [];
+			this.waitingForInput = false;
+			this.pendingEof = false;
+			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
+			const clangAssets = resolveRuntimeAssetConfig('clang', runtimeAssets, currentUrl);
+			const objectivecAssets = resolveObjectiveCRuntimeAssetConfig(runtimeAssets, currentUrl);
+			const nextObjectiveCAssetsKey = objectiveCAssetsKey(objectivecAssets);
+			const needsWorkerReset =
+				!this.worker ||
+				!this.assetBridge ||
+				!this.assetBridge.matches(clangAssets) ||
+				this.activeObjectiveCAssetsKey !== nextObjectiveCAssetsKey;
+			if (needsWorkerReset && this.worker) {
+				this.workerSession.reset();
+			}
+			if (!this.worker) {
+				this.worker = new (
+					await import('$lib/playground/worker/objectivec?worker')
+				).default();
+				this.workerSession.attach(this.worker);
+				this.assetBridge = new WorkerAssetBridge(
+					this.worker,
+					'clang',
+					clangAssets,
+					progress
 				);
-				const nextObjectiveCAssetsKey = objectiveCAssetsKey(objectivecAssets);
-				const needsWorkerReset =
-					!this.worker ||
-					!this.assetBridge ||
-					!this.assetBridge.matches(clangAssets) ||
-					this.activeObjectiveCAssetsKey !== nextObjectiveCAssetsKey;
-				if (needsWorkerReset && this.worker) {
-					this.worker.terminate();
-					delete this.worker;
-					this.assetBridge = null;
-				}
-				if (!this.worker) {
-					this.worker = new (
-						await import('$lib/playground/worker/objectivec?worker')
-					).default();
-					this.assetBridge = new WorkerAssetBridge(
-						this.worker,
-						'clang',
-						clangAssets,
-						progress
-					);
-					this.activeObjectiveCAssetsKey = nextObjectiveCAssetsKey;
-					this.worker.onmessage = (event: MessageEvent<any>) => {
-						if (this.assetBridge?.handleMessage(event)) return;
-						if (event.data?.progress != null) progress?.set?.(event.data.progress);
-						if (event.data?.load) resolve();
-						if (event.data?.error) reject(event.data.error);
-					};
-					this.worker.postMessage({
-						load: true,
-						log,
-						code,
-						args,
-						clangAssets: {
-							baseUrl: clangAssets.baseUrl,
-							useAssetBridge: clangAssets.useAssetBridge
-						},
-						objectivecAssets
-					});
-				} else {
-					this.assetBridge?.rebind(this.worker, clangAssets, progress);
-					this.worker.postMessage({ log });
-					resolve();
-				}
-			})().catch(reject);
+				this.activeObjectiveCAssetsKey = nextObjectiveCAssetsKey;
+				this.worker.onmessage = (event: MessageEvent<any>) => {
+					if (this.assetBridge?.handleMessage(event)) return;
+					if (event.data?.progress != null) progress?.set?.(event.data.progress);
+					if (event.data?.load) resolve();
+					if (event.data?.error) reject(event.data.error);
+				};
+				this.worker.postMessage({
+					load: true,
+					log,
+					code,
+					args,
+					clangAssets: {
+						baseUrl: clangAssets.baseUrl,
+						useAssetBridge: clangAssets.useAssetBridge
+					},
+					objectivecAssets
+				});
+			} else {
+				this.assetBridge?.rebind(this.worker, clangAssets, progress);
+				this.worker.postMessage({ log });
+				resolve();
+			}
 		});
 	}
 
@@ -148,58 +153,56 @@ class ObjectiveC implements Sandbox {
 		if (options.debug) return Promise.reject('Objective-C debugging is not supported yet.');
 		this.exit = false;
 		return new Promise<boolean | string>((resolve, reject) => {
-			void (async () => {
+			if (!this.worker) return reject('Worker not loaded');
+			const operation = this.workerSession.beginRun(this.worker, reject);
+			const { compileArgs, programArgs } = resolveSandboxExecutionArgs(
+				this.language,
+				args,
+				options
+			);
+			const _uid = ++this.uid;
+			const handler = (event: Event & { data: any }) => {
+				if (this.assetBridge?.handleMessage(event as MessageEvent<any>)) return;
 				if (!this.worker) return reject('Worker not loaded');
-				this.activeReject = reject;
-				const { compileArgs, programArgs } = resolveSandboxExecutionArgs(
-					this.language,
-					args,
-					options
-				);
-				const _uid = ++this.uid;
-				const handler = (event: Event & { data: any }) => {
-					if (this.assetBridge?.handleMessage(event as MessageEvent<any>)) return;
-					if (!this.worker) return reject('Worker not loaded');
-					if (_uid !== this.uid) return (this.worker.onmessage = null);
-					const { output, results, log, error, buffer, progress } = event.data;
-					if (buffer) {
-						this.waitingForInput = true;
-						this.flushPendingInput();
-					}
-					if (output) this.output?.(output);
-					if (results) {
-						this.elapse = Date.now() - this.begin;
-						this.exit = true;
-						this.waitingForInput = false;
-						this.pendingEof = false;
-						this.activeReject = null;
-						resolve(results as string);
-					}
-					if (log) console.log(log);
-					if (error) {
-						this.elapse = Date.now() - this.begin;
-						this.waitingForInput = false;
-						this.pendingEof = false;
-						this.activeReject = null;
-						this.exit = true;
-						reject(error);
-					}
-					if (progress) prog?.set?.(progress);
-				};
-				this.worker.onmessage = handler;
-				this.begin = Date.now();
-				this.worker.postMessage({
-					code,
-					prepare,
-					buffer: this.buffer,
-					stdin: options.stdin,
-					log,
-					compileArgs,
-					programArgs,
-					activePath: options.activePath,
-					workspaceFiles: options.workspaceFiles
-				});
-			})().catch(reject);
+				if (_uid !== this.uid) return (this.worker.onmessage = null);
+				const { output, results, log, error, buffer, progress } = event.data;
+				if (buffer) {
+					this.waitingForInput = true;
+					this.flushPendingInput();
+				}
+				if (output) this.output?.(output);
+				if (results) {
+					this.elapse = Date.now() - this.begin;
+					this.exit = true;
+					this.waitingForInput = false;
+					this.pendingEof = false;
+					this.workerSession.complete(operation);
+					resolve(results as string);
+				}
+				if (log) console.log(log);
+				if (error) {
+					this.elapse = Date.now() - this.begin;
+					this.waitingForInput = false;
+					this.pendingEof = false;
+					this.workerSession.complete(operation);
+					this.exit = true;
+					reject(error);
+				}
+				if (progress) prog?.set?.(progress);
+			};
+			this.worker.onmessage = handler;
+			this.begin = Date.now();
+			this.worker.postMessage({
+				code,
+				prepare,
+				buffer: this.buffer,
+				stdin: options.stdin,
+				log,
+				compileArgs,
+				programArgs,
+				activePath: options.activePath,
+				workspaceFiles: options.workspaceFiles
+			});
 		});
 	}
 
@@ -208,15 +211,10 @@ class ObjectiveC implements Sandbox {
 	}
 
 	terminate() {
-		this.activeReject?.('Process terminated');
-		this.activeReject = null;
 		this.waitingForInput = false;
 		this.pendingEof = false;
 		this.uid += 1;
-		this.worker?.terminate?.();
-		delete this.worker;
-		this.assetBridge = null;
-		this.activeObjectiveCAssetsKey = '';
+		this.workerSession.terminate();
 		this.exit = true;
 	}
 

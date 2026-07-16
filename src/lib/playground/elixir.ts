@@ -11,6 +11,7 @@ import {
 	resetBufferedStdin
 } from '$lib/playground/stdinBuffer';
 import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
+import { WorkerSession } from '$lib/playground/workerSession';
 
 type BeamEvalLanguage = 'ELIXIR' | 'ERLANG';
 
@@ -25,11 +26,21 @@ class Elixir implements Sandbox {
 	uid = 0;
 	exit = true;
 	bundleUrl = '';
-	activeReject: ((reason: string) => void) | null = null;
 	prepared = false;
 	hasExecuted = false;
 	waitingForInput = false;
 	pendingEof = false;
+	private readonly workerSession = new WorkerSession({
+		label: () => (this.language === 'ERLANG' ? 'Erlang' : 'Elixir'),
+		onDispose: (worker) => {
+			if (this.worker === worker) delete this.worker;
+			this.exit = true;
+			this.prepared = false;
+			this.hasExecuted = false;
+			this.waitingForInput = false;
+			this.pendingEof = false;
+		}
+	});
 
 	constructor(language: BeamEvalLanguage = 'ELIXIR') {
 		this.language = language;
@@ -43,7 +54,7 @@ class Elixir implements Sandbox {
 		_options: SandboxExecutionOptions = {},
 		progress?: { set?: (value: number) => void } | import('svelte/store').Writable<number>
 	) {
-		return new Promise<void>(async (resolve, reject) => {
+		return this.workerSession.load(async (resolve, reject) => {
 			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
 			const nextBundleUrl =
 				this.language === 'ERLANG'
@@ -69,25 +80,13 @@ class Elixir implements Sandbox {
 			this.waitingForInput = false;
 			this.bundleUrl = nextBundleUrl;
 			if (needsWorkerReset && this.worker) {
-				this.worker.terminate();
-				delete this.worker;
+				this.workerSession.reset();
 			}
 			if (!this.worker) {
 				progress?.set?.(0.2);
 				this.worker = new (await import('$lib/playground/worker/elixir?worker')).default();
 				progress?.set?.(0.5);
-				this.worker.onerror = (event: ErrorEvent) => {
-					const location =
-						event.filename && event.lineno
-							? ` (${event.filename}:${event.lineno}:${event.colno})`
-							: '';
-					reject(
-						`${runtimeLabel} worker script error: ${event.message || 'unknown error'}${location}`
-					);
-				};
-				this.worker.onmessageerror = () => {
-					reject(`${runtimeLabel} worker message deserialization failed`);
-				};
+				this.workerSession.attach(this.worker);
 				this.worker.onmessage = (event: MessageEvent<any>) => {
 					if (event.data?.load) {
 						progress?.set?.(1);
@@ -143,7 +142,7 @@ class Elixir implements Sandbox {
 		return new Promise<boolean | string>((resolve, reject) => {
 			if (!this.worker) return reject('Worker not loaded');
 			const activeUid = ++this.uid;
-			this.activeReject = reject;
+			const operation = this.workerSession.beginRun(this.worker, reject);
 			const handler = (event: Event & { data: any }) => {
 				if (!this.worker) return reject('Worker not loaded');
 				if (activeUid !== this.uid) return (this.worker.onmessage = null);
@@ -165,7 +164,7 @@ class Elixir implements Sandbox {
 					this.exit = true;
 					this.waitingForInput = false;
 					this.pendingEof = false;
-					this.activeReject = null;
+					this.workerSession.complete(operation);
 					this.prepared = prepare;
 					this.hasExecuted = !prepare;
 					if (!prepare && typeof results === 'string' && results) {
@@ -178,7 +177,7 @@ class Elixir implements Sandbox {
 					this.exit = true;
 					this.waitingForInput = false;
 					this.pendingEof = false;
-					this.activeReject = null;
+					this.workerSession.complete(operation);
 					this.prepared = false;
 					this.hasExecuted = false;
 					reject(error);
@@ -202,15 +201,12 @@ class Elixir implements Sandbox {
 	}
 
 	terminate() {
-		this.activeReject?.('Process terminated');
-		this.activeReject = null;
 		this.uid += 1;
 		this.prepared = false;
 		this.hasExecuted = false;
 		this.waitingForInput = false;
 		this.pendingEof = false;
-		this.worker?.terminate?.();
-		delete this.worker;
+		this.workerSession.terminate();
 		this.exit = true;
 	}
 

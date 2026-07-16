@@ -385,7 +385,12 @@ const RUNTIME_ASSET_FOLDERS = {
 	java: {
 		folder: 'teavm',
 		virtualBaseUrl: 'https://wasm-idle.invalid/java/',
-		resolveRootBaseUrl: resolveTeaVmBaseUrl,
+		resolveRootBaseUrl: (rootUrl: string, currentUrl: string) =>
+			resolveTeaVmBaseUrl(
+				rootUrl,
+				currentUrl,
+				(publicEnv.PUBLIC_TEAVM_BASE_URL || '').trim()
+			),
 		resolveConfiguredBaseUrl: normalizeTeaVmConfiguredBaseUrl
 	},
 	clang: {

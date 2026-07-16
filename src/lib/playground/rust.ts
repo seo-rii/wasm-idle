@@ -13,6 +13,7 @@ import {
 	resetBufferedStdin
 } from '$lib/playground/stdinBuffer';
 import { createWasmIdleSharedBuffer, requireSharedArrayBuffer } from '$lib/playground/sharedBuffer';
+import { WorkerSession } from '$lib/playground/workerSession';
 
 const debugBreakpointBufferInts = 1028;
 
@@ -31,10 +32,19 @@ class Rust implements Sandbox {
 	exit = true;
 	compilerUrl = '';
 	assetPath = '';
-	activeReject: ((reason: string) => void) | null = null;
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	waitingForInput = false;
 	pendingEof = false;
+	private readonly workerSession = new WorkerSession({
+		label: 'Rust',
+		onDispose: (worker) => {
+			if (this.worker === worker) delete this.worker;
+			this.exit = true;
+			this.waitingForInput = false;
+			this.pendingEof = false;
+			this.ondebug?.({ type: 'stop' });
+		}
+	});
 
 	load(
 		runtimeAssets: string | PlaygroundRuntimeAssets = '',
@@ -44,7 +54,7 @@ class Rust implements Sandbox {
 		_options: SandboxExecutionOptions = {},
 		progress?: { set?: (value: number) => void } | import('svelte/store').Writable<number>
 	) {
-		return new Promise<void>(async (resolve, reject) => {
+		return this.workerSession.load(async (resolve, reject) => {
 			this.pendingInput = [];
 			this.waitingForInput = false;
 			this.pendingEof = false;
@@ -69,23 +79,11 @@ class Rust implements Sandbox {
 			this.compilerUrl = nextCompilerUrl;
 			this.assetPath = nextAssetPath;
 			if (needsWorkerReset && this.worker) {
-				this.worker.terminate();
-				delete this.worker;
+				this.workerSession.reset();
 			}
 			if (!this.worker) {
 				this.worker = new (await import('$lib/playground/worker/rust?worker')).default();
-				this.worker.onerror = (event: ErrorEvent) => {
-					const location =
-						event.filename && event.lineno
-							? ` (${event.filename}:${event.lineno}:${event.colno})`
-							: '';
-					reject(
-						`Rust worker script error: ${event.message || 'unknown error'}${location}`
-					);
-				};
-				this.worker.onmessageerror = () => {
-					reject('Rust worker message deserialization failed');
-				};
+				this.workerSession.attach(this.worker);
 				this.worker.onmessage = (event: MessageEvent<any>) => {
 					if (event.data?.load) {
 						progress?.set?.(1);
@@ -144,7 +142,7 @@ class Rust implements Sandbox {
 			const { programArgs } = resolveSandboxExecutionArgs('RUST', args, options);
 			const targetTriple = options.rustTargetTriple || 'wasm32-wasip1';
 			const _uid = ++this.uid;
-			this.activeReject = reject;
+			const operation = this.workerSession.beginRun(this.worker, reject);
 			this.setBreakpoints(options.debug ? [...(options.breakpoints || [])] : []);
 			const handler = (event: Event & { data: any }) => {
 				if (!this.worker) return reject('Worker not loaded');
@@ -166,7 +164,7 @@ class Rust implements Sandbox {
 					this.exit = true;
 					this.waitingForInput = false;
 					this.pendingEof = false;
-					this.activeReject = null;
+					this.workerSession.complete(operation);
 					this.ondebug?.({ type: 'stop' });
 					resolve(results as string);
 				}
@@ -175,7 +173,7 @@ class Rust implements Sandbox {
 					this.exit = true;
 					this.waitingForInput = false;
 					this.pendingEof = false;
-					this.activeReject = null;
+					this.workerSession.complete(operation);
 					this.ondebug?.({ type: 'stop' });
 					reject(error);
 				}
@@ -227,16 +225,13 @@ class Rust implements Sandbox {
 	}
 
 	terminate() {
-		this.activeReject?.('Process terminated');
-		this.activeReject = null;
 		this.waitingForInput = false;
 		this.pendingEof = false;
 		this.uid += 1;
 		const control = new Int32Array(this.debugBuffer);
 		Atomics.add(control, 0, 1);
 		Atomics.notify(control, 0);
-		this.worker?.terminate?.();
-		delete this.worker;
+		this.workerSession.terminate();
 		this.exit = true;
 	}
 

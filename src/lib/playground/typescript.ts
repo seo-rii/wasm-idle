@@ -11,6 +11,7 @@ import {
 	resetBufferedStdin
 } from '$lib/playground/stdinBuffer';
 import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
+import { WorkerSession } from '$lib/playground/workerSession';
 
 type TypeScriptSandboxLanguage = 'JAVASCRIPT' | 'TYPESCRIPT';
 
@@ -24,10 +25,18 @@ class TypeScriptSandbox implements Sandbox {
 	uid = 0;
 	exit = true;
 	moduleUrl = '';
-	activeReject: ((reason: string) => void) | null = null;
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	waitingForInput = false;
 	pendingEof = false;
+	private readonly workerSession = new WorkerSession({
+		label: () => this.languageLabel,
+		onDispose: (worker) => {
+			if (this.worker === worker) delete this.worker;
+			this.exit = true;
+			this.waitingForInput = false;
+			this.pendingEof = false;
+		}
+	});
 
 	constructor(private readonly language: TypeScriptSandboxLanguage = 'TYPESCRIPT') {}
 
@@ -47,7 +56,7 @@ class TypeScriptSandbox implements Sandbox {
 		_options: SandboxExecutionOptions = {},
 		progress?: { set?: (value: number) => void } | import('svelte/store').Writable<number>
 	) {
-		return new Promise<void>(async (resolve, reject) => {
+		return this.workerSession.load(async (resolve, reject) => {
 			this.pendingInput = [];
 			this.waitingForInput = false;
 			this.pendingEof = false;
@@ -61,25 +70,13 @@ class TypeScriptSandbox implements Sandbox {
 			const needsWorkerReset = !this.worker || this.moduleUrl !== nextModuleUrl;
 			this.moduleUrl = nextModuleUrl;
 			if (needsWorkerReset && this.worker) {
-				this.worker.terminate();
-				delete this.worker;
+				this.workerSession.reset();
 			}
 			if (!this.worker) {
 				this.worker = new (
 					await import('$lib/playground/worker/typescript?worker')
 				).default();
-				this.worker.onerror = (event: ErrorEvent) => {
-					const location =
-						event.filename && event.lineno
-							? ` (${event.filename}:${event.lineno}:${event.colno})`
-							: '';
-					reject(
-						`${this.languageLabel} worker script error: ${event.message || 'unknown error'}${location}`
-					);
-				};
-				this.worker.onmessageerror = () => {
-					reject(`${this.languageLabel} worker message deserialization failed`);
-				};
+				this.workerSession.attach(this.worker);
 				this.worker.onmessage = (event: MessageEvent<any>) => {
 					if (event.data?.load) {
 						progress?.set?.(1);
@@ -135,7 +132,7 @@ class TypeScriptSandbox implements Sandbox {
 			if (!this.worker) return reject('Worker not loaded');
 			const { programArgs } = resolveSandboxExecutionArgs(this.language, args, options);
 			const _uid = ++this.uid;
-			this.activeReject = reject;
+			const operation = this.workerSession.beginRun(this.worker, reject);
 			const handler = (event: Event & { data: any }) => {
 				if (!this.worker) return reject('Worker not loaded');
 				if (_uid !== this.uid) return (this.worker.onmessage = null);
@@ -154,7 +151,7 @@ class TypeScriptSandbox implements Sandbox {
 					this.exit = true;
 					this.waitingForInput = false;
 					this.pendingEof = false;
-					this.activeReject = null;
+					this.workerSession.complete(operation);
 					resolve(results as string);
 				}
 				if (error) {
@@ -162,7 +159,7 @@ class TypeScriptSandbox implements Sandbox {
 					this.exit = true;
 					this.waitingForInput = false;
 					this.pendingEof = false;
-					this.activeReject = null;
+					this.workerSession.complete(operation);
 					reject(error);
 				}
 			};
@@ -188,13 +185,10 @@ class TypeScriptSandbox implements Sandbox {
 	}
 
 	terminate() {
-		this.activeReject?.('Process terminated');
-		this.activeReject = null;
 		this.waitingForInput = false;
 		this.pendingEof = false;
 		this.uid += 1;
-		this.worker?.terminate?.();
-		delete this.worker;
+		this.workerSession.terminate();
 		this.exit = true;
 	}
 

@@ -16,6 +16,7 @@ import {
 	resetBufferedStdin
 } from '$lib/playground/stdinBuffer';
 import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
+import { WorkerSession } from '$lib/playground/workerSession';
 
 const DEFAULT_HASKELL_MAIN_SO_PATH = '/tmp/libplayground001.so';
 const DEFAULT_HASKELL_SEARCH_DIRS = [
@@ -44,10 +45,18 @@ class Haskell implements Sandbox {
 	uid = 0;
 	exit = true;
 	runtimeKey = '';
-	activeReject: ((reason: string) => void) | null = null;
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	waitingForInput = false;
 	pendingEof = false;
+	private readonly workerSession = new WorkerSession({
+		label: 'Haskell',
+		onDispose: (worker) => {
+			if (this.worker === worker) delete this.worker;
+			this.exit = true;
+			this.waitingForInput = false;
+			this.pendingEof = false;
+		}
+	});
 
 	load(
 		runtimeAssets: string | PlaygroundRuntimeAssets = '',
@@ -57,76 +66,55 @@ class Haskell implements Sandbox {
 		_options: SandboxExecutionOptions = {},
 		progress?: { set?: (value: number) => void } | import('svelte/store').Writable<number>
 	) {
-		return new Promise<void>((resolve, reject) => {
-			void (async () => {
-				this.pendingInput = [];
-				this.waitingForInput = false;
-				this.pendingEof = false;
-				const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
-				const moduleUrl = resolveHaskellModuleUrl(runtimeAssets, currentUrl);
-				const rootfsUrl = resolveHaskellRootfsUrl(runtimeAssets, currentUrl);
-				const bsdtarUrl = resolveHaskellBsdtarUrl(runtimeAssets, currentUrl);
-				if (!moduleUrl || !rootfsUrl || !bsdtarUrl) {
-					return reject(
-						'Haskell runtime is not configured. Set PUBLIC_WASM_HASKELL_MODULE_URL, PUBLIC_WASM_HASKELL_ROOTFS_URL, and PUBLIC_WASM_HASKELL_BSDTAR_URL, or runtimeAssets.haskell.'
-					);
-				}
-				const runtimeConfig =
-					typeof runtimeAssets === 'object' ? runtimeAssets.haskell : undefined;
-				const nextRuntimeKey = haskellRuntimeKey(runtimeAssets, currentUrl);
-				const needsWorkerReset = !this.worker || this.runtimeKey !== nextRuntimeKey;
-				this.runtimeKey = nextRuntimeKey;
-				if (needsWorkerReset && this.worker) {
-					this.worker.terminate();
-					delete this.worker;
-				}
-				if (!this.worker) {
-					this.worker = new (
-						await import('$lib/playground/worker/haskell?worker')
-					).default();
-					this.worker.onerror = (event: ErrorEvent) => {
-						const location =
-							event.filename && event.lineno
-								? ` (${event.filename}:${event.lineno}:${event.colno})`
-								: '';
-						reject(
-							`Haskell worker script error: ${event.message || 'unknown error'}${location}`
+		return this.workerSession.load(async (resolve, reject) => {
+			this.pendingInput = [];
+			this.waitingForInput = false;
+			this.pendingEof = false;
+			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
+			const moduleUrl = resolveHaskellModuleUrl(runtimeAssets, currentUrl);
+			const rootfsUrl = resolveHaskellRootfsUrl(runtimeAssets, currentUrl);
+			const bsdtarUrl = resolveHaskellBsdtarUrl(runtimeAssets, currentUrl);
+			if (!moduleUrl || !rootfsUrl || !bsdtarUrl) {
+				return reject(
+					'Haskell runtime is not configured. Set PUBLIC_WASM_HASKELL_MODULE_URL, PUBLIC_WASM_HASKELL_ROOTFS_URL, and PUBLIC_WASM_HASKELL_BSDTAR_URL, or runtimeAssets.haskell.'
+				);
+			}
+			const runtimeConfig =
+				typeof runtimeAssets === 'object' ? runtimeAssets.haskell : undefined;
+			const nextRuntimeKey = haskellRuntimeKey(runtimeAssets, currentUrl);
+			const needsWorkerReset = !this.worker || this.runtimeKey !== nextRuntimeKey;
+			this.runtimeKey = nextRuntimeKey;
+			if (needsWorkerReset && this.worker) {
+				this.workerSession.reset();
+			}
+			if (!this.worker) {
+				this.worker = new (await import('$lib/playground/worker/haskell?worker')).default();
+				this.workerSession.attach(this.worker);
+				this.worker.onmessage = (event: MessageEvent<any>) => {
+					if (event.data?.progress && typeof event.data.progress.percent === 'number') {
+						progress?.set?.(
+							Math.max(0, Math.min(event.data.progress.percent / 100, 1))
 						);
-					};
-					this.worker.onmessageerror = () => {
-						reject('Haskell worker message deserialization failed');
-					};
-					this.worker.onmessage = (event: MessageEvent<any>) => {
-						if (
-							event.data?.progress &&
-							typeof event.data.progress.percent === 'number'
-						) {
-							progress?.set?.(
-								Math.max(0, Math.min(event.data.progress.percent / 100, 1))
-							);
-						}
-						if (event.data?.load) {
-							progress?.set?.(1);
-							resolve();
-						}
-						if (event.data?.error) reject(event.data.error);
-					};
-					this.worker.postMessage({
-						load: true,
-						moduleUrl,
-						rootfsUrl,
-						bsdtarUrl,
-						mainSoPath: runtimeConfig?.mainSoPath || DEFAULT_HASKELL_MAIN_SO_PATH,
-						searchDirs: runtimeConfig?.searchDirs || DEFAULT_HASKELL_SEARCH_DIRS,
-						log: _log
-					});
-				} else {
-					progress?.set?.(1);
-					resolve();
-				}
-			})().catch((error) => {
-				reject(error?.message || String(error));
-			});
+					}
+					if (event.data?.load) {
+						progress?.set?.(1);
+						resolve();
+					}
+					if (event.data?.error) reject(event.data.error);
+				};
+				this.worker.postMessage({
+					load: true,
+					moduleUrl,
+					rootfsUrl,
+					bsdtarUrl,
+					mainSoPath: runtimeConfig?.mainSoPath || DEFAULT_HASKELL_MAIN_SO_PATH,
+					searchDirs: runtimeConfig?.searchDirs || DEFAULT_HASKELL_SEARCH_DIRS,
+					log: _log
+				});
+			} else {
+				progress?.set?.(1);
+				resolve();
+			}
 		});
 	}
 
@@ -171,7 +159,7 @@ class Haskell implements Sandbox {
 				options
 			);
 			const _uid = ++this.uid;
-			this.activeReject = reject;
+			const operation = this.workerSession.beginRun(this.worker, reject);
 			const handler = (event: Event & { data: any }) => {
 				if (!this.worker) return reject('Worker not loaded');
 				if (_uid !== this.uid) return (this.worker.onmessage = null);
@@ -190,7 +178,7 @@ class Haskell implements Sandbox {
 					this.exit = true;
 					this.waitingForInput = false;
 					this.pendingEof = false;
-					this.activeReject = null;
+					this.workerSession.complete(operation);
 					resolve(results as string);
 				}
 				if (error) {
@@ -198,7 +186,7 @@ class Haskell implements Sandbox {
 					this.exit = true;
 					this.waitingForInput = false;
 					this.pendingEof = false;
-					this.activeReject = null;
+					this.workerSession.complete(operation);
 					reject(error);
 				}
 			};
@@ -222,13 +210,10 @@ class Haskell implements Sandbox {
 	}
 
 	terminate() {
-		this.activeReject?.('Process terminated');
-		this.activeReject = null;
 		this.waitingForInput = false;
 		this.pendingEof = false;
 		this.uid += 1;
-		this.worker?.terminate?.();
-		delete this.worker;
+		this.workerSession.terminate();
 		this.exit = true;
 	}
 

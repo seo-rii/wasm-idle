@@ -14,6 +14,7 @@ import {
 	resetBufferedStdin
 } from '$lib/playground/stdinBuffer';
 import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
+import { WorkerSession } from '$lib/playground/workerSession';
 
 type OctaveWorkerMessage = {
 	load?: true;
@@ -36,11 +37,19 @@ class Octave implements Sandbox {
 	baseUrl = '';
 	workerUrl = '';
 	manifestUrl = '';
-	activeReject: ((reason: string) => void) | null = null;
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	waitingForInput = false;
 	pendingEof = false;
 	stdinWaiters: Array<() => void> = [];
+	private readonly workerSession = new WorkerSession({
+		label: 'Octave',
+		onDispose: (worker) => {
+			if (this.worker === worker) delete this.worker;
+			this.exit = true;
+			this.waitingForInput = false;
+			this.pendingEof = false;
+		}
+	});
 
 	load(
 		runtimeAssets: string | PlaygroundRuntimeAssets = '',
@@ -118,11 +127,12 @@ class Octave implements Sandbox {
 
 	private createWorker() {
 		if (this.worker) {
-			this.worker.terminate();
-			delete this.worker;
+			this.workerSession.reset();
+			this.exit = false;
 		}
 		const worker = new Worker(this.workerUrl);
 		this.worker = worker;
+		this.workerSession.attach(worker);
 		return worker;
 	}
 
@@ -143,24 +153,12 @@ class Octave implements Sandbox {
 			}
 			const { programArgs } = resolveSandboxExecutionArgs('OCTAVE', args, options);
 			const _uid = ++this.uid;
-			this.activeReject = reject;
+			const operation = this.workerSession.beginRun(null, reject);
 			this.begin = Date.now();
 			this.collectStdinForRun(code, options)
 				.then((stdin) => {
 					if (_uid !== this.uid) return;
 					const worker = this.createWorker();
-					worker.onerror = (event: ErrorEvent) => {
-						const location =
-							event.filename && event.lineno
-								? ` (${event.filename}:${event.lineno}:${event.colno})`
-								: '';
-						reject(
-							`Octave worker script error: ${event.message || 'unknown error'}${location}`
-						);
-					};
-					worker.onmessageerror = () => {
-						reject('Octave worker message deserialization failed');
-					};
 					worker.onmessage = (event: MessageEvent<OctaveWorkerMessage>) => {
 						if (_uid !== this.uid) return;
 						const { output, results, error, buffer, progress } = event.data;
@@ -177,7 +175,7 @@ class Octave implements Sandbox {
 							this.exit = true;
 							this.waitingForInput = false;
 							this.pendingEof = false;
-							this.activeReject = null;
+							this.workerSession.complete(operation);
 							resolve(true);
 						}
 						if (error) {
@@ -185,7 +183,7 @@ class Octave implements Sandbox {
 							this.exit = true;
 							this.waitingForInput = false;
 							this.pendingEof = false;
-							this.activeReject = null;
+							this.workerSession.complete(operation);
 							reject(error);
 						}
 					};
@@ -202,7 +200,10 @@ class Octave implements Sandbox {
 						log: _log
 					});
 				})
-				.catch(reject);
+				.catch((error) => {
+					this.workerSession.complete(operation);
+					reject(error);
+				});
 		});
 	}
 
@@ -211,14 +212,11 @@ class Octave implements Sandbox {
 	}
 
 	terminate() {
-		this.activeReject?.('Process terminated');
-		this.activeReject = null;
 		this.waitingForInput = false;
 		this.pendingEof = false;
 		this.uid += 1;
 		this.resolveStdinWaiters();
-		this.worker?.terminate?.();
-		delete this.worker;
+		this.workerSession.terminate();
 		this.exit = true;
 	}
 

@@ -56,7 +56,10 @@ describe('Bash sandbox', () => {
 		).resolves.toBe(true);
 
 		expect(fetch).toHaveBeenCalledWith('http://localhost:3000/assets/wasm-bash/bash.webc');
-		expect(init).toHaveBeenCalledOnce();
+		expect(init).toHaveBeenCalledWith({
+			sdkUrl: expect.stringContaining('index.mjs'),
+			workerUrl: expect.stringContaining('wasmerThreadWorker')
+		});
 		expect(fromFile).toHaveBeenCalledWith(expect.any(Uint8Array));
 		expect(commandRun).toHaveBeenCalledWith({
 			args: [

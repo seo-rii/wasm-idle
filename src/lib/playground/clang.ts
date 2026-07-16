@@ -15,6 +15,7 @@ import {
 	waitForBufferedSequenceChange
 } from '$lib/playground/stdinBuffer';
 import { createWasmIdleSharedBuffer, requireSharedArrayBuffer } from '$lib/playground/sharedBuffer';
+import { WorkerSession } from '$lib/playground/workerSession';
 import type { Writable } from 'svelte/store';
 
 const debugBreakpointBufferInts = 1028;
@@ -41,7 +42,17 @@ class Clang implements Sandbox {
 	pendingEof = false;
 	exit = true;
 	assetBridge: WorkerAssetBridge | null = null;
-	activeReject: ((reason?: string) => void) | null = null;
+	private readonly workerSession = new WorkerSession({
+		label: 'Clang',
+		onDispose: (worker) => {
+			if (this.worker === worker) delete this.worker;
+			this.assetBridge = null;
+			this.exit = true;
+			this.waitingForInput = false;
+			this.pendingEof = false;
+			this.ondebug?.({ type: 'stop' });
+		}
+	});
 
 	constructor(language: 'C' | 'CPP') {
 		this.language = language;
@@ -55,7 +66,7 @@ class Clang implements Sandbox {
 		_options: SandboxExecutionOptions = {},
 		progress?: { set?: (value: number) => void } | import('svelte/store').Writable<number>
 	) {
-		return new Promise<void>(async (resolve) => {
+		return this.workerSession.load(async (resolve, reject) => {
 			this.log = log;
 			this.pendingInput = [];
 			this.waitingForInput = false;
@@ -68,12 +79,11 @@ class Clang implements Sandbox {
 			const needsWorkerReset =
 				!this.worker || !this.assetBridge || !this.assetBridge.matches(assetConfig);
 			if (needsWorkerReset && this.worker) {
-				this.worker.terminate();
-				delete this.worker;
-				this.assetBridge = null;
+				this.workerSession.reset();
 			}
 			if (!this.worker) {
 				this.worker = new (await import('$lib/playground/worker/clang?worker')).default();
+				this.workerSession.attach(this.worker);
 				this.assetBridge = new WorkerAssetBridge(
 					this.worker,
 					'clang',
@@ -84,6 +94,7 @@ class Clang implements Sandbox {
 					if (this.assetBridge?.handleMessage(event)) return;
 					if (event.data?.progress != null) progress?.set?.(event.data.progress);
 					if (event.data?.load) resolve();
+					if (event.data?.error) reject(event.data.error);
 				};
 				this.worker.postMessage({
 					load: true,
@@ -137,9 +148,9 @@ class Clang implements Sandbox {
 	): Promise<boolean | string> {
 		if (options.debug) requireSharedArrayBuffer(`${this.language} debugging`);
 		this.exit = false;
-		return new Promise<boolean | string>(async (resolve, reject) => {
+		return new Promise<boolean | string>((resolve, reject) => {
 			if (!this.worker) return reject('Worker not loaded');
-			this.activeReject = reject;
+			const operation = this.workerSession.beginRun(this.worker, reject);
 			const { compileArgs, programArgs } = resolveSandboxExecutionArgs(
 				this.language,
 				args,
@@ -165,7 +176,7 @@ class Clang implements Sandbox {
 					this.exit = true;
 					this.waitingForInput = false;
 					this.pendingEof = false;
-					this.activeReject = null;
+					this.workerSession.complete(operation);
 					this.ondebug?.({ type: 'stop' });
 					resolve(results as string);
 				}
@@ -174,7 +185,7 @@ class Clang implements Sandbox {
 					this.elapse = Date.now() - this.begin;
 					this.waitingForInput = false;
 					this.pendingEof = false;
-					this.activeReject = null;
+					this.workerSession.complete(operation);
 					this.exit = true;
 					this.ondebug?.({ type: 'stop' });
 					reject(error);
@@ -253,8 +264,6 @@ class Clang implements Sandbox {
 	}
 
 	terminate() {
-		this.activeReject?.('Process terminated');
-		this.activeReject = null;
 		this.waitingForInput = false;
 		this.pendingEof = false;
 		this.uid += 1;
@@ -262,9 +271,7 @@ class Clang implements Sandbox {
 		const control = new Int32Array(this.debugBuffer);
 		Atomics.add(control, 0, 1);
 		Atomics.notify(control, 0);
-		this.worker?.terminate?.();
-		delete this.worker;
-		this.assetBridge = null;
+		this.workerSession.terminate();
 		this.exit = true;
 	}
 
@@ -281,9 +288,7 @@ class Clang implements Sandbox {
 		debugBuffer.fill(0);
 		await new Promise((resolve) => setTimeout(resolve, 200));
 		if (!this.exit) {
-			this.worker?.terminate?.();
-			delete this.worker;
-			this.assetBridge = null;
+			this.workerSession.terminate();
 			this.exit = true;
 		}
 	}

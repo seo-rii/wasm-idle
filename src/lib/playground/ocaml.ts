@@ -16,6 +16,7 @@ import {
 	resetBufferedStdin
 } from '$lib/playground/stdinBuffer';
 import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
+import { WorkerSession } from '$lib/playground/workerSession';
 
 type RuntimeGlobal = Record<string, unknown>;
 type RuntimeAssetEntry = {
@@ -36,10 +37,18 @@ class Ocaml implements Sandbox {
 	exit = true;
 	moduleUrl = '';
 	manifestUrl = '';
-	activeReject: ((reason: string) => void) | null = null;
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	waitingForInput = false;
 	pendingEof = false;
+	private readonly workerSession = new WorkerSession({
+		label: 'OCaml',
+		onDispose: (worker) => {
+			if (this.worker === worker) delete this.worker;
+			this.exit = true;
+			this.waitingForInput = false;
+			this.pendingEof = false;
+		}
+	});
 
 	load(
 		runtimeAssets: string | PlaygroundRuntimeAssets = '',
@@ -49,7 +58,7 @@ class Ocaml implements Sandbox {
 		_options: SandboxExecutionOptions = {},
 		progress?: { set?: (value: number) => void } | import('svelte/store').Writable<number>
 	) {
-		return new Promise<void>(async (resolve, reject) => {
+		return this.workerSession.load(async (resolve, reject) => {
 			this.pendingInput = [];
 			this.waitingForInput = false;
 			this.pendingEof = false;
@@ -69,23 +78,11 @@ class Ocaml implements Sandbox {
 			this.moduleUrl = nextModuleUrl;
 			this.manifestUrl = nextManifestUrl;
 			if (needsWorkerReset && this.worker) {
-				this.worker.terminate();
-				delete this.worker;
+				this.workerSession.reset();
 			}
 			if (!this.worker) {
 				this.worker = new (await import('$lib/playground/worker/ocaml?worker')).default();
-				this.worker.onerror = (event: ErrorEvent) => {
-					const location =
-						event.filename && event.lineno
-							? ` (${event.filename}:${event.lineno}:${event.colno})`
-							: '';
-					reject(
-						`OCaml worker script error: ${event.message || 'unknown error'}${location}`
-					);
-				};
-				this.worker.onmessageerror = () => {
-					reject('OCaml worker message deserialization failed');
-				};
+				this.workerSession.attach(this.worker);
 				this.worker.onmessage = (event: MessageEvent<any>) => {
 					if (event.data?.load) {
 						progress?.set?.(1);
@@ -143,7 +140,7 @@ class Ocaml implements Sandbox {
 			const target: OcamlBackend = options.ocamlBackend || 'wasm';
 			const wasmBinaryenMode: OcamlWasmBinaryenMode = options.ocamlWasmBinaryenMode || 'fast';
 			const _uid = ++this.uid;
-			this.activeReject = reject;
+			const operation = this.workerSession.beginRun(this.worker, reject);
 			const handler = async (event: Event & { data: any }) => {
 				if (!this.worker) return reject('Worker not loaded');
 				if (_uid !== this.uid) return (this.worker.onmessage = null);
@@ -328,12 +325,12 @@ class Ocaml implements Sandbox {
 						}
 						this.elapse = Date.now() - this.begin;
 						this.exit = true;
-						this.activeReject = null;
+						this.workerSession.complete(operation);
 						resolve(true);
 					} catch (runtimeError: any) {
 						this.elapse = Date.now() - this.begin;
 						this.exit = true;
-						this.activeReject = null;
+						this.workerSession.complete(operation);
 						reject(runtimeError?.message || String(runtimeError));
 					} finally {
 						window.console = originalConsole;
@@ -375,7 +372,7 @@ class Ocaml implements Sandbox {
 					this.exit = true;
 					this.waitingForInput = false;
 					this.pendingEof = false;
-					this.activeReject = null;
+					this.workerSession.complete(operation);
 					resolve(results as string);
 				}
 				if (error) {
@@ -383,7 +380,7 @@ class Ocaml implements Sandbox {
 					this.exit = true;
 					this.waitingForInput = false;
 					this.pendingEof = false;
-					this.activeReject = null;
+					this.workerSession.complete(operation);
 					reject(error);
 				}
 			};
@@ -408,13 +405,10 @@ class Ocaml implements Sandbox {
 	}
 
 	terminate() {
-		this.activeReject?.('Process terminated');
-		this.activeReject = null;
 		this.waitingForInput = false;
 		this.pendingEof = false;
 		this.uid += 1;
-		this.worker?.terminate?.();
-		delete this.worker;
+		this.workerSession.terminate();
 		this.exit = true;
 	}
 

@@ -6,11 +6,13 @@ import { fileURLToPath } from 'node:url';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const packages = [
-	['clang-common', 'packages/clang-common'],
 	['core', 'packages/core'],
+	['llvm-core', 'packages/llvm-core'],
 	['lsp', 'packages/lsp'],
-	['runtime-assemblyscript', 'runtimes/assemblyscript'],
-	['runtime-php', 'runtimes/php'],
+	['node', 'packages/node'],
+	['react', 'packages/react'],
+	['svelte', 'packages/svelte'],
+	['vue', 'packages/vue'],
 	['wasm-idle', '.']
 ];
 
@@ -21,6 +23,29 @@ function run(command, args, cwd, env = process.env) {
 		child.on('close', (code, signal) => {
 			if (code === 0) {
 				resolve();
+				return;
+			}
+			reject(
+				new Error(
+					`${command} ${args.join(' ')} failed${signal ? ` with signal ${signal}` : ` with code ${String(code)}`}`
+				)
+			);
+		});
+	});
+}
+
+function runCapture(command, args, cwd, env = process.env) {
+	return new Promise((resolve, reject) => {
+		const child = spawn(command, args, { cwd, stdio: ['ignore', 'pipe', 'inherit'], env });
+		let stdout = '';
+		child.stdout.setEncoding('utf8');
+		child.stdout.on('data', (chunk) => {
+			stdout += chunk;
+		});
+		child.on('error', reject);
+		child.on('close', (code, signal) => {
+			if (code === 0) {
+				resolve(stdout);
 				return;
 			}
 			reject(
@@ -43,9 +68,28 @@ try {
 
 	const dependencies = {};
 	for (const [fileName, packageDir] of packages) {
-		const manifest = JSON.parse(
-			await readFile(path.join(REPO_ROOT, packageDir, 'package.json'), 'utf8')
-		);
+		const packagePath = path.join(REPO_ROOT, packageDir);
+		const manifest = JSON.parse(await readFile(path.join(packagePath, 'package.json'), 'utf8'));
+		const dryRun = JSON.parse(
+			await runCapture(
+				'npm',
+				['pack', '--dry-run', '--ignore-scripts', '--json'],
+				packagePath,
+				{ ...process.env, npm_config_ignore_scripts: 'true' }
+			)
+		)[0];
+		const forbiddenAssets = dryRun.files
+			.map(({ path: packedPath }) => packedPath)
+			.filter((packedPath) =>
+				/(^|\/)(?:assets?|artifacts?|static)(\/|$)|\.(?:a|bc|br|data|gz|o|pack|so|tar|tgz|wasm|zip|zst)$/iu.test(
+					packedPath
+				)
+			);
+		if (forbiddenAssets.length > 0) {
+			throw new Error(
+				`${manifest.name} contains static runtime assets: ${forbiddenAssets.join(', ')}`
+			);
+		}
 		const tarballPath = path.join(tarballDir, `${fileName}.tgz`);
 		await run(
 			'pnpm',
@@ -80,10 +124,13 @@ try {
 			'--input-type=module',
 			'--eval',
 			[
-				"await import('@seo-rii/wasm-llvm/runtime/core/gcc-compat');",
+				"await import('@wasm-idle/core');",
+				"await import('@wasm-idle/llvm-core/core/gcc-compat');",
 				"await import('@wasm-idle/lsp/clangd');",
-				"await import('@wasm-idle/runtime-assemblyscript');",
-				"await import('@wasm-idle/runtime-php');",
+				"await import('@wasm-idle/node');",
+				"await import('@wasm-idle/react');",
+				"await import('@wasm-idle/svelte');",
+				"await import('@wasm-idle/vue');",
 				"if (!import.meta.resolve('wasm-idle').endsWith('/wasm-idle/dist/index.js')) throw new Error('wasm-idle import export did not resolve');"
 			].join('\n')
 		],

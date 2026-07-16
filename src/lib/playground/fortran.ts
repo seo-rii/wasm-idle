@@ -9,6 +9,7 @@ import type { SandboxExecutionOptions } from '$lib/playground/options';
 import { resolveSandboxExecutionArgs } from '$lib/playground/options';
 import type { Sandbox } from '$lib/playground/sandbox';
 import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
+import { WorkerSession } from '$lib/playground/workerSession';
 import {
 	flushBufferedEof,
 	flushQueuedStdin,
@@ -21,7 +22,8 @@ const fortranAssetsKey = (assets: ResolvedFortranRuntimeAssetConfig) =>
 		baseUrl: assets.baseUrl,
 		f2cWasmUrl: assets.f2cWasmUrl,
 		libf2cUrl: assets.libf2cUrl,
-		f2cHeaderUrl: assets.f2cHeaderUrl
+		f2cHeaderUrl: assets.f2cHeaderUrl,
+		analyzerUrl: assets.analyzerUrl
 	});
 
 class Fortran implements Sandbox {
@@ -38,8 +40,18 @@ class Fortran implements Sandbox {
 	pendingEof = false;
 	exit = true;
 	assetBridge: WorkerAssetBridge | null = null;
-	activeReject: ((reason?: string) => void) | null = null;
 	activeFortranAssetsKey = '';
+	private readonly workerSession = new WorkerSession({
+		label: 'Fortran',
+		onDispose: (worker) => {
+			if (this.worker === worker) delete this.worker;
+			this.assetBridge = null;
+			this.activeFortranAssetsKey = '';
+			this.exit = true;
+			this.waitingForInput = false;
+			this.pendingEof = false;
+		}
+	});
 
 	load(
 		runtimeAssets: string | PlaygroundRuntimeAssets = '',
@@ -49,7 +61,7 @@ class Fortran implements Sandbox {
 		_options: SandboxExecutionOptions = {},
 		progress?: { set?: (value: number) => void } | Writable<number>
 	) {
-		return new Promise<void>(async (resolve, reject) => {
+		return this.workerSession.load(async (resolve, reject) => {
 			this.log = log;
 			this.pendingInput = [];
 			this.waitingForInput = false;
@@ -64,12 +76,11 @@ class Fortran implements Sandbox {
 				!this.assetBridge.matches(clangAssets) ||
 				this.activeFortranAssetsKey !== nextFortranAssetsKey;
 			if (needsWorkerReset && this.worker) {
-				this.worker.terminate();
-				delete this.worker;
-				this.assetBridge = null;
+				this.workerSession.reset();
 			}
 			if (!this.worker) {
 				this.worker = new (await import('$lib/playground/worker/fortran?worker')).default();
+				this.workerSession.attach(this.worker);
 				this.assetBridge = new WorkerAssetBridge(
 					this.worker,
 					'clang',
@@ -136,9 +147,9 @@ class Fortran implements Sandbox {
 	): Promise<boolean | string> {
 		if (options.debug) return Promise.reject('Fortran debugging is not supported yet.');
 		this.exit = false;
-		return new Promise<boolean | string>(async (resolve, reject) => {
+		return new Promise<boolean | string>((resolve, reject) => {
 			if (!this.worker) return reject('Worker not loaded');
-			this.activeReject = reject;
+			const operation = this.workerSession.beginRun(this.worker, reject);
 			const { compileArgs, programArgs } = resolveSandboxExecutionArgs(
 				this.language,
 				args,
@@ -160,7 +171,7 @@ class Fortran implements Sandbox {
 					this.exit = true;
 					this.waitingForInput = false;
 					this.pendingEof = false;
-					this.activeReject = null;
+					this.workerSession.complete(operation);
 					resolve(results as string);
 				}
 				if (log) console.log(log);
@@ -168,7 +179,7 @@ class Fortran implements Sandbox {
 					this.elapse = Date.now() - this.begin;
 					this.waitingForInput = false;
 					this.pendingEof = false;
-					this.activeReject = null;
+					this.workerSession.complete(operation);
 					this.exit = true;
 					reject(error);
 				}
@@ -195,15 +206,10 @@ class Fortran implements Sandbox {
 	}
 
 	terminate() {
-		this.activeReject?.('Process terminated');
-		this.activeReject = null;
 		this.waitingForInput = false;
 		this.pendingEof = false;
 		this.uid += 1;
-		this.worker?.terminate?.();
-		delete this.worker;
-		this.assetBridge = null;
-		this.activeFortranAssetsKey = '';
+		this.workerSession.terminate();
 		this.exit = true;
 	}
 
