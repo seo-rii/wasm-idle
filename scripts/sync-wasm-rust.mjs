@@ -1,20 +1,17 @@
 import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
 	rewriteSharedEmscriptenLldAssets,
 	syncCanonicalEmscriptenLldAssets,
 	validateSharedEmscriptenLldAssets
-} from '@seo-rii/wasm-llvm/runtime/emscripten-lld';
-import * as rustRuntimeContract from '@seo-rii/wasm-llvm/runtime/rust';
+} from './llvm-contracts/emscripten-lld.mjs';
+import { validateRustRuntimeProfile } from './llvm-contracts/rust.mjs';
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const THIS_DIR = path.dirname(THIS_FILE);
 const REPO_ROOT = path.resolve(THIS_DIR, '..');
-const require = createRequire(import.meta.url);
-const WASM_LLVM_ROOT = path.dirname(require.resolve('@seo-rii/wasm-llvm/package.json'));
 const DEFAULT_SOURCE_DIR = path.resolve(REPO_ROOT, 'runtimes', 'wasm-rust', 'dist');
 const DEFAULT_TARGET_DIR = path.resolve(REPO_ROOT, 'static', 'wasm-rust');
 const DEFAULT_VERSION_MODULE_PATH = path.resolve(
@@ -25,12 +22,6 @@ const DEFAULT_VERSION_MODULE_PATH = path.resolve(
 	'wasmRustVersion.ts'
 );
 const DEFAULT_SHARED_LLD_DIR = path.resolve(REPO_ROOT, 'static', 'shared', 'emscripten-lld');
-const DEFAULT_CANONICAL_LLD_DIR = path.resolve(
-	WASM_LLVM_ROOT,
-	'runtime',
-	'emscripten-lld',
-	'assets'
-);
 
 /**
  * @param {string} sourcePath
@@ -198,7 +189,7 @@ export async function syncWasmRustDist(options = {}) {
 		targetDir = DEFAULT_TARGET_DIR,
 		versionModulePath = DEFAULT_VERSION_MODULE_PATH,
 		sharedLldDir = DEFAULT_SHARED_LLD_DIR,
-		canonicalLldDir = DEFAULT_CANONICAL_LLD_DIR
+		canonicalLldDir = sharedLldDir
 	} = options;
 	const sourceStats = await stat(sourceDir).catch(() => null);
 	if (!sourceStats?.isDirectory()) {
@@ -212,54 +203,7 @@ export async function syncWasmRustDist(options = {}) {
 	if (!entryModuleStats?.isFile()) {
 		throw new Error(`wasm-rust dist entry was not found at ${entryModulePath}.`);
 	}
-	const manifestPath = path.join(sourceDir, 'runtime', 'runtime-manifest.v3.json');
-	const runtimeManifest = JSON.parse(await readFile(manifestPath, 'utf8'));
-	const runtimeTargets = Object.entries(runtimeManifest.targets || {});
-	const integratedRuntime =
-		runtimeTargets.length > 0 &&
-		runtimeTargets.every(([, target]) => target?.compile?.kind?.startsWith('integrated-rustc'));
-	let rustRuntimeProfile;
-	if (integratedRuntime) {
-		if (
-			runtimeManifest.manifestVersion !== 3 ||
-			runtimeManifest.version !== 'rust-1.99.0-browser-integrated-v1' ||
-			runtimeManifest.compiler?.rustcWasm !== 'rustc/rustc.wasm.gz' ||
-			runtimeManifest.producer?.id !== '@seo-rii/wasm-llvm/rust-browser' ||
-			!runtimeManifest.producer?.manifestSha256?.match(/^[0-9a-f]{64}$/)
-		) {
-			throw new Error('wasm-rust integrated producer manifest is invalid');
-		}
-		for (const [target, config] of runtimeTargets) {
-			if (!config.sysrootPack?.asset || !config.sysrootPack.index) {
-				throw new Error(`wasm-rust integrated sysroot pack is missing for ${target}`);
-			}
-			for (const relativePath of [config.sysrootPack.asset, config.sysrootPack.index]) {
-				const fileStats = await stat(path.join(sourceDir, 'runtime', relativePath)).catch(
-					() => null
-				);
-				if (!fileStats?.isFile()) {
-					throw new Error(`wasm-rust integrated asset was not found: ${relativePath}`);
-				}
-			}
-		}
-		const rustcStats = await stat(
-			path.join(sourceDir, 'runtime', runtimeManifest.compiler.rustcWasm)
-		).catch(() => null);
-		if (!rustcStats?.isFile()) {
-			throw new Error(`wasm-rust integrated rustc asset was not found`);
-		}
-		rustRuntimeProfile = {
-			profile: { id: 'rustc-integrated-llvm', version: 1 },
-			manifestPath,
-			llvmAssetDir: null,
-			hasEmscriptenLld: false
-		};
-	} else {
-		const validateRuntimeProfile =
-			rustRuntimeContract.validateRustRuntimeProfile ||
-			rustRuntimeContract.validateRustLlvmProfile;
-		rustRuntimeProfile = await validateRuntimeProfile(sourceDir);
-	}
+	const rustRuntimeProfile = await validateRustRuntimeProfile(sourceDir);
 	const hasSharedLldAssets =
 		rustRuntimeProfile.hasEmscriptenLld && rustRuntimeProfile.llvmAssetDir
 			? await validateSharedEmscriptenLldAssets({
@@ -268,10 +212,12 @@ export async function syncWasmRustDist(options = {}) {
 				})
 			: false;
 	if (hasSharedLldAssets) {
-		await syncCanonicalEmscriptenLldAssets({
-			canonicalAssetDir: canonicalLldDir,
-			targetAssetDir: sharedLldDir
-		});
+		if (path.resolve(canonicalLldDir) !== path.resolve(sharedLldDir)) {
+			await syncCanonicalEmscriptenLldAssets({
+				canonicalAssetDir: canonicalLldDir,
+				targetAssetDir: sharedLldDir
+			});
+		}
 	}
 
 	await rm(targetDir, { recursive: true, force: true });

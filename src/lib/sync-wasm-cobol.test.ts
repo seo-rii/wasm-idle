@@ -79,6 +79,12 @@ describe('syncWasmCobolAssets', () => {
 		);
 	});
 
+	it('requires an explicit source directory', async () => {
+		await expect(syncWasmCobolAssets()).rejects.toThrow(
+			'wasm-cobol sync requires an explicit source directory'
+		);
+	});
+
 	it('validates and atomically installs all wasm-llvm COBOL runtime assets', async () => {
 		const sourceDir = await makeTempDir();
 		const targetParent = await makeTempDir();

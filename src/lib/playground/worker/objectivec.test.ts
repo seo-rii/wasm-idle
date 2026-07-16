@@ -5,7 +5,7 @@ const configureWorkerRuntimeAssets = vi.fn();
 const handleWorkerAssetMessage = vi.fn();
 const waitForBufferedStdin = vi.fn();
 
-vi.mock('@seo-rii/wasm-llvm/runtime/objective-c', () => ({ installObjectiveCWorker }));
+vi.mock('@wasm-idle/llvm-core/objective-c', () => ({ installObjectiveCWorker }));
 vi.mock('$lib/playground/worker/assets', () => ({
 	configureWorkerRuntimeAssets,
 	handleWorkerAssetMessage
@@ -19,7 +19,7 @@ describe('Objective-C worker adapter', () => {
 		(globalThis as any).self = globalThis;
 	});
 
-	it('installs the wasm-llvm worker runtime with wasm-idle asset and stdin hooks', async () => {
+	it('installs the llvm-core worker runtime with wasm-idle asset and stdin hooks', async () => {
 		await import('./objectivec');
 
 		expect(installObjectiveCWorker).toHaveBeenCalledOnce();

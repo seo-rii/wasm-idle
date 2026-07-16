@@ -62,6 +62,13 @@ describe('syncWasmNimAssets', () => {
 		);
 	});
 
+	it('loads the Nim LLVM contract from wasm-idle', async () => {
+		const source = await readFile(path.resolve('scripts', 'sync-wasm-nim.mjs'), 'utf8');
+
+		expect(source).toContain("from './llvm-contracts/nim.mjs'");
+		expect(source).not.toMatch(/from\s+['"]@seo-rii\/wasm-llvm/u);
+	});
+
 	it('copies Nim wasm compiler assets, patches clang.js, and writes a version module', async () => {
 		const sourceDir = await makeTempDir();
 		const targetDir = await makeTempDir();

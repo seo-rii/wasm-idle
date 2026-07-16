@@ -1,76 +1,385 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { promisify } from 'node:util';
+import { gzipSync } from 'node:zlib';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { syncWasmClangDist } from '../../scripts/sync-wasm-clang.mjs';
 
 const tempDirs: string[] = [];
+const execFileAsync = promisify(execFile);
+const syncScript = path.resolve('scripts/sync-wasm-clang.mjs');
 const assets = [
-	'runtime-manifest.v1.json',
-	'bin/clang.zip',
-	'bin/lld.zip',
-	'bin/memfs.zip',
-	'bin/sysroot.tar.zip',
-	'clangd/clangd.js',
-	'clangd/clangd.wasm.gz'
+	{
+		asset: 'clang.zip',
+		source: 'bin/clang.zip',
+		target: 'clang/bin/clang.zip'
+	},
+	{
+		asset: 'lld.zip',
+		source: 'bin/lld.zip',
+		target: 'clang/bin/lld.zip'
+	},
+	{
+		asset: 'memfs.zip',
+		source: 'bin/memfs.zip',
+		target: 'clang/bin/memfs.zip'
+	},
+	{
+		asset: 'sysroot.tar.zip',
+		source: 'bin/sysroot.tar.zip',
+		target: 'clang/bin/sysroot.tar.zip'
+	},
+	{
+		asset: 'clangd/clangd.js',
+		source: 'clangd/clangd.js',
+		target: 'clangd/clangd.js'
+	},
+	{
+		asset: 'clangd/clangd.wasm.gz',
+		source: 'clangd/clangd.wasm.gz',
+		target: 'clangd/clangd.wasm.gz'
+	}
 ];
 
 async function makeTempDir() {
-	const dir = await mkdtemp(path.join(os.tmpdir(), 'wasm-idle-wasm-clang-'));
-	tempDirs.push(dir);
-	return dir;
+	const directory = await mkdtemp(path.join(os.tmpdir(), 'wasm-idle-wasm-clang-'));
+	tempDirs.push(directory);
+	return directory;
+}
+
+function sha256(contents: Buffer) {
+	return createHash('sha256').update(contents).digest('hex');
+}
+
+async function writeJson(filePath: string, value: unknown) {
+	await writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`);
 }
 
 async function writeFixture(sourceDir: string) {
-	for (const asset of assets) {
-		const filePath = path.join(sourceDir, asset);
+	const contents = new Map(
+		assets.map(({ source }) => [source, Buffer.from(`fixture:${source}`)])
+	);
+	const stdinImport = Buffer.from('__asyncjs__waitForStdin');
+	const importSection = Buffer.concat([
+		Buffer.from([0x01, 0x03]),
+		Buffer.from('env'),
+		Buffer.from([stdinImport.byteLength]),
+		stdinImport,
+		Buffer.from([0x00, 0x00])
+	]);
+	contents.set(
+		'clangd/clangd.js',
+		Buffer.from('const stdinReady = Module.stdinReady; const wasm = WebAssembly;')
+	);
+	contents.set(
+		'clangd/clangd.wasm.gz',
+		gzipSync(
+			Buffer.concat([
+				Buffer.from([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]),
+				Buffer.from([0x01, 0x04, 0x01, 0x60, 0x00, 0x00]),
+				Buffer.from([0x02, importSection.byteLength]),
+				importSection
+			])
+		)
+	);
+	for (const [filename, bytes] of contents) {
+		const filePath = path.join(sourceDir, filename);
 		await mkdir(path.dirname(filePath), { recursive: true });
-		await writeFile(filePath, `fixture:${asset}`);
+		await writeFile(filePath, bytes);
 	}
+
+	const version = 'llvmorg-22.1.8';
+	const manifest = {
+		manifestVersion: 1,
+		version,
+		defaultTarget: 'wasm32-wasi',
+		compiler: {
+			memfs: { asset: 'bin/memfs.zip', argv0: 'memfs' },
+			clang: { asset: 'bin/clang.zip', argv0: 'clang' },
+			lld: { asset: 'bin/lld.zip', argv0: 'wasm-ld' },
+			sysroot: { asset: 'bin/sysroot.tar.zip' },
+			resourceDir: '/lib/clang/22',
+			compilerRuntimeLibDir: 'lib/clang/22/lib/wasi'
+		},
+		clangd: {
+			js: 'clangd/clangd.js',
+			wasm: 'clangd/clangd.wasm.gz'
+		},
+		targets: {
+			'wasm32-wasi': {
+				artifactFormat: 'wasi-core-wasm',
+				execution: { kind: 'wasi-preview1' }
+			}
+		}
+	};
+	const assetHashes = Object.fromEntries(
+		assets.map(({ asset, source }) => [asset, sha256(contents.get(source)!)])
+	);
+	const buildInfo = {
+		toolchain: {
+			producer: { id: 'wasm-llvm/clang-browser' },
+			version,
+			llvmVersion: '22.1.8',
+			wasiSdkVersion: '33',
+			emsdkVersion: '6.0.0',
+			resourceDir: manifest.compiler.resourceDir,
+			compilerRuntimeLibDir: manifest.compiler.compilerRuntimeLibDir,
+			clangd: {
+				stdinBridge: 'emscripten-asyncify',
+				patch: 'patches/clangd-emscripten-stdin.patch',
+				patchSha256: 'a'.repeat(64)
+			},
+			assets: assetHashes
+		},
+		assets: assets.map(({ asset, source }) => ({
+			asset,
+			size: contents.get(source)!.byteLength,
+			sha256: assetHashes[asset]
+		}))
+	};
+	await writeJson(path.join(sourceDir, 'runtime-manifest.v1.json'), manifest);
+	await writeJson(path.join(sourceDir, 'runtime-build.json'), buildInfo);
+	return { contents, manifest, buildInfo };
+}
+
+async function replaceFixtureAsset(
+	sourceDir: string,
+	buildInfo: Awaited<ReturnType<typeof writeFixture>>['buildInfo'],
+	asset: string,
+	source: string,
+	bytes: Buffer
+) {
+	await writeFile(path.join(sourceDir, source), bytes);
+	const assetHash = sha256(bytes);
+	const nextBuildInfo = {
+		...buildInfo,
+		toolchain: {
+			...buildInfo.toolchain,
+			assets: { ...buildInfo.toolchain.assets, [asset]: assetHash }
+		},
+		assets: buildInfo.assets.map((entry) =>
+			entry.asset === asset ? { ...entry, size: bytes.byteLength, sha256: assetHash } : entry
+		)
+	};
+	await writeJson(path.join(sourceDir, 'runtime-build.json'), nextBuildInfo);
+}
+
+async function writeExistingTargets(staticDir: string) {
+	await mkdir(path.join(staticDir, 'clang', 'bin'), { recursive: true });
+	await mkdir(path.join(staticDir, 'clangd'), { recursive: true });
+	await writeFile(path.join(staticDir, 'clang', 'existing.txt'), 'existing-clang');
+	await writeFile(path.join(staticDir, 'clangd', 'existing.txt'), 'existing-clangd');
+}
+
+async function expectExistingTargets(staticDir: string) {
+	await expect(readFile(path.join(staticDir, 'clang', 'existing.txt'), 'utf8')).resolves.toBe(
+		'existing-clang'
+	);
+	await expect(readFile(path.join(staticDir, 'clangd', 'existing.txt'), 'utf8')).resolves.toBe(
+		'existing-clangd'
+	);
 }
 
 describe('syncWasmClangDist', () => {
 	afterEach(async () => {
 		await Promise.all(
-			tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true }))
+			tempDirs.splice(0).map((directory) => rm(directory, { recursive: true, force: true }))
 		);
 	});
 
-	it('generates the legacy static paths from the runtime-owned assets', async () => {
-		const sourceDir = await makeTempDir();
-		const staticDir = await makeTempDir();
-		await writeFixture(sourceDir);
-		await mkdir(path.join(staticDir, 'clang', 'bin'), { recursive: true });
-		await writeFile(path.join(staticDir, 'clang', 'bin', 'stale.zip'), 'stale');
-
-		await syncWasmClangDist({ sourceDir, staticDir });
-
-		await expect(
-			readFile(path.join(staticDir, 'clang', 'runtime-manifest.v1.json'), 'utf8')
-		).resolves.toBe('fixture:runtime-manifest.v1.json');
-		await expect(
-			readFile(path.join(staticDir, 'clang', 'bin', 'clang.zip'), 'utf8')
-		).resolves.toBe('fixture:bin/clang.zip');
-		await expect(readFile(path.join(staticDir, 'clangd', 'clangd.js'), 'utf8')).resolves.toBe(
-			'fixture:clangd/clangd.js'
+	it('requires an explicit source directory', async () => {
+		await expect(syncWasmClangDist()).rejects.toThrow(
+			'wasm-clang sync requires an explicit source directory'
 		);
-		await expect(
-			readFile(path.join(staticDir, 'clang', 'bin', 'stale.zip'), 'utf8')
-		).rejects.toThrow();
 	});
 
-	it('does not clear existing assets when the runtime build is incomplete', async () => {
+	it('validates, stages, and transactionally installs the complete producer bundle', async () => {
 		const sourceDir = await makeTempDir();
-		const staticDir = await makeTempDir();
-		await mkdir(path.join(staticDir, 'clangd'), { recursive: true });
-		await writeFile(path.join(staticDir, 'clangd', 'clangd.js'), 'existing');
+		const staticDir = path.join(await makeTempDir(), 'static');
+		const fixture = await writeFixture(sourceDir);
+		await writeExistingTargets(staticDir);
+
+		expect(await syncWasmClangDist({ sourceDir, staticDir })).toEqual({
+			sourceDir,
+			staticDir
+		});
+		expect(
+			JSON.parse(
+				await readFile(path.join(staticDir, 'clang', 'runtime-manifest.v1.json'), 'utf8')
+			)
+		).toEqual(fixture.manifest);
+		expect(
+			JSON.parse(await readFile(path.join(staticDir, 'clang', 'runtime-build.json'), 'utf8'))
+		).toEqual(fixture.buildInfo);
+		for (const { source, target } of assets) {
+			await expect(readFile(path.join(staticDir, target))).resolves.toEqual(
+				fixture.contents.get(source)
+			);
+		}
+		await expect(stat(path.join(staticDir, 'clang', 'existing.txt'))).rejects.toThrow();
+		await expect(stat(path.join(staticDir, 'clangd', 'existing.txt'))).rejects.toThrow();
+		expect((await readdir(staticDir)).sort()).toEqual(['clang', 'clangd']);
+	});
+
+	it('accepts the pnpm argument separator in the CLI path', async () => {
+		const sourceDir = await makeTempDir();
+		const staticDir = path.join(await makeTempDir(), 'static');
+		const { contents } = await writeFixture(sourceDir);
+
+		await execFileAsync(process.execPath, [syncScript, '--', sourceDir, staticDir]);
+
+		await expect(
+			readFile(path.join(staticDir, 'clang', 'runtime-build.json'), 'utf8')
+		).resolves.toContain('llvmorg-22.1.8');
+		await expect(readFile(path.join(staticDir, 'clangd', 'clangd.js'))).resolves.toEqual(
+			contents.get('clangd/clangd.js')
+		);
+	});
+
+	it('rejects excessive CLI arguments', async () => {
+		await expect(
+			execFileAsync(process.execPath, [syncScript, 'source', 'static', 'extra'])
+		).rejects.toThrow('wasm-clang sync accepts at most sourceDir and staticDir arguments');
+	});
+
+	it('rejects an invalid runtime manifest shape', async () => {
+		const sourceDir = await makeTempDir();
+		const staticDir = path.join(await makeTempDir(), 'static');
+		const { manifest } = await writeFixture(sourceDir);
+		await writeJson(path.join(sourceDir, 'runtime-manifest.v1.json'), {
+			...manifest,
+			compiler: { ...manifest.compiler, clang: { asset: 'clang.zip', argv0: 'clang' } }
+		});
 
 		await expect(syncWasmClangDist({ sourceDir, staticDir })).rejects.toThrow(
-			'Reinstall @seo-rii/wasm-llvm before syncing'
+			'does not reference the complete Clang runtime asset set'
 		);
-		await expect(readFile(path.join(staticDir, 'clangd', 'clangd.js'), 'utf8')).resolves.toBe(
-			'existing'
+	});
+
+	it('rejects manifest and build versions that do not match', async () => {
+		const sourceDir = await makeTempDir();
+		const staticDir = path.join(await makeTempDir(), 'static');
+		const { buildInfo } = await writeFixture(sourceDir);
+		await writeJson(path.join(sourceDir, 'runtime-build.json'), {
+			...buildInfo,
+			toolchain: { ...buildInfo.toolchain, version: 'llvmorg-23.0.0' }
+		});
+
+		await expect(syncWasmClangDist({ sourceDir, staticDir })).rejects.toThrow(
+			'does not match runtime-build.json version'
+		);
+	});
+
+	it('rejects clangd assets without a stdin bridge receipt', async () => {
+		const sourceDir = await makeTempDir();
+		const staticDir = path.join(await makeTempDir(), 'static');
+		const { buildInfo } = await writeFixture(sourceDir);
+		await writeJson(path.join(sourceDir, 'runtime-build.json'), {
+			...buildInfo,
+			toolchain: { ...buildInfo.toolchain, clangd: undefined }
+		});
+
+		await expect(syncWasmClangDist({ sourceDir, staticDir })).rejects.toThrow(
+			'missing the clangd stdin bridge receipt'
+		);
+	});
+
+	it('rejects a clangd loader without the stdin readiness callback', async () => {
+		const sourceDir = await makeTempDir();
+		const staticDir = path.join(await makeTempDir(), 'static');
+		const { buildInfo } = await writeFixture(sourceDir);
+		await replaceFixtureAsset(
+			sourceDir,
+			buildInfo,
+			'clangd/clangd.js',
+			'clangd/clangd.js',
+			Buffer.from('const wasm = WebAssembly;')
+		);
+
+		await expect(syncWasmClangDist({ sourceDir, staticDir })).rejects.toThrow(
+			'missing the browser stdin readiness callback'
+		);
+	});
+
+	it('rejects clangd WebAssembly without the Asyncify stdin import', async () => {
+		const sourceDir = await makeTempDir();
+		const staticDir = path.join(await makeTempDir(), 'static');
+		const { buildInfo } = await writeFixture(sourceDir);
+		await replaceFixtureAsset(
+			sourceDir,
+			buildInfo,
+			'clangd/clangd.wasm.gz',
+			'clangd/clangd.wasm.gz',
+			gzipSync(Buffer.from([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]))
+		);
+
+		await expect(syncWasmClangDist({ sourceDir, staticDir })).rejects.toThrow(
+			'missing the Asyncify stdin import'
+		);
+	});
+
+	it('rejects runtime-build metadata with an incomplete asset list', async () => {
+		const sourceDir = await makeTempDir();
+		const staticDir = path.join(await makeTempDir(), 'static');
+		const { buildInfo } = await writeFixture(sourceDir);
+		await writeJson(path.join(sourceDir, 'runtime-build.json'), {
+			...buildInfo,
+			assets: buildInfo.assets.slice(0, -1)
+		});
+
+		await expect(syncWasmClangDist({ sourceDir, staticDir })).rejects.toThrow(
+			'does not describe the complete runtime asset set'
+		);
+	});
+
+	it('rejects a missing producer asset and preserves both existing targets', async () => {
+		const sourceDir = await makeTempDir();
+		const staticDir = path.join(await makeTempDir(), 'static');
+		await writeFixture(sourceDir);
+		await rm(path.join(sourceDir, 'bin', 'lld.zip'));
+		await writeExistingTargets(staticDir);
+
+		await expect(syncWasmClangDist({ sourceDir, staticDir })).rejects.toThrow(
+			'bin/lld.zip was not found'
+		);
+		await expectExistingTargets(staticDir);
+		expect((await readdir(staticDir)).sort()).toEqual(['clang', 'clangd']);
+	});
+
+	it('rejects a hash mismatch and preserves both existing targets', async () => {
+		const sourceDir = await makeTempDir();
+		const staticDir = path.join(await makeTempDir(), 'static');
+		const { contents } = await writeFixture(sourceDir);
+		await writeFile(
+			path.join(sourceDir, 'bin', 'clang.zip'),
+			Buffer.alloc(contents.get('bin/clang.zip')!.byteLength, 0x78)
+		);
+		await writeExistingTargets(staticDir);
+
+		await expect(syncWasmClangDist({ sourceDir, staticDir })).rejects.toThrow(
+			'bin/clang.zip does not match runtime-build.json'
+		);
+		await expectExistingTargets(staticDir);
+		expect((await readdir(staticDir)).sort()).toEqual(['clang', 'clangd']);
+	});
+
+	it('rejects a size mismatch', async () => {
+		const sourceDir = await makeTempDir();
+		const staticDir = path.join(await makeTempDir(), 'static');
+		const { buildInfo } = await writeFixture(sourceDir);
+		await writeJson(path.join(sourceDir, 'runtime-build.json'), {
+			...buildInfo,
+			assets: buildInfo.assets.map((entry) =>
+				entry.asset === 'memfs.zip' ? { ...entry, size: entry.size + 1 } : entry
+			)
+		});
+
+		await expect(syncWasmClangDist({ sourceDir, staticDir })).rejects.toThrow(
+			'bin/memfs.zip does not match runtime-build.json'
 		);
 	});
 });

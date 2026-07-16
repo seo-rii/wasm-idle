@@ -26,11 +26,17 @@ describe('syncWasmDDist', () => {
 		);
 	});
 
+	it('loads the Emscripten LLD contract from wasm-idle', async () => {
+		const source = await readFile(path.resolve('scripts', 'sync-wasm-d.mjs'), 'utf8');
+
+		expect(source).toContain("from './llvm-contracts/emscripten-lld.mjs'");
+		expect(source).not.toMatch(/from\s+['"]@seo-rii\/wasm-llvm/u);
+	});
+
 	it('uses the canonical shared Emscripten LLD assets', async () => {
 		const sourceDir = await makeTempDir();
 		const targetDir = await makeTempDir();
 		const sharedLldDir = await makeTempDir();
-		const canonicalLldDir = await makeTempDir();
 		const versionModulePath = path.join(await makeTempDir(), 'wasmDVersion.ts');
 		for (const file of [
 			'index.js',
@@ -42,9 +48,9 @@ describe('syncWasmDDist', () => {
 		await writeFixtureFile(sourceDir, 'runtime/bin/lld.js', 'shared-js');
 		await writeFixtureFile(sourceDir, 'runtime/bin/lld.wasm.gz', 'shared-wasm');
 		await writeFixtureFile(sourceDir, 'runtime/bin/lld.data.gz', 'shared-data');
-		await writeFixtureFile(canonicalLldDir, 'lld.js', 'shared-js');
-		await writeFixtureFile(canonicalLldDir, 'lld.wasm.gz', 'shared-wasm');
-		await writeFixtureFile(canonicalLldDir, 'lld.data.gz', 'shared-data');
+		await writeFixtureFile(sharedLldDir, 'lld.js', 'shared-js');
+		await writeFixtureFile(sharedLldDir, 'lld.wasm.gz', 'shared-wasm');
+		await writeFixtureFile(sharedLldDir, 'lld.data.gz', 'shared-data');
 		await writeFixtureFile(
 			sourceDir,
 			'runtime/runtime-build.json',
@@ -60,8 +66,7 @@ describe('syncWasmDDist', () => {
 			sourceDir,
 			targetDir,
 			versionModulePath,
-			sharedLldDir,
-			canonicalLldDir
+			sharedLldDir
 		});
 		await expect(readFile(path.join(sharedLldDir, 'lld.wasm.gz'), 'utf8')).resolves.toBe(
 			'shared-wasm'

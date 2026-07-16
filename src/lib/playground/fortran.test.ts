@@ -1,8 +1,8 @@
 // @vitest-environment node
 
 import { readFileSync } from 'node:fs';
+import { createServer } from 'node:http';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
 import { WASI } from '@bjorn3/browser_wasi_shim';
 import { describe, expect, it } from 'vitest';
 import {
@@ -12,7 +12,7 @@ import {
 	loadRuntimeManifest,
 	resolveRuntimeManifestUrl,
 	type BrowserClangArtifact
-} from '@seo-rii/wasm-llvm/runtime/clang';
+} from '@wasm-idle/llvm-core/clang';
 
 const textDecoder = new TextDecoder();
 
@@ -67,8 +67,7 @@ async function translateFortranToC() {
 	return textDecoder.decode(generated!.data);
 }
 
-async function compileFortranProgram(cSource: string) {
-	const clangBaseUrl = pathToFileURL(path.join(process.cwd(), 'static', 'clang') + '/').href;
+async function compileFortranProgram(cSource: string, clangBaseUrl: string) {
 	const manifest = await loadRuntimeManifest(resolveRuntimeManifestUrl(clangBaseUrl));
 	const clang = new BrowserClangRuntime({
 		log: false,
@@ -132,7 +131,42 @@ describe('Fortran browser runtime', () => {
 		expect(cSource).toContain('s_rsle');
 		expect(cSource).toContain('do_lio');
 
-		const artifact = await compileFortranProgram(cSource);
+		const staticRoot = path.resolve(process.cwd(), 'static');
+		const server = createServer((request, response) => {
+			const requestUrl = new URL(request.url || '/', 'http://127.0.0.1');
+			const assetPath = path.resolve(
+				staticRoot,
+				decodeURIComponent(requestUrl.pathname.slice(1))
+			);
+			if (!assetPath.startsWith(`${staticRoot}${path.sep}`)) {
+				response.writeHead(403).end();
+				return;
+			}
+			try {
+				response.writeHead(200).end(readFileSync(assetPath));
+			} catch {
+				response.writeHead(404).end();
+			}
+		});
+		await new Promise<void>((resolve, reject) => {
+			server.once('error', reject);
+			server.listen(0, '127.0.0.1', resolve);
+		});
+		const address = server.address();
+		if (!address || typeof address === 'string')
+			throw new Error('HTTP test server did not bind');
+
+		let artifact: BrowserClangArtifact;
+		try {
+			artifact = await compileFortranProgram(
+				cSource,
+				`http://127.0.0.1:${address.port}/clang/`
+			);
+		} finally {
+			await new Promise<void>((resolve, reject) =>
+				server.close((error) => (error ? reject(error) : resolve()))
+			);
+		}
 		const outputChunks: string[] = [];
 		let stdinConsumed = false;
 		const result = await executeBrowserClangArtifact(artifact, {

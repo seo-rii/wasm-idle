@@ -9,14 +9,14 @@ import {
 import type {
 	BrowserClangArtifact,
 	BrowserClangRuntime as Clang
-} from '@seo-rii/wasm-llvm/runtime/clang';
+} from '@wasm-idle/llvm-core/clang';
 import {
 	BrowserClangRuntime,
 	createBrowserWasiHost,
 	executeBrowserClangArtifact,
 	loadRuntimeManifest,
 	resolveRuntimeManifestUrl
-} from '@seo-rii/wasm-llvm/runtime/clang';
+} from '@wasm-idle/llvm-core/clang';
 
 declare var self: any;
 self.document = {

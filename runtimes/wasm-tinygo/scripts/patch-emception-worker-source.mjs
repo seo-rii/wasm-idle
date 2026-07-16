@@ -1,1 +1,1 @@
-export { patchEmceptionWorkerSource } from '@seo-rii/wasm-llvm/runtime/tinygo';
+export { patchEmceptionWorkerSource } from '../../../scripts/llvm-contracts/tinygo.mjs';

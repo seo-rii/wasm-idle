@@ -58,12 +58,19 @@ describe('syncWasmRustDist', () => {
 		);
 	});
 
+	it('loads Rust and Emscripten LLD contracts from wasm-idle', async () => {
+		const source = await readFile(path.resolve('scripts', 'sync-wasm-rust.mjs'), 'utf8');
+
+		expect(source).toContain("from './llvm-contracts/emscripten-lld.mjs'");
+		expect(source).toContain("from './llvm-contracts/rust.mjs'");
+		expect(source).not.toMatch(/from\s+['"]@seo-rii\/wasm-llvm/u);
+	});
+
 	it('copies the built wasm-rust browser bundle into the target directory', async () => {
 		const sourceDir = await makeTempDir();
 		const targetDir = await makeTempDir();
 		const versionModulePath = path.join(await makeTempDir(), 'wasmRustVersion.ts');
 		const sharedLldDir = await makeTempDir();
-		const canonicalLldDir = await makeTempDir();
 
 		await writeFixtureFile(sourceDir, 'index.js', 'export default "compiler";\n');
 		await writeFixtureFile(
@@ -98,9 +105,9 @@ describe('syncWasmRustDist', () => {
 			'runtime/packs/link/wasm32-wasip1.pack.gz',
 			'gzip-link-pack'
 		);
-		await writeFixtureFile(canonicalLldDir, 'lld.js', 'lld-js');
-		await writeFixtureFile(canonicalLldDir, 'lld.wasm.gz', 'gzip-lld-wasm');
-		await writeFixtureFile(canonicalLldDir, 'lld.data.gz', 'gzip-lld-data');
+		await writeFixtureFile(sharedLldDir, 'lld.js', 'lld-js');
+		await writeFixtureFile(sharedLldDir, 'lld.wasm.gz', 'gzip-lld-wasm');
+		await writeFixtureFile(sharedLldDir, 'lld.data.gz', 'gzip-lld-data');
 		await writeFixtureFile(sourceDir, 'types.d.ts', 'export type Ignored = true;\n');
 		await writeFixtureFile(
 			sourceDir,
@@ -133,8 +140,7 @@ describe('syncWasmRustDist', () => {
 			sourceDir,
 			targetDir,
 			versionModulePath,
-			sharedLldDir,
-			canonicalLldDir
+			sharedLldDir
 		});
 		await expect(readFile(path.join(sharedLldDir, 'lld.data.gz'), 'utf8')).resolves.toBe(
 			'gzip-lld-data'

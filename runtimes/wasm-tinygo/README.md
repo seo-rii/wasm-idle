@@ -21,7 +21,7 @@ Detailed compatibility and verification notes live in [COMPATIBILITY.md](./COMPA
 
 - Browser execution path is working end to end.
 - The app boots emception in the browser and executes generated `clang` and `wasm-ld` plans.
-- emception LLVM `16.0.0` download, patching, and checksum validation are owned by the pinned `@seo-rii/wasm-llvm` TinyGo profile; the browser runtime does not load wasm-rust assets.
+- emception LLVM `16.0.0` download, patching, and checksum validation use the consumer-owned profile in `scripts/llvm-contracts/tinygo.mjs`; no producer npm package or wasm-rust assets are loaded.
 - The Go/WASI probe binary handles driver, front-end, and backend modes.
 - The planner-owned front-end handoff now carries explicit `compileUnits`, `packageGraph`, and `buildContext` sections.
 - The front-end and backend exchange normalized manifests and verify them on the host/browser side.

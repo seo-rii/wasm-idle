@@ -28,7 +28,6 @@
 		"vite": "^8.0.0"
 	},
 	"dependencies": {
-		"@seo-rii/wasm-llvm": "github:seo-rii/wasm-llvm#22ba6c3",
 		"@bjorn3/browser_wasi_shim": "^0.4.2",
 		"comlink": "^4.4.2"
 	}

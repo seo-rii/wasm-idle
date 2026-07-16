@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
 	waitForBufferedStdin: vi.fn()
 }));
 
-vi.mock('@seo-rii/wasm-llvm/runtime/cobol', () => ({
+vi.mock('@wasm-idle/llvm-core/cobol', () => ({
 	createCobolCompiler: mocks.createCobolCompiler,
 	executeBrowserCobolArtifact: mocks.executeBrowserCobolArtifact
 }));
@@ -40,7 +40,7 @@ describe('COBOL worker', () => {
 		});
 	});
 
-	it('loads GnuCOBOL through wasm-llvm, compiles workspace source, and executes stdin', async () => {
+	it('loads GnuCOBOL through llvm-core, compiles workspace source, and executes stdin', async () => {
 		await import('./cobol');
 		await (globalThis as any).self.onmessage({
 			data: {

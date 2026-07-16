@@ -3,11 +3,10 @@ import { fileURLToPath } from 'node:url';
 import {
 	syncEmceptionRuntime,
 	TINYGO_LLVM_PROFILE
-} from '@seo-rii/wasm-llvm/runtime/tinygo';
+} from '../../../scripts/llvm-contracts/tinygo.mjs';
 
 const emceptionWorkerUrl =
-	process.env.WASM_TINYGO_EMCEPTION_WORKER_URL ??
-	TINYGO_LLVM_PROFILE.workerUrl;
+	process.env.WASM_TINYGO_EMCEPTION_WORKER_URL ?? TINYGO_LLVM_PROFILE.workerUrl;
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const outputPath =

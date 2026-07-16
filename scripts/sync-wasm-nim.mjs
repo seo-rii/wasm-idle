@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
-import { NIM_LLVM_PROFILE, validateNimLlvmProfile } from '@seo-rii/wasm-llvm/runtime/nim';
+import { NIM_LLVM_PROFILE, validateNimLlvmProfile } from './llvm-contracts/nim.mjs';
 
 const execFileAsync = promisify(execFile);
 

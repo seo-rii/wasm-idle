@@ -9,7 +9,7 @@ import {
 	createCobolCompiler,
 	executeBrowserCobolArtifact,
 	type BrowserCobolCompiler
-} from '@seo-rii/wasm-llvm/runtime/cobol';
+} from '@wasm-idle/llvm-core/cobol';
 
 declare var self: any;
 self.document = {

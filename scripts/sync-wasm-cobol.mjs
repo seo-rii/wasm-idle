@@ -1,12 +1,10 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { cp, mkdir, readFile, rename, rm, stat } from 'node:fs/promises';
-import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const REPO_ROOT = path.resolve(path.dirname(THIS_FILE), '..');
-const require = createRequire(import.meta.url);
 const DEFAULT_TARGET_DIR = path.join(REPO_ROOT, 'static', 'wasm-cobol');
 
 const ARCHIVE_FILES = ['cobc.zip', 'rootfs.tar.zip', 'c-sysroot.tar.zip'];
@@ -38,12 +36,6 @@ async function sha256File(filePath) {
 		.digest('hex');
 }
 
-function defaultSourceDir() {
-	return path.dirname(
-		require.resolve('@seo-rii/wasm-llvm/runtime/cobol/assets/runtime-manifest.v1.json')
-	);
-}
-
 /** @param {string} sourceDir */
 async function validateSource(sourceDir) {
 	for (const filename of REQUIRED_FILES) {
@@ -51,7 +43,7 @@ async function validateSource(sourceDir) {
 		const fileStats = await stat(filePath).catch(() => null);
 		if (!fileStats?.isFile()) {
 			throw new Error(
-				`wasm-cobol runtime asset ${filename} was not found in ${sourceDir}. Reinstall @seo-rii/wasm-llvm before syncing.`
+				`wasm-cobol runtime asset ${filename} was not found in ${sourceDir}. Provide a complete source directory before syncing.`
 			);
 		}
 	}
@@ -141,7 +133,10 @@ async function validateSource(sourceDir) {
 
 /** @param {{ sourceDir?: string; targetDir?: string }} [options] */
 export async function syncWasmCobolAssets({ sourceDir, targetDir = DEFAULT_TARGET_DIR } = {}) {
-	const resolvedSourceDir = path.resolve(sourceDir || defaultSourceDir());
+	if (!sourceDir) {
+		throw new Error('wasm-cobol sync requires an explicit source directory.');
+	}
+	const resolvedSourceDir = path.resolve(sourceDir);
 	const resolvedTargetDir = path.resolve(targetDir);
 	await validateSource(resolvedSourceDir);
 
@@ -186,7 +181,7 @@ export async function syncWasmCobolAssets({ sourceDir, targetDir = DEFAULT_TARGE
 if (process.argv[1] && path.resolve(process.argv[1]) === THIS_FILE) {
 	const [, , sourceDirArg, targetDirArg] = process.argv;
 	const result = await syncWasmCobolAssets({
-		sourceDir: sourceDirArg ? path.resolve(sourceDirArg) : undefined,
+		sourceDir: sourceDirArg,
 		targetDir: targetDirArg ? path.resolve(targetDirArg) : DEFAULT_TARGET_DIR
 	});
 	console.log(`Synced wasm-cobol from ${result.sourceDir} to ${result.targetDir}`);

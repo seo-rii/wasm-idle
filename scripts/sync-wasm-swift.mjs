@@ -1,6 +1,15 @@
 import { createHash } from 'node:crypto';
-import { cp, mkdir, mkdtemp, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
-import { createRequire } from 'node:module';
+import {
+	cp,
+	mkdir,
+	mkdtemp,
+	readdir,
+	readFile,
+	rename,
+	rm,
+	stat,
+	writeFile
+} from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -12,23 +21,19 @@ import {
 	validateSwiftRuntimeFileSignatures,
 	validateSwiftRuntimeManifest,
 	validateSwiftRuntimeManifestFiles
-} from '@seo-rii/wasm-llvm/tooling/swift/runtime-manifest';
+} from './llvm-contracts/swift/runtime-manifest.mjs';
 import {
 	BUILD_PLAN_SNAPSHOT_FILE,
 	BROWSER_BUILD_LOG_SNAPSHOT_FILE,
 	SOURCE_BOOTSTRAP_RECEIPT_SNAPSHOT_FILE,
 	validateSwiftRuntimeBuildInfo,
 	validateSwiftRuntimeSdkChecksum
-} from '@seo-rii/wasm-llvm/tooling/swift/runtime-build-info';
+} from './llvm-contracts/swift/runtime-build-info.mjs';
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const THIS_DIR = path.dirname(THIS_FILE);
 const REPO_ROOT = path.resolve(THIS_DIR, '..');
-const require = createRequire(import.meta.url);
-const WASM_LLVM_ROOT = path.dirname(require.resolve('@seo-rii/wasm-llvm/package.json'));
-const DEFAULT_SOURCE_DIR = path.resolve(WASM_LLVM_ROOT, 'runtime', 'swift', 'dist');
 const DEFAULT_TARGET_DIR = path.resolve(REPO_ROOT, 'static', 'wasm-swift');
-const DEFAULT_BUILD_INFO_PATH = path.join(DEFAULT_SOURCE_DIR, 'runtime-build.json');
 const DEFAULT_VERSION_MODULE_PATH = path.resolve(
 	REPO_ROOT,
 	'src',
@@ -48,6 +53,20 @@ const OPTIONAL_SOURCE_FILES = [
 	SOURCE_BOOTSTRAP_RECEIPT_SNAPSHOT_FILE
 ];
 const BASELINE_RECEIPT_SNAPSHOT_PATTERN = /^upstream-baseline-[A-Za-z0-9._+-]+\.snapshot\.json$/u;
+
+/**
+ * @param {string | undefined} sourceDir
+ * @param {NodeJS.ProcessEnv | Record<string, string | undefined>} environment
+ */
+function resolveConfiguredSourceDir(sourceDir, environment = process.env) {
+	const configuredSourceDir = sourceDir || environment.WASM_SWIFT_RUNTIME_SOURCE_DIR;
+	if (!configuredSourceDir) {
+		throw new Error(
+			'Swift runtime sourceDir is required. Pass it explicitly or set WASM_SWIFT_RUNTIME_SOURCE_DIR to an externally produced runtime bundle.'
+		);
+	}
+	return path.resolve(configuredSourceDir);
+}
 
 /** @param {string} filePath */
 async function fileExists(filePath) {
@@ -345,16 +364,15 @@ async function syncCompressedManifestForGzipOnlyAssets(targetDir, manifest) {
 		const size = runtimeEntry?.bytes ?? existingSizes[asset];
 		if (Number.isFinite(size)) sizes[asset] = size;
 	}
-	await writeFile(
-		manifestPath,
-		`${JSON.stringify({ assets, sizes }, null, 2)}\n`,
-		'utf8'
-	);
+	await writeFile(manifestPath, `${JSON.stringify({ assets, sizes }, null, 2)}\n`, 'utf8');
 	return gzipOnlyAssets;
 }
 
-/** @param {string[]} argv */
-export function parseSyncWasmSwiftArgs(argv) {
+/**
+ * @param {string[]} argv
+ * @param {NodeJS.ProcessEnv | Record<string, string | undefined>} environment
+ */
+export function parseSyncWasmSwiftArgs(argv, environment = process.env) {
 	const positional = [];
 	for (const arg of argv) {
 		if (arg === '--help') return { help: true };
@@ -366,7 +384,7 @@ export function parseSyncWasmSwiftArgs(argv) {
 	}
 	const [sourceDir, targetDir] = positional;
 	return {
-		sourceDir: sourceDir ? path.resolve(sourceDir) : DEFAULT_SOURCE_DIR,
+		sourceDir: resolveConfiguredSourceDir(sourceDir, environment),
 		targetDir: targetDir ? path.resolve(targetDir) : DEFAULT_TARGET_DIR
 	};
 }
@@ -375,7 +393,8 @@ function usage() {
 	return [
 		'Usage: pnpm run sync:wasm-swift [sourceDir] [targetDir]',
 		'',
-		'Synchronizes a packaged wasm-swift dist into static/wasm-swift.',
+		'Synchronizes an externally produced wasm-swift dist into static/wasm-swift.',
+		'Pass sourceDir explicitly or set WASM_SWIFT_RUNTIME_SOURCE_DIR; runtime assets must come from an external producer bundle.',
 		'The source directory must be produced by package:wasm-swift and include runtime-build.json source provenance.',
 		'runtime-build.json must also record the Swift browser runtimeContract format and version produced by package:wasm-swift.',
 		'Compiler inputs may be stored as swiftc.wasm.gz and swiftpm.wasm.gz; sync preserves them as compressed files while validating the manifest against decompressed .wasm bytes.'
@@ -391,13 +410,16 @@ function usage() {
  * }} options
  */
 export async function syncWasmSwiftAssets({
-	sourceDir = DEFAULT_SOURCE_DIR,
+	sourceDir,
 	targetDir = DEFAULT_TARGET_DIR,
-	buildInfoPath = path.join(sourceDir, 'runtime-build.json'),
+	buildInfoPath,
 	versionModulePath = DEFAULT_VERSION_MODULE_PATH
 } = {}) {
-	const normalizedSourceDir = path.resolve(sourceDir);
+	const normalizedSourceDir = resolveConfiguredSourceDir(sourceDir);
 	const normalizedTargetDir = path.resolve(targetDir);
+	const normalizedBuildInfoPath = buildInfoPath
+		? path.resolve(buildInfoPath)
+		: path.join(normalizedSourceDir, 'runtime-build.json');
 	const sourceStats = await stat(normalizedSourceDir).catch(() => null);
 	if (!sourceStats?.isDirectory()) {
 		throw new Error(
@@ -408,7 +430,7 @@ export async function syncWasmSwiftAssets({
 	await assertRequiredFiles(normalizedSourceDir);
 	await assertRunnerWorkerContract(normalizedSourceDir);
 	await assertRuntimeFileSignatures(normalizedSourceDir);
-	const buildInfo = await readBuildInfo(buildInfoPath);
+	const buildInfo = await readBuildInfo(normalizedBuildInfoPath);
 	assertBuildInfoProvenance(buildInfo);
 	await assertSourceManifest(normalizedSourceDir, buildInfo);
 	await assertSdkChecksum(normalizedSourceDir, buildInfo);

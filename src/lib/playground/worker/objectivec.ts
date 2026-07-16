@@ -3,7 +3,7 @@ import {
 	configureWorkerRuntimeAssets,
 	handleWorkerAssetMessage
 } from '$lib/playground/worker/assets';
-import { installObjectiveCWorker } from '@seo-rii/wasm-llvm/runtime/objective-c';
+import { installObjectiveCWorker } from '@wasm-idle/llvm-core/objective-c';
 
 declare const self: DedicatedWorkerGlobalScope;
 

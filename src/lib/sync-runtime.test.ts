@@ -9,7 +9,7 @@ import {
 } from '../../scripts/sync-runtime.mjs';
 
 describe('sync-runtime registry', () => {
-	it('registers the wasm-llvm COBOL asset synchronizer', () => {
+	it('registers the wasm-llvm-produced COBOL asset synchronizer', () => {
 		expect(RUNTIMES.find((runtime) => runtime.name === 'wasm-cobol')).toMatchObject({
 			module: './sync-wasm-cobol.mjs',
 			exportName: 'syncWasmCobolAssets',

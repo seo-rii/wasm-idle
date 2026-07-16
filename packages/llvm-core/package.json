@@ -1,0 +1,62 @@
+{
+	"name": "@wasm-idle/llvm-core",
+	"version": "0.1.0",
+	"description": "Browser LLVM runtime hosts for wasm-idle",
+	"license": "MIT",
+	"type": "module",
+	"sideEffects": false,
+	"exports": {
+		".": {
+			"types": "./dist/core/src/index.d.ts",
+			"import": "./dist/core/src/index.js",
+			"default": "./dist/core/src/index.js"
+		},
+		"./core": {
+			"types": "./dist/core/src/index.d.ts",
+			"import": "./dist/core/src/index.js",
+			"default": "./dist/core/src/index.js"
+		},
+		"./core/*": {
+			"types": "./dist/core/src/*.d.ts",
+			"import": "./dist/core/src/*.js",
+			"default": "./dist/core/src/*.js"
+		},
+		"./clang": {
+			"types": "./dist/clang/src/index.d.ts",
+			"import": "./dist/clang/src/index.js",
+			"default": "./dist/clang/src/index.js"
+		},
+		"./cobol": {
+			"types": "./dist/cobol/src/index.d.ts",
+			"import": "./dist/cobol/src/index.js",
+			"default": "./dist/cobol/src/index.js"
+		},
+		"./objective-c": {
+			"types": "./dist/objective-c/src/index.d.ts",
+			"import": "./dist/objective-c/src/index.js",
+			"default": "./dist/objective-c/src/index.js"
+		},
+		"./package.json": "./package.json"
+	},
+	"files": [
+		"dist",
+		"!dist/**/*.{wasm,zip,tar,gz,tgz,data,zst,br,a,o,so,bc,pack}",
+		"README.md"
+	],
+	"scripts": {
+		"build": "rm -rf dist && tsc -p tsconfig.json",
+		"check": "tsc -p tsconfig.json --noEmit",
+		"prepack": "pnpm run build && pnpm run verify:package-boundary",
+		"test": "vitest run",
+		"verify:package-boundary": "node scripts/verify-package-boundary.mjs"
+	},
+	"dependencies": {
+		"@bjorn3/browser_wasi_shim": "^0.4.2",
+		"@zip.js/zip.js": "^2.8.26"
+	},
+	"devDependencies": {
+		"@types/node": "^25.6.0",
+		"typescript": "^6.0.2",
+		"vitest": "^4.1.4"
+	}
+}

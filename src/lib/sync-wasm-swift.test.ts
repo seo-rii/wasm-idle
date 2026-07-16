@@ -17,13 +17,17 @@ import {
 	SOURCE_BOOTSTRAP_RECEIPT_SNAPSHOT_FILE,
 	swiftBaselineReceiptSnapshotFile,
 	validateSwiftRuntimeBuildInfo
-} from '@seo-rii/wasm-llvm/tooling/swift/runtime-build-info';
+} from '../../scripts/llvm-contracts/swift/runtime-build-info.mjs';
+import {
+	createSwiftRuntimeContract,
+	validateSwiftRuntimeContract
+} from '../../scripts/llvm-contracts/swift/runtime-contract.mjs';
 import {
 	buildFileEntries,
 	createSwiftRuntimeManifest,
 	fingerprintFileEntries,
 	validateSwiftRuntimeManifestFiles
-} from '@seo-rii/wasm-llvm/tooling/swift/runtime-manifest';
+} from '../../scripts/llvm-contracts/swift/runtime-manifest.mjs';
 
 const tempDirs: string[] = [];
 const VALID_RUNNER_WORKER_SOURCE = `
@@ -54,9 +58,7 @@ self.onmessage = async (event) => {
 };
 `;
 const VALID_SDK_ARCHIVE_BYTES = Uint8Array.from(gzipSync(Uint8Array.of(115, 100, 107)));
-const VALID_SDK_ARCHIVE_SHA256 = createHash('sha256')
-	.update(VALID_SDK_ARCHIVE_BYTES)
-	.digest('hex');
+const VALID_SDK_ARCHIVE_SHA256 = createHash('sha256').update(VALID_SDK_ARCHIVE_BYTES).digest('hex');
 
 async function makeTempDir() {
 	const dir = await mkdtemp(path.join(os.tmpdir(), 'wasm-idle-wasm-swift-'));
@@ -89,7 +91,9 @@ function encodeU32Leb(value: number) {
 
 function taggedWasmFixture(tag: string, paddingLength = 0, fill = 0) {
 	const header = Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0);
-	const name = Uint8Array.from([119, 97, 115, 109, 45, 105, 100, 108, 101, 45, 116, 101, 115, 116]);
+	const name = Uint8Array.from([
+		119, 97, 115, 109, 45, 105, 100, 108, 101, 45, 116, 101, 115, 116
+	]);
 	const nameLength = encodeU32Leb(name.byteLength);
 	const tagBytes = Buffer.from(tag, 'utf8');
 	const payloadLength =
@@ -137,18 +141,13 @@ function runtimeBuildInfo(overrides: Record<string, unknown> = {}) {
 	};
 }
 
-async function writeValidSwiftSourceBundle(sourceDir: string, overrides: Record<string, unknown> = {}) {
+async function writeValidSwiftSourceBundle(
+	sourceDir: string,
+	overrides: Record<string, unknown> = {}
+) {
 	await writeFixtureFile(sourceDir, 'runner-worker.js', VALID_RUNNER_WORKER_SOURCE);
-	await writeFixtureFile(
-		sourceDir,
-		'swiftc.wasm',
-		taggedWasmFixture('swiftc Swift compiler')
-	);
-	await writeFixtureFile(
-		sourceDir,
-		'swiftpm.wasm',
-		taggedWasmFixture('swiftpm SwiftPM')
-	);
+	await writeFixtureFile(sourceDir, 'swiftc.wasm', taggedWasmFixture('swiftc Swift compiler'));
+	await writeFixtureFile(sourceDir, 'swiftpm.wasm', taggedWasmFixture('swiftpm SwiftPM'));
 	await writeFixtureFile(sourceDir, 'sdk.tar.gz', VALID_SDK_ARCHIVE_BYTES);
 	await writeFixtureFile(
 		sourceDir,
@@ -156,8 +155,7 @@ async function writeValidSwiftSourceBundle(sourceDir: string, overrides: Record<
 		`${JSON.stringify(runtimeBuildInfo(overrides), null, 2)}\n`
 	);
 	await writeSourceManifest(sourceDir, {
-		swiftVersion:
-			typeof overrides.swiftVersion === 'string' ? overrides.swiftVersion : '6.3.3',
+		swiftVersion: typeof overrides.swiftVersion === 'string' ? overrides.swiftVersion : '6.3.3',
 		wasmSdkId:
 			typeof overrides.wasmSdkId === 'string'
 				? overrides.wasmSdkId
@@ -194,11 +192,34 @@ describe('syncWasmSwiftAssets', () => {
 		);
 	});
 
+	it('loads Swift contracts from wasm-idle', async () => {
+		const [source, declarations] = await Promise.all([
+			readFile(path.resolve('scripts', 'sync-wasm-swift.mjs'), 'utf8'),
+			readFile(path.resolve('scripts', 'sync-wasm-swift.d.mts'), 'utf8')
+		]);
+
+		expect(source).toContain("from './llvm-contracts/swift/runtime-manifest.mjs'");
+		expect(source).toContain("from './llvm-contracts/swift/runtime-build-info.mjs'");
+		expect(`${source}\n${declarations}`).not.toMatch(/from\s+['"]@seo-rii\/wasm-llvm/u);
+		expect(validateSwiftRuntimeContract(createSwiftRuntimeContract())).toEqual([]);
+	});
+
 	it('parses and validates direct sync CLI arguments', () => {
 		expect(parseSyncWasmSwiftArgs(['dist', 'static/wasm-swift'])).toEqual({
 			sourceDir: path.resolve('dist'),
 			targetDir: path.resolve('static/wasm-swift')
 		});
+		expect(
+			parseSyncWasmSwiftArgs([], {
+				WASM_SWIFT_RUNTIME_SOURCE_DIR: 'external/wasm-swift'
+			})
+		).toEqual({
+			sourceDir: path.resolve('external/wasm-swift'),
+			targetDir: path.resolve('static/wasm-swift')
+		});
+		expect(() => parseSyncWasmSwiftArgs([], {})).toThrow(
+			/sourceDir is required.*WASM_SWIFT_RUNTIME_SOURCE_DIR/u
+		);
 		expect(parseSyncWasmSwiftArgs(['--help'])).toEqual({ help: true });
 		expect(() => parseSyncWasmSwiftArgs(['--unknown'])).toThrow(/Unknown option/u);
 		expect(() => parseSyncWasmSwiftArgs(['one', 'two', 'three'])).toThrow(
@@ -213,6 +234,10 @@ describe('syncWasmSwiftAssets', () => {
 		const invalid = spawnSync(process.execPath, [scriptPath, '--unknown'], {
 			encoding: 'utf8'
 		});
+		const missingSource = spawnSync(process.execPath, [scriptPath], {
+			encoding: 'utf8',
+			env: { ...process.env, WASM_SWIFT_RUNTIME_SOURCE_DIR: '' }
+		});
 		const tooMany = spawnSync(process.execPath, [scriptPath, 'one', 'two', 'three'], {
 			encoding: 'utf8'
 		});
@@ -220,6 +245,7 @@ describe('syncWasmSwiftAssets', () => {
 		expect(help.status).toBe(0);
 		expect(help.stdout).toContain('Usage: pnpm run sync:wasm-swift');
 		expect(help.stdout).toContain('runtime-build.json source provenance');
+		expect(help.stdout).toContain('runtime assets must come from an external producer bundle');
 		expect(help.stdout).toContain('runtimeContract format and version');
 		expect(help.stdout).toContain('swiftc.wasm.gz and swiftpm.wasm.gz');
 		expect(help.stdout).toContain('decompressed .wasm bytes');
@@ -227,6 +253,11 @@ describe('syncWasmSwiftAssets', () => {
 		expect(invalid.status).not.toBe(0);
 		expect(invalid.stderr).toMatch(/Unknown option: --unknown/u);
 		expect(invalid.stderr).not.toMatch(/\n\s+at /u);
+		expect(missingSource.status).not.toBe(0);
+		expect(missingSource.stderr).toMatch(
+			/sourceDir is required.*WASM_SWIFT_RUNTIME_SOURCE_DIR/u
+		);
+		expect(missingSource.stderr).not.toMatch(/\n\s+at /u);
 		expect(tooMany.status).not.toBe(0);
 		expect(tooMany.stderr).toMatch(/at most sourceDir and targetDir/u);
 		expect(tooMany.stderr).not.toMatch(/\n\s+at /u);
@@ -365,7 +396,10 @@ describe('syncWasmSwiftAssets', () => {
 		expect(result.receipt).toEqual(receipt);
 		await expect(
 			JSON.parse(
-				await readFile(path.join(targetRootDir, 'compressed-runtime-assets.v1.json'), 'utf8')
+				await readFile(
+					path.join(targetRootDir, 'compressed-runtime-assets.v1.json'),
+					'utf8'
+				)
 			)
 		).toEqual({
 			assets: ['wasm-rust/runtime/compiler.wasm'],
@@ -387,11 +421,7 @@ describe('syncWasmSwiftAssets', () => {
 			'swiftc.wasm',
 			largeWasmFixture('swiftc Swift compiler', 2)
 		);
-		await writeFixtureFile(
-			sourceDir,
-			'swiftpm.wasm',
-			largeWasmFixture('swiftpm SwiftPM', 3)
-		);
+		await writeFixtureFile(sourceDir, 'swiftpm.wasm', largeWasmFixture('swiftpm SwiftPM', 3));
 		await writeFixtureFile(sourceDir, 'sdk.tar.gz', VALID_SDK_ARCHIVE_BYTES);
 		await writeFixtureFile(
 			sourceDir,
@@ -517,9 +547,9 @@ describe('syncWasmSwiftAssets', () => {
 		const result = await syncWasmSwiftAssets({ sourceDir, targetDir, versionModulePath });
 
 		expect(result.fingerprint).toMatch(/^[a-f0-9]{16}$/u);
-		await expect(readFile(path.join(targetDir, 'runtime-manifest.v1.json'), 'utf8')).resolves.toContain(
-			result.fingerprint
-		);
+		await expect(
+			readFile(path.join(targetDir, 'runtime-manifest.v1.json'), 'utf8')
+		).resolves.toContain(result.fingerprint);
 	});
 
 	it('rejects packaged source bundles without runtime build provenance', async () => {
@@ -531,9 +561,7 @@ describe('syncWasmSwiftAssets', () => {
 		await expect(syncWasmSwiftAssets({ sourceDir, targetDir })).rejects.toThrow(
 			/source provenance before syncing app assets/u
 		);
-		await expect(readFile(path.join(targetDir, 'stale.txt'), 'utf8')).resolves.toBe(
-			'stale\n'
-		);
+		await expect(readFile(path.join(targetDir, 'stale.txt'), 'utf8')).resolves.toBe('stale\n');
 		await expect(stat(path.join(targetDir, 'runtime-manifest.v1.json'))).rejects.toThrow();
 	});
 
@@ -613,11 +641,7 @@ describe('syncWasmSwiftAssets', () => {
 		const targetDir = await makeTempDir();
 		await writeFixtureFile(sourceDir, 'runner-worker.js', VALID_RUNNER_WORKER_SOURCE);
 		await writeFixtureFile(sourceDir, 'swiftc.wasm', 'not wasm');
-		await writeFixtureFile(
-			sourceDir,
-			'swiftpm.wasm',
-			taggedWasmFixture('swiftpm SwiftPM')
-		);
+		await writeFixtureFile(sourceDir, 'swiftpm.wasm', taggedWasmFixture('swiftpm SwiftPM'));
 		await writeFixtureFile(sourceDir, 'sdk.tar.gz', VALID_SDK_ARCHIVE_BYTES);
 		await writeFixtureFile(
 			sourceDir,
@@ -671,11 +695,7 @@ describe('syncWasmSwiftAssets', () => {
 			'swiftc.wasm',
 			taggedWasmFixture('swiftc Swift compiler')
 		);
-		await writeFixtureFile(
-			sourceDir,
-			'swiftpm.wasm',
-			taggedWasmFixture('swiftpm SwiftPM')
-		);
+		await writeFixtureFile(sourceDir, 'swiftpm.wasm', taggedWasmFixture('swiftpm SwiftPM'));
 		await writeFixtureFile(sourceDir, 'sdk.tar.gz', VALID_SDK_ARCHIVE_BYTES);
 		await writeFixtureFile(
 			sourceDir,
@@ -694,11 +714,7 @@ describe('syncWasmSwiftAssets', () => {
 		const targetDir = await makeTempDir();
 		await writeFixtureFile(sourceDir, 'runner-worker.js', VALID_RUNNER_WORKER_SOURCE);
 		await writeFixtureFile(sourceDir, 'swiftc.wasm', 'not wasm');
-		await writeFixtureFile(
-			sourceDir,
-			'swiftpm.wasm',
-			taggedWasmFixture('swiftpm SwiftPM')
-		);
+		await writeFixtureFile(sourceDir, 'swiftpm.wasm', taggedWasmFixture('swiftpm SwiftPM'));
 		await writeFixtureFile(sourceDir, 'sdk.tar.gz', 'not gzip');
 		await writeFixtureFile(
 			sourceDir,
@@ -751,11 +767,7 @@ describe('syncWasmSwiftAssets', () => {
 			'swiftc.wasm',
 			taggedWasmFixture('swiftc Swift compiler')
 		);
-		await writeFixtureFile(
-			sourceDir,
-			'swiftpm.wasm',
-			taggedWasmFixture('swiftpm SwiftPM')
-		);
+		await writeFixtureFile(sourceDir, 'swiftpm.wasm', taggedWasmFixture('swiftpm SwiftPM'));
 		await writeFixtureFile(sourceDir, 'sdk.tar.gz', VALID_SDK_ARCHIVE_BYTES);
 		await writeFixtureFile(
 			sourceDir,
@@ -786,11 +798,7 @@ describe('syncWasmSwiftAssets', () => {
 			'swiftc.wasm',
 			taggedWasmFixture('swiftc Swift compiler')
 		);
-		await writeFixtureFile(
-			sourceDir,
-			'swiftpm.wasm',
-			taggedWasmFixture('swiftpm SwiftPM')
-		);
+		await writeFixtureFile(sourceDir, 'swiftpm.wasm', taggedWasmFixture('swiftpm SwiftPM'));
 		await writeFixtureFile(sourceDir, 'sdk.tar.gz', VALID_SDK_ARCHIVE_BYTES);
 		await writeFixtureFile(
 			sourceDir,

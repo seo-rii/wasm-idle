@@ -1,6 +1,5 @@
 import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -8,13 +7,11 @@ import {
 	rewriteSharedEmscriptenLldAssets,
 	syncCanonicalEmscriptenLldAssets,
 	validateSharedEmscriptenLldAssets
-} from '@seo-rii/wasm-llvm/runtime/emscripten-lld';
+} from './llvm-contracts/emscripten-lld.mjs';
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const THIS_DIR = path.dirname(THIS_FILE);
 const REPO_ROOT = path.resolve(THIS_DIR, '..');
-const require = createRequire(import.meta.url);
-const WASM_LLVM_ROOT = path.dirname(require.resolve('@seo-rii/wasm-llvm/package.json'));
 const DEFAULT_SOURCE_DIR = path.resolve(REPO_ROOT, 'runtimes', 'wasm-d', 'dist');
 const DEFAULT_TARGET_DIR = path.resolve(REPO_ROOT, 'static', 'wasm-d');
 const DEFAULT_VERSION_MODULE_PATH = path.resolve(
@@ -25,12 +22,6 @@ const DEFAULT_VERSION_MODULE_PATH = path.resolve(
 	'wasmDVersion.ts'
 );
 const DEFAULT_SHARED_LLD_DIR = path.resolve(REPO_ROOT, 'static', 'shared', 'emscripten-lld');
-const DEFAULT_CANONICAL_LLD_DIR = path.resolve(
-	WASM_LLVM_ROOT,
-	'runtime',
-	'emscripten-lld',
-	'assets'
-);
 
 function shouldSkipCopy(sourcePath) {
 	return sourcePath.endsWith('.d.ts') || sourcePath.endsWith('.tsbuildinfo');
@@ -106,7 +97,7 @@ export async function syncWasmDDist({
 	targetDir = DEFAULT_TARGET_DIR,
 	versionModulePath = DEFAULT_VERSION_MODULE_PATH,
 	sharedLldDir = DEFAULT_SHARED_LLD_DIR,
-	canonicalLldDir = DEFAULT_CANONICAL_LLD_DIR
+	canonicalLldDir = sharedLldDir
 } = {}) {
 	const sourceStats = await stat(sourceDir).catch(() => null);
 	if (!sourceStats?.isDirectory()) {
@@ -134,10 +125,12 @@ export async function syncWasmDDist({
 		sourceAssetDir: path.join(sourceDir, 'runtime', 'bin'),
 		sharedAssetDir: canonicalLldDir
 	});
-	await syncCanonicalEmscriptenLldAssets({
-		canonicalAssetDir: canonicalLldDir,
-		targetAssetDir: sharedLldDir
-	});
+	if (path.resolve(canonicalLldDir) !== path.resolve(sharedLldDir)) {
+		await syncCanonicalEmscriptenLldAssets({
+			canonicalAssetDir: canonicalLldDir,
+			targetAssetDir: sharedLldDir
+		});
+	}
 
 	await rm(targetDir, { recursive: true, force: true });
 	await mkdir(targetDir, { recursive: true });
@@ -154,8 +147,7 @@ export async function syncWasmDDist({
 	const runtimeBuild = JSON.parse(await readFile(runtimeBuildPath, 'utf8'));
 	if (Array.isArray(runtimeBuild.assets)) {
 		runtimeBuild.assets = runtimeBuild.assets.filter(
-			(entry) =>
-				!['bin/lld.js', 'bin/lld.wasm.gz', 'bin/lld.data.gz'].includes(entry?.asset)
+			(entry) => !['bin/lld.js', 'bin/lld.wasm.gz', 'bin/lld.data.gz'].includes(entry?.asset)
 		);
 	}
 	runtimeBuild.manifestSha256 = createHash('sha256')
