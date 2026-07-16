@@ -19,6 +19,7 @@ interface LspBrowserCase {
 	aliases?: string[];
 	statusKey?: string;
 	knownFailure?: string;
+	expectDiagnostics?: boolean;
 	expectedResponses?: Array<string | RegExp>;
 	assertNoPreEnableRequests?: Array<string | RegExp>;
 	timeoutMs?: number;
@@ -27,6 +28,13 @@ interface LspBrowserCase {
 interface MonacoDiagnosticCounts {
 	dom: number;
 	markers: number;
+}
+
+interface MonacoLspProgressEntry {
+	progressVisible: boolean;
+	progressValue: number | null;
+	state: string;
+	text: string;
 }
 
 interface MonacoTestStatus {
@@ -63,6 +71,9 @@ interface MonacoTestGlobal {
 		outgoing: number;
 		methods: string[];
 	} | null;
+	__wasmIdleLspProgressObserver?: MutationObserver | null;
+	__wasmIdleLspProgressRecord?: (() => void) | null;
+	__wasmIdleLspProgressTrace?: MonacoLspProgressEntry[];
 }
 
 const bypassCookie = 'dev_bypass_waf=seorii_bypass_token_is_this';
@@ -70,7 +81,7 @@ const diagnosticSelector = '.squiggly-error, .squiggly-warning, .squiggly-info';
 const browserTimeoutMs = Number(process.env.WASM_IDLE_LSP_BROWSER_TIMEOUT_MS || '180000');
 const suiteTimeoutMs = Number(process.env.WASM_IDLE_LSP_BROWSER_SUITE_TIMEOUT_MS || '1800000');
 
-const lspBrowserCases = [
+const lspBrowserCases: LspBrowserCase[] = [
 	{
 		language: 'CPP',
 		label: 'C++',
@@ -86,6 +97,15 @@ const lspBrowserCases = [
 		fileName: 'main.c',
 		source: 'int main(void) {\n    int n = "nope";\n    return n;\n}\n',
 		aliases: ['clang'],
+		statusKey: 'clangd',
+		timeoutMs: 240_000
+	},
+	{
+		language: 'OBJC',
+		label: 'Objective-C',
+		fileName: 'main.m',
+		source: '#import <Foundation/Foundation.h>\n\nint main(void) {\n    NSString *value = 42;\n    return value;\n}\n',
+		aliases: ['objective-c', 'objectivec', 'objc'],
 		statusKey: 'clangd',
 		timeoutMs: 240_000
 	},
@@ -133,6 +153,7 @@ const lspBrowserCases = [
 		fileName: 'index.html',
 		source: '<main><h1>Hello</main>\n',
 		aliases: ['htm'],
+		expectDiagnostics: false,
 		timeoutMs: 120_000
 	},
 	{
@@ -221,7 +242,7 @@ const lspBrowserCases = [
 		fileName: 'Program.cs',
 		source: 'using System;\n\nclass Program {\n    static void Main() {\n        int n = "nope";\n        Console.WriteLine(n);\n    }\n}\n',
 		aliases: ['csharp', 'cs'],
-		knownFailure: 'wasm-dotnet pthread worker crashes before publishing Monaco diagnostics',
+		assertNoPreEnableRequests: ['/wasm-dotnet/runtime/csharp/'],
 		timeoutMs: 240_000
 	},
 	{
@@ -230,7 +251,7 @@ const lspBrowserCases = [
 		fileName: 'Program.fsx',
 		source: 'let value: int = "nope"\nprintfn "%d" value\n',
 		aliases: ['fsharp', 'fs'],
-		knownFailure: 'wasm-dotnet pthread worker crashes before publishing Monaco diagnostics',
+		assertNoPreEnableRequests: ['/wasm-dotnet/runtime/fsharp/'],
 		timeoutMs: 240_000
 	},
 	{
@@ -239,7 +260,7 @@ const lspBrowserCases = [
 		fileName: 'Program.vb',
 		source: 'Module Program\n    Sub Main()\n        Dim n As Integer =\n    End Sub\nEnd Module\n',
 		aliases: ['vb', 'visualbasic'],
-		knownFailure: 'wasm-dotnet pthread worker crashes before publishing Monaco diagnostics',
+		assertNoPreEnableRequests: ['/wasm-dotnet/runtime/vbnet/'],
 		timeoutMs: 240_000
 	},
 	{
@@ -275,7 +296,7 @@ const lspBrowserCases = [
 	{
 		language: 'FORTRAN',
 		label: 'Fortran',
-		fileName: 'main.f90',
+		fileName: 'main.f',
 		source: 'program main\ninteger :: x\nx = "abc"\nend program main\n',
 		aliases: ['f90', 'f95'],
 		expectedResponses: ['/wasm-fortran/lfortran.wasm', '/wasm-fortran/lfortran.data'],
@@ -304,14 +325,111 @@ const lspBrowserCases = [
 		source: 'def main\n  puts(\n',
 		aliases: ['rb'],
 		timeoutMs: 240_000
+	},
+	{
+		language: 'D',
+		label: 'D',
+		fileName: 'main.d',
+		source: 'import std.stdio;\n\nvoid main() {\n    missing();\n}\n',
+		timeoutMs: 300_000
+	},
+	{
+		language: 'ELIXIR',
+		label: 'Elixir',
+		fileName: 'main.exs',
+		source: 'defmodule Main do\n  def run, do: :ok\n',
+		aliases: ['ex', 'exs'],
+		timeoutMs: 240_000
+	},
+	{
+		language: 'ERLANG',
+		label: 'Erlang',
+		fileName: 'main.erl',
+		source: '-module(main).\n-export([main/0]).\nmain() ->\n',
+		aliases: ['erl'],
+		timeoutMs: 240_000
+	},
+	{
+		language: 'TCL',
+		label: 'Tcl',
+		fileName: 'main.tcl',
+		source: 'proc main {} {\n  set\n}\n',
+		timeoutMs: 180_000
+	},
+	{
+		language: 'JANET',
+		label: 'Janet',
+		fileName: 'main.janet',
+		source: '(defn main []\n  (print 1)\n',
+		timeoutMs: 180_000
+	},
+	{
+		language: 'LISP',
+		label: 'Scheme',
+		fileName: 'main.scm',
+		source: '(define (main)\n  (display 1)\n',
+		aliases: ['scheme', 'scm'],
+		timeoutMs: 180_000
+	},
+	{
+		language: 'R',
+		label: 'R',
+		fileName: 'main.R',
+		source: 'main <- function() {\n  print(\n',
+		timeoutMs: 300_000
+	},
+	{
+		language: 'OCTAVE',
+		label: 'Octave',
+		fileName: 'main.m',
+		source: 'function y = main()\n  y = fgetl(stdin\nend\n',
+		aliases: ['matlab'],
+		timeoutMs: 480_000
+	},
+	{
+		language: 'AWK',
+		label: 'AWK',
+		fileName: 'main.awk',
+		source: 'function total(x) {\n  print(\n}\n',
+		timeoutMs: 180_000
+	},
+	{
+		language: 'PERL',
+		label: 'Perl',
+		fileName: 'main.pl',
+		source: 'sub main {\n  print(\n}\n',
+		aliases: ['pl'],
+		timeoutMs: 180_000
+	},
+	{
+		language: 'WASM',
+		label: 'WebAssembly',
+		fileName: 'main.wasm',
+		source: 'base64:not-wasm',
+		aliases: ['webassembly'],
+		timeoutMs: 120_000
 	}
-] satisfies LspBrowserCase[];
+];
 
 const lspBrowserMatrixGroups = {
 	'cpp-python': ['CPP', 'C', 'PYTHON'],
 	document: ['JSON', 'YAML', 'TOML', 'HTML', 'CSS', 'MARKDOWN'],
 	'runtime-small': ['ASSEMBLYSCRIPT', 'WAT', 'GO', 'GLEAM', 'PASCAL', 'LUA', 'PROLOG', 'RUBY'],
 	'runtime-heavy': ['DUCKDB', 'RUST', 'ZIG', 'OCAML', 'HASKELL', 'FORTRAN'],
+	'runtime-extra': [
+		'OBJC',
+		'D',
+		'ELIXIR',
+		'ERLANG',
+		'TCL',
+		'JANET',
+		'LISP',
+		'R',
+		'OCTAVE',
+		'AWK',
+		'PERL',
+		'WASM'
+	],
 	dotnet: ['CSHARP', 'FSHARP', 'VBNET']
 } satisfies Record<string, string[]>;
 
@@ -369,6 +487,12 @@ const lspStatusKeyByLanguage: Record<string, string> = {
 	SQLITE: 'sql',
 	PROLOG: 'prolog',
 	RUBY: 'ruby'
+};
+
+const dotnetRuntimeLanguageByLanguage: Record<string, 'csharp' | 'fsharp' | 'vbnet'> = {
+	CSHARP: 'csharp',
+	FSHARP: 'fsharp',
+	VBNET: 'vbnet'
 };
 
 const withLspTestQuery = (browserUrl: string) => {
@@ -504,6 +628,58 @@ async function enableLsp(page: Page) {
 	}
 }
 
+async function installLspProgressProbe(page: Page) {
+	await page.evaluate(() => {
+		const testGlobal = globalThis as typeof globalThis & MonacoTestGlobal;
+		testGlobal.__wasmIdleLspProgressObserver?.disconnect();
+		testGlobal.__wasmIdleLspProgressTrace = [];
+		const record = () => {
+			const status = document.querySelector('[data-lsp-state]') as HTMLElement | null;
+			if (!status) return;
+			const progress = status.querySelector('[role="progressbar"]') as HTMLElement | null;
+			const rawValue = progress?.getAttribute('aria-valuenow');
+			const entry: MonacoLspProgressEntry = {
+				progressVisible: Boolean(progress),
+				progressValue: rawValue === null || rawValue === undefined ? null : Number(rawValue),
+				state: status.dataset.lspState || '',
+				text: status.textContent?.trim() || ''
+			};
+			const trace = testGlobal.__wasmIdleLspProgressTrace || [];
+			const previous = trace.at(-1);
+			if (
+				!previous ||
+				previous.progressVisible !== entry.progressVisible ||
+				previous.progressValue !== entry.progressValue ||
+				previous.state !== entry.state ||
+				previous.text !== entry.text
+			) {
+				trace.push(entry);
+			}
+			testGlobal.__wasmIdleLspProgressTrace = trace;
+		};
+		const observer = new MutationObserver(record);
+		observer.observe(document.body, {
+			attributes: true,
+			attributeFilter: ['aria-valuenow', 'data-lsp-state'],
+			childList: true,
+			characterData: true,
+			subtree: true
+		});
+		testGlobal.__wasmIdleLspProgressObserver = observer;
+		testGlobal.__wasmIdleLspProgressRecord = record;
+		record();
+	});
+}
+
+async function readAndStopLspProgressProbe(page: Page) {
+	return await page.evaluate(() => {
+		const testGlobal = globalThis as typeof globalThis & MonacoTestGlobal;
+		testGlobal.__wasmIdleLspProgressRecord?.();
+		testGlobal.__wasmIdleLspProgressObserver?.disconnect();
+		return testGlobal.__wasmIdleLspProgressTrace || [];
+	});
+}
+
 async function replaceEditorSource(page: Page, source: string) {
 	await page.waitForFunction(() => {
 		const testGlobal = globalThis as typeof globalThis & MonacoTestGlobal;
@@ -622,18 +798,54 @@ async function runLspCase(
 			)
 			.catch((error: unknown) => error)
 	);
+	await installLspProgressProbe(page);
 	await enableLsp(page);
 	await waitForVisibleLspStatus(page);
 	await waitForLspReady(page, testCase);
+	const progressTrace = await readAndStopLspProgressProbe(page);
+	expect(
+		progressTrace.some(
+			(entry) => entry.state === 'loading' && entry.progressVisible && entry.text.includes('LSP')
+		)
+	).toBe(true);
+	expect(progressTrace.some((entry) => entry.state === 'ready')).toBe(true);
+	for (const entry of progressTrace) {
+		if (entry.progressValue === null) continue;
+		expect(Number.isFinite(entry.progressValue)).toBe(true);
+		expect(entry.progressValue).toBeGreaterThanOrEqual(0);
+		expect(entry.progressValue).toBeLessThanOrEqual(100);
+	}
 	await replaceEditorSource(page, testCase.source);
 
 	for (const response of await Promise.all(expectedResponses)) {
 		if (response instanceof Error) throw response;
 	}
 
-	await waitForDiagnostics(page, testCase);
+	if (testCase.expectDiagnostics !== false) {
+		await waitForDiagnostics(page, testCase);
+	}
 	const diagnostics = await readDiagnosticCounts(page);
-	expect(diagnostics.dom + diagnostics.markers).toBeGreaterThan(0);
+	if (testCase.expectDiagnostics === false) {
+		expect(diagnostics.dom + diagnostics.markers).toBe(0);
+	} else {
+		expect(diagnostics.dom + diagnostics.markers).toBeGreaterThan(0);
+	}
+	const selectedDotnetRuntime = dotnetRuntimeLanguageByLanguage[testCase.language];
+	if (selectedDotnetRuntime) {
+		expect(
+			lspRequests.some((request) =>
+				request.includes(`/wasm-dotnet/runtime/${selectedDotnetRuntime}/`)
+			)
+		).toBe(true);
+		for (const language of ['csharp', 'fsharp', 'vbnet'] as const) {
+			if (language === selectedDotnetRuntime) continue;
+			expect(
+				lspRequests.some((request) =>
+					request.includes(`/wasm-dotnet/runtime/${language}/`)
+				)
+			).toBe(false);
+		}
+	}
 }
 
 async function collectPageDebugInfo(page: Page) {
@@ -722,6 +934,29 @@ describe('Monaco LSP browser integration', () => {
 				'OCAML',
 				'HASKELL',
 				'FORTRAN'
+			]);
+
+			process.env.WASM_IDLE_LSP_BROWSER_GROUPS = 'runtime-extra';
+			expect(selectedCases().map((testCase) => testCase.language)).toEqual([
+				'OBJC',
+				'D',
+				'ELIXIR',
+				'ERLANG',
+				'TCL',
+				'JANET',
+				'LISP',
+				'R',
+				'OCTAVE',
+				'AWK',
+				'PERL',
+				'WASM'
+			]);
+
+			process.env.WASM_IDLE_LSP_BROWSER_GROUPS = 'dotnet';
+			expect(selectedCases().map((testCase) => testCase.language)).toEqual([
+				'CSHARP',
+				'FSHARP',
+				'VBNET'
 			]);
 		} finally {
 			if (previousLanguages === undefined) {

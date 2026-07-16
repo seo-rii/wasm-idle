@@ -3,6 +3,21 @@ import { describe, expect, it, vi } from 'vitest';
 import { createSqlWorkerService, type LspDocument, type LspDocumentContext } from '../src/index.js';
 
 describe('createSqlWorkerService', () => {
+	it('requires external SQLite and DuckDB asset URLs', async () => {
+		const context: LspDocumentContext = {
+			documents: new Map(),
+			publishDiagnostics: vi.fn(),
+			reportProgress: vi.fn()
+		};
+
+		await expect(
+			createSqlWorkerService().initialize?.({ dialect: 'sqlite' }, context)
+		).rejects.toThrow('externally hosted WASM URL');
+		await expect(
+			createSqlWorkerService().initialize?.({ dialect: 'duckdb' }, context)
+		).rejects.toThrow('externally hosted bundle URLs');
+	});
+
 	it('validates through the configured SQL engine and provides editor features', async () => {
 		const loadEngine = vi.fn(async () => ({
 			validate: vi.fn(() => [

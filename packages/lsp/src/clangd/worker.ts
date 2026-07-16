@@ -3,14 +3,14 @@ import {
 	BrowserMessageWriter,
 	type BrowserMessageWriter as BrowserMessageWriterInstance
 } from '../jsonrpc.js';
-import { writeGccCompatibilityHeaders } from '@seo-rii/wasm-llvm/runtime/core/gcc-compat';
+import { writeGccCompatibilityHeaders } from '@wasm-idle/llvm-core/core/gcc-compat';
 import {
 	CLANGD_CPP_FILE_PATH,
 	CLANGD_WORKSPACE_PATH,
 	createClangdCompileFlags,
 	normalizeClangdBaseUrl
 } from './config.js';
-import { JsonStream } from '@seo-rii/wasm-llvm/runtime/core/json-stream';
+import { JsonStream } from '@wasm-idle/llvm-core/core/json-stream';
 import type { ClangdWorkerInboundMessage } from './protocol.js';
 
 interface ClangdWorkerScope {

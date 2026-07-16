@@ -8,24 +8,7 @@ describe('TypeScript worker service', () => {
 		vi.unstubAllGlobals();
 	});
 
-	it('loads bundled standard libraries from the gzipped asset', async () => {
-		const libraries = {
-			'lib.es2022.full.d.ts':
-				'interface Array<T> {}\ndeclare const console: { log(...args: unknown[]): void };'
-		};
-		const compressed = gzipSync(JSON.stringify(libraries), { level: 9, mtime: 0 });
-		const fetchMock = vi.fn(async (url: string | URL | Request) => {
-			expect(String(url)).toMatch(/typescript-libs\.json\.gz$/);
-			return new Response(compressed, {
-				status: 200,
-				headers: {
-					'content-length': String(compressed.byteLength),
-					'content-type': 'application/gzip'
-				}
-			});
-		});
-		vi.stubGlobal('fetch', fetchMock);
-
+	it('requires externally hosted standard libraries by default', async () => {
 		const reportProgress = vi.fn();
 		const context: LspDocumentContext = {
 			documents: new Map(),
@@ -34,9 +17,10 @@ describe('TypeScript worker service', () => {
 		};
 		const service = createTypeScriptWorkerService('typescript');
 
-		await service.initialize?.({ language: 'typescript' }, context);
+		await expect(service.initialize?.({ language: 'typescript' }, context)).rejects.toThrow(
+			'externally hosted standard-library URL'
+		);
 
-		expect(fetchMock).toHaveBeenCalledOnce();
 		expect(reportProgress).toHaveBeenCalledWith('load-typescript-libs');
 	});
 

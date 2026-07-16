@@ -141,4 +141,27 @@ describe('createLispWorkerService', () => {
 		expect(context.reportProgress).toHaveBeenCalledWith('load-lisp-compiler');
 		expect(context.reportProgress).toHaveBeenCalledWith('lisp-diagnostics');
 	});
+
+	it('reports incomplete Scheme structure when the compiler accepts an editor draft', async () => {
+		const compile = vi.fn(async () => ({ success: true, diagnostics: [] }));
+		const service = createLispWorkerService(async () => ({ compile }));
+		const document: LspDocument = {
+			uri: 'file:///workspace/main.scm',
+			languageId: 'lisp',
+			version: 1,
+			text: '(define (main)\n  (display 1)\n'
+		};
+		const context = contextFor(document);
+
+		await service.initialize?.({ moduleUrl: '/wasm-lisp/index.js' }, context);
+		const diagnostics = await service.diagnostics?.(document, context);
+
+		expect(diagnostics).toEqual([
+			expect.objectContaining({
+				message: 'Unclosed (',
+				severity: 1,
+				source: 'lisp'
+			})
+		]);
+	});
 });

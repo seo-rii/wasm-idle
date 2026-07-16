@@ -121,14 +121,9 @@ async function loadTypeScriptLibsFromUrl(url: string | URL) {
 	return (await decompressedResponse.json()) as Record<string, string>;
 }
 
-async function loadBundledTypeScriptLibs() {
-	const bundledLibsPath = './typescript-libs.json.gz';
-	return await loadTypeScriptLibsFromUrl(new URL(bundledLibsPath, import.meta.url));
-}
-
 export function createTypeScriptWorkerService(
 	defaultLanguage: TypeScriptLanguage,
-	loadLibs: LoadTypeScriptLibs = loadBundledTypeScriptLibs
+	loadLibs?: LoadTypeScriptLibs
 ): WorkerLanguageService {
 	let language = defaultLanguage;
 	let context: LspDocumentContext;
@@ -231,9 +226,17 @@ export function createTypeScriptWorkerService(
 			language = config.language || defaultLanguage;
 			context = nextContext;
 			context.reportProgress('load-typescript-libs');
-			libFiles =
-				config.libFiles ||
-				(await (config.libUrl ? loadTypeScriptLibsFromUrl(config.libUrl) : loadLibs()));
+			if (config.libFiles) {
+				libFiles = config.libFiles;
+			} else if (config.libUrl) {
+				libFiles = await loadTypeScriptLibsFromUrl(config.libUrl);
+			} else if (loadLibs) {
+				libFiles = await loadLibs();
+			} else {
+				throw new Error(
+					'TypeScript language server requires an externally hosted standard-library URL'
+				);
+			}
 			extraLibs = Object.fromEntries(
 				Object.entries(config.extraLibs || {}).map(([fileName, source]) => [
 					normalizePath(fileName),

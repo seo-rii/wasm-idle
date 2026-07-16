@@ -182,6 +182,109 @@ export function createLispWorkerService(
 			});
 			lastKey = key;
 			lastDiagnostics = (result.diagnostics || []).map(diagnosticFor);
+			if (!lastDiagnostics.length) {
+				// Puppy Scheme is permissive about incomplete forms, so retain basic editor feedback.
+				const openings: Array<{ character: '(' | '['; offset: number }> = [];
+				let blockCommentDepth = 0;
+				let blockCommentOffset = -1;
+				let inLineComment = false;
+				let inString = false;
+				let stringOffset = -1;
+				let escaped = false;
+				let structuralError: { message: string; offset: number } | null = null;
+				for (let offset = 0; offset < document.text.length; offset += 1) {
+					const character = document.text[offset];
+					const next = document.text[offset + 1] || '';
+					if (inLineComment) {
+						if (character === '\n') inLineComment = false;
+						continue;
+					}
+					if (blockCommentDepth > 0) {
+						if (character === '#' && next === '|') {
+							blockCommentDepth += 1;
+							offset += 1;
+						} else if (character === '|' && next === '#') {
+							blockCommentDepth -= 1;
+							offset += 1;
+						}
+						continue;
+					}
+					if (inString) {
+						if (escaped) {
+							escaped = false;
+						} else if (character === '\\') {
+							escaped = true;
+						} else if (character === '"') {
+							inString = false;
+						}
+						continue;
+					}
+					if (character === ';') {
+						inLineComment = true;
+						continue;
+					}
+					if (character === '#' && next === '|') {
+						blockCommentDepth = 1;
+						blockCommentOffset = offset;
+						offset += 1;
+						continue;
+					}
+					if (character === '#' && next === '\\') {
+						offset += 2;
+						continue;
+					}
+					if (character === '"') {
+						inString = true;
+						stringOffset = offset;
+						continue;
+					}
+					if (character === '(' || character === '[') {
+						openings.push({ character, offset });
+						continue;
+					}
+					if (character !== ')' && character !== ']') continue;
+					const opening = openings.pop();
+					if (
+						!opening ||
+						(opening.character === '(' && character !== ')') ||
+						(opening.character === '[' && character !== ']')
+					) {
+						structuralError = { message: `Unexpected ${character}`, offset };
+						break;
+					}
+				}
+				if (!structuralError && inString) {
+					structuralError = { message: 'Unterminated string', offset: stringOffset };
+				}
+				if (!structuralError && blockCommentDepth > 0) {
+					structuralError = {
+						message: 'Unterminated block comment',
+						offset: blockCommentOffset
+					};
+				}
+				if (!structuralError && openings.length > 0) {
+					const opening = openings.at(-1)!;
+					structuralError = {
+						message: `Unclosed ${opening.character}`,
+						offset: opening.offset
+					};
+				}
+				if (structuralError) {
+					const start = positionAt(document.text, structuralError.offset);
+					const end = positionAt(
+						document.text,
+						Math.min(document.text.length, structuralError.offset + 1)
+					);
+					lastDiagnostics = [
+						{
+							range: { start, end },
+							severity: 1,
+							source: 'lisp',
+							message: structuralError.message
+						}
+					];
+				}
+			}
 			if (!result.success && !lastDiagnostics.length) {
 				lastDiagnostics = [
 					{

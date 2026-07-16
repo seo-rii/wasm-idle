@@ -154,15 +154,15 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(/let pascalLspStatus = \$state<LanguageServerStatus>/);
 		expect(source).toMatch(/label = 'Pascal LSP';/);
 		expect(source).toMatch(
-			/const \{ getWasmLanguageServer \} = await import\('@wasm-idle\/lsp'\);/
+			/const \{ getWasmLanguageServer \} = await import\('@wasm-idle\/lsp\/wasm'\);/
 		);
 		expect(source).toMatch(/label = 'Elixir LSP';/);
 		expect(source).toMatch(/label = 'Erlang LSP';/);
 		expect(source).toMatch(
-			/const \{ getElixirLanguageServer \} = await import\('@wasm-idle\/lsp'\);/
+			/const \{ getElixirLanguageServer \} = await import\('@wasm-idle\/lsp\/elixir'\);/
 		);
 		expect(source).toMatch(
-			/const \{ getErlangLanguageServer \} = await import\('@wasm-idle\/lsp'\);/
+			/const \{ getErlangLanguageServer \} = await import\('@wasm-idle\/lsp\/erlang'\);/
 		);
 		expect(source).toMatch(
 			/const nextDebugView = new MonacoDebugView\(monacoApi, activeEditor, onBreakpointsChange\);[\s\S]*debugView = nextDebugView;/s
@@ -212,8 +212,40 @@ describe('Monaco route debug sync', () => {
 		expect(source).not.toMatch(/recordLspTraffic/);
 		expect(source).not.toMatch(/lspOptions=\{/);
 		expect(source).toMatch(
-			/const \{ getCppLanguageServer \} = await import\('@wasm-idle\/lsp'\);/
+			/const \{ getCppLanguageServer \} = await import\('@wasm-idle\/lsp\/clangd'\);/
 		);
+		expect(source).not.toMatch(/await import\('@wasm-idle\/lsp'\)/);
+		for (const entrypoint of [
+			'python',
+			'dotnet',
+			'gleam',
+			'd',
+			'tcl',
+			'pascal',
+			'go',
+			'rust',
+			'typescript',
+			'assemblyscript',
+			'wat',
+			'zig',
+			'lua',
+			'janet',
+			'lisp',
+			'ocaml',
+			'haskell',
+			'fortran',
+			'graphql',
+			'sql',
+			'prolog',
+			'ruby',
+			'r',
+			'octave',
+			'awk',
+			'perl',
+			'document'
+		]) {
+			expect(source).toContain(`import('@wasm-idle/lsp/${entrypoint}')`);
+		}
 		expect(source).toMatch(/handle\.syncFile\?\.\(normalizedFilePath\);/);
 		expect(source).toMatch(/getCSharpLanguageServer/);
 		expect(source).toMatch(/getFSharpLanguageServer/);
@@ -247,7 +279,8 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(/getOctaveLanguageServer/);
 		expect(source).toMatch(/getAwkLanguageServer/);
 		expect(source).toMatch(/getPerlLanguageServer/);
-		expect(source).toMatch(/languages: \['c', 'cpp'\]/);
+		expect(source).toMatch(/languages: \['c', 'cpp', 'objective-c'\]/);
+		expect(source).toMatch(/case 'objective-c':\s+label = 'Objective-C LSP';/);
 		expect(source).toMatch(/languages: \['d'\]/);
 		expect(source).toMatch(/languages: \['tcl'\]/);
 		expect(source).toMatch(/languages: \['pascal'\]/);
@@ -283,6 +316,8 @@ describe('Monaco route debug sync', () => {
 		);
 		expect(source).toMatch(/typescript: \{ libUrl: typescriptLspLibUrl \}/);
 		expect(source).toMatch(/javascript: \{ libUrl: typescriptLspLibUrl \}/);
+		expect(source).toMatch(/mainModule: duckdbMvpWasmUrl/);
+		expect(source).toMatch(/mainWorker: duckdbMvpWorkerUrl/);
 		for (const statusKey of ['json', 'yaml', 'toml', 'html', 'css', 'markdown']) {
 			expect(source).toMatch(new RegExp(`${statusKey}: documentLspStatus`));
 		}
@@ -411,6 +446,8 @@ describe('Monaco route debug sync', () => {
 		expect(debugLspLanguages.has('CPP')).toBe(true);
 		expect(clangdLspLanguages.has('C')).toBe(true);
 		expect(clangdLspLanguages.has('CPP')).toBe(true);
+		expect(clangdLspLanguages.has('OBJC')).toBe(true);
+		expect(source).toMatch(/languages: \['c', 'cpp', 'objective-c'\]/);
 		expect(pageSource).toMatch(
 			/if \(enableDebug && debugLspLanguages\.has\(language\)\) clangdRequested = true;/
 		);

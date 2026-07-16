@@ -15,6 +15,8 @@
 		IMonacoSetting
 	} from '@seorii/monaco';
 	import type { EditorLanguageServerHandle, LanguageServerStatus } from '@wasm-idle/lsp';
+	import duckdbMvpWasmUrl from '@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm?url';
+	import duckdbMvpWorkerUrl from '@duckdb/duckdb-wasm/dist/duckdb-browser-mvp.worker.js?url';
 	import type monaco from 'monaco-editor';
 	import { onMount, untrack } from 'svelte';
 	import {
@@ -2643,6 +2645,10 @@
 				label = 'C++ LSP';
 				status = clangdStatus;
 				break;
+			case 'objective-c':
+				label = 'Objective-C LSP';
+				status = clangdStatus;
+				break;
 			case 'python':
 				label = 'Python LSP';
 				status = pythonLspStatus;
@@ -2846,11 +2852,11 @@
 	});
 	const lspRoutes: LspRoute[] = [
 		{
-			languages: ['c', 'cpp'],
+			languages: ['c', 'cpp', 'objective-c'],
 			isEnabled: () => clangdEnabled && !!clangdBaseUrl,
 			setStatus: (status) => (clangdStatus = status),
 			load: async (currentUrl) => {
-				const { getCppLanguageServer } = await import('@wasm-idle/lsp');
+				const { getCppLanguageServer } = await import('@wasm-idle/lsp/clangd');
 				const handle = await getCppLanguageServer({
 					cpp: { baseUrl: clangdBaseUrl || '' },
 					currentUrl,
@@ -2865,7 +2871,7 @@
 			isEnabled: () => true,
 			setStatus: (status) => (pythonLspStatus = status),
 			load: async (currentUrl) => {
-				const { getPythonLanguageServer } = await import('@wasm-idle/lsp');
+				const { getPythonLanguageServer } = await import('@wasm-idle/lsp/python');
 				return await getPythonLanguageServer({
 					currentUrl,
 					python: { baseUrl: pythonLspBaseUrl },
@@ -2885,7 +2891,7 @@
 					getCSharpLanguageServer,
 					getFSharpLanguageServer,
 					getVisualBasicLanguageServer
-				} = await import('@wasm-idle/lsp');
+				} = await import('@wasm-idle/lsp/dotnet');
 				const load = {
 					csharp: getCSharpLanguageServer,
 					fsharp: getFSharpLanguageServer,
@@ -2903,7 +2909,7 @@
 			isEnabled: () => elixirLspEnabled && !!elixirLspBundleUrl && !!elixirLspWorkerUrl,
 			setStatus: (status) => (elixirLspStatus = status),
 			load: async (currentUrl) => {
-				const { getElixirLanguageServer } = await import('@wasm-idle/lsp');
+				const { getElixirLanguageServer } = await import('@wasm-idle/lsp/elixir');
 				return await getElixirLanguageServer({
 					currentUrl,
 					elixir: {
@@ -2919,7 +2925,7 @@
 			isEnabled: () => erlangLspEnabled && !!erlangLspBundleUrl && !!erlangLspWorkerUrl,
 			setStatus: (status) => (erlangLspStatus = status),
 			load: async (currentUrl) => {
-				const { getErlangLanguageServer } = await import('@wasm-idle/lsp');
+				const { getErlangLanguageServer } = await import('@wasm-idle/lsp/erlang');
 				return await getErlangLanguageServer({
 					currentUrl,
 					erlang: {
@@ -2935,7 +2941,7 @@
 			isEnabled: () => gleamLspEnabled && !!gleamLspBaseUrl,
 			setStatus: (status) => (gleamLspStatus = status),
 			load: async (currentUrl) => {
-				const { getGleamLanguageServer } = await import('@wasm-idle/lsp');
+				const { getGleamLanguageServer } = await import('@wasm-idle/lsp/gleam');
 				return await getGleamLanguageServer({
 					currentUrl,
 					gleam: {
@@ -2951,7 +2957,7 @@
 			isEnabled: () => dLspEnabled && !!dLspModuleUrl,
 			setStatus: (status) => (dLspStatus = status),
 			load: async (currentUrl) => {
-				const { getDLanguageServer } = await import('@wasm-idle/lsp');
+				const { getDLanguageServer } = await import('@wasm-idle/lsp/d');
 				return await getDLanguageServer({
 					currentUrl,
 					d: {
@@ -2966,7 +2972,7 @@
 			isEnabled: () => tclLspEnabled && !!tclLspBaseUrl && !!tclLspWorkerUrl,
 			setStatus: (status) => (tclLspStatus = status),
 			load: async (currentUrl) => {
-				const { getTclLanguageServer } = await import('@wasm-idle/lsp');
+				const { getTclLanguageServer } = await import('@wasm-idle/lsp/tcl');
 				return await getTclLanguageServer({
 					currentUrl,
 					tcl: {
@@ -2982,7 +2988,7 @@
 			isEnabled: () => pascalLspEnabled && !!pascalLspBaseUrl && !!pascalLspWorkerUrl,
 			setStatus: (status) => (pascalLspStatus = status),
 			load: async (currentUrl) => {
-				const { getPascalLanguageServer } = await import('@wasm-idle/lsp');
+				const { getPascalLanguageServer } = await import('@wasm-idle/lsp/pascal');
 				return await getPascalLanguageServer({
 					currentUrl,
 					pascal: {
@@ -2998,7 +3004,7 @@
 			isEnabled: () => goLspEnabled && !!goLspCompilerUrl,
 			setStatus: (status) => (goLspStatus = status),
 			load: async (currentUrl) => {
-				const { getGoLanguageServer } = await import('@wasm-idle/lsp');
+				const { getGoLanguageServer } = await import('@wasm-idle/lsp/go');
 				return await getGoLanguageServer({
 					currentUrl,
 					go: {
@@ -3014,7 +3020,7 @@
 			isEnabled: () => rustLspEnabled && !!rustLspCompilerUrl,
 			setStatus: (status) => (rustLspStatus = status),
 			load: async (currentUrl) => {
-				const { getRustLanguageServer } = await import('@wasm-idle/lsp');
+				const { getRustLanguageServer } = await import('@wasm-idle/lsp/rust');
 				return await getRustLanguageServer({
 					currentUrl,
 					rust: {
@@ -3031,7 +3037,7 @@
 			setStatus: (status) => (typescriptLspStatus = status),
 			load: async (currentUrl) => {
 				const { getJavaScriptLanguageServer, getTypeScriptLanguageServer } =
-					await import('@wasm-idle/lsp');
+					await import('@wasm-idle/lsp/typescript');
 				if (activeLspLanguage === 'javascript') {
 					return await getJavaScriptLanguageServer({
 						currentUrl,
@@ -3051,7 +3057,8 @@
 			isEnabled: () => true,
 			setStatus: (status) => (assemblyScriptLspStatus = status),
 			load: async (currentUrl) => {
-				const { getAssemblyScriptLanguageServer } = await import('@wasm-idle/lsp');
+				const { getAssemblyScriptLanguageServer } =
+					await import('@wasm-idle/lsp/assemblyscript');
 				return await getAssemblyScriptLanguageServer({
 					currentUrl,
 					onStatus: (status) => (assemblyScriptLspStatus = status)
@@ -3063,7 +3070,7 @@
 			isEnabled: () => true,
 			setStatus: (status) => (watLspStatus = status),
 			load: async (currentUrl) => {
-				const { getWatLanguageServer } = await import('@wasm-idle/lsp');
+				const { getWatLanguageServer } = await import('@wasm-idle/lsp/wat');
 				return await getWatLanguageServer({
 					currentUrl,
 					onStatus: (status) => (watLspStatus = status)
@@ -3075,7 +3082,7 @@
 			isEnabled: () => true,
 			setStatus: (status) => (wasmLspStatus = status),
 			load: async (currentUrl) => {
-				const { getWasmLanguageServer } = await import('@wasm-idle/lsp');
+				const { getWasmLanguageServer } = await import('@wasm-idle/lsp/wasm');
 				return await getWasmLanguageServer({
 					currentUrl,
 					onStatus: (status) => (wasmLspStatus = status)
@@ -3087,7 +3094,7 @@
 			isEnabled: () => zigLspEnabled && !!zigLspCompilerUrl && !!zigLspStdlibUrl,
 			setStatus: (status) => (zigLspStatus = status),
 			load: async (currentUrl) => {
-				const { getZigLanguageServer } = await import('@wasm-idle/lsp');
+				const { getZigLanguageServer } = await import('@wasm-idle/lsp/zig');
 				return await getZigLanguageServer({
 					currentUrl,
 					zig: {
@@ -3103,7 +3110,7 @@
 			isEnabled: () => luaLspEnabled && !!luaLspModuleUrl,
 			setStatus: (status) => (luaLspStatus = status),
 			load: async (currentUrl) => {
-				const { getLuaLanguageServer } = await import('@wasm-idle/lsp');
+				const { getLuaLanguageServer } = await import('@wasm-idle/lsp/lua');
 				return await getLuaLanguageServer({
 					currentUrl,
 					lua: {
@@ -3118,7 +3125,7 @@
 			isEnabled: () => janetLspEnabled && !!janetLspBaseUrl && !!janetLspWorkerUrl,
 			setStatus: (status) => (janetLspStatus = status),
 			load: async (currentUrl) => {
-				const { getJanetLanguageServer } = await import('@wasm-idle/lsp');
+				const { getJanetLanguageServer } = await import('@wasm-idle/lsp/janet');
 				return await getJanetLanguageServer({
 					currentUrl,
 					janet: {
@@ -3134,7 +3141,7 @@
 			isEnabled: () => lispLspEnabled && !!lispLspModuleUrl,
 			setStatus: (status) => (lispLspStatus = status),
 			load: async (currentUrl) => {
-				const { getLispLanguageServer } = await import('@wasm-idle/lsp');
+				const { getLispLanguageServer } = await import('@wasm-idle/lsp/lisp');
 				return await getLispLanguageServer({
 					currentUrl,
 					lisp: {
@@ -3149,7 +3156,7 @@
 			isEnabled: () => ocamlLspEnabled && !!ocamlLspModuleUrl && !!ocamlLspManifestUrl,
 			setStatus: (status) => (ocamlLspStatus = status),
 			load: async (currentUrl) => {
-				const { getOcamlLanguageServer } = await import('@wasm-idle/lsp');
+				const { getOcamlLanguageServer } = await import('@wasm-idle/lsp/ocaml');
 				return await getOcamlLanguageServer({
 					currentUrl,
 					ocaml: {
@@ -3169,7 +3176,7 @@
 				!!haskellLspBsdtarUrl,
 			setStatus: (status) => (haskellLspStatus = status),
 			load: async (currentUrl) => {
-				const { getHaskellLanguageServer } = await import('@wasm-idle/lsp');
+				const { getHaskellLanguageServer } = await import('@wasm-idle/lsp/haskell');
 				return await getHaskellLanguageServer({
 					currentUrl,
 					haskell: {
@@ -3186,7 +3193,7 @@
 			isEnabled: () => !!fortranLspAnalyzerUrl,
 			setStatus: (status) => (fortranLspStatus = status),
 			load: async (currentUrl) => {
-				const { getFortranLanguageServer } = await import('@wasm-idle/lsp');
+				const { getFortranLanguageServer } = await import('@wasm-idle/lsp/fortran');
 				return await getFortranLanguageServer({
 					currentUrl,
 					fortran: {
@@ -3201,7 +3208,7 @@
 			isEnabled: () => true,
 			setStatus: (status) => (graphqlLspStatus = status),
 			load: async (currentUrl) => {
-				const { getGraphqlLanguageServer } = await import('@wasm-idle/lsp');
+				const { getGraphqlLanguageServer } = await import('@wasm-idle/lsp/graphql');
 				return await getGraphqlLanguageServer({
 					currentUrl,
 					onStatus: (status) => (graphqlLspStatus = status)
@@ -3213,9 +3220,18 @@
 			isEnabled: () => true,
 			setStatus: (status) => (duckdbLspStatus = status),
 			load: async (currentUrl) => {
-				const { getDuckDbLanguageServer } = await import('@wasm-idle/lsp');
+				const { getDuckDbLanguageServer } = await import('@wasm-idle/lsp/sql');
 				return await getDuckDbLanguageServer({
 					currentUrl,
+					sql: {
+						dialect: 'duckdb',
+						duckdbBundles: {
+							mvp: {
+								mainModule: duckdbMvpWasmUrl,
+								mainWorker: duckdbMvpWorkerUrl
+							}
+						}
+					},
 					onStatus: (status) => (duckdbLspStatus = status)
 				});
 			}
@@ -3225,7 +3241,7 @@
 			isEnabled: () => sqlLspEnabled && !!sqlLspWasmUrl,
 			setStatus: (status) => (sqlLspStatus = status),
 			load: async (currentUrl) => {
-				const { getSqlLanguageServer } = await import('@wasm-idle/lsp');
+				const { getSqlLanguageServer } = await import('@wasm-idle/lsp/sql');
 				return await getSqlLanguageServer({
 					currentUrl,
 					sql: {
@@ -3241,7 +3257,7 @@
 			isEnabled: () => prologLspEnabled && !!prologLspBaseUrl && !!prologLspWorkerUrl,
 			setStatus: (status) => (prologLspStatus = status),
 			load: async (currentUrl) => {
-				const { getPrologLanguageServer } = await import('@wasm-idle/lsp');
+				const { getPrologLanguageServer } = await import('@wasm-idle/lsp/prolog');
 				return await getPrologLanguageServer({
 					currentUrl,
 					prolog: {
@@ -3257,7 +3273,7 @@
 			isEnabled: () => rubyLspEnabled && !!rubyLspWasmUrl,
 			setStatus: (status) => (rubyLspStatus = status),
 			load: async (currentUrl) => {
-				const { getRubyLanguageServer } = await import('@wasm-idle/lsp');
+				const { getRubyLanguageServer } = await import('@wasm-idle/lsp/ruby');
 				return await getRubyLanguageServer({
 					currentUrl,
 					ruby: {
@@ -3272,7 +3288,7 @@
 			isEnabled: () => rLspEnabled && !!rLspBaseUrl,
 			setStatus: (status) => (rLspStatus = status),
 			load: async (currentUrl) => {
-				const { getRLanguageServer } = await import('@wasm-idle/lsp');
+				const { getRLanguageServer } = await import('@wasm-idle/lsp/r');
 				return await getRLanguageServer({
 					currentUrl,
 					r: {
@@ -3291,7 +3307,7 @@
 				!!octaveLspManifestUrl,
 			setStatus: (status) => (octaveLspStatus = status),
 			load: async (currentUrl) => {
-				const { getOctaveLanguageServer } = await import('@wasm-idle/lsp');
+				const { getOctaveLanguageServer } = await import('@wasm-idle/lsp/octave');
 				return await getOctaveLanguageServer({
 					currentUrl,
 					octave: {
@@ -3308,7 +3324,7 @@
 			isEnabled: () => awkLspEnabled && !!awkLspBaseUrl && !!awkLspWorkerUrl,
 			setStatus: (status) => (awkLspStatus = status),
 			load: async (currentUrl) => {
-				const { getAwkLanguageServer } = await import('@wasm-idle/lsp');
+				const { getAwkLanguageServer } = await import('@wasm-idle/lsp/awk');
 				return await getAwkLanguageServer({
 					currentUrl,
 					awk: {
@@ -3324,7 +3340,7 @@
 			isEnabled: () => perlLspEnabled && !!perlLspBaseUrl && !!perlLspWorkerUrl,
 			setStatus: (status) => (perlLspStatus = status),
 			load: async (currentUrl) => {
-				const { getPerlLanguageServer } = await import('@wasm-idle/lsp');
+				const { getPerlLanguageServer } = await import('@wasm-idle/lsp/perl');
 				return await getPerlLanguageServer({
 					currentUrl,
 					perl: {
@@ -3347,7 +3363,7 @@
 					getMarkdownLanguageServer,
 					getTomlLanguageServer,
 					getYamlLanguageServer
-				} = await import('@wasm-idle/lsp');
+				} = await import('@wasm-idle/lsp/document');
 				const load = {
 					json: getJsonLanguageServer,
 					yaml: getYamlLanguageServer,

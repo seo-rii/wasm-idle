@@ -40,6 +40,7 @@ describe('language registry', () => {
 		expect(debugLspLanguages.has('CPP')).toBe(true);
 		expect(clangdLspLanguages.has('C')).toBe(true);
 		expect(clangdLspLanguages.has('CPP')).toBe(true);
+		expect(clangdLspLanguages.has('OBJC')).toBe(true);
 		expect(dotnetLspLanguages.has('CSHARP')).toBe(true);
 		expect(dotnetLspLanguages.has('FSHARP')).toBe(true);
 		expect(dotnetLspLanguages.has('VBNET')).toBe(true);

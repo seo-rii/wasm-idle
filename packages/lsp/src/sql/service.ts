@@ -141,15 +141,11 @@ const diagnosticFor = (text: string, diagnostic: SqlEngineDiagnostic): LspDiagno
 
 async function loadSqlJsEngine(options: SqlWorkerOptions): Promise<SqlEngine> {
 	if (options.dialect === 'duckdb') {
+		if (!options.duckdbBundles || Object.keys(options.duckdbBundles).length === 0) {
+			throw new Error('DuckDB language server requires externally hosted bundle URLs');
+		}
 		const duckdb = await import('@duckdb/duckdb-wasm');
-		const bundle = await duckdb.selectBundle(
-			options.duckdbBundles || {
-				mvp: {
-					mainModule: new URL('./duckdb-mvp.wasm', import.meta.url).href,
-					mainWorker: new URL('./duckdb-browser-mvp.worker.js', import.meta.url).href
-				}
-			}
-		);
+		const bundle = await duckdb.selectBundle(options.duckdbBundles);
 		if (!bundle.mainWorker) {
 			throw new Error('DuckDB selected bundle does not include a browser worker');
 		}
@@ -189,16 +185,14 @@ async function loadSqlJsEngine(options: SqlWorkerOptions): Promise<SqlEngine> {
 		};
 	}
 
-	let SQL: SqlJsStatic;
-	if (options.wasmUrl) {
-		SQL = await initSqlJs({
-			locateFile(file) {
-				return file.endsWith('.wasm') ? options.wasmUrl || file : file;
-			}
-		});
-	} else {
-		SQL = await initSqlJs();
+	if (!options.wasmUrl) {
+		throw new Error('SQLite language server requires an externally hosted WASM URL');
 	}
+	const SQL: SqlJsStatic = await initSqlJs({
+		locateFile(file) {
+			return file.endsWith('.wasm') ? options.wasmUrl || file : file;
+		}
+	});
 
 	return {
 		validate(code) {
