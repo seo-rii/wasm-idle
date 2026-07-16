@@ -16,7 +16,7 @@ import {
 } from '$lib/playground/stdinBuffer';
 import { createWasmIdleSharedBuffer, requireSharedArrayBuffer } from '$lib/playground/sharedBuffer';
 import { WorkerSession } from '$lib/playground/workerSession';
-import type { Writable } from 'svelte/store';
+import { reportWorkerProgress, type ProgressSink } from '$lib/playground/workerProgress';
 
 const debugBreakpointBufferInts = 1028;
 
@@ -64,7 +64,7 @@ class Clang implements Sandbox {
 		log = true,
 		args: string[] = [],
 		_options: SandboxExecutionOptions = {},
-		progress?: { set?: (value: number) => void } | import('svelte/store').Writable<number>
+		progress?: ProgressSink
 	) {
 		return this.workerSession.load(async (resolve, reject) => {
 			this.log = log;
@@ -92,7 +92,7 @@ class Clang implements Sandbox {
 				);
 				this.worker.onmessage = (event: MessageEvent<any>) => {
 					if (this.assetBridge?.handleMessage(event)) return;
-					if (event.data?.progress != null) progress?.set?.(event.data.progress);
+					reportWorkerProgress(progress, event.data?.progress);
 					if (event.data?.load) resolve();
 					if (event.data?.error) reject(event.data.error);
 				};
@@ -142,7 +142,7 @@ class Clang implements Sandbox {
 		code: string,
 		prepare: boolean,
 		log = this.log,
-		prog?: Writable<number> | { set?: (value: number) => void },
+		prog?: ProgressSink,
 		args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
@@ -190,7 +190,7 @@ class Clang implements Sandbox {
 					this.ondebug?.({ type: 'stop' });
 					reject(error);
 				}
-				if (progress) prog?.set?.(progress);
+				reportWorkerProgress(prog, progress);
 			};
 			interrupt[0] = 0;
 			this.worker.onmessage = handler;

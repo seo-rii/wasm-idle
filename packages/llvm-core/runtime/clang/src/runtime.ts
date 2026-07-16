@@ -223,15 +223,16 @@ class Clang {
 			trace: (message) => this.trace(message)
 		});
 
-		this.getModule(this.assetUrls.clang, this.progress.clang);
-		this.getModule(this.assetUrls.lld, this.progress.lld);
-		this.ready = this.memfs.ready.then(async () => {
+		const clangReady = this.getModule(this.assetUrls.clang, this.progress.clang);
+		const lldReady = this.getModule(this.assetUrls.lld, this.progress.lld);
+		const fileSystemReady = this.memfs.ready.then(async () => {
 			await this.hostLogAsync(
 				`Untarring ${this.assetUrls.sysroot}`,
 				readBuffer(this.assetUrls.sysroot).then((buffer) => untar(buffer, this.memfs))
 			);
 			installGccCompatibilityHeaders(this.memfs);
 		});
+		this.ready = Promise.all([clangReady, lldReady, fileSystemReady]).then(() => undefined);
 	}
 
 	hostLog(message: string) {

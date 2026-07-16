@@ -184,30 +184,20 @@ if not globals().get("__wasm_idle_img_inited__", False):
 const cdnFallbackUrl = (version: string) =>
 	version ? `https://cdn.jsdelivr.net/pyodide/v${version}/full/` : '';
 
+function postProgress(percent: number, stage: string) {
+	self.postMessage({ progress: { percent, stage } });
+}
+
 async function loadPyodide(path: string) {
 	if (pyodide) return;
-	const { loadPyodide } = await import('pyodide');
-	pyodide = await loadPyodide({ indexURL: path });
-	packageBaseUrl = path;
-	const setCdnUrl = (pyodide as any)?.setCdnUrl;
-	if (typeof setCdnUrl === 'function') setCdnUrl(packageBaseUrl);
+	const { loadPyodide, version } = await import('pyodide');
+	packageBaseUrl = cdnFallbackUrl(version);
+	pyodide = await loadPyodide({ indexURL: path, packageBaseUrl });
 }
 
 async function loadPackages(code: string) {
 	if (!code) return;
-	try {
-		await pyodide.loadPackagesFromImports(code);
-	} catch (e) {
-		const fallback = cdnFallbackUrl((pyodide as any)?.version || '');
-		const setCdnUrl = (pyodide as any)?.setCdnUrl;
-		if (fallback && fallback !== packageBaseUrl && typeof setCdnUrl === 'function') {
-			setCdnUrl(fallback);
-			packageBaseUrl = fallback;
-			await pyodide.loadPackagesFromImports(code);
-			return;
-		}
-		throw e;
-	}
+	await pyodide.loadPackagesFromImports(code);
 }
 
 function normalizeWorkspacePath(path: string) {
@@ -250,15 +240,39 @@ self.onmessage = async (event: any) => {
 		workspaceFiles
 	} = event.data;
 	if (load) {
-		const runtimeAssets = assets as WorkerRuntimeAssetConfig | undefined;
-		baseUrl = runtimeAssets?.baseUrl || baseUrl;
-		configureWorkerRuntimeAssets(runtimeAssets || null);
-		postMessage({ output: 'Loading Pyodide...' });
-		await loadPyodide(baseUrl);
-		postMessage({ output: ' Done.\n\r' });
-		postMessage({ load: true });
+		try {
+			const runtimeAssets = assets as WorkerRuntimeAssetConfig | undefined;
+			baseUrl = runtimeAssets?.baseUrl || baseUrl;
+			configureWorkerRuntimeAssets(runtimeAssets || null);
+			postMessage({ output: 'Loading Pyodide...' });
+			postProgress(2, 'Loading Pyodide module');
+			await loadPyodide(baseUrl);
+			postProgress(100, 'Pyodide runtime ready');
+			postMessage({ output: ' Done.\n\r' });
+			postMessage({ load: true });
+		} catch (e: any) {
+			self.postMessage({ error: e.message || 'Unknown error' });
+		}
 	} else if (prepare) {
 		postMessage({ output: 'Loading packages...' });
+		try {
+			postProgress(5, 'Preparing Python workspace');
+			await loadPyodide(baseUrl);
+			writeWorkspaceFiles(workspaceFiles);
+			postProgress(15, 'Resolving Python imports');
+			await loadPackages(
+				[
+					code,
+					...(workspaceFiles || []).map((file: { content: string }) => file.content)
+				].join('\n')
+			);
+			postProgress(100, 'Python packages ready');
+			postMessage({ output: ' Done.\n\r' });
+			self.postMessage({ results: true });
+		} catch (e: any) {
+			self.postMessage({ error: e.message || 'Unknown error' });
+		}
+	} else if (code) {
 		try {
 			await loadPyodide(baseUrl);
 			writeWorkspaceFiles(workspaceFiles);
@@ -268,19 +282,10 @@ self.onmessage = async (event: any) => {
 					...(workspaceFiles || []).map((file: { content: string }) => file.content)
 				].join('\n')
 			);
-			postMessage({ output: ' Done.\n\r' });
-			self.postMessage({ results: true });
 		} catch (e: any) {
 			self.postMessage({ error: e.message || 'Unknown error' });
+			return;
 		}
-	} else if (code) {
-		await loadPyodide(baseUrl);
-		writeWorkspaceFiles(workspaceFiles);
-		await loadPackages(
-			[code, ...(workspaceFiles || []).map((file: { content: string }) => file.content)].join(
-				'\n'
-			)
-		);
 		const ts = Date.now();
 		stdinBufferPyodide = new Int32Array(buffer);
 		debugBufferPyodide = new Int32Array(debugBuffer);

@@ -7,7 +7,12 @@ class MockWorker {
 	onmessage: ((event: MessageEvent<any>) => void) | null = null;
 	postMessage = vi.fn((message: any) => {
 		if (message.load) {
-			queueMicrotask(() => this.onmessage?.({ data: { load: true } } as MessageEvent<any>));
+			queueMicrotask(() => {
+				this.onmessage?.({
+					data: { progress: { percent: 35, stage: 'Initializing Pyodide' } }
+				} as MessageEvent<any>);
+				this.onmessage?.({ data: { load: true } } as MessageEvent<any>);
+			});
 			return;
 		}
 		queueMicrotask(() =>
@@ -196,5 +201,14 @@ print((left + right) // (left - left))`,
 				mimeType: 'application/javascript'
 			}
 		});
+	});
+
+	it('forwards structured Pyodide progress with its stage label', async () => {
+		const sandbox = new Python();
+		const progress = { set: vi.fn() };
+
+		await sandbox.load('/', '', true, [], {}, progress);
+
+		expect(progress.set).toHaveBeenCalledWith(0.35, 'Initializing Pyodide');
 	});
 });

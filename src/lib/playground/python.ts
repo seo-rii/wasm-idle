@@ -15,6 +15,7 @@ import {
 } from '$lib/playground/stdinBuffer';
 import { createWasmIdleSharedBuffer, requireSharedArrayBuffer } from '$lib/playground/sharedBuffer';
 import { WorkerSession } from '$lib/playground/workerSession';
+import { reportWorkerProgress, type ProgressSink } from '$lib/playground/workerProgress';
 
 class Python implements Sandbox {
 	ts = Date.now();
@@ -53,7 +54,7 @@ class Python implements Sandbox {
 		log = true,
 		_args: string[] = [],
 		_options: SandboxExecutionOptions = {},
-		progress?: { set?: (value: number) => void } | import('svelte/store').Writable<number>
+		progress?: ProgressSink | import('svelte/store').Writable<number>
 	) {
 		return this.workerSession.load(async (resolve, reject) => {
 			this.pendingInput = [];
@@ -80,6 +81,7 @@ class Python implements Sandbox {
 				);
 				this.worker.onmessage = (event: MessageEvent<any>) => {
 					if (this.assetBridge?.handleMessage(event)) return;
+					reportWorkerProgress(progress, event.data?.progress);
 					if (event.data?.load) resolve();
 					if (event.data?.error) reject(event.data.error);
 				};
@@ -129,7 +131,7 @@ class Python implements Sandbox {
 		code: string,
 		prepare: boolean,
 		_log = true,
-		_prog?: { set?: (value: number) => void } | import('svelte/store').Writable<number>,
+		_prog?: ProgressSink | import('svelte/store').Writable<number>,
 		_args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
@@ -154,6 +156,7 @@ class Python implements Sandbox {
 					data: payload,
 					debugEvent
 				} = event.data;
+				reportWorkerProgress(_prog, event.data?.progress);
 				if (buffer) {
 					this.waitingForInput = true;
 					this.flushPendingInput();

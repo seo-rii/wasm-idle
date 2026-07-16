@@ -22,6 +22,10 @@ let stdinBufferClang: Int32Array,
 let hasInitialStdinClang = false;
 let initialStdinClang: string | null = null;
 
+function postProgress(percent: number, stage: string) {
+	postMessage({ progress: { percent, stage } });
+}
+
 async function loadClang(path: string, log: boolean) {
 	const { BrowserClangRuntime, loadRuntimeManifest, resolveRuntimeManifestUrl } =
 		await import('@wasm-idle/llvm-core/clang');
@@ -44,6 +48,7 @@ async function loadClang(path: string, log: boolean) {
 		runtimeBaseUrl: path,
 		manifest
 	});
+	await clang.ready;
 }
 
 self.onmessage = async (event: { data: any }) => {
@@ -73,10 +78,14 @@ self.onmessage = async (event: { data: any }) => {
 		stdin
 	} = event.data;
 	if (load) {
-		const runtimeAssets = assets as WorkerRuntimeAssetConfig | undefined;
-		configureWorkerRuntimeAssets(runtimeAssets || null);
-		await loadClang(runtimeAssets?.baseUrl || path || '', log);
-		postMessage({ load: true });
+		try {
+			const runtimeAssets = assets as WorkerRuntimeAssetConfig | undefined;
+			configureWorkerRuntimeAssets(runtimeAssets || null);
+			await loadClang(runtimeAssets?.baseUrl || path || '', log);
+			postMessage({ load: true });
+		} catch (error: any) {
+			self.postMessage({ error: error.message || 'Unable to load the C/C++ runtime.' });
+		}
 	} else if (prepare) {
 		stdinBufferClang = new Int32Array(buffer);
 		debugBufferClang = new Int32Array(debugBuffer);
@@ -91,6 +100,7 @@ self.onmessage = async (event: { data: any }) => {
 		}
 
 		try {
+			postProgress(5, `Compiling ${language === 'C' ? 'C' : 'C++'} source`);
 			await clang.compileLink(code, {
 				language,
 				compileArgs,
@@ -107,6 +117,7 @@ self.onmessage = async (event: { data: any }) => {
 				watchBuffer: watchBufferClang,
 				watchResultBuffer: watchResultBufferClang
 			});
+			postProgress(100, `${language === 'C' ? 'C' : 'C++'} program ready`);
 			self.postMessage({ results: true });
 		} catch (error: any) {
 			self.postMessage({ error: error.message });

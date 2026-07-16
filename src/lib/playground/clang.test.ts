@@ -11,7 +11,12 @@ class MockWorker {
 	onmessage: ((event: MessageEvent<any>) => void) | null = null;
 	postMessage = vi.fn((message: any) => {
 		if (message.load) {
-			queueMicrotask(() => this.onmessage?.({ data: { load: true } } as MessageEvent<any>));
+			queueMicrotask(() => {
+				this.onmessage?.({
+					data: { progress: { percent: 40, stage: 'Loading Clang modules' } }
+				} as MessageEvent<any>);
+				this.onmessage?.({ data: { load: true } } as MessageEvent<any>);
+			});
 			return;
 		}
 		queueMicrotask(() =>
@@ -175,5 +180,14 @@ int main() {
 				cppVersion: 'CPP17'
 			})
 		);
+	});
+
+	it('forwards structured Clang progress with its stage label', async () => {
+		const sandbox = new Clang('C');
+		const progress = { set: vi.fn() };
+
+		await sandbox.load('/', '', true, [], {}, progress);
+
+		expect(progress.set).toHaveBeenCalledWith(0.4, 'Loading Clang modules');
 	});
 });
