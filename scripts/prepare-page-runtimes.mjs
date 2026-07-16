@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(SCRIPT_DIR, '..');
+const OCAML_RUNTIME_DIR = 'runtimes/wasm-of-js-of-ocaml';
 
 function pnpmCommand() {
 	return process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
@@ -39,7 +40,7 @@ async function fileExists(filePath) {
 }
 
 await run(pnpmCommand(), ['--dir', 'runtimes/wasm-typescript', 'build']);
-await run(pnpmCommand(), ['--dir', 'runtimes/wasm-of-js-of-ocaml', 'build']);
+await run(pnpmCommand(), ['--dir', OCAML_RUNTIME_DIR, 'build']);
 
 const ocamlBundleDir = path.join(
 	REPO_ROOT,
@@ -68,9 +69,11 @@ for (const relativePath of requiredOcamlBundleFiles) {
 }
 
 if (process.env.WASM_IDLE_PAGE_FORCE_OCAML_NATIVE === '1' || !hasOcamlBundle) {
+	await run(pnpmCommand(), ['--dir', OCAML_RUNTIME_DIR, 'run', 'bootstrap:host-tools']);
+	await run(pnpmCommand(), ['--dir', OCAML_RUNTIME_DIR, 'run', 'toolchain:bootstrap']);
 	await run(pnpmCommand(), [
 		'--dir',
-		'runtimes/wasm-of-js-of-ocaml',
+		OCAML_RUNTIME_DIR,
 		'exec',
 		'node',
 		'./scripts/prepare-browser-native.mjs'
