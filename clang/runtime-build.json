@@ -1,0 +1,60 @@
+{
+  "toolchain": {
+    "producer": {
+      "id": "wasm-llvm/clang-browser",
+      "manifest": "producer/clang-browser/manifest.json",
+      "manifestSha256": "cc92f3c057a177288e7e11c06092aed47a7484e9ca6551f5c5413bb11b820d78"
+    },
+    "version": "llvmorg-22.1.8",
+    "llvmVersion": "22.1.8",
+    "llvmCommit": "ca7933e47d3a3451d81e72ac174dcb5aa28b59d1",
+    "wasiSdkVersion": "33",
+    "resourceDir": "/lib/clang/22",
+    "compilerRuntimeLibDir": "lib/clang/22/lib/wasi",
+    "clangd": {
+      "stdinBridge": "emscripten-asyncify",
+      "patch": "patches/clangd-emscripten-stdin.patch",
+      "patchSha256": "e60c4c1299d7e028451e9f46270318c5eb80f8d77ce3af773e2f1ad802b3a022"
+    },
+    "assets": {
+      "clang.zip": "f1cfd85a3e258ed0cf731318bfda9c21daec58840867b3eb8c1a5b337e40e6ff",
+      "lld.zip": "8c02fd14857775cfd379600a02ce0891ee1f62aec0a896118a26798c50ba26bd",
+      "sysroot.tar.zip": "eb1fa4c9e63969249ac18f24a37cf03fc89b30194e2c044be1993b5c76d248b9",
+      "memfs.zip": "51eefede548b6638565b79ab46aac23c8131682f04cc9946035b614ccd3feda1",
+      "clangd/clangd.js": "a7ff1c588eb5374783bbda84d949b92b8027c2381c786072448b96eba90c7027",
+      "clangd/clangd.wasm.gz": "c6d45cb134ee41c0e9b37838c3375aedcf130a7feed902db22f59bc0d2c46b34"
+    }
+  },
+  "assets": [
+    {
+      "asset": "clang.zip",
+      "size": 15741511,
+      "sha256": "f1cfd85a3e258ed0cf731318bfda9c21daec58840867b3eb8c1a5b337e40e6ff"
+    },
+    {
+      "asset": "lld.zip",
+      "size": 7846938,
+      "sha256": "8c02fd14857775cfd379600a02ce0891ee1f62aec0a896118a26798c50ba26bd"
+    },
+    {
+      "asset": "memfs.zip",
+      "size": 19181,
+      "sha256": "51eefede548b6638565b79ab46aac23c8131682f04cc9946035b614ccd3feda1"
+    },
+    {
+      "asset": "sysroot.tar.zip",
+      "size": 5084489,
+      "sha256": "eb1fa4c9e63969249ac18f24a37cf03fc89b30194e2c044be1993b5c76d248b9"
+    },
+    {
+      "asset": "clangd/clangd.js",
+      "size": 142904,
+      "sha256": "a7ff1c588eb5374783bbda84d949b92b8027c2381c786072448b96eba90c7027"
+    },
+    {
+      "asset": "clangd/clangd.wasm.gz",
+      "size": 24921957,
+      "sha256": "c6d45cb134ee41c0e9b37838c3375aedcf130a7feed902db22f59bc0d2c46b34"
+    }
+  ]
+}

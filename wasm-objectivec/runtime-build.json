@@ -1,4 +1,9 @@
 {
+	"producer": {
+		"id": "wasm-llvm/objective-c-browser",
+		"manifest": "producer/objective-c-browser/manifest.json",
+		"manifestSha256": "b53c9249a69822d7b14399aeeb305bb13a205f7023034013b7a3856bb2d77522"
+	},
 	"libobjc2": {
 		"url": "https://github.com/gnustep/libobjc2.git",
 		"ref": "v2.3",
@@ -9,13 +14,39 @@
 		"ref": "v1.4.0",
 		"commit": "4ec1bf19c6a96125ea22062f38c2cf5b958e448e"
 	},
-	"clangRuntime": {
-		"baseUrl": "file:///home/seorii/dev/hancomac/wasm-idle/static/clang/",
-		"manifestUrl": "file:///home/seorii/dev/hancomac/wasm-idle/static/clang/runtime-manifest.v1.json"
+	"toolchain": {
+		"wasiSdkVersion": "33",
+		"clangVersion": "clang version 22.1.0-wasi-sdk (https://github.com/llvm/llvm-project 4434dabb69916856b824f68a64b029c67175e532)"
 	},
 	"target": "wasm32-wasi",
+	"assets": {
+		"libobjc.a": {
+			"bytes": 190272,
+			"sha256": "1dde20d4ce78eed271ab725062ef25f1923b20d51384943c9b8f7177eb1fc2d9"
+		},
+		"headers.json": {
+			"bytes": 83231,
+			"sha256": "64bf5a09feffa612e6f82cfc52f3d6a9c5e4fc3064c3824c24aeea59cb544d8e"
+		},
+		"libgnustep-base.a": {
+			"bytes": 15220588,
+			"sha256": "1915b83476f7a520d8ae85c2e02603d245ba6bfc96d7e2593a552d079a7c4526"
+		},
+		"libgnustep-base.o": {
+			"bytes": 13557664,
+			"sha256": "4022983db158350fe82ccd8c6eaf1c9e1305ee9233a6d7e3f9d5508a4f937aa7"
+		},
+		"foundation-headers.json": {
+			"bytes": 1581430,
+			"sha256": "116eaafa65f0bf65d64bd4143abc5c00aea54de19fe4bf9e4cbe88965db9d719"
+		},
+		"libffi.a": {
+			"bytes": 4966,
+			"sha256": "dcdf2754536c93dcadca640a26fe4eb415ee58c15db7a53072e0f18f322e2cbd"
+		}
+	},
 	"notes": [
-		"GNUstep libobjc2 is compiled with single-threaded WASI compatibility shims.",
+		"GNUstep libobjc2 is compiled with single-threaded WASI compatibility shims and the WASI SDK mmap emulation.",
 		"User code links a constructor wrapper that calls clang Objective-C module load functions.",
 		"WASM cannot host executable trampolines, so block-to-IMP bridge APIs return null."
 	],
@@ -45,5 +76,19 @@
 		"blocks_runtime.m",
 		"arc.mm",
 		"block_to_imp_wasm.c"
-	]
+	],
+	"gnustepBase": {
+		"url": "https://github.com/gnustep/libs-base.git",
+		"ref": "base-1_31_1",
+		"commit": "6307e474dd39e36eb2c5f6ee15ade8b51e337970"
+	},
+	"libffi": {
+		"url": "https://github.com/libffi/libffi.git",
+		"ref": "v3.6.0",
+		"commit": "f6303b8b0dd6353c6a5bb4de2e855a13b86f22cf"
+	},
+	"foundation": {
+		"sourceCount": 218,
+		"usesLibffi": true
+	}
 }

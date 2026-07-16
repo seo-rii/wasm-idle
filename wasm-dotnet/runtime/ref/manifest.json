@@ -162,7 +162,7 @@
     "System.Xml.XmlSerializer.dll",
     "System.Xml.dll",
     "System.dll",
-    "WasmDotnet.Compiler.dll",
+    "WasmDotnet.Stdin.dll",
     "WindowsBase.dll",
     "mscorlib.dll",
     "netstandard.dll"

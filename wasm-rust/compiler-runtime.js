@@ -1,18 +1,29 @@
 import { resolveVersionedAssetUrl } from './asset-url.js';
-import { loadRuntimeManifest, normalizeRuntimeManifest, resolveTargetManifest } from './runtime-manifest.js';
+import { isMissingRuntimeManifestError, loadRuntimeManifest, normalizeRuntimeManifest, resolveTargetManifest } from './runtime-manifest.js';
 export async function loadBundledRuntimeContext(loadManifest = loadRuntimeManifest, targetTriple) {
     const runtimeBaseUrl = resolveVersionedAssetUrl(import.meta.url, './runtime/');
     let loadedManifest;
-    try {
-        loadedManifest = await loadManifest(resolveVersionedAssetUrl(runtimeBaseUrl, 'runtime-manifest.v3.json'));
-    }
-    catch {
+    let lastMissingManifestError = null;
+    for (const manifestFileName of [
+        'runtime-manifest.v3.json',
+        'runtime-manifest.v2.json',
+        'runtime-manifest.json'
+    ]) {
         try {
-            loadedManifest = await loadManifest(resolveVersionedAssetUrl(runtimeBaseUrl, 'runtime-manifest.v2.json'));
+            loadedManifest = await loadManifest(resolveVersionedAssetUrl(runtimeBaseUrl, manifestFileName));
+            break;
         }
-        catch {
-            loadedManifest = await loadManifest(resolveVersionedAssetUrl(runtimeBaseUrl, 'runtime-manifest.json'));
+        catch (error) {
+            if (!isMissingRuntimeManifestError(error)) {
+                throw error;
+            }
+            lastMissingManifestError = error;
         }
+    }
+    if (!loadedManifest) {
+        throw lastMissingManifestError instanceof Error
+            ? lastMissingManifestError
+            : new Error('failed to load a bundled wasm-rust runtime manifest');
     }
     const manifest = normalizeRuntimeManifest(loadedManifest);
     const targetConfig = resolveTargetManifest(manifest, targetTriple);

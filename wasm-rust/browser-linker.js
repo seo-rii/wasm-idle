@@ -1,7 +1,7 @@
 import { componentizeCoreWasmToPreview2Component } from './browser-component-tools.js';
 import { fetchRuntimeAssetBytes } from './runtime-asset.js';
 import { clearRuntimeAssetPackCache, loadRuntimePackEntries } from './runtime-asset-store.js';
-import { resolveRuntimeAssetUrl } from './runtime-manifest.js';
+import { isIntegratedCompilerOutput, resolveRuntimeAssetUrl } from './runtime-manifest.js';
 const linkAssetCache = new Map();
 function mkdirp(module, targetPath) {
     const segments = targetPath.replace(/^\/+/, '').split('/').filter(Boolean);
@@ -46,6 +46,24 @@ export async function linkBitcodeWithLlvmWasm(bitcode, manifest, target, runtime
             ...(bytesTotal !== undefined ? { bytesTotal } : {})
         });
     };
+    if (isIntegratedCompilerOutput(target.compile)) {
+        emitProgress('link', 1, 1, 'integrated rustc link finished');
+        if (target.compile.kind === 'integrated-rustc+component-encoder') {
+            emitProgress('componentize', 0, 1, 'encoding preview2 component');
+            const component = await componentizeCoreWasm(bitcode, runtimeBaseUrl, (progress) => emitProgress('componentize', 0, 1, 'encoding preview2 component', progress.loaded, progress.total));
+            emitProgress('componentize', 1, 1, 'preview2 component ready');
+            return {
+                wasm: component,
+                targetTriple: target.targetTriple,
+                format: 'component'
+            };
+        }
+        return {
+            wasm: bitcode,
+            targetTriple: target.targetTriple,
+            format: target.artifactFormat
+        };
+    }
     const llcWasmAsset = target.compile.llvm.llcWasm || 'llvm/llc.wasm';
     const llcWasmUrl = resolveRuntimeAssetUrl(runtimeBaseUrl, llcWasmAsset);
     let cachedLlcWasm = linkAssetCache.get(llcWasmUrl);

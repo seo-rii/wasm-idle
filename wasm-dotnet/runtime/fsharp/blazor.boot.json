@@ -1,0 +1,149 @@
+{
+  "mainAssemblyName": "WasmDotnet.Compiler.dll",
+  "resources": {
+    "hash": "sha256-lrOkTOd2+fT7Hl7uG4kk6+OW3CCytGUFiKMfe5Wr8Bw=",
+    "jsModuleWorker": {
+      "dotnet.native.worker.mjs": "sha256-W8oA/PZmSpflTFgoa7I1q/s/qi3oWCqq8EbUUgwYONU="
+    },
+    "jsModuleNative": {
+      "dotnet.native.js": "sha256-d2VOi4fYAMWRZx4id4CBF+kZKA1J6RUDd45Ikwr76/4="
+    },
+    "jsModuleRuntime": {
+      "dotnet.runtime.js": "sha256-i+x0dU+798Wr2Mkh8osc0b6F6BwqZzGBYKG0ObE2h24="
+    },
+    "wasmNative": {
+      "dotnet.native.wasm": "sha256-YQZ1kO5ROwez3W3W+/naLjepqXvKkHCM9oQbjDQTfiQ="
+    },
+    "coreAssembly": {
+      "FSharp.Compiler.Service.wasm": "sha256-yZfAc7JhgLc1owSAXfXMA3roL0fYKaPpGn3e+FuilgA=",
+      "FSharp.Core.wasm": "sha256-loAjl8jztoMMk7C0T7W3JSmJvQkXZWbRMeKtES+CLDg=",
+      "System.Collections.Concurrent.wasm": "sha256-uzFiOOzkZ/fO0HsRKmv5T37mCaSjrNYiVYBmXOpMfHc=",
+      "System.Collections.wasm": "sha256-FCCp38S/W2f59KWbO3odKElkg6tRYwvldrd4NvpjRi8=",
+      "System.Collections.Immutable.wasm": "sha256-GTm5H/DyA6rGe20M6KfDErfVGWSe5p4n6TXeyLGUxks=",
+      "System.Diagnostics.DiagnosticSource.wasm": "sha256-+Efkh54pxLHLc6XSHbB9oo5GB0nwSbCSnNEAjUM5C9Q=",
+      "System.Linq.wasm": "sha256-LXdyL+hA8E/eOvw1tltXq4vi9ntxxO4amXFwdru1O40=",
+      "System.Linq.Expressions.wasm": "sha256-xe4Bvs6U7XZ397szJ9lsp0+x2Ciy7MQdcduV7crWV5Y=",
+      "System.Memory.wasm": "sha256-I5IKYgzdkcZDlBwe0uljnbkOtGDkjk3UwEBNurQTtu0=",
+      "System.Private.CoreLib.wasm": "sha256-yQRyT7wm1fWHqLew7zdW78jhfN7baDNCh/tLTAxkybk=",
+      "System.Reflection.Metadata.wasm": "sha256-4aE7SB8Fl8+S/ro/NoPVuL8Qd7BhRXD/7fCCnw41s6s=",
+      "System.Runtime.Numerics.wasm": "sha256-3fQYbO3iCpPZghpbDGDa30kODogR8sIHKdQStwH3c2k=",
+      "System.Text.RegularExpressions.wasm": "sha256-8FciTQh8Fqw1kwR8u6zvWofMTiMgcvyNpLtOHsB8d+Q=",
+      "WasmDotnet.Stdin.wasm": "sha256-IqVzZlq5eP5LZ+O9k5hoVgdDbOcO+tTUThZg6u5YtLg=",
+      "netstandard.wasm": "sha256-5p9jkaBF+dFJtmBnMNlv8TYW4at2oa3hfiCEdprwFBM=",
+      "System.Buffers.wasm": "sha256-tthJNNU0mplKP4IUrAfO06LS07+0cBmqF4rx3Qi3AEg=",
+      "System.Collections.NonGeneric.wasm": "sha256-hNtjqSNhWRS/XL/jQGmfQIzL3PppQtpEN9NdkUv74YM=",
+      "System.Collections.Specialized.wasm": "sha256-8dYi4p5ckfloQAB0G2kYAsdjY+hgIv/OjQEx91UTSuM=",
+      "System.ComponentModel.wasm": "sha256-+t8P5VwB9QreGtaNHR5OsuxiRQ8ToVQvFiE4CXb2sQE=",
+      "System.ComponentModel.EventBasedAsync.wasm": "sha256-5W1aabktOQ8KFYjae4m6KlX2JmnVy+O5cBRFv1rctnc=",
+      "System.ComponentModel.Primitives.wasm": "sha256-cbL9EI1eOfnqfWlyokZCPY3DfxkXEqKJA/v3E/X0bzU=",
+      "System.ComponentModel.TypeConverter.wasm": "sha256-k6KZp5akQ3ZmmnnRYbVpxFWKq2QONUTakKLxs+mJ67M=",
+      "System.Console.wasm": "sha256-NziSRkti3jD4OwV4gSCe194sXaKZ/EOuy26+xjY9k3s=",
+      "System.Diagnostics.Process.wasm": "sha256-MKp1dTwDyB757Oh34ZgTUU57tc8PMRpzZsX8lScx9e8=",
+      "System.Diagnostics.TraceSource.wasm": "sha256-ZqM2tI2724R6hPe0oyefUl3oEX03aEGmSrzFlIdQnuo=",
+      "System.wasm": "sha256-vqksUokCfyXTF8gay+7Uklvi5m8rb/JBYFISea7jsU0=",
+      "System.IO.Compression.wasm": "sha256-GKN1z6KEpYn1BEGZq2PmkKCHsaZ6l4kO0efqrYNKFfs=",
+      "System.IO.MemoryMappedFiles.wasm": "sha256-sZ1zyJo0Mq703A77k8eLBJVm9wp73DiRo3C/94jzI6g=",
+      "System.IO.Pipelines.wasm": "sha256-DOS3631fUKSvbgYYQ0EtoOsoqV7wDE8Xh4FViJerdx8=",
+      "System.IO.Pipes.wasm": "sha256-xrBL45ETjpiJE9KsLdw3DccVvK2QhpHPcAhqkykkgi8=",
+      "System.Linq.Queryable.wasm": "sha256-GLorYsuhcUgtnqS3WZpn9frsD41bzlf30ItUMUr/XYM=",
+      "System.Net.Http.wasm": "sha256-hcjQhD6j5ZOelp/EScbaKS43bJD/u3dCcJERo8dDaY4=",
+      "System.Net.Primitives.wasm": "sha256-N5V7rBwA0BajMT0FjfwRqgmL9GiZ1UljxTGdKeZc+gc=",
+      "System.Net.Requests.wasm": "sha256-qFajs1d+8aiK326D5DSjlkseUTaXAPpyQaKMCBEsY6s=",
+      "System.Net.WebClient.wasm": "sha256-AE3NvMbbv+2QxB2vTadYB6SycOOSqc4ZwlGaMXd08iY=",
+      "System.ObjectModel.wasm": "sha256-DbDzVAOyPcQSRnUVeOxbQlYXt1bZH2g5WxwnTBKcVVo=",
+      "System.Private.Uri.wasm": "sha256-aUvtlR6Kem6kRVR9XLFIPsjF7W4lqgFJRXQ6zdGltwI=",
+      "System.Private.Xml.wasm": "sha256-/jbRru7p4njMy5Ny1qb3b7ebpDyeIV9LG7FTE3WdYVk=",
+      "System.Private.Xml.Linq.wasm": "sha256-HKYgv1EuOd8DzeP3C0ELBfNFMom2bZujVWbnhY9HoH8=",
+      "System.Reflection.Emit.wasm": "sha256-yEVyTknML6WU1lYf3rTxGDZD1ZwdcNvUa/V4vrMecoI=",
+      "System.Reflection.Emit.ILGeneration.wasm": "sha256-5PadlX1qySLdOI5JxOgjGD4PQuGXQc2XKftUiqpBI+Q=",
+      "System.Runtime.InteropServices.wasm": "sha256-MD+YrgfBqnHN8hwQlRdPelVXBwOqR+VFn3onbBw29SQ=",
+      "System.Runtime.InteropServices.JavaScript.wasm": "sha256-b6QZ5sIqZliO3gTXK6sKDZ6Dk6PFQDALCpeXSf6dvgA=",
+      "System.Runtime.InteropServices.RuntimeInformation.wasm": "sha256-b4dD3nRt/Q4o5i3/m9ZB9EJE2wGiqzHbVXtKuTP77tw=",
+      "System.Runtime.Loader.wasm": "sha256-3OvbtNg8fVcL+Dn99dH+nO7sWOkjBeM48kvm/9UD1hI=",
+      "System.Security.Cryptography.wasm": "sha256-JBKrEfgwNVTOeG0AUQVmHnFLEQWl9F7NNKf/UTA5SfY=",
+      "System.Text.Encodings.Web.wasm": "sha256-zCq0TawNr14/QV+Y0JY1bVvunIQ3nBoZI3ULrxpyYfU=",
+      "System.Text.Json.wasm": "sha256-rrzbZoQGwKfKNijwrIA2tSyjOJS7/+klSbBhsMhZ0A4=",
+      "System.Threading.Channels.wasm": "sha256-9+GoKF5zjm6M3Q5nKnoiyRAl9PjLb39nSF5hGdFAT7Y=",
+      "System.Threading.Tasks.Parallel.wasm": "sha256-v2w0+RvUnqgyzA/DjCjm37dZCfBdCC2ZmsJmCw728SM=",
+      "System.Xml.Linq.wasm": "sha256-mbYGP0LGPc5vvAcBsJSyW5l3bCBmvuZcPtJM/pCswrA=",
+      "WasmDotnet.Compiler.wasm": "sha256-Too/j3NMvKTDAd+LMQvzPvXjExk2O+UT7G3Vkjcc42E="
+    },
+    "assembly": {},
+    "satelliteResources": {
+      "cs": {
+        "FSharp.Compiler.Service.resources.wasm": "sha256-Rhs8aoTpRV8ducr/jgPqAStBR1l2PzVqwsboeLKTStk=",
+        "FSharp.Core.resources.wasm": "sha256-50fn4yaT45N3NfLYdjmaMVSOBEUCZgbvt/7c8VQGymo=",
+        "FSharp.DependencyManager.Nuget.resources.wasm": "sha256-gBpE5J+7HRjopoNCG1RnCgNlp+USkec11DgeOUQKBkY="
+      },
+      "de": {
+        "FSharp.Compiler.Service.resources.wasm": "sha256-r8a17eBfAR+GrwMkWuZzaA0vVfRDzS9ue5d/WhMHFhc=",
+        "FSharp.Core.resources.wasm": "sha256-IV1j5QyxD4tZUIJiwqXgd+tZ2yUgOo5Jd1sSnN6YjL4=",
+        "FSharp.DependencyManager.Nuget.resources.wasm": "sha256-pW0GbHJR4rT3Z3kj00+3/273aFpl1ftV8g/fmdOTrjQ="
+      },
+      "es": {
+        "FSharp.Compiler.Service.resources.wasm": "sha256-5g3cG1RZOPWbYGMSHfWTwtIhjqT4druRwAB5V2qiK2U=",
+        "FSharp.Core.resources.wasm": "sha256-kXvsUrynJMmN05oomObSIRM2dIg2K+YCgszoixDd8dw=",
+        "FSharp.DependencyManager.Nuget.resources.wasm": "sha256-F5pYFJzmR4kEM8px6oSrCzzFsfHZ+0ed1e5SV+dBZZg="
+      },
+      "fr": {
+        "FSharp.Compiler.Service.resources.wasm": "sha256-bGjy8h6iqhXgWtZ9I2S/5QiLO4sbWE8vlZjkYzi9ICQ=",
+        "FSharp.Core.resources.wasm": "sha256-vCSytQgpc1zyXPmastpN/PD1jCC2gM4I3LxEeY9V+Tw=",
+        "FSharp.DependencyManager.Nuget.resources.wasm": "sha256-wTy6PgzPPY+a55JlAzZFxBs7iTh3vjdn12IyZxFMWtU="
+      },
+      "it": {
+        "FSharp.Compiler.Service.resources.wasm": "sha256-fQcl0m0o/6VWM2sZdq45BibT6Fyfg/K8eJaG4s0PhFA=",
+        "FSharp.Core.resources.wasm": "sha256-bkYX3jZ8tbn0qnVvFyY0BrJ1oL4BFxyX6h3uGo5f2LU=",
+        "FSharp.DependencyManager.Nuget.resources.wasm": "sha256-UuDeZLnugZA3XZomuANR+Q+4upFAol9D2VNOIOKwNVM="
+      },
+      "ja": {
+        "FSharp.Compiler.Service.resources.wasm": "sha256-i3TZG4JMXtsPupzzexqMenX4/X5/zOG128SvKwEomLI=",
+        "FSharp.Core.resources.wasm": "sha256-0byiJyGqEDNdROsTRgDvHQSPiQ4smtru07hcqX/HmfY=",
+        "FSharp.DependencyManager.Nuget.resources.wasm": "sha256-/L6z/b7k7pPp85ys7evV9ja+oTEFp3aHp2znzi1feEA="
+      },
+      "ko": {
+        "FSharp.Compiler.Service.resources.wasm": "sha256-ZfMKGAWQ2Fbied+WVM+aoMQ5uZQEuxzsxGIsSu74slA=",
+        "FSharp.Core.resources.wasm": "sha256-C8JUjcWTSn9O8YcKUw0joBuC9su9q4Tcjur9XS0cBdU=",
+        "FSharp.DependencyManager.Nuget.resources.wasm": "sha256-4nHsl5qtMtnm/o7iH44WkG4MqsGP9wkw1syT42VFUCE="
+      },
+      "pl": {
+        "FSharp.Compiler.Service.resources.wasm": "sha256-oWH3aRaUT5TZoWzza0lAVsBcj/vjkuKM3IdbtnGVKlE=",
+        "FSharp.Core.resources.wasm": "sha256-CaX8aW8e6Txd0sGdJVd4TjHfdib2ZR535pA80sg9c4c=",
+        "FSharp.DependencyManager.Nuget.resources.wasm": "sha256-2uptj8a05w7OLOgzlDMkI31Rt61cqoBw7KZ0f9PiZ9c="
+      },
+      "pt-BR": {
+        "FSharp.Compiler.Service.resources.wasm": "sha256-qNMAlEge1RFpaNpJBKQ0tiZ7aElZ4b6nKIHVPi2faLw=",
+        "FSharp.Core.resources.wasm": "sha256-uk0X2o8DlWngoK71Gsge09p7OBjtIDu7zklK7rKwGFg=",
+        "FSharp.DependencyManager.Nuget.resources.wasm": "sha256-9XH/i0XAkS/UcEXWWoKyvT40WJTO5eTf25Mn9dHtcZA="
+      },
+      "ru": {
+        "FSharp.Compiler.Service.resources.wasm": "sha256-nLHC35YZcavUHkOjRWBUkLhpgAuakSJB67Id5PZXZWg=",
+        "FSharp.Core.resources.wasm": "sha256-ZRjO3d/TNdNJ673qTEJxq8voAgA0gDtM7FS1aRIZfYU=",
+        "FSharp.DependencyManager.Nuget.resources.wasm": "sha256-y/VUkH+JHS1zo2vTubVEmPgmMPq5GC4aPCUfBrgEC6o="
+      },
+      "tr": {
+        "FSharp.Compiler.Service.resources.wasm": "sha256-wzzLJsHGkP9SGqkshW5nnQFFE/C1IwBfI9xp+k5WoVk=",
+        "FSharp.Core.resources.wasm": "sha256-DDoxO6ujoQMpuOtfovM2r+pTWKdgRxpO5dccM+s60LQ=",
+        "FSharp.DependencyManager.Nuget.resources.wasm": "sha256-Vn021CA0OtGkFIOG2cQEySCV5q8bGUbZzVBnfLxhHwg="
+      },
+      "zh-Hans": {
+        "FSharp.Compiler.Service.resources.wasm": "sha256-iQe4Wtlzfx0J8wCIYIhkRujosQTkG2jir7Rh8Jdr/8o=",
+        "FSharp.Core.resources.wasm": "sha256-3HQVdScDbfsbTy/r8UENZK+3Leh5ZN+HtrB4OJWf/Ik=",
+        "FSharp.DependencyManager.Nuget.resources.wasm": "sha256-IK+DSzqd3OTn2OgxHX28kXShcwI7QvBig/LNyI0sp+8="
+      },
+      "zh-Hant": {
+        "FSharp.Compiler.Service.resources.wasm": "sha256-V1eo/GR2v7mhEvqcPiXlYmANjs/bnuVg4samLIbPaCk=",
+        "FSharp.Core.resources.wasm": "sha256-vFfzSxd1g+7dkocIhyJdyaK+B2lyJMIxVIbujejSLpU=",
+        "FSharp.DependencyManager.Nuget.resources.wasm": "sha256-HhIt4etOTprVLuUrxBNO1Exa8Wtb3AFvaXrHsUrGJsA="
+      }
+    },
+    "coreVfs": {
+      "runtimeconfig.bin": {
+        "supportFiles/0_runtimeconfig.bin": "sha256-66hlBIz4W/RaYnv9qWSyJ4S+jhYW0lDZNJ6WKhhujTQ="
+      }
+    }
+  },
+  "debugLevel": 0,
+  "globalizationMode": "invariant",
+  "pthreadPoolInitialSize": 8,
+  "pthreadPoolUnusedSize": 8
+}

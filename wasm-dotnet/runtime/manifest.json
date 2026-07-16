@@ -1,0 +1,23 @@
+{
+  "languages": {
+    "csharp": {
+      "compilerAssemblies": [
+        "Microsoft.CodeAnalysis.wasm",
+        "Microsoft.CodeAnalysis.CSharp.wasm"
+      ]
+    },
+    "fsharp": {
+      "compilerAssemblies": [
+        "FSharp.Compiler.Service.wasm",
+        "FSharp.Core.wasm"
+      ]
+    },
+    "vbnet": {
+      "compilerAssemblies": [
+        "Microsoft.CodeAnalysis.wasm",
+        "Microsoft.CodeAnalysis.VisualBasic.wasm"
+      ]
+    }
+  },
+  "references": "ref/manifest.json"
+}

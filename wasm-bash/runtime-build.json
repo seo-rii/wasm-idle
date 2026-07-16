@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "package": "wasmer/bash",
+  "packageVersion": "1.0.25",
+  "sourceRepository": "https://github.com/wasix-org/bash",
+  "sourceRevision": "fc8096485478055f4fcf31402004fdd8ff6b72b7",
+  "sourceArchiveUrl": "https://github.com/wasix-org/bash/archive/fc8096485478055f4fcf31402004fdd8ff6b72b7.tar.gz",
+  "sourceArchiveSha256": "8dc67f0d1dd04fed7f0e2a976b24ca4e915c2ea8216e1742705546780f03db41",
+  "sysrootRelease": "v2024-07-08.1",
+  "sysrootArchiveUrl": "https://github.com/wasix-org/wasix-libc/releases/download/v2024-07-08.1/sysroot.tar.gz",
+  "sysrootArchiveSha256": "ab48114f09d6092eeab6752e50feaa34da8fe33112e02aadc81ea7e664ec7bd9",
+  "toolchain": "WASI SDK 20.0 (LLVM 16.0.0)",
+  "toolchainArchiveUrl": "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-20/wasi-sdk-20.0-linux.tar.gz",
+  "toolchainArchiveSha256": "7030139d495a19fbeccb9449150c2b1531e15d8fb74419872a719a7580aad0f9",
+  "binaryenVersion": "108",
+  "binaryenArchiveUrl": "https://github.com/WebAssembly/binaryen/releases/download/version_108/binaryen-version_108-x86_64-linux.tar.gz",
+  "binaryenArchiveSha256": "7bb8a2d97214f40bf34abc31d49b34aa5deab10b25d6d13c5f72cb395cf142fb",
+  "wasmerVersion": "7.2.0",
+  "wasmerArchiveUrl": "https://github.com/wasmerio/wasmer/releases/download/v7.2.0/wasmer-linux-amd64.tar.gz",
+  "wasmerArchiveSha256": "fce71a4b0d504b9925e2461d1368b24cce60001111edb3fa871df8187a8a40f2",
+  "buildTarget": "shell",
+  "postprocessArgs": [
+    "--strip-debug"
+  ],
+  "wasmFeatures": [
+    "threads",
+    "mutable-globals",
+    "bulk-memory",
+    "sign-ext"
+  ],
+  "wasmSha256": "62a39c0b18b34ad15eb54388dfc4c323430cd002cc45a54f121690c9b459d3d0",
+  "wasmBytes": 1807388,
+  "webcSha256": "73e34672254faf20f54fa0e7f8ffa8a6117017e8779aaa75c80682c00e6d8468",
+  "webcBytes": 1808682,
+  "abi": "wasix_32v1",
+  "license": "GPL-3.0-or-later",
+  "licenseSha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+  "limitations": [
+    "Only Bash builtins are bundled; external coreutils commands are unavailable."
+  ]
+}

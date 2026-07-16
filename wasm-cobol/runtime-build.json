@@ -1,0 +1,47 @@
+{
+  "toolchain": {
+    "version": "gnucobol-3.2-wasi-preview1-v1",
+    "producer": {
+      "id": "wasm-llvm/cobol-browser",
+      "manifest": "producer/cobol-browser/manifest.json",
+      "manifestSha256": "abc9bff73252c6bc602778098dd86efc578278e6f0ceb5ad052bf2ccc3c458fd"
+    },
+    "gnucobolVersion": "3.2",
+    "gmpVersion": "6.3.0",
+    "wasiSdkVersion": "33.0",
+    "frontendLlvmVersion": "22.1.0-wasi-sdk",
+    "frontendTarget": "wasm32-wasi",
+    "backend": "wasm-llvm-clang",
+    "assets": {
+      "cobc.zip": {
+        "bytes": 591360,
+        "sha256": "111626be5b2e7472717038611876df9e33a008fe8a28cb96aaf6f0b29b80aa4b"
+      },
+      "rootfs.tar.zip": {
+        "bytes": 526875,
+        "sha256": "b666c84d100c1835322a63a0d232eb604d9dc361c9852b2c1ea2862f8f931a6d"
+      },
+      "c-sysroot.tar.zip": {
+        "bytes": 1211407,
+        "sha256": "376db6a04db0fd2bdc9dba7ef1ef05bddfd7365f4c6b369645d4b42ece20f97d"
+      }
+    }
+  },
+  "assets": [
+    {
+      "asset": "cobc.zip",
+      "size": 591360,
+      "sha256": "111626be5b2e7472717038611876df9e33a008fe8a28cb96aaf6f0b29b80aa4b"
+    },
+    {
+      "asset": "rootfs.tar.zip",
+      "size": 526875,
+      "sha256": "b666c84d100c1835322a63a0d232eb604d9dc361c9852b2c1ea2862f8f931a6d"
+    },
+    {
+      "asset": "c-sysroot.tar.zip",
+      "size": 1211407,
+      "sha256": "376db6a04db0fd2bdc9dba7ef1ef05bddfd7365f4c6b369645d4b42ece20f97d"
+    }
+  ]
+}

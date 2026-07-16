@@ -1,4 +1,39 @@
 import { resolveVersionedAssetUrl } from './asset-url.js';
+export function isIntegratedCompilerOutput(compile) {
+    return (compile.kind === 'integrated-rustc' || compile.kind === 'integrated-rustc+component-encoder');
+}
+export class RuntimeManifestLoadError extends Error {
+    manifestUrl;
+    status;
+    statusText;
+    code;
+    constructor(manifestUrl, options = {}) {
+        const detail = options.status !== undefined
+            ? ` (HTTP ${options.status}${options.statusText ? ` ${options.statusText}` : ''})`
+            : options.code
+                ? ` (${options.code})`
+                : '';
+        super(`failed to load wasm-rust runtime manifest from ${manifestUrl}${detail}`);
+        this.name = 'RuntimeManifestLoadError';
+        this.manifestUrl = manifestUrl;
+        if (options.status !== undefined) {
+            this.status = options.status;
+        }
+        if (options.statusText) {
+            this.statusText = options.statusText;
+        }
+        if (options.code) {
+            this.code = options.code;
+        }
+    }
+}
+export function isMissingRuntimeManifestError(error) {
+    if (!error || typeof error !== 'object') {
+        return false;
+    }
+    const candidate = error;
+    return candidate.status === 404 || candidate.code === 'ENOENT';
+}
 function isNormalizedRuntimeManifest(value) {
     if (!('compiler' in value) || !('targets' in value) || !('defaultTargetTriple' in value)) {
         return false;
@@ -35,15 +70,14 @@ function expectNumber(value, label) {
     return value;
 }
 function expectStringArray(value, label) {
-    if (!Array.isArray(value) || value.some((entry) => typeof entry !== 'string' || entry.length === 0)) {
+    if (!Array.isArray(value) ||
+        value.some((entry) => typeof entry !== 'string' || entry.length === 0)) {
         throw new Error(`invalid ${label} in wasm-rust runtime manifest`);
     }
     return value;
 }
 function expectTargetTriple(value, label) {
-    if (value !== 'wasm32-wasip1' &&
-        value !== 'wasm32-wasip2' &&
-        value !== 'wasm32-wasip3') {
+    if (value !== 'wasm32-wasip1' && value !== 'wasm32-wasip2' && value !== 'wasm32-wasip3') {
         throw new Error(`invalid ${label} in wasm-rust runtime manifest`);
     }
     return value;
@@ -55,7 +89,10 @@ function expectArtifactFormat(value, label) {
     return value;
 }
 function expectCompileKind(value, label) {
-    if (value !== 'llvm-wasm' && value !== 'llvm-wasm+component-encoder') {
+    if (value !== 'llvm-wasm' &&
+        value !== 'llvm-wasm+component-encoder' &&
+        value !== 'integrated-rustc' &&
+        value !== 'integrated-rustc+component-encoder') {
         throw new Error(`invalid ${label} in wasm-rust runtime manifest`);
     }
     return value;
@@ -100,6 +137,9 @@ function parseCompilerConfig(value, label) {
         rustcWasm: expectString(object.rustcWasm, `${label}.rustcWasm`),
         workerBitcodeFile: expectString(object.workerBitcodeFile, `${label}.workerBitcodeFile`),
         workerSharedOutputBytes: expectNumber(object.workerSharedOutputBytes, `${label}.workerSharedOutputBytes`),
+        workerSharedWorkspaceBytes: object.workerSharedWorkspaceBytes === undefined
+            ? 128 * 1024 * 1024
+            : expectNumber(object.workerSharedWorkspaceBytes, `${label}.workerSharedWorkspaceBytes`),
         compileTimeoutMs: expectNumber(object.compileTimeoutMs, `${label}.compileTimeoutMs`),
         artifactIdleMs: expectNumber(object.artifactIdleMs, `${label}.artifactIdleMs`),
         rustcMemory: parseRustcMemory(object.rustcMemory, `${label}.rustcMemory`)
@@ -117,7 +157,9 @@ function normalizeRuntimeLlvmConfig(llvm) {
 function parseLinkConfig(value, label) {
     const object = expectObject(value, label);
     const pack = object.pack === undefined ? undefined : parseRuntimeAssetPack(object.pack, `${label}.pack`);
-    const files = object.files === undefined ? undefined : expectAssetFileArray(object.files, `${label}.files`);
+    const files = object.files === undefined
+        ? undefined
+        : expectAssetFileArray(object.files, `${label}.files`);
     const allocatorObjectRuntimePath = object.allocatorObjectRuntimePath === undefined
         ? undefined
         : expectString(object.allocatorObjectRuntimePath, `${label}.allocatorObjectRuntimePath`);
@@ -154,7 +196,7 @@ function parseLinkConfig(value, label) {
 function parseRuntimeTargetConfig(value, label, targetTriple) {
     const object = expectObject(value, label);
     const compile = expectObject(object.compile, `${label}.compile`);
-    const llvm = expectObject(compile.llvm, `${label}.compile.llvm`);
+    const compileKind = expectCompileKind(compile.kind, `${label}.compile.kind`);
     const execution = expectObject(object.execution, `${label}.execution`);
     const sysrootFiles = object.sysrootFiles === undefined
         ? undefined
@@ -165,21 +207,15 @@ function parseRuntimeTargetConfig(value, label, targetTriple) {
     if (!sysrootFiles && !sysrootPack) {
         throw new Error(`invalid ${label}: missing sysroot assets in wasm-rust runtime manifest`);
     }
-    return {
-        targetTriple,
-        artifactFormat: expectArtifactFormat(object.artifactFormat, `${label}.artifactFormat`),
-        ...(sysrootFiles
-            ? {
-                sysrootFiles
-            }
-            : {}),
-        ...(sysrootPack
-            ? {
-                sysrootPack
-            }
-            : {}),
-        compile: {
-            kind: expectCompileKind(compile.kind, `${label}.compile.kind`),
+    let parsedCompile;
+    if (compileKind === 'integrated-rustc' ||
+        compileKind === 'integrated-rustc+component-encoder') {
+        parsedCompile = { kind: compileKind };
+    }
+    else {
+        const llvm = expectObject(compile.llvm, `${label}.compile.llvm`);
+        parsedCompile = {
+            kind: compileKind,
             llvm: {
                 llc: expectString(llvm.llc, `${label}.compile.llvm.llc`),
                 ...(llvm.llcWasm === undefined
@@ -200,7 +236,22 @@ function parseRuntimeTargetConfig(value, label, targetTriple) {
                     })
             },
             link: parseLinkConfig(compile.link, `${label}.compile.link`)
-        },
+        };
+    }
+    return {
+        targetTriple,
+        artifactFormat: expectArtifactFormat(object.artifactFormat, `${label}.artifactFormat`),
+        ...(sysrootFiles
+            ? {
+                sysrootFiles
+            }
+            : {}),
+        ...(sysrootPack
+            ? {
+                sysrootPack
+            }
+            : {}),
+        compile: parsedCompile,
         execution: {
             kind: expectExecutionKind(execution.kind, `${label}.execution.kind`)
         }
@@ -298,10 +349,12 @@ export function normalizeRuntimeManifest(value) {
             }
             targets[targetTriple] = {
                 ...targetConfig,
-                compile: {
-                    ...targetConfig.compile,
-                    llvm: normalizeRuntimeLlvmConfig(targetConfig.compile.llvm)
-                }
+                compile: isIntegratedCompilerOutput(targetConfig.compile)
+                    ? targetConfig.compile
+                    : {
+                        ...targetConfig.compile,
+                        llvm: normalizeRuntimeLlvmConfig(targetConfig.compile.llvm)
+                    }
             };
         }
         return {
@@ -328,10 +381,12 @@ export function normalizeRuntimeManifest(value) {
                         sysrootPack: targetConfig.sysrootPack
                     }
                     : {}),
-                compile: {
-                    ...targetConfig.compile,
-                    llvm: normalizeRuntimeLlvmConfig(targetConfig.compile.llvm)
-                },
+                compile: isIntegratedCompilerOutput(targetConfig.compile)
+                    ? targetConfig.compile
+                    : {
+                        ...targetConfig.compile,
+                        llvm: normalizeRuntimeLlvmConfig(targetConfig.compile.llvm)
+                    },
                 execution: targetConfig.execution
             };
         }
@@ -353,6 +408,7 @@ export function normalizeRuntimeManifest(value) {
             rustcWasm: value.rustcWasm,
             workerBitcodeFile: value.workerBitcodeFile,
             workerSharedOutputBytes: value.workerSharedOutputBytes,
+            workerSharedWorkspaceBytes: 128 * 1024 * 1024,
             compileTimeoutMs: value.compileTimeoutMs,
             artifactIdleMs: value.artifactIdleMs,
             rustcMemory: value.rustcMemory
@@ -384,7 +440,10 @@ export function resolveTargetManifest(manifest, targetTriple = manifest.defaultT
 export async function loadRuntimeManifest(manifestUrl, fetchImpl = fetch) {
     const response = await fetchImpl(manifestUrl.toString());
     if (!response.ok) {
-        throw new Error(`failed to load wasm-rust runtime manifest from ${manifestUrl}`);
+        throw new RuntimeManifestLoadError(manifestUrl.toString(), {
+            status: response.status,
+            statusText: response.statusText
+        });
     }
     return parseRuntimeManifest(await response.json());
 }

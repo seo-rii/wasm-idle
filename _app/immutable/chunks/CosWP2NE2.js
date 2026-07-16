@@ -1,0 +1,1 @@
+import{t as e}from"./BcgnSMxp.js";import{t}from"./DI6U1YL4.js";t({id:`tcl`,extensions:[`.tcl`],aliases:[`tcl`,`Tcl`,`tcltk`,`TclTk`,`tcl/tk`,`Tcl/Tk`],loader:()=>e(()=>import(`./CUKfgnWz.js`),[],import.meta.url)});

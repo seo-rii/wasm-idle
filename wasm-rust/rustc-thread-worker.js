@@ -17,7 +17,7 @@ function describeStartArgMemory(memory, startArg) {
     }
 }
 async function instantiateThreadWorkerRuntime(request) {
-    const { fds } = await buildPreopenedDirectories(request.manifest, request.sysrootAssets, request.sourceCode, request.sharedBitcodeBuffer);
+    const { fds } = await buildPreopenedDirectories(request.manifest, request.sysrootAssets, request.sourceCode, request.sharedBitcodeBuffer, request.sharedWorkspaceBuffer);
     if (request.log) {
         postMessage({
             type: 'thread-log',
@@ -67,6 +67,7 @@ async function instantiateThreadWorkerRuntime(request) {
                     sourceCode: request.sourceCode,
                     log: request.log,
                     sharedBitcodeBuffer: request.sharedBitcodeBuffer,
+                    sharedWorkspaceBuffer: request.sharedWorkspaceBuffer,
                     sharedStatusBuffer: request.sharedStatusBuffer,
                     threadCounterBuffer: request.threadCounterBuffer,
                     sysrootAssets: request.sysrootAssets,
