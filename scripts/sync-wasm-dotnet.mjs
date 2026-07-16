@@ -108,10 +108,23 @@ export async function syncWasmDotnetDist({
 		);
 	}
 
-	const bootManifestPath = path.join(runtimeDirPath, 'blazor.boot.json');
-	const bootManifestStats = await stat(bootManifestPath).catch(() => null);
-	if (!bootManifestStats?.isFile()) {
-		throw new Error(`wasm-dotnet boot manifest was not found at ${bootManifestPath}.`);
+	const runtimeManifestPath = path.join(runtimeDirPath, 'manifest.json');
+	const runtimeManifestStats = await stat(runtimeManifestPath).catch(() => null);
+	if (!runtimeManifestStats?.isFile()) {
+		throw new Error(`wasm-dotnet runtime manifest was not found at ${runtimeManifestPath}.`);
+	}
+	const runtimeManifest = JSON.parse(await readFile(runtimeManifestPath, 'utf8'));
+	for (const language of ['csharp', 'fsharp', 'vbnet']) {
+		if (!runtimeManifest.languages?.[language]) {
+			throw new Error(`wasm-dotnet runtime manifest does not declare ${language}.`);
+		}
+		const bootManifestPath = path.join(runtimeDirPath, language, 'blazor.boot.json');
+		const bootManifestStats = await stat(bootManifestPath).catch(() => null);
+		if (!bootManifestStats?.isFile()) {
+			throw new Error(
+				`wasm-dotnet ${language} boot manifest was not found at ${bootManifestPath}.`
+			);
+		}
 	}
 
 	await rm(targetDir, { recursive: true, force: true });

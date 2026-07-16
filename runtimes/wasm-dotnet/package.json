@@ -15,7 +15,7 @@
 		"dist"
 	],
 	"scripts": {
-		"build": "rm -rf dist && tsc -p tsconfig.build.json",
+		"build": "node scripts/clean-module-output.mjs && tsc -p tsconfig.build.json",
 		"build:runtime": "node scripts/build-runtime.mjs",
 		"check": "tsc -p tsconfig.json --noEmit",
 		"test": "vitest run"

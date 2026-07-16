@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { compileDotnet, createDotnetCompiler, parseDotnetDiagnostics } from '../src/compiler.js';
-import { resetDotnetCompilerRuntimeForTests } from '../src/runtime-loader.js';
+import {
+	loadDotnetCompilerRuntime,
+	resolveDotnetRuntimeBaseUrl,
+	resetDotnetCompilerRuntimeForTests
+} from '../src/runtime-loader.js';
 
 describe('compileDotnet', () => {
 	beforeEach(() => {
@@ -9,12 +13,15 @@ describe('compileDotnet', () => {
 
 	it('compiles F# source through the browser runtime bridge', async () => {
 		const requests: unknown[] = [];
+		const runtimeLanguages: string[] = [];
 		const result = await compileDotnet(
 			{
 				code: 'printfn "hello"'
 			},
 			{
-				loadRuntime: async () => ({
+				loadRuntime: async (language) => {
+					runtimeLanguages.push(language);
+					return {
 					async compile(request) {
 						requests.push(request);
 						return {
@@ -25,7 +32,8 @@ describe('compileDotnet', () => {
 					async run() {
 						return { exitCode: 0 };
 					}
-				})
+					};
+				}
 			}
 		);
 
@@ -43,6 +51,94 @@ describe('compileDotnet', () => {
 				target: 'browser-wasm'
 			})
 		]);
+		expect(runtimeLanguages).toEqual(['fsharp']);
+	});
+
+	it('resolves the default runtime from the selected language directory', () => {
+		expect(resolveDotnetRuntimeBaseUrl({ language: 'csharp' }).pathname).toMatch(
+			/\/runtime\/csharp\/$/
+		);
+		expect(resolveDotnetRuntimeBaseUrl({ language: 'fsharp' }).pathname).toMatch(
+			/\/runtime\/fsharp\/$/
+		);
+		expect(resolveDotnetRuntimeBaseUrl({ language: 'vbnet' }).pathname).toMatch(
+			/\/runtime\/vbnet\/$/
+		);
+	});
+
+	it('keeps independent runtime instances for different .NET languages', async () => {
+		let creates = 0;
+		const dotnetModule = {
+			dotnet: {
+				async create() {
+					creates += 1;
+					return {
+						async getAssemblyExports() {
+							return {
+								CompilerHost: {
+									Compile: () => JSON.stringify({ success: true }),
+									Run: () => JSON.stringify({ exitCode: 0 })
+								}
+							};
+						}
+					};
+				}
+			}
+		};
+
+		const csharp = await loadDotnetCompilerRuntime({ language: 'csharp', dotnetModule });
+		const csharpAgain = await loadDotnetCompilerRuntime({
+			language: 'csharp',
+			dotnetModule
+		});
+		const fsharp = await loadDotnetCompilerRuntime({ language: 'fsharp', dotnetModule });
+
+		expect(csharpAgain).toBe(csharp);
+		expect(fsharp).not.toBe(csharp);
+		expect(creates).toBe(2);
+	});
+
+	it('does not lazy-load Roslyn assemblies embedded in the AOT runtime', async () => {
+		const lazyAssemblies: string[] = [];
+		const runtime = await loadDotnetCompilerRuntime({
+			dotnetModule: {
+				dotnet: {
+					async create() {
+						return {
+							INTERNAL: {
+								async loadLazyAssembly(name: string) {
+									lazyAssemblies.push(name);
+									return true;
+								}
+							},
+							async getAssemblyExports() {
+								return {
+									CompilerHost: {
+										Compile() {
+											return JSON.stringify({
+												assemblyId: 'asm-fsharp',
+												success: true
+											});
+										},
+										Run() {
+											return JSON.stringify({ exitCode: 0 });
+										}
+									}
+								};
+							}
+						};
+					}
+				}
+			}
+		});
+
+		await runtime.compile({
+			language: 'fsharp',
+			source: 'printfn "hello"',
+			target: 'browser-wasm'
+		});
+
+		expect(lazyAssemblies).toEqual([]);
 	});
 
 	it('compiles C# source through the browser runtime bridge', async () => {
@@ -118,10 +214,7 @@ describe('compileDotnet', () => {
 				target: 'browser-wasm'
 			})
 		]);
-		expect(lazyAssemblies).toEqual([
-			'Microsoft.CodeAnalysis.wasm',
-			'Microsoft.CodeAnalysis.CSharp.wasm'
-		]);
+		expect(lazyAssemblies).toEqual([]);
 		expect(configs).toEqual([
 			{
 				jsThreadBlockingMode: 'DangerousAllowBlockingWait'

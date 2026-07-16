@@ -1,4 +1,5 @@
 import type {
+	DotnetLanguage,
 	DotnetRuntimeCompileRequest,
 	DotnetRuntimeCompileResponse,
 	DotnetRuntimeRunRequest,
@@ -6,6 +7,7 @@ import type {
 } from './types.js';
 
 export interface DotnetCompilerRuntimeOptions {
+	language?: DotnetLanguage;
 	runtimeBaseUrl?: string | URL;
 	dotnetJsUrl?: string | URL;
 	mainAssemblyName?: string;
@@ -24,9 +26,6 @@ type DotnetBuilder = {
 	create: () => Promise<{
 		getAssemblyExports?: (assemblyName: string) => Promise<Record<string, unknown>>;
 		getConfig?: () => { mainAssemblyName?: string };
-		INTERNAL?: {
-			loadLazyAssembly?: (assemblyName: string) => Promise<boolean>;
-		};
 	}>;
 };
 
@@ -37,17 +36,13 @@ type RuntimeBridge = {
 	run?: (requestJson: string) => string | Promise<string>;
 };
 
-let runtimePromise: Promise<DotnetCompilerRuntime> | null = null;
-let runtimeKey = '';
+const runtimePromises = new Map<string, Promise<DotnetCompilerRuntime>>();
 
-const lazyCompilerAssembliesByLanguage = {
-	csharp: ['Microsoft.CodeAnalysis.wasm', 'Microsoft.CodeAnalysis.CSharp.wasm'],
-	fsharp: ['FSharp.Core.wasm', 'FSharp.Compiler.Service.wasm'],
-	vbnet: ['Microsoft.CodeAnalysis.wasm', 'Microsoft.CodeAnalysis.VisualBasic.wasm']
-} as const;
-
-function resolveRuntimeBaseUrl(options: DotnetCompilerRuntimeOptions) {
-	return new URL(options.runtimeBaseUrl || './runtime/', import.meta.url);
+export function resolveDotnetRuntimeBaseUrl(options: DotnetCompilerRuntimeOptions = {}) {
+	if (options.runtimeBaseUrl) {
+		return new URL(options.runtimeBaseUrl, globalThis.location?.href || import.meta.url);
+	}
+	return new URL(`./runtime/${options.language || 'fsharp'}/`, import.meta.url);
 }
 
 function resolveDotnetJsUrl(options: DotnetCompilerRuntimeOptions) {
@@ -57,7 +52,7 @@ function resolveDotnetJsUrl(options: DotnetCompilerRuntimeOptions) {
 			globalThis.location?.href || import.meta.url
 		).toString();
 	}
-	return new URL('dotnet.js', resolveRuntimeBaseUrl(options)).toString();
+	return new URL('dotnet.js', resolveDotnetRuntimeBaseUrl(options)).toString();
 }
 
 function getDotnetBuilder(module: unknown): DotnetBuilder {
@@ -109,25 +104,8 @@ async function callJson<T>(
 	return JSON.parse(response) as T;
 }
 
-function createLazyAssemblyLoader(runtime: Awaited<ReturnType<DotnetBuilder['create']>>) {
-	const loadLazyAssembly = runtime.INTERNAL?.loadLazyAssembly;
-	const loadedAssemblies = new Map<string, Promise<unknown>>();
-	return async (language: DotnetRuntimeCompileRequest['language']) => {
-		if (typeof loadLazyAssembly !== 'function') return;
-		for (const assembly of lazyCompilerAssembliesByLanguage[language] || []) {
-			let promise = loadedAssemblies.get(assembly);
-			if (!promise) {
-				promise = loadLazyAssembly(assembly);
-				loadedAssemblies.set(assembly, promise);
-			}
-			await promise;
-		}
-	};
-}
-
 export function resetDotnetCompilerRuntimeForTests() {
-	runtimePromise = null;
-	runtimeKey = '';
+	runtimePromises.clear();
 }
 
 export async function loadDotnetCompilerRuntime(
@@ -135,9 +113,9 @@ export async function loadDotnetCompilerRuntime(
 ): Promise<DotnetCompilerRuntime> {
 	const dotnetJsUrl = resolveDotnetJsUrl(options);
 	const key = `${dotnetJsUrl}\n${options.mainAssemblyName || ''}\n${options.dotnetModule ? 'injected' : ''}\n${options.diagnosticTracing ? 'trace' : ''}`;
-	if (runtimePromise && runtimeKey === key) return await runtimePromise;
-	runtimeKey = key;
-	runtimePromise = (async () => {
+	const cached = runtimePromises.get(key);
+	if (cached) return await cached;
+	const promise: Promise<DotnetCompilerRuntime> = (async () => {
 		const dotnetModule = options.dotnetModule || (await import(/* @vite-ignore */ dotnetJsUrl));
 		let builder = getDotnetBuilder(dotnetModule);
 		if (builder.withConfig) {
@@ -163,10 +141,8 @@ export async function loadDotnetCompilerRuntime(
 		if (!compile || !run) {
 			throw new Error('wasm-dotnet compiler bridge is incomplete.');
 		}
-		const loadLazyCompilerAssemblies = createLazyAssemblyLoader(runtime);
 		return {
-			async compile(request) {
-				await loadLazyCompilerAssemblies(request.language);
+			compile(request) {
 				return callJson<DotnetRuntimeCompileResponse>(compile.bind(bridge), request);
 			},
 			run(request) {
@@ -174,5 +150,13 @@ export async function loadDotnetCompilerRuntime(
 			}
 		};
 	})();
-	return await runtimePromise;
+	runtimePromises.set(key, promise);
+	try {
+		return await promise;
+	} catch (error) {
+		if (runtimePromises.get(key) === promise) {
+			runtimePromises.delete(key);
+		}
+		throw error;
+	}
 }

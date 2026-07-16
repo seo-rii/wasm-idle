@@ -4,16 +4,79 @@
     <RuntimeIdentifier>browser-wasm</RuntimeIdentifier>
     <OutputType>Exe</OutputType>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <WasmDotnetLanguage Condition="'$(WasmDotnetLanguage)' == ''">csharp</WasmDotnetLanguage>
     <InvariantGlobalization>true</InvariantGlobalization>
     <JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>
     <WasmEnableThreads>true</WasmEnableThreads>
+    <RunAOTCompilation>true</RunAOTCompilation>
+    <PublishTrimmed>true</PublishTrimmed>
     <WasmMainJSPath>main.js</WasmMainJSPath>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+
+  <PropertyGroup Condition="'$(WasmDotnetLanguage)' == 'csharp'">
+    <DefineConstants>$(DefineConstants);WASM_DOTNET_CSHARP</DefineConstants>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(WasmDotnetLanguage)' == 'fsharp'">
+    <DefineConstants>$(DefineConstants);WASM_DOTNET_FSHARP</DefineConstants>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(WasmDotnetLanguage)' == 'vbnet'">
+    <DefineConstants>$(DefineConstants);WASM_DOTNET_VBNET</DefineConstants>
+  </PropertyGroup>
+
   <ItemGroup>
+    <ProjectReference Include="../WasmDotnet.Stdin/WasmDotnet.Stdin.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(WasmDotnetLanguage)' == 'csharp'">
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(WasmDotnetLanguage)' == 'vbnet'">
     <PackageReference Include="Microsoft.CodeAnalysis.VisualBasic" Version="4.14.0" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(WasmDotnetLanguage)' == 'fsharp'">
     <PackageReference Include="FSharp.Compiler.Service" Version="43.12.204" />
     <TrimmerRootAssembly Include="FSharp.Core" />
+    <TrimmerRootAssembly Include="FSharp.Compiler.Service" />
   </ItemGroup>
+
+  <Target Name="ValidateWasmDotnetLanguage" BeforeTargets="PrepareForBuild">
+    <Error
+      Condition="'$(WasmDotnetLanguage)' != 'csharp' and '$(WasmDotnetLanguage)' != 'fsharp' and '$(WasmDotnetLanguage)' != 'vbnet'"
+      Text="WasmDotnetLanguage must be csharp, fsharp, or vbnet (received '$(WasmDotnetLanguage)')." />
+  </Target>
+
+  <!-- The selected compiler and its hot BCL paths are not interactive under the interpreter. -->
+  <Target Name="SelectInteractiveCompilerAotAssemblies" BeforeTargets="_WasmAotCompileApp" Condition="'$(RunAOTCompilation)' == 'true'">
+    <ItemGroup>
+      <_AOT_InternalForceInterpretAssemblies
+        Include="@(_WasmAssembliesInternal)"
+        Condition="'%(_WasmAssembliesInternal.Filename)' != 'WasmDotnet.Stdin' and
+                   '%(_WasmAssembliesInternal.Filename)' != 'System.Collections' and
+                   '%(_WasmAssembliesInternal.Filename)' != 'System.Collections.Concurrent' and
+                   '%(_WasmAssembliesInternal.Filename)' != 'System.Collections.Immutable' and
+                   '%(_WasmAssembliesInternal.Filename)' != 'System.Diagnostics.DiagnosticSource' and
+                   '%(_WasmAssembliesInternal.Filename)' != 'System.Linq' and
+                   '%(_WasmAssembliesInternal.Filename)' != 'System.Linq.Expressions' and
+                   '%(_WasmAssembliesInternal.Filename)' != 'System.Memory' and
+                   '%(_WasmAssembliesInternal.Filename)' != 'System.Private.CoreLib' and
+                   '%(_WasmAssembliesInternal.Filename)' != 'System.Reflection.Metadata' and
+                   '%(_WasmAssembliesInternal.Filename)' != 'System.Runtime.Numerics' and
+                   '%(_WasmAssembliesInternal.Filename)' != 'System.Text.RegularExpressions' and
+                   ('$(WasmDotnetLanguage)' != 'csharp' or
+                     ('%(_WasmAssembliesInternal.Filename)' != 'Microsoft.CodeAnalysis' and
+                      '%(_WasmAssembliesInternal.Filename)' != 'Microsoft.CodeAnalysis.CSharp')) and
+                   ('$(WasmDotnetLanguage)' != 'fsharp' or
+                     ('%(_WasmAssembliesInternal.Filename)' != 'FSharp.Compiler.Service' and
+                      '%(_WasmAssembliesInternal.Filename)' != 'FSharp.Core')) and
+                   ('$(WasmDotnetLanguage)' != 'vbnet' or
+                     ('%(_WasmAssembliesInternal.Filename)' != 'Microsoft.CodeAnalysis' and
+                      '%(_WasmAssembliesInternal.Filename)' != 'Microsoft.CodeAnalysis.VisualBasic'))" />
+    </ItemGroup>
+    <Message Text="AOT compiling the $(WasmDotnetLanguage) compiler hot paths; interpreting the remaining @(_AOT_InternalForceInterpretAssemblies->Count()) assemblies." Importance="High" />
+  </Target>
 </Project>

@@ -28,7 +28,9 @@ export async function executeBrowserDotnetArtifact(
 		throw new Error(`Unsupported .NET artifact format: ${artifact.format}`);
 	}
 
-	const runtime = options.runtime || (await loadDotnetCompilerRuntime(options));
+	const runtime =
+		options.runtime ||
+		(await loadDotnetCompilerRuntime({ ...options, language: artifact.language }));
 	const response: DotnetRuntimeRunResponse = await runtime.run({
 		assemblyId: artifact.assemblyId,
 		args: options.args || [],

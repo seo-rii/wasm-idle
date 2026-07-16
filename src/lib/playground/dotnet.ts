@@ -5,6 +5,7 @@ import {
 	type SandboxExecutionOptions
 } from '$lib/playground/options';
 import type { Sandbox } from '$lib/playground/sandbox';
+import { WorkerSession } from '$lib/playground/workerSession';
 
 type DotnetSandboxLanguage = 'FSHARP' | 'CSHARP' | 'VBNET';
 type DotnetCompileLanguage = 'fsharp' | 'csharp' | 'vbnet';
@@ -54,13 +55,19 @@ class Dotnet implements Sandbox {
 	uid = 0;
 	exit = true;
 	moduleUrl = '';
-	activeReject: ((reason: string) => void) | null = null;
 	pendingInput: string[] = [];
 	pendingEof = false;
 	stdinWaiters: Array<() => void> = [];
 	compiledArtifact: unknown = null;
 	compiledCacheKey = '';
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
+	private readonly workerSession = new WorkerSession({
+		label: () => this.languageLabel,
+		onDispose: (worker) => {
+			if (this.worker === worker) delete this.worker;
+			this.exit = true;
+		}
+	});
 
 	constructor(private readonly language: DotnetSandboxLanguage = 'FSHARP') {}
 
@@ -93,7 +100,7 @@ class Dotnet implements Sandbox {
 		_options: SandboxExecutionOptions = {},
 		progress?: { set?: (value: number) => void } | import('svelte/store').Writable<number>
 	) {
-		return new Promise<void>(async (resolve, reject) => {
+		return this.workerSession.load(async (resolve, reject) => {
 			try {
 				const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
 				const nextModuleUrl = resolveDotnetModuleUrl(runtimeAssets, currentUrl);
@@ -107,8 +114,7 @@ class Dotnet implements Sandbox {
 				this.moduleUrl = nextModuleUrl;
 				if (this.shouldRunOnMainThread()) {
 					if (this.worker) {
-						this.worker.terminate();
-						delete this.worker;
+						this.workerSession.reset();
 					}
 					if (needsRuntimeReset) {
 						const runtimeModule = (await import(
@@ -136,25 +142,13 @@ class Dotnet implements Sandbox {
 				this.compiledArtifact = null;
 				this.compiledCacheKey = '';
 				if (needsWorkerReset && this.worker) {
-					this.worker.terminate();
-					delete this.worker;
+					this.workerSession.reset();
 				}
 				if (!this.worker) {
 					this.worker = new (
 						await import('$lib/playground/worker/dotnet?worker')
 					).default();
-					this.worker.onerror = (event: ErrorEvent) => {
-						const location =
-							event.filename && event.lineno
-								? ` (${event.filename}:${event.lineno}:${event.colno})`
-								: '';
-						reject(
-							`${this.languageLabel} worker script error: ${event.message || 'unknown error'}${location}`
-						);
-					};
-					this.worker.onmessageerror = () => {
-						reject(`${this.languageLabel} worker message deserialization failed`);
-					};
+					this.workerSession.attach(this.worker);
 					this.worker.onmessage = (event: MessageEvent<any>) => {
 						if (event.data?.load) {
 							progress?.set?.(1);
@@ -231,7 +225,7 @@ class Dotnet implements Sandbox {
 		return new Promise<boolean | string>((resolve, reject) => {
 			const { programArgs } = resolveSandboxExecutionArgs(this.language, args, options);
 			const _uid = ++this.uid;
-			this.activeReject = reject;
+			const operation = this.workerSession.beginRun(worker, reject);
 			worker.onmessage = (event: Event & { data: any }) => {
 				if (this.worker !== worker) return reject('Worker not loaded');
 				if (_uid !== this.uid) return (worker.onmessage = null);
@@ -244,13 +238,13 @@ class Dotnet implements Sandbox {
 				if (results) {
 					this.elapse = Date.now() - this.begin;
 					this.exit = true;
-					this.activeReject = null;
+					this.workerSession.complete(operation);
 					resolve(results as string);
 				}
 				if (error) {
 					this.elapse = Date.now() - this.begin;
 					this.exit = true;
-					this.activeReject = null;
+					this.workerSession.complete(operation);
 					reject(error);
 				}
 			};
@@ -267,7 +261,10 @@ class Dotnet implements Sandbox {
 						log: _log
 					});
 				})
-				.catch(reject);
+				.catch((error) => {
+					this.workerSession.complete(operation);
+					reject(error);
+				});
 		});
 	}
 
@@ -350,7 +347,6 @@ class Dotnet implements Sandbox {
 		} finally {
 			this.elapse = Date.now() - this.begin;
 			this.exit = true;
-			this.activeReject = null;
 		}
 	}
 
@@ -359,12 +355,9 @@ class Dotnet implements Sandbox {
 	}
 
 	terminate() {
-		this.activeReject?.('Process terminated');
-		this.activeReject = null;
 		this.uid += 1;
 		this.resolveStdinWaiters();
-		this.worker?.terminate?.();
-		delete this.worker;
+		this.workerSession.terminate();
 		this.exit = true;
 	}
 

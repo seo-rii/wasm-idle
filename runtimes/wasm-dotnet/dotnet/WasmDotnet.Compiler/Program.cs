@@ -8,21 +8,38 @@ using System.Runtime.InteropServices.JavaScript;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
+#if WASM_DOTNET_CSHARP || WASM_DOTNET_VBNET
 using Microsoft.CodeAnalysis;
+#endif
+#if WASM_DOTNET_CSHARP
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Microsoft.CodeAnalysis.VisualBasic;
 using CSharpSyntaxFactory = Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
+#endif
+#if WASM_DOTNET_VBNET
+using Microsoft.CodeAnalysis.VisualBasic;
+#endif
+#if WASM_DOTNET_FSHARP
 using FSharp.Compiler.CodeAnalysis;
 using FSharp.Compiler.Diagnostics;
 using Microsoft.FSharp.Control;
 using Microsoft.FSharp.Core;
+#endif
 
 namespace WasmDotnet.Compiler;
 
 public static partial class CompilerHost
 {
     private static readonly Dictionary<string, Assembly> Assemblies = new();
+#if WASM_DOTNET_CSHARP
+    private const string RuntimeLanguage = "csharp";
+#elif WASM_DOTNET_FSHARP
+    private const string RuntimeLanguage = "fsharp";
+#elif WASM_DOTNET_VBNET
+    private const string RuntimeLanguage = "vbnet";
+#else
+#error A wasm-dotnet runtime language must be selected.
+#endif
 
     static CompilerHost()
     {
@@ -39,6 +56,7 @@ public static partial class CompilerHost
     }
 
     [JSExport]
+    [return: JSMarshalAs<JSType.Promise<JSType.String>>]
     public static async Task<string> Compile(string requestJson)
     {
         try
@@ -54,12 +72,22 @@ public static partial class CompilerHost
                 });
             }
 
-            var result = request.Language switch
+            if (!string.Equals(request.Language, RuntimeLanguage, StringComparison.Ordinal))
             {
-                "csharp" => CompileCSharp(request.Source, request.References),
-                "vbnet" => CompileVisualBasic(request.Source, request.References),
-                _ => await CompileFSharp(request.Source, request.References)
-            };
+                return WriteJson(new CompileResponse
+                {
+                    Success = false,
+                    Error = $"The {RuntimeLanguage} runtime bundle cannot compile {request.Language ?? "an unspecified language"}."
+                });
+            }
+
+#if WASM_DOTNET_CSHARP
+            var result = CompileCSharp(request.Source, request.References);
+#elif WASM_DOTNET_FSHARP
+            var result = await CompileFSharp(request.Source, request.References);
+#elif WASM_DOTNET_VBNET
+            var result = CompileVisualBasic(request.Source, request.References);
+#endif
 
             if (!result.Success || result.Assembly is null)
             {
@@ -92,6 +120,7 @@ public static partial class CompilerHost
     }
 
     [JSExport]
+    [return: JSMarshalAs<JSType.Promise<JSType.String>>]
     public static Task<string> Run(string requestJson)
     {
         var previousOut = Console.Out;
@@ -165,6 +194,7 @@ public static partial class CompilerHost
         }
     }
 
+#if WASM_DOTNET_CSHARP
     private static CompileResult CompileCSharp(string source, ReferenceAssembly[]? references)
     {
         using var stream = new MemoryStream();
@@ -195,7 +225,9 @@ public static partial class CompilerHost
             Diagnostics = diagnostics
         };
     }
+#endif
 
+#if WASM_DOTNET_VBNET
     private static CompileResult CompileVisualBasic(string source, ReferenceAssembly[]? references)
     {
         using var stream = new MemoryStream();
@@ -229,7 +261,9 @@ public static partial class CompilerHost
             Diagnostics = diagnostics
         };
     }
+#endif
 
+#if WASM_DOTNET_FSHARP
     private static async Task<CompileResult> CompileFSharp(string source, ReferenceAssembly[]? references)
     {
         var workDir = Path.Combine(Path.GetTempPath(), $"wasm-dotnet-{Guid.NewGuid():N}");
@@ -250,7 +284,8 @@ public static partial class CompilerHost
             $"--out:{outputPath}",
             sourcePath
         };
-        argv.AddRange(ReferenceAssemblyPaths(workDir, references).Select(path => $"-r:{path}"));
+        var referencePaths = ReferenceAssemblyPaths(workDir, references);
+        argv.AddRange(referencePaths.Select(path => $"-r:{path}"));
 
         var disabled = Some(false);
         var checker = FSharpChecker.Create(
@@ -268,7 +303,10 @@ public static partial class CompilerHost
             null,
             disabled,
             null);
-        var result = await FSharpAsync.StartAsTask(checker.Compile(argv.ToArray(), null), null, null);
+        var result = await FSharpAsync.StartAsTask(
+            checker.Compile(argv.ToArray(), null),
+            null,
+            null);
         var diagnostics = new CompilerDiagnostic[result.Item1.Length];
         for (var index = 0; index < result.Item1.Length; index++)
         {
@@ -276,11 +314,17 @@ public static partial class CompilerHost
         }
         if (result.Item2 is not null || !File.Exists(outputPath))
         {
+            var terminatingException = result.Item2?.Value;
+            var stderr = string.Join("\n", new[]
+            {
+                string.Join("\n", diagnostics.Select(d => d.Message)),
+                terminatingException?.ToString()
+            }.Where(message => !string.IsNullOrWhiteSpace(message)));
             return new CompileResult
             {
                 Success = false,
                 Diagnostics = diagnostics,
-                Stderr = string.Join("\n", diagnostics.Select(d => d.Message))
+                Stderr = stderr
             };
         }
 
@@ -291,7 +335,9 @@ public static partial class CompilerHost
             Diagnostics = diagnostics
         };
     }
+#endif
 
+#if WASM_DOTNET_CSHARP || WASM_DOTNET_VBNET
     private static IEnumerable<MetadataReference> MetadataReferences(ReferenceAssembly[]? references)
     {
         IEnumerable<MetadataReference> metadataReferences;
@@ -305,14 +351,16 @@ public static partial class CompilerHost
             metadataReferences = TrustedPlatformReferencePaths().Select(path => MetadataReference.CreateFromFile(path));
         }
 
-        var hostAssemblyPath = HostAssemblyReferencePath();
-        if (!string.IsNullOrWhiteSpace(hostAssemblyPath))
+        var stdinAssemblyPath = StdinAssemblyReferencePath();
+        if (!string.IsNullOrWhiteSpace(stdinAssemblyPath))
         {
-            metadataReferences = metadataReferences.Concat([MetadataReference.CreateFromFile(hostAssemblyPath)]);
+            metadataReferences = metadataReferences.Concat([MetadataReference.CreateFromFile(stdinAssemblyPath)]);
         }
         return metadataReferences;
     }
+#endif
 
+#if WASM_DOTNET_FSHARP
     private static string[] ReferenceAssemblyPaths(string workDir, ReferenceAssembly[]? references)
     {
         string[] paths;
@@ -337,17 +385,18 @@ public static partial class CompilerHost
             }).ToArray();
         }
 
-        var hostAssemblyPath = HostAssemblyReferencePath();
-        if (!string.IsNullOrWhiteSpace(hostAssemblyPath) && !paths.Contains(hostAssemblyPath))
+        var stdinAssemblyPath = StdinAssemblyReferencePath();
+        if (!string.IsNullOrWhiteSpace(stdinAssemblyPath) && !paths.Contains(stdinAssemblyPath))
         {
-            paths = paths.Append(hostAssemblyPath).ToArray();
+            paths = paths.Append(stdinAssemblyPath).ToArray();
         }
         return paths;
     }
+#endif
 
-    private static string? HostAssemblyReferencePath()
+    private static string? StdinAssemblyReferencePath()
     {
-        var path = AssemblyLocation(typeof(CompilerHost).Assembly);
+        var path = AssemblyLocation(typeof(StdinShim).Assembly);
         return !string.IsNullOrWhiteSpace(path) && File.Exists(path) ? path : null;
     }
 
@@ -384,7 +433,9 @@ public static partial class CompilerHost
             : null;
     }
 
+#if WASM_DOTNET_FSHARP
     private static FSharpOption<T> Some<T>(T value) => FSharpOption<T>.Some(value);
+#endif
 
     private static string AssemblyLocation(Assembly assembly)
     {
@@ -398,26 +449,33 @@ public static partial class CompilerHost
         }
     }
 
+#if WASM_DOTNET_CSHARP
     private static string RewriteCSharpSource(string source)
     {
         var root = CSharpSyntaxTree.ParseText(source).GetRoot();
         return new CSharpStdinRewriter().Visit(root)?.ToFullString() ?? source;
     }
+#endif
 
+#if WASM_DOTNET_FSHARP
     private static string RewriteFSharpSource(string source) =>
         source
             .Replace("System.Console.ReadLine(", "WasmDotnet.Compiler.StdinShim.ReadLine(")
             .Replace("Console.ReadLine(", "WasmDotnet.Compiler.StdinShim.ReadLine(")
             .Replace("System.Console.In", "WasmDotnet.Compiler.StdinShim.In")
             .Replace("Console.In", "WasmDotnet.Compiler.StdinShim.In");
+#endif
 
+#if WASM_DOTNET_VBNET
     private static string RewriteVisualBasicSource(string source) =>
         source
             .Replace("System.Console.ReadLine(", "WasmDotnet.Compiler.StdinShim.ReadLine(")
             .Replace("Console.ReadLine(", "WasmDotnet.Compiler.StdinShim.ReadLine(")
             .Replace("System.Console.In", "WasmDotnet.Compiler.StdinShim.In")
             .Replace("Console.In", "WasmDotnet.Compiler.StdinShim.In");
+#endif
 
+#if WASM_DOTNET_CSHARP
     private sealed class CSharpStdinRewriter : CSharpSyntaxRewriter
     {
         public override SyntaxNode? VisitInvocationExpression(InvocationExpressionSyntax node)
@@ -451,7 +509,9 @@ public static partial class CompilerHost
             return text == "Console" || text == "System.Console";
         }
     }
+#endif
 
+#if WASM_DOTNET_CSHARP || WASM_DOTNET_VBNET
     private static CompilerDiagnostic ToDiagnostic(Diagnostic diagnostic)
     {
         var span = diagnostic.Location.GetLineSpan();
@@ -468,7 +528,9 @@ public static partial class CompilerHost
             Message = $"{diagnostic.Id}: {diagnostic.GetMessage()}"
         };
     }
+#endif
 
+#if WASM_DOTNET_FSHARP
     private static CompilerDiagnostic ToDiagnostic(FSharpDiagnostic diagnostic) =>
         new()
         {
@@ -483,6 +545,7 @@ public static partial class CompilerHost
                     : "other",
             Message = $"{diagnostic.ErrorNumberPrefix}{diagnostic.ErrorNumber}: {diagnostic.Message}"
         };
+#endif
 
     private static string WriteJson(CompileResponse value) =>
         JsonSerializer.Serialize(value, CompilerJsonContext.Default.CompileResponse);
@@ -560,19 +623,4 @@ public static partial class CompilerHost
 [JsonSerializable(typeof(CompilerHost.RunResponse))]
 internal sealed partial class CompilerJsonContext : JsonSerializerContext
 {
-}
-
-public static class StdinShim
-{
-    private static StringReader? reader;
-
-    public static TextReader In => reader ?? TextReader.Null;
-
-    public static void Set(string? input)
-    {
-        reader?.Dispose();
-        reader = input is null ? null : new StringReader(input);
-    }
-
-    public static string? ReadLine() => reader?.ReadLine();
 }

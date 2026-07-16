@@ -33,11 +33,30 @@ describe('syncWasmDotnetDist', () => {
 		await writeFixtureFile(sourceDir, 'index.js', 'export default "dotnet";\n');
 		await writeFixtureFile(sourceDir, 'compiler.js', 'export const compile = true;\n');
 		await writeFixtureFile(sourceDir, 'types.d.ts', 'export type Ignored = true;\n');
-		await writeFixtureFile(sourceDir, 'runtime/blazor.boot.json', '{"resources":{}}\n');
-		await writeFixtureFile(sourceDir, 'runtime/dotnet.js', 'export const dotnet = {};\n');
+		await writeFixtureFile(
+			sourceDir,
+			'runtime/manifest.json',
+			'{"languages":{"csharp":{},"fsharp":{},"vbnet":{}},"references":"ref/manifest.json"}\n'
+		);
+		for (const language of ['csharp', 'fsharp', 'vbnet']) {
+			await writeFixtureFile(
+				sourceDir,
+				`runtime/${language}/blazor.boot.json`,
+				'{"resources":{}}\n'
+			);
+			await writeFixtureFile(
+				sourceDir,
+				`runtime/${language}/dotnet.js`,
+				'export const dotnet = {};\n'
+			);
+			await writeFixtureFile(
+				sourceDir,
+				`runtime/${language}/WasmDotnet.Compiler.wasm`,
+				'wasm'
+			);
+		}
 		await writeFixtureFile(sourceDir, 'runtime/ref/manifest.json', '{"assemblies":[]}\n');
 		await writeFixtureFile(sourceDir, 'runtime/ref/System.Runtime.dll', 'dll');
-		await writeFixtureFile(sourceDir, 'runtime/WasmDotnet.Compiler.wasm', 'wasm');
 
 		const result = await syncWasmDotnetDist({ sourceDir, targetDir, versionModulePath });
 
@@ -48,10 +67,10 @@ describe('syncWasmDotnetDist', () => {
 			'compile = true'
 		);
 		await expect(
-			readFile(path.join(targetDir, 'runtime/blazor.boot.json'), 'utf8')
+			readFile(path.join(targetDir, 'runtime/csharp/blazor.boot.json'), 'utf8')
 		).resolves.toContain('"resources"');
 		await expect(
-			readFile(path.join(targetDir, 'runtime/dotnet.js'), 'utf8')
+			readFile(path.join(targetDir, 'runtime/fsharp/dotnet.js'), 'utf8')
 		).resolves.toContain('dotnet');
 		await expect(
 			readFile(path.join(targetDir, 'runtime/ref/manifest.json'), 'utf8')
@@ -60,7 +79,7 @@ describe('syncWasmDotnetDist', () => {
 			readFile(path.join(targetDir, 'runtime/ref/System.Runtime.dll'), 'utf8')
 		).resolves.toBe('dll');
 		await expect(
-			readFile(path.join(targetDir, 'runtime/WasmDotnet.Compiler.wasm'), 'utf8')
+			readFile(path.join(targetDir, 'runtime/vbnet/WasmDotnet.Compiler.wasm'), 'utf8')
 		).resolves.toBe('wasm');
 		await expect(readFile(path.join(targetDir, 'types.d.ts'), 'utf8')).rejects.toThrow();
 		await expect(readFile(versionModulePath, 'utf8')).resolves.toContain(

@@ -9,6 +9,7 @@ import type {
 } from './types.js';
 import {
 	loadDotnetCompilerRuntime,
+	resolveDotnetRuntimeBaseUrl,
 	type DotnetCompilerRuntime,
 	type DotnetCompilerRuntimeOptions
 } from './runtime-loader.js';
@@ -19,7 +20,10 @@ export interface CreateDotnetCompilerOptions extends DotnetCompilerRuntimeOption
 }
 
 export interface CompileDotnetDependencies {
-	loadRuntime?: (options?: DotnetCompilerRuntimeOptions) => Promise<DotnetCompilerRuntime>;
+	loadRuntime?: (
+		language: DotnetLanguage,
+		options?: DotnetCompilerRuntimeOptions
+	) => Promise<DotnetCompilerRuntime>;
 	loadReferences?: (language: DotnetLanguage) => Promise<DotnetReferenceAssembly[]>;
 }
 
@@ -44,11 +48,21 @@ const commonReferenceAssemblies = new Set([
 	'System.Runtime.dll',
 	'System.Threading.Tasks.dll',
 	'System.Threading.dll',
-	'WasmDotnet.Compiler.dll'
+	'WasmDotnet.Stdin.dll'
 ]);
 const languageReferenceAssemblies: Record<DotnetLanguage, Set<string>> = {
 	csharp: new Set(['Microsoft.CSharp.dll']),
-	fsharp: new Set(['FSharp.Core.dll']),
+	fsharp: new Set([
+		'FSharp.Core.dll',
+		'netstandard.dll',
+		'System.Collections.dll',
+		'System.Console.dll',
+		'System.Net.Requests.dll',
+		'System.Net.WebClient.dll',
+		'System.Runtime.dll',
+		'System.Runtime.Numerics.dll',
+		'WasmDotnet.Stdin.dll'
+	]),
 	vbnet: new Set(['Microsoft.VisualBasic.Core.dll', 'Microsoft.VisualBasic.dll'])
 };
 
@@ -111,9 +125,15 @@ function failure(message: string, stderr?: string): BrowserDotnetCompilerResult 
 	};
 }
 
-function resolveReferenceBaseUrl(options: CreateDotnetCompilerOptions) {
-	const runtimeBaseUrl = new URL(options.runtimeBaseUrl || './runtime/', import.meta.url);
-	return new URL(options.referenceBaseUrl || 'ref/', runtimeBaseUrl);
+function resolveReferenceBaseUrl(
+	options: CreateDotnetCompilerOptions,
+	language: DotnetLanguage
+) {
+	const runtimeBaseUrl = resolveDotnetRuntimeBaseUrl({ ...options, language });
+	return new URL(
+		options.referenceBaseUrl || (options.runtimeBaseUrl ? 'ref/' : '../ref/'),
+		runtimeBaseUrl
+	);
 }
 
 function bytesToBase64(bytes: Uint8Array) {
@@ -134,6 +154,9 @@ function isUserReferenceAssembly(name: string, language: DotnetLanguage) {
 	) {
 		return false;
 	}
+	if (language === 'fsharp') {
+		return languageReferenceAssemblies.fsharp.has(name);
+	}
 	return (
 		name.endsWith('.dll') &&
 		(commonReferenceAssemblies.has(name) || languageReferenceAssemblies[language].has(name))
@@ -144,7 +167,7 @@ async function loadDotnetReferenceAssemblies(
 	options: CreateDotnetCompilerOptions = {},
 	language: DotnetLanguage
 ) {
-	const baseUrl = resolveReferenceBaseUrl(options);
+	const baseUrl = resolveReferenceBaseUrl(options, language);
 	const cacheKey = `${baseUrl.toString()}\n${language}`;
 	const cached = referenceAssemblyCache.get(cacheKey);
 	if (cached) return await cached;
@@ -201,8 +224,8 @@ export async function compileDotnet(
 			? { diagnosticTracing: true }
 			: undefined;
 		const runtime = dependencies.loadRuntime
-			? await dependencies.loadRuntime(runtimeOptions)
-			: await loadDotnetCompilerRuntime(runtimeOptions);
+			? await dependencies.loadRuntime(language, runtimeOptions)
+			: await loadDotnetCompilerRuntime({ ...runtimeOptions, language });
 		const references = dependencies.loadReferences
 			? await dependencies.loadReferences(language)
 			: [];
@@ -244,10 +267,11 @@ export function createDotnetCompiler(
 	return {
 		async compile(request) {
 			return await compileDotnet(request, {
-				loadRuntime: (runtimeOptions = {}) =>
+				loadRuntime: (language, runtimeOptions = {}) =>
 					loadDotnetCompilerRuntime({
 						...options,
 						...runtimeOptions,
+						language,
 						diagnosticTracing: Boolean(
 							options.diagnosticTracing || runtimeOptions.diagnosticTracing
 						)
