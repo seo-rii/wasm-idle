@@ -6,6 +6,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import { compileOnHost } from '../dist/src/node.js';
+import { DEFAULT_SWITCH_NAME } from '../scripts/toolchain-defaults.mjs';
 
 const testPath = fileURLToPath(import.meta.url);
 const testsDir = path.dirname(testPath);
@@ -13,7 +14,7 @@ const projectRoot = path.resolve(testsDir, '..');
 const opamRoot =
 	process.env.WASM_OF_JS_OF_OCAML_OPAM_ROOT ||
 	path.join(process.env.HOME || process.cwd(), '.cache', 'wasm-of-js-of-ocaml', 'opam');
-const switchName = process.env.WASM_OF_JS_OF_OCAML_SWITCH_NAME || 'wasm-of-js-of-ocaml';
+const switchName = process.env.WASM_OF_JS_OF_OCAML_SWITCH_NAME || DEFAULT_SWITCH_NAME;
 const opamBin =
 	process.env.WASM_OF_JS_OF_OCAML_OPAM_BIN ||
 	(await readFile(path.join(projectRoot, '.cache', 'opam-2.2.1')).then(

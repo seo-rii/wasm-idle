@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 
 import { compileOnHost } from '../dist/src/node.js';
+import { DEFAULT_SWITCH_NAME } from './toolchain-defaults.mjs';
 
 const scriptPath = fileURLToPath(import.meta.url);
 const scriptsDir = path.dirname(scriptPath);
@@ -41,7 +42,7 @@ function runCommand(command, args, options = {}) {
 const opamRoot =
 	process.env.WASM_OF_JS_OF_OCAML_OPAM_ROOT ||
 	path.join(process.env.HOME || process.cwd(), '.cache', 'wasm-of-js-of-ocaml', 'opam');
-const switchName = process.env.WASM_OF_JS_OF_OCAML_SWITCH_NAME || 'wasm-of-js-of-ocaml';
+const switchName = process.env.WASM_OF_JS_OF_OCAML_SWITCH_NAME || DEFAULT_SWITCH_NAME;
 const opamBin =
 	process.env.WASM_OF_JS_OF_OCAML_OPAM_BIN ||
 	(await readFile(path.join(projectRoot, '.cache', 'opam-2.2.1')).then(

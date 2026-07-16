@@ -7,6 +7,8 @@ import { finished, pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import { createGzip } from 'node:zlib';
 
+import { DEFAULT_JS_OF_OCAML_VERSION, DEFAULT_SWITCH_NAME } from './toolchain-defaults.mjs';
+
 const scriptPath = fileURLToPath(import.meta.url);
 const scriptsDir = path.dirname(scriptPath);
 const projectRoot = path.resolve(scriptsDir, '..');
@@ -20,7 +22,7 @@ function parseArgs(argv) {
 		opamRoot:
 			process.env.WASM_OF_JS_OF_OCAML_OPAM_ROOT ||
 			path.join(process.env.HOME || process.cwd(), '.cache', 'wasm-of-js-of-ocaml', 'opam'),
-		switchName: process.env.WASM_OF_JS_OF_OCAML_SWITCH_NAME || 'wasm-of-js-of-ocaml',
+		switchName: process.env.WASM_OF_JS_OF_OCAML_SWITCH_NAME || DEFAULT_SWITCH_NAME,
 		switchPrefix: process.env.WASM_OF_JS_OF_OCAML_SWITCH_PREFIX || '',
 		outDir: path.join(projectRoot, '.cache', 'browser-native-bundle')
 	};
@@ -466,10 +468,33 @@ const switchPrefix = await getSwitchPrefix(options);
 const switchRoot = switchPrefix;
 const switchSourcesRoot = path.join(switchRoot, '.opam-switch', 'sources');
 const sourceDir = await findExistingPath([
-	path.join(switchSourcesRoot, 'wasm_of_ocaml-compiler.6.3.2'),
-	path.join(switchSourcesRoot, 'js_of_ocaml-compiler.6.3.2')
+	path.join(switchSourcesRoot, `wasm_of_ocaml-compiler.${DEFAULT_JS_OF_OCAML_VERSION}`),
+	path.join(switchSourcesRoot, `js_of_ocaml-compiler.${DEFAULT_JS_OF_OCAML_VERSION}`)
 ]);
 const versionDunePatch = await patchVersionDuneToAvoidGitProbe(sourceDir);
+const runtimeWasmArgsPath = path.join(sourceDir, 'runtime', 'wasm', 'args.ml');
+const runtimeWasmArgsSource = await readFile(runtimeWasmArgsPath, 'utf8');
+const legacyRuntimeModuleName = 'Filename.chop_suffix Sys.argv.(i) ".wat"';
+const normalizedRuntimeModuleName = 'Filename.chop_suffix (Filename.basename Sys.argv.(i)) ".wat"';
+let patchedRuntimeWasmArgsSource = runtimeWasmArgsSource;
+if (!runtimeWasmArgsSource.includes(normalizedRuntimeModuleName)) {
+	if (!runtimeWasmArgsSource.includes(legacyRuntimeModuleName)) {
+		throw new Error(
+			`failed to locate Wasm runtime module name expression in ${runtimeWasmArgsPath}`
+		);
+	}
+	patchedRuntimeWasmArgsSource = runtimeWasmArgsSource.replace(
+		legacyRuntimeModuleName,
+		normalizedRuntimeModuleName
+	);
+	await writeFile(runtimeWasmArgsPath, patchedRuntimeWasmArgsSource, 'utf8');
+}
+const runtimeWasmModuleNamesPatch = {
+	path: runtimeWasmArgsPath,
+	alreadyPatched: runtimeWasmArgsSource === patchedRuntimeWasmArgsSource,
+	sourceSha256: sha256(runtimeWasmArgsSource),
+	patchedSha256: sha256(patchedRuntimeWasmArgsSource)
+};
 
 const outDir = path.resolve(options.outDir);
 const toolsDir = path.join(outDir, 'tools');
@@ -673,6 +698,7 @@ const manifest = {
 	},
 	toolPatches: {
 		version_dune_static_placeholder: versionDunePatch,
+		runtime_wasm_module_names: runtimeWasmModuleNamesPatch,
 		wasm_of_ocaml_binaryen_bridge: wasmOfOcamlPatch,
 		browser_binaryen_tools: [wasmOptPatch, wasmMergePatch, wasmMetadcePatch]
 	},

@@ -1,6 +1,8 @@
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { DEFAULT_SWITCH_NAME } from './toolchain-defaults.mjs';
+
 const scriptPath = fileURLToPath(import.meta.url);
 const scriptsDir = path.dirname(scriptPath);
 const projectRoot = path.resolve(scriptsDir, '..');
@@ -13,7 +15,7 @@ const [{ compile }, { createNodeSystemDispatcher }] = await Promise.all([
 const opamRoot =
 	process.env.OPAMROOT ||
 	path.join(process.env.HOME || '', '.cache', 'wasm-of-js-of-ocaml', 'opam');
-const switchName = process.env.WASM_OF_JS_OF_OCAML_SWITCH || 'wasm-of-js-of-ocaml';
+const switchName = process.env.WASM_OF_JS_OF_OCAML_SWITCH || DEFAULT_SWITCH_NAME;
 const binaryenBinDir =
 	process.env.WASM_OF_JS_OF_OCAML_BINARYEN_BIN_DIR ||
 	path.join(projectRoot, '.cache', 'npm', 'node_modules', '.bin');

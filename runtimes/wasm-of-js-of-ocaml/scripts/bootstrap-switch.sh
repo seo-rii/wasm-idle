@@ -10,8 +10,8 @@ Create a host-side frozen OCaml switch that can later be collected into a browse
 Environment:
   WASM_OF_JS_OF_OCAML_OPAM_BIN         Custom opam executable. Default: opam
   WASM_OF_JS_OF_OCAML_OPAM_ROOT        Custom opam root. Default: ~/.cache/wasm-of-js-of-ocaml/opam
-  WASM_OF_JS_OF_OCAML_SWITCH_NAME      Switch name. Default: wasm-of-js-of-ocaml
-  WASM_OF_JS_OF_OCAML_COMPILER_PACKAGE Compiler package. Auto-detected from opam if omitted.
+  WASM_OF_JS_OF_OCAML_SWITCH_NAME      Switch name. Default: wasm-of-js-of-ocaml-5.4.1
+  WASM_OF_JS_OF_OCAML_COMPILER_PACKAGE Compiler package. Default: ocaml-base-compiler.5.4.1.
   WASM_OF_JS_OF_OCAML_BASE_PACKAGES    Space-separated package list.
   WASM_OF_JS_OF_OCAML_INSTALL_WASM_COMPILER
                                        Install wasm_of_ocaml-compiler when non-empty.
@@ -35,8 +35,10 @@ if ! command -v "$OPAM_BIN" >/dev/null 2>&1; then
 fi
 
 OPAM_ROOT="${WASM_OF_JS_OF_OCAML_OPAM_ROOT:-$HOME/.cache/wasm-of-js-of-ocaml/opam}"
-SWITCH_NAME="${WASM_OF_JS_OF_OCAML_SWITCH_NAME:-wasm-of-js-of-ocaml}"
-BASE_PACKAGES="${WASM_OF_JS_OF_OCAML_BASE_PACKAGES:-ocamlfind dune js_of_ocaml js_of_ocaml-compiler}"
+PINNED_OCAML_VERSION="5.4.1"
+PINNED_JS_OF_OCAML_VERSION="6.3.2"
+SWITCH_NAME="${WASM_OF_JS_OF_OCAML_SWITCH_NAME:-wasm-of-js-of-ocaml-$PINNED_OCAML_VERSION}"
+BASE_PACKAGES="${WASM_OF_JS_OF_OCAML_BASE_PACKAGES:-ocamlfind dune js_of_ocaml.$PINNED_JS_OF_OCAML_VERSION js_of_ocaml-compiler.$PINNED_JS_OF_OCAML_VERSION}"
 INSTALL_WASM_COMPILER="${WASM_OF_JS_OF_OCAML_INSTALL_WASM_COMPILER:-}"
 JSOO_SOURCE_DIR="${WASM_OF_JS_OF_OCAML_JSOO_SOURCE_DIR:-}"
 
@@ -45,19 +47,7 @@ if [[ ! -d "$OPAM_ROOT/default" && ! -f "$OPAM_ROOT/config" ]]; then
   OPAMROOT="$OPAM_ROOT" "$OPAM_BIN" init --bare --disable-sandboxing -y >/dev/null
 fi
 
-COMPILER_PACKAGE="${WASM_OF_JS_OF_OCAML_COMPILER_PACKAGE:-}"
-if [[ -z "$COMPILER_PACKAGE" ]]; then
-  COMPILER_PACKAGE="$(
-    OPAMROOT="$OPAM_ROOT" "$OPAM_BIN" switch list-available --short 2>/dev/null \
-      | grep '^ocaml-base-compiler\.' \
-      | tail -n 1
-  )"
-fi
-
-if [[ -z "$COMPILER_PACKAGE" ]]; then
-  echo "error: failed to determine an OCaml compiler package; set WASM_OF_JS_OF_OCAML_COMPILER_PACKAGE" >&2
-  exit 1
-fi
+COMPILER_PACKAGE="${WASM_OF_JS_OF_OCAML_COMPILER_PACKAGE:-ocaml-base-compiler.$PINNED_OCAML_VERSION}"
 
 if ! OPAMROOT="$OPAM_ROOT" "$OPAM_BIN" switch list --short 2>/dev/null | grep -Fxq "$SWITCH_NAME"; then
   OPAMROOT="$OPAM_ROOT" "$OPAM_BIN" switch create "$SWITCH_NAME" "$COMPILER_PACKAGE" -y
