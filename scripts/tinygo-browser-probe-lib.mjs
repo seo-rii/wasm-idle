@@ -1,5 +1,11 @@
 import { chromium } from 'playwright-core';
 
+import {
+	assertLoadingProgressTrace,
+	installLoadingProgressProbe,
+	readLoadingProgressTrace,
+	stopLoadingProgressProbe
+} from './browser-progress-probe.mjs';
 import { resolveChromiumExecutable } from './rust-browser-probe-lib.mjs';
 
 /**
@@ -37,12 +43,14 @@ async function readProbeSummary(page, activeState, pageErrors, consoleMessages, 
 			.locator('[data-testid="terminal-debug-output"]')
 			.textContent()
 			.catch(() => '')) || '';
+	const progressTrace = await readLoadingProgressTrace(page);
 	return {
 		activeState,
 		browserUrl,
 		consoleTail: summarizeConsole(consoleMessages),
 		finalUrl: page.url(),
 		pageErrors,
+		progressTrace,
 		title: await page.title().catch(() => ''),
 		transcript
 	};
@@ -147,6 +155,7 @@ export async function runTinyGoBrowserProbe({
 				.locator('[data-testid="terminal-debug-output"]')
 				.textContent()
 				.catch(() => '')) || '';
+		await installLoadingProgressProbe(page);
 		await page.locator('button.action-button--run').first().click();
 		try {
 			await page.waitForFunction(
@@ -202,9 +211,9 @@ export async function runTinyGoBrowserProbe({
 					}
 					const finishedCount = (text.match(/Process finished after/g) || []).length;
 					return (
-						text.includes(requiredOutput) ||
 						text.includes('TinyGo compilation failed') ||
-						finishedCount >= previousFinishedCount + 1
+						(finishedCount >= previousFinishedCount + 1 &&
+							(!requiredOutput || text.includes(requiredOutput)))
 					);
 				},
 				{
@@ -224,6 +233,7 @@ export async function runTinyGoBrowserProbe({
 			);
 		}
 
+		await stopLoadingProgressProbe(page);
 		const summary = await readProbeSummary(
 			page,
 			activeState,
@@ -234,6 +244,7 @@ export async function runTinyGoBrowserProbe({
 		if (summary.pageErrors.length > 0) {
 			throw new Error(`page errors detected\n${JSON.stringify(summary, null, 2)}`);
 		}
+		assertLoadingProgressTrace(summary.progressTrace, 'TinyGo');
 		if (summary.transcript.includes('TinyGo compilation failed')) {
 			throw new Error(`TinyGo run failed\n${JSON.stringify(summary, null, 2)}`);
 		}

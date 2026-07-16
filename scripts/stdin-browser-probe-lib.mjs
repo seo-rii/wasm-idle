@@ -1,5 +1,11 @@
 import { chromium } from 'playwright-core';
 
+import {
+	assertLoadingProgressTrace,
+	installLoadingProgressProbe,
+	readLoadingProgressTrace,
+	stopLoadingProgressProbe
+} from './browser-progress-probe.mjs';
 import { resolveChromiumExecutable } from './rust-browser-probe-lib.mjs';
 
 /**
@@ -24,6 +30,39 @@ function filterBenignPageErrors(pageErrors) {
 			!entry.includes('Missing requestHandler or method: getCodeFixesAtPosition') &&
 			!entry.includes('Missing requestHandler or method: getNavigationTree')
 	);
+}
+
+export function classifyTerminalRun(previousTranscript, transcript, expectedOutput) {
+	if (transcript === previousTranscript) return 'running';
+	const delta = transcript.startsWith(previousTranscript)
+		? transcript.slice(previousTranscript.length)
+		: transcript;
+	if (delta.includes(expectedOutput)) return 'success';
+	if (
+		/process exited with code \d+/i.test(delta) ||
+		delta.includes('Process finished after') ||
+		delta.includes('\x1b[1;3;31m')
+	) {
+		return 'failure';
+	}
+	return 'running';
+}
+
+export async function withWallClockTimeout(promise, timeoutMs, label = 'browser operation') {
+	let timeoutId;
+	try {
+		return await Promise.race([
+			Promise.resolve(promise),
+			new Promise((_, reject) => {
+				timeoutId = setTimeout(
+					() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)),
+					timeoutMs
+				);
+			})
+		]);
+	} finally {
+		clearTimeout(timeoutId);
+	}
 }
 
 /**
@@ -54,23 +93,35 @@ async function readActiveState(page) {
  * @param {BrowserConsoleMessage[]} consoleMessages
  */
 async function readProbeSummary(page, activeState, pageErrors, consoleMessages) {
+	const readTimeoutMs = 2_000;
 	const transcript =
-		(await page
-			.locator('[data-testid="terminal-debug-output"]')
-			.textContent()
-			.catch(() => '')) || '';
+		(await withWallClockTimeout(
+			page
+				.locator('[data-testid="terminal-debug-output"]')
+				.textContent({ timeout: readTimeoutMs }),
+			readTimeoutMs + 250,
+			'terminal summary read'
+		).catch(() => '')) || '';
+	const progressTrace = await withWallClockTimeout(
+		readLoadingProgressTrace(page),
+		readTimeoutMs,
+		'progress summary read'
+	).catch(() => []);
 	return {
 		activeState,
 		consoleTail: summarizeConsole(consoleMessages),
 		finalUrl: page.url(),
 		language:
-			(await page
-				.locator('select')
-				.first()
-				.inputValue()
-				.catch(() => '')) || '',
+			(await withWallClockTimeout(
+				page.locator('select').first().inputValue({ timeout: readTimeoutMs }),
+				readTimeoutMs + 250,
+				'language summary read'
+			).catch(() => '')) || '',
 		pageErrors,
-		title: await page.title().catch(() => ''),
+		progressTrace,
+		title: await withWallClockTimeout(page.title(), readTimeoutMs, 'title summary read').catch(
+			() => ''
+		),
 		transcript
 	};
 }
@@ -135,6 +186,23 @@ export async function runStdinBrowserProbe(options) {
 	const consoleMessages = [];
 	/** @type {string[]} */
 	const pageErrors = [];
+	/** @type {string[]} */
+	const preselectionRuntimeRequests = [];
+	/** @type {string[]} */
+	const selectedRuntimeRequests = [];
+	let languageSelected = false;
+	page.on('request', (request) => {
+		const pathname = new URL(request.url()).pathname;
+		if (
+			/\/(?:clang\/bin|clangd|pyodide|teavm|webr|wasm-(?!idle(?:\/|$))[^/]+)\//u.test(
+				pathname
+			)
+		) {
+			(languageSelected ? selectedRuntimeRequests : preselectionRuntimeRequests).push(
+				request.url()
+			);
+		}
+	});
 	page.on('console', (message) => {
 		consoleMessages.push({
 			type: message.type(),
@@ -200,6 +268,16 @@ export async function runStdinBrowserProbe(options) {
 			undefined,
 			{ timeout: runTimeoutMs }
 		);
+		if (preselectionRuntimeRequests.length > 0) {
+			throw new Error(
+				`runtime assets loaded before selecting ${language}\n${JSON.stringify(
+					preselectionRuntimeRequests,
+					null,
+					2
+				)}`
+			);
+		}
+		languageSelected = true;
 		await page.locator('select').selectOption(language);
 		await page.waitForFunction(
 			(expectedLanguage) =>
@@ -334,6 +412,7 @@ export async function runStdinBrowserProbe(options) {
 				)}`
 			);
 		}
+		await installLoadingProgressProbe(page);
 		activeState = await readActiveState(page);
 		const usePreloadedStdin = preloadStdin || !activeState.sharedArrayBuffer;
 		if (usePreloadedStdin) {
@@ -354,55 +433,102 @@ export async function runStdinBrowserProbe(options) {
 			}
 		}
 		await page.locator('button.action-button--run').first().click();
+		/** @type {unknown} */
+		let stdinDeliveryError = null;
+		let stdinDelivery = Promise.resolve();
 		if (!usePreloadedStdin) {
-			await page.evaluate(async (text) => {
-				await /** @type {any} */ (window).__wasmIdleDebug.writeTerminalInput(text, false);
-			}, stdinText);
-		}
-		if (sendEof && !usePreloadedStdin) {
-			await page.waitForTimeout(500);
-			await page.evaluate(async () => {
-				await /** @type {any} */ (window).__wasmIdleDebug.writeTerminalInput('', true);
+			stdinDelivery = (async () => {
+				await page.evaluate(async (text) => {
+					await /** @type {any} */ (window).__wasmIdleDebug.writeTerminalInput(
+						text,
+						false
+					);
+				}, stdinText);
+				if (sendEof) {
+					await page.waitForTimeout(500);
+					await page.evaluate(async () => {
+						await /** @type {any} */ (window).__wasmIdleDebug.writeTerminalInput(
+							'',
+							true
+						);
+					});
+				}
+			})().catch((error) => {
+				stdinDeliveryError = error;
 			});
 		}
 
-		try {
-			await page.waitForFunction(
-				({ previousTranscript, requiredOutput }) => {
-					const text =
-						document.querySelector('[data-testid="terminal-debug-output"]')
-							?.textContent || '';
-					return text !== previousTranscript && text.includes(requiredOutput);
-				},
-				{
-					previousTranscript: initialTranscript,
-					requiredOutput: expectedOutput
-				},
-				{
-					polling: 250,
-					timeout: runTimeoutMs
-				}
+		const runDeadline = Date.now() + runTimeoutMs;
+		let terminalRunStatus = 'running';
+		while (terminalRunStatus === 'running' && !stdinDeliveryError && Date.now() < runDeadline) {
+			const pollTimeoutMs = Math.max(1, Math.min(1_000, runDeadline - Date.now()));
+			const transcript =
+				(await withWallClockTimeout(
+					page
+						.locator('[data-testid="terminal-debug-output"]')
+						.textContent({ timeout: pollTimeoutMs }),
+					pollTimeoutMs + 250,
+					'terminal poll'
+				).catch(() => '')) || '';
+			terminalRunStatus = classifyTerminalRun(initialTranscript, transcript, expectedOutput);
+			if (terminalRunStatus === 'running') {
+				await withWallClockTimeout(page.waitForTimeout(250), 500, 'terminal poll delay').catch(
+					() => {}
+				);
+			}
+		}
+		if (stdinDeliveryError) {
+			throw new Error(
+				`stdin browser probe could not deliver ${language} input: ${String(stdinDeliveryError)}\n${JSON.stringify(
+					await readProbeSummary(page, activeState, pageErrors, consoleMessages),
+					null,
+					2
+				)}`
 			);
-		} catch (error) {
+		}
+		if (terminalRunStatus === 'running') {
 			throw new Error(
 				`stdin browser probe timed out waiting for ${language} output\n${JSON.stringify(
 					await readProbeSummary(page, activeState, pageErrors, consoleMessages),
 					null,
 					2
-				)}`,
-				{ cause: error }
+				)}`
+			);
+		}
+		if (terminalRunStatus === 'failure') {
+			throw new Error(
+				`stdin browser probe observed ${language} failure before expected output\n${JSON.stringify(
+					await readProbeSummary(page, activeState, pageErrors, consoleMessages),
+					null,
+					2
+				)}`
+			);
+		}
+		await stdinDelivery;
+		if (stdinDeliveryError) {
+			throw new Error(
+				`stdin browser probe could not finish delivering ${language} input: ${String(stdinDeliveryError)}\n${JSON.stringify(
+					await readProbeSummary(page, activeState, pageErrors, consoleMessages),
+					null,
+					2
+				)}`
 			);
 		}
 		await page.waitForFunction(
 			() =>
-				(document.querySelector('[data-testid="terminal-debug-output"]')?.textContent || '').includes(
-					'Process finished after'
-				),
+				(
+					document.querySelector('[data-testid="terminal-debug-output"]')?.textContent ||
+					''
+				).includes('Process finished after'),
 			undefined,
 			{ polling: 100, timeout: runTimeoutMs }
 		);
 
-		const summary = await readProbeSummary(page, activeState, pageErrors, consoleMessages);
+		await stopLoadingProgressProbe(page);
+		const summary = {
+			...(await readProbeSummary(page, activeState, pageErrors, consoleMessages)),
+			runtimeRequests: [...new Set(selectedRuntimeRequests)]
+		};
 		const relevantPageErrors = filterBenignPageErrors(summary.pageErrors);
 		if (relevantPageErrors.length > 0) {
 			throw new Error(`page errors detected\n${JSON.stringify(summary, null, 2)}`);
@@ -426,10 +552,18 @@ export async function runStdinBrowserProbe(options) {
 				`stdin browser run did not finish\n${JSON.stringify(summary, null, 2)}`
 			);
 		}
+		try {
+			assertLoadingProgressTrace(summary.progressTrace, language);
+		} catch (error) {
+			throw new Error(
+				`${error instanceof Error ? error.message : String(error)}\n${JSON.stringify(summary, null, 2)}`,
+				{ cause: error }
+			);
+		}
 		return summary;
 	} finally {
-		await page.close().catch(() => {});
-		await context.close().catch(() => {});
-		await browser.close().catch(() => {});
+		await withWallClockTimeout(page.close(), 2_000, 'page close').catch(() => {});
+		await withWallClockTimeout(context.close(), 2_000, 'browser context close').catch(() => {});
+		await withWallClockTimeout(browser.close(), 5_000, 'browser close').catch(() => {});
 	}
 }

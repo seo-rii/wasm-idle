@@ -1,5 +1,11 @@
 import { chromium } from 'playwright-core';
 
+import {
+	assertLoadingProgressTrace,
+	installLoadingProgressProbe,
+	readLoadingProgressTrace,
+	stopLoadingProgressProbe
+} from './browser-progress-probe.mjs';
 import { resolveChromiumExecutable } from './rust-browser-probe-lib.mjs';
 
 const staleBinaryenBridgePath = '/' + 'api/binaryen-command';
@@ -111,6 +117,7 @@ async function readProbeSummary(
 	const storedCode = await page
 		.evaluate(() => window.localStorage.getItem('code') || '')
 		.catch(() => '');
+	const progressTrace = await readLoadingProgressTrace(page);
 	return {
 		activeState,
 		binaryenBridgeRequests,
@@ -123,6 +130,7 @@ async function readProbeSummary(
 		moduleResolutionErrors: findModuleResolutionErrors(consoleMessages),
 		ocamlConsoleErrors: findOcamlConsoleErrors(consoleMessages),
 		pageErrors,
+		progressTrace,
 		selectedOcamlBackend,
 		storedCode,
 		title: await page.title().catch(() => ''),
@@ -309,6 +317,7 @@ export async function runOcamlBrowserProbe({
 				.catch(() => '')) || '';
 		const initialFinishedCount = (initialTranscript.match(/Process finished after/g) || [])
 			.length;
+		await installLoadingProgressProbe(page);
 		await page.locator('button.action-button--run').first().click();
 		if (stdinText || sendEof) {
 			if (stdinMethod === 'keyboard') {
@@ -369,8 +378,8 @@ export async function runOcamlBrowserProbe({
 						const finishedCount = (text.match(/Process finished after/g) || []).length;
 						return (
 							text.includes('OCaml compilation failed') ||
-							finishedCount >= previousFinishedCount + 1 ||
-							(Boolean(requiredOutput) && text.includes(requiredOutput))
+							(finishedCount >= previousFinishedCount + 1 &&
+								(!requiredOutput || text.includes(requiredOutput)))
 						);
 					},
 					{
@@ -402,8 +411,8 @@ export async function runOcamlBrowserProbe({
 						const finishedCount = (text.match(/Process finished after/g) || []).length;
 						return (
 							text.includes('OCaml compilation failed') ||
-							finishedCount >= previousFinishedCount + 1 ||
-							(Boolean(requiredOutput) && text.includes(requiredOutput))
+							(finishedCount >= previousFinishedCount + 1 &&
+								(!requiredOutput || text.includes(requiredOutput)))
 						);
 					},
 					{
@@ -424,6 +433,7 @@ export async function runOcamlBrowserProbe({
 			}
 		}
 
+		await stopLoadingProgressProbe(page);
 		const summary = await readProbeSummary(
 			page,
 			activeState,
@@ -446,6 +456,7 @@ export async function runOcamlBrowserProbe({
 		if (summary.ocamlConsoleErrors.length > 0) {
 			throw new Error(`ocaml console errors detected\n${JSON.stringify(summary, null, 2)}`);
 		}
+		assertLoadingProgressTrace(summary.progressTrace, `OCaml (${backend})`);
 		if (!summary.transcript.includes(expectedOutput)) {
 			throw new Error(
 				`expected OCaml output "${expectedOutput}" was not found\n${JSON.stringify(summary, null, 2)}`

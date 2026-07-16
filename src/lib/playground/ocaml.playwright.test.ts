@@ -10,6 +10,10 @@ import {
 } from '../../../scripts/browser-preview-server.mjs';
 import { runOcamlBrowserProbe } from '../../../scripts/ocaml-browser-probe-lib.mjs';
 
+const ocamlBrowserTestTimeoutMs = Number(
+	process.env.WASM_IDLE_OCAML_TEST_TIMEOUT_MS || '900000'
+);
+
 describe('wasm-idle OCaml browser playwright integration', () => {
 	function expectedStaticBinaryenPathPrefix(browserUrl: string) {
 		const pathname = new URL(browserUrl).pathname.replace(/\/$/, '');
@@ -110,7 +114,7 @@ describe('wasm-idle OCaml browser playwright integration', () => {
 				await previewServer.close();
 			}
 		});
-	}, 420_000);
+	}, ocamlBrowserTestTimeoutMs);
 
 	it('accepts terminal-typed stdin on the real browser-native OCaml backend paths', async () => {
 		if (process.env.WASM_IDLE_RUN_REAL_BROWSER_OCAML !== '1') {
@@ -203,5 +207,5 @@ describe('wasm-idle OCaml browser playwright integration', () => {
 				await previewServer.close();
 			}
 		});
-	}, 420_000);
+	}, ocamlBrowserTestTimeoutMs);
 });

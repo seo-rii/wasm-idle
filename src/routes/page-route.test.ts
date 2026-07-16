@@ -839,7 +839,7 @@ describe('example route debug actions', () => {
 		expect(editorOnlyLanguages.has('DUCKDB')).toBe(false);
 	});
 
-	it('surfaces COBOL through the GnuCOBOL wasm-llvm runtime contract', () => {
+	it('surfaces COBOL through the GnuCOBOL llvm-core runtime contract', () => {
 		expect(source).toMatch(/<option value="COBOL">COBOL<\/option>/);
 		expect(source).toMatch(/cobol: 'COBOL'/);
 		expect(source).toMatch(/gnucobol: 'COBOL'/);
@@ -847,7 +847,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/COBOL: 'main\.cob'/);
 		expect(source).toMatch(/COBOL: 'cobol'/);
 		expect(source).toMatch(/GnuCOBOL 3\.2/);
-		expect(source).toMatch(/Use `ACCEPT` for stdin and `DISPLAY` for stdout/);
+		expect(source).toMatch(/Use `ACCEPT` for stdin and `DISPLAY` for\s+stdout/);
 		expect(editorOnlyLanguages.has('COBOL')).toBe(false);
 	});
 

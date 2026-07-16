@@ -10,6 +10,10 @@ import {
 } from '../../../scripts/browser-preview-server.mjs';
 import { runTinyGoBrowserProbe } from '../../../scripts/tinygo-browser-probe-lib.mjs';
 
+const tinyGoBrowserTestTimeoutMs = Number(
+	process.env.WASM_IDLE_TINYGO_TEST_TIMEOUT_MS || '600000'
+);
+
 describe('wasm-idle TinyGo browser playwright integration', () => {
 	it('runs the real TinyGo page path through the browser runtime by default', async () => {
 		if (process.env.WASM_IDLE_RUN_REAL_BROWSER_TINYGO !== '1') {
@@ -71,5 +75,5 @@ describe('wasm-idle TinyGo browser playwright integration', () => {
 				await previewServer.close();
 			}
 		});
-	}, 420_000);
+	}, tinyGoBrowserTestTimeoutMs);
 });

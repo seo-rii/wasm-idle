@@ -52,32 +52,36 @@ describe('executeTerminalRun', () => {
 		expect(result).toBe(false);
 	});
 
-	it('marks loading complete before execute starts', async () => {
+	it('keeps progress connected through execute and completes it afterwards', async () => {
 		const values: number[] = [];
 		const stages: Array<string | undefined> = [];
+		const progress = {
+			set(value: number, stage?: string) {
+				values.push(value);
+				stages.push(stage);
+			}
+		};
 		const terminal = {
 			clear: vi.fn(async () => {}),
 			prepare: vi.fn(async (_language, _code, _log, progress) => {
 				progress?.set?.(0.5, 'Compiling and linking Nim output');
 				return true;
 			}),
-			run: vi.fn(async () => 'ok')
+			run: vi.fn(async (_language, _code, _log, progress) => {
+				progress?.set?.(0.75, 'Starting runtime');
+				return 'ok';
+			})
 		};
 
 		await executeTerminalRun({
 			terminal,
 			language: 'PYTHON',
 			code: 'print(1)',
-			progress: {
-				set(value: number, stage?: string) {
-					values.push(value);
-					stages.push(stage);
-				}
-			}
+			progress
 		});
 
-		expect(values).toEqual([0.5, 1]);
-		expect(stages).toEqual(['Compiling and linking Nim output', undefined]);
-		expect(terminal.run).toHaveBeenCalledWith('PYTHON', 'print(1)', true, undefined, [], {});
+		expect(values).toEqual([0.5, 0.75, 1]);
+		expect(stages).toEqual(['Compiling and linking Nim output', 'Starting runtime', undefined]);
+		expect(terminal.run).toHaveBeenCalledWith('PYTHON', 'print(1)', true, progress, [], {});
 	});
 });

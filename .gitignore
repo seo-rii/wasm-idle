@@ -13,6 +13,7 @@ runtimes/wasm-clang/artifacts/
 
 # Local build caches and generated sync outputs
 .cache/
+**/.svelte-kit/
 static/.cache/
 static/clang/bin/
 static/clangd/

@@ -49,6 +49,8 @@ export type WasmIdleLanguageId =
 	| 'SHELL'
 	| 'CLOJURESCRIPT'
 	| 'CLJS'
+	| 'FORTRAN'
+	| 'F77'
 	| 'COBOL'
 	| 'COB'
 	| 'CBL'
@@ -110,6 +112,7 @@ export const supportedLanguageIds = [
 	'NIM',
 	'BASH',
 	'CLOJURESCRIPT',
+	'FORTRAN',
 	'COBOL',
 	'TINYGO',
 	'OCAML',
@@ -154,6 +157,7 @@ export const DEFAULT_DEFERRED_PROGRESS_LANGUAGES = new Set<string>([
 	'NIM',
 	'BASH',
 	'CLOJURESCRIPT',
+	'FORTRAN',
 	'COBOL',
 	'OCAML',
 	'JAVASCRIPT',
@@ -194,6 +198,7 @@ const LANGUAGE_ALIASES: Record<string, string> = {
 	SH: 'BASH',
 	SHELL: 'BASH',
 	CLJS: 'CLOJURESCRIPT',
+	F77: 'FORTRAN',
 	COB: 'COBOL',
 	CBL: 'COBOL',
 	GNUCOBOL: 'COBOL',

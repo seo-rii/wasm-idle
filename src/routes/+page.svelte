@@ -567,7 +567,9 @@
 
 	const progressRef = {
 		set(value: number, stage?: string) {
-			progress = value;
+			const next = Math.min(1, Math.max(0, value));
+			if (progress >= 0 && next < progress) return;
+			progress = next;
 			if (stage) progressStage = stage;
 		}
 	};
@@ -2350,8 +2352,9 @@
 		{/if}
 		{#if language === 'COBOL'}
 			<p class="hint">
-				COBOL compiles locally with GnuCOBOL 3.2, then wasm-llvm compiles and links the
-				generated C to WebAssembly. Use `ACCEPT` for stdin and `DISPLAY` for stdout.
+				COBOL compiles locally with GnuCOBOL 3.2, then the llvm-core Clang runtime compiles
+				and links the generated C to WebAssembly. Use `ACCEPT` for stdin and `DISPLAY` for
+				stdout.
 			</p>
 		{/if}
 		{#if language === 'PASCAL'}

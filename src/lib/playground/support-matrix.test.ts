@@ -17,19 +17,21 @@ describe('README support matrix', () => {
 		expect(renderSupportMatrixSection()).toContain('| Scheme');
 	});
 
-	it('keeps stdin-capable execution languages tied to browser IO coverage', () => {
+	it('keeps every execution language tied to real browser coverage', () => {
 		const rowsMissingBrowserIo = supportMatrixRows
-			.filter((row) => row.stdin !== 'No' && row.stdin !== 'Blocked')
 			.filter((row) => !row.browserTest)
 			.map((row) => row.language);
 
 		expect(rowsMissingBrowserIo).toEqual([]);
 		expect(supportMatrixRows.find((row) => row.language === 'C')?.stdin).toBe('Yes');
 		expect(supportMatrixRows.find((row) => row.language === 'C++')?.stdin).toBe('Yes');
-		expect(supportMatrixRows.find((row) => row.language === 'F#')?.stdin).toBe('Blocked');
+		expect(supportMatrixRows.find((row) => row.language === 'F#')?.stdin).toBe('Yes');
 		expect(supportMatrixRows.find((row) => row.language === 'Fortran')?.stdin).toBe('Yes');
 		expect(supportMatrixRows.find((row) => row.language === 'Haskell')?.stdin).toBe('Yes');
-		expect(supportMatrixRows.find((row) => row.language === 'Scheme')?.stdin).toBe('No');
+		expect(supportMatrixRows.find((row) => row.language === 'Scheme')).toMatchObject({
+			stdin: 'Yes',
+			browserTest: { language: 'LISP' }
+		});
 	});
 
 	it('keeps Swift listed only as a blocked candidate until a real browser compiler bundle exists', () => {

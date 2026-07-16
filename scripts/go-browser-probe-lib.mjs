@@ -1,5 +1,11 @@
 import { chromium } from 'playwright-core';
 
+import {
+	assertLoadingProgressTrace,
+	installLoadingProgressProbe,
+	readLoadingProgressTrace,
+	stopLoadingProgressProbe
+} from './browser-progress-probe.mjs';
 import { resolveChromiumExecutable } from './rust-browser-probe-lib.mjs';
 
 /**
@@ -93,6 +99,7 @@ async function readProbeSummary(page, activeState, pageErrors, consoleMessages, 
 			.locator('#go-target')
 			.inputValue()
 			.catch(() => '')) || '';
+	const progressTrace = await readLoadingProgressTrace(page);
 	return {
 		activeState,
 		availableGoTargets,
@@ -102,6 +109,7 @@ async function readProbeSummary(page, activeState, pageErrors, consoleMessages, 
 		goConsoleErrors: findGoConsoleErrors(consoleMessages),
 		moduleResolutionErrors: findModuleResolutionErrors(consoleMessages),
 		pageErrors,
+		progressTrace,
 		selectedGoTarget,
 		title: await page.title().catch(() => ''),
 		transcript
@@ -211,6 +219,7 @@ export async function runGoBrowserProbe({
 				.catch(() => '')) || '';
 		const initialFinishedCount = (initialTranscript.match(/Process finished after/g) || [])
 			.length;
+		await installLoadingProgressProbe(page);
 		await page.locator('button.action-button--run').first().click();
 		if (stdinMethod === 'keyboard') {
 			await waitForConsoleMessage(
@@ -253,9 +262,9 @@ export async function runGoBrowserProbe({
 					}
 					const finishedCount = (text.match(/Process finished after/g) || []).length;
 					return (
-						text.includes(requiredOutput) ||
 						text.includes('Go compilation failed') ||
-						finishedCount >= previousFinishedCount + 1
+						(finishedCount >= previousFinishedCount + 1 &&
+							(!requiredOutput || text.includes(requiredOutput)))
 					);
 				},
 				{
@@ -275,6 +284,7 @@ export async function runGoBrowserProbe({
 			);
 		}
 
+		await stopLoadingProgressProbe(page);
 		const summary = await readProbeSummary(
 			page,
 			activeState,
@@ -293,6 +303,7 @@ export async function runGoBrowserProbe({
 		if (summary.goConsoleErrors.length > 0) {
 			throw new Error(`go console errors detected\n${JSON.stringify(summary, null, 2)}`);
 		}
+		assertLoadingProgressTrace(summary.progressTrace, `Go (${target})`);
 		if (summary.transcript.includes('Go compilation failed')) {
 			throw new Error(`Go run failed\n${JSON.stringify(summary, null, 2)}`);
 		}

@@ -155,7 +155,7 @@ export const supportMatrixRows = [
 	{
 		language: 'C',
 		ids: ['C'],
-		runtime: '@seo-rii/wasm-llvm / Clang WASI',
+		runtime: '@wasm-idle/llvm-core / Clang WASI',
 		stdin: 'Yes',
 		editorSupport: 'clangd',
 		debug: '-',
@@ -168,7 +168,7 @@ export const supportMatrixRows = [
 	{
 		language: 'C++',
 		ids: ['CPP'],
-		runtime: '@seo-rii/wasm-llvm / Clang WASI',
+		runtime: '@wasm-idle/llvm-core / Clang WASI',
 		stdin: 'Yes',
 		editorSupport: 'clangd',
 		debug: 'Trace',
@@ -181,7 +181,7 @@ export const supportMatrixRows = [
 	{
 		language: 'Objective-C',
 		ids: ['OBJC'],
-		runtime: 'GNUstep libobjc2 + @seo-rii/wasm-llvm',
+		runtime: 'GNUstep libobjc2 + @wasm-idle/llvm-core',
 		stdin: 'Yes',
 		editorSupport: 'clangd',
 		debug: '-',
@@ -273,9 +273,14 @@ export const supportMatrixRows = [
 		language: 'F#',
 		ids: ['FSHARP'],
 		runtime: 'wasm-dotnet',
-		stdin: 'Blocked',
+		stdin: 'Yes',
 		editorSupport: 'compiler diagnostics',
-		debug: '-'
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/stdin.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_STDIN',
+			language: 'FSHARP'
+		}
 	},
 	{
 		language: 'VB.NET',
@@ -619,9 +624,14 @@ export const supportMatrixRows = [
 		language: 'Scheme',
 		ids: ['LISP'],
 		runtime: 'Puppy Scheme / wasm-lisp',
-		stdin: 'No',
+		stdin: 'Yes',
 		editorSupport: 'syntax',
-		debug: '-'
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/stdin.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_STDIN',
+			language: 'LISP'
+		}
 	},
 	{
 		language: 'Ruby',
@@ -652,7 +662,7 @@ export const supportMatrixRows = [
 	{
 		language: 'Fortran',
 		ids: ['FORTRAN'],
-		runtime: 'f2c + @seo-rii/wasm-llvm',
+		runtime: 'f2c + @wasm-idle/llvm-core',
 		stdin: 'Yes',
 		editorSupport: 'Fortran LSP',
 		debug: '-',
@@ -665,7 +675,7 @@ export const supportMatrixRows = [
 	{
 		language: 'COBOL',
 		ids: ['COBOL'],
-		runtime: 'GnuCOBOL 3.2 + @seo-rii/wasm-llvm',
+		runtime: 'GnuCOBOL 3.2 + @wasm-idle/llvm-core',
 		stdin: 'Yes',
 		editorSupport: 'syntax',
 		debug: '-',
@@ -803,7 +813,9 @@ const runtimeDetailsByLanguage = new Map([
 	[
 		'C',
 		{
-			packageBase: `${npmPackage('@seo-rii/wasm-llvm')} / Clang 22.1.8 WASI sysroot`,
+			packageBase:
+				`${workspacePackage('packages/llvm-core')} / Clang 22.1.8 WASI sysroot ` +
+				`from the ${code('wasm-llvm')} producer`,
 			execution:
 				`${code('clang')} for ${code('wasm32-wasi')}; default ${code('-std=gnu11')}; ` +
 				`WASI preview1 execution supports ${code('stdin')} and ${code('programArgs')}`,
@@ -816,7 +828,9 @@ const runtimeDetailsByLanguage = new Map([
 	[
 		'C++',
 		{
-			packageBase: `${npmPackage('@seo-rii/wasm-llvm')} / Clang 22.1.8 WASI sysroot`,
+			packageBase:
+				`${workspacePackage('packages/llvm-core')} / Clang 22.1.8 WASI sysroot ` +
+				`from the ${code('wasm-llvm')} producer`,
 			execution:
 				`${code('clang++')} for ${code('wasm32-wasi')}; default ${code('-std=gnu++2a')}; ` +
 				`trace debug uses wasm-idle controls; supports ${code('stdin')} and ${code('programArgs')}`,
@@ -830,8 +844,8 @@ const runtimeDetailsByLanguage = new Map([
 		'Objective-C',
 		{
 			packageBase:
-				`GNUstep libobjc2 v2.3 (${code('static/wasm-objectivec/libobjc.a')}) + ` +
-				`${npmPackage('@seo-rii/wasm-llvm')}`,
+				`GNUstep libobjc2 v2.3 assets from the ${code('wasm-llvm')} producer + ` +
+				`${workspacePackage('packages/llvm-core')}`,
 			execution:
 				`${code('clang -x objective-c -fobjc-runtime=gnustep-2.0 -fblocks')} for ` +
 				`${code('wasm32-wasi')}; links ${code('libobjc.a')}, ${code('libgnustep-base.a')}, ` +
@@ -875,7 +889,7 @@ const runtimeDetailsByLanguage = new Map([
 			packageBase:
 				`${workspacePackage('runtimes/wasm-rust')} / ` +
 				`${manifestValue('static/wasm-rust/runtime/runtime-manifest.v3.json', ['version'])} + ` +
-				`integrated LLVM/LLD 22.1.8 from ${code('@seo-rii/wasm-llvm')} producer`,
+				`integrated LLVM/LLD 22.1.8 from the ${code('wasm-llvm')} producer`,
 			execution:
 				`browser host ${code('wasm32-wasip1-threads')}; ` +
 				`${code('rustc -Zthreads=1 -Zcodegen-backend=llvm --crate-type=bin --edition=2024 -Cpanic=abort -Ccodegen-units=1 --emit=link')}; ` +
@@ -926,31 +940,49 @@ const runtimeDetailsByLanguage = new Map([
 	[
 		'C#',
 		{
-			packageBase: `${workspacePackage('runtimes/wasm-dotnet')} / browser-wasm .NET module`,
+			packageBase:
+				`${workspacePackage('runtimes/wasm-dotnet')} / .NET 9.0.16 browser-wasm / ` +
+				`Roslyn C# 4.14.0`,
 			execution:
-				`${code('language=csharp')} compile target ${code('browser-wasm')}; ` +
+				`${code('CSharpCompilationOptions(OutputKind.ConsoleApplication)')}; ` +
+				`${code('concurrentBuild=false')}; target ${code('browser-wasm')}; ` +
+				`language-specific AOT bundle ${code('runtime/csharp/')}; ` +
 				`supports ${code('stdin')} and ${code('programArgs')}`,
-			customization: `${code('runtimeAssets.dotnet.moduleUrl')} or ${code('PUBLIC_WASM_DOTNET_MODULE_URL')}`
+			customization:
+				`${code('runtimeAssets.dotnet.moduleUrl')} or ${code('PUBLIC_WASM_DOTNET_MODULE_URL')}; ` +
+				`${code('programArgs')}, LSP on/off`
 		}
 	],
 	[
 		'F#',
 		{
-			packageBase: `${workspacePackage('runtimes/wasm-dotnet')} / browser-wasm .NET module`,
-			execution: `${code('language=fsharp')} compile target ${code('browser-wasm')}; stdin is currently blocked`,
+			packageBase:
+				`${workspacePackage('runtimes/wasm-dotnet')} / .NET 9.0.16 browser-wasm / ` +
+				`FCS 43.12.204 / FSharp.Core 10.1.204`,
+			execution:
+				`${code('fsc.exe --target:exe --targetprofile:netcore --noframework --simpleresolution --nowin32manifest --debug- --optimize-')}; ` +
+				`language-specific AOT bundle ${code('runtime/fsharp/')}; ` +
+				`supports ${code('stdin')} and ${code('programArgs')}`,
 			customization:
 				`${code('runtimeAssets.dotnet.moduleUrl')} or ${code('PUBLIC_WASM_DOTNET_MODULE_URL')}; ` +
-				`${code('programArgs')}`
+				`${code('programArgs')}, LSP on/off`
 		}
 	],
 	[
 		'VB.NET',
 		{
-			packageBase: `${workspacePackage('runtimes/wasm-dotnet')} / browser-wasm .NET module`,
+			packageBase:
+				`${workspacePackage('runtimes/wasm-dotnet')} / .NET 9.0.16 browser-wasm / ` +
+				`Roslyn Visual Basic 4.14.0`,
 			execution:
-				`${code('language=vbnet')} compile target ${code('browser-wasm')}; ` +
+				`${code('VisualBasicCompilationOptions(OutputKind.ConsoleApplication)')}; ` +
+				`${code('concurrentBuild=false')}, ${code('OptionStrict=Off')}, ` +
+				`${code('OptionInfer=On')}, ${code('OptionExplicit=On')}; target ${code('browser-wasm')}; ` +
+				`language-specific AOT bundle ${code('runtime/vbnet/')}; ` +
 				`supports ${code('stdin')} and ${code('programArgs')}`,
-			customization: `${code('runtimeAssets.dotnet.moduleUrl')} or ${code('PUBLIC_WASM_DOTNET_MODULE_URL')}`
+			customization:
+				`${code('runtimeAssets.dotnet.moduleUrl')} or ${code('PUBLIC_WASM_DOTNET_MODULE_URL')}; ` +
+				`${code('programArgs')}, LSP on/off`
 		}
 	],
 	[
@@ -1164,11 +1196,9 @@ const runtimeDetailsByLanguage = new Map([
 	[
 		'AssemblyScript',
 		{
-			packageBase:
-				`${workspacePackage('runtimes/assemblyscript')} / ${npmPackage('assemblyscript')} + ` +
-				npmPackage('@assemblyscript/loader'),
+			packageBase: `${npmPackage('assemblyscript')} + ${npmPackage('@assemblyscript/loader')}`,
 			execution: `AssemblyScript compiler emits WASM and runs through WASI/browser imports; supports ${code('stdin')}`,
-			customization: `${code('programArgs')}, ${code('stdin')}; compiler assets come from bundled package`
+			customization: `${code('programArgs')}, ${code('stdin')}; compiler modules load with the AssemblyScript worker`
 		}
 	],
 	[
@@ -1221,7 +1251,7 @@ const runtimeDetailsByLanguage = new Map([
 		'Scheme',
 		{
 			packageBase: `${workspacePackage('runtimes/wasm-lisp')} / Puppy Scheme WASM component`,
-			execution: `Puppy Scheme compiler/runtime; stdin is not wired`,
+			execution: `Puppy Scheme compiler/runtime; supports ${code('stdin')} and ${code('programArgs')}`,
 			customization:
 				`${code('runtimeAssets.lisp.moduleUrl')} or ${code('PUBLIC_WASM_LISP_MODULE_URL')}; ` +
 				`${code('programArgs')}`
@@ -1252,9 +1282,11 @@ const runtimeDetailsByLanguage = new Map([
 	[
 		'Fortran',
 		{
-			packageBase: `Netlib f2c 2022-09-09 + ${code('@cowasm/f2c 1.0.0')} libf2c + ${npmPackage('@seo-rii/wasm-llvm')}`,
+			packageBase:
+				`Netlib f2c 2022-09-09 + ${code('@cowasm/f2c 1.0.0')} libf2c + ` +
+				`${workspacePackage('packages/llvm-core')}`,
 			execution:
-				`runs ${code('f2c.wasm')} in WASI, compiles generated C with wasm-llvm, links ` +
+				`runs ${code('f2c.wasm')} in WASI, compiles generated C with the llvm-core Clang host, links ` +
 				`${code('libf2c.a')}, then executes the resulting WASI module with ${code('stdin')} and ` +
 				`${code('programArgs')}`,
 			customization:
@@ -1267,10 +1299,12 @@ const runtimeDetailsByLanguage = new Map([
 	[
 		'COBOL',
 		{
-			packageBase: `GnuCOBOL 3.2 + GMP 6.3.0 + ${npmPackage('@seo-rii/wasm-llvm')}`,
+			packageBase:
+				`GnuCOBOL 3.2 + GMP 6.3.0 assets from the ${code('wasm-llvm')} producer + ` +
+				`${workspacePackage('packages/llvm-core')}`,
 			execution:
 				`translates free-format COBOL with the real GnuCOBOL ${code('cobc')} frontend, compiles ` +
-				`the generated C with wasm-llvm, links libcob/GMP, and executes the resulting WASI module ` +
+				`the generated C with the llvm-core Clang host, links libcob/GMP, and executes the resulting WASI module ` +
 				`with ${code('stdin')} and ${code('programArgs')}`,
 			customization:
 				`${code('runtimeAssets.cobol.baseUrl')} or ${code('PUBLIC_WASM_COBOL_BASE_URL')}; ` +
@@ -1317,9 +1351,7 @@ const runtimeDetailsByLanguage = new Map([
 	[
 		'PHP',
 		{
-			packageBase:
-				`${workspacePackage('runtimes/php')} / ${npmPackage('@php-wasm/web')} + ` +
-				npmPackage('@php-wasm/universal'),
+			packageBase: `${npmPackage('@php-wasm/web')} + ${npmPackage('@php-wasm/universal')}`,
 			execution: `php-wasm runtime, default PHP version ${code('8.4')}; supports ${code('stdin')} and ${code('programArgs')}`,
 			customization:
 				`${code('runtimeAssets.php.version')} or ${code('PUBLIC_WASM_PHP_VERSION')}; ` +
@@ -1475,13 +1507,22 @@ function extractStringArrayFromExportedConst(source, fileName, exportName) {
 			node.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)
 		) {
 			for (const declaration of node.declarationList.declarations) {
+				let initializer = declaration.initializer;
+				while (
+					initializer &&
+					(ts.isAsExpression(initializer) ||
+						ts.isSatisfiesExpression(initializer) ||
+						ts.isParenthesizedExpression(initializer))
+				) {
+					initializer = initializer.expression;
+				}
 				if (
 					ts.isIdentifier(declaration.name) &&
 					declaration.name.text === exportName &&
-					declaration.initializer &&
-					ts.isArrayLiteralExpression(declaration.initializer)
+					initializer &&
+					ts.isArrayLiteralExpression(initializer)
 				) {
-					values = declaration.initializer.elements.map((element) => {
+					values = initializer.elements.map((element) => {
 						if (!ts.isStringLiteral(element)) {
 							throw new Error(
 								`${exportName} in ${fileName} must contain string literals only`
@@ -1501,9 +1542,9 @@ function extractStringArrayFromExportedConst(source, fileName, exportName) {
 
 /** @param {string} rootDir */
 export async function readSupportedLanguageIds(rootDir = process.cwd()) {
-	const filePath = path.join(rootDir, 'src/lib/playground/index.ts');
+	const filePath = path.join(rootDir, 'packages/core/src/languages.ts');
 	const source = await fs.readFile(filePath, 'utf8');
-	return extractStringArrayFromExportedConst(source, filePath, 'supportedLanguages');
+	return extractStringArrayFromExportedConst(source, filePath, 'supportedLanguageIds');
 }
 
 /**
@@ -1573,7 +1614,7 @@ export async function validateSupportMatrix(rootDir = process.cwd()) {
 	assertSameSet(
 		matrixIds,
 		await readSupportedLanguageIds(rootDir),
-		'support matrix rows must match src/lib/playground/index.ts supportedLanguages'
+		'support matrix rows must match packages/core/src/languages.ts supportedLanguageIds'
 	);
 
 	const readmePath = path.join(rootDir, 'README.md');
@@ -1585,9 +1626,8 @@ export async function validateSupportMatrix(rootDir = process.cwd()) {
 	}
 
 	for (const row of supportMatrixRows) {
-		if (row.stdin === 'No' || row.stdin === 'Blocked') continue;
 		if (!row.browserTest) {
-			throw new Error(`${row.language} must declare a browser IO test`);
+			throw new Error(`${row.language} must declare a browser execution test`);
 		}
 		const testPath = path.join(rootDir, row.browserTest.file);
 		const source = await fs.readFile(testPath, 'utf8');

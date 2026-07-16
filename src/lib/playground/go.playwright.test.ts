@@ -12,6 +12,10 @@ import {
 } from '../../../scripts/browser-preview-server.mjs';
 import { runGoBrowserProbe } from '../../../scripts/go-browser-probe-lib.mjs';
 
+const goBrowserTestTimeoutMs = Number(
+	process.env.WASM_IDLE_GO_TEST_TIMEOUT_MS || '1500000'
+);
+
 describe('wasm-idle Go browser playwright integration', () => {
 	it('runs the real Go page path through the bundled wasm-go browser compiler', async () => {
 		if (process.env.WASM_IDLE_RUN_REAL_BROWSER_GO !== '1') {
@@ -110,5 +114,5 @@ describe('wasm-idle Go browser playwright integration', () => {
 				await previewServer.close();
 			}
 		});
-	}, 420_000);
+	}, goBrowserTestTimeoutMs);
 });

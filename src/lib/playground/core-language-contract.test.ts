@@ -182,6 +182,13 @@ describe('core language contract', () => {
 		expect(isDeferredProgressLanguage('sh')).toBe(true);
 	});
 
+	it('exposes Fortran aliases as a deferred browser runtime language', () => {
+		expect(supportedLanguageIds).toContain('FORTRAN');
+		expect(normalizeLanguageId('fortran')).toBe('FORTRAN');
+		expect(normalizeLanguageId('f77')).toBe('FORTRAN');
+		expect(isDeferredProgressLanguage('f77')).toBe(true);
+	});
+
 	it('includes the Bash WEBc url in runtime asset cache keys', () => {
 		const key = createRuntimeAssetsKey({ bash: { webcUrl: '/wasm-bash/bash.webc?v=test' } });
 		expect(key).toContain('"bashWebcUrl":"/wasm-bash/bash.webc?v=test"');

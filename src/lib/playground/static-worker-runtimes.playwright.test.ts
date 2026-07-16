@@ -8,7 +8,7 @@ import {
 	shouldReuseProvidedBrowserUrl,
 	startBrowserPreviewServer
 } from '../../../scripts/browser-preview-server.mjs';
-import { runStdinBrowserProbe } from '../../../scripts/stdin-browser-probe-lib.mjs';
+import { runStdinBrowserProbe as runBaseStdinBrowserProbe } from '../../../scripts/stdin-browser-probe-lib.mjs';
 
 const prologStdinSource = `:- use_module(library(readutil)).
 
@@ -111,6 +111,9 @@ let n =
 
 echo "main=", n + 5
 `;
+
+const runStdinBrowserProbe = (options: Parameters<typeof runBaseStdinBrowserProbe>[0]) =>
+	runBaseStdinBrowserProbe({ ...options, sendEof: true });
 
 async function withPreviewServer(
 	syncScripts: string[],
