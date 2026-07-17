@@ -63,6 +63,12 @@ describe('Terminal source', () => {
 		expect(source).toMatch(
 			/inputCharacters\.splice\(inputCursor, 0, \.\.\.insertedCharacters\);/
 		);
+		expect(source).toContain('let inputEcho = text;');
+		expect(source).toContain('inputEcho += inputTail;');
+		expect(source).toContain('term?.write(inputEcho);');
+		expect(source).not.toMatch(
+			/inputCursor \+= insertedCharacters\.length;\s+term\?\.write\(text\);/
+		);
 		expect(source).toContain('backspaceEcho += `\\x1b[${cursorReturnCellWidth}D`;');
 		expect(source).toContain('if (backspaceEcho) term.write(backspaceEcho);');
 		expect(source).not.toContain('term.write(`\\x1b[${cursorReturnCellWidth}D`);');

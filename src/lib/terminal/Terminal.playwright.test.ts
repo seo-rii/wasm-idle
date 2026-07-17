@@ -23,7 +23,16 @@ const resumedCompositionLine = fs.readLineSync(0);
 console.log(\`resumed=\${JSON.stringify(resumedCompositionLine.trimEnd())}\`);
 console.log('ready-for-composition-clear-retype');
 const retypedCompositionLine = fs.readLineSync(0);
-console.log(\`retyped=\${JSON.stringify(retypedCompositionLine.trimEnd())}\`);`;
+console.log(\`retyped=\${JSON.stringify(retypedCompositionLine.trimEnd())}\`);
+console.log('ready-for-cursor-composition-space');
+const cursorCompositionLine = fs.readLineSync(0);
+console.log(\`cursorComposition=\${JSON.stringify(cursorCompositionLine.trimEnd())}\`);
+console.log('ready-for-cursor-composition-reference');
+const cursorCompositionReferenceLine = fs.readLineSync(0);
+console.log(\`cursorCompositionReference=\${JSON.stringify(cursorCompositionReferenceLine.trimEnd())}\`);
+console.log('ready-for-backspace-recomposition-space');
+const backspaceRecompositionLine = fs.readLineSync(0);
+console.log(\`backspaceRecomposition=\${JSON.stringify(backspaceRecompositionLine.trimEnd())}\`);`;
 
 describe('terminal Hangul input in Chromium', () => {
 	it('keeps IME composition, CJK cursor movement, and Backspace aligned before Enter', async () => {
@@ -646,6 +655,269 @@ describe('terminal Hangul input in Chromium', () => {
 					'';
 				expect(compositionTranscript).toContain('resumed="한글"');
 				expect(compositionTranscript).toContain('retyped="다시"');
+
+				await page.waitForFunction(() =>
+					document
+						.querySelector('[data-testid="terminal-debug-output"]')
+						?.textContent?.includes('ready-for-cursor-composition-space')
+				);
+				await textarea.evaluate((element) => {
+					const input = element as HTMLTextAreaElement;
+					input.value = '';
+					input.dispatchEvent(
+						new CompositionEvent('compositionstart', { bubbles: true, data: '' })
+					);
+					input.value = '안녕';
+					input.dispatchEvent(
+						new CompositionEvent('compositionupdate', { bubbles: true, data: '안녕' })
+					);
+					input.dispatchEvent(
+						new InputEvent('input', {
+							bubbles: true,
+							data: '안녕',
+							inputType: 'insertCompositionText'
+						})
+					);
+				});
+				await page.waitForTimeout(50);
+				await page.keyboard.press('Space');
+				await page.waitForTimeout(50);
+				expect(
+					await page
+						.locator('.composition-view')
+						.evaluate((element) => element.classList.contains('active'))
+				).toBe(false);
+
+				await page.keyboard.press('ArrowLeft');
+				await page.keyboard.press('ArrowLeft');
+				await textarea.evaluate((element) => {
+					const input = element as HTMLTextAreaElement;
+					input.dispatchEvent(
+						new CompositionEvent('compositionstart', { bubbles: true, data: '' })
+					);
+					input.value += '안녕';
+					input.dispatchEvent(
+						new CompositionEvent('compositionupdate', { bubbles: true, data: '안녕' })
+					);
+					input.dispatchEvent(
+						new InputEvent('input', {
+							bubbles: true,
+							data: '안녕',
+							inputType: 'insertCompositionText'
+						})
+					);
+				});
+				await page.waitForTimeout(50);
+				await page.keyboard.press('Space');
+				await page.waitForTimeout(100);
+				const cursorCompositionClip = await page
+					.locator('.xterm-screen')
+					.evaluate((screen) => {
+						(screen as HTMLElement).style.backgroundColor = '#fff';
+						const screenBounds = screen.getBoundingClientRect();
+						const compositionView =
+							screen.querySelector<HTMLElement>('.composition-view');
+						return {
+							height: Math.round(
+								Number.parseFloat(compositionView?.style.height || '0')
+							),
+							width: Math.floor(screenBounds.width),
+							x: Math.round(screenBounds.x),
+							y: Math.round(
+								screenBounds.y +
+									Number.parseFloat(compositionView?.style.top || '0')
+							)
+						};
+					});
+				expect(cursorCompositionClip.height).toBeGreaterThan(0);
+				const cursorCompositionScreen = await page.screenshot({
+					clip: cursorCompositionClip
+				});
+				await page.keyboard.press('Enter');
+				await page.waitForFunction(() =>
+					document
+						.querySelector('[data-testid="terminal-debug-output"]')
+						?.textContent?.includes('cursorComposition="안안녕 녕"')
+				);
+				const cursorCompositionTranscript =
+					(await page.locator('[data-testid="terminal-debug-output"]').textContent()) ||
+					'';
+				expect(cursorCompositionTranscript).toContain('cursorComposition="안안녕 녕"');
+
+				await page.waitForFunction(() =>
+					document
+						.querySelector('[data-testid="terminal-debug-output"]')
+						?.textContent?.includes('ready-for-cursor-composition-reference')
+				);
+				await textarea.evaluate((element) => {
+					const input = element as HTMLTextAreaElement;
+					input.value = '';
+					input.dispatchEvent(
+						new CompositionEvent('compositionstart', { bubbles: true, data: '' })
+					);
+					input.value = '안안녕';
+					input.dispatchEvent(
+						new CompositionEvent('compositionupdate', { bubbles: true, data: '안안녕' })
+					);
+					input.dispatchEvent(
+						new InputEvent('input', {
+							bubbles: true,
+							data: '안안녕',
+							inputType: 'insertCompositionText'
+						})
+					);
+				});
+				await page.waitForTimeout(50);
+				await page.keyboard.press('Space');
+				await textarea.evaluate((element) => {
+					const input = element as HTMLTextAreaElement;
+					input.dispatchEvent(
+						new CompositionEvent('compositionstart', { bubbles: true, data: '' })
+					);
+					input.value += '녕';
+					input.dispatchEvent(
+						new CompositionEvent('compositionupdate', { bubbles: true, data: '녕' })
+					);
+					input.dispatchEvent(
+						new InputEvent('input', {
+							bubbles: true,
+							data: '녕',
+							inputType: 'insertCompositionText'
+						})
+					);
+				});
+				await page.waitForTimeout(50);
+				await page.keyboard.press('Space');
+				await page.keyboard.press('ArrowLeft');
+				await page.keyboard.press('ArrowLeft');
+				await page.waitForTimeout(100);
+				const cursorCompositionReferenceClip = await page
+					.locator('.xterm-screen')
+					.evaluate((screen) => {
+						const screenBounds = screen.getBoundingClientRect();
+						const compositionView =
+							screen.querySelector<HTMLElement>('.composition-view');
+						return {
+							height: Math.round(
+								Number.parseFloat(compositionView?.style.height || '0')
+							),
+							width: Math.floor(screenBounds.width),
+							x: Math.round(screenBounds.x),
+							y: Math.round(
+								screenBounds.y +
+									Number.parseFloat(compositionView?.style.top || '0')
+							)
+						};
+					});
+				const cursorCompositionReferenceScreen = await page.screenshot({
+					clip: cursorCompositionReferenceClip
+				});
+				expect(cursorCompositionScreen.equals(cursorCompositionReferenceScreen)).toBe(true);
+				await page.keyboard.press('ArrowRight');
+				await page.keyboard.press('ArrowRight');
+				await page.keyboard.press('Enter');
+				await page.waitForFunction(() =>
+					document
+						.querySelector('[data-testid="terminal-debug-output"]')
+						?.textContent?.includes('cursorCompositionReference="안안녕 녕"')
+				);
+
+				await page.waitForFunction(() =>
+					document
+						.querySelector('[data-testid="terminal-debug-output"]')
+						?.textContent?.includes('ready-for-backspace-recomposition-space')
+				);
+				await textarea.evaluate((element) => {
+					const input = element as HTMLTextAreaElement;
+					input.value = '';
+					input.dispatchEvent(
+						new CompositionEvent('compositionstart', { bubbles: true, data: '' })
+					);
+					input.dispatchEvent(
+						new CompositionEvent('compositionupdate', { bubbles: true, data: '' })
+					);
+				});
+				const backspaceRecompositionBaseline = await page
+					.locator('.composition-view')
+					.evaluate((element) =>
+						Number.parseFloat((element as HTMLElement).style.left || '0')
+					);
+				await textarea.evaluate((element) => {
+					const input = element as HTMLTextAreaElement;
+					input.dispatchEvent(
+						new CompositionEvent('compositionend', { bubbles: true, data: '' })
+					);
+					input.dispatchEvent(
+						new CompositionEvent('compositionstart', { bubbles: true, data: '' })
+					);
+					input.value = '안녕';
+					input.dispatchEvent(
+						new CompositionEvent('compositionupdate', { bubbles: true, data: '안녕' })
+					);
+					input.dispatchEvent(
+						new InputEvent('input', {
+							bubbles: true,
+							data: '안녕',
+							inputType: 'insertCompositionText'
+						})
+					);
+				});
+				await page.waitForTimeout(50);
+				await page.keyboard.press('Space');
+				await page.keyboard.press('Backspace');
+				await page.keyboard.press('Backspace');
+				await textarea.evaluate((element) => {
+					const input = element as HTMLTextAreaElement;
+					input.dispatchEvent(
+						new CompositionEvent('compositionstart', { bubbles: true, data: '' })
+					);
+					input.value += '안녕';
+					input.dispatchEvent(
+						new CompositionEvent('compositionupdate', { bubbles: true, data: '안녕' })
+					);
+					input.dispatchEvent(
+						new InputEvent('input', {
+							bubbles: true,
+							data: '안녕',
+							inputType: 'insertCompositionText'
+						})
+					);
+				});
+				await page.waitForTimeout(50);
+				await page.keyboard.press('Space');
+				await page.waitForTimeout(100);
+				await textarea.evaluate((element) => {
+					const input = element as HTMLTextAreaElement;
+					input.dispatchEvent(
+						new CompositionEvent('compositionstart', { bubbles: true, data: '' })
+					);
+					input.dispatchEvent(
+						new CompositionEvent('compositionupdate', { bubbles: true, data: '' })
+					);
+				});
+				const backspaceRecompositionCursorLeft = await page
+					.locator('.composition-view')
+					.evaluate((element) =>
+						Number.parseFloat((element as HTMLElement).style.left || '0')
+					);
+				expect(
+					Math.round(
+						(backspaceRecompositionCursorLeft - backspaceRecompositionBaseline) /
+							cursorMeasurement.cellWidth
+					)
+				).toBe(7);
+				await textarea.evaluate((element) => {
+					(element as HTMLTextAreaElement).dispatchEvent(
+						new CompositionEvent('compositionend', { bubbles: true, data: '' })
+					);
+				});
+				await page.waitForTimeout(50);
+				await page.keyboard.press('Enter');
+				await page.waitForFunction(() =>
+					document
+						.querySelector('[data-testid="terminal-debug-output"]')
+						?.textContent?.includes('backspaceRecomposition="안안녕"')
+				);
 			} finally {
 				await context.close();
 				await browser.close();

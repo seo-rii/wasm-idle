@@ -179,12 +179,13 @@
 		inputCharacters.splice(inputCursor, 0, ...insertedCharacters);
 		input = inputCharacters.join('');
 		inputCursor += insertedCharacters.length;
-		term?.write(text);
+		let inputEcho = text;
 		if (inputTail && term) {
-			term.write(inputTail);
+			inputEcho += inputTail;
 			const inputTailCellWidth = getInputCellWidth(inputTail);
-			if (inputTailCellWidth > 0) term.write(`\x1b[${inputTailCellWidth}D`);
+			if (inputTailCellWidth > 0) inputEcho += `\x1b[${inputTailCellWidth}D`;
 		}
+		term?.write(inputEcho);
 	}
 
 	function getInputCharacters(text: string) {
