@@ -212,9 +212,9 @@ export function resolveCobolRuntimeAssetUrls(
 	const normalized = normalizeBaseUrl(baseUrl);
 	return {
 		manifest: new URL(COBOL_MANIFEST_NAME, normalized).toString(),
-		frontend: new URL(manifest?.frontend.asset || 'cobc.zip', normalized).toString(),
-		rootfs: new URL(manifest?.rootfs.asset || 'rootfs.tar.zip', normalized).toString(),
-		cSysroot: new URL(manifest?.cSysroot.asset || 'c-sysroot.tar.zip', normalized).toString()
+		frontend: new URL(manifest?.frontend.asset || 'cobc.wasm.gz', normalized).toString(),
+		rootfs: new URL(manifest?.rootfs.asset || 'rootfs.tar.gz', normalized).toString(),
+		cSysroot: new URL(manifest?.cSysroot.asset || 'c-sysroot.tar.gz', normalized).toString()
 	};
 }
 

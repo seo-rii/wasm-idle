@@ -130,9 +130,9 @@ import {
 const manifest = {
 	manifestVersion: 1 as const,
 	version: 'test',
-	frontend: { asset: 'cobc.zip', argv0: 'cobc' },
-	rootfs: { asset: 'rootfs.tar.zip' },
-	cSysroot: { asset: 'c-sysroot.tar.zip' },
+	frontend: { asset: 'cobc.wasm.gz', argv0: 'cobc' },
+	rootfs: { asset: 'rootfs.tar.gz' },
+	cSysroot: { asset: 'c-sysroot.tar.gz' },
 	profile: COBOL_LLVM_PROFILE
 };
 
@@ -156,7 +156,7 @@ describe('GnuCOBOL llvm-core runtime', () => {
 			expect.objectContaining({
 				compiler: expect.objectContaining({
 					resourceDir: '/lib/clang/22',
-					sysroot: { asset: expect.stringMatching(/c-sysroot\.tar\.zip$/) }
+					sysroot: { asset: expect.stringMatching(/c-sysroot\.tar\.gz$/) }
 				})
 			})
 		);
@@ -166,10 +166,24 @@ describe('GnuCOBOL llvm-core runtime', () => {
 		expect(parseCobolRuntimeManifest(manifest)).toEqual(manifest);
 		expect(resolveCobolRuntimeAssetUrls('https://cdn.test/cobol', manifest)).toEqual({
 			manifest: 'https://cdn.test/cobol/runtime-manifest.v1.json',
-			frontend: 'https://cdn.test/cobol/cobc.zip',
-			rootfs: 'https://cdn.test/cobol/rootfs.tar.zip',
-			cSysroot: 'https://cdn.test/cobol/c-sysroot.tar.zip'
+			frontend: 'https://cdn.test/cobol/cobc.wasm.gz',
+			rootfs: 'https://cdn.test/cobol/rootfs.tar.gz',
+			cSysroot: 'https://cdn.test/cobol/c-sysroot.tar.gz'
 		});
+		expect(
+			resolveCobolRuntimeAssetUrls('https://cdn.test/cobol', {
+				...manifest,
+				frontend: { asset: 'cobc.zip', argv0: 'cobc' },
+				rootfs: { asset: 'rootfs.tar.zip' },
+				cSysroot: { asset: 'c-sysroot.tar.zip' }
+			})
+		).toEqual(
+			expect.objectContaining({
+				frontend: 'https://cdn.test/cobol/cobc.zip',
+				rootfs: 'https://cdn.test/cobol/rootfs.tar.zip',
+				cSysroot: 'https://cdn.test/cobol/c-sysroot.tar.zip'
+			})
+		);
 		expect(() => parseCobolRuntimeManifest({ ...manifest, manifestVersion: 2 })).toThrow(
 			'manifestVersion'
 		);
