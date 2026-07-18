@@ -1,4 +1,4 @@
-import * as zip from '@zip.js/zip.js';
+import { Unzip, UnzipInflate } from 'fflate';
 
 export interface ProgressSink {
 	set?: (value: number) => void;
@@ -29,34 +29,54 @@ export const readBuffer = async (name: string, progress?: ProgressSink) => {
 				throw new Error(`Failed to load runtime asset ${resolvedUrl}: ${response.status}`);
 			}
 			const contentLength = +(response.headers.get('Content-Length') || 0);
-			if (!response.body) {
-				return new Uint8Array(await response.arrayBuffer());
-			}
-			const r = response.body.getReader();
-
+			let extracted: Uint8Array | undefined;
+			let archiveError: unknown;
+			let selected = false;
+			const unzip = new Unzip((file) => {
+				if (selected || file.name.endsWith('/')) return;
+				selected = true;
+				const chunks: Uint8Array[] = [];
+				let extractedLength = 0;
+				file.ondata = (error, data, final) => {
+					if (error) {
+						archiveError = error;
+						return;
+					}
+					if (data.byteLength > 0) {
+						chunks.push(data);
+						extractedLength += data.byteLength;
+					}
+					if (!final) return;
+					extracted = new Uint8Array(extractedLength);
+					let offset = 0;
+					for (const chunk of chunks) {
+						extracted.set(chunk, offset);
+						offset += chunk.byteLength;
+					}
+				};
+				file.start();
+			});
+			unzip.register(UnzipInflate);
 			let receivedLength = 0;
-			const chunks: Uint8Array[] = [];
-			while (true) {
-				const { done, value } = await r.read();
-				if (done) break;
-				if (!value) continue;
-				chunks.push(Uint8Array.from(value));
-				receivedLength += value.length;
-				if (contentLength > 0) progress?.set?.(receivedLength / contentLength);
+			if (response.body) {
+				const reader = response.body.getReader();
+				while (true) {
+					const { done, value } = await reader.read();
+					if (done) break;
+					if (!value) continue;
+					receivedLength += value.byteLength;
+					unzip.push(value);
+					if (archiveError) throw archiveError;
+					if (contentLength > 0) progress?.set?.(receivedLength / contentLength);
+				}
+				unzip.push(new Uint8Array(0), true);
+			} else {
+				const source = new Uint8Array(await response.arrayBuffer());
+				receivedLength = source.byteLength;
+				unzip.push(source, true);
 			}
-			const chunksAll = new Uint8Array(receivedLength);
-			let position = 0;
-			for (const chunk of chunks) {
-				chunksAll.set(chunk, position);
-				position += chunk.length;
-			}
-
-			const reader = new zip.ZipReader(new zip.Uint8ArrayReader(chunksAll));
-			const entries = await reader.getEntries();
-			for (const entry of entries) {
-				if (!('getData' in entry)) continue;
-				return await entry.getData(new zip.Uint8ArrayWriter());
-			}
+			if (archiveError) throw archiveError;
+			if (extracted) return extracted;
 			throw new Error('No entry found');
 		})().catch((error) => {
 			delete bufferStore[name];

@@ -1,14 +1,12 @@
-import * as zip from '@zip.js/zip.js';
+import { zipSync } from 'fflate';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { compile, getInstance, readBuffer } from '../src/wasm.js';
 
 const emptyWasm = Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0);
 
-async function zipBytes(filename: string, contents: Uint8Array) {
-	const writer = new zip.ZipWriter(new zip.Uint8ArrayWriter());
-	await writer.add(filename, new zip.Uint8ArrayReader(contents));
-	return writer.close();
+async function zipBytes(filename: string, contents: Uint8Array, level: 0 | 6 = 6) {
+	return zipSync({ [filename]: contents }, { level });
 }
 
 describe('WebAssembly loading utilities', () => {
@@ -39,6 +37,67 @@ describe('WebAssembly loading utilities', () => {
 
 		await expect(readBuffer(url, progress)).resolves.toEqual(Uint8Array.of(1, 2, 3, 4));
 		expect(progress.set).toHaveBeenLastCalledWith(1);
+	});
+
+	it('streams chunked stored ZIP responses and skips directory entries', async () => {
+		const archive = zipSync(
+			{
+				'fixture/': new Uint8Array(),
+				'fixture/data.bin': Uint8Array.of(5, 6, 7, 8)
+			},
+			{ level: 0 }
+		);
+		const url = 'https://cdn.test/llvm/chunked-stored.zip';
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(
+				async () =>
+					new Response(
+						new ReadableStream({
+							start(controller) {
+								for (let offset = 0; offset < archive.byteLength; offset += 7) {
+									controller.enqueue(archive.slice(offset, offset + 7));
+								}
+								controller.close();
+							}
+						}),
+						{ headers: { 'Content-Length': String(archive.byteLength) } }
+					)
+			)
+		);
+
+		await expect(readBuffer(url)).resolves.toEqual(Uint8Array.of(5, 6, 7, 8));
+	});
+
+	it('extracts ZIP data when the response does not expose a body stream', async () => {
+		const archive = await zipBytes('fixture.bin', Uint8Array.of(9, 10, 11));
+		const url = 'https://cdn.test/llvm/no-body.zip';
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => ({
+				ok: true,
+				status: 200,
+				headers: new Headers({ 'Content-Length': String(archive.byteLength) }),
+				body: null,
+				arrayBuffer: async () => archive.slice().buffer
+			}))
+		);
+
+		await expect(readBuffer(url)).resolves.toEqual(Uint8Array.of(9, 10, 11));
+	});
+
+	it('evicts malformed archives from the cache so the same URL can be retried', async () => {
+		const archive = await zipBytes('fixture.bin', Uint8Array.of(12, 13));
+		const url = 'https://cdn.test/llvm/retry.zip';
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValueOnce(new Response(Uint8Array.of(1, 2, 3)))
+			.mockResolvedValueOnce(new Response(archive));
+		vi.stubGlobal('fetch', fetchMock);
+
+		await expect(readBuffer(url)).rejects.toThrow();
+		await expect(readBuffer(url)).resolves.toEqual(Uint8Array.of(12, 13));
+		expect(fetchMock).toHaveBeenCalledTimes(2);
 	});
 
 	it('compiles zipped wasm and instantiates the resulting module', async () => {

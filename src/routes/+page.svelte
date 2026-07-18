@@ -49,6 +49,7 @@
 	import { WASM_TYPESCRIPT_ASSET_VERSION } from '$lib/playground/wasmTypeScriptVersion';
 	import { WASM_WAT_ASSET_VERSION } from '$lib/playground/wasmWatVersion';
 	import { WASM_ZIG_ASSET_VERSION } from '$lib/playground/wasmZigVersion';
+	import { STATIC_RUNTIME_MODULE_VERSION } from '$lib/playground/staticRuntimeModuleVersion';
 	import type {
 		CompilerDiagnostic,
 		GoTarget,
@@ -83,13 +84,18 @@
 		typescriptLspLanguages,
 		type PlaygroundLanguage
 	} from './language-registry';
-	import rubyStdlibWasmUrl from '@ruby/3.4-wasm-wasi/dist/ruby+stdlib.wasm?url';
-	import sqliteWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
 
 	type WorkspaceFile = {
 		path: string;
 		content: string;
 	};
+	type WorkspaceArchiveRequest =
+		| { type: 'create'; files: WorkspaceFile[] }
+		| { type: 'extract'; archive: ArrayBuffer };
+	type WorkspaceArchiveResponse =
+		| { type: 'created'; archive: ArrayBuffer }
+		| { type: 'extracted'; files: WorkspaceFile[] }
+		| { type: 'error'; message: string };
 
 	type LanguageWorkspace = {
 		activePath: string;
@@ -143,6 +149,21 @@
 	let clangdBaseUrl = $derived(path ? `${path}/clangd` : '/clangd');
 	let runtimeAssets = $derived.by<PlaygroundRuntimeAssets>(() => ({
 		rootUrl: path,
+		assemblyscript: {
+			moduleUrl: path
+				? `${path}/wasm-assemblyscript/runtime.mjs?v=${STATIC_RUNTIME_MODULE_VERSION}`
+				: `/wasm-assemblyscript/runtime.mjs?v=${STATIC_RUNTIME_MODULE_VERSION}`
+		},
+		duckdb: {
+			moduleUrl: path
+				? `${path}/wasm-duckdb/runtime.mjs?v=${STATIC_RUNTIME_MODULE_VERSION}`
+				: `/wasm-duckdb/runtime.mjs?v=${STATIC_RUNTIME_MODULE_VERSION}`
+		},
+		php: {
+			moduleUrl: path
+				? `${path}/wasm-php/runtime.mjs?v=${STATIC_RUNTIME_MODULE_VERSION}`
+				: `/wasm-php/runtime.mjs?v=${STATIC_RUNTIME_MODULE_VERSION}`
+		},
 		rust: {
 			compilerUrl: path
 				? `${path}/wasm-rust/index.js?v=${WASM_RUST_ASSET_VERSION}`
@@ -249,9 +270,15 @@
 				: `/wasm-nim/runner-worker.js?v=${WASM_NIM_ASSET_VERSION}`
 		},
 		bash: {
+			moduleUrl: path
+				? `${path}/wasm-bash/sdk/index.mjs?v=${STATIC_RUNTIME_MODULE_VERSION}`
+				: `/wasm-bash/sdk/index.mjs?v=${STATIC_RUNTIME_MODULE_VERSION}`,
 			webcUrl: path
 				? `${path}/wasm-bash/bash.webc?v=${WASM_BASH_ASSET_VERSION}`
-				: `/wasm-bash/bash.webc?v=${WASM_BASH_ASSET_VERSION}`
+				: `/wasm-bash/bash.webc?v=${WASM_BASH_ASSET_VERSION}`,
+			workerUrl: path
+				? `${path}/wasm-bash/sdk/worker.mjs?v=${STATIC_RUNTIME_MODULE_VERSION}`
+				: `/wasm-bash/sdk/worker.mjs?v=${STATIC_RUNTIME_MODULE_VERSION}`
 		},
 		clojurescript: {
 			baseUrl: path ? `${path}/wasm-clojurescript/` : '/wasm-clojurescript/',
@@ -313,7 +340,9 @@
 				: `/wasm-lisp/index.js?v=${WASM_LISP_ASSET_VERSION}`
 		},
 		ruby: {
-			wasmUrl: rubyStdlibWasmUrl
+			moduleUrl: path
+				? `${path}/wasm-ruby/runtime.mjs?v=${STATIC_RUNTIME_MODULE_VERSION}`
+				: `/wasm-ruby/runtime.mjs?v=${STATIC_RUNTIME_MODULE_VERSION}`
 		},
 		haskell: {
 			moduleUrl: path
@@ -380,7 +409,9 @@
 				: `/wasm-octave/runtime/runtime-manifest.v1.json?v=${WASM_OCTAVE_ASSET_VERSION}`
 		},
 		sqlite: {
-			wasmUrl: sqliteWasmUrl
+			moduleUrl: path
+				? `${path}/wasm-sqlite/runtime.mjs?v=${STATIC_RUNTIME_MODULE_VERSION}`
+				: `/wasm-sqlite/runtime.mjs?v=${STATIC_RUNTIME_MODULE_VERSION}`
 		}
 	}));
 	const playground = $derived.by(() => createPlaygroundBinding(runtimeAssets));
@@ -515,15 +546,17 @@
 	const fortranLspAnalyzerUrl = $derived(
 		fortranLspEnabled ? runtimeAssets.fortran?.analyzerUrl : undefined
 	);
+	const assemblyScriptLspModuleUrl = $derived(runtimeAssets.assemblyscript?.moduleUrl);
+	const duckDbLspModuleUrl = $derived(runtimeAssets.duckdb?.moduleUrl);
 	const sqlLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'sql');
-	const sqlLspWasmUrl = $derived(sqlLspEnabled ? runtimeAssets.sqlite?.wasmUrl : undefined);
+	const sqlLspModuleUrl = $derived(sqlLspEnabled ? runtimeAssets.sqlite?.moduleUrl : undefined);
 	const prologLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'prolog');
 	const prologLspBaseUrl = $derived(prologLspEnabled ? runtimeAssets.prolog?.baseUrl : undefined);
 	const prologLspWorkerUrl = $derived(
 		prologLspEnabled ? runtimeAssets.prolog?.workerUrl : undefined
 	);
 	const rubyLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'ruby');
-	const rubyLspWasmUrl = $derived(rubyLspEnabled ? runtimeAssets.ruby?.wasmUrl : undefined);
+	const rubyLspModuleUrl = $derived(rubyLspEnabled ? runtimeAssets.ruby?.moduleUrl : undefined);
 	const rLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'r');
 	const rLspBaseUrl = $derived(rLspEnabled ? runtimeAssets.r?.baseUrl : undefined);
 	const octaveLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'octave');
@@ -1244,28 +1277,53 @@
 		saveStatus = `${basename(file.path)} downloaded`;
 	}
 
-	async function downloadZip() {
-		const zip = await import('@zip.js/zip.js');
-		const writer = new zip.ZipWriter(new zip.BlobWriter('application/zip'));
-		for (const file of files) {
-			await writer.add(file.path, new zip.TextReader(file.content));
+	async function runWorkspaceArchive(
+		request: WorkspaceArchiveRequest,
+		transfer: Transferable[] = []
+	) {
+		const { default: WorkspaceArchiveWorker } =
+			await import('./workspaceArchive.worker?worker');
+		const worker = new WorkspaceArchiveWorker();
+		try {
+			return await new Promise<WorkspaceArchiveResponse>((resolve, reject) => {
+				worker.onmessage = ({ data }: MessageEvent<WorkspaceArchiveResponse>) => {
+					if (data.type === 'error') reject(new Error(data.message));
+					else resolve(data);
+				};
+				worker.onerror = (event) => reject(new Error(event.message || 'ZIP worker failed'));
+				worker.postMessage(request, transfer);
+			});
+		} finally {
+			worker.terminate();
 		}
-		downloadBlob(await writer.close(), 'wasm-idle-workspace.zip');
+	}
+
+	async function downloadZip() {
+		const response = await runWorkspaceArchive({
+			type: 'create',
+			files: files.map((file) => ({ path: file.path, content: file.content }))
+		});
+		if (response.type !== 'created') throw new Error('ZIP worker returned an invalid response');
+		downloadBlob(
+			new Blob([response.archive], { type: 'application/zip' }),
+			'wasm-idle-workspace.zip'
+		);
 		saveStatus = 'ZIP downloaded';
 	}
 
 	async function importZip(file: File) {
-		const zip = await import('@zip.js/zip.js');
-		const reader = new zip.ZipReader(new zip.BlobReader(file));
-		const entries = await reader.getEntries();
-		const imported: string[] = [];
-		for (const entry of entries) {
-			if (entry.directory || !entry.filename) continue;
-			const blob = await entry.getData?.(new zip.BlobWriter());
-			if (!blob) continue;
-			imported.push(addWorkspaceFile(entry.filename, await blob.text(), false));
+		const archive = new Uint8Array(await file.arrayBuffer());
+		const archiveBuffer = archive.slice().buffer;
+		const response = await runWorkspaceArchive({ type: 'extract', archive: archiveBuffer }, [
+			archiveBuffer
+		]);
+		if (response.type !== 'extracted') {
+			throw new Error('ZIP worker returned an invalid response');
 		}
-		await reader.close();
+		const imported: string[] = [];
+		for (const importedFile of response.files) {
+			imported.push(addWorkspaceFile(importedFile.path, importedFile.content, false));
+		}
 		return imported;
 	}
 
@@ -2493,9 +2551,9 @@
 		{/if}
 		{#if language === 'PHP'}
 			<p class="hint">
-				PHP runs through `@php-wasm/web` in the browser worker. Pass CLI args here; terminal
-				stdin is provided as `php://input`, so use Ctrl+D or the EOF button after typing
-				full-input data.
+				PHP 8.4 runs from the external static runtime in the browser worker. Pass CLI args
+				here; terminal stdin is provided as `php://input`, so use Ctrl+D or the EOF button
+				after typing full-input data.
 			</p>
 		{/if}
 		{#if language === 'ZIG'}
@@ -2861,13 +2919,15 @@
 				{haskellLspRootfsUrl}
 				{haskellLspBsdtarUrl}
 				{fortranLspAnalyzerUrl}
+				{assemblyScriptLspModuleUrl}
+				{duckDbLspModuleUrl}
 				{sqlLspEnabled}
-				{sqlLspWasmUrl}
+				{sqlLspModuleUrl}
 				{prologLspEnabled}
 				{prologLspBaseUrl}
 				{prologLspWorkerUrl}
 				{rubyLspEnabled}
-				{rubyLspWasmUrl}
+				{rubyLspModuleUrl}
 				{rLspEnabled}
 				{rLspBaseUrl}
 				{octaveLspEnabled}

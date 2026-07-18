@@ -15,8 +15,6 @@
 		IMonacoSetting
 	} from '@seorii/monaco';
 	import type { EditorLanguageServerHandle, LanguageServerStatus } from '@wasm-idle/lsp';
-	import duckdbMvpWasmUrl from '@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm?url';
-	import duckdbMvpWorkerUrl from '@duckdb/duckdb-wasm/dist/duckdb-browser-mvp.worker.js?url';
 	import type monaco from 'monaco-editor';
 	import { onMount, untrack } from 'svelte';
 	import {
@@ -2382,13 +2380,15 @@
 		haskellLspRootfsUrl?: string;
 		haskellLspBsdtarUrl?: string;
 		fortranLspAnalyzerUrl?: string;
+		assemblyScriptLspModuleUrl?: string;
+		duckDbLspModuleUrl?: string;
 		sqlLspEnabled?: boolean;
-		sqlLspWasmUrl?: string;
+		sqlLspModuleUrl?: string;
 		prologLspEnabled?: boolean;
 		prologLspBaseUrl?: string;
 		prologLspWorkerUrl?: string;
 		rubyLspEnabled?: boolean;
-		rubyLspWasmUrl?: string;
+		rubyLspModuleUrl?: string;
 		rLspEnabled?: boolean;
 		rLspBaseUrl?: string;
 		octaveLspEnabled?: boolean;
@@ -2468,13 +2468,15 @@
 		haskellLspRootfsUrl,
 		haskellLspBsdtarUrl,
 		fortranLspAnalyzerUrl,
+		assemblyScriptLspModuleUrl,
+		duckDbLspModuleUrl,
 		sqlLspEnabled = false,
-		sqlLspWasmUrl,
+		sqlLspModuleUrl,
 		prologLspEnabled = false,
 		prologLspBaseUrl,
 		prologLspWorkerUrl,
 		rubyLspEnabled = false,
-		rubyLspWasmUrl,
+		rubyLspModuleUrl,
 		rLspEnabled = false,
 		rLspBaseUrl,
 		octaveLspEnabled = false,
@@ -2614,10 +2616,12 @@
 			haskellLspEnabled ? haskellLspRootfsUrl || '' : '',
 			haskellLspEnabled ? haskellLspBsdtarUrl || '' : '',
 			fortranLspAnalyzerUrl || '',
-			sqlLspEnabled ? sqlLspWasmUrl || '' : '',
+			assemblyScriptLspModuleUrl || '',
+			duckDbLspModuleUrl || '',
+			sqlLspEnabled ? sqlLspModuleUrl || '' : '',
 			prologLspEnabled ? prologLspBaseUrl || '' : '',
 			prologLspEnabled ? prologLspWorkerUrl || '' : '',
-			rubyLspEnabled ? rubyLspWasmUrl || '' : '',
+			rubyLspEnabled ? rubyLspModuleUrl || '' : '',
 			rLspEnabled ? rLspBaseUrl || '' : '',
 			octaveLspEnabled ? octaveLspBaseUrl || '' : '',
 			octaveLspEnabled ? octaveLspWorkerUrl || '' : '',
@@ -3059,9 +3063,10 @@
 			load: async (currentUrl) => {
 				const { getAssemblyScriptLanguageServer } =
 					await import('@wasm-idle/lsp/assemblyscript');
-				return await getAssemblyScriptLanguageServer({
-					currentUrl,
-					onStatus: (status) => (assemblyScriptLspStatus = status)
+					return await getAssemblyScriptLanguageServer({
+						currentUrl,
+						assemblyscript: { moduleUrl: assemblyScriptLspModuleUrl || '' },
+						onStatus: (status) => (assemblyScriptLspStatus = status)
 				});
 			}
 		},
@@ -3221,32 +3226,27 @@
 			setStatus: (status) => (duckdbLspStatus = status),
 			load: async (currentUrl) => {
 				const { getDuckDbLanguageServer } = await import('@wasm-idle/lsp/sql');
-				return await getDuckDbLanguageServer({
-					currentUrl,
-					sql: {
-						dialect: 'duckdb',
-						duckdbBundles: {
-							mvp: {
-								mainModule: duckdbMvpWasmUrl,
-								mainWorker: duckdbMvpWorkerUrl
-							}
-						}
-					},
+					return await getDuckDbLanguageServer({
+						currentUrl,
+						sql: {
+							dialect: 'duckdb',
+							moduleUrl: duckDbLspModuleUrl || ''
+						},
 					onStatus: (status) => (duckdbLspStatus = status)
 				});
 			}
 		},
 		{
 			languages: ['sql'],
-			isEnabled: () => sqlLspEnabled && !!sqlLspWasmUrl,
+			isEnabled: () => sqlLspEnabled && !!sqlLspModuleUrl,
 			setStatus: (status) => (sqlLspStatus = status),
 			load: async (currentUrl) => {
 				const { getSqlLanguageServer } = await import('@wasm-idle/lsp/sql');
 				return await getSqlLanguageServer({
 					currentUrl,
-					sql: {
-						dialect: 'sqlite',
-						wasmUrl: sqlLspWasmUrl || ''
+						sql: {
+							dialect: 'sqlite',
+							moduleUrl: sqlLspModuleUrl || ''
 					},
 					onStatus: (status) => (sqlLspStatus = status)
 				});
@@ -3270,14 +3270,14 @@
 		},
 		{
 			languages: ['ruby'],
-			isEnabled: () => rubyLspEnabled && !!rubyLspWasmUrl,
+			isEnabled: () => rubyLspEnabled && !!rubyLspModuleUrl,
 			setStatus: (status) => (rubyLspStatus = status),
 			load: async (currentUrl) => {
 				const { getRubyLanguageServer } = await import('@wasm-idle/lsp/ruby');
 				return await getRubyLanguageServer({
 					currentUrl,
-					ruby: {
-						wasmUrl: rubyLspWasmUrl || ''
+						ruby: {
+							moduleUrl: rubyLspModuleUrl || ''
 					},
 					onStatus: (status) => (rubyLspStatus = status)
 				});

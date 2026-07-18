@@ -316,8 +316,8 @@ describe('Monaco route debug sync', () => {
 		);
 		expect(source).toMatch(/typescript: \{ libUrl: typescriptLspLibUrl \}/);
 		expect(source).toMatch(/javascript: \{ libUrl: typescriptLspLibUrl \}/);
-		expect(source).toMatch(/mainModule: duckdbMvpWasmUrl/);
-		expect(source).toMatch(/mainWorker: duckdbMvpWorkerUrl/);
+		expect(source).toMatch(/moduleUrl: duckDbLspModuleUrl \|\| ''/);
+		expect(source).not.toMatch(/@duckdb\/duckdb-wasm\/dist/);
 		for (const statusKey of ['json', 'yaml', 'toml', 'html', 'css', 'markdown']) {
 			expect(source).toMatch(new RegExp(`${statusKey}: documentLspStatus`));
 		}
@@ -642,11 +642,15 @@ describe('Monaco route debug sync', () => {
 	it('does not keep the legacy monaco-languageclient in the app shell', async () => {
 		const packageJson = JSON.parse(
 			await readFile(path.resolve(process.cwd(), 'package.json'), 'utf8')
-		) as { dependencies?: Record<string, string> };
+			) as {
+				dependencies?: Record<string, string>;
+				devDependencies?: Record<string, string>;
+			};
 		const viteConfig = await readFile(path.resolve(process.cwd(), 'vite.config.ts'), 'utf8');
 		const libIndex = await readFile(path.resolve(process.cwd(), 'src/lib/index.ts'), 'utf8');
 
-		expect(packageJson.dependencies?.['@seorii/monaco']).toBe('0.1.1');
+		expect(packageJson.devDependencies?.['@seorii/monaco']).toBe('0.1.1');
+		expect(packageJson.dependencies).not.toHaveProperty('@seorii/monaco');
 		expect(packageJson.dependencies).not.toHaveProperty('@hancomac/monaco-languageclient');
 		expect(viteConfig).not.toContain('@hancomac/monaco-languageclient');
 		expect(viteConfig).not.toContain('vscode-compatibility');

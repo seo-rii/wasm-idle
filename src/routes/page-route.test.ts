@@ -919,7 +919,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/'.php': 'PHP'/);
 		expect(source).toMatch(/PHP: 'main\.php'/);
 		expect(source).toMatch(/PHP: 'php'/);
-		expect(source).toMatch(/PHP runs through `@php-wasm\/web` in the browser worker/);
+		expect(source).toMatch(/PHP 8\.4 runs from the external static runtime/);
 		expect(source).toMatch(/stdin is provided as `php:\/\/input`/);
 	});
 
