@@ -51,6 +51,12 @@ describe('Terminal source', () => {
 		);
 	});
 
+	it('ignores breakpoint synchronization before a sandbox is loaded', () => {
+		expect(source).toMatch(
+			/async setBreakpoints\(lines: number\[\]\) \{\s+await wait\(\);\s+sandbox\?\.setBreakpoints\?\.\(lines\);\s+\}/s
+		);
+	});
+
 	it('submits pending stdin and sends EOF on ctrl+d for read-to-end programs', () => {
 		expect(source).toMatch(
 			/else if \(\(ev\.ctrlKey \|\| ev\.metaKey\) && ev\.key\.toLowerCase\(\) === 'd'\) \{\s+ev\.preventDefault\(\);\s+if \(input\.length > 0\) submitCurrentInput\(\);\s+submitSandboxEof\(\);\s+\}/s

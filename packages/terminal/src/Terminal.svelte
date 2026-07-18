@@ -329,7 +329,7 @@
 		},
 		async setBreakpoints(lines: number[]) {
 			await wait();
-			sandbox.setBreakpoints?.(lines);
+			sandbox?.setBreakpoints?.(lines);
 		},
 		async debugEvaluate(expression: string) {
 			await wait();
