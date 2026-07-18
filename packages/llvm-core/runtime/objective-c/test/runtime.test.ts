@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const validEmptyWasm = new Uint8Array([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]);
 
 let runCalls: string[][] = [];
+let compileCalls: any[] = [];
+let debugRunCalls: any[] = [];
 let executedArtifacts: any[] = [];
 let runtimeInstances: any[] = [];
 
@@ -57,14 +59,43 @@ vi.mock('../../clang/src/index.js', () => {
 			compilerRuntimeLibDir: 'lib/clang/22/lib/wasi'
 		};
 		log = false;
+		debug = false;
+		debugBreakpoints = new Set<number>();
+		debugPauseOnEntry = false;
+		debugBuffer?: Int32Array;
+		debugWatchBuffer?: Int32Array;
+		debugWatchResultBuffer?: Int32Array;
+		debugInterruptBuffer?: Uint8Array;
+		debugVariableMetadata = { 1: [] };
+		debugGlobalMetadata: any[] = [];
+		debugFunctionMetadata = { 1: 'main' };
 		memfs = new MockMemfs();
 		ready = Promise.resolve();
 		stdout: (chunk: string) => void;
+		onDebugEvent?: (event: any) => void;
 
-		constructor(options: { log?: boolean; stdout?: (chunk: string) => void }) {
+		constructor(options: {
+			log?: boolean;
+			stdout?: (chunk: string) => void;
+			onDebugEvent?: (event: any) => void;
+		}) {
 			this.log = !!options.log;
 			this.stdout = options.stdout || (() => {});
+			this.onDebugEvent = options.onDebugEvent;
 			runtimeInstances.push(this);
+		}
+
+		beginTrace(debug: boolean) {
+			this.debug = debug;
+		}
+
+		async compile(options: any) {
+			compileCalls.push(options);
+			this.memfs.addFile(
+				options.input,
+				options.transformSource ? options.transformSource(options.code) : options.code
+			);
+			this.memfs.addFile(options.obj, bytes('obj'));
 		}
 
 		async getModule(url: string) {
@@ -80,6 +111,24 @@ vi.mock('../../clang/src/index.js', () => {
 			if (outputIndex === -1) return;
 			const outputPath = args[outputIndex + 1];
 			this.memfs.addFile(outputPath, argv0 === 'wasm-ld' ? validEmptyWasm : bytes('obj'));
+		}
+
+		async runWithOptions(
+			module: unknown,
+			out: boolean,
+			args: string[],
+			environ: Record<string, string>,
+			extraImports: WebAssembly.Imports | undefined,
+			instanceRef: { current: WebAssembly.Instance | null } | undefined
+		) {
+			debugRunCalls.push({ module, out, args, environ, extraImports, instanceRef });
+			this.onDebugEvent?.({
+				type: 'pause',
+				line: 2,
+				reason: 'entry',
+				locals: [],
+				callStack: [{ functionName: 'main', line: 2 }]
+			});
 		}
 	}
 
@@ -112,6 +161,8 @@ describe('Objective-C worker', () => {
 	beforeEach(() => {
 		vi.resetModules();
 		runCalls = [];
+		compileCalls = [];
+		debugRunCalls = [];
 		executedArtifacts = [];
 		runtimeInstances = [];
 		(globalThis as any).self = globalThis as any;
@@ -348,6 +399,94 @@ describe('Objective-C worker', () => {
 		)?.[1];
 		expect(mainSource).toContain('@interface NSObject @end');
 		expect(executedArtifacts[0]?.options.extraImports).toEqual(expect.any(Function));
+	});
+
+	it('compiles and runs Objective-C debug sessions through the Clang trace host', async () => {
+		await installWorker();
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				log: false,
+				clangAssets: { baseUrl: 'http://localhost/clang/', useAssetBridge: false },
+				objectivecAssets: {
+					libobjcUrl: 'http://localhost/wasm-objectivec/libobjc.a',
+					headersUrl: 'http://localhost/wasm-objectivec/headers.json',
+					libgnustepBaseUrl: 'http://localhost/wasm-objectivec/libgnustep-base.a',
+					libgnustepBaseObjectUrl: 'http://localhost/wasm-objectivec/libgnustep-base.o',
+					foundationHeadersUrl:
+						'http://localhost/wasm-objectivec/foundation-headers.json',
+					libffiUrl: 'http://localhost/wasm-objectivec/libffi.a'
+				}
+			}
+		});
+		const debugBuffer = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * 32);
+		const watchBuffer = new SharedArrayBuffer(64);
+		const watchResultBuffer = new SharedArrayBuffer(64);
+		const interrupt = new SharedArrayBuffer(1);
+
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: '#include <stdio.h>\n#import <Foundation/Foundation.h>\nint main(void) {\n    int value = 73;\n    printf("%d\\n", value);\n    return 0;\n}',
+				buffer: new SharedArrayBuffer(64),
+				debugBuffer,
+				watchBuffer,
+				watchResultBuffer,
+				interrupt,
+				debug: true,
+				breakpoints: [4],
+				pauseOnEntry: true,
+				prepare: false,
+				log: false,
+				activePath: 'main.m',
+				programArgs: ['--trace'],
+				workspaceFiles: []
+			}
+		});
+
+		expect(compileCalls).toEqual([
+			expect.objectContaining({
+				language: 'OBJC',
+				debug: true,
+				input: expect.stringMatching(/main\.m$/),
+				transformSource: expect.any(Function)
+			})
+		]);
+		const linkCall = runCalls.find((call) => call[0] === 'wasm-ld');
+		expect(linkCall).toEqual(
+			expect.arrayContaining(['--allow-undefined', 'libgnustep-base.a', 'libffi.a'])
+		);
+		const compiledSource = [...runtimeInstances[0].memfs.files.entries()].find(([path]) =>
+			/main\.m$/.test(path)
+		)?.[1];
+		expect(String(compiledSource)).toContain('@interface NSObject @end');
+		expect(String(compiledSource)).not.toContain('#import <Foundation/Foundation.h>');
+		expect(executedArtifacts).toEqual([]);
+		expect(debugRunCalls).toHaveLength(1);
+		expect(debugRunCalls[0]).toEqual(
+			expect.objectContaining({
+				args: [expect.stringMatching(/main\.wasm$/), '--trace'],
+				extraImports: {
+					env: expect.objectContaining({ ffi_call_js: expect.any(Function) })
+				}
+			})
+		);
+		expect(runtimeInstances[0]).toEqual(
+			expect.objectContaining({
+				debug: true,
+				debugPauseOnEntry: true,
+				debugBreakpoints: new Set([4]),
+				debugBuffer: expect.any(Int32Array),
+				debugWatchBuffer: expect.any(Int32Array),
+				debugWatchResultBuffer: expect.any(Int32Array),
+				debugInterruptBuffer: expect.any(Uint8Array)
+			})
+		);
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				debugEvent: expect.objectContaining({ type: 'pause', line: 2, reason: 'entry' })
+			})
+		);
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
 	});
 
 	it('replays captured clang output when object compilation fails', async () => {

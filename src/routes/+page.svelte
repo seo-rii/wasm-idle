@@ -130,13 +130,17 @@
 	const WORKSPACE_STORAGE_KEY = 'wasm-idle:example-workspace:v3';
 	const SHARE_PREFIX = 'workspace=';
 	const debugLanguageAdapters: Partial<Record<PlaygroundLanguage, DebugLanguageAdapter>> = {
+		C: cppDebugLanguageAdapter,
 		CPP: cppDebugLanguageAdapter,
+		OBJC: cppDebugLanguageAdapter,
 		GO: goDebugLanguageAdapter,
 		RUST: rustDebugLanguageAdapter,
 		PYTHON: pythonDebugLanguageAdapter
 	};
 	const debugTitles: Partial<Record<PlaygroundLanguage, string>> = {
+		C: 'Native Trace',
 		CPP: 'Native Trace',
+		OBJC: 'Objective-C Trace',
 		GO: 'Go Trace',
 		RUST: 'Rust Trace',
 		PYTHON: 'Pyodide Trace'

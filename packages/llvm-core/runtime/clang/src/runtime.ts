@@ -36,7 +36,7 @@ const defaultCompilerRuntimeLibDir = 'lib/clang/8.0.1/lib/wasi';
 const defaultCppStandardArg = '-std=gnu++2a';
 const defaultCStandardArg = '-std=gnu11';
 
-export type ClangSourceLanguage = 'C' | 'CPP';
+export type ClangSourceLanguage = 'C' | 'CPP' | 'OBJC';
 
 function normalizeStandardCode(value?: string) {
 	return (value || '').trim().toUpperCase().replaceAll(/\s+/g, '');
@@ -125,6 +125,12 @@ function resolveClangLanguageArgs(
 			standardArg: resolveCStandardArg(options.cVersion)
 		};
 	}
+	if (language === 'OBJC') {
+		return {
+			languageArg: 'objective-c',
+			standardArg: resolveCStandardArg(options.cVersion)
+		};
+	}
 
 	return {
 		languageArg: 'c++',
@@ -145,7 +151,7 @@ export function resolveBuildArtifactNames(language: ClangSourceLanguage, fileNam
 	const input =
 		normalizedFileName && /\.[A-Za-z0-9_-]+$/.test(normalizedFileName)
 			? normalizedFileName
-			: `${normalizedFileName || defaultStem}.${language === 'C' ? 'c' : 'cc'}`;
+			: `${normalizedFileName || defaultStem}.${language === 'C' ? 'c' : language === 'OBJC' ? 'm' : 'cc'}`;
 	const stem = (input.split('/').pop() || input).replace(/\.[^.]+$/, '') || defaultStem;
 	return {
 		input,
@@ -300,7 +306,8 @@ class Clang {
 		const input = normalizeWorkspacePath(options.input || 'main.cc') || 'main.cc';
 		let source = options.code;
 		const obj = options.obj;
-		const language: ClangSourceLanguage = options.language === 'C' ? 'C' : 'CPP';
+		const language: ClangSourceLanguage =
+			options.language === 'C' ? 'C' : options.language === 'OBJC' ? 'OBJC' : 'CPP';
 		const compileArgs = options.compileArgs ?? options.args ?? [];
 		const { languageArg, standardArg } = resolveClangLanguageArgs(language, options);
 		const debug = !!options.debug;
@@ -427,71 +434,78 @@ class Clang {
 			this.debugGlobalMetadata = [];
 			this.debugFunctionMetadata = {};
 			const globalInitialization: string[] = [];
-			const instrumented = [
-				'#include <cstdio>',
-				'#include <iostream>',
-				'#include <map>',
-				'#include <set>',
-				'#include <string>',
-				'#include <type_traits>',
-				'#include <vector>',
-				'extern "C" __attribute__((import_module("env"), import_name("__wasm_idle_debug_enter"))) void __wasm_idle_debug_enter(int functionId, int line);',
-				'extern "C" __attribute__((import_module("env"), import_name("__wasm_idle_debug_leave"))) void __wasm_idle_debug_leave(int functionId);',
-				'extern "C" __attribute__((import_module("env"), import_name("__wasm_idle_debug_value_num"))) void __wasm_idle_debug_value_num(int functionId, int slot, double value);',
-				'extern "C" __attribute__((import_module("env"), import_name("__wasm_idle_debug_value_bool"))) void __wasm_idle_debug_value_bool(int functionId, int slot, int value);',
-				'extern "C" __attribute__((import_module("env"), import_name("__wasm_idle_debug_value_addr"))) void __wasm_idle_debug_value_addr(int functionId, int slot, int value);',
-				'extern "C" __attribute__((import_module("env"), import_name("__wasm_idle_debug_value_text"))) void __wasm_idle_debug_value_text(int functionId, int slot, const char* ptr, int len);',
-				'template <typename T>',
-				'static inline std::string __wasm_idle_debug_format_value(const T& value) {',
-				'    if constexpr (std::is_same_v<T, bool>) return value ? "true" : "false";',
-				`    else if constexpr (std::is_same_v<T, char>) return std::string("'") + value + "'";`,
-				'    else if constexpr (std::is_same_v<T, signed char> || std::is_same_v<T, unsigned char>) return std::to_string((int)value);',
-				'    else if constexpr (std::is_integral_v<T> || std::is_floating_point_v<T>) return std::to_string(value);',
-				'    else return "?";',
-				'}',
-				'template <typename T>',
-				'static inline void __wasm_idle_debug_emit_vector(int functionId, int slot, const std::vector<T>& values) {',
-				'    std::string text = "[";',
-				'    int count = 0;',
-				'    for (const auto& value : values) {',
-				'        if (count > 0) text += ", ";',
-				'        if (count >= 8) { text += "..."; break; }',
-				'        text += __wasm_idle_debug_format_value(value);',
-				'        count += 1;',
-				'    }',
-				'    text += "]";',
-				'    __wasm_idle_debug_value_text(functionId, slot, text.c_str(), (int)text.size());',
-				'}',
-				'template <typename T>',
-				'static inline void __wasm_idle_debug_emit_set(int functionId, int slot, const std::set<T>& values) {',
-				'    std::string text = "{";',
-				'    int count = 0;',
-				'    for (const auto& value : values) {',
-				'        if (count > 0) text += ", ";',
-				'        if (count >= 8) { text += "..."; break; }',
-				'        text += __wasm_idle_debug_format_value(value);',
-				'        count += 1;',
-				'    }',
-				'    text += "}";',
-				'    __wasm_idle_debug_value_text(functionId, slot, text.c_str(), (int)text.size());',
-				'}',
-				'template <typename K, typename V>',
-				'static inline void __wasm_idle_debug_emit_map(int functionId, int slot, const std::map<K, V>& values) {',
-				'    std::string text = "{";',
-				'    int count = 0;',
-				'    for (const auto& entry : values) {',
-				'        if (count > 0) text += ", ";',
-				'        if (count >= 8) { text += "..."; break; }',
-				'        text += __wasm_idle_debug_format_value(entry.first);',
-				'        text += ": ";',
-				'        text += __wasm_idle_debug_format_value(entry.second);',
-				'        count += 1;',
-				'    }',
-				'    text += "}";',
-				'    __wasm_idle_debug_value_text(functionId, slot, text.c_str(), (int)text.size());',
-				'}',
-				'extern "C" __attribute__((import_module("env"), import_name("__wasm_idle_debug_line"))) void __wasm_idle_debug_line(int functionId, int line);'
+			const debugLinkage = language === 'CPP' ? 'extern "C" ' : '';
+			const debugDeclarations = [
+				`${debugLinkage}__attribute__((import_module("env"), import_name("__wasm_idle_debug_enter"))) void __wasm_idle_debug_enter(int functionId, int line);`,
+				`${debugLinkage}__attribute__((import_module("env"), import_name("__wasm_idle_debug_leave"))) void __wasm_idle_debug_leave(int functionId);`,
+				`${debugLinkage}__attribute__((import_module("env"), import_name("__wasm_idle_debug_value_num"))) void __wasm_idle_debug_value_num(int functionId, int slot, double value);`,
+				`${debugLinkage}__attribute__((import_module("env"), import_name("__wasm_idle_debug_value_bool"))) void __wasm_idle_debug_value_bool(int functionId, int slot, int value);`,
+				`${debugLinkage}__attribute__((import_module("env"), import_name("__wasm_idle_debug_value_addr"))) void __wasm_idle_debug_value_addr(int functionId, int slot, int value);`,
+				`${debugLinkage}__attribute__((import_module("env"), import_name("__wasm_idle_debug_value_text"))) void __wasm_idle_debug_value_text(int functionId, int slot, const char* ptr, int len);`,
+				`${debugLinkage}__attribute__((import_module("env"), import_name("__wasm_idle_debug_line"))) void __wasm_idle_debug_line(int functionId, int line);`
 			];
+			const instrumented =
+				language === 'CPP'
+					? [
+							'#include <cstdio>',
+							'#include <iostream>',
+							'#include <map>',
+							'#include <set>',
+							'#include <string>',
+							'#include <type_traits>',
+							'#include <vector>',
+							...debugDeclarations,
+							'template <typename T>',
+							'static inline std::string __wasm_idle_debug_format_value(const T& value) {',
+							'    if constexpr (std::is_same_v<T, bool>) return value ? "true" : "false";',
+							`    else if constexpr (std::is_same_v<T, char>) return std::string("'") + value + "'";`,
+							'    else if constexpr (std::is_same_v<T, signed char> || std::is_same_v<T, unsigned char>) return std::to_string((int)value);',
+							'    else if constexpr (std::is_integral_v<T> || std::is_floating_point_v<T>) return std::to_string(value);',
+							'    else return "?";',
+							'}',
+							'template <typename T>',
+							'static inline void __wasm_idle_debug_emit_vector(int functionId, int slot, const std::vector<T>& values) {',
+							'    std::string text = "[";',
+							'    int count = 0;',
+							'    for (const auto& value : values) {',
+							'        if (count > 0) text += ", ";',
+							'        if (count >= 8) { text += "..."; break; }',
+							'        text += __wasm_idle_debug_format_value(value);',
+							'        count += 1;',
+							'    }',
+							'    text += "]";',
+							'    __wasm_idle_debug_value_text(functionId, slot, text.c_str(), (int)text.size());',
+							'}',
+							'template <typename T>',
+							'static inline void __wasm_idle_debug_emit_set(int functionId, int slot, const std::set<T>& values) {',
+							'    std::string text = "{";',
+							'    int count = 0;',
+							'    for (const auto& value : values) {',
+							'        if (count > 0) text += ", ";',
+							'        if (count >= 8) { text += "..."; break; }',
+							'        text += __wasm_idle_debug_format_value(value);',
+							'        count += 1;',
+							'    }',
+							'    text += "}";',
+							'    __wasm_idle_debug_value_text(functionId, slot, text.c_str(), (int)text.size());',
+							'}',
+							'template <typename K, typename V>',
+							'static inline void __wasm_idle_debug_emit_map(int functionId, int slot, const std::map<K, V>& values) {',
+							'    std::string text = "{";',
+							'    int count = 0;',
+							'    for (const auto& entry : values) {',
+							'        if (count > 0) text += ", ";',
+							'        if (count >= 8) { text += "..."; break; }',
+							'        text += __wasm_idle_debug_format_value(entry.first);',
+							'        text += ": ";',
+							'        text += __wasm_idle_debug_format_value(entry.second);',
+							'        count += 1;',
+							'    }',
+							'    text += "}";',
+							'    __wasm_idle_debug_value_text(functionId, slot, text.c_str(), (int)text.size());',
+							'}'
+						]
+					: ['#include <stdio.h>', ...debugDeclarations];
 			for (let index = 0; index < lines.length; index += 1) {
 				const line = lines[index];
 				const indent = line.match(/^\s*/)?.[0] || '';
@@ -979,9 +993,16 @@ class Clang {
 					functionDepth = braceDepth;
 					currentFunctionId = nextFunctionId++;
 					let functionName = 'anonymous';
+					const objectiveCMethod =
+						language === 'OBJC' && startsInlineFunctionBody
+							? normalized.match(/^([-+])\s*\([^)]*\)\s*([A-Za-z_]\w*)/)
+							: null;
 					if (startsInlineFunctionBody) {
 						const beforeParen = normalized.slice(0, normalized.indexOf('(')).trim();
 						functionName = beforeParen.split(/\s+/).pop() || functionName;
+						if (objectiveCMethod) {
+							functionName = `${objectiveCMethod[1]}${objectiveCMethod[2]}`;
+						}
 					} else if (pendingFunctionHeader) {
 						functionName = pendingFunctionHeader.functionName || functionName;
 					}
@@ -993,13 +1014,25 @@ class Clang {
 						`${indent}    __wasm_idle_debug_enter(${currentFunctionId}, ${index + 1});`
 					);
 					if (functionName === 'main') {
-						instrumented.push(`${indent}    std::cout.setf(std::ios::unitbuf);`);
-						instrumented.push(`${indent}    std::cerr.setf(std::ios::unitbuf);`);
-						instrumented.push(`${indent}    setvbuf(stdout, nullptr, _IONBF, 0);`);
-						instrumented.push(`${indent}    setvbuf(stderr, nullptr, _IONBF, 0);`);
+						if (language === 'CPP') {
+							instrumented.push(`${indent}    std::cout.setf(std::ios::unitbuf);`);
+							instrumented.push(`${indent}    std::cerr.setf(std::ios::unitbuf);`);
+						}
+						const nullPointer = language === 'CPP' ? 'nullptr' : 'NULL';
+						instrumented.push(
+							`${indent}    setvbuf(stdout, ${nullPointer}, _IONBF, 0);`
+						);
+						instrumented.push(
+							`${indent}    setvbuf(stderr, ${nullPointer}, _IONBF, 0);`
+						);
 					}
 					const parameterSource = startsInlineFunctionBody
-						? normalized.slice(normalized.indexOf('(') + 1, normalized.lastIndexOf(')'))
+						? objectiveCMethod
+							? ''
+							: normalized.slice(
+									normalized.indexOf('(') + 1,
+									normalized.lastIndexOf(')')
+								)
 						: pendingFunctionHeader?.parameters || '';
 					for (const parameter of parameterSource
 						.split(',')
@@ -1128,16 +1161,27 @@ class Clang {
 				}
 			}
 			if (globalInitialization.length) {
-				instrumented.push('struct __wasm_idle_debug_globals_init {');
-				instrumented.push('    __wasm_idle_debug_globals_init() {');
-				instrumented.push(...globalInitialization.map((line) => `        ${line}`));
-				instrumented.push('    }');
-				instrumented.push('} __wasm_idle_debug_globals_init_instance;');
+				if (language === 'CPP') {
+					instrumented.push('struct __wasm_idle_debug_globals_init {');
+					instrumented.push('    __wasm_idle_debug_globals_init() {');
+					instrumented.push(...globalInitialization.map((line) => `        ${line}`));
+					instrumented.push('    }');
+					instrumented.push('} __wasm_idle_debug_globals_init_instance;');
+				} else {
+					instrumented.push(
+						'__attribute__((constructor)) static void __wasm_idle_debug_globals_init(void) {'
+					);
+					instrumented.push(...globalInitialization.map((line) => `    ${line}`));
+					instrumented.push('}');
+				}
 			}
 			source = instrumented.join('\n');
 		} else {
 			this.debugVariableMetadata = {};
 			this.debugGlobalMetadata = [];
+		}
+		if (typeof options.transformSource === 'function') {
+			source = options.transformSource(source);
 		}
 		const code = toUtf8(source);
 
@@ -1180,6 +1224,7 @@ class Clang {
 			'-resource-dir',
 			clangResourceDir,
 			...includeArgs,
+			...(language === 'OBJC' ? ['-I.'] : []),
 			'-ferror-limit',
 			'19',
 			'-fcolor-diagnostics',
@@ -1189,6 +1234,7 @@ class Clang {
 			standardArg,
 			'-x',
 			languageArg,
+			...(language === 'OBJC' ? ['-fobjc-runtime=gnustep-2.0', '-fblocks'] : []),
 			input,
 			...compileArgs
 		];
@@ -1247,13 +1293,18 @@ class Clang {
 		module: WebAssembly.Module,
 		out: boolean,
 		args: string[],
-		environ: Record<string, string> = {}
+		environ: Record<string, string> = {},
+		extraImports?: WebAssembly.Imports,
+		instanceRef?: { current: WebAssembly.Instance | null }
 	) {
 		this.memfs.out = out;
 		this.hostLog(`${args.join(' ')}\n`);
 		this.trace(`run ${args.join(' ')}`);
 		const start = +new Date();
-		const app = new App(module, this.memfs, args[0], ...args.slice(1));
+		const app = new App(module, this.memfs, args[0], ...args.slice(1), {
+			extraImports,
+			instanceRef
+		});
 		app.environ = { ...app.environ, ...environ };
 		app.trace = (message) => this.trace(message);
 		app.debugSession = {

@@ -32,6 +32,44 @@ describe('App debug tracing', () => {
 		);
 	});
 
+	it('merges extra environment imports and publishes the instantiated module reference', async () => {
+		const instance = {
+			exports: {
+				memory: new WebAssembly.Memory({ initial: 1 })
+			}
+		} as WebAssembly.Instance;
+		const getInstance = vi.spyOn(wasmModule, 'getInstance').mockResolvedValue(instance);
+		const instanceRef = { current: null as WebAssembly.Instance | null };
+		const hostProbe = vi.fn();
+		const memfs = { exports: {} } as any;
+		const module = {} as WebAssembly.Module;
+		const app = new App(module, memfs, 'test.wasm', '--flag', {
+			extraImports: { env: { host_probe: hostProbe } },
+			instanceRef
+		});
+
+		await app.ready;
+
+		expect(app.argv).toEqual(['test.wasm', '--flag']);
+		expect(instanceRef.current).toBe(instance);
+		expect(getInstance).toHaveBeenCalledWith(
+			module,
+			expect.objectContaining({
+				wasi_snapshot_preview1: expect.objectContaining({
+					path_filestat_set_times: expect.any(Function),
+					sock_accept: expect.any(Function),
+					sock_recv: expect.any(Function),
+					sock_send: expect.any(Function),
+					sock_shutdown: expect.any(Function)
+				}),
+				env: expect.objectContaining({
+					host_probe: hostProbe,
+					__wasm_idle_debug_line: expect.any(Function)
+				})
+			})
+		);
+	});
+
 	it('traces normal proc_exit without treating it as an error', async () => {
 		const trace = vi.fn();
 		const stdout = vi.fn();

@@ -407,6 +407,7 @@ async function loadObjectiveCRuntime(
 		stdout: (output) => postMessage({ output }),
 		stdin: () => '',
 		progress: (value) => postMessage({ progress: value }),
+		onDebugEvent: (debugEvent) => postMessage({ debugEvent }),
 		log,
 		runtimeBaseUrl: clangBaseUrl,
 		manifest
@@ -605,9 +606,26 @@ async function compileObjectiveCObject(
 	code: string | null,
 	obj: string,
 	language: ObjectiveCSourceLanguage,
-	compileArgs: string[] = []
+	compileArgs: string[] = [],
+	debug = false,
+	transformSource?: (source: string) => string
 ) {
 	if (!clang) throw new Error('Objective-C runtime is not loaded.');
+	if (debug) {
+		if (code == null) {
+			throw new Error('Objective-C debug compilation requires the active source text.');
+		}
+		await clang.compile({
+			input,
+			code,
+			obj,
+			language: language === 'objective-c' ? 'OBJC' : 'C',
+			compileArgs,
+			debug: true,
+			transformSource
+		});
+		return;
+	}
 	if (code != null) await addFileWithDirectories(clang, input, code);
 	clang.memfs.addFile(obj, new Uint8Array(0));
 	const clangModule = await clang.getModule(clang.assetUrls.clang);
@@ -661,7 +679,8 @@ async function compileAndLinkObjectiveC(
 	code: string,
 	activePath: string | undefined,
 	workspaceFiles: ObjectiveCWorkspaceFile[],
-	compileArgs: string[] = []
+	compileArgs: string[] = [],
+	debug = false
 ) {
 	if (!clang) throw new Error('Objective-C runtime is not loaded.');
 	const trace = (message: string) => console.log(`[wasm-idle:objectivec-worker] ${message}`);
@@ -708,19 +727,24 @@ async function compileAndLinkObjectiveC(
 	let mainCode = code;
 	if (needsFoundation) {
 		await ensureObjectiveCFoundationAssets();
-		mainCode = inlineFoundationImportsForSource(inputPath, code);
+		if (!debug) mainCode = inlineFoundationImportsForSource(inputPath, code);
 	}
 	if (needsObjectiveCLoad) {
 		trace('compiling Objective-C load constructor');
 		await compileObjectiveCObject(ctorSource, OBJC_CONSTRUCTOR_SOURCE, ctorObj, 'c');
 	}
 	trace(`compiling ${inputPath}`);
-	await compileObjectiveCObject(input, ensureTrailingNewline(mainCode), mainObj, mainLanguage, [
-		'-I',
-		prefix,
-		...foundationCompileArgs,
-		...compileArgs
-	]);
+	await compileObjectiveCObject(
+		input,
+		ensureTrailingNewline(mainCode),
+		mainObj,
+		mainLanguage,
+		['-I', prefix, ...foundationCompileArgs, ...compileArgs],
+		debug,
+		debug && needsFoundation
+			? (source) => inlineFoundationImportsForSource(inputPath, source)
+			: undefined
+	);
 	for (const source of auxiliarySources) {
 		const objectName = source.path.replace(/[^A-Za-z0-9_.-]/g, '_').replace(/\.[^.]+$/, '');
 		const objectPath = `${prefix}/${objectName}.o`;
@@ -748,7 +772,7 @@ async function compileAndLinkObjectiveC(
 		'wasm-ld',
 		...(needsFoundation ? ['--export=malloc', '--export=free'] : ['--export-dynamic']),
 		'--gc-sections',
-		...(needsFoundation ? ['--allow-undefined'] : []),
+		...(needsFoundation || debug ? ['--allow-undefined'] : []),
 		...(needsFoundation ? ['--export-table'] : []),
 		'-z',
 		`stack-size=${stackSize}`,
@@ -783,6 +807,13 @@ async function compileAndLinkObjectiveC(
 		format: 'wasi-core-wasm',
 		fileName: wasmPath,
 		language: 'C',
+		debugMetadata: debug
+			? {
+					variableMetadata: clang.debugVariableMetadata,
+					globalVariableMetadata: clang.debugGlobalMetadata,
+					functionMetadata: clang.debugFunctionMetadata
+				}
+			: undefined,
 		needsLibffi: needsFoundation
 	} satisfies ObjectiveCBrowserClangArtifact;
 }
@@ -791,13 +822,15 @@ function artifactCacheKey(
 	code: string,
 	activePath: string | undefined,
 	workspaceFiles: ObjectiveCWorkspaceFile[],
-	compileArgs: string[]
+	compileArgs: string[],
+	debug: boolean
 ) {
 	return JSON.stringify({
 		code,
 		activePath: activePath || '',
 		workspaceFiles,
-		compileArgs
+		compileArgs,
+		debug
 	});
 }
 
@@ -814,6 +847,13 @@ const handleObjectiveCWorkerMessage = async (event: { data: any }) => {
 		activePath,
 		workspaceFiles,
 		stdin,
+		debug,
+		breakpoints,
+		pauseOnEntry,
+		debugBuffer,
+		watchBuffer,
+		watchResultBuffer,
+		interrupt,
 		clangAssets,
 		objectivecAssets
 	} = event.data;
@@ -840,11 +880,22 @@ const handleObjectiveCWorkerMessage = async (event: { data: any }) => {
 		try {
 			const normalizedWorkspaceFiles = workspaceFiles || [];
 			const normalizedCompileArgs = compileArgs || [];
+			const debugEnabled = !!debug;
+			clang.beginTrace(debugEnabled);
+			clang.debugBreakpoints = new Set(debugEnabled ? breakpoints || [] : []);
+			clang.debugPauseOnEntry = debugEnabled && !!pauseOnEntry;
+			clang.debugBuffer = debugBuffer ? new Int32Array(debugBuffer) : undefined;
+			clang.debugWatchBuffer = watchBuffer ? new Int32Array(watchBuffer) : undefined;
+			clang.debugWatchResultBuffer = watchResultBuffer
+				? new Int32Array(watchResultBuffer)
+				: undefined;
+			clang.debugInterruptBuffer = interrupt ? new Uint8Array(interrupt) : undefined;
 			const cacheKey = artifactCacheKey(
 				code,
 				activePath,
 				normalizedWorkspaceFiles,
-				normalizedCompileArgs
+				normalizedCompileArgs,
+				debugEnabled
 			);
 			let artifact: ObjectiveCBrowserClangArtifact;
 			if (prepare) {
@@ -852,7 +903,8 @@ const handleObjectiveCWorkerMessage = async (event: { data: any }) => {
 					code,
 					activePath,
 					normalizedWorkspaceFiles,
-					normalizedCompileArgs
+					normalizedCompileArgs,
+					debugEnabled
 				);
 				preparedArtifactObjectiveC = artifact;
 				preparedArtifactKeyObjectiveC = cacheKey;
@@ -866,12 +918,24 @@ const handleObjectiveCWorkerMessage = async (event: { data: any }) => {
 					code,
 					activePath,
 					normalizedWorkspaceFiles,
-					normalizedCompileArgs
+					normalizedCompileArgs,
+					debugEnabled
 				);
 				preparedArtifactObjectiveC = artifact;
 				preparedArtifactKeyObjectiveC = cacheKey;
 			}
-			if (!prepare) {
+			if (!prepare && debugEnabled) {
+				clang.memfs.stdin = () => readProgramStdin() ?? '';
+				const instanceRef = { current: null as WebAssembly.Instance | null };
+				await clang.runWithOptions(
+					artifact.wasm!,
+					true,
+					[artifact.fileName || 'main.wasm', ...(programArgs || [])],
+					{},
+					artifact.needsLibffi ? createObjectiveCLibffiImports(instanceRef) : undefined,
+					instanceRef
+				);
+			} else if (!prepare) {
 				const result = await executeBrowserClangArtifact(artifact, {
 					args: programArgs || [],
 					stdin: readProgramStdin,

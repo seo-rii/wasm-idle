@@ -18,6 +18,7 @@ import { flushQueuedStdin, readBufferedStdin } from './stdin-buffer.js';
 
 const ESUCCESS = 0;
 const ENOENT = 44;
+const ENOTSUP = 58;
 const WASI_RIGHT_FD_READ = 1 << 1;
 const WASI_RIGHT_FD_SEEK = 1 << 2;
 const WASI_RIGHT_FD_SYNC = 1 << 4;
@@ -72,6 +73,11 @@ interface DebugSession {
 	}) => void;
 }
 
+interface AppInstantiationOptions {
+	extraImports?: WebAssembly.Imports;
+	instanceRef?: { current: WebAssembly.Instance | null };
+}
+
 export default class App {
 	ready: Promise<void>;
 
@@ -97,7 +103,18 @@ export default class App {
 		{ path: string; contents: Uint8Array; position: number; size: number }
 	>();
 
-	constructor(module: WebAssembly.Module, memfs: MemFS, name: string, ...args: string[]) {
+	constructor(
+		module: WebAssembly.Module,
+		memfs: MemFS,
+		name: string,
+		...argsAndOptions: Array<string | AppInstantiationOptions>
+	) {
+		const lastArgument = argsAndOptions.at(-1);
+		const options =
+			lastArgument && typeof lastArgument === 'object'
+				? (argsAndOptions.pop() as AppInstantiationOptions)
+				: {};
+		const args = argsAndOptions as string[];
 		this.argv = [name, ...args];
 		this.environ = { USER: 'wasm-clang' };
 		this.memfs = memfs;
@@ -127,6 +144,11 @@ export default class App {
 				'clock_time_get',
 				'poll_oneoff',
 				'fd_filestat_set_times',
+				'path_filestat_set_times',
+				'sock_accept',
+				'sock_recv',
+				'sock_send',
+				'sock_shutdown',
 				'path_link',
 				'path_rename'
 			),
@@ -153,12 +175,15 @@ export default class App {
 
 		// Rust/WASI modules import `wasi_snapshot_preview1`, while older toolchains here still use
 		// `wasi_unstable`. Expose the same host under both names so either artifact shape runs.
+		const extraEnv = (options.extraImports?.env || {}) as WebAssembly.ModuleImports;
 		this.ready = getInstance(module, {
+			...options.extraImports,
 			wasi_unstable: wasi,
 			wasi_snapshot_preview1: wasi,
-			env
+			env: { ...extraEnv, ...env }
 		}).then((instance) => {
 			this.instance = instance;
+			if (options.instanceRef) options.instanceRef.current = instance;
 			this.exports = this.instance.exports;
 			this.mem = new Memory(this.exports.memory);
 			this.memfs.hostMem = this.mem;
@@ -1376,6 +1401,31 @@ export default class App {
 	fd_filestat_set_times() {
 		this.trace('fd_filestat_set_times()');
 		return ESUCCESS;
+	}
+
+	path_filestat_set_times() {
+		this.trace('path_filestat_set_times()');
+		return ESUCCESS;
+	}
+
+	sock_accept() {
+		this.trace('sock_accept() unsupported');
+		return ENOTSUP;
+	}
+
+	sock_recv() {
+		this.trace('sock_recv() unsupported');
+		return ENOTSUP;
+	}
+
+	sock_send() {
+		this.trace('sock_send() unsupported');
+		return ENOTSUP;
+	}
+
+	sock_shutdown() {
+		this.trace('sock_shutdown() unsupported');
+		return ENOTSUP;
 	}
 
 	path_link(

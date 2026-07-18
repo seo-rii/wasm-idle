@@ -200,6 +200,96 @@ int main() {
 		expect(instrumentedSource.match(/setvbuf\(stdout, nullptr, _IONBF, 0\);/g)).toHaveLength(1);
 	});
 
+	it('emits C-compatible debug hooks without C++ headers or syntax', async () => {
+		const { clang } = createClangHarness();
+		const code = `#include <stdio.h>
+
+int total = 2;
+
+int main(void) {
+    int next = total + 3;
+    printf("%d\\n", next);
+    return 0;
+}`;
+
+		await clang.compile({
+			input: 'main.c',
+			code,
+			obj: 'main.o',
+			language: 'C',
+			debug: true
+		});
+
+		const instrumentedSource = String(vi.mocked(clang.memfs.addFile).mock.calls[0]?.[1] || '');
+		const compileArgs = vi.mocked(clang.run).mock.calls[0]?.slice(2) ?? [];
+		expect(instrumentedSource).toContain('#include <stdio.h>');
+		expect(instrumentedSource).toContain(
+			'__attribute__((import_module("env"), import_name("__wasm_idle_debug_line"))) void __wasm_idle_debug_line(int functionId, int line);'
+		);
+		expect(instrumentedSource).toContain('setvbuf(stdout, NULL, _IONBF, 0);');
+		expect(instrumentedSource).toContain(
+			'__attribute__((constructor)) static void __wasm_idle_debug_globals_init(void) {'
+		);
+		expect(instrumentedSource).not.toContain('extern "C"');
+		expect(instrumentedSource).not.toContain('#include <iostream>');
+		expect(instrumentedSource).not.toContain('template <typename');
+		expect(compileArgs).toEqual(expect.arrayContaining(['-std=gnu11', '-x', 'c']));
+	});
+
+	it('uses C-compatible hooks and Objective-C compiler flags for debug builds', async () => {
+		const { clang } = createClangHarness();
+		const code = `@interface Counter
+- (int)increment;
+@end
+
+@implementation Counter
+- (int)increment {
+    int value = 1;
+    value += 1;
+    return value;
+}
+@end
+
+int main(void) {
+    return 0;
+}`;
+		const transformSource = vi.fn((source: string) =>
+			source.replace('@implementation Counter', '// transformed\n@implementation Counter')
+		);
+
+		await clang.compile({
+			input: 'main.m',
+			code,
+			obj: 'main.o',
+			language: 'OBJC',
+			debug: true,
+			transformSource
+		});
+
+		const instrumentedSource = String(vi.mocked(clang.memfs.addFile).mock.calls[0]?.[1] || '');
+		const compileArgs = vi.mocked(clang.run).mock.calls[0]?.slice(2) ?? [];
+		expect(instrumentedSource).toContain('__wasm_idle_debug_enter(1, 6);');
+		expect(instrumentedSource).toContain('setvbuf(stdout, NULL, _IONBF, 0);');
+		expect(instrumentedSource).not.toContain('extern "C"');
+		expect(instrumentedSource).not.toContain('#include <iostream>');
+		expect(instrumentedSource).not.toContain('__wasm_idle_debug_value_num(1, 1, int);');
+		expect(instrumentedSource).toContain('// transformed\n@implementation Counter');
+		expect(transformSource).toHaveBeenCalledWith(
+			expect.stringContaining('__wasm_idle_debug_enter(1, 6);')
+		);
+		expect((clang as any).debugFunctionMetadata[1]).toBe('-increment');
+		expect(compileArgs).toEqual(
+			expect.arrayContaining([
+				'-I.',
+				'-std=gnu11',
+				'-x',
+				'objective-c',
+				'-fobjc-runtime=gnustep-2.0',
+				'-fblocks'
+			])
+		);
+	});
+
 	it('tracks outer loop mutations without emitting out-of-scope loop variable hooks', async () => {
 		const { clang } = createClangHarness();
 		const code = `#include <stdio.h>

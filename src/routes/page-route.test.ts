@@ -57,7 +57,9 @@ describe('example route debug actions', () => {
 		);
 		expect(source).toMatch(/GO: goDebugLanguageAdapter/);
 		expect(source).toMatch(/RUST: rustDebugLanguageAdapter/);
+		expect(source).toMatch(/C: cppDebugLanguageAdapter/);
 		expect(source).toMatch(/CPP: cppDebugLanguageAdapter/);
+		expect(source).toMatch(/OBJC: cppDebugLanguageAdapter/);
 		expect(source).toMatch(/PYTHON: pythonDebugLanguageAdapter/);
 		expect(source).toMatch(/const debug = createDebugSessionController\(\{/);
 		expect(source).toMatch(/syncBreakpointsWhile: \(\) => runningMode === 'debug'/);
