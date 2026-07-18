@@ -1,1 +1,1 @@
-export const WASM_OCAML_ASSET_VERSION = '229ba95eea9ead26';
+export const WASM_OCAML_ASSET_VERSION = 'c68f44119a68fb4c';
