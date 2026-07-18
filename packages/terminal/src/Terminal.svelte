@@ -1,33 +1,27 @@
 <script lang="ts">
-	import type {
-		CompilerDiagnostic,
-		DebugCommand,
-		DebugSessionEvent,
-		SandboxExecutionOptions
-	} from '$lib/playground/options';
-	import type { PlaygroundRuntimeAssets } from '$lib/playground/assets';
-	import type {
-		BoundSandbox,
-		PlaygroundBinding,
-		SandboxRuntimeAssets
-	} from '$lib/playground/sandbox';
-	import type { TerminalControl } from '$lib/terminal/types';
-	import { Theme, registerAllPlugins } from '$lib/terminal';
-	import load from '$lib/playground';
 	import {
 		createRuntimeAssetsKey,
 		phaseProgress,
-		progressBandsForLanguage
+		progressBandsForLanguage,
+		type DebugCommand,
+		type DebugSessionEvent
 	} from '@wasm-idle/core';
 	import { onMount } from 'svelte';
 	import '@xterm/xterm/css/xterm.css';
 	import type { Terminal as TerminalType } from '@xterm/xterm';
+	import registerAllPlugins from './plugin/index.js';
+	import Theme from './theme.js';
+	import type {
+		BoundSandbox,
+		CompilerDiagnostic,
+		PlaygroundBinding,
+		TerminalControl,
+		TerminalExecutionOptions
+	} from './types.js';
 
 	interface Props {
 		dark?: boolean;
-		path?: string;
-		runtimeAssets?: string | PlaygroundRuntimeAssets;
-		playground?: PlaygroundBinding;
+		playground: PlaygroundBinding;
 		font?: string;
 
 		onload?: () => void;
@@ -41,9 +35,7 @@
 
 	let {
 		dark = false,
-		path = '',
-		runtimeAssets = undefined,
-		playground = undefined,
+		playground,
 		font = "'D2 coding', monospace",
 		onload,
 		onfinish,
@@ -92,7 +84,7 @@
 
 	async function initSandbox(language: string) {
 		const currentPlayground = playground;
-		const currentRuntimeAssets = currentPlayground?.runtimeAssets || runtimeAssets || path;
+		const currentRuntimeAssets = currentPlayground.runtimeAssets;
 		const currentRuntimeAssetsKey = createRuntimeAssetsKey(currentRuntimeAssets);
 		const requiresSandboxReset =
 			ll !== language || loadedRuntimeAssetsKey !== currentRuntimeAssetsKey;
@@ -104,9 +96,7 @@
 		inputCursor = 0;
 		finish = false;
 		if (!sandbox || requiresSandboxReset) {
-			sandbox = currentPlayground
-				? await currentPlayground.load(language)
-				: await load(language, currentRuntimeAssets);
+			sandbox = await currentPlayground.load(language);
 			await sandbox.clear();
 			ll = language;
 			loadedRuntimeAssetsKey = currentRuntimeAssetsKey;
@@ -271,7 +261,7 @@
 			log = true,
 			prog?: { set?: (value: number, stage?: string) => void },
 			args: string[] = [],
-			options: SandboxExecutionOptions = {}
+			options: TerminalExecutionOptions = {}
 		) {
 			prog?.set?.(0, `Loading ${language} runtime`);
 			const progressBands = progressBandsForLanguage(language);
@@ -307,7 +297,7 @@
 			log = true,
 			prog?: { set?: (value: number, stage?: string) => void },
 			args: string[] = [],
-			options: SandboxExecutionOptions = {}
+			options: TerminalExecutionOptions = {}
 		) {
 			await Promise.all([
 				initSandbox(language).then(() => sandbox.load(code, log, args, options, prog)),

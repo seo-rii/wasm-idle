@@ -4,7 +4,7 @@ import {
 	type PlaygroundRuntimeAssets
 } from '$lib/playground/assets';
 import type { SandboxExecutionOptions } from '$lib/playground/options';
-import type { Sandbox } from '$lib/playground/sandbox';
+import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
 import {
 	flushBufferedEof,
 	flushQueuedStdin,
@@ -52,7 +52,7 @@ class Elixir implements Sandbox {
 		log = true,
 		_args: string[] = [],
 		_options: SandboxExecutionOptions = {},
-		progress?: { set?: (value: number) => void } | import('svelte/store').Writable<number>
+		progress?: SandboxProgress
 	) {
 		return this.workerSession.load(async (resolve, reject) => {
 			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
@@ -134,7 +134,7 @@ class Elixir implements Sandbox {
 		code: string,
 		prepare: boolean,
 		log = true,
-		_prog?: { set?: (value: number) => void } | import('svelte/store').Writable<number>,
+		_prog?: SandboxProgress,
 		_args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {

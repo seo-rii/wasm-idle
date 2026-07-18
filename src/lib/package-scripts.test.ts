@@ -45,17 +45,22 @@ describe('LLVM runtime package scripts', () => {
 		expect(verifier).not.toContain('@wasm-idle/runtime-php');
 	});
 
-	it('keeps terminal and ZIP support dependencies lean', async () => {
+	it('keeps terminal UI dependencies out of the root runtime package', async () => {
 		const root = await readRootPackage();
 		const llvmCore = await readPackageManifest('packages/llvm-core');
 		const lsp = await readPackageManifest('packages/lsp');
+		const terminal = await readPackageManifest('packages/terminal');
 
 		for (const manifest of [root, llvmCore, lsp]) {
 			expect(manifest.dependencies?.['@zip.js/zip.js']).toBeUndefined();
 			expect(manifest.dependencies?.fflate).toBe('0.8.3');
 		}
-		expect(root.dependencies?.['@xterm/addon-canvas']).toBeUndefined();
-		expect(root.dependencies?.['@xterm/addon-ligatures']).toBeUndefined();
+		expect(root.dependencies?.['@xterm/xterm']).toBeUndefined();
+		expect(root.peerDependencies?.svelte).toBeUndefined();
+		expect(root.devDependencies?.['@wasm-idle/terminal']).toBe('workspace:*');
+		expect(terminal.name).toBe('@wasm-idle/terminal');
+		expect(terminal.dependencies?.['@xterm/xterm']).toBe('^6.0.0');
+		expect(terminal.peerDependencies?.svelte).toBe('^5.0.0');
 	});
 
 	it('keeps editor tooling as separately installed page plugins', async () => {
@@ -70,7 +75,18 @@ describe('LLVM runtime package scripts', () => {
 		expect(root.scripts?.['package:root']).toContain('scripts/clean-package-output.mjs');
 		expect(verifier).toContain("name: '@wasm-idle/debug install'");
 		expect(verifier).toContain("name: '@wasm-idle/lsp install'");
-		expect(verifier).toContain("absentPackageNames: ['@wasm-idle/debug', '@wasm-idle/lsp']");
+		expect(verifier).toContain("name: '@wasm-idle/terminal install'");
+		expect(verifier).toContain("'@wasm-idle/terminal'");
+	});
+
+	it('builds Rust source instrumentation as a lazy static asset', async () => {
+		const root = await readRootPackage();
+		const rustRuntime = await readPackageManifest('runtimes/wasm-rust');
+
+		expect(root.dependencies?.['@lezer/rust']).toBeUndefined();
+		expect(rustRuntime.dependencies?.['@lezer/rust']).toBeUndefined();
+		expect(rustRuntime.devDependencies?.['@lezer/rust']).toBe('^1.0.2');
+		expect(rustRuntime.scripts?.['postbuild:js']).toContain('build-debug-instrumenter.mjs');
 	});
 
 	it('keeps the debugger package code-only with explicit host peers', async () => {
@@ -134,6 +150,7 @@ describe('LLVM runtime package scripts', () => {
 			'packages/node',
 			'packages/react',
 			'packages/svelte',
+			'packages/terminal',
 			'packages/vue'
 		]) {
 			expect(verifier).toContain(`'${packagePath}'`);

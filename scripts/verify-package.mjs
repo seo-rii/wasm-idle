@@ -13,6 +13,7 @@ const packages = [
 	['node', 'packages/node'],
 	['react', 'packages/react'],
 	['svelte', 'packages/svelte'],
+	['terminal', 'packages/terminal'],
 	['vue', 'packages/vue'],
 	['wasm-idle', '.']
 ];
@@ -21,11 +22,26 @@ const scenarios = [
 	{
 		name: 'wasm-idle root install',
 		packageNames: ['wasm-idle', '@wasm-idle/core', '@wasm-idle/llvm-core'],
-		absentPackageNames: ['@wasm-idle/debug', '@wasm-idle/lsp'],
+		absentPackageNames: [
+			'@lezer/rust',
+			'@wasm-idle/debug',
+			'@wasm-idle/lsp',
+			'@wasm-idle/terminal',
+			'@xterm/xterm',
+			'svelte'
+		],
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/llvm-core/core/gcc-compat');",
 			"if (!import.meta.resolve('wasm-idle').endsWith('/wasm-idle/dist/index.js')) throw new Error('wasm-idle import export did not resolve');"
+		]
+	},
+	{
+		name: '@wasm-idle/terminal install',
+		packageNames: ['@wasm-idle/terminal', '@wasm-idle/core'],
+		imports: [
+			"await import('@wasm-idle/core');",
+			"if (!import.meta.resolve('@wasm-idle/terminal').includes('/@wasm-idle/terminal/dist/index.js')) throw new Error('@wasm-idle/terminal export did not resolve');"
 		]
 	},
 	{
@@ -62,6 +78,7 @@ const scenarios = [
 			"await import('@wasm-idle/node');",
 			"await import('@wasm-idle/react');",
 			"await import('@wasm-idle/svelte');",
+			"if (!import.meta.resolve('@wasm-idle/terminal').includes('/@wasm-idle/terminal/dist/index.js')) throw new Error('@wasm-idle/terminal export did not resolve');",
 			"await import('@wasm-idle/vue');",
 			"if (!import.meta.resolve('wasm-idle').endsWith('/wasm-idle/dist/index.js')) throw new Error('wasm-idle import export did not resolve');"
 		]
@@ -290,6 +307,7 @@ try {
 		if (manifest.name === 'wasm-idle') {
 			const legacyPluginFiles = packedPaths.filter(
 				(packedPath) =>
+					packedPath.startsWith('dist/terminal/') ||
 					packedPath.startsWith('dist/debug/') ||
 					packedPath.startsWith('dist/lsp/') ||
 					packedPath.startsWith('dist/utils/vscodeJsonrpcBrowser')

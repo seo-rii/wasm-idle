@@ -1,6 +1,7 @@
 <script lang="ts">
 	import Monaco from './Monaco.svelte';
-	import Terminal, { createPlaygroundBinding, isSharedArrayBufferAvailable } from '$lib';
+	import Terminal, { type TerminalControl } from '@wasm-idle/terminal';
+	import { createPlaygroundBinding, isSharedArrayBufferAvailable } from '$lib';
 	import {
 		createDebugSessionController,
 		cppDebugLanguageAdapter,
@@ -58,7 +59,6 @@
 		SandboxExecutionOptions,
 		TinyGoTarget
 	} from '$lib/playground/options';
-	import type { TerminalControl } from '$lib/terminal';
 	import type monaco from 'monaco-editor';
 	import { executeTerminalRun } from './execute';
 	import elixirRuntimeWorkerUrl from '$lib/playground/worker/elixir?worker&url';

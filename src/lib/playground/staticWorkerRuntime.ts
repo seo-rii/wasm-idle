@@ -4,7 +4,7 @@ import {
 	type CompilerDiagnostic,
 	type SandboxExecutionOptions
 } from '$lib/playground/options';
-import type { Sandbox } from '$lib/playground/sandbox';
+import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
 
 export interface StaticWorkerRuntimeUrls {
 	baseUrl: string;
@@ -24,10 +24,6 @@ export interface StaticWorkerRuntimeConfig {
 	) => StaticWorkerRuntimeUrls;
 }
 
-type ProgressSink =
-	| { set?: (value: number, stage?: string) => void }
-	| import('svelte/store').Writable<number>;
-
 type StaticWorkerMessage = {
 	__wasmIdleStaticWorkerReady?: boolean;
 	output?: string;
@@ -44,7 +40,7 @@ type BufferedStdin = {
 
 type ActiveRun = {
 	id: number;
-	progress?: ProgressSink;
+	progress?: SandboxProgress;
 	resolve: (result: boolean | string) => void;
 	reject: (reason: string) => void;
 };
@@ -74,7 +70,7 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 
 	private activeRun: ActiveRun | null = null;
 	private bootstrapUrl = '';
-	private lifecycleProgress?: ProgressSink;
+	private lifecycleProgress?: SandboxProgress;
 	private progressValues = new WeakMap<object, number>();
 	private startupReject: ((reason: Error) => void) | null = null;
 	private workerGeneration = 0;
@@ -88,7 +84,7 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 		_log = true,
 		_args: string[] = [],
 		_options: SandboxExecutionOptions = {},
-		progress?: ProgressSink
+		progress?: SandboxProgress
 	) {
 		const progressSink = this.selectProgress(progress);
 		const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
@@ -165,12 +161,12 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 		return { stdin, stdinEof: true };
 	}
 
-	private selectProgress(progress?: ProgressSink) {
+	private selectProgress(progress?: SandboxProgress) {
 		if (progress) this.lifecycleProgress = progress;
 		return progress || this.lifecycleProgress;
 	}
 
-	private reportProgress(progress: ProgressSink | undefined, value: number, stage?: string) {
+	private reportProgress(progress: SandboxProgress | undefined, value: number, stage?: string) {
 		const sink = this.selectProgress(progress);
 		if (!sink) return;
 		const clamped = Number.isFinite(value) ? Math.max(0, Math.min(value, 1)) : 0;
@@ -180,7 +176,7 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 		sink.set?.(clamped, stage);
 	}
 
-	private async preloadWorkerScript(progress?: ProgressSink) {
+	private async preloadWorkerScript(progress?: SandboxProgress) {
 		this.reportProgress(progress, 0.05, `Loading ${this.config.displayName} worker script`);
 		let response: Response;
 		try {
@@ -242,7 +238,7 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 		this.bootstrapUrl = '';
 	}
 
-	private ensureWorkerStarted(progress?: ProgressSink) {
+	private ensureWorkerStarted(progress?: SandboxProgress) {
 		if (this.workerStartPromise) return this.workerStartPromise;
 		const generation = ++this.workerGeneration;
 		const startPromise = this.startWorker(generation, progress);
@@ -253,7 +249,7 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 		return startPromise;
 	}
 
-	private async startWorker(generation: number, progress?: ProgressSink) {
+	private async startWorker(generation: number, progress?: SandboxProgress) {
 		await this.preloadWorkerScript(progress);
 		if (generation !== this.workerGeneration) {
 			throw new Error('Process terminated');
@@ -391,7 +387,7 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 		code: string,
 		prepare: boolean,
 		_log = true,
-		_prog?: ProgressSink,
+		_prog?: SandboxProgress,
 		args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {

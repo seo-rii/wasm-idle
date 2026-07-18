@@ -5,7 +5,7 @@ import type {
 } from '$lib/playground/options';
 import { WorkerAssetBridge } from '$lib/playground/assetBridge';
 import { resolveRuntimeAssetConfig, type PlaygroundRuntimeAssets } from '$lib/playground/assets';
-import type { Sandbox } from '$lib/playground/sandbox';
+import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
 import {
 	bufferedSequence,
 	flushBufferedEof,
@@ -15,7 +15,7 @@ import {
 } from '$lib/playground/stdinBuffer';
 import { createWasmIdleSharedBuffer, requireSharedArrayBuffer } from '$lib/playground/sharedBuffer';
 import { WorkerSession } from '$lib/playground/workerSession';
-import { reportWorkerProgress, type ProgressSink } from '$lib/playground/workerProgress';
+import { reportWorkerProgress } from '$lib/playground/workerProgress';
 
 class Python implements Sandbox {
 	ts = Date.now();
@@ -54,7 +54,7 @@ class Python implements Sandbox {
 		log = true,
 		_args: string[] = [],
 		_options: SandboxExecutionOptions = {},
-		progress?: ProgressSink | import('svelte/store').Writable<number>
+		progress?: SandboxProgress
 	) {
 		return this.workerSession.load(async (resolve, reject) => {
 			this.pendingInput = [];
@@ -131,7 +131,7 @@ class Python implements Sandbox {
 		code: string,
 		prepare: boolean,
 		_log = true,
-		_prog?: ProgressSink | import('svelte/store').Writable<number>,
+		_prog?: SandboxProgress,
 		_args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {

@@ -5,7 +5,7 @@ import {
 	type SandboxExecutionOptions
 } from '$lib/playground/options';
 import { importRuntimeModule } from '$lib/playground/runtimeModule';
-import type { Sandbox } from '$lib/playground/sandbox';
+import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
 
 type BashRuntimeAssetConfig = PlaygroundRuntimeAssets & {
 	bash?: { moduleUrl?: string; webcUrl?: string; workerUrl?: string };
@@ -53,9 +53,7 @@ class Bash implements Sandbox {
 		_log = true,
 		_args: string[] = [],
 		_options: SandboxExecutionOptions = {},
-		progress?:
-			| { set?: (value: number, stage?: string) => void }
-			| import('svelte/store').Writable<number>
+		progress?: SandboxProgress
 	) {
 		this.pendingInput = [];
 		this.pendingEof = false;
@@ -71,9 +69,7 @@ class Bash implements Sandbox {
 		this.webcUrl = currentUrl ? new URL(nextWebcUrl, currentUrl).href : nextWebcUrl;
 		const sdkModuleUrl = bashAssets?.moduleUrl || `${normalizedRoot}/wasm-bash/sdk/index.mjs`;
 		const sdkWorkerUrl = bashAssets?.workerUrl || `${normalizedRoot}/wasm-bash/sdk/worker.mjs`;
-		const resolvedSdkUrl = currentUrl
-			? new URL(sdkModuleUrl, currentUrl).href
-			: sdkModuleUrl;
+		const resolvedSdkUrl = currentUrl ? new URL(sdkModuleUrl, currentUrl).href : sdkModuleUrl;
 		const resolvedThreadWorkerUrl = currentUrl
 			? new URL(sdkWorkerUrl, currentUrl).href
 			: sdkWorkerUrl;
@@ -129,9 +125,7 @@ class Bash implements Sandbox {
 		code: string,
 		prepare: boolean,
 		_log = true,
-		_prog?:
-			| { set?: (value: number, stage?: string) => void }
-			| import('svelte/store').Writable<number>,
+		_prog?: SandboxProgress,
 		args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {

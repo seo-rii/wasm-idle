@@ -1,6 +1,6 @@
-import source from './Terminal.svelte?raw';
-import pluginSource from './plugin/index.ts?raw';
-import Theme from './theme';
+import source from '../src/Terminal.svelte?raw';
+import pluginSource from '../src/plugin/index.ts?raw';
+import Theme from '../src/theme.js';
 import { compile } from 'svelte/compiler';
 import { describe, expect, it } from 'vitest';
 
@@ -8,7 +8,7 @@ describe('Terminal source', () => {
 	it('restores the cursor and copies terminal selections before ctrl+c stop handling', () => {
 		expect(() =>
 			compile(source, {
-				filename: 'src/lib/terminal/Terminal.svelte',
+				filename: 'packages/terminal/src/Terminal.svelte',
 				generate: 'client'
 			})
 		).not.toThrow();
@@ -22,6 +22,13 @@ describe('Terminal source', () => {
 		expect(source).toMatch(
 			/if \(isCopyShortcut\) \{\s+ev\.preventDefault\(\);\s+sandbox\.kill\?\.\(\);\s+\}/s
 		);
+	});
+
+	it('requires an injected playground binding without importing the root runtime', () => {
+		expect(source).toContain('playground: PlaygroundBinding;');
+		expect(source).toContain('sandbox = await currentPlayground.load(language);');
+		expect(source).not.toContain("from '$lib");
+		expect(source).not.toMatch(/import load from/);
 	});
 
 	it('uses transparent backgrounds for terminal rendering layers', () => {

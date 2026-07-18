@@ -5,7 +5,7 @@ import {
 } from '$lib/playground/worker/assets';
 import { installObjectiveCWorker } from '@wasm-idle/llvm-core/objective-c';
 
-declare const self: DedicatedWorkerGlobalScope;
+declare const self: unknown;
 
 installObjectiveCWorker(self as any, {
 	configureRuntimeAssets: configureWorkerRuntimeAssets,

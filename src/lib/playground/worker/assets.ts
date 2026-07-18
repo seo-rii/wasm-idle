@@ -1,4 +1,4 @@
-declare const self: DedicatedWorkerGlobalScope & {
+declare const self: {
 	postMessage: (message: any) => void;
 };
 

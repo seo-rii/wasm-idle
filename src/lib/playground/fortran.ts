@@ -7,7 +7,7 @@ import {
 } from '$lib/playground/assets';
 import type { SandboxExecutionOptions } from '$lib/playground/options';
 import { resolveSandboxExecutionArgs } from '$lib/playground/options';
-import type { Sandbox } from '$lib/playground/sandbox';
+import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
 import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
 import { WorkerSession } from '$lib/playground/workerSession';
 import {
@@ -15,7 +15,6 @@ import {
 	flushQueuedStdin,
 	resetBufferedStdin
 } from '$lib/playground/stdinBuffer';
-import type { Writable } from 'svelte/store';
 
 const fortranAssetsKey = (assets: ResolvedFortranRuntimeAssetConfig) =>
 	JSON.stringify({
@@ -59,7 +58,7 @@ class Fortran implements Sandbox {
 		log = true,
 		args: string[] = [],
 		_options: SandboxExecutionOptions = {},
-		progress?: { set?: (value: number) => void } | Writable<number>
+		progress?: SandboxProgress
 	) {
 		return this.workerSession.load(async (resolve, reject) => {
 			this.log = log;
@@ -141,7 +140,7 @@ class Fortran implements Sandbox {
 		code: string,
 		prepare: boolean,
 		log = this.log,
-		prog?: Writable<number> | { set?: (value: number) => void },
+		prog?: SandboxProgress,
 		args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {

@@ -7,8 +7,12 @@ import {
 	type WorkerRuntimeAssetConfig
 } from '$lib/playground/worker/assets';
 
-declare const self: DedicatedWorkerGlobalScope & {
+declare const self: {
 	postMessage: (message: any) => void;
+	addEventListener: (
+		type: 'message',
+		listener: (event: MessageEvent<any>) => void | Promise<void>
+	) => void;
 };
 
 let compilerLib: any = null;

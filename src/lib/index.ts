@@ -1,7 +1,6 @@
-import Terminal from '$lib/terminal';
 import playground, { createPlaygroundBinding } from '$lib/playground';
 
-export default Terminal;
+export default playground;
 export { createPlaygroundBinding, playground };
 export {
 	isSharedArrayBufferAvailable,
@@ -12,10 +11,9 @@ export type {
 	DebugFrame,
 	DebugSessionEvent,
 	DebugVariable,
-	SandboxExecutionOptions,
 	TerminalControl
-} from '$lib/terminal';
-export type { CompilerDiagnostic } from '$lib/playground/options';
+} from '@wasm-idle/core';
+export type { CompilerDiagnostic, SandboxExecutionOptions } from '$lib/playground/options';
 export type {
 	PlaygroundRuntimeAssets,
 	RuntimeAssetConfig,

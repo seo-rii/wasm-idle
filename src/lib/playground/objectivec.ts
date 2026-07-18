@@ -7,7 +7,7 @@ import {
 } from '$lib/playground/assets';
 import type { SandboxExecutionOptions } from '$lib/playground/options';
 import { resolveSandboxExecutionArgs } from '$lib/playground/options';
-import type { Sandbox } from '$lib/playground/sandbox';
+import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
 import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
 import { WorkerSession } from '$lib/playground/workerSession';
 import {
@@ -15,7 +15,6 @@ import {
 	flushQueuedStdin,
 	resetBufferedStdin
 } from '$lib/playground/stdinBuffer';
-import type { Writable } from 'svelte/store';
 
 const objectiveCAssetsKey = (assets: ResolvedObjectiveCRuntimeAssetConfig) =>
 	JSON.stringify({
@@ -61,7 +60,7 @@ class ObjectiveC implements Sandbox {
 		log = true,
 		args: string[] = [],
 		options: SandboxExecutionOptions = {},
-		progress?: { set?: (value: number) => void } | Writable<number>
+		progress?: SandboxProgress
 	) {
 		void options;
 		return this.workerSession.load(async (resolve, reject) => {
@@ -146,7 +145,7 @@ class ObjectiveC implements Sandbox {
 		code: string,
 		prepare: boolean,
 		log = this.log,
-		prog?: Writable<number> | { set?: (value: number) => void },
+		prog?: SandboxProgress,
 		args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {

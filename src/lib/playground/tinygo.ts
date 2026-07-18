@@ -10,7 +10,7 @@ import {
 	type SandboxExecutionOptions,
 	type TinyGoTarget
 } from '$lib/playground/options';
-import type { Sandbox } from '$lib/playground/sandbox';
+import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
 import {
 	flushBufferedEof,
 	flushQueuedStdin,
@@ -86,10 +86,7 @@ class TinyGo implements Sandbox {
 	waitingForInput = false;
 	pendingEof = false;
 	lastActivityLog = '';
-	runtimeProgress:
-		| { set?: (value: number) => void }
-		| import('svelte/store').Writable<number>
-		| undefined = undefined;
+	runtimeProgress: SandboxProgress | undefined = undefined;
 	runtimeProgressStart = 0;
 	runtimeProgressEnd = 0;
 	runtimeProgressValue = 0;
@@ -110,7 +107,7 @@ class TinyGo implements Sandbox {
 		_log = true,
 		_args: string[] = [],
 		_options: SandboxExecutionOptions = {},
-		progress?: { set?: (value: number) => void } | import('svelte/store').Writable<number>
+		progress?: SandboxProgress
 	): Promise<void> {
 		this.pendingInput = [];
 		this.waitingForInput = false;
@@ -322,7 +319,7 @@ class TinyGo implements Sandbox {
 		code: string,
 		target: TinyGoTarget = 'wasm',
 		log = true,
-		prog?: { set?: (value: number) => void } | import('svelte/store').Writable<number>
+		prog?: SandboxProgress
 	) {
 		const compileCacheKey = JSON.stringify({
 			code,
@@ -413,7 +410,7 @@ class TinyGo implements Sandbox {
 		code: string,
 		prepare: boolean,
 		_log = true,
-		_prog?: { set?: (value: number) => void } | import('svelte/store').Writable<number>,
+		_prog?: SandboxProgress,
 		args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
