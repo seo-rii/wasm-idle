@@ -66,7 +66,7 @@ describe('Zig sandbox', () => {
 	beforeEach(() => {
 		workerInstances.length = 0;
 		publicEnv.PUBLIC_WASM_ZIG_COMPILER_URL = '/wasm-zig/zig_small.wasm';
-		publicEnv.PUBLIC_WASM_ZIG_STDLIB_URL = '/wasm-zig/std.zip';
+		publicEnv.PUBLIC_WASM_ZIG_STDLIB_URL = '/wasm-zig/std.tar.gz';
 		suppressAutoLoadAck = false;
 	});
 
@@ -113,7 +113,7 @@ describe('Zig sandbox', () => {
 			expect.objectContaining({
 				load: true,
 				compilerUrl: expect.stringMatching(/\/wasm-zig\/zig_small\.wasm$/),
-				stdlibUrl: expect.stringMatching(/\/wasm-zig\/std\.zip$/)
+				stdlibUrl: expect.stringMatching(/\/wasm-zig\/std\.tar\.gz$/)
 			})
 		);
 		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(

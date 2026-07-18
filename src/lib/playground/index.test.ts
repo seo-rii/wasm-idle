@@ -1004,7 +1004,7 @@ End Module`;
 			rootUrl: '/absproxy/5173',
 			zig: {
 				compilerUrl: '/absproxy/5173/wasm-zig/zig_small.wasm?v=test',
-				stdlibUrl: '/absproxy/5173/wasm-zig/std.zip?v=test'
+				stdlibUrl: '/absproxy/5173/wasm-zig/std.tar.gz?v=test'
 			}
 		});
 		const progress = { set() {} };
@@ -1016,7 +1016,7 @@ End Module`;
 			rootUrl: '/absproxy/5173',
 			zig: {
 				compilerUrl: '/absproxy/5173/wasm-zig/zig_small.wasm?v=test',
-				stdlibUrl: '/absproxy/5173/wasm-zig/std.zip?v=test'
+				stdlibUrl: '/absproxy/5173/wasm-zig/std.tar.gz?v=test'
 			}
 		};
 		expect(sandbox.runtimeAssets).toEqual(runtimeAssets);

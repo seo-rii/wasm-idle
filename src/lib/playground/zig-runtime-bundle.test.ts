@@ -11,7 +11,7 @@ import {
 	PreopenDirectory,
 	WASI
 } from '@bjorn3/browser_wasi_shim';
-import { Unzip, UnzipInflate } from 'fflate';
+import { untar } from '@wasm-idle/llvm-core';
 
 const staticDir = path.resolve(process.cwd(), 'static/wasm-zig');
 const encoder = new TextEncoder();
@@ -29,7 +29,7 @@ function toWasiStartInstance(instance: WebAssembly.Instance) {
 	return instance as unknown as WasiStartInstance;
 }
 
-function addFile(root: Directory, filePath: string, data: Uint8Array) {
+function addFileToDirectory(root: Directory, filePath: string, data: Uint8Array) {
 	const parts = filePath.split('/').filter(Boolean);
 	let current = root;
 	for (const part of parts.slice(0, -1)) {
@@ -45,36 +45,14 @@ function addFile(root: Directory, filePath: string, data: Uint8Array) {
 	current.contents.set(parts.at(-1) || 'file', new File(data, { readonly: true }));
 }
 
-async function unzipStdDirectory(source: Uint8Array) {
+function untarStdDirectory(source: Uint8Array) {
 	const root = new Directory(new Map());
-	let archiveError: unknown;
-	const unzip = new Unzip((file) => {
-		if (!file.name || file.name.endsWith('/')) return;
-		const chunks: Uint8Array[] = [];
-		let length = 0;
-		file.ondata = (error, data, final) => {
-			if (error) {
-				archiveError = error;
-				return;
-			}
-			if (data.byteLength > 0) {
-				chunks.push(data);
-				length += data.byteLength;
-			}
-			if (!final) return;
-			const contents = new Uint8Array(length);
-			let offset = 0;
-			for (const chunk of chunks) {
-				contents.set(chunk, offset);
-				offset += chunk.byteLength;
-			}
-			addFile(root, file.name, contents);
-		};
-		file.start();
+	untar(source, {
+		addDirectory() {},
+		addFile(filePath, contents) {
+			addFileToDirectory(root, filePath, contents);
+		}
 	});
-	unzip.register(UnzipInflate);
-	unzip.push(source, true);
-	if (archiveError) throw archiveError;
 	const stdDirectory = root.contents.get('std');
 	if (!(stdDirectory instanceof Directory)) throw new Error('std directory missing');
 	return stdDirectory;
@@ -91,7 +69,9 @@ describe('bundled wasm-zig runtime', () => {
 	it('compiles a Zig program to WASI and runs it with the browser WASI shim', async () => {
 		const [compilerBytes, stdDirectory] = await Promise.all([
 			readStaticAsset('zig_small.wasm'),
-			readFile(path.join(staticDir, 'std.zip')).then((data) => unzipStdDirectory(data))
+			readFile(path.join(staticDir, 'std.tar.gz'))
+				.then((data) => gunzipAsync(data))
+				.then((data) => untarStdDirectory(data))
 		]);
 		const workDir = new Map<string, File>([
 			[

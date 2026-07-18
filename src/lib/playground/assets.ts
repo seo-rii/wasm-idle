@@ -1302,14 +1302,14 @@ export function resolveZigStdlibUrl(
 
 	if (typeof options === 'string') {
 		return resolveConfiguredUrl(
-			`${normalizeRootUrl(options) || ''}/wasm-zig/std.zip`,
+			`${normalizeRootUrl(options) || ''}/wasm-zig/std.tar.gz`,
 			currentUrl
 		);
 	}
 
 	if (options?.rootUrl) {
 		return resolveConfiguredUrl(
-			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-zig/std.zip`,
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-zig/std.tar.gz`,
 			currentUrl
 		);
 	}

@@ -330,8 +330,8 @@
 				? `${path}/wasm-zig/zig_small.wasm?v=${WASM_ZIG_ASSET_VERSION}`
 				: `/wasm-zig/zig_small.wasm?v=${WASM_ZIG_ASSET_VERSION}`,
 			stdlibUrl: path
-				? `${path}/wasm-zig/std.zip?v=${WASM_ZIG_ASSET_VERSION}`
-				: `/wasm-zig/std.zip?v=${WASM_ZIG_ASSET_VERSION}`
+				? `${path}/wasm-zig/std.tar.gz?v=${WASM_ZIG_ASSET_VERSION}`
+				: `/wasm-zig/std.tar.gz?v=${WASM_ZIG_ASSET_VERSION}`
 		},
 		lisp: {
 			moduleUrl: path
@@ -2557,7 +2557,7 @@
 		{/if}
 		{#if language === 'ZIG'}
 			<p class="hint">
-				Zig runs the bundled `zig_small.wasm` compiler. It uses the `std.zip` standard
+				Zig runs the bundled `zig_small.wasm` compiler. It uses the `std.tar.gz` standard
 				library inside the browser worker, compiles for `wasm64-wasi`. It executes the
 				emitted WASI artifact locally. Pass CLI args here, type into the terminal below, and
 				use Ctrl+D or the EOF button if the program reads stdin until EOF.

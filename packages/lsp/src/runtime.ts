@@ -270,18 +270,18 @@ export function resolveZigLanguageServerStdlibUrl(
 	currentUrl = ''
 ) {
 	if (typeof options === 'string') {
-		return resolveFileUrl(`${normalizeRootUrl(options) || ''}/wasm-zig/std.zip`, currentUrl);
+		return resolveFileUrl(`${normalizeRootUrl(options) || ''}/wasm-zig/std.tar.gz`, currentUrl);
 	}
 	if (options?.zig?.stdlibUrl) {
 		return resolveFileUrl(options.zig.stdlibUrl, currentUrl);
 	}
 	if (options?.rootUrl) {
 		return resolveFileUrl(
-			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-zig/std.zip`,
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-zig/std.tar.gz`,
 			currentUrl
 		);
 	}
-	return resolveFileUrl('/wasm-zig/std.zip', currentUrl);
+	return resolveFileUrl('/wasm-zig/std.tar.gz', currentUrl);
 }
 
 export function resolveLuaLanguageServerModuleUrl(

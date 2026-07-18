@@ -44,7 +44,7 @@ describe('createZigWorkerService', () => {
 		await service.initialize?.(
 			{
 				compilerUrl: 'https://static.example.com/wasm-zig/zig_small.wasm',
-				stdlibUrl: 'https://static.example.com/wasm-zig/std.zip'
+				stdlibUrl: 'https://static.example.com/wasm-zig/std.tar.gz'
 			},
 			context
 		);

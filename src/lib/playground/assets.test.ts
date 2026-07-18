@@ -593,20 +593,20 @@ describe('runtime asset config resolution', () => {
 	it('prefers explicit Zig compiler and stdlib urls over public env overrides', async () => {
 		vi.resetModules();
 		publicEnv.PUBLIC_WASM_ZIG_COMPILER_URL = 'https://env.example.com/zig_small.wasm';
-		publicEnv.PUBLIC_WASM_ZIG_STDLIB_URL = 'https://env.example.com/std.zip';
+		publicEnv.PUBLIC_WASM_ZIG_STDLIB_URL = 'https://env.example.com/std.tar.gz';
 		const { resolveZigCompilerUrl, resolveZigStdlibUrl } = await import('./assets');
 
 		const config = {
 			zig: {
 				compilerUrl: '/runtime/wasm-zig/zig_small.wasm',
-				stdlibUrl: '/runtime/wasm-zig/std.zip'
+				stdlibUrl: '/runtime/wasm-zig/std.tar.gz'
 			}
 		};
 		expect(resolveZigCompilerUrl(config, 'https://example.com/app')).toBe(
 			'https://example.com/runtime/wasm-zig/zig_small.wasm'
 		);
 		expect(resolveZigStdlibUrl(config, 'https://example.com/app')).toBe(
-			'https://example.com/runtime/wasm-zig/std.zip'
+			'https://example.com/runtime/wasm-zig/std.tar.gz'
 		);
 	});
 
@@ -620,7 +620,7 @@ describe('runtime asset config resolution', () => {
 			'https://example.com/absproxy/5173/wasm-zig/zig_small.wasm'
 		);
 		expect(resolveZigStdlibUrl('/absproxy/5173', 'https://example.com/app')).toBe(
-			'https://example.com/absproxy/5173/wasm-zig/std.zip'
+			'https://example.com/absproxy/5173/wasm-zig/std.tar.gz'
 		);
 	});
 

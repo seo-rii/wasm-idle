@@ -8,7 +8,7 @@ import {
 	WASI,
 	wasi
 } from '@bjorn3/browser_wasi_shim';
-import { Unzip, UnzipInflate } from 'fflate';
+import { decompressGzip, untar } from '@wasm-idle/llvm-core';
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
 import type { SandboxWorkspaceFile, ZigTargetTriple } from '$lib/playground/options';
 
@@ -120,7 +120,7 @@ function normalizeWorkspacePath(value: string, fallback = 'main.zig') {
 	return normalized || fallback;
 }
 
-function addFile(root: Directory, filePath: string, data: Uint8Array) {
+function addFileToDirectory(root: Directory, filePath: string, data: Uint8Array) {
 	const parts = normalizeWorkspacePath(filePath).split('/').filter(Boolean);
 	let current = root;
 	for (const part of parts.slice(0, -1)) {
@@ -157,9 +157,13 @@ function buildWorkspaceRoot(
 	const entryPath = normalizeWorkspacePath(activePath || 'main.zig');
 	for (const file of workspaceFiles) {
 		if (!file || typeof file.path !== 'string' || typeof file.content !== 'string') continue;
-		addFile(root, file.path, encoder.encode(file.path === activePath ? code : file.content));
+		addFileToDirectory(
+			root,
+			file.path,
+			encoder.encode(file.path === activePath ? code : file.content)
+		);
 	}
-	addFile(root, entryPath, encoder.encode(code));
+	addFileToDirectory(root, entryPath, encoder.encode(code));
 	return { root, entryPath };
 }
 
@@ -198,36 +202,46 @@ async function fetchBytes(url: string, label: string, progressStart: number, pro
 	return data;
 }
 
-async function unzipStdDirectory(source: Uint8Array) {
+async function loadStdDirectory(source: Uint8Array, assetUrl: string) {
 	const root = new Directory(new Map());
-	let archiveError: unknown;
-	const unzip = new Unzip((file) => {
-		if (!file.name || file.name.endsWith('/')) return;
-		const chunks: Uint8Array[] = [];
-		let length = 0;
-		file.ondata = (error, data, final) => {
-			if (error) {
-				archiveError = error;
-				return;
+	if (source.byteLength >= 2 && source[0] === 0x50 && source[1] === 0x4b) {
+		const { Unzip, UnzipInflate } = await import('fflate');
+		let archiveError: unknown;
+		const unzip = new Unzip((file) => {
+			if (!file.name || file.name.endsWith('/')) return;
+			const chunks: Uint8Array[] = [];
+			let length = 0;
+			file.ondata = (error, data, final) => {
+				if (error) {
+					archiveError = error;
+					return;
+				}
+				if (data.byteLength > 0) {
+					chunks.push(data);
+					length += data.byteLength;
+				}
+				if (!final) return;
+				const contents = new Uint8Array(length);
+				let offset = 0;
+				for (const chunk of chunks) {
+					contents.set(chunk, offset);
+					offset += chunk.byteLength;
+				}
+				addFileToDirectory(root, file.name, contents);
+			};
+			file.start();
+		});
+		unzip.register(UnzipInflate);
+		unzip.push(source, true);
+		if (archiveError) throw archiveError;
+	} else {
+		untar(await decompressGzip(source, assetUrl), {
+			addDirectory() {},
+			addFile(filePath, contents) {
+				addFileToDirectory(root, filePath, contents);
 			}
-			if (data.byteLength > 0) {
-				chunks.push(data);
-				length += data.byteLength;
-			}
-			if (!final) return;
-			const contents = new Uint8Array(length);
-			let offset = 0;
-			for (const chunk of chunks) {
-				contents.set(chunk, offset);
-				offset += chunk.byteLength;
-			}
-			addFile(root, file.name, contents);
-		};
-		file.start();
-	});
-	unzip.register(UnzipInflate);
-	unzip.push(source, true);
-	if (archiveError) throw archiveError;
+		});
+	}
 	const stdDirectory = root.contents.get('std');
 	if (!(stdDirectory instanceof Directory)) {
 		throw new Error('Zig standard library archive must contain a std/ directory.');
@@ -260,7 +274,7 @@ async function loadAssets(nextCompilerUrl: string, nextStdlibUrl: string) {
 		]);
 		const [compilerModule, stdDirectory] = await Promise.all([
 			WebAssembly.compile(compilerBytes),
-			unzipStdDirectory(stdlibBytes)
+			loadStdDirectory(stdlibBytes, nextStdlibUrl)
 		]);
 		postProgress(100);
 		return { compilerModule, stdDirectory };

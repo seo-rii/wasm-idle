@@ -344,12 +344,12 @@ describe('core language contract', () => {
 			rootUrl: '/repl',
 			zig: {
 				compilerUrl: '/wasm-zig/zig_small.wasm?v=test',
-				stdlibUrl: '/wasm-zig/std.zip?v=test'
+				stdlibUrl: '/wasm-zig/std.tar.gz?v=test'
 			}
 		});
 
 		expect(key).toContain('"zigCompilerUrl":"/wasm-zig/zig_small.wasm?v=test"');
-		expect(key).toContain('"zigStdlibUrl":"/wasm-zig/std.zip?v=test"');
+		expect(key).toContain('"zigStdlibUrl":"/wasm-zig/std.tar.gz?v=test"');
 	});
 
 	it('includes R base url in runtime asset cache keys', () => {

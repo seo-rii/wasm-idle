@@ -1,11 +1,42 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { strToU8, zipSync } from 'fflate';
+import { gzipSync } from 'node:zlib';
 import { flushQueuedStdin } from '$lib/playground/stdinBuffer';
 
 const encoder = new TextEncoder();
+const stdlibFile = strToU8('pub const std = true;');
 const stdlibArchive = zipSync({
-	'std/std.zig': strToU8('pub const std = true;')
+	'std/std.zig': stdlibFile
 });
+const stdlibTarHeader = Buffer.alloc(512);
+stdlibTarHeader.write('std/std.zig', 0, 100, 'utf8');
+stdlibTarHeader.write('0000644\0', 100, 8, 'ascii');
+stdlibTarHeader.write('0000000\0', 108, 8, 'ascii');
+stdlibTarHeader.write('0000000\0', 116, 8, 'ascii');
+stdlibTarHeader.write(`${stdlibFile.byteLength.toString(8).padStart(11, '0')}\0`, 124, 12, 'ascii');
+stdlibTarHeader.write('00000000000\0', 136, 12, 'ascii');
+stdlibTarHeader.fill(0x20, 148, 156);
+stdlibTarHeader.write('0', 156, 1, 'ascii');
+stdlibTarHeader.write('ustar\0', 257, 6, 'ascii');
+stdlibTarHeader.write('00', 263, 2, 'ascii');
+stdlibTarHeader.write(
+	`${stdlibTarHeader
+		.reduce((total, byte) => total + byte, 0)
+		.toString(8)
+		.padStart(6, '0')}\0 `,
+	148,
+	8,
+	'ascii'
+);
+const stdlibTarGzip = gzipSync(
+	Buffer.concat([
+		stdlibTarHeader,
+		Buffer.from(stdlibFile),
+		Buffer.alloc((512 - (stdlibFile.byteLength % 512)) % 512),
+		Buffer.alloc(1024)
+	]),
+	{ level: 9 }
+);
 
 const shim = vi.hoisted(() => {
 	const encoder = new TextEncoder();
@@ -141,6 +172,7 @@ describe('Zig worker', () => {
 		(globalThis as any).fetch = vi.fn(async (url: string) => {
 			if (url.endsWith('zig_small.wasm'))
 				return responseFor(new Uint8Array([0, 97, 115, 109]));
+			if (url.endsWith('std.tar.gz')) return responseFor(stdlibTarGzip);
 			if (url.endsWith('std.zip')) return responseFor(stdlibArchive);
 			return { ok: false, status: 404, headers: { get: () => null } };
 		});
@@ -174,7 +206,7 @@ describe('Zig worker', () => {
 			data: {
 				load: true,
 				compilerUrl: '/wasm-zig/zig_small.wasm',
-				stdlibUrl: '/wasm-zig/std.zip',
+				stdlibUrl: '/wasm-zig/std.tar.gz',
 				log: false
 			}
 		});
@@ -201,7 +233,7 @@ describe('Zig worker', () => {
 		const compileWasi = shim.state.constructed[0];
 		const runWasi = shim.state.constructed[1];
 		expect((globalThis as any).fetch).toHaveBeenCalledWith('/wasm-zig/zig_small.wasm');
-		expect((globalThis as any).fetch).toHaveBeenCalledWith('/wasm-zig/std.zip');
+		expect((globalThis as any).fetch).toHaveBeenCalledWith('/wasm-zig/std.tar.gz');
 		expect(compileWasi.args).toEqual([
 			'zigc.wasm',
 			'build-exe',
@@ -277,7 +309,7 @@ describe('Zig worker', () => {
 			data: {
 				load: true,
 				compilerUrl: '/wasm-zig/zig_small.wasm',
-				stdlibUrl: '/wasm-zig/std.zip',
+				stdlibUrl: '/wasm-zig/std.tar.gz',
 				log: false
 			}
 		});

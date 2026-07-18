@@ -1,1 +1,1 @@
-export const WASM_ZIG_ASSET_VERSION = '60d9bdc4cd492482';
+export const WASM_ZIG_ASSET_VERSION = '3ca2e87da2a76dda';

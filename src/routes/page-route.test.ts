@@ -237,7 +237,7 @@ describe('example route debug actions', () => {
 			/lua: \{\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-lua\/index\.js\?v=\$\{WASM_LUA_ASSET_VERSION\}`\s+:\s+`\/wasm-lua\/index\.js\?v=\$\{WASM_LUA_ASSET_VERSION\}`\s+\}/s
 		);
 		expect(source).toMatch(
-			/zig: \{\s+compilerUrl: path\s+\?\s+`\$\{path\}\/wasm-zig\/zig_small\.wasm\?v=\$\{WASM_ZIG_ASSET_VERSION\}`\s+:\s+`\/wasm-zig\/zig_small\.wasm\?v=\$\{WASM_ZIG_ASSET_VERSION\}`,\s+stdlibUrl: path\s+\?\s+`\$\{path\}\/wasm-zig\/std\.zip\?v=\$\{WASM_ZIG_ASSET_VERSION\}`\s+:\s+`\/wasm-zig\/std\.zip\?v=\$\{WASM_ZIG_ASSET_VERSION\}`\s+\}/s
+			/zig: \{\s+compilerUrl: path\s+\?\s+`\$\{path\}\/wasm-zig\/zig_small\.wasm\?v=\$\{WASM_ZIG_ASSET_VERSION\}`\s+:\s+`\/wasm-zig\/zig_small\.wasm\?v=\$\{WASM_ZIG_ASSET_VERSION\}`,\s+stdlibUrl: path\s+\?\s+`\$\{path\}\/wasm-zig\/std\.tar\.gz\?v=\$\{WASM_ZIG_ASSET_VERSION\}`\s+:\s+`\/wasm-zig\/std\.tar\.gz\?v=\$\{WASM_ZIG_ASSET_VERSION\}`\s+\}/s
 		);
 		expect(source).toMatch(
 			/lisp: \{\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-lisp\/index\.js\?v=\$\{WASM_LISP_ASSET_VERSION\}`\s+:\s+`\/wasm-lisp\/index\.js\?v=\$\{WASM_LISP_ASSET_VERSION\}`\s+\}/s
@@ -727,7 +727,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/zig: \{/);
 		expect(source).toMatch(/WASM_ZIG_ASSET_VERSION/);
 		expect(source).toMatch(/wasm-zig\/zig_small\.wasm\?v=\$\{WASM_ZIG_ASSET_VERSION\}/);
-		expect(source).toMatch(/wasm-zig\/std\.zip\?v=\$\{WASM_ZIG_ASSET_VERSION\}/);
+		expect(source).toMatch(/wasm-zig\/std\.tar\.gz\?v=\$\{WASM_ZIG_ASSET_VERSION\}/);
 		expect(source).toMatch(/<option value="ZIG">Zig<\/option>/);
 		expect(source).toMatch(/zig: 'ZIG'/);
 		expectEditorLanguage('ZIG', 'zig');
@@ -736,7 +736,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/ZIG: 'zig'/);
 		expect(source).toMatch(/ZIG: \(\) => \(\{ zigTargetTriple: 'wasm64-wasi' \}\)/);
 		expect(source).toMatch(/Zig runs the bundled `zig_small\.wasm` compiler/);
-		expect(source).toMatch(/`std\.zip` standard\s+library inside\s+the browser worker/s);
+		expect(source).toMatch(/`std\.tar\.gz` standard\s+library inside\s+the browser worker/s);
 		expect(source).toMatch(/compiles for `wasm64-wasi`/);
 		expect(source).toMatch(/executes the\s+emitted WASI artifact locally/s);
 		expect(source).not.toContain('api/zig');

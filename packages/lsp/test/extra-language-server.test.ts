@@ -105,7 +105,7 @@ describe('additional language server workers', () => {
 			type: 'init',
 			options: {
 				compilerUrl: 'https://static.example.com/repl_20240807/wasm-zig/zig_small.wasm',
-				stdlibUrl: 'https://static.example.com/repl_20240807/wasm-zig/std.zip',
+				stdlibUrl: 'https://static.example.com/repl_20240807/wasm-zig/std.tar.gz',
 				targetTriple: undefined,
 				compileArgs: undefined
 			}

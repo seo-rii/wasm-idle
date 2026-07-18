@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto';
 import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gzipSync } from 'node:zlib';
+import { unzipSync } from 'fflate';
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const THIS_DIR = path.dirname(THIS_FILE);
@@ -112,7 +114,7 @@ async function computeBundleFingerprint(files) {
  */
 async function writeVersionModule(versionModulePath, fingerprint) {
 	await mkdir(path.dirname(versionModulePath), { recursive: true });
-	const moduleSource = `export const WASM_ZIG_ASSET_VERSION = ${JSON.stringify(fingerprint)};\n`;
+	const moduleSource = `export const WASM_ZIG_ASSET_VERSION = '${fingerprint}';\n`;
 	const current = await readFile(versionModulePath, 'utf8').catch(() => '');
 	if (current === moduleSource) return;
 	await writeFile(versionModulePath, moduleSource, 'utf8');
@@ -134,7 +136,65 @@ export async function syncWasmZigAssets({
 				`${asset.label} asset at ${asset.fileName} is not a valid bundle file.`
 			);
 		}
-		files.push({ fileName: asset.fileName, data });
+		if (asset.fileName !== 'std.zip') {
+			files.push({ fileName: asset.fileName, data });
+			continue;
+		}
+
+		let archiveEntries;
+		try {
+			archiveEntries = unzipSync(data);
+		} catch (error) {
+			throw new Error(
+				`zig standard library asset at std.zip could not be repackaged: ${error instanceof Error ? error.message : error}`
+			);
+		}
+		const tarParts = [];
+		const standardLibraryFiles = Object.entries(archiveEntries)
+			.filter(([entryName]) => entryName && !entryName.endsWith('/'))
+			.sort(([left], [right]) => left.localeCompare(right));
+		if (
+			standardLibraryFiles.length === 0 ||
+			standardLibraryFiles.some(([entryName]) => !entryName.startsWith('std/'))
+		) {
+			throw new Error('zig standard library asset at std.zip must contain files under std/');
+		}
+		for (const [entryName, entryBytes] of standardLibraryFiles) {
+			const normalizedName = entryName.replaceAll('\\', '/');
+			if (
+				normalizedName.startsWith('/') ||
+				normalizedName.split('/').includes('..') ||
+				Buffer.byteLength(normalizedName) > 100
+			) {
+				throw new Error(`zig standard library contains an unsupported path: ${entryName}`);
+			}
+			const header = Buffer.alloc(512);
+			header.write(normalizedName, 0, 100, 'utf8');
+			header.write('0000644\0', 100, 8, 'ascii');
+			header.write('0000000\0', 108, 8, 'ascii');
+			header.write('0000000\0', 116, 8, 'ascii');
+			header.write(
+				`${entryBytes.byteLength.toString(8).padStart(11, '0')}\0`,
+				124,
+				12,
+				'ascii'
+			);
+			header.write('00000000000\0', 136, 12, 'ascii');
+			header.fill(0x20, 148, 156);
+			header.write('0', 156, 1, 'ascii');
+			header.write('ustar\0', 257, 6, 'ascii');
+			header.write('00', 263, 2, 'ascii');
+			const checksum = header.reduce((total, byte) => total + byte, 0);
+			header.write(`${checksum.toString(8).padStart(6, '0')}\0 `, 148, 8, 'ascii');
+			tarParts.push(header, Buffer.from(entryBytes));
+			const padding = (512 - (entryBytes.byteLength % 512)) % 512;
+			if (padding > 0) tarParts.push(Buffer.alloc(padding));
+		}
+		tarParts.push(Buffer.alloc(1024));
+		files.push({
+			fileName: 'std.tar.gz',
+			data: gzipSync(Buffer.concat(tarParts), { level: 9, mtime: 0 })
+		});
 	}
 
 	await rm(targetDir, { recursive: true, force: true });

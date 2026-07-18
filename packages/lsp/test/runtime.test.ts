@@ -113,7 +113,7 @@ describe('lsp runtime asset resolution', () => {
 				'https://static.example.com/repl_20240807',
 				'https://app.example.com/editor'
 			)
-		).toBe('https://static.example.com/repl_20240807/wasm-zig/std.zip');
+		).toBe('https://static.example.com/repl_20240807/wasm-zig/std.tar.gz');
 		expect(
 			resolveLuaLanguageServerModuleUrl(
 				'https://static.example.com/repl_20240807',
@@ -280,7 +280,7 @@ describe('lsp runtime asset resolution', () => {
 			},
 			zig: {
 				compilerUrl: 'https://zig.example.com/zig_small.wasm?v=20240807',
-				stdlibUrl: 'https://zig.example.com/std.zip?v=20240807'
+				stdlibUrl: 'https://zig.example.com/std.tar.gz?v=20240807'
 			},
 			lua: {
 				moduleUrl: 'https://lua.example.com/wasm-lua/index.js?v=20240807'
@@ -361,7 +361,7 @@ describe('lsp runtime asset resolution', () => {
 			'https://zig.example.com/zig_small.wasm?v=20240807'
 		);
 		expect(resolveZigLanguageServerStdlibUrl(options)).toBe(
-			'https://zig.example.com/std.zip?v=20240807'
+			'https://zig.example.com/std.tar.gz?v=20240807'
 		);
 		expect(resolveLuaLanguageServerModuleUrl(options)).toBe(
 			'https://lua.example.com/wasm-lua/index.js?v=20240807'
@@ -481,7 +481,7 @@ describe('lsp runtime asset resolution', () => {
 			resolveZigLanguageServerCompilerUrl(undefined, 'https://app.example.com/editor')
 		).toBe('https://app.example.com/wasm-zig/zig_small.wasm');
 		expect(resolveZigLanguageServerStdlibUrl(undefined, 'https://app.example.com/editor')).toBe(
-			'https://app.example.com/wasm-zig/std.zip'
+			'https://app.example.com/wasm-zig/std.tar.gz'
 		);
 		expect(resolveLuaLanguageServerModuleUrl(undefined, 'https://app.example.com/editor')).toBe(
 			'https://app.example.com/wasm-lua/index.js'
