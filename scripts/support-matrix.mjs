@@ -818,6 +818,7 @@ const runtimeDetailsByLanguage = new Map([
 				`from the ${code('wasm-llvm')} producer`,
 			execution:
 				`${code('clang')} for ${code('wasm32-wasi')}; default ${code('-std=gnu11')}; ` +
+				`native gzip delivery for compiler Wasm and sysroot tar assets; ` +
 				`WASI preview1 execution supports ${code('stdin')} and ${code('programArgs')}`,
 			customization:
 				`${code('runtimeAssets.clang.baseUrl')}/${code('loader')} or ${code('rootUrl')}; ` +
@@ -833,6 +834,7 @@ const runtimeDetailsByLanguage = new Map([
 				`from the ${code('wasm-llvm')} producer`,
 			execution:
 				`${code('clang++')} for ${code('wasm32-wasi')}; default ${code('-std=gnu++2a')}; ` +
+				`native gzip delivery for compiler Wasm and sysroot tar assets; ` +
 				`trace debug uses wasm-idle controls; supports ${code('stdin')} and ${code('programArgs')}`,
 			customization:
 				`${code('runtimeAssets.clang.baseUrl')}/${code('loader')} or ${code('rootUrl')}; ` +
@@ -893,7 +895,8 @@ const runtimeDetailsByLanguage = new Map([
 			packageBase:
 				`${workspacePackage('runtimes/wasm-rust')} / ` +
 				`${manifestValue('static/wasm-rust/runtime/runtime-manifest.v3.json', ['version'])} + ` +
-				`integrated LLVM/LLD 22.1.8 from the ${code('wasm-llvm')} producer`,
+				`integrated LLVM/LLD 22.1.8 from the ${code('wasm-llvm')} producer; ` +
+				`${code('debug-instrumenter.js')} is a separately generated static asset`,
 			execution:
 				`browser host ${code('wasm32-wasip1-threads')}; ` +
 				`${code('rustc -Zthreads=1 -Zcodegen-backend=llvm --crate-type=bin --edition=2024 -Cpanic=abort -Ccodegen-units=1 --emit=link')}; ` +
@@ -902,9 +905,9 @@ const runtimeDetailsByLanguage = new Map([
 					'wasm32-wasip2',
 					'wasm32-wasip3'
 				])}; Preview 1 emits core Wasm and Preview 2/3 are component-encoded; ` +
-				`supports ${code('stdin')} and ${code('programArgs')}`,
+				`supports ${code('stdin')} and ${code('programArgs')}; the debug instrumenter is fetched only for debug runs`,
 			customization:
-				`${code('runtimeAssets.rust.compilerUrl')} or ${code('PUBLIC_WASM_RUST_COMPILER_URL')}; ` +
+				`${code('runtimeAssets.rust.compilerUrl')}, ${code('runtimeAssets.rust.debugModuleUrl')}, or ${code('PUBLIC_WASM_RUST_COMPILER_URL')}; ` +
 				`${code('rootUrl')}, ${code('rustTargetTriple')}, ${code('programArgs')}; ` +
 				`compiler requests accept ${code('edition')}, ${code('crateType')}, ${code('extendedTimeout')}, ${code('log')}, and ${code('onProgress')}; ` +
 				`runtime manifest controls compiler memory, timeout, and shared workspace size`
