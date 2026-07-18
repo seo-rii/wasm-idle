@@ -1,9 +1,5 @@
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
 import { isSharedBufferBackedView } from '$lib/playground/sharedBuffer';
-import {
-	instrumentRustDebugSource,
-	RUST_DEBUG_MARKER
-} from '$lib/playground/rustDebugInstrumentation';
 import type { DebugFrame, DebugPauseReason } from '$lib/playground/options';
 
 declare var self: any;
@@ -17,6 +13,7 @@ self.document = {
 let stdinBufferRust: Int32Array | null = null;
 let debugBufferRust: Int32Array | null = null;
 let compilerUrl = '';
+let debugModuleUrl = '';
 let runtimeBaseUrl = '';
 let loadedCompilerUrl = '';
 let compilerPromise: Promise<{
@@ -39,6 +36,13 @@ let compilerPromise: Promise<{
 }> | null = null;
 let compiledArtifact: any = null;
 let compiledCacheKey = '';
+let loadedDebugModuleUrl = '';
+let debugInstrumenterPromise: Promise<RustDebugInstrumenter> | null = null;
+
+interface RustDebugInstrumenter {
+	RUST_DEBUG_MARKER: string;
+	instrumentRustDebugSource: (source: string) => string;
+}
 
 interface RustDebugState {
 	breakpointVersion: number;
@@ -88,6 +92,35 @@ async function loadCompiler(url: string) {
 	return await compilerPromise;
 }
 
+async function loadDebugInstrumenter(url: string) {
+	if (!url) {
+		throw new Error('Rust debugging is not configured. Set runtimeAssets.rust.debugModuleUrl.');
+	}
+	if (loadedDebugModuleUrl === url && debugInstrumenterPromise) {
+		return await debugInstrumenterPromise;
+	}
+	loadedDebugModuleUrl = url;
+	debugInstrumenterPromise = (async () => {
+		const module = (await import(/* @vite-ignore */ url)) as Partial<RustDebugInstrumenter>;
+		if (
+			typeof module.RUST_DEBUG_MARKER !== 'string' ||
+			typeof module.instrumentRustDebugSource !== 'function'
+		) {
+			throw new Error(
+				'Rust debug instrumenter must export RUST_DEBUG_MARKER and instrumentRustDebugSource.'
+			);
+		}
+		return module as RustDebugInstrumenter;
+	})().catch((error) => {
+		if (loadedDebugModuleUrl === url) {
+			loadedDebugModuleUrl = '';
+			debugInstrumenterPromise = null;
+		}
+		throw error;
+	});
+	return await debugInstrumenterPromise;
+}
+
 function normalizedBreakpointSet(values: unknown) {
 	return new Set(
 		[...(Array.isArray(values) ? values : [])]
@@ -134,6 +167,7 @@ function createRustDebugHost(options: {
 	control: Int32Array;
 	breakpoints: unknown;
 	pauseOnEntry: boolean;
+	marker: string;
 }) {
 	const state: RustDebugState = {
 		breakpointVersion: Atomics.load(options.control, 2),
@@ -144,7 +178,7 @@ function createRustDebugHost(options: {
 		nextLine: null
 	};
 	let stderrBuffer = '';
-	const markerPrefix = `${RUST_DEBUG_MARKER}:`;
+	const markerPrefix = `${options.marker}:`;
 
 	const handleMarker = (line: number, functionName: string) => {
 		refreshRustDebugBreakpoints(state, options.control);
@@ -182,8 +216,14 @@ function createRustDebugHost(options: {
 
 	const consumeLine = (line: string, hasNewline: boolean) => {
 		if (line.startsWith(markerPrefix)) {
-			const match = /^__WASM_IDLE_RUST_DEBUG__:(\d+):(.*)$/u.exec(line);
-			if (match) handleMarker(Math.max(1, Number(match[1] || 1)), match[2] || 'main');
+			const payload = line.slice(markerPrefix.length);
+			const separator = payload.indexOf(':');
+			if (separator >= 0) {
+				handleMarker(
+					Math.max(1, Number(payload.slice(0, separator) || 1)),
+					payload.slice(separator + 1) || 'main'
+				);
+			}
 			return '';
 		}
 		return `${line}${hasNewline ? '\n' : ''}`;
@@ -209,6 +249,7 @@ self.onmessage = async (event: { data: any }) => {
 	const {
 		load,
 		compilerUrl: nextCompilerUrl,
+		debugModuleUrl: nextDebugModuleUrl,
 		buffer,
 		debugBuffer,
 		code,
@@ -224,6 +265,7 @@ self.onmessage = async (event: { data: any }) => {
 	try {
 		if (load) {
 			compilerUrl = nextCompilerUrl;
+			debugModuleUrl = nextDebugModuleUrl;
 			if (log) {
 				console.log(`[wasm-idle:rust-worker] load compilerUrl=${compilerUrl}`);
 			}
@@ -239,7 +281,27 @@ self.onmessage = async (event: { data: any }) => {
 			return;
 		}
 		const runtime = await loadCompiler(compilerUrl);
-		const compileCode = debug ? instrumentRustDebugSource(code) : code;
+		let debugInstrumenter: RustDebugInstrumenter | null = null;
+		if (debug) {
+			postMessage({
+				progress: {
+					stage: 'load-debug-instrumenter',
+					percent: 1,
+					message: 'Loading Rust debugger'
+				}
+			});
+			debugInstrumenter = await loadDebugInstrumenter(debugModuleUrl);
+			postMessage({
+				progress: {
+					stage: 'load-debug-instrumenter',
+					percent: 3,
+					message: 'Rust debugger loaded'
+				}
+			});
+		}
+		const compileCode = debugInstrumenter
+			? debugInstrumenter.instrumentRustDebugSource(code)
+			: code;
 		const compileCacheKey = `${targetTriple}\n${compileCode}`;
 		if (!compiledArtifact || compiledCacheKey !== compileCacheKey) {
 			if (log) {
@@ -303,11 +365,12 @@ self.onmessage = async (event: { data: any }) => {
 			);
 		}
 		const rustDebugHost =
-			debug && debugBufferRust
+			debug && debugBufferRust && debugInstrumenter
 				? createRustDebugHost({
 						control: debugBufferRust,
 						breakpoints,
-						pauseOnEntry: !!pauseOnEntry
+						pauseOnEntry: !!pauseOnEntry,
+						marker: debugInstrumenter.RUST_DEBUG_MARKER
 					})
 				: null;
 		const hasInitialStdin = typeof stdin === 'string';

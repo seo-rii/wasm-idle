@@ -42,6 +42,7 @@ export interface RuntimeAssetConfig {
 
 export interface RustRuntimeAssetConfig {
 	compilerUrl?: string;
+	debugModuleUrl?: string;
 }
 
 export interface GoRuntimeAssetConfig {
@@ -352,10 +353,10 @@ export const JAVA_RUNTIME_LOAD_ASSETS = [
 ] as const;
 
 export const CLANG_RUNTIME_LOAD_ASSETS = [
-	'bin/memfs.zip',
-	'bin/clang.zip',
-	'bin/lld.zip',
-	'bin/sysroot.tar.zip'
+	'bin/memfs.wasm.gz',
+	'bin/clang.wasm.gz',
+	'bin/lld.wasm.gz',
+	'bin/sysroot.tar.gz'
 ] as const;
 
 export const CLANGD_RUNTIME_LOAD_ASSETS = ['clangd.js', 'clangd.wasm.gz'] as const;
@@ -492,6 +493,34 @@ export function resolveRustCompilerUrl(
 
 	if (!configuredCompilerUrl) return '';
 	return currentUrl ? new URL(configuredCompilerUrl, currentUrl).href : configuredCompilerUrl;
+}
+
+export function resolveRustDebugModuleUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredDebugModuleUrl =
+		typeof options === 'object' ? options?.rust?.debugModuleUrl : undefined;
+	if (configuredDebugModuleUrl) {
+		return currentUrl
+			? new URL(configuredDebugModuleUrl, currentUrl).href
+			: configuredDebugModuleUrl;
+	}
+
+	const compilerUrl = resolveRustCompilerUrl(options, currentUrl);
+	if (!compilerUrl) return '';
+	try {
+		const compiler = currentUrl ? new URL(compilerUrl, currentUrl) : new URL(compilerUrl);
+		const debugModule = new URL('./debug-instrumenter.js', compiler);
+		debugModule.search = compiler.search;
+		return debugModule.href;
+	} catch {
+		const queryIndex = compilerUrl.indexOf('?');
+		const path = queryIndex >= 0 ? compilerUrl.slice(0, queryIndex) : compilerUrl;
+		const query = queryIndex >= 0 ? compilerUrl.slice(queryIndex) : '';
+		const slashIndex = path.lastIndexOf('/');
+		return `${slashIndex >= 0 ? path.slice(0, slashIndex + 1) : ''}debug-instrumenter.js${query}`;
+	}
 }
 
 export function resolveGoCompilerUrl(

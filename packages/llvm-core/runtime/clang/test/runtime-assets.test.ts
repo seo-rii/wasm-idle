@@ -26,6 +26,15 @@ const manifest: RuntimeManifestV1 = {
 };
 
 describe('runtime asset urls', () => {
+	it('defaults to native gzip compiler and sysroot assets', () => {
+		const urls = resolveRuntimeAssetUrls('https://cdn.example.com/pkg/runtime');
+
+		expect(urls.memfs).toBe('https://cdn.example.com/pkg/runtime/bin/memfs.wasm.gz');
+		expect(urls.clang).toBe('https://cdn.example.com/pkg/runtime/bin/clang.wasm.gz');
+		expect(urls.lld).toBe('https://cdn.example.com/pkg/runtime/bin/lld.wasm.gz');
+		expect(urls.sysroot).toBe('https://cdn.example.com/pkg/runtime/bin/sysroot.tar.gz');
+	});
+
 	it('resolves externally hosted asset URLs from the runtime manifest', () => {
 		const urls = resolveRuntimeAssetUrls('https://cdn.example.com/pkg/runtime', manifest);
 

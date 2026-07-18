@@ -6,9 +6,9 @@
 	"description": "Browser-loadable Rust compiler module for wasm-idle",
 	"exports": {
 		".": {
+			"types": "./dist/index.d.ts",
 			"import": "./dist/index.js",
-			"default": "./dist/index.js",
-			"types": "./dist/index.d.ts"
+			"default": "./dist/index.js"
 		}
 	},
 	"files": [
@@ -18,6 +18,7 @@
 		"build": "pnpm run build:js && pnpm run prepare:runtime",
 		"build:all-compressed": "WASM_RUST_PRECOMPRESS_SCOPES=all pnpm run build",
 		"build:js": "tsc -p tsconfig.json",
+		"postbuild:js": "node scripts/build-debug-instrumenter.mjs",
 		"build:producer": "pnpm run build:js && pnpm run prepare:runtime:producer",
 		"build:prebuilt": "WASM_RUST_ALLOW_PREBUILT_RUNTIME_FALLBACK=1 pnpm run build",
 		"build:uncompressed": "WASM_RUST_PRECOMPRESS_SCOPES=none pnpm run build",
@@ -40,7 +41,7 @@
 		"typecheck": "pnpm exec tsc -p tsconfig.json --noEmit",
 		"test": "vitest run",
 		"test:ci": "pnpm run test:ci:fast",
-		"test:ci:fast": "WASM_RUST_SKIP_DIST_TESTS=1 pnpm exec vitest run test/artifact.test.ts test/asset-url.test.ts test/browser-component-tools.test.ts test/browser-execution.test.ts test/browser-linker.test.ts test/build-output.test.ts test/ci-script-contract.test.ts test/compiler-edge-cases.test.ts test/compiler-progress.test.ts test/compiler-retry.test.ts test/compiler-worker.test.ts test/diagnostics.test.ts test/fixtures.test.ts test/index.test.ts test/module-worker.test.ts test/producer-runtime.test.ts test/runtime-bitcode-mirror.test.ts test/runtime-compression-config.test.ts test/runtime-manifest-edge.test.ts test/runtime-pack.test.ts test/runtime-random.test.ts test/rustc-runtime.test.ts test/shared-workspace.test.ts test/thread-startup.test.ts test/validate-standalone-browser.test.ts test/wasip3-build-pipeline.test.ts test/watch-process.test.ts test/worker-status.test.ts",
+		"test:ci:fast": "WASM_RUST_SKIP_DIST_TESTS=1 pnpm exec vitest run test/artifact.test.ts test/asset-url.test.ts test/browser-component-tools.test.ts test/browser-execution.test.ts test/browser-linker.test.ts test/build-output.test.ts test/ci-script-contract.test.ts test/compiler-edge-cases.test.ts test/compiler-progress.test.ts test/compiler-retry.test.ts test/compiler-worker.test.ts test/debug-instrumenter.test.ts test/diagnostics.test.ts test/fixtures.test.ts test/index.test.ts test/module-worker.test.ts test/producer-runtime.test.ts test/runtime-bitcode-mirror.test.ts test/runtime-compression-config.test.ts test/runtime-manifest-edge.test.ts test/runtime-pack.test.ts test/runtime-random.test.ts test/rustc-runtime.test.ts test/shared-workspace.test.ts test/thread-startup.test.ts test/validate-standalone-browser.test.ts test/wasip3-build-pipeline.test.ts test/watch-process.test.ts test/worker-status.test.ts",
 		"test:ci:browser": "pnpm run test:browser && pnpm run test:browser:vitest && pnpm run test:browser:playwright",
 		"test:ci:browser:clean-room": "pnpm run build:js && pnpm run probe:browser-harness && pnpm run test:browser:vitest && pnpm run test:browser:playwright",
 		"test:browser": "pnpm build && node ./scripts/probe-browser-harness.mjs",
@@ -64,7 +65,9 @@
 		"probe:rustc:patched-target": "node scripts/probe-rustc-wasm.mjs --patch-target-metadata"
 	},
 	"devDependencies": {
+		"@lezer/rust": "^1.0.2",
 		"@types/node": "^24.6.1",
+		"esbuild": "0.27.3",
 		"playwright-core": "^1.58.2",
 		"typescript": "^5.9.3",
 		"vitest": "^4.0.18",

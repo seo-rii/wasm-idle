@@ -29,6 +29,10 @@ API accepts one `bin` source file, editions `2021` or `2024`, and the three bund
 does not yet expose Cargo dependency resolution or a multi-file crate graph. A cross-origin-isolated
 browser environment is required for Rust compiler threads.
 
+`pnpm run build:js` also emits `dist/debug-instrumenter.js`, a self-contained browser ESM asset.
+It bundles the Lezer Rust parser at producer build time so browser hosts can fetch source
+instrumentation only when a debug execution starts; consumers do not install `@lezer/rust`.
+
 ## Quick start
 
 Build the canonical compiler from pinned source and package its attested output:
@@ -205,7 +209,8 @@ pnpm run probe:browser-harness
 ## Scripts
 
 - `pnpm build`
-    - builds TypeScript and prepares the historical split-backend runtime under `dist/runtime/`
+    - builds TypeScript and the debug instrumenter asset, then prepares the historical split-backend
+      runtime under `dist/runtime/`
 - `pnpm run build:producer`
     - builds TypeScript and packages the pinned, receipt-verified integrated rustc producer output
 - `pnpm run release:upload -- --tag <tag> [asset...]`

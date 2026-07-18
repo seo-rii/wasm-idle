@@ -53,7 +53,7 @@ describe('Clang memory utility compatibility', () => {
 		await memfs.ready;
 
 		expect(compile).toHaveBeenCalledWith(
-			'https://example.test/runtime/bin/memfs.zip',
+			'https://example.test/runtime/bin/memfs.wasm.gz',
 			undefined
 		);
 	});

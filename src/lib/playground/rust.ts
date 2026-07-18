@@ -1,4 +1,8 @@
-import { resolveRustCompilerUrl, type PlaygroundRuntimeAssets } from '$lib/playground/assets';
+import {
+	resolveRustCompilerUrl,
+	resolveRustDebugModuleUrl,
+	type PlaygroundRuntimeAssets
+} from '$lib/playground/assets';
 import {
 	type DebugCommand,
 	type DebugSessionEvent,
@@ -6,7 +10,7 @@ import {
 	type CompilerDiagnostic,
 	type SandboxExecutionOptions
 } from '$lib/playground/options';
-import type { Sandbox } from '$lib/playground/sandbox';
+import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
 import {
 	flushBufferedEof,
 	flushQueuedStdin,
@@ -32,6 +36,7 @@ class Rust implements Sandbox {
 	uid = 0;
 	exit = true;
 	compilerUrl = '';
+	debugModuleUrl = '';
 	assetPath = '';
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	waitingForInput = false;
@@ -53,7 +58,7 @@ class Rust implements Sandbox {
 		_log = true,
 		_args: string[] = [],
 		_options: SandboxExecutionOptions = {},
-		progress?: { set?: (value: number) => void } | import('svelte/store').Writable<number>
+		progress?: SandboxProgress
 	) {
 		return this.workerSession.load(async (resolve, reject) => {
 			this.pendingInput = [];
@@ -61,6 +66,7 @@ class Rust implements Sandbox {
 			this.pendingEof = false;
 			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
 			const nextCompilerUrl = resolveRustCompilerUrl(runtimeAssets, currentUrl);
+			const nextDebugModuleUrl = resolveRustDebugModuleUrl(runtimeAssets, currentUrl);
 			const nextAssetPath =
 				typeof runtimeAssets === 'string'
 					? runtimeAssets
@@ -76,8 +82,10 @@ class Rust implements Sandbox {
 			const needsWorkerReset =
 				!this.worker ||
 				this.compilerUrl !== nextCompilerUrl ||
+				this.debugModuleUrl !== nextDebugModuleUrl ||
 				this.assetPath !== nextAssetPath;
 			this.compilerUrl = nextCompilerUrl;
+			this.debugModuleUrl = nextDebugModuleUrl;
 			this.assetPath = nextAssetPath;
 			if (needsWorkerReset && this.worker) {
 				this.workerSession.reset();
@@ -95,6 +103,7 @@ class Rust implements Sandbox {
 				this.worker.postMessage({
 					load: true,
 					compilerUrl: this.compilerUrl,
+					debugModuleUrl: this.debugModuleUrl,
 					path: this.assetPath
 				});
 			} else {
@@ -132,7 +141,7 @@ class Rust implements Sandbox {
 		code: string,
 		prepare: boolean,
 		_log = true,
-		_prog?: { set?: (value: number) => void } | import('svelte/store').Writable<number>,
+		_prog?: SandboxProgress,
 		args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {

@@ -16,6 +16,7 @@ describe('Rust worker', () => {
 		(globalThis as any).__lastExecution = undefined;
 		(globalThis as any).__lastStdin = undefined;
 		(globalThis as any).__debugControl = undefined;
+		(globalThis as any).__debugModuleLoads = 0;
 	});
 
 	it('loads a wasm-rust-style compiler module and runs the returned artifact through executeBrowserRustArtifact', async () => {
@@ -311,6 +312,16 @@ describe('Rust worker', () => {
 
 			export default createRustCompiler;
 		`);
+		const debugModuleUrl = await createMockRustRuntimeModule(`
+			globalThis.__debugModuleLoads += 1;
+			export const RUST_DEBUG_MARKER = '__WASM_IDLE_RUST_DEBUG__';
+			export function instrumentRustDebugSource(source) {
+				return source.replace(
+					'    println!("hi");',
+					'    eprintln!("__WASM_IDLE_RUST_DEBUG__:{}:{}", 2, "main"); println!("hi");'
+				);
+			}
+		`);
 		const debugBuffer = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * 1028);
 		(globalThis as any).__debugControl = new Int32Array(debugBuffer);
 		(globalThis as any).postMessage = vi.fn((message: any) => {
@@ -325,7 +336,8 @@ describe('Rust worker', () => {
 		await (globalThis as any).self.onmessage({
 			data: {
 				load: true,
-				compilerUrl: compilerModuleUrl
+				compilerUrl: compilerModuleUrl,
+				debugModuleUrl
 			}
 		});
 		await Promise.resolve();
@@ -347,6 +359,14 @@ describe('Rust worker', () => {
 		expect((globalThis as any).__lastCompileOptions.code).toContain(
 			'eprintln!("__WASM_IDLE_RUST_DEBUG__:{}:{}", 2, "main");'
 		);
+		expect((globalThis as any).__debugModuleLoads).toBe(1);
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			progress: {
+				stage: 'load-debug-instrumenter',
+				percent: 1,
+				message: 'Loading Rust debugger'
+			}
+		});
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
 			debugEvent: {
 				type: 'pause',

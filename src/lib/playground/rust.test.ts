@@ -96,6 +96,7 @@ describe('Rust sandbox', () => {
 			expect.objectContaining({
 				load: true,
 				compilerUrl: expect.stringMatching(/\/wasm-rust\/index\.js$/),
+				debugModuleUrl: expect.stringMatching(/\/wasm-rust\/debug-instrumenter\.js$/),
 				path: '/absproxy/5173'
 			})
 		);

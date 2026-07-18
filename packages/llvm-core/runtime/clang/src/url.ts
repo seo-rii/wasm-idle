@@ -39,14 +39,16 @@ export const resolveRuntimeBaseUrlFromManifestUrl = (manifestUrl: string | URL) 
 export const runtimeManifestUrl = (prefix: string | URL) =>
 	resolveRuntimeAssetUrl(prefix, 'runtime-manifest.v1.json');
 
-export const memfsUrl = (prefix: string | URL) => resolveRuntimeAssetUrl(prefix, 'bin/memfs.zip');
+export const memfsUrl = (prefix: string | URL) =>
+	resolveRuntimeAssetUrl(prefix, 'bin/memfs.wasm.gz');
 
-export const clangUrl = (prefix: string | URL) => resolveRuntimeAssetUrl(prefix, 'bin/clang.zip');
+export const clangUrl = (prefix: string | URL) =>
+	resolveRuntimeAssetUrl(prefix, 'bin/clang.wasm.gz');
 
-export const lldUrl = (prefix: string | URL) => resolveRuntimeAssetUrl(prefix, 'bin/lld.zip');
+export const lldUrl = (prefix: string | URL) => resolveRuntimeAssetUrl(prefix, 'bin/lld.wasm.gz');
 
 export const rootUrl = (prefix: string | URL) =>
-	resolveRuntimeAssetUrl(prefix, 'bin/sysroot.tar.zip');
+	resolveRuntimeAssetUrl(prefix, 'bin/sysroot.tar.gz');
 
 export const clangdJsUrl = (prefix: string | URL) =>
 	resolveRuntimeAssetUrl(prefix, 'clangd/clangd.js');

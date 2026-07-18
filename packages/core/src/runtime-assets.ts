@@ -4,7 +4,7 @@ export interface RuntimeAssetKeySource {
 	java?: { baseUrl?: string; loader?: unknown };
 	clang?: { baseUrl?: string; loader?: unknown };
 	clangd?: { baseUrl?: string; loader?: unknown };
-	rust?: { compilerUrl?: string };
+	rust?: { compilerUrl?: string; debugModuleUrl?: string };
 	go?: { compilerUrl?: string };
 	assemblyscript?: { moduleUrl?: string };
 	duckdb?: { moduleUrl?: string };
@@ -74,6 +74,7 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	{ runtime: 'clangd', property: 'baseUrl', key: 'clangdBaseUrl' },
 	{ runtime: 'clangd', property: 'loader', key: 'hasClangdLoader', serialize: hasValue },
 	{ runtime: 'rust', property: 'compilerUrl', key: 'rustCompilerUrl' },
+	{ runtime: 'rust', property: 'debugModuleUrl', key: 'rustDebugModuleUrl' },
 	{ runtime: 'go', property: 'compilerUrl', key: 'goCompilerUrl' },
 	{ runtime: 'assemblyscript', property: 'moduleUrl', key: 'assemblyScriptModuleUrl' },
 	{ runtime: 'duckdb', property: 'moduleUrl', key: 'duckDbModuleUrl' },

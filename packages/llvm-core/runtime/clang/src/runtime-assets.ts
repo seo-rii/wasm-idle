@@ -20,19 +20,19 @@ export function resolveRuntimeAssetUrls(
 		manifest: runtimeManifestUrl(runtimeBaseUrl).toString(),
 		memfs: resolveVersionedAssetUrl(
 			runtimeBaseUrl,
-			manifest?.compiler.memfs.asset || 'bin/memfs.zip'
+			manifest?.compiler.memfs.asset || 'bin/memfs.wasm.gz'
 		).toString(),
 		clang: resolveVersionedAssetUrl(
 			runtimeBaseUrl,
-			manifest?.compiler.clang.asset || 'bin/clang.zip'
+			manifest?.compiler.clang.asset || 'bin/clang.wasm.gz'
 		).toString(),
 		lld: resolveVersionedAssetUrl(
 			runtimeBaseUrl,
-			manifest?.compiler.lld.asset || 'bin/lld.zip'
+			manifest?.compiler.lld.asset || 'bin/lld.wasm.gz'
 		).toString(),
 		sysroot: resolveVersionedAssetUrl(
 			runtimeBaseUrl,
-			manifest?.compiler.sysroot.asset || 'bin/sysroot.tar.zip'
+			manifest?.compiler.sysroot.asset || 'bin/sysroot.tar.gz'
 		).toString(),
 		clangdJs: resolveVersionedAssetUrl(
 			runtimeBaseUrl,

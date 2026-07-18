@@ -1,4 +1,5 @@
 import { zipSync } from 'fflate';
+import { gzipSync } from 'node:zlib';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { compile, getInstance, readBuffer } from '../src/wasm.js';
@@ -67,6 +68,50 @@ describe('WebAssembly loading utilities', () => {
 		);
 
 		await expect(readBuffer(url)).resolves.toEqual(Uint8Array.of(5, 6, 7, 8));
+	});
+
+	it('uses native gzip decompression for wasm.gz and tar.gz assets', async () => {
+		const progress = { set: vi.fn() };
+		const contents = Uint8Array.of(21, 22, 23, 24);
+		const compressed = gzipSync(contents, { level: 9, mtime: 0 });
+		const url = 'https://cdn.test/llvm/fixture.wasm.gz';
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(
+				async () =>
+					new Response(compressed, {
+						headers: { 'Content-Length': String(compressed.byteLength) }
+					})
+			)
+		);
+
+		await expect(readBuffer(url, progress)).resolves.toEqual(contents);
+		expect(progress.set).toHaveBeenLastCalledWith(1);
+	});
+
+	it('accepts gzip URLs already decoded by HTTP content encoding', async () => {
+		const contents = Uint8Array.of(31, 32, 33);
+		const url = 'https://cdn.test/llvm/already-decoded.tar.gz';
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => new Response(contents))
+		);
+
+		await expect(readBuffer(url)).resolves.toEqual(contents);
+	});
+
+	it('reports when native gzip decompression is unavailable', async () => {
+		const compressed = gzipSync(Uint8Array.of(41, 42), { level: 9, mtime: 0 });
+		const url = 'https://cdn.test/llvm/no-decompression-stream.wasm.gz';
+		vi.stubGlobal('DecompressionStream', undefined);
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => new Response(compressed))
+		);
+
+		await expect(readBuffer(url)).rejects.toThrow(
+			/DecompressionStream\('gzip'\) is unavailable/u
+		);
 	});
 
 	it('extracts ZIP data when the response does not expose a body stream', async () => {

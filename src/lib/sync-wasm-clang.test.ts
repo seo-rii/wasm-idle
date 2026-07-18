@@ -4,7 +4,8 @@ import { mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { gzipSync } from 'node:zlib';
+import { gzipSync, gunzipSync } from 'node:zlib';
+import { zipSync } from 'fflate';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { syncWasmClangDist } from '../../scripts/sync-wasm-clang.mjs';
@@ -15,33 +16,45 @@ const syncScript = path.resolve('scripts/sync-wasm-clang.mjs');
 const assets = [
 	{
 		asset: 'clang.zip',
+		deliveryAsset: 'clang.wasm.gz',
 		source: 'bin/clang.zip',
-		target: 'clang/bin/clang.zip'
+		target: 'clang/bin/clang.wasm.gz',
+		entry: 'clang'
 	},
 	{
 		asset: 'lld.zip',
+		deliveryAsset: 'lld.wasm.gz',
 		source: 'bin/lld.zip',
-		target: 'clang/bin/lld.zip'
+		target: 'clang/bin/lld.wasm.gz',
+		entry: 'lld'
 	},
 	{
 		asset: 'memfs.zip',
+		deliveryAsset: 'memfs.wasm.gz',
 		source: 'bin/memfs.zip',
-		target: 'clang/bin/memfs.zip'
+		target: 'clang/bin/memfs.wasm.gz',
+		entry: 'memfs'
 	},
 	{
 		asset: 'sysroot.tar.zip',
+		deliveryAsset: 'sysroot.tar.gz',
 		source: 'bin/sysroot.tar.zip',
-		target: 'clang/bin/sysroot.tar.zip'
+		target: 'clang/bin/sysroot.tar.gz',
+		entry: 'sysroot.tar'
 	},
 	{
 		asset: 'clangd/clangd.js',
+		deliveryAsset: 'clangd/clangd.js',
 		source: 'clangd/clangd.js',
-		target: 'clangd/clangd.js'
+		target: 'clangd/clangd.js',
+		entry: undefined
 	},
 	{
 		asset: 'clangd/clangd.wasm.gz',
+		deliveryAsset: 'clangd/clangd.wasm.gz',
 		source: 'clangd/clangd.wasm.gz',
-		target: 'clangd/clangd.wasm.gz'
+		target: 'clangd/clangd.wasm.gz',
+		entry: undefined
 	}
 ];
 
@@ -60,9 +73,17 @@ async function writeJson(filePath: string, value: unknown) {
 }
 
 async function writeFixture(sourceDir: string) {
-	const contents = new Map(
-		assets.map(({ source }) => [source, Buffer.from(`fixture:${source}`)])
-	);
+	const payloads = new Map<string, Buffer>();
+	const contents = new Map<string, Buffer>();
+	for (const asset of assets) {
+		if (!asset.entry) {
+			contents.set(asset.source, Buffer.from(`fixture:${asset.source}`));
+			continue;
+		}
+		const payload = Buffer.from(`fixture:${asset.entry}`);
+		payloads.set(asset.source, payload);
+		contents.set(asset.source, Buffer.from(zipSync({ [asset.entry]: payload }, { level: 6 })));
+	}
 	const stdinImport = Buffer.from('__asyncjs__waitForStdin');
 	const importSection = Buffer.concat([
 		Buffer.from([0x01, 0x03]),
@@ -143,7 +164,7 @@ async function writeFixture(sourceDir: string) {
 	};
 	await writeJson(path.join(sourceDir, 'runtime-manifest.v1.json'), manifest);
 	await writeJson(path.join(sourceDir, 'runtime-build.json'), buildInfo);
-	return { contents, manifest, buildInfo };
+	return { contents, payloads, manifest, buildInfo };
 }
 
 async function replaceFixtureAsset(
@@ -207,18 +228,34 @@ describe('syncWasmClangDist', () => {
 			sourceDir,
 			staticDir
 		});
-		expect(
-			JSON.parse(
-				await readFile(path.join(staticDir, 'clang', 'runtime-manifest.v1.json'), 'utf8')
-			)
-		).toEqual(fixture.manifest);
-		expect(
-			JSON.parse(await readFile(path.join(staticDir, 'clang', 'runtime-build.json'), 'utf8'))
-		).toEqual(fixture.buildInfo);
-		for (const { source, target } of assets) {
-			await expect(readFile(path.join(staticDir, target))).resolves.toEqual(
-				fixture.contents.get(source)
-			);
+		const deliveredManifest = JSON.parse(
+			await readFile(path.join(staticDir, 'clang', 'runtime-manifest.v1.json'), 'utf8')
+		);
+		expect(deliveredManifest.compiler).toMatchObject({
+			memfs: { asset: 'bin/memfs.wasm.gz' },
+			clang: { asset: 'bin/clang.wasm.gz' },
+			lld: { asset: 'bin/lld.wasm.gz' },
+			sysroot: { asset: 'bin/sysroot.tar.gz' }
+		});
+		const deliveredBuildInfo = JSON.parse(
+			await readFile(path.join(staticDir, 'clang', 'runtime-build.json'), 'utf8')
+		);
+		expect(deliveredBuildInfo.delivery).toEqual({
+			format: 'wasm-idle-clang-native-gzip-v1',
+			sourceAssets: fixture.buildInfo.assets
+		});
+		expect(deliveredBuildInfo.assets.map(({ asset }: { asset: string }) => asset)).toEqual(
+			assets.map(({ deliveryAsset }) => deliveryAsset)
+		);
+		for (const { entry, source, target } of assets) {
+			const delivered = await readFile(path.join(staticDir, target));
+			if (entry) {
+				const payload = fixture.payloads.get(source)!;
+				expect(delivered).toEqual(gzipSync(payload, { level: 9 }));
+				expect(gunzipSync(delivered)).toEqual(payload);
+			} else {
+				expect(delivered).toEqual(fixture.contents.get(source));
+			}
 		}
 		await expect(stat(path.join(staticDir, 'clang', 'existing.txt'))).rejects.toThrow();
 		await expect(stat(path.join(staticDir, 'clangd', 'existing.txt'))).rejects.toThrow();

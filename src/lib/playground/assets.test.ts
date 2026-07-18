@@ -34,8 +34,8 @@ const { publicEnv } = vi.hoisted(() => ({
 		PUBLIC_WASM_OBJECTIVEC_GNUSTEP_BASE_OBJECT_URL: '',
 		PUBLIC_WASM_OBJECTIVEC_FOUNDATION_HEADERS_URL: '',
 		PUBLIC_WASM_OBJECTIVEC_LIBFFI_URL: '',
-			PUBLIC_WASM_RUBY_WASM_URL: '',
-			PUBLIC_WASM_RUBY_MODULE_URL: '',
+		PUBLIC_WASM_RUBY_WASM_URL: '',
+		PUBLIC_WASM_RUBY_MODULE_URL: '',
 		PUBLIC_WASM_R_BASE_URL: '',
 		PUBLIC_WASM_OCTAVE_BASE_URL: '',
 		PUBLIC_WASM_OCTAVE_WORKER_URL: '',
@@ -68,11 +68,11 @@ const { publicEnv } = vi.hoisted(() => ({
 		PUBLIC_WASM_SWIFT_BASE_URL: '',
 		PUBLIC_WASM_SWIFT_WORKER_URL: '',
 		PUBLIC_WASM_SWIFT_MANIFEST_URL: '',
-			PUBLIC_WASM_SQLITE_WASM_URL: '',
-			PUBLIC_WASM_SQLITE_MODULE_URL: '',
-			PUBLIC_WASM_ASSEMBLYSCRIPT_MODULE_URL: '',
-			PUBLIC_WASM_DUCKDB_MODULE_URL: '',
-			PUBLIC_WASM_PHP_MODULE_URL: ''
+		PUBLIC_WASM_SQLITE_WASM_URL: '',
+		PUBLIC_WASM_SQLITE_MODULE_URL: '',
+		PUBLIC_WASM_ASSEMBLYSCRIPT_MODULE_URL: '',
+		PUBLIC_WASM_DUCKDB_MODULE_URL: '',
+		PUBLIC_WASM_PHP_MODULE_URL: ''
 	}
 }));
 
@@ -96,7 +96,7 @@ describe('runtime asset config resolution', () => {
 			'java',
 			'python'
 		]);
-		expect(RUNTIME_LOAD_ASSETS.clang).toContain('bin/clang.zip');
+		expect(RUNTIME_LOAD_ASSETS.clang).toContain('bin/clang.wasm.gz');
 		expect(RUNTIME_LOAD_ASSETS.clangd).toContain('clangd.wasm.gz');
 	});
 
@@ -233,6 +233,39 @@ describe('runtime asset config resolution', () => {
 		expect(resolveRustCompilerUrl('/absproxy/5173', 'https://example.com/app')).toBe(
 			'https://example.com/wasm-rust/index.js'
 		);
+	});
+
+	it('derives the Rust debug instrumenter beside the compiler and preserves its version', async () => {
+		vi.resetModules();
+		const { resolveRustDebugModuleUrl } = await import('./assets');
+
+		expect(
+			resolveRustDebugModuleUrl(
+				{
+					rust: {
+						compilerUrl: '/wasm-rust/index.js?v=asset-version'
+					}
+				},
+				'https://example.com/app/'
+			)
+		).toBe('https://example.com/wasm-rust/debug-instrumenter.js?v=asset-version');
+	});
+
+	it('prefers an explicit Rust debug instrumenter url', async () => {
+		vi.resetModules();
+		const { resolveRustDebugModuleUrl } = await import('./assets');
+
+		expect(
+			resolveRustDebugModuleUrl(
+				{
+					rust: {
+						compilerUrl: '/wasm-rust/index.js',
+						debugModuleUrl: '/debug-assets/rust.js'
+					}
+				},
+				'https://example.com/app/'
+			)
+		).toBe('https://example.com/debug-assets/rust.js');
 	});
 
 	it('prefers an explicit go compiler url over the public env override', async () => {
@@ -1013,11 +1046,13 @@ describe('runtime asset config resolution', () => {
 			'https://cdn.example.com/swift-runtime/runtime-manifest.v1.json?v=abc';
 		const { resolveSwiftRuntimeAssetConfig } = await import('./assets');
 
-		expect(resolveSwiftRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual({
-			baseUrl: 'https://cdn.example.com/swift-runtime/',
-			workerUrl: 'https://cdn.example.com/swift-worker.js?v=abc',
-			manifestUrl: 'https://cdn.example.com/swift-runtime/runtime-manifest.v1.json?v=abc'
-		});
+		expect(resolveSwiftRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual(
+			{
+				baseUrl: 'https://cdn.example.com/swift-runtime/',
+				workerUrl: 'https://cdn.example.com/swift-worker.js?v=abc',
+				manifestUrl: 'https://cdn.example.com/swift-runtime/runtime-manifest.v1.json?v=abc'
+			}
+		);
 	});
 
 	it('derives Swift worker and manifest urls from PUBLIC_WASM_SWIFT_BASE_URL', async () => {
@@ -1027,11 +1062,13 @@ describe('runtime asset config resolution', () => {
 		publicEnv.PUBLIC_WASM_SWIFT_MANIFEST_URL = '';
 		const { resolveSwiftRuntimeAssetConfig } = await import('./assets');
 
-		expect(resolveSwiftRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual({
-			baseUrl: 'https://cdn.example.com/swift-runtime/',
-			workerUrl: 'https://cdn.example.com/swift-runtime/runner-worker.js',
-			manifestUrl: 'https://cdn.example.com/swift-runtime/runtime-manifest.v1.json'
-		});
+		expect(resolveSwiftRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual(
+			{
+				baseUrl: 'https://cdn.example.com/swift-runtime/',
+				workerUrl: 'https://cdn.example.com/swift-runtime/runner-worker.js',
+				manifestUrl: 'https://cdn.example.com/swift-runtime/runtime-manifest.v1.json'
+			}
+		);
 	});
 
 	it('derives static runtime module urls from the shared root path', async () => {

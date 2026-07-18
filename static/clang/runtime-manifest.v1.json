@@ -4,19 +4,19 @@
   "defaultTarget": "wasm32-wasi",
   "compiler": {
     "memfs": {
-      "asset": "bin/memfs.zip",
+      "asset": "bin/memfs.wasm.gz",
       "argv0": "memfs"
     },
     "clang": {
-      "asset": "bin/clang.zip",
+      "asset": "bin/clang.wasm.gz",
       "argv0": "clang"
     },
     "lld": {
-      "asset": "bin/lld.zip",
+      "asset": "bin/lld.wasm.gz",
       "argv0": "wasm-ld"
     },
     "sysroot": {
-      "asset": "bin/sysroot.tar.zip"
+      "asset": "bin/sysroot.tar.gz"
     },
     "resourceDir": "/lib/clang/22",
     "compilerRuntimeLibDir": "lib/clang/22/lib/wasi"

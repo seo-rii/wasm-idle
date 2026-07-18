@@ -60,6 +60,22 @@ describe('core language contract', () => {
 		});
 	});
 
+	it('includes both Rust compiler assets in runtime cache keys', () => {
+		const key = JSON.parse(
+			createRuntimeAssetsKey({
+				rust: {
+					compilerUrl: '/wasm-rust/index.js?v=test',
+					debugModuleUrl: '/wasm-rust/debug-instrumenter.js?v=test'
+				}
+			}) || '{}'
+		);
+
+		expect(key).toMatchObject({
+			rustCompilerUrl: '/wasm-rust/index.js?v=test',
+			rustDebugModuleUrl: '/wasm-rust/debug-instrumenter.js?v=test'
+		});
+	});
+
 	it('exposes Zig as a deferred browser runtime language', () => {
 		expect(supportedLanguageIds).toContain('ZIG');
 		expect(normalizeLanguageId('zig')).toBe('ZIG');
