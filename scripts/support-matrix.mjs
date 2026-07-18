@@ -1258,9 +1258,10 @@ const runtimeDetailsByLanguage = new Map([
 	[
 		'Zig',
 		{
-			packageBase: `static wasm-zig assets / ${code('zig_small.wasm')} + stdlib zip`,
+			packageBase: `static wasm-zig assets / ${code('zig_small.wasm')} + ${code('std.tar.gz')}`,
 			execution:
-				`default target ${code('wasm64-wasi')}; Zig compile args are appended; supports ` +
+				`native gzip delivery for the tar standard library; default target ${code('wasm64-wasi')}; ` +
+				`Zig compile args are appended; supports ` +
 				`${code('stdin')}, ${code('compileArgs')}, ${code('programArgs')}`,
 			customization:
 				`${code('runtimeAssets.zig.compilerUrl')}/${code('stdlibUrl')} or ${code('PUBLIC_WASM_ZIG_*')}; ` +
@@ -1328,7 +1329,8 @@ const runtimeDetailsByLanguage = new Map([
 				`GnuCOBOL 3.2 + GMP 6.3.0 assets from the ${code('wasm-llvm')} producer + ` +
 				`${workspacePackage('packages/llvm-core')}`,
 			execution:
-				`translates free-format COBOL with the real GnuCOBOL ${code('cobc')} frontend, compiles ` +
+				`native gzip delivery for the frontend Wasm and filesystem tar assets; translates free-format COBOL ` +
+				`with the real GnuCOBOL ${code('cobc')} frontend, compiles ` +
 				`the generated C with the llvm-core Clang host, links libcob/GMP, and executes the resulting WASI module ` +
 				`with ${code('stdin')} and ${code('programArgs')}`,
 			customization:
