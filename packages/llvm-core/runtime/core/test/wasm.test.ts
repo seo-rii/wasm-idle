@@ -40,7 +40,7 @@ describe('WebAssembly loading utilities', () => {
 		expect(progress.set).toHaveBeenLastCalledWith(1);
 	});
 
-	it('streams chunked stored ZIP responses and skips directory entries', async () => {
+	it('reads chunked stored ZIP responses and skips directory entries', async () => {
 		const archive = zipSync(
 			{
 				'fixture/': new Uint8Array(),
@@ -87,6 +87,47 @@ describe('WebAssembly loading utilities', () => {
 
 		await expect(readBuffer(url, progress)).resolves.toEqual(contents);
 		expect(progress.set).toHaveBeenLastCalledWith(1);
+	});
+
+	it('connects gzip network chunks to the native decompression stream before download completion', async () => {
+		const contents = Uint8Array.from({ length: 16_384 }, (_, index) => index % 251);
+		const compressed = gzipSync(contents, { level: 9, mtime: 0 });
+		const nativeDecompressionStream = globalThis.DecompressionStream;
+		let offset = 0;
+		let pulls = 0;
+		let pullsAtDecompression = -1;
+		vi.stubGlobal(
+			'DecompressionStream',
+			function TrackingDecompressionStream(format: CompressionFormat) {
+				pullsAtDecompression = pulls;
+				return new nativeDecompressionStream(format);
+			}
+		);
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(
+				async () =>
+					new Response(
+						new ReadableStream({
+							pull(controller) {
+								if (offset >= compressed.byteLength) {
+									controller.close();
+									return;
+								}
+								controller.enqueue(compressed.subarray(offset, ++offset));
+								pulls += 1;
+							}
+						}),
+						{ headers: { 'Content-Length': String(compressed.byteLength) } }
+					)
+			)
+		);
+
+		await expect(readBuffer('https://cdn.test/llvm/streamed-runtime.tar.gz')).resolves.toEqual(
+			contents
+		);
+		expect(pullsAtDecompression).toBeGreaterThanOrEqual(2);
+		expect(pullsAtDecompression).toBeLessThan(compressed.byteLength);
 	});
 
 	it('accepts gzip URLs already decoded by HTTP content encoding', async () => {

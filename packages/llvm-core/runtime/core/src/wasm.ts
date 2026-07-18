@@ -1,5 +1,3 @@
-import { unzipSync } from 'fflate';
-
 export interface ProgressSink {
 	set?: (value: number) => void;
 }
@@ -53,7 +51,7 @@ async function readResponseBytes(response: Response, progress?: ProgressSink) {
 	return bytes;
 }
 
-async function gunzip(bytes: Uint8Array, assetUrl: URL) {
+export async function decompressGzip(bytes: Uint8Array, assetUrl: string | URL = 'runtime asset') {
 	// Browsers expose an already-decoded body when the server sets Content-Encoding: gzip.
 	if (!isGzip(bytes)) return bytes;
 	if (typeof DecompressionStream !== 'function') {
@@ -63,9 +61,17 @@ async function gunzip(bytes: Uint8Array, assetUrl: URL) {
 	}
 	try {
 		const compressed = Uint8Array.from(bytes);
-		const stream = new Blob([compressed.buffer])
-			.stream()
-			.pipeThrough(new DecompressionStream('gzip'));
+		const source = new ReadableStream<Uint8Array>({
+			start(controller) {
+				controller.enqueue(compressed);
+				controller.close();
+			}
+		});
+		const decompressor = new DecompressionStream('gzip');
+		const stream = source.pipeThrough({
+			readable: decompressor.readable as ReadableStream<Uint8Array>,
+			writable: decompressor.writable as WritableStream<Uint8Array>
+		});
 		return new Uint8Array(await new Response(stream).arrayBuffer());
 	} catch (error) {
 		throw new Error(
@@ -74,7 +80,96 @@ async function gunzip(bytes: Uint8Array, assetUrl: URL) {
 	}
 }
 
-function unzipFirstFile(bytes: Uint8Array) {
+async function readGzipResponse(response: Response, assetUrl: URL, progress?: ProgressSink) {
+	if (!response.body) {
+		const source = new Uint8Array(await response.arrayBuffer());
+		const result = await decompressGzip(source, assetUrl);
+		progress?.set?.(1);
+		return result;
+	}
+
+	const contentLength = +(response.headers.get('Content-Length') || 0);
+	const reader = response.body.getReader();
+	const leadingChunks: Uint8Array[] = [];
+	let leadingLength = 0;
+	let receivedLength = 0;
+	while (leadingLength < 2) {
+		const { done, value } = await reader.read();
+		if (done) break;
+		if (!value) continue;
+		const chunk = Uint8Array.from(value);
+		leadingChunks.push(chunk);
+		leadingLength += chunk.byteLength;
+		receivedLength += chunk.byteLength;
+		if (contentLength > 0) {
+			progress?.set?.(Math.min(receivedLength / contentLength, 1));
+		}
+	}
+
+	let firstByte: number | undefined;
+	let secondByte: number | undefined;
+	for (const chunk of leadingChunks) {
+		for (const byte of chunk) {
+			if (firstByte === undefined) firstByte = byte;
+			else if (secondByte === undefined) secondByte = byte;
+			if (secondByte !== undefined) break;
+		}
+		if (secondByte !== undefined) break;
+	}
+
+	let leadingIndex = 0;
+	const source = new ReadableStream<Uint8Array>({
+		async pull(controller) {
+			if (leadingIndex < leadingChunks.length) {
+				controller.enqueue(leadingChunks[leadingIndex++]);
+				return;
+			}
+			const { done, value } = await reader.read();
+			if (done) {
+				controller.close();
+				return;
+			}
+			if (!value) return;
+			const chunk = Uint8Array.from(value);
+			receivedLength += chunk.byteLength;
+			if (contentLength > 0) {
+				progress?.set?.(Math.min(receivedLength / contentLength, 1));
+			}
+			controller.enqueue(chunk);
+		},
+		cancel(reason) {
+			return reader.cancel(reason);
+		}
+	});
+
+	let output = source;
+	if (firstByte === 0x1f && secondByte === 0x8b) {
+		if (typeof DecompressionStream !== 'function') {
+			await reader.cancel();
+			throw new Error(
+				`Failed to decompress runtime asset ${assetUrl}: DecompressionStream('gzip') is unavailable`
+			);
+		}
+		const decompressor = new DecompressionStream('gzip');
+		output = source.pipeThrough({
+			readable: decompressor.readable as ReadableStream<Uint8Array>,
+			writable: decompressor.writable as WritableStream<Uint8Array>
+		});
+	}
+
+	try {
+		const result = new Uint8Array(await new Response(output).arrayBuffer());
+		progress?.set?.(1);
+		return result;
+	} catch (error) {
+		throw new Error(
+			`Failed to decompress runtime asset ${assetUrl}: ${error instanceof Error ? error.message : String(error)}`
+		);
+	}
+}
+
+async function unzipFirstFile(bytes: Uint8Array) {
+	const { unzipSync } = await import('fflate');
 	const entries = unzipSync(bytes);
 	for (const [entryName, entryBytes] of Object.entries(entries)) {
 		if (!entryName.endsWith('/')) return entryBytes;
@@ -90,9 +185,11 @@ export const readBuffer = async (name: string, progress?: ProgressSink) => {
 			if (!response.ok) {
 				throw new Error(`Failed to load runtime asset ${resolvedUrl}: ${response.status}`);
 			}
+			if (resolvedUrl.pathname.endsWith('.gz')) {
+				return await readGzipResponse(response, resolvedUrl, progress);
+			}
 			const source = await readResponseBytes(response, progress);
-			if (resolvedUrl.pathname.endsWith('.gz')) return await gunzip(source, resolvedUrl);
-			if (resolvedUrl.pathname.endsWith('.zip')) return unzipFirstFile(source);
+			if (resolvedUrl.pathname.endsWith('.zip')) return await unzipFirstFile(source);
 			return source;
 		})().catch((error) => {
 			delete bufferStore[name];
