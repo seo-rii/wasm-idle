@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 interface PackageJson {
 	dependencies?: Record<string, string>;
+	devDependencies?: Record<string, string>;
 	name?: string;
 	private?: boolean;
 	scripts?: Record<string, string>;
@@ -10,6 +11,10 @@ interface PackageJson {
 
 async function readRootPackage() {
 	return JSON.parse(await readFile('package.json', 'utf8')) as PackageJson;
+}
+
+async function readPackageManifest(packagePath: string) {
+	return JSON.parse(await readFile(`${packagePath}/package.json`, 'utf8')) as PackageJson;
 }
 
 async function readPackageVerifier() {
@@ -36,6 +41,31 @@ describe('LLVM runtime package scripts', () => {
 		expect(verifier).not.toContain('runtimes/php');
 		expect(verifier).not.toContain('@wasm-idle/runtime-assemblyscript');
 		expect(verifier).not.toContain('@wasm-idle/runtime-php');
+	});
+
+	it('keeps terminal and ZIP support dependencies lean', async () => {
+		const root = await readRootPackage();
+		const llvmCore = await readPackageManifest('packages/llvm-core');
+		const lsp = await readPackageManifest('packages/lsp');
+
+		for (const manifest of [root, llvmCore, lsp]) {
+			expect(manifest.dependencies?.['@zip.js/zip.js']).toBeUndefined();
+			expect(manifest.dependencies?.fflate).toBe('0.8.3');
+		}
+		expect(root.dependencies?.['@xterm/addon-canvas']).toBeUndefined();
+		expect(root.dependencies?.['@xterm/addon-ligatures']).toBeUndefined();
+	});
+
+	it('keeps language servers as a separately installed page plugin', async () => {
+		const root = await readRootPackage();
+		const verifier = await readPackageVerifier();
+
+		expect(root.dependencies?.['@wasm-idle/lsp']).toBeUndefined();
+		expect(root.dependencies?.['vscode-jsonrpc']).toBeUndefined();
+		expect(root.devDependencies?.['@wasm-idle/lsp']).toBe('workspace:*');
+		expect(root.scripts?.['package:root']).toContain('scripts/clean-package-output.mjs');
+		expect(verifier).toContain("name: '@wasm-idle/lsp install'");
+		expect(verifier).toContain("absentPackageNames: ['@wasm-idle/lsp']");
 	});
 
 	it('keeps every language runtime workspace private', async () => {

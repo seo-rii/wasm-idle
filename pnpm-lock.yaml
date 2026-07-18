@@ -20,9 +20,6 @@ importers:
       '@wasm-idle/llvm-core':
         specifier: workspace:*
         version: link:packages/llvm-core
-      '@wasm-idle/lsp':
-        specifier: workspace:*
-        version: link:packages/lsp
       '@xterm/addon-fit':
         specifier: ^0.11.0
         version: 0.11.0
@@ -47,9 +44,6 @@ importers:
       fflate:
         specifier: 0.8.3
         version: 0.8.3
-      vscode-jsonrpc:
-        specifier: ^8.2.1
-        version: 8.2.1
     devDependencies:
       '@assemblyscript/loader':
         specifier: 0.28.17
@@ -114,6 +108,9 @@ importers:
       '@typescript-eslint/parser':
         specifier: ^8.58.2
         version: 8.58.2(eslint@10.2.0)(typescript@6.0.2)
+      '@wasm-idle/lsp':
+        specifier: workspace:*
+        version: link:packages/lsp
       '@wasmer/sdk':
         specifier: 0.9.0
         version: 0.9.0
