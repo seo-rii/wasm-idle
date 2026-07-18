@@ -10,3 +10,7 @@ export {
 	type RubySyntaxDiagnostic,
 	type RubyWorkerOptions
 } from './service.js';
+export {
+	resolveRubyLanguageServerModuleUrl,
+	resolveRubyLanguageServerWasmUrl
+} from '../runtime.js';

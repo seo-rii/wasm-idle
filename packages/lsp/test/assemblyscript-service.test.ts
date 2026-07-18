@@ -7,6 +7,33 @@ import {
 } from '../src/index.js';
 
 describe('createAssemblyScriptWorkerService', () => {
+	it('loads the compiler through the configured static runtime module', async () => {
+		const stateKey = '__wasmIdleAssemblyScriptLspRuntimeTest';
+		const state = {
+			loadCount: 0,
+			compiler: { main: vi.fn(() => ({ error: undefined })) }
+		};
+		(globalThis as Record<string, unknown>)[stateKey] = state;
+		const moduleUrl = `data:text/javascript,${encodeURIComponent(`
+			export async function loadCompiler() {
+				globalThis.${stateKey}.loadCount += 1;
+				return globalThis.${stateKey}.compiler;
+			}
+		`)}`;
+		const context: LspDocumentContext = {
+			documents: new Map(),
+			publishDiagnostics: vi.fn(),
+			reportProgress: vi.fn()
+		};
+
+		try {
+			await createAssemblyScriptWorkerService().initialize?.({ moduleUrl }, context);
+			expect(state.loadCount).toBe(1);
+		} finally {
+			Reflect.deleteProperty(globalThis, stateKey);
+		}
+	});
+
 	it('invokes asc and maps AssemblyScript diagnostics to LSP ranges', async () => {
 		const main = vi.fn(async (args, io) => {
 			expect(args).toEqual(['assembly/index.ts', '--noEmit', '--runtime', 'stub']);
@@ -20,7 +47,8 @@ describe('createAssemblyScriptWorkerService', () => {
 			);
 			return { error: new Error('compile failed') };
 		});
-		const service = createAssemblyScriptWorkerService(async () => ({ main }));
+		const loadCompiler = vi.fn(async () => ({ main }));
+		const service = createAssemblyScriptWorkerService(loadCompiler);
 		const context: LspDocumentContext = {
 			documents: new Map(),
 			publishDiagnostics: vi.fn(),
@@ -35,6 +63,7 @@ describe('createAssemblyScriptWorkerService', () => {
 
 		await service.initialize?.(
 			{
+				moduleUrl: '/wasm-assemblyscript/runtime.mjs',
 				extraFiles: {
 					'/workspace/helper.ts': 'export const helper = 1;\n'
 				}
@@ -51,6 +80,12 @@ describe('createAssemblyScriptWorkerService', () => {
 		const hover = await service.hover?.(document, { line: 0, character: 23 }, context);
 
 		expect(main).toHaveBeenCalledOnce();
+		expect(loadCompiler).toHaveBeenCalledWith({
+			moduleUrl: '/wasm-assemblyscript/runtime.mjs',
+			extraFiles: {
+				'/workspace/helper.ts': 'export const helper = 1;\n'
+			}
+		});
 		expect(diagnostics).toEqual([
 			{
 				range: {

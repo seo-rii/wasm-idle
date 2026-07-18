@@ -1252,10 +1252,7 @@ End Module`;
 
 	it('routes PHP requests through the PHP wasm sandbox implementation', async () => {
 		const binding = createPlaygroundBinding({
-			rootUrl: '/absproxy/5173',
-			php: {
-				version: '8.5'
-			}
+			rootUrl: '/absproxy/5173'
 		});
 		const progress = { set() {} };
 		const sandbox = await binding.load('PHP');
@@ -1263,10 +1260,7 @@ End Module`;
 		await sandbox.load('<?php echo "hello\\n";', true, ['7'], {}, progress);
 
 		const runtimeAssets = {
-			rootUrl: '/absproxy/5173',
-			php: {
-				version: '8.5'
-			}
+			rootUrl: '/absproxy/5173'
 		};
 		expect(sandbox.runtimeAssets).toEqual(runtimeAssets);
 		expect(sandboxInstances.get('PHP')).toHaveLength(1);

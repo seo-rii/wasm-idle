@@ -17,6 +17,12 @@ describe('Python worker source', () => {
 		expect(source).toContain("postProgress(100, 'Python packages ready');");
 	});
 
+	it('loads the Pyodide module from the configured static runtime URL', () => {
+		expect(source).toContain('pyodide.mjs');
+		expect(source).toContain('/* @vite-ignore */ moduleUrl');
+		expect(source).not.toContain("await import('pyodide')");
+	});
+
 	it('configures the supported Pyodide package base URL instead of a removed setter', () => {
 		expect(source).toContain('loadPyodide({ indexURL: path, packageBaseUrl })');
 		expect(source).not.toContain('setCdnUrl');

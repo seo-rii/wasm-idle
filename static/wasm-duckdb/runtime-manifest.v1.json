@@ -1,0 +1,34 @@
+{
+  "formatVersion": 1,
+  "runtimeModule": "runtime.mjs",
+  "packages": {
+    "@duckdb/duckdb-wasm": "1.33.1-dev45.0"
+  },
+  "files": [
+    {
+      "path": "assets/duckdb-browser-eh.worker--3HUwN9R.js",
+      "bytes": 772845,
+      "sha256": "56573a489c417ac2c6931340b1f04bd76573189068309d0b946eebec66280740"
+    },
+    {
+      "path": "assets/duckdb-browser-mvp.worker-AS4FIczp.js",
+      "bytes": 839466,
+      "sha256": "f9f28e9284269247c85b63a17929d28d0335a6014b8f6726fafb812e9c68e585"
+    },
+    {
+      "path": "assets/duckdb-eh-D-nnNw7L.wasm",
+      "bytes": 35738125,
+      "sha256": "2d33317a5b5055fc4d2f7757cef8bac12d36d986cf7cbd55f8198e45c6806ee1"
+    },
+    {
+      "path": "assets/duckdb-mvp-CNulJfH-.wasm",
+      "bytes": 41086840,
+      "sha256": "96304565986972201e2863ad9a523e9c3b20a9cf871f2aa6ffb3c955412164db"
+    },
+    {
+      "path": "runtime.mjs",
+      "bytes": 205547,
+      "sha256": "8603f03a14ec4d03fbc591449833dfdc56f62c4706c8eaa1b3334b214c777553"
+    }
+  ]
+}

@@ -1,29 +1,26 @@
-import * as duckdb from '@duckdb/duckdb-wasm';
-import duckdbEhWasmUrl from '@duckdb/duckdb-wasm/dist/duckdb-eh.wasm?url';
-import duckdbEhWorkerUrl from '@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js?url';
-import duckdbMvpWasmUrl from '@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm?url';
-import duckdbMvpWorkerUrl from '@duckdb/duckdb-wasm/dist/duckdb-browser-mvp.worker.js?url';
 import type { SandboxWorkspaceFile } from '$lib/playground/options';
+import { importRuntimeModule } from '$lib/playground/runtimeModule';
 
 declare var self: any;
 
 const encoder = new TextEncoder();
-let dbPromise: Promise<duckdb.AsyncDuckDB> | null = null;
+let dbPromise: Promise<any> | null = null;
+let runtimeModuleUrl = '';
 
-const bundles: duckdb.DuckDBBundles = {
-	mvp: {
-		mainModule: duckdbMvpWasmUrl,
-		mainWorker: duckdbMvpWorkerUrl
-	},
-	eh: {
-		mainModule: duckdbEhWasmUrl,
-		mainWorker: duckdbEhWorkerUrl
+interface DuckDbRuntimeModule {
+	duckdb: any;
+	bundles: Record<string, { mainModule: string; mainWorker?: string; pthreadWorker?: string }>;
+}
+
+async function loadDuckDB(moduleUrl: string, log: boolean) {
+	if (!moduleUrl) throw new Error('DuckDB runtime module URL is not configured.');
+	if (runtimeModuleUrl !== moduleUrl) {
+		runtimeModuleUrl = moduleUrl;
+		dbPromise = null;
 	}
-};
-
-async function loadDuckDB(log: boolean) {
 	if (dbPromise) return await dbPromise;
 	dbPromise = (async () => {
+		const { duckdb, bundles } = await importRuntimeModule<DuckDbRuntimeModule>(moduleUrl);
 		const bundle = await duckdb.selectBundle(bundles);
 		if (!bundle.mainWorker) {
 			throw new Error('DuckDB selected bundle does not include a browser worker');
@@ -78,7 +75,7 @@ function isSqlPath(path: string) {
 }
 
 async function registerWorkspaceFiles(
-	db: duckdb.AsyncDuckDB,
+	db: any,
 	activePath: string,
 	code: string,
 	workspaceFiles: SandboxWorkspaceFile[],
@@ -108,6 +105,7 @@ async function registerWorkspaceFiles(
 self.onmessage = async (event: { data: any }) => {
 	const {
 		load,
+		moduleUrl: nextModuleUrl,
 		code,
 		prepare,
 		activePath = 'main.duckdb',
@@ -120,12 +118,12 @@ self.onmessage = async (event: { data: any }) => {
 			if (log) {
 				console.log('[wasm-idle:duckdb-worker] load');
 			}
-			await loadDuckDB(Boolean(log));
+			await loadDuckDB(nextModuleUrl || runtimeModuleUrl, Boolean(log));
 			postMessage({ load: true });
 			return;
 		}
 
-		const db = await loadDuckDB(Boolean(log));
+		const db = await loadDuckDB(runtimeModuleUrl, Boolean(log));
 		if (prepare) {
 			postMessage({ results: true });
 			return;

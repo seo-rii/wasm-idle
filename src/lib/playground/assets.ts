@@ -1,5 +1,7 @@
-import { env as publicEnv } from '$env/dynamic/public';
+import { env as dynamicPublicEnv } from '$env/dynamic/public';
 import { normalizeTeaVmBaseUrl, resolveTeaVmBaseUrl } from '$lib/playground/teavmConfig';
+
+const publicEnv = (dynamicPublicEnv || {}) as Record<string, string | undefined>;
 
 export type RuntimeAssetRuntime = 'python' | 'java' | 'clang' | 'clangd';
 
@@ -127,6 +129,7 @@ export interface LispRuntimeAssetConfig {
 }
 
 export interface RubyRuntimeAssetConfig {
+	moduleUrl?: string;
 	wasmUrl?: string;
 }
 
@@ -202,7 +205,9 @@ export interface NimRuntimeAssetConfig {
 }
 
 export interface BashRuntimeAssetConfig {
+	moduleUrl?: string;
 	webcUrl?: string;
+	workerUrl?: string;
 }
 
 export interface ClojureScriptRuntimeAssetConfig {
@@ -217,11 +222,20 @@ export interface SwiftRuntimeAssetConfig {
 }
 
 export interface SqliteRuntimeAssetConfig {
+	moduleUrl?: string;
 	wasmUrl?: string;
 }
 
+export interface AssemblyScriptRuntimeAssetConfig {
+	moduleUrl?: string;
+}
+
+export interface DuckDbRuntimeAssetConfig {
+	moduleUrl?: string;
+}
+
 export interface PhpRuntimeAssetConfig {
-	version?: string;
+	moduleUrl?: string;
 }
 
 export interface PlaygroundRuntimeAssets {
@@ -265,6 +279,8 @@ export interface PlaygroundRuntimeAssets {
 	bash?: BashRuntimeAssetConfig;
 	clojurescript?: ClojureScriptRuntimeAssetConfig;
 	swift?: SwiftRuntimeAssetConfig;
+	assemblyscript?: AssemblyScriptRuntimeAssetConfig;
+	duckdb?: DuckDbRuntimeAssetConfig;
 	sqlite?: SqliteRuntimeAssetConfig;
 	php?: PhpRuntimeAssetConfig;
 }
@@ -2420,10 +2436,83 @@ export function resolveSqliteWasmUrl(
 	return '';
 }
 
-export function resolvePhpVersion(options: string | PlaygroundRuntimeAssets | undefined) {
-	const configuredVersion =
-		(typeof options === 'object' && options?.php?.version) ||
-		(publicEnv.PUBLIC_WASM_PHP_VERSION || '').trim();
+function resolveStaticRuntimeModuleUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	configuredModuleUrl: string | undefined,
+	publicModuleUrl: string,
+	folder: string,
+	currentUrl = ''
+) {
+	const moduleUrl = configuredModuleUrl || publicModuleUrl.trim();
+	if (moduleUrl) return resolveConfiguredUrl(moduleUrl, currentUrl);
+	const rootUrl = typeof options === 'string' ? options : options?.rootUrl || '';
+	return resolveConfiguredUrl(
+		`${normalizeRootUrl(rootUrl) || ''}/${folder}/runtime.mjs`,
+		currentUrl
+	);
+}
 
-	return configuredVersion || '8.4';
+export function resolveAssemblyScriptRuntimeModuleUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	return resolveStaticRuntimeModuleUrl(
+		options,
+		typeof options === 'object' ? options?.assemblyscript?.moduleUrl : undefined,
+		publicEnv.PUBLIC_WASM_ASSEMBLYSCRIPT_MODULE_URL || '',
+		'wasm-assemblyscript',
+		currentUrl
+	);
+}
+
+export function resolveDuckDbRuntimeModuleUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	return resolveStaticRuntimeModuleUrl(
+		options,
+		typeof options === 'object' ? options?.duckdb?.moduleUrl : undefined,
+		publicEnv.PUBLIC_WASM_DUCKDB_MODULE_URL || '',
+		'wasm-duckdb',
+		currentUrl
+	);
+}
+
+export function resolvePhpRuntimeModuleUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	return resolveStaticRuntimeModuleUrl(
+		options,
+		typeof options === 'object' ? options?.php?.moduleUrl : undefined,
+		publicEnv.PUBLIC_WASM_PHP_MODULE_URL || '',
+		'wasm-php',
+		currentUrl
+	);
+}
+
+export function resolveRubyRuntimeModuleUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	return resolveStaticRuntimeModuleUrl(
+		options,
+		typeof options === 'object' ? options?.ruby?.moduleUrl : undefined,
+		publicEnv.PUBLIC_WASM_RUBY_MODULE_URL || '',
+		'wasm-ruby',
+		currentUrl
+	);
+}
+
+export function resolveSqliteRuntimeModuleUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	return resolveStaticRuntimeModuleUrl(
+		options,
+		typeof options === 'object' ? options?.sqlite?.moduleUrl : undefined,
+		publicEnv.PUBLIC_WASM_SQLITE_MODULE_URL || '',
+		'wasm-sqlite',
+		currentUrl
+	);
 }

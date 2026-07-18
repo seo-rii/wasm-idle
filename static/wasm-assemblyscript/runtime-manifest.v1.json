@@ -1,0 +1,40 @@
+{
+  "formatVersion": 1,
+  "runtimeModule": "runtime.mjs",
+  "packages": {
+    "assemblyscript": "0.28.17",
+    "@assemblyscript/loader": "0.28.17"
+  },
+  "files": [
+    {
+      "path": "chunks/__vite-browser-external-CBM_S3fv.mjs",
+      "bytes": 102,
+      "sha256": "31208864f100e9c5862fb1d66835ebbad2bba189e3a28bcc2a34eb75934ded9c"
+    },
+    {
+      "path": "chunks/asc-B7u7ie6k.mjs",
+      "bytes": 13489859,
+      "sha256": "9bc0c5dd3d670cbb0c125209955e21f72827310cc6650361463e4bd46010e56e"
+    },
+    {
+      "path": "chunks/chunk-DSPWxLtR.mjs",
+      "bytes": 686,
+      "sha256": "8694d3eadcf4f97da353b6ed255414f5f2f9d478b0b1a251188e489666349223"
+    },
+    {
+      "path": "chunks/preload-helper-Di021t7d.mjs",
+      "bytes": 1374,
+      "sha256": "8654151aa32cfd92affe83a8b91c715f2c5127cc9ca97c61a37d0c39edcb81c1"
+    },
+    {
+      "path": "LICENSE.txt",
+      "bytes": 11357,
+      "sha256": "b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1"
+    },
+    {
+      "path": "runtime.mjs",
+      "bytes": 6004,
+      "sha256": "2e062d456711d215bce7c860a13e01535e8fbce49632f2c71ed33e8ab112ead8"
+    }
+  ]
+}

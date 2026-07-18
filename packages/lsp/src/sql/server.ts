@@ -1,10 +1,15 @@
+import {
+	resolveDuckDbLanguageServerModuleUrl,
+	resolveSqliteLanguageServerModuleUrl
+} from '../runtime.js';
 import type { EditorLanguageServerOptions, EditorLanguageServerRuntimeOptions } from '../types.js';
+import type { DuckDBBundles } from '../types.js';
 import { createWorkerLanguageServerClient, type LanguageServerStatus } from '../worker-client.js';
 import type { SqlLanguageServerDialect } from './service.js';
-import type { DuckDBBundles } from '@duckdb/duckdb-wasm';
 
 export interface SqlLanguageServerConfig {
 	dialect?: SqlLanguageServerDialect;
+	moduleUrl?: string;
 	wasmUrl?: string;
 	duckdbBundles?: DuckDBBundles;
 }
@@ -20,16 +25,27 @@ const createDefaultWorker = () =>
 const resolveConfig = (options: EditorLanguageServerOptions | undefined) =>
 	typeof options === 'object' ? options.sql || {} : {};
 
+const resolveModuleUrl = (
+	options: EditorLanguageServerOptions | undefined,
+	dialect: SqlLanguageServerDialect,
+	currentUrl = ''
+) =>
+	dialect === 'duckdb'
+		? resolveDuckDbLanguageServerModuleUrl(options, currentUrl)
+		: resolveSqliteLanguageServerModuleUrl(options, currentUrl);
+
 export async function getSqlLanguageServer(
 	options?: EditorLanguageServerOptions | SqlLanguageServerOptions
 ) {
 	const hostOptions =
 		typeof options === 'object' ? (options as SqlLanguageServerOptions) : undefined;
 	const config = resolveConfig(options);
+	const dialect = config.dialect || 'sqlite';
 	return await createWorkerLanguageServerClient({
 		createWorker: hostOptions?.createWorker || createDefaultWorker,
 		initOptions: {
-			dialect: config.dialect || 'sqlite',
+			dialect,
+			moduleUrl: resolveModuleUrl(options, dialect, hostOptions?.currentUrl),
 			wasmUrl: config.wasmUrl,
 			duckdbBundles: config.duckdbBundles
 		},
@@ -47,6 +63,7 @@ export async function getDuckDbLanguageServer(
 		createWorker: hostOptions?.createWorker || createDefaultWorker,
 		initOptions: {
 			dialect: 'duckdb',
+			moduleUrl: resolveDuckDbLanguageServerModuleUrl(options, hostOptions?.currentUrl),
 			wasmUrl: config.wasmUrl,
 			duckdbBundles: config.duckdbBundles
 		},

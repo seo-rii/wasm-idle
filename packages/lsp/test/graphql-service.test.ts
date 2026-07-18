@@ -3,14 +3,14 @@ import { describe, expect, it, vi } from 'vitest';
 import { createGraphqlWorkerService, type LspDocumentContext } from '../src/index.js';
 
 describe('createGraphqlWorkerService', () => {
-	it('uses the GraphQL parser and schema validator for diagnostics', () => {
+	it('uses the GraphQL parser and schema validator for diagnostics', async () => {
 		const service = createGraphqlWorkerService();
 		const context: LspDocumentContext = {
 			documents: new Map(),
 			publishDiagnostics: vi.fn(),
 			reportProgress: vi.fn()
 		};
-		service.initialize?.({ schema: 'type Query { hello: String }' }, context);
+		await service.initialize?.({ schema: 'type Query { hello: String }' }, context);
 
 		const diagnostics = service.diagnostics?.(
 			{

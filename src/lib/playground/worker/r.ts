@@ -1,4 +1,4 @@
-import { ChannelType, WebR } from 'webr';
+import type { WebR } from 'webr';
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
 import type { SandboxWorkspaceFile } from '$lib/playground/options';
 
@@ -70,7 +70,11 @@ async function loadWebR(url: string, log = true) {
 	webRPromise?.then((runtime) => runtime.close()).catch(() => {});
 	webRPromise = (async () => {
 		postProgress(5);
-		const webR = new WebR({
+		const moduleUrl = `${url.endsWith('/') ? url : `${url}/`}webr.js`;
+		const { ChannelType, WebR: WebRConstructor } = (await import(
+			/* @vite-ignore */ moduleUrl
+		)) as typeof import('webr');
+		const webR = new WebRConstructor({
 			baseUrl: url,
 			serviceWorkerUrl: url,
 			channelType: ChannelType.PostMessage,

@@ -143,20 +143,20 @@ export {
 } from './elixir/index.js';
 export { getErlangLanguageServer, type ErlangLanguageServerOptions } from './erlang/index.js';
 export {
+	createDocumentWorkerService,
+	createGraphqlWorkerService,
 	createTypeScriptWorkerService,
+	createWatWorkerService
+} from './optional-provider-services.js';
+export {
 	getJavaScriptLanguageServer,
 	getTypeScriptLanguageServer,
-	type TypeScriptLanguage,
 	type TypeScriptLanguageServerConfig,
-	type TypeScriptLanguageServerOptions,
-	type TypeScriptWorkerOptions
-} from './typescript/index.js';
-export {
-	createWatWorkerService,
-	getWatLanguageServer,
-	type WatLanguageServerOptions,
-	type WatWorkerOptions
-} from './wat/index.js';
+	type TypeScriptLanguageServerOptions
+} from './typescript/server.js';
+export type { TypeScriptLanguage, TypeScriptWorkerOptions } from './typescript/service.js';
+export { getWatLanguageServer, type WatLanguageServerOptions } from './wat/server.js';
+export type { WatWorkerOptions } from './wat/service.js';
 export {
 	createWasmWorkerService,
 	decodeWasmSource,
@@ -251,12 +251,11 @@ export {
 	type SqlWorkerOptions
 } from './sql/index.js';
 export {
-	createGraphqlWorkerService,
 	getGraphqlLanguageServer,
 	type GraphqlLanguageServerConfig,
-	type GraphqlLanguageServerOptions,
-	type GraphqlWorkerOptions
-} from './graphql/index.js';
+	type GraphqlLanguageServerOptions
+} from './graphql/server.js';
+export type { GraphqlWorkerOptions } from './graphql/service.js';
 export {
 	createFortranWorkerService,
 	getFortranLanguageServer,
@@ -318,7 +317,6 @@ export {
 	type RunPerlDiagnostics
 } from './perl/index.js';
 export {
-	createDocumentWorkerService,
 	getCssLanguageServer,
 	getDocumentLanguageServer,
 	getHtmlLanguageServer,
@@ -326,11 +324,10 @@ export {
 	getMarkdownLanguageServer,
 	getTomlLanguageServer,
 	getYamlLanguageServer,
-	type DocumentLanguageId,
 	type DocumentLanguageServerConfig,
-	type DocumentLanguageServerOptions,
-	type DocumentWorkerOptions
-} from './document/index.js';
+	type DocumentLanguageServerOptions
+} from './document/server.js';
+export type { DocumentLanguageId, DocumentWorkerOptions } from './document/service.js';
 export {
 	applyContentChanges,
 	fullDocumentRange,

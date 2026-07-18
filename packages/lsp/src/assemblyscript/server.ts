@@ -1,5 +1,11 @@
+import { resolveAssemblyScriptLanguageServerModuleUrl } from '../runtime.js';
 import type { EditorLanguageServerOptions, EditorLanguageServerRuntimeOptions } from '../types.js';
 import { createWorkerLanguageServerClient, type LanguageServerStatus } from '../worker-client.js';
+
+export interface AssemblyScriptLanguageServerConfig {
+	moduleUrl?: string;
+	extraFiles?: Record<string, string>;
+}
 
 export interface AssemblyScriptLanguageServerOptions extends EditorLanguageServerRuntimeOptions {
 	createWorker?: () => Worker;
@@ -17,6 +23,10 @@ export async function getAssemblyScriptLanguageServer(
 	return await createWorkerLanguageServerClient({
 		createWorker: hostOptions?.createWorker || createDefaultWorker,
 		initOptions: {
+			moduleUrl: resolveAssemblyScriptLanguageServerModuleUrl(
+				options,
+				hostOptions?.currentUrl
+			),
 			extraFiles: hostOptions?.assemblyscript?.extraFiles
 		},
 		onStatus: hostOptions?.onStatus

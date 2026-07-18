@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { phpInstances, loadWebRuntimeMock, runResponses, MockPhp } = vi.hoisted(() => {
+const {
+	phpInstances,
+	createPhp84Mock,
+	runResponses,
+	MockPhp
+} = vi.hoisted(() => {
 	const runResponses: Array<{ text: string; errors: string; exitCode: number }> = [];
 	const phpInstances: any[] = [];
 
@@ -18,25 +23,31 @@ const { phpInstances, loadWebRuntimeMock, runResponses, MockPhp } = vi.hoisted((
 
 	return {
 		phpInstances,
-		loadWebRuntimeMock: vi.fn(async (version: string) => ({ version })),
+		createPhp84Mock: vi.fn(async () => new MockPhp('php-8.4')),
 		runResponses,
 		MockPhp
 	};
 });
 
-vi.mock('@php-wasm/web', () => ({
-	loadWebRuntime: loadWebRuntimeMock
+vi.mock('$lib/playground/runtimeModule', () => ({
+	importRuntimeModule: vi.fn(async () => ({ createPhp84: createPhp84Mock }))
 }));
 
-vi.mock('@php-wasm/universal', () => ({
-	PHP: MockPhp
-}));
+async function loadWorker() {
+	await import('./php');
+	await (globalThis as any).self.onmessage({
+		data: {
+			load: true,
+			moduleUrl: '/wasm-php/runtime.mjs'
+		}
+	});
+}
 
 describe('PHP worker', () => {
 	beforeEach(() => {
 		vi.resetModules();
 		phpInstances.length = 0;
-		loadWebRuntimeMock.mockClear();
+		createPhp84Mock.mockClear();
 		runResponses.length = 0;
 		(globalThis as any).self = globalThis as any;
 		(globalThis as any).postMessage = vi.fn();
@@ -48,13 +59,7 @@ describe('PHP worker', () => {
 			errors: '',
 			exitCode: 0
 		});
-		await import('./php');
-		await (globalThis as any).self.onmessage({
-			data: {
-				load: true,
-				version: '8.4'
-			}
-		});
+		await loadWorker();
 		await (globalThis as any).self.onmessage({
 			data: {
 				code: "<?php echo file_get_contents('php://input');",
@@ -69,8 +74,9 @@ describe('PHP worker', () => {
 			}
 		});
 
-		expect(loadWebRuntimeMock).toHaveBeenCalledWith('8.4');
+		expect(createPhp84Mock).toHaveBeenCalledOnce();
 		expect(phpInstances).toHaveLength(1);
+		expect(phpInstances[0].runtime).toBe('php-8.4');
 		expect(phpInstances[0].mkdir).toHaveBeenCalledWith('/workspace');
 		expect(phpInstances[0].writeFile).toHaveBeenCalledWith(
 			'/workspace/lib/util.php',
@@ -95,6 +101,15 @@ describe('PHP worker', () => {
 		);
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ load: true });
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			progress: { percent: 5 }
+		});
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			progress: { percent: 95 }
+		});
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			progress: { percent: 100 }
+		});
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
 			output: 'factorial_plus_bonus=27\n'
 		});
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
@@ -106,7 +121,7 @@ describe('PHP worker', () => {
 			errors: 'fatal demo error',
 			exitCode: 1
 		});
-		await import('./php');
+		await loadWorker();
 		await (globalThis as any).self.onmessage({
 			data: {
 				code: '<?php exit(1);',

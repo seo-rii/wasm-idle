@@ -1,5 +1,5 @@
-import { instantiate, type ASUtil } from '@assemblyscript/loader';
 import type { SandboxWorkspaceFile } from '$lib/playground/options';
+import { importRuntimeModule } from '$lib/playground/runtimeModule';
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
 
 declare var self: any;
@@ -22,11 +22,36 @@ interface AssemblyScriptCompilerModule {
 		| { error?: Error; stdout?: unknown; stderr?: unknown };
 }
 
+interface AssemblyScriptRuntimeModule {
+	instantiate<T extends Record<string, unknown>>(
+		module: WebAssembly.Module | ArrayBufferView,
+		imports?: WebAssembly.Imports
+	): Promise<{ exports: T & AssemblyScriptRuntimeExports }>;
+	loadCompiler(): Promise<AssemblyScriptCompilerModule>;
+}
+
+interface AssemblyScriptRuntimeExports {
+	__getString?(pointer: number): string;
+	__newString?(value: string): number;
+}
+
 let loaded = false;
 let compilerPromise: Promise<AssemblyScriptCompilerModule> | null = null;
+let runtimePromise: Promise<AssemblyScriptRuntimeModule> | null = null;
+let runtimeModuleUrl = '';
 let compiledWasm: Uint8Array | null = null;
 let compiledCacheKey = '';
 let compiledReturnTypes: Record<string, string> = {};
+
+async function loadRuntime(url: string) {
+	if (!url) throw new Error('AssemblyScript runtime module URL is not configured.');
+	if (!runtimePromise || runtimeModuleUrl !== url) {
+		runtimeModuleUrl = url;
+		runtimePromise = importRuntimeModule<AssemblyScriptRuntimeModule>(url);
+		compilerPromise = null;
+	}
+	return await runtimePromise;
+}
 
 class AssemblyScriptStdin {
 	private initialStdin: string | null;
@@ -100,6 +125,7 @@ class AssemblyScriptStdin {
 self.onmessage = async (event: { data: any }) => {
 	const {
 		load,
+		moduleUrl: nextModuleUrl,
 		code,
 		prepare,
 		buffer,
@@ -109,6 +135,7 @@ self.onmessage = async (event: { data: any }) => {
 		log
 	}: {
 		load?: boolean;
+		moduleUrl?: string;
 		code?: string;
 		prepare?: boolean;
 		buffer?: SharedArrayBuffer;
@@ -120,9 +147,14 @@ self.onmessage = async (event: { data: any }) => {
 	try {
 		if (load) {
 			loaded = true;
+			postMessage({ progress: { percent: 5, stage: 'Loading AssemblyScript runtime' } });
+			await loadRuntime(nextModuleUrl || runtimeModuleUrl);
 			if (log) {
-				console.log('[wasm-idle:assemblyscript-worker] load bundled compiler');
+				console.log(
+					`[wasm-idle:assemblyscript-worker] load runtime=${nextModuleUrl || runtimeModuleUrl}`
+				);
 			}
+			postMessage({ progress: { percent: 100, stage: 'AssemblyScript runtime ready' } });
 			postMessage({ load: true });
 			return;
 		}
@@ -141,25 +173,7 @@ self.onmessage = async (event: { data: any }) => {
 				);
 			}
 			if (!compilerPromise) {
-				const workerGlobal = globalThis as Record<string, unknown>;
-				const hadProcess = Object.prototype.hasOwnProperty.call(workerGlobal, 'process');
-				const previousProcess = workerGlobal.process;
-				if (!Reflect.deleteProperty(workerGlobal, 'process')) {
-					workerGlobal.process = undefined;
-				}
-				compilerPromise =
-					import('assemblyscript/asc') as Promise<AssemblyScriptCompilerModule>;
-				const restoreProcess = () => {
-					if (hadProcess) {
-						workerGlobal.process = previousProcess;
-					} else {
-						Reflect.deleteProperty(workerGlobal, 'process');
-					}
-				};
-				compilerPromise.then(
-					() => restoreProcess(),
-					() => restoreProcess()
-				);
+				compilerPromise = (await loadRuntime(runtimeModuleUrl)).loadCompiler();
 			}
 			const files: Record<string, string> = {};
 			for (const file of workspaceFiles) {
@@ -265,7 +279,7 @@ self.onmessage = async (event: { data: any }) => {
 			return;
 		}
 
-		let activeExports: (Record<string, unknown> & ASUtil) | null = null;
+		let activeExports: (Record<string, unknown> & AssemblyScriptRuntimeExports) | null = null;
 		const stdinReader = new AssemblyScriptStdin(
 			stdin,
 			buffer ? new Int32Array(buffer) : null,
@@ -312,8 +326,10 @@ self.onmessage = async (event: { data: any }) => {
 				}
 			}
 		};
-		const instance = await instantiate<Record<string, unknown>>(compiledWasm, imports);
-		activeExports = instance.exports as Record<string, unknown> & ASUtil;
+		const runtime = await loadRuntime(runtimeModuleUrl);
+		const instance = await runtime.instantiate<Record<string, unknown>>(compiledWasm, imports);
+		activeExports = instance.exports;
+		const getString = activeExports.__getString;
 		const preferredExportName =
 			typeof activeExports._start === 'function'
 				? '_start'
@@ -325,9 +341,9 @@ self.onmessage = async (event: { data: any }) => {
 		if (preferredExportName) {
 			const value = (activeExports[preferredExportName] as () => unknown)();
 			const returnType = compiledReturnTypes[preferredExportName] || '';
-			if (returnType === 'string' && typeof value === 'number') {
+			if (returnType === 'string' && typeof value === 'number' && getString) {
 				postMessage({
-					output: `${preferredExportName}=${activeExports.__getString(value >>> 0)}\n`
+					output: `${preferredExportName}=${getString(value >>> 0)}\n`
 				});
 				printed = true;
 			} else if (returnType === 'boolean' && typeof value === 'number') {
@@ -350,9 +366,9 @@ self.onmessage = async (event: { data: any }) => {
 				try {
 					const result = (value as () => unknown)();
 					const returnType = compiledReturnTypes[name] || '';
-					if (returnType === 'string' && typeof result === 'number') {
+					if (returnType === 'string' && typeof result === 'number' && getString) {
 						postMessage({
-							output: `${name}=${activeExports.__getString(result >>> 0)}\n`
+							output: `${name}=${getString(result >>> 0)}\n`
 						});
 						printed = true;
 					} else if (returnType === 'boolean' && typeof result === 'number') {

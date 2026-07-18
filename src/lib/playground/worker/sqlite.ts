@@ -1,11 +1,30 @@
-import initSqlJs, { type Database, type QueryExecResult } from 'sql.js';
-import sqliteWasmDefaultUrl from 'sql.js/dist/sql-wasm.wasm?url';
+import { importRuntimeModule } from '$lib/playground/runtimeModule';
 
 declare var self: any;
 
 let wasmUrl = '';
 let loadedWasmUrl = '';
-let sqlPromise: ReturnType<typeof initSqlJs> | null = null;
+let runtimeModuleUrl = '';
+let sqlPromise: Promise<SqlJsStatic> | null = null;
+
+interface QueryExecResult {
+	columns: string[];
+	values: unknown[][];
+}
+
+interface Database {
+	exec(sql: string): QueryExecResult[];
+	close(): void;
+}
+
+interface SqlJsStatic {
+	Database: new () => Database;
+}
+
+interface SqliteRuntimeModule {
+	default(options: { locateFile(file: string): string }): Promise<SqlJsStatic>;
+	sqliteWasmUrl: string;
+}
 
 function locateSqliteWasm(url: string) {
 	const maybeProcess =
@@ -16,13 +35,16 @@ function locateSqliteWasm(url: string) {
 	return url;
 }
 
-async function loadSqlite(url: string) {
-	const nextUrl = url || sqliteWasmDefaultUrl;
-	if (loadedWasmUrl === nextUrl && sqlPromise) {
+async function loadSqlite(moduleUrl: string, url: string) {
+	if (!moduleUrl) throw new Error('SQLite runtime module URL is not configured.');
+	const runtime = await importRuntimeModule<SqliteRuntimeModule>(moduleUrl);
+	const nextUrl = url || runtime.sqliteWasmUrl;
+	if (runtimeModuleUrl === moduleUrl && loadedWasmUrl === nextUrl && sqlPromise) {
 		return await sqlPromise;
 	}
+	runtimeModuleUrl = moduleUrl;
 	loadedWasmUrl = nextUrl;
-	sqlPromise = initSqlJs({
+	sqlPromise = runtime.default({
 		locateFile(file) {
 			return file.endsWith('.wasm') ? locateSqliteWasm(nextUrl) : file;
 		}
@@ -66,6 +88,7 @@ function loadWorkspaceFiles(db: Database, workspaceFiles: { path: string; conten
 self.onmessage = async (event: { data: any }) => {
 	const {
 		load,
+		moduleUrl: nextModuleUrl,
 		wasmUrl: nextWasmUrl,
 		code,
 		prepare,
@@ -75,18 +98,19 @@ self.onmessage = async (event: { data: any }) => {
 	} = event.data;
 	try {
 		if (load) {
+			const moduleUrl = nextModuleUrl || runtimeModuleUrl;
 			wasmUrl = nextWasmUrl || '';
 			if (log) {
 				console.log(
-					`[wasm-idle:sqlite-worker] load wasmUrl=${wasmUrl || sqliteWasmDefaultUrl}`
+					`[wasm-idle:sqlite-worker] load moduleUrl=${moduleUrl} wasmUrl=${wasmUrl || 'default'}`
 				);
 			}
-			await loadSqlite(wasmUrl);
+			await loadSqlite(moduleUrl, wasmUrl);
 			postMessage({ load: true });
 			return;
 		}
 
-		const SQL = await loadSqlite(wasmUrl);
+		const SQL = await loadSqlite(runtimeModuleUrl, wasmUrl);
 		if (prepare) {
 			postMessage({ results: true });
 			return;

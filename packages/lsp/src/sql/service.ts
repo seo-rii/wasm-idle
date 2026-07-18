@@ -1,5 +1,3 @@
-import initSqlJs, { type SqlJsStatic } from 'sql.js';
-import type { DuckDBBundles } from '@duckdb/duckdb-wasm';
 import {
 	positionAt,
 	type LspDiagnostic,
@@ -7,13 +5,58 @@ import {
 	type LspPosition,
 	type WorkerLanguageService
 } from '../lsp.js';
+import type { DuckDBBundles } from '../types.js';
 
 export type SqlLanguageServerDialect = 'sql' | 'sqlite' | 'duckdb';
 
 export interface SqlWorkerOptions {
 	dialect?: SqlLanguageServerDialect;
+	moduleUrl?: string;
 	wasmUrl?: string;
 	duckdbBundles?: DuckDBBundles;
+}
+
+interface SqlJsDatabase {
+	exec(code: string): unknown;
+	close(): void;
+}
+
+interface SqlJsStatic {
+	Database: new () => SqlJsDatabase;
+}
+
+interface SqliteRuntimeModule {
+	default?: (options: { locateFile(file: string): string }) => Promise<SqlJsStatic>;
+	sqliteWasmUrl?: string;
+}
+
+interface DuckDBSelectedBundle {
+	mainModule: string;
+	mainWorker: string | null;
+	pthreadWorker: string | null;
+}
+
+interface DuckDBConnection {
+	query(code: string): Promise<unknown>;
+	close(): Promise<void>;
+}
+
+interface DuckDBDatabase {
+	instantiate(mainModule: string, pthreadWorker: string | null): Promise<void>;
+	reset(): Promise<void>;
+	connect(): Promise<DuckDBConnection>;
+	terminate(): Promise<void>;
+}
+
+interface DuckDBRuntimeNamespace {
+	selectBundle(bundles: DuckDBBundles): Promise<DuckDBSelectedBundle>;
+	VoidLogger: new () => unknown;
+	AsyncDuckDB: new (logger: unknown, worker: Worker) => DuckDBDatabase;
+}
+
+interface DuckDBRuntimeModule {
+	duckdb?: DuckDBRuntimeNamespace;
+	bundles?: DuckDBBundles;
 }
 
 export interface SqlEngineDiagnostic {
@@ -141,11 +184,19 @@ const diagnosticFor = (text: string, diagnostic: SqlEngineDiagnostic): LspDiagno
 
 async function loadSqlJsEngine(options: SqlWorkerOptions): Promise<SqlEngine> {
 	if (options.dialect === 'duckdb') {
-		if (!options.duckdbBundles || Object.keys(options.duckdbBundles).length === 0) {
+		if (!options.moduleUrl) {
+			throw new Error('DuckDB language server requires a runtime module URL');
+		}
+		const runtime = (await import(/* @vite-ignore */ options.moduleUrl)) as DuckDBRuntimeModule;
+		const duckdb = runtime.duckdb;
+		if (!duckdb || typeof duckdb.selectBundle !== 'function') {
+			throw new Error('DuckDB runtime module does not export the duckdb namespace');
+		}
+		const bundles = options.duckdbBundles || runtime.bundles;
+		if (!bundles || Object.keys(bundles).length === 0) {
 			throw new Error('DuckDB language server requires externally hosted bundle URLs');
 		}
-		const duckdb = await import('@duckdb/duckdb-wasm');
-		const bundle = await duckdb.selectBundle(options.duckdbBundles);
+		const bundle = await duckdb.selectBundle(bundles);
 		if (!bundle.mainWorker) {
 			throw new Error('DuckDB selected bundle does not include a browser worker');
 		}
@@ -185,12 +236,20 @@ async function loadSqlJsEngine(options: SqlWorkerOptions): Promise<SqlEngine> {
 		};
 	}
 
-	if (!options.wasmUrl) {
+	if (!options.moduleUrl) {
+		throw new Error('SQLite language server requires a runtime module URL');
+	}
+	const runtime = (await import(/* @vite-ignore */ options.moduleUrl)) as SqliteRuntimeModule;
+	if (typeof runtime.default !== 'function') {
+		throw new Error('SQLite runtime module does not export initSqlJs as default');
+	}
+	const wasmUrl = options.wasmUrl || runtime.sqliteWasmUrl;
+	if (!wasmUrl) {
 		throw new Error('SQLite language server requires an externally hosted WASM URL');
 	}
-	const SQL: SqlJsStatic = await initSqlJs({
+	const SQL = await runtime.default({
 		locateFile(file) {
-			return file.endsWith('.wasm') ? options.wasmUrl || file : file;
+			return file.endsWith('.wasm') ? wasmUrl : file;
 		}
 	});
 

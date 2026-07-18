@@ -1,8 +1,12 @@
 import type { EditorLanguageServerOptions, EditorLanguageServerRuntimeOptions } from '../types.js';
-import { resolveRubyLanguageServerWasmUrl } from '../runtime.js';
+import {
+	resolveRubyLanguageServerModuleUrl,
+	resolveRubyLanguageServerWasmUrl
+} from '../runtime.js';
 import { createWorkerLanguageServerClient, type LanguageServerStatus } from '../worker-client.js';
 
 export interface RubyLanguageServerConfig {
+	moduleUrl?: string;
 	wasmUrl?: string;
 }
 
@@ -22,6 +26,7 @@ export async function getRubyLanguageServer(
 	return await createWorkerLanguageServerClient({
 		createWorker: hostOptions?.createWorker || createDefaultWorker,
 		initOptions: {
+			moduleUrl: resolveRubyLanguageServerModuleUrl(options, hostOptions?.currentUrl),
 			wasmUrl: resolveRubyLanguageServerWasmUrl(options, hostOptions?.currentUrl)
 		},
 		onStatus: hostOptions?.onStatus

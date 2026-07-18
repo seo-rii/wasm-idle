@@ -1,0 +1,20 @@
+{
+  "formatVersion": 1,
+  "runtimeModule": "runtime.mjs",
+  "packages": {
+    "@ruby/3.4-wasm-wasi": "2.9.3-2.9.4",
+    "@ruby/wasm-wasi": "2.9.3-2.9.4"
+  },
+  "files": [
+    {
+      "path": "assets/ruby_stdlib-C40Yu-vu.wasm",
+      "bytes": 30608059,
+      "sha256": "81bc8bbb2130ea34f30826e03d850661bb6cb1c7fe72be598584f12b2810c9de"
+    },
+    {
+      "path": "runtime.mjs",
+      "bytes": 54623,
+      "sha256": "d832ed230a34df7db0a7ed823d4fc974fb532b532e0b0de0ad76033acec05b71"
+    }
+  ]
+}

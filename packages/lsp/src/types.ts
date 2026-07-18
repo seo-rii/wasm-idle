@@ -1,8 +1,19 @@
 import type { MessageReader, MessageWriter } from 'vscode-jsonrpc';
 import type { CompilerOptions } from 'typescript';
-import type { DuckDBBundles } from '@duckdb/duckdb-wasm';
 import type { LanguageToolAssetConfig } from './assets.js';
 import type { DocumentLanguageId } from './document/service.js';
+
+export interface DuckDBBundleConfig {
+	mainModule: string;
+	mainWorker: string;
+	pthreadWorker?: string;
+}
+
+export interface DuckDBBundles {
+	mvp: DuckDBBundleConfig;
+	eh?: DuckDBBundleConfig;
+	coi?: DuckDBBundleConfig & { pthreadWorker: string };
+}
 
 export interface EditorLanguageServerTransport {
 	reader: MessageReader;
@@ -65,6 +76,7 @@ export interface EditorLanguageServerRuntimeOptions {
 		manifestUrl?: string;
 	};
 	assemblyscript?: {
+		moduleUrl?: string;
 		extraFiles?: Record<string, string>;
 	};
 	zig?: {
@@ -106,6 +118,7 @@ export interface EditorLanguageServerRuntimeOptions {
 	};
 	sql?: {
 		dialect?: 'sql' | 'sqlite' | 'duckdb';
+		moduleUrl?: string;
 		wasmUrl?: string;
 		duckdbBundles?: DuckDBBundles;
 	};
@@ -120,6 +133,7 @@ export interface EditorLanguageServerRuntimeOptions {
 		workerUrl?: string;
 	};
 	ruby?: {
+		moduleUrl?: string;
 		wasmUrl?: string;
 	};
 	r?: {

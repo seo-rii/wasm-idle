@@ -458,36 +458,44 @@ describe('core language contract', () => {
 		expect(key).toContain('"lispModuleUrl":"/wasm-lisp/index.js?v=test"');
 	});
 
-	it('includes Ruby wasm urls in runtime asset cache keys', () => {
+	it('includes Ruby runtime module and wasm urls in runtime asset cache keys', () => {
 		const key = createRuntimeAssetsKey({
 			rootUrl: '/repl',
 			ruby: {
+				moduleUrl: '/wasm-ruby/runtime.mjs?v=test',
 				wasmUrl: '/ruby/ruby+stdlib.wasm?v=test'
 			}
 		});
 
+		expect(key).toContain('"rubyModuleUrl":"/wasm-ruby/runtime.mjs?v=test"');
 		expect(key).toContain('"rubyWasmUrl":"/ruby/ruby+stdlib.wasm?v=test"');
 	});
 
-	it('includes SQLite wasm urls in runtime asset cache keys', () => {
+	it('includes external runtime module urls in runtime asset cache keys', () => {
 		const key = createRuntimeAssetsKey({
 			rootUrl: '/repl',
+			assemblyscript: { moduleUrl: '/wasm-assemblyscript/runtime.mjs?v=test' },
+			duckdb: { moduleUrl: '/wasm-duckdb/runtime.mjs?v=test' },
+			php: { moduleUrl: '/wasm-php/runtime.mjs?v=test' },
+			bash: {
+				moduleUrl: '/wasm-bash/sdk/index.mjs?v=test',
+				webcUrl: '/wasm-bash/bash.webc?v=test',
+				workerUrl: '/wasm-bash/sdk/worker.mjs?v=test'
+			},
 			sqlite: {
+				moduleUrl: '/wasm-sqlite/runtime.mjs?v=test',
 				wasmUrl: '/sqlite/sql-wasm.wasm?v=test'
 			}
 		});
 
+		expect(key).toContain(
+			'"assemblyScriptModuleUrl":"/wasm-assemblyscript/runtime.mjs?v=test"'
+		);
+		expect(key).toContain('"duckDbModuleUrl":"/wasm-duckdb/runtime.mjs?v=test"');
+		expect(key).toContain('"phpModuleUrl":"/wasm-php/runtime.mjs?v=test"');
+		expect(key).toContain('"bashModuleUrl":"/wasm-bash/sdk/index.mjs?v=test"');
+		expect(key).toContain('"bashWorkerUrl":"/wasm-bash/sdk/worker.mjs?v=test"');
+		expect(key).toContain('"sqliteModuleUrl":"/wasm-sqlite/runtime.mjs?v=test"');
 		expect(key).toContain('"sqliteWasmUrl":"/sqlite/sql-wasm.wasm?v=test"');
-	});
-
-	it('includes PHP versions in runtime asset cache keys', () => {
-		const key = createRuntimeAssetsKey({
-			rootUrl: '/repl',
-			php: {
-				version: '8.5'
-			}
-		});
-
-		expect(key).toContain('"phpVersion":"8.5"');
 	});
 });

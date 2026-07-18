@@ -1,4 +1,3 @@
-import { ChannelType, WebR } from 'webr';
 import {
 	positionAt,
 	type LspDiagnostic,
@@ -85,6 +84,12 @@ async function loadWebRParser(options: RWorkerOptions): Promise<RSyntaxParser> {
 	if (!options.baseUrl) {
 		throw new Error('R language server requires a WebR baseUrl');
 	}
+	const normalizedBaseUrl = options.baseUrl.endsWith('/')
+		? options.baseUrl
+		: `${options.baseUrl}/`;
+	const { ChannelType, WebR } = (await import(
+		/* @vite-ignore */ `${normalizedBaseUrl}webr.js`
+	)) as typeof import('webr');
 	const webR = new WebR({
 		baseUrl: options.baseUrl,
 		serviceWorkerUrl: options.baseUrl,

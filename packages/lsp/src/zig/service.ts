@@ -6,7 +6,7 @@ import {
 	PreopenDirectory,
 	WASI
 } from '@bjorn3/browser_wasi_shim';
-import { Uint8ArrayReader, Uint8ArrayWriter, ZipReader } from '@zip.js/zip.js';
+import { Unzip, UnzipInflate } from 'fflate';
 import {
 	positionAt,
 	uriToPath,
@@ -297,16 +297,35 @@ async function fetchBytes(
 }
 
 async function unzipStdDirectory(source: Uint8Array) {
-	const reader = new ZipReader(new Uint8ArrayReader(source));
-	const entries = await reader.getEntries();
 	const root = new Directory(new Map());
-	for (const entry of entries) {
-		if (!entry.filename || entry.directory) continue;
-		const data = await entry.getData?.(new Uint8ArrayWriter());
-		if (!data) continue;
-		addFile(root, entry.filename, data);
-	}
-	await reader.close();
+	let archiveError: unknown;
+	const unzip = new Unzip((file) => {
+		if (!file.name || file.name.endsWith('/')) return;
+		const chunks: Uint8Array[] = [];
+		let length = 0;
+		file.ondata = (error, data, final) => {
+			if (error) {
+				archiveError = error;
+				return;
+			}
+			if (data.byteLength > 0) {
+				chunks.push(data);
+				length += data.byteLength;
+			}
+			if (!final) return;
+			const contents = new Uint8Array(length);
+			let offset = 0;
+			for (const chunk of chunks) {
+				contents.set(chunk, offset);
+				offset += chunk.byteLength;
+			}
+			addFile(root, file.name, contents);
+		};
+		file.start();
+	});
+	unzip.register(UnzipInflate);
+	unzip.push(source, true);
+	if (archiveError) throw archiveError;
 	const stdDirectory = root.contents.get('std');
 	if (!(stdDirectory instanceof Directory)) {
 		throw new Error('Zig standard library archive must contain a std/ directory');

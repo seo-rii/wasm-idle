@@ -34,7 +34,8 @@ const { publicEnv } = vi.hoisted(() => ({
 		PUBLIC_WASM_OBJECTIVEC_GNUSTEP_BASE_OBJECT_URL: '',
 		PUBLIC_WASM_OBJECTIVEC_FOUNDATION_HEADERS_URL: '',
 		PUBLIC_WASM_OBJECTIVEC_LIBFFI_URL: '',
-		PUBLIC_WASM_RUBY_WASM_URL: '',
+			PUBLIC_WASM_RUBY_WASM_URL: '',
+			PUBLIC_WASM_RUBY_MODULE_URL: '',
 		PUBLIC_WASM_R_BASE_URL: '',
 		PUBLIC_WASM_OCTAVE_BASE_URL: '',
 		PUBLIC_WASM_OCTAVE_WORKER_URL: '',
@@ -67,8 +68,11 @@ const { publicEnv } = vi.hoisted(() => ({
 		PUBLIC_WASM_SWIFT_BASE_URL: '',
 		PUBLIC_WASM_SWIFT_WORKER_URL: '',
 		PUBLIC_WASM_SWIFT_MANIFEST_URL: '',
-		PUBLIC_WASM_SQLITE_WASM_URL: '',
-		PUBLIC_WASM_PHP_VERSION: ''
+			PUBLIC_WASM_SQLITE_WASM_URL: '',
+			PUBLIC_WASM_SQLITE_MODULE_URL: '',
+			PUBLIC_WASM_ASSEMBLYSCRIPT_MODULE_URL: '',
+			PUBLIC_WASM_DUCKDB_MODULE_URL: '',
+			PUBLIC_WASM_PHP_MODULE_URL: ''
 	}
 }));
 
@@ -1030,6 +1034,38 @@ describe('runtime asset config resolution', () => {
 		});
 	});
 
+	it('derives static runtime module urls from the shared root path', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_ASSEMBLYSCRIPT_MODULE_URL = '';
+		publicEnv.PUBLIC_WASM_DUCKDB_MODULE_URL = '';
+		publicEnv.PUBLIC_WASM_PHP_MODULE_URL = '';
+		publicEnv.PUBLIC_WASM_RUBY_MODULE_URL = '';
+		publicEnv.PUBLIC_WASM_SQLITE_MODULE_URL = '';
+		const {
+			resolveAssemblyScriptRuntimeModuleUrl,
+			resolveDuckDbRuntimeModuleUrl,
+			resolvePhpRuntimeModuleUrl,
+			resolveRubyRuntimeModuleUrl,
+			resolveSqliteRuntimeModuleUrl
+		} = await import('./assets');
+
+		expect(resolveAssemblyScriptRuntimeModuleUrl('/app', 'https://example.com/')).toBe(
+			'https://example.com/app/wasm-assemblyscript/runtime.mjs'
+		);
+		expect(resolveDuckDbRuntimeModuleUrl('/app', 'https://example.com/')).toBe(
+			'https://example.com/app/wasm-duckdb/runtime.mjs'
+		);
+		expect(resolvePhpRuntimeModuleUrl('/app', 'https://example.com/')).toBe(
+			'https://example.com/app/wasm-php/runtime.mjs'
+		);
+		expect(resolveRubyRuntimeModuleUrl('/app', 'https://example.com/')).toBe(
+			'https://example.com/app/wasm-ruby/runtime.mjs'
+		);
+		expect(resolveSqliteRuntimeModuleUrl('/app', 'https://example.com/')).toBe(
+			'https://example.com/app/wasm-sqlite/runtime.mjs'
+		);
+	});
+
 	it('prefers an explicit SQLite wasm url over the public env override', async () => {
 		vi.resetModules();
 		publicEnv.PUBLIC_WASM_SQLITE_WASM_URL = 'https://env.example.com/sql-wasm.wasm';
@@ -1063,36 +1099,6 @@ describe('runtime asset config resolution', () => {
 		const { resolveSqliteWasmUrl } = await import('./assets');
 
 		expect(resolveSqliteWasmUrl('/absproxy/5173', 'https://example.com/app')).toBe('');
-	});
-
-	it('prefers an explicit PHP version over the public env override', async () => {
-		vi.resetModules();
-		publicEnv.PUBLIC_WASM_PHP_VERSION = '8.3';
-		const { resolvePhpVersion } = await import('./assets');
-
-		expect(
-			resolvePhpVersion({
-				php: {
-					version: '8.5'
-				}
-			})
-		).toBe('8.5');
-	});
-
-	it('falls back to PUBLIC_WASM_PHP_VERSION when no PHP runtime config is provided', async () => {
-		vi.resetModules();
-		publicEnv.PUBLIC_WASM_PHP_VERSION = '8.2';
-		const { resolvePhpVersion } = await import('./assets');
-
-		expect(resolvePhpVersion('/absproxy/5173')).toBe('8.2');
-	});
-
-	it('uses PHP 8.4 when no PHP version is configured', async () => {
-		vi.resetModules();
-		publicEnv.PUBLIC_WASM_PHP_VERSION = '';
-		const { resolvePhpVersion } = await import('./assets');
-
-		expect(resolvePhpVersion('/absproxy/5173')).toBe('8.4');
 	});
 
 	it('prefers explicit Haskell asset urls over public env overrides', async () => {

@@ -1,5 +1,3 @@
-import { File, OpenFile, WASI } from '@bjorn3/browser_wasi_shim';
-import { RubyVM, consolePrinter } from '@ruby/wasm-wasi';
 import {
 	type LspDiagnostic,
 	type LspDocument,
@@ -8,7 +6,44 @@ import {
 } from '../lsp.js';
 
 export interface RubyWorkerOptions {
+	moduleUrl?: string;
 	wasmUrl?: string;
+}
+
+interface RubyVirtualMachine {
+	eval(code: string): unknown;
+}
+
+interface RubyWasi {
+	wasiImport: WebAssembly.ModuleImports;
+	initialize(instance: WebAssembly.Instance): void;
+}
+
+interface RubyRuntimeModule {
+	RubyVM?: {
+		instantiateModule(options: {
+			module: WebAssembly.Module;
+			wasip1: RubyWasi;
+			args: string[];
+			addToImports(imports: WebAssembly.Imports): void;
+			setMemory(memory: WebAssembly.Memory): void;
+		}): Promise<{ vm: RubyVirtualMachine }>;
+	};
+	consolePrinter?: (options: { stdout(output: string): void; stderr(output: string): void }) => {
+		addToImports(imports: WebAssembly.Imports): void;
+		setMemory(memory: WebAssembly.Memory): void;
+	};
+	wasiShim?: {
+		File: new (data: Array<number> | Uint8Array) => unknown;
+		OpenFile: new (file: unknown) => unknown;
+		WASI: new (
+			args: string[],
+			env: string[],
+			fds: unknown[],
+			options?: { debug?: boolean }
+		) => RubyWasi;
+	};
+	rubyStdlibWasmUrl?: string;
 }
 
 export interface RubySyntaxDiagnostic {
@@ -87,16 +122,26 @@ const wordAt = (text: string, position: LspPosition) => {
 };
 
 async function loadRubyWasmChecker(options: RubyWorkerOptions): Promise<RubySyntaxChecker> {
-	if (!options.wasmUrl) {
+	if (!options.moduleUrl) {
+		throw new Error('Ruby language server requires a runtime module URL');
+	}
+	const runtime = (await import(/* @vite-ignore */ options.moduleUrl)) as RubyRuntimeModule;
+	if (!runtime.RubyVM || !runtime.consolePrinter || !runtime.wasiShim) {
+		throw new Error('Ruby runtime module is missing required Ruby or WASI exports');
+	}
+	const wasmUrl = options.wasmUrl || runtime.rubyStdlibWasmUrl;
+	if (!wasmUrl) {
 		throw new Error('Ruby language server requires a ruby.wasm URL');
 	}
-	const response = await fetch(options.wasmUrl);
+	const response = await fetch(wasmUrl);
 	if (!response.ok) {
 		throw new Error(
 			`Failed to load Ruby WASM asset: ${response.status} ${response.statusText}`
 		);
 	}
 	const module = await WebAssembly.compile(await response.arrayBuffer());
+	const { RubyVM, consolePrinter, wasiShim } = runtime;
+	const { File: WasiFile, OpenFile, WASI } = wasiShim;
 
 	return {
 		async check(code, fileName) {
@@ -111,9 +156,9 @@ async function loadRubyWasmChecker(options: RubyWorkerOptions): Promise<RubySynt
 				['ruby.wasm'],
 				[],
 				[
-					new OpenFile(new File([])),
-					new OpenFile(new File([])),
-					new OpenFile(new File([]))
+					new OpenFile(new WasiFile([])),
+					new OpenFile(new WasiFile([])),
+					new OpenFile(new WasiFile([]))
 				],
 				{ debug: false }
 			);

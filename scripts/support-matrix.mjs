@@ -740,7 +740,7 @@ export const supportMatrixRows = [
 	{
 		language: 'PHP',
 		ids: ['PHP'],
-		runtime: 'php-wasm',
+		runtime: 'PHP 8.4 / php-wasm',
 		stdin: 'Yes',
 		editorSupport: 'syntax',
 		debug: '-',
@@ -866,11 +866,15 @@ const runtimeDetailsByLanguage = new Map([
 	[
 		'Python',
 		{
-			packageBase: `${workspacePackage('runtimes/pyodide')} / ${npmPackage('pyodide')}`,
+			packageBase: `static ESM ${code('static/pyodide/pyodide.mjs')} / ${npmPackage('pyodide')}`,
 			execution:
-				`Pyodide worker loads ${code('pyodide.asm.js')}, ${code('pyodide.asm.wasm')}, ` +
-				`${code('python_stdlib.zip')}; supports ${code('stdin')} and ${code('programArgs')}`,
-			customization: `${code('runtimeAssets.python.baseUrl')}/${code('loader')} or ${code('rootUrl')}`
+				`loads ${code('pyodide.mjs')}, ${code('pyodide.asm.js')}, ${code('pyodide.asm.wasm')}, and ` +
+				`${code('python_stdlib.zip')} from the configured static asset tree on demand; supports ` +
+				`${code('stdin')}, workspace files, and trace debugging`,
+			customization:
+				`${code('runtimeAssets.python.baseUrl')}/${code('loader')} or ${code('rootUrl')}; ` +
+				`${code('stdin')}, ${code('activePath')}, ${code('workspaceFiles')}, ${code('debug')}, ` +
+				`${code('breakpoints')}, ${code('pauseOnEntry')}, ${code('debugPath')}`
 		}
 	],
 	[
@@ -1119,11 +1123,17 @@ const runtimeDetailsByLanguage = new Map([
 	[
 		'Bash',
 		{
-			packageBase: `${workspacePackage('runtimes/wasm-bash')} / GNU Bash WASIX + ${npmPackage('@wasmer/sdk')}`,
+			packageBase:
+				`${workspacePackage('runtimes/wasm-bash')} / GNU Bash WASIX + static ESM ` +
+				`${code('static/wasm-bash/sdk/index.mjs')} produced from ${npmPackage('@wasmer/sdk')}`,
 			execution:
-				`runs the pinned ${code('bash.webc')} locally with the Wasmer package entrypoint; supports ` +
+				`runs the pinned ${code('bash.webc')} locally through the on-demand Wasmer SDK asset; invokes ` +
+				`${code('bash -c <code> <activePath> ...programArgs')} and supports ` +
 				`${code('stdin')}, ${code('programArgs')}, ${code('activePath')}, and ${code('workspaceFiles')}`,
-			customization: `${code('runtimeAssets.bash.webcUrl')} or ${code('rootUrl')}; ${code('programArgs')}`
+			customization:
+				`${code('runtimeAssets.bash.moduleUrl')}/${code('workerUrl')}/${code('webcUrl')} or ` +
+				`${code('rootUrl')}; ${code('stdin')}, ${code('programArgs')}, ${code('activePath')}, ` +
+				`${code('workspaceFiles')}`
 		}
 	],
 	[
@@ -1196,9 +1206,16 @@ const runtimeDetailsByLanguage = new Map([
 	[
 		'AssemblyScript',
 		{
-			packageBase: `${npmPackage('assemblyscript')} + ${npmPackage('@assemblyscript/loader')}`,
-			execution: `AssemblyScript compiler emits WASM and runs through WASI/browser imports; supports ${code('stdin')}`,
-			customization: `${code('programArgs')}, ${code('stdin')}; compiler modules load with the AssemblyScript worker`
+			packageBase:
+				`static ESM ${code('static/wasm-assemblyscript/runtime.mjs')} produced from ` +
+				`${npmPackage('assemblyscript')} + ${npmPackage('@assemblyscript/loader')}`,
+			execution:
+				`${code('asc <activePath> --outFile module.wasm --runtime incremental --bindings raw --optimize --exportRuntime')}; ` +
+				`runs the emitted WASM through WASI/browser imports and supports ${code('stdin')}`,
+			customization:
+				`${code('runtimeAssets.assemblyscript.moduleUrl')} or ` +
+				`${code('PUBLIC_WASM_ASSEMBLYSCRIPT_MODULE_URL')} or ${code('rootUrl')}; ` +
+				`${code('stdin')}, ${code('activePath')}, ${code('workspaceFiles')}`
 		}
 	],
 	[
@@ -1260,11 +1277,16 @@ const runtimeDetailsByLanguage = new Map([
 	[
 		'Ruby',
 		{
-			packageBase: `${workspacePackage('runtimes/ruby')} / ${npmPackage('@ruby/3.4-wasm-wasi')}`,
-			execution: `CRuby 3.4 WASI runtime; supports ${code('stdin')} and ${code('programArgs')}`,
+			packageBase:
+				`static ESM ${code('static/wasm-ruby/runtime.mjs')} produced from ` +
+				`${npmPackage('@ruby/3.4-wasm-wasi')} + ${npmPackage('@ruby/wasm-wasi')}`,
+			execution:
+				`CRuby 3.4 WASI runtime loads ${code('ruby+stdlib.wasm')} on demand; supports ` +
+				`${code('stdin')}, ${code('programArgs')}, and workspace files`,
 			customization:
-				`${code('runtimeAssets.ruby.wasmUrl')} or ${code('PUBLIC_WASM_RUBY_WASM_URL')}; ` +
-				`${code('programArgs')}`
+				`${code('runtimeAssets.ruby.moduleUrl')}/${code('wasmUrl')} or ` +
+				`${code('PUBLIC_WASM_RUBY_MODULE_URL')}/${code('PUBLIC_WASM_RUBY_WASM_URL')} or ` +
+				`${code('rootUrl')}; ${code('stdin')}, ${code('programArgs')}, ${code('workspaceFiles')}`
 		}
 	],
 	[
@@ -1315,9 +1337,13 @@ const runtimeDetailsByLanguage = new Map([
 	[
 		'R',
 		{
-			packageBase: `${workspacePackage('runtimes/r')} / ${npmPackage('webr')}`,
-			execution: `WebR worker; supports ${code('stdin')} and ${code('programArgs')}`,
-			customization: `${code('runtimeAssets.r.baseUrl')} or ${code('PUBLIC_WASM_R_BASE_URL')}`
+			packageBase: `versioned static ${code('static/webr/<hash>/webr.js')} / ${npmPackage('webr')}`,
+			execution:
+				`loads the browser ESM entry ${code('webr.js')} and its WebR runtime files from the configured static asset tree ` +
+				`on demand; supports ${code('stdin')}, ${code('programArgs')}, and workspace files`,
+			customization:
+				`${code('runtimeAssets.r.baseUrl')} or ${code('PUBLIC_WASM_R_BASE_URL')}; ` +
+				`${code('stdin')}, ${code('programArgs')}, ${code('activePath')}, ${code('workspaceFiles')}`
 		}
 	],
 	[
@@ -1335,27 +1361,45 @@ const runtimeDetailsByLanguage = new Map([
 	[
 		'DuckDB',
 		{
-			packageBase: npmPackage('@duckdb/duckdb-wasm'),
-			execution: `DuckDB-Wasm query engine; stdin is treated as SQL/file input rather than terminal stdin`,
-			customization: `${code('stdin')} for query text/files; no separate runtime asset override`
+			packageBase:
+				`static ESM ${code('static/wasm-duckdb/runtime.mjs')} produced from ` +
+				`${npmPackage('@duckdb/duckdb-wasm')}`,
+			execution:
+				`selects the best DuckDB-Wasm MVP/EH bundle on demand and creates a fresh in-memory ` +
+				`database per run; ${code('stdin')} is registered as ${code('stdin.txt')} and ` +
+				`${code('/dev/stdin')} rather than terminal stdin`,
+			customization:
+				`${code('runtimeAssets.duckdb.moduleUrl')} or ${code('PUBLIC_WASM_DUCKDB_MODULE_URL')} ` +
+				`or ${code('rootUrl')}; ${code('stdin')}, ${code('activePath')}, ${code('workspaceFiles')}`
 		}
 	],
 	[
 		'SQLite',
 		{
-			packageBase: npmPackage('sql.js'),
-			execution: `sql.js executes SQL in browser memory; terminal stdin is not applicable`,
-			customization: `${code('runtimeAssets.sqlite.wasmUrl')} or ${code('PUBLIC_WASM_SQLITE_WASM_URL')}`
+			packageBase: `static ESM ${code('static/wasm-sqlite/runtime.mjs')} produced from ${npmPackage('sql.js')}`,
+			execution:
+				`sql.js loads ${code('sql-wasm.wasm')} on demand and executes SQL in a fresh in-memory ` +
+				`database; terminal stdin is not applicable`,
+			customization:
+				`${code('runtimeAssets.sqlite.moduleUrl')}/${code('wasmUrl')} or ` +
+				`${code('PUBLIC_WASM_SQLITE_MODULE_URL')}/${code('PUBLIC_WASM_SQLITE_WASM_URL')} or ` +
+				`${code('rootUrl')}; ${code('workspaceFiles')}`
 		}
 	],
 	[
 		'PHP',
 		{
-			packageBase: `${npmPackage('@php-wasm/web')} + ${npmPackage('@php-wasm/universal')}`,
-			execution: `php-wasm runtime, default PHP version ${code('8.4')}; supports ${code('stdin')} and ${code('programArgs')}`,
+			packageBase:
+				`static ESM ${code('static/wasm-php/runtime.mjs')} produced from ` +
+				`${npmPackage('@php-wasm/web-8-4')} + ${npmPackage('@php-wasm/universal')}`,
+			execution:
+				`fixed PHP ${code('8.4')} php-wasm runtime; injects ${code('$argv')}/${code('$argc')} and ` +
+				`runs the active workspace script with ${code('php.run')}; supports ${code('stdin')} and ` +
+				`${code('programArgs')}; there is no runtime version selector`,
 			customization:
-				`${code('runtimeAssets.php.version')} or ${code('PUBLIC_WASM_PHP_VERSION')}; ` +
-				`${code('programArgs')}`
+				`${code('runtimeAssets.php.moduleUrl')} or ${code('PUBLIC_WASM_PHP_MODULE_URL')} or ` +
+				`${code('rootUrl')}; ${code('stdin')}, ${code('programArgs')}, ${code('activePath')}, ` +
+				`${code('workspaceFiles')}`
 		}
 	]
 ]);
@@ -1473,8 +1517,10 @@ ${renderSupportMatrixTable(rows)}
 
 ### Runtime details
 
-\`Package/version base\` names the browser-side npm package, workspace runtime wrapper, or
-static runtime manifest that backs each row. \`Execution defaults / flags\` lists the default
+\`Package/version base\` names the deployed static module or manifest and its producer package,
+or the browser-side package/workspace runtime that backs each row. Static ESM entries are page
+assets loaded over HTTP on demand, not files embedded in the published npm packages.
+\`Execution defaults / flags\` lists the default
 targets and flags wasm-idle applies, plus the public per-run options that change execution.
 \`Customization\` lists the \`runtimeAssets\` fields and matching \`PUBLIC_WASM_*\` env overrides
 when they exist.

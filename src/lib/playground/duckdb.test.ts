@@ -36,6 +36,8 @@ vi.mock('$lib/playground/worker/duckdb?worker', () => ({
 	default: MockWorker
 }));
 
+vi.mock('$env/dynamic/public', () => ({ env: {} }));
+
 import DuckDB from './duckdb';
 
 describe('DuckDB sandbox', () => {
@@ -64,8 +66,9 @@ describe('DuckDB sandbox', () => {
 		expect(workerInstances).toHaveLength(1);
 		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
 			1,
-			expect.objectContaining({
-				load: true
+				expect.objectContaining({
+					load: true,
+					moduleUrl: expect.stringMatching(/\/wasm-duckdb\/runtime\.mjs$/)
 			})
 		);
 		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(

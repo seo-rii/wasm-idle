@@ -2,11 +2,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { readBufferedStdin } from './stdinBuffer';
 
 const workerInstances: MockWorker[] = [];
-const { publicEnv } = vi.hoisted(() => ({
-	publicEnv: {
-		PUBLIC_WASM_PHP_VERSION: ''
-	}
-}));
 let suppressAutoLoadAck = false;
 
 class MockWorker {
@@ -42,16 +37,13 @@ vi.mock('$lib/playground/worker/php?worker', () => ({
 	default: MockWorker
 }));
 
-vi.mock('$env/dynamic/public', () => ({
-	env: publicEnv
-}));
+vi.mock('$env/dynamic/public', () => ({ env: {} }));
 
 import Php from './php';
 
 describe('PHP sandbox', () => {
 	beforeEach(() => {
 		workerInstances.length = 0;
-		publicEnv.PUBLIC_WASM_PHP_VERSION = '';
 		suppressAutoLoadAck = false;
 	});
 
@@ -72,13 +64,11 @@ describe('PHP sandbox', () => {
 		).resolves.toBe(true);
 
 		expect(workerInstances).toHaveLength(1);
-		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
-			1,
-			expect.objectContaining({
+			expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(1, {
 				load: true,
-				version: '8.4'
-			})
-		);
+				moduleUrl: 'http://localhost:3000/absproxy/5173/wasm-php/runtime.mjs',
+				log: true
+		});
 		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
 			2,
 			expect.objectContaining({
@@ -100,39 +90,6 @@ describe('PHP sandbox', () => {
 			})
 		);
 		expect(outputs).toContain('factorial_plus_bonus=27\n');
-	});
-
-	it('passes an explicit PHP version to the worker', async () => {
-		const sandbox = new Php();
-
-		await sandbox.load({
-			php: {
-				version: '8.5'
-			}
-		});
-
-		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
-			1,
-			expect.objectContaining({
-				load: true,
-				version: '8.5'
-			})
-		);
-	});
-
-	it('falls back to the public PHP version override', async () => {
-		publicEnv.PUBLIC_WASM_PHP_VERSION = '8.3';
-		const sandbox = new Php();
-
-		await sandbox.load('/absproxy/5173');
-
-		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
-			1,
-			expect.objectContaining({
-				load: true,
-				version: '8.3'
-			})
-		);
 	});
 
 	it('rejects load when the PHP worker script fails before posting load', async () => {

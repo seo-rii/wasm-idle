@@ -8,6 +8,7 @@ import {
 } from '../lsp.js';
 
 export interface AssemblyScriptWorkerOptions {
+	moduleUrl?: string;
 	extraFiles?: Record<string, string>;
 }
 
@@ -26,7 +27,9 @@ interface AssemblyScriptCompiler {
 	): Promise<{ error?: Error }> | { error?: Error };
 }
 
-type LoadAssemblyScriptCompiler = () => Promise<AssemblyScriptCompiler>;
+export type LoadAssemblyScriptCompiler = (
+	options: AssemblyScriptWorkerOptions
+) => Promise<AssemblyScriptCompiler>;
 
 const ASSEMBLYSCRIPT_COMPLETIONS = [
 	'i8',
@@ -160,17 +163,19 @@ function parseAssemblyScriptDiagnostics(message: string): LspDiagnostic[] {
 	return diagnostics;
 }
 
-async function importAssemblyScriptCompiler(): Promise<AssemblyScriptCompiler> {
-	const workerGlobal = globalThis as Record<string, unknown>;
-	const hadProcess = Object.prototype.hasOwnProperty.call(workerGlobal, 'process');
-	const previousProcess = workerGlobal.process;
-	if (!Reflect.deleteProperty(workerGlobal, 'process')) workerGlobal.process = undefined;
-	try {
-		return (await import('assemblyscript/asc')) as AssemblyScriptCompiler;
-	} finally {
-		if (hadProcess) workerGlobal.process = previousProcess;
-		else Reflect.deleteProperty(workerGlobal, 'process');
+async function importAssemblyScriptCompiler(
+	options: AssemblyScriptWorkerOptions
+): Promise<AssemblyScriptCompiler> {
+	if (!options.moduleUrl) {
+		throw new Error('AssemblyScript language server requires a runtime module URL');
 	}
+	const runtime = (await import(/* @vite-ignore */ options.moduleUrl)) as {
+		loadCompiler?: () => Promise<AssemblyScriptCompiler> | AssemblyScriptCompiler;
+	};
+	if (typeof runtime.loadCompiler !== 'function') {
+		throw new Error('AssemblyScript runtime module does not export loadCompiler()');
+	}
+	return await runtime.loadCompiler();
 }
 
 export function createAssemblyScriptWorkerService(
@@ -197,13 +202,15 @@ export function createAssemblyScriptWorkerService(
 		},
 		async initialize(options, nextContext) {
 			context = nextContext;
+			const config = (options || {}) as AssemblyScriptWorkerOptions;
 			extraFiles = Object.fromEntries(
-				Object.entries(
-					(options as AssemblyScriptWorkerOptions | undefined)?.extraFiles || {}
-				).map(([fileName, source]) => [normalizeFileName(fileName), source])
+				Object.entries(config.extraFiles || {}).map(([fileName, source]) => [
+					normalizeFileName(fileName),
+					source
+				])
 			);
 			context.reportProgress('load-assemblyscript');
-			compiler = await loadCompiler();
+			compiler = await loadCompiler(config);
 		},
 		async diagnostics(document: LspDocument) {
 			const files = collectFiles();

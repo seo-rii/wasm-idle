@@ -4,19 +4,33 @@ import {
 	type CompilerDiagnostic,
 	type SandboxExecutionOptions
 } from '$lib/playground/options';
+import { importRuntimeModule } from '$lib/playground/runtimeModule';
 import type { Sandbox } from '$lib/playground/sandbox';
-import wasmerThreadWorkerUrl from '$lib/playground/worker/wasmerThreadWorker?worker&url';
-import wasmerSdkUrl from '@wasmer/sdk?url';
 
 type BashRuntimeAssetConfig = PlaygroundRuntimeAssets & {
-	bash?: { webcUrl?: string };
+	bash?: { moduleUrl?: string; webcUrl?: string; workerUrl?: string };
 };
 
-type WasmerSdk = typeof import('@wasmer/sdk');
-type WasmerPackage = Awaited<ReturnType<WasmerSdk['Wasmer']['fromFile']>>;
-type WasixInstance = Awaited<ReturnType<NonNullable<WasmerPackage['entrypoint']>['run']>>;
+interface WasixInstance {
+	stdin?: WritableStream<Uint8Array>;
+	stdout: ReadableStream<Uint8Array>;
+	stderr: ReadableStream<Uint8Array>;
+	wait(): Promise<{ ok: boolean; code: number }>;
+	free(): void;
+}
+
+interface WasmerPackage {
+	entrypoint?: { run(options: Record<string, unknown>): Promise<WasixInstance> };
+	free(): void;
+}
+
+interface WasmerSdk {
+	init(options: { sdkUrl: string; workerUrl: string }): Promise<unknown>;
+	Wasmer: { fromFile(bytes: Uint8Array): Promise<WasmerPackage> };
+}
 
 let sdkPromise: Promise<WasmerSdk> | undefined;
+let sdkCacheKey = '';
 
 class Bash implements Sandbox {
 	output?: (data: string) => void;
@@ -46,7 +60,8 @@ class Bash implements Sandbox {
 		this.pendingInput = [];
 		this.pendingEof = false;
 		const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
-		const configured = (runtimeAssets as BashRuntimeAssetConfig)?.bash?.webcUrl;
+		const bashAssets = (runtimeAssets as BashRuntimeAssetConfig)?.bash;
+		const configured = bashAssets?.webcUrl;
 		const rootUrl =
 			typeof runtimeAssets === 'string'
 				? runtimeAssets
@@ -54,14 +69,20 @@ class Bash implements Sandbox {
 		const normalizedRoot = rootUrl.endsWith('/') ? rootUrl.slice(0, -1) : rootUrl;
 		const nextWebcUrl = configured || `${normalizedRoot}/wasm-bash/bash.webc`;
 		this.webcUrl = currentUrl ? new URL(nextWebcUrl, currentUrl).href : nextWebcUrl;
-		const resolvedSdkUrl = currentUrl ? new URL(wasmerSdkUrl, currentUrl).href : wasmerSdkUrl;
+		const sdkModuleUrl = bashAssets?.moduleUrl || `${normalizedRoot}/wasm-bash/sdk/index.mjs`;
+		const sdkWorkerUrl = bashAssets?.workerUrl || `${normalizedRoot}/wasm-bash/sdk/worker.mjs`;
+		const resolvedSdkUrl = currentUrl
+			? new URL(sdkModuleUrl, currentUrl).href
+			: sdkModuleUrl;
 		const resolvedThreadWorkerUrl = currentUrl
-			? new URL(wasmerThreadWorkerUrl, currentUrl).href
-			: wasmerThreadWorkerUrl;
+			? new URL(sdkWorkerUrl, currentUrl).href
+			: sdkWorkerUrl;
+		const nextSdkCacheKey = `${resolvedSdkUrl}\n${resolvedThreadWorkerUrl}`;
 
 		progress?.set?.(0.1, 'Loading Bash runtime');
-		if (!sdkPromise) {
-			sdkPromise = import('@wasmer/sdk').then(async (sdk) => {
+		if (!sdkPromise || sdkCacheKey !== nextSdkCacheKey) {
+			sdkCacheKey = nextSdkCacheKey;
+			sdkPromise = importRuntimeModule<WasmerSdk>(resolvedSdkUrl).then(async (sdk) => {
 				await sdk.init({
 					sdkUrl: resolvedSdkUrl,
 					workerUrl: resolvedThreadWorkerUrl

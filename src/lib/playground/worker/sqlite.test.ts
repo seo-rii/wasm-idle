@@ -1,19 +1,37 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const { importRuntimeModuleMock } = vi.hoisted(() => ({
+	importRuntimeModuleMock: vi.fn()
+}));
+
+vi.mock('$lib/playground/runtimeModule', () => ({
+	importRuntimeModule: importRuntimeModuleMock
+}));
+
+async function loadWorker() {
+	await import('./sqlite');
+	await (globalThis as any).self.onmessage({
+		data: {
+			load: true,
+			moduleUrl: '/wasm-sqlite/runtime.mjs'
+		}
+	});
+}
+
 describe('SQLite worker', () => {
 	beforeEach(() => {
 		vi.resetModules();
+		importRuntimeModuleMock.mockReset();
+		importRuntimeModuleMock.mockImplementation(async () => ({
+			default: (await import('sql.js')).default,
+			sqliteWasmUrl: '/node_modules/sql.js/dist/sql-wasm.wasm'
+		}));
 		(globalThis as any).self = globalThis as any;
 		(globalThis as any).postMessage = vi.fn();
 	});
 
 	it('executes SQL and prints result sets as tab-separated tables', async () => {
-		await import('./sqlite');
-		await (globalThis as any).self.onmessage({
-			data: {
-				load: true
-			}
-		});
+		await loadWorker();
 		await (globalThis as any).self.onmessage({
 			data: {
 				code: `CREATE TABLE numbers (n INTEGER NOT NULL);
@@ -33,7 +51,7 @@ SELECT 'factorial_plus_bonus=' || 27 AS result;`,
 	}, 15000);
 
 	it('reports SQLite execution failures as worker errors', async () => {
-		await import('./sqlite');
+		await loadWorker();
 		await (globalThis as any).self.onmessage({
 			data: {
 				code: 'select missing from nowhere;',

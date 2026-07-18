@@ -1,4 +1,8 @@
-import { resolveSqliteWasmUrl, type PlaygroundRuntimeAssets } from '$lib/playground/assets';
+import {
+	resolveSqliteRuntimeModuleUrl,
+	resolveSqliteWasmUrl,
+	type PlaygroundRuntimeAssets
+} from '$lib/playground/assets';
 import type { CompilerDiagnostic, SandboxExecutionOptions } from '$lib/playground/options';
 import type { Sandbox } from '$lib/playground/sandbox';
 import { WorkerSession } from '$lib/playground/workerSession';
@@ -12,6 +16,7 @@ class Sqlite implements Sandbox {
 	uid = 0;
 	exit = true;
 	wasmUrl = '';
+	moduleUrl = '';
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	private readonly workerSession = new WorkerSession({
 		label: 'SQLite',
@@ -32,8 +37,11 @@ class Sqlite implements Sandbox {
 		return this.workerSession.load(async (resolve, reject) => {
 			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
 			const nextWasmUrl = resolveSqliteWasmUrl(runtimeAssets, currentUrl);
-			const needsWorkerReset = !this.worker || this.wasmUrl !== nextWasmUrl;
+			const nextModuleUrl = resolveSqliteRuntimeModuleUrl(runtimeAssets, currentUrl);
+			const needsWorkerReset =
+				!this.worker || this.wasmUrl !== nextWasmUrl || this.moduleUrl !== nextModuleUrl;
 			this.wasmUrl = nextWasmUrl;
+			this.moduleUrl = nextModuleUrl;
 			if (needsWorkerReset && this.worker) {
 				this.workerSession.reset();
 			}
@@ -49,6 +57,7 @@ class Sqlite implements Sandbox {
 				};
 				this.worker.postMessage({
 					load: true,
+					moduleUrl: this.moduleUrl,
 					wasmUrl: this.wasmUrl,
 					log: _log
 				});

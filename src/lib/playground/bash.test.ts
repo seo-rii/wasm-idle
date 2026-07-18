@@ -1,13 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { commandRun, fromFile, init, packageFree } = vi.hoisted(() => ({
+const { commandRun, fromFile, importRuntimeModule, init, packageFree } = vi.hoisted(() => ({
 	commandRun: vi.fn(),
 	fromFile: vi.fn(),
+	importRuntimeModule: vi.fn(),
 	init: vi.fn(async () => {}),
 	packageFree: vi.fn()
 }));
 
-vi.mock('@wasmer/sdk', () => ({ init, Wasmer: { fromFile } }));
+vi.mock('$lib/playground/runtimeModule', () => ({ importRuntimeModule }));
 
 import Bash from './bash';
 
@@ -23,6 +24,7 @@ function byteStream(text: string) {
 describe('Bash sandbox', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		importRuntimeModule.mockResolvedValue({ init, Wasmer: { fromFile } });
 		fromFile.mockResolvedValue({ entrypoint: { run: commandRun }, free: packageFree });
 		vi.stubGlobal(
 			'fetch',
@@ -57,9 +59,12 @@ describe('Bash sandbox', () => {
 
 		expect(fetch).toHaveBeenCalledWith('http://localhost:3000/assets/wasm-bash/bash.webc');
 		expect(init).toHaveBeenCalledWith({
-			sdkUrl: expect.stringContaining('index.mjs'),
-			workerUrl: expect.stringContaining('wasmerThreadWorker')
+			sdkUrl: 'http://localhost:3000/assets/wasm-bash/sdk/index.mjs',
+			workerUrl: 'http://localhost:3000/assets/wasm-bash/sdk/worker.mjs'
 		});
+		expect(importRuntimeModule).toHaveBeenCalledWith(
+			'http://localhost:3000/assets/wasm-bash/sdk/index.mjs'
+		);
 		expect(fromFile).toHaveBeenCalledWith(expect.any(Uint8Array));
 		expect(commandRun).toHaveBeenCalledWith({
 			args: [

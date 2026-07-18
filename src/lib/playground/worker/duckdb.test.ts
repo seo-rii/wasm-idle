@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const { importRuntimeModuleMock } = vi.hoisted(() => ({
+	importRuntimeModuleMock: vi.fn()
+}));
+
 const duckdbMock = vi.hoisted(() => {
 	const query = vi.fn();
 	const close = vi.fn(async () => {});
@@ -49,24 +53,39 @@ const duckdbMock = vi.hoisted(() => {
 	};
 });
 
-vi.mock('@duckdb/duckdb-wasm', () => duckdbMock);
-vi.mock('@duckdb/duckdb-wasm/dist/duckdb-eh.wasm?url', () => ({
-	default: '/duckdb-eh.wasm'
+vi.mock('$lib/playground/runtimeModule', () => ({
+	importRuntimeModule: importRuntimeModuleMock
 }));
-vi.mock('@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js?url', () => ({
-	default: '/duckdb-browser-eh.worker.js'
-}));
-vi.mock('@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm?url', () => ({
-	default: '/duckdb-mvp.wasm'
-}));
-vi.mock('@duckdb/duckdb-wasm/dist/duckdb-browser-mvp.worker.js?url', () => ({
-	default: '/duckdb-browser-mvp.worker.js'
-}));
+
+async function loadWorker() {
+	await import('./duckdb');
+	await (globalThis as any).self.onmessage({
+		data: {
+			load: true,
+			moduleUrl: '/wasm-duckdb/runtime.mjs',
+			log: false
+		}
+	});
+}
 
 describe('DuckDB worker', () => {
 	beforeEach(() => {
 		vi.resetModules();
 		duckdbMock.reset();
+		importRuntimeModuleMock.mockReset();
+		importRuntimeModuleMock.mockResolvedValue({
+			duckdb: duckdbMock,
+			bundles: {
+				eh: {
+					mainModule: '/duckdb-eh.wasm',
+					mainWorker: '/duckdb-browser-eh.worker.js'
+				},
+				mvp: {
+					mainModule: '/duckdb-mvp.wasm',
+					mainWorker: '/duckdb-browser-mvp.worker.js'
+				}
+			}
+		});
 		(globalThis as any).self = globalThis as any;
 		(globalThis as any).postMessage = vi.fn();
 		(globalThis as any).Worker = vi.fn(function MockWorker(this: { url: string }, url: string) {
@@ -87,13 +106,7 @@ describe('DuckDB worker', () => {
 			})
 		});
 
-		await import('./duckdb');
-		await (globalThis as any).self.onmessage({
-			data: {
-				load: true,
-				log: false
-			}
-		});
+		await loadWorker();
 		await (globalThis as any).self.onmessage({
 			data: {
 				code: "SELECT 'factorial_plus_bonus' AS label, 27 AS value;",
@@ -154,7 +167,7 @@ describe('DuckDB worker', () => {
 	it('reports DuckDB execution failures as worker errors', async () => {
 		duckdbMock.query.mockRejectedValue(new Error('bad duckdb sql'));
 
-		await import('./duckdb');
+		await loadWorker();
 		await (globalThis as any).self.onmessage({
 			data: {
 				code: 'select missing from nowhere;',

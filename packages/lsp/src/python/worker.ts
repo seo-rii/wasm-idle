@@ -1,5 +1,4 @@
 import type { PyodideInterface } from 'pyodide';
-import { loadPyodide } from 'pyodide';
 import packageInitSource from './package/wasm_idle_python_lsp/__init__.py?raw';
 import packageServerSource from './package/wasm_idle_python_lsp/server.py?raw';
 import type { PythonLspWorkerInboundMessage } from './protocol.js';
@@ -55,6 +54,9 @@ async function bootstrapPythonBridge(pyodideBaseUrl: string) {
 
 	initPromise = (async () => {
 		self.postMessage({ type: 'progress', stage: 'load-pyodide' });
+		const { loadPyodide } = (await import(
+			/* @vite-ignore */ `${normalizeBaseUrl(pyodideBaseUrl)}pyodide.mjs`
+		)) as typeof import('pyodide');
 		pyodide = await loadPyodide({ indexURL: normalizeBaseUrl(pyodideBaseUrl) });
 		pyodide.registerJsModule('wasm_idle_lsp_bridge', {
 			emit: emitTransportMessage

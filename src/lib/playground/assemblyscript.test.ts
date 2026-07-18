@@ -50,6 +50,8 @@ vi.mock('$lib/playground/worker/assemblyscript?worker', () => ({
 	default: MockWorker
 }));
 
+vi.mock('$env/dynamic/public', () => ({ env: {} }));
+
 import AssemblyScript from './assemblyscript';
 
 describe('AssemblyScript sandbox', () => {
@@ -79,9 +81,10 @@ describe('AssemblyScript sandbox', () => {
 		expect(workerInstances).toHaveLength(1);
 		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
 			1,
-			expect.objectContaining({
-				load: true,
-				log: true
+				expect.objectContaining({
+					load: true,
+					moduleUrl: expect.stringMatching(/\/wasm-assemblyscript\/runtime\.mjs$/),
+					log: true
 			})
 		);
 		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(

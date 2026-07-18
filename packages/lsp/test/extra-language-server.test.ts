@@ -57,6 +57,7 @@ vi.mock('../src/jsonrpc.js', () => ({
 }));
 
 import {
+	getAssemblyScriptLanguageServer,
 	getCssLanguageServer,
 	getElixirLanguageServer,
 	getErlangLanguageServer,
@@ -335,6 +336,7 @@ describe('additional language server workers', () => {
 			type: 'init',
 			options: {
 				dialect: 'sqlite',
+				moduleUrl: '/wasm-sqlite/runtime.mjs',
 				wasmUrl: '/assets/sql-wasm.wasm'
 			}
 		});
@@ -358,8 +360,28 @@ describe('additional language server workers', () => {
 			type: 'init',
 			options: {
 				dialect: 'duckdb',
+				moduleUrl: '/wasm-duckdb/runtime.mjs',
 				wasmUrl: undefined,
 				duckdbBundles
+			}
+		});
+
+		handle.dispose();
+	});
+
+	it('starts AssemblyScript with the root-hosted compiler runtime module', async () => {
+		const handle = await getAssemblyScriptLanguageServer({
+			rootUrl: 'https://static.example.com/repl_20240807',
+			currentUrl: 'https://app.example.com/editor',
+			createWorker: () => new mockState.FakeWorker() as unknown as Worker
+		});
+
+		expect(mockState.workers[0]?.messages[0]).toEqual({
+			type: 'init',
+			options: {
+				moduleUrl:
+					'https://static.example.com/repl_20240807/wasm-assemblyscript/runtime.mjs',
+				extraFiles: undefined
 			}
 		});
 
@@ -470,6 +492,7 @@ describe('additional language server workers', () => {
 		expect(mockState.workers[0]?.messages[0]).toEqual({
 			type: 'init',
 			options: {
+				moduleUrl: '/wasm-ruby/runtime.mjs',
 				wasmUrl: '/assets/ruby+stdlib.wasm'
 			}
 		});

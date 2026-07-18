@@ -1,0 +1,29 @@
+{
+  "formatVersion": 1,
+  "runtimeModule": "index.mjs",
+  "packages": {
+    "@wasmer/sdk": "0.9.0"
+  },
+  "files": [
+    {
+      "path": "index.mjs",
+      "bytes": 49233,
+      "sha256": "c7e42dbbdf7d5ddbf2692bae24d732f14f09a879f8db1bc4cf23bef086a86b6a"
+    },
+    {
+      "path": "LICENSE.txt",
+      "bytes": 1097,
+      "sha256": "76dc7d305458d07478bc62669fe53dbfd3b94b95c5e00fbb45af1f492cbd7284"
+    },
+    {
+      "path": "wasmer_js_bg.wasm",
+      "bytes": 5701868,
+      "sha256": "10b42451b1be2cd25543ee14e1f87adf6019f64aa3e6cb74c296aecd15787509"
+    },
+    {
+      "path": "worker.mjs",
+      "bytes": 700,
+      "sha256": "5c1f104cde1205569a34985e6984fa05826fc95a5fc3feb731c013a222de7451"
+    }
+  ]
+}

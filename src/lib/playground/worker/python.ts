@@ -190,7 +190,10 @@ function postProgress(percent: number, stage: string) {
 
 async function loadPyodide(path: string) {
 	if (pyodide) return;
-	const { loadPyodide, version } = await import('pyodide');
+	const moduleUrl = `${path.endsWith('/') ? path : `${path}/`}pyodide.mjs`;
+	const { loadPyodide, version } = (await import(
+		/* @vite-ignore */ moduleUrl
+	)) as typeof import('pyodide');
 	packageBaseUrl = cdnFallbackUrl(version);
 	pyodide = await loadPyodide({ indexURL: path, packageBaseUrl });
 }

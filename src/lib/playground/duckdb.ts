@@ -1,5 +1,8 @@
 import type { CompilerDiagnostic, SandboxExecutionOptions } from '$lib/playground/options';
-import type { PlaygroundRuntimeAssets } from '$lib/playground/assets';
+import {
+	resolveDuckDbRuntimeModuleUrl,
+	type PlaygroundRuntimeAssets
+} from '$lib/playground/assets';
 import type { Sandbox } from '$lib/playground/sandbox';
 import { WorkerSession } from '$lib/playground/workerSession';
 import { reportWorkerProgress } from '$lib/playground/workerProgress';
@@ -11,6 +14,7 @@ class DuckDB implements Sandbox {
 	elapse = 0;
 	uid = 0;
 	exit = true;
+	moduleUrl = '';
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	private readonly workerSession = new WorkerSession({
 		label: 'DuckDB',
@@ -21,7 +25,7 @@ class DuckDB implements Sandbox {
 	});
 
 	load(
-		_runtimeAssets: string | PlaygroundRuntimeAssets = '',
+		runtimeAssets: string | PlaygroundRuntimeAssets = '',
 		_code = '',
 		_log = true,
 		_args: string[] = [],
@@ -29,6 +33,10 @@ class DuckDB implements Sandbox {
 		progress?: { set?: (value: number) => void } | import('svelte/store').Writable<number>
 	) {
 		return this.workerSession.load(async (resolve, reject) => {
+			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
+			const nextModuleUrl = resolveDuckDbRuntimeModuleUrl(runtimeAssets, currentUrl);
+			if (this.worker && this.moduleUrl !== nextModuleUrl) this.workerSession.reset();
+			this.moduleUrl = nextModuleUrl;
 			if (!this.worker) {
 				this.worker = new (await import('$lib/playground/worker/duckdb?worker')).default();
 				this.workerSession.attach(this.worker);
@@ -41,6 +49,7 @@ class DuckDB implements Sandbox {
 				};
 				this.worker.postMessage({
 					load: true,
+					moduleUrl: this.moduleUrl,
 					log: _log
 				});
 			} else {

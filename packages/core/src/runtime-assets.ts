@@ -6,6 +6,8 @@ export interface RuntimeAssetKeySource {
 	clangd?: { baseUrl?: string; loader?: unknown };
 	rust?: { compilerUrl?: string };
 	go?: { compilerUrl?: string };
+	assemblyscript?: { moduleUrl?: string };
+	duckdb?: { moduleUrl?: string };
 	d?: { moduleUrl?: string };
 	dotnet?: { moduleUrl?: string };
 	elixir?: { bundleUrl?: string };
@@ -24,7 +26,7 @@ export interface RuntimeAssetKeySource {
 	};
 	zig?: { compilerUrl?: string; stdlibUrl?: string };
 	lisp?: { moduleUrl?: string };
-	ruby?: { wasmUrl?: string };
+	ruby?: { moduleUrl?: string; wasmUrl?: string };
 	r?: { baseUrl?: string };
 	octave?: { baseUrl?: string; workerUrl?: string; manifestUrl?: string };
 	prolog?: { baseUrl?: string; workerUrl?: string };
@@ -39,12 +41,12 @@ export interface RuntimeAssetKeySource {
 	janet?: { baseUrl?: string; workerUrl?: string };
 	julia?: { baseUrl?: string; workerUrl?: string };
 	nim?: { baseUrl?: string; workerUrl?: string };
-	bash?: { webcUrl?: string };
+	bash?: { moduleUrl?: string; webcUrl?: string; workerUrl?: string };
 	clojurescript?: { baseUrl?: string; workerUrl?: string };
 	cobol?: { baseUrl?: string };
 	swift?: { baseUrl?: string; workerUrl?: string; manifestUrl?: string };
-	sqlite?: { wasmUrl?: string };
-	php?: { version?: string };
+	sqlite?: { moduleUrl?: string; wasmUrl?: string };
+	php?: { moduleUrl?: string };
 }
 
 export type RuntimeAssetKeyInput = string | RuntimeAssetKeySource | undefined;
@@ -73,6 +75,8 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	{ runtime: 'clangd', property: 'loader', key: 'hasClangdLoader', serialize: hasValue },
 	{ runtime: 'rust', property: 'compilerUrl', key: 'rustCompilerUrl' },
 	{ runtime: 'go', property: 'compilerUrl', key: 'goCompilerUrl' },
+	{ runtime: 'assemblyscript', property: 'moduleUrl', key: 'assemblyScriptModuleUrl' },
+	{ runtime: 'duckdb', property: 'moduleUrl', key: 'duckDbModuleUrl' },
 	{ runtime: 'd', property: 'moduleUrl', key: 'dModuleUrl' },
 	{ runtime: 'dotnet', property: 'moduleUrl', key: 'dotnetModuleUrl' },
 	{ runtime: 'elixir', property: 'bundleUrl', key: 'elixirBundleUrl' },
@@ -97,6 +101,7 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	{ runtime: 'zig', property: 'compilerUrl', key: 'zigCompilerUrl' },
 	{ runtime: 'zig', property: 'stdlibUrl', key: 'zigStdlibUrl' },
 	{ runtime: 'lisp', property: 'moduleUrl', key: 'lispModuleUrl' },
+	{ runtime: 'ruby', property: 'moduleUrl', key: 'rubyModuleUrl' },
 	{ runtime: 'ruby', property: 'wasmUrl', key: 'rubyWasmUrl' },
 	{ runtime: 'r', property: 'baseUrl', key: 'rBaseUrl' },
 	{ runtime: 'octave', property: 'baseUrl', key: 'octaveBaseUrl' },
@@ -127,15 +132,18 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	{ runtime: 'julia', property: 'workerUrl', key: 'juliaWorkerUrl' },
 	{ runtime: 'nim', property: 'baseUrl', key: 'nimBaseUrl' },
 	{ runtime: 'nim', property: 'workerUrl', key: 'nimWorkerUrl' },
+	{ runtime: 'bash', property: 'moduleUrl', key: 'bashModuleUrl' },
 	{ runtime: 'bash', property: 'webcUrl', key: 'bashWebcUrl' },
+	{ runtime: 'bash', property: 'workerUrl', key: 'bashWorkerUrl' },
 	{ runtime: 'clojurescript', property: 'baseUrl', key: 'clojurescriptBaseUrl' },
 	{ runtime: 'clojurescript', property: 'workerUrl', key: 'clojurescriptWorkerUrl' },
 	{ runtime: 'cobol', property: 'baseUrl', key: 'cobolBaseUrl' },
 	{ runtime: 'swift', property: 'baseUrl', key: 'swiftBaseUrl' },
 	{ runtime: 'swift', property: 'workerUrl', key: 'swiftWorkerUrl' },
 	{ runtime: 'swift', property: 'manifestUrl', key: 'swiftManifestUrl' },
+	{ runtime: 'sqlite', property: 'moduleUrl', key: 'sqliteModuleUrl' },
 	{ runtime: 'sqlite', property: 'wasmUrl', key: 'sqliteWasmUrl' },
-	{ runtime: 'php', property: 'version', key: 'phpVersion' }
+	{ runtime: 'php', property: 'moduleUrl', key: 'phpModuleUrl' }
 ] satisfies RuntimeAssetKeyField[];
 
 const runtimeAssetRecord = (runtimeAssets: RuntimeAssetKeySource, runtime: RuntimeAssetName) =>

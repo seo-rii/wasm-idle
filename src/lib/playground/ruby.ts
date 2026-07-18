@@ -1,4 +1,8 @@
-import { resolveRubyWasmUrl, type PlaygroundRuntimeAssets } from '$lib/playground/assets';
+import {
+	resolveRubyRuntimeModuleUrl,
+	resolveRubyWasmUrl,
+	type PlaygroundRuntimeAssets
+} from '$lib/playground/assets';
 import {
 	resolveSandboxExecutionArgs,
 	type CompilerDiagnostic,
@@ -24,6 +28,7 @@ class Ruby implements Sandbox {
 	uid = 0;
 	exit = true;
 	wasmUrl = '';
+	moduleUrl = '';
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	waitingForInput = false;
 	pendingEof = false;
@@ -51,8 +56,11 @@ class Ruby implements Sandbox {
 			this.pendingEof = false;
 			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
 			const nextWasmUrl = resolveRubyWasmUrl(runtimeAssets, currentUrl);
-			const needsWorkerReset = !this.worker || this.wasmUrl !== nextWasmUrl;
+			const nextModuleUrl = resolveRubyRuntimeModuleUrl(runtimeAssets, currentUrl);
+			const needsWorkerReset =
+				!this.worker || this.wasmUrl !== nextWasmUrl || this.moduleUrl !== nextModuleUrl;
 			this.wasmUrl = nextWasmUrl;
+			this.moduleUrl = nextModuleUrl;
 			if (needsWorkerReset && this.worker) {
 				this.workerSession.reset();
 			}
@@ -68,6 +76,7 @@ class Ruby implements Sandbox {
 				};
 				this.worker.postMessage({
 					load: true,
+					moduleUrl: this.moduleUrl,
 					wasmUrl: this.wasmUrl
 				});
 			} else {

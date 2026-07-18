@@ -25,7 +25,12 @@ describe('wasm-idle Bash browser playwright integration', () => {
 			const reuseProvidedBrowserUrl = shouldReuseProvidedBrowserUrl(configuredBrowserUrl);
 			if (!reuseProvidedBrowserUrl && serverMode === 'preview') {
 				await runBrowserPreparationScripts(
-					['sync:wasm-bash', 'compress:static-runtimes', 'build:preview'],
+					[
+						'sync:wasm-bash',
+						'build:static-runtime-modules',
+						'compress:static-runtimes',
+						'build:preview'
+					],
 					{ timeoutMs: Number(process.env.WASM_IDLE_BASH_PREP_TIMEOUT_MS || '900000') }
 				);
 			}

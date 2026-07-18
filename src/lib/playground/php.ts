@@ -1,4 +1,7 @@
-import { resolvePhpVersion, type PlaygroundRuntimeAssets } from '$lib/playground/assets';
+import {
+	resolvePhpRuntimeModuleUrl,
+	type PlaygroundRuntimeAssets
+} from '$lib/playground/assets';
 import {
 	resolveSandboxExecutionArgs,
 	type CompilerDiagnostic,
@@ -23,7 +26,7 @@ class Php implements Sandbox {
 	elapse = 0;
 	uid = 0;
 	exit = true;
-	version = '';
+	moduleUrl = '';
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	waitingForInput = false;
 	pendingEof = false;
@@ -49,12 +52,10 @@ class Php implements Sandbox {
 			this.pendingInput = [];
 			this.waitingForInput = false;
 			this.pendingEof = false;
-			const nextVersion = resolvePhpVersion(runtimeAssets);
-			const needsWorkerReset = !this.worker || this.version !== nextVersion;
-			this.version = nextVersion;
-			if (needsWorkerReset && this.worker) {
-				this.workerSession.reset();
-			}
+			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
+			const nextModuleUrl = resolvePhpRuntimeModuleUrl(runtimeAssets, currentUrl);
+			if (this.worker && this.moduleUrl !== nextModuleUrl) this.workerSession.reset();
+			this.moduleUrl = nextModuleUrl;
 			if (!this.worker) {
 				this.worker = new (await import('$lib/playground/worker/php?worker')).default();
 				this.workerSession.attach(this.worker);
@@ -68,7 +69,7 @@ class Php implements Sandbox {
 				};
 				this.worker.postMessage({
 					load: true,
-					version: this.version,
+					moduleUrl: this.moduleUrl,
 					log: _log
 				});
 			} else {

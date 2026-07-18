@@ -2,8 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const workerInstances: MockWorker[] = [];
 const { publicEnv } = vi.hoisted(() => ({
-	publicEnv: {
-		PUBLIC_WASM_SQLITE_WASM_URL: ''
+		publicEnv: {
+			PUBLIC_WASM_SQLITE_MODULE_URL: '',
+			PUBLIC_WASM_SQLITE_WASM_URL: ''
 	}
 }));
 let suppressAutoLoadAck = false;
@@ -51,6 +52,7 @@ describe('SQLite sandbox', () => {
 	beforeEach(() => {
 		workerInstances.length = 0;
 		publicEnv.PUBLIC_WASM_SQLITE_WASM_URL = '/sqlite/sql-wasm.wasm';
+		publicEnv.PUBLIC_WASM_SQLITE_MODULE_URL = '';
 		suppressAutoLoadAck = false;
 	});
 
@@ -72,9 +74,10 @@ describe('SQLite sandbox', () => {
 		expect(workerInstances).toHaveLength(1);
 		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
 			1,
-			expect.objectContaining({
-				load: true,
-				wasmUrl: expect.stringMatching(/\/sqlite\/sql-wasm\.wasm$/)
+				expect.objectContaining({
+					load: true,
+					moduleUrl: expect.stringMatching(/\/wasm-sqlite\/runtime\.mjs$/),
+					wasmUrl: expect.stringMatching(/\/sqlite\/sql-wasm\.wasm$/)
 			})
 		);
 		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(

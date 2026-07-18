@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { strToU8, zipSync } from 'fflate';
 import { flushQueuedStdin } from '$lib/playground/stdinBuffer';
 
 const encoder = new TextEncoder();
+const stdlibArchive = zipSync({
+	'std/std.zig': strToU8('pub const std = true;')
+});
 
 const shim = vi.hoisted(() => {
 	const encoder = new TextEncoder();
@@ -113,26 +117,6 @@ vi.mock('@bjorn3/browser_wasi_shim', () => ({
 	}
 }));
 
-vi.mock('@zip.js/zip.js', () => ({
-	ZipReader: class {
-		async getEntries() {
-			return [
-				{
-					filename: 'std/std.zig',
-					directory: false,
-					getData: async () => encoder.encode('pub const std = true;')
-				}
-			];
-		}
-
-		async close() {}
-	},
-	Uint8ArrayReader: class {
-		constructor(_data: Uint8Array) {}
-	},
-	Uint8ArrayWriter: class {}
-}));
-
 function responseFor(data: Uint8Array) {
 	return {
 		ok: true,
@@ -157,7 +141,7 @@ describe('Zig worker', () => {
 		(globalThis as any).fetch = vi.fn(async (url: string) => {
 			if (url.endsWith('zig_small.wasm'))
 				return responseFor(new Uint8Array([0, 97, 115, 109]));
-			if (url.endsWith('std.zip')) return responseFor(new Uint8Array([0x50, 0x4b, 3, 4]));
+			if (url.endsWith('std.zip')) return responseFor(stdlibArchive);
 			return { ok: false, status: 404, headers: { get: () => null } };
 		});
 		vi.spyOn(WebAssembly, 'compile').mockResolvedValue({} as WebAssembly.Module);

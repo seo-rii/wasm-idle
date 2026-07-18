@@ -18,10 +18,8 @@
 		"build": "rm -rf dist && tsc -p tsconfig.json",
 		"check": "tsc -p tsconfig.json --noEmit"
 	},
-	"dependencies": {
-		"pyodide": "0.29.3"
-	},
 	"devDependencies": {
+		"pyodide": "0.29.3",
 		"typescript": "^6.0.2"
 	}
 }

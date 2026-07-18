@@ -1,19 +1,37 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const { importRuntimeModuleMock } = vi.hoisted(() => ({
+	importRuntimeModuleMock: vi.fn()
+}));
+
+vi.mock('$lib/playground/runtimeModule', () => ({
+	importRuntimeModule: importRuntimeModuleMock
+}));
+
+async function loadWorker() {
+	await import('./assemblyscript');
+	await (globalThis as any).self.onmessage({
+		data: {
+			load: true,
+			moduleUrl: '/wasm-assemblyscript/runtime.mjs'
+		}
+	});
+}
+
 describe('AssemblyScript worker', () => {
 	beforeEach(() => {
 		vi.resetModules();
+		importRuntimeModuleMock.mockReset();
+		importRuntimeModuleMock.mockImplementation(async () => ({
+			instantiate: (await import('@assemblyscript/loader')).instantiate,
+			loadCompiler: async () => await import('assemblyscript/asc')
+		}));
 		(globalThis as any).self = globalThis as any;
 		(globalThis as any).postMessage = vi.fn();
 	});
 
 	it('compiles AssemblyScript source and prints zero-argument exports', async () => {
-		await import('./assemblyscript');
-		await (globalThis as any).self.onmessage({
-			data: {
-				load: true
-			}
-		});
+		await loadWorker();
 		await (globalThis as any).self.onmessage({
 			data: {
 				code: `const bonus: i32 = 3;
@@ -39,7 +57,7 @@ export function factorial_plus_bonus(): i32 {
 	}, 15000);
 
 	it('decodes string and boolean export results from declaration metadata', async () => {
-		await import('./assemblyscript');
+		await loadWorker();
 		await (globalThis as any).self.onmessage({
 			data: {
 				code: `export function greeting(): string {
@@ -63,7 +81,7 @@ export function ok(): bool {
 	}, 15000);
 
 	it('provides injected stdin through env readLine, readByte, and readAll imports', async () => {
-		await import('./assemblyscript');
+		await loadWorker();
 		await (globalThis as any).self.onmessage({
 			data: {
 				code: `@external("env", "readLine")
@@ -92,7 +110,7 @@ export function main(): string {
 	}, 15000);
 
 	it('reports compiler failures as diagnostics and worker errors', async () => {
-		await import('./assemblyscript');
+		await loadWorker();
 		await (globalThis as any).self.onmessage({
 			data: {
 				code: 'export function broken(): i32 { return nope; }',

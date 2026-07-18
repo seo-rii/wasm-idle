@@ -17,6 +17,7 @@ const DEFAULT_VERSION_MODULE_PATH = path.resolve(
 );
 
 const WEBR_ASSET_ENTRIES = [
+	'webr.js',
 	'R.js',
 	'R.wasm',
 	'webr-worker.js',

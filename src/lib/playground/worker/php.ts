@@ -1,33 +1,48 @@
-import { PHP } from '@php-wasm/universal';
-import { loadWebRuntime } from '@php-wasm/web';
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
 import type { SandboxWorkspaceFile } from '$lib/playground/options';
+import { importRuntimeModule } from '$lib/playground/runtimeModule';
 
 declare var self: any;
 
 const encoder = new TextEncoder();
 
 let stdinBufferPhp: Int32Array | null = null;
-let version = '8.4';
-let loadedVersion = '';
-let phpPromise: Promise<PHP> | null = null;
+let runtimeModuleUrl = '';
+let phpPromise: Promise<PhpRuntime> | null = null;
+
+interface PhpRuntime {
+	mkdir(path: string): void;
+	writeFile(path: string, content: string): void;
+	run(options: Record<string, unknown>): Promise<{
+		text: string;
+		errors: string;
+		exitCode: number;
+	}>;
+}
+
+interface PhpRuntimeModule {
+	createPhp84(): Promise<PhpRuntime>;
+}
 
 function postProgress(percent: number) {
 	postMessage({ progress: { percent: Math.max(0, Math.min(100, percent)) } });
 }
 
-async function loadPhp(nextVersion: string, log = true) {
-	if (loadedVersion === nextVersion && phpPromise) {
-		return await phpPromise;
+async function loadPhp(moduleUrl: string, log = true) {
+	if (!moduleUrl) throw new Error('PHP runtime module URL is not configured.');
+	if (runtimeModuleUrl !== moduleUrl) {
+		runtimeModuleUrl = moduleUrl;
+		phpPromise = null;
 	}
-	loadedVersion = nextVersion;
+	if (phpPromise) return await phpPromise;
 	phpPromise = (async () => {
 		postProgress(5);
-		const php = new PHP(await loadWebRuntime(nextVersion as never));
+		const runtime = await importRuntimeModule<PhpRuntimeModule>(moduleUrl);
+		const php = await runtime.createPhp84();
 		postProgress(95);
 		php.mkdir('/workspace');
 		if (log) {
-			console.log(`[wasm-idle:php-worker] PHP ${nextVersion} ready`);
+			console.log('[wasm-idle:php-worker] PHP 8.4 ready');
 		}
 		postProgress(100);
 		return php;
@@ -48,7 +63,7 @@ function dirname(path: string) {
 	return slashIndex === -1 ? '' : path.slice(0, slashIndex);
 }
 
-function mkdirp(php: PHP, path: string) {
+function mkdirp(php: PhpRuntime, path: string) {
 	const normalized = normalizeWorkspacePath(path);
 	if (!normalized) return;
 	let current = '';
@@ -62,7 +77,7 @@ function mkdirp(php: PHP, path: string) {
 	}
 }
 
-function writeWorkspaceFile(php: PHP, path: string, content: string) {
+function writeWorkspaceFile(php: PhpRuntime, path: string, content: string) {
 	const normalized = normalizeWorkspacePath(path);
 	if (!normalized) return;
 	const fullPath = `/workspace/${normalized}`;
@@ -106,7 +121,7 @@ function readInitialStdin(code: string, initialStdin: unknown, log = true) {
 self.onmessage = async (event: { data: any }) => {
 	const {
 		load,
-		version: nextVersion = '8.4',
+		moduleUrl: nextModuleUrl,
 		buffer,
 		code,
 		prepare,
@@ -118,17 +133,15 @@ self.onmessage = async (event: { data: any }) => {
 	} = event.data;
 	try {
 		if (load) {
-			version = nextVersion || '8.4';
-			if (log) {
-				console.log(`[wasm-idle:php-worker] load version=${version}`);
-			}
-			await loadPhp(version, log);
+			const moduleUrl = nextModuleUrl || runtimeModuleUrl;
+			if (log) console.log(`[wasm-idle:php-worker] load PHP 8.4 module=${moduleUrl}`);
+			await loadPhp(moduleUrl, log);
 			postMessage({ load: true });
 			return;
 		}
 
 		stdinBufferPhp = new Int32Array(buffer);
-		const php = await loadPhp(version, log);
+		const php = await loadPhp(runtimeModuleUrl, log);
 
 		if (prepare) {
 			postMessage({ results: true });

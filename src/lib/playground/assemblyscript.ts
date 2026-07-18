@@ -1,5 +1,8 @@
 import type { CompilerDiagnostic, SandboxExecutionOptions } from '$lib/playground/options';
-import type { PlaygroundRuntimeAssets } from '$lib/playground/assets';
+import {
+	resolveAssemblyScriptRuntimeModuleUrl,
+	type PlaygroundRuntimeAssets
+} from '$lib/playground/assets';
 import type { Sandbox } from '$lib/playground/sandbox';
 import {
 	flushBufferedEof,
@@ -19,6 +22,7 @@ class AssemblyScriptSandbox implements Sandbox {
 	elapse = 0;
 	uid = 0;
 	exit = true;
+	moduleUrl = '';
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	waitingForInput = false;
 	pendingEof = false;
@@ -33,7 +37,7 @@ class AssemblyScriptSandbox implements Sandbox {
 	});
 
 	load(
-		_runtimeAssets: string | PlaygroundRuntimeAssets = '',
+		runtimeAssets: string | PlaygroundRuntimeAssets = '',
 		_code = '',
 		_log = true,
 		_args: string[] = [],
@@ -44,6 +48,10 @@ class AssemblyScriptSandbox implements Sandbox {
 			this.pendingInput = [];
 			this.waitingForInput = false;
 			this.pendingEof = false;
+			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
+			const nextModuleUrl = resolveAssemblyScriptRuntimeModuleUrl(runtimeAssets, currentUrl);
+			if (this.worker && this.moduleUrl !== nextModuleUrl) this.workerSession.reset();
+			this.moduleUrl = nextModuleUrl;
 			if (!this.worker) {
 				this.worker = new (
 					await import('$lib/playground/worker/assemblyscript?worker')
@@ -58,6 +66,7 @@ class AssemblyScriptSandbox implements Sandbox {
 				};
 				this.worker.postMessage({
 					load: true,
+					moduleUrl: this.moduleUrl,
 					log: _log
 				});
 			} else {

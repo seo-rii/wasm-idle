@@ -70,6 +70,29 @@ export function resolvePythonLanguageServerBaseUrl(
 const resolveFileUrl = (value: string, currentUrl = '') =>
 	currentUrl ? new URL(value, currentUrl).href : value;
 
+const resolveStaticRuntimeModuleUrl = (
+	options: EditorLanguageServerOptions | undefined,
+	moduleUrl: string | undefined,
+	path: string,
+	currentUrl = ''
+) => {
+	if (moduleUrl) return resolveFileUrl(moduleUrl, currentUrl);
+	const rootUrl = typeof options === 'string' ? options : options?.rootUrl || '';
+	return resolveFileUrl(`${normalizeRootUrl(rootUrl) || ''}${path}`, currentUrl);
+};
+
+export function resolveAssemblyScriptLanguageServerModuleUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	return resolveStaticRuntimeModuleUrl(
+		options,
+		typeof options === 'object' ? options.assemblyscript?.moduleUrl : undefined,
+		'/wasm-assemblyscript/runtime.mjs',
+		currentUrl
+	);
+}
+
 export function resolveRustLanguageServerCompilerUrl(
 	options: EditorLanguageServerOptions | undefined,
 	currentUrl = ''
@@ -488,6 +511,30 @@ export function resolveHaskellLanguageServerBsdtarUrl(
 	return resolveFileUrl('/wasm-haskell/bsdtar.wasm', currentUrl);
 }
 
+export function resolveSqliteLanguageServerModuleUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	return resolveStaticRuntimeModuleUrl(
+		options,
+		typeof options === 'object' ? options.sql?.moduleUrl : undefined,
+		'/wasm-sqlite/runtime.mjs',
+		currentUrl
+	);
+}
+
+export function resolveDuckDbLanguageServerModuleUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	return resolveStaticRuntimeModuleUrl(
+		options,
+		typeof options === 'object' ? options.sql?.moduleUrl : undefined,
+		'/wasm-duckdb/runtime.mjs',
+		currentUrl
+	);
+}
+
 export function resolveFortranLanguageServerAnalyzerUrl(
 	options: EditorLanguageServerOptions | undefined,
 	currentUrl = ''
@@ -559,6 +606,18 @@ export function resolveRubyLanguageServerWasmUrl(
 		return resolveFileUrl(options.ruby.wasmUrl, currentUrl);
 	}
 	return '';
+}
+
+export function resolveRubyLanguageServerModuleUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	return resolveStaticRuntimeModuleUrl(
+		options,
+		typeof options === 'object' ? options.ruby?.moduleUrl : undefined,
+		'/wasm-ruby/runtime.mjs',
+		currentUrl
+	);
 }
 
 export function resolveRLanguageServerBaseUrl(
