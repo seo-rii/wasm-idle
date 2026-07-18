@@ -1,7 +1,7 @@
-import { evaluateDebugExpression } from '$lib/debug/expression';
-import type { DebugVariable } from '$lib/playground/options';
+import type { DebugVariable } from '@wasm-idle/core';
 
-import type { DebugLanguageAdapter } from './types';
+import { evaluateDebugExpression } from '../expression.js';
+import type { DebugLanguageAdapter } from './types.js';
 
 const selectInlinePythonLocals = (lineText: string, locals: DebugVariable[]) => {
 	const sanitized = lineText

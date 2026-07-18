@@ -5,6 +5,8 @@ interface PackageJson {
 	dependencies?: Record<string, string>;
 	devDependencies?: Record<string, string>;
 	name?: string;
+	peerDependencies?: Record<string, string>;
+	peerDependenciesMeta?: Record<string, { optional?: boolean }>;
 	private?: boolean;
 	scripts?: Record<string, string>;
 }
@@ -56,16 +58,31 @@ describe('LLVM runtime package scripts', () => {
 		expect(root.dependencies?.['@xterm/addon-ligatures']).toBeUndefined();
 	});
 
-	it('keeps language servers as a separately installed page plugin', async () => {
+	it('keeps editor tooling as separately installed page plugins', async () => {
 		const root = await readRootPackage();
 		const verifier = await readPackageVerifier();
 
+		expect(root.dependencies?.['@wasm-idle/debug']).toBeUndefined();
 		expect(root.dependencies?.['@wasm-idle/lsp']).toBeUndefined();
 		expect(root.dependencies?.['vscode-jsonrpc']).toBeUndefined();
+		expect(root.devDependencies?.['@wasm-idle/debug']).toBe('workspace:*');
 		expect(root.devDependencies?.['@wasm-idle/lsp']).toBe('workspace:*');
 		expect(root.scripts?.['package:root']).toContain('scripts/clean-package-output.mjs');
+		expect(verifier).toContain("name: '@wasm-idle/debug install'");
 		expect(verifier).toContain("name: '@wasm-idle/lsp install'");
-		expect(verifier).toContain("absentPackageNames: ['@wasm-idle/lsp']");
+		expect(verifier).toContain("absentPackageNames: ['@wasm-idle/debug', '@wasm-idle/lsp']");
+	});
+
+	it('keeps the debugger package code-only with explicit host peers', async () => {
+		const debug = await readPackageManifest('packages/debug');
+
+		expect(debug.name).toBe('@wasm-idle/debug');
+		expect(debug.dependencies?.['@wasm-idle/core']).toBe('workspace:*');
+		expect(debug.peerDependencies?.['@wasm-idle/core']).toBe('0.1.0');
+		expect(debug.peerDependencies?.svelte).toBe('^5.0.0');
+		expect(debug.peerDependencies?.['monaco-editor']).toBe('^0.55.0');
+		expect(debug.peerDependenciesMeta?.['monaco-editor']?.optional).toBe(true);
+		expect(debug.dependencies?.['monaco-editor']).toBeUndefined();
 	});
 
 	it('keeps every language runtime workspace private', async () => {
@@ -111,6 +128,7 @@ describe('LLVM runtime package scripts', () => {
 
 		for (const packagePath of [
 			'packages/core',
+			'packages/debug',
 			'packages/llvm-core',
 			'packages/lsp',
 			'packages/node',

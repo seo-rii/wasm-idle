@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { evaluateDebugExpression } from './expression';
+import { evaluateDebugExpression } from '../src/expression.js';
 
 describe('evaluateDebugExpression', () => {
 	it('evaluates arithmetic and comparison expressions against debug locals', () => {

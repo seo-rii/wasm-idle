@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const packages = [
 	['core', 'packages/core'],
+	['debug', 'packages/debug'],
 	['llvm-core', 'packages/llvm-core'],
 	['lsp', 'packages/lsp'],
 	['node', 'packages/node'],
@@ -20,11 +21,22 @@ const scenarios = [
 	{
 		name: 'wasm-idle root install',
 		packageNames: ['wasm-idle', '@wasm-idle/core', '@wasm-idle/llvm-core'],
-		absentPackageNames: ['@wasm-idle/lsp'],
+		absentPackageNames: ['@wasm-idle/debug', '@wasm-idle/lsp'],
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/llvm-core/core/gcc-compat');",
 			"if (!import.meta.resolve('wasm-idle').endsWith('/wasm-idle/dist/index.js')) throw new Error('wasm-idle import export did not resolve');"
+		]
+	},
+	{
+		name: '@wasm-idle/debug install',
+		packageNames: ['@wasm-idle/debug', '@wasm-idle/core'],
+		imports: [
+			"await import('@wasm-idle/core');",
+			"await import('@wasm-idle/debug');",
+			"await import('@wasm-idle/debug/controller');",
+			"await import('@wasm-idle/debug/editor');",
+			"await import('@wasm-idle/debug/language');"
 		]
 	},
 	{
@@ -43,6 +55,7 @@ const scenarios = [
 		),
 		imports: [
 			"await import('@wasm-idle/core');",
+			"await import('@wasm-idle/debug');",
 			"await import('@wasm-idle/llvm-core/core/gcc-compat');",
 			"await import('@wasm-idle/lsp');",
 			"await import('@wasm-idle/lsp/clangd');",
@@ -275,14 +288,15 @@ try {
 			);
 		}
 		if (manifest.name === 'wasm-idle') {
-			const legacyLspFiles = packedPaths.filter(
+			const legacyPluginFiles = packedPaths.filter(
 				(packedPath) =>
+					packedPath.startsWith('dist/debug/') ||
 					packedPath.startsWith('dist/lsp/') ||
 					packedPath.startsWith('dist/utils/vscodeJsonrpcBrowser')
 			);
-			if (legacyLspFiles.length > 0) {
+			if (legacyPluginFiles.length > 0) {
 				throw new Error(
-					`wasm-idle contains legacy LSP files: ${legacyLspFiles.join(', ')}`
+					`wasm-idle contains legacy optional-plugin files: ${legacyPluginFiles.join(', ')}`
 				);
 			}
 		}

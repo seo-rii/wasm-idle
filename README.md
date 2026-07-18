@@ -151,6 +151,8 @@ toolchains can be consumed from pinned external runtime repositories:
 
 - `packages/core`: framework-neutral contracts, runtime asset keys, progress helpers, and playground
   binding helpers.
+- `packages/debug`: optional debug session controller, language adapters, expression helpers, and
+  Monaco integration built on the contracts from `@wasm-idle/core`.
 - `packages/llvm-core`: code-only browser hosts for shared memory, MemFS, tar, WASI, Clang, COBOL,
   and Objective-C execution. Every compiler, sysroot, archive, and worker asset is supplied through
   an explicit HTTP(S) URL.
@@ -384,6 +386,17 @@ session; the repo-owned regression target is the local preview path above.
 
 ## Runtime expectations
 
+`@wasm-idle/debug` is an optional debugger UI/controller plugin that must be installed separately:
+
+```bash
+pnpm add @wasm-idle/debug
+```
+
+The root `wasm-idle` package no longer exports the debug session controller, language adapters, or
+Monaco integration. Applications that need those APIs import them from `@wasm-idle/debug`; the
+Pages application keeps the package as a dev dependency. `svelte` is a required peer for the
+reactive controller, while `monaco-editor` is needed only when using the editor integration.
+
 `@wasm-idle/lsp` is an optional editor plugin that must be installed separately:
 
 ```bash
@@ -394,12 +407,13 @@ Installing the root `wasm-idle` package does not install `@wasm-idle/lsp` transi
 that want browser editor LSP support must add it explicitly, along with the optional provider peers
 they use.
 
-The `wasm-idle`, `@wasm-idle/llvm-core`, and `@wasm-idle/lsp` npm packages contain host/provider JS,
-types, and lightweight language-service code, but no compiler or language-runtime payloads. The
-`wasm-llvm` repository produces compiler assets but is not an npm runtime dependency. Static
-compiler/runtime assets are deployed separately and loaded through `runtimeAssets` HTTP(S) URLs.
-References to bundled assets below mean files deployed to the page's HTTP origin, not files embedded
-in an npm package; library consumers must provide their own externally hosted URLs.
+The `wasm-idle`, `@wasm-idle/debug`, `@wasm-idle/llvm-core`, and `@wasm-idle/lsp` npm packages
+contain host/provider JS, types, and lightweight editor-service code, but no compiler or
+language-runtime payloads. The `wasm-llvm` repository produces compiler assets but is not an npm
+runtime dependency. Static compiler/runtime assets are deployed separately and loaded through
+`runtimeAssets` HTTP(S) URLs. References to bundled assets below mean files deployed to the page's
+HTTP origin, not files embedded in an npm package; library consumers must provide their own
+externally hosted URLs.
 
 `@wasm-idle/lsp` keeps its host and provider JS in the package. Heavy compiler/runtime modules are
 external static assets loaded only after LSP is enabled: Python uses `pyodide/pyodide.mjs`, R uses

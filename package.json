@@ -140,6 +140,7 @@
 		"@types/sql.js": "^1.4.11",
 		"@typescript-eslint/eslint-plugin": "^8.58.2",
 		"@typescript-eslint/parser": "^8.58.2",
+		"@wasm-idle/debug": "workspace:*",
 		"@wasm-idle/lsp": "workspace:*",
 		"@wasmer/sdk": "0.9.0",
 		"assemblyscript": "0.28.17",

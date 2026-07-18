@@ -1,15 +1,4 @@
 import Terminal from '$lib/terminal';
-export {
-	cppDebugLanguageAdapter,
-	goDebugLanguageAdapter,
-	pythonDebugLanguageAdapter,
-	rustDebugLanguageAdapter,
-	evaluateDebugExpression,
-	createDebugSessionController,
-	MonacoDebugView,
-	attachMonacoDebugActions,
-	selectInlineDebugLocals
-} from '$lib/debug';
 import playground, { createPlaygroundBinding } from '$lib/playground';
 
 export default Terminal;
@@ -28,12 +17,6 @@ export type {
 } from '$lib/terminal';
 export type { CompilerDiagnostic } from '$lib/playground/options';
 export type {
-	DebugSessionController,
-	DebugSessionControllerOptions,
-	DebugWatchValue,
-	MonacoDebugActionsOptions
-} from '$lib/debug';
-export type {
 	PlaygroundRuntimeAssets,
 	RuntimeAssetConfig,
 	RuntimeAssetLoadRequest,
@@ -47,4 +30,3 @@ export type {
 	SandboxProgress,
 	SandboxRuntimeAssets
 } from '$lib/playground/sandbox';
-export type { DebugLanguageAdapter } from '$lib/debug';

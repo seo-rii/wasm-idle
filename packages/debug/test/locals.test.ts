@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { selectInlineDebugLocals } from './locals';
+import { selectInlineDebugLocals } from '../src/locals.js';
 
 describe('selectInlineDebugLocals', () => {
 	it('keeps only locals referenced on the current line', () => {

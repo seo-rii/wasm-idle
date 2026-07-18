@@ -1,4 +1,4 @@
-import type { DebugVariable } from '$lib/playground/options';
+import type { DebugVariable } from '@wasm-idle/core';
 
 export function selectInlineDebugLocals(lineText: string, locals: DebugVariable[]) {
 	const sanitized = lineText

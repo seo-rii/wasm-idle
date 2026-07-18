@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { attachMonacoDebugActions, MonacoDebugView } from '$lib';
-	import type { DebugLanguageAdapter } from '$lib/debug/language';
+	import { attachMonacoDebugActions, MonacoDebugView } from '@wasm-idle/debug/editor';
+	import type { DebugLanguageAdapter } from '@wasm-idle/debug/language';
 	import type {
 		CompilerDiagnostic,
 		DebugVariable,
@@ -3063,10 +3063,10 @@
 			load: async (currentUrl) => {
 				const { getAssemblyScriptLanguageServer } =
 					await import('@wasm-idle/lsp/assemblyscript');
-					return await getAssemblyScriptLanguageServer({
-						currentUrl,
-						assemblyscript: { moduleUrl: assemblyScriptLspModuleUrl || '' },
-						onStatus: (status) => (assemblyScriptLspStatus = status)
+				return await getAssemblyScriptLanguageServer({
+					currentUrl,
+					assemblyscript: { moduleUrl: assemblyScriptLspModuleUrl || '' },
+					onStatus: (status) => (assemblyScriptLspStatus = status)
 				});
 			}
 		},
@@ -3226,12 +3226,12 @@
 			setStatus: (status) => (duckdbLspStatus = status),
 			load: async (currentUrl) => {
 				const { getDuckDbLanguageServer } = await import('@wasm-idle/lsp/sql');
-					return await getDuckDbLanguageServer({
-						currentUrl,
-						sql: {
-							dialect: 'duckdb',
-							moduleUrl: duckDbLspModuleUrl || ''
-						},
+				return await getDuckDbLanguageServer({
+					currentUrl,
+					sql: {
+						dialect: 'duckdb',
+						moduleUrl: duckDbLspModuleUrl || ''
+					},
 					onStatus: (status) => (duckdbLspStatus = status)
 				});
 			}
@@ -3244,9 +3244,9 @@
 				const { getSqlLanguageServer } = await import('@wasm-idle/lsp/sql');
 				return await getSqlLanguageServer({
 					currentUrl,
-						sql: {
-							dialect: 'sqlite',
-							moduleUrl: sqlLspModuleUrl || ''
+					sql: {
+						dialect: 'sqlite',
+						moduleUrl: sqlLspModuleUrl || ''
 					},
 					onStatus: (status) => (sqlLspStatus = status)
 				});
@@ -3276,8 +3276,8 @@
 				const { getRubyLanguageServer } = await import('@wasm-idle/lsp/ruby');
 				return await getRubyLanguageServer({
 					currentUrl,
-						ruby: {
-							moduleUrl: rubyLspModuleUrl || ''
+					ruby: {
+						moduleUrl: rubyLspModuleUrl || ''
 					},
 					onStatus: (status) => (rubyLspStatus = status)
 				});

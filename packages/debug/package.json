@@ -1,0 +1,66 @@
+{
+	"name": "@wasm-idle/debug",
+	"version": "0.1.0",
+	"description": "Optional debugger UI and controller utilities for wasm-idle",
+	"license": "MIT",
+	"type": "module",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js",
+			"default": "./dist/index.js"
+		},
+		"./controller": {
+			"types": "./dist/controller.d.ts",
+			"import": "./dist/controller.js",
+			"default": "./dist/controller.js"
+		},
+		"./editor": {
+			"types": "./dist/editor/index.d.ts",
+			"import": "./dist/editor/index.js",
+			"default": "./dist/editor/index.js"
+		},
+		"./language": {
+			"types": "./dist/language/index.d.ts",
+			"import": "./dist/language/index.js",
+			"default": "./dist/language/index.js"
+		},
+		"./expression": {
+			"types": "./dist/expression.d.ts",
+			"import": "./dist/expression.js",
+			"default": "./dist/expression.js"
+		}
+	},
+	"files": [
+		"dist",
+		"README.md"
+	],
+	"publishConfig": {
+		"access": "public"
+	},
+	"peerDependencies": {
+		"@wasm-idle/core": "0.1.0",
+		"monaco-editor": "^0.55.0",
+		"svelte": "^5.0.0"
+	},
+	"peerDependenciesMeta": {
+		"monaco-editor": {
+			"optional": true
+		}
+	},
+	"dependencies": {
+		"@wasm-idle/core": "workspace:*"
+	},
+	"devDependencies": {
+		"jsdom": "^29.0.2",
+		"monaco-editor": "^0.55.1",
+		"svelte": "^5.55.4",
+		"typescript": "^6.0.2",
+		"vitest": "^4.1.4"
+	},
+	"scripts": {
+		"build": "rm -rf dist && tsc -p tsconfig.json",
+		"check": "tsc -p tsconfig.json --noEmit",
+		"test": "vitest run"
+	}
+}

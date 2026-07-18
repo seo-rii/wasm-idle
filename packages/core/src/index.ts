@@ -5,6 +5,17 @@ export {
 	supportedLanguageIds,
 	type WasmIdleLanguageId
 } from './languages.js';
+export type {
+	DebugArrayElementKind,
+	DebugCommand,
+	DebugFrame,
+	DebugPauseReason,
+	DebugSessionEvent,
+	DebugStructFieldMetadata,
+	DebugVariable,
+	DebugVariableKind,
+	DebugVariableMetadata
+} from './debug.js';
 export { phaseProgress, progressBandsForLanguage, type ProgressLike } from './progress.js';
 export {
 	createRuntimeAssetsKey,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { goDebugLanguageAdapter } from './go';
+import { goDebugLanguageAdapter } from '../../src/language/go.js';
 
 describe('goDebugLanguageAdapter', () => {
 	it('filters inline locals and evaluates simple expressions', () => {

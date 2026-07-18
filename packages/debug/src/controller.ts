@@ -1,20 +1,26 @@
-import type { DebugLanguageAdapter } from '$lib/debug/language';
 import type {
 	DebugCommand,
 	DebugFrame,
 	DebugSessionEvent,
-	DebugVariable
-} from '$lib/playground/options';
-import type { TerminalControl } from '$lib/terminal';
+	DebugVariable,
+	TerminalControl
+} from '@wasm-idle/core';
 import { fromStore, get, writable } from 'svelte/store';
+
+import type { DebugLanguageAdapter } from './language/index.js';
 
 export type DebugWatchValue = {
 	expression: string;
 	value: string;
 };
 
+export type DebugTerminalControl = Pick<
+	TerminalControl,
+	'debugCommand' | 'setBreakpoints' | 'debugEvaluate' | 'stop'
+>;
+
 export type DebugSessionControllerOptions = {
-	terminal?: TerminalControl;
+	terminal?: DebugTerminalControl;
 	adapter?: DebugLanguageAdapter | null;
 	breakpoints?: number[];
 	cursorLine?: number | null;
@@ -33,7 +39,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 	const watchValuesStore = writable<DebugWatchValue[]>([]);
 	const breakpointsStore = writable<number[]>([...(options.breakpoints || [])]);
 	const cursorLineStore = writable<number | null>(options.cursorLine ?? null);
-	const terminalStore = writable<TerminalControl | undefined>(options.terminal);
+	const terminalStore = writable<DebugTerminalControl | undefined>(options.terminal);
 	const adapterStore = writable<DebugLanguageAdapter | null>(options.adapter ?? null);
 
 	const activeState = fromStore(activeStore);
@@ -175,7 +181,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		reset();
 	}
 
-	function setTerminal(terminal?: TerminalControl) {
+	function setTerminal(terminal?: DebugTerminalControl) {
 		terminalStore.set(terminal);
 		refreshWatchValues();
 		syncBreakpoints();
@@ -221,7 +227,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 
 	async function sendCommand(command: DebugCommand) {
 		const terminal = get(terminalStore);
-		if (!terminal || !get(pausedStore)) return false;
+		if (!terminal?.debugCommand || !get(pausedStore)) return false;
 		await terminal.debugCommand(command);
 		return true;
 	}
@@ -230,7 +236,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		const terminal = get(terminalStore);
 		const breakpoints = get(breakpointsStore);
 		if (
-			!terminal ||
+			!terminal?.debugCommand ||
 			!get(pausedStore) ||
 			!targetLine ||
 			targetLine === get(pausedLineStore) ||

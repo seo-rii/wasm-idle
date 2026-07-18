@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { createDebugSessionController } from './controller.svelte';
+import { createDebugSessionController } from '../src/controller.js';
 
 describe('createDebugSessionController', () => {
 	it('prefers runtime-backed watch evaluation and adds a temporary run-to-cursor breakpoint', async () => {

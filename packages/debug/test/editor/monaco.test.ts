@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { attachMonacoDebugActions, MonacoDebugView } from './monaco';
+import { attachMonacoDebugActions, MonacoDebugView } from '../../src/editor/monaco.js';
 
 describe('MonacoDebugView', () => {
 	it('keeps inline debug hints visible for empty end-of-line ranges', () => {

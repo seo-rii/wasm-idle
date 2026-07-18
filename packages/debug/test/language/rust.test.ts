@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { rustDebugLanguageAdapter } from './rust';
+import { rustDebugLanguageAdapter } from '../../src/language/rust.js';
 
 describe('rustDebugLanguageAdapter', () => {
 	it('uses the shared expression evaluator and inline local selector', () => {

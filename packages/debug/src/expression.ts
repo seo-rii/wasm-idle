@@ -1,4 +1,4 @@
-import type { DebugVariable } from '$lib/playground/options';
+import type { DebugVariable } from '@wasm-idle/core';
 
 type Token =
 	| { type: 'number'; value: string }

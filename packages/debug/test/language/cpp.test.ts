@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { cppDebugLanguageAdapter } from './cpp';
+import { cppDebugLanguageAdapter } from '../../src/language/cpp.js';
 
 describe('cppDebugLanguageAdapter', () => {
 	it('filters inline locals and evaluates expressions', () => {

@@ -1,4 +1,4 @@
-import type { DebugVariable } from '$lib/playground/options';
+import type { DebugVariable } from '@wasm-idle/core';
 
 export interface DebugLanguageAdapter {
 	id: string;

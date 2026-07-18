@@ -44,7 +44,10 @@ describe('example route debug actions', () => {
 
 	it('delegates debug state, runtime watches, and run-to-cursor to the shared debug controller', () => {
 		expect(source).toMatch(
-			/import Terminal, \{\s+createPlaygroundBinding,\s+createDebugSessionController,\s+cppDebugLanguageAdapter,\s+goDebugLanguageAdapter,\s+pythonDebugLanguageAdapter,\s+rustDebugLanguageAdapter,\s+isSharedArrayBufferAvailable\s+\} from '\$lib';/s
+			/import Terminal, \{\s+createPlaygroundBinding,\s+isSharedArrayBufferAvailable\s+\} from '\$lib';/s
+		);
+		expect(source).toMatch(
+			/import \{\s+createDebugSessionController,\s+cppDebugLanguageAdapter,\s+goDebugLanguageAdapter,\s+pythonDebugLanguageAdapter,\s+rustDebugLanguageAdapter,\s+type DebugLanguageAdapter\s+\} from '@wasm-idle\/debug';/s
 		);
 		expect(source).toMatch(
 			/const debugLanguageAdapters(?:: Partial<Record<PlaygroundLanguage, DebugLanguageAdapter>>)? = \{/

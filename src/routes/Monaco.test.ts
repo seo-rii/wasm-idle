@@ -170,7 +170,7 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(/onCursorLineChange\?: \(line: number \| null\) => void;/);
 		expect(source).toMatch(/onRunToCursor\?: \(line: number \| null\) => void;/);
 		expect(source).toMatch(
-			/import \{ attachMonacoDebugActions, MonacoDebugView \} from '\$lib';/
+			/import \{ attachMonacoDebugActions, MonacoDebugView \} from '@wasm-idle\/debug\/editor';/
 		);
 		expect(source).toMatch(/let debugActionBindings: \{ dispose\(\): void \} \| null = null;/);
 		expect(source).toMatch(
@@ -642,10 +642,10 @@ describe('Monaco route debug sync', () => {
 	it('does not keep the legacy monaco-languageclient in the app shell', async () => {
 		const packageJson = JSON.parse(
 			await readFile(path.resolve(process.cwd(), 'package.json'), 'utf8')
-			) as {
-				dependencies?: Record<string, string>;
-				devDependencies?: Record<string, string>;
-			};
+		) as {
+			dependencies?: Record<string, string>;
+			devDependencies?: Record<string, string>;
+		};
 		const viteConfig = await readFile(path.resolve(process.cwd(), 'vite.config.ts'), 'utf8');
 		const libIndex = await readFile(path.resolve(process.cwd(), 'src/lib/index.ts'), 'utf8');
 
@@ -656,6 +656,8 @@ describe('Monaco route debug sync', () => {
 		expect(viteConfig).not.toContain('vscode-compatibility');
 		expect(libIndex).not.toContain('$lib/lsp');
 		expect(libIndex).not.toContain('@wasm-idle/lsp');
+		expect(libIndex).not.toContain('$lib/debug');
+		expect(libIndex).not.toContain('@wasm-idle/debug');
 	});
 
 	it('serves the app with cross-origin isolation headers for browser compiler runtimes', async () => {

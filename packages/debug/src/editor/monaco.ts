@@ -1,6 +1,7 @@
-import type { DebugVariable } from '$lib/playground/options';
-import type { DebugLanguageAdapter } from '$lib/debug/language';
+import type { DebugVariable } from '@wasm-idle/core';
 import type monaco from 'monaco-editor';
+
+import type { DebugLanguageAdapter } from '../language/index.js';
 
 export type MonacoDebugActionsOptions = {
 	runToCursorLabel?: string;

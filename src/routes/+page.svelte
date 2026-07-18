@@ -1,14 +1,14 @@
 <script lang="ts">
 	import Monaco from './Monaco.svelte';
-	import Terminal, {
-		createPlaygroundBinding,
+	import Terminal, { createPlaygroundBinding, isSharedArrayBufferAvailable } from '$lib';
+	import {
 		createDebugSessionController,
 		cppDebugLanguageAdapter,
 		goDebugLanguageAdapter,
 		pythonDebugLanguageAdapter,
 		rustDebugLanguageAdapter,
-		isSharedArrayBufferAvailable
-	} from '$lib';
+		type DebugLanguageAdapter
+	} from '@wasm-idle/debug';
 	import { page } from '$app/state';
 	import { browser } from '$app/environment';
 	import { replaceState } from '$app/navigation';
@@ -16,7 +16,6 @@
 	import { SvelteURL } from 'svelte/reactivity';
 	import type { PlaygroundRuntimeAssets } from '$lib/playground/assets';
 	import { createLoadingProgressController } from '$lib/playground/loadingProgress';
-	import type { DebugLanguageAdapter } from '$lib';
 	import { WASM_AWK_ASSET_VERSION } from '$lib/playground/wasmAwkVersion';
 	import { WASM_BASH_ASSET_VERSION } from '$lib/playground/wasmBashVersion';
 	import { WASM_CLOJURESCRIPT_ASSET_VERSION } from '$lib/playground/wasmClojureScriptVersion';

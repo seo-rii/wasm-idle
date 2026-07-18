@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { pythonDebugLanguageAdapter } from './python';
+import { pythonDebugLanguageAdapter } from '../../src/language/python.js';
 
 describe('pythonDebugLanguageAdapter', () => {
 	it('filters inline locals and evaluates Python-style expressions', () => {
