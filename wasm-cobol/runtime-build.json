@@ -13,35 +13,46 @@
     "frontendTarget": "wasm32-wasi",
     "backend": "wasm-llvm-clang",
     "assets": {
-      "cobc.zip": {
-        "bytes": 591360,
-        "sha256": "111626be5b2e7472717038611876df9e33a008fe8a28cb96aaf6f0b29b80aa4b"
-      },
-      "rootfs.tar.zip": {
-        "bytes": 526875,
-        "sha256": "b666c84d100c1835322a63a0d232eb604d9dc361c9852b2c1ea2862f8f931a6d"
-      },
-      "c-sysroot.tar.zip": {
-        "bytes": 1211407,
-        "sha256": "376db6a04db0fd2bdc9dba7ef1ef05bddfd7365f4c6b369645d4b42ece20f97d"
-      }
+      "cobc.wasm.gz": "92bfb399d5e5a7add7a11f4e1eca786312f4cd1010c06001f85f11d5f2bca12b",
+      "rootfs.tar.gz": "13bdf0fa99247694405352576ea9b3251640ff51a92a44de84623756e8983578",
+      "c-sysroot.tar.gz": "0bba0b9290add72f2ee5fafed18cd464ddb126dc8eb1729b97f708b80ffb868e"
     }
   },
   "assets": [
     {
-      "asset": "cobc.zip",
-      "size": 591360,
-      "sha256": "111626be5b2e7472717038611876df9e33a008fe8a28cb96aaf6f0b29b80aa4b"
+      "asset": "cobc.wasm.gz",
+      "size": 600296,
+      "sha256": "92bfb399d5e5a7add7a11f4e1eca786312f4cd1010c06001f85f11d5f2bca12b"
     },
     {
-      "asset": "rootfs.tar.zip",
-      "size": 526875,
-      "sha256": "b666c84d100c1835322a63a0d232eb604d9dc361c9852b2c1ea2862f8f931a6d"
+      "asset": "rootfs.tar.gz",
+      "size": 530360,
+      "sha256": "13bdf0fa99247694405352576ea9b3251640ff51a92a44de84623756e8983578"
     },
     {
-      "asset": "c-sysroot.tar.zip",
-      "size": 1211407,
-      "sha256": "376db6a04db0fd2bdc9dba7ef1ef05bddfd7365f4c6b369645d4b42ece20f97d"
+      "asset": "c-sysroot.tar.gz",
+      "size": 1216964,
+      "sha256": "0bba0b9290add72f2ee5fafed18cd464ddb126dc8eb1729b97f708b80ffb868e"
     }
-  ]
+  ],
+  "delivery": {
+    "format": "wasm-idle-cobol-native-gzip-v1",
+    "sourceAssets": [
+      {
+        "asset": "cobc.zip",
+        "size": 591360,
+        "sha256": "111626be5b2e7472717038611876df9e33a008fe8a28cb96aaf6f0b29b80aa4b"
+      },
+      {
+        "asset": "rootfs.tar.zip",
+        "size": 526875,
+        "sha256": "b666c84d100c1835322a63a0d232eb604d9dc361c9852b2c1ea2862f8f931a6d"
+      },
+      {
+        "asset": "c-sysroot.tar.zip",
+        "size": 1211407,
+        "sha256": "376db6a04db0fd2bdc9dba7ef1ef05bddfd7365f4c6b369645d4b42ece20f97d"
+      }
+    ]
+  }
 }

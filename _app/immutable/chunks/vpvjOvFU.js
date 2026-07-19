@@ -1,0 +1,1 @@
+import{n as e}from"./DmDlKzqN2.js";var t=()=>new Worker(new URL(``+new URL(`../workers/worker-CFUWyucl.js`,import.meta.url).href,``+import.meta.url),{type:`module`});async function n(n){let r=typeof n==`object`?n:void 0;return await e({createWorker:r?.createWorker||t,initOptions:{},onStatus:r?.onStatus})}export{n as getWasmLanguageServer};

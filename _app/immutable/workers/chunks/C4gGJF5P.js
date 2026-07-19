@@ -1,1 +1,0 @@
-const e=()=>(async()=>`Suspending`in WebAssembly)();export{e as t};

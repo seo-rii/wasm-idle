@@ -1,1 +1,0 @@
-import{t as e}from"./BcgnSMxp.js";import{t}from"./DI6U1YL4.js";t({id:`php`,extensions:[`.php`,`.php4`,`.php5`,`.phtml`,`.ctp`],aliases:[`PHP`,`php`],mimetypes:[`application/x-php`],loader:()=>e(()=>import(`./BZCMVlh1.js`),[],import.meta.url)});

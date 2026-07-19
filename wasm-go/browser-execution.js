@@ -19,7 +19,9 @@ function createRuntimeFetch() {
             return new Response(await readFile(fileURLToPath(url)));
         }
         catch (error) {
-            const code = error && typeof error === 'object' && 'code' in error ? error.code : '';
+            const code = error && typeof error === 'object' && 'code' in error
+                ? error.code
+                : '';
             return new Response(null, {
                 status: code === 'ENOENT' ? 404 : 500
             });
@@ -268,7 +270,9 @@ export async function executeBrowserGoArtifact(artifact, options = {}) {
             const instantiated = (await WebAssembly.instantiate(artifact.bytes instanceof Uint8Array
                 ? artifact.bytes
                 : new Uint8Array(artifact.bytes), go.importObject));
-            await go.run(('instance' in instantiated ? instantiated.instance : instantiated));
+            await go.run(('instance' in instantiated
+                ? instantiated.instance
+                : instantiated));
         }
         finally {
             if (previousGo === undefined) {

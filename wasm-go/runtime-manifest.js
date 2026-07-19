@@ -20,7 +20,8 @@ function expectString(value, label) {
     return value;
 }
 function expectStringArray(value, label) {
-    if (!Array.isArray(value) || value.some((entry) => typeof entry !== 'string' || entry.length === 0)) {
+    if (!Array.isArray(value) ||
+        value.some((entry) => typeof entry !== 'string' || entry.length === 0)) {
         throw new Error(`invalid ${label} in wasm-go runtime manifest`);
     }
     return value;
@@ -71,14 +72,40 @@ function parseRuntimeAssetFileArray(value, label) {
         };
     });
 }
-function parseRuntimePackReference(value, label) {
+function parseRuntimePackReference(value, label, ancestors = new Set()) {
     const object = expectObject(value, label);
-    return {
-        asset: expectString(object.asset, `${label}.asset`),
-        index: expectString(object.index, `${label}.index`),
-        fileCount: expectNonNegativeInteger(object.fileCount, `${label}.fileCount`),
-        totalBytes: expectNonNegativeInteger(object.totalBytes, `${label}.totalBytes`)
-    };
+    if (ancestors.has(object)) {
+        throw new Error(`invalid recursive ${label} in wasm-go runtime manifest`);
+    }
+    ancestors.add(object);
+    try {
+        let delta;
+        if (object.delta !== undefined) {
+            const deltaObject = expectObject(object.delta, `${label}.delta`);
+            if (deltaObject.format !== 'copy-literal-v1') {
+                throw new Error(`invalid ${label}.delta.format in wasm-go runtime manifest`);
+            }
+            delta = {
+                format: 'copy-literal-v1',
+                base: parseRuntimePackReference(deltaObject.base, `${label}.delta.base`, ancestors)
+            };
+        }
+        return {
+            asset: expectString(object.asset, `${label}.asset`),
+            index: expectString(object.index, `${label}.index`),
+            fileCount: expectNonNegativeInteger(object.fileCount, `${label}.fileCount`),
+            totalBytes: expectNonNegativeInteger(object.totalBytes, `${label}.totalBytes`),
+            ...(object.decodedTotalBytes !== undefined
+                ? {
+                    decodedTotalBytes: expectNonNegativeInteger(object.decodedTotalBytes, `${label}.decodedTotalBytes`)
+                }
+                : {}),
+            ...(delta ? { delta } : {})
+        };
+    }
+    finally {
+        ancestors.delete(object);
+    }
 }
 function parseRuntimeStdlibIndexAsset(value, label) {
     const object = expectObject(value, label);
@@ -183,13 +210,17 @@ function parseTargetConfig(target, value, label) {
         goarch,
         artifactFormat: expectArtifactFormat(object.artifactFormat, `${label}.artifactFormat`),
         ...(object.sysrootFiles !== undefined
-            ? { sysrootFiles: parseRuntimeAssetFileArray(object.sysrootFiles, `${label}.sysrootFiles`) }
+            ? {
+                sysrootFiles: parseRuntimeAssetFileArray(object.sysrootFiles, `${label}.sysrootFiles`)
+            }
             : {}),
         ...(object.sysrootPack !== undefined
             ? { sysrootPack: parseRuntimePackReference(object.sysrootPack, `${label}.sysrootPack`) }
             : {}),
         ...(object.stdlibIndex !== undefined
-            ? { stdlibIndex: parseRuntimeStdlibIndexAsset(object.stdlibIndex, `${label}.stdlibIndex`) }
+            ? {
+                stdlibIndex: parseRuntimeStdlibIndexAsset(object.stdlibIndex, `${label}.stdlibIndex`)
+            }
             : {}),
         execution: parseExecutionConfig(object.execution, `${label}.execution`),
         planner: parseRuntimePlannerConfig(object.planner, `${label}.planner`)

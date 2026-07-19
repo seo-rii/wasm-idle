@@ -1,0 +1,55 @@
+{
+  "formatVersion": 1,
+  "runtimeModule": "runtime.mjs",
+  "packages": {
+    "@php-wasm/web-8-4": "3.1.34",
+    "@php-wasm/universal": "3.1.34"
+  },
+  "files": [
+    {
+      "path": "assets/intl-CUx5vSaa.so",
+      "bytes": 7915366,
+      "sha256": "15faf0692e6adb432ffa2182711723c3f2f9afc025f96afc0f04c3fd07d12709"
+    },
+    {
+      "path": "assets/intl-ZuZnBC_c.so",
+      "bytes": 5583120,
+      "sha256": "baef85d1e59fcebd27194feb8538caf511aac0ba82c116cad8d403d9a40d1d43"
+    },
+    {
+      "path": "assets/php_8_4-BR2RjfzA.wasm",
+      "bytes": 22959684,
+      "sha256": "f3acf17776a8c5309a546b64860dda46a1f31848bc77f34de8a6f90f5fb23827"
+    },
+    {
+      "path": "assets/php_8_4-By-NgDvF.wasm",
+      "bytes": 22388434,
+      "sha256": "6b5c901172bf4d387c2d41df6feb3a4a997a169bc1d0079ecbd28783bf9c3d0f"
+    },
+    {
+      "path": "chunks/__vite-browser-external-C69RRdE_.mjs",
+      "bytes": 595,
+      "sha256": "804c7ea12907abc7839bfb8cace292637e3229b43a5b8a6f5d29f79756a20ad4"
+    },
+    {
+      "path": "chunks/php_8_4-B7kvx5p1.mjs",
+      "bytes": 140805,
+      "sha256": "94a2715c2f4fa56d4e9c824794d019376d008df15010c349b0ad24fa4ce9ea45"
+    },
+    {
+      "path": "chunks/php_8_4-DIST9frv.mjs",
+      "bytes": 153325,
+      "sha256": "20889180bc282ad6248c830247e4463e51c9feefcdecbe1e397a2d8c92630ed6"
+    },
+    {
+      "path": "LICENSE.txt",
+      "bytes": 18092,
+      "sha256": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643"
+    },
+    {
+      "path": "runtime.mjs",
+      "bytes": 118000,
+      "sha256": "07ad236e447e464e69381f062d3edba21d6aaf18a7ff321004b225272e6e6831"
+    }
+  ]
+}

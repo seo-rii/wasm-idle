@@ -1,0 +1,3423 @@
+{
+  "schemaVersion": 1,
+  "maxLayerBytes": 16777216,
+  "layers": {
+    "wasm-dotnet/runtime/layers/csharp-00.pack.gz": {
+      "length": 16672093,
+      "compressedLength": 4527544
+    },
+    "wasm-dotnet/runtime/layers/csharp-01.pack.gz": {
+      "length": 424490,
+      "compressedLength": 123617
+    },
+    "wasm-dotnet/runtime/layers/fsharp-00.pack.gz": {
+      "length": 15848729,
+      "compressedLength": 4437559
+    },
+    "wasm-dotnet/runtime/layers/fsharp-01.pack.gz": {
+      "length": 12168865,
+      "compressedLength": 3644352
+    },
+    "wasm-dotnet/runtime/layers/ref-00.pack.gz": {
+      "length": 8231119,
+      "compressedLength": 3133671
+    },
+    "wasm-dotnet/runtime/layers/vbnet-00.pack.gz": {
+      "length": 13057379,
+      "compressedLength": 3624465
+    },
+    "wasm-tinygo/layers/emception-00.pack.gz": {
+      "length": 9467552,
+      "compressedLength": 2774460
+    },
+    "wasm-tinygo/layers/emception-01.pack.gz": {
+      "length": 11828708,
+      "compressedLength": 1110047
+    },
+    "wasm-tinygo/layers/emception-02.pack.gz": {
+      "length": 16062970,
+      "compressedLength": 4635331
+    },
+    "wasm-tinygo/layers/emception-03.pack.gz": {
+      "length": 14861946,
+      "compressedLength": 2196297
+    },
+    "wasm-tinygo/layers/emception-04.pack.gz": {
+      "length": 13409482,
+      "compressedLength": 4034636
+    },
+    "wasm-tinygo/layers/emception-05.pack.gz": {
+      "length": 11431652,
+      "compressedLength": 3511049
+    },
+    "wasm-tinygo/layers/emception-06.pack.gz": {
+      "length": 12598682,
+      "compressedLength": 3804697
+    },
+    "wasm-tinygo/layers/emception-07.pack.gz": {
+      "length": 14719934,
+      "compressedLength": 4115248
+    },
+    "wasm-tinygo/layers/emception-08.pack.gz": {
+      "length": 16510646,
+      "compressedLength": 5239090
+    },
+    "wasm-tinygo/layers/emception-09.pack.gz": {
+      "length": 14577652,
+      "compressedLength": 2074970
+    },
+    "wasm-tinygo/layers/emception-10.pack.gz": {
+      "length": 14911164,
+      "compressedLength": 4513948
+    },
+    "wasm-tinygo/layers/emception-11.pack.gz": {
+      "length": 14443710,
+      "compressedLength": 4443520
+    },
+    "wasm-tinygo/layers/emception-12.pack.gz": {
+      "length": 15274904,
+      "compressedLength": 4297978
+    },
+    "wasm-tinygo/layers/emception-13.pack.gz": {
+      "length": 15863270,
+      "compressedLength": 5383584
+    },
+    "wasm-tinygo/layers/emception-14.pack.gz": {
+      "length": 11263088,
+      "compressedLength": 3459126
+    },
+    "wasm-tinygo/layers/emception-15.pack.gz": {
+      "length": 15777042,
+      "compressedLength": 4816178
+    },
+    "wasm-tinygo/layers/emception-16.pack.gz": {
+      "length": 14370930,
+      "compressedLength": 4340048
+    },
+    "wasm-tinygo/layers/emception-17.pack.gz": {
+      "length": 16613267,
+      "compressedLength": 5638568
+    },
+    "wasm-tinygo/layers/emception-18.pack.gz": {
+      "length": 15639194,
+      "compressedLength": 5325494
+    },
+    "wasm-tinygo/layers/emception-19.pack.gz": {
+      "length": 15709874,
+      "compressedLength": 4396546
+    },
+    "wasm-tinygo/layers/emception-20.pack.gz": {
+      "length": 15177004,
+      "compressedLength": 4412779
+    },
+    "wasm-tinygo/layers/emception-21.pack.gz": {
+      "length": 16384494,
+      "compressedLength": 4670371
+    },
+    "wasm-tinygo/layers/emception-22.pack.gz": {
+      "length": 15319827,
+      "compressedLength": 4948951
+    },
+    "wasm-tinygo/layers/emception-23.pack.gz": {
+      "length": 15992300,
+      "compressedLength": 4855621
+    }
+  },
+  "assets": {
+    "wasm-dotnet/runtime/csharp/Microsoft.CodeAnalysis.CSharp.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 0,
+      "length": 5094681
+    },
+    "wasm-dotnet/runtime/csharp/Microsoft.CodeAnalysis.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 5094681,
+      "length": 1278741
+    },
+    "wasm-dotnet/runtime/csharp/System.Collections.Concurrent.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 6373422,
+      "length": 25365
+    },
+    "wasm-dotnet/runtime/csharp/System.Collections.Immutable.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 6398787,
+      "length": 80149
+    },
+    "wasm-dotnet/runtime/csharp/System.Collections.NonGeneric.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 6478936,
+      "length": 7445
+    },
+    "wasm-dotnet/runtime/csharp/System.Collections.Specialized.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 6486381,
+      "length": 9493
+    },
+    "wasm-dotnet/runtime/csharp/System.Collections.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 6495874,
+      "length": 31509
+    },
+    "wasm-dotnet/runtime/csharp/System.ComponentModel.Primitives.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 6527383,
+      "length": 6933
+    },
+    "wasm-dotnet/runtime/csharp/System.ComponentModel.TypeConverter.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 6534316,
+      "length": 45333
+    },
+    "wasm-dotnet/runtime/csharp/System.ComponentModel.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 6579649,
+      "length": 4885
+    },
+    "wasm-dotnet/runtime/csharp/System.Console.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 6584534,
+      "length": 30997
+    },
+    "wasm-dotnet/runtime/csharp/System.Diagnostics.DiagnosticSource.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 6615531,
+      "length": 18197
+    },
+    "wasm-dotnet/runtime/csharp/System.Globalization.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 6633728,
+      "length": 4373
+    },
+    "wasm-dotnet/runtime/csharp/System.IO.Compression.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 6638101,
+      "length": 24853
+    },
+    "wasm-dotnet/runtime/csharp/System.IO.MemoryMappedFiles.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 6662954,
+      "length": 24341
+    },
+    "wasm-dotnet/runtime/csharp/System.IO.Pipelines.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 6687295,
+      "length": 5909
+    },
+    "wasm-dotnet/runtime/csharp/System.Linq.Expressions.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 6693204,
+      "length": 7445
+    },
+    "wasm-dotnet/runtime/csharp/System.Linq.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 6700649,
+      "length": 46869
+    },
+    "wasm-dotnet/runtime/csharp/System.Memory.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 6747518,
+      "length": 14101
+    },
+    "wasm-dotnet/runtime/csharp/System.Net.Http.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 6761619,
+      "length": 138517
+    },
+    "wasm-dotnet/runtime/csharp/System.Net.Primitives.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 6900136,
+      "length": 7445
+    },
+    "wasm-dotnet/runtime/csharp/System.ObjectModel.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 6907581,
+      "length": 5909
+    },
+    "wasm-dotnet/runtime/csharp/System.Private.CoreLib.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 6913490,
+      "length": 1631509
+    },
+    "wasm-dotnet/runtime/csharp/System.Private.Uri.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 8544999,
+      "length": 64277
+    },
+    "wasm-dotnet/runtime/csharp/System.Private.Xml.Linq.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 8609276,
+      "length": 44309
+    },
+    "wasm-dotnet/runtime/csharp/System.Private.Xml.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 8653585,
+      "length": 529685
+    },
+    "wasm-dotnet/runtime/csharp/System.Reflection.Metadata.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 9183270,
+      "length": 257813
+    },
+    "wasm-dotnet/runtime/csharp/System.Runtime.InteropServices.JavaScript.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 9441083,
+      "length": 59157
+    },
+    "wasm-dotnet/runtime/csharp/System.Runtime.Numerics.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 9500240,
+      "length": 80661
+    },
+    "wasm-dotnet/runtime/csharp/System.Runtime.Serialization.Primitives.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 9580901,
+      "length": 5909
+    },
+    "wasm-dotnet/runtime/csharp/System.Security.Cryptography.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 9586810,
+      "length": 23829
+    },
+    "wasm-dotnet/runtime/csharp/System.Text.Encodings.Web.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 9610639,
+      "length": 29461
+    },
+    "wasm-dotnet/runtime/csharp/System.Text.Json.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 9640100,
+      "length": 197397
+    },
+    "wasm-dotnet/runtime/csharp/System.Text.RegularExpressions.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 9837497,
+      "length": 235797
+    },
+    "wasm-dotnet/runtime/csharp/System.Threading.Channels.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 10073294,
+      "length": 20757
+    },
+    "wasm-dotnet/runtime/csharp/System.Threading.Tasks.Parallel.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 10094051,
+      "length": 15637
+    },
+    "wasm-dotnet/runtime/csharp/System.Xml.Linq.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 10109688,
+      "length": 4373
+    },
+    "wasm-dotnet/runtime/csharp/System.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 10114061,
+      "length": 4373
+    },
+    "wasm-dotnet/runtime/csharp/WasmDotnet.Compiler.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 10118434,
+      "length": 56085
+    },
+    "wasm-dotnet/runtime/csharp/WasmDotnet.Stdin.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 10174519,
+      "length": 3861
+    },
+    "wasm-dotnet/runtime/csharp/blazor.boot.json": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 10178380,
+      "length": 7774
+    },
+    "wasm-dotnet/runtime/csharp/cs/Microsoft.CodeAnalysis.CSharp.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 10186154,
+      "length": 430869
+    },
+    "wasm-dotnet/runtime/csharp/cs/Microsoft.CodeAnalysis.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 10617023,
+      "length": 37653
+    },
+    "wasm-dotnet/runtime/csharp/de/Microsoft.CodeAnalysis.CSharp.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 10654676,
+      "length": 461077
+    },
+    "wasm-dotnet/runtime/csharp/de/Microsoft.CodeAnalysis.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 11115753,
+      "length": 39701
+    },
+    "wasm-dotnet/runtime/csharp/dotnet.js": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 11155454,
+      "length": 42864
+    },
+    "wasm-dotnet/runtime/csharp/dotnet.native.js": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 11198318,
+      "length": 148535
+    },
+    "wasm-dotnet/runtime/csharp/dotnet.native.worker.mjs": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 11346853,
+      "length": 2854
+    },
+    "wasm-dotnet/runtime/csharp/dotnet.runtime.js": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 11349707,
+      "length": 232671
+    },
+    "wasm-dotnet/runtime/csharp/es/Microsoft.CodeAnalysis.CSharp.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 11582378,
+      "length": 450837
+    },
+    "wasm-dotnet/runtime/csharp/es/Microsoft.CodeAnalysis.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 12033215,
+      "length": 39189
+    },
+    "wasm-dotnet/runtime/csharp/fr/Microsoft.CodeAnalysis.CSharp.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 12072404,
+      "length": 463125
+    },
+    "wasm-dotnet/runtime/csharp/fr/Microsoft.CodeAnalysis.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 12535529,
+      "length": 39701
+    },
+    "wasm-dotnet/runtime/csharp/it/Microsoft.CodeAnalysis.CSharp.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 12575230,
+      "length": 457493
+    },
+    "wasm-dotnet/runtime/csharp/it/Microsoft.CodeAnalysis.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 13032723,
+      "length": 39701
+    },
+    "wasm-dotnet/runtime/csharp/ja/Microsoft.CodeAnalysis.CSharp.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 13072424,
+      "length": 504597
+    },
+    "wasm-dotnet/runtime/csharp/ja/Microsoft.CodeAnalysis.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 13577021,
+      "length": 43285
+    },
+    "wasm-dotnet/runtime/csharp/ko/Microsoft.CodeAnalysis.CSharp.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 13620306,
+      "length": 462613
+    },
+    "wasm-dotnet/runtime/csharp/ko/Microsoft.CodeAnalysis.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 14082919,
+      "length": 39701
+    },
+    "wasm-dotnet/runtime/csharp/pl/Microsoft.CodeAnalysis.CSharp.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 14122620,
+      "length": 463637
+    },
+    "wasm-dotnet/runtime/csharp/pl/Microsoft.CodeAnalysis.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 14586257,
+      "length": 39701
+    },
+    "wasm-dotnet/runtime/csharp/pt-BR/Microsoft.CodeAnalysis.CSharp.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 14625958,
+      "length": 443157
+    },
+    "wasm-dotnet/runtime/csharp/pt-BR/Microsoft.CodeAnalysis.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 15069115,
+      "length": 38677
+    },
+    "wasm-dotnet/runtime/csharp/ru/Microsoft.CodeAnalysis.CSharp.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 15107792,
+      "length": 610581
+    },
+    "wasm-dotnet/runtime/csharp/ru/Microsoft.CodeAnalysis.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 15718373,
+      "length": 49941
+    },
+    "wasm-dotnet/runtime/csharp/supportFiles/0_runtimeconfig.bin": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 15768314,
+      "length": 1551
+    },
+    "wasm-dotnet/runtime/csharp/tr/Microsoft.CodeAnalysis.CSharp.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 15769865,
+      "length": 439061
+    },
+    "wasm-dotnet/runtime/csharp/tr/Microsoft.CodeAnalysis.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 16208926,
+      "length": 38165
+    },
+    "wasm-dotnet/runtime/csharp/zh-Hans/Microsoft.CodeAnalysis.CSharp.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 16247091,
+      "length": 390421
+    },
+    "wasm-dotnet/runtime/csharp/zh-Hans/Microsoft.CodeAnalysis.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
+      "offset": 16637512,
+      "length": 34581
+    },
+    "wasm-dotnet/runtime/csharp/zh-Hant/Microsoft.CodeAnalysis.CSharp.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-01.pack.gz",
+      "offset": 0,
+      "length": 389909
+    },
+    "wasm-dotnet/runtime/csharp/zh-Hant/Microsoft.CodeAnalysis.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/csharp-01.pack.gz",
+      "offset": 389909,
+      "length": 34581
+    },
+    "wasm-dotnet/runtime/fsharp/FSharp.Compiler.Service.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-00.pack.gz",
+      "offset": 0,
+      "length": 15848729
+    },
+    "wasm-dotnet/runtime/fsharp/FSharp.Core.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 0,
+      "length": 1670933
+    },
+    "wasm-dotnet/runtime/fsharp/System.Buffers.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 1670933,
+      "length": 4373
+    },
+    "wasm-dotnet/runtime/fsharp/System.Collections.Concurrent.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 1675306,
+      "length": 30997
+    },
+    "wasm-dotnet/runtime/fsharp/System.Collections.Immutable.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 1706303,
+      "length": 62741
+    },
+    "wasm-dotnet/runtime/fsharp/System.Collections.NonGeneric.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 1769044,
+      "length": 12565
+    },
+    "wasm-dotnet/runtime/fsharp/System.Collections.Specialized.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 1781609,
+      "length": 10005
+    },
+    "wasm-dotnet/runtime/fsharp/System.Collections.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 1791614,
+      "length": 16661
+    },
+    "wasm-dotnet/runtime/fsharp/System.ComponentModel.EventBasedAsync.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 1808275,
+      "length": 5397
+    },
+    "wasm-dotnet/runtime/fsharp/System.ComponentModel.Primitives.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 1813672,
+      "length": 11029
+    },
+    "wasm-dotnet/runtime/fsharp/System.ComponentModel.TypeConverter.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 1824701,
+      "length": 45333
+    },
+    "wasm-dotnet/runtime/fsharp/System.ComponentModel.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 1870034,
+      "length": 4885
+    },
+    "wasm-dotnet/runtime/fsharp/System.Console.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 1874919,
+      "length": 30997
+    },
+    "wasm-dotnet/runtime/fsharp/System.Diagnostics.DiagnosticSource.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 1905916,
+      "length": 63765
+    },
+    "wasm-dotnet/runtime/fsharp/System.Diagnostics.Process.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 1969681,
+      "length": 8981
+    },
+    "wasm-dotnet/runtime/fsharp/System.Diagnostics.TraceSource.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 1978662,
+      "length": 17173
+    },
+    "wasm-dotnet/runtime/fsharp/System.IO.Compression.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 1995835,
+      "length": 29973
+    },
+    "wasm-dotnet/runtime/fsharp/System.IO.MemoryMappedFiles.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 2025808,
+      "length": 25877
+    },
+    "wasm-dotnet/runtime/fsharp/System.IO.Pipelines.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 2051685,
+      "length": 5909
+    },
+    "wasm-dotnet/runtime/fsharp/System.IO.Pipes.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 2057594,
+      "length": 6933
+    },
+    "wasm-dotnet/runtime/fsharp/System.Linq.Expressions.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 2064527,
+      "length": 359189
+    },
+    "wasm-dotnet/runtime/fsharp/System.Linq.Queryable.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 2423716,
+      "length": 30997
+    },
+    "wasm-dotnet/runtime/fsharp/System.Linq.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 2454713,
+      "length": 69397
+    },
+    "wasm-dotnet/runtime/fsharp/System.Memory.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 2524110,
+      "length": 14101
+    },
+    "wasm-dotnet/runtime/fsharp/System.Net.Http.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 2538211,
+      "length": 142101
+    },
+    "wasm-dotnet/runtime/fsharp/System.Net.Primitives.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 2680312,
+      "length": 7445
+    },
+    "wasm-dotnet/runtime/fsharp/System.Net.Requests.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 2687757,
+      "length": 6421
+    },
+    "wasm-dotnet/runtime/fsharp/System.Net.WebClient.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 2694178,
+      "length": 6421
+    },
+    "wasm-dotnet/runtime/fsharp/System.ObjectModel.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 2700599,
+      "length": 5909
+    },
+    "wasm-dotnet/runtime/fsharp/System.Private.CoreLib.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 2706508,
+      "length": 1879317
+    },
+    "wasm-dotnet/runtime/fsharp/System.Private.Uri.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 4585825,
+      "length": 64277
+    },
+    "wasm-dotnet/runtime/fsharp/System.Private.Xml.Linq.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 4650102,
+      "length": 35093
+    },
+    "wasm-dotnet/runtime/fsharp/System.Private.Xml.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 4685195,
+      "length": 688405
+    },
+    "wasm-dotnet/runtime/fsharp/System.Reflection.Emit.ILGeneration.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 5373600,
+      "length": 4885
+    },
+    "wasm-dotnet/runtime/fsharp/System.Reflection.Emit.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 5378485,
+      "length": 14613
+    },
+    "wasm-dotnet/runtime/fsharp/System.Reflection.Metadata.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 5393098,
+      "length": 134933
+    },
+    "wasm-dotnet/runtime/fsharp/System.Runtime.InteropServices.JavaScript.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 5528031,
+      "length": 59157
+    },
+    "wasm-dotnet/runtime/fsharp/System.Runtime.InteropServices.RuntimeInformation.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 5587188,
+      "length": 4885
+    },
+    "wasm-dotnet/runtime/fsharp/System.Runtime.InteropServices.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 5592073,
+      "length": 5909
+    },
+    "wasm-dotnet/runtime/fsharp/System.Runtime.Loader.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 5597982,
+      "length": 4885
+    },
+    "wasm-dotnet/runtime/fsharp/System.Runtime.Numerics.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 5602867,
+      "length": 83221
+    },
+    "wasm-dotnet/runtime/fsharp/System.Security.Cryptography.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 5686088,
+      "length": 23829
+    },
+    "wasm-dotnet/runtime/fsharp/System.Text.Encodings.Web.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 5709917,
+      "length": 29461
+    },
+    "wasm-dotnet/runtime/fsharp/System.Text.Json.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 5739378,
+      "length": 199957
+    },
+    "wasm-dotnet/runtime/fsharp/System.Text.RegularExpressions.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 5939335,
+      "length": 251669
+    },
+    "wasm-dotnet/runtime/fsharp/System.Threading.Channels.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 6191004,
+      "length": 21269
+    },
+    "wasm-dotnet/runtime/fsharp/System.Threading.Tasks.Parallel.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 6212273,
+      "length": 17173
+    },
+    "wasm-dotnet/runtime/fsharp/System.Xml.Linq.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 6229446,
+      "length": 4373
+    },
+    "wasm-dotnet/runtime/fsharp/System.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 6233819,
+      "length": 4373
+    },
+    "wasm-dotnet/runtime/fsharp/WasmDotnet.Compiler.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 6238192,
+      "length": 53013
+    },
+    "wasm-dotnet/runtime/fsharp/WasmDotnet.Stdin.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 6291205,
+      "length": 3861
+    },
+    "wasm-dotnet/runtime/fsharp/blazor.boot.json": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 6295066,
+      "length": 10123
+    },
+    "wasm-dotnet/runtime/fsharp/cs/FSharp.Compiler.Service.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 6305189,
+      "length": 363797
+    },
+    "wasm-dotnet/runtime/fsharp/cs/FSharp.Core.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 6668986,
+      "length": 23829
+    },
+    "wasm-dotnet/runtime/fsharp/cs/FSharp.DependencyManager.Nuget.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 6692815,
+      "length": 5909
+    },
+    "wasm-dotnet/runtime/fsharp/de/FSharp.Compiler.Service.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 6698724,
+      "length": 386837
+    },
+    "wasm-dotnet/runtime/fsharp/de/FSharp.Core.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 7085561,
+      "length": 24853
+    },
+    "wasm-dotnet/runtime/fsharp/de/FSharp.DependencyManager.Nuget.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 7110414,
+      "length": 5909
+    },
+    "wasm-dotnet/runtime/fsharp/dotnet.js": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 7116323,
+      "length": 42864
+    },
+    "wasm-dotnet/runtime/fsharp/dotnet.native.js": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 7159187,
+      "length": 166960
+    },
+    "wasm-dotnet/runtime/fsharp/dotnet.native.worker.mjs": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 7326147,
+      "length": 2854
+    },
+    "wasm-dotnet/runtime/fsharp/dotnet.runtime.js": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 7329001,
+      "length": 232671
+    },
+    "wasm-dotnet/runtime/fsharp/es/FSharp.Compiler.Service.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 7561672,
+      "length": 378133
+    },
+    "wasm-dotnet/runtime/fsharp/es/FSharp.Core.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 7939805,
+      "length": 23829
+    },
+    "wasm-dotnet/runtime/fsharp/es/FSharp.DependencyManager.Nuget.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 7963634,
+      "length": 5909
+    },
+    "wasm-dotnet/runtime/fsharp/fr/FSharp.Compiler.Service.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 7969543,
+      "length": 385813
+    },
+    "wasm-dotnet/runtime/fsharp/fr/FSharp.Core.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 8355356,
+      "length": 24341
+    },
+    "wasm-dotnet/runtime/fsharp/fr/FSharp.DependencyManager.Nuget.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 8379697,
+      "length": 5909
+    },
+    "wasm-dotnet/runtime/fsharp/it/FSharp.Compiler.Service.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 8385606,
+      "length": 379669
+    },
+    "wasm-dotnet/runtime/fsharp/it/FSharp.Core.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 8765275,
+      "length": 23829
+    },
+    "wasm-dotnet/runtime/fsharp/it/FSharp.DependencyManager.Nuget.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 8789104,
+      "length": 5909
+    },
+    "wasm-dotnet/runtime/fsharp/ja/FSharp.Compiler.Service.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 8795013,
+      "length": 420629
+    },
+    "wasm-dotnet/runtime/fsharp/ja/FSharp.Core.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 9215642,
+      "length": 26389
+    },
+    "wasm-dotnet/runtime/fsharp/ja/FSharp.DependencyManager.Nuget.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 9242031,
+      "length": 5909
+    },
+    "wasm-dotnet/runtime/fsharp/ko/FSharp.Compiler.Service.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 9247940,
+      "length": 390933
+    },
+    "wasm-dotnet/runtime/fsharp/ko/FSharp.Core.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 9638873,
+      "length": 25365
+    },
+    "wasm-dotnet/runtime/fsharp/ko/FSharp.DependencyManager.Nuget.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 9664238,
+      "length": 5909
+    },
+    "wasm-dotnet/runtime/fsharp/netstandard.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 9670147,
+      "length": 18709
+    },
+    "wasm-dotnet/runtime/fsharp/pl/FSharp.Compiler.Service.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 9688856,
+      "length": 385301
+    },
+    "wasm-dotnet/runtime/fsharp/pl/FSharp.Core.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 10074157,
+      "length": 24853
+    },
+    "wasm-dotnet/runtime/fsharp/pl/FSharp.DependencyManager.Nuget.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 10099010,
+      "length": 5909
+    },
+    "wasm-dotnet/runtime/fsharp/pt-BR/FSharp.Compiler.Service.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 10104919,
+      "length": 371477
+    },
+    "wasm-dotnet/runtime/fsharp/pt-BR/FSharp.Core.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 10476396,
+      "length": 23317
+    },
+    "wasm-dotnet/runtime/fsharp/pt-BR/FSharp.DependencyManager.Nuget.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 10499713,
+      "length": 5909
+    },
+    "wasm-dotnet/runtime/fsharp/ru/FSharp.Compiler.Service.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 10505622,
+      "length": 509205
+    },
+    "wasm-dotnet/runtime/fsharp/ru/FSharp.Core.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 11014827,
+      "length": 30997
+    },
+    "wasm-dotnet/runtime/fsharp/ru/FSharp.DependencyManager.Nuget.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 11045824,
+      "length": 6421
+    },
+    "wasm-dotnet/runtime/fsharp/supportFiles/0_runtimeconfig.bin": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 11052245,
+      "length": 1551
+    },
+    "wasm-dotnet/runtime/fsharp/tr/FSharp.Compiler.Service.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 11053796,
+      "length": 371477
+    },
+    "wasm-dotnet/runtime/fsharp/tr/FSharp.Core.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 11425273,
+      "length": 23317
+    },
+    "wasm-dotnet/runtime/fsharp/tr/FSharp.DependencyManager.Nuget.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 11448590,
+      "length": 5909
+    },
+    "wasm-dotnet/runtime/fsharp/zh-Hans/FSharp.Compiler.Service.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 11454499,
+      "length": 330517
+    },
+    "wasm-dotnet/runtime/fsharp/zh-Hans/FSharp.Core.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 11785016,
+      "length": 21781
+    },
+    "wasm-dotnet/runtime/fsharp/zh-Hans/FSharp.DependencyManager.Nuget.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 11806797,
+      "length": 5909
+    },
+    "wasm-dotnet/runtime/fsharp/zh-Hant/FSharp.Compiler.Service.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 11812706,
+      "length": 328981
+    },
+    "wasm-dotnet/runtime/fsharp/zh-Hant/FSharp.Core.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 12141687,
+      "length": 21269
+    },
+    "wasm-dotnet/runtime/fsharp/zh-Hant/FSharp.DependencyManager.Nuget.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/fsharp-01.pack.gz",
+      "offset": 12162956,
+      "length": 5909
+    },
+    "wasm-dotnet/runtime/ref/FSharp.Core.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 0,
+      "length": 2396456
+    },
+    "wasm-dotnet/runtime/ref/Microsoft.CSharp.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 2396456,
+      "length": 18216
+    },
+    "wasm-dotnet/runtime/ref/Microsoft.VisualBasic.Core.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 2414672,
+      "length": 59216
+    },
+    "wasm-dotnet/runtime/ref/Microsoft.VisualBasic.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 2473888,
+      "length": 17192
+    },
+    "wasm-dotnet/runtime/ref/Microsoft.Win32.Primitives.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 2491080,
+      "length": 16168
+    },
+    "wasm-dotnet/runtime/ref/Microsoft.Win32.Registry.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 2507248,
+      "length": 21288
+    },
+    "wasm-dotnet/runtime/ref/System.AppContext.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 2528536,
+      "length": 15184
+    },
+    "wasm-dotnet/runtime/ref/System.Buffers.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 2543720,
+      "length": 15144
+    },
+    "wasm-dotnet/runtime/ref/System.Collections.Concurrent.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 2558864,
+      "length": 27432
+    },
+    "wasm-dotnet/runtime/ref/System.Collections.Immutable.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 2586296,
+      "length": 74536
+    },
+    "wasm-dotnet/runtime/ref/System.Collections.NonGeneric.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 2660832,
+      "length": 22824
+    },
+    "wasm-dotnet/runtime/ref/System.Collections.Specialized.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 2683656,
+      "length": 25896
+    },
+    "wasm-dotnet/runtime/ref/System.Collections.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 2709552,
+      "length": 56104
+    },
+    "wasm-dotnet/runtime/ref/System.ComponentModel.Annotations.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 2765656,
+      "length": 31528
+    },
+    "wasm-dotnet/runtime/ref/System.ComponentModel.DataAnnotations.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 2797184,
+      "length": 16720
+    },
+    "wasm-dotnet/runtime/ref/System.ComponentModel.EventBasedAsync.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 2813904,
+      "length": 19280
+    },
+    "wasm-dotnet/runtime/ref/System.ComponentModel.Primitives.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 2833184,
+      "length": 25936
+    },
+    "wasm-dotnet/runtime/ref/System.ComponentModel.TypeConverter.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 2859120,
+      "length": 104744
+    },
+    "wasm-dotnet/runtime/ref/System.ComponentModel.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 2963864,
+      "length": 15656
+    },
+    "wasm-dotnet/runtime/ref/System.Configuration.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 2979520,
+      "length": 19280
+    },
+    "wasm-dotnet/runtime/ref/System.Console.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 2998800,
+      "length": 26408
+    },
+    "wasm-dotnet/runtime/ref/System.Core.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 3025208,
+      "length": 23376
+    },
+    "wasm-dotnet/runtime/ref/System.Data.Common.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 3048584,
+      "length": 153896
+    },
+    "wasm-dotnet/runtime/ref/System.Data.DataSetExtensions.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 3202480,
+      "length": 15656
+    },
+    "wasm-dotnet/runtime/ref/System.Data.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 3218136,
+      "length": 23848
+    },
+    "wasm-dotnet/runtime/ref/System.Diagnostics.Contracts.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 3241984,
+      "length": 19752
+    },
+    "wasm-dotnet/runtime/ref/System.Diagnostics.Debug.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 3261736,
+      "length": 15656
+    },
+    "wasm-dotnet/runtime/ref/System.Diagnostics.DiagnosticSource.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 3277392,
+      "length": 42280
+    },
+    "wasm-dotnet/runtime/ref/System.Diagnostics.FileVersionInfo.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 3319672,
+      "length": 16720
+    },
+    "wasm-dotnet/runtime/ref/System.Diagnostics.Process.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 3336392,
+      "length": 31016
+    },
+    "wasm-dotnet/runtime/ref/System.Diagnostics.StackTrace.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 3367408,
+      "length": 22824
+    },
+    "wasm-dotnet/runtime/ref/System.Diagnostics.TextWriterTraceListener.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 3390232,
+      "length": 17704
+    },
+    "wasm-dotnet/runtime/ref/System.Diagnostics.Tools.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 3407936,
+      "length": 15144
+    },
+    "wasm-dotnet/runtime/ref/System.Diagnostics.TraceSource.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 3423080,
+      "length": 27984
+    },
+    "wasm-dotnet/runtime/ref/System.Diagnostics.Tracing.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 3451064,
+      "length": 28968
+    },
+    "wasm-dotnet/runtime/ref/System.Drawing.Primitives.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 3480032,
+      "length": 35624
+    },
+    "wasm-dotnet/runtime/ref/System.Drawing.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 3515656,
+      "length": 20264
+    },
+    "wasm-dotnet/runtime/ref/System.Dynamic.Runtime.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 3535920,
+      "length": 16168
+    },
+    "wasm-dotnet/runtime/ref/System.Formats.Asn1.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 3552088,
+      "length": 25896
+    },
+    "wasm-dotnet/runtime/ref/System.Formats.Tar.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 3577984,
+      "length": 20264
+    },
+    "wasm-dotnet/runtime/ref/System.Globalization.Calendars.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 3598248,
+      "length": 15656
+    },
+    "wasm-dotnet/runtime/ref/System.Globalization.Extensions.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 3613904,
+      "length": 15144
+    },
+    "wasm-dotnet/runtime/ref/System.Globalization.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 3629048,
+      "length": 15696
+    },
+    "wasm-dotnet/runtime/ref/System.IO.Compression.Brotli.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 3644744,
+      "length": 18216
+    },
+    "wasm-dotnet/runtime/ref/System.IO.Compression.FileSystem.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 3662960,
+      "length": 15184
+    },
+    "wasm-dotnet/runtime/ref/System.IO.Compression.ZipFile.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 3678144,
+      "length": 16720
+    },
+    "wasm-dotnet/runtime/ref/System.IO.Compression.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 3694864,
+      "length": 21800
+    },
+    "wasm-dotnet/runtime/ref/System.IO.FileSystem.AccessControl.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 3716664,
+      "length": 20264
+    },
+    "wasm-dotnet/runtime/ref/System.IO.FileSystem.DriveInfo.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 3736928,
+      "length": 17232
+    },
+    "wasm-dotnet/runtime/ref/System.IO.FileSystem.Primitives.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 3754160,
+      "length": 15144
+    },
+    "wasm-dotnet/runtime/ref/System.IO.FileSystem.Watcher.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 3769304,
+      "length": 20776
+    },
+    "wasm-dotnet/runtime/ref/System.IO.FileSystem.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 3790080,
+      "length": 15656
+    },
+    "wasm-dotnet/runtime/ref/System.IO.IsolatedStorage.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 3805736,
+      "length": 22312
+    },
+    "wasm-dotnet/runtime/ref/System.IO.MemoryMappedFiles.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 3828048,
+      "length": 18256
+    },
+    "wasm-dotnet/runtime/ref/System.IO.Pipelines.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 3846304,
+      "length": 20264
+    },
+    "wasm-dotnet/runtime/ref/System.IO.Pipes.AccessControl.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 3866568,
+      "length": 17704
+    },
+    "wasm-dotnet/runtime/ref/System.IO.Pipes.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 3884272,
+      "length": 21800
+    },
+    "wasm-dotnet/runtime/ref/System.IO.UnmanagedMemoryStream.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 3906072,
+      "length": 15144
+    },
+    "wasm-dotnet/runtime/ref/System.IO.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 3921216,
+      "length": 15696
+    },
+    "wasm-dotnet/runtime/ref/System.Linq.Expressions.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 3936912,
+      "length": 63272
+    },
+    "wasm-dotnet/runtime/ref/System.Linq.Parallel.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 4000184,
+      "length": 31056
+    },
+    "wasm-dotnet/runtime/ref/System.Linq.Queryable.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 4031240,
+      "length": 31016
+    },
+    "wasm-dotnet/runtime/ref/System.Linq.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 4062256,
+      "length": 32592
+    },
+    "wasm-dotnet/runtime/ref/System.Memory.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 4094848,
+      "length": 52048
+    },
+    "wasm-dotnet/runtime/ref/System.Net.Http.Json.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 4146896,
+      "length": 23336
+    },
+    "wasm-dotnet/runtime/ref/System.Net.Http.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 4170232,
+      "length": 60200
+    },
+    "wasm-dotnet/runtime/ref/System.Net.HttpListener.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 4230432,
+      "length": 25384
+    },
+    "wasm-dotnet/runtime/ref/System.Net.Mail.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 4255816,
+      "length": 32040
+    },
+    "wasm-dotnet/runtime/ref/System.Net.NameResolution.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 4287856,
+      "length": 17704
+    },
+    "wasm-dotnet/runtime/ref/System.Net.NetworkInformation.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 4305560,
+      "length": 33576
+    },
+    "wasm-dotnet/runtime/ref/System.Net.Ping.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 4339136,
+      "length": 20264
+    },
+    "wasm-dotnet/runtime/ref/System.Net.Primitives.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 4359400,
+      "length": 35664
+    },
+    "wasm-dotnet/runtime/ref/System.Net.Quic.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 4395064,
+      "length": 23336
+    },
+    "wasm-dotnet/runtime/ref/System.Net.Requests.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 4418400,
+      "length": 40784
+    },
+    "wasm-dotnet/runtime/ref/System.Net.Security.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 4459184,
+      "length": 52520
+    },
+    "wasm-dotnet/runtime/ref/System.Net.ServicePoint.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 4511704,
+      "length": 15144
+    },
+    "wasm-dotnet/runtime/ref/System.Net.Sockets.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 4526848,
+      "length": 47400
+    },
+    "wasm-dotnet/runtime/ref/System.Net.WebClient.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 4574248,
+      "length": 27432
+    },
+    "wasm-dotnet/runtime/ref/System.Net.WebHeaderCollection.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 4601680,
+      "length": 19280
+    },
+    "wasm-dotnet/runtime/ref/System.Net.WebProxy.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 4620960,
+      "length": 17704
+    },
+    "wasm-dotnet/runtime/ref/System.Net.WebSockets.Client.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 4638664,
+      "length": 19240
+    },
+    "wasm-dotnet/runtime/ref/System.Net.WebSockets.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 4657904,
+      "length": 22312
+    },
+    "wasm-dotnet/runtime/ref/System.Net.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 4680216,
+      "length": 17232
+    },
+    "wasm-dotnet/runtime/ref/System.Numerics.Vectors.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 4697448,
+      "length": 47440
+    },
+    "wasm-dotnet/runtime/ref/System.Numerics.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 4744888,
+      "length": 15144
+    },
+    "wasm-dotnet/runtime/ref/System.ObjectModel.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 4760032,
+      "length": 23336
+    },
+    "wasm-dotnet/runtime/ref/System.Reflection.DispatchProxy.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 4783368,
+      "length": 15696
+    },
+    "wasm-dotnet/runtime/ref/System.Reflection.Emit.ILGeneration.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 4799064,
+      "length": 20776
+    },
+    "wasm-dotnet/runtime/ref/System.Reflection.Emit.Lightweight.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 4819840,
+      "length": 19240
+    },
+    "wasm-dotnet/runtime/ref/System.Reflection.Emit.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 4839080,
+      "length": 43816
+    },
+    "wasm-dotnet/runtime/ref/System.Reflection.Extensions.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 4882896,
+      "length": 15144
+    },
+    "wasm-dotnet/runtime/ref/System.Reflection.Metadata.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 4898040,
+      "length": 122152
+    },
+    "wasm-dotnet/runtime/ref/System.Reflection.Primitives.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 5020192,
+      "length": 21800
+    },
+    "wasm-dotnet/runtime/ref/System.Reflection.TypeExtensions.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 5041992,
+      "length": 19280
+    },
+    "wasm-dotnet/runtime/ref/System.Reflection.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 5061272,
+      "length": 16208
+    },
+    "wasm-dotnet/runtime/ref/System.Resources.Reader.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 5077480,
+      "length": 15184
+    },
+    "wasm-dotnet/runtime/ref/System.Resources.ResourceManager.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 5092664,
+      "length": 15656
+    },
+    "wasm-dotnet/runtime/ref/System.Resources.Writer.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 5108320,
+      "length": 16168
+    },
+    "wasm-dotnet/runtime/ref/System.Runtime.CompilerServices.Unsafe.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 5124488,
+      "length": 15144
+    },
+    "wasm-dotnet/runtime/ref/System.Runtime.CompilerServices.VisualC.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 5139632,
+      "length": 17232
+    },
+    "wasm-dotnet/runtime/ref/System.Runtime.Extensions.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 5156864,
+      "length": 17704
+    },
+    "wasm-dotnet/runtime/ref/System.Runtime.Handles.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 5174568,
+      "length": 15184
+    },
+    "wasm-dotnet/runtime/ref/System.Runtime.InteropServices.JavaScript.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 5189752,
+      "length": 25896
+    },
+    "wasm-dotnet/runtime/ref/System.Runtime.InteropServices.RuntimeInformation.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 5215648,
+      "length": 15184
+    },
+    "wasm-dotnet/runtime/ref/System.Runtime.InteropServices.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 5230832,
+      "length": 98640
+    },
+    "wasm-dotnet/runtime/ref/System.Runtime.Intrinsics.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 5329472,
+      "length": 400168
+    },
+    "wasm-dotnet/runtime/ref/System.Runtime.Loader.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 5729640,
+      "length": 19280
+    },
+    "wasm-dotnet/runtime/ref/System.Runtime.Numerics.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 5748920,
+      "length": 36176
+    },
+    "wasm-dotnet/runtime/ref/System.Runtime.Serialization.Formatters.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 5785096,
+      "length": 23336
+    },
+    "wasm-dotnet/runtime/ref/System.Runtime.Serialization.Json.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 5808432,
+      "length": 20816
+    },
+    "wasm-dotnet/runtime/ref/System.Runtime.Serialization.Primitives.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 5829248,
+      "length": 19752
+    },
+    "wasm-dotnet/runtime/ref/System.Runtime.Serialization.Xml.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 5849000,
+      "length": 39720
+    },
+    "wasm-dotnet/runtime/ref/System.Runtime.Serialization.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 5888720,
+      "length": 16680
+    },
+    "wasm-dotnet/runtime/ref/System.Runtime.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 5905400,
+      "length": 847144
+    },
+    "wasm-dotnet/runtime/ref/System.Security.AccessControl.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 6752544,
+      "length": 37200
+    },
+    "wasm-dotnet/runtime/ref/System.Security.Claims.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 6789744,
+      "length": 32080
+    },
+    "wasm-dotnet/runtime/ref/System.Security.Cryptography.Algorithms.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 6821824,
+      "length": 17192
+    },
+    "wasm-dotnet/runtime/ref/System.Security.Cryptography.Cng.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 6839016,
+      "length": 16168
+    },
+    "wasm-dotnet/runtime/ref/System.Security.Cryptography.Csp.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 6855184,
+      "length": 15696
+    },
+    "wasm-dotnet/runtime/ref/System.Security.Cryptography.Encoding.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 6870880,
+      "length": 15696
+    },
+    "wasm-dotnet/runtime/ref/System.Security.Cryptography.OpenSsl.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 6886576,
+      "length": 15184
+    },
+    "wasm-dotnet/runtime/ref/System.Security.Cryptography.Primitives.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 6901760,
+      "length": 15696
+    },
+    "wasm-dotnet/runtime/ref/System.Security.Cryptography.X509Certificates.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 6917456,
+      "length": 16680
+    },
+    "wasm-dotnet/runtime/ref/System.Security.Cryptography.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 6934136,
+      "length": 142120
+    },
+    "wasm-dotnet/runtime/ref/System.Security.Principal.Windows.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 7076256,
+      "length": 26960
+    },
+    "wasm-dotnet/runtime/ref/System.Security.Principal.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 7103216,
+      "length": 15144
+    },
+    "wasm-dotnet/runtime/ref/System.Security.SecureString.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 7118360,
+      "length": 15144
+    },
+    "wasm-dotnet/runtime/ref/System.Security.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 7133504,
+      "length": 18216
+    },
+    "wasm-dotnet/runtime/ref/System.ServiceModel.Web.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 7151720,
+      "length": 16680
+    },
+    "wasm-dotnet/runtime/ref/System.ServiceProcess.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 7168400,
+      "length": 15656
+    },
+    "wasm-dotnet/runtime/ref/System.Text.Encoding.CodePages.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 7184056,
+      "length": 15696
+    },
+    "wasm-dotnet/runtime/ref/System.Text.Encoding.Extensions.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 7199752,
+      "length": 20776
+    },
+    "wasm-dotnet/runtime/ref/System.Text.Encoding.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 7220528,
+      "length": 15696
+    },
+    "wasm-dotnet/runtime/ref/System.Text.Encodings.Web.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 7236224,
+      "length": 25896
+    },
+    "wasm-dotnet/runtime/ref/System.Text.Json.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 7262120,
+      "length": 80168
+    },
+    "wasm-dotnet/runtime/ref/System.Text.RegularExpressions.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 7342288,
+      "length": 36176
+    },
+    "wasm-dotnet/runtime/ref/System.Threading.Channels.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 7378464,
+      "length": 19240
+    },
+    "wasm-dotnet/runtime/ref/System.Threading.Overlapped.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 7397704,
+      "length": 18728
+    },
+    "wasm-dotnet/runtime/ref/System.Threading.Tasks.Dataflow.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 7416432,
+      "length": 31528
+    },
+    "wasm-dotnet/runtime/ref/System.Threading.Tasks.Extensions.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 7447960,
+      "length": 15696
+    },
+    "wasm-dotnet/runtime/ref/System.Threading.Tasks.Parallel.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 7463656,
+      "length": 19752
+    },
+    "wasm-dotnet/runtime/ref/System.Threading.Tasks.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 7483408,
+      "length": 16680
+    },
+    "wasm-dotnet/runtime/ref/System.Threading.Thread.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 7500088,
+      "length": 23376
+    },
+    "wasm-dotnet/runtime/ref/System.Threading.ThreadPool.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 7523464,
+      "length": 18216
+    },
+    "wasm-dotnet/runtime/ref/System.Threading.Timer.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 7541680,
+      "length": 15144
+    },
+    "wasm-dotnet/runtime/ref/System.Threading.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 7556824,
+      "length": 32552
+    },
+    "wasm-dotnet/runtime/ref/System.Transactions.Local.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 7589376,
+      "length": 25936
+    },
+    "wasm-dotnet/runtime/ref/System.Transactions.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 7615312,
+      "length": 16208
+    },
+    "wasm-dotnet/runtime/ref/System.ValueTuple.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 7631520,
+      "length": 15144
+    },
+    "wasm-dotnet/runtime/ref/System.Web.HttpUtility.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 7646664,
+      "length": 17232
+    },
+    "wasm-dotnet/runtime/ref/System.Web.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 7663896,
+      "length": 15144
+    },
+    "wasm-dotnet/runtime/ref/System.Windows.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 7679040,
+      "length": 15656
+    },
+    "wasm-dotnet/runtime/ref/System.Xml.Linq.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 7694696,
+      "length": 15656
+    },
+    "wasm-dotnet/runtime/ref/System.Xml.ReaderWriter.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 7710352,
+      "length": 115496
+    },
+    "wasm-dotnet/runtime/ref/System.Xml.Serialization.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 7825848,
+      "length": 16168
+    },
+    "wasm-dotnet/runtime/ref/System.Xml.XDocument.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 7842016,
+      "length": 34088
+    },
+    "wasm-dotnet/runtime/ref/System.Xml.XPath.XDocument.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 7876104,
+      "length": 16168
+    },
+    "wasm-dotnet/runtime/ref/System.Xml.XPath.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 7892272,
+      "length": 16720
+    },
+    "wasm-dotnet/runtime/ref/System.Xml.XmlDocument.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 7908992,
+      "length": 15696
+    },
+    "wasm-dotnet/runtime/ref/System.Xml.XmlSerializer.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 7924688,
+      "length": 50472
+    },
+    "wasm-dotnet/runtime/ref/System.Xml.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 7975160,
+      "length": 23376
+    },
+    "wasm-dotnet/runtime/ref/System.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 7998536,
+      "length": 49488
+    },
+    "wasm-dotnet/runtime/ref/WasmDotnet.Stdin.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 8048024,
+      "length": 4608
+    },
+    "wasm-dotnet/runtime/ref/WindowsBase.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 8052632,
+      "length": 16168
+    },
+    "wasm-dotnet/runtime/ref/manifest.json": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 8068800,
+      "length": 6079
+    },
+    "wasm-dotnet/runtime/ref/mscorlib.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 8074879,
+      "length": 55592
+    },
+    "wasm-dotnet/runtime/ref/netstandard.dll": {
+      "layer": "wasm-dotnet/runtime/layers/ref-00.pack.gz",
+      "offset": 8130471,
+      "length": 100648
+    },
+    "wasm-dotnet/runtime/vbnet/Microsoft.CodeAnalysis.VisualBasic.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 0,
+      "length": 3296025
+    },
+    "wasm-dotnet/runtime/vbnet/Microsoft.CodeAnalysis.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 3296025,
+      "length": 1174293
+    },
+    "wasm-dotnet/runtime/vbnet/System.Collections.Concurrent.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 4470318,
+      "length": 23829
+    },
+    "wasm-dotnet/runtime/vbnet/System.Collections.Immutable.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 4494147,
+      "length": 77077
+    },
+    "wasm-dotnet/runtime/vbnet/System.Collections.NonGeneric.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 4571224,
+      "length": 7445
+    },
+    "wasm-dotnet/runtime/vbnet/System.Collections.Specialized.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 4578669,
+      "length": 9493
+    },
+    "wasm-dotnet/runtime/vbnet/System.Collections.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 4588162,
+      "length": 34581
+    },
+    "wasm-dotnet/runtime/vbnet/System.ComponentModel.Primitives.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 4622743,
+      "length": 6933
+    },
+    "wasm-dotnet/runtime/vbnet/System.ComponentModel.TypeConverter.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 4629676,
+      "length": 45333
+    },
+    "wasm-dotnet/runtime/vbnet/System.ComponentModel.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 4675009,
+      "length": 4885
+    },
+    "wasm-dotnet/runtime/vbnet/System.Console.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 4679894,
+      "length": 30997
+    },
+    "wasm-dotnet/runtime/vbnet/System.Diagnostics.DiagnosticSource.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 4710891,
+      "length": 18197
+    },
+    "wasm-dotnet/runtime/vbnet/System.Globalization.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 4729088,
+      "length": 4373
+    },
+    "wasm-dotnet/runtime/vbnet/System.IO.Compression.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 4733461,
+      "length": 24853
+    },
+    "wasm-dotnet/runtime/vbnet/System.IO.MemoryMappedFiles.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 4758314,
+      "length": 24341
+    },
+    "wasm-dotnet/runtime/vbnet/System.IO.Pipelines.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 4782655,
+      "length": 5909
+    },
+    "wasm-dotnet/runtime/vbnet/System.Linq.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 4788564,
+      "length": 44821
+    },
+    "wasm-dotnet/runtime/vbnet/System.Memory.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 4833385,
+      "length": 14101
+    },
+    "wasm-dotnet/runtime/vbnet/System.Net.Http.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 4847486,
+      "length": 138005
+    },
+    "wasm-dotnet/runtime/vbnet/System.Net.Primitives.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 4985491,
+      "length": 7445
+    },
+    "wasm-dotnet/runtime/vbnet/System.ObjectModel.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 4992936,
+      "length": 5909
+    },
+    "wasm-dotnet/runtime/vbnet/System.Private.CoreLib.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 4998845,
+      "length": 1664789
+    },
+    "wasm-dotnet/runtime/vbnet/System.Private.Uri.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 6663634,
+      "length": 64277
+    },
+    "wasm-dotnet/runtime/vbnet/System.Private.Xml.Linq.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 6727911,
+      "length": 44309
+    },
+    "wasm-dotnet/runtime/vbnet/System.Private.Xml.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 6772220,
+      "length": 529685
+    },
+    "wasm-dotnet/runtime/vbnet/System.Reflection.Metadata.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 7301905,
+      "length": 257813
+    },
+    "wasm-dotnet/runtime/vbnet/System.Runtime.InteropServices.JavaScript.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 7559718,
+      "length": 59157
+    },
+    "wasm-dotnet/runtime/vbnet/System.Runtime.Numerics.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 7618875,
+      "length": 82197
+    },
+    "wasm-dotnet/runtime/vbnet/System.Runtime.Serialization.Primitives.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 7701072,
+      "length": 5909
+    },
+    "wasm-dotnet/runtime/vbnet/System.Security.Cryptography.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 7706981,
+      "length": 23829
+    },
+    "wasm-dotnet/runtime/vbnet/System.Text.Encodings.Web.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 7730810,
+      "length": 29461
+    },
+    "wasm-dotnet/runtime/vbnet/System.Text.Json.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 7760271,
+      "length": 197397
+    },
+    "wasm-dotnet/runtime/vbnet/System.Text.RegularExpressions.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 7957668,
+      "length": 15637
+    },
+    "wasm-dotnet/runtime/vbnet/System.Threading.Channels.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 7973305,
+      "length": 20757
+    },
+    "wasm-dotnet/runtime/vbnet/System.Threading.Tasks.Parallel.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 7994062,
+      "length": 15637
+    },
+    "wasm-dotnet/runtime/vbnet/System.Xml.Linq.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 8009699,
+      "length": 4373
+    },
+    "wasm-dotnet/runtime/vbnet/System.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 8014072,
+      "length": 4373
+    },
+    "wasm-dotnet/runtime/vbnet/WasmDotnet.Compiler.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 8018445,
+      "length": 55573
+    },
+    "wasm-dotnet/runtime/vbnet/WasmDotnet.Stdin.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 8074018,
+      "length": 3861
+    },
+    "wasm-dotnet/runtime/vbnet/blazor.boot.json": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 8077879,
+      "length": 7751
+    },
+    "wasm-dotnet/runtime/vbnet/cs/Microsoft.CodeAnalysis.VisualBasic.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 8085630,
+      "length": 292629
+    },
+    "wasm-dotnet/runtime/vbnet/cs/Microsoft.CodeAnalysis.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 8378259,
+      "length": 37653
+    },
+    "wasm-dotnet/runtime/vbnet/de/Microsoft.CodeAnalysis.VisualBasic.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 8415912,
+      "length": 308501
+    },
+    "wasm-dotnet/runtime/vbnet/de/Microsoft.CodeAnalysis.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 8724413,
+      "length": 39701
+    },
+    "wasm-dotnet/runtime/vbnet/dotnet.js": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 8764114,
+      "length": 42864
+    },
+    "wasm-dotnet/runtime/vbnet/dotnet.native.js": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 8806978,
+      "length": 148287
+    },
+    "wasm-dotnet/runtime/vbnet/dotnet.native.worker.mjs": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 8955265,
+      "length": 2854
+    },
+    "wasm-dotnet/runtime/vbnet/dotnet.runtime.js": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 8958119,
+      "length": 232671
+    },
+    "wasm-dotnet/runtime/vbnet/es/Microsoft.CodeAnalysis.VisualBasic.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 9190790,
+      "length": 303893
+    },
+    "wasm-dotnet/runtime/vbnet/es/Microsoft.CodeAnalysis.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 9494683,
+      "length": 39189
+    },
+    "wasm-dotnet/runtime/vbnet/fr/Microsoft.CodeAnalysis.VisualBasic.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 9533872,
+      "length": 311061
+    },
+    "wasm-dotnet/runtime/vbnet/fr/Microsoft.CodeAnalysis.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 9844933,
+      "length": 39701
+    },
+    "wasm-dotnet/runtime/vbnet/it/Microsoft.CodeAnalysis.VisualBasic.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 9884634,
+      "length": 308501
+    },
+    "wasm-dotnet/runtime/vbnet/it/Microsoft.CodeAnalysis.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 10193135,
+      "length": 39701
+    },
+    "wasm-dotnet/runtime/vbnet/ja/Microsoft.CodeAnalysis.VisualBasic.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 10232836,
+      "length": 344341
+    },
+    "wasm-dotnet/runtime/vbnet/ja/Microsoft.CodeAnalysis.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 10577177,
+      "length": 43285
+    },
+    "wasm-dotnet/runtime/vbnet/ko/Microsoft.CodeAnalysis.VisualBasic.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 10620462,
+      "length": 313621
+    },
+    "wasm-dotnet/runtime/vbnet/ko/Microsoft.CodeAnalysis.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 10934083,
+      "length": 39701
+    },
+    "wasm-dotnet/runtime/vbnet/pl/Microsoft.CodeAnalysis.VisualBasic.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 10973784,
+      "length": 318229
+    },
+    "wasm-dotnet/runtime/vbnet/pl/Microsoft.CodeAnalysis.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 11292013,
+      "length": 39701
+    },
+    "wasm-dotnet/runtime/vbnet/pt-BR/Microsoft.CodeAnalysis.VisualBasic.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 11331714,
+      "length": 297749
+    },
+    "wasm-dotnet/runtime/vbnet/pt-BR/Microsoft.CodeAnalysis.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 11629463,
+      "length": 38677
+    },
+    "wasm-dotnet/runtime/vbnet/ru/Microsoft.CodeAnalysis.VisualBasic.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 11668140,
+      "length": 401173
+    },
+    "wasm-dotnet/runtime/vbnet/ru/Microsoft.CodeAnalysis.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 12069313,
+      "length": 49941
+    },
+    "wasm-dotnet/runtime/vbnet/supportFiles/0_runtimeconfig.bin": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 12119254,
+      "length": 1551
+    },
+    "wasm-dotnet/runtime/vbnet/tr/Microsoft.CodeAnalysis.VisualBasic.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 12120805,
+      "length": 294165
+    },
+    "wasm-dotnet/runtime/vbnet/tr/Microsoft.CodeAnalysis.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 12414970,
+      "length": 38165
+    },
+    "wasm-dotnet/runtime/vbnet/zh-Hans/Microsoft.CodeAnalysis.VisualBasic.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 12453135,
+      "length": 268053
+    },
+    "wasm-dotnet/runtime/vbnet/zh-Hans/Microsoft.CodeAnalysis.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 12721188,
+      "length": 34581
+    },
+    "wasm-dotnet/runtime/vbnet/zh-Hant/Microsoft.CodeAnalysis.VisualBasic.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 12755769,
+      "length": 267029
+    },
+    "wasm-dotnet/runtime/vbnet/zh-Hant/Microsoft.CodeAnalysis.resources.wasm": {
+      "layer": "wasm-dotnet/runtime/layers/vbnet-00.pack.gz",
+      "offset": 13022798,
+      "length": 34581
+    },
+    "wasm-tinygo/vendor/emception/0030c207ed64a7bf27e6.a": {
+      "layer": "wasm-tinygo/layers/emception-00.pack.gz",
+      "offset": 0,
+      "length": 75460
+    },
+    "wasm-tinygo/vendor/emception/003abc24b98e20612cee.a": {
+      "layer": "wasm-tinygo/layers/emception-00.pack.gz",
+      "offset": 75460,
+      "length": 6208976
+    },
+    "wasm-tinygo/vendor/emception/00ca31632129751ac14e.a": {
+      "layer": "wasm-tinygo/layers/emception-00.pack.gz",
+      "offset": 6284436,
+      "length": 85546
+    },
+    "wasm-tinygo/vendor/emception/019acfdd56c878299047.a": {
+      "layer": "wasm-tinygo/layers/emception-00.pack.gz",
+      "offset": 6369982,
+      "length": 505914
+    },
+    "wasm-tinygo/vendor/emception/027cb8ac6666251e390f.a": {
+      "layer": "wasm-tinygo/layers/emception-00.pack.gz",
+      "offset": 6875896,
+      "length": 939898
+    },
+    "wasm-tinygo/vendor/emception/02934eef61f674a7ba8b.a": {
+      "layer": "wasm-tinygo/layers/emception-00.pack.gz",
+      "offset": 7815794,
+      "length": 194960
+    },
+    "wasm-tinygo/vendor/emception/02a1e1da31f4dbcf92cf.a": {
+      "layer": "wasm-tinygo/layers/emception-00.pack.gz",
+      "offset": 8010754,
+      "length": 1239542
+    },
+    "wasm-tinygo/vendor/emception/02ab3a78139e912813bf.a": {
+      "layer": "wasm-tinygo/layers/emception-00.pack.gz",
+      "offset": 9250296,
+      "length": 70366
+    },
+    "wasm-tinygo/vendor/emception/02b4510138040d46231f.a": {
+      "layer": "wasm-tinygo/layers/emception-00.pack.gz",
+      "offset": 9320662,
+      "length": 77282
+    },
+    "wasm-tinygo/vendor/emception/03604c08ed6fa76168fe.a": {
+      "layer": "wasm-tinygo/layers/emception-00.pack.gz",
+      "offset": 9397944,
+      "length": 69608
+    },
+    "wasm-tinygo/vendor/emception/04de61a8a0f85ee15beb.a": {
+      "layer": "wasm-tinygo/layers/emception-01.pack.gz",
+      "offset": 0,
+      "length": 10566920
+    },
+    "wasm-tinygo/vendor/emception/085dc88a414612443d3f.a": {
+      "layer": "wasm-tinygo/layers/emception-01.pack.gz",
+      "offset": 10566920,
+      "length": 12330
+    },
+    "wasm-tinygo/vendor/emception/089e41a761e53a1235b3.a": {
+      "layer": "wasm-tinygo/layers/emception-01.pack.gz",
+      "offset": 10579250,
+      "length": 90416
+    },
+    "wasm-tinygo/vendor/emception/08d4c0c2c1409cda97e5.a": {
+      "layer": "wasm-tinygo/layers/emception-01.pack.gz",
+      "offset": 10669666,
+      "length": 933960
+    },
+    "wasm-tinygo/vendor/emception/09d11aef1b4454a8e60d.a": {
+      "layer": "wasm-tinygo/layers/emception-01.pack.gz",
+      "offset": 11603626,
+      "length": 1608
+    },
+    "wasm-tinygo/vendor/emception/0ce62cc3b7a3acef23f2.a": {
+      "layer": "wasm-tinygo/layers/emception-01.pack.gz",
+      "offset": 11605234,
+      "length": 68910
+    },
+    "wasm-tinygo/vendor/emception/0da73d2b972ffcc2ec92.a": {
+      "layer": "wasm-tinygo/layers/emception-01.pack.gz",
+      "offset": 11674144,
+      "length": 71098
+    },
+    "wasm-tinygo/vendor/emception/0e8d0fbb3e449a5365ea.a": {
+      "layer": "wasm-tinygo/layers/emception-01.pack.gz",
+      "offset": 11745242,
+      "length": 70344
+    },
+    "wasm-tinygo/vendor/emception/109b42bf81b4a80cb6e4.a": {
+      "layer": "wasm-tinygo/layers/emception-01.pack.gz",
+      "offset": 11815586,
+      "length": 13122
+    },
+    "wasm-tinygo/vendor/emception/10f4ef39e073ebb81fc4.a": {
+      "layer": "wasm-tinygo/layers/emception-02.pack.gz",
+      "offset": 0,
+      "length": 6236128
+    },
+    "wasm-tinygo/vendor/emception/11b668c873a64514b50c.a": {
+      "layer": "wasm-tinygo/layers/emception-02.pack.gz",
+      "offset": 6236128,
+      "length": 69520
+    },
+    "wasm-tinygo/vendor/emception/1631613159e86cd28b93.a": {
+      "layer": "wasm-tinygo/layers/emception-02.pack.gz",
+      "offset": 6305648,
+      "length": 3523698
+    },
+    "wasm-tinygo/vendor/emception/16b6b2bb3ff9246a4c5d.a": {
+      "layer": "wasm-tinygo/layers/emception-02.pack.gz",
+      "offset": 9829346,
+      "length": 6233624
+    },
+    "wasm-tinygo/vendor/emception/171f06adf4ca45b43274.a": {
+      "layer": "wasm-tinygo/layers/emception-03.pack.gz",
+      "offset": 0,
+      "length": 4151650
+    },
+    "wasm-tinygo/vendor/emception/1754e00b4e2c496160e2.a": {
+      "layer": "wasm-tinygo/layers/emception-03.pack.gz",
+      "offset": 4151650,
+      "length": 10567756
+    },
+    "wasm-tinygo/vendor/emception/1838b3fb9127b0660165.a": {
+      "layer": "wasm-tinygo/layers/emception-03.pack.gz",
+      "offset": 14719406,
+      "length": 84026
+    },
+    "wasm-tinygo/vendor/emception/1aef9b3ca32fe30de8da.a": {
+      "layer": "wasm-tinygo/layers/emception-03.pack.gz",
+      "offset": 14803432,
+      "length": 58514
+    },
+    "wasm-tinygo/vendor/emception/1bef303e2e82c1268454.a": {
+      "layer": "wasm-tinygo/layers/emception-04.pack.gz",
+      "offset": 0,
+      "length": 6437758
+    },
+    "wasm-tinygo/vendor/emception/1d2d2c3848b4c74a9984.a": {
+      "layer": "wasm-tinygo/layers/emception-04.pack.gz",
+      "offset": 6437758,
+      "length": 535052
+    },
+    "wasm-tinygo/vendor/emception/1d582aefcec51ccf575e.a": {
+      "layer": "wasm-tinygo/layers/emception-04.pack.gz",
+      "offset": 6972810,
+      "length": 81292
+    },
+    "wasm-tinygo/vendor/emception/1e27090d617d5c6ec383.a": {
+      "layer": "wasm-tinygo/layers/emception-04.pack.gz",
+      "offset": 7054102,
+      "length": 6276664
+    },
+    "wasm-tinygo/vendor/emception/1f33fbe509395d6e35d3.a": {
+      "layer": "wasm-tinygo/layers/emception-04.pack.gz",
+      "offset": 13330766,
+      "length": 78716
+    },
+    "wasm-tinygo/vendor/emception/21d74c631d6b5d57fdf0.a": {
+      "layer": "wasm-tinygo/layers/emception-05.pack.gz",
+      "offset": 0,
+      "length": 7681122
+    },
+    "wasm-tinygo/vendor/emception/226968a81c4faee77de2.a": {
+      "layer": "wasm-tinygo/layers/emception-05.pack.gz",
+      "offset": 7681122,
+      "length": 3166834
+    },
+    "wasm-tinygo/vendor/emception/253c83e39376e8305ab6.a": {
+      "layer": "wasm-tinygo/layers/emception-05.pack.gz",
+      "offset": 10847956,
+      "length": 49836
+    },
+    "wasm-tinygo/vendor/emception/26427f6f132a9f2e781c.a": {
+      "layer": "wasm-tinygo/layers/emception-05.pack.gz",
+      "offset": 10897792,
+      "length": 81438
+    },
+    "wasm-tinygo/vendor/emception/26ba662bc6c482081c5e.a": {
+      "layer": "wasm-tinygo/layers/emception-05.pack.gz",
+      "offset": 10979230,
+      "length": 51510
+    },
+    "wasm-tinygo/vendor/emception/26e791689c03ae435b25.a": {
+      "layer": "wasm-tinygo/layers/emception-05.pack.gz",
+      "offset": 11030740,
+      "length": 374
+    },
+    "wasm-tinygo/vendor/emception/2754f972e673987726f7.a": {
+      "layer": "wasm-tinygo/layers/emception-05.pack.gz",
+      "offset": 11031114,
+      "length": 84576
+    },
+    "wasm-tinygo/vendor/emception/27da7a84edbf7d0c6414.a": {
+      "layer": "wasm-tinygo/layers/emception-05.pack.gz",
+      "offset": 11115690,
+      "length": 51540
+    },
+    "wasm-tinygo/vendor/emception/29d8c156f5f1464d475a.a": {
+      "layer": "wasm-tinygo/layers/emception-05.pack.gz",
+      "offset": 11167230,
+      "length": 89856
+    },
+    "wasm-tinygo/vendor/emception/2a1452c949443bb9610b.a": {
+      "layer": "wasm-tinygo/layers/emception-05.pack.gz",
+      "offset": 11257086,
+      "length": 51492
+    },
+    "wasm-tinygo/vendor/emception/2b8a84c5dd12caecce74.a": {
+      "layer": "wasm-tinygo/layers/emception-05.pack.gz",
+      "offset": 11308578,
+      "length": 90144
+    },
+    "wasm-tinygo/vendor/emception/2bea33b61adc4a8cbc37.a": {
+      "layer": "wasm-tinygo/layers/emception-05.pack.gz",
+      "offset": 11398722,
+      "length": 32930
+    },
+    "wasm-tinygo/vendor/emception/30572c3f480097d41f17.a": {
+      "layer": "wasm-tinygo/layers/emception-06.pack.gz",
+      "offset": 0,
+      "length": 7786228
+    },
+    "wasm-tinygo/vendor/emception/30c5877ae1a653c6d5f7.a": {
+      "layer": "wasm-tinygo/layers/emception-06.pack.gz",
+      "offset": 7786228,
+      "length": 4158968
+    },
+    "wasm-tinygo/vendor/emception/314b38ebc146fad796c8.a": {
+      "layer": "wasm-tinygo/layers/emception-06.pack.gz",
+      "offset": 11945196,
+      "length": 505270
+    },
+    "wasm-tinygo/vendor/emception/324865c4a6e59371aa07.a": {
+      "layer": "wasm-tinygo/layers/emception-06.pack.gz",
+      "offset": 12450466,
+      "length": 77226
+    },
+    "wasm-tinygo/vendor/emception/32af490da76021cdb0f7.a": {
+      "layer": "wasm-tinygo/layers/emception-06.pack.gz",
+      "offset": 12527692,
+      "length": 70990
+    },
+    "wasm-tinygo/vendor/emception/3451fe3aaae5367cc50e.a": {
+      "layer": "wasm-tinygo/layers/emception-07.pack.gz",
+      "offset": 0,
+      "length": 7749204
+    },
+    "wasm-tinygo/vendor/emception/34c7d9125bf0bdaf0178.a": {
+      "layer": "wasm-tinygo/layers/emception-07.pack.gz",
+      "offset": 7749204,
+      "length": 69816
+    },
+    "wasm-tinygo/vendor/emception/35a8f83fa8bc298ddc74.a": {
+      "layer": "wasm-tinygo/layers/emception-07.pack.gz",
+      "offset": 7819020,
+      "length": 75666
+    },
+    "wasm-tinygo/vendor/emception/3752854faba466b0ad3c.a": {
+      "layer": "wasm-tinygo/layers/emception-07.pack.gz",
+      "offset": 7894686,
+      "length": 49810
+    },
+    "wasm-tinygo/vendor/emception/3762a871e53a7f2be47d.a": {
+      "layer": "wasm-tinygo/layers/emception-07.pack.gz",
+      "offset": 7944496,
+      "length": 51706
+    },
+    "wasm-tinygo/vendor/emception/37f9433ccbb2e5b06f80.a": {
+      "layer": "wasm-tinygo/layers/emception-07.pack.gz",
+      "offset": 7996202,
+      "length": 39682
+    },
+    "wasm-tinygo/vendor/emception/395eb7f88e36733b7e9c.a": {
+      "layer": "wasm-tinygo/layers/emception-07.pack.gz",
+      "offset": 8035884,
+      "length": 81602
+    },
+    "wasm-tinygo/vendor/emception/3a35f810e081e867bbf8.a": {
+      "layer": "wasm-tinygo/layers/emception-07.pack.gz",
+      "offset": 8117486,
+      "length": 16918
+    },
+    "wasm-tinygo/vendor/emception/3b08edf93ac01bdfbd8c.a": {
+      "layer": "wasm-tinygo/layers/emception-07.pack.gz",
+      "offset": 8134404,
+      "length": 89660
+    },
+    "wasm-tinygo/vendor/emception/3bd4396ead453e4ed403.a": {
+      "layer": "wasm-tinygo/layers/emception-07.pack.gz",
+      "offset": 8224064,
+      "length": 75756
+    },
+    "wasm-tinygo/vendor/emception/3d3924c42465d0fa49d9.a": {
+      "layer": "wasm-tinygo/layers/emception-07.pack.gz",
+      "offset": 8299820,
+      "length": 74582
+    },
+    "wasm-tinygo/vendor/emception/3d960df64448d8eb5038.a": {
+      "layer": "wasm-tinygo/layers/emception-07.pack.gz",
+      "offset": 8374402,
+      "length": 69046
+    },
+    "wasm-tinygo/vendor/emception/3e3d564148bf6b2d1b0d.a": {
+      "layer": "wasm-tinygo/layers/emception-07.pack.gz",
+      "offset": 8443448,
+      "length": 6276486
+    },
+    "wasm-tinygo/vendor/emception/401cd80fe51001bb1a63.a": {
+      "layer": "wasm-tinygo/layers/emception-08.pack.gz",
+      "offset": 0,
+      "length": 7743202
+    },
+    "wasm-tinygo/vendor/emception/424ba3d99b75ea62787c.a": {
+      "layer": "wasm-tinygo/layers/emception-08.pack.gz",
+      "offset": 7743202,
+      "length": 266074
+    },
+    "wasm-tinygo/vendor/emception/44d6e1159bbeb361b0e4.a": {
+      "layer": "wasm-tinygo/layers/emception-08.pack.gz",
+      "offset": 8009276,
+      "length": 32894
+    },
+    "wasm-tinygo/vendor/emception/469e91eedfad1eb4a1b7.a": {
+      "layer": "wasm-tinygo/layers/emception-08.pack.gz",
+      "offset": 8042170,
+      "length": 12296
+    },
+    "wasm-tinygo/vendor/emception/487545a1523c0d7964d3.a": {
+      "layer": "wasm-tinygo/layers/emception-08.pack.gz",
+      "offset": 8054466,
+      "length": 222514
+    },
+    "wasm-tinygo/vendor/emception/48c93ac5822c3960ba2b.a": {
+      "layer": "wasm-tinygo/layers/emception-08.pack.gz",
+      "offset": 8276980,
+      "length": 400
+    },
+    "wasm-tinygo/vendor/emception/496dd2f48b66b8cb7606.a": {
+      "layer": "wasm-tinygo/layers/emception-08.pack.gz",
+      "offset": 8277380,
+      "length": 543354
+    },
+    "wasm-tinygo/vendor/emception/49c9ad3e8cfed6575848.a": {
+      "layer": "wasm-tinygo/layers/emception-08.pack.gz",
+      "offset": 8820734,
+      "length": 1261822
+    },
+    "wasm-tinygo/vendor/emception/4ab268f1951794185d45.a": {
+      "layer": "wasm-tinygo/layers/emception-08.pack.gz",
+      "offset": 10082556,
+      "length": 70070
+    },
+    "wasm-tinygo/vendor/emception/4ae248a4532699a7fabd.a": {
+      "layer": "wasm-tinygo/layers/emception-08.pack.gz",
+      "offset": 10152626,
+      "length": 83412
+    },
+    "wasm-tinygo/vendor/emception/4b75a92c47b9d2f1da3e.a": {
+      "layer": "wasm-tinygo/layers/emception-08.pack.gz",
+      "offset": 10236038,
+      "length": 221900
+    },
+    "wasm-tinygo/vendor/emception/4bdb12dfce4fc2e5c72a.a": {
+      "layer": "wasm-tinygo/layers/emception-08.pack.gz",
+      "offset": 10457938,
+      "length": 1673730
+    },
+    "wasm-tinygo/vendor/emception/4bf0b95b08ea03231696.a": {
+      "layer": "wasm-tinygo/layers/emception-08.pack.gz",
+      "offset": 12131668,
+      "length": 1255220
+    },
+    "wasm-tinygo/vendor/emception/4c353481d4a4d217faf3.a": {
+      "layer": "wasm-tinygo/layers/emception-08.pack.gz",
+      "offset": 13386888,
+      "length": 3123758
+    },
+    "wasm-tinygo/vendor/emception/4c5e79483ebda7b07e4e.a": {
+      "layer": "wasm-tinygo/layers/emception-09.pack.gz",
+      "offset": 0,
+      "length": 1000732
+    },
+    "wasm-tinygo/vendor/emception/4d870f1c504d70e9657f.a": {
+      "layer": "wasm-tinygo/layers/emception-09.pack.gz",
+      "offset": 1000732,
+      "length": 75900
+    },
+    "wasm-tinygo/vendor/emception/4e5503d753fc3f5d236f.a": {
+      "layer": "wasm-tinygo/layers/emception-09.pack.gz",
+      "offset": 1076632,
+      "length": 58650
+    },
+    "wasm-tinygo/vendor/emception/4e9fcba7c19d91fbd475.a": {
+      "layer": "wasm-tinygo/layers/emception-09.pack.gz",
+      "offset": 1135282,
+      "length": 194914
+    },
+    "wasm-tinygo/vendor/emception/4f64a0de2e33a9d52e57.a": {
+      "layer": "wasm-tinygo/layers/emception-09.pack.gz",
+      "offset": 1330196,
+      "length": 33814
+    },
+    "wasm-tinygo/vendor/emception/526fdf5d41f613e9918f.a": {
+      "layer": "wasm-tinygo/layers/emception-09.pack.gz",
+      "offset": 1364010,
+      "length": 923732
+    },
+    "wasm-tinygo/vendor/emception/52dc1ff339b26793349a.a": {
+      "layer": "wasm-tinygo/layers/emception-09.pack.gz",
+      "offset": 2287742,
+      "length": 939508
+    },
+    "wasm-tinygo/vendor/emception/545e06e36d3971f5faa4.a": {
+      "layer": "wasm-tinygo/layers/emception-09.pack.gz",
+      "offset": 3227250,
+      "length": 74712
+    },
+    "wasm-tinygo/vendor/emception/560b686e438e69459e43.a": {
+      "layer": "wasm-tinygo/layers/emception-09.pack.gz",
+      "offset": 3301962,
+      "length": 49764
+    },
+    "wasm-tinygo/vendor/emception/56b4dd6088d9b60490d8.a": {
+      "layer": "wasm-tinygo/layers/emception-09.pack.gz",
+      "offset": 3351726,
+      "length": 538724
+    },
+    "wasm-tinygo/vendor/emception/576fb8e37f5af1c9c3fd.a": {
+      "layer": "wasm-tinygo/layers/emception-09.pack.gz",
+      "offset": 3890450,
+      "length": 10569876
+    },
+    "wasm-tinygo/vendor/emception/58e35328715996cf20c1.a": {
+      "layer": "wasm-tinygo/layers/emception-09.pack.gz",
+      "offset": 14460326,
+      "length": 6108
+    },
+    "wasm-tinygo/vendor/emception/593aac65e32e855929ab.a": {
+      "layer": "wasm-tinygo/layers/emception-09.pack.gz",
+      "offset": 14466434,
+      "length": 32958
+    },
+    "wasm-tinygo/vendor/emception/5b162e2075fe0ad9ae86.a": {
+      "layer": "wasm-tinygo/layers/emception-09.pack.gz",
+      "offset": 14499392,
+      "length": 78260
+    },
+    "wasm-tinygo/vendor/emception/5b2c818770988de3bdbb.a": {
+      "layer": "wasm-tinygo/layers/emception-10.pack.gz",
+      "offset": 0,
+      "length": 7742882
+    },
+    "wasm-tinygo/vendor/emception/5cca7d24838f53227177.a": {
+      "layer": "wasm-tinygo/layers/emception-10.pack.gz",
+      "offset": 7742882,
+      "length": 6641068
+    },
+    "wasm-tinygo/vendor/emception/5d9204846740fdfff126.a": {
+      "layer": "wasm-tinygo/layers/emception-10.pack.gz",
+      "offset": 14383950,
+      "length": 75548
+    },
+    "wasm-tinygo/vendor/emception/5de9254458072f582a9c.a": {
+      "layer": "wasm-tinygo/layers/emception-10.pack.gz",
+      "offset": 14459498,
+      "length": 39268
+    },
+    "wasm-tinygo/vendor/emception/5e4d1d0feb99e0f7649d.a": {
+      "layer": "wasm-tinygo/layers/emception-10.pack.gz",
+      "offset": 14498766,
+      "length": 74848
+    },
+    "wasm-tinygo/vendor/emception/5f5b08f157f3670785cb.a": {
+      "layer": "wasm-tinygo/layers/emception-10.pack.gz",
+      "offset": 14573614,
+      "length": 247028
+    },
+    "wasm-tinygo/vendor/emception/5f5c761577337f8715c0.a": {
+      "layer": "wasm-tinygo/layers/emception-10.pack.gz",
+      "offset": 14820642,
+      "length": 90522
+    },
+    "wasm-tinygo/vendor/emception/5fee2eca5cafb9d8ab1b.a": {
+      "layer": "wasm-tinygo/layers/emception-11.pack.gz",
+      "offset": 0,
+      "length": 4202764
+    },
+    "wasm-tinygo/vendor/emception/615ffa5917f56000b53c.a": {
+      "layer": "wasm-tinygo/layers/emception-11.pack.gz",
+      "offset": 4202764,
+      "length": 70728
+    },
+    "wasm-tinygo/vendor/emception/6294ecc490cf0f2b7867.a": {
+      "layer": "wasm-tinygo/layers/emception-11.pack.gz",
+      "offset": 4273492,
+      "length": 74718
+    },
+    "wasm-tinygo/vendor/emception/644b5edde7f4df30b4a7.a": {
+      "layer": "wasm-tinygo/layers/emception-11.pack.gz",
+      "offset": 4348210,
+      "length": 13202
+    },
+    "wasm-tinygo/vendor/emception/65483916311c903881d2.a": {
+      "layer": "wasm-tinygo/layers/emception-11.pack.gz",
+      "offset": 4361412,
+      "length": 81204
+    },
+    "wasm-tinygo/vendor/emception/65502b6412f21c86f425.a": {
+      "layer": "wasm-tinygo/layers/emception-11.pack.gz",
+      "offset": 4442616,
+      "length": 18656
+    },
+    "wasm-tinygo/vendor/emception/6565fc792637f066f701.a": {
+      "layer": "wasm-tinygo/layers/emception-11.pack.gz",
+      "offset": 4461272,
+      "length": 166554
+    },
+    "wasm-tinygo/vendor/emception/6676b9f8cba3f6f9504f.a": {
+      "layer": "wasm-tinygo/layers/emception-11.pack.gz",
+      "offset": 4627826,
+      "length": 7792522
+    },
+    "wasm-tinygo/vendor/emception/6818cdd8528ffab26047.a": {
+      "layer": "wasm-tinygo/layers/emception-11.pack.gz",
+      "offset": 12420348,
+      "length": 70234
+    },
+    "wasm-tinygo/vendor/emception/68a603456ac5c6d7db4f.a": {
+      "layer": "wasm-tinygo/layers/emception-11.pack.gz",
+      "offset": 12490582,
+      "length": 69512
+    },
+    "wasm-tinygo/vendor/emception/68a84a9f1afc575af7fa.a": {
+      "layer": "wasm-tinygo/layers/emception-11.pack.gz",
+      "offset": 12560094,
+      "length": 530834
+    },
+    "wasm-tinygo/vendor/emception/6ac72f2188527970f306.a": {
+      "layer": "wasm-tinygo/layers/emception-11.pack.gz",
+      "offset": 13090928,
+      "length": 75784
+    },
+    "wasm-tinygo/vendor/emception/6bb136019ea3f3f2534f.a": {
+      "layer": "wasm-tinygo/layers/emception-11.pack.gz",
+      "offset": 13166712,
+      "length": 1246268
+    },
+    "wasm-tinygo/vendor/emception/6be3d258342b5b03c75e.a": {
+      "layer": "wasm-tinygo/layers/emception-11.pack.gz",
+      "offset": 14412980,
+      "length": 30730
+    },
+    "wasm-tinygo/vendor/emception/6c95ccc192cc5cedda57.a": {
+      "layer": "wasm-tinygo/layers/emception-12.pack.gz",
+      "offset": 0,
+      "length": 7687442
+    },
+    "wasm-tinygo/vendor/emception/6cc9879b697f7bea5320.a": {
+      "layer": "wasm-tinygo/layers/emception-12.pack.gz",
+      "offset": 7687442,
+      "length": 6169908
+    },
+    "wasm-tinygo/vendor/emception/6e39b186389d876425b6.a": {
+      "layer": "wasm-tinygo/layers/emception-12.pack.gz",
+      "offset": 13857350,
+      "length": 1020828
+    },
+    "wasm-tinygo/vendor/emception/71089b287747d3fea34e.a": {
+      "layer": "wasm-tinygo/layers/emception-12.pack.gz",
+      "offset": 14878178,
+      "length": 69912
+    },
+    "wasm-tinygo/vendor/emception/7273dd29ef1379c23089.a": {
+      "layer": "wasm-tinygo/layers/emception-12.pack.gz",
+      "offset": 14948090,
+      "length": 30756
+    },
+    "wasm-tinygo/vendor/emception/73b97b3beff14f47a807.a": {
+      "layer": "wasm-tinygo/layers/emception-12.pack.gz",
+      "offset": 14978846,
+      "length": 51628
+    },
+    "wasm-tinygo/vendor/emception/75abf635041a549569b8.a": {
+      "layer": "wasm-tinygo/layers/emception-12.pack.gz",
+      "offset": 15030474,
+      "length": 70276
+    },
+    "wasm-tinygo/vendor/emception/764045a8ce5284c73e70.a": {
+      "layer": "wasm-tinygo/layers/emception-12.pack.gz",
+      "offset": 15100750,
+      "length": 84116
+    },
+    "wasm-tinygo/vendor/emception/76675e5bd5a2a60a5283.a": {
+      "layer": "wasm-tinygo/layers/emception-12.pack.gz",
+      "offset": 15184866,
+      "length": 90038
+    },
+    "wasm-tinygo/vendor/emception/770a53c29432c92364e8.a": {
+      "layer": "wasm-tinygo/layers/emception-13.pack.gz",
+      "offset": 0,
+      "length": 3128288
+    },
+    "wasm-tinygo/vendor/emception/7760079e1a0e0e943337.a": {
+      "layer": "wasm-tinygo/layers/emception-13.pack.gz",
+      "offset": 3128288,
+      "length": 69976
+    },
+    "wasm-tinygo/vendor/emception/783b057899f333b0261a.a": {
+      "layer": "wasm-tinygo/layers/emception-13.pack.gz",
+      "offset": 3198264,
+      "length": 328
+    },
+    "wasm-tinygo/vendor/emception/788412dcc1e37edc5ac3.a": {
+      "layer": "wasm-tinygo/layers/emception-13.pack.gz",
+      "offset": 3198592,
+      "length": 68956
+    },
+    "wasm-tinygo/vendor/emception/7b445e27b2b77addb603.a": {
+      "layer": "wasm-tinygo/layers/emception-13.pack.gz",
+      "offset": 3267548,
+      "length": 7074
+    },
+    "wasm-tinygo/vendor/emception/7fdc5c4e0d0c20909779.a": {
+      "layer": "wasm-tinygo/layers/emception-13.pack.gz",
+      "offset": 3274622,
+      "length": 68820
+    },
+    "wasm-tinygo/vendor/emception/8022d574f96fed799232.a": {
+      "layer": "wasm-tinygo/layers/emception-13.pack.gz",
+      "offset": 3343442,
+      "length": 51718
+    },
+    "wasm-tinygo/vendor/emception/80e8be53df562faaf13f.a": {
+      "layer": "wasm-tinygo/layers/emception-13.pack.gz",
+      "offset": 3395160,
+      "length": 6211864
+    },
+    "wasm-tinygo/vendor/emception/81d0ac06d1c2ad629785.a": {
+      "layer": "wasm-tinygo/layers/emception-13.pack.gz",
+      "offset": 9607024,
+      "length": 40254
+    },
+    "wasm-tinygo/vendor/emception/8255d5388ffc5c5fa04e.a": {
+      "layer": "wasm-tinygo/layers/emception-13.pack.gz",
+      "offset": 9647278,
+      "length": 6210918
+    },
+    "wasm-tinygo/vendor/emception/842128646422958a8aa0.a": {
+      "layer": "wasm-tinygo/layers/emception-13.pack.gz",
+      "offset": 15858196,
+      "length": 5074
+    },
+    "wasm-tinygo/vendor/emception/848137a3fff4c44b7f6a.a": {
+      "layer": "wasm-tinygo/layers/emception-14.pack.gz",
+      "offset": 0,
+      "length": 6169714
+    },
+    "wasm-tinygo/vendor/emception/878c1f5028be0e7b9363.a": {
+      "layer": "wasm-tinygo/layers/emception-14.pack.gz",
+      "offset": 6169714,
+      "length": 68726
+    },
+    "wasm-tinygo/vendor/emception/88b9893df42e6f9bbbff.a": {
+      "layer": "wasm-tinygo/layers/emception-14.pack.gz",
+      "offset": 6238440,
+      "length": 77744
+    },
+    "wasm-tinygo/vendor/emception/8935d5839308320a333e.a": {
+      "layer": "wasm-tinygo/layers/emception-14.pack.gz",
+      "offset": 6316184,
+      "length": 77800
+    },
+    "wasm-tinygo/vendor/emception/8a1f2ccb58c5bb56f414.a": {
+      "layer": "wasm-tinygo/layers/emception-14.pack.gz",
+      "offset": 6393984,
+      "length": 51404
+    },
+    "wasm-tinygo/vendor/emception/8a3942b36afc94293f78.a": {
+      "layer": "wasm-tinygo/layers/emception-14.pack.gz",
+      "offset": 6445388,
+      "length": 51650
+    },
+    "wasm-tinygo/vendor/emception/8a9c08484fac6b54b554.a": {
+      "layer": "wasm-tinygo/layers/emception-14.pack.gz",
+      "offset": 6497038,
+      "length": 78772
+    },
+    "wasm-tinygo/vendor/emception/8b345c86db298e9ae423.a": {
+      "layer": "wasm-tinygo/layers/emception-14.pack.gz",
+      "offset": 6575810,
+      "length": 4687278
+    },
+    "wasm-tinygo/vendor/emception/8c2b21b1370943fce840.a": {
+      "layer": "wasm-tinygo/layers/emception-15.pack.gz",
+      "offset": 0,
+      "length": 6582366
+    },
+    "wasm-tinygo/vendor/emception/8cb0ec04369d2ee7bc3b.a": {
+      "layer": "wasm-tinygo/layers/emception-15.pack.gz",
+      "offset": 6582366,
+      "length": 24778
+    },
+    "wasm-tinygo/vendor/emception/8fb392152570da7be1d8.a": {
+      "layer": "wasm-tinygo/layers/emception-15.pack.gz",
+      "offset": 6607144,
+      "length": 70440
+    },
+    "wasm-tinygo/vendor/emception/8fcf3370ff66ca937936.a": {
+      "layer": "wasm-tinygo/layers/emception-15.pack.gz",
+      "offset": 6677584,
+      "length": 90234
+    },
+    "wasm-tinygo/vendor/emception/903d775a7c01b0a8302e.a": {
+      "layer": "wasm-tinygo/layers/emception-15.pack.gz",
+      "offset": 6767818,
+      "length": 60404
+    },
+    "wasm-tinygo/vendor/emception/90a7cde4d54bcb949daf.a": {
+      "layer": "wasm-tinygo/layers/emception-15.pack.gz",
+      "offset": 6828222,
+      "length": 7786548
+    },
+    "wasm-tinygo/vendor/emception/921a6ac9f018f2f3e7b3.a": {
+      "layer": "wasm-tinygo/layers/emception-15.pack.gz",
+      "offset": 14614770,
+      "length": 80888
+    },
+    "wasm-tinygo/vendor/emception/9350f3b1d574a5e06b54.a": {
+      "layer": "wasm-tinygo/layers/emception-15.pack.gz",
+      "offset": 14695658,
+      "length": 39314
+    },
+    "wasm-tinygo/vendor/emception/936acf34f9406ab0a6f8.a": {
+      "layer": "wasm-tinygo/layers/emception-15.pack.gz",
+      "offset": 14734972,
+      "length": 918294
+    },
+    "wasm-tinygo/vendor/emception/94c22103400127179679.a": {
+      "layer": "wasm-tinygo/layers/emception-15.pack.gz",
+      "offset": 15653266,
+      "length": 39098
+    },
+    "wasm-tinygo/vendor/emception/96b4a47dce9ccbc9044c.a": {
+      "layer": "wasm-tinygo/layers/emception-15.pack.gz",
+      "offset": 15692364,
+      "length": 84678
+    },
+    "wasm-tinygo/vendor/emception/98bfeb29a114081d225b.a": {
+      "layer": "wasm-tinygo/layers/emception-16.pack.gz",
+      "offset": 0,
+      "length": 6209170
+    },
+    "wasm-tinygo/vendor/emception/99f706cb4c9f9ff65afa.a": {
+      "layer": "wasm-tinygo/layers/emception-16.pack.gz",
+      "offset": 6209170,
+      "length": 89768
+    },
+    "wasm-tinygo/vendor/emception/9a8de5ae196c7a3fa9e8.a": {
+      "layer": "wasm-tinygo/layers/emception-16.pack.gz",
+      "offset": 6298938,
+      "length": 538266
+    },
+    "wasm-tinygo/vendor/emception/9b6ef3a3b3c561272b1d.a": {
+      "layer": "wasm-tinygo/layers/emception-16.pack.gz",
+      "offset": 6837204,
+      "length": 1324238
+    },
+    "wasm-tinygo/vendor/emception/9c6f88f14b1ca01cd2a3.a": {
+      "layer": "wasm-tinygo/layers/emception-16.pack.gz",
+      "offset": 8161442,
+      "length": 6209488
+    },
+    "wasm-tinygo/vendor/emception/9c9f534949497090d21c.a": {
+      "layer": "wasm-tinygo/layers/emception-17.pack.gz",
+      "offset": 0,
+      "length": 6441072
+    },
+    "wasm-tinygo/vendor/emception/9ccbcde5aa7a9eb4d38e.a": {
+      "layer": "wasm-tinygo/layers/emception-17.pack.gz",
+      "offset": 6441072,
+      "length": 89480
+    },
+    "wasm-tinygo/vendor/emception/9d1e542b80004e27297f.wasm": {
+      "layer": "wasm-tinygo/layers/emception-17.pack.gz",
+      "offset": 6530552,
+      "length": 146837
+    },
+    "wasm-tinygo/vendor/emception/9e2d96ffe47693786fa8.a": {
+      "layer": "wasm-tinygo/layers/emception-17.pack.gz",
+      "offset": 6677389,
+      "length": 7898
+    },
+    "wasm-tinygo/vendor/emception/9ea9109e04562ba620dc.a": {
+      "layer": "wasm-tinygo/layers/emception-17.pack.gz",
+      "offset": 6685287,
+      "length": 4195460
+    },
+    "wasm-tinygo/vendor/emception/9fdbf3f28c9b4f3006c4.a": {
+      "layer": "wasm-tinygo/layers/emception-17.pack.gz",
+      "offset": 10880747,
+      "length": 608350
+    },
+    "wasm-tinygo/vendor/emception/a3897fd7df5d1fe53b18.a": {
+      "layer": "wasm-tinygo/layers/emception-17.pack.gz",
+      "offset": 11489097,
+      "length": 24338
+    },
+    "wasm-tinygo/vendor/emception/a3e7a5ca29f190121182.a": {
+      "layer": "wasm-tinygo/layers/emception-17.pack.gz",
+      "offset": 11513435,
+      "length": 74630
+    },
+    "wasm-tinygo/vendor/emception/a5ee9301e9948a38c5b0.a": {
+      "layer": "wasm-tinygo/layers/emception-17.pack.gz",
+      "offset": 11588065,
+      "length": 243790
+    },
+    "wasm-tinygo/vendor/emception/a889be9f26be507689ca.a": {
+      "layer": "wasm-tinygo/layers/emception-17.pack.gz",
+      "offset": 11831855,
+      "length": 4661804
+    },
+    "wasm-tinygo/vendor/emception/a95c58d116b417247f1f.a": {
+      "layer": "wasm-tinygo/layers/emception-17.pack.gz",
+      "offset": 16493659,
+      "length": 68188
+    },
+    "wasm-tinygo/vendor/emception/aa6cd7a259e084446796.a": {
+      "layer": "wasm-tinygo/layers/emception-17.pack.gz",
+      "offset": 16561847,
+      "length": 51420
+    },
+    "wasm-tinygo/vendor/emception/aaacf72c4293885f3981.a": {
+      "layer": "wasm-tinygo/layers/emception-18.pack.gz",
+      "offset": 0,
+      "length": 607436
+    },
+    "wasm-tinygo/vendor/emception/aaf39f7b0a33ad89516a.a": {
+      "layer": "wasm-tinygo/layers/emception-18.pack.gz",
+      "offset": 607436,
+      "length": 24656
+    },
+    "wasm-tinygo/vendor/emception/ab602f45c7a0d68440ea.a": {
+      "layer": "wasm-tinygo/layers/emception-18.pack.gz",
+      "offset": 632092,
+      "length": 3171358
+    },
+    "wasm-tinygo/vendor/emception/ab973d2baad62524c42a.a": {
+      "layer": "wasm-tinygo/layers/emception-18.pack.gz",
+      "offset": 3803450,
+      "length": 194986
+    },
+    "wasm-tinygo/vendor/emception/ac41c398c49667748a17.a": {
+      "layer": "wasm-tinygo/layers/emception-18.pack.gz",
+      "offset": 3998436,
+      "length": 3537434
+    },
+    "wasm-tinygo/vendor/emception/acd57fcd0078e86b624f.a": {
+      "layer": "wasm-tinygo/layers/emception-18.pack.gz",
+      "offset": 7535870,
+      "length": 58730
+    },
+    "wasm-tinygo/vendor/emception/ace2f4d2f26710ccafae.a": {
+      "layer": "wasm-tinygo/layers/emception-18.pack.gz",
+      "offset": 7594600,
+      "length": 6583348
+    },
+    "wasm-tinygo/vendor/emception/acebf0ab9836a0b4a201.a": {
+      "layer": "wasm-tinygo/layers/emception-18.pack.gz",
+      "offset": 14177948,
+      "length": 1255620
+    },
+    "wasm-tinygo/vendor/emception/ad473e6f07763dd5e6f0.a": {
+      "layer": "wasm-tinygo/layers/emception-18.pack.gz",
+      "offset": 15433568,
+      "length": 51626
+    },
+    "wasm-tinygo/vendor/emception/ad713bb2412d55a7db10.a": {
+      "layer": "wasm-tinygo/layers/emception-18.pack.gz",
+      "offset": 15485194,
+      "length": 69856
+    },
+    "wasm-tinygo/vendor/emception/aeb70566eaadb2362cf4.a": {
+      "layer": "wasm-tinygo/layers/emception-18.pack.gz",
+      "offset": 15555050,
+      "length": 84144
+    },
+    "wasm-tinygo/vendor/emception/afde9c24a034f8ce4be8.a": {
+      "layer": "wasm-tinygo/layers/emception-19.pack.gz",
+      "offset": 0,
+      "length": 7634814
+    },
+    "wasm-tinygo/vendor/emception/b11ab0c1e4dbd3bc46b9.a": {
+      "layer": "wasm-tinygo/layers/emception-19.pack.gz",
+      "offset": 7634814,
+      "length": 75694
+    },
+    "wasm-tinygo/vendor/emception/b20b7276388fba49edf1.a": {
+      "layer": "wasm-tinygo/layers/emception-19.pack.gz",
+      "offset": 7710508,
+      "length": 5136
+    },
+    "wasm-tinygo/vendor/emception/b25fbaced0366a902a81.a": {
+      "layer": "wasm-tinygo/layers/emception-19.pack.gz",
+      "offset": 7715644,
+      "length": 70810
+    },
+    "wasm-tinygo/vendor/emception/b2f4f98ff2e618604cdc.a": {
+      "layer": "wasm-tinygo/layers/emception-19.pack.gz",
+      "offset": 7786454,
+      "length": 84590
+    },
+    "wasm-tinygo/vendor/emception/b4218667f09dd0592f31.a": {
+      "layer": "wasm-tinygo/layers/emception-19.pack.gz",
+      "offset": 7871044,
+      "length": 84858
+    },
+    "wasm-tinygo/vendor/emception/b46e382623b285217b2c.a": {
+      "layer": "wasm-tinygo/layers/emception-19.pack.gz",
+      "offset": 7955902,
+      "length": 7635140
+    },
+    "wasm-tinygo/vendor/emception/b4a90fa56770b7c0ed93.a": {
+      "layer": "wasm-tinygo/layers/emception-19.pack.gz",
+      "offset": 15591042,
+      "length": 33960
+    },
+    "wasm-tinygo/vendor/emception/b4ef012f1edcec3076e8.a": {
+      "layer": "wasm-tinygo/layers/emception-19.pack.gz",
+      "offset": 15625002,
+      "length": 84872
+    },
+    "wasm-tinygo/vendor/emception/b532f5ece12a15aefaf0.a": {
+      "layer": "wasm-tinygo/layers/emception-20.pack.gz",
+      "offset": 0,
+      "length": 6235950
+    },
+    "wasm-tinygo/vendor/emception/b537202751ac156ce052.a": {
+      "layer": "wasm-tinygo/layers/emception-20.pack.gz",
+      "offset": 6235950,
+      "length": 85330
+    },
+    "wasm-tinygo/vendor/emception/bb18a32e4130d426d35d.a": {
+      "layer": "wasm-tinygo/layers/emception-20.pack.gz",
+      "offset": 6321280,
+      "length": 80770
+    },
+    "wasm-tinygo/vendor/emception/bb5f1bcaf5299bfcb1f7.a": {
+      "layer": "wasm-tinygo/layers/emception-20.pack.gz",
+      "offset": 6402050,
+      "length": 26884
+    },
+    "wasm-tinygo/vendor/emception/bb85f3944f23b3173b13.a": {
+      "layer": "wasm-tinygo/layers/emception-20.pack.gz",
+      "offset": 6428934,
+      "length": 74494
+    },
+    "wasm-tinygo/vendor/emception/bce8059434f142d51825.a": {
+      "layer": "wasm-tinygo/layers/emception-20.pack.gz",
+      "offset": 6503428,
+      "length": 5110
+    },
+    "wasm-tinygo/vendor/emception/be984663ae1e68cf1d8e.a": {
+      "layer": "wasm-tinygo/layers/emception-20.pack.gz",
+      "offset": 6508538,
+      "length": 75992
+    },
+    "wasm-tinygo/vendor/emception/bedd34b179493040a81e.a": {
+      "layer": "wasm-tinygo/layers/emception-20.pack.gz",
+      "offset": 6584530,
+      "length": 1344346
+    },
+    "wasm-tinygo/vendor/emception/c1f13c7e7bf8dd4114ec.a": {
+      "layer": "wasm-tinygo/layers/emception-20.pack.gz",
+      "offset": 7928876,
+      "length": 69568
+    },
+    "wasm-tinygo/vendor/emception/c240cb6c2119909b942b.a": {
+      "layer": "wasm-tinygo/layers/emception-20.pack.gz",
+      "offset": 7998444,
+      "length": 51738
+    },
+    "wasm-tinygo/vendor/emception/c2bd245fa6d9997e3760.a": {
+      "layer": "wasm-tinygo/layers/emception-20.pack.gz",
+      "offset": 8050182,
+      "length": 70436
+    },
+    "wasm-tinygo/vendor/emception/c5969658c8b5e2b977f3.a": {
+      "layer": "wasm-tinygo/layers/emception-20.pack.gz",
+      "offset": 8120618,
+      "length": 263214
+    },
+    "wasm-tinygo/vendor/emception/c5cf3f08c9f3eb35301a.a": {
+      "layer": "wasm-tinygo/layers/emception-20.pack.gz",
+      "offset": 8383832,
+      "length": 80682
+    },
+    "wasm-tinygo/vendor/emception/c7d99977a96a08063adb.a": {
+      "layer": "wasm-tinygo/layers/emception-20.pack.gz",
+      "offset": 8464514,
+      "length": 6167496
+    },
+    "wasm-tinygo/vendor/emception/c8333aadb718cb785b9f.a": {
+      "layer": "wasm-tinygo/layers/emception-20.pack.gz",
+      "offset": 14632010,
+      "length": 81526
+    },
+    "wasm-tinygo/vendor/emception/c88c5c86f371ac2fbd27.a": {
+      "layer": "wasm-tinygo/layers/emception-20.pack.gz",
+      "offset": 14713536,
+      "length": 147138
+    },
+    "wasm-tinygo/vendor/emception/cabb6f5ef2e39e9ba39d.a": {
+      "layer": "wasm-tinygo/layers/emception-20.pack.gz",
+      "offset": 14860674,
+      "length": 26570
+    },
+    "wasm-tinygo/vendor/emception/cc34f01f30f83cd4f50e.a": {
+      "layer": "wasm-tinygo/layers/emception-20.pack.gz",
+      "offset": 14887244,
+      "length": 82162
+    },
+    "wasm-tinygo/vendor/emception/cc494ac7d9a625b07b1b.a": {
+      "layer": "wasm-tinygo/layers/emception-20.pack.gz",
+      "offset": 14969406,
+      "length": 68324
+    },
+    "wasm-tinygo/vendor/emception/cd2b4d8bfcd766e4197f.a": {
+      "layer": "wasm-tinygo/layers/emception-20.pack.gz",
+      "offset": 15037730,
+      "length": 70492
+    },
+    "wasm-tinygo/vendor/emception/cdecb3abae4373e4d303.a": {
+      "layer": "wasm-tinygo/layers/emception-20.pack.gz",
+      "offset": 15108222,
+      "length": 68782
+    },
+    "wasm-tinygo/vendor/emception/cf8a1872bb7ba5c61027.a": {
+      "layer": "wasm-tinygo/layers/emception-21.pack.gz",
+      "offset": 0,
+      "length": 1674326
+    },
+    "wasm-tinygo/vendor/emception/d07d07d3f2cae1667a40.a": {
+      "layer": "wasm-tinygo/layers/emception-21.pack.gz",
+      "offset": 1674326,
+      "length": 539682
+    },
+    "wasm-tinygo/vendor/emception/d0aafd030289257fd078.a": {
+      "layer": "wasm-tinygo/layers/emception-21.pack.gz",
+      "offset": 2214008,
+      "length": 6274122
+    },
+    "wasm-tinygo/vendor/emception/d128e7651294849405be.a": {
+      "layer": "wasm-tinygo/layers/emception-21.pack.gz",
+      "offset": 8488130,
+      "length": 24842
+    },
+    "wasm-tinygo/vendor/emception/d3febdfe46b4a90e5d13.a": {
+      "layer": "wasm-tinygo/layers/emception-21.pack.gz",
+      "offset": 8512972,
+      "length": 74800
+    },
+    "wasm-tinygo/vendor/emception/d544af9224c958eb7ac2.a": {
+      "layer": "wasm-tinygo/layers/emception-21.pack.gz",
+      "offset": 8587772,
+      "length": 13526
+    },
+    "wasm-tinygo/vendor/emception/d66750e1cc984ebd7ef8.a": {
+      "layer": "wasm-tinygo/layers/emception-21.pack.gz",
+      "offset": 8601298,
+      "length": 82032
+    },
+    "wasm-tinygo/vendor/emception/d9ea7a9998a09c276158.a": {
+      "layer": "wasm-tinygo/layers/emception-21.pack.gz",
+      "offset": 8683330,
+      "length": 7641484
+    },
+    "wasm-tinygo/vendor/emception/da352a2e4b1a38aed21a.a": {
+      "layer": "wasm-tinygo/layers/emception-21.pack.gz",
+      "offset": 16324814,
+      "length": 28932
+    },
+    "wasm-tinygo/vendor/emception/dacae59483525b96002c.a": {
+      "layer": "wasm-tinygo/layers/emception-21.pack.gz",
+      "offset": 16353746,
+      "length": 30748
+    },
+    "wasm-tinygo/vendor/emception/daf021c7f25ff74890d4.a": {
+      "layer": "wasm-tinygo/layers/emception-22.pack.gz",
+      "offset": 0,
+      "length": 1344780
+    },
+    "wasm-tinygo/vendor/emception/def2e0a48afad5408473.a": {
+      "layer": "wasm-tinygo/layers/emception-22.pack.gz",
+      "offset": 1344780,
+      "length": 505610
+    },
+    "wasm-tinygo/vendor/emception/df116a87bb461a3ba533.a": {
+      "layer": "wasm-tinygo/layers/emception-22.pack.gz",
+      "offset": 1850390,
+      "length": 70158
+    },
+    "wasm-tinygo/vendor/emception/e10a86fe8e23905fd8d8.a": {
+      "layer": "wasm-tinygo/layers/emception-22.pack.gz",
+      "offset": 1920548,
+      "length": 377906
+    },
+    "wasm-tinygo/vendor/emception/e1aad3f6208dad036a33.a": {
+      "layer": "wasm-tinygo/layers/emception-22.pack.gz",
+      "offset": 2298454,
+      "length": 68278
+    },
+    "wasm-tinygo/vendor/emception/e38cdda5ca1f9617b4d2.a": {
+      "layer": "wasm-tinygo/layers/emception-22.pack.gz",
+      "offset": 2366732,
+      "length": 78204
+    },
+    "wasm-tinygo/vendor/emception/e3ea30e0937417a56260.a": {
+      "layer": "wasm-tinygo/layers/emception-22.pack.gz",
+      "offset": 2444936,
+      "length": 1262194
+    },
+    "wasm-tinygo/vendor/emception/e43c6f178821c3ebb17e.a": {
+      "layer": "wasm-tinygo/layers/emception-22.pack.gz",
+      "offset": 3707130,
+      "length": 1021280
+    },
+    "wasm-tinygo/vendor/emception/e49fe87ee1cb0af5c592.a": {
+      "layer": "wasm-tinygo/layers/emception-22.pack.gz",
+      "offset": 4728410,
+      "length": 1677340
+    },
+    "wasm-tinygo/vendor/emception/e65296472ca08bb92858.a": {
+      "layer": "wasm-tinygo/layers/emception-22.pack.gz",
+      "offset": 6405750,
+      "length": 70620
+    },
+    "wasm-tinygo/vendor/emception/e6bcedba8c951c670fa8.a": {
+      "layer": "wasm-tinygo/layers/emception-22.pack.gz",
+      "offset": 6476370,
+      "length": 38742
+    },
+    "wasm-tinygo/vendor/emception/e707e552c02523b4245e.a": {
+      "layer": "wasm-tinygo/layers/emception-22.pack.gz",
+      "offset": 6515112,
+      "length": 266452
+    },
+    "wasm-tinygo/vendor/emception/e7529b3cc5e39c21383a.a": {
+      "layer": "wasm-tinygo/layers/emception-22.pack.gz",
+      "offset": 6781564,
+      "length": 6206758
+    },
+    "wasm-tinygo/vendor/emception/e7e6cb2d1231d9f29258.a": {
+      "layer": "wasm-tinygo/layers/emception-22.pack.gz",
+      "offset": 12988322,
+      "length": 246658
+    },
+    "wasm-tinygo/vendor/emception/e875359c01ba17c0be14.a": {
+      "layer": "wasm-tinygo/layers/emception-22.pack.gz",
+      "offset": 13234980,
+      "length": 81278
+    },
+    "wasm-tinygo/vendor/emception/e87631b792e2f847abba.a": {
+      "layer": "wasm-tinygo/layers/emception-22.pack.gz",
+      "offset": 13316258,
+      "length": 70056
+    },
+    "wasm-tinygo/vendor/emception/ee4be49f22de1cea178a.a": {
+      "layer": "wasm-tinygo/layers/emception-22.pack.gz",
+      "offset": 13386314,
+      "length": 82070
+    },
+    "wasm-tinygo/vendor/emception/ef04f09a4ac1910678e6.a": {
+      "layer": "wasm-tinygo/layers/emception-22.pack.gz",
+      "offset": 13468384,
+      "length": 224430
+    },
+    "wasm-tinygo/vendor/emception/ef61b23df7b55f389e11.a": {
+      "layer": "wasm-tinygo/layers/emception-22.pack.gz",
+      "offset": 13692814,
+      "length": 74936
+    },
+    "wasm-tinygo/vendor/emception/efb2437ce73fe73669bd.a": {
+      "layer": "wasm-tinygo/layers/emception-22.pack.gz",
+      "offset": 13767750,
+      "length": 27074
+    },
+    "wasm-tinygo/vendor/emception/emception.worker.js": {
+      "layer": "wasm-tinygo/layers/emception-22.pack.gz",
+      "offset": 13794824,
+      "length": 530734
+    },
+    "wasm-tinygo/vendor/emception/f0283badd42fe745cbe4.wasm": {
+      "layer": "wasm-tinygo/layers/emception-22.pack.gz",
+      "offset": 14325558,
+      "length": 804447
+    },
+    "wasm-tinygo/vendor/emception/f03f0884c6369c148e6b.a": {
+      "layer": "wasm-tinygo/layers/emception-22.pack.gz",
+      "offset": 15130005,
+      "length": 69726
+    },
+    "wasm-tinygo/vendor/emception/f0ec64bab345fb342d61.a": {
+      "layer": "wasm-tinygo/layers/emception-22.pack.gz",
+      "offset": 15199731,
+      "length": 51682
+    },
+    "wasm-tinygo/vendor/emception/f0f311988cbb0f5ddb56.a": {
+      "layer": "wasm-tinygo/layers/emception-22.pack.gz",
+      "offset": 15251413,
+      "length": 68414
+    },
+    "wasm-tinygo/vendor/emception/f173f94bdafe7867c381.a": {
+      "layer": "wasm-tinygo/layers/emception-23.pack.gz",
+      "offset": 0,
+      "length": 6442030
+    },
+    "wasm-tinygo/vendor/emception/f4170ad872a06601aa01.a": {
+      "layer": "wasm-tinygo/layers/emception-23.pack.gz",
+      "offset": 6442030,
+      "length": 83924
+    },
+    "wasm-tinygo/vendor/emception/f45faeacf5d3190597aa.a": {
+      "layer": "wasm-tinygo/layers/emception-23.pack.gz",
+      "offset": 6525954,
+      "length": 39232
+    },
+    "wasm-tinygo/vendor/emception/f59f066c9e02c6306c1c.a": {
+      "layer": "wasm-tinygo/layers/emception-23.pack.gz",
+      "offset": 6565186,
+      "length": 84782
+    },
+    "wasm-tinygo/vendor/emception/f676d308226db6473e81.a": {
+      "layer": "wasm-tinygo/layers/emception-23.pack.gz",
+      "offset": 6649968,
+      "length": 33788
+    },
+    "wasm-tinygo/vendor/emception/f978c6aa8bc576a41037.a": {
+      "layer": "wasm-tinygo/layers/emception-23.pack.gz",
+      "offset": 6683756,
+      "length": 7680796
+    },
+    "wasm-tinygo/vendor/emception/fba10914ebd608ba08b7.a": {
+      "layer": "wasm-tinygo/layers/emception-23.pack.gz",
+      "offset": 14364552,
+      "length": 85456
+    },
+    "wasm-tinygo/vendor/emception/fc7443fdff9e56254cce.a": {
+      "layer": "wasm-tinygo/layers/emception-23.pack.gz",
+      "offset": 14450008,
+      "length": 934376
+    },
+    "wasm-tinygo/vendor/emception/fefe5d5e0b9817df2802.a": {
+      "layer": "wasm-tinygo/layers/emception-23.pack.gz",
+      "offset": 15384384,
+      "length": 607916
+    }
+  }
+}

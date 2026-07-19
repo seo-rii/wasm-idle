@@ -2,14 +2,14 @@
   "manifestVersion": 1,
   "version": "gnucobol-3.2-wasi-preview1-v1",
   "frontend": {
-    "asset": "cobc.zip",
+    "asset": "cobc.wasm.gz",
     "argv0": "cobc"
   },
   "rootfs": {
-    "asset": "rootfs.tar.zip"
+    "asset": "rootfs.tar.gz"
   },
   "cSysroot": {
-    "asset": "c-sysroot.tar.zip"
+    "asset": "c-sysroot.tar.gz"
   },
   "profile": {
     "name": "gnucobol-wasi-clang",

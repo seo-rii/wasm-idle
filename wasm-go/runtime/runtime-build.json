@@ -7,7 +7,7 @@
     "sha256": "031f088e5d955bab8657ede27ad4e3bc5b7c1ba281f05f245bcc304f327c987a"
   },
   "toolchain": {
-    "goroot": "/home/seorii/dev/hancomac/wasm-go/artifacts/cache/toolchains/go1.26.1/linux-x64/go"
+    "goroot": "/home/seorii/dev/hancomac/wasm-idle/runtimes/wasm-go/artifacts/cache/toolchains/go1.26.1/linux-x64/go"
   },
   "outputs": {
     "compileWasmGzip": "tools/compile.wasm.gz",

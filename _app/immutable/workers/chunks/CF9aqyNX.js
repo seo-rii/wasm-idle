@@ -1,1 +1,0 @@
-var e=``+new URL(`../assets/intl-CuMshQPh.so`,import.meta.url).href;export{e as default};

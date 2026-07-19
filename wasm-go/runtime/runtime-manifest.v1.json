@@ -123,7 +123,17 @@
         "asset": "sysroot/js.pack.gz",
         "index": "sysroot/js.index.json.gz",
         "fileCount": 350,
-        "totalBytes": 129713052
+        "totalBytes": 11957160,
+        "decodedTotalBytes": 129713052,
+        "delta": {
+          "format": "copy-literal-v1",
+          "base": {
+            "asset": "sysroot/wasip1.pack.gz",
+            "index": "sysroot/wasip1.index.json.gz",
+            "fileCount": 349,
+            "totalBytes": 129493860
+          }
+        }
       },
       "stdlibIndex": {
         "asset": "sysroot/js.stdlib-index.json.gz",

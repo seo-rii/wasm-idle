@@ -69,6 +69,12 @@ function expectNumber(value, label) {
     }
     return value;
 }
+function expectNonNegativeInteger(value, label) {
+    if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
+        throw new Error(`invalid ${label} in wasm-rust runtime manifest`);
+    }
+    return value;
+}
 function expectStringArray(value, label) {
     if (!Array.isArray(value) ||
         value.some((entry) => typeof entry !== 'string' || entry.length === 0)) {
@@ -115,14 +121,39 @@ function expectAssetFileArray(value, label) {
         };
     });
 }
-function parseRuntimeAssetPack(value, label) {
+function parseRuntimeAssetPack(value, label, ancestors = new Set()) {
     const object = expectObject(value, label);
-    return {
-        asset: expectString(object.asset, `${label}.asset`),
-        index: expectString(object.index, `${label}.index`),
-        fileCount: expectNumber(object.fileCount, `${label}.fileCount`),
-        totalBytes: expectNumber(object.totalBytes, `${label}.totalBytes`)
-    };
+    if (ancestors.has(object)) {
+        throw new Error(`invalid ${label}: cyclic delta base in wasm-rust runtime manifest`);
+    }
+    ancestors.add(object);
+    try {
+        const decodedTotalBytes = object.decodedTotalBytes === undefined
+            ? undefined
+            : expectNonNegativeInteger(object.decodedTotalBytes, `${label}.decodedTotalBytes`);
+        let delta;
+        if (object.delta !== undefined) {
+            const deltaObject = expectObject(object.delta, `${label}.delta`);
+            if (deltaObject.format !== 'copy-literal-v1') {
+                throw new Error(`invalid ${label}.delta.format in wasm-rust runtime manifest`);
+            }
+            delta = {
+                format: 'copy-literal-v1',
+                base: parseRuntimeAssetPack(deltaObject.base, `${label}.delta.base`, ancestors)
+            };
+        }
+        return {
+            asset: expectString(object.asset, `${label}.asset`),
+            index: expectString(object.index, `${label}.index`),
+            fileCount: expectNonNegativeInteger(object.fileCount, `${label}.fileCount`),
+            totalBytes: expectNonNegativeInteger(object.totalBytes, `${label}.totalBytes`),
+            ...(decodedTotalBytes === undefined ? {} : { decodedTotalBytes }),
+            ...(delta ? { delta } : {})
+        };
+    }
+    finally {
+        ancestors.delete(object);
+    }
 }
 function parseRustcMemory(value, label) {
     const object = expectObject(value, label);

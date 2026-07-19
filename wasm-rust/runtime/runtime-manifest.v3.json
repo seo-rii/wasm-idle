@@ -43,7 +43,17 @@
         "asset": "packs/sysroot/wasm32-wasip2.pack.gz",
         "index": "packs/sysroot/wasm32-wasip2.index.json.gz",
         "fileCount": 47,
-        "totalBytes": 77894467
+        "totalBytes": 17558862,
+        "decodedTotalBytes": 77894467,
+        "delta": {
+          "format": "copy-literal-v1",
+          "base": {
+            "asset": "packs/sysroot/wasm32-wasip1.pack.gz",
+            "index": "packs/sysroot/wasm32-wasip1.index.json.gz",
+            "fileCount": 45,
+            "totalBytes": 75268153
+          }
+        }
       },
       "compile": {
         "kind": "integrated-rustc+component-encoder"
@@ -58,7 +68,17 @@
         "asset": "packs/sysroot/wasm32-wasip3.pack.gz",
         "index": "packs/sysroot/wasm32-wasip3.index.json.gz",
         "fileCount": 47,
-        "totalBytes": 78563925
+        "totalBytes": 18202672,
+        "decodedTotalBytes": 78563925,
+        "delta": {
+          "format": "copy-literal-v1",
+          "base": {
+            "asset": "packs/sysroot/wasm32-wasip1.pack.gz",
+            "index": "packs/sysroot/wasm32-wasip1.index.json.gz",
+            "fileCount": 45,
+            "totalBytes": 75268153
+          }
+        }
       },
       "compile": {
         "kind": "integrated-rustc+component-encoder"

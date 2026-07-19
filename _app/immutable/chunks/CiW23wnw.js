@@ -1,1 +1,0 @@
-import{I as e}from"./Cp7t0EUi.js";import{t}from"./BpMlv3VK.js";var n=class extends t{constructor(){super({languageId:`TCL`,displayName:`Tcl`,defaultActivePath:`main.tcl`,readStdinPattern:/\b(gets|read)\s+(stdin|file\d*)\b|\bstdin\b/,resolveRuntimeAssets(t,n){return e(t,n)}})}};export{n as default};

@@ -9,14 +9,14 @@
     "nimVersion": "2.2.4",
     "llvmVersion": "8.0.1"
   },
-  "fingerprint": "06890c693abcdd01",
+  "fingerprint": "9e75d610fab41626",
   "files": [
     "LICENSE",
     "README.md",
     "clang/clang.js",
     "clang/clang.wasm.gz",
     "clang/lld.wasm.gz",
-    "clang/memfs.wasm",
+    "clang/memfs.wasm.gz",
     "clang/sysroot.tar.gz",
     "nim/nim-bundle.js.gz",
     "nim/nim.wasm.gz",
