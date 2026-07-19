@@ -3871,6 +3871,13 @@
 	.editor-host {
 		flex: 1;
 		min-height: 0;
+		display: flex;
+	}
+
+	.editor-host > :global(main) {
+		flex: 1;
+		min-width: 0;
+		min-height: 0;
 	}
 
 	:global(.monaco-editor .debug-breakpoint-glyph) {

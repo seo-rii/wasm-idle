@@ -633,7 +633,12 @@ describe('Monaco route debug sync', () => {
 			/main \{\s+flex: 1;\s+min-width: 0;\s+min-height: 0;\s+display: flex;/s
 		);
 		expect(source).toMatch(/overflow: hidden;/);
-		expect(source).toMatch(/\.editor-host \{\s+flex: 1;\s+min-height: 0;\s+\}/s);
+		expect(source).toMatch(
+			/\.editor-host \{\s+flex: 1;\s+min-height: 0;\s+display: flex;\s+\}/s
+		);
+		expect(source).toMatch(
+			/\.editor-host > :global\(main\) \{\s+flex: 1;\s+min-width: 0;\s+min-height: 0;\s+\}/s
+		);
 		expect(source).toMatch(
 			/@media \(max-width: 960px\) \{\s+main \{\s+min-height: 360px;\s+border-left: 0;\s+border-top: 1px solid #e5e7eb;\s+\}\s+\}/s
 		);
