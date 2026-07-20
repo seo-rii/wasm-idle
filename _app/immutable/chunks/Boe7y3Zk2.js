@@ -1,0 +1,1 @@
+import{f as e}from"./CvV3BqBD.js";import{t}from"./DzX0TRf2.js";var n=class extends t{constructor(){super({languageId:`FORTH`,displayName:`Forth`,defaultActivePath:`main.fth`,readStdinPattern:/\b(?:KEY|ACCEPT|REFILL)\b/i,resolveRuntimeAssets(t,n){return e(t,n)}})}};export{n as default};

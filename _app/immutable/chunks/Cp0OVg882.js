@@ -1,0 +1,1 @@
+import{M as e}from"./CvV3BqBD.js";import{t}from"./DzX0TRf2.js";var n=class extends t{constructor(){super({languageId:`PROLOG`,displayName:`Prolog`,defaultActivePath:`main.prolog`,readStdinPattern:/\b(read_line_to_string|read_line_to_codes|get_char|get_code|read\s*\(|read_string)\b/,resolveRuntimeAssets(t,n){return e(t,n)}})}};export{n as default};
