@@ -1,1 +1,0 @@
-import{y as e}from"./CvV3BqBD.js";import{t}from"./DzX0TRf2.js";var n=class extends t{constructor(){super({languageId:`J`,displayName:`J`,defaultActivePath:`main.ijs`,moduleWorker:!0,readStdinPattern:/1!:\s*1|\/dev\/stdin|\bstdin\b/iu,resolveRuntimeAssets(t,n){return e(t,n)}})}};export{n as default};
