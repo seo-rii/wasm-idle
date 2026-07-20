@@ -11,13 +11,13 @@ import {
 
 describe('editor defaults', () => {
 	it('keeps each starter wired for the current browser runtime path', () => {
-		expect(editorDefaults.c).toContain('puts("Hello, WebAssembly!")');
+		expect(editorDefaults.c).toContain('fibonacci=%d');
 		expect(editorDefaults.cpp).toContain('std::cin >> n');
-		expect(editorDefaults.python).toContain('factorial_plus_bonus');
+		expect(editorDefaults.python).toContain('fibonacci');
 		expect(editorDefaults.java).toContain('Scanner scanner = new Scanner(System.in);');
 		expect(editorDefaults.go).toContain("ReadString('\\n')");
 		expect(editorDefaults.d).toContain('stdin.readln()');
-		expect(editorDefaults.d).toContain('writeln("factorial_plus_bonus="');
+		expect(editorDefaults.d).toContain('writeln("fibonacci="');
 		expect(editorDefaults.csharp).toContain('Console.ReadLine()');
 		expect(editorDefaults.fsharp).toContain('System.Console.ReadLine()');
 		expect(editorDefaults.fsharp).toContain('commandLineArgs.Length > 1');
@@ -26,24 +26,24 @@ describe('editor defaults', () => {
 		expect(editorDefaults.vbnet).toContain('Sub Main(args As String())');
 		expect(editorDefaults.elixir).toContain('IO.gets("")');
 		expect(editorDefaults.erlang).toContain('io:get_line("")');
-		expect(editorDefaults.erlang).toContain('io:format("stdin=~s"');
+		expect(editorDefaults.erlang).toContain('io:format("fibonacci=~w"');
 		expect(editorDefaults.prolog).toContain('read_line_to_string(user_input, Line)');
 		expect(editorDefaults.gleam).toContain('import wasm_idle/stdin');
 		expect(editorDefaults.gleam).toContain('stdin.read_line()');
 		expect(editorDefaults.perl).toContain('my $line = <STDIN>;');
 		expect(editorDefaults.pascal).toContain('ReadLn(Line);');
 		expect(editorDefaults.forth).toContain('KEY DUP 10 <>');
-		expect(editorDefaults.forth).toContain('factorial_plus_bonus=');
+		expect(editorDefaults.forth).toContain('fibonacci=');
 		expect(editorDefaults.j).toContain('1!:1 [ 1');
-		expect(editorDefaults.j).toContain('factorial_plus_bonus=');
+		expect(editorDefaults.j).toContain('fibonacci=');
 		expect(editorDefaults.bqn).toContain('•GetLine @');
-		expect(editorDefaults.bqn).toContain('Factorial');
+		expect(editorDefaults.bqn).toContain('fibonacci');
 		expect(editorDefaults.janet).toContain('(getline)');
-		expect(editorDefaults.janet).toContain('factorial_plus_bonus=');
+		expect(editorDefaults.janet).toContain('fibonacci=');
 		expect(editorDefaults.julia).toContain('readline()');
-		expect(editorDefaults.julia).toContain('factorial_plus_bonus=');
+		expect(editorDefaults.julia).toContain('fibonacci=');
 		expect(editorDefaults.nim).toContain('stdin.readLine()');
-		expect(editorDefaults.nim).toContain('factorial_plus_bonus=');
+		expect(editorDefaults.nim).toContain('fibonacci=');
 		expect(editorDefaults.clojurescript).toContain('[wasm-idle.runtime :as runtime]');
 		expect(editorDefaults.clojurescript).toContain('(runtime/read-line)');
 		expect(editorDefaults.clojurescript).toContain('(runtime/args)');
@@ -53,32 +53,49 @@ describe('editor defaults', () => {
 		expect(editorDefaults.typescript).toContain("import fs from 'node:fs'");
 		expect(editorDefaults.typescript).toContain('const bonus: number = 3;');
 		expect(editorDefaults.wat).toContain('(module');
-		expect(editorDefaults.wat).toContain('(export "factorial_plus_bonus")');
-		expect(editorDefaults.lua).toContain('local function factorial');
+		expect(editorDefaults.wat).toContain('(export "fibonacci")');
+		expect(editorDefaults.lua).toContain('local function fibonacci');
 		expect(editorDefaults.lua).toContain('io.read("*l")');
-		expect(editorDefaults.haskell).toContain('factorial :: Int -> Int');
+		expect(editorDefaults.haskell).toContain('fibonacci :: Int -> Int');
 		expect(editorDefaults.haskell).toContain('putStrLn');
 		expect(editorDefaults.r).toContain('readLines(stdin(), n = 1');
-		expect(editorDefaults.r).toContain('factorial_plus_bonus=%d');
+		expect(editorDefaults.r).toContain('fibonacci=%d');
 		expect(editorDefaults.octave).toContain('fgetl(stdin)');
-		expect(editorDefaults.octave).toContain('factorial_plus_bonus=%d');
+		expect(editorDefaults.octave).toContain('fibonacci=%d');
 		expect(editorDefaults.cobol).toContain('accept input-value');
-		expect(editorDefaults.cobol).toContain('display "factorial_plus_bonus="');
-		expect(editorDefaults.sqlite).toContain('CREATE TABLE numbers');
-		expect(editorDefaults.sqlite).toContain('factorial_plus_bonus=');
+		expect(editorDefaults.cobol).toContain('display "fibonacci="');
+		expect(editorDefaults.cobol).toContain('memo');
+		expect(editorDefaults.cobol).toContain('cached-result');
+		expect(editorDefaults.sqlite).toContain('WITH RECURSIVE memo');
+		expect(editorDefaults.sqlite).toContain("'fibonacci='");
+		expect(editorDefaults.duckdb).toContain('WITH RECURSIVE memo');
+		expect(editorDefaults.duckdb).toContain("'fibonacci='");
+		expect(editorDefaults.graphql).toContain('query Fibonacci');
+		expect(editorDefaults.graphql).toContain('$n: Int = 4');
+		expect(editorDefaults.graphql).toContain('fibonacci(n: $n)');
 		expect(editorDefaults.php).toContain("file_get_contents('php://input')");
-		expect(editorDefaults.php).toContain('factorial_plus_bonus=');
+		expect(editorDefaults.php).toContain('fibonacci=');
+		expect(editorDefaults.graphql).toContain('fibonacci');
 		expect(editorDefaults.json).toContain('"lsp": true');
+		expect(editorDefaults.json).toContain('"memo"');
+		expect(editorDefaults.json).toContain('"bonus": 3');
+		expect(editorDefaults.json).toContain('"outputTemplate": "fibonacci=%d"');
 		expect(editorDefaults.yaml).toContain('lsp: true');
+		expect(editorDefaults.yaml).toContain('memo:');
+		expect(editorDefaults.yaml).toContain('bonus: 3');
+		expect(editorDefaults.yaml).toContain('outputTemplate: "fibonacci=%d"');
 		expect(editorDefaults.toml).toContain('lsp = true');
+		expect(editorDefaults.toml).toContain('memo =');
+		expect(editorDefaults.toml).toContain('bonus = 3');
+		expect(editorDefaults.toml).toContain('outputTemplate = "fibonacci=%d"');
 		expect(editorDefaults.html).toContain('<!doctype html>');
 		expect(editorDefaults.css).toContain('font-family: system-ui');
 		expect(editorDefaults.markdown).toContain('# wasm-idle');
 		expect(editorDefaults.zig).toContain('std.io.getStdIn().reader()');
-		expect(editorDefaults.zig).toContain('factorial_plus_bonus={d}');
-		expect(editorDefaults.lisp).toContain('(define (factorial n)');
-		expect(editorDefaults.lisp).toContain('(display "factorial_plus_bonus=")');
-		expect(editorDefaults.haskell).toContain('factorial :: Int -> Int');
+		expect(editorDefaults.zig).toContain('fibonacci={d}');
+		expect(editorDefaults.lisp).toContain('(define (fibonacci n)');
+		expect(editorDefaults.lisp).toContain('(display "fibonacci=")');
+		expect(editorDefaults.haskell).toContain('fibonacci :: Int -> Int');
 		expect(editorDefaults.haskell).toContain('putStrLn');
 		expect(rustEditorDefaults['wasm32-wasip1']).toContain('io::stdin().read_line');
 	});
@@ -86,8 +103,8 @@ describe('editor defaults', () => {
 	it('keeps legacy broken starters recognizable for migration', () => {
 		expect(legacyBrokenTinyGoEditorDefault).toContain(`ReadString('
 ')`);
-		expect(legacyBrokenTinyGoEditorDefault).toContain(`factorial_plus_bonus=%d
-", factorial(n)+bonus)`);
+		expect(legacyBrokenTinyGoEditorDefault).toContain(`fibonacci=%d
+", fibonacci(n)+bonus)`);
 		expect(legacyBrokenFsharpEditorDefault).toContain('Array.skip 1');
 	});
 
