@@ -711,8 +711,8 @@ fibonacci() {
         printf '1'
         return
     fi
-    if [[ -n ${memo[$n]+set} ]]; then
-        printf '%d' "${memo[$n]}"
+    if [[ -n \${memo[$n]+set} ]]; then
+        printf '%d' "\${memo[$n]}"
     else
         local value=$(( $(fibonacci "$(( n - 1 ))") + $(fibonacci "$(( n - 2 ))") ))
         memo[$n]=$value
