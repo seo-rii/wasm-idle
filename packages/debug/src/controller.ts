@@ -57,6 +57,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 	const adapterState = fromStore(adapterStore);
 
 	let watchRequestVersion = 0;
+	let commandInFlight = false;
 
 	function shouldSyncBreakpoints() {
 		if (typeof options.syncBreakpointsWhile === 'function') {
@@ -162,7 +163,14 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 	function handleEvent(event: DebugSessionEvent) {
 		if (event.type === 'pause') {
 			activeStore.set(true);
+			const restoreBreakpoints = get(runToCursorLineStore) !== null;
 			runToCursorLineStore.set(null);
+			if (restoreBreakpoints) {
+				const terminal = get(terminalStore);
+				if (terminal?.setBreakpoints) {
+					void terminal.setBreakpoints([...get(breakpointsStore)]);
+				}
+			}
 			pausedLineStore.set(event.line);
 			localsStore.set(event.locals);
 			callStackStore.set(event.callStack);
@@ -227,15 +235,21 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 
 	async function sendCommand(command: DebugCommand) {
 		const terminal = get(terminalStore);
-		if (!terminal?.debugCommand || !get(pausedStore)) return false;
-		await terminal.debugCommand(command);
-		return true;
+		if (commandInFlight || !terminal?.debugCommand || !get(pausedStore)) return false;
+		commandInFlight = true;
+		try {
+			await terminal.debugCommand(command);
+			return true;
+		} finally {
+			commandInFlight = false;
+		}
 	}
 
 	async function runToCursor(targetLine = get(cursorLineStore)) {
 		const terminal = get(terminalStore);
 		const breakpoints = get(breakpointsStore);
 		if (
+			commandInFlight ||
 			!terminal?.debugCommand ||
 			!get(pausedStore) ||
 			!targetLine ||
@@ -248,9 +262,14 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 			? [...breakpoints]
 			: [...breakpoints, targetLine].sort((left, right) => left - right);
 		runToCursorLineStore.set(breakpoints.includes(targetLine) ? null : targetLine);
-		await terminal.setBreakpoints(nextBreakpoints);
-		await terminal.debugCommand('continue');
-		return true;
+		commandInFlight = true;
+		try {
+			await terminal.setBreakpoints(nextBreakpoints);
+			await terminal.debugCommand('continue');
+			return true;
+		} finally {
+			commandInFlight = false;
+		}
 	}
 
 	async function stop() {

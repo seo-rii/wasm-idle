@@ -48,9 +48,12 @@ interface RustDebugState {
 	breakpointVersion: number;
 	breakpoints: Set<number>;
 	pauseOnEntry: boolean;
-	stepMode: 'step' | 'next' | null;
+	stepMode: 'step' | 'next' | 'out' | null;
 	resumeSkip: string | null;
+	nextDepth: number | null;
 	nextLine: number | null;
+	stepOutDepth: number | null;
+	callStack: DebugFrame[];
 }
 
 async function loadCompiler(url: string) {
@@ -142,7 +145,13 @@ function refreshRustDebugBreakpoints(state: RustDebugState, control: Int32Array)
 	state.breakpoints = next;
 }
 
-function waitForRustDebugCommand(state: RustDebugState, control: Int32Array, line: number) {
+function waitForRustDebugCommand(
+	state: RustDebugState,
+	control: Int32Array,
+	locationKey: string,
+	line: number,
+	depth: number
+) {
 	while (true) {
 		const command = Atomics.exchange(control, 1, 0);
 		if (!command) {
@@ -150,14 +159,20 @@ function waitForRustDebugCommand(state: RustDebugState, control: Int32Array, lin
 			Atomics.wait(control, 0, sequence, 100);
 			continue;
 		}
-		state.resumeSkip = String(line);
+		state.resumeSkip = locationKey;
 		state.stepMode = null;
+		state.nextDepth = null;
 		state.nextLine = null;
+		state.stepOutDepth = null;
 		if (command === 2) {
 			state.stepMode = 'step';
 		} else if (command === 3) {
 			state.stepMode = 'next';
+			state.nextDepth = depth;
 			state.nextLine = line;
+		} else if (command === 4) {
+			state.stepMode = 'out';
+			state.stepOutDepth = Math.max(0, depth - 1);
 		}
 		return;
 	}
@@ -175,14 +190,39 @@ function createRustDebugHost(options: {
 		pauseOnEntry: options.pauseOnEntry,
 		stepMode: null,
 		resumeSkip: null,
-		nextLine: null
+		nextDepth: null,
+		nextLine: null,
+		stepOutDepth: null,
+		callStack: []
 	};
 	let stderrBuffer = '';
 	const markerPrefix = `${options.marker}:`;
 
 	const handleMarker = (line: number, functionName: string) => {
 		refreshRustDebugBreakpoints(state, options.control);
-		const skipKey = String(line);
+		const normalizedFunctionName = functionName || 'main';
+		const currentFrame = state.callStack.at(-1);
+		if (!currentFrame) {
+			state.callStack.push({ functionName: normalizedFunctionName, line });
+		} else if (currentFrame.functionName === normalizedFunctionName) {
+			currentFrame.line = line;
+		} else {
+			let existingFrameIndex = -1;
+			for (let index = state.callStack.length - 2; index >= 0; index -= 1) {
+				if (state.callStack[index].functionName === normalizedFunctionName) {
+					existingFrameIndex = index;
+					break;
+				}
+			}
+			if (existingFrameIndex >= 0) {
+				state.callStack.length = existingFrameIndex + 1;
+				state.callStack[existingFrameIndex].line = line;
+			} else {
+				state.callStack.push({ functionName: normalizedFunctionName, line });
+			}
+		}
+		const depth = state.callStack.length;
+		const skipKey = `${depth}:${normalizedFunctionName}:${line}`;
 		if (state.resumeSkip === skipKey) return;
 		if (state.resumeSkip) state.resumeSkip = null;
 
@@ -193,15 +233,28 @@ function createRustDebugHost(options: {
 			reason = 'breakpoint';
 		} else if (state.stepMode === 'step') {
 			reason = 'step';
-		} else if (state.stepMode === 'next' && line !== state.nextLine) {
+		} else if (
+			state.stepMode === 'next' &&
+			state.nextDepth !== null &&
+			depth <= state.nextDepth &&
+			(depth !== state.nextDepth || line !== state.nextLine)
+		) {
 			reason = 'nextLine';
+		} else if (
+			state.stepMode === 'out' &&
+			state.stepOutDepth !== null &&
+			depth <= state.stepOutDepth
+		) {
+			reason = 'stepOut';
 		}
 		if (!reason) return;
 
 		state.pauseOnEntry = false;
 		state.stepMode = null;
+		state.nextDepth = null;
 		state.nextLine = null;
-		const callStack: DebugFrame[] = [{ functionName: functionName || 'main', line }];
+		state.stepOutDepth = null;
+		const callStack = state.callStack.slice().reverse();
 		postMessage({
 			debugEvent: {
 				type: 'pause',
@@ -211,7 +264,7 @@ function createRustDebugHost(options: {
 				callStack
 			}
 		});
-		waitForRustDebugCommand(state, options.control, line);
+		waitForRustDebugCommand(state, options.control, skipKey, line, depth);
 	};
 
 	const consumeLine = (line: string, hasNewline: boolean) => {

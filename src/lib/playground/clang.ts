@@ -42,6 +42,7 @@ class Clang implements Sandbox {
 	pendingEof = false;
 	exit = true;
 	assetBridge: WorkerAssetBridge | null = null;
+	private debugEvaluationQueue: Promise<void> = Promise.resolve();
 	private readonly workerSession = new WorkerSession({
 		label: 'Clang',
 		onDispose: (worker) => {
@@ -244,19 +245,29 @@ class Clang implements Sandbox {
 		Atomics.add(control, 2, 1);
 	}
 
-	async debugEvaluate(expression: string) {
-		if (!this.worker) throw new Error('Worker not loaded');
-		resetBufferedStdin(this.watchResultBuffer);
-		const previousSequence = bufferedSequence(this.watchResultBuffer);
-		flushQueuedStdin([expression], this.watchBuffer);
-		const control = new Int32Array(this.debugBuffer);
-		Atomics.store(control, 1, 5);
-		Atomics.add(control, 0, 1);
-		Atomics.notify(control, 0);
-		return (
-			(await waitForBufferedSequenceChange(this.watchResultBuffer, previousSequence, 5000)) ??
-			'?'
+	debugEvaluate(expression: string) {
+		const evaluation = this.debugEvaluationQueue.then(async () => {
+			if (!this.worker) throw new Error('Worker not loaded');
+			resetBufferedStdin(this.watchResultBuffer);
+			const previousSequence = bufferedSequence(this.watchResultBuffer);
+			flushQueuedStdin([expression], this.watchBuffer);
+			const control = new Int32Array(this.debugBuffer);
+			Atomics.store(control, 1, 5);
+			Atomics.add(control, 0, 1);
+			Atomics.notify(control, 0);
+			return (
+				(await waitForBufferedSequenceChange(
+					this.watchResultBuffer,
+					previousSequence,
+					5000
+				)) ?? '?'
+			);
+		});
+		this.debugEvaluationQueue = evaluation.then(
+			() => undefined,
+			() => undefined
 		);
+		return evaluation;
 	}
 
 	kill() {

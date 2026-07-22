@@ -343,6 +343,7 @@ self.onmessage = async (event: any) => {
 		const debugWaitName = `__wasm_idle_python_debug_wait_${ts}`;
 		const debugReadWatchName = `__wasm_idle_python_debug_watch_read_${ts}`;
 		const debugWriteWatchName = `__wasm_idle_python_debug_watch_write_${ts}`;
+		const debugReadBreakpointsName = `__wasm_idle_python_debug_breakpoints_${ts}`;
 		self[debugPauseName] = (
 			line: number,
 			reason: string,
@@ -385,6 +386,19 @@ self.onmessage = async (event: any) => {
 		self[debugWriteWatchName] = (value: string) => {
 			flushQueuedStdin([value], watchResultBufferPyodide);
 		};
+		self[debugReadBreakpointsName] = () => {
+			const version = Atomics.load(debugBufferPyodide, 2);
+			const count = Math.max(
+				0,
+				Math.min(Atomics.load(debugBufferPyodide, 3), debugBufferPyodide.length - 4)
+			);
+			const lines: number[] = [];
+			for (let index = 0; index < count; index += 1) {
+				const line = Atomics.load(debugBufferPyodide, 4 + index);
+				if (Number.isInteger(line) && line > 0) lines.push(line);
+			}
+			return JSON.stringify({ version, lines });
+		};
 		const executionFilename =
 			normalizeWorkspacePath(activePath || '') || '__wasm_idle_user__.py';
 		const debugFilename = normalizeWorkspacePath(debugPath || '') || executionFilename;
@@ -405,6 +419,7 @@ import sys
 from js import __pyodide__input_${ts}, __pyodide__output_${ts}
 ${debug ? `from js import ${debugPauseName}, ${debugWaitName}` : ''}
 ${debug ? `from js import ${debugReadWatchName}, ${debugWriteWatchName}` : ''}
+${debug ? `from js import ${debugReadBreakpointsName}` : ''}
 
 __wasm_idle_input = __pyodide__input_${ts}
 def __wasm_idle_input_wrapper(prompt = ""):
@@ -426,12 +441,23 @@ ${
 	debug
 		? `
 __wasm_idle_debug_breakpoints = set(${normalizedBreakpoints})
+__wasm_idle_debug_breakpoint_version = -1
 __wasm_idle_debug_pause_on_entry = ${pauseOnEntry ? 'True' : 'False'}
 __wasm_idle_debug_step_mode = None
 __wasm_idle_debug_resume_skip = None
 __wasm_idle_debug_next_depth = None
 __wasm_idle_debug_next_line = None
 __wasm_idle_debug_step_out_depth = None
+
+def __wasm_idle_debug_refresh_breakpoints():
+    global __wasm_idle_debug_breakpoints
+    global __wasm_idle_debug_breakpoint_version
+    snapshot = json.loads(${debugReadBreakpointsName}())
+    version = int(snapshot.get("version", -1))
+    if version == __wasm_idle_debug_breakpoint_version:
+        return
+    __wasm_idle_debug_breakpoint_version = version
+    __wasm_idle_debug_breakpoints = set(int(line) for line in snapshot.get("lines", []) if int(line) > 0)
 
 def __wasm_idle_debug_depth(frame):
     depth = 0
@@ -519,6 +545,7 @@ def __wasm_idle_debug_trace(frame, event, arg):
     if event != "line":
         return __wasm_idle_debug_trace
 
+    __wasm_idle_debug_refresh_breakpoints()
     depth = __wasm_idle_debug_depth(frame)
     line = frame.f_lineno
     if __wasm_idle_debug_resume_skip == (depth, line):
@@ -608,6 +635,7 @@ finally:
 			delete self[debugWaitName];
 			delete self[debugReadWatchName];
 			delete self[debugWriteWatchName];
+			delete self[debugReadBreakpointsName];
 		}
 	}
 };

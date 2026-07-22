@@ -159,6 +159,24 @@ int main() {
 		await expect(sandbox.debugEvaluate?.('A[i].s')).resolves.toBe('42');
 	});
 
+	it('serializes overlapping C++ watch evaluations on the shared transport', async () => {
+		const sandbox = new Clang('CPP');
+		sandbox.worker = {} as Worker;
+		const control = new Int32Array(sandbox.debugBuffer);
+
+		const firstEvaluation = sandbox.debugEvaluate('first');
+		const secondEvaluation = sandbox.debugEvaluate('second');
+
+		await vi.waitFor(() => expect(Atomics.load(control, 0)).toBe(1));
+		flushQueuedStdin(['first-result'], sandbox.watchResultBuffer);
+		await expect(firstEvaluation).resolves.toBe('first-result');
+
+		await vi.waitFor(() => expect(Atomics.load(control, 0)).toBe(2));
+		flushQueuedStdin(['second-result'], sandbox.watchResultBuffer);
+
+		await expect(secondEvaluation).resolves.toBe('second-result');
+	});
+
 	it('separates compile args from runtime args for C++ runs', async () => {
 		const sandbox = new Clang('CPP');
 		sandbox.output = vi.fn();

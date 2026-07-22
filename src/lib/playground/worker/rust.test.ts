@@ -384,4 +384,77 @@ describe('Rust worker', () => {
 		});
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
 	});
+
+	it('keeps Next Line out of callees and handles Step Out at the caller', async () => {
+		const compilerModuleUrl = await createMockRustRuntimeModule(`
+			export async function createRustCompiler() {
+				return {
+					async compile(options) {
+						return {
+							success: true,
+							artifact: {
+								wasm: new Uint8Array([0, 97, 115, 109]),
+								targetTriple: options.targetTriple,
+								format: 'core-wasm'
+							}
+						};
+					}
+				};
+			}
+
+			export async function executeBrowserRustArtifact(_artifact, _runtimeBaseUrl, options = {}) {
+				for (const marker of [
+					'__WASM_IDLE_RUST_DEBUG__:1:main\\n',
+					'__WASM_IDLE_RUST_DEBUG__:10:callee\\n',
+					'__WASM_IDLE_RUST_DEBUG__:2:main\\n',
+					'__WASM_IDLE_RUST_DEBUG__:11:callee\\n',
+					'__WASM_IDLE_RUST_DEBUG__:20:nested\\n',
+					'__WASM_IDLE_RUST_DEBUG__:12:callee\\n',
+					'__WASM_IDLE_RUST_DEBUG__:3:main\\n'
+				]) {
+					options.stderr?.(marker);
+				}
+				return { exitCode: 0, stdout: '', stderr: '' };
+			}
+		`);
+		const debugModuleUrl = await createMockRustRuntimeModule(`
+			export const RUST_DEBUG_MARKER = '__WASM_IDLE_RUST_DEBUG__';
+			export function instrumentRustDebugSource(source) {
+				return source;
+			}
+		`);
+		const debugBuffer = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * 1028);
+		const debugControl = new Int32Array(debugBuffer);
+		const commands = [3, 2, 4, 1];
+		const pauses: any[] = [];
+		(globalThis as any).postMessage = vi.fn((message: any) => {
+			if (message?.debugEvent?.type !== 'pause') return;
+			pauses.push(message.debugEvent);
+			Atomics.store(debugControl, 1, commands.shift() || 1);
+			Atomics.add(debugControl, 0, 1);
+			Atomics.notify(debugControl, 0);
+		});
+
+		await import('./rust');
+		await (globalThis as any).self.onmessage({
+			data: { load: true, compilerUrl: compilerModuleUrl, debugModuleUrl }
+		});
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: 'fn main() {}',
+				prepare: false,
+				buffer: new SharedArrayBuffer(1024),
+				debugBuffer,
+				debug: true,
+				pauseOnEntry: true
+			}
+		});
+
+		expect(pauses.map(({ line, reason }) => ({ line, reason }))).toEqual([
+			{ line: 1, reason: 'entry' },
+			{ line: 2, reason: 'nextLine' },
+			{ line: 11, reason: 'step' },
+			{ line: 3, reason: 'stepOut' }
+		]);
+	});
 });

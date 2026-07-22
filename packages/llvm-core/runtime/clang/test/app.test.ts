@@ -456,6 +456,61 @@ describe('App debug tracing', () => {
 		]);
 	});
 
+	it('steps over recursive calls when advancing to the next line', () => {
+		const onPause = vi.fn();
+		const buffer = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * 4);
+		const control = new Int32Array(buffer);
+		control[1] = 3;
+		const app = Object.assign(Object.create(App.prototype), {
+			debugSession: {
+				buffer: control,
+				interruptBuffer: new Uint8Array(new SharedArrayBuffer(1)),
+				breakpoints: new Set<number>(),
+				pauseOnEntry: false,
+				stepArmed: true,
+				nextLineArmed: false,
+				stepOutArmed: false,
+				callDepth: 1,
+				stepOutDepth: 0,
+				currentFunctionId: 2,
+				currentLine: 14,
+				resumeSkipActive: false,
+				resumeSkipFunctionId: 0,
+				resumeSkipLine: 0,
+				nextLineFunctionId: 0,
+				nextLineLine: 0,
+				functionMetadata: { 2: 'factorial' },
+				variableMetadata: {},
+				globalVariableMetadata: [],
+				frames: [{ functionId: 2, functionName: 'factorial', line: 14, values: new Map() }],
+				globalValues: new Map(),
+				onPause
+			},
+			trace: vi.fn()
+		}) as App;
+
+		expect(app.__wasm_idle_debug_line(2, 14)).toBe(0);
+		expect(app.debugSession?.nextLineDepth).toBe(1);
+		onPause.mockClear();
+
+		expect(app.__wasm_idle_debug_enter(2, 14)).toBe(0);
+		expect(app.__wasm_idle_debug_line(2, 15)).toBe(0);
+		expect(onPause).not.toHaveBeenCalled();
+		expect(app.__wasm_idle_debug_leave(2)).toBe(0);
+		expect(app.debugSession?.nextLineArmed).toBe(true);
+		expect(app.debugSession?.stepArmed).toBe(false);
+
+		control[1] = 1;
+		expect(app.__wasm_idle_debug_line(2, 16)).toBe(0);
+		expect(onPause).toHaveBeenCalledWith({
+			type: 'pause',
+			line: 16,
+			reason: 'nextLine',
+			locals: [],
+			callStack: [{ functionName: 'factorial', line: 16 }]
+		});
+	});
+
 	it('arms a step fallback when next-line leaves the current function before another line', () => {
 		const app = Object.assign(Object.create(App.prototype), {
 			debugSession: {
@@ -539,6 +594,84 @@ describe('App debug tracing', () => {
 			reason: 'step',
 			locals: [{ name: 'result1', value: '?' }],
 			callStack: [{ functionName: 'main', line: 6 }]
+		});
+	});
+
+	it('emits one effective local when nested locals and a global share a name', () => {
+		const onPause = vi.fn();
+		const buffer = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * 4);
+		const control = new Int32Array(buffer);
+		control[1] = 1;
+		const app = Object.assign(Object.create(App.prototype), {
+			debugSession: {
+				buffer: control,
+				interruptBuffer: new Uint8Array(new SharedArrayBuffer(1)),
+				breakpoints: new Set<number>(),
+				pauseOnEntry: false,
+				stepArmed: true,
+				nextLineArmed: false,
+				stepOutArmed: false,
+				callDepth: 1,
+				stepOutDepth: 0,
+				currentFunctionId: 1,
+				currentLine: 0,
+				resumeSkipActive: false,
+				resumeSkipFunctionId: 0,
+				resumeSkipLine: 0,
+				nextLineFunctionId: 0,
+				nextLineLine: 0,
+				functionMetadata: { 1: 'main' },
+				variableMetadata: {
+					1: [
+						{
+							slot: 1,
+							name: 'value',
+							kind: 'number',
+							fromLine: 4,
+							toLine: 10
+						},
+						{
+							slot: 2,
+							name: 'value',
+							kind: 'number',
+							fromLine: 6,
+							toLine: 8
+						}
+					]
+				},
+				globalVariableMetadata: [
+					{
+						slot: 3,
+						name: 'value',
+						kind: 'number',
+						fromLine: 1,
+						toLine: Number.MAX_SAFE_INTEGER
+					}
+				],
+				frames: [
+					{
+						functionId: 1,
+						functionName: 'main',
+						line: 0,
+						values: new Map([
+							[1, '10'],
+							[2, '20']
+						])
+					}
+				],
+				globalValues: new Map([[3, '30']]),
+				onPause
+			},
+			trace: vi.fn()
+		}) as App;
+
+		expect(app.__wasm_idle_debug_line(1, 7)).toBe(0);
+		expect(onPause).toHaveBeenCalledWith({
+			type: 'pause',
+			line: 7,
+			reason: 'step',
+			locals: [{ name: 'value', value: '20' }],
+			callStack: [{ functionName: 'main', line: 7 }]
 		});
 	});
 

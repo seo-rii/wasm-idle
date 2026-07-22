@@ -176,6 +176,51 @@ const toUtf8 = (text: string) => {
 	return result;
 };
 
+function maskDebugSyntax(line: string, startsInBlockComment: boolean) {
+	const masked = [...line];
+	let inBlockComment = startsInBlockComment;
+	let quote: '"' | "'" | undefined;
+	let escaped = false;
+	for (let index = 0; index < line.length; index += 1) {
+		const character = line[index];
+		const nextCharacter = line[index + 1];
+		if (inBlockComment) {
+			masked[index] = ' ';
+			if (character === '*' && nextCharacter === '/') {
+				masked[index + 1] = ' ';
+				index += 1;
+				inBlockComment = false;
+			}
+			continue;
+		}
+		if (quote) {
+			masked[index] = ' ';
+			if (escaped) escaped = false;
+			else if (character === '\\') escaped = true;
+			else if (character === quote) quote = undefined;
+			continue;
+		}
+		if (character === '/' && nextCharacter === '*') {
+			masked[index] = ' ';
+			masked[index + 1] = ' ';
+			index += 1;
+			inBlockComment = true;
+			continue;
+		}
+		if (character === '/' && nextCharacter === '/') {
+			for (let commentIndex = index; commentIndex < line.length; commentIndex += 1) {
+				masked[commentIndex] = ' ';
+			}
+			break;
+		}
+		if (character === '"' || character === "'") {
+			masked[index] = ' ';
+			quote = character;
+		}
+	}
+	return { line: masked.join(''), inBlockComment };
+}
+
 class Clang {
 	ready: Promise<void>;
 	memfs: MemFS;
@@ -314,6 +359,60 @@ class Clang {
 		const opt = debug ? '0' : options.opt || '2';
 		if (debug) {
 			const lines = source.split('\n');
+			let parsingBlockComment = false;
+			const analysisLines = lines.map((line: string) => {
+				const masked = maskDebugSyntax(line, parsingBlockComment);
+				parsingBlockComment = masked.inBlockComment;
+				return masked.line;
+			});
+			const expectsUnbracedBody = (normalized: string) => {
+				if (/^(?:do|else)$/.test(normalized)) return true;
+				if (!/^(?:else\s+)?(?:if|for|while)\s*\(/.test(normalized)) return false;
+				const openIndex = normalized.indexOf('(');
+				let parenDepth = 0;
+				for (let index = openIndex; index < normalized.length; index += 1) {
+					if (normalized[index] === '(') parenDepth += 1;
+					if (normalized[index] === ')') {
+						parenDepth -= 1;
+						if (parenDepth === 0) return normalized.slice(index + 1).trim() === '';
+					}
+				}
+				return false;
+			};
+			const unsafeStandaloneInstrumentationLines = new Set<number>();
+			let nextSignificantLineIsUnbracedBody = false;
+			let unbracedBodyContinues = false;
+			for (let index = 0; index < analysisLines.length; index += 1) {
+				const normalized = analysisLines[index].trim();
+				if (!normalized) continue;
+				const continuingUnbracedBody = unbracedBodyContinues;
+				let suppressStandaloneInstrumentation = continuingUnbracedBody;
+				if (continuingUnbracedBody && normalized.includes(';')) {
+					unbracedBodyContinues = false;
+				}
+				if (nextSignificantLineIsUnbracedBody) {
+					nextSignificantLineIsUnbracedBody = false;
+					if (normalized !== '{') {
+						suppressStandaloneInstrumentation = true;
+						if (
+							!normalized.includes(';') &&
+							!normalized.includes('{') &&
+							!expectsUnbracedBody(normalized)
+						) {
+							unbracedBodyContinues = true;
+						}
+					}
+				}
+				if (/^while\s*\(.*\)\s*;$/.test(normalized)) {
+					suppressStandaloneInstrumentation = true;
+				}
+				if (suppressStandaloneInstrumentation) {
+					unsafeStandaloneInstrumentationLines.add(index);
+				}
+				if (expectsUnbracedBody(normalized)) {
+					nextSignificantLineIsUnbracedBody = true;
+				}
+			}
 			let braceDepth = 0;
 			let functionDepth = 0;
 			let currentFunctionId = 0;
@@ -336,7 +435,6 @@ class Clang {
 					toLine: number;
 				}
 			>();
-			let inBlockComment = false;
 			let pendingFunctionHeader:
 				| {
 						functionName: string;
@@ -510,31 +608,10 @@ class Clang {
 				const line = lines[index];
 				const indent = line.match(/^\s*/)?.[0] || '';
 				let rewrittenLine = line;
-				let analysisLine = line;
-				if (inBlockComment) {
-					const commentEnd = analysisLine.indexOf('*/');
-					if (commentEnd === -1) {
-						instrumented.push(line);
-						continue;
-					}
-					analysisLine = analysisLine.slice(commentEnd + 2);
-					inBlockComment = false;
-				}
-				const commentStart = analysisLine.indexOf('/*');
-				if (commentStart !== -1) {
-					const commentEnd = analysisLine.indexOf('*/', commentStart + 2);
-					if (commentEnd === -1) {
-						inBlockComment = true;
-						analysisLine = analysisLine.slice(0, commentStart);
-					} else {
-						analysisLine =
-							analysisLine.slice(0, commentStart) +
-							analysisLine.slice(commentEnd + 2);
-					}
-				}
-				const lineComment = analysisLine.indexOf('//');
-				if (lineComment !== -1) analysisLine = analysisLine.slice(0, lineComment);
+				const analysisLine = analysisLines[index];
 				const normalized = analysisLine.trim();
+				const suppressStandaloneInstrumentation =
+					unsafeStandaloneInstrumentationLines.has(index);
 				const inFunctionBody = functionDepth > 0 && braceDepth >= functionDepth;
 				const isTopLevelDeclarationContext =
 					functionDepth === 0 &&
@@ -627,6 +704,7 @@ class Clang {
 				}
 				if (
 					inFunctionBody &&
+					!suppressStandaloneInstrumentation &&
 					normalized &&
 					!normalized.startsWith('#') &&
 					normalized !== '{' &&
@@ -803,9 +881,9 @@ class Clang {
 								new RegExp(`(?:^|[^\\w])(?:\\+\\+|--)\\s*${escapedName}\\b`).test(
 									normalized
 								) ||
-								new RegExp(`\\b${escapedName}\\s*(?:[+\\-*/%]?=|\\+\\+|--)`).test(
-									normalized
-								) ||
+								new RegExp(
+									`\\b${escapedName}\\s*(?:(?:<<|>>|[+\\-*/%&|^])?=|\\+\\+|--)`
+								).test(normalized) ||
 								new RegExp(`&\\s*${escapedName}\\b`).test(normalized) ||
 								new RegExp(
 									`\\b(?:cin|std::cin)\\b[^;]*>>\\s*${escapedName}\\b`
@@ -827,9 +905,9 @@ class Clang {
 								new RegExp(`(?:^|[^\\w])(?:\\+\\+|--)\\s*${escapedName}\\b`).test(
 									normalized
 								) ||
-								new RegExp(`\\b${escapedName}\\s*(?:[+\\-*/%]?=|\\+\\+|--)`).test(
-									normalized
-								) ||
+								new RegExp(
+									`\\b${escapedName}\\s*(?:(?:<<|>>|[+\\-*/%&|^])?=|\\+\\+|--)`
+								).test(normalized) ||
 								new RegExp(`&\\s*${escapedName}\\b`).test(normalized) ||
 								new RegExp(
 									`\\b(?:cin|std::cin)\\b[^;]*>>\\s*${escapedName}\\b`
@@ -881,13 +959,14 @@ class Clang {
 									continue;
 								const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 								if (
-									new RegExp(
+									!controlHeaderWithoutInlineBlock &&
+									(new RegExp(
 										`(?:^|[^\\w])(?:\\+\\+|--)\\s*${escapedName}\\b`
 									).test(normalized) ||
-									new RegExp(
-										`\\b${escapedName}\\s*(?:[+\\-*/%]?=|\\+\\+|--)`
-									).test(normalized) ||
-									new RegExp(`&\\s*${escapedName}\\b`).test(normalized)
+										new RegExp(
+											`\\b${escapedName}\\s*(?:(?:<<|>>|[+\\-*/%&|^])?=|\\+\\+|--)`
+										).test(normalized) ||
+										new RegExp(`&\\s*${escapedName}\\b`).test(normalized))
 								) {
 									trailingInstrumentation.push(
 										`${indent}${variable.kind === 'bool' ? '__wasm_idle_debug_value_bool' : '__wasm_idle_debug_value_num'}(0, ${variable.slot}, ${name});`
@@ -929,7 +1008,7 @@ class Clang {
 											'\\$&'
 										);
 										const mutationPattern = new RegExp(
-											`(?:^|[^\\w])(?:\\+\\+|--)\\s*${escapedName}\\b|\\b${escapedName}\\s*(?:[+\\-*/%]?=|\\+\\+|--)`
+											`(?:^|[^\\w])(?:\\+\\+|--)\\s*${escapedName}\\b|\\b${escapedName}\\s*(?:(?:<<|>>|[+\\-*/%&|^])?=|\\+\\+|--)`
 										);
 										if (
 											!initLooksLikeDeclaration &&
@@ -967,9 +1046,48 @@ class Clang {
 										line.slice(closeIndex);
 								}
 							} else {
+								const conditionMutationHooks: string[] = [];
+								if (controlHeaderWithoutInlineBlock) {
+									for (const [name, variable] of currentFunctionVariables) {
+										const escapedName = name.replace(
+											/[.*+?^${}()|[\]\\]/g,
+											'\\$&'
+										);
+										const mutationPattern = new RegExp(
+											`(?:^|[^\\w])(?:\\+\\+|--)\\s*${escapedName}\\b|\\b${escapedName}\\s*(?:(?:<<|>>|[+\\-*/%&|^])?=|\\+\\+|--)`
+										);
+										if (mutationPattern.test(conditionSource)) {
+											conditionMutationHooks.push(
+												`${variable.kind === 'bool' ? '__wasm_idle_debug_value_bool' : '__wasm_idle_debug_value_num'}(${currentFunctionId}, ${variable.slot}, ${name})`
+											);
+										}
+									}
+									for (const [name, variable] of globalVariables) {
+										if (
+											currentFunctionVariables.has(name) ||
+											currentFunctionContainers.has(name)
+										)
+											continue;
+										const escapedName = name.replace(
+											/[.*+?^${}()|[\]\\]/g,
+											'\\$&'
+										);
+										const mutationPattern = new RegExp(
+											`(?:^|[^\\w])(?:\\+\\+|--)\\s*${escapedName}\\b|\\b${escapedName}\\s*(?:(?:<<|>>|[+\\-*/%&|^])?=|\\+\\+|--)`
+										);
+										if (mutationPattern.test(conditionSource)) {
+											conditionMutationHooks.push(
+												`${variable.kind === 'bool' ? '__wasm_idle_debug_value_bool' : '__wasm_idle_debug_value_num'}(0, ${variable.slot}, ${name})`
+											);
+										}
+									}
+								}
+								const instrumentedCondition = conditionMutationHooks.length
+									? `((${conditionSource.trim()}) ? (${conditionMutationHooks.join(', ')}, 1) : (${conditionMutationHooks.join(', ')}, 0))`
+									: `(${conditionSource.trim()})`;
 								rewrittenLine =
 									line.slice(0, openIndex + 1) +
-									`(__wasm_idle_debug_line(${currentFunctionId}, ${index + 1}), (${conditionSource.trim()}))` +
+									`(__wasm_idle_debug_line(${currentFunctionId}, ${index + 1}), ${instrumentedCondition})` +
 									line.slice(closeIndex);
 							}
 						}
@@ -983,6 +1101,8 @@ class Clang {
 					normalized.includes('(') &&
 					normalized.includes(')') &&
 					normalized.includes('{') &&
+					(analysisLine.match(/{/g) || []).length >
+						(analysisLine.match(/}/g) || []).length &&
 					!/^(if|for|while|switch|catch)\b/.test(normalized) &&
 					!/^(class|struct|namespace|enum|union)\b/.test(normalized);
 				const startsPendingFunctionBody =

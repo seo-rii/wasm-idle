@@ -294,6 +294,8 @@ describe('Rust sandbox', () => {
 
 		sandbox.debugCommand('nextLine');
 		expect(Atomics.load(new Int32Array(sandbox.debugBuffer), 1)).toBe(3);
+		sandbox.debugCommand('stepOut');
+		expect(Atomics.load(new Int32Array(sandbox.debugBuffer), 1)).toBe(4);
 		sandbox.setBreakpoints([5, 3]);
 		const control = new Int32Array(sandbox.debugBuffer);
 		expect(Atomics.load(control, 3)).toBe(2);

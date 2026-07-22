@@ -54,6 +54,7 @@ interface DebugSession {
 	resumeSkipLine: number;
 	nextLineFunctionId: number;
 	nextLineLine: number;
+	nextLineDepth?: number;
 	variableMetadata: Record<number, DebugVariableMetadata[]>;
 	globalVariableMetadata: DebugVariableMetadata[];
 	functionMetadata: Record<number, string>;
@@ -818,6 +819,7 @@ export default class App {
 		session.pauseOnEntry = false;
 		session.stepArmed = false;
 		session.nextLineArmed = false;
+		session.nextLineDepth = 0;
 		session.stepOutArmed = false;
 		this.trace(`pause(function=${functionId}, line=${line}, reason=${reason})`);
 		const locals =
@@ -1120,11 +1122,14 @@ export default class App {
 				const value = session.globalValues?.get(variable.slot) ?? '?';
 				return [{ name: variable.name, value }];
 			}) || [];
+		const effectiveLocals = new Map(locals.map((variable) => [variable.name, variable]));
+		const effectiveGlobals = new Map(globals.map((variable) => [variable.name, variable]));
+		for (const name of effectiveLocals.keys()) effectiveGlobals.delete(name);
 		session.onPause?.({
 			type: 'pause',
 			line,
 			reason,
-			locals: [...locals, ...globals],
+			locals: [...effectiveLocals.values(), ...effectiveGlobals.values()],
 			callStack: [...session.frames].reverse().map((stackFrame) => ({
 				functionName: stackFrame.functionName,
 				line: stackFrame.line
@@ -1153,6 +1158,7 @@ export default class App {
 				session.nextLineArmed = true;
 				session.nextLineFunctionId = session.currentFunctionId;
 				session.nextLineLine = session.currentLine;
+				session.nextLineDepth = session.callDepth;
 				session.resumeSkipActive = true;
 				session.resumeSkipFunctionId = session.currentFunctionId;
 				session.resumeSkipLine = session.currentLine;
@@ -1209,8 +1215,13 @@ export default class App {
 		const session = this.debugSession;
 		if (!session?.buffer) return ESUCCESS;
 		this.trace(`leave(function=${functionId}, depth=${session.callDepth})`);
-		if (session.nextLineArmed && functionId === session.nextLineFunctionId) {
+		if (
+			session.nextLineArmed &&
+			functionId === session.nextLineFunctionId &&
+			session.callDepth <= (session.nextLineDepth ?? session.callDepth)
+		) {
 			session.nextLineArmed = false;
+			session.nextLineDepth = 0;
 			session.stepArmed = true;
 		}
 		session.callDepth = Math.max(0, session.callDepth - 1);
@@ -1318,6 +1329,7 @@ export default class App {
 		else if (session.stepArmed) reason = 'step';
 		else if (
 			session.nextLineArmed &&
+			session.callDepth <= (session.nextLineDepth ?? session.callDepth) &&
 			functionId === session.nextLineFunctionId &&
 			line !== session.nextLineLine
 		) {

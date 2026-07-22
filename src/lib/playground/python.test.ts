@@ -155,6 +155,35 @@ print((left + right) // (left - left))`,
 		await expect(sandbox.debugEvaluate?.('1 + 2')).resolves.toBe('3');
 	});
 
+	it('publishes live breakpoint updates through the Python debug buffer', async () => {
+		const sandbox = new Python();
+		const worker = new MockWorker();
+		let runMessage: any;
+
+		sandbox.worker = worker as unknown as Worker;
+		worker.postMessage.mockImplementationOnce((message) => {
+			runMessage = message;
+		});
+		const running = sandbox.run('print("hi")', false, true, undefined, [], {
+			debug: true,
+			breakpoints: [8, 3]
+		});
+		const control = new Int32Array(sandbox.debugBuffer);
+
+		expect(runMessage.debugBuffer).toBe(sandbox.debugBuffer);
+		expect(Atomics.load(control, 3)).toBe(2);
+		expect([Atomics.load(control, 4), Atomics.load(control, 5)]).toEqual([3, 8]);
+		const initialVersion = Atomics.load(control, 2);
+
+		sandbox.setBreakpoints([12, 5, 12]);
+		expect(Atomics.load(control, 2)).toBe(initialVersion + 1);
+		expect(Atomics.load(control, 3)).toBe(2);
+		expect([Atomics.load(control, 4), Atomics.load(control, 5)]).toEqual([5, 12]);
+
+		worker.onmessage?.({ data: { results: true } } as MessageEvent<any>);
+		await expect(running).resolves.toBe(true);
+	});
+
 	it('configures a custom runtime asset loader bridge for Pyodide assets', async () => {
 		const sandbox = new Python();
 		const loader = vi.fn().mockResolvedValue({

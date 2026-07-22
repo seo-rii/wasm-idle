@@ -17,6 +17,8 @@ import { createWasmIdleSharedBuffer, requireSharedArrayBuffer } from '$lib/playg
 import { WorkerSession } from '$lib/playground/workerSession';
 import { reportWorkerProgress } from '$lib/playground/workerProgress';
 
+const debugBreakpointBufferInts = 1028;
+
 class Python implements Sandbox {
 	ts = Date.now();
 	output: any = null;
@@ -24,7 +26,9 @@ class Python implements Sandbox {
 	image?: (data: { mime: string; b64: string; ts?: number }) => void;
 	worker?: Worker = <any>null;
 	buffer = createWasmIdleSharedBuffer(1024);
-	debugBuffer = createWasmIdleSharedBuffer(Int32Array.BYTES_PER_ELEMENT * 4);
+	debugBuffer = createWasmIdleSharedBuffer(
+		Int32Array.BYTES_PER_ELEMENT * debugBreakpointBufferInts
+	);
 	watchBuffer = createWasmIdleSharedBuffer(1024);
 	watchResultBuffer = createWasmIdleSharedBuffer(1024);
 	interruptBuffer = createWasmIdleSharedBuffer(1);
@@ -140,6 +144,7 @@ class Python implements Sandbox {
 		return new Promise<boolean | string>((resolve, reject) => {
 			if (!this.worker) return reject('Worker not loaded');
 			const operation = this.workerSession.beginRun(this.worker, reject);
+			this.setBreakpoints(options.debug ? [...(options.breakpoints || [])] : []);
 			const interrupt = new Uint8Array(this.interruptBuffer),
 				_uid = ++this.uid;
 			const handler = (event: Event & { data: any }) => {
@@ -217,6 +222,18 @@ class Python implements Sandbox {
 		Atomics.add(control, 0, 1);
 		Atomics.notify(control, 0);
 		this.ondebug?.({ type: 'resume', command });
+	}
+
+	setBreakpoints(lines: number[]) {
+		const control = new Int32Array(this.debugBuffer);
+		const next = [...new Set(lines.filter((line) => Number.isInteger(line) && line > 0))]
+			.sort((left, right) => left - right)
+			.slice(0, Math.max(0, control.length - 4));
+		for (let index = 4; index < control.length; index += 1) {
+			Atomics.store(control, index, next[index - 4] || 0);
+		}
+		Atomics.store(control, 3, next.length);
+		Atomics.add(control, 2, 1);
 	}
 
 	async debugEvaluate(expression: string) {

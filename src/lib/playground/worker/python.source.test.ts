@@ -36,4 +36,17 @@ describe('Python worker source', () => {
 			/else if \(code\) \{[\s\S]*?await loadPackages\([\s\S]*?catch[\s\S]*?return;/
 		);
 	});
+
+	it('refreshes breakpoints from shared state while the debugger is running', () => {
+		expect(source).toContain(
+			'const debugReadBreakpointsName = `__wasm_idle_python_debug_breakpoints_${ts}`;'
+		);
+		expect(source).toContain('const version = Atomics.load(debugBufferPyodide, 2);');
+		expect(source).toContain('Math.min(Atomics.load(debugBufferPyodide, 3)');
+		expect(source).toContain('const line = Atomics.load(debugBufferPyodide, 4 + index);');
+		expect(source).toContain('def __wasm_idle_debug_refresh_breakpoints():');
+		expect(source).toMatch(
+			/if event != "line":[\s\S]*?__wasm_idle_debug_refresh_breakpoints\(\)[\s\S]*?line = frame\.f_lineno/
+		);
+	});
 });

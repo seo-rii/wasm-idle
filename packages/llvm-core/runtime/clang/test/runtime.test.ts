@@ -290,6 +290,97 @@ int main(void) {
 		);
 	});
 
+	it('does not insert standalone hooks into unbraced control-flow bodies', async () => {
+		const { clang } = createClangHarness();
+		const code = `int main() {
+    int value = 0;
+    if (value == 0)
+        value += 1;
+    else
+        value += 10;
+    for (int index = 0; index < 1; ++index)
+        value += index;
+    while (value < 2)
+        value++;
+    do
+        value--;
+    while (value > 1);
+    return value;
+}`;
+
+		await clang.compile({
+			input: 'main.cc',
+			code,
+			obj: 'main.o',
+			debug: true
+		});
+
+		const instrumentedSource = String(vi.mocked(clang.memfs.addFile).mock.calls[0]?.[1] || '');
+		expect(instrumentedSource).toMatch(
+			/if \([^\n]*__wasm_idle_debug_line\(1, 3\)[^\n]*\)\n\s*value \+= 1;\n\s*else\n\s*value \+= 10;/
+		);
+		expect(instrumentedSource).toMatch(
+			/for \(int index = 0; \(__wasm_idle_debug_value_num\(1, 2, index\), __wasm_idle_debug_line\(1, 7\), \(index < 1\)\); \(\+\+index, __wasm_idle_debug_value_num\(1, 2, index\)\)\)\n\s*value \+= index;/
+		);
+		expect(instrumentedSource).toMatch(
+			/while \([^\n]*__wasm_idle_debug_line\(1, 9\)[^\n]*\)\n\s*value\+\+;/
+		);
+		expect(instrumentedSource).toMatch(
+			/do\n\s*value--;\n\s*while \(\(__wasm_idle_debug_line\(1, 13\), \(value > 1\)\)\);/
+		);
+	});
+
+	it('keeps one-line function definitions valid in debug mode', async () => {
+		const { clang } = createClangHarness();
+		const code = `int value() { return 1; }
+
+int main() {
+    return value();
+}`;
+
+		await clang.compile({
+			input: 'main.cc',
+			code,
+			obj: 'main.o',
+			debug: true
+		});
+
+		const instrumentedSource = String(vi.mocked(clang.memfs.addFile).mock.calls[0]?.[1] || '');
+		expect(instrumentedSource).toContain('int value() { return 1; }\n\nint main() {');
+		expect(instrumentedSource).not.toMatch(
+			/int value\(\) \{ return 1; \}\n\s*__wasm_idle_debug_enter/
+		);
+		expect(clang.debugFunctionMetadata).toEqual({ 1: 'main' });
+	});
+
+	it('ignores braces inside string and character literals while tracking functions', async () => {
+		const { clang } = createClangHarness();
+		const code = `int string_brace() {
+    const char* token = "}";
+    return token[0];
+}
+
+int character_brace() {
+    char token = '{';
+    return token;
+}`;
+
+		await clang.compile({
+			input: 'main.cc',
+			code,
+			obj: 'main.o',
+			debug: true
+		});
+
+		const instrumentedSource = String(vi.mocked(clang.memfs.addFile).mock.calls[0]?.[1] || '');
+		expect(instrumentedSource).toContain('__wasm_idle_debug_leave(1);\n    return token[0];');
+		expect(instrumentedSource).toContain('__wasm_idle_debug_leave(2);\n    return token;');
+		expect(clang.debugFunctionMetadata).toEqual({
+			1: 'string_brace',
+			2: 'character_brace'
+		});
+	});
+
 	it('tracks outer loop mutations without emitting out-of-scope loop variable hooks', async () => {
 		const { clang } = createClangHarness();
 		const code = `#include <stdio.h>
@@ -334,6 +425,60 @@ int main() {
 		expect(instrumentedSource).toContain(
 			'while ((__wasm_idle_debug_line(1, 5), (num <= 10))) {'
 		);
+	});
+
+	it('refreshes a scalar mutated in a condition before a next-line brace', async () => {
+		const { clang } = createClangHarness();
+		const code = `int main() {
+    int x = 0;
+    while (x++ < 1)
+    {
+    }
+    return x;
+}`;
+
+		await clang.compile({
+			input: 'main.cc',
+			code,
+			obj: 'main.o',
+			debug: true
+		});
+
+		const instrumentedSource = String(vi.mocked(clang.memfs.addFile).mock.calls[0]?.[1] || '');
+		expect(instrumentedSource).toContain(
+			'while ((__wasm_idle_debug_line(1, 3), ((x++ < 1) ? (__wasm_idle_debug_value_num(1, 1, x), 1) : (__wasm_idle_debug_value_num(1, 1, x), 0))))\n    {'
+		);
+	});
+
+	it('refreshes scalars after bitwise and shift compound assignments', async () => {
+		const { clang } = createClangHarness();
+		const code = `int main() {
+    int value = 8;
+    value <<= 1;
+    value >>= 1;
+    value &= 7;
+    value |= 8;
+    value ^= 3;
+}`;
+
+		await clang.compile({
+			input: 'main.cc',
+			code,
+			obj: 'main.o',
+			debug: true
+		});
+
+		const instrumentedSource = String(vi.mocked(clang.memfs.addFile).mock.calls[0]?.[1] || '');
+		for (const statement of [
+			'value <<= 1;',
+			'value >>= 1;',
+			'value &= 7;',
+			'value |= 8;',
+			'value ^= 3;'
+		]) {
+			expect(instrumentedSource).toContain(`    ${statement}
+    __wasm_idle_debug_value_num(1, 1, value);`);
+		}
 	});
 
 	it('keeps debug hooks for the provided while-loop sample program', async () => {

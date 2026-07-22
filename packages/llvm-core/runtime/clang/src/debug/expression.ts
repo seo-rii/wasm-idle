@@ -376,6 +376,16 @@ export const evaluateDebugExpressionWithResolver = (
 		return value[name]!;
 	};
 	let cursor = 0;
+	let evaluationEnabled = true;
+	const parseWithoutEvaluation = (parse: () => DebugExpressionValue) => {
+		const previous = evaluationEnabled;
+		evaluationEnabled = false;
+		try {
+			return parse();
+		} finally {
+			evaluationEnabled = previous;
+		}
+	};
 	const parsePrimary = (): DebugExpressionValue => {
 		const token = tokens[cursor];
 		if (!token) throw new Error('unexpected end of expression');
@@ -397,7 +407,7 @@ export const evaluateDebugExpressionWithResolver = (
 		}
 		if (token.type === 'identifier') {
 			cursor += 1;
-			let resolved = resolveIdentifierValue(token.value);
+			let resolved = evaluationEnabled ? resolveIdentifierValue(token.value) : null;
 			while (true) {
 				const bracket = tokens[cursor];
 				if (bracket?.type === 'bracket' && bracket.value === '[') {
@@ -407,7 +417,7 @@ export const evaluateDebugExpressionWithResolver = (
 					if (!closing || closing.type !== 'bracket' || closing.value !== ']')
 						throw new Error('missing closing bracket');
 					cursor += 1;
-					resolved = readIndexedValue(resolved, index);
+					resolved = evaluationEnabled ? readIndexedValue(resolved, index) : null;
 					continue;
 				}
 				if (bracket?.type === 'dot') {
@@ -416,7 +426,7 @@ export const evaluateDebugExpressionWithResolver = (
 					if (!property || property.type !== 'identifier')
 						throw new Error('missing property name');
 					cursor += 1;
-					resolved = readMemberValue(resolved, property.value);
+					resolved = evaluationEnabled ? readMemberValue(resolved, property.value) : null;
 					continue;
 				}
 				break;
@@ -518,7 +528,11 @@ export const evaluateDebugExpressionWithResolver = (
 			const operator = tokens[cursor];
 			if (!operator || operator.type !== 'operator' || operator.value !== '&&') break;
 			cursor += 1;
-			left = Boolean(left) && Boolean(parseEquality());
+			const right =
+				evaluationEnabled && Boolean(left)
+					? parseEquality()
+					: parseWithoutEvaluation(parseEquality);
+			if (evaluationEnabled) left = Boolean(left) && Boolean(right);
 		}
 		return left;
 	};
@@ -528,7 +542,9 @@ export const evaluateDebugExpressionWithResolver = (
 			const operator = tokens[cursor];
 			if (!operator || operator.type !== 'operator' || operator.value !== '||') break;
 			cursor += 1;
-			left = Boolean(left) || Boolean(parseAnd());
+			const right =
+				evaluationEnabled && !Boolean(left) ? parseAnd() : parseWithoutEvaluation(parseAnd);
+			if (evaluationEnabled) left = Boolean(left) || Boolean(right);
 		}
 		return left;
 	};

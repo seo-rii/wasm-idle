@@ -163,4 +163,69 @@ describe('createDebugSessionController', () => {
 		expect(controller.watchExpressions).toEqual([]);
 		expect(controller.watchValues).toEqual([]);
 	});
+
+	it('does not dispatch a second continue or step command while one is pending', async () => {
+		let resolveCommand: (() => void) | null = null;
+		const debugCommand = vi.fn(
+			() =>
+				new Promise<void>((resolve) => {
+					resolveCommand = resolve;
+				})
+		);
+		const controller = createDebugSessionController({
+			terminal: { debugCommand } as never
+		});
+
+		controller.handleEvent({
+			type: 'pause',
+			line: 6,
+			reason: 'breakpoint',
+			locals: [],
+			callStack: []
+		});
+
+		const continuing = controller.sendCommand('continue');
+		await expect(controller.sendCommand('nextLine')).resolves.toBe(false);
+		expect(debugCommand).toHaveBeenCalledTimes(1);
+
+		expect(resolveCommand).not.toBeNull();
+		if (!resolveCommand) throw new Error('expected pending command resolver');
+		(resolveCommand as () => void)();
+		await expect(continuing).resolves.toBe(true);
+	});
+
+	it('restores persistent breakpoints after a run-to-cursor pause', async () => {
+		const setBreakpoints = vi.fn(async () => undefined);
+		const controller = createDebugSessionController({
+			terminal: {
+				debugCommand: vi.fn(async () => undefined),
+				setBreakpoints
+			} as never,
+			breakpoints: [4],
+			cursorLine: 8
+		});
+
+		controller.begin();
+		controller.handleEvent({
+			type: 'pause',
+			line: 5,
+			reason: 'breakpoint',
+			locals: [],
+			callStack: []
+		});
+		await controller.runToCursor();
+		expect(setBreakpoints).toHaveBeenLastCalledWith([4, 8]);
+
+		controller.handleEvent({
+			type: 'pause',
+			line: 8,
+			reason: 'breakpoint',
+			locals: [],
+			callStack: []
+		});
+
+		expect(setBreakpoints).toHaveBeenLastCalledWith([4]);
+		expect(controller.runToCursorLine).toBe(null);
+		expect(controller.effectiveBreakpoints).toEqual([4]);
+	});
 });
