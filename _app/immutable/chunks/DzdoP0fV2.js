@@ -1,0 +1,1 @@
+import{w as e}from"./BPxIOYqA.js";import{t}from"./DzX0TRf2.js";var n=class extends t{constructor(){super({displayName:`Nim`,languageId:`NIM`,defaultActivePath:`main.nim`,readStdinPattern:/\b(?:stdin|readLine|readAll|lines)\b/i,resolveRuntimeAssets:e})}};export{n as default};
