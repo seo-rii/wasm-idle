@@ -6,6 +6,11 @@ import type {
 	DebugVariable
 } from './debug.js';
 import {
+	defineRuntimeTrustProfile,
+	enforceRuntimeTrustProfile,
+	type RuntimeTrustProfile
+} from './capabilities.js';
+import {
 	BusyError,
 	CancelledError,
 	DiagnosticLimitError,
@@ -132,15 +137,18 @@ export interface BoundSandbox extends Omit<Sandbox, 'load' | 'dispose'> {
 	) => Promise<void>;
 	dispose?: () => Promise<void>;
 	runtimeAssets: SandboxRuntimeAssets;
+	trustProfile?: RuntimeTrustProfile;
 }
 
 export interface PlaygroundTerminalProps {
 	playground: PlaygroundBinding;
 	runtimeAssets: SandboxRuntimeAssets;
+	trustProfile?: RuntimeTrustProfile;
 }
 
 export interface PlaygroundBinding {
 	runtimeAssets: SandboxRuntimeAssets;
+	trustProfile?: RuntimeTrustProfile;
 	terminalProps: PlaygroundTerminalProps;
 	load: (language: string) => Promise<BoundSandbox>;
 	dispose: () => Promise<void>;
@@ -148,12 +156,17 @@ export interface PlaygroundBinding {
 
 export type SandboxLoader = (language: string) => Promise<Sandbox>;
 
+export interface PlaygroundBindingOptions {
+	trustProfile?: RuntimeTrustProfile;
+}
+
 const workspaceTextEncoder = new TextEncoder();
 
 function validateSandboxExecutionOptions(
 	code: string,
 	options: SandboxExecutionOptions,
-	phase: RuntimePhase = 'execute'
+	phase: RuntimePhase = 'execute',
+	trustProfile?: RuntimeTrustProfile
 ): ValidatedSandboxExecutionOptions {
 	if (options.signal?.aborted) {
 		throw new CancelledError('Runtime operation was cancelled before it started', {
@@ -220,6 +233,10 @@ function validateSandboxExecutionOptions(
 		}
 	}
 
+	const environment =
+		trustProfile && options.env !== undefined
+			? enforceRuntimeTrustProfile(trustProfile, { environment: options.env }).environment
+			: options.env;
 	return {
 		...options,
 		limits,
@@ -227,7 +244,8 @@ function validateSandboxExecutionOptions(
 			? {}
 			: { workspaceLimits }),
 		...(options.activePath === undefined ? {} : { activePath }),
-		...(options.workspaceFiles === undefined ? {} : { workspaceFiles })
+		...(options.workspaceFiles === undefined ? {} : { workspaceFiles }),
+		...(options.env === undefined ? {} : { env: environment })
 	};
 }
 
@@ -364,7 +382,11 @@ function combinedPhaseTimeoutMs(firstTimeoutMs: number, secondTimeoutMs: number)
 	return Math.min(2_147_483_647, firstTimeoutMs + secondTimeoutMs);
 }
 
-function bindRuntimeAssets(sandbox: Sandbox, runtimeAssets: SandboxRuntimeAssets): BoundSandbox {
+function bindRuntimeAssets(
+	sandbox: Sandbox,
+	runtimeAssets: SandboxRuntimeAssets,
+	trustProfile?: RuntimeTrustProfile
+): BoundSandbox {
 	let disposePromise: Promise<void> | undefined;
 	let disposed = false;
 	const operationState: SandboxOperationState = {
@@ -443,6 +465,7 @@ function bindRuntimeAssets(sandbox: Sandbox, runtimeAssets: SandboxRuntimeAssets
 	return new Proxy(sandbox, {
 		get(target, prop, receiver) {
 			if (prop === 'runtimeAssets') return runtimeAssets;
+			if (prop === 'trustProfile') return trustProfile;
 			if (prop === 'output') return outputSink;
 			if (prop === 'oncompilerdiagnostic') return diagnosticSink;
 			if (prop === 'dispose') {
@@ -467,7 +490,12 @@ function bindRuntimeAssets(sandbox: Sandbox, runtimeAssets: SandboxRuntimeAssets
 					progress?: SandboxProgress
 				) => {
 					assertNotDisposed();
-					const validated = validateSandboxExecutionOptions(code, options, 'startup');
+					const validated = validateSandboxExecutionOptions(
+						code,
+						options,
+						'startup',
+						trustProfile
+					);
 					installBoundarySinks();
 					return runSandboxOperation(
 						target,
@@ -487,17 +515,22 @@ function bindRuntimeAssets(sandbox: Sandbox, runtimeAssets: SandboxRuntimeAssets
 			if (prop === 'execute' && execute) {
 				return async (request: ExecutionRequest) => {
 					assertNotDisposed();
-					const validated = validateSandboxExecutionOptions(request.code, {
-						activePath: request.activePath,
-						workspaceFiles: request.workspaceFiles,
-						args: request.args,
-						compileArgs: request.compileArgs,
-						debug: request.debug,
-						env: request.env,
-						limits: request.limits ?? {},
-						signal: request.signal,
-						stdin: request.stdin
-					});
+					const validated = validateSandboxExecutionOptions(
+						request.code,
+						{
+							activePath: request.activePath,
+							workspaceFiles: request.workspaceFiles,
+							args: request.args,
+							compileArgs: request.compileArgs,
+							debug: request.debug,
+							env: request.env,
+							limits: request.limits ?? {},
+							signal: request.signal,
+							stdin: request.stdin
+						},
+						'execute',
+						trustProfile
+					);
 					installBoundarySinks();
 					return runSandboxOperation(
 						target,
@@ -531,7 +564,12 @@ function bindRuntimeAssets(sandbox: Sandbox, runtimeAssets: SandboxRuntimeAssets
 					options: SandboxExecutionOptions = {}
 				) => {
 					assertNotDisposed();
-					const validated = validateSandboxExecutionOptions(code, options);
+					const validated = validateSandboxExecutionOptions(
+						code,
+						options,
+						'execute',
+						trustProfile
+					);
 					installBoundarySinks();
 					return runSandboxOperation(
 						target,
@@ -568,13 +606,18 @@ function bindRuntimeAssets(sandbox: Sandbox, runtimeAssets: SandboxRuntimeAssets
 
 export function createPlaygroundBinding(
 	runtimeAssets: SandboxRuntimeAssets,
-	loadSandbox: SandboxLoader
+	loadSandbox: SandboxLoader,
+	options: PlaygroundBindingOptions = {}
 ): PlaygroundBinding {
+	const trustProfile = options.trustProfile
+		? defineRuntimeTrustProfile(options.trustProfile)
+		: undefined;
 	const sandboxes = new Set<BoundSandbox>();
 	let disposed = false;
 	let disposePromise: Promise<void> | undefined;
 	const binding = {
 		runtimeAssets,
+		trustProfile,
 		terminalProps: {} as PlaygroundBinding['terminalProps'],
 		async load(language: string) {
 			if (disposed) {
@@ -587,7 +630,11 @@ export function createPlaygroundBinding(
 			}
 			const normalizedLanguage = normalizeLanguageId(language);
 			if (!normalizedLanguage) throw new UnsupportedLanguageError(language);
-			const sandbox = bindRuntimeAssets(await loadSandbox(normalizedLanguage), runtimeAssets);
+			const sandbox = bindRuntimeAssets(
+				await loadSandbox(normalizedLanguage),
+				runtimeAssets,
+				trustProfile
+			);
 			if (disposed) {
 				if (sandbox.dispose) await sandbox.dispose();
 				else await sandbox.terminate();
@@ -617,7 +664,8 @@ export function createPlaygroundBinding(
 	} as PlaygroundBinding;
 	binding.terminalProps = {
 		playground: binding,
-		runtimeAssets
+		runtimeAssets,
+		trustProfile
 	};
 	return binding;
 }

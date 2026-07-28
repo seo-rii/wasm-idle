@@ -2,6 +2,7 @@ export {
 	DEFAULT_RESTRICTED_RUNTIME_TRUST_PROFILE,
 	RUNTIME_TRUST_PROFILE_SCHEMA_VERSION,
 	defineRuntimeTrustProfile,
+	enforceRuntimeTrustProfile,
 	type RuntimeDynamicCodeMode,
 	type RuntimeEnvironmentMode,
 	type RuntimeEnvironmentPolicy,
@@ -11,6 +12,8 @@ export {
 	type RuntimeStoragePolicy,
 	type RuntimeThreadPolicy,
 	type RuntimeTrustProfile,
+	type RuntimeTrustGrant,
+	type RuntimeTrustRequest,
 	type RuntimeWorkerPolicy
 } from './capabilities.js';
 export {
@@ -156,6 +159,7 @@ export {
 	createPlaygroundBinding,
 	type BoundSandbox,
 	type PlaygroundBinding,
+	type PlaygroundBindingOptions,
 	type PlaygroundTerminalProps,
 	type Sandbox,
 	type SandboxExecutionOptions,
