@@ -48,6 +48,15 @@ describe('language registry', () => {
 		]);
 	});
 
+	it('exposes compatibility languages with their actual implementations and dialects', () => {
+		expect(languageLabels.PYTHON).toBe('Python — Pyodide');
+		expect(languageLabels.JAVASCRIPT).toBe('JavaScript — Browser');
+		expect(languageLabels.LISP).toBe('Scheme — Puppy Scheme');
+		expect(languageLabels.OCTAVE).toBe('MATLAB-compatible — GNU Octave');
+		expect(languageLabels.DUCKDB).toBe('SQL — DuckDB');
+		expect(languageLabels.SQLITE).toBe('SQL — SQLite dialect');
+	});
+
 	it('keeps Swift out of the page language registry until runtime readiness is satisfied', () => {
 		expect(playgroundLanguages).not.toContain('SWIFT');
 		expect('SWIFT' in languageLabels).toBe(false);

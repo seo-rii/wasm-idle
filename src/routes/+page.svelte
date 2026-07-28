@@ -2310,59 +2310,9 @@
 				<label class="select-chip">
 					<span class="material-symbols-outlined">code_blocks</span>
 					<select id="language-select" value={language} onchange={handleLanguageChange}>
-						<option value="C">C</option>
-						<option value="CPP">C++</option>
-						<option value="OBJC">Objective-C</option>
-						<option value="PYTHON">Python</option>
-						<option value="JAVA">Java</option>
-						<option value="RUST">Rust</option>
-						<option value="GO">Go</option>
-						<option value="D">D</option>
-						<option value="CSHARP">C#</option>
-						<option value="FSHARP">F#</option>
-						<option value="VBNET">VB.NET</option>
-						<option value="ELIXIR">Elixir</option>
-						<option value="ERLANG">Erlang</option>
-						<option value="PROLOG">Prolog</option>
-						<option value="GLEAM">Gleam</option>
-						<option value="PERL">Perl</option>
-						<option value="TCL">Tcl</option>
-						<option value="AWK">AWK</option>
-						<option value="PASCAL">Pascal</option>
-						<option value="FORTH">Forth</option>
-						<option value="J">J</option>
-						<option value="BQN">BQN</option>
-						<option value="JANET">Janet</option>
-						<option value="JULIA">Julia</option>
-						<option value="NIM">Nim</option>
-						<option value="BASH">Bash</option>
-						<option value="CLOJURESCRIPT">ClojureScript</option>
-						<option value="OCAML">OCaml</option>
-						<option value="TINYGO">TinyGo</option>
-						<option value="JAVASCRIPT">JavaScript</option>
-						<option value="TYPESCRIPT">TypeScript</option>
-						<option value="ASSEMBLYSCRIPT">AssemblyScript</option>
-						<option value="WAT">WAT</option>
-						<option value="WASM">WASM</option>
-						<option value="LUA">Lua</option>
-						<option value="ZIG">Zig</option>
-						<option value="LISP">Scheme</option>
-						<option value="RUBY">Ruby</option>
-						<option value="HASKELL">Haskell</option>
-						<option value="R">R</option>
-						<option value="OCTAVE">Octave</option>
-						<option value="FORTRAN">Fortran</option>
-						<option value="COBOL">COBOL</option>
-						<option value="GRAPHQL">GraphQL</option>
-						<option value="DUCKDB">DuckDB</option>
-						<option value="SQLITE">SQLite</option>
-						<option value="PHP">PHP</option>
-						<option value="JSON">JSON</option>
-						<option value="YAML">YAML</option>
-						<option value="TOML">TOML</option>
-						<option value="HTML">HTML</option>
-						<option value="CSS">CSS</option>
-						<option value="MARKDOWN">Markdown</option>
+						{#each playgroundLanguages as languageOption (languageOption)}
+							<option value={languageOption}>{languageLabels[languageOption]}</option>
+						{/each}
 					</select>
 				</label>
 				{#if argsHelpLanguages.has(language)}
