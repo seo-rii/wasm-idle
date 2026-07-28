@@ -5,10 +5,17 @@ import {
 	resolveRootToolBaseUrl,
 	type ResolvedLanguageToolAssetConfig
 } from './assets.js';
+import { BUNDLED_CLANGD_ASSET_INTEGRITY } from './bundledClangdAssetIntegrity.js';
 import type { EditorLanguageServerOptions, EditorLanguageServerRuntimeOptions } from './types.js';
 
 const resolveAllowedBaseUrls = (urls: string[] | undefined, currentUrl: string) =>
 	urls?.map((url) => normalizeBaseUrl(url, currentUrl));
+
+const resolveCppAssetIntegrity = (config: EditorLanguageServerRuntimeOptions['cpp']) => {
+	if (config?.integrity) return config.integrity;
+	if (!config?.baseUrl && !config?.loader) return BUNDLED_CLANGD_ASSET_INTEGRITY;
+	return undefined;
+};
 
 export function resolveCppLanguageServerRuntimeAssetConfig(
 	options: EditorLanguageServerOptions | undefined,
@@ -16,17 +23,20 @@ export function resolveCppLanguageServerRuntimeAssetConfig(
 ): ResolvedLanguageToolAssetConfig {
 	if (typeof options === 'string') {
 		return {
-			baseUrl: resolveRootToolBaseUrl(options, '/clangd/', currentUrl)
+			baseUrl: resolveRootToolBaseUrl(options, '/clangd/', currentUrl),
+			integrity: BUNDLED_CLANGD_ASSET_INTEGRITY
 		};
 	}
 
 	const runtimeConfig = options?.cpp;
+	const integrity = resolveCppAssetIntegrity(runtimeConfig);
+	const allowedBaseUrls = resolveAllowedBaseUrls(runtimeConfig?.allowedBaseUrls, currentUrl);
 	if (runtimeConfig?.baseUrl) {
 		return {
 			baseUrl: normalizeBaseUrl(runtimeConfig.baseUrl, currentUrl),
 			loader: runtimeConfig.loader,
-			allowedBaseUrls: resolveAllowedBaseUrls(runtimeConfig.allowedBaseUrls, currentUrl),
-			integrity: runtimeConfig.integrity
+			allowedBaseUrls,
+			integrity
 		};
 	}
 
@@ -34,8 +44,8 @@ export function resolveCppLanguageServerRuntimeAssetConfig(
 		return {
 			baseUrl: resolveRootToolBaseUrl(options.rootUrl, '/clangd/', currentUrl),
 			loader: runtimeConfig?.loader,
-			allowedBaseUrls: resolveAllowedBaseUrls(runtimeConfig?.allowedBaseUrls, currentUrl),
-			integrity: runtimeConfig?.integrity
+			allowedBaseUrls,
+			integrity
 		};
 	}
 
@@ -43,13 +53,15 @@ export function resolveCppLanguageServerRuntimeAssetConfig(
 		return {
 			baseUrl: CLANGD_VIRTUAL_BASE_URL,
 			loader: runtimeConfig.loader,
-			allowedBaseUrls: resolveAllowedBaseUrls(runtimeConfig.allowedBaseUrls, currentUrl),
-			integrity: runtimeConfig.integrity
+			allowedBaseUrls,
+			integrity
 		};
 	}
 
 	return {
-		baseUrl: normalizeBaseUrl('clangd/', currentUrl)
+		baseUrl: normalizeBaseUrl('clangd/', currentUrl),
+		allowedBaseUrls,
+		integrity
 	};
 }
 

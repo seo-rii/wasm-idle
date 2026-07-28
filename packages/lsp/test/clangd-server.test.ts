@@ -85,7 +85,9 @@ describe('getCppLanguageServer', () => {
 	it('starts clangd with a resolved base URL and sync hook', async () => {
 		const status = vi.fn();
 		const handle = await getCppLanguageServer({
-			rootUrl: 'https://static.example.com/repl_20240807',
+			cpp: {
+				baseUrl: 'https://static.example.com/repl_20240807/clangd/'
+			},
 			currentUrl: 'https://app.example.com/editor',
 			createWorker: () => new mockState.FakeWorker() as unknown as Worker,
 			onStatus: status

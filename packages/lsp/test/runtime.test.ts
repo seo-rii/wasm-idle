@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { BUNDLED_CLANGD_ASSET_INTEGRITY } from '../src/bundledClangdAssetIntegrity.js';
 import {
 	resolveCppLanguageServerBaseUrl,
 	resolveCppLanguageServerRuntimeAssetConfig,
@@ -49,6 +50,30 @@ import {
 } from '../src/runtime.js';
 
 describe('lsp runtime asset resolution', () => {
+	it('pins bundled clangd assets in the default runtime config', () => {
+		expect(
+			resolveCppLanguageServerRuntimeAssetConfig(
+				{ rootUrl: '/wasm-idle' },
+				'https://app.example.com/editor'
+			)
+		).toEqual({
+			baseUrl: 'https://app.example.com/wasm-idle/clangd/',
+			loader: undefined,
+			allowedBaseUrls: undefined,
+			integrity: BUNDLED_CLANGD_ASSET_INTEGRITY
+		});
+
+		expect(
+			resolveCppLanguageServerRuntimeAssetConfig(
+				'/wasm-idle',
+				'https://app.example.com/editor'
+			)
+		).toEqual({
+			baseUrl: 'https://app.example.com/wasm-idle/clangd/',
+			integrity: BUNDLED_CLANGD_ASSET_INTEGRITY
+		});
+	});
+
 	it('keeps default clangd and Python assets under the deployed application base', () => {
 		const applicationUrl = 'https://app.example.com/wasm-idle/';
 
