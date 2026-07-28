@@ -71,4 +71,6 @@ Chromium job. The gate installs Chromium, downloads the four external Clang deli
 verifies every pinned SHA-256 receipt, and requires the product LLDB/WAMR binaries published by
 `wasm-llvm` commit `1186508362a98bdbfc71db14c7375863dff9e30f` for C, C++, and Rust. The V2
 manifest and all six debug assets are downloaded from that immutable revision and verified before
-the browser starts; the test cannot silently fall back to trace debugging.
+the browser starts; the test cannot silently fall back to trace debugging. At each C, C++, and Rust
+source pause, the gate also verifies that LLDB scopes remain lazy until their
+`variablesReference` is requested and then contain the expected local value.

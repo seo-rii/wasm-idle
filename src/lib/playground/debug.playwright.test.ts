@@ -17,6 +17,7 @@ const debugCases = [
 		backend: 'lldb',
 		breakpointLine: 4,
 		expectedOutput: 'lldb-c=73',
+		expectedLocal: { name: 'value', value: '70' },
 		expectedTitle: 'C · LLDB / WAMR',
 		language: 'C',
 		programArgs: [],
@@ -34,6 +35,7 @@ int main(void) {
 		backend: 'lldb',
 		breakpointLine: 9,
 		expectedOutput: 'lldb-cpp=73',
+		expectedLocal: { name: 'result', value: '73' },
 		expectedTitle: 'C++ · LLDB / WAMR',
 		language: 'CPP',
 		programArgs: [],
@@ -55,6 +57,7 @@ int main() {
 		backend: 'lldb',
 		breakpointLine: 2,
 		expectedOutput: 'lldb-rust=73:browser-arg',
+		expectedLocal: { name: 'value', value: '70' },
 		expectedTitle: 'Rust · LLDB / WAMR',
 		language: 'RUST',
 		programArgs: ['browser-arg'],
@@ -500,6 +503,38 @@ describe('native-source browser debugging in Chromium', () => {
 									previousLine
 							);
 						}, stepStartLine);
+						if (requireLldbDebug && testCase.backend === 'lldb') {
+							const debugState = await page.evaluate(() =>
+								(window as any).__wasmIdleDebug.getDebugState()
+							);
+							expect(debugState.paused).toBe(true);
+							expect(debugState.frameId).toBeTypeOf('number');
+							expect(debugState.scopes.length).toBeGreaterThan(0);
+							expect(debugState.variablesByReference).toEqual([]);
+
+							const loadedVariables = [];
+							for (const scope of debugState.scopes) {
+								if (scope.variablesReference <= 0) continue;
+								loadedVariables.push(
+									...(await page.evaluate(
+										(variablesReference) =>
+											(window as any).__wasmIdleDebug.loadDebugVariables(
+												variablesReference
+											),
+										scope.variablesReference
+									))
+								);
+							}
+							expect(loadedVariables).toEqual(
+								expect.arrayContaining([
+									expect.objectContaining(testCase.expectedLocal)
+								])
+							);
+							const loadedState = await page.evaluate(() =>
+								(window as any).__wasmIdleDebug.getDebugState()
+							);
+							expect(loadedState.variablesByReference.length).toBeGreaterThan(0);
+						}
 						if (
 							requireLldbDebug &&
 							testCase.backend === 'lldb' &&

@@ -59,6 +59,7 @@
 		SandboxExecutionOptions,
 		TinyGoTarget,
 		DebugSessionEvent,
+		DebugScope,
 		DebugVariable
 	} from '$lib/playground/options';
 	import type monaco from 'monaco-editor';
@@ -700,6 +701,17 @@
 		setEditorValue: (text: string) => Promise<boolean>;
 		setWorkspaceFiles: (files: WorkspaceFile[], activePath?: string) => Promise<boolean>;
 		setBreakpoints: (lines: number[]) => void;
+		getDebugState: () => {
+			paused: boolean;
+			frameId: number | null;
+			scopes: DebugScope[];
+			variablesByReference: Array<[number, DebugVariable[]]>;
+		};
+		loadDebugVariables: (
+			variablesReference: number,
+			start?: number,
+			count?: number
+		) => Promise<DebugVariable[]>;
 		setPreloadedStdin: (text: string) => void;
 	};
 	let browserDebugHookVersion = 0;
@@ -2022,6 +2034,26 @@
 			},
 			setBreakpoints(lines: number[]) {
 				debug.setBreakpoints(lines);
+			},
+			getDebugState() {
+				return {
+					paused: debug.paused,
+					frameId: debug.frameId,
+					scopes: debug.scopes.map((scope) => ({
+						...scope,
+						variables: scope.variables.map((variable) => ({ ...variable }))
+					})),
+					variablesByReference: Array.from(
+						debug.variablesByReference,
+						([reference, variables]) => [
+							reference,
+							variables.map((variable) => ({ ...variable }))
+						]
+					)
+				};
+			},
+			loadDebugVariables(variablesReference: number, start?: number, count?: number) {
+				return debug.loadVariableChildren(variablesReference, start, count);
 			},
 			setPreloadedStdin(text: string) {
 				stdinInput = text;
