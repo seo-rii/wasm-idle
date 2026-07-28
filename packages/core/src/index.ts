@@ -23,7 +23,8 @@ export { phaseProgress, progressBandsForLanguage, type ProgressLike } from './pr
 export {
 	createRuntimeAssetsKey,
 	type RuntimeAssetKeyInput,
-	type RuntimeAssetKeySource
+	type RuntimeAssetKeySource,
+	type RuntimeAssetLoaderKeySource
 } from './runtime-assets.js';
 export type { TerminalControl } from './terminal.js';
 export {

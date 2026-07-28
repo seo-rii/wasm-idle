@@ -1,9 +1,15 @@
+export interface RuntimeAssetLoaderKeySource {
+	baseUrl?: string;
+	loader?: unknown;
+	loaderKey?: string;
+}
+
 export interface RuntimeAssetKeySource {
 	rootUrl?: string;
-	python?: { baseUrl?: string; loader?: unknown };
-	java?: { baseUrl?: string; loader?: unknown };
-	clang?: { baseUrl?: string; loader?: unknown };
-	clangd?: { baseUrl?: string; loader?: unknown };
+	python?: RuntimeAssetLoaderKeySource;
+	java?: RuntimeAssetLoaderKeySource;
+	clang?: RuntimeAssetLoaderKeySource;
+	clangd?: RuntimeAssetLoaderKeySource;
 	rust?: { compilerUrl?: string; debugModuleUrl?: string };
 	go?: { compilerUrl?: string };
 	assemblyscript?: { moduleUrl?: string };
@@ -63,6 +69,11 @@ interface RuntimeAssetKeyField {
 const hasValue = (value: unknown) => !!value;
 
 const joinStringList = (value: unknown) => (Array.isArray(value) ? value.join('\0') : '');
+
+const loaderIdentities = new WeakMap<object, string>();
+let nextLoaderIdentity = 0;
+
+const LOADER_RUNTIMES = ['python', 'java', 'clang', 'clangd'] as const;
 
 const RUNTIME_ASSET_KEY_FIELDS = [
 	{ runtime: 'python', property: 'baseUrl', key: 'pythonBaseUrl' },
@@ -167,6 +178,24 @@ export function createRuntimeAssetsKey(runtimeAssets: RuntimeAssetKeyInput): str
 	};
 	for (const field of RUNTIME_ASSET_KEY_FIELDS) {
 		keyParts[field.key] = readRuntimeAssetKeyField(runtimeAssets, field);
+	}
+	for (const runtime of LOADER_RUNTIMES) {
+		const config = runtimeAssetRecord(runtimeAssets, runtime);
+		const loader = config?.loader;
+		let identity = '';
+		if ((typeof loader === 'object' && loader !== null) || typeof loader === 'function') {
+			const explicitKey = typeof config?.loaderKey === 'string' ? config.loaderKey : '';
+			if (explicitKey) {
+				identity = `key:${explicitKey}`;
+			} else {
+				identity = loaderIdentities.get(loader) || '';
+				if (!identity) {
+					identity = `instance:${++nextLoaderIdentity}`;
+					loaderIdentities.set(loader, identity);
+				}
+			}
+		}
+		keyParts[`${runtime}LoaderIdentity`] = identity;
 	}
 	return JSON.stringify(keyParts);
 }

@@ -38,6 +38,7 @@ export type RuntimeAssetLoader = (
 export interface RuntimeAssetConfig {
 	baseUrl?: string;
 	loader?: RuntimeAssetLoader;
+	loaderKey?: string;
 }
 
 export interface RustRuntimeAssetConfig {

@@ -60,6 +60,25 @@ describe('core language contract', () => {
 		});
 	});
 
+	it('distinguishes custom loader identities in runtime asset cache keys', () => {
+		const firstLoader = () => undefined;
+		const secondLoader = () => undefined;
+		const firstKey = createRuntimeAssetsKey({ python: { loader: firstLoader } });
+		const secondKey = createRuntimeAssetsKey({ python: { loader: secondLoader } });
+
+		expect(firstKey).toBe(createRuntimeAssetsKey({ python: { loader: firstLoader } }));
+		expect(firstKey).not.toBe(secondKey);
+		expect(
+			createRuntimeAssetsKey({
+				python: { loader: firstLoader, loaderKey: 'pyodide-cache-v1' }
+			})
+		).toBe(
+			createRuntimeAssetsKey({
+				python: { loader: secondLoader, loaderKey: 'pyodide-cache-v1' }
+			})
+		);
+	});
+
 	it('includes both Rust compiler assets in runtime cache keys', () => {
 		const key = JSON.parse(
 			createRuntimeAssetsKey({
