@@ -3,7 +3,13 @@ export type LanguageToolAssetRuntime = 'clangd';
 export interface LanguageToolAssetLoadRequest {
 	runtime: LanguageToolAssetRuntime;
 	asset: string;
+	signal: AbortSignal;
 	reportProgress: (loaded: number, total?: number) => void;
+}
+
+export interface LanguageToolAssetLoadOptions {
+	signal?: AbortSignal;
+	timeoutMs?: number;
 }
 
 export interface LanguageToolAssetDataResult {
@@ -62,6 +68,14 @@ export interface LoadedLanguageToolAsset {
 
 export const CLANGD_ASSETS = ['clangd.js', 'clangd.wasm.gz'] as const;
 export const CLANGD_VIRTUAL_BASE_URL = 'https://wasm-idle.invalid/clangd/';
+export const DEFAULT_LANGUAGE_TOOL_ASSET_TIMEOUT_MS = 120_000;
+
+export class LanguageToolAssetTimeoutError extends Error {
+	constructor(asset: string, timeoutMs: number) {
+		super(`Timed out loading runtime asset ${asset} after ${timeoutMs} ms`);
+		this.name = 'LanguageToolAssetTimeoutError';
+	}
+}
 
 const textEncoder = new TextEncoder();
 const DEFAULT_STREAM_BUFFER_BYTES = 64 * 1024;
@@ -176,13 +190,15 @@ async function fetchAsset(
 	url: string,
 	asset: string,
 	config: ResolvedLanguageToolAssetConfig,
-	reportProgress: (loaded: number, total?: number) => void
+	reportProgress: (loaded: number, total?: number) => void,
+	signal: AbortSignal
 ): Promise<LoadedLanguageToolAsset> {
 	const requestUrl = requireAllowedAssetUrl(asset, url, config);
 	const response = await fetch(requestUrl.href, {
 		credentials: 'omit',
 		redirect: 'follow',
-		referrerPolicy: 'no-referrer'
+		referrerPolicy: 'no-referrer',
+		signal
 	});
 	requireAllowedAssetUrl(asset, response.url || requestUrl.href, config);
 	if (!response.ok) throw new Error(`Failed to load ${asset}: ${response.status}`);
@@ -200,46 +216,59 @@ async function fetchAsset(
 	}
 
 	const reader = response.body.getReader();
-	let receivedLength = 0;
-	let bytes = new Uint8Array(contentLength || DEFAULT_STREAM_BUFFER_BYTES);
-	while (true) {
-		const { done, value } = await reader.read();
-		if (done) break;
-		if (!value) continue;
-		const nextLength = receivedLength + value.byteLength;
-		if (nextLength > MAX_LANGUAGE_TOOL_ASSET_BYTES) {
-			await reader.cancel();
-			throw new Error(
-				`Runtime asset ${asset} exceeds the ${MAX_LANGUAGE_TOOL_ASSET_BYTES} byte limit`
-			);
-		}
-		if (nextLength > bytes.byteLength) {
-			const capacity = Math.min(
-				MAX_LANGUAGE_TOOL_ASSET_BYTES,
-				Math.max(nextLength, bytes.byteLength * 2)
-			);
-			const grown = new Uint8Array(capacity);
-			grown.set(bytes.subarray(0, receivedLength));
-			bytes = grown;
-		}
-		bytes.set(value, receivedLength);
-		receivedLength = nextLength;
-		reportProgress(receivedLength, contentLength);
+	const cancelOnAbort = () => {
+		void reader.cancel(signal.reason).catch(() => {});
+	};
+	if (signal.aborted) {
+		await reader.cancel(signal.reason);
+		throw signal.reason;
 	}
-	if (receivedLength !== bytes.byteLength) bytes = bytes.slice(0, receivedLength);
-	reportProgress(receivedLength, contentLength ?? receivedLength);
-	return { bytes, mimeType };
+	signal.addEventListener('abort', cancelOnAbort, { once: true });
+	try {
+		let receivedLength = 0;
+		let bytes = new Uint8Array(contentLength || DEFAULT_STREAM_BUFFER_BYTES);
+		while (true) {
+			const { done, value } = await reader.read();
+			if (done) break;
+			if (!value) continue;
+			const nextLength = receivedLength + value.byteLength;
+			if (nextLength > MAX_LANGUAGE_TOOL_ASSET_BYTES) {
+				await reader.cancel();
+				throw new Error(
+					`Runtime asset ${asset} exceeds the ${MAX_LANGUAGE_TOOL_ASSET_BYTES} byte limit`
+				);
+			}
+			if (nextLength > bytes.byteLength) {
+				const capacity = Math.min(
+					MAX_LANGUAGE_TOOL_ASSET_BYTES,
+					Math.max(nextLength, bytes.byteLength * 2)
+				);
+				const grown = new Uint8Array(capacity);
+				grown.set(bytes.subarray(0, receivedLength));
+				bytes = grown;
+			}
+			bytes.set(value, receivedLength);
+			receivedLength = nextLength;
+			reportProgress(receivedLength, contentLength);
+		}
+		if (receivedLength !== bytes.byteLength) bytes = bytes.slice(0, receivedLength);
+		reportProgress(receivedLength, contentLength ?? receivedLength);
+		return { bytes, mimeType };
+	} finally {
+		signal.removeEventListener('abort', cancelOnAbort);
+	}
 }
 
 async function normalizeLoaderResult(
 	result: LanguageToolAssetLoaderResult,
 	asset: string,
 	config: ResolvedLanguageToolAssetConfig,
-	reportProgress: (loaded: number, total?: number) => void
+	reportProgress: (loaded: number, total?: number) => void,
+	signal: AbortSignal
 ): Promise<LoadedLanguageToolAsset | null> {
 	if (!result) return null;
 	if (typeof result === 'string' || result instanceof URL) {
-		return await fetchAsset(String(result), asset, config, reportProgress);
+		return await fetchAsset(String(result), asset, config, reportProgress, signal);
 	}
 	if (result instanceof ArrayBuffer) {
 		const bytes = new Uint8Array(result);
@@ -256,7 +285,7 @@ async function normalizeLoaderResult(
 		return { bytes, mimeType: result.type || undefined };
 	}
 	if ('url' in result && result.url) {
-		return await fetchAsset(String(result.url), asset, config, reportProgress);
+		return await fetchAsset(String(result.url), asset, config, reportProgress, signal);
 	}
 	if ('data' in result) {
 		if (typeof result.data === 'string') {
@@ -284,7 +313,8 @@ export async function loadLanguageToolAsset(
 	runtime: LanguageToolAssetRuntime,
 	asset: string,
 	config: ResolvedLanguageToolAssetConfig,
-	reportProgress: (loaded: number, total?: number) => void
+	reportProgress: (loaded: number, total?: number) => void,
+	options: LanguageToolAssetLoadOptions = {}
 ): Promise<LoadedLanguageToolAsset> {
 	if (runtime === 'clangd' && !(CLANGD_ASSETS as readonly string[]).includes(asset)) {
 		throw new Error(`Unexpected clangd runtime asset: ${asset}`);
@@ -292,16 +322,62 @@ export async function loadLanguageToolAsset(
 	if (config.integrity && !Object.hasOwn(config.integrity, asset)) {
 		throw new Error(`Runtime asset ${asset} is missing integrity metadata`);
 	}
-	let loaded: LoadedLanguageToolAsset | null = null;
-	if (config.loader) {
-		loaded = await normalizeLoaderResult(
-			await config.loader({ runtime, asset, reportProgress }),
-			asset,
-			config,
-			reportProgress
-		);
+	const timeoutMs = options.timeoutMs ?? DEFAULT_LANGUAGE_TOOL_ASSET_TIMEOUT_MS;
+	if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) {
+		throw new TypeError('Language tool asset timeout must be a positive safe integer');
 	}
-	loaded ||= await fetchAsset(asset, asset, config, reportProgress);
-	loaded = { ...loaded, bytes: enforceAssetSize(asset, loaded.bytes) };
-	return await verifyAssetIntegrity(asset, loaded, config);
+	if (options.signal?.aborted) {
+		throw options.signal.reason instanceof Error
+			? options.signal.reason
+			: new DOMException('Language tool asset loading was cancelled', 'AbortError');
+	}
+
+	const controller = new AbortController();
+	let rejectStopped = (_reason: unknown) => {};
+	const stopped = new Promise<never>((_resolve, reject) => {
+		rejectStopped = reject;
+	});
+	const stop = (reason: Error) => {
+		if (controller.signal.aborted) return;
+		controller.abort(reason);
+		rejectStopped(reason);
+	};
+	const handleAbort = () => {
+		stop(
+			options.signal?.reason instanceof Error
+				? options.signal.reason
+				: new DOMException('Language tool asset loading was cancelled', 'AbortError')
+		);
+	};
+	options.signal?.addEventListener('abort', handleAbort, { once: true });
+	const timeout = setTimeout(() => {
+		stop(new LanguageToolAssetTimeoutError(asset, timeoutMs));
+	}, timeoutMs);
+
+	try {
+		const loading = (async () => {
+			let loaded: LoadedLanguageToolAsset | null = null;
+			if (config.loader) {
+				loaded = await normalizeLoaderResult(
+					await config.loader({
+						runtime,
+						asset,
+						signal: controller.signal,
+						reportProgress
+					}),
+					asset,
+					config,
+					reportProgress,
+					controller.signal
+				);
+			}
+			loaded ||= await fetchAsset(asset, asset, config, reportProgress, controller.signal);
+			loaded = { ...loaded, bytes: enforceAssetSize(asset, loaded.bytes) };
+			return await verifyAssetIntegrity(asset, loaded, config);
+		})();
+		return await Promise.race([loading, stopped]);
+	} finally {
+		clearTimeout(timeout);
+		options.signal?.removeEventListener('abort', handleAbort);
+	}
 }

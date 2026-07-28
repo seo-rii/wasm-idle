@@ -39,7 +39,8 @@ function transferBuffer(bytes: Uint8Array) {
 
 async function preloadClangdAssets(
 	assetConfig: ResolvedLanguageToolAssetConfig,
-	onStatus?: (status: ClangdStatus) => void
+	onStatus: ((status: ClangdStatus) => void) | undefined,
+	lifecycle: Pick<EditorLanguageServerRuntimeOptions, 'signal' | 'assetTimeoutMs'>
 ): Promise<{ assets: ClangdPreloadedAssets; transfer: Transferable[] }> {
 	const fractions = new Map<string, number>();
 	for (const asset of CLANGD_ASSETS) fractions.set(asset, 0);
@@ -50,13 +51,19 @@ async function preloadClangdAssets(
 	};
 
 	const load = async (asset: (typeof CLANGD_ASSETS)[number]) => {
-		const loaded = await loadLanguageToolAsset('clangd', asset, assetConfig, (value, total) => {
-			fractions.set(
-				asset,
-				total && total > 0 ? Math.min(value / total, 1) : value > 0 ? 1 : 0
-			);
-			emitProgress();
-		});
+		const loaded = await loadLanguageToolAsset(
+			'clangd',
+			asset,
+			assetConfig,
+			(value, total) => {
+				fractions.set(
+					asset,
+					total && total > 0 ? Math.min(value / total, 1) : value > 0 ? 1 : 0
+				);
+				emitProgress();
+			},
+			{ signal: lifecycle.signal, timeoutMs: lifecycle.assetTimeoutMs }
+		);
 		return transferBuffer(loaded.bytes);
 	};
 
@@ -71,14 +78,15 @@ async function preloadClangdAssets(
 async function createServer(
 	assetConfig: ResolvedLanguageToolAssetConfig,
 	createWorker: () => Worker,
-	onStatus?: (status: ClangdStatus) => void,
+	onStatus: ((status: ClangdStatus) => void) | undefined,
+	lifecycle: Pick<EditorLanguageServerRuntimeOptions, 'signal' | 'assetTimeoutMs'>,
 	debug = false
 ) {
 	const status = createLanguageServerProgressReporter(onStatus);
 	status.loading();
 	let preloaded: Awaited<ReturnType<typeof preloadClangdAssets>>;
 	try {
-		preloaded = await preloadClangdAssets(assetConfig, onStatus);
+		preloaded = await preloadClangdAssets(assetConfig, onStatus, lifecycle);
 	} catch (error) {
 		status.error(error instanceof Error ? error.message : String(error));
 		throw error;
@@ -155,6 +163,7 @@ export async function createClangdLanguageServer(
 		assetConfig,
 		hostOptions?.createWorker || createDefaultClangdWorker,
 		hostOptions?.onStatus,
+		{ signal: hostOptions?.signal, assetTimeoutMs: hostOptions?.assetTimeoutMs },
 		debug
 	);
 	const reader = new BrowserMessageReader(worker);

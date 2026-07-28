@@ -30,6 +30,8 @@ export interface EditorLanguageServerRuntimeOptions {
 	createWorker?: () => Worker;
 	currentUrl?: string;
 	rootUrl?: string;
+	signal?: AbortSignal;
+	assetTimeoutMs?: number;
 	cpp?: LanguageToolAssetConfig;
 	python?: {
 		baseUrl?: string;

@@ -173,4 +173,24 @@ describe('getCppLanguageServer', () => {
 			message: 'Failed to load clangd.js: 404'
 		});
 	});
+
+	it('propagates caller cancellation into asset preflight', async () => {
+		const controller = new AbortController();
+		const loader = vi.fn();
+		controller.abort(new Error('clangd start cancelled'));
+
+		await expect(
+			getCppLanguageServer({
+				cpp: {
+					baseUrl: 'https://static.example.com/clangd/',
+					loader
+				},
+				signal: controller.signal,
+				createWorker: () => new mockState.FakeWorker() as unknown as Worker
+			})
+		).rejects.toThrow('clangd start cancelled');
+
+		expect(loader).not.toHaveBeenCalled();
+		expect(mockState.workers).toHaveLength(0);
+	});
 });

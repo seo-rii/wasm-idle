@@ -43,6 +43,8 @@ export {
 export {
 	CLANGD_ASSETS,
 	CLANGD_VIRTUAL_BASE_URL,
+	DEFAULT_LANGUAGE_TOOL_ASSET_TIMEOUT_MS,
+	LanguageToolAssetTimeoutError,
 	loadLanguageToolAsset,
 	normalizeBaseUrl,
 	normalizeRootUrl,
@@ -52,6 +54,7 @@ export {
 	type LanguageToolAssetIntegrityEntry,
 	type LanguageToolAssetIntegrityMap,
 	type LanguageToolAssetLoadRequest,
+	type LanguageToolAssetLoadOptions,
 	type LanguageToolAssetLoader,
 	type LanguageToolAssetLoaderResult,
 	type LanguageToolAssetRuntime,

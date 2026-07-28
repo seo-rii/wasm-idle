@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { loadLanguageToolAsset } from '../src/assets.js';
 
 afterEach(() => {
+	vi.useRealTimers();
 	vi.restoreAllMocks();
 	vi.unstubAllGlobals();
 });
@@ -176,8 +177,54 @@ describe('language tool asset loading', () => {
 			expect.objectContaining({
 				credentials: 'omit',
 				redirect: 'follow',
-				referrerPolicy: 'no-referrer'
+				referrerPolicy: 'no-referrer',
+				signal: expect.any(AbortSignal)
 			})
 		);
+	});
+
+	it('aborts a loader that exceeds its configured timeout', async () => {
+		vi.useFakeTimers();
+		let loaderSignal: AbortSignal | undefined;
+		const loading = loadLanguageToolAsset(
+			'clangd',
+			'clangd.js',
+			{
+				baseUrl: 'https://assets.example.com/clangd/',
+				loader: ({ signal }) => {
+					loaderSignal = signal;
+					return new Promise(() => {});
+				}
+			},
+			vi.fn(),
+			{ timeoutMs: 25 }
+		);
+		const rejection = expect(loading).rejects.toThrow(
+			'Timed out loading runtime asset clangd.js after 25 ms'
+		);
+
+		await vi.advanceTimersByTimeAsync(25);
+		await rejection;
+		expect(loaderSignal?.aborted).toBe(true);
+	});
+
+	it('honors a caller cancellation before invoking a custom loader', async () => {
+		const controller = new AbortController();
+		const loader = vi.fn();
+		controller.abort(new Error('asset load cancelled'));
+
+		await expect(
+			loadLanguageToolAsset(
+				'clangd',
+				'clangd.js',
+				{
+					baseUrl: 'https://assets.example.com/clangd/',
+					loader
+				},
+				vi.fn(),
+				{ signal: controller.signal }
+			)
+		).rejects.toThrow('asset load cancelled');
+		expect(loader).not.toHaveBeenCalled();
 	});
 });
