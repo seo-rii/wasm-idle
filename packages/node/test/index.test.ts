@@ -17,7 +17,9 @@ function createSandbox(run: Sandbox['run']): Sandbox {
 
 describe('runWasmIdleInNode', () => {
 	it('treats fulfilled string runtime results as successful', async () => {
+		const dispose = vi.fn(async () => undefined);
 		const sandbox = createSandbox(vi.fn(async () => ':ok'));
+		sandbox.dispose = dispose;
 
 		const result = await runWasmIdleInNode({
 			language: 'ELIXIR',
@@ -28,6 +30,7 @@ describe('runWasmIdleInNode', () => {
 		});
 
 		expect(result).toEqual({ ok: true, result: ':ok', elapsedMs: 17 });
+		expect(dispose).toHaveBeenCalledTimes(1);
 	});
 
 	it('preserves the original rejected error for callers', async () => {
@@ -55,5 +58,22 @@ describe('runWasmIdleInNode', () => {
 		});
 		expect(result.error).toBe(error);
 		expect(stderr).toHaveBeenCalledWith('runtime failed\n');
+	});
+
+	it('can retain a sandbox when the caller owns its lifecycle', async () => {
+		const dispose = vi.fn(async () => undefined);
+		const sandbox = createSandbox(vi.fn(async () => true));
+		sandbox.dispose = dispose;
+
+		await runWasmIdleInNode({
+			language: 'C',
+			code: 'int main() {}',
+			loadSandbox: async () => sandbox,
+			stdout: vi.fn(),
+			stderr: vi.fn(),
+			disposeAfterRun: false
+		});
+
+		expect(dispose).not.toHaveBeenCalled();
 	});
 });

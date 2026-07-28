@@ -5,8 +5,10 @@ import type {
 	DebugSourceBreakpoints,
 	DebugVariable
 } from './debug.js';
+import { RuntimeConfigurationError } from './errors.js';
 import type { ExecutionLimits, ExecutionRequest, ExecutionResult } from './execution.js';
 import type { ProgressLike } from './progress.js';
+import type { RuntimeRunId } from './protocol.js';
 import type { RuntimeAssetKeySource } from './runtime-assets.js';
 import {
 	DEFAULT_WORKSPACE_LIMITS,
@@ -32,6 +34,13 @@ export interface SandboxExecutionOptions {
 	workspaceLimits?: Partial<WorkspaceLimits>;
 }
 
+export interface SandboxLifecycle {
+	cancel: (runId?: RuntimeRunId) => void | Promise<void>;
+	reset: () => void | Promise<void>;
+	clearOutput: () => void | Promise<void>;
+	dispose: () => void | Promise<void>;
+}
+
 export interface Sandbox {
 	constructor: unknown;
 	eof: () => void;
@@ -55,6 +64,10 @@ export interface Sandbox {
 	terminate: () => void | Promise<void>;
 	clear: () => Promise<void>;
 	kill?: () => void | Promise<void>;
+	cancel?: SandboxLifecycle['cancel'];
+	reset?: SandboxLifecycle['reset'];
+	clearOutput?: SandboxLifecycle['clearOutput'];
+	dispose?: SandboxLifecycle['dispose'];
 	write?: (data: string) => void;
 	output?: (data: string) => void;
 	ondebug?: (event: DebugSessionEvent) => void;
@@ -77,7 +90,7 @@ export interface Sandbox {
 	elapse?: number;
 }
 
-export interface BoundSandbox extends Omit<Sandbox, 'load'> {
+export interface BoundSandbox extends Omit<Sandbox, 'load' | 'dispose'> {
 	load: (
 		code?: string,
 		log?: boolean,
@@ -85,6 +98,7 @@ export interface BoundSandbox extends Omit<Sandbox, 'load'> {
 		options?: SandboxExecutionOptions,
 		progress?: SandboxProgress
 	) => Promise<void>;
+	dispose: () => Promise<void>;
 	runtimeAssets: SandboxRuntimeAssets;
 }
 
@@ -97,6 +111,7 @@ export interface PlaygroundBinding {
 	runtimeAssets: SandboxRuntimeAssets;
 	terminalProps: PlaygroundTerminalProps;
 	load: (language: string) => Promise<BoundSandbox>;
+	dispose: () => Promise<void>;
 }
 
 export type SandboxLoader = (language: string) => Promise<Sandbox>;
@@ -167,9 +182,21 @@ function validateSandboxExecutionOptions(
 }
 
 function bindRuntimeAssets(sandbox: Sandbox, runtimeAssets: SandboxRuntimeAssets): BoundSandbox {
+	let disposePromise: Promise<void> | undefined;
 	return new Proxy(sandbox, {
 		get(target, prop, receiver) {
 			if (prop === 'runtimeAssets') return runtimeAssets;
+			if (prop === 'dispose') {
+				return () => {
+					if (!disposePromise) {
+						disposePromise = (async () => {
+							if (target.dispose) await target.dispose();
+							else await target.terminate();
+						})();
+					}
+					return disposePromise;
+				};
+			}
 			if (prop === 'load') {
 				return async (
 					code = '',
@@ -218,11 +245,44 @@ export function createPlaygroundBinding(
 	runtimeAssets: SandboxRuntimeAssets,
 	loadSandbox: SandboxLoader
 ): PlaygroundBinding {
+	const sandboxes = new Set<BoundSandbox>();
+	let disposed = false;
+	let disposePromise: Promise<void> | undefined;
 	const binding = {
 		runtimeAssets,
 		terminalProps: {} as PlaygroundBinding['terminalProps'],
 		async load(language: string) {
-			return bindRuntimeAssets(await loadSandbox(language), runtimeAssets);
+			if (disposed) {
+				throw new RuntimeConfigurationError(
+					'Cannot load a sandbox from a disposed binding',
+					{
+						phase: 'dispose'
+					}
+				);
+			}
+			const sandbox = bindRuntimeAssets(await loadSandbox(language), runtimeAssets);
+			if (disposed) {
+				await sandbox.dispose();
+				throw new RuntimeConfigurationError(
+					'Binding was disposed while loading a sandbox',
+					{
+						phase: 'dispose'
+					}
+				);
+			}
+			sandboxes.add(sandbox);
+			return sandbox;
+		},
+		dispose() {
+			if (!disposePromise) {
+				disposed = true;
+				const ownedSandboxes = [...sandboxes];
+				sandboxes.clear();
+				disposePromise = Promise.all(
+					ownedSandboxes.map((sandbox) => sandbox.dispose())
+				).then(() => undefined);
+			}
+			return disposePromise;
 		}
 	} as PlaygroundBinding;
 	binding.terminalProps = {

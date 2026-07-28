@@ -23,6 +23,7 @@ export interface NodeRunOptions {
 	stdout?: (chunk: string) => void;
 	stderr?: (chunk: string) => void;
 	clearAfterRun?: boolean;
+	disposeAfterRun?: boolean;
 }
 
 export interface NodeRunResult {
@@ -86,6 +87,7 @@ export async function runWasmIdleInNode(options: NodeRunOptions): Promise<NodeRu
 		};
 	} finally {
 		if (options.clearAfterRun) await sandbox.clear();
+		if (options.disposeAfterRun ?? true) await sandbox.dispose();
 	}
 }
 

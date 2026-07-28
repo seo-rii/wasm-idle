@@ -5,7 +5,7 @@ import {
 	type SandboxRuntimeAssets,
 	type TerminalControl
 } from '@wasm-idle/core';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 export interface ReactWasmIdleHost {
 	binding: PlaygroundBinding;
@@ -13,16 +13,19 @@ export interface ReactWasmIdleHost {
 	setTerminal: (terminal: TerminalControl | undefined) => void;
 	terminalRef: { current: TerminalControl | undefined };
 	terminalProps: PlaygroundBinding['terminalProps'];
+	dispose: () => Promise<void>;
 }
 
 export function useWasmIdlePlayground(
 	runtimeAssets: SandboxRuntimeAssets,
 	loadSandbox: SandboxLoader
 ): PlaygroundBinding {
-	return useMemo(
+	const binding = useMemo(
 		() => createPlaygroundBinding(runtimeAssets, loadSandbox),
 		[runtimeAssets, loadSandbox]
 	);
+	useEffect(() => () => void binding.dispose(), [binding]);
+	return binding;
 }
 
 export function useWasmIdleHost(
@@ -36,12 +39,20 @@ export function useWasmIdleHost(
 		terminalRef.current = nextTerminal;
 		setTerminalState(nextTerminal);
 	}, []);
+	const dispose = useCallback(async () => {
+		const currentTerminal = terminalRef.current;
+		terminalRef.current = undefined;
+		setTerminalState(undefined);
+		if (currentTerminal) await currentTerminal.destroy();
+		await binding.dispose();
+	}, [binding]);
 	return {
 		binding,
 		terminal,
 		setTerminal,
 		terminalRef,
-		terminalProps: binding.terminalProps
+		terminalProps: binding.terminalProps,
+		dispose
 	};
 }
 

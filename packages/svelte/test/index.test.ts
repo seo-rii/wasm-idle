@@ -1,4 +1,4 @@
-import type { SandboxLoader } from '@wasm-idle/core';
+import type { Sandbox, SandboxLoader } from '@wasm-idle/core';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createSveltePlaygroundBinding, createSvelteWasmIdleHost } from '../src/index.js';
@@ -21,5 +21,26 @@ describe('Svelte playground factories', () => {
 
 		expect(host.binding.runtimeAssets).toBe('/runtime');
 		expect(host.terminal).toEqual(expect.objectContaining({ subscribe: expect.any(Function) }));
+	});
+
+	it('disposes the current binding and terminal through the host lifecycle', async () => {
+		const terminate = vi.fn();
+		const destroy = vi.fn(async () => undefined);
+		const sandbox = {
+			constructor: Object,
+			eof: vi.fn(),
+			load: vi.fn(async () => undefined),
+			run: vi.fn(async () => true),
+			terminate,
+			clear: vi.fn(async () => undefined)
+		} satisfies Sandbox;
+		const host = createSvelteWasmIdleHost('/runtime', async () => sandbox);
+		host.setTerminal({ destroy } as never);
+		await host.binding.load('C');
+
+		await host.dispose();
+
+		expect(destroy).toHaveBeenCalledTimes(1);
+		expect(terminate).toHaveBeenCalledTimes(1);
 	});
 });

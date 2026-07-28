@@ -107,6 +107,7 @@ export {
 	type Sandbox,
 	type SandboxExecutionOptions,
 	type SandboxLoader,
+	type SandboxLifecycle,
 	type SandboxProgress,
 	type SandboxRuntimeAssets
 } from './sandbox.js';

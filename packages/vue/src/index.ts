@@ -5,7 +5,15 @@ import {
 	type SandboxRuntimeAssets,
 	type TerminalControl
 } from '@wasm-idle/core';
-import { computed, shallowRef, unref, type Ref, type ShallowRef } from 'vue';
+import {
+	computed,
+	getCurrentScope,
+	onScopeDispose,
+	shallowRef,
+	unref,
+	type Ref,
+	type ShallowRef
+} from 'vue';
 
 export type MaybeRef<T> = T | Ref<T>;
 
@@ -14,13 +22,30 @@ export interface VueWasmIdleHost {
 	terminal: ShallowRef<TerminalControl | undefined>;
 	terminalProps: Ref<PlaygroundBinding['terminalProps']>;
 	setTerminal: (terminal: TerminalControl | undefined) => void;
+	dispose: () => Promise<void>;
 }
 
 export function useWasmIdlePlayground(
 	runtimeAssets: MaybeRef<SandboxRuntimeAssets>,
 	loadSandbox: MaybeRef<SandboxLoader>
 ): Ref<PlaygroundBinding> {
-	return computed(() => createPlaygroundBinding(unref(runtimeAssets), unref(loadSandbox)));
+	let currentAssets = unref(runtimeAssets);
+	let currentLoader = unref(loadSandbox);
+	let currentBinding = createPlaygroundBinding(currentAssets, currentLoader);
+	const binding = computed(() => {
+		const nextAssets = unref(runtimeAssets);
+		const nextLoader = unref(loadSandbox);
+		if (nextAssets !== currentAssets || nextLoader !== currentLoader) {
+			const previousBinding = currentBinding;
+			currentAssets = nextAssets;
+			currentLoader = nextLoader;
+			currentBinding = createPlaygroundBinding(nextAssets, nextLoader);
+			void previousBinding.dispose();
+		}
+		return currentBinding;
+	});
+	if (getCurrentScope()) onScopeDispose(() => void currentBinding.dispose());
+	return binding;
 }
 
 export function useWasmIdleHost(
@@ -35,6 +60,12 @@ export function useWasmIdleHost(
 		terminalProps: computed(() => binding.value.terminalProps),
 		setTerminal(nextTerminal) {
 			terminal.value = nextTerminal;
+		},
+		async dispose() {
+			const currentTerminal = terminal.value;
+			terminal.value = undefined;
+			if (currentTerminal) await currentTerminal.destroy();
+			await binding.value.dispose();
 		}
 	};
 }

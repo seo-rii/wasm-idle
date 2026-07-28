@@ -12,6 +12,7 @@ export interface SvelteWasmIdleHost {
 	terminal: Writable<TerminalControl | undefined>;
 	terminalProps: PlaygroundBinding['terminalProps'];
 	setTerminal: (terminal: TerminalControl | undefined) => void;
+	dispose: () => Promise<void>;
 }
 
 export function createSvelteWasmIdleHost(
@@ -20,12 +21,21 @@ export function createSvelteWasmIdleHost(
 ): SvelteWasmIdleHost {
 	const binding = createPlaygroundBinding(runtimeAssets, loadSandbox);
 	const terminal = writable<TerminalControl | undefined>(undefined);
+	let currentTerminal: TerminalControl | undefined;
 	return {
 		binding,
 		terminal,
 		terminalProps: binding.terminalProps,
 		setTerminal(nextTerminal) {
+			currentTerminal = nextTerminal;
 			terminal.set(nextTerminal);
+		},
+		async dispose() {
+			const terminalToDispose = currentTerminal;
+			currentTerminal = undefined;
+			terminal.set(undefined);
+			if (terminalToDispose) await terminalToDispose.destroy();
+			await binding.dispose();
 		}
 	};
 }

@@ -1,7 +1,7 @@
-import type { SandboxLoader, SandboxRuntimeAssets } from '@wasm-idle/core';
+import type { Sandbox, SandboxLoader, SandboxRuntimeAssets } from '@wasm-idle/core';
 import { describe, expect, it, vi } from 'vitest';
 
-import { useWasmIdlePlayground } from '../src/index.js';
+import { useWasmIdleHost, useWasmIdlePlayground } from '../src/index.js';
 
 describe('useWasmIdlePlayground', () => {
 	it('does not unwrap ordinary runtime asset objects that contain a value field', () => {
@@ -14,5 +14,27 @@ describe('useWasmIdlePlayground', () => {
 		const binding = useWasmIdlePlayground(runtimeAssets, loadSandbox);
 
 		expect(binding.value.runtimeAssets).toBe(runtimeAssets);
+	});
+
+	it('disposes the current binding and terminal through the host lifecycle', async () => {
+		const terminate = vi.fn();
+		const destroy = vi.fn(async () => undefined);
+		const sandbox = {
+			constructor: Object,
+			eof: vi.fn(),
+			load: vi.fn(async () => undefined),
+			run: vi.fn(async () => true),
+			terminate,
+			clear: vi.fn(async () => undefined)
+		} satisfies Sandbox;
+		const host = useWasmIdleHost('/runtime', async () => sandbox);
+		host.setTerminal({ destroy } as never);
+		await host.binding.value.load('C');
+
+		await host.dispose();
+
+		expect(destroy).toHaveBeenCalledTimes(1);
+		expect(terminate).toHaveBeenCalledTimes(1);
+		expect(host.terminal.value).toBeUndefined();
 	});
 });
