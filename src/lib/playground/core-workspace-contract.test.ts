@@ -1,10 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
 	DEFAULT_WORKSPACE_LIMITS,
 	WorkspaceValidationError,
+	createPlaygroundBinding,
 	normalizeWorkspacePath,
-	validateWorkspaceFiles
+	validateWorkspaceFiles,
+	type Sandbox
 } from '@wasm-idle/core';
 
 describe('core workspace policy', () => {
@@ -93,5 +95,66 @@ describe('core workspace policy', () => {
 			maxPathBytes: 1024,
 			caseSensitive: false
 		});
+	});
+
+	it('normalizes and validates workspaces before bound runs', async () => {
+		const run = vi.fn(async () => true);
+		const sandbox = {
+			constructor: Object,
+			eof() {},
+			load: vi.fn(async () => undefined),
+			run,
+			terminate() {},
+			clear: vi.fn(async () => undefined)
+		} satisfies Sandbox;
+		const binding = createPlaygroundBinding({}, async () => sandbox);
+		const bound = await binding.load('TYPESCRIPT');
+
+		await expect(
+			bound.run('export {};', false, true, undefined, [], {
+				activePath: 'src\\main.ts',
+				workspaceFiles: [{ path: 'src\\helper.ts', content: 'export {};' }]
+			})
+		).resolves.toBe(true);
+		expect(run).toHaveBeenCalledWith('export {};', false, true, undefined, [], {
+			activePath: 'src/main.ts',
+			workspaceFiles: [{ path: 'src/helper.ts', content: 'export {};' }]
+		});
+
+		const rejected = bound.run('export {};', false, true, undefined, [], {
+			activePath: '../main.ts'
+		});
+		expect(rejected).toBeInstanceOf(Promise);
+		await expect(rejected).rejects.toMatchObject({ code: 'invalid-path' });
+		expect(run).toHaveBeenCalledTimes(1);
+	});
+
+	it('counts the active source in binding quotas and validates bound loads', async () => {
+		const load = vi.fn(async () => undefined);
+		const run = vi.fn(async () => true);
+		const sandbox = {
+			constructor: Object,
+			eof() {},
+			load,
+			run,
+			terminate() {},
+			clear: vi.fn(async () => undefined)
+		} satisfies Sandbox;
+		const binding = createPlaygroundBinding({}, async () => sandbox);
+		const bound = await binding.load('TYPESCRIPT');
+
+		await expect(
+			bound.run('한글', false, true, undefined, [], {
+				workspaceLimits: { maxFileBytes: 5 }
+			})
+		).rejects.toMatchObject({ code: 'file-size-limit' });
+		expect(run).not.toHaveBeenCalled();
+
+		const rejected = bound.load('export {};', true, [], {
+			workspaceFiles: [{ path: 'src/../main.ts', content: '' }]
+		});
+		expect(rejected).toBeInstanceOf(Promise);
+		await expect(rejected).rejects.toMatchObject({ code: 'invalid-path' });
+		expect(load).not.toHaveBeenCalled();
 	});
 });

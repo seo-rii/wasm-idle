@@ -78,48 +78,32 @@ export function normalizeWorkspacePath(path: string): string {
 	return normalized;
 }
 
-const requireLimit = (name: keyof Omit<WorkspaceLimits, 'caseSensitive'>, value: number) => {
-	if (!Number.isSafeInteger(value) || value < 0) {
-		throw new WorkspaceValidationError(
-			'invalid-limit',
-			`Workspace limit ${name} must be a non-negative safe integer`
-		);
-	}
-	return value;
-};
-
-const resolveWorkspaceLimits = (limits: Partial<WorkspaceLimits>): WorkspaceLimits => ({
-	maxFiles: requireLimit('maxFiles', limits.maxFiles ?? DEFAULT_WORKSPACE_LIMITS.maxFiles),
-	maxFileBytes: requireLimit(
-		'maxFileBytes',
-		limits.maxFileBytes ?? DEFAULT_WORKSPACE_LIMITS.maxFileBytes
-	),
-	maxTotalBytes: requireLimit(
-		'maxTotalBytes',
-		limits.maxTotalBytes ?? DEFAULT_WORKSPACE_LIMITS.maxTotalBytes
-	),
-	maxPathBytes: requireLimit(
-		'maxPathBytes',
-		limits.maxPathBytes ?? DEFAULT_WORKSPACE_LIMITS.maxPathBytes
-	),
-	caseSensitive: limits.caseSensitive ?? DEFAULT_WORKSPACE_LIMITS.caseSensitive
-});
-
-const contentByteLength = (file: WorkspaceFile) => {
-	if (typeof file.content === 'string') return textEncoder.encode(file.content).byteLength;
-	if (file.content instanceof Uint8Array) return file.content.byteLength;
-	throw new WorkspaceValidationError(
-		'invalid-content',
-		`Workspace file ${file.path} must contain a string or Uint8Array`,
-		{ path: file.path }
-	);
-};
-
 export function validateWorkspaceFiles<T extends WorkspaceFile>(
 	files: readonly T[],
 	limits: Partial<WorkspaceLimits> = {}
 ): Array<T & { path: string }> {
-	const resolvedLimits = resolveWorkspaceLimits(limits);
+	const resolvedLimits: WorkspaceLimits = {
+		maxFiles: limits.maxFiles ?? DEFAULT_WORKSPACE_LIMITS.maxFiles,
+		maxFileBytes: limits.maxFileBytes ?? DEFAULT_WORKSPACE_LIMITS.maxFileBytes,
+		maxTotalBytes: limits.maxTotalBytes ?? DEFAULT_WORKSPACE_LIMITS.maxTotalBytes,
+		maxPathBytes: limits.maxPathBytes ?? DEFAULT_WORKSPACE_LIMITS.maxPathBytes,
+		caseSensitive: limits.caseSensitive ?? DEFAULT_WORKSPACE_LIMITS.caseSensitive
+	};
+	for (const name of ['maxFiles', 'maxFileBytes', 'maxTotalBytes', 'maxPathBytes'] as const) {
+		const value = resolvedLimits[name];
+		if (!Number.isSafeInteger(value) || value < 0) {
+			throw new WorkspaceValidationError(
+				'invalid-limit',
+				`Workspace limit ${name} must be a non-negative safe integer`
+			);
+		}
+	}
+	if (typeof resolvedLimits.caseSensitive !== 'boolean') {
+		throw new WorkspaceValidationError(
+			'invalid-limit',
+			'Workspace limit caseSensitive must be a boolean'
+		);
+	}
 	if (files.length > resolvedLimits.maxFiles) {
 		throw new WorkspaceValidationError(
 			'file-count-limit',
@@ -165,7 +149,18 @@ export function validateWorkspaceFiles<T extends WorkspaceFile>(
 			foldedPaths.set(foldedPath, path);
 		}
 
-		const fileBytes = contentByteLength(file);
+		let fileBytes: number;
+		if (typeof file.content === 'string') {
+			fileBytes = textEncoder.encode(file.content).byteLength;
+		} else if (file.content instanceof Uint8Array) {
+			fileBytes = file.content.byteLength;
+		} else {
+			throw new WorkspaceValidationError(
+				'invalid-content',
+				`Workspace file ${file.path} must contain a string or Uint8Array`,
+				{ path: file.path }
+			);
+		}
 		if (fileBytes > resolvedLimits.maxFileBytes) {
 			throw new WorkspaceValidationError(
 				'file-size-limit',

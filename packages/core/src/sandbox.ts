@@ -6,7 +6,14 @@ import type {
 } from './debug.js';
 import type { ProgressLike } from './progress.js';
 import type { RuntimeAssetKeySource } from './runtime-assets.js';
-import type { WorkspaceFile, WorkspaceLimits } from './workspace.js';
+import {
+	DEFAULT_WORKSPACE_LIMITS,
+	WorkspaceValidationError,
+	normalizeWorkspacePath,
+	validateWorkspaceFiles,
+	type WorkspaceFile,
+	type WorkspaceLimits
+} from './workspace.js';
 
 export type SandboxRuntimeAssets = string | RuntimeAssetKeySource;
 export type SandboxProgress = ProgressLike;
@@ -82,18 +89,109 @@ export interface PlaygroundBinding {
 
 export type SandboxLoader = (language: string) => Promise<Sandbox>;
 
+const workspaceTextEncoder = new TextEncoder();
+
+function validateSandboxExecutionOptions(
+	code: string,
+	options: SandboxExecutionOptions
+): SandboxExecutionOptions {
+	const workspaceFiles = validateWorkspaceFiles(
+		options.workspaceFiles ?? [],
+		options.workspaceLimits
+	);
+	const activePath =
+		options.activePath === undefined ? undefined : normalizeWorkspacePath(options.activePath);
+
+	if (activePath !== undefined) {
+		validateWorkspaceFiles(
+			[
+				...workspaceFiles.filter((file) => file.path !== activePath),
+				{ path: activePath, content: code }
+			],
+			options.workspaceLimits
+		);
+	} else {
+		const maxFiles = options.workspaceLimits?.maxFiles ?? DEFAULT_WORKSPACE_LIMITS.maxFiles;
+		const maxFileBytes =
+			options.workspaceLimits?.maxFileBytes ?? DEFAULT_WORKSPACE_LIMITS.maxFileBytes;
+		const maxTotalBytes =
+			options.workspaceLimits?.maxTotalBytes ?? DEFAULT_WORKSPACE_LIMITS.maxTotalBytes;
+		const sourceBytes = workspaceTextEncoder.encode(code).byteLength;
+		if (workspaceFiles.length + 1 > maxFiles) {
+			throw new WorkspaceValidationError(
+				'file-count-limit',
+				`Workspace plus active source contains ${workspaceFiles.length + 1} files; limit is ${maxFiles}`,
+				{ limit: maxFiles, actual: workspaceFiles.length + 1 }
+			);
+		}
+		if (sourceBytes > maxFileBytes) {
+			throw new WorkspaceValidationError(
+				'file-size-limit',
+				`Active source is ${sourceBytes} bytes; limit is ${maxFileBytes}`,
+				{ limit: maxFileBytes, actual: sourceBytes }
+			);
+		}
+		let totalBytes = sourceBytes;
+		for (const file of workspaceFiles) {
+			totalBytes +=
+				typeof file.content === 'string'
+					? workspaceTextEncoder.encode(file.content).byteLength
+					: file.content.byteLength;
+		}
+		if (totalBytes > maxTotalBytes) {
+			throw new WorkspaceValidationError(
+				'total-size-limit',
+				`Workspace plus active source is ${totalBytes} bytes; limit is ${maxTotalBytes}`,
+				{ limit: maxTotalBytes, actual: totalBytes }
+			);
+		}
+	}
+
+	return {
+		...options,
+		...(options.activePath === undefined ? {} : { activePath }),
+		...(options.workspaceFiles === undefined ? {} : { workspaceFiles })
+	};
+}
+
 function bindRuntimeAssets(sandbox: Sandbox, runtimeAssets: SandboxRuntimeAssets): BoundSandbox {
 	return new Proxy(sandbox, {
 		get(target, prop, receiver) {
 			if (prop === 'runtimeAssets') return runtimeAssets;
 			if (prop === 'load') {
-				return (
+				return async (
 					code = '',
 					log = true,
 					args: string[] = [],
 					options: SandboxExecutionOptions = {},
 					progress?: SandboxProgress
-				) => target.load(runtimeAssets, code, log, args, options, progress);
+				) =>
+					target.load(
+						runtimeAssets,
+						code,
+						log,
+						args,
+						validateSandboxExecutionOptions(code, options),
+						progress
+					);
+			}
+			if (prop === 'run') {
+				return async (
+					code: string,
+					prepare: boolean,
+					log?: boolean,
+					progress?: SandboxProgress,
+					args?: string[],
+					options: SandboxExecutionOptions = {}
+				) =>
+					target.run(
+						code,
+						prepare,
+						log,
+						progress,
+						args,
+						validateSandboxExecutionOptions(code, options)
+					);
 			}
 			const value = Reflect.get(target, prop, receiver);
 			return typeof value === 'function' ? value.bind(target) : value;
