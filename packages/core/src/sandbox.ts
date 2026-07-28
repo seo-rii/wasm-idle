@@ -62,6 +62,7 @@ interface SandboxOperationState {
 	phase: RuntimePhase;
 	limitExceeded: boolean;
 	onLimit?: (error: OutputLimitError | DiagnosticLimitError) => void;
+	onDispose?: () => void;
 }
 
 export interface SandboxLifecycle {
@@ -262,6 +263,7 @@ function runSandboxOperation<T>(
 			if (timeout !== undefined) clearTimeout(timeout);
 			signal?.removeEventListener('abort', onAbort);
 			operationState.onLimit = undefined;
+			operationState.onDispose = undefined;
 		};
 		const requestCancellation = () => {
 			if (cancellationRequested) return;
@@ -283,6 +285,7 @@ function runSandboxOperation<T>(
 			operationState.diagnosticCount = 0;
 			operationState.limitExceeded = false;
 			operationState.onLimit = undefined;
+			operationState.onDispose = undefined;
 		};
 		const settle = (callback: () => void) => {
 			if (settled) return;
@@ -306,6 +309,19 @@ function runSandboxOperation<T>(
 			if (operationStarted) requestCancellation();
 			else releaseOperation();
 			settle(() => reject(error));
+		};
+		operationState.onDispose = () => {
+			if (!operationStarted) releaseOperation();
+			settle(() =>
+				reject(
+					new CancelledError(
+						'Runtime operation cancelled because its sandbox was disposed',
+						{
+							phase: 'dispose'
+						}
+					)
+				)
+			);
 		};
 
 		signal?.addEventListener('abort', onAbort, { once: true });
@@ -349,6 +365,7 @@ function combinedPhaseTimeoutMs(firstTimeoutMs: number, secondTimeoutMs: number)
 
 function bindRuntimeAssets(sandbox: Sandbox, runtimeAssets: SandboxRuntimeAssets): BoundSandbox {
 	let disposePromise: Promise<void> | undefined;
+	let disposed = false;
 	const operationState: SandboxOperationState = {
 		active: false,
 		outputBytes: 0,
@@ -414,6 +431,13 @@ function bindRuntimeAssets(sandbox: Sandbox, runtimeAssets: SandboxRuntimeAssets
 		sandbox.output = emitOutput;
 		sandbox.oncompilerdiagnostic = emitDiagnostic;
 	};
+	const assertNotDisposed = () => {
+		if (disposed) {
+			throw new RuntimeConfigurationError('Cannot use a disposed sandbox', {
+				phase: 'dispose'
+			});
+		}
+	};
 	installBoundarySinks();
 	return new Proxy(sandbox, {
 		get(target, prop, receiver) {
@@ -423,6 +447,8 @@ function bindRuntimeAssets(sandbox: Sandbox, runtimeAssets: SandboxRuntimeAssets
 			if (prop === 'dispose') {
 				return () => {
 					if (!disposePromise) {
+						disposed = true;
+						operationState.onDispose?.();
 						disposePromise = (async () => {
 							if (target.dispose) await target.dispose();
 							else await target.terminate();
@@ -439,6 +465,7 @@ function bindRuntimeAssets(sandbox: Sandbox, runtimeAssets: SandboxRuntimeAssets
 					options: SandboxExecutionOptions = {},
 					progress?: SandboxProgress
 				) => {
+					assertNotDisposed();
 					const validated = validateSandboxExecutionOptions(code, options, 'startup');
 					installBoundarySinks();
 					return runSandboxOperation(
@@ -458,6 +485,7 @@ function bindRuntimeAssets(sandbox: Sandbox, runtimeAssets: SandboxRuntimeAssets
 			const execute = target.execute;
 			if (prop === 'execute' && execute) {
 				return async (request: ExecutionRequest) => {
+					assertNotDisposed();
 					const validated = validateSandboxExecutionOptions(request.code, {
 						activePath: request.activePath,
 						workspaceFiles: request.workspaceFiles,
@@ -522,6 +550,7 @@ function bindRuntimeAssets(sandbox: Sandbox, runtimeAssets: SandboxRuntimeAssets
 					args?: string[],
 					options: SandboxExecutionOptions = {}
 				) => {
+					assertNotDisposed();
 					const validated = validateSandboxExecutionOptions(code, options);
 					installBoundarySinks();
 					return runSandboxOperation(

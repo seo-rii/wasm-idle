@@ -70,6 +70,65 @@ describe('playground binding lifecycle', () => {
 		expect(loadSandbox).toHaveBeenCalledTimes(4);
 	});
 
+	it('settles an active operation and rejects reuse when its sandbox is disposed', async () => {
+		let finishRun: ((result: boolean | string) => void) | undefined;
+		const run = vi.fn(
+			() =>
+				new Promise<boolean | string>((resolve) => {
+					finishRun = resolve;
+				})
+		);
+		const load = vi.fn(async () => undefined);
+		const execute = vi.fn(async () => ({
+			ok: true,
+			exitCode: 0,
+			stdout: '',
+			stderr: '',
+			diagnostics: [],
+			artifacts: [],
+			timings: { assetMs: 0, startupMs: 0, compileMs: 0, executeMs: 0, totalMs: 0 },
+			terminationReason: 'completed' as const,
+			runtime: {
+				languageId: 'C',
+				implementationId: 'test',
+				version: '1',
+				protocolVersion: 1
+			}
+		}));
+		const dispose = vi.fn(async () => undefined);
+		const binding = createPlaygroundBinding('/runtime', async () =>
+			sandboxWithLifecycle({ load, run, execute, dispose })
+		);
+		const sandbox = await binding.load('C');
+
+		const operation = sandbox.run('int main() {}', false);
+		const rejection = expect(operation).rejects.toMatchObject({
+			code: 'cancelled',
+			phase: 'dispose'
+		});
+		await Promise.resolve();
+		await sandbox.dispose?.();
+		await rejection;
+
+		await expect(sandbox.load()).rejects.toMatchObject({
+			code: 'runtime-configuration',
+			phase: 'dispose'
+		});
+		await expect(sandbox.run('', false)).rejects.toMatchObject({
+			code: 'runtime-configuration',
+			phase: 'dispose'
+		});
+		await expect(sandbox.execute?.({ code: '' })).rejects.toMatchObject({
+			code: 'runtime-configuration',
+			phase: 'dispose'
+		});
+		expect(dispose).toHaveBeenCalledOnce();
+		expect(load).not.toHaveBeenCalled();
+		expect(run).toHaveBeenCalledOnce();
+		expect(execute).not.toHaveBeenCalled();
+		finishRun?.(true);
+	});
+
 	it('disposes a sandbox whose load races with binding disposal', async () => {
 		let resolveSandbox!: (sandbox: Sandbox) => void;
 		const sandboxPromise = new Promise<Sandbox>((resolve) => {
