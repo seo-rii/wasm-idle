@@ -25,7 +25,7 @@ describe('playground binding lifecycle', () => {
 		const first = await binding.load('C');
 		await binding.load('CPP');
 
-		await first.dispose();
+		await first.dispose?.();
 		await binding.dispose();
 		await binding.dispose();
 

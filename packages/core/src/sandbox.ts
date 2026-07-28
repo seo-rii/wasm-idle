@@ -103,7 +103,7 @@ export interface BoundSandbox extends Omit<Sandbox, 'load' | 'dispose'> {
 		options?: SandboxExecutionOptions,
 		progress?: SandboxProgress
 	) => Promise<void>;
-	dispose: () => Promise<void>;
+	dispose?: () => Promise<void>;
 	runtimeAssets: SandboxRuntimeAssets;
 }
 
@@ -305,7 +305,8 @@ export function createPlaygroundBinding(
 			}
 			const sandbox = bindRuntimeAssets(await loadSandbox(language), runtimeAssets);
 			if (disposed) {
-				await sandbox.dispose();
+				if (sandbox.dispose) await sandbox.dispose();
+				else await sandbox.terminate();
 				throw new RuntimeConfigurationError(
 					'Binding was disposed while loading a sandbox',
 					{
@@ -322,7 +323,9 @@ export function createPlaygroundBinding(
 				const ownedSandboxes = [...sandboxes];
 				sandboxes.clear();
 				disposePromise = Promise.all(
-					ownedSandboxes.map((sandbox) => sandbox.dispose())
+					ownedSandboxes.map((sandbox) =>
+						sandbox.dispose ? sandbox.dispose() : sandbox.terminate()
+					)
 				).then(() => undefined);
 			}
 			return disposePromise;

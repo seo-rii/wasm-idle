@@ -87,7 +87,10 @@ export async function runWasmIdleInNode(options: NodeRunOptions): Promise<NodeRu
 		};
 	} finally {
 		if (options.clearAfterRun) await sandbox.clear();
-		if (options.disposeAfterRun ?? true) await sandbox.dispose();
+		if (options.disposeAfterRun ?? true) {
+			if (sandbox.dispose) await sandbox.dispose();
+			else await sandbox.terminate();
+		}
 	}
 }
 
