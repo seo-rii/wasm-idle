@@ -1,5 +1,6 @@
 import {
 	DEFAULT_EXECUTION_LIMITS,
+	RUNTIME_TRUST_PROFILE_SCHEMA_VERSION,
 	createPlaygroundBinding,
 	type ExecutionResult,
 	type Sandbox
@@ -33,6 +34,19 @@ const completedResult: ExecutionResult = {
 		version: '22.1.8',
 		protocolVersion: 1
 	}
+};
+
+const resourceTrustProfile = {
+	schemaVersion: RUNTIME_TRUST_PROFILE_SCHEMA_VERSION,
+	profileId: 'resource-admission-test',
+	network: { mode: 'allowlist' as const, allowedOrigins: ['https://cdn.example.com'] },
+	storage: { mode: 'ephemeral' as const },
+	environment: { mode: 'allowlist' as const, allowedNames: ['MODE'] },
+	threads: { maxThreads: 4 },
+	workers: { maxNestedWorkers: 3 },
+	sharedArrayBuffer: true,
+	dynamicCode: 'javascript-and-wasm' as const,
+	sameOriginAccess: false
 };
 
 describe('core execution boundary', () => {
@@ -315,5 +329,85 @@ describe('core execution boundary', () => {
 				limits: { ...DEFAULT_EXECUTION_LIMITS, compileTimeoutMs: 4321 }
 			})
 		);
+	});
+
+	it('admits and normalizes declared runtime requirements before dispatch', async () => {
+		const execute = vi.fn(async () => completedResult);
+		const binding = createPlaygroundBinding(
+			'/runtime',
+			async () => createSandbox({ execute }),
+			{ trustProfile: resourceTrustProfile }
+		);
+		const sandbox = await binding.load('C');
+
+		await sandbox.execute!({
+			code: 'int main() {}',
+			env: { MODE: 'test' },
+			runtimeRequirements: {
+				wasmMemoryBytes: 64,
+				networkUrls: ['https://cdn.example.com/pkg/../runtime.wasm'],
+				pageOrigin: 'https://app.example.com',
+				storage: 'ephemeral',
+				threads: 2,
+				nestedWorkers: 1,
+				sharedArrayBuffer: true,
+				dynamicCode: 'wasm-only'
+			},
+			limits: { maxWasmMemoryBytes: 128, maxThreads: 2, maxWorkers: 1 }
+		});
+
+		expect(execute).toHaveBeenCalledWith(
+			expect.objectContaining({
+				env: { MODE: 'test' },
+				runtimeRequirements: {
+					wasmMemoryBytes: 64,
+					networkUrls: ['https://cdn.example.com/runtime.wasm'],
+					pageOrigin: 'https://app.example.com',
+					storage: 'ephemeral',
+					threads: 2,
+					nestedWorkers: 1,
+					sharedArrayBuffer: true,
+					dynamicCode: 'wasm-only',
+					sameOriginAccess: false
+				}
+			})
+		);
+	});
+
+	it('rejects undeclared and over-budget runtime requirements before dispatch', async () => {
+		const untrustedExecute = vi.fn(async () => completedResult);
+		const untrustedBinding = createPlaygroundBinding('/runtime', async () =>
+			createSandbox({ execute: untrustedExecute })
+		);
+		const untrustedSandbox = await untrustedBinding.load('C');
+		await expect(
+			untrustedSandbox.execute!({
+				code: 'int main() {}',
+				runtimeRequirements: { wasmMemoryBytes: 1 }
+			})
+		).rejects.toThrow('without a trust profile');
+		expect(untrustedExecute).not.toHaveBeenCalled();
+
+		const execute = vi.fn(async () => completedResult);
+		const binding = createPlaygroundBinding(
+			'/runtime',
+			async () => createSandbox({ execute }),
+			{ trustProfile: resourceTrustProfile }
+		);
+		const sandbox = await binding.load('C');
+		for (const [runtimeRequirements, expected] of [
+			[{ wasmMemoryBytes: 129 }, '129 Wasm memory bytes'],
+			[{ threads: 3, sharedArrayBuffer: true }, '3 threads'],
+			[{ nestedWorkers: 2 }, '2 nested workers']
+		] as const) {
+			await expect(
+				sandbox.execute!({
+					code: 'int main() {}',
+					runtimeRequirements,
+					limits: { maxWasmMemoryBytes: 128, maxThreads: 2, maxWorkers: 1 }
+				})
+			).rejects.toThrow(expected);
+		}
+		expect(execute).not.toHaveBeenCalled();
 	});
 });

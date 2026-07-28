@@ -26,7 +26,8 @@ import {
 	validateExecutionResult,
 	type ExecutionLimits,
 	type ExecutionRequest,
-	type ExecutionResult
+	type ExecutionResult,
+	type ExecutionRuntimeRequirements
 } from './execution.js';
 import type { ProgressLike } from './progress.js';
 import type { RuntimeRunId } from './protocol.js';
@@ -48,6 +49,7 @@ export interface SandboxExecutionOptions {
 	activePath?: string;
 	env?: Record<string, string>;
 	limits?: Partial<ExecutionLimits>;
+	runtimeRequirements?: ExecutionRuntimeRequirements;
 	signal?: AbortSignal;
 	sourceBreakpoints?: DebugSourceBreakpoints[];
 	stdin?: string | AsyncIterable<Uint8Array>;
@@ -233,10 +235,68 @@ function validateSandboxExecutionOptions(
 		}
 	}
 
-	const environment =
-		trustProfile && options.env !== undefined
-			? enforceRuntimeTrustProfile(trustProfile, { environment: options.env }).environment
-			: options.env;
+	const requestedRequirements = options.runtimeRequirements;
+	if (requestedRequirements !== undefined && !trustProfile) {
+		throw new RuntimeConfigurationError(
+			'Runtime requirements cannot be admitted without a trust profile',
+			{ phase }
+		);
+	}
+	const wasmMemoryBytes = requestedRequirements?.wasmMemoryBytes ?? 0;
+	if (!Number.isSafeInteger(wasmMemoryBytes) || wasmMemoryBytes < 0) {
+		throw new RuntimeConfigurationError(
+			'Runtime Wasm memory request must be a non-negative safe integer',
+			{ phase }
+		);
+	}
+	if (wasmMemoryBytes > limits.maxWasmMemoryBytes) {
+		throw new RuntimeConfigurationError(
+			`Runtime requested ${wasmMemoryBytes} Wasm memory bytes; execution limit is ${limits.maxWasmMemoryBytes}`,
+			{ phase }
+		);
+	}
+	const trustGrant = trustProfile
+		? enforceRuntimeTrustProfile(trustProfile, {
+				environment: options.env,
+				networkUrls: requestedRequirements?.networkUrls,
+				pageOrigin: requestedRequirements?.pageOrigin,
+				storage: requestedRequirements?.storage,
+				threads: requestedRequirements?.threads,
+				nestedWorkers: requestedRequirements?.nestedWorkers,
+				sharedArrayBuffer: requestedRequirements?.sharedArrayBuffer,
+				dynamicCode: requestedRequirements?.dynamicCode,
+				sameOriginAccess: requestedRequirements?.sameOriginAccess
+			})
+		: undefined;
+	if (trustGrant && trustGrant.threads > limits.maxThreads) {
+		throw new RuntimeConfigurationError(
+			`Runtime requested ${trustGrant.threads} threads; execution limit is ${limits.maxThreads}`,
+			{ phase }
+		);
+	}
+	if (trustGrant && trustGrant.nestedWorkers > limits.maxWorkers) {
+		throw new RuntimeConfigurationError(
+			`Runtime requested ${trustGrant.nestedWorkers} nested workers; execution limit is ${limits.maxWorkers}`,
+			{ phase }
+		);
+	}
+	const runtimeRequirements =
+		requestedRequirements && trustGrant
+			? Object.freeze({
+					wasmMemoryBytes,
+					networkUrls: trustGrant.networkUrls,
+					...(trustGrant.pageOrigin === undefined
+						? {}
+						: { pageOrigin: trustGrant.pageOrigin }),
+					storage: trustGrant.storage,
+					threads: trustGrant.threads,
+					nestedWorkers: trustGrant.nestedWorkers,
+					sharedArrayBuffer: trustGrant.sharedArrayBuffer,
+					dynamicCode: trustGrant.dynamicCode,
+					sameOriginAccess: trustGrant.sameOriginAccess
+				})
+			: undefined;
+	const environment = trustGrant?.environment ?? options.env;
 	return {
 		...options,
 		limits,
@@ -245,7 +305,8 @@ function validateSandboxExecutionOptions(
 			: { workspaceLimits }),
 		...(options.activePath === undefined ? {} : { activePath }),
 		...(options.workspaceFiles === undefined ? {} : { workspaceFiles }),
-		...(options.env === undefined ? {} : { env: environment })
+		...(options.env === undefined ? {} : { env: environment }),
+		...(runtimeRequirements === undefined ? {} : { runtimeRequirements })
 	};
 }
 
@@ -524,6 +585,9 @@ function bindRuntimeAssets(
 							compileArgs: request.compileArgs,
 							debug: request.debug,
 							env: request.env,
+							...(request.runtimeRequirements === undefined
+								? {}
+								: { runtimeRequirements: request.runtimeRequirements }),
 							limits: request.limits ?? {},
 							signal: request.signal,
 							stdin: request.stdin
@@ -540,6 +604,9 @@ function bindRuntimeAssets(
 								...request,
 								activePath: validated.activePath,
 								workspaceFiles: validated.workspaceFiles,
+								...(validated.runtimeRequirements === undefined
+									? {}
+									: { runtimeRequirements: validated.runtimeRequirements }),
 								limits: validated.limits
 							});
 							return validateExecutionResult(result, validated.limits);

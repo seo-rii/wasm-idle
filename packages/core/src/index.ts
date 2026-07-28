@@ -80,6 +80,7 @@ export {
 	type ExecutionLimits,
 	type ExecutionRequest,
 	type ExecutionResult,
+	type ExecutionRuntimeRequirements,
 	type ExecutionTimings,
 	type RuntimeIdentity,
 	type TerminationReason

@@ -12,6 +12,7 @@ import {
 	normalizeWorkspacePath,
 	type WorkspaceFile
 } from './workspace.js';
+import type { RuntimeTrustRequest } from './capabilities.js';
 
 export interface ExecutionLimits {
 	assetTimeoutMs: number;
@@ -74,6 +75,10 @@ export interface ExecutionDebugOptions {
 	sourceBreakpoints?: DebugSourceBreakpoints[];
 }
 
+export interface ExecutionRuntimeRequirements extends Omit<RuntimeTrustRequest, 'environment'> {
+	readonly wasmMemoryBytes?: number;
+}
+
 export interface ExecutionRequest {
 	code: string;
 	activePath?: string;
@@ -83,6 +88,7 @@ export interface ExecutionRequest {
 	compileArgs?: string[];
 	env?: Record<string, string>;
 	debug?: ExecutionDebugOptions;
+	runtimeRequirements?: ExecutionRuntimeRequirements;
 	limits?: Partial<ExecutionLimits>;
 	signal?: AbortSignal;
 }
