@@ -128,6 +128,7 @@ export {
 	RUNTIME_REGISTRY_MANIFEST_SCHEMA_VERSION,
 	defineRuntimeRegistryManifest,
 	runtimeHandshakeExpectationFromRegistryManifest,
+	runtimeIndexFromRegistryManifest,
 	runtimeIntegrityFromRegistryManifest,
 	runtimeProfilesFromRegistryManifest,
 	type RuntimeAssetEncoding,
@@ -135,6 +136,7 @@ export {
 	type RuntimeRegistryContractTargets,
 	type RuntimeRegistryEntry,
 	type RuntimeRegistryIdentity,
+	type RuntimeRegistryIndex,
 	type RuntimeRegistryManifest,
 	type RuntimeRegistryProfile
 } from './runtime-manifest.js';

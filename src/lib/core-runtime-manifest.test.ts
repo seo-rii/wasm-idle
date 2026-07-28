@@ -1,6 +1,7 @@
 import {
 	RUNTIME_REGISTRY_MANIFEST_SCHEMA_VERSION,
 	defineRuntimeRegistryManifest,
+	runtimeIndexFromRegistryManifest,
 	runtimeIntegrityFromRegistryManifest,
 	runtimeProfilesFromRegistryManifest,
 	type RuntimeRegistryManifest
@@ -102,6 +103,62 @@ describe('runtime registry manifest', () => {
 				}
 			}
 		});
+	});
+
+	it('generates immutable consumer indexes from manifest contract targets', () => {
+		const manifest = createManifest();
+		const baseRuntime = manifest.runtimes[0]!;
+		const index = runtimeIndexFromRegistryManifest({
+			...manifest,
+			runtimes: [
+				baseRuntime,
+				{
+					...baseRuntime,
+					runtimeId: 'fortran/modern',
+					identity: {
+						...baseRuntime.identity,
+						implementationId: 'modern-fortran',
+						implementationVersion: '1.0.0',
+						profile: {
+							...baseRuntime.identity.profile,
+							profileId: 'modern-fortran-browser-v1'
+						}
+					},
+					aliases: [],
+					assetRoot: undefined,
+					assets: [],
+					contracts: {
+						routeId: 'fortran-modern',
+						runtimeAssetKey: 'fortran-modern',
+						documentationId: 'FORTRAN',
+						syncTarget: 'sync:wasm-fortran',
+						browserTestId: 'browser:fortran-modern'
+					}
+				}
+			]
+		});
+		const runtime = index.runtime('fortran/f2c');
+
+		expect(runtime).toBe(index.runtimeForAlias(' f77 '));
+		expect(runtime).toBe(index.runtimeForRoute('fortran'));
+		expect(runtime).toBe(index.runtimeForAssetKey('fortran'));
+		expect(runtime).toBe(index.runtimeForBrowserTest('browser:fortran'));
+		expect(index.runtimesForLanguage('FORTRAN').map(({ runtimeId }) => runtimeId)).toEqual([
+			'fortran/f2c',
+			'fortran/modern'
+		]);
+		expect(index.runtimesForDocumentation('FORTRAN')).toEqual(
+			index.runtimesForLanguage('FORTRAN')
+		);
+		expect(index.runtimesForSyncTarget('sync:wasm-fortran')).toEqual(
+			index.runtimesForLanguage('FORTRAN')
+		);
+		expect(index.runtimesForLanguage('C')).toEqual([]);
+		expect(index.runtimeForRoute('missing')).toBeUndefined();
+		expect(Object.isFrozen(index)).toBe(true);
+		expect(Object.isFrozen(index.manifest)).toBe(true);
+		expect(Object.isFrozen(index.runtimesForLanguage('FORTRAN'))).toBe(true);
+		expect(Object.isFrozen(index.runtimesForLanguage('C'))).toBe(true);
 	});
 
 	it('rejects aliases that name a different language implementation', () => {

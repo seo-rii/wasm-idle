@@ -61,6 +61,20 @@ export interface RuntimeRegistryManifest {
 	readonly runtimes: readonly RuntimeRegistryEntry[];
 }
 
+export interface RuntimeRegistryIndex {
+	readonly manifest: RuntimeRegistryManifest;
+	readonly runtime: (runtimeId: string) => RuntimeRegistryEntry | undefined;
+	readonly runtimesForLanguage: (
+		languageId: CanonicalLanguageId
+	) => readonly RuntimeRegistryEntry[];
+	readonly runtimeForAlias: (alias: string) => RuntimeRegistryEntry | undefined;
+	readonly runtimeForRoute: (routeId: string) => RuntimeRegistryEntry | undefined;
+	readonly runtimeForAssetKey: (runtimeAssetKey: string) => RuntimeRegistryEntry | undefined;
+	readonly runtimesForDocumentation: (documentationId: string) => readonly RuntimeRegistryEntry[];
+	readonly runtimesForSyncTarget: (syncTarget: string) => readonly RuntimeRegistryEntry[];
+	readonly runtimeForBrowserTest: (browserTestId: string) => RuntimeRegistryEntry | undefined;
+}
+
 export function defineRuntimeRegistryManifest(
 	manifest: RuntimeRegistryManifest
 ): RuntimeRegistryManifest {
@@ -365,6 +379,63 @@ export function defineRuntimeRegistryManifest(
 		runtimes: Object.freeze(
 			normalizedRuntimes.sort((left, right) => left.runtimeId.localeCompare(right.runtimeId))
 		)
+	});
+}
+
+export function runtimeIndexFromRegistryManifest(
+	manifest: RuntimeRegistryManifest
+): RuntimeRegistryIndex {
+	const normalizedManifest = defineRuntimeRegistryManifest(manifest);
+	const runtimesById = new Map<string, RuntimeRegistryEntry>();
+	const runtimesByLanguage = new Map<CanonicalLanguageId, RuntimeRegistryEntry[]>();
+	const runtimesByAlias = new Map<LanguageAliasId, RuntimeRegistryEntry>();
+	const runtimesByRoute = new Map<string, RuntimeRegistryEntry>();
+	const runtimesByAssetKey = new Map<string, RuntimeRegistryEntry>();
+	const runtimesByDocumentation = new Map<string, RuntimeRegistryEntry[]>();
+	const runtimesBySyncTarget = new Map<string, RuntimeRegistryEntry[]>();
+	const runtimesByBrowserTest = new Map<string, RuntimeRegistryEntry>();
+	const noRuntimes = Object.freeze([]) as readonly RuntimeRegistryEntry[];
+
+	for (const runtime of normalizedManifest.runtimes) {
+		runtimesById.set(runtime.runtimeId, runtime);
+		const languageRuntimes = runtimesByLanguage.get(runtime.identity.languageId) ?? [];
+		languageRuntimes.push(runtime);
+		runtimesByLanguage.set(runtime.identity.languageId, languageRuntimes);
+		for (const alias of runtime.aliases ?? []) runtimesByAlias.set(alias, runtime);
+		runtimesByRoute.set(runtime.contracts.routeId, runtime);
+		runtimesByAssetKey.set(runtime.contracts.runtimeAssetKey, runtime);
+		const documentationRuntimes =
+			runtimesByDocumentation.get(runtime.contracts.documentationId) ?? [];
+		documentationRuntimes.push(runtime);
+		runtimesByDocumentation.set(runtime.contracts.documentationId, documentationRuntimes);
+		if (runtime.contracts.syncTarget !== undefined) {
+			const syncRuntimes = runtimesBySyncTarget.get(runtime.contracts.syncTarget) ?? [];
+			syncRuntimes.push(runtime);
+			runtimesBySyncTarget.set(runtime.contracts.syncTarget, syncRuntimes);
+		}
+		if (runtime.contracts.browserTestId !== undefined) {
+			runtimesByBrowserTest.set(runtime.contracts.browserTestId, runtime);
+		}
+	}
+
+	for (const runtimes of runtimesByLanguage.values()) Object.freeze(runtimes);
+	for (const runtimes of runtimesByDocumentation.values()) Object.freeze(runtimes);
+	for (const runtimes of runtimesBySyncTarget.values()) Object.freeze(runtimes);
+
+	return Object.freeze({
+		manifest: normalizedManifest,
+		runtime: (runtimeId: string) => runtimesById.get(runtimeId),
+		runtimesForLanguage: (languageId: CanonicalLanguageId) =>
+			runtimesByLanguage.get(languageId) ?? noRuntimes,
+		runtimeForAlias: (alias: string) =>
+			runtimesByAlias.get(alias.trim().toUpperCase() as LanguageAliasId),
+		runtimeForRoute: (routeId: string) => runtimesByRoute.get(routeId),
+		runtimeForAssetKey: (runtimeAssetKey: string) => runtimesByAssetKey.get(runtimeAssetKey),
+		runtimesForDocumentation: (documentationId: string) =>
+			runtimesByDocumentation.get(documentationId) ?? noRuntimes,
+		runtimesForSyncTarget: (syncTarget: string) =>
+			runtimesBySyncTarget.get(syncTarget) ?? noRuntimes,
+		runtimeForBrowserTest: (browserTestId: string) => runtimesByBrowserTest.get(browserTestId)
 	});
 }
 
