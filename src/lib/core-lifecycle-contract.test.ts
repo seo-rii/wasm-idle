@@ -48,6 +48,28 @@ describe('playground binding lifecycle', () => {
 		expect(loadSandbox).not.toHaveBeenCalled();
 	});
 
+	it('normalizes aliases and prototype-shaped public language IDs before loading', async () => {
+		const loadSandbox = vi.fn(async () => sandboxWithLifecycle());
+		const binding = createPlaygroundBinding('/runtime', loadSandbox);
+
+		await binding.load(' pypy3 ');
+		await binding.load('toString');
+		await binding.load('constructor');
+		await binding.load('__proto__');
+
+		expect(loadSandbox.mock.calls.map(([language]) => language)).toEqual([
+			'PYTHON3',
+			'TOSTRING',
+			'CONSTRUCTOR',
+			'__PROTO__'
+		]);
+		await expect(binding.load('   ')).rejects.toMatchObject({
+			code: 'unsupported-language',
+			languageId: '   '
+		});
+		expect(loadSandbox).toHaveBeenCalledTimes(4);
+	});
+
 	it('disposes a sandbox whose load races with binding disposal', async () => {
 		let resolveSandbox!: (sandbox: Sandbox) => void;
 		const sandboxPromise = new Promise<Sandbox>((resolve) => {

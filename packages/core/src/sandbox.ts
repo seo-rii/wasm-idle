@@ -12,8 +12,10 @@ import {
 	OutputLimitError,
 	RuntimeConfigurationError,
 	TimeoutError,
+	UnsupportedLanguageError,
 	type RuntimePhase
 } from './errors.js';
+import { normalizeLanguageId } from './languages.js';
 import {
 	resolveExecutionLimits,
 	type ExecutionLimits,
@@ -574,7 +576,9 @@ export function createPlaygroundBinding(
 					}
 				);
 			}
-			const sandbox = bindRuntimeAssets(await loadSandbox(language), runtimeAssets);
+			const normalizedLanguage = normalizeLanguageId(language);
+			if (!normalizedLanguage) throw new UnsupportedLanguageError(language);
+			const sandbox = bindRuntimeAssets(await loadSandbox(normalizedLanguage), runtimeAssets);
 			if (disposed) {
 				if (sandbox.dispose) await sandbox.dispose();
 				else await sandbox.terminate();
