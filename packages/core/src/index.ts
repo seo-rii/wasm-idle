@@ -133,6 +133,13 @@ export {
 	type RuntimeRegistryManifest,
 	type RuntimeRegistryProfile
 } from './runtime-manifest.js';
+export {
+	RuntimeProfileActivationStore,
+	type ActivatedRuntimeAsset,
+	type RuntimeProfileActivationRequest,
+	type RuntimeProfileActivationSnapshot,
+	type RuntimeProfileAssetCandidate
+} from './runtime-activation.js';
 export type { TerminalControl } from './terminal.js';
 export {
 	DEFAULT_WORKSPACE_LIMITS,
