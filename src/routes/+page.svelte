@@ -57,7 +57,9 @@
 		OcamlWasmBinaryenMode,
 		RustTargetTriple,
 		SandboxExecutionOptions,
-		TinyGoTarget
+		TinyGoTarget,
+		DebugSessionEvent,
+		DebugVariable
 	} from '$lib/playground/options';
 	import type monaco from 'monaco-editor';
 	import { executeTerminalRun } from './execute';
@@ -129,6 +131,7 @@
 
 	const WORKSPACE_STORAGE_KEY = 'wasm-idle:example-workspace:v3';
 	const SHARE_PREFIX = 'workspace=';
+	const lldbDebugLanguages = new Set<PlaygroundLanguage>(['C', 'CPP', 'RUST']);
 	const debugLanguageAdapters: Partial<Record<PlaygroundLanguage, DebugLanguageAdapter>> = {
 		C: cppDebugLanguageAdapter,
 		CPP: cppDebugLanguageAdapter,
@@ -138,11 +141,11 @@
 		PYTHON: pythonDebugLanguageAdapter
 	};
 	const debugTitles: Partial<Record<PlaygroundLanguage, string>> = {
-		C: 'Native Trace',
-		CPP: 'Native Trace',
+		C: 'C · LLDB / WAMR',
+		CPP: 'C++ · LLDB / WAMR',
 		OBJC: 'Objective-C Trace',
 		GO: 'Go Trace',
-		RUST: 'Rust Trace',
+		RUST: 'Rust · LLDB / WAMR',
 		PYTHON: 'Pyodide Trace'
 	};
 
@@ -152,6 +155,12 @@
 	let clangdBaseUrl = $derived(path ? `${path}/clangd` : '/clangd');
 	let runtimeAssets = $derived.by<PlaygroundRuntimeAssets>(() => ({
 		rootUrl: path,
+		debug: {
+			baseUrl: path ? `${path}/wasm-debug/` : '/wasm-debug/',
+			manifestUrl: path
+				? `${path}/wasm-debug/runtime-manifest.v2.json`
+				: '/wasm-debug/runtime-manifest.v2.json'
+		},
 		assemblyscript: {
 			moduleUrl: path
 				? `${path}/wasm-assemblyscript/runtime.mjs?v=${STATIC_RUNTIME_MODULE_VERSION}`
@@ -433,6 +442,7 @@
 		lspEnabled = $state(false),
 		language = $state<PlaygroundLanguage>('CPP'),
 		runningMode = $state<'run' | 'debug' | null>(null),
+		activeDebugBackend = $state<'lldb' | 'trace' | null>(null),
 		progress = $state(-1),
 		progressStage = $state(''),
 		progressIndeterminate = $state(false),
@@ -584,6 +594,9 @@
 	);
 	const compact = $derived(examplePaneWidth > 0 && examplePaneWidth <= 760);
 	const activeFile = $derived(files.find((file) => file.path === activePath) ?? files[0]);
+	const activeDebugSourcePath = $derived(
+		`/workspace/${normalizePath(activePath) || defaultPathForLanguage()}`
+	);
 	const sortedFiles = $derived([...files].sort((a, b) => a.path.localeCompare(b.path)));
 	const activeLines = $derived(activeFile ? activeFile.content.split(/\r\n|\r|\n/).length : 0);
 	const activeBytes = $derived(activeFile ? new Blob([activeFile.content]).size : 0);
@@ -613,17 +626,42 @@
 	const progressRef = { set: loadingProgress.set };
 
 	const debugLanguage = $derived(debugLanguageAdapters[language] ?? null);
+	const selectedDebugMode = $derived(
+		lldbDebugLanguages.has(language) ? ('lldb' as const) : ('trace' as const)
+	);
+	const debugTargetAvailable = $derived(
+		language !== 'RUST' || rustTargetTriple === 'wasm32-wasip1'
+	);
+	const debugUnavailableReason = $derived(
+		!sharedBufferAvailable
+			? 'Debugging requires SharedArrayBuffer'
+			: !debugTargetAvailable
+				? 'Rust LLDB debugging currently supports wasm32-wasip1 only'
+				: 'Debug'
+	);
 	const debug = createDebugSessionController({
 		syncBreakpointsWhile: () => runningMode === 'debug'
 	});
-	const debugStatusLabel = $derived(debug.paused ? 'Paused' : debug.active ? 'Running' : 'Ready');
+	const debugStatusLabel = $derived(
+		debug.paused
+			? 'Paused'
+			: activeDebugBackend === 'trace' && lldbDebugLanguages.has(language)
+				? 'Trace fallback'
+				: debug.active
+					? 'Running'
+					: 'Ready'
+	);
 	const debugStatusIcon = $derived(
 		debug.paused ? 'pause_circle' : debug.active ? 'play_circle' : 'adjust'
 	);
 	const knownRustTargetTriples = ['wasm32-wasip1', 'wasm32-wasip2', 'wasm32-wasip3'] as const;
 	const knownGoTargets = ['wasip1/wasm', 'wasip2/wasm', 'wasip3/wasm', 'js/wasm'] as const;
 	const knownTinyGoTargets = ['wasm', 'wasip1', 'wasip2', 'wasip3'] as const;
-	const debugTitle = $derived(debugTitles[language] ?? 'Pyodide Trace');
+	const debugTitle = $derived(
+		activeDebugBackend === 'trace' && lldbDebugLanguages.has(language)
+			? `${languageLabels[language] ?? language} · Trace fallback`
+			: (debugTitles[language] ?? 'Pyodide Trace')
+	);
 	const loading = $derived(progress >= 0 && progress < 1);
 	const progressValue = $derived(progress < 0 ? 0 : progress > 1 ? 1 : progress);
 	const progressPercent = $derived(Math.round(progressValue * 100));
@@ -661,6 +699,7 @@
 		getEditorValue: () => string;
 		setEditorValue: (text: string) => Promise<boolean>;
 		setWorkspaceFiles: (files: WorkspaceFile[], activePath?: string) => Promise<boolean>;
+		setBreakpoints: (lines: number[]) => void;
 		setPreloadedStdin: (text: string) => void;
 	};
 	let browserDebugHookVersion = 0;
@@ -1535,13 +1574,30 @@
 		compilerDiagnostics = [...compilerDiagnostics, diagnostic];
 	}
 
+	function onDebugEvent(event: DebugSessionEvent) {
+		if (event.type === 'pause') {
+			const sourcePath = event.sourcePath || event.callStack[0]?.sourcePath;
+			const workspacePath = normalizePath(sourcePath?.replace(/^\/workspace\//u, '') || '');
+			if (workspacePath && files.some((file) => file.path === workspacePath)) {
+				debug.setSourcePath(`/workspace/${workspacePath}`);
+				selectFile(workspacePath);
+			}
+		}
+		debug.handleEvent(event);
+	}
+
 	async function exec(enableDebug = false) {
 		if (!editor || !terminal || !activeFile) return;
 		if (!executionAvailable) return;
 		if (enableDebug && !debugLanguage) return;
 		if (enableDebug && !sharedBufferAvailable) return;
+		if (enableDebug && !debugTargetAvailable) return;
 		if (runningMode) return;
+		let executionDebugMode: NonNullable<SandboxExecutionOptions['debugMode']> = enableDebug
+			? selectedDebugMode
+			: 'none';
 		runningMode = enableDebug ? 'debug' : 'run';
+		activeDebugBackend = enableDebug ? selectedDebugMode : null;
 		if (enableDebug && debugLspLanguages.has(language)) clangdRequested = true;
 		if (enableDebug) {
 			debug.begin();
@@ -1564,6 +1620,38 @@
 		}
 		try {
 			loadingProgress.start(`Loading ${language} runtime`);
+			if (executionDebugMode === 'lldb') {
+				try {
+					loadingProgress.set(0, 'Checking LLDB debug runtime');
+					const manifestUrl = runtimeAssets.debug?.manifestUrl;
+					if (!manifestUrl)
+						throw new Error('LLDB runtime manifest URL is not configured.');
+					const response = await fetch(manifestUrl, { cache: 'no-store' });
+					if (!response.ok) {
+						throw new Error(`LLDB runtime manifest returned ${response.status}.`);
+					}
+					const { parseDebugRuntimeManifest } =
+						await import('@wasm-idle/llvm-core/debug');
+					const manifest = parseDebugRuntimeManifest(await response.json());
+					const capabilities = manifest.debugger.capabilities;
+					if (
+						!capabilities.breakpoints ||
+						!capabilities.stepping ||
+						!capabilities.stackTrace ||
+						!capabilities.locals
+					) {
+						throw new Error('LLDB runtime is missing required debug capabilities.');
+					}
+					activeDebugBackend = 'lldb';
+				} catch (error) {
+					executionDebugMode = 'trace';
+					activeDebugBackend = 'trace';
+					console.warn(
+						'LLDB debug runtime is unavailable; using trace debugging for this run.',
+						error
+					);
+				}
+			}
 			const preloadedStdin =
 				sharedBufferAvailable && language !== 'BASH' ? undefined : stdinInput;
 			await executeTerminalRun({
@@ -1574,8 +1662,14 @@
 				progress: progressRef,
 				args,
 				options: {
+					debugMode: executionDebugMode,
 					debug: enableDebug,
 					breakpoints: [...debug.effectiveBreakpoints],
+					sourceBreakpoints: debug.sourceBreakpoints.filter(({ sourcePath }) =>
+						files.some(
+							(file) => `/workspace/${normalizePath(file.path)}` === sourcePath
+						)
+					),
 					activePath,
 					workspaceFiles: files.map((file) => ({
 						path: file.path,
@@ -1881,6 +1975,10 @@
 	});
 
 	$effect(() => {
+		debug.setSourcePath(activeDebugSourcePath);
+	});
+
+	$effect(() => {
 		if (!browser) return;
 		const target = window as Window &
 			typeof globalThis & { __wasmIdleDebug?: WasmIdleDebugApi };
@@ -1918,6 +2016,9 @@
 					activePath === nextActiveFilePath &&
 					files.some((file) => file.path === nextActiveFilePath)
 				);
+			},
+			setBreakpoints(lines: number[]) {
+				debug.setBreakpoints(lines);
 			},
 			setPreloadedStdin(text: string) {
 				stdinInput = text;
@@ -2039,10 +2140,11 @@
 						<button
 							class="action-button action-button--debug"
 							onclick={() => exec(true)}
-							disabled={!!runningMode || !debugLanguage || !sharedBufferAvailable}
-							title={!sharedBufferAvailable
-								? 'Debugging requires SharedArrayBuffer'
-								: 'Debug'}
+							disabled={!!runningMode ||
+								!debugLanguage ||
+								!sharedBufferAvailable ||
+								!debugTargetAvailable}
+							title={debugUnavailableReason}
 						>
 							<span class="material-symbols-outlined">bug_report</span>
 							<span>Debug</span>
@@ -2056,6 +2158,15 @@
 						aria-label="Send EOF"
 					>
 						<span class="material-symbols-outlined">keyboard_tab_rtl</span>
+					</button>
+					<button
+						class="action-button action-button--icon"
+						onclick={() => debug.pause()}
+						disabled={selectedDebugMode !== 'lldb' || !debug.active || debug.paused}
+						title="Pause"
+						aria-label="Pause"
+					>
+						<span class="material-symbols-outlined">pause</span>
 					</button>
 					<button
 						class="action-button action-button--icon"
@@ -2574,6 +2685,37 @@
 				program stdin is currently treated as EOF by the upstream browser runtime.
 			</p>
 		{/if}
+		{#snippet debugVariableRows(variables: DebugVariable[])}
+			{#each variables as variable, index (`${variable.name}:${index}`)}
+				{@const reference = variable.variablesReference || 0}
+				{@const children = debug.variablesByReference.get(reference)}
+				<li class="debug-entry debug-entry--local">
+					<div class="debug-entry__body">
+						<code class="debug-key">{variable.name}</code>
+						{#if variable.type}<span class="debug-variable-type">{variable.type}</span
+							>{/if}
+					</div>
+					<code class="debug-value">{variable.value}</code>
+					{#if reference > 0}
+						<button
+							class="debug-expand"
+							onclick={() => debug.loadVariableChildren(reference)}
+							disabled={children !== undefined}
+							aria-label={`Load children for ${variable.name}`}
+						>
+							<span class="material-symbols-outlined">
+								{children === undefined ? 'chevron_right' : 'expand_more'}
+							</span>
+						</button>
+					{/if}
+				</li>
+				{#if children?.length}
+					<li class="debug-variable-children">
+						<ul>{@render debugVariableRows(children)}</ul>
+					</li>
+				{/if}
+			{/each}
+		{/snippet}
 		{#if debugLanguage && debug.active}
 			<section
 				class={[
@@ -2608,7 +2750,11 @@
 						</div>
 						<div class="debug-metric">
 							<span>Breakpoints</span>
-							<strong>{debug.breakpoints.length}</strong>
+							<strong>
+								{debug.resolvedBreakpoints.length
+									? `${debug.resolvedBreakpoints.filter((breakpoint) => breakpoint.verified).length}/${debug.resolvedBreakpoints.length}`
+									: debug.breakpoints.length}
+							</strong>
 						</div>
 						<div class="debug-metric">
 							<span>Watches</span>
@@ -2620,6 +2766,18 @@
 								>{debug.pausedLine === null ? '—' : `L${debug.pausedLine}`}</strong
 							>
 						</div>
+						{#if debug.paused && debug.threadId !== null}
+							<div class="debug-metric">
+								<span>Thread</span>
+								<strong>{debug.threadId}</strong>
+							</div>
+						{/if}
+						{#if debug.paused && debug.stoppedReason}
+							<div class="debug-metric">
+								<span>Reason</span>
+								<strong>{debug.stoppedReason}</strong>
+							</div>
+						{/if}
 					</div>
 				</div>
 				<div class="debug-panels">
@@ -2628,19 +2786,52 @@
 							<div class="debug-panel__title">
 								<span class="material-symbols-outlined">data_object</span>
 								<div class="debug-panel__copy">
-									<h3>Locals</h3>
+									<h3>{debug.scopes.length ? 'Variables' : 'Locals'}</h3>
 								</div>
 							</div>
-							<span class="debug-count">{debug.locals.length}</span>
+							<span class="debug-count">
+								{debug.scopes.length
+									? debug.scopes.reduce(
+											(total, scope) => total + scope.variables.length,
+											0
+										)
+									: debug.locals.length}
+							</span>
 						</header>
-						{#if debug.locals.length}
-							<ul>
-								{#each debug.locals as variable (variable.name)}
-									<li class="debug-entry debug-entry--local">
-										<code class="debug-key">{variable.name}</code>
-										<code class="debug-value">{variable.value}</code>
-									</li>
+						{#if debug.scopes.length}
+							<div class="debug-scopes">
+								{#each debug.scopes as scope (scope.variablesReference)}
+									{@const loadedScopeVariables =
+										scope.variables.length > 0
+											? scope.variables
+											: debug.variablesByReference.get(
+													scope.variablesReference
+												)}
+									<section class="debug-scope">
+										<h4>{scope.name}</h4>
+										{#if loadedScopeVariables?.length}
+											<ul>
+												{@render debugVariableRows(loadedScopeVariables)}
+											</ul>
+										{:else if loadedScopeVariables === undefined && scope.variablesReference > 0}
+											<button
+												class="debug-load-scope"
+												onclick={() =>
+													debug.loadVariableChildren(
+														scope.variablesReference
+													)}
+											>
+												Load {scope.name.toLowerCase()}
+											</button>
+										{:else}
+											<p class="empty">No variables</p>
+										{/if}
+									</section>
 								{/each}
+							</div>
+						{:else if debug.locals.length}
+							<ul>
+								{@render debugVariableRows(debug.locals)}
 							</ul>
 						{:else}
 							<p class="empty">
@@ -2741,7 +2932,7 @@
 			<Terminal
 				bind:terminal
 				{playground}
-				ondebug={debug.handleEvent}
+				ondebug={onDebugEvent}
 				oncompilediagnostic={onCompileDiagnostic}
 			/>
 		</div>
@@ -3893,6 +4084,72 @@
 		display: flex;
 		flex-direction: column;
 		gap: 8px;
+	}
+
+	.debug-scopes {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+	}
+
+	.debug-scope {
+		display: flex;
+		flex-direction: column;
+		gap: 7px;
+	}
+
+	.debug-scope h4 {
+		margin: 0;
+		color: #475569;
+		font-size: 10px;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+	}
+
+	.debug-load-scope {
+		align-self: flex-start;
+		border: 1px solid rgba(37, 99, 235, 0.18);
+		border-radius: 7px;
+		background: rgba(37, 99, 235, 0.06);
+		padding: 5px 9px;
+		color: #1d4ed8;
+		font-size: 11px;
+		font-weight: 650;
+		cursor: pointer;
+	}
+
+	.debug-variable-type {
+		color: #64748b;
+		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+		font-size: 10px;
+	}
+
+	.debug-expand {
+		display: inline-grid;
+		width: 24px;
+		height: 24px;
+		flex: 0 0 auto;
+		place-items: center;
+		border: 0;
+		border-radius: 8px;
+		background: rgba(99, 102, 241, 0.08);
+		color: var(--debug-accent);
+		cursor: pointer;
+	}
+
+	.debug-expand:disabled {
+		cursor: default;
+		opacity: 0.65;
+	}
+
+	.debug-expand .material-symbols-outlined {
+		font-size: 17px;
+	}
+
+	.debug-variable-children {
+		margin-left: 14px;
+		padding-left: 10px;
+		border-left: 1px solid rgba(99, 102, 241, 0.18);
 	}
 
 	.debug-entry {

@@ -67,8 +67,22 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(
 			/\$effect\(\(\) => \{\s+debug\.setAdapter\(debugLanguage\);\s+\}\);/s
 		);
+		expect(source).toMatch(
+			/\$effect\(\(\) => \{\s+debug\.setSourcePath\(activeDebugSourcePath\);\s+\}\);/s
+		);
 		expect(source).toMatch(/debug\.begin\(\);/);
 		expect(source).toMatch(/breakpoints: \[\.\.\.debug\.effectiveBreakpoints\],/);
+		expect(source).toMatch(/sourceBreakpoints: debug\.sourceBreakpoints\.filter/);
+		expect(source).toMatch(
+			/const lldbDebugLanguages = new Set<PlaygroundLanguage>\(\['C', 'CPP', 'RUST'\]\);/
+		);
+		expect(source).toMatch(
+			/const selectedDebugMode = \$derived\(\s*lldbDebugLanguages\.has\(language\) \? \('lldb' as const\) : \('trace' as const\)\s*\);/s
+		);
+		expect(source).toMatch(/language !== 'RUST' \|\| rustTargetTriple === 'wasm32-wasip1'/);
+		expect(source).toMatch(/if \(executionDebugMode === 'lldb'\) \{/);
+		expect(source).toMatch(/executionDebugMode = 'trace';/);
+		expect(source).toMatch(/parseDebugRuntimeManifest\(await response\.json\(\)\)/);
 		expect(source).toMatch(/if \(!debug\.paused\) debug\.reset\(\);/);
 		expect(source).toMatch(
 			/title=\{debug\.cursorLine\s+\?\s+`Run to Cursor \(L\$\{debug\.cursorLine\}\)`\s+:\s+'Run to Cursor'\}/
@@ -79,7 +93,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/onclick=\{\(\) => debug\.runToCursor\(\)\}/);
 		expect(source).toMatch(/disabled=\{!debug\.canRunToCursor\}/);
 		expect(source).toMatch(/onclick=\{\(\) => debug\.sendCommand\('continue'\)\}/);
-		expect(source).toMatch(/ondebug=\{debug\.handleEvent\}/);
+		expect(source).toMatch(/ondebug=\{onDebugEvent\}/);
 		expect(source).toMatch(/bind:value=\{debug\.watchInput\}/);
 		expect(source).toMatch(/onclick=\{\(\) => debug\.addWatchExpression\(\)\}/);
 		expect(source).toMatch(
@@ -105,7 +119,7 @@ describe('example route debug actions', () => {
 		);
 		expect(source).toMatch(/bind:value=\{stdinInput\}/);
 		expect(source).toMatch(
-			/disabled=\{!!runningMode \|\| !debugLanguage \|\| !sharedBufferAvailable\}/
+			/disabled=\{!!runningMode \|\|\s+!debugLanguage \|\|\s+!sharedBufferAvailable \|\|\s+!debugTargetAvailable\}/s
 		);
 	});
 
@@ -377,7 +391,7 @@ describe('example route debug actions', () => {
 
 	it('exposes a browser debug hook that writes terminal stdin through the bound control', () => {
 		expect(source).toMatch(
-			/type WasmIdleDebugApi = \{\s+writeTerminalInput: \(text: string, eof\?: boolean\) => Promise<void>;\s+getEditorValue: \(\) => string;\s+setEditorValue: \(text: string\) => Promise<boolean>;\s+setWorkspaceFiles: \(files: WorkspaceFile\[], activePath\?: string\) => Promise<boolean>;\s+setPreloadedStdin: \(text: string\) => void;\s+\};/s
+			/type WasmIdleDebugApi = \{\s+writeTerminalInput: \(text: string, eof\?: boolean\) => Promise<void>;\s+getEditorValue: \(\) => string;\s+setEditorValue: \(text: string\) => Promise<boolean>;\s+setWorkspaceFiles: \(files: WorkspaceFile\[], activePath\?: string\) => Promise<boolean>;\s+setBreakpoints: \(lines: number\[]\) => void;\s+setPreloadedStdin: \(text: string\) => void;\s+\};/s
 		);
 		expect(source).toMatch(/let browserDebugHookVersion = 0;/);
 		expect(source).toMatch(/const debugHookVersion = \+\+browserDebugHookVersion;/);
@@ -395,6 +409,9 @@ describe('example route debug actions', () => {
 			/async setEditorValue\(text: string\) \{\s+if \(!editor\) return false;\s+editor\.setValue\(text\);\s+updateActiveContent\(text\);\s+await Promise\.resolve\(\);\s+return editor\.getValue\(\) === text && activeFile\?\.content === text;\s+\}/s
 		);
 		expect(source).toMatch(/setPreloadedStdin\(text: string\) \{\s+stdinInput = text;\s+\}/s);
+		expect(source).toMatch(
+			/setBreakpoints\(lines: number\[]\) \{\s+debug\.setBreakpoints\(lines\);\s+\}/s
+		);
 	});
 
 	it('keeps browser stdin helper wiring separate from the shared debug controller', () => {
