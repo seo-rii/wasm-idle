@@ -18,6 +18,7 @@ import {
 import { normalizeLanguageId } from './languages.js';
 import {
 	resolveExecutionLimits,
+	validateExecutionResult,
 	type ExecutionLimits,
 	type ExecutionRequest,
 	type ExecutionResult
@@ -508,28 +509,7 @@ function bindRuntimeAssets(sandbox: Sandbox, runtimeAssets: SandboxRuntimeAssets
 								workspaceFiles: validated.workspaceFiles,
 								limits: validated.limits
 							});
-							const outputBytes =
-								workspaceTextEncoder.encode(result.stdout).byteLength +
-								workspaceTextEncoder.encode(result.stderr).byteLength;
-							if (outputBytes > validated.limits.maxOutputBytes) {
-								throw new OutputLimitError(
-									`Runtime output exceeded ${validated.limits.maxOutputBytes} bytes`,
-									{
-										limit: validated.limits.maxOutputBytes,
-										actual: outputBytes
-									}
-								);
-							}
-							if (result.diagnostics.length > validated.limits.maxDiagnostics) {
-								throw new DiagnosticLimitError(
-									`Runtime diagnostics exceeded ${validated.limits.maxDiagnostics} entries`,
-									{
-										limit: validated.limits.maxDiagnostics,
-										actual: result.diagnostics.length
-									}
-								);
-							}
-							return result;
+							return validateExecutionResult(result, validated.limits);
 						},
 						validated.signal,
 						combinedPhaseTimeoutMs(

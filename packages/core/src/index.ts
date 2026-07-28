@@ -67,6 +67,7 @@ export {
 	DEFAULT_EXECUTION_LIMITS,
 	TERMINATION_REASONS,
 	resolveExecutionLimits,
+	validateExecutionResult,
 	type ExecutionArtifact,
 	type ExecutionArtifactKind,
 	type ExecutionDebugOptions,
