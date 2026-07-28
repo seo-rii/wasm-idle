@@ -45,6 +45,21 @@ export {
 	type RuntimeIdentity,
 	type TerminationReason
 } from './execution.js';
+export {
+	RUNTIME_PROTOCOL_NAME,
+	RUNTIME_PROTOCOL_VERSION,
+	assertRuntimeHandshake,
+	type HostToRuntimeWorkerMessage,
+	type RuntimeCapabilities,
+	type RuntimeHandshake,
+	type RuntimeHandshakeExpectation,
+	type RuntimeHandshakeIdentity,
+	type RuntimeRunId,
+	type RuntimeStdinMode,
+	type RuntimeWorkerRunRequest,
+	type RuntimeWorkerToHostMessage,
+	type SerializedRuntimeError
+} from './protocol.js';
 export type {
 	DebugArrayElementKind,
 	DebugCommand,
