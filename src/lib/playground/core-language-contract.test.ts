@@ -83,14 +83,24 @@ describe('core language contract', () => {
 		const firstKey = createRuntimeAssetsKey({
 			clang: {
 				integrity: {
-					'bin/clang.wasm.gz': { sha256: 'a'.repeat(64), bytes: 123 }
+					'bin/clang.wasm.gz': {
+						sha256: 'a'.repeat(64),
+						bytes: 123,
+						uncompressedSha256: 'c'.repeat(64),
+						uncompressedBytes: 456
+					}
 				}
 			}
 		});
 		const secondKey = createRuntimeAssetsKey({
 			clang: {
 				integrity: {
-					'bin/clang.wasm.gz': { sha256: 'b'.repeat(64), bytes: 123 }
+					'bin/clang.wasm.gz': {
+						sha256: 'a'.repeat(64),
+						bytes: 123,
+						uncompressedSha256: 'd'.repeat(64),
+						uncompressedBytes: 456
+					}
 				}
 			}
 		});

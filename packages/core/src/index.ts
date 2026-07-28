@@ -111,6 +111,8 @@ export {
 export {
 	RUNTIME_REGISTRY_MANIFEST_SCHEMA_VERSION,
 	defineRuntimeRegistryManifest,
+	runtimeIntegrityFromRegistryManifest,
+	runtimeProfilesFromRegistryManifest,
 	type RuntimeAssetEncoding,
 	type RuntimeRegistryAsset,
 	type RuntimeRegistryContractTargets,

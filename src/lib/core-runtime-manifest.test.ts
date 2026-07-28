@@ -1,11 +1,14 @@
 import {
 	RUNTIME_REGISTRY_MANIFEST_SCHEMA_VERSION,
 	defineRuntimeRegistryManifest,
+	runtimeIntegrityFromRegistryManifest,
+	runtimeProfilesFromRegistryManifest,
 	type RuntimeRegistryManifest
 } from '@wasm-idle/core';
 import { describe, expect, it } from 'vitest';
 
-const sha256 = 'a'.repeat(64);
+const compressedSha256 = 'a'.repeat(64);
+const uncompressedSha256 = 'b'.repeat(64);
 
 function createManifest(): RuntimeRegistryManifest {
 	return {
@@ -23,7 +26,7 @@ function createManifest(): RuntimeRegistryManifest {
 					profile: {
 						profileId: 'f2c-browser-v1',
 						manifestSchemaVersion: 1,
-						manifestSha256: sha256,
+						manifestSha256: compressedSha256,
 						protocolVersion: 1,
 						trustProfileId: 'restricted-browser-worker-v1',
 						trustProfileSchemaVersion: 1
@@ -43,7 +46,8 @@ function createManifest(): RuntimeRegistryManifest {
 					{
 						key: 'f2c.wasm.gz',
 						path: 'f2c.wasm.gz',
-						sha256,
+						compressedSha256,
+						uncompressedSha256,
 						compressedBytes: 10,
 						uncompressedBytes: 20,
 						mediaType: 'application/wasm',
@@ -72,6 +76,32 @@ describe('runtime registry manifest', () => {
 		expect(Object.isFrozen(manifest.runtimes)).toBe(true);
 		expect(Object.isFrozen(manifest.runtimes[0]?.identity.profile)).toBe(true);
 		expect(Object.isFrozen(manifest.runtimes[0]?.assets[0])).toBe(true);
+	});
+
+	it('projects cache profiles and both integrity stages from the registry', () => {
+		const manifest = createManifest();
+
+		expect(runtimeProfilesFromRegistryManifest(manifest)).toEqual({
+			fortran: {
+				profileId: 'f2c-browser-v1',
+				manifestSchemaVersion: 1,
+				manifestSha256: compressedSha256,
+				protocolVersion: 1,
+				trustProfileId: 'restricted-browser-worker-v1',
+				trustProfileSchemaVersion: 1
+			}
+		});
+		expect(runtimeIntegrityFromRegistryManifest(manifest)).toEqual({
+			fortran: {
+				'f2c.wasm.gz': {
+					sha256: compressedSha256,
+					bytes: 10,
+					mediaType: 'application/wasm',
+					uncompressedSha256,
+					uncompressedBytes: 20
+				}
+			}
+		});
 	});
 
 	it('rejects aliases that name a different language implementation', () => {
@@ -152,10 +182,12 @@ describe('runtime registry manifest', () => {
 				runtimes: [
 					{
 						...invalidHashRuntime,
-						assets: [{ ...invalidHashRuntime.assets[0]!, sha256: 'unverified' }]
+						assets: [
+							{ ...invalidHashRuntime.assets[0]!, uncompressedSha256: 'unverified' }
+						]
 					}
 				]
 			})
-		).toThrow('Invalid asset SHA-256');
+		).toThrow('Invalid uncompressed asset SHA-256');
 	});
 });

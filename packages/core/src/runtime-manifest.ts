@@ -1,6 +1,7 @@
 import { isSupportedLanguageId, languageAliases } from './languages.js';
 import type { CanonicalLanguageId, LanguageAliasId } from './languages.js';
 import type { RuntimeCapabilities } from './protocol.js';
+import type { RuntimeAssetIntegrityMap, RuntimeAssetProfileKeySource } from './runtime-assets.js';
 
 export const RUNTIME_REGISTRY_MANIFEST_SCHEMA_VERSION = 1 as const;
 
@@ -26,7 +27,8 @@ export interface RuntimeRegistryIdentity {
 export interface RuntimeRegistryAsset {
 	readonly key: string;
 	readonly path: string;
-	readonly sha256: string;
+	readonly compressedSha256: string;
+	readonly uncompressedSha256: string;
 	readonly compressedBytes: number;
 	readonly uncompressedBytes: number;
 	readonly mediaType: string;
@@ -86,6 +88,7 @@ export function defineRuntimeRegistryManifest(
 	const runtimeIds = new Set<string>();
 	const aliases = new Set<LanguageAliasId>();
 	const routeIds = new Set<string>();
+	const runtimeAssetKeys = new Set<string>();
 	const browserTestIds = new Set<string>();
 	const normalizedRuntimes = manifest.runtimes.map((runtime) => {
 		if (
@@ -246,9 +249,20 @@ export function defineRuntimeRegistryManifest(
 				);
 			}
 			assetPaths.add(asset.path);
-			if (typeof asset.sha256 !== 'string' || !/^[a-f0-9]{64}$/u.test(asset.sha256)) {
+			if (
+				typeof asset.compressedSha256 !== 'string' ||
+				!/^[a-f0-9]{64}$/u.test(asset.compressedSha256)
+			) {
 				throw new TypeError(
-					`Invalid asset SHA-256 for runtime ${runtime.runtimeId}: ${asset.key}`
+					`Invalid compressed asset SHA-256 for runtime ${runtime.runtimeId}: ${asset.key}`
+				);
+			}
+			if (
+				typeof asset.uncompressedSha256 !== 'string' ||
+				!/^[a-f0-9]{64}$/u.test(asset.uncompressedSha256)
+			) {
+				throw new TypeError(
+					`Invalid uncompressed asset SHA-256 for runtime ${runtime.runtimeId}: ${asset.key}`
 				);
 			}
 			if (!Number.isSafeInteger(asset.compressedBytes) || asset.compressedBytes < 0) {
@@ -276,10 +290,11 @@ export function defineRuntimeRegistryManifest(
 			}
 			if (
 				asset.encoding === 'identity' &&
-				asset.compressedBytes !== asset.uncompressedBytes
+				(asset.compressedBytes !== asset.uncompressedBytes ||
+					asset.compressedSha256 !== asset.uncompressedSha256)
 			) {
 				throw new TypeError(
-					`Identity asset sizes differ for runtime ${runtime.runtimeId}: ${asset.key}`
+					`Identity asset integrity differs for runtime ${runtime.runtimeId}: ${asset.key}`
 				);
 			}
 			return Object.freeze({ ...asset });
@@ -308,6 +323,12 @@ export function defineRuntimeRegistryManifest(
 			throw new TypeError(`Duplicate runtime route ID: ${runtime.contracts.routeId}`);
 		}
 		routeIds.add(runtime.contracts.routeId);
+		if (runtimeAssetKeys.has(runtime.contracts.runtimeAssetKey)) {
+			throw new TypeError(
+				`Duplicate runtime asset key: ${runtime.contracts.runtimeAssetKey}`
+			);
+		}
+		runtimeAssetKeys.add(runtime.contracts.runtimeAssetKey);
 		if (runtime.contracts.browserTestId !== undefined) {
 			if (browserTestIds.has(runtime.contracts.browserTestId)) {
 				throw new TypeError(
@@ -345,4 +366,41 @@ export function defineRuntimeRegistryManifest(
 			normalizedRuntimes.sort((left, right) => left.runtimeId.localeCompare(right.runtimeId))
 		)
 	});
+}
+
+export function runtimeProfilesFromRegistryManifest(
+	manifest: RuntimeRegistryManifest
+): Readonly<Record<string, RuntimeAssetProfileKeySource>> {
+	const profiles: Record<string, RuntimeAssetProfileKeySource> = {};
+	for (const runtime of defineRuntimeRegistryManifest(manifest).runtimes) {
+		profiles[runtime.contracts.runtimeAssetKey] = Object.freeze({
+			profileId: runtime.identity.profile.profileId,
+			manifestSchemaVersion: runtime.identity.profile.manifestSchemaVersion,
+			manifestSha256: runtime.identity.profile.manifestSha256,
+			protocolVersion: runtime.identity.profile.protocolVersion,
+			trustProfileId: runtime.identity.profile.trustProfileId,
+			trustProfileSchemaVersion: runtime.identity.profile.trustProfileSchemaVersion
+		});
+	}
+	return Object.freeze(profiles);
+}
+
+export function runtimeIntegrityFromRegistryManifest(
+	manifest: RuntimeRegistryManifest
+): Readonly<Record<string, RuntimeAssetIntegrityMap>> {
+	const runtimeIntegrity: Record<string, RuntimeAssetIntegrityMap> = {};
+	for (const runtime of defineRuntimeRegistryManifest(manifest).runtimes) {
+		const integrity: RuntimeAssetIntegrityMap = {};
+		for (const asset of runtime.assets) {
+			integrity[asset.key] = Object.freeze({
+				sha256: asset.compressedSha256,
+				bytes: asset.compressedBytes,
+				mediaType: asset.mediaType,
+				uncompressedSha256: asset.uncompressedSha256,
+				uncompressedBytes: asset.uncompressedBytes
+			});
+		}
+		runtimeIntegrity[runtime.contracts.runtimeAssetKey] = Object.freeze(integrity);
+	}
+	return Object.freeze(runtimeIntegrity);
 }

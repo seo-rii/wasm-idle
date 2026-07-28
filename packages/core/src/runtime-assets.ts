@@ -2,6 +2,8 @@ export interface RuntimeAssetIntegrityEntry {
 	sha256: string;
 	bytes?: number;
 	mediaType?: string;
+	uncompressedSha256?: string;
+	uncompressedBytes?: number;
 }
 
 export type RuntimeAssetIntegrityMap = Record<string, string | RuntimeAssetIntegrityEntry>;
@@ -107,7 +109,15 @@ const serializeIntegrity = (value: unknown) => {
 					sha256: typeof metadata.sha256 === 'string' ? metadata.sha256 : '',
 					bytes: typeof metadata.bytes === 'number' ? metadata.bytes : undefined,
 					mediaType:
-						typeof metadata.mediaType === 'string' ? metadata.mediaType : undefined
+						typeof metadata.mediaType === 'string' ? metadata.mediaType : undefined,
+					uncompressedSha256:
+						typeof metadata.uncompressedSha256 === 'string'
+							? metadata.uncompressedSha256
+							: undefined,
+					uncompressedBytes:
+						typeof metadata.uncompressedBytes === 'number'
+							? metadata.uncompressedBytes
+							: undefined
 				}
 			];
 		});
