@@ -100,13 +100,74 @@ const serializeIntegrity = (value: unknown) => {
 	const entries = Object.entries(value as Record<string, unknown>)
 		.sort(([left], [right]) => left.localeCompare(right))
 		.map(([asset, entry]) => {
-			if (typeof entry === 'string') return [asset, entry];
-			if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return [asset, ''];
+			if (
+				asset.startsWith('/') ||
+				asset.includes('\\') ||
+				asset.includes('\0') ||
+				asset.includes('?') ||
+				asset.includes('#') ||
+				asset.split('/').some((segment) => !segment || segment === '.' || segment === '..')
+			) {
+				throw new TypeError(
+					`Runtime integrity asset key must be normalized and relative: ${asset}`
+				);
+			}
+			if (typeof entry === 'string') {
+				if (!/^[a-f0-9]{64}$/u.test(entry)) {
+					throw new TypeError(`Runtime integrity entry ${asset} has an invalid SHA-256`);
+				}
+				return [asset, entry];
+			}
+			if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+				throw new TypeError(
+					`Runtime integrity entry ${asset} must be a digest or metadata object`
+				);
+			}
 			const metadata = entry as Record<string, unknown>;
+			if (typeof metadata.sha256 !== 'string' || !/^[a-f0-9]{64}$/u.test(metadata.sha256)) {
+				throw new TypeError(`Runtime integrity entry ${asset} has an invalid SHA-256`);
+			}
+			if (
+				metadata.bytes !== undefined &&
+				(!Number.isSafeInteger(metadata.bytes) || (metadata.bytes as number) < 0)
+			) {
+				throw new TypeError(`Runtime integrity entry ${asset} has an invalid byte size`);
+			}
+			if (
+				metadata.mediaType !== undefined &&
+				(typeof metadata.mediaType !== 'string' || !metadata.mediaType.includes('/'))
+			) {
+				throw new TypeError(`Runtime integrity entry ${asset} has an invalid media type`);
+			}
+			const hasUncompressedSha256 = metadata.uncompressedSha256 !== undefined;
+			const hasUncompressedBytes = metadata.uncompressedBytes !== undefined;
+			if (hasUncompressedSha256 !== hasUncompressedBytes) {
+				throw new TypeError(
+					`Runtime integrity entry ${asset} requires both uncompressed digest and size`
+				);
+			}
+			if (
+				hasUncompressedSha256 &&
+				(typeof metadata.uncompressedSha256 !== 'string' ||
+					!/^[a-f0-9]{64}$/u.test(metadata.uncompressedSha256))
+			) {
+				throw new TypeError(
+					`Runtime integrity entry ${asset} has an invalid uncompressed SHA-256`
+				);
+			}
+			if (
+				hasUncompressedBytes &&
+				(!Number.isSafeInteger(metadata.uncompressedBytes) ||
+					(metadata.uncompressedBytes as number) < 0)
+			) {
+				throw new TypeError(
+					`Runtime integrity entry ${asset} has an invalid uncompressed byte size`
+				);
+			}
 			return [
 				asset,
 				{
-					sha256: typeof metadata.sha256 === 'string' ? metadata.sha256 : '',
+					sha256: metadata.sha256,
 					bytes: typeof metadata.bytes === 'number' ? metadata.bytes : undefined,
 					mediaType:
 						typeof metadata.mediaType === 'string' ? metadata.mediaType : undefined,

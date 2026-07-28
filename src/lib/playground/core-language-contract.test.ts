@@ -108,6 +108,40 @@ describe('core language contract', () => {
 		expect(firstKey).not.toBe(secondKey);
 	});
 
+	it('rejects malformed runtime integrity metadata before key generation', () => {
+		expect(() =>
+			createRuntimeAssetsKey({
+				clang: { integrity: { '../clang.wasm': 'a'.repeat(64) } }
+			})
+		).toThrow('asset key must be normalized and relative');
+		expect(() =>
+			createRuntimeAssetsKey({
+				clang: { integrity: { 'clang.wasm': 'not-a-digest' } }
+			})
+		).toThrow('invalid SHA-256');
+		expect(() =>
+			createRuntimeAssetsKey({
+				clang: {
+					integrity: {
+						'clang.wasm': { sha256: 'a'.repeat(64), bytes: -1 }
+					}
+				}
+			})
+		).toThrow('invalid byte size');
+		expect(() =>
+			createRuntimeAssetsKey({
+				clang: {
+					integrity: {
+						'clang.wasm': {
+							sha256: 'a'.repeat(64),
+							uncompressedSha256: 'b'.repeat(64)
+						}
+					}
+				}
+			})
+		).toThrow('requires both uncompressed digest and size');
+	});
+
 	it('includes allowed runtime asset bases in cache keys', () => {
 		const firstKey = createRuntimeAssetsKey({
 			clang: { allowedBaseUrls: ['https://one.example.com/clang/'] }
