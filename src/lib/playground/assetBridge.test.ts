@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { gzipSync } from 'node:zlib';
 
 vi.mock('$env/dynamic/public', () => ({ env: {} }));
 
@@ -118,6 +119,34 @@ describe('WorkerAssetBridge asset requests', () => {
 		expect(postMessage.mock.calls[0]?.[0]).toMatchObject({
 			assetResponse: { id: 24, ok: true }
 		});
+	});
+
+	it('verifies and transfers the decoded bytes of gzip delivery assets', async () => {
+		const postMessage = vi.fn();
+		const runtimeBytes = new Uint8Array([1, 2, 3]);
+		const asset = 'bin/memfs.wasm.gz';
+		const bridge = new WorkerAssetBridge({ postMessage } as unknown as Worker, 'clang', {
+			baseUrl: '/clang/',
+			loader: vi.fn().mockResolvedValue(Uint8Array.from(gzipSync(runtimeBytes))),
+			integrity: {
+				[asset]: {
+					bytes: runtimeBytes.byteLength,
+					sha256: '039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81'
+				}
+			},
+			useAssetBridge: true
+		});
+
+		bridge.handleMessage({
+			data: { assetRequest: { id: 25, asset } }
+		} as MessageEvent);
+
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
+		const response = postMessage.mock.calls[0]?.[0];
+		expect(response, response?.assetResponse?.error).toMatchObject({
+			assetResponse: { id: 25, ok: true }
+		});
+		expect(new Uint8Array(response.assetResponse.bytes)).toEqual(runtimeBytes);
 	});
 
 	it('verifies configured asset sizes and SHA-256 digests before transfer', async () => {

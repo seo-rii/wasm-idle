@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
+import { gunzipSync } from 'node:zlib';
 
 import { describe, expect, it } from 'vitest';
 
@@ -29,9 +30,15 @@ describe('bundled clang asset integrity', () => {
 		for (const [runtimeAsset, receiptAsset] of Object.entries(sourceByRuntimeAsset)) {
 			const record = receiptByAsset.get(receiptAsset);
 			expect(record, `${receiptAsset} is missing from runtime-build.json`).toBeDefined();
+			const compressedBytes = await readFile(
+				resolve(process.cwd(), 'static/clang/bin', receiptAsset)
+			);
+			expect(compressedBytes.byteLength).toBe(record?.size);
+			expect(createHash('sha256').update(compressedBytes).digest('hex')).toBe(record?.sha256);
+			const runtimeBytes = gunzipSync(compressedBytes);
 			expect(BUNDLED_CLANG_ASSET_INTEGRITY[runtimeAsset]).toEqual({
-				bytes: record?.size,
-				sha256: record?.sha256
+				bytes: runtimeBytes.byteLength,
+				sha256: createHash('sha256').update(runtimeBytes).digest('hex')
 			});
 		}
 

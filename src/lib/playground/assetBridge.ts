@@ -4,6 +4,7 @@ import {
 	type RuntimeAssetLoaderResult,
 	type RuntimeAssetRuntime
 } from '$lib/playground/assets';
+import { decompressGzip } from '@wasm-idle/llvm-core';
 
 type ProgressLike = { set?: (value: number) => void };
 
@@ -173,14 +174,20 @@ export class WorkerAssetBridge {
 		this.activeLoads.add(controller);
 		try {
 			const loaded = await this.loadAsset(request.asset, controller.signal);
-			if (loaded.bytes.byteLength > MAX_RUNTIME_ASSET_BYTES) {
+			const runtimeBytes = request.asset.endsWith('.gz')
+				? await decompressGzip(loaded.bytes, request.asset)
+				: loaded.bytes;
+			if (runtimeBytes.byteLength > MAX_RUNTIME_ASSET_BYTES) {
 				throw new Error(
 					`Runtime asset ${request.asset} exceeds the ${MAX_RUNTIME_ASSET_BYTES} byte limit`
 				);
 			}
-			await this.verifyIntegrity(request.asset, loaded.bytes, loaded.mimeType);
+			await this.verifyIntegrity(request.asset, runtimeBytes, loaded.mimeType);
 			if (controller.signal.aborted || generation !== this.generation) return;
-			const buffer = transferBuffer(loaded.bytes, loaded.transferOwnership);
+			const buffer = transferBuffer(
+				runtimeBytes,
+				runtimeBytes === loaded.bytes ? loaded.transferOwnership : true
+			);
 			worker.postMessage(
 				{
 					assetResponse: {
