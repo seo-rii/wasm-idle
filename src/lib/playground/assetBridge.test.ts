@@ -286,6 +286,45 @@ describe('WorkerAssetBridge asset requests', () => {
 		});
 	});
 
+	it('cancels a stream that crosses the runtime asset limit', async () => {
+		const postMessage = vi.fn();
+		const cancel = vi.fn();
+		const reader = {
+			read: vi.fn().mockResolvedValueOnce({
+				done: false,
+				value: { byteLength: 128 * 1024 * 1024 + 1 } as Uint8Array
+			}),
+			cancel
+		};
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue({
+				ok: true,
+				headers: { get: vi.fn(() => null) },
+				body: { getReader: () => reader }
+			})
+		);
+		const bridge = new WorkerAssetBridge({ postMessage } as unknown as Worker, 'clang', {
+			baseUrl: 'https://assets.example.com/clang/',
+			useAssetBridge: true
+		});
+		const asset = RUNTIME_LOAD_ASSETS.clang[0];
+
+		bridge.handleMessage({
+			data: { assetRequest: { id: 20, asset } }
+		} as MessageEvent);
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
+
+		expect(cancel).toHaveBeenCalledOnce();
+		expect(postMessage).toHaveBeenCalledWith({
+			assetResponse: {
+				id: 20,
+				ok: false,
+				error: `Runtime asset ${asset} exceeds the ${128 * 1024 * 1024} byte limit`
+			}
+		});
+	});
+
 	it('aborts stale loads and never forwards their response after rebind', async () => {
 		const firstWorkerPostMessage = vi.fn();
 		const secondWorkerPostMessage = vi.fn();
@@ -360,5 +399,22 @@ describe('WorkerAssetBridge asset requests', () => {
 		resolveLoad(new Uint8Array([1, 2, 3]));
 		await new Promise((resolve) => setTimeout(resolve, 0));
 		expect(postMessage).not.toHaveBeenCalled();
+	});
+
+	it('contains worker postMessage failures while delivering a response', async () => {
+		const postMessage = vi.fn(() => {
+			throw new DOMException('Worker is gone', 'InvalidStateError');
+		});
+		const bridge = new WorkerAssetBridge({ postMessage } as unknown as Worker, 'clang', {
+			baseUrl: '/clang/',
+			loader: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3])),
+			useAssetBridge: true
+		});
+
+		bridge.handleMessage({
+			data: { assetRequest: { id: 19, asset: RUNTIME_LOAD_ASSETS.clang[0] } }
+		} as MessageEvent);
+
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledTimes(2));
 	});
 });

@@ -49,6 +49,17 @@ export const CLANGD_ASSETS = ['clangd.js', 'clangd.wasm.gz'] as const;
 export const CLANGD_VIRTUAL_BASE_URL = 'https://wasm-idle.invalid/clangd/';
 
 const textEncoder = new TextEncoder();
+const DEFAULT_STREAM_BUFFER_BYTES = 64 * 1024;
+const MAX_LANGUAGE_TOOL_ASSET_BYTES = 128 * 1024 * 1024;
+
+const enforceAssetSize = (asset: string, bytes: Uint8Array) => {
+	if (bytes.byteLength > MAX_LANGUAGE_TOOL_ASSET_BYTES) {
+		throw new Error(
+			`Runtime asset ${asset} exceeds the ${MAX_LANGUAGE_TOOL_ASSET_BYTES} byte limit`
+		);
+	}
+	return bytes;
+};
 
 export const normalizeBaseUrl = (baseUrl: string, currentUrl = '') => {
 	const normalized = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
@@ -69,31 +80,46 @@ async function fetchAsset(
 	const response = await fetch(url);
 	if (!response.ok) throw new Error(`Failed to load ${asset}: ${response.status}`);
 	const contentLength = Number(response.headers.get('content-length') || 0) || undefined;
+	if (contentLength && contentLength > MAX_LANGUAGE_TOOL_ASSET_BYTES) {
+		throw new Error(
+			`Runtime asset ${asset} exceeds the ${MAX_LANGUAGE_TOOL_ASSET_BYTES} byte limit`
+		);
+	}
 	const mimeType = response.headers.get('content-type') || undefined;
 	if (!response.body) {
-		const bytes = new Uint8Array(await response.arrayBuffer());
+		const bytes = enforceAssetSize(asset, new Uint8Array(await response.arrayBuffer()));
 		reportProgress(bytes.byteLength, contentLength ?? bytes.byteLength);
 		return { bytes, mimeType };
 	}
 
 	const reader = response.body.getReader();
 	let receivedLength = 0;
-	const chunks: Uint8Array[] = [];
+	let bytes = new Uint8Array(contentLength || DEFAULT_STREAM_BUFFER_BYTES);
 	while (true) {
 		const { done, value } = await reader.read();
 		if (done) break;
 		if (!value) continue;
-		const chunk = Uint8Array.from(value);
-		chunks.push(chunk);
-		receivedLength += chunk.byteLength;
+		const nextLength = receivedLength + value.byteLength;
+		if (nextLength > MAX_LANGUAGE_TOOL_ASSET_BYTES) {
+			await reader.cancel();
+			throw new Error(
+				`Runtime asset ${asset} exceeds the ${MAX_LANGUAGE_TOOL_ASSET_BYTES} byte limit`
+			);
+		}
+		if (nextLength > bytes.byteLength) {
+			const capacity = Math.min(
+				MAX_LANGUAGE_TOOL_ASSET_BYTES,
+				Math.max(nextLength, bytes.byteLength * 2)
+			);
+			const grown = new Uint8Array(capacity);
+			grown.set(bytes.subarray(0, receivedLength));
+			bytes = grown;
+		}
+		bytes.set(value, receivedLength);
+		receivedLength = nextLength;
 		reportProgress(receivedLength, contentLength);
 	}
-	const bytes = new Uint8Array(receivedLength);
-	let position = 0;
-	for (const chunk of chunks) {
-		bytes.set(chunk, position);
-		position += chunk.byteLength;
-	}
+	if (receivedLength !== bytes.byteLength) bytes = bytes.slice(0, receivedLength);
 	reportProgress(receivedLength, contentLength ?? receivedLength);
 	return { bytes, mimeType };
 }
@@ -158,7 +184,7 @@ export async function loadLanguageToolAsset(
 			asset,
 			reportProgress
 		);
-		if (loaded) return loaded;
+		if (loaded) return { ...loaded, bytes: enforceAssetSize(asset, loaded.bytes) };
 	}
 	return await fetchAsset(new URL(asset, config.baseUrl).href, asset, reportProgress);
 }

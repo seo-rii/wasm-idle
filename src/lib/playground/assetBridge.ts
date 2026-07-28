@@ -188,13 +188,17 @@ export class WorkerAssetBridge {
 			);
 		} catch (error) {
 			if (controller.signal.aborted || generation !== this.generation) return;
-			worker.postMessage({
-				assetResponse: {
-					id: request.id,
-					ok: false,
-					error: error instanceof Error ? error.message : String(error)
-				}
-			});
+			try {
+				worker.postMessage({
+					assetResponse: {
+						id: request.id,
+						ok: false,
+						error: error instanceof Error ? error.message : String(error)
+					}
+				});
+			} catch {
+				// The worker may already be terminated. There is no remaining response channel.
+			}
 		} finally {
 			this.activeLoads.delete(controller);
 		}
