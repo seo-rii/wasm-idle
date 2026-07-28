@@ -14,21 +14,63 @@ import { resolveChromiumExecutable } from '../../../scripts/rust-browser-probe-l
 const debugCases = [
 	{
 		activePath: 'main.c',
-		expectedOutput: 'trace-c=73',
+		backend: 'lldb',
+		breakpointLine: 4,
+		expectedOutput: 'lldb-c=73',
+		expectedTitle: 'C · LLDB / WAMR',
 		language: 'C',
+		programArgs: [],
 		source: `#include <stdio.h>
 
 int main(void) {
     int value = 70;
     value += 3;
-    printf("trace-c=%d\\n", value);
+    printf("lldb-c=%d\\n", value);
     return 0;
 }`
 	},
 	{
+		activePath: 'main.cpp',
+		backend: 'lldb',
+		breakpointLine: 9,
+		expectedOutput: 'lldb-cpp=73',
+		expectedTitle: 'C++ · LLDB / WAMR',
+		language: 'CPP',
+		programArgs: [],
+		source: `#include <cstdio>
+
+int calculate(int value) {
+    int doubled = value * 2;
+    return doubled + 3;
+}
+
+int main() {
+    int result = calculate(35);
+    std::printf("lldb-cpp=%d\\n", result);
+    return 0;
+}`
+	},
+	{
+		activePath: 'solution.rs',
+		backend: 'lldb',
+		breakpointLine: 2,
+		expectedOutput: 'lldb-rust=73:browser-arg',
+		expectedTitle: 'Rust · LLDB / WAMR',
+		language: 'RUST',
+		programArgs: ['browser-arg'],
+		source: `fn main() {
+    let mut value = 70;
+    value += 3;
+    let argument = std::env::args().nth(1).unwrap_or_else(|| "missing".to_owned());
+    println!("lldb-rust={value}:{argument}");
+}`
+	},
+	{
 		activePath: 'main.m',
+		backend: 'trace',
 		expectedOutput: 'trace-objectivec=73',
 		language: 'OBJC',
+		programArgs: [],
 		source: `#include <stdio.h>
 #include <objc/runtime.h>
 
@@ -54,8 +96,10 @@ int main(void) {
 	},
 	{
 		activePath: 'foundation.m',
+		backend: 'trace',
 		expectedOutput: 'trace-foundation=73',
 		language: 'OBJC',
+		programArgs: [],
 		source: `#include <stdio.h>
 #import <Foundation/NSString.h>
 
@@ -77,6 +121,16 @@ const requestedDebugLanguages = new Set(
 const activeDebugCases = requestedDebugLanguages.size
 	? debugCases.filter((testCase) => requestedDebugLanguages.has(testCase.language))
 	: debugCases;
+const requireLldbDebug = process.env.WASM_IDLE_REQUIRE_LLDB_DEBUG === '1';
+const requiredLldbAssets = [
+	'runtime-manifest.v2.json',
+	'debug/lldb-web-dap.js',
+	'debug/lldb-web-dap.wasm',
+	'debug/lldb-web-dap.pthread.mjs',
+	'debug/wamr-debug.js',
+	'debug/wamr-debug.wasm',
+	'debug/wamr-debug.worker.mjs'
+] as const;
 
 let previewServerPromise: ReturnType<typeof startBrowserPreviewServer> | null = null;
 
@@ -118,8 +172,8 @@ async function readPausedLine(page: Page) {
 	});
 }
 
-describe('C-family trace debugging in Chromium', () => {
-	it('pauses, steps, and completes real C and Objective-C browser programs without page errors', async () => {
+describe('native-source browser debugging in Chromium', () => {
+	it('pauses, steps, and completes the requested browser programs without page errors', async () => {
 		if (process.env.WASM_IDLE_RUN_REAL_BROWSER_DEBUG !== '1') return;
 
 		await runWithBrowserProbeSessionLock(async () => {
@@ -167,11 +221,22 @@ describe('C-family trace debugging in Chromium', () => {
 					);
 					const pageErrors: string[] = [];
 					const consoleMessages: string[] = [];
+					const debugAssetResponses = new Map<string, number>();
 					page.on('console', (message) => {
 						consoleMessages.push(`[${message.type()}] ${message.text()}`);
 					});
 					page.on('pageerror', (error) => {
 						pageErrors.push(String(error.stack || error.message || error));
+					});
+					page.on('response', (response) => {
+						const pathname = new URL(response.url()).pathname;
+						const marker = '/wasm-debug/';
+						const markerIndex = pathname.indexOf(marker);
+						if (markerIndex < 0) return;
+						debugAssetResponses.set(
+							pathname.slice(markerIndex + marker.length),
+							response.status()
+						);
 					});
 					try {
 						const activeState = await ensureSharedBrowserPage(
@@ -197,6 +262,11 @@ describe('C-family trace debugging in Chromium', () => {
 							(language) => document.querySelector('select')?.value === language,
 							testCase.language
 						);
+						if (testCase.programArgs.length > 0) {
+							await page
+								.locator('.args-chip input')
+								.fill(testCase.programArgs.join(' '));
+						}
 						const workspaceUpdated = await page.evaluate(
 							async (activePath) =>
 								await (window as any).__wasmIdleDebug.setWorkspaceFiles(
@@ -226,14 +296,52 @@ describe('C-family trace debugging in Chromium', () => {
 							(source) => (window as any).__wasmIdleDebug.getEditorValue() === source,
 							testCase.source
 						);
+						if (testCase.backend === 'lldb') {
+							await page.evaluate(
+								(line) => (window as any).__wasmIdleDebug.setBreakpoints([line]),
+								testCase.breakpointLine
+							);
+						}
 
 						const debugButton = page.locator('button.action-button--debug');
 						await debugButton.waitFor({ state: 'visible' });
 						expect(await debugButton.isEnabled()).toBe(true);
 						await debugButton.click();
-						await page
-							.getByRole('button', { name: 'Stop Debug' })
-							.waitFor({ state: 'visible' });
+						let startTimeout: ReturnType<typeof setTimeout> | undefined;
+						const startOutcome = await Promise.race([
+							page
+								.getByRole('button', { name: 'Stop Debug' })
+								.waitFor({ state: 'visible' })
+								.then(() => 'started' as const),
+							new Promise<'timed-out'>((resolve) => {
+								startTimeout = setTimeout(
+									() => resolve('timed-out'),
+									Number(process.env.WASM_IDLE_DEBUG_START_TIMEOUT_MS || '120000')
+								);
+							})
+						]).finally(() => {
+							if (startTimeout !== undefined) clearTimeout(startTimeout);
+						});
+						if (startOutcome !== 'started') {
+							const transcript =
+								(await page
+									.locator('[data-testid="terminal-debug-output"]')
+									.textContent()
+									.catch(() => '')) || '';
+							throw new Error(
+								`${testCase.language} debug session did not start\n${JSON.stringify(
+									{
+										startOutcome,
+										consoleTail: consoleMessages.slice(-80),
+										pageErrors,
+										transcript
+									},
+									null,
+									2
+								)}`
+							);
+						}
+						let pauseTimeout: ReturnType<typeof setTimeout> | undefined;
 						const pauseOutcome = await Promise.race([
 							page
 								.locator('.debug-status-pill--paused')
@@ -241,8 +349,16 @@ describe('C-family trace debugging in Chromium', () => {
 								.then(() => 'paused' as const),
 							debugButton
 								.waitFor({ state: 'visible' })
-								.then(() => 'finished' as const)
-						]);
+								.then(() => 'finished' as const),
+							new Promise<'timed-out'>((resolve) => {
+								pauseTimeout = setTimeout(
+									() => resolve('timed-out'),
+									Number(process.env.WASM_IDLE_DEBUG_PAUSE_TIMEOUT_MS || '120000')
+								);
+							})
+						]).finally(() => {
+							if (pauseTimeout !== undefined) clearTimeout(pauseTimeout);
+						});
 						if (pauseOutcome !== 'paused') {
 							const transcript =
 								(await page
@@ -250,8 +366,9 @@ describe('C-family trace debugging in Chromium', () => {
 									.textContent()
 									.catch(() => '')) || '';
 							throw new Error(
-								`${testCase.language} debug session finished before pausing\n${JSON.stringify(
+								`${testCase.language} debug session did not pause\n${JSON.stringify(
 									{
+										pauseOutcome,
 										consoleTail: consoleMessages.slice(-80),
 										pageErrors,
 										transcript
@@ -262,7 +379,112 @@ describe('C-family trace debugging in Chromium', () => {
 							);
 						}
 						const entryLine = await readPausedLine(page);
-						expect(entryLine).toMatch(/^L\d+$/);
+						expect(entryLine).toMatch(/^(?:—|L\d+)$/);
+						if (requireLldbDebug && testCase.backend === 'lldb') {
+							expect(
+								(await page.locator('.debug-hero__copy h2').textContent())?.trim()
+							).toBe(testCase.expectedTitle);
+							await page.waitForFunction(
+								() => {
+									const metric = Array.from(
+										document.querySelectorAll('.debug-metric')
+									).find(
+										(element) =>
+											element.querySelector('span')?.textContent?.trim() ===
+											'Breakpoints'
+									);
+									return (
+										metric?.querySelector('strong')?.textContent?.trim() ===
+										'1/1'
+									);
+								},
+								undefined,
+								{ timeout: 30_000 }
+							);
+							const breakpointMetric = await page.evaluate(() => {
+								const metric = Array.from(
+									document.querySelectorAll('.debug-metric')
+								).find(
+									(element) =>
+										element.querySelector('span')?.textContent?.trim() ===
+										'Breakpoints'
+								);
+								return metric?.querySelector('strong')?.textContent?.trim() || '';
+							});
+							expect(breakpointMetric).toBe('1/1');
+							expect(Object.fromEntries(debugAssetResponses)).toEqual(
+								expect.objectContaining(
+									Object.fromEntries(
+										requiredLldbAssets.map((asset) => [asset, 200])
+									)
+								)
+							);
+						}
+
+						let stepStartLine = entryLine;
+						if (
+							testCase.backend === 'lldb' &&
+							entryLine !== `L${testCase.breakpointLine}`
+						) {
+							await page.locator('button[aria-label="Continue"]').click();
+							let continueTimeout: ReturnType<typeof setTimeout> | undefined;
+							const continueOutcome = await Promise.race([
+								page
+									.waitForFunction((previousLine) => {
+										const metric = Array.from(
+											document.querySelectorAll('.debug-metric')
+										).find(
+											(element) =>
+												element
+													.querySelector('span')
+													?.textContent?.trim() === 'Line'
+										);
+										const currentLine = metric
+											?.querySelector('strong')
+											?.textContent?.trim();
+										return (
+											document.querySelector('.debug-status-pill--paused') !=
+												null &&
+											currentLine !== previousLine &&
+											currentLine !== 'L0'
+										);
+									}, entryLine)
+									.then(() => 'paused' as const),
+								debugButton
+									.waitFor({ state: 'visible' })
+									.then(() => 'finished' as const),
+								new Promise<'timed-out'>((resolve) => {
+									continueTimeout = setTimeout(
+										() => resolve('timed-out'),
+										Number(
+											process.env.WASM_IDLE_DEBUG_PAUSE_TIMEOUT_MS || '120000'
+										)
+									);
+								})
+							]).finally(() => {
+								if (continueTimeout !== undefined) clearTimeout(continueTimeout);
+							});
+							if (continueOutcome !== 'paused') {
+								const transcript =
+									(await page
+										.locator('[data-testid="terminal-debug-output"]')
+										.textContent()
+										.catch(() => '')) || '';
+								throw new Error(
+									`${testCase.language} did not stop at its source breakpoint\n${JSON.stringify(
+										{
+											continueOutcome,
+											consoleTail: consoleMessages.slice(-80),
+											pageErrors,
+											transcript
+										},
+										null,
+										2
+									)}`
+								);
+							}
+							stepStartLine = await readPausedLine(page);
+						}
 
 						await page.locator('button[aria-label="Next Line"]').click();
 						await page.waitForFunction((previousLine) => {
@@ -277,7 +499,7 @@ describe('C-family trace debugging in Chromium', () => {
 								metric?.querySelector('strong')?.textContent?.trim() !==
 									previousLine
 							);
-						}, entryLine);
+						}, stepStartLine);
 						await page.locator('button[aria-label="Continue"]').click();
 						await page.waitForFunction(
 							(expectedOutput) =>
