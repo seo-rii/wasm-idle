@@ -108,6 +108,17 @@ export {
 	type RuntimeAssetLoaderKeySource,
 	type RuntimeAssetProfileKeySource
 } from './runtime-assets.js';
+export {
+	RUNTIME_REGISTRY_MANIFEST_SCHEMA_VERSION,
+	defineRuntimeRegistryManifest,
+	type RuntimeAssetEncoding,
+	type RuntimeRegistryAsset,
+	type RuntimeRegistryContractTargets,
+	type RuntimeRegistryEntry,
+	type RuntimeRegistryIdentity,
+	type RuntimeRegistryManifest,
+	type RuntimeRegistryProfile
+} from './runtime-manifest.js';
 export type { TerminalControl } from './terminal.js';
 export {
 	DEFAULT_WORKSPACE_LIMITS,
