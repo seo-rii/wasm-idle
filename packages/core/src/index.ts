@@ -143,7 +143,8 @@ export {
 	type RuntimeRegistryIdentity,
 	type RuntimeRegistryIndex,
 	type RuntimeRegistryManifest,
-	type RuntimeRegistryProfile
+	type RuntimeRegistryProfile,
+	type RuntimeWorkerLifetimePolicy
 } from './runtime-manifest.js';
 export {
 	RuntimeProfileActivationStore,

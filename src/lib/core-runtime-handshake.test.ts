@@ -38,6 +38,7 @@ function createManifest(): RuntimeRegistryManifest {
 					artifacts: true,
 					streamingOutput: true
 				},
+				workerLifetime: { mode: 'per-run' },
 				requiredBrowserFeatures: ['wasm'],
 				assets: [],
 				contracts: {

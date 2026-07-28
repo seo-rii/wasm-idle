@@ -41,6 +41,11 @@ function createManifest(): RuntimeRegistryManifest {
 					artifacts: false,
 					streamingOutput: true
 				},
+				workerLifetime: {
+					mode: 'persistent',
+					idleTimeoutMs: 60_000,
+					evictOnMemoryPressure: true
+				},
 				requiredBrowserFeatures: ['wasm', 'bulk-memory', 'wasm'],
 				assetRoot: 'wasm-fortran',
 				assets: [
@@ -68,6 +73,17 @@ function createManifest(): RuntimeRegistryManifest {
 }
 
 describe('runtime registry manifest', () => {
+	it('rejects the previous registry schema after the lifetime contract migration', () => {
+		const manifest = createManifest();
+
+		expect(() =>
+			defineRuntimeRegistryManifest({
+				...manifest,
+				schemaVersion: 1 as never
+			})
+		).toThrow('Unsupported runtime registry manifest schema: 1');
+	});
+
 	it('normalizes and freezes identity, capability, asset, and contract data', () => {
 		const manifest = defineRuntimeRegistryManifest(createManifest());
 
@@ -76,7 +92,67 @@ describe('runtime registry manifest', () => {
 		expect(Object.isFrozen(manifest)).toBe(true);
 		expect(Object.isFrozen(manifest.runtimes)).toBe(true);
 		expect(Object.isFrozen(manifest.runtimes[0]?.identity.profile)).toBe(true);
+		expect(Object.isFrozen(manifest.runtimes[0]?.workerLifetime)).toBe(true);
 		expect(Object.isFrozen(manifest.runtimes[0]?.assets[0])).toBe(true);
+	});
+
+	it('validates persistent and pooled worker lifetime bounds', () => {
+		const manifest = createManifest();
+		const runtime = manifest.runtimes[0]!;
+
+		expect(() =>
+			defineRuntimeRegistryManifest({
+				...manifest,
+				runtimes: [
+					{
+						...runtime,
+						workerLifetime: {
+							mode: 'persistent',
+							idleTimeoutMs: 0,
+							evictOnMemoryPressure: true
+						}
+					}
+				]
+			})
+		).toThrow('Persistent worker idle timeout must be a positive safe integer');
+
+		expect(() =>
+			defineRuntimeRegistryManifest({
+				...manifest,
+				runtimes: [
+					{
+						...runtime,
+						workerLifetime: {
+							mode: 'pool',
+							idleTimeoutMs: 60_000,
+							maxWorkers: 1,
+							evictOnMemoryPressure: true
+						}
+					}
+				]
+			})
+		).toThrow('Worker pool size must be a safe integer of at least two');
+
+		const pooled = defineRuntimeRegistryManifest({
+			...manifest,
+			runtimes: [
+				{
+					...runtime,
+					workerLifetime: {
+						mode: 'pool',
+						idleTimeoutMs: 30_000,
+						maxWorkers: 3,
+						evictOnMemoryPressure: false
+					}
+				}
+			]
+		});
+		expect(pooled.runtimes[0]?.workerLifetime).toEqual({
+			mode: 'pool',
+			idleTimeoutMs: 30_000,
+			maxWorkers: 3,
+			evictOnMemoryPressure: false
+		});
 	});
 
 	it('projects cache profiles and both integrity stages from the registry', () => {
@@ -185,6 +261,13 @@ describe('runtime registry manifest', () => {
 	it('rejects missing capability and generated contract fields at runtime', () => {
 		const manifest = createManifest();
 		const runtime = manifest.runtimes[0]!;
+		expect(() =>
+			defineRuntimeRegistryManifest({
+				...manifest,
+				runtimes: [{ ...runtime, workerLifetime: undefined as never }]
+			})
+		).toThrow('must declare a worker lifetime policy');
+
 		expect(() =>
 			defineRuntimeRegistryManifest({
 				...manifest,

@@ -42,6 +42,7 @@ function createManifest(
 					artifacts: false,
 					streamingOutput: true
 				},
+				workerLifetime: { mode: 'per-run' },
 				requiredBrowserFeatures: ['wasm'],
 				assetRoot: 'wasm-fortran',
 				assets: [

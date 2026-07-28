@@ -137,6 +137,7 @@ describe('Core untrusted-boundary fuzz regressions', () => {
 						artifacts: false,
 						streamingOutput: true
 					},
+					workerLifetime: { mode: 'per-run' },
 					requiredBrowserFeatures: ['wasm'],
 					assetRoot: 'wasm-c',
 					assets: [

@@ -3,9 +3,25 @@ import type { CanonicalLanguageId, LanguageAliasId } from './languages.js';
 import type { RuntimeCapabilities, RuntimeHandshakeExpectation } from './protocol.js';
 import type { RuntimeAssetIntegrityMap, RuntimeAssetProfileKeySource } from './runtime-assets.js';
 
-export const RUNTIME_REGISTRY_MANIFEST_SCHEMA_VERSION = 1 as const;
+export const RUNTIME_REGISTRY_MANIFEST_SCHEMA_VERSION = 2 as const;
 
 export type RuntimeAssetEncoding = 'identity' | 'gzip' | 'br';
+
+export type RuntimeWorkerLifetimePolicy =
+	| {
+			readonly mode: 'per-run';
+	  }
+	| {
+			readonly mode: 'persistent';
+			readonly idleTimeoutMs: number;
+			readonly evictOnMemoryPressure: boolean;
+	  }
+	| {
+			readonly mode: 'pool';
+			readonly idleTimeoutMs: number;
+			readonly maxWorkers: number;
+			readonly evictOnMemoryPressure: boolean;
+	  };
 
 export interface RuntimeRegistryProfile {
 	readonly profileId: string;
@@ -48,6 +64,7 @@ export interface RuntimeRegistryEntry {
 	readonly identity: RuntimeRegistryIdentity;
 	readonly aliases?: readonly LanguageAliasId[];
 	readonly capabilities: RuntimeCapabilities;
+	readonly workerLifetime: RuntimeWorkerLifetimePolicy;
 	readonly requiredBrowserFeatures: readonly string[];
 	readonly assetRoot?: string;
 	readonly assets: readonly RuntimeRegistryAsset[];
@@ -196,6 +213,72 @@ export function defineRuntimeRegistryManifest(
 			if (typeof capabilities[name] !== 'boolean') {
 				throw new TypeError(`Runtime capability ${name} must be boolean`);
 			}
+		}
+
+		const workerLifetime = runtime.workerLifetime;
+		if (!workerLifetime || typeof workerLifetime !== 'object') {
+			throw new TypeError(
+				`Runtime ${runtime.runtimeId} must declare a worker lifetime policy`
+			);
+		}
+		let normalizedWorkerLifetime: RuntimeWorkerLifetimePolicy;
+		switch (workerLifetime.mode) {
+			case 'per-run':
+				normalizedWorkerLifetime = Object.freeze({ mode: 'per-run' });
+				break;
+			case 'persistent':
+				if (
+					!Number.isSafeInteger(workerLifetime.idleTimeoutMs) ||
+					workerLifetime.idleTimeoutMs <= 0
+				) {
+					throw new TypeError(
+						`Persistent worker idle timeout must be a positive safe integer for runtime ${runtime.runtimeId}`
+					);
+				}
+				if (typeof workerLifetime.evictOnMemoryPressure !== 'boolean') {
+					throw new TypeError(
+						`Persistent worker memory-pressure policy must be boolean for runtime ${runtime.runtimeId}`
+					);
+				}
+				normalizedWorkerLifetime = Object.freeze({
+					mode: 'persistent',
+					idleTimeoutMs: workerLifetime.idleTimeoutMs,
+					evictOnMemoryPressure: workerLifetime.evictOnMemoryPressure
+				});
+				break;
+			case 'pool':
+				if (
+					!Number.isSafeInteger(workerLifetime.idleTimeoutMs) ||
+					workerLifetime.idleTimeoutMs <= 0
+				) {
+					throw new TypeError(
+						`Worker pool idle timeout must be a positive safe integer for runtime ${runtime.runtimeId}`
+					);
+				}
+				if (
+					!Number.isSafeInteger(workerLifetime.maxWorkers) ||
+					workerLifetime.maxWorkers < 2
+				) {
+					throw new TypeError(
+						`Worker pool size must be a safe integer of at least two for runtime ${runtime.runtimeId}`
+					);
+				}
+				if (typeof workerLifetime.evictOnMemoryPressure !== 'boolean') {
+					throw new TypeError(
+						`Worker pool memory-pressure policy must be boolean for runtime ${runtime.runtimeId}`
+					);
+				}
+				normalizedWorkerLifetime = Object.freeze({
+					mode: 'pool',
+					idleTimeoutMs: workerLifetime.idleTimeoutMs,
+					maxWorkers: workerLifetime.maxWorkers,
+					evictOnMemoryPressure: workerLifetime.evictOnMemoryPressure
+				});
+				break;
+			default:
+				throw new TypeError(
+					`Invalid worker lifetime mode for runtime ${runtime.runtimeId}`
+				);
 		}
 
 		const requiredBrowserFeatures = [...new Set(runtime.requiredBrowserFeatures)].sort();
@@ -363,6 +446,7 @@ export function defineRuntimeRegistryManifest(
 			}),
 			aliases: Object.freeze(normalizedAliases),
 			capabilities: Object.freeze({ ...capabilities }),
+			workerLifetime: normalizedWorkerLifetime,
 			requiredBrowserFeatures: Object.freeze(requiredBrowserFeatures),
 			assetRoot: runtime.assetRoot,
 			assets: Object.freeze(
