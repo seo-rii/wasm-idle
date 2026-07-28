@@ -428,7 +428,10 @@ const normalizeRootUrl = (rootUrl: string) =>
 	rootUrl.endsWith('/') ? rootUrl.slice(0, -1) : rootUrl;
 
 const resolveFolderRuntimeBaseUrl = (folder: string, rootUrl = '', currentUrl = '') =>
-	normalizeBaseUrl(`${normalizeRootUrl(rootUrl) || ''}/${folder}/`, currentUrl);
+	normalizeBaseUrl(
+		rootUrl ? `${normalizeRootUrl(rootUrl) || ''}/${folder}/` : `${folder}/`,
+		currentUrl
+	);
 
 const normalizeTeaVmConfiguredBaseUrl = (baseUrl: string, currentUrl = '') =>
 	currentUrl
@@ -443,12 +446,12 @@ const RUNTIME_ASSET_FOLDERS = {
 	java: {
 		folder: 'teavm',
 		virtualBaseUrl: 'https://wasm-idle.invalid/java/',
-		resolveRootBaseUrl: (rootUrl: string, currentUrl: string) =>
-			resolveTeaVmBaseUrl(
-				rootUrl,
-				currentUrl,
-				(publicEnv.PUBLIC_TEAVM_BASE_URL || '').trim()
-			),
+		resolveRootBaseUrl: (rootUrl: string, currentUrl: string) => {
+			const configuredBaseUrl = (publicEnv.PUBLIC_TEAVM_BASE_URL || '').trim();
+			return configuredBaseUrl || rootUrl
+				? resolveTeaVmBaseUrl(rootUrl, currentUrl, configuredBaseUrl)
+				: normalizeBaseUrl('teavm/', currentUrl);
+		},
 		resolveConfiguredBaseUrl: normalizeTeaVmConfiguredBaseUrl
 	},
 	clang: {

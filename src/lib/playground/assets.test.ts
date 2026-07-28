@@ -92,6 +92,23 @@ import {
 import { BUNDLED_CLANG_ASSET_INTEGRITY } from './clangAssetIntegrity';
 
 describe('runtime asset config resolution', () => {
+	it.each([
+		['https://example.com/', 'https://example.com/'],
+		['https://example.com/wasm-idle/', 'https://example.com/wasm-idle/'],
+		['https://example.com/foo/bar/', 'https://example.com/foo/bar/']
+	])('keeps bundled folder runtimes under the application base %s', (currentUrl, baseUrl) => {
+		for (const [runtime, folder] of [
+			['python', 'pyodide'],
+			['java', 'teavm'],
+			['clang', 'clang'],
+			['clangd', 'clangd']
+		] as const) {
+			expect(resolveRuntimeAssetConfig(runtime, undefined, currentUrl).baseUrl).toBe(
+				`${baseUrl}${folder}/`
+			);
+		}
+	});
+
 	it('indexes folder-backed runtime load assets by runtime id', () => {
 		expect(Object.keys(RUNTIME_LOAD_ASSETS).sort()).toEqual([
 			'clang',
