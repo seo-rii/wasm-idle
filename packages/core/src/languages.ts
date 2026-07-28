@@ -85,7 +85,6 @@ export type WasmIdleLanguageId =
 
 export const supportedLanguageIds = [
 	'PYTHON3',
-	'PYPY3',
 	'C',
 	'CPP',
 	'OBJC',
@@ -133,6 +132,18 @@ export const supportedLanguageIds = [
 	'PHP'
 ] as const;
 
+export type CanonicalLanguageId = (typeof supportedLanguageIds)[number];
+
+export type LanguageAliasKind = 'spelling' | 'compatibility' | 'dialect' | 'implementation';
+
+export interface LanguageAliasInfo {
+	alias: string;
+	canonicalId: CanonicalLanguageId;
+	kind: LanguageAliasKind;
+	deprecated: boolean;
+	message?: string;
+}
+
 export const DEFAULT_DEFERRED_PROGRESS_LANGUAGES = new Set<string>([
 	'OBJC',
 	'RUST',
@@ -177,48 +188,91 @@ export const DEFAULT_DEFERRED_PROGRESS_LANGUAGES = new Set<string>([
 	'PHP'
 ]);
 
-const LANGUAGE_ALIASES: Record<string, string> = {
-	'C#': 'CSHARP',
-	'F#': 'FSHARP',
-	VB: 'VBNET',
-	VISUALBASIC: 'VBNET',
-	OBJECTIVEC: 'OBJC',
-	OBJECTIVE_C: 'OBJC',
-	'OBJECTIVE-C': 'OBJC',
-	ERL: 'ERLANG',
-	SWIPL: 'PROLOG',
-	SWI: 'PROLOG',
-	TCLSH: 'TCL',
-	GAWK: 'AWK',
-	PAS: 'PASCAL',
-	FPC: 'PASCAL',
-	GFORTH: 'FORTH',
-	JL: 'JULIA',
-	NIMROD: 'NIM',
-	SH: 'BASH',
-	SHELL: 'BASH',
-	CLJS: 'CLOJURESCRIPT',
-	F77: 'FORTRAN',
-	COB: 'COBOL',
-	CBL: 'COBOL',
-	GNUCOBOL: 'COBOL',
-	DLANG: 'D',
-	JS: 'JAVASCRIPT',
-	AS: 'ASSEMBLYSCRIPT',
-	PYTHON: 'PYTHON3',
-	HS: 'HASKELL',
-	RB: 'RUBY',
-	SCHEME: 'LISP',
-	SCM: 'LISP',
-	TS: 'TYPESCRIPT',
-	MATLAB: 'OCTAVE',
-	SQL: 'SQLITE',
-	WASM32: 'WASM'
-};
+const languageAliasDefinitions = {
+	'C#': { canonicalId: 'CSHARP', kind: 'spelling' },
+	'F#': { canonicalId: 'FSHARP', kind: 'spelling' },
+	VB: { canonicalId: 'VBNET', kind: 'spelling' },
+	VISUALBASIC: { canonicalId: 'VBNET', kind: 'spelling' },
+	OBJECTIVEC: { canonicalId: 'OBJC', kind: 'spelling' },
+	OBJECTIVE_C: { canonicalId: 'OBJC', kind: 'spelling' },
+	'OBJECTIVE-C': { canonicalId: 'OBJC', kind: 'spelling' },
+	ERL: { canonicalId: 'ERLANG', kind: 'spelling' },
+	SWIPL: { canonicalId: 'PROLOG', kind: 'implementation' },
+	SWI: { canonicalId: 'PROLOG', kind: 'implementation' },
+	TCLSH: { canonicalId: 'TCL', kind: 'implementation' },
+	GAWK: { canonicalId: 'AWK', kind: 'implementation' },
+	PAS: { canonicalId: 'PASCAL', kind: 'spelling' },
+	FPC: { canonicalId: 'PASCAL', kind: 'implementation' },
+	GFORTH: { canonicalId: 'FORTH', kind: 'implementation' },
+	JL: { canonicalId: 'JULIA', kind: 'spelling' },
+	NIMROD: { canonicalId: 'NIM', kind: 'spelling' },
+	SH: { canonicalId: 'BASH', kind: 'compatibility' },
+	SHELL: { canonicalId: 'BASH', kind: 'compatibility' },
+	CLJS: { canonicalId: 'CLOJURESCRIPT', kind: 'spelling' },
+	F77: { canonicalId: 'FORTRAN', kind: 'dialect' },
+	COB: { canonicalId: 'COBOL', kind: 'spelling' },
+	CBL: { canonicalId: 'COBOL', kind: 'spelling' },
+	GNUCOBOL: { canonicalId: 'COBOL', kind: 'implementation' },
+	DLANG: { canonicalId: 'D', kind: 'spelling' },
+	JS: { canonicalId: 'JAVASCRIPT', kind: 'spelling' },
+	AS: { canonicalId: 'ASSEMBLYSCRIPT', kind: 'spelling' },
+	PYTHON: { canonicalId: 'PYTHON3', kind: 'spelling' },
+	PYPY3: {
+		canonicalId: 'PYTHON3',
+		kind: 'implementation',
+		deprecated: true,
+		message: 'PYPY3 runs the Pyodide implementation; use PYTHON3 instead.'
+	},
+	HS: { canonicalId: 'HASKELL', kind: 'spelling' },
+	RB: { canonicalId: 'RUBY', kind: 'spelling' },
+	SCHEME: {
+		canonicalId: 'LISP',
+		kind: 'compatibility',
+		message: 'SCHEME selects the bundled Puppy Scheme-compatible runtime.'
+	},
+	SCM: {
+		canonicalId: 'LISP',
+		kind: 'compatibility',
+		message: 'SCM selects the bundled Puppy Scheme-compatible runtime.'
+	},
+	TS: { canonicalId: 'TYPESCRIPT', kind: 'spelling' },
+	MATLAB: {
+		canonicalId: 'OCTAVE',
+		kind: 'compatibility',
+		message: 'MATLAB selects GNU Octave compatibility, not MATLAB.'
+	},
+	SQL: {
+		canonicalId: 'SQLITE',
+		kind: 'dialect',
+		message: 'SQL selects the SQLite dialect and engine.'
+	},
+	WASM32: { canonicalId: 'WASM', kind: 'spelling' }
+} as const satisfies Record<
+	string,
+	{
+		canonicalId: CanonicalLanguageId;
+		kind: LanguageAliasKind;
+		deprecated?: boolean;
+		message?: string;
+	}
+>;
+
+export const languageAliases: Readonly<Record<string, LanguageAliasInfo>> = Object.freeze(
+	Object.fromEntries(
+		Object.entries(languageAliasDefinitions).map(([alias, definition]) => [
+			alias,
+			Object.freeze({ alias, deprecated: false, ...definition })
+		])
+	)
+);
+
+export function getLanguageAliasInfo(language: string): LanguageAliasInfo | undefined {
+	return languageAliases[language.trim().toUpperCase()];
+}
 
 export function normalizeLanguageId(language: string): string {
 	const upper = language.trim().toUpperCase();
-	return LANGUAGE_ALIASES[upper] || upper;
+	return languageAliases[upper]?.canonicalId ?? upper;
 }
 
 export function isDeferredProgressLanguage(language: string): boolean {
