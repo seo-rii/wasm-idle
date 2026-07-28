@@ -29,5 +29,17 @@ jobs:
                   cache: pnpm
             - run: pnpm install --frozen-lockfile
             - run: pnpm exec playwright-core install --with-deps chromium
-            - run: pnpm run prepare:test-assets -- clang
+            - name: Download pinned Clang browser assets
+              env:
+                  WASM_IDLE_ASSET_BASE_URL: https://seorii.page/wasm-idle
+              run: |
+                  mkdir -p static/clang/bin
+                  curl --fail --location --retry 3 --header "Cookie: dev_bypass_waf=seorii_bypass_token_is_this" "$WASM_IDLE_ASSET_BASE_URL/clang/bin/clang.wasm.gz" --output static/clang/bin/clang.wasm.gz
+                  curl --fail --location --retry 3 --header "Cookie: dev_bypass_waf=seorii_bypass_token_is_this" "$WASM_IDLE_ASSET_BASE_URL/clang/bin/lld.wasm.gz" --output static/clang/bin/lld.wasm.gz
+                  curl --fail --location --retry 3 --header "Cookie: dev_bypass_waf=seorii_bypass_token_is_this" "$WASM_IDLE_ASSET_BASE_URL/clang/bin/memfs.wasm.gz" --output static/clang/bin/memfs.wasm.gz
+                  curl --fail --location --retry 3 --header "Cookie: dev_bypass_waf=seorii_bypass_token_is_this" "$WASM_IDLE_ASSET_BASE_URL/clang/bin/sysroot.tar.gz" --output static/clang/bin/sysroot.tar.gz
+                  sha256sum --check <<<"b1174438d9a67b7ff11e623541b9a0572c024a9e798084b9b021dd9da2da0874  static/clang/bin/clang.wasm.gz"
+                  sha256sum --check <<<"f842a9b5df3c6d326f0260bfd313c11c2e22bc8b8ae0387deede9a4af55779cd  static/clang/bin/lld.wasm.gz"
+                  sha256sum --check <<<"d86f141eacd58a93511fbfb7c4e81d498eb7106a8a57df1bea7d33df3ce1f403  static/clang/bin/memfs.wasm.gz"
+                  sha256sum --check <<<"68437624a81c465b93895615e7afd3f235ff256de17dc1927b124e783614e3e4  static/clang/bin/sysroot.tar.gz"
             - run: pnpm run test:browser:debug:lldb

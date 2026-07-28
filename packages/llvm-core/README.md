@@ -67,6 +67,6 @@ assets are lazy-loaded from the versioned producer manifest and are not included
 package.
 
 Repository CI runs `test:browser:debug:lldb` for every pull request and `main` push in a dedicated
-Chromium job. The gate installs Chromium, prepares the external Clang test assets, and requires the
-pinned product LLDB/WAMR binaries for C, C++, and Rust; the test cannot silently fall back to trace
-debugging.
+Chromium job. The gate installs Chromium, downloads the four external Clang delivery assets,
+verifies every pinned SHA-256 receipt, and requires the pinned product LLDB/WAMR binaries for C,
+C++, and Rust; the test cannot silently fall back to trace debugging.
