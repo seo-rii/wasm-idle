@@ -4,6 +4,9 @@ import type { DebugFrame, DebugPauseReason } from '$lib/playground/options';
 
 declare var self: any;
 
+type RustWorkerDebugMode = 'none' | 'trace' | 'lldb';
+const lowercaseSha256Pattern = /^[0-9a-f]{64}$/u;
+
 self.document = {
 	querySelectorAll() {
 		return [];
@@ -312,6 +315,7 @@ self.onmessage = async (event: { data: any }) => {
 		targetTriple = 'wasm32-wasip1',
 		log,
 		debug = false,
+		debugMode: requestedDebugMode,
 		breakpoints = [],
 		pauseOnEntry = false
 	} = event.data;
@@ -327,15 +331,23 @@ self.onmessage = async (event: { data: any }) => {
 			return;
 		}
 
+		const debugMode: RustWorkerDebugMode =
+			requestedDebugMode === undefined ? (debug ? 'trace' : 'none') : requestedDebugMode;
+		if (debugMode !== 'none' && debugMode !== 'trace' && debugMode !== 'lldb') {
+			throw new Error(`Unsupported Rust debug mode: ${String(debugMode)}`);
+		}
 		stdinBufferRust = new Int32Array(buffer);
 		debugBufferRust = debugBuffer ? new Int32Array(debugBuffer) : null;
-		if (debug && (!debugBufferRust || !isSharedBufferBackedView(debugBufferRust))) {
+		if (
+			debugMode === 'trace' &&
+			(!debugBufferRust || !isSharedBufferBackedView(debugBufferRust))
+		) {
 			postMessage({ error: 'Rust debugging requires SharedArrayBuffer.' });
 			return;
 		}
 		const runtime = await loadCompiler(compilerUrl);
 		let debugInstrumenter: RustDebugInstrumenter | null = null;
-		if (debug) {
+		if (debugMode === 'trace') {
 			postMessage({
 				progress: {
 					stage: 'load-debug-instrumenter',
@@ -355,7 +367,7 @@ self.onmessage = async (event: { data: any }) => {
 		const compileCode = debugInstrumenter
 			? debugInstrumenter.instrumentRustDebugSource(code)
 			: code;
-		const compileCacheKey = `${targetTriple}\n${compileCode}`;
+		const compileCacheKey = `${debugMode}\n${targetTriple}\n${compileCode}`;
 		if (!compiledArtifact || compiledCacheKey !== compileCacheKey) {
 			if (log) {
 				console.log(
@@ -364,6 +376,7 @@ self.onmessage = async (event: { data: any }) => {
 			}
 			const result = await runtime.compiler.compile({
 				code: compileCode,
+				debugMode,
 				edition: '2024',
 				crateType: 'bin',
 				targetTriple,
@@ -412,13 +425,96 @@ self.onmessage = async (event: { data: any }) => {
 			return;
 		}
 
+		if (debugMode === 'lldb') {
+			if (
+				compiledArtifact.targetTriple !== 'wasm32-wasip1' ||
+				compiledArtifact.format !== 'core-wasm'
+			) {
+				throw new Error('wasm-rust LLDB artifact must be wasm32-wasip1 core-wasm');
+			}
+			const descriptor = compiledArtifact.debug;
+			if (
+				!descriptor ||
+				typeof descriptor !== 'object' ||
+				descriptor.kind !== 'dwarf' ||
+				descriptor.sourceRoot !== '/workspace'
+			) {
+				throw new Error('wasm-rust did not return an LLDB DWARF descriptor');
+			}
+			if (
+				typeof descriptor.moduleSha256 !== 'string' ||
+				!lowercaseSha256Pattern.test(descriptor.moduleSha256)
+			) {
+				throw new Error('wasm-rust LLDB descriptor has an invalid module SHA-256');
+			}
+			if (
+				!Array.isArray(descriptor.files) ||
+				descriptor.files.length !== 1 ||
+				!descriptor.files[0] ||
+				typeof descriptor.files[0] !== 'object' ||
+				descriptor.files[0].path !== '/workspace/main.rs'
+			) {
+				throw new Error(
+					'wasm-rust LLDB descriptor must contain exactly one /workspace/main.rs source'
+				);
+			}
+			const sourceDescriptor = descriptor.files[0];
+			if (
+				typeof sourceDescriptor.contentSha256 !== 'string' ||
+				!lowercaseSha256Pattern.test(sourceDescriptor.contentSha256)
+			) {
+				throw new Error(
+					'wasm-rust LLDB descriptor has an invalid /workspace/main.rs SHA-256'
+				);
+			}
+			const compiler = descriptor.compiler;
+			if (
+				!compiler ||
+				typeof compiler !== 'object' ||
+				compiler.name !== 'rustc' ||
+				[
+					'version',
+					'revision',
+					'llvmVersion',
+					'llvmRevision',
+					'runtimeVersion',
+					'hostTriple'
+				].some(
+					(field) =>
+						typeof compiler[field] !== 'string' || compiler[field].trim().length === 0
+				)
+			) {
+				throw new Error(
+					'wasm-rust LLDB descriptor requires complete rustc compiler provenance'
+				);
+			}
+			const artifactBytes =
+				compiledArtifact.wasm instanceof Uint8Array
+					? compiledArtifact.wasm
+					: new Uint8Array(compiledArtifact.wasm);
+			postMessage({
+				lldbArtifact: {
+					bytes: new Uint8Array(artifactBytes),
+					descriptor,
+					sources: [
+						{
+							path: '/workspace/main.rs',
+							content: code,
+							contentSha256: sourceDescriptor.contentSha256
+						}
+					]
+				}
+			});
+			return;
+		}
+
 		if (log) {
 			console.log(
 				`[wasm-idle:rust-worker] runtime start target=${compiledArtifact.targetTriple} format=${compiledArtifact.format}`
 			);
 		}
 		const rustDebugHost =
-			debug && debugBufferRust && debugInstrumenter
+			debugMode === 'trace' && debugBufferRust && debugInstrumenter
 				? createRustDebugHost({
 						control: debugBufferRust,
 						breakpoints,

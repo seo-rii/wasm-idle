@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { readBufferedStdin } from './stdinBuffer';
 
 const workerInstances: MockWorker[] = [];
-const { publicEnv } = vi.hoisted(() => ({
+const { lldbSessions, publicEnv } = vi.hoisted(() => ({
+	lldbSessions: [] as any[],
 	publicEnv: {
 		PUBLIC_WASM_RUST_COMPILER_URL: ''
 	}
@@ -57,10 +58,55 @@ vi.mock('$env/dynamic/public', () => ({
 	env: publicEnv
 }));
 
+vi.mock('$lib/playground/lldbSession', () => ({
+	LldbSandboxSession: class {
+		readonly breakpointCalls: Array<{ lines: number[]; sourcePath: string }> = [];
+		readonly options: any;
+		private resolveStart?: (value: true) => void;
+
+		constructor(options: any) {
+			this.options = options;
+			lldbSessions.push(this);
+		}
+
+		start() {
+			return new Promise<true>((resolve) => {
+				this.resolveStart = resolve;
+			});
+		}
+
+		emit(event: any) {
+			this.options.onDebugEvent(event);
+		}
+
+		finish() {
+			this.resolveStart?.(true);
+		}
+
+		setBreakpoints(lines: number[], sourcePath: string) {
+			this.breakpointCalls.push({ lines: [...lines], sourcePath });
+			return Promise.resolve([]);
+		}
+
+		debugCommand() {}
+		pause() {}
+		write() {}
+		eof() {}
+		disconnect() {}
+		evaluate() {
+			return Promise.resolve('?');
+		}
+		variables() {
+			return Promise.resolve([]);
+		}
+	}
+}));
+
 import Rust from './rust';
 
 describe('Rust sandbox', () => {
 	beforeEach(() => {
+		lldbSessions.length = 0;
 		workerInstances.length = 0;
 		publicEnv.PUBLIC_WASM_RUST_COMPILER_URL = '/wasm-rust/index.js';
 		suppressAutoLoadAck = false;
@@ -300,5 +346,119 @@ describe('Rust sandbox', () => {
 		const control = new Int32Array(sandbox.debugBuffer);
 		expect(Atomics.load(control, 3)).toBe(2);
 		expect([Atomics.load(control, 4), Atomics.load(control, 5)]).toEqual([3, 5]);
+	});
+
+	it('uses canonical Rust DWARF paths while exposing the active editor source alias', async () => {
+		const sandbox = new Rust();
+		const worker = new MockWorker();
+		const events: any[] = [];
+
+		sandbox.worker = worker as unknown as Worker;
+		sandbox.ondebug = (event) => events.push(event);
+		worker.postMessage.mockImplementationOnce(() => {
+			queueMicrotask(() => {
+				worker.onmessage?.({
+					data: {
+						lldbArtifact: {
+							bytes: Uint8Array.of(0, 97, 115, 109),
+							descriptor: {
+								kind: 'dwarf',
+								sourceRoot: '/workspace',
+								moduleSha256: '1'.repeat(64)
+							},
+							sources: [
+								{
+									path: '/workspace/main.rs',
+									content: 'fn main() {}',
+									contentSha256: '2'.repeat(64)
+								}
+							]
+						}
+					}
+				} as MessageEvent<any>);
+			});
+		});
+
+		const run = sandbox.run('fn main() {}', false, true, undefined, [], {
+			debugMode: 'lldb',
+			activePath: 'src/../solution.rs',
+			breakpoints: [7, 2, 2, -1],
+			sourceBreakpoints: [
+				{ sourcePath: 'solution.rs', lines: [3, 2] },
+				{ sourcePath: '/workspace/src/../solution.rs', lines: [4] },
+				{ sourcePath: '/workspace/lib.rs', lines: [99] }
+			]
+		});
+
+		await vi.waitFor(() => expect(lldbSessions).toHaveLength(1));
+		const session = lldbSessions[0];
+		expect(session.options).toMatchObject({
+			sourcePath: '/workspace/main.rs',
+			breakpoints: [2, 3, 4, 7],
+			sourceBreakpoints: [
+				{
+					sourcePath: '/workspace/main.rs',
+					lines: [2, 3, 4, 7]
+				}
+			]
+		});
+
+		await sandbox.setBreakpoints([8, 6, 8], '/workspace/solution.rs');
+		expect(sandbox.setBreakpoints([99], '/workspace/lib.rs')).toBeUndefined();
+		expect(session.breakpointCalls).toEqual([
+			{
+				lines: [6, 8],
+				sourcePath: '/workspace/main.rs'
+			}
+		]);
+
+		session.emit({
+			type: 'breakpoints',
+			sourcePath: '/workspace/main.rs',
+			breakpoints: [{ requestedLine: 2, line: 2, verified: true }]
+		});
+		session.emit({
+			type: 'pause',
+			line: 2,
+			reason: 'breakpoint',
+			sourcePath: '/workspace/main.rs',
+			locals: [],
+			callStack: [
+				{ functionName: 'main', line: 2, sourcePath: '/workspace/main.rs' },
+				{ functionName: 'helper', line: 8, sourcePath: '/workspace/main.rs' },
+				{ functionName: 'foreign', line: 9, sourcePath: '/workspace/lib.rs' },
+				{ functionName: '_start', line: 0 }
+			]
+		});
+
+		expect(events).toContainEqual({
+			type: 'breakpoints',
+			sourcePath: '/workspace/solution.rs',
+			breakpoints: [{ requestedLine: 2, line: 2, verified: true }]
+		});
+		expect(events).toContainEqual({
+			type: 'pause',
+			line: 2,
+			reason: 'breakpoint',
+			sourcePath: '/workspace/solution.rs',
+			locals: [],
+			callStack: [
+				{
+					functionName: 'main',
+					line: 2,
+					sourcePath: '/workspace/solution.rs'
+				},
+				{
+					functionName: 'helper',
+					line: 8,
+					sourcePath: '/workspace/solution.rs'
+				},
+				{ functionName: 'foreign', line: 9, sourcePath: '/workspace/lib.rs' },
+				{ functionName: '_start', line: 0 }
+			]
+		});
+
+		session.finish();
+		await expect(run).resolves.toBe(true);
 	});
 });

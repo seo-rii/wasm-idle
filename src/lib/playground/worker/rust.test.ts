@@ -17,6 +17,13 @@ describe('Rust worker', () => {
 		(globalThis as any).__lastStdin = undefined;
 		(globalThis as any).__debugControl = undefined;
 		(globalThis as any).__debugModuleLoads = 0;
+		(globalThis as any).__compileModes = [];
+		(globalThis as any).__compileTargets = [];
+		(globalThis as any).__executionCalls = 0;
+		(globalThis as any).__sourceWasm = undefined;
+		(globalThis as any).__lldbDescriptor = undefined;
+		(globalThis as any).__artifactTargetTriple = undefined;
+		(globalThis as any).__artifactFormat = undefined;
 	});
 
 	it('loads a wasm-rust-style compiler module and runs the returned artifact through executeBrowserRustArtifact', async () => {
@@ -92,6 +99,7 @@ describe('Rust worker', () => {
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ output: 'build log\n' });
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ output: 'hi\n' });
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
+		expect((globalThis as any).__lastCompileOptions.debugMode).toBe('none');
 		expect((globalThis as any).__lastCompileOptions.targetTriple).toBe('wasm32-wasip2');
 		expect((globalThis as any).__lastExecution.artifact.targetTriple).toBe('wasm32-wasip2');
 		expect((globalThis as any).__lastExecution.runtimeBaseUrl).toBe(compilerModuleUrl);
@@ -281,6 +289,337 @@ describe('Rust worker', () => {
 		});
 	});
 
+	it('separates LLDB artifacts from the normal cache and returns copied bytes without executing them', async () => {
+		const compilerModuleUrl = await createMockRustRuntimeModule(`
+			export async function createRustCompiler() {
+				return {
+					async compile(options) {
+						globalThis.__lastCompileOptions = options;
+						globalThis.__compileModes.push(options.debugMode);
+						const wasm = new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]);
+						if (options.debugMode === 'lldb') {
+							globalThis.__sourceWasm = wasm;
+						}
+						return {
+							success: true,
+							artifact: {
+								wasm,
+								targetTriple: options.targetTriple,
+								format: 'core-wasm',
+								...(options.debugMode === 'lldb'
+									? {
+											debug: {
+												kind: 'dwarf',
+												sourceRoot: '/workspace',
+												moduleSha256: 'a'.repeat(64),
+												files: [{
+													path: '/workspace/main.rs',
+													contentSha256: 'b'.repeat(64)
+												}],
+												compiler: {
+													name: 'rustc',
+													version: '1.99.0',
+													revision: 'rust-revision',
+													llvmVersion: '22.1.8',
+													llvmRevision: 'llvm-revision',
+													runtimeVersion: 'test-runtime',
+													hostTriple: 'wasm32-wasip1-threads'
+												}
+											}
+										}
+									: {})
+							}
+						};
+					}
+				};
+			}
+
+			export async function executeBrowserRustArtifact() {
+				globalThis.__executionCalls += 1;
+				return {
+					exitCode: 0,
+					stdout: '',
+					stderr: ''
+				};
+			}
+
+			export default createRustCompiler;
+		`);
+		const source = 'fn main() { let answer = 42; println!("{answer}"); }';
+
+		await import('./rust');
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				compilerUrl: compilerModuleUrl
+			}
+		});
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: source,
+				prepare: false,
+				buffer: new SharedArrayBuffer(1024),
+				debugMode: 'none',
+				targetTriple: 'wasm32-wasip1'
+			}
+		});
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: source,
+				prepare: false,
+				buffer: new SharedArrayBuffer(1024),
+				debugMode: 'lldb',
+				targetTriple: 'wasm32-wasip1'
+			}
+		});
+
+		const postedMessages = (globalThis as any).postMessage.mock.calls.map(
+			([message]: [any]) => message
+		);
+		const lldbMessage = postedMessages.find((message: any) => message.lldbArtifact);
+		expect((globalThis as any).__compileModes).toEqual(['none', 'lldb']);
+		expect((globalThis as any).__lastCompileOptions).toMatchObject({
+			code: source,
+			debugMode: 'lldb',
+			targetTriple: 'wasm32-wasip1'
+		});
+		expect((globalThis as any).__executionCalls).toBe(1);
+		expect((globalThis as any).__debugModuleLoads).toBe(0);
+		expect(lldbMessage).toMatchObject({
+			lldbArtifact: {
+				bytes: new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]),
+				descriptor: {
+					kind: 'dwarf',
+					sourceRoot: '/workspace',
+					moduleSha256: 'a'.repeat(64)
+				},
+				sources: [
+					{
+						path: '/workspace/main.rs',
+						content: source,
+						contentSha256: 'b'.repeat(64)
+					}
+				]
+			}
+		});
+		expect(lldbMessage.lldbArtifact.bytes).not.toBe((globalThis as any).__sourceWasm);
+		(globalThis as any).__sourceWasm[0] = 255;
+		expect(lldbMessage.lldbArtifact.bytes[0]).toBe(0);
+		expect(postedMessages.filter((message: any) => message.results)).toHaveLength(1);
+	});
+
+	it('rejects malformed LLDB artifacts returned across the dynamic compiler boundary', async () => {
+		const compilerModuleUrl = await createMockRustRuntimeModule(`
+			export async function createRustCompiler() {
+				return {
+					async compile() {
+						return {
+							success: true,
+							artifact: {
+								wasm: new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]),
+								targetTriple: globalThis.__artifactTargetTriple,
+								format: globalThis.__artifactFormat,
+								debug: globalThis.__lldbDescriptor
+							}
+						};
+					}
+				};
+			}
+
+			export async function executeBrowserRustArtifact() {
+				globalThis.__executionCalls += 1;
+				return {
+					exitCode: 0,
+					stdout: '',
+					stderr: ''
+				};
+			}
+
+			export default createRustCompiler;
+		`);
+		const validDescriptor = {
+			kind: 'dwarf',
+			sourceRoot: '/workspace',
+			moduleSha256: 'a'.repeat(64),
+			files: [
+				{
+					path: '/workspace/main.rs',
+					contentSha256: 'b'.repeat(64)
+				}
+			],
+			compiler: {
+				name: 'rustc',
+				version: '1.99.0',
+				revision: 'rust-revision',
+				llvmVersion: '22.1.8',
+				llvmRevision: 'llvm-revision',
+				runtimeVersion: 'test-runtime',
+				hostTriple: 'wasm32-wasip1-threads'
+			}
+		};
+		const malformedCases = [
+			{
+				name: 'target',
+				targetTriple: 'wasm32-wasip2',
+				format: 'core-wasm',
+				descriptor: validDescriptor,
+				error: 'wasm-rust LLDB artifact must be wasm32-wasip1 core-wasm'
+			},
+			{
+				name: 'format',
+				targetTriple: 'wasm32-wasip1',
+				format: 'component',
+				descriptor: validDescriptor,
+				error: 'wasm-rust LLDB artifact must be wasm32-wasip1 core-wasm'
+			},
+			{
+				name: 'descriptor kind',
+				targetTriple: 'wasm32-wasip1',
+				format: 'core-wasm',
+				descriptor: { ...validDescriptor, kind: 'trace' },
+				error: 'wasm-rust did not return an LLDB DWARF descriptor'
+			},
+			{
+				name: 'source root',
+				targetTriple: 'wasm32-wasip1',
+				format: 'core-wasm',
+				descriptor: { ...validDescriptor, sourceRoot: '/work' },
+				error: 'wasm-rust did not return an LLDB DWARF descriptor'
+			},
+			{
+				name: 'module hash',
+				targetTriple: 'wasm32-wasip1',
+				format: 'core-wasm',
+				descriptor: { ...validDescriptor, moduleSha256: 'A'.repeat(64) },
+				error: 'wasm-rust LLDB descriptor has an invalid module SHA-256'
+			},
+			{
+				name: 'source list',
+				targetTriple: 'wasm32-wasip1',
+				format: 'core-wasm',
+				descriptor: {
+					...validDescriptor,
+					files: [...validDescriptor.files, ...validDescriptor.files]
+				},
+				error: 'wasm-rust LLDB descriptor must contain exactly one /workspace/main.rs source'
+			},
+			{
+				name: 'source hash',
+				targetTriple: 'wasm32-wasip1',
+				format: 'core-wasm',
+				descriptor: {
+					...validDescriptor,
+					files: [{ ...validDescriptor.files[0], contentSha256: 'B'.repeat(64) }]
+				},
+				error: 'wasm-rust LLDB descriptor has an invalid /workspace/main.rs SHA-256'
+			},
+			{
+				name: 'compiler provenance',
+				targetTriple: 'wasm32-wasip1',
+				format: 'core-wasm',
+				descriptor: {
+					...validDescriptor,
+					compiler: { ...validDescriptor.compiler, llvmRevision: ' ' }
+				},
+				error: 'wasm-rust LLDB descriptor requires complete rustc compiler provenance'
+			}
+		];
+
+		await import('./rust');
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				compilerUrl: compilerModuleUrl
+			}
+		});
+
+		for (const [index, malformed] of malformedCases.entries()) {
+			(globalThis as any).postMessage.mockClear();
+			(globalThis as any).__artifactTargetTriple = malformed.targetTriple;
+			(globalThis as any).__artifactFormat = malformed.format;
+			(globalThis as any).__lldbDescriptor = malformed.descriptor;
+			await (globalThis as any).self.onmessage({
+				data: {
+					code: `fn main() { let malformed_case = ${index}; }`,
+					prepare: false,
+					buffer: new SharedArrayBuffer(1024),
+					debugMode: 'lldb',
+					targetTriple: 'wasm32-wasip1'
+				}
+			});
+
+			expect(
+				(globalThis as any).postMessage,
+				`malformed LLDB artifact case: ${malformed.name}`
+			).toHaveBeenCalledOnce();
+			expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+				error: malformed.error
+			});
+			expect((globalThis as any).postMessage).not.toHaveBeenCalledWith({
+				lldbArtifact: expect.anything()
+			});
+		}
+		expect((globalThis as any).__executionCalls).toBe(0);
+	});
+
+	it('passes through compiler errors for unsupported LLDB component targets', async () => {
+		const compilerModuleUrl = await createMockRustRuntimeModule(`
+			export async function createRustCompiler() {
+				return {
+					async compile(options) {
+						globalThis.__compileTargets.push(options.targetTriple);
+						return {
+							success: false,
+							stderr: 'lldb-target-error:' + options.targetTriple
+						};
+					}
+				};
+			}
+
+			export async function executeBrowserRustArtifact() {
+				globalThis.__executionCalls += 1;
+				return {
+					exitCode: 0,
+					stdout: '',
+					stderr: ''
+				};
+			}
+
+			export default createRustCompiler;
+		`);
+
+		await import('./rust');
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				compilerUrl: compilerModuleUrl
+			}
+		});
+		for (const targetTriple of ['wasm32-wasip2', 'wasm32-wasip3']) {
+			await (globalThis as any).self.onmessage({
+				data: {
+					code: 'fn main() {}',
+					prepare: false,
+					buffer: new SharedArrayBuffer(1024),
+					debugMode: 'lldb',
+					targetTriple
+				}
+			});
+		}
+
+		expect((globalThis as any).__compileTargets).toEqual(['wasm32-wasip2', 'wasm32-wasip3']);
+		expect((globalThis as any).__executionCalls).toBe(0);
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			error: 'lldb-target-error:wasm32-wasip2'
+		});
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			error: 'lldb-target-error:wasm32-wasip3'
+		});
+		expect((globalThis as any).postMessage).not.toHaveBeenCalledWith({
+			lldbArtifact: expect.anything()
+		});
+	});
+
 	it('instruments Rust source and forwards debug pauses from stderr trace markers', async () => {
 		const compilerModuleUrl = await createMockRustRuntimeModule(`
 			export async function createRustCompiler() {
@@ -359,6 +698,7 @@ describe('Rust worker', () => {
 		expect((globalThis as any).__lastCompileOptions.code).toContain(
 			'eprintln!("__WASM_IDLE_RUST_DEBUG__:{}:{}", 2, "main");'
 		);
+		expect((globalThis as any).__lastCompileOptions.debugMode).toBe('trace');
 		expect((globalThis as any).__debugModuleLoads).toBe(1);
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
 			progress: {
@@ -445,7 +785,7 @@ describe('Rust worker', () => {
 				prepare: false,
 				buffer: new SharedArrayBuffer(1024),
 				debugBuffer,
-				debug: true,
+				debugMode: 'trace',
 				pauseOnEntry: true
 			}
 		});
