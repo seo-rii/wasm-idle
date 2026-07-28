@@ -76,6 +76,7 @@ interface SandboxOperationState {
 export interface SandboxLifecycle {
 	cancel: (runId?: RuntimeRunId) => void | Promise<void>;
 	reset: () => void | Promise<void>;
+	restart: () => void | Promise<void>;
 	clearOutput: () => void | Promise<void>;
 	dispose: () => void | Promise<void>;
 }
@@ -105,6 +106,7 @@ export interface Sandbox {
 	kill?: () => void | Promise<void>;
 	cancel?: SandboxLifecycle['cancel'];
 	reset?: SandboxLifecycle['reset'];
+	restart?: SandboxLifecycle['restart'];
 	clearOutput?: SandboxLifecycle['clearOutput'];
 	dispose?: SandboxLifecycle['dispose'];
 	write?: (data: string) => void;
@@ -540,6 +542,22 @@ function bindRuntimeAssets(
 						})();
 					}
 					return disposePromise;
+				};
+			}
+			if (prop === 'restart') {
+				return async () => {
+					assertNotDisposed();
+					if (operationState.active) {
+						throw new BusyError(
+							'Cannot restart a runtime while an operation is active',
+							{
+								phase: operationState.phase
+							}
+						);
+					}
+					installBoundarySinks();
+					if (target.restart) await target.restart();
+					else await target.clear();
 				};
 			}
 			if (prop === 'load') {

@@ -48,6 +48,56 @@ describe('playground binding lifecycle', () => {
 		expect(loadSandbox).not.toHaveBeenCalled();
 	});
 
+	it('restarts through the runtime hook and falls back to clearing legacy sandboxes', async () => {
+		const restart = vi.fn(async () => undefined);
+		const hookedClear = vi.fn(async () => undefined);
+		const fallbackClear = vi.fn(async () => undefined);
+		const sandboxes = [
+			sandboxWithLifecycle({ restart, clear: hookedClear }),
+			sandboxWithLifecycle({ clear: fallbackClear })
+		];
+		const binding = createPlaygroundBinding('/runtime', async () => sandboxes.shift()!);
+		const hooked = await binding.load('C');
+		const fallback = await binding.load('CPP');
+
+		await hooked.restart!();
+		await fallback.restart!();
+
+		expect(restart).toHaveBeenCalledOnce();
+		expect(hookedClear).not.toHaveBeenCalled();
+		expect(fallbackClear).toHaveBeenCalledOnce();
+	});
+
+	it('rejects restart while an operation is active or after disposal', async () => {
+		const restart = vi.fn(async () => undefined);
+		const binding = createPlaygroundBinding('/runtime', async () =>
+			sandboxWithLifecycle({
+				restart,
+				run: vi.fn(() => new Promise<boolean | string>(() => undefined))
+			})
+		);
+		const sandbox = await binding.load('C');
+		const operation = sandbox.run('int main() {}', false);
+		const operationRejection = expect(operation).rejects.toMatchObject({
+			code: 'cancelled',
+			phase: 'dispose'
+		});
+		await Promise.resolve();
+
+		await expect(sandbox.restart!()).rejects.toMatchObject({
+			code: 'busy',
+			phase: 'execute'
+		});
+		expect(restart).not.toHaveBeenCalled();
+
+		await sandbox.dispose?.();
+		await operationRejection;
+		await expect(sandbox.restart!()).rejects.toMatchObject({
+			code: 'runtime-configuration',
+			phase: 'dispose'
+		});
+	});
+
 	it('normalizes aliases and prototype-shaped public language IDs before loading', async () => {
 		const loadSandbox = vi.fn(async (_language: string) => sandboxWithLifecycle());
 		const binding = createPlaygroundBinding('/runtime', loadSandbox);

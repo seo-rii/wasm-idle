@@ -326,6 +326,20 @@
 			term?.dispose();
 			if (sandbox) await sandbox.clear();
 		},
+		async restartRuntime() {
+			await wait();
+			if (!sandbox) return;
+			sandboxAcceptingInput = false;
+			pendingSandboxInput = [];
+			pendingSandboxEof = false;
+			input = '';
+			inputCursor = 0;
+			finish = true;
+			stopRequested = false;
+			tc += 1;
+			if (sandbox.restart) await sandbox.restart();
+			else await sandbox.clear();
+		},
 		async stop() {
 			await wait();
 			stopRequested = true;

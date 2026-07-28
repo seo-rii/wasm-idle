@@ -21,6 +21,7 @@ export interface TerminalControl {
 		options?: SandboxExecutionOptions
 	) => Promise<boolean | string>;
 	destroy: () => Promise<void>;
+	restartRuntime: () => Promise<void>;
 	stop?: () => Promise<void>;
 	debugCommand?: (command: DebugCommand) => Promise<void>;
 	debugPause?: () => Promise<void>;

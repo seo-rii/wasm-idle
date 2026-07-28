@@ -51,6 +51,12 @@ describe('Terminal source', () => {
 		);
 	});
 
+	it('exposes a runtime restart that clears queued input before restarting the sandbox', () => {
+		expect(source).toMatch(
+			/async restartRuntime\(\) \{\s+await wait\(\);\s+if \(!sandbox\) return;\s+sandboxAcceptingInput = false;\s+pendingSandboxInput = \[\];\s+pendingSandboxEof = false;\s+input = '';\s+inputCursor = 0;\s+finish = true;\s+stopRequested = false;\s+tc \+= 1;\s+if \(sandbox\.restart\) await sandbox\.restart\(\);\s+else await sandbox\.clear\(\);\s+\}/s
+		);
+	});
+
 	it('awaits debugger controls and queues source breakpoints before a sandbox is loaded', () => {
 		expect(source).toMatch(
 			/async debugCommand\(command: DebugCommand\) \{\s+await wait\(\);\s+await sandbox\.debugCommand\?\.\(command\);\s+\}/s

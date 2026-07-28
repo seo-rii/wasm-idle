@@ -1459,6 +1459,12 @@
 		saveWorkspace();
 	}
 
+	async function restartRuntime() {
+		if (!terminal || runningMode || !executionAvailable) return;
+		await terminal.restartRuntime();
+		saveStatus = `${languageLabels[language]} runtime restarted`;
+	}
+
 	async function stopExecution() {
 		if (!terminal || !runningMode) return;
 		if (runningMode === 'debug') {
@@ -2292,6 +2298,15 @@
 				<button class="tool-button" onclick={() => saveWorkspace(true)}>
 					<span class="material-symbols-outlined">save</span>
 					<span>Save</span>
+				</button>
+				<button
+					class="tool-button"
+					onclick={restartRuntime}
+					disabled={!terminal || !!runningMode || !executionAvailable}
+					title="Restart runtime"
+				>
+					<span class="material-symbols-outlined">restart_alt</span>
+					<span>Restart Runtime</span>
 				</button>
 				<button class="tool-button" onclick={shareWorkspace}>
 					<span class="material-symbols-outlined">share</span>
