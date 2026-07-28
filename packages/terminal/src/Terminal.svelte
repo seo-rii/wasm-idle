@@ -332,8 +332,8 @@
 			finish = true;
 			sandboxAcceptingInput = false;
 			pendingSandboxEof = false;
-			if (sandbox?.kill) sandbox.kill();
-			else sandbox?.terminate?.();
+			if (sandbox?.kill) await sandbox.kill();
+			else await sandbox?.terminate?.();
 		},
 		async debugCommand(command: DebugCommand) {
 			await wait();

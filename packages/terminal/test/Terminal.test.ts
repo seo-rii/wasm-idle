@@ -47,7 +47,7 @@ describe('Terminal source', () => {
 		expect(source).toMatch(/stopRequested = false;/);
 		expect(source).toMatch(/if \(stopRequested\) return false;/);
 		expect(source).toMatch(
-			/async stop\(\) \{\s+await wait\(\);\s+stopRequested = true;\s+finish = true;\s+sandboxAcceptingInput = false;\s+pendingSandboxEof = false;\s+if \(sandbox\?\.kill\) sandbox\.kill\(\);\s+else sandbox\?\.terminate\?\.\(\);\s+\}/s
+			/async stop\(\) \{\s+await wait\(\);\s+stopRequested = true;\s+finish = true;\s+sandboxAcceptingInput = false;\s+pendingSandboxEof = false;\s+if \(sandbox\?\.kill\) await sandbox\.kill\(\);\s+else await sandbox\?\.terminate\?\.\(\);\s+\}/s
 		);
 	});
 

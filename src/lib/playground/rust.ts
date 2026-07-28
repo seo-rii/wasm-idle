@@ -416,14 +416,14 @@ class Rust implements Sandbox {
 	}
 
 	kill() {
-		this.terminate();
+		return this.terminate();
 	}
 
-	terminate() {
+	async terminate() {
 		const lldbSession = this.lldbSession;
 		this.lldbSession = undefined;
 		this.lldbEditorSourcePath = rustLldbSourcePath;
-		void lldbSession?.disconnect();
+		const disconnecting = lldbSession?.disconnect();
 		this.waitingForInput = false;
 		this.pendingEof = false;
 		this.uid += 1;
@@ -432,6 +432,7 @@ class Rust implements Sandbox {
 		Atomics.notify(control, 0);
 		this.workerSession.terminate();
 		this.exit = true;
+		await disconnecting;
 	}
 
 	async clear() {
@@ -442,7 +443,7 @@ class Rust implements Sandbox {
 		resetBufferedStdin(this.buffer);
 		new Int32Array(this.debugBuffer).fill(0);
 		if (!this.exit) {
-			this.terminate();
+			await this.terminate();
 		}
 	}
 }

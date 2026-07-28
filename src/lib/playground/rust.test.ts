@@ -112,6 +112,35 @@ describe('Rust sandbox', () => {
 		suppressAutoLoadAck = false;
 	});
 
+	it('waits for the active LLDB session to disconnect before terminate resolves', async () => {
+		const sandbox = new Rust();
+		let releaseDisconnect!: () => void;
+		const disconnect = vi.fn(
+			() =>
+				new Promise<void>((resolve) => {
+					releaseDisconnect = resolve;
+				})
+		);
+		(
+			sandbox as unknown as {
+				lldbSession: { disconnect(): Promise<void> };
+			}
+		).lldbSession = { disconnect };
+
+		let settled = false;
+		const termination = Promise.resolve(sandbox.terminate()).then(() => {
+			settled = true;
+		});
+		await Promise.resolve();
+
+		expect(disconnect).toHaveBeenCalledTimes(1);
+		expect(settled).toBe(false);
+
+		releaseDisconnect();
+		await expect(termination).resolves.toBeUndefined();
+		expect(settled).toBe(true);
+	});
+
 	it('loads the rust worker and forwards diagnostics plus run output', async () => {
 		const sandbox = new Rust();
 		const outputs: string[] = [];

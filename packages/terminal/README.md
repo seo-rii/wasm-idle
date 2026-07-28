@@ -22,3 +22,14 @@ pnpm add wasm-idle @wasm-idle/terminal svelte
 
 Compiler and language-runtime payloads are not included in this package. Configure their external
 URLs through the injected playground binding.
+
+## Stop lifecycle
+
+`TerminalControl.stop()` does not resolve until the active sandbox's `kill()` or `terminate()`
+operation resolves. Sandbox implementations may return either `void` or `Promise<void>` from those
+methods; an asynchronous implementation must keep its promise pending until runtime resources are
+released.
+
+The C/C++ and Rust LLDB sandboxes use this contract to wait for both LLDB and WAMR worker teardown.
+Callers can therefore await `stop()` before launching another debug session without overlapping the
+previous session's workers or receiving its late events.

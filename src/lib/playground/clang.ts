@@ -402,13 +402,13 @@ class Clang implements Sandbox {
 	}
 
 	kill() {
-		this.terminate();
+		return this.terminate();
 	}
 
-	terminate() {
+	async terminate() {
 		const lldbSession = this.lldbSession;
 		this.lldbSession = undefined;
-		void lldbSession?.disconnect();
+		const disconnecting = lldbSession?.disconnect();
 		this.waitingForInput = false;
 		this.pendingEof = false;
 		this.uid += 1;
@@ -418,10 +418,11 @@ class Clang implements Sandbox {
 		Atomics.notify(control, 0);
 		this.workerSession.terminate();
 		this.exit = true;
+		await disconnecting;
 	}
 
 	async clear() {
-		this.terminate();
+		await this.terminate();
 		this.pendingInput = [];
 		this.waitingForInput = false;
 		this.pendingEof = false;

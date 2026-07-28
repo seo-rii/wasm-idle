@@ -117,6 +117,35 @@ int main() {
 		expect(sandbox.terminate).toHaveBeenCalledTimes(1);
 	});
 
+	it('waits for the active LLDB session to disconnect before kill resolves', async () => {
+		const sandbox = new Clang('CPP');
+		let releaseDisconnect!: () => void;
+		const disconnect = vi.fn(
+			() =>
+				new Promise<void>((resolve) => {
+					releaseDisconnect = resolve;
+				})
+		);
+		(
+			sandbox as unknown as {
+				lldbSession: { disconnect(): Promise<void> };
+			}
+		).lldbSession = { disconnect };
+
+		let settled = false;
+		const termination = Promise.resolve(sandbox.kill?.()).then(() => {
+			settled = true;
+		});
+		await Promise.resolve();
+
+		expect(disconnect).toHaveBeenCalledTimes(1);
+		expect(settled).toBe(false);
+
+		releaseDisconnect();
+		await expect(termination).resolves.toBeUndefined();
+		expect(settled).toBe(true);
+	});
+
 	it('configures the C++ worker asset bridge when a clang loader is provided', async () => {
 		const sandbox = new Clang('CPP');
 		const loader = vi.fn();

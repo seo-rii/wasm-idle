@@ -29,10 +29,10 @@ export interface Sandbox {
 		args?: string[],
 		options?: SandboxExecutionOptions
 	) => Promise<boolean | string>;
-	terminate: () => void;
+	terminate: () => void | Promise<void>;
 	clear: () => Promise<void>;
 
-	kill?: () => void;
+	kill?: () => void | Promise<void>;
 	write?: (data: string) => void;
 	output?: (data: string) => void;
 	ondebug?: (event: DebugSessionEvent) => void;
