@@ -1,6 +1,6 @@
 import { isSupportedLanguageId, languageAliases } from './languages.js';
 import type { CanonicalLanguageId, LanguageAliasId } from './languages.js';
-import type { RuntimeCapabilities } from './protocol.js';
+import type { RuntimeCapabilities, RuntimeHandshakeExpectation } from './protocol.js';
 import type { RuntimeAssetIntegrityMap, RuntimeAssetProfileKeySource } from './runtime-assets.js';
 
 export const RUNTIME_REGISTRY_MANIFEST_SCHEMA_VERSION = 1 as const;
@@ -403,4 +403,28 @@ export function runtimeIntegrityFromRegistryManifest(
 		runtimeIntegrity[runtime.contracts.runtimeAssetKey] = Object.freeze(integrity);
 	}
 	return Object.freeze(runtimeIntegrity);
+}
+
+export function runtimeHandshakeExpectationFromRegistryManifest(
+	manifest: RuntimeRegistryManifest,
+	runtimeId: string
+): RuntimeHandshakeExpectation {
+	const runtime = defineRuntimeRegistryManifest(manifest).runtimes.find(
+		(candidate) => candidate.runtimeId === runtimeId
+	);
+	if (!runtime) {
+		throw new TypeError(`Runtime registry manifest does not declare ${runtimeId}`);
+	}
+	return Object.freeze({
+		protocolVersion: runtime.identity.profile.protocolVersion,
+		manifestSchemaVersion: runtime.identity.profile.manifestSchemaVersion,
+		manifestSha256: runtime.identity.profile.manifestSha256,
+		profileId: runtime.identity.profile.profileId,
+		languageId: runtime.identity.languageId,
+		implementationId: runtime.identity.implementationId,
+		runtimeVersion: runtime.identity.implementationVersion,
+		trustProfileId: runtime.identity.profile.trustProfileId,
+		trustProfileSchemaVersion: runtime.identity.profile.trustProfileSchemaVersion,
+		requiredCapabilities: Object.freeze({ ...runtime.capabilities })
+	});
 }

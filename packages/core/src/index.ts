@@ -123,6 +123,7 @@ export {
 export {
 	RUNTIME_REGISTRY_MANIFEST_SCHEMA_VERSION,
 	defineRuntimeRegistryManifest,
+	runtimeHandshakeExpectationFromRegistryManifest,
 	runtimeIntegrityFromRegistryManifest,
 	runtimeProfilesFromRegistryManifest,
 	type RuntimeAssetEncoding,

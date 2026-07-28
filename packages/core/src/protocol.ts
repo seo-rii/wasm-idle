@@ -21,12 +21,15 @@ export interface RuntimeHandshakeIdentity {
 	implementationId: string;
 	version: string;
 	profileId?: string;
+	trustProfileId?: string;
+	trustProfileSchemaVersion?: number;
 }
 
 export interface RuntimeHandshake {
 	protocol: typeof RUNTIME_PROTOCOL_NAME;
 	protocolVersion: number;
 	manifestSchemaVersion?: number;
+	manifestSha256?: string;
 	runtime: RuntimeHandshakeIdentity;
 	capabilities: RuntimeCapabilities;
 }
@@ -34,7 +37,13 @@ export interface RuntimeHandshake {
 export interface RuntimeHandshakeExpectation {
 	protocolVersion: number;
 	manifestSchemaVersion?: number;
+	manifestSha256?: string;
 	profileId?: string;
+	languageId?: string;
+	implementationId?: string;
+	runtimeVersion?: string;
+	trustProfileId?: string;
+	trustProfileSchemaVersion?: number;
 	requiredCapabilities?: Partial<RuntimeCapabilities>;
 }
 
@@ -54,12 +63,60 @@ export function assertRuntimeHandshake(
 			}
 		);
 	}
+	for (const [identity, value] of [
+		['language', actual.runtime?.languageId],
+		['implementation', actual.runtime?.implementationId],
+		['version', actual.runtime?.version]
+	] as const) {
+		if (typeof value !== 'string' || !value.trim()) {
+			throw new ProtocolError(`Runtime ${identity} identity is missing`, {
+				runtimeId: actual.runtime?.implementationId,
+				profileId: actual.runtime?.profileId
+			});
+		}
+	}
+	if (
+		actual.runtime.profileId !== undefined &&
+		(typeof actual.runtime.profileId !== 'string' || !actual.runtime.profileId.trim())
+	) {
+		throw new ProtocolError('Runtime profile identity is malformed', {
+			runtimeId: actual.runtime.implementationId,
+			profileId: actual.runtime.profileId
+		});
+	}
+	if (
+		actual.manifestSchemaVersion !== undefined &&
+		(!Number.isSafeInteger(actual.manifestSchemaVersion) || actual.manifestSchemaVersion < 1)
+	) {
+		throw new ProtocolError('Runtime manifest schema is malformed', {
+			runtimeId: actual.runtime.implementationId,
+			profileId: actual.runtime.profileId
+		});
+	}
 	if (
 		expected.manifestSchemaVersion !== undefined &&
 		actual.manifestSchemaVersion !== expected.manifestSchemaVersion
 	) {
 		throw new ProtocolError(
 			`Runtime manifest schema mismatch: expected ${expected.manifestSchemaVersion}, received ${actual.manifestSchemaVersion ?? 'missing'}`,
+			{
+				runtimeId: actual.runtime.implementationId,
+				profileId: actual.runtime.profileId
+			}
+		);
+	}
+	if (actual.manifestSha256 !== undefined && !/^[a-f0-9]{64}$/u.test(actual.manifestSha256)) {
+		throw new ProtocolError('Runtime manifest SHA-256 is malformed', {
+			runtimeId: actual.runtime.implementationId,
+			profileId: actual.runtime.profileId
+		});
+	}
+	if (
+		expected.manifestSha256 !== undefined &&
+		actual.manifestSha256 !== expected.manifestSha256
+	) {
+		throw new ProtocolError(
+			`Runtime manifest SHA-256 mismatch: expected ${expected.manifestSha256}, received ${actual.manifestSha256 ?? 'missing'}`,
 			{
 				runtimeId: actual.runtime.implementationId,
 				profileId: actual.runtime.profileId
@@ -74,6 +131,82 @@ export function assertRuntimeHandshake(
 				profileId: actual.runtime.profileId
 			}
 		);
+	}
+	for (const [identity, required, received] of [
+		['language', expected.languageId, actual.runtime.languageId],
+		['implementation', expected.implementationId, actual.runtime.implementationId],
+		['version', expected.runtimeVersion, actual.runtime.version],
+		['trust profile', expected.trustProfileId, actual.runtime.trustProfileId]
+	] as const) {
+		if (required !== undefined && received !== required) {
+			throw new ProtocolError(
+				`Runtime ${identity} mismatch: expected ${required}, received ${received ?? 'missing'}`,
+				{
+					runtimeId: actual.runtime.implementationId,
+					profileId: actual.runtime.profileId
+				}
+			);
+		}
+	}
+	const hasTrustProfileId = actual.runtime.trustProfileId !== undefined;
+	const hasTrustProfileSchemaVersion = actual.runtime.trustProfileSchemaVersion !== undefined;
+	if (hasTrustProfileId !== hasTrustProfileSchemaVersion) {
+		throw new ProtocolError('Runtime trust profile identity is incomplete', {
+			runtimeId: actual.runtime.implementationId,
+			profileId: actual.runtime.profileId
+		});
+	}
+	if (
+		hasTrustProfileId &&
+		(typeof actual.runtime.trustProfileId !== 'string' ||
+			!/^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$/u.test(actual.runtime.trustProfileId))
+	) {
+		throw new ProtocolError('Runtime trust profile ID is malformed', {
+			runtimeId: actual.runtime.implementationId,
+			profileId: actual.runtime.profileId
+		});
+	}
+	if (
+		hasTrustProfileSchemaVersion &&
+		(!Number.isSafeInteger(actual.runtime.trustProfileSchemaVersion) ||
+			(actual.runtime.trustProfileSchemaVersion ?? 0) < 1)
+	) {
+		throw new ProtocolError('Runtime trust profile schema is malformed', {
+			runtimeId: actual.runtime.implementationId,
+			profileId: actual.runtime.profileId
+		});
+	}
+	if (
+		expected.trustProfileSchemaVersion !== undefined &&
+		actual.runtime.trustProfileSchemaVersion !== expected.trustProfileSchemaVersion
+	) {
+		throw new ProtocolError(
+			`Runtime trust profile schema mismatch: expected ${expected.trustProfileSchemaVersion}, received ${actual.runtime.trustProfileSchemaVersion ?? 'missing'}`,
+			{
+				runtimeId: actual.runtime.implementationId,
+				profileId: actual.runtime.profileId
+			}
+		);
+	}
+	if (!actual.capabilities || typeof actual.capabilities !== 'object') {
+		throw new ProtocolError('Runtime capabilities are malformed', {
+			runtimeId: actual.runtime.implementationId,
+			profileId: actual.runtime.profileId
+		});
+	}
+	if (!['none', 'prebuffered', 'streaming'].includes(actual.capabilities.stdin)) {
+		throw new ProtocolError('Runtime stdin capability is malformed', {
+			runtimeId: actual.runtime.implementationId,
+			profileId: actual.runtime.profileId
+		});
+	}
+	for (const capability of ['workspace', 'abort', 'artifacts', 'streamingOutput'] as const) {
+		if (typeof actual.capabilities[capability] !== 'boolean') {
+			throw new ProtocolError(`Runtime ${capability} capability is malformed`, {
+				runtimeId: actual.runtime.implementationId,
+				profileId: actual.runtime.profileId
+			});
+		}
 	}
 	for (const [capability, required] of Object.entries(
 		expected.requiredCapabilities ?? {}
