@@ -2,6 +2,8 @@ import {
 	DiagnosticLimitError,
 	OutputLimitError,
 	ProtocolError,
+	RUNTIME_ERROR_CODES,
+	RUNTIME_PHASES,
 	RuntimeConfigurationError,
 	type RuntimeErrorCode,
 	type RuntimePhase
@@ -337,8 +339,21 @@ export function validateExecutionResult(
 			throw new ProtocolError('Execution result error summary must be an object');
 		}
 		const error = value.error as Record<string, unknown>;
-		if (typeof error.code !== 'string' || typeof error.message !== 'string') {
+		if (
+			typeof error.code !== 'string' ||
+			(error.code !== 'unknown' &&
+				!RUNTIME_ERROR_CODES.includes(error.code as RuntimeErrorCode)) ||
+			typeof error.message !== 'string' ||
+			!error.message.trim()
+		) {
 			throw new ProtocolError('Execution result error summary is malformed');
+		}
+		if (
+			error.phase !== undefined &&
+			(typeof error.phase !== 'string' ||
+				!RUNTIME_PHASES.includes(error.phase as RuntimePhase))
+		) {
+			throw new ProtocolError('Execution result error phase is invalid');
 		}
 		if (error.recoverable !== undefined && typeof error.recoverable !== 'boolean') {
 			throw new ProtocolError('Execution result error recoverable must be boolean');

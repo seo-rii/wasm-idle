@@ -110,6 +110,30 @@ describe('structured execution result validation', () => {
 		).toThrow('Execution runtime protocolVersion is invalid');
 	});
 
+	it('enforces canonical typed error summaries', () => {
+		const result = {
+			...createResult(),
+			ok: false,
+			terminationReason: 'runtime-error' as const,
+			error: {
+				code: 'unknown' as const,
+				message: 'Runtime returned an unclassified failure',
+				phase: 'execute' as const,
+				recoverable: true
+			}
+		};
+		expect(validateExecutionResult(result)).toBe(result);
+
+		for (const [error, message] of [
+			[{ code: 'invented', message: 'bad' }, 'error summary is malformed'],
+			[{ code: 'runtime', message: '   ' }, 'error summary is malformed'],
+			[{ code: 'runtime', message: 'bad', phase: 'unknown' }, 'error phase is invalid'],
+			[{ code: 'runtime', message: 'bad', recoverable: 'yes' }, 'recoverable must be boolean']
+		] as const) {
+			expect(() => validateExecutionResult({ ...result, error })).toThrow(message);
+		}
+	});
+
 	it('rejects a non-object result before reading fields', () => {
 		expect(() => validateExecutionResult('success')).toThrow(
 			'Runtime returned a malformed execution result'
