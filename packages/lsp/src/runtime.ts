@@ -40,7 +40,7 @@ export function resolveCppLanguageServerRuntimeAssetConfig(
 	}
 
 	return {
-		baseUrl: normalizeBaseUrl('/clangd/', currentUrl)
+		baseUrl: normalizeBaseUrl('clangd/', currentUrl)
 	};
 }
 
@@ -64,7 +64,7 @@ export function resolvePythonLanguageServerBaseUrl(
 	if (options?.rootUrl) {
 		return resolveRootToolBaseUrl(options.rootUrl, '/pyodide/', currentUrl);
 	}
-	return normalizeBaseUrl('/pyodide/', currentUrl);
+	return normalizeBaseUrl('pyodide/', currentUrl);
 }
 
 const resolveFileUrl = (value: string, currentUrl = '') =>

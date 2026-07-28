@@ -41,6 +41,19 @@ import {
 } from '../src/index.js';
 
 describe('lsp runtime asset resolution', () => {
+	it('keeps default clangd and Python assets under the deployed application base', () => {
+		const applicationUrl = 'https://app.example.com/wasm-idle/';
+
+		expect(resolveCppLanguageServerBaseUrl(undefined, applicationUrl)).toBe(
+			'https://app.example.com/wasm-idle/clangd/'
+		);
+		expect(resolvePythonLanguageServerBaseUrl(undefined, applicationUrl)).toBe(
+			'https://app.example.com/wasm-idle/pyodide/'
+		);
+		expect(resolveCppLanguageServerBaseUrl(undefined)).toBe('clangd/');
+		expect(resolvePythonLanguageServerBaseUrl(undefined)).toBe('pyodide/');
+	});
+
 	it('resolves root-based cpp and python asset URLs', () => {
 		expect(
 			resolveCppLanguageServerBaseUrl(
