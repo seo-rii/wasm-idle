@@ -5,10 +5,34 @@ export {
 	supportedLanguageIds,
 	type WasmIdleLanguageId
 } from './languages.js';
+export {
+	AssetIntegrityError,
+	AssetNotFoundError,
+	AssetTooLargeError,
+	BusyError,
+	CancelledError,
+	CompileError,
+	ProtocolError,
+	RuntimeConfigurationError,
+	RuntimeExecutionError,
+	TimeoutError,
+	UnsupportedBrowserFeatureError,
+	UnsupportedLanguageError,
+	WasmIdleError,
+	WorkerStartupError,
+	isWasmIdleError,
+	type AssetTooLargeErrorOptions,
+	type RuntimeErrorCode,
+	type RuntimeErrorContext,
+	type RuntimePhase,
+	type TimeoutErrorOptions,
+	type WasmIdleErrorOptions
+} from './errors.js';
 export type {
 	DebugArrayElementKind,
 	DebugCommand,
 	DebugFrame,
+	DebugMemory,
 	DebugPauseReason,
 	DebugResolvedBreakpoint,
 	DebugScope,
