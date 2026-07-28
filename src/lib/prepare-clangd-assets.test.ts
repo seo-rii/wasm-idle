@@ -35,8 +35,8 @@ describe('prepareClangdAssets', () => {
 				}))
 			})
 		);
-		const fetchImpl = vi.fn(async (input: string | URL) => {
-			const url = new URL(input);
+		const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+			const url = new URL(input instanceof Request ? input.url : input);
 			const bytes = contents.get(url.pathname.replace('/wasm-idle/', ''))!;
 			const encoded = url.pathname.endsWith('.js');
 			return new Response(bytes, {

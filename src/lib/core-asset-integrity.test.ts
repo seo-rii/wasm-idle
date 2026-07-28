@@ -67,13 +67,13 @@ describe('runtime asset integrity', () => {
 				runtimeId: 'runtime-a',
 				profileId: 'profile-a'
 			})
-		).rejects.toMatchObject<Partial<AssetIntegrityError>>({
+		).rejects.toMatchObject({
 			name: 'AssetIntegrityError',
 			code: 'asset-integrity',
 			phase: 'asset',
 			runtimeId: 'runtime-a',
 			profileId: 'profile-a'
-		});
+		} satisfies Partial<AssetIntegrityError>);
 	});
 
 	it('rejects decompression expansion that violates the declared logical size', async () => {

@@ -11,6 +11,10 @@ const DEFAULT_ASSET_BASE_URL = 'https://seorii.page/wasm-idle/';
 const DEFAULT_BYPASS_COOKIE = 'dev_bypass_waf=seorii_bypass_token_is_this';
 
 /**
+ * @typedef {{ asset: string; size: number; sha256: string }} ClangdReceiptAsset
+ */
+
+/**
  * @param {{
  *   receiptPath?: string;
  *   staticDir?: string;
@@ -28,7 +32,9 @@ export async function prepareClangdAssets({
 	fetchImpl = fetch,
 	timeoutMs = 120_000
 } = {}) {
-	const receipt = JSON.parse(await readFile(receiptPath, 'utf8'));
+	const receipt = /** @type {{ assets?: ClangdReceiptAsset[] }} */ (
+		JSON.parse(await readFile(receiptPath, 'utf8'))
+	);
 	if (!Array.isArray(receipt?.assets)) {
 		throw new Error('Clang runtime receipt is missing its asset list');
 	}

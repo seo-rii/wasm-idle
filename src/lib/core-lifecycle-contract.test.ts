@@ -49,7 +49,7 @@ describe('playground binding lifecycle', () => {
 	});
 
 	it('normalizes aliases and prototype-shaped public language IDs before loading', async () => {
-		const loadSandbox = vi.fn(async () => sandboxWithLifecycle());
+		const loadSandbox = vi.fn(async (_language: string) => sandboxWithLifecycle());
 		const binding = createPlaygroundBinding('/runtime', loadSandbox);
 
 		await binding.load(' pypy3 ');
