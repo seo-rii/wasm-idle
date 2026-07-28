@@ -80,6 +80,9 @@ manifest and all six debug assets are downloaded from that immutable revision an
 the browser starts; the test cannot silently fall back to trace debugging. At each C, C++, and Rust
 source pause, the gate also verifies that LLDB scopes remain lazy until their
 `variablesReference` is requested and then contain the expected local value.
+The C++ fixture additionally follows the structure's own `variablesReference`
+and verifies its `first` and `second` fields without eagerly flattening the
+variable tree.
 It then sends a DAP `readMemory` request from the LLDB hexadecimal memory reference `0x0` for four
 bytes of Wasm linear memory through the complete Sandbox and Terminal control path and verifies
 that the response is readable before resuming. The hexadecimal form matters because LLDB-DAP
