@@ -26,6 +26,11 @@
 			"import": "./dist/clang/src/index.js",
 			"default": "./dist/clang/src/index.js"
 		},
+		"./debug": {
+			"types": "./dist/debug/src/index.d.ts",
+			"import": "./dist/debug/src/index.js",
+			"default": "./dist/debug/src/index.js"
+		},
 		"./cobol": {
 			"types": "./dist/cobol/src/index.d.ts",
 			"import": "./dist/cobol/src/index.js",
