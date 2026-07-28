@@ -25,6 +25,8 @@ type LoadedAsset = {
 };
 
 const encoder = new TextEncoder();
+const DEFAULT_STREAM_BUFFER_BYTES = 64 * 1024;
+const MAX_RUNTIME_ASSET_BYTES = 128 * 1024 * 1024;
 
 const transferBuffer = (bytes: Uint8Array, transferOwnership = false) =>
 	transferOwnership &&
@@ -140,6 +142,11 @@ export class WorkerAssetBridge {
 		this.activeLoads.add(controller);
 		try {
 			const loaded = await this.loadAsset(request.asset, controller.signal);
+			if (loaded.bytes.byteLength > MAX_RUNTIME_ASSET_BYTES) {
+				throw new Error(
+					`Runtime asset ${request.asset} exceeds the ${MAX_RUNTIME_ASSET_BYTES} byte limit`
+				);
+			}
 			if (controller.signal.aborted || generation !== this.generation) return;
 			const buffer = transferBuffer(loaded.bytes, loaded.transferOwnership);
 			worker.postMessage(
@@ -262,6 +269,11 @@ export class WorkerAssetBridge {
 					response.headers.get('content-length') ||
 					0
 			) || undefined;
+		if (contentLength && contentLength > MAX_RUNTIME_ASSET_BYTES) {
+			throw new Error(
+				`Runtime asset ${asset} exceeds the ${MAX_RUNTIME_ASSET_BYTES} byte limit`
+			);
+		}
 		const mimeType = response.headers.get('content-type') || undefined;
 		if (!response.body) {
 			const bytes = new Uint8Array(await response.arrayBuffer());
@@ -271,22 +283,32 @@ export class WorkerAssetBridge {
 
 		const reader = response.body.getReader();
 		let receivedLength = 0;
-		const chunks: Uint8Array[] = [];
+		let bytes = new Uint8Array(contentLength || DEFAULT_STREAM_BUFFER_BYTES);
 		while (true) {
 			const { done, value } = await reader.read();
 			if (done) break;
 			if (!value) continue;
-			const chunk = Uint8Array.from(value);
-			chunks.push(chunk);
-			receivedLength += chunk.byteLength;
+			const nextLength = receivedLength + value.byteLength;
+			if (nextLength > MAX_RUNTIME_ASSET_BYTES) {
+				await reader.cancel();
+				throw new Error(
+					`Runtime asset ${asset} exceeds the ${MAX_RUNTIME_ASSET_BYTES} byte limit`
+				);
+			}
+			if (nextLength > bytes.byteLength) {
+				const nextCapacity = Math.min(
+					MAX_RUNTIME_ASSET_BYTES,
+					Math.max(nextLength, bytes.byteLength * 2)
+				);
+				const grown = new Uint8Array(nextCapacity);
+				grown.set(bytes.subarray(0, receivedLength));
+				bytes = grown;
+			}
+			bytes.set(value, receivedLength);
+			receivedLength = nextLength;
 			this.progress.update(asset, receivedLength, contentLength);
 		}
-		const bytes = new Uint8Array(receivedLength);
-		let position = 0;
-		for (const chunk of chunks) {
-			bytes.set(chunk, position);
-			position += chunk.byteLength;
-		}
+		if (receivedLength !== bytes.byteLength) bytes = bytes.slice(0, receivedLength);
 		this.progress.update(asset, receivedLength, contentLength ?? receivedLength);
 		return { bytes, mimeType, transferOwnership: true };
 	}

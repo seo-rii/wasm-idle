@@ -1,9 +1,14 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('$env/dynamic/public', () => ({ env: {} }));
 
 import { RUNTIME_LOAD_ASSETS } from '$lib/playground/assets';
 import { WorkerAssetBridge } from '$lib/playground/assetBridge';
+
+afterEach(() => {
+	vi.restoreAllMocks();
+	vi.unstubAllGlobals();
+});
 
 describe('WorkerAssetBridge progress', () => {
 	it('does not mark an asset complete from the first chunk when its total is unknown', () => {
@@ -125,6 +130,82 @@ describe('WorkerAssetBridge asset requests', () => {
 		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
 
 		expect(postMessage.mock.calls[0]?.[1]?.[0]).toBe(bytes.buffer);
+	});
+
+	it('assembles streamed fetches without retaining copied chunks', async () => {
+		const postMessage = vi.fn();
+		const reader = {
+			read: vi
+				.fn()
+				.mockResolvedValueOnce({ done: false, value: new Uint8Array([1, 2, 3]) })
+				.mockResolvedValueOnce({ done: false, value: new Uint8Array([4, 5, 6]) })
+				.mockResolvedValueOnce({ done: true, value: undefined })
+		};
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue({
+				ok: true,
+				headers: {
+					get: vi.fn((name: string) => {
+						if (name === 'content-length') return '4';
+						if (name === 'content-type') return 'application/wasm';
+						return null;
+					})
+				},
+				body: { getReader: () => reader }
+			})
+		);
+		const copySpy = vi.spyOn(Uint8Array, 'from');
+		const bridge = new WorkerAssetBridge({ postMessage } as unknown as Worker, 'clang', {
+			baseUrl: 'https://assets.example.com/clang/',
+			useAssetBridge: true
+		});
+		const asset = RUNTIME_LOAD_ASSETS.clang[0];
+
+		bridge.handleMessage({
+			data: { assetRequest: { id: 14, asset } }
+		} as MessageEvent);
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
+
+		expect(copySpy).not.toHaveBeenCalled();
+		const transferred = postMessage.mock.calls[0]?.[1]?.[0] as ArrayBuffer;
+		expect([...new Uint8Array(transferred)]).toEqual([1, 2, 3, 4, 5, 6]);
+	});
+
+	it('rejects an oversized asset before reading its response body', async () => {
+		const postMessage = vi.fn();
+		const read = vi.fn();
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue({
+				ok: true,
+				headers: {
+					get: vi.fn((name: string) =>
+						name === 'content-length' ? String(128 * 1024 * 1024 + 1) : null
+					)
+				},
+				body: { getReader: () => ({ read }) }
+			})
+		);
+		const bridge = new WorkerAssetBridge({ postMessage } as unknown as Worker, 'clang', {
+			baseUrl: 'https://assets.example.com/clang/',
+			useAssetBridge: true
+		});
+		const asset = RUNTIME_LOAD_ASSETS.clang[0];
+
+		bridge.handleMessage({
+			data: { assetRequest: { id: 15, asset } }
+		} as MessageEvent);
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
+
+		expect(read).not.toHaveBeenCalled();
+		expect(postMessage).toHaveBeenCalledWith({
+			assetResponse: {
+				id: 15,
+				ok: false,
+				error: `Runtime asset ${asset} exceeds the ${128 * 1024 * 1024} byte limit`
+			}
+		});
 	});
 
 	it('aborts stale loads and never forwards their response after rebind', async () => {
