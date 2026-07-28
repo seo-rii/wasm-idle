@@ -89,6 +89,7 @@ import {
 	resolveObjectiveCRuntimeAssetConfig,
 	resolveRuntimeAssetConfig
 } from './assets';
+import { BUNDLED_CLANG_ASSET_INTEGRITY } from './clangAssetIntegrity';
 
 describe('runtime asset config resolution', () => {
 	it('indexes folder-backed runtime load assets by runtime id', () => {
@@ -182,6 +183,33 @@ describe('runtime asset config resolution', () => {
 			)
 		).toEqual({
 			baseUrl: 'https://example.com/absproxy/5173/clang/',
+			integrity: BUNDLED_CLANG_ASSET_INTEGRITY,
+			useAssetBridge: true
+		});
+	});
+
+	it('pins bundled clang assets when resolving the legacy root path', () => {
+		expect(
+			resolveRuntimeAssetConfig('clang', '/absproxy/5173', 'https://example.com/app')
+		).toEqual({
+			baseUrl: 'https://example.com/absproxy/5173/clang/',
+			integrity: BUNDLED_CLANG_ASSET_INTEGRITY,
+			useAssetBridge: true
+		});
+	});
+
+	it('does not apply bundled clang hashes to a custom asset source', () => {
+		expect(
+			resolveRuntimeAssetConfig(
+				'clang',
+				{ clang: { baseUrl: 'https://cdn.example.com/custom-clang/' } },
+				'https://example.com/app'
+			)
+		).toEqual({
+			baseUrl: 'https://cdn.example.com/custom-clang/',
+			loader: undefined,
+			integrity: undefined,
+			allowedBaseUrls: undefined,
 			useAssetBridge: false
 		});
 	});

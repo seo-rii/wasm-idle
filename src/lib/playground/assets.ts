@@ -1,4 +1,5 @@
 import { env as dynamicPublicEnv } from '$env/dynamic/public';
+import { BUNDLED_CLANG_ASSET_INTEGRITY } from '$lib/playground/clangAssetIntegrity';
 import { normalizeTeaVmBaseUrl, resolveTeaVmBaseUrl } from '$lib/playground/teavmConfig';
 
 const publicEnv = (dynamicPublicEnv || {}) as Record<string, string | undefined>;
@@ -407,8 +408,21 @@ const resolveConfiguredUrl = (url: string, currentUrl = '') =>
 const resolveAllowedBaseUrls = (urls: string[] | undefined, currentUrl = '') =>
 	urls?.map((url) => normalizeBaseUrl(url, currentUrl));
 
-const useAssetBridgeForConfig = (config: RuntimeAssetConfig | undefined) =>
-	!!config?.loader || !!config?.integrity || !!config?.allowedBaseUrls?.length;
+const useAssetBridgeForConfig = (
+	config: RuntimeAssetConfig | undefined,
+	integrity = config?.integrity
+) => !!config?.loader || !!integrity || !!config?.allowedBaseUrls?.length;
+
+const resolveRuntimeAssetIntegrity = (
+	runtime: RuntimeAssetRuntime,
+	config: RuntimeAssetConfig | undefined
+): RuntimeAssetIntegrityMap | undefined => {
+	if (config?.integrity) return config.integrity;
+	if (runtime === 'clang' && !config?.baseUrl && !config?.loader) {
+		return BUNDLED_CLANG_ASSET_INTEGRITY;
+	}
+	return undefined;
+};
 
 const normalizeRootUrl = (rootUrl: string) =>
 	rootUrl.endsWith('/') ? rootUrl.slice(0, -1) : rootUrl;
@@ -469,13 +483,16 @@ export function resolveRuntimeAssetConfig(
 ): ResolvedRuntimeAssetConfig {
 	const runtimeFolder = RUNTIME_ASSET_FOLDERS[runtime];
 	if (typeof options === 'string') {
+		const integrity = resolveRuntimeAssetIntegrity(runtime, undefined);
 		return {
 			baseUrl: resolveRuntimeRootBaseUrl(runtimeFolder, options, currentUrl),
-			useAssetBridge: false
+			...(integrity ? { integrity } : {}),
+			useAssetBridge: !!integrity
 		};
 	}
 
 	const runtimeConfig = options?.[runtime];
+	const integrity = resolveRuntimeAssetIntegrity(runtime, runtimeConfig);
 	const allowedBaseUrls = resolveAllowedBaseUrls(runtimeConfig?.allowedBaseUrls, currentUrl);
 	if (runtimeConfig?.baseUrl) {
 		return {
@@ -485,7 +502,7 @@ export function resolveRuntimeAssetConfig(
 				currentUrl
 			),
 			loader: runtimeConfig.loader,
-			integrity: runtimeConfig.integrity,
+			integrity,
 			allowedBaseUrls,
 			useAssetBridge: useAssetBridgeForConfig(runtimeConfig)
 		};
@@ -495,9 +512,9 @@ export function resolveRuntimeAssetConfig(
 		return {
 			baseUrl: resolveRuntimeRootBaseUrl(runtimeFolder, options.rootUrl, currentUrl),
 			loader: runtimeConfig?.loader,
-			integrity: runtimeConfig?.integrity,
+			integrity,
 			allowedBaseUrls,
-			useAssetBridge: useAssetBridgeForConfig(runtimeConfig)
+			useAssetBridge: useAssetBridgeForConfig(runtimeConfig, integrity)
 		};
 	}
 
@@ -522,7 +539,8 @@ export function resolveRuntimeAssetConfig(
 
 	return {
 		baseUrl: resolveRuntimeRootBaseUrl(runtimeFolder, '', currentUrl),
-		useAssetBridge: false
+		...(integrity ? { integrity } : {}),
+		useAssetBridge: !!integrity
 	};
 }
 
