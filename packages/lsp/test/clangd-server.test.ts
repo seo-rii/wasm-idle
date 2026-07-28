@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockState = vi.hoisted(() => {
 	const workers: FakeWorker[] = [];
@@ -66,6 +66,20 @@ import { getCppLanguageServer } from '../src/index.js';
 describe('getCppLanguageServer', () => {
 	beforeEach(() => {
 		mockState.workers.splice(0, mockState.workers.length);
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(
+				async () =>
+					new Response(new Uint8Array([0x1f, 0x8b, 0x08]), {
+						status: 200,
+						headers: { 'content-length': '3' }
+					})
+			)
+		);
+	});
+
+	afterEach(() => {
+		vi.unstubAllGlobals();
 	});
 
 	it('starts clangd with a resolved base URL and sync hook', async () => {
@@ -78,10 +92,15 @@ describe('getCppLanguageServer', () => {
 		});
 		const worker = mockState.workers[0];
 
-		expect(worker?.messages[0]).toEqual({
+		expect(worker?.messages[0]).toMatchObject({
 			type: 'init',
-			baseUrl: 'https://static.example.com/repl_20240807/clangd/'
+			baseUrl: 'https://static.example.com/repl_20240807/clangd/',
+			assets: {
+				clangdJs: expect.any(ArrayBuffer),
+				clangdWasmGz: expect.any(ArrayBuffer)
+			}
 		});
+		expect(worker?.transfers[0]).toHaveLength(2);
 		expect(status).toHaveBeenCalledWith({
 			state: 'loading',
 			stage: 'startup',
@@ -128,5 +147,28 @@ describe('getCppLanguageServer', () => {
 			}
 		});
 		expect(worker?.transfers[0]).toHaveLength(2);
+	});
+
+	it('fails asset preflight before creating a worker', async () => {
+		const status = vi.fn();
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => new Response(null, { status: 404 }))
+		);
+
+		await expect(
+			getCppLanguageServer({
+				rootUrl: 'https://static.example.com/wasm-idle',
+				currentUrl: 'https://app.example.com/wasm-idle/',
+				createWorker: () => new mockState.FakeWorker() as unknown as Worker,
+				onStatus: status
+			})
+		).rejects.toThrow('Failed to load clangd.js: 404');
+
+		expect(mockState.workers).toHaveLength(0);
+		expect(status).toHaveBeenLastCalledWith({
+			state: 'error',
+			message: 'Failed to load clangd.js: 404'
+		});
 	});
 });

@@ -40,9 +40,7 @@ function transferBuffer(bytes: Uint8Array) {
 async function preloadClangdAssets(
 	assetConfig: ResolvedLanguageToolAssetConfig,
 	onStatus?: (status: ClangdStatus) => void
-): Promise<{ assets: ClangdPreloadedAssets; transfer: Transferable[] } | undefined> {
-	if (!assetConfig.loader) return undefined;
-
+): Promise<{ assets: ClangdPreloadedAssets; transfer: Transferable[] }> {
 	const fractions = new Map<string, number>();
 	for (const asset of CLANGD_ASSETS) fractions.set(asset, 0);
 	const emitProgress = () => {
@@ -78,7 +76,13 @@ async function createServer(
 ) {
 	const status = createLanguageServerProgressReporter(onStatus);
 	status.loading();
-	const preloaded = await preloadClangdAssets(assetConfig, onStatus);
+	let preloaded: Awaited<ReturnType<typeof preloadClangdAssets>>;
+	try {
+		preloaded = await preloadClangdAssets(assetConfig, onStatus);
+	} catch (error) {
+		status.error(error instanceof Error ? error.message : String(error));
+		throw error;
+	}
 	let resolveReady = () => {};
 	let rejectReady = (_error: Error) => {};
 	const ready = new Promise<void>((resolve, reject) => {
@@ -120,11 +124,17 @@ async function createServer(
 			type: 'init',
 			baseUrl: assetConfig.baseUrl,
 			...(debug ? { debug } : {}),
-			...(preloaded ? { assets: preloaded.assets } : {})
+			assets: preloaded.assets
 		},
-		preloaded?.transfer || []
+		preloaded.transfer
 	);
-	await ready;
+	try {
+		await ready;
+	} catch (error) {
+		worker.terminate();
+		status.error(error instanceof Error ? error.message : String(error));
+		throw error;
+	}
 	return worker;
 }
 
