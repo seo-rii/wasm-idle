@@ -375,6 +375,7 @@ export const JAVA_RUNTIME_LOAD_ASSETS = [
 ] as const;
 
 export const CLANG_RUNTIME_LOAD_ASSETS = [
+	'runtime-manifest.v1.json',
 	'bin/memfs.wasm.gz',
 	'bin/clang.wasm.gz',
 	'bin/lld.wasm.gz',

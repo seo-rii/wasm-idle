@@ -116,6 +116,7 @@ describe('runtime asset config resolution', () => {
 			'java',
 			'python'
 		]);
+		expect(RUNTIME_LOAD_ASSETS.clang).toContain('runtime-manifest.v1.json');
 		expect(RUNTIME_LOAD_ASSETS.clang).toContain('bin/clang.wasm.gz');
 		expect(RUNTIME_LOAD_ASSETS.clangd).toContain('clangd.wasm.gz');
 	});

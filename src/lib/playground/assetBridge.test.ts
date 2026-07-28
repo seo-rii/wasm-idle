@@ -29,12 +29,12 @@ describe('WorkerAssetBridge progress', () => {
 		bridge.handleMessage({
 			data: { assetProgress: { asset, loaded: 64 * 1024, total: 128 * 1024 } }
 		} as MessageEvent);
-		expect(progress.set).toHaveBeenLastCalledWith(0.125);
+		expect(progress.set).toHaveBeenLastCalledWith(0.1);
 
 		bridge.handleMessage({
 			data: { assetProgress: { asset, loaded: 128 * 1024, total: 128 * 1024 } }
 		} as MessageEvent);
-		expect(progress.set).toHaveBeenLastCalledWith(0.25);
+		expect(progress.set).toHaveBeenLastCalledWith(0.2);
 	});
 });
 
@@ -91,6 +91,32 @@ describe('WorkerAssetBridge asset requests', () => {
 		});
 		expect(postMessage.mock.calls[0]?.[0]).toMatchObject({
 			assetResponse: { id: 8, ok: true, mimeType: undefined }
+		});
+	});
+
+	it('loads an integrity-pinned Clang runtime manifest through the bridge', async () => {
+		const postMessage = vi.fn();
+		const bytes = new Uint8Array([1, 2, 3]);
+		const asset = 'runtime-manifest.v1.json';
+		const bridge = new WorkerAssetBridge({ postMessage } as unknown as Worker, 'clang', {
+			baseUrl: '/clang/',
+			loader: vi.fn().mockResolvedValue(bytes),
+			integrity: {
+				[asset]: {
+					bytes: bytes.byteLength,
+					sha256: '039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81'
+				}
+			},
+			useAssetBridge: true
+		});
+
+		bridge.handleMessage({
+			data: { assetRequest: { id: 24, asset } }
+		} as MessageEvent);
+
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
+		expect(postMessage.mock.calls[0]?.[0]).toMatchObject({
+			assetResponse: { id: 24, ok: true }
 		});
 	});
 
@@ -252,7 +278,7 @@ describe('WorkerAssetBridge asset requests', () => {
 
 		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
 		expect(fetchMock).toHaveBeenCalledWith(
-			'https://assets.example.com/clang/bin/memfs.wasm.gz',
+			`https://assets.example.com/clang/${asset}`,
 			expect.objectContaining({
 				credentials: 'omit',
 				redirect: 'follow',

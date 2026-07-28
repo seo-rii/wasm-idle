@@ -1,6 +1,10 @@
 const integrityEntry = (bytes: number, sha256: string) => Object.freeze({ bytes, sha256 });
 
 export const BUNDLED_CLANG_ASSET_INTEGRITY = Object.freeze({
+	'runtime-manifest.v1.json': integrityEntry(
+		876,
+		'1420808d0391ff2d8a2fdf2a9f6bbce8f728e06b1ed1651029ed80b226101444'
+	),
 	'bin/memfs.wasm.gz': integrityEntry(
 		18_974,
 		'd86f141eacd58a93511fbfb7c4e81d498eb7106a8a57df1bea7d33df3ce1f403'

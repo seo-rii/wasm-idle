@@ -23,6 +23,10 @@ loader pipes gzip response bodies through `DecompressionStream('gzip')`. Runtime
 older external deployments may still reference ZIP files; those load `fflate` only on the legacy
 compatibility path.
 
+The bundled Clang `runtime-manifest.v1.json` is routed through the same worker asset bridge as its
+four delivery assets. Its exact byte length and SHA-256 digest are pinned alongside those assets,
+so the compiler cannot consume an unverified manifest before loading an otherwise verified binary.
+
 ## LLDB debug sessions
 
 `@wasm-idle/llvm-core/debug` provides the low-level browser session that connects a dedicated LLDB

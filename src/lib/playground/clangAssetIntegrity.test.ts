@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
@@ -34,8 +35,15 @@ describe('bundled clang asset integrity', () => {
 			});
 		}
 
+		const manifestBytes = await readFile(
+			resolve(process.cwd(), 'static/clang/runtime-manifest.v1.json')
+		);
+		expect(BUNDLED_CLANG_ASSET_INTEGRITY['runtime-manifest.v1.json']).toEqual({
+			bytes: manifestBytes.byteLength,
+			sha256: createHash('sha256').update(manifestBytes).digest('hex')
+		});
 		expect(Object.keys(BUNDLED_CLANG_ASSET_INTEGRITY).sort()).toEqual(
-			Object.keys(sourceByRuntimeAsset).sort()
+			['runtime-manifest.v1.json', ...Object.keys(sourceByRuntimeAsset)].sort()
 		);
 	});
 });
