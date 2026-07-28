@@ -152,7 +152,10 @@ export function validateWorkspaceFiles<T extends WorkspaceFile>(
 		let fileBytes: number;
 		if (typeof file.content === 'string') {
 			fileBytes = textEncoder.encode(file.content).byteLength;
-		} else if (file.content instanceof Uint8Array) {
+		} else if (
+			ArrayBuffer.isView(file.content) &&
+			Object.prototype.toString.call(file.content) === '[object Uint8Array]'
+		) {
 			fileBytes = file.content.byteLength;
 		} else {
 			throw new WorkspaceValidationError(
