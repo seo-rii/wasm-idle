@@ -68,5 +68,7 @@ package.
 
 Repository CI runs `test:browser:debug:lldb` for every pull request and `main` push in a dedicated
 Chromium job. The gate installs Chromium, downloads the four external Clang delivery assets,
-verifies every pinned SHA-256 receipt, and requires the pinned product LLDB/WAMR binaries for C,
-C++, and Rust; the test cannot silently fall back to trace debugging.
+verifies every pinned SHA-256 receipt, and requires the product LLDB/WAMR binaries published by
+`wasm-llvm` commit `1186508362a98bdbfc71db14c7375863dff9e30f` for C, C++, and Rust. The V2
+manifest and all six debug assets are downloaded from that immutable revision and verified before
+the browser starts; the test cannot silently fall back to trace debugging.
