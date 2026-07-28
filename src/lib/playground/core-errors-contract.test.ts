@@ -5,6 +5,8 @@ import {
 	BusyError,
 	CancelledError,
 	CompileError,
+	DiagnosticLimitError,
+	OutputLimitError,
 	ProtocolError,
 	RuntimeConfigurationError,
 	RuntimeExecutionError,
@@ -95,6 +97,35 @@ describe('core runtime errors', () => {
 			code: 'cancelled',
 			phase: 'execute',
 			cause: reason,
+			recoverable: true
+		});
+	});
+
+	it('reports host-enforced output and diagnostic budgets with stable metadata', () => {
+		expect(
+			new OutputLimitError('output flood', {
+				limit: 1024,
+				actual: 2048
+			})
+		).toMatchObject({
+			name: 'OutputLimitError',
+			code: 'output-limit',
+			phase: 'execute',
+			limit: 1024,
+			actual: 2048,
+			recoverable: true
+		});
+		expect(
+			new DiagnosticLimitError('diagnostic flood', {
+				limit: 100,
+				actual: 101
+			})
+		).toMatchObject({
+			name: 'DiagnosticLimitError',
+			code: 'diagnostic-limit',
+			phase: 'compile',
+			limit: 100,
+			actual: 101,
 			recoverable: true
 		});
 	});

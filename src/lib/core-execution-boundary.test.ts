@@ -205,6 +205,71 @@ describe('core execution boundary', () => {
 		}
 	});
 
+	it('blocks streamed output at the UTF-8 byte budget and cancels the runtime', async () => {
+		let finishRun: ((result: boolean | string) => void) | undefined;
+		const run = vi.fn(
+			() =>
+				new Promise<boolean | string>((resolve) => {
+					finishRun = resolve;
+				})
+		);
+		const cancel = vi.fn(async () => undefined);
+		const rawSandbox = createSandbox({ run, cancel });
+		const binding = createPlaygroundBinding('/runtime', async () => rawSandbox);
+		const sandbox = await binding.load('C');
+		const output = vi.fn();
+		sandbox.output = output;
+
+		const operation = sandbox.run('int main() {}', false, false, undefined, [], {
+			limits: { maxOutputBytes: 5 }
+		});
+		const rejection = expect(operation).rejects.toMatchObject({
+			code: 'output-limit',
+			phase: 'execute',
+			limit: 5,
+			actual: 6
+		});
+		await Promise.resolve();
+		rawSandbox.output?.('1234');
+		rawSandbox.output?.('é');
+
+		await rejection;
+		expect(output).toHaveBeenCalledOnce();
+		expect(output).toHaveBeenCalledWith('1234');
+		expect(cancel).toHaveBeenCalledOnce();
+		finishRun?.(true);
+		await Promise.resolve();
+	});
+
+	it('validates structured output and diagnostic budgets before returning results', async () => {
+		const diagnostic = { message: 'warning', severity: 'warning' as const };
+		const execute = vi
+			.fn()
+			.mockResolvedValueOnce({ ...completedResult, stdout: 'ééé' })
+			.mockResolvedValueOnce({
+				...completedResult,
+				diagnostics: [diagnostic, diagnostic]
+			});
+		const binding = createPlaygroundBinding('/runtime', async () => createSandbox({ execute }));
+		const sandbox = await binding.load('C');
+
+		await expect(
+			sandbox.execute!({ code: 'int main() {}', limits: { maxOutputBytes: 5 } })
+		).rejects.toMatchObject({
+			code: 'output-limit',
+			limit: 5,
+			actual: 6
+		});
+		await expect(
+			sandbox.execute!({ code: 'int main() {}', limits: { maxDiagnostics: 1 } })
+		).rejects.toMatchObject({
+			code: 'diagnostic-limit',
+			phase: 'compile',
+			limit: 1,
+			actual: 2
+		});
+	});
+
 	it('cleans deadline and abort listeners after successful execution', async () => {
 		vi.useFakeTimers();
 		try {

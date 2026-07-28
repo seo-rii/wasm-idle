@@ -8,6 +8,8 @@ import type {
 import {
 	BusyError,
 	CancelledError,
+	DiagnosticLimitError,
+	OutputLimitError,
 	RuntimeConfigurationError,
 	TimeoutError,
 	type RuntimePhase
@@ -51,6 +53,13 @@ interface ValidatedSandboxExecutionOptions extends SandboxExecutionOptions {
 
 interface SandboxOperationState {
 	active: boolean;
+	outputBytes: number;
+	diagnosticCount: number;
+	maxOutputBytes: number;
+	maxDiagnostics: number;
+	phase: RuntimePhase;
+	limitExceeded: boolean;
+	onLimit?: (error: OutputLimitError | DiagnosticLimitError) => void;
 }
 
 export interface SandboxLifecycle {
@@ -224,6 +233,7 @@ function runSandboxOperation<T>(
 	operation: () => Promise<T>,
 	signal: AbortSignal | undefined,
 	timeoutMs: number,
+	limits: ExecutionLimits,
 	phase: RuntimePhase
 ): Promise<T> {
 	if (operationState.active) {
@@ -234,6 +244,12 @@ function runSandboxOperation<T>(
 		);
 	}
 	operationState.active = true;
+	operationState.outputBytes = 0;
+	operationState.diagnosticCount = 0;
+	operationState.maxOutputBytes = limits.maxOutputBytes;
+	operationState.maxDiagnostics = limits.maxDiagnostics;
+	operationState.phase = phase;
+	operationState.limitExceeded = false;
 	return new Promise<T>((resolve, reject) => {
 		let settled = false;
 		let operationStarted = false;
@@ -243,6 +259,7 @@ function runSandboxOperation<T>(
 		const cleanup = () => {
 			if (timeout !== undefined) clearTimeout(timeout);
 			signal?.removeEventListener('abort', onAbort);
+			operationState.onLimit = undefined;
 		};
 		const requestCancellation = () => {
 			if (cancellationRequested) return;
@@ -260,6 +277,10 @@ function runSandboxOperation<T>(
 		};
 		const releaseOperation = () => {
 			operationState.active = false;
+			operationState.outputBytes = 0;
+			operationState.diagnosticCount = 0;
+			operationState.limitExceeded = false;
+			operationState.onLimit = undefined;
 		};
 		const settle = (callback: () => void) => {
 			if (settled) return;
@@ -278,6 +299,11 @@ function runSandboxOperation<T>(
 					})
 				)
 			);
+		};
+		operationState.onLimit = (error) => {
+			if (operationStarted) requestCancellation();
+			else releaseOperation();
+			settle(() => reject(error));
 		};
 
 		signal?.addEventListener('abort', onAbort, { once: true });
@@ -321,10 +347,77 @@ function combinedPhaseTimeoutMs(firstTimeoutMs: number, secondTimeoutMs: number)
 
 function bindRuntimeAssets(sandbox: Sandbox, runtimeAssets: SandboxRuntimeAssets): BoundSandbox {
 	let disposePromise: Promise<void> | undefined;
-	const operationState: SandboxOperationState = { active: false };
+	const operationState: SandboxOperationState = {
+		active: false,
+		outputBytes: 0,
+		diagnosticCount: 0,
+		maxOutputBytes: 0,
+		maxDiagnostics: 0,
+		phase: 'execute',
+		limitExceeded: false
+	};
+	let outputSink = sandbox.output;
+	let diagnosticSink = sandbox.oncompilerdiagnostic;
+	const emitOutput = (data: string) => {
+		if (!operationState.active) {
+			outputSink?.(data);
+			return;
+		}
+		if (operationState.limitExceeded) return;
+		const actual = operationState.outputBytes + workspaceTextEncoder.encode(data).byteLength;
+		if (actual > operationState.maxOutputBytes) {
+			operationState.outputBytes = actual;
+			operationState.limitExceeded = true;
+			operationState.onLimit?.(
+				new OutputLimitError(
+					`Runtime output exceeded ${operationState.maxOutputBytes} bytes`,
+					{
+						limit: operationState.maxOutputBytes,
+						actual,
+						phase: operationState.phase
+					}
+				)
+			);
+			return;
+		}
+		operationState.outputBytes = actual;
+		outputSink?.(data);
+	};
+	const emitDiagnostic = (diagnostic: unknown) => {
+		if (!operationState.active) {
+			diagnosticSink?.(diagnostic);
+			return;
+		}
+		if (operationState.limitExceeded) return;
+		const actual = operationState.diagnosticCount + 1;
+		if (actual > operationState.maxDiagnostics) {
+			operationState.diagnosticCount = actual;
+			operationState.limitExceeded = true;
+			operationState.onLimit?.(
+				new DiagnosticLimitError(
+					`Runtime diagnostics exceeded ${operationState.maxDiagnostics} entries`,
+					{
+						limit: operationState.maxDiagnostics,
+						actual,
+						phase: operationState.phase === 'execute' ? 'compile' : operationState.phase
+					}
+				)
+			);
+			return;
+		}
+		operationState.diagnosticCount = actual;
+		diagnosticSink?.(diagnostic);
+	};
+	const installBoundarySinks = () => {
+		sandbox.output = emitOutput;
+		sandbox.oncompilerdiagnostic = emitDiagnostic;
+	};
+	installBoundarySinks();
 	return new Proxy(sandbox, {
 		get(target, prop, receiver) {
 			if (prop === 'runtimeAssets') return runtimeAssets;
+			if (prop === 'output') return outputSink;
+			if (prop === 'oncompilerdiagnostic') return diagnosticSink;
 			if (prop === 'dispose') {
 				return () => {
 					if (!disposePromise) {
@@ -345,6 +438,7 @@ function bindRuntimeAssets(sandbox: Sandbox, runtimeAssets: SandboxRuntimeAssets
 					progress?: SandboxProgress
 				) => {
 					const validated = validateSandboxExecutionOptions(code, options, 'startup');
+					installBoundarySinks();
 					return runSandboxOperation(
 						target,
 						operationState,
@@ -354,6 +448,7 @@ function bindRuntimeAssets(sandbox: Sandbox, runtimeAssets: SandboxRuntimeAssets
 							validated.limits.assetTimeoutMs,
 							validated.limits.startupTimeoutMs
 						),
+						validated.limits,
 						'startup'
 					);
 				};
@@ -372,21 +467,46 @@ function bindRuntimeAssets(sandbox: Sandbox, runtimeAssets: SandboxRuntimeAssets
 						signal: request.signal,
 						stdin: request.stdin
 					});
+					installBoundarySinks();
 					return runSandboxOperation(
 						target,
 						operationState,
-						() =>
-							execute.call(target, {
+						async () => {
+							const result = await execute.call(target, {
 								...request,
 								activePath: validated.activePath,
 								workspaceFiles: validated.workspaceFiles,
 								limits: validated.limits
-							}),
+							});
+							const outputBytes =
+								workspaceTextEncoder.encode(result.stdout).byteLength +
+								workspaceTextEncoder.encode(result.stderr).byteLength;
+							if (outputBytes > validated.limits.maxOutputBytes) {
+								throw new OutputLimitError(
+									`Runtime output exceeded ${validated.limits.maxOutputBytes} bytes`,
+									{
+										limit: validated.limits.maxOutputBytes,
+										actual: outputBytes
+									}
+								);
+							}
+							if (result.diagnostics.length > validated.limits.maxDiagnostics) {
+								throw new DiagnosticLimitError(
+									`Runtime diagnostics exceeded ${validated.limits.maxDiagnostics} entries`,
+									{
+										limit: validated.limits.maxDiagnostics,
+										actual: result.diagnostics.length
+									}
+								);
+							}
+							return result;
+						},
 						validated.signal,
 						combinedPhaseTimeoutMs(
 							validated.limits.compileTimeoutMs,
 							validated.limits.runTimeoutMs
 						),
+						validated.limits,
 						'execute'
 					);
 				};
@@ -401,6 +521,7 @@ function bindRuntimeAssets(sandbox: Sandbox, runtimeAssets: SandboxRuntimeAssets
 					options: SandboxExecutionOptions = {}
 				) => {
 					const validated = validateSandboxExecutionOptions(code, options);
+					installBoundarySinks();
 					return runSandboxOperation(
 						target,
 						operationState,
@@ -410,6 +531,7 @@ function bindRuntimeAssets(sandbox: Sandbox, runtimeAssets: SandboxRuntimeAssets
 							validated.limits.compileTimeoutMs,
 							validated.limits.runTimeoutMs
 						),
+						validated.limits,
 						'execute'
 					);
 				};
@@ -418,6 +540,16 @@ function bindRuntimeAssets(sandbox: Sandbox, runtimeAssets: SandboxRuntimeAssets
 			return typeof value === 'function' ? value.bind(target) : value;
 		},
 		set(target, prop, value, receiver) {
+			if (prop === 'output') {
+				outputSink = typeof value === 'function' ? value : undefined;
+				target.output = emitOutput;
+				return true;
+			}
+			if (prop === 'oncompilerdiagnostic') {
+				diagnosticSink = typeof value === 'function' ? value : undefined;
+				target.oncompilerdiagnostic = emitDiagnostic;
+				return true;
+			}
 			return Reflect.set(target, prop, value, receiver);
 		}
 	}) as BoundSandbox;

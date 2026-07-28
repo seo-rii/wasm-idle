@@ -35,6 +35,8 @@ export {
 	BusyError,
 	CancelledError,
 	CompileError,
+	DiagnosticLimitError,
+	OutputLimitError,
 	ProtocolError,
 	RuntimeConfigurationError,
 	RuntimeExecutionError,
@@ -47,6 +49,7 @@ export {
 	type AssetTooLargeErrorOptions,
 	type RuntimeErrorCode,
 	type RuntimeErrorContext,
+	type RuntimeMessageLimitErrorOptions,
 	type RuntimePhase,
 	type TimeoutErrorOptions,
 	type WasmIdleErrorOptions

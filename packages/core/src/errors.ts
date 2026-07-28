@@ -10,6 +10,8 @@ export type RuntimeErrorCode =
 	| 'runtime'
 	| 'timeout'
 	| 'cancelled'
+	| 'output-limit'
+	| 'diagnostic-limit'
 	| 'protocol'
 	| 'unsupported-browser-feature';
 
@@ -204,6 +206,45 @@ export class CancelledError extends WasmIdleError {
 			recoverable: options.recoverable ?? true
 		});
 		this.name = 'CancelledError';
+	}
+}
+
+export interface RuntimeMessageLimitErrorOptions extends RuntimeErrorContext {
+	limit: number;
+	actual: number;
+}
+
+export class OutputLimitError extends WasmIdleError {
+	readonly limit: number;
+	readonly actual: number;
+
+	constructor(message: string, options: RuntimeMessageLimitErrorOptions) {
+		super(message, {
+			...options,
+			code: 'output-limit',
+			phase: options.phase ?? 'execute',
+			recoverable: options.recoverable ?? true
+		});
+		this.name = 'OutputLimitError';
+		this.limit = options.limit;
+		this.actual = options.actual;
+	}
+}
+
+export class DiagnosticLimitError extends WasmIdleError {
+	readonly limit: number;
+	readonly actual: number;
+
+	constructor(message: string, options: RuntimeMessageLimitErrorOptions) {
+		super(message, {
+			...options,
+			code: 'diagnostic-limit',
+			phase: options.phase ?? 'compile',
+			recoverable: options.recoverable ?? true
+		});
+		this.name = 'DiagnosticLimitError';
+		this.limit = options.limit;
+		this.actual = options.actual;
 	}
 }
 
