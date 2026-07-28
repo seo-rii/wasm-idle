@@ -1,88 +1,3 @@
-export type WasmIdleLanguageId =
-	| 'PYTHON3'
-	| 'PYTHON'
-	| 'PYPY3'
-	| 'C'
-	| 'CPP'
-	| 'OBJC'
-	| 'OBJECTIVEC'
-	| 'OBJECTIVE_C'
-	| 'OBJECTIVE-C'
-	| 'JAVA'
-	| 'RUST'
-	| 'GO'
-	| 'D'
-	| 'DLANG'
-	| 'CSHARP'
-	| 'C#'
-	| 'FSHARP'
-	| 'F#'
-	| 'VBNET'
-	| 'VB'
-	| 'VISUALBASIC'
-	| 'ELIXIR'
-	| 'ERLANG'
-	| 'ERL'
-	| 'PROLOG'
-	| 'SWIPL'
-	| 'SWI'
-	| 'GLEAM'
-	| 'PERL'
-	| 'TCL'
-	| 'TCLSH'
-	| 'AWK'
-	| 'GAWK'
-	| 'PASCAL'
-	| 'PAS'
-	| 'FPC'
-	| 'FORTH'
-	| 'GFORTH'
-	| 'J'
-	| 'BQN'
-	| 'JANET'
-	| 'JULIA'
-	| 'JL'
-	| 'NIM'
-	| 'NIMROD'
-	| 'BASH'
-	| 'SH'
-	| 'SHELL'
-	| 'CLOJURESCRIPT'
-	| 'CLJS'
-	| 'FORTRAN'
-	| 'F77'
-	| 'COBOL'
-	| 'COB'
-	| 'CBL'
-	| 'GNUCOBOL'
-	| 'TINYGO'
-	| 'OCAML'
-	| 'JAVASCRIPT'
-	| 'JS'
-	| 'TYPESCRIPT'
-	| 'TS'
-	| 'ASSEMBLYSCRIPT'
-	| 'AS'
-	| 'WAT'
-	| 'WASM'
-	| 'WASM32'
-	| 'LUA'
-	| 'ZIG'
-	| 'LISP'
-	| 'SCHEME'
-	| 'SCM'
-	| 'RUBY'
-	| 'RB'
-	| 'HASKELL'
-	| 'HS'
-	| 'R'
-	| 'OCTAVE'
-	| 'MATLAB'
-	| 'DUCKDB'
-	| 'SQLITE'
-	| 'SQL'
-	| 'PHP';
-
 export const supportedLanguageIds = [
 	'PYTHON3',
 	'C',
@@ -257,22 +172,35 @@ const languageAliasDefinitions = {
 	}
 >;
 
-export const languageAliases: Readonly<Record<string, LanguageAliasInfo>> = Object.freeze(
+export type LanguageAliasId = keyof typeof languageAliasDefinitions;
+export type WasmIdleLanguageId = CanonicalLanguageId | LanguageAliasId;
+
+export const languageAliasIds = Object.freeze(
+	Object.keys(languageAliasDefinitions) as LanguageAliasId[]
+);
+
+export const languageAliases = Object.freeze(
 	Object.fromEntries(
 		Object.entries(languageAliasDefinitions).map(([alias, definition]) => [
 			alias,
 			Object.freeze({ alias, deprecated: false, ...definition })
 		])
-	)
+	) as Record<LanguageAliasId, LanguageAliasInfo>
 );
 
 export function getLanguageAliasInfo(language: string): LanguageAliasInfo | undefined {
-	return languageAliases[language.trim().toUpperCase()];
+	return languageAliases[language.trim().toUpperCase() as LanguageAliasId];
 }
 
+export function normalizeLanguageId(language: WasmIdleLanguageId): CanonicalLanguageId;
+export function normalizeLanguageId(language: string): string;
 export function normalizeLanguageId(language: string): string {
 	const upper = language.trim().toUpperCase();
-	return languageAliases[upper]?.canonicalId ?? upper;
+	return languageAliases[upper as LanguageAliasId]?.canonicalId ?? upper;
+}
+
+export function isSupportedLanguageId(language: string): language is CanonicalLanguageId {
+	return (supportedLanguageIds as readonly string[]).includes(language);
 }
 
 export function isDeferredProgressLanguage(language: string): boolean {

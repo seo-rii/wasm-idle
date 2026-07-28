@@ -17,11 +17,14 @@ export {
 	DEFAULT_DEFERRED_PROGRESS_LANGUAGES,
 	getLanguageAliasInfo,
 	isDeferredProgressLanguage,
+	isSupportedLanguageId,
+	languageAliasIds,
 	languageAliases,
 	normalizeLanguageId,
 	supportedLanguageIds,
 	type CanonicalLanguageId,
 	type LanguageAliasInfo,
+	type LanguageAliasId,
 	type LanguageAliasKind,
 	type WasmIdleLanguageId
 } from './languages.js';
