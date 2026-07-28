@@ -1,4 +1,5 @@
 import type { BrowserClangRuntime as Clang } from '@wasm-idle/llvm-core/clang';
+import { normalizeDwarfWorkspacePath } from '@wasm-idle/llvm-core/clang';
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
 import { isSharedBufferBackedView } from '$lib/playground/sharedBuffer';
 import {
@@ -72,11 +73,13 @@ self.onmessage = async (event: { data: any }) => {
 		workspaceFiles,
 		cppVersion,
 		cVersion,
+		debugMode,
 		debug,
 		breakpoints,
 		pauseOnEntry,
 		stdin
 	} = event.data;
+	const resolvedDebugMode = debugMode || (debug ? 'trace' : 'none');
 	if (load) {
 		try {
 			const runtimeAssets = assets as WorkerRuntimeAssetConfig | undefined;
@@ -94,14 +97,14 @@ self.onmessage = async (event: { data: any }) => {
 		interruptBufferClang = new Uint8Array(interrupt);
 		hasInitialStdinClang = typeof stdin === 'string';
 		initialStdinClang = hasInitialStdinClang ? stdin : null;
-		if (debug && !isSharedBufferBackedView(debugBufferClang)) {
+		if (resolvedDebugMode === 'trace' && !isSharedBufferBackedView(debugBufferClang)) {
 			self.postMessage({ error: 'C/C++ debugging requires SharedArrayBuffer.' });
 			return;
 		}
 
 		try {
 			postProgress(5, `Compiling ${language === 'C' ? 'C' : 'C++'} source`);
-			await clang.compileLink(code, {
+			await clang.compileArtifact(code, {
 				language,
 				compileArgs,
 				programArgs,
@@ -109,7 +112,7 @@ self.onmessage = async (event: { data: any }) => {
 				workspaceFiles,
 				cppVersion,
 				cVersion,
-				debug,
+				debugMode: resolvedDebugMode,
 				breakpoints,
 				pauseOnEntry,
 				debugBuffer: debugBufferClang,
@@ -131,12 +134,51 @@ self.onmessage = async (event: { data: any }) => {
 		interruptBufferClang = new Uint8Array(interrupt);
 		hasInitialStdinClang = typeof stdin === 'string';
 		initialStdinClang = hasInitialStdinClang ? stdin : null;
-		if (debug && !isSharedBufferBackedView(debugBufferClang)) {
+		if (resolvedDebugMode === 'trace' && !isSharedBufferBackedView(debugBufferClang)) {
 			self.postMessage({ error: 'C/C++ debugging requires SharedArrayBuffer.' });
 			return;
 		}
 
 		try {
+			if (resolvedDebugMode === 'lldb') {
+				const artifact = await clang.compileArtifact(code, {
+					language,
+					compileArgs,
+					programArgs,
+					activePath,
+					workspaceFiles,
+					cppVersion,
+					cVersion,
+					debugMode: 'lldb'
+				});
+				if (!artifact.debug) {
+					throw new Error('wasm-clang did not return an LLDB DWARF descriptor');
+				}
+				const inputPath =
+					normalizeDwarfWorkspacePath(
+						activePath || (language === 'C' ? 'main.c' : 'main.cc')
+					) || (language === 'C' ? 'main.c' : 'main.cc');
+				const sources = new Map<string, string>();
+				for (const file of workspaceFiles || []) {
+					const sourcePath = normalizeDwarfWorkspacePath(file.path);
+					if (sourcePath) sources.set(`/workspace/${sourcePath}`, file.content);
+				}
+				sources.set(`/workspace/${inputPath}`, code);
+				self.postMessage({
+					lldbArtifact: {
+						bytes: new Uint8Array(artifact.bytes),
+						descriptor: artifact.debug,
+						sources: artifact.debug.files.map(({ path, contentSha256 }) => {
+							const content = sources.get(path);
+							if (content === undefined) {
+								throw new Error(`Missing LLDB source content for ${path}`);
+							}
+							return { path, content, contentSha256 };
+						})
+					}
+				});
+				return;
+			}
 			await clang.compileLinkRun(code, {
 				language,
 				compileArgs,
@@ -145,7 +187,7 @@ self.onmessage = async (event: { data: any }) => {
 				workspaceFiles,
 				cppVersion,
 				cVersion,
-				debug,
+				debugMode: resolvedDebugMode,
 				breakpoints,
 				pauseOnEntry,
 				debugBuffer: debugBufferClang,
