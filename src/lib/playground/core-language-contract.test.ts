@@ -79,6 +79,25 @@ describe('core language contract', () => {
 		);
 	});
 
+	it('includes runtime integrity metadata in asset cache keys', () => {
+		const firstKey = createRuntimeAssetsKey({
+			clang: {
+				integrity: {
+					'bin/clang.wasm.gz': { sha256: 'a'.repeat(64), bytes: 123 }
+				}
+			}
+		});
+		const secondKey = createRuntimeAssetsKey({
+			clang: {
+				integrity: {
+					'bin/clang.wasm.gz': { sha256: 'b'.repeat(64), bytes: 123 }
+				}
+			}
+		});
+
+		expect(firstKey).not.toBe(secondKey);
+	});
+
 	it('includes both Rust compiler assets in runtime cache keys', () => {
 		const key = JSON.parse(
 			createRuntimeAssetsKey({

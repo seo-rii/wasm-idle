@@ -1,7 +1,15 @@
+export interface RuntimeAssetIntegrityEntry {
+	sha256: string;
+	bytes?: number;
+}
+
+export type RuntimeAssetIntegrityMap = Record<string, string | RuntimeAssetIntegrityEntry>;
+
 export interface RuntimeAssetLoaderKeySource {
 	baseUrl?: string;
 	loader?: unknown;
 	loaderKey?: string;
+	integrity?: RuntimeAssetIntegrityMap;
 }
 
 export interface RuntimeAssetKeySource {
@@ -70,6 +78,25 @@ const hasValue = (value: unknown) => !!value;
 
 const joinStringList = (value: unknown) => (Array.isArray(value) ? value.join('\0') : '');
 
+const serializeIntegrity = (value: unknown) => {
+	if (!value || typeof value !== 'object' || Array.isArray(value)) return '';
+	const entries = Object.entries(value as Record<string, unknown>)
+		.sort(([left], [right]) => left.localeCompare(right))
+		.map(([asset, entry]) => {
+			if (typeof entry === 'string') return [asset, entry];
+			if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return [asset, ''];
+			const metadata = entry as Record<string, unknown>;
+			return [
+				asset,
+				{
+					sha256: typeof metadata.sha256 === 'string' ? metadata.sha256 : '',
+					bytes: typeof metadata.bytes === 'number' ? metadata.bytes : undefined
+				}
+			];
+		});
+	return JSON.stringify(entries);
+};
+
 const loaderIdentities = new WeakMap<object, string>();
 let nextLoaderIdentity = 0;
 
@@ -78,12 +105,31 @@ const LOADER_RUNTIMES = ['python', 'java', 'clang', 'clangd'] as const;
 const RUNTIME_ASSET_KEY_FIELDS = [
 	{ runtime: 'python', property: 'baseUrl', key: 'pythonBaseUrl' },
 	{ runtime: 'python', property: 'loader', key: 'hasPythonLoader', serialize: hasValue },
+	{
+		runtime: 'python',
+		property: 'integrity',
+		key: 'pythonIntegrity',
+		serialize: serializeIntegrity
+	},
 	{ runtime: 'java', property: 'baseUrl', key: 'javaBaseUrl' },
 	{ runtime: 'java', property: 'loader', key: 'hasJavaLoader', serialize: hasValue },
+	{ runtime: 'java', property: 'integrity', key: 'javaIntegrity', serialize: serializeIntegrity },
 	{ runtime: 'clang', property: 'baseUrl', key: 'clangBaseUrl' },
 	{ runtime: 'clang', property: 'loader', key: 'hasClangLoader', serialize: hasValue },
+	{
+		runtime: 'clang',
+		property: 'integrity',
+		key: 'clangIntegrity',
+		serialize: serializeIntegrity
+	},
 	{ runtime: 'clangd', property: 'baseUrl', key: 'clangdBaseUrl' },
 	{ runtime: 'clangd', property: 'loader', key: 'hasClangdLoader', serialize: hasValue },
+	{
+		runtime: 'clangd',
+		property: 'integrity',
+		key: 'clangdIntegrity',
+		serialize: serializeIntegrity
+	},
 	{ runtime: 'rust', property: 'compilerUrl', key: 'rustCompilerUrl' },
 	{ runtime: 'rust', property: 'debugModuleUrl', key: 'rustDebugModuleUrl' },
 	{ runtime: 'go', property: 'compilerUrl', key: 'goCompilerUrl' },

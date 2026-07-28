@@ -94,6 +94,84 @@ describe('WorkerAssetBridge asset requests', () => {
 		});
 	});
 
+	it('verifies configured asset sizes and SHA-256 digests before transfer', async () => {
+		const postMessage = vi.fn();
+		const asset = RUNTIME_LOAD_ASSETS.clang[0];
+		const bridge = new WorkerAssetBridge({ postMessage } as unknown as Worker, 'clang', {
+			baseUrl: '/clang/',
+			loader: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3])),
+			integrity: {
+				[asset]: {
+					bytes: 3,
+					sha256: '039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81'
+				}
+			},
+			useAssetBridge: true
+		});
+
+		bridge.handleMessage({
+			data: { assetRequest: { id: 16, asset } }
+		} as MessageEvent);
+
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
+		expect(postMessage.mock.calls[0]?.[0]).toMatchObject({
+			assetResponse: { id: 16, ok: true }
+		});
+	});
+
+	it('rejects an asset whose SHA-256 digest does not match', async () => {
+		const postMessage = vi.fn();
+		const asset = RUNTIME_LOAD_ASSETS.clang[0];
+		const expectedSha256 = '0'.repeat(64);
+		const bridge = new WorkerAssetBridge({ postMessage } as unknown as Worker, 'clang', {
+			baseUrl: '/clang/',
+			loader: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3])),
+			integrity: { [asset]: { sha256: expectedSha256 } },
+			useAssetBridge: true
+		});
+
+		bridge.handleMessage({
+			data: { assetRequest: { id: 17, asset } }
+		} as MessageEvent);
+
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
+		expect(postMessage).toHaveBeenCalledWith({
+			assetResponse: {
+				id: 17,
+				ok: false,
+				error: `Runtime asset ${asset} SHA-256 mismatch: expected ${expectedSha256}, received 039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81`
+			}
+		});
+	});
+
+	it('rejects requested assets omitted from a configured integrity manifest', async () => {
+		const postMessage = vi.fn();
+		const loader = vi.fn();
+		const asset = RUNTIME_LOAD_ASSETS.clang[0];
+		const bridge = new WorkerAssetBridge({ postMessage } as unknown as Worker, 'clang', {
+			baseUrl: '/clang/',
+			loader,
+			integrity: {
+				[RUNTIME_LOAD_ASSETS.clang[1]]: { sha256: 'a'.repeat(64) }
+			},
+			useAssetBridge: true
+		});
+
+		bridge.handleMessage({
+			data: { assetRequest: { id: 18, asset } }
+		} as MessageEvent);
+
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
+		expect(loader).not.toHaveBeenCalled();
+		expect(postMessage).toHaveBeenCalledWith({
+			assetResponse: {
+				id: 18,
+				ok: false,
+				error: `Runtime asset ${asset} is missing integrity metadata`
+			}
+		});
+	});
+
 	it('copies loader-owned buffers before transferring them to a worker', async () => {
 		const postMessage = vi.fn();
 		const bytes = new Uint8Array([1, 2, 3]);

@@ -37,10 +37,18 @@ export type RuntimeAssetLoader = (
 	request: RuntimeAssetLoadRequest
 ) => RuntimeAssetLoaderResult | Promise<RuntimeAssetLoaderResult>;
 
+export interface RuntimeAssetIntegrityEntry {
+	sha256: string;
+	bytes?: number;
+}
+
+export type RuntimeAssetIntegrityMap = Record<string, string | RuntimeAssetIntegrityEntry>;
+
 export interface RuntimeAssetConfig {
 	baseUrl?: string;
 	loader?: RuntimeAssetLoader;
 	loaderKey?: string;
+	integrity?: RuntimeAssetIntegrityMap;
 }
 
 export interface RustRuntimeAssetConfig {
@@ -326,6 +334,7 @@ export type TinyGoRuntimeAssetLoader = (
 export interface ResolvedRuntimeAssetConfig {
 	baseUrl: string;
 	loader?: RuntimeAssetLoader;
+	integrity?: RuntimeAssetIntegrityMap;
 	useAssetBridge: boolean;
 }
 
@@ -466,7 +475,8 @@ export function resolveRuntimeAssetConfig(
 				currentUrl
 			),
 			loader: runtimeConfig.loader,
-			useAssetBridge: !!runtimeConfig.loader
+			integrity: runtimeConfig.integrity,
+			useAssetBridge: !!runtimeConfig.loader || !!runtimeConfig.integrity
 		};
 	}
 
@@ -474,7 +484,8 @@ export function resolveRuntimeAssetConfig(
 		return {
 			baseUrl: resolveRuntimeRootBaseUrl(runtimeFolder, options.rootUrl, currentUrl),
 			loader: runtimeConfig?.loader,
-			useAssetBridge: !!runtimeConfig?.loader
+			integrity: runtimeConfig?.integrity,
+			useAssetBridge: !!runtimeConfig?.loader || !!runtimeConfig?.integrity
 		};
 	}
 
@@ -482,6 +493,15 @@ export function resolveRuntimeAssetConfig(
 		return {
 			baseUrl: runtimeFolder.virtualBaseUrl,
 			loader: runtimeConfig.loader,
+			integrity: runtimeConfig.integrity,
+			useAssetBridge: true
+		};
+	}
+
+	if (runtimeConfig?.integrity) {
+		return {
+			baseUrl: resolveRuntimeRootBaseUrl(runtimeFolder, '', currentUrl),
+			integrity: runtimeConfig.integrity,
 			useAssetBridge: true
 		};
 	}

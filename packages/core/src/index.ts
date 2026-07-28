@@ -22,6 +22,8 @@ export type {
 export { phaseProgress, progressBandsForLanguage, type ProgressLike } from './progress.js';
 export {
 	createRuntimeAssetsKey,
+	type RuntimeAssetIntegrityEntry,
+	type RuntimeAssetIntegrityMap,
 	type RuntimeAssetKeyInput,
 	type RuntimeAssetKeySource,
 	type RuntimeAssetLoaderKeySource

@@ -195,6 +195,26 @@ describe('runtime asset config resolution', () => {
 		});
 	});
 
+	it('routes integrity-protected assets through the browser bridge', () => {
+		const integrity = {
+			'bin/clang.wasm.gz': {
+				sha256: 'a'.repeat(64),
+				bytes: 123
+			}
+		};
+
+		expect(
+			resolveRuntimeAssetConfig('clang', {
+				rootUrl: '/absproxy/5173',
+				clang: { integrity }
+			})
+		).toEqual({
+			baseUrl: '/absproxy/5173/clang/',
+			integrity,
+			useAssetBridge: true
+		});
+	});
+
 	it('derives the default clangd asset base url from the shared root path', () => {
 		expect(
 			resolveRuntimeAssetConfig(

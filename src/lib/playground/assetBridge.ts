@@ -39,6 +39,30 @@ const transferBuffer = (bytes: Uint8Array, transferOwnership = false) =>
 const expectedAssetsForRuntime = (runtime: RuntimeAssetRuntime) =>
 	new Set<string>(RUNTIME_LOAD_ASSETS[runtime]);
 
+const integrityKey = (config: ResolvedRuntimeAssetConfig) =>
+	JSON.stringify(
+		Object.entries(config.integrity || {})
+			.sort(([left], [right]) => left.localeCompare(right))
+			.map(([asset, entry]) => [
+				asset,
+				typeof entry === 'string' ? entry : { sha256: entry.sha256, bytes: entry.bytes }
+			])
+	);
+
+const sha256Hex = async (bytes: Uint8Array) => {
+	if (!globalThis.crypto?.subtle) {
+		throw new Error('Web Crypto SHA-256 is unavailable');
+	}
+	const input =
+		bytes.byteOffset === 0 &&
+		bytes.byteLength === bytes.buffer.byteLength &&
+		bytes.buffer instanceof ArrayBuffer
+			? bytes.buffer
+			: Uint8Array.from(bytes).buffer;
+	const digest = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', input));
+	return Array.from(digest, (value) => value.toString(16).padStart(2, '0')).join('');
+};
+
 class RuntimeLoadProgress {
 	private readonly fractions = new Map<string, number>();
 	private readonly expectedAssets: Set<string>;
@@ -100,6 +124,7 @@ export class WorkerAssetBridge {
 		return (
 			this.config.baseUrl === config.baseUrl &&
 			this.config.loader === config.loader &&
+			integrityKey(this.config) === integrityKey(config) &&
 			this.config.useAssetBridge === config.useAssetBridge
 		);
 	}
@@ -147,6 +172,7 @@ export class WorkerAssetBridge {
 					`Runtime asset ${request.asset} exceeds the ${MAX_RUNTIME_ASSET_BYTES} byte limit`
 				);
 			}
+			await this.verifyIntegrity(request.asset, loaded.bytes);
 			if (controller.signal.aborted || generation !== this.generation) return;
 			const buffer = transferBuffer(loaded.bytes, loaded.transferOwnership);
 			worker.postMessage(
@@ -178,6 +204,9 @@ export class WorkerAssetBridge {
 		if (!this.expectedAssets.has(asset)) {
 			throw new Error(`Unexpected ${this.runtime} runtime asset: ${asset}`);
 		}
+		if (this.config.integrity && !Object.hasOwn(this.config.integrity, asset)) {
+			throw new Error(`Runtime asset ${asset} is missing integrity metadata`);
+		}
 		const reportProgress = (loaded: number, total?: number) =>
 			this.progress.update(asset, loaded, total);
 		if (this.config.loader) {
@@ -194,6 +223,31 @@ export class WorkerAssetBridge {
 			if (loaded) return loaded;
 		}
 		return await this.fetchAsset(new URL(asset, this.config.baseUrl).href, asset, signal);
+	}
+
+	private async verifyIntegrity(asset: string, bytes: Uint8Array) {
+		const configured = this.config.integrity?.[asset];
+		if (!configured) return;
+		const expected = typeof configured === 'string' ? { sha256: configured } : configured;
+		if (expected.bytes !== undefined) {
+			if (!Number.isSafeInteger(expected.bytes) || expected.bytes < 0) {
+				throw new Error(`Runtime asset ${asset} has an invalid expected byte size`);
+			}
+			if (bytes.byteLength !== expected.bytes) {
+				throw new Error(
+					`Runtime asset ${asset} size mismatch: expected ${expected.bytes} bytes, received ${bytes.byteLength}`
+				);
+			}
+		}
+		if (!/^[a-f0-9]{64}$/u.test(expected.sha256)) {
+			throw new Error(`Runtime asset ${asset} has an invalid expected SHA-256 digest`);
+		}
+		const actual = await sha256Hex(bytes);
+		if (actual !== expected.sha256) {
+			throw new Error(
+				`Runtime asset ${asset} SHA-256 mismatch: expected ${expected.sha256}, received ${actual}`
+			);
+		}
 	}
 
 	private async normalizeLoaderResult(
