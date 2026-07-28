@@ -46,6 +46,8 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 	const resolvedBreakpointsStore = writable<DebugResolvedBreakpoint[]>([]);
 	const sourcePathStore = writable(options.sourcePath ?? '');
 	const pausedSourcePathStore = writable<string | null>(null);
+	const sourceRevisionStaleStore = writable(false);
+	const staleSourcePathsStore = writable<ReadonlySet<string>>(new Set());
 	const breakpointsBySourceStore = writable<ReadonlyMap<string, number[]>>(
 		new Map(
 			(options.sourceBreakpoints || []).map(({ sourcePath, lines }) => [
@@ -93,6 +95,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 	const resolvedBreakpointsState = fromStore(resolvedBreakpointsStore);
 	const sourcePathState = fromStore(sourcePathStore);
 	const pausedSourcePathState = fromStore(pausedSourcePathStore);
+	const sourceRevisionStaleState = fromStore(sourceRevisionStaleStore);
 	const breakpointsBySourceState = fromStore(breakpointsBySourceStore);
 	const runToCursorLineState = fromStore(runToCursorLineStore);
 	const watchInputState = fromStore(watchInputStore);
@@ -215,6 +218,8 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		frameIdStore.set(null);
 		stoppedReasonStore.set(null);
 		pausedSourcePathStore.set(null);
+		sourceRevisionStaleStore.set(false);
+		staleSourcePathsStore.set(new Set());
 		pausedStore.set(false);
 	}
 
@@ -259,8 +264,23 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 			}
 			const pausedSourcePath =
 				event.sourcePath || event.callStack[0]?.sourcePath || get(sourcePathStore);
+			if (event.sourceRevisionStale && pausedSourcePath) {
+				staleSourcePathsStore.update((current) => {
+					const next = new Set(current);
+					next.add(pausedSourcePath);
+					return next;
+				});
+			}
+			const sourceRevisionStale =
+				event.sourceRevisionStale === true ||
+				(!!pausedSourcePath && get(staleSourcePathsStore).has(pausedSourcePath));
 			pausedSourcePathStore.set(pausedSourcePath);
-			pausedLineStore.set(pausedSourcePath === get(sourcePathStore) ? event.line : null);
+			sourceRevisionStaleStore.set(sourceRevisionStale);
+			pausedLineStore.set(
+				!sourceRevisionStale && pausedSourcePath === get(sourcePathStore)
+					? event.line
+					: null
+			);
 			localsStore.set(event.locals);
 			callStackStore.set(event.callStack);
 			scopesStore.set(event.scopes || []);
@@ -289,6 +309,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 			variablesByReferenceStore.set(new Map());
 			stoppedReasonStore.set(null);
 			pausedSourcePathStore.set(null);
+			sourceRevisionStaleStore.set(false);
 			refreshWatchValues();
 			return;
 		}
@@ -314,12 +335,26 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		resolvedBreakpointsStore.set([
 			...(get(resolvedBreakpointsBySourceStore).get(sourcePath) || [])
 		]);
+		const isPausedSource = get(pausedSourcePathStore) === sourcePath;
+		const sourceRevisionStale = isPausedSource && get(staleSourcePathsStore).has(sourcePath);
+		sourceRevisionStaleStore.set(sourceRevisionStale);
 		pausedLineStore.set(
-			get(pausedSourcePathStore) === sourcePath
-				? (get(callStackStore)[0]?.line ?? null)
-				: null
+			isPausedSource && !sourceRevisionStale ? (get(callStackStore)[0]?.line ?? null) : null
 		);
 		syncBreakpoints();
+	}
+
+	function markSourceRevisionStale(sourcePath = get(sourcePathStore)) {
+		if (!get(activeStore) || !sourcePath) return;
+		staleSourcePathsStore.update((current) => {
+			const next = new Set(current);
+			next.add(sourcePath);
+			return next;
+		});
+		if (get(pausedSourcePathStore) === sourcePath) {
+			sourceRevisionStaleStore.set(true);
+			pausedLineStore.set(null);
+		}
 	}
 
 	function setBreakpoints(lines: number[]) {
@@ -476,6 +511,9 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		get pausedSourcePath() {
 			return pausedSourcePathState.current;
 		},
+		get sourceRevisionStale() {
+			return sourceRevisionStaleState.current;
+		},
 		get resolvedBreakpoints() {
 			return resolvedBreakpointsState.current;
 		},
@@ -526,6 +564,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		setTerminal,
 		setAdapter,
 		setSourcePath,
+		markSourceRevisionStale,
 		setBreakpoints,
 		setCursorLine,
 		sendCommand,

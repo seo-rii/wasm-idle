@@ -21,3 +21,9 @@ Debug execution is exposed through one adapter contract:
 lazy through `variablesReference`; consumers should not serialize an entire LLDB variable tree.
 Supply an LLDB DAP session from `@wasm-idle/llvm-core/debug`. Runtime assets remain owned by the
 `wasm-llvm` producer and are deliberately excluded from this package.
+
+LLDB pause, frame, and breakpoint events carry the SHA-256 of the compiled source when the artifact
+provides it. Hosts should call `markSourceRevisionStale(sourcePath)` when an editor model changes
+during an active session. The controller keeps execution controls available but clears the paused
+line for that source and exposes `sourceRevisionStale`, preventing a valid DWARF location from being
+drawn against newer text.

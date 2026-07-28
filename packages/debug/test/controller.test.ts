@@ -345,4 +345,39 @@ describe('createDebugSessionController', () => {
 		]);
 		expect(setBreakpoints).toHaveBeenLastCalledWith([4], '/workspace/main.cpp');
 	});
+
+	it('keeps a paused session controllable while hiding stale source locations', () => {
+		const controller = createDebugSessionController({
+			sourcePath: '/workspace/main.cpp'
+		});
+
+		controller.begin();
+		controller.handleEvent({
+			type: 'pause',
+			line: 7,
+			reason: 'breakpoint',
+			sourcePath: '/workspace/main.cpp',
+			sourceContentSha256: 'compiled-source-sha',
+			locals: [],
+			callStack: [
+				{
+					functionName: 'main',
+					line: 7,
+					sourcePath: '/workspace/main.cpp',
+					sourceContentSha256: 'compiled-source-sha'
+				}
+			]
+		});
+		expect(controller.pausedLine).toBe(7);
+		expect(controller.sourceRevisionStale).toBe(false);
+
+		controller.markSourceRevisionStale('/workspace/main.cpp');
+
+		expect(controller.paused).toBe(true);
+		expect(controller.pausedLine).toBe(null);
+		expect(controller.sourceRevisionStale).toBe(true);
+
+		controller.handleEvent({ type: 'resume', command: 'continue' });
+		expect(controller.sourceRevisionStale).toBe(false);
+	});
 });

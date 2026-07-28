@@ -40,6 +40,7 @@ export interface DebugFrame {
 	id?: number;
 	column?: number;
 	sourcePath?: string;
+	sourceContentSha256?: string;
 }
 
 export interface DebugScope {
@@ -73,11 +74,14 @@ export type DebugSessionEvent =
 			scopes?: DebugScope[];
 			stoppedReason?: string;
 			sourcePath?: string;
+			sourceContentSha256?: string;
+			sourceRevisionStale?: boolean;
 	  }
 	| { type: 'resume'; command: DebugCommand }
 	| {
 			type: 'breakpoints';
 			sourcePath: string;
+			sourceContentSha256?: string;
 			breakpoints: DebugResolvedBreakpoint[];
 	  }
 	| { type: 'stop' };

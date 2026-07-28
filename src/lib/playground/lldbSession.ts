@@ -113,6 +113,7 @@ export class LldbSandboxSession {
 	private breakpointVersion = 0;
 	private dapExitCode: number | null = null;
 	private readonly breakpointsBySource = new Map<`/workspace/${string}`, number[]>();
+	private readonly sourceContentSha256ByPath = new Map<string, string>();
 
 	constructor(private readonly options: LldbSandboxSessionOptions) {
 		const sourceBreakpoints = options.sourceBreakpoints?.length
@@ -120,6 +121,11 @@ export class LldbSandboxSession {
 			: [{ sourcePath: options.sourcePath, lines: options.breakpoints }];
 		for (const { sourcePath, lines } of sourceBreakpoints) {
 			this.breakpointsBySource.set(sourcePath, [...lines]);
+		}
+		for (const source of options.artifact.sources) {
+			if (source.contentSha256) {
+				this.sourceContentSha256ByPath.set(source.path, source.contentSha256);
+			}
 		}
 	}
 
@@ -444,17 +450,26 @@ export class LldbSandboxSession {
 		if (version !== this.stateVersion || this.session !== session) return;
 		this.activeThreadId = threadId;
 		this.activeFrameId = selectedFrame.id;
-		const callStack = frames.map<DebugFrame>((frame) => ({
-			id: frame.id,
-			functionName: frame.name,
-			line: frame.line,
-			column: frame.column,
-			sourcePath: frame.source?.path
-		}));
+		const callStack = frames.map<DebugFrame>((frame) => {
+			const sourcePath = frame.source?.path;
+			const sourceContentSha256 = this.sourceContentSha256ByPath.get(sourcePath || '');
+			return {
+				id: frame.id,
+				functionName: frame.name,
+				line: frame.line,
+				column: frame.column,
+				sourcePath,
+				...(sourceContentSha256 ? { sourceContentSha256 } : {})
+			};
+		});
+		const sourceContentSha256 = this.sourceContentSha256ByPath.get(
+			selectedFrame.source?.path || ''
+		);
 		this.options.onDebugEvent({
 			type: 'pause',
 			line: selectedFrame.line,
 			sourcePath: selectedFrame.source?.path,
+			...(sourceContentSha256 ? { sourceContentSha256 } : {}),
 			reason: pauseReason(reason, this.command),
 			stoppedReason: reason,
 			threadId,
@@ -523,9 +538,11 @@ export class LldbSandboxSession {
 		requestedLines: number[],
 		sourcePath = this.options.sourcePath
 	) {
+		const sourceContentSha256 = this.sourceContentSha256ByPath.get(sourcePath);
 		this.options.onDebugEvent({
 			type: 'breakpoints',
 			sourcePath,
+			...(sourceContentSha256 ? { sourceContentSha256 } : {}),
 			breakpoints: requestedLines.map((requestedLine, index) => ({
 				requestedLine,
 				line: breakpoints[index]?.line ?? requestedLine,

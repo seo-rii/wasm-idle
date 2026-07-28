@@ -500,6 +500,29 @@ describe('native-source browser debugging in Chromium', () => {
 									previousLine
 							);
 						}, stepStartLine);
+						if (
+							requireLldbDebug &&
+							testCase.backend === 'lldb' &&
+							testCase.language === 'C'
+						) {
+							await page.evaluate(
+								async (source) =>
+									await (window as any).__wasmIdleDebug.setEditorValue(
+										`${source}\n// edited after the LLDB artifact was compiled`
+									),
+								testCase.source
+							);
+							await page.waitForFunction(() =>
+								Array.from(document.querySelectorAll('.debug-metric')).some(
+									(metric) =>
+										metric.querySelector('span')?.textContent?.trim() ===
+											'Source' &&
+										metric.querySelector('strong')?.textContent?.trim() ===
+											'Changed'
+								)
+							);
+							expect(await readPausedLine(page)).toBe('—');
+						}
 						await page.locator('button[aria-label="Continue"]').click();
 						await page.waitForFunction(
 							(expectedOutput) =>

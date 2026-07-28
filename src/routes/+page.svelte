@@ -1098,6 +1098,9 @@
 		const file = activeFile;
 		if (!file || file.content === value) return;
 		file.content = value;
+		if (debug.active) {
+			debug.markSourceRevisionStale(`/workspace/${file.path}`);
+		}
 		saveStatus = 'Saving...';
 	}
 
@@ -2776,6 +2779,15 @@
 							<div class="debug-metric">
 								<span>Reason</span>
 								<strong>{debug.stoppedReason}</strong>
+							</div>
+						{/if}
+						{#if debug.paused && debug.sourceRevisionStale}
+							<div
+								class="debug-metric"
+								title="The editor source changed after this debug session started."
+							>
+								<span>Source</span>
+								<strong>Changed</strong>
 							</div>
 						{/if}
 					</div>

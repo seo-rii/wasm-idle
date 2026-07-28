@@ -71,6 +71,12 @@ describe('example route debug actions', () => {
 			/\$effect\(\(\) => \{\s+debug\.setSourcePath\(activeDebugSourcePath\);\s+\}\);/s
 		);
 		expect(source).toMatch(/debug\.begin\(\);/);
+		expect(source).toMatch(
+			/debug\.markSourceRevisionStale\(`\/workspace\/\$\{file\.path\}`\);/
+		);
+		expect(source).toMatch(/debug\.sourceRevisionStale/);
+		expect(source).toContain('<span>Source</span>');
+		expect(source).toContain('<strong>Changed</strong>');
 		expect(source).toMatch(/breakpoints: \[\.\.\.debug\.effectiveBreakpoints\],/);
 		expect(source).toMatch(/sourceBreakpoints: debug\.sourceBreakpoints\.filter/);
 		expect(source).toMatch(

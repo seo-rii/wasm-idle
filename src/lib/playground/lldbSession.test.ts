@@ -150,7 +150,18 @@ describe('LldbSandboxSession', () => {
 			artifact: {
 				bytes: Uint8Array.of(0, 97, 115, 109),
 				descriptor: { moduleSha256: 'module-sha' },
-				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+				sources: [
+					{
+						path: '/workspace/main.cpp',
+						content: 'int main() {}',
+						contentSha256: 'main-source-sha'
+					},
+					{
+						path: '/workspace/lib.cpp',
+						content: 'int helper() {}',
+						contentSha256: 'lib-source-sha'
+					}
+				]
 			},
 			sourcePath: '/workspace/main.cpp',
 			breakpoints: [6],
@@ -205,6 +216,7 @@ describe('LldbSandboxSession', () => {
 		expect(events).toContainEqual({
 			type: 'breakpoints',
 			sourcePath: '/workspace/main.cpp',
+			sourceContentSha256: 'main-source-sha',
 			breakpoints: [
 				{
 					requestedLine: 6,
@@ -229,6 +241,7 @@ describe('LldbSandboxSession', () => {
 					type: 'pause',
 					line: 6,
 					sourcePath: '/workspace/main.cpp',
+					sourceContentSha256: 'main-source-sha',
 					threadId: 7,
 					frameId: 41,
 					stoppedReason: 'breakpoint',
@@ -236,7 +249,8 @@ describe('LldbSandboxSession', () => {
 					callStack: [
 						expect.objectContaining({
 							functionName: 'main',
-							sourcePath: '/workspace/main.cpp'
+							sourcePath: '/workspace/main.cpp',
+							sourceContentSha256: 'main-source-sha'
 						}),
 						expect.objectContaining({ functionName: '_start' })
 					],
