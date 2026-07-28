@@ -1,3 +1,5 @@
+import type { DebugMemory as CoreDebugMemory } from '@wasm-idle/core';
+
 export type DebugAdapterKind = 'trace' | 'lldb';
 
 export interface DebugCapabilities {
@@ -132,11 +134,7 @@ export interface DebugVariable {
 	memoryReference?: string;
 }
 
-export interface DebugMemory {
-	address?: string;
-	data: Uint8Array;
-	unreadableBytes: number;
-}
+export type DebugMemory = CoreDebugMemory;
 
 export interface DebugEvaluateResult {
 	result: string;

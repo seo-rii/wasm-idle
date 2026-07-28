@@ -80,3 +80,5 @@ manifest and all six debug assets are downloaded from that immutable revision an
 the browser starts; the test cannot silently fall back to trace debugging. At each C, C++, and Rust
 source pause, the gate also verifies that LLDB scopes remain lazy until their
 `variablesReference` is requested and then contain the expected local value.
+It then sends a DAP `readMemory` request for four bytes of Wasm linear memory through the complete
+Sandbox and Terminal control path and verifies that the response is readable before resuming.

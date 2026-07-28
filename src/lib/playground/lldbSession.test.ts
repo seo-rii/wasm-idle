@@ -87,6 +87,13 @@ class FakeRuntimeSession {
 				]
 			} as T;
 		}
+		if (command === 'readMemory') {
+			return {
+				address: '0x1004',
+				data: 'AQIDBA==',
+				unreadableBytes: 2
+			} as T;
+		}
 		if (command === 'evaluate') return { result: '42' } as T;
 		return {} as T;
 	}
@@ -505,6 +512,45 @@ describe('LldbSandboxSession', () => {
 		expect(runtimeState.session!.disposeCount).toBe(1);
 
 		releaseDispose();
+		await expect(completion).resolves.toBe(true);
+	});
+
+	it('reads target memory through DAP and decodes the returned bytes', async () => {
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: true,
+			onDebugEvent: () => undefined,
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({
+					manifestVersion: 2,
+					debugger: { capabilities: { readMemory: true } }
+				})
+			})) as unknown as typeof fetch
+		});
+
+		const completion = controller.start();
+		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+
+		await expect(controller.readMemory('0x1000', 4, 6)).resolves.toEqual({
+			address: '0x1004',
+			data: Uint8Array.of(1, 2, 3, 4),
+			unreadableBytes: 2
+		});
+		expect(runtimeState.session?.requests).toContainEqual({
+			command: 'readMemory',
+			args: { memoryReference: '0x1000', offset: 4, count: 6 }
+		});
+
+		await controller.disconnect();
 		await expect(completion).resolves.toBe(true);
 	});
 

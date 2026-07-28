@@ -146,6 +146,35 @@ int main() {
 		expect(settled).toBe(true);
 	});
 
+	it('forwards target memory reads to the active LLDB session', async () => {
+		const sandbox = new Clang('C');
+		const readMemory = vi.fn(
+			async (_memoryReference: string, _offset: number, _count: number) => ({
+				address: '0x10',
+				data: Uint8Array.of(7, 3),
+				unreadableBytes: 0
+			})
+		);
+		(
+			sandbox as unknown as {
+				lldbSession: { readMemory: typeof readMemory };
+			}
+		).lldbSession = { readMemory };
+
+		await expect(
+			(sandbox as unknown as { debugReadMemory: typeof readMemory }).debugReadMemory(
+				'0x10',
+				0,
+				2
+			)
+		).resolves.toEqual({
+			address: '0x10',
+			data: Uint8Array.of(7, 3),
+			unreadableBytes: 0
+		});
+		expect(readMemory).toHaveBeenCalledWith('0x10', 0, 2);
+	});
+
 	it('configures the C++ worker asset bridge when a clang loader is provided', async () => {
 		const sandbox = new Clang('CPP');
 		const loader = vi.fn();

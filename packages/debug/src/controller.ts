@@ -1,6 +1,7 @@
 import type {
 	DebugCommand,
 	DebugFrame,
+	DebugMemory,
 	DebugResolvedBreakpoint,
 	DebugScope,
 	DebugSessionEvent,
@@ -19,7 +20,13 @@ export type DebugWatchValue = {
 
 export type DebugTerminalControl = Pick<
 	TerminalControl,
-	'debugCommand' | 'debugPause' | 'setBreakpoints' | 'debugEvaluate' | 'debugVariables' | 'stop'
+	| 'debugCommand'
+	| 'debugPause'
+	| 'setBreakpoints'
+	| 'debugEvaluate'
+	| 'debugVariables'
+	| 'debugReadMemory'
+	| 'stop'
 >;
 
 export type DebugSessionControllerOptions = {
@@ -474,6 +481,24 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		return variables;
 	}
 
+	async function readMemory(
+		memoryReference: string,
+		offset: number,
+		count: number
+	): Promise<DebugMemory | null> {
+		if (
+			!get(pausedStore) ||
+			!memoryReference ||
+			!Number.isInteger(offset) ||
+			!Number.isInteger(count) ||
+			count < 0
+		) {
+			return null;
+		}
+		const terminal = get(terminalStore);
+		return (await terminal?.debugReadMemory?.(memoryReference, offset, count)) ?? null;
+	}
+
 	return {
 		get active() {
 			return activeState.current;
@@ -574,7 +599,8 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		addWatchExpression,
 		removeWatchExpression,
 		clearWatches,
-		loadVariableChildren
+		loadVariableChildren,
+		readMemory
 	};
 }
 

@@ -310,6 +310,36 @@ describe('createDebugSessionController', () => {
 		]);
 	});
 
+	it('reads LLDB memory through the paused terminal session', async () => {
+		const debugReadMemory = vi.fn(async () => ({
+			address: '0x20',
+			data: Uint8Array.of(0x2a, 0x00),
+			unreadableBytes: 0
+		}));
+		const controller = createDebugSessionController({
+			terminal: {
+				debugCommand: vi.fn(async () => undefined),
+				debugReadMemory
+			} as never
+		});
+
+		controller.begin();
+		controller.handleEvent({
+			type: 'pause',
+			line: 3,
+			reason: 'breakpoint',
+			locals: [],
+			callStack: []
+		});
+
+		await expect(controller.readMemory('0x20', 0, 2)).resolves.toEqual({
+			address: '0x20',
+			data: Uint8Array.of(0x2a, 0x00),
+			unreadableBytes: 0
+		});
+		expect(debugReadMemory).toHaveBeenCalledWith('0x20', 0, 2);
+	});
+
 	it('keeps breakpoints and resolved locations isolated by source path', () => {
 		const setBreakpoints = vi.fn(async () => undefined);
 		const controller = createDebugSessionController({

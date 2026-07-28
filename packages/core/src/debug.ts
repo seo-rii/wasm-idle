@@ -50,6 +50,12 @@ export interface DebugScope {
 	variables: DebugVariable[];
 }
 
+export interface DebugMemory {
+	address?: string;
+	data: Uint8Array;
+	unreadableBytes: number;
+}
+
 export interface DebugResolvedBreakpoint {
 	requestedLine: number;
 	line: number;

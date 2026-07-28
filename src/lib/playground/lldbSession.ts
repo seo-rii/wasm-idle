@@ -1,6 +1,7 @@
 import type {
 	DebugCommand,
 	DebugFrame,
+	DebugMemory,
 	DebugPauseReason,
 	DebugScope,
 	DebugSessionEvent,
@@ -110,6 +111,7 @@ export class LldbSandboxSession {
 	private lifecycleVersion = 0;
 	private initialized = false;
 	private supportsEvaluateExpressions = false;
+	private supportsReadMemory = false;
 	private breakpointVersion = 0;
 	private dapExitCode: number | null = null;
 	private readonly breakpointsBySource = new Map<`/workspace/${string}`, number[]>();
@@ -146,6 +148,7 @@ export class LldbSandboxSession {
 		);
 		this.supportsEvaluateExpressions =
 			manifest.debugger?.capabilities?.evaluateExpressions === true;
+		this.supportsReadMemory = manifest.debugger?.capabilities?.readMemory === true;
 		if (lifecycleVersion !== this.lifecycleVersion) return completion;
 		const artifactCompiler = this.options.artifact.descriptor?.compiler;
 		if (
@@ -335,12 +338,40 @@ export class LldbSandboxSession {
 		}));
 	}
 
+	async readMemory(
+		memoryReference: string,
+		offset: number,
+		count: number
+	): Promise<DebugMemory | null> {
+		if (!this.supportsReadMemory) return null;
+		const response = await this.requireSession().request<{
+			address?: string;
+			data?: string;
+			unreadableBytes?: number;
+		}>('readMemory', {
+			memoryReference,
+			offset,
+			count
+		});
+		const binary = globalThis.atob(response.data || '');
+		const data = new Uint8Array(binary.length);
+		for (let index = 0; index < binary.length; index += 1) {
+			data[index] = binary.charCodeAt(index);
+		}
+		return {
+			address: response.address,
+			data,
+			unreadableBytes: response.unreadableBytes ?? 0
+		};
+	}
+
 	async disconnect() {
 		this.lifecycleVersion += 1;
 		this.stateVersion += 1;
 		this.inputReady = false;
 		this.initialized = false;
 		this.supportsEvaluateExpressions = false;
+		this.supportsReadMemory = false;
 		this.dapExitCode = null;
 		const session = this.session;
 		this.session = undefined;
@@ -488,6 +519,7 @@ export class LldbSandboxSession {
 		this.inputReady = false;
 		this.initialized = false;
 		this.supportsEvaluateExpressions = false;
+		this.supportsReadMemory = false;
 		this.dapExitCode = null;
 		const session = this.session;
 		this.session = undefined;
@@ -518,6 +550,7 @@ export class LldbSandboxSession {
 		this.inputReady = false;
 		this.initialized = false;
 		this.supportsEvaluateExpressions = false;
+		this.supportsReadMemory = false;
 		this.dapExitCode = null;
 		const session = this.session;
 		this.session = undefined;

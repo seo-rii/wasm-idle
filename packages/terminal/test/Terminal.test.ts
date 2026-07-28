@@ -64,6 +64,9 @@ describe('Terminal source', () => {
 		expect(source).toMatch(
 			/sourceBreakpoints: Array\.from\(\s*pendingDebugBreakpoints,\s*\(\[sourcePath, lines\]\) => \(\{\s*sourcePath,\s*lines: \[\.\.\.lines\]\s*\}\)\s*\)/s
 		);
+		expect(source).toMatch(
+			/async debugReadMemory\(memoryReference: string, offset: number, count: number\) \{\s+await wait\(\);\s+return \(await sandbox\.debugReadMemory\?\.\(memoryReference, offset, count\)\) \?\? null;\s+\}/s
+		);
 	});
 
 	it('submits pending stdin and sends EOF on ctrl+d for read-to-end programs', () => {

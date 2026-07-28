@@ -4,6 +4,7 @@ export type {
 	DebugArrayElementKind,
 	DebugCommand,
 	DebugFrame,
+	DebugMemory,
 	DebugPauseReason,
 	DebugResolvedBreakpoint,
 	DebugSessionEvent,

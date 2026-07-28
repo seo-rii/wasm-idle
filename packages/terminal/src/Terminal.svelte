@@ -356,6 +356,10 @@
 			await wait();
 			return (await sandbox.debugVariables?.(variablesReference, start, count)) || [];
 		},
+		async debugReadMemory(memoryReference: string, offset: number, count: number) {
+			await wait();
+			return (await sandbox.debugReadMemory?.(memoryReference, offset, count)) ?? null;
+		},
 		async waitForInput() {
 			await waitForInput();
 		},

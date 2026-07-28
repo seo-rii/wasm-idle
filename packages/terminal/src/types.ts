@@ -109,6 +109,7 @@ export interface TerminalControl extends Omit<
 export type {
 	DebugCommand,
 	DebugFrame,
+	DebugMemory,
 	DebugResolvedBreakpoint,
 	DebugSessionEvent,
 	DebugScope,

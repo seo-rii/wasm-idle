@@ -22,6 +22,11 @@ lazy through `variablesReference`; consumers should not serialize an entire LLDB
 Supply an LLDB DAP session from `@wasm-idle/llvm-core/debug`. Runtime assets remain owned by the
 `wasm-llvm` producer and are deliberately excluded from this package.
 
+The playground-facing controller also exposes `readMemory(memoryReference, offset, count)` while
+the target is paused. `DebugMemory` crosses the framework-neutral Sandbox and Terminal contracts
+as a `Uint8Array`; browser automation and other serialization boundaries should explicitly convert
+that array to plain byte values instead of relying on implicit typed-array serialization.
+
 LLDB pause, frame, and breakpoint events carry the SHA-256 of the compiled source when the artifact
 provides it. Hosts should call `markSourceRevisionStale(sourcePath)` when an editor model changes
 during an active session. The controller keeps execution controls available but clears the paused

@@ -141,6 +141,35 @@ describe('Rust sandbox', () => {
 		expect(settled).toBe(true);
 	});
 
+	it('forwards target memory reads to the active LLDB session', async () => {
+		const sandbox = new Rust();
+		const readMemory = vi.fn(
+			async (_memoryReference: string, _offset: number, _count: number) => ({
+				address: '0x40',
+				data: Uint8Array.of(4, 2),
+				unreadableBytes: 0
+			})
+		);
+		(
+			sandbox as unknown as {
+				lldbSession: { readMemory: typeof readMemory };
+			}
+		).lldbSession = { readMemory };
+
+		await expect(
+			(sandbox as unknown as { debugReadMemory: typeof readMemory }).debugReadMemory(
+				'0x40',
+				0,
+				2
+			)
+		).resolves.toEqual({
+			address: '0x40',
+			data: Uint8Array.of(4, 2),
+			unreadableBytes: 0
+		});
+		expect(readMemory).toHaveBeenCalledWith('0x40', 0, 2);
+	});
+
 	it('loads the rust worker and forwards diagnostics plus run output', async () => {
 		const sandbox = new Rust();
 		const outputs: string[] = [];

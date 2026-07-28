@@ -415,6 +415,12 @@ class Rust implements Sandbox {
 		return this.lldbSession?.variables(variablesReference, start, count) ?? Promise.resolve([]);
 	}
 
+	debugReadMemory(memoryReference: string, offset: number, count: number) {
+		return (
+			this.lldbSession?.readMemory(memoryReference, offset, count) ?? Promise.resolve(null)
+		);
+	}
+
 	kill() {
 		return this.terminate();
 	}

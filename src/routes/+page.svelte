@@ -712,6 +712,15 @@
 			start?: number,
 			count?: number
 		) => Promise<DebugVariable[]>;
+		readDebugMemory: (
+			memoryReference: string,
+			offset: number,
+			count: number
+		) => Promise<{
+			address?: string;
+			data: number[];
+			unreadableBytes: number;
+		} | null>;
 		setPreloadedStdin: (text: string) => void;
 	};
 	let browserDebugHookVersion = 0;
@@ -2054,6 +2063,10 @@
 			},
 			loadDebugVariables(variablesReference: number, start?: number, count?: number) {
 				return debug.loadVariableChildren(variablesReference, start, count);
+			},
+			async readDebugMemory(memoryReference: string, offset: number, count: number) {
+				const memory = await debug.readMemory(memoryReference, offset, count);
+				return memory ? { ...memory, data: Array.from(memory.data) } : null;
 			},
 			setPreloadedStdin(text: string) {
 				stdinInput = text;

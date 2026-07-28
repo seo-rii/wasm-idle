@@ -534,6 +534,14 @@ describe('native-source browser debugging in Chromium', () => {
 								(window as any).__wasmIdleDebug.getDebugState()
 							);
 							expect(loadedState.variablesByReference.length).toBeGreaterThan(0);
+							const memory = await page.evaluate(() =>
+								(window as any).__wasmIdleDebug.readDebugMemory('0', 0, 4)
+							);
+							expect(memory).toMatchObject({
+								data: expect.any(Array),
+								unreadableBytes: 0
+							});
+							expect(memory.data).toHaveLength(4);
 						}
 						if (
 							requireLldbDebug &&

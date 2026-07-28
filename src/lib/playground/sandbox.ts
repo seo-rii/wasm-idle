@@ -1,6 +1,7 @@
 import type {
 	CompilerDiagnostic,
 	DebugCommand,
+	DebugMemory,
 	DebugSessionEvent,
 	SandboxExecutionOptions
 } from '$lib/playground/options';
@@ -41,6 +42,11 @@ export interface Sandbox {
 	debugPause?: () => void | Promise<void>;
 	setBreakpoints?: (lines: number[], sourcePath?: string) => void | Promise<void>;
 	debugEvaluate?: (expression: string) => Promise<string>;
+	debugReadMemory?: (
+		memoryReference: string,
+		offset: number,
+		count: number
+	) => Promise<DebugMemory | null>;
 	image?: (data: { mime: string; b64: string; ts?: number }) => void;
 	elapse?: number;
 }
