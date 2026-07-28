@@ -55,6 +55,7 @@
 		input = '',
 		inputCursor = 0,
 		pendingSandboxInput: string[] = [],
+		pendingDebugBreakpoints = new Map<string, number[]>(),
 		pendingSandboxEof = false,
 		sandbox: BoundSandbox,
 		sandboxAcceptingInput = false,
@@ -299,13 +300,24 @@
 			args: string[] = [],
 			options: TerminalExecutionOptions = {}
 		) {
+			pendingDebugBreakpoints.clear();
+			for (const { sourcePath, lines } of options.sourceBreakpoints || []) {
+				pendingDebugBreakpoints.set(sourcePath, [...lines]);
+			}
 			await Promise.all([
 				initSandbox(language).then(() => sandbox.load(code, log, args, options, prog)),
 				initTerm()
 			]);
+			const executionOptions = {
+				...options,
+				sourceBreakpoints: Array.from(pendingDebugBreakpoints, ([sourcePath, lines]) => ({
+					sourcePath,
+					lines: [...lines]
+				}))
+			};
 			sandboxAcceptingInput = true;
 			flushPendingSandboxInput();
-			return await runSandbox(sandbox.run(code, false, log, prog, args, options));
+			return await runSandbox(sandbox.run(code, false, log, prog, args, executionOptions));
 		},
 		async destroy() {
 			await wait();
@@ -325,15 +337,24 @@
 		},
 		async debugCommand(command: DebugCommand) {
 			await wait();
-			sandbox.debugCommand?.(command);
+			await sandbox.debugCommand?.(command);
 		},
-		async setBreakpoints(lines: number[]) {
+		async debugPause() {
 			await wait();
-			sandbox?.setBreakpoints?.(lines);
+			await sandbox.debugPause?.();
+		},
+		async setBreakpoints(lines: number[], sourcePath?: string) {
+			pendingDebugBreakpoints.set(sourcePath || '', [...lines]);
+			await wait();
+			await sandbox?.setBreakpoints?.(lines, sourcePath);
 		},
 		async debugEvaluate(expression: string) {
 			await wait();
 			return (await sandbox.debugEvaluate?.(expression)) || '?';
+		},
+		async debugVariables(variablesReference: number, start?: number, count?: number) {
+			await wait();
+			return (await sandbox.debugVariables?.(variablesReference, start, count)) || [];
 		},
 		async waitForInput() {
 			await waitForInput();

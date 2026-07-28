@@ -1,6 +1,7 @@
 import type {
 	BoundSandbox as CoreBoundSandbox,
 	DebugCommand,
+	DebugSourceBreakpoints,
 	PlaygroundBinding as CorePlaygroundBinding,
 	ProgressLike,
 	SandboxExecutionOptions as CoreSandboxExecutionOptions,
@@ -19,6 +20,7 @@ export interface CompilerDiagnostic {
 }
 
 export type RustTargetTriple = 'wasm32-wasip1' | 'wasm32-wasip2' | 'wasm32-wasip3';
+export type BrowserDebugMode = 'none' | 'trace' | 'lldb';
 export type GoTarget = 'wasip1/wasm' | 'wasip2/wasm' | 'wasip3/wasm' | 'js/wasm';
 export type TinyGoTarget = 'wasm' | 'wasip1' | 'wasip2' | 'wasip3';
 export type OcamlBackend = 'js' | 'wasm';
@@ -31,8 +33,11 @@ export interface SandboxWorkspaceFile {
 }
 
 export interface SandboxExecutionOptions {
+	debugMode?: BrowserDebugMode;
+	/** @deprecated Use debugMode. */
 	debug?: boolean;
 	breakpoints?: number[];
+	sourceBreakpoints?: DebugSourceBreakpoints[];
 	pauseOnEntry?: boolean;
 	stdin?: string;
 	activePath?: string;
@@ -104,7 +109,9 @@ export interface TerminalControl extends Omit<
 export type {
 	DebugCommand,
 	DebugFrame,
+	DebugResolvedBreakpoint,
 	DebugSessionEvent,
+	DebugScope,
 	DebugVariable,
 	ProgressLike
 } from '@wasm-idle/core';

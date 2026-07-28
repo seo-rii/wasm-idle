@@ -51,9 +51,18 @@ describe('Terminal source', () => {
 		);
 	});
 
-	it('ignores breakpoint synchronization before a sandbox is loaded', () => {
+	it('awaits debugger controls and queues source breakpoints before a sandbox is loaded', () => {
 		expect(source).toMatch(
-			/async setBreakpoints\(lines: number\[\]\) \{\s+await wait\(\);\s+sandbox\?\.setBreakpoints\?\.\(lines\);\s+\}/s
+			/async debugCommand\(command: DebugCommand\) \{\s+await wait\(\);\s+await sandbox\.debugCommand\?\.\(command\);\s+\}/s
+		);
+		expect(source).toMatch(
+			/async debugPause\(\) \{\s+await wait\(\);\s+await sandbox\.debugPause\?\.\(\);\s+\}/s
+		);
+		expect(source).toMatch(
+			/async setBreakpoints\(lines: number\[\], sourcePath\?: string\) \{\s+pendingDebugBreakpoints\.set\(sourcePath \|\| '', \[\.\.\.lines\]\);\s+await wait\(\);\s+await sandbox\?\.setBreakpoints\?\.\(lines, sourcePath\);\s+\}/s
+		);
+		expect(source).toMatch(
+			/sourceBreakpoints: Array\.from\(\s*pendingDebugBreakpoints,\s*\(\[sourcePath, lines\]\) => \(\{\s*sourcePath,\s*lines: \[\.\.\.lines\]\s*\}\)\s*\)/s
 		);
 	});
 
@@ -165,7 +174,7 @@ describe('Terminal source', () => {
 			/async write\(input: string\) \{\s+await waitForInput\(\);\s+if \(!input\) return;\s+applyPastedText\(input\);/s
 		);
 		expect(source).toMatch(
-			/sandboxAcceptingInput = true;\s+flushPendingSandboxInput\(\);\s+return await runSandbox\(sandbox\.run\(code, false, log, prog, args, options\)\);/s
+			/sandboxAcceptingInput = true;\s+flushPendingSandboxInput\(\);\s+return await runSandbox\(sandbox\.run\(code, false, log, prog, args, executionOptions\)\);/s
 		);
 		expect(source).toMatch(/\.finally\(\(\) => \{\s+sandboxAcceptingInput = false;/s);
 	});
