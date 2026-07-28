@@ -65,3 +65,8 @@ runtime reports a real exit, abort, or session disposal.
 The debug runtime requires a cross-origin-isolated page with `SharedArrayBuffer`. LLDB and WAMR
 assets are lazy-loaded from the versioned producer manifest and are not included in this npm
 package.
+
+Repository CI runs `test:browser:debug:lldb` for every pull request and `main` push in a dedicated
+Chromium job. The gate installs Chromium, prepares the external Clang test assets, and requires the
+pinned product LLDB/WAMR binaries for C, C++, and Rust; the test cannot silently fall back to trace
+debugging.

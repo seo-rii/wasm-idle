@@ -1,0 +1,33 @@
+name: LLDB browser integration
+
+on:
+    pull_request:
+        branches: [main]
+    push:
+        branches: [main]
+    workflow_dispatch:
+
+permissions:
+    contents: read
+
+concurrency:
+    group: lldb-browser-${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    product-lldb-wamr:
+        runs-on: ubuntu-latest
+        timeout-minutes: 90
+        steps:
+            - uses: actions/checkout@v4
+            - uses: pnpm/action-setup@v4
+              with:
+                  version: 10.30.0
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 24
+                  cache: pnpm
+            - run: pnpm install --frozen-lockfile
+            - run: pnpm exec playwright-core install --with-deps chromium
+            - run: pnpm run prepare:test-assets -- clang
+            - run: pnpm run test:browser:debug:lldb
