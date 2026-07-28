@@ -1,4 +1,9 @@
-import type { DebugCommand, DebugSessionEvent } from './debug.js';
+import type {
+	DebugCommand,
+	DebugSessionEvent,
+	DebugSourceBreakpoints,
+	DebugVariable
+} from './debug.js';
 import type { ProgressLike } from './progress.js';
 import type { RuntimeAssetKeySource } from './runtime-assets.js';
 
@@ -7,6 +12,7 @@ export type SandboxProgress = ProgressLike;
 
 export interface SandboxExecutionOptions {
 	[key: string]: unknown;
+	sourceBreakpoints?: DebugSourceBreakpoints[];
 }
 
 export interface Sandbox {
@@ -35,9 +41,15 @@ export interface Sandbox {
 	output?: (data: string) => void;
 	ondebug?: (event: DebugSessionEvent) => void;
 	oncompilerdiagnostic?: (diagnostic: unknown) => void;
-	debugCommand?: (command: DebugCommand) => void;
-	setBreakpoints?: (lines: number[]) => void;
+	debugCommand?: (command: DebugCommand) => void | Promise<void>;
+	debugPause?: () => void | Promise<void>;
+	setBreakpoints?: (lines: number[], sourcePath?: string) => void | Promise<void>;
 	debugEvaluate?: (expression: string) => Promise<string>;
+	debugVariables?: (
+		variablesReference: number,
+		start?: number,
+		count?: number
+	) => Promise<DebugVariable[]>;
 	image?: (data: { mime: string; b64: string; ts?: number }) => void;
 	elapse?: number;
 }

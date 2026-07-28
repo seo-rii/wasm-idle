@@ -1,4 +1,4 @@
-import type { DebugCommand } from './debug.js';
+import type { DebugCommand, DebugVariable } from './debug.js';
 import type { ProgressLike } from './progress.js';
 import type { SandboxExecutionOptions } from './sandbox.js';
 
@@ -23,8 +23,14 @@ export interface TerminalControl {
 	destroy: () => Promise<void>;
 	stop?: () => Promise<void>;
 	debugCommand?: (command: DebugCommand) => Promise<void>;
-	setBreakpoints?: (lines: number[]) => Promise<void>;
+	debugPause?: () => Promise<void>;
+	setBreakpoints?: (lines: number[], sourcePath?: string) => Promise<void>;
 	debugEvaluate?: (expression: string) => Promise<string>;
+	debugVariables?: (
+		variablesReference: number,
+		start?: number,
+		count?: number
+	) => Promise<DebugVariable[]>;
 	waitForInput?: () => Promise<void>;
 	write: (input: string) => Promise<void>;
 	eof?: () => Promise<void>;
