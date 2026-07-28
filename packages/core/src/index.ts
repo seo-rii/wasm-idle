@@ -30,6 +30,15 @@ export {
 } from './runtime-assets.js';
 export type { TerminalControl } from './terminal.js';
 export {
+	DEFAULT_WORKSPACE_LIMITS,
+	WorkspaceValidationError,
+	normalizeWorkspacePath,
+	validateWorkspaceFiles,
+	type WorkspaceFile,
+	type WorkspaceLimits,
+	type WorkspaceValidationErrorCode
+} from './workspace.js';
+export {
 	createPlaygroundBinding,
 	type BoundSandbox,
 	type PlaygroundBinding,

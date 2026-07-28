@@ -6,13 +6,17 @@ import type {
 } from './debug.js';
 import type { ProgressLike } from './progress.js';
 import type { RuntimeAssetKeySource } from './runtime-assets.js';
+import type { WorkspaceFile, WorkspaceLimits } from './workspace.js';
 
 export type SandboxRuntimeAssets = string | RuntimeAssetKeySource;
 export type SandboxProgress = ProgressLike;
 
 export interface SandboxExecutionOptions {
 	[key: string]: unknown;
+	activePath?: string;
 	sourceBreakpoints?: DebugSourceBreakpoints[];
+	workspaceFiles?: WorkspaceFile[];
+	workspaceLimits?: Partial<WorkspaceLimits>;
 }
 
 export interface Sandbox {

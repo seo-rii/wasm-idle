@@ -1,0 +1,97 @@
+import { describe, expect, it } from 'vitest';
+
+import {
+	DEFAULT_WORKSPACE_LIMITS,
+	WorkspaceValidationError,
+	normalizeWorkspacePath,
+	validateWorkspaceFiles
+} from '@wasm-idle/core';
+
+describe('core workspace policy', () => {
+	it('normalizes portable relative paths without changing file contents', () => {
+		const files = validateWorkspaceFiles([
+			{ path: 'src\\main.ts', content: 'export const answer = 42;\n' },
+			{ path: 'assets/data.bin', content: new Uint8Array([0, 1, 2]) }
+		]);
+
+		expect(files).toEqual([
+			{ path: 'src/main.ts', content: 'export const answer = 42;\n' },
+			{ path: 'assets/data.bin', content: new Uint8Array([0, 1, 2]) }
+		]);
+		expect(normalizeWorkspacePath('Sources/main.swift')).toBe('Sources/main.swift');
+	});
+
+	it.each([
+		'',
+		'/etc/passwd',
+		'../secret',
+		'src/../secret',
+		'./main.c',
+		'src//main.c',
+		'C:\\workspace\\main.c',
+		'file:///workspace/main.c',
+		'https://example.com/main.c',
+		'\\\\server\\share\\main.c',
+		'main\0.c'
+	])('rejects unsafe workspace path %j', (path) => {
+		expect(() => normalizeWorkspacePath(path)).toThrow(WorkspaceValidationError);
+	});
+
+	it('rejects duplicate and case-colliding paths', () => {
+		expect(() =>
+			validateWorkspaceFiles([
+				{ path: 'src/main.ts', content: '' },
+				{ path: 'src\\main.ts', content: '' }
+			])
+		).toThrowError(expect.objectContaining({ code: 'duplicate-path' }));
+
+		expect(() =>
+			validateWorkspaceFiles([
+				{ path: 'Readme.md', content: '' },
+				{ path: 'README.md', content: '' }
+			])
+		).toThrowError(expect.objectContaining({ code: 'case-collision' }));
+	});
+
+	it('enforces file count, per-file bytes, total bytes, and path bytes', () => {
+		expect(() =>
+			validateWorkspaceFiles(
+				[
+					{ path: 'a.txt', content: '' },
+					{ path: 'b.txt', content: '' }
+				],
+				{ maxFiles: 1 }
+			)
+		).toThrowError(expect.objectContaining({ code: 'file-count-limit' }));
+
+		expect(() =>
+			validateWorkspaceFiles([{ path: 'unicode.txt', content: '한글' }], {
+				maxFileBytes: 5
+			})
+		).toThrowError(expect.objectContaining({ code: 'file-size-limit' }));
+
+		expect(() =>
+			validateWorkspaceFiles(
+				[
+					{ path: 'a.txt', content: '1234' },
+					{ path: 'b.txt', content: '5678' }
+				],
+				{ maxTotalBytes: 7 }
+			)
+		).toThrowError(expect.objectContaining({ code: 'total-size-limit' }));
+
+		expect(() =>
+			validateWorkspaceFiles([{ path: '한.txt', content: '' }], { maxPathBytes: 6 })
+		).toThrowError(expect.objectContaining({ code: 'path-size-limit' }));
+	});
+
+	it('publishes finite conservative defaults', () => {
+		expect(DEFAULT_WORKSPACE_LIMITS).toEqual({
+			maxFiles: 256,
+			maxFileBytes: 2 * 1024 * 1024,
+			maxTotalBytes: 8 * 1024 * 1024,
+			maxPathBytes: 1024,
+			caseSensitive: false
+		});
+	});
+});
