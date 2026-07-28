@@ -36,7 +36,11 @@ describe('bundled clang asset integrity', () => {
 			expect(compressedBytes.byteLength).toBe(record?.size);
 			expect(createHash('sha256').update(compressedBytes).digest('hex')).toBe(record?.sha256);
 			const runtimeBytes = gunzipSync(compressedBytes);
-			expect(BUNDLED_CLANG_ASSET_INTEGRITY[runtimeAsset]).toEqual({
+			expect(
+				BUNDLED_CLANG_ASSET_INTEGRITY[
+					runtimeAsset as keyof typeof BUNDLED_CLANG_ASSET_INTEGRITY
+				]
+			).toEqual({
 				bytes: runtimeBytes.byteLength,
 				sha256: createHash('sha256').update(runtimeBytes).digest('hex')
 			});
