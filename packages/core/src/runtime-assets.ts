@@ -6,6 +6,13 @@ export interface RuntimeAssetIntegrityEntry {
 
 export type RuntimeAssetIntegrityMap = Record<string, string | RuntimeAssetIntegrityEntry>;
 
+export interface RuntimeAssetProfileKeySource {
+	profileId: string;
+	manifestSchemaVersion: number;
+	manifestSha256: string;
+	protocolVersion: number;
+}
+
 export interface RuntimeAssetLoaderKeySource {
 	baseUrl?: string;
 	loader?: unknown;
@@ -16,6 +23,7 @@ export interface RuntimeAssetLoaderKeySource {
 
 export interface RuntimeAssetKeySource {
 	rootUrl?: string;
+	runtimeProfiles?: Readonly<Record<string, RuntimeAssetProfileKeySource>>;
 	python?: RuntimeAssetLoaderKeySource;
 	java?: RuntimeAssetLoaderKeySource;
 	clang?: RuntimeAssetLoaderKeySource;
@@ -67,7 +75,7 @@ export interface RuntimeAssetKeySource {
 
 export type RuntimeAssetKeyInput = string | RuntimeAssetKeySource | undefined;
 
-type RuntimeAssetName = Exclude<keyof RuntimeAssetKeySource, 'rootUrl'>;
+type RuntimeAssetName = Exclude<keyof RuntimeAssetKeySource, 'rootUrl' | 'runtimeProfiles'>;
 
 interface RuntimeAssetKeyField {
 	runtime: RuntimeAssetName;
@@ -253,6 +261,46 @@ export function createRuntimeAssetsKey(runtimeAssets: RuntimeAssetKeyInput): str
 	const keyParts: Record<string, string | boolean> = {
 		rootUrl: runtimeAssets.rootUrl || ''
 	};
+	const runtimeProfiles: Array<[string, RuntimeAssetProfileKeySource]> = [];
+	for (const [runtimeId, profile] of Object.entries(runtimeAssets.runtimeProfiles || {}).sort(
+		([left], [right]) => left.localeCompare(right)
+	)) {
+		if (!runtimeId.trim() || !profile || typeof profile !== 'object') {
+			throw new TypeError(
+				'Runtime profile entries require a non-empty runtime ID and profile'
+			);
+		}
+		if (typeof profile.profileId !== 'string' || !profile.profileId.trim()) {
+			throw new TypeError(`Runtime profile ${runtimeId} requires a non-empty profile ID`);
+		}
+		if (
+			!Number.isSafeInteger(profile.manifestSchemaVersion) ||
+			profile.manifestSchemaVersion < 1
+		) {
+			throw new TypeError(
+				`Runtime profile ${runtimeId} has an invalid manifest schema version`
+			);
+		}
+		if (
+			typeof profile.manifestSha256 !== 'string' ||
+			!/^[a-f0-9]{64}$/u.test(profile.manifestSha256)
+		) {
+			throw new TypeError(`Runtime profile ${runtimeId} has an invalid manifest SHA-256`);
+		}
+		if (!Number.isSafeInteger(profile.protocolVersion) || profile.protocolVersion < 1) {
+			throw new TypeError(`Runtime profile ${runtimeId} has an invalid protocol version`);
+		}
+		runtimeProfiles.push([
+			runtimeId,
+			{
+				profileId: profile.profileId,
+				manifestSchemaVersion: profile.manifestSchemaVersion,
+				manifestSha256: profile.manifestSha256,
+				protocolVersion: profile.protocolVersion
+			}
+		]);
+	}
+	keyParts.runtimeProfiles = JSON.stringify(runtimeProfiles);
 	for (const field of RUNTIME_ASSET_KEY_FIELDS) {
 		keyParts[field.key] = readRuntimeAssetKeyField(runtimeAssets, field);
 	}

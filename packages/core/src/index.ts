@@ -87,7 +87,8 @@ export {
 	type RuntimeAssetIntegrityMap,
 	type RuntimeAssetKeyInput,
 	type RuntimeAssetKeySource,
-	type RuntimeAssetLoaderKeySource
+	type RuntimeAssetLoaderKeySource,
+	type RuntimeAssetProfileKeySource
 } from './runtime-assets.js';
 export type { TerminalControl } from './terminal.js';
 export {
