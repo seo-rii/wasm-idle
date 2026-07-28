@@ -17,6 +17,7 @@ runtimes/wasm-clang/artifacts/
 static/.cache/
 static/clang/bin/
 static/clangd/
+static/wasm-debug/
 static/wasm-of-js-of-ocaml/
 static/wasm-d/runtime/bin/lld.data.gz
 static/wasm-d/runtime/bin/lld.wasm.gz

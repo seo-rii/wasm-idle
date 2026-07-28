@@ -61,6 +61,7 @@
 		"sync:runtime": "node scripts/sync-runtime.mjs",
 		"sync:runtimes": "node scripts/sync-runtime.mjs all",
 		"sync:wasm-clang": "node scripts/sync-wasm-clang.mjs",
+		"sync:wasm-debug": "node scripts/sync-wasm-debug.mjs",
 		"sync:wasm-objectivec": "node scripts/sync-wasm-objectivec.mjs",
 		"sync:wasm-cobol": "node scripts/sync-runtime.mjs wasm-cobol",
 		"sync:wasm-of-js-of-ocaml": "node scripts/sync-runtime.mjs wasm-of-js-of-ocaml",

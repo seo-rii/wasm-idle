@@ -23,6 +23,11 @@ describe('bundled wasm-clang runtime', () => {
 			await readFile(path.join(runtimeRoot, 'runtime-build.json'), 'utf8')
 		);
 		expect(buildInfo.delivery?.format).toBe('wasm-idle-clang-native-gzip-v1');
+		expect(manifest.compiler.provenance).toEqual({
+			name: 'clang',
+			version: buildInfo.toolchain.llvmVersion,
+			revision: buildInfo.toolchain.llvmCommit
+		});
 
 		const assets = [
 			[manifest.compiler.memfs.asset, 'memfs.wasm.gz', 'wasm'],
