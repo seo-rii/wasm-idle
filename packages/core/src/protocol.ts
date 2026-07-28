@@ -1,5 +1,18 @@
-import { ProtocolError, type RuntimeErrorCode, type RuntimePhase } from './errors.js';
-import type { ExecutionLimits, TerminationReason } from './execution.js';
+import {
+	ProtocolError,
+	RUNTIME_ERROR_CODES,
+	RUNTIME_PHASES,
+	type RuntimeErrorCode,
+	type RuntimePhase
+} from './errors.js';
+import {
+	DEFAULT_EXECUTION_LIMITS,
+	TERMINATION_REASONS,
+	resolveExecutionLimits,
+	type ExecutionLimits,
+	type ExecutionRuntimeRequirements,
+	type TerminationReason
+} from './execution.js';
 import type { WorkspaceFile } from './workspace.js';
 
 export const RUNTIME_PROTOCOL_NAME = 'wasm-idle-runtime' as const;
@@ -234,6 +247,7 @@ export interface RuntimeWorkerRunRequest {
 	stdin?: string;
 	compileArgs?: string[];
 	env?: Record<string, string>;
+	runtimeRequirements?: ExecutionRuntimeRequirements;
 	limits?: Partial<ExecutionLimits>;
 }
 
@@ -319,3 +333,226 @@ export type RuntimeWorkerToHostMessage =
 			runId: RuntimeRunId;
 			error: SerializedRuntimeError;
 	  };
+
+function protocolMessageRecord(value: unknown, label: string): Record<string, unknown> {
+	if (!value || typeof value !== 'object' || Array.isArray(value)) {
+		throw new ProtocolError(`${label} must be an object`);
+	}
+	return value as Record<string, unknown>;
+}
+
+function assertProtocolVersion(record: Record<string, unknown>): void {
+	if (record.protocolVersion !== RUNTIME_PROTOCOL_VERSION) {
+		throw new ProtocolError(
+			`Runtime worker protocol mismatch: expected ${RUNTIME_PROTOCOL_VERSION}, received ${String(record.protocolVersion)}`
+		);
+	}
+}
+
+function assertProtocolRunId(record: Record<string, unknown>): void {
+	if (
+		typeof record.runId !== 'string' ||
+		!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u.test(record.runId)
+	) {
+		throw new ProtocolError('Runtime worker message has an invalid run ID');
+	}
+}
+
+export function assertHostToRuntimeWorkerMessage(message: unknown): HostToRuntimeWorkerMessage {
+	const record = protocolMessageRecord(message, 'Host-to-runtime worker message');
+	assertProtocolVersion(record);
+
+	switch (record.type) {
+		case 'handshake': {
+			const expected = protocolMessageRecord(
+				record.expected,
+				'Runtime handshake expectation'
+			);
+			if (expected.protocolVersion !== RUNTIME_PROTOCOL_VERSION) {
+				throw new ProtocolError(
+					'Runtime handshake expectation has an invalid protocol version'
+				);
+			}
+			break;
+		}
+		case 'run': {
+			assertProtocolRunId(record);
+			const request = protocolMessageRecord(record.request, 'Runtime run request');
+			if (typeof request.code !== 'string') {
+				throw new ProtocolError('Runtime run request code must be a string');
+			}
+			for (const field of ['activePath', 'stdin'] as const) {
+				if (request[field] !== undefined && typeof request[field] !== 'string') {
+					throw new ProtocolError(`Runtime run request ${field} must be a string`);
+				}
+			}
+			for (const field of ['args', 'compileArgs'] as const) {
+				if (
+					request[field] !== undefined &&
+					(!Array.isArray(request[field]) ||
+						!(request[field] as unknown[]).every((value) => typeof value === 'string'))
+				) {
+					throw new ProtocolError(`Runtime run request ${field} must be a string array`);
+				}
+			}
+			if (request.env !== undefined) {
+				const environment = protocolMessageRecord(request.env, 'Runtime run environment');
+				for (const [name, value] of Object.entries(environment)) {
+					if (
+						!/^[A-Za-z_][A-Za-z0-9_]*$/u.test(name) ||
+						typeof value !== 'string' ||
+						value.includes('\0')
+					) {
+						throw new ProtocolError(
+							`Runtime run environment entry is invalid: ${name}`
+						);
+					}
+				}
+			}
+			if (request.workspaceFiles !== undefined) {
+				if (!Array.isArray(request.workspaceFiles)) {
+					throw new ProtocolError('Runtime run workspaceFiles must be an array');
+				}
+				for (const file of request.workspaceFiles) {
+					const workspaceFile = protocolMessageRecord(file, 'Runtime workspace file');
+					const binaryContent =
+						ArrayBuffer.isView(workspaceFile.content) &&
+						Object.prototype.toString.call(workspaceFile.content) ===
+							'[object Uint8Array]';
+					if (
+						typeof workspaceFile.path !== 'string' ||
+						(typeof workspaceFile.content !== 'string' && !binaryContent)
+					) {
+						throw new ProtocolError('Runtime workspace file is malformed');
+					}
+				}
+			}
+			if (request.runtimeRequirements !== undefined) {
+				protocolMessageRecord(
+					request.runtimeRequirements,
+					'Runtime execution requirements'
+				);
+			}
+			if (request.limits !== undefined) {
+				const limits = protocolMessageRecord(request.limits, 'Runtime execution limits');
+				for (const name of Object.keys(limits)) {
+					if (!(name in DEFAULT_EXECUTION_LIMITS)) {
+						throw new ProtocolError(`Runtime execution limit is unknown: ${name}`);
+					}
+				}
+				try {
+					resolveExecutionLimits(limits as Partial<ExecutionLimits>);
+				} catch (cause) {
+					throw new ProtocolError('Runtime execution limits are malformed', { cause });
+				}
+			}
+			break;
+		}
+		case 'stdin':
+			assertProtocolRunId(record);
+			if (typeof record.data !== 'string') {
+				throw new ProtocolError('Runtime stdin data must be a string');
+			}
+			break;
+		case 'stdin-eof':
+		case 'abort':
+			assertProtocolRunId(record);
+			break;
+		case 'dispose':
+			break;
+		default:
+			throw new ProtocolError(
+				`Unsupported host-to-runtime worker message: ${String(record.type)}`
+			);
+	}
+
+	return message as HostToRuntimeWorkerMessage;
+}
+
+export function assertRuntimeWorkerToHostMessage(message: unknown): RuntimeWorkerToHostMessage {
+	const record = protocolMessageRecord(message, 'Runtime worker-to-host message');
+	assertProtocolVersion(record);
+
+	switch (record.type) {
+		case 'handshake': {
+			const handshake = protocolMessageRecord(record.handshake, 'Runtime handshake');
+			protocolMessageRecord(handshake.runtime, 'Runtime handshake identity');
+			protocolMessageRecord(handshake.capabilities, 'Runtime handshake capabilities');
+			assertRuntimeHandshake(
+				{ protocolVersion: RUNTIME_PROTOCOL_VERSION },
+				handshake as unknown as RuntimeHandshake
+			);
+			break;
+		}
+		case 'ready':
+			break;
+		case 'stdout':
+		case 'stderr':
+			assertProtocolRunId(record);
+			if (typeof record.data !== 'string') {
+				throw new ProtocolError('Runtime output data must be a string');
+			}
+			break;
+		case 'progress':
+			assertProtocolRunId(record);
+			if (
+				typeof record.value !== 'number' ||
+				!Number.isFinite(record.value) ||
+				record.value < 0 ||
+				record.value > 1
+			) {
+				throw new ProtocolError('Runtime progress must be a finite value between 0 and 1');
+			}
+			if (
+				record.stage !== undefined &&
+				(typeof record.stage !== 'string' || !record.stage.trim())
+			) {
+				throw new ProtocolError('Runtime progress stage must be a non-empty string');
+			}
+			break;
+		case 'diagnostic':
+			assertProtocolRunId(record);
+			if (!Object.prototype.hasOwnProperty.call(record, 'diagnostic')) {
+				throw new ProtocolError('Runtime diagnostic payload is missing');
+			}
+			break;
+		case 'result':
+			assertProtocolRunId(record);
+			if (record.exitCode !== null && !Number.isSafeInteger(record.exitCode)) {
+				throw new ProtocolError('Runtime result exitCode must be a safe integer or null');
+			}
+			if (!TERMINATION_REASONS.includes(record.terminationReason as TerminationReason)) {
+				throw new ProtocolError('Runtime result termination reason is invalid');
+			}
+			break;
+		case 'error': {
+			assertProtocolRunId(record);
+			const error = protocolMessageRecord(record.error, 'Serialized runtime error');
+			if (
+				typeof error.code !== 'string' ||
+				(error.code !== 'unknown' &&
+					!RUNTIME_ERROR_CODES.includes(error.code as RuntimeErrorCode))
+			) {
+				throw new ProtocolError('Serialized runtime error code is invalid');
+			}
+			if (typeof error.message !== 'string' || !error.message.trim()) {
+				throw new ProtocolError('Serialized runtime error message is invalid');
+			}
+			if (
+				error.phase !== undefined &&
+				(typeof error.phase !== 'string' ||
+					!RUNTIME_PHASES.includes(error.phase as RuntimePhase))
+			) {
+				throw new ProtocolError('Serialized runtime error phase is invalid');
+			}
+			if (error.recoverable !== undefined && typeof error.recoverable !== 'boolean') {
+				throw new ProtocolError('Serialized runtime error recoverable flag is invalid');
+			}
+			break;
+		}
+		default:
+			throw new ProtocolError(`Unsupported runtime worker message: ${String(record.type)}`);
+	}
+
+	return message as RuntimeWorkerToHostMessage;
+}

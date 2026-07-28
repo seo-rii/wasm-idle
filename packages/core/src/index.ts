@@ -50,6 +50,8 @@ export {
 	DiagnosticLimitError,
 	OutputLimitError,
 	ProtocolError,
+	RUNTIME_ERROR_CODES,
+	RUNTIME_PHASES,
 	RuntimeConfigurationError,
 	RuntimeExecutionError,
 	TimeoutError,
@@ -88,7 +90,9 @@ export {
 export {
 	RUNTIME_PROTOCOL_NAME,
 	RUNTIME_PROTOCOL_VERSION,
+	assertHostToRuntimeWorkerMessage,
 	assertRuntimeHandshake,
+	assertRuntimeWorkerToHostMessage,
 	type HostToRuntimeWorkerMessage,
 	type RuntimeCapabilities,
 	type RuntimeHandshake,

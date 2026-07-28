@@ -1,28 +1,34 @@
-export type RuntimeErrorCode =
-	| 'unsupported-language'
-	| 'busy'
-	| 'runtime-configuration'
-	| 'asset-not-found'
-	| 'asset-integrity'
-	| 'asset-too-large'
-	| 'worker-startup'
-	| 'compile'
-	| 'runtime'
-	| 'timeout'
-	| 'cancelled'
-	| 'output-limit'
-	| 'diagnostic-limit'
-	| 'protocol'
-	| 'unsupported-browser-feature';
+export const RUNTIME_ERROR_CODES = [
+	'unsupported-language',
+	'busy',
+	'runtime-configuration',
+	'asset-not-found',
+	'asset-integrity',
+	'asset-too-large',
+	'worker-startup',
+	'compile',
+	'runtime',
+	'timeout',
+	'cancelled',
+	'output-limit',
+	'diagnostic-limit',
+	'protocol',
+	'unsupported-browser-feature'
+] as const;
 
-export type RuntimePhase =
-	| 'configuration'
-	| 'asset'
-	| 'startup'
-	| 'compile'
-	| 'execute'
-	| 'protocol'
-	| 'dispose';
+export type RuntimeErrorCode = (typeof RUNTIME_ERROR_CODES)[number];
+
+export const RUNTIME_PHASES = [
+	'configuration',
+	'asset',
+	'startup',
+	'compile',
+	'execute',
+	'protocol',
+	'dispose'
+] as const;
+
+export type RuntimePhase = (typeof RUNTIME_PHASES)[number];
 
 export interface RuntimeErrorContext {
 	phase?: RuntimePhase;
