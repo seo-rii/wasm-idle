@@ -5,8 +5,13 @@ import type {
 	DebugSourceBreakpoints,
 	DebugVariable
 } from './debug.js';
-import { RuntimeConfigurationError } from './errors.js';
-import type { ExecutionLimits, ExecutionRequest, ExecutionResult } from './execution.js';
+import { CancelledError, RuntimeConfigurationError } from './errors.js';
+import {
+	resolveExecutionLimits,
+	type ExecutionLimits,
+	type ExecutionRequest,
+	type ExecutionResult
+} from './execution.js';
 import type { ProgressLike } from './progress.js';
 import type { RuntimeRunId } from './protocol.js';
 import type { RuntimeAssetKeySource } from './runtime-assets.js';
@@ -122,10 +127,24 @@ function validateSandboxExecutionOptions(
 	code: string,
 	options: SandboxExecutionOptions
 ): SandboxExecutionOptions {
-	const workspaceFiles = validateWorkspaceFiles(
-		options.workspaceFiles ?? [],
-		options.workspaceLimits
-	);
+	if (options.signal?.aborted) {
+		throw new CancelledError('Runtime operation was cancelled before it started', {
+			cause: options.signal.reason
+		});
+	}
+	const limits = resolveExecutionLimits(options.limits);
+	const workspaceLimits = {
+		...options.workspaceLimits,
+		maxFileBytes: Math.min(
+			options.workspaceLimits?.maxFileBytes ?? DEFAULT_WORKSPACE_LIMITS.maxFileBytes,
+			limits.maxWorkspaceBytes
+		),
+		maxTotalBytes: Math.min(
+			options.workspaceLimits?.maxTotalBytes ?? DEFAULT_WORKSPACE_LIMITS.maxTotalBytes,
+			limits.maxWorkspaceBytes
+		)
+	};
+	const workspaceFiles = validateWorkspaceFiles(options.workspaceFiles ?? [], workspaceLimits);
 	const activePath =
 		options.activePath === undefined ? undefined : normalizeWorkspacePath(options.activePath);
 
@@ -135,14 +154,12 @@ function validateSandboxExecutionOptions(
 				...workspaceFiles.filter((file) => file.path !== activePath),
 				{ path: activePath, content: code }
 			],
-			options.workspaceLimits
+			workspaceLimits
 		);
 	} else {
-		const maxFiles = options.workspaceLimits?.maxFiles ?? DEFAULT_WORKSPACE_LIMITS.maxFiles;
-		const maxFileBytes =
-			options.workspaceLimits?.maxFileBytes ?? DEFAULT_WORKSPACE_LIMITS.maxFileBytes;
-		const maxTotalBytes =
-			options.workspaceLimits?.maxTotalBytes ?? DEFAULT_WORKSPACE_LIMITS.maxTotalBytes;
+		const maxFiles = workspaceLimits.maxFiles ?? DEFAULT_WORKSPACE_LIMITS.maxFiles;
+		const maxFileBytes = workspaceLimits.maxFileBytes;
+		const maxTotalBytes = workspaceLimits.maxTotalBytes;
 		const sourceBytes = workspaceTextEncoder.encode(code).byteLength;
 		if (workspaceFiles.length + 1 > maxFiles) {
 			throw new WorkspaceValidationError(
@@ -176,6 +193,10 @@ function validateSandboxExecutionOptions(
 
 	return {
 		...options,
+		...(options.limits === undefined ? {} : { limits }),
+		...(options.workspaceLimits === undefined && options.limits?.maxWorkspaceBytes === undefined
+			? {}
+			: { workspaceLimits }),
 		...(options.activePath === undefined ? {} : { activePath }),
 		...(options.workspaceFiles === undefined ? {} : { workspaceFiles })
 	};
@@ -213,6 +234,28 @@ function bindRuntimeAssets(sandbox: Sandbox, runtimeAssets: SandboxRuntimeAssets
 						validateSandboxExecutionOptions(code, options),
 						progress
 					);
+			}
+			const execute = target.execute;
+			if (prop === 'execute' && execute) {
+				return async (request: ExecutionRequest) => {
+					const validated = validateSandboxExecutionOptions(request.code, {
+						activePath: request.activePath,
+						workspaceFiles: request.workspaceFiles,
+						args: request.args,
+						compileArgs: request.compileArgs,
+						debug: request.debug,
+						env: request.env,
+						limits: request.limits ?? {},
+						signal: request.signal,
+						stdin: request.stdin
+					});
+					return execute.call(target, {
+						...request,
+						activePath: validated.activePath,
+						workspaceFiles: validated.workspaceFiles,
+						limits: validated.limits
+					});
+				};
 			}
 			if (prop === 'run') {
 				return async (
