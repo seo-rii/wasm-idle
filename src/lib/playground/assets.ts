@@ -9,6 +9,7 @@ export interface RuntimeAssetLoadRequest {
 	runtime: RuntimeAssetRuntime;
 	asset: string;
 	reportProgress: (loaded: number, total?: number) => void;
+	signal?: AbortSignal;
 }
 
 export interface RuntimeAssetDataResult {

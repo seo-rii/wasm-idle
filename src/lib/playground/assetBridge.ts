@@ -73,6 +73,8 @@ export class WorkerAssetBridge {
 	private config: ResolvedRuntimeAssetConfig;
 	private readonly progress: RuntimeLoadProgress;
 	private readonly expectedAssets: Set<string>;
+	private generation = 0;
+	private readonly activeLoads = new Set<AbortController>();
 
 	constructor(
 		worker: Worker,
@@ -97,9 +99,16 @@ export class WorkerAssetBridge {
 	}
 
 	rebind(worker: Worker, config: ResolvedRuntimeAssetConfig, progress?: ProgressLike) {
+		this.generation += 1;
+		this.abortActiveLoads();
 		this.worker = worker;
 		this.config = config;
 		this.progress.reset(progress);
+	}
+
+	dispose() {
+		this.generation += 1;
+		this.abortActiveLoads();
 	}
 
 	resetProgress(progress?: ProgressLike) {
@@ -121,10 +130,15 @@ export class WorkerAssetBridge {
 	}
 
 	private async respond(request: AssetRequestMessage) {
+		const worker = this.worker;
+		const generation = this.generation;
+		const controller = new AbortController();
+		this.activeLoads.add(controller);
 		try {
-			const loaded = await this.loadAsset(request.asset);
+			const loaded = await this.loadAsset(request.asset, controller.signal);
+			if (controller.signal.aborted || generation !== this.generation) return;
 			const buffer = transferBuffer(loaded.bytes);
-			this.worker.postMessage(
+			worker.postMessage(
 				{
 					assetResponse: {
 						id: request.id,
@@ -136,17 +150,20 @@ export class WorkerAssetBridge {
 				[buffer]
 			);
 		} catch (error) {
-			this.worker.postMessage({
+			if (controller.signal.aborted || generation !== this.generation) return;
+			worker.postMessage({
 				assetResponse: {
 					id: request.id,
 					ok: false,
 					error: error instanceof Error ? error.message : String(error)
 				}
 			});
+		} finally {
+			this.activeLoads.delete(controller);
 		}
 	}
 
-	private async loadAsset(asset: string): Promise<LoadedAsset> {
+	private async loadAsset(asset: string, signal: AbortSignal): Promise<LoadedAsset> {
 		if (!this.expectedAssets.has(asset)) {
 			throw new Error(`Unexpected ${this.runtime} runtime asset: ${asset}`);
 		}
@@ -157,22 +174,25 @@ export class WorkerAssetBridge {
 				await this.config.loader({
 					runtime: this.runtime,
 					asset,
-					reportProgress
+					reportProgress,
+					signal
 				}),
-				asset
+				asset,
+				signal
 			);
 			if (loaded) return loaded;
 		}
-		return await this.fetchAsset(new URL(asset, this.config.baseUrl).href, asset);
+		return await this.fetchAsset(new URL(asset, this.config.baseUrl).href, asset, signal);
 	}
 
 	private async normalizeLoaderResult(
 		result: RuntimeAssetLoaderResult,
-		asset: string
+		asset: string,
+		signal: AbortSignal
 	): Promise<LoadedAsset | null> {
 		if (!result) return null;
 		if (typeof result === 'string' || result instanceof URL) {
-			return await this.fetchAsset(String(result), asset);
+			return await this.fetchAsset(String(result), asset, signal);
 		}
 		if (result instanceof ArrayBuffer) {
 			const bytes = new Uint8Array(result);
@@ -189,7 +209,7 @@ export class WorkerAssetBridge {
 			return { bytes, mimeType: result.type || undefined };
 		}
 		if ('url' in result && result.url) {
-			return await this.fetchAsset(String(result.url), asset);
+			return await this.fetchAsset(String(result.url), asset, signal);
 		}
 		if ('data' in result) {
 			if (typeof result.data === 'string') {
@@ -213,8 +233,12 @@ export class WorkerAssetBridge {
 		return null;
 	}
 
-	private async fetchAsset(url: string, asset: string): Promise<LoadedAsset> {
-		const response = await fetch(url);
+	private async fetchAsset(
+		url: string,
+		asset: string,
+		signal: AbortSignal
+	): Promise<LoadedAsset> {
+		const response = await fetch(url, { signal });
 		if (!response.ok) throw new Error(`Failed to load ${asset}: ${response.status}`);
 		const contentLength =
 			Number(
@@ -249,5 +273,10 @@ export class WorkerAssetBridge {
 		}
 		this.progress.update(asset, receivedLength, contentLength ?? receivedLength);
 		return { bytes, mimeType };
+	}
+
+	private abortActiveLoads() {
+		for (const controller of this.activeLoads) controller.abort();
+		this.activeLoads.clear();
 	}
 }
