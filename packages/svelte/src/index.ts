@@ -30,7 +30,12 @@ export function createSvelteWasmIdleHost(
 	};
 }
 
-export const createSveltePlaygroundBinding = createSvelteWasmIdleHost;
+export function createSveltePlaygroundBinding(
+	runtimeAssets: SandboxRuntimeAssets,
+	loadSandbox: SandboxLoader
+): PlaygroundBinding {
+	return createPlaygroundBinding(runtimeAssets, loadSandbox);
+}
 export type {
 	PlaygroundBinding,
 	SandboxLoader,
