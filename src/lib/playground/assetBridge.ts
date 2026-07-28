@@ -21,14 +21,18 @@ interface AssetProgressMessage {
 type LoadedAsset = {
 	bytes: Uint8Array;
 	mimeType?: string;
+	transferOwnership?: boolean;
 };
 
 const encoder = new TextEncoder();
 
-const transferBuffer = (bytes: Uint8Array) =>
-	bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength
+const transferBuffer = (bytes: Uint8Array, transferOwnership = false) =>
+	transferOwnership &&
+	bytes.byteOffset === 0 &&
+	bytes.byteLength === bytes.buffer.byteLength &&
+	bytes.buffer instanceof ArrayBuffer
 		? bytes.buffer
-		: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+		: Uint8Array.from(bytes).buffer;
 
 const expectedAssetsForRuntime = (runtime: RuntimeAssetRuntime) =>
 	new Set<string>(RUNTIME_LOAD_ASSETS[runtime]);
@@ -137,7 +141,7 @@ export class WorkerAssetBridge {
 		try {
 			const loaded = await this.loadAsset(request.asset, controller.signal);
 			if (controller.signal.aborted || generation !== this.generation) return;
-			const buffer = transferBuffer(loaded.bytes);
+			const buffer = transferBuffer(loaded.bytes, loaded.transferOwnership);
 			worker.postMessage(
 				{
 					assetResponse: {
@@ -206,7 +210,7 @@ export class WorkerAssetBridge {
 		if (result instanceof Blob) {
 			const bytes = new Uint8Array(await result.arrayBuffer());
 			this.progress.update(asset, bytes.byteLength, bytes.byteLength);
-			return { bytes, mimeType: result.type || undefined };
+			return { bytes, mimeType: result.type || undefined, transferOwnership: true };
 		}
 		if ('url' in result && result.url) {
 			return await this.fetchAsset(String(result.url), asset, signal);
@@ -215,20 +219,32 @@ export class WorkerAssetBridge {
 			if (typeof result.data === 'string') {
 				const bytes = encoder.encode(result.data);
 				this.progress.update(asset, bytes.byteLength, bytes.byteLength);
-				return { bytes, mimeType: result.mimeType };
+				return { bytes, mimeType: result.mimeType, transferOwnership: true };
 			}
 			if (result.data instanceof ArrayBuffer) {
 				const bytes = new Uint8Array(result.data);
 				this.progress.update(asset, bytes.byteLength, bytes.byteLength);
-				return { bytes, mimeType: result.mimeType };
+				return {
+					bytes,
+					mimeType: result.mimeType,
+					transferOwnership: result.transferOwnership === true
+				};
 			}
 			if (result.data instanceof Uint8Array) {
 				this.progress.update(asset, result.data.byteLength, result.data.byteLength);
-				return { bytes: result.data, mimeType: result.mimeType };
+				return {
+					bytes: result.data,
+					mimeType: result.mimeType,
+					transferOwnership: result.transferOwnership === true
+				};
 			}
 			const bytes = new Uint8Array(await result.data.arrayBuffer());
 			this.progress.update(asset, bytes.byteLength, bytes.byteLength);
-			return { bytes, mimeType: result.mimeType || result.data.type || undefined };
+			return {
+				bytes,
+				mimeType: result.mimeType || result.data.type || undefined,
+				transferOwnership: true
+			};
 		}
 		return null;
 	}
@@ -250,7 +266,7 @@ export class WorkerAssetBridge {
 		if (!response.body) {
 			const bytes = new Uint8Array(await response.arrayBuffer());
 			this.progress.update(asset, bytes.byteLength, contentLength ?? bytes.byteLength);
-			return { bytes, mimeType };
+			return { bytes, mimeType, transferOwnership: true };
 		}
 
 		const reader = response.body.getReader();
@@ -272,7 +288,7 @@ export class WorkerAssetBridge {
 			position += chunk.byteLength;
 		}
 		this.progress.update(asset, receivedLength, contentLength ?? receivedLength);
-		return { bytes, mimeType };
+		return { bytes, mimeType, transferOwnership: true };
 	}
 
 	private abortActiveLoads() {

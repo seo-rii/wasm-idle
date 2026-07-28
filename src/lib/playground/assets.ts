@@ -15,6 +15,7 @@ export interface RuntimeAssetLoadRequest {
 export interface RuntimeAssetDataResult {
 	data: string | ArrayBuffer | Uint8Array | Blob;
 	mimeType?: string;
+	transferOwnership?: boolean;
 }
 
 export interface RuntimeAssetUrlResult {

@@ -89,6 +89,44 @@ describe('WorkerAssetBridge asset requests', () => {
 		});
 	});
 
+	it('copies loader-owned buffers before transferring them to a worker', async () => {
+		const postMessage = vi.fn();
+		const bytes = new Uint8Array([1, 2, 3]);
+		const bridge = new WorkerAssetBridge({ postMessage } as unknown as Worker, 'clang', {
+			baseUrl: '/clang/',
+			loader: vi.fn().mockResolvedValue(bytes),
+			useAssetBridge: true
+		});
+		const asset = RUNTIME_LOAD_ASSETS.clang[0];
+
+		bridge.handleMessage({
+			data: { assetRequest: { id: 12, asset } }
+		} as MessageEvent);
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
+
+		const transferred = postMessage.mock.calls[0]?.[1]?.[0] as ArrayBuffer;
+		expect(transferred).not.toBe(bytes.buffer);
+		expect([...new Uint8Array(transferred)]).toEqual([...bytes]);
+	});
+
+	it('transfers loader buffers directly only with explicit ownership', async () => {
+		const postMessage = vi.fn();
+		const bytes = new Uint8Array([4, 5, 6]);
+		const bridge = new WorkerAssetBridge({ postMessage } as unknown as Worker, 'clang', {
+			baseUrl: '/clang/',
+			loader: vi.fn().mockResolvedValue({ data: bytes, transferOwnership: true }),
+			useAssetBridge: true
+		});
+		const asset = RUNTIME_LOAD_ASSETS.clang[0];
+
+		bridge.handleMessage({
+			data: { assetRequest: { id: 13, asset } }
+		} as MessageEvent);
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
+
+		expect(postMessage.mock.calls[0]?.[1]?.[0]).toBe(bytes.buffer);
+	});
+
 	it('aborts stale loads and never forwards their response after rebind', async () => {
 		const firstWorkerPostMessage = vi.fn();
 		const secondWorkerPostMessage = vi.fn();
