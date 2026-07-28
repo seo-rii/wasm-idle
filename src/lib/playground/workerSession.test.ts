@@ -84,4 +84,18 @@ describe('WorkerSession', () => {
 		expect(worker.onmessageerror).toBeNull();
 		expect(worker.terminate).toHaveBeenCalledOnce();
 	});
+
+	it('releases a compiler worker without ending the active debug operation', () => {
+		const worker = new MockWorker();
+		const onDispose = vi.fn();
+		const reject = vi.fn();
+		const session = new WorkerSession({ label: 'Clang', onDispose });
+		const operation = session.beginRun(worker as unknown as Worker, reject);
+
+		expect(session.release(worker as unknown as Worker)).toBe(true);
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(onDispose).not.toHaveBeenCalled();
+		expect(reject).not.toHaveBeenCalled();
+		expect(session.complete(operation)).toBe(true);
+	});
 });

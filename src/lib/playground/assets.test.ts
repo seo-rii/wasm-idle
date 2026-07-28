@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 const { publicEnv } = vi.hoisted(() => ({
 	publicEnv: {
+		PUBLIC_WASM_DEBUG_RUNTIME_URL: '',
 		PUBLIC_WASM_RUST_COMPILER_URL: '',
 		PUBLIC_WASM_GO_COMPILER_URL: '',
 		PUBLIC_WASM_D_MODULE_URL: '',
@@ -83,6 +84,7 @@ vi.mock('$env/dynamic/public', () => ({
 import {
 	RUNTIME_LOAD_ASSETS,
 	resolveCobolBaseUrl,
+	resolveDebugRuntimeUrls,
 	resolveFortranRuntimeAssetConfig,
 	resolveObjectiveCRuntimeAssetConfig,
 	resolveRuntimeAssetConfig
@@ -106,6 +108,25 @@ describe('runtime asset config resolution', () => {
 		).toEqual({
 			baseUrl: 'https://example.com/absproxy/5173/pyodide/',
 			useAssetBridge: false
+		});
+	});
+
+	it('resolves lazy LLDB/WAMR assets from a dedicated runtime manifest', () => {
+		expect(
+			resolveDebugRuntimeUrls(
+				{
+					rootUrl: '/absproxy/5173',
+					debug: { baseUrl: '/debug-runtime/' }
+				},
+				'https://example.com/app'
+			)
+		).toEqual({
+			baseUrl: 'https://example.com/debug-runtime/',
+			manifestUrl: 'https://example.com/debug-runtime/runtime-manifest.v2.json'
+		});
+		expect(resolveDebugRuntimeUrls('/absproxy/5173', 'https://example.com/app')).toEqual({
+			baseUrl: 'https://example.com/absproxy/5173/wasm-debug/',
+			manifestUrl: 'https://example.com/absproxy/5173/wasm-debug/runtime-manifest.v2.json'
 		});
 	});
 

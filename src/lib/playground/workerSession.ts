@@ -84,6 +84,16 @@ export class WorkerSession {
 		return true;
 	}
 
+	release(worker: Worker) {
+		if (this.worker !== worker) return false;
+		this.worker = null;
+		worker.onmessage = null;
+		worker.onerror = null;
+		worker.onmessageerror = null;
+		worker.terminate();
+		return true;
+	}
+
 	reset() {
 		const worker = this.disposeWorker();
 		if (worker) this.options.onDispose?.(worker);

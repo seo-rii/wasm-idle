@@ -45,6 +45,11 @@ export interface RustRuntimeAssetConfig {
 	debugModuleUrl?: string;
 }
 
+export interface DebugRuntimeAssetConfig {
+	baseUrl?: string;
+	manifestUrl?: string;
+}
+
 export interface GoRuntimeAssetConfig {
 	compilerUrl?: string;
 }
@@ -245,6 +250,7 @@ export interface PlaygroundRuntimeAssets {
 	java?: RuntimeAssetConfig;
 	clang?: RuntimeAssetConfig;
 	clangd?: RuntimeAssetConfig;
+	debug?: DebugRuntimeAssetConfig;
 	rust?: RustRuntimeAssetConfig;
 	go?: GoRuntimeAssetConfig;
 	d?: DRuntimeAssetConfig;
@@ -493,6 +499,27 @@ export function resolveRustCompilerUrl(
 
 	if (!configuredCompilerUrl) return '';
 	return currentUrl ? new URL(configuredCompilerUrl, currentUrl).href : configuredCompilerUrl;
+}
+
+export function resolveDebugRuntimeUrls(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredBaseUrl =
+		(typeof options === 'object' && options?.debug?.baseUrl) ||
+		(publicEnv.PUBLIC_WASM_DEBUG_RUNTIME_URL || '').trim();
+	const rootUrl = (typeof options === 'string' ? options : options?.rootUrl) || '';
+	const baseUrl = configuredBaseUrl
+		? normalizeBaseUrl(configuredBaseUrl, currentUrl)
+		: resolveFolderRuntimeBaseUrl('wasm-debug', rootUrl, currentUrl);
+	const configuredManifestUrl =
+		typeof options === 'object' ? options?.debug?.manifestUrl : undefined;
+	return {
+		baseUrl,
+		manifestUrl: configuredManifestUrl
+			? resolveConfiguredUrl(configuredManifestUrl, currentUrl)
+			: new URL('runtime-manifest.v2.json', baseUrl).href
+	};
 }
 
 export function resolveRustDebugModuleUrl(

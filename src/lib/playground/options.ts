@@ -1,9 +1,14 @@
+import type { DebugSourceBreakpoints } from '@wasm-idle/core';
+
 export type {
 	DebugArrayElementKind,
 	DebugCommand,
 	DebugFrame,
 	DebugPauseReason,
+	DebugResolvedBreakpoint,
 	DebugSessionEvent,
+	DebugScope,
+	DebugSourceBreakpoints,
 	DebugStructFieldMetadata,
 	DebugVariable,
 	DebugVariableKind,
@@ -22,6 +27,7 @@ export interface CompilerDiagnostic {
 }
 
 export type RustTargetTriple = 'wasm32-wasip1' | 'wasm32-wasip2' | 'wasm32-wasip3';
+export type BrowserDebugMode = 'none' | 'trace' | 'lldb';
 export type GoTarget = 'wasip1/wasm' | 'wasip2/wasm' | 'wasip3/wasm' | 'js/wasm';
 export type TinyGoTarget = 'wasm' | 'wasip1' | 'wasip2' | 'wasip3';
 export type OcamlBackend = 'js' | 'wasm';
@@ -34,8 +40,11 @@ export interface SandboxWorkspaceFile {
 }
 
 export interface SandboxExecutionOptions {
+	debugMode?: BrowserDebugMode;
+	/** @deprecated Use debugMode. true maps to trace unless the caller explicitly selects lldb. */
 	debug?: boolean;
 	breakpoints?: number[];
+	sourceBreakpoints?: DebugSourceBreakpoints[];
 	pauseOnEntry?: boolean;
 	stdin?: string;
 	activePath?: string;

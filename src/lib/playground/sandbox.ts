@@ -37,8 +37,9 @@ export interface Sandbox {
 	output?: (data: string) => void;
 	ondebug?: (event: DebugSessionEvent) => void;
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
-	debugCommand?: (command: DebugCommand) => void;
-	setBreakpoints?: (lines: number[]) => void;
+	debugCommand?: (command: DebugCommand) => void | Promise<void>;
+	debugPause?: () => void | Promise<void>;
+	setBreakpoints?: (lines: number[], sourcePath?: string) => void | Promise<void>;
 	debugEvaluate?: (expression: string) => Promise<string>;
 	image?: (data: { mime: string; b64: string; ts?: number }) => void;
 	elapse?: number;
