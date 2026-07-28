@@ -5,7 +5,12 @@ import type {
 	DebugSourceBreakpoints,
 	DebugVariable
 } from './debug.js';
-import { CancelledError, RuntimeConfigurationError } from './errors.js';
+import {
+	CancelledError,
+	RuntimeConfigurationError,
+	TimeoutError,
+	type RuntimePhase
+} from './errors.js';
 import {
 	resolveExecutionLimits,
 	type ExecutionLimits,
@@ -37,6 +42,10 @@ export interface SandboxExecutionOptions {
 	stdin?: string | AsyncIterable<Uint8Array>;
 	workspaceFiles?: WorkspaceFile[];
 	workspaceLimits?: Partial<WorkspaceLimits>;
+}
+
+interface ValidatedSandboxExecutionOptions extends SandboxExecutionOptions {
+	limits: ExecutionLimits;
 }
 
 export interface SandboxLifecycle {
@@ -125,11 +134,13 @@ const workspaceTextEncoder = new TextEncoder();
 
 function validateSandboxExecutionOptions(
 	code: string,
-	options: SandboxExecutionOptions
-): SandboxExecutionOptions {
+	options: SandboxExecutionOptions,
+	phase: RuntimePhase = 'execute'
+): ValidatedSandboxExecutionOptions {
 	if (options.signal?.aborted) {
 		throw new CancelledError('Runtime operation was cancelled before it started', {
-			cause: options.signal.reason
+			cause: options.signal.reason,
+			phase
 		});
 	}
 	const limits = resolveExecutionLimits(options.limits);
@@ -193,13 +204,90 @@ function validateSandboxExecutionOptions(
 
 	return {
 		...options,
-		...(options.limits === undefined ? {} : { limits }),
+		limits,
 		...(options.workspaceLimits === undefined && options.limits?.maxWorkspaceBytes === undefined
 			? {}
 			: { workspaceLimits }),
 		...(options.activePath === undefined ? {} : { activePath }),
 		...(options.workspaceFiles === undefined ? {} : { workspaceFiles })
 	};
+}
+
+function runSandboxOperation<T>(
+	sandbox: Sandbox,
+	operation: () => Promise<T>,
+	signal: AbortSignal | undefined,
+	timeoutMs: number,
+	phase: RuntimePhase
+): Promise<T> {
+	return new Promise<T>((resolve, reject) => {
+		let settled = false;
+		let cancellationRequested = false;
+		let timeout: ReturnType<typeof setTimeout> | undefined;
+
+		const cleanup = () => {
+			if (timeout !== undefined) clearTimeout(timeout);
+			signal?.removeEventListener('abort', onAbort);
+		};
+		const requestCancellation = () => {
+			if (cancellationRequested) return;
+			cancellationRequested = true;
+			try {
+				const cancellation = sandbox.cancel
+					? sandbox.cancel()
+					: sandbox.kill
+						? sandbox.kill()
+						: sandbox.terminate();
+				void Promise.resolve(cancellation).catch(() => undefined);
+			} catch {
+				// The boundary error remains authoritative even if runtime cleanup fails.
+			}
+		};
+		const settle = (callback: () => void) => {
+			if (settled) return;
+			settled = true;
+			cleanup();
+			callback();
+		};
+		const onAbort = () => {
+			requestCancellation();
+			settle(() =>
+				reject(
+					new CancelledError('Runtime operation cancelled', {
+						cause: signal?.reason,
+						phase
+					})
+				)
+			);
+		};
+
+		signal?.addEventListener('abort', onAbort, { once: true });
+		if (signal?.aborted) {
+			onAbort();
+			return;
+		}
+		timeout = setTimeout(() => {
+			requestCancellation();
+			settle(() =>
+				reject(
+					new TimeoutError(`Runtime ${phase} exceeded ${timeoutMs} ms`, {
+						phase,
+						timeoutMs
+					})
+				)
+			);
+		}, timeoutMs);
+		void Promise.resolve()
+			.then(operation)
+			.then(
+				(value) => settle(() => resolve(value)),
+				(error) => settle(() => reject(error))
+			);
+	});
+}
+
+function combinedPhaseTimeoutMs(firstTimeoutMs: number, secondTimeoutMs: number): number {
+	return Math.min(2_147_483_647, firstTimeoutMs + secondTimeoutMs);
 }
 
 function bindRuntimeAssets(sandbox: Sandbox, runtimeAssets: SandboxRuntimeAssets): BoundSandbox {
@@ -225,15 +313,19 @@ function bindRuntimeAssets(sandbox: Sandbox, runtimeAssets: SandboxRuntimeAssets
 					args: string[] = [],
 					options: SandboxExecutionOptions = {},
 					progress?: SandboxProgress
-				) =>
-					target.load(
-						runtimeAssets,
-						code,
-						log,
-						args,
-						validateSandboxExecutionOptions(code, options),
-						progress
+				) => {
+					const validated = validateSandboxExecutionOptions(code, options, 'startup');
+					return runSandboxOperation(
+						target,
+						() => target.load(runtimeAssets, code, log, args, validated, progress),
+						validated.signal,
+						combinedPhaseTimeoutMs(
+							validated.limits.assetTimeoutMs,
+							validated.limits.startupTimeoutMs
+						),
+						'startup'
 					);
+				};
 			}
 			const execute = target.execute;
 			if (prop === 'execute' && execute) {
@@ -249,12 +341,22 @@ function bindRuntimeAssets(sandbox: Sandbox, runtimeAssets: SandboxRuntimeAssets
 						signal: request.signal,
 						stdin: request.stdin
 					});
-					return execute.call(target, {
-						...request,
-						activePath: validated.activePath,
-						workspaceFiles: validated.workspaceFiles,
-						limits: validated.limits
-					});
+					return runSandboxOperation(
+						target,
+						() =>
+							execute.call(target, {
+								...request,
+								activePath: validated.activePath,
+								workspaceFiles: validated.workspaceFiles,
+								limits: validated.limits
+							}),
+						validated.signal,
+						combinedPhaseTimeoutMs(
+							validated.limits.compileTimeoutMs,
+							validated.limits.runTimeoutMs
+						),
+						'execute'
+					);
 				};
 			}
 			if (prop === 'run') {
@@ -265,15 +367,19 @@ function bindRuntimeAssets(sandbox: Sandbox, runtimeAssets: SandboxRuntimeAssets
 					progress?: SandboxProgress,
 					args?: string[],
 					options: SandboxExecutionOptions = {}
-				) =>
-					target.run(
-						code,
-						prepare,
-						log,
-						progress,
-						args,
-						validateSandboxExecutionOptions(code, options)
+				) => {
+					const validated = validateSandboxExecutionOptions(code, options);
+					return runSandboxOperation(
+						target,
+						() => target.run(code, prepare, log, progress, args, validated),
+						validated.signal,
+						combinedPhaseTimeoutMs(
+							validated.limits.compileTimeoutMs,
+							validated.limits.runTimeoutMs
+						),
+						'execute'
 					);
+				};
 			}
 			const value = Reflect.get(target, prop, receiver);
 			return typeof value === 'function' ? value.bind(target) : value;

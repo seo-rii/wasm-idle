@@ -78,6 +78,114 @@ describe('core execution boundary', () => {
 		expect(run).not.toHaveBeenCalled();
 	});
 
+	it('cancels and settles an active legacy run when its signal aborts', async () => {
+		const run = vi.fn(() => new Promise<boolean | string>(() => undefined));
+		const cancel = vi.fn(async () => undefined);
+		const binding = createPlaygroundBinding('/runtime', async () =>
+			createSandbox({ run, cancel })
+		);
+		const sandbox = await binding.load('C');
+		const controller = new AbortController();
+
+		const operation = sandbox.run('int main() {}', false, false, undefined, [], {
+			signal: controller.signal
+		});
+		await Promise.resolve();
+		controller.abort('stop this run');
+
+		await expect(operation).rejects.toMatchObject({
+			code: 'cancelled',
+			phase: 'execute',
+			cause: 'stop this run'
+		});
+		expect(run).toHaveBeenCalledOnce();
+		expect(cancel).toHaveBeenCalledOnce();
+	});
+
+	it('times out structured execution and requests runtime cancellation', async () => {
+		vi.useFakeTimers();
+		try {
+			const execute = vi.fn(() => new Promise<ExecutionResult>(() => undefined));
+			const cancel = vi.fn(async () => undefined);
+			const binding = createPlaygroundBinding('/runtime', async () =>
+				createSandbox({ execute, cancel })
+			);
+			const sandbox = await binding.load('C');
+
+			const operation = sandbox.execute!({
+				code: 'int main() {}',
+				limits: { compileTimeoutMs: 10, runTimeoutMs: 15 }
+			});
+			const rejection = expect(operation).rejects.toMatchObject({
+				code: 'timeout',
+				phase: 'execute',
+				timeoutMs: 25
+			});
+			await Promise.resolve();
+			await vi.advanceTimersByTimeAsync(25);
+
+			await rejection;
+			expect(execute).toHaveBeenCalledOnce();
+			expect(cancel).toHaveBeenCalledOnce();
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('applies the startup deadline to sandbox loading', async () => {
+		vi.useFakeTimers();
+		try {
+			const load = vi.fn(() => new Promise<void>(() => undefined));
+			const cancel = vi.fn(async () => undefined);
+			const binding = createPlaygroundBinding('/runtime', async () =>
+				createSandbox({ load, cancel })
+			);
+			const sandbox = await binding.load('C');
+
+			const operation = sandbox.load('', false, [], {
+				limits: { assetTimeoutMs: 5, startupTimeoutMs: 15 }
+			});
+			const rejection = expect(operation).rejects.toMatchObject({
+				code: 'timeout',
+				phase: 'startup',
+				timeoutMs: 20
+			});
+			await Promise.resolve();
+			await vi.advanceTimersByTimeAsync(20);
+
+			await rejection;
+			expect(load).toHaveBeenCalledOnce();
+			expect(cancel).toHaveBeenCalledOnce();
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('cleans deadline and abort listeners after successful execution', async () => {
+		vi.useFakeTimers();
+		try {
+			const run = vi.fn(async () => true);
+			const cancel = vi.fn(async () => undefined);
+			const binding = createPlaygroundBinding('/runtime', async () =>
+				createSandbox({ run, cancel })
+			);
+			const sandbox = await binding.load('C');
+			const controller = new AbortController();
+
+			await expect(
+				sandbox.run('int main() {}', false, false, undefined, [], {
+					signal: controller.signal,
+					limits: { compileTimeoutMs: 10, runTimeoutMs: 15 }
+				})
+			).resolves.toBe(true);
+			expect(vi.getTimerCount()).toBe(0);
+			controller.abort();
+			expect(cancel).not.toHaveBeenCalled();
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
 	it('normalizes structured requests before forwarding execute', async () => {
 		const execute = vi.fn(async () => completedResult);
 		const binding = createPlaygroundBinding('/runtime', async () => createSandbox({ execute }));

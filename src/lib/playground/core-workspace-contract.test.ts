@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+	DEFAULT_EXECUTION_LIMITS,
 	DEFAULT_WORKSPACE_LIMITS,
 	WorkspaceValidationError,
 	createPlaygroundBinding,
@@ -118,6 +119,7 @@ describe('core workspace policy', () => {
 		).resolves.toBe(true);
 		expect(run).toHaveBeenCalledWith('export {};', false, true, undefined, [], {
 			activePath: 'src/main.ts',
+			limits: DEFAULT_EXECUTION_LIMITS,
 			workspaceFiles: [{ path: 'src/helper.ts', content: 'export {};' }]
 		});
 
