@@ -4,6 +4,7 @@ import {
 	type RuntimeAssetLoaderResult,
 	type RuntimeAssetRuntime
 } from '$lib/playground/assets';
+import { verifyRuntimeAssetIntegrity, verifyRuntimeAssetPair } from '@wasm-idle/core';
 import { decompressGzip } from '@wasm-idle/llvm-core';
 
 type ProgressLike = { set?: (value: number) => void };
@@ -48,26 +49,18 @@ const integrityKey = (config: ResolvedRuntimeAssetConfig) =>
 				asset,
 				typeof entry === 'string'
 					? entry
-					: { sha256: entry.sha256, bytes: entry.bytes, mediaType: entry.mediaType }
+					: {
+							sha256: entry.sha256,
+							bytes: entry.bytes,
+							mediaType: entry.mediaType,
+							uncompressedSha256: entry.uncompressedSha256,
+							uncompressedBytes: entry.uncompressedBytes
+						}
 			])
 	);
 
 const allowedBaseUrlsKey = (config: ResolvedRuntimeAssetConfig) =>
 	JSON.stringify([...(config.allowedBaseUrls || [])].sort());
-
-const sha256Hex = async (bytes: Uint8Array) => {
-	if (!globalThis.crypto?.subtle) {
-		throw new Error('Web Crypto SHA-256 is unavailable');
-	}
-	const input =
-		bytes.byteOffset === 0 &&
-		bytes.byteLength === bytes.buffer.byteLength &&
-		bytes.buffer instanceof ArrayBuffer
-			? bytes.buffer
-			: Uint8Array.from(bytes).buffer;
-	const digest = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', input));
-	return Array.from(digest, (value) => value.toString(16).padStart(2, '0')).join('');
-};
 
 class RuntimeLoadProgress {
 	private readonly fractions = new Map<string, number>();
@@ -174,6 +167,11 @@ export class WorkerAssetBridge {
 		this.activeLoads.add(controller);
 		try {
 			const loaded = await this.loadAsset(request.asset, controller.signal);
+			if (loaded.bytes.byteLength > MAX_RUNTIME_ASSET_BYTES) {
+				throw new Error(
+					`Runtime asset ${request.asset} exceeds the ${MAX_RUNTIME_ASSET_BYTES} byte limit`
+				);
+			}
 			const runtimeBytes = request.asset.endsWith('.gz')
 				? await decompressGzip(loaded.bytes, request.asset)
 				: loaded.bytes;
@@ -182,7 +180,7 @@ export class WorkerAssetBridge {
 					`Runtime asset ${request.asset} exceeds the ${MAX_RUNTIME_ASSET_BYTES} byte limit`
 				);
 			}
-			await this.verifyIntegrity(request.asset, runtimeBytes, loaded.mimeType);
+			await this.verifyIntegrity(request.asset, loaded.bytes, runtimeBytes, loaded.mimeType);
 			if (controller.signal.aborted || generation !== this.generation) return;
 			const buffer = transferBuffer(
 				runtimeBytes,
@@ -242,38 +240,36 @@ export class WorkerAssetBridge {
 		return await this.fetchAsset(asset, asset, signal);
 	}
 
-	private async verifyIntegrity(asset: string, bytes: Uint8Array, mimeType?: string) {
+	private async verifyIntegrity(
+		asset: string,
+		deliveryBytes: Uint8Array,
+		runtimeBytes: Uint8Array,
+		mimeType?: string
+	) {
 		const configured = this.config.integrity?.[asset];
 		if (!configured) return;
 		const expected = typeof configured === 'string' ? { sha256: configured } : configured;
-		if (expected.bytes !== undefined) {
-			if (!Number.isSafeInteger(expected.bytes) || expected.bytes < 0) {
-				throw new Error(`Runtime asset ${asset} has an invalid expected byte size`);
-			}
-			if (bytes.byteLength !== expected.bytes) {
-				throw new Error(
-					`Runtime asset ${asset} size mismatch: expected ${expected.bytes} bytes, received ${bytes.byteLength}`
-				);
-			}
+		if (expected.uncompressedSha256 !== undefined || expected.uncompressedBytes !== undefined) {
+			await verifyRuntimeAssetPair({
+				asset,
+				compressed: deliveryBytes,
+				uncompressed: runtimeBytes,
+				expected,
+				mimeType
+			});
+			return;
 		}
-		if (!/^[a-f0-9]{64}$/u.test(expected.sha256)) {
-			throw new Error(`Runtime asset ${asset} has an invalid expected SHA-256 digest`);
-		}
-		if (expected.mediaType) {
-			const actualMediaType = mimeType?.split(';', 1)[0]?.trim().toLowerCase() || 'missing';
-			const expectedMediaType = expected.mediaType.trim().toLowerCase();
-			if (actualMediaType !== expectedMediaType) {
-				throw new Error(
-					`Runtime asset ${asset} MIME type mismatch: expected ${expectedMediaType}, received ${actualMediaType}`
-				);
-			}
-		}
-		const actual = await sha256Hex(bytes);
-		if (actual !== expected.sha256) {
-			throw new Error(
-				`Runtime asset ${asset} SHA-256 mismatch: expected ${expected.sha256}, received ${actual}`
-			);
-		}
+		await verifyRuntimeAssetIntegrity({
+			asset,
+			bytes: runtimeBytes,
+			expected: {
+				...expected,
+				uncompressedSha256: expected.sha256,
+				uncompressedBytes: expected.bytes ?? runtimeBytes.byteLength
+			},
+			stage: 'uncompressed',
+			mimeType
+		});
 	}
 
 	private async normalizeLoaderResult(

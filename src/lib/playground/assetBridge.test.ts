@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 
 vi.mock('$env/dynamic/public', () => ({ env: {} }));
@@ -124,14 +125,18 @@ describe('WorkerAssetBridge asset requests', () => {
 	it('verifies and transfers the decoded bytes of gzip delivery assets', async () => {
 		const postMessage = vi.fn();
 		const runtimeBytes = new Uint8Array([1, 2, 3]);
+		const deliveryBytes = Uint8Array.from(gzipSync(runtimeBytes));
 		const asset = 'bin/memfs.wasm.gz';
 		const bridge = new WorkerAssetBridge({ postMessage } as unknown as Worker, 'clang', {
 			baseUrl: '/clang/',
-			loader: vi.fn().mockResolvedValue(Uint8Array.from(gzipSync(runtimeBytes))),
+			loader: vi.fn().mockResolvedValue(deliveryBytes),
 			integrity: {
 				[asset]: {
-					bytes: runtimeBytes.byteLength,
-					sha256: '039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81'
+					bytes: deliveryBytes.byteLength,
+					sha256: createHash('sha256').update(deliveryBytes).digest('hex'),
+					uncompressedBytes: runtimeBytes.byteLength,
+					uncompressedSha256:
+						'039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81'
 				}
 			},
 			useAssetBridge: true
@@ -147,6 +152,42 @@ describe('WorkerAssetBridge asset requests', () => {
 			assetResponse: { id: 25, ok: true }
 		});
 		expect(new Uint8Array(response.assetResponse.bytes)).toEqual(runtimeBytes);
+	});
+
+	it('rejects gzip delivery bytes whose compressed digest does not match', async () => {
+		const postMessage = vi.fn();
+		const runtimeBytes = new Uint8Array([1, 2, 3]);
+		const deliveryBytes = Uint8Array.from(gzipSync(runtimeBytes));
+		const asset = 'bin/memfs.wasm.gz';
+		const expectedSha256 = '0'.repeat(64);
+		const actualSha256 = createHash('sha256').update(deliveryBytes).digest('hex');
+		const bridge = new WorkerAssetBridge({ postMessage } as unknown as Worker, 'clang', {
+			baseUrl: '/clang/',
+			loader: vi.fn().mockResolvedValue(deliveryBytes),
+			integrity: {
+				[asset]: {
+					bytes: deliveryBytes.byteLength,
+					sha256: expectedSha256,
+					uncompressedBytes: runtimeBytes.byteLength,
+					uncompressedSha256:
+						'039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81'
+				}
+			},
+			useAssetBridge: true
+		});
+
+		bridge.handleMessage({
+			data: { assetRequest: { id: 26, asset } }
+		} as MessageEvent);
+
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
+		expect(postMessage).toHaveBeenCalledWith({
+			assetResponse: {
+				id: 26,
+				ok: false,
+				error: `Runtime asset ${asset} compressed SHA-256 mismatch: expected ${expectedSha256}, received ${actualSha256}`
+			}
+		});
 	});
 
 	it('verifies configured asset sizes and SHA-256 digests before transfer', async () => {
@@ -194,7 +235,7 @@ describe('WorkerAssetBridge asset requests', () => {
 			assetResponse: {
 				id: 17,
 				ok: false,
-				error: `Runtime asset ${asset} SHA-256 mismatch: expected ${expectedSha256}, received 039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81`
+				error: `Runtime asset ${asset} uncompressed SHA-256 mismatch: expected ${expectedSha256}, received 039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81`
 			}
 		});
 	});

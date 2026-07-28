@@ -1,6 +1,7 @@
 import { env as dynamicPublicEnv } from '$env/dynamic/public';
 import { BUNDLED_CLANG_ASSET_INTEGRITY } from '$lib/playground/clangAssetIntegrity';
 import { normalizeTeaVmBaseUrl, resolveTeaVmBaseUrl } from '$lib/playground/teavmConfig';
+import type { RuntimeAssetIntegrityEntry as CoreRuntimeAssetIntegrityEntry } from '@wasm-idle/core';
 
 const publicEnv = (dynamicPublicEnv || {}) as Record<string, string | undefined>;
 
@@ -38,11 +39,7 @@ export type RuntimeAssetLoader = (
 	request: RuntimeAssetLoadRequest
 ) => RuntimeAssetLoaderResult | Promise<RuntimeAssetLoaderResult>;
 
-export interface RuntimeAssetIntegrityEntry {
-	sha256: string;
-	bytes?: number;
-	mediaType?: string;
-}
+export type RuntimeAssetIntegrityEntry = CoreRuntimeAssetIntegrityEntry;
 
 export type RuntimeAssetIntegrityMap = Record<string, string | RuntimeAssetIntegrityEntry>;
 
