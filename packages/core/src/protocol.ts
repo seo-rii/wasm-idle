@@ -62,8 +62,25 @@ export interface RuntimeHandshakeExpectation {
 
 export function assertRuntimeHandshake(
 	expected: RuntimeHandshakeExpectation,
-	actual: RuntimeHandshake
+	candidate: unknown
 ): RuntimeHandshake {
+	if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+		throw new ProtocolError('Runtime handshake must be an object');
+	}
+	const actual = candidate as RuntimeHandshake;
+	if (!actual.runtime || typeof actual.runtime !== 'object' || Array.isArray(actual.runtime)) {
+		throw new ProtocolError('Runtime handshake identity must be an object');
+	}
+	if (
+		!actual.capabilities ||
+		typeof actual.capabilities !== 'object' ||
+		Array.isArray(actual.capabilities)
+	) {
+		throw new ProtocolError('Runtime handshake capabilities must be an object', {
+			runtimeId: actual.runtime.implementationId,
+			profileId: actual.runtime.profileId
+		});
+	}
 	if (
 		actual.protocol !== RUNTIME_PROTOCOL_NAME ||
 		actual.protocolVersion !== expected.protocolVersion
@@ -200,12 +217,6 @@ export function assertRuntimeHandshake(
 				profileId: actual.runtime.profileId
 			}
 		);
-	}
-	if (!actual.capabilities || typeof actual.capabilities !== 'object') {
-		throw new ProtocolError('Runtime capabilities are malformed', {
-			runtimeId: actual.runtime.implementationId,
-			profileId: actual.runtime.profileId
-		});
 	}
 	if (!['none', 'prebuffered', 'streaming'].includes(actual.capabilities.stdin)) {
 		throw new ProtocolError('Runtime stdin capability is malformed', {

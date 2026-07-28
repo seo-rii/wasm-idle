@@ -135,4 +135,21 @@ describe('runtime profile handshake', () => {
 			'Runtime trust profile identity is incomplete'
 		);
 	});
+
+	it.each([
+		[null, 'Runtime handshake must be an object'],
+		[{}, 'Runtime handshake identity must be an object'],
+		[
+			{
+				protocol: RUNTIME_PROTOCOL_NAME,
+				protocolVersion: 1,
+				runtime: { languageId: 'C', implementationId: 'clang', version: '22.1.8' }
+			},
+			'Runtime handshake capabilities must be an object'
+		]
+	] as const)('rejects incomplete untrusted handshake objects', (candidate, message) => {
+		expect(() => assertRuntimeHandshake({ protocolVersion: 1 }, candidate)).toThrowError(
+			expect.objectContaining({ code: 'protocol', message })
+		);
+	});
 });
