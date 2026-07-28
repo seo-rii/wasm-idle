@@ -102,10 +102,40 @@ describe('core execution boundary', () => {
 		expect(cancel).toHaveBeenCalledOnce();
 	});
 
-	it('times out structured execution and requests runtime cancellation', async () => {
+	it('does not start a runtime operation when cancellation wins the scheduling race', async () => {
+		const run = vi.fn(async () => true);
+		const cancel = vi.fn(async () => undefined);
+		const binding = createPlaygroundBinding('/runtime', async () =>
+			createSandbox({ run, cancel })
+		);
+		const sandbox = await binding.load('C');
+		const controller = new AbortController();
+
+		const operation = sandbox.run('int main() {}', false, false, undefined, [], {
+			signal: controller.signal
+		});
+		const rejection = expect(operation).rejects.toMatchObject({ code: 'cancelled' });
+		controller.abort();
+
+		await rejection;
+		expect(run).not.toHaveBeenCalled();
+		expect(cancel).not.toHaveBeenCalled();
+		await expect(sandbox.run('int main() {}', false)).resolves.toBe(true);
+	});
+
+	it('keeps structured execution exclusive until a timed-out runtime actually settles', async () => {
 		vi.useFakeTimers();
 		try {
-			const execute = vi.fn(() => new Promise<ExecutionResult>(() => undefined));
+			let finishExecution: ((result: ExecutionResult) => void) | undefined;
+			const execute = vi
+				.fn()
+				.mockImplementationOnce(
+					() =>
+						new Promise<ExecutionResult>((resolve) => {
+							finishExecution = resolve;
+						})
+				)
+				.mockResolvedValue(completedResult);
 			const cancel = vi.fn(async () => undefined);
 			const binding = createPlaygroundBinding('/runtime', async () =>
 				createSandbox({ execute, cancel })
@@ -122,10 +152,24 @@ describe('core execution boundary', () => {
 				timeoutMs: 25
 			});
 			await Promise.resolve();
+			await expect(sandbox.execute!({ code: 'int second() {}' })).rejects.toMatchObject({
+				code: 'busy',
+				phase: 'execute'
+			});
 			await vi.advanceTimersByTimeAsync(25);
 
 			await rejection;
-			expect(execute).toHaveBeenCalledOnce();
+			await expect(sandbox.execute!({ code: 'int third() {}' })).rejects.toMatchObject({
+				code: 'busy',
+				phase: 'execute'
+			});
+			finishExecution?.(completedResult);
+			await Promise.resolve();
+			await Promise.resolve();
+			await expect(sandbox.execute!({ code: 'int fourth() {}' })).resolves.toBe(
+				completedResult
+			);
+			expect(execute).toHaveBeenCalledTimes(2);
 			expect(cancel).toHaveBeenCalledOnce();
 		} finally {
 			vi.useRealTimers();

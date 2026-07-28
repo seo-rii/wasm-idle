@@ -6,6 +6,7 @@ import type {
 	DebugVariable
 } from './debug.js';
 import {
+	BusyError,
 	CancelledError,
 	RuntimeConfigurationError,
 	TimeoutError,
@@ -46,6 +47,10 @@ export interface SandboxExecutionOptions {
 
 interface ValidatedSandboxExecutionOptions extends SandboxExecutionOptions {
 	limits: ExecutionLimits;
+}
+
+interface SandboxOperationState {
+	active: boolean;
 }
 
 export interface SandboxLifecycle {
@@ -215,13 +220,23 @@ function validateSandboxExecutionOptions(
 
 function runSandboxOperation<T>(
 	sandbox: Sandbox,
+	operationState: SandboxOperationState,
 	operation: () => Promise<T>,
 	signal: AbortSignal | undefined,
 	timeoutMs: number,
 	phase: RuntimePhase
 ): Promise<T> {
+	if (operationState.active) {
+		return Promise.reject(
+			new BusyError('A sandbox operation is already active', {
+				phase
+			})
+		);
+	}
+	operationState.active = true;
 	return new Promise<T>((resolve, reject) => {
 		let settled = false;
+		let operationStarted = false;
 		let cancellationRequested = false;
 		let timeout: ReturnType<typeof setTimeout> | undefined;
 
@@ -243,6 +258,9 @@ function runSandboxOperation<T>(
 				// The boundary error remains authoritative even if runtime cleanup fails.
 			}
 		};
+		const releaseOperation = () => {
+			operationState.active = false;
+		};
 		const settle = (callback: () => void) => {
 			if (settled) return;
 			settled = true;
@@ -250,7 +268,8 @@ function runSandboxOperation<T>(
 			callback();
 		};
 		const onAbort = () => {
-			requestCancellation();
+			if (operationStarted) requestCancellation();
+			else releaseOperation();
 			settle(() =>
 				reject(
 					new CancelledError('Runtime operation cancelled', {
@@ -267,7 +286,8 @@ function runSandboxOperation<T>(
 			return;
 		}
 		timeout = setTimeout(() => {
-			requestCancellation();
+			if (operationStarted) requestCancellation();
+			else releaseOperation();
 			settle(() =>
 				reject(
 					new TimeoutError(`Runtime ${phase} exceeded ${timeoutMs} ms`, {
@@ -277,12 +297,21 @@ function runSandboxOperation<T>(
 				)
 			);
 		}, timeoutMs);
-		void Promise.resolve()
-			.then(operation)
-			.then(
-				(value) => settle(() => resolve(value)),
-				(error) => settle(() => reject(error))
-			);
+		void Promise.resolve().then(async () => {
+			if (settled) {
+				releaseOperation();
+				return;
+			}
+			operationStarted = true;
+			try {
+				const value = await operation();
+				releaseOperation();
+				settle(() => resolve(value));
+			} catch (error) {
+				releaseOperation();
+				settle(() => reject(error));
+			}
+		});
 	});
 }
 
@@ -292,6 +321,7 @@ function combinedPhaseTimeoutMs(firstTimeoutMs: number, secondTimeoutMs: number)
 
 function bindRuntimeAssets(sandbox: Sandbox, runtimeAssets: SandboxRuntimeAssets): BoundSandbox {
 	let disposePromise: Promise<void> | undefined;
+	const operationState: SandboxOperationState = { active: false };
 	return new Proxy(sandbox, {
 		get(target, prop, receiver) {
 			if (prop === 'runtimeAssets') return runtimeAssets;
@@ -317,6 +347,7 @@ function bindRuntimeAssets(sandbox: Sandbox, runtimeAssets: SandboxRuntimeAssets
 					const validated = validateSandboxExecutionOptions(code, options, 'startup');
 					return runSandboxOperation(
 						target,
+						operationState,
 						() => target.load(runtimeAssets, code, log, args, validated, progress),
 						validated.signal,
 						combinedPhaseTimeoutMs(
@@ -343,6 +374,7 @@ function bindRuntimeAssets(sandbox: Sandbox, runtimeAssets: SandboxRuntimeAssets
 					});
 					return runSandboxOperation(
 						target,
+						operationState,
 						() =>
 							execute.call(target, {
 								...request,
@@ -371,6 +403,7 @@ function bindRuntimeAssets(sandbox: Sandbox, runtimeAssets: SandboxRuntimeAssets
 					const validated = validateSandboxExecutionOptions(code, options);
 					return runSandboxOperation(
 						target,
+						operationState,
 						() => target.run(code, prepare, log, progress, args, validated),
 						validated.signal,
 						combinedPhaseTimeoutMs(
