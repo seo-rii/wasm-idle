@@ -29,6 +29,7 @@ export interface NodeRunResult {
 	ok: boolean;
 	result: boolean | string;
 	elapsedMs: number;
+	error?: unknown;
 }
 
 export function fileAssetUrl(path: string): string {
@@ -70,7 +71,7 @@ export async function runWasmIdleInNode(options: NodeRunOptions): Promise<NodeRu
 			options.executionOptions || {}
 		);
 		return {
-			ok: result === true,
+			ok: result !== false,
 			result,
 			elapsedMs: sandbox.elapse || 0
 		};
@@ -80,7 +81,8 @@ export async function runWasmIdleInNode(options: NodeRunOptions): Promise<NodeRu
 		return {
 			ok: false,
 			result: message,
-			elapsedMs: sandbox.elapse || 0
+			elapsedMs: sandbox.elapse || 0,
+			error
 		};
 	} finally {
 		if (options.clearAfterRun) await sandbox.clear();
