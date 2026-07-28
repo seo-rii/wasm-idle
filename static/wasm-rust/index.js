@@ -1,6 +1,6 @@
-import { compileRust, preloadBrowserRustRuntime } from './compiler.js';
+import { compileRust, createBrowserRustCompileRequestIdentity, preloadBrowserRustRuntime, resolveBrowserRustDebugMode } from './compiler.js';
 import { executeBrowserRustArtifact } from './browser-execution.js';
-export { executeBrowserRustArtifact, preloadBrowserRustRuntime };
+export { createBrowserRustCompileRequestIdentity, executeBrowserRustArtifact, preloadBrowserRustRuntime, resolveBrowserRustDebugMode };
 export async function createRustCompiler(options) {
     return {
         compile: async (request) => compileRust(request, options?.dependencies)

@@ -1,5 +1,6 @@
 export type SupportedTargetTriple = 'wasm32-wasip1' | 'wasm32-wasip2' | 'wasm32-wasip3';
 export type BrowserRustArtifactFormat = 'core-wasm' | 'component';
+export type BrowserRustDebugMode = 'none' | 'trace' | 'lldb';
 export type BrowserRustCompileStage =
 	| 'manifest'
 	| 'fetch-rustc'
@@ -49,6 +50,11 @@ export interface BrowserRustCompileRequest {
 	 * Reserved for a future compile-mode surface. Passing a value is currently rejected.
 	 */
 	mode?: string;
+	/**
+	 * Selects the debug artifact contract. `trace` preserves the supplied source as-is, while
+	 * `lldb` emits unoptimized embedded DWARF for the wasm32-wasip1 target.
+	 */
+	debugMode?: BrowserRustDebugMode;
 	edition?: string;
 	crateType?: string;
 	targetTriple?: SupportedTargetTriple;
@@ -64,6 +70,35 @@ export interface BrowserRustCompileRequest {
 	onProgress?: (progress: BrowserRustCompileProgress) => void;
 }
 
+export interface RuntimeRustCompilerProvenance {
+	name: 'rustc';
+	version: string;
+	revision: string;
+	llvmVersion: string;
+	llvmRevision: string;
+	runtimeVersion: string;
+	hostTriple: string;
+}
+
+export interface DwarfDebugDescriptor {
+	kind: 'dwarf';
+	sourceRoot: '/workspace';
+	moduleSha256: string;
+	files: Array<{
+		path: '/workspace/main.rs';
+		contentSha256: string;
+	}>;
+	compiler: RuntimeRustCompilerProvenance;
+}
+
+export interface BrowserRustArtifact {
+	wasm?: Uint8Array | ArrayBuffer;
+	wat?: string;
+	targetTriple: SupportedTargetTriple;
+	format: BrowserRustArtifactFormat;
+	debug?: DwarfDebugDescriptor;
+}
+
 export interface BrowserRustCompilerResult {
 	success: boolean;
 	stdout?: string;
@@ -71,12 +106,7 @@ export interface BrowserRustCompilerResult {
 	diagnostics?: CompilerDiagnostic[];
 	logs?: string[];
 	logRecords?: CompilerLogRecord[];
-	artifact?: {
-		wasm?: Uint8Array | ArrayBuffer;
-		wat?: string;
-		targetTriple: SupportedTargetTriple;
-		format: BrowserRustArtifactFormat;
-	};
+	artifact?: BrowserRustArtifact;
 }
 
 export interface BrowserRustCompiler {

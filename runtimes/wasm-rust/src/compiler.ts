@@ -2,8 +2,10 @@ import { resolveVersionedAssetUrl } from './asset-url.js';
 import { linkBitcodeWithLlvmWasm } from './browser-linker.js';
 import {
 	attachCompileLogs,
+	createBrowserRustCompileRequestIdentity,
 	describeWorkerErrorEvent,
 	makeFailure,
+	resolveBrowserRustDebugMode,
 	validateCompileRequest
 } from './compiler-support.js';
 import {
@@ -22,28 +24,37 @@ import type {
 	CompileWorkerRequest
 } from './worker-protocol.js';
 import type {
+	BrowserRustArtifact,
 	BrowserRustCompileProgress,
 	BrowserRustCompileRequest,
 	BrowserRustCompileStage,
 	BrowserRustCompileWorkerRequest,
 	BrowserRustCompilerResult,
+	BrowserRustDebugMode,
 	CompilerLogLevel,
 	CompilerLogRecord,
-	CompilerDiagnostic
+	CompilerDiagnostic,
+	DwarfDebugDescriptor,
+	RuntimeRustCompilerProvenance
 } from './types.js';
 
 export type {
+	BrowserRustArtifact,
 	BrowserRustCompileProgress,
 	BrowserRustCompileRequest,
 	BrowserRustCompileStage,
 	BrowserRustCompiler,
 	BrowserRustCompilerFactory,
 	BrowserRustCompilerResult,
+	BrowserRustDebugMode,
 	CompilerDiagnostic,
 	CompilerLogLevel,
-	CompilerLogRecord
+	CompilerLogRecord,
+	DwarfDebugDescriptor,
+	RuntimeRustCompilerProvenance
 } from './types.js';
 export type { PreloadBrowserRustRuntimeOptions } from './compiler-preload.js';
+export { createBrowserRustCompileRequestIdentity, resolveBrowserRustDebugMode };
 export { preloadBrowserRustRuntime };
 
 interface WorkerLike {
@@ -96,6 +107,7 @@ export async function compileRust(
 	if (validationError) {
 		return makeFailure(validationError);
 	}
+	const debugMode = resolveBrowserRustDebugMode(request);
 	if (
 		(!dependencies.createWorker && typeof Worker === 'undefined') ||
 		typeof SharedArrayBuffer === 'undefined' ||
@@ -209,6 +221,34 @@ export async function compileRust(
 	try {
 		const { manifest, targetConfig, versionedModuleBaseUrl, versionedRuntimeBaseUrl } =
 			await loadBundledRuntimeContext(dependencies.loadManifest, request.targetTriple);
+		let dwarfDebugDescriptorBase: Omit<DwarfDebugDescriptor, 'moduleSha256'> | null = null;
+		if (debugMode === 'lldb') {
+			if (!globalThis.crypto?.subtle) {
+				throw new Error('wasm-rust LLDB artifacts require Web Crypto SHA-256 support');
+			}
+			const sourceDigest = await globalThis.crypto.subtle.digest(
+				'SHA-256',
+				new TextEncoder().encode(request.code)
+			);
+			if (!manifest.compilerProvenance) {
+				throw new Error(
+					'wasm-rust LLDB artifacts require pinned rustc and LLVM provenance in the runtime manifest'
+				);
+			}
+			dwarfDebugDescriptorBase = {
+				kind: 'dwarf',
+				sourceRoot: '/workspace',
+				files: [
+					{
+						path: '/workspace/main.rs',
+						contentSha256: Array.from(new Uint8Array(sourceDigest), (byte) =>
+							byte.toString(16).padStart(2, '0')
+						).join('')
+					}
+				],
+				compiler: { ...manifest.compilerProvenance }
+			};
+		}
 		const integratedCompilerOutput = isIntegratedCompilerOutput(targetConfig.compile);
 		const mirroredOutputName = integratedCompilerOutput
 			? 'linked WebAssembly artifact'
@@ -451,6 +491,23 @@ export async function compileRust(
 						);
 						break;
 					}
+					if (dwarfDebugDescriptorBase) {
+						if (!artifact.wasm) {
+							throw new Error(
+								'wasm-rust LLDB compilation completed without WebAssembly module bytes'
+							);
+						}
+						const moduleDigest = await globalThis.crypto.subtle.digest(
+							'SHA-256',
+							new Uint8Array(artifact.wasm)
+						);
+						artifact.debug = {
+							...dwarfDebugDescriptorBase,
+							moduleSha256: Array.from(new Uint8Array(moduleDigest), (byte) =>
+								byte.toString(16).padStart(2, '0')
+							).join('')
+						};
+					}
 					flushAttemptCompileLogs(attemptCompileLogs);
 					emitCompileProgress('done', attempt, {
 						completed: 1,
@@ -518,6 +575,23 @@ export async function compileRust(
 						);
 						break;
 					}
+					if (dwarfDebugDescriptorBase) {
+						if (!artifact.wasm) {
+							throw new Error(
+								'wasm-rust LLDB compilation completed without WebAssembly module bytes'
+							);
+						}
+						const moduleDigest = await globalThis.crypto.subtle.digest(
+							'SHA-256',
+							new Uint8Array(artifact.wasm)
+						);
+						artifact.debug = {
+							...dwarfDebugDescriptorBase,
+							moduleSha256: Array.from(new Uint8Array(moduleDigest), (byte) =>
+								byte.toString(16).padStart(2, '0')
+							).join('')
+						};
+					}
 					flushAttemptCompileLogs(attemptCompileLogs);
 					emitCompileProgress('done', attempt, {
 						completed: 1,
@@ -580,6 +654,23 @@ export async function compileRust(
 										emitCompileProgress(progress.stage, attempt, progress)
 								}
 							);
+							if (dwarfDebugDescriptorBase) {
+								if (!artifact.wasm) {
+									throw new Error(
+										'wasm-rust LLDB compilation completed without WebAssembly module bytes'
+									);
+								}
+								const moduleDigest = await globalThis.crypto.subtle.digest(
+									'SHA-256',
+									new Uint8Array(artifact.wasm)
+								);
+								artifact.debug = {
+									...dwarfDebugDescriptorBase,
+									moduleSha256: Array.from(new Uint8Array(moduleDigest), (byte) =>
+										byte.toString(16).padStart(2, '0')
+									).join('')
+								};
+							}
 							flushAttemptCompileLogs(attemptCompileLogs);
 							emitCompileProgress('done', attempt, {
 								completed: 1,
@@ -678,6 +769,23 @@ export async function compileRust(
 								settledMessage.stdout
 							);
 							continue;
+						}
+						if (dwarfDebugDescriptorBase) {
+							if (!artifact.wasm) {
+								throw new Error(
+									'wasm-rust LLDB compilation completed without WebAssembly module bytes'
+								);
+							}
+							const moduleDigest = await globalThis.crypto.subtle.digest(
+								'SHA-256',
+								new Uint8Array(artifact.wasm)
+							);
+							artifact.debug = {
+								...dwarfDebugDescriptorBase,
+								moduleSha256: Array.from(new Uint8Array(moduleDigest), (byte) =>
+									byte.toString(16).padStart(2, '0')
+								).join('')
+							};
 						}
 						flushAttemptCompileLogs(attemptCompileLogs);
 						emitCompileProgress('done', attempt, {

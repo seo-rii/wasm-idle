@@ -192,6 +192,13 @@ async function main() {
 					runner: receipt.runner,
 					sourceDateEpoch: receipt.sourceDateEpoch
 				},
+				compilerProvenance: {
+					name: 'rustc',
+					version: lock.sources.rust.version,
+					revision: lock.sources.rust.commit,
+					llvmVersion: lock.sources.llvm.version,
+					llvmRevision: lock.sources.llvm.commit
+				},
 				compiler: {
 					rustcWasm,
 					workerBitcodeFile: 'main.wasm',

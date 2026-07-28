@@ -1,10 +1,29 @@
 const SUPPORTED_EDITIONS = new Set(['2021', '2024']);
 const SUPPORTED_CRATE_TYPES = new Set(['bin']);
+const SUPPORTED_DEBUG_MODES = new Set(['none', 'trace', 'lldb']);
 const SUPPORTED_TARGET_TRIPLES = new Set([
     'wasm32-wasip1',
     'wasm32-wasip2',
     'wasm32-wasip3'
 ]);
+export function resolveBrowserRustDebugMode(request) {
+    const debugMode = request.debugMode ?? 'none';
+    if (!SUPPORTED_DEBUG_MODES.has(debugMode)) {
+        throw new Error(`unsupported browser compiler debug mode: ${String(debugMode)}`);
+    }
+    return debugMode;
+}
+export function createBrowserRustCompileRequestIdentity(request) {
+    return JSON.stringify({
+        version: 1,
+        sourcePath: '/workspace/main.rs',
+        code: request.code,
+        debugMode: resolveBrowserRustDebugMode(request),
+        edition: request.edition || '2024',
+        crateType: request.crateType || 'bin',
+        targetTriple: request.targetTriple || 'wasm32-wasip1'
+    });
+}
 export function describeWorkerErrorEvent(event) {
     const location = event.filename
         ? `${event.filename}${event.lineno ? `:${event.lineno}` : ''}${event.colno ? `:${event.colno}` : ''}`
@@ -63,6 +82,17 @@ export function validateCompileRequest(request) {
     }
     if (request.targetTriple && !SUPPORTED_TARGET_TRIPLES.has(request.targetTriple)) {
         return `unsupported browser compiler target: ${request.targetTriple}`;
+    }
+    let debugMode;
+    try {
+        debugMode = resolveBrowserRustDebugMode(request);
+    }
+    catch (error) {
+        return error instanceof Error ? error.message : String(error);
+    }
+    const targetTriple = request.targetTriple || 'wasm32-wasip1';
+    if (debugMode === 'lldb' && targetTriple !== 'wasm32-wasip1') {
+        return `browser compiler LLDB debugging currently supports only wasm32-wasip1, not ${targetTriple}`;
     }
     return null;
 }

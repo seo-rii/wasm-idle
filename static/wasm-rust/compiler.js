@@ -1,6 +1,6 @@
 import { resolveVersionedAssetUrl } from './asset-url.js';
 import { linkBitcodeWithLlvmWasm } from './browser-linker.js';
-import { attachCompileLogs, describeWorkerErrorEvent, makeFailure, validateCompileRequest } from './compiler-support.js';
+import { attachCompileLogs, createBrowserRustCompileRequestIdentity, describeWorkerErrorEvent, makeFailure, resolveBrowserRustDebugMode, validateCompileRequest } from './compiler-support.js';
 import { preloadBrowserRustRuntime } from './compiler-preload.js';
 import { loadBundledRuntimeContext } from './compiler-runtime.js';
 import { createModuleWorker } from './module-worker.js';
@@ -8,6 +8,7 @@ import { classifyRetryableFailureKind } from './retryable-failure-kind.js';
 import { isIntegratedCompilerOutput } from './runtime-manifest.js';
 import { readMirroredBitcode } from './rustc-runtime.js';
 import { readWorkerFailure, WORKER_STATUS_BUFFER_BYTES } from './worker-status.js';
+export { createBrowserRustCompileRequestIdentity, resolveBrowserRustDebugMode };
 export { preloadBrowserRustRuntime };
 const PROGRESS_STAGE_RANGES = {
     manifest: [0, 1],
@@ -27,6 +28,7 @@ export async function compileRust(request, dependencies = {}) {
     if (validationError) {
         return makeFailure(validationError);
     }
+    const debugMode = resolveBrowserRustDebugMode(request);
     if ((!dependencies.createWorker && typeof Worker === 'undefined') ||
         typeof SharedArrayBuffer === 'undefined' ||
         typeof Atomics === 'undefined') {
@@ -129,6 +131,27 @@ export async function compileRust(request, dependencies = {}) {
     });
     try {
         const { manifest, targetConfig, versionedModuleBaseUrl, versionedRuntimeBaseUrl } = await loadBundledRuntimeContext(dependencies.loadManifest, request.targetTriple);
+        let dwarfDebugDescriptorBase = null;
+        if (debugMode === 'lldb') {
+            if (!globalThis.crypto?.subtle) {
+                throw new Error('wasm-rust LLDB artifacts require Web Crypto SHA-256 support');
+            }
+            const sourceDigest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(request.code));
+            if (!manifest.compilerProvenance) {
+                throw new Error('wasm-rust LLDB artifacts require pinned rustc and LLVM provenance in the runtime manifest');
+            }
+            dwarfDebugDescriptorBase = {
+                kind: 'dwarf',
+                sourceRoot: '/workspace',
+                files: [
+                    {
+                        path: '/workspace/main.rs',
+                        contentSha256: Array.from(new Uint8Array(sourceDigest), (byte) => byte.toString(16).padStart(2, '0')).join('')
+                    }
+                ],
+                compiler: { ...manifest.compilerProvenance }
+            };
+        }
         const integratedCompilerOutput = isIntegratedCompilerOutput(targetConfig.compile);
         const mirroredOutputName = integratedCompilerOutput
             ? 'linked WebAssembly artifact'
@@ -314,6 +337,16 @@ export async function compileRust(request, dependencies = {}) {
                         attemptResult = makeFailure(`browser rustc emitted ${mirroredOutputName} but ${outputFinalizationName} failed: ${error instanceof Error ? error.message : String(error)}`);
                         break;
                     }
+                    if (dwarfDebugDescriptorBase) {
+                        if (!artifact.wasm) {
+                            throw new Error('wasm-rust LLDB compilation completed without WebAssembly module bytes');
+                        }
+                        const moduleDigest = await globalThis.crypto.subtle.digest('SHA-256', new Uint8Array(artifact.wasm));
+                        artifact.debug = {
+                            ...dwarfDebugDescriptorBase,
+                            moduleSha256: Array.from(new Uint8Array(moduleDigest), (byte) => byte.toString(16).padStart(2, '0')).join('')
+                        };
+                    }
                     flushAttemptCompileLogs(attemptCompileLogs);
                     emitCompileProgress('done', attempt, {
                         completed: 1,
@@ -358,6 +391,16 @@ export async function compileRust(request, dependencies = {}) {
                         attemptResult = makeFailure(`browser rustc emitted ${mirroredOutputName} but ${outputFinalizationName} failed: ${error instanceof Error ? error.message : String(error)}`);
                         break;
                     }
+                    if (dwarfDebugDescriptorBase) {
+                        if (!artifact.wasm) {
+                            throw new Error('wasm-rust LLDB compilation completed without WebAssembly module bytes');
+                        }
+                        const moduleDigest = await globalThis.crypto.subtle.digest('SHA-256', new Uint8Array(artifact.wasm));
+                        artifact.debug = {
+                            ...dwarfDebugDescriptorBase,
+                            moduleSha256: Array.from(new Uint8Array(moduleDigest), (byte) => byte.toString(16).padStart(2, '0')).join('')
+                        };
+                    }
                     flushAttemptCompileLogs(attemptCompileLogs);
                     emitCompileProgress('done', attempt, {
                         completed: 1,
@@ -398,6 +441,16 @@ export async function compileRust(request, dependencies = {}) {
                             const artifact = await (dependencies.linkBitcode || linkBitcodeWithLlvmWasm)(mirrored.bytes, manifest, targetConfig, versionedRuntimeBaseUrl.toString(), {
                                 onProgress: (progress) => emitCompileProgress(progress.stage, attempt, progress)
                             });
+                            if (dwarfDebugDescriptorBase) {
+                                if (!artifact.wasm) {
+                                    throw new Error('wasm-rust LLDB compilation completed without WebAssembly module bytes');
+                                }
+                                const moduleDigest = await globalThis.crypto.subtle.digest('SHA-256', new Uint8Array(artifact.wasm));
+                                artifact.debug = {
+                                    ...dwarfDebugDescriptorBase,
+                                    moduleSha256: Array.from(new Uint8Array(moduleDigest), (byte) => byte.toString(16).padStart(2, '0')).join('')
+                                };
+                            }
                             flushAttemptCompileLogs(attemptCompileLogs);
                             emitCompileProgress('done', attempt, {
                                 completed: 1,
@@ -458,6 +511,16 @@ export async function compileRust(request, dependencies = {}) {
                         if (!artifact) {
                             attemptResult = makeFailure(`browser rustc emitted ${mirroredOutputName} but ${outputFinalizationName} returned no wasm artifact`, settledMessage.diagnostics, settledMessage.stdout);
                             continue;
+                        }
+                        if (dwarfDebugDescriptorBase) {
+                            if (!artifact.wasm) {
+                                throw new Error('wasm-rust LLDB compilation completed without WebAssembly module bytes');
+                            }
+                            const moduleDigest = await globalThis.crypto.subtle.digest('SHA-256', new Uint8Array(artifact.wasm));
+                            artifact.debug = {
+                                ...dwarfDebugDescriptorBase,
+                                moduleSha256: Array.from(new Uint8Array(moduleDigest), (byte) => byte.toString(16).padStart(2, '0')).join('')
+                            };
                         }
                         flushAttemptCompileLogs(attemptCompileLogs);
                         emitCompileProgress('done', attempt, {

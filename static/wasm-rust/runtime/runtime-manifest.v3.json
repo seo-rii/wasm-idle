@@ -9,6 +9,13 @@
     "runner": "host",
     "sourceDateEpoch": 1783912447
   },
+  "compilerProvenance": {
+    "name": "rustc",
+    "version": "1.99.0",
+    "revision": "48c2cee70232ecc3a6a8e285b2e15620b39f82a7",
+    "llvmVersion": "22.1.8",
+    "llvmRevision": "52ed14fcd56afc30f9cccd8ca8ce237c2eef7e04"
+  },
   "compiler": {
     "rustcWasm": "rustc/rustc.wasm.gz",
     "workerBitcodeFile": "main.wasm",

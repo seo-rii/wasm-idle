@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { compileRust } from '../src/compiler.js';
+import {
+	compileRust,
+	createBrowserRustCompileRequestIdentity,
+	resolveBrowserRustDebugMode
+} from '../src/compiler.js';
 import {
 	FakeWorker,
 	createRuntimeManifest,
@@ -64,6 +68,68 @@ describe('wasm-rust compiler edge cases', () => {
 		expect(channelResult.stderr).toContain('channel selection is not supported yet');
 		expect(modeResult.success).toBe(false);
 		expect(modeResult.stderr).toContain('mode selection is not supported yet');
+		expect(loadManifest).not.toHaveBeenCalled();
+		expect(createWorker).not.toHaveBeenCalled();
+	});
+
+	it('includes the resolved debug mode in stable compile request identities', () => {
+		const request = {
+			code: 'fn main() {}',
+			targetTriple: 'wasm32-wasip1' as const
+		};
+
+		expect(resolveBrowserRustDebugMode(request)).toBe('none');
+		expect(createBrowserRustCompileRequestIdentity(request)).toBe(
+			createBrowserRustCompileRequestIdentity({
+				...request,
+				debugMode: 'none'
+			})
+		);
+		expect(
+			createBrowserRustCompileRequestIdentity({
+				...request,
+				debugMode: 'trace'
+			})
+		).not.toBe(
+			createBrowserRustCompileRequestIdentity({
+				...request,
+				debugMode: 'lldb'
+			})
+		);
+	});
+
+	it('rejects unsupported debug modes and non-wasip1 LLDB targets before runtime work', async () => {
+		const loadManifest = vi.fn(async () => createRuntimeManifest());
+		const createWorker = vi.fn(() => new FakeWorker());
+
+		const unsupportedModeResult = await compileRust(
+			{
+				code: 'fn main() {}',
+				debugMode: 'native' as 'lldb'
+			},
+			{
+				loadManifest,
+				createWorker
+			}
+		);
+		const unsupportedTargetResult = await compileRust(
+			{
+				code: 'fn main() {}',
+				debugMode: 'lldb',
+				targetTriple: 'wasm32-wasip2'
+			},
+			{
+				loadManifest,
+				createWorker
+			}
+		);
+
+		expect(unsupportedModeResult.success).toBe(false);
+		expect(unsupportedModeResult.stderr).toContain('unsupported browser compiler debug mode');
+		expect(unsupportedTargetResult.success).toBe(false);
+		expect(unsupportedTargetResult.stderr).toContain(
+			'LLDB debugging currently supports only wasm32-wasip1'
+		);
 		expect(loadManifest).not.toHaveBeenCalled();
 		expect(createWorker).not.toHaveBeenCalled();
 	});

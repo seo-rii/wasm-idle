@@ -1,5 +1,9 @@
 import { resolveVersionedAssetUrl } from './asset-url.js';
-import type { BrowserRustArtifactFormat, SupportedTargetTriple } from './types.js';
+import type {
+	BrowserRustArtifactFormat,
+	RuntimeRustCompilerProvenance,
+	SupportedTargetTriple
+} from './types.js';
 
 export interface RuntimeAssetFile {
 	asset: string;
@@ -95,6 +99,7 @@ export interface RuntimeManifestV1 {
 		lldData?: string;
 	};
 	link: RuntimeLinkConfig;
+	compilerProvenance?: RuntimeRustCompilerProvenance;
 }
 
 export interface RuntimeManifestV2 {
@@ -103,6 +108,7 @@ export interface RuntimeManifestV2 {
 	hostTriple: string;
 	defaultTargetTriple: SupportedTargetTriple;
 	compiler: RuntimeCompilerConfig;
+	compilerProvenance?: RuntimeRustCompilerProvenance;
 	targets: Partial<Record<SupportedTargetTriple, Omit<RuntimeTargetConfig, 'targetTriple'>>>;
 }
 
@@ -112,6 +118,7 @@ export interface RuntimeManifestV3 {
 	hostTriple: string;
 	defaultTargetTriple: SupportedTargetTriple;
 	compiler: RuntimeCompilerConfig;
+	compilerProvenance?: RuntimeRustCompilerProvenance;
 	targets: Partial<Record<SupportedTargetTriple, Omit<RuntimeTargetConfig, 'targetTriple'>>>;
 }
 
@@ -121,6 +128,7 @@ export interface NormalizedRuntimeManifest {
 	hostTriple: string;
 	defaultTargetTriple: SupportedTargetTriple;
 	compiler: RuntimeCompilerConfig;
+	compilerProvenance?: RuntimeRustCompilerProvenance;
 	targets: Partial<Record<SupportedTargetTriple, RuntimeTargetConfig>>;
 }
 
@@ -184,6 +192,27 @@ function isNormalizedRuntimeManifest(
 		}
 	}
 	return true;
+}
+
+function parseCompilerProvenance(
+	value: unknown,
+	runtimeVersion: string,
+	hostTriple: string
+): RuntimeRustCompilerProvenance | undefined {
+	if (value === undefined) return undefined;
+	const provenance = expectObject(value, 'compilerProvenance');
+	if (provenance.name !== 'rustc') {
+		throw new Error('compilerProvenance.name must be rustc');
+	}
+	return {
+		name: 'rustc',
+		version: expectString(provenance.version, 'compilerProvenance.version'),
+		revision: expectString(provenance.revision, 'compilerProvenance.revision'),
+		llvmVersion: expectString(provenance.llvmVersion, 'compilerProvenance.llvmVersion'),
+		llvmRevision: expectString(provenance.llvmRevision, 'compilerProvenance.llvmRevision'),
+		runtimeVersion,
+		hostTriple
+	};
 }
 
 function isRuntimeManifestV2(
@@ -488,37 +517,60 @@ export function parseRuntimeManifest(value: unknown): RuntimeManifest {
 	const root = expectObject(value, 'root');
 
 	if (root.manifestVersion === 3) {
+		const version = expectString(root.version, 'version');
+		const hostTriple = expectString(root.hostTriple, 'hostTriple');
+		const compilerProvenance = parseCompilerProvenance(
+			root.compilerProvenance,
+			version,
+			hostTriple
+		);
 		return {
 			manifestVersion: 3,
-			version: expectString(root.version, 'version'),
-			hostTriple: expectString(root.hostTriple, 'hostTriple'),
+			version,
+			hostTriple,
 			defaultTargetTriple: expectTargetTriple(
 				root.defaultTargetTriple,
 				'defaultTargetTriple'
 			),
 			compiler: parseCompilerConfig(root.compiler, 'compiler'),
+			...(compilerProvenance ? { compilerProvenance } : {}),
 			targets: parseVersionedTargets(root)
 		};
 	}
 
 	if (root.manifestVersion === 2) {
+		const version = expectString(root.version, 'version');
+		const hostTriple = expectString(root.hostTriple, 'hostTriple');
+		const compilerProvenance = parseCompilerProvenance(
+			root.compilerProvenance,
+			version,
+			hostTriple
+		);
 		return {
 			manifestVersion: 2,
-			version: expectString(root.version, 'version'),
-			hostTriple: expectString(root.hostTriple, 'hostTriple'),
+			version,
+			hostTriple,
 			defaultTargetTriple: expectTargetTriple(
 				root.defaultTargetTriple,
 				'defaultTargetTriple'
 			),
 			compiler: parseCompilerConfig(root.compiler, 'compiler'),
+			...(compilerProvenance ? { compilerProvenance } : {}),
 			targets: parseVersionedTargets(root)
 		};
 	}
 
 	const llvm = expectObject(root.llvm, 'llvm');
+	const version = expectString(root.version, 'version');
+	const hostTriple = expectString(root.hostTriple, 'hostTriple');
+	const compilerProvenance = parseCompilerProvenance(
+		root.compilerProvenance,
+		version,
+		hostTriple
+	);
 	return {
-		version: expectString(root.version, 'version'),
-		hostTriple: expectString(root.hostTriple, 'hostTriple'),
+		version,
+		hostTriple,
 		targetTriple: expectTargetTriple(root.targetTriple, 'targetTriple'),
 		rustcWasm: expectString(root.rustcWasm, 'rustcWasm'),
 		workerBitcodeFile: expectString(root.workerBitcodeFile, 'workerBitcodeFile'),
@@ -549,7 +601,8 @@ export function parseRuntimeManifest(value: unknown): RuntimeManifest {
 						lldData: expectString(llvm.lldData, 'llvm.lldData')
 					})
 		},
-		link: parseLinkConfig(root.link, 'link')
+		link: parseLinkConfig(root.link, 'link'),
+		...(compilerProvenance ? { compilerProvenance } : {})
 	};
 }
 
@@ -557,6 +610,11 @@ export function normalizeRuntimeManifest(
 	value: RuntimeManifest | NormalizedRuntimeManifest
 ): NormalizedRuntimeManifest {
 	if (isNormalizedRuntimeManifest(value)) {
+		const compilerProvenance = parseCompilerProvenance(
+			value.compilerProvenance,
+			value.version,
+			value.hostTriple
+		);
 		const targets: NormalizedRuntimeManifest['targets'] = {};
 		for (const [targetTriple, targetConfig] of Object.entries(value.targets) as Array<
 			[SupportedTargetTriple, NormalizedRuntimeManifest['targets'][SupportedTargetTriple]]
@@ -576,11 +634,17 @@ export function normalizeRuntimeManifest(
 		}
 		return {
 			...value,
+			...(compilerProvenance ? { compilerProvenance } : {}),
 			targets
 		};
 	}
 
 	if (isRuntimeManifestV2(value) || isRuntimeManifestV3(value)) {
+		const compilerProvenance = parseCompilerProvenance(
+			value.compilerProvenance,
+			value.version,
+			value.hostTriple
+		);
 		const targets: NormalizedRuntimeManifest['targets'] = {};
 		for (const [targetTriple, targetConfig] of Object.entries(value.targets) as Array<
 			[SupportedTargetTriple, RuntimeManifestV2['targets'][SupportedTargetTriple]]
@@ -616,10 +680,16 @@ export function normalizeRuntimeManifest(
 			hostTriple: value.hostTriple,
 			defaultTargetTriple: value.defaultTargetTriple,
 			compiler: value.compiler,
+			...(compilerProvenance ? { compilerProvenance } : {}),
 			targets
 		};
 	}
 
+	const compilerProvenance = parseCompilerProvenance(
+		value.compilerProvenance,
+		value.version,
+		value.hostTriple
+	);
 	return {
 		manifestVersion: 1,
 		version: value.version,
@@ -634,6 +704,7 @@ export function normalizeRuntimeManifest(
 			artifactIdleMs: value.artifactIdleMs,
 			rustcMemory: value.rustcMemory
 		},
+		...(compilerProvenance ? { compilerProvenance } : {}),
 		targets: {
 			[value.targetTriple]: {
 				targetTriple: value.targetTriple,

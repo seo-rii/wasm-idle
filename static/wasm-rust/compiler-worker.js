@@ -1,6 +1,7 @@
 import { resolveVersionedAssetUrl } from './asset-url.js';
 import { createModuleWorker } from './module-worker.js';
 import { classifyRetryableFailureKind } from './retryable-failure-kind.js';
+import { resolveBrowserRustDebugMode } from './compiler-support.js';
 import { isIntegratedCompilerOutput, resolveTargetManifest } from './runtime-manifest.js';
 import { buildPreopenedDirectories, instantiateRustcInstance } from './rustc-runtime.js';
 import { dispatchThreadPoolSlotAndWait, reserveIdleThreadPoolSlot, THREAD_STARTUP_STATE_INSTANTIATED } from './thread-startup.js';
@@ -21,6 +22,7 @@ export function validateRuntimeAssetBytes(assetPath, bytes) {
 export { fetchRuntimeAssetBytes };
 export function buildRustcArguments(request, manifest) {
     const edition = request.edition || '2024';
+    const debugMode = resolveBrowserRustDebugMode(request);
     const target = resolveTargetManifest(manifest, request.targetTriple);
     const integratedOutput = isIntegratedCompilerOutput(target.compile);
     return [
@@ -39,6 +41,14 @@ export function buildRustcArguments(request, manifest) {
         edition,
         '-Cpanic=abort',
         '-Ccodegen-units=1',
+        ...(debugMode === 'lldb'
+            ? [
+                '-Cdebuginfo=2',
+                '-Copt-level=0',
+                '-Cstrip=none',
+                '--remap-path-prefix=/work=/workspace'
+            ]
+            : []),
         ...(integratedOutput
             ? ['--emit=link']
             : ['-Cno-prepopulate-passes', '-Csave-temps', '--emit=obj']),

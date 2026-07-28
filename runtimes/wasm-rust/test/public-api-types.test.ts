@@ -31,15 +31,46 @@ describe('public api type contracts', () => {
 			tempFile,
 			`import createRustCompiler, {
 	createRustCompiler as createNamedCompiler,
+	createBrowserRustCompileRequestIdentity,
 	executeBrowserRustArtifact,
+	resolveBrowserRustDebugMode,
+	type BrowserRustDebugMode,
 	type BrowserRustCompilerFactory,
-	type BrowserRustCompilerResult
+	type BrowserRustCompilerResult,
+	type DwarfDebugDescriptor
 } from './index.js';
 
 const factory: BrowserRustCompilerFactory = createRustCompiler;
 await factory({ dependencies: {} });
 await createRustCompiler({ dependencies: {} });
 await createNamedCompiler({ dependencies: {} });
+
+const debugMode: BrowserRustDebugMode = resolveBrowserRustDebugMode({
+	debugMode: 'lldb'
+});
+createBrowserRustCompileRequestIdentity({
+	code: 'fn main() {}',
+	debugMode
+});
+
+const debugDescriptor: DwarfDebugDescriptor = {
+	kind: 'dwarf',
+	sourceRoot: '/workspace',
+	moduleSha256: 'module-sha256',
+	files: [{
+		path: '/workspace/main.rs',
+		contentSha256: 'source-sha256'
+	}],
+	compiler: {
+		name: 'rustc',
+		version: '1.99.0',
+		revision: 'rust-revision',
+		llvmVersion: '22.1.8',
+		llvmRevision: 'llvm-revision',
+		runtimeVersion: 'rust-test-runtime',
+		hostTriple: 'wasm32-wasip1-threads'
+	}
+};
 
 const artifact: NonNullable<BrowserRustCompilerResult['artifact']> = {
 	wasm: new Uint8Array([0]),
@@ -50,9 +81,12 @@ const artifact: NonNullable<BrowserRustCompilerResult['artifact']> = {
 const compiler = await createRustCompiler();
 await compiler.compile({
 	code: 'fn main() {}',
+	debugMode: 'lldb',
 	extendedTimeout: true,
 	prepare: true
 });
+
+void debugDescriptor;
 
 await executeBrowserRustArtifact(artifact, {
 	stdin: () => null

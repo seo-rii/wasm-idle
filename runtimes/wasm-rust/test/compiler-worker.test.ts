@@ -97,4 +97,43 @@ describe('compiler-worker runtime asset validation', () => {
 		expect(args).not.toContain('-Csave-temps');
 		expect(args).not.toContain('--emit=obj');
 	});
+
+	it('emits unoptimized embedded DWARF with a stable workspace source path for LLDB', () => {
+		const manifest = normalizeRuntimeManifest(createIntegratedRuntimeManifestV3());
+		const args = buildRustcArguments(
+			{
+				code: 'fn main() {}',
+				debugMode: 'lldb',
+				targetTriple: 'wasm32-wasip1'
+			},
+			manifest
+		);
+
+		expect(args).toEqual(
+			expect.arrayContaining([
+				'/work/main.rs',
+				'-Cdebuginfo=2',
+				'-Copt-level=0',
+				'-Cstrip=none',
+				'--remap-path-prefix=/work=/workspace'
+			])
+		);
+	});
+
+	it('leaves trace compilation flags unchanged', () => {
+		const manifest = normalizeRuntimeManifest(createIntegratedRuntimeManifestV3());
+		const args = buildRustcArguments(
+			{
+				code: 'fn main() {}',
+				debugMode: 'trace',
+				targetTriple: 'wasm32-wasip1'
+			},
+			manifest
+		);
+
+		expect(args).not.toContain('-Cdebuginfo=2');
+		expect(args).not.toContain('-Copt-level=0');
+		expect(args).not.toContain('-Cstrip=none');
+		expect(args).not.toContain('--remap-path-prefix=/work=/workspace');
+	});
 });

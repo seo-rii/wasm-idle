@@ -1,9 +1,18 @@
 import type { CompileWorkerMessage } from '../src/worker-protocol.js';
 
+const compilerProvenance = {
+	name: 'rustc',
+	version: '1.99.0',
+	revision: '1'.repeat(40),
+	llvmVersion: '22.1.8',
+	llvmRevision: '2'.repeat(40)
+} as const;
+
 export function createRuntimeManifest(overrides: Record<string, unknown> = {}) {
 	return {
 		version: 'test-runtime-v1',
 		hostTriple: 'x86_64-unknown-linux-gnu',
+		compilerProvenance,
 		targetTriple: 'wasm32-wasip1',
 		rustcWasm: 'rustc/rustc.wasm.gz',
 		workerBitcodeFile: 'main.main.1ca70c240d7de168-cgu.0.rcgu.no-opt.bc',
@@ -44,6 +53,7 @@ export function createRuntimeManifestV2(overrides: Record<string, unknown> = {})
 		manifestVersion: 2,
 		version: 'test-runtime-v2',
 		hostTriple: 'x86_64-unknown-linux-gnu',
+		compilerProvenance,
 		defaultTargetTriple: 'wasm32-wasip1',
 		compiler: {
 			rustcWasm: 'rustc/rustc.wasm.gz',
@@ -166,6 +176,7 @@ export function createRuntimeManifestV3(overrides: Record<string, unknown> = {})
 		manifestVersion: 3,
 		version: 'test-runtime-v3',
 		hostTriple: 'x86_64-unknown-linux-gnu',
+		compilerProvenance,
 		defaultTargetTriple: 'wasm32-wasip1',
 		compiler: {
 			rustcWasm: 'rustc/rustc.wasm.gz',

@@ -44,12 +44,14 @@
 			"tree": "f5687c013f8dd061ea3de9c71537578ba4fdf727"
 		},
 		"llvm": {
+			"version": "22.1.8",
 			"commit": "52ed14fcd56afc30f9cccd8ca8ce237c2eef7e04",
 			"patchSha256": "29f9a340415928eab8dd6647eb518f86fdf7706fdd3184ceef4d92d802b98ce8",
 			"patchedTree": "1e6e38a99d610309b558f2498f017b135b97f0f9",
 			"tree": "65bd4bfb3d72ef2b38735fb667fabe129aa1a422"
 		},
 		"rust": {
+			"version": "1.99.0",
 			"commit": "48c2cee70232ecc3a6a8e285b2e15620b39f82a7",
 			"patchSha256": "6d42704d70505fcf806fcbfc163d313b24851f1b094c5728cd4bc24470542937",
 			"patchedTree": "e3f2e1b2a38e4a34c2296c6d4c1f90575b6c5625",
