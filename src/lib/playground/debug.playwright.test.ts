@@ -567,7 +567,7 @@ describe('native-source browser debugging in Chromium', () => {
 							);
 							expect(loadedState.variablesByReference.length).toBeGreaterThan(0);
 							const memory = await page.evaluate(() =>
-								(window as any).__wasmIdleDebug.readDebugMemory('0', 0, 4)
+								(window as any).__wasmIdleDebug.readDebugMemory('0x0', 0, 4)
 							);
 							expect(memory).toMatchObject({
 								data: expect.any(Array),

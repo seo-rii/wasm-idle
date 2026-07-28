@@ -75,12 +75,17 @@ package.
 Repository CI runs `test:browser:debug:lldb` for every pull request and `main` push in a dedicated
 Chromium job. The gate installs Chromium, downloads the four external Clang delivery assets,
 verifies every pinned SHA-256 receipt, and requires the product LLDB/WAMR binaries published by
-`wasm-llvm` commit `d76d939c2cf9a00d3d3521cd596c5ba9f37d053b` for C, C++, and Rust. The V2
+`wasm-llvm` commit `9f61a243b00d056fdffe8266092ddfa4824e6f51` for C, C++, and Rust. The V2
 manifest and all six debug assets are downloaded from that immutable revision and verified before
 the browser starts; the test cannot silently fall back to trace debugging. At each C, C++, and Rust
 source pause, the gate also verifies that LLDB scopes remain lazy until their
 `variablesReference` is requested and then contain the expected local value.
-It then sends a DAP `readMemory` request for four bytes of Wasm linear memory through the complete
-Sandbox and Terminal control path and verifies that the response is readable before resuming.
-This pinned LLDB build also avoids erased plugin-predicate callbacks on Emscripten pthreads, which
-previously trapped on the first lazy `variables` request.
+It then sends a DAP `readMemory` request from the LLDB hexadecimal memory reference `0x0` for four
+bytes of Wasm linear memory through the complete Sandbox and Terminal control path and verifies
+that the response is readable before resuming. The hexadecimal form matters because LLDB-DAP
+treats memory references as opaque strings and accepts addresses emitted by its own
+`memoryReference` encoder.
+This pinned LLDB build registers the inert no-script interpreter required by native formatter
+matching, so the first lazy `variables` request cannot fall through a missing plugin callback. Its
+call-depth frame identities also keep caller frames stable while a callee is pushed, allowing the
+C++ gate to verify that `next` steps over a function call instead of stopping inside it.
