@@ -336,8 +336,9 @@ describe('additional language server workers', () => {
 			type: 'init',
 			options: {
 				dialect: 'sqlite',
-				moduleUrl: '/wasm-sqlite/runtime.mjs',
-				wasmUrl: '/assets/sql-wasm.wasm'
+				moduleUrl: 'wasm-sqlite/runtime.mjs',
+				wasmUrl: '/assets/sql-wasm.wasm',
+				duckdbBundles: undefined
 			}
 		});
 
@@ -360,7 +361,7 @@ describe('additional language server workers', () => {
 			type: 'init',
 			options: {
 				dialect: 'duckdb',
-				moduleUrl: '/wasm-duckdb/runtime.mjs',
+				moduleUrl: 'wasm-duckdb/runtime.mjs',
 				wasmUrl: undefined,
 				duckdbBundles
 			}
@@ -492,7 +493,7 @@ describe('additional language server workers', () => {
 		expect(mockState.workers[0]?.messages[0]).toEqual({
 			type: 'init',
 			options: {
-				moduleUrl: '/wasm-ruby/runtime.mjs',
+				moduleUrl: 'wasm-ruby/runtime.mjs',
 				wasmUrl: '/assets/ruby+stdlib.wasm'
 			}
 		});
