@@ -14,6 +14,15 @@ export {
 	type RuntimeWorkerPolicy
 } from './capabilities.js';
 export {
+	verifyRuntimeAssetIntegrity,
+	verifyRuntimeAssetPair,
+	type RuntimeAssetIntegrityStage,
+	type RuntimeAssetIntegrityVerificationRequest,
+	type RuntimeAssetPairVerificationRequest,
+	type VerifiedRuntimeAssetIntegrity,
+	type VerifiedRuntimeAssetPair
+} from './asset-integrity.js';
+export {
 	DEFAULT_DEFERRED_PROGRESS_LANGUAGES,
 	getLanguageAliasInfo,
 	isDeferredProgressLanguage,
