@@ -1,8 +1,8 @@
 export const supportedLanguageIds = [
-	'PYTHON3',
 	'C',
 	'CPP',
 	'OBJC',
+	'PYTHON3',
 	'JAVA',
 	'RUST',
 	'GO',

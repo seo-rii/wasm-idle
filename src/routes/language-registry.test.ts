@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { supportedLanguageIds } from '@wasm-idle/core';
 import {
 	argsHelpLanguages,
 	clangdLspLanguages,
@@ -26,6 +27,25 @@ describe('language registry', () => {
 			expect(languageLabels[language]).toBeTruthy();
 			expect(editorLanguages[language]).toBeTruthy();
 		}
+	});
+
+	it('projects every canonical runtime language from the Core registry', () => {
+		const projectedRuntimeLanguages = supportedLanguageIds.map((language) =>
+			language === 'PYTHON3' ? 'PYTHON' : language
+		);
+
+		expect(playgroundLanguages.slice(0, projectedRuntimeLanguages.length)).toEqual(
+			projectedRuntimeLanguages
+		);
+		expect(playgroundLanguages.slice(projectedRuntimeLanguages.length)).toEqual([
+			'GRAPHQL',
+			'JSON',
+			'YAML',
+			'TOML',
+			'HTML',
+			'CSS',
+			'MARKDOWN'
+		]);
 	});
 
 	it('keeps Swift out of the page language registry until runtime readiness is satisfied', () => {

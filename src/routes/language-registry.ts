@@ -1,57 +1,18 @@
-export type PlaygroundLanguage =
-	| 'C'
-	| 'CPP'
-	| 'OBJC'
-	| 'PYTHON'
-	| 'JAVA'
-	| 'RUST'
-	| 'GO'
-	| 'D'
-	| 'CSHARP'
-	| 'FSHARP'
-	| 'VBNET'
-	| 'ELIXIR'
-	| 'ERLANG'
-	| 'PROLOG'
-	| 'GLEAM'
-	| 'PERL'
-	| 'TCL'
-	| 'AWK'
-	| 'PASCAL'
-	| 'FORTH'
-	| 'J'
-	| 'BQN'
-	| 'JANET'
-	| 'JULIA'
-	| 'NIM'
-	| 'BASH'
-	| 'CLOJURESCRIPT'
-	| 'OCAML'
-	| 'TINYGO'
-	| 'JAVASCRIPT'
-	| 'TYPESCRIPT'
-	| 'ASSEMBLYSCRIPT'
-	| 'WAT'
-	| 'WASM'
-	| 'LUA'
-	| 'ZIG'
-	| 'LISP'
-	| 'RUBY'
-	| 'HASKELL'
-	| 'R'
-	| 'OCTAVE'
-	| 'FORTRAN'
-	| 'COBOL'
-	| 'GRAPHQL'
-	| 'DUCKDB'
-	| 'SQLITE'
-	| 'PHP'
-	| 'JSON'
-	| 'YAML'
-	| 'TOML'
-	| 'HTML'
-	| 'CSS'
-	| 'MARKDOWN';
+import { supportedLanguageIds, type CanonicalLanguageId } from '@wasm-idle/core';
+
+type PlaygroundRuntimeLanguage = Exclude<CanonicalLanguageId, 'PYTHON3'> | 'PYTHON';
+
+const editorOnlyLanguageIds = [
+	'GRAPHQL',
+	'JSON',
+	'YAML',
+	'TOML',
+	'HTML',
+	'CSS',
+	'MARKDOWN'
+] as const;
+
+export type PlaygroundLanguage = PlaygroundRuntimeLanguage | (typeof editorOnlyLanguageIds)[number];
 
 export type RuntimeLspCapability =
 	| 'elixir'
@@ -83,59 +44,10 @@ export type DotnetLspLanguage = 'csharp' | 'fsharp' | 'vbnet';
 type MonacoLanguageContributionLoader = () => Promise<unknown>;
 
 export const playgroundLanguages: PlaygroundLanguage[] = [
-	'C',
-	'CPP',
-	'OBJC',
-	'PYTHON',
-	'JAVA',
-	'RUST',
-	'GO',
-	'D',
-	'CSHARP',
-	'FSHARP',
-	'VBNET',
-	'ELIXIR',
-	'ERLANG',
-	'PROLOG',
-	'GLEAM',
-	'PERL',
-	'TCL',
-	'AWK',
-	'PASCAL',
-	'FORTH',
-	'J',
-	'BQN',
-	'JANET',
-	'JULIA',
-	'NIM',
-	'BASH',
-	'CLOJURESCRIPT',
-	'OCAML',
-	'TINYGO',
-	'JAVASCRIPT',
-	'TYPESCRIPT',
-	'ASSEMBLYSCRIPT',
-	'WAT',
-	'WASM',
-	'LUA',
-	'ZIG',
-	'LISP',
-	'RUBY',
-	'HASKELL',
-	'R',
-	'OCTAVE',
-	'FORTRAN',
-	'COBOL',
-	'GRAPHQL',
-	'DUCKDB',
-	'SQLITE',
-	'PHP',
-	'JSON',
-	'YAML',
-	'TOML',
-	'HTML',
-	'CSS',
-	'MARKDOWN'
+	...supportedLanguageIds.map<PlaygroundRuntimeLanguage>((language) =>
+		language === 'PYTHON3' ? 'PYTHON' : language
+	),
+	...editorOnlyLanguageIds
 ];
 
 export const languageLabels: Record<PlaygroundLanguage, string> = {
@@ -258,15 +170,7 @@ export const lspLanguageOverrides: Partial<Record<PlaygroundLanguage, string>> =
 	ASSEMBLYSCRIPT: 'assemblyscript',
 	DUCKDB: 'duckdb'
 };
-export const editorOnlyLanguages = new Set<PlaygroundLanguage>([
-	'GRAPHQL',
-	'JSON',
-	'YAML',
-	'TOML',
-	'HTML',
-	'CSS',
-	'MARKDOWN'
-]);
+export const editorOnlyLanguages = new Set<PlaygroundLanguage>(editorOnlyLanguageIds);
 export const runtimeLspCapabilities: Partial<Record<PlaygroundLanguage, RuntimeLspCapability>> = {
 	ELIXIR: 'elixir',
 	ERLANG: 'erlang',
