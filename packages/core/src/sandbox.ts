@@ -1,9 +1,11 @@
 import type {
 	DebugCommand,
+	DebugMemory,
 	DebugSessionEvent,
 	DebugSourceBreakpoints,
 	DebugVariable
 } from './debug.js';
+import type { ExecutionLimits, ExecutionRequest, ExecutionResult } from './execution.js';
 import type { ProgressLike } from './progress.js';
 import type { RuntimeAssetKeySource } from './runtime-assets.js';
 import {
@@ -21,7 +23,11 @@ export type SandboxProgress = ProgressLike;
 export interface SandboxExecutionOptions {
 	[key: string]: unknown;
 	activePath?: string;
+	env?: Record<string, string>;
+	limits?: Partial<ExecutionLimits>;
+	signal?: AbortSignal;
 	sourceBreakpoints?: DebugSourceBreakpoints[];
+	stdin?: string | AsyncIterable<Uint8Array>;
 	workspaceFiles?: WorkspaceFile[];
 	workspaceLimits?: Partial<WorkspaceLimits>;
 }
@@ -45,6 +51,7 @@ export interface Sandbox {
 		args?: string[],
 		options?: SandboxExecutionOptions
 	) => Promise<boolean | string>;
+	execute?: (request: ExecutionRequest) => Promise<ExecutionResult>;
 	terminate: () => void | Promise<void>;
 	clear: () => Promise<void>;
 	kill?: () => void | Promise<void>;
@@ -61,6 +68,11 @@ export interface Sandbox {
 		start?: number,
 		count?: number
 	) => Promise<DebugVariable[]>;
+	debugReadMemory?: (
+		memoryReference: string,
+		offset: number,
+		count: number
+	) => Promise<DebugMemory | null>;
 	image?: (data: { mime: string; b64: string; ts?: number }) => void;
 	elapse?: number;
 }

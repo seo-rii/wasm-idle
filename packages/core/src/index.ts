@@ -28,6 +28,23 @@ export {
 	type TimeoutErrorOptions,
 	type WasmIdleErrorOptions
 } from './errors.js';
+export {
+	DEFAULT_EXECUTION_LIMITS,
+	TERMINATION_REASONS,
+	resolveExecutionLimits,
+	type ExecutionArtifact,
+	type ExecutionArtifactKind,
+	type ExecutionDebugOptions,
+	type ExecutionDiagnostic,
+	type ExecutionDiagnosticSeverity,
+	type ExecutionErrorSummary,
+	type ExecutionLimits,
+	type ExecutionRequest,
+	type ExecutionResult,
+	type ExecutionTimings,
+	type RuntimeIdentity,
+	type TerminationReason
+} from './execution.js';
 export type {
 	DebugArrayElementKind,
 	DebugCommand,
