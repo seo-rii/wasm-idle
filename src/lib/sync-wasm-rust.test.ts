@@ -111,6 +111,11 @@ describe('syncWasmRustDist', () => {
 		await writeFixtureFile(sourceDir, 'types.d.ts', 'export type Ignored = true;\n');
 		await writeFixtureFile(
 			sourceDir,
+			'tmp-public-api-types-123-456.js',
+			'export const Transient = true;\n'
+		);
+		await writeFixtureFile(
+			sourceDir,
 			'vendor/browser_wasi_shim/index.js',
 			'export const WASI = class WASI {};\nexport const Directory = class Directory {};\n'
 		);
@@ -213,6 +218,9 @@ describe('syncWasmRustDist', () => {
 			readFile(path.join(targetDir, 'runtime/llvm/lld.data'), 'utf8')
 		).rejects.toThrow();
 		await expect(readFile(path.join(targetDir, 'types.d.ts'), 'utf8')).rejects.toThrow();
+		await expect(
+			readFile(path.join(targetDir, 'tmp-public-api-types-123-456.js'), 'utf8')
+		).rejects.toThrow();
 		await expect(
 			readFile(path.join(targetDir, 'vendor/browser_wasi_shim/tsconfig.tsbuildinfo'), 'utf8')
 		).rejects.toThrow();

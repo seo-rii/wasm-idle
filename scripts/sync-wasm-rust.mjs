@@ -27,7 +27,11 @@ const DEFAULT_SHARED_LLD_DIR = path.resolve(REPO_ROOT, 'static', 'shared', 'emsc
  * @param {string} sourcePath
  */
 function shouldSkipCopy(sourcePath) {
-	return sourcePath.endsWith('.d.ts') || sourcePath.endsWith('.tsbuildinfo');
+	return (
+		sourcePath.endsWith('.d.ts') ||
+		sourcePath.endsWith('.tsbuildinfo') ||
+		path.basename(sourcePath).startsWith('tmp-public-api-types-')
+	);
 }
 
 /**
