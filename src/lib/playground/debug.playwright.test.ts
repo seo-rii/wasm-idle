@@ -515,15 +515,47 @@ describe('native-source browser debugging in Chromium', () => {
 							const loadedVariables = [];
 							for (const scope of debugState.scopes) {
 								if (scope.variablesReference <= 0) continue;
-								loadedVariables.push(
-									...(await page.evaluate(
-										(variablesReference) =>
-											(window as any).__wasmIdleDebug.loadDebugVariables(
-												variablesReference
-											),
-										scope.variablesReference
-									))
-								);
+								try {
+									loadedVariables.push(
+										...(await page.evaluate(
+											(variablesReference) =>
+												(window as any).__wasmIdleDebug.loadDebugVariables(
+													variablesReference
+												),
+											scope.variablesReference
+										))
+									);
+								} catch (error) {
+									await page.waitForTimeout(100);
+									const transcript =
+										(await page
+											.locator('[data-testid="terminal-debug-output"]')
+											.textContent()
+											.catch(() => '')) || '';
+									const failedState = await page
+										.evaluate(() =>
+											(window as any).__wasmIdleDebug.getDebugState()
+										)
+										.catch(() => null);
+									throw new Error(
+										`${testCase.language} failed to lazily load the ${scope.name} scope\n${JSON.stringify(
+											{
+												error:
+													error instanceof Error
+														? error.stack || error.message
+														: String(error),
+												scope,
+												scopes: debugState.scopes,
+												failedState,
+												consoleTail: consoleMessages.slice(-80),
+												pageErrors,
+												transcript
+											},
+											null,
+											2
+										)}`
+									);
+								}
 							}
 							expect(loadedVariables).toEqual(
 								expect.arrayContaining([
