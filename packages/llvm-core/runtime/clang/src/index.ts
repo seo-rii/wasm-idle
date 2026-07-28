@@ -1,4 +1,5 @@
 import Runtime from './runtime.js';
+import { resolveDebugMode } from './types.js';
 import {
 	compileClang,
 	createClangCompiler,
@@ -21,6 +22,7 @@ import {
 } from './runtime-manifest.js';
 import { resolveRuntimeAssetUrls } from './runtime-assets.js';
 import { resolveRuntimeBaseUrl, resolveRuntimeBaseUrlFromManifestUrl } from './url.js';
+import { normalizeDwarfWorkspacePath } from './workspace.js';
 import { MemFS, Memory, untar } from './memory/index.js';
 import { compile, getInstance, readBuffer } from './wasm.js';
 import {
@@ -39,8 +41,10 @@ export type {
 	BrowserClangCompiler,
 	BrowserClangCompilerFactory,
 	BrowserClangCompilerResult,
+	BrowserClangDebugMode,
 	BrowserClangRuntimeOptions,
 	BrowserClangRuntimeRunOptions,
+	BrowserClangWorkspaceFile,
 	CompilerDiagnostic,
 	CompilerLogLevel,
 	CompilerLogRecord,
@@ -51,10 +55,12 @@ export type {
 	DebugStructFieldMetadata,
 	DebugVariable,
 	DebugVariableMetadata,
+	DwarfDebugDescriptor,
 	ProgressSink,
 	RuntimeBuildInfo,
 	RuntimeBuildProducerRecord,
 	RuntimeBuildToolchainInfo,
+	RuntimeCompilerProvenance,
 	RuntimeManifestV1,
 	SupportedClangLanguage,
 	SupportedClangTarget
@@ -91,12 +97,14 @@ export {
 	executeBrowserClangArtifact,
 	getInstance,
 	loadRuntimeManifest,
+	normalizeDwarfWorkspacePath,
 	parseRuntimeManifest,
 	preloadBrowserClangRuntime,
 	readBuffer,
 	resolveRuntimeAssetUrls,
 	resolveRuntimeBaseUrl,
 	resolveRuntimeBaseUrlFromManifestUrl,
+	resolveDebugMode,
 	resolveRuntimeManifestUrl,
 	untar
 };

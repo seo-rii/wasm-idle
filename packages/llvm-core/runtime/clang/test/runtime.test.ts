@@ -52,7 +52,7 @@ describe('Clang compile/debug flow', () => {
 		});
 	});
 
-	it('uses the requested C++ standard and disables optimization for debug runs', async () => {
+	it('keeps legacy debug builds on trace instrumentation without DWARF flags', async () => {
 		const { clang } = createClangHarness();
 
 		await clang.compile({
@@ -70,6 +70,48 @@ describe('Clang compile/debug flow', () => {
 		expect(compileArgs).not.toContain('-g');
 		expect(compileArgs).not.toContain('-fstandalone-debug');
 		expect(compileArgs).toContain('-DMODE=1');
+	});
+
+	it('emits embedded DWARF from the original source for LLDB builds', async () => {
+		const { clang } = createClangHarness();
+		const code = 'int main() {\n    return 0;\n}\n';
+
+		await clang.compile({
+			input: 'src/main.cpp',
+			code,
+			obj: 'main.o',
+			debugMode: 'lldb',
+			compileArgs: [
+				'-O3',
+				'-debug-info-kind=line-tables-only',
+				'-dwarf-version=5',
+				'-debugger-tuning=lldb',
+				'-fdebug-compilation-dir=/elsewhere'
+			]
+		});
+
+		const sourceWrite = vi
+			.mocked(clang.memfs.addFile)
+			.mock.calls.find(([path]) => path === 'src/main.cpp');
+		expect(sourceWrite?.[1]).toBe(code);
+
+		const compileArgs = vi.mocked(clang.run).mock.calls[0]?.slice(2) ?? [];
+		expect(compileArgs).toContain('src/main.cpp');
+		expect(compileArgs).not.toContain('-g');
+		expect(compileArgs).not.toContain('-fstandalone-debug');
+		expect(compileArgs).not.toContain('--allow-undefined');
+		expect(compileArgs.at(-4)).toBe('-debug-info-kind=standalone');
+		expect(compileArgs.at(-3)).toBe('-dwarf-version=4');
+		expect(compileArgs.at(-2)).toBe('-debugger-tuning=gdb');
+		expect(compileArgs.at(-1)).toBe('-fdebug-compilation-dir=/workspace');
+		expect(compileArgs.lastIndexOf('-O0')).toBeGreaterThan(compileArgs.lastIndexOf('-O3'));
+		expect(compileArgs.lastIndexOf('-debug-info-kind=standalone')).toBeGreaterThan(
+			compileArgs.lastIndexOf('-debug-info-kind=line-tables-only')
+		);
+		expect(compileArgs.lastIndexOf('-fdebug-compilation-dir=/workspace')).toBeGreaterThan(
+			compileArgs.lastIndexOf('-fdebug-compilation-dir=/elsewhere')
+		);
+		expect(String(sourceWrite?.[1])).not.toContain('__wasm_idle_debug_');
 	});
 
 	it('maps newer C++ versions to the newest supported clang standard', async () => {
@@ -835,20 +877,42 @@ int main() {
 		expect(linkArgs).toContain('--allow-undefined');
 	});
 
-	it('reuses cached wasm only when the debug/build key matches', async () => {
+	it('does not allow unresolved trace hooks during LLDB links', async () => {
+		const { clang } = createClangHarness();
+
+		await Clang.prototype.link.call(clang, 'main.o', 'main.wasm', 'lldb');
+
+		const linkArgs = vi.mocked(clang.run).mock.calls[0]?.slice(2) ?? [];
+		expect(linkArgs).not.toContain('--allow-undefined');
+	});
+
+	it('reuses cached wasm only when the three-way debug mode/build key matches', async () => {
 		const compileWasm = vi
 			.spyOn(WebAssembly, 'compile')
 			.mockResolvedValue({ id: 'wasm-module' } as unknown as WebAssembly.Module);
 		const { clang } = createClangHarness();
 		clang.compile = vi.fn(async () => null) as any;
 
-		await clang.compileLink('int main() {}', { compileArgs: ['-DTEST=1'], debug: false });
-		await clang.compileLink('int main() {}', { compileArgs: ['-DTEST=1'], debug: false });
-		await clang.compileLink('int main() {}', { compileArgs: ['-DTEST=1'], debug: true });
+		await clang.compileLink('int main() {}', {
+			compileArgs: ['-DTEST=1'],
+			debugMode: 'none'
+		});
+		await clang.compileLink('int main() {}', {
+			compileArgs: ['-DTEST=1'],
+			debugMode: 'none'
+		});
+		await clang.compileLink('int main() {}', {
+			compileArgs: ['-DTEST=1'],
+			debugMode: 'trace'
+		});
+		await clang.compileLink('int main() {}', {
+			compileArgs: ['-DTEST=1'],
+			debugMode: 'lldb'
+		});
 
-		expect(vi.mocked(clang.compile)).toHaveBeenCalledTimes(2);
-		expect(vi.mocked(clang.link)).toHaveBeenCalledTimes(2);
-		expect(compileWasm).toHaveBeenCalledTimes(2);
+		expect(vi.mocked(clang.compile)).toHaveBeenCalledTimes(3);
+		expect(vi.mocked(clang.link)).toHaveBeenCalledTimes(3);
+		expect(compileWasm).toHaveBeenCalledTimes(3);
 	});
 
 	it('derives compile and artifact names from the requested file name', async () => {
@@ -872,9 +936,9 @@ int main() {
 			workspaceFiles: [],
 			cppVersion: undefined,
 			cVersion: undefined,
-			debug: false
+			debugMode: 'none'
 		});
-		expect(vi.mocked(clang.link)).toHaveBeenCalledWith('hello.o', 'hello.wasm', false);
+		expect(vi.mocked(clang.link)).toHaveBeenCalledWith('hello.o', 'hello.wasm', 'none');
 		expect(clang.lastArtifactPath).toBe('hello.wasm');
 		expect(compileWasm).toHaveBeenCalledTimes(1);
 	});
@@ -906,7 +970,7 @@ int main() {
 			],
 			cppVersion: undefined,
 			cVersion: undefined,
-			debug: false
+			debugMode: 'none'
 		});
 		expect(vi.mocked(clang.memfs.addDirectory)).toHaveBeenCalledWith('include');
 		expect(vi.mocked(clang.memfs.addDirectory)).toHaveBeenCalledWith('src');
@@ -922,8 +986,37 @@ int main() {
 			'src/main.cpp',
 			expect.stringContaining('#include "../include/add.h"')
 		);
-		expect(vi.mocked(clang.link)).toHaveBeenCalledWith('main.o', 'main.wasm', false);
+		expect(vi.mocked(clang.link)).toHaveBeenCalledWith('main.o', 'main.wasm', 'none');
 		expect(clang.lastArtifactPath).toBe('main.wasm');
+	});
+
+	it('normalizes an explicit /workspace root for LLDB inputs and sibling files', async () => {
+		vi.spyOn(WebAssembly, 'compile').mockResolvedValue({
+			id: 'workspace-module'
+		} as unknown as WebAssembly.Module);
+		const { clang } = createClangHarness();
+		clang.compile = vi.fn(async () => null) as any;
+
+		await clang.compileLink('int main() { return value; }', {
+			activePath: '/workspace/src/main.cpp',
+			workspaceFiles: [
+				{ path: '/workspace/src/main.cpp', content: 'stale active copy' },
+				{ path: '/workspace/include/value.hpp', content: 'constexpr int value = 0;' }
+			],
+			debugMode: 'lldb'
+		});
+
+		expect(vi.mocked(clang.compile)).toHaveBeenCalledWith(
+			expect.objectContaining({
+				input: 'src/main.cpp',
+				debugMode: 'lldb',
+				workspaceFiles: [
+					{ path: 'src/main.cpp', content: 'stale active copy' },
+					{ path: 'include/value.hpp', content: 'constexpr int value = 0;' }
+				]
+			})
+		);
+		expect(vi.mocked(clang.link)).toHaveBeenCalledWith('main.o', 'main.wasm', 'lldb');
 	});
 
 	it('passes runtime program args to the compiled wasm module', async () => {
@@ -944,7 +1037,7 @@ int main() {
 			activePath: undefined,
 			workspaceFiles: [],
 			compileArgs: ['-DTEST=1'],
-			debug: false,
+			debugMode: 'none',
 			breakpoints: [],
 			pauseOnEntry: false,
 			cppVersion: undefined,
@@ -957,5 +1050,18 @@ int main() {
 		const runArgs = vi.mocked(clang.run).mock.calls[0];
 		expect(runArgs?.[0]).toBe(wasmModule);
 		expect(runArgs?.slice(2)).toEqual(['hello.wasm', 'one', 'two']);
+	});
+
+	it('requires the dedicated debug runtime for LLDB artifacts', async () => {
+		const { clang } = createClangHarness();
+		const compileLink = vi.spyOn(clang, 'compileLink');
+
+		await expect(
+			clang.compileLinkRun('int main() {}', {
+				debugMode: 'lldb'
+			})
+		).rejects.toThrow('Use compileArtifact() and @wasm-idle/llvm-core/debug instead.');
+		expect(compileLink).not.toHaveBeenCalled();
+		expect(clang.run).not.toHaveBeenCalled();
 	});
 });

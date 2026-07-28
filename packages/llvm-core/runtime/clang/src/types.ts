@@ -11,6 +11,7 @@ export type SupportedClangLanguage = 'C' | 'CPP';
 export type SupportedClangTarget = 'wasm32-wasi';
 export type BrowserClangArtifactFormat = 'wasi-core-wasm';
 export type BrowserClangCompileStage = 'bootstrap' | 'compile' | 'link' | 'done';
+export type BrowserClangDebugMode = 'none' | 'trace' | 'lldb';
 export type CompilerLogLevel = 'log' | 'warn' | 'error' | 'debug';
 
 export interface CompilerDiagnostic {
@@ -89,20 +90,63 @@ export interface BrowserClangCompileProgress {
 	message?: string;
 }
 
+export interface BrowserClangWorkspaceFile {
+	path: string;
+	content: string;
+}
+
 export interface BrowserClangCompileRequest {
 	code: string;
 	language?: SupportedClangLanguage;
 	target?: SupportedClangTarget;
 	fileName?: string;
+	activePath?: string;
+	workspaceFiles?: BrowserClangWorkspaceFile[];
 	compileArgs?: string[];
 	cppVersion?: string;
 	cVersion?: string;
 	log?: boolean;
 	showTiming?: boolean;
+	debugMode?: BrowserClangDebugMode;
+	/** @deprecated Use debugMode. true maps to "trace". */
 	debug?: boolean;
 	breakpoints?: number[];
 	pauseOnEntry?: boolean;
 	onProgress?: (progress: BrowserClangCompileProgress) => void;
+}
+
+export function resolveDebugMode(options: {
+	debugMode?: BrowserClangDebugMode;
+	debug?: boolean;
+}): BrowserClangDebugMode {
+	if (options.debugMode !== undefined) {
+		if (
+			options.debugMode === 'none' ||
+			options.debugMode === 'trace' ||
+			options.debugMode === 'lldb'
+		) {
+			return options.debugMode;
+		}
+		throw new Error(`unsupported wasm-clang debug mode: ${String(options.debugMode)}`);
+	}
+	return options.debug ? 'trace' : 'none';
+}
+
+export interface RuntimeCompilerProvenance {
+	name: 'clang';
+	version: string;
+	revision: string;
+}
+
+export interface DwarfDebugDescriptor {
+	kind: 'dwarf';
+	sourceRoot: '/workspace';
+	moduleSha256: string;
+	files: Array<{
+		path: string;
+		contentSha256: string;
+	}>;
+	compiler: RuntimeCompilerProvenance;
 }
 
 export interface BrowserClangArtifact {
@@ -113,6 +157,7 @@ export interface BrowserClangArtifact {
 	fileName?: string;
 	language?: SupportedClangLanguage;
 	debugMetadata?: BrowserClangDebugMetadata;
+	debug?: DwarfDebugDescriptor;
 }
 
 export interface BrowserClangCompilerResult {
@@ -172,9 +217,11 @@ export interface BrowserClangRuntimeRunOptions {
 	compileArgs?: string[];
 	programArgs?: string[];
 	activePath?: string;
-	workspaceFiles?: Array<{ path: string; content: string }>;
+	workspaceFiles?: BrowserClangWorkspaceFile[];
 	cppVersion?: string;
 	cVersion?: string;
+	debugMode?: BrowserClangDebugMode;
+	/** @deprecated Use debugMode. true maps to "trace". */
 	debug?: boolean;
 	breakpoints?: number[];
 	pauseOnEntry?: boolean;
@@ -201,6 +248,7 @@ export interface RuntimeCompilerConfig {
 	compilerRuntimeLibDir?: string;
 	defaultCppStandard?: string;
 	defaultCStandard?: string;
+	provenance?: RuntimeCompilerProvenance;
 }
 
 export interface RuntimeClangdConfig {

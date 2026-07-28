@@ -2,6 +2,7 @@ import { resolveHostedRuntimeUrl, runtimeManifestUrl } from './url.js';
 import type {
 	RuntimeClangdConfig,
 	RuntimeCompilerConfig,
+	RuntimeCompilerProvenance,
 	RuntimeManifestV1,
 	RuntimeManifestTarget,
 	SupportedClangTarget
@@ -26,6 +27,18 @@ function expectTarget(value: unknown, label: string): SupportedClangTarget {
 		throw new Error(`invalid ${label} in wasm-clang runtime manifest`);
 	}
 	return value;
+}
+
+function parseCompilerProvenance(value: unknown): RuntimeCompilerProvenance {
+	const provenance = expectObject(value, 'root.compiler.provenance');
+	if (provenance.name !== 'clang') {
+		throw new Error('invalid root.compiler.provenance.name in wasm-clang runtime manifest');
+	}
+	return {
+		name: 'clang',
+		version: expectString(provenance.version, 'root.compiler.provenance.version'),
+		revision: expectString(provenance.revision, 'root.compiler.provenance.revision')
+	};
 }
 
 function parseCompilerConfig(value: unknown): RuntimeCompilerConfig {
@@ -82,6 +95,9 @@ function parseCompilerConfig(value: unknown): RuntimeCompilerConfig {
 			: {}),
 		...(typeof compiler.defaultCStandard === 'string'
 			? { defaultCStandard: compiler.defaultCStandard }
+			: {}),
+		...(compiler.provenance !== undefined
+			? { provenance: parseCompilerProvenance(compiler.provenance) }
 			: {})
 	};
 }

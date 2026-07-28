@@ -1,7 +1,10 @@
 import Runtime from './runtime.js';
+import { createDwarfDebugDescriptor } from './dwarf.js';
 import { loadRuntimeManifest, resolveRuntimeManifestUrl } from './runtime-manifest.js';
 import { resolveRuntimeBaseUrl, resolveRuntimeBaseUrlFromManifestUrl } from './url.js';
-import type {
+import {
+	resolveDebugMode,
+	type BrowserClangDebugMode,
 	BrowserClangArtifact,
 	BrowserClangCompileProgress,
 	BrowserClangCompileRequest,
@@ -148,6 +151,7 @@ export async function compileClang(
 	}
 
 	const enabledLogs = request.log ?? options.log ?? false;
+	const debugMode: BrowserClangDebugMode = resolveDebugMode(request);
 	const logRecords: CompilerLogRecord[] = [];
 	const compilerOutput: string[] = [];
 	emitProgress(request, 'bootstrap', 0, 'loading runtime manifest');
@@ -187,8 +191,10 @@ export async function compileClang(
 		const wasmModule = await runtime.compileLink(request.code, {
 			language: request.language || 'CPP',
 			fileName: request.fileName,
+			activePath: request.activePath,
+			workspaceFiles: request.workspaceFiles || [],
 			compileArgs: request.compileArgs || [],
-			debug: request.debug,
+			debugMode,
 			breakpoints: request.breakpoints,
 			pauseOnEntry: request.pauseOnEntry,
 			cppVersion: request.cppVersion,
@@ -206,13 +212,22 @@ export async function compileClang(
 			format: 'wasi-core-wasm',
 			fileName: runtime.lastArtifactPath,
 			language: request.language || 'CPP',
-			...(request.debug
+			...(debugMode === 'trace'
 				? {
 						debugMetadata: {
 							variableMetadata: runtime.debugVariableMetadata,
 							globalVariableMetadata: runtime.debugGlobalMetadata,
 							functionMetadata: runtime.debugFunctionMetadata
 						}
+					}
+				: {}),
+			...(debugMode === 'lldb'
+				? {
+						debug: await createDwarfDebugDescriptor(
+							request,
+							artifactBytes,
+							manifest.compiler.provenance
+						)
 					}
 				: {})
 		};

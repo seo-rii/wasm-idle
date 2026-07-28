@@ -1,4 +1,8 @@
-import type {
+import {
+	resolveDebugMode,
+	type BrowserClangArtifact,
+	type BrowserClangDebugMode,
+	type BrowserClangCompileRequest,
 	BrowserClangPauseEvent,
 	BrowserClangRuntimeOptions,
 	BrowserClangRuntimeRunOptions,
@@ -18,6 +22,18 @@ import { green, yellow, normal } from '../../core/src/color.js';
 import { createCombinedProgress, type CombinedProgressSlots } from './progress.js';
 import { resolveRuntimeAssetUrls, type RuntimeAssetUrls } from './runtime-assets.js';
 import { compile, readBuffer } from '../../core/src/wasm.js';
+import {
+	normalizeDwarfWorkspacePath,
+	normalizeWorkspacePath,
+	resolveBuildArtifactNames
+} from './workspace.js';
+import { createDwarfDebugDescriptor } from './dwarf.js';
+
+export {
+	normalizeDwarfWorkspacePath,
+	normalizeWorkspacePath,
+	resolveBuildArtifactNames
+} from './workspace.js';
 
 if (typeof globalThis.document === 'undefined') {
 	(
@@ -135,28 +151,6 @@ function resolveClangLanguageArgs(
 	return {
 		languageArg: 'c++',
 		standardArg: resolveCppStandardArg(options.cppVersion)
-	};
-}
-
-const normalizeWorkspacePath = (path: string) =>
-	path
-		.replaceAll('\\', '/')
-		.split('/')
-		.filter((part) => part && part !== '.' && part !== '..')
-		.join('/');
-
-export function resolveBuildArtifactNames(language: ClangSourceLanguage, fileName?: string) {
-	const normalizedFileName = normalizeWorkspacePath(fileName || '');
-	const defaultStem = 'main';
-	const input =
-		normalizedFileName && /\.[A-Za-z0-9_-]+$/.test(normalizedFileName)
-			? normalizedFileName
-			: `${normalizedFileName || defaultStem}.${language === 'C' ? 'c' : language === 'OBJC' ? 'm' : 'cc'}`;
-	const stem = (input.split('/').pop() || input).replace(/\.[^.]+$/, '') || defaultStem;
-	return {
-		input,
-		obj: `${stem}.o`,
-		wasm: `${stem}.wasm`
 	};
 }
 
@@ -355,9 +349,11 @@ class Clang {
 			options.language === 'C' ? 'C' : options.language === 'OBJC' ? 'OBJC' : 'CPP';
 		const compileArgs = options.compileArgs ?? options.args ?? [];
 		const { languageArg, standardArg } = resolveClangLanguageArgs(language, options);
-		const debug = !!options.debug;
-		const opt = debug ? '0' : options.opt || '2';
-		if (debug) {
+		const debugMode = resolveDebugMode(options);
+		const traceDebug = debugMode === 'trace';
+		const lldbDebug = debugMode === 'lldb';
+		const opt = debugMode === 'none' ? options.opt || '2' : '0';
+		if (traceDebug) {
 			const lines = source.split('\n');
 			let parsingBlockComment = false;
 			const analysisLines = lines.map((line: string) => {
@@ -1299,6 +1295,7 @@ class Clang {
 		} else {
 			this.debugVariableMetadata = {};
 			this.debugGlobalMetadata = [];
+			this.debugFunctionMetadata = {};
 		}
 		if (typeof options.transformSource === 'function') {
 			source = options.transformSource(source);
@@ -1348,7 +1345,7 @@ class Clang {
 			'-ferror-limit',
 			'19',
 			'-fcolor-diagnostics',
-			'-O' + opt,
+			...(lldbDebug ? [] : ['-O' + opt]),
 			'-o',
 			obj,
 			standardArg,
@@ -1356,7 +1353,16 @@ class Clang {
 			languageArg,
 			...(language === 'OBJC' ? ['-fobjc-runtime=gnustep-2.0', '-fblocks'] : []),
 			input,
-			...compileArgs
+			...compileArgs,
+			...(lldbDebug
+				? [
+						'-O0',
+						'-debug-info-kind=standalone',
+						'-dwarf-version=4',
+						'-debugger-tuning=gdb',
+						'-fdebug-compilation-dir=/workspace'
+					]
+				: [])
 		];
 		this.trace(`compile ${input} -> ${obj}`);
 		try {
@@ -1373,7 +1379,15 @@ class Clang {
 		}
 	}
 
-	async link(obj: string, wasm: string, debug = false) {
+	async link(
+		obj: string,
+		wasm: string,
+		debugModeOrLegacyDebug: BrowserClangDebugMode | boolean = 'none'
+	) {
+		const debugMode =
+			typeof debugModeOrLegacyDebug === 'boolean'
+				? resolveDebugMode({ debug: debugModeOrLegacyDebug })
+				: resolveDebugMode({ debugMode: debugModeOrLegacyDebug });
 		const stackSize = 1024 * 1024;
 		const libdir = 'lib/wasm32-wasi';
 		const compilerRuntimeLibDir =
@@ -1387,7 +1401,7 @@ class Clang {
 			this.log,
 			'wasm-ld',
 			'--export-dynamic', // TODO required?
-			...(debug ? ['--allow-undefined'] : []),
+			...(debugMode === 'trace' ? ['--allow-undefined'] : []),
 			'-z',
 			`stack-size=${stackSize}`,
 			`-L${libdir}/noeh`,
@@ -1471,7 +1485,8 @@ class Clang {
 			workspaceFiles = [],
 			args = [],
 			compileArgs = args,
-			debug = false,
+			debugMode: requestedDebugMode,
+			debug,
 			breakpoints = [],
 			pauseOnEntry = false,
 			cppVersion,
@@ -1481,14 +1496,25 @@ class Clang {
 			watchBuffer,
 			watchResultBuffer
 		} = options;
+		const debugMode = resolveDebugMode({ debugMode: requestedDebugMode, debug });
+		const normalizedWorkspaceFiles =
+			debugMode === 'lldb'
+				? workspaceFiles.map((file) => ({
+						...file,
+						path: normalizeDwarfWorkspacePath(file.path)
+					}))
+				: workspaceFiles;
+		const normalizeRequestedPath =
+			debugMode === 'lldb' ? normalizeDwarfWorkspacePath : normalizeWorkspacePath;
 		const requestedInput =
-			normalizeWorkspacePath(activePath || '') ||
-			normalizeWorkspacePath(fileName || '') ||
+			normalizeRequestedPath(activePath || '') ||
+			normalizeRequestedPath(fileName || '') ||
 			undefined;
 		const { input, obj, wasm } = resolveBuildArtifactNames(language, requestedInput);
-		this.beginTrace(debug);
-		this.debugBreakpoints = new Set(debug ? breakpoints : []);
-		this.debugPauseOnEntry = debug && pauseOnEntry;
+		const traceDebug = debugMode === 'trace';
+		this.beginTrace(traceDebug);
+		this.debugBreakpoints = new Set(traceDebug ? breakpoints : []);
+		this.debugPauseOnEntry = traceDebug && pauseOnEntry;
 		this.debugBuffer = debugBuffer;
 		this.debugInterruptBuffer = interruptBuffer;
 		this.debugWatchBuffer = watchBuffer;
@@ -1500,10 +1526,10 @@ class Clang {
 			wasm,
 			language,
 			compileArgs,
-			workspaceFiles,
+			workspaceFiles: normalizedWorkspaceFiles,
 			cppVersion,
 			cVersion,
-			debug
+			debugMode
 		});
 		if (this.lastBuildKey === buildKey) {
 			this.trace(`reuse ${wasm}`);
@@ -1515,12 +1541,12 @@ class Clang {
 			obj,
 			language,
 			compileArgs,
-			workspaceFiles,
+			workspaceFiles: normalizedWorkspaceFiles,
 			cppVersion,
 			cVersion,
-			debug
+			debugMode
 		});
-		await this.link(obj, wasm, debug);
+		await this.link(obj, wasm, debugMode);
 
 		this.lastBuildKey = buildKey;
 		const wasmBytes = Uint8Array.from(this.memfs.getFileContents(wasm));
@@ -1528,6 +1554,53 @@ class Clang {
 			`Compiling ${wasm}`,
 			WebAssembly.compile(wasmBytes)
 		));
+	}
+
+	async compileArtifact(
+		code: string,
+		options: BrowserClangRuntimeRunOptions = {}
+	): Promise<BrowserClangArtifact> {
+		const debugMode = resolveDebugMode(options);
+		const wasm = await this.compileLink(code, options);
+		const bytes = Uint8Array.from(this.memfs.getFileContents(this.lastArtifactPath));
+		const language = options.language || 'CPP';
+		const request: BrowserClangCompileRequest = {
+			code,
+			language,
+			fileName: options.fileName,
+			activePath: options.activePath,
+			workspaceFiles: options.workspaceFiles,
+			compileArgs: options.compileArgs,
+			cppVersion: options.cppVersion,
+			cVersion: options.cVersion,
+			debugMode
+		};
+		return {
+			bytes,
+			wasm,
+			target: 'wasm32-wasi',
+			format: 'wasi-core-wasm',
+			fileName: this.lastArtifactPath,
+			language,
+			...(debugMode === 'trace'
+				? {
+						debugMetadata: {
+							variableMetadata: this.debugVariableMetadata,
+							globalVariableMetadata: this.debugGlobalMetadata,
+							functionMetadata: this.debugFunctionMetadata
+						}
+					}
+				: {}),
+			...(debugMode === 'lldb'
+				? {
+						debug: await createDwarfDebugDescriptor(
+							request,
+							bytes,
+							this.compilerConfig?.provenance
+						)
+					}
+				: {})
+		};
 	}
 
 	async compileLinkRun(code: string, options: BrowserClangRuntimeRunOptions = {}) {
@@ -1539,7 +1612,8 @@ class Clang {
 			args = [],
 			compileArgs = args,
 			programArgs = [],
-			debug = false,
+			debugMode: requestedDebugMode,
+			debug,
 			breakpoints = [],
 			pauseOnEntry = false,
 			cppVersion,
@@ -1549,7 +1623,14 @@ class Clang {
 			watchBuffer,
 			watchResultBuffer
 		} = options;
-		this.debug = debug;
+		const debugMode = resolveDebugMode({ debugMode: requestedDebugMode, debug });
+		if (debugMode === 'lldb') {
+			throw new Error(
+				'compileLinkRun() cannot execute LLDB artifacts in the browser WebAssembly engine. ' +
+					'Use compileArtifact() and @wasm-idle/llvm-core/debug instead.'
+			);
+		}
+		this.debug = debugMode === 'trace';
 		const requestedInput =
 			normalizeWorkspacePath(activePath || '') ||
 			normalizeWorkspacePath(fileName || '') ||
@@ -1562,7 +1643,7 @@ class Clang {
 				activePath,
 				workspaceFiles,
 				compileArgs,
-				debug,
+				debugMode,
 				breakpoints,
 				pauseOnEntry,
 				cppVersion,

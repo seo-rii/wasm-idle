@@ -115,7 +115,9 @@ import {
 	compileClang,
 	createClangCompiler,
 	executeBrowserClangArtifact,
-	preloadBrowserClangRuntime
+	normalizeDwarfWorkspacePath,
+	preloadBrowserClangRuntime,
+	resolveDebugMode
 } from '../src/index.js';
 
 const manifest: RuntimeManifestV1 = {
@@ -126,7 +128,12 @@ const manifest: RuntimeManifestV1 = {
 		memfs: { asset: 'bin/memfs.zip', argv0: 'memfs' },
 		clang: { asset: 'bin/clang.zip', argv0: 'clang' },
 		lld: { asset: 'bin/lld.zip', argv0: 'wasm-ld' },
-		sysroot: { asset: 'bin/sysroot.tar.zip' }
+		sysroot: { asset: 'bin/sysroot.tar.zip' },
+		provenance: {
+			name: 'clang',
+			version: '22.1.8',
+			revision: 'ca7933e47d3a3451d81e72ac174dcb5aa28b59d1'
+		}
 	},
 	targets: {
 		'wasm32-wasi': {
@@ -140,6 +147,14 @@ const manifest: RuntimeManifestV1 = {
 	}
 };
 
+async function sha256Hex(value: string | Uint8Array) {
+	const bytes = typeof value === 'string' ? new TextEncoder().encode(value) : value;
+	const digest = await crypto.subtle.digest('SHA-256', bytes);
+	return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join(
+		''
+	);
+}
+
 describe('public wasm-clang API contract', () => {
 	afterEach(() => {
 		vi.restoreAllMocks();
@@ -149,6 +164,19 @@ describe('public wasm-clang API contract', () => {
 		wasiState.lastArgs = [];
 		wasiState.start.mockReset();
 		wasiState.start.mockReturnValue(0);
+	});
+
+	it('exports the canonical DWARF workspace path mapping used by debug hosts', () => {
+		expect(normalizeDwarfWorkspacePath('src\\nested\\main.cpp')).toBe('src/nested/main.cpp');
+		expect(normalizeDwarfWorkspacePath('/workspace/src/../main.cpp')).toBe('src/main.cpp');
+	});
+
+	it('resolves explicit debug modes before the deprecated trace boolean', () => {
+		expect(resolveDebugMode({})).toBe('none');
+		expect(resolveDebugMode({ debug: true })).toBe('trace');
+		expect(resolveDebugMode({ debug: false })).toBe('none');
+		expect(resolveDebugMode({ debug: true, debugMode: 'lldb' })).toBe('lldb');
+		expect(resolveDebugMode({ debug: true, debugMode: 'none' })).toBe('none');
 	});
 
 	it('forwards public compile options and returns artifact metadata', async () => {
@@ -170,7 +198,7 @@ describe('public wasm-clang API contract', () => {
 			log: true
 		});
 
-		expect(result.success).toBe(true);
+		expect(result.success, result.stderr).toBe(true);
 		const runtime = runtimeState.instances[0] as {
 			debugVariableMetadata: unknown;
 			debugGlobalMetadata: unknown;
@@ -192,13 +220,16 @@ describe('public wasm-clang API contract', () => {
 				wasm: runtime.wasm
 			})
 		);
+		expect(result.artifact?.debug).toBeUndefined();
 		expect(runtime.compileLinkCall).toEqual({
 			code: 'int main(void) { return 0; }',
 			options: {
 				language: 'C',
 				fileName: 'hello.c',
+				activePath: undefined,
+				workspaceFiles: [],
 				compileArgs: ['-DTEST=1'],
-				debug: true,
+				debugMode: 'trace',
 				breakpoints: [7],
 				pauseOnEntry: true,
 				cppVersion: undefined,
@@ -209,6 +240,84 @@ describe('public wasm-clang API contract', () => {
 			'[wasm-clang] runtime manifest loaded',
 			'[wasm-clang] runtime ready'
 		]);
+	});
+
+	it('returns a deterministic DWARF descriptor and forwards workspace sources', async () => {
+		const result = await compileClang(
+			{
+				language: 'CPP',
+				fileName: 'ignored.cpp',
+				activePath: '/workspace/src/main.cpp',
+				code: '#include "../include/value.hpp"\nint main() { return value; }\n',
+				workspaceFiles: [
+					{ path: '/workspace/src/main.cpp', content: 'stale active source' },
+					{ path: '/workspace/include/value.hpp', content: 'constexpr int value = 0;\n' }
+				],
+				debugMode: 'lldb'
+			},
+			{
+				runtimeBaseUrl: 'https://cdn.example.com/pkg/runtime/',
+				manifest
+			}
+		);
+
+		expect(result.success, result.stderr).toBe(true);
+		expect(result.artifact?.debugMetadata).toBeUndefined();
+		expect(result.artifact?.debug).toEqual({
+			kind: 'dwarf',
+			sourceRoot: '/workspace',
+			moduleSha256: await sha256Hex(wasmFixture.bytes),
+			files: [
+				{
+					path: '/workspace/include/value.hpp',
+					contentSha256: await sha256Hex('constexpr int value = 0;\n')
+				},
+				{
+					path: '/workspace/src/main.cpp',
+					contentSha256: await sha256Hex(
+						'#include "../include/value.hpp"\nint main() { return value; }\n'
+					)
+				}
+			],
+			compiler: manifest.compiler.provenance
+		});
+		expect(runtimeState.instances[0]?.compileLinkCall).toEqual({
+			code: '#include "../include/value.hpp"\nint main() { return value; }\n',
+			options: {
+				language: 'CPP',
+				fileName: 'ignored.cpp',
+				activePath: '/workspace/src/main.cpp',
+				workspaceFiles: [
+					{ path: '/workspace/src/main.cpp', content: 'stale active source' },
+					{ path: '/workspace/include/value.hpp', content: 'constexpr int value = 0;\n' }
+				],
+				compileArgs: [],
+				debugMode: 'lldb',
+				breakpoints: undefined,
+				pauseOnEntry: undefined,
+				cppVersion: undefined,
+				cVersion: undefined
+			}
+		});
+	});
+
+	it('reports missing compiler provenance only when LLDB metadata is requested', async () => {
+		const legacyManifest = structuredClone(manifest);
+		delete legacyManifest.compiler.provenance;
+
+		const result = await compileClang(
+			{
+				code: 'int main() { return 0; }',
+				debugMode: 'lldb'
+			},
+			{
+				runtimeBaseUrl: 'https://cdn.example.com/pkg/runtime/',
+				manifest: legacyManifest
+			}
+		);
+
+		expect(result.success).toBe(false);
+		expect(result.stderr).toContain('requires compiler provenance');
 	});
 
 	it('preloads the runtime with the provided manifest and base url', async () => {

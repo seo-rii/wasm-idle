@@ -12,7 +12,12 @@ const manifestValue = {
 		lld: { asset: 'bin/lld.zip', argv0: 'wasm-ld' },
 		sysroot: { asset: 'bin/sysroot.tar.zip' },
 		resourceDir: '/lib/clang/22.1.8',
-		compilerRuntimeLibDir: 'lib/clang/22.1.8/lib/wasi'
+		compilerRuntimeLibDir: 'lib/clang/22.1.8/lib/wasi',
+		provenance: {
+			name: 'clang',
+			version: '22.1.8',
+			revision: 'ca7933e47d3a3451d81e72ac174dcb5aa28b59d1'
+		}
 	},
 	clangd: {
 		js: 'clangd/clangd.js',
@@ -34,8 +39,20 @@ describe('runtime manifest', () => {
 		expect(manifest.compiler.clang.argv0).toBe('clang');
 		expect(manifest.compiler.resourceDir).toBe('/lib/clang/22.1.8');
 		expect(manifest.compiler.compilerRuntimeLibDir).toBe('lib/clang/22.1.8/lib/wasi');
+		expect(manifest.compiler.provenance).toEqual({
+			name: 'clang',
+			version: '22.1.8',
+			revision: 'ca7933e47d3a3451d81e72ac174dcb5aa28b59d1'
+		});
 		expect(manifest.clangd.wasm).toBe('clangd/clangd.wasm.gz');
 		expect(manifest.targets['wasm32-wasi'].artifactFormat).toBe('wasi-core-wasm');
+	});
+
+	it('keeps compiler provenance additive for older version 1 manifests', () => {
+		const legacyValue = structuredClone(manifestValue);
+		delete (legacyValue.compiler as { provenance?: unknown }).provenance;
+
+		expect(parseRuntimeManifest(legacyValue).compiler.provenance).toBeUndefined();
 	});
 
 	it('loads only an explicitly hosted manifest URL', async () => {
