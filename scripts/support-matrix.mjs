@@ -158,7 +158,7 @@ export const supportMatrixRows = [
 		runtime: '@wasm-idle/llvm-core / Clang WASI',
 		stdin: 'Yes',
 		editorSupport: 'clangd',
-		debug: '-',
+		debug: 'LLDB',
 		browserTest: {
 			file: 'src/lib/playground/stdin.playwright.test.ts',
 			env: 'WASM_IDLE_RUN_REAL_BROWSER_CLANG_STDIN',
@@ -171,7 +171,7 @@ export const supportMatrixRows = [
 		runtime: '@wasm-idle/llvm-core / Clang WASI',
 		stdin: 'Yes',
 		editorSupport: 'clangd',
-		debug: 'Trace',
+		debug: 'LLDB',
 		browserTest: {
 			file: 'src/lib/playground/stdin.playwright.test.ts',
 			env: 'WASM_IDLE_RUN_REAL_BROWSER_CLANG_STDIN',
@@ -184,7 +184,7 @@ export const supportMatrixRows = [
 		runtime: 'GNUstep libobjc2 + @wasm-idle/llvm-core',
 		stdin: 'Yes',
 		editorSupport: 'clangd',
-		debug: '-',
+		debug: 'Trace',
 		browserTest: {
 			file: 'src/lib/playground/stdin.playwright.test.ts',
 			env: 'WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC',
@@ -223,7 +223,7 @@ export const supportMatrixRows = [
 		runtime: 'wasm-rust / browser rustc',
 		stdin: 'Yes',
 		editorSupport: 'rustc diagnostics',
-		debug: 'Trace',
+		debug: 'LLDB',
 		browserTest: {
 			file: 'src/lib/playground/rust.playwright.test.ts',
 			env: 'WASM_IDLE_RUN_REAL_BROWSER_RUST',
@@ -818,12 +818,13 @@ const runtimeDetailsByLanguage = new Map([
 				`from the ${code('wasm-llvm')} producer`,
 			execution:
 				`${code('clang')} for ${code('wasm32-wasi')}; default ${code('-std=gnu11')}; ` +
-				`native gzip delivery for compiler Wasm and sysroot tar assets; ` +
-				`WASI preview1 execution supports ${code('stdin')} and ${code('programArgs')}`,
+				`LLDB mode compiles untouched source with embedded DWARF at ${code('-g -O0')} and runs it in WAMR; ` +
+				`normal runs still use the browser WASI host; supports ${code('stdin')} and ${code('programArgs')}`,
 			customization:
 				`${code('runtimeAssets.clang.baseUrl')}/${code('loader')} or ${code('rootUrl')}; ` +
 				`${code('compileArgs')}, ${code('programArgs')}, ${code('cVersion')}, ` +
-				`${code('activePath')}, ${code('workspaceFiles')}`
+				`${code('activePath')}, ${code('workspaceFiles')}, ${code('debugMode')}, ` +
+				`${code('breakpoints')}, ${code('pauseOnEntry')}`
 		}
 	],
 	[
@@ -834,12 +835,13 @@ const runtimeDetailsByLanguage = new Map([
 				`from the ${code('wasm-llvm')} producer`,
 			execution:
 				`${code('clang++')} for ${code('wasm32-wasi')}; default ${code('-std=gnu++2a')}; ` +
-				`native gzip delivery for compiler Wasm and sysroot tar assets; ` +
-				`trace debug uses wasm-idle controls; supports ${code('stdin')} and ${code('programArgs')}`,
+				`LLDB mode compiles untouched source with embedded DWARF at ${code('-g -O0')} and runs it in WAMR; ` +
+				`normal runs still use the browser WASI host; supports ${code('stdin')} and ${code('programArgs')}`,
 			customization:
 				`${code('runtimeAssets.clang.baseUrl')}/${code('loader')} or ${code('rootUrl')}; ` +
 				`${code('compileArgs')}, ${code('programArgs')}, ${code('cppVersion')}, ` +
-				`${code('activePath')}, ${code('workspaceFiles')}`
+				`${code('activePath')}, ${code('workspaceFiles')}, ${code('debugMode')}, ` +
+				`${code('breakpoints')}, ${code('pauseOnEntry')}`
 		}
 	],
 	[
@@ -854,6 +856,7 @@ const runtimeDetailsByLanguage = new Map([
 				`and ${code('libffi.a')} when Foundation is imported; Foundation headers are inlined ` +
 				`from ${code('foundation-headers.json')}; includes a constructor wrapper for Objective-C ` +
 				`class registration; auto-compiles ${code('.m')} and ${code('.c')} workspace sources; ` +
+				`trace debug instruments active source and uses wasm-idle controls; ` +
 				`supports ${code('stdin')} and ${code('programArgs')}; large Objective-C assets may be ` +
 				`served as gzip-only ${code('.gz')} files through the service worker or worker fallback`,
 			customization:
@@ -862,7 +865,8 @@ const runtimeDetailsByLanguage = new Map([
 				`${code('foundationHeadersUrl')}/${code('libffiUrl')} ` +
 				`or ${code('PUBLIC_WASM_OBJECTIVEC_*')}; ${code('runtimeAssets.clang.baseUrl')}/` +
 				`${code('loader')} for the clang toolchain; ${code('activePath')}, ` +
-				`${code('workspaceFiles')}, ${code('compileArgs')}`
+				`${code('workspaceFiles')}, ${code('compileArgs')}, ${code('debug')}, ` +
+				`${code('breakpoints')}, ${code('pauseOnEntry')}`
 		}
 	],
 	[
@@ -896,19 +900,19 @@ const runtimeDetailsByLanguage = new Map([
 				`${workspacePackage('runtimes/wasm-rust')} / ` +
 				`${manifestValue('static/wasm-rust/runtime/runtime-manifest.v3.json', ['version'])} + ` +
 				`integrated LLVM/LLD 22.1.8 from the ${code('wasm-llvm')} producer; ` +
-				`${code('debug-instrumenter.js')} is a separately generated static asset`,
+				`exact rustc/LLVM provenance is recorded for LLDB compatibility`,
 			execution:
 				`browser host ${code('wasm32-wasip1-threads')}; ` +
-				`${code('rustc -Zthreads=1 -Zcodegen-backend=llvm --crate-type=bin --edition=2024 -Cpanic=abort -Ccodegen-units=1 --emit=link')}; ` +
 				`default target ${code('wasm32-wasip1')}, selectable ${codeList([
 					'wasm32-wasip1',
 					'wasm32-wasip2',
 					'wasm32-wasip3'
-				])}; Preview 1 emits core Wasm and Preview 2/3 are component-encoded; ` +
-				`supports ${code('stdin')} and ${code('programArgs')}; the debug instrumenter is fetched only for debug runs`,
+				])}; LLDB mode is currently limited to ${code('wasm32-wasip1')} and emits embedded ` +
+				`DWARF with ${code('-C debuginfo=2 -C opt-level=0')}; normal Preview 1/2/3 execution ` +
+				`remains unchanged; supports ${code('stdin')} and ${code('programArgs')}`,
 			customization:
 				`${code('runtimeAssets.rust.compilerUrl')}, ${code('runtimeAssets.rust.debugModuleUrl')}, or ${code('PUBLIC_WASM_RUST_COMPILER_URL')}; ` +
-				`${code('rootUrl')}, ${code('rustTargetTriple')}, ${code('programArgs')}; ` +
+				`${code('rootUrl')}, ${code('rustTargetTriple')}, ${code('programArgs')}, ${code('debugMode')}; ` +
 				`compiler requests accept ${code('edition')}, ${code('crateType')}, ${code('extendedTimeout')}, ${code('log')}, and ${code('onProgress')}; ` +
 				`runtime manifest controls compiler memory, timeout, and shared workspace size`
 		}
@@ -1515,10 +1519,65 @@ export function renderSupportMatrixSection(rows = supportMatrixRows) {
 
 All execution entries run in the browser through real runtime, compiler, or interpreter
 implementations. \`Editor support\` lists browser LSP/compiler diagnostics when wired; \`syntax\`
-means Monaco syntax highlighting only. \`Debug\` means wasm-idle's trace/debug controls, not a
-native debugger.
+means Monaco syntax highlighting only. C, C++, and \`wasm32-wasip1\` Rust use the browser LLDB/WAMR
+debug runtime; the remaining debug-enabled languages retain wasm-idle's trace controls.
 
 ${renderSupportMatrixTable(rows)}
+
+## Browser LLDB debug runtime
+
+Normal execution still compiles and instantiates the user module with the browser WebAssembly
+engine and the existing WASI host. C, C++, and \`wasm32-wasip1\` Rust debug sessions use a separate,
+lazy-loaded path:
+
+\`\`\`text
+Monaco / debug UI
+  ↕ DAP over a SharedArrayBuffer byte stream
+LLDB worker (ProcessWasm + DWARF)
+  ↕ GDB RSP over a separate SharedArrayBuffer byte stream
+WAMR target worker (classic interpreter + source-debug stub)
+  ↕
+program.wasm + embedded DWARF + WASI
+\`\`\`
+
+The compiler writes stable \`/workspace/...\` paths and embedded DWARF at \`-O0\`. The target is loaded
+before LLDB attaches; breakpoints and \`configurationDone\` are completed before WAMR starts the
+guest. Program output, input, lifecycle control, DAP, and RSP use separate logical streams.
+Breakpoints are retained per source path, so switching between C/C++ workspace files does not leak
+line numbers into another file and changes made while compilation is in flight are applied when the
+debug target connects.
+\`@wasm-idle/debug\` remains a code-only UI/adapter package, while
+\`@wasm-idle/llvm-core/debug\` owns the browser session and \`wasm-llvm\` owns the pinned LLDB/WAMR
+producers and binary manifests.
+
+Debugging requires \`SharedArrayBuffer\` and a cross-origin-isolated deployment. The LLDB and WAMR
+assets are not downloaded until a supported debug session starts. If the LLDB manifest is absent,
+invalid, or does not advertise the required breakpoint/step/stack/local capabilities, the
+playground labels that run as a trace fallback and keeps the existing instrumentation debugger
+available. Build and verify both producers
+using [\`producer/lldb-browser\`](../wasm-llvm/producer/lldb-browser) and
+[\`producer/wamr-browser\`](../wasm-llvm/producer/wamr-browser), then assemble them with the Clang
+release:
+
+\`\`\`sh
+cd ../wasm-llvm
+WASM_LLVM_LLDB_ARTIFACT_DIR=/path/to/lldb-artifacts \\
+WASM_LLVM_WAMR_ARTIFACT_DIR=/path/to/wamr-artifacts \\
+pnpm prepare:clang-release
+
+cd ../wasm-idle
+WASM_RUST_PRODUCER_OUTPUT_ROOT=/path/to/rust-producer-output \\
+pnpm --dir runtimes/wasm-rust build:producer
+pnpm sync:wasm-rust
+pnpm sync:wasm-debug ../wasm-llvm/out/clang-browser
+WASM_IDLE_BROWSER_SERVER_MODE=dev pnpm test:browser:debug:lldb
+\`\`\`
+
+The synchronized manifest rejects missing hashes, incompatible Clang/LLDB revisions, and stale
+worker sidecars. The strict browser test covers real C, C++, and Rust breakpoint, step, output, and
+termination paths and rejects trace fallback or a missing debug asset. The Rust producer build is
+required for LLDB metadata; the historical split-runtime build intentionally lacks exact compiler
+provenance and is rejected instead of starting a potentially incompatible debugger.
 
 ### Runtime details
 

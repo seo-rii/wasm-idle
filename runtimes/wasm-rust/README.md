@@ -29,9 +29,14 @@ API accepts one `bin` source file, editions `2021` or `2024`, and the three bund
 does not yet expose Cargo dependency resolution or a multi-file crate graph. A cross-origin-isolated
 browser environment is required for Rust compiler threads.
 
-`pnpm run build:js` also emits `dist/debug-instrumenter.js`, a self-contained browser ESM asset.
-It bundles the Lezer Rust parser at producer build time so browser hosts can fetch source
-instrumentation only when a debug execution starts; consumers do not install `@lezer/rust`.
+The canonical producer manifest records exact rustc and rust-lang LLVM provenance. `debugMode:
+'lldb'` is supported for `wasm32-wasip1`: it emits untouched `-C debuginfo=2 -C opt-level=0`
+source with embedded DWARF for the browser LLDB/WAMR runtime. The legacy trace instrumenter remains
+available as `debugMode: 'trace'`.
+
+`pnpm run build:js` still emits `dist/debug-instrumenter.js` for that trace compatibility mode.
+The historical split-backend `pnpm build` output deliberately has no compiler provenance and is
+therefore rejected for LLDB artifacts; use `pnpm run build:producer` for LLDB-capable releases.
 
 ## Quick start
 
@@ -210,9 +215,10 @@ pnpm run probe:browser-harness
 
 - `pnpm build`
     - builds TypeScript and the debug instrumenter asset, then prepares the historical split-backend
-      runtime under `dist/runtime/`
+      runtime under `dist/runtime/`; this compatibility runtime does not advertise LLDB provenance
 - `pnpm run build:producer`
-    - builds TypeScript and packages the pinned, receipt-verified integrated rustc producer output
+    - builds TypeScript and packages the pinned, receipt-verified integrated rustc producer output,
+      including rustc/LLVM provenance required by `debugMode: 'lldb'`
 - `pnpm run release:upload -- --tag <tag> [asset...]`
     - uploads one or more assets to a GitHub release with `gh`, and can create the release first
 - `pnpm test`

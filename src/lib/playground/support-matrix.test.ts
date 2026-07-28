@@ -15,6 +15,7 @@ describe('README support matrix', () => {
 		await expect(validateSupportMatrix()).resolves.toBeUndefined();
 		expect(renderSupportMatrixSection()).toContain('| Pascal');
 		expect(renderSupportMatrixSection()).toContain('| Scheme');
+		expect(renderSupportMatrixSection()).toContain('## Browser LLDB debug runtime');
 	});
 
 	it('keeps every execution language tied to real browser coverage', () => {
@@ -25,6 +26,12 @@ describe('README support matrix', () => {
 		expect(rowsMissingBrowserIo).toEqual([]);
 		expect(supportMatrixRows.find((row) => row.language === 'C')?.stdin).toBe('Yes');
 		expect(supportMatrixRows.find((row) => row.language === 'C++')?.stdin).toBe('Yes');
+		expect(supportMatrixRows.find((row) => row.language === 'C')?.debug).toBe('LLDB');
+		expect(supportMatrixRows.find((row) => row.language === 'C++')?.debug).toBe('LLDB');
+		expect(supportMatrixRows.find((row) => row.language === 'Rust')?.debug).toBe('LLDB');
+		expect(supportMatrixRows.find((row) => row.language === 'Objective-C')?.debug).toBe(
+			'Trace'
+		);
 		expect(supportMatrixRows.find((row) => row.language === 'F#')?.stdin).toBe('Yes');
 		expect(supportMatrixRows.find((row) => row.language === 'Fortran')?.stdin).toBe('Yes');
 		expect(supportMatrixRows.find((row) => row.language === 'Haskell')?.stdin).toBe('Yes');
