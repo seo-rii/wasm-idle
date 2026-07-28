@@ -72,6 +72,7 @@ export class WorkerAssetBridge {
 	private readonly runtime: RuntimeAssetRuntime;
 	private config: ResolvedRuntimeAssetConfig;
 	private readonly progress: RuntimeLoadProgress;
+	private readonly expectedAssets: Set<string>;
 
 	constructor(
 		worker: Worker,
@@ -83,6 +84,7 @@ export class WorkerAssetBridge {
 		this.runtime = runtime;
 		this.config = config;
 		this.progress = new RuntimeLoadProgress(runtime);
+		this.expectedAssets = expectedAssetsForRuntime(runtime);
 		this.progress.reset(progress);
 	}
 
@@ -145,6 +147,9 @@ export class WorkerAssetBridge {
 	}
 
 	private async loadAsset(asset: string): Promise<LoadedAsset> {
+		if (!this.expectedAssets.has(asset)) {
+			throw new Error(`Unexpected ${this.runtime} runtime asset: ${asset}`);
+		}
 		const reportProgress = (loaded: number, total?: number) =>
 			this.progress.update(asset, loaded, total);
 		if (this.config.loader) {
