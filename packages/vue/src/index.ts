@@ -5,7 +5,7 @@ import {
 	type SandboxRuntimeAssets,
 	type TerminalControl
 } from '@wasm-idle/core';
-import { computed, shallowRef, type Ref, type ShallowRef } from 'vue';
+import { computed, shallowRef, unref, type Ref, type ShallowRef } from 'vue';
 
 export type MaybeRef<T> = T | Ref<T>;
 
@@ -16,17 +16,11 @@ export interface VueWasmIdleHost {
 	setTerminal: (terminal: TerminalControl | undefined) => void;
 }
 
-function unwrap<T>(value: MaybeRef<T>): T {
-	return typeof value === 'object' && value !== null && 'value' in value
-		? (value as Ref<T>).value
-		: value;
-}
-
 export function useWasmIdlePlayground(
 	runtimeAssets: MaybeRef<SandboxRuntimeAssets>,
 	loadSandbox: MaybeRef<SandboxLoader>
 ): Ref<PlaygroundBinding> {
-	return computed(() => createPlaygroundBinding(unwrap(runtimeAssets), unwrap(loadSandbox)));
+	return computed(() => createPlaygroundBinding(unref(runtimeAssets), unref(loadSandbox)));
 }
 
 export function useWasmIdleHost(
