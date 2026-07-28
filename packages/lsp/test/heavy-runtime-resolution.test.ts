@@ -55,20 +55,20 @@ describe('heavy LSP runtime module resolution', () => {
 		).toBe('https://app.example.com/editor/ruby-runtime.mjs');
 	});
 
-	it('resolves root-relative defaults against the current application URL', () => {
-		const currentUrl = 'https://app.example.com/editor';
+	it('resolves defaults relative to the current application base', () => {
+		const currentUrl = 'https://app.example.com/wasm-idle/';
 
 		expect(resolveAssemblyScriptLanguageServerModuleUrl(undefined, currentUrl)).toBe(
-			'https://app.example.com/wasm-assemblyscript/runtime.mjs'
+			'https://app.example.com/wasm-idle/wasm-assemblyscript/runtime.mjs'
 		);
 		expect(resolveSqliteLanguageServerModuleUrl(undefined, currentUrl)).toBe(
-			'https://app.example.com/wasm-sqlite/runtime.mjs'
+			'https://app.example.com/wasm-idle/wasm-sqlite/runtime.mjs'
 		);
 		expect(resolveDuckDbLanguageServerModuleUrl(undefined, currentUrl)).toBe(
-			'https://app.example.com/wasm-duckdb/runtime.mjs'
+			'https://app.example.com/wasm-idle/wasm-duckdb/runtime.mjs'
 		);
 		expect(resolveRubyLanguageServerModuleUrl(undefined, currentUrl)).toBe(
-			'https://app.example.com/wasm-ruby/runtime.mjs'
+			'https://app.example.com/wasm-idle/wasm-ruby/runtime.mjs'
 		);
 	});
 });

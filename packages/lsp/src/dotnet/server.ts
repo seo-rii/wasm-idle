@@ -21,7 +21,10 @@ export function resolveDotnetLanguageServerModuleUrl(
 	}
 	const rootUrl =
 		typeof options === 'string' ? options : typeof options === 'object' ? options.rootUrl : '';
-	const path = `${normalizeRootUrl(rootUrl || '')}/wasm-dotnet/index.js`;
+	const normalizedRootUrl = normalizeRootUrl(rootUrl || '');
+	const path = normalizedRootUrl
+		? `${normalizedRootUrl}/wasm-dotnet/index.js`
+		: 'wasm-dotnet/index.js';
 	return baseUrl ? new URL(path, baseUrl).href : normalizeBaseUrl(path).replace(/\/$/u, '');
 }
 

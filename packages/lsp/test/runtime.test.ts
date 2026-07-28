@@ -33,12 +33,20 @@ import {
 	resolveOcamlLanguageServerManifestUrl,
 	resolveOcamlLanguageServerModuleUrl,
 	resolveRLanguageServerBaseUrl,
+	resolvePrologLanguageServerBaseUrl,
+	resolvePrologLanguageServerWorkerUrl,
 	resolveRustLanguageServerCompilerUrl,
 	resolveTclLanguageServerBaseUrl,
 	resolveTclLanguageServerWorkerUrl,
 	resolveZigLanguageServerCompilerUrl,
 	resolveZigLanguageServerStdlibUrl
 } from '../src/index.js';
+import {
+	resolveAssemblyScriptLanguageServerModuleUrl,
+	resolveDuckDbLanguageServerModuleUrl,
+	resolveRubyLanguageServerModuleUrl,
+	resolveSqliteLanguageServerModuleUrl
+} from '../src/runtime.js';
 
 describe('lsp runtime asset resolution', () => {
 	it('keeps default clangd and Python assets under the deployed application base', () => {
@@ -52,6 +60,63 @@ describe('lsp runtime asset resolution', () => {
 		);
 		expect(resolveCppLanguageServerBaseUrl(undefined)).toBe('clangd/');
 		expect(resolvePythonLanguageServerBaseUrl(undefined)).toBe('pyodide/');
+	});
+
+	it('keeps every default runtime asset under the deployed application base', () => {
+		const applicationUrl = 'https://app.example.com/wasm-idle/';
+		const cases: [(options: undefined, currentUrl: string) => string, string][] = [
+			[resolveAssemblyScriptLanguageServerModuleUrl, 'wasm-assemblyscript/runtime.mjs'],
+			[resolveRustLanguageServerCompilerUrl, 'wasm-rust/index.js'],
+			[resolveGoLanguageServerCompilerUrl, 'wasm-go/index.js'],
+			[resolveDLanguageServerModuleUrl, 'wasm-d/index.js'],
+			[resolveGleamLanguageServerBaseUrl, 'wasm-gleam/'],
+			[resolveGleamLanguageServerManifestUrl, 'wasm-gleam/source-manifest.v1.json'],
+			[resolveElixirLanguageServerBundleUrl, 'wasm-elixir/bundle.avm'],
+			[resolveErlangLanguageServerBundleUrl, 'wasm-elixir/bundle.avm'],
+			[resolveZigLanguageServerCompilerUrl, 'wasm-zig/zig_small.wasm'],
+			[resolveZigLanguageServerStdlibUrl, 'wasm-zig/std.tar.gz'],
+			[resolveLuaLanguageServerModuleUrl, 'wasm-lua/index.js'],
+			[resolveJanetLanguageServerBaseUrl, 'wasm-janet/'],
+			[resolveJanetLanguageServerWorkerUrl, 'wasm-janet/runner-worker.js'],
+			[resolveLispLanguageServerModuleUrl, 'wasm-lisp/index.js'],
+			[resolveOctaveLanguageServerBaseUrl, 'wasm-octave/runtime/'],
+			[resolveOctaveLanguageServerWorkerUrl, 'wasm-octave/runner-worker.js'],
+			[
+				resolveOctaveLanguageServerManifestUrl,
+				'wasm-octave/runtime/runtime-manifest.v1.json'
+			],
+			[
+				resolveOcamlLanguageServerModuleUrl,
+				'wasm-of-js-of-ocaml/browser-native/src/index.js'
+			],
+			[
+				resolveOcamlLanguageServerManifestUrl,
+				'wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json'
+			],
+			[resolveHaskellLanguageServerModuleUrl, 'wasm-haskell/dyld.mjs'],
+			[resolveHaskellLanguageServerRootfsUrl, 'wasm-haskell/rootfs.tar.zst'],
+			[resolveHaskellLanguageServerBsdtarUrl, 'wasm-haskell/bsdtar.wasm'],
+			[resolveSqliteLanguageServerModuleUrl, 'wasm-sqlite/runtime.mjs'],
+			[resolveDuckDbLanguageServerModuleUrl, 'wasm-duckdb/runtime.mjs'],
+			[resolveDotnetLanguageServerModuleUrl, 'wasm-dotnet/index.js'],
+			[resolveFortranLanguageServerAnalyzerUrl, 'wasm-fortran/analyzer.js'],
+			[resolvePrologLanguageServerBaseUrl, 'wasm-prolog/'],
+			[resolvePrologLanguageServerWorkerUrl, 'wasm-prolog/runner-worker.js'],
+			[resolveRubyLanguageServerModuleUrl, 'wasm-ruby/runtime.mjs'],
+			[resolveRLanguageServerBaseUrl, 'webr/'],
+			[resolveAwkLanguageServerBaseUrl, 'wasm-awk/'],
+			[resolveAwkLanguageServerWorkerUrl, 'wasm-awk/runner-worker.js'],
+			[resolvePerlLanguageServerBaseUrl, 'wasm-perl/'],
+			[resolvePerlLanguageServerWorkerUrl, 'wasm-perl/runner-worker.js'],
+			[resolveTclLanguageServerBaseUrl, 'wasm-tcl/'],
+			[resolveTclLanguageServerWorkerUrl, 'wasm-tcl/runner-worker.js'],
+			[resolvePascalLanguageServerBaseUrl, 'wasm-pascal/'],
+			[resolvePascalLanguageServerWorkerUrl, 'wasm-pascal/runner-worker.js']
+		];
+
+		for (const [resolve, path] of cases) {
+			expect(resolve(undefined, applicationUrl), path).toBe(`${applicationUrl}${path}`);
+		}
 	});
 
 	it('resolves root-based cpp and python asset URLs', () => {

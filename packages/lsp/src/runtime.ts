@@ -70,6 +70,9 @@ export function resolvePythonLanguageServerBaseUrl(
 const resolveFileUrl = (value: string, currentUrl = '') =>
 	currentUrl ? new URL(value, currentUrl).href : value;
 
+const resolveApplicationAssetUrl = (path: string, currentUrl = '') =>
+	resolveFileUrl(path.replace(/^\/+/, ''), currentUrl);
+
 const resolveStaticRuntimeModuleUrl = (
 	options: EditorLanguageServerOptions | undefined,
 	moduleUrl: string | undefined,
@@ -78,7 +81,9 @@ const resolveStaticRuntimeModuleUrl = (
 ) => {
 	if (moduleUrl) return resolveFileUrl(moduleUrl, currentUrl);
 	const rootUrl = typeof options === 'string' ? options : options?.rootUrl || '';
-	return resolveFileUrl(`${normalizeRootUrl(rootUrl) || ''}${path}`, currentUrl);
+	return rootUrl
+		? resolveFileUrl(`${normalizeRootUrl(rootUrl)}${path}`, currentUrl)
+		: resolveApplicationAssetUrl(path, currentUrl);
 };
 
 export function resolveAssemblyScriptLanguageServerModuleUrl(
@@ -109,7 +114,7 @@ export function resolveRustLanguageServerCompilerUrl(
 			currentUrl
 		);
 	}
-	return resolveFileUrl('/wasm-rust/index.js', currentUrl);
+	return resolveApplicationAssetUrl('/wasm-rust/index.js', currentUrl);
 }
 
 export function resolveGoLanguageServerCompilerUrl(
@@ -128,7 +133,7 @@ export function resolveGoLanguageServerCompilerUrl(
 			currentUrl
 		);
 	}
-	return resolveFileUrl('/wasm-go/index.js', currentUrl);
+	return resolveApplicationAssetUrl('/wasm-go/index.js', currentUrl);
 }
 
 export function resolveDLanguageServerModuleUrl(
@@ -147,7 +152,7 @@ export function resolveDLanguageServerModuleUrl(
 			currentUrl
 		);
 	}
-	return resolveFileUrl('/wasm-d/index.js', currentUrl);
+	return resolveApplicationAssetUrl('/wasm-d/index.js', currentUrl);
 }
 
 export function resolveGleamLanguageServerBaseUrl(
@@ -163,7 +168,7 @@ export function resolveGleamLanguageServerBaseUrl(
 	if (options?.rootUrl) {
 		return resolveRootToolBaseUrl(options.rootUrl, '/wasm-gleam/', currentUrl);
 	}
-	return normalizeBaseUrl('/wasm-gleam/', currentUrl);
+	return resolveApplicationAssetUrl('/wasm-gleam/', currentUrl);
 }
 
 export function resolveGleamLanguageServerManifestUrl(
@@ -198,7 +203,7 @@ export function resolveElixirLanguageServerBundleUrl(
 			currentUrl
 		);
 	}
-	return resolveFileUrl('/wasm-elixir/bundle.avm', currentUrl);
+	return resolveApplicationAssetUrl('/wasm-elixir/bundle.avm', currentUrl);
 }
 
 export function resolveElixirLanguageServerWorkerUrl(
@@ -232,7 +237,7 @@ export function resolveErlangLanguageServerBundleUrl(
 			currentUrl
 		);
 	}
-	return resolveFileUrl('/wasm-elixir/bundle.avm', currentUrl);
+	return resolveApplicationAssetUrl('/wasm-elixir/bundle.avm', currentUrl);
 }
 
 export function resolveErlangLanguageServerWorkerUrl(
@@ -262,7 +267,7 @@ export function resolveZigLanguageServerCompilerUrl(
 			currentUrl
 		);
 	}
-	return resolveFileUrl('/wasm-zig/zig_small.wasm', currentUrl);
+	return resolveApplicationAssetUrl('/wasm-zig/zig_small.wasm', currentUrl);
 }
 
 export function resolveZigLanguageServerStdlibUrl(
@@ -281,7 +286,7 @@ export function resolveZigLanguageServerStdlibUrl(
 			currentUrl
 		);
 	}
-	return resolveFileUrl('/wasm-zig/std.tar.gz', currentUrl);
+	return resolveApplicationAssetUrl('/wasm-zig/std.tar.gz', currentUrl);
 }
 
 export function resolveLuaLanguageServerModuleUrl(
@@ -300,7 +305,7 @@ export function resolveLuaLanguageServerModuleUrl(
 			currentUrl
 		);
 	}
-	return resolveFileUrl('/wasm-lua/index.js', currentUrl);
+	return resolveApplicationAssetUrl('/wasm-lua/index.js', currentUrl);
 }
 
 export function resolveJanetLanguageServerBaseUrl(
@@ -316,7 +321,7 @@ export function resolveJanetLanguageServerBaseUrl(
 	if (options?.rootUrl) {
 		return resolveFileUrl(`${normalizeRootUrl(options.rootUrl) || ''}/wasm-janet/`, currentUrl);
 	}
-	return resolveFileUrl('/wasm-janet/', currentUrl);
+	return resolveApplicationAssetUrl('/wasm-janet/', currentUrl);
 }
 
 export function resolveJanetLanguageServerWorkerUrl(
@@ -338,7 +343,7 @@ export function resolveJanetLanguageServerWorkerUrl(
 			currentUrl
 		);
 	}
-	return resolveFileUrl('/wasm-janet/runner-worker.js', currentUrl);
+	return resolveApplicationAssetUrl('/wasm-janet/runner-worker.js', currentUrl);
 }
 
 export function resolveLispLanguageServerModuleUrl(
@@ -357,7 +362,7 @@ export function resolveLispLanguageServerModuleUrl(
 			currentUrl
 		);
 	}
-	return resolveFileUrl('/wasm-lisp/index.js', currentUrl);
+	return resolveApplicationAssetUrl('/wasm-lisp/index.js', currentUrl);
 }
 
 export function resolveOctaveLanguageServerBaseUrl(
@@ -373,7 +378,7 @@ export function resolveOctaveLanguageServerBaseUrl(
 	if (options?.rootUrl) {
 		return resolveRootToolBaseUrl(options.rootUrl, '/wasm-octave/runtime/', currentUrl);
 	}
-	return normalizeBaseUrl('/wasm-octave/runtime/', currentUrl);
+	return resolveApplicationAssetUrl('/wasm-octave/runtime/', currentUrl);
 }
 
 export function resolveOctaveLanguageServerWorkerUrl(
@@ -395,7 +400,7 @@ export function resolveOctaveLanguageServerWorkerUrl(
 			currentUrl
 		);
 	}
-	return resolveFileUrl('/wasm-octave/runner-worker.js', currentUrl);
+	return resolveApplicationAssetUrl('/wasm-octave/runner-worker.js', currentUrl);
 }
 
 export function resolveOctaveLanguageServerManifestUrl(
@@ -425,7 +430,7 @@ export function resolveOcamlLanguageServerModuleUrl(
 	if (options?.rootUrl) {
 		return resolveFileUrl(`${normalizeRootUrl(options.rootUrl) || ''}${path}`, currentUrl);
 	}
-	return resolveFileUrl(path, currentUrl);
+	return resolveApplicationAssetUrl(path, currentUrl);
 }
 
 export function resolveOcamlLanguageServerManifestUrl(
@@ -442,7 +447,7 @@ export function resolveOcamlLanguageServerManifestUrl(
 	if (options?.rootUrl) {
 		return resolveFileUrl(`${normalizeRootUrl(options.rootUrl) || ''}${path}`, currentUrl);
 	}
-	return resolveFileUrl(path, currentUrl);
+	return resolveApplicationAssetUrl(path, currentUrl);
 }
 
 export function resolveHaskellLanguageServerModuleUrl(
@@ -464,7 +469,7 @@ export function resolveHaskellLanguageServerModuleUrl(
 			currentUrl
 		);
 	}
-	return resolveFileUrl('/wasm-haskell/dyld.mjs', currentUrl);
+	return resolveApplicationAssetUrl('/wasm-haskell/dyld.mjs', currentUrl);
 }
 
 export function resolveHaskellLanguageServerRootfsUrl(
@@ -486,7 +491,7 @@ export function resolveHaskellLanguageServerRootfsUrl(
 			currentUrl
 		);
 	}
-	return resolveFileUrl('/wasm-haskell/rootfs.tar.zst', currentUrl);
+	return resolveApplicationAssetUrl('/wasm-haskell/rootfs.tar.zst', currentUrl);
 }
 
 export function resolveHaskellLanguageServerBsdtarUrl(
@@ -508,7 +513,7 @@ export function resolveHaskellLanguageServerBsdtarUrl(
 			currentUrl
 		);
 	}
-	return resolveFileUrl('/wasm-haskell/bsdtar.wasm', currentUrl);
+	return resolveApplicationAssetUrl('/wasm-haskell/bsdtar.wasm', currentUrl);
 }
 
 export function resolveSqliteLanguageServerModuleUrl(
@@ -554,7 +559,7 @@ export function resolveFortranLanguageServerAnalyzerUrl(
 			currentUrl
 		);
 	}
-	return resolveFileUrl('/wasm-fortran/analyzer.js', currentUrl);
+	return resolveApplicationAssetUrl('/wasm-fortran/analyzer.js', currentUrl);
 }
 
 export function resolvePrologLanguageServerBaseUrl(
@@ -573,7 +578,7 @@ export function resolvePrologLanguageServerBaseUrl(
 			currentUrl
 		);
 	}
-	return resolveFileUrl('/wasm-prolog/', currentUrl);
+	return resolveApplicationAssetUrl('/wasm-prolog/', currentUrl);
 }
 
 export function resolvePrologLanguageServerWorkerUrl(
@@ -595,7 +600,7 @@ export function resolvePrologLanguageServerWorkerUrl(
 			currentUrl
 		);
 	}
-	return resolveFileUrl('/wasm-prolog/runner-worker.js', currentUrl);
+	return resolveApplicationAssetUrl('/wasm-prolog/runner-worker.js', currentUrl);
 }
 
 export function resolveRubyLanguageServerWasmUrl(
@@ -633,7 +638,7 @@ export function resolveRLanguageServerBaseUrl(
 	if (options?.rootUrl) {
 		return resolveFileUrl(`${normalizeRootUrl(options.rootUrl) || ''}/webr/`, currentUrl);
 	}
-	return resolveFileUrl('/webr/', currentUrl);
+	return resolveApplicationAssetUrl('/webr/', currentUrl);
 }
 
 export function resolveAwkLanguageServerBaseUrl(
@@ -649,7 +654,7 @@ export function resolveAwkLanguageServerBaseUrl(
 	if (options?.rootUrl) {
 		return resolveFileUrl(`${normalizeRootUrl(options.rootUrl) || ''}/wasm-awk/`, currentUrl);
 	}
-	return resolveFileUrl('/wasm-awk/', currentUrl);
+	return resolveApplicationAssetUrl('/wasm-awk/', currentUrl);
 }
 
 export function resolveAwkLanguageServerWorkerUrl(
@@ -671,7 +676,7 @@ export function resolveAwkLanguageServerWorkerUrl(
 			currentUrl
 		);
 	}
-	return resolveFileUrl('/wasm-awk/runner-worker.js', currentUrl);
+	return resolveApplicationAssetUrl('/wasm-awk/runner-worker.js', currentUrl);
 }
 
 export function resolvePerlLanguageServerBaseUrl(
@@ -687,7 +692,7 @@ export function resolvePerlLanguageServerBaseUrl(
 	if (options?.rootUrl) {
 		return resolveFileUrl(`${normalizeRootUrl(options.rootUrl) || ''}/wasm-perl/`, currentUrl);
 	}
-	return resolveFileUrl('/wasm-perl/', currentUrl);
+	return resolveApplicationAssetUrl('/wasm-perl/', currentUrl);
 }
 
 export function resolvePerlLanguageServerWorkerUrl(
@@ -709,7 +714,7 @@ export function resolvePerlLanguageServerWorkerUrl(
 			currentUrl
 		);
 	}
-	return resolveFileUrl('/wasm-perl/runner-worker.js', currentUrl);
+	return resolveApplicationAssetUrl('/wasm-perl/runner-worker.js', currentUrl);
 }
 
 export function resolveTclLanguageServerBaseUrl(
@@ -725,7 +730,7 @@ export function resolveTclLanguageServerBaseUrl(
 	if (options?.rootUrl) {
 		return resolveFileUrl(`${normalizeRootUrl(options.rootUrl) || ''}/wasm-tcl/`, currentUrl);
 	}
-	return normalizeBaseUrl('/wasm-tcl/', currentUrl);
+	return resolveApplicationAssetUrl('/wasm-tcl/', currentUrl);
 }
 
 export function resolveTclLanguageServerWorkerUrl(
@@ -747,7 +752,7 @@ export function resolveTclLanguageServerWorkerUrl(
 			currentUrl
 		);
 	}
-	return resolveFileUrl('/wasm-tcl/runner-worker.js', currentUrl);
+	return resolveApplicationAssetUrl('/wasm-tcl/runner-worker.js', currentUrl);
 }
 
 export function resolvePascalLanguageServerBaseUrl(
@@ -766,7 +771,7 @@ export function resolvePascalLanguageServerBaseUrl(
 			currentUrl
 		);
 	}
-	return normalizeBaseUrl('/wasm-pascal/', currentUrl);
+	return resolveApplicationAssetUrl('/wasm-pascal/', currentUrl);
 }
 
 export function resolvePascalLanguageServerWorkerUrl(
@@ -788,7 +793,7 @@ export function resolvePascalLanguageServerWorkerUrl(
 			currentUrl
 		);
 	}
-	return resolveFileUrl('/wasm-pascal/runner-worker.js', currentUrl);
+	return resolveApplicationAssetUrl('/wasm-pascal/runner-worker.js', currentUrl);
 }
 
 export type { EditorLanguageServerRuntimeOptions };
