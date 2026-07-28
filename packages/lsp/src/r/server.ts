@@ -24,6 +24,7 @@ export async function getRLanguageServer(
 		initOptions: {
 			baseUrl: resolveRLanguageServerBaseUrl(options, hostOptions?.currentUrl)
 		},
-		onStatus: hostOptions?.onStatus
+		onStatus: hostOptions?.onStatus,
+		lifecycle: hostOptions
 	});
 }

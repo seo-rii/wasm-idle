@@ -40,7 +40,8 @@ async function createLanguageServer(
 			extraLibs: config.extraLibs,
 			libUrl: config.libUrl
 		},
-		onStatus: hostOptions?.onStatus
+		onStatus: hostOptions?.onStatus,
+		lifecycle: hostOptions
 	});
 }
 

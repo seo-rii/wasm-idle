@@ -1,3 +1,5 @@
+import { runWithSignalAndTimeout } from './lifecycle.js';
+
 export type LanguageToolAssetRuntime = 'clangd';
 
 export interface LanguageToolAssetLoadRequest {
@@ -323,61 +325,32 @@ export async function loadLanguageToolAsset(
 		throw new Error(`Runtime asset ${asset} is missing integrity metadata`);
 	}
 	const timeoutMs = options.timeoutMs ?? DEFAULT_LANGUAGE_TOOL_ASSET_TIMEOUT_MS;
-	if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) {
-		throw new TypeError('Language tool asset timeout must be a positive safe integer');
-	}
-	if (options.signal?.aborted) {
-		throw options.signal.reason instanceof Error
-			? options.signal.reason
-			: new DOMException('Language tool asset loading was cancelled', 'AbortError');
-	}
-
-	const controller = new AbortController();
-	let rejectStopped = (_reason: unknown) => {};
-	const stopped = new Promise<never>((_resolve, reject) => {
-		rejectStopped = reject;
-	});
-	const stop = (reason: Error) => {
-		if (controller.signal.aborted) return;
-		controller.abort(reason);
-		rejectStopped(reason);
-	};
-	const handleAbort = () => {
-		stop(
-			options.signal?.reason instanceof Error
-				? options.signal.reason
-				: new DOMException('Language tool asset loading was cancelled', 'AbortError')
-		);
-	};
-	options.signal?.addEventListener('abort', handleAbort, { once: true });
-	const timeout = setTimeout(() => {
-		stop(new LanguageToolAssetTimeoutError(asset, timeoutMs));
-	}, timeoutMs);
-
-	try {
-		const loading = (async () => {
+	return await runWithSignalAndTimeout(
+		async (signal) => {
 			let loaded: LoadedLanguageToolAsset | null = null;
 			if (config.loader) {
 				loaded = await normalizeLoaderResult(
 					await config.loader({
 						runtime,
 						asset,
-						signal: controller.signal,
+						signal,
 						reportProgress
 					}),
 					asset,
 					config,
 					reportProgress,
-					controller.signal
+					signal
 				);
 			}
-			loaded ||= await fetchAsset(asset, asset, config, reportProgress, controller.signal);
+			loaded ||= await fetchAsset(asset, asset, config, reportProgress, signal);
 			loaded = { ...loaded, bytes: enforceAssetSize(asset, loaded.bytes) };
 			return await verifyAssetIntegrity(asset, loaded, config);
-		})();
-		return await Promise.race([loading, stopped]);
-	} finally {
-		clearTimeout(timeout);
-		options.signal?.removeEventListener('abort', handleAbort);
-	}
+		},
+		{
+			signal: options.signal,
+			timeoutMs,
+			operationName: 'Language tool asset',
+			timeoutError: () => new LanguageToolAssetTimeoutError(asset, timeoutMs)
+		}
+	);
 }

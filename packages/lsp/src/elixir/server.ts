@@ -30,6 +30,7 @@ export async function getElixirLanguageServer(
 			bundleUrl: resolveElixirLanguageServerBundleUrl(options, hostOptions?.currentUrl),
 			workerUrl: resolveElixirLanguageServerWorkerUrl(options, hostOptions?.currentUrl)
 		},
-		onStatus: hostOptions?.onStatus
+		onStatus: hostOptions?.onStatus,
+		lifecycle: hostOptions
 	});
 }

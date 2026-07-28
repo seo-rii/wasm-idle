@@ -46,6 +46,7 @@ export async function getOcamlLanguageServer(
 			wasmBinaryenMode: config.wasmBinaryenMode,
 			packages: config.packages
 		},
-		onStatus: hostOptions?.onStatus
+		onStatus: hostOptions?.onStatus,
+		lifecycle: hostOptions
 	});
 }

@@ -38,6 +38,7 @@ export async function getZigLanguageServer(
 			targetTriple: config.targetTriple,
 			compileArgs: config.compileArgs
 		},
-		onStatus: hostOptions?.onStatus
+		onStatus: hostOptions?.onStatus,
+		lifecycle: hostOptions
 	});
 }

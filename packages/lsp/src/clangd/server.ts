@@ -4,6 +4,7 @@ import {
 	loadLanguageToolAsset,
 	type ResolvedLanguageToolAssetConfig
 } from '../assets.js';
+import { waitForLanguageServerStartup } from '../lifecycle.js';
 import { resolveCppLanguageServerRuntimeAssetConfig } from '../runtime.js';
 import type {
 	EditorLanguageServerHandle,
@@ -79,7 +80,10 @@ async function createServer(
 	assetConfig: ResolvedLanguageToolAssetConfig,
 	createWorker: () => Worker,
 	onStatus: ((status: ClangdStatus) => void) | undefined,
-	lifecycle: Pick<EditorLanguageServerRuntimeOptions, 'signal' | 'assetTimeoutMs'>,
+	lifecycle: Pick<
+		EditorLanguageServerRuntimeOptions,
+		'signal' | 'assetTimeoutMs' | 'startupTimeoutMs'
+	>,
 	debug = false
 ) {
 	const status = createLanguageServerProgressReporter(onStatus);
@@ -91,58 +95,68 @@ async function createServer(
 		status.error(error instanceof Error ? error.message : String(error));
 		throw error;
 	}
-	let resolveReady = () => {};
-	let rejectReady = (_error: Error) => {};
-	const ready = new Promise<void>((resolve, reject) => {
-		resolveReady = resolve;
-		rejectReady = reject;
-	});
-	const worker = createWorker();
-	const cleanup = () => {
-		worker.removeEventListener('message', readyListener);
-		worker.removeEventListener('error', errorListener);
-	};
-	const readyListener = (event: MessageEvent<ClangdWorkerOutboundMessage>) => {
-		switch (event.data?.type) {
-			case 'progress': {
-				status.progress({ loaded: event.data.value, total: event.data.max });
-				break;
-			}
-			case 'ready': {
-				cleanup();
-				status.ready();
-				resolveReady();
-				break;
-			}
-			case 'error': {
-				cleanup();
-				rejectReady(new Error(event.data?.message || 'clangd failed to initialize'));
-				break;
-			}
-		}
-	};
-	const errorListener = (event: ErrorEvent) => {
-		cleanup();
-		rejectReady(event.error || new Error(event.message || 'clangd worker failed'));
-	};
-	worker.addEventListener('message', readyListener);
-	worker.addEventListener('error', errorListener);
-	worker.postMessage(
-		{
-			type: 'init',
-			baseUrl: assetConfig.baseUrl,
-			...(debug ? { debug } : {}),
-			assets: preloaded.assets
-		},
-		preloaded.transfer
-	);
+	let worker: Worker | undefined;
+	let cleanup = () => {};
 	try {
-		await ready;
+		await waitForLanguageServerStartup(
+			() =>
+				new Promise<void>((resolve, reject) => {
+					const activeWorker = createWorker();
+					worker = activeWorker;
+					const readyListener = (event: MessageEvent<ClangdWorkerOutboundMessage>) => {
+						switch (event.data?.type) {
+							case 'progress': {
+								status.progress({
+									loaded: event.data.value,
+									total: event.data.max
+								});
+								break;
+							}
+							case 'ready': {
+								cleanup();
+								status.ready();
+								resolve();
+								break;
+							}
+							case 'error': {
+								cleanup();
+								reject(
+									new Error(event.data?.message || 'clangd failed to initialize')
+								);
+								break;
+							}
+						}
+					};
+					const errorListener = (event: ErrorEvent) => {
+						cleanup();
+						reject(event.error || new Error(event.message || 'clangd worker failed'));
+					};
+					cleanup = () => {
+						activeWorker.removeEventListener('message', readyListener);
+						activeWorker.removeEventListener('error', errorListener);
+					};
+					activeWorker.addEventListener('message', readyListener);
+					activeWorker.addEventListener('error', errorListener);
+					activeWorker.postMessage(
+						{
+							type: 'init',
+							baseUrl: assetConfig.baseUrl,
+							...(debug ? { debug } : {}),
+							assets: preloaded.assets
+						},
+						preloaded.transfer
+					);
+				}),
+			{ signal: lifecycle.signal, timeoutMs: lifecycle.startupTimeoutMs }
+		);
 	} catch (error) {
-		worker.terminate();
+		worker?.terminate();
 		status.error(error instanceof Error ? error.message : String(error));
 		throw error;
+	} finally {
+		cleanup();
 	}
+	if (!worker) throw new Error('clangd worker did not start');
 	return worker;
 }
 
@@ -163,7 +177,11 @@ export async function createClangdLanguageServer(
 		assetConfig,
 		hostOptions?.createWorker || createDefaultClangdWorker,
 		hostOptions?.onStatus,
-		{ signal: hostOptions?.signal, assetTimeoutMs: hostOptions?.assetTimeoutMs },
+		{
+			signal: hostOptions?.signal,
+			assetTimeoutMs: hostOptions?.assetTimeoutMs,
+			startupTimeoutMs: hostOptions?.startupTimeoutMs
+		},
 		debug
 	);
 	const reader = new BrowserMessageReader(worker);

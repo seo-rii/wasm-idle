@@ -98,4 +98,17 @@ describe('getPythonLanguageServer', () => {
 		expect(worker?.terminated).toBe(true);
 		expect(status).toHaveBeenCalledWith({ state: 'disabled' });
 	});
+
+	it('does not create a worker when startup is already cancelled', async () => {
+		const controller = new AbortController();
+		controller.abort(new Error('Python LSP startup cancelled'));
+
+		await expect(
+			getPythonLanguageServer({
+				signal: controller.signal,
+				createWorker: () => new mockState.FakeWorker() as unknown as Worker
+			})
+		).rejects.toThrow('Python LSP startup cancelled');
+		expect(mockState.workers).toHaveLength(0);
+	});
 });

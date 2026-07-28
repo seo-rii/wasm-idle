@@ -32,7 +32,8 @@ export async function getDocumentLanguageServer(
 	return await createWorkerLanguageServerClient({
 		createWorker: hostOptions?.createWorker || createDefaultWorker,
 		initOptions: config,
-		onStatus: hostOptions?.onStatus
+		onStatus: hostOptions?.onStatus,
+		lifecycle: hostOptions
 	});
 }
 

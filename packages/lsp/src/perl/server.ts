@@ -29,6 +29,7 @@ export async function getPerlLanguageServer(
 			baseUrl: resolvePerlLanguageServerBaseUrl(options, hostOptions?.currentUrl),
 			workerUrl: resolvePerlLanguageServerWorkerUrl(options, hostOptions?.currentUrl)
 		},
-		onStatus: hostOptions?.onStatus
+		onStatus: hostOptions?.onStatus,
+		lifecycle: hostOptions
 	});
 }

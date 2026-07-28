@@ -1,5 +1,10 @@
 export { getEditorLanguageServer } from './registry.js';
 export {
+	DEFAULT_LANGUAGE_SERVER_STARTUP_TIMEOUT_MS,
+	LanguageServerStartupTimeoutError,
+	type LanguageServerStartupOptions
+} from './lifecycle.js';
+export {
 	resolveCppLanguageServerBaseUrl,
 	resolveCppLanguageServerRuntimeAssetConfig,
 	resolveDLanguageServerModuleUrl,

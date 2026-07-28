@@ -27,6 +27,7 @@ export async function getGraphqlLanguageServer(
 		initOptions: {
 			schema: config.schema
 		},
-		onStatus: hostOptions?.onStatus
+		onStatus: hostOptions?.onStatus,
+		lifecycle: hostOptions
 	});
 }

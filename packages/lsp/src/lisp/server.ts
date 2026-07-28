@@ -23,6 +23,7 @@ export async function getLispLanguageServer(
 		initOptions: {
 			moduleUrl: resolveLispLanguageServerModuleUrl(options, hostOptions?.currentUrl)
 		},
-		onStatus: hostOptions?.onStatus
+		onStatus: hostOptions?.onStatus,
+		lifecycle: hostOptions
 	});
 }

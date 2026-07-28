@@ -64,7 +64,8 @@ async function createLanguageServer(
 			moduleUrl: resolveDotnetLanguageServerModuleUrl(options, baseUrl),
 			debug
 		},
-		onStatus: hostOptions?.onStatus
+		onStatus: hostOptions?.onStatus,
+		lifecycle: hostOptions
 	});
 }
 

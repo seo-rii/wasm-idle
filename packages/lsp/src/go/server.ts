@@ -32,6 +32,7 @@ export async function getGoLanguageServer(
 			compilerUrl: resolveGoLanguageServerCompilerUrl(options, hostOptions?.currentUrl),
 			target: config.target
 		},
-		onStatus: hostOptions?.onStatus
+		onStatus: hostOptions?.onStatus,
+		lifecycle: hostOptions
 	});
 }

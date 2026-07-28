@@ -29,6 +29,7 @@ export async function getPrologLanguageServer(
 			baseUrl: resolvePrologLanguageServerBaseUrl(options, hostOptions?.currentUrl),
 			workerUrl: resolvePrologLanguageServerWorkerUrl(options, hostOptions?.currentUrl)
 		},
-		onStatus: hostOptions?.onStatus
+		onStatus: hostOptions?.onStatus,
+		lifecycle: hostOptions
 	});
 }

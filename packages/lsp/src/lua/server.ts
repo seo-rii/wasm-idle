@@ -23,6 +23,7 @@ export async function getLuaLanguageServer(
 		initOptions: {
 			moduleUrl: resolveLuaLanguageServerModuleUrl(options, hostOptions?.currentUrl)
 		},
-		onStatus: hostOptions?.onStatus
+		onStatus: hostOptions?.onStatus,
+		lifecycle: hostOptions
 	});
 }

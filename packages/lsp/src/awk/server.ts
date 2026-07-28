@@ -26,6 +26,7 @@ export async function getAwkLanguageServer(
 			baseUrl: resolveAwkLanguageServerBaseUrl(options, hostOptions?.currentUrl),
 			workerUrl: resolveAwkLanguageServerWorkerUrl(options, hostOptions?.currentUrl)
 		},
-		onStatus: hostOptions?.onStatus
+		onStatus: hostOptions?.onStatus,
+		lifecycle: hostOptions
 	});
 }

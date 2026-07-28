@@ -49,7 +49,8 @@ export async function getSqlLanguageServer(
 			wasmUrl: config.wasmUrl,
 			duckdbBundles: config.duckdbBundles
 		},
-		onStatus: hostOptions?.onStatus
+		onStatus: hostOptions?.onStatus,
+		lifecycle: hostOptions
 	});
 }
 
@@ -67,6 +68,7 @@ export async function getDuckDbLanguageServer(
 			wasmUrl: config.wasmUrl,
 			duckdbBundles: config.duckdbBundles
 		},
-		onStatus: hostOptions?.onStatus
+		onStatus: hostOptions?.onStatus,
+		lifecycle: hostOptions
 	});
 }

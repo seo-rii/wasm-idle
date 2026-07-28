@@ -12,7 +12,7 @@ const mockState = vi.hoisted(() => {
 		transfers: Transferable[][] = [];
 		terminated = false;
 
-		constructor() {
+		constructor(private readonly autoReady = true) {
 			workers.push(this);
 		}
 
@@ -27,7 +27,7 @@ const mockState = vi.hoisted(() => {
 		postMessage(message: any, transfer: Transferable[] = []) {
 			this.messages.push(message);
 			this.transfers.push(transfer);
-			if (message.type !== 'init') return;
+			if (message.type !== 'init' || !this.autoReady) return;
 			for (const handler of this.listeners.message) {
 				handler({ data: { type: 'progress', value: 2, max: 3 } } as MessageEvent<any>);
 			}
@@ -79,6 +79,7 @@ describe('getCppLanguageServer', () => {
 	});
 
 	afterEach(() => {
+		vi.useRealTimers();
 		vi.unstubAllGlobals();
 	});
 
@@ -192,5 +193,29 @@ describe('getCppLanguageServer', () => {
 
 		expect(loader).not.toHaveBeenCalled();
 		expect(mockState.workers).toHaveLength(0);
+	});
+
+	it('terminates a worker that never reports ready', async () => {
+		vi.useFakeTimers();
+		const loading = getCppLanguageServer({
+			cpp: {
+				baseUrl: 'https://static.example.com/clangd/',
+				loader: ({ asset }) =>
+					asset === 'clangd.js'
+						? { data: 'export default async () => ({})' }
+						: new Uint8Array(3)
+			},
+			startupTimeoutMs: 25,
+			createWorker: () => new mockState.FakeWorker(false) as unknown as Worker
+		});
+		const rejection = expect(loading).rejects.toThrow(
+			'Language server startup timed out after 25 ms'
+		);
+
+		await vi.advanceTimersByTimeAsync(0);
+		expect(mockState.workers).toHaveLength(1);
+		await vi.advanceTimersByTimeAsync(25);
+		await rejection;
+		expect(mockState.workers[0]?.terminated).toBe(true);
 	});
 });

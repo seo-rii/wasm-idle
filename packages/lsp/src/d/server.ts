@@ -31,6 +31,7 @@ export async function getDLanguageServer(
 			moduleUrl: resolveDLanguageServerModuleUrl(options, hostOptions?.currentUrl),
 			compileArgs: config.compileArgs
 		},
-		onStatus: hostOptions?.onStatus
+		onStatus: hostOptions?.onStatus,
+		lifecycle: hostOptions
 	});
 }

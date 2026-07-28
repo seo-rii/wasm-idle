@@ -28,6 +28,7 @@ export async function getGleamLanguageServer(
 			baseUrl: resolveGleamLanguageServerBaseUrl(options, baseUrl),
 			manifestUrl: resolveGleamLanguageServerManifestUrl(options, baseUrl)
 		},
-		onStatus: hostOptions?.onStatus
+		onStatus: hostOptions?.onStatus,
+		lifecycle: hostOptions
 	});
 }

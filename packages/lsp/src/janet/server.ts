@@ -29,6 +29,7 @@ export async function getJanetLanguageServer(
 			baseUrl: resolveJanetLanguageServerBaseUrl(options, hostOptions?.currentUrl),
 			workerUrl: resolveJanetLanguageServerWorkerUrl(options, hostOptions?.currentUrl)
 		},
-		onStatus: hostOptions?.onStatus
+		onStatus: hostOptions?.onStatus,
+		lifecycle: hostOptions
 	});
 }

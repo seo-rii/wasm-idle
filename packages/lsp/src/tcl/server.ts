@@ -26,6 +26,7 @@ export async function getTclLanguageServer(
 			baseUrl: resolveTclLanguageServerBaseUrl(options, hostOptions?.currentUrl),
 			workerUrl: resolveTclLanguageServerWorkerUrl(options, hostOptions?.currentUrl)
 		},
-		onStatus: hostOptions?.onStatus
+		onStatus: hostOptions?.onStatus,
+		lifecycle: hostOptions
 	});
 }

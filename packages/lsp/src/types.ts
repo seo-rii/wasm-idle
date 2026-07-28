@@ -32,6 +32,7 @@ export interface EditorLanguageServerRuntimeOptions {
 	rootUrl?: string;
 	signal?: AbortSignal;
 	assetTimeoutMs?: number;
+	startupTimeoutMs?: number;
 	cpp?: LanguageToolAssetConfig;
 	python?: {
 		baseUrl?: string;

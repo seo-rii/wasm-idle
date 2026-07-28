@@ -1,6 +1,7 @@
 import { BrowserMessageReader, BrowserMessageWriter } from './jsonrpc.js';
+import { waitForLanguageServerStartup } from './lifecycle.js';
 import { isProgressValue, nextFallbackProgress, progressRatio } from './progress.js';
-import type { EditorLanguageServerHandle } from './types.js';
+import type { EditorLanguageServerHandle, EditorLanguageServerRuntimeOptions } from './types.js';
 import type { MessageReader } from 'vscode-jsonrpc';
 
 export type LanguageServerStatus =
@@ -19,6 +20,7 @@ export interface WorkerLanguageServerClientOptions {
 	createWorker: () => Worker;
 	initOptions?: unknown;
 	onStatus?: (status: LanguageServerStatus) => void;
+	lifecycle?: Pick<EditorLanguageServerRuntimeOptions, 'signal' | 'startupTimeoutMs'>;
 }
 
 interface WorkerControlMessage {
@@ -71,49 +73,68 @@ export async function createWorkerLanguageServerClient(
 ): Promise<EditorLanguageServerHandle> {
 	const status = createLanguageServerProgressReporter(options.onStatus);
 	status.loading();
-	const worker = options.createWorker();
+	let worker: Worker | undefined;
+	let cleanup = () => {};
 	try {
-		await new Promise<void>((resolve, reject) => {
-			const cleanup = () => {
-				worker.removeEventListener('message', handleMessage);
-				worker.removeEventListener('error', handleError);
-			};
-			const handleMessage = (event: MessageEvent<WorkerControlMessage>) => {
-				switch (event.data?.type) {
-					case 'progress':
-						status.progress({
-							stage: event.data.stage,
-							loaded: event.data.loaded,
-							total: event.data.total
-						});
-						return;
-					case 'ready':
-						cleanup();
-						resolve();
-						return;
-					case 'error':
+		await waitForLanguageServerStartup(
+			() =>
+				new Promise<void>((resolve, reject) => {
+					const activeWorker = options.createWorker();
+					worker = activeWorker;
+					const handleMessage = (event: MessageEvent<WorkerControlMessage>) => {
+						switch (event.data?.type) {
+							case 'progress':
+								status.progress({
+									stage: event.data.stage,
+									loaded: event.data.loaded,
+									total: event.data.total
+								});
+								return;
+							case 'ready':
+								cleanup();
+								resolve();
+								return;
+							case 'error':
+								cleanup();
+								reject(
+									new Error(
+										event.data.message || 'Language server failed to initialize'
+									)
+								);
+						}
+					};
+					const handleError = (event: ErrorEvent) => {
 						cleanup();
 						reject(
-							new Error(event.data.message || 'Language server failed to initialize')
+							event.error ||
+								new Error(event.message || 'Language server worker failed')
 						);
-				}
-			};
-			const handleError = (event: ErrorEvent) => {
-				cleanup();
-				reject(event.error || new Error(event.message || 'Language server worker failed'));
-			};
-			worker.addEventListener('message', handleMessage);
-			worker.addEventListener('error', handleError);
-			worker.postMessage({ type: 'init', options: options.initOptions });
-		});
+					};
+					cleanup = () => {
+						activeWorker.removeEventListener('message', handleMessage);
+						activeWorker.removeEventListener('error', handleError);
+					};
+					activeWorker.addEventListener('message', handleMessage);
+					activeWorker.addEventListener('error', handleError);
+					activeWorker.postMessage({ type: 'init', options: options.initOptions });
+				}),
+			{
+				signal: options.lifecycle?.signal,
+				timeoutMs: options.lifecycle?.startupTimeoutMs
+			}
+		);
 	} catch (error) {
-		worker.terminate();
+		worker?.terminate();
 		const message = error instanceof Error ? error.message : String(error);
 		status.error(message);
 		throw error;
+	} finally {
+		cleanup();
 	}
+	if (!worker) throw new Error('Language server worker did not start');
+	const activeWorker = worker;
 
-	const reader = new BrowserMessageReader(worker);
+	const reader = new BrowserMessageReader(activeWorker);
 	const filteredReader: MessageReader = {
 		onError: reader.onError,
 		onClose: reader.onClose,
@@ -130,12 +151,12 @@ export async function createWorkerLanguageServerClient(
 			reader.dispose();
 		}
 	};
-	const writer = new BrowserMessageWriter(worker);
+	const writer = new BrowserMessageWriter(activeWorker);
 	status.ready();
 	return {
 		transport: { reader: filteredReader, writer },
 		dispose: () => {
-			worker.terminate();
+			activeWorker.terminate();
 			reader.dispose();
 			writer.dispose();
 			status.disabled();

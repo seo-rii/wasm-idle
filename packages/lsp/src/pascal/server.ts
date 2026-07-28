@@ -28,6 +28,7 @@ export async function getPascalLanguageServer(
 			baseUrl: resolvePascalLanguageServerBaseUrl(options, hostOptions?.currentUrl),
 			workerUrl: resolvePascalLanguageServerWorkerUrl(options, hostOptions?.currentUrl)
 		},
-		onStatus: hostOptions?.onStatus
+		onStatus: hostOptions?.onStatus,
+		lifecycle: hostOptions
 	});
 }

@@ -29,6 +29,7 @@ export async function getAssemblyScriptLanguageServer(
 			),
 			extraFiles: hostOptions?.assemblyscript?.extraFiles
 		},
-		onStatus: hostOptions?.onStatus
+		onStatus: hostOptions?.onStatus,
+		lifecycle: hostOptions
 	});
 }

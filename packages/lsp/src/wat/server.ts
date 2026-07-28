@@ -19,6 +19,7 @@ export async function getWatLanguageServer(
 		initOptions: {
 			features: hostOptions?.wat?.features
 		},
-		onStatus: hostOptions?.onStatus
+		onStatus: hostOptions?.onStatus,
+		lifecycle: hostOptions
 	});
 }

@@ -29,6 +29,7 @@ export async function getRubyLanguageServer(
 			moduleUrl: resolveRubyLanguageServerModuleUrl(options, hostOptions?.currentUrl),
 			wasmUrl: resolveRubyLanguageServerWasmUrl(options, hostOptions?.currentUrl)
 		},
-		onStatus: hostOptions?.onStatus
+		onStatus: hostOptions?.onStatus,
+		lifecycle: hostOptions
 	});
 }

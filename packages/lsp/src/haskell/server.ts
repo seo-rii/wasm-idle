@@ -42,6 +42,7 @@ export async function getHaskellLanguageServer(
 			searchDirs: config.searchDirs,
 			ghcArgs: config.ghcArgs
 		},
-		onStatus: hostOptions?.onStatus
+		onStatus: hostOptions?.onStatus,
+		lifecycle: hostOptions
 	});
 }

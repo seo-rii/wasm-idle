@@ -36,6 +36,7 @@ export async function getRustLanguageServer(
 			targetTriple: config.targetTriple,
 			edition: config.edition
 		},
-		onStatus: hostOptions?.onStatus
+		onStatus: hostOptions?.onStatus,
+		lifecycle: hostOptions
 	});
 }

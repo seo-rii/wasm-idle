@@ -30,6 +30,7 @@ export async function getErlangLanguageServer(
 			bundleUrl: resolveErlangLanguageServerBundleUrl(options, hostOptions?.currentUrl),
 			workerUrl: resolveErlangLanguageServerWorkerUrl(options, hostOptions?.currentUrl)
 		},
-		onStatus: hostOptions?.onStatus
+		onStatus: hostOptions?.onStatus,
+		lifecycle: hostOptions
 	});
 }
