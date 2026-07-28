@@ -172,6 +172,102 @@ describe('WorkerAssetBridge asset requests', () => {
 		});
 	});
 
+	it('validates an integrity manifest MIME type', async () => {
+		const postMessage = vi.fn();
+		const asset = RUNTIME_LOAD_ASSETS.clang[0];
+		const bridge = new WorkerAssetBridge({ postMessage } as unknown as Worker, 'clang', {
+			baseUrl: '/clang/',
+			loader: vi.fn().mockResolvedValue({
+				data: new Uint8Array([1, 2, 3]),
+				mimeType: 'text/plain; charset=utf-8'
+			}),
+			integrity: {
+				[asset]: {
+					sha256: '039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81',
+					mediaType: 'application/wasm'
+				}
+			},
+			useAssetBridge: true
+		});
+
+		bridge.handleMessage({
+			data: { assetRequest: { id: 21, asset } }
+		} as MessageEvent);
+
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
+		expect(postMessage).toHaveBeenCalledWith({
+			assetResponse: {
+				id: 21,
+				ok: false,
+				error: `Runtime asset ${asset} MIME type mismatch: expected application/wasm, received text/plain`
+			}
+		});
+	});
+
+	it('rejects loader URLs outside the configured asset bases', async () => {
+		const postMessage = vi.fn();
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+		const asset = RUNTIME_LOAD_ASSETS.clang[0];
+		const bridge = new WorkerAssetBridge({ postMessage } as unknown as Worker, 'clang', {
+			baseUrl: 'https://assets.example.com/clang/',
+			loader: vi.fn().mockResolvedValue('https://assets.example.com/private/tool.wasm'),
+			useAssetBridge: true
+		});
+
+		bridge.handleMessage({
+			data: { assetRequest: { id: 22, asset } }
+		} as MessageEvent);
+
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
+		expect(fetchMock).not.toHaveBeenCalled();
+		expect(postMessage).toHaveBeenCalledWith({
+			assetResponse: {
+				id: 22,
+				ok: false,
+				error: `Runtime asset ${asset} URL is outside the allowed asset bases: https://assets.example.com/private/tool.wasm`
+			}
+		});
+	});
+
+	it('rejects redirects outside the configured asset bases and omits credentials', async () => {
+		const postMessage = vi.fn();
+		const fetchMock = vi.fn().mockResolvedValue({
+			ok: true,
+			url: 'https://evil.example.com/clang/tool.wasm',
+			headers: { get: vi.fn(() => null) },
+			body: null,
+			arrayBuffer: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3]).buffer)
+		});
+		vi.stubGlobal('fetch', fetchMock);
+		const asset = RUNTIME_LOAD_ASSETS.clang[0];
+		const bridge = new WorkerAssetBridge({ postMessage } as unknown as Worker, 'clang', {
+			baseUrl: 'https://assets.example.com/clang/',
+			useAssetBridge: true
+		});
+
+		bridge.handleMessage({
+			data: { assetRequest: { id: 23, asset } }
+		} as MessageEvent);
+
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
+		expect(fetchMock).toHaveBeenCalledWith(
+			'https://assets.example.com/clang/bin/memfs.wasm.gz',
+			expect.objectContaining({
+				credentials: 'omit',
+				redirect: 'follow',
+				referrerPolicy: 'no-referrer'
+			})
+		);
+		expect(postMessage).toHaveBeenCalledWith({
+			assetResponse: {
+				id: 23,
+				ok: false,
+				error: `Runtime asset ${asset} URL is outside the allowed asset bases: https://evil.example.com/clang/tool.wasm`
+			}
+		});
+	});
+
 	it('copies loader-owned buffers before transferring them to a worker', async () => {
 		const postMessage = vi.fn();
 		const bytes = new Uint8Array([1, 2, 3]);

@@ -49,6 +49,8 @@ export {
 	resolveRootToolBaseUrl,
 	type LanguageToolAssetConfig,
 	type LanguageToolAssetDataResult,
+	type LanguageToolAssetIntegrityEntry,
+	type LanguageToolAssetIntegrityMap,
 	type LanguageToolAssetLoadRequest,
 	type LanguageToolAssetLoader,
 	type LanguageToolAssetLoaderResult,

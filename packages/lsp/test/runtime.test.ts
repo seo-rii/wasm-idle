@@ -512,15 +512,20 @@ describe('lsp runtime asset resolution', () => {
 		const loader = async () => null;
 
 		expect(
-			resolveCppLanguageServerRuntimeAssetConfig({
-				cpp: {
-					baseUrl: 'https://cpp.example.com/assets',
-					loader
-				}
-			})
+			resolveCppLanguageServerRuntimeAssetConfig(
+				{
+					cpp: {
+						baseUrl: 'https://cpp.example.com/assets',
+						loader,
+						allowedBaseUrls: ['./mirror/']
+					}
+				},
+				'https://app.example.com/wasm-idle/'
+			)
 		).toEqual({
 			baseUrl: 'https://cpp.example.com/assets/',
-			loader
+			loader,
+			allowedBaseUrls: ['https://app.example.com/wasm-idle/mirror/']
 		});
 	});
 

@@ -215,6 +215,25 @@ describe('runtime asset config resolution', () => {
 		});
 	});
 
+	it('resolves additional allowed asset bases against the application URL', () => {
+		expect(
+			resolveRuntimeAssetConfig(
+				'clang',
+				{
+					clang: {
+						baseUrl: '/runtime/clang/',
+						allowedBaseUrls: ['/mirror/clang/']
+					}
+				},
+				'https://app.example.com/wasm-idle/'
+			)
+		).toEqual({
+			baseUrl: 'https://app.example.com/runtime/clang/',
+			allowedBaseUrls: ['https://app.example.com/mirror/clang/'],
+			useAssetBridge: true
+		});
+	});
+
 	it('derives the default clangd asset base url from the shared root path', () => {
 		expect(
 			resolveRuntimeAssetConfig(

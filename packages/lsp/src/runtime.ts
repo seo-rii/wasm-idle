@@ -7,6 +7,9 @@ import {
 } from './assets.js';
 import type { EditorLanguageServerOptions, EditorLanguageServerRuntimeOptions } from './types.js';
 
+const resolveAllowedBaseUrls = (urls: string[] | undefined, currentUrl: string) =>
+	urls?.map((url) => normalizeBaseUrl(url, currentUrl));
+
 export function resolveCppLanguageServerRuntimeAssetConfig(
 	options: EditorLanguageServerOptions | undefined,
 	currentUrl = ''
@@ -21,21 +24,27 @@ export function resolveCppLanguageServerRuntimeAssetConfig(
 	if (runtimeConfig?.baseUrl) {
 		return {
 			baseUrl: normalizeBaseUrl(runtimeConfig.baseUrl, currentUrl),
-			loader: runtimeConfig.loader
+			loader: runtimeConfig.loader,
+			allowedBaseUrls: resolveAllowedBaseUrls(runtimeConfig.allowedBaseUrls, currentUrl),
+			integrity: runtimeConfig.integrity
 		};
 	}
 
 	if (options?.rootUrl) {
 		return {
 			baseUrl: resolveRootToolBaseUrl(options.rootUrl, '/clangd/', currentUrl),
-			loader: runtimeConfig?.loader
+			loader: runtimeConfig?.loader,
+			allowedBaseUrls: resolveAllowedBaseUrls(runtimeConfig?.allowedBaseUrls, currentUrl),
+			integrity: runtimeConfig?.integrity
 		};
 	}
 
 	if (runtimeConfig?.loader) {
 		return {
 			baseUrl: CLANGD_VIRTUAL_BASE_URL,
-			loader: runtimeConfig.loader
+			loader: runtimeConfig.loader,
+			allowedBaseUrls: resolveAllowedBaseUrls(runtimeConfig.allowedBaseUrls, currentUrl),
+			integrity: runtimeConfig.integrity
 		};
 	}
 

@@ -40,6 +40,7 @@ export type RuntimeAssetLoader = (
 export interface RuntimeAssetIntegrityEntry {
 	sha256: string;
 	bytes?: number;
+	mediaType?: string;
 }
 
 export type RuntimeAssetIntegrityMap = Record<string, string | RuntimeAssetIntegrityEntry>;
@@ -49,6 +50,7 @@ export interface RuntimeAssetConfig {
 	loader?: RuntimeAssetLoader;
 	loaderKey?: string;
 	integrity?: RuntimeAssetIntegrityMap;
+	allowedBaseUrls?: string[];
 }
 
 export interface RustRuntimeAssetConfig {
@@ -335,6 +337,7 @@ export interface ResolvedRuntimeAssetConfig {
 	baseUrl: string;
 	loader?: RuntimeAssetLoader;
 	integrity?: RuntimeAssetIntegrityMap;
+	allowedBaseUrls?: string[];
 	useAssetBridge: boolean;
 }
 
@@ -400,6 +403,12 @@ const normalizeBaseUrl = (baseUrl: string, currentUrl = '') => {
 
 const resolveConfiguredUrl = (url: string, currentUrl = '') =>
 	currentUrl ? new URL(url, currentUrl).href : url;
+
+const resolveAllowedBaseUrls = (urls: string[] | undefined, currentUrl = '') =>
+	urls?.map((url) => normalizeBaseUrl(url, currentUrl));
+
+const useAssetBridgeForConfig = (config: RuntimeAssetConfig | undefined) =>
+	!!config?.loader || !!config?.integrity || !!config?.allowedBaseUrls?.length;
 
 const normalizeRootUrl = (rootUrl: string) =>
 	rootUrl.endsWith('/') ? rootUrl.slice(0, -1) : rootUrl;
@@ -467,6 +476,7 @@ export function resolveRuntimeAssetConfig(
 	}
 
 	const runtimeConfig = options?.[runtime];
+	const allowedBaseUrls = resolveAllowedBaseUrls(runtimeConfig?.allowedBaseUrls, currentUrl);
 	if (runtimeConfig?.baseUrl) {
 		return {
 			baseUrl: resolveRuntimeConfiguredBaseUrl(
@@ -476,7 +486,8 @@ export function resolveRuntimeAssetConfig(
 			),
 			loader: runtimeConfig.loader,
 			integrity: runtimeConfig.integrity,
-			useAssetBridge: !!runtimeConfig.loader || !!runtimeConfig.integrity
+			allowedBaseUrls,
+			useAssetBridge: useAssetBridgeForConfig(runtimeConfig)
 		};
 	}
 
@@ -485,7 +496,8 @@ export function resolveRuntimeAssetConfig(
 			baseUrl: resolveRuntimeRootBaseUrl(runtimeFolder, options.rootUrl, currentUrl),
 			loader: runtimeConfig?.loader,
 			integrity: runtimeConfig?.integrity,
-			useAssetBridge: !!runtimeConfig?.loader || !!runtimeConfig?.integrity
+			allowedBaseUrls,
+			useAssetBridge: useAssetBridgeForConfig(runtimeConfig)
 		};
 	}
 
@@ -494,14 +506,16 @@ export function resolveRuntimeAssetConfig(
 			baseUrl: runtimeFolder.virtualBaseUrl,
 			loader: runtimeConfig.loader,
 			integrity: runtimeConfig.integrity,
+			allowedBaseUrls,
 			useAssetBridge: true
 		};
 	}
 
-	if (runtimeConfig?.integrity) {
+	if (runtimeConfig?.integrity || runtimeConfig?.allowedBaseUrls?.length) {
 		return {
 			baseUrl: resolveRuntimeRootBaseUrl(runtimeFolder, '', currentUrl),
-			integrity: runtimeConfig.integrity,
+			integrity: runtimeConfig?.integrity,
+			allowedBaseUrls,
 			useAssetBridge: true
 		};
 	}

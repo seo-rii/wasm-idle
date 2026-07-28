@@ -8,6 +8,60 @@ afterEach(() => {
 });
 
 describe('language tool asset loading', () => {
+	it('rejects assets outside the clangd runtime allowlist before fetching', async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+
+		await expect(
+			loadLanguageToolAsset(
+				'clangd',
+				'../../private',
+				{ baseUrl: 'https://assets.example.com/clangd/' },
+				vi.fn()
+			)
+		).rejects.toThrow('Unexpected clangd runtime asset: ../../private');
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	it('rejects a clangd asset whose configured SHA-256 digest does not match', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue({
+				ok: true,
+				url: 'https://assets.example.com/clangd/clangd.js',
+				headers: {
+					get: vi.fn((name: string) =>
+						name === 'content-type' ? 'text/javascript; charset=utf-8' : null
+					)
+				},
+				body: null,
+				arrayBuffer: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3]).buffer)
+			})
+		);
+
+		await expect(
+			loadLanguageToolAsset(
+				'clangd',
+				'clangd.js',
+				{
+					baseUrl: 'https://assets.example.com/clangd/',
+					integrity: {
+						'clangd.js': {
+							bytes: 3,
+							sha256: '0'.repeat(64),
+							mediaType: 'text/javascript'
+						}
+					}
+				},
+				vi.fn()
+			)
+		).rejects.toThrow(
+			'Runtime asset clangd.js SHA-256 mismatch: expected ' +
+				'0'.repeat(64) +
+				', received 039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81'
+		);
+	});
+
 	it('assembles a stream in bounded storage when Content-Length is inaccurate', async () => {
 		const reader = {
 			read: vi
@@ -95,5 +149,35 @@ describe('language tool asset loading', () => {
 			)
 		).rejects.toThrow('Runtime asset clangd.wasm.gz exceeds the 134217728 byte limit');
 		expect(cancel).toHaveBeenCalledOnce();
+	});
+
+	it('rejects redirects outside the configured asset bases and omits credentials', async () => {
+		const fetchMock = vi.fn().mockResolvedValue({
+			ok: true,
+			url: 'https://evil.example.com/clangd/clangd.js',
+			headers: { get: vi.fn(() => null) },
+			body: null,
+			arrayBuffer: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3]).buffer)
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		await expect(
+			loadLanguageToolAsset(
+				'clangd',
+				'clangd.js',
+				{ baseUrl: 'https://assets.example.com/clangd/' },
+				vi.fn()
+			)
+		).rejects.toThrow(
+			'Runtime asset clangd.js URL is outside the allowed asset bases: https://evil.example.com/clangd/clangd.js'
+		);
+		expect(fetchMock).toHaveBeenCalledWith(
+			'https://assets.example.com/clangd/clangd.js',
+			expect.objectContaining({
+				credentials: 'omit',
+				redirect: 'follow',
+				referrerPolicy: 'no-referrer'
+			})
+		);
 	});
 });

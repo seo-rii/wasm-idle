@@ -30,14 +30,29 @@ export type LanguageToolAssetLoader = (
 	request: LanguageToolAssetLoadRequest
 ) => LanguageToolAssetLoaderResult | Promise<LanguageToolAssetLoaderResult>;
 
+export interface LanguageToolAssetIntegrityEntry {
+	sha256: string;
+	bytes?: number;
+	mediaType?: string;
+}
+
+export type LanguageToolAssetIntegrityMap = Record<
+	string,
+	string | LanguageToolAssetIntegrityEntry
+>;
+
 export interface LanguageToolAssetConfig {
 	baseUrl?: string;
 	loader?: LanguageToolAssetLoader;
+	allowedBaseUrls?: string[];
+	integrity?: LanguageToolAssetIntegrityMap;
 }
 
 export interface ResolvedLanguageToolAssetConfig {
 	baseUrl: string;
 	loader?: LanguageToolAssetLoader;
+	allowedBaseUrls?: string[];
+	integrity?: LanguageToolAssetIntegrityMap;
 }
 
 export interface LoadedLanguageToolAsset {
@@ -61,6 +76,91 @@ const enforceAssetSize = (asset: string, bytes: Uint8Array) => {
 	return bytes;
 };
 
+const sha256Hex = async (bytes: Uint8Array) => {
+	if (!globalThis.crypto?.subtle) throw new Error('Web Crypto SHA-256 is unavailable');
+	const input =
+		bytes.byteOffset === 0 &&
+		bytes.byteLength === bytes.buffer.byteLength &&
+		bytes.buffer instanceof ArrayBuffer
+			? bytes.buffer
+			: Uint8Array.from(bytes).buffer;
+	const digest = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', input));
+	return Array.from(digest, (value) => value.toString(16).padStart(2, '0')).join('');
+};
+
+const verifyAssetIntegrity = async (
+	asset: string,
+	loaded: LoadedLanguageToolAsset,
+	config: ResolvedLanguageToolAssetConfig
+) => {
+	const configured = config.integrity?.[asset];
+	if (!configured) return loaded;
+	const expected = typeof configured === 'string' ? { sha256: configured } : configured;
+	if (expected.bytes !== undefined) {
+		if (!Number.isSafeInteger(expected.bytes) || expected.bytes < 0) {
+			throw new Error(`Runtime asset ${asset} has an invalid expected byte size`);
+		}
+		if (loaded.bytes.byteLength !== expected.bytes) {
+			throw new Error(
+				`Runtime asset ${asset} size mismatch: expected ${expected.bytes} bytes, received ${loaded.bytes.byteLength}`
+			);
+		}
+	}
+	if (!/^[a-f0-9]{64}$/u.test(expected.sha256)) {
+		throw new Error(`Runtime asset ${asset} has an invalid expected SHA-256 digest`);
+	}
+	if (expected.mediaType) {
+		const actualMediaType =
+			loaded.mimeType?.split(';', 1)[0]?.trim().toLowerCase() || 'missing';
+		const expectedMediaType = expected.mediaType.trim().toLowerCase();
+		if (actualMediaType !== expectedMediaType) {
+			throw new Error(
+				`Runtime asset ${asset} MIME type mismatch: expected ${expectedMediaType}, received ${actualMediaType}`
+			);
+		}
+	}
+	const actual = await sha256Hex(loaded.bytes);
+	if (actual !== expected.sha256) {
+		throw new Error(
+			`Runtime asset ${asset} SHA-256 mismatch: expected ${expected.sha256}, received ${actual}`
+		);
+	}
+	return loaded;
+};
+
+const requireAllowedAssetUrl = (
+	asset: string,
+	value: string,
+	config: ResolvedLanguageToolAssetConfig
+) => {
+	let url: URL;
+	try {
+		url = new URL(value, config.baseUrl);
+	} catch {
+		throw new Error(`Runtime asset ${asset} has an invalid URL: ${value}`);
+	}
+	if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+		throw new Error(`Runtime asset ${asset} uses an unsupported URL scheme: ${url.protocol}`);
+	}
+	const allowed = [config.baseUrl, ...(config.allowedBaseUrls || [])].some((baseUrl) => {
+		let base: URL;
+		try {
+			base = new URL(baseUrl, url);
+		} catch {
+			return false;
+		}
+		if (base.protocol !== 'https:' && base.protocol !== 'http:') return false;
+		const basePath = base.pathname.endsWith('/') ? base.pathname : `${base.pathname}/`;
+		return url.origin === base.origin && url.pathname.startsWith(basePath);
+	});
+	if (!allowed) {
+		throw new Error(
+			`Runtime asset ${asset} URL is outside the allowed asset bases: ${url.href}`
+		);
+	}
+	return url;
+};
+
 export const normalizeBaseUrl = (baseUrl: string, currentUrl = '') => {
 	const normalized = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
 	return currentUrl ? new URL(normalized, currentUrl).href : normalized;
@@ -75,9 +175,16 @@ export const resolveRootToolBaseUrl = (rootUrl: string, toolPath: string, curren
 async function fetchAsset(
 	url: string,
 	asset: string,
+	config: ResolvedLanguageToolAssetConfig,
 	reportProgress: (loaded: number, total?: number) => void
 ): Promise<LoadedLanguageToolAsset> {
-	const response = await fetch(url);
+	const requestUrl = requireAllowedAssetUrl(asset, url, config);
+	const response = await fetch(requestUrl.href, {
+		credentials: 'omit',
+		redirect: 'follow',
+		referrerPolicy: 'no-referrer'
+	});
+	requireAllowedAssetUrl(asset, response.url || requestUrl.href, config);
 	if (!response.ok) throw new Error(`Failed to load ${asset}: ${response.status}`);
 	const contentLength = Number(response.headers.get('content-length') || 0) || undefined;
 	if (contentLength && contentLength > MAX_LANGUAGE_TOOL_ASSET_BYTES) {
@@ -127,11 +234,12 @@ async function fetchAsset(
 async function normalizeLoaderResult(
 	result: LanguageToolAssetLoaderResult,
 	asset: string,
+	config: ResolvedLanguageToolAssetConfig,
 	reportProgress: (loaded: number, total?: number) => void
 ): Promise<LoadedLanguageToolAsset | null> {
 	if (!result) return null;
 	if (typeof result === 'string' || result instanceof URL) {
-		return await fetchAsset(String(result), asset, reportProgress);
+		return await fetchAsset(String(result), asset, config, reportProgress);
 	}
 	if (result instanceof ArrayBuffer) {
 		const bytes = new Uint8Array(result);
@@ -148,7 +256,7 @@ async function normalizeLoaderResult(
 		return { bytes, mimeType: result.type || undefined };
 	}
 	if ('url' in result && result.url) {
-		return await fetchAsset(String(result.url), asset, reportProgress);
+		return await fetchAsset(String(result.url), asset, config, reportProgress);
 	}
 	if ('data' in result) {
 		if (typeof result.data === 'string') {
@@ -178,13 +286,22 @@ export async function loadLanguageToolAsset(
 	config: ResolvedLanguageToolAssetConfig,
 	reportProgress: (loaded: number, total?: number) => void
 ): Promise<LoadedLanguageToolAsset> {
+	if (runtime === 'clangd' && !(CLANGD_ASSETS as readonly string[]).includes(asset)) {
+		throw new Error(`Unexpected clangd runtime asset: ${asset}`);
+	}
+	if (config.integrity && !Object.hasOwn(config.integrity, asset)) {
+		throw new Error(`Runtime asset ${asset} is missing integrity metadata`);
+	}
+	let loaded: LoadedLanguageToolAsset | null = null;
 	if (config.loader) {
-		const loaded = await normalizeLoaderResult(
+		loaded = await normalizeLoaderResult(
 			await config.loader({ runtime, asset, reportProgress }),
 			asset,
+			config,
 			reportProgress
 		);
-		if (loaded) return { ...loaded, bytes: enforceAssetSize(asset, loaded.bytes) };
 	}
-	return await fetchAsset(new URL(asset, config.baseUrl).href, asset, reportProgress);
+	loaded ||= await fetchAsset(asset, asset, config, reportProgress);
+	loaded = { ...loaded, bytes: enforceAssetSize(asset, loaded.bytes) };
+	return await verifyAssetIntegrity(asset, loaded, config);
 }

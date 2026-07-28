@@ -98,6 +98,17 @@ describe('core language contract', () => {
 		expect(firstKey).not.toBe(secondKey);
 	});
 
+	it('includes allowed runtime asset bases in cache keys', () => {
+		const firstKey = createRuntimeAssetsKey({
+			clang: { allowedBaseUrls: ['https://one.example.com/clang/'] }
+		});
+		const secondKey = createRuntimeAssetsKey({
+			clang: { allowedBaseUrls: ['https://two.example.com/clang/'] }
+		});
+
+		expect(firstKey).not.toBe(secondKey);
+	});
+
 	it('includes both Rust compiler assets in runtime cache keys', () => {
 		const key = JSON.parse(
 			createRuntimeAssetsKey({

@@ -45,9 +45,14 @@ const integrityKey = (config: ResolvedRuntimeAssetConfig) =>
 			.sort(([left], [right]) => left.localeCompare(right))
 			.map(([asset, entry]) => [
 				asset,
-				typeof entry === 'string' ? entry : { sha256: entry.sha256, bytes: entry.bytes }
+				typeof entry === 'string'
+					? entry
+					: { sha256: entry.sha256, bytes: entry.bytes, mediaType: entry.mediaType }
 			])
 	);
+
+const allowedBaseUrlsKey = (config: ResolvedRuntimeAssetConfig) =>
+	JSON.stringify([...(config.allowedBaseUrls || [])].sort());
 
 const sha256Hex = async (bytes: Uint8Array) => {
 	if (!globalThis.crypto?.subtle) {
@@ -125,6 +130,7 @@ export class WorkerAssetBridge {
 			this.config.baseUrl === config.baseUrl &&
 			this.config.loader === config.loader &&
 			integrityKey(this.config) === integrityKey(config) &&
+			allowedBaseUrlsKey(this.config) === allowedBaseUrlsKey(config) &&
 			this.config.useAssetBridge === config.useAssetBridge
 		);
 	}
@@ -172,7 +178,7 @@ export class WorkerAssetBridge {
 					`Runtime asset ${request.asset} exceeds the ${MAX_RUNTIME_ASSET_BYTES} byte limit`
 				);
 			}
-			await this.verifyIntegrity(request.asset, loaded.bytes);
+			await this.verifyIntegrity(request.asset, loaded.bytes, loaded.mimeType);
 			if (controller.signal.aborted || generation !== this.generation) return;
 			const buffer = transferBuffer(loaded.bytes, loaded.transferOwnership);
 			worker.postMessage(
@@ -226,10 +232,10 @@ export class WorkerAssetBridge {
 			);
 			if (loaded) return loaded;
 		}
-		return await this.fetchAsset(new URL(asset, this.config.baseUrl).href, asset, signal);
+		return await this.fetchAsset(asset, asset, signal);
 	}
 
-	private async verifyIntegrity(asset: string, bytes: Uint8Array) {
+	private async verifyIntegrity(asset: string, bytes: Uint8Array, mimeType?: string) {
 		const configured = this.config.integrity?.[asset];
 		if (!configured) return;
 		const expected = typeof configured === 'string' ? { sha256: configured } : configured;
@@ -245,6 +251,15 @@ export class WorkerAssetBridge {
 		}
 		if (!/^[a-f0-9]{64}$/u.test(expected.sha256)) {
 			throw new Error(`Runtime asset ${asset} has an invalid expected SHA-256 digest`);
+		}
+		if (expected.mediaType) {
+			const actualMediaType = mimeType?.split(';', 1)[0]?.trim().toLowerCase() || 'missing';
+			const expectedMediaType = expected.mediaType.trim().toLowerCase();
+			if (actualMediaType !== expectedMediaType) {
+				throw new Error(
+					`Runtime asset ${asset} MIME type mismatch: expected ${expectedMediaType}, received ${actualMediaType}`
+				);
+			}
 		}
 		const actual = await sha256Hex(bytes);
 		if (actual !== expected.sha256) {
@@ -319,7 +334,14 @@ export class WorkerAssetBridge {
 		asset: string,
 		signal: AbortSignal
 	): Promise<LoadedAsset> {
-		const response = await fetch(url, { signal });
+		const requestUrl = this.requireAllowedAssetUrl(asset, url);
+		const response = await fetch(requestUrl.href, {
+			signal,
+			credentials: 'omit',
+			redirect: 'follow',
+			referrerPolicy: 'no-referrer'
+		});
+		this.requireAllowedAssetUrl(asset, response.url || requestUrl.href);
 		if (!response.ok) throw new Error(`Failed to load ${asset}: ${response.status}`);
 		const contentLength =
 			Number(
@@ -369,6 +391,39 @@ export class WorkerAssetBridge {
 		if (receivedLength !== bytes.byteLength) bytes = bytes.slice(0, receivedLength);
 		this.progress.update(asset, receivedLength, contentLength ?? receivedLength);
 		return { bytes, mimeType, transferOwnership: true };
+	}
+
+	private requireAllowedAssetUrl(asset: string, value: string) {
+		let url: URL;
+		try {
+			url = new URL(value, this.config.baseUrl);
+		} catch {
+			throw new Error(`Runtime asset ${asset} has an invalid URL: ${value}`);
+		}
+		if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+			throw new Error(
+				`Runtime asset ${asset} uses an unsupported URL scheme: ${url.protocol}`
+			);
+		}
+		const allowed = [this.config.baseUrl, ...(this.config.allowedBaseUrls || [])].some(
+			(baseUrl) => {
+				let base: URL;
+				try {
+					base = new URL(baseUrl, url);
+				} catch {
+					return false;
+				}
+				if (base.protocol !== 'https:' && base.protocol !== 'http:') return false;
+				const basePath = base.pathname.endsWith('/') ? base.pathname : `${base.pathname}/`;
+				return url.origin === base.origin && url.pathname.startsWith(basePath);
+			}
+		);
+		if (!allowed) {
+			throw new Error(
+				`Runtime asset ${asset} URL is outside the allowed asset bases: ${url.href}`
+			);
+		}
+		return url;
 	}
 
 	private abortActiveLoads() {
