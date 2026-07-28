@@ -1,4 +1,19 @@
 export {
+	DEFAULT_RESTRICTED_RUNTIME_TRUST_PROFILE,
+	RUNTIME_TRUST_PROFILE_SCHEMA_VERSION,
+	defineRuntimeTrustProfile,
+	type RuntimeDynamicCodeMode,
+	type RuntimeEnvironmentMode,
+	type RuntimeEnvironmentPolicy,
+	type RuntimeNetworkMode,
+	type RuntimeNetworkPolicy,
+	type RuntimeStorageMode,
+	type RuntimeStoragePolicy,
+	type RuntimeThreadPolicy,
+	type RuntimeTrustProfile,
+	type RuntimeWorkerPolicy
+} from './capabilities.js';
+export {
 	DEFAULT_DEFERRED_PROGRESS_LANGUAGES,
 	getLanguageAliasInfo,
 	isDeferredProgressLanguage,

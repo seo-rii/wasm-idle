@@ -11,6 +11,8 @@ export interface RuntimeAssetProfileKeySource {
 	manifestSchemaVersion: number;
 	manifestSha256: string;
 	protocolVersion: number;
+	trustProfileId?: string;
+	trustProfileSchemaVersion?: number;
 }
 
 export interface RuntimeAssetLoaderKeySource {
@@ -290,13 +292,38 @@ export function createRuntimeAssetsKey(runtimeAssets: RuntimeAssetKeyInput): str
 		if (!Number.isSafeInteger(profile.protocolVersion) || profile.protocolVersion < 1) {
 			throw new TypeError(`Runtime profile ${runtimeId} has an invalid protocol version`);
 		}
+		const hasTrustProfileId = profile.trustProfileId !== undefined;
+		const hasTrustProfileSchemaVersion = profile.trustProfileSchemaVersion !== undefined;
+		if (hasTrustProfileId !== hasTrustProfileSchemaVersion) {
+			throw new TypeError(
+				`Runtime profile ${runtimeId} requires both trust profile ID and schema version`
+			);
+		}
+		if (
+			hasTrustProfileId &&
+			(typeof profile.trustProfileId !== 'string' ||
+				!/^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$/u.test(profile.trustProfileId))
+		) {
+			throw new TypeError(`Runtime profile ${runtimeId} has an invalid trust profile ID`);
+		}
+		if (
+			hasTrustProfileSchemaVersion &&
+			(!Number.isSafeInteger(profile.trustProfileSchemaVersion) ||
+				(profile.trustProfileSchemaVersion ?? 0) < 1)
+		) {
+			throw new TypeError(
+				`Runtime profile ${runtimeId} has an invalid trust profile schema version`
+			);
+		}
 		runtimeProfiles.push([
 			runtimeId,
 			{
 				profileId: profile.profileId,
 				manifestSchemaVersion: profile.manifestSchemaVersion,
 				manifestSha256: profile.manifestSha256,
-				protocolVersion: profile.protocolVersion
+				protocolVersion: profile.protocolVersion,
+				trustProfileId: profile.trustProfileId,
+				trustProfileSchemaVersion: profile.trustProfileSchemaVersion
 			}
 		]);
 	}
