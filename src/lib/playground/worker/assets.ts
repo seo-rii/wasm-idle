@@ -4,6 +4,7 @@ declare const self: {
 
 export interface WorkerRuntimeAssetConfig {
 	baseUrl: string;
+	maxAssetBytes?: number;
 	useAssetBridge: boolean;
 }
 
@@ -18,6 +19,8 @@ interface PendingAssetRequest {
 }
 
 const decoder = new TextDecoder();
+const DEFAULT_MAX_ASSET_BYTES = 128 * 1024 * 1024;
+const DEFAULT_STREAM_BUFFER_BYTES = 64 * 1024;
 const originalFetch = globalThis.fetch.bind(globalThis);
 const NativeXMLHttpRequest = globalThis.XMLHttpRequest;
 
@@ -27,6 +30,36 @@ let nextAssetRequestId = 0;
 
 const pendingAssetRequests = new Map<number, PendingAssetRequest>();
 
+const configuredBaseUrl = () => {
+	if (!activeConfig) return null;
+	const locationOrigin = globalThis.location?.origin;
+	const locationHref = globalThis.location?.href;
+	const fallbackBaseUrl =
+		locationOrigin && locationOrigin !== 'null'
+			? `${locationOrigin}/`
+			: locationHref?.startsWith('blob:')
+				? locationHref.slice('blob:'.length)
+				: locationHref || 'http://localhost/';
+	let baseUrl: URL;
+	try {
+		baseUrl = new URL(activeConfig.baseUrl, fallbackBaseUrl);
+	} catch {
+		throw new Error(`Runtime asset base URL is invalid: ${activeConfig.baseUrl}`);
+	}
+	if (baseUrl.protocol !== 'http:' && baseUrl.protocol !== 'https:') {
+		throw new Error(`Runtime asset base URL must use HTTP(S): ${activeConfig.baseUrl}`);
+	}
+	if (baseUrl.username || baseUrl.password || baseUrl.hash || baseUrl.search) {
+		throw new Error(
+			`Runtime asset base URL must not include credentials, a query, or a fragment: ${activeConfig.baseUrl}`
+		);
+	}
+	if (!baseUrl.pathname.endsWith('/')) {
+		baseUrl.pathname += '/';
+	}
+	return baseUrl;
+};
+
 const responseBuffer = (bytes: Uint8Array): ArrayBuffer => {
 	const buffer = bytes.buffer as ArrayBuffer;
 	return bytes.byteOffset === 0 && bytes.byteLength === buffer.byteLength
@@ -35,15 +68,33 @@ const responseBuffer = (bytes: Uint8Array): ArrayBuffer => {
 };
 
 const trackedAssetUrl = (input: RequestInfo | URL) => {
-	if (!activeConfig) return null;
-	if (typeof input === 'string') return new URL(input, activeConfig.baseUrl).href;
-	if (input instanceof URL) return input.href;
-	return input.url;
+	const baseUrl = configuredBaseUrl();
+	if (!baseUrl) return null;
+	try {
+		if (typeof input === 'string') return new URL(input, baseUrl).href;
+		if (input instanceof URL) return input.href;
+		return input.url;
+	} catch {
+		return null;
+	}
 };
 
 const trackedAssetName = (url: string) => {
-	if (!activeConfig || !url.startsWith(activeConfig.baseUrl)) return null;
-	return url.slice(activeConfig.baseUrl.length);
+	const baseUrl = configuredBaseUrl();
+	if (!baseUrl) return null;
+	let assetUrl: URL;
+	try {
+		assetUrl = new URL(url, baseUrl);
+	} catch {
+		return null;
+	}
+	if (assetUrl.protocol !== 'http:' && assetUrl.protocol !== 'https:') return null;
+	if (assetUrl.username || assetUrl.password || assetUrl.hash) return null;
+	if (/%2f|%5c/iu.test(assetUrl.pathname)) return null;
+	if (assetUrl.origin !== baseUrl.origin || !assetUrl.pathname.startsWith(baseUrl.pathname)) {
+		return null;
+	}
+	return `${assetUrl.pathname.slice(baseUrl.pathname.length)}${assetUrl.search}`;
 };
 
 const isTrackedAssetUrl = (url: string) => trackedAssetName(url) !== null;
@@ -62,12 +113,75 @@ const loadAssetFromBridge = async (asset: string) => {
 };
 
 const loadAssetFromUrl = async (url: string, asset: string) => {
-	const response = await originalFetch(url);
-	if (!response.ok) throw new Error(`Failed to load ${asset}: ${response.status}`);
-	const total = Number(response.headers.get('content-length') || 0) || undefined;
+	const requestUrl = trackedAssetUrl(url);
+	if (!requestUrl || trackedAssetName(requestUrl) !== asset || !activeConfig) {
+		throw new Error('Untracked runtime asset request');
+	}
+	const maxAssetBytes = activeConfig.maxAssetBytes ?? DEFAULT_MAX_ASSET_BYTES;
+	const response = await originalFetch(requestUrl, {
+		credentials: 'omit',
+		redirect: 'error',
+		referrerPolicy: 'no-referrer'
+	});
+	if (response.url) {
+		let responseUrl: URL;
+		try {
+			responseUrl = new URL(response.url);
+		} catch {
+			try {
+				await response.body?.cancel();
+			} catch {
+				// Preserve the URL validation failure.
+			}
+			throw new Error(`Runtime asset response URL is invalid: ${response.url}`);
+		}
+		if (responseUrl.href !== requestUrl) {
+			try {
+				await response.body?.cancel();
+			} catch {
+				// Preserve the redirect/substitution failure.
+			}
+			throw new Error(
+				`Runtime asset response URL mismatch: expected ${requestUrl}, received ${responseUrl.href}`
+			);
+		}
+	}
+	if (!response.ok) {
+		try {
+			await response.body?.cancel();
+		} catch {
+			// Preserve the HTTP failure.
+		}
+		throw new Error(`Failed to load ${asset}: ${response.status}`);
+	}
+	const rawContentLength = response.headers.get('content-length');
+	let total: number | undefined;
+	if (rawContentLength !== null) {
+		const parsedContentLength = Number(rawContentLength);
+		if (!/^\d+$/u.test(rawContentLength.trim()) || !Number.isSafeInteger(parsedContentLength)) {
+			try {
+				await response.body?.cancel();
+			} catch {
+				// Preserve the invalid-length failure.
+			}
+			throw new Error(`Runtime asset ${asset} has an invalid Content-Length`);
+		}
+		total = parsedContentLength || undefined;
+	}
+	if (total !== undefined && total > maxAssetBytes) {
+		try {
+			await response.body?.cancel();
+		} catch {
+			// Preserve the size-limit failure.
+		}
+		throw new Error(`Runtime asset ${asset} exceeds the ${maxAssetBytes} byte limit`);
+	}
 	const mimeType = response.headers.get('content-type') || undefined;
 	if (!response.body) {
 		const bytes = new Uint8Array(await response.arrayBuffer());
+		if (bytes.byteLength > maxAssetBytes) {
+			throw new Error(`Runtime asset ${asset} exceeds the ${maxAssetBytes} byte limit`);
+		}
 		self.postMessage({
 			assetProgress: {
 				asset,
@@ -79,29 +193,56 @@ const loadAssetFromUrl = async (url: string, asset: string) => {
 	}
 
 	const reader = response.body.getReader();
+	let readerCancelled = false;
 	let receivedLength = 0;
-	const chunks: Uint8Array[] = [];
-	while (true) {
-		const { done, value } = await reader.read();
-		if (done) break;
-		if (!value) continue;
-		const chunk = Uint8Array.from(value);
-		chunks.push(chunk);
-		receivedLength += chunk.byteLength;
-		self.postMessage({
-			assetProgress: {
-				asset,
-				loaded: receivedLength,
-				total
+	let bytes = new Uint8Array(total || Math.min(DEFAULT_STREAM_BUFFER_BYTES, maxAssetBytes));
+	try {
+		while (true) {
+			const { done, value } = await reader.read();
+			if (done) break;
+			if (!value) continue;
+			const nextLength = receivedLength + value.byteLength;
+			if (nextLength > maxAssetBytes) {
+				try {
+					await reader.cancel();
+				} catch {
+					// Preserve the size-limit failure.
+				}
+				readerCancelled = true;
+				throw new Error(`Runtime asset ${asset} exceeds the ${maxAssetBytes} byte limit`);
 			}
-		});
+			if (nextLength > bytes.byteLength) {
+				const nextCapacity = Math.min(
+					maxAssetBytes,
+					Math.max(nextLength, bytes.byteLength * 2)
+				);
+				const grown = new Uint8Array(nextCapacity);
+				grown.set(bytes.subarray(0, receivedLength));
+				bytes = grown;
+			}
+			bytes.set(value, receivedLength);
+			receivedLength = nextLength;
+			self.postMessage({
+				assetProgress: {
+					asset,
+					loaded: receivedLength,
+					total
+				}
+			});
+		}
+	} catch (error) {
+		if (!readerCancelled) {
+			try {
+				await reader.cancel();
+			} catch {
+				// Preserve the stream failure.
+			}
+		}
+		throw error;
+	} finally {
+		reader.releaseLock();
 	}
-	const bytes = new Uint8Array(receivedLength);
-	let position = 0;
-	for (const chunk of chunks) {
-		bytes.set(chunk, position);
-		position += chunk.byteLength;
-	}
+	if (receivedLength !== bytes.byteLength) bytes = bytes.slice(0, receivedLength);
 	self.postMessage({
 		assetProgress: {
 			asset,
@@ -258,6 +399,12 @@ function installRuntimeAssetInterceptors() {
 }
 
 export function configureWorkerRuntimeAssets(config: WorkerRuntimeAssetConfig | null) {
+	if (
+		config?.maxAssetBytes !== undefined &&
+		(!Number.isSafeInteger(config.maxAssetBytes) || config.maxAssetBytes <= 0)
+	) {
+		throw new TypeError('Runtime asset maxAssetBytes must be a positive safe integer');
+	}
 	activeConfig = config;
 	installRuntimeAssetInterceptors();
 }
@@ -281,5 +428,9 @@ export function handleWorkerAssetMessage(data: any) {
 
 export async function loadWorkerRuntimeAsset(asset: string) {
 	if (!activeConfig) throw new Error('Runtime asset config unavailable');
-	return await loadTrackedAsset(new URL(asset, activeConfig.baseUrl).href);
+	const assetUrl = trackedAssetUrl(asset);
+	if (!assetUrl || !isTrackedAssetUrl(assetUrl)) {
+		throw new Error('Untracked runtime asset request');
+	}
+	return await loadTrackedAsset(assetUrl);
 }
