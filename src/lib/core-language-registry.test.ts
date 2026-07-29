@@ -13,6 +13,7 @@ import { describe, expect, expectTypeOf, it } from 'vitest';
 
 describe('core language registry', () => {
 	it('derives every public alias from one typed registry', () => {
+		expect(Object.isFrozen(supportedLanguageIds)).toBe(true);
 		expect(languageAliasIds).toEqual(Object.keys(languageAliases));
 		expect(new Set(languageAliasIds).size).toBe(languageAliasIds.length);
 		for (const alias of languageAliasIds) {

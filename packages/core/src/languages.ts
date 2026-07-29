@@ -1,4 +1,4 @@
-export const supportedLanguageIds = [
+const canonicalLanguageIds = [
 	'C',
 	'CPP',
 	'OBJC',
@@ -47,7 +47,9 @@ export const supportedLanguageIds = [
 	'PHP'
 ] as const;
 
-export type CanonicalLanguageId = (typeof supportedLanguageIds)[number];
+export type CanonicalLanguageId = (typeof canonicalLanguageIds)[number];
+
+export const supportedLanguageIds = Object.freeze(canonicalLanguageIds);
 
 export type LanguageAliasKind = 'spelling' | 'compatibility' | 'dialect' | 'implementation';
 
