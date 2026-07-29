@@ -27,7 +27,7 @@
 		"prepare:browser-native": "node ./scripts/prepare-browser-native.mjs",
 		"serve:browser-harness": "node ./scripts/browser-harness-server.mjs",
 		"test": "npm run test:host-pipeline",
-		"test:browser-native-bundle": "node --test ./tests/browser-native-bundle.test.mjs ./tests/browser-native-bridge-contract.test.mjs",
+		"test:browser-native-bundle": "node --test ./tests/browser-native-bundle.test.mjs ./tests/browser-native-bridge-contract.test.mjs ./tests/browser-native-runtime-pack-boundary.test.mjs",
 		"test:browser-native": "playwright test",
 		"test:ci": "npm run build && npm run test:host-pipeline && npm run prepare:browser-native -- --force && npm run test:browser-native-bundle && npm run test:browser-native",
 		"test:host-pipeline": "node --test ./tests/host-pipeline.test.mjs",

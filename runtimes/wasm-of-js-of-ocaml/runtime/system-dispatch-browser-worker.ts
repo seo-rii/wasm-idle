@@ -45,14 +45,29 @@ export type BrowserNativeManifest = {
 	packages: BrowserNativeManifestPackage[];
 };
 
-type BrowserNativeRuntimePackEntry = {
+export type BrowserNativeRuntimePackEntry = {
 	offset: number;
 	length: number;
 };
 
-type BrowserNativeRuntimePackCache = {
-	bytes: Uint8Array;
+export type BrowserNativeRuntimePackCache = {
+	bytes: Uint8Array<ArrayBuffer>;
 	entries: Map<string, BrowserNativeRuntimePackEntry>;
+};
+
+export type BrowserNativeRuntimeAssetLimits = {
+	maxAssetBytes?: number;
+	maxMetadataBytes?: number;
+	maxEntries?: number;
+	maxEntryBytes?: number;
+	maxPathBytes?: number;
+};
+
+export type BrowserNativeRuntimeAssetOptions = {
+	baseUrl?: string | URL;
+	fetch?: typeof fetch;
+	limits?: BrowserNativeRuntimeAssetLimits;
+	signal?: AbortSignal;
 };
 
 type BrowserToolPreloadFile = {
@@ -84,6 +99,307 @@ type WorkerResponse = {
 		data: ArrayBuffer;
 	}>;
 };
+
+const DEFAULT_MAX_RUNTIME_ASSET_BYTES = 128 * 1024 * 1024;
+const DEFAULT_MAX_RUNTIME_METADATA_BYTES = 4 * 1024 * 1024;
+const DEFAULT_MAX_RUNTIME_PACK_ENTRIES = 4096;
+const DEFAULT_MAX_RUNTIME_PACK_ENTRY_BYTES = 32 * 1024 * 1024;
+const DEFAULT_MAX_RUNTIME_PACK_PATH_BYTES = 1024;
+const DEFAULT_RUNTIME_ASSET_BUFFER_BYTES = 64 * 1024;
+const RUNTIME_PACK_FORMAT = 'wasm-of-js-of-ocaml-browser-native-runtime-pack-v1';
+const RUNTIME_PACK_INDEX_FORMAT = 'wasm-of-js-of-ocaml-browser-native-runtime-pack-index-v1';
+
+type ResolvedRuntimeAssetLimits = Required<BrowserNativeRuntimeAssetLimits>;
+
+function resolveRuntimeAssetLimits(
+	limits: BrowserNativeRuntimeAssetLimits = {}
+): ResolvedRuntimeAssetLimits {
+	const resolved = {
+		maxAssetBytes: limits.maxAssetBytes ?? DEFAULT_MAX_RUNTIME_ASSET_BYTES,
+		maxMetadataBytes: limits.maxMetadataBytes ?? DEFAULT_MAX_RUNTIME_METADATA_BYTES,
+		maxEntries: limits.maxEntries ?? DEFAULT_MAX_RUNTIME_PACK_ENTRIES,
+		maxEntryBytes: limits.maxEntryBytes ?? DEFAULT_MAX_RUNTIME_PACK_ENTRY_BYTES,
+		maxPathBytes: limits.maxPathBytes ?? DEFAULT_MAX_RUNTIME_PACK_PATH_BYTES
+	};
+	for (const [name, value] of Object.entries(resolved)) {
+		if (!Number.isSafeInteger(value) || value <= 0) {
+			throw new TypeError(`${name} must be a positive safe integer`);
+		}
+	}
+	return resolved;
+}
+
+function abortReason(signal: AbortSignal) {
+	return (
+		signal.reason ?? new DOMException('browser-native runtime asset load aborted', 'AbortError')
+	);
+}
+
+function throwIfAborted(signal?: AbortSignal) {
+	if (signal?.aborted) throw abortReason(signal);
+}
+
+async function readBoundedStream(
+	stream: ReadableStream<Uint8Array>,
+	label: string,
+	maxBytes: number,
+	signal?: AbortSignal,
+	declaredLength?: number
+): Promise<Uint8Array<ArrayBuffer>> {
+	const reader = stream.getReader();
+	const cancelOnAbort = () => {
+		void reader.cancel(abortReason(signal!)).catch(() => {});
+	};
+	signal?.addEventListener('abort', cancelOnAbort, { once: true });
+	let bytes: Uint8Array<ArrayBuffer> = new Uint8Array(
+		Math.min(maxBytes, Math.max(declaredLength ?? DEFAULT_RUNTIME_ASSET_BUFFER_BYTES, 1))
+	);
+	let receivedLength = 0;
+	let readerCancelled = false;
+	try {
+		throwIfAborted(signal);
+		while (true) {
+			const { done, value } = await reader.read();
+			if (done) break;
+			if (!value) continue;
+			const nextLength = receivedLength + value.byteLength;
+			if (nextLength > maxBytes) {
+				try {
+					await reader.cancel();
+				} catch {
+					// Preserve the size-limit failure.
+				}
+				readerCancelled = true;
+				throw new Error(`${label} exceeds the ${maxBytes} byte limit`);
+			}
+			if (nextLength > bytes.byteLength) {
+				const nextCapacity = Math.min(
+					maxBytes,
+					Math.max(nextLength, Math.max(bytes.byteLength * 2, 1))
+				);
+				const grown = new Uint8Array(nextCapacity);
+				grown.set(bytes.subarray(0, receivedLength));
+				bytes = grown;
+			}
+			bytes.set(value, receivedLength);
+			receivedLength = nextLength;
+		}
+		throwIfAborted(signal);
+		return receivedLength === bytes.byteLength ? bytes : bytes.slice(0, receivedLength);
+	} catch (error) {
+		if (!readerCancelled) await reader.cancel(error).catch(() => {});
+		if (signal?.aborted) throw abortReason(signal);
+		throw error;
+	} finally {
+		signal?.removeEventListener('abort', cancelOnAbort);
+		reader.releaseLock();
+	}
+}
+
+async function fetchBoundedRuntimeAsset(
+	value: string,
+	label: string,
+	maxBytes: number,
+	options: BrowserNativeRuntimeAssetOptions
+): Promise<Uint8Array<ArrayBuffer>> {
+	throwIfAborted(options.signal);
+	const configuredBase = options.baseUrl;
+	const baseUrl =
+		configuredBase instanceof URL
+			? configuredBase.href
+			: configuredBase || globalThis.location?.href;
+	let requestUrl: URL;
+	try {
+		requestUrl = baseUrl ? new URL(value, baseUrl) : new URL(value);
+	} catch {
+		throw new Error(`invalid browser-native runtime asset URL: ${value}`);
+	}
+	if (requestUrl.protocol !== 'http:' && requestUrl.protocol !== 'https:') {
+		throw new Error(
+			`unsupported browser-native runtime asset URL scheme: ${requestUrl.protocol}`
+		);
+	}
+	if (requestUrl.username || requestUrl.password || requestUrl.hash) {
+		throw new Error(
+			'browser-native runtime asset URLs must not include credentials or fragments'
+		);
+	}
+	if (/%2f|%5c/iu.test(requestUrl.pathname)) {
+		throw new Error(
+			'browser-native runtime asset URLs must not include encoded path separators'
+		);
+	}
+	const fetchImpl = options.fetch ?? globalThis.fetch?.bind(globalThis);
+	if (!fetchImpl) throw new Error(`fetch is required to load ${label}`);
+	const requestInit: RequestInit = {
+		cache: 'no-store',
+		credentials: 'omit',
+		redirect: 'error',
+		referrerPolicy: 'no-referrer'
+	};
+	if (options.signal) requestInit.signal = options.signal;
+	let response: Response;
+	try {
+		response = await fetchImpl(requestUrl.href, requestInit);
+	} catch (error) {
+		if (options.signal?.aborted) throw abortReason(options.signal);
+		throw new Error(
+			`failed to fetch ${label}: ${error instanceof Error ? error.message : String(error)}`,
+			{ cause: error }
+		);
+	}
+	if (options.signal?.aborted) {
+		try {
+			await response.body?.cancel();
+		} catch {
+			// Preserve the cancellation reason.
+		}
+		throw abortReason(options.signal);
+	}
+	if (response.url) {
+		let finalUrl: URL;
+		try {
+			finalUrl = new URL(response.url, requestUrl);
+		} catch {
+			try {
+				await response.body?.cancel();
+			} catch {
+				// Preserve the invalid-URL failure.
+			}
+			throw new Error(`${label} returned an invalid final URL: ${response.url}`);
+		}
+		if (finalUrl.href !== requestUrl.href) {
+			try {
+				await response.body?.cancel();
+			} catch {
+				// Preserve the final-URL mismatch.
+			}
+			throw new Error(
+				`${label} final URL mismatch: expected ${requestUrl.href}, received ${finalUrl.href}`
+			);
+		}
+	}
+	if (!response.ok) {
+		try {
+			await response.body?.cancel();
+		} catch {
+			// Preserve the HTTP failure.
+		}
+		throw new Error(`failed to fetch ${label}: HTTP ${response.status}`);
+	}
+
+	const rawContentLength = response.headers.get('content-length');
+	let contentLength: number | undefined;
+	if (rawContentLength !== null) {
+		const normalized = rawContentLength.trim();
+		const parsed = Number(normalized);
+		if (!/^\d+$/u.test(normalized) || !Number.isSafeInteger(parsed)) {
+			try {
+				await response.body?.cancel();
+			} catch {
+				// Preserve the invalid-length failure.
+			}
+			throw new Error(`${label} has an invalid Content-Length`);
+		}
+		contentLength = parsed;
+	}
+	if (contentLength !== undefined && contentLength > maxBytes) {
+		try {
+			await response.body?.cancel();
+		} catch {
+			// Preserve the size-limit failure.
+		}
+		throw new Error(`${label} exceeds the ${maxBytes} byte limit`);
+	}
+	if (!response.body) {
+		const bytes = new Uint8Array(await response.arrayBuffer());
+		throwIfAborted(options.signal);
+		if (bytes.byteLength > maxBytes) {
+			throw new Error(`${label} exceeds the ${maxBytes} byte limit`);
+		}
+		return bytes;
+	}
+	return readBoundedStream(response.body, label, maxBytes, options.signal, contentLength);
+}
+
+function parseJson(bytes: Uint8Array, label: string): unknown {
+	let source: string;
+	try {
+		source = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+	} catch (error) {
+		throw new Error(`${label} is not valid UTF-8`, { cause: error });
+	}
+	try {
+		return JSON.parse(source) as unknown;
+	} catch (error) {
+		throw new Error(`${label} is not valid JSON`, { cause: error });
+	}
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function validateRuntimePackPath(path: string, maxPathBytes: number) {
+	if (new TextEncoder().encode(path).byteLength > maxPathBytes) {
+		throw new Error(`browser-native runtime pack path exceeds ${maxPathBytes} bytes: ${path}`);
+	}
+	if (
+		!path.startsWith('/static/toolchain/') ||
+		path.includes('\\') ||
+		Array.from(path).some((character) => {
+			const codePoint = character.codePointAt(0) ?? 0;
+			return codePoint <= 0x1f || codePoint === 0x7f;
+		})
+	) {
+		throw new Error(`unsafe browser-native runtime pack path: ${path}`);
+	}
+	const parts = path.slice(1).split('/');
+	if (parts.some((part) => !part || part === '.' || part === '..')) {
+		throw new Error(`unsafe browser-native runtime pack path: ${path}`);
+	}
+	return path;
+}
+
+function expectedRuntimePackFiles(
+	manifest: BrowserNativeManifest,
+	limits: ResolvedRuntimeAssetLimits
+) {
+	if (!Array.isArray(manifest.ocamlLibFiles) || !Array.isArray(manifest.packages)) {
+		throw new Error('invalid browser-native runtime manifest file lists');
+	}
+	const files: unknown[] = [...manifest.ocamlLibFiles];
+	for (const manifestPackage of manifest.packages) {
+		if (!isRecord(manifestPackage) || !Array.isArray(manifestPackage.files)) {
+			throw new Error('invalid browser-native runtime manifest package files');
+		}
+		files.push(...manifestPackage.files);
+	}
+	if (files.length > limits.maxEntries) {
+		throw new Error(`browser-native runtime pack exceeds the ${limits.maxEntries} entry limit`);
+	}
+	const expected = new Map<string, number>();
+	for (const file of files) {
+		if (!isRecord(file) || typeof file.path !== 'string') {
+			throw new Error('invalid browser-native runtime manifest file');
+		}
+		const path = validateRuntimePackPath(file.path, limits.maxPathBytes);
+		if (!Number.isSafeInteger(file.size) || (file.size as number) <= 0) {
+			throw new Error(`invalid browser-native runtime manifest size for ${path}`);
+		}
+		const size = file.size as number;
+		if (size > limits.maxEntryBytes) {
+			throw new Error(
+				`browser-native runtime pack entry ${path} exceeds the ${limits.maxEntryBytes} byte limit`
+			);
+		}
+		if (expected.has(path)) {
+			throw new Error(`duplicate browser-native runtime manifest path: ${path}`);
+		}
+		expected.set(path, size);
+	}
+	return expected;
+}
 
 function toArrayBuffer(data: Uint8Array) {
 	const copy = new Uint8Array(data.byteLength);
@@ -254,14 +570,177 @@ function getToolchainPreloads(
 	];
 }
 
-export async function fetchBrowserNativeManifest() {
-	const response = await fetch('/.cache/browser-native-bundle/browser-native-manifest.v1.json', {
-		cache: 'no-store'
-	});
-	if (!response.ok) {
-		throw new Error(`failed to fetch browser-native manifest: ${response.status}`);
+export async function fetchBrowserNativeManifest(options: BrowserNativeRuntimeAssetOptions = {}) {
+	const limits = resolveRuntimeAssetLimits(options.limits);
+	const bytes = await fetchBoundedRuntimeAsset(
+		'/.cache/browser-native-bundle/browser-native-manifest.v1.json',
+		'browser-native runtime manifest',
+		limits.maxMetadataBytes,
+		options
+	);
+	const parsed = parseJson(bytes, 'browser-native runtime manifest');
+	if (
+		!isRecord(parsed) ||
+		parsed.version !== 1 ||
+		!Array.isArray(parsed.ocamlLibFiles) ||
+		!Array.isArray(parsed.packages)
+	) {
+		throw new Error('invalid browser-native runtime manifest');
 	}
-	return (await response.json()) as BrowserNativeManifest;
+	const manifest = parsed as BrowserNativeManifest;
+	expectedRuntimePackFiles(manifest, limits);
+	return manifest;
+}
+
+export async function loadBrowserNativeRuntimePack(
+	manifest: BrowserNativeManifest,
+	options: BrowserNativeRuntimeAssetOptions = {}
+): Promise<BrowserNativeRuntimePackCache | null> {
+	if (!manifest.runtimePack) return null;
+	const limits = resolveRuntimeAssetLimits(options.limits);
+	const runtimePack = manifest.runtimePack;
+	const expectedFiles = expectedRuntimePackFiles(manifest, limits);
+	if (
+		runtimePack.format !== RUNTIME_PACK_FORMAT ||
+		typeof runtimePack.asset !== 'string' ||
+		!runtimePack.asset ||
+		typeof runtimePack.index !== 'string' ||
+		!runtimePack.index
+	) {
+		throw new Error('invalid browser-native runtime pack metadata');
+	}
+	if (
+		!Number.isSafeInteger(runtimePack.fileCount) ||
+		runtimePack.fileCount <= 0 ||
+		runtimePack.fileCount > limits.maxEntries
+	) {
+		throw new Error('invalid browser-native runtime pack file count');
+	}
+	if (
+		!Number.isSafeInteger(runtimePack.totalBytes) ||
+		runtimePack.totalBytes <= 0 ||
+		runtimePack.totalBytes > limits.maxAssetBytes
+	) {
+		throw new Error(
+			`browser-native runtime pack declares an invalid or oversized expanded size`
+		);
+	}
+	if (runtimePack.fileCount !== expectedFiles.size) {
+		throw new Error('browser-native runtime pack file count does not match the manifest');
+	}
+	let expectedTotalBytes = 0;
+	for (const size of expectedFiles.values()) {
+		expectedTotalBytes += size;
+		if (!Number.isSafeInteger(expectedTotalBytes)) {
+			throw new Error('browser-native runtime manifest has an invalid aggregate size');
+		}
+	}
+	if (runtimePack.totalBytes !== expectedTotalBytes) {
+		throw new Error('browser-native runtime pack size does not match the manifest');
+	}
+
+	const indexBytes = await fetchBoundedRuntimeAsset(
+		runtimePack.index,
+		'browser-native runtime pack index',
+		limits.maxMetadataBytes,
+		options
+	);
+	const parsedIndex = parseJson(indexBytes, 'browser-native runtime pack index');
+	if (
+		!isRecord(parsedIndex) ||
+		parsedIndex.format !== RUNTIME_PACK_INDEX_FORMAT ||
+		!Number.isSafeInteger(parsedIndex.fileCount) ||
+		parsedIndex.fileCount !== runtimePack.fileCount ||
+		!Number.isSafeInteger(parsedIndex.totalBytes) ||
+		parsedIndex.totalBytes !== runtimePack.totalBytes ||
+		!Array.isArray(parsedIndex.entries) ||
+		parsedIndex.entries.length !== runtimePack.fileCount
+	) {
+		throw new Error('invalid browser-native runtime pack index');
+	}
+
+	const entries = new Map<string, BrowserNativeRuntimePackEntry>();
+	let nextOffset = 0;
+	for (const value of parsedIndex.entries) {
+		if (
+			!isRecord(value) ||
+			typeof value.runtimePath !== 'string' ||
+			!Number.isSafeInteger(value.offset) ||
+			!Number.isSafeInteger(value.length)
+		) {
+			throw new Error('invalid browser-native runtime pack entry');
+		}
+		const path = validateRuntimePackPath(value.runtimePath, limits.maxPathBytes);
+		const offset = value.offset as number;
+		const length = value.length as number;
+		if (offset !== nextOffset || length <= 0) {
+			throw new Error(`browser-native runtime pack entry is not contiguous: ${path}`);
+		}
+		if (length > limits.maxEntryBytes) {
+			throw new Error(
+				`browser-native runtime pack entry ${path} exceeds the ${limits.maxEntryBytes} byte limit`
+			);
+		}
+		if (entries.has(path)) {
+			throw new Error(`duplicate browser-native runtime pack path: ${path}`);
+		}
+		const expectedSize = expectedFiles.get(path);
+		if (expectedSize === undefined || expectedSize !== length) {
+			throw new Error(
+				`browser-native runtime pack entry does not match the manifest: ${path}`
+			);
+		}
+		nextOffset = offset + length;
+		if (!Number.isSafeInteger(nextOffset) || nextOffset > runtimePack.totalBytes) {
+			throw new Error(`browser-native runtime pack entry is out of range: ${path}`);
+		}
+		entries.set(path, { offset, length });
+	}
+	if (nextOffset !== runtimePack.totalBytes || entries.size !== expectedFiles.size) {
+		throw new Error('browser-native runtime pack index does not cover the declared payload');
+	}
+	for (const path of expectedFiles.keys()) {
+		if (!entries.has(path)) {
+			throw new Error(`browser-native runtime pack index is missing ${path}`);
+		}
+	}
+
+	let bytes = await fetchBoundedRuntimeAsset(
+		runtimePack.asset,
+		'browser-native runtime pack asset',
+		limits.maxAssetBytes,
+		options
+	);
+	if (bytes.byteLength >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b) {
+		if (typeof DecompressionStream !== 'function') {
+			throw new Error(
+				"failed to decompress browser-native runtime pack: this browser does not support DecompressionStream('gzip')"
+			);
+		}
+		const decompressed = new Blob([bytes])
+			.stream()
+			.pipeThrough(new DecompressionStream('gzip'));
+		try {
+			bytes = await readBoundedStream(
+				decompressed,
+				'browser-native runtime pack expanded payload',
+				runtimePack.totalBytes,
+				options.signal,
+				runtimePack.totalBytes
+			);
+		} catch (error) {
+			if (options.signal?.aborted) throw abortReason(options.signal);
+			if (error instanceof Error && error.message.includes('byte limit')) throw error;
+			throw new Error(
+				`failed to decompress browser-native runtime pack: ${error instanceof Error ? error.message : String(error)}`,
+				{ cause: error }
+			);
+		}
+	}
+	if (bytes.byteLength !== runtimePack.totalBytes) {
+		throw new Error('browser-native runtime pack metadata does not match payload');
+	}
+	return { bytes, entries };
 }
 
 export async function runBrowserNativeTool(request: {
@@ -330,7 +809,10 @@ export async function runBrowserNativeTool(request: {
 	}
 }
 
-export function createBrowserWorkerSystemDispatcher(options: { manifest: BrowserNativeManifest }) {
+export function createBrowserWorkerSystemDispatcher(options: {
+	manifest: BrowserNativeManifest;
+	runtimeAssets?: BrowserNativeRuntimeAssetOptions;
+}) {
 	const packageMap = new Map(
 		options.manifest.packages.map((manifestPackage) => [manifestPackage.name, manifestPackage])
 	);
@@ -373,85 +855,10 @@ export function createBrowserWorkerSystemDispatcher(options: { manifest: Browser
 				env['WASM_OF_JS_OF_OCAML_BROWSER_FAST_BINARYEN'] || '1';
 		}
 		if (!runtimePackEntriesPromise) {
-			runtimePackEntriesPromise = (async () => {
-				if (!options.manifest.runtimePack) {
-					return null;
-				}
-				const packIndexResponse = await fetch(options.manifest.runtimePack.index, {
-					cache: 'no-store'
-				});
-				if (!packIndexResponse.ok) {
-					throw new Error(
-						`failed to fetch browser-native runtime pack index: ${packIndexResponse.status}`
-					);
-				}
-				const packIndex = (await packIndexResponse.json()) as {
-					format?: string;
-					fileCount?: number;
-					totalBytes?: number;
-					entries?: Array<{
-						runtimePath?: string;
-						offset?: number;
-						length?: number;
-					}>;
-				};
-				if (
-					packIndex.format !==
-						'wasm-of-js-of-ocaml-browser-native-runtime-pack-index-v1' ||
-					!Array.isArray(packIndex.entries) ||
-					packIndex.fileCount !== packIndex.entries.length ||
-					typeof packIndex.totalBytes !== 'number'
-				) {
-					throw new Error('invalid browser-native runtime pack index');
-				}
-				const packAssetResponse = await fetch(options.manifest.runtimePack.asset, {
-					cache: 'no-store'
-				});
-				if (!packAssetResponse.ok) {
-					throw new Error(
-						`failed to fetch browser-native runtime pack asset: ${packAssetResponse.status}`
-					);
-				}
-				let packBytes = new Uint8Array(await packAssetResponse.arrayBuffer());
-				if (packBytes.byteLength >= 2 && packBytes[0] === 0x1f && packBytes[1] === 0x8b) {
-					if (typeof DecompressionStream !== 'function') {
-						throw new Error(
-							"failed to decompress browser-native runtime pack: this browser does not support DecompressionStream('gzip')"
-						);
-					}
-					const decompressedResponse = new Response(
-						new Blob([packBytes.buffer])
-							.stream()
-							.pipeThrough(new DecompressionStream('gzip'))
-					);
-					packBytes = new Uint8Array(await decompressedResponse.arrayBuffer());
-				}
-				if (
-					packIndex.fileCount !== options.manifest.runtimePack.fileCount ||
-					packIndex.totalBytes !== options.manifest.runtimePack.totalBytes ||
-					packBytes.byteLength !== packIndex.totalBytes
-				) {
-					throw new Error('browser-native runtime pack metadata does not match payload');
-				}
-				const packEntries = new Map<string, BrowserNativeRuntimePackEntry>();
-				for (const entry of packIndex.entries) {
-					if (
-						typeof entry.runtimePath !== 'string' ||
-						typeof entry.offset !== 'number' ||
-						typeof entry.length !== 'number'
-					) {
-						throw new Error('invalid browser-native runtime pack entry');
-					}
-					packEntries.set(entry.runtimePath, {
-						offset: entry.offset,
-						length: entry.length
-					});
-				}
-				return {
-					bytes: packBytes,
-					entries: packEntries
-				};
-			})();
+			runtimePackEntriesPromise = loadBrowserNativeRuntimePack(
+				options.manifest,
+				options.runtimeAssets
+			);
 		}
 		const runtimePackEntries = await runtimePackEntriesPromise;
 
