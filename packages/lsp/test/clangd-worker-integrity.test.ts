@@ -48,6 +48,22 @@ describe('clangd worker asset integrity', () => {
 		vi.unstubAllGlobals();
 	});
 
+	it('rejects initialization without an explicit asset base URL', async () => {
+		await scope.dispatch({
+			type: 'init',
+			assets: {
+				clangdJs: new ArrayBuffer(0),
+				clangdWasmGz: new ArrayBuffer(0)
+			}
+		});
+
+		expect(scope.messages).toContainEqual({
+			type: 'error',
+			message: 'clangd init requires an explicit baseUrl'
+		});
+		expect(mocks.decompressGzip).not.toHaveBeenCalled();
+	});
+
 	it('verifies decompressed Wasm bytes before importing the runtime module', async () => {
 		const runtimeBytes = Uint8Array.of(0, 97, 115, 109);
 		const deliveryBytes = Uint8Array.of(0x1f, 0x8b, 0x08);

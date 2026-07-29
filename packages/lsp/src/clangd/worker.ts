@@ -116,10 +116,13 @@ self.addEventListener('message', async (event: MessageEvent<ClangdWorkerInboundM
 	}
 	if (event.data?.type !== 'init') return;
 
-	const baseUrl = normalizeClangdBaseUrl(event.data.baseUrl || '/clangd') + '/';
 	debugEnabled = !!event.data.debug;
-	debugLog('init', baseUrl);
 	try {
+		if (typeof event.data.baseUrl !== 'string' || !event.data.baseUrl.trim()) {
+			throw new Error('clangd init requires an explicit baseUrl');
+		}
+		const baseUrl = normalizeClangdBaseUrl(event.data.baseUrl.trim()) + '/';
+		debugLog('init', baseUrl);
 		if (!event.data.assets) throw new Error('clangd init requires preloaded runtime assets');
 		const jsBytes = new Uint8Array(event.data.assets.clangdJs);
 		self.postMessage({ type: 'progress', value: 1, max: 3 });

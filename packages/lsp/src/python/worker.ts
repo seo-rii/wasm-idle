@@ -18,7 +18,7 @@ type PythonBridge = (payload: string) => void;
 let pyodide: PyodideInterface | null = null;
 let bridge: PythonBridge | null = null;
 let initPromise: Promise<void> | null = null;
-let configuredPyodideBaseUrl = '/pyodide/';
+let configuredPyodideBaseUrl: string | null = null;
 
 function toErrorMessage(error: unknown) {
 	return error instanceof Error ? error.message : String(error);
@@ -104,14 +104,27 @@ self.addEventListener('message', (event) => {
 	const payload = event.data as Record<string, unknown> | null;
 	if (!payload || typeof payload !== 'object') return;
 	if (payload.type === 'init') {
-		configuredPyodideBaseUrl =
-			typeof payload.pyodideBaseUrl === 'string' ? payload.pyodideBaseUrl : '/pyodide/';
+		if (typeof payload.pyodideBaseUrl !== 'string' || !payload.pyodideBaseUrl.trim()) {
+			self.postMessage({
+				type: 'error',
+				error: 'Python LSP init requires an explicit pyodideBaseUrl'
+			});
+			return;
+		}
+		configuredPyodideBaseUrl = payload.pyodideBaseUrl.trim();
 		void bootstrapPythonBridge(configuredPyodideBaseUrl).catch((error) => {
 			console.error('Failed to initialize Python LSP worker', error);
 		});
 		return;
 	}
 	if ('type' in payload) return;
+	if (!configuredPyodideBaseUrl) {
+		self.postMessage({
+			type: 'error',
+			error: 'Python LSP worker requires init before JSON-RPC messages'
+		});
+		return;
+	}
 
 	const serialized = JSON.stringify(payload);
 
