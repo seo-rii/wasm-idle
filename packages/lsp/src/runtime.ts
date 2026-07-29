@@ -101,8 +101,18 @@ export function resolvePythonLanguageServerBaseUrl(
 }
 
 const resolveFileUrl = (value: string, currentUrl = '') => {
-	if (!value.trim()) return '';
-	return currentUrl ? new URL(value, currentUrl).href : value;
+	const configured = value.trim();
+	if (!configured) return '';
+	if (currentUrl) return new URL(configured, currentUrl).href;
+	if (configured.startsWith('/')) return configured;
+	try {
+		return new URL(configured).href;
+	} catch {
+		throw new LanguageServerAssetConfigurationError(
+			'External LSP asset URL',
+			'an absolute or root-relative URL, or currentUrl for a document-relative URL'
+		);
+	}
 };
 
 const resolveApplicationAssetUrl = (path: string, _currentUrl = '') => {

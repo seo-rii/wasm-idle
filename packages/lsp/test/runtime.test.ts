@@ -101,6 +101,25 @@ describe('lsp runtime asset resolution', () => {
 		).toBe('');
 	});
 
+	it('requires host context for document-relative asset overrides', () => {
+		const options = { rust: { compilerUrl: './assets/rustc.js' } };
+
+		expect(() => resolveRustLanguageServerCompilerUrl(options)).toThrow(
+			LanguageServerAssetConfigurationError
+		);
+		expect(
+			resolveRustLanguageServerCompilerUrl(
+				options,
+				'https://app.example.com/wasm-idle/editor/'
+			)
+		).toBe('https://app.example.com/wasm-idle/editor/assets/rustc.js');
+		expect(
+			resolveRustLanguageServerCompilerUrl({
+				rust: { compilerUrl: '/wasm-idle/wasm-rust/index.js' }
+			})
+		).toBe('/wasm-idle/wasm-rust/index.js');
+	});
+
 	it('resolves declared runtime roots and rejects document-relative fallbacks', () => {
 		const applicationUrl = 'https://app.example.com/wasm-idle/';
 		const cases: [(options: string | undefined, currentUrl: string) => string, string][] = [
