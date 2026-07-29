@@ -6,6 +6,7 @@ import {
 } from '$lib/playground/options';
 import { importRuntimeModule } from '$lib/playground/runtimeModule';
 import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
+import { fetchRuntimeAssetBytes } from '$lib/playground/worker/runtimeAssetFetch';
 
 type BashRuntimeAssetConfig = PlaygroundRuntimeAssets & {
 	bash?: { moduleUrl?: string; webcUrl?: string; workerUrl?: string };
@@ -52,7 +53,7 @@ class Bash implements Sandbox {
 		_code = '',
 		_log = true,
 		_args: string[] = [],
-		_options: SandboxExecutionOptions = {},
+		options: SandboxExecutionOptions = {},
 		progress?: SandboxProgress
 	) {
 		this.pendingInput = [];
@@ -86,14 +87,17 @@ class Bash implements Sandbox {
 				return sdk;
 			});
 		}
-		const [response, sdk] = await Promise.all([fetch(this.webcUrl), sdkPromise]);
-		if (!response.ok) {
-			throw new Error(`Failed to load Bash WEBc package: HTTP ${response.status}`);
-		}
+		const [webcBytes, sdk] = await Promise.all([
+			fetchRuntimeAssetBytes({
+				url: this.webcUrl,
+				label: 'Bash WEBc package',
+				maxAssetBytes: options.limits?.maxAssetBytes,
+				signal: options.signal
+			}),
+			sdkPromise
+		]);
 		this.runtimePackage?.free();
-		this.runtimePackage = await sdk.Wasmer.fromFile(
-			new Uint8Array(await response.arrayBuffer())
-		);
+		this.runtimePackage = await sdk.Wasmer.fromFile(webcBytes);
 		progress?.set?.(1, 'Bash runtime ready');
 	}
 

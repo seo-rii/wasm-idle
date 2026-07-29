@@ -57,7 +57,11 @@ describe('Bash sandbox', () => {
 			)
 		).resolves.toBe(true);
 
-		expect(fetch).toHaveBeenCalledWith('http://localhost:3000/assets/wasm-bash/bash.webc');
+		expect(fetch).toHaveBeenCalledWith('http://localhost:3000/assets/wasm-bash/bash.webc', {
+			credentials: 'omit',
+			redirect: 'error',
+			referrerPolicy: 'no-referrer'
+		});
 		expect(init).toHaveBeenCalledWith({
 			sdkUrl: 'http://localhost:3000/assets/wasm-bash/sdk/index.mjs',
 			workerUrl: 'http://localhost:3000/assets/wasm-bash/sdk/worker.mjs'
@@ -84,6 +88,31 @@ describe('Bash sandbox', () => {
 		expect(output.join('')).toBe('main=73 arg=demo\n');
 		expect(free).not.toHaveBeenCalled();
 		expect(sandbox.stdinWriter).toBeNull();
+	});
+
+	it('propagates caller cancellation and enforces byte limits while loading WEBc', async () => {
+		const controller = new AbortController();
+		vi.mocked(fetch).mockResolvedValueOnce(
+			new Response(new Uint8Array(5), {
+				headers: { 'content-length': '5' }
+			})
+		);
+		const sandbox = new Bash();
+
+		await expect(
+			sandbox.load('/assets', '', true, [], {
+				limits: { maxAssetBytes: 4 },
+				signal: controller.signal
+			})
+		).rejects.toThrow('Bash WEBc package exceeds the 4 byte limit');
+
+		expect(fetch).toHaveBeenCalledWith('http://localhost:3000/assets/wasm-bash/bash.webc', {
+			credentials: 'omit',
+			redirect: 'error',
+			referrerPolicy: 'no-referrer',
+			signal: controller.signal
+		});
+		expect(fromFile).not.toHaveBeenCalled();
 	});
 
 	it('connects write and eof to a running Bash stdin stream', async () => {
