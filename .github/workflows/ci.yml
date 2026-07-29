@@ -23,6 +23,7 @@ jobs:
                   cache: pnpm
             - run: pnpm install --frozen-lockfile
             - run: pnpm run check
+            - run: pnpm test
             - run: pnpm run check:packages
             - run: pnpm --dir packages/llvm-core test
             - run: pnpm --dir packages/lsp test
