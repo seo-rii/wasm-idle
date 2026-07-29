@@ -129,7 +129,7 @@ describe('wasm-lisp Puppy Scheme runtime', () => {
 		expect(fetchCount).toBeGreaterThan(1);
 	});
 
-	it('rechecks cancellation after a bodyless core-module read', async () => {
+	it('rejects promptly when a bodyless core-module read is aborted', async () => {
 		let markArrayBufferStarted!: () => void;
 		const arrayBufferStarted = new Promise<void>((resolve) => {
 			markArrayBufferStarted = resolve;
@@ -152,13 +152,36 @@ describe('wasm-lisp Puppy Scheme runtime', () => {
 		const compiler = await createCompilerWithFetch(fetchImpl, 1024);
 		const controller = new AbortController();
 		const reason = new Error('stop bodyless core load');
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
 		const compile = compiler.compile({ code: '(display 1)', signal: controller.signal });
 
 		await arrayBufferStarted;
+		vi.useFakeTimers();
 		controller.abort(reason);
-		releaseArrayBuffer();
+		try {
+			const outcome = Promise.race([
+				compile.then(
+					(value) => ({ status: 'resolved', value }),
+					(error) => ({ status: 'rejected', reason: error })
+				),
+				new Promise((resolve) => {
+					setTimeout(() => resolve({ status: 'pending' }), 1);
+				})
+			]);
+			await vi.advanceTimersByTimeAsync(1);
 
-		await expect(compile).rejects.toBe(reason);
+			expect(await outcome).toEqual({ status: 'rejected', reason });
+			const abortRegistration = addEventListener.mock.calls.find(
+				([type]) => type === 'abort'
+			);
+			expect(abortRegistration).toBeDefined();
+			expect(removeEventListener).toHaveBeenCalledWith('abort', abortRegistration?.[1]);
+		} finally {
+			releaseArrayBuffer();
+			await compile.catch(() => {});
+			vi.useRealTimers();
+		}
 	});
 
 	it('bounds streamed compiler assets and omits ambient request authority', async () => {

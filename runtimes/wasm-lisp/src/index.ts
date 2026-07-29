@@ -371,15 +371,25 @@ async function fetchBytes(
 		throw new Error(`wasm-lisp runtime asset exceeds the ${maxAssetBytes} byte download limit`);
 	}
 	if (!response.body) {
-		throwIfAborted(signal);
+		let cancelOnAbort: (() => void) | undefined;
+		const aborted = signal
+			? new Promise<never>((_resolve, reject) => {
+					cancelOnAbort = () => reject(abortReason(signal));
+					signal.addEventListener('abort', cancelOnAbort, { once: true });
+				})
+			: undefined;
 		let source: ArrayBuffer;
 		try {
-			source = await response.arrayBuffer();
+			throwIfAborted(signal);
+			const materialized = response.arrayBuffer();
+			source = aborted ? await Promise.race([materialized, aborted]) : await materialized;
+			throwIfAborted(signal);
 		} catch (error) {
 			if (signal?.aborted) throw abortReason(signal);
 			throw error;
+		} finally {
+			if (cancelOnAbort) signal?.removeEventListener('abort', cancelOnAbort);
 		}
-		throwIfAborted(signal);
 		const bytes = new Uint8Array(source);
 		if (bytes.byteLength > maxAssetBytes) {
 			throw new Error(
