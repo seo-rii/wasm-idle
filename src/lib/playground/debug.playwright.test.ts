@@ -76,6 +76,22 @@ int main() {
 }`
 	},
 	{
+		activePath: 'trap.c',
+		backend: 'lldb',
+		breakpointLine: 2,
+		expectedLocal: { name: 'value', value: '73' },
+		expectedStoppedReason: 'exception',
+		expectedTitle: 'C · LLDB / WAMR',
+		language: 'C',
+		programArgs: [],
+		source: `int main(void) {
+    int value = 73;
+    __builtin_trap();
+    return value;
+}`,
+		testId: 'c-trap'
+	},
+	{
 		activePath: 'solution.rs',
 		backend: 'lldb',
 		breakpointLine: 2,
@@ -144,9 +160,18 @@ const requestedDebugLanguages = new Set(
 		.map((value) => value.trim().toUpperCase())
 		.filter(Boolean)
 );
-const activeDebugCases = requestedDebugLanguages.size
-	? debugCases.filter((testCase) => requestedDebugLanguages.has(testCase.language))
-	: debugCases;
+const requestedDebugCases = new Set(
+	(process.env.WASM_IDLE_DEBUG_BROWSER_CASES || '')
+		.split(',')
+		.map((value) => value.trim())
+		.filter(Boolean)
+);
+const activeDebugCases = debugCases.filter(
+	(testCase) =>
+		(!requestedDebugLanguages.size || requestedDebugLanguages.has(testCase.language)) &&
+		(!requestedDebugCases.size ||
+			('testId' in testCase && requestedDebugCases.has(testCase.testId)))
+);
 const requireLldbDebug = process.env.WASM_IDLE_REQUIRE_LLDB_DEBUG === '1';
 const requiredLldbAssets = [
 	'runtime-manifest.v2.json',
@@ -632,7 +657,7 @@ describe('native-source browser debugging in Chromium', () => {
 						if (
 							requireLldbDebug &&
 							testCase.backend === 'lldb' &&
-							testCase.language === 'C'
+							testCase.activePath === 'main.c'
 						) {
 							await page.evaluate(
 								async (source) =>
@@ -653,13 +678,74 @@ describe('native-source browser debugging in Chromium', () => {
 							expect(await readPausedLine(page)).toBe('—');
 						}
 						await page.locator('button[aria-label="Continue"]').click();
-						await page.waitForFunction(
-							(expectedOutput) =>
-								document
-									.querySelector('[data-testid="terminal-debug-output"]')
-									?.textContent?.includes(expectedOutput),
-							testCase.expectedOutput
-						);
+						if ('expectedStoppedReason' in testCase) {
+							try {
+								await page.waitForFunction(
+									(expectedReason) =>
+										Array.from(document.querySelectorAll('.debug-metric')).some(
+											(metric) =>
+												metric
+													.querySelector('span')
+													?.textContent?.trim() === 'Reason' &&
+												metric
+													.querySelector('strong')
+													?.textContent?.trim() === expectedReason
+										),
+									testCase.expectedStoppedReason,
+									{
+										timeout: Number(
+											process.env.WASM_IDLE_DEBUG_TRAP_TIMEOUT_MS || '30000'
+										)
+									}
+								);
+							} catch (error) {
+								const debugState = await page
+									.evaluate(() => (window as any).__wasmIdleDebug.getDebugState())
+									.catch(() => null);
+								const debugMetrics = await page.evaluate(() =>
+									Array.from(document.querySelectorAll('.debug-metric')).map(
+										(metric) => metric.textContent?.trim() || ''
+									)
+								);
+								const transcript =
+									(await page
+										.locator('[data-testid="terminal-debug-output"]')
+										.textContent()
+										.catch(() => '')) || '';
+								throw new Error(
+									`${testCase.language} trap did not stop as ${testCase.expectedStoppedReason}\n${JSON.stringify(
+										{
+											error:
+												error instanceof Error
+													? error.stack || error.message
+													: String(error),
+											debugState,
+											debugMetrics,
+											consoleTail: consoleMessages.slice(-80),
+											pageErrors,
+											transcript
+										},
+										null,
+										2
+									)}`
+								);
+							}
+							const trapState = await page.evaluate(() =>
+								(window as any).__wasmIdleDebug.getDebugState()
+							);
+							expect(trapState.paused).toBe(true);
+							expect(trapState.scopes.length).toBeGreaterThan(0);
+							expect(await readPausedLine(page)).toBe('L3');
+							await page.getByRole('button', { name: 'Stop Debug' }).click();
+						} else {
+							await page.waitForFunction(
+								(expectedOutput) =>
+									document
+										.querySelector('[data-testid="terminal-debug-output"]')
+										?.textContent?.includes(expectedOutput),
+								testCase.expectedOutput
+							);
+						}
 						await page
 							.locator('button.action-button--debug')
 							.waitFor({ state: 'visible' });

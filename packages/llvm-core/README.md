@@ -86,6 +86,9 @@ source pause, the gate also verifies that LLDB scopes remain lazy until their
 The C++ fixture additionally follows the structure's and a pointer's own `variablesReference`
 values and verifies their `first` and `second` fields without eagerly flattening either variable
 tree.
+A dedicated C fixture executes `__builtin_trap()`, verifies that LLDB reports an `exception` stop
+on the trap source line with scopes still available, and then exercises a clean Stop Debug
+disconnect. Set `WASM_IDLE_DEBUG_BROWSER_CASES=c-trap` to run only this fixture locally.
 It then sends a DAP `readMemory` request from the LLDB hexadecimal memory reference `0x0` for four
 bytes of Wasm linear memory through the complete Sandbox and Terminal control path and verifies
 that the response is readable before resuming. The hexadecimal form matters because LLDB-DAP

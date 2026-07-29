@@ -59,4 +59,12 @@ describe('LLDB browser integration workflow', () => {
 		expect(workflow).toContain('pnpm run test:browser:debug:lldb');
 		expect(workflow).not.toContain('continue-on-error: true');
 	});
+
+	it('keeps a product-binary WAMR trap fixture in the required browser gate', async () => {
+		const browserTest = await readFile('src/lib/playground/debug.playwright.test.ts', 'utf8');
+
+		expect(browserTest).toContain('__builtin_trap();');
+		expect(browserTest).toContain("expectedStoppedReason: 'exception'");
+		expect(browserTest).toContain('WASM_IDLE_DEBUG_BROWSER_CASES');
+	});
 });
