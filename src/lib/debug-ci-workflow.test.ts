@@ -67,4 +67,12 @@ describe('LLDB browser integration workflow', () => {
 		expect(browserTest).toContain("expectedStoppedReason: 'exception'");
 		expect(browserTest).toContain('WASM_IDLE_DEBUG_BROWSER_CASES');
 	});
+
+	it('keeps a running-target WAMR interrupt fixture in the required browser gate', async () => {
+		const browserTest = await readFile('src/lib/playground/debug.playwright.test.ts', 'utf8');
+
+		expect(browserTest).toContain("testId: 'c-interrupt'");
+		expect(browserTest).toContain("afterContinue: 'pause'");
+		expect(browserTest).toContain("expectedStoppedReason: 'pause'");
+	});
 });

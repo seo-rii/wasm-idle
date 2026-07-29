@@ -101,6 +101,7 @@ export class LldbSandboxSession {
 	private activeThreadId = 1;
 	private activeFrameId?: number;
 	private command: DebugCommand | null = null;
+	private pauseRequested = false;
 	private stopped = false;
 	private stateVersion = 0;
 	private completionResolve?: (value: true) => void;
@@ -135,6 +136,7 @@ export class LldbSandboxSession {
 		if (this.session) throw new Error('LLDB sandbox session is already running.');
 		const lifecycleVersion = ++this.lifecycleVersion;
 		this.stopped = false;
+		this.pauseRequested = false;
 		this.initialized = false;
 		this.dapExitCode = null;
 		const completion = new Promise<true>((resolve, reject) => {
@@ -269,6 +271,7 @@ export class LldbSandboxSession {
 	async debugCommand(command: DebugCommand) {
 		const session = this.requireSession();
 		this.command = command;
+		this.pauseRequested = false;
 		const dapCommand =
 			command === 'stepInto'
 				? 'stepIn'
@@ -277,14 +280,28 @@ export class LldbSandboxSession {
 					: command === 'stepOut'
 						? 'stepOut'
 						: 'continue';
-		await session.request(dapCommand, { threadId: this.activeThreadId });
+		this.stateVersion += 1;
+		const request = session.request(dapCommand, { threadId: this.activeThreadId });
 		this.options.onDebugEvent({ type: 'resume', command });
+		void request.catch((error: unknown) =>
+			this.fail(
+				error instanceof Error
+					? error
+					: new Error(`Unable to send the LLDB ${dapCommand} request.`)
+			)
+		);
 	}
 
 	async pause() {
-		await this.requireSession().request('pause', {
-			threadId: this.activeThreadId
-		});
+		this.pauseRequested = true;
+		try {
+			await this.requireSession().request('pause', {
+				threadId: this.activeThreadId
+			});
+		} catch (error) {
+			this.pauseRequested = false;
+			throw error;
+		}
 	}
 
 	async setBreakpoints(lines: number[], sourcePath = this.options.sourcePath) {
@@ -392,14 +409,16 @@ export class LldbSandboxSession {
 			const body = event.body as
 				| { reason?: string; threadId?: number; allThreadsStopped?: boolean }
 				| undefined;
+			const reason =
+				this.pauseRequested && body?.reason === 'exception'
+					? 'pause'
+					: body?.reason || 'pause';
+			this.pauseRequested = false;
 			const version = ++this.stateVersion;
-			void this.resolveStoppedState(body?.threadId, body?.reason || 'pause', version).catch(
-				(error) =>
-					this.fail(
-						error instanceof Error
-							? error
-							: new Error('Unable to read LLDB stopped state.')
-					)
+			void this.resolveStoppedState(body?.threadId, reason, version).catch((error) =>
+				this.fail(
+					error instanceof Error ? error : new Error('Unable to read LLDB stopped state.')
+				)
 			);
 			return;
 		}

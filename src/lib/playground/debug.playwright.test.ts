@@ -92,6 +92,24 @@ int main() {
 		testId: 'c-trap'
 	},
 	{
+		activePath: 'interrupt.c',
+		afterContinue: 'pause',
+		backend: 'lldb',
+		breakpointLine: 2,
+		expectedLocal: { name: 'value', value: '0' },
+		expectedStoppedReason: 'pause',
+		expectedTitle: 'C · LLDB / WAMR',
+		language: 'C',
+		programArgs: [],
+		source: `int main(void) {
+    volatile int value = 0;
+    for (;;) {
+        value += 1;
+    }
+}`,
+		testId: 'c-interrupt'
+	},
+	{
 		activePath: 'solution.rs',
 		backend: 'lldb',
 		breakpointLine: 2,
@@ -679,6 +697,22 @@ describe('native-source browser debugging in Chromium', () => {
 						}
 						await page.locator('button[aria-label="Continue"]').click();
 						if ('expectedStoppedReason' in testCase) {
+							if ('afterContinue' in testCase && testCase.afterContinue === 'pause') {
+								const pauseButton = page.locator('button[aria-label="Pause"]');
+								await page.waitForFunction(() => {
+									const button = document.querySelector<HTMLButtonElement>(
+										'button[aria-label="Pause"]'
+									);
+									return (
+										document.querySelector('.debug-status-pill--active') !=
+											null &&
+										button != null &&
+										!button.disabled
+									);
+								});
+								await page.waitForTimeout(250);
+								await pauseButton.click();
+							}
 							try {
 								await page.waitForFunction(
 									(expectedReason) =>
@@ -694,7 +728,7 @@ describe('native-source browser debugging in Chromium', () => {
 									testCase.expectedStoppedReason,
 									{
 										timeout: Number(
-											process.env.WASM_IDLE_DEBUG_TRAP_TIMEOUT_MS || '30000'
+											process.env.WASM_IDLE_DEBUG_STOP_TIMEOUT_MS || '30000'
 										)
 									}
 								);
@@ -713,7 +747,9 @@ describe('native-source browser debugging in Chromium', () => {
 										.textContent()
 										.catch(() => '')) || '';
 								throw new Error(
-									`${testCase.language} trap did not stop as ${testCase.expectedStoppedReason}\n${JSON.stringify(
+									`${testCase.language} ${
+										'afterContinue' in testCase ? 'interrupt' : 'trap'
+									} did not stop as ${testCase.expectedStoppedReason}\n${JSON.stringify(
 										{
 											error:
 												error instanceof Error
@@ -730,12 +766,17 @@ describe('native-source browser debugging in Chromium', () => {
 									)}`
 								);
 							}
-							const trapState = await page.evaluate(() =>
+							const stoppedState = await page.evaluate(() =>
 								(window as any).__wasmIdleDebug.getDebugState()
 							);
-							expect(trapState.paused).toBe(true);
-							expect(trapState.scopes.length).toBeGreaterThan(0);
-							expect(await readPausedLine(page)).toBe('L3');
+							expect(stoppedState.paused).toBe(true);
+							expect(stoppedState.scopes.length).toBeGreaterThan(0);
+							const stoppedLine = await readPausedLine(page);
+							if ('afterContinue' in testCase) {
+								expect(stoppedLine).toMatch(/^L[34]$/);
+							} else {
+								expect(stoppedLine).toBe('L3');
+							}
 							await page.getByRole('button', { name: 'Stop Debug' }).click();
 						} else {
 							await page.waitForFunction(

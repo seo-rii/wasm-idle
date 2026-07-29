@@ -4,6 +4,7 @@ const runtimeState = vi.hoisted(() => ({
 	session: null as FakeRuntimeSession | null,
 	options: null as Record<string, unknown> | null,
 	initializeGate: null as Promise<void> | null,
+	continueGate: null as Promise<void> | null,
 	disposeGate: null as Promise<void> | null
 }));
 
@@ -44,6 +45,7 @@ class FakeRuntimeSession {
 
 	async request<T>(command: string, args?: unknown): Promise<T> {
 		this.requests.push({ command, args });
+		if (command === 'continue') await runtimeState.continueGate;
 		if (command === 'threads') return { threads: [{ id: 7, name: 'wasm' }] } as T;
 		if (command === 'stackTrace') {
 			return {
@@ -145,6 +147,7 @@ describe('LldbSandboxSession', () => {
 		runtimeState.session = null;
 		runtimeState.options = null;
 		runtimeState.initializeGate = null;
+		runtimeState.continueGate = null;
 		runtimeState.disposeGate = null;
 	});
 
@@ -389,6 +392,102 @@ describe('LldbSandboxSession', () => {
 		await Promise.resolve();
 		await Promise.resolve();
 		expect(events).not.toContainEqual(expect.objectContaining({ type: 'pause' }));
+		runtimeState.session!.emit({ event: 'terminated' });
+		runtimeState.session!.emitLifecycle({ type: 'target-exit', exitCode: 0 });
+		await completion;
+	});
+
+	it('publishes a running target before a pending continue response settles', async () => {
+		const events: Array<{ type: string; command?: string }> = [];
+		let releaseContinue = () => undefined;
+		runtimeState.continueGate = new Promise<void>((resolve) => {
+			releaseContinue = resolve;
+		});
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0),
+				sources: [{ path: '/workspace/main.c', content: 'int main(void) {}' }]
+			},
+			sourcePath: '/workspace/main.c',
+			breakpoints: [],
+			pauseOnEntry: false,
+			onDebugEvent: (event) => events.push(event),
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({ manifestVersion: 2 })
+			})) as unknown as typeof fetch
+		});
+		const completion = controller.start();
+		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+
+		let commandSettled = false;
+		const command = controller.debugCommand('continue').then(() => {
+			commandSettled = true;
+		});
+		await vi.waitFor(() =>
+			expect(runtimeState.session!.requests).toContainEqual({
+				command: 'continue',
+				args: { threadId: 1 }
+			})
+		);
+		try {
+			await vi.waitFor(() => expect(commandSettled).toBe(true));
+			expect(events.filter((event) => event.type === 'resume')).toEqual([
+				{ type: 'resume', command: 'continue' }
+			]);
+		} finally {
+			releaseContinue();
+			await command;
+			runtimeState.session!.emit({ event: 'terminated' });
+			runtimeState.session!.emitLifecycle({ type: 'target-exit', exitCode: 0 });
+			await completion;
+		}
+	});
+
+	it('reports an LLDB interrupt stop as a requested pause', async () => {
+		const events: Array<{
+			type: string;
+			reason?: string;
+			stoppedReason?: string;
+		}> = [];
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: false,
+			onDebugEvent: (event) => events.push(event),
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({ manifestVersion: 2 })
+			})) as unknown as typeof fetch
+		});
+		const completion = controller.start();
+		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+
+		await controller.pause();
+		runtimeState.session!.emit({
+			event: 'stopped',
+			body: { reason: 'exception', threadId: 7 }
+		});
+		await vi.waitFor(() =>
+			expect(events).toContainEqual(
+				expect.objectContaining({
+					type: 'pause',
+					reason: 'pause',
+					stoppedReason: 'pause'
+				})
+			)
+		);
+
 		runtimeState.session!.emit({ event: 'terminated' });
 		runtimeState.session!.emitLifecycle({ type: 'target-exit', exitCode: 0 });
 		await completion;

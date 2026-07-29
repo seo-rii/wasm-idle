@@ -89,6 +89,11 @@ tree.
 A dedicated C fixture executes `__builtin_trap()`, verifies that LLDB reports an `exception` stop
 on the trap source line with scopes still available, and then exercises a clean Stop Debug
 disconnect. Set `WASM_IDLE_DEBUG_BROWSER_CASES=c-trap` to run only this fixture locally.
+A second C fixture continues into an infinite loop, requires the UI to enter its running state
+without waiting for LLDB's deferred `continue` response, sends Pause through the live WAMR RSP
+transport, and verifies that the resulting LLDB interrupt is normalized to a `pause` stop with
+source frames and scopes still available. Set `WASM_IDLE_DEBUG_BROWSER_CASES=c-interrupt` to run
+only this fixture locally.
 It then sends a DAP `readMemory` request from the LLDB hexadecimal memory reference `0x0` for four
 bytes of Wasm linear memory through the complete Sandbox and Terminal control path and verifies
 that the response is readable before resuming. The hexadecimal form matters because LLDB-DAP
