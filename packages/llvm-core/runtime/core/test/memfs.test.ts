@@ -28,7 +28,11 @@ describe('MemFS', () => {
 		});
 		await memfs.ready;
 
-		expect(compile).toHaveBeenCalledWith('https://example.test/memfs.zip', undefined);
+		expect(compile).toHaveBeenCalledWith(
+			'https://example.test/memfs.zip',
+			undefined,
+			undefined
+		);
 		expect(instantiate).toHaveBeenCalledWith(module, {
 			env: expect.objectContaining({
 				abort: expect.any(Function),
@@ -41,6 +45,34 @@ describe('MemFS', () => {
 		});
 		expect(init).toHaveBeenCalledOnce();
 		expect(memfs.mem.memory).toBe(memory);
+
+		instantiate.mockRestore();
+	});
+
+	it('forwards a pre-aborted startup signal without instantiating MemFS', async () => {
+		const controller = new AbortController();
+		const reason = new Error('stop MemFS startup');
+		controller.abort(reason);
+		vi.mocked(compile).mockImplementation(async (_moduleUrl, _progress, signal) => {
+			if (signal?.aborted) throw signal.reason;
+			return {} as WebAssembly.Module;
+		});
+		const instantiate = vi.spyOn(WebAssembly, 'instantiate');
+
+		const memfs = new MemFS({
+			moduleUrl: 'https://example.test/memfs.zip',
+			stdin: () => '',
+			stdout: vi.fn(),
+			signal: controller.signal
+		});
+
+		await expect(memfs.ready).rejects.toBe(reason);
+		expect(compile).toHaveBeenCalledWith(
+			'https://example.test/memfs.zip',
+			undefined,
+			controller.signal
+		);
+		expect(instantiate).not.toHaveBeenCalled();
 
 		instantiate.mockRestore();
 	});

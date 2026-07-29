@@ -11,6 +11,7 @@ export interface MemFsOptions {
 	stdinStr?: string;
 	moduleUrl: string;
 	progress?: ProgressSink;
+	signal?: AbortSignal;
 	trace?: (message: string) => void;
 }
 
@@ -47,7 +48,7 @@ export default class MemFS {
 			'copy_out'
 		);
 
-		this.ready = compile(options.moduleUrl, options.progress)
+		this.ready = compile(options.moduleUrl, options.progress, options.signal)
 			.then(
 				(module) =>
 					WebAssembly.instantiate(module, {
