@@ -371,6 +371,69 @@ describe('runtime asset loader', () => {
 		expect(cancelled).toBe(true);
 	});
 
+	it('rejects promptly when a bodyless asset read is aborted', async () => {
+		vi.useFakeTimers();
+		const controller = new AbortController();
+		const reason = new Error('stop bodyless D asset read');
+		const reportProgress = vi.fn();
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		let markMaterializationStarted!: () => void;
+		const materializationStarted = new Promise<void>((resolve) => {
+			markMaterializationStarted = resolve;
+		});
+		let resolveArrayBuffer!: (value: ArrayBuffer) => void;
+		const arrayBufferPromise = new Promise<ArrayBuffer>((resolve) => {
+			resolveArrayBuffer = resolve;
+		});
+		const arrayBuffer = vi.fn(() => {
+			markMaterializationStarted();
+			return arrayBufferPromise;
+		});
+		const pending = fetchRuntimeAssetBytes(
+			'https://example.test/runtime/toolchain.tar',
+			'D toolchain',
+			async () =>
+				({
+					ok: true,
+					headers: new Headers(),
+					body: null,
+					arrayBuffer
+				}) as unknown as Response,
+			reportProgress,
+			undefined,
+			DEFAULT_MAX_RUNTIME_ASSET_BYTES,
+			controller.signal
+		);
+
+		await materializationStarted;
+		controller.abort(reason);
+		try {
+			const outcome = Promise.race([
+				pending.then(
+					(value) => ({ status: 'resolved', value }),
+					(error) => ({ status: 'rejected', reason: error })
+				),
+				new Promise((resolve) => {
+					setTimeout(() => resolve({ status: 'pending' }), 1);
+				})
+			]);
+			await vi.advanceTimersByTimeAsync(1);
+
+			expect(await outcome).toEqual({ status: 'rejected', reason });
+			expect(reportProgress).not.toHaveBeenCalled();
+			const abortRegistration = addEventListener.mock.calls.find(
+				([type]) => type === 'abort'
+			);
+			expect(abortRegistration).toBeDefined();
+			expect(removeEventListener).toHaveBeenCalledWith('abort', abortRegistration?.[1]);
+		} finally {
+			resolveArrayBuffer(Uint8Array.of(1, 2, 3).buffer);
+			await pending.catch(() => {});
+			vi.useRealTimers();
+		}
+	});
+
 	it('cancels an active gzip decompression chain with the caller signal', async () => {
 		const compressed = gzipSync(new Uint8Array(1024), { level: 9 });
 		let cancelled = false;

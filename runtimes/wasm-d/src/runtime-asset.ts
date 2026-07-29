@@ -222,8 +222,23 @@ export async function fetchRuntimeAssetBytes(
 	}
 	const shouldDecompress = shouldDecompressResponse(response, compression);
 	if (!response.body) {
-		const bytes = new Uint8Array(await response.arrayBuffer());
-		throwIfAborted(signal);
+		let cancelOnAbort: (() => void) | undefined;
+		const aborted = signal
+			? new Promise<never>((_resolve, reject) => {
+					cancelOnAbort = () => reject(abortReason(signal));
+					signal.addEventListener('abort', cancelOnAbort, { once: true });
+				})
+			: undefined;
+		let source: ArrayBuffer;
+		try {
+			throwIfAborted(signal);
+			const materialized = response.arrayBuffer();
+			source = aborted ? await Promise.race([materialized, aborted]) : await materialized;
+			throwIfAborted(signal);
+		} finally {
+			if (cancelOnAbort) signal?.removeEventListener('abort', cancelOnAbort);
+		}
+		const bytes = new Uint8Array(source);
 		if (bytes.byteLength > maxOutputBytes) {
 			throw new Error(`${assetLabel} download size exceeds the ${maxOutputBytes} byte limit`);
 		}
