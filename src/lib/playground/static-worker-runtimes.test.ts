@@ -1218,6 +1218,35 @@ describe('static worker backed language sandboxes', () => {
 		expect(workerInstances).toHaveLength(0);
 	});
 
+	it.each(['', '-1', '1.5', '1e2', '3, 3', '9007199254740992'])(
+		'rejects an invalid static worker Content-Length before reading: %s',
+		async (contentLength) => {
+			const cancel = vi.fn(async () => undefined);
+			const getReader = vi.fn();
+			const arrayBuffer = vi.fn();
+			vi.mocked(fetch).mockResolvedValueOnce({
+				ok: true,
+				status: 200,
+				url: '',
+				headers: new Headers({ 'content-length': contentLength }),
+				body: { cancel, getReader },
+				arrayBuffer
+			} as unknown as Response);
+			const sandbox = new Prolog();
+
+			await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+				name: 'ProtocolError',
+				code: 'protocol',
+				phase: 'asset',
+				runtimeId: 'PROLOG'
+			});
+			expect(cancel).toHaveBeenCalledOnce();
+			expect(getReader).not.toHaveBeenCalled();
+			expect(arrayBuffer).not.toHaveBeenCalled();
+			expect(workerInstances).toHaveLength(0);
+		}
+	);
+
 	it('rejects an oversized static worker script before reading its body', async () => {
 		vi.mocked(fetch).mockResolvedValueOnce(
 			new Response('small test body', {

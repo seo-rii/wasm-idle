@@ -378,9 +378,24 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 				throw error;
 			}
 
-			const declaredLength = Number(response.headers.get('content-length'));
-			const total =
-				Number.isFinite(declaredLength) && declaredLength > 0 ? declaredLength : 0;
+			const rawContentLength = response.headers.get('content-length');
+			let total = 0;
+			if (rawContentLength !== null) {
+				const normalizedContentLength = rawContentLength.trim();
+				const declaredLength = Number(normalizedContentLength);
+				if (
+					!/^\d+$/u.test(normalizedContentLength) ||
+					!Number.isSafeInteger(declaredLength)
+				) {
+					const error = new ProtocolError(
+						`${this.config.displayName} worker script has an invalid Content-Length: ${rawContentLength}`,
+						{ phase: 'asset', runtimeId: this.config.languageId }
+					);
+					await response.body?.cancel(error).catch(() => undefined);
+					throw error;
+				}
+				total = declaredLength;
+			}
 			if (total > limits.maxAssetBytes) {
 				const error = new AssetTooLargeError(
 					`${this.config.displayName} worker script exceeds ${limits.maxAssetBytes} bytes`,
