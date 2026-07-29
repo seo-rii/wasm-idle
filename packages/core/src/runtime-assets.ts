@@ -110,12 +110,47 @@ export type RuntimeAssetKeyInput = string | RuntimeAssetKeySource | undefined;
 
 type RuntimeAssetName = Exclude<keyof RuntimeAssetKeySource, 'rootUrl' | 'runtimeProfiles'>;
 
-interface RuntimeAssetKeyField {
-	runtime: RuntimeAssetName;
-	property: string;
-	key: string;
-	serialize?: (value: unknown) => string | boolean;
+type RuntimeAssetProperty<Runtime extends RuntimeAssetName> = Extract<
+	keyof NonNullable<RuntimeAssetKeySource[Runtime]>,
+	string
+>;
+
+type RuntimeAssetKeyField = {
+	[Runtime in RuntimeAssetName]: {
+		runtime: Runtime;
+		property: RuntimeAssetProperty<Runtime>;
+		key: string;
+		serialize?: (value: unknown) => string | boolean;
+	};
+}[RuntimeAssetName];
+
+type RuntimeAssetLoaderField = {
+	[Runtime in RuntimeAssetName]: {
+		runtime: Runtime;
+		loaderProperty: RuntimeAssetProperty<Runtime>;
+		loaderKeyProperty: RuntimeAssetProperty<Runtime>;
+		identityKey: string;
+	};
+}[RuntimeAssetName];
+
+type RuntimeAssetFieldId<Field> = Field extends {
+	runtime: infer Runtime extends RuntimeAssetName;
+	property: infer Property extends string;
 }
+	? `${Runtime}.${Property}`
+	: never;
+
+type RuntimeAssetLoaderFieldId<Field> = Field extends {
+	runtime: infer Runtime extends RuntimeAssetName;
+	loaderProperty: infer LoaderProperty extends string;
+	loaderKeyProperty: infer LoaderKeyProperty extends string;
+}
+	? `${Runtime}.${LoaderProperty}` | `${Runtime}.${LoaderKeyProperty}`
+	: never;
+
+type RequiredRuntimeAssetFieldId = {
+	[Runtime in RuntimeAssetName]: `${Runtime}.${RuntimeAssetProperty<Runtime>}`;
+}[RuntimeAssetName];
 
 const hasValue = (value: unknown) => !!value;
 
@@ -279,7 +314,7 @@ const RUNTIME_ASSET_LOADER_FIELDS = [
 		loaderKeyProperty: 'assetLoaderKey',
 		identityKey: 'tinygoAssetLoaderIdentity'
 	}
-] as const;
+] as const satisfies readonly RuntimeAssetLoaderField[];
 
 const RUNTIME_ASSET_KEY_FIELDS = [
 	{ runtime: 'python', property: 'baseUrl', key: 'pythonBaseUrl' },
@@ -444,7 +479,16 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	{ runtime: 'sqlite', property: 'moduleUrl', key: 'sqliteModuleUrl' },
 	{ runtime: 'sqlite', property: 'wasmUrl', key: 'sqliteWasmUrl' },
 	{ runtime: 'php', property: 'moduleUrl', key: 'phpModuleUrl' }
-] satisfies RuntimeAssetKeyField[];
+] as const satisfies readonly RuntimeAssetKeyField[];
+
+type MissingRuntimeAssetField = Exclude<
+	RequiredRuntimeAssetFieldId,
+	| RuntimeAssetFieldId<(typeof RUNTIME_ASSET_KEY_FIELDS)[number]>
+	| RuntimeAssetLoaderFieldId<(typeof RUNTIME_ASSET_LOADER_FIELDS)[number]>
+>;
+
+const RUNTIME_ASSET_FIELD_COVERAGE: [MissingRuntimeAssetField] extends [never] ? true : never =
+	true;
 
 const runtimeAssetRecord = (runtimeAssets: RuntimeAssetKeySource, runtime: RuntimeAssetName) =>
 	runtimeAssets[runtime] as Record<string, unknown> | undefined;
@@ -459,6 +503,7 @@ const readRuntimeAssetKeyField = (
 };
 
 export function createRuntimeAssetsKey(runtimeAssets: RuntimeAssetKeyInput): string | undefined {
+	void RUNTIME_ASSET_FIELD_COVERAGE;
 	if (typeof runtimeAssets === 'string') return runtimeAssets;
 	if (!runtimeAssets) return undefined;
 	const keyParts: Record<string, string | boolean> = {
