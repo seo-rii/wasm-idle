@@ -26,11 +26,18 @@ test('browser-native worker runs static Binaryen tools without the Binaryen API 
 	assert.match(workerSource, /request\.binaryenTools/);
 	assert.match(
 		workerSource,
-		/runBinaryenTool\(runtimeGlobal,\s*command,\s*request\.binaryenTools\)/
+		/runBinaryenTool\(runtimeGlobal,\s*command,\s*binaryenToolSources\)/
 	);
 	assert.doesNotMatch(workerSource, /\/api\/binaryen-command/);
 	assert.doesNotMatch(workerSource, /__binaryen_tool_source_cache/);
-	assert.match(workerSource, /function loadBinaryenToolSource\(toolUrl: string\)/);
+	assert.doesNotMatch(workerSource, /XMLHttpRequest/);
+	assert.match(workerSource, /async function materializeBinaryenToolSources\(/);
+	assert.match(
+		workerSource,
+		/fetchBrowserToolAsset\(\s*toolUrl,\s*`browser-native Binaryen tool \$\{displayName\}`/u
+	);
+	assert.match(workerSource, /fastMode\s*\? \['wasm_merge'\]/u);
+	assert.match(workerSource, /new Function\(`\$\{toolAsset\.source\}/);
 	assert.match(
 		workerSource,
 		/const activeBinaryenCliRuntime = runtimeGlobal\['__binaryen_cli_runtime'\]/

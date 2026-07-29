@@ -50,6 +50,18 @@ type BinaryenToolUrls = {
 	wasm_metadce?: string;
 };
 
+type BinaryenToolName = keyof BinaryenToolUrls;
+
+type BinaryenToolSources = Partial<
+	Record<
+		BinaryenToolName,
+		{
+			url: string;
+			source: string;
+		}
+	>
+>;
+
 class ToolExit extends Error {
 	readonly code: number;
 
@@ -373,17 +385,6 @@ function writeVirtualFiles(
 	}
 }
 
-function loadBinaryenToolSource(toolUrl: string) {
-	const xhr = new XMLHttpRequest();
-	xhr.open('GET', toolUrl, false);
-	xhr.responseType = 'text';
-	xhr.send(null);
-	if (xhr.status !== 200) {
-		throw new Error(`failed to fetch static Binaryen tool: ${toolUrl} (${xhr.status})`);
-	}
-	return xhr.responseText || '';
-}
-
 function ensureBinaryenCliDirectory(fs: Record<string, unknown>, targetPath: string) {
 	const normalizedPath = normalizePath(targetPath);
 	const directory = normalizedPath.replace(/\/[^/]+$/, '') || '/';
@@ -474,21 +475,21 @@ function parseBinaryenCommand(command: string) {
 function runBinaryenTool(
 	runtimeGlobal: RuntimeGlobal,
 	command: string,
-	toolUrls: BinaryenToolUrls | undefined
+	toolSources: BinaryenToolSources | undefined
 ): number {
-	if (!toolUrls) {
+	if (!toolSources) {
 		throw new Error('browser-native Binaryen tools are missing from the tool request');
 	}
 	const parsed = parseBinaryenCommand(command);
-	const toolUrl =
+	const toolName: BinaryenToolName | '' =
 		(parsed.toolName === 'wasm-opt'
-			? toolUrls.wasm_opt
+			? 'wasm_opt'
 			: parsed.toolName === 'wasm-merge'
-				? toolUrls.wasm_merge
+				? 'wasm_merge'
 				: parsed.toolName === 'wasm-metadce'
-					? toolUrls.wasm_metadce
+					? 'wasm_metadce'
 					: '') || '';
-	if (!toolUrl) {
+	if (!toolName) {
 		throw new Error(`unsupported static Binaryen tool: ${parsed.toolName}`);
 	}
 	if (isBinaryenBridgeDebugEnabled(runtimeGlobal)) {
@@ -559,6 +560,10 @@ function runBinaryenTool(
 		}
 		return 0;
 	}
+	const toolAsset = toolSources[toolName];
+	if (!toolAsset) {
+		throw new Error(`static Binaryen tool was not prefetched: ${parsed.toolName}`);
+	}
 
 	const originalModule = runtimeGlobal['Module'];
 	const originalBinaryenCliRuntime = runtimeGlobal['__binaryen_cli_runtime'];
@@ -582,7 +587,7 @@ function runBinaryenTool(
 			runtimeGlobal['__binaryen_cli_quit'] = (status: number) => {
 				throw new ToolExit(status);
 			};
-			new Function(`${loadBinaryenToolSource(toolUrl)}\n//# sourceURL=${toolUrl}`)();
+			new Function(`${toolAsset.source}\n//# sourceURL=${toolAsset.url}`)();
 			const cliRuntime = runtimeGlobal['__binaryen_cli_runtime'] as
 				| {
 						FS?: Record<string, unknown>;
@@ -773,6 +778,43 @@ function runBinaryenTool(
 	}
 }
 
+async function materializeBinaryenToolSources(
+	toolUrls: BinaryenToolUrls | undefined,
+	budget: BrowserToolInputBudget,
+	fastMode: boolean
+) {
+	if (!toolUrls) {
+		throw new Error('browser-native Binaryen tools are missing from the tool request');
+	}
+	const selectedTools: BinaryenToolName[] = fastMode
+		? ['wasm_merge']
+		: ['wasm_opt', 'wasm_merge', 'wasm_metadce'];
+	const sources: BinaryenToolSources = {};
+	await Promise.all(
+		selectedTools.map(async (toolName) => {
+			const toolUrl = toolUrls[toolName];
+			const displayName = toolName.replaceAll('_', '-');
+			if (!toolUrl) {
+				throw new Error(`browser-native Binaryen tool URL is missing: ${displayName}`);
+			}
+			const bytes = await fetchBrowserToolAsset(
+				toolUrl,
+				`browser-native Binaryen tool ${displayName}`,
+				budget,
+				{ cache: 'force-cache' }
+			);
+			sources[toolName] = {
+				url: toolUrl,
+				source: decodeBrowserToolSource(
+					bytes,
+					`browser-native Binaryen tool ${displayName}`
+				)
+			};
+		})
+	);
+	return sources;
+}
+
 async function materializePreloadFiles(
 	preloadFiles: PreloadFile[],
 	budget: BrowserToolInputBudget
@@ -854,6 +896,14 @@ self.addEventListener('message', async (event: MessageEvent<RunToolRequest>) => 
 		const toolSource = patchToolSource(
 			decodeBrowserToolSource(toolBytes, 'browser-native tool source')
 		);
+		const binaryenToolSources =
+			request.systemBridge === 'binaryen'
+				? await materializeBinaryenToolSources(
+						request.binaryenTools,
+						inputBudget,
+						request.env['WASM_OF_JS_OF_OCAML_BROWSER_FAST_BINARYEN'] === '1'
+					)
+				: undefined;
 		const patchedToolSource = toolSource;
 
 		runtimeSlots['__jsoo_mounts'] = [];
@@ -894,7 +944,7 @@ self.addEventListener('message', async (event: MessageEvent<RunToolRequest>) => 
 						`binaryen system command invoked: ${command}`
 					);
 				}
-				return runBinaryenTool(runtimeGlobal, command, request.binaryenTools);
+				return runBinaryenTool(runtimeGlobal, command, binaryenToolSources);
 			};
 			const browserRequire = Object.assign(
 				(specifier: string) => {
@@ -904,7 +954,7 @@ self.addEventListener('message', async (event: MessageEvent<RunToolRequest>) => 
 								const exitCode = runBinaryenTool(
 									runtimeGlobal,
 									String(command),
-									request.binaryenTools
+									binaryenToolSources
 								);
 								if (exitCode !== 0) {
 									const error = new Error(
@@ -934,7 +984,7 @@ self.addEventListener('message', async (event: MessageEvent<RunToolRequest>) => 
 								const status = runBinaryenTool(
 									runtimeGlobal,
 									commandLine,
-									request.binaryenTools
+									binaryenToolSources
 								);
 								return {
 									status,
