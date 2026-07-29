@@ -2,7 +2,7 @@
   "format": "wasm-forth-runtime-manifest-v1",
   "runtime": "waforth",
   "waforthVersion": "0.20.1",
-  "fingerprint": "b5eb53321b148b18",
+  "fingerprint": "dabe720dbaa84277",
   "files": [
     "waforth.js"
   ]

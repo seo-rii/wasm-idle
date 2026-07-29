@@ -39,7 +39,50 @@ async function loadWaforth(baseUrl) {
 	return { runtimePackage, WAForth };
 }
 
-function createKeyReader(stdin) {
+function createSharedKeyReader(channel) {
+	if (channel === undefined) return null;
+	if (
+		channel?.protocol !== 'wasm-idle-static-stdin-ring' ||
+		channel?.protocolVersion !== 1 ||
+		channel?.controlBytes !== 16 ||
+		!Number.isSafeInteger(channel?.capacity) ||
+		channel.capacity <= 0 ||
+		typeof SharedArrayBuffer !== 'function' ||
+		!(channel.buffer instanceof SharedArrayBuffer) ||
+		channel.buffer.byteLength !== channel.controlBytes + channel.capacity ||
+		typeof Atomics.wait !== 'function'
+	) {
+		throw new Error('Invalid WAForth streaming stdin channel.');
+	}
+
+	const control = new Int32Array(channel.buffer, 0, 4);
+	const bytes = new Uint8Array(channel.buffer, channel.controlBytes, channel.capacity);
+	return () => {
+		while (true) {
+			if (Atomics.load(control, 3) === 1) {
+				throw new Error('WAForth streaming stdin was cancelled.');
+			}
+			const write = Atomics.load(control, 0);
+			const read = Atomics.load(control, 1);
+			const available = write - read;
+			if (available < 0 || available > bytes.byteLength) {
+				throw new Error('WAForth streaming stdin counters are invalid.');
+			}
+			if (available > 0) {
+				const value = bytes[read % bytes.byteLength];
+				Atomics.store(control, 1, read + 1);
+				return value;
+			}
+			if (Atomics.load(control, 2) === 1) return -1;
+			self.postMessage({ type: 'stdin-request' });
+			Atomics.wait(control, 0, write);
+		}
+	};
+}
+
+function createKeyReader(stdin, channel) {
+	const sharedReader = createSharedKeyReader(channel);
+	if (sharedReader) return sharedReader;
 	const source = typeof stdin === 'string' ? stdin : '';
 	const bytes = Array.from(new TextEncoder().encode(source));
 	let index = 0;
@@ -52,13 +95,13 @@ function createKeyReader(stdin) {
 }
 
 self.onmessage = async (event) => {
-	const { baseUrl, code, stdin, log } = event.data || {};
+	const { baseUrl, code, stdin, stdinChannel, log } = event.data || {};
 	const decoder = new TextDecoder();
 	try {
 		if (log) console.log(`[wasm-idle:forth-worker] run start baseUrl=${baseUrl}`);
 		const { runtimePackage, WAForth } = await loadWaforth(baseUrl);
 		const forth = new WAForth();
-		forth.key = createKeyReader(stdin);
+		forth.key = createKeyReader(stdin, stdinChannel);
 		forth.onEmit = (byte) => postOutput(decoder.decode(Uint8Array.of(byte), { stream: true }));
 		await forth.load();
 		const result = forth.interpret(String(code || ''), true);

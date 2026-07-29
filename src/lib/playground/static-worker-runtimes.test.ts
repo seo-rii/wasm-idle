@@ -184,10 +184,11 @@ describe('static worker backed language sandboxes', () => {
 	});
 
 	it('reports prebuffered stdin for legacy runtimes and the non-isolated fallback', () => {
-		for (const Runtime of [Awk, ClojureScript, Forth, Gleam, Julia, Nim, Pascal]) {
+		for (const Runtime of [Awk, ClojureScript, Gleam, Julia, Nim, Pascal]) {
 			expect(new Runtime().stdinMode).toBe('prebuffered');
 		}
 		expect(new Bqn().stdinMode).toBe('prebuffered');
+		expect(new Forth().stdinMode).toBe('prebuffered');
 		expect(new J().stdinMode).toBe('prebuffered');
 		expect(new Janet().stdinMode).toBe('prebuffered');
 		expect(new Perl().stdinMode).toBe('prebuffered');
@@ -233,6 +234,7 @@ describe('static worker backed language sandboxes', () => {
 			const sandbox = createStreamingTestSandbox();
 			expect(sandbox.stdinMode).toBe('streaming');
 			expect(new Bqn().stdinMode).toBe('streaming');
+			expect(new Forth().stdinMode).toBe('streaming');
 			expect(new J().stdinMode).toBe('streaming');
 			expect(new Janet().stdinMode).toBe('streaming');
 			expect(new Perl().stdinMode).toBe('streaming');

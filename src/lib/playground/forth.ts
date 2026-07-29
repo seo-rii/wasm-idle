@@ -11,7 +11,7 @@ class Forth extends StaticWorkerRuntimeSandbox {
 			displayName: 'Forth',
 			defaultActivePath: 'main.fth',
 			stdin: {
-				mode: 'prebuffered',
+				mode: 'streaming',
 				sourceHintPattern: /\b(?:KEY|ACCEPT|REFILL)\b/i
 			},
 			resolveRuntimeAssets(runtimeAssets: string | PlaygroundRuntimeAssets, currentUrl) {

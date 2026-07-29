@@ -78,6 +78,7 @@ const forthStdinSource = `: READ-NUMBER ( -- n )
 ;
 
 : RUN
+  ." value?" CR
   READ-NUMBER 5 + ." main=" PRINT-UINT CR
 ;
 
@@ -346,7 +347,8 @@ describe('wasm-idle static worker language browser integrations', () => {
 					language: 'FORTH',
 					runTimeoutMs: Number(process.env.WASM_IDLE_FORTH_RUN_TIMEOUT_MS || '240000'),
 					source: forthStdinSource,
-					stdinText: '68\n'
+					stdinText: '68\n',
+					waitForOutputBeforeStdin: 'value?'
 				});
 				expect(summary.activeState.crossOriginIsolated).toBe(true);
 				expect(summary.activeState.sharedArrayBuffer).toBe(true);
