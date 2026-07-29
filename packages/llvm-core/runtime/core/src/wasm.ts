@@ -9,7 +9,15 @@ const isGzip = (bytes: Uint8Array) =>
 	bytes.byteLength >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b;
 
 export const DEFAULT_MAX_DECOMPRESSED_ASSET_BYTES = 128 * 1024 * 1024;
+export const DEFAULT_MAX_RUNTIME_JSON_BYTES = 4 * 1024 * 1024;
 const DEFAULT_DECOMPRESSION_BUFFER_BYTES = 64 * 1024;
+
+export interface RuntimeJsonFetchOptions {
+	fetchImpl?: typeof fetch;
+	label?: string;
+	maxBytes?: number;
+	signal?: AbortSignal;
+}
 
 async function readBoundedDecompressionStream(
 	stream: ReadableStream<Uint8Array>,
@@ -70,12 +78,22 @@ function readContentLength(response: Response) {
 	return Number.isSafeInteger(contentLength) ? contentLength : 0;
 }
 
+function runtimeAbortReason(signal: AbortSignal) {
+	return signal.reason ?? new DOMException('Runtime asset load aborted', 'AbortError');
+}
+
 async function readResponseBytes(
 	response: Response,
 	assetUrl: string | URL,
 	maxOutputBytes: number,
-	progress?: ProgressSink
+	progress?: ProgressSink,
+	signal?: AbortSignal
 ) {
+	if (signal?.aborted) {
+		const reason = runtimeAbortReason(signal);
+		await response.body?.cancel(reason).catch(() => {});
+		throw reason;
+	}
 	const contentLength = readContentLength(response);
 	if (contentLength > maxOutputBytes) {
 		await response.body?.cancel().catch(() => {});
@@ -83,6 +101,7 @@ async function readResponseBytes(
 	}
 	if (!response.body) {
 		const bytes = new Uint8Array(await response.arrayBuffer());
+		if (signal?.aborted) throw runtimeAbortReason(signal);
 		if (bytes.byteLength > maxOutputBytes) {
 			throw new Error(
 				`Runtime asset ${assetUrl} size exceeds the ${maxOutputBytes} byte limit`
@@ -93,18 +112,22 @@ async function readResponseBytes(
 	}
 
 	const reader = response.body.getReader();
+	const cancelOnAbort = () => {
+		void reader.cancel(runtimeAbortReason(signal!)).catch(() => {});
+	};
+	signal?.addEventListener('abort', cancelOnAbort, { once: true });
 	let bytes = new Uint8Array(
 		Math.min(maxOutputBytes, contentLength || DEFAULT_DECOMPRESSION_BUFFER_BYTES)
 	);
 	let receivedLength = 0;
 	try {
+		if (signal?.aborted) throw runtimeAbortReason(signal);
 		while (true) {
 			const { done, value } = await reader.read();
 			if (done) break;
 			if (!value) continue;
 			const nextLength = receivedLength + value.byteLength;
 			if (nextLength > maxOutputBytes) {
-				await reader.cancel().catch(() => {});
 				throw new Error(
 					`Runtime asset ${assetUrl} size exceeds the ${maxOutputBytes} byte limit`
 				);
@@ -122,9 +145,76 @@ async function readResponseBytes(
 			receivedLength = nextLength;
 			if (contentLength > 0) progress?.set?.(receivedLength / contentLength);
 		}
+		if (signal?.aborted) throw runtimeAbortReason(signal);
 		return bytes.subarray(0, receivedLength);
+	} catch (error) {
+		await reader.cancel(error).catch(() => {});
+		if (signal?.aborted) throw runtimeAbortReason(signal);
+		throw error;
 	} finally {
+		signal?.removeEventListener('abort', cancelOnAbort);
 		reader.releaseLock();
+	}
+}
+
+export async function fetchRuntimeJson(
+	url: string | URL,
+	options: RuntimeJsonFetchOptions = {}
+): Promise<unknown> {
+	const maxBytes = options.maxBytes ?? DEFAULT_MAX_RUNTIME_JSON_BYTES;
+	if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) {
+		throw new Error('Runtime JSON byte limit must be a positive safe integer');
+	}
+	const resolvedUrl = resolveRuntimeAssetUrl(url.toString());
+	if (resolvedUrl.username || resolvedUrl.password) {
+		throw new Error('Runtime JSON URLs must not include credentials');
+	}
+	const label = options.label?.trim() || 'runtime JSON';
+	const fetchImpl = options.fetchImpl ?? globalThis.fetch?.bind(globalThis);
+	if (!fetchImpl) throw new Error(`Fetch is unavailable while loading ${label}`);
+	if (options.signal?.aborted) throw runtimeAbortReason(options.signal);
+	const requestInit: RequestInit = {
+		cache: 'no-store',
+		credentials: 'omit',
+		redirect: 'error',
+		referrerPolicy: 'no-referrer'
+	};
+	if (options.signal) requestInit.signal = options.signal;
+	const response = await fetchImpl(resolvedUrl.toString(), requestInit);
+	if (response.url) {
+		let finalUrl: URL;
+		try {
+			finalUrl = new URL(response.url);
+		} catch {
+			await response.body?.cancel().catch(() => {});
+			throw new Error(`${label} returned an invalid final URL: ${response.url}`);
+		}
+		if (finalUrl.href !== resolvedUrl.href) {
+			await response.body?.cancel().catch(() => {});
+			throw new Error(`${label} returned an unexpected final URL: ${response.url}`);
+		}
+	}
+	if (!response.ok) {
+		await response.body?.cancel().catch(() => {});
+		throw new Error(`Failed to load ${label} from ${resolvedUrl}: ${response.status}`);
+	}
+	const bytes = await readResponseBytes(
+		response,
+		resolvedUrl,
+		maxBytes,
+		undefined,
+		options.signal
+	);
+	let source: string;
+	try {
+		source = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+	} catch (error) {
+		throw new Error(`${label} is not valid UTF-8`, { cause: error });
+	}
+	try {
+		return JSON.parse(source) as unknown;
+	} catch (error) {
+		throw new Error(`${label} is not valid JSON`, { cause: error });
 	}
 }
 

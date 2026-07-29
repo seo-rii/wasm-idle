@@ -2,7 +2,7 @@ import { zipSync } from 'fflate';
 import { gzipSync } from 'node:zlib';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { compile, decompressGzip, getInstance, readBuffer } from '../src/wasm.js';
+import { compile, decompressGzip, fetchRuntimeJson, getInstance, readBuffer } from '../src/wasm.js';
 
 const emptyWasm = Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0);
 
@@ -30,6 +30,137 @@ describe('WebAssembly loading utilities', () => {
 		);
 		await expect(compile('toString')).rejects.toThrow(/Runtime asset URL must be absolute/u);
 		await expect(compile('constructor')).rejects.toThrow(/Runtime asset URL must be absolute/u);
+		await expect(
+			fetchRuntimeJson('https://user:secret@cdn.test/manifest.json')
+		).rejects.toThrow(/Runtime JSON URLs must not include credentials/u);
+	});
+
+	it('loads bounded runtime JSON with least-authority request options', async () => {
+		const url = 'https://cdn.test/llvm/runtime-manifest.v1.json';
+		const body = new TextEncoder().encode(JSON.stringify({ manifestVersion: 1 }));
+		const response = new Response(body, {
+			headers: { 'Content-Length': String(body.byteLength) }
+		});
+		Object.defineProperty(response, 'url', { value: url });
+		const fetchImpl = vi.fn(async () => response);
+		const controller = new AbortController();
+
+		await expect(
+			fetchRuntimeJson(url, {
+				fetchImpl,
+				label: 'fixture runtime manifest',
+				maxBytes: body.byteLength,
+				signal: controller.signal
+			})
+		).resolves.toEqual({ manifestVersion: 1 });
+		expect(fetchImpl).toHaveBeenCalledWith(url, {
+			cache: 'no-store',
+			credentials: 'omit',
+			redirect: 'error',
+			referrerPolicy: 'no-referrer',
+			signal: controller.signal
+		});
+	});
+
+	it('cancels runtime JSON bodies that exceed declared or streamed limits', async () => {
+		const declaredUrl = 'https://cdn.test/llvm/declared-manifest.json';
+		let declaredCancelled = false;
+		const declaredResponse = new Response(
+			new ReadableStream({
+				pull() {
+					throw new Error('body should not be read');
+				},
+				cancel() {
+					declaredCancelled = true;
+				}
+			}),
+			{ headers: { 'Content-Length': '6' } }
+		);
+		await expect(
+			fetchRuntimeJson(declaredUrl, {
+				fetchImpl: async () => declaredResponse,
+				maxBytes: 5
+			})
+		).rejects.toThrow(`Runtime asset ${declaredUrl} size exceeds the 5 byte limit`);
+		expect(declaredCancelled).toBe(true);
+
+		const streamedUrl = 'https://cdn.test/llvm/streamed-manifest.json';
+		let streamedCancelled = false;
+		const streamedResponse = new Response(
+			new ReadableStream({
+				start(controller) {
+					controller.enqueue(Uint8Array.of(1, 2, 3));
+					controller.enqueue(Uint8Array.of(4, 5, 6));
+				},
+				cancel() {
+					streamedCancelled = true;
+				}
+			})
+		);
+		await expect(
+			fetchRuntimeJson(streamedUrl, {
+				fetchImpl: async () => streamedResponse,
+				maxBytes: 5
+			})
+		).rejects.toThrow(`Runtime asset ${streamedUrl} size exceeds the 5 byte limit`);
+		expect(streamedCancelled).toBe(true);
+	});
+
+	it('cancels an active runtime JSON reader with the caller signal', async () => {
+		const url = 'https://cdn.test/llvm/cancelled-manifest.json';
+		let cancelled = false;
+		const response = new Response(
+			new ReadableStream({
+				cancel() {
+					cancelled = true;
+				}
+			})
+		);
+		const fetchImpl = vi.fn(async () => response);
+		const controller = new AbortController();
+		const reason = new Error('stop manifest load');
+		const pending = fetchRuntimeJson(url, {
+			fetchImpl,
+			signal: controller.signal
+		});
+
+		await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledOnce());
+		controller.abort(reason);
+
+		await expect(pending).rejects.toBe(reason);
+		expect(cancelled).toBe(true);
+	});
+
+	it('rejects substituted, invalid UTF-8, and malformed runtime JSON', async () => {
+		const url = 'https://cdn.test/llvm/runtime-manifest.json';
+		let substitutedCancelled = false;
+		const substituted = new Response(
+			new ReadableStream({
+				cancel() {
+					substitutedCancelled = true;
+				}
+			})
+		);
+		Object.defineProperty(substituted, 'url', {
+			value: 'https://mirror.test/llvm/runtime-manifest.json'
+		});
+		await expect(fetchRuntimeJson(url, { fetchImpl: async () => substituted })).rejects.toThrow(
+			/returned an unexpected final URL/u
+		);
+		expect(substitutedCancelled).toBe(true);
+
+		await expect(
+			fetchRuntimeJson(url, {
+				fetchImpl: async () => new Response(Uint8Array.of(0xc3, 0x28)),
+				label: 'fixture manifest'
+			})
+		).rejects.toThrow('fixture manifest is not valid UTF-8');
+		await expect(
+			fetchRuntimeJson(url, {
+				fetchImpl: async () => new Response('{'),
+				label: 'fixture manifest'
+			})
+		).rejects.toThrow('fixture manifest is not valid JSON');
 	});
 
 	it('extracts the first file from a zip response and reports completion', async () => {
@@ -358,9 +489,7 @@ describe('WebAssembly loading utilities', () => {
 			.mockResolvedValueOnce(new Response(Uint8Array.of(7, 8, 9)));
 		vi.stubGlobal('fetch', fetchMock);
 
-		await expect(readBuffer(url)).rejects.toThrow(
-			`Failed to load runtime asset ${url}: 503`
-		);
+		await expect(readBuffer(url)).rejects.toThrow(`Failed to load runtime asset ${url}: 503`);
 		expect(cancelled).toBe(true);
 		await expect(readBuffer(url)).resolves.toEqual(Uint8Array.of(7, 8, 9));
 		expect(fetchMock).toHaveBeenCalledTimes(2);

@@ -67,12 +67,40 @@ describe('runtime manifest', () => {
 		await expect(
 			loadRuntimeManifest('https://cdn.example.com/clang/v1/manifest.json', fetchImpl)
 		).resolves.toEqual(parseRuntimeManifest(manifestValue));
-		expect(fetchImpl).toHaveBeenCalledWith('https://cdn.example.com/clang/v1/manifest.json');
+		expect(fetchImpl).toHaveBeenCalledWith('https://cdn.example.com/clang/v1/manifest.json', {
+			cache: 'no-store',
+			credentials: 'omit',
+			redirect: 'error',
+			referrerPolicy: 'no-referrer'
+		});
 		await expect(loadRuntimeManifest(undefined as never, fetchImpl)).rejects.toThrow(
 			'wasm-clang runtime manifest URL is required'
 		);
 		await expect(
 			loadRuntimeManifest('file:///package/runtime-manifest.json', fetchImpl)
 		).rejects.toThrow('wasm-clang runtime manifest URL must use HTTP(S)');
+	});
+
+	it('rejects an oversized manifest before parsing its body', async () => {
+		let cancelled = false;
+		const fetchImpl = vi.fn(
+			async () =>
+				new Response(
+					new ReadableStream({
+						pull() {
+							throw new Error('body should not be read');
+						},
+						cancel() {
+							cancelled = true;
+						}
+					}),
+					{ headers: { 'Content-Length': String(4 * 1024 * 1024 + 1) } }
+				)
+		);
+
+		await expect(
+			loadRuntimeManifest('https://cdn.example.com/clang/v1/manifest.json', fetchImpl)
+		).rejects.toThrow(/size exceeds the 4194304 byte limit/u);
+		expect(cancelled).toBe(true);
 	});
 });

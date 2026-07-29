@@ -9,7 +9,7 @@ import {
 	type BrowserExecutionOptions,
 	type RuntimeManifestV1
 } from '../../clang/src/index.js';
-import { compile, readBuffer } from '../../core/src/wasm.js';
+import { compile, fetchRuntimeJson, readBuffer } from '../../core/src/wasm.js';
 import untar from '../../core/src/tar.js';
 
 const COBOL_MANIFEST_NAME = 'runtime-manifest.v1.json';
@@ -223,11 +223,12 @@ export async function loadCobolRuntimeManifest(
 	fetchImpl: typeof fetch = fetch
 ): Promise<CobolRuntimeManifestV1> {
 	const url = resolveHostedRuntimeUrl(manifestUrl, 'wasm-cobol runtime manifest URL');
-	const response = await fetchImpl(url.toString());
-	if (!response.ok) {
-		throw new Error(`failed to load wasm-cobol runtime manifest: ${response.status}`);
-	}
-	return parseCobolRuntimeManifest(await response.json());
+	return parseCobolRuntimeManifest(
+		await fetchRuntimeJson(url, {
+			fetchImpl,
+			label: 'wasm-cobol runtime manifest'
+		})
+	);
 }
 
 function emitProgress(

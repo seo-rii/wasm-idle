@@ -12,7 +12,8 @@ const calls = vi.hoisted(() => ({
 	runtimeOptions: [] as Array<Record<string, unknown>>
 }));
 
-vi.mock('../../core/src/wasm.js', () => ({
+vi.mock('../../core/src/wasm.js', async (importOriginal) => ({
+	...(await importOriginal<typeof import('../../core/src/wasm.js')>()),
 	compile: vi.fn(async () => new WebAssembly.Module(emptyWasm)),
 	readBuffer: vi.fn(async () => new Uint8Array())
 }));
@@ -123,6 +124,7 @@ vi.mock('../../clang/src/index.js', () => {
 import {
 	COBOL_LLVM_PROFILE,
 	createCobolCompiler,
+	loadCobolRuntimeManifest,
 	parseCobolRuntimeManifest,
 	resolveCobolRuntimeAssetUrls
 } from '../src/index.js';
@@ -187,6 +189,25 @@ describe('GnuCOBOL llvm-core runtime', () => {
 		expect(() => parseCobolRuntimeManifest({ ...manifest, manifestVersion: 2 })).toThrow(
 			'manifestVersion'
 		);
+	});
+
+	it('loads the COBOL manifest through the bounded shared JSON reader', async () => {
+		const fetchImpl = vi.fn(
+			async () =>
+				new Response(JSON.stringify(manifest), {
+					status: 200,
+					headers: { 'content-type': 'application/json' }
+				})
+		);
+		const url = 'https://cdn.test/cobol/runtime-manifest.v1.json';
+
+		await expect(loadCobolRuntimeManifest(url, fetchImpl)).resolves.toEqual(manifest);
+		expect(fetchImpl).toHaveBeenCalledWith(url, {
+			cache: 'no-store',
+			credentials: 'omit',
+			redirect: 'error',
+			referrerPolicy: 'no-referrer'
+		});
 	});
 
 	it('translates real COBOL output files, compiles C, and links libcob with GMP', async () => {

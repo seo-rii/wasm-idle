@@ -1,3 +1,4 @@
+import { fetchRuntimeJson } from '../../core/src/wasm.js';
 import { resolveHostedRuntimeUrl, runtimeManifestUrl } from './url.js';
 import type {
 	RuntimeClangdConfig,
@@ -158,13 +159,12 @@ export async function loadRuntimeManifest(
 	fetchImpl: typeof fetch = fetch
 ): Promise<RuntimeManifestV1> {
 	const resolvedUrl = resolveHostedRuntimeUrl(manifestUrl, 'wasm-clang runtime manifest URL');
-	const response = await fetchImpl(resolvedUrl.toString());
-	if (!response.ok) {
-		throw new Error(
-			`failed to load wasm-clang runtime manifest from ${resolvedUrl}: ${response.status}`
-		);
-	}
-	return parseRuntimeManifest(await response.json());
+	return parseRuntimeManifest(
+		await fetchRuntimeJson(resolvedUrl, {
+			fetchImpl,
+			label: 'wasm-clang runtime manifest'
+		})
+	);
 }
 
 export function resolveRuntimeManifestUrl(baseUrl: string | URL) {

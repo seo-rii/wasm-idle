@@ -14,7 +14,16 @@ export { JsonStream } from './json-stream.js';
 export { default as MemFS, type MemFsOptions } from './memfs.js';
 export { default as Memory } from './memory.js';
 export { default as untar, type TarFileSystem } from './tar.js';
-export { compile, decompressGzip, getInstance, readBuffer, type ProgressSink } from './wasm.js';
+export {
+	DEFAULT_MAX_RUNTIME_JSON_BYTES,
+	compile,
+	decompressGzip,
+	fetchRuntimeJson,
+	getInstance,
+	readBuffer,
+	type ProgressSink,
+	type RuntimeJsonFetchOptions
+} from './wasm.js';
 export {
 	installWasiExtractionQuota,
 	type WasiExtractionQuota,

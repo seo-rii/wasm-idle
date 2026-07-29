@@ -351,7 +351,13 @@ describe('public wasm-clang API contract', () => {
 		});
 
 		expect(fetchImpl).toHaveBeenCalledWith(
-			'https://cdn.example.com/clang/v2/custom-manifest.json'
+			'https://cdn.example.com/clang/v2/custom-manifest.json',
+			{
+				cache: 'no-store',
+				credentials: 'omit',
+				redirect: 'error',
+				referrerPolicy: 'no-referrer'
+			}
 		);
 		expect(runtimeState.instances[0]?.options).toEqual(
 			expect.objectContaining({
