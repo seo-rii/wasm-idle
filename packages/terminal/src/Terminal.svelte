@@ -1,10 +1,12 @@
 <script lang="ts">
 	import {
+		RuntimeProgressController,
 		createRuntimeAssetsKey,
 		phaseProgress,
 		progressBandsForLanguage,
 		type DebugCommand,
-		type DebugSessionEvent
+		type DebugSessionEvent,
+		type ProgressLike
 	} from '@wasm-idle/core';
 	import { onMount } from 'svelte';
 	import '@xterm/xterm/css/xterm.css';
@@ -64,7 +66,9 @@
 		plugin = $state(),
 		ll: string | null = null,
 		loadedRuntimeAssetsKey: string | undefined = undefined,
-		stopRequested = false;
+		stopRequested = false,
+		progressLifecycleCounter = 0;
+	const progressController = new RuntimeProgressController();
 
 	function writeTerminalOutput(text: string) {
 		if (!text) return;
@@ -149,6 +153,23 @@
 				finish = true;
 				if (term) term.options.cursorBlink = false;
 			});
+	}
+
+	async function withProgressLifecycle<T>(
+		language: string,
+		progress: ProgressLike | undefined,
+		operation: (progress: ProgressLike | undefined) => Promise<T>
+	) {
+		const lifecycle = progressController.begin(
+			`${language}:${++progressLifecycleCounter}`,
+			progress,
+			`Loading ${language} runtime`
+		);
+		try {
+			return await operation(lifecycle.progress);
+		} finally {
+			lifecycle.end();
+		}
 	}
 
 	async function initTerm(blink = true) {
@@ -264,33 +285,34 @@
 			args: string[] = [],
 			options: TerminalExecutionOptions = {}
 		) {
-			prog?.set?.(0, `Loading ${language} runtime`);
-			const progressBands = progressBandsForLanguage(language);
-			const loadProgress = phaseProgress(
-				prog,
-				progressBands.load[0],
-				progressBands.load[1],
-				`Loading ${language} runtime`
-			);
-			const prepareProgress = phaseProgress(
-				prog,
-				progressBands.prepare[0],
-				progressBands.prepare[1],
-				`Preparing ${language} program`
-			);
-			await Promise.all([
-				initSandbox(language).then(() =>
-					sandbox.load(code, log, args, options, loadProgress)
-				),
-				initTerm(false)
-			]);
-			prepareProgress?.set?.(0, `Preparing ${language} program`);
-			const prepared = !!(await runSandbox(
-				sandbox.run(code, true, log, prepareProgress, args, options),
-				false
-			));
-			if (prepared) prepareProgress?.set?.(1, `${language} runtime ready`);
-			return prepared;
+			return await withProgressLifecycle(language, prog, async (runProgress) => {
+				const progressBands = progressBandsForLanguage(language);
+				const loadProgress = phaseProgress(
+					runProgress,
+					progressBands.load[0],
+					progressBands.load[1],
+					`Loading ${language} runtime`
+				);
+				const prepareProgress = phaseProgress(
+					runProgress,
+					progressBands.prepare[0],
+					progressBands.prepare[1],
+					`Preparing ${language} program`
+				);
+				await Promise.all([
+					initSandbox(language).then(() =>
+						sandbox.load(code, log, args, options, loadProgress)
+					),
+					initTerm(false)
+				]);
+				prepareProgress?.set?.(0, `Preparing ${language} program`);
+				const prepared = !!(await runSandbox(
+					sandbox.run(code, true, log, prepareProgress, args, options),
+					false
+				));
+				if (prepared) prepareProgress?.set?.(1, `${language} runtime ready`);
+				return prepared;
+			});
 		},
 		async run(
 			language: string,
@@ -300,27 +322,37 @@
 			args: string[] = [],
 			options: TerminalExecutionOptions = {}
 		) {
-			pendingDebugBreakpoints.clear();
-			for (const { sourcePath, lines } of options.sourceBreakpoints || []) {
-				pendingDebugBreakpoints.set(sourcePath, [...lines]);
-			}
-			await Promise.all([
-				initSandbox(language).then(() => sandbox.load(code, log, args, options, prog)),
-				initTerm()
-			]);
-			const executionOptions = {
-				...options,
-				sourceBreakpoints: Array.from(pendingDebugBreakpoints, ([sourcePath, lines]) => ({
-					sourcePath,
-					lines: [...lines]
-				}))
-			};
-			sandboxAcceptingInput = true;
-			flushPendingSandboxInput();
-			return await runSandbox(sandbox.run(code, false, log, prog, args, executionOptions));
+			return await withProgressLifecycle(language, prog, async (runProgress) => {
+				pendingDebugBreakpoints.clear();
+				for (const { sourcePath, lines } of options.sourceBreakpoints || []) {
+					pendingDebugBreakpoints.set(sourcePath, [...lines]);
+				}
+				await Promise.all([
+					initSandbox(language).then(() =>
+						sandbox.load(code, log, args, options, runProgress)
+					),
+					initTerm()
+				]);
+				const executionOptions = {
+					...options,
+					sourceBreakpoints: Array.from(
+						pendingDebugBreakpoints,
+						([sourcePath, lines]) => ({
+							sourcePath,
+							lines: [...lines]
+						})
+					)
+				};
+				sandboxAcceptingInput = true;
+				flushPendingSandboxInput();
+				return await runSandbox(
+					sandbox.run(code, false, log, runProgress, args, executionOptions)
+				);
+			});
 		},
 		async destroy() {
 			await wait();
+			progressController.invalidate();
 			sandboxAcceptingInput = false;
 			pendingSandboxEof = false;
 			term?.dispose();
@@ -329,6 +361,7 @@
 		async restartRuntime() {
 			await wait();
 			if (!sandbox) return;
+			progressController.invalidate();
 			sandboxAcceptingInput = false;
 			pendingSandboxInput = [];
 			pendingSandboxEof = false;
@@ -342,6 +375,7 @@
 		},
 		async stop() {
 			await wait();
+			progressController.invalidate();
 			stopRequested = true;
 			finish = true;
 			sandboxAcceptingInput = false;
@@ -531,6 +565,7 @@
 		});
 
 		return async () => {
+			progressController.invalidate();
 			term?.dispose();
 			if (sandbox) await sandbox.clear();
 		};

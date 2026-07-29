@@ -47,13 +47,13 @@ describe('Terminal source', () => {
 		expect(source).toMatch(/stopRequested = false;/);
 		expect(source).toMatch(/if \(stopRequested\) return false;/);
 		expect(source).toMatch(
-			/async stop\(\) \{\s+await wait\(\);\s+stopRequested = true;\s+finish = true;\s+sandboxAcceptingInput = false;\s+pendingSandboxEof = false;\s+if \(sandbox\?\.kill\) await sandbox\.kill\(\);\s+else await sandbox\?\.terminate\?\.\(\);\s+\}/s
+			/async stop\(\) \{\s+await wait\(\);\s+progressController\.invalidate\(\);\s+stopRequested = true;\s+finish = true;\s+sandboxAcceptingInput = false;\s+pendingSandboxEof = false;\s+if \(sandbox\?\.kill\) await sandbox\.kill\(\);\s+else await sandbox\?\.terminate\?\.\(\);\s+\}/s
 		);
 	});
 
 	it('exposes a runtime restart that clears queued input before restarting the sandbox', () => {
 		expect(source).toMatch(
-			/async restartRuntime\(\) \{\s+await wait\(\);\s+if \(!sandbox\) return;\s+sandboxAcceptingInput = false;\s+pendingSandboxInput = \[\];\s+pendingSandboxEof = false;\s+input = '';\s+inputCursor = 0;\s+finish = true;\s+stopRequested = false;\s+tc \+= 1;\s+if \(sandbox\.restart\) await sandbox\.restart\(\);\s+else await sandbox\.clear\(\);\s+\}/s
+			/async restartRuntime\(\) \{\s+await wait\(\);\s+if \(!sandbox\) return;\s+progressController\.invalidate\(\);\s+sandboxAcceptingInput = false;\s+pendingSandboxInput = \[\];\s+pendingSandboxEof = false;\s+input = '';\s+inputCursor = 0;\s+finish = true;\s+stopRequested = false;\s+tc \+= 1;\s+if \(sandbox\.restart\) await sandbox\.restart\(\);\s+else await sandbox\.clear\(\);\s+\}/s
 		);
 	});
 
@@ -186,16 +186,23 @@ describe('Terminal source', () => {
 			/async write\(input: string\) \{\s+await waitForInput\(\);\s+if \(!input\) return;\s+applyPastedText\(input\);/s
 		);
 		expect(source).toMatch(
-			/sandboxAcceptingInput = true;\s+flushPendingSandboxInput\(\);\s+return await runSandbox\(sandbox\.run\(code, false, log, prog, args, executionOptions\)\);/s
+			/sandboxAcceptingInput = true;\s+flushPendingSandboxInput\(\);\s+return await runSandbox\(\s+sandbox\.run\(code, false, log, runProgress, args, executionOptions\)\s+\);/s
 		);
 		expect(source).toMatch(/\.finally\(\(\) => \{\s+sandboxAcceptingInput = false;/s);
 	});
 
 	it('uses the same bounded load and prepare progress phases for every language', () => {
-		expect(source).toMatch(/prog\?\.set\?\.\(0, `Loading \$\{language\} runtime`\);/);
+		expect(source).toContain('const progressController = new RuntimeProgressController();');
+		expect(source).toMatch(
+			/progressController\.begin\(\s+`\$\{language\}:\$\{\+\+progressLifecycleCounter\}`,\s+progress,\s+`Loading \$\{language\} runtime`/s
+		);
+		expect(source).toMatch(/finally \{\s+lifecycle\.end\(\);\s+\}/s);
+		expect(source).toMatch(
+			/return async \(\) => \{\s+progressController\.invalidate\(\);\s+term\?\.dispose\(\);/s
+		);
 		expect(source).toMatch(/const progressBands = progressBandsForLanguage\(language\);/);
 		expect(source).toMatch(
-			/phaseProgress\(\s+prog,\s+progressBands\.load\[0\],\s+progressBands\.load\[1\],\s+`Loading \$\{language\} runtime`/s
+			/phaseProgress\(\s+runProgress,\s+progressBands\.load\[0\],\s+progressBands\.load\[1\],\s+`Loading \$\{language\} runtime`/s
 		);
 		expect(source).toMatch(/progressBands\.prepare\[0\]/);
 		expect(source).toMatch(/progressBands\.prepare\[1\]/);
