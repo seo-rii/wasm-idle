@@ -3,7 +3,7 @@
   "runtime": "pas2js",
   "pas2jsVersion": "3.2.1",
   "pas2jsCommit": "9ac46614dc82",
-  "fingerprint": "2e1fae07df7c7c09",
+  "fingerprint": "5a7407110eb7207d",
   "files": [
     "compiler.js",
     "rtl.js",

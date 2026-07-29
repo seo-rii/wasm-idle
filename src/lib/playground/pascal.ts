@@ -10,7 +10,7 @@ class Pascal extends StaticWorkerRuntimeSandbox {
 			languageId: 'PASCAL',
 			displayName: 'Pascal',
 			defaultActivePath: 'main.pas',
-			stdin: { mode: 'prebuffered', sourceHintPattern: /\bReadLn\s*\(/i },
+			stdin: { mode: 'streaming', sourceHintPattern: /\bReadLn\s*\(/i },
 			resolveRuntimeAssets(runtimeAssets: string | PlaygroundRuntimeAssets, currentUrl) {
 				return resolvePascalRuntimeAssetConfig(runtimeAssets, currentUrl);
 			}

@@ -33,7 +33,75 @@ async function importRuntimeScript(baseUrl, path) {
 	}
 }
 
-function createLineReader(stdin) {
+function createSharedByteReader(channel) {
+	if (channel === undefined) return null;
+	if (
+		channel?.protocol !== 'wasm-idle-static-stdin-ring' ||
+		channel?.protocolVersion !== 1 ||
+		channel?.controlBytes !== 16 ||
+		!Number.isSafeInteger(channel?.capacity) ||
+		channel.capacity <= 0 ||
+		typeof SharedArrayBuffer !== 'function' ||
+		!(channel.buffer instanceof SharedArrayBuffer) ||
+		channel.buffer.byteLength !== channel.controlBytes + channel.capacity ||
+		typeof Atomics.wait !== 'function'
+	) {
+		throw new Error('Invalid pas2js streaming stdin channel.');
+	}
+
+	const control = new Int32Array(channel.buffer, 0, 4);
+	const bytes = new Uint8Array(channel.buffer, channel.controlBytes, channel.capacity);
+	return () => {
+		while (true) {
+			if (Atomics.load(control, 3) === 1) {
+				throw new Error('pas2js streaming stdin was cancelled.');
+			}
+			const write = Atomics.load(control, 0);
+			const read = Atomics.load(control, 1);
+			const available = write - read;
+			if (available < 0 || available > bytes.byteLength) {
+				throw new Error('pas2js streaming stdin counters are invalid.');
+			}
+			if (available > 0) {
+				const value = bytes[read % bytes.byteLength];
+				Atomics.store(control, 1, read + 1);
+				return value;
+			}
+			if (Atomics.load(control, 2) === 1) return null;
+			self.postMessage({ type: 'stdin-request' });
+			Atomics.wait(control, 0, write);
+		}
+	};
+}
+
+function createSharedLineReader(channel) {
+	const readByte = createSharedByteReader(channel);
+	if (!readByte) return null;
+	const decoder = new TextDecoder();
+	let skipLineFeed = false;
+	return () => {
+		const bytes = [];
+		while (true) {
+			const value = readByte();
+			if (value === null) return decoder.decode(Uint8Array.from(bytes));
+			if (skipLineFeed) {
+				skipLineFeed = false;
+				if (value === 10) continue;
+			}
+			if (value === 10) break;
+			if (value === 13) {
+				skipLineFeed = true;
+				break;
+			}
+			bytes.push(value);
+		}
+		return decoder.decode(Uint8Array.from(bytes));
+	};
+}
+
+function createLineReader(stdin, channel) {
+	const sharedReader = createSharedLineReader(channel);
+	if (sharedReader) return sharedReader;
 	const source = typeof stdin === 'string' ? stdin : '';
 	const lines = source.length ? source.split(/\r\n|\n|\r/) : [];
 	let index = 0;
@@ -56,8 +124,8 @@ async function loadCompiler(baseUrl) {
 	return globalThis.__wasmIdlePascalCompiler;
 }
 
-function runGeneratedJavaScript(source, stdin) {
-	const readLine = createLineReader(stdin);
+function runGeneratedJavaScript(source, stdin, stdinChannel) {
+	const readLine = createLineReader(stdin, stdinChannel);
 	const previousConsole = globalThis.console;
 	const previousRead = globalThis.__wasm_idle_pascal_read;
 	globalThis.console = {
@@ -80,14 +148,14 @@ function runGeneratedJavaScript(source, stdin) {
 }
 
 self.onmessage = async (event) => {
-	const { baseUrl, code, stdin, log } = event.data || {};
+	const { baseUrl, code, stdin, stdinChannel, log } = event.data || {};
 	try {
 		if (log) console.log(`[wasm-idle:pascal-worker] run start baseUrl=${baseUrl}`);
 		const compiler = await loadCompiler(baseUrl);
 		compiler.setFile('system.pas', await fetchText(assetUrl(baseUrl, 'system.pas')));
 		compiler.setFile('rtl.js', await fetchText(assetUrl(baseUrl, 'rtl.js')));
 		const generated = compiler.compile(String(code || ''));
-		runGeneratedJavaScript(generated, stdin);
+		runGeneratedJavaScript(generated, stdin, stdinChannel);
 		if (log) console.log('[wasm-idle:pascal-worker] run settled');
 		self.postMessage({ results: true });
 	} catch (error) {

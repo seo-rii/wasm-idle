@@ -51,6 +51,7 @@ var
   N: Integer;
 
 begin
+  WriteLn('value?');
   ReadLn(N);
   WriteLn('main=', N + 5);
 end.
@@ -297,7 +298,8 @@ describe('wasm-idle static worker language browser integrations', () => {
 					language: 'PASCAL',
 					runTimeoutMs: Number(process.env.WASM_IDLE_PASCAL_RUN_TIMEOUT_MS || '240000'),
 					source: pascalStdinSource,
-					stdinText: '68\n'
+					stdinText: '68\n',
+					waitForOutputBeforeStdin: 'value?'
 				});
 				expect(summary.activeState.crossOriginIsolated).toBe(true);
 				expect(summary.activeState.sharedArrayBuffer).toBe(true);
