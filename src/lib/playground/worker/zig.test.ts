@@ -346,4 +346,67 @@ describe('Zig worker', () => {
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ error: 'compile log\n' });
 		expect(shim.state.runCount).toBe(0);
 	});
+
+	it('rejects a ZIP entry whose declared output exceeds the expanded-byte budget', async () => {
+		const archive = zipSync({ 'std/large.zig': new Uint8Array(5) });
+		const { loadStdDirectory } = await import('./zig');
+
+		await expect(
+			loadStdDirectory(archive, 'https://assets.example.test/std.zip', {
+				maxExpandedBytes: 4,
+				maxFiles: 10
+			})
+		).rejects.toThrow('Zig standard library archive exceeds the 4 byte expanded-size limit');
+	});
+
+	it('rejects a ZIP archive that exceeds the standard-library file-count budget', async () => {
+		const archive = zipSync({
+			'std/a.zig': new Uint8Array([1]),
+			'std/b.zig': new Uint8Array([2])
+		});
+		const { loadStdDirectory } = await import('./zig');
+
+		await expect(
+			loadStdDirectory(archive, 'https://assets.example.test/std.zip', {
+				maxExpandedBytes: 16,
+				maxFiles: 1
+			})
+		).rejects.toThrow('Zig standard library archive exceeds the 1 file limit');
+	});
+
+	it('rejects unsafe ZIP paths instead of normalizing traversal', async () => {
+		const archive = zipSync({ 'std/../escape.zig': new Uint8Array([1]) });
+		const { loadStdDirectory } = await import('./zig');
+
+		await expect(
+			loadStdDirectory(archive, 'https://assets.example.test/std.zip')
+		).rejects.toThrow('Zig standard library archive has an unsafe path: std/../escape.zig');
+	});
+
+	it('rejects ZIP file and directory path collisions', async () => {
+		const archive = zipSync({
+			'std/collision': new Uint8Array([1]),
+			'std/collision/nested.zig': new Uint8Array([2])
+		});
+		const { loadStdDirectory } = await import('./zig');
+
+		await expect(
+			loadStdDirectory(archive, 'https://assets.example.test/std.zip')
+		).rejects.toThrow('Zig standard library archive path collision: std/collision/nested.zig');
+	});
+
+	it('bounds gzip-expanded TAR bytes before materializing the standard library', async () => {
+		const { loadStdDirectory } = await import('./zig');
+
+		await expect(
+			loadStdDirectory(
+				new Uint8Array(stdlibTarGzip),
+				'https://assets.example.test/std.tar.gz',
+				{
+					maxExpandedBytes: 512,
+					maxFiles: 10
+				}
+			)
+		).rejects.toThrow('512 byte limit');
+	});
 });
