@@ -53,6 +53,7 @@ export interface RuntimeAssetConfig {
 
 export interface RustRuntimeAssetConfig {
 	compilerUrl?: string;
+	manifestUrl?: string;
 	debugModuleUrl?: string;
 }
 
@@ -63,6 +64,7 @@ export interface DebugRuntimeAssetConfig {
 
 export interface GoRuntimeAssetConfig {
 	compilerUrl?: string;
+	manifestUrl?: string;
 }
 
 export interface DRuntimeAssetConfig {

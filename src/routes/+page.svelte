@@ -15,41 +15,11 @@
 	import { replaceState } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { SvelteURL } from 'svelte/reactivity';
-	import type { PlaygroundRuntimeAssets } from '$lib/playground/assets';
+	import {
+		createApplicationAssetResolver,
+		createApplicationRuntimeAssets
+	} from '$lib/playground/applicationAssets';
 	import { createLoadingProgressController } from '$lib/playground/loadingProgress';
-	import { WASM_AWK_ASSET_VERSION } from '$lib/playground/wasmAwkVersion';
-	import { WASM_BASH_ASSET_VERSION } from '$lib/playground/wasmBashVersion';
-	import { WASM_CLOJURESCRIPT_ASSET_VERSION } from '$lib/playground/wasmClojureScriptVersion';
-	import { WASM_BQN_ASSET_VERSION } from '$lib/playground/wasmBqnVersion';
-	import { WASM_D_ASSET_VERSION } from '$lib/playground/wasmDVersion';
-	import { WASM_DOTNET_ASSET_VERSION } from '$lib/playground/wasmDotnetVersion';
-	import { WASM_ELIXIR_ASSET_VERSION } from '$lib/playground/wasmElixirVersion';
-	import { WASM_FORTRAN_ASSET_VERSION } from '$lib/playground/wasmFortranVersion';
-	import { WASM_FORTH_ASSET_VERSION } from '$lib/playground/wasmForthVersion';
-	import { WASM_GO_ASSET_VERSION } from '$lib/playground/wasmGoVersion';
-	import { WASM_HASKELL_ASSET_VERSION } from '$lib/playground/wasmHaskellVersion';
-	import { WASM_J_ASSET_VERSION } from '$lib/playground/wasmJVersion';
-	import { WASM_JANET_ASSET_VERSION } from '$lib/playground/wasmJanetVersion';
-	import { WASM_JULIA_ASSET_VERSION } from '$lib/playground/wasmJuliaVersion';
-	import { WASM_NIM_ASSET_VERSION } from '$lib/playground/wasmNimVersion';
-	import { WASM_LUA_ASSET_VERSION } from '$lib/playground/wasmLuaVersion';
-	import { WASM_LISP_ASSET_VERSION } from '$lib/playground/wasmLispVersion';
-	import { WASM_OBJECTIVEC_ASSET_VERSION } from '$lib/playground/wasmObjectiveCVersion';
-	import { WASM_OCAML_ASSET_VERSION } from '$lib/playground/wasmOcamlVersion';
-	import { WASM_OCTAVE_ASSET_VERSION } from '$lib/playground/wasmOctaveVersion';
-	import { WASM_PROLOG_ASSET_VERSION } from '$lib/playground/wasmPrologVersion';
-	import { WASM_GLEAM_ASSET_VERSION } from '$lib/playground/wasmGleamVersion';
-	import { WASM_PASCAL_ASSET_VERSION } from '$lib/playground/wasmPascalVersion';
-	import { WASM_PERL_ASSET_VERSION } from '$lib/playground/wasmPerlVersion';
-	import { WASM_R_ASSET_VERSION } from '$lib/playground/wasmRVersion';
-	import { WASM_RUST_ASSET_VERSION } from '$lib/playground/wasmRustVersion';
-	import { WASM_SWIFT_ASSET_VERSION } from '$lib/playground/wasmSwiftVersion';
-	import { WASM_TCL_ASSET_VERSION } from '$lib/playground/wasmTclVersion';
-	import { WASM_TINYGO_ASSET_VERSION } from '$lib/playground/wasmTinyGoVersion';
-	import { WASM_TYPESCRIPT_ASSET_VERSION } from '$lib/playground/wasmTypeScriptVersion';
-	import { WASM_WAT_ASSET_VERSION } from '$lib/playground/wasmWatVersion';
-	import { WASM_ZIG_ASSET_VERSION } from '$lib/playground/wasmZigVersion';
-	import { STATIC_RUNTIME_MODULE_VERSION } from '$lib/playground/staticRuntimeModuleVersion';
 	import type {
 		CompilerDiagnostic,
 		GoTarget,
@@ -153,278 +123,16 @@
 	let path = $derived(
 		page.url.pathname.endsWith('/') ? page.url.pathname.slice(0, -1) : page.url.pathname
 	);
-	let clangdBaseUrl = $derived(path ? `${path}/clangd` : '/clangd');
-	let runtimeAssets = $derived.by<PlaygroundRuntimeAssets>(() => ({
-		rootUrl: path,
+	const applicationRootUrl = base;
+	const resolveApplicationAsset = createApplicationAssetResolver(applicationRootUrl);
+	let clangdBaseUrl = $derived(resolveApplicationAsset('clangd/'));
+	let runtimeAssets = $derived.by(() => ({
+		...createApplicationRuntimeAssets(applicationRootUrl),
 		debug: {
 			baseUrl: path ? `${path}/wasm-debug/` : '/wasm-debug/',
 			manifestUrl: path
 				? `${path}/wasm-debug/runtime-manifest.v2.json`
 				: '/wasm-debug/runtime-manifest.v2.json'
-		},
-		assemblyscript: {
-			moduleUrl: path
-				? `${path}/wasm-assemblyscript/runtime.mjs?v=${STATIC_RUNTIME_MODULE_VERSION}`
-				: `/wasm-assemblyscript/runtime.mjs?v=${STATIC_RUNTIME_MODULE_VERSION}`
-		},
-		duckdb: {
-			moduleUrl: path
-				? `${path}/wasm-duckdb/runtime.mjs?v=${STATIC_RUNTIME_MODULE_VERSION}`
-				: `/wasm-duckdb/runtime.mjs?v=${STATIC_RUNTIME_MODULE_VERSION}`
-		},
-		php: {
-			moduleUrl: path
-				? `${path}/wasm-php/runtime.mjs?v=${STATIC_RUNTIME_MODULE_VERSION}`
-				: `/wasm-php/runtime.mjs?v=${STATIC_RUNTIME_MODULE_VERSION}`
-		},
-		rust: {
-			compilerUrl: path
-				? `${path}/wasm-rust/index.js?v=${WASM_RUST_ASSET_VERSION}`
-				: `/wasm-rust/index.js?v=${WASM_RUST_ASSET_VERSION}`
-		},
-		go: {
-			compilerUrl: path
-				? `${path}/wasm-go/index.js?v=${WASM_GO_ASSET_VERSION}`
-				: `/wasm-go/index.js?v=${WASM_GO_ASSET_VERSION}`
-		},
-		d: {
-			moduleUrl: path
-				? `${path}/wasm-d/index.js?v=${WASM_D_ASSET_VERSION}`
-				: `/wasm-d/index.js?v=${WASM_D_ASSET_VERSION}`
-		},
-		dotnet: {
-			moduleUrl: path
-				? `${path}/wasm-dotnet/index.js?v=${WASM_DOTNET_ASSET_VERSION}`
-				: `/wasm-dotnet/index.js?v=${WASM_DOTNET_ASSET_VERSION}`
-		},
-		elixir: {
-			bundleUrl: path
-				? `${path}/wasm-elixir/bundle.avm?v=${WASM_ELIXIR_ASSET_VERSION}`
-				: `/wasm-elixir/bundle.avm?v=${WASM_ELIXIR_ASSET_VERSION}`
-		},
-		erlang: {
-			bundleUrl: path
-				? `${path}/wasm-elixir/bundle.avm?v=${WASM_ELIXIR_ASSET_VERSION}`
-				: `/wasm-elixir/bundle.avm?v=${WASM_ELIXIR_ASSET_VERSION}`
-		},
-		prolog: {
-			baseUrl: path ? `${path}/wasm-prolog/` : '/wasm-prolog/',
-			workerUrl: path
-				? `${path}/wasm-prolog/runner-worker.js?v=${WASM_PROLOG_ASSET_VERSION}`
-				: `/wasm-prolog/runner-worker.js?v=${WASM_PROLOG_ASSET_VERSION}`
-		},
-		gleam: {
-			baseUrl: path ? `${path}/wasm-gleam/` : '/wasm-gleam/',
-			workerUrl: path
-				? `${path}/wasm-gleam/runner-worker.js?v=${WASM_GLEAM_ASSET_VERSION}`
-				: `/wasm-gleam/runner-worker.js?v=${WASM_GLEAM_ASSET_VERSION}`,
-			manifestUrl: path
-				? `${path}/wasm-gleam/source-manifest.v1.json?v=${WASM_GLEAM_ASSET_VERSION}`
-				: `/wasm-gleam/source-manifest.v1.json?v=${WASM_GLEAM_ASSET_VERSION}`
-		},
-		perl: {
-			baseUrl: path ? `${path}/wasm-perl/` : '/wasm-perl/',
-			workerUrl: path
-				? `${path}/wasm-perl/runner-worker.js?v=${WASM_PERL_ASSET_VERSION}`
-				: `/wasm-perl/runner-worker.js?v=${WASM_PERL_ASSET_VERSION}`
-		},
-		tcl: {
-			baseUrl: path ? `${path}/wasm-tcl/` : '/wasm-tcl/',
-			workerUrl: path
-				? `${path}/wasm-tcl/runner-worker.js?v=${WASM_TCL_ASSET_VERSION}`
-				: `/wasm-tcl/runner-worker.js?v=${WASM_TCL_ASSET_VERSION}`
-		},
-		awk: {
-			baseUrl: path ? `${path}/wasm-awk/` : '/wasm-awk/',
-			workerUrl: path
-				? `${path}/wasm-awk/runner-worker.js?v=${WASM_AWK_ASSET_VERSION}`
-				: `/wasm-awk/runner-worker.js?v=${WASM_AWK_ASSET_VERSION}`
-		},
-		pascal: {
-			baseUrl: path ? `${path}/wasm-pascal/` : '/wasm-pascal/',
-			workerUrl: path
-				? `${path}/wasm-pascal/runner-worker.js?v=${WASM_PASCAL_ASSET_VERSION}`
-				: `/wasm-pascal/runner-worker.js?v=${WASM_PASCAL_ASSET_VERSION}`
-		},
-		forth: {
-			baseUrl: path ? `${path}/wasm-forth/` : '/wasm-forth/',
-			workerUrl: path
-				? `${path}/wasm-forth/runner-worker.js?v=${WASM_FORTH_ASSET_VERSION}`
-				: `/wasm-forth/runner-worker.js?v=${WASM_FORTH_ASSET_VERSION}`
-		},
-		j: {
-			baseUrl: path ? `${path}/wasm-j/` : '/wasm-j/',
-			workerUrl: path
-				? `${path}/wasm-j/runner-worker.js?v=${WASM_J_ASSET_VERSION}`
-				: `/wasm-j/runner-worker.js?v=${WASM_J_ASSET_VERSION}`
-		},
-		bqn: {
-			baseUrl: path ? `${path}/wasm-bqn/` : '/wasm-bqn/',
-			workerUrl: path
-				? `${path}/wasm-bqn/runner-worker.js?v=${WASM_BQN_ASSET_VERSION}`
-				: `/wasm-bqn/runner-worker.js?v=${WASM_BQN_ASSET_VERSION}`
-		},
-		janet: {
-			baseUrl: path ? `${path}/wasm-janet/` : '/wasm-janet/',
-			workerUrl: path
-				? `${path}/wasm-janet/runner-worker.js?v=${WASM_JANET_ASSET_VERSION}`
-				: `/wasm-janet/runner-worker.js?v=${WASM_JANET_ASSET_VERSION}`
-		},
-		julia: {
-			baseUrl: path ? `${path}/wasm-julia/` : '/wasm-julia/',
-			workerUrl: path
-				? `${path}/wasm-julia/runner-worker.js?v=${WASM_JULIA_ASSET_VERSION}`
-				: `/wasm-julia/runner-worker.js?v=${WASM_JULIA_ASSET_VERSION}`
-		},
-		nim: {
-			baseUrl: path ? `${path}/wasm-nim/` : '/wasm-nim/',
-			workerUrl: path
-				? `${path}/wasm-nim/runner-worker.js?v=${WASM_NIM_ASSET_VERSION}`
-				: `/wasm-nim/runner-worker.js?v=${WASM_NIM_ASSET_VERSION}`
-		},
-		bash: {
-			moduleUrl: path
-				? `${path}/wasm-bash/sdk/index.mjs?v=${STATIC_RUNTIME_MODULE_VERSION}`
-				: `/wasm-bash/sdk/index.mjs?v=${STATIC_RUNTIME_MODULE_VERSION}`,
-			webcUrl: path
-				? `${path}/wasm-bash/bash.webc?v=${WASM_BASH_ASSET_VERSION}`
-				: `/wasm-bash/bash.webc?v=${WASM_BASH_ASSET_VERSION}`,
-			workerUrl: path
-				? `${path}/wasm-bash/sdk/worker.mjs?v=${STATIC_RUNTIME_MODULE_VERSION}`
-				: `/wasm-bash/sdk/worker.mjs?v=${STATIC_RUNTIME_MODULE_VERSION}`
-		},
-		clojurescript: {
-			baseUrl: path ? `${path}/wasm-clojurescript/` : '/wasm-clojurescript/',
-			workerUrl: path
-				? `${path}/wasm-clojurescript/runner-worker.js?v=${WASM_CLOJURESCRIPT_ASSET_VERSION}`
-				: `/wasm-clojurescript/runner-worker.js?v=${WASM_CLOJURESCRIPT_ASSET_VERSION}`
-		},
-		swift: {
-			baseUrl: path ? `${path}/wasm-swift/` : '/wasm-swift/',
-			workerUrl: path
-				? `${path}/wasm-swift/runner-worker.js?v=${WASM_SWIFT_ASSET_VERSION}`
-				: `/wasm-swift/runner-worker.js?v=${WASM_SWIFT_ASSET_VERSION}`,
-			manifestUrl: path
-				? `${path}/wasm-swift/runtime-manifest.v1.json?v=${WASM_SWIFT_ASSET_VERSION}`
-				: `/wasm-swift/runtime-manifest.v1.json?v=${WASM_SWIFT_ASSET_VERSION}`
-		},
-		ocaml: {
-			moduleUrl: path
-				? `${path}/wasm-of-js-of-ocaml/browser-native/src/index.js?v=${WASM_OCAML_ASSET_VERSION}`
-				: `/wasm-of-js-of-ocaml/browser-native/src/index.js?v=${WASM_OCAML_ASSET_VERSION}`,
-			manifestUrl: path
-				? `${path}/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json?v=${WASM_OCAML_ASSET_VERSION}`
-				: `/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json?v=${WASM_OCAML_ASSET_VERSION}`
-		},
-		tinygo: {
-			moduleUrl: path
-				? `${path}/wasm-tinygo/runtime.js?v=${WASM_TINYGO_ASSET_VERSION}`
-				: `/wasm-tinygo/runtime.js?v=${WASM_TINYGO_ASSET_VERSION}`
-		},
-		typescript: {
-			moduleUrl: path
-				? `${path}/wasm-typescript/index.js?v=${WASM_TYPESCRIPT_ASSET_VERSION}`
-				: `/wasm-typescript/index.js?v=${WASM_TYPESCRIPT_ASSET_VERSION}`,
-			libUrl: path
-				? `${path}/lsp/typescript-libs.json.gz?v=${WASM_TYPESCRIPT_ASSET_VERSION}`
-				: `/lsp/typescript-libs.json.gz?v=${WASM_TYPESCRIPT_ASSET_VERSION}`
-		},
-		wat: {
-			moduleUrl: path
-				? `${path}/wasm-wat/index.js?v=${WASM_WAT_ASSET_VERSION}`
-				: `/wasm-wat/index.js?v=${WASM_WAT_ASSET_VERSION}`
-		},
-		lua: {
-			moduleUrl: path
-				? `${path}/wasm-lua/index.js?v=${WASM_LUA_ASSET_VERSION}`
-				: `/wasm-lua/index.js?v=${WASM_LUA_ASSET_VERSION}`
-		},
-		zig: {
-			compilerUrl: path
-				? `${path}/wasm-zig/zig_small.wasm?v=${WASM_ZIG_ASSET_VERSION}`
-				: `/wasm-zig/zig_small.wasm?v=${WASM_ZIG_ASSET_VERSION}`,
-			stdlibUrl: path
-				? `${path}/wasm-zig/std.tar.gz?v=${WASM_ZIG_ASSET_VERSION}`
-				: `/wasm-zig/std.tar.gz?v=${WASM_ZIG_ASSET_VERSION}`
-		},
-		lisp: {
-			moduleUrl: path
-				? `${path}/wasm-lisp/index.js?v=${WASM_LISP_ASSET_VERSION}`
-				: `/wasm-lisp/index.js?v=${WASM_LISP_ASSET_VERSION}`
-		},
-		ruby: {
-			moduleUrl: path
-				? `${path}/wasm-ruby/runtime.mjs?v=${STATIC_RUNTIME_MODULE_VERSION}`
-				: `/wasm-ruby/runtime.mjs?v=${STATIC_RUNTIME_MODULE_VERSION}`
-		},
-		haskell: {
-			moduleUrl: path
-				? `${path}/wasm-haskell/dyld.mjs?v=${WASM_HASKELL_ASSET_VERSION}`
-				: `/wasm-haskell/dyld.mjs?v=${WASM_HASKELL_ASSET_VERSION}`,
-			rootfsUrl: path
-				? `${path}/wasm-haskell/rootfs.tar.zst?v=${WASM_HASKELL_ASSET_VERSION}`
-				: `/wasm-haskell/rootfs.tar.zst?v=${WASM_HASKELL_ASSET_VERSION}`,
-			bsdtarUrl: path
-				? `${path}/wasm-haskell/bsdtar.wasm?v=${WASM_HASKELL_ASSET_VERSION}`
-				: `/wasm-haskell/bsdtar.wasm?v=${WASM_HASKELL_ASSET_VERSION}`
-		},
-		fortran: {
-			baseUrl: path ? `${path}/wasm-fortran/` : '/wasm-fortran/',
-			f2cWasmUrl: path
-				? `${path}/wasm-fortran/f2c.wasm?v=${WASM_FORTRAN_ASSET_VERSION}`
-				: `/wasm-fortran/f2c.wasm?v=${WASM_FORTRAN_ASSET_VERSION}`,
-			libf2cUrl: path
-				? `${path}/wasm-fortran/libf2c.a?v=${WASM_FORTRAN_ASSET_VERSION}`
-				: `/wasm-fortran/libf2c.a?v=${WASM_FORTRAN_ASSET_VERSION}`,
-			f2cHeaderUrl: path
-				? `${path}/wasm-fortran/f2c.h?v=${WASM_FORTRAN_ASSET_VERSION}`
-				: `/wasm-fortran/f2c.h?v=${WASM_FORTRAN_ASSET_VERSION}`,
-			analyzerUrl: path
-				? `${path}/wasm-fortran/analyzer.js?v=${WASM_FORTRAN_ASSET_VERSION}`
-				: `/wasm-fortran/analyzer.js?v=${WASM_FORTRAN_ASSET_VERSION}`
-		},
-		cobol: {
-			baseUrl: path ? `${path}/wasm-cobol/` : '/wasm-cobol/'
-		},
-		objectivec: {
-			baseUrl: path ? `${path}/wasm-objectivec/` : '/wasm-objectivec/',
-			libobjcUrl: path
-				? `${path}/wasm-objectivec/libobjc.a?v=${WASM_OBJECTIVEC_ASSET_VERSION}`
-				: `/wasm-objectivec/libobjc.a?v=${WASM_OBJECTIVEC_ASSET_VERSION}`,
-			headersUrl: path
-				? `${path}/wasm-objectivec/headers.json?v=${WASM_OBJECTIVEC_ASSET_VERSION}`
-				: `/wasm-objectivec/headers.json?v=${WASM_OBJECTIVEC_ASSET_VERSION}`,
-			libgnustepBaseUrl: path
-				? `${path}/wasm-objectivec/libgnustep-base.a?v=${WASM_OBJECTIVEC_ASSET_VERSION}`
-				: `/wasm-objectivec/libgnustep-base.a?v=${WASM_OBJECTIVEC_ASSET_VERSION}`,
-			libgnustepBaseObjectUrl: path
-				? `${path}/wasm-objectivec/libgnustep-base.o?v=${WASM_OBJECTIVEC_ASSET_VERSION}`
-				: `/wasm-objectivec/libgnustep-base.o?v=${WASM_OBJECTIVEC_ASSET_VERSION}`,
-			foundationHeadersUrl: path
-				? `${path}/wasm-objectivec/foundation-headers.json?v=${WASM_OBJECTIVEC_ASSET_VERSION}`
-				: `/wasm-objectivec/foundation-headers.json?v=${WASM_OBJECTIVEC_ASSET_VERSION}`,
-			libffiUrl: path
-				? `${path}/wasm-objectivec/libffi.a?v=${WASM_OBJECTIVEC_ASSET_VERSION}`
-				: `/wasm-objectivec/libffi.a?v=${WASM_OBJECTIVEC_ASSET_VERSION}`
-		},
-		r: {
-			baseUrl: path
-				? `${path}/webr/${WASM_R_ASSET_VERSION}/`
-				: `/webr/${WASM_R_ASSET_VERSION}/`
-		},
-		octave: {
-			baseUrl: path ? `${path}/wasm-octave/runtime/` : '/wasm-octave/runtime/',
-			workerUrl: path
-				? `${path}/wasm-octave/runner-worker.js?v=${WASM_OCTAVE_ASSET_VERSION}`
-				: `/wasm-octave/runner-worker.js?v=${WASM_OCTAVE_ASSET_VERSION}`,
-			manifestUrl: path
-				? `${path}/wasm-octave/runtime/runtime-manifest.v1.json?v=${WASM_OCTAVE_ASSET_VERSION}`
-				: `/wasm-octave/runtime/runtime-manifest.v1.json?v=${WASM_OCTAVE_ASSET_VERSION}`
-		},
-		sqlite: {
-			moduleUrl: path
-				? `${path}/wasm-sqlite/runtime.mjs?v=${STATIC_RUNTIME_MODULE_VERSION}`
-				: `/wasm-sqlite/runtime.mjs?v=${STATIC_RUNTIME_MODULE_VERSION}`
 		}
 	}));
 	const playground = $derived.by(() => createPlaygroundBinding(runtimeAssets));
@@ -587,7 +295,7 @@
 	const perlLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'perl');
 	const perlLspBaseUrl = $derived(perlLspEnabled ? runtimeAssets.perl?.baseUrl : undefined);
 	const perlLspWorkerUrl = $derived(perlLspEnabled ? runtimeAssets.perl?.workerUrl : undefined);
-	const pythonLspBaseUrl = $derived(path ? `${path}/pyodide/` : '/pyodide/');
+	const pythonLspBaseUrl = $derived(resolveApplicationAsset('pyodide/'));
 	const typescriptLspLibUrl = $derived(
 		lspEnabled && typescriptLspLanguages.has(language)
 			? runtimeAssets.typescript?.libUrl
@@ -1840,11 +1548,10 @@
 
 	$effect(() => {
 		if (!browser || language !== 'RUST') return;
+		const manifestUrl = runtimeAssets.rust?.manifestUrl;
+		if (!manifestUrl) return;
 		let cancelled = false;
 		(async () => {
-			const manifestUrl = path
-				? `${path}/wasm-rust/runtime/runtime-manifest.v3.json?v=${WASM_RUST_ASSET_VERSION}`
-				: `/wasm-rust/runtime/runtime-manifest.v3.json?v=${WASM_RUST_ASSET_VERSION}`;
 			try {
 				const response = await fetch(manifestUrl, { cache: 'no-store' });
 				if (!response.ok) {
@@ -1924,11 +1631,10 @@
 
 	$effect(() => {
 		if (!browser || language !== 'GO') return;
+		const manifestUrl = runtimeAssets.go?.manifestUrl;
+		if (!manifestUrl) return;
 		let cancelled = false;
 		(async () => {
-			const manifestUrl = path
-				? `${path}/wasm-go/runtime/runtime-manifest.v1.json?v=${WASM_GO_ASSET_VERSION}`
-				: `/wasm-go/runtime/runtime-manifest.v1.json?v=${WASM_GO_ASSET_VERSION}`;
 			try {
 				const response = await fetch(manifestUrl, { cache: 'no-store' });
 				if (!response.ok) {
