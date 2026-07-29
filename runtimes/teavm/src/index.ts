@@ -139,14 +139,17 @@ export async function fetchTeaVmAsset(
 		throw new Error(`Failed to load TeaVM runtime asset ${asset}: ${response.status}`);
 	}
 	const contentLengthValue = response.headers.get('content-length');
-	const contentLength =
-		contentLengthValue && /^\d+$/u.test(contentLengthValue)
-			? Number(contentLengthValue)
-			: undefined;
-	if (
-		contentLength !== undefined &&
-		(!Number.isSafeInteger(contentLength) || contentLength > maxAssetBytes)
-	) {
+	let contentLength: number | undefined;
+	if (contentLengthValue !== null) {
+		contentLength = Number(contentLengthValue);
+		if (!/^\d+$/u.test(contentLengthValue) || !Number.isSafeInteger(contentLength)) {
+			await response.body?.cancel().catch(() => {});
+			throw new Error(
+				`TeaVM runtime asset ${asset} has an invalid Content-Length: ${contentLengthValue}`
+			);
+		}
+	}
+	if (contentLength !== undefined && contentLength > maxAssetBytes) {
 		await response.body?.cancel().catch(() => {});
 		throw new Error(`TeaVM runtime asset ${asset} exceeds the ${maxAssetBytes} byte limit`);
 	}

@@ -97,6 +97,47 @@ describe('TeaVM runtime asset boundary', () => {
 		expect(cancel).toHaveBeenCalledOnce();
 	});
 
+	it.each([
+		['empty', ''],
+		['negative', '-1'],
+		['fractional', '1.5'],
+		['exponential', '1e2'],
+		['duplicate', '2, 2'],
+		['unsafe', '9007199254740992']
+	])('rejects a %s Content-Length before reading and cancels the body', async (_case, value) => {
+		const cancel = vi.fn(async () => {});
+		const getReader = vi.fn();
+		const fetchMock = vi.fn(
+			async () =>
+				({
+					ok: true,
+					url: 'https://assets.example/teavm/compiler.wasm',
+					headers: new Headers({ 'content-length': value }),
+					body: { cancel, getReader }
+				}) as unknown as Response
+		);
+
+		await expect(
+			fetchTeaVmAsset('compiler.wasm', {
+				baseUrl: 'https://assets.example/teavm/',
+				fetch: fetchMock
+			})
+		).rejects.toThrow(
+			`TeaVM runtime asset compiler.wasm has an invalid Content-Length: ${value}`
+		);
+		expect(getReader).not.toHaveBeenCalled();
+		expect(cancel).toHaveBeenCalledOnce();
+	});
+
+	it('allows a zero Content-Length declaration', async () => {
+		await expect(
+			fetchTeaVmAsset('compiler.wasm', {
+				baseUrl: 'https://assets.example/teavm/',
+				fetch: async () => new Response(null, { headers: { 'content-length': '0' } })
+			})
+		).resolves.toEqual(new Uint8Array());
+	});
+
 	it('cancels an unknown-length stream that crosses the byte limit', async () => {
 		let cancelled = false;
 		const fetchMock = vi.fn(
