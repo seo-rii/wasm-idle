@@ -47,11 +47,14 @@ function toArrayBuffer(bytes: Uint8Array) {
 	return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
 }
 
-function readContentLength(response: Response) {
+function readContentLength(response: Response, assetLabel: string) {
 	const value = response.headers.get('content-length');
-	if (!value || !/^\d+$/u.test(value)) return undefined;
+	if (value === null) return undefined;
 	const contentLength = Number(value);
-	return Number.isSafeInteger(contentLength) ? contentLength : undefined;
+	if (!/^\d+$/u.test(value) || !Number.isSafeInteger(contentLength)) {
+		throw new Error(`D runtime asset ${assetLabel} has an invalid Content-Length: ${value}`);
+	}
+	return contentLength;
 }
 
 async function readBoundedStream(
@@ -199,7 +202,13 @@ export async function fetchRuntimeAssetBytes(
 			`failed to fetch ${assetLabel} from ${resolvedAssetUrl} (status ${response.status})`
 		);
 	}
-	const contentLength = readContentLength(response);
+	let contentLength: number | undefined;
+	try {
+		contentLength = readContentLength(response, assetLabel);
+	} catch (error) {
+		await response.body?.cancel(error).catch(() => {});
+		throw error;
+	}
 	if (contentLength !== undefined && contentLength > maxOutputBytes) {
 		await response.body?.cancel().catch(() => {});
 		throw new Error(`${assetLabel} download size exceeds the ${maxOutputBytes} byte limit`);

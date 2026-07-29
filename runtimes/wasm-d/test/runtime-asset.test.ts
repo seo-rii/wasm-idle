@@ -153,6 +153,89 @@ describe('runtime asset loader', () => {
 		expect(cancelled).toBe(true);
 	});
 
+	it.each([
+		['empty', ''],
+		['negative', '-1'],
+		['fractional', '1.5'],
+		['exponential', '1e2'],
+		['duplicate', '2, 2'],
+		['unsafe', '9007199254740992']
+	])('rejects and cancels a %s Content-Length declaration', async (_caseName, value) => {
+		let cancelled = false;
+		const response = new Response(
+			new ReadableStream({
+				cancel() {
+					cancelled = true;
+				}
+			}),
+			{ headers: { 'Content-Length': value } }
+		);
+
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.test/runtime/bin/ldc2.wasm',
+				'ldc2.wasm',
+				async () => response
+			)
+		).rejects.toThrow(`D runtime asset ldc2.wasm has an invalid Content-Length: ${value}`);
+		expect(cancelled).toBe(true);
+	});
+
+	it('rejects and cancels invalid Content-Length on gzip and manifest paths', async () => {
+		let gzipCancelled = false;
+		let manifestCancelled = false;
+		const gzipResponse = new Response(
+			new ReadableStream({
+				cancel() {
+					gzipCancelled = true;
+				}
+			}),
+			{ headers: { 'Content-Length': '-1' } }
+		);
+		const manifestResponse = new Response(
+			new ReadableStream({
+				cancel() {
+					manifestCancelled = true;
+				}
+			}),
+			{ headers: { 'Content-Length': '1e2' } }
+		);
+
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.test/runtime/bin/ldc2.wasm.gz',
+				'ldc2.wasm',
+				async () => gzipResponse,
+				undefined,
+				'gzip'
+			)
+		).rejects.toThrow('D runtime asset ldc2.wasm has an invalid Content-Length: -1');
+		await expect(
+			loadRuntimeManifest('https://example.test/runtime/', async () => manifestResponse)
+		).rejects.toThrow(
+			'D runtime asset wasm-d runtime manifest has an invalid Content-Length: 1e2'
+		);
+		expect(gzipCancelled).toBe(true);
+		expect(manifestCancelled).toBe(true);
+	});
+
+	it('allows absent and zero Content-Length declarations', async () => {
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.test/runtime/no-content-length.bin',
+				'D runtime asset',
+				async () => new Response(Uint8Array.of(1, 2))
+			)
+		).resolves.toEqual(Uint8Array.of(1, 2));
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.test/runtime/zero-content-length.bin',
+				'D runtime asset',
+				async () => new Response(null, { headers: { 'Content-Length': '0' } })
+			)
+		).resolves.toEqual(new Uint8Array());
+	});
+
 	it('uses a dedicated 4 MiB ceiling for runtime manifests', async () => {
 		let cancelled = false;
 		const fetchImpl = vi.fn(
