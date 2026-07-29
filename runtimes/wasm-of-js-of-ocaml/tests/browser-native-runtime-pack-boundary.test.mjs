@@ -430,22 +430,40 @@ test('bounds manifest metadata and rejects substituted final URLs', async () => 
 		/browser-native runtime manifest exceeds the 4 byte limit/
 	);
 
-	const substituted = createResponse(encodeJson({}), 'https://other.example.test/manifest.json');
+	let substitutedCancelled = false;
+	const finalUrlSecret = 'signed-final-url-secret';
+	const substituted = new Response(
+		new ReadableStream({
+			cancel() {
+				substitutedCancelled = true;
+			}
+		})
+	);
+	Object.defineProperty(substituted, 'url', {
+		value: `https://runtime-user:password@other.example.test/manifest.json?signature=${finalUrlSecret}#access-token`
+	});
 	await assert.rejects(
 		fetchBrowserNativeManifest({
 			baseUrl: BASE_URL,
 			fetch: async () => substituted
 		}),
-		/final URL mismatch/
+		(error) => {
+			assert.equal(error.message, 'browser-native runtime manifest final URL mismatch');
+			assert.equal(error.message.includes(finalUrlSecret), false);
+			assert.equal(error.message.includes('access-token'), false);
+			return true;
+		}
 	);
+	assert.equal(substitutedCancelled, true);
 
 	let readerRequested = false;
 	let cancelled = false;
+	const invalidFinalUrl = '://invalid-final-url-secret';
 	await assert.rejects(
 		fetchBrowserNativeManifest({
 			baseUrl: BASE_URL,
 			fetch: async () => ({
-				url: 'browser-native-manifest.v1.json',
+				url: invalidFinalUrl,
 				ok: true,
 				status: 200,
 				headers: new Headers(),
@@ -460,7 +478,14 @@ test('bounds manifest metadata and rejects substituted final URLs', async () => 
 				}
 			})
 		}),
-		/invalid final URL/
+		(error) => {
+			assert.equal(
+				error.message,
+				'browser-native runtime manifest returned an invalid final URL'
+			);
+			assert.equal(error.message.includes(invalidFinalUrl), false);
+			return true;
+		}
 	);
 	assert.equal(readerRequested, false);
 	assert.equal(cancelled, true);

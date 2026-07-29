@@ -279,7 +279,7 @@ async function fetchBoundedRuntimeAsset(
 			} catch {
 				// Preserve the invalid-URL failure.
 			}
-			throw new Error(`${label} returned an invalid final URL: ${response.url}`);
+			throw new Error(`${label} returned an invalid final URL`);
 		}
 		if (finalUrl.href !== requestUrl.href) {
 			try {
@@ -287,9 +287,7 @@ async function fetchBoundedRuntimeAsset(
 			} catch {
 				// Preserve the final-URL mismatch.
 			}
-			throw new Error(
-				`${label} final URL mismatch: expected ${requestUrl.href}, received ${finalUrl.href}`
-			);
+			throw new Error(`${label} final URL mismatch`);
 		}
 	}
 	if (!response.ok) {
