@@ -141,8 +141,10 @@ Observed recovery behavior:
 
 Shipped mitigation:
 
-- `src/thread-startup.ts` now waits for helper workers to reach a minimum startup state before the
-  browser thread id is returned to rustc
+- `src/thread-startup.ts` now waits until a helper reaches the `wasi_thread_start` entry boundary
+  before its browser thread id is returned to rustc
+    - merely instantiating the helper runtime is not sufficient because the parent can otherwise
+      resume and reuse the shared `startArg` storage before the helper snapshots it
 - `src/rustc-thread-worker.ts` instantiates a fresh helper runtime per pooled dispatch instead of
   reusing a stale wasm instance across multiple starts
 - `src/rustc-runtime.ts` sets `RUST_MIN_STACK=8388608`, which materially improved helper-thread
@@ -275,6 +277,8 @@ Latest observed outcome:
   console event separately from its bounded console tail and fails the run if any retry occurs
     - repeated target runs therefore measure first-attempt stability instead of accepting a recovered
       compile as a clean result
+- after moving the helper handshake to the entry boundary, five fresh `wasm32-wasip1` Chromium
+  sessions completed with zero compiler retries and zero memory-OOB reports
 - targeted browser coverage still included:
     - helper-thread startup/retry/runtime shims
     - richer Chromium browser harness regression

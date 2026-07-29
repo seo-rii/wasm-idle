@@ -14,7 +14,7 @@ import {
 	THREAD_STARTUP_STATE_ENTERING,
 	THREAD_STARTUP_STATE_INSTANTIATED,
 	THREAD_STARTUP_STATE_STARTING,
-	waitForThreadStartupState
+	waitForThreadEntry
 } from './thread-startup.js';
 
 const MIRRORED_BITCODE_LENGTH_INDEX = 0;
@@ -106,12 +106,11 @@ async function instantiateThreadWorkerRuntime(
 					startArg,
 					readyBuffer: nestedReadyBuffer
 				} satisfies RustcThreadWorkerRequest);
-				waitForThreadStartupState(
+				waitForThreadEntry(
 					nestedReadyState,
-					THREAD_STARTUP_STATE_INSTANTIATED,
 					30_000,
-					`rustc dedicated helper thread ${nestedThreadId} failed to initialize`,
-					`rustc dedicated helper thread ${nestedThreadId} timed out during startup`
+					`rustc dedicated helper thread ${nestedThreadId} failed before entering wasi_thread_start`,
+					`rustc dedicated helper thread ${nestedThreadId} timed out before entering wasi_thread_start`
 				);
 				return nestedThreadId;
 			};
@@ -139,10 +138,9 @@ async function instantiateThreadWorkerRuntime(
 					slot.slotState,
 					nestedThreadId,
 					startArg,
-					THREAD_STARTUP_STATE_INSTANTIATED,
 					30_000,
-					`rustc pooled helper thread ${nestedThreadId} failed to initialize`,
-					`rustc pooled helper thread ${nestedThreadId} timed out during startup`
+					`rustc pooled helper thread ${nestedThreadId} failed before entering wasi_thread_start`,
+					`rustc pooled helper thread ${nestedThreadId} timed out before entering wasi_thread_start`
 				);
 				return nestedThreadId;
 			}

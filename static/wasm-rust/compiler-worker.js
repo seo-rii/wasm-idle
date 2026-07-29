@@ -4,7 +4,7 @@ import { classifyRetryableFailureKind } from './retryable-failure-kind.js';
 import { resolveBrowserRustDebugMode } from './compiler-support.js';
 import { isIntegratedCompilerOutput, resolveTargetManifest } from './runtime-manifest.js';
 import { buildPreopenedDirectories, instantiateRustcInstance } from './rustc-runtime.js';
-import { dispatchThreadPoolSlotAndWait, reserveIdleThreadPoolSlot, THREAD_STARTUP_STATE_INSTANTIATED } from './thread-startup.js';
+import { dispatchThreadPoolSlotAndWait, reserveIdleThreadPoolSlot } from './thread-startup.js';
 import { fetchRuntimeAssetBytes } from './runtime-asset.js';
 import { loadRuntimePackEntries } from './runtime-asset-store.js';
 const ARCHIVE_MAGIC = new Uint8Array([0x21, 0x3c, 0x61, 0x72, 0x63, 0x68, 0x3e, 0x0a]);
@@ -323,7 +323,7 @@ async function compileRustInWorker(request) {
             throw new Error('rustc browser thread pool exhausted');
         }
         emitCompileWorkerLog(request, `[wasm-rust:compiler-worker] assign thread=${threadId} startArg=${startArg} slot=${slot.slotIndex}`);
-        dispatchThreadPoolSlotAndWait(slot.slotState, threadId, startArg, THREAD_STARTUP_STATE_INSTANTIATED, 30_000, `rustc browser helper thread ${threadId} failed before instantiating wasi_thread_start`, `rustc browser helper thread ${threadId} timed out before instantiating wasi_thread_start`);
+        dispatchThreadPoolSlotAndWait(slot.slotState, threadId, startArg, 30_000, `rustc browser helper thread ${threadId} failed before entering wasi_thread_start`, `rustc browser helper thread ${threadId} timed out before entering wasi_thread_start`);
         return threadId;
     };
     const instantiated = await instantiateRustcInstance({

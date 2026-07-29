@@ -30,7 +30,6 @@ export function dispatchThreadPoolSlotAndWait(
 	state: Int32Array,
 	threadId: number,
 	startArg: number,
-	minimumState: number,
 	timeoutMs: number,
 	failureMessage: string,
 	timeoutMessage: string
@@ -40,9 +39,18 @@ export function dispatchThreadPoolSlotAndWait(
 	Atomics.store(state, 0, THREAD_STARTUP_STATE_STARTING);
 	Atomics.store(state, THREAD_POOL_SLOT_LOCK_INDEX, THREAD_POOL_SLOT_UNLOCKED);
 	Atomics.notify(state, 0);
+	return waitForThreadEntry(state, timeoutMs, failureMessage, timeoutMessage);
+}
+
+export function waitForThreadEntry(
+	state: Int32Array,
+	timeoutMs: number,
+	failureMessage: string,
+	timeoutMessage: string
+) {
 	return waitForThreadStartupState(
 		state,
-		minimumState,
+		THREAD_STARTUP_STATE_ENTERING,
 		timeoutMs,
 		failureMessage,
 		timeoutMessage

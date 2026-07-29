@@ -11,11 +11,7 @@ import { classifyRetryableFailureKind } from './retryable-failure-kind.js';
 import { resolveBrowserRustDebugMode } from './compiler-support.js';
 import { isIntegratedCompilerOutput, resolveTargetManifest } from './runtime-manifest.js';
 import { buildPreopenedDirectories, instantiateRustcInstance } from './rustc-runtime.js';
-import {
-	dispatchThreadPoolSlotAndWait,
-	reserveIdleThreadPoolSlot,
-	THREAD_STARTUP_STATE_INSTANTIATED
-} from './thread-startup.js';
+import { dispatchThreadPoolSlotAndWait, reserveIdleThreadPoolSlot } from './thread-startup.js';
 import { fetchRuntimeAssetBytes } from './runtime-asset.js';
 import { loadRuntimePackEntries } from './runtime-asset-store.js';
 
@@ -428,10 +424,9 @@ async function compileRustInWorker(request: CompileWorkerRequest) {
 			slot.slotState,
 			threadId,
 			startArg,
-			THREAD_STARTUP_STATE_INSTANTIATED,
 			30_000,
-			`rustc browser helper thread ${threadId} failed before instantiating wasi_thread_start`,
-			`rustc browser helper thread ${threadId} timed out before instantiating wasi_thread_start`
+			`rustc browser helper thread ${threadId} failed before entering wasi_thread_start`,
+			`rustc browser helper thread ${threadId} timed out before entering wasi_thread_start`
 		);
 		return threadId;
 	};

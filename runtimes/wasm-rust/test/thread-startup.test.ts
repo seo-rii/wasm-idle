@@ -7,6 +7,7 @@ import {
 	THREAD_STARTUP_STATE_ENTERING,
 	THREAD_STARTUP_STATE_FAILED,
 	THREAD_STARTUP_STATE_STARTING,
+	waitForThreadEntry,
 	waitForThreadStartupState
 } from '../src/thread-startup.js';
 
@@ -55,19 +56,25 @@ describe('thread startup handshake', () => {
 		).toThrow('timed out before entering');
 	});
 
+	it('does not resume the parent while a helper is only instantiated', () => {
+		const state = new Int32Array(new SharedArrayBuffer(4));
+		Atomics.store(state, 0, THREAD_STARTUP_STATE_INSTANTIATED);
+
+		expect(() =>
+			waitForThreadEntry(
+				state,
+				0,
+				'failed before entering wasi_thread_start',
+				'timed out before entering wasi_thread_start'
+			)
+		).toThrow('timed out before entering wasi_thread_start');
+	});
+
 	it('primes a pooled slot with thread metadata before waiting for the worker to enter', () => {
 		const state = new Int32Array(new SharedArrayBuffer(16));
 
 		expect(() =>
-			dispatchThreadPoolSlotAndWait(
-				state,
-				7,
-				1234,
-				THREAD_STARTUP_STATE_INSTANTIATED,
-				0,
-				'failed',
-				'timed out before entering'
-			)
+			dispatchThreadPoolSlotAndWait(state, 7, 1234, 0, 'failed', 'timed out before entering')
 		).toThrow('timed out before entering');
 		expect(Atomics.load(state, 0)).toBe(THREAD_STARTUP_STATE_STARTING);
 		expect(Atomics.load(state, 1)).toBe(7);

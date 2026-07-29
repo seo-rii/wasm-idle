@@ -2,7 +2,7 @@ import { resolveVersionedAssetUrl } from './asset-url.js';
 import { createModuleWorker } from './module-worker.js';
 import { buildPreopenedDirectories, instantiateRustcInstance } from './rustc-runtime.js';
 import { markWorkerFailure, recordWorkerFailureContext } from './worker-status.js';
-import { dispatchThreadPoolSlotAndWait, reserveIdleThreadPoolSlot, THREAD_STARTUP_STATE_ENTERING, THREAD_STARTUP_STATE_INSTANTIATED, THREAD_STARTUP_STATE_STARTING, waitForThreadStartupState } from './thread-startup.js';
+import { dispatchThreadPoolSlotAndWait, reserveIdleThreadPoolSlot, THREAD_STARTUP_STATE_ENTERING, THREAD_STARTUP_STATE_INSTANTIATED, THREAD_STARTUP_STATE_STARTING, waitForThreadEntry } from './thread-startup.js';
 const MIRRORED_BITCODE_LENGTH_INDEX = 0;
 postMessage({
     type: 'thread-ready'
@@ -78,7 +78,7 @@ async function instantiateThreadWorkerRuntime(request) {
                     startArg,
                     readyBuffer: nestedReadyBuffer
                 });
-                waitForThreadStartupState(nestedReadyState, THREAD_STARTUP_STATE_INSTANTIATED, 30_000, `rustc dedicated helper thread ${nestedThreadId} failed to initialize`, `rustc dedicated helper thread ${nestedThreadId} timed out during startup`);
+                waitForThreadEntry(nestedReadyState, 30_000, `rustc dedicated helper thread ${nestedThreadId} failed before entering wasi_thread_start`, `rustc dedicated helper thread ${nestedThreadId} timed out before entering wasi_thread_start`);
                 return nestedThreadId;
             };
             if (request.type === 'thread-pool-init') {
@@ -99,7 +99,7 @@ async function instantiateThreadWorkerRuntime(request) {
                         detail: `slot=${slot.index} startArg=${startArg}`
                     });
                 }
-                dispatchThreadPoolSlotAndWait(slot.slotState, nestedThreadId, startArg, THREAD_STARTUP_STATE_INSTANTIATED, 30_000, `rustc pooled helper thread ${nestedThreadId} failed to initialize`, `rustc pooled helper thread ${nestedThreadId} timed out during startup`);
+                dispatchThreadPoolSlotAndWait(slot.slotState, nestedThreadId, startArg, 30_000, `rustc pooled helper thread ${nestedThreadId} failed before entering wasi_thread_start`, `rustc pooled helper thread ${nestedThreadId} timed out before entering wasi_thread_start`);
                 return nestedThreadId;
             }
             return spawnDedicatedWorker();

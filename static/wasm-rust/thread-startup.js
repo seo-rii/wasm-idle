@@ -17,13 +17,16 @@ export function reserveIdleThreadPoolSlot(slots) {
     }
     return null;
 }
-export function dispatchThreadPoolSlotAndWait(state, threadId, startArg, minimumState, timeoutMs, failureMessage, timeoutMessage) {
+export function dispatchThreadPoolSlotAndWait(state, threadId, startArg, timeoutMs, failureMessage, timeoutMessage) {
     Atomics.store(state, 1, threadId);
     Atomics.store(state, 2, startArg);
     Atomics.store(state, 0, THREAD_STARTUP_STATE_STARTING);
     Atomics.store(state, THREAD_POOL_SLOT_LOCK_INDEX, THREAD_POOL_SLOT_UNLOCKED);
     Atomics.notify(state, 0);
-    return waitForThreadStartupState(state, minimumState, timeoutMs, failureMessage, timeoutMessage);
+    return waitForThreadEntry(state, timeoutMs, failureMessage, timeoutMessage);
+}
+export function waitForThreadEntry(state, timeoutMs, failureMessage, timeoutMessage) {
+    return waitForThreadStartupState(state, THREAD_STARTUP_STATE_ENTERING, timeoutMs, failureMessage, timeoutMessage);
 }
 export function waitForThreadStartupState(state, minimumState, timeoutMs, failureMessage, timeoutMessage) {
     const deadline = Date.now() + timeoutMs;
