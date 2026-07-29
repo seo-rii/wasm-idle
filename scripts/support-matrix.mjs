@@ -855,7 +855,7 @@ const runtimeDetailsByLanguage = new Map([
 				`${code('wasm32-wasi')}; links ${code('libobjc.a')}, ${code('libgnustep-base.a')}, ` +
 				`and ${code('libffi.a')} when Foundation is imported; Foundation headers are inlined ` +
 				`from ${code('foundation-headers.json')}; includes a constructor wrapper for Objective-C ` +
-				`class registration; auto-compiles ${code('.m')} and ${code('.c')} workspace sources; ` +
+				`class registration; auto-compiles ${code('.m')}/${code('.mm')}/${code('.c')} workspace files; ` +
 				`trace debug instruments active source and uses wasm-idle controls; ` +
 				`supports ${code('stdin')} and ${code('programArgs')}; large Objective-C assets may be ` +
 				`served as gzip-only ${code('.gz')} files through the service worker or worker fallback`,
