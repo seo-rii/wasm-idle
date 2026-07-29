@@ -30,7 +30,50 @@ async function fetchRuntimeBytes(baseUrl, path) {
 	return new Response(decompressed).arrayBuffer();
 }
 
-function createInputReader(stdin) {
+function createSharedInputReader(channel) {
+	if (channel === undefined) return null;
+	if (
+		channel?.protocol !== 'wasm-idle-static-stdin-ring' ||
+		channel?.protocolVersion !== 1 ||
+		channel?.controlBytes !== 16 ||
+		!Number.isSafeInteger(channel?.capacity) ||
+		channel.capacity <= 0 ||
+		typeof SharedArrayBuffer !== 'function' ||
+		!(channel.buffer instanceof SharedArrayBuffer) ||
+		channel.buffer.byteLength !== channel.controlBytes + channel.capacity ||
+		typeof Atomics.wait !== 'function'
+	) {
+		throw new Error('Invalid J streaming stdin channel.');
+	}
+
+	const control = new Int32Array(channel.buffer, 0, 4);
+	const bytes = new Uint8Array(channel.buffer, channel.controlBytes, channel.capacity);
+	return () => {
+		while (true) {
+			if (Atomics.load(control, 3) === 1) {
+				throw new Error('J streaming stdin was cancelled.');
+			}
+			const write = Atomics.load(control, 0);
+			const read = Atomics.load(control, 1);
+			const available = write - read;
+			if (available < 0 || available > bytes.byteLength) {
+				throw new Error('J streaming stdin counters are invalid.');
+			}
+			if (available > 0) {
+				const value = bytes[read % bytes.byteLength];
+				Atomics.store(control, 1, read + 1);
+				return value;
+			}
+			if (Atomics.load(control, 2) === 1) return null;
+			self.postMessage({ type: 'stdin-request' });
+			Atomics.wait(control, 0, write);
+		}
+	};
+}
+
+function createInputReader(stdin, channel) {
+	const sharedReader = createSharedInputReader(channel);
+	if (sharedReader) return sharedReader;
 	const bytes = Array.from(new TextEncoder().encode(typeof stdin === 'string' ? stdin : ''));
 	let index = 0;
 	return () => {
@@ -51,7 +94,7 @@ function normalizeChunk(output) {
 		.replace(/^warning: unsupported syscall: \d+\n?/gmu, '');
 }
 
-async function createJRuntime(baseUrl, stdin) {
+async function createJRuntime(baseUrl, stdin, stdinChannel) {
 	const wasmBinary = await fetchRuntimeBytes(baseUrl, 'jamalgam.wasm');
 	const runtimeModule = await import(assetUrl(baseUrl, 'jamalgam.js'));
 	const createModule = runtimeModule.default || runtimeModule;
@@ -62,7 +105,7 @@ async function createJRuntime(baseUrl, stdin) {
 		locateFile: (path) => assetUrl(baseUrl, path),
 		print() {},
 		printErr() {},
-		stdin: createInputReader(stdin),
+		stdin: createInputReader(stdin, stdinChannel),
 		wasmBinary
 	});
 	const jinit = module.cwrap('em_jinit', 'number', []);
@@ -74,17 +117,15 @@ async function createJRuntime(baseUrl, stdin) {
 	return { jdo, jsetstr };
 }
 
-function runJLineByLine(jdo, code) {
-	let output = '';
+function runJLineByLine(jdo, code, onOutput) {
 	for (const line of String(code || '')
 		.replace(/\r\n?/gu, '\n')
 		.split('\n')) {
 		if (!line.trim()) continue;
 		const chunk = normalizeChunk(jdo(line));
-		if (chunk) output += `${chunk.endsWith('\n') ? chunk : `${chunk}\n`}`;
 		if (isJError(chunk)) throw new Error(chunk);
+		if (chunk) onOutput(chunk);
 	}
-	return output;
 }
 
 function runJScript(jdo, jsetstr, code) {
@@ -101,14 +142,12 @@ function readsStdin(code) {
 }
 
 self.onmessage = async (event) => {
-	const { baseUrl, code, stdin, log } = event.data || {};
+	const { baseUrl, code, stdin, stdinChannel, log } = event.data || {};
 	try {
 		if (log) console.log(`[wasm-idle:j-worker] run start baseUrl=${baseUrl}`);
-		const { jdo, jsetstr } = await createJRuntime(baseUrl, stdin);
-		const output = readsStdin(String(code || ''))
-			? runJLineByLine(jdo, code)
-			: runJScript(jdo, jsetstr, code);
-		postOutput(output);
+		const { jdo, jsetstr } = await createJRuntime(baseUrl, stdin, stdinChannel);
+		if (readsStdin(String(code || ''))) runJLineByLine(jdo, code, postOutput);
+		else postOutput(runJScript(jdo, jsetstr, code));
 		if (log) console.log('[wasm-idle:j-worker] run settled');
 		self.postMessage({ results: true });
 	} catch (error) {

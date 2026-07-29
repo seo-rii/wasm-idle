@@ -9,7 +9,7 @@ class J extends StaticWorkerRuntimeSandbox {
 			defaultActivePath: 'main.ijs',
 			moduleWorker: true,
 			stdin: {
-				mode: 'prebuffered',
+				mode: 'streaming',
 				sourceHintPattern: /1!:\s*1|\/dev\/stdin|\bstdin\b/iu
 			},
 			resolveRuntimeAssets(runtimeAssets: string | PlaygroundRuntimeAssets, currentUrl) {

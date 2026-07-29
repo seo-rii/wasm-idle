@@ -84,7 +84,8 @@ const forthStdinSource = `: READ-NUMBER ( -- n )
 RUN
 `;
 
-const jStdinSource = `input =: 1!:1 [ 1
+const jStdinSource = `smoutput 'value?'
+input =: 1!:1 [ 1
 n =: ". input
 smoutput 'main=', ": n + 5
 `;
@@ -369,7 +370,8 @@ describe('wasm-idle static worker language browser integrations', () => {
 					language: 'J',
 					runTimeoutMs: Number(process.env.WASM_IDLE_J_RUN_TIMEOUT_MS || '240000'),
 					source: jStdinSource,
-					stdinText: '68\n'
+					stdinText: '68\n',
+					waitForOutputBeforeStdin: 'value?'
 				});
 				expect(summary.activeState.crossOriginIsolated).toBe(true);
 				expect(summary.activeState.sharedArrayBuffer).toBe(true);
