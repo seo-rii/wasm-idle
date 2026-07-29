@@ -7,7 +7,10 @@ class Nim extends StaticWorkerRuntimeSandbox {
 			displayName: 'Nim',
 			languageId: 'NIM',
 			defaultActivePath: 'main.nim',
-			readStdinPattern: /\b(?:stdin|readLine|readAll|lines)\b/i,
+			stdin: {
+				mode: 'prebuffered',
+				sourceHintPattern: /\b(?:stdin|readLine|readAll|lines)\b/i
+			},
 			resolveRuntimeAssets: resolveNimRuntimeAssetConfig
 		});
 	}

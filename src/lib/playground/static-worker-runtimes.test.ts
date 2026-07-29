@@ -92,6 +92,7 @@ import Nim from './nim';
 import Perl from './perl';
 import Pascal from './pascal';
 import Prolog from './prolog';
+import { StaticWorkerRuntimeSandbox } from './staticWorkerRuntime';
 import Tcl from './tcl';
 
 async function expectWorkerBootstrap(worker: MockWorker, targetUrl: string) {
@@ -137,6 +138,48 @@ describe('static worker backed language sandboxes', () => {
 
 	afterEach(() => {
 		vi.restoreAllMocks();
+	});
+
+	it('declares every static-worker stdin transport as prebuffered', () => {
+		for (const Runtime of [
+			Awk,
+			Bqn,
+			ClojureScript,
+			Forth,
+			Gleam,
+			J,
+			Janet,
+			Julia,
+			Nim,
+			Pascal,
+			Perl,
+			Prolog,
+			Tcl
+		]) {
+			expect(new Runtime().stdinMode).toBe('prebuffered');
+		}
+	});
+
+	it('does not forward input when a static runtime declares no stdin capability', async () => {
+		const sandbox = new StaticWorkerRuntimeSandbox({
+			languageId: 'NO_STDIN_TEST',
+			displayName: 'No stdin test',
+			defaultActivePath: 'main.txt',
+			stdin: { mode: 'none' },
+			resolveRuntimeAssets: () => ({
+				baseUrl: '/no-stdin-test/',
+				workerUrl: '/no-stdin-test/worker.js'
+			})
+		});
+
+		expect(sandbox.stdinMode).toBe('none');
+		await sandbox.load();
+		await expect(
+			sandbox.run('print("ok")', false, true, undefined, [], { stdin: 'ignored\n' })
+		).resolves.toBe(true);
+		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({ stdin: undefined, stdinEof: false })
+		);
 	});
 
 	it('loads Prolog runtime urls and forwards stdin to the SWI-Prolog worker', async () => {

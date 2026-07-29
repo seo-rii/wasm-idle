@@ -10,7 +10,10 @@ class Forth extends StaticWorkerRuntimeSandbox {
 			languageId: 'FORTH',
 			displayName: 'Forth',
 			defaultActivePath: 'main.fth',
-			readStdinPattern: /\b(?:KEY|ACCEPT|REFILL)\b/i,
+			stdin: {
+				mode: 'prebuffered',
+				sourceHintPattern: /\b(?:KEY|ACCEPT|REFILL)\b/i
+			},
 			resolveRuntimeAssets(runtimeAssets: string | PlaygroundRuntimeAssets, currentUrl) {
 				return resolveForthRuntimeAssetConfig(runtimeAssets, currentUrl);
 			}

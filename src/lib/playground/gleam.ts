@@ -11,7 +11,10 @@ class Gleam extends StaticWorkerRuntimeSandbox {
 			displayName: 'Gleam',
 			defaultActivePath: 'main.gleam',
 			moduleWorker: true,
-			readStdinPattern: /\bwasm_idle\/stdin\b|\bstdin\.read_line\s*\(/,
+			stdin: {
+				mode: 'prebuffered',
+				sourceHintPattern: /\bwasm_idle\/stdin\b|\bstdin\.read_line\s*\(/
+			},
 			resolveRuntimeAssets(runtimeAssets: string | PlaygroundRuntimeAssets, currentUrl) {
 				return resolveGleamRuntimeAssetConfig(runtimeAssets, currentUrl);
 			}

@@ -7,7 +7,10 @@ class Swift extends StaticWorkerRuntimeSandbox {
 			displayName: 'Swift',
 			languageId: 'SWIFT',
 			defaultActivePath: 'main.swift',
-			readStdinPattern: /\b(?:readLine|FileHandle\.standardInput|stdin)\b/,
+			stdin: {
+				mode: 'prebuffered',
+				sourceHintPattern: /\b(?:readLine|FileHandle\.standardInput|stdin)\b/
+			},
 			resolveRuntimeAssets: resolveSwiftRuntimeAssetConfig
 		});
 	}

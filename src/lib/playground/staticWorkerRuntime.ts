@@ -12,7 +12,8 @@ import {
 	isWasmIdleError,
 	resolveExecutionLimits,
 	validateExecutionWorkspace,
-	type ExecutionLimits
+	type ExecutionLimits,
+	type RuntimeStdinMode
 } from '@wasm-idle/core';
 import {
 	resolveSandboxExecutionArgs,
@@ -27,12 +28,21 @@ export interface StaticWorkerRuntimeUrls {
 	manifestUrl?: string;
 }
 
+export type StaticWorkerRuntimeStdin =
+	| {
+			readonly mode: 'none';
+	  }
+	| {
+			readonly mode: 'prebuffered';
+			readonly sourceHintPattern: RegExp;
+	  };
+
 export interface StaticWorkerRuntimeConfig {
 	languageId: string;
 	displayName: string;
 	defaultActivePath: string;
 	moduleWorker?: boolean;
-	readStdinPattern: RegExp;
+	stdin: StaticWorkerRuntimeStdin;
 	resolveRuntimeAssets: (
 		runtimeAssets: string | PlaygroundRuntimeAssets,
 		currentUrl: string
@@ -102,8 +112,11 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 	private startupReject: ((reason: Error) => void) | null = null;
 	private workerGeneration = 0;
 	private workerStartPromise: Promise<Worker> | null = null;
+	readonly stdinMode: RuntimeStdinMode;
 
-	constructor(private readonly config: StaticWorkerRuntimeConfig) {}
+	constructor(private readonly config: StaticWorkerRuntimeConfig) {
+		this.stdinMode = config.stdin.mode;
+	}
 
 	async load(
 		runtimeAssets: string | PlaygroundRuntimeAssets = '',
@@ -186,20 +199,26 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 		this.pendingEof = false;
 	}
 
-	private readsStdin(code: string) {
-		this.config.readStdinPattern.lastIndex = 0;
-		return this.config.readStdinPattern.test(code);
+	private sourceMayReadStdin(code: string) {
+		if (this.config.stdin.mode !== 'prebuffered') return false;
+		const pattern = this.config.stdin.sourceHintPattern;
+		pattern.lastIndex = 0;
+		return pattern.test(code);
 	}
 
 	private async collectStdinForRun(
 		code: string,
 		options: SandboxExecutionOptions
 	): Promise<BufferedStdin> {
+		if (this.stdinMode === 'none') {
+			this.clearPendingStdin();
+			return { stdin: undefined, stdinEof: false };
+		}
 		if (typeof options.stdin === 'string') {
 			this.clearPendingStdin();
 			return { stdin: options.stdin, stdinEof: true };
 		}
-		if (!this.readsStdin(code) && this.pendingInput.length === 0 && !this.pendingEof) {
+		if (!this.sourceMayReadStdin(code) && this.pendingInput.length === 0 && !this.pendingEof) {
 			return { stdin: undefined, stdinEof: false };
 		}
 

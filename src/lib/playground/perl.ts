@@ -10,7 +10,10 @@ class Perl extends StaticWorkerRuntimeSandbox {
 			languageId: 'PERL',
 			displayName: 'Perl',
 			defaultActivePath: 'main.pl',
-			readStdinPattern: /<\s*STDIN\s*>|\bSTDIN\b|\breadline\b|<\s*>/,
+			stdin: {
+				mode: 'prebuffered',
+				sourceHintPattern: /<\s*STDIN\s*>|\bSTDIN\b|\breadline\b|<\s*>/
+			},
 			resolveRuntimeAssets(runtimeAssets: string | PlaygroundRuntimeAssets, currentUrl) {
 				return resolvePerlRuntimeAssetConfig(runtimeAssets, currentUrl);
 			}

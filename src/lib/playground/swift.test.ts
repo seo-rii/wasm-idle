@@ -23,7 +23,7 @@ class MockWorker {
 		}
 		queueMicrotask(() =>
 			this.onmessage?.({
-				data: { output: 'swift-ok\n', results: true }
+				data: { runId: message.runId, output: 'swift-ok\n', results: true }
 			} as MessageEvent<any>)
 		);
 	});
@@ -79,6 +79,10 @@ describe('Swift sandbox', () => {
 
 	afterEach(() => {
 		vi.restoreAllMocks();
+	});
+
+	it('declares its stdin transport as prebuffered', () => {
+		expect(new Swift().stdinMode).toBe('prebuffered');
 	});
 
 	it('loads Swift runtime urls and forwards the static worker run payload', async () => {
@@ -143,7 +147,7 @@ describe('Swift sandbox', () => {
 			runMessage = message;
 			queueMicrotask(() => {
 				worker.onmessage?.({
-					data: { results: true }
+					data: { runId: message.runId, results: true }
 				} as MessageEvent<any>);
 			});
 		};
@@ -180,7 +184,7 @@ describe('Swift sandbox', () => {
 			runMessage = message;
 			queueMicrotask(() => {
 				worker.onmessage?.({
-					data: { results: true }
+					data: { runId: message.runId, results: true }
 				} as MessageEvent<any>);
 			});
 		};

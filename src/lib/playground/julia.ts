@@ -7,7 +7,10 @@ class Julia extends StaticWorkerRuntimeSandbox {
 			displayName: 'Julia',
 			languageId: 'JULIA',
 			defaultActivePath: 'main.jl',
-			readStdinPattern: /\b(?:readline|readlines|read|eachline|stdin)\b/i,
+			stdin: {
+				mode: 'prebuffered',
+				sourceHintPattern: /\b(?:readline|readlines|read|eachline|stdin)\b/i
+			},
 			resolveRuntimeAssets: resolveJuliaRuntimeAssetConfig
 		});
 	}

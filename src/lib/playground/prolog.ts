@@ -10,8 +10,11 @@ class Prolog extends StaticWorkerRuntimeSandbox {
 			languageId: 'PROLOG',
 			displayName: 'Prolog',
 			defaultActivePath: 'main.prolog',
-			readStdinPattern:
-				/\b(read_line_to_string|read_line_to_codes|get_char|get_code|read\s*\(|read_string)\b/,
+			stdin: {
+				mode: 'prebuffered',
+				sourceHintPattern:
+					/\b(read_line_to_string|read_line_to_codes|get_char|get_code|read\s*\(|read_string)\b/
+			},
 			resolveRuntimeAssets(runtimeAssets: string | PlaygroundRuntimeAssets, currentUrl) {
 				return resolvePrologRuntimeAssetConfig(runtimeAssets, currentUrl);
 			}
