@@ -4,9 +4,9 @@ type RuntimeAssetProgressReporter = (loaded: number, total?: number) => void;
 type RuntimeAssetCompression = 'gzip' | undefined;
 
 function createRuntimeFetch(): typeof fetch {
-	return (async (input: string | URL) => {
+	return (async (input: string | URL, init?: RequestInit) => {
 		const url = new URL(input.toString());
-		if (url.protocol !== 'file:') return fetch(url);
+		if (url.protocol !== 'file:') return fetch(url, init);
 		const [{ readFile }, { fileURLToPath }] = await Promise.all([
 			import('node:fs/promises'),
 			import('node:url')
@@ -27,11 +27,66 @@ function createRuntimeFetch(): typeof fetch {
 
 export const defaultFetch = createRuntimeFetch();
 
+export const DEFAULT_MAX_RUNTIME_ASSET_BYTES = 128 * 1024 * 1024;
+const DEFAULT_RUNTIME_ASSET_BUFFER_BYTES = 64 * 1024;
+
 function toArrayBuffer(bytes: Uint8Array) {
 	return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
 }
 
-async function decompressGzip(bytes: Uint8Array, assetLabel: string) {
+function readContentLength(response: Response) {
+	const value = response.headers.get('content-length');
+	if (!value || !/^\d+$/u.test(value)) return undefined;
+	const contentLength = Number(value);
+	return Number.isSafeInteger(contentLength) ? contentLength : undefined;
+}
+
+async function readBoundedStream(
+	stream: ReadableStream<Uint8Array>,
+	assetLabel: string,
+	maxOutputBytes: number,
+	sizeKind: 'download size' | 'decompressed size',
+	reportProgress?: RuntimeAssetProgressReporter,
+	total?: number
+) {
+	const reader = stream.getReader();
+	let bytes = new Uint8Array(
+		Math.min(maxOutputBytes, total || DEFAULT_RUNTIME_ASSET_BUFFER_BYTES)
+	);
+	let receivedLength = 0;
+	try {
+		while (true) {
+			const { done, value } = await reader.read();
+			if (done) break;
+			if (!value) continue;
+			const nextLength = receivedLength + value.byteLength;
+			if (nextLength > maxOutputBytes) {
+				await reader.cancel().catch(() => {});
+				throw new Error(
+					`${assetLabel} ${sizeKind} exceeds the ${maxOutputBytes} byte limit`
+				);
+			}
+			if (nextLength > bytes.byteLength) {
+				const nextCapacity = Math.min(
+					maxOutputBytes,
+					Math.max(nextLength, Math.max(bytes.byteLength * 2, 1))
+				);
+				const grown = new Uint8Array(nextCapacity);
+				grown.set(bytes.subarray(0, receivedLength));
+				bytes = grown;
+			}
+			bytes.set(value, receivedLength);
+			receivedLength = nextLength;
+			reportProgress?.(receivedLength, total);
+		}
+		reportProgress?.(receivedLength, total ?? receivedLength);
+		return bytes.subarray(0, receivedLength);
+	} finally {
+		reader.releaseLock();
+	}
+}
+
+async function decompressGzip(bytes: Uint8Array, assetLabel: string, maxOutputBytes: number) {
 	if (typeof DecompressionStream !== 'function') {
 		throw new Error(
 			`cannot decompress gzip ${assetLabel}: DecompressionStream is not available`
@@ -40,7 +95,7 @@ async function decompressGzip(bytes: Uint8Array, assetLabel: string) {
 	const stream = new Blob([toArrayBuffer(bytes)])
 		.stream()
 		.pipeThrough(new DecompressionStream('gzip'));
-	return new Uint8Array(await new Response(stream).arrayBuffer());
+	return await readBoundedStream(stream, assetLabel, maxOutputBytes, 'decompressed size');
 }
 
 function shouldDecompressResponse(response: Response, compression: RuntimeAssetCompression) {
@@ -58,52 +113,105 @@ export async function fetchRuntimeAssetBytes(
 	assetLabel: string,
 	fetchImpl: typeof fetch = defaultFetch,
 	reportProgress?: RuntimeAssetProgressReporter,
-	compression?: RuntimeAssetCompression
+	compression?: RuntimeAssetCompression,
+	maxOutputBytes = DEFAULT_MAX_RUNTIME_ASSET_BYTES
 ) {
-	const resolvedAssetUrl = assetUrl.toString();
+	if (!Number.isSafeInteger(maxOutputBytes) || maxOutputBytes < 0) {
+		throw new Error('D runtime asset byte limit must be a non-negative safe integer');
+	}
+	const resolvedUrl = new URL(assetUrl.toString());
+	if (!['file:', 'http:', 'https:'].includes(resolvedUrl.protocol)) {
+		throw new Error(`unsupported D runtime asset URL scheme: ${resolvedUrl.protocol}`);
+	}
+	if (resolvedUrl.hash) throw new Error('D runtime asset URLs must not include fragments');
+	if (resolvedUrl.username || resolvedUrl.password) {
+		throw new Error('D runtime asset URLs must not include credentials');
+	}
+	const resolvedAssetUrl = resolvedUrl.href;
 	let response: Response;
 	try {
-		response = await fetchImpl(resolvedAssetUrl);
+		response = await fetchImpl(resolvedAssetUrl, {
+			credentials: 'omit',
+			redirect: 'error',
+			referrerPolicy: 'no-referrer'
+		});
 	} catch (error) {
 		throw new Error(
 			`failed to fetch ${assetLabel} from ${resolvedAssetUrl}: ${error instanceof Error ? error.message : String(error)}`
 		);
 	}
+	if (response.url && new URL(response.url).href !== resolvedAssetUrl) {
+		await response.body?.cancel().catch(() => {});
+		throw new Error(
+			`D runtime asset ${assetLabel} returned an unexpected final URL: ${response.url}`
+		);
+	}
 	if (!response.ok) {
+		await response.body?.cancel().catch(() => {});
 		throw new Error(
 			`failed to fetch ${assetLabel} from ${resolvedAssetUrl} (status ${response.status})`
 		);
 	}
+	const contentLength = readContentLength(response);
+	if (contentLength !== undefined && contentLength > maxOutputBytes) {
+		await response.body?.cancel().catch(() => {});
+		throw new Error(`${assetLabel} download size exceeds the ${maxOutputBytes} byte limit`);
+	}
 	const shouldDecompress = shouldDecompressResponse(response, compression);
 	if (!response.body) {
 		const bytes = new Uint8Array(await response.arrayBuffer());
+		if (bytes.byteLength > maxOutputBytes) {
+			throw new Error(`${assetLabel} download size exceeds the ${maxOutputBytes} byte limit`);
+		}
 		reportProgress?.(bytes.byteLength, bytes.byteLength);
-		return shouldDecompress ? await decompressGzip(bytes, assetLabel) : bytes;
+		return shouldDecompress ? await decompressGzip(bytes, assetLabel, maxOutputBytes) : bytes;
 	}
-	const reader = response.body.getReader();
-	const contentLength = Number(response.headers.get('content-length') || 0) || undefined;
-	let receivedLength = 0;
-	const chunks: Uint8Array[] = [];
-	while (true) {
-		const { done, value } = await reader.read();
-		if (done) break;
-		if (!value) continue;
-		const chunk = Uint8Array.from(value);
-		chunks.push(chunk);
-		receivedLength += chunk.byteLength;
-		reportProgress?.(receivedLength, contentLength);
-	}
-	const bytes = new Uint8Array(receivedLength);
-	let position = 0;
-	for (const chunk of chunks) {
-		bytes.set(chunk, position);
-		position += chunk.byteLength;
-	}
-	reportProgress?.(receivedLength, contentLength ?? receivedLength);
 	if (shouldDecompress) {
-		return await decompressGzip(bytes, assetLabel);
+		if (typeof DecompressionStream !== 'function') {
+			await response.body.cancel().catch(() => {});
+			throw new Error(
+				`cannot decompress gzip ${assetLabel}: DecompressionStream is not available`
+			);
+		}
+		let receivedLength = 0;
+		const limitedDownload = response.body.pipeThrough(
+			new TransformStream<Uint8Array, Uint8Array>({
+				transform(chunk, controller) {
+					const nextLength = receivedLength + chunk.byteLength;
+					if (nextLength > maxOutputBytes) {
+						throw new Error(
+							`${assetLabel} download size exceeds the ${maxOutputBytes} byte limit`
+						);
+					}
+					receivedLength = nextLength;
+					reportProgress?.(receivedLength, contentLength);
+					controller.enqueue(chunk);
+				},
+				flush() {
+					reportProgress?.(receivedLength, contentLength ?? receivedLength);
+				}
+			})
+		);
+		const decompressor = new DecompressionStream('gzip');
+		const decompressed = limitedDownload.pipeThrough({
+			readable: decompressor.readable as ReadableStream<Uint8Array>,
+			writable: decompressor.writable as WritableStream<Uint8Array>
+		});
+		return await readBoundedStream(
+			decompressed,
+			assetLabel,
+			maxOutputBytes,
+			'decompressed size'
+		);
 	}
-	return bytes;
+	return await readBoundedStream(
+		response.body,
+		assetLabel,
+		maxOutputBytes,
+		'download size',
+		reportProgress,
+		contentLength
+	);
 }
 
 export async function fetchRuntimeAssetJson<T>(
@@ -112,7 +220,8 @@ export async function fetchRuntimeAssetJson<T>(
 	assetLabel: string,
 	fetchImpl: typeof fetch = defaultFetch,
 	reportProgress?: RuntimeAssetProgressReporter,
-	compression?: RuntimeAssetCompression
+	compression?: RuntimeAssetCompression,
+	maxOutputBytes = DEFAULT_MAX_RUNTIME_ASSET_BYTES
 ) {
 	return JSON.parse(
 		new TextDecoder().decode(
@@ -121,7 +230,8 @@ export async function fetchRuntimeAssetJson<T>(
 				assetLabel,
 				fetchImpl,
 				reportProgress,
-				compression
+				compression,
+				maxOutputBytes
 			)
 		)
 	) as T;
