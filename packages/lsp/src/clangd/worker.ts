@@ -3,6 +3,8 @@ import {
 	BrowserMessageWriter,
 	type BrowserMessageWriter as BrowserMessageWriterInstance
 } from '../jsonrpc.js';
+import { verifyRuntimeAssetIntegrity } from '@wasm-idle/core';
+import { decompressGzip } from '@wasm-idle/llvm-core';
 import { writeGccCompatibilityHeaders } from '@wasm-idle/llvm-core/core/gcc-compat';
 import {
 	CLANGD_CPP_FILE_PATH,
@@ -107,23 +109,6 @@ const syncWorkspaceFile = (filePath: string) => {
 	clangdRuntime.FS.writeFile(normalizedFilePath, '');
 };
 
-async function fetchAssetBytes(baseUrl: string, asset: string) {
-	const response = await fetch(new URL(asset, baseUrl).href);
-	if (!response.ok) throw new Error(`Failed to load ${asset}: ${response.status}`);
-	return new Uint8Array(await response.arrayBuffer());
-}
-
-async function decompressGzip(bytes: Uint8Array) {
-	if (bytes[0] !== 0x1f || bytes[1] !== 0x8b) return bytes;
-	if (typeof DecompressionStream === 'undefined') {
-		throw new Error('Failed to decompress clangd.wasm.gz: DecompressionStream is unavailable');
-	}
-	const copy = new Uint8Array(bytes.byteLength);
-	copy.set(bytes);
-	const stream = new Blob([copy.buffer]).stream().pipeThrough(new DecompressionStream('gzip'));
-	return new Uint8Array(await new Response(stream).arrayBuffer());
-}
-
 self.addEventListener('message', async (event: MessageEvent<ClangdWorkerInboundMessage>) => {
 	if (event.data?.type === 'sync-file' && typeof event.data?.name === 'string') {
 		syncWorkspaceFile(event.data.name);
@@ -135,22 +120,29 @@ self.addEventListener('message', async (event: MessageEvent<ClangdWorkerInboundM
 	debugEnabled = !!event.data.debug;
 	debugLog('init', baseUrl);
 	try {
-		const jsBytes = event.data.assets?.clangdJs
-			? new Uint8Array(event.data.assets.clangdJs)
-			: await fetchAssetBytes(baseUrl, 'clangd.js');
+		if (!event.data.assets) throw new Error('clangd init requires preloaded runtime assets');
+		const jsBytes = new Uint8Array(event.data.assets.clangdJs);
 		self.postMessage({ type: 'progress', value: 1, max: 3 });
 		const jsSource = textDecoder.decode(jsBytes);
 		const jsDataUrl = URL.createObjectURL(
 			new Blob([jsSource], { type: 'text/javascript;charset=utf-8' })
 		);
-		const jsModule = import(/* @vite-ignore */ jsDataUrl);
 
-		const compressedWasmBytes = event.data.assets?.clangdWasmGz
-			? new Uint8Array(event.data.assets.clangdWasmGz)
-			: await fetchAssetBytes(baseUrl, 'clangd.wasm.gz');
+		const compressedWasmBytes = new Uint8Array(event.data.assets.clangdWasmGz);
 		self.postMessage({ type: 'progress', value: 2, max: 3 });
-		const wasmBytes = await decompressGzip(compressedWasmBytes);
+		const wasmBytes = await decompressGzip(compressedWasmBytes, 'clangd.wasm.gz');
+		if (event.data.assets.clangdWasmIntegrity) {
+			await verifyRuntimeAssetIntegrity({
+				asset: 'clangd.wasm.gz',
+				bytes: wasmBytes,
+				expected: event.data.assets.clangdWasmIntegrity,
+				stage: 'uncompressed',
+				mimeType: 'application/wasm',
+				runtimeId: 'clangd'
+			});
+		}
 		self.postMessage({ type: 'progress', value: 3, max: 3 });
+		const jsModule = import(/* @vite-ignore */ jsDataUrl);
 		const wasmBlobBytes = new Uint8Array(wasmBytes.byteLength);
 		wasmBlobBytes.set(wasmBytes);
 		const wasmBlob = new Blob([wasmBlobBytes.buffer], { type: 'application/wasm' });

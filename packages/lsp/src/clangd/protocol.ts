@@ -1,12 +1,15 @@
+import type { RuntimeAssetIntegrityEntry } from '@wasm-idle/core';
+
 export interface ClangdPreloadedAssets {
 	clangdJs: ArrayBuffer;
 	clangdWasmGz: ArrayBuffer;
+	clangdWasmIntegrity?: RuntimeAssetIntegrityEntry;
 }
 
 export interface ClangdWorkerInitMessage {
 	type: 'init';
 	baseUrl: string;
-	assets?: ClangdPreloadedAssets;
+	assets: ClangdPreloadedAssets;
 	debug?: boolean;
 }
 

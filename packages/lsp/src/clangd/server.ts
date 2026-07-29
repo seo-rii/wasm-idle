@@ -70,8 +70,20 @@ async function preloadClangdAssets(
 
 	const clangdJs = await load('clangd.js');
 	const clangdWasmGz = await load('clangd.wasm.gz');
+	const configuredWasmIntegrity = assetConfig.integrity?.['clangd.wasm.gz'];
+	const runtimeIntegrity =
+		configuredWasmIntegrity &&
+		typeof configuredWasmIntegrity === 'object' &&
+		(configuredWasmIntegrity.uncompressedSha256 !== undefined ||
+			configuredWasmIntegrity.uncompressedBytes !== undefined)
+			? configuredWasmIntegrity
+			: undefined;
 	return {
-		assets: { clangdJs, clangdWasmGz },
+		assets: {
+			clangdJs,
+			clangdWasmGz,
+			...(runtimeIntegrity ? { clangdWasmIntegrity: runtimeIntegrity } : {})
+		},
 		transfer: [clangdJs, clangdWasmGz]
 	};
 }

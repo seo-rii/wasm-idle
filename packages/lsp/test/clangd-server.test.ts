@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createHash } from 'node:crypto';
 
 const mockState = vi.hoisted(() => {
 	const workers: FakeWorker[] = [];
@@ -126,15 +127,28 @@ describe('getCppLanguageServer', () => {
 	});
 
 	it('preloads clangd assets through the configured loader before worker init', async () => {
+		const jsBytes = new TextEncoder().encode('export default async () => ({})');
+		const wasmDeliveryBytes = new Uint8Array([0x1f, 0x8b, 0x08]);
+		const wasmIntegrity = {
+			bytes: wasmDeliveryBytes.byteLength,
+			sha256: createHash('sha256').update(wasmDeliveryBytes).digest('hex'),
+			uncompressedBytes: 64,
+			uncompressedSha256: 'a'.repeat(64)
+		};
 		const loader = vi.fn(async ({ asset }: { asset: string }) =>
-			asset === 'clangd.js'
-				? { data: 'export default async () => ({})' }
-				: new Uint8Array([0x1f, 0x8b, 0x08])
+			asset === 'clangd.js' ? jsBytes : wasmDeliveryBytes
 		);
 		await getCppLanguageServer({
 			cpp: {
 				baseUrl: 'https://cdn.example.com/clangd',
-				loader
+				loader,
+				integrity: {
+					'clangd.js': {
+						bytes: jsBytes.byteLength,
+						sha256: createHash('sha256').update(jsBytes).digest('hex')
+					},
+					'clangd.wasm.gz': wasmIntegrity
+				}
 			},
 			createWorker: () => new mockState.FakeWorker() as unknown as Worker
 		});
@@ -146,7 +160,8 @@ describe('getCppLanguageServer', () => {
 			baseUrl: 'https://cdn.example.com/clangd/',
 			assets: {
 				clangdJs: expect.any(ArrayBuffer),
-				clangdWasmGz: expect.any(ArrayBuffer)
+				clangdWasmGz: expect.any(ArrayBuffer),
+				clangdWasmIntegrity: wasmIntegrity
 			}
 		});
 		expect(worker?.transfers[0]).toHaveLength(2);
