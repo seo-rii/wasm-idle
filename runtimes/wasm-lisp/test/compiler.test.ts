@@ -217,7 +217,7 @@ describe('wasm-lisp Puppy Scheme runtime', () => {
 		['negative', '-1'],
 		['fractional', '1.5'],
 		['exponential', '1e2'],
-		['duplicate', '2, 2'],
+		['duplicate', '2, content-length-secret'],
 		['unsafe', '9007199254740992']
 	])('rejects a %s Content-Length before reading and cancels the body', async (_case, value) => {
 		const cancel = vi.fn(async () => {});
@@ -236,9 +236,8 @@ describe('wasm-lisp Puppy Scheme runtime', () => {
 		const compiled = await compiler.compile({ code: '(display 1)' });
 
 		expect(compiled.success).toBe(false);
-		expect(compiled.stderr).toContain(
-			`wasm-lisp runtime asset has an invalid Content-Length: ${value}`
-		);
+		expect(compiled.stderr).toBe('wasm-lisp runtime asset has an invalid Content-Length');
+		if (value) expect(compiled.stderr).not.toContain(value);
 		expect(getReader).not.toHaveBeenCalled();
 		expect(fetchImpl).toHaveBeenCalled();
 		expect(cancel).toHaveBeenCalledTimes(fetchImpl.mock.calls.length);

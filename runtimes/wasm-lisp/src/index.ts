@@ -363,9 +363,7 @@ async function fetchBytes(
 		contentLength = Number(contentLengthValue);
 		if (!/^\d+$/u.test(contentLengthValue) || !Number.isSafeInteger(contentLength)) {
 			await response.body?.cancel().catch(() => {});
-			throw new Error(
-				`wasm-lisp runtime asset has an invalid Content-Length: ${contentLengthValue}`
-			);
+			throw new Error('wasm-lisp runtime asset has an invalid Content-Length');
 		}
 	}
 	if (contentLength !== undefined && contentLength > maxAssetBytes) {
