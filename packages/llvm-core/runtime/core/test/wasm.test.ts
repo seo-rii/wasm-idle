@@ -25,6 +25,8 @@ describe('WebAssembly loading utilities', () => {
 		await expect(readBuffer('data:application/zip;base64,AA==')).rejects.toThrow(
 			/Runtime assets must use HTTP\(S\)/u
 		);
+		await expect(compile('toString')).rejects.toThrow(/Runtime asset URL must be absolute/u);
+		await expect(compile('constructor')).rejects.toThrow(/Runtime asset URL must be absolute/u);
 	});
 
 	it('extracts the first file from a zip response and reports completion', async () => {
@@ -319,6 +321,21 @@ describe('WebAssembly loading utilities', () => {
 		await expect(readBuffer(url)).rejects.toThrow();
 		await expect(readBuffer(url)).resolves.toEqual(Uint8Array.of(12, 13));
 		expect(fetchMock).toHaveBeenCalledTimes(2);
+	});
+
+	it('deduplicates concurrent compilation without prototype-key cache hits', async () => {
+		const url = 'https://cdn.test/llvm/concurrent.wasm';
+		const compileSpy = vi.spyOn(WebAssembly, 'compile');
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => new Response(emptyWasm))
+		);
+
+		const [first, second] = await Promise.all([compile(url), compile(url)]);
+
+		expect(first).toBe(second);
+		expect(compileSpy).toHaveBeenCalledTimes(1);
+		compileSpy.mockRestore();
 	});
 
 	it('compiles zipped wasm and instantiates the resulting module', async () => {

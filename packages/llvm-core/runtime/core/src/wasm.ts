@@ -2,8 +2,8 @@ export interface ProgressSink {
 	set?: (value: number) => void;
 }
 
-const store: Partial<Record<string, Promise<WebAssembly.Module>>> = {};
-const bufferStore: Partial<Record<string, Promise<Uint8Array>>> = {};
+const store = new Map<string, Promise<WebAssembly.Module>>();
+const bufferStore = new Map<string, Promise<Uint8Array>>();
 
 const isGzip = (bytes: Uint8Array) =>
 	bytes.byteLength >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b;
@@ -355,8 +355,9 @@ export const readBuffer = async (
 		throw new Error('Runtime asset byte limit must be a non-negative safe integer');
 	}
 	const cacheKey = `${name}\0${maxOutputBytes}`;
-	if (!bufferStore[cacheKey]) {
-		bufferStore[cacheKey] = (async () => {
+	let pending = bufferStore.get(cacheKey);
+	if (!pending) {
+		pending = (async () => {
 			const resolvedUrl = resolveRuntimeAssetUrl(name);
 			const response = await fetch(resolvedUrl, {
 				credentials: 'omit',
@@ -374,12 +375,13 @@ export const readBuffer = async (
 			}
 			return source;
 		})().catch((error) => {
-			delete bufferStore[cacheKey];
+			if (bufferStore.get(cacheKey) === pending) bufferStore.delete(cacheKey);
 			throw error;
 		});
+		bufferStore.set(cacheKey, pending);
 	}
 
-	const data = await bufferStore[cacheKey];
+	const data = await pending;
 	progress?.set?.(1);
 	return Uint8Array.from(data);
 };
@@ -387,8 +389,16 @@ export const readBuffer = async (
 export async function compile(filename: string, progress?: ProgressSink) {
 	// TODO: make compileStreaming work. It needs the server to use the
 	// application/wasm mimetype.
-	if (store[filename]) return store[filename];
-	return (store[filename] = WebAssembly.compile(await readBuffer(filename, progress)));
+	const cached = store.get(filename);
+	if (cached) return cached;
+	const pending = (async () => WebAssembly.compile(await readBuffer(filename, progress)))().catch(
+		(error) => {
+			if (store.get(filename) === pending) store.delete(filename);
+			throw error;
+		}
+	);
+	store.set(filename, pending);
+	return pending;
 }
 
 export function getInstance(module: WebAssembly.Module, imports: WebAssembly.Imports) {
