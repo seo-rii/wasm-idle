@@ -70,5 +70,5 @@ test('browser-native dispatcher transfers transient preload buffers to the tool 
 	);
 
 	assert.match(dispatcherSource, /const transferPreloadBuffers = request\.preloadFiles\.flatMap/);
-	assert.match(dispatcherSource, /}, transferPreloadBuffers\);/);
+	assert.match(dispatcherSource, /\},\s*transferPreloadBuffers\s*\);/u);
 });
