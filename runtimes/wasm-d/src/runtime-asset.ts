@@ -52,7 +52,7 @@ function readContentLength(response: Response, assetLabel: string) {
 	if (value === null) return undefined;
 	const contentLength = Number(value);
 	if (!/^\d+$/u.test(value) || !Number.isSafeInteger(contentLength)) {
-		throw new Error(`D runtime asset ${assetLabel} has an invalid Content-Length: ${value}`);
+		throw new Error(`D runtime asset ${assetLabel} has an invalid Content-Length`);
 	}
 	return contentLength;
 }

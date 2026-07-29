@@ -197,7 +197,7 @@ describe('runtime asset loader', () => {
 		['negative', '-1'],
 		['fractional', '1.5'],
 		['exponential', '1e2'],
-		['duplicate', '2, 2'],
+		['duplicate', '2, content-length-secret'],
 		['unsafe', '9007199254740992']
 	])('rejects and cancels a %s Content-Length declaration', async (_caseName, value) => {
 		let cancelled = false;
@@ -210,13 +210,21 @@ describe('runtime asset loader', () => {
 			{ headers: { 'Content-Length': value } }
 		);
 
-		await expect(
-			fetchRuntimeAssetBytes(
+		let rejected: unknown;
+		try {
+			await fetchRuntimeAssetBytes(
 				'https://example.test/runtime/bin/ldc2.wasm',
 				'ldc2.wasm',
 				async () => response
-			)
-		).rejects.toThrow(`D runtime asset ldc2.wasm has an invalid Content-Length: ${value}`);
+			);
+		} catch (error) {
+			rejected = error;
+		}
+		expect(rejected).toBeInstanceOf(Error);
+		expect((rejected as Error).message).toBe(
+			'D runtime asset ldc2.wasm has an invalid Content-Length'
+		);
+		if (value) expect((rejected as Error).message).not.toContain(value);
 		expect(cancelled).toBe(true);
 	});
 
@@ -248,11 +256,11 @@ describe('runtime asset loader', () => {
 				undefined,
 				'gzip'
 			)
-		).rejects.toThrow('D runtime asset ldc2.wasm has an invalid Content-Length: -1');
+		).rejects.toThrow(/^D runtime asset ldc2\.wasm has an invalid Content-Length$/u);
 		await expect(
 			loadRuntimeManifest('https://example.test/runtime/', async () => manifestResponse)
 		).rejects.toThrow(
-			'D runtime asset wasm-d runtime manifest has an invalid Content-Length: 1e2'
+			/^D runtime asset wasm-d runtime manifest has an invalid Content-Length$/u
 		);
 		expect(gzipCancelled).toBe(true);
 		expect(manifestCancelled).toBe(true);
