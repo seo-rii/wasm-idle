@@ -24,6 +24,20 @@ In particular:
   `r.baseUrl`.
 - Clangd and other compiler-backed language servers use their corresponding runtime asset config.
 
+Clangd and Python deliberately have no document-relative fallback. Supply their individual asset
+configuration or one explicit deployment root before creating the provider:
+
+```ts
+import { getEditorLanguageServer } from '@wasm-idle/lsp';
+
+const python = await getEditorLanguageServer('python', {
+	rootUrl: 'https://cdn.example.com/wasm-idle'
+});
+```
+
+Missing Clangd or Python asset configuration fails with
+`LanguageServerAssetConfigurationError` before a worker starts or an asset request is issued.
+
 No WASM modules, compressed standard libraries, compiler archives, or worker assets are included in
 the package tarball.
 

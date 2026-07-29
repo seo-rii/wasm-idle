@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { BUNDLED_CLANGD_ASSET_INTEGRITY } from '../src/bundledClangdAssetIntegrity.js';
 import {
+	LanguageServerAssetConfigurationError,
 	resolveCppLanguageServerBaseUrl,
 	resolveCppLanguageServerRuntimeAssetConfig,
 	resolveDLanguageServerModuleUrl,
@@ -74,17 +75,21 @@ describe('lsp runtime asset resolution', () => {
 		});
 	});
 
-	it('keeps default clangd and Python assets under the deployed application base', () => {
+	it('requires the host to declare clangd and Python asset roots', () => {
 		const applicationUrl = 'https://app.example.com/wasm-idle/';
 
-		expect(resolveCppLanguageServerBaseUrl(undefined, applicationUrl)).toBe(
+		expect(() => resolveCppLanguageServerBaseUrl(undefined, applicationUrl)).toThrow(
+			LanguageServerAssetConfigurationError
+		);
+		expect(() => resolvePythonLanguageServerBaseUrl(undefined, applicationUrl)).toThrow(
+			LanguageServerAssetConfigurationError
+		);
+		expect(resolveCppLanguageServerBaseUrl({ rootUrl: '/wasm-idle' }, applicationUrl)).toBe(
 			'https://app.example.com/wasm-idle/clangd/'
 		);
-		expect(resolvePythonLanguageServerBaseUrl(undefined, applicationUrl)).toBe(
+		expect(resolvePythonLanguageServerBaseUrl({ rootUrl: '/wasm-idle' }, applicationUrl)).toBe(
 			'https://app.example.com/wasm-idle/pyodide/'
 		);
-		expect(resolveCppLanguageServerBaseUrl(undefined)).toBe('clangd/');
-		expect(resolvePythonLanguageServerBaseUrl(undefined)).toBe('pyodide/');
 	});
 
 	it('keeps every default runtime asset under the deployed application base', () => {
@@ -554,13 +559,7 @@ describe('lsp runtime asset resolution', () => {
 		});
 	});
 
-	it('falls back to same-origin defaults when no runtime root is provided', () => {
-		expect(resolveCppLanguageServerBaseUrl(undefined, 'https://app.example.com/editor')).toBe(
-			'https://app.example.com/clangd/'
-		);
-		expect(
-			resolvePythonLanguageServerBaseUrl(undefined, 'https://app.example.com/editor')
-		).toBe('https://app.example.com/pyodide/');
+	it('keeps remaining default runtime assets under the same origin', () => {
 		expect(
 			resolveRustLanguageServerCompilerUrl(undefined, 'https://app.example.com/editor')
 		).toBe('https://app.example.com/wasm-rust/index.js');

@@ -105,6 +105,7 @@ describe('getPythonLanguageServer', () => {
 
 		await expect(
 			getPythonLanguageServer({
+				rootUrl: 'https://static.example.com/repl_20240807',
 				signal: controller.signal,
 				createWorker: () => new mockState.FakeWorker() as unknown as Worker
 			})

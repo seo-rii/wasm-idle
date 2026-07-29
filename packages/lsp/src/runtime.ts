@@ -8,6 +8,16 @@ import {
 import { BUNDLED_CLANGD_ASSET_INTEGRITY } from './bundledClangdAssetIntegrity.js';
 import type { EditorLanguageServerOptions, EditorLanguageServerRuntimeOptions } from './types.js';
 
+export class LanguageServerAssetConfigurationError extends Error {
+	readonly provider: string;
+
+	constructor(provider: string, requirement: string) {
+		super(`${provider} requires ${requirement}`);
+		this.name = 'LanguageServerAssetConfigurationError';
+		this.provider = provider;
+	}
+}
+
 const resolveAllowedBaseUrls = (urls: string[] | undefined, currentUrl: string) =>
 	urls?.map((url) => normalizeBaseUrl(url, currentUrl));
 
@@ -58,11 +68,10 @@ export function resolveCppLanguageServerRuntimeAssetConfig(
 		};
 	}
 
-	return {
-		baseUrl: normalizeBaseUrl('clangd/', currentUrl),
-		allowedBaseUrls,
-		integrity
-	};
+	throw new LanguageServerAssetConfigurationError(
+		'clangd',
+		'an explicit cpp.baseUrl, cpp.loader, or rootUrl'
+	);
 }
 
 export function resolveCppLanguageServerBaseUrl(
@@ -85,7 +94,10 @@ export function resolvePythonLanguageServerBaseUrl(
 	if (options?.rootUrl) {
 		return resolveRootToolBaseUrl(options.rootUrl, '/pyodide/', currentUrl);
 	}
-	return normalizeBaseUrl('pyodide/', currentUrl);
+	throw new LanguageServerAssetConfigurationError(
+		'Python LSP',
+		'an explicit python.baseUrl or rootUrl'
+	);
 }
 
 const resolveFileUrl = (value: string, currentUrl = '') =>

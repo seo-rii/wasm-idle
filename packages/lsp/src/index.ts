@@ -11,6 +11,7 @@ export {
 	type LanguageServerStartupOptions
 } from './lifecycle.js';
 export {
+	LanguageServerAssetConfigurationError,
 	resolveCppLanguageServerBaseUrl,
 	resolveCppLanguageServerRuntimeAssetConfig,
 	resolveDLanguageServerModuleUrl,
