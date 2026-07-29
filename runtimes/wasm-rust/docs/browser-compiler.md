@@ -277,6 +277,8 @@ Latest observed outcome:
   console event separately from its bounded console tail and fails the run if any retry occurs
     - repeated target runs therefore measure first-attempt stability instead of accepting a recovered
       compile as a clean result
+- the Chromium readiness probe retries when a Service Worker navigation replaces Playwright's
+  execution context, while unrelated evaluation failures still fail immediately
 - after moving the helper handshake to the entry boundary, five fresh `wasm32-wasip1` Chromium
   sessions completed with zero compiler retries and zero memory-OOB reports
 - targeted browser coverage still included:

@@ -233,12 +233,27 @@ fn main() {
 /**
  * @param {import('playwright-core').Page} page
  */
-async function readActiveState(page) {
-	return await page.evaluate(() => ({
-		crossOriginIsolated,
-		sharedArrayBuffer: typeof SharedArrayBuffer !== 'undefined',
-		serviceWorkerControlled: !!navigator.serviceWorker?.controller
-	}));
+export async function readActiveState(page) {
+	for (let attempt = 0; attempt < 4; attempt += 1) {
+		try {
+			return await page.evaluate(() => ({
+				crossOriginIsolated,
+				sharedArrayBuffer: typeof SharedArrayBuffer !== 'undefined',
+				serviceWorkerControlled: !!navigator.serviceWorker?.controller
+			}));
+		} catch (error) {
+			const detail = error instanceof Error ? error.message : String(error);
+			const navigationReplacedContext =
+				detail.includes('Execution context was destroyed') ||
+				detail.includes('Cannot find context with specified id') ||
+				detail.includes('most likely because of a navigation');
+			if (!navigationReplacedContext || attempt === 3) {
+				throw error;
+			}
+			await page.waitForLoadState('domcontentloaded').catch(() => {});
+		}
+	}
+	throw new Error('Rust browser page readiness could not be measured');
 }
 
 /**

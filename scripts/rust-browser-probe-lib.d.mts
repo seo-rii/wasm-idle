@@ -10,6 +10,14 @@ export function resolveChromiumExecutable(explicitPath?: string): Promise<string
  */
 export function findRustCompilerRetries(messages: BrowserConsoleMessage[]): string[];
 /**
+ * @param {import('playwright-core').Page} page
+ */
+export function readActiveState(page: import("playwright-core").Page): Promise<{
+    crossOriginIsolated: boolean;
+    sharedArrayBuffer: boolean;
+    serviceWorkerControlled: boolean;
+}>;
+/**
  * @param {{ browserUrl: string; runTimeoutMs?: number; chromiumExecutable?: string; stdinText?: string; sendEof?: boolean; expectedOutput?: string; targetTriple?: 'wasm32-wasip1' | 'wasm32-wasip2' | 'wasm32-wasip3' }} options
  */
 export function runRustBrowserProbe({ browserUrl, runTimeoutMs, chromiumExecutable, stdinText, sendEof, expectedOutput, targetTriple }: {
