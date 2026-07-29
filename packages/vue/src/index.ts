@@ -54,6 +54,13 @@ export function useWasmIdleHost(
 ): VueWasmIdleHost {
 	const binding = useWasmIdlePlayground(runtimeAssets, loadSandbox);
 	const terminal = shallowRef<TerminalControl | undefined>(undefined);
+	const dispose = async () => {
+		const currentTerminal = terminal.value;
+		terminal.value = undefined;
+		if (currentTerminal) await currentTerminal.destroy();
+		await binding.value.dispose();
+	};
+	if (getCurrentScope()) onScopeDispose(() => void dispose());
 	return {
 		binding,
 		terminal,
@@ -61,12 +68,7 @@ export function useWasmIdleHost(
 		setTerminal(nextTerminal) {
 			terminal.value = nextTerminal;
 		},
-		async dispose() {
-			const currentTerminal = terminal.value;
-			terminal.value = undefined;
-			if (currentTerminal) await currentTerminal.destroy();
-			await binding.value.dispose();
-		}
+		dispose
 	};
 }
 
