@@ -41,14 +41,20 @@ class MockWorker {
 	onmessage: ((event: MessageEvent<any>) => void) | null = null;
 	onerror: ((event: ErrorEvent) => void) | null = null;
 	onmessageerror: ((event: MessageEvent<any>) => void) | null = null;
+	lastRunId: string | undefined;
 	postMessage = vi.fn((message: any) => {
+		this.lastRunId = message?.runId;
 		if (onPostMessage) {
 			onPostMessage(this, message);
 			return;
 		}
 		queueMicrotask(() =>
 			this.onmessage?.({
-				data: { output: 'factorial_plus_bonus=27\n', results: true }
+				data: {
+					runId: this.lastRunId,
+					output: 'factorial_plus_bonus=27\n',
+					results: true
+				}
 			} as MessageEvent<any>)
 		);
 	});
@@ -92,7 +98,13 @@ async function expectWorkerBootstrap(worker: MockWorker, targetUrl: string) {
 	expect(worker.url).toMatch(/^blob:wasm-idle-worker-/);
 	const bootstrap = workerBootstrapBlobs.get(worker.url);
 	expect(bootstrap).toBeDefined();
-	expect(await bootstrap!.text()).toContain(JSON.stringify(targetUrl));
+	const source = await bootstrap!.text();
+	expect(source).toContain(JSON.stringify(targetUrl));
+	expect(source).toContain("['output', 'results', 'error', 'diagnostic', 'progress']");
+	expect(source).toContain('runId: __wasmIdleRunId');
+	expect(source.indexOf('self.postMessage =')).toBeLessThan(
+		source.indexOf(JSON.stringify(targetUrl))
+	);
 }
 
 describe('static worker backed language sandboxes', () => {
@@ -152,6 +164,7 @@ describe('static worker backed language sandboxes', () => {
 		);
 		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
 			expect.objectContaining({
+				runId: expect.stringMatching(/^static-\d+$/),
 				baseUrl: 'http://localhost:3000/wasm-prolog/',
 				code,
 				args: ['demo'],
@@ -512,17 +525,23 @@ describe('static worker backed language sandboxes', () => {
 	});
 
 	it('keeps startup and runtime progress meaningful and monotonic until completion', async () => {
-		onPostMessage = (worker, _message) => {
+		onPostMessage = (worker, message) => {
 			queueMicrotask(() => {
 				worker.onmessage?.({
 					data: {
+						runId: message.runId,
 						progress: { percent: 70, stage: 'Compiling and linking Nim output' }
 					}
 				} as MessageEvent<any>);
 				worker.onmessage?.({
-					data: { progress: { percent: 20, stage: 'Late stale progress' } }
+					data: {
+						runId: message.runId,
+						progress: { percent: 20, stage: 'Late stale progress' }
+					}
 				} as MessageEvent<any>);
-				worker.onmessage?.({ data: { results: true } } as MessageEvent<any>);
+				worker.onmessage?.({
+					data: { runId: message.runId, results: true }
+				} as MessageEvent<any>);
 			});
 		};
 		const progress = { set: vi.fn() };
@@ -610,9 +629,48 @@ describe('static worker backed language sandboxes', () => {
 			sandbox.run('writeln(second).', false, true, undefined, [], { stdin: '' })
 		).rejects.toMatchObject({ name: 'BusyError', code: 'busy' });
 
-		workerInstances[0].onmessage?.({ data: { results: true } } as MessageEvent<any>);
+		workerInstances[0].onmessage?.({
+			data: { runId: workerInstances[0].lastRunId, results: true }
+		} as MessageEvent<any>);
 		await expect(first).resolves.toBe(true);
 		expect(workerInstances[0].terminate).toHaveBeenCalledOnce();
+	});
+
+	it('ignores uncorrelated and stale messages until the active run responds', async () => {
+		onPostMessage = () => {};
+		const sandbox = new Prolog();
+		const output = vi.fn();
+		sandbox.output = output;
+		await sandbox.load('/absproxy/5173');
+		const run = sandbox.run('writeln(current).', false, true, undefined, [], { stdin: '' });
+		await vi.waitFor(() => expect(workerInstances[0].postMessage).toHaveBeenCalledOnce());
+
+		let settled = false;
+		void run.finally(() => {
+			settled = true;
+		});
+		workerInstances[0].onmessage?.({
+			data: { output: 'missing-run-id\n', results: true }
+		} as MessageEvent<any>);
+		workerInstances[0].onmessage?.({
+			data: { runId: 'static-stale', output: 'stale\n', results: true }
+		} as MessageEvent<any>);
+		await Promise.resolve();
+
+		expect(settled).toBe(false);
+		expect(output).not.toHaveBeenCalled();
+		const runId = workerInstances[0].lastRunId;
+		expect(runId).toMatch(/^static-\d+$/);
+		workerInstances[0].onmessage?.({
+			data: { runId, output: 'current\n' }
+		} as MessageEvent<any>);
+		workerInstances[0].onmessage?.({
+			data: { runId, results: true }
+		} as MessageEvent<any>);
+
+		await expect(run).resolves.toBe(true);
+		expect(output).toHaveBeenCalledOnce();
+		expect(output).toHaveBeenCalledWith('current\n');
 	});
 
 	it('releases the active-run slot after kill for an immediate rerun', async () => {

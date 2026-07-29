@@ -27,6 +27,7 @@ export interface StaticWorkerRuntimeConfig {
 
 type StaticWorkerMessage = {
 	__wasmIdleStaticWorkerReady?: boolean;
+	runId?: string;
 	output?: string;
 	results?: boolean | string;
 	error?: string;
@@ -40,7 +41,7 @@ type BufferedStdin = {
 };
 
 type ActiveRun = {
-	id: number;
+	id: string;
 	progress?: SandboxProgress;
 	resolve: (result: boolean | string) => void;
 	reject: (reason: string) => void;
@@ -225,11 +226,29 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 			throw new Error(`${this.config.displayName} worker bootstrap is unavailable.`);
 		}
 		const importStatement = this.config.moduleWorker
-			? `import ${JSON.stringify(this.workerUrl)};`
+			? `await import(${JSON.stringify(this.workerUrl)});`
 			: `importScripts(${JSON.stringify(this.workerUrl)});`;
-		const source = `${importStatement}\nself.postMessage({ ${JSON.stringify(
-			WORKER_READY_MESSAGE
-		)}: true });\n`;
+		const source = `const __wasmIdleNativePostMessage = self.postMessage.bind(self);
+let __wasmIdleRunId = null;
+const __wasmIdleExecutionKeys = ['output', 'results', 'error', 'diagnostic', 'progress'];
+self.addEventListener('message', (event) => {
+  const runId = event.data?.runId;
+  if (typeof runId === 'string') __wasmIdleRunId = runId;
+}, { capture: true });
+self.postMessage = (message, transferOrOptions) => {
+  const executionMessage = __wasmIdleRunId !== null &&
+    message !== null && typeof message === 'object' &&
+    __wasmIdleExecutionKeys.some((key) => Object.prototype.hasOwnProperty.call(message, key));
+  const correlated = executionMessage
+    ? Object.assign({}, message, { runId: __wasmIdleRunId })
+    : message;
+  return transferOrOptions === undefined
+    ? __wasmIdleNativePostMessage(correlated)
+    : __wasmIdleNativePostMessage(correlated, transferOrOptions);
+};
+${importStatement}
+__wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
+`;
 		return URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
 	}
 
@@ -306,6 +325,7 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 	private handleWorkerMessage(event: MessageEvent<StaticWorkerMessage>) {
 		const activeRun = this.activeRun;
 		if (!activeRun) return;
+		if (event.data?.runId !== activeRun.id) return;
 		const { output, results, error, diagnostic, progress } = event.data || {};
 		if (progress && typeof progress.percent === 'number') {
 			const runtimeProgress = Math.max(0, Math.min(progress.percent / 100, 1));
@@ -347,7 +367,7 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 		else this.disposeWorker();
 	}
 
-	private resolveRun(id: number, result: boolean | string) {
+	private resolveRun(id: string, result: boolean | string) {
 		const activeRun = this.activeRun;
 		if (!activeRun || activeRun.id !== id) return;
 		this.elapse = Date.now() - this.begin;
@@ -359,7 +379,7 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 		activeRun.resolve(result);
 	}
 
-	private rejectRun(id: number, reason: string) {
+	private rejectRun(id: string, reason: string) {
 		const activeRun = this.activeRun;
 		if (!activeRun || activeRun.id !== id) return;
 		this.elapse = Date.now() - this.begin;
@@ -413,7 +433,7 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 
 		this.exit = false;
 		return new Promise<boolean | string>((resolve, reject) => {
-			const id = ++this.uid;
+			const id = `static-${++this.uid}`;
 			this.activeRun = { id, progress, resolve, reject };
 			this.activeReject = reject;
 			this.begin = Date.now();
@@ -435,6 +455,7 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 					);
 					worker.postMessage({
 						run: true,
+						runId: id,
 						baseUrl: this.baseUrl,
 						manifestUrl: this.manifestUrl,
 						code,
