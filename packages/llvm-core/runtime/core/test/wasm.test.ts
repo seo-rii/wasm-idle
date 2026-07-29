@@ -25,6 +25,9 @@ describe('WebAssembly loading utilities', () => {
 		await expect(readBuffer('data:application/zip;base64,AA==')).rejects.toThrow(
 			/Runtime assets must use HTTP\(S\)/u
 		);
+		await expect(readBuffer('https://cdn.test/runtime.wasm#latest')).rejects.toThrow(
+			/Runtime asset URLs must not include fragments/u
+		);
 		await expect(compile('toString')).rejects.toThrow(/Runtime asset URL must be absolute/u);
 		await expect(compile('constructor')).rejects.toThrow(/Runtime asset URL must be absolute/u);
 	});
@@ -305,8 +308,36 @@ describe('WebAssembly loading utilities', () => {
 
 		expect(fetchMock).toHaveBeenCalledWith(
 			new URL(url),
-			expect.objectContaining({ credentials: 'omit', referrerPolicy: 'no-referrer' })
+			expect.objectContaining({
+				credentials: 'omit',
+				redirect: 'error',
+				referrerPolicy: 'no-referrer'
+			})
 		);
+	});
+
+	it('rejects a response whose final URL differs from the declared asset URL', async () => {
+		const url = 'https://cdn.test/llvm/exact-url.bin';
+		let cancelled = false;
+		const response = new Response(
+			new ReadableStream({
+				cancel() {
+					cancelled = true;
+				}
+			})
+		);
+		Object.defineProperty(response, 'url', {
+			value: 'https://mirror.test/llvm/exact-url.bin'
+		});
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => response)
+		);
+
+		await expect(readBuffer(url)).rejects.toThrow(
+			`Runtime asset ${url} returned an unexpected final URL: https://mirror.test/llvm/exact-url.bin`
+		);
+		expect(cancelled).toBe(true);
 	});
 
 	it('evicts malformed archives from the cache so the same URL can be retried', async () => {

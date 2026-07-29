@@ -59,6 +59,7 @@ function resolveRuntimeAssetUrl(name: string) {
 	if (resolvedUrl.protocol !== 'http:' && resolvedUrl.protocol !== 'https:') {
 		throw new Error('Runtime assets must use HTTP(S)');
 	}
+	if (resolvedUrl.hash) throw new Error('Runtime asset URLs must not include fragments');
 	return resolvedUrl;
 }
 
@@ -361,8 +362,15 @@ export const readBuffer = async (
 			const resolvedUrl = resolveRuntimeAssetUrl(name);
 			const response = await fetch(resolvedUrl, {
 				credentials: 'omit',
+				redirect: 'error',
 				referrerPolicy: 'no-referrer'
 			});
+			if (response.url && new URL(response.url).href !== resolvedUrl.href) {
+				await response.body?.cancel().catch(() => {});
+				throw new Error(
+					`Runtime asset ${resolvedUrl} returned an unexpected final URL: ${response.url}`
+				);
+			}
 			if (!response.ok) {
 				throw new Error(`Failed to load runtime asset ${resolvedUrl}: ${response.status}`);
 			}
