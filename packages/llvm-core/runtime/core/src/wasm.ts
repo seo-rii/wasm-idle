@@ -62,34 +62,69 @@ function resolveRuntimeAssetUrl(name: string) {
 	return resolvedUrl;
 }
 
-async function readResponseBytes(response: Response, progress?: ProgressSink) {
-	const contentLength = +(response.headers.get('Content-Length') || 0);
+function readContentLength(response: Response) {
+	const value = response.headers.get('Content-Length');
+	if (!value || !/^\d+$/u.test(value)) return 0;
+	const contentLength = Number(value);
+	return Number.isSafeInteger(contentLength) ? contentLength : 0;
+}
+
+async function readResponseBytes(
+	response: Response,
+	assetUrl: string | URL,
+	maxOutputBytes: number,
+	progress?: ProgressSink
+) {
+	const contentLength = readContentLength(response);
+	if (contentLength > maxOutputBytes) {
+		await response.body?.cancel().catch(() => {});
+		throw new Error(`Runtime asset ${assetUrl} size exceeds the ${maxOutputBytes} byte limit`);
+	}
 	if (!response.body) {
 		const bytes = new Uint8Array(await response.arrayBuffer());
+		if (bytes.byteLength > maxOutputBytes) {
+			throw new Error(
+				`Runtime asset ${assetUrl} size exceeds the ${maxOutputBytes} byte limit`
+			);
+		}
 		progress?.set?.(1);
 		return bytes;
 	}
 
 	const reader = response.body.getReader();
-	const chunks: Uint8Array[] = [];
+	let bytes = new Uint8Array(
+		Math.min(maxOutputBytes, contentLength || DEFAULT_DECOMPRESSION_BUFFER_BYTES)
+	);
 	let receivedLength = 0;
-	while (true) {
-		const { done, value } = await reader.read();
-		if (done) break;
-		if (!value) continue;
-		const chunk = Uint8Array.from(value);
-		chunks.push(chunk);
-		receivedLength += chunk.byteLength;
-		if (contentLength > 0) progress?.set?.(receivedLength / contentLength);
+	try {
+		while (true) {
+			const { done, value } = await reader.read();
+			if (done) break;
+			if (!value) continue;
+			const nextLength = receivedLength + value.byteLength;
+			if (nextLength > maxOutputBytes) {
+				await reader.cancel().catch(() => {});
+				throw new Error(
+					`Runtime asset ${assetUrl} size exceeds the ${maxOutputBytes} byte limit`
+				);
+			}
+			if (nextLength > bytes.byteLength) {
+				const nextCapacity = Math.min(
+					maxOutputBytes,
+					Math.max(nextLength, Math.max(bytes.byteLength * 2, 1))
+				);
+				const grown = new Uint8Array(nextCapacity);
+				grown.set(bytes.subarray(0, receivedLength));
+				bytes = grown;
+			}
+			bytes.set(value, receivedLength);
+			receivedLength = nextLength;
+			if (contentLength > 0) progress?.set?.(receivedLength / contentLength);
+		}
+		return bytes.subarray(0, receivedLength);
+	} finally {
+		reader.releaseLock();
 	}
-
-	const bytes = new Uint8Array(receivedLength);
-	let offset = 0;
-	for (const chunk of chunks) {
-		bytes.set(chunk, offset);
-		offset += chunk.byteLength;
-	}
-	return bytes;
 }
 
 export async function decompressGzip(
@@ -135,30 +170,77 @@ export async function decompressGzip(
 	}
 }
 
-async function readGzipResponse(response: Response, assetUrl: URL, progress?: ProgressSink) {
+async function readGzipResponse(
+	response: Response,
+	assetUrl: URL,
+	maxOutputBytes: number,
+	progress?: ProgressSink
+) {
+	const contentLength = readContentLength(response);
+	if (contentLength > maxOutputBytes) {
+		await response.body?.cancel().catch(() => {});
+		throw new Error(
+			`Runtime asset ${assetUrl} download size exceeds the ${maxOutputBytes} byte limit`
+		);
+	}
 	if (!response.body) {
 		const source = new Uint8Array(await response.arrayBuffer());
-		const result = await decompressGzip(source, assetUrl);
+		if (source.byteLength > maxOutputBytes) {
+			throw new Error(
+				`Runtime asset ${assetUrl} download size exceeds the ${maxOutputBytes} byte limit`
+			);
+		}
+		const result = await decompressGzip(source, assetUrl, maxOutputBytes);
 		progress?.set?.(1);
 		return result;
 	}
 
-	const contentLength = +(response.headers.get('Content-Length') || 0);
 	const reader = response.body.getReader();
 	const leadingChunks: Uint8Array[] = [];
 	let leadingLength = 0;
 	let receivedLength = 0;
-	while (leadingLength < 2) {
-		const { done, value } = await reader.read();
-		if (done) break;
-		if (!value) continue;
-		const chunk = Uint8Array.from(value);
-		leadingChunks.push(chunk);
-		leadingLength += chunk.byteLength;
-		receivedLength += chunk.byteLength;
-		if (contentLength > 0) {
-			progress?.set?.(Math.min(receivedLength / contentLength, 1));
+	let readerDone = false;
+	let readerReleased = false;
+	const releaseReader = () => {
+		if (readerReleased) return;
+		readerReleased = true;
+		reader.releaseLock();
+	};
+	const cancelReader = async (reason?: unknown) => {
+		if (readerReleased) return;
+		try {
+			await reader.cancel(reason);
+		} finally {
+			releaseReader();
 		}
+	};
+	try {
+		while (leadingLength < 2) {
+			const { done, value } = await reader.read();
+			if (done) {
+				readerDone = true;
+				releaseReader();
+				break;
+			}
+			if (!value) continue;
+			const nextLength = receivedLength + value.byteLength;
+			if (nextLength > maxOutputBytes) {
+				const error = new Error(
+					`Runtime asset ${assetUrl} download size exceeds the ${maxOutputBytes} byte limit`
+				);
+				await cancelReader(error);
+				throw error;
+			}
+			leadingChunks.push(value);
+			leadingLength += value.byteLength;
+			receivedLength = nextLength;
+			if (contentLength > 0) {
+				progress?.set?.(Math.min(receivedLength / contentLength, 1));
+			}
+		}
+	} catch (error) {
+		await cancelReader(error).catch(() => {});
+		throw error;
 	}
 
 	let firstByte: number | undefined;
@@ -179,28 +261,47 @@ async function readGzipResponse(response: Response, assetUrl: URL, progress?: Pr
 				controller.enqueue(leadingChunks[leadingIndex++]);
 				return;
 			}
-			const { done, value } = await reader.read();
-			if (done) {
+			if (readerDone) {
 				controller.close();
 				return;
 			}
-			if (!value) return;
-			const chunk = Uint8Array.from(value);
-			receivedLength += chunk.byteLength;
-			if (contentLength > 0) {
-				progress?.set?.(Math.min(receivedLength / contentLength, 1));
+			try {
+				const { done, value } = await reader.read();
+				if (done) {
+					readerDone = true;
+					releaseReader();
+					controller.close();
+					return;
+				}
+				if (!value) return;
+				const nextLength = receivedLength + value.byteLength;
+				if (nextLength > maxOutputBytes) {
+					const error = new Error(
+						`Runtime asset ${assetUrl} download size exceeds the ${maxOutputBytes} byte limit`
+					);
+					await cancelReader(error);
+					controller.error(error);
+					return;
+				}
+				receivedLength = nextLength;
+				if (contentLength > 0) {
+					progress?.set?.(Math.min(receivedLength / contentLength, 1));
+				}
+				controller.enqueue(value);
+			} catch (error) {
+				await cancelReader(error).catch(() => {});
+				controller.error(error);
 			}
-			controller.enqueue(chunk);
 		},
 		cancel(reason) {
-			return reader.cancel(reason);
+			return cancelReader(reason);
 		}
 	});
 
 	let output = source;
 	if (firstByte === 0x1f && secondByte === 0x8b) {
 		if (typeof DecompressionStream !== 'function') {
-			await reader.cancel();
+			await cancelReader();
 			throw new Error(
 				`Failed to decompress runtime asset ${assetUrl}: DecompressionStream('gzip') is unavailable`
 			);
@@ -213,50 +314,72 @@ async function readGzipResponse(response: Response, assetUrl: URL, progress?: Pr
 	}
 
 	try {
-		const result = await readBoundedDecompressionStream(
-			output,
-			assetUrl,
-			DEFAULT_MAX_DECOMPRESSED_ASSET_BYTES
-		);
+		const result = await readBoundedDecompressionStream(output, assetUrl, maxOutputBytes);
 		progress?.set?.(1);
 		return result;
 	} catch (error) {
+		await cancelReader(error).catch(() => {});
 		throw new Error(
 			`Failed to decompress runtime asset ${assetUrl}: ${error instanceof Error ? error.message : String(error)}`
 		);
 	}
 }
 
-async function unzipFirstFile(bytes: Uint8Array) {
+async function unzipFirstFile(bytes: Uint8Array, assetUrl: string | URL, maxOutputBytes: number) {
 	const { unzipSync } = await import('fflate');
-	const entries = unzipSync(bytes);
+	let selectedFile: string | undefined;
+	const entries = unzipSync(bytes, {
+		filter(file) {
+			if (file.name.endsWith('/') || selectedFile !== undefined) return false;
+			if (file.originalSize > maxOutputBytes) {
+				throw new Error(
+					`Runtime asset ${assetUrl} extracted size exceeds the ${maxOutputBytes} byte limit`
+				);
+			}
+			selectedFile = file.name;
+			return true;
+		}
+	});
 	for (const [entryName, entryBytes] of Object.entries(entries)) {
 		if (!entryName.endsWith('/')) return entryBytes;
 	}
 	throw new Error('No entry found');
 }
 
-export const readBuffer = async (name: string, progress?: ProgressSink) => {
-	if (!bufferStore[name]) {
-		bufferStore[name] = (async () => {
+export const readBuffer = async (
+	name: string,
+	progress?: ProgressSink,
+	maxOutputBytes = DEFAULT_MAX_DECOMPRESSED_ASSET_BYTES
+) => {
+	if (!Number.isSafeInteger(maxOutputBytes) || maxOutputBytes < 0) {
+		throw new Error('Runtime asset byte limit must be a non-negative safe integer');
+	}
+	const cacheKey = `${name}\0${maxOutputBytes}`;
+	if (!bufferStore[cacheKey]) {
+		bufferStore[cacheKey] = (async () => {
 			const resolvedUrl = resolveRuntimeAssetUrl(name);
-			const response = await fetch(resolvedUrl);
+			const response = await fetch(resolvedUrl, {
+				credentials: 'omit',
+				referrerPolicy: 'no-referrer'
+			});
 			if (!response.ok) {
 				throw new Error(`Failed to load runtime asset ${resolvedUrl}: ${response.status}`);
 			}
 			if (resolvedUrl.pathname.endsWith('.gz')) {
-				return await readGzipResponse(response, resolvedUrl, progress);
+				return await readGzipResponse(response, resolvedUrl, maxOutputBytes, progress);
 			}
-			const source = await readResponseBytes(response, progress);
-			if (resolvedUrl.pathname.endsWith('.zip')) return await unzipFirstFile(source);
+			const source = await readResponseBytes(response, resolvedUrl, maxOutputBytes, progress);
+			if (resolvedUrl.pathname.endsWith('.zip')) {
+				return await unzipFirstFile(source, resolvedUrl, maxOutputBytes);
+			}
 			return source;
 		})().catch((error) => {
-			delete bufferStore[name];
+			delete bufferStore[cacheKey];
 			throw error;
 		});
 	}
 
-	const data = await bufferStore[name];
+	const data = await bufferStore[cacheKey];
 	progress?.set?.(1);
 	return Uint8Array.from(data);
 };

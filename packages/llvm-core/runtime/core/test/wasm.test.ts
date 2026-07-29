@@ -101,6 +101,34 @@ describe('WebAssembly loading utilities', () => {
 		);
 	});
 
+	it('rejects an oversized gzip transfer before starting decompression', async () => {
+		const contents = gzipSync(Uint8Array.of(1, 2, 3), { level: 9, mtime: 0 });
+		const url = 'https://cdn.test/llvm/gzip-download-limit.wasm.gz';
+		let cancelled = false;
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(
+				async () =>
+					new Response(
+						new ReadableStream({
+							start(controller) {
+								controller.enqueue(contents);
+							},
+							cancel() {
+								cancelled = true;
+							}
+						}),
+						{ headers: { 'Content-Length': String(contents.byteLength) } }
+					)
+			)
+		);
+
+		await expect(readBuffer(url, undefined, contents.byteLength - 1)).rejects.toThrow(
+			`Runtime asset ${url} download size exceeds the ${contents.byteLength - 1} byte limit`
+		);
+		expect(cancelled).toBe(true);
+	});
+
 	it('connects gzip network chunks to the native decompression stream before download completion', async () => {
 		const contents = Uint8Array.from({ length: 16_384 }, (_, index) => index % 251);
 		const compressed = gzipSync(contents, { level: 9, mtime: 0 });
@@ -182,6 +210,101 @@ describe('WebAssembly loading utilities', () => {
 		);
 
 		await expect(readBuffer(url)).resolves.toEqual(Uint8Array.of(9, 10, 11));
+	});
+
+	it('rejects an oversized Content-Length before reading the response body', async () => {
+		const url = 'https://cdn.test/llvm/content-length-limit.bin';
+		let cancelled = false;
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(
+				async () =>
+					new Response(
+						new ReadableStream({
+							pull() {
+								throw new Error('body should not be read');
+							},
+							cancel() {
+								cancelled = true;
+							}
+						}),
+						{ headers: { 'Content-Length': '6' } }
+					)
+			)
+		);
+
+		await expect(readBuffer(url, undefined, 5)).rejects.toThrow(
+			'Runtime asset https://cdn.test/llvm/content-length-limit.bin size exceeds the 5 byte limit'
+		);
+		expect(cancelled).toBe(true);
+	});
+
+	it('cancels an unknown-length stream as soon as it crosses the byte limit', async () => {
+		const url = 'https://cdn.test/llvm/stream-limit.bin';
+		let cancelled = false;
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(
+				async () =>
+					new Response(
+						new ReadableStream({
+							start(controller) {
+								controller.enqueue(Uint8Array.of(1, 2, 3));
+								controller.enqueue(Uint8Array.of(4, 5, 6));
+							},
+							cancel() {
+								cancelled = true;
+							}
+						})
+					)
+			)
+		);
+
+		await expect(readBuffer(url, undefined, 5)).rejects.toThrow(
+			'Runtime asset https://cdn.test/llvm/stream-limit.bin size exceeds the 5 byte limit'
+		);
+		expect(cancelled).toBe(true);
+	});
+
+	it('does not reuse a cached asset across different byte limits', async () => {
+		const url = 'https://cdn.test/llvm/cache-limit.bin';
+		const fetchMock = vi.fn(async () => new Response(Uint8Array.of(1, 2, 3)));
+		vi.stubGlobal('fetch', fetchMock);
+
+		await expect(readBuffer(url, undefined, 3)).resolves.toEqual(Uint8Array.of(1, 2, 3));
+		await expect(readBuffer(url, undefined, 2)).rejects.toThrow(
+			`Runtime asset ${url} size exceeds the 2 byte limit`
+		);
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+	});
+
+	it('rejects a ZIP entry from its declared original size before extraction', async () => {
+		const expanded = new Uint8Array(4096);
+		const archive = zipSync({ 'expanded.bin': expanded }, { level: 6 });
+		const limit = archive.byteLength + 16;
+		expect(limit).toBeLessThan(expanded.byteLength);
+		const url = 'https://cdn.test/llvm/zip-output-limit.zip';
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => new Response(archive))
+		);
+
+		await expect(readBuffer(url, undefined, limit)).rejects.toThrow(
+			`Runtime asset ${url} extracted size exceeds the ${limit} byte limit`
+		);
+	});
+
+	it('omits credentials and referrer metadata from runtime asset fetches', async () => {
+		const url = 'https://cdn.test/llvm/request-policy.bin';
+		const fetchMock = vi.fn(async () => new Response(Uint8Array.of(1)));
+		vi.stubGlobal('fetch', fetchMock);
+
+		await readBuffer(url);
+
+		expect(fetchMock).toHaveBeenCalledWith(
+			new URL(url),
+			expect.objectContaining({ credentials: 'omit', referrerPolicy: 'no-referrer' })
+		);
 	});
 
 	it('evicts malformed archives from the cache so the same URL can be retried', async () => {
