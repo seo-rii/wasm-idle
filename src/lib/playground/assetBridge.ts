@@ -4,7 +4,11 @@ import {
 	type RuntimeAssetLoaderResult,
 	type RuntimeAssetRuntime
 } from '$lib/playground/assets';
-import { verifyRuntimeAssetIntegrity, verifyRuntimeAssetPair } from '@wasm-idle/core';
+import {
+	ProtocolError,
+	verifyRuntimeAssetIntegrity,
+	verifyRuntimeAssetPair
+} from '@wasm-idle/core';
 import { decompressGzip } from '@wasm-idle/llvm-core';
 
 type ProgressLike = { set?: (value: number) => void };
@@ -390,16 +394,35 @@ export class WorkerAssetBridge {
 			await response.body?.cancel(error).catch(() => undefined);
 			throw error;
 		}
-		const contentLength =
-			Number(
-				response.headers.get('x-wasm-idle-original-content-length') ||
-					response.headers.get('content-length') ||
-					0
-			) || undefined;
-		if (contentLength && contentLength > MAX_RUNTIME_ASSET_BYTES) {
-			throw new Error(
+		const originalContentLength = response.headers.get('x-wasm-idle-original-content-length');
+		const contentLengthHeader =
+			originalContentLength !== null
+				? 'x-wasm-idle-original-content-length'
+				: 'content-length';
+		const rawContentLength = originalContentLength ?? response.headers.get('content-length');
+		let contentLength: number | undefined;
+		if (rawContentLength !== null) {
+			const normalizedContentLength = rawContentLength.trim();
+			const parsedContentLength = Number(normalizedContentLength);
+			if (
+				!/^\d+$/u.test(normalizedContentLength) ||
+				!Number.isSafeInteger(parsedContentLength)
+			) {
+				const error = new ProtocolError(
+					`Runtime asset ${asset} has an invalid ${contentLengthHeader}: ${rawContentLength}`,
+					{ phase: 'asset', runtimeId: this.runtime }
+				);
+				await response.body?.cancel(error).catch(() => undefined);
+				throw error;
+			}
+			contentLength = parsedContentLength;
+		}
+		if (contentLength !== undefined && contentLength > MAX_RUNTIME_ASSET_BYTES) {
+			const error = new Error(
 				`Runtime asset ${asset} exceeds the ${MAX_RUNTIME_ASSET_BYTES} byte limit`
 			);
+			await response.body?.cancel(error).catch(() => undefined);
+			throw error;
 		}
 		const mimeType = response.headers.get('content-type') || undefined;
 		const contentEncoding = response.headers.get('content-encoding') || undefined;

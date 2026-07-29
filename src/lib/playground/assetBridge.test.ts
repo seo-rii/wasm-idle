@@ -560,9 +560,60 @@ describe('WorkerAssetBridge asset requests', () => {
 		expect([...new Uint8Array(transferred)]).toEqual([1, 2, 3, 4, 5, 6]);
 	});
 
+	it.each([
+		['content-length', ''],
+		['content-length', '-1'],
+		['content-length', '1.5'],
+		['content-length', '1e2'],
+		['content-length', '3, 3'],
+		['content-length', '9007199254740992'],
+		['x-wasm-idle-original-content-length', 'invalid']
+	])('rejects an invalid %s before reading its response body: %s', async (header, value) => {
+		const postMessage = vi.fn();
+		const cancel = vi.fn(async () => undefined);
+		const getReader = vi.fn();
+		const arrayBuffer = vi.fn();
+		const headers = new Headers({ [header]: value });
+		if (header === 'x-wasm-idle-original-content-length') {
+			headers.set('content-length', '3');
+		}
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue({
+				ok: true,
+				url: '',
+				headers,
+				body: { cancel, getReader },
+				arrayBuffer
+			})
+		);
+		const bridge = new WorkerAssetBridge({ postMessage } as unknown as Worker, 'clang', {
+			baseUrl: 'https://assets.example.com/clang/',
+			useAssetBridge: true
+		});
+		const asset = RUNTIME_LOAD_ASSETS.clang[0];
+
+		bridge.handleMessage({
+			data: { assetRequest: { id: 27, asset } }
+		} as MessageEvent);
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
+
+		expect(postMessage).toHaveBeenCalledWith({
+			assetResponse: {
+				id: 27,
+				ok: false,
+				error: `Runtime asset ${asset} has an invalid ${header}: ${value}`
+			}
+		});
+		expect(cancel).toHaveBeenCalledOnce();
+		expect(getReader).not.toHaveBeenCalled();
+		expect(arrayBuffer).not.toHaveBeenCalled();
+	});
+
 	it('rejects an oversized asset before reading its response body', async () => {
 		const postMessage = vi.fn();
 		const read = vi.fn();
+		const cancel = vi.fn(async () => undefined);
 		vi.stubGlobal(
 			'fetch',
 			vi.fn().mockResolvedValue({
@@ -572,7 +623,7 @@ describe('WorkerAssetBridge asset requests', () => {
 						name === 'content-length' ? String(128 * 1024 * 1024 + 1) : null
 					)
 				},
-				body: { getReader: () => ({ read }) }
+				body: { cancel, getReader: () => ({ read }) }
 			})
 		);
 		const bridge = new WorkerAssetBridge({ postMessage } as unknown as Worker, 'clang', {
@@ -594,6 +645,7 @@ describe('WorkerAssetBridge asset requests', () => {
 				error: `Runtime asset ${asset} exceeds the ${128 * 1024 * 1024} byte limit`
 			}
 		});
+		expect(cancel).toHaveBeenCalledOnce();
 	});
 
 	it('cancels a stream that crosses the runtime asset limit', async () => {
