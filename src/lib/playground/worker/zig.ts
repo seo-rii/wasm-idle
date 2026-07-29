@@ -11,6 +11,7 @@ import {
 import { decompressGzip, untar } from '@wasm-idle/llvm-core';
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
 import type { SandboxWorkspaceFile, ZigTargetTriple } from '$lib/playground/options';
+import { fetchRuntimeAssetBytes } from './runtimeAssetFetch';
 
 declare var self: any;
 
@@ -168,36 +169,15 @@ function buildWorkspaceRoot(
 }
 
 async function fetchBytes(url: string, label: string, progressStart: number, progressEnd: number) {
-	const response = await fetch(url);
-	if (!response.ok) {
-		throw new Error(`failed to load ${label} from ${url}: ${response.status}`);
-	}
-	const total = Number(response.headers.get('content-length') || 0);
-	const body = response.body?.getReader();
-	if (!body) {
-		const data = new Uint8Array(await response.arrayBuffer());
-		postProgress(progressEnd);
-		return data;
-	}
-
-	const chunks: Uint8Array[] = [];
-	let loaded = 0;
-	while (true) {
-		const { done, value } = await body.read();
-		if (done) break;
-		if (!value) continue;
-		chunks.push(value);
-		loaded += value.byteLength;
-		if (total > 0) {
-			postProgress(progressStart + ((progressEnd - progressStart) * loaded) / total);
+	const data = await fetchRuntimeAssetBytes({
+		url,
+		label,
+		onProgress: ({ loaded, total }) => {
+			if (total && total > 0) {
+				postProgress(progressStart + ((progressEnd - progressStart) * loaded) / total);
+			}
 		}
-	}
-	const data = new Uint8Array(loaded);
-	let offset = 0;
-	for (const chunk of chunks) {
-		data.set(chunk, offset);
-		offset += chunk.byteLength;
-	}
+	});
 	postProgress(progressEnd);
 	return data;
 }

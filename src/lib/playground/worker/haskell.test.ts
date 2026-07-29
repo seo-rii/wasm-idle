@@ -117,10 +117,11 @@ vi.mock('@bjorn3/browser_wasi_shim', () => ({
 	}
 }));
 
-function responseFor(data: Uint8Array) {
+function responseFor(data: Uint8Array, url: string) {
 	return {
 		ok: true,
 		status: 200,
+		url,
 		headers: {
 			get(name: string) {
 				return name.toLowerCase() === 'content-length' ? String(data.byteLength) : null;
@@ -146,9 +147,10 @@ describe('Haskell worker', () => {
 		(globalThis as any).__lastHostOptions = undefined;
 		(globalThis as any).__lastMainCall = undefined;
 		(globalThis as any).fetch = vi.fn(async (url: string) => {
-			if (url.endsWith('bsdtar.wasm')) return responseFor(new Uint8Array([0, 97, 115, 109]));
+			if (url.endsWith('bsdtar.wasm'))
+				return responseFor(new Uint8Array([0, 97, 115, 109]), url);
 			if (url.endsWith('rootfs.tar.zst'))
-				return responseFor(new Uint8Array([0x28, 0xb5, 0x2f, 0xfd]));
+				return responseFor(new Uint8Array([0x28, 0xb5, 0x2f, 0xfd]), url);
 			return { ok: false, status: 404, headers: { get: () => null } };
 		});
 		vi.spyOn(WebAssembly, 'instantiate').mockResolvedValue({
@@ -197,8 +199,8 @@ describe('Haskell worker', () => {
 			data: {
 				load: true,
 				moduleUrl,
-				rootfsUrl: '/wasm-haskell/rootfs.tar.zst',
-				bsdtarUrl: '/wasm-haskell/bsdtar.wasm',
+				rootfsUrl: 'https://assets.example.test/wasm-haskell/rootfs.tar.zst',
+				bsdtarUrl: 'https://assets.example.test/wasm-haskell/bsdtar.wasm',
 				mainSoPath: '/tmp/libplayground001.so',
 				searchDirs: ['/tmp/clib', '/tmp/hslib/lib/wasm32-wasi-ghc'],
 				log: false
@@ -217,8 +219,22 @@ describe('Haskell worker', () => {
 		});
 		await Promise.resolve();
 
-		expect((globalThis as any).fetch).toHaveBeenCalledWith('/wasm-haskell/bsdtar.wasm');
-		expect((globalThis as any).fetch).toHaveBeenCalledWith('/wasm-haskell/rootfs.tar.zst');
+		expect((globalThis as any).fetch).toHaveBeenCalledWith(
+			'https://assets.example.test/wasm-haskell/bsdtar.wasm',
+			{
+				credentials: 'omit',
+				redirect: 'error',
+				referrerPolicy: 'no-referrer'
+			}
+		);
+		expect((globalThis as any).fetch).toHaveBeenCalledWith(
+			'https://assets.example.test/wasm-haskell/rootfs.tar.zst',
+			{
+				credentials: 'omit',
+				redirect: 'error',
+				referrerPolicy: 'no-referrer'
+			}
+		);
 		expect(shim.state.constructed[0].args).toEqual(['bsdtar.wasm', '-x']);
 		expect(shim.state.extractCount).toBe(1);
 		expect(shim.state.constructed[0].wasi.wasiImport.fd_filestat_set_times()).toBe(0);
@@ -274,8 +290,8 @@ describe('Haskell worker', () => {
 			data: {
 				load: true,
 				moduleUrl,
-				rootfsUrl: '/wasm-haskell/rootfs.tar.zst',
-				bsdtarUrl: '/wasm-haskell/bsdtar.wasm'
+				rootfsUrl: 'https://assets.example.test/wasm-haskell/rootfs.tar.zst',
+				bsdtarUrl: 'https://assets.example.test/wasm-haskell/bsdtar.wasm'
 			}
 		});
 		await Promise.resolve();
@@ -320,8 +336,8 @@ describe('Haskell worker', () => {
 			data: {
 				load: true,
 				moduleUrl,
-				rootfsUrl: '/wasm-haskell/rootfs.tar.zst',
-				bsdtarUrl: '/wasm-haskell/bsdtar.wasm'
+				rootfsUrl: 'https://assets.example.test/wasm-haskell/rootfs.tar.zst',
+				bsdtarUrl: 'https://assets.example.test/wasm-haskell/bsdtar.wasm'
 			}
 		});
 		await Promise.resolve();
@@ -358,8 +374,8 @@ describe('Haskell worker', () => {
 		const loadMessage = {
 			load: true,
 			moduleUrl,
-			rootfsUrl: '/wasm-haskell/rootfs.tar.zst',
-			bsdtarUrl: '/wasm-haskell/bsdtar.wasm',
+			rootfsUrl: 'https://assets.example.test/wasm-haskell/rootfs.tar.zst',
+			bsdtarUrl: 'https://assets.example.test/wasm-haskell/bsdtar.wasm',
 			mainSoPath: '/tmp/libplayground001.so',
 			searchDirs: ['/tmp/clib']
 		};
@@ -410,8 +426,8 @@ describe('Haskell worker', () => {
 			data: {
 				load: true,
 				moduleUrl,
-				rootfsUrl: '/wasm-haskell/rootfs.tar.zst',
-				bsdtarUrl: '/wasm-haskell/bsdtar.wasm'
+				rootfsUrl: 'https://assets.example.test/wasm-haskell/rootfs.tar.zst',
+				bsdtarUrl: 'https://assets.example.test/wasm-haskell/bsdtar.wasm'
 			}
 		});
 		await (globalThis as any).self.onmessage({

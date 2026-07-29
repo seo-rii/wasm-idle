@@ -148,10 +148,11 @@ vi.mock('@bjorn3/browser_wasi_shim', () => ({
 	}
 }));
 
-function responseFor(data: Uint8Array) {
+function responseFor(data: Uint8Array, url: string) {
 	return {
 		ok: true,
 		status: 200,
+		url,
 		headers: {
 			get(name: string) {
 				return name.toLowerCase() === 'content-length' ? String(data.byteLength) : null;
@@ -171,9 +172,9 @@ describe('Zig worker', () => {
 		(globalThis as any).postMessage = vi.fn();
 		(globalThis as any).fetch = vi.fn(async (url: string) => {
 			if (url.endsWith('zig_small.wasm'))
-				return responseFor(new Uint8Array([0, 97, 115, 109]));
-			if (url.endsWith('std.tar.gz')) return responseFor(stdlibTarGzip);
-			if (url.endsWith('std.zip')) return responseFor(stdlibArchive);
+				return responseFor(new Uint8Array([0, 97, 115, 109]), url);
+			if (url.endsWith('std.tar.gz')) return responseFor(stdlibTarGzip, url);
+			if (url.endsWith('std.zip')) return responseFor(stdlibArchive, url);
 			return { ok: false, status: 404, headers: { get: () => null } };
 		});
 		vi.spyOn(WebAssembly, 'compile').mockResolvedValue({} as WebAssembly.Module);
@@ -205,8 +206,8 @@ describe('Zig worker', () => {
 		await (globalThis as any).self.onmessage({
 			data: {
 				load: true,
-				compilerUrl: '/wasm-zig/zig_small.wasm',
-				stdlibUrl: '/wasm-zig/std.tar.gz',
+				compilerUrl: 'https://assets.example.test/wasm-zig/zig_small.wasm',
+				stdlibUrl: 'https://assets.example.test/wasm-zig/std.tar.gz',
 				log: false
 			}
 		});
@@ -232,8 +233,22 @@ describe('Zig worker', () => {
 
 		const compileWasi = shim.state.constructed[0];
 		const runWasi = shim.state.constructed[1];
-		expect((globalThis as any).fetch).toHaveBeenCalledWith('/wasm-zig/zig_small.wasm');
-		expect((globalThis as any).fetch).toHaveBeenCalledWith('/wasm-zig/std.tar.gz');
+		expect((globalThis as any).fetch).toHaveBeenCalledWith(
+			'https://assets.example.test/wasm-zig/zig_small.wasm',
+			{
+				credentials: 'omit',
+				redirect: 'error',
+				referrerPolicy: 'no-referrer'
+			}
+		);
+		expect((globalThis as any).fetch).toHaveBeenCalledWith(
+			'https://assets.example.test/wasm-zig/std.tar.gz',
+			{
+				credentials: 'omit',
+				redirect: 'error',
+				referrerPolicy: 'no-referrer'
+			}
+		);
 		expect(compileWasi.args).toEqual([
 			'zigc.wasm',
 			'build-exe',
@@ -266,8 +281,8 @@ describe('Zig worker', () => {
 		await (globalThis as any).self.onmessage({
 			data: {
 				load: true,
-				compilerUrl: '/wasm-zig/zig_small.wasm',
-				stdlibUrl: '/wasm-zig/std.zip',
+				compilerUrl: 'https://assets.example.test/wasm-zig/zig_small.wasm',
+				stdlibUrl: 'https://assets.example.test/wasm-zig/std.zip',
 				log: false
 			}
 		});
@@ -308,8 +323,8 @@ describe('Zig worker', () => {
 		await (globalThis as any).self.onmessage({
 			data: {
 				load: true,
-				compilerUrl: '/wasm-zig/zig_small.wasm',
-				stdlibUrl: '/wasm-zig/std.tar.gz',
+				compilerUrl: 'https://assets.example.test/wasm-zig/zig_small.wasm',
+				stdlibUrl: 'https://assets.example.test/wasm-zig/std.tar.gz',
 				log: false
 			}
 		});
