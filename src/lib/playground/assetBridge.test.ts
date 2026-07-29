@@ -371,11 +371,12 @@ describe('WorkerAssetBridge asset requests', () => {
 
 	it('rejects redirects outside the configured asset bases and omits credentials', async () => {
 		const postMessage = vi.fn();
+		const cancel = vi.fn(async () => undefined);
 		const fetchMock = vi.fn().mockResolvedValue({
 			ok: true,
 			url: 'https://evil.example.com/clang/tool.wasm',
 			headers: { get: vi.fn(() => null) },
-			body: null,
+			body: { cancel },
 			arrayBuffer: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3]).buffer)
 		});
 		vi.stubGlobal('fetch', fetchMock);
@@ -405,6 +406,80 @@ describe('WorkerAssetBridge asset requests', () => {
 				error: `Runtime asset ${asset} URL is outside the allowed asset bases: https://evil.example.com/clang/tool.wasm`
 			}
 		});
+		expect(cancel).toHaveBeenCalledOnce();
+	});
+
+	it('rejects a relative final response URL before reading its body', async () => {
+		const postMessage = vi.fn();
+		const cancel = vi.fn(async () => undefined);
+		const getReader = vi.fn();
+		const arrayBuffer = vi.fn();
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue({
+				ok: true,
+				status: 200,
+				url: 'tool.wasm',
+				headers: new Headers(),
+				body: { cancel, getReader },
+				arrayBuffer
+			})
+		);
+		const asset = RUNTIME_LOAD_ASSETS.clang[0];
+		const bridge = new WorkerAssetBridge({ postMessage } as unknown as Worker, 'clang', {
+			baseUrl: 'https://assets.example.com/clang/',
+			useAssetBridge: true
+		});
+
+		bridge.handleMessage({
+			data: { assetRequest: { id: 25, asset } }
+		} as MessageEvent);
+
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
+		expect(postMessage).toHaveBeenCalledWith({
+			assetResponse: {
+				id: 25,
+				ok: false,
+				error: `Runtime asset ${asset} has an invalid final response URL: tool.wasm`
+			}
+		});
+		expect(cancel).toHaveBeenCalledOnce();
+		expect(getReader).not.toHaveBeenCalled();
+		expect(arrayBuffer).not.toHaveBeenCalled();
+	});
+
+	it('cancels a failed HTTP response before reporting its status', async () => {
+		const postMessage = vi.fn();
+		const cancel = vi.fn(async () => undefined);
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue({
+				ok: false,
+				status: 503,
+				url: '',
+				headers: new Headers(),
+				body: { cancel }
+			})
+		);
+		const asset = RUNTIME_LOAD_ASSETS.clang[0];
+		const bridge = new WorkerAssetBridge({ postMessage } as unknown as Worker, 'clang', {
+			baseUrl: 'https://assets.example.com/clang/',
+			useAssetBridge: true
+		});
+
+		bridge.handleMessage({
+			data: { assetRequest: { id: 26, asset } }
+		} as MessageEvent);
+
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
+		expect(postMessage).toHaveBeenCalledWith({
+			assetResponse: {
+				id: 26,
+				ok: false,
+				error: `Failed to load ${asset}: 503`
+			}
+		});
+		expect(cancel).toHaveBeenCalledOnce();
 	});
 
 	it('copies loader-owned buffers before transferring them to a worker', async () => {

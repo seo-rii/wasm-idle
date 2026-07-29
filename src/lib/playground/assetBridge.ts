@@ -367,8 +367,29 @@ export class WorkerAssetBridge {
 			redirect: 'follow',
 			referrerPolicy: 'no-referrer'
 		});
-		this.requireAllowedAssetUrl(asset, response.url || requestUrl.href);
-		if (!response.ok) throw new Error(`Failed to load ${asset}: ${response.status}`);
+		let finalResponseUrl = requestUrl.href;
+		if (response.url) {
+			try {
+				finalResponseUrl = new URL(response.url).href;
+			} catch {
+				const error = new Error(
+					`Runtime asset ${asset} has an invalid final response URL: ${response.url}`
+				);
+				await response.body?.cancel(error).catch(() => undefined);
+				throw error;
+			}
+		}
+		try {
+			this.requireAllowedAssetUrl(asset, finalResponseUrl);
+		} catch (error) {
+			await response.body?.cancel(error).catch(() => undefined);
+			throw error;
+		}
+		if (!response.ok) {
+			const error = new Error(`Failed to load ${asset}: ${response.status}`);
+			await response.body?.cancel(error).catch(() => undefined);
+			throw error;
+		}
 		const contentLength =
 			Number(
 				response.headers.get('x-wasm-idle-original-content-length') ||
