@@ -15,6 +15,10 @@ const runTimeoutMs = Number(
 	process.env.WASM_RUST_BROWSER_HARNESS_RUN_TIMEOUT_MS || String(120000 + 120000)
 );
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const constrainedRustcMemory = {
+	initialPages: 6400,
+	maximumPages: 8192
+} as const;
 
 describe('browser harness direct Playwright integration', () => {
 	it('compiles and runs hello world directly through Chromium and the standalone harness', async () => {
@@ -95,8 +99,47 @@ describe('browser harness direct Playwright integration', () => {
 				if (targetTriple === 'wasm32-wasip1') {
 					expect(result.compile.format).toBe('core-wasm');
 				}
+				expect(
+					result.compile.logs.filter((line: string) => line.includes('failed; retrying'))
+				).toEqual([]);
 			}
+
+			const constrainedResult = await page.evaluate(
+				async ({ code, initialPages, maximumPages }) =>
+					window.runWasmRustHarness({
+						code,
+						initialPages,
+						maximumPages,
+						log: true,
+						targetTriple: 'wasm32-wasip1'
+					}),
+				{
+					code: sampleProgram,
+					...constrainedRustcMemory
+				}
+			);
+
+			expect(constrainedResult.manifest).toMatchObject({
+				targetTriple: 'wasm32-wasip1',
+				...constrainedRustcMemory
+			});
+			expect(constrainedResult.compile.success).toBe(true);
+			expect(constrainedResult.compile.hasWasm).toBe(true);
+			expect(constrainedResult.runtime?.exitCode).toBe(0);
+			expect(constrainedResult.runtime?.stdout).toBe('hi\n');
+			expect(
+				constrainedResult.compile.logs.filter((line: string) =>
+					line.includes('failed; retrying')
+				)
+			).toEqual([]);
 			expect(pageErrors).toEqual([]);
+			expect(
+				consoleMessages.filter(
+					(message) =>
+						message.text.includes('failed; retrying') ||
+						message.text.includes('memory access out of bounds')
+				)
+			).toEqual([]);
 			expect(
 				consoleMessages.some(
 					(message) =>

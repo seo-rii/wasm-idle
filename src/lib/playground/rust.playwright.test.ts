@@ -12,7 +12,19 @@ import {
 } from '../../../scripts/browser-preview-server.mjs';
 import { runRustBrowserProbe } from '../../../scripts/rust-browser-probe-lib.mjs';
 
+const defaultBrowserRepeats = {
+	'wasm32-wasip1': 4,
+	'wasm32-wasip2': 4,
+	'wasm32-wasip3': 2
+} as const;
+
 describe('wasm-idle rust browser playwright integration', () => {
+	it('keeps the default retry-race stress above eight fresh Chromium sessions', () => {
+		expect(
+			Object.values(defaultBrowserRepeats).reduce((total, value) => total + value, 0)
+		).toBe(10);
+	});
+
 	it('runs the real Rust page path for every shipped wasm-rust target without worker bootstrap or memory-oob failures', async () => {
 		if (process.env.WASM_IDLE_RUN_REAL_BROWSER_RUST !== '1') {
 			return;
@@ -42,12 +54,18 @@ describe('wasm-idle rust browser playwright integration', () => {
 			>;
 
 			for (const targetTriple of expectedRustTargets) {
-				const targetRuns =
+				const configuredRepeats =
 					targetTriple === 'wasm32-wasip2'
-						? Number(process.env.WASM_IDLE_WASIP2_BROWSER_REPEATS || '4')
+						? process.env.WASM_IDLE_WASIP2_BROWSER_REPEATS
 						: targetTriple === 'wasm32-wasip3'
-							? Number(process.env.WASM_IDLE_WASIP3_BROWSER_REPEATS || '1')
-							: Number(process.env.WASM_IDLE_WASIP1_BROWSER_REPEATS || '2');
+							? process.env.WASM_IDLE_WASIP3_BROWSER_REPEATS
+							: process.env.WASM_IDLE_WASIP1_BROWSER_REPEATS;
+				const targetRuns = Number(configuredRepeats ?? defaultBrowserRepeats[targetTriple]);
+				if (!Number.isSafeInteger(targetRuns) || targetRuns <= 0) {
+					throw new Error(
+						`Invalid ${targetTriple} browser repeat count: ${configuredRepeats}`
+					);
+				}
 				for (let runIndex = 0; runIndex < targetRuns; runIndex += 1) {
 					const previewServer = reuseProvidedBrowserUrl
 						? {
