@@ -42,11 +42,13 @@ export type CreateClangCompilerOptions = ClangRuntimeLocation & {
 	log?: boolean;
 	manifest?: RuntimeManifestV1;
 	fetchImpl?: typeof fetch;
+	signal?: AbortSignal;
 };
 
 export type PreloadBrowserClangRuntimeOptions = ClangRuntimeLocation & {
 	manifest?: RuntimeManifestV1;
 	fetchImpl?: typeof fetch;
+	signal?: AbortSignal;
 };
 
 function toStandaloneBytes(value: Uint8Array | ArrayBuffer) {
@@ -114,18 +116,21 @@ async function resolveRuntimeLocation(
 			: resolveRuntimeBaseUrlFromManifestUrl(options.manifestUrl);
 	const manifestUrl = options.manifestUrl || resolveRuntimeManifestUrl(runtimeBaseUrl);
 	const manifest =
-		options.manifest || (await loadRuntimeManifest(manifestUrl, options.fetchImpl || fetch));
+		options.manifest ||
+		(await loadRuntimeManifest(manifestUrl, options.fetchImpl || fetch, options.signal));
 	return { manifest, runtimeBaseUrl };
 }
 
 export async function preloadBrowserClangRuntime(
 	options: PreloadBrowserClangRuntimeOptions
 ): Promise<void> {
+	if (options.signal?.aborted) throw options.signal.reason;
 	const { manifest, runtimeBaseUrl } = await resolveRuntimeLocation(options);
 	const runtime = new Runtime({
 		stdin: () => '',
 		stdout: () => {},
 		progress: () => {},
+		signal: options.signal,
 		log: false,
 		runtimeBaseUrl,
 		manifest
@@ -137,6 +142,7 @@ export async function compileClang(
 	request: BrowserClangCompileRequest,
 	options: CreateClangCompilerOptions
 ): Promise<BrowserClangCompilerResult> {
+	if (options.signal?.aborted) throw options.signal.reason;
 	if (!request.code || typeof request.code !== 'string') {
 		return {
 			success: false,
@@ -178,6 +184,7 @@ export async function compileClang(
 			);
 		},
 		log: enabledLogs,
+		signal: options.signal,
 		showTiming: request.showTiming ?? options.showTiming ?? false,
 		runtimeBaseUrl,
 		manifest
@@ -240,6 +247,7 @@ export async function compileClang(
 			...createLogResult(logRecords, enabledLogs)
 		};
 	} catch (error) {
+		if (options.signal?.aborted) throw options.signal.reason;
 		pushRecord(
 			logRecords,
 			enabledLogs,
