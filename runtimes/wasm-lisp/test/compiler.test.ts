@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -52,6 +52,115 @@ async function createCompilerWithFetch(fetchImpl: typeof fetch, maxAssetBytes: n
 }
 
 describe('wasm-lisp Puppy Scheme runtime', () => {
+	it('rejects a pre-aborted compile without fetching a core module', async () => {
+		const fetchImpl = vi.fn(async () => {
+			throw new Error('unexpected core-module fetch');
+		});
+		const compiler = await createCompilerWithFetch(fetchImpl, 1024);
+		const controller = new AbortController();
+		const reason = new Error('stop before compilation');
+		controller.abort(reason);
+
+		await expect(
+			compiler.compile({ code: '(display 1)', signal: controller.signal })
+		).rejects.toBe(reason);
+		expect(fetchImpl).not.toHaveBeenCalled();
+	});
+
+	it('cancels a streamed core module with the caller signal and permits a clean retry', async () => {
+		let fetchCount = 0;
+		let requestSignal: AbortSignal | null | undefined;
+		let cancelReason: unknown;
+		let resolveBlockedRead:
+			| ((result: ReadableStreamReadResult<Uint8Array>) => void)
+			| undefined;
+		let markReadStarted!: () => void;
+		const readStarted = new Promise<void>((resolve) => {
+			markReadStarted = resolve;
+		});
+		const reader = {
+			read: vi.fn(() => {
+				if (reader.read.mock.calls.length === 1) {
+					return Promise.resolve({ done: false, value: new Uint8Array([0]) });
+				}
+				markReadStarted();
+				return new Promise<ReadableStreamReadResult<Uint8Array>>((resolve) => {
+					resolveBlockedRead = resolve;
+				});
+			}),
+			cancel: vi.fn(async (reason: unknown) => {
+				cancelReason = reason;
+				resolveBlockedRead?.({ done: true, value: undefined });
+			}),
+			releaseLock: vi.fn()
+		};
+		const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+			fetchCount += 1;
+			if (fetchCount === 1) {
+				requestSignal = init?.signal;
+				const response = new Response(null);
+				Object.defineProperty(response, 'body', {
+					value: { getReader: () => reader }
+				});
+				return response;
+			}
+			const url =
+				typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+			return new Response(await readFile(fileURLToPath(url)));
+		});
+		const compiler = await createCompilerWithFetch(fetchImpl, 128 * 1024 * 1024);
+		const controller = new AbortController();
+		const reason = new Error('stop streamed core load');
+		const abortedCompile = compiler.compile({
+			code: '(display 1)',
+			signal: controller.signal
+		});
+
+		await readStarted;
+		controller.abort(reason);
+		await expect(abortedCompile).rejects.toBe(reason);
+		expect(requestSignal).toBe(controller.signal);
+		expect(reader.cancel).toHaveBeenCalledWith(reason);
+		expect(cancelReason).toBe(reason);
+		expect(reader.releaseLock).toHaveBeenCalledOnce();
+
+		const retried = await compiler.compile({ code: '(display 1)' });
+		expect(retried.success).toBe(true);
+		expect(fetchCount).toBeGreaterThan(1);
+	});
+
+	it('rechecks cancellation after a bodyless core-module read', async () => {
+		let markArrayBufferStarted!: () => void;
+		const arrayBufferStarted = new Promise<void>((resolve) => {
+			markArrayBufferStarted = resolve;
+		});
+		let releaseArrayBuffer!: () => void;
+		const arrayBufferRelease = new Promise<void>((resolve) => {
+			releaseArrayBuffer = resolve;
+		});
+		const fetchImpl = vi.fn(async () => {
+			const response = new Response(null);
+			Object.defineProperty(response, 'arrayBuffer', {
+				value: async () => {
+					markArrayBufferStarted();
+					await arrayBufferRelease;
+					return new Uint8Array([0, 0x61, 0x73, 0x6d]).buffer;
+				}
+			});
+			return response;
+		});
+		const compiler = await createCompilerWithFetch(fetchImpl, 1024);
+		const controller = new AbortController();
+		const reason = new Error('stop bodyless core load');
+		const compile = compiler.compile({ code: '(display 1)', signal: controller.signal });
+
+		await arrayBufferStarted;
+		controller.abort(reason);
+		releaseArrayBuffer();
+
+		await expect(compile).rejects.toBe(reason);
+	});
+
 	it('bounds streamed compiler assets and omits ambient request authority', async () => {
 		let requestInit: RequestInit | undefined;
 		let cancelled = false;

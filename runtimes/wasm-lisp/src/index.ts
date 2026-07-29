@@ -38,6 +38,7 @@ export interface BrowserLispCompileRequest {
 	fileName?: string;
 	files?: BrowserLispVirtualFile[];
 	log?: boolean;
+	signal?: AbortSignal;
 }
 
 export interface BrowserLispArtifact {
@@ -102,6 +103,14 @@ const symbolDispose: symbol =
 const outputFileName = '__wasm_idle_output.wasm';
 export const DEFAULT_MAX_RUNTIME_ASSET_BYTES = 128 * 1024 * 1024;
 const DEFAULT_RUNTIME_ASSET_BUFFER_BYTES = 64 * 1024;
+
+function abortReason(signal: AbortSignal) {
+	return signal.reason ?? new DOMException('wasm-lisp compilation aborted', 'AbortError');
+}
+
+function throwIfAborted(signal?: AbortSignal) {
+	if (signal?.aborted) throw abortReason(signal);
+}
 
 class BufferedInput {
 	private chunk: Uint8Array<ArrayBufferLike> = new Uint8Array(0);
@@ -297,7 +306,13 @@ function setupWasiShims(options: {
 	};
 }
 
-async function fetchBytes(url: URL, fetcher: typeof fetch, maxAssetBytes: number) {
+async function fetchBytes(
+	url: URL,
+	fetcher: typeof fetch,
+	maxAssetBytes: number,
+	signal?: AbortSignal
+) {
+	throwIfAborted(signal);
 	if (!['file:', 'http:', 'https:'].includes(url.protocol)) {
 		throw new Error(`unsupported wasm-lisp runtime asset URL scheme: ${url.protocol}`);
 	}
@@ -307,15 +322,23 @@ async function fetchBytes(url: URL, fetcher: typeof fetch, maxAssetBytes: number
 	}
 	let response: Response;
 	try {
-		response = await fetcher(url.href, {
+		const requestInit: RequestInit = {
 			credentials: 'omit',
 			redirect: 'error',
 			referrerPolicy: 'no-referrer'
-		});
+		};
+		if (signal) requestInit.signal = signal;
+		response = await fetcher(url.href, requestInit);
 	} catch (error) {
+		if (signal?.aborted) throw abortReason(signal);
 		throw new Error(
 			`failed to load ${url.href}: ${error instanceof Error ? error.message : String(error)}`
 		);
+	}
+	if (signal?.aborted) {
+		const reason = abortReason(signal);
+		await response.body?.cancel(reason).catch(() => {});
+		throw reason;
 	}
 	if (response.url && new URL(response.url).href !== url.href) {
 		await response.body?.cancel().catch(() => {});
@@ -341,7 +364,16 @@ async function fetchBytes(url: URL, fetcher: typeof fetch, maxAssetBytes: number
 		throw new Error(`wasm-lisp runtime asset exceeds the ${maxAssetBytes} byte download limit`);
 	}
 	if (!response.body) {
-		const bytes = new Uint8Array(await response.arrayBuffer());
+		throwIfAborted(signal);
+		let source: ArrayBuffer;
+		try {
+			source = await response.arrayBuffer();
+		} catch (error) {
+			if (signal?.aborted) throw abortReason(signal);
+			throw error;
+		}
+		throwIfAborted(signal);
+		const bytes = new Uint8Array(source);
 		if (bytes.byteLength > maxAssetBytes) {
 			throw new Error(
 				`wasm-lisp runtime asset exceeds the ${maxAssetBytes} byte download limit`
@@ -350,14 +382,20 @@ async function fetchBytes(url: URL, fetcher: typeof fetch, maxAssetBytes: number
 		return bytes;
 	}
 	const reader = response.body.getReader();
+	const cancelOnAbort = () => {
+		void reader.cancel(abortReason(signal!)).catch(() => {});
+	};
+	signal?.addEventListener('abort', cancelOnAbort, { once: true });
 	let bytes = new Uint8Array(
 		Math.min(maxAssetBytes, contentLength || DEFAULT_RUNTIME_ASSET_BUFFER_BYTES)
 	);
 	let receivedLength = 0;
 	try {
+		throwIfAborted(signal);
 		while (true) {
 			const { done, value } = await reader.read();
 			if (done) break;
+			throwIfAborted(signal);
 			if (!value) continue;
 			const nextLength = receivedLength + value.byteLength;
 			if (nextLength > maxAssetBytes) {
@@ -377,11 +415,14 @@ async function fetchBytes(url: URL, fetcher: typeof fetch, maxAssetBytes: number
 			bytes.set(value, receivedLength);
 			receivedLength = nextLength;
 		}
+		throwIfAborted(signal);
 		return bytes.subarray(0, receivedLength);
 	} catch (error) {
-		await reader.cancel().catch(() => {});
+		await reader.cancel(error).catch(() => {});
+		if (signal?.aborted) throw abortReason(signal);
 		throw error;
 	} finally {
+		signal?.removeEventListener('abort', cancelOnAbort);
 		reader.releaseLock();
 	}
 }
@@ -511,25 +552,44 @@ export async function createLispCompiler(
 	const compilerModulePromise = import(
 		/* @vite-ignore */ compilerModuleUrl.href
 	) as Promise<ComponentModule>;
-	const coreModuleCache = new Map<string, Promise<WebAssembly.Module>>();
+	const coreModuleCache = new Map<string, WebAssembly.Module>();
+	const coreModuleLoads = new Map<string, Promise<WebAssembly.Module>>();
 
-	async function getCompilerCoreModule(moduleName: string) {
+	async function getCompilerCoreModule(moduleName: string, signal?: AbortSignal) {
+		throwIfAborted(signal);
 		const normalizedName = moduleName.replace(/^[./]+/, '');
 		const moduleUrl = new URL(normalizedName, runtimeBaseUrl);
 		const key = moduleUrl.href;
-		if (!coreModuleCache.has(key)) {
-			coreModuleCache.set(
-				key,
-				fetchBytes(moduleUrl, fetcher, maxAssetBytes).then((bytes) =>
-					WebAssembly.compile(bytes)
-				)
-			);
+		const cached = coreModuleCache.get(key);
+		if (cached) return cached;
+		if (signal) {
+			const bytes = await fetchBytes(moduleUrl, fetcher, maxAssetBytes, signal);
+			throwIfAborted(signal);
+			const compiled = await WebAssembly.compile(bytes);
+			throwIfAborted(signal);
+			coreModuleCache.set(key, compiled);
+			return compiled;
 		}
-		return await coreModuleCache.get(key)!;
+		let pending = coreModuleLoads.get(key);
+		if (!pending) {
+			pending = fetchBytes(moduleUrl, fetcher, maxAssetBytes)
+				.then((bytes) => WebAssembly.compile(bytes))
+				.then((compiled) => {
+					coreModuleCache.set(key, compiled);
+					return compiled;
+				});
+			coreModuleLoads.set(key, pending);
+		}
+		try {
+			return await pending;
+		} finally {
+			if (coreModuleLoads.get(key) === pending) coreModuleLoads.delete(key);
+		}
 	}
 
 	return {
 		async compile(request: BrowserLispCompileRequest) {
+			throwIfAborted(request.signal);
 			const fileName = normalizeWorkspacePath(request.fileName, 'main.scm');
 			const outputPath = outputFileName;
 			const fileData = buildWorkspaceFileData(request.code, fileName, request.files);
@@ -542,10 +602,12 @@ export async function createLispCompiler(
 			try {
 				exitCode = await runComponentModule(
 					await compilerModulePromise,
-					getCompilerCoreModule,
+					(moduleName) => getCompilerCoreModule(moduleName, request.signal),
 					wasi.imports
 				);
+				throwIfAborted(request.signal);
 			} catch (errorValue) {
+				if (request.signal?.aborted) throw abortReason(request.signal);
 				const output = wasi.finish();
 				const message =
 					errorValue instanceof Error ? errorValue.message : String(errorValue);
