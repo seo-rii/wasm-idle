@@ -93,7 +93,8 @@ const bqnStdinSource = `•Show "value?"
 5 + •ParseFloat •GetLine @
 `;
 
-const janetStdinSource = `(def n (scan-number (string/trim (getline))))
+const janetStdinSource = `(print "value?")
+(def n (scan-number (string/trim (getline))))
 (print "main=" (+ n 5))
 `;
 
@@ -417,7 +418,8 @@ describe('wasm-idle static worker language browser integrations', () => {
 					language: 'JANET',
 					runTimeoutMs: Number(process.env.WASM_IDLE_JANET_RUN_TIMEOUT_MS || '240000'),
 					source: janetStdinSource,
-					stdinText: '68\n'
+					stdinText: '68\n',
+					waitForOutputBeforeStdin: 'value?'
 				});
 				expect(summary.activeState.crossOriginIsolated).toBe(true);
 				expect(summary.activeState.sharedArrayBuffer).toBe(true);

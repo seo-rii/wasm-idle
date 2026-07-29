@@ -1,1 +1,1 @@
-export const WASM_JANET_ASSET_VERSION = '0bc79d55cee34cd7';
+export const WASM_JANET_ASSET_VERSION = '8417edd17dbee20b';

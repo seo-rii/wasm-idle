@@ -9,7 +9,7 @@ class Janet extends StaticWorkerRuntimeSandbox {
 			defaultActivePath: 'main.janet',
 			moduleWorker: true,
 			stdin: {
-				mode: 'prebuffered',
+				mode: 'streaming',
 				sourceHintPattern: /\b(?:getline|stdin|file\/read)\b/i
 			},
 			resolveRuntimeAssets: resolveJanetRuntimeAssetConfig
