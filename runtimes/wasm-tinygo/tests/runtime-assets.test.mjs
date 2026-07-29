@@ -432,6 +432,38 @@ test('loadRuntimeAssetBytes rejects substituted final URLs and cancels the body'
 	assert.equal(cancelled, true);
 });
 
+test('loadRuntimeAssetBytes rejects invalid Content-Length values and cancels the body', async () => {
+	for (const contentLength of ['-1', '1.5', '1e2', '3, 3', '9007199254740992']) {
+		let cancelled = false;
+		let sent = false;
+		const body = new ReadableStream({
+			pull(controller) {
+				if (sent) {
+					controller.close();
+					return;
+				}
+				sent = true;
+				controller.enqueue(new Uint8Array([1]));
+			},
+			cancel() {
+				cancelled = true;
+			}
+		});
+
+		await assert.rejects(
+			loadRuntimeAssetBytes({
+				assetPath: 'tools/go-probe.wasm',
+				assetUrl: 'https://assets.invalid/tools/go-probe.wasm',
+				label: 'go-probe.wasm',
+				fetchImpl: async () =>
+					new Response(body, { headers: { 'content-length': contentLength } })
+			}),
+			/invalid Content-Length/
+		);
+		assert.equal(cancelled, true, `expected ${contentLength} response body to be cancelled`);
+	}
+});
+
 test('loadRuntimeAssetBytes rejects oversized Content-Length before reading', async () => {
 	let cancelled = false;
 	const body = new ReadableStream({

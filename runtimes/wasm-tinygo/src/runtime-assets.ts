@@ -447,14 +447,17 @@ async function fetchRuntimeAssetBytes(
 		}
 	}
 	const contentLengthValue = response.headers.get('content-length');
-	const contentLength =
-		contentLengthValue && /^\d+$/u.test(contentLengthValue)
-			? Number(contentLengthValue)
-			: undefined;
-	if (
-		contentLength !== undefined &&
-		(!Number.isSafeInteger(contentLength) || contentLength > options.maxAssetBytes)
-	) {
+	let contentLength: number | undefined;
+	if (contentLengthValue !== null) {
+		contentLength = Number(contentLengthValue);
+		if (!/^\d+$/u.test(contentLengthValue) || !Number.isSafeInteger(contentLength)) {
+			await response.body?.cancel().catch(() => {});
+			throw new Error(
+				`wasm-tinygo runtime asset ${assetLabel} has an invalid Content-Length: ${contentLengthValue}`
+			);
+		}
+	}
+	if (contentLength !== undefined && contentLength > options.maxAssetBytes) {
 		await response.body?.cancel().catch(() => {});
 		throw new Error(
 			`${assetLabel} download size exceeds the ${options.maxAssetBytes} byte limit`
