@@ -55,6 +55,8 @@ const cacheIdentityIds = new WeakMap<object, number>();
 let nextCacheIdentityId = 0;
 
 export const DEFAULT_MAX_TINYGO_ASSET_BYTES = 128 * 1024 * 1024;
+export const MAX_TINYGO_RUNTIME_PACK_FILES = 65_536;
+export const MAX_TINYGO_RUNTIME_PATH_LENGTH = 4_096;
 const DEFAULT_TINYGO_ASSET_BUFFER_BYTES = 64 * 1024;
 
 function cacheIdentity(value: object | undefined) {
@@ -117,7 +119,7 @@ function expectString(value: unknown, label: string): string {
 function expectNonNegativeInteger(value: unknown, label: string): number {
 	if (
 		typeof value !== 'number' ||
-		!Number.isInteger(value) ||
+		!Number.isSafeInteger(value) ||
 		value < 0 ||
 		!Number.isFinite(value)
 	) {
@@ -143,19 +145,49 @@ export function parseTinyGoRuntimePackIndex(value: unknown): TinyGoRuntimePackIn
 		throw new Error('invalid root.entries in wasm-tinygo runtime pack index');
 	}
 	const totalBytes = expectNonNegativeInteger(root.totalBytes, 'root.totalBytes');
+	const fileCount = expectNonNegativeInteger(root.fileCount, 'root.fileCount');
+	if (fileCount !== root.entries.length) {
+		throw new Error('invalid root.fileCount in wasm-tinygo runtime pack index');
+	}
+	if (fileCount > MAX_TINYGO_RUNTIME_PACK_FILES) {
+		throw new Error(
+			`invalid root.fileCount in wasm-tinygo runtime pack index: ${fileCount} exceeds ${MAX_TINYGO_RUNTIME_PACK_FILES}`
+		);
+	}
 	const entries = root.entries.map((entry, index) => {
 		const object = expectObject(entry, `root.entries[${index}]`);
+		const runtimePath = expectString(object.runtimePath, `root.entries[${index}].runtimePath`);
+		const expectsAbsolutePath = root.format === 'wasm-rust-runtime-pack-index-v1';
+		const pathWithoutRoot = expectsAbsolutePath ? runtimePath.slice(1) : runtimePath;
+		const pathSegments = pathWithoutRoot.split('/');
+		if (
+			runtimePath.length > MAX_TINYGO_RUNTIME_PATH_LENGTH ||
+			runtimePath.includes('\0') ||
+			runtimePath.includes('\\') ||
+			runtimePath.includes('?') ||
+			runtimePath.includes('#') ||
+			runtimePath.includes('%') ||
+			(expectsAbsolutePath ? !runtimePath.startsWith('/') : runtimePath.startsWith('/')) ||
+			pathSegments.some(
+				(segment, segmentIndex) =>
+					segment === '' ||
+					segment === '.' ||
+					segment === '..' ||
+					(segmentIndex === 0 && segment.includes(':'))
+			)
+		) {
+			throw new Error(
+				`invalid root.entries[${index}].runtimePath in wasm-tinygo runtime pack index`
+			);
+		}
 		return {
-			runtimePath: expectString(object.runtimePath, `root.entries[${index}].runtimePath`),
+			runtimePath,
 			offset: expectNonNegativeInteger(object.offset, `root.entries[${index}].offset`),
 			length: expectNonNegativeInteger(object.length, `root.entries[${index}].length`)
 		};
 	});
-	const fileCount = expectNonNegativeInteger(root.fileCount, 'root.fileCount');
-	if (fileCount !== entries.length) {
-		throw new Error('invalid root.fileCount in wasm-tinygo runtime pack index');
-	}
 	const seenRuntimePaths = new Set<string>();
+	let expectedOffset = 0;
 	for (const entry of entries) {
 		if (seenRuntimePaths.has(entry.runtimePath)) {
 			throw new Error(
@@ -163,11 +195,22 @@ export function parseTinyGoRuntimePackIndex(value: unknown): TinyGoRuntimePackIn
 			);
 		}
 		seenRuntimePaths.add(entry.runtimePath);
-		if (entry.offset + entry.length > totalBytes) {
+		if (entry.offset > totalBytes || entry.length > totalBytes - entry.offset) {
 			throw new Error(
 				`invalid runtime pack range for ${entry.runtimePath}: ${entry.offset}+${entry.length} exceeds ${totalBytes}`
 			);
 		}
+		if (entry.offset !== expectedOffset) {
+			throw new Error(
+				`invalid runtime pack range for ${entry.runtimePath}: expected offset ${expectedOffset} but got ${entry.offset}`
+			);
+		}
+		expectedOffset += entry.length;
+	}
+	if (expectedOffset !== totalBytes) {
+		throw new Error(
+			`invalid root.totalBytes in wasm-tinygo runtime pack index: entries cover ${expectedOffset} bytes but expected ${totalBytes}`
+		);
 	}
 	return {
 		format: root.format,
@@ -602,6 +645,27 @@ async function loadRuntimePackEntries(
 	signal?: AbortSignal,
 	maxAssetBytes = DEFAULT_MAX_TINYGO_ASSET_BYTES
 ): Promise<Map<string, Uint8Array>> {
+	if (typeof pack.index !== 'string' || pack.index.length === 0 || pack.index.includes('\0')) {
+		throw new Error('invalid wasm-tinygo runtime pack index reference');
+	}
+	if (typeof pack.asset !== 'string' || pack.asset.length === 0 || pack.asset.includes('\0')) {
+		throw new Error(`invalid wasm-tinygo runtime pack asset reference for ${pack.index}`);
+	}
+	if (
+		typeof pack.fileCount !== 'number' ||
+		!Number.isSafeInteger(pack.fileCount) ||
+		pack.fileCount < 0 ||
+		pack.fileCount > MAX_TINYGO_RUNTIME_PACK_FILES
+	) {
+		throw new Error(`invalid wasm-tinygo runtime pack fileCount for ${pack.index}`);
+	}
+	if (
+		typeof pack.totalBytes !== 'number' ||
+		!Number.isSafeInteger(pack.totalBytes) ||
+		pack.totalBytes < 0
+	) {
+		throw new Error(`invalid wasm-tinygo runtime pack totalBytes for ${pack.index}`);
+	}
 	if (pack.totalBytes > maxAssetBytes) {
 		throw new Error(
 			`wasm-tinygo runtime pack ${pack.asset} exceeds the ${maxAssetBytes} byte limit`
@@ -637,9 +701,9 @@ async function loadRuntimePackEntries(
 			`invalid wasm-tinygo runtime pack ${pack.index}: expected ${pack.totalBytes} bytes but got ${index.totalBytes}`
 		);
 	}
-	if (packBytes.byteLength < index.totalBytes) {
+	if (packBytes.byteLength !== index.totalBytes) {
 		throw new Error(
-			`invalid wasm-tinygo runtime pack ${pack.asset}: expected at least ${index.totalBytes} bytes but got ${packBytes.byteLength}`
+			`invalid wasm-tinygo runtime pack ${pack.asset}: expected exactly ${index.totalBytes} bytes but got ${packBytes.byteLength}`
 		);
 	}
 	const entries = new Map<string, Uint8Array>();

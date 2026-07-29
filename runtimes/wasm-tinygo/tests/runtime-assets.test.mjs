@@ -5,6 +5,7 @@ import { gzipSync } from 'node:zlib';
 import {
 	clearTinyGoRuntimePackCache,
 	loadRuntimeAssetBytes,
+	MAX_TINYGO_RUNTIME_PACK_FILES,
 	parseTinyGoRuntimePackIndex
 } from '../src/runtime-assets.ts';
 
@@ -36,6 +37,116 @@ test('parseTinyGoRuntimePackIndex validates the index payload', () => {
 
 	assert.equal(index.fileCount, 1);
 	assert.equal(index.entries[0].runtimePath, 'tools/go-probe.wasm');
+});
+
+test('parseTinyGoRuntimePackIndex rejects unsafe and ambiguous runtime paths', () => {
+	const unsafePaths = [
+		'../escape.wasm',
+		'/absolute.wasm',
+		'tools//probe.wasm',
+		'tools/./probe.wasm',
+		'tools/../probe.wasm',
+		'tools\\probe.wasm',
+		'tools/%2e%2e/probe.wasm',
+		'https://assets.invalid/probe.wasm',
+		'tools/probe.wasm?download=1',
+		'tools/probe.wasm#fragment',
+		'tools/probe.wasm\0suffix'
+	];
+
+	for (const runtimePath of unsafePaths) {
+		assert.throws(
+			() =>
+				parseTinyGoRuntimePackIndex({
+					format: 'wasm-tinygo-runtime-pack-index-v1',
+					fileCount: 1,
+					totalBytes: 1,
+					entries: [{ runtimePath, offset: 0, length: 1 }]
+				}),
+			/runtimePath/
+		);
+	}
+
+	const rustIndex = parseTinyGoRuntimePackIndex({
+		format: 'wasm-rust-runtime-pack-index-v1',
+		fileCount: 1,
+		totalBytes: 1,
+		entries: [{ runtimePath: '/lib/rustlib/libstd.rlib', offset: 0, length: 1 }]
+	});
+	assert.equal(rustIndex.entries[0].runtimePath, '/lib/rustlib/libstd.rlib');
+});
+
+test('parseTinyGoRuntimePackIndex rejects unsafe counts and byte ranges', () => {
+	assert.throws(
+		() =>
+			parseTinyGoRuntimePackIndex({
+				format: 'wasm-tinygo-runtime-pack-index-v1',
+				fileCount: MAX_TINYGO_RUNTIME_PACK_FILES + 1,
+				totalBytes: 0,
+				entries: new Array(MAX_TINYGO_RUNTIME_PACK_FILES + 1).fill(null)
+			}),
+		/exceeds/
+	);
+	assert.throws(
+		() =>
+			parseTinyGoRuntimePackIndex({
+				format: 'wasm-tinygo-runtime-pack-index-v1',
+				fileCount: 1,
+				totalBytes: Number.MAX_SAFE_INTEGER + 1,
+				entries: [{ runtimePath: 'tools/probe.wasm', offset: 0, length: 1 }]
+			}),
+		/root\.totalBytes/
+	);
+	assert.throws(
+		() =>
+			parseTinyGoRuntimePackIndex({
+				format: 'wasm-tinygo-runtime-pack-index-v1',
+				fileCount: 1,
+				totalBytes: 1,
+				entries: [
+					{
+						runtimePath: 'tools/probe.wasm',
+						offset: Number.MAX_SAFE_INTEGER + 1,
+						length: 0
+					}
+				]
+			}),
+		/root\.entries\[0\]\.offset/
+	);
+
+	const invalidLayouts = [
+		{
+			totalBytes: 3,
+			entries: [{ runtimePath: 'tools/gap.wasm', offset: 1, length: 2 }]
+		},
+		{
+			totalBytes: 3,
+			entries: [
+				{ runtimePath: 'tools/first.wasm', offset: 0, length: 2 },
+				{ runtimePath: 'tools/overlap.wasm', offset: 1, length: 2 }
+			]
+		},
+		{
+			totalBytes: 3,
+			entries: [{ runtimePath: 'tools/trailing.wasm', offset: 0, length: 2 }]
+		},
+		{
+			totalBytes: 3,
+			entries: [{ runtimePath: 'tools/overflow.wasm', offset: 0, length: 4 }]
+		}
+	];
+	for (const layout of invalidLayouts) {
+		assert.throws(
+			() =>
+				parseTinyGoRuntimePackIndex({
+					format: 'wasm-tinygo-runtime-pack-index-v1',
+					fileCount: layout.entries.length,
+					totalBytes: layout.totalBytes,
+					entries: layout.entries
+				}),
+			/invalid (runtime pack range|root\.totalBytes)/
+		);
+	}
 });
 
 test('loadRuntimeAssetBytes returns packed runtime assets before hitting the network', async () => {
@@ -110,6 +221,81 @@ test('loadRuntimeAssetBytes returns packed runtime assets before hitting the net
 		true
 	);
 	clearTinyGoRuntimePackCache();
+});
+
+test('loadRuntimeAssetBytes requires exact runtime pack payload length', async () => {
+	clearTinyGoRuntimePackCache();
+	const packIndex = new TextEncoder().encode(
+		JSON.stringify({
+			format: 'wasm-tinygo-runtime-pack-index-v1',
+			fileCount: 1,
+			totalBytes: 1,
+			entries: [{ runtimePath: 'tools/go-probe.wasm', offset: 0, length: 1 }]
+		})
+	);
+	const fetchImpl = async (url) =>
+		new Response(String(url).endsWith('pack.index.json') ? packIndex : new Uint8Array([1, 2]));
+
+	await assert.rejects(
+		loadRuntimeAssetBytes({
+			assetPath: 'tools/go-probe.wasm',
+			assetUrl: 'https://assets.invalid/tools/go-probe.wasm',
+			assetBaseUrl: 'https://assets.invalid/',
+			label: 'go-probe.wasm',
+			packs: [
+				{
+					index: 'pack.index.json',
+					asset: 'pack.bin',
+					fileCount: 1,
+					totalBytes: 1
+				}
+			],
+			fetchImpl
+		}),
+		/expected exactly 1 bytes but got 2/
+	);
+	clearTinyGoRuntimePackCache();
+});
+
+test('loadRuntimeAssetBytes rejects invalid runtime pack references before fetching', async () => {
+	let fetchCount = 0;
+
+	await assert.rejects(
+		loadRuntimeAssetBytes({
+			assetPath: 'tools/go-probe.wasm',
+			assetUrl: 'https://assets.invalid/tools/go-probe.wasm',
+			assetBaseUrl: 'https://assets.invalid/',
+			label: 'go-probe.wasm',
+			packs: [
+				{
+					index: 'pack.index.json',
+					asset: 'pack.bin',
+					fileCount: 1.5,
+					totalBytes: 1
+				}
+			],
+			fetchImpl: async () => {
+				fetchCount += 1;
+				return new Response(new Uint8Array());
+			}
+		}),
+		/invalid wasm-tinygo runtime pack fileCount/
+	);
+	await assert.rejects(
+		loadRuntimeAssetBytes({
+			assetPath: 'tools/go-probe.wasm',
+			assetUrl: 'https://assets.invalid/tools/go-probe.wasm',
+			assetBaseUrl: 'https://assets.invalid/',
+			label: 'go-probe.wasm',
+			packs: [{ index: '', asset: 'pack.bin', fileCount: 1, totalBytes: 1 }],
+			fetchImpl: async () => {
+				fetchCount += 1;
+				return new Response(new Uint8Array());
+			}
+		}),
+		/invalid wasm-tinygo runtime pack index reference/
+	);
+	assert.equal(fetchCount, 0);
 });
 
 test('loadRuntimeAssetBytes respects loader overrides', async () => {
