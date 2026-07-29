@@ -86,12 +86,18 @@ describe('LLDB browser integration workflow', () => {
 
 	it('measures repeated LLDB/WAMR session cleanup in the required browser gate', async () => {
 		const browserTest = await readFile('src/lib/playground/debug.playwright.test.ts', 'utf8');
+		const debugReadme = await readFile('packages/debug/README.md', 'utf8');
+		const vitestConfig = await readFile('vitest.config.ts', 'utf8');
 
 		expect(browserTest).toContain("testId: 'c-relaunch'");
 		expect(browserTest).toContain("afterContinue: 'relaunch'");
 		expect(browserTest).toContain('repeatCount: 3');
+		expect(browserTest).toContain('WASM_IDLE_DEBUG_RELAUNCH_COUNT');
+		expect(vitestConfig).toContain('WASM_IDLE_DEBUG_BROWSER_TEST_TIMEOUT_MS');
 		expect(browserTest).toContain('__wasmIdleWorkerMetrics');
 		expect(browserTest).toContain('WASM_IDLE_DEBUG_HEAP_GROWTH_LIMIT_BYTES');
+		expect(debugReadme).toContain('WASM_IDLE_DEBUG_RELAUNCH_COUNT=100');
+		expect(debugReadme).toContain('WASM_IDLE_DEBUG_BROWSER_TEST_TIMEOUT_MS=7200000');
 	});
 
 	it('keeps a missing-asset trace fallback fixture in the browser gate', async () => {

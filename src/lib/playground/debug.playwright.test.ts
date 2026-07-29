@@ -1504,6 +1504,18 @@ describe('native-source browser debugging in Chromium', () => {
 								await page.evaluate(() =>
 									(window as any).__wasmIdleDebug.setBreakpoints([])
 								);
+								const repeatCount = Number(
+									process.env.WASM_IDLE_DEBUG_RELAUNCH_COUNT ||
+										testCase.repeatCount
+								);
+								if (
+									!Number.isSafeInteger(repeatCount) ||
+									repeatCount < testCase.repeatCount
+								) {
+									throw new Error(
+										`WASM_IDLE_DEBUG_RELAUNCH_COUNT must be an integer greater than or equal to ${testCase.repeatCount}`
+									);
+								}
 								await page.requestGC();
 								const baselineMetrics = await readBrowserLifecycleMetrics(page);
 								expect(baselineMetrics.usedJsHeapSize).toBeGreaterThan(0);
@@ -1513,7 +1525,7 @@ describe('native-source browser debugging in Chromium', () => {
 								);
 								let latestMetrics = baselineMetrics;
 								const lifecycleMetrics = [baselineMetrics];
-								for (let run = 1; run < testCase.repeatCount; run += 1) {
+								for (let run = 1; run < repeatCount; run += 1) {
 									await debugButton.click();
 									await page
 										.getByRole('button', { name: 'Stop Debug' })
@@ -1550,7 +1562,7 @@ describe('native-source browser debugging in Chromium', () => {
 											baselineMetrics.usedJsHeapSize
 									).toBeLessThanOrEqual(heapGrowthLimit);
 								}
-								const repeatedRuns = testCase.repeatCount - 1;
+								const repeatedRuns = repeatCount - 1;
 								expect(
 									latestMetrics.created - baselineMetrics.created
 								).toBeGreaterThanOrEqual(repeatedRuns * 2);
@@ -1695,5 +1707,5 @@ describe('native-source browser debugging in Chromium', () => {
 				await browser.close();
 			}
 		});
-	}, 1_200_000);
+	});
 });
