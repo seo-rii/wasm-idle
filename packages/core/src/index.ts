@@ -123,7 +123,13 @@ export type {
 	DebugVariableKind,
 	DebugVariableMetadata
 } from './debug.js';
-export { phaseProgress, progressBandsForLanguage, type ProgressLike } from './progress.js';
+export {
+	RuntimeProgressController,
+	phaseProgress,
+	progressBandsForLanguage,
+	type ProgressLike,
+	type RuntimeProgressLifecycle
+} from './progress.js';
 export {
 	createRuntimeAssetsKey,
 	type RuntimeAssetIntegrityEntry,
