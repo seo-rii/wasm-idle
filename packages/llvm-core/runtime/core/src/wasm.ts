@@ -22,12 +22,18 @@ export interface RuntimeJsonFetchOptions {
 async function readBoundedDecompressionStream(
 	stream: ReadableStream<Uint8Array>,
 	assetUrl: string | URL,
-	maxOutputBytes: number
+	maxOutputBytes: number,
+	signal?: AbortSignal
 ) {
 	const reader = stream.getReader();
+	const cancelOnAbort = () => {
+		void reader.cancel(runtimeAbortReason(signal!)).catch(() => {});
+	};
+	signal?.addEventListener('abort', cancelOnAbort, { once: true });
 	let bytes = new Uint8Array(Math.min(DEFAULT_DECOMPRESSION_BUFFER_BYTES, maxOutputBytes));
 	let receivedLength = 0;
 	try {
+		throwIfRuntimeAssetAborted(signal);
 		while (true) {
 			const { done, value } = await reader.read();
 			if (done) break;
@@ -51,8 +57,13 @@ async function readBoundedDecompressionStream(
 			bytes.set(value, receivedLength);
 			receivedLength = nextLength;
 		}
+		throwIfRuntimeAssetAborted(signal);
 		return bytes.subarray(0, receivedLength);
+	} catch (error) {
+		if (signal?.aborted) throw runtimeAbortReason(signal);
+		throw error;
 	} finally {
+		signal?.removeEventListener('abort', cancelOnAbort);
 		reader.releaseLock();
 	}
 }
@@ -83,6 +94,10 @@ function readContentLength(response: Response) {
 
 function runtimeAbortReason(signal: AbortSignal) {
 	return signal.reason ?? new DOMException('Runtime asset load aborted', 'AbortError');
+}
+
+function throwIfRuntimeAssetAborted(signal?: AbortSignal) {
+	if (signal?.aborted) throw runtimeAbortReason(signal);
 }
 
 async function readResponseBytes(
@@ -265,8 +280,14 @@ async function readGzipResponse(
 	response: Response,
 	assetUrl: URL,
 	maxOutputBytes: number,
-	progress?: ProgressSink
+	progress?: ProgressSink,
+	signal?: AbortSignal
 ) {
+	if (signal?.aborted) {
+		const reason = runtimeAbortReason(signal);
+		await response.body?.cancel(reason).catch(() => {});
+		throw reason;
+	}
 	const contentLength = readContentLength(response);
 	if (contentLength > maxOutputBytes) {
 		await response.body?.cancel().catch(() => {});
@@ -276,12 +297,14 @@ async function readGzipResponse(
 	}
 	if (!response.body) {
 		const source = new Uint8Array(await response.arrayBuffer());
+		throwIfRuntimeAssetAborted(signal);
 		if (source.byteLength > maxOutputBytes) {
 			throw new Error(
 				`Runtime asset ${assetUrl} download size exceeds the ${maxOutputBytes} byte limit`
 			);
 		}
 		const result = await decompressGzip(source, assetUrl, maxOutputBytes);
+		throwIfRuntimeAssetAborted(signal);
 		progress?.set?.(1);
 		return result;
 	}
@@ -305,7 +328,12 @@ async function readGzipResponse(
 			releaseReader();
 		}
 	};
+	const cancelOnAbort = () => {
+		void cancelReader(runtimeAbortReason(signal!)).catch(() => {});
+	};
+	signal?.addEventListener('abort', cancelOnAbort, { once: true });
 	try {
+		throwIfRuntimeAssetAborted(signal);
 		while (leadingLength < 2) {
 			const { done, value } = await reader.read();
 			if (done) {
@@ -329,9 +357,13 @@ async function readGzipResponse(
 				progress?.set?.(Math.min(receivedLength / contentLength, 1));
 			}
 		}
+		throwIfRuntimeAssetAborted(signal);
 	} catch (error) {
 		await cancelReader(error).catch(() => {});
+		if (signal?.aborted) throw runtimeAbortReason(signal);
 		throw error;
+	} finally {
+		signal?.removeEventListener('abort', cancelOnAbort);
 	}
 
 	let firstByte: number | undefined;
@@ -405,19 +437,32 @@ async function readGzipResponse(
 	}
 
 	try {
-		const result = await readBoundedDecompressionStream(output, assetUrl, maxOutputBytes);
+		const result = await readBoundedDecompressionStream(
+			output,
+			assetUrl,
+			maxOutputBytes,
+			signal
+		);
 		progress?.set?.(1);
 		return result;
 	} catch (error) {
 		await cancelReader(error).catch(() => {});
+		if (signal?.aborted) throw runtimeAbortReason(signal);
 		throw new Error(
 			`Failed to decompress runtime asset ${assetUrl}: ${error instanceof Error ? error.message : String(error)}`
 		);
 	}
 }
 
-async function unzipFirstFile(bytes: Uint8Array, assetUrl: string | URL, maxOutputBytes: number) {
+async function unzipFirstFile(
+	bytes: Uint8Array,
+	assetUrl: string | URL,
+	maxOutputBytes: number,
+	signal?: AbortSignal
+) {
+	throwIfRuntimeAssetAborted(signal);
 	const { unzipSync } = await import('fflate');
+	throwIfRuntimeAssetAborted(signal);
 	let selectedFile: string | undefined;
 	const entries = unzipSync(bytes, {
 		filter(file) {
@@ -431,6 +476,7 @@ async function unzipFirstFile(bytes: Uint8Array, assetUrl: string | URL, maxOutp
 			return true;
 		}
 	});
+	throwIfRuntimeAssetAborted(signal);
 	for (const [entryName, entryBytes] of Object.entries(entries)) {
 		if (!entryName.endsWith('/')) return entryBytes;
 	}
@@ -440,21 +486,36 @@ async function unzipFirstFile(bytes: Uint8Array, assetUrl: string | URL, maxOutp
 export const readBuffer = async (
 	name: string,
 	progress?: ProgressSink,
-	maxOutputBytes = DEFAULT_MAX_DECOMPRESSED_ASSET_BYTES
+	maxOutputBytes = DEFAULT_MAX_DECOMPRESSED_ASSET_BYTES,
+	signal?: AbortSignal
 ) => {
 	if (!Number.isSafeInteger(maxOutputBytes) || maxOutputBytes < 0) {
 		throw new Error('Runtime asset byte limit must be a non-negative safe integer');
 	}
+	throwIfRuntimeAssetAborted(signal);
 	const cacheKey = `${name}\0${maxOutputBytes}`;
-	let pending = bufferStore.get(cacheKey);
+	let pending = signal ? undefined : bufferStore.get(cacheKey);
 	if (!pending) {
 		pending = (async () => {
 			const resolvedUrl = resolveRuntimeAssetUrl(name);
-			const response = await fetch(resolvedUrl, {
+			const requestInit: RequestInit = {
 				credentials: 'omit',
 				redirect: 'error',
 				referrerPolicy: 'no-referrer'
-			});
+			};
+			if (signal) requestInit.signal = signal;
+			let response: Response;
+			try {
+				response = await fetch(resolvedUrl, requestInit);
+			} catch (error) {
+				if (signal?.aborted) throw runtimeAbortReason(signal);
+				throw error;
+			}
+			if (signal?.aborted) {
+				const reason = runtimeAbortReason(signal);
+				await response.body?.cancel(reason).catch(() => {});
+				throw reason;
+			}
 			if (response.url && new URL(response.url).href !== resolvedUrl.href) {
 				await response.body?.cancel().catch(() => {});
 				throw new Error(
@@ -466,37 +527,66 @@ export const readBuffer = async (
 				throw new Error(`Failed to load runtime asset ${resolvedUrl}: ${response.status}`);
 			}
 			if (resolvedUrl.pathname.endsWith('.gz')) {
-				return await readGzipResponse(response, resolvedUrl, maxOutputBytes, progress);
+				return await readGzipResponse(
+					response,
+					resolvedUrl,
+					maxOutputBytes,
+					progress,
+					signal
+				);
 			}
-			const source = await readResponseBytes(response, resolvedUrl, maxOutputBytes, progress);
+			const source = await readResponseBytes(
+				response,
+				resolvedUrl,
+				maxOutputBytes,
+				progress,
+				signal
+			);
 			if (resolvedUrl.pathname.endsWith('.zip')) {
-				return await unzipFirstFile(source, resolvedUrl, maxOutputBytes);
+				return await unzipFirstFile(source, resolvedUrl, maxOutputBytes, signal);
 			}
 			return source;
-		})().catch((error) => {
-			if (bufferStore.get(cacheKey) === pending) bufferStore.delete(cacheKey);
-			throw error;
-		});
-		bufferStore.set(cacheKey, pending);
+		})();
+		if (!signal) {
+			pending = pending.catch((error) => {
+				if (bufferStore.get(cacheKey) === pending) bufferStore.delete(cacheKey);
+				throw error;
+			});
+			bufferStore.set(cacheKey, pending);
+		}
 	}
 
 	const data = await pending;
+	throwIfRuntimeAssetAborted(signal);
 	progress?.set?.(1);
 	return Uint8Array.from(data);
 };
 
-export async function compile(filename: string, progress?: ProgressSink) {
+export async function compile(filename: string, progress?: ProgressSink, signal?: AbortSignal) {
 	// TODO: make compileStreaming work. It needs the server to use the
 	// application/wasm mimetype.
-	const cached = store.get(filename);
+	throwIfRuntimeAssetAborted(signal);
+	const cached = signal ? undefined : store.get(filename);
 	if (cached) return cached;
-	const pending = (async () => WebAssembly.compile(await readBuffer(filename, progress)))().catch(
-		(error) => {
+	let pending = (async () => {
+		const bytes = await readBuffer(
+			filename,
+			progress,
+			DEFAULT_MAX_DECOMPRESSED_ASSET_BYTES,
+			signal
+		);
+		throwIfRuntimeAssetAborted(signal);
+		const module = await WebAssembly.compile(bytes);
+		throwIfRuntimeAssetAborted(signal);
+		return module;
+	})();
+	if (!signal) {
+		pending = pending.catch((error) => {
 			if (store.get(filename) === pending) store.delete(filename);
 			throw error;
-		}
-	);
-	store.set(filename, pending);
+		});
+		store.set(filename, pending);
+	}
 	return pending;
 }
 

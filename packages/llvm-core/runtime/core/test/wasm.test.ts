@@ -55,6 +55,182 @@ describe('WebAssembly loading utilities', () => {
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
+	it('preserves pre-abort reasons without fetching or caching assets', async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+		const controller = new AbortController();
+		const reason = new Error('stop before asset fetch');
+		controller.abort(reason);
+
+		await expect(
+			readBuffer(
+				'https://cdn.test/llvm/pre-aborted-runtime.zip',
+				undefined,
+				undefined,
+				controller.signal
+			)
+		).rejects.toBe(reason);
+		await expect(
+			compile('https://cdn.test/llvm/pre-aborted-runtime.wasm', undefined, controller.signal)
+		).rejects.toBe(reason);
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	it('normalizes a fetch abort back to the caller-provided reason', async () => {
+		const url = 'https://cdn.test/llvm/cancelled-fetch.bin';
+		const fetchMock = vi.fn(
+			async (_input: RequestInfo | URL, init?: RequestInit) =>
+				await new Promise<Response>((_resolve, reject) => {
+					init?.signal?.addEventListener(
+						'abort',
+						() => reject(new DOMException('fetch aborted', 'AbortError')),
+						{ once: true }
+					);
+				})
+		);
+		vi.stubGlobal('fetch', fetchMock);
+		const controller = new AbortController();
+		const reason = new Error('stop pending fetch');
+		const pending = readBuffer(url, undefined, undefined, controller.signal);
+
+		await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+		controller.abort(reason);
+
+		await expect(pending).rejects.toBe(reason);
+	});
+
+	it('cancels active raw asset readers without poisoning a later retry', async () => {
+		const url = 'https://cdn.test/llvm/cancelled-runtime.bin';
+		let cancelled = false;
+		const body = new ReadableStream<Uint8Array>({
+			cancel() {
+				cancelled = true;
+			}
+		});
+		const getReaderSpy = vi.spyOn(body, 'getReader');
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValueOnce(new Response(body))
+			.mockResolvedValueOnce(new Response(Uint8Array.of(7, 8, 9)));
+		vi.stubGlobal('fetch', fetchMock);
+		const controller = new AbortController();
+		const reason = new Error('stop raw asset load');
+		const pending = readBuffer(url, undefined, undefined, controller.signal);
+
+		await vi.waitFor(() => expect(getReaderSpy).toHaveBeenCalledOnce());
+		controller.abort(reason);
+
+		await expect(pending).rejects.toBe(reason);
+		expect(cancelled).toBe(true);
+		expect(fetchMock).toHaveBeenNthCalledWith(
+			1,
+			new URL(url),
+			expect.objectContaining({ signal: controller.signal })
+		);
+		await expect(readBuffer(url)).resolves.toEqual(Uint8Array.of(7, 8, 9));
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+	});
+
+	it('cancels active gzip readers and preserves the caller reason', async () => {
+		const url = 'https://cdn.test/llvm/cancelled-runtime.wasm.gz';
+		const compressed = gzipSync(Uint8Array.of(1, 2, 3, 4), { level: 9, mtime: 0 });
+		let cancelled = false;
+		const body = new ReadableStream<Uint8Array>({
+			start(streamController) {
+				streamController.enqueue(compressed.subarray(0, compressed.byteLength - 2));
+			},
+			cancel() {
+				cancelled = true;
+			}
+		});
+		const getReaderSpy = vi.spyOn(body, 'getReader');
+		const fetchMock = vi.fn(async () => new Response(body));
+		vi.stubGlobal('fetch', fetchMock);
+		const controller = new AbortController();
+		const reason = new Error('stop gzip asset load');
+		const pending = readBuffer(url, undefined, undefined, controller.signal);
+
+		await vi.waitFor(() => expect(getReaderSpy).toHaveBeenCalledOnce());
+		controller.abort(reason);
+
+		await expect(pending).rejects.toBe(reason);
+		expect(cancelled).toBe(true);
+		expect(fetchMock).toHaveBeenCalledWith(
+			new URL(url),
+			expect.objectContaining({ signal: controller.signal })
+		);
+	});
+
+	it('observes cancellation before extracting a downloaded ZIP', async () => {
+		const url = 'https://cdn.test/llvm/cancelled-runtime.zip';
+		const archive = await zipBytes('fixture.bin', Uint8Array.of(1, 2, 3));
+		const controller = new AbortController();
+		const reason = new Error('stop before ZIP extraction');
+		const fetchMock = vi.fn(
+			async () =>
+				new Response(archive, {
+					headers: { 'Content-Length': String(archive.byteLength) }
+				})
+		);
+		vi.stubGlobal('fetch', fetchMock);
+
+		await expect(
+			readBuffer(
+				url,
+				{
+					set(value) {
+						if (value > 0) controller.abort(reason);
+					}
+				},
+				undefined,
+				controller.signal
+			)
+		).rejects.toBe(reason);
+		expect(fetchMock).toHaveBeenCalledWith(
+			new URL(url),
+			expect.objectContaining({ signal: controller.signal })
+		);
+	});
+
+	it('keeps aborted compilation outside the shared module cache', async () => {
+		const url = 'https://cdn.test/llvm/cancelled-compilation.wasm';
+		const module = new WebAssembly.Module(emptyWasm);
+		let compilationStarted!: () => void;
+		let finishCompilation!: () => void;
+		const started = new Promise<void>((resolve) => {
+			compilationStarted = resolve;
+		});
+		const finish = new Promise<void>((resolve) => {
+			finishCompilation = resolve;
+		});
+		const compileSpy = vi
+			.spyOn(WebAssembly, 'compile')
+			.mockImplementationOnce(async () => {
+				compilationStarted();
+				await finish;
+				return module;
+			})
+			.mockResolvedValueOnce(module);
+		const fetchMock = vi.fn(async () => new Response(emptyWasm));
+		vi.stubGlobal('fetch', fetchMock);
+		const controller = new AbortController();
+		const reason = new Error('stop WebAssembly compilation');
+
+		try {
+			const pending = compile(url, undefined, controller.signal);
+			await started;
+			controller.abort(reason);
+			finishCompilation();
+
+			await expect(pending).rejects.toBe(reason);
+			await expect(compile(url)).resolves.toBe(module);
+			expect(compileSpy).toHaveBeenCalledTimes(2);
+			expect(fetchMock).toHaveBeenCalledTimes(2);
+		} finally {
+			compileSpy.mockRestore();
+		}
+	});
+
 	it('loads bounded runtime JSON with least-authority request options', async () => {
 		const url = 'https://cdn.test/llvm/runtime-manifest.v1.json';
 		const body = new TextEncoder().encode(JSON.stringify({ manifestVersion: 1 }));
