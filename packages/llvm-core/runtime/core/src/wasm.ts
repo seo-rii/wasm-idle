@@ -85,12 +85,12 @@ function resolveRuntimeAssetUrl(name: string) {
 	return resolvedUrl;
 }
 
-function readContentLength(response: Response, assetUrl: string | URL) {
+function readContentLength(response: Response) {
 	const value = response.headers.get('Content-Length');
 	if (value === null) return 0;
 	const contentLength = Number(value);
 	if (!/^\d+$/u.test(value) || !Number.isSafeInteger(contentLength)) {
-		throw new Error(`Runtime asset ${assetUrl} has an invalid Content-Length: ${value}`);
+		throw new Error('Runtime asset has an invalid Content-Length');
 	}
 	return contentLength;
 }
@@ -117,7 +117,7 @@ async function readResponseBytes(
 	}
 	let contentLength: number;
 	try {
-		contentLength = readContentLength(response, assetUrl);
+		contentLength = readContentLength(response);
 	} catch (error) {
 		await response.body?.cancel(error).catch(() => {});
 		throw error;
@@ -299,7 +299,7 @@ async function readGzipResponse(
 	}
 	let contentLength: number;
 	try {
-		contentLength = readContentLength(response, assetUrl);
+		contentLength = readContentLength(response);
 	} catch (error) {
 		await response.body?.cancel(error).catch(() => {});
 		throw error;

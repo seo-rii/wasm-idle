@@ -612,7 +612,7 @@ describe('WebAssembly loading utilities', () => {
 		['negative', '-1'],
 		['fractional', '1.5'],
 		['exponential', '1e2'],
-		['duplicate', '2, 2'],
+		['duplicate', '2, content-length-secret'],
 		['unsafe', '9007199254740992']
 	])('rejects and cancels a %s Content-Length declaration', async (caseName, value) => {
 		const url = `https://cdn.test/llvm/invalid-content-length-${caseName}.bin`;
@@ -629,10 +629,16 @@ describe('WebAssembly loading utilities', () => {
 			'fetch',
 			vi.fn(async () => response)
 		);
+		let rejected: unknown;
 
-		await expect(readBuffer(url)).rejects.toThrow(
-			`Runtime asset ${url} has an invalid Content-Length: ${value}`
-		);
+		try {
+			await readBuffer(url);
+		} catch (error) {
+			rejected = error;
+		}
+		expect(rejected).toBeInstanceOf(Error);
+		expect((rejected as Error).message).toBe('Runtime asset has an invalid Content-Length');
+		if (value) expect((rejected as Error).message).not.toContain(value);
 		expect(cancelled).toBe(true);
 	});
 
@@ -678,12 +684,12 @@ describe('WebAssembly loading utilities', () => {
 			vi.fn(async () => gzipResponse)
 		);
 		await expect(readBuffer(gzipUrl)).rejects.toThrow(
-			`Runtime asset ${gzipUrl} has an invalid Content-Length: -1`
+			'Runtime asset has an invalid Content-Length'
 		);
 
 		await expect(
 			fetchRuntimeJson(jsonUrl, { fetchImpl: async () => jsonResponse })
-		).rejects.toThrow(`Runtime asset ${jsonUrl} has an invalid Content-Length: 1e2`);
+		).rejects.toThrow('Runtime asset has an invalid Content-Length');
 		expect(gzipCancelled).toBe(true);
 		expect(jsonCancelled).toBe(true);
 	});
