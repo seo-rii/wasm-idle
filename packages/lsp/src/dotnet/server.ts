@@ -22,13 +22,13 @@ export function resolveDotnetLanguageServerModuleUrl(
 	}
 	const rootUrl =
 		typeof options === 'string' ? options : typeof options === 'object' ? options.rootUrl : '';
-	const normalizedRootUrl = normalizeRootUrl(rootUrl || '');
-	if (!normalizedRootUrl) {
+	if (!rootUrl?.trim()) {
 		throw new LanguageServerAssetConfigurationError(
 			'.NET LSP',
 			'an explicit dotnet.moduleUrl or rootUrl'
 		);
 	}
+	const normalizedRootUrl = normalizeRootUrl(rootUrl);
 	const path = `${normalizedRootUrl}/wasm-dotnet/index.js`;
 	return baseUrl ? new URL(path, baseUrl).href : path;
 }
