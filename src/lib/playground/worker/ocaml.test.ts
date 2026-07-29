@@ -2,6 +2,36 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { flushBufferedEof, flushQueuedStdin } from '$lib/playground/stdinBuffer';
 
+const manifestUrl =
+	'https://example.test/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json';
+const manifest = {
+	version: 1,
+	generatedAt: '2026-04-10T00:00:00.000Z',
+	switchPrefix: '/static/toolchain',
+	findlibConf: '/static/toolchain/lib/findlib.conf',
+	tools: {
+		ocamlc: '/static/toolchain/bin/ocamlc.bc.browser.js',
+		js_of_ocaml: '/static/toolchain/bin/js_of_ocaml.bc.browser.js',
+		wasm_of_ocaml: '/static/toolchain/bin/wasm_of_ocaml.bc.browser.js'
+	},
+	ocamlLibFiles: [],
+	packages: []
+};
+const manifestBytes = new TextEncoder().encode(JSON.stringify(manifest));
+
+function manifestResponse(data = manifestBytes, url = manifestUrl) {
+	return {
+		async arrayBuffer() {
+			return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+		},
+		body: null,
+		headers: new Headers({ 'content-length': String(data.byteLength) }),
+		ok: true,
+		status: 200,
+		url
+	};
+}
+
 async function createMockOcamlCompilerModule(source: string) {
 	return `data:text/javascript;base64,${Buffer.from(source, 'utf8').toString('base64')}`;
 }
@@ -12,24 +42,70 @@ describe('OCaml worker', () => {
 		(globalThis as any).self = globalThis as any;
 		(globalThis as any).document = undefined;
 		(globalThis as any).postMessage = vi.fn();
+		(globalThis as any).fetch = vi.fn(async () => manifestResponse());
+	});
+
+	it('loads the manifest through the bounded no-store asset boundary', async () => {
+		const compilerModuleUrl = await createMockOcamlCompilerModule(`
+			export async function compile() { throw new Error('not used'); }
+			export function createBrowserWorkerSystemDispatcher() { return {}; }
+		`);
+
+		await import('./ocaml');
+		await (globalThis as any).self.onmessage({
+			data: { load: true, moduleUrl: compilerModuleUrl, manifestUrl }
+		});
+
+		expect((globalThis as any).fetch).toHaveBeenCalledWith(manifestUrl, {
+			cache: 'no-store',
+			credentials: 'omit',
+			redirect: 'error',
+			referrerPolicy: 'no-referrer'
+		});
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ load: true });
+	});
+
+	it('rejects an oversized manifest declaration before reading its body', async () => {
+		const bodyCancel = vi.fn(async () => undefined);
 		(globalThis as any).fetch = vi.fn(async () => ({
+			body: { cancel: bodyCancel },
+			headers: new Headers({ 'content-length': String(4 * 1024 * 1024 + 1) }),
 			ok: true,
-			async json() {
-				return {
-					version: 1,
-					generatedAt: '2026-04-10T00:00:00.000Z',
-					switchPrefix: '/static/toolchain',
-					findlibConf: '/static/toolchain/lib/findlib.conf',
-					tools: {
-						ocamlc: '/static/toolchain/bin/ocamlc.bc.browser.js',
-						js_of_ocaml: '/static/toolchain/bin/js_of_ocaml.bc.browser.js',
-						wasm_of_ocaml: '/static/toolchain/bin/wasm_of_ocaml.bc.browser.js'
-					},
-					ocamlLibFiles: [],
-					packages: []
-				};
-			}
+			status: 200,
+			url: manifestUrl
 		}));
+		const compilerModuleUrl = await createMockOcamlCompilerModule(`
+			export async function compile() { throw new Error('not used'); }
+			export function createBrowserWorkerSystemDispatcher() { return {}; }
+		`);
+
+		await import('./ocaml');
+		await (globalThis as any).self.onmessage({
+			data: { load: true, moduleUrl: compilerModuleUrl, manifestUrl }
+		});
+
+		expect(bodyCancel).toHaveBeenCalledOnce();
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			error: `OCaml manifest exceeds the ${4 * 1024 * 1024} byte limit`
+		});
+	});
+
+	it('reports invalid manifest JSON deterministically', async () => {
+		const invalidJson = new TextEncoder().encode('{invalid');
+		(globalThis as any).fetch = vi.fn(async () => manifestResponse(invalidJson));
+		const compilerModuleUrl = await createMockOcamlCompilerModule(`
+			export async function compile() { throw new Error('not used'); }
+			export function createBrowserWorkerSystemDispatcher() { return {}; }
+		`);
+
+		await import('./ocaml');
+		await (globalThis as any).self.onmessage({
+			data: { load: true, moduleUrl: compilerModuleUrl, manifestUrl }
+		});
+
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			error: 'OCaml manifest is not valid JSON'
+		});
 	});
 
 	it('reads stdin from the shared buffer while executing browser-native js_of_ocaml output', async () => {

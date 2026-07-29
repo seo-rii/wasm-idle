@@ -47,9 +47,15 @@ describe('runtime asset fetch', () => {
 		const progress = vi.fn();
 
 		await expect(
-			fetchRuntimeAssetBytes({ url: assetUrl, label: 'test compiler', onProgress: progress })
+			fetchRuntimeAssetBytes({
+				url: assetUrl,
+				label: 'test compiler',
+				cache: 'no-store',
+				onProgress: progress
+			})
 		).resolves.toEqual(new Uint8Array([1, 2, 3]));
 		expect(fetchMock).toHaveBeenCalledWith(assetUrl, {
+			cache: 'no-store',
 			credentials: 'omit',
 			redirect: 'error',
 			referrerPolicy: 'no-referrer'

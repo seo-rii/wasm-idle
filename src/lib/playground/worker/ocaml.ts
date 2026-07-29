@@ -1,4 +1,5 @@
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
+import { fetchRuntimeAssetBytes } from './runtimeAssetFetch';
 
 declare var self: any;
 
@@ -103,6 +104,9 @@ type RunRequest = {
 	buffer?: ArrayBufferLike;
 	stdin?: string;
 };
+
+const MAX_OCAML_MANIFEST_BYTES = 4 * 1024 * 1024;
+const textDecoder = new TextDecoder();
 
 let moduleUrl = '';
 let manifestUrl = '';
@@ -252,11 +256,19 @@ async function loadManifest(nextManifestUrl: string) {
 	compiledResult = null;
 	compiledCacheKey = '';
 	manifestPromise = (async () => {
-		const response = await fetch(nextManifestUrl, { cache: 'no-store' });
-		if (!response.ok) {
-			throw new Error(`failed to fetch OCaml manifest: ${response.status}`);
+		const bytes = await fetchRuntimeAssetBytes({
+			url: nextManifestUrl,
+			label: 'OCaml manifest',
+			cache: 'no-store',
+			maxAssetBytes: MAX_OCAML_MANIFEST_BYTES
+		});
+		let manifest: BrowserNativeManifest;
+		try {
+			manifest = JSON.parse(textDecoder.decode(bytes)) as BrowserNativeManifest;
+		} catch {
+			throw new Error('OCaml manifest is not valid JSON');
 		}
-		return rewriteManifest((await response.json()) as BrowserNativeManifest, nextManifestUrl);
+		return rewriteManifest(manifest, nextManifestUrl);
 	})();
 	return await manifestPromise;
 }

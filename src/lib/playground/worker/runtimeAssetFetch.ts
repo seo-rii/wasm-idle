@@ -6,6 +6,7 @@ export interface RuntimeAssetDownloadProgress {
 export interface RuntimeAssetFetchOptions {
 	url: string;
 	label: string;
+	cache?: RequestCache;
 	maxAssetBytes?: number;
 	onProgress?: (progress: RuntimeAssetDownloadProgress) => void;
 	signal?: AbortSignal;
@@ -50,6 +51,7 @@ function throwIfAborted(signal?: AbortSignal) {
 export async function fetchRuntimeAssetBytes({
 	url,
 	label,
+	cache,
 	maxAssetBytes = DEFAULT_RUNTIME_ASSET_MAX_BYTES,
 	onProgress,
 	signal
@@ -64,6 +66,7 @@ export async function fetchRuntimeAssetBytes({
 		redirect: 'error',
 		referrerPolicy: 'no-referrer'
 	};
+	if (cache) requestInit.cache = cache;
 	if (signal) requestInit.signal = signal;
 	const response = await fetch(requestUrl.href, requestInit);
 	if (signal?.aborted) {
