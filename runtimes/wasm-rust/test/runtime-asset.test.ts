@@ -325,6 +325,215 @@ describe('runtime asset fetch fallback', () => {
 		expect(DEFAULT_MAX_RUNTIME_ASSET_BYTES).toBe(128 * 1024 * 1024);
 	});
 
+	it('rejects a pre-aborted runtime asset load before fetching', async () => {
+		const controller = new AbortController();
+		const reason = new Error('cancelled before fetch');
+		controller.abort(reason);
+		const fetchImpl = vi.fn(async () => new Response(new Uint8Array()));
+
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.test/runtime/data.bin',
+				'data.bin',
+				fetchImpl,
+				false,
+				undefined,
+				{ signal: controller.signal }
+			)
+		).rejects.toBe(reason);
+		expect(fetchImpl).not.toHaveBeenCalled();
+	});
+
+	it('passes the signal to fetch and cancels a response returned after abort', async () => {
+		const controller = new AbortController();
+		const reason = new Error('cancelled by fetch test');
+		let cancelled = false;
+		let sent = false;
+		const response = new Response(
+			new ReadableStream({
+				pull(streamController) {
+					if (sent) {
+						streamController.close();
+						return;
+					}
+					sent = true;
+					streamController.enqueue(new Uint8Array([1]));
+				},
+				cancel() {
+					cancelled = true;
+				}
+			})
+		);
+		const observedSignals: Array<AbortSignal | null | undefined> = [];
+
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.test/runtime/data.bin',
+				'data.bin',
+				async (_input, init) => {
+					observedSignals.push(init?.signal);
+					controller.abort(reason);
+					return response;
+				},
+				false,
+				undefined,
+				{ signal: controller.signal }
+			)
+		).rejects.toBe(reason);
+		expect(observedSignals).toEqual([controller.signal]);
+		expect(cancelled).toBe(true);
+	});
+
+	it('cancels and releases a pending stream reader when aborted', async () => {
+		const controller = new AbortController();
+		const reason = new Error('cancelled during read');
+		let finishRead: ((result: { done: true; value: undefined }) => void) | undefined;
+		const reader = {
+			read: vi.fn(
+				() =>
+					new Promise<{ done: true; value: undefined }>((resolve) => {
+						finishRead = resolve;
+						setTimeout(() => resolve({ done: true, value: undefined }), 50);
+					})
+			),
+			cancel: vi.fn(async () => {
+				finishRead?.({ done: true, value: undefined });
+			}),
+			releaseLock: vi.fn()
+		};
+		const response = {
+			url: '',
+			ok: true,
+			status: 200,
+			headers: new Headers(),
+			body: { getReader: () => reader }
+		} as unknown as Response;
+		const load = fetchRuntimeAssetBytes(
+			'https://example.test/runtime/data.bin',
+			'data.bin',
+			async () => response,
+			false,
+			undefined,
+			{ signal: controller.signal }
+		);
+		const rejection = expect(load).rejects.toBe(reason);
+		await vi.waitFor(() => expect(reader.read).toHaveBeenCalledOnce());
+		controller.abort(reason);
+
+		await rejection;
+		expect(reader.cancel).toHaveBeenCalledOnce();
+		expect(reader.releaseLock).toHaveBeenCalledOnce();
+	});
+
+	it('preserves the abort reason while reading gzip output', async () => {
+		const controller = new AbortController();
+		const reason = new Error('cancelled during decompression');
+		let markDecompressionStarted: (() => void) | undefined;
+		const decompressionStarted = new Promise<void>((resolve) => {
+			markDecompressionStarted = resolve;
+		});
+		let outputCancellationReason: unknown;
+
+		class TestDecompressionStream {
+			readonly readable = new ReadableStream<Uint8Array>({
+				start(outputController) {
+					outputController.enqueue(new Uint8Array([1]));
+					markDecompressionStarted?.();
+				},
+				cancel(cancelReason) {
+					outputCancellationReason = cancelReason;
+				}
+			});
+			readonly writable = new WritableStream<BufferSource>();
+		}
+
+		vi.stubGlobal('DecompressionStream', TestDecompressionStream);
+		try {
+			const load = fetchRuntimeAssetBytes(
+				'https://example.test/runtime/data.bin.gz',
+				'data.bin.gz',
+				async () => new Response(new Uint8Array([0x1f, 0x8b])),
+				false,
+				undefined,
+				{ signal: controller.signal }
+			);
+			const rejection = expect(load).rejects.toBe(reason);
+			await decompressionStarted;
+			controller.abort(reason);
+
+			await rejection;
+			expect(outputCancellationReason).toBe(reason);
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+
+	it('preserves abort reasons through gzip fallback', async () => {
+		const controller = new AbortController();
+		const reason = new Error('cancelled during fallback');
+		const assetUrl = 'https://example.test/runtime/data.bin';
+		const observedSignals: Array<AbortSignal | null | undefined> = [];
+
+		await expect(
+			fetchRuntimeAssetBytes(
+				assetUrl,
+				'data.bin',
+				async (input, init) => {
+					observedSignals.push(init?.signal);
+					if (!String(input).endsWith('.gz')) return new Response(null, { status: 404 });
+					controller.abort(reason);
+					return new Response(gzipSync(new Uint8Array([1, 2, 3, 4])));
+				},
+				true,
+				undefined,
+				{ signal: controller.signal }
+			)
+		).rejects.toBe(reason);
+		expect(observedSignals).toEqual([controller.signal, controller.signal]);
+	});
+
+	it('propagates cancellation through bodyless and JSON asset paths', async () => {
+		const bodylessController = new AbortController();
+		const bodylessReason = new Error('cancelled during bodyless read');
+		const bodylessResponse = {
+			url: '',
+			ok: true,
+			status: 200,
+			headers: new Headers(),
+			body: null,
+			arrayBuffer: async () => {
+				bodylessController.abort(bodylessReason);
+				return new Uint8Array([1]).buffer;
+			}
+		} as unknown as Response;
+
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.test/runtime/data.bin',
+				'data.bin',
+				async () => bodylessResponse,
+				false,
+				undefined,
+				{ signal: bodylessController.signal }
+			)
+		).rejects.toBe(bodylessReason);
+
+		const jsonController = new AbortController();
+		const jsonReason = new Error('cancelled before JSON fetch');
+		jsonController.abort(jsonReason);
+		const jsonFetch = vi.fn(async () => new Response('{"ok":true}'));
+		await expect(
+			fetchRuntimeAssetJson(
+				'https://example.test/runtime/manifest.json',
+				'manifest',
+				jsonFetch,
+				undefined,
+				{ signal: jsonController.signal }
+			)
+		).rejects.toBe(jsonReason);
+		expect(jsonFetch).not.toHaveBeenCalled();
+	});
+
 	it('cancels a failed response before trying the gzip fallback', async () => {
 		const assetUrl = 'https://example.test/runtime/llvm/lld.wasm';
 		let cancelled = false;

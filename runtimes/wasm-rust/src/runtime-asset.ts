@@ -7,6 +7,15 @@ export const DEFAULT_MAX_RUNTIME_ASSET_BYTES = 128 * 1024 * 1024;
 
 export interface RuntimeAssetFetchOptions {
 	maxAssetBytes?: number;
+	signal?: AbortSignal;
+}
+
+function runtimeAssetAbortReason(signal: AbortSignal): unknown {
+	return signal.reason ?? new Error('wasm-rust runtime asset load was aborted');
+}
+
+function throwIfRuntimeAssetAborted(signal?: AbortSignal) {
+	if (signal?.aborted) throw runtimeAssetAbortReason(signal);
 }
 
 async function readBoundedStream(
@@ -15,14 +24,26 @@ async function readBoundedStream(
 	maxAssetBytes: number,
 	sizeKind: 'download' | 'decompressed',
 	total?: number,
-	onProgress?: (progress: RuntimeAssetDownloadProgress) => void
+	onProgress?: (progress: RuntimeAssetDownloadProgress) => void,
+	signal?: AbortSignal
 ): Promise<Uint8Array<ArrayBuffer>> {
+	throwIfRuntimeAssetAborted(signal);
 	const reader = stream.getReader();
+	let abortCancellation: Promise<void> | undefined;
+	const cancelOnAbort = () => {
+		if (!signal) return;
+		abortCancellation = reader.cancel(runtimeAssetAbortReason(signal)).then(
+			() => undefined,
+			() => undefined
+		);
+	};
+	signal?.addEventListener('abort', cancelOnAbort, { once: true });
 	let bytes = new Uint8Array(total ?? 0);
 	let loaded = 0;
 	try {
 		while (true) {
 			const { done, value } = await reader.read();
+			throwIfRuntimeAssetAborted(signal);
 			if (done) break;
 			if (!value) continue;
 			const nextLength = loaded + value.byteLength;
@@ -50,13 +71,19 @@ async function readBoundedStream(
 		if (loaded === 0) {
 			onProgress?.({ loaded: 0, total: total ?? 0 });
 		}
+		throwIfRuntimeAssetAborted(signal);
 		return bytes.subarray(0, loaded);
 	} catch (error) {
-		try {
-			await reader.cancel(error);
-		} catch {}
+		if (abortCancellation) await abortCancellation;
+		else {
+			try {
+				await reader.cancel(error);
+			} catch {}
+		}
+		throwIfRuntimeAssetAborted(signal);
 		throw error;
 	} finally {
+		signal?.removeEventListener('abort', cancelOnAbort);
 		reader.releaseLock();
 	}
 }
@@ -65,8 +92,10 @@ async function readResponseBytes(
 	response: Response,
 	assetLabel: string,
 	maxAssetBytes: number,
-	onProgress?: (progress: RuntimeAssetDownloadProgress) => void
+	onProgress?: (progress: RuntimeAssetDownloadProgress) => void,
+	signal?: AbortSignal
 ): Promise<Uint8Array<ArrayBuffer>> {
+	throwIfRuntimeAssetAborted(signal);
 	const contentLength = response.headers.get('content-length');
 	let total: number | undefined;
 	if (contentLength !== null) {
@@ -74,6 +103,7 @@ async function readResponseBytes(
 		const parsed = Number(normalized);
 		if (!/^\d+$/u.test(normalized) || !Number.isSafeInteger(parsed)) {
 			await response.body?.cancel().catch(() => undefined);
+			throwIfRuntimeAssetAborted(signal);
 			throw new Error(
 				`wasm-rust runtime asset has an invalid Content-Length: ${contentLength}`
 			);
@@ -82,18 +112,21 @@ async function readResponseBytes(
 	}
 	if (total !== undefined && total > maxAssetBytes) {
 		await response.body?.cancel().catch(() => undefined);
+		throwIfRuntimeAssetAborted(signal);
 		throw new Error(
 			`wasm-rust runtime asset ${assetLabel} download size exceeds the ${maxAssetBytes} byte limit`
 		);
 	}
 	if (!response.body) {
 		const bytes = new Uint8Array(await response.arrayBuffer());
+		throwIfRuntimeAssetAborted(signal);
 		if (bytes.byteLength > maxAssetBytes) {
 			throw new Error(
 				`wasm-rust runtime asset ${assetLabel} download size exceeds the ${maxAssetBytes} byte limit`
 			);
 		}
 		onProgress?.({ loaded: bytes.byteLength, total: total ?? bytes.byteLength });
+		throwIfRuntimeAssetAborted(signal);
 		return bytes;
 	}
 	return readBoundedStream(
@@ -102,7 +135,8 @@ async function readResponseBytes(
 		maxAssetBytes,
 		'download',
 		total,
-		onProgress
+		onProgress,
+		signal
 	);
 }
 
@@ -118,6 +152,7 @@ export async function fetchRuntimeAssetBytes(
 	if (!Number.isSafeInteger(maxAssetBytes) || maxAssetBytes <= 0) {
 		throw new Error(`wasm-rust runtime asset has an invalid maxAssetBytes: ${maxAssetBytes}`);
 	}
+	throwIfRuntimeAssetAborted(options.signal);
 	let resolvedAssetUrlObject: URL;
 	try {
 		resolvedAssetUrlObject = new URL(assetUrl.toString());
@@ -139,17 +174,25 @@ export async function fetchRuntimeAssetBytes(
 		throw new Error('wasm-rust runtime asset URLs must not include fragments');
 	}
 	const resolvedAssetUrl = resolvedAssetUrlObject.href;
+	const requestInit: RequestInit = {
+		credentials: 'omit',
+		redirect: 'error',
+		referrerPolicy: 'no-referrer'
+	};
+	if (options.signal) requestInit.signal = options.signal;
 	let response: Response;
 	try {
-		response = await fetchImpl(resolvedAssetUrl, {
-			credentials: 'omit',
-			redirect: 'error',
-			referrerPolicy: 'no-referrer'
-		});
+		response = await fetchImpl(resolvedAssetUrl, requestInit);
 	} catch (error) {
+		throwIfRuntimeAssetAborted(options.signal);
 		throw new Error(
 			`failed to fetch ${assetLabel} from ${resolvedAssetUrl}: ${error instanceof Error ? error.message : String(error)}. This usually means the browser loaded a stale wasm-rust bundle or blocked a nested runtime asset request; hard refresh and resync the runtime assets.`
 		);
+	}
+	if (options.signal?.aborted) {
+		const reason = runtimeAssetAbortReason(options.signal);
+		await response.body?.cancel(reason).catch(() => undefined);
+		throw reason;
 	}
 	if (response.url) {
 		let finalUrl: URL;
@@ -157,12 +200,14 @@ export async function fetchRuntimeAssetBytes(
 			finalUrl = new URL(response.url);
 		} catch {
 			await response.body?.cancel().catch(() => undefined);
+			throwIfRuntimeAssetAborted(options.signal);
 			throw new Error(
 				`wasm-rust runtime asset ${assetLabel} returned an invalid final URL: ${response.url}`
 			);
 		}
 		if (finalUrl.href !== resolvedAssetUrl) {
 			await response.body?.cancel().catch(() => undefined);
+			throwIfRuntimeAssetAborted(options.signal);
 			throw new Error(
 				`wasm-rust runtime asset ${assetLabel} returned an unexpected final URL: ${response.url}`
 			);
@@ -170,6 +215,7 @@ export async function fetchRuntimeAssetBytes(
 	}
 	if (!response.ok) {
 		await response.body?.cancel().catch(() => undefined);
+		throwIfRuntimeAssetAborted(options.signal);
 		if (allowCompressedFallback && !resolvedAssetUrlObject.pathname.endsWith('.gz')) {
 			const compressedAssetUrl = new URL(resolvedAssetUrl);
 			compressedAssetUrl.pathname = `${compressedAssetUrl.pathname}.gz`;
@@ -182,13 +228,21 @@ export async function fetchRuntimeAssetBytes(
 					onProgress,
 					options
 				);
-			} catch {}
+			} catch {
+				throwIfRuntimeAssetAborted(options.signal);
+			}
 		}
 		throw new Error(
 			`failed to fetch ${assetLabel} from ${resolvedAssetUrl} (status ${response.status}). This usually means the browser loaded a stale wasm-rust bundle or a nested runtime asset is missing.`
 		);
 	}
-	const assetBytes = await readResponseBytes(response, assetLabel, maxAssetBytes, onProgress);
+	const assetBytes = await readResponseBytes(
+		response,
+		assetLabel,
+		maxAssetBytes,
+		onProgress,
+		options.signal
+	);
 	const assetPreview = new TextDecoder()
 		.decode(assetBytes.slice(0, 128))
 		.replace(/^\uFEFF/, '')
@@ -215,7 +269,9 @@ export async function fetchRuntimeAssetBytes(
 				onProgress,
 				options
 			);
-		} catch {}
+		} catch {
+			throwIfRuntimeAssetAborted(options.signal);
+		}
 	}
 	if (responseLooksLikeHtml) {
 		throw new Error(
@@ -242,9 +298,13 @@ export async function fetchRuntimeAssetBytes(
 			decompressedStream,
 			assetLabel,
 			maxAssetBytes,
-			'decompressed'
+			'decompressed',
+			undefined,
+			undefined,
+			options.signal
 		);
 	} catch (error) {
+		throwIfRuntimeAssetAborted(options.signal);
 		throw new Error(
 			`failed to decompress ${assetLabel} from ${resolvedAssetUrl}: ${error instanceof Error ? error.message : String(error)}`
 		);
