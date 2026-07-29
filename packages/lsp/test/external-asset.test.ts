@@ -193,10 +193,52 @@ describe('bounded external LSP asset loading', () => {
 				label: 'test runtime',
 				fetch: fetchMock
 			})
-		).rejects.toThrow('test runtime returned an invalid final URL: ://invalid');
+		).rejects.toThrow('test runtime returned an invalid final URL');
 		expect(getReader).not.toHaveBeenCalled();
 		expect(cancel).toHaveBeenCalledOnce();
 	});
+
+	it.each([
+		['://invalid-final-url-secret', 'invalid final URL', 'invalid-final-url-secret'],
+		[
+			'https://runtime-user:final-password-secret@assets.example.com/runtime.wasm#fragment-secret',
+			'unexpected final URL',
+			'final-password-secret'
+		]
+	])(
+		'redacts a rejected final URL from the error: %s',
+		async (finalUrl, expectedMessage, secret) => {
+			const cancel = vi.fn(async () => {});
+			const getReader = vi.fn();
+			const fetchMock = vi.fn(
+				async () =>
+					({
+						ok: true,
+						url: finalUrl,
+						headers: new Headers(),
+						body: { cancel, getReader }
+					}) as unknown as Response
+			);
+			let rejected: unknown;
+
+			try {
+				await fetchBoundedExternalAsset({
+					url: 'https://assets.example.com/runtime.wasm',
+					label: 'test runtime',
+					fetch: fetchMock
+				});
+			} catch (error) {
+				rejected = error;
+			}
+
+			expect(rejected).toBeInstanceOf(Error);
+			expect((rejected as Error).message).toContain(expectedMessage);
+			expect((rejected as Error).message).not.toContain(secret);
+			expect((rejected as Error).message).not.toContain(finalUrl);
+			expect(getReader).not.toHaveBeenCalled();
+			expect(cancel).toHaveBeenCalledOnce();
+		}
+	);
 
 	it('cancels when the caller aborts while fetch is resolving', async () => {
 		let cancelled = false;

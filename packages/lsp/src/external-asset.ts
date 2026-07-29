@@ -74,11 +74,11 @@ export async function fetchBoundedExternalAsset(
 			finalUrl = new URL(response.url);
 		} catch {
 			await response.body?.cancel().catch(() => {});
-			throw new Error(`${options.label} returned an invalid final URL: ${response.url}`);
+			throw new Error(`${options.label} returned an invalid final URL`);
 		}
 		if (finalUrl.href !== expectedFinalUrl) {
 			await response.body?.cancel().catch(() => {});
-			throw new Error(`${options.label} returned an unexpected final URL: ${response.url}`);
+			throw new Error(`${options.label} returned an unexpected final URL`);
 		}
 	}
 	if (!response.ok) {
