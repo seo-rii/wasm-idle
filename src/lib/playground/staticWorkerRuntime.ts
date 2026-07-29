@@ -7,6 +7,7 @@ import {
 	DEFAULT_WORKSPACE_LIMITS,
 	DiagnosticLimitError,
 	OutputLimitError,
+	ProtocolError,
 	RuntimeProgressController,
 	TimeoutError,
 	isWasmIdleError,
@@ -342,13 +343,39 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 		try {
 			const response = await fetch(this.workerUrl, {
 				cache: 'force-cache',
+				credentials: 'omit',
+				redirect: 'error',
+				referrerPolicy: 'no-referrer',
 				signal: phaseController.signal
 			});
+			if (response.url) {
+				let finalResponseUrl: string;
+				try {
+					finalResponseUrl = new URL(response.url).href;
+				} catch {
+					const error = new ProtocolError(
+						`${this.config.displayName} worker script returned an invalid final URL: ${response.url}`,
+						{ phase: 'asset', runtimeId: this.config.languageId }
+					);
+					await response.body?.cancel(error).catch(() => undefined);
+					throw error;
+				}
+				if (finalResponseUrl !== this.workerUrl) {
+					const error = new ProtocolError(
+						`${this.config.displayName} worker script response URL mismatch: expected ${this.workerUrl}, received ${finalResponseUrl}`,
+						{ phase: 'asset', runtimeId: this.config.languageId }
+					);
+					await response.body?.cancel(error).catch(() => undefined);
+					throw error;
+				}
+			}
 			if (!response.ok) {
-				throw new AssetNotFoundError(
+				const error = new AssetNotFoundError(
 					`${this.config.displayName} worker script failed to load: HTTP ${response.status}`,
 					{ runtimeId: this.config.languageId }
 				);
+				await response.body?.cancel(error).catch(() => undefined);
+				throw error;
 			}
 
 			const declaredLength = Number(response.headers.get('content-length'));

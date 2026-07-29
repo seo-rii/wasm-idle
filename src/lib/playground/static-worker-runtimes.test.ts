@@ -1148,6 +1148,76 @@ describe('static worker backed language sandboxes', () => {
 		expect(workerInstances).toHaveLength(0);
 	});
 
+	it('preloads static worker scripts with least-authority request options', async () => {
+		const sandbox = new Prolog();
+
+		await sandbox.load('/absproxy/5173');
+
+		expect(fetch).toHaveBeenCalledWith(
+			'http://localhost:3000/absproxy/5173/wasm-prolog/runner-worker.js',
+			expect.objectContaining({
+				cache: 'force-cache',
+				credentials: 'omit',
+				redirect: 'error',
+				referrerPolicy: 'no-referrer',
+				signal: expect.any(AbortSignal)
+			})
+		);
+	});
+
+	it.each([
+		['relative', 'runner-worker.js'],
+		['substituted', 'https://evil.example/runner-worker.js']
+	])(
+		'rejects a %s static worker final URL before reading its body',
+		async (_kind, responseUrl) => {
+			const cancel = vi.fn(async () => undefined);
+			const getReader = vi.fn();
+			const arrayBuffer = vi.fn();
+			vi.mocked(fetch).mockResolvedValueOnce({
+				ok: true,
+				status: 200,
+				url: responseUrl,
+				headers: new Headers(),
+				body: { cancel, getReader },
+				arrayBuffer
+			} as unknown as Response);
+			const sandbox = new Prolog();
+
+			await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+				name: 'ProtocolError',
+				code: 'protocol',
+				phase: 'asset',
+				runtimeId: 'PROLOG'
+			});
+			expect(cancel).toHaveBeenCalledOnce();
+			expect(getReader).not.toHaveBeenCalled();
+			expect(arrayBuffer).not.toHaveBeenCalled();
+			expect(workerInstances).toHaveLength(0);
+		}
+	);
+
+	it('cancels a failed static worker response before reporting its status', async () => {
+		const cancel = vi.fn(async () => undefined);
+		vi.mocked(fetch).mockResolvedValueOnce({
+			ok: false,
+			status: 503,
+			url: '',
+			headers: new Headers(),
+			body: { cancel }
+		} as unknown as Response);
+		const sandbox = new Prolog();
+
+		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+			name: 'AssetNotFoundError',
+			code: 'asset-not-found',
+			phase: 'asset',
+			runtimeId: 'PROLOG'
+		});
+		expect(cancel).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(0);
+	});
+
 	it('rejects an oversized static worker script before reading its body', async () => {
 		vi.mocked(fetch).mockResolvedValueOnce(
 			new Response('small test body', {
