@@ -3,7 +3,7 @@
   "version": "2017-05-29",
   "package": "wacl.zip",
   "packageUrl": "https://ecky-l.github.io/wacl/releases/wacl.zip",
-  "fingerprint": "4d805f0cd0cbfdc7",
+  "fingerprint": "da167ea56abae60b",
   "files": [
     "require.js",
     "tcl/wacl-custom.data",

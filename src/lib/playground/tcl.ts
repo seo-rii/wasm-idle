@@ -8,7 +8,7 @@ class Tcl extends StaticWorkerRuntimeSandbox {
 			displayName: 'Tcl',
 			defaultActivePath: 'main.tcl',
 			stdin: {
-				mode: 'prebuffered',
+				mode: 'streaming',
 				sourceHintPattern: /\b(gets|read)\s+(stdin|file\d*)\b|\bstdin\b/
 			},
 			resolveRuntimeAssets(runtimeAssets: string | PlaygroundRuntimeAssets, currentUrl) {

@@ -35,7 +35,8 @@ chomp $line;
 print "main=", $line + 5, "\\n";
 `;
 
-const tclStdinSource = `gets stdin line
+const tclStdinSource = `puts "value?"
+gets stdin line
 puts "main=[expr {$line + 5}]"
 `;
 
@@ -240,7 +241,8 @@ describe('wasm-idle static worker language browser integrations', () => {
 					language: 'TCL',
 					runTimeoutMs: Number(process.env.WASM_IDLE_TCL_RUN_TIMEOUT_MS || '240000'),
 					source: tclStdinSource,
-					stdinText: '68\n'
+					stdinText: '68\n',
+					waitForOutputBeforeStdin: 'value?'
 				});
 				expect(summary.activeState.crossOriginIsolated).toBe(true);
 				expect(summary.activeState.sharedArrayBuffer).toBe(true);
