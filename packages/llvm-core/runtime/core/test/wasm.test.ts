@@ -30,9 +30,29 @@ describe('WebAssembly loading utilities', () => {
 		);
 		await expect(compile('toString')).rejects.toThrow(/Runtime asset URL must be absolute/u);
 		await expect(compile('constructor')).rejects.toThrow(/Runtime asset URL must be absolute/u);
+	});
+
+	it('rejects credential-bearing runtime asset URLs before fetching', async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+		const expectedError = 'Runtime asset URLs must not include credentials';
+
+		await expect(readBuffer('https://user@cdn.test/runtime.bin')).rejects.toThrow(
+			expectedError
+		);
+		await expect(readBuffer('https://user:secret@cdn.test/runtime.wasm.gz')).rejects.toThrow(
+			expectedError
+		);
+		await expect(readBuffer('https://:secret@cdn.test/runtime.zip')).rejects.toThrow(
+			expectedError
+		);
+		await expect(compile('https://user:secret@cdn.test/runtime.wasm')).rejects.toThrow(
+			expectedError
+		);
 		await expect(
 			fetchRuntimeJson('https://user:secret@cdn.test/manifest.json')
-		).rejects.toThrow(/Runtime JSON URLs must not include credentials/u);
+		).rejects.toThrow(expectedError);
+		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
 	it('loads bounded runtime JSON with least-authority request options', async () => {

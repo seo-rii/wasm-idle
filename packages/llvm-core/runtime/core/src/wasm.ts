@@ -67,6 +67,9 @@ function resolveRuntimeAssetUrl(name: string) {
 	if (resolvedUrl.protocol !== 'http:' && resolvedUrl.protocol !== 'https:') {
 		throw new Error('Runtime assets must use HTTP(S)');
 	}
+	if (resolvedUrl.username || resolvedUrl.password) {
+		throw new Error('Runtime asset URLs must not include credentials');
+	}
 	if (resolvedUrl.hash) throw new Error('Runtime asset URLs must not include fragments');
 	return resolvedUrl;
 }
@@ -166,9 +169,6 @@ export async function fetchRuntimeJson(
 		throw new Error('Runtime JSON byte limit must be a positive safe integer');
 	}
 	const resolvedUrl = resolveRuntimeAssetUrl(url.toString());
-	if (resolvedUrl.username || resolvedUrl.password) {
-		throw new Error('Runtime JSON URLs must not include credentials');
-	}
 	const label = options.label?.trim() || 'runtime JSON';
 	const fetchImpl = options.fetchImpl ?? globalThis.fetch?.bind(globalThis);
 	if (!fetchImpl) throw new Error(`Fetch is unavailable while loading ${label}`);
