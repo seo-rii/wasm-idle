@@ -1,4 +1,10 @@
-export { getEditorLanguageServer } from './registry.js';
+export {
+	editorLanguageServerProviders,
+	getEditorLanguageServer,
+	resolveEditorLanguageServerProvider,
+	type EditorLanguageServerProviderDescriptor,
+	type EditorLanguageServerProviderFactory
+} from './registry.js';
 export {
 	DEFAULT_LANGUAGE_SERVER_STARTUP_TIMEOUT_MS,
 	LanguageServerStartupTimeoutError,
