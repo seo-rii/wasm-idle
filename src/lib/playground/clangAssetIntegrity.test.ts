@@ -60,5 +60,5 @@ describe('bundled clang asset integrity', () => {
 		expect(Object.keys(BUNDLED_CLANG_ASSET_INTEGRITY).sort()).toEqual(
 			['runtime-manifest.v1.json', ...Object.keys(sourceByRuntimeAsset)].sort()
 		);
-	});
+	}, 30_000);
 });

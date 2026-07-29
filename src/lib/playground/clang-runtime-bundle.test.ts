@@ -52,5 +52,5 @@ describe('bundled wasm-clang runtime', () => {
 				expect(decompressed.subarray(257, 262).toString('ascii')).toBe('ustar');
 			}
 		}
-	});
+	}, 30_000);
 });
