@@ -183,3 +183,67 @@ export function validateWorkspaceFiles<T extends WorkspaceFile>(
 		return { ...file, path };
 	});
 }
+
+export interface ValidatedExecutionWorkspace<T extends WorkspaceFile = WorkspaceFile> {
+	readonly activePath?: string;
+	readonly workspaceFiles: Array<T & { path: string }>;
+}
+
+export function validateExecutionWorkspace<T extends WorkspaceFile>(
+	code: string,
+	files: readonly T[] = [],
+	activePath?: string,
+	limits: Partial<WorkspaceLimits> = {}
+): ValidatedExecutionWorkspace<T> {
+	const workspaceFiles = validateWorkspaceFiles(files, limits);
+	const normalizedActivePath =
+		activePath === undefined ? undefined : normalizeWorkspacePath(activePath);
+
+	if (normalizedActivePath !== undefined) {
+		validateWorkspaceFiles(
+			[
+				...workspaceFiles.filter((file) => file.path !== normalizedActivePath),
+				{ path: normalizedActivePath, content: code }
+			],
+			limits
+		);
+	} else {
+		const maxFiles = limits.maxFiles ?? DEFAULT_WORKSPACE_LIMITS.maxFiles;
+		const maxFileBytes = limits.maxFileBytes ?? DEFAULT_WORKSPACE_LIMITS.maxFileBytes;
+		const maxTotalBytes = limits.maxTotalBytes ?? DEFAULT_WORKSPACE_LIMITS.maxTotalBytes;
+		const sourceBytes = textEncoder.encode(code).byteLength;
+		if (workspaceFiles.length + 1 > maxFiles) {
+			throw new WorkspaceValidationError(
+				'file-count-limit',
+				`Workspace plus active source contains ${workspaceFiles.length + 1} files; limit is ${maxFiles}`,
+				{ limit: maxFiles, actual: workspaceFiles.length + 1 }
+			);
+		}
+		if (sourceBytes > maxFileBytes) {
+			throw new WorkspaceValidationError(
+				'file-size-limit',
+				`Active source is ${sourceBytes} bytes; limit is ${maxFileBytes}`,
+				{ limit: maxFileBytes, actual: sourceBytes }
+			);
+		}
+		let totalBytes = sourceBytes;
+		for (const file of workspaceFiles) {
+			totalBytes +=
+				typeof file.content === 'string'
+					? textEncoder.encode(file.content).byteLength
+					: file.content.byteLength;
+		}
+		if (totalBytes > maxTotalBytes) {
+			throw new WorkspaceValidationError(
+				'total-size-limit',
+				`Workspace plus active source is ${totalBytes} bytes; limit is ${maxTotalBytes}`,
+				{ limit: maxTotalBytes, actual: totalBytes }
+			);
+		}
+	}
+
+	return {
+		...(normalizedActivePath === undefined ? {} : { activePath: normalizedActivePath }),
+		workspaceFiles
+	};
+}

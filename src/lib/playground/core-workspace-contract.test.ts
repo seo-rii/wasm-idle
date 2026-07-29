@@ -6,6 +6,7 @@ import {
 	WorkspaceValidationError,
 	createPlaygroundBinding,
 	normalizeWorkspacePath,
+	validateExecutionWorkspace,
 	validateWorkspaceFiles,
 	type Sandbox
 } from '@wasm-idle/core';
@@ -86,6 +87,33 @@ describe('core workspace policy', () => {
 		expect(() =>
 			validateWorkspaceFiles([{ path: '한.txt', content: '' }], { maxPathBytes: 6 })
 		).toThrowError(expect.objectContaining({ code: 'path-size-limit' }));
+	});
+
+	it('validates the active source and workspace as one execution filesystem', () => {
+		const workspace = validateExecutionWorkspace(
+			'export const answer = helper;\n',
+			[{ path: 'src\\helper.ts', content: 'export const helper = 42;\n' }],
+			'src\\main.ts'
+		);
+
+		expect(workspace).toEqual({
+			activePath: 'src/main.ts',
+			workspaceFiles: [{ path: 'src/helper.ts', content: 'export const helper = 42;\n' }]
+		});
+		expect(() => validateExecutionWorkspace('source', [], '../main.ts')).toThrowError(
+			expect.objectContaining({ code: 'invalid-path' })
+		);
+		expect(() =>
+			validateExecutionWorkspace('1234', [{ path: 'data.txt', content: '5678' }], undefined, {
+				maxTotalBytes: 7
+			})
+		).toThrowError(
+			expect.objectContaining({
+				code: 'total-size-limit',
+				actual: 8,
+				limit: 7
+			})
+		);
 	});
 
 	it('publishes finite conservative defaults', () => {

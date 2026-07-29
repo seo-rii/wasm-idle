@@ -35,9 +35,7 @@ import type { RuntimeRunId } from './protocol.js';
 import type { RuntimeAssetKeySource } from './runtime-assets.js';
 import {
 	DEFAULT_WORKSPACE_LIMITS,
-	WorkspaceValidationError,
-	normalizeWorkspacePath,
-	validateWorkspaceFiles,
+	validateExecutionWorkspace,
 	type WorkspaceFile,
 	type WorkspaceLimits
 } from './workspace.js';
@@ -192,52 +190,12 @@ function validateSandboxExecutionOptions(
 			limits.maxWorkspaceBytes
 		)
 	};
-	const workspaceFiles = validateWorkspaceFiles(options.workspaceFiles ?? [], workspaceLimits);
-	const activePath =
-		options.activePath === undefined ? undefined : normalizeWorkspacePath(options.activePath);
-
-	if (activePath !== undefined) {
-		validateWorkspaceFiles(
-			[
-				...workspaceFiles.filter((file) => file.path !== activePath),
-				{ path: activePath, content: code }
-			],
-			workspaceLimits
-		);
-	} else {
-		const maxFiles = workspaceLimits.maxFiles ?? DEFAULT_WORKSPACE_LIMITS.maxFiles;
-		const maxFileBytes = workspaceLimits.maxFileBytes;
-		const maxTotalBytes = workspaceLimits.maxTotalBytes;
-		const sourceBytes = workspaceTextEncoder.encode(code).byteLength;
-		if (workspaceFiles.length + 1 > maxFiles) {
-			throw new WorkspaceValidationError(
-				'file-count-limit',
-				`Workspace plus active source contains ${workspaceFiles.length + 1} files; limit is ${maxFiles}`,
-				{ limit: maxFiles, actual: workspaceFiles.length + 1 }
-			);
-		}
-		if (sourceBytes > maxFileBytes) {
-			throw new WorkspaceValidationError(
-				'file-size-limit',
-				`Active source is ${sourceBytes} bytes; limit is ${maxFileBytes}`,
-				{ limit: maxFileBytes, actual: sourceBytes }
-			);
-		}
-		let totalBytes = sourceBytes;
-		for (const file of workspaceFiles) {
-			totalBytes +=
-				typeof file.content === 'string'
-					? workspaceTextEncoder.encode(file.content).byteLength
-					: file.content.byteLength;
-		}
-		if (totalBytes > maxTotalBytes) {
-			throw new WorkspaceValidationError(
-				'total-size-limit',
-				`Workspace plus active source is ${totalBytes} bytes; limit is ${maxTotalBytes}`,
-				{ limit: maxTotalBytes, actual: totalBytes }
-			);
-		}
-	}
+	const { activePath, workspaceFiles } = validateExecutionWorkspace(
+		code,
+		options.workspaceFiles ?? [],
+		options.activePath,
+		workspaceLimits
+	);
 
 	const requestedRequirements = options.runtimeRequirements;
 	if (requestedRequirements !== undefined && !trustProfile) {

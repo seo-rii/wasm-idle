@@ -801,6 +801,54 @@ describe('static worker backed language sandboxes', () => {
 		expect(workerInstances[0].terminate).toHaveBeenCalledOnce();
 	});
 
+	it('rejects unsafe static workspace paths before dispatch', async () => {
+		const sandbox = new Prolog();
+		await sandbox.load('/absproxy/5173');
+
+		await expect(
+			sandbox.run('writeln(unsafe).', false, true, undefined, [], {
+				activePath: '../main.prolog',
+				workspaceFiles: [{ path: 'safe.prolog', content: '' }]
+			})
+		).rejects.toMatchObject({
+			name: 'WorkspaceValidationError',
+			code: 'invalid-path',
+			path: '../main.prolog'
+		});
+		expect(workerInstances[0].postMessage).not.toHaveBeenCalled();
+		expect(workerInstances[0].terminate).not.toHaveBeenCalled();
+	});
+
+	it('normalizes static workspace paths and enforces the aggregate byte limit', async () => {
+		const sandbox = new Prolog();
+		await sandbox.load('/absproxy/5173');
+		await expect(
+			sandbox.run('writeln(ok).', false, true, undefined, [], {
+				activePath: 'src\\main.prolog',
+				workspaceFiles: [{ path: 'src\\helper.prolog', content: 'helper.' }]
+			})
+		).resolves.toBe(true);
+		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				activePath: 'src/main.prolog',
+				workspaceFiles: [{ path: 'src/helper.prolog', content: 'helper.' }]
+			})
+		);
+
+		await sandbox.load('/absproxy/5173');
+		await expect(
+			sandbox.run('12345', false, true, undefined, [], {
+				limits: { maxWorkspaceBytes: 4 }
+			})
+		).rejects.toMatchObject({
+			name: 'WorkspaceValidationError',
+			code: 'file-size-limit',
+			actual: 5,
+			limit: 4
+		});
+		expect(workerInstances[1].postMessage).not.toHaveBeenCalled();
+	});
+
 	it('releases the active-run slot after kill for an immediate rerun', async () => {
 		onPostMessage = () => {};
 		const sandbox = new Prolog();

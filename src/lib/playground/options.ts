@@ -1,4 +1,4 @@
-import type { DebugSourceBreakpoints, ExecutionLimits } from '@wasm-idle/core';
+import type { DebugSourceBreakpoints, ExecutionLimits, WorkspaceLimits } from '@wasm-idle/core';
 
 export type {
 	DebugArrayElementKind,
@@ -50,6 +50,7 @@ export interface SandboxExecutionOptions {
 	stdin?: string;
 	signal?: AbortSignal;
 	limits?: Partial<ExecutionLimits>;
+	workspaceLimits?: Partial<WorkspaceLimits>;
 	activePath?: string;
 	debugPath?: string;
 	workspaceFiles?: SandboxWorkspaceFile[];

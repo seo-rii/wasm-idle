@@ -196,7 +196,9 @@ export {
 	DEFAULT_WORKSPACE_LIMITS,
 	WorkspaceValidationError,
 	normalizeWorkspacePath,
+	validateExecutionWorkspace,
 	validateWorkspaceFiles,
+	type ValidatedExecutionWorkspace,
 	type WorkspaceFile,
 	type WorkspaceLimits,
 	type WorkspaceValidationErrorCode

@@ -4,12 +4,14 @@ import {
 	AssetTooLargeError,
 	BusyError,
 	CancelledError,
+	DEFAULT_WORKSPACE_LIMITS,
 	DiagnosticLimitError,
 	OutputLimitError,
 	RuntimeProgressController,
 	TimeoutError,
 	isWasmIdleError,
 	resolveExecutionLimits,
+	validateExecutionWorkspace,
 	type ExecutionLimits
 } from '@wasm-idle/core';
 import {
@@ -105,7 +107,7 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 
 	async load(
 		runtimeAssets: string | PlaygroundRuntimeAssets = '',
-		_code = '',
+		code = '',
 		_log = true,
 		_args: string[] = [],
 		options: SandboxExecutionOptions = {},
@@ -119,6 +121,7 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 				runtimeId: this.config.languageId
 			});
 		}
+		this.validateWorkspace(code, options, controls.limits);
 		const progressSink = this.selectProgress(progress);
 		const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
 		const urls = this.config.resolveRuntimeAssets(runtimeAssets, currentUrl);
@@ -231,6 +234,30 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 			limits: resolveExecutionLimits(options.limits),
 			...(options.signal ? { signal: options.signal } : {})
 		};
+	}
+
+	private validateWorkspace(
+		code: string,
+		options: SandboxExecutionOptions,
+		limits: ExecutionLimits
+	) {
+		const workspaceLimits = {
+			...options.workspaceLimits,
+			maxFileBytes: Math.min(
+				options.workspaceLimits?.maxFileBytes ?? DEFAULT_WORKSPACE_LIMITS.maxFileBytes,
+				limits.maxWorkspaceBytes
+			),
+			maxTotalBytes: Math.min(
+				options.workspaceLimits?.maxTotalBytes ?? DEFAULT_WORKSPACE_LIMITS.maxTotalBytes,
+				limits.maxWorkspaceBytes
+			)
+		};
+		return validateExecutionWorkspace(
+			code,
+			options.workspaceFiles ?? [],
+			options.activePath ?? this.config.defaultActivePath,
+			workspaceLimits
+		);
 	}
 
 	private reportProgress(progress: SandboxProgress | undefined, value: number, stage?: string) {
@@ -654,8 +681,10 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 			);
 		}
 		let controls: StaticWorkerExecutionControls;
+		let workspace: ReturnType<typeof validateExecutionWorkspace>;
 		try {
 			controls = this.resolveExecutionControls(options);
+			workspace = this.validateWorkspace(code, options, controls.limits);
 		} catch (error) {
 			return Promise.reject(error);
 		}
@@ -762,8 +791,8 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 						args: programArgs,
 						stdin,
 						stdinEof,
-						activePath: options.activePath || this.config.defaultActivePath,
-						workspaceFiles: options.workspaceFiles || [],
+						activePath: workspace.activePath,
+						workspaceFiles: workspace.workspaceFiles,
 						log: _log
 					});
 				} catch (error) {
