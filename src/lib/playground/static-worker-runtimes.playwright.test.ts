@@ -110,7 +110,9 @@ const janetStdinSource = `(print "value?")
 (print "main=" (+ n 5))
 `;
 
-const juliaStdinSource = `line = readline()
+const juliaStdinSource = `print("value? ")
+flush(stdout)
+line = readline()
 n = tryparse(Int, strip(line))
 if n === nothing
     n = 0
@@ -463,7 +465,8 @@ describe('wasm-idle static worker language browser integrations', () => {
 					language: 'JULIA',
 					runTimeoutMs: Number(process.env.WASM_IDLE_JULIA_RUN_TIMEOUT_MS || '240000'),
 					source: juliaStdinSource,
-					stdinText: '68\n'
+					stdinText: '68\n',
+					waitForOutputBeforeStdin: 'value?'
 				});
 				expect(summary.activeState.crossOriginIsolated).toBe(true);
 				expect(summary.activeState.sharedArrayBuffer).toBe(true);

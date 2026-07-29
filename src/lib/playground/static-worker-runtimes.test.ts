@@ -243,6 +243,7 @@ describe('static worker backed language sandboxes', () => {
 			expect(new Gleam().stdinMode).toBe('streaming');
 			expect(new J().stdinMode).toBe('streaming');
 			expect(new Janet().stdinMode).toBe('streaming');
+			expect(new Julia().stdinMode).toBe('streaming');
 			expect(new Nim().stdinMode).toBe('streaming');
 			expect(new Pascal().stdinMode).toBe('streaming');
 			expect(new Perl().stdinMode).toBe('streaming');

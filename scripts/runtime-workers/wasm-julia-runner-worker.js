@@ -1,3 +1,5 @@
+const textEncoder = new TextEncoder();
+
 function assetUrl(baseUrl, path) {
 	return new URL(path, baseUrl).href;
 }
@@ -5,6 +7,64 @@ function assetUrl(baseUrl, path) {
 function postOutput(lines) {
 	const output = lines.filter(Boolean).join('\n');
 	if (output) self.postMessage({ output: output.endsWith('\n') ? output : `${output}\n` });
+}
+
+function postOutputChunk(output) {
+	if (output) self.postMessage({ output });
+}
+
+function createStdinReader(stdin, channel) {
+	if (channel === undefined) {
+		const bytes = textEncoder.encode(typeof stdin === 'string' ? stdin : '');
+		let offset = 0;
+		return () => (offset < bytes.length ? bytes[offset++] : null);
+	}
+	if (
+		channel?.protocol !== 'wasm-idle-static-stdin-ring' ||
+		channel?.protocolVersion !== 1 ||
+		channel?.controlBytes !== 16 ||
+		!Number.isSafeInteger(channel?.capacity) ||
+		channel.capacity <= 0 ||
+		typeof SharedArrayBuffer !== 'function' ||
+		!(channel.buffer instanceof SharedArrayBuffer) ||
+		channel.buffer.byteLength !== channel.controlBytes + channel.capacity ||
+		typeof Atomics.wait !== 'function'
+	) {
+		throw new Error('Invalid Julia streaming stdin channel.');
+	}
+
+	const control = new Int32Array(channel.buffer, 0, 4);
+	const bytes = new Uint8Array(channel.buffer, channel.controlBytes, channel.capacity);
+	let yieldAfterChunk = false;
+	return () => {
+		while (true) {
+			if (Atomics.load(control, 3) === 1) {
+				throw new Error('Julia streaming stdin was cancelled.');
+			}
+			const write = Atomics.load(control, 0);
+			const read = Atomics.load(control, 1);
+			const available = write - read;
+			if (available < 0 || available > bytes.byteLength) {
+				throw new Error('Julia streaming stdin counters are invalid.');
+			}
+			if (available > 0) {
+				const value = bytes[read % bytes.byteLength];
+				Atomics.store(control, 1, read + 1);
+				if (available === 1) {
+					yieldAfterChunk = true;
+					self.postMessage({ type: 'stdin-request' });
+				}
+				return value;
+			}
+			if (Atomics.load(control, 2) === 1) return null;
+			if (yieldAfterChunk) {
+				yieldAfterChunk = false;
+				return undefined;
+			}
+			self.postMessage({ type: 'stdin-request' });
+			Atomics.wait(control, 0, write);
+		}
+	};
 }
 
 async function fetchRuntimeBytes(baseUrl, path) {
@@ -30,18 +90,35 @@ async function fetchRuntimeBytes(baseUrl, path) {
 	return new Response(decompressed).arrayBuffer();
 }
 
-function createCharOutput(lines) {
+function createCharOutput(lines, onChunk = () => {}) {
 	const decoder = new TextDecoder();
-	let bytes = [];
-	return (value) => {
-		if (value === null || value === 10) {
-			const text = decoder.decode(new Uint8Array(bytes));
-			bytes = [];
-			if (text) lines.push(text);
+	let line = '';
+	const flush = () => {
+		const tail = decoder.decode();
+		if (tail) onChunk(tail);
+		line += tail;
+		if (line) lines.push(line);
+		line = '';
+	};
+	const output = (value) => {
+		if (value === null) {
+			flush();
 			return;
 		}
-		if (value !== 0) bytes.push(value);
+		if (value === 0) return;
+		const text = decoder.decode(Uint8Array.of(value), { stream: true });
+		if (text) {
+			line += text;
+			onChunk(text);
+		}
+		if (value === 10) {
+			const completedLine = line.endsWith('\n') ? line.slice(0, -1) : line;
+			if (completedLine) lines.push(completedLine);
+			line = '';
+		}
 	};
+	output.finish = flush;
+	return output;
 }
 
 function cString(module, text) {
@@ -55,21 +132,20 @@ function juliaString(text) {
 	return JSON.stringify(String(text || ''));
 }
 
-function buildRunnerSource(code, stdin, activePath) {
-	return `import Base: readline, readlines, read, eachline
-const __wasm_idle_stdin = IOBuffer(${juliaString(stdin)})
+function buildRunnerSource(code, stdin, activePath, streaming) {
+	const stdinSource = streaming ? 'open("/dev/stdin", "r")' : `IOBuffer(${juliaString(stdin)})`;
+	const stdinSetup = `import Base: readline, readlines, read, eachline
+const __wasm_idle_stdin = ${stdinSource}
 readline() = Base.readline(__wasm_idle_stdin)
 readline(::typeof(stdin)) = Base.readline(__wasm_idle_stdin)
 readlines() = Base.readlines(__wasm_idle_stdin)
 readlines(::typeof(stdin)) = Base.readlines(__wasm_idle_stdin)
-read() = read(stdin, String)
-read(::typeof(stdin)) = take!(__wasm_idle_stdin)
-read(::typeof(stdin), ::Type{String}) = String(take!(__wasm_idle_stdin))
-eachline() = eachline(stdin)
-function eachline(::typeof(stdin))
-    data = String(take!(__wasm_idle_stdin))
-    isempty(data) ? String[] : split(chomp(data), '\\n')
-end
+read() = Base.read(__wasm_idle_stdin, String)
+read(::typeof(stdin)) = Base.read(__wasm_idle_stdin)
+read(::typeof(stdin), ::Type{String}) = Base.read(__wasm_idle_stdin, String)
+eachline() = Base.eachline(__wasm_idle_stdin)
+eachline(::typeof(stdin)) = Base.eachline(__wasm_idle_stdin)`;
+	return `${stdinSetup}
 try
     Base.include_string(Main, ${juliaString(code)}, ${juliaString(activePath || 'main.jl')})
 catch error
@@ -79,9 +155,11 @@ catch error
 end`;
 }
 
-async function loadJuliaRuntime(baseUrl, stdout, stderr) {
+async function loadJuliaRuntime(baseUrl, stdinReader, stdout, stderr) {
 	const wasmBinary = await fetchRuntimeBytes(baseUrl, 'julia.wasm');
 	const sysimageData = await fetchRuntimeBytes(baseUrl, 'julia.data');
+	const stdoutDevice = createCharOutput(stdout, postOutputChunk);
+	const stderrDevice = createCharOutput(stderr);
 	const module = {
 		noInitialRun: true,
 		wasmBinary,
@@ -92,14 +170,18 @@ async function loadJuliaRuntime(baseUrl, stdout, stderr) {
 			if (value.endsWith('julia-wasm/julia.wasm')) return assetUrl(baseUrl, 'julia.wasm');
 			return assetUrl(baseUrl, value);
 		},
-		print: (text) => stdout.push(String(text)),
+		print: (text) => {
+			const output = String(text);
+			stdout.push(output);
+			postOutput([output]);
+		},
 		printErr: (text) => stderr.push(String(text)),
-		stdin: () => null,
-		stdout: createCharOutput(stdout),
-		stderr: createCharOutput(stderr)
+		stdin: stdinReader,
+		stdout: stdoutDevice,
+		stderr: stderrDevice
 	};
 	self.Module = module;
-	return await new Promise((resolve, reject) => {
+	const initializedModule = await new Promise((resolve, reject) => {
 		module.onRuntimeInitialized = () => {
 			try {
 				module._jl_initialize();
@@ -114,22 +196,39 @@ async function loadJuliaRuntime(baseUrl, stdout, stderr) {
 			reject(error);
 		}
 	});
+	return {
+		module: initializedModule,
+		finishOutput() {
+			stdoutDevice.finish();
+			stderrDevice.finish();
+		}
+	};
 }
 
 self.onmessage = async (event) => {
-	const { baseUrl, code, stdin, activePath, log } = event.data || {};
+	const { baseUrl, code, stdin, stdinChannel, activePath, log } = event.data || {};
 	const stdout = [];
 	const stderr = [];
+	let finishOutput = () => {};
 	try {
 		if (log) console.log(`[wasm-idle:julia-worker] run start baseUrl=${baseUrl}`);
-		const module = await loadJuliaRuntime(baseUrl, stdout, stderr);
-		const runnerSource = buildRunnerSource(code || '', stdin || '', activePath);
+		const stdinReader = createStdinReader(stdin || '', stdinChannel);
+		const runtime = await loadJuliaRuntime(baseUrl, stdinReader, stdout, stderr);
+		const { module } = runtime;
+		finishOutput = runtime.finishOutput;
+		const runnerSource = buildRunnerSource(
+			code || '',
+			stdin || '',
+			activePath,
+			stdinChannel !== undefined
+		);
 		const sourcePtr = cString(module, runnerSource);
 		try {
 			module._jl_eval_string(sourcePtr);
 		} finally {
 			module._free(sourcePtr);
 		}
+		finishOutput();
 		const exception =
 			typeof module._jl_exception_occurred === 'function'
 				? module._jl_exception_occurred()
@@ -146,12 +245,13 @@ self.onmessage = async (event) => {
 		if (exception) {
 			throw new Error('Julia execution failed.');
 		}
-		postOutput(stdout);
 		if (log) console.log('[wasm-idle:julia-worker] run settled');
 		self.postMessage({ results: true });
 	} catch (error) {
 		const message = stderr.length > 0 ? stderr.join('\n') : error?.message || String(error);
 		if (log) console.error('[wasm-idle:julia-worker] failed', error);
 		self.postMessage({ error: message });
+	} finally {
+		finishOutput();
 	}
 };
