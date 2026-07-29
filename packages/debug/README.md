@@ -47,3 +47,7 @@ The strict Chromium LLDB suite also injects stale-generation control messages in
 and WAMR workers and synthetic stale output, error, and exit events at the host boundary. The active
 session must remain paused, step successfully, emit only current-generation output, and exit
 normally.
+
+Streaming input is verified on the same product path: a C target resumes from an LLDB source
+breakpoint, flushes a prompt, blocks in WASI `stdin`, and receives input plus EOF only after the
+browser observes that prompt. This keeps debugger control traffic independent from terminal I/O.

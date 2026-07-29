@@ -51,6 +51,31 @@ int main(void) {
 		testId: 'c-stale-generation'
 	},
 	{
+		activePath: 'streaming-stdin.c',
+		backend: 'lldb',
+		breakpointLine: 4,
+		expectedLocal: { name: 'value', value: '0' },
+		expectedOutput: 'lldb-input=73',
+		expectedPrompt: 'lldb-input? ',
+		expectedTitle: 'C · LLDB / WAMR',
+		language: 'C',
+		programArgs: [],
+		source: `#include <stdio.h>
+
+int main(void) {
+    int value = 0;
+    printf("lldb-input? ");
+    fflush(stdout);
+    if (scanf("%d", &value) != 1) {
+        return 2;
+    }
+    printf("lldb-input=%d\\n", value);
+    return 0;
+}`,
+		stdinAfterPrompt: '73\n',
+		testId: 'c-streaming-stdin'
+	},
+	{
 		activePath: 'main.cpp',
 		backend: 'lldb',
 		breakpointLine: 16,
@@ -1242,6 +1267,23 @@ describe('native-source browser debugging in Chromium', () => {
 							expect(await readPausedLine(page)).toBe('—');
 						}
 						await page.locator('button[aria-label="Continue"]').click();
+						if ('stdinAfterPrompt' in testCase) {
+							await page.waitForFunction(
+								(expectedPrompt) =>
+									document
+										.querySelector('[data-testid="terminal-debug-output"]')
+										?.textContent?.includes(expectedPrompt),
+								testCase.expectedPrompt
+							);
+							await page.evaluate(
+								async (input) =>
+									await (window as any).__wasmIdleDebug.writeTerminalInput(
+										input,
+										true
+									),
+								testCase.stdinAfterPrompt
+							);
+						}
 						if (
 							'afterContinue' in testCase &&
 							(testCase.afterContinue === 'disconnect' ||
