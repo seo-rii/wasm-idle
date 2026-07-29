@@ -100,5 +100,8 @@ describe('LLDB browser integration workflow', () => {
 		expect(browserTest).toContain("testId: 'c-asset-fallback'");
 		expect(browserTest).toContain("missingDebugAsset: 'debug/lldb-web-dap.wasm'");
 		expect(browserTest).toContain("expectedOutput: 'trace-asset-fallback=73'");
+		expect(browserTest).toContain(
+			"expectedFallbackWarning: 'LLDB WebAssembly debug asset (404)'"
+		);
 	});
 });
