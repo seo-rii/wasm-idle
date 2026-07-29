@@ -77,7 +77,7 @@ export async function fetchRuntimeAssetBytes({
 	if (response.url) {
 		let responseUrl: URL;
 		try {
-			responseUrl = new URL(response.url, requestUrl);
+			responseUrl = new URL(response.url);
 		} catch {
 			await cancelResponseBody(response);
 			throw new Error(`${label} response URL is invalid: ${response.url}`);

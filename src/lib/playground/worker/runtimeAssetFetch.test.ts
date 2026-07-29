@@ -161,6 +161,22 @@ describe('runtime asset fetch', () => {
 		expect(bodyCancel).toHaveBeenCalledOnce();
 	});
 
+	it('rejects a relative final URL and cancels its body', async () => {
+		const bodyCancel = vi.fn(async () => undefined);
+		(globalThis as any).fetch = vi.fn(async () => ({
+			body: { cancel: bodyCancel },
+			headers: new Headers(),
+			ok: true,
+			status: 200,
+			url: 'compiler.wasm'
+		}));
+
+		await expect(
+			fetchRuntimeAssetBytes({ url: assetUrl, label: 'test compiler' })
+		).rejects.toThrow('test compiler response URL is invalid: compiler.wasm');
+		expect(bodyCancel).toHaveBeenCalledOnce();
+	});
+
 	it('checks the byte limit after materializing a no-body response', async () => {
 		(globalThis as any).fetch = vi.fn(async () => ({
 			arrayBuffer: async () => new Uint8Array(5).buffer,
