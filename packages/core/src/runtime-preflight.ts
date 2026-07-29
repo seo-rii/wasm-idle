@@ -142,10 +142,11 @@ function parseContentLength(
 	const normalized = raw.trim();
 	const value = Number(normalized);
 	if (!/^\d+$/u.test(normalized) || !Number.isSafeInteger(value)) {
-		throw new ProtocolError(
-			`Runtime asset ${asset.key} has an invalid Content-Length: ${raw}`,
-			{ phase: 'asset', runtimeId, profileId }
-		);
+		throw new ProtocolError(`Runtime asset ${asset.key} has an invalid Content-Length`, {
+			phase: 'asset',
+			runtimeId,
+			profileId
+		});
 	}
 	return value;
 }

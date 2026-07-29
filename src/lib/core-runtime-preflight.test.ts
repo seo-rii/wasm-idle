@@ -294,6 +294,51 @@ describe('runtime registry asset preflight', () => {
 		}
 	);
 
+	it('redacts an invalid Content-Length before reading and cancelling the body', async () => {
+		const rawHeader = '2, content-length-secret';
+		let cancelReason: unknown;
+		let readerRequested = false;
+		const response = {
+			url: '',
+			ok: true,
+			status: 200,
+			headers: new Headers({ 'content-length': rawHeader }),
+			body: {
+				async cancel(reason?: unknown) {
+					cancelReason = reason;
+				},
+				getReader() {
+					readerRequested = true;
+					throw new Error('invalid-length response body should not be read');
+				}
+			}
+		} as unknown as Response;
+		let rejected: unknown;
+
+		try {
+			await preflightRuntimeAssets({
+				manifest: createManifest([assets[0]!]),
+				runtimeId: 'fortran/preflight-test',
+				rootUrl: 'https://example.test/',
+				fetch: async () => response
+			});
+		} catch (error) {
+			rejected = error;
+		}
+
+		expect(rejected).toMatchObject({
+			name: 'ProtocolError',
+			code: 'protocol',
+			phase: 'asset'
+		});
+		expect((rejected as Error).message).toBe(
+			'Runtime asset loader has an invalid Content-Length'
+		);
+		expect((rejected as Error).message).not.toContain(rawHeader);
+		expect(cancelReason).toBe(rejected);
+		expect(readerRequested).toBe(false);
+	});
+
 	it('cancels an oversized Content-Length before requesting a reader', async () => {
 		const expected = encoder.encode('four');
 		const asset: RuntimeRegistryAsset = {
