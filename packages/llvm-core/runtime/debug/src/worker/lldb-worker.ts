@@ -5,7 +5,8 @@ import {
 	loadEmscriptenModuleFactory,
 	mountDebugFiles,
 	postWorkerError,
-	postWorkerMessage
+	postWorkerMessage,
+	startLinearMemoryTelemetry
 } from './module-loader.js';
 
 let activeGeneration: string | undefined;
@@ -102,15 +103,17 @@ async function initialize(message: LldbWorkerInitializeMessage) {
 		}
 	});
 	mountDebugFiles(module, message.module, message.sources);
-	postWorkerMessage({
-		type: 'ready',
-		worker: 'lldb',
-		generation: message.generation
-	});
+	const stopMemoryTelemetry = startLinearMemoryTelemetry(module, 'lldb', message.generation);
 	try {
+		postWorkerMessage({
+			type: 'ready',
+			worker: 'lldb',
+			generation: message.generation
+		});
 		await module.callMain([message.generation]);
 		await lifecycle;
 	} finally {
+		stopMemoryTelemetry();
 		if (finishActiveLifecycle === finishLifecycle) finishActiveLifecycle = undefined;
 	}
 }

@@ -5,7 +5,8 @@ import {
 	loadEmscriptenModuleFactory,
 	mountDebugFiles,
 	postWorkerError,
-	postWorkerMessage
+	postWorkerMessage,
+	startLinearMemoryTelemetry
 } from './module-loader.js';
 
 let activeGeneration: string | undefined;
@@ -111,25 +112,30 @@ async function initialize(message: TargetWorkerInitializeMessage) {
 		}
 		return `--env=${key}=${value}`;
 	});
-	postWorkerMessage({
-		type: 'ready',
-		worker: 'target',
-		generation: message.generation
-	});
-	void Promise.resolve(
-		module.callMain([
-			...environmentArgs,
-			'-v=0',
-			'--heap-size=1048576',
-			`--dir=${cwd}`,
-			'-g=wasm-messageport:1',
-			'/workspace/program.wasm',
-			...args
-		])
-	).catch((error) =>
-		rejectTarget(error instanceof Error ? error : new Error('WAMR main failed'))
-	);
-	await lifecycle;
+	const stopMemoryTelemetry = startLinearMemoryTelemetry(module, 'target', message.generation);
+	try {
+		postWorkerMessage({
+			type: 'ready',
+			worker: 'target',
+			generation: message.generation
+		});
+		void Promise.resolve(
+			module.callMain([
+				...environmentArgs,
+				'-v=0',
+				'--heap-size=1048576',
+				`--dir=${cwd}`,
+				'-g=wasm-messageport:1',
+				'/workspace/program.wasm',
+				...args
+			])
+		).catch((error) =>
+			rejectTarget(error instanceof Error ? error : new Error('WAMR main failed'))
+		);
+		await lifecycle;
+	} finally {
+		stopMemoryTelemetry();
+	}
 }
 
 export function handleTargetWorkerMessage(message: DebugWorkerInboundMessage) {

@@ -513,6 +513,9 @@ export class BrowserLldbSession {
 			if (message.type === 'output') {
 				this.options.onOutput?.(message.channel, message.data);
 			}
+			if (message.type === 'memory') {
+				this.options.onMemory?.(message.worker, message.bytes);
+			}
 			if (message.type === 'error') {
 				const reportError = () => {
 					this.options.onLifecycle?.({

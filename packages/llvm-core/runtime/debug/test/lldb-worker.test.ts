@@ -21,12 +21,24 @@ vi.mock('../src/worker/module-loader.js', () => ({
 	loadEmscriptenModuleFactory: vi.fn(async () => async (options: Record<string, unknown>) => {
 		workerMocks.moduleOptions = options;
 		return {
+			HEAPU8: new Uint8Array(512),
 			callMain: workerMocks.callMain
 		};
 	}),
 	mountDebugFiles: vi.fn(),
 	postWorkerError: workerMocks.postWorkerError,
-	postWorkerMessage: workerMocks.postWorkerMessage
+	postWorkerMessage: workerMocks.postWorkerMessage,
+	startLinearMemoryTelemetry: vi.fn(
+		(module: { HEAPU8?: Uint8Array }, worker: 'lldb', generation: string) => {
+			workerMocks.postWorkerMessage({
+				type: 'memory',
+				worker,
+				bytes: module.HEAPU8?.buffer.byteLength ?? 0,
+				generation
+			});
+			return vi.fn();
+		}
+	)
 }));
 
 import { handleLldbWorkerMessage } from '../src/worker/lldb-worker.js';
@@ -51,6 +63,14 @@ describe('LLDB worker lifecycle', () => {
 
 		handleLldbWorkerMessage(message);
 
+		await vi.waitFor(() =>
+			expect(workerMocks.postWorkerMessage).toHaveBeenCalledWith({
+				type: 'memory',
+				worker: 'lldb',
+				bytes: 512,
+				generation: message.generation
+			})
+		);
 		await vi.waitFor(() =>
 			expect(workerMocks.postWorkerMessage).toHaveBeenCalledWith({
 				type: 'ready',

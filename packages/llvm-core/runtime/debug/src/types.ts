@@ -272,6 +272,12 @@ export type DebugWorkerOutboundMessage =
 			generation: DebugSessionGeneration;
 	  }
 	| {
+			type: 'memory';
+			worker: DebugWorkerKind;
+			bytes: number;
+			generation: DebugSessionGeneration;
+	  }
+	| {
 			type: 'exit';
 			exitCode: number | null;
 			generation: DebugSessionGeneration;
@@ -321,6 +327,7 @@ export interface BrowserLldbSessionOptions {
 	readyTimeoutMs?: number;
 	fetchImpl?: typeof fetch;
 	onOutput?: (channel: 'stdout' | 'stderr', data: string) => void;
+	onMemory?: (worker: DebugWorkerKind, bytes: number) => void;
 	onLifecycle?: (
 		event:
 			| { type: 'worker-error'; worker: DebugWorkerKind; message: string }

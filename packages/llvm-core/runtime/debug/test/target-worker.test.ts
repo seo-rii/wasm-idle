@@ -23,6 +23,7 @@ vi.mock('../src/worker/module-loader.js', () => ({
 			writeFile: vi.fn(),
 			chdir: workerMocks.chdir
 		},
+		HEAPU8: new Uint8Array(256),
 		callMain: (args: string[]) => {
 			workerMocks.callMain(args);
 			queueMicrotask(() => {
@@ -38,7 +39,18 @@ vi.mock('../src/worker/module-loader.js', () => ({
 	})),
 	mountDebugFiles: workerMocks.mountDebugFiles,
 	postWorkerError: workerMocks.postWorkerError,
-	postWorkerMessage: workerMocks.postWorkerMessage
+	postWorkerMessage: workerMocks.postWorkerMessage,
+	startLinearMemoryTelemetry: vi.fn(
+		(module: { HEAPU8?: Uint8Array }, worker: 'target', generation: string) => {
+			workerMocks.postWorkerMessage({
+				type: 'memory',
+				worker,
+				bytes: module.HEAPU8?.buffer.byteLength ?? 0,
+				generation
+			});
+			return vi.fn();
+		}
+	)
 }));
 
 function initializeMessage(generation: string): TargetWorkerInitializeMessage {
@@ -88,6 +100,14 @@ describe('WAMR target worker launch', () => {
 
 		handleTargetWorkerMessage(message);
 
+		await vi.waitFor(() =>
+			expect(workerMocks.postWorkerMessage).toHaveBeenCalledWith({
+				type: 'memory',
+				worker: 'target',
+				bytes: 256,
+				generation: message.generation
+			})
+		);
 		await vi.waitFor(() =>
 			expect(workerMocks.postWorkerMessage).toHaveBeenCalledWith({
 				type: 'ready',

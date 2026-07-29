@@ -54,6 +54,9 @@ const session = await createBrowserLldbSession({
 		args: ['demo'],
 		env: { MODE: 'debug' },
 		cwd: '/workspace'
+	},
+	onMemory: (worker, bytes) => {
+		console.info(`${worker} linear memory: ${bytes} bytes`);
 	}
 });
 await session.initialize();
@@ -77,6 +80,15 @@ runtime reports a real exit, abort, or session disposal.
 LLDB may defer `continue`, `next`, `stepIn`, and `stepOut` responses until the target stops again.
 Those execution requests therefore opt out of the DAP response timeout while retaining the
 transport-write timeout; ordinary DAP requests still use the configured response deadline.
+
+Current producer modules expose Emscripten's canonical `HEAPU8` view. Each worker samples only its
+backing buffer length, emits an initial `onMemory(worker, bytes)` value, and emits again only when
+the linear memory grows. A final sample is taken during worker shutdown. These messages carry the
+session generation and stale-session samples are ignored by the same boundary as output, error,
+and exit events. Callers can retain the maximum value per worker as the session's peak linear
+memory; the callback does not expose memory contents and does not include the browser engine's
+separate JavaScript heap. Older compatible producer assets without `HEAPU8` continue to run but do
+not emit memory samples.
 
 The debug runtime requires a cross-origin-isolated page with `SharedArrayBuffer`. LLDB and WAMR
 assets are lazy-loaded from the versioned producer manifest and are not included in this npm

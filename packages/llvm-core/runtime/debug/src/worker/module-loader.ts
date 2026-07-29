@@ -14,6 +14,7 @@ export interface EmscriptenFileSystem {
 
 export interface EmscriptenDebugModule {
 	FS: EmscriptenFileSystem;
+	HEAPU8?: Uint8Array;
 	callMain(args: string[]): number | Promise<number>;
 }
 
@@ -163,4 +164,31 @@ export function postWorkerError(
 		generation,
 		message: error instanceof Error ? error.message : String(error)
 	});
+}
+
+export function startLinearMemoryTelemetry(
+	module: EmscriptenDebugModule,
+	worker: DebugWorkerKind,
+	generation: DebugSessionGeneration,
+	intervalMs = 250
+) {
+	if (!(module.HEAPU8 instanceof Uint8Array)) return () => undefined;
+	let previousBytes = 0;
+	const sample = () => {
+		const bytes = module.HEAPU8?.buffer.byteLength ?? 0;
+		if (bytes <= previousBytes) return;
+		previousBytes = bytes;
+		postWorkerMessage({
+			type: 'memory',
+			worker,
+			bytes,
+			generation
+		});
+	};
+	sample();
+	const interval = setInterval(sample, intervalMs);
+	return () => {
+		clearInterval(interval);
+		sample();
+	};
 }

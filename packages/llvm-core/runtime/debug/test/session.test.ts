@@ -102,6 +102,12 @@ class FakeWorker implements WorkerLike {
 			stdout.close();
 			if (!this.suppressReady) {
 				this.emit({
+					type: 'memory',
+					worker: 'target',
+					bytes: 256,
+					generation: message.generation
+				});
+				this.emit({
 					type: 'ready',
 					worker: 'target',
 					generation: message.generation
@@ -118,6 +124,12 @@ class FakeWorker implements WorkerLike {
 		}
 		if (message.type === 'initialize-lldb') {
 			if (!this.suppressReady) {
+				this.emit({
+					type: 'memory',
+					worker: 'lldb',
+					bytes: 512,
+					generation: message.generation
+				});
 				this.emit({
 					type: 'ready',
 					worker: 'lldb',
@@ -278,6 +290,7 @@ describe('BrowserLldbSession', () => {
 		const commands: string[] = [];
 		const workers: FakeWorker[] = [];
 		const output: string[] = [];
+		const memory: string[] = [];
 		const session = new BrowserLldbSession({
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
@@ -302,6 +315,7 @@ describe('BrowserLldbSession', () => {
 			},
 			fetchImpl: async () => new Response('debug-asset'),
 			onOutput: (channel, value) => output.push(`${channel}:${value}`),
+			onMemory: (worker, bytes) => memory.push(`${worker}:${bytes}`),
 			requestTimeoutMs: 1_000,
 			readyTimeoutMs: 1_000
 		});
@@ -311,6 +325,7 @@ describe('BrowserLldbSession', () => {
 			supportsReadMemoryRequest: true
 		});
 		expect(commands).toEqual(['initialize', 'attach', 'setBreakpoints', 'configurationDone']);
+		expect(memory).toEqual(['target:256', 'lldb:512']);
 		const lldbWorker = workers.find((worker) => worker.kind === 'lldb');
 		expect(
 			lldbWorker?.requests.find((request) => request.command === 'attach')?.arguments
