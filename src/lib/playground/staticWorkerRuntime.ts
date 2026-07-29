@@ -4,6 +4,8 @@ import {
 	AssetTooLargeError,
 	BusyError,
 	CancelledError,
+	DiagnosticLimitError,
+	OutputLimitError,
 	RuntimeProgressController,
 	TimeoutError,
 	isWasmIdleError,
@@ -51,7 +53,11 @@ type BufferedStdin = {
 };
 
 type ActiveRun = {
+	cleanup: () => void;
+	diagnosticCount: number;
 	id: string;
+	limits: ExecutionLimits;
+	outputBytes: number;
 	progress?: SandboxProgress;
 	resolve: (result: boolean | string) => void;
 	reject: (reason: unknown) => void;
@@ -63,11 +69,12 @@ type StaticWorkerExecutionControls = {
 };
 
 type StdinWaiter = {
-	reject: (reason: string) => void;
+	reject: (reason: unknown) => void;
 	resolve: () => void;
 };
 
 const WORKER_READY_MESSAGE = '__wasmIdleStaticWorkerReady';
+const outputEncoder = new TextEncoder();
 
 export class StaticWorkerRuntimeSandbox implements Sandbox {
 	output: any = null;
@@ -166,7 +173,7 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 		for (const waiter of waiters) waiter.resolve();
 	}
 
-	private rejectStdinWaiters(reason: string) {
+	private rejectStdinWaiters(reason: unknown) {
 		const waiters = this.stdinWaiters.splice(0);
 		for (const waiter of waiters) waiter.reject(reason);
 	}
@@ -517,8 +524,46 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 				progress.stage || `Running ${this.config.displayName}`
 			);
 		}
-		if (output) this.output?.(output);
-		if (diagnostic) this.oncompilerdiagnostic?.(diagnostic);
+		if (typeof output === 'string' && output.length > 0) {
+			const outputBytes = activeRun.outputBytes + outputEncoder.encode(output).byteLength;
+			if (outputBytes > activeRun.limits.maxOutputBytes) {
+				this.rejectRun(
+					activeRun.id,
+					new OutputLimitError(
+						`${this.config.displayName} output exceeded ${activeRun.limits.maxOutputBytes} bytes`,
+						{
+							actual: outputBytes,
+							limit: activeRun.limits.maxOutputBytes,
+							phase: 'execute',
+							runtimeId: this.config.languageId
+						}
+					)
+				);
+				return;
+			}
+			activeRun.outputBytes = outputBytes;
+			this.output?.(output);
+		}
+		if (diagnostic) {
+			const diagnosticCount = activeRun.diagnosticCount + 1;
+			if (diagnosticCount > activeRun.limits.maxDiagnostics) {
+				this.rejectRun(
+					activeRun.id,
+					new DiagnosticLimitError(
+						`${this.config.displayName} diagnostics exceeded ${activeRun.limits.maxDiagnostics} messages`,
+						{
+							actual: diagnosticCount,
+							limit: activeRun.limits.maxDiagnostics,
+							phase: 'execute',
+							runtimeId: this.config.languageId
+						}
+					)
+				);
+				return;
+			}
+			activeRun.diagnosticCount = diagnosticCount;
+			this.oncompilerdiagnostic?.(diagnostic);
+		}
 		if (typeof error === 'string') {
 			this.rejectRun(activeRun.id, error);
 			return;
@@ -552,6 +597,7 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 	private resolveRun(id: string, result: boolean | string) {
 		const activeRun = this.activeRun;
 		if (!activeRun || activeRun.id !== id) return;
+		activeRun.cleanup();
 		this.elapse = Date.now() - this.begin;
 		this.exit = true;
 		this.activeRun = null;
@@ -565,6 +611,7 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 	private rejectRun(id: string, reason: unknown) {
 		const activeRun = this.activeRun;
 		if (!activeRun || activeRun.id !== id) return;
+		activeRun.cleanup();
 		this.elapse = Date.now() - this.begin;
 		this.exit = true;
 		this.activeRun = null;
@@ -642,15 +689,60 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 		this.exit = false;
 		return new Promise<boolean | string>((resolve, reject) => {
 			const id = `static-${++this.uid}`;
-			this.activeRun = { id, progress, resolve, reject };
+			let deadline: ReturnType<typeof setTimeout> | undefined;
+			const onAbort = () => {
+				const error = new CancelledError(`${this.config.displayName} run cancelled`, {
+					cause: controls.signal?.reason,
+					phase: 'execute',
+					runtimeId: this.config.languageId
+				});
+				this.rejectStdinWaiters(error);
+				this.rejectRun(id, error);
+			};
+			const cleanup = () => {
+				if (deadline !== undefined) clearTimeout(deadline);
+				controls.signal?.removeEventListener('abort', onAbort);
+			};
+			this.activeRun = {
+				cleanup,
+				diagnosticCount: 0,
+				id,
+				limits: controls.limits,
+				outputBytes: 0,
+				progress,
+				resolve,
+				reject
+			};
 			this.activeReject = reject;
 			this.begin = Date.now();
+			controls.signal?.addEventListener('abort', onAbort, { once: true });
+			if (controls.signal?.aborted) {
+				onAbort();
+				return;
+			}
 
 			void (async () => {
 				try {
 					const worker = await this.ensureWorkerStarted(progress, controls);
 					const { stdin, stdinEof } = await this.collectStdinForRun(code, options);
 					if (this.activeRun?.id !== id) return;
+					const executionTimeoutMs = Math.min(
+						2_147_483_647,
+						controls.limits.compileTimeoutMs + controls.limits.runTimeoutMs
+					);
+					deadline = setTimeout(() => {
+						this.rejectRun(
+							id,
+							new TimeoutError(
+								`${this.config.displayName} execution timed out after ${executionTimeoutMs} ms`,
+								{
+									phase: 'execute',
+									runtimeId: this.config.languageId,
+									timeoutMs: executionTimeoutMs
+								}
+							)
+						);
+					}, executionTimeoutMs);
 					const { programArgs } = resolveSandboxExecutionArgs(
 						this.config.languageId,
 						args,
@@ -694,6 +786,7 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 		this.rejectStdinWaiters(reason);
 		if (this.activeRun) {
 			const activeRun = this.activeRun;
+			activeRun.cleanup();
 			this.activeRun = null;
 			this.activeReject = null;
 			activeRun.reject(reason);

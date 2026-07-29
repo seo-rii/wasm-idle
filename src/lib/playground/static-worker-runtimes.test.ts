@@ -693,6 +693,114 @@ describe('static worker backed language sandboxes', () => {
 		expect(output).toHaveBeenCalledWith('current\n');
 	});
 
+	it('cancels a static run while it is waiting for stdin', async () => {
+		const controller = new AbortController();
+		const sandbox = new Prolog();
+		await sandbox.load('/absproxy/5173');
+		const code = 'main :- read_line_to_string(user_input, Line), writeln(Line).';
+		const run = sandbox.run(code, false, true, undefined, [], {
+			signal: controller.signal
+		});
+		const outcome = run.catch((error) => error);
+		await Promise.resolve();
+		expect(workerInstances[0].postMessage).not.toHaveBeenCalled();
+
+		controller.abort(new Error('cancel stdin wait'));
+		await expect(outcome).resolves.toMatchObject({
+			name: 'CancelledError',
+			code: 'cancelled',
+			phase: 'execute',
+			runtimeId: 'PROLOG'
+		});
+		expect(workerInstances[0].terminate).toHaveBeenCalledOnce();
+	});
+
+	it('terminates a static run at its aggregate execution deadline', async () => {
+		onPostMessage = () => {};
+		const sandbox = new Prolog();
+		await sandbox.load('/absproxy/5173');
+		const run = sandbox.run('writeln(slow).', false, true, undefined, [], {
+			stdin: '',
+			limits: { compileTimeoutMs: 5, runTimeoutMs: 5 }
+		});
+		const outcome = run.catch((error) => error);
+		await vi.waitFor(() => expect(workerInstances[0].postMessage).toHaveBeenCalledOnce());
+
+		await expect(outcome).resolves.toMatchObject({
+			name: 'TimeoutError',
+			code: 'timeout',
+			phase: 'execute',
+			runtimeId: 'PROLOG',
+			timeoutMs: 10
+		});
+		expect(workerInstances[0].terminate).toHaveBeenCalledOnce();
+	});
+
+	it('terminates a static run before emitting output beyond its UTF-8 byte limit', async () => {
+		onPostMessage = () => {};
+		const sandbox = new Prolog();
+		const output = vi.fn();
+		sandbox.output = output;
+		await sandbox.load('/absproxy/5173');
+		const run = sandbox.run('writeln(output).', false, true, undefined, [], {
+			stdin: '',
+			limits: { maxOutputBytes: 4 }
+		});
+		const outcome = run.catch((error) => error);
+		await vi.waitFor(() => expect(workerInstances[0].postMessage).toHaveBeenCalledOnce());
+		workerInstances[0].onmessage?.({
+			data: { runId: workerInstances[0].lastRunId, output: 'ééé' }
+		} as MessageEvent<any>);
+
+		await expect(outcome).resolves.toMatchObject({
+			name: 'OutputLimitError',
+			code: 'output-limit',
+			phase: 'execute',
+			runtimeId: 'PROLOG',
+			actual: 6,
+			limit: 4
+		});
+		expect(output).not.toHaveBeenCalled();
+		expect(workerInstances[0].terminate).toHaveBeenCalledOnce();
+	});
+
+	it('terminates a static run when its diagnostic count exceeds the limit', async () => {
+		onPostMessage = () => {};
+		const sandbox = new Prolog();
+		const oncompilerdiagnostic = vi.fn();
+		sandbox.oncompilerdiagnostic = oncompilerdiagnostic;
+		await sandbox.load('/absproxy/5173');
+		const run = sandbox.run('writeln(diagnostics).', false, true, undefined, [], {
+			stdin: '',
+			limits: { maxDiagnostics: 1 }
+		});
+		const outcome = run.catch((error) => error);
+		await vi.waitFor(() => expect(workerInstances[0].postMessage).toHaveBeenCalledOnce());
+		const diagnostic = {
+			lineNumber: 1,
+			severity: 'warning' as const,
+			message: 'test diagnostic'
+		};
+		workerInstances[0].onmessage?.({
+			data: { runId: workerInstances[0].lastRunId, diagnostic }
+		} as MessageEvent<any>);
+		workerInstances[0].onmessage?.({
+			data: { runId: workerInstances[0].lastRunId, diagnostic }
+		} as MessageEvent<any>);
+
+		await expect(outcome).resolves.toMatchObject({
+			name: 'DiagnosticLimitError',
+			code: 'diagnostic-limit',
+			phase: 'execute',
+			runtimeId: 'PROLOG',
+			actual: 2,
+			limit: 1
+		});
+		expect(oncompilerdiagnostic).toHaveBeenCalledOnce();
+		expect(oncompilerdiagnostic).toHaveBeenCalledWith(diagnostic);
+		expect(workerInstances[0].terminate).toHaveBeenCalledOnce();
+	});
+
 	it('releases the active-run slot after kill for an immediate rerun', async () => {
 		onPostMessage = () => {};
 		const sandbox = new Prolog();
