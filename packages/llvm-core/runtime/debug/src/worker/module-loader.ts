@@ -172,7 +172,14 @@ export function startLinearMemoryTelemetry(
 	generation: DebugSessionGeneration,
 	intervalMs = 250
 ) {
-	if (!(module.HEAPU8 instanceof Uint8Array)) return () => undefined;
+	const descriptor = Object.getOwnPropertyDescriptor(module, 'HEAPU8');
+	if (
+		!descriptor ||
+		!('value' in descriptor) ||
+		!(descriptor.value instanceof Uint8Array)
+	) {
+		return () => undefined;
+	}
 	let previousBytes = 0;
 	const sample = () => {
 		const bytes = module.HEAPU8?.buffer.byteLength ?? 0;

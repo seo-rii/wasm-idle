@@ -74,4 +74,23 @@ describe('linear memory telemetry', () => {
 		stop();
 		expect(postMessage).not.toHaveBeenCalled();
 	});
+
+	it('does not touch the aborting compatibility getter in older Emscripten modules', () => {
+		const postMessage = vi.fn();
+		vi.stubGlobal('postMessage', postMessage);
+		const module = debugModule();
+		Object.defineProperty(module, 'HEAPU8', {
+			configurable: true,
+			get() {
+				throw new Error(
+					"'HEAPU8' was not exported. add it to EXPORTED_RUNTIME_METHODS"
+				);
+			}
+		});
+
+		expect(() =>
+			startLinearMemoryTelemetry(module, 'lldb', 'legacy-generation', 10)
+		).not.toThrow();
+		expect(postMessage).not.toHaveBeenCalled();
+	});
 });
