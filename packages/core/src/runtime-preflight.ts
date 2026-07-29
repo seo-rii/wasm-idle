@@ -305,10 +305,12 @@ async function preflightAsset(
 		throw error;
 	}
 	if (!response.ok) {
-		throw new AssetNotFoundError(
+		const error = new AssetNotFoundError(
 			`Failed to load runtime asset ${asset.key}: HTTP ${response.status}`,
 			{ runtimeId, profileId, recoverable: response.status >= 500 }
 		);
+		await response.body?.cancel(error).catch(() => undefined);
+		throw error;
 	}
 	const contentEncoding = response.headers.get('content-encoding') || undefined;
 	if (

@@ -281,6 +281,53 @@ describe('runtime registry asset preflight', () => {
 		expect(arrayBufferRequested).toBe(false);
 	});
 
+	it('cancels a failed HTTP response before returning the asset error', async () => {
+		let cancelReason: unknown;
+		let readerRequested = false;
+		let arrayBufferRequested = false;
+		const response = {
+			url: '',
+			ok: false,
+			status: 503,
+			headers: new Headers(),
+			body: {
+				async cancel(reason?: unknown) {
+					cancelReason = reason;
+				},
+				getReader() {
+					readerRequested = true;
+					throw new Error('failed HTTP response body should not be read');
+				}
+			},
+			async arrayBuffer() {
+				arrayBufferRequested = true;
+				throw new Error('failed HTTP response body should not be materialized');
+			}
+		} as unknown as Response;
+
+		await expect(
+			preflightRuntimeAssets({
+				manifest: createManifest([assets[0]!]),
+				runtimeId: 'fortran/preflight-test',
+				rootUrl: 'https://example.test/',
+				fetch: async () => response
+			})
+		).rejects.toMatchObject({
+			name: 'AssetNotFoundError',
+			code: 'asset-not-found',
+			phase: 'asset',
+			runtimeId: 'fortran/preflight-test',
+			profileId: 'preflight-v1',
+			recoverable: true
+		});
+		expect(cancelReason).toMatchObject({
+			name: 'AssetNotFoundError',
+			code: 'asset-not-found'
+		});
+		expect(readerRequested).toBe(false);
+		expect(arrayBufferRequested).toBe(false);
+	});
+
 	it('rejects redirect targets outside the manifest asset root', async () => {
 		const response = responseFor('https://example.test/runtime/loader.js');
 		Object.defineProperty(response, 'url', {
