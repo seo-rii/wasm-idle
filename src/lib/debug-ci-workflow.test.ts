@@ -75,4 +75,12 @@ describe('LLDB browser integration workflow', () => {
 		expect(browserTest).toContain("afterContinue: 'pause'");
 		expect(browserTest).toContain("expectedStoppedReason: 'pause'");
 	});
+
+	it('keeps a running-target LLDB disconnect fixture in the required browser gate', async () => {
+		const browserTest = await readFile('src/lib/playground/debug.playwright.test.ts', 'utf8');
+
+		expect(browserTest).toContain("testId: 'c-disconnect'");
+		expect(browserTest).toContain("afterContinue: 'disconnect'");
+		expect(browserTest).toContain('WASM_IDLE_DEBUG_DISCONNECT_TIMEOUT_MS');
+	});
 });

@@ -90,7 +90,8 @@ class FakeWorker implements WorkerLike {
 		readonly kind: 'lldb' | 'target',
 		readonly commands: string[],
 		private readonly failAfterReady = false,
-		private readonly suppressReady = false
+		private readonly suppressReady = false,
+		private readonly suppressedResponses = new Set<string>()
 	) {}
 
 	postMessage(message: DebugWorkerInboundMessage) {
@@ -239,6 +240,7 @@ class FakeWorker implements WorkerLike {
 					await output.write(encodeDapMessage(initialized));
 					continue;
 				}
+				if (this.suppressedResponses.has(request.command)) continue;
 				const response: DapResponse = {
 					seq: this.commands.length + 100,
 					type: 'response',
@@ -378,6 +380,47 @@ describe('BrowserLldbSession', () => {
 
 		await session.disconnect();
 		expect(commands).toContain('disconnect');
+	});
+
+	it('disposes a running target without waiting for the disconnect response', async () => {
+		const commands: string[] = [];
+		const workers: FakeWorker[] = [];
+		const session = new BrowserLldbSession({
+			manifest,
+			runtimeBaseUrl: 'https://cdn.example/debug/',
+			module: Uint8Array.of(0, 97, 115, 109),
+			sources: [],
+			fetchImpl: async () => new Response('debug-asset'),
+			workerFactory: (kind) => {
+				const worker = new FakeWorker(
+					kind,
+					commands,
+					false,
+					false,
+					new Set(['disconnect'])
+				);
+				workers.push(worker);
+				return worker;
+			},
+			requestTimeoutMs: 1_000,
+			readyTimeoutMs: 1_000
+		});
+		await session.initialize();
+
+		const disconnect = session.disconnect({ terminateTarget: true });
+		try {
+			await expect(
+				Promise.race([
+					disconnect.then(() => 'disconnected' as const),
+					new Promise<'waiting'>((resolve) => setTimeout(() => resolve('waiting'), 100))
+				])
+			).resolves.toBe('disconnected');
+			expect(commands).toContain('disconnect');
+			expect(workers.every((worker) => worker.isTerminated)).toBe(true);
+		} finally {
+			await session.dispose();
+			await disconnect;
+		}
 	});
 
 	it('verifies large debug assets one at a time before creating workers', async () => {

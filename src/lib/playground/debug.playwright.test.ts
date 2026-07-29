@@ -110,6 +110,23 @@ int main() {
 		testId: 'c-interrupt'
 	},
 	{
+		activePath: 'disconnect.c',
+		afterContinue: 'disconnect',
+		backend: 'lldb',
+		breakpointLine: 2,
+		expectedLocal: { name: 'value', value: '0' },
+		expectedTitle: 'C · LLDB / WAMR',
+		language: 'C',
+		programArgs: [],
+		source: `int main(void) {
+    volatile int value = 0;
+    for (;;) {
+        value += 1;
+    }
+}`,
+		testId: 'c-disconnect'
+	},
+	{
 		activePath: 'solution.rs',
 		backend: 'lldb',
 		breakpointLine: 2,
@@ -696,7 +713,22 @@ describe('native-source browser debugging in Chromium', () => {
 							expect(await readPausedLine(page)).toBe('—');
 						}
 						await page.locator('button[aria-label="Continue"]').click();
-						if ('expectedStoppedReason' in testCase) {
+						if (
+							'afterContinue' in testCase &&
+							testCase.afterContinue === 'disconnect'
+						) {
+							await page
+								.locator('.debug-status-pill--active')
+								.waitFor({ state: 'visible' });
+							await page.waitForTimeout(250);
+							await page.getByRole('button', { name: 'Stop Debug' }).click();
+							await debugButton.waitFor({
+								state: 'visible',
+								timeout: Number(
+									process.env.WASM_IDLE_DEBUG_DISCONNECT_TIMEOUT_MS || '5000'
+								)
+							});
+						} else if ('expectedStoppedReason' in testCase) {
 							if ('afterContinue' in testCase && testCase.afterContinue === 'pause') {
 								const pauseButton = page.locator('button[aria-label="Pause"]');
 								await page.waitForFunction(() => {

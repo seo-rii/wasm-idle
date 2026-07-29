@@ -97,6 +97,11 @@ without waiting for LLDB's deferred `continue` response, sends Pause through the
 transport, and verifies that the resulting LLDB interrupt is normalized to a `pause` stop with
 source frames and scopes still available. Set `WASM_IDLE_DEBUG_BROWSER_CASES=c-interrupt` to run
 only this fixture locally.
+A third C fixture enters the same running loop and invokes Stop Debug before another stop event.
+The session gives DAP `disconnect` a short best-effort grace period, then closes its queues and
+terminates both workers without waiting for LLDB's deferred response. The fixture requires the UI
+to return to Ready within five seconds. Set `WASM_IDLE_DEBUG_BROWSER_CASES=c-disconnect` to run only
+this fixture locally.
 It then sends a DAP `readMemory` request from the LLDB hexadecimal memory reference `0x0` for four
 bytes of Wasm linear memory through the complete Sandbox and Terminal control path and verifies
 that the response is readable before resuming. The hexadecimal form matters because LLDB-DAP

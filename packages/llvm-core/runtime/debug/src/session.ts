@@ -426,12 +426,21 @@ export class BrowserLldbSession {
 	async disconnect(options: { terminateTarget?: boolean } = {}) {
 		if (this.disposePromise) return this.disposePromise;
 		if (this.dap) {
-			await this.dap
+			const disconnectRequest = this.dap
 				.request('disconnect', {
 					restart: false,
 					terminateDebuggee: options.terminateTarget ?? true
 				})
 				.catch(() => undefined);
+			let disconnectGrace: ReturnType<typeof setTimeout> | undefined;
+			await Promise.race([
+				disconnectRequest,
+				new Promise<void>((resolve) => {
+					disconnectGrace = setTimeout(resolve, WORKER_SHUTDOWN_GRACE_MS);
+				})
+			]).finally(() => {
+				if (disconnectGrace !== undefined) clearTimeout(disconnectGrace);
+			});
 		}
 		await this.dispose();
 	}
