@@ -194,11 +194,11 @@ describe('static worker backed language sandboxes', () => {
 			Janet,
 			Julia,
 			Nim,
-			Pascal,
-			Perl
+			Pascal
 		]) {
 			expect(new Runtime().stdinMode).toBe('prebuffered');
 		}
+		expect(new Perl().stdinMode).toBe('prebuffered');
 		expect(new Prolog().stdinMode).toBe('prebuffered');
 		expect(new Tcl().stdinMode).toBe('prebuffered');
 	});
@@ -240,6 +240,7 @@ describe('static worker backed language sandboxes', () => {
 			};
 			const sandbox = createStreamingTestSandbox();
 			expect(sandbox.stdinMode).toBe('streaming');
+			expect(new Perl().stdinMode).toBe('streaming');
 			expect(new Prolog().stdinMode).toBe('streaming');
 			expect(new Tcl().stdinMode).toBe('streaming');
 			await sandbox.load();

@@ -30,7 +30,9 @@ pub fn main() {
 }
 `;
 
-const perlStdinSource = `my $line = <STDIN>;
+const perlStdinSource = `$| = 1;
+print "value?\\n";
+my $line = <STDIN>;
 chomp $line;
 print "main=", $line + 5, "\\n";
 `;
@@ -217,7 +219,8 @@ describe('wasm-idle static worker language browser integrations', () => {
 					language: 'PERL',
 					runTimeoutMs: Number(process.env.WASM_IDLE_PERL_RUN_TIMEOUT_MS || '240000'),
 					source: perlStdinSource,
-					stdinText: '68\n'
+					stdinText: '68\n',
+					waitForOutputBeforeStdin: 'value?'
 				});
 				expect(summary.activeState.crossOriginIsolated).toBe(true);
 				expect(summary.activeState.sharedArrayBuffer).toBe(true);
