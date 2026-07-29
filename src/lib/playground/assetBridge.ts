@@ -22,6 +22,7 @@ interface AssetProgressMessage {
 
 type LoadedAsset = {
 	bytes: Uint8Array;
+	contentEncoding?: string;
 	mimeType?: string;
 	transferOwnership?: boolean;
 };
@@ -180,7 +181,18 @@ export class WorkerAssetBridge {
 					`Runtime asset ${request.asset} exceeds the ${MAX_RUNTIME_ASSET_BYTES} byte limit`
 				);
 			}
-			await this.verifyIntegrity(request.asset, loaded.bytes, runtimeBytes, loaded.mimeType);
+			const httpDecodedGzip = (loaded.contentEncoding || '')
+				.toLowerCase()
+				.split(',')
+				.map((encoding) => encoding.trim())
+				.includes('gzip');
+			await this.verifyIntegrity(
+				request.asset,
+				loaded.bytes,
+				runtimeBytes,
+				loaded.mimeType,
+				!httpDecodedGzip
+			);
 			if (controller.signal.aborted || generation !== this.generation) return;
 			const buffer = transferBuffer(
 				runtimeBytes,
@@ -244,19 +256,30 @@ export class WorkerAssetBridge {
 		asset: string,
 		deliveryBytes: Uint8Array,
 		runtimeBytes: Uint8Array,
-		mimeType?: string
+		mimeType?: string,
+		hasDeliveryBytes = true
 	) {
 		const configured = this.config.integrity?.[asset];
 		if (!configured) return;
 		const expected = typeof configured === 'string' ? { sha256: configured } : configured;
 		if (expected.uncompressedSha256 !== undefined || expected.uncompressedBytes !== undefined) {
-			await verifyRuntimeAssetPair({
-				asset,
-				compressed: deliveryBytes,
-				uncompressed: runtimeBytes,
-				expected,
-				mimeType
-			});
+			if (hasDeliveryBytes) {
+				await verifyRuntimeAssetPair({
+					asset,
+					compressed: deliveryBytes,
+					uncompressed: runtimeBytes,
+					expected,
+					mimeType
+				});
+			} else {
+				await verifyRuntimeAssetIntegrity({
+					asset,
+					bytes: runtimeBytes,
+					expected,
+					stage: 'uncompressed',
+					mimeType
+				});
+			}
 			return;
 		}
 		await verifyRuntimeAssetIntegrity({
@@ -358,10 +381,11 @@ export class WorkerAssetBridge {
 			);
 		}
 		const mimeType = response.headers.get('content-type') || undefined;
+		const contentEncoding = response.headers.get('content-encoding') || undefined;
 		if (!response.body) {
 			const bytes = new Uint8Array(await response.arrayBuffer());
 			this.progress.update(asset, bytes.byteLength, contentLength ?? bytes.byteLength);
-			return { bytes, mimeType, transferOwnership: true };
+			return { bytes, contentEncoding, mimeType, transferOwnership: true };
 		}
 
 		const reader = response.body.getReader();
@@ -393,7 +417,7 @@ export class WorkerAssetBridge {
 		}
 		if (receivedLength !== bytes.byteLength) bytes = bytes.slice(0, receivedLength);
 		this.progress.update(asset, receivedLength, contentLength ?? receivedLength);
-		return { bytes, mimeType, transferOwnership: true };
+		return { bytes, contentEncoding, mimeType, transferOwnership: true };
 	}
 
 	private requireAllowedAssetUrl(asset: string, value: string) {

@@ -26,8 +26,11 @@ compatibility path.
 The bundled Clang `runtime-manifest.v1.json` is routed through the same worker asset bridge as its
 four delivery assets. The compressed files remain pinned against their producer receipts in CI,
 while the browser bridge normalizes transparent HTTP gzip decoding and pins the exact decoded
-runtime bytes that it transfers to the compiler worker. The manifest is pinned directly, so the
-compiler cannot consume unverified metadata before loading an otherwise verified binary.
+runtime bytes that it transfers to the compiler worker. When HTTP `Content-Encoding: gzip` hides
+the original delivery bytes, the bridge verifies the decoded size and digest; loaders that return
+raw gzip bytes continue to verify both the compressed delivery and decoded runtime identities. The
+manifest is pinned directly, so the compiler cannot consume unverified metadata before loading an
+otherwise verified binary.
 
 ## LLDB debug sessions
 
