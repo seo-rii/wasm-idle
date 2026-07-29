@@ -76,6 +76,32 @@ int main(void) {
 		testId: 'c-streaming-stdin'
 	},
 	{
+		activePath: 'wasi-file.c',
+		backend: 'lldb',
+		breakpointLine: 4,
+		expectedLocal: { name: 'value', value: '0' },
+		expectedOutput: 'lldb-file=73',
+		expectedTitle: 'C · LLDB / WAMR',
+		language: 'C',
+		programArgs: [],
+		source: `#include <stdio.h>
+
+int main(void) {
+    int value = 0;
+    FILE *file = fopen("/workspace/data/input.txt", "r");
+    if (!file) {
+        printf("lldb-file=missing\\n");
+        return 0;
+    }
+    fscanf(file, "%d", &value);
+    fclose(file);
+    printf("lldb-file=%d\\n", value);
+    return 0;
+}`,
+		testId: 'c-wasi-file',
+		workspaceFiles: [{ path: 'data/input.txt', content: '73\n' }]
+	},
+	{
 		activePath: 'main.cpp',
 		backend: 'lldb',
 		breakpointLine: 16,

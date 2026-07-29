@@ -234,6 +234,7 @@ export interface TargetWorkerInitializeMessage {
 	args?: string[];
 	env?: Record<string, string>;
 	cwd?: '/workspace';
+	workspaceFiles: DebugSourceFile[];
 	rspInput: SharedByteQueueDescriptor;
 	rspOutput: SharedByteQueueDescriptor;
 	stdout: SharedByteQueueDescriptor;

@@ -331,7 +331,13 @@ describe('BrowserLldbSession', () => {
 			type: 'initialize-target',
 			args: ['first', 'second'],
 			env: { MODE: 'debug' },
-			cwd: '/workspace'
+			cwd: '/workspace',
+			workspaceFiles: [
+				{
+					path: '/workspace/main.cpp',
+					content: 'int main() { return 0; }'
+				}
+			]
 		});
 		expect(lldbInit).toMatchObject({
 			type: 'initialize-lldb',

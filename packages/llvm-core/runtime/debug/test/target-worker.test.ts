@@ -52,6 +52,12 @@ function initializeMessage(generation: string): TargetWorkerInitializeMessage {
 			EMPTY: ''
 		},
 		cwd: '/workspace',
+		workspaceFiles: [
+			{
+				path: '/workspace/data/input.txt',
+				content: '73\n'
+			}
+		],
 		rspInput: createSharedByteQueue(4096, 1),
 		rspOutput: createSharedByteQueue(4096, 1),
 		stdout: createSharedByteQueue(4096, 1),
@@ -92,7 +98,7 @@ describe('WAMR target worker launch', () => {
 		expect(workerMocks.mountDebugFiles).toHaveBeenCalledWith(
 			expect.anything(),
 			message.module,
-			[]
+			message.workspaceFiles
 		);
 		expect(workerMocks.chdir).toHaveBeenCalledWith('/workspace');
 		expect(workerMocks.callMain).toHaveBeenCalledWith([

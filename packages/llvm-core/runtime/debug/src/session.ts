@@ -223,6 +223,7 @@ export class BrowserLldbSession {
 				args: this.options.launch?.args ?? [],
 				env: this.options.launch?.env ?? {},
 				cwd: this.options.launch?.cwd ?? '/workspace',
+				workspaceFiles: this.options.sources,
 				rspInput: lldbToTarget,
 				rspOutput: targetToLldb,
 				stdout,

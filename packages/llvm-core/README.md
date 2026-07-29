@@ -64,6 +64,10 @@ untouched source, embedded DWARF, stable `/workspace/...` paths, and exact Clang
 `compileLinkRun()` rejects `lldb` because an LLDB artifact must not be instantiated through the
 normal browser execution path. Launch arguments, WASI environment variables, and the `/workspace`
 working directory are forwarded to WAMR rather than being applied only to LLDB's attach request.
+The same preflight-validated `/workspace/...` files provided to LLDB are mounted into WAMR's
+MEMFS before launch, so guest WASI file access observes the workspace used to compile the DWARF
+artifact. File paths must remain canonical beneath `/workspace`, and `/workspace/program.wasm` is
+reserved for the debug target.
 The target launch also reserves a 1 MiB WAMR app heap for the debugger's scratch region, matching
 the verified native source-debug baseline, and runs WAMR at verbosity zero so runtime diagnostics
 do not contaminate the guest's stdout/stderr streams.
@@ -94,6 +98,9 @@ source pause, the gate also verifies that LLDB scopes remain lazy until their
 The C++ fixture additionally follows the structure's and a pointer's own `variablesReference`
 values and verifies their `first` and `second` fields without eagerly flattening either variable
 tree.
+A WASI file fixture mounts `/workspace/data/input.txt` into both debugger workers, pauses before
+the guest opens it, and requires WAMR to print the file's value after continuing. Set
+`WASM_IDLE_DEBUG_BROWSER_CASES=c-wasi-file` to run only this fixture locally.
 A dedicated C fixture executes `__builtin_trap()`, verifies that LLDB reports an `exception` stop
 on the trap source line with scopes still available, and then exercises a clean Stop Debug
 disconnect. Set `WASM_IDLE_DEBUG_BROWSER_CASES=c-trap` to run only this fixture locally.

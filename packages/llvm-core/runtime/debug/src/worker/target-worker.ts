@@ -96,7 +96,7 @@ async function initialize(message: TargetWorkerInitializeMessage) {
 			rejectTarget(new Error(`WAMR aborted: ${String(reason)}`));
 		}
 	});
-	mountDebugFiles(module, message.module, []);
+	mountDebugFiles(module, message.module, message.workspaceFiles);
 	const cwd = message.cwd ?? '/workspace';
 	module.FS.chdir(cwd);
 	const args = message.args ?? [];
