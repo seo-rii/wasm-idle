@@ -34,7 +34,7 @@ export async function compileRust(request, dependencies = {}) {
         typeof Atomics === 'undefined') {
         return makeFailure('wasm-rust requires a cross-origin-isolated worker environment with SharedArrayBuffer support');
     }
-    const maxBrowserAttempts = 5;
+    const maxBrowserAttempts = 2;
     const compileLogs = [];
     const emitCompileLog = (message, level = 'log') => {
         if (!request.log) {

@@ -118,7 +118,7 @@ export async function compileRust(
 		);
 	}
 
-	const maxBrowserAttempts = 5;
+	const maxBrowserAttempts = 2;
 	const compileLogs: BufferedCompileLog[] = [];
 	const emitCompileLog = (message: string, level: CompilerLogLevel = 'log') => {
 		if (!request.log) {

@@ -107,6 +107,43 @@ describe('compileRust retry behavior', () => {
 		expect(secondWorker.terminated).toBe(true);
 	});
 
+	it('limits transient recovery to one fresh worker retry', async () => {
+		const emitTransientFailure = (worker: FakeWorker) => {
+			worker.emitMessage({
+				type: 'error',
+				message: 'memory access out of bounds'
+			});
+		};
+		const firstWorker = new FakeWorker((_, worker) => emitTransientFailure(worker));
+		const secondWorker = new FakeWorker((_, worker) => emitTransientFailure(worker));
+		const thirdWorker = new FakeWorker((message) => {
+			mirrorBitcode(message.sharedBitcodeBuffer, new Uint8Array([0x42, 0x43]));
+		});
+
+		const result = await compileRust(
+			{
+				code: 'fn main() { println!("hi"); }',
+				edition: '2024',
+				crateType: 'bin',
+				log: true
+			},
+			{
+				...createRetryDependencies([firstWorker, secondWorker, thirdWorker]).dependencies,
+				linkBitcode: async () => ({
+					wasm: new Uint8Array([1, 2, 3]),
+					targetTriple: 'wasm32-wasip1',
+					format: 'core-wasm'
+				})
+			}
+		);
+
+		expect(result.success).toBe(false);
+		expect(result.logs).toContain('[wasm-rust] browser rustc attempt 1/2 failed; retrying');
+		expect(firstWorker.terminated).toBe(true);
+		expect(secondWorker.terminated).toBe(true);
+		expect(thirdWorker.terminated).toBe(false);
+	});
+
 	it('preserves failed attempt logs when a later retry succeeds', async () => {
 		const bitcode = new Uint8Array([0x13, 0x37, 0x13, 0x37]);
 		const firstWorker = new FakeWorker((_, worker) => {
@@ -148,7 +185,7 @@ describe('compileRust retry behavior', () => {
 		expect(result.logs).toEqual(
 			expect.arrayContaining([
 				'[wasm-rust:compiler-worker] first attempt warmup',
-				'[wasm-rust] browser rustc attempt 1/5 failed; retrying',
+				'[wasm-rust] browser rustc attempt 1/2 failed; retrying',
 				'[wasm-rust:compiler-worker] second attempt ready'
 			])
 		);
@@ -160,14 +197,14 @@ describe('compileRust retry behavior', () => {
 				},
 				{
 					level: 'warn',
-					message: '[wasm-rust] browser rustc attempt 1/5 failed; retrying'
+					message: '[wasm-rust] browser rustc attempt 1/2 failed; retrying'
 				}
 			])
 		);
 		expect(
 			result.logs?.indexOf('[wasm-rust:compiler-worker] first attempt warmup')
 		).toBeLessThan(
-			result.logs?.indexOf('[wasm-rust] browser rustc attempt 1/5 failed; retrying') ?? -1
+			result.logs?.indexOf('[wasm-rust] browser rustc attempt 1/2 failed; retrying') ?? -1
 		);
 	});
 
@@ -431,7 +468,7 @@ describe('compileRust retry behavior', () => {
 			expect(result.success).toBe(true);
 			expect(errorSpy).not.toHaveBeenCalled();
 			expect(warnSpy).toHaveBeenCalledWith(
-				expect.stringContaining('[wasm-rust] browser rustc attempt 1/5 failed; retrying')
+				expect.stringContaining('[wasm-rust] browser rustc attempt 1/2 failed; retrying')
 			);
 			expect(debugSpy).not.toHaveBeenCalledWith(
 				expect.stringContaining('[wasm-rust] compile worker bootstrap failed')

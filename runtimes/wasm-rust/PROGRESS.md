@@ -70,18 +70,23 @@ Latest verified outcome:
 - the linked `wasm-idle` localhost route also succeeded for every shipped Rust target in its synced
   manifest, including `wasm32-wasip3`
 
-## Known limitation
+## Stabilization status
 
-The browser-hosted `rustc.wasm` worker still has intermittent LLVM-worker failures, including:
+The browser-hosted `rustc.wasm` worker previously showed intermittent LLVM-worker failures,
+including:
 
 - `memory access out of bounds`
 - `operation does not support unaligned accesses`
 
 Current product behavior:
 
-- the compiler retries transient failures up to `5` attempts
-- mirrored `.no-opt.bc` recovery plus `llvm-wasm` linking is what makes the standalone browser path
-  reliable enough today
+- helper startup waits for the `wasi_thread_start` entry boundary instead of returning after runtime
+  instantiation
+- five repeated `wasm32-wasip1` Chromium sessions and a subsequent all-target preview run completed
+  without retries or memory-OOB reports
+- the compiler keeps one fresh-worker retry as a bounded fallback, while browser regression coverage
+  fails if any retry occurs
+- mirrored `.no-opt.bc` recovery plus `llvm-wasm` linking remains available for that fallback
 - `wasm32-wasip3` is still a transitional browser target
     - toolchain and packaging work with the patched custom Rust build
     - browser execution still assumes WASIp2-style browser imports

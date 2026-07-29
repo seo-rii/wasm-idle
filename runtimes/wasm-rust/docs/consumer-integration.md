@@ -111,13 +111,14 @@ Recommended behavior:
 
 ## Retry behavior
 
-`wasm-rust` intentionally retries transient browser-rustc failures up to five attempts.
+`wasm-rust` permits one fresh-worker retry after a transient browser-rustc failure.
 
-This is currently expected product behavior, not an exceptional local workaround. A consumer should
-expect to see warning logs like the following when `compile({ log: true })` is enabled:
+This is a bounded fallback rather than the normal success path. Browser regression coverage requires
+first-attempt success, but a consumer can still see a warning like the following when
+`compile({ log: true })` is enabled:
 
 ```text
-[wasm-rust] browser rustc attempt 1/5 failed; retrying
+[wasm-rust] browser rustc attempt 1/2 failed; retrying
 ```
 
 Important implications:

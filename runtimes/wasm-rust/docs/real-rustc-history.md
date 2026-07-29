@@ -41,22 +41,24 @@ That validation covers:
 The original bootstrap blockers are no longer the active issue. The remaining limitation is runtime
 stability inside the browser-hosted LLVM path.
 
-Current blocker category:
+Current stabilization status:
 
-- `browser platform limitation`
+- helper startup now waits for the `wasi_thread_start` entry boundary
+- five repeated `wasm32-wasip1` sessions and a later all-target preview run completed without a
+  compiler retry or memory-OOB report
+- one fresh-worker retry remains as a bounded fallback while longer stress coverage accumulates
 
-Concrete symptom:
+Previously observed symptom:
 
-- browser-hosted `rustc.wasm` worker threads can still fail intermittently during LLVM work with
+- browser-hosted `rustc.wasm` worker threads could fail intermittently during LLVM work with
   errors like:
     - `memory access out of bounds`
     - `operation does not support unaligned accesses`
 
 Current product behavior:
 
-- transient browser-rustc failures are retried up to `5` attempts
-- mirrored `.no-opt.bc` recovery plus `llvm-wasm` linking is what makes the standalone browser path
-  reliable enough today
+- transient browser-rustc failures receive at most one fresh-worker retry
+- mirrored `.no-opt.bc` recovery plus `llvm-wasm` linking remains available for that fallback
 
 What is not blocked anymore:
 
@@ -66,8 +68,8 @@ What is not blocked anymore:
 - final linker availability
 - wasm artifact shape for consumers
 
-So the remaining issue is no longer "can we make real rustc work at all?" It is "can we reduce the
-remaining intermittent browser-rustc LLVM worker failure rate enough to remove or relax retries?"
+So the remaining question is no longer "can we make real rustc work at all?" It is whether longer
+browser stress coverage is clean enough to remove the final bounded retry.
 
 ## Resolved blocker chain
 
@@ -184,7 +186,8 @@ Resolution:
 
 - preserve the mirrored bitcode
 - lower and link it with packaged `llvm-wasm`
-- retry transient browser-rustc failures up to `5` attempts
+- originally retry transient browser-rustc failures up to `5` attempts
+- after fixing the helper entry handshake, reduce the current fallback to one retry
 
 This is the architecture that shipped.
 

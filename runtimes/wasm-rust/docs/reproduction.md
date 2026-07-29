@@ -39,10 +39,14 @@ Latest validated outcome from that wrapper:
     - `runtime.exitCode: 0`
     - `runtime.stdout: "hi\n"`
 
-Observed during the same successful run:
+Current browser baseline:
 
-- browser rustc attempt `1/5` may still fail with transient LLVM worker faults
-- the current shipped behavior is to retry and continue once mirrored `.no-opt.bc` is available
+- five repeated `wasm32-wasip1` sessions and a later `wasm32-wasip1`/`wasm32-wasip2`/
+  `wasm32-wasip3` preview run completed without compiler retries or memory-OOB reports
+- the shipped fallback permits one fresh-worker retry and continues when mirrored `.no-opt.bc` is
+  available
+- the wasm-idle Chromium regression fails if a retry is observed, so recovered compilation is not
+  counted as a clean stress result
 - a `favicon.ico` `404` in the harness console is expected noise and not a product failure
 
 ## Standalone browser harness

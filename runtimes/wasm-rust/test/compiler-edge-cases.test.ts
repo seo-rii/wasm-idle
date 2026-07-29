@@ -331,7 +331,7 @@ describe('wasm-rust compiler edge cases', () => {
 		expect(result.artifact?.format).toBe('component');
 	});
 
-	it('stops after the fifth transient worker failure and returns the last failure', async () => {
+	it('stops after the second transient worker failure and returns the last failure', async () => {
 		let createWorkerCalls = 0;
 
 		const result = await compileRust(
@@ -363,7 +363,7 @@ describe('wasm-rust compiler edge cases', () => {
 
 		expect(result.success).toBe(false);
 		expect(result.stderr).toContain('memory access out of bounds');
-		expect(createWorkerCalls).toBe(5);
+		expect(createWorkerCalls).toBe(2);
 	});
 
 	it('surfaces worker bootstrap filename and location when the browser error event has no message', async () => {
@@ -397,7 +397,7 @@ describe('wasm-rust compiler edge cases', () => {
 		expect(result.stderr).toContain('worker script error at');
 		expect(result.stderr).toContain('compiler-worker.js:91:17');
 		expect(result.stderr).toContain('[worker=');
-		expect(createWorkerCalls).toBe(5);
+		expect(createWorkerCalls).toBe(2);
 	});
 
 	it('includes the attempted worker URL when the browser only reports a generic script error', async () => {
@@ -429,6 +429,6 @@ describe('wasm-rust compiler edge cases', () => {
 		expect(result.stderr).toContain('worker script error');
 		expect(result.stderr).toContain('[worker=');
 		expect(result.stderr).toContain('compiler-worker.js');
-		expect(createWorkerCalls).toBe(5);
+		expect(createWorkerCalls).toBe(2);
 	});
 });

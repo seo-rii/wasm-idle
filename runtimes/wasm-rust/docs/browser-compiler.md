@@ -151,7 +151,7 @@ Shipped mitigation:
   startup stability in Chromium
 - `src/worker-status.ts` records the last helper-thread start-arg snapshot so recovered OOBs still
   leave actionable context in diagnostics
-- `src/compiler.ts` retries transient browser failures up to `5` attempts
+- `src/compiler.ts` permits one fresh-worker retry (`2` attempts total) for transient browser failures
 - `src/compiler.ts` now also gives mirrored-bitcode recovery a short grace window before turning a
   helper-thread failure into a user-visible compile failure
 - retries are currently triggered for:
@@ -281,6 +281,8 @@ Latest observed outcome:
   execution context, while unrelated evaluation failures still fail immediately
 - after moving the helper handshake to the entry boundary, five fresh `wasm32-wasip1` Chromium
   sessions completed with zero compiler retries and zero memory-OOB reports
+- a subsequent preview-build run completed `wasm32-wasip1`, `wasm32-wasip2`, and
+  `wasm32-wasip3` with zero compiler retries and zero memory-OOB reports
 - targeted browser coverage still included:
     - helper-thread startup/retry/runtime shims
     - richer Chromium browser harness regression
@@ -293,7 +295,7 @@ Latest observed outcome:
     - `wasm32-wasip2` stdout containing `factorial_plus_bonus=27`
     - `wasm32-wasip3` stdout `hi\n`
 
-Important observation from the same successful run:
+Historical observation from the pre-entry-handshake run:
 
 - attempt `1/5` still hit transient browser-hosted LLVM worker failures
 - observed failure texts included:
@@ -307,10 +309,11 @@ Observed recovery markers from the successful browser run:
 - the shared mirror logged `mirrored artifact updated seq=2 bytes=4996 overflowed=false`
 - the linker logged `mirrored bitcode settled; linking through llvm-wasm`
 
-This confirms the current product behavior:
+That historical run established why a bounded recovery path remains:
 
-- transient browser-rustc worker faults are still expected
-- the shipped retry plus mirrored-bitcode recovery path is what makes the standalone browser compile reliable enough today
+- mirrored-bitcode recovery can preserve a usable artifact after a transient worker fault
+- current browser gates require clean first-attempt compilation, and the fallback is limited to one
+  fresh worker retry rather than treating repeated retries as normal success
 
 Minor harness note:
 
