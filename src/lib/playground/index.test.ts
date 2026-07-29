@@ -451,7 +451,7 @@ describe('playground runtime binding', () => {
 	it('normalizes public language IDs before route lookup', async () => {
 		const sandbox = await playground('  cpp  ');
 
-		expect((sandbox as MockSandbox).language).toBe('CPP');
+		expect((sandbox as InstanceType<typeof MockSandbox>).language).toBe('CPP');
 		expect(sandboxInstances.get('CPP')).toHaveLength(1);
 	});
 
