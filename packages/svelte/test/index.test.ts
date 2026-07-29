@@ -43,4 +43,35 @@ describe('Svelte playground factories', () => {
 		expect(destroy).toHaveBeenCalledTimes(1);
 		expect(terminate).toHaveBeenCalledTimes(1);
 	});
+
+	it('registers idempotent component teardown when a lifecycle registrar is provided', async () => {
+		const terminate = vi.fn();
+		const destroy = vi.fn(async () => undefined);
+		const sandbox = {
+			constructor: Object,
+			eof: vi.fn(),
+			load: vi.fn(async () => undefined),
+			run: vi.fn(async () => true),
+			terminate,
+			clear: vi.fn(async () => undefined)
+		} satisfies Sandbox;
+		let cleanup: (() => void) | undefined;
+		const host = createSvelteWasmIdleHost('/runtime', async () => sandbox, {
+			registerDispose(dispose) {
+				cleanup = dispose;
+			}
+		});
+		host.setTerminal({ destroy } as never);
+		await host.binding.load('C');
+
+		cleanup!();
+		await vi.waitFor(() => {
+			expect(destroy).toHaveBeenCalledTimes(1);
+			expect(terminate).toHaveBeenCalledTimes(1);
+		});
+		await host.dispose();
+
+		expect(destroy).toHaveBeenCalledTimes(1);
+		expect(terminate).toHaveBeenCalledTimes(1);
+	});
 });

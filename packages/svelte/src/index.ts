@@ -15,14 +15,26 @@ export interface SvelteWasmIdleHost {
 	dispose: () => Promise<void>;
 }
 
+export interface SvelteWasmIdleHostOptions {
+	registerDispose?: (cleanup: () => void) => void;
+}
+
 export function createSvelteWasmIdleHost(
 	runtimeAssets: SandboxRuntimeAssets,
-	loadSandbox: SandboxLoader
+	loadSandbox: SandboxLoader,
+	options: SvelteWasmIdleHostOptions = {}
 ): SvelteWasmIdleHost {
 	const binding = createPlaygroundBinding(runtimeAssets, loadSandbox);
 	const terminal = writable<TerminalControl | undefined>(undefined);
 	let currentTerminal: TerminalControl | undefined;
-	return {
+	const dispose = async () => {
+		const terminalToDispose = currentTerminal;
+		currentTerminal = undefined;
+		terminal.set(undefined);
+		if (terminalToDispose) await terminalToDispose.destroy();
+		await binding.dispose();
+	};
+	const host: SvelteWasmIdleHost = {
 		binding,
 		terminal,
 		terminalProps: binding.terminalProps,
@@ -30,14 +42,12 @@ export function createSvelteWasmIdleHost(
 			currentTerminal = nextTerminal;
 			terminal.set(nextTerminal);
 		},
-		async dispose() {
-			const terminalToDispose = currentTerminal;
-			currentTerminal = undefined;
-			terminal.set(undefined);
-			if (terminalToDispose) await terminalToDispose.destroy();
-			await binding.dispose();
-		}
+		dispose
 	};
+	options.registerDispose?.(() => {
+		void dispose().catch(() => {});
+	});
+	return host;
 }
 
 export function createSveltePlaygroundBinding(
