@@ -340,6 +340,32 @@ describe('WebAssembly loading utilities', () => {
 		expect(cancelled).toBe(true);
 	});
 
+	it('cancels failed response bodies before allowing the asset to be retried', async () => {
+		const url = 'https://cdn.test/llvm/failed-response.bin';
+		let cancelled = false;
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValueOnce(
+				new Response(
+					new ReadableStream({
+						cancel() {
+							cancelled = true;
+						}
+					}),
+					{ status: 503 }
+				)
+			)
+			.mockResolvedValueOnce(new Response(Uint8Array.of(7, 8, 9)));
+		vi.stubGlobal('fetch', fetchMock);
+
+		await expect(readBuffer(url)).rejects.toThrow(
+			`Failed to load runtime asset ${url}: 503`
+		);
+		expect(cancelled).toBe(true);
+		await expect(readBuffer(url)).resolves.toEqual(Uint8Array.of(7, 8, 9));
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+	});
+
 	it('evicts malformed archives from the cache so the same URL can be retried', async () => {
 		const archive = await zipBytes('fixture.bin', Uint8Array.of(12, 13));
 		const url = 'https://cdn.test/llvm/retry.zip';

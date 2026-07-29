@@ -372,6 +372,7 @@ export const readBuffer = async (
 				);
 			}
 			if (!response.ok) {
+				await response.body?.cancel().catch(() => {});
 				throw new Error(`Failed to load runtime asset ${resolvedUrl}: ${response.status}`);
 			}
 			if (resolvedUrl.pathname.endsWith('.gz')) {
