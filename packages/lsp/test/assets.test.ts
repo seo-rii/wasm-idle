@@ -222,6 +222,43 @@ describe('language tool asset loading', () => {
 		expect(arrayBuffer).not.toHaveBeenCalled();
 	});
 
+	it.each(['', '-1', '1.5', '1e2', '3, 3', '9007199254740992'])(
+		'rejects and cancels an invalid Content-Length before reading: %s',
+		async (contentLength) => {
+			const cancel = vi.fn(async () => {});
+			const getReader = vi.fn();
+			const arrayBuffer = vi.fn();
+			vi.stubGlobal(
+				'fetch',
+				vi.fn().mockResolvedValue({
+					ok: true,
+					status: 200,
+					url: 'https://assets.example.com/clangd/clangd.js',
+					headers: new Headers({ 'content-length': contentLength }),
+					body: { cancel, getReader },
+					arrayBuffer
+				})
+			);
+
+			await expect(
+				loadLanguageToolAsset(
+					'clangd',
+					'clangd.js',
+					{ baseUrl: 'https://assets.example.com/clangd/' },
+					vi.fn()
+				)
+			).rejects.toMatchObject({
+				name: 'ProtocolError',
+				code: 'protocol',
+				phase: 'asset',
+				runtimeId: 'clangd'
+			});
+			expect(cancel).toHaveBeenCalledOnce();
+			expect(getReader).not.toHaveBeenCalled();
+			expect(arrayBuffer).not.toHaveBeenCalled();
+		}
+	);
+
 	it('cancels failed HTTP responses before reporting their status', async () => {
 		const cancel = vi.fn(async () => {});
 		vi.stubGlobal(

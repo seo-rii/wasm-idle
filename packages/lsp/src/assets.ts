@@ -1,5 +1,9 @@
 import { runWithSignalAndTimeout } from './lifecycle.js';
-import { verifyRuntimeAssetIntegrity, type RuntimeAssetIntegrityEntry } from '@wasm-idle/core';
+import {
+	ProtocolError,
+	verifyRuntimeAssetIntegrity,
+	type RuntimeAssetIntegrityEntry
+} from '@wasm-idle/core';
 
 export type LanguageToolAssetRuntime = 'clangd';
 
@@ -188,14 +192,21 @@ async function fetchAsset(
 		throw new Error(`Failed to load ${asset}: ${response.status}`);
 	}
 	const contentLengthValue = response.headers.get('content-length');
-	const contentLength =
-		contentLengthValue && /^\d+$/u.test(contentLengthValue)
-			? Number(contentLengthValue)
-			: undefined;
-	if (
-		contentLength !== undefined &&
-		(!Number.isSafeInteger(contentLength) || contentLength > MAX_LANGUAGE_TOOL_ASSET_BYTES)
-	) {
+	let contentLength: number | undefined;
+	if (contentLengthValue !== null) {
+		const normalizedContentLength = contentLengthValue.trim();
+		const parsedContentLength = Number(normalizedContentLength);
+		if (!/^\d+$/u.test(normalizedContentLength) || !Number.isSafeInteger(parsedContentLength)) {
+			const error = new ProtocolError(
+				`Runtime asset ${asset} has an invalid Content-Length: ${contentLengthValue}`,
+				{ phase: 'asset', runtimeId: 'clangd' }
+			);
+			await response.body?.cancel(error).catch(() => {});
+			throw error;
+		}
+		contentLength = parsedContentLength;
+	}
+	if (contentLength !== undefined && contentLength > MAX_LANGUAGE_TOOL_ASSET_BYTES) {
 		await response.body?.cancel().catch(() => {});
 		throw new Error(
 			`Runtime asset ${asset} exceeds the ${MAX_LANGUAGE_TOOL_ASSET_BYTES} byte limit`
