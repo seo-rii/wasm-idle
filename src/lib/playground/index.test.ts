@@ -361,6 +361,16 @@ import playground, { createPlaygroundBinding, supportedLanguages } from './index
 
 const moduleLoadsAfterFactoryImport = new Set(moduleLoads);
 
+const expectedBoundOptions = (options: Record<string, unknown> = {}) =>
+	expect.objectContaining({
+		...options,
+		limits: expect.objectContaining({
+			maxAssetBytes: expect.any(Number),
+			maxOutputBytes: expect.any(Number),
+			maxWorkspaceBytes: expect.any(Number)
+		})
+	});
+
 describe('playground runtime binding', () => {
 	beforeEach(() => {
 		moduleLoads.clear();
@@ -409,10 +419,46 @@ describe('playground runtime binding', () => {
 	});
 
 	it('routes GnuCOBOL aliases through the COBOL sandbox', async () => {
-		await playground('GNUCOBOL');
-		expect(await playground('COB')).toBe(await playground('CBL'));
-		expect(sandboxInstances.get('COBOL')).toHaveLength(1);
+		const implementationAlias = await playground('GNUCOBOL');
+		const shortAlias = await playground('COB');
+		const alternateAlias = await playground('CBL');
+
+		expect(implementationAlias).not.toBe(shortAlias);
+		expect(shortAlias).not.toBe(alternateAlias);
+		expect(sandboxInstances.get('COBOL')).toHaveLength(3);
 		expect(moduleLoads).toContain('COBOL');
+	});
+
+	it('creates isolated sandboxes for repeated canonical language requests', async () => {
+		const first = await playground('JAVA');
+		const second = await playground('JAVA');
+		const firstOutput = vi.fn();
+		const secondOutput = vi.fn();
+
+		first.output = firstOutput;
+		second.output = secondOutput;
+		first.output?.('first');
+		second.output?.('second');
+
+		expect(first).not.toBe(second);
+		expect(firstOutput).toHaveBeenCalledWith('first');
+		expect(firstOutput).not.toHaveBeenCalledWith('second');
+		expect(secondOutput).toHaveBeenCalledWith('second');
+		expect(secondOutput).not.toHaveBeenCalledWith('first');
+		expect(sandboxInstances.get('JAVA')).toHaveLength(2);
+	});
+
+	it('normalizes public language IDs before route lookup', async () => {
+		const sandbox = await playground('  cpp  ');
+
+		expect((sandbox as MockSandbox).language).toBe('CPP');
+		expect(sandboxInstances.get('CPP')).toHaveLength(1);
+	});
+
+	it('rejects prototype-shaped language names through the unsupported-language path', async () => {
+		for (const language of ['toString', 'constructor', '__proto__']) {
+			await expect(playground(language)).rejects.toThrow(`Unsupported language: ${language}`);
+		}
 	});
 
 	it('keeps the legacy sandbox load signature when runtime assets are not bound', async () => {
@@ -427,22 +473,23 @@ describe('playground runtime binding', () => {
 		]);
 	});
 
-	it('binds runtime assets into cached playground sandboxes', async () => {
+	it('binds runtime assets into a fresh playground sandbox', async () => {
 		const runtimeAssets = { rootUrl: '/repl' };
-		await playground('JAVA');
+		const unbound = await playground('JAVA');
 		const sandbox = await playground('JAVA', runtimeAssets);
 		const progress = { set() {} };
 
 		await sandbox.load('class Main {}', false, ['one'], { stdin: '7' }, progress);
 
 		expect(sandbox.runtimeAssets).toBe(runtimeAssets);
-		expect(sandboxInstances.get('JAVA')).toHaveLength(1);
-		expect(sandboxInstances.get('JAVA')?.[0]?.loadCalls.at(-1)).toEqual([
+		expect(sandbox).not.toBe(unbound);
+		expect(sandboxInstances.get('JAVA')).toHaveLength(2);
+		expect(sandboxInstances.get('JAVA')?.[1]?.loadCalls.at(-1)).toEqual([
 			runtimeAssets,
 			'class Main {}',
 			false,
 			['one'],
-			{ stdin: '7' },
+			expectedBoundOptions({ stdin: '7' }),
 			progress
 		]);
 	});
@@ -470,7 +517,7 @@ describe('playground runtime binding', () => {
 				'fn main() {}',
 				true,
 				['hello'],
-				{ rustTargetTriple: 'wasm32-wasip2' },
+				expectedBoundOptions({ rustTargetTriple: 'wasm32-wasip2' }),
 				progress
 			]
 		]);
@@ -506,7 +553,7 @@ describe('playground runtime binding', () => {
 				'package main\nfunc main() {}',
 				true,
 				['demo'],
-				{},
+				expectedBoundOptions(),
 				progress
 			]
 		]);
@@ -542,7 +589,7 @@ describe('playground runtime binding', () => {
 				'package main\nfunc main() {}',
 				true,
 				['demo'],
-				{},
+				expectedBoundOptions(),
 				progress
 			]
 		]);
@@ -569,10 +616,10 @@ describe('playground runtime binding', () => {
 		expect(sandbox.runtimeAssets).toEqual(runtimeAssets);
 		expect(sandboxInstances.get('D')).toHaveLength(1);
 		expect(sandboxInstances.get('D')?.[0]?.loadCalls).toEqual([
-			[runtimeAssets, 'void main() {}', true, ['demo'], {}, progress]
+			[runtimeAssets, 'void main() {}', true, ['demo'], expectedBoundOptions(), progress]
 		]);
 		expect((await binding.load('D')).runtimeAssets).toEqual(runtimeAssets);
-		expect(sandboxInstances.get('D')).toHaveLength(1);
+		expect(sandboxInstances.get('D')).toHaveLength(2);
 	});
 
 	it('routes F# requests through the Dotnet sandbox implementation', async () => {
@@ -605,7 +652,7 @@ describe('playground runtime binding', () => {
 				'printfn "hello"',
 				true,
 				['demo'],
-				{},
+				expectedBoundOptions(),
 				progress
 			]
 		]);
@@ -641,7 +688,7 @@ describe('playground runtime binding', () => {
 				'Console.WriteLine("hello");',
 				true,
 				['demo'],
-				{},
+				expectedBoundOptions(),
 				progress
 			]
 		]);
@@ -674,11 +721,11 @@ End Module`;
 		expect(sandbox.runtimeAssets).toEqual(runtimeAssets);
 		expect(sandboxInstances.get('VBNET')).toHaveLength(1);
 		expect(sandboxInstances.get('VBNET')?.[0]?.loadCalls).toEqual([
-			[runtimeAssets, code, true, ['demo'], {}, progress]
+			[runtimeAssets, code, true, ['demo'], expectedBoundOptions(), progress]
 		]);
 		expect((await binding.load('VBNET')).runtimeAssets).toEqual(runtimeAssets);
 		expect((await binding.load('VISUALBASIC')).runtimeAssets).toEqual(runtimeAssets);
-		expect(sandboxInstances.get('VBNET')).toHaveLength(1);
+		expect(sandboxInstances.get('VBNET')).toHaveLength(3);
 	});
 
 	it('routes Elixir requests through the Popcorn-backed sandbox implementation', async () => {
@@ -711,7 +758,7 @@ End Module`;
 				'IO.puts("hello")',
 				true,
 				[],
-				{},
+				expectedBoundOptions(),
 				progress
 			]
 		]);
@@ -748,7 +795,7 @@ End Module`;
 				code,
 				true,
 				[],
-				{},
+				expectedBoundOptions(),
 				progress
 			]
 		]);
@@ -758,7 +805,7 @@ End Module`;
 				bundleUrl: '/absproxy/5173/wasm-elixir/bundle.avm?v=test'
 			}
 		});
-		expect(sandboxInstances.get('ERLANG')).toHaveLength(1);
+		expect(sandboxInstances.get('ERLANG')).toHaveLength(2);
 	});
 
 	it('routes Prolog aliases through the SWI-Prolog wasm sandbox implementation', async () => {
@@ -785,11 +832,11 @@ End Module`;
 		expect(sandbox.runtimeAssets).toEqual(runtimeAssets);
 		expect(sandboxInstances.get('PROLOG')).toHaveLength(1);
 		expect(sandboxInstances.get('PROLOG')?.[0]?.loadCalls).toEqual([
-			[runtimeAssets, code, true, [], {}, progress]
+			[runtimeAssets, code, true, [], expectedBoundOptions(), progress]
 		]);
 		expect((await binding.load('PROLOG')).runtimeAssets).toEqual(runtimeAssets);
 		expect((await binding.load('SWI')).runtimeAssets).toEqual(runtimeAssets);
-		expect(sandboxInstances.get('PROLOG')).toHaveLength(1);
+		expect(sandboxInstances.get('PROLOG')).toHaveLength(3);
 	});
 
 	it('routes Gleam, Perl, Tcl, AWK, Pascal, Forth, J, BQN, Janet, Julia, and Nim requests through their static worker wasm implementations', async () => {
@@ -890,37 +937,44 @@ End Module`;
 		expect(sandboxInstances.get('JULIA')).toHaveLength(1);
 		expect(sandboxInstances.get('NIM')).toHaveLength(1);
 		expect(sandboxInstances.get('GLEAM')?.[0]?.loadCalls).toEqual([
-			[runtimeAssets, 'pub fn main() { Nil }', true, [], {}, progress]
+			[runtimeAssets, 'pub fn main() { Nil }', true, [], expectedBoundOptions(), progress]
 		]);
 		expect(sandboxInstances.get('PERL')?.[0]?.loadCalls).toEqual([
-			[runtimeAssets, 'print "hello\\n";', true, [], {}, progress]
+			[runtimeAssets, 'print "hello\\n";', true, [], expectedBoundOptions(), progress]
 		]);
 		expect(sandboxInstances.get('TCL')?.[0]?.loadCalls).toEqual([
-			[runtimeAssets, 'puts "hello"', true, [], {}, progress]
+			[runtimeAssets, 'puts "hello"', true, [], expectedBoundOptions(), progress]
 		]);
 		expect(sandboxInstances.get('AWK')?.[0]?.loadCalls).toEqual([
-			[runtimeAssets, '{ print }', true, [], {}, progress]
+			[runtimeAssets, '{ print }', true, [], expectedBoundOptions(), progress]
 		]);
 		expect(sandboxInstances.get('PASCAL')?.[0]?.loadCalls).toEqual([
-			[runtimeAssets, 'program main; begin WriteLn(1); end.', true, [], {}, progress]
+			[
+				runtimeAssets,
+				'program main; begin WriteLn(1); end.',
+				true,
+				[],
+				expectedBoundOptions(),
+				progress
+			]
 		]);
 		expect(sandboxInstances.get('FORTH')?.[0]?.loadCalls).toEqual([
-			[runtimeAssets, 'KEY EMIT', true, [], {}, progress]
+			[runtimeAssets, 'KEY EMIT', true, [], expectedBoundOptions(), progress]
 		]);
 		expect(sandboxInstances.get('J')?.[0]?.loadCalls).toEqual([
-			[runtimeAssets, 'smoutput 1', true, [], {}, progress]
+			[runtimeAssets, 'smoutput 1', true, [], expectedBoundOptions(), progress]
 		]);
 		expect(sandboxInstances.get('BQN')?.[0]?.loadCalls).toEqual([
-			[runtimeAssets, '1+1', true, [], {}, progress]
+			[runtimeAssets, '1+1', true, [], expectedBoundOptions(), progress]
 		]);
 		expect(sandboxInstances.get('JANET')?.[0]?.loadCalls).toEqual([
-			[runtimeAssets, '(print "hello")', true, [], {}, progress]
+			[runtimeAssets, '(print "hello")', true, [], expectedBoundOptions(), progress]
 		]);
 		expect(sandboxInstances.get('JULIA')?.[0]?.loadCalls).toEqual([
-			[runtimeAssets, 'println("hello")', true, [], {}, progress]
+			[runtimeAssets, 'println("hello")', true, [], expectedBoundOptions(), progress]
 		]);
 		expect(sandboxInstances.get('NIM')?.[0]?.loadCalls).toEqual([
-			[runtimeAssets, 'echo "hello"', true, [], {}, progress]
+			[runtimeAssets, 'echo "hello"', true, [], expectedBoundOptions(), progress]
 		]);
 	});
 
@@ -961,7 +1015,7 @@ End Module`;
 				'let () = print_endline "hello"',
 				true,
 				[],
-				{},
+				expectedBoundOptions(),
 				progress
 			]
 		]);
@@ -992,10 +1046,17 @@ End Module`;
 		expect(sandboxInstances.get('JAVASCRIPT')).toHaveLength(1);
 		expect(sandboxInstances.get('TYPESCRIPT')).toHaveLength(1);
 		expect(sandboxInstances.get('JAVASCRIPT')?.[0]?.loadCalls).toEqual([
-			[runtimeAssets, 'console.log(1)', true, ['demo'], {}, progress]
+			[runtimeAssets, 'console.log(1)', true, ['demo'], expectedBoundOptions(), progress]
 		]);
 		expect(sandboxInstances.get('TYPESCRIPT')?.[0]?.loadCalls).toEqual([
-			[runtimeAssets, 'const n: number = 1;', true, ['demo'], {}, progress]
+			[
+				runtimeAssets,
+				'const n: number = 1;',
+				true,
+				['demo'],
+				expectedBoundOptions(),
+				progress
+			]
 		]);
 	});
 
@@ -1022,7 +1083,14 @@ End Module`;
 		expect(sandbox.runtimeAssets).toEqual(runtimeAssets);
 		expect(sandboxInstances.get('ZIG')).toHaveLength(1);
 		expect(sandboxInstances.get('ZIG')?.[0]?.loadCalls).toEqual([
-			[runtimeAssets, 'pub fn main() void {}', true, ['demo'], {}, progress]
+			[
+				runtimeAssets,
+				'pub fn main() void {}',
+				true,
+				['demo'],
+				expectedBoundOptions(),
+				progress
+			]
 		]);
 	});
 
@@ -1047,7 +1115,7 @@ End Module`;
 		expect(sandbox.runtimeAssets).toEqual(runtimeAssets);
 		expect(sandboxInstances.get('WAT')).toHaveLength(1);
 		expect(sandboxInstances.get('WAT')?.[0]?.loadCalls).toEqual([
-			[runtimeAssets, '(module)', true, ['demo'], {}, progress]
+			[runtimeAssets, '(module)', true, ['demo'], expectedBoundOptions(), progress]
 		]);
 	});
 
@@ -1062,10 +1130,10 @@ End Module`;
 		expect(sandbox.runtimeAssets).toBe('/absproxy/5173');
 		expect(sandboxInstances.get('WASM')).toHaveLength(1);
 		expect(sandboxInstances.get('WASM')?.[0]?.loadCalls).toEqual([
-			['/absproxy/5173', code, true, ['demo'], {}, progress]
+			['/absproxy/5173', code, true, ['demo'], expectedBoundOptions(), progress]
 		]);
 		expect((await binding.load('WASM')).runtimeAssets).toBe('/absproxy/5173');
-		expect(sandboxInstances.get('WASM')).toHaveLength(1);
+		expect(sandboxInstances.get('WASM')).toHaveLength(2);
 	});
 
 	it('routes Lua requests through the wasm-lua sandbox implementation', async () => {
@@ -1089,7 +1157,7 @@ End Module`;
 		expect(sandbox.runtimeAssets).toEqual(runtimeAssets);
 		expect(sandboxInstances.get('LUA')).toHaveLength(1);
 		expect(sandboxInstances.get('LUA')?.[0]?.loadCalls).toEqual([
-			[runtimeAssets, 'print("hello")', true, ['demo'], {}, progress]
+			[runtimeAssets, 'print("hello")', true, ['demo'], expectedBoundOptions(), progress]
 		]);
 	});
 
@@ -1114,11 +1182,11 @@ End Module`;
 		expect(sandbox.runtimeAssets).toEqual(runtimeAssets);
 		expect(sandboxInstances.get('LISP')).toHaveLength(1);
 		expect(sandboxInstances.get('LISP')?.[0]?.loadCalls).toEqual([
-			[runtimeAssets, '(display "hello")', true, ['demo'], {}, progress]
+			[runtimeAssets, '(display "hello")', true, ['demo'], expectedBoundOptions(), progress]
 		]);
 		expect((await binding.load('LISP')).runtimeAssets).toEqual(runtimeAssets);
 		expect((await binding.load('SCM')).runtimeAssets).toEqual(runtimeAssets);
-		expect(sandboxInstances.get('LISP')).toHaveLength(1);
+		expect(sandboxInstances.get('LISP')).toHaveLength(3);
 	});
 
 	it('routes Haskell aliases through the wasm-haskell sandbox implementation', async () => {
@@ -1146,10 +1214,17 @@ End Module`;
 		expect(sandbox.runtimeAssets).toEqual(runtimeAssets);
 		expect(sandboxInstances.get('HASKELL')).toHaveLength(1);
 		expect(sandboxInstances.get('HASKELL')?.[0]?.loadCalls).toEqual([
-			[runtimeAssets, 'main = putStrLn "hello"', true, ['-Wall'], {}, progress]
+			[
+				runtimeAssets,
+				'main = putStrLn "hello"',
+				true,
+				['-Wall'],
+				expectedBoundOptions(),
+				progress
+			]
 		]);
 		expect((await binding.load('HASKELL')).runtimeAssets).toEqual(runtimeAssets);
-		expect(sandboxInstances.get('HASKELL')).toHaveLength(1);
+		expect(sandboxInstances.get('HASKELL')).toHaveLength(2);
 	});
 
 	it('routes R requests through the webR sandbox implementation', async () => {
@@ -1173,7 +1248,7 @@ End Module`;
 		expect(sandbox.runtimeAssets).toEqual(runtimeAssets);
 		expect(sandboxInstances.get('R')).toHaveLength(1);
 		expect(sandboxInstances.get('R')?.[0]?.loadCalls).toEqual([
-			[runtimeAssets, 'cat("hello\\n")', true, [], {}, progress]
+			[runtimeAssets, 'cat("hello\\n")', true, [], expectedBoundOptions(), progress]
 		]);
 	});
 
@@ -1202,10 +1277,10 @@ End Module`;
 		expect(sandbox.runtimeAssets).toEqual(runtimeAssets);
 		expect(sandboxInstances.get('OCTAVE')).toHaveLength(1);
 		expect(sandboxInstances.get('OCTAVE')?.[0]?.loadCalls).toEqual([
-			[runtimeAssets, 'disp("hello")', true, [], {}, progress]
+			[runtimeAssets, 'disp("hello")', true, [], expectedBoundOptions(), progress]
 		]);
 		expect((await binding.load('OCTAVE')).runtimeAssets).toEqual(runtimeAssets);
-		expect(sandboxInstances.get('OCTAVE')).toHaveLength(1);
+		expect(sandboxInstances.get('OCTAVE')).toHaveLength(2);
 	});
 
 	it('routes SQLite aliases through the SQLite sandbox implementation', async () => {
@@ -1229,10 +1304,10 @@ End Module`;
 		expect(sandbox.runtimeAssets).toEqual(runtimeAssets);
 		expect(sandboxInstances.get('SQLITE')).toHaveLength(1);
 		expect(sandboxInstances.get('SQLITE')?.[0]?.loadCalls).toEqual([
-			[runtimeAssets, 'select 1;', true, [], {}, progress]
+			[runtimeAssets, 'select 1;', true, [], expectedBoundOptions(), progress]
 		]);
 		expect((await binding.load('SQLITE')).runtimeAssets).toEqual(runtimeAssets);
-		expect(sandboxInstances.get('SQLITE')).toHaveLength(1);
+		expect(sandboxInstances.get('SQLITE')).toHaveLength(2);
 	});
 
 	it('routes DuckDB requests through the DuckDB wasm sandbox implementation', async () => {
@@ -1246,7 +1321,7 @@ End Module`;
 		expect(sandbox.runtimeAssets).toBe('/absproxy/5173');
 		expect(sandboxInstances.get('DUCKDB')).toHaveLength(1);
 		expect(sandboxInstances.get('DUCKDB')?.[0]?.loadCalls).toEqual([
-			['/absproxy/5173', code, true, [], {}, progress]
+			['/absproxy/5173', code, true, [], expectedBoundOptions(), progress]
 		]);
 	});
 
@@ -1265,7 +1340,7 @@ End Module`;
 		expect(sandbox.runtimeAssets).toEqual(runtimeAssets);
 		expect(sandboxInstances.get('PHP')).toHaveLength(1);
 		expect(sandboxInstances.get('PHP')?.[0]?.loadCalls).toEqual([
-			[runtimeAssets, '<?php echo "hello\\n";', true, ['7'], {}, progress]
+			[runtimeAssets, '<?php echo "hello\\n";', true, ['7'], expectedBoundOptions(), progress]
 		]);
 	});
 });

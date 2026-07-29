@@ -6,10 +6,9 @@ import type {
 } from '$lib/playground/sandbox';
 import {
 	createPlaygroundBinding as createCorePlaygroundBinding,
+	normalizeLanguageId,
 	supportedLanguageIds
 } from '@wasm-idle/core';
-
-const sandboxCache: { [key: string]: Sandbox } = {};
 
 interface SandboxRoute {
 	aliases: readonly string[];
@@ -361,16 +360,12 @@ async function playground(
 	runtimeAssets: SandboxRuntimeAssets
 ): Promise<BoundSandbox>;
 async function playground(language: string, runtimeAssets?: SandboxRuntimeAssets) {
-	if (sandboxCache[language]) {
-		return runtimeAssets
-			? createPlaygroundBinding(runtimeAssets).load(language)
-			: sandboxCache[language];
-	}
-	const route = sandboxRouteByLanguage.get(language);
+	const normalizedLanguage = normalizeLanguageId(language);
+	const route = sandboxRouteByLanguage.get(normalizedLanguage);
 	if (!route) throw new Error(`Unsupported language: ${language}`);
-	const sandbox = await route.load();
-	for (const alias of route.aliases) sandboxCache[alias] = sandbox;
-	return runtimeAssets ? createPlaygroundBinding(runtimeAssets).load(language) : sandbox;
+	return runtimeAssets
+		? createPlaygroundBinding(runtimeAssets).load(normalizedLanguage)
+		: route.load();
 }
 
 export default playground;
