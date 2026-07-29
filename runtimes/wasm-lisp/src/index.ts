@@ -63,6 +63,7 @@ export interface BrowserLispCompiler {
 export interface BrowserLispCompilerOptions {
 	runtimeBaseUrl?: string | URL;
 	fetch?: typeof fetch;
+	maxAssetBytes?: number;
 }
 
 export interface BrowserLispExecutionOptions {
@@ -99,6 +100,8 @@ const decoderFatal = new TextDecoder();
 const symbolDispose: symbol =
 	(Symbol as unknown as { dispose?: symbol }).dispose ?? Symbol.for('dispose');
 const outputFileName = '__wasm_idle_output.wasm';
+export const DEFAULT_MAX_RUNTIME_ASSET_BYTES = 128 * 1024 * 1024;
+const DEFAULT_RUNTIME_ASSET_BUFFER_BYTES = 64 * 1024;
 
 class BufferedInput {
 	private chunk: Uint8Array<ArrayBufferLike> = new Uint8Array(0);
@@ -133,6 +136,13 @@ function normalizeRuntimeBaseUrl(value?: string | URL) {
 	const baseUrl = value
 		? new URL(String(value), import.meta.url)
 		: new URL('./', import.meta.url);
+	if (!['file:', 'http:', 'https:'].includes(baseUrl.protocol)) {
+		throw new Error(`unsupported wasm-lisp runtime base URL scheme: ${baseUrl.protocol}`);
+	}
+	if (baseUrl.hash) throw new Error('wasm-lisp runtime base URLs must not include fragments');
+	if (baseUrl.username || baseUrl.password) {
+		throw new Error('wasm-lisp runtime base URLs must not include credentials');
+	}
 	return baseUrl.href.endsWith('/') ? baseUrl : new URL('./', baseUrl.href);
 }
 
@@ -287,12 +297,93 @@ function setupWasiShims(options: {
 	};
 }
 
-async function fetchBytes(url: URL, fetcher: typeof fetch) {
-	const response = await fetcher(url.href);
+async function fetchBytes(url: URL, fetcher: typeof fetch, maxAssetBytes: number) {
+	if (!['file:', 'http:', 'https:'].includes(url.protocol)) {
+		throw new Error(`unsupported wasm-lisp runtime asset URL scheme: ${url.protocol}`);
+	}
+	if (url.hash) throw new Error('wasm-lisp runtime asset URLs must not include fragments');
+	if (url.username || url.password) {
+		throw new Error('wasm-lisp runtime asset URLs must not include credentials');
+	}
+	let response: Response;
+	try {
+		response = await fetcher(url.href, {
+			credentials: 'omit',
+			redirect: 'error',
+			referrerPolicy: 'no-referrer'
+		});
+	} catch (error) {
+		throw new Error(
+			`failed to load ${url.href}: ${error instanceof Error ? error.message : String(error)}`
+		);
+	}
+	if (response.url && new URL(response.url).href !== url.href) {
+		await response.body?.cancel().catch(() => {});
+		throw new Error(
+			`wasm-lisp runtime asset returned an unexpected final URL: ${response.url}`
+		);
+	}
 	if (!response.ok) {
+		await response.body?.cancel().catch(() => {});
 		throw new Error(`failed to load ${url.href}: ${response.status}`);
 	}
-	return new Uint8Array(await response.arrayBuffer());
+	const contentLengthValue = response.headers.get('content-length');
+	const contentLength =
+		contentLengthValue && /^\d+$/u.test(contentLengthValue)
+			? Number(contentLengthValue)
+			: undefined;
+	if (
+		contentLength !== undefined &&
+		Number.isSafeInteger(contentLength) &&
+		contentLength > maxAssetBytes
+	) {
+		await response.body?.cancel().catch(() => {});
+		throw new Error(`wasm-lisp runtime asset exceeds the ${maxAssetBytes} byte download limit`);
+	}
+	if (!response.body) {
+		const bytes = new Uint8Array(await response.arrayBuffer());
+		if (bytes.byteLength > maxAssetBytes) {
+			throw new Error(
+				`wasm-lisp runtime asset exceeds the ${maxAssetBytes} byte download limit`
+			);
+		}
+		return bytes;
+	}
+	const reader = response.body.getReader();
+	let bytes = new Uint8Array(
+		Math.min(maxAssetBytes, contentLength || DEFAULT_RUNTIME_ASSET_BUFFER_BYTES)
+	);
+	let receivedLength = 0;
+	try {
+		while (true) {
+			const { done, value } = await reader.read();
+			if (done) break;
+			if (!value) continue;
+			const nextLength = receivedLength + value.byteLength;
+			if (nextLength > maxAssetBytes) {
+				throw new Error(
+					`wasm-lisp runtime asset exceeds the ${maxAssetBytes} byte download limit`
+				);
+			}
+			if (nextLength > bytes.byteLength) {
+				const nextCapacity = Math.min(
+					maxAssetBytes,
+					Math.max(nextLength, Math.max(bytes.byteLength * 2, 1))
+				);
+				const grown = new Uint8Array(nextCapacity);
+				grown.set(bytes.subarray(0, receivedLength));
+				bytes = grown;
+			}
+			bytes.set(value, receivedLength);
+			receivedLength = nextLength;
+		}
+		return bytes.subarray(0, receivedLength);
+	} catch (error) {
+		await reader.cancel().catch(() => {});
+		throw error;
+	} finally {
+		reader.releaseLock();
+	}
 }
 
 function toBase64(bytes: Uint8Array) {
@@ -409,6 +500,10 @@ export async function createLispCompiler(
 ): Promise<BrowserLispCompiler> {
 	const runtimeBaseUrl = normalizeRuntimeBaseUrl(options.runtimeBaseUrl);
 	const fetcher = options.fetch || globalThis.fetch?.bind(globalThis);
+	const maxAssetBytes = options.maxAssetBytes ?? DEFAULT_MAX_RUNTIME_ASSET_BYTES;
+	if (!Number.isSafeInteger(maxAssetBytes) || maxAssetBytes < 0) {
+		throw new Error('wasm-lisp maxAssetBytes must be a non-negative safe integer');
+	}
 	if (!fetcher) {
 		throw new Error('wasm-lisp requires fetch to load the Puppy Scheme compiler assets');
 	}
@@ -425,7 +520,9 @@ export async function createLispCompiler(
 		if (!coreModuleCache.has(key)) {
 			coreModuleCache.set(
 				key,
-				fetchBytes(moduleUrl, fetcher).then((bytes) => WebAssembly.compile(bytes))
+				fetchBytes(moduleUrl, fetcher, maxAssetBytes).then((bytes) =>
+					WebAssembly.compile(bytes)
+				)
 			);
 		}
 		return await coreModuleCache.get(key)!;

@@ -42,7 +42,113 @@ async function createCompiler() {
 	return { runtime, compiler };
 }
 
+async function createCompilerWithFetch(fetchImpl: typeof fetch, maxAssetBytes: number) {
+	const runtime = await loadRuntime();
+	return await runtime.createLispCompiler({
+		runtimeBaseUrl: pathToFileURL(`${runtimeRoot}/`),
+		fetch: fetchImpl,
+		maxAssetBytes
+	});
+}
+
 describe('wasm-lisp Puppy Scheme runtime', () => {
+	it('bounds streamed compiler assets and omits ambient request authority', async () => {
+		let requestInit: RequestInit | undefined;
+		let cancelled = false;
+		const compiler = await createCompilerWithFetch(async (_input, init) => {
+			requestInit = init;
+			return new Response(
+				new ReadableStream<Uint8Array>({
+					start(controller) {
+						controller.enqueue(new Uint8Array([0, 1, 2, 3, 4]));
+					},
+					cancel() {
+						cancelled = true;
+					}
+				})
+			);
+		}, 4);
+
+		const compiled = await compiler.compile({ code: '(display 1)' });
+
+		expect(compiled.success).toBe(false);
+		expect(compiled.stderr).toContain('exceeds the 4 byte download limit');
+		expect(cancelled).toBe(true);
+		expect(requestInit).toMatchObject({
+			credentials: 'omit',
+			redirect: 'error',
+			referrerPolicy: 'no-referrer'
+		});
+	});
+
+	it('rejects oversized declared assets before reading their bodies', async () => {
+		let cancelled = false;
+		const compiler = await createCompilerWithFetch(
+			async () =>
+				new Response(
+					new ReadableStream<Uint8Array>({
+						cancel() {
+							cancelled = true;
+						}
+					}),
+					{ headers: { 'content-length': '5' } }
+				),
+			4
+		);
+
+		const compiled = await compiler.compile({ code: '(display 1)' });
+
+		expect(compiled.success).toBe(false);
+		expect(compiled.stderr).toContain('exceeds the 4 byte download limit');
+		expect(cancelled).toBe(true);
+	});
+
+	it('rejects runtime responses from a substituted final URL', async () => {
+		let cancelled = false;
+		const compiler = await createCompilerWithFetch(async () => {
+			const response = new Response(
+				new ReadableStream<Uint8Array>({
+					cancel() {
+						cancelled = true;
+					}
+				})
+			);
+			Object.defineProperty(response, 'url', {
+				value: 'https://cdn.example.invalid/substituted.wasm'
+			});
+			return response;
+		}, 4);
+
+		const compiled = await compiler.compile({ code: '(display 1)' });
+
+		expect(compiled.success).toBe(false);
+		expect(compiled.stderr).toContain('unexpected final URL');
+		expect(cancelled).toBe(true);
+	});
+
+	it('rejects invalid runtime asset byte limits', async () => {
+		const runtime = await loadRuntime();
+
+		await expect(
+			runtime.createLispCompiler({
+				runtimeBaseUrl: pathToFileURL(`${runtimeRoot}/`),
+				maxAssetBytes: -1
+			})
+		).rejects.toThrow('maxAssetBytes must be a non-negative safe integer');
+	});
+
+	it.each([
+		['unsupported schemes', 'data:text/javascript,export default {}', 'scheme'],
+		['embedded credentials', 'https://user:secret@example.invalid/runtime/', 'credentials'],
+		['fragments', 'https://example.invalid/runtime/#compiler', 'fragments']
+	])('rejects runtime base URLs with %s', async (_case, runtimeBaseUrl, expectedMessage) => {
+		const runtime = await loadRuntime();
+
+		await expect(runtime.createLispCompiler({ runtimeBaseUrl })).rejects.toThrow(
+			expectedMessage
+		);
+	});
+
 	it('runs the upstream WASM compiler and executes a macro-heavy recursive program', async () => {
 		const { runtime, compiler } = await createCompiler();
 		const source = `
