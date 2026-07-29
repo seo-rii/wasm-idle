@@ -134,6 +134,7 @@ export {
 export {
 	RUNTIME_REGISTRY_MANIFEST_SCHEMA_VERSION,
 	defineRuntimeRegistryManifest,
+	defineRuntimeWorkerLifetimePolicy,
 	runtimeHandshakeExpectationFromRegistryManifest,
 	runtimeIndexFromRegistryManifest,
 	runtimeIntegrityFromRegistryManifest,
@@ -155,6 +156,11 @@ export {
 	type RuntimeProfileActivationSnapshot,
 	type RuntimeProfileAssetCandidate
 } from './runtime-activation.js';
+export {
+	RuntimeWorkerLifetimeController,
+	type RuntimeWorkerLease,
+	type RuntimeWorkerLifetimeControllerOptions
+} from './worker-lifetime.js';
 export type { TerminalControl } from './terminal.js';
 export {
 	DEFAULT_WORKSPACE_LIMITS,

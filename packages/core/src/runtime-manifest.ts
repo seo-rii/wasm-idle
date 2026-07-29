@@ -23,6 +23,59 @@ export type RuntimeWorkerLifetimePolicy =
 			readonly evictOnMemoryPressure: boolean;
 	  };
 
+export function defineRuntimeWorkerLifetimePolicy(
+	policy: RuntimeWorkerLifetimePolicy,
+	runtimeId = 'runtime'
+): RuntimeWorkerLifetimePolicy {
+	if (!policy || typeof policy !== 'object') {
+		throw new TypeError(`Runtime ${runtimeId} must declare a worker lifetime policy`);
+	}
+	switch (policy.mode) {
+		case 'per-run':
+			return Object.freeze({ mode: 'per-run' });
+		case 'persistent':
+			if (!Number.isSafeInteger(policy.idleTimeoutMs) || policy.idleTimeoutMs <= 0) {
+				throw new TypeError(
+					`Persistent worker idle timeout must be a positive safe integer for runtime ${runtimeId}`
+				);
+			}
+			if (typeof policy.evictOnMemoryPressure !== 'boolean') {
+				throw new TypeError(
+					`Persistent worker memory-pressure policy must be boolean for runtime ${runtimeId}`
+				);
+			}
+			return Object.freeze({
+				mode: 'persistent',
+				idleTimeoutMs: policy.idleTimeoutMs,
+				evictOnMemoryPressure: policy.evictOnMemoryPressure
+			});
+		case 'pool':
+			if (!Number.isSafeInteger(policy.idleTimeoutMs) || policy.idleTimeoutMs <= 0) {
+				throw new TypeError(
+					`Worker pool idle timeout must be a positive safe integer for runtime ${runtimeId}`
+				);
+			}
+			if (!Number.isSafeInteger(policy.maxWorkers) || policy.maxWorkers < 2) {
+				throw new TypeError(
+					`Worker pool size must be a safe integer of at least two for runtime ${runtimeId}`
+				);
+			}
+			if (typeof policy.evictOnMemoryPressure !== 'boolean') {
+				throw new TypeError(
+					`Worker pool memory-pressure policy must be boolean for runtime ${runtimeId}`
+				);
+			}
+			return Object.freeze({
+				mode: 'pool',
+				idleTimeoutMs: policy.idleTimeoutMs,
+				maxWorkers: policy.maxWorkers,
+				evictOnMemoryPressure: policy.evictOnMemoryPressure
+			});
+		default:
+			throw new TypeError(`Invalid worker lifetime mode for runtime ${runtimeId}`);
+	}
+}
+
 export interface RuntimeRegistryProfile {
 	readonly profileId: string;
 	readonly manifestSchemaVersion: number;
@@ -215,71 +268,10 @@ export function defineRuntimeRegistryManifest(
 			}
 		}
 
-		const workerLifetime = runtime.workerLifetime;
-		if (!workerLifetime || typeof workerLifetime !== 'object') {
-			throw new TypeError(
-				`Runtime ${runtime.runtimeId} must declare a worker lifetime policy`
-			);
-		}
-		let normalizedWorkerLifetime: RuntimeWorkerLifetimePolicy;
-		switch (workerLifetime.mode) {
-			case 'per-run':
-				normalizedWorkerLifetime = Object.freeze({ mode: 'per-run' });
-				break;
-			case 'persistent':
-				if (
-					!Number.isSafeInteger(workerLifetime.idleTimeoutMs) ||
-					workerLifetime.idleTimeoutMs <= 0
-				) {
-					throw new TypeError(
-						`Persistent worker idle timeout must be a positive safe integer for runtime ${runtime.runtimeId}`
-					);
-				}
-				if (typeof workerLifetime.evictOnMemoryPressure !== 'boolean') {
-					throw new TypeError(
-						`Persistent worker memory-pressure policy must be boolean for runtime ${runtime.runtimeId}`
-					);
-				}
-				normalizedWorkerLifetime = Object.freeze({
-					mode: 'persistent',
-					idleTimeoutMs: workerLifetime.idleTimeoutMs,
-					evictOnMemoryPressure: workerLifetime.evictOnMemoryPressure
-				});
-				break;
-			case 'pool':
-				if (
-					!Number.isSafeInteger(workerLifetime.idleTimeoutMs) ||
-					workerLifetime.idleTimeoutMs <= 0
-				) {
-					throw new TypeError(
-						`Worker pool idle timeout must be a positive safe integer for runtime ${runtime.runtimeId}`
-					);
-				}
-				if (
-					!Number.isSafeInteger(workerLifetime.maxWorkers) ||
-					workerLifetime.maxWorkers < 2
-				) {
-					throw new TypeError(
-						`Worker pool size must be a safe integer of at least two for runtime ${runtime.runtimeId}`
-					);
-				}
-				if (typeof workerLifetime.evictOnMemoryPressure !== 'boolean') {
-					throw new TypeError(
-						`Worker pool memory-pressure policy must be boolean for runtime ${runtime.runtimeId}`
-					);
-				}
-				normalizedWorkerLifetime = Object.freeze({
-					mode: 'pool',
-					idleTimeoutMs: workerLifetime.idleTimeoutMs,
-					maxWorkers: workerLifetime.maxWorkers,
-					evictOnMemoryPressure: workerLifetime.evictOnMemoryPressure
-				});
-				break;
-			default:
-				throw new TypeError(
-					`Invalid worker lifetime mode for runtime ${runtime.runtimeId}`
-				);
-		}
+		const normalizedWorkerLifetime = defineRuntimeWorkerLifetimePolicy(
+			runtime.workerLifetime,
+			runtime.runtimeId
+		);
 
 		const requiredBrowserFeatures = [...new Set(runtime.requiredBrowserFeatures)].sort();
 		for (const feature of requiredBrowserFeatures) {
