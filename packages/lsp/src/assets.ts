@@ -125,6 +125,12 @@ const requireAllowedAssetUrl = (
 	if (url.protocol !== 'https:' && url.protocol !== 'http:') {
 		throw new Error(`Runtime asset ${asset} uses an unsupported URL scheme: ${url.protocol}`);
 	}
+	if (url.username || url.password) {
+		throw new Error(`Runtime asset ${asset} URL must not include credentials`);
+	}
+	if (url.hash) {
+		throw new Error(`Runtime asset ${asset} URL must not include a fragment`);
+	}
 	const allowed = [config.baseUrl, ...(config.allowedBaseUrls || [])].some((baseUrl) => {
 		let base: URL;
 		try {

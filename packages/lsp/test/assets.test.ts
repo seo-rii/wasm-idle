@@ -24,6 +24,35 @@ describe('language tool asset loading', () => {
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
+	it.each([
+		[
+			'credentials',
+			'https://user:secret@assets.example.com/clangd/clangd.js',
+			'Runtime asset clangd.js URL must not include credentials'
+		],
+		[
+			'a fragment',
+			'https://assets.example.com/clangd/clangd.js#token',
+			'Runtime asset clangd.js URL must not include a fragment'
+		]
+	])('rejects custom-loader URLs containing %s before fetching', async (_kind, url, message) => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+
+		await expect(
+			loadLanguageToolAsset(
+				'clangd',
+				'clangd.js',
+				{
+					baseUrl: 'https://assets.example.com/clangd/',
+					loader: () => url
+				},
+				vi.fn()
+			)
+		).rejects.toThrow(message);
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
 	it('rejects a clangd asset whose configured SHA-256 digest does not match', async () => {
 		vi.stubGlobal(
 			'fetch',
@@ -217,6 +246,46 @@ describe('language tool asset loading', () => {
 				vi.fn()
 			)
 		).rejects.toThrow('Runtime asset clangd.js has an invalid final response URL: clangd.js');
+		expect(cancel).toHaveBeenCalledOnce();
+		expect(getReader).not.toHaveBeenCalled();
+		expect(arrayBuffer).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		[
+			'credentials',
+			'https://user:secret@assets.example.com/clangd/clangd.js',
+			'Runtime asset clangd.js URL must not include credentials'
+		],
+		[
+			'a fragment',
+			'https://assets.example.com/clangd/clangd.js#token',
+			'Runtime asset clangd.js URL must not include a fragment'
+		]
+	])('rejects final response URLs containing %s before reading', async (_kind, url, message) => {
+		const cancel = vi.fn(async () => {});
+		const getReader = vi.fn();
+		const arrayBuffer = vi.fn();
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue({
+				ok: true,
+				status: 200,
+				url,
+				headers: new Headers(),
+				body: { cancel, getReader },
+				arrayBuffer
+			})
+		);
+
+		await expect(
+			loadLanguageToolAsset(
+				'clangd',
+				'clangd.js',
+				{ baseUrl: 'https://assets.example.com/clangd/' },
+				vi.fn()
+			)
+		).rejects.toThrow(message);
 		expect(cancel).toHaveBeenCalledOnce();
 		expect(getReader).not.toHaveBeenCalled();
 		expect(arrayBuffer).not.toHaveBeenCalled();
