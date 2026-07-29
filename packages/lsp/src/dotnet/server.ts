@@ -1,5 +1,6 @@
-import { normalizeBaseUrl, normalizeRootUrl } from '../assets.js';
+import { normalizeRootUrl } from '../assets.js';
 import { startWorkerLanguageServer } from '../lsp.js';
+import { LanguageServerAssetConfigurationError } from '../runtime.js';
 import type { EditorLanguageServerOptions, EditorLanguageServerRuntimeOptions } from '../types.js';
 import { createWorkerLanguageServerClient, type LanguageServerStatus } from '../worker-client.js';
 import { createDotnetWorkerService, type DotnetLanguage } from './service.js';
@@ -22,10 +23,14 @@ export function resolveDotnetLanguageServerModuleUrl(
 	const rootUrl =
 		typeof options === 'string' ? options : typeof options === 'object' ? options.rootUrl : '';
 	const normalizedRootUrl = normalizeRootUrl(rootUrl || '');
-	const path = normalizedRootUrl
-		? `${normalizedRootUrl}/wasm-dotnet/index.js`
-		: 'wasm-dotnet/index.js';
-	return baseUrl ? new URL(path, baseUrl).href : normalizeBaseUrl(path).replace(/\/$/u, '');
+	if (!normalizedRootUrl) {
+		throw new LanguageServerAssetConfigurationError(
+			'.NET LSP',
+			'an explicit dotnet.moduleUrl or rootUrl'
+		);
+	}
+	const path = `${normalizedRootUrl}/wasm-dotnet/index.js`;
+	return baseUrl ? new URL(path, baseUrl).href : path;
 }
 
 async function createLanguageServer(

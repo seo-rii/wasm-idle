@@ -25,9 +25,25 @@ vi.mock('../src/jsonrpc.js', () => ({
 	BrowserMessageWriter: mockState.MockWriter
 }));
 
-import { getCSharpLanguageServer } from '../src/dotnet/server.js';
+import {
+	getCSharpLanguageServer,
+	resolveDotnetLanguageServerModuleUrl
+} from '../src/dotnet/server.js';
+import { LanguageServerAssetConfigurationError } from '../src/runtime.js';
 
 describe('dotnet language server', () => {
+	it('requires an explicit module URL or deployment root', () => {
+		expect(() =>
+			resolveDotnetLanguageServerModuleUrl(undefined, 'https://app.example.com/editor')
+		).toThrow(LanguageServerAssetConfigurationError);
+		expect(
+			resolveDotnetLanguageServerModuleUrl(
+				{ rootUrl: '/wasm-idle' },
+				'https://app.example.com/editor'
+			)
+		).toBe('https://app.example.com/wasm-idle/wasm-dotnet/index.js');
+	});
+
 	it('hosts the threaded dotnet compiler through an in-process JSON-RPC channel', async () => {
 		const statuses: string[] = [];
 		const moduleSource = [

@@ -1,4 +1,5 @@
 import type { CompilerOptions } from 'typescript';
+import { LanguageServerAssetConfigurationError } from '../runtime.js';
 import type { EditorLanguageServerOptions, EditorLanguageServerRuntimeOptions } from '../types.js';
 import { createWorkerLanguageServerClient, type LanguageServerStatus } from '../worker-client.js';
 import type { TypeScriptLanguage } from './service.js';
@@ -32,13 +33,29 @@ async function createLanguageServer(
 	const hostOptions =
 		typeof options === 'object' ? (options as TypeScriptLanguageServerOptions) : undefined;
 	const config = resolveConfig(language, options);
+	if (!config.libUrl?.trim()) {
+		throw new LanguageServerAssetConfigurationError(
+			`${language} LSP`,
+			`an explicit ${language}.libUrl`
+		);
+	}
+	const currentUrl = hostOptions?.currentUrl ?? globalThis.location?.href ?? '';
+	let libUrl: string;
+	try {
+		libUrl = new URL(config.libUrl.trim(), currentUrl || undefined).href;
+	} catch {
+		throw new LanguageServerAssetConfigurationError(
+			`${language} LSP`,
+			`an absolute ${language}.libUrl or currentUrl for relative URLs`
+		);
+	}
 	return await createWorkerLanguageServerClient({
 		createWorker: hostOptions?.createWorker || createDefaultWorker,
 		initOptions: {
 			language,
 			compilerOptions: config.compilerOptions,
 			extraLibs: config.extraLibs,
-			libUrl: config.libUrl
+			libUrl
 		},
 		onStatus: hostOptions?.onStatus,
 		lifecycle: hostOptions
