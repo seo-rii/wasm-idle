@@ -1,7 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { gzipSync } from 'node:zlib';
 
-import { loadRuntimeAssetBytes, parseTinyGoRuntimePackIndex } from '../src/runtime-assets.ts';
+import {
+	clearTinyGoRuntimePackCache,
+	loadRuntimeAssetBytes,
+	parseTinyGoRuntimePackIndex
+} from '../src/runtime-assets.ts';
 
 function streamedResponse(chunks, headers = {}) {
 	const stream = new ReadableStream({
@@ -34,6 +39,7 @@ test('parseTinyGoRuntimePackIndex validates the index payload', () => {
 });
 
 test('loadRuntimeAssetBytes returns packed runtime assets before hitting the network', async () => {
+	clearTinyGoRuntimePackCache();
 	const packBytes = new Uint8Array([1, 2, 3, 4]);
 	const packIndex = {
 		format: 'wasm-tinygo-runtime-pack-index-v1',
@@ -103,12 +109,16 @@ test('loadRuntimeAssetBytes returns packed runtime assets before hitting the net
 		progressEvents.some((progress) => progress.label.includes('runtime pack pack.bin')),
 		true
 	);
+	clearTinyGoRuntimePackCache();
 });
 
 test('loadRuntimeAssetBytes respects loader overrides', async () => {
 	let fetchedUrl = null;
-	const fetchImpl = async (url) => {
+	let fetchOptions = null;
+	const controller = new AbortController();
+	const fetchImpl = async (url, options) => {
 		fetchedUrl = String(url);
+		fetchOptions = options;
 		return new Response(new Uint8Array([9, 9]));
 	};
 
@@ -117,12 +127,22 @@ test('loadRuntimeAssetBytes respects loader overrides', async () => {
 		assetUrl: 'http://assets.invalid/tools/go-probe.wasm',
 		assetBaseUrl: 'http://assets.invalid/',
 		label: 'go-probe.wasm',
-		loader: async () => 'http://assets.invalid/override/go-probe.wasm',
+		loader: async ({ signal }) => {
+			assert.equal(signal, controller.signal);
+			return 'http://assets.invalid/override/go-probe.wasm';
+		},
+		signal: controller.signal,
 		fetchImpl
 	});
 
 	assert.deepEqual([...bytes], [9, 9]);
 	assert.equal(fetchedUrl, 'http://assets.invalid/override/go-probe.wasm');
+	assert.deepEqual(fetchOptions, {
+		credentials: 'omit',
+		redirect: 'error',
+		referrerPolicy: 'no-referrer',
+		signal: controller.signal
+	});
 });
 
 test('loadRuntimeAssetBytes accepts loader-provided bytes without fetching', async () => {
@@ -168,4 +188,233 @@ test('loadRuntimeAssetBytes reports byte progress for streamed direct fetches', 
 	assert.equal(progressEvents[0].loaded, 2);
 	assert.equal(progressEvents.at(-1).loaded, 5);
 	assert.equal(progressEvents.at(-1).total, 5);
+});
+
+test('loadRuntimeAssetBytes rejects unsafe URLs before fetching', async () => {
+	let fetchCount = 0;
+	const fetchImpl = async () => {
+		fetchCount += 1;
+		return new Response(new Uint8Array([1]));
+	};
+	const baseOptions = {
+		assetPath: 'tools/go-probe.wasm',
+		label: 'go-probe.wasm',
+		fetchImpl
+	};
+
+	await assert.rejects(
+		loadRuntimeAssetBytes({
+			...baseOptions,
+			assetUrl: 'https://user:password@assets.invalid/tools/go-probe.wasm'
+		}),
+		/URLs must not include credentials/
+	);
+	await assert.rejects(
+		loadRuntimeAssetBytes({
+			...baseOptions,
+			assetUrl: 'https://assets.invalid/tools/go-probe.wasm#subresource'
+		}),
+		/URLs must not include fragments/
+	);
+	assert.equal(fetchCount, 0);
+});
+
+test('loadRuntimeAssetBytes rejects substituted final URLs and cancels the body', async () => {
+	let cancelled = false;
+	const body = new ReadableStream({
+		pull(controller) {
+			controller.enqueue(new Uint8Array([1]));
+		},
+		cancel() {
+			cancelled = true;
+		}
+	});
+	const response = new Response(body);
+	Object.defineProperty(response, 'url', {
+		value: 'https://mirror.invalid/tools/go-probe.wasm'
+	});
+
+	await assert.rejects(
+		loadRuntimeAssetBytes({
+			assetPath: 'tools/go-probe.wasm',
+			assetUrl: 'https://assets.invalid/tools/go-probe.wasm',
+			label: 'go-probe.wasm',
+			fetchImpl: async () => response
+		}),
+		/unexpected final URL/
+	);
+	assert.equal(cancelled, true);
+});
+
+test('loadRuntimeAssetBytes rejects oversized Content-Length before reading', async () => {
+	let cancelled = false;
+	const body = new ReadableStream({
+		pull(controller) {
+			controller.enqueue(new Uint8Array([1]));
+		},
+		cancel() {
+			cancelled = true;
+		}
+	});
+
+	await assert.rejects(
+		loadRuntimeAssetBytes({
+			assetPath: 'tools/go-probe.wasm',
+			assetUrl: 'https://assets.invalid/tools/go-probe.wasm',
+			label: 'go-probe.wasm',
+			maxAssetBytes: 4,
+			fetchImpl: async () => new Response(body, { headers: { 'content-length': '5' } })
+		}),
+		/download size exceeds the 4 byte limit/
+	);
+	assert.equal(cancelled, true);
+});
+
+test('loadRuntimeAssetBytes bounds unknown-length response streams', async () => {
+	let cancelled = false;
+	let chunkIndex = 0;
+	const chunks = [new Uint8Array([1, 2, 3]), new Uint8Array([4, 5])];
+	const body = new ReadableStream(
+		{
+			pull(controller) {
+				if (chunkIndex < chunks.length) {
+					controller.enqueue(chunks[chunkIndex++]);
+				} else {
+					controller.close();
+				}
+			},
+			cancel() {
+				cancelled = true;
+			}
+		},
+		{ highWaterMark: 0 }
+	);
+
+	await assert.rejects(
+		loadRuntimeAssetBytes({
+			assetPath: 'tools/go-probe.wasm',
+			assetUrl: 'https://assets.invalid/tools/go-probe.wasm',
+			label: 'go-probe.wasm',
+			maxAssetBytes: 4,
+			fetchImpl: async () => new Response(body)
+		}),
+		/download size exceeds the 4 byte limit/
+	);
+	assert.equal(cancelled, true);
+});
+
+test('loadRuntimeAssetBytes bounds decompressed gzip output', async () => {
+	const compressed = gzipSync(Buffer.alloc(100, 1));
+	assert.equal(compressed.byteLength < 32, true);
+
+	await assert.rejects(
+		loadRuntimeAssetBytes({
+			assetPath: 'tools/go-probe.wasm.gz',
+			assetUrl: 'https://assets.invalid/tools/go-probe.wasm.gz',
+			label: 'go-probe.wasm.gz',
+			maxAssetBytes: 32,
+			fetchImpl: async () => new Response(compressed)
+		}),
+		/decompressed size exceeds the 32 byte limit/
+	);
+});
+
+test('loadRuntimeAssetBytes rejects oversized loader Blobs before materializing them', async () => {
+	const blob = new Blob([new Uint8Array([1, 2, 3, 4, 5])]);
+	let materialized = false;
+	blob.arrayBuffer = async () => {
+		materialized = true;
+		return new ArrayBuffer(0);
+	};
+
+	await assert.rejects(
+		loadRuntimeAssetBytes({
+			assetPath: 'tools/go-probe.wasm',
+			assetUrl: 'https://assets.invalid/tools/go-probe.wasm',
+			label: 'go-probe.wasm',
+			loader: async () => blob,
+			maxAssetBytes: 4,
+			fetchImpl: async () => new Response(new Uint8Array())
+		}),
+		/exceeds the 4 byte limit/
+	);
+	assert.equal(materialized, false);
+});
+
+test('loadRuntimeAssetBytes separates runtime pack caches by fetch identity', async () => {
+	clearTinyGoRuntimePackCache();
+	const packIndex = new TextEncoder().encode(
+		JSON.stringify({
+			format: 'wasm-tinygo-runtime-pack-index-v1',
+			fileCount: 1,
+			totalBytes: 1,
+			entries: [{ runtimePath: 'tools/go-probe.wasm', offset: 0, length: 1 }]
+		})
+	);
+	const createFetch = (packByte, requests) => async (url) => {
+		requests.push(String(url));
+		return new Response(
+			String(url).endsWith('pack.index.json') ? packIndex : new Uint8Array([packByte])
+		);
+	};
+	const packs = [
+		{
+			index: 'pack.index.json',
+			asset: 'pack.bin',
+			fileCount: 1,
+			totalBytes: 1
+		}
+	];
+	const firstRequests = [];
+	const secondRequests = [];
+	const commonOptions = {
+		assetPath: 'tools/go-probe.wasm',
+		assetUrl: 'https://assets.invalid/tools/go-probe.wasm',
+		assetBaseUrl: 'https://assets.invalid/',
+		label: 'go-probe.wasm',
+		packs
+	};
+
+	const first = await loadRuntimeAssetBytes({
+		...commonOptions,
+		fetchImpl: createFetch(1, firstRequests)
+	});
+	const second = await loadRuntimeAssetBytes({
+		...commonOptions,
+		fetchImpl: createFetch(2, secondRequests)
+	});
+
+	assert.deepEqual([...first], [1]);
+	assert.deepEqual([...second], [2]);
+	assert.equal(firstRequests.length, 2);
+	assert.equal(secondRequests.length, 2);
+	clearTinyGoRuntimePackCache();
+});
+
+test('loadRuntimeAssetBytes rejects pre-aborted loads before invoking hooks', async () => {
+	const controller = new AbortController();
+	const reason = new Error('cancelled by test');
+	controller.abort(reason);
+	let loaderCalled = false;
+	let fetchCalled = false;
+
+	await assert.rejects(
+		loadRuntimeAssetBytes({
+			assetPath: 'tools/go-probe.wasm',
+			assetUrl: 'https://assets.invalid/tools/go-probe.wasm',
+			label: 'go-probe.wasm',
+			signal: controller.signal,
+			loader: async () => {
+				loaderCalled = true;
+				return null;
+			},
+			fetchImpl: async () => {
+				fetchCalled = true;
+				return new Response(new Uint8Array());
+			}
+		}),
+		reason
+	);
+	assert.equal(loaderCalled, false);
+	assert.equal(fetchCalled, false);
 });

@@ -16,6 +16,7 @@ export type TinyGoRuntimeAssetLoader = (options: {
 	assetPath: string;
 	assetUrl: string;
 	label: string;
+	signal?: AbortSignal;
 }) => TinyGoRuntimeAssetLoaderResult | Promise<TinyGoRuntimeAssetLoaderResult>;
 
 export type TinyGoRuntimeAssetProgress = {
@@ -50,6 +51,54 @@ export interface TinyGoRuntimePackIndex {
 
 const runtimePackBytesCache = new Map<string, Promise<Uint8Array>>();
 const runtimePackIndexCache = new Map<string, Promise<TinyGoRuntimePackIndex>>();
+const cacheIdentityIds = new WeakMap<object, number>();
+let nextCacheIdentityId = 0;
+
+export const DEFAULT_MAX_TINYGO_ASSET_BYTES = 128 * 1024 * 1024;
+const DEFAULT_TINYGO_ASSET_BUFFER_BYTES = 64 * 1024;
+
+function cacheIdentity(value: object | undefined) {
+	if (!value) return 'none';
+	let id = cacheIdentityIds.get(value);
+	if (!id) {
+		id = ++nextCacheIdentityId;
+		cacheIdentityIds.set(value, id);
+	}
+	return String(id);
+}
+
+function runtimePackCacheKey(options: {
+	url: string;
+	fetchImpl: typeof fetch;
+	loader?: TinyGoRuntimeAssetLoader;
+	signal?: AbortSignal;
+	maxAssetBytes: number;
+}) {
+	return [
+		options.url,
+		options.maxAssetBytes,
+		cacheIdentity(options.fetchImpl),
+		cacheIdentity(options.loader),
+		cacheIdentity(options.signal)
+	].join('\0');
+}
+
+function enforceAssetSize(assetPath: string, bytes: Uint8Array, maxAssetBytes: number) {
+	if (bytes.byteLength > maxAssetBytes) {
+		throw new Error(
+			`wasm-tinygo runtime asset ${assetPath} exceeds the ${maxAssetBytes} byte limit`
+		);
+	}
+	return bytes;
+}
+
+function resolveMaxAssetBytes(maxAssetBytes?: number) {
+	const resolved = maxAssetBytes ?? DEFAULT_MAX_TINYGO_ASSET_BYTES;
+	if (!Number.isSafeInteger(resolved) || resolved < 0) {
+		throw new Error('wasm-tinygo maxAssetBytes must be a non-negative safe integer');
+	}
+	return resolved;
+}
 
 function expectObject(value: unknown, label: string): Record<string, unknown> {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -130,21 +179,32 @@ export function parseTinyGoRuntimePackIndex(value: unknown): TinyGoRuntimePackIn
 
 async function normalizeLoaderResult(
 	result: TinyGoRuntimeAssetLoaderResult,
-	assetPath: string
+	assetPath: string,
+	maxAssetBytes: number
 ): Promise<{ bytes?: Uint8Array; url?: string; mimeType?: string } | null> {
 	if (!result) return null;
 	if (typeof result === 'string' || result instanceof URL) {
 		return { url: String(result) };
 	}
 	if (result instanceof ArrayBuffer) {
-		return { bytes: new Uint8Array(result) };
+		return { bytes: enforceAssetSize(assetPath, new Uint8Array(result), maxAssetBytes) };
 	}
 	if (result instanceof Uint8Array) {
+		enforceAssetSize(assetPath, result, maxAssetBytes);
 		return { bytes: result };
 	}
 	if (result instanceof Blob) {
+		if (result.size > maxAssetBytes) {
+			throw new Error(
+				`wasm-tinygo runtime asset ${assetPath} exceeds the ${maxAssetBytes} byte limit`
+			);
+		}
 		return {
-			bytes: new Uint8Array(await result.arrayBuffer()),
+			bytes: enforceAssetSize(
+				assetPath,
+				new Uint8Array(await result.arrayBuffer()),
+				maxAssetBytes
+			),
 			mimeType: result.type || undefined
 		};
 	}
@@ -153,35 +213,155 @@ async function normalizeLoaderResult(
 		if (url) return { url };
 		if (result.data === undefined || result.data === null) return null;
 		if (typeof result.data === 'string') {
-			return { bytes: new TextEncoder().encode(result.data), mimeType: result.mimeType };
+			if (result.data.length > maxAssetBytes) {
+				throw new Error(
+					`wasm-tinygo runtime asset ${assetPath} exceeds the ${maxAssetBytes} byte limit`
+				);
+			}
+			return {
+				bytes: enforceAssetSize(
+					assetPath,
+					new TextEncoder().encode(result.data),
+					maxAssetBytes
+				),
+				mimeType: result.mimeType
+			};
 		}
 		if (result.data instanceof ArrayBuffer) {
-			return { bytes: new Uint8Array(result.data), mimeType: result.mimeType };
+			return {
+				bytes: enforceAssetSize(assetPath, new Uint8Array(result.data), maxAssetBytes),
+				mimeType: result.mimeType
+			};
 		}
 		if (result.data instanceof Uint8Array) {
+			enforceAssetSize(assetPath, result.data, maxAssetBytes);
 			return { bytes: result.data, mimeType: result.mimeType };
 		}
+		if (result.data.size > maxAssetBytes) {
+			throw new Error(
+				`wasm-tinygo runtime asset ${assetPath} exceeds the ${maxAssetBytes} byte limit`
+			);
+		}
 		return {
-			bytes: new Uint8Array(await result.data.arrayBuffer()),
+			bytes: enforceAssetSize(
+				assetPath,
+				new Uint8Array(await result.data.arrayBuffer()),
+				maxAssetBytes
+			),
 			mimeType: result.mimeType || result.data.type || undefined
 		};
 	}
 	throw new Error(`unsupported wasm-tinygo asset loader result for ${assetPath}`);
 }
 
+async function readBoundedAssetStream(options: {
+	stream: ReadableStream<Uint8Array>;
+	assetLabel: string;
+	maxAssetBytes: number;
+	sizeKind: 'download' | 'decompressed';
+	total?: number;
+	signal?: AbortSignal;
+	onChunk?: (loaded: number, total: number | null) => void;
+}) {
+	const reader = options.stream.getReader();
+	let cancellation: Promise<void> | undefined;
+	const cancelReader = (reason?: unknown) => {
+		cancellation ??= reader.cancel(reason).catch(() => {});
+		return cancellation;
+	};
+	const cancelOnAbort = () => {
+		void cancelReader(
+			options.signal?.reason ?? new Error('wasm-tinygo runtime asset load was aborted')
+		);
+	};
+	options.signal?.addEventListener('abort', cancelOnAbort, { once: true });
+	let bytes = new Uint8Array(
+		Math.min(options.maxAssetBytes, options.total ?? DEFAULT_TINYGO_ASSET_BUFFER_BYTES)
+	);
+	let loaded = 0;
+	try {
+		if (options.signal?.aborted) {
+			throw options.signal.reason ?? new Error('wasm-tinygo runtime asset load was aborted');
+		}
+		while (true) {
+			const { done, value } = await reader.read();
+			if (done) break;
+			if (!value) continue;
+			const nextLength = loaded + value.byteLength;
+			if (nextLength > options.maxAssetBytes) {
+				throw new Error(
+					`${options.assetLabel} ${options.sizeKind} size exceeds the ${options.maxAssetBytes} byte limit`
+				);
+			}
+			if (nextLength > bytes.byteLength) {
+				const nextCapacity = Math.min(
+					options.maxAssetBytes,
+					Math.max(nextLength, Math.max(bytes.byteLength * 2, 1))
+				);
+				const grown = new Uint8Array(nextCapacity);
+				grown.set(bytes.subarray(0, loaded));
+				bytes = grown;
+			}
+			bytes.set(value, loaded);
+			loaded = nextLength;
+			options.onChunk?.(loaded, options.total ?? null);
+		}
+		if (options.signal?.aborted) {
+			throw options.signal.reason ?? new Error('wasm-tinygo runtime asset load was aborted');
+		}
+		options.onChunk?.(loaded, options.total ?? loaded);
+		return bytes.subarray(0, loaded);
+	} catch (error) {
+		await cancelReader(error);
+		if (options.signal?.aborted) {
+			throw options.signal.reason ?? new Error('wasm-tinygo runtime asset load was aborted');
+		}
+		throw error;
+	} finally {
+		options.signal?.removeEventListener('abort', cancelOnAbort);
+		reader.releaseLock();
+	}
+}
+
 async function fetchRuntimeAssetBytes(
 	assetUrl: string,
 	assetLabel: string,
 	fetchImpl: typeof fetch,
-	allowCompressedFallback = true,
-	onProgress?: TinyGoRuntimeAssetProgressCallback
-): Promise<Uint8Array> {
-	const resolvedAssetUrl = assetUrl.toString();
-	const resolvedAssetUrlObject = new URL(resolvedAssetUrl);
+	options: {
+		allowCompressedFallback?: boolean;
+		onProgress?: TinyGoRuntimeAssetProgressCallback;
+		signal?: AbortSignal;
+		maxAssetBytes: number;
+	}
+): Promise<Uint8Array<ArrayBuffer>> {
+	let resolvedAssetUrlObject: URL;
+	try {
+		resolvedAssetUrlObject = new URL(assetUrl, globalThis.location?.href);
+	} catch {
+		throw new Error('wasm-tinygo runtime asset URLs must be absolute outside a browser');
+	}
+	if (
+		resolvedAssetUrlObject.protocol !== 'http:' &&
+		resolvedAssetUrlObject.protocol !== 'https:'
+	) {
+		throw new Error(
+			`unsupported wasm-tinygo runtime asset URL scheme: ${resolvedAssetUrlObject.protocol}`
+		);
+	}
+	if (resolvedAssetUrlObject.username || resolvedAssetUrlObject.password) {
+		throw new Error('wasm-tinygo runtime asset URLs must not include credentials');
+	}
+	if (resolvedAssetUrlObject.hash) {
+		throw new Error('wasm-tinygo runtime asset URLs must not include fragments');
+	}
+	if (options.signal?.aborted) {
+		throw options.signal.reason ?? new Error('wasm-tinygo runtime asset load was aborted');
+	}
+	const resolvedAssetUrl = resolvedAssetUrlObject.href;
 	const emitProgress = (loaded: number, total: number | null) => {
-		if (!onProgress) return;
+		if (!options.onProgress) return;
 		try {
-			onProgress({
+			options.onProgress({
 				assetPath: resolvedAssetUrlObject.pathname.replace(/^\/+/, ''),
 				assetUrl: resolvedAssetUrl,
 				label: assetLabel,
@@ -192,56 +372,68 @@ async function fetchRuntimeAssetBytes(
 	};
 	let response: Response;
 	try {
-		response = await fetchImpl(resolvedAssetUrl);
+		response = await fetchImpl(resolvedAssetUrl, {
+			credentials: 'omit',
+			redirect: 'error',
+			referrerPolicy: 'no-referrer',
+			signal: options.signal
+		});
 	} catch (error) {
+		if (options.signal?.aborted) {
+			throw options.signal.reason ?? new Error('wasm-tinygo runtime asset load was aborted');
+		}
 		throw new Error(
 			`failed to fetch ${assetLabel} from ${resolvedAssetUrl}: ${error instanceof Error ? error.message : String(error)}. This usually means the browser loaded a stale wasm-tinygo bundle or blocked a nested runtime asset request; hard refresh and resync the runtime assets.`
 		);
 	}
-	const contentLength = response.headers.get('content-length');
-	const parsedTotal = contentLength ? Number(contentLength) : Number.NaN;
-	const total = Number.isFinite(parsedTotal) ? parsedTotal : null;
-	const chunks: Uint8Array[] = [];
-	let loaded = 0;
-	if (response.body) {
-		const reader = response.body.getReader();
+	if (response.url) {
+		let finalUrl: string;
 		try {
-			while (true) {
-				const { done, value } = await reader.read();
-				if (done) break;
-				if (!value) continue;
-				chunks.push(value);
-				loaded += value.byteLength;
-				emitProgress(loaded, total);
-			}
-		} finally {
-			try {
-				reader.releaseLock();
-			} catch {}
+			finalUrl = new URL(response.url).href;
+		} catch {
+			await response.body?.cancel().catch(() => {});
+			throw new Error(
+				`wasm-tinygo runtime asset ${assetLabel} returned an invalid final URL: ${response.url}`
+			);
+		}
+		if (finalUrl !== resolvedAssetUrl) {
+			await response.body?.cancel().catch(() => {});
+			throw new Error(
+				`wasm-tinygo runtime asset ${assetLabel} returned an unexpected final URL: ${response.url}`
+			);
 		}
 	}
-	const assetBytes =
-		chunks.length > 0
-			? (() => {
-					const bytes = new Uint8Array(loaded);
-					let offset = 0;
-					for (const chunk of chunks) {
-						bytes.set(chunk, offset);
-						offset += chunk.byteLength;
-					}
-					return bytes;
-				})()
-			: response.body
-				? new Uint8Array(0)
-				: new Uint8Array(await response.arrayBuffer());
-	if (!loaded) {
-		loaded = assetBytes.byteLength;
-		emitProgress(loaded, total);
-	} else if (total === loaded) {
-		emitProgress(loaded, total);
+	const contentLengthValue = response.headers.get('content-length');
+	const contentLength =
+		contentLengthValue && /^\d+$/u.test(contentLengthValue)
+			? Number(contentLengthValue)
+			: undefined;
+	if (
+		contentLength !== undefined &&
+		(!Number.isSafeInteger(contentLength) || contentLength > options.maxAssetBytes)
+	) {
+		await response.body?.cancel().catch(() => {});
+		throw new Error(
+			`${assetLabel} download size exceeds the ${options.maxAssetBytes} byte limit`
+		);
+	}
+	let assetBytes: Uint8Array<ArrayBuffer>;
+	if (response.body) {
+		assetBytes = await readBoundedAssetStream({
+			stream: response.body,
+			assetLabel,
+			maxAssetBytes: options.maxAssetBytes,
+			sizeKind: 'download',
+			total: contentLength,
+			signal: options.signal,
+			onChunk: emitProgress
+		});
+	} else {
+		assetBytes = new Uint8Array();
+		emitProgress(0, contentLength ?? 0);
 	}
 	const assetPreview = new TextDecoder()
-		.decode(assetBytes.slice(0, 128))
+		.decode(assetBytes.subarray(0, 128))
 		.replace(/^\uFEFF/, '')
 		.trimStart()
 		.toLowerCase();
@@ -251,7 +443,7 @@ async function fetchRuntimeAssetBytes(
 		assetPreview.startsWith('<head') ||
 		assetPreview.startsWith('<body');
 	if (
-		allowCompressedFallback &&
+		(options.allowCompressedFallback ?? true) &&
 		!resolvedAssetUrlObject.pathname.endsWith('.gz') &&
 		(!response.ok || responseLooksLikeHtml)
 	) {
@@ -262,10 +454,14 @@ async function fetchRuntimeAssetBytes(
 				compressedAssetUrl.toString(),
 				assetLabel,
 				fetchImpl,
-				false,
-				onProgress
+				{
+					...options,
+					allowCompressedFallback: false
+				}
 			);
-		} catch {}
+		} catch (error) {
+			if (options.signal?.aborted) throw error;
+		}
 	}
 	if (!response.ok) {
 		throw new Error(
@@ -277,7 +473,7 @@ async function fetchRuntimeAssetBytes(
 			`failed to fetch ${assetLabel} from ${resolvedAssetUrl}: expected a wasm-tinygo runtime asset but got HTML instead. This usually means the browser loaded a stale or wrong wasm-tinygo bundle, or the host rewrote a missing nested asset request to index.html; hard refresh and resync the runtime assets.`
 		);
 	}
-	if (!new URL(resolvedAssetUrl).pathname.endsWith('.gz')) {
+	if (!resolvedAssetUrlObject.pathname.endsWith('.gz')) {
 		return assetBytes;
 	}
 	if (assetBytes.byteLength < 2 || assetBytes[0] !== 0x1f || assetBytes[1] !== 0x8b) {
@@ -289,11 +485,25 @@ async function fetchRuntimeAssetBytes(
 		);
 	}
 	try {
-		const decompressedResponse = new Response(
-			new Blob([assetBytes]).stream().pipeThrough(new DecompressionStream('gzip'))
-		);
-		return new Uint8Array(await decompressedResponse.arrayBuffer());
+		const decompressed = new Blob([
+			assetBytes.buffer.slice(
+				assetBytes.byteOffset,
+				assetBytes.byteOffset + assetBytes.byteLength
+			)
+		])
+			.stream()
+			.pipeThrough(new DecompressionStream('gzip'));
+		return await readBoundedAssetStream({
+			stream: decompressed,
+			assetLabel,
+			maxAssetBytes: options.maxAssetBytes,
+			sizeKind: 'decompressed',
+			signal: options.signal
+		});
 	} catch (error) {
+		if (options.signal?.aborted) {
+			throw options.signal.reason ?? new Error('wasm-tinygo runtime asset load was aborted');
+		}
 		throw new Error(
 			`failed to decompress ${assetLabel} from ${resolvedAssetUrl}: ${error instanceof Error ? error.message : String(error)}`
 		);
@@ -305,10 +515,19 @@ async function loadRuntimePackBytes(
 	pack: TinyGoRuntimeAssetPackReference,
 	fetchImpl: typeof fetch,
 	loader?: TinyGoRuntimeAssetLoader,
-	onProgress?: TinyGoRuntimeAssetProgressCallback
+	onProgress?: TinyGoRuntimeAssetProgressCallback,
+	signal?: AbortSignal,
+	maxAssetBytes = DEFAULT_MAX_TINYGO_ASSET_BYTES
 ) {
 	const assetUrl = new URL(pack.asset, assetBaseUrl).toString();
-	let cachedBytes = runtimePackBytesCache.get(assetUrl);
+	const cacheKey = runtimePackCacheKey({
+		url: assetUrl,
+		fetchImpl,
+		loader,
+		signal,
+		maxAssetBytes
+	});
+	let cachedBytes = runtimePackBytesCache.get(cacheKey);
 	if (!cachedBytes) {
 		cachedBytes = loadRuntimeAssetBytes({
 			assetPath: pack.asset,
@@ -317,12 +536,14 @@ async function loadRuntimePackBytes(
 			fetchImpl,
 			loader,
 			packs: null,
-			onProgress
+			onProgress,
+			signal,
+			maxAssetBytes
 		});
-		runtimePackBytesCache.set(assetUrl, cachedBytes);
+		runtimePackBytesCache.set(cacheKey, cachedBytes);
 		cachedBytes.catch(() => {
-			if (runtimePackBytesCache.get(assetUrl) === cachedBytes) {
-				runtimePackBytesCache.delete(assetUrl);
+			if (runtimePackBytesCache.get(cacheKey) === cachedBytes) {
+				runtimePackBytesCache.delete(cacheKey);
 			}
 		});
 	}
@@ -334,10 +555,19 @@ async function loadRuntimePackIndex(
 	pack: TinyGoRuntimeAssetPackReference,
 	fetchImpl: typeof fetch,
 	loader?: TinyGoRuntimeAssetLoader,
-	onProgress?: TinyGoRuntimeAssetProgressCallback
+	onProgress?: TinyGoRuntimeAssetProgressCallback,
+	signal?: AbortSignal,
+	maxAssetBytes = DEFAULT_MAX_TINYGO_ASSET_BYTES
 ) {
 	const indexUrl = new URL(pack.index, assetBaseUrl).toString();
-	let cachedIndex = runtimePackIndexCache.get(indexUrl);
+	const cacheKey = runtimePackCacheKey({
+		url: indexUrl,
+		fetchImpl,
+		loader,
+		signal,
+		maxAssetBytes
+	});
+	let cachedIndex = runtimePackIndexCache.get(cacheKey);
 	if (!cachedIndex) {
 		cachedIndex = loadRuntimeAssetBytes({
 			assetPath: pack.index,
@@ -347,14 +577,16 @@ async function loadRuntimePackIndex(
 			loader,
 			packs: null,
 			assetBaseUrl,
-			onProgress
+			onProgress,
+			signal,
+			maxAssetBytes
 		}).then((value) =>
 			parseTinyGoRuntimePackIndex(JSON.parse(new TextDecoder().decode(value)))
 		);
-		runtimePackIndexCache.set(indexUrl, cachedIndex);
+		runtimePackIndexCache.set(cacheKey, cachedIndex);
 		cachedIndex.catch(() => {
-			if (runtimePackIndexCache.get(indexUrl) === cachedIndex) {
-				runtimePackIndexCache.delete(indexUrl);
+			if (runtimePackIndexCache.get(cacheKey) === cachedIndex) {
+				runtimePackIndexCache.delete(cacheKey);
 			}
 		});
 	}
@@ -366,11 +598,34 @@ async function loadRuntimePackEntries(
 	pack: TinyGoRuntimeAssetPackReference,
 	fetchImpl: typeof fetch,
 	loader?: TinyGoRuntimeAssetLoader,
-	onProgress?: TinyGoRuntimeAssetProgressCallback
+	onProgress?: TinyGoRuntimeAssetProgressCallback,
+	signal?: AbortSignal,
+	maxAssetBytes = DEFAULT_MAX_TINYGO_ASSET_BYTES
 ): Promise<Map<string, Uint8Array>> {
+	if (pack.totalBytes > maxAssetBytes) {
+		throw new Error(
+			`wasm-tinygo runtime pack ${pack.asset} exceeds the ${maxAssetBytes} byte limit`
+		);
+	}
 	const [index, packBytes] = await Promise.all([
-		loadRuntimePackIndex(assetBaseUrl, pack, fetchImpl, loader, onProgress),
-		loadRuntimePackBytes(assetBaseUrl, pack, fetchImpl, loader, onProgress)
+		loadRuntimePackIndex(
+			assetBaseUrl,
+			pack,
+			fetchImpl,
+			loader,
+			onProgress,
+			signal,
+			maxAssetBytes
+		),
+		loadRuntimePackBytes(
+			assetBaseUrl,
+			pack,
+			fetchImpl,
+			loader,
+			onProgress,
+			signal,
+			maxAssetBytes
+		)
 	]);
 	if (index.fileCount !== pack.fileCount) {
 		throw new Error(
@@ -406,8 +661,17 @@ export async function loadRuntimeAssetBytes(options: {
 	assetBaseUrl?: string;
 	packs?: TinyGoRuntimeAssetPackReference[] | null;
 	onProgress?: TinyGoRuntimeAssetProgressCallback;
+	signal?: AbortSignal;
+	maxAssetBytes?: number;
 }): Promise<Uint8Array> {
-	const fetchImpl = options.fetchImpl ?? fetch;
+	const maxAssetBytes = resolveMaxAssetBytes(options.maxAssetBytes);
+	if (options.signal?.aborted) {
+		throw options.signal.reason ?? new Error('wasm-tinygo runtime asset load was aborted');
+	}
+	const fetchImpl = options.fetchImpl ?? globalThis.fetch;
+	if (!fetchImpl) {
+		throw new Error('wasm-tinygo runtime asset loading requires fetch');
+	}
 	const loader = options.loader;
 	if (options.packs?.length) {
 		if (!options.assetBaseUrl) {
@@ -419,7 +683,9 @@ export async function loadRuntimeAssetBytes(options: {
 				pack,
 				fetchImpl,
 				loader,
-				options.onProgress
+				options.onProgress,
+				options.signal,
+				maxAssetBytes
 			);
 			const packed = entries.get(options.assetPath);
 			if (packed) return packed;
@@ -430,28 +696,28 @@ export async function loadRuntimeAssetBytes(options: {
 			await loader({
 				assetPath: options.assetPath,
 				assetUrl: options.assetUrl,
-				label: options.label
+				label: options.label,
+				signal: options.signal
 			}),
-			options.assetPath
+			options.assetPath,
+			maxAssetBytes
 		);
 		if (normalized?.bytes) return normalized.bytes;
 		if (normalized?.url) {
-			return await fetchRuntimeAssetBytes(
-				normalized.url,
-				options.label,
-				fetchImpl,
-				true,
-				options.onProgress
-			);
+			return await fetchRuntimeAssetBytes(normalized.url, options.label, fetchImpl, {
+				allowCompressedFallback: true,
+				onProgress: options.onProgress,
+				signal: options.signal,
+				maxAssetBytes
+			});
 		}
 	}
-	return await fetchRuntimeAssetBytes(
-		options.assetUrl,
-		options.label,
-		fetchImpl,
-		true,
-		options.onProgress
-	);
+	return await fetchRuntimeAssetBytes(options.assetUrl, options.label, fetchImpl, {
+		allowCompressedFallback: true,
+		onProgress: options.onProgress,
+		signal: options.signal,
+		maxAssetBytes
+	});
 }
 
 export async function resolveRuntimeAssetUrl(options: {
@@ -459,16 +725,24 @@ export async function resolveRuntimeAssetUrl(options: {
 	assetUrl: string;
 	label: string;
 	loader?: TinyGoRuntimeAssetLoader;
+	signal?: AbortSignal;
+	maxAssetBytes?: number;
 }): Promise<string> {
+	const maxAssetBytes = resolveMaxAssetBytes(options.maxAssetBytes);
+	if (options.signal?.aborted) {
+		throw options.signal.reason ?? new Error('wasm-tinygo runtime asset load was aborted');
+	}
 	const loader = options.loader;
 	if (!loader) return options.assetUrl;
 	const normalized = await normalizeLoaderResult(
 		await loader({
 			assetPath: options.assetPath,
 			assetUrl: options.assetUrl,
-			label: options.label
+			label: options.label,
+			signal: options.signal
 		}),
-		options.assetPath
+		options.assetPath,
+		maxAssetBytes
 	);
 	if (!normalized) return options.assetUrl;
 	if (normalized.url) return normalized.url;
