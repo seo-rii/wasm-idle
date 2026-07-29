@@ -153,6 +153,91 @@ describe('runtime registry asset preflight', () => {
 		});
 	});
 
+	it.each(['', '-1', '1.5', '1e2', '3, 3', '9007199254740992'])(
+		'rejects and cancels an invalid Content-Length before reading: %s',
+		async (contentLength) => {
+			let cancelled = false;
+			let readerRequested = false;
+			const response = {
+				url: '',
+				ok: true,
+				status: 200,
+				headers: new Headers({ 'content-length': contentLength }),
+				body: {
+					async cancel() {
+						cancelled = true;
+					},
+					getReader() {
+						readerRequested = true;
+						throw new Error('invalid-length response body should not be read');
+					}
+				}
+			} as unknown as Response;
+
+			await expect(
+				preflightRuntimeAssets({
+					manifest: createManifest([assets[0]!]),
+					runtimeId: 'fortran/preflight-test',
+					rootUrl: 'https://example.test/',
+					fetch: async () => response
+				})
+			).rejects.toMatchObject({
+				name: 'ProtocolError',
+				code: 'protocol',
+				phase: 'asset',
+				runtimeId: 'fortran/preflight-test',
+				profileId: 'preflight-v1'
+			});
+			expect(readerRequested).toBe(false);
+			expect(cancelled).toBe(true);
+		}
+	);
+
+	it('cancels an oversized Content-Length before requesting a reader', async () => {
+		const expected = encoder.encode('four');
+		const asset: RuntimeRegistryAsset = {
+			...assets[0]!,
+			compressedSha256: sha256(expected),
+			uncompressedSha256: sha256(expected),
+			compressedBytes: expected.byteLength,
+			uncompressedBytes: expected.byteLength
+		};
+		let cancelled = false;
+		let readerRequested = false;
+		const response = {
+			url: '',
+			ok: true,
+			status: 200,
+			headers: new Headers({ 'content-length': '6' }),
+			body: {
+				async cancel() {
+					cancelled = true;
+				},
+				getReader() {
+					readerRequested = true;
+					throw new Error('oversized response body should not be read');
+				}
+			}
+		} as unknown as Response;
+
+		await expect(
+			preflightRuntimeAssets({
+				manifest: createManifest([asset]),
+				runtimeId: 'fortran/preflight-test',
+				rootUrl: 'https://example.test/',
+				fetch: async () => response,
+				limits: { maxAssetBytes: 5 }
+			})
+		).rejects.toMatchObject({
+			name: 'AssetTooLargeError',
+			code: 'asset-too-large',
+			actual: 6,
+			limit: 5
+		});
+		expect(readerRequested).toBe(false);
+		expect(cancelled).toBe(true);
+	});
+
 	it('rejects redirect targets outside the manifest asset root', async () => {
 		const response = responseFor('https://example.test/runtime/loader.js');
 		Object.defineProperty(response, 'url', {

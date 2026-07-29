@@ -7,6 +7,7 @@ import {
 	AssetNotFoundError,
 	AssetTooLargeError,
 	CancelledError,
+	ProtocolError,
 	RuntimeConfigurationError,
 	TimeoutError,
 	isWasmIdleError
@@ -122,11 +123,23 @@ function requireConfinedUrl(
 	return url;
 }
 
-function parseContentLength(response: Response): number | undefined {
+function parseContentLength(
+	response: Response,
+	asset: RuntimeRegistryAsset,
+	runtimeId: string,
+	profileId: string
+): number | undefined {
 	const raw = response.headers.get('content-length');
-	if (!raw) return undefined;
-	const value = Number(raw);
-	return Number.isSafeInteger(value) && value >= 0 ? value : undefined;
+	if (raw === null) return undefined;
+	const normalized = raw.trim();
+	const value = Number(normalized);
+	if (!/^\d+$/u.test(normalized) || !Number.isSafeInteger(value)) {
+		throw new ProtocolError(
+			`Runtime asset ${asset.key} has an invalid Content-Length: ${raw}`,
+			{ phase: 'asset', runtimeId, profileId }
+		);
+	}
+	return value;
 }
 
 async function readBoundedResponse(
@@ -138,9 +151,15 @@ async function readBoundedResponse(
 	runtimeId: string,
 	profileId: string
 ): Promise<Uint8Array> {
-	const declaredLength = parseContentLength(response);
+	let declaredLength: number | undefined;
+	try {
+		declaredLength = parseContentLength(response, asset, runtimeId, profileId);
+	} catch (error) {
+		await response.body?.cancel(error).catch(() => undefined);
+		throw error;
+	}
 	if (declaredLength !== undefined && declaredLength > maxAssetBytes) {
-		throw new AssetTooLargeError(
+		const error = new AssetTooLargeError(
 			`Runtime asset ${asset.key} exceeds the ${maxAssetBytes} byte limit`,
 			{
 				limit: maxAssetBytes,
@@ -149,6 +168,8 @@ async function readBoundedResponse(
 				profileId
 			}
 		);
+		await response.body?.cancel(error).catch(() => undefined);
+		throw error;
 	}
 	if (!response.body) {
 		const bytes = new Uint8Array(await response.arrayBuffer());
