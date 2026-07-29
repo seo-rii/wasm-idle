@@ -407,6 +407,7 @@ test('loadRuntimeAssetBytes rejects unsafe URLs before fetching', async () => {
 
 test('loadRuntimeAssetBytes rejects substituted final URLs and cancels the body', async () => {
 	let cancelled = false;
+	const secret = 'signed-query-secret';
 	const body = new ReadableStream({
 		pull(controller) {
 			controller.enqueue(new Uint8Array([1]));
@@ -417,7 +418,7 @@ test('loadRuntimeAssetBytes rejects substituted final URLs and cancels the body'
 	});
 	const response = new Response(body);
 	Object.defineProperty(response, 'url', {
-		value: 'https://mirror.invalid/tools/go-probe.wasm'
+		value: `https://runtime-user:password@mirror.invalid/tools/go-probe.wasm?signature=${secret}#access-token`
 	});
 
 	await assert.rejects(
@@ -427,7 +428,45 @@ test('loadRuntimeAssetBytes rejects substituted final URLs and cancels the body'
 			label: 'go-probe.wasm',
 			fetchImpl: async () => response
 		}),
-		/unexpected final URL/
+		(error) => {
+			assert.equal(
+				error.message,
+				'wasm-tinygo runtime asset go-probe.wasm returned an unexpected final URL'
+			);
+			assert.equal(error.message.includes(secret), false);
+			assert.equal(error.message.includes('access-token'), false);
+			return true;
+		}
+	);
+	assert.equal(cancelled, true);
+});
+
+test('loadRuntimeAssetBytes redacts malformed final URLs and cancels the body', async () => {
+	let cancelled = false;
+	const invalidFinalUrl = '://invalid-final-url-secret';
+	const body = new ReadableStream({
+		cancel() {
+			cancelled = true;
+		}
+	});
+	const response = new Response(body);
+	Object.defineProperty(response, 'url', { value: invalidFinalUrl });
+
+	await assert.rejects(
+		loadRuntimeAssetBytes({
+			assetPath: 'tools/go-probe.wasm',
+			assetUrl: 'https://assets.invalid/tools/go-probe.wasm',
+			label: 'go-probe.wasm',
+			fetchImpl: async () => response
+		}),
+		(error) => {
+			assert.equal(
+				error.message,
+				'wasm-tinygo runtime asset go-probe.wasm returned an invalid final URL'
+			);
+			assert.equal(error.message.includes(invalidFinalUrl), false);
+			return true;
+		}
 	);
 	assert.equal(cancelled, true);
 });

@@ -436,13 +436,13 @@ async function fetchRuntimeAssetBytes(
 		} catch {
 			await response.body?.cancel().catch(() => {});
 			throw new Error(
-				`wasm-tinygo runtime asset ${assetLabel} returned an invalid final URL: ${response.url}`
+				`wasm-tinygo runtime asset ${assetLabel} returned an invalid final URL`
 			);
 		}
 		if (finalUrl !== resolvedAssetUrl) {
 			await response.body?.cancel().catch(() => {});
 			throw new Error(
-				`wasm-tinygo runtime asset ${assetLabel} returned an unexpected final URL: ${response.url}`
+				`wasm-tinygo runtime asset ${assetLabel} returned an unexpected final URL`
 			);
 		}
 	}
