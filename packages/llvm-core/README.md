@@ -102,6 +102,12 @@ The session gives DAP `disconnect` a short best-effort grace period, then closes
 terminates both workers without waiting for LLDB's deferred response. The fixture requires the UI
 to return to Ready within five seconds. Set `WASM_IDLE_DEBUG_BROWSER_CASES=c-disconnect` to run only
 this fixture locally.
+A fourth C fixture repeats that running-target launch and disconnect sequence three times in one
+page. It instruments page-created workers, requires every extra LLDB/WAMR worker pair to terminate,
+and verifies that the active worker count returns to the first-run baseline after each disconnect.
+It also requests garbage collection and limits renderer JS heap growth to 64 MiB by default; set
+`WASM_IDLE_DEBUG_HEAP_GROWTH_LIMIT_BYTES` to tune that budget for constrained CI environments. Set
+`WASM_IDLE_DEBUG_BROWSER_CASES=c-relaunch` to run only this fixture locally.
 It then sends a DAP `readMemory` request from the LLDB hexadecimal memory reference `0x0` for four
 bytes of Wasm linear memory through the complete Sandbox and Terminal control path and verifies
 that the response is readable before resuming. The hexadecimal form matters because LLDB-DAP

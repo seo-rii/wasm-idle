@@ -83,4 +83,14 @@ describe('LLDB browser integration workflow', () => {
 		expect(browserTest).toContain("afterContinue: 'disconnect'");
 		expect(browserTest).toContain('WASM_IDLE_DEBUG_DISCONNECT_TIMEOUT_MS');
 	});
+
+	it('measures repeated LLDB/WAMR session cleanup in the required browser gate', async () => {
+		const browserTest = await readFile('src/lib/playground/debug.playwright.test.ts', 'utf8');
+
+		expect(browserTest).toContain("testId: 'c-relaunch'");
+		expect(browserTest).toContain("afterContinue: 'relaunch'");
+		expect(browserTest).toContain('repeatCount: 3');
+		expect(browserTest).toContain('__wasmIdleWorkerMetrics');
+		expect(browserTest).toContain('WASM_IDLE_DEBUG_HEAP_GROWTH_LIMIT_BYTES');
+	});
 });

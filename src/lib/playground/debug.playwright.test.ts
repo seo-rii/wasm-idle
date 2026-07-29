@@ -127,6 +127,24 @@ int main() {
 		testId: 'c-disconnect'
 	},
 	{
+		activePath: 'relaunch.c',
+		afterContinue: 'relaunch',
+		backend: 'lldb',
+		breakpointLine: 2,
+		expectedLocal: { name: 'value', value: '0' },
+		expectedTitle: 'C · LLDB / WAMR',
+		language: 'C',
+		programArgs: [],
+		repeatCount: 3,
+		source: `int main(void) {
+    volatile int value = 0;
+    for (;;) {
+        value += 1;
+    }
+}`,
+		testId: 'c-relaunch'
+	},
+	{
 		activePath: 'solution.rs',
 		backend: 'lldb',
 		breakpointLine: 2,
@@ -258,6 +276,33 @@ async function readPausedLine(page: Page) {
 	});
 }
 
+async function readBrowserLifecycleMetrics(page: Page) {
+	return page.evaluate(() => {
+		const workerMetrics = (
+			globalThis as typeof globalThis & {
+				__wasmIdleWorkerMetrics?: () => {
+					active: number;
+					created: number;
+					terminated: number;
+				};
+			}
+		).__wasmIdleWorkerMetrics?.() ?? {
+			active: 0,
+			created: 0,
+			terminated: 0
+		};
+		const memory = (
+			performance as Performance & {
+				memory?: { usedJSHeapSize?: number };
+			}
+		).memory;
+		return {
+			...workerMetrics,
+			usedJsHeapSize: Number(memory?.usedJSHeapSize ?? 0)
+		};
+	});
+}
+
 describe('native-source browser debugging in Chromium', () => {
 	it('pauses, steps, and completes the requested browser programs without page errors', async () => {
 		if (process.env.WASM_IDLE_RUN_REAL_BROWSER_DEBUG !== '1') return;
@@ -297,6 +342,39 @@ describe('native-source browser debugging in Chromium', () => {
 			]);
 			await context.setExtraHTTPHeaders({
 				Cookie: 'dev_bypass_waf=seorii_bypass_token_is_this'
+			});
+			await context.addInitScript(() => {
+				const NativeWorker = globalThis.Worker;
+				if (typeof NativeWorker !== 'function') return;
+				let active = 0;
+				let created = 0;
+				let terminated = 0;
+				const liveWorkers = new WeakSet<Worker>();
+				class MeasuredWorker extends NativeWorker {
+					constructor(url: string | URL, options?: WorkerOptions) {
+						super(url, options);
+						liveWorkers.add(this);
+						active += 1;
+						created += 1;
+					}
+
+					override terminate() {
+						if (liveWorkers.delete(this)) {
+							active -= 1;
+							terminated += 1;
+						}
+						super.terminate();
+					}
+				}
+				Object.defineProperty(globalThis, 'Worker', {
+					configurable: true,
+					value: MeasuredWorker,
+					writable: true
+				});
+				Object.defineProperty(globalThis, '__wasmIdleWorkerMetrics', {
+					configurable: true,
+					value: () => ({ active, created, terminated })
+				});
 			});
 
 			try {
@@ -715,7 +793,8 @@ describe('native-source browser debugging in Chromium', () => {
 						await page.locator('button[aria-label="Continue"]').click();
 						if (
 							'afterContinue' in testCase &&
-							testCase.afterContinue === 'disconnect'
+							(testCase.afterContinue === 'disconnect' ||
+								testCase.afterContinue === 'relaunch')
 						) {
 							await page
 								.locator('.debug-status-pill--active')
@@ -728,6 +807,70 @@ describe('native-source browser debugging in Chromium', () => {
 									process.env.WASM_IDLE_DEBUG_DISCONNECT_TIMEOUT_MS || '5000'
 								)
 							});
+							if (testCase.afterContinue === 'relaunch') {
+								await page.evaluate(() =>
+									(window as any).__wasmIdleDebug.setBreakpoints([])
+								);
+								await page.requestGC();
+								const baselineMetrics = await readBrowserLifecycleMetrics(page);
+								expect(baselineMetrics.usedJsHeapSize).toBeGreaterThan(0);
+								const heapGrowthLimit = Number(
+									process.env.WASM_IDLE_DEBUG_HEAP_GROWTH_LIMIT_BYTES ||
+										String(64 * 1024 * 1024)
+								);
+								let latestMetrics = baselineMetrics;
+								const lifecycleMetrics = [baselineMetrics];
+								for (let run = 1; run < testCase.repeatCount; run += 1) {
+									await debugButton.click();
+									await page
+										.getByRole('button', { name: 'Stop Debug' })
+										.waitFor({ state: 'visible' });
+									await page
+										.locator('.debug-status-pill--paused')
+										.waitFor({ state: 'visible' });
+									await page.locator('button[aria-label="Continue"]').click();
+									await page
+										.locator('.debug-status-pill--active')
+										.waitFor({ state: 'visible' });
+									await page.waitForTimeout(250);
+									await page.getByRole('button', { name: 'Stop Debug' }).click();
+									await debugButton.waitFor({
+										state: 'visible',
+										timeout: Number(
+											process.env.WASM_IDLE_DEBUG_DISCONNECT_TIMEOUT_MS ||
+												'5000'
+										)
+									});
+									await page.waitForTimeout(250);
+									const debugState = await page.evaluate(() =>
+										(window as any).__wasmIdleDebug.getDebugState()
+									);
+									expect(debugState.paused).toBe(false);
+									await page.requestGC();
+									latestMetrics = await readBrowserLifecycleMetrics(page);
+									lifecycleMetrics.push(latestMetrics);
+									expect(latestMetrics.active).toBeLessThanOrEqual(
+										baselineMetrics.active
+									);
+									expect(
+										latestMetrics.usedJsHeapSize -
+											baselineMetrics.usedJsHeapSize
+									).toBeLessThanOrEqual(heapGrowthLimit);
+								}
+								const repeatedRuns = testCase.repeatCount - 1;
+								expect(
+									latestMetrics.created - baselineMetrics.created
+								).toBeGreaterThanOrEqual(repeatedRuns * 2);
+								expect(
+									latestMetrics.terminated - baselineMetrics.terminated
+								).toBeGreaterThanOrEqual(repeatedRuns * 2);
+								console.info(
+									`[wasm-idle:lldb-lifecycle] ${JSON.stringify({
+										heapGrowthLimit,
+										runs: lifecycleMetrics
+									})}`
+								);
+							}
 						} else if ('expectedStoppedReason' in testCase) {
 							if ('afterContinue' in testCase && testCase.afterContinue === 'pause') {
 								const pauseButton = page.locator('button[aria-label="Pause"]');
