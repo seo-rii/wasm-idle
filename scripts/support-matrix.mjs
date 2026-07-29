@@ -1608,46 +1608,73 @@ ${renderBlockedCandidatesTable()}
  */
 function extractStringArrayFromExportedConst(source, fileName, exportName) {
 	const sourceFile = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true);
-	/** @type {string[] | null} */
-	let values = null;
+	/** @type {Map<string, import('typescript').Expression>} */
+	const initializers = new Map();
+	/** @type {import('typescript').Expression | null} */
+	let exportedInitializer = null;
 	/** @param {import('typescript').Node} node */
 	function visit(node) {
-		if (
-			ts.isVariableStatement(node) &&
-			node.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)
-		) {
+		if (ts.isVariableStatement(node)) {
+			const exported = node.modifiers?.some(
+				(modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword
+			);
 			for (const declaration of node.declarationList.declarations) {
-				let initializer = declaration.initializer;
-				while (
-					initializer &&
-					(ts.isAsExpression(initializer) ||
-						ts.isSatisfiesExpression(initializer) ||
-						ts.isParenthesizedExpression(initializer))
-				) {
-					initializer = initializer.expression;
-				}
-				if (
-					ts.isIdentifier(declaration.name) &&
-					declaration.name.text === exportName &&
-					initializer &&
-					ts.isArrayLiteralExpression(initializer)
-				) {
-					values = initializer.elements.map((element) => {
-						if (!ts.isStringLiteral(element)) {
-							throw new Error(
-								`${exportName} in ${fileName} must contain string literals only`
-							);
-						}
-						return element.text;
-					});
+				if (!ts.isIdentifier(declaration.name) || !declaration.initializer) continue;
+				initializers.set(declaration.name.text, declaration.initializer);
+				if (exported && declaration.name.text === exportName) {
+					exportedInitializer = declaration.initializer;
 				}
 			}
 		}
 		ts.forEachChild(node, visit);
 	}
 	visit(sourceFile);
-	if (!values) throw new Error(`Could not find exported const ${exportName} in ${fileName}`);
-	return values;
+	if (!exportedInitializer) {
+		throw new Error(`Could not find exported const ${exportName} in ${fileName}`);
+	}
+
+	const seenIdentifiers = new Set();
+	let initializer = exportedInitializer;
+	while (initializer) {
+		while (
+			ts.isAsExpression(initializer) ||
+			ts.isSatisfiesExpression(initializer) ||
+			ts.isParenthesizedExpression(initializer)
+		) {
+			initializer = initializer.expression;
+		}
+		if (
+			ts.isCallExpression(initializer) &&
+			ts.isPropertyAccessExpression(initializer.expression) &&
+			ts.isIdentifier(initializer.expression.expression) &&
+			initializer.expression.expression.text === 'Object' &&
+			initializer.expression.name.text === 'freeze' &&
+			initializer.arguments.length === 1
+		) {
+			initializer = initializer.arguments[0];
+			continue;
+		}
+		if (ts.isIdentifier(initializer)) {
+			if (seenIdentifiers.has(initializer.text)) {
+				throw new Error(`Circular initializer for ${exportName} in ${fileName}`);
+			}
+			seenIdentifiers.add(initializer.text);
+			const referencedInitializer = initializers.get(initializer.text);
+			if (!referencedInitializer) break;
+			initializer = referencedInitializer;
+			continue;
+		}
+		break;
+	}
+	if (!initializer || !ts.isArrayLiteralExpression(initializer)) {
+		throw new Error(`${exportName} in ${fileName} must resolve to an array of string literals`);
+	}
+	return initializer.elements.map((element) => {
+		if (!ts.isStringLiteral(element)) {
+			throw new Error(`${exportName} in ${fileName} must contain string literals only`);
+		}
+		return element.text;
+	});
 }
 
 /** @param {string} rootDir */
