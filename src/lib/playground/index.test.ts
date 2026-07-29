@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { languageAliasIds, languageAliases, supportedLanguageIds } from '@wasm-idle/core';
 
 const { moduleLoads, sandboxInstances, createMockSandboxClass, MockSandbox } = vi.hoisted(() => {
 	const moduleLoads = new Set<string>();
@@ -54,6 +55,13 @@ vi.mock('$lib/playground/python', () => {
 	moduleLoads.add('PYTHON');
 	return {
 		default: createMockSandboxClass('PYTHON')
+	};
+});
+
+vi.mock('$lib/playground/objectivec', () => {
+	moduleLoads.add('OBJC');
+	return {
+		default: createMockSandboxClass('OBJC')
 	};
 });
 
@@ -427,6 +435,28 @@ describe('playground runtime binding', () => {
 		expect(shortAlias).not.toBe(alternateAlias);
 		expect(sandboxInstances.get('COBOL')).toHaveLength(3);
 		expect(moduleLoads).toContain('COBOL');
+	});
+
+	it('loads every canonical language declared by Core', async () => {
+		for (const languageId of supportedLanguageIds) {
+			const sandbox = await playground(languageId);
+			expect(sandbox).toBeInstanceOf(MockSandbox);
+		}
+	});
+
+	it('routes every Core alias through its canonical sandbox', async () => {
+		for (const alias of languageAliasIds) {
+			const canonicalId = languageAliases[alias].canonicalId;
+			const aliasSandbox = (await playground(alias)) as InstanceType<typeof MockSandbox>;
+			const canonicalSandbox = (await playground(canonicalId)) as InstanceType<
+				typeof MockSandbox
+			>;
+
+			expect({ alias, language: aliasSandbox.language }).toEqual({
+				alias,
+				language: canonicalSandbox.language
+			});
+		}
 	});
 
 	it('creates isolated sandboxes for repeated canonical language requests', async () => {

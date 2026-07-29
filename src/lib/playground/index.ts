@@ -6,333 +6,335 @@ import type {
 } from '$lib/playground/sandbox';
 import {
 	createPlaygroundBinding as createCorePlaygroundBinding,
+	isSupportedLanguageId,
 	normalizeLanguageId,
-	supportedLanguageIds
+	supportedLanguageIds,
+	type CanonicalLanguageId
 } from '@wasm-idle/core';
 
 interface SandboxRoute {
-	aliases: readonly string[];
+	languageId: CanonicalLanguageId;
 	load: () => Promise<Sandbox>;
 }
 
 const sandboxRoutes = [
 	{
-		aliases: ['PYTHON3', 'PYTHON', 'PYPY3'],
+		languageId: 'PYTHON3',
 		load: async () => {
 			const { default: Python } = await import('$lib/playground/python');
 			return new Python();
 		}
 	},
 	{
-		aliases: ['C'],
+		languageId: 'C',
 		load: async () => {
 			const { default: Clang } = await import('$lib/playground/clang');
 			return new Clang('C');
 		}
 	},
 	{
-		aliases: ['CPP'],
+		languageId: 'CPP',
 		load: async () => {
 			const { default: Clang } = await import('$lib/playground/clang');
 			return new Clang('CPP');
 		}
 	},
 	{
-		aliases: ['OBJC', 'OBJECTIVEC', 'OBJECTIVE_C', 'OBJECTIVE-C'],
+		languageId: 'OBJC',
 		load: async () => {
 			const { default: ObjectiveC } = await import('$lib/playground/objectivec');
 			return new ObjectiveC();
 		}
 	},
 	{
-		aliases: ['JAVA'],
+		languageId: 'JAVA',
 		load: async () => {
 			const { default: Java } = await import('$lib/playground/java');
 			return new Java();
 		}
 	},
 	{
-		aliases: ['RUST'],
+		languageId: 'RUST',
 		load: async () => {
 			const { default: Rust } = await import('$lib/playground/rust');
 			return new Rust();
 		}
 	},
 	{
-		aliases: ['GO'],
+		languageId: 'GO',
 		load: async () => {
 			const { default: Go } = await import('$lib/playground/go');
 			return new Go();
 		}
 	},
 	{
-		aliases: ['D', 'DLANG'],
+		languageId: 'D',
 		load: async () => {
 			const { default: D } = await import('$lib/playground/d');
 			return new D();
 		}
 	},
 	{
-		aliases: ['CSHARP', 'C#'],
+		languageId: 'CSHARP',
 		load: async () => {
 			const { default: Dotnet } = await import('$lib/playground/dotnet');
 			return new Dotnet('CSHARP');
 		}
 	},
 	{
-		aliases: ['FSHARP', 'F#'],
+		languageId: 'FSHARP',
 		load: async () => {
 			const { default: Dotnet } = await import('$lib/playground/dotnet');
 			return new Dotnet('FSHARP');
 		}
 	},
 	{
-		aliases: ['VBNET', 'VB', 'VISUALBASIC'],
+		languageId: 'VBNET',
 		load: async () => {
 			const { default: Dotnet } = await import('$lib/playground/dotnet');
 			return new Dotnet('VBNET');
 		}
 	},
 	{
-		aliases: ['ELIXIR'],
+		languageId: 'ELIXIR',
 		load: async () => {
 			const { default: Elixir } = await import('$lib/playground/elixir');
 			return new Elixir();
 		}
 	},
 	{
-		aliases: ['ERLANG', 'ERL'],
+		languageId: 'ERLANG',
 		load: async () => {
 			const { default: Elixir } = await import('$lib/playground/elixir');
 			return new Elixir('ERLANG');
 		}
 	},
 	{
-		aliases: ['PROLOG', 'SWIPL', 'SWI'],
+		languageId: 'PROLOG',
 		load: async () => {
 			const { default: Prolog } = await import('$lib/playground/prolog');
 			return new Prolog();
 		}
 	},
 	{
-		aliases: ['GLEAM'],
+		languageId: 'GLEAM',
 		load: async () => {
 			const { default: Gleam } = await import('$lib/playground/gleam');
 			return new Gleam();
 		}
 	},
 	{
-		aliases: ['PERL'],
+		languageId: 'PERL',
 		load: async () => {
 			const { default: Perl } = await import('$lib/playground/perl');
 			return new Perl();
 		}
 	},
 	{
-		aliases: ['TCL', 'TCLSH'],
+		languageId: 'TCL',
 		load: async () => {
 			const { default: Tcl } = await import('$lib/playground/tcl');
 			return new Tcl();
 		}
 	},
 	{
-		aliases: ['AWK', 'GAWK'],
+		languageId: 'AWK',
 		load: async () => {
 			const { default: Awk } = await import('$lib/playground/awk');
 			return new Awk();
 		}
 	},
 	{
-		aliases: ['PASCAL', 'PAS', 'FPC'],
+		languageId: 'PASCAL',
 		load: async () => {
 			const { default: Pascal } = await import('$lib/playground/pascal');
 			return new Pascal();
 		}
 	},
 	{
-		aliases: ['CLOJURESCRIPT', 'CLJS'],
+		languageId: 'CLOJURESCRIPT',
 		load: async () => {
 			const { default: ClojureScript } = await import('$lib/playground/clojurescript');
 			return new ClojureScript();
 		}
 	},
 	{
-		aliases: ['FORTH', 'GFORTH'],
+		languageId: 'FORTH',
 		load: async () => {
 			const { default: Forth } = await import('$lib/playground/forth');
 			return new Forth();
 		}
 	},
 	{
-		aliases: ['J'],
+		languageId: 'J',
 		load: async () => {
 			const { default: J } = await import('$lib/playground/j');
 			return new J();
 		}
 	},
 	{
-		aliases: ['BQN'],
+		languageId: 'BQN',
 		load: async () => {
 			const { default: Bqn } = await import('$lib/playground/bqn');
 			return new Bqn();
 		}
 	},
 	{
-		aliases: ['JANET'],
+		languageId: 'JANET',
 		load: async () => {
 			const { default: Janet } = await import('$lib/playground/janet');
 			return new Janet();
 		}
 	},
 	{
-		aliases: ['JULIA', 'JL'],
+		languageId: 'JULIA',
 		load: async () => {
 			const { default: Julia } = await import('$lib/playground/julia');
 			return new Julia();
 		}
 	},
 	{
-		aliases: ['NIM', 'NIMROD'],
+		languageId: 'NIM',
 		load: async () => {
 			const { default: Nim } = await import('$lib/playground/nim');
 			return new Nim();
 		}
 	},
 	{
-		aliases: ['BASH', 'SH', 'SHELL'],
+		languageId: 'BASH',
 		load: async () => {
 			const { default: Bash } = await import('$lib/playground/bash');
 			return new Bash();
 		}
 	},
 	{
-		aliases: ['FORTRAN', 'F77'],
+		languageId: 'FORTRAN',
 		load: async () => {
 			const { default: Fortran } = await import('$lib/playground/fortran');
 			return new Fortran();
 		}
 	},
 	{
-		aliases: ['COBOL', 'COB', 'CBL', 'GNUCOBOL'],
+		languageId: 'COBOL',
 		load: async () => {
 			const { default: Cobol } = await import('$lib/playground/cobol');
 			return new Cobol();
 		}
 	},
 	{
-		aliases: ['TINYGO'],
+		languageId: 'TINYGO',
 		load: async () => {
 			const { default: TinyGo } = await import('$lib/playground/tinygo');
 			return new TinyGo();
 		}
 	},
 	{
-		aliases: ['OCAML'],
+		languageId: 'OCAML',
 		load: async () => {
 			const { default: Ocaml } = await import('$lib/playground/ocaml');
 			return new Ocaml();
 		}
 	},
 	{
-		aliases: ['JAVASCRIPT', 'JS'],
+		languageId: 'JAVASCRIPT',
 		load: async () => {
 			const { default: TypeScriptSandbox } = await import('$lib/playground/typescript');
 			return new TypeScriptSandbox('JAVASCRIPT');
 		}
 	},
 	{
-		aliases: ['TYPESCRIPT', 'TS'],
+		languageId: 'TYPESCRIPT',
 		load: async () => {
 			const { default: TypeScriptSandbox } = await import('$lib/playground/typescript');
 			return new TypeScriptSandbox('TYPESCRIPT');
 		}
 	},
 	{
-		aliases: ['ASSEMBLYSCRIPT', 'AS'],
+		languageId: 'ASSEMBLYSCRIPT',
 		load: async () => {
 			const { default: AssemblyScript } = await import('$lib/playground/assemblyscript');
 			return new AssemblyScript();
 		}
 	},
 	{
-		aliases: ['WAT'],
+		languageId: 'WAT',
 		load: async () => {
 			const { default: Wat } = await import('$lib/playground/wat');
 			return new Wat();
 		}
 	},
 	{
-		aliases: ['WASM', 'WASM32'],
+		languageId: 'WASM',
 		load: async () => {
 			const { default: Wasm } = await import('$lib/playground/wasm');
 			return new Wasm();
 		}
 	},
 	{
-		aliases: ['LUA'],
+		languageId: 'LUA',
 		load: async () => {
 			const { default: Lua } = await import('$lib/playground/lua');
 			return new Lua();
 		}
 	},
 	{
-		aliases: ['ZIG'],
+		languageId: 'ZIG',
 		load: async () => {
 			const { default: Zig } = await import('$lib/playground/zig');
 			return new Zig();
 		}
 	},
 	{
-		aliases: ['LISP', 'SCHEME', 'SCM'],
+		languageId: 'LISP',
 		load: async () => {
 			const { default: Lisp } = await import('$lib/playground/lisp');
 			return new Lisp();
 		}
 	},
 	{
-		aliases: ['RUBY', 'RB'],
+		languageId: 'RUBY',
 		load: async () => {
 			const { default: Ruby } = await import('$lib/playground/ruby');
 			return new Ruby();
 		}
 	},
 	{
-		aliases: ['HASKELL', 'HS'],
+		languageId: 'HASKELL',
 		load: async () => {
 			const { default: Haskell } = await import('$lib/playground/haskell');
 			return new Haskell();
 		}
 	},
 	{
-		aliases: ['R'],
+		languageId: 'R',
 		load: async () => {
 			const { default: R } = await import('$lib/playground/r');
 			return new R();
 		}
 	},
 	{
-		aliases: ['OCTAVE', 'MATLAB'],
+		languageId: 'OCTAVE',
 		load: async () => {
 			const { default: Octave } = await import('$lib/playground/octave');
 			return new Octave();
 		}
 	},
 	{
-		aliases: ['DUCKDB'],
+		languageId: 'DUCKDB',
 		load: async () => {
 			const { default: DuckDB } = await import('$lib/playground/duckdb');
 			return new DuckDB();
 		}
 	},
 	{
-		aliases: ['SQLITE', 'SQL'],
+		languageId: 'SQLITE',
 		load: async () => {
 			const { default: Sqlite } = await import('$lib/playground/sqlite');
 			return new Sqlite();
 		}
 	},
 	{
-		aliases: ['PHP'],
+		languageId: 'PHP',
 		load: async () => {
 			const { default: Php } = await import('$lib/playground/php');
 			return new Php();
@@ -340,9 +342,17 @@ const sandboxRoutes = [
 	}
 ] satisfies SandboxRoute[];
 
-const sandboxRouteByLanguage = new Map<string, SandboxRoute>();
+const sandboxRouteByLanguage = new Map<CanonicalLanguageId, SandboxRoute>();
 for (const route of sandboxRoutes) {
-	for (const alias of route.aliases) sandboxRouteByLanguage.set(alias, route);
+	if (sandboxRouteByLanguage.has(route.languageId)) {
+		throw new Error(`Duplicate sandbox route: ${route.languageId}`);
+	}
+	sandboxRouteByLanguage.set(route.languageId, route);
+}
+for (const languageId of supportedLanguageIds) {
+	if (!sandboxRouteByLanguage.has(languageId)) {
+		throw new Error(`Missing sandbox route: ${languageId}`);
+	}
 }
 
 export const supportedLanguages = [...supportedLanguageIds];
@@ -361,8 +371,11 @@ async function playground(
 ): Promise<BoundSandbox>;
 async function playground(language: string, runtimeAssets?: SandboxRuntimeAssets) {
 	const normalizedLanguage = normalizeLanguageId(language);
+	if (!isSupportedLanguageId(normalizedLanguage)) {
+		throw new Error(`Unsupported language: ${language}`);
+	}
 	const route = sandboxRouteByLanguage.get(normalizedLanguage);
-	if (!route) throw new Error(`Unsupported language: ${language}`);
+	if (!route) throw new Error(`Missing sandbox route: ${normalizedLanguage}`);
 	return runtimeAssets
 		? createPlaygroundBinding(runtimeAssets).load(normalizedLanguage)
 		: route.load();
