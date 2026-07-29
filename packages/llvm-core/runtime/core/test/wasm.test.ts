@@ -2,7 +2,7 @@ import { zipSync } from 'fflate';
 import { gzipSync } from 'node:zlib';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { compile, getInstance, readBuffer } from '../src/wasm.js';
+import { compile, decompressGzip, getInstance, readBuffer } from '../src/wasm.js';
 
 const emptyWasm = Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0);
 
@@ -87,6 +87,18 @@ describe('WebAssembly loading utilities', () => {
 
 		await expect(readBuffer(url, progress)).resolves.toEqual(contents);
 		expect(progress.set).toHaveBeenLastCalledWith(1);
+	});
+
+	it('bounds decompressed gzip output before materializing the full asset', async () => {
+		const contents = Uint8Array.of(1, 2, 3, 4, 5);
+		const compressed = gzipSync(contents, { level: 9, mtime: 0 });
+
+		await expect(decompressGzip(compressed, 'fixture.wasm.gz', 4)).rejects.toThrow(
+			'Runtime asset fixture.wasm.gz decompressed size exceeds the 4 byte limit'
+		);
+		await expect(decompressGzip(contents, 'decoded.wasm', 4)).rejects.toThrow(
+			'Runtime asset decoded.wasm decompressed size exceeds the 4 byte limit'
+		);
 	});
 
 	it('connects gzip network chunks to the native decompression stream before download completion', async () => {

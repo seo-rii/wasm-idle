@@ -8,6 +8,47 @@ const bufferStore: Partial<Record<string, Promise<Uint8Array>>> = {};
 const isGzip = (bytes: Uint8Array) =>
 	bytes.byteLength >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b;
 
+export const DEFAULT_MAX_DECOMPRESSED_ASSET_BYTES = 128 * 1024 * 1024;
+const DEFAULT_DECOMPRESSION_BUFFER_BYTES = 64 * 1024;
+
+async function readBoundedDecompressionStream(
+	stream: ReadableStream<Uint8Array>,
+	assetUrl: string | URL,
+	maxOutputBytes: number
+) {
+	const reader = stream.getReader();
+	let bytes = new Uint8Array(Math.min(DEFAULT_DECOMPRESSION_BUFFER_BYTES, maxOutputBytes));
+	let receivedLength = 0;
+	try {
+		while (true) {
+			const { done, value } = await reader.read();
+			if (done) break;
+			if (!value) continue;
+			const nextLength = receivedLength + value.byteLength;
+			if (nextLength > maxOutputBytes) {
+				await reader.cancel().catch(() => {});
+				throw new Error(
+					`Runtime asset ${assetUrl} decompressed size exceeds the ${maxOutputBytes} byte limit`
+				);
+			}
+			if (nextLength > bytes.byteLength) {
+				const nextCapacity = Math.min(
+					maxOutputBytes,
+					Math.max(nextLength, Math.max(bytes.byteLength * 2, 1))
+				);
+				const grown = new Uint8Array(nextCapacity);
+				grown.set(bytes.subarray(0, receivedLength));
+				bytes = grown;
+			}
+			bytes.set(value, receivedLength);
+			receivedLength = nextLength;
+		}
+		return bytes.subarray(0, receivedLength);
+	} finally {
+		reader.releaseLock();
+	}
+}
+
 function resolveRuntimeAssetUrl(name: string) {
 	let resolvedUrl: URL;
 	try {
@@ -51,9 +92,23 @@ async function readResponseBytes(response: Response, progress?: ProgressSink) {
 	return bytes;
 }
 
-export async function decompressGzip(bytes: Uint8Array, assetUrl: string | URL = 'runtime asset') {
+export async function decompressGzip(
+	bytes: Uint8Array,
+	assetUrl: string | URL = 'runtime asset',
+	maxOutputBytes = DEFAULT_MAX_DECOMPRESSED_ASSET_BYTES
+) {
+	if (!Number.isSafeInteger(maxOutputBytes) || maxOutputBytes < 0) {
+		throw new Error('Runtime asset decompression limit must be a non-negative safe integer');
+	}
 	// Browsers expose an already-decoded body when the server sets Content-Encoding: gzip.
-	if (!isGzip(bytes)) return bytes;
+	if (!isGzip(bytes)) {
+		if (bytes.byteLength > maxOutputBytes) {
+			throw new Error(
+				`Runtime asset ${assetUrl} decompressed size exceeds the ${maxOutputBytes} byte limit`
+			);
+		}
+		return bytes;
+	}
 	if (typeof DecompressionStream !== 'function') {
 		throw new Error(
 			`Failed to decompress runtime asset ${assetUrl}: DecompressionStream('gzip') is unavailable`
@@ -72,7 +127,7 @@ export async function decompressGzip(bytes: Uint8Array, assetUrl: string | URL =
 			readable: decompressor.readable as ReadableStream<Uint8Array>,
 			writable: decompressor.writable as WritableStream<Uint8Array>
 		});
-		return new Uint8Array(await new Response(stream).arrayBuffer());
+		return await readBoundedDecompressionStream(stream, assetUrl, maxOutputBytes);
 	} catch (error) {
 		throw new Error(
 			`Failed to decompress runtime asset ${assetUrl}: ${error instanceof Error ? error.message : String(error)}`
@@ -158,7 +213,11 @@ async function readGzipResponse(response: Response, assetUrl: URL, progress?: Pr
 	}
 
 	try {
-		const result = new Uint8Array(await new Response(output).arrayBuffer());
+		const result = await readBoundedDecompressionStream(
+			output,
+			assetUrl,
+			DEFAULT_MAX_DECOMPRESSED_ASSET_BYTES
+		);
 		progress?.set?.(1);
 		return result;
 	} catch (error) {
