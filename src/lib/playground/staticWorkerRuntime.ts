@@ -1,5 +1,15 @@
 import type { PlaygroundRuntimeAssets } from '$lib/playground/assets';
-import { BusyError, RuntimeProgressController } from '@wasm-idle/core';
+import {
+	AssetNotFoundError,
+	AssetTooLargeError,
+	BusyError,
+	CancelledError,
+	RuntimeProgressController,
+	TimeoutError,
+	isWasmIdleError,
+	resolveExecutionLimits,
+	type ExecutionLimits
+} from '@wasm-idle/core';
 import {
 	resolveSandboxExecutionArgs,
 	type CompilerDiagnostic,
@@ -44,7 +54,12 @@ type ActiveRun = {
 	id: string;
 	progress?: SandboxProgress;
 	resolve: (result: boolean | string) => void;
-	reject: (reason: string) => void;
+	reject: (reason: unknown) => void;
+};
+
+type StaticWorkerExecutionControls = {
+	limits: ExecutionLimits;
+	signal?: AbortSignal;
 };
 
 type StdinWaiter = {
@@ -65,7 +80,7 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 	baseUrl = '';
 	workerUrl = '';
 	manifestUrl = '';
-	activeReject: ((reason: string) => void) | null = null;
+	activeReject: ((reason: unknown) => void) | null = null;
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	pendingEof = false;
 	stdinWaiters: StdinWaiter[] = [];
@@ -86,9 +101,17 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 		_code = '',
 		_log = true,
 		_args: string[] = [],
-		_options: SandboxExecutionOptions = {},
+		options: SandboxExecutionOptions = {},
 		progress?: SandboxProgress
 	) {
+		const controls = this.resolveExecutionControls(options);
+		if (controls.signal?.aborted) {
+			throw new CancelledError(`${this.config.displayName} startup cancelled`, {
+				cause: controls.signal.reason,
+				phase: 'startup',
+				runtimeId: this.config.languageId
+			});
+		}
 		const progressSink = this.selectProgress(progress);
 		const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
 		const urls = this.config.resolveRuntimeAssets(runtimeAssets, currentUrl);
@@ -123,7 +146,7 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 				0.02,
 				`Resolving ${this.config.displayName} runtime`
 			);
-			await this.ensureWorkerStarted(lifecycle.progress);
+			await this.ensureWorkerStarted(lifecycle.progress, controls);
 		} finally {
 			lifecycle.end();
 		}
@@ -194,49 +217,137 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 		);
 	}
 
+	private resolveExecutionControls(
+		options: SandboxExecutionOptions
+	): StaticWorkerExecutionControls {
+		return {
+			limits: resolveExecutionLimits(options.limits),
+			...(options.signal ? { signal: options.signal } : {})
+		};
+	}
+
 	private reportProgress(progress: SandboxProgress | undefined, value: number, stage?: string) {
 		if (!progress) return;
 		const clamped = Number.isFinite(value) ? Math.max(0, Math.min(value, 1)) : 0;
 		progress.set?.(clamped, stage);
 	}
 
-	private async preloadWorkerScript(progress?: SandboxProgress) {
+	private async preloadWorkerScript(
+		progress: SandboxProgress | undefined,
+		controls: StaticWorkerExecutionControls
+	) {
+		const { limits, signal } = controls;
+		if (signal?.aborted) {
+			throw new CancelledError(`${this.config.displayName} worker download cancelled`, {
+				cause: signal.reason,
+				phase: 'asset',
+				runtimeId: this.config.languageId
+			});
+		}
+		const phaseController = new AbortController();
+		let timedOut = false;
+		const onAbort = () => phaseController.abort(signal?.reason);
+		signal?.addEventListener('abort', onAbort, { once: true });
+		const timeout = setTimeout(() => {
+			timedOut = true;
+			phaseController.abort();
+		}, limits.assetTimeoutMs);
 		this.reportProgress(progress, 0.05, `Loading ${this.config.displayName} worker script`);
-		let response: Response;
 		try {
-			response = await fetch(this.workerUrl, { cache: 'force-cache' });
+			const response = await fetch(this.workerUrl, {
+				cache: 'force-cache',
+				signal: phaseController.signal
+			});
+			if (!response.ok) {
+				throw new AssetNotFoundError(
+					`${this.config.displayName} worker script failed to load: HTTP ${response.status}`,
+					{ runtimeId: this.config.languageId }
+				);
+			}
+
+			const declaredLength = Number(response.headers.get('content-length'));
+			const total =
+				Number.isFinite(declaredLength) && declaredLength > 0 ? declaredLength : 0;
+			if (total > limits.maxAssetBytes) {
+				const error = new AssetTooLargeError(
+					`${this.config.displayName} worker script exceeds ${limits.maxAssetBytes} bytes`,
+					{
+						actual: total,
+						limit: limits.maxAssetBytes,
+						runtimeId: this.config.languageId
+					}
+				);
+				await response.body?.cancel(error).catch(() => undefined);
+				throw error;
+			}
+			if (!response.body) {
+				const bytes = await response.arrayBuffer();
+				if (bytes.byteLength > limits.maxAssetBytes) {
+					throw new AssetTooLargeError(
+						`${this.config.displayName} worker script exceeds ${limits.maxAssetBytes} bytes`,
+						{
+							actual: bytes.byteLength,
+							limit: limits.maxAssetBytes,
+							runtimeId: this.config.languageId
+						}
+					);
+				}
+				this.reportProgress(progress, 0.2, `${this.config.displayName} worker downloaded`);
+				return;
+			}
+
+			const reader = response.body.getReader();
+			let loaded = 0;
+			while (true) {
+				const { done, value } = await reader.read();
+				if (done) break;
+				loaded += value.byteLength;
+				if (loaded > limits.maxAssetBytes) {
+					const error = new AssetTooLargeError(
+						`${this.config.displayName} worker script exceeds ${limits.maxAssetBytes} bytes`,
+						{
+							actual: loaded,
+							limit: limits.maxAssetBytes,
+							runtimeId: this.config.languageId
+						}
+					);
+					await reader.cancel(error).catch(() => undefined);
+					throw error;
+				}
+				const ratio = total > 0 ? Math.min(loaded / total, 1) : 0.5;
+				this.reportProgress(
+					progress,
+					0.05 + ratio * 0.15,
+					`Loading ${this.config.displayName} worker script`
+				);
+			}
+			this.reportProgress(progress, 0.2, `${this.config.displayName} worker downloaded`);
 		} catch (error) {
+			if (isWasmIdleError(error)) throw error;
+			if (timedOut) {
+				throw new TimeoutError(
+					`${this.config.displayName} worker download timed out after ${limits.assetTimeoutMs} ms`,
+					{
+						phase: 'asset',
+						runtimeId: this.config.languageId,
+						timeoutMs: limits.assetTimeoutMs
+					}
+				);
+			}
+			if (signal?.aborted) {
+				throw new CancelledError(`${this.config.displayName} worker download cancelled`, {
+					cause: signal.reason,
+					phase: 'asset',
+					runtimeId: this.config.languageId
+				});
+			}
 			throw new Error(
 				`${this.config.displayName} worker script failed to load: ${this.errorMessage(error)}`
 			);
+		} finally {
+			clearTimeout(timeout);
+			signal?.removeEventListener('abort', onAbort);
 		}
-		if (!response.ok) {
-			throw new Error(
-				`${this.config.displayName} worker script failed to load: HTTP ${response.status}`
-			);
-		}
-
-		const total = Number(response.headers.get('content-length')) || 0;
-		if (!response.body) {
-			await response.arrayBuffer();
-			this.reportProgress(progress, 0.2, `${this.config.displayName} worker downloaded`);
-			return;
-		}
-
-		const reader = response.body.getReader();
-		let loaded = 0;
-		while (true) {
-			const { done, value } = await reader.read();
-			if (done) break;
-			loaded += value.byteLength;
-			const ratio = total > 0 ? Math.min(loaded / total, 1) : 0.5;
-			this.reportProgress(
-				progress,
-				0.05 + ratio * 0.15,
-				`Loading ${this.config.displayName} worker script`
-			);
-		}
-		this.reportProgress(progress, 0.2, `${this.config.displayName} worker downloaded`);
 	}
 
 	private createBootstrapUrl() {
@@ -280,10 +391,13 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 		this.bootstrapUrl = '';
 	}
 
-	private ensureWorkerStarted(progress?: SandboxProgress) {
+	private ensureWorkerStarted(
+		progress: SandboxProgress | undefined,
+		controls: StaticWorkerExecutionControls
+	) {
 		if (this.workerStartPromise) return this.workerStartPromise;
 		const generation = ++this.workerGeneration;
-		const startPromise = this.startWorker(generation, progress);
+		const startPromise = this.startWorker(generation, progress, controls);
 		this.workerStartPromise = startPromise;
 		void startPromise.catch(() => {
 			if (this.workerStartPromise === startPromise) this.disposeWorker();
@@ -291,8 +405,12 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 		return startPromise;
 	}
 
-	private async startWorker(generation: number, progress?: SandboxProgress) {
-		await this.preloadWorkerScript(progress);
+	private async startWorker(
+		generation: number,
+		progress: SandboxProgress | undefined,
+		controls: StaticWorkerExecutionControls
+	) {
+		await this.preloadWorkerScript(progress, controls);
 		if (generation !== this.workerGeneration) {
 			throw new Error('Process terminated');
 		}
@@ -316,31 +434,73 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 			throw new Error('Process terminated');
 		}
 
-		this.worker = worker;
-		worker.onmessage = (event: MessageEvent<StaticWorkerMessage>) => {
-			if (event.data?.__wasmIdleStaticWorkerReady) {
-				this.startupReject = null;
-				this.revokeBootstrapUrl();
-				this.reportProgress(progress, 0.25, `${this.config.displayName} worker ready`);
-				readyResolve(worker);
-				return;
-			}
-			this.handleWorkerMessage(event);
-		};
-		worker.onerror = (event: ErrorEvent) => {
-			event.preventDefault?.();
-			this.handleWorkerFailure(this.formatWorkerError(event));
-		};
-		worker.onmessageerror = () => {
-			this.handleWorkerFailure(
-				`${this.config.displayName} worker message deserialization failed`
-			);
-		};
-
-		let readyResolve!: (worker: Worker) => void;
 		return await new Promise<Worker>((resolve, reject) => {
-			readyResolve = resolve;
-			this.startupReject = reject;
+			let settled = false;
+			const cleanup = () => {
+				clearTimeout(timeout);
+				controls.signal?.removeEventListener('abort', onAbort);
+			};
+			const rejectStartup = (reason: Error) => {
+				if (settled) return;
+				settled = true;
+				cleanup();
+				if (this.startupReject === rejectStartup) this.startupReject = null;
+				reject(reason);
+			};
+			const onAbort = () => {
+				rejectStartup(
+					new CancelledError(`${this.config.displayName} worker startup cancelled`, {
+						cause: controls.signal?.reason,
+						phase: 'startup',
+						runtimeId: this.config.languageId
+					})
+				);
+				if (generation === this.workerGeneration && this.worker === worker) {
+					this.disposeWorker();
+				}
+			};
+			const timeout = setTimeout(() => {
+				rejectStartup(
+					new TimeoutError(
+						`${this.config.displayName} worker startup timed out after ${controls.limits.startupTimeoutMs} ms`,
+						{
+							phase: 'startup',
+							runtimeId: this.config.languageId,
+							timeoutMs: controls.limits.startupTimeoutMs
+						}
+					)
+				);
+				if (generation === this.workerGeneration && this.worker === worker) {
+					this.disposeWorker();
+				}
+			}, controls.limits.startupTimeoutMs);
+
+			this.worker = worker;
+			this.startupReject = rejectStartup;
+			worker.onmessage = (event: MessageEvent<StaticWorkerMessage>) => {
+				if (event.data?.__wasmIdleStaticWorkerReady) {
+					if (settled) return;
+					settled = true;
+					cleanup();
+					this.startupReject = null;
+					this.revokeBootstrapUrl();
+					this.reportProgress(progress, 0.25, `${this.config.displayName} worker ready`);
+					resolve(worker);
+					return;
+				}
+				this.handleWorkerMessage(event);
+			};
+			worker.onerror = (event: ErrorEvent) => {
+				event.preventDefault?.();
+				this.handleWorkerFailure(this.formatWorkerError(event));
+			};
+			worker.onmessageerror = () => {
+				this.handleWorkerFailure(
+					`${this.config.displayName} worker message deserialization failed`
+				);
+			};
+			controls.signal?.addEventListener('abort', onAbort, { once: true });
+			if (controls.signal?.aborted) onAbort();
 		});
 	}
 
@@ -402,7 +562,7 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 		activeRun.resolve(result);
 	}
 
-	private rejectRun(id: string, reason: string) {
+	private rejectRun(id: string, reason: unknown) {
 		const activeRun = this.activeRun;
 		if (!activeRun || activeRun.id !== id) return;
 		this.elapse = Date.now() - this.begin;
@@ -446,6 +606,21 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 				})
 			);
 		}
+		let controls: StaticWorkerExecutionControls;
+		try {
+			controls = this.resolveExecutionControls(options);
+		} catch (error) {
+			return Promise.reject(error);
+		}
+		if (controls.signal?.aborted) {
+			return Promise.reject(
+				new CancelledError(`${this.config.displayName} run cancelled`, {
+					cause: controls.signal.reason,
+					phase: 'execute',
+					runtimeId: this.config.languageId
+				})
+			);
+		}
 		const progressSink = this.selectProgress(_prog);
 		const lifecycle = this.beginProgressLifecycle(
 			progressSink,
@@ -456,7 +631,7 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 		const progress = lifecycle.progress;
 
 		if (prepare) {
-			return this.ensureWorkerStarted(progress)
+			return this.ensureWorkerStarted(progress, controls)
 				.then(() => {
 					this.reportProgress(progress, 0.25, `${this.config.displayName} worker ready`);
 					return true;
@@ -473,7 +648,7 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 
 			void (async () => {
 				try {
-					const worker = await this.ensureWorkerStarted(progress);
+					const worker = await this.ensureWorkerStarted(progress, controls);
 					const { stdin, stdinEof } = await this.collectStdinForRun(code, options);
 					if (this.activeRun?.id !== id) return;
 					const { programArgs } = resolveSandboxExecutionArgs(
@@ -500,7 +675,7 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 						log: _log
 					});
 				} catch (error) {
-					this.rejectRun(id, this.errorMessage(error));
+					this.rejectRun(id, isWasmIdleError(error) ? error : this.errorMessage(error));
 				}
 			})();
 		}).finally(() => lifecycle.end());

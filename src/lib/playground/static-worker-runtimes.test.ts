@@ -785,6 +785,133 @@ describe('static worker backed language sandboxes', () => {
 		);
 	});
 
+	it('rejects a pre-cancelled static worker load before fetching', async () => {
+		const controller = new AbortController();
+		controller.abort(new Error('cancel before load'));
+		const sandbox = new Prolog();
+
+		await expect(
+			sandbox.load('/absproxy/5173', '', true, [], { signal: controller.signal })
+		).rejects.toMatchObject({
+			name: 'CancelledError',
+			code: 'cancelled',
+			phase: 'startup',
+			runtimeId: 'PROLOG'
+		});
+		expect(fetch).not.toHaveBeenCalled();
+		expect(workerInstances).toHaveLength(0);
+	});
+
+	it('aborts a static worker download at its asset deadline', async () => {
+		let fetchSignal: AbortSignal | undefined;
+		vi.mocked(fetch).mockImplementationOnce((_input, init) => {
+			fetchSignal = init?.signal ?? undefined;
+			return new Promise((_resolve, reject) => {
+				fetchSignal?.addEventListener(
+					'abort',
+					() => reject(fetchSignal?.reason ?? new DOMException('Aborted', 'AbortError')),
+					{ once: true }
+				);
+			});
+		});
+		const sandbox = new Prolog();
+
+		await expect(
+			sandbox.load('/absproxy/5173', '', true, [], {
+				limits: { assetTimeoutMs: 5 }
+			})
+		).rejects.toMatchObject({
+			name: 'TimeoutError',
+			code: 'timeout',
+			phase: 'asset',
+			runtimeId: 'PROLOG',
+			timeoutMs: 5
+		});
+		expect(fetchSignal?.aborted).toBe(true);
+		expect(workerInstances).toHaveLength(0);
+	});
+
+	it('rejects an oversized static worker script before reading its body', async () => {
+		vi.mocked(fetch).mockResolvedValueOnce(
+			new Response('small test body', {
+				headers: { 'content-length': '1024' }
+			})
+		);
+		const sandbox = new Prolog();
+
+		await expect(
+			sandbox.load('/absproxy/5173', '', true, [], {
+				limits: { maxAssetBytes: 32 }
+			})
+		).rejects.toMatchObject({
+			name: 'AssetTooLargeError',
+			code: 'asset-too-large',
+			phase: 'asset',
+			runtimeId: 'PROLOG',
+			actual: 1024,
+			limit: 32
+		});
+		expect(workerInstances).toHaveLength(0);
+	});
+
+	it('cancels an unknown-length worker-script stream after its byte limit', async () => {
+		vi.mocked(fetch).mockResolvedValueOnce(new Response(new Uint8Array(64)));
+		const sandbox = new Prolog();
+
+		await expect(
+			sandbox.load('/absproxy/5173', '', true, [], {
+				limits: { maxAssetBytes: 32 }
+			})
+		).rejects.toMatchObject({
+			name: 'AssetTooLargeError',
+			code: 'asset-too-large',
+			phase: 'asset',
+			runtimeId: 'PROLOG',
+			actual: 64,
+			limit: 32
+		});
+		expect(workerInstances).toHaveLength(0);
+	});
+
+	it('terminates a pending worker startup when its signal is aborted', async () => {
+		autoStartWorkers = false;
+		const controller = new AbortController();
+		const sandbox = new Prolog();
+		const load = sandbox.load('/absproxy/5173', '', true, [], {
+			signal: controller.signal
+		});
+		const outcome = load.catch((error) => error);
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
+		controller.abort(new Error('cancel startup'));
+
+		await expect(outcome).resolves.toMatchObject({
+			name: 'CancelledError',
+			code: 'cancelled',
+			phase: 'startup',
+			runtimeId: 'PROLOG'
+		});
+		expect(workerInstances[0].terminate).toHaveBeenCalledOnce();
+	});
+
+	it('terminates a static worker that misses its startup deadline', async () => {
+		autoStartWorkers = false;
+		const sandbox = new Prolog();
+		const load = sandbox.load('/absproxy/5173', '', true, [], {
+			limits: { startupTimeoutMs: 5 }
+		});
+		const outcome = load.catch((error) => error);
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
+
+		await expect(outcome).resolves.toMatchObject({
+			name: 'TimeoutError',
+			code: 'timeout',
+			phase: 'startup',
+			runtimeId: 'PROLOG',
+			timeoutMs: 5
+		});
+		expect(workerInstances[0].terminate).toHaveBeenCalledOnce();
+	});
+
 	it('rejects worker script download and bootstrap import failures', async () => {
 		vi.mocked(fetch).mockResolvedValueOnce(new Response('', { status: 404 }));
 		const missingScript = new Prolog();
