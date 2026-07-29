@@ -1,6 +1,145 @@
+import { gzipSync } from 'node:zlib';
+import { strToU8, zipSync } from 'fflate';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createZigWorkerService, type LspDocument, type LspDocumentContext } from '../src/index.js';
+import { loadZigStdDirectory } from '../src/zig/service.js';
+
+const stdlibFile = strToU8('pub const std = true;');
+
+function createTarGzip(entries: { path: string; contents: Uint8Array }[]) {
+	const blocks: Buffer[] = [];
+	for (const entry of entries) {
+		const header = Buffer.alloc(512);
+		header.write(entry.path, 0, 100, 'utf8');
+		header.write('0000644\0', 100, 8, 'ascii');
+		header.write('0000000\0', 108, 8, 'ascii');
+		header.write('0000000\0', 116, 8, 'ascii');
+		header.write(
+			`${entry.contents.byteLength.toString(8).padStart(11, '0')}\0`,
+			124,
+			12,
+			'ascii'
+		);
+		header.write('00000000000\0', 136, 12, 'ascii');
+		header.fill(0x20, 148, 156);
+		header.write('0', 156, 1, 'ascii');
+		header.write('ustar\0', 257, 6, 'ascii');
+		header.write('00', 263, 2, 'ascii');
+		header.write(
+			`${header
+				.reduce((total, byte) => total + byte, 0)
+				.toString(8)
+				.padStart(6, '0')}\0 `,
+			148,
+			8,
+			'ascii'
+		);
+		blocks.push(
+			header,
+			Buffer.from(entry.contents),
+			Buffer.alloc((512 - (entry.contents.byteLength % 512)) % 512)
+		);
+	}
+	blocks.push(Buffer.alloc(1024));
+	return gzipSync(Buffer.concat(blocks), { level: 9 });
+}
+
+const stdlibTarGzip = createTarGzip([{ path: 'std/std.zig', contents: stdlibFile }]);
+
+describe('loadZigStdDirectory', () => {
+	it('loads a valid ZIP archive rooted at std/', async () => {
+		const directory = await loadZigStdDirectory(
+			zipSync({ 'std/std.zig': stdlibFile }),
+			'https://static.example.com/wasm-zig/std.zip'
+		);
+
+		expect(directory.contents.has('std.zig')).toBe(true);
+	});
+
+	it('rejects ZIP output larger than the expanded-byte budget', async () => {
+		await expect(
+			loadZigStdDirectory(
+				zipSync({ 'std/large.zig': new Uint8Array(5) }),
+				'https://static.example.com/wasm-zig/std.zip',
+				{ maxExpandedBytes: 4, maxFiles: 10 }
+			)
+		).rejects.toThrow('Zig standard library archive exceeds the 4 byte expanded-size limit');
+	});
+
+	it('rejects ZIP archives larger than the file-count budget', async () => {
+		await expect(
+			loadZigStdDirectory(
+				zipSync({
+					'std/a.zig': new Uint8Array([1]),
+					'std/b.zig': new Uint8Array([2])
+				}),
+				'https://static.example.com/wasm-zig/std.zip',
+				{ maxExpandedBytes: 16, maxFiles: 1 }
+			)
+		).rejects.toThrow('Zig standard library archive exceeds the 1 file limit');
+	});
+
+	it('rejects traversal paths instead of normalizing them', async () => {
+		await expect(
+			loadZigStdDirectory(
+				zipSync({ 'std/../escape.zig': new Uint8Array([1]) }),
+				'https://static.example.com/wasm-zig/std.zip'
+			)
+		).rejects.toThrow('Zig standard library archive has an unsafe path: std/../escape.zig');
+	});
+
+	it('rejects file and directory path collisions', async () => {
+		await expect(
+			loadZigStdDirectory(
+				zipSync({
+					'std/collision': new Uint8Array([1]),
+					'std/collision/nested.zig': new Uint8Array([2])
+				}),
+				'https://static.example.com/wasm-zig/std.zip'
+			)
+		).rejects.toThrow('Zig standard library archive path collision: std/collision/nested.zig');
+	});
+
+	it('bounds gzip-expanded TAR bytes before materializing the archive', async () => {
+		await expect(
+			loadZigStdDirectory(
+				new Uint8Array(stdlibTarGzip),
+				'https://static.example.com/wasm-zig/std.tar.gz',
+				{ maxExpandedBytes: 512, maxFiles: 10 }
+			)
+		).rejects.toThrow('512 byte limit');
+	});
+
+	it('rejects TAR archives larger than the file-count budget', async () => {
+		const archive = createTarGzip([
+			{ path: 'std/a.zig', contents: new Uint8Array([1]) },
+			{ path: 'std/b.zig', contents: new Uint8Array([2]) }
+		]);
+
+		await expect(
+			loadZigStdDirectory(
+				new Uint8Array(archive),
+				'https://static.example.com/wasm-zig/std.tar.gz',
+				{ maxExpandedBytes: 4096, maxFiles: 1 }
+			)
+		).rejects.toThrow('Zig standard library archive exceeds the 1 file limit');
+	});
+
+	it('rejects unsafe TAR paths instead of normalizing traversal', async () => {
+		const archive = createTarGzip([
+			{ path: 'std/../escape.zig', contents: new Uint8Array([1]) }
+		]);
+
+		await expect(
+			loadZigStdDirectory(
+				new Uint8Array(archive),
+				'https://static.example.com/wasm-zig/std.tar.gz',
+				{ maxExpandedBytes: 4096, maxFiles: 10 }
+			)
+		).rejects.toThrow('Zig standard library archive has an unsafe path: std/../escape.zig');
+	});
+});
 
 describe('createZigWorkerService', () => {
 	it('uses the wasm-zig compiler host for diagnostics, completion, and hover', async () => {

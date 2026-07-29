@@ -60,10 +60,19 @@ interface ZigCompilerHost {
 	}): Promise<ZigCompilerResult>;
 }
 
+interface ZigStdlibArchiveLimits {
+	maxExpandedBytes?: number;
+	maxFiles?: number;
+}
+
 type LoadZigCompilerHost = (
 	options: ZigWorkerOptions,
 	context: LspDocumentContext
 ) => Promise<ZigCompilerHost>;
+
+const DEFAULT_ZIG_STDLIB_MAX_EXPANDED_BYTES = 128 * 1024 * 1024;
+const DEFAULT_ZIG_STDLIB_MAX_FILES = 4096;
+const DEFAULT_ZIP_FILE_BUFFER_BYTES = 64 * 1024;
 
 const ZIG_KEYWORDS = [
 	'addrspace',
@@ -276,32 +285,193 @@ async function fetchBytes(
 	});
 }
 
-async function loadStdDirectory(source: Uint8Array, assetUrl: string) {
+class ZigStdlibArchiveBudget {
+	private declaredBytes = 0;
+	private expandedBytes = 0;
+	private fileCount = 0;
+	private readonly entries = new Map<string, 'directory' | 'file'>();
+
+	constructor(
+		private readonly maxExpandedBytes: number,
+		private readonly maxFiles: number
+	) {}
+
+	addDirectory(path: string) {
+		const normalized = this.normalizePath(path, true);
+		const parts = normalized.split('/');
+		for (let index = 1; index <= parts.length; index += 1) {
+			const directoryPath = parts.slice(0, index).join('/');
+			if (this.entries.get(directoryPath) === 'file') {
+				throw new Error(`Zig standard library archive path collision: ${normalized}`);
+			}
+			this.entries.set(directoryPath, 'directory');
+		}
+	}
+
+	startFile(path: string, declaredBytes?: number) {
+		const normalized = this.normalizePath(path, false);
+		if (this.entries.has(normalized)) {
+			throw new Error(`Zig standard library archive repeats path: ${normalized}`);
+		}
+		const parts = normalized.split('/');
+		for (let index = 1; index < parts.length; index += 1) {
+			const parent = parts.slice(0, index).join('/');
+			if (this.entries.get(parent) === 'file') {
+				throw new Error(`Zig standard library archive path collision: ${normalized}`);
+			}
+		}
+		const nextFileCount = this.fileCount + 1;
+		if (nextFileCount > this.maxFiles) {
+			throw new Error(`Zig standard library archive exceeds the ${this.maxFiles} file limit`);
+		}
+		if (
+			declaredBytes !== undefined &&
+			(!Number.isSafeInteger(declaredBytes) || declaredBytes < 0)
+		) {
+			throw new Error(`Zig standard library archive has an invalid size for ${normalized}`);
+		}
+		const nextDeclaredBytes = this.declaredBytes + (declaredBytes ?? 0);
+		if (nextDeclaredBytes > this.maxExpandedBytes) {
+			throw new Error(
+				`Zig standard library archive exceeds the ${this.maxExpandedBytes} byte expanded-size limit`
+			);
+		}
+		for (let index = 1; index < parts.length; index += 1) {
+			const parent = parts.slice(0, index).join('/');
+			if (!this.entries.has(parent)) this.entries.set(parent, 'directory');
+		}
+		this.entries.set(normalized, 'file');
+		this.fileCount = nextFileCount;
+		this.declaredBytes = nextDeclaredBytes;
+		return normalized;
+	}
+
+	addExpandedBytes(byteLength: number) {
+		const nextExpandedBytes = this.expandedBytes + byteLength;
+		if (nextExpandedBytes > this.maxExpandedBytes) {
+			throw new Error(
+				`Zig standard library archive exceeds the ${this.maxExpandedBytes} byte expanded-size limit`
+			);
+		}
+		this.expandedBytes = nextExpandedBytes;
+	}
+
+	private normalizePath(path: string, directory: boolean) {
+		const candidate = directory ? path.replace(/\/+$/u, '') : path;
+		if (
+			!candidate ||
+			candidate.includes('\\') ||
+			candidate.includes('\0') ||
+			candidate.startsWith('/') ||
+			/%2f|%5c/iu.test(candidate)
+		) {
+			throw new Error(`Zig standard library archive has an unsafe path: ${path}`);
+		}
+		const parts = candidate.split('/');
+		if (parts.some((part) => !part || part === '.' || part === '..')) {
+			throw new Error(`Zig standard library archive has an unsafe path: ${path}`);
+		}
+		const normalized = parts.join('/');
+		if (normalized !== 'std' && !normalized.startsWith('std/')) {
+			throw new Error(`Zig standard library archive path is outside std/: ${path}`);
+		}
+		if (!directory && normalized === 'std') {
+			throw new Error(`Zig standard library archive has an unsafe file path: ${path}`);
+		}
+		return normalized;
+	}
+}
+
+export async function loadZigStdDirectory(
+	source: Uint8Array,
+	assetUrl: string,
+	limits: ZigStdlibArchiveLimits = {}
+) {
+	const maxExpandedBytes = limits.maxExpandedBytes ?? DEFAULT_ZIG_STDLIB_MAX_EXPANDED_BYTES;
+	const maxFiles = limits.maxFiles ?? DEFAULT_ZIG_STDLIB_MAX_FILES;
+	if (!Number.isSafeInteger(maxExpandedBytes) || maxExpandedBytes <= 0) {
+		throw new TypeError(
+			'Zig standard library maxExpandedBytes must be a positive safe integer'
+		);
+	}
+	if (!Number.isSafeInteger(maxFiles) || maxFiles <= 0) {
+		throw new TypeError('Zig standard library maxFiles must be a positive safe integer');
+	}
 	const root = new Directory(new Map());
+	const budget = new ZigStdlibArchiveBudget(maxExpandedBytes, maxFiles);
 	if (source.byteLength >= 2 && source[0] === 0x50 && source[1] === 0x4b) {
 		const { Unzip, UnzipInflate } = await import('fflate');
 		let archiveError: unknown;
 		const unzip = new Unzip((file) => {
-			if (!file.name || file.name.endsWith('/')) return;
-			const chunks: Uint8Array[] = [];
+			const stopFile = (error: unknown) => {
+				archiveError ??= error;
+				try {
+					file.terminate();
+				} catch {
+					// Preserve the archive validation or decompression error.
+				}
+			};
+			if (archiveError) {
+				stopFile(archiveError);
+				return;
+			}
+			if (file.name.endsWith('/')) {
+				try {
+					budget.addDirectory(file.name);
+				} catch (error) {
+					stopFile(error);
+				}
+				return;
+			}
+			let normalizedPath: string;
+			try {
+				normalizedPath = budget.startFile(file.name, file.originalSize);
+			} catch (error) {
+				stopFile(error);
+				return;
+			}
+			let contents = new Uint8Array(
+				Math.min(
+					maxExpandedBytes,
+					file.originalSize ?? DEFAULT_ZIP_FILE_BUFFER_BYTES,
+					DEFAULT_ZIP_FILE_BUFFER_BYTES
+				)
+			);
 			let length = 0;
 			file.ondata = (error, data, final) => {
 				if (error) {
-					archiveError = error;
+					stopFile(error);
 					return;
 				}
-				if (data.byteLength > 0) {
-					chunks.push(data);
-					length += data.byteLength;
+				if (archiveError) return;
+				const nextLength = length + data.byteLength;
+				try {
+					budget.addExpandedBytes(data.byteLength);
+				} catch (budgetError) {
+					stopFile(budgetError);
+					return;
 				}
+				if (nextLength > contents.byteLength) {
+					const nextCapacity = Math.min(
+						maxExpandedBytes,
+						Math.max(nextLength, Math.max(1, contents.byteLength * 2))
+					);
+					const grown = new Uint8Array(nextCapacity);
+					grown.set(contents.subarray(0, length));
+					contents = grown;
+				}
+				contents.set(data, length);
+				length = nextLength;
 				if (!final) return;
-				const contents = new Uint8Array(length);
-				let offset = 0;
-				for (const chunk of chunks) {
-					contents.set(chunk, offset);
-					offset += chunk.byteLength;
+				if (file.originalSize !== undefined && length !== file.originalSize) {
+					stopFile(
+						new Error(
+							`Zig standard library archive size mismatch for ${normalizedPath}: expected ${file.originalSize}, received ${length}`
+						)
+					);
+					return;
 				}
-				addFileToDirectory(root, file.name, contents);
+				addFileToDirectory(root, normalizedPath, contents.slice(0, length));
 			};
 			file.start();
 		});
@@ -309,10 +479,14 @@ async function loadStdDirectory(source: Uint8Array, assetUrl: string) {
 		unzip.push(source, true);
 		if (archiveError) throw archiveError;
 	} else {
-		untar(await decompressGzip(source, assetUrl), {
-			addDirectory() {},
+		untar(await decompressGzip(source, assetUrl, maxExpandedBytes), {
+			addDirectory(directoryPath) {
+				budget.addDirectory(directoryPath);
+			},
 			addFile(filePath, contents) {
-				addFileToDirectory(root, filePath, contents);
+				const normalizedPath = budget.startFile(filePath, contents.byteLength);
+				budget.addExpandedBytes(contents.byteLength);
+				addFileToDirectory(root, normalizedPath, contents);
 			}
 		});
 	}
@@ -337,7 +511,7 @@ async function loadDefaultZigCompilerHost(
 	]);
 	const [compilerModule, stdDirectory] = await Promise.all([
 		WebAssembly.compile(compilerBytes),
-		loadStdDirectory(stdlibBytes, options.stdlibUrl)
+		loadZigStdDirectory(stdlibBytes, options.stdlibUrl)
 	]);
 
 	return {
