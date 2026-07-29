@@ -284,15 +284,13 @@ export async function fetchBrowserToolAsset(
 			finalUrl = new URL(response.url);
 		} catch (error) {
 			await cancelResponse(response, error);
-			throw new Error(`${label} returned an invalid final URL: ${response.url}`, {
+			throw new Error(`${label} returned an invalid final URL`, {
 				cause: error
 			});
 		}
 		if (finalUrl.href !== requestUrl.href) {
 			await cancelResponse(response);
-			throw new Error(
-				`${label} final URL mismatch: expected ${requestUrl.href}, received ${response.url}`
-			);
+			throw new Error(`${label} final URL mismatch`);
 		}
 	}
 	if (!response.ok) {

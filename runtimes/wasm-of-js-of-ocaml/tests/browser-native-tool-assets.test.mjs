@@ -191,6 +191,7 @@ test('cancels an unknown-length stream that crosses the aggregate input budget',
 
 test('rejects substituted final URLs and invalid UTF-8 tool sources', async () => {
 	let cancelled = false;
+	const finalUrlSecret = 'signed-final-url-secret';
 	const requestedUrl = new URL('tool.js', BASE_URL).href;
 	const response = responseWithUrl(
 		new ReadableStream({
@@ -198,7 +199,7 @@ test('rejects substituted final URLs and invalid UTF-8 tool sources', async () =
 				cancelled = true;
 			}
 		}),
-		new URL('other.js', BASE_URL).href
+		`https://runtime-user:password@assets.example/other.js?signature=${finalUrlSecret}#access-token`
 	);
 
 	await assert.rejects(
@@ -208,11 +209,17 @@ test('rejects substituted final URLs and invalid UTF-8 tool sources', async () =
 			createBrowserToolInputBudget({ maxAssetBytes: 8, maxTotalBytes: 16 }),
 			{ fetch: async () => response }
 		),
-		/final URL mismatch/
+		(error) => {
+			assert.equal(error.message, 'OCaml tool final URL mismatch');
+			assert.equal(error.message.includes(finalUrlSecret), false);
+			assert.equal(error.message.includes('access-token'), false);
+			return true;
+		}
 	);
 	assert.equal(cancelled, true);
 
 	let invalidUrlCancelled = false;
+	const invalidFinalUrl = '://invalid-final-url-secret';
 	await assert.rejects(
 		fetchBrowserToolAsset(
 			requestedUrl,
@@ -220,7 +227,7 @@ test('rejects substituted final URLs and invalid UTF-8 tool sources', async () =
 			createBrowserToolInputBudget({ maxAssetBytes: 8, maxTotalBytes: 16 }),
 			{
 				fetch: async () => ({
-					url: 'http://[',
+					url: invalidFinalUrl,
 					ok: true,
 					status: 200,
 					headers: new Headers(),
@@ -232,7 +239,11 @@ test('rejects substituted final URLs and invalid UTF-8 tool sources', async () =
 				})
 			}
 		),
-		/invalid final URL/
+		(error) => {
+			assert.equal(error.message, 'OCaml tool returned an invalid final URL');
+			assert.equal(error.message.includes(invalidFinalUrl), false);
+			return true;
+		}
 	);
 	assert.equal(invalidUrlCancelled, true);
 	assert.throws(
