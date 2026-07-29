@@ -30,7 +30,50 @@ async function fetchRuntimeBytes(baseUrl, path) {
 	return new Response(decompressed).arrayBuffer();
 }
 
-function createInputReader(stdin) {
+function createSharedInputReader(channel) {
+	if (channel === undefined) return null;
+	if (
+		channel?.protocol !== 'wasm-idle-static-stdin-ring' ||
+		channel?.protocolVersion !== 1 ||
+		channel?.controlBytes !== 16 ||
+		!Number.isSafeInteger(channel?.capacity) ||
+		channel.capacity <= 0 ||
+		typeof SharedArrayBuffer !== 'function' ||
+		!(channel.buffer instanceof SharedArrayBuffer) ||
+		channel.buffer.byteLength !== channel.controlBytes + channel.capacity ||
+		typeof Atomics.wait !== 'function'
+	) {
+		throw new Error('Invalid CBQN streaming stdin channel.');
+	}
+
+	const control = new Int32Array(channel.buffer, 0, 4);
+	const bytes = new Uint8Array(channel.buffer, channel.controlBytes, channel.capacity);
+	return () => {
+		while (true) {
+			if (Atomics.load(control, 3) === 1) {
+				throw new Error('CBQN streaming stdin was cancelled.');
+			}
+			const write = Atomics.load(control, 0);
+			const read = Atomics.load(control, 1);
+			const available = write - read;
+			if (available < 0 || available > bytes.byteLength) {
+				throw new Error('CBQN streaming stdin counters are invalid.');
+			}
+			if (available > 0) {
+				const value = bytes[read % bytes.byteLength];
+				Atomics.store(control, 1, read + 1);
+				return value;
+			}
+			if (Atomics.load(control, 2) === 1) return null;
+			self.postMessage({ type: 'stdin-request' });
+			Atomics.wait(control, 0, write);
+		}
+	};
+}
+
+function createInputReader(stdin, channel) {
+	const sharedReader = createSharedInputReader(channel);
+	if (sharedReader) return sharedReader;
 	const bytes = Array.from(new TextEncoder().encode(typeof stdin === 'string' ? stdin : ''));
 	let index = 0;
 	return () => {
@@ -50,7 +93,7 @@ function createBqnRunner(module) {
 	};
 }
 
-async function createBqnRuntime(baseUrl, stdin, stdout, stderr) {
+async function createBqnRuntime(baseUrl, stdin, stdinChannel, onStdout, stderr) {
 	const wasmBinary = await fetchRuntimeBytes(baseUrl, 'BQN.wasm');
 	const runtimeModule = await import(assetUrl(baseUrl, 'BQN.js'));
 	const createModule = runtimeModule.default || runtimeModule;
@@ -59,27 +102,31 @@ async function createBqnRuntime(baseUrl, stdin, stdout, stderr) {
 	}
 	const module = await createModule({
 		locateFile: (path) => assetUrl(baseUrl, path),
-		print: (message) => stdout.push(String(message)),
+		print: (message) => onStdout(String(message)),
 		printErr: (message) => stderr.push(String(message)),
-		stdin: createInputReader(stdin),
+		stdin: createInputReader(stdin, stdinChannel),
 		wasmBinary
 	});
 	return createBqnRunner(module);
 }
 
 self.onmessage = async (event) => {
-	const { baseUrl, code, stdin, log } = event.data || {};
-	const stdout = [];
+	const { baseUrl, code, stdin, stdinChannel, log } = event.data || {};
 	const stderr = [];
 	try {
 		if (log) console.log(`[wasm-idle:bqn-worker] run start baseUrl=${baseUrl}`);
 		const source = String(code || '');
 		if (source.trim()) {
-			const runBqn = await createBqnRuntime(baseUrl, stdin, stdout, stderr);
+			const runBqn = await createBqnRuntime(
+				baseUrl,
+				stdin,
+				stdinChannel,
+				(message) => postOutput([message]),
+				stderr
+			);
 			runBqn(source);
 		}
 		if (stderr.length > 0) throw new Error(stderr.join('\n'));
-		postOutput(stdout);
 		if (log) console.log('[wasm-idle:bqn-worker] run settled');
 		self.postMessage({ results: true });
 	} catch (error) {

@@ -8,7 +8,7 @@ class Bqn extends StaticWorkerRuntimeSandbox {
 			displayName: 'BQN',
 			defaultActivePath: 'main.bqn',
 			moduleWorker: true,
-			stdin: { mode: 'prebuffered', sourceHintPattern: /•GetLine|stdin/iu },
+			stdin: { mode: 'streaming', sourceHintPattern: /•GetLine|stdin/iu },
 			resolveRuntimeAssets(runtimeAssets: string | PlaygroundRuntimeAssets, currentUrl) {
 				return resolveBqnRuntimeAssetConfig(runtimeAssets, currentUrl);
 			}
