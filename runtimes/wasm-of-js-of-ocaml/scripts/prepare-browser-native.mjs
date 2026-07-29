@@ -229,10 +229,12 @@ async function collectPackageManifest(packageName, packageRootPath, rootUrl, opt
 async function writeRuntimePack(packEntries, assetPath, indexPath) {
 	const packPath = assetPath.replace(/\.gz$/, '');
 	const writer = createWriteStream(packPath);
+	const uncompressedHash = createHash('sha256');
 	const runtimePackEntries = [];
 	let totalBytes = 0;
 	for (const entry of packEntries) {
 		const entryBytes = await readFile(entry.sourcePath);
+		uncompressedHash.update(entryBytes);
 		await new Promise((resolve, reject) => {
 			const handleError = (error) => {
 				writer.off('error', handleError);
@@ -263,8 +265,7 @@ async function writeRuntimePack(packEntries, assetPath, indexPath) {
 		createWriteStream(assetPath)
 	);
 	await rm(packPath, { force: true });
-	await writeFile(
-		indexPath,
+	const indexBytes = Buffer.from(
 		`${JSON.stringify(
 			{
 				format: 'wasm-of-js-of-ocaml-browser-native-runtime-pack-index-v1',
@@ -277,12 +278,19 @@ async function writeRuntimePack(packEntries, assetPath, indexPath) {
 		)}\n`,
 		'utf8'
 	);
+	await writeFile(indexPath, indexBytes);
+	const compressedBytes = await readFile(assetPath);
 	return {
 		format: 'wasm-of-js-of-ocaml-browser-native-runtime-pack-v1',
 		asset: '/.cache/browser-native-bundle/browser-native-runtime-pack.v1.bin.gz',
 		index: '/.cache/browser-native-bundle/browser-native-runtime-pack.v1.index.json',
+		indexBytes: indexBytes.byteLength,
+		indexSha256: sha256(indexBytes),
+		compressedBytes: compressedBytes.byteLength,
+		compressedSha256: sha256(compressedBytes),
 		fileCount: runtimePackEntries.length,
-		totalBytes
+		totalBytes,
+		uncompressedSha256: uncompressedHash.digest('hex')
 	};
 }
 

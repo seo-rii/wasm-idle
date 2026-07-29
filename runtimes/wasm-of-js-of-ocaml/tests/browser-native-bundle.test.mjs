@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gunzipSync } from 'node:zlib';
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(testDir, '..');
@@ -104,8 +106,15 @@ test('browser-native bundle records runtime pack metadata', async () => {
 	);
 	assert.equal(typeof manifest.runtimePack.fileCount, 'number');
 	assert.equal(typeof manifest.runtimePack.totalBytes, 'number');
+	assert.equal(typeof manifest.runtimePack.indexBytes, 'number');
+	assert.match(manifest.runtimePack.indexSha256, /^[0-9a-f]{64}$/u);
+	assert.equal(typeof manifest.runtimePack.compressedBytes, 'number');
+	assert.match(manifest.runtimePack.compressedSha256, /^[0-9a-f]{64}$/u);
+	assert.match(manifest.runtimePack.uncompressedSha256, /^[0-9a-f]{64}$/u);
 	assert.ok(manifest.runtimePack.fileCount > 0);
 	assert.ok(manifest.runtimePack.totalBytes > 0);
+	assert.ok(manifest.runtimePack.indexBytes > 0);
+	assert.ok(manifest.runtimePack.compressedBytes > 0);
 });
 
 test('browser-native runtime pack index includes stdlib and yojson entries', async () => {
@@ -116,7 +125,16 @@ test('browser-native runtime pack index includes stdlib and yojson entries', asy
 		'browser-native-bundle',
 		'browser-native-runtime-pack.v1.index.json'
 	);
-	const runtimePackIndex = JSON.parse(await readFile(runtimePackIndexPath, 'utf8'));
+	const runtimePackAssetPath = path.join(
+		projectRoot,
+		'.cache',
+		'browser-native-bundle',
+		'browser-native-runtime-pack.v1.bin.gz'
+	);
+	const runtimePackIndexBytes = await readFile(runtimePackIndexPath);
+	const runtimePackAssetBytes = await readFile(runtimePackAssetPath);
+	const runtimePackBytes = gunzipSync(runtimePackAssetBytes);
+	const runtimePackIndex = JSON.parse(runtimePackIndexBytes.toString('utf8'));
 
 	assert.equal(
 		runtimePackIndex.format,
@@ -124,6 +142,21 @@ test('browser-native runtime pack index includes stdlib and yojson entries', asy
 	);
 	assert.equal(runtimePackIndex.fileCount, manifest.runtimePack.fileCount);
 	assert.equal(runtimePackIndex.totalBytes, manifest.runtimePack.totalBytes);
+	assert.equal(runtimePackIndexBytes.byteLength, manifest.runtimePack.indexBytes);
+	assert.equal(
+		createHash('sha256').update(runtimePackIndexBytes).digest('hex'),
+		manifest.runtimePack.indexSha256
+	);
+	assert.equal(runtimePackAssetBytes.byteLength, manifest.runtimePack.compressedBytes);
+	assert.equal(
+		createHash('sha256').update(runtimePackAssetBytes).digest('hex'),
+		manifest.runtimePack.compressedSha256
+	);
+	assert.equal(runtimePackBytes.byteLength, manifest.runtimePack.totalBytes);
+	assert.equal(
+		createHash('sha256').update(runtimePackBytes).digest('hex'),
+		manifest.runtimePack.uncompressedSha256
+	);
 	assert.ok(
 		runtimePackIndex.entries.some(
 			(entry) => entry.runtimePath === '/static/toolchain/lib/ocaml/stdlib.cma'

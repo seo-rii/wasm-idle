@@ -75,6 +75,11 @@ The Playwright tests assert that the browser-native path does not call `/api/bin
 
 The runtime pack stores OCaml stdlib and supported package files in one compressed asset. The index maps each virtual toolchain path to a byte range inside the decompressed payload.
 
+The manifest records the exact index and compressed sizes, SHA-256 receipts for both files, and a
+separate SHA-256 receipt for the expanded payload. The browser verifies each stage before publishing
+the pack to a compiler worker, so a truncated, substituted, corrupt, or unexpectedly expanded pack
+fails closed.
+
 This reduces the number of static file requests and avoids leaving thousands of individual package files in downstream apps.
 
 ## Binaryen Modes

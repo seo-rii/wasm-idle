@@ -11,8 +11,13 @@ export type BrowserNativeManifestRuntimePack = {
 	format: 'wasm-of-js-of-ocaml-browser-native-runtime-pack-v1';
 	asset: string;
 	index: string;
+	indexBytes: number;
+	indexSha256: string;
+	compressedBytes: number;
+	compressedSha256: string;
 	fileCount: number;
 	totalBytes: number;
+	uncompressedSha256: string;
 };
 
 export type BrowserNativeManifestPackage = {
@@ -336,6 +341,25 @@ function parseJson(bytes: Uint8Array, label: string): unknown {
 	}
 }
 
+async function verifySha256(
+	bytes: Uint8Array<ArrayBuffer>,
+	expectedSha256: string,
+	label: string,
+	signal?: AbortSignal
+) {
+	throwIfAborted(signal);
+	const subtle = globalThis.crypto?.subtle;
+	if (!subtle) throw new Error(`SHA-256 is unavailable while verifying ${label}`);
+	const digest = new Uint8Array(await subtle.digest('SHA-256', bytes));
+	throwIfAborted(signal);
+	const actualSha256 = Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join('');
+	if (actualSha256 !== expectedSha256) {
+		throw new Error(
+			`${label} SHA-256 mismatch: expected ${expectedSha256}, received ${actualSha256}`
+		);
+	}
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -605,7 +629,16 @@ export async function loadBrowserNativeRuntimePack(
 		typeof runtimePack.asset !== 'string' ||
 		!runtimePack.asset ||
 		typeof runtimePack.index !== 'string' ||
-		!runtimePack.index
+		!runtimePack.index ||
+		!Number.isSafeInteger(runtimePack.indexBytes) ||
+		runtimePack.indexBytes <= 0 ||
+		runtimePack.indexBytes > limits.maxMetadataBytes ||
+		!Number.isSafeInteger(runtimePack.compressedBytes) ||
+		runtimePack.compressedBytes <= 0 ||
+		runtimePack.compressedBytes > limits.maxAssetBytes ||
+		!/^[0-9a-f]{64}$/u.test(runtimePack.indexSha256) ||
+		!/^[0-9a-f]{64}$/u.test(runtimePack.compressedSha256) ||
+		!/^[0-9a-f]{64}$/u.test(runtimePack.uncompressedSha256)
 	) {
 		throw new Error('invalid browser-native runtime pack metadata');
 	}
@@ -642,8 +675,17 @@ export async function loadBrowserNativeRuntimePack(
 	const indexBytes = await fetchBoundedRuntimeAsset(
 		runtimePack.index,
 		'browser-native runtime pack index',
-		limits.maxMetadataBytes,
+		runtimePack.indexBytes,
 		options
+	);
+	if (indexBytes.byteLength !== runtimePack.indexBytes) {
+		throw new Error('browser-native runtime pack index size does not match the manifest');
+	}
+	await verifySha256(
+		indexBytes,
+		runtimePack.indexSha256,
+		'browser-native runtime pack index',
+		options.signal
 	);
 	const parsedIndex = parseJson(indexBytes, 'browser-native runtime pack index');
 	if (
@@ -708,8 +750,17 @@ export async function loadBrowserNativeRuntimePack(
 	let bytes = await fetchBoundedRuntimeAsset(
 		runtimePack.asset,
 		'browser-native runtime pack asset',
-		limits.maxAssetBytes,
+		runtimePack.compressedBytes,
 		options
+	);
+	if (bytes.byteLength !== runtimePack.compressedBytes) {
+		throw new Error('browser-native runtime pack compressed size does not match the manifest');
+	}
+	await verifySha256(
+		bytes,
+		runtimePack.compressedSha256,
+		'browser-native runtime pack compressed asset',
+		options.signal
 	);
 	if (bytes.byteLength >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b) {
 		if (typeof DecompressionStream !== 'function') {
@@ -740,6 +791,12 @@ export async function loadBrowserNativeRuntimePack(
 	if (bytes.byteLength !== runtimePack.totalBytes) {
 		throw new Error('browser-native runtime pack metadata does not match payload');
 	}
+	await verifySha256(
+		bytes,
+		runtimePack.uncompressedSha256,
+		'browser-native runtime pack expanded payload',
+		options.signal
+	);
 	return { bytes, entries };
 }
 
