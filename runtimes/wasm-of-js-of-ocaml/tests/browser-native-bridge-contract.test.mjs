@@ -72,3 +72,25 @@ test('browser-native dispatcher transfers transient preload buffers to the tool 
 	assert.match(dispatcherSource, /const transferPreloadBuffers = request\.preloadFiles\.flatMap/);
 	assert.match(dispatcherSource, /\},\s*transferPreloadBuffers\s*\);/u);
 });
+
+test('browser-native worker applies one bounded budget to compiler and preload inputs', async () => {
+	const workerSource = await readFile(
+		path.join(projectRoot, 'browser-harness', 'native-tool-worker.ts'),
+		'utf8'
+	);
+	const materializeStart = workerSource.indexOf('async function materializePreloadFiles');
+	const materializeEnd = workerSource.indexOf(
+		"self.addEventListener('message'",
+		materializeStart
+	);
+	assert.notEqual(materializeStart, -1);
+	assert.notEqual(materializeEnd, -1);
+	const materializeSource = workerSource.slice(materializeStart, materializeEnd);
+
+	assert.match(workerSource, /const inputBudget = createBrowserToolInputBudget\(\);/);
+	assert.match(workerSource, /materializePreloadFiles\(request\.preloadFiles, inputBudget\)/);
+	assert.match(workerSource, /fetchBrowserToolAsset\(\s*request\.toolUrl,[\s\S]*?inputBudget,/u);
+	assert.match(materializeSource, /accountBrowserToolInputBytes\(budget, label,/);
+	assert.doesNotMatch(workerSource, /await toolResponse\.text\(\)/);
+	assert.doesNotMatch(materializeSource, /new Uint8Array\(await response\.arrayBuffer\(\)\)/);
+});

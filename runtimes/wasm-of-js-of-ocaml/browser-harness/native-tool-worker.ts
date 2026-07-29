@@ -1,3 +1,11 @@
+import {
+	accountBrowserToolInputBytes,
+	createBrowserToolInputBudget,
+	decodeBrowserToolSource,
+	fetchBrowserToolAsset,
+	type BrowserToolInputBudget
+} from '../runtime/browser-native-tool-assets.js';
+
 type PreloadFile = {
 	path: string;
 	url?: string;
@@ -765,35 +773,39 @@ function runBinaryenTool(
 	}
 }
 
-async function materializePreloadFiles(preloadFiles: PreloadFile[]) {
+async function materializePreloadFiles(
+	preloadFiles: PreloadFile[],
+	budget: BrowserToolInputBudget
+) {
 	const encoder = new TextEncoder();
 	const materialized = [];
 	for (let index = 0; index < preloadFiles.length; index += 24) {
 		const batch = preloadFiles.slice(index, index + 24);
 		const batchResults = await Promise.all(
 			batch.map(async (preloadFile) => {
+				const label = `browser-native preload ${preloadFile.path}`;
 				if (typeof preloadFile.text === 'string') {
+					const content = encoder.encode(preloadFile.text);
+					accountBrowserToolInputBytes(budget, label, content.byteLength);
 					return {
 						name: preloadFile.path,
-						content: encoder.encode(preloadFile.text)
+						content
 					};
 				}
 				if (preloadFile.bytes instanceof ArrayBuffer) {
+					accountBrowserToolInputBytes(budget, label, preloadFile.bytes.byteLength);
 					return {
 						name: preloadFile.path,
 						content: bytesToBinaryString(new Uint8Array(preloadFile.bytes))
 					};
 				}
 				if (preloadFile.url) {
-					const response = await fetch(preloadFile.url, { cache: 'force-cache' });
-					if (!response.ok) {
-						throw new Error(
-							`failed to fetch preload file: ${preloadFile.url} (${response.status})`
-						);
-					}
+					const content = await fetchBrowserToolAsset(preloadFile.url, label, budget, {
+						cache: 'force-cache'
+					});
 					return {
 						name: preloadFile.path,
-						content: bytesToBinaryString(new Uint8Array(await response.arrayBuffer()))
+						content: bytesToBinaryString(content)
 					};
 				}
 				throw new Error(`preload file is missing data: ${preloadFile.path}`);
@@ -831,12 +843,17 @@ self.addEventListener('message', async (event: MessageEvent<RunToolRequest>) => 
 	const originalCreatedFiles = runtimeSlots['__jsoo_created_files'];
 
 	try {
-		const preloadFiles = await materializePreloadFiles(request.preloadFiles);
-		const toolResponse = await fetch(request.toolUrl, { cache: 'no-store' });
-		if (!toolResponse.ok) {
-			throw new Error(`failed to fetch browser tool: ${request.toolUrl}`);
-		}
-		const toolSource = patchToolSource(await toolResponse.text());
+		const inputBudget = createBrowserToolInputBudget();
+		const preloadFiles = await materializePreloadFiles(request.preloadFiles, inputBudget);
+		const toolBytes = await fetchBrowserToolAsset(
+			request.toolUrl,
+			'browser-native tool source',
+			inputBudget,
+			{ cache: 'no-store' }
+		);
+		const toolSource = patchToolSource(
+			decodeBrowserToolSource(toolBytes, 'browser-native tool source')
+		);
 		const patchedToolSource = toolSource;
 
 		runtimeSlots['__jsoo_mounts'] = [];
