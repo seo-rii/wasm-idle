@@ -99,6 +99,9 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/if \(executionDebugMode === 'lldb'\) \{/);
 		expect(source).toMatch(/executionDebugMode = 'trace';/);
 		expect(source).toMatch(/parseDebugRuntimeManifest\(await response\.json\(\)\)/);
+		expect(source).toMatch(
+			/await preflightDebugRuntimeAssets\(\s*manifest,\s*runtimeAssets\.debug\.baseUrl\s*\);/s
+		);
 		expect(source).toMatch(/if \(!debug\.paused\) debug\.reset\(\);/);
 		expect(source).toMatch(
 			/title=\{debug\.cursorLine\s+\?\s+`Run to Cursor \(L\$\{debug\.cursorLine\}\)`\s+:\s+'Run to Cursor'\}/

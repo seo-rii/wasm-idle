@@ -1,5 +1,5 @@
 import { DapClient } from './dap-client.js';
-import { resolveDebugRuntimeAssets, sha256Hex, verifyAssetSha256 } from './manifest.js';
+import { preflightDebugRuntimeAssets, sha256Hex } from './manifest.js';
 import { createSharedByteQueue, SharedByteQueue } from './shared-byte-queue.js';
 import { validateDebugSourcePath } from './worker/module-loader.js';
 import type {
@@ -139,11 +139,14 @@ export class BrowserLldbSession {
 		const stdin = createSharedByteQueue(queueCapacity, queueGeneration);
 		const stdout = createSharedByteQueue(queueCapacity, queueGeneration);
 		const stderr = createSharedByteQueue(queueCapacity, queueGeneration);
-		const assets = resolveDebugRuntimeAssets(
-			this.options.manifest,
-			this.options.runtimeBaseUrl
+		const assets = await this.awaitWhileActive(
+			preflightDebugRuntimeAssets(
+				this.options.manifest,
+				this.options.runtimeBaseUrl,
+				this.options.fetchImpl ?? fetch,
+				this.lifecycleAbortController.signal
+			)
 		);
-		await this.awaitWhileActive(this.verifyRuntimeAssets(assets));
 		this.assertActive();
 		const workerFactory = this.options.workerFactory ?? defaultWorkerFactory;
 		try {
@@ -499,45 +502,6 @@ export class BrowserLldbSession {
 			this.eventListeners.clear();
 		})();
 		return this.disposePromise;
-	}
-
-	private async verifyRuntimeAssets(assets: ReturnType<typeof resolveDebugRuntimeAssets>) {
-		const fetchImpl = this.options.fetchImpl ?? fetch;
-		const checks = [
-			[assets.lldb.js, this.options.manifest.debugger.lldb.jsSha256, 'LLDB JavaScript'],
-			[assets.lldb.wasm, this.options.manifest.debugger.lldb.wasmSha256, 'LLDB WebAssembly'],
-			[
-				assets.lldb.worker,
-				this.options.manifest.debugger.lldb.workerSha256,
-				'LLDB pthread worker'
-			],
-			[
-				assets.targetRuntime.js,
-				this.options.manifest.debugger.targetRuntime.jsSha256,
-				'WAMR JavaScript'
-			],
-			[
-				assets.targetRuntime.wasm,
-				this.options.manifest.debugger.targetRuntime.wasmSha256,
-				'WAMR WebAssembly'
-			],
-			[
-				assets.targetRuntime.worker,
-				this.options.manifest.debugger.targetRuntime.workerSha256,
-				'WAMR pthread worker'
-			]
-		] as const;
-		for (const [url, expectedSha256, label] of checks) {
-			const response = await fetchImpl(url, {
-				signal: this.lifecycleAbortController.signal
-			});
-			if (!response.ok) {
-				throw new Error(
-					`Unable to load ${label} debug asset (${response.status}) from ${url}`
-				);
-			}
-			await verifyAssetSha256(await response.arrayBuffer(), expectedSha256, label);
-		}
 	}
 
 	private attachWorkerEvents(worker: WorkerLike, kind: DebugWorkerKind) {

@@ -177,6 +177,35 @@ export function resolveDebugRuntimeAssets(
 	};
 }
 
+export async function preflightDebugRuntimeAssets(
+	manifest: RuntimeManifestV2,
+	runtimeBaseUrl: string | URL,
+	fetchImpl: typeof fetch = fetch,
+	signal?: AbortSignal
+) {
+	const assets = resolveDebugRuntimeAssets(manifest, runtimeBaseUrl);
+	const checks = [
+		[assets.lldb.js, manifest.debugger.lldb.jsSha256, 'LLDB JavaScript'],
+		[assets.lldb.wasm, manifest.debugger.lldb.wasmSha256, 'LLDB WebAssembly'],
+		[assets.lldb.worker, manifest.debugger.lldb.workerSha256, 'LLDB pthread worker'],
+		[assets.targetRuntime.js, manifest.debugger.targetRuntime.jsSha256, 'WAMR JavaScript'],
+		[assets.targetRuntime.wasm, manifest.debugger.targetRuntime.wasmSha256, 'WAMR WebAssembly'],
+		[
+			assets.targetRuntime.worker,
+			manifest.debugger.targetRuntime.workerSha256,
+			'WAMR pthread worker'
+		]
+	] as const;
+	for (const [url, expectedSha256, label] of checks) {
+		const response = await fetchImpl(url, { signal });
+		if (!response.ok) {
+			throw new Error(`Unable to load ${label} debug asset (${response.status}) from ${url}`);
+		}
+		await verifyAssetSha256(await response.arrayBuffer(), expectedSha256, label);
+	}
+	return assets;
+}
+
 export async function sha256Hex(value: Uint8Array | ArrayBuffer) {
 	const input = value instanceof Uint8Array ? value : new Uint8Array(value);
 	const bytes = new Uint8Array(input.byteLength);

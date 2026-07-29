@@ -77,6 +77,11 @@ transport-write timeout; ordinary DAP requests still use the configured response
 The debug runtime requires a cross-origin-isolated page with `SharedArrayBuffer`. LLDB and WAMR
 assets are lazy-loaded from the versioned producer manifest and are not included in this npm
 package.
+Before compiling an LLDB run, the application resolves all six LLDB/WAMR assets from that manifest,
+downloads them one at a time, and verifies their pinned SHA-256 values. A missing or corrupt asset
+therefore selects trace debugging for that run before DWARF compilation begins. The session repeats
+the same preflight before creating workers so direct package consumers retain the integrity
+boundary.
 
 Repository CI runs `test:browser:debug:lldb` for every pull request and `main` push in a dedicated
 Chromium job. The gate installs Chromium, downloads the four external Clang delivery assets,
@@ -108,6 +113,10 @@ and verifies that the active worker count returns to the first-run baseline afte
 It also requests garbage collection and limits renderer JS heap growth to 64 MiB by default; set
 `WASM_IDLE_DEBUG_HEAP_GROWTH_LIMIT_BYTES` to tune that budget for constrained CI environments. Set
 `WASM_IDLE_DEBUG_BROWSER_CASES=c-relaunch` to run only this fixture locally.
+A fifth C fixture intercepts the LLDB WebAssembly asset with a synthetic 404 after a valid manifest
+load. It requires the application preflight to select trace debugging and still produce
+`trace-asset-fallback=73`. Set `WASM_IDLE_DEBUG_BROWSER_CASES=c-asset-fallback` to run only this
+fixture locally.
 It then sends a DAP `readMemory` request from the LLDB hexadecimal memory reference `0x0` for four
 bytes of Wasm linear memory through the complete Sandbox and Terminal control path and verifies
 that the response is readable before resuming. The hexadecimal form matters because LLDB-DAP

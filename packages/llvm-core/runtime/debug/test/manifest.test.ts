@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest';
 
 import {
 	parseDebugRuntimeManifest,
+	preflightDebugRuntimeAssets,
 	resolveDebugRuntimeAssets,
 	verifyAssetSha256
 } from '../src/manifest.js';
 
 const hash = 'a'.repeat(64);
+const debugAssetHash = 'a647260c0a2f386cdb893fdc303169041dcf2955da1fa881501863ec8b968785';
 
 function manifest() {
 	return {
@@ -128,5 +130,50 @@ describe('debug runtime manifest', () => {
 			)
 		).resolves.toBeUndefined();
 		await expect(verifyAssetSha256(bytes, hash, 'lldb')).rejects.toThrow(/mismatch/u);
+	});
+
+	it('preflights every LLDB/WAMR asset in order before workers are created', async () => {
+		const parsed = parseDebugRuntimeManifest(manifest());
+		for (const asset of [parsed.debugger.lldb, parsed.debugger.targetRuntime]) {
+			asset.jsSha256 = debugAssetHash;
+			asset.wasmSha256 = debugAssetHash;
+			asset.workerSha256 = debugAssetHash;
+		}
+		const requests: string[] = [];
+
+		await expect(
+			preflightDebugRuntimeAssets(parsed, 'https://cdn.example/runtime/', async (url) => {
+				requests.push(String(url));
+				return new Response('debug-asset');
+			})
+		).resolves.toEqual(resolveDebugRuntimeAssets(parsed, 'https://cdn.example/runtime/'));
+		expect(requests).toEqual([
+			'https://cdn.example/runtime/debug/lldb.js',
+			'https://cdn.example/runtime/debug/lldb.wasm',
+			'https://cdn.example/runtime/debug/lldb.pthread.mjs',
+			'https://cdn.example/runtime/debug/wamr.js',
+			'https://cdn.example/runtime/debug/wamr.wasm',
+			'https://cdn.example/runtime/debug/wamr.worker.mjs'
+		]);
+	});
+
+	it('rejects a missing or corrupt asset during preflight', async () => {
+		const parsed = parseDebugRuntimeManifest(manifest());
+		parsed.debugger.lldb.jsSha256 = debugAssetHash;
+
+		await expect(
+			preflightDebugRuntimeAssets(parsed, 'https://cdn.example/runtime/', async (url) =>
+				String(url).endsWith('lldb.wasm')
+					? new Response(null, { status: 404 })
+					: new Response('debug-asset')
+			)
+		).rejects.toThrow(/LLDB WebAssembly.*404/u);
+		await expect(
+			preflightDebugRuntimeAssets(
+				parsed,
+				'https://cdn.example/runtime/',
+				async () => new Response('corrupt')
+			)
+		).rejects.toThrow(/SHA-256 mismatch/u);
 	});
 });

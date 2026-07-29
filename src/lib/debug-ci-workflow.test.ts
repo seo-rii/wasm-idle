@@ -93,4 +93,12 @@ describe('LLDB browser integration workflow', () => {
 		expect(browserTest).toContain('__wasmIdleWorkerMetrics');
 		expect(browserTest).toContain('WASM_IDLE_DEBUG_HEAP_GROWTH_LIMIT_BYTES');
 	});
+
+	it('keeps a missing-asset trace fallback fixture in the browser gate', async () => {
+		const browserTest = await readFile('src/lib/playground/debug.playwright.test.ts', 'utf8');
+
+		expect(browserTest).toContain("testId: 'c-asset-fallback'");
+		expect(browserTest).toContain("missingDebugAsset: 'debug/lldb-web-dap.wasm'");
+		expect(browserTest).toContain("expectedOutput: 'trace-asset-fallback=73'");
+	});
 });

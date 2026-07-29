@@ -145,6 +145,22 @@ int main() {
 		testId: 'c-relaunch'
 	},
 	{
+		activePath: 'asset-fallback.c',
+		backend: 'trace',
+		expectedOutput: 'trace-asset-fallback=73',
+		language: 'C',
+		missingDebugAsset: 'debug/lldb-web-dap.wasm',
+		programArgs: [],
+		source: `#include <stdio.h>
+
+int main(void) {
+    int value = 73;
+    printf("trace-asset-fallback=%d\\n", value);
+    return 0;
+}`,
+		testId: 'c-asset-fallback'
+	},
+	{
 		activePath: 'solution.rs',
 		backend: 'lldb',
 		breakpointLine: 2,
@@ -403,6 +419,37 @@ describe('native-source browser debugging in Chromium', () => {
 						);
 					});
 					try {
+						if ('missingDebugAsset' in testCase) {
+							await page.addInitScript((assetPath) => {
+								const nativeFetch = globalThis.fetch.bind(globalThis);
+								Object.defineProperty(globalThis, 'fetch', {
+									configurable: true,
+									value: (
+										input: URL | RequestInfo,
+										init?: RequestInit
+									): Promise<Response> => {
+										const url =
+											input instanceof URL
+												? input
+												: new URL(
+														typeof input === 'string'
+															? input
+															: input.url,
+														location.href
+													);
+										if (url.pathname.endsWith(`/${assetPath}`)) {
+											return Promise.resolve(
+												new Response('missing debug asset fixture', {
+													status: 404
+												})
+											);
+										}
+										return nativeFetch(input, init);
+									},
+									writable: true
+								});
+							}, testCase.missingDebugAsset);
+						}
 						const activeState = await ensureSharedBrowserPage(
 							page,
 							previewServer.browserUrl

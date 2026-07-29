@@ -1368,7 +1368,7 @@
 					if (!response.ok) {
 						throw new Error(`LLDB runtime manifest returned ${response.status}.`);
 					}
-					const { parseDebugRuntimeManifest } =
+					const { parseDebugRuntimeManifest, preflightDebugRuntimeAssets } =
 						await import('@wasm-idle/llvm-core/debug');
 					const manifest = parseDebugRuntimeManifest(await response.json());
 					const capabilities = manifest.debugger.capabilities;
@@ -1380,6 +1380,7 @@
 					) {
 						throw new Error('LLDB runtime is missing required debug capabilities.');
 					}
+					await preflightDebugRuntimeAssets(manifest, runtimeAssets.debug.baseUrl);
 					activeDebugBackend = 'lldb';
 				} catch (error) {
 					executionDebugMode = 'trace';
