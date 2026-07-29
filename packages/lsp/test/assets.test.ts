@@ -192,25 +192,32 @@ describe('language tool asset loading', () => {
 
 	it('rejects redirects outside the configured asset bases and omits credentials', async () => {
 		const cancel = vi.fn(async () => {});
+		const secret = 'signed-final-url-secret';
 		const fetchMock = vi.fn().mockResolvedValue({
 			ok: true,
-			url: 'https://evil.example.com/clangd/clangd.js',
+			url: `https://evil.example.com/clangd/clangd.js?signature=${secret}`,
 			headers: { get: vi.fn(() => null) },
 			body: { cancel },
 			arrayBuffer: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3]).buffer)
 		});
 		vi.stubGlobal('fetch', fetchMock);
 
-		await expect(
-			loadLanguageToolAsset(
+		let rejected: unknown;
+		try {
+			await loadLanguageToolAsset(
 				'clangd',
 				'clangd.js',
 				{ baseUrl: 'https://assets.example.com/clangd/' },
 				vi.fn()
-			)
-		).rejects.toThrow(
-			'Runtime asset clangd.js URL is outside the allowed asset bases: https://evil.example.com/clangd/clangd.js'
+			);
+		} catch (error) {
+			rejected = error;
+		}
+		expect(rejected).toBeInstanceOf(Error);
+		expect((rejected as Error).message).toBe(
+			'Runtime asset clangd.js URL is outside the allowed asset bases'
 		);
+		expect((rejected as Error).message).not.toContain(secret);
 		expect(fetchMock).toHaveBeenCalledWith(
 			'https://assets.example.com/clangd/clangd.js',
 			expect.objectContaining({
@@ -227,25 +234,34 @@ describe('language tool asset loading', () => {
 		const cancel = vi.fn(async () => {});
 		const getReader = vi.fn();
 		const arrayBuffer = vi.fn();
+		const invalidFinalUrl = '://invalid-final-url-secret';
 		vi.stubGlobal(
 			'fetch',
 			vi.fn().mockResolvedValue({
 				ok: true,
-				url: 'clangd.js',
+				url: invalidFinalUrl,
 				headers: { get: vi.fn(() => null) },
 				body: { cancel, getReader },
 				arrayBuffer
 			})
 		);
 
-		await expect(
-			loadLanguageToolAsset(
+		let rejected: unknown;
+		try {
+			await loadLanguageToolAsset(
 				'clangd',
 				'clangd.js',
 				{ baseUrl: 'https://assets.example.com/clangd/' },
 				vi.fn()
-			)
-		).rejects.toThrow('Runtime asset clangd.js has an invalid final response URL: clangd.js');
+			);
+		} catch (error) {
+			rejected = error;
+		}
+		expect(rejected).toBeInstanceOf(Error);
+		expect((rejected as Error).message).toBe(
+			'Runtime asset clangd.js has an invalid final response URL'
+		);
+		expect((rejected as Error).message).not.toContain(invalidFinalUrl);
 		expect(cancel).toHaveBeenCalledOnce();
 		expect(getReader).not.toHaveBeenCalled();
 		expect(arrayBuffer).not.toHaveBeenCalled();

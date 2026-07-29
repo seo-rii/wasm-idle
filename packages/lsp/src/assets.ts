@@ -143,9 +143,7 @@ const requireAllowedAssetUrl = (
 		return url.origin === base.origin && url.pathname.startsWith(basePath);
 	});
 	if (!allowed) {
-		throw new Error(
-			`Runtime asset ${asset} URL is outside the allowed asset bases: ${url.href}`
-		);
+		throw new Error(`Runtime asset ${asset} URL is outside the allowed asset bases`);
 	}
 	return url;
 };
@@ -180,9 +178,7 @@ async function fetchAsset(
 		try {
 			finalResponseUrl = new URL(response.url).href;
 		} catch {
-			const error = new Error(
-				`Runtime asset ${asset} has an invalid final response URL: ${response.url}`
-			);
+			const error = new Error(`Runtime asset ${asset} has an invalid final response URL`);
 			await response.body?.cancel(error).catch(() => {});
 			throw error;
 		}
