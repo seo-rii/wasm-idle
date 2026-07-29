@@ -68,6 +68,50 @@ describe('runtime asset fetch fallback', () => {
 		expect(cancelled).toBe(true);
 	});
 
+	it.each(['', '-1', '1.5', '1e2', '3, 3', '9007199254740992'])(
+		'rejects and cancels an invalid Content-Length: %s',
+		async (contentLength) => {
+			let cancelled = false;
+			let readerRequested = false;
+			const response = new Response(
+				new ReadableStream({
+					cancel() {
+						cancelled = true;
+					}
+				}),
+				{ headers: { 'content-length': contentLength } }
+			);
+			Object.defineProperty(response.body, 'getReader', {
+				value: () => {
+					readerRequested = true;
+					throw new Error('invalid-length response body should not be read');
+				}
+			});
+
+			await expect(
+				fetchRuntimeAssetBytes(
+					'https://example.test/runtime/data.bin',
+					'data.bin',
+					async () => response,
+					false
+				)
+			).rejects.toThrow(`invalid Content-Length: ${contentLength}`);
+			expect(readerRequested).toBe(false);
+			expect(cancelled).toBe(true);
+		}
+	);
+
+	it('accepts a zero Content-Length declaration', async () => {
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.test/runtime/empty.bin',
+				'empty.bin',
+				async () => new Response(null, { headers: { 'content-length': '0' } }),
+				false
+			)
+		).resolves.toEqual(new Uint8Array());
+	});
+
 	it('cancels a failed response before trying the gzip fallback', async () => {
 		const assetUrl = 'https://example.test/runtime/llvm/lld.wasm';
 		let cancelled = false;

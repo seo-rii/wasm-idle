@@ -8,7 +8,18 @@ async function readResponseBytes(
 	onProgress?: (progress: RuntimeAssetDownloadProgress) => void
 ) {
 	const contentLength = response.headers.get('content-length');
-	const total = contentLength ? Number(contentLength) : undefined;
+	let total: number | undefined;
+	if (contentLength !== null) {
+		const normalized = contentLength.trim();
+		const parsed = Number(normalized);
+		if (!/^\d+$/u.test(normalized) || !Number.isSafeInteger(parsed)) {
+			await response.body?.cancel().catch(() => undefined);
+			throw new Error(
+				`wasm-rust runtime asset has an invalid Content-Length: ${contentLength}`
+			);
+		}
+		total = parsed;
+	}
 	if (!response.body) {
 		const bytes = new Uint8Array(await response.arrayBuffer());
 		onProgress?.({ loaded: bytes.byteLength, total: total ?? bytes.byteLength });
