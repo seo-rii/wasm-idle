@@ -1,5 +1,6 @@
 import layoutSource from './+layout.svelte?raw';
 import source from './+page.svelte?raw';
+import { createApplicationRuntimeAssets } from '$lib/playground/applicationAssets';
 import { compile } from 'svelte/compiler';
 import { describe, expect, it } from 'vitest';
 import {
@@ -8,11 +9,20 @@ import {
 	compilerDiagnosticLanguages,
 	editorLanguages,
 	editorOnlyLanguages,
+	languageLabels,
+	playgroundLanguages,
 	type PlaygroundLanguage
 } from './language-registry';
 
+const applicationRuntimeAssets = createApplicationRuntimeAssets('/wasm-idle');
+
 const expectEditorLanguage = (language: PlaygroundLanguage, editorLanguage: string) => {
 	expect(editorLanguages[language]).toBe(editorLanguage);
+};
+
+const expectPlaygroundLanguage = (language: PlaygroundLanguage) => {
+	expect(playgroundLanguages).toContain(language);
+	expect(languageLabels[language]).toBeTruthy();
 };
 
 describe('example route debug actions', () => {
@@ -129,154 +139,38 @@ describe('example route debug actions', () => {
 		);
 	});
 
-	it('passes a local wasm-rust bundle through a reusable playground binding', () => {
-		expect(source).toMatch(
-			/import \{ WASM_GO_ASSET_VERSION \} from '\$lib\/playground\/wasmGoVersion';/
+	it('derives non-debug runtime assets from the deployed application base', () => {
+		expect(source).toContain("from '$lib/playground/applicationAssets';");
+		expect(source).toContain('const applicationRootUrl = base;');
+		expect(source).toContain(
+			'const resolveApplicationAsset = createApplicationAssetResolver(applicationRootUrl);'
 		);
 		expect(source).toMatch(
-			/import \{ WASM_BQN_ASSET_VERSION \} from '\$lib\/playground\/wasmBqnVersion';/
+			/let runtimeAssets = \$derived\.by\(\(\) => \(\{\s+\.\.\.createApplicationRuntimeAssets\(applicationRootUrl\),/s
 		);
 		expect(source).toMatch(
-			/import \{ WASM_JANET_ASSET_VERSION \} from '\$lib\/playground\/wasmJanetVersion';/
+			/\{#each playgroundLanguages as languageOption \(languageOption\)\}\s+<option value=\{languageOption\}>\{languageLabels\[languageOption\]\}<\/option>/s
 		);
-		expect(source).toMatch(
-			/import \{ WASM_JULIA_ASSET_VERSION \} from '\$lib\/playground\/wasmJuliaVersion';/
-		);
-		expect(source).toMatch(
-			/import \{ WASM_NIM_ASSET_VERSION \} from '\$lib\/playground\/wasmNimVersion';/
-		);
-		expect(source).toMatch(
-			/import \{ WASM_SWIFT_ASSET_VERSION \} from '\$lib\/playground\/wasmSwiftVersion';/
-		);
-		expect(source).toMatch(
-			/import \{ WASM_D_ASSET_VERSION \} from '\$lib\/playground\/wasmDVersion';/
-		);
-		expect(source).toMatch(
-			/import \{ WASM_DOTNET_ASSET_VERSION \} from '\$lib\/playground\/wasmDotnetVersion';/
-		);
-		expect(source).toMatch(
-			/import \{ WASM_ELIXIR_ASSET_VERSION \} from '\$lib\/playground\/wasmElixirVersion';/
-		);
-		expect(source).toMatch(
-			/import \{ WASM_OCAML_ASSET_VERSION \} from '\$lib\/playground\/wasmOcamlVersion';/
-		);
-		expect(source).toMatch(
-			/import \{ WASM_OCTAVE_ASSET_VERSION \} from '\$lib\/playground\/wasmOctaveVersion';/
-		);
-		expect(source).toMatch(
-			/import \{ WASM_PROLOG_ASSET_VERSION \} from '\$lib\/playground\/wasmPrologVersion';/
-		);
-		expect(source).toMatch(
-			/import \{ WASM_GLEAM_ASSET_VERSION \} from '\$lib\/playground\/wasmGleamVersion';/
-		);
-		expect(source).toMatch(
-			/import \{ WASM_PERL_ASSET_VERSION \} from '\$lib\/playground\/wasmPerlVersion';/
-		);
-		expect(source).toMatch(
-			/import \{ WASM_RUST_ASSET_VERSION \} from '\$lib\/playground\/wasmRustVersion';/
-		);
-		expect(source).toMatch(
-			/import \{ WASM_TINYGO_ASSET_VERSION \} from '\$lib\/playground\/wasmTinyGoVersion';/
-		);
-		expect(source).toMatch(
-			/import \{ WASM_TYPESCRIPT_ASSET_VERSION \} from '\$lib\/playground\/wasmTypeScriptVersion';/
-		);
-		expect(source).toMatch(
-			/import \{ WASM_WAT_ASSET_VERSION \} from '\$lib\/playground\/wasmWatVersion';/
-		);
-		expect(source).toMatch(
-			/import \{ WASM_LUA_ASSET_VERSION \} from '\$lib\/playground\/wasmLuaVersion';/
-		);
-		expect(source).toMatch(
-			/import \{ WASM_ZIG_ASSET_VERSION \} from '\$lib\/playground\/wasmZigVersion';/
-		);
-		expect(source).toMatch(
-			/import \{ WASM_LISP_ASSET_VERSION \} from '\$lib\/playground\/wasmLispVersion';/
-		);
-		expect(source).toMatch(
-			/import \{ WASM_HASKELL_ASSET_VERSION \} from '\$lib\/playground\/wasmHaskellVersion';/
-		);
-		expect(source).not.toContain('tinygo' + 'CompilePath');
-		expect(source).not.toMatch(/dotnetCompilePath/);
-		expect(source).not.toContain('tinygo' + 'Host' + 'CompileUrl');
-		expect(source).not.toContain('tinygo' + 'Disable' + 'Host' + 'Compile');
-		expect(source).toMatch(
-			/let runtimeAssets = \$derived\.by<PlaygroundRuntimeAssets>\(\(\) => \(\{/
-		);
-		expect(source).toMatch(/rootUrl: path,/);
-		expect(source).toMatch(
-			/rust: \{\s+compilerUrl: path\s+\?\s+`\$\{path\}\/wasm-rust\/index\.js\?v=\$\{WASM_RUST_ASSET_VERSION\}`\s+:\s+`\/wasm-rust\/index\.js\?v=\$\{WASM_RUST_ASSET_VERSION\}`\s+\}/s
-		);
-		expect(source).toMatch(
-			/go: \{\s+compilerUrl: path\s+\?\s+`\$\{path\}\/wasm-go\/index\.js\?v=\$\{WASM_GO_ASSET_VERSION\}`\s+:\s+`\/wasm-go\/index\.js\?v=\$\{WASM_GO_ASSET_VERSION\}`\s+\}/s
-		);
-		expect(source).toMatch(
-			/d: \{\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-d\/index\.js\?v=\$\{WASM_D_ASSET_VERSION\}`\s+:\s+`\/wasm-d\/index\.js\?v=\$\{WASM_D_ASSET_VERSION\}`\s+\}/s
-		);
-		expect(source).toMatch(
-			/dotnet: \{\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-dotnet\/index\.js\?v=\$\{WASM_DOTNET_ASSET_VERSION\}`\s+:\s+`\/wasm-dotnet\/index\.js\?v=\$\{WASM_DOTNET_ASSET_VERSION\}`\s+\}/s
-		);
-		expect(source).toMatch(
-			/elixir: \{\s+bundleUrl: path\s+\?\s+`\$\{path\}\/wasm-elixir\/bundle\.avm\?v=\$\{WASM_ELIXIR_ASSET_VERSION\}`\s+:\s+`\/wasm-elixir\/bundle\.avm\?v=\$\{WASM_ELIXIR_ASSET_VERSION\}`\s+\}/s
-		);
-		expect(source).toMatch(
-			/erlang: \{\s+bundleUrl: path\s+\?\s+`\$\{path\}\/wasm-elixir\/bundle\.avm\?v=\$\{WASM_ELIXIR_ASSET_VERSION\}`\s+:\s+`\/wasm-elixir\/bundle\.avm\?v=\$\{WASM_ELIXIR_ASSET_VERSION\}`\s+\}/s
-		);
-		expect(source).toMatch(
-			/prolog: \{\s+baseUrl: path\s+\?\s+`\$\{path\}\/wasm-prolog\/`\s+:\s+'\/wasm-prolog\/',\s+workerUrl: path\s+\?\s+`\$\{path\}\/wasm-prolog\/runner-worker\.js\?v=\$\{WASM_PROLOG_ASSET_VERSION\}`\s+:\s+`\/wasm-prolog\/runner-worker\.js\?v=\$\{WASM_PROLOG_ASSET_VERSION\}`\s+\}/s
-		);
-		expect(source).toMatch(
-			/gleam: \{\s+baseUrl: path\s+\?\s+`\$\{path\}\/wasm-gleam\/`\s+:\s+'\/wasm-gleam\/',\s+workerUrl: path\s+\?\s+`\$\{path\}\/wasm-gleam\/runner-worker\.js\?v=\$\{WASM_GLEAM_ASSET_VERSION\}`\s+:\s+`\/wasm-gleam\/runner-worker\.js\?v=\$\{WASM_GLEAM_ASSET_VERSION\}`,\s+manifestUrl: path\s+\?\s+`\$\{path\}\/wasm-gleam\/source-manifest\.v1\.json\?v=\$\{WASM_GLEAM_ASSET_VERSION\}`\s+:\s+`\/wasm-gleam\/source-manifest\.v1\.json\?v=\$\{WASM_GLEAM_ASSET_VERSION\}`\s+\}/s
-		);
-		expect(source).toMatch(
-			/perl: \{\s+baseUrl: path\s+\?\s+`\$\{path\}\/wasm-perl\/`\s+:\s+'\/wasm-perl\/',\s+workerUrl: path\s+\?\s+`\$\{path\}\/wasm-perl\/runner-worker\.js\?v=\$\{WASM_PERL_ASSET_VERSION\}`\s+:\s+`\/wasm-perl\/runner-worker\.js\?v=\$\{WASM_PERL_ASSET_VERSION\}`\s+\}/s
-		);
-		expect(source).toMatch(
-			/janet: \{\s+baseUrl: path\s+\?\s+`\$\{path\}\/wasm-janet\/`\s+:\s+'\/wasm-janet\/',\s+workerUrl: path\s+\?\s+`\$\{path\}\/wasm-janet\/runner-worker\.js\?v=\$\{WASM_JANET_ASSET_VERSION\}`\s+:\s+`\/wasm-janet\/runner-worker\.js\?v=\$\{WASM_JANET_ASSET_VERSION\}`\s+\}/s
-		);
-		expect(source).toMatch(
-			/julia: \{\s+baseUrl: path\s+\?\s+`\$\{path\}\/wasm-julia\/`\s+:\s+'\/wasm-julia\/',\s+workerUrl: path\s+\?\s+`\$\{path\}\/wasm-julia\/runner-worker\.js\?v=\$\{WASM_JULIA_ASSET_VERSION\}`\s+:\s+`\/wasm-julia\/runner-worker\.js\?v=\$\{WASM_JULIA_ASSET_VERSION\}`\s+\}/s
-		);
-		expect(source).toMatch(
-			/nim: \{\s+baseUrl: path\s+\?\s+`\$\{path\}\/wasm-nim\/`\s+:\s+'\/wasm-nim\/',\s+workerUrl: path\s+\?\s+`\$\{path\}\/wasm-nim\/runner-worker\.js\?v=\$\{WASM_NIM_ASSET_VERSION\}`\s+:\s+`\/wasm-nim\/runner-worker\.js\?v=\$\{WASM_NIM_ASSET_VERSION\}`\s+\}/s
-		);
-		expect(source).toMatch(
-			/swift: \{\s+baseUrl: path\s+\?\s+`\$\{path\}\/wasm-swift\/`\s+:\s+'\/wasm-swift\/',\s+workerUrl: path\s+\?\s+`\$\{path\}\/wasm-swift\/runner-worker\.js\?v=\$\{WASM_SWIFT_ASSET_VERSION\}`\s+:\s+`\/wasm-swift\/runner-worker\.js\?v=\$\{WASM_SWIFT_ASSET_VERSION\}`,\s+manifestUrl: path\s+\?\s+`\$\{path\}\/wasm-swift\/runtime-manifest\.v1\.json\?v=\$\{WASM_SWIFT_ASSET_VERSION\}`\s+:\s+`\/wasm-swift\/runtime-manifest\.v1\.json\?v=\$\{WASM_SWIFT_ASSET_VERSION\}`\s+\}/s
-		);
-		expect(source).toMatch(
-			/ocaml: \{\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-of-js-of-ocaml\/browser-native\/src\/index\.js\?v=\$\{WASM_OCAML_ASSET_VERSION\}`\s+:\s+`\/wasm-of-js-of-ocaml\/browser-native\/src\/index\.js\?v=\$\{WASM_OCAML_ASSET_VERSION\}`,\s+manifestUrl: path\s+\?\s+`\$\{path\}\/wasm-of-js-of-ocaml\/browser-native-bundle\/browser-native-manifest\.v1\.json\?v=\$\{WASM_OCAML_ASSET_VERSION\}`\s+:\s+`\/wasm-of-js-of-ocaml\/browser-native-bundle\/browser-native-manifest\.v1\.json\?v=\$\{WASM_OCAML_ASSET_VERSION\}`\s+\}/s
-		);
-		expect(source).toMatch(
-			/tinygo: \{\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-tinygo\/runtime\.js\?v=\$\{WASM_TINYGO_ASSET_VERSION\}`\s+:\s+`\/wasm-tinygo\/runtime\.js\?v=\$\{WASM_TINYGO_ASSET_VERSION\}`\s+\}/s
-		);
-		expect(source).toMatch(
-			/typescript: \{\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-typescript\/index\.js\?v=\$\{WASM_TYPESCRIPT_ASSET_VERSION\}`\s+:\s+`\/wasm-typescript\/index\.js\?v=\$\{WASM_TYPESCRIPT_ASSET_VERSION\}`,\s+libUrl: path\s+\?\s+`\$\{path\}\/lsp\/typescript-libs\.json\.gz\?v=\$\{WASM_TYPESCRIPT_ASSET_VERSION\}`\s+:\s+`\/lsp\/typescript-libs\.json\.gz\?v=\$\{WASM_TYPESCRIPT_ASSET_VERSION\}`\s+\}/s
-		);
-		expect(source).toMatch(
-			/wat: \{\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-wat\/index\.js\?v=\$\{WASM_WAT_ASSET_VERSION\}`\s+:\s+`\/wasm-wat\/index\.js\?v=\$\{WASM_WAT_ASSET_VERSION\}`\s+\}/s
-		);
-		expect(source).toMatch(
-			/lua: \{\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-lua\/index\.js\?v=\$\{WASM_LUA_ASSET_VERSION\}`\s+:\s+`\/wasm-lua\/index\.js\?v=\$\{WASM_LUA_ASSET_VERSION\}`\s+\}/s
-		);
-		expect(source).toMatch(
-			/zig: \{\s+compilerUrl: path\s+\?\s+`\$\{path\}\/wasm-zig\/zig_small\.wasm\?v=\$\{WASM_ZIG_ASSET_VERSION\}`\s+:\s+`\/wasm-zig\/zig_small\.wasm\?v=\$\{WASM_ZIG_ASSET_VERSION\}`,\s+stdlibUrl: path\s+\?\s+`\$\{path\}\/wasm-zig\/std\.tar\.gz\?v=\$\{WASM_ZIG_ASSET_VERSION\}`\s+:\s+`\/wasm-zig\/std\.tar\.gz\?v=\$\{WASM_ZIG_ASSET_VERSION\}`\s+\}/s
-		);
-		expect(source).toMatch(
-			/lisp: \{\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-lisp\/index\.js\?v=\$\{WASM_LISP_ASSET_VERSION\}`\s+:\s+`\/wasm-lisp\/index\.js\?v=\$\{WASM_LISP_ASSET_VERSION\}`\s+\}/s
-		);
-		expect(source).toMatch(
-			/haskell: \{\s+moduleUrl: path\s+\?\s+`\$\{path\}\/wasm-haskell\/dyld\.mjs\?v=\$\{WASM_HASKELL_ASSET_VERSION\}`\s+:\s+`\/wasm-haskell\/dyld\.mjs\?v=\$\{WASM_HASKELL_ASSET_VERSION\}`,\s+rootfsUrl: path\s+\?\s+`\$\{path\}\/wasm-haskell\/rootfs\.tar\.zst\?v=\$\{WASM_HASKELL_ASSET_VERSION\}`\s+:\s+`\/wasm-haskell\/rootfs\.tar\.zst\?v=\$\{WASM_HASKELL_ASSET_VERSION\}`,\s+bsdtarUrl: path\s+\?\s+`\$\{path\}\/wasm-haskell\/bsdtar\.wasm\?v=\$\{WASM_HASKELL_ASSET_VERSION\}`\s+:\s+`\/wasm-haskell\/bsdtar\.wasm\?v=\$\{WASM_HASKELL_ASSET_VERSION\}`\s+\}/s
-		);
-		expect(source).toMatch(
-			/octave: \{\s+baseUrl: path\s+\?\s+`\$\{path\}\/wasm-octave\/runtime\/`\s+:\s+'\/wasm-octave\/runtime\/',\s+workerUrl: path\s+\?\s+`\$\{path\}\/wasm-octave\/runner-worker\.js\?v=\$\{WASM_OCTAVE_ASSET_VERSION\}`\s+:\s+`\/wasm-octave\/runner-worker\.js\?v=\$\{WASM_OCTAVE_ASSET_VERSION\}`,\s+manifestUrl: path\s+\?\s+`\$\{path\}\/wasm-octave\/runtime\/runtime-manifest\.v1\.json\?v=\$\{WASM_OCTAVE_ASSET_VERSION\}`\s+:\s+`\/wasm-octave\/runtime\/runtime-manifest\.v1\.json\?v=\$\{WASM_OCTAVE_ASSET_VERSION\}`\s+\}/s
-		);
+		expect(source).not.toMatch(/import \{ WASM_[A-Z_]+_ASSET_VERSION \}/u);
 		expect(source).toMatch(
 			/const playground = \$derived\.by\(\(\) => createPlaygroundBinding\(runtimeAssets\)\);/
 		);
 		expect(source).toMatch(/<Terminal\s+bind:terminal\s+\{playground\}/s);
+		expect(applicationRuntimeAssets.rootUrl).toBe('/wasm-idle');
+
+		for (const [runtime, config] of Object.entries(applicationRuntimeAssets)) {
+			if (runtime === 'rootUrl' || !config || typeof config !== 'object') continue;
+			for (const value of Object.values(config)) {
+				if (typeof value === 'string') expect(value).toMatch(/^\/wasm-idle\//u);
+			}
+		}
+	});
+
+	it('persists and forwards the Rust target triple selection', () => {
 		expect(source).toMatch(
 			/type WasmRustRuntimeModule = \{\s+preloadBrowserRustRuntime\?: \(options\?: \{\s+targetTriple\?: RustTargetTriple;\s+\}\) => Promise<void>;\s+\};/s
 		);
+		expect(source).toMatch(/rustTargetTriple = \$state<RustTargetTriple>\('wasm32-wasip1'\),/);
 		expect(source).toMatch(/if \(!browser \|\| language !== 'RUST'\) return;/);
 		expect(source).toMatch(
 			/const compilerUrl = runtimeAssets\.rust\?\.compilerUrl;\s+const preloadTargetTriple = availableRustTargetTriples\.includes\(rustTargetTriple\)\s+\?\s+rustTargetTriple\s+:\s+availableRustTargetTriples\[0\];/s
@@ -288,33 +182,15 @@ describe('example route debug actions', () => {
 			/await runtimeModule\.preloadBrowserRustRuntime\?\.\(\{\s+targetTriple: preloadTargetTriple\s+\}\);/s
 		);
 		expect(source).toMatch(
-			/type WasmGoRuntimeModule = \{\s+preloadBrowserGoRuntime\?: \(options\?: \{\s*target\?: GoTarget;?\s*\}\) => Promise<void>;\s+\};/s
-		);
-		expect(source).toMatch(/if \(!browser \|\| language !== 'GO'\) return;/);
-		expect(source).toMatch(/const compilerUrl = runtimeAssets\.go\?\.compilerUrl;/);
-		expect(source).toMatch(
-			/const preloadTarget = availableGoTargets\.includes\(goTarget\)\s+\?\s+goTarget\s+:\s+availableGoTargets\[0\];/
-		);
-		expect(source).toMatch(
-			/const runtimeModule = \(await import\(\s+\/\* @vite-ignore \*\/ compilerUrl\s+\)\) as WasmGoRuntimeModule;/
-		);
-		expect(source).toMatch(
-			/await runtimeModule\.preloadBrowserGoRuntime\?\.\(\{\s+target: preloadTarget\s+\}\);/s
-		);
-	});
-
-	it('persists and forwards the Rust target triple selection', () => {
-		expect(source).toMatch(/rustTargetTriple = \$state<RustTargetTriple>\('wasm32-wasip1'\),/);
-		expect(source).toMatch(/if \(!browser \|\| language !== 'RUST'\) return;/);
-		expect(source).toMatch(
 			/const knownRustTargetTriples = \['wasm32-wasip1', 'wasm32-wasip2', 'wasm32-wasip3'\] as const;/
 		);
 		expect(source).toMatch(
 			/let availableRustTargetTriples = \$state<RustTargetTriple\[]>\(\[\s*'wasm32-wasip1',\s*'wasm32-wasip2'\s*\]\);/s
 		);
 		expect(source).toMatch(/localStorage\.setItem\('rustTargetTriple', rustTargetTriple\);/);
-		expect(source).toMatch(
-			/const manifestUrl = path\s+\?\s+`\$\{path\}\/wasm-rust\/runtime\/runtime-manifest\.v3\.json\?v=\$\{WASM_RUST_ASSET_VERSION\}`\s+:\s+`\/wasm-rust\/runtime\/runtime-manifest\.v3\.json\?v=\$\{WASM_RUST_ASSET_VERSION\}`;/
+		expect(source).toMatch(/const manifestUrl = runtimeAssets\.rust\?\.manifestUrl;/);
+		expect(applicationRuntimeAssets.rust?.manifestUrl).toContain(
+			'/wasm-rust/runtime/runtime-manifest.v3.json?'
 		);
 		expect(source).toMatch(
 			/const response = await fetch\(manifestUrl, \{ cache: 'no-store' \}\);/
@@ -367,9 +243,22 @@ describe('example route debug actions', () => {
 	});
 
 	it('persists and forwards the Go target selection', () => {
+		expect(source).toMatch(
+			/type WasmGoRuntimeModule = \{\s+preloadBrowserGoRuntime\?: \(options\?: \{\s*target\?: GoTarget;?\s*\}\) => Promise<void>;\s+\};/s
+		);
 		expect(source).toMatch(/GoTarget,/);
 		expect(source).toMatch(/goTarget = \$state<GoTarget>\('wasip1\/wasm'\),/);
 		expect(source).toMatch(/if \(!browser \|\| language !== 'GO'\) return;/);
+		expect(source).toMatch(/const compilerUrl = runtimeAssets\.go\?\.compilerUrl;/);
+		expect(source).toMatch(
+			/const preloadTarget = availableGoTargets\.includes\(goTarget\)\s+\?\s+goTarget\s+:\s+availableGoTargets\[0\];/
+		);
+		expect(source).toMatch(
+			/const runtimeModule = \(await import\(\s+\/\* @vite-ignore \*\/ compilerUrl\s+\)\) as WasmGoRuntimeModule;/
+		);
+		expect(source).toMatch(
+			/await runtimeModule\.preloadBrowserGoRuntime\?\.\(\{\s+target: preloadTarget\s+\}\);/s
+		);
 		expect(source).toMatch(
 			/const knownGoTargets = \['wasip1\/wasm', 'wasip2\/wasm', 'wasip3\/wasm', 'js\/wasm'\] as const;/
 		);
@@ -378,8 +267,9 @@ describe('example route debug actions', () => {
 		);
 		expect(source).toMatch(/localStorage\.setItem\('goTarget', goTarget\);/);
 		expect(source).toMatch(/const storedGoTarget = localStorage\.getItem\('goTarget'\);/);
-		expect(source).toMatch(
-			/const manifestUrl = path\s+\?\s+`\$\{path\}\/wasm-go\/runtime\/runtime-manifest\.v1\.json\?v=\$\{WASM_GO_ASSET_VERSION\}`\s+:\s+`\/wasm-go\/runtime\/runtime-manifest\.v1\.json\?v=\$\{WASM_GO_ASSET_VERSION\}`;/
+		expect(source).toMatch(/const manifestUrl = runtimeAssets\.go\?\.manifestUrl;/);
+		expect(applicationRuntimeAssets.go?.manifestUrl).toContain(
+			'/wasm-go/runtime/runtime-manifest.v1.json?'
 		);
 		expect(source).toMatch(
 			/const nextAvailableGoTargets = knownGoTargets\.filter\(\s*\(target\) =>\s*Object\.prototype\.hasOwnProperty\.call\(manifest\.targets \|\| \{}, target\)\s*\);/s
@@ -470,6 +360,7 @@ describe('example route debug actions', () => {
 	});
 
 	it('surfaces TinyGo through the shared language selector, args field, and stdin hint', () => {
+		expect(applicationRuntimeAssets.tinygo?.moduleUrl).toContain('/wasm-tinygo/runtime.js?');
 		expect(source).toMatch(/TinyGoTarget/);
 		expect(source).toMatch(/tinygoTarget = \$state<TinyGoTarget>\('wasm'\),/);
 		expect(source).toMatch(
@@ -483,37 +374,37 @@ describe('example route debug actions', () => {
 			/requestedTinyGoTarget === 'wasip2' \|\|\s+requestedTinyGoTarget === 'wasip3'/s
 		);
 		expect(source).toMatch(/TINYGO: \(\) => \(\{ tinygoTarget \}\)/);
-		expect(source).toMatch(/<option value="GO">Go<\/option>/);
-		expect(source).toMatch(/<option value="D">D<\/option>/);
-		expect(source).toMatch(/<option value="CSHARP">C#<\/option>/);
-		expect(source).toMatch(/<option value="FSHARP">F#<\/option>/);
-		expect(source).toMatch(/<option value="VBNET">VB\.NET<\/option>/);
-		expect(source).toMatch(/<option value="ELIXIR">Elixir<\/option>/);
-		expect(source).toMatch(/<option value="ERLANG">Erlang<\/option>/);
-		expect(source).toMatch(/<option value="PROLOG">Prolog<\/option>/);
-		expect(source).toMatch(/<option value="GLEAM">Gleam<\/option>/);
-		expect(source).toMatch(/<option value="PERL">Perl<\/option>/);
-		expect(source).toMatch(/<option value="PASCAL">Pascal<\/option>/);
-		expect(source).toMatch(/<option value="CLOJURESCRIPT">ClojureScript<\/option>/);
-		expect(source).toMatch(/<option value="FORTH">Forth<\/option>/);
-		expect(source).toMatch(/<option value="J">J<\/option>/);
-		expect(source).toMatch(/<option value="BQN">BQN<\/option>/);
-		expect(source).toMatch(/<option value="JANET">Janet<\/option>/);
-		expect(source).toMatch(/<option value="OCAML">OCaml<\/option>/);
-		expect(source).toMatch(/<option value="TINYGO">TinyGo<\/option>/);
-		expect(source).toMatch(/<option value="JAVASCRIPT">JavaScript<\/option>/);
-		expect(source).toMatch(/<option value="TYPESCRIPT">TypeScript<\/option>/);
-		expect(source).toMatch(/<option value="ASSEMBLYSCRIPT">AssemblyScript<\/option>/);
-		expect(source).toMatch(/<option value="WAT">WAT<\/option>/);
-		expect(source).toMatch(/<option value="LUA">Lua<\/option>/);
-		expect(source).toMatch(/<option value="ZIG">Zig<\/option>/);
-		expect(source).toMatch(/<option value="LISP">Scheme<\/option>/);
-		expect(source).toMatch(/<option value="RUBY">Ruby<\/option>/);
-		expect(source).toMatch(/<option value="HASKELL">Haskell<\/option>/);
-		expect(source).toMatch(/<option value="R">R<\/option>/);
-		expect(source).toMatch(/<option value="OCTAVE">Octave<\/option>/);
-		expect(source).toMatch(/<option value="SQLITE">SQLite<\/option>/);
-		expect(source).toMatch(/<option value="PHP">PHP<\/option>/);
+		expectPlaygroundLanguage('GO');
+		expectPlaygroundLanguage('D');
+		expectPlaygroundLanguage('CSHARP');
+		expectPlaygroundLanguage('FSHARP');
+		expectPlaygroundLanguage('VBNET');
+		expectPlaygroundLanguage('ELIXIR');
+		expectPlaygroundLanguage('ERLANG');
+		expectPlaygroundLanguage('PROLOG');
+		expectPlaygroundLanguage('GLEAM');
+		expectPlaygroundLanguage('PERL');
+		expectPlaygroundLanguage('PASCAL');
+		expectPlaygroundLanguage('CLOJURESCRIPT');
+		expectPlaygroundLanguage('FORTH');
+		expectPlaygroundLanguage('J');
+		expectPlaygroundLanguage('BQN');
+		expectPlaygroundLanguage('JANET');
+		expectPlaygroundLanguage('OCAML');
+		expectPlaygroundLanguage('TINYGO');
+		expectPlaygroundLanguage('JAVASCRIPT');
+		expectPlaygroundLanguage('TYPESCRIPT');
+		expectPlaygroundLanguage('ASSEMBLYSCRIPT');
+		expectPlaygroundLanguage('WAT');
+		expectPlaygroundLanguage('LUA');
+		expectPlaygroundLanguage('ZIG');
+		expectPlaygroundLanguage('LISP');
+		expectPlaygroundLanguage('RUBY');
+		expectPlaygroundLanguage('HASKELL');
+		expectPlaygroundLanguage('R');
+		expectPlaygroundLanguage('OCTAVE');
+		expectPlaygroundLanguage('SQLITE');
+		expectPlaygroundLanguage('PHP');
 		expect(source).toMatch(/\{#if argsHelpLanguages\.has\(language\)\}/);
 		for (const argsLanguage of [
 			'JAVA',
@@ -567,10 +458,8 @@ describe('example route debug actions', () => {
 	});
 
 	it('surfaces D through bundled LDC and Emscripten LLD browser assets', () => {
-		expect(source).toMatch(/d: \{/);
-		expect(source).toMatch(/WASM_D_ASSET_VERSION/);
-		expect(source).toMatch(/wasm-d\/index\.js\?v=\$\{WASM_D_ASSET_VERSION\}/);
-		expect(source).toMatch(/<option value="D">D<\/option>/);
+		expect(applicationRuntimeAssets.d?.moduleUrl).toContain('/wasm-d/index.js?');
+		expectPlaygroundLanguage('D');
 		expect(source).toMatch(/d: 'D'/);
 		expect(source).toMatch(/dlang: 'D'/);
 		expectEditorLanguage('D', 'd');
@@ -585,11 +474,11 @@ describe('example route debug actions', () => {
 	});
 
 	it('surfaces C#, F#, and VB.NET through wasm-dotnet runtime assets and the browser compiler hint', () => {
-		expect(source).toMatch(/dotnet: \{/);
+		expect(applicationRuntimeAssets.dotnet?.moduleUrl).toContain('/wasm-dotnet/index.js?');
 		expect(source).not.toContain('dotnet' + 'Host' + 'CompileUrl');
-		expect(source).toMatch(/<option value="CSHARP">C#<\/option>/);
-		expect(source).toMatch(/<option value="FSHARP">F#<\/option>/);
-		expect(source).toMatch(/<option value="VBNET">VB\.NET<\/option>/);
+		expectPlaygroundLanguage('CSHARP');
+		expectPlaygroundLanguage('FSHARP');
+		expectPlaygroundLanguage('VBNET');
 		expect(source).toMatch(/csharp: 'CSHARP'/);
 		expect(source).toMatch(/'c#': 'CSHARP'/);
 		expect(source).toMatch(/cs: 'CSHARP'/);
@@ -620,14 +509,14 @@ describe('example route debug actions', () => {
 	});
 
 	it('surfaces JavaScript and TypeScript through the wasm-typescript runtime', () => {
-		expect(source).toMatch(/typescript: \{/);
-		expect(source).toMatch(/WASM_TYPESCRIPT_ASSET_VERSION/);
-		expect(source).toMatch(/wasm-typescript\/index\.js\?v=\$\{WASM_TYPESCRIPT_ASSET_VERSION\}/);
-		expect(source).toMatch(
-			/lsp\/typescript-libs\.json\.gz\?v=\$\{WASM_TYPESCRIPT_ASSET_VERSION\}/
+		expect(applicationRuntimeAssets.typescript?.moduleUrl).toContain(
+			'/wasm-typescript/index.js?'
 		);
-		expect(source).toMatch(/<option value="JAVASCRIPT">JavaScript<\/option>/);
-		expect(source).toMatch(/<option value="TYPESCRIPT">TypeScript<\/option>/);
+		expect(applicationRuntimeAssets.typescript?.libUrl).toContain(
+			'/lsp/typescript-libs.json.gz?'
+		);
+		expectPlaygroundLanguage('JAVASCRIPT');
+		expectPlaygroundLanguage('TYPESCRIPT');
 		expect(source).toMatch(/javascript: 'JAVASCRIPT'/);
 		expect(source).toMatch(/js: 'JAVASCRIPT'/);
 		expect(source).toMatch(/typescript: 'TYPESCRIPT'/);
@@ -647,7 +536,10 @@ describe('example route debug actions', () => {
 	});
 
 	it('surfaces AssemblyScript through the bundled browser compiler', () => {
-		expect(source).toMatch(/<option value="ASSEMBLYSCRIPT">AssemblyScript<\/option>/);
+		expect(applicationRuntimeAssets.assemblyscript?.moduleUrl).toContain(
+			'/wasm-assemblyscript/runtime.mjs?'
+		);
+		expectPlaygroundLanguage('ASSEMBLYSCRIPT');
 		expect(source).toMatch(/assemblyscript: 'ASSEMBLYSCRIPT'/);
 		expect(source).toMatch(/as: 'ASSEMBLYSCRIPT'/);
 		expectEditorLanguage('ASSEMBLYSCRIPT', 'typescript');
@@ -660,10 +552,8 @@ describe('example route debug actions', () => {
 	});
 
 	it('surfaces WAT through the wasm-wat browser compiler contract', () => {
-		expect(source).toMatch(/wat: \{/);
-		expect(source).toMatch(/WASM_WAT_ASSET_VERSION/);
-		expect(source).toMatch(/wasm-wat\/index\.js\?v=\$\{WASM_WAT_ASSET_VERSION\}/);
-		expect(source).toMatch(/<option value="WAT">WAT<\/option>/);
+		expect(applicationRuntimeAssets.wat?.moduleUrl).toContain('/wasm-wat/index.js?');
+		expectPlaygroundLanguage('WAT');
 		expect(source).toMatch(/wat: 'WAT'/);
 		expect(source).toMatch(/wast: 'WAT'/);
 		expectEditorLanguage('WAT', 'wat');
@@ -675,7 +565,7 @@ describe('example route debug actions', () => {
 	});
 
 	it('surfaces WASM through the binary WebAssembly runner contract', () => {
-		expect(source).toMatch(/<option value="WASM">WASM<\/option>/);
+		expectPlaygroundLanguage('WASM');
 		expect(source).toMatch(/wasm: 'WASM'/);
 		expect(source).toMatch(/wasm32: 'WASM'/);
 		expectEditorLanguage('WASM', 'wasm');
@@ -689,10 +579,8 @@ describe('example route debug actions', () => {
 	});
 
 	it('surfaces Lua through the wasm-lua browser runtime contract', () => {
-		expect(source).toMatch(/lua: \{/);
-		expect(source).toMatch(/WASM_LUA_ASSET_VERSION/);
-		expect(source).toMatch(/wasm-lua\/index\.js\?v=\$\{WASM_LUA_ASSET_VERSION\}/);
-		expect(source).toMatch(/<option value="LUA">Lua<\/option>/);
+		expect(applicationRuntimeAssets.lua?.moduleUrl).toContain('/wasm-lua/index.js?');
+		expectPlaygroundLanguage('LUA');
 		expect(source).toMatch(/lua: 'LUA'/);
 		expectEditorLanguage('LUA', 'lua');
 		expect(source).toMatch(/'.lua': 'LUA'/);
@@ -703,10 +591,8 @@ describe('example route debug actions', () => {
 	});
 
 	it('surfaces BQN through the CBQN wasm worker runtime contract', () => {
-		expect(source).toMatch(/bqn: \{/);
-		expect(source).toMatch(/WASM_BQN_ASSET_VERSION/);
-		expect(source).toMatch(/wasm-bqn\/runner-worker\.js\?v=\$\{WASM_BQN_ASSET_VERSION\}/);
-		expect(source).toMatch(/<option value="BQN">BQN<\/option>/);
+		expect(applicationRuntimeAssets.bqn?.workerUrl).toContain('/wasm-bqn/runner-worker.js?');
+		expectPlaygroundLanguage('BQN');
 		expect(source).toMatch(/bqn: 'BQN'/);
 		expectEditorLanguage('BQN', 'bqn');
 		expect(source).toMatch(/'.bqn': 'BQN'/);
@@ -717,10 +603,10 @@ describe('example route debug actions', () => {
 	});
 
 	it('surfaces Janet through the upstream Janet VM wasm worker runtime contract', () => {
-		expect(source).toMatch(/janet: \{/);
-		expect(source).toMatch(/WASM_JANET_ASSET_VERSION/);
-		expect(source).toMatch(/wasm-janet\/runner-worker\.js\?v=\$\{WASM_JANET_ASSET_VERSION\}/);
-		expect(source).toMatch(/<option value="JANET">Janet<\/option>/);
+		expect(applicationRuntimeAssets.janet?.workerUrl).toContain(
+			'/wasm-janet/runner-worker.js?'
+		);
+		expectPlaygroundLanguage('JANET');
 		expect(source).toMatch(/janet: 'JANET'/);
 		expectEditorLanguage('JANET', 'janet');
 		expect(source).toMatch(/'.janet': 'JANET'/);
@@ -731,10 +617,10 @@ describe('example route debug actions', () => {
 	});
 
 	it('surfaces Julia through the Julia wasm worker runtime contract', () => {
-		expect(source).toMatch(/julia: \{/);
-		expect(source).toMatch(/WASM_JULIA_ASSET_VERSION/);
-		expect(source).toMatch(/wasm-julia\/runner-worker\.js\?v=\$\{WASM_JULIA_ASSET_VERSION\}/);
-		expect(source).toMatch(/<option value="JULIA">Julia<\/option>/);
+		expect(applicationRuntimeAssets.julia?.workerUrl).toContain(
+			'/wasm-julia/runner-worker.js?'
+		);
+		expectPlaygroundLanguage('JULIA');
 		expect(source).toMatch(/julia: 'JULIA'/);
 		expect(source).toMatch(/jl: 'JULIA'/);
 		expectEditorLanguage('JULIA', 'julia');
@@ -746,10 +632,8 @@ describe('example route debug actions', () => {
 	});
 
 	it('surfaces Nim through the Nim wasm compiler worker runtime contract', () => {
-		expect(source).toMatch(/nim: \{/);
-		expect(source).toMatch(/WASM_NIM_ASSET_VERSION/);
-		expect(source).toMatch(/wasm-nim\/runner-worker\.js\?v=\$\{WASM_NIM_ASSET_VERSION\}/);
-		expect(source).toMatch(/<option value="NIM">Nim<\/option>/);
+		expect(applicationRuntimeAssets.nim?.workerUrl).toContain('/wasm-nim/runner-worker.js?');
+		expectPlaygroundLanguage('NIM');
 		expect(source).toMatch(/nim: 'NIM'/);
 		expect(source).toMatch(/nimrod: 'NIM'/);
 		expectEditorLanguage('NIM', 'nim');
@@ -761,11 +645,9 @@ describe('example route debug actions', () => {
 	});
 
 	it('surfaces Zig through bundled wasm compiler assets and the browser runtime hint', () => {
-		expect(source).toMatch(/zig: \{/);
-		expect(source).toMatch(/WASM_ZIG_ASSET_VERSION/);
-		expect(source).toMatch(/wasm-zig\/zig_small\.wasm\?v=\$\{WASM_ZIG_ASSET_VERSION\}/);
-		expect(source).toMatch(/wasm-zig\/std\.tar\.gz\?v=\$\{WASM_ZIG_ASSET_VERSION\}/);
-		expect(source).toMatch(/<option value="ZIG">Zig<\/option>/);
+		expect(applicationRuntimeAssets.zig?.compilerUrl).toContain('/wasm-zig/zig_small.wasm?');
+		expect(applicationRuntimeAssets.zig?.stdlibUrl).toContain('/wasm-zig/std.tar.gz?');
+		expectPlaygroundLanguage('ZIG');
 		expect(source).toMatch(/zig: 'ZIG'/);
 		expectEditorLanguage('ZIG', 'zig');
 		expect(source).toMatch(/'.zig': 'ZIG'/);
@@ -780,10 +662,8 @@ describe('example route debug actions', () => {
 	});
 
 	it('surfaces Lisp through the Puppy Scheme wasm compiler contract', () => {
-		expect(source).toMatch(/lisp: \{/);
-		expect(source).toMatch(/WASM_LISP_ASSET_VERSION/);
-		expect(source).toMatch(/wasm-lisp\/index\.js\?v=\$\{WASM_LISP_ASSET_VERSION\}/);
-		expect(source).toMatch(/<option value="LISP">Scheme<\/option>/);
+		expect(applicationRuntimeAssets.lisp?.moduleUrl).toContain('/wasm-lisp/index.js?');
+		expectPlaygroundLanguage('LISP');
 		expect(source).toMatch(/lisp: 'LISP'/);
 		expect(source).toMatch(/scheme: 'LISP'/);
 		expectEditorLanguage('LISP', 'lisp');
@@ -793,7 +673,8 @@ describe('example route debug actions', () => {
 	});
 
 	it('surfaces Ruby through the CRuby WebAssembly runtime contract', () => {
-		expect(source).toMatch(/<option value="RUBY">Ruby<\/option>/);
+		expect(applicationRuntimeAssets.ruby?.moduleUrl).toContain('/wasm-ruby/runtime.mjs?');
+		expectPlaygroundLanguage('RUBY');
 		expect(source).toMatch(/ruby: 'RUBY'/);
 		expect(source).toMatch(/rb: 'RUBY'/);
 		expectEditorLanguage('RUBY', 'ruby');
@@ -806,14 +687,12 @@ describe('example route debug actions', () => {
 	});
 
 	it('surfaces Haskell through the ghc-in-browser wasm compiler contract', () => {
-		expect(source).toMatch(/haskell: \{/);
-		expect(source).toMatch(/WASM_HASKELL_ASSET_VERSION/);
-		expect(source).toMatch(/wasm-haskell\/dyld\.mjs\?v=\$\{WASM_HASKELL_ASSET_VERSION\}/);
-		expect(source).toMatch(
-			/wasm-haskell\/rootfs\.tar\.zst\?v=\$\{WASM_HASKELL_ASSET_VERSION\}/
+		expect(applicationRuntimeAssets.haskell?.moduleUrl).toContain('/wasm-haskell/dyld.mjs?');
+		expect(applicationRuntimeAssets.haskell?.rootfsUrl).toContain(
+			'/wasm-haskell/rootfs.tar.zst?'
 		);
-		expect(source).toMatch(/wasm-haskell\/bsdtar\.wasm\?v=\$\{WASM_HASKELL_ASSET_VERSION\}/);
-		expect(source).toMatch(/<option value="HASKELL">Haskell<\/option>/);
+		expect(applicationRuntimeAssets.haskell?.bsdtarUrl).toContain('/wasm-haskell/bsdtar.wasm?');
+		expectPlaygroundLanguage('HASKELL');
 		expect(source).toMatch(/haskell: 'HASKELL'/);
 		expect(source).toMatch(/hs: 'HASKELL'/);
 		expectEditorLanguage('HASKELL', 'haskell');
@@ -827,13 +706,8 @@ describe('example route debug actions', () => {
 	});
 
 	it('surfaces R through the bundled webR runtime contract', () => {
-		expect(source).toMatch(
-			/import \{ WASM_R_ASSET_VERSION \} from '\$lib\/playground\/wasmRVersion';/
-		);
-		expect(source).toMatch(
-			/r: \{\s+baseUrl: path\s+\?\s+`\$\{path\}\/webr\/\$\{WASM_R_ASSET_VERSION\}\/`\s+:\s+`\/webr\/\$\{WASM_R_ASSET_VERSION\}\/`\s+\}/s
-		);
-		expect(source).toMatch(/<option value="R">R<\/option>/);
+		expect(applicationRuntimeAssets.r?.baseUrl).toMatch(/^\/wasm-idle\/webr\/[a-f0-9]+\/$/u);
+		expectPlaygroundLanguage('R');
 		expect(source).toMatch(/r: 'R'/);
 		expectEditorLanguage('R', 'r');
 		expect(source).toMatch(/'.r': 'R'/);
@@ -843,10 +717,13 @@ describe('example route debug actions', () => {
 	});
 
 	it('surfaces Octave through the bundled GNU Octave wasm runtime contract', () => {
-		expect(source).toMatch(
-			/import \{ WASM_OCTAVE_ASSET_VERSION \} from '\$lib\/playground\/wasmOctaveVersion';/
+		expect(applicationRuntimeAssets.octave?.workerUrl).toContain(
+			'/wasm-octave/runner-worker.js?'
 		);
-		expect(source).toMatch(/<option value="OCTAVE">Octave<\/option>/);
+		expect(applicationRuntimeAssets.octave?.manifestUrl).toContain(
+			'/wasm-octave/runtime/runtime-manifest.v1.json?'
+		);
+		expectPlaygroundLanguage('OCTAVE');
 		expect(source).toMatch(/octave: 'OCTAVE'/);
 		expect(source).toMatch(/matlab: 'OCTAVE'/);
 		expectEditorLanguage('OCTAVE', 'octave');
@@ -858,7 +735,8 @@ describe('example route debug actions', () => {
 	});
 
 	it('surfaces SQLite through the bundled sql.js worker runtime contract', () => {
-		expect(source).toMatch(/<option value="SQLITE">SQLite<\/option>/);
+		expect(applicationRuntimeAssets.sqlite?.moduleUrl).toContain('/wasm-sqlite/runtime.mjs?');
+		expectPlaygroundLanguage('SQLITE');
 		expect(source).toMatch(/sqlite: 'SQLITE'/);
 		expect(source).toMatch(/sql: 'SQLITE'/);
 		expectEditorLanguage('SQLITE', 'sql');
@@ -871,7 +749,8 @@ describe('example route debug actions', () => {
 	});
 
 	it('surfaces DuckDB through the bundled DuckDB-Wasm worker runtime contract', () => {
-		expect(source).toMatch(/<option value="DUCKDB">DuckDB<\/option>/);
+		expect(applicationRuntimeAssets.duckdb?.moduleUrl).toContain('/wasm-duckdb/runtime.mjs?');
+		expectPlaygroundLanguage('DUCKDB');
 		expect(source).toMatch(/duckdb: 'DUCKDB'/);
 		expectEditorLanguage('DUCKDB', 'sql');
 		expect(source).toMatch(/'.duckdb': 'DUCKDB'/);
@@ -883,7 +762,8 @@ describe('example route debug actions', () => {
 	});
 
 	it('surfaces COBOL through the GnuCOBOL llvm-core runtime contract', () => {
-		expect(source).toMatch(/<option value="COBOL">COBOL<\/option>/);
+		expect(applicationRuntimeAssets.cobol?.baseUrl).toBe('/wasm-idle/wasm-cobol/');
+		expectPlaygroundLanguage('COBOL');
 		expect(source).toMatch(/cobol: 'COBOL'/);
 		expect(source).toMatch(/gnucobol: 'COBOL'/);
 		expect(source).toMatch(/'.cob': 'COBOL'/);
@@ -895,7 +775,10 @@ describe('example route debug actions', () => {
 	});
 
 	it('surfaces editor-only LSP workspaces', () => {
-		expect(source).toMatch(/<option value="FORTRAN">Fortran<\/option>/);
+		expect(applicationRuntimeAssets.fortran?.analyzerUrl).toContain(
+			'/wasm-fortran/analyzer.js?'
+		);
+		expectPlaygroundLanguage('FORTRAN');
 		expect(editorOnlyLanguages.has('FORTRAN')).toBe(false);
 		for (const [language, label] of [
 			['GRAPHQL', 'GraphQL'],
@@ -905,8 +788,9 @@ describe('example route debug actions', () => {
 			['HTML', 'HTML'],
 			['CSS', 'CSS'],
 			['MARKDOWN', 'Markdown']
-		]) {
-			expect(source).toMatch(new RegExp(`<option value="${language}">${label}<\\/option>`));
+		] as const) {
+			expectPlaygroundLanguage(language);
+			expect(languageLabels[language]).toBe(label);
 		}
 		for (const language of [
 			'GRAPHQL',
@@ -956,7 +840,8 @@ describe('example route debug actions', () => {
 	});
 
 	it('surfaces PHP through the php-wasm browser runtime contract', () => {
-		expect(source).toMatch(/<option value="PHP">PHP<\/option>/);
+		expect(applicationRuntimeAssets.php?.moduleUrl).toContain('/wasm-php/runtime.mjs?');
+		expectPlaygroundLanguage('PHP');
 		expect(source).toMatch(/php: 'PHP'/);
 		expectEditorLanguage('PHP', 'php');
 		expect(source).toMatch(/'.php': 'PHP'/);
@@ -967,9 +852,8 @@ describe('example route debug actions', () => {
 	});
 
 	it('surfaces Elixir through the shared language selector and Popcorn hint', () => {
-		expect(source).toMatch(/elixir: \{/);
-		expect(source).toMatch(/bundleUrl: path/);
-		expect(source).toMatch(/<option value="ELIXIR">Elixir<\/option>/);
+		expect(applicationRuntimeAssets.elixir?.bundleUrl).toContain('/wasm-elixir/bundle.avm?');
+		expectPlaygroundLanguage('ELIXIR');
 		expect(source).toMatch(/elixir: 'ELIXIR'/);
 		expectEditorLanguage('ELIXIR', 'elixir');
 		expect(source).toMatch(/Elixir runs through a bundled Popcorn evaluator/);
@@ -980,8 +864,8 @@ describe('example route debug actions', () => {
 	});
 
 	it('surfaces Erlang through the shared language selector and Popcorn hint', () => {
-		expect(source).toMatch(/erlang: \{/);
-		expect(source).toMatch(/<option value="ERLANG">Erlang<\/option>/);
+		expect(applicationRuntimeAssets.erlang?.bundleUrl).toContain('/wasm-elixir/bundle.avm?');
+		expectPlaygroundLanguage('ERLANG');
 		expect(source).toMatch(/erlang: 'ERLANG'/);
 		expect(source).toMatch(/erl: 'ERLANG'/);
 		expect(source).toMatch(/'.erl': 'ERLANG'/);
@@ -994,15 +878,16 @@ describe('example route debug actions', () => {
 	});
 
 	it('surfaces Prolog, Gleam, and Perl through static wasm worker runtime contracts', () => {
-		expect(source).toMatch(/prolog: \{/);
-		expect(source).toMatch(/gleam: \{/);
-		expect(source).toMatch(/perl: \{/);
-		expect(source).toMatch(/WASM_PROLOG_ASSET_VERSION/);
-		expect(source).toMatch(/WASM_GLEAM_ASSET_VERSION/);
-		expect(source).toMatch(/WASM_PERL_ASSET_VERSION/);
-		expect(source).toMatch(/<option value="PROLOG">Prolog<\/option>/);
-		expect(source).toMatch(/<option value="GLEAM">Gleam<\/option>/);
-		expect(source).toMatch(/<option value="PERL">Perl<\/option>/);
+		expect(applicationRuntimeAssets.prolog?.workerUrl).toContain(
+			'/wasm-prolog/runner-worker.js?'
+		);
+		expect(applicationRuntimeAssets.gleam?.workerUrl).toContain(
+			'/wasm-gleam/runner-worker.js?'
+		);
+		expect(applicationRuntimeAssets.perl?.workerUrl).toContain('/wasm-perl/runner-worker.js?');
+		expectPlaygroundLanguage('PROLOG');
+		expectPlaygroundLanguage('GLEAM');
+		expectPlaygroundLanguage('PERL');
 		expect(source).toMatch(/prolog: 'PROLOG'/);
 		expect(source).toMatch(/swipl: 'PROLOG'/);
 		expect(source).toMatch(/swi: 'PROLOG'/);
