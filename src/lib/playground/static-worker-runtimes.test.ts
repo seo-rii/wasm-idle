@@ -550,6 +550,89 @@ describe('static worker backed language sandboxes', () => {
 		expect(allValues.at(-1)).toBe(1);
 	});
 
+	it('rejects an overlapping run while worker startup is pending', async () => {
+		autoStartWorkers = false;
+		const sandbox = new Prolog();
+		const load = sandbox.load('/absproxy/5173');
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
+
+		let firstSettled = false;
+		const first = sandbox.run('writeln(first).', false, true, undefined, [], { stdin: '' });
+		void first.finally(() => {
+			firstSettled = true;
+		});
+		const overlapping = sandbox.run('writeln(second).', false, true, undefined, [], {
+			stdin: ''
+		});
+
+		await expect(overlapping).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			phase: 'execute',
+			runtimeId: 'PROLOG',
+			recoverable: true
+		});
+		expect(firstSettled).toBe(false);
+
+		workerInstances[0].onmessage?.({
+			data: { __wasmIdleStaticWorkerReady: true }
+		} as MessageEvent<any>);
+		await load;
+		await expect(first).resolves.toBe(true);
+	});
+
+	it('rejects an overlapping run while the first run waits for stdin', async () => {
+		const sandbox = new Prolog();
+		await sandbox.load('/absproxy/5173');
+		const code = 'main :- read_line_to_string(user_input, Line), writeln(Line).';
+		const first = sandbox.run(code, false);
+		await Promise.resolve();
+
+		await expect(
+			sandbox.run('writeln(second).', false, true, undefined, [], { stdin: '' })
+		).rejects.toMatchObject({ name: 'BusyError', code: 'busy' });
+		expect(workerInstances[0].postMessage).not.toHaveBeenCalled();
+
+		sandbox.write('first\n');
+		sandbox.eof();
+		await expect(first).resolves.toBe(true);
+		expect(workerInstances[0].postMessage).toHaveBeenCalledOnce();
+	});
+
+	it('rejects an overlapping run while the worker is executing', async () => {
+		onPostMessage = () => {};
+		const sandbox = new Prolog();
+		await sandbox.load('/absproxy/5173');
+		const first = sandbox.run('writeln(first).', false, true, undefined, [], { stdin: '' });
+		await vi.waitFor(() => expect(workerInstances[0].postMessage).toHaveBeenCalledOnce());
+
+		await expect(
+			sandbox.run('writeln(second).', false, true, undefined, [], { stdin: '' })
+		).rejects.toMatchObject({ name: 'BusyError', code: 'busy' });
+
+		workerInstances[0].onmessage?.({ data: { results: true } } as MessageEvent<any>);
+		await expect(first).resolves.toBe(true);
+		expect(workerInstances[0].terminate).toHaveBeenCalledOnce();
+	});
+
+	it('releases the active-run slot after kill for an immediate rerun', async () => {
+		onPostMessage = () => {};
+		const sandbox = new Prolog();
+		await sandbox.load('/absproxy/5173');
+		const first = sandbox.run('writeln(first).', false, true, undefined, [], { stdin: '' });
+		await vi.waitFor(() => expect(workerInstances[0].postMessage).toHaveBeenCalledOnce());
+
+		sandbox.kill();
+		await expect(first).rejects.toBe('Process terminated');
+		expect(workerInstances[0].terminate).toHaveBeenCalledOnce();
+
+		onPostMessage = null;
+		await expect(
+			sandbox.run('writeln(second).', false, true, undefined, [], { stdin: '' })
+		).resolves.toBe(true);
+		expect(workerInstances).toHaveLength(2);
+	});
+
 	it('buffers every stdin chunk until EOF and preserves explicit empty stdin', async () => {
 		const sandbox = new Prolog();
 		const code = 'main :- read_line_to_string(user_input, Line), writeln(Line).';

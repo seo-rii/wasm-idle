@@ -1,4 +1,5 @@
 import type { PlaygroundRuntimeAssets } from '$lib/playground/assets';
+import { BusyError } from '@wasm-idle/core';
 import {
 	resolveSandboxExecutionArgs,
 	type CompilerDiagnostic,
@@ -394,6 +395,13 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 		const progress = this.selectProgress(_prog);
 		if (!this.baseUrl || !this.workerUrl) {
 			return Promise.reject(`${this.config.displayName} runtime is not configured.`);
+		}
+		if (this.activeRun) {
+			return Promise.reject(
+				new BusyError(`${this.config.displayName} runtime already has an active run`, {
+					runtimeId: this.config.languageId
+				})
+			);
 		}
 
 		if (prepare) {
