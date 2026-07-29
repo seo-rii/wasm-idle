@@ -5,10 +5,7 @@ import {
 	loadRuntimeManifest,
 	resolveRuntimeManifestUrl
 } from '../../clang/src/index.js';
-import {
-	DEFAULT_MAX_RUNTIME_JSON_BYTES,
-	readBuffer
-} from '../../core/src/wasm.js';
+import { DEFAULT_MAX_RUNTIME_JSON_BYTES, readBuffer } from '../../core/src/wasm.js';
 
 export interface ObjectiveCWorkspaceFile {
 	path: string;
@@ -57,7 +54,11 @@ export interface ObjectiveCWorkerAssetConfig {
 type ObjectiveCSourceLanguage = 'c' | 'objective-c' | 'objective-c++';
 type ObjectiveCBrowserClangArtifact = BrowserClangArtifact & { needsLibffi: boolean };
 
-const textDecoder = new TextDecoder();
+const textDecoder = new TextDecoder('utf-8', { fatal: true });
+const textEncoder = new TextEncoder();
+const MAX_OBJECTIVEC_HEADER_ENTRIES = 4096;
+const MAX_OBJECTIVEC_HEADER_PATH_BYTES = 1024;
+const OBJECTIVEC_HEADER_CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f]/u;
 
 const FFI_TYPE_VOID = 0;
 const FFI_TYPE_INT = 1;
@@ -212,9 +213,65 @@ async function fetchBytes(url: string, label: string, maxOutputBytes?: number) {
 }
 
 async function fetchJson(url: string, label: string) {
-	return JSON.parse(
-		textDecoder.decode(await fetchBytes(url, label, DEFAULT_MAX_RUNTIME_JSON_BYTES))
-	) as Record<string, string>;
+	const bytes = await fetchBytes(url, label, DEFAULT_MAX_RUNTIME_JSON_BYTES);
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(textDecoder.decode(bytes));
+	} catch (error) {
+		throw new Error(`${label} metadata is not valid UTF-8 JSON.`, { cause: error });
+	}
+	if (
+		typeof parsed !== 'object' ||
+		parsed === null ||
+		Array.isArray(parsed) ||
+		Object.getPrototypeOf(parsed) !== Object.prototype
+	) {
+		throw new Error(`${label} metadata must be a plain object.`);
+	}
+	const entries = Object.entries(parsed);
+	if (entries.length > MAX_OBJECTIVEC_HEADER_ENTRIES) {
+		throw new Error(
+			`${label} metadata exceeds the ${MAX_OBJECTIVEC_HEADER_ENTRIES} header entry limit.`
+		);
+	}
+	const headers = Object.create(null) as Record<string, string>;
+	const filePaths = new Set<string>();
+	const directoryPaths = new Set<string>();
+	for (const [headerPath, headerSource] of entries) {
+		if (typeof headerSource !== 'string') {
+			throw new Error(`${label} metadata contains a non-string header source.`);
+		}
+		const pathParts = headerPath.split('/');
+		if (
+			!headerPath ||
+			headerPath.startsWith('/') ||
+			/^[A-Za-z]:\//u.test(headerPath) ||
+			headerPath.includes('\\') ||
+			OBJECTIVEC_HEADER_CONTROL_CHARACTER_PATTERN.test(headerPath) ||
+			pathParts.some((part) => !part || part === '.' || part === '..')
+		) {
+			throw new Error(`${label} metadata contains an unsafe header path.`);
+		}
+		if (textEncoder.encode(headerPath).byteLength > MAX_OBJECTIVEC_HEADER_PATH_BYTES) {
+			throw new Error(
+				`${label} metadata header path exceeds the ${MAX_OBJECTIVEC_HEADER_PATH_BYTES} byte limit.`
+			);
+		}
+		if (directoryPaths.has(headerPath)) {
+			throw new Error(`${label} metadata contains a file/directory path collision.`);
+		}
+		let parentPath = '';
+		for (const part of pathParts.slice(0, -1)) {
+			parentPath = parentPath ? `${parentPath}/${part}` : part;
+			if (filePaths.has(parentPath)) {
+				throw new Error(`${label} metadata contains a file/directory path collision.`);
+			}
+			directoryPaths.add(parentPath);
+		}
+		filePaths.add(headerPath);
+		headers[headerPath] = headerSource;
+	}
+	return headers;
 }
 
 function createObjectiveCLibffiImports(instanceRef: { current: WebAssembly.Instance | null }) {

@@ -50,6 +50,24 @@ function responseBytesForObjectiveCAsset(url: string) {
 	return bytes('mock-libobjc');
 }
 
+function objectiveCLoadEvent() {
+	return {
+		data: {
+			load: true,
+			log: false,
+			clangAssets: { baseUrl: 'http://localhost/clang/', useAssetBridge: false },
+			objectivecAssets: {
+				libobjcUrl: 'http://localhost/wasm-objectivec/libobjc.a',
+				headersUrl: 'http://localhost/wasm-objectivec/headers.json',
+				libgnustepBaseUrl: 'http://localhost/wasm-objectivec/libgnustep-base.a',
+				libgnustepBaseObjectUrl: 'http://localhost/wasm-objectivec/libgnustep-base.o',
+				foundationHeadersUrl: 'http://localhost/wasm-objectivec/foundation-headers.json',
+				libffiUrl: 'http://localhost/wasm-objectivec/libffi.a'
+			}
+		}
+	};
+}
+
 vi.mock('../../clang/src/index.js', () => {
 	class MockBrowserClangRuntime {
 		assetUrls = {
@@ -335,7 +353,9 @@ describe('Objective-C worker', () => {
 				return new Response(
 					new ReadableStream({
 						pull() {
-							throw new Error('oversized compressed metadata body should not be read');
+							throw new Error(
+								'oversized compressed metadata body should not be read'
+							);
 						},
 						cancel() {
 							cancelled = true;
@@ -372,6 +392,174 @@ describe('Objective-C worker', () => {
 			error: `Runtime asset http://localhost/wasm-objectivec/headers.json.gz download size exceeds the ${DEFAULT_MAX_RUNTIME_JSON_BYTES} byte limit`
 		});
 		expect(cancelled).toBe(true);
+	});
+
+	it.each([
+		['an array', bytes('[]'), 'metadata must be a plain object'],
+		['null', bytes('null'), 'metadata must be a plain object'],
+		[
+			'a non-string value',
+			bytes(JSON.stringify({ 'include/objc/runtime.h': 73 })),
+			'metadata contains a non-string header source'
+		],
+		['invalid UTF-8', new Uint8Array([0xc3, 0x28]), 'metadata is not valid UTF-8 JSON']
+	])('rejects Objective-C header metadata containing %s', async (_caseName, payload, error) => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (input: string | URL) => {
+				const url = String(input);
+				return new Response(
+					url.endsWith('/headers.json') ? payload : responseBytesForObjectiveCAsset(url)
+				);
+			})
+		);
+
+		await installWorker();
+		await (globalThis as any).self.onmessage(objectiveCLoadEvent());
+
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			error: expect.stringContaining(error)
+		});
+		expect(runtimeInstances[0]?.memfs.files.size).toBe(0);
+	});
+
+	it.each([
+		['traversal', '../escape.h'],
+		['absolute', '/escape.h'],
+		['Windows absolute', 'C:/escape.h'],
+		['backslash', 'include\\escape.h'],
+		['empty segment', 'include//escape.h'],
+		['dot segment', 'include/./escape.h'],
+		['control character', 'include/\u0000escape.h']
+	])('rejects an Objective-C header metadata %s path', async (_caseName, unsafePath) => {
+		const metadata = Object.fromEntries([
+			['safe.h', 'int safe(void);'],
+			[unsafePath, 'int escaped(void);']
+		]);
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (input: string | URL) => {
+				const url = String(input);
+				return new Response(
+					url.endsWith('/headers.json')
+						? bytes(JSON.stringify(metadata))
+						: responseBytesForObjectiveCAsset(url)
+				);
+			})
+		);
+
+		await installWorker();
+		await (globalThis as any).self.onmessage(objectiveCLoadEvent());
+
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			error: 'Objective-C headers metadata contains an unsafe header path.'
+		});
+		expect(runtimeInstances[0]?.memfs.files.has('safe.h')).toBe(false);
+	});
+
+	it.each([
+		[
+			'path byte limit',
+			Object.fromEntries([[`${'é'.repeat(513)}.h`, 'int oversized(void);']]),
+			'Objective-C headers metadata header path exceeds the 1024 byte limit.'
+		],
+		[
+			'file/directory collision',
+			Object.fromEntries([
+				['include', 'int collision(void);'],
+				['include/objc.h', 'int nested(void);']
+			]),
+			'Objective-C headers metadata contains a file/directory path collision.'
+		],
+		[
+			'directory/file collision',
+			Object.fromEntries([
+				['include/objc.h', 'int nested(void);'],
+				['include', 'int collision(void);']
+			]),
+			'Objective-C headers metadata contains a file/directory path collision.'
+		]
+	])('rejects an Objective-C header metadata %s', async (_caseName, metadata, error) => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (input: string | URL) => {
+				const url = String(input);
+				return new Response(
+					url.endsWith('/headers.json')
+						? bytes(JSON.stringify(metadata))
+						: responseBytesForObjectiveCAsset(url)
+				);
+			})
+		);
+
+		await installWorker();
+		await (globalThis as any).self.onmessage(objectiveCLoadEvent());
+
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ error });
+		expect(runtimeInstances[0]?.memfs.files.size).toBe(0);
+	});
+
+	it('rejects Objective-C header metadata above the entry limit before materialization', async () => {
+		const metadata = Object.fromEntries(
+			Array.from({ length: 4097 }, (_, index) => [`include/header-${index}.h`, ''])
+		);
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (input: string | URL) => {
+				const url = String(input);
+				return new Response(
+					url.endsWith('/headers.json')
+						? bytes(JSON.stringify(metadata))
+						: responseBytesForObjectiveCAsset(url)
+				);
+			})
+		);
+
+		await installWorker();
+		await (globalThis as any).self.onmessage(objectiveCLoadEvent());
+
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			error: 'Objective-C headers metadata exceeds the 4096 header entry limit.'
+		});
+		expect(runtimeInstances[0]?.memfs.files.size).toBe(0);
+	});
+
+	it('validates Foundation header metadata before using it', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (input: string | URL) => {
+				const url = String(input);
+				if (url.endsWith('/foundation-headers.json')) {
+					return new Response(
+						bytes(
+							JSON.stringify({
+								Foundation: 'file',
+								'Foundation/Foundation.h': '@interface NSObject @end'
+							})
+						)
+					);
+				}
+				return new Response(responseBytesForObjectiveCAsset(url));
+			})
+		);
+
+		await installWorker();
+		await (globalThis as any).self.onmessage(objectiveCLoadEvent());
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: '#import <Foundation/Foundation.h>\nint main(void) { return 0; }',
+				buffer: new SharedArrayBuffer(64),
+				prepare: false,
+				log: false,
+				activePath: 'main.m',
+				workspaceFiles: []
+			}
+		});
+
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			error: 'Objective-C Foundation headers metadata contains a file/directory path collision.'
+		});
+		expect(runtimeInstances[0]?.memfs.files.has('Foundation/Foundation.h')).toBe(false);
 	});
 
 	it('rejects oversized Objective-C startup assets before reading their bodies', async () => {
