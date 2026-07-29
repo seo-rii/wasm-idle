@@ -89,12 +89,13 @@ function requireConfinedUrl(
 	assetRootUrl: URL,
 	asset: RuntimeRegistryAsset,
 	runtimeId: string,
-	profileId: string
+	profileId: string,
+	allowRelative: boolean
 ): URL {
 	const expectedUrl = new URL(asset.path, assetRootUrl);
 	let url: URL;
 	try {
-		url = new URL(String(value), assetRootUrl);
+		url = allowRelative ? new URL(String(value), assetRootUrl) : new URL(String(value));
 	} catch {
 		throw new RuntimeConfigurationError(`Runtime asset ${asset.key} has an invalid URL`, {
 			phase: 'asset',
@@ -264,7 +265,14 @@ async function preflightAsset(
 			}
 		);
 	}
-	const requestUrl = requireConfinedUrl(asset.path, assetRootUrl, asset, runtimeId, profileId);
+	const requestUrl = requireConfinedUrl(
+		asset.path,
+		assetRootUrl,
+		asset,
+		runtimeId,
+		profileId,
+		true
+	);
 	let response: Response;
 	try {
 		response = await fetchImpl(requestUrl.href, {
@@ -282,13 +290,20 @@ async function preflightAsset(
 			recoverable: true
 		});
 	}
-	const responseUrl = requireConfinedUrl(
-		response.url || requestUrl.href,
-		assetRootUrl,
-		asset,
-		runtimeId,
-		profileId
-	);
+	let responseUrl: URL;
+	try {
+		responseUrl = requireConfinedUrl(
+			response.url || requestUrl.href,
+			assetRootUrl,
+			asset,
+			runtimeId,
+			profileId,
+			false
+		);
+	} catch (error) {
+		await response.body?.cancel(error).catch(() => undefined);
+		throw error;
+	}
 	if (!response.ok) {
 		throw new AssetNotFoundError(
 			`Failed to load runtime asset ${asset.key}: HTTP ${response.status}`,

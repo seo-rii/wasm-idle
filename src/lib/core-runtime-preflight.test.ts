@@ -238,6 +238,49 @@ describe('runtime registry asset preflight', () => {
 		expect(cancelled).toBe(true);
 	});
 
+	it('rejects a relative final response URL before reading its body', async () => {
+		let cancelled = false;
+		let readerRequested = false;
+		let arrayBufferRequested = false;
+		const response = {
+			url: 'loader.js',
+			ok: true,
+			status: 200,
+			headers: new Headers(),
+			body: {
+				async cancel() {
+					cancelled = true;
+				},
+				getReader() {
+					readerRequested = true;
+					throw new Error('relative final URL response should not be read');
+				}
+			},
+			async arrayBuffer() {
+				arrayBufferRequested = true;
+				throw new Error('relative final URL response should not be materialized');
+			}
+		} as unknown as Response;
+
+		await expect(
+			preflightRuntimeAssets({
+				manifest: createManifest([assets[0]!]),
+				runtimeId: 'fortran/preflight-test',
+				rootUrl: 'https://example.test/',
+				fetch: async () => response
+			})
+		).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'asset',
+			runtimeId: 'fortran/preflight-test',
+			profileId: 'preflight-v1'
+		});
+		expect(cancelled).toBe(true);
+		expect(readerRequested).toBe(false);
+		expect(arrayBufferRequested).toBe(false);
+	});
+
 	it('rejects redirect targets outside the manifest asset root', async () => {
 		const response = responseFor('https://example.test/runtime/loader.js');
 		Object.defineProperty(response, 'url', {
