@@ -128,11 +128,22 @@ export async function fetchTeaVmAsset(
 			`Failed to load TeaVM runtime asset ${asset}: ${error instanceof Error ? error.message : String(error)}`
 		);
 	}
-	if (expectedUrl && response.url && new URL(response.url).href !== expectedUrl) {
-		await response.body?.cancel().catch(() => {});
-		throw new Error(
-			`TeaVM runtime asset ${asset} returned an unexpected final URL: ${response.url}`
-		);
+	if (expectedUrl && response.url) {
+		let finalUrl: URL;
+		try {
+			finalUrl = new URL(response.url);
+		} catch {
+			await response.body?.cancel().catch(() => {});
+			throw new Error(
+				`TeaVM runtime asset ${asset} returned an invalid final URL: ${response.url}`
+			);
+		}
+		if (finalUrl.href !== expectedUrl) {
+			await response.body?.cancel().catch(() => {});
+			throw new Error(
+				`TeaVM runtime asset ${asset} returned an unexpected final URL: ${response.url}`
+			);
+		}
 	}
 	if (!response.ok) {
 		await response.body?.cancel().catch(() => {});

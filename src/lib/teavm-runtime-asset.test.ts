@@ -196,4 +196,29 @@ describe('TeaVM runtime asset boundary', () => {
 		).rejects.toThrow('Unexpected TeaVM runtime asset');
 		expect(fetchMock).toHaveBeenCalledOnce();
 	});
+
+	it('rejects a malformed final URL before reading and cancels the body', async () => {
+		const cancel = vi.fn(async () => {});
+		const getReader = vi.fn();
+		const fetchMock = vi.fn(
+			async () =>
+				({
+					ok: true,
+					url: '://invalid',
+					headers: new Headers(),
+					body: { cancel, getReader }
+				}) as unknown as Response
+		);
+
+		await expect(
+			fetchTeaVmAsset('compiler.wasm', {
+				baseUrl: 'https://assets.example/teavm/',
+				fetch: fetchMock
+			})
+		).rejects.toThrow(
+			'TeaVM runtime asset compiler.wasm returned an invalid final URL: ://invalid'
+		);
+		expect(getReader).not.toHaveBeenCalled();
+		expect(cancel).toHaveBeenCalledOnce();
+	});
 });
