@@ -1,0 +1,282 @@
+import { createHash } from 'node:crypto';
+import {
+	RUNTIME_REGISTRY_MANIFEST_SCHEMA_VERSION,
+	preflightRuntimeAssets,
+	type RuntimeRegistryAsset,
+	type RuntimeRegistryManifest
+} from '@wasm-idle/core';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+const encoder = new TextEncoder();
+const loaderBytes = encoder.encode('export default 1;');
+const compressedBytes = encoder.encode('compressed compiler');
+const runtimeBytes = encoder.encode('logical compiler');
+const sha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
+
+const assets: readonly RuntimeRegistryAsset[] = [
+	{
+		key: 'loader',
+		path: 'loader.js',
+		compressedSha256: sha256(loaderBytes),
+		uncompressedSha256: sha256(loaderBytes),
+		compressedBytes: loaderBytes.byteLength,
+		uncompressedBytes: loaderBytes.byteLength,
+		mediaType: 'text/javascript',
+		encoding: 'identity'
+	},
+	{
+		key: 'compiler',
+		path: 'compiler.wasm.gz',
+		compressedSha256: sha256(compressedBytes),
+		uncompressedSha256: sha256(runtimeBytes),
+		compressedBytes: compressedBytes.byteLength,
+		uncompressedBytes: runtimeBytes.byteLength,
+		mediaType: 'application/wasm',
+		encoding: 'gzip'
+	}
+];
+
+function createManifest(runtimeAssets = assets): RuntimeRegistryManifest {
+	return {
+		schemaVersion: RUNTIME_REGISTRY_MANIFEST_SCHEMA_VERSION,
+		manifestId: 'wasm-idle/preflight-test',
+		revision: 'test-v1',
+		runtimes: [
+			{
+				runtimeId: 'fortran/preflight-test',
+				identity: {
+					languageId: 'FORTRAN',
+					implementationId: 'preflight-test',
+					implementationVersion: '1.0.0',
+					profile: {
+						profileId: 'preflight-v1',
+						manifestSchemaVersion: 1,
+						manifestSha256: 'a'.repeat(64),
+						protocolVersion: 1,
+						trustProfileId: 'restricted-browser-worker-v1',
+						trustProfileSchemaVersion: 1
+					}
+				},
+				capabilities: {
+					stdin: 'prebuffered',
+					workspace: false,
+					abort: true,
+					artifacts: false,
+					streamingOutput: true
+				},
+				workerLifetime: { mode: 'per-run' },
+				requiredBrowserFeatures: ['wasm'],
+				assetRoot: 'runtime',
+				assets: runtimeAssets,
+				contracts: {
+					routeId: 'fortran',
+					runtimeAssetKey: 'fortran',
+					documentationId: 'FORTRAN'
+				}
+			}
+		]
+	};
+}
+
+const responseFor = (url: string) => {
+	if (url.endsWith('/loader.js')) {
+		return new Response(loaderBytes, {
+			status: 200,
+			headers: {
+				'content-length': String(loaderBytes.byteLength),
+				'content-type': 'text/javascript; charset=utf-8'
+			}
+		});
+	}
+	return new Response(compressedBytes, {
+		status: 200,
+		headers: {
+			'content-length': String(compressedBytes.byteLength),
+			'content-type': 'application/gzip'
+		}
+	});
+};
+
+afterEach(() => {
+	vi.useRealTimers();
+});
+
+describe('runtime registry asset preflight', () => {
+	it('loads every declared asset under a nested root before worker startup', async () => {
+		const requested: Array<{ url: string; init?: RequestInit }> = [];
+		const progress: string[] = [];
+		const result = await preflightRuntimeAssets({
+			manifest: createManifest(),
+			runtimeId: 'fortran/preflight-test',
+			rootUrl: 'https://example.test/wasm-idle/',
+			fetch: async (input, init) => {
+				requested.push({ url: String(input), init });
+				return responseFor(String(input));
+			},
+			reportProgress: ({ assetKey, loadedBytes, totalBytes }) =>
+				progress.push(`${assetKey}:${loadedBytes}/${totalBytes}`)
+		});
+
+		expect(requested.map(({ url }) => url).sort()).toEqual([
+			'https://example.test/wasm-idle/runtime/compiler.wasm.gz',
+			'https://example.test/wasm-idle/runtime/loader.js'
+		]);
+		for (const { init } of requested) {
+			expect(init).toMatchObject({
+				credentials: 'omit',
+				redirect: 'follow',
+				referrerPolicy: 'no-referrer'
+			});
+		}
+		expect(result.assetRootUrl).toBe('https://example.test/wasm-idle/runtime/');
+		expect(result.assets.loader?.runtimeIntegrity?.sha256).toBe(sha256(loaderBytes));
+		expect(result.assets.compiler?.deliveryIntegrity.sha256).toBe(sha256(compressedBytes));
+		expect(result.assets.compiler?.runtimeIntegrity).toBeUndefined();
+		expect(result.assets.loader?.cacheKey).toBe(`sha256:${sha256(loaderBytes)}`);
+		expect(progress).toContain(`loader:${loaderBytes.byteLength}/${loaderBytes.byteLength}`);
+		expect(Object.isFrozen(result.assets)).toBe(true);
+	});
+
+	it('rejects corrupt or truncated bytes before publishing a result', async () => {
+		await expect(
+			preflightRuntimeAssets({
+				manifest: createManifest([assets[0]!]),
+				runtimeId: 'fortran/preflight-test',
+				rootUrl: 'https://example.test/',
+				fetch: async () => new Response(encoder.encode('truncated'))
+			})
+		).rejects.toMatchObject({
+			name: 'AssetIntegrityError',
+			code: 'asset-integrity',
+			runtimeId: 'fortran/preflight-test',
+			profileId: 'preflight-v1'
+		});
+	});
+
+	it('rejects redirect targets outside the manifest asset root', async () => {
+		const response = responseFor('https://example.test/runtime/loader.js');
+		Object.defineProperty(response, 'url', {
+			value: 'https://cdn.example.test/runtime/loader.js'
+		});
+
+		await expect(
+			preflightRuntimeAssets({
+				manifest: createManifest([assets[0]!]),
+				runtimeId: 'fortran/preflight-test',
+				rootUrl: 'https://example.test/',
+				fetch: async () => response
+			})
+		).rejects.toThrow('outside its declared asset root');
+	});
+
+	it('rejects a redirect to a different file within the same asset root', async () => {
+		const response = responseFor('https://example.test/runtime/loader.js');
+		Object.defineProperty(response, 'url', {
+			value: 'https://example.test/runtime/alternate.js'
+		});
+
+		await expect(
+			preflightRuntimeAssets({
+				manifest: createManifest([assets[0]!]),
+				runtimeId: 'fortran/preflight-test',
+				rootUrl: 'https://example.test/',
+				fetch: async () => response
+			})
+		).rejects.toThrow('does not match its declared path');
+	});
+
+	it('rejects declared decompressed sizes above the execution limit without fetching', async () => {
+		const fetch = vi.fn<typeof globalThis.fetch>();
+
+		await expect(
+			preflightRuntimeAssets({
+				manifest: createManifest([assets[1]!]),
+				runtimeId: 'fortran/preflight-test',
+				rootUrl: 'https://example.test/',
+				fetch,
+				limits: { maxAssetBytes: runtimeBytes.byteLength - 1 }
+			})
+		).rejects.toMatchObject({ name: 'AssetTooLargeError', code: 'asset-too-large' });
+		expect(fetch).not.toHaveBeenCalled();
+	});
+
+	it('stops a stream as soon as its actual bytes exceed the limit', async () => {
+		const declared = encoder.encode('four');
+		const oversized = encoder.encode('sixsix');
+		const asset: RuntimeRegistryAsset = {
+			...assets[0]!,
+			compressedSha256: sha256(declared),
+			uncompressedSha256: sha256(declared),
+			compressedBytes: declared.byteLength,
+			uncompressedBytes: declared.byteLength
+		};
+
+		await expect(
+			preflightRuntimeAssets({
+				manifest: createManifest([asset]),
+				runtimeId: 'fortran/preflight-test',
+				rootUrl: 'https://example.test/',
+				fetch: async () => new Response(oversized),
+				limits: { maxAssetBytes: 5 }
+			})
+		).rejects.toMatchObject({
+			name: 'AssetTooLargeError',
+			limit: 5,
+			actual: oversized.byteLength
+		});
+	});
+
+	it('returns typed timeout and pre-abort failures', async () => {
+		vi.useFakeTimers();
+		const fetch = vi.fn<typeof globalThis.fetch>(
+			async (_input, init) =>
+				await new Promise<Response>((_resolve, reject) => {
+					init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), {
+						once: true
+					});
+				})
+		);
+		const pending = preflightRuntimeAssets({
+			manifest: createManifest([assets[0]!]),
+			runtimeId: 'fortran/preflight-test',
+			rootUrl: 'https://example.test/',
+			fetch,
+			limits: { assetTimeoutMs: 10 }
+		});
+		const timedOut = expect(pending).rejects.toMatchObject({
+			name: 'TimeoutError',
+			code: 'timeout',
+			phase: 'asset',
+			timeoutMs: 10
+		});
+		await vi.advanceTimersByTimeAsync(11);
+		await timedOut;
+
+		const controller = new AbortController();
+		controller.abort(new Error('stop'));
+		await expect(
+			preflightRuntimeAssets({
+				manifest: createManifest([assets[0]!]),
+				runtimeId: 'fortran/preflight-test',
+				rootUrl: 'https://example.test/',
+				fetch,
+				signal: controller.signal
+			})
+		).rejects.toMatchObject({ name: 'CancelledError', code: 'cancelled', phase: 'asset' });
+		expect(fetch).toHaveBeenCalledTimes(1);
+	});
+
+	it('rejects encoded assets that HTTP transparently decodes', async () => {
+		await expect(
+			preflightRuntimeAssets({
+				manifest: createManifest([assets[1]!]),
+				runtimeId: 'fortran/preflight-test',
+				rootUrl: 'https://example.test/',
+				fetch: async () =>
+					new Response(runtimeBytes, {
+						headers: { 'content-encoding': 'gzip' }
+					})
+			})
+		).rejects.toThrow('delivery bytes were transparently gzip-decoded');
+	});
+});

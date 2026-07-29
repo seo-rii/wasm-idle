@@ -160,6 +160,13 @@ export {
 	type RuntimeProfileAssetCandidate
 } from './runtime-activation.js';
 export {
+	preflightRuntimeAssets,
+	type PreflightedRuntimeAsset,
+	type RuntimeAssetPreflightProgress,
+	type RuntimeAssetPreflightRequest,
+	type RuntimeAssetPreflightResult
+} from './runtime-preflight.js';
+export {
 	RuntimeResourceBudget,
 	type RuntimeResourceBudgetOptions,
 	type RuntimeResourceBudgetSnapshot,
