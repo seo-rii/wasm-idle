@@ -35,6 +35,26 @@ describe('application runtime asset root', () => {
 		);
 	});
 
+	it.each([
+		['/', ''],
+		['/wasm-idle/', '/wasm-idle'],
+		['/foo/bar/', '/foo/bar']
+	])('confines every runtime asset under the %s deployment base', (rootUrl, expectedRoot) => {
+		const assets = createApplicationRuntimeAssets(rootUrl);
+
+		expect(assets.rootUrl).toBe(expectedRoot);
+		for (const [runtime, config] of Object.entries(assets)) {
+			if (runtime === 'rootUrl' || typeof config !== 'object' || !config) continue;
+			for (const [assetKey, value] of Object.entries(config)) {
+				if (typeof value !== 'string') continue;
+				expect(
+					value.startsWith(`${expectedRoot}/`),
+					`${runtime}.${assetKey} escaped ${rootUrl}: ${value}`
+				).toBe(true);
+			}
+		}
+	});
+
 	it('projects every non-debug page runtime from the shared root', () => {
 		const assets = createApplicationRuntimeAssets('/foo/bar/');
 
