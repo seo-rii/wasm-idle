@@ -170,6 +170,25 @@ describe('Rust sandbox', () => {
 		expect(readMemory).toHaveBeenCalledWith('0x40', 0, 2);
 	});
 
+	it('forwards frame scope requests to the active LLDB session', async () => {
+		const sandbox = new Rust();
+		const scopes = vi.fn(async (_frameId: number) => [
+			{ name: 'Locals', variablesReference: 9, expensive: false, variables: [] }
+		]);
+		(
+			sandbox as unknown as {
+				lldbSession: { scopes: typeof scopes };
+			}
+		).lldbSession = { scopes };
+
+		await expect(
+			(sandbox as unknown as { debugScopes: typeof scopes }).debugScopes(73)
+		).resolves.toEqual([
+			{ name: 'Locals', variablesReference: 9, expensive: false, variables: [] }
+		]);
+		expect(scopes).toHaveBeenCalledWith(73);
+	});
+
 	it('loads the rust worker and forwards diagnostics plus run output', async () => {
 		const sandbox = new Rust();
 		const outputs: string[] = [];

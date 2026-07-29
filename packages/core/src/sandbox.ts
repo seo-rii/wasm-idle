@@ -1,6 +1,7 @@
 import type {
 	DebugCommand,
 	DebugMemory,
+	DebugScope,
 	DebugSessionEvent,
 	DebugSourceBreakpoints,
 	DebugVariable
@@ -122,6 +123,7 @@ export interface Sandbox {
 		start?: number,
 		count?: number
 	) => Promise<DebugVariable[]>;
+	debugScopes?: (frameId: number) => Promise<DebugScope[]>;
 	debugReadMemory?: (
 		memoryReference: string,
 		offset: number,

@@ -25,6 +25,7 @@ export type DebugTerminalControl = Pick<
 	| 'setBreakpoints'
 	| 'debugEvaluate'
 	| 'debugVariables'
+	| 'debugScopes'
 	| 'debugReadMemory'
 	| 'stop'
 >;
@@ -114,6 +115,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 	const adapterState = fromStore(adapterStore);
 
 	let watchRequestVersion = 0;
+	let frameRequestVersion = 0;
 	let commandInFlight = false;
 
 	function shouldSyncBreakpoints() {
@@ -215,6 +217,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 	}
 
 	function clearPauseState() {
+		frameRequestVersion += 1;
 		runToCursorLineStore.set(null);
 		pausedLineStore.set(null);
 		localsStore.set([]);
@@ -260,6 +263,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 			return;
 		}
 		if (event.type === 'pause') {
+			frameRequestVersion += 1;
 			activeStore.set(true);
 			const restoreBreakpoints = get(runToCursorLineStore) !== null;
 			runToCursorLineStore.set(null);
@@ -481,6 +485,46 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		return variables;
 	}
 
+	async function selectFrame(frameId: number) {
+		const frame = get(callStackStore).find((entry) => entry.id === frameId);
+		const terminal = get(terminalStore);
+		if (!get(pausedStore) || !frame || !terminal?.debugScopes) return false;
+		const version = ++frameRequestVersion;
+		let scopes: DebugScope[];
+		try {
+			scopes = await terminal.debugScopes(frameId);
+		} catch {
+			return false;
+		}
+		if (
+			version !== frameRequestVersion ||
+			!get(pausedStore) ||
+			!get(callStackStore).some((entry) => entry.id === frameId)
+		) {
+			return false;
+		}
+		const selectedSourcePath = frame.sourcePath || get(sourcePathStore);
+		const sourceRevisionStale =
+			!!selectedSourcePath && get(staleSourcePathsStore).has(selectedSourcePath);
+		frameIdStore.set(frameId);
+		scopesStore.set(scopes);
+		localsStore.set([]);
+		variablesByReferenceStore.set(
+			new Map(
+				scopes
+					.filter((scope) => scope.variablesReference > 0 && scope.variables.length > 0)
+					.map((scope) => [scope.variablesReference, [...scope.variables]])
+			)
+		);
+		pausedSourcePathStore.set(selectedSourcePath);
+		sourceRevisionStaleStore.set(sourceRevisionStale);
+		pausedLineStore.set(
+			!sourceRevisionStale && selectedSourcePath === get(sourcePathStore) ? frame.line : null
+		);
+		refreshWatchValues();
+		return true;
+	}
+
 	async function readMemory(
 		memoryReference: string,
 		offset: number,
@@ -600,6 +644,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		removeWatchExpression,
 		clearWatches,
 		loadVariableChildren,
+		selectFrame,
 		readMemory
 	};
 }

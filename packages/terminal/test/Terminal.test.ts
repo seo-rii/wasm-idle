@@ -73,6 +73,9 @@ describe('Terminal source', () => {
 		expect(source).toMatch(
 			/async debugReadMemory\(memoryReference: string, offset: number, count: number\) \{\s+await wait\(\);\s+return \(await sandbox\.debugReadMemory\?\.\(memoryReference, offset, count\)\) \?\? null;\s+\}/s
 		);
+		expect(source).toMatch(
+			/async debugScopes\(frameId: number\) \{\s+await wait\(\);\s+return \(await sandbox\.debugScopes\?\.\(frameId\)\) \?\? \[\];\s+\}/s
+		);
 	});
 
 	it('submits pending stdin and sends EOF on ctrl+d for read-to-end programs', () => {

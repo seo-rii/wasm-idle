@@ -370,6 +370,10 @@
 			await wait();
 			return (await sandbox.debugVariables?.(variablesReference, start, count)) || [];
 		},
+		async debugScopes(frameId: number) {
+			await wait();
+			return (await sandbox.debugScopes?.(frameId)) ?? [];
+		},
 		async debugReadMemory(memoryReference: string, offset: number, count: number) {
 			await wait();
 			return (await sandbox.debugReadMemory?.(memoryReference, offset, count)) ?? null;

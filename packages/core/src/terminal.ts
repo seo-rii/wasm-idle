@@ -1,4 +1,4 @@
-import type { DebugCommand, DebugMemory, DebugVariable } from './debug.js';
+import type { DebugCommand, DebugMemory, DebugScope, DebugVariable } from './debug.js';
 import type { ProgressLike } from './progress.js';
 import type { SandboxExecutionOptions } from './sandbox.js';
 
@@ -32,6 +32,7 @@ export interface TerminalControl {
 		start?: number,
 		count?: number
 	) => Promise<DebugVariable[]>;
+	debugScopes?: (frameId: number) => Promise<DebugScope[]>;
 	debugReadMemory?: (
 		memoryReference: string,
 		offset: number,

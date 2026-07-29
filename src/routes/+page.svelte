@@ -28,6 +28,7 @@
 		RustTargetTriple,
 		SandboxExecutionOptions,
 		TinyGoTarget,
+		DebugFrame,
 		DebugSessionEvent,
 		DebugScope,
 		DebugVariable
@@ -412,9 +413,11 @@
 		getDebugState: () => {
 			paused: boolean;
 			frameId: number | null;
+			callStack: DebugFrame[];
 			scopes: DebugScope[];
 			variablesByReference: Array<[number, DebugVariable[]]>;
 		};
+		selectDebugFrame: (frameId: number) => Promise<boolean>;
 		loadDebugVariables: (
 			variablesReference: number,
 			start?: number,
@@ -1764,6 +1767,7 @@
 				return {
 					paused: debug.paused,
 					frameId: debug.frameId,
+					callStack: debug.callStack.map((frame) => ({ ...frame })),
 					scopes: debug.scopes.map((scope) => ({
 						...scope,
 						variables: scope.variables.map((variable) => ({ ...variable }))
@@ -1776,6 +1780,9 @@
 						]
 					)
 				};
+			},
+			selectDebugFrame(frameId: number) {
+				return debug.selectFrame(frameId);
 			},
 			loadDebugVariables(variablesReference: number, start?: number, count?: number) {
 				return debug.loadVariableChildren(variablesReference, start, count);
@@ -2637,16 +2644,22 @@
 										class={[
 											'debug-entry',
 											'debug-entry--stack',
-											index === 0 && 'debug-entry--current'
+											debug.frameId === frame.id && 'debug-entry--current'
 										]}
 									>
-										<div class="stack-meta">
-											<span class="stack-order">{index + 1}</span>
-											<span class="stack-function"
-												>{frame.functionName || '(entry)'}</span
-											>
-										</div>
-										<code class="stack-line">L{frame.line}</code>
+										<button
+											class="debug-frame-select"
+											disabled={!frame.id}
+											onclick={() => frame.id && debug.selectFrame(frame.id)}
+										>
+											<div class="stack-meta">
+												<span class="stack-order">{index + 1}</span>
+												<span class="stack-function"
+													>{frame.functionName || '(entry)'}</span
+												>
+											</div>
+											<code class="stack-line">L{frame.line}</code>
+										</button>
 									</li>
 								{/each}
 							</ul>
@@ -3937,6 +3950,25 @@
 
 	.debug-entry--stack {
 		align-items: center;
+	}
+
+	.debug-frame-select {
+		width: 100%;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 10px;
+		padding: 0;
+		border: 0;
+		background: transparent;
+		color: inherit;
+		font: inherit;
+		text-align: left;
+		cursor: pointer;
+	}
+
+	.debug-frame-select:disabled {
+		cursor: default;
 	}
 
 	.debug-entry--current {

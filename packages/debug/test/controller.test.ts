@@ -256,11 +256,20 @@ describe('createDebugSessionController', () => {
 		const debugVariables = vi.fn(async () => [
 			{ name: 'field', value: '9', type: 'int', variablesReference: 0 }
 		]);
+		const debugScopes = vi.fn(async (frameId: number) => [
+			{
+				name: `Locals ${frameId}`,
+				variablesReference: frameId,
+				expensive: false,
+				variables: []
+			}
+		]);
 		const controller = createDebugSessionController({
 			terminal: {
 				debugCommand: vi.fn(async () => undefined),
-				debugVariables
-			}
+				debugVariables,
+				debugScopes
+			} as never
 		});
 
 		controller.handleEvent({
@@ -271,7 +280,10 @@ describe('createDebugSessionController', () => {
 			threadId: 3,
 			frameId: 11,
 			locals: [{ name: 'point', value: '{...}', variablesReference: 42 }],
-			callStack: [{ id: 11, functionName: 'main', line: 7 }],
+			callStack: [
+				{ id: 11, functionName: 'recurse', line: 7 },
+				{ id: 12, functionName: 'recurse', line: 9 }
+			],
 			scopes: [
 				{
 					name: 'Locals',
@@ -287,6 +299,24 @@ describe('createDebugSessionController', () => {
 		expect(controller.stoppedReason).toBe('breakpoint');
 		expect(controller.scopes[0]?.name).toBe('Locals');
 		expect(controller.variablesByReference.has(42)).toBe(false);
+
+		await expect(controller.selectFrame(12)).resolves.toBe(true);
+		expect(debugScopes).toHaveBeenCalledWith(12);
+		expect(controller.frameId).toBe(12);
+		expect(controller.scopes).toEqual([
+			{
+				name: 'Locals 12',
+				variablesReference: 12,
+				expensive: false,
+				variables: []
+			}
+		]);
+		expect(controller.variablesByReference.size).toBe(0);
+
+		debugScopes.mockRejectedValueOnce(new Error('scope failure'));
+		await expect(controller.selectFrame(11)).resolves.toBe(false);
+		expect(controller.frameId).toBe(12);
+		expect(controller.scopes[0]?.name).toBe('Locals 12');
 
 		await expect(controller.loadVariableChildren(42)).resolves.toEqual([
 			{ name: 'field', value: '9', type: 'int', variablesReference: 0 }

@@ -114,9 +114,13 @@ It also requests garbage collection and limits renderer JS heap growth to 64 MiB
 `WASM_IDLE_DEBUG_HEAP_GROWTH_LIMIT_BYTES` to tune that budget for constrained CI environments. Set
 `WASM_IDLE_DEBUG_BROWSER_CASES=c-relaunch` to run only this fixture locally.
 A fifth C fixture intercepts the LLDB WebAssembly asset with a synthetic 404 after a valid manifest
-load. It requires the application preflight to select trace debugging and still produce
-`trace-asset-fallback=73`. Set `WASM_IDLE_DEBUG_BROWSER_CASES=c-asset-fallback` to run only this
-fixture locally.
+load. It requires the application preflight to report that exact asset status, select trace
+debugging, and still produce `trace-asset-fallback=73`. Set
+`WASM_IDLE_DEBUG_BROWSER_CASES=c-asset-fallback` to run only this fixture locally.
+A sixth C fixture stops after stepping inside a three-level recursive call, selects every `recurse`
+frame through the product UI adapter, and requires distinct frame IDs with `n=1`, `n=2`, and `n=3`
+scope values. This guards the pinned synthetic-CFA fix against reusing the top frame's Wasm locals
+for callers. Set `WASM_IDLE_DEBUG_BROWSER_CASES=c-recursive-frames` to run only this fixture locally.
 It then sends a DAP `readMemory` request from the LLDB hexadecimal memory reference `0x0` for four
 bytes of Wasm linear memory through the complete Sandbox and Terminal control path and verifies
 that the response is readable before resuming. The hexadecimal form matters because LLDB-DAP

@@ -104,4 +104,12 @@ describe('LLDB browser integration workflow', () => {
 			"expectedFallbackWarning: 'LLDB WebAssembly debug asset (404)'"
 		);
 	});
+
+	it('keeps distinct recursive frame locals in the required browser gate', async () => {
+		const browserTest = await readFile('src/lib/playground/debug.playwright.test.ts', 'utf8');
+
+		expect(browserTest).toContain("testId: 'c-recursive-frames'");
+		expect(browserTest).toContain('expectedFrameLocals:');
+		expect(browserTest).toContain('selectDebugFrame');
+	});
 });

@@ -76,6 +76,38 @@ int main() {
 }`
 	},
 	{
+		activePath: 'recursive.c',
+		backend: 'lldb',
+		breakpointLine: 6,
+		expectedFrameLocals: [
+			{ name: 'n', value: '1' },
+			{ name: 'n', value: '2' },
+			{ name: 'n', value: '3' }
+		],
+		expectedLocal: { name: 'doubled', value: '2' },
+		expectedOutput: 'lldb-recursive=12',
+		expectedTitle: 'C · LLDB / WAMR',
+		language: 'C',
+		programArgs: [],
+		source: `#include <stdio.h>
+
+__attribute__((noinline)) int recurse(int n) {
+    int doubled = n * 2;
+    if (n == 1) {
+        volatile int stop = doubled;
+        return stop;
+    }
+    return doubled + recurse(n - 1);
+}
+
+int main(void) {
+    int result = recurse(3);
+    printf("lldb-recursive=%d\\n", result);
+    return 0;
+}`,
+		testId: 'c-recursive-frames'
+	},
+	{
 		activePath: 'trap.c',
 		backend: 'lldb',
 		breakpointLine: 2,
@@ -823,6 +855,61 @@ describe('native-source browser debugging in Chromium', () => {
 								unreadableBytes: 0
 							});
 							expect(memory.data).toHaveLength(4);
+							if ('expectedFrameLocals' in testCase) {
+								const recursiveFrames = debugState.callStack.filter(
+									(frame: { id?: number; functionName?: string }) =>
+										frame.functionName === 'recurse'
+								);
+								expect(recursiveFrames).toHaveLength(
+									testCase.expectedFrameLocals.length
+								);
+								expect(
+									new Set(
+										recursiveFrames.map((frame: { id?: number }) => frame.id)
+									).size
+								).toBe(recursiveFrames.length);
+								for (
+									let index = 0;
+									index < testCase.expectedFrameLocals.length;
+									index += 1
+								) {
+									const frame = recursiveFrames[index];
+									expect(frame.id).toBeTypeOf('number');
+									await page.evaluate(
+										(frameId) =>
+											(window as any).__wasmIdleDebug.selectDebugFrame(
+												frameId
+											),
+										frame.id
+									);
+									const selectedState = await page.evaluate(() =>
+										(window as any).__wasmIdleDebug.getDebugState()
+									);
+									expect(selectedState.frameId).toBe(frame.id);
+									const frameVariables = [];
+									for (const scope of selectedState.scopes) {
+										if (scope.variablesReference <= 0) continue;
+										frameVariables.push(
+											...(await page.evaluate(
+												(variablesReference) =>
+													(
+														window as any
+													).__wasmIdleDebug.loadDebugVariables(
+														variablesReference
+													),
+												scope.variablesReference
+											))
+										);
+									}
+									expect(frameVariables).toEqual(
+										expect.arrayContaining([
+											expect.objectContaining(
+												testCase.expectedFrameLocals[index]
+											)
+										])
+									);
+								}
+							}
 						}
 						if (
 							requireLldbDebug &&

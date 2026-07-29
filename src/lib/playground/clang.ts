@@ -401,6 +401,10 @@ class Clang implements Sandbox {
 		return this.lldbSession?.variables(variablesReference, start, count) ?? Promise.resolve([]);
 	}
 
+	debugScopes(frameId: number) {
+		return this.lldbSession?.scopes(frameId) ?? Promise.resolve([]);
+	}
+
 	debugReadMemory(memoryReference: string, offset: number, count: number) {
 		return (
 			this.lldbSession?.readMemory(memoryReference, offset, count) ?? Promise.resolve(null)

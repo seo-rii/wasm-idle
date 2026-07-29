@@ -5,7 +5,8 @@ const runtimeState = vi.hoisted(() => ({
 	options: null as Record<string, unknown> | null,
 	initializeGate: null as Promise<void> | null,
 	continueGate: null as Promise<void> | null,
-	disposeGate: null as Promise<void> | null
+	disposeGate: null as Promise<void> | null,
+	scopesErrorFrameId: null as number | null
 }));
 
 class FakeRuntimeSession {
@@ -68,6 +69,12 @@ class FakeRuntimeSession {
 			} as T;
 		}
 		if (command === 'scopes') {
+			if (
+				(args as { frameId?: number } | undefined)?.frameId ===
+				runtimeState.scopesErrorFrameId
+			) {
+				throw new Error('scope failure');
+			}
 			return {
 				scopes: [
 					{ name: 'Arguments', variablesReference: 10, expensive: false },
@@ -149,6 +156,7 @@ describe('LldbSandboxSession', () => {
 		runtimeState.initializeGate = null;
 		runtimeState.continueGate = null;
 		runtimeState.disposeGate = null;
+		runtimeState.scopesErrorFrameId = null;
 	});
 
 	it('maps DAP stopped state to source frames and top-level scopes', async () => {
@@ -316,6 +324,37 @@ describe('LldbSandboxSession', () => {
 				}
 			])
 		);
+		await expect(controller.scopes(41)).resolves.toEqual([
+			{
+				name: 'Arguments',
+				variablesReference: 10,
+				expensive: false,
+				variables: []
+			},
+			{
+				name: 'Locals',
+				variablesReference: 11,
+				expensive: false,
+				variables: []
+			},
+			{
+				name: 'Globals',
+				variablesReference: 12,
+				expensive: true,
+				variables: []
+			}
+		]);
+		expect(runtimeState.session!.requests).toContainEqual({
+			command: 'scopes',
+			args: { frameId: 41 }
+		});
+		runtimeState.scopesErrorFrameId = 42;
+		await expect(controller.scopes(42)).rejects.toThrow('scope failure');
+		await expect(controller.evaluate('answer')).resolves.toBe('42');
+		expect(runtimeState.session!.requests.at(-1)).toEqual({
+			command: 'evaluate',
+			args: { expression: 'answer', frameId: 41, context: 'watch' }
+		});
 		runtimeState.session!.emit({
 			event: 'output',
 			body: { output: 'hello\n' }

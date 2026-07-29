@@ -359,6 +359,24 @@ export class LldbSandboxSession {
 		}));
 	}
 
+	async scopes(frameId: number) {
+		if (!Number.isInteger(frameId) || frameId <= 0) {
+			throw new RangeError('LLDB frame ID must be a positive integer.');
+		}
+		const response = await this.requireSession().request<{ scopes?: DapScope[] }>('scopes', {
+			frameId
+		});
+		this.activeFrameId = frameId;
+		return (response.scopes ?? []).map(
+			(scope): DebugScope => ({
+				name: scope.name,
+				variablesReference: scope.variablesReference,
+				expensive: scope.expensive,
+				variables: []
+			})
+		);
+	}
+
 	async readMemory(
 		memoryReference: string,
 		offset: number,
@@ -485,22 +503,7 @@ export class LldbSandboxSession {
 		const isWorkspaceFrame = this.options.artifact.sources.some(
 			(source) => source.path === selectedFrame.source?.path
 		);
-		const scopes = isWorkspaceFrame
-			? (
-					(
-						await session.request<{ scopes?: DapScope[] }>('scopes', {
-							frameId: selectedFrame.id
-						})
-					).scopes ?? []
-				).map(
-					(scope): DebugScope => ({
-						name: scope.name,
-						variablesReference: scope.variablesReference,
-						expensive: scope.expensive,
-						variables: []
-					})
-				)
-			: [];
+		const scopes = isWorkspaceFrame ? await this.scopes(selectedFrame.id) : [];
 		if (version !== this.stateVersion || this.session !== session) return;
 		this.activeThreadId = threadId;
 		this.activeFrameId = selectedFrame.id;

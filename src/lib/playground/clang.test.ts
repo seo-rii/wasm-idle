@@ -175,6 +175,25 @@ int main() {
 		expect(readMemory).toHaveBeenCalledWith('0x10', 0, 2);
 	});
 
+	it('forwards frame scope requests to the active LLDB session', async () => {
+		const sandbox = new Clang('C');
+		const scopes = vi.fn(async (_frameId: number) => [
+			{ name: 'Locals', variablesReference: 7, expensive: false, variables: [] }
+		]);
+		(
+			sandbox as unknown as {
+				lldbSession: { scopes: typeof scopes };
+			}
+		).lldbSession = { scopes };
+
+		await expect(
+			(sandbox as unknown as { debugScopes: typeof scopes }).debugScopes(42)
+		).resolves.toEqual([
+			{ name: 'Locals', variablesReference: 7, expensive: false, variables: [] }
+		]);
+		expect(scopes).toHaveBeenCalledWith(42);
+	});
+
 	it('configures the C++ worker asset bridge when a clang loader is provided', async () => {
 		const sandbox = new Clang('CPP');
 		const loader = vi.fn();
