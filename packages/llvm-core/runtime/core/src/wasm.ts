@@ -85,11 +85,14 @@ function resolveRuntimeAssetUrl(name: string) {
 	return resolvedUrl;
 }
 
-function readContentLength(response: Response) {
+function readContentLength(response: Response, assetUrl: string | URL) {
 	const value = response.headers.get('Content-Length');
-	if (!value || !/^\d+$/u.test(value)) return 0;
+	if (value === null) return 0;
 	const contentLength = Number(value);
-	return Number.isSafeInteger(contentLength) ? contentLength : 0;
+	if (!/^\d+$/u.test(value) || !Number.isSafeInteger(contentLength)) {
+		throw new Error(`Runtime asset ${assetUrl} has an invalid Content-Length: ${value}`);
+	}
+	return contentLength;
 }
 
 function runtimeAbortReason(signal: AbortSignal) {
@@ -112,7 +115,13 @@ async function readResponseBytes(
 		await response.body?.cancel(reason).catch(() => {});
 		throw reason;
 	}
-	const contentLength = readContentLength(response);
+	let contentLength: number;
+	try {
+		contentLength = readContentLength(response, assetUrl);
+	} catch (error) {
+		await response.body?.cancel(error).catch(() => {});
+		throw error;
+	}
 	if (contentLength > maxOutputBytes) {
 		await response.body?.cancel().catch(() => {});
 		throw new Error(`Runtime asset ${assetUrl} size exceeds the ${maxOutputBytes} byte limit`);
@@ -288,7 +297,13 @@ async function readGzipResponse(
 		await response.body?.cancel(reason).catch(() => {});
 		throw reason;
 	}
-	const contentLength = readContentLength(response);
+	let contentLength: number;
+	try {
+		contentLength = readContentLength(response, assetUrl);
+	} catch (error) {
+		await response.body?.cancel(error).catch(() => {});
+		throw error;
+	}
 	if (contentLength > maxOutputBytes) {
 		await response.body?.cancel().catch(() => {});
 		throw new Error(

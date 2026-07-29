@@ -571,6 +571,100 @@ describe('WebAssembly loading utilities', () => {
 		expect(cancelled).toBe(true);
 	});
 
+	it.each([
+		['empty', ''],
+		['negative', '-1'],
+		['fractional', '1.5'],
+		['exponential', '1e2'],
+		['duplicate', '2, 2'],
+		['unsafe', '9007199254740992']
+	])('rejects and cancels a %s Content-Length declaration', async (caseName, value) => {
+		const url = `https://cdn.test/llvm/invalid-content-length-${caseName}.bin`;
+		let cancelled = false;
+		const response = new Response(
+			new ReadableStream({
+				cancel() {
+					cancelled = true;
+				}
+			}),
+			{ headers: { 'Content-Length': value } }
+		);
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => response)
+		);
+
+		await expect(readBuffer(url)).rejects.toThrow(
+			`Runtime asset ${url} has an invalid Content-Length: ${value}`
+		);
+		expect(cancelled).toBe(true);
+	});
+
+	it('evicts invalid Content-Length failures so the asset can be retried', async () => {
+		const url = 'https://cdn.test/llvm/retry-invalid-content-length.bin';
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValueOnce(
+				new Response(new ReadableStream(), { headers: { 'Content-Length': 'invalid' } })
+			)
+			.mockResolvedValueOnce(new Response(Uint8Array.of(4, 5, 6)));
+		vi.stubGlobal('fetch', fetchMock);
+
+		await expect(readBuffer(url)).rejects.toThrow(/invalid Content-Length/u);
+		await expect(readBuffer(url)).resolves.toEqual(Uint8Array.of(4, 5, 6));
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+	});
+
+	it('cancels invalid Content-Length responses on gzip and JSON paths', async () => {
+		const gzipUrl = 'https://cdn.test/llvm/invalid-content-length.gz';
+		const jsonUrl = 'https://cdn.test/llvm/invalid-content-length.json';
+		let gzipCancelled = false;
+		let jsonCancelled = false;
+		const gzipResponse = new Response(
+			new ReadableStream({
+				cancel() {
+					gzipCancelled = true;
+				}
+			}),
+			{ headers: { 'Content-Length': '-1' } }
+		);
+		const jsonResponse = new Response(
+			new ReadableStream({
+				cancel() {
+					jsonCancelled = true;
+				}
+			}),
+			{ headers: { 'Content-Length': '1e2' } }
+		);
+
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => gzipResponse)
+		);
+		await expect(readBuffer(gzipUrl)).rejects.toThrow(
+			`Runtime asset ${gzipUrl} has an invalid Content-Length: -1`
+		);
+
+		await expect(
+			fetchRuntimeJson(jsonUrl, { fetchImpl: async () => jsonResponse })
+		).rejects.toThrow(`Runtime asset ${jsonUrl} has an invalid Content-Length: 1e2`);
+		expect(gzipCancelled).toBe(true);
+		expect(jsonCancelled).toBe(true);
+	});
+
+	it('allows absent and zero Content-Length declarations', async () => {
+		const missingUrl = 'https://cdn.test/llvm/missing-content-length.bin';
+		const zeroUrl = 'https://cdn.test/llvm/zero-content-length.bin';
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValueOnce(new Response(Uint8Array.of(1, 2)))
+			.mockResolvedValueOnce(new Response(null, { headers: { 'Content-Length': '0' } }));
+		vi.stubGlobal('fetch', fetchMock);
+
+		await expect(readBuffer(missingUrl)).resolves.toEqual(Uint8Array.of(1, 2));
+		await expect(readBuffer(zeroUrl)).resolves.toEqual(new Uint8Array());
+	});
+
 	it('cancels an unknown-length stream as soon as it crosses the byte limit', async () => {
 		const url = 'https://cdn.test/llvm/stream-limit.bin';
 		let cancelled = false;
