@@ -100,7 +100,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/executionDebugMode = 'trace';/);
 		expect(source).toMatch(/parseDebugRuntimeManifest\(await response\.json\(\)\)/);
 		expect(source).toMatch(
-			/await preflightDebugRuntimeAssets\(\s*manifest,\s*runtimeAssets\.debug\.baseUrl\s*\);/s
+			/await preflightDebugRuntimeAssets\(\s*manifest,\s*new URL\(runtimeAssets\.debug\.baseUrl, globalThis\.location\.href\)\s*\);/s
 		);
 		expect(source).toMatch(/if \(!debug\.paused\) debug\.reset\(\);/);
 		expect(source).toMatch(

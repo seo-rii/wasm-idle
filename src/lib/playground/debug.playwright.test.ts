@@ -147,6 +147,7 @@ int main() {
 	{
 		activePath: 'asset-fallback.c',
 		backend: 'trace',
+		expectedFallbackWarning: 'LLDB WebAssembly debug asset (404)',
 		expectedOutput: 'trace-asset-fallback=73',
 		language: 'C',
 		missingDebugAsset: 'debug/lldb-web-dap.wasm',
@@ -551,6 +552,15 @@ describe('native-source browser debugging in Chromium', () => {
 									2
 								)}`
 							);
+						}
+						if ('expectedFallbackWarning' in testCase) {
+							await expect
+								.poll(() =>
+									consoleMessages.find((message) =>
+										message.includes(testCase.expectedFallbackWarning)
+									)
+								)
+								.toContain(testCase.expectedFallbackWarning);
 						}
 						let pauseTimeout: ReturnType<typeof setTimeout> | undefined;
 						const pauseOutcome = await Promise.race([

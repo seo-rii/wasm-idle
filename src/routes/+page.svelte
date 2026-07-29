@@ -1380,7 +1380,10 @@
 					) {
 						throw new Error('LLDB runtime is missing required debug capabilities.');
 					}
-					await preflightDebugRuntimeAssets(manifest, runtimeAssets.debug.baseUrl);
+					await preflightDebugRuntimeAssets(
+						manifest,
+						new URL(runtimeAssets.debug.baseUrl, globalThis.location.href)
+					);
 					activeDebugBackend = 'lldb';
 				} catch (error) {
 					executionDebugMode = 'trace';
