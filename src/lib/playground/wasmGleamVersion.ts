@@ -1,1 +1,1 @@
-export const WASM_GLEAM_ASSET_VERSION = '9485c199782f928c';
+export const WASM_GLEAM_ASSET_VERSION = '24fecac3bd9bb765';

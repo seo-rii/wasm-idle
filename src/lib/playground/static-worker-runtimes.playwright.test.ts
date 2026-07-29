@@ -25,6 +25,7 @@ import gleam/io
 import wasm_idle/stdin
 
 pub fn main() {
+  io.println("value?")
   let assert Ok(n) = int.parse(stdin.read_line())
   io.println("main=" <> int.to_string(n + 5))
 }
@@ -200,7 +201,8 @@ describe('wasm-idle static worker language browser integrations', () => {
 					language: 'GLEAM',
 					runTimeoutMs: Number(process.env.WASM_IDLE_GLEAM_RUN_TIMEOUT_MS || '240000'),
 					source: gleamStdinSource,
-					stdinText: '68\n'
+					stdinText: '68\n',
+					waitForOutputBeforeStdin: 'value?'
 				});
 				expect(summary.activeState.crossOriginIsolated).toBe(true);
 				expect(summary.activeState.sharedArrayBuffer).toBe(true);

@@ -12,7 +12,7 @@ class Gleam extends StaticWorkerRuntimeSandbox {
 			defaultActivePath: 'main.gleam',
 			moduleWorker: true,
 			stdin: {
-				mode: 'prebuffered',
+				mode: 'streaming',
 				sourceHintPattern: /\bwasm_idle\/stdin\b|\bstdin\.read_line\s*\(/
 			},
 			resolveRuntimeAssets(runtimeAssets: string | PlaygroundRuntimeAssets, currentUrl) {

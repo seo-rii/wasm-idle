@@ -32,7 +32,75 @@ function moduleNameFromPath(path) {
 	return withoutPrefix.slice(0, -'.gleam'.length);
 }
 
-function createLineReader(stdin) {
+function createSharedByteReader(channel) {
+	if (channel === undefined) return null;
+	if (
+		channel?.protocol !== 'wasm-idle-static-stdin-ring' ||
+		channel?.protocolVersion !== 1 ||
+		channel?.controlBytes !== 16 ||
+		!Number.isSafeInteger(channel?.capacity) ||
+		channel.capacity <= 0 ||
+		typeof SharedArrayBuffer !== 'function' ||
+		!(channel.buffer instanceof SharedArrayBuffer) ||
+		channel.buffer.byteLength !== channel.controlBytes + channel.capacity ||
+		typeof Atomics.wait !== 'function'
+	) {
+		throw new Error('Invalid Gleam streaming stdin channel.');
+	}
+
+	const control = new Int32Array(channel.buffer, 0, 4);
+	const bytes = new Uint8Array(channel.buffer, channel.controlBytes, channel.capacity);
+	return () => {
+		while (true) {
+			if (Atomics.load(control, 3) === 1) {
+				throw new Error('Gleam streaming stdin was cancelled.');
+			}
+			const write = Atomics.load(control, 0);
+			const read = Atomics.load(control, 1);
+			const available = write - read;
+			if (available < 0 || available > bytes.byteLength) {
+				throw new Error('Gleam streaming stdin counters are invalid.');
+			}
+			if (available > 0) {
+				const value = bytes[read % bytes.byteLength];
+				Atomics.store(control, 1, read + 1);
+				return value;
+			}
+			if (Atomics.load(control, 2) === 1) return null;
+			self.postMessage({ type: 'stdin-request' });
+			Atomics.wait(control, 0, write);
+		}
+	};
+}
+
+function createSharedLineReader(channel) {
+	const readByte = createSharedByteReader(channel);
+	if (!readByte) return null;
+	const decoder = new TextDecoder();
+	let skipLineFeed = false;
+	return () => {
+		const bytes = [];
+		while (true) {
+			const value = readByte();
+			if (value === null) return decoder.decode(Uint8Array.from(bytes));
+			if (skipLineFeed) {
+				skipLineFeed = false;
+				if (value === 10) continue;
+			}
+			if (value === 10) break;
+			if (value === 13) {
+				skipLineFeed = true;
+				break;
+			}
+			bytes.push(value);
+		}
+		return decoder.decode(Uint8Array.from(bytes));
+	};
+}
+
+function createLineReader(stdin, channel) {
+	const sharedReader = createSharedLineReader(channel);
+	if (sharedReader) return sharedReader;
 	const text = typeof stdin === 'string' ? stdin : '';
 	let offset = 0;
 	return () => {
@@ -192,12 +260,18 @@ async function executeMain(moduleSources, baseUrl, projectId) {
 }
 
 self.onmessage = async (event) => {
-	const { baseUrl, manifestUrl, code, stdin, workspaceFiles = [], log } = event.data || {};
+	const {
+		baseUrl,
+		manifestUrl,
+		code,
+		stdin,
+		stdinChannel,
+		workspaceFiles = [],
+		log
+	} = event.data || {};
 	const projectId = `wasm_idle_${Date.now()}_${++projectCounter}`;
-	const readLine = createLineReader(stdin);
 	const originalLog = console.log;
 	const originalError = console.error;
-	globalThis.__wasmIdleReadLine = readLine;
 	console.log = (...args) => {
 		self.postMessage({ output: `${args.map(String).join(' ')}\n` });
 	};
@@ -205,6 +279,7 @@ self.onmessage = async (event) => {
 		self.postMessage({ output: `${args.map(String).join(' ')}\n` });
 	};
 	try {
+		globalThis.__wasmIdleReadLine = createLineReader(stdin, stdinChannel);
 		if (log) {
 			originalLog(`[wasm-idle:gleam-worker] compile start baseUrl=${baseUrl}`);
 		}
