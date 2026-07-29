@@ -6,6 +6,7 @@ import {
 	WASI,
 	wasi
 } from '@bjorn3/browser_wasi_shim';
+import { installWasiExtractionQuota } from '@wasm-idle/llvm-core';
 import type { SandboxWorkspaceFile } from '$lib/playground/options';
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
 import { fetchRuntimeAssetBytes } from './runtimeAssetFetch';
@@ -122,6 +123,7 @@ class HaskellStdin {
 
 type PendingSymlink = {
 	target: string;
+	resolvedTarget: string;
 	path: string;
 };
 
@@ -157,37 +159,10 @@ function instantiateResult(
 	return result instanceof WebAssembly.Instance ? result : result.instance;
 }
 
-function normalizeRootfsPath(path: string) {
-	const parts: string[] = [];
-	for (const part of path.replace(/^\/+/, '').split('/')) {
-		if (!part || part === '.') continue;
-		if (part === '..') {
-			parts.pop();
-			continue;
-		}
-		parts.push(part);
-	}
-	return parts.join('/');
-}
-
-function dirname(path: string) {
-	const normalized = normalizeRootfsPath(path);
-	const slashIndex = normalized.lastIndexOf('/');
-	return slashIndex === -1 ? '' : normalized.slice(0, slashIndex);
-}
-
-function resolveSymlinkTarget(target: string, linkPath: string) {
-	if (target.startsWith('/')) return normalizeRootfsPath(target);
-	const parent = dirname(linkPath);
-	return normalizeRootfsPath(parent ? `${parent}/${target}` : target);
-}
-
-function readWasiString(tarWasi: WASI, pointer: number, length: number) {
-	const bytes = new Uint8Array(tarWasi.inst.exports.memory.buffer, pointer, length);
-	return new TextDecoder('utf-8').decode(bytes);
-}
-
 function installRootfsExtractionWasiPatches(tarWasi: WASI, pendingSymlinks: PendingSymlink[]) {
+	const extractionQuota = installWasiExtractionQuota(tarWasi, {
+		label: 'Haskell rootfs'
+	});
 	tarWasi.wasiImport.fd_filestat_set_times = () => wasi.ERRNO_SUCCESS;
 	tarWasi.wasiImport.path_filestat_set_times = () => wasi.ERRNO_SUCCESS;
 	tarWasi.wasiImport.path_symlink = (
@@ -198,19 +173,23 @@ function installRootfsExtractionWasiPatches(tarWasi: WASI, pendingSymlinks: Pend
 		newPathLength: number
 	) => {
 		if (!tarWasi.fds[fd]) return wasi.ERRNO_BADF;
-		pendingSymlinks.push({
-			target: readWasiString(tarWasi, oldPathPointer, oldPathLength),
-			path: readWasiString(tarWasi, newPathPointer, newPathLength)
-		});
+		const symlink = extractionQuota.readSymlink(
+			tarWasi,
+			oldPathPointer,
+			oldPathLength,
+			newPathPointer,
+			newPathLength
+		);
+		extractionQuota.recordEntry(symlink.path);
+		pendingSymlinks.push(symlink);
 		return wasi.ERRNO_SUCCESS;
 	};
 }
 
 function materializeRootfsSymlinks(rootfs: PreopenDirectory, pendingSymlinks: PendingSymlink[]) {
 	for (const symlink of pendingSymlinks) {
-		const linkPath = normalizeRootfsPath(symlink.path);
-		const targetPath = resolveSymlinkTarget(symlink.target, linkPath);
-		const { ret, inode_obj: inode } = rootfs.path_lookup(targetPath, 0);
+		const linkPath = symlink.path;
+		const { ret, inode_obj: inode } = rootfs.path_lookup(symlink.resolvedTarget, 0);
 		if (ret !== wasi.ERRNO_SUCCESS || !inode) {
 			throw new Error(
 				`failed to resolve Haskell rootfs symlink ${linkPath} -> ${symlink.target}`

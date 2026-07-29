@@ -354,6 +354,30 @@ describe('Haskell worker', () => {
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ load: true });
 	});
 
+	it('rejects rootfs symlink targets that escape the extraction root', async () => {
+		shim.state.nextSymlink = {
+			target: '../../escape',
+			path: 'tmp/link'
+		};
+
+		await import('./haskell');
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				moduleUrl: 'data:text/javascript,',
+				rootfsUrl: 'https://assets.example.test/wasm-haskell/rootfs.tar.zst',
+				bsdtarUrl: 'https://assets.example.test/wasm-haskell/bsdtar.wasm'
+			}
+		});
+		await Promise.resolve();
+
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			error: 'Haskell rootfs symlink target escapes the extraction root: ../../escape'
+		});
+		expect(shim.state.pathLinks).toEqual([]);
+		expect((globalThis as any).postMessage).not.toHaveBeenCalledWith({ load: true });
+	});
+
 	it('treats prepare as a load-only success and caches the rootfs runtime', async () => {
 		const moduleUrl = createMockDyldModule(`
 			export class DyLDBrowserHost {
