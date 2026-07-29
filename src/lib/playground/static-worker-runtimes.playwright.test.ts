@@ -43,7 +43,13 @@ gets stdin line
 puts "main=[expr {$line + 5}]"
 `;
 
-const awkStdinSource = `{ print "main=" ($1 + 5) }
+const awkStdinSource = `BEGIN {
+  print "value?"
+  fflush()
+  if ((getline line) > 0) {
+    print "main=" (line + 5)
+  }
+}
 `;
 
 const pascalStdinSource = `program Main;
@@ -280,7 +286,8 @@ describe('wasm-idle static worker language browser integrations', () => {
 					language: 'AWK',
 					runTimeoutMs: Number(process.env.WASM_IDLE_AWK_RUN_TIMEOUT_MS || '240000'),
 					source: awkStdinSource,
-					stdinText: '68\n'
+					stdinText: '68\n',
+					waitForOutputBeforeStdin: 'value?'
 				});
 				expect(summary.activeState.crossOriginIsolated).toBe(true);
 				expect(summary.activeState.sharedArrayBuffer).toBe(true);

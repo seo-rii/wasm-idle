@@ -8,7 +8,7 @@ class Awk extends StaticWorkerRuntimeSandbox {
 			displayName: 'AWK',
 			defaultActivePath: 'main.awk',
 			stdin: {
-				mode: 'prebuffered',
+				mode: 'streaming',
 				sourceHintPattern:
 					/\bgetline\b|\$[0-9]|\b(NR|FNR|NF)\b|(^|\n)\s*(?:\/|[!$({]|[A-Za-z_]\w*\s*(?:\(|==|!=|~|!~|<|>|<=|>=))/
 			},
