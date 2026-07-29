@@ -5,6 +5,7 @@ import {
 	loadRuntimeManifest,
 	resolveRuntimeManifestUrl
 } from '../../clang/src/index.js';
+import { readBuffer } from '../../core/src/wasm.js';
 
 export interface ObjectiveCWorkspaceFile {
 	path: string;
@@ -176,36 +177,35 @@ const resolveInputPath = (activePath?: string) => {
 	return /\.[A-Za-z0-9_-]+$/.test(normalized) ? normalized : `${normalized}.m`;
 };
 
-function hasGzipContentEncoding(response: Response) {
-	const contentEncoding = response.headers.get('content-encoding') || '';
-	return contentEncoding
-		.toLowerCase()
-		.split(',')
-		.map((value) => value.trim())
-		.includes('gzip');
-}
-
-async function inflateGzipResponse(response: Response, label: string) {
-	if (hasGzipContentEncoding(response)) {
-		return new Uint8Array(await response.arrayBuffer());
-	}
-	if (!response.body || typeof DecompressionStream !== 'function') {
-		throw new Error(`${label} is gzip-compressed, but DecompressionStream is unavailable.`);
-	}
-	const decompressed = response.body.pipeThrough(new DecompressionStream('gzip'));
-	return new Uint8Array(await new Response(decompressed).arrayBuffer());
-}
-
 async function fetchBytes(url: string, label: string) {
-	const response = await fetch(url);
-	if (!response.ok) {
-		const compressedResponse = await fetch(`${url}.gz`).catch(() => null);
-		if (!compressedResponse?.ok) {
-			throw new Error(`Failed to load ${label}: ${response.status}`);
+	const resolvedUrl = new URL(url).href;
+	try {
+		return await readBuffer(resolvedUrl);
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		const failedResponsePrefix = `Failed to load runtime asset ${resolvedUrl}: `;
+		if (!message.startsWith(failedResponsePrefix)) throw error;
+		const compressedAssetUrl = new URL(resolvedUrl);
+		compressedAssetUrl.pathname += '.gz';
+		const compressedUrl = compressedAssetUrl.href;
+		try {
+			return await readBuffer(compressedUrl);
+		} catch (compressedError) {
+			const compressedMessage =
+				compressedError instanceof Error
+					? compressedError.message
+					: String(compressedError);
+			if (!compressedMessage.startsWith(`Failed to load runtime asset ${compressedUrl}: `)) {
+				throw compressedError;
+			}
+			throw new Error(
+				`Failed to load ${label}: ${message.slice(failedResponsePrefix.length)}`,
+				{
+					cause: compressedError
+				}
+			);
 		}
-		return inflateGzipResponse(compressedResponse, label);
 	}
-	return new Uint8Array(await response.arrayBuffer());
 }
 
 async function fetchJson(url: string, label: string) {

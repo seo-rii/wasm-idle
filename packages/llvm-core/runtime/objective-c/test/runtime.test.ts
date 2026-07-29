@@ -169,12 +169,10 @@ describe('Objective-C worker', () => {
 		(globalThis as any).postMessage = vi.fn();
 		vi.stubGlobal(
 			'fetch',
-			vi.fn(async (url: string) => ({
-				ok: true,
-				arrayBuffer: async () => {
-					return responseBytesForObjectiveCAsset(url).buffer;
-				}
-			}))
+			vi.fn(
+				async (url: string | URL) =>
+					new Response(responseBytesForObjectiveCAsset(String(url)))
+			)
 		);
 	});
 
@@ -204,10 +202,13 @@ describe('Objective-C worker', () => {
 
 	it('loads gzip-only Objective-C startup assets through original asset urls', async () => {
 		const fetchedUrls: string[] = [];
+		const fetchedOptions: (RequestInit | undefined)[] = [];
 		vi.stubGlobal(
 			'fetch',
-			vi.fn(async (url: string) => {
+			vi.fn(async (input: string | URL, options?: RequestInit) => {
+				const url = String(input);
 				fetchedUrls.push(url);
+				fetchedOptions.push(options);
 				if (!url.endsWith('.gz')) {
 					return {
 						ok: false,
@@ -255,6 +256,63 @@ describe('Objective-C worker', () => {
 		expect(Array.from(runtimeInstances[0]?.memfs.files.get('libobjc.a') as Uint8Array)).toEqual(
 			Array.from(bytes('mock-libobjc'))
 		);
+		for (const options of fetchedOptions) {
+			expect(options).toEqual(
+				expect.objectContaining({
+					credentials: 'omit',
+					redirect: 'error',
+					referrerPolicy: 'no-referrer'
+				})
+			);
+		}
+	});
+
+	it('rejects oversized Objective-C startup assets before reading their bodies', async () => {
+		const limit = 128 * 1024 * 1024;
+		let cancelled = false;
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (input: string | URL) => {
+				const url = String(input);
+				if (!url.endsWith('libobjc.a')) {
+					return new Response(responseBytesForObjectiveCAsset(url));
+				}
+				return new Response(
+					new ReadableStream({
+						pull() {
+							throw new Error('oversized body should not be read');
+						},
+						cancel() {
+							cancelled = true;
+						}
+					}),
+					{ headers: { 'Content-Length': String(limit + 1) } }
+				);
+			})
+		);
+
+		await installWorker();
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				log: false,
+				clangAssets: { baseUrl: 'http://localhost/clang/', useAssetBridge: false },
+				objectivecAssets: {
+					libobjcUrl: 'http://localhost/wasm-objectivec/libobjc.a',
+					headersUrl: 'http://localhost/wasm-objectivec/headers.json',
+					libgnustepBaseUrl: 'http://localhost/wasm-objectivec/libgnustep-base.a',
+					libgnustepBaseObjectUrl: 'http://localhost/wasm-objectivec/libgnustep-base.o',
+					foundationHeadersUrl:
+						'http://localhost/wasm-objectivec/foundation-headers.json',
+					libffiUrl: 'http://localhost/wasm-objectivec/libffi.a'
+				}
+			}
+		});
+
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			error: `Runtime asset http://localhost/wasm-objectivec/libobjc.a size exceeds the ${limit} byte limit`
+		});
+		expect(cancelled).toBe(true);
 	});
 
 	it('compiles and links Objective-C workspace implementation files', async () => {
