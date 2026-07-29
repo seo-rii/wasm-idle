@@ -31,6 +31,26 @@ int main(void) {
 }`
 	},
 	{
+		activePath: 'stale-generation.c',
+		backend: 'lldb',
+		breakpointLine: 4,
+		expectedOutput: 'lldb-stale-generation=73',
+		expectedLocal: { name: 'value', value: '70' },
+		expectedTitle: 'C · LLDB / WAMR',
+		injectStaleGeneration: true,
+		language: 'C',
+		programArgs: [],
+		source: `#include <stdio.h>
+
+int main(void) {
+    int value = 70;
+    value += 3;
+    printf("lldb-stale-generation=%d\\n", value);
+    return 0;
+}`,
+		testId: 'c-stale-generation'
+	},
+	{
 		activePath: 'main.cpp',
 		backend: 'lldb',
 		breakpointLine: 16,
@@ -437,18 +457,27 @@ describe('native-source browser debugging in Chromium', () => {
 				let created = 0;
 				let terminated = 0;
 				const liveWorkers = new WeakSet<Worker>();
+				const debugWorkers = new Map<'lldb' | 'target', Worker>();
 				class MeasuredWorker extends NativeWorker {
 					constructor(url: string | URL, options?: WorkerOptions) {
 						super(url, options);
 						liveWorkers.add(this);
 						active += 1;
 						created += 1;
+						if (options?.name === 'wasm-lldb-debugger') {
+							debugWorkers.set('lldb', this);
+						} else if (options?.name === 'wasm-target-debugger') {
+							debugWorkers.set('target', this);
+						}
 					}
 
 					override terminate() {
 						if (liveWorkers.delete(this)) {
 							active -= 1;
 							terminated += 1;
+						}
+						for (const [kind, worker] of debugWorkers) {
+							if (worker === this) debugWorkers.delete(kind);
 						}
 						super.terminate();
 					}
@@ -461,6 +490,56 @@ describe('native-source browser debugging in Chromium', () => {
 				Object.defineProperty(globalThis, '__wasmIdleWorkerMetrics', {
 					configurable: true,
 					value: () => ({ active, created, terminated })
+				});
+				Object.defineProperty(globalThis, '__wasmIdleDebugWorkerFaults', {
+					configurable: true,
+					value: {
+						injectStaleGeneration() {
+							const lldbWorker = debugWorkers.get('lldb');
+							const targetWorker = debugWorkers.get('target');
+							if (!lldbWorker || !targetWorker) return false;
+							const generation = `wasm-debug-stale-${Date.now().toString(36)}`;
+							lldbWorker.postMessage({ type: 'dispose', generation });
+							targetWorker.postMessage({ type: 'interrupt-target', generation });
+							targetWorker.postMessage({ type: 'dispose', generation });
+							lldbWorker.dispatchEvent(
+								new MessageEvent('message', {
+									data: {
+										type: 'error',
+										worker: 'lldb',
+										message: 'stale-generation-lldb-error',
+										generation
+									}
+								})
+							);
+							targetWorker.dispatchEvent(
+								new MessageEvent('message', {
+									data: {
+										type: 'output',
+										channel: 'stdout',
+										data: 'stale-generation-output',
+										generation
+									}
+								})
+							);
+							targetWorker.dispatchEvent(
+								new MessageEvent('message', {
+									data: {
+										type: 'error',
+										worker: 'target',
+										message: 'stale-generation-target-error',
+										generation
+									}
+								})
+							);
+							targetWorker.dispatchEvent(
+								new MessageEvent('message', {
+									data: { type: 'exit', exitCode: 91, generation }
+								})
+							);
+							return true;
+						}
+					}
 				});
 			});
 
@@ -830,6 +909,25 @@ describe('native-source browser debugging in Chromium', () => {
 								}
 							);
 							stepStartLine = await readPausedLine(page);
+						}
+						if ('injectStaleGeneration' in testCase) {
+							const injected = await page.evaluate(
+								() =>
+									(
+										window as any
+									).__wasmIdleDebugWorkerFaults?.injectStaleGeneration?.() ===
+									true
+							);
+							expect(injected).toBe(true);
+							const stateAfterFault = await page.evaluate(() =>
+								(window as any).__wasmIdleDebug.getDebugState()
+							);
+							expect(stateAfterFault.paused).toBe(true);
+							const transcriptAfterFault =
+								(await page
+									.locator('[data-testid="terminal-debug-output"]')
+									.textContent()) || '';
+							expect(transcriptAfterFault).not.toContain('stale-generation-output');
 						}
 
 						if (!('breakpointSourcePath' in testCase)) {

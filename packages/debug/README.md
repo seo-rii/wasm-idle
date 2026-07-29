@@ -42,3 +42,8 @@ hosts may therefore issue the next step as soon as the stopped state is publishe
 When a selected LLDB stack frame names another `/workspace/...` source, the host should await
 `selectFrame()`, open the matching workspace file, and then update the controller source path. This
 keeps the Monaco model, selected frame, paused line, and per-source revision state synchronized.
+
+The strict Chromium LLDB suite also injects stale-generation control messages into the real LLDB
+and WAMR workers and synthetic stale output, error, and exit events at the host boundary. The active
+session must remain paused, step successfully, emit only current-generation output, and exit
+normally.
