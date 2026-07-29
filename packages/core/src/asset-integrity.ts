@@ -75,6 +75,12 @@ export async function verifyRuntimeAssetIntegrity(
 		if (stage === 'compressed') {
 			expectedSha256 = request.expected.sha256;
 			expectedBytes = request.expected.bytes;
+			if (
+				request.expected.uncompressedSha256 === undefined &&
+				request.expected.uncompressedBytes === undefined
+			) {
+				expectedMediaType = request.expected.mediaType;
+			}
 		} else {
 			if (
 				request.expected.uncompressedSha256 === undefined ||
@@ -159,10 +165,9 @@ export async function verifyRuntimeAssetIntegrity(
 		stage,
 		sha256: actualSha256,
 		bytes: request.bytes.byteLength,
-		mediaType:
-			stage === 'uncompressed' && request.mimeType
-				? request.mimeType.split(';', 1)[0]?.trim().toLowerCase()
-				: undefined
+		mediaType: expectedMediaType
+			? request.mimeType?.split(';', 1)[0]?.trim().toLowerCase()
+			: undefined
 	});
 }
 

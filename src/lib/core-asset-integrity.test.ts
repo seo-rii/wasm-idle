@@ -76,6 +76,34 @@ describe('runtime asset integrity', () => {
 		} satisfies Partial<AssetIntegrityError>);
 	});
 
+	it('treats MIME metadata on a legacy receipt as the delivery media type', async () => {
+		const bytes = encoder.encode('export default 1;');
+		const expected: RuntimeAssetIntegrityEntry = {
+			sha256: createHash('sha256').update(bytes).digest('hex'),
+			bytes: bytes.byteLength,
+			mediaType: 'text/javascript'
+		};
+
+		await expect(
+			verifyRuntimeAssetIntegrity({
+				asset: 'runtime.js',
+				bytes,
+				expected,
+				mimeType: 'Text/JavaScript; charset=utf-8'
+			})
+		).resolves.toMatchObject({ mediaType: 'text/javascript' });
+		await expect(
+			verifyRuntimeAssetIntegrity({
+				asset: 'runtime.js',
+				bytes,
+				expected,
+				mimeType: 'text/plain'
+			})
+		).rejects.toThrow(
+			'Runtime asset runtime.js MIME type mismatch: expected text/javascript, received text/plain'
+		);
+	});
+
 	it('rejects decompression expansion that violates the declared logical size', async () => {
 		const compressed = encoder.encode('compressed');
 		const uncompressed = encoder.encode('expanded payload');
