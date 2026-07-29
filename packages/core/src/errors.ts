@@ -10,6 +10,7 @@ export const RUNTIME_ERROR_CODES = [
 	'runtime',
 	'timeout',
 	'cancelled',
+	'resource-limit',
 	'output-limit',
 	'diagnostic-limit',
 	'protocol',
@@ -218,6 +219,33 @@ export class CancelledError extends WasmIdleError {
 export interface RuntimeMessageLimitErrorOptions extends RuntimeErrorContext {
 	limit: number;
 	actual: number;
+}
+
+export type RuntimeResourceKind = 'wasm-memory' | 'nested-workers' | 'threads';
+
+export interface ResourceLimitErrorOptions extends RuntimeErrorContext {
+	resource: RuntimeResourceKind;
+	limit: number;
+	actual: number;
+}
+
+export class ResourceLimitError extends WasmIdleError {
+	readonly resource: RuntimeResourceKind;
+	readonly limit: number;
+	readonly actual: number;
+
+	constructor(message: string, options: ResourceLimitErrorOptions) {
+		super(message, {
+			...options,
+			code: 'resource-limit',
+			phase: options.phase ?? 'execute',
+			recoverable: options.recoverable ?? true
+		});
+		this.name = 'ResourceLimitError';
+		this.resource = options.resource;
+		this.limit = options.limit;
+		this.actual = options.actual;
+	}
 }
 
 export class OutputLimitError extends WasmIdleError {

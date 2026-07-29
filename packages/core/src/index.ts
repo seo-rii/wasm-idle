@@ -51,6 +51,7 @@ export {
 	DiagnosticLimitError,
 	OutputLimitError,
 	ProtocolError,
+	ResourceLimitError,
 	RUNTIME_ERROR_CODES,
 	RUNTIME_PHASES,
 	RuntimeConfigurationError,
@@ -65,6 +66,8 @@ export {
 	type RuntimeErrorCode,
 	type RuntimeErrorContext,
 	type RuntimeMessageLimitErrorOptions,
+	type ResourceLimitErrorOptions,
+	type RuntimeResourceKind,
 	type RuntimePhase,
 	type TimeoutErrorOptions,
 	type WasmIdleErrorOptions
@@ -156,6 +159,14 @@ export {
 	type RuntimeProfileActivationSnapshot,
 	type RuntimeProfileAssetCandidate
 } from './runtime-activation.js';
+export {
+	RuntimeResourceBudget,
+	type RuntimeResourceBudgetOptions,
+	type RuntimeResourceBudgetSnapshot,
+	type RuntimeResourceLease,
+	type RuntimeResourceReservation,
+	type RuntimeResourceUsage
+} from './resource-budget.js';
 export {
 	RuntimeWorkerLifetimeController,
 	type RuntimeWorkerLease,
