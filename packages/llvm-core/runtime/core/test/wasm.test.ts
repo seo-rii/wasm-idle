@@ -667,6 +667,31 @@ describe('WebAssembly loading utilities', () => {
 		expect(cancelled).toBe(true);
 	});
 
+	it('cancels malformed final URLs and evicts the failed request from the cache', async () => {
+		const url = 'https://cdn.test/llvm/invalid-final-url.bin';
+		let cancelled = false;
+		const invalidResponse = new Response(
+			new ReadableStream({
+				cancel() {
+					cancelled = true;
+				}
+			})
+		);
+		Object.defineProperty(invalidResponse, 'url', { value: '://invalid' });
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValueOnce(invalidResponse)
+			.mockResolvedValueOnce(new Response(Uint8Array.of(7, 8, 9)));
+		vi.stubGlobal('fetch', fetchMock);
+
+		await expect(readBuffer(url)).rejects.toThrow(
+			`Runtime asset ${url} returned an invalid final URL: ://invalid`
+		);
+		expect(cancelled).toBe(true);
+		await expect(readBuffer(url)).resolves.toEqual(Uint8Array.of(7, 8, 9));
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+	});
+
 	it('cancels failed response bodies before allowing the asset to be retried', async () => {
 		const url = 'https://cdn.test/llvm/failed-response.bin';
 		let cancelled = false;
