@@ -128,6 +128,8 @@ import {
 	parseCobolRuntimeManifest,
 	resolveCobolRuntimeAssetUrls
 } from '../src/index.js';
+import { loadRuntimeManifest } from '../../clang/src/index.js';
+import { compile, readBuffer } from '../../core/src/wasm.js';
 
 const manifest = {
 	manifestVersion: 1 as const,
@@ -149,6 +151,9 @@ describe('GnuCOBOL llvm-core runtime', () => {
 		calls.runWithOptions.length = 0;
 		calls.compile.length = 0;
 		calls.runtimeOptions.length = 0;
+		vi.mocked(compile).mockClear();
+		vi.mocked(readBuffer).mockClear();
+		vi.mocked(loadRuntimeManifest).mockClear();
 	});
 
 	it('loads clang metadata and replaces only its sysroot with the COBOL C bundle', async () => {
@@ -208,6 +213,76 @@ describe('GnuCOBOL llvm-core runtime', () => {
 			redirect: 'error',
 			referrerPolicy: 'no-referrer'
 		});
+	});
+
+	it('preserves a pre-aborted COBOL manifest reason without fetching', async () => {
+		const fetchImpl = vi.fn();
+		const controller = new AbortController();
+		const reason = new Error('stop COBOL manifest loading');
+		controller.abort(reason);
+
+		await expect(
+			loadCobolRuntimeManifest(
+				'https://cdn.test/cobol/runtime-manifest.v1.json',
+				fetchImpl,
+				controller.signal
+			)
+		).rejects.toBe(reason);
+		expect(fetchImpl).not.toHaveBeenCalled();
+	});
+
+	it('cancels every COBOL compiler startup asset with one signal', async () => {
+		const controller = new AbortController();
+		const reason = new Error('stop COBOL compiler startup');
+		const fetchImpl = vi.fn(
+			async () =>
+				new Response(JSON.stringify(manifest), {
+					status: 200,
+					headers: { 'content-type': 'application/json' }
+				})
+		);
+		vi.mocked(compile).mockImplementationOnce(
+			async (_url, _progress, signal) =>
+				await new Promise<WebAssembly.Module>((_resolve, reject) => {
+					signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
+				})
+		);
+		const pending = createCobolCompiler({
+			...runtimeLocations,
+			fetchImpl,
+			signal: controller.signal
+		});
+
+		await vi.waitFor(() => {
+			expect(compile).toHaveBeenCalledOnce();
+			expect(readBuffer).toHaveBeenCalledOnce();
+			expect(calls.runtimeOptions).toHaveLength(1);
+		});
+		expect(fetchImpl).toHaveBeenCalledWith(
+			'https://cdn.test/cobol/runtime-manifest.v1.json',
+			expect.objectContaining({ signal: controller.signal })
+		);
+		expect(loadRuntimeManifest).toHaveBeenCalledWith(
+			'https://cdn.test/clang/runtime-manifest.v1.json',
+			fetchImpl,
+			controller.signal
+		);
+		expect(calls.runtimeOptions[0]?.signal).toBe(controller.signal);
+		expect(compile).toHaveBeenCalledWith(
+			'https://cdn.test/cobol/cobc.wasm.gz',
+			undefined,
+			controller.signal
+		);
+		expect(readBuffer).toHaveBeenCalledWith(
+			'https://cdn.test/cobol/rootfs.tar.gz',
+			undefined,
+			undefined,
+			controller.signal
+		);
+
+		controller.abort(reason);
+
+		await expect(pending).rejects.toBe(reason);
 	});
 
 	it('translates real COBOL output files, compiles C, and links libcob with GMP', async () => {

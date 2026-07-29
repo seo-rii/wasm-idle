@@ -109,6 +109,7 @@ export type CreateCobolCompilerOptions = CobolRuntimeLocation &
 		clangManifest?: RuntimeManifestV1;
 		fetchImpl?: typeof fetch;
 		log?: boolean;
+		signal?: AbortSignal;
 	};
 
 export interface CobolRuntimeAssetUrls {
@@ -220,13 +221,15 @@ export function resolveCobolRuntimeAssetUrls(
 
 export async function loadCobolRuntimeManifest(
 	manifestUrl: string | URL,
-	fetchImpl: typeof fetch = fetch
+	fetchImpl: typeof fetch = fetch,
+	signal?: AbortSignal
 ): Promise<CobolRuntimeManifestV1> {
 	const url = resolveHostedRuntimeUrl(manifestUrl, 'wasm-cobol runtime manifest URL');
 	return parseCobolRuntimeManifest(
 		await fetchRuntimeJson(url, {
 			fetchImpl,
-			label: 'wasm-cobol runtime manifest'
+			label: 'wasm-cobol runtime manifest',
+			signal
 		})
 	);
 }
@@ -321,6 +324,7 @@ class CobolCompiler implements BrowserCobolCompiler {
 	}
 
 	static async create(options: CreateCobolCompilerOptions) {
+		if (options.signal?.aborted) throw options.signal.reason;
 		const fetchImpl = options.fetchImpl || fetch;
 		const runtimeBaseUrl =
 			options.runtimeBaseUrl !== undefined
@@ -330,7 +334,8 @@ class CobolCompiler implements BrowserCobolCompiler {
 			options.manifest ||
 			(await loadCobolRuntimeManifest(
 				options.manifestUrl || resolveCobolRuntimeManifestUrl(runtimeBaseUrl),
-				fetchImpl
+				fetchImpl,
+				options.signal
 			));
 		const assets = resolveCobolRuntimeAssetUrls(runtimeBaseUrl, manifest);
 		const clangRuntimeBaseUrl =
@@ -341,7 +346,8 @@ class CobolCompiler implements BrowserCobolCompiler {
 			options.clangManifest ||
 			(await loadRuntimeManifest(
 				options.clangManifestUrl || resolveRuntimeManifestUrl(clangRuntimeBaseUrl),
-				fetchImpl
+				fetchImpl,
+				options.signal
 			));
 		const runtime = new BrowserClangRuntime({
 			runtimeBaseUrl: clangRuntimeBaseUrl,
@@ -353,13 +359,18 @@ class CobolCompiler implements BrowserCobolCompiler {
 				}
 			},
 			log: options.log,
+			signal: options.signal,
 			stdout: () => {}
 		});
-		const [frontend, rootfs] = await Promise.all([
-			compile(assets.frontend),
-			readBuffer(assets.rootfs)
-		]);
+		const frontendReady = options.signal
+			? compile(assets.frontend, undefined, options.signal)
+			: compile(assets.frontend);
+		const rootfsReady = options.signal
+			? readBuffer(assets.rootfs, undefined, undefined, options.signal)
+			: readBuffer(assets.rootfs);
+		const [frontend, rootfs] = await Promise.all([frontendReady, rootfsReady]);
 		await runtime.ready;
+		if (options.signal?.aborted) throw options.signal.reason;
 		untar(rootfs, runtime.memfs);
 		addDirectory(runtime, 'tmp');
 		return new CobolCompiler(runtime, frontend);
