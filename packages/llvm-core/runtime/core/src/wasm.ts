@@ -211,11 +211,11 @@ export async function fetchRuntimeJson(
 			finalUrl = new URL(response.url);
 		} catch {
 			await response.body?.cancel().catch(() => {});
-			throw new Error(`${label} returned an invalid final URL: ${response.url}`);
+			throw new Error(`${label} returned an invalid final URL`);
 		}
 		if (finalUrl.href !== resolvedUrl.href) {
 			await response.body?.cancel().catch(() => {});
-			throw new Error(`${label} returned an unexpected final URL: ${response.url}`);
+			throw new Error(`${label} returned an unexpected final URL`);
 		}
 	}
 	if (!response.ok) {
@@ -537,15 +537,11 @@ export const readBuffer = async (
 					finalUrl = new URL(response.url);
 				} catch {
 					await response.body?.cancel().catch(() => {});
-					throw new Error(
-						`Runtime asset ${resolvedUrl} returned an invalid final URL: ${response.url}`
-					);
+					throw new Error('Runtime asset returned an invalid final URL');
 				}
 				if (finalUrl.href !== resolvedUrl.href) {
 					await response.body?.cancel().catch(() => {});
-					throw new Error(
-						`Runtime asset ${resolvedUrl} returned an unexpected final URL: ${response.url}`
-					);
+					throw new Error('Runtime asset returned an unexpected final URL');
 				}
 			}
 			if (!response.ok) {

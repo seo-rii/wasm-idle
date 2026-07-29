@@ -330,6 +330,7 @@ describe('WebAssembly loading utilities', () => {
 	it('rejects substituted, invalid UTF-8, and malformed runtime JSON', async () => {
 		const url = 'https://cdn.test/llvm/runtime-manifest.json';
 		let substitutedCancelled = false;
+		const finalUrlSecret = 'signed-final-url-secret';
 		const substituted = new Response(
 			new ReadableStream({
 				cancel() {
@@ -338,12 +339,47 @@ describe('WebAssembly loading utilities', () => {
 			})
 		);
 		Object.defineProperty(substituted, 'url', {
-			value: 'https://mirror.test/llvm/runtime-manifest.json'
+			value: `https://runtime-user:password@mirror.test/llvm/runtime-manifest.json?signature=${finalUrlSecret}#access-token`
 		});
-		await expect(fetchRuntimeJson(url, { fetchImpl: async () => substituted })).rejects.toThrow(
-			/returned an unexpected final URL/u
+		let substitutedError: unknown;
+		try {
+			await fetchRuntimeJson(url, { fetchImpl: async () => substituted });
+		} catch (error) {
+			substitutedError = error;
+		}
+		expect(substitutedError).toBeInstanceOf(Error);
+		expect((substitutedError as Error).message).toBe(
+			'runtime JSON returned an unexpected final URL'
 		);
+		expect((substitutedError as Error).message).not.toContain(finalUrlSecret);
+		expect((substitutedError as Error).message).not.toContain('access-token');
 		expect(substitutedCancelled).toBe(true);
+
+		let invalidCancelled = false;
+		const invalidFinalUrl = '://invalid-final-url-secret';
+		let invalidError: unknown;
+		try {
+			await fetchRuntimeJson(url, {
+				fetchImpl: async () =>
+					({
+						url: invalidFinalUrl,
+						ok: true,
+						status: 200,
+						headers: new Headers(),
+						body: {
+							async cancel() {
+								invalidCancelled = true;
+							}
+						}
+					}) as unknown as Response
+			});
+		} catch (error) {
+			invalidError = error;
+		}
+		expect(invalidError).toBeInstanceOf(Error);
+		expect((invalidError as Error).message).toBe('runtime JSON returned an invalid final URL');
+		expect((invalidError as Error).message).not.toContain(invalidFinalUrl);
+		expect(invalidCancelled).toBe(true);
 
 		await expect(
 			fetchRuntimeJson(url, {
@@ -740,6 +776,7 @@ describe('WebAssembly loading utilities', () => {
 	it('rejects a response whose final URL differs from the declared asset URL', async () => {
 		const url = 'https://cdn.test/llvm/exact-url.bin';
 		let cancelled = false;
+		const finalUrlSecret = 'signed-final-url-secret';
 		const response = new Response(
 			new ReadableStream({
 				cancel() {
@@ -748,16 +785,23 @@ describe('WebAssembly loading utilities', () => {
 			})
 		);
 		Object.defineProperty(response, 'url', {
-			value: 'https://mirror.test/llvm/exact-url.bin'
+			value: `https://runtime-user:password@mirror.test/llvm/exact-url.bin?signature=${finalUrlSecret}#access-token`
 		});
 		vi.stubGlobal(
 			'fetch',
 			vi.fn(async () => response)
 		);
 
-		await expect(readBuffer(url)).rejects.toThrow(
-			`Runtime asset ${url} returned an unexpected final URL: https://mirror.test/llvm/exact-url.bin`
-		);
+		let rejected: unknown;
+		try {
+			await readBuffer(url);
+		} catch (error) {
+			rejected = error;
+		}
+		expect(rejected).toBeInstanceOf(Error);
+		expect((rejected as Error).message).toBe('Runtime asset returned an unexpected final URL');
+		expect((rejected as Error).message).not.toContain(finalUrlSecret);
+		expect((rejected as Error).message).not.toContain('access-token');
 		expect(cancelled).toBe(true);
 	});
 
@@ -771,16 +815,23 @@ describe('WebAssembly loading utilities', () => {
 				}
 			})
 		);
-		Object.defineProperty(invalidResponse, 'url', { value: '://invalid' });
+		const invalidFinalUrl = '://invalid-final-url-secret';
+		Object.defineProperty(invalidResponse, 'url', { value: invalidFinalUrl });
 		const fetchMock = vi
 			.fn()
 			.mockResolvedValueOnce(invalidResponse)
 			.mockResolvedValueOnce(new Response(Uint8Array.of(7, 8, 9)));
 		vi.stubGlobal('fetch', fetchMock);
 
-		await expect(readBuffer(url)).rejects.toThrow(
-			`Runtime asset ${url} returned an invalid final URL: ://invalid`
-		);
+		let rejected: unknown;
+		try {
+			await readBuffer(url);
+		} catch (error) {
+			rejected = error;
+		}
+		expect(rejected).toBeInstanceOf(Error);
+		expect((rejected as Error).message).toBe('Runtime asset returned an invalid final URL');
+		expect((rejected as Error).message).not.toContain(invalidFinalUrl);
 		expect(cancelled).toBe(true);
 		await expect(readBuffer(url)).resolves.toEqual(Uint8Array.of(7, 8, 9));
 		expect(fetchMock).toHaveBeenCalledTimes(2);
