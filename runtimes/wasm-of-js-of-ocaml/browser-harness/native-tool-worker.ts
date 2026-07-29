@@ -1100,20 +1100,6 @@ self.addEventListener('message', async (event: MessageEvent<RunToolRequest>) => 
 							}
 						};
 					}
-					if (specifier === 'node:fs/promises') {
-						return {
-							readFile: async (filePath: string) => {
-								const response = await fetch(filePath, {
-									cache: 'no-store',
-									credentials: 'same-origin'
-								});
-								if (!response.ok) {
-									throw new Error(`failed to read browser file: ${filePath}`);
-								}
-								return new Uint8Array(await response.arrayBuffer());
-							}
-						};
-					}
 					if (specifier === 'node:os') {
 						return {
 							tmpdir: () => '/tmp'

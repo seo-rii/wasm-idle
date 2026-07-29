@@ -31,6 +31,8 @@ test('browser-native worker runs static Binaryen tools without the Binaryen API 
 	assert.doesNotMatch(workerSource, /\/api\/binaryen-command/);
 	assert.doesNotMatch(workerSource, /__binaryen_tool_source_cache/);
 	assert.doesNotMatch(workerSource, /XMLHttpRequest/);
+	assert.doesNotMatch(workerSource, /node:fs\/promises/);
+	assert.doesNotMatch(workerSource, /credentials:\s*'same-origin'/);
 	assert.match(workerSource, /async function materializeBinaryenToolSources\(/);
 	assert.match(
 		workerSource,
