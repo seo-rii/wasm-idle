@@ -91,9 +91,7 @@ export async function fetchBoundedExternalAsset(
 		contentLength = Number(contentLengthValue);
 		if (!/^\d+$/u.test(contentLengthValue) || !Number.isSafeInteger(contentLength)) {
 			await response.body?.cancel().catch(() => {});
-			throw new Error(
-				`${options.label} has an invalid Content-Length: ${contentLengthValue}`
-			);
+			throw new Error(`${options.label} has an invalid Content-Length`);
 		}
 	}
 	if (contentLength !== undefined && contentLength > maxBytes) {

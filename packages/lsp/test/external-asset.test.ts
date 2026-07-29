@@ -73,7 +73,7 @@ describe('bounded external LSP asset loading', () => {
 		['negative', '-1'],
 		['fractional', '1.5'],
 		['exponential', '1e2'],
-		['duplicate', '2, 2'],
+		['duplicate', '2, content-length-secret'],
 		['unsafe', '9007199254740992']
 	])('rejects a %s Content-Length before reading and cancels the body', async (_case, value) => {
 		const cancel = vi.fn(async () => {});
@@ -88,13 +88,19 @@ describe('bounded external LSP asset loading', () => {
 				}) as unknown as Response
 		);
 
-		await expect(
-			fetchBoundedExternalAsset({
+		let rejected: unknown;
+		try {
+			await fetchBoundedExternalAsset({
 				url: 'https://assets.example.com/runtime.wasm',
 				label: 'test runtime',
 				fetch: fetchMock
-			})
-		).rejects.toThrow(`test runtime has an invalid Content-Length: ${value}`);
+			});
+		} catch (error) {
+			rejected = error;
+		}
+		expect(rejected).toBeInstanceOf(Error);
+		expect((rejected as Error).message).toBe('test runtime has an invalid Content-Length');
+		if (value) expect((rejected as Error).message).not.toContain(value);
 		expect(getReader).not.toHaveBeenCalled();
 		expect(cancel).toHaveBeenCalledOnce();
 	});
