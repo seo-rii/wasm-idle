@@ -426,30 +426,35 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 
 			const reader = response.body.getReader();
 			let loaded = 0;
-			while (true) {
-				const { done, value } = await reader.read();
-				if (done) break;
-				loaded += value.byteLength;
-				if (loaded > limits.maxAssetBytes) {
-					const error = new AssetTooLargeError(
-						`${this.config.displayName} worker script exceeds ${limits.maxAssetBytes} bytes`,
-						{
-							actual: loaded,
-							limit: limits.maxAssetBytes,
-							runtimeId: this.config.languageId
-						}
+			try {
+				while (true) {
+					const { done, value } = await reader.read();
+					if (done) break;
+					loaded += value.byteLength;
+					if (loaded > limits.maxAssetBytes) {
+						throw new AssetTooLargeError(
+							`${this.config.displayName} worker script exceeds ${limits.maxAssetBytes} bytes`,
+							{
+								actual: loaded,
+								limit: limits.maxAssetBytes,
+								runtimeId: this.config.languageId
+							}
+						);
+					}
+					const ratio = total > 0 ? Math.min(loaded / total, 1) : 0.5;
+					this.reportProgress(
+						progress,
+						0.05 + ratio * 0.15,
+						`Loading ${this.config.displayName} worker script`
 					);
-					await reader.cancel(error).catch(() => undefined);
-					throw error;
 				}
-				const ratio = total > 0 ? Math.min(loaded / total, 1) : 0.5;
-				this.reportProgress(
-					progress,
-					0.05 + ratio * 0.15,
-					`Loading ${this.config.displayName} worker script`
-				);
+				this.reportProgress(progress, 0.2, `${this.config.displayName} worker downloaded`);
+			} catch (error) {
+				await reader.cancel(error).catch(() => undefined);
+				throw error;
+			} finally {
+				reader.releaseLock();
 			}
-			this.reportProgress(progress, 0.2, `${this.config.displayName} worker downloaded`);
 		} catch (error) {
 			if (isWasmIdleError(error)) throw error;
 			if (timedOut) {

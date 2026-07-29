@@ -1289,6 +1289,50 @@ describe('static worker backed language sandboxes', () => {
 		expect(workerInstances).toHaveLength(0);
 	});
 
+	it('releases a successful static worker response reader', async () => {
+		const cancel = vi.fn(async () => undefined);
+		const releaseLock = vi.fn();
+		const read = vi
+			.fn()
+			.mockResolvedValueOnce({ done: false, value: new Uint8Array([1, 2, 3]) })
+			.mockResolvedValueOnce({ done: true, value: undefined });
+		vi.mocked(fetch).mockResolvedValueOnce({
+			ok: true,
+			status: 200,
+			url: '',
+			headers: new Headers(),
+			body: { getReader: () => ({ cancel, read, releaseLock }) }
+		} as unknown as Response);
+		const sandbox = new Prolog();
+
+		await sandbox.load('/absproxy/5173');
+
+		expect(cancel).not.toHaveBeenCalled();
+		expect(releaseLock).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(1);
+	});
+
+	it('cancels and releases a static worker reader when streaming fails', async () => {
+		const cancel = vi.fn(async () => undefined);
+		const releaseLock = vi.fn();
+		const read = vi.fn().mockRejectedValueOnce(new Error('worker stream failed'));
+		vi.mocked(fetch).mockResolvedValueOnce({
+			ok: true,
+			status: 200,
+			url: '',
+			headers: new Headers(),
+			body: { getReader: () => ({ cancel, read, releaseLock }) }
+		} as unknown as Response);
+		const sandbox = new Prolog();
+
+		await expect(sandbox.load('/absproxy/5173')).rejects.toThrow(
+			'Prolog worker script failed to load: worker stream failed'
+		);
+		expect(cancel).toHaveBeenCalledOnce();
+		expect(releaseLock).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(0);
+	});
+
 	it('terminates a pending worker startup when its signal is aborted', async () => {
 		autoStartWorkers = false;
 		const controller = new AbortController();
