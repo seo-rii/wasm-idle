@@ -340,11 +340,22 @@ async function fetchBytes(
 		await response.body?.cancel(reason).catch(() => {});
 		throw reason;
 	}
-	if (response.url && new URL(response.url).href !== url.href) {
-		await response.body?.cancel().catch(() => {});
-		throw new Error(
-			`wasm-lisp runtime asset returned an unexpected final URL: ${response.url}`
-		);
+	if (response.url) {
+		let finalUrl: URL;
+		try {
+			finalUrl = new URL(response.url);
+		} catch {
+			await response.body?.cancel().catch(() => {});
+			throw new Error(
+				`wasm-lisp runtime asset returned an invalid final URL: ${response.url}`
+			);
+		}
+		if (finalUrl.href !== url.href) {
+			await response.body?.cancel().catch(() => {});
+			throw new Error(
+				`wasm-lisp runtime asset returned an unexpected final URL: ${response.url}`
+			);
+		}
 	}
 	if (!response.ok) {
 		await response.body?.cancel().catch(() => {});

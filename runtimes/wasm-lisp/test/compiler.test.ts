@@ -279,6 +279,31 @@ describe('wasm-lisp Puppy Scheme runtime', () => {
 		expect(cancelled).toBe(true);
 	});
 
+	it('rejects malformed final URLs before reading and cancels every response', async () => {
+		const cancel = vi.fn(async () => {});
+		const getReader = vi.fn();
+		const fetchImpl = vi.fn(
+			async () =>
+				({
+					ok: true,
+					url: '://invalid',
+					headers: new Headers(),
+					body: { cancel, getReader }
+				}) as unknown as Response
+		);
+		const compiler = await createCompilerWithFetch(fetchImpl, 1024);
+
+		const compiled = await compiler.compile({ code: '(display 1)' });
+
+		expect(compiled.success).toBe(false);
+		expect(compiled.stderr).toContain(
+			'wasm-lisp runtime asset returned an invalid final URL: ://invalid'
+		);
+		expect(getReader).not.toHaveBeenCalled();
+		expect(fetchImpl).toHaveBeenCalled();
+		expect(cancel).toHaveBeenCalledTimes(fetchImpl.mock.calls.length);
+	});
+
 	it('rejects invalid runtime asset byte limits', async () => {
 		const runtime = await loadRuntime();
 
