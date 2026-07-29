@@ -21,6 +21,7 @@ export interface CompilerDiagnostic {
 
 export interface BrowserDCompileRequest {
 	code: string;
+	signal?: AbortSignal;
 	fileName?: string;
 	target?: BrowserDTarget;
 	args?: string[];

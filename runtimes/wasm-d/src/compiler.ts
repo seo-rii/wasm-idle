@@ -105,10 +105,20 @@ async function resolveManifest(options: CreateDCompilerOptions, request: Browser
 	const fetchImpl = options.fetchImpl || defaultFetch;
 	if (options.manifest) return options.manifest;
 	emitProgress(request, 'manifest', 0, 'loading D runtime manifest');
-	return await loadRuntimeManifest(options.runtimeBaseUrl, fetchImpl, (loaded, total) => {
-		const fraction = total && total > 0 ? loaded / total : loaded > 0 ? 1 : 0;
-		emitProgress(request, 'manifest', Math.min(8, fraction * 8), 'loading D runtime manifest');
-	});
+	return await loadRuntimeManifest(
+		options.runtimeBaseUrl,
+		fetchImpl,
+		(loaded, total) => {
+			const fraction = total && total > 0 ? loaded / total : loaded > 0 ? 1 : 0;
+			emitProgress(
+				request,
+				'manifest',
+				Math.min(8, fraction * 8),
+				'loading D runtime manifest'
+			);
+		},
+		request.signal
+	);
 }
 
 async function loadRuntimeAssets(
@@ -131,28 +141,36 @@ async function loadRuntimeAssets(
 			'ldc2.wasm',
 			fetchImpl,
 			report,
-			manifest.compiler.ldc2.compression
+			manifest.compiler.ldc2.compression,
+			undefined,
+			request.signal
 		),
 		fetchRuntimeAssetBytes(
 			resolveVersionedAssetUrl(runtimeBaseUrl, manifest.compiler.toolchain.asset),
 			'D toolchain',
 			fetchImpl,
 			report,
-			manifest.compiler.toolchain.compression
+			manifest.compiler.toolchain.compression,
+			undefined,
+			request.signal
 		),
 		fetchRuntimeAssetBytes(
 			resolveVersionedAssetUrl(runtimeBaseUrl, linker.wasm.asset),
 			'wasm-ld.wasm',
 			fetchImpl,
 			report,
-			linker.wasm.compression
+			linker.wasm.compression,
+			undefined,
+			request.signal
 		),
 		fetchRuntimeAssetBytes(
 			resolveVersionedAssetUrl(runtimeBaseUrl, linker.data.asset),
 			'wasm-ld.data',
 			fetchImpl,
 			report,
-			linker.data.compression
+			linker.data.compression,
+			undefined,
+			request.signal
 		)
 	]);
 	emitProgress(request, 'assets', 25, 'D compiler assets loaded');
@@ -264,6 +282,9 @@ export async function compileD(
 	request: BrowserDCompileRequest,
 	options: CreateDCompilerOptions = {}
 ): Promise<BrowserDCompilerResult> {
+	if (request.signal?.aborted) {
+		throw request.signal.reason ?? new DOMException('D compilation aborted', 'AbortError');
+	}
 	if (!request.code || typeof request.code !== 'string') {
 		return {
 			success: false,
@@ -287,6 +308,9 @@ export async function compileD(
 			options,
 			request
 		);
+		if (request.signal?.aborted) {
+			throw request.signal.reason ?? new DOMException('D compilation aborted', 'AbortError');
+		}
 		const root = new Directory(new Map());
 		ensureGuestDirectory(root, '/work');
 		addToolchainEntries(root, toolchainEntries);
@@ -345,6 +369,9 @@ export async function compileD(
 			}
 		};
 	} catch (error) {
+		if (request.signal?.aborted) {
+			throw request.signal.reason ?? new DOMException('D compilation aborted', 'AbortError');
+		}
 		return resultFromFailure(error instanceof Error ? error.message : String(error));
 	}
 }

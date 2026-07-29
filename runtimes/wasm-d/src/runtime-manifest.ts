@@ -2,6 +2,8 @@ import { runtimeManifestUrl } from './asset-url.js';
 import { defaultFetch, fetchRuntimeAssetJson } from './runtime-asset.js';
 import type { RuntimeManifestV1 } from './types.js';
 
+export const DEFAULT_MAX_RUNTIME_MANIFEST_BYTES = 4 * 1024 * 1024;
+
 function expectObject(value: unknown, label: string): Record<string, unknown> {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) {
 		throw new Error(`invalid ${label} in wasm-d runtime manifest`);
@@ -110,7 +112,8 @@ export function parseRuntimeManifest(value: unknown): RuntimeManifestV1 {
 export async function loadRuntimeManifest(
 	baseUrl?: string | URL,
 	fetchImpl: typeof fetch = defaultFetch,
-	reportProgress?: (loaded: number, total?: number) => void
+	reportProgress?: (loaded: number, total?: number) => void,
+	signal?: AbortSignal
 ) {
 	return parseRuntimeManifest(
 		await fetchRuntimeAssetJson<unknown>(
@@ -118,7 +121,10 @@ export async function loadRuntimeManifest(
 			'',
 			'wasm-d runtime manifest',
 			fetchImpl,
-			reportProgress
+			reportProgress,
+			undefined,
+			DEFAULT_MAX_RUNTIME_MANIFEST_BYTES,
+			signal
 		)
 	);
 }

@@ -1,6 +1,10 @@
 import { gzipSync } from 'node:zlib';
 import { describe, expect, it, vi } from 'vitest';
 import { DEFAULT_MAX_RUNTIME_ASSET_BYTES, fetchRuntimeAssetBytes } from '../src/runtime-asset.js';
+import {
+	DEFAULT_MAX_RUNTIME_MANIFEST_BYTES,
+	loadRuntimeManifest
+} from '../src/runtime-manifest.js';
 
 describe('runtime asset loader', () => {
 	it('inflates gzip-compressed assets after fetch', async () => {
@@ -36,12 +40,17 @@ describe('runtime asset loader', () => {
 
 	it('omits credentials and rejects redirects for exact HTTP asset requests', async () => {
 		const fetchImpl = vi.fn(async () => new Response(Uint8Array.of(1, 2, 3)));
+		const controller = new AbortController();
 
 		await expect(
 			fetchRuntimeAssetBytes(
 				'https://example.test/runtime/bin/ldc2.wasm',
 				'ldc2.wasm',
-				fetchImpl
+				fetchImpl,
+				undefined,
+				undefined,
+				DEFAULT_MAX_RUNTIME_ASSET_BYTES,
+				controller.signal
 			)
 		).resolves.toEqual(Uint8Array.of(1, 2, 3));
 		expect(fetchImpl).toHaveBeenCalledWith(
@@ -49,9 +58,30 @@ describe('runtime asset loader', () => {
 			expect.objectContaining({
 				credentials: 'omit',
 				redirect: 'error',
-				referrerPolicy: 'no-referrer'
+				referrerPolicy: 'no-referrer',
+				signal: controller.signal
 			})
 		);
+	});
+
+	it('preserves a pre-aborted reason without invoking fetch', async () => {
+		const fetchImpl = vi.fn();
+		const controller = new AbortController();
+		const reason = new Error('stop before D asset fetch');
+		controller.abort(reason);
+
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.test/runtime/bin/ldc2.wasm',
+				'ldc2.wasm',
+				fetchImpl,
+				undefined,
+				undefined,
+				DEFAULT_MAX_RUNTIME_ASSET_BYTES,
+				controller.signal
+			)
+		).rejects.toBe(reason);
+		expect(fetchImpl).not.toHaveBeenCalled();
 	});
 
 	it('rejects embedded URL credentials before invoking fetch', async () => {
@@ -123,6 +153,35 @@ describe('runtime asset loader', () => {
 		expect(cancelled).toBe(true);
 	});
 
+	it('uses a dedicated 4 MiB ceiling for runtime manifests', async () => {
+		let cancelled = false;
+		const fetchImpl = vi.fn(
+			async () =>
+				new Response(
+					new ReadableStream({
+						pull() {
+							throw new Error('manifest body should not be read');
+						},
+						cancel() {
+							cancelled = true;
+						}
+					}),
+					{
+						headers: {
+							'Content-Length': String(DEFAULT_MAX_RUNTIME_MANIFEST_BYTES + 1)
+						}
+					}
+				)
+		);
+
+		await expect(
+			loadRuntimeManifest('https://example.test/runtime/', fetchImpl)
+		).rejects.toThrow(
+			`wasm-d runtime manifest download size exceeds the ${DEFAULT_MAX_RUNTIME_MANIFEST_BYTES} byte limit`
+		);
+		expect(cancelled).toBe(true);
+	});
+
 	it('cancels an unknown-length download as soon as it crosses its byte limit', async () => {
 		let cancelled = false;
 		const fetchImpl = vi.fn(
@@ -151,6 +210,68 @@ describe('runtime asset loader', () => {
 			)
 		).rejects.toThrow('D toolchain download size exceeds the 5 byte limit');
 		expect(cancelled).toBe(true);
+	});
+
+	it('cancels an active unknown-length download with the caller signal', async () => {
+		let cancelled = false;
+		const response = new Response(
+			new ReadableStream({
+				cancel() {
+					cancelled = true;
+				}
+			})
+		);
+		const fetchImpl = vi.fn(async () => response);
+		const controller = new AbortController();
+		const reason = new Error('stop D asset download');
+		const pending = fetchRuntimeAssetBytes(
+			'https://example.test/runtime/toolchain.tar',
+			'D toolchain',
+			fetchImpl,
+			undefined,
+			undefined,
+			DEFAULT_MAX_RUNTIME_ASSET_BYTES,
+			controller.signal
+		);
+
+		await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledOnce());
+		controller.abort(reason);
+
+		await expect(pending).rejects.toBe(reason);
+		expect(cancelled).toBe(true);
+	});
+
+	it('cancels an active gzip decompression chain with the caller signal', async () => {
+		const compressed = gzipSync(new Uint8Array(1024), { level: 9 });
+		let cancelled = false;
+		const response = new Response(
+			new ReadableStream({
+				start(controller) {
+					controller.enqueue(compressed);
+				},
+				cancel() {
+					cancelled = true;
+				}
+			})
+		);
+		const fetchImpl = vi.fn(async () => response);
+		const controller = new AbortController();
+		const reason = new Error('stop D asset decompression');
+		const pending = fetchRuntimeAssetBytes(
+			'https://example.test/runtime/toolchain.tar.gz',
+			'D toolchain',
+			fetchImpl,
+			undefined,
+			'gzip',
+			DEFAULT_MAX_RUNTIME_ASSET_BYTES,
+			controller.signal
+		);
+
+		await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledOnce());
+		controller.abort(reason);
+
+		await expect(pending).rejects.toBe(reason);
+		await vi.waitFor(() => expect(cancelled).toBe(true));
 	});
 
 	it('bounds streamed gzip output before materializing a decompression bomb', async () => {
