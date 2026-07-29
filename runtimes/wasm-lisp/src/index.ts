@@ -351,15 +351,17 @@ async function fetchBytes(
 		throw new Error(`failed to load ${url.href}: ${response.status}`);
 	}
 	const contentLengthValue = response.headers.get('content-length');
-	const contentLength =
-		contentLengthValue && /^\d+$/u.test(contentLengthValue)
-			? Number(contentLengthValue)
-			: undefined;
-	if (
-		contentLength !== undefined &&
-		Number.isSafeInteger(contentLength) &&
-		contentLength > maxAssetBytes
-	) {
+	let contentLength: number | undefined;
+	if (contentLengthValue !== null) {
+		contentLength = Number(contentLengthValue);
+		if (!/^\d+$/u.test(contentLengthValue) || !Number.isSafeInteger(contentLength)) {
+			await response.body?.cancel().catch(() => {});
+			throw new Error(
+				`wasm-lisp runtime asset has an invalid Content-Length: ${contentLengthValue}`
+			);
+		}
+	}
+	if (contentLength !== undefined && contentLength > maxAssetBytes) {
 		await response.body?.cancel().catch(() => {});
 		throw new Error(`wasm-lisp runtime asset exceeds the ${maxAssetBytes} byte download limit`);
 	}

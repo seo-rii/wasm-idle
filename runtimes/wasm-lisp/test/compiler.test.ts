@@ -212,6 +212,50 @@ describe('wasm-lisp Puppy Scheme runtime', () => {
 		expect(cancelled).toBe(true);
 	});
 
+	it.each([
+		['empty', ''],
+		['negative', '-1'],
+		['fractional', '1.5'],
+		['exponential', '1e2'],
+		['duplicate', '2, 2'],
+		['unsafe', '9007199254740992']
+	])('rejects a %s Content-Length before reading and cancels the body', async (_case, value) => {
+		const cancel = vi.fn(async () => {});
+		const getReader = vi.fn();
+		const fetchImpl = vi.fn(
+			async () =>
+				({
+					ok: true,
+					url: '',
+					headers: new Headers({ 'content-length': value }),
+					body: { cancel, getReader }
+				}) as unknown as Response
+		);
+		const compiler = await createCompilerWithFetch(fetchImpl, 1024);
+
+		const compiled = await compiler.compile({ code: '(display 1)' });
+
+		expect(compiled.success).toBe(false);
+		expect(compiled.stderr).toContain(
+			`wasm-lisp runtime asset has an invalid Content-Length: ${value}`
+		);
+		expect(getReader).not.toHaveBeenCalled();
+		expect(fetchImpl).toHaveBeenCalled();
+		expect(cancel).toHaveBeenCalledTimes(fetchImpl.mock.calls.length);
+	});
+
+	it('allows a zero Content-Length declaration', async () => {
+		const compiler = await createCompilerWithFetch(
+			async () => new Response(null, { headers: { 'content-length': '0' } }),
+			1024
+		);
+
+		const compiled = await compiler.compile({ code: '(display 1)' });
+
+		expect(compiled.success).toBe(false);
+		expect(compiled.stderr).not.toContain('invalid Content-Length');
+	});
+
 	it('rejects runtime responses from a substituted final URL', async () => {
 		let cancelled = false;
 		const compiler = await createCompilerWithFetch(async () => {
