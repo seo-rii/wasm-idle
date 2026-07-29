@@ -165,10 +165,26 @@ async function fetchAsset(
 		referrerPolicy: 'no-referrer',
 		signal
 	});
-	requireAllowedAssetUrl(asset, response.url || requestUrl.href, config);
-	if (!response.ok) throw new Error(`Failed to load ${asset}: ${response.status}`);
-	const contentLength = Number(response.headers.get('content-length') || 0) || undefined;
-	if (contentLength && contentLength > MAX_LANGUAGE_TOOL_ASSET_BYTES) {
+	try {
+		requireAllowedAssetUrl(asset, response.url || requestUrl.href, config);
+	} catch (error) {
+		await response.body?.cancel(error).catch(() => {});
+		throw error;
+	}
+	if (!response.ok) {
+		await response.body?.cancel().catch(() => {});
+		throw new Error(`Failed to load ${asset}: ${response.status}`);
+	}
+	const contentLengthValue = response.headers.get('content-length');
+	const contentLength =
+		contentLengthValue && /^\d+$/u.test(contentLengthValue)
+			? Number(contentLengthValue)
+			: undefined;
+	if (
+		contentLength !== undefined &&
+		(!Number.isSafeInteger(contentLength) || contentLength > MAX_LANGUAGE_TOOL_ASSET_BYTES)
+	) {
+		await response.body?.cancel().catch(() => {});
 		throw new Error(
 			`Runtime asset ${asset} exceeds the ${MAX_LANGUAGE_TOOL_ASSET_BYTES} byte limit`
 		);
@@ -181,24 +197,27 @@ async function fetchAsset(
 	}
 
 	const reader = response.body.getReader();
-	const cancelOnAbort = () => {
-		void reader.cancel(signal.reason).catch(() => {});
+	let cancellation: Promise<void> | undefined;
+	const cancelReader = (reason?: unknown) => {
+		cancellation ??= reader.cancel(reason).catch(() => {});
+		return cancellation;
 	};
-	if (signal.aborted) {
-		await reader.cancel(signal.reason);
-		throw signal.reason;
-	}
+	const cancelOnAbort = () => {
+		void cancelReader(signal.reason ?? new Error('Runtime asset load was aborted'));
+	};
 	signal.addEventListener('abort', cancelOnAbort, { once: true });
 	try {
+		if (signal.aborted) {
+			throw signal.reason ?? new Error('Runtime asset load was aborted');
+		}
 		let receivedLength = 0;
-		let bytes = new Uint8Array(contentLength || DEFAULT_STREAM_BUFFER_BYTES);
+		let bytes = new Uint8Array(contentLength ?? DEFAULT_STREAM_BUFFER_BYTES);
 		while (true) {
 			const { done, value } = await reader.read();
 			if (done) break;
 			if (!value) continue;
 			const nextLength = receivedLength + value.byteLength;
 			if (nextLength > MAX_LANGUAGE_TOOL_ASSET_BYTES) {
-				await reader.cancel();
 				throw new Error(
 					`Runtime asset ${asset} exceeds the ${MAX_LANGUAGE_TOOL_ASSET_BYTES} byte limit`
 				);
@@ -216,11 +235,21 @@ async function fetchAsset(
 			receivedLength = nextLength;
 			reportProgress(receivedLength, contentLength);
 		}
+		if (signal.aborted) {
+			throw signal.reason ?? new Error('Runtime asset load was aborted');
+		}
 		if (receivedLength !== bytes.byteLength) bytes = bytes.slice(0, receivedLength);
 		reportProgress(receivedLength, contentLength ?? receivedLength);
 		return { bytes, mimeType };
+	} catch (error) {
+		await cancelReader(error);
+		if (signal.aborted) {
+			throw signal.reason ?? new Error('Runtime asset load was aborted');
+		}
+		throw error;
 	} finally {
 		signal.removeEventListener('abort', cancelOnAbort);
+		reader.releaseLock();
 	}
 }
 
@@ -236,16 +265,22 @@ async function normalizeLoaderResult(
 		return await fetchAsset(String(result), asset, config, reportProgress, signal);
 	}
 	if (result instanceof ArrayBuffer) {
-		const bytes = new Uint8Array(result);
+		const bytes = enforceAssetSize(asset, new Uint8Array(result));
 		reportProgress(bytes.byteLength, bytes.byteLength);
 		return { bytes };
 	}
 	if (result instanceof Uint8Array) {
+		enforceAssetSize(asset, result);
 		reportProgress(result.byteLength, result.byteLength);
 		return { bytes: result };
 	}
 	if (result instanceof Blob) {
-		const bytes = new Uint8Array(await result.arrayBuffer());
+		if (result.size > MAX_LANGUAGE_TOOL_ASSET_BYTES) {
+			throw new Error(
+				`Runtime asset ${asset} exceeds the ${MAX_LANGUAGE_TOOL_ASSET_BYTES} byte limit`
+			);
+		}
+		const bytes = enforceAssetSize(asset, new Uint8Array(await result.arrayBuffer()));
 		reportProgress(bytes.byteLength, bytes.byteLength);
 		return { bytes, mimeType: result.type || undefined };
 	}
@@ -254,20 +289,26 @@ async function normalizeLoaderResult(
 	}
 	if ('data' in result) {
 		if (typeof result.data === 'string') {
-			const bytes = textEncoder.encode(result.data);
+			const bytes = enforceAssetSize(asset, textEncoder.encode(result.data));
 			reportProgress(bytes.byteLength, bytes.byteLength);
 			return { bytes, mimeType: result.mimeType };
 		}
 		if (result.data instanceof ArrayBuffer) {
-			const bytes = new Uint8Array(result.data);
+			const bytes = enforceAssetSize(asset, new Uint8Array(result.data));
 			reportProgress(bytes.byteLength, bytes.byteLength);
 			return { bytes, mimeType: result.mimeType };
 		}
 		if (result.data instanceof Uint8Array) {
+			enforceAssetSize(asset, result.data);
 			reportProgress(result.data.byteLength, result.data.byteLength);
 			return { bytes: result.data, mimeType: result.mimeType };
 		}
-		const bytes = new Uint8Array(await result.data.arrayBuffer());
+		if (result.data.size > MAX_LANGUAGE_TOOL_ASSET_BYTES) {
+			throw new Error(
+				`Runtime asset ${asset} exceeds the ${MAX_LANGUAGE_TOOL_ASSET_BYTES} byte limit`
+			);
+		}
+		const bytes = enforceAssetSize(asset, new Uint8Array(await result.data.arrayBuffer()));
 		reportProgress(bytes.byteLength, bytes.byteLength);
 		return { bytes, mimeType: result.mimeType || result.data.type || undefined };
 	}

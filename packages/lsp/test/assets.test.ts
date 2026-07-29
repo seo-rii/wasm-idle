@@ -64,12 +64,15 @@ describe('language tool asset loading', () => {
 	});
 
 	it('assembles a stream in bounded storage when Content-Length is inaccurate', async () => {
+		const releaseLock = vi.fn();
 		const reader = {
 			read: vi
 				.fn()
 				.mockResolvedValueOnce({ done: false, value: new Uint8Array([1, 2, 3]) })
 				.mockResolvedValueOnce({ done: false, value: new Uint8Array([4, 5, 6]) })
-				.mockResolvedValueOnce({ done: true, value: undefined })
+				.mockResolvedValueOnce({ done: true, value: undefined }),
+			cancel: vi.fn(),
+			releaseLock
 		};
 		vi.stubGlobal(
 			'fetch',
@@ -94,10 +97,12 @@ describe('language tool asset loading', () => {
 
 		expect(copySpy).not.toHaveBeenCalled();
 		expect([...loaded.bytes]).toEqual([1, 2, 3, 4, 5, 6]);
+		expect(releaseLock).toHaveBeenCalledOnce();
 	});
 
 	it('rejects an oversized response before reading its body', async () => {
 		const read = vi.fn();
+		const cancel = vi.fn(async () => {});
 		vi.stubGlobal(
 			'fetch',
 			vi.fn().mockResolvedValue({
@@ -107,7 +112,7 @@ describe('language tool asset loading', () => {
 						name === 'content-length' ? String(128 * 1024 * 1024 + 1) : null
 					)
 				},
-				body: { getReader: () => ({ read }) }
+				body: { cancel, getReader: () => ({ read }) }
 			})
 		);
 
@@ -120,10 +125,12 @@ describe('language tool asset loading', () => {
 			)
 		).rejects.toThrow('Runtime asset clangd.wasm.gz exceeds the 134217728 byte limit');
 		expect(read).not.toHaveBeenCalled();
+		expect(cancel).toHaveBeenCalledOnce();
 	});
 
 	it('cancels a streamed response that crosses the asset limit', async () => {
-		const cancel = vi.fn();
+		const cancel = vi.fn(async () => {});
+		const releaseLock = vi.fn();
 		vi.stubGlobal(
 			'fetch',
 			vi.fn().mockResolvedValue({
@@ -135,7 +142,8 @@ describe('language tool asset loading', () => {
 							done: false,
 							value: { byteLength: 128 * 1024 * 1024 + 1 } as Uint8Array
 						}),
-						cancel
+						cancel,
+						releaseLock
 					})
 				}
 			})
@@ -150,14 +158,16 @@ describe('language tool asset loading', () => {
 			)
 		).rejects.toThrow('Runtime asset clangd.wasm.gz exceeds the 134217728 byte limit');
 		expect(cancel).toHaveBeenCalledOnce();
+		expect(releaseLock).toHaveBeenCalledOnce();
 	});
 
 	it('rejects redirects outside the configured asset bases and omits credentials', async () => {
+		const cancel = vi.fn(async () => {});
 		const fetchMock = vi.fn().mockResolvedValue({
 			ok: true,
 			url: 'https://evil.example.com/clangd/clangd.js',
 			headers: { get: vi.fn(() => null) },
-			body: null,
+			body: { cancel },
 			arrayBuffer: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3]).buffer)
 		});
 		vi.stubGlobal('fetch', fetchMock);
@@ -181,6 +191,86 @@ describe('language tool asset loading', () => {
 				signal: expect.any(AbortSignal)
 			})
 		);
+		expect(cancel).toHaveBeenCalledOnce();
+	});
+
+	it('cancels failed HTTP responses before reporting their status', async () => {
+		const cancel = vi.fn(async () => {});
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue({
+				ok: false,
+				status: 503,
+				url: 'https://assets.example.com/clangd/clangd.js',
+				headers: { get: vi.fn(() => null) },
+				body: { cancel }
+			})
+		);
+
+		await expect(
+			loadLanguageToolAsset(
+				'clangd',
+				'clangd.js',
+				{ baseUrl: 'https://assets.example.com/clangd/' },
+				vi.fn()
+			)
+		).rejects.toThrow('Failed to load clangd.js: 503');
+		expect(cancel).toHaveBeenCalledOnce();
+	});
+
+	it('does not publish partial bytes when cancellation completes a stream read', async () => {
+		const controller = new AbortController();
+		const cancel = vi.fn(async () => {});
+		const releaseLock = vi.fn();
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue({
+				ok: true,
+				url: 'https://assets.example.com/clangd/clangd.js',
+				headers: { get: vi.fn(() => null) },
+				body: {
+					getReader: () => ({
+						read: vi.fn(async () => {
+							controller.abort(new Error('cancelled during read'));
+							return { done: true, value: undefined };
+						}),
+						cancel,
+						releaseLock
+					})
+				}
+			})
+		);
+
+		await expect(
+			loadLanguageToolAsset(
+				'clangd',
+				'clangd.js',
+				{ baseUrl: 'https://assets.example.com/clangd/' },
+				vi.fn(),
+				{ signal: controller.signal }
+			)
+		).rejects.toThrow('cancelled during read');
+		expect(cancel).toHaveBeenCalledOnce();
+		expect(releaseLock).toHaveBeenCalledOnce();
+	});
+
+	it('rejects oversized loader-owned blobs before materializing them', async () => {
+		const blob = new Blob();
+		Object.defineProperty(blob, 'size', { value: 128 * 1024 * 1024 + 1 });
+		const arrayBuffer = vi.spyOn(blob, 'arrayBuffer');
+
+		await expect(
+			loadLanguageToolAsset(
+				'clangd',
+				'clangd.js',
+				{
+					baseUrl: 'https://assets.example.com/clangd/',
+					loader: () => blob
+				},
+				vi.fn()
+			)
+		).rejects.toThrow('Runtime asset clangd.js exceeds the 134217728 byte limit');
+		expect(arrayBuffer).not.toHaveBeenCalled();
 	});
 
 	it('aborts a loader that exceeds its configured timeout', async () => {
