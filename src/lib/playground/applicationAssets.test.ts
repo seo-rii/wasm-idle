@@ -119,4 +119,69 @@ describe('application runtime asset root', () => {
 			goManifestUrl: `/foo/bar/wasm-go/runtime/runtime-manifest.v1.json?v=${WASM_GO_ASSET_VERSION}`
 		});
 	});
+
+	it('includes every specialized application asset in runtime cache identity', () => {
+		const assets = createApplicationRuntimeAssets('/foo/bar');
+		const key = JSON.parse(createRuntimeAssetsKey(assets) || '{}') as Record<string, unknown>;
+
+		expect(key).toMatchObject({
+			typeScriptLibUrl: assets.typescript?.libUrl,
+			fortranBaseUrl: assets.fortran?.baseUrl,
+			fortranF2cWasmUrl: assets.fortran?.f2cWasmUrl,
+			fortranLibf2cUrl: assets.fortran?.libf2cUrl,
+			fortranF2cHeaderUrl: assets.fortran?.f2cHeaderUrl,
+			fortranAnalyzerUrl: assets.fortran?.analyzerUrl,
+			objectiveCBaseUrl: assets.objectivec?.baseUrl,
+			objectiveCLibobjcUrl: assets.objectivec?.libobjcUrl,
+			objectiveCHeadersUrl: assets.objectivec?.headersUrl,
+			objectiveCLibgnustepBaseUrl: assets.objectivec?.libgnustepBaseUrl,
+			objectiveCLibgnustepBaseObjectUrl: assets.objectivec?.libgnustepBaseObjectUrl,
+			objectiveCFoundationHeadersUrl: assets.objectivec?.foundationHeadersUrl,
+			objectiveCLibffiUrl: assets.objectivec?.libffiUrl
+		});
+	});
+
+	it('keys TinyGo asset packs and custom loader identity', () => {
+		const firstLoader = () => undefined;
+		const secondLoader = () => undefined;
+		const assetPacks = [
+			{ index: 'stdlib.index.json', asset: 'stdlib.tar.gz', fileCount: 12, totalBytes: 3456 }
+		];
+		const firstKey = createRuntimeAssetsKey({
+			tinygo: { assetLoader: firstLoader, assetPacks }
+		});
+		const secondKey = createRuntimeAssetsKey({
+			tinygo: { assetLoader: secondLoader, assetPacks }
+		});
+
+		expect(firstKey).toBe(
+			createRuntimeAssetsKey({ tinygo: { assetLoader: firstLoader, assetPacks } })
+		);
+		expect(firstKey).not.toBe(secondKey);
+		expect(
+			createRuntimeAssetsKey({
+				tinygo: {
+					assetLoader: firstLoader,
+					assetLoaderKey: 'tinygo-pack-loader-v1',
+					assetPacks
+				}
+			})
+		).toBe(
+			createRuntimeAssetsKey({
+				tinygo: {
+					assetLoader: secondLoader,
+					assetLoaderKey: 'tinygo-pack-loader-v1',
+					assetPacks
+				}
+			})
+		);
+		expect(firstKey).not.toBe(
+			createRuntimeAssetsKey({
+				tinygo: {
+					assetLoader: firstLoader,
+					assetPacks: [{ ...assetPacks[0], totalBytes: 3457 }]
+				}
+			})
+		);
+	});
 });

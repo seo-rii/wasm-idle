@@ -127,6 +127,7 @@ export {
 	type RuntimeAssetKeyInput,
 	type RuntimeAssetKeySource,
 	type RuntimeAssetLoaderKeySource,
+	type RuntimeAssetPackKeySource,
 	type RuntimeAssetProfileKeySource
 } from './runtime-assets.js';
 export {

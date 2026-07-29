@@ -25,6 +25,13 @@ export interface RuntimeAssetLoaderKeySource {
 	allowedBaseUrls?: string[];
 }
 
+export interface RuntimeAssetPackKeySource {
+	index: string;
+	asset: string;
+	fileCount: number;
+	totalBytes: number;
+}
+
 export interface RuntimeAssetKeySource {
 	rootUrl?: string;
 	runtimeProfiles?: Readonly<Record<string, RuntimeAssetProfileKeySource>>;
@@ -41,8 +48,14 @@ export interface RuntimeAssetKeySource {
 	elixir?: { bundleUrl?: string };
 	erlang?: { bundleUrl?: string };
 	ocaml?: { moduleUrl?: string; manifestUrl?: string };
-	tinygo?: { appUrl?: string; moduleUrl?: string };
-	typescript?: { moduleUrl?: string };
+	tinygo?: {
+		appUrl?: string;
+		moduleUrl?: string;
+		assetLoader?: unknown;
+		assetLoaderKey?: string;
+		assetPacks?: readonly RuntimeAssetPackKeySource[];
+	};
+	typescript?: { moduleUrl?: string; libUrl?: string };
 	wat?: { moduleUrl?: string };
 	lua?: { moduleUrl?: string };
 	haskell?: {
@@ -52,7 +65,23 @@ export interface RuntimeAssetKeySource {
 		mainSoPath?: string;
 		searchDirs?: string[];
 	};
+	fortran?: {
+		baseUrl?: string;
+		f2cWasmUrl?: string;
+		libf2cUrl?: string;
+		f2cHeaderUrl?: string;
+		analyzerUrl?: string;
+	};
 	zig?: { compilerUrl?: string; stdlibUrl?: string };
+	objectivec?: {
+		baseUrl?: string;
+		libobjcUrl?: string;
+		headersUrl?: string;
+		libgnustepBaseUrl?: string;
+		libgnustepBaseObjectUrl?: string;
+		foundationHeadersUrl?: string;
+		libffiUrl?: string;
+	};
 	lisp?: { moduleUrl?: string };
 	ruby?: { moduleUrl?: string; wasmUrl?: string };
 	r?: { baseUrl?: string };
@@ -94,6 +123,37 @@ const joinStringList = (value: unknown) => (Array.isArray(value) ? value.join('\
 
 const joinSortedStringList = (value: unknown) =>
 	Array.isArray(value) ? [...value].sort().join('\0') : '';
+
+const serializeRuntimeAssetPacks = (value: unknown) => {
+	if (value === undefined) return '';
+	if (!Array.isArray(value)) throw new TypeError('Runtime asset packs must be an array');
+	return JSON.stringify(
+		value.map((entry, position) => {
+			if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+				throw new TypeError(`Runtime asset pack ${position} must be an object`);
+			}
+			const pack = entry as Record<string, unknown>;
+			if (typeof pack.index !== 'string' || !pack.index) {
+				throw new TypeError(`Runtime asset pack ${position} requires an index`);
+			}
+			if (typeof pack.asset !== 'string' || !pack.asset) {
+				throw new TypeError(`Runtime asset pack ${position} requires an asset`);
+			}
+			if (!Number.isSafeInteger(pack.fileCount) || (pack.fileCount as number) < 0) {
+				throw new TypeError(`Runtime asset pack ${position} has an invalid file count`);
+			}
+			if (!Number.isSafeInteger(pack.totalBytes) || (pack.totalBytes as number) < 0) {
+				throw new TypeError(`Runtime asset pack ${position} has an invalid byte size`);
+			}
+			return {
+				index: pack.index,
+				asset: pack.asset,
+				fileCount: pack.fileCount,
+				totalBytes: pack.totalBytes
+			};
+		})
+	);
+};
 
 const serializeIntegrity = (value: unknown) => {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) return '';
@@ -188,7 +248,38 @@ const serializeIntegrity = (value: unknown) => {
 const loaderIdentities = new WeakMap<object, string>();
 let nextLoaderIdentity = 0;
 
-const LOADER_RUNTIMES = ['python', 'java', 'clang', 'clangd'] as const;
+const RUNTIME_ASSET_LOADER_FIELDS = [
+	{
+		runtime: 'python',
+		loaderProperty: 'loader',
+		loaderKeyProperty: 'loaderKey',
+		identityKey: 'pythonLoaderIdentity'
+	},
+	{
+		runtime: 'java',
+		loaderProperty: 'loader',
+		loaderKeyProperty: 'loaderKey',
+		identityKey: 'javaLoaderIdentity'
+	},
+	{
+		runtime: 'clang',
+		loaderProperty: 'loader',
+		loaderKeyProperty: 'loaderKey',
+		identityKey: 'clangLoaderIdentity'
+	},
+	{
+		runtime: 'clangd',
+		loaderProperty: 'loader',
+		loaderKeyProperty: 'loaderKey',
+		identityKey: 'clangdLoaderIdentity'
+	},
+	{
+		runtime: 'tinygo',
+		loaderProperty: 'assetLoader',
+		loaderKeyProperty: 'assetLoaderKey',
+		identityKey: 'tinygoAssetLoaderIdentity'
+	}
+] as const;
 
 const RUNTIME_ASSET_KEY_FIELDS = [
 	{ runtime: 'python', property: 'baseUrl', key: 'pythonBaseUrl' },
@@ -257,7 +348,20 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	{ runtime: 'ocaml', property: 'manifestUrl', key: 'ocamlManifestUrl' },
 	{ runtime: 'tinygo', property: 'appUrl', key: 'tinygoAppUrl' },
 	{ runtime: 'tinygo', property: 'moduleUrl', key: 'tinygoModuleUrl' },
+	{
+		runtime: 'tinygo',
+		property: 'assetLoader',
+		key: 'hasTinyGoAssetLoader',
+		serialize: hasValue
+	},
+	{
+		runtime: 'tinygo',
+		property: 'assetPacks',
+		key: 'tinygoAssetPacks',
+		serialize: serializeRuntimeAssetPacks
+	},
 	{ runtime: 'typescript', property: 'moduleUrl', key: 'typeScriptModuleUrl' },
+	{ runtime: 'typescript', property: 'libUrl', key: 'typeScriptLibUrl' },
 	{ runtime: 'wat', property: 'moduleUrl', key: 'watModuleUrl' },
 	{ runtime: 'lua', property: 'moduleUrl', key: 'luaModuleUrl' },
 	{ runtime: 'haskell', property: 'moduleUrl', key: 'haskellModuleUrl' },
@@ -270,8 +374,32 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 		key: 'haskellSearchDirs',
 		serialize: joinStringList
 	},
+	{ runtime: 'fortran', property: 'baseUrl', key: 'fortranBaseUrl' },
+	{ runtime: 'fortran', property: 'f2cWasmUrl', key: 'fortranF2cWasmUrl' },
+	{ runtime: 'fortran', property: 'libf2cUrl', key: 'fortranLibf2cUrl' },
+	{ runtime: 'fortran', property: 'f2cHeaderUrl', key: 'fortranF2cHeaderUrl' },
+	{ runtime: 'fortran', property: 'analyzerUrl', key: 'fortranAnalyzerUrl' },
 	{ runtime: 'zig', property: 'compilerUrl', key: 'zigCompilerUrl' },
 	{ runtime: 'zig', property: 'stdlibUrl', key: 'zigStdlibUrl' },
+	{ runtime: 'objectivec', property: 'baseUrl', key: 'objectiveCBaseUrl' },
+	{ runtime: 'objectivec', property: 'libobjcUrl', key: 'objectiveCLibobjcUrl' },
+	{ runtime: 'objectivec', property: 'headersUrl', key: 'objectiveCHeadersUrl' },
+	{
+		runtime: 'objectivec',
+		property: 'libgnustepBaseUrl',
+		key: 'objectiveCLibgnustepBaseUrl'
+	},
+	{
+		runtime: 'objectivec',
+		property: 'libgnustepBaseObjectUrl',
+		key: 'objectiveCLibgnustepBaseObjectUrl'
+	},
+	{
+		runtime: 'objectivec',
+		property: 'foundationHeadersUrl',
+		key: 'objectiveCFoundationHeadersUrl'
+	},
+	{ runtime: 'objectivec', property: 'libffiUrl', key: 'objectiveCLibffiUrl' },
 	{ runtime: 'lisp', property: 'moduleUrl', key: 'lispModuleUrl' },
 	{ runtime: 'ruby', property: 'moduleUrl', key: 'rubyModuleUrl' },
 	{ runtime: 'ruby', property: 'wasmUrl', key: 'rubyWasmUrl' },
@@ -404,12 +532,13 @@ export function createRuntimeAssetsKey(runtimeAssets: RuntimeAssetKeyInput): str
 	for (const field of RUNTIME_ASSET_KEY_FIELDS) {
 		keyParts[field.key] = readRuntimeAssetKeyField(runtimeAssets, field);
 	}
-	for (const runtime of LOADER_RUNTIMES) {
-		const config = runtimeAssetRecord(runtimeAssets, runtime);
-		const loader = config?.loader;
+	for (const field of RUNTIME_ASSET_LOADER_FIELDS) {
+		const config = runtimeAssetRecord(runtimeAssets, field.runtime);
+		const loader = config?.[field.loaderProperty];
 		let identity = '';
 		if ((typeof loader === 'object' && loader !== null) || typeof loader === 'function') {
-			const explicitKey = typeof config?.loaderKey === 'string' ? config.loaderKey : '';
+			const loaderKey = config?.[field.loaderKeyProperty];
+			const explicitKey = typeof loaderKey === 'string' ? loaderKey : '';
 			if (explicitKey) {
 				identity = `key:${explicitKey}`;
 			} else {
@@ -420,7 +549,7 @@ export function createRuntimeAssetsKey(runtimeAssets: RuntimeAssetKeyInput): str
 				}
 			}
 		}
-		keyParts[`${runtime}LoaderIdentity`] = identity;
+		keyParts[field.identityKey] = identity;
 	}
 	return JSON.stringify(keyParts);
 }

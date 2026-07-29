@@ -84,6 +84,7 @@ export interface TinyGoRuntimeAssetConfig {
 	moduleUrl?: string;
 	appUrl?: string;
 	assetLoader?: TinyGoRuntimeAssetLoader;
+	assetLoaderKey?: string;
 	assetPacks?: TinyGoRuntimeAssetPackReference[];
 }
 
