@@ -127,6 +127,54 @@ describe('bounded external LSP asset loading', () => {
 		).resolves.toEqual(new Uint8Array());
 	});
 
+	it('rejects promptly when a bodyless response read is aborted', async () => {
+		const controller = new AbortController();
+		const reason = new Error('cancelled during bodyless read');
+		const reportProgress = vi.fn();
+		let resolveArrayBuffer!: (value: ArrayBuffer) => void;
+		const arrayBufferPromise = new Promise<ArrayBuffer>((resolve) => {
+			resolveArrayBuffer = resolve;
+		});
+		const arrayBuffer = vi.fn(() => arrayBufferPromise);
+		const fetchMock = vi.fn(
+			async () =>
+				({
+					ok: true,
+					url: 'https://assets.example.com/bodyless-runtime.wasm',
+					headers: new Headers(),
+					body: null,
+					arrayBuffer
+				}) as unknown as Response
+		);
+		const loading = fetchBoundedExternalAsset({
+			url: 'https://assets.example.com/bodyless-runtime.wasm',
+			label: 'bodyless runtime',
+			fetch: fetchMock,
+			signal: controller.signal,
+			reportProgress
+		});
+
+		await vi.waitFor(() => expect(arrayBuffer).toHaveBeenCalledOnce());
+		controller.abort(reason);
+		try {
+			const outcome = await Promise.race([
+				loading.then(
+					(value) => ({ status: 'resolved', value }),
+					(error) => ({ status: 'rejected', reason: error })
+				),
+				new Promise((resolve) => {
+					setTimeout(() => resolve({ status: 'pending' }), 50);
+				})
+			]);
+
+			expect(outcome).toEqual({ status: 'rejected', reason });
+			expect(reportProgress).not.toHaveBeenCalled();
+		} finally {
+			resolveArrayBuffer(Uint8Array.of(1, 2, 3).buffer);
+			await loading.catch(() => {});
+		}
+	});
+
 	it('cancels an unknown-length stream when it crosses the byte limit', async () => {
 		let cancelled = false;
 		const fetchMock = vi.fn(

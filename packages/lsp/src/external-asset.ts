@@ -99,12 +99,28 @@ export async function fetchBoundedExternalAsset(
 		throw new Error(`${options.label} exceeds the ${maxBytes} byte download limit`);
 	}
 	if (!response.body) {
-		const bytes = new Uint8Array(await response.arrayBuffer());
-		if (bytes.byteLength > maxBytes) {
-			throw new Error(`${options.label} exceeds the ${maxBytes} byte download limit`);
+		let cancelOnAbort: (() => void) | undefined;
+		const aborted = options.signal
+			? new Promise<never>((_resolve, reject) => {
+					cancelOnAbort = () => reject(abortReason(options.signal!));
+					options.signal!.addEventListener('abort', cancelOnAbort, { once: true });
+				})
+			: undefined;
+		try {
+			if (options.signal?.aborted) throw abortReason(options.signal);
+			const buffer = response.arrayBuffer();
+			const bytes = new Uint8Array(
+				aborted ? await Promise.race([buffer, aborted]) : await buffer
+			);
+			if (options.signal?.aborted) throw abortReason(options.signal);
+			if (bytes.byteLength > maxBytes) {
+				throw new Error(`${options.label} exceeds the ${maxBytes} byte download limit`);
+			}
+			options.reportProgress?.(bytes.byteLength, contentLength ?? bytes.byteLength);
+			return bytes;
+		} finally {
+			if (cancelOnAbort) options.signal?.removeEventListener('abort', cancelOnAbort);
 		}
-		options.reportProgress?.(bytes.byteLength, contentLength ?? bytes.byteLength);
-		return bytes;
 	}
 
 	const reader = response.body.getReader();
