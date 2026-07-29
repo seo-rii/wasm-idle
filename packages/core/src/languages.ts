@@ -59,49 +59,17 @@ export interface LanguageAliasInfo {
 	message?: string;
 }
 
-export const DEFAULT_DEFERRED_PROGRESS_LANGUAGES = new Set<string>([
-	'OBJC',
-	'RUST',
-	'GO',
-	'D',
-	'CSHARP',
-	'FSHARP',
-	'VBNET',
-	'TINYGO',
-	'ERLANG',
-	'PROLOG',
-	'GLEAM',
-	'PERL',
-	'TCL',
-	'AWK',
-	'PASCAL',
-	'FORTH',
-	'J',
-	'BQN',
-	'JANET',
-	'JULIA',
-	'NIM',
-	'BASH',
-	'CLOJURESCRIPT',
-	'FORTRAN',
-	'COBOL',
-	'OCAML',
-	'JAVASCRIPT',
-	'TYPESCRIPT',
-	'ASSEMBLYSCRIPT',
-	'WAT',
-	'WASM',
-	'LUA',
-	'ZIG',
-	'LISP',
-	'RUBY',
-	'HASKELL',
-	'R',
-	'OCTAVE',
-	'DUCKDB',
-	'SQLITE',
-	'PHP'
-]);
+const eagerProgressLanguageIds = [
+	'C',
+	'CPP',
+	'PYTHON3',
+	'JAVA'
+] as const satisfies readonly CanonicalLanguageId[];
+const eagerProgressLanguages = new Set<string>(eagerProgressLanguageIds);
+
+export const DEFAULT_DEFERRED_PROGRESS_LANGUAGES: ReadonlySet<string> = new Set(
+	supportedLanguageIds.filter((language) => !eagerProgressLanguages.has(language))
+);
 
 const languageAliasDefinitions = {
 	'C#': { canonicalId: 'CSHARP', kind: 'spelling' },

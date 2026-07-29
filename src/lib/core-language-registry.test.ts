@@ -1,5 +1,7 @@
 import {
+	DEFAULT_DEFERRED_PROGRESS_LANGUAGES,
 	getLanguageAliasInfo,
+	isDeferredProgressLanguage,
 	isSupportedLanguageId,
 	languageAliasIds,
 	languageAliases,
@@ -32,5 +34,17 @@ describe('core language registry', () => {
 		expectTypeOf(normalizeLanguageId(language)).toEqualTypeOf<
 			(typeof supportedLanguageIds)[number]
 		>();
+	});
+
+	it('derives deferred progress from the canonical language registry', () => {
+		const eagerLanguages = new Set(['C', 'CPP', 'PYTHON3', 'JAVA']);
+		expect([...DEFAULT_DEFERRED_PROGRESS_LANGUAGES]).toEqual(
+			supportedLanguageIds.filter((language) => !eagerLanguages.has(language))
+		);
+		for (const language of supportedLanguageIds) {
+			expect(isDeferredProgressLanguage(language)).toBe(!eagerLanguages.has(language));
+		}
+		expect(isDeferredProgressLanguage('python')).toBe(false);
+		expect(isDeferredProgressLanguage('pypy3')).toBe(false);
 	});
 });
