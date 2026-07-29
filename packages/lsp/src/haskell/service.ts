@@ -15,6 +15,7 @@ import {
 	type LspPosition,
 	type WorkerLanguageService
 } from '../lsp.js';
+import { fetchBoundedExternalAsset } from '../external-asset.js';
 
 const DEFAULT_HASKELL_MAIN_SO_PATH = '/tmp/libplayground001.so';
 const DEFAULT_HASKELL_SEARCH_DIRS = [
@@ -239,37 +240,17 @@ async function fetchBytes(
 	progressStart = 0,
 	progressEnd = 100
 ) {
-	const response = await fetch(url);
-	if (!response.ok) {
-		throw new Error(`failed to load ${stage} from ${url}: ${response.status}`);
-	}
-	const total = Number(response.headers.get('content-length') || 0) || undefined;
-	const body = response.body?.getReader();
-	if (!body) {
-		const data = new Uint8Array(await response.arrayBuffer());
-		reportProgress(stage, data.byteLength, total);
-		return data;
-	}
-	const chunks: Uint8Array[] = [];
-	let loaded = 0;
-	while (true) {
-		const { done, value } = await body.read();
-		if (done) break;
-		if (!value) continue;
-		chunks.push(value);
-		loaded += value.byteLength;
-		const progress =
-			total && total > 0
-				? progressStart + ((progressEnd - progressStart) * loaded) / total
-				: undefined;
-		reportProgress(stage, progress, total ? 100 : undefined);
-	}
-	const data = new Uint8Array(loaded);
-	let offset = 0;
-	for (const chunk of chunks) {
-		data.set(chunk, offset);
-		offset += chunk.byteLength;
-	}
+	const data = await fetchBoundedExternalAsset({
+		url,
+		label: stage,
+		reportProgress(loaded, total) {
+			const progress =
+				total && total > 0
+					? progressStart + ((progressEnd - progressStart) * loaded) / total
+					: undefined;
+			reportProgress(stage, progress, total ? 100 : undefined);
+		}
+	});
 	reportProgress(stage, progressEnd, 100);
 	return data;
 }

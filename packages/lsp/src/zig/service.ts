@@ -7,6 +7,7 @@ import {
 	WASI
 } from '@bjorn3/browser_wasi_shim';
 import { decompressGzip, untar } from '@wasm-idle/llvm-core';
+import { fetchBoundedExternalAsset } from '../external-asset.js';
 import {
 	positionAt,
 	uriToPath,
@@ -266,34 +267,13 @@ async function fetchBytes(
 	stage: string,
 	reportProgress: LspDocumentContext['reportProgress']
 ) {
-	const response = await fetch(url);
-	if (!response.ok) {
-		throw new Error(`Failed to load ${stage} from ${url}: ${response.status}`);
-	}
-	const total = Number(response.headers.get('content-length') || 0) || undefined;
-	const body = response.body?.getReader();
-	if (!body) {
-		const data = new Uint8Array(await response.arrayBuffer());
-		reportProgress(stage, data.byteLength, total);
-		return data;
-	}
-	const chunks: Uint8Array[] = [];
-	let loaded = 0;
-	while (true) {
-		const { done, value } = await body.read();
-		if (done) break;
-		if (!value) continue;
-		chunks.push(value);
-		loaded += value.byteLength;
-		reportProgress(stage, loaded, total);
-	}
-	const data = new Uint8Array(loaded);
-	let offset = 0;
-	for (const chunk of chunks) {
-		data.set(chunk, offset);
-		offset += chunk.byteLength;
-	}
-	return data;
+	return await fetchBoundedExternalAsset({
+		url,
+		label: stage,
+		reportProgress(loaded, total) {
+			reportProgress(stage, loaded, total);
+		}
+	});
 }
 
 async function loadStdDirectory(source: Uint8Array, assetUrl: string) {

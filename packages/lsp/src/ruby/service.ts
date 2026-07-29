@@ -4,6 +4,7 @@ import {
 	type LspPosition,
 	type WorkerLanguageService
 } from '../lsp.js';
+import { fetchBoundedExternalAsset } from '../external-asset.js';
 
 export interface RubyWorkerOptions {
 	moduleUrl?: string;
@@ -133,13 +134,9 @@ async function loadRubyWasmChecker(options: RubyWorkerOptions): Promise<RubySynt
 	if (!wasmUrl) {
 		throw new Error('Ruby language server requires a ruby.wasm URL');
 	}
-	const response = await fetch(wasmUrl);
-	if (!response.ok) {
-		throw new Error(
-			`Failed to load Ruby WASM asset: ${response.status} ${response.statusText}`
-		);
-	}
-	const module = await WebAssembly.compile(await response.arrayBuffer());
+	const module = await WebAssembly.compile(
+		await fetchBoundedExternalAsset({ url: wasmUrl, label: 'Ruby WASM asset' })
+	);
 	const { RubyVM, consolePrinter, wasiShim } = runtime;
 	const { File: WasiFile, OpenFile, WASI } = wasiShim;
 

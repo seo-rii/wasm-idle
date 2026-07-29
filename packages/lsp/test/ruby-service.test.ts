@@ -34,12 +34,16 @@ describe('createRubyWorkerService', () => {
 			}
 			export const wasiShim = { File, OpenFile, WASI };
 		`)}`;
-		const fetchMock = vi.fn(async () => ({
-			ok: true,
-			status: 200,
-			statusText: 'OK',
-			arrayBuffer: async () => new ArrayBuffer(0)
-		}));
+		const fetchMock = vi.fn(
+			async () =>
+				({
+					ok: true,
+					url: '',
+					headers: { get: () => null } as Headers,
+					body: null,
+					arrayBuffer: async () => new ArrayBuffer(0)
+				}) as Response
+		);
 		vi.stubGlobal('fetch', fetchMock);
 		const compile = vi
 			.spyOn(WebAssembly, 'compile')
@@ -60,7 +64,14 @@ describe('createRubyWorkerService', () => {
 		try {
 			await service.initialize?.({ moduleUrl }, context);
 			expect(await service.diagnostics?.(document, context)).toEqual([]);
-			expect(fetchMock).toHaveBeenCalledWith('/bundled/ruby+stdlib.wasm');
+			expect(fetchMock).toHaveBeenCalledWith(
+				'/bundled/ruby+stdlib.wasm',
+				expect.objectContaining({
+					credentials: 'omit',
+					redirect: 'error',
+					referrerPolicy: 'no-referrer'
+				})
+			);
 			expect(state.instantiated).toBe(true);
 			expect(state.evaluated).toContain('RubyVM::InstructionSequence.compile');
 		} finally {
