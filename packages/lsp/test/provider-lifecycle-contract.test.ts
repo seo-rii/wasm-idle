@@ -4,6 +4,7 @@ const mockState = vi.hoisted(() => {
 	const workers: FakeWorker[] = [];
 	const readers: MockReader[] = [];
 	const writers: MockWriter[] = [];
+	const behavior = { respondToInit: true };
 
 	class FakeWorker {
 		listeners = {
@@ -41,7 +42,7 @@ const mockState = vi.hoisted(() => {
 
 		postMessage(message: { type?: string }) {
 			this.messages.push(message);
-			if (message.type !== 'init') return;
+			if (message.type !== 'init' || !behavior.respondToInit) return;
 			for (const handler of this.listeners.message) {
 				handler({ data: { type: 'ready' } } as MessageEvent<unknown>);
 			}
@@ -83,7 +84,7 @@ const mockState = vi.hoisted(() => {
 		}
 	}
 
-	return { workers, readers, writers, FakeWorker, MockReader, MockWriter };
+	return { workers, readers, writers, behavior, FakeWorker, MockReader, MockWriter };
 });
 
 vi.mock('../src/jsonrpc.js', () => ({
@@ -159,6 +160,7 @@ describe('registered LSP provider lifecycle contract', () => {
 		mockState.workers.splice(0, mockState.workers.length);
 		mockState.readers.splice(0, mockState.readers.length);
 		mockState.writers.splice(0, mockState.writers.length);
+		mockState.behavior.respondToInit = true;
 	});
 
 	it.each(editorLanguageServerProviders)(
@@ -199,6 +201,38 @@ describe('registered LSP provider lifecycle contract', () => {
 			}
 
 			handle.dispose();
+		}
+	);
+
+	it.each(editorLanguageServerProviders)(
+		'$id terminates a worker that exceeds the startup timeout',
+		async (provider) => {
+			mockState.behavior.respondToInit = false;
+
+			await expect(
+				provider.create({ ...createProviderOptions(), startupTimeoutMs: 1 })
+			).rejects.toMatchObject({ name: 'LanguageServerStartupTimeoutError' });
+
+			expect(mockState.workers, provider.id).toHaveLength(1);
+			expect(mockState.workers[0]?.terminateCalls, provider.id).toBe(1);
+			expect(mockState.readers, provider.id).toHaveLength(0);
+			expect(mockState.writers, provider.id).toHaveLength(0);
+		}
+	);
+
+	it.each(editorLanguageServerProviders)(
+		'$id does not create a worker for an already-aborted startup',
+		async (provider) => {
+			const controller = new AbortController();
+			const reason = new DOMException(`${provider.id} startup cancelled`, 'AbortError');
+			controller.abort(reason);
+
+			await expect(
+				provider.create({ ...createProviderOptions(), signal: controller.signal })
+			).rejects.toBe(reason);
+			expect(mockState.workers, provider.id).toHaveLength(0);
+			expect(mockState.readers, provider.id).toHaveLength(0);
+			expect(mockState.writers, provider.id).toHaveLength(0);
 		}
 	);
 });
