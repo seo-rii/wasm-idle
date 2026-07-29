@@ -137,6 +137,28 @@ describe('runtime registry asset preflight', () => {
 		expect(Object.isFrozen(result.assets)).toBe(true);
 	});
 
+	it('rejects credentialed asset roots without copying secrets into the error', async () => {
+		const secret = 'root-password-must-not-leak';
+		let rejected: unknown;
+		try {
+			await preflightRuntimeAssets({
+				manifest: createManifest([assets[0]!]),
+				runtimeId: 'fortran/preflight-test',
+				rootUrl: `https://runtime-user:${secret}@example.test/`,
+				fetch: vi.fn<typeof globalThis.fetch>()
+			});
+		} catch (error) {
+			rejected = error;
+		}
+
+		expect(rejected).toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'asset'
+		});
+		expect((rejected as Error).message).not.toContain(secret);
+	});
+
 	it('rejects corrupt or truncated bytes before publishing a result', async () => {
 		await expect(
 			preflightRuntimeAssets({
@@ -280,6 +302,65 @@ describe('runtime registry asset preflight', () => {
 		expect(readerRequested).toBe(false);
 		expect(arrayBufferRequested).toBe(false);
 	});
+
+	it.each([
+		[
+			'https://runtime-user:final-password-must-not-leak@example.test/runtime/loader.js',
+			'final-password-must-not-leak'
+		],
+		[
+			'https://example.test/runtime/loader.js?token=query-secret-must-not-leak',
+			'query-secret-must-not-leak'
+		],
+		[
+			'https://example.test/runtime/loader.js#fragment-secret-must-not-leak',
+			'fragment-secret-must-not-leak'
+		]
+	])(
+		'rejects an unsafe final URL without copying its secret into the error: %s',
+		async (finalUrl, secret) => {
+			let cancelled = false;
+			let readerRequested = false;
+			const response = {
+				url: finalUrl,
+				ok: true,
+				status: 200,
+				headers: new Headers(),
+				body: {
+					async cancel() {
+						cancelled = true;
+					},
+					getReader() {
+						readerRequested = true;
+						throw new Error('unsafe final URL response body should not be read');
+					}
+				}
+			} as unknown as Response;
+			let rejected: unknown;
+
+			try {
+				await preflightRuntimeAssets({
+					manifest: createManifest([assets[0]!]),
+					runtimeId: 'fortran/preflight-test',
+					rootUrl: 'https://example.test/',
+					fetch: async () => response
+				});
+			} catch (error) {
+				rejected = error;
+			}
+
+			expect(rejected).toMatchObject({
+				name: 'RuntimeConfigurationError',
+				code: 'runtime-configuration',
+				phase: 'asset',
+				runtimeId: 'fortran/preflight-test',
+				profileId: 'preflight-v1'
+			});
+			expect((rejected as Error).message).not.toContain(secret);
+			expect(cancelled).toBe(true);
+			expect(readerRequested).toBe(false);
+		}
+	);
 
 	it('cancels a failed HTTP response before returning the asset error', async () => {
 		let cancelReason: unknown;

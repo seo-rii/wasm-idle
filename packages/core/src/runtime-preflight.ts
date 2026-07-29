@@ -64,7 +64,7 @@ function normalizeRootUrl(value: string | URL): URL {
 	try {
 		url = new URL(String(value));
 	} catch {
-		throw new RuntimeConfigurationError(`Runtime asset root URL is invalid: ${String(value)}`, {
+		throw new RuntimeConfigurationError('Runtime asset root URL is invalid', {
 			phase: 'asset'
 		});
 	}
@@ -76,7 +76,7 @@ function normalizeRootUrl(value: string | URL): URL {
 		url.hash
 	) {
 		throw new RuntimeConfigurationError(
-			`Runtime asset root must be an HTTP(S) directory URL: ${url.href}`,
+			'Runtime asset root must be a credential-free HTTP(S) directory URL without a query or fragment',
 			{ phase: 'asset' }
 		);
 	}
@@ -103,21 +103,28 @@ function requireConfinedUrl(
 			profileId
 		});
 	}
-	if (
-		(url.protocol !== 'https:' && url.protocol !== 'http:') ||
-		url.username ||
-		url.password ||
-		url.origin !== assetRootUrl.origin ||
-		!url.pathname.startsWith(assetRootUrl.pathname)
-	) {
+	if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+		throw new RuntimeConfigurationError(`Runtime asset ${asset.key} URL must use HTTP(S)`, {
+			phase: 'asset',
+			runtimeId,
+			profileId
+		});
+	}
+	if (url.username || url.password || url.search || url.hash) {
 		throw new RuntimeConfigurationError(
-			`Runtime asset ${asset.key} URL is outside its declared asset root: ${url.href}`,
+			`Runtime asset ${asset.key} URL must not include credentials, a query, or a fragment`,
+			{ phase: 'asset', runtimeId, profileId }
+		);
+	}
+	if (url.origin !== assetRootUrl.origin || !url.pathname.startsWith(assetRootUrl.pathname)) {
+		throw new RuntimeConfigurationError(
+			`Runtime asset ${asset.key} URL is outside its declared asset root`,
 			{ phase: 'asset', runtimeId, profileId }
 		);
 	}
 	if (url.href !== expectedUrl.href) {
 		throw new RuntimeConfigurationError(
-			`Runtime asset ${asset.key} URL does not match its declared path: ${url.href}`,
+			`Runtime asset ${asset.key} URL does not match its declared path`,
 			{ phase: 'asset', runtimeId, profileId }
 		);
 	}
