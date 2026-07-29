@@ -92,6 +92,15 @@ describe('lsp runtime asset resolution', () => {
 		);
 	});
 
+	it('keeps an absent optional Erlang worker override empty', () => {
+		expect(
+			resolveErlangLanguageServerWorkerUrl(
+				{ rootUrl: '/wasm-idle' },
+				'https://app.example.com/wasm-idle/'
+			)
+		).toBe('');
+	});
+
 	it('resolves declared runtime roots and rejects document-relative fallbacks', () => {
 		const applicationUrl = 'https://app.example.com/wasm-idle/';
 		const cases: [(options: string | undefined, currentUrl: string) => string, string][] = [

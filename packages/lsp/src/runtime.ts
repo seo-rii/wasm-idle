@@ -100,8 +100,10 @@ export function resolvePythonLanguageServerBaseUrl(
 	);
 }
 
-const resolveFileUrl = (value: string, currentUrl = '') =>
-	currentUrl ? new URL(value, currentUrl).href : value;
+const resolveFileUrl = (value: string, currentUrl = '') => {
+	if (!value.trim()) return '';
+	return currentUrl ? new URL(value, currentUrl).href : value;
+};
 
 const resolveApplicationAssetUrl = (path: string, _currentUrl = '') => {
 	throw new LanguageServerAssetConfigurationError(
