@@ -14,19 +14,40 @@ import {
 	languageLabels,
 	lspLanguageOverrides,
 	monacoLanguageContributionLoaders,
+	playgroundLanguageDescriptors,
 	playgroundLanguages,
 	runtimeLspCapabilities,
 	typescriptLspLanguages
 } from './language-registry';
 
 describe('language registry', () => {
-	it('keeps every playground language wired to a label and editor language', () => {
+	it('keeps one complete descriptor for every playground language', () => {
 		expect(new Set(playgroundLanguages).size).toBe(playgroundLanguages.length);
+		expect(Object.keys(playgroundLanguageDescriptors).sort()).toEqual(
+			[...playgroundLanguages].sort()
+		);
 
 		for (const language of playgroundLanguages) {
-			expect(languageLabels[language]).toBeTruthy();
-			expect(editorLanguages[language]).toBeTruthy();
+			const descriptor = playgroundLanguageDescriptors[language];
+			expect(languageLabels[language]).toBe(descriptor.label);
+			expect(editorLanguages[language]).toBe(descriptor.editorLanguage);
 		}
+	});
+
+	it('derives page capability indexes from the language descriptors', () => {
+		for (const language of playgroundLanguages) {
+			const descriptor = playgroundLanguageDescriptors[language];
+			expect(argsHelpLanguages.has(language)).toBe(Boolean(descriptor.supportsArgs));
+			expect(compilerDiagnosticLanguages.has(language)).toBe(
+				Boolean(descriptor.compilerDiagnostics)
+			);
+			expect(runtimeLspCapabilities[language]).toBe(descriptor.runtimeLspCapability);
+			expect(lspLanguageOverrides[language]).toBe(descriptor.lspLanguageOverride);
+		}
+
+		expect([...clangdLspLanguages].sort()).toEqual(['C', 'CPP', 'OBJC']);
+		expect([...dotnetLspLanguages].sort()).toEqual(['CSHARP', 'FSHARP', 'VBNET']);
+		expect([...typescriptLspLanguages].sort()).toEqual(['JAVASCRIPT', 'TYPESCRIPT']);
 	});
 
 	it('projects every canonical runtime language from the Core registry', () => {

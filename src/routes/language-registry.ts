@@ -43,6 +43,20 @@ export type DotnetLspLanguage = 'csharp' | 'fsharp' | 'vbnet';
 
 type MonacoLanguageContributionLoader = () => Promise<unknown>;
 
+type PlaygroundLspProvider = 'clangd' | 'dotnet' | 'typescript';
+
+export interface PlaygroundLanguageDescriptor {
+	readonly label: string;
+	readonly editorLanguage: string;
+	readonly lspProvider?: PlaygroundLspProvider;
+	readonly lspLanguageOverride?: string;
+	readonly runtimeLspCapability?: RuntimeLspCapability;
+	readonly supportsArgs?: boolean;
+	readonly argsLabel?: string;
+	readonly compilerDiagnostics?: boolean;
+	readonly diagnosticMarkers?: boolean;
+}
+
 export const playgroundLanguages: PlaygroundLanguage[] = [
 	...supportedLanguageIds.map<PlaygroundRuntimeLanguage>((language) =>
 		language === 'PYTHON3' ? 'PYTHON' : language
@@ -50,210 +64,344 @@ export const playgroundLanguages: PlaygroundLanguage[] = [
 	...editorOnlyLanguageIds
 ];
 
-export const languageLabels: Record<PlaygroundLanguage, string> = {
-	C: 'C',
-	CPP: 'C++',
-	OBJC: 'Objective-C',
-	PYTHON: 'Python — Pyodide',
-	JAVA: 'Java',
-	RUST: 'Rust',
-	GO: 'Go',
-	D: 'D',
-	CSHARP: 'C#',
-	FSHARP: 'F#',
-	VBNET: 'VB.NET',
-	ELIXIR: 'Elixir',
-	ERLANG: 'Erlang',
-	PROLOG: 'Prolog',
-	GLEAM: 'Gleam',
-	PERL: 'Perl',
-	TCL: 'Tcl',
-	AWK: 'AWK',
-	PASCAL: 'Pascal',
-	FORTH: 'Forth',
-	J: 'J',
-	BQN: 'BQN',
-	JANET: 'Janet',
-	JULIA: 'Julia',
-	NIM: 'Nim',
-	BASH: 'Bash',
-	CLOJURESCRIPT: 'ClojureScript',
-	OCAML: 'OCaml',
-	TINYGO: 'TinyGo',
-	JAVASCRIPT: 'JavaScript — Browser',
-	TYPESCRIPT: 'TypeScript',
-	ASSEMBLYSCRIPT: 'AssemblyScript',
-	WAT: 'WAT',
-	WASM: 'WASM',
-	LUA: 'Lua',
-	ZIG: 'Zig',
-	LISP: 'Scheme — Puppy Scheme',
-	RUBY: 'Ruby',
-	HASKELL: 'Haskell',
-	R: 'R',
-	OCTAVE: 'MATLAB-compatible — GNU Octave',
-	FORTRAN: 'Fortran',
-	COBOL: 'COBOL',
-	GRAPHQL: 'GraphQL',
-	DUCKDB: 'SQL — DuckDB',
-	SQLITE: 'SQL — SQLite dialect',
-	PHP: 'PHP',
-	JSON: 'JSON',
-	YAML: 'YAML',
-	TOML: 'TOML',
-	HTML: 'HTML',
-	CSS: 'CSS',
-	MARKDOWN: 'Markdown'
+export const playgroundLanguageDescriptors: Readonly<
+	Record<PlaygroundLanguage, PlaygroundLanguageDescriptor>
+> = {
+	C: {
+		label: 'C',
+		editorLanguage: 'c',
+		lspProvider: 'clangd',
+		diagnosticMarkers: true
+	},
+	CPP: {
+		label: 'C++',
+		editorLanguage: 'cpp',
+		lspProvider: 'clangd',
+		diagnosticMarkers: true
+	},
+	OBJC: {
+		label: 'Objective-C',
+		editorLanguage: 'objective-c',
+		lspProvider: 'clangd',
+		supportsArgs: true,
+		compilerDiagnostics: true,
+		diagnosticMarkers: true
+	},
+	PYTHON: { label: 'Python — Pyodide', editorLanguage: 'python', diagnosticMarkers: true },
+	JAVA: {
+		label: 'Java',
+		editorLanguage: 'java',
+		supportsArgs: true,
+		compilerDiagnostics: true,
+		diagnosticMarkers: true
+	},
+	RUST: {
+		label: 'Rust',
+		editorLanguage: 'rust',
+		runtimeLspCapability: 'rust',
+		supportsArgs: true,
+		compilerDiagnostics: true,
+		diagnosticMarkers: true
+	},
+	GO: {
+		label: 'Go',
+		editorLanguage: 'go',
+		runtimeLspCapability: 'go',
+		supportsArgs: true,
+		compilerDiagnostics: true,
+		diagnosticMarkers: true
+	},
+	D: {
+		label: 'D',
+		editorLanguage: 'd',
+		runtimeLspCapability: 'd',
+		supportsArgs: true,
+		compilerDiagnostics: true,
+		diagnosticMarkers: true
+	},
+	CSHARP: {
+		label: 'C#',
+		editorLanguage: 'csharp',
+		lspProvider: 'dotnet',
+		supportsArgs: true,
+		compilerDiagnostics: true,
+		diagnosticMarkers: true
+	},
+	FSHARP: {
+		label: 'F#',
+		editorLanguage: 'fsharp',
+		lspProvider: 'dotnet',
+		supportsArgs: true,
+		compilerDiagnostics: true,
+		diagnosticMarkers: true
+	},
+	VBNET: {
+		label: 'VB.NET',
+		editorLanguage: 'vb',
+		lspProvider: 'dotnet',
+		supportsArgs: true,
+		compilerDiagnostics: true,
+		diagnosticMarkers: true
+	},
+	ELIXIR: {
+		label: 'Elixir',
+		editorLanguage: 'elixir',
+		runtimeLspCapability: 'elixir',
+		diagnosticMarkers: true
+	},
+	ERLANG: {
+		label: 'Erlang',
+		editorLanguage: 'erlang',
+		runtimeLspCapability: 'erlang',
+		diagnosticMarkers: true
+	},
+	PROLOG: {
+		label: 'Prolog',
+		editorLanguage: 'prolog',
+		runtimeLspCapability: 'prolog',
+		supportsArgs: true,
+		compilerDiagnostics: true,
+		diagnosticMarkers: true
+	},
+	GLEAM: {
+		label: 'Gleam',
+		editorLanguage: 'gleam',
+		runtimeLspCapability: 'gleam',
+		supportsArgs: true,
+		compilerDiagnostics: true,
+		diagnosticMarkers: true
+	},
+	PERL: {
+		label: 'Perl',
+		editorLanguage: 'perl',
+		runtimeLspCapability: 'perl',
+		supportsArgs: true,
+		compilerDiagnostics: true,
+		diagnosticMarkers: true
+	},
+	TCL: {
+		label: 'Tcl',
+		editorLanguage: 'tcl',
+		runtimeLspCapability: 'tcl',
+		supportsArgs: true,
+		diagnosticMarkers: true
+	},
+	AWK: {
+		label: 'AWK',
+		editorLanguage: 'awk',
+		runtimeLspCapability: 'awk',
+		supportsArgs: true,
+		diagnosticMarkers: true
+	},
+	PASCAL: {
+		label: 'Pascal',
+		editorLanguage: 'pascal',
+		runtimeLspCapability: 'pascal',
+		diagnosticMarkers: true
+	},
+	FORTH: { label: 'Forth', editorLanguage: 'forth' },
+	J: { label: 'J', editorLanguage: 'j' },
+	BQN: { label: 'BQN', editorLanguage: 'bqn' },
+	JANET: {
+		label: 'Janet',
+		editorLanguage: 'janet',
+		runtimeLspCapability: 'janet',
+		diagnosticMarkers: true
+	},
+	JULIA: { label: 'Julia', editorLanguage: 'julia', diagnosticMarkers: true },
+	NIM: { label: 'Nim', editorLanguage: 'nim', diagnosticMarkers: true },
+	BASH: { label: 'Bash', editorLanguage: 'shell', supportsArgs: true },
+	CLOJURESCRIPT: { label: 'ClojureScript', editorLanguage: 'clojure', supportsArgs: true },
+	OCAML: {
+		label: 'OCaml',
+		editorLanguage: 'ocaml',
+		runtimeLspCapability: 'ocaml',
+		compilerDiagnostics: true,
+		diagnosticMarkers: true
+	},
+	TINYGO: {
+		label: 'TinyGo',
+		editorLanguage: 'go',
+		supportsArgs: true,
+		compilerDiagnostics: true,
+		diagnosticMarkers: true
+	},
+	JAVASCRIPT: {
+		label: 'JavaScript — Browser',
+		editorLanguage: 'javascript',
+		lspProvider: 'typescript',
+		supportsArgs: true,
+		compilerDiagnostics: true,
+		diagnosticMarkers: true
+	},
+	TYPESCRIPT: {
+		label: 'TypeScript',
+		editorLanguage: 'typescript',
+		lspProvider: 'typescript',
+		supportsArgs: true,
+		compilerDiagnostics: true,
+		diagnosticMarkers: true
+	},
+	ASSEMBLYSCRIPT: {
+		label: 'AssemblyScript',
+		editorLanguage: 'typescript',
+		lspLanguageOverride: 'assemblyscript',
+		compilerDiagnostics: true,
+		diagnosticMarkers: true
+	},
+	WAT: {
+		label: 'WAT',
+		editorLanguage: 'wat',
+		compilerDiagnostics: true,
+		diagnosticMarkers: true
+	},
+	WASM: {
+		label: 'WASM',
+		editorLanguage: 'wasm',
+		runtimeLspCapability: 'wasm',
+		diagnosticMarkers: true
+	},
+	LUA: {
+		label: 'Lua',
+		editorLanguage: 'lua',
+		runtimeLspCapability: 'lua',
+		supportsArgs: true,
+		compilerDiagnostics: true,
+		diagnosticMarkers: true
+	},
+	ZIG: {
+		label: 'Zig',
+		editorLanguage: 'zig',
+		runtimeLspCapability: 'zig',
+		supportsArgs: true,
+		compilerDiagnostics: true,
+		diagnosticMarkers: true
+	},
+	LISP: {
+		label: 'Scheme — Puppy Scheme',
+		editorLanguage: 'lisp',
+		runtimeLspCapability: 'lisp',
+		supportsArgs: true,
+		compilerDiagnostics: true,
+		diagnosticMarkers: true
+	},
+	RUBY: {
+		label: 'Ruby',
+		editorLanguage: 'ruby',
+		runtimeLspCapability: 'ruby',
+		supportsArgs: true,
+		compilerDiagnostics: true
+	},
+	HASKELL: {
+		label: 'Haskell',
+		editorLanguage: 'haskell',
+		runtimeLspCapability: 'haskell',
+		supportsArgs: true,
+		argsLabel: 'GHC Args',
+		compilerDiagnostics: true,
+		diagnosticMarkers: true
+	},
+	R: {
+		label: 'R',
+		editorLanguage: 'r',
+		runtimeLspCapability: 'r',
+		supportsArgs: true,
+		diagnosticMarkers: true
+	},
+	OCTAVE: {
+		label: 'MATLAB-compatible — GNU Octave',
+		editorLanguage: 'octave',
+		runtimeLspCapability: 'octave',
+		supportsArgs: true,
+		diagnosticMarkers: true
+	},
+	FORTRAN: {
+		label: 'Fortran',
+		editorLanguage: 'fortran',
+		runtimeLspCapability: 'fortran',
+		diagnosticMarkers: true
+	},
+	COBOL: {
+		label: 'COBOL',
+		editorLanguage: 'cobol',
+		supportsArgs: true,
+		diagnosticMarkers: true
+	},
+	GRAPHQL: { label: 'GraphQL', editorLanguage: 'graphql' },
+	DUCKDB: { label: 'SQL — DuckDB', editorLanguage: 'sql', lspLanguageOverride: 'duckdb' },
+	SQLITE: {
+		label: 'SQL — SQLite dialect',
+		editorLanguage: 'sql',
+		runtimeLspCapability: 'sql',
+		compilerDiagnostics: true
+	},
+	PHP: {
+		label: 'PHP',
+		editorLanguage: 'php',
+		supportsArgs: true,
+		compilerDiagnostics: true
+	},
+	JSON: { label: 'JSON', editorLanguage: 'json', diagnosticMarkers: true },
+	YAML: { label: 'YAML', editorLanguage: 'yaml', diagnosticMarkers: true },
+	TOML: { label: 'TOML', editorLanguage: 'toml', diagnosticMarkers: true },
+	HTML: { label: 'HTML', editorLanguage: 'html', diagnosticMarkers: true },
+	CSS: { label: 'CSS', editorLanguage: 'css', diagnosticMarkers: true },
+	MARKDOWN: { label: 'Markdown', editorLanguage: 'markdown', diagnosticMarkers: true }
 };
 
-export const editorLanguages: Record<PlaygroundLanguage, string> = {
-	C: 'c',
-	CPP: 'cpp',
-	OBJC: 'objective-c',
-	PYTHON: 'python',
-	JAVA: 'java',
-	RUST: 'rust',
-	GO: 'go',
-	D: 'd',
-	CSHARP: 'csharp',
-	FSHARP: 'fsharp',
-	VBNET: 'vb',
-	ELIXIR: 'elixir',
-	ERLANG: 'erlang',
-	PROLOG: 'prolog',
-	GLEAM: 'gleam',
-	PERL: 'perl',
-	TCL: 'tcl',
-	AWK: 'awk',
-	PASCAL: 'pascal',
-	FORTH: 'forth',
-	J: 'j',
-	BQN: 'bqn',
-	JANET: 'janet',
-	JULIA: 'julia',
-	NIM: 'nim',
-	BASH: 'shell',
-	CLOJURESCRIPT: 'clojure',
-	OCAML: 'ocaml',
-	TINYGO: 'go',
-	JAVASCRIPT: 'javascript',
-	TYPESCRIPT: 'typescript',
-	ASSEMBLYSCRIPT: 'typescript',
-	WAT: 'wat',
-	WASM: 'wasm',
-	LUA: 'lua',
-	ZIG: 'zig',
-	LISP: 'lisp',
-	RUBY: 'ruby',
-	HASKELL: 'haskell',
-	R: 'r',
-	OCTAVE: 'octave',
-	FORTRAN: 'fortran',
-	COBOL: 'cobol',
-	GRAPHQL: 'graphql',
-	DUCKDB: 'sql',
-	SQLITE: 'sql',
-	PHP: 'php',
-	JSON: 'json',
-	YAML: 'yaml',
-	TOML: 'toml',
-	HTML: 'html',
-	CSS: 'css',
-	MARKDOWN: 'markdown'
-};
+const languageDescriptorEntries = Object.entries(playgroundLanguageDescriptors) as Array<
+	[PlaygroundLanguage, PlaygroundLanguageDescriptor]
+>;
+
+export const languageLabels = Object.fromEntries(
+	languageDescriptorEntries.map(([language, descriptor]) => [language, descriptor.label])
+) as Record<PlaygroundLanguage, string>;
+export const editorLanguages = Object.fromEntries(
+	languageDescriptorEntries.map(([language, descriptor]) => [language, descriptor.editorLanguage])
+) as Record<PlaygroundLanguage, string>;
 
 export const debugLspLanguages = new Set<PlaygroundLanguage>(['CPP']);
-export const clangdLspLanguages = new Set<PlaygroundLanguage>(['C', 'CPP', 'OBJC']);
-export const dotnetLspLanguages = new Set<PlaygroundLanguage>(['CSHARP', 'FSHARP', 'VBNET']);
-export const typescriptLspLanguages = new Set<PlaygroundLanguage>(['JAVASCRIPT', 'TYPESCRIPT']);
-export const lspLanguageOverrides: Partial<Record<PlaygroundLanguage, string>> = {
-	ASSEMBLYSCRIPT: 'assemblyscript',
-	DUCKDB: 'duckdb'
-};
+export const clangdLspLanguages = new Set<PlaygroundLanguage>(
+	languageDescriptorEntries
+		.filter(([, descriptor]) => descriptor.lspProvider === 'clangd')
+		.map(([language]) => language)
+);
+export const dotnetLspLanguages = new Set<PlaygroundLanguage>(
+	languageDescriptorEntries
+		.filter(([, descriptor]) => descriptor.lspProvider === 'dotnet')
+		.map(([language]) => language)
+);
+export const typescriptLspLanguages = new Set<PlaygroundLanguage>(
+	languageDescriptorEntries
+		.filter(([, descriptor]) => descriptor.lspProvider === 'typescript')
+		.map(([language]) => language)
+);
+export const lspLanguageOverrides = Object.fromEntries(
+	languageDescriptorEntries
+		.filter(([, descriptor]) => descriptor.lspLanguageOverride !== undefined)
+		.map(([language, descriptor]) => [language, descriptor.lspLanguageOverride!])
+) as Partial<Record<PlaygroundLanguage, string>>;
 export const editorOnlyLanguages = new Set<PlaygroundLanguage>(editorOnlyLanguageIds);
-export const runtimeLspCapabilities: Partial<Record<PlaygroundLanguage, RuntimeLspCapability>> = {
-	ELIXIR: 'elixir',
-	ERLANG: 'erlang',
-	GLEAM: 'gleam',
-	D: 'd',
-	TCL: 'tcl',
-	PASCAL: 'pascal',
-	GO: 'go',
-	RUST: 'rust',
-	ZIG: 'zig',
-	LUA: 'lua',
-	JANET: 'janet',
-	LISP: 'lisp',
-	OCAML: 'ocaml',
-	HASKELL: 'haskell',
-	FORTRAN: 'fortran',
-	SQLITE: 'sql',
-	PROLOG: 'prolog',
-	RUBY: 'ruby',
-	R: 'r',
-	OCTAVE: 'octave',
-	AWK: 'awk',
-	PERL: 'perl',
-	WASM: 'wasm'
-};
-export const argsHelpLanguages = new Set<PlaygroundLanguage>([
-	'OBJC',
-	'JAVA',
-	'RUST',
-	'GO',
-	'D',
-	'CSHARP',
-	'FSHARP',
-	'VBNET',
-	'PROLOG',
-	'GLEAM',
-	'PERL',
-	'TCL',
-	'AWK',
-	'BASH',
-	'CLOJURESCRIPT',
-	'TINYGO',
-	'JAVASCRIPT',
-	'TYPESCRIPT',
-	'LUA',
-	'ZIG',
-	'LISP',
-	'RUBY',
-	'HASKELL',
-	'R',
-	'OCTAVE',
-	'PHP',
-	'COBOL'
-]);
-export const argsLabels: Partial<Record<PlaygroundLanguage, string>> = {
-	HASKELL: 'GHC Args'
-};
-export const compilerDiagnosticLanguages = new Set<PlaygroundLanguage>([
-	'OBJC',
-	'JAVA',
-	'RUST',
-	'GO',
-	'D',
-	'CSHARP',
-	'FSHARP',
-	'VBNET',
-	'PROLOG',
-	'GLEAM',
-	'PERL',
-	'TINYGO',
-	'OCAML',
-	'JAVASCRIPT',
-	'TYPESCRIPT',
-	'ASSEMBLYSCRIPT',
-	'WAT',
-	'LUA',
-	'ZIG',
-	'LISP',
-	'RUBY',
-	'HASKELL',
-	'SQLITE',
-	'PHP'
-]);
+export const runtimeLspCapabilities = Object.fromEntries(
+	languageDescriptorEntries
+		.filter(([, descriptor]) => descriptor.runtimeLspCapability !== undefined)
+		.map(([language, descriptor]) => [language, descriptor.runtimeLspCapability!])
+) as Partial<Record<PlaygroundLanguage, RuntimeLspCapability>>;
+export const argsHelpLanguages = new Set<PlaygroundLanguage>(
+	languageDescriptorEntries
+		.filter(([, descriptor]) => descriptor.supportsArgs)
+		.map(([language]) => language)
+);
+export const argsLabels = Object.fromEntries(
+	languageDescriptorEntries
+		.filter(([, descriptor]) => descriptor.argsLabel !== undefined)
+		.map(([language, descriptor]) => [language, descriptor.argsLabel!])
+) as Partial<Record<PlaygroundLanguage, string>>;
+export const compilerDiagnosticLanguages = new Set<PlaygroundLanguage>(
+	languageDescriptorEntries
+		.filter(([, descriptor]) => descriptor.compilerDiagnostics)
+		.map(([language]) => language)
+);
 
 export const dotnetMonacoLspLanguages: Record<string, DotnetLspLanguage> = {
 	csharp: 'csharp',
@@ -270,49 +418,11 @@ export const defaultLanguageAliases: Record<string, string> = {
 	sql: 'sqlite'
 };
 export const debugViewLanguages = new Set(['cpp']);
-export const diagnosticMarkerLanguages = new Set([
-	'c',
-	'objective-c',
-	'java',
-	'python',
-	'rust',
-	'go',
-	'd',
-	'csharp',
-	'fsharp',
-	'vb',
-	'elixir',
-	'erlang',
-	'prolog',
-	'gleam',
-	'tcl',
-	'pascal',
-	'perl',
-	'awk',
-	'ocaml',
-	'javascript',
-	'typescript',
-	'wat',
-	'wasm',
-	'lua',
-	'janet',
-	'julia',
-	'nim',
-	'zig',
-	'lisp',
-	'haskell',
-	'fortran',
-	'cobol',
-	'r',
-	'octave',
-	'cpp',
-	'json',
-	'yaml',
-	'toml',
-	'html',
-	'css',
-	'markdown'
-]);
+export const diagnosticMarkerLanguages = new Set(
+	languageDescriptorEntries
+		.filter(([, descriptor]) => descriptor.diagnosticMarkers)
+		.map(([, descriptor]) => descriptor.editorLanguage)
+);
 export const monacoLanguageContributionLoaders: Record<string, MonacoLanguageContributionLoader> = {
 	c: () => import('monaco-editor/esm/vs/basic-languages/cpp/cpp.contribution.js'),
 	cpp: () => import('monaco-editor/esm/vs/basic-languages/cpp/cpp.contribution.js'),
