@@ -33,14 +33,23 @@ int main(void) {
 	{
 		activePath: 'main.cpp',
 		backend: 'lldb',
-		breakpointLine: 15,
-		expectedChildren: {
-			parent: 'pair',
-			variables: [
-				{ name: 'first', value: '35' },
-				{ name: 'second', value: '38' }
-			]
-		},
+		breakpointLine: 16,
+		expectedVariableTrees: [
+			{
+				parent: 'pair',
+				variables: [
+					{ name: 'first', value: '35' },
+					{ name: 'second', value: '38' }
+				]
+			},
+			{
+				parent: 'pair_ptr',
+				variables: [
+					{ name: 'first', value: '35' },
+					{ name: 'second', value: '38' }
+				]
+			}
+		],
 		expectedOutput: 'lldb-cpp=73',
 		expectedLocal: { name: 'result', value: '73' },
 		expectedTitle: 'C++ · LLDB / WAMR',
@@ -60,7 +69,8 @@ int calculate(int value) {
 
 int main() {
     Pair pair{35, 38};
-    int result = calculate(pair.first);
+    Pair *pair_ptr = &pair;
+    int result = calculate(pair_ptr->first);
     std::printf("lldb-cpp=%d\\n", result);
     return 0;
 }`
@@ -575,35 +585,36 @@ describe('native-source browser debugging in Chromium', () => {
 									expect.objectContaining(testCase.expectedLocal)
 								])
 							);
-							if ('expectedChildren' in testCase) {
-								const parent = loadedVariables.find(
-									(variable) =>
-										variable.name === testCase.expectedChildren.parent
-								);
-								if (!parent) {
-									throw new Error(
-										`${testCase.language} did not expose ${testCase.expectedChildren.parent}`
+							if ('expectedVariableTrees' in testCase) {
+								for (const expectedTree of testCase.expectedVariableTrees) {
+									const parent = loadedVariables.find(
+										(variable) => variable.name === expectedTree.parent
+									);
+									if (!parent) {
+										throw new Error(
+											`${testCase.language} did not expose ${expectedTree.parent}`
+										);
+									}
+									expect(parent).toMatchObject({
+										name: expectedTree.parent,
+										variablesReference: expect.any(Number)
+									});
+									expect(parent.variablesReference).toBeGreaterThan(0);
+									const children = await page.evaluate(
+										(variablesReference) =>
+											(window as any).__wasmIdleDebug.loadDebugVariables(
+												variablesReference
+											),
+										parent.variablesReference
+									);
+									expect(children).toEqual(
+										expect.arrayContaining(
+											expectedTree.variables.map((variable) =>
+												expect.objectContaining(variable)
+											)
+										)
 									);
 								}
-								expect(parent).toMatchObject({
-									name: testCase.expectedChildren.parent,
-									variablesReference: expect.any(Number)
-								});
-								expect(parent.variablesReference).toBeGreaterThan(0);
-								const children = await page.evaluate(
-									(variablesReference) =>
-										(window as any).__wasmIdleDebug.loadDebugVariables(
-											variablesReference
-										),
-									parent.variablesReference
-								);
-								expect(children).toEqual(
-									expect.arrayContaining(
-										testCase.expectedChildren.variables.map((variable) =>
-											expect.objectContaining(variable)
-										)
-									)
-								);
 							}
 							const loadedState = await page.evaluate(() =>
 								(window as any).__wasmIdleDebug.getDebugState()
