@@ -729,6 +729,42 @@ describe('static worker backed language sandboxes', () => {
 		);
 	});
 
+	it('does not leak stdin queued before or during an explicit-input run', async () => {
+		onPostMessage = () => {};
+		const sandbox = new Prolog();
+		const code = 'main :- read_line_to_string(user_input, Line), writeln(Line).';
+		await sandbox.load('/absproxy/5173');
+		sandbox.write('queued before the run\n');
+		sandbox.eof();
+
+		const explicitRun = sandbox.run(code, false, true, undefined, [], {
+			stdin: 'explicit input\n'
+		});
+		await vi.waitFor(() => expect(workerInstances[0].postMessage).toHaveBeenCalledOnce());
+		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({ stdin: 'explicit input\n', stdinEof: true })
+		);
+		sandbox.write('queued during the run\n');
+		sandbox.eof();
+		workerInstances[0].onmessage?.({
+			data: { runId: workerInstances[0].lastRunId, results: true }
+		} as MessageEvent<any>);
+		await expect(explicitRun).resolves.toBe(true);
+
+		onPostMessage = null;
+		await sandbox.load('/absproxy/5173');
+		const nextRun = sandbox.run(code, false);
+		await Promise.resolve();
+		expect(workerInstances[1].postMessage).not.toHaveBeenCalled();
+
+		sandbox.write('fresh input\n');
+		sandbox.eof();
+		await expect(nextRun).resolves.toBe(true);
+		expect(workerInstances[1].postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({ stdin: 'fresh input\n', stdinEof: true })
+		);
+	});
+
 	it('rejects worker script download and bootstrap import failures', async () => {
 		vi.mocked(fetch).mockResolvedValueOnce(new Response('', { status: 404 }));
 		const missingScript = new Prolog();

@@ -135,6 +135,11 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 		for (const waiter of waiters) waiter.reject(reason);
 	}
 
+	private clearPendingStdin() {
+		this.pendingInput = [];
+		this.pendingEof = false;
+	}
+
 	private readsStdin(code: string) {
 		this.config.readStdinPattern.lastIndex = 0;
 		return this.config.readStdinPattern.test(code);
@@ -145,6 +150,7 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 		options: SandboxExecutionOptions
 	): Promise<BufferedStdin> {
 		if (typeof options.stdin === 'string') {
+			this.clearPendingStdin();
 			return { stdin: options.stdin, stdinEof: true };
 		}
 		if (!this.readsStdin(code) && this.pendingInput.length === 0 && !this.pendingEof) {
@@ -158,8 +164,7 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 		}
 
 		const stdin = this.pendingInput.join('');
-		this.pendingInput = [];
-		this.pendingEof = false;
+		this.clearPendingStdin();
 		return { stdin, stdinEof: true };
 	}
 
@@ -374,6 +379,7 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 		this.exit = true;
 		this.activeRun = null;
 		this.activeReject = null;
+		this.clearPendingStdin();
 		this.reportProgress(activeRun.progress, 1, `${this.config.displayName} run complete`);
 		this.disposeWorker();
 		activeRun.resolve(result);
@@ -386,6 +392,7 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 		this.exit = true;
 		this.activeRun = null;
 		this.activeReject = null;
+		this.clearPendingStdin();
 		this.disposeWorker();
 		activeRun.reject(reason);
 	}
@@ -489,8 +496,7 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 			this.activeReject = null;
 			activeRun.reject(reason);
 		}
-		this.pendingInput = [];
-		this.pendingEof = false;
+		this.clearPendingStdin();
 		this.disposeWorker();
 		this.exit = true;
 	}
