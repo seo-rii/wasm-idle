@@ -50,7 +50,7 @@ export interface ObjectiveCWorkerAssetConfig {
 	libffiUrl: string;
 }
 
-type ObjectiveCSourceLanguage = 'c' | 'objective-c';
+type ObjectiveCSourceLanguage = 'c' | 'objective-c' | 'objective-c++';
 type ObjectiveCBrowserClangArtifact = BrowserClangArtifact & { needsLibffi: boolean };
 
 const textDecoder = new TextDecoder();
@@ -486,9 +486,14 @@ function readProgramStdin() {
 
 function sourceLanguageForPath(filePath: string): ObjectiveCSourceLanguage | null {
 	const normalized = filePath.toLowerCase();
+	if (normalized.endsWith('.mm')) return 'objective-c++';
 	if (normalized.endsWith('.m')) return 'objective-c';
 	if (normalized.endsWith('.c')) return 'c';
 	return null;
+}
+
+function usesObjectiveCRuntime(language: ObjectiveCSourceLanguage) {
+	return language === 'objective-c' || language === 'objective-c++';
 }
 
 function sourceImportsFoundation(source: string) {
@@ -612,6 +617,9 @@ async function compileObjectiveCObject(
 ) {
 	if (!clang) throw new Error('Objective-C runtime is not loaded.');
 	if (debug) {
+		if (language === 'objective-c++') {
+			throw new Error('Objective-C++ trace debugging is not supported.');
+		}
 		if (code == null) {
 			throw new Error('Objective-C debug compilation requires the active source text.');
 		}
@@ -644,6 +652,7 @@ async function compileObjectiveCObject(
 		'/',
 		'-resource-dir',
 		resourceDir,
+		...(language === 'objective-c++' ? ['-internal-isystem', '/include/c++/v1'] : []),
 		'-internal-isystem',
 		resourceIncludeDir,
 		'-internal-isystem',
@@ -656,9 +665,10 @@ async function compileObjectiveCObject(
 		'-O2',
 		'-o',
 		obj,
+		...(language === 'objective-c++' ? ['-std=gnu++20'] : []),
 		'-x',
 		language,
-		...(language === 'objective-c' ? ['-fobjc-runtime=gnustep-2.0', '-fblocks'] : []),
+		...(usesObjectiveCRuntime(language) ? ['-fobjc-runtime=gnustep-2.0', '-fblocks'] : []),
 		input,
 		...compileArgs
 	];
@@ -714,13 +724,16 @@ async function compileAndLinkObjectiveC(
 		workspaceFiles.some((file) => sourceImportsFoundation(file.content));
 	const needsObjectiveCLoad =
 		!needsFoundation &&
-		mainLanguage === 'objective-c' &&
+		usesObjectiveCRuntime(mainLanguage) &&
 		(/@\s*(?:interface|implementation|protocol)\b/u.test(code) ||
-			workspaceFiles.some(
-				(file) =>
-					sourceLanguageForPath(file.path) === 'objective-c' &&
+			workspaceFiles.some((file) => {
+				const language = sourceLanguageForPath(file.path);
+				return (
+					language !== null &&
+					usesObjectiveCRuntime(language) &&
 					/@\s*(?:interface|implementation|protocol)\b/u.test(file.content)
-			));
+				);
+			}));
 	const foundationCompileArgs = needsFoundation
 		? ['-Wno-macro-redefined', '-Wno-nullability-completeness']
 		: [];

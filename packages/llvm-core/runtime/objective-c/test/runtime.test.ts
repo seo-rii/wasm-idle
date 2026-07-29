@@ -344,6 +344,83 @@ describe('Objective-C worker', () => {
 		expect(executedArtifacts[0]?.options.extraImports).toBeUndefined();
 	});
 
+	it('compiles and links Objective-C++ active and workspace implementation files', async () => {
+		await installWorker();
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				log: false,
+				clangAssets: { baseUrl: 'http://localhost/clang/', useAssetBridge: false },
+				objectivecAssets: {
+					libobjcUrl: 'http://localhost/wasm-objectivec/libobjc.a',
+					headersUrl: 'http://localhost/wasm-objectivec/headers.json',
+					libgnustepBaseUrl: 'http://localhost/wasm-objectivec/libgnustep-base.a',
+					libgnustepBaseObjectUrl: 'http://localhost/wasm-objectivec/libgnustep-base.o',
+					foundationHeadersUrl:
+						'http://localhost/wasm-objectivec/foundation-headers.json',
+					libffiUrl: 'http://localhost/wasm-objectivec/libffi.a'
+				}
+			}
+		});
+
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: '#include <objc/runtime.h>\n#include "Greeter.h"\nint main(void) { Greeter *greeter = (Greeter *)class_createInstance(objc_getClass("Greeter"), 0); return [greeter offset: 68] == 73 ? 0 : 1; }',
+				buffer: new SharedArrayBuffer(64),
+				prepare: false,
+				log: false,
+				activePath: 'main.mm',
+				stdin: '',
+				workspaceFiles: [
+					{
+						path: 'Greeter.h',
+						content:
+							'#include <objc/runtime.h>\n__attribute__((objc_root_class))\n@interface Greeter { Class isa; }\n- (int)offset:(int)value;\n@end'
+					},
+					{
+						path: 'Greeter.mm',
+						content:
+							'#include <string>\n#include "Greeter.h"\n@implementation Greeter\n- (int)offset:(int)value { const std::string step = "12345"; return value + (int)step.size(); }\n@end'
+					}
+				]
+			}
+		});
+
+		const objectiveCxxRuns = runCalls.filter((call) => {
+			const languageIndex = call.indexOf('-x');
+			return languageIndex >= 0 && call[languageIndex + 1] === 'objective-c++';
+		});
+		expect(objectiveCxxRuns).toHaveLength(2);
+		for (const compileRun of objectiveCxxRuns) {
+			expect(compileRun).toEqual(
+				expect.arrayContaining([
+					'-std=gnu++20',
+					'/include/c++/v1',
+					'-fobjc-runtime=gnustep-2.0',
+					'-fblocks'
+				])
+			);
+		}
+		expect(objectiveCxxRuns[0]).toEqual(
+			expect.arrayContaining([expect.stringMatching(/main\.mm$/)])
+		);
+		expect(objectiveCxxRuns[1]).toEqual(
+			expect.arrayContaining([expect.stringMatching(/Greeter\.mm$/)])
+		);
+
+		const lldRun = runCalls.find((call) => call[0] === 'wasm-ld');
+		expect(lldRun).toEqual(
+			expect.arrayContaining([
+				expect.stringMatching(/main\.o$/),
+				expect.stringMatching(/Greeter\.o$/),
+				'libobjc.a',
+				'-lc++',
+				'-lc++abi'
+			])
+		);
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
+	});
+
 	it('links GNUstep Base and libffi only when Foundation is imported', async () => {
 		await installWorker();
 		await (globalThis as any).self.onmessage({

@@ -33,6 +33,7 @@
 		"test:browser:fortran": "WASM_IDLE_RUN_REAL_BROWSER_FORTRAN=1 pnpm exec vitest run src/lib/playground/stdin.playwright.test.ts",
 		"test:browser:cobol": "WASM_IDLE_RUN_REAL_BROWSER_COBOL=1 pnpm exec vitest run src/lib/playground/stdin.playwright.test.ts",
 		"test:browser:objectivec": "WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC=1 pnpm exec vitest run src/lib/playground/stdin.playwright.test.ts",
+		"test:browser:objectivecxx": "WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVECXX=1 pnpm exec vitest run src/lib/playground/objectivecxx.playwright.test.ts",
 		"test:browser:debug": "WASM_IDLE_RUN_REAL_BROWSER_DEBUG=1 pnpm exec vitest run src/lib/playground/debug.playwright.test.ts",
 		"test:browser:debug:lldb": "WASM_IDLE_RUN_REAL_BROWSER_DEBUG=1 WASM_IDLE_REQUIRE_LLDB_DEBUG=1 WASM_IDLE_DEBUG_BROWSER_LANGUAGES=C,CPP,RUST pnpm exec vitest run src/lib/playground/debug.playwright.test.ts",
 		"test:browser:go": "WASM_IDLE_RUN_REAL_BROWSER_GO=1 pnpm exec vitest run src/lib/playground/go.playwright.test.ts",
