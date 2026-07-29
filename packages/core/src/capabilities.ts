@@ -171,6 +171,56 @@ export function defineRuntimeTrustProfile(profile: RuntimeTrustProfile): Runtime
 	});
 }
 
+function normalizeRuntimeNetworkUrl(
+	profile: RuntimeTrustProfile,
+	value: string | URL,
+	pageOrigin?: string,
+	baseUrl?: string
+) {
+	let url: URL;
+	try {
+		url = new URL(String(value), baseUrl);
+	} catch {
+		throw new RuntimeConfigurationError(`Runtime network URL is invalid: ${String(value)}`);
+	}
+	if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+		throw new RuntimeConfigurationError(
+			`Runtime network URL uses an unsupported scheme: ${url.protocol}`
+		);
+	}
+	if (url.username || url.password) {
+		throw new RuntimeConfigurationError(
+			`Runtime network URL cannot contain credentials: ${url.origin}`
+		);
+	}
+	if (profile.network.mode === 'none') {
+		throw new RuntimeConfigurationError(
+			`Runtime trust profile ${profile.profileId} does not allow network access`
+		);
+	}
+	if (
+		profile.network.mode === 'allowlist' &&
+		!profile.network.allowedOrigins.includes(url.origin)
+	) {
+		throw new RuntimeConfigurationError(
+			`Runtime network origin ${url.origin} is not allowed by ${profile.profileId}`
+		);
+	}
+	if (!profile.sameOriginAccess) {
+		if (!pageOrigin) {
+			throw new RuntimeConfigurationError(
+				'Runtime page origin is required to enforce same-origin isolation'
+			);
+		}
+		if (url.origin === pageOrigin) {
+			throw new RuntimeConfigurationError(
+				`Runtime trust profile ${profile.profileId} does not allow same-origin access`
+			);
+		}
+	}
+	return url.href;
+}
+
 export function enforceRuntimeTrustProfile(
 	profile: RuntimeTrustProfile,
 	request: RuntimeTrustRequest = {}
@@ -233,50 +283,9 @@ export function enforceRuntimeTrustProfile(
 		}
 		pageOrigin = pageUrl.origin;
 	}
-	const normalizedNetworkUrls = (request.networkUrls ?? []).map((value) => {
-		let url: URL;
-		try {
-			url = new URL(value);
-		} catch {
-			throw new RuntimeConfigurationError(`Runtime network URL is invalid: ${value}`);
-		}
-		if (url.protocol !== 'https:' && url.protocol !== 'http:') {
-			throw new RuntimeConfigurationError(
-				`Runtime network URL uses an unsupported scheme: ${url.protocol}`
-			);
-		}
-		if (url.username || url.password) {
-			throw new RuntimeConfigurationError(
-				`Runtime network URL cannot contain credentials: ${url.origin}`
-			);
-		}
-		if (normalizedProfile.network.mode === 'none') {
-			throw new RuntimeConfigurationError(
-				`Runtime trust profile ${normalizedProfile.profileId} does not allow network access`
-			);
-		}
-		if (
-			normalizedProfile.network.mode === 'allowlist' &&
-			!normalizedProfile.network.allowedOrigins.includes(url.origin)
-		) {
-			throw new RuntimeConfigurationError(
-				`Runtime network origin ${url.origin} is not allowed by ${normalizedProfile.profileId}`
-			);
-		}
-		if (!normalizedProfile.sameOriginAccess) {
-			if (!pageOrigin) {
-				throw new RuntimeConfigurationError(
-					'Runtime page origin is required to enforce same-origin isolation'
-				);
-			}
-			if (url.origin === pageOrigin) {
-				throw new RuntimeConfigurationError(
-					`Runtime trust profile ${normalizedProfile.profileId} does not allow same-origin access`
-				);
-			}
-		}
-		return url.href;
-	});
+	const normalizedNetworkUrls = (request.networkUrls ?? []).map((value) =>
+		normalizeRuntimeNetworkUrl(normalizedProfile, value, pageOrigin)
+	);
 
 	const storage = request.storage ?? 'none';
 	if (!['none', 'ephemeral', 'persistent'].includes(storage)) {
@@ -368,6 +377,39 @@ export function enforceRuntimeTrustProfile(
 		dynamicCode,
 		sameOriginAccess
 	});
+}
+
+export function authorizeRuntimeNetworkRequest(
+	grant: RuntimeTrustGrant,
+	value: string | URL,
+	baseUrl?: string
+): string {
+	if (!grant || typeof grant !== 'object') {
+		throw new RuntimeConfigurationError('Runtime trust grant must be an object');
+	}
+	const normalizedGrant = enforceRuntimeTrustProfile(grant.profile, {
+		environment: grant.environment,
+		networkUrls: grant.networkUrls,
+		pageOrigin: grant.pageOrigin,
+		storage: grant.storage,
+		threads: grant.threads,
+		nestedWorkers: grant.nestedWorkers,
+		sharedArrayBuffer: grant.sharedArrayBuffer,
+		dynamicCode: grant.dynamicCode,
+		sameOriginAccess: grant.sameOriginAccess
+	});
+	const authorizedUrl = normalizeRuntimeNetworkUrl(
+		normalizedGrant.profile,
+		value,
+		normalizedGrant.pageOrigin,
+		baseUrl ?? normalizedGrant.pageOrigin
+	);
+	if (!normalizedGrant.networkUrls.includes(authorizedUrl)) {
+		throw new RuntimeConfigurationError(
+			`Runtime network URL is not included in the execution grant: ${authorizedUrl}`
+		);
+	}
+	return authorizedUrl;
 }
 
 export const DEFAULT_RESTRICTED_RUNTIME_TRUST_PROFILE = defineRuntimeTrustProfile({

@@ -1,6 +1,7 @@
 export {
 	DEFAULT_RESTRICTED_RUNTIME_TRUST_PROFILE,
 	RUNTIME_TRUST_PROFILE_SCHEMA_VERSION,
+	authorizeRuntimeNetworkRequest,
 	defineRuntimeTrustProfile,
 	enforceRuntimeTrustProfile,
 	type RuntimeDynamicCodeMode,
