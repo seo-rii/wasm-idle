@@ -1,5 +1,5 @@
 import type { PlaygroundRuntimeAssets } from '$lib/playground/assets';
-import { BusyError } from '@wasm-idle/core';
+import { BusyError, RuntimeProgressController } from '@wasm-idle/core';
 import {
 	resolveSandboxExecutionArgs,
 	type CompilerDiagnostic,
@@ -73,7 +73,8 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 	private activeRun: ActiveRun | null = null;
 	private bootstrapUrl = '';
 	private lifecycleProgress?: SandboxProgress;
-	private progressValues = new WeakMap<object, number>();
+	private readonly progressController = new RuntimeProgressController();
+	private progressUid = 0;
 	private startupReject: ((reason: Error) => void) | null = null;
 	private workerGeneration = 0;
 	private workerStartPromise: Promise<Worker> | null = null;
@@ -112,8 +113,20 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 			return;
 		}
 
-		this.reportProgress(progressSink, 0.02, `Resolving ${this.config.displayName} runtime`);
-		await this.ensureWorkerStarted(progressSink);
+		const lifecycle = this.beginProgressLifecycle(
+			progressSink,
+			`Resolving ${this.config.displayName} runtime`
+		);
+		try {
+			this.reportProgress(
+				lifecycle.progress,
+				0.02,
+				`Resolving ${this.config.displayName} runtime`
+			);
+			await this.ensureWorkerStarted(lifecycle.progress);
+		} finally {
+			lifecycle.end();
+		}
 	}
 
 	write(input: string) {
@@ -173,14 +186,18 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 		return progress || this.lifecycleProgress;
 	}
 
+	private beginProgressLifecycle(progress: SandboxProgress | undefined, stage: string) {
+		return this.progressController.begin(
+			`${this.config.languageId.toLowerCase()}-${++this.progressUid}`,
+			progress,
+			stage
+		);
+	}
+
 	private reportProgress(progress: SandboxProgress | undefined, value: number, stage?: string) {
-		const sink = this.selectProgress(progress);
-		if (!sink) return;
+		if (!progress) return;
 		const clamped = Number.isFinite(value) ? Math.max(0, Math.min(value, 1)) : 0;
-		const previous = this.progressValues.get(sink) ?? 0;
-		if (clamped < previous) return;
-		this.progressValues.set(sink, clamped);
-		sink.set?.(clamped, stage);
+		progress.set?.(clamped, stage);
 	}
 
 	private async preloadWorkerScript(progress?: SandboxProgress) {
@@ -419,7 +436,6 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 		args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
-		const progress = this.selectProgress(_prog);
 		if (!this.baseUrl || !this.workerUrl) {
 			return Promise.reject(`${this.config.displayName} runtime is not configured.`);
 		}
@@ -430,12 +446,22 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 				})
 			);
 		}
+		const progressSink = this.selectProgress(_prog);
+		const lifecycle = this.beginProgressLifecycle(
+			progressSink,
+			prepare
+				? `Preparing ${this.config.displayName} runtime`
+				: `Starting ${this.config.displayName} run`
+		);
+		const progress = lifecycle.progress;
 
 		if (prepare) {
-			return this.ensureWorkerStarted(progress).then(() => {
-				this.reportProgress(progress, 0.25, `${this.config.displayName} worker ready`);
-				return true;
-			});
+			return this.ensureWorkerStarted(progress)
+				.then(() => {
+					this.reportProgress(progress, 0.25, `${this.config.displayName} worker ready`);
+					return true;
+				})
+				.finally(() => lifecycle.end());
 		}
 
 		this.exit = false;
@@ -477,7 +503,7 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 					this.rejectRun(id, this.errorMessage(error));
 				}
 			})();
-		});
+		}).finally(() => lifecycle.end());
 	}
 
 	kill() {
@@ -486,6 +512,7 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 
 	terminate() {
 		const reason = 'Process terminated';
+		this.progressController.invalidate();
 		this.uid += 1;
 		this.startupReject?.(new Error(reason));
 		this.startupReject = null;
@@ -504,6 +531,5 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 	async clear() {
 		this.terminate();
 		this.lifecycleProgress = undefined;
-		this.progressValues = new WeakMap<object, number>();
 	}
 }

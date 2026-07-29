@@ -524,7 +524,7 @@ describe('static worker backed language sandboxes', () => {
 		);
 	});
 
-	it('keeps startup and runtime progress meaningful and monotonic until completion', async () => {
+	it('resets reused progress sinks and keeps each lifecycle monotonic', async () => {
 		onPostMessage = (worker, message) => {
 			queueMicrotask(() => {
 				worker.onmessage?.({
@@ -547,26 +547,46 @@ describe('static worker backed language sandboxes', () => {
 		const progress = { set: vi.fn() };
 		const sandbox = new Nim();
 		await sandbox.load('/absproxy/5173', '', true, [], {}, progress);
-		await expect(sandbox.run('echo "ok"', true, true, progress)).resolves.toBe(true);
+		const loadCalls = progress.set.mock.calls.slice();
+		expect(loadCalls[0]).toEqual([0, 'Resolving Nim runtime']);
+		const loadValues = loadCalls.map(([value]) => value as number);
+		expect(loadValues).toEqual([...loadValues].sort((left, right) => left - right));
+		expect(Math.max(...loadValues)).toBeLessThan(1);
 
-		const startupValues = progress.set.mock.calls.map(([value]) => value as number);
-		expect(startupValues.length).toBeGreaterThan(2);
-		expect(Math.max(...startupValues)).toBeLessThan(1);
+		const prepareStart = progress.set.mock.calls.length;
+		await expect(sandbox.run('echo "ok"', true, true, progress)).resolves.toBe(true);
+		const prepareCalls = progress.set.mock.calls.slice(prepareStart);
+		expect(prepareCalls[0]).toEqual([0, 'Preparing Nim runtime']);
+		const prepareValues = prepareCalls.map(([value]) => value as number);
+		expect(prepareValues).toEqual([...prepareValues].sort((left, right) => left - right));
+		expect(prepareValues.at(-1)).toBe(0.25);
 		expect(workerInstances).toHaveLength(1);
 		const repeatedLoadProgress = { set: vi.fn() };
 		await sandbox.load('/absproxy/5173', '', true, [], {}, repeatedLoadProgress);
 		expect(repeatedLoadProgress.set).not.toHaveBeenCalled();
 
+		const firstRunStart = progress.set.mock.calls.length;
 		await expect(sandbox.run('echo "ok"', false, true, progress)).resolves.toBe(true);
-
-		const compileProgress = progress.set.mock.calls.find(
+		const firstRunCalls = progress.set.mock.calls.slice(firstRunStart);
+		expect(firstRunCalls[0]).toEqual([0, 'Starting Nim run']);
+		const compileProgress = firstRunCalls.find(
 			([, stage]) => stage === 'Compiling and linking Nim output'
 		);
 		expect(compileProgress?.[0]).toBeCloseTo(0.755);
 		expect(progress.set).not.toHaveBeenCalledWith(expect.any(Number), 'Late stale progress');
-		const allValues = progress.set.mock.calls.map(([value]) => value as number);
-		expect(allValues).toEqual([...allValues].sort((left, right) => left - right));
-		expect(allValues.at(-1)).toBe(1);
+		const firstRunValues = firstRunCalls.map(([value]) => value as number);
+		expect(firstRunValues).toEqual([...firstRunValues].sort((left, right) => left - right));
+		expect(firstRunValues.at(-1)).toBe(1);
+
+		const secondRunStart = progress.set.mock.calls.length;
+		await expect(sandbox.run('echo "again"', false, true, progress)).resolves.toBe(true);
+		const secondRunCalls = progress.set.mock.calls.slice(secondRunStart);
+		expect(secondRunCalls[0]).toEqual([0, 'Starting Nim run']);
+		const secondRunValues = secondRunCalls.map(([value]) => value as number);
+		expect(secondRunValues).toEqual([...secondRunValues].sort((left, right) => left - right));
+		expect(secondRunValues).toContain(0.05);
+		expect(secondRunValues.at(-1)).toBe(1);
+		expect(workerInstances).toHaveLength(2);
 	});
 
 	it('rejects an overlapping run while worker startup is pending', async () => {
