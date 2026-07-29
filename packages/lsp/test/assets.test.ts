@@ -194,6 +194,34 @@ describe('language tool asset loading', () => {
 		expect(cancel).toHaveBeenCalledOnce();
 	});
 
+	it('rejects a relative final response URL before reading its body', async () => {
+		const cancel = vi.fn(async () => {});
+		const getReader = vi.fn();
+		const arrayBuffer = vi.fn();
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue({
+				ok: true,
+				url: 'clangd.js',
+				headers: { get: vi.fn(() => null) },
+				body: { cancel, getReader },
+				arrayBuffer
+			})
+		);
+
+		await expect(
+			loadLanguageToolAsset(
+				'clangd',
+				'clangd.js',
+				{ baseUrl: 'https://assets.example.com/clangd/' },
+				vi.fn()
+			)
+		).rejects.toThrow('Runtime asset clangd.js has an invalid final response URL: clangd.js');
+		expect(cancel).toHaveBeenCalledOnce();
+		expect(getReader).not.toHaveBeenCalled();
+		expect(arrayBuffer).not.toHaveBeenCalled();
+	});
+
 	it('cancels failed HTTP responses before reporting their status', async () => {
 		const cancel = vi.fn(async () => {});
 		vi.stubGlobal(

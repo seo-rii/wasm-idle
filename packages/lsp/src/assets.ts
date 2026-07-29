@@ -165,8 +165,20 @@ async function fetchAsset(
 		referrerPolicy: 'no-referrer',
 		signal
 	});
+	let finalResponseUrl = requestUrl.href;
+	if (response.url) {
+		try {
+			finalResponseUrl = new URL(response.url).href;
+		} catch {
+			const error = new Error(
+				`Runtime asset ${asset} has an invalid final response URL: ${response.url}`
+			);
+			await response.body?.cancel(error).catch(() => {});
+			throw error;
+		}
+	}
 	try {
-		requireAllowedAssetUrl(asset, response.url || requestUrl.href, config);
+		requireAllowedAssetUrl(asset, finalResponseUrl, config);
 	} catch (error) {
 		await response.body?.cancel(error).catch(() => {});
 		throw error;
