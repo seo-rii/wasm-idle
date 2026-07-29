@@ -139,6 +139,11 @@ and verifies that the active worker count returns to the first-run baseline afte
 It also requests garbage collection and limits renderer JS heap growth to 64 MiB by default; set
 `WASM_IDLE_DEBUG_HEAP_GROWTH_LIMIT_BYTES` to tune that budget for constrained CI environments. Set
 `WASM_IDLE_DEBUG_BROWSER_CASES=c-relaunch` to run only this fixture locally.
+A companion fixture force-terminates the real target Worker and LLDB Worker after separate source
+pauses. It dispatches the browser worker-error boundary, requires both workers from each failed
+session to terminate within five seconds, and launches a final clean session that must print
+`lldb-worker-recovery=73`. Set `WASM_IDLE_DEBUG_BROWSER_CASES=c-worker-crash` to run only this
+fixture locally.
 A fifth C fixture intercepts the LLDB WebAssembly asset with a synthetic 404 after a valid manifest
 load. It requires the application preflight to report that exact asset status, select trace
 debugging, and still produce `trace-asset-fallback=73`. Set

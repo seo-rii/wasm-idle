@@ -48,6 +48,12 @@ and WAMR workers and synthetic stale output, error, and exit events at the host 
 session must remain paused, step successfully, emit only current-generation output, and exit
 normally.
 
+The same product suite terminates the real WAMR target Worker and LLDB Worker in turn after a
+source pause. Each browser `error` event must stop the active debug view, dispose both workers
+within five seconds, and permit a fresh session to launch without stale events. A final third
+session runs to normal output, proving that failure cleanup does not poison later DAP or RSP
+generations.
+
 Streaming input is verified on the same product path: a C target resumes from an LLDB source
 breakpoint, flushes a prompt, blocks in WASI `stdin`, and receives input plus EOF only after the
 browser observes that prompt. This keeps debugger control traffic independent from terminal I/O.

@@ -52,6 +52,26 @@ int main(void) {
 		testId: 'c-stale-generation'
 	},
 	{
+		activePath: 'worker-crash.c',
+		backend: 'lldb',
+		breakpointLine: 4,
+		expectedLocal: { name: 'value', value: '70' },
+		expectedOutput: 'lldb-worker-recovery=73',
+		expectedTitle: 'C · LLDB / WAMR',
+		language: 'C',
+		programArgs: [],
+		source: `#include <stdio.h>
+
+int main(void) {
+    int value = 70;
+    value += 3;
+    printf("lldb-worker-recovery=%d\\n", value);
+    return 0;
+}`,
+		testId: 'c-worker-crash',
+		workerFailures: ['target', 'lldb'] as const
+	},
+	{
 		activePath: 'streaming-stdin.c',
 		backend: 'lldb',
 		breakpointLine: 4,
@@ -633,6 +653,17 @@ describe('native-source browser debugging in Chromium', () => {
 								})
 							);
 							return true;
+						},
+						terminateWorker(workerKind: 'lldb' | 'target') {
+							const worker = debugWorkers.get(workerKind);
+							if (!worker) return false;
+							worker.dispatchEvent(
+								new ErrorEvent('error', {
+									message: `injected ${workerKind} debug worker crash`
+								})
+							);
+							worker.terminate();
+							return true;
 						}
 					}
 				});
@@ -1023,6 +1054,75 @@ describe('native-source browser debugging in Chromium', () => {
 									.locator('[data-testid="terminal-debug-output"]')
 									.textContent()) || '';
 							expect(transcriptAfterFault).not.toContain('stale-generation-output');
+						}
+						if ('workerFailures' in testCase) {
+							for (const worker of testCase.workerFailures) {
+								const beforeFailure = await readBrowserLifecycleMetrics(page);
+								const injected = await page.evaluate(
+									(workerKind) =>
+										(
+											window as any
+										).__wasmIdleDebugWorkerFaults?.terminateWorker?.(
+											workerKind
+										) === true,
+									worker
+								);
+								expect(injected).toBe(true);
+								console.info(`[wasm-idle:lldb-worker-crash] injected ${worker}`);
+								await debugButton.waitFor({
+									state: 'visible',
+									timeout: Number(
+										process.env.WASM_IDLE_DEBUG_DISCONNECT_TIMEOUT_MS || '5000'
+									)
+								});
+								await expect
+									.poll(
+										async () =>
+											(await readBrowserLifecycleMetrics(page)).terminated,
+										{ timeout: 5_000 }
+									)
+									.toBeGreaterThanOrEqual(beforeFailure.terminated + 2);
+								const failedState = await page.evaluate(() =>
+									(window as any).__wasmIdleDebug.getDebugState()
+								);
+								expect(failedState.paused).toBe(false);
+								console.info(`[wasm-idle:lldb-worker-crash] recovered ${worker}`);
+								if (worker !== testCase.workerFailures.at(-1)) {
+									await debugButton.click();
+									await page
+										.getByRole('button', { name: 'Stop Debug' })
+										.waitFor({ state: 'visible', timeout: 120_000 });
+									await page
+										.locator('.debug-status-pill--paused')
+										.waitFor({ state: 'visible', timeout: 120_000 });
+									console.info(
+										`[wasm-idle:lldb-worker-crash] relaunched after ${worker}`
+									);
+								}
+							}
+							await page.evaluate(() =>
+								(window as any).__wasmIdleDebug.setBreakpoints([])
+							);
+							await debugButton.click();
+							await page
+								.getByRole('button', { name: 'Stop Debug' })
+								.waitFor({ state: 'visible', timeout: 120_000 });
+							await page
+								.locator('.debug-status-pill--paused')
+								.waitFor({ state: 'visible', timeout: 120_000 });
+							await page.locator('button[aria-label="Continue"]').click();
+							await page.waitForFunction(
+								(expectedOutput) =>
+									document
+										.querySelector('[data-testid="terminal-debug-output"]')
+										?.textContent?.includes(expectedOutput),
+								testCase.expectedOutput,
+								{ timeout: 120_000 }
+							);
+							await debugButton.waitFor({ state: 'visible' });
+							console.info('[wasm-idle:lldb-worker-crash] final run completed');
+							expect(pageErrors).toEqual([]);
+							continue;
 						}
 
 						if (!('breakpointSourcePath' in testCase)) {
