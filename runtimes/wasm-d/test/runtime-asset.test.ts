@@ -99,6 +99,7 @@ describe('runtime asset loader', () => {
 
 	it('cancels a response whose final URL differs from the declared asset', async () => {
 		let cancelled = false;
+		const secret = 'signed-query-secret';
 		const response = new Response(
 			new ReadableStream({
 				cancel() {
@@ -107,18 +108,25 @@ describe('runtime asset loader', () => {
 			})
 		);
 		Object.defineProperty(response, 'url', {
-			value: 'https://mirror.test/runtime/bin/ldc2.wasm'
+			value: `https://mirror.test/runtime/bin/ldc2.wasm?X-Amz-Signature=${secret}`
 		});
+		let rejected: unknown;
 
-		await expect(
-			fetchRuntimeAssetBytes(
+		try {
+			await fetchRuntimeAssetBytes(
 				'https://example.test/runtime/bin/ldc2.wasm',
 				'ldc2.wasm',
 				async () => response
-			)
-		).rejects.toThrow(
-			'D runtime asset ldc2.wasm returned an unexpected final URL: https://mirror.test/runtime/bin/ldc2.wasm'
+			);
+		} catch (error) {
+			rejected = error;
+		}
+
+		expect(rejected).toBeInstanceOf(Error);
+		expect((rejected as Error).message).toBe(
+			'D runtime asset ldc2.wasm returned an unexpected final URL'
 		);
+		expect((rejected as Error).message).not.toContain(secret);
 		expect(cancelled).toBe(true);
 	});
 
@@ -131,15 +139,25 @@ describe('runtime asset loader', () => {
 				}
 			})
 		);
-		Object.defineProperty(response, 'url', { value: '://invalid' });
+		const invalidFinalUrl = '://invalid-final-url-secret';
+		Object.defineProperty(response, 'url', { value: invalidFinalUrl });
+		let rejected: unknown;
 
-		await expect(
-			fetchRuntimeAssetBytes(
+		try {
+			await fetchRuntimeAssetBytes(
 				'https://example.test/runtime/bin/ldc2.wasm',
 				'ldc2.wasm',
 				async () => response
-			)
-		).rejects.toThrow('D runtime asset ldc2.wasm returned an invalid final URL: ://invalid');
+			);
+		} catch (error) {
+			rejected = error;
+		}
+
+		expect(rejected).toBeInstanceOf(Error);
+		expect((rejected as Error).message).toBe(
+			'D runtime asset ldc2.wasm returned an invalid final URL'
+		);
+		expect((rejected as Error).message).not.toContain(invalidFinalUrl);
 		expect(cancelled).toBe(true);
 	});
 

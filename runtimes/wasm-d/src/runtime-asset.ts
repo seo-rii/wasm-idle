@@ -196,15 +196,11 @@ export async function fetchRuntimeAssetBytes(
 			finalUrl = new URL(response.url);
 		} catch {
 			await response.body?.cancel().catch(() => {});
-			throw new Error(
-				`D runtime asset ${assetLabel} returned an invalid final URL: ${response.url}`
-			);
+			throw new Error(`D runtime asset ${assetLabel} returned an invalid final URL`);
 		}
 		if (finalUrl.href !== resolvedAssetUrl) {
 			await response.body?.cancel().catch(() => {});
-			throw new Error(
-				`D runtime asset ${assetLabel} returned an unexpected final URL: ${response.url}`
-			);
+			throw new Error(`D runtime asset ${assetLabel} returned an unexpected final URL`);
 		}
 	}
 	if (!response.ok) {
