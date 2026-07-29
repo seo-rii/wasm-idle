@@ -122,6 +122,27 @@ describe('runtime asset loader', () => {
 		expect(cancelled).toBe(true);
 	});
 
+	it('cancels a response whose final URL is malformed', async () => {
+		let cancelled = false;
+		const response = new Response(
+			new ReadableStream({
+				cancel() {
+					cancelled = true;
+				}
+			})
+		);
+		Object.defineProperty(response, 'url', { value: '://invalid' });
+
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.test/runtime/bin/ldc2.wasm',
+				'ldc2.wasm',
+				async () => response
+			)
+		).rejects.toThrow('D runtime asset ldc2.wasm returned an invalid final URL: ://invalid');
+		expect(cancelled).toBe(true);
+	});
+
 	it('rejects an oversized declared response before reading its body', async () => {
 		let cancelled = false;
 		const fetchImpl = vi.fn(
