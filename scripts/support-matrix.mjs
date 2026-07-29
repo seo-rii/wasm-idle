@@ -193,7 +193,7 @@ export const supportMatrixRows = [
 	},
 	{
 		language: 'Python',
-		ids: ['PYTHON3', 'PYPY3'],
+		ids: ['PYTHON3'],
 		runtime: 'Pyodide',
 		stdin: 'Yes',
 		editorSupport: 'Python LSP',
