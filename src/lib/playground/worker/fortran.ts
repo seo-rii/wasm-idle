@@ -6,6 +6,7 @@ import {
 	handleWorkerAssetMessage,
 	type WorkerRuntimeAssetConfig
 } from '$lib/playground/worker/assets';
+import { fetchRuntimeAssetBytes } from '$lib/playground/worker/runtimeAssetFetch';
 import type {
 	BrowserClangArtifact,
 	BrowserClangRuntime as Clang
@@ -99,9 +100,7 @@ const resolveInputPath = (activePath?: string) => {
 };
 
 async function fetchBytes(url: string, label: string) {
-	const response = await fetch(url);
-	if (!response.ok) throw new Error(`Failed to load ${label}: ${response.status}`);
-	return new Uint8Array(await response.arrayBuffer());
+	return await fetchRuntimeAssetBytes({ url, label });
 }
 
 async function fetchText(url: string, label: string) {
