@@ -369,6 +369,43 @@ describe('WorkerAssetBridge asset requests', () => {
 		});
 	});
 
+	it.each([
+		[
+			'credentials',
+			'https://user:secret@assets.example.com/clang/tool.wasm',
+			'URL must not include credentials'
+		],
+		[
+			'a fragment',
+			'https://assets.example.com/clang/tool.wasm#token',
+			'URL must not include a fragment'
+		]
+	])('rejects loader URLs containing %s before fetching', async (_kind, url, errorSuffix) => {
+		const postMessage = vi.fn();
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+		const asset = RUNTIME_LOAD_ASSETS.clang[0];
+		const bridge = new WorkerAssetBridge({ postMessage } as unknown as Worker, 'clang', {
+			baseUrl: 'https://assets.example.com/clang/',
+			loader: vi.fn().mockResolvedValue(url),
+			useAssetBridge: true
+		});
+
+		bridge.handleMessage({
+			data: { assetRequest: { id: 29, asset } }
+		} as MessageEvent);
+
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
+		expect(fetchMock).not.toHaveBeenCalled();
+		expect(postMessage).toHaveBeenCalledWith({
+			assetResponse: {
+				id: 29,
+				ok: false,
+				error: `Runtime asset ${asset} ${errorSuffix}`
+			}
+		});
+	});
+
 	it('rejects redirects outside the configured asset bases and omits credentials', async () => {
 		const postMessage = vi.fn();
 		const cancel = vi.fn(async () => undefined);
@@ -447,6 +484,59 @@ describe('WorkerAssetBridge asset requests', () => {
 		expect(getReader).not.toHaveBeenCalled();
 		expect(arrayBuffer).not.toHaveBeenCalled();
 	});
+
+	it.each([
+		[
+			'credentials',
+			'https://user:secret@assets.example.com/clang/tool.wasm',
+			'URL must not include credentials'
+		],
+		[
+			'a fragment',
+			'https://assets.example.com/clang/tool.wasm#token',
+			'URL must not include a fragment'
+		]
+	])(
+		'rejects final response URLs containing %s before reading',
+		async (_kind, url, errorSuffix) => {
+			const postMessage = vi.fn();
+			const cancel = vi.fn(async () => undefined);
+			const getReader = vi.fn();
+			const arrayBuffer = vi.fn();
+			vi.stubGlobal(
+				'fetch',
+				vi.fn().mockResolvedValue({
+					ok: true,
+					status: 200,
+					url,
+					headers: new Headers(),
+					body: { cancel, getReader },
+					arrayBuffer
+				})
+			);
+			const asset = RUNTIME_LOAD_ASSETS.clang[0];
+			const bridge = new WorkerAssetBridge({ postMessage } as unknown as Worker, 'clang', {
+				baseUrl: 'https://assets.example.com/clang/',
+				useAssetBridge: true
+			});
+
+			bridge.handleMessage({
+				data: { assetRequest: { id: 30, asset } }
+			} as MessageEvent);
+
+			await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
+			expect(postMessage).toHaveBeenCalledWith({
+				assetResponse: {
+					id: 30,
+					ok: false,
+					error: `Runtime asset ${asset} ${errorSuffix}`
+				}
+			});
+			expect(cancel).toHaveBeenCalledOnce();
+			expect(getReader).not.toHaveBeenCalled();
+			expect(arrayBuffer).not.toHaveBeenCalled();
+		}
+	);
 
 	it('cancels a failed HTTP response before reporting its status', async () => {
 		const postMessage = vi.fn();

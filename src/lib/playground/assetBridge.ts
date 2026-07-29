@@ -482,6 +482,12 @@ export class WorkerAssetBridge {
 				`Runtime asset ${asset} uses an unsupported URL scheme: ${url.protocol}`
 			);
 		}
+		if (url.username || url.password) {
+			throw new Error(`Runtime asset ${asset} URL must not include credentials`);
+		}
+		if (url.hash) {
+			throw new Error(`Runtime asset ${asset} URL must not include a fragment`);
+		}
 		const allowed = [this.config.baseUrl, ...(this.config.allowedBaseUrls || [])].some(
 			(baseUrl) => {
 				let base: URL;
