@@ -328,10 +328,12 @@ async function preflightAsset(
 			.map((encoding) => encoding.trim())
 			.includes(asset.encoding)
 	) {
-		throw new AssetIntegrityError(
+		const error = new AssetIntegrityError(
 			`Runtime asset ${asset.key} delivery bytes were transparently ${asset.encoding}-decoded by HTTP`,
 			{ runtimeId, profileId }
 		);
+		await response.body?.cancel(error).catch(() => undefined);
+		throw error;
 	}
 	const bytes = await readBoundedResponse(
 		response,

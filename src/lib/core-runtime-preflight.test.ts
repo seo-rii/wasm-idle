@@ -523,16 +523,48 @@ describe('runtime registry asset preflight', () => {
 	});
 
 	it('rejects encoded assets that HTTP transparently decodes', async () => {
+		let cancelReason: unknown;
+		let readerRequested = false;
+		let arrayBufferRequested = false;
+		const response = {
+			url: '',
+			ok: true,
+			status: 200,
+			headers: new Headers({ 'content-encoding': 'gzip' }),
+			body: {
+				async cancel(reason?: unknown) {
+					cancelReason = reason;
+				},
+				getReader() {
+					readerRequested = true;
+					throw new Error('transparently decoded response should not be read');
+				}
+			},
+			async arrayBuffer() {
+				arrayBufferRequested = true;
+				throw new Error('transparently decoded response should not be materialized');
+			}
+		} as unknown as Response;
+
 		await expect(
 			preflightRuntimeAssets({
 				manifest: createManifest([assets[1]!]),
 				runtimeId: 'fortran/preflight-test',
 				rootUrl: 'https://example.test/',
-				fetch: async () =>
-					new Response(runtimeBytes, {
-						headers: { 'content-encoding': 'gzip' }
-					})
+				fetch: async () => response
 			})
-		).rejects.toThrow('delivery bytes were transparently gzip-decoded');
+		).rejects.toMatchObject({
+			name: 'AssetIntegrityError',
+			code: 'asset-integrity',
+			phase: 'asset',
+			runtimeId: 'fortran/preflight-test',
+			profileId: 'preflight-v1'
+		});
+		expect(cancelReason).toMatchObject({
+			name: 'AssetIntegrityError',
+			code: 'asset-integrity'
+		});
+		expect(readerRequested).toBe(false);
+		expect(arrayBufferRequested).toBe(false);
 	});
 });
