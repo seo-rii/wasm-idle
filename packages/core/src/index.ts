@@ -167,6 +167,12 @@ export {
 	type RuntimeAssetPreflightResult
 } from './runtime-preflight.js';
 export {
+	activatePreflightedRuntimeProfile,
+	type ActivatePreflightedRuntimeProfileRequest,
+	type RuntimeAssetDecodeRequest,
+	type RuntimeAssetDecoder
+} from './runtime-preflight-activation.js';
+export {
 	RuntimeResourceBudget,
 	type RuntimeResourceBudgetOptions,
 	type RuntimeResourceBudgetSnapshot,

@@ -179,4 +179,23 @@ describe('runtime profile activation', () => {
 		expect(currentResult).toMatchObject({ status: 'fulfilled' });
 		expect(store.get('fortran/f2c')?.profileId).toBe('fortran-current');
 	});
+
+	it('does not publish a profile when cancellation wins during verification', async () => {
+		const store = new RuntimeProfileActivationStore();
+		const controller = new AbortController();
+		const pending = store.activate({
+			manifest: createManifest(),
+			runtimeId: 'fortran/f2c',
+			assets: activationAssets(),
+			signal: controller.signal
+		});
+		controller.abort(new Error('stop'));
+
+		await expect(pending).rejects.toMatchObject({
+			name: 'CancelledError',
+			code: 'cancelled',
+			phase: 'asset'
+		});
+		expect(store.get('fortran/f2c')).toBeUndefined();
+	});
 });

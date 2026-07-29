@@ -1,5 +1,5 @@
 import { verifyRuntimeAssetPair, type VerifiedRuntimeAssetPair } from './asset-integrity.js';
-import { RuntimeConfigurationError } from './errors.js';
+import { CancelledError, RuntimeConfigurationError } from './errors.js';
 import { defineRuntimeRegistryManifest, type RuntimeRegistryManifest } from './runtime-manifest.js';
 
 export interface RuntimeProfileAssetCandidate {
@@ -13,6 +13,7 @@ export interface RuntimeProfileActivationRequest {
 	readonly manifest: RuntimeRegistryManifest;
 	readonly runtimeId: string;
 	readonly assets: Readonly<Record<string, RuntimeProfileAssetCandidate>>;
+	readonly signal?: AbortSignal;
 }
 
 export interface ActivatedRuntimeAsset {
@@ -51,6 +52,14 @@ export class RuntimeProfileActivationStore {
 				`Runtime registry manifest does not declare ${request.runtimeId}`,
 				{ runtimeId: request.runtimeId }
 			);
+		}
+		if (request.signal?.aborted) {
+			throw new CancelledError('Runtime profile activation cancelled', {
+				phase: 'asset',
+				runtimeId: runtime.runtimeId,
+				profileId: runtime.identity.profile.profileId,
+				cause: request.signal.reason
+			});
 		}
 
 		const expectedAssetKeys = runtime.assets.map((asset) => asset.key).sort();
@@ -115,6 +124,14 @@ export class RuntimeProfileActivationStore {
 				] as const;
 			})
 		);
+		if (request.signal?.aborted) {
+			throw new CancelledError('Runtime profile activation cancelled', {
+				phase: 'asset',
+				runtimeId: runtime.runtimeId,
+				profileId: runtime.identity.profile.profileId,
+				cause: request.signal.reason
+			});
+		}
 		if (this.activationVersions.get(runtime.runtimeId) !== activationVersion) {
 			throw new RuntimeConfigurationError(
 				`Runtime profile ${runtime.identity.profile.profileId} activation was superseded by a newer request`,
