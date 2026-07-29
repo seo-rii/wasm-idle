@@ -28,7 +28,8 @@ int main(void) {
     value += 3;
     printf("lldb-c=%d\\n", value);
     return 0;
-}`
+}`,
+		testId: 'c-basic'
 	},
 	{
 		activePath: 'stale-generation.c',
@@ -441,12 +442,17 @@ async function readBrowserLifecycleMetrics(page: Page) {
 				__wasmIdleWorkerMetrics?: () => {
 					active: number;
 					created: number;
+					linearMemory: Record<'lldb' | 'target', { peakBytes: number; samples: number }>;
 					terminated: number;
 				};
 			}
 		).__wasmIdleWorkerMetrics?.() ?? {
 			active: 0,
 			created: 0,
+			linearMemory: {
+				lldb: { peakBytes: 0, samples: 0 },
+				target: { peakBytes: 0, samples: 0 }
+			},
 			terminated: 0
 		};
 		const memory = (
@@ -509,16 +515,46 @@ describe('native-source browser debugging in Chromium', () => {
 				let terminated = 0;
 				const liveWorkers = new WeakSet<Worker>();
 				const debugWorkers = new Map<'lldb' | 'target', Worker>();
+				const linearMemory = {
+					lldb: { peakBytes: 0, samples: 0 },
+					target: { peakBytes: 0, samples: 0 }
+				};
 				class MeasuredWorker extends NativeWorker {
 					constructor(url: string | URL, options?: WorkerOptions) {
 						super(url, options);
 						liveWorkers.add(this);
 						active += 1;
 						created += 1;
+						let debugWorkerKind: 'lldb' | 'target' | undefined;
 						if (options?.name === 'wasm-lldb-debugger') {
-							debugWorkers.set('lldb', this);
+							debugWorkerKind = 'lldb';
 						} else if (options?.name === 'wasm-target-debugger') {
-							debugWorkers.set('target', this);
+							debugWorkerKind = 'target';
+						}
+						if (debugWorkerKind) {
+							debugWorkers.set(debugWorkerKind, this);
+							this.addEventListener('message', (event) => {
+								const data: unknown = event.data;
+								if (
+									!data ||
+									typeof data !== 'object' ||
+									(data as { type?: unknown }).type !== 'memory' ||
+									(data as { worker?: unknown }).worker !== debugWorkerKind
+								) {
+									return;
+								}
+								const bytes = (data as { bytes?: unknown }).bytes;
+								if (
+									typeof bytes !== 'number' ||
+									!Number.isSafeInteger(bytes) ||
+									bytes <= 0
+								) {
+									return;
+								}
+								const metric = linearMemory[debugWorkerKind];
+								metric.samples += 1;
+								metric.peakBytes = Math.max(metric.peakBytes, bytes);
+							});
 						}
 					}
 
@@ -540,7 +576,15 @@ describe('native-source browser debugging in Chromium', () => {
 				});
 				Object.defineProperty(globalThis, '__wasmIdleWorkerMetrics', {
 					configurable: true,
-					value: () => ({ active, created, terminated })
+					value: () => ({
+						active,
+						created,
+						linearMemory: {
+							lldb: { ...linearMemory.lldb },
+							target: { ...linearMemory.target }
+						},
+						terminated
+					})
 				});
 				Object.defineProperty(globalThis, '__wasmIdleDebugWorkerFaults', {
 					configurable: true,
@@ -1100,6 +1144,36 @@ describe('native-source browser debugging in Chromium', () => {
 								unreadableBytes: 0
 							});
 							expect(memory.data).toHaveLength(4);
+							if ('testId' in testCase && testCase.testId === 'c-basic') {
+								const workerMetrics = await readBrowserLifecycleMetrics(page);
+								const linearMemoryLimits = {
+									lldb: Number(
+										process.env
+											.WASM_IDLE_DEBUG_LLDB_LINEAR_MEMORY_LIMIT_BYTES ||
+											String(640 * 1024 * 1024)
+									),
+									target: Number(
+										process.env
+											.WASM_IDLE_DEBUG_TARGET_LINEAR_MEMORY_LIMIT_BYTES ||
+											String(320 * 1024 * 1024)
+									)
+								};
+								for (const worker of ['lldb', 'target'] as const) {
+									expect(
+										workerMetrics.linearMemory[worker].samples,
+										`${worker} worker did not report linear-memory telemetry`
+									).toBeGreaterThan(0);
+									expect(
+										workerMetrics.linearMemory[worker].peakBytes
+									).toBeLessThanOrEqual(linearMemoryLimits[worker]);
+								}
+								console.info(
+									`[wasm-idle:lldb-linear-memory] ${JSON.stringify({
+										limits: linearMemoryLimits,
+										workers: workerMetrics.linearMemory
+									})}`
+								);
+							}
 							if ('expectedFrameLocals' in testCase) {
 								const recursiveFrames = debugState.callStack.filter(
 									(frame: { id?: number; functionName?: string }) =>

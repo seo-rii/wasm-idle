@@ -89,6 +89,13 @@ and exit events. Callers can retain the maximum value per worker as the session'
 memory; the callback does not expose memory contents and does not include the browser engine's
 separate JavaScript heap. Older compatible producer assets without `HEAPU8` continue to run but do
 not emit memory samples.
+The required product Chromium gate retains the peak reported by each worker during its basic C
+fixture and requires at least one sample from both workers. Its default linear-memory ceilings are
+640 MiB for LLDB and 320 MiB for WAMR, leaving 25% headroom above their pinned 512 MiB and 256 MiB
+initial memories. Override them with `WASM_IDLE_DEBUG_LLDB_LINEAR_MEMORY_LIMIT_BYTES` and
+`WASM_IDLE_DEBUG_TARGET_LINEAR_MEMORY_LIMIT_BYTES` only when validating an intentional producer
+memory change. The current basic fixture reports one sample at exactly 512 MiB and 256 MiB,
+respectively.
 
 The debug runtime requires a cross-origin-isolated page with `SharedArrayBuffer`. LLDB and WAMR
 assets are lazy-loaded from the versioned producer manifest and are not included in this npm
