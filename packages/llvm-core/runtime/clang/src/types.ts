@@ -203,6 +203,7 @@ export interface BrowserClangRuntimeOptions {
 	stdin?: () => string;
 	stdout?: (chunk: string) => void;
 	progress?: (value: number) => void;
+	signal?: AbortSignal;
 	onDebugEvent?: (event: BrowserClangPauseEvent) => void;
 	log?: boolean;
 	showTiming?: boolean;

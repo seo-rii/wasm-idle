@@ -265,15 +265,23 @@ class Clang {
 			stdin: options.stdin || (() => ''),
 			moduleUrl: this.assetUrls.memfs,
 			progress: this.progress.memfs,
+			signal: options.signal,
 			trace: (message) => this.trace(message)
 		});
 
-		const clangReady = this.getModule(this.assetUrls.clang, this.progress.clang);
-		const lldReady = this.getModule(this.assetUrls.lld, this.progress.lld);
+		const clangReady = this.getModule(
+			this.assetUrls.clang,
+			this.progress.clang,
+			options.signal
+		);
+		const lldReady = this.getModule(this.assetUrls.lld, this.progress.lld, options.signal);
 		const fileSystemReady = this.memfs.ready.then(async () => {
+			const sysrootReady = options.signal
+				? readBuffer(this.assetUrls.sysroot, undefined, undefined, options.signal)
+				: readBuffer(this.assetUrls.sysroot);
 			await this.hostLogAsync(
 				`Untarring ${this.assetUrls.sysroot}`,
-				readBuffer(this.assetUrls.sysroot).then((buffer) => untar(buffer, this.memfs))
+				sysrootReady.then((buffer) => untar(buffer, this.memfs))
 			);
 			installGccCompatibilityHeaders(this.memfs);
 		});
@@ -308,11 +316,11 @@ class Clang {
 		return result;
 	}
 
-	async getModule(name: string, progress?: ProgressSink) {
+	async getModule(name: string, progress?: ProgressSink, signal?: AbortSignal) {
 		if (this.moduleCache[name]) return this.moduleCache[name];
 		const module = await this.hostLogAsync(
 			`Fetching and compiling ${name}`,
-			compile(name, progress)
+			signal ? compile(name, progress, signal) : compile(name, progress)
 		);
 		this.moduleCache[name] = module;
 		return module;
