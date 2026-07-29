@@ -307,7 +307,7 @@ describe('language tool asset loading', () => {
 		expect(arrayBuffer).not.toHaveBeenCalled();
 	});
 
-	it.each(['', '-1', '1.5', '1e2', '3, 3', '9007199254740992'])(
+	it.each(['', '-1', '1.5', '1e2', '3, clangd-header-secret', '9007199254740992'])(
 		'rejects and cancels an invalid Content-Length before reading: %s',
 		async (contentLength) => {
 			const cancel = vi.fn(async () => {});
@@ -325,24 +325,91 @@ describe('language tool asset loading', () => {
 				})
 			);
 
-			await expect(
-				loadLanguageToolAsset(
+			let rejected: unknown;
+			try {
+				await loadLanguageToolAsset(
 					'clangd',
 					'clangd.js',
 					{ baseUrl: 'https://assets.example.com/clangd/' },
 					vi.fn()
-				)
-			).rejects.toMatchObject({
+				);
+			} catch (error) {
+				rejected = error;
+			}
+			expect(rejected).toMatchObject({
 				name: 'ProtocolError',
 				code: 'protocol',
 				phase: 'asset',
-				runtimeId: 'clangd'
+				runtimeId: 'clangd',
+				message: 'Runtime asset clangd.js has an invalid Content-Length'
 			});
+			if (contentLength) expect((rejected as Error).message).not.toContain(contentLength);
 			expect(cancel).toHaveBeenCalledOnce();
 			expect(getReader).not.toHaveBeenCalled();
 			expect(arrayBuffer).not.toHaveBeenCalled();
 		}
 	);
+
+	it('retries after an invalid Content-Length and releases the successful reader', async () => {
+		const firstCancel = vi.fn(async () => {});
+		const firstGetReader = vi.fn();
+		const retryCancel = vi.fn(async () => {});
+		const releaseLock = vi.fn();
+		const retryReader = {
+			read: vi
+				.fn()
+				.mockResolvedValueOnce({ done: false, value: Uint8Array.of(1) })
+				.mockResolvedValueOnce({ done: true, value: undefined }),
+			cancel: retryCancel,
+			releaseLock
+		};
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValueOnce({
+				ok: true,
+				status: 200,
+				url: 'https://assets.example.com/clangd/clangd.js',
+				headers: new Headers({ 'content-length': '1, clangd-header-secret' }),
+				body: { cancel: firstCancel, getReader: firstGetReader }
+			})
+			.mockResolvedValueOnce({
+				ok: true,
+				status: 200,
+				url: 'https://assets.example.com/clangd/clangd.js',
+				headers: new Headers({ 'content-length': '1' }),
+				body: { getReader: () => retryReader }
+			});
+		vi.stubGlobal('fetch', fetchMock);
+
+		await expect(
+			loadLanguageToolAsset(
+				'clangd',
+				'clangd.js',
+				{ baseUrl: 'https://assets.example.com/clangd/' },
+				vi.fn()
+			)
+		).rejects.toMatchObject({
+			name: 'ProtocolError',
+			code: 'protocol',
+			phase: 'asset',
+			runtimeId: 'clangd',
+			message: 'Runtime asset clangd.js has an invalid Content-Length'
+		});
+
+		const loaded = await loadLanguageToolAsset(
+			'clangd',
+			'clangd.js',
+			{ baseUrl: 'https://assets.example.com/clangd/' },
+			vi.fn()
+		);
+
+		expect(Array.from(loaded.bytes)).toEqual([1]);
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+		expect(firstCancel).toHaveBeenCalledOnce();
+		expect(firstGetReader).not.toHaveBeenCalled();
+		expect(retryCancel).not.toHaveBeenCalled();
+		expect(releaseLock).toHaveBeenCalledOnce();
+	});
 
 	it('cancels failed HTTP responses before reporting their status', async () => {
 		const cancel = vi.fn(async () => {});

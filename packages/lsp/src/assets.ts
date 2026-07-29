@@ -200,7 +200,7 @@ async function fetchAsset(
 		const parsedContentLength = Number(normalizedContentLength);
 		if (!/^\d+$/u.test(normalizedContentLength) || !Number.isSafeInteger(parsedContentLength)) {
 			const error = new ProtocolError(
-				`Runtime asset ${asset} has an invalid Content-Length: ${contentLengthValue}`,
+				`Runtime asset ${asset} has an invalid Content-Length`,
 				{ phase: 'asset', runtimeId: 'clangd' }
 			);
 			await response.body?.cancel(error).catch(() => {});
