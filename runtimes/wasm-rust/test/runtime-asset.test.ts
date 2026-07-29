@@ -2,7 +2,11 @@ import { gzipSync } from 'node:zlib';
 
 import { describe, expect, it, vi } from 'vitest';
 
-import { fetchRuntimeAssetBytes } from '../src/runtime-asset.js';
+import {
+	DEFAULT_MAX_RUNTIME_ASSET_BYTES,
+	fetchRuntimeAssetBytes,
+	fetchRuntimeAssetJson
+} from '../src/runtime-asset.js';
 
 describe('runtime asset fetch fallback', () => {
 	it('uses least-authority fetch options and accepts an exact final URL', async () => {
@@ -110,6 +114,215 @@ describe('runtime asset fetch fallback', () => {
 				false
 			)
 		).resolves.toEqual(new Uint8Array());
+	});
+
+	it.each([0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1])(
+		'rejects an invalid maxAssetBytes before fetching: %s',
+		async (maxAssetBytes) => {
+			const fetchImpl = vi.fn(async () => new Response(new Uint8Array()));
+
+			await expect(
+				fetchRuntimeAssetBytes(
+					'https://example.test/runtime/data.bin',
+					'data.bin',
+					fetchImpl,
+					false,
+					undefined,
+					{ maxAssetBytes }
+				)
+			).rejects.toThrow(/invalid maxAssetBytes/);
+			expect(fetchImpl).not.toHaveBeenCalled();
+		}
+	);
+
+	it('rejects an oversized declaration before requesting a reader', async () => {
+		let cancelled = false;
+		let readerRequested = false;
+		const response = new Response(
+			new ReadableStream({
+				cancel() {
+					cancelled = true;
+				}
+			}),
+			{ headers: { 'content-length': '5' } }
+		);
+		Object.defineProperty(response.body, 'getReader', {
+			value: () => {
+				readerRequested = true;
+				throw new Error('oversized response body should not be read');
+			}
+		});
+
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.test/runtime/data.bin',
+				'data.bin',
+				async () => response,
+				false,
+				undefined,
+				{ maxAssetBytes: 4 }
+			)
+		).rejects.toThrow(/download size exceeds the 4 byte limit/);
+		expect(readerRequested).toBe(false);
+		expect(cancelled).toBe(true);
+	});
+
+	it('cancels and releases an unknown-length stream that exceeds the byte limit', async () => {
+		const reader = {
+			read: vi
+				.fn()
+				.mockResolvedValueOnce({ done: false, value: new Uint8Array([1, 2, 3]) })
+				.mockResolvedValueOnce({ done: false, value: new Uint8Array([4, 5]) })
+				.mockResolvedValueOnce({ done: true, value: undefined }),
+			cancel: vi.fn(async () => undefined),
+			releaseLock: vi.fn()
+		};
+		const response = {
+			url: '',
+			ok: true,
+			status: 200,
+			headers: new Headers(),
+			body: { getReader: () => reader }
+		} as unknown as Response;
+
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.test/runtime/data.bin',
+				'data.bin',
+				async () => response,
+				false,
+				undefined,
+				{ maxAssetBytes: 4 }
+			)
+		).rejects.toThrow(/download size exceeds the 4 byte limit/);
+		expect(reader.cancel).toHaveBeenCalledOnce();
+		expect(reader.releaseLock).toHaveBeenCalledOnce();
+	});
+
+	it('cancels and releases a stream after a read failure', async () => {
+		const failure = new Error('stream failed');
+		const reader = {
+			read: vi.fn(async () => {
+				throw failure;
+			}),
+			cancel: vi.fn(async () => undefined),
+			releaseLock: vi.fn()
+		};
+		const response = {
+			url: '',
+			ok: true,
+			status: 200,
+			headers: new Headers(),
+			body: { getReader: () => reader }
+		} as unknown as Response;
+
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.test/runtime/data.bin',
+				'data.bin',
+				async () => response,
+				false,
+				undefined,
+				{ maxAssetBytes: 4 }
+			)
+		).rejects.toBe(failure);
+		expect(reader.cancel).toHaveBeenCalledOnce();
+		expect(reader.releaseLock).toHaveBeenCalledOnce();
+	});
+
+	it('rejects an oversized bodyless response after materialization', async () => {
+		const response = {
+			url: '',
+			ok: true,
+			status: 200,
+			headers: new Headers(),
+			body: null,
+			arrayBuffer: async () => new Uint8Array([1, 2, 3, 4, 5]).buffer
+		} as unknown as Response;
+
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.test/runtime/data.bin',
+				'data.bin',
+				async () => response,
+				false,
+				undefined,
+				{ maxAssetBytes: 4 }
+			)
+		).rejects.toThrow(/download size exceeds the 4 byte limit/);
+	});
+
+	it('bounds gzip expansion and accepts raw or expanded bytes exactly at the limit', async () => {
+		const bombExpanded = new Uint8Array(100);
+		const bombCompressed = gzipSync(bombExpanded);
+		expect(bombCompressed.byteLength).toBeLessThan(32);
+
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.test/runtime/data.bin.gz',
+				'data.bin.gz',
+				async () => new Response(bombCompressed),
+				false,
+				undefined,
+				{ maxAssetBytes: 32 }
+			)
+		).rejects.toThrow(/decompressed size exceeds the 32 byte limit/);
+
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.test/runtime/data.bin',
+				'data.bin',
+				async () => new Response(new Uint8Array([1, 2, 3, 4])),
+				false,
+				undefined,
+				{ maxAssetBytes: 4 }
+			)
+		).resolves.toEqual(new Uint8Array([1, 2, 3, 4]));
+
+		const exactExpanded = new Uint8Array(32);
+		const exactCompressed = gzipSync(exactExpanded);
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.test/runtime/data.bin.gz',
+				'data.bin.gz',
+				async () => new Response(exactCompressed),
+				false,
+				undefined,
+				{ maxAssetBytes: exactExpanded.byteLength }
+			)
+		).resolves.toEqual(exactExpanded);
+	});
+
+	it('preserves a custom byte limit through gzip fallback and JSON loading', async () => {
+		const fallbackUrl = 'https://example.test/runtime/data.bin';
+		const expanded = new Uint8Array([1, 2, 3, 4, 5]);
+		await expect(
+			fetchRuntimeAssetBytes(
+				fallbackUrl,
+				'data.bin',
+				async (input) =>
+					String(input).endsWith('.gz')
+						? new Response(gzipSync(expanded))
+						: new Response(null, { status: 404 }),
+				true,
+				undefined,
+				{ maxAssetBytes: 4 }
+			)
+		).rejects.toThrow(/status 404/);
+
+		await expect(
+			fetchRuntimeAssetJson(
+				'https://example.test/runtime/manifest.json',
+				'manifest',
+				async () => new Response('{"ok":true}'),
+				undefined,
+				{ maxAssetBytes: 4 }
+			)
+		).rejects.toThrow(/download size exceeds the 4 byte limit/);
+	});
+
+	it('exports a safe default runtime asset byte limit', () => {
+		expect(DEFAULT_MAX_RUNTIME_ASSET_BYTES).toBe(128 * 1024 * 1024);
 	});
 
 	it('cancels a failed response before trying the gzip fallback', async () => {

@@ -3,10 +3,70 @@ export interface RuntimeAssetDownloadProgress {
 	total?: number;
 }
 
+export const DEFAULT_MAX_RUNTIME_ASSET_BYTES = 128 * 1024 * 1024;
+
+export interface RuntimeAssetFetchOptions {
+	maxAssetBytes?: number;
+}
+
+async function readBoundedStream(
+	stream: ReadableStream<Uint8Array>,
+	assetLabel: string,
+	maxAssetBytes: number,
+	sizeKind: 'download' | 'decompressed',
+	total?: number,
+	onProgress?: (progress: RuntimeAssetDownloadProgress) => void
+): Promise<Uint8Array<ArrayBuffer>> {
+	const reader = stream.getReader();
+	let bytes = new Uint8Array(total ?? 0);
+	let loaded = 0;
+	try {
+		while (true) {
+			const { done, value } = await reader.read();
+			if (done) break;
+			if (!value) continue;
+			const nextLength = loaded + value.byteLength;
+			if (!Number.isSafeInteger(nextLength) || nextLength > maxAssetBytes) {
+				throw new Error(
+					`wasm-rust runtime asset ${assetLabel} ${sizeKind} size exceeds the ${maxAssetBytes} byte limit`
+				);
+			}
+			if (nextLength > bytes.byteLength) {
+				const nextCapacity = Math.min(
+					maxAssetBytes,
+					Math.max(nextLength, Math.max(bytes.byteLength * 2, 1))
+				);
+				const grown = new Uint8Array(nextCapacity);
+				grown.set(bytes.subarray(0, loaded));
+				bytes = grown;
+			}
+			bytes.set(value, loaded);
+			loaded = nextLength;
+			onProgress?.({
+				loaded,
+				...(total !== undefined ? { total } : {})
+			});
+		}
+		if (loaded === 0) {
+			onProgress?.({ loaded: 0, total: total ?? 0 });
+		}
+		return bytes.subarray(0, loaded);
+	} catch (error) {
+		try {
+			await reader.cancel(error);
+		} catch {}
+		throw error;
+	} finally {
+		reader.releaseLock();
+	}
+}
+
 async function readResponseBytes(
 	response: Response,
+	assetLabel: string,
+	maxAssetBytes: number,
 	onProgress?: (progress: RuntimeAssetDownloadProgress) => void
-) {
+): Promise<Uint8Array<ArrayBuffer>> {
 	const contentLength = response.headers.get('content-length');
 	let total: number | undefined;
 	if (contentLength !== null) {
@@ -20,42 +80,30 @@ async function readResponseBytes(
 		}
 		total = parsed;
 	}
+	if (total !== undefined && total > maxAssetBytes) {
+		await response.body?.cancel().catch(() => undefined);
+		throw new Error(
+			`wasm-rust runtime asset ${assetLabel} download size exceeds the ${maxAssetBytes} byte limit`
+		);
+	}
 	if (!response.body) {
 		const bytes = new Uint8Array(await response.arrayBuffer());
+		if (bytes.byteLength > maxAssetBytes) {
+			throw new Error(
+				`wasm-rust runtime asset ${assetLabel} download size exceeds the ${maxAssetBytes} byte limit`
+			);
+		}
 		onProgress?.({ loaded: bytes.byteLength, total: total ?? bytes.byteLength });
 		return bytes;
 	}
-	const reader = response.body.getReader();
-	const chunks: Uint8Array[] = [];
-	let loaded = 0;
-	while (true) {
-		const { done, value } = await reader.read();
-		if (done) {
-			break;
-		}
-		if (!value) {
-			continue;
-		}
-		chunks.push(value);
-		loaded += value.byteLength;
-		onProgress?.({
-			loaded,
-			...(total !== undefined ? { total } : {})
-		});
-	}
-	if (chunks.length === 1) {
-		return chunks[0]!;
-	}
-	const bytes = new Uint8Array(loaded);
-	let offset = 0;
-	for (const chunk of chunks) {
-		bytes.set(chunk, offset);
-		offset += chunk.byteLength;
-	}
-	if (loaded === 0) {
-		onProgress?.({ loaded: 0, total: total ?? 0 });
-	}
-	return bytes;
+	return readBoundedStream(
+		response.body,
+		assetLabel,
+		maxAssetBytes,
+		'download',
+		total,
+		onProgress
+	);
 }
 
 export async function fetchRuntimeAssetBytes(
@@ -63,8 +111,13 @@ export async function fetchRuntimeAssetBytes(
 	assetLabel: string,
 	fetchImpl: typeof fetch = fetch,
 	allowCompressedFallback = true,
-	onProgress?: (progress: RuntimeAssetDownloadProgress) => void
+	onProgress?: (progress: RuntimeAssetDownloadProgress) => void,
+	options: RuntimeAssetFetchOptions = {}
 ) {
+	const maxAssetBytes = options.maxAssetBytes ?? DEFAULT_MAX_RUNTIME_ASSET_BYTES;
+	if (!Number.isSafeInteger(maxAssetBytes) || maxAssetBytes <= 0) {
+		throw new Error(`wasm-rust runtime asset has an invalid maxAssetBytes: ${maxAssetBytes}`);
+	}
 	let resolvedAssetUrlObject: URL;
 	try {
 		resolvedAssetUrlObject = new URL(assetUrl.toString());
@@ -126,7 +179,8 @@ export async function fetchRuntimeAssetBytes(
 					assetLabel,
 					fetchImpl,
 					false,
-					onProgress
+					onProgress,
+					options
 				);
 			} catch {}
 		}
@@ -134,7 +188,7 @@ export async function fetchRuntimeAssetBytes(
 			`failed to fetch ${assetLabel} from ${resolvedAssetUrl} (status ${response.status}). This usually means the browser loaded a stale wasm-rust bundle or a nested runtime asset is missing.`
 		);
 	}
-	const assetBytes = await readResponseBytes(response, onProgress);
+	const assetBytes = await readResponseBytes(response, assetLabel, maxAssetBytes, onProgress);
 	const assetPreview = new TextDecoder()
 		.decode(assetBytes.slice(0, 128))
 		.replace(/^\uFEFF/, '')
@@ -158,7 +212,8 @@ export async function fetchRuntimeAssetBytes(
 				assetLabel,
 				fetchImpl,
 				false,
-				onProgress
+				onProgress,
+				options
 			);
 		} catch {}
 	}
@@ -180,10 +235,15 @@ export async function fetchRuntimeAssetBytes(
 	}
 	try {
 		const assetBuffer = new Uint8Array(assetBytes).buffer;
-		const decompressedResponse = new Response(
-			new Blob([assetBuffer]).stream().pipeThrough(new DecompressionStream('gzip'))
+		const decompressedStream = new Blob([assetBuffer])
+			.stream()
+			.pipeThrough(new DecompressionStream('gzip'));
+		return await readBoundedStream(
+			decompressedStream,
+			assetLabel,
+			maxAssetBytes,
+			'decompressed'
 		);
-		return new Uint8Array(await decompressedResponse.arrayBuffer());
 	} catch (error) {
 		throw new Error(
 			`failed to decompress ${assetLabel} from ${resolvedAssetUrl}: ${error instanceof Error ? error.message : String(error)}`
@@ -195,11 +255,12 @@ export async function fetchRuntimeAssetJson<T>(
 	assetUrl: string | URL,
 	assetLabel: string,
 	fetchImpl: typeof fetch = fetch,
-	onProgress?: (progress: RuntimeAssetDownloadProgress) => void
+	onProgress?: (progress: RuntimeAssetDownloadProgress) => void,
+	options: RuntimeAssetFetchOptions = {}
 ): Promise<T> {
 	return JSON.parse(
 		new TextDecoder().decode(
-			await fetchRuntimeAssetBytes(assetUrl, assetLabel, fetchImpl, true, onProgress)
+			await fetchRuntimeAssetBytes(assetUrl, assetLabel, fetchImpl, true, onProgress, options)
 		)
 	) as T;
 }
