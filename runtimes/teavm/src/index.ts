@@ -134,15 +134,11 @@ export async function fetchTeaVmAsset(
 			finalUrl = new URL(response.url);
 		} catch {
 			await response.body?.cancel().catch(() => {});
-			throw new Error(
-				`TeaVM runtime asset ${asset} returned an invalid final URL: ${response.url}`
-			);
+			throw new Error(`TeaVM runtime asset ${asset} returned an invalid final URL`);
 		}
 		if (finalUrl.href !== expectedUrl) {
 			await response.body?.cancel().catch(() => {});
-			throw new Error(
-				`TeaVM runtime asset ${asset} returned an unexpected final URL: ${response.url}`
-			);
+			throw new Error(`TeaVM runtime asset ${asset} returned an unexpected final URL`);
 		}
 	}
 	if (!response.ok) {
