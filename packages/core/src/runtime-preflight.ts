@@ -197,13 +197,18 @@ async function readBoundedResponse(
 	}
 
 	const reader = response.body.getReader();
-	const cancelReader = () => {
-		void reader.cancel(signal.reason).catch(() => {});
+	let cancellation: Promise<void> | undefined;
+	const cancelReader = (reason?: unknown) => {
+		cancellation ??= reader.cancel(reason).catch(() => {});
+		return cancellation;
 	};
-	signal.addEventListener('abort', cancelReader, { once: true });
+	const cancelOnAbort = () => {
+		void cancelReader(signal.reason);
+	};
+	signal.addEventListener('abort', cancelOnAbort, { once: true });
 	try {
 		if (signal.aborted) {
-			await reader.cancel(signal.reason);
+			await cancelReader(signal.reason);
 			throw signal.reason;
 		}
 		let receivedLength = 0;
@@ -216,8 +221,7 @@ async function readBoundedResponse(
 			if (!value) continue;
 			const nextLength = receivedLength + value.byteLength;
 			if (nextLength > maxAssetBytes) {
-				await reader.cancel();
-				throw new AssetTooLargeError(
+				const error = new AssetTooLargeError(
 					`Runtime asset ${asset.key} exceeds the ${maxAssetBytes} byte limit`,
 					{
 						limit: maxAssetBytes,
@@ -226,6 +230,8 @@ async function readBoundedResponse(
 						profileId
 					}
 				);
+				await cancelReader(error);
+				throw error;
 			}
 			if (nextLength > bytes.byteLength) {
 				const capacity = Math.min(
@@ -246,8 +252,11 @@ async function readBoundedResponse(
 		if (receivedLength !== bytes.byteLength) bytes = bytes.slice(0, receivedLength);
 		reportProgress(receivedLength);
 		return bytes;
+	} catch (error) {
+		await cancelReader(error);
+		throw error;
 	} finally {
-		signal.removeEventListener('abort', cancelReader);
+		signal.removeEventListener('abort', cancelOnAbort);
 		reader.releaseLock();
 	}
 }
