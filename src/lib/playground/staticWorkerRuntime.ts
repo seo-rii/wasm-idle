@@ -8,6 +8,7 @@ import {
 	DiagnosticLimitError,
 	OutputLimitError,
 	ProtocolError,
+	RuntimeConfigurationError,
 	RuntimeProgressController,
 	TimeoutError,
 	isWasmIdleError,
@@ -331,6 +332,36 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 				runtimeId: this.config.languageId
 			});
 		}
+		let workerRequestUrl: URL;
+		try {
+			workerRequestUrl =
+				typeof window === 'undefined'
+					? new URL(this.workerUrl)
+					: new URL(this.workerUrl, window.location.href);
+		} catch {
+			throw new RuntimeConfigurationError(
+				`${this.config.displayName} worker script URL is invalid`,
+				{ runtimeId: this.config.languageId }
+			);
+		}
+		if (workerRequestUrl.protocol !== 'https:' && workerRequestUrl.protocol !== 'http:') {
+			throw new RuntimeConfigurationError(
+				`${this.config.displayName} worker script URL must use HTTP(S)`,
+				{ runtimeId: this.config.languageId }
+			);
+		}
+		if (workerRequestUrl.username || workerRequestUrl.password) {
+			throw new RuntimeConfigurationError(
+				`${this.config.displayName} worker script URL must not include credentials`,
+				{ runtimeId: this.config.languageId }
+			);
+		}
+		if (workerRequestUrl.hash) {
+			throw new RuntimeConfigurationError(
+				`${this.config.displayName} worker script URL must not include a fragment`,
+				{ runtimeId: this.config.languageId }
+			);
+		}
 		const phaseController = new AbortController();
 		let timedOut = false;
 		const onAbort = () => phaseController.abort(signal?.reason);
@@ -341,7 +372,7 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 		}, limits.assetTimeoutMs);
 		this.reportProgress(progress, 0.05, `Loading ${this.config.displayName} worker script`);
 		try {
-			const response = await fetch(this.workerUrl, {
+			const response = await fetch(workerRequestUrl.href, {
 				cache: 'force-cache',
 				credentials: 'omit',
 				redirect: 'error',
@@ -360,9 +391,9 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 					await response.body?.cancel(error).catch(() => undefined);
 					throw error;
 				}
-				if (finalResponseUrl !== this.workerUrl) {
+				if (finalResponseUrl !== workerRequestUrl.href) {
 					const error = new ProtocolError(
-						`${this.config.displayName} worker script response URL mismatch: expected ${this.workerUrl}, received ${finalResponseUrl}`,
+						`${this.config.displayName} worker script response URL mismatch: expected ${workerRequestUrl.href}, received ${finalResponseUrl}`,
 						{ phase: 'asset', runtimeId: this.config.languageId }
 					);
 					await response.body?.cancel(error).catch(() => undefined);

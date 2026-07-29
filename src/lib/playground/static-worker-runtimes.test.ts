@@ -1119,6 +1119,49 @@ describe('static worker backed language sandboxes', () => {
 		expect(workerInstances).toHaveLength(0);
 	});
 
+	it.each([
+		[
+			'an unsupported scheme',
+			'data:text/javascript,postMessage({})',
+			'Unsafe worker URL test worker script URL must use HTTP(S)'
+		],
+		[
+			'credentials',
+			'https://user:secret@assets.example.test/runtime/worker.js',
+			'Unsafe worker URL test worker script URL must not include credentials'
+		],
+		[
+			'a fragment',
+			'https://assets.example.test/runtime/worker.js#token',
+			'Unsafe worker URL test worker script URL must not include a fragment'
+		]
+	])(
+		'rejects a static worker URL containing %s before fetching',
+		async (_kind, workerUrl, message) => {
+			const sandbox = new StaticWorkerRuntimeSandbox({
+				languageId: 'UNSAFE_WORKER_URL_TEST',
+				displayName: 'Unsafe worker URL test',
+				defaultActivePath: 'main.txt',
+				stdin: { mode: 'none' },
+				resolveRuntimeAssets: () => ({
+					baseUrl: 'https://assets.example.test/runtime/',
+					workerUrl
+				})
+			});
+
+			const outcome = await sandbox.load().catch((error) => error);
+			expect(outcome).toMatchObject({
+				name: 'RuntimeConfigurationError',
+				code: 'runtime-configuration',
+				phase: 'configuration',
+				runtimeId: 'UNSAFE_WORKER_URL_TEST',
+				message
+			});
+			expect(fetch).not.toHaveBeenCalled();
+			expect(workerInstances).toHaveLength(0);
+		}
+	);
+
 	it('aborts a static worker download at its asset deadline', async () => {
 		let fetchSignal: AbortSignal | undefined;
 		vi.mocked(fetch).mockImplementationOnce((_input, init) => {
