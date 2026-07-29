@@ -1331,6 +1331,14 @@
 		debug.handleEvent(event);
 	}
 
+	async function selectDebugFrame(frame: DebugFrame) {
+		if (!frame.id || !(await debug.selectFrame(frame.id))) return;
+		const workspacePath = normalizePath(frame.sourcePath?.replace(/^\/workspace\//u, '') || '');
+		if (!workspacePath || !files.some((file) => file.path === workspacePath)) return;
+		selectFile(workspacePath);
+		debug.setSourcePath(`/workspace/${workspacePath}`);
+	}
+
 	async function exec(enableDebug = false) {
 		if (!editor || !terminal || !activeFile) return;
 		if (!executionAvailable) return;
@@ -2678,7 +2686,7 @@
 										<button
 											class="debug-frame-select"
 											disabled={!frame.id}
-											onclick={() => frame.id && debug.selectFrame(frame.id)}
+											onclick={() => selectDebugFrame(frame)}
 										>
 											<div class="stack-meta">
 												<span class="stack-order">{index + 1}</span>

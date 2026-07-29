@@ -1009,6 +1009,20 @@ describe('native-source browser debugging in Chromium', () => {
 							if ('breakpointSourcePath' in testCase) {
 								const helperPausedLine = await readPausedLine(page);
 								expect(helperPausedLine).toBe(`L${testCase.expectedPausedLine}`);
+								await page
+									.locator(
+										`.file-tab.active[title="${testCase.breakpointSourcePath}"]`
+									)
+									.waitFor({ state: 'visible' });
+								const helperSource = testCase.workspaceFiles.find(
+									(file) => file.path === testCase.breakpointSourcePath
+								)?.content;
+								expect(helperSource).toBeDefined();
+								await page.waitForFunction(
+									(source) =>
+										(window as any).__wasmIdleDebug.getEditorValue() === source,
+									helperSource
+								);
 								const multiSourceState = await page.evaluate(() =>
 									(window as any).__wasmIdleDebug.getDebugState()
 								);
@@ -1038,27 +1052,53 @@ describe('native-source browser debugging in Chromium', () => {
 									}
 								);
 								expect(workspaceReplaced).toBe(true);
-								const mainFrameSelected = await page.evaluate(
-									(frameId) =>
-										(window as any).__wasmIdleDebug.selectDebugFrame(frameId),
-									mainFrame.id
+								const callStackPanel = page.locator('.debug-panel').filter({
+									has: page.locator('h3', { hasText: 'Call Stack' })
+								});
+								const mainFrameButton = callStackPanel
+									.locator('.debug-frame-select')
+									.filter({
+										has: page.locator('.stack-function', {
+											hasText: mainFrame.functionName
+										})
+									});
+								await mainFrameButton.click();
+								await page
+									.locator(`.file-tab.active[title="${testCase.activePath}"]`)
+									.waitFor({ state: 'visible' });
+								await page.waitForFunction(
+									(source) =>
+										(window as any).__wasmIdleDebug.getEditorValue() === source,
+									editedMainSource
 								);
-								expect(mainFrameSelected).toBe(true);
 								await page.waitForFunction((sourcePath) => {
 									const state = (window as any).__wasmIdleDebug.getDebugState();
 									return (
 										state.paused &&
+										state.sourcePath === sourcePath &&
 										state.pausedSourcePath === sourcePath &&
 										state.sourceRevisionStale &&
 										state.pausedLine === null
 									);
 								}, `/workspace/${testCase.activePath}`);
-								const helperFrameSelected = await page.evaluate(
-									(frameId) =>
-										(window as any).__wasmIdleDebug.selectDebugFrame(frameId),
-									helperFrame.id
+								const helperFrameButton = callStackPanel
+									.locator('.debug-frame-select')
+									.filter({
+										has: page.locator('.stack-function', {
+											hasText: helperFrame.functionName
+										})
+									});
+								await helperFrameButton.click();
+								await page
+									.locator(
+										`.file-tab.active[title="${testCase.breakpointSourcePath}"]`
+									)
+									.waitFor({ state: 'visible' });
+								await page.waitForFunction(
+									(source) =>
+										(window as any).__wasmIdleDebug.getEditorValue() === source,
+									helperSource
 								);
-								expect(helperFrameSelected).toBe(true);
 								await page.waitForFunction(
 									({ sourcePath, pausedLine }) => {
 										const state = (
@@ -1066,6 +1106,7 @@ describe('native-source browser debugging in Chromium', () => {
 										).__wasmIdleDebug.getDebugState();
 										return (
 											state.paused &&
+											state.sourcePath === sourcePath &&
 											state.pausedSourcePath === sourcePath &&
 											!state.sourceRevisionStale &&
 											state.pausedLine === pausedLine

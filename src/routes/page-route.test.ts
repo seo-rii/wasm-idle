@@ -124,6 +124,13 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/<span class="material-symbols-outlined">play_circle<\/span>/);
 	});
 
+	it('navigates the workspace editor when an LLDB frame belongs to another source', () => {
+		expect(source).toMatch(
+			/async function selectDebugFrame\(frame: DebugFrame\) \{\s+if \(!frame\.id \|\| !\(await debug\.selectFrame\(frame\.id\)\)\) return;\s+const workspacePath = normalizePath\(\s*frame\.sourcePath\?\.replace\(\/\^\\\/workspace\\\/\/u, ''\) \|\| ''\s*\);\s+if \(!workspacePath \|\| !files\.some\(\(file\) => file\.path === workspacePath\)\) return;\s+selectFile\(workspacePath\);\s+debug\.setSourcePath\(`\/workspace\/\$\{workspacePath\}`\);\s+\}/s
+		);
+		expect(source).toMatch(/onclick=\{\(\) => selectDebugFrame\(frame\)\}/);
+	});
+
 	it('preloads stdin when SharedArrayBuffer is unavailable or Bash is selected', () => {
 		expect(source).not.toMatch(/location\.reload\(\)/);
 		expect(source).toMatch(
@@ -326,7 +333,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(
 			/async readDebugMemory\(memoryReference: string, offset: number, count: number\) \{\s+const memory = await debug\.readMemory\(memoryReference, offset, count\);\s+return memory \? \{ \.\.\.memory, data: Array\.from\(memory\.data\) \} : null;\s+\}/s
 		);
-		expect(source).toMatch(/onclick=\{\(\) => frame\.id && debug\.selectFrame\(frame\.id\)\}/);
+		expect(source).toMatch(/onclick=\{\(\) => selectDebugFrame\(frame\)\}/);
 		expect(source).toMatch(/debug\.frameId === frame\.id && 'debug-entry--current'/);
 	});
 

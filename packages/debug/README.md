@@ -38,3 +38,7 @@ preventing a valid DWARF location from being drawn against newer text.
 Command serialization also treats a runtime `pause` event as completion of the command that resumed
 the target. Locks are versioned so a late `continue` promise cannot unlock a newer step request;
 hosts may therefore issue the next step as soon as the stopped state is published.
+
+When a selected LLDB stack frame names another `/workspace/...` source, the host should await
+`selectFrame()`, open the matching workspace file, and then update the controller source path. This
+keeps the Monaco model, selected frame, paused line, and per-source revision state synchronized.
