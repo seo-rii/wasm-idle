@@ -68,6 +68,59 @@ describe('bounded external LSP asset loading', () => {
 		expect(cancel).toHaveBeenCalledOnce();
 	});
 
+	it.each([
+		['empty', ''],
+		['negative', '-1'],
+		['fractional', '1.5'],
+		['exponential', '1e2'],
+		['duplicate', '2, 2'],
+		['unsafe', '9007199254740992']
+	])('rejects a %s Content-Length before reading and cancels the body', async (_case, value) => {
+		const cancel = vi.fn(async () => {});
+		const getReader = vi.fn();
+		const fetchMock = vi.fn(
+			async () =>
+				({
+					ok: true,
+					url: 'https://assets.example.com/runtime.wasm',
+					headers: new Headers({ 'content-length': value }),
+					body: { cancel, getReader }
+				}) as unknown as Response
+		);
+
+		await expect(
+			fetchBoundedExternalAsset({
+				url: 'https://assets.example.com/runtime.wasm',
+				label: 'test runtime',
+				fetch: fetchMock
+			})
+		).rejects.toThrow(`test runtime has an invalid Content-Length: ${value}`);
+		expect(getReader).not.toHaveBeenCalled();
+		expect(cancel).toHaveBeenCalledOnce();
+	});
+
+	it('allows absent and zero Content-Length declarations', async () => {
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValueOnce(new Response(Uint8Array.of(1, 2)))
+			.mockResolvedValueOnce(new Response(null, { headers: { 'content-length': '0' } }));
+
+		await expect(
+			fetchBoundedExternalAsset({
+				url: 'https://assets.example.com/missing-length.wasm',
+				label: 'missing length runtime',
+				fetch: fetchMock
+			})
+		).resolves.toEqual(Uint8Array.of(1, 2));
+		await expect(
+			fetchBoundedExternalAsset({
+				url: 'https://assets.example.com/zero-length.wasm',
+				label: 'zero length runtime',
+				fetch: fetchMock
+			})
+		).resolves.toEqual(new Uint8Array());
+	});
+
 	it('cancels an unknown-length stream when it crosses the byte limit', async () => {
 		let cancelled = false;
 		const fetchMock = vi.fn(

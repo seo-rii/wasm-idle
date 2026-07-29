@@ -77,14 +77,17 @@ export async function fetchBoundedExternalAsset(
 		throw new Error(`Failed to load ${options.label} from ${requestUrl}: ${response.status}`);
 	}
 	const contentLengthValue = response.headers.get('content-length');
-	const contentLength =
-		contentLengthValue && /^\d+$/u.test(contentLengthValue)
-			? Number(contentLengthValue)
-			: undefined;
-	if (
-		contentLength !== undefined &&
-		(!Number.isSafeInteger(contentLength) || contentLength > maxBytes)
-	) {
+	let contentLength: number | undefined;
+	if (contentLengthValue !== null) {
+		contentLength = Number(contentLengthValue);
+		if (!/^\d+$/u.test(contentLengthValue) || !Number.isSafeInteger(contentLength)) {
+			await response.body?.cancel().catch(() => {});
+			throw new Error(
+				`${options.label} has an invalid Content-Length: ${contentLengthValue}`
+			);
+		}
+	}
+	if (contentLength !== undefined && contentLength > maxBytes) {
 		await response.body?.cancel().catch(() => {});
 		throw new Error(`${options.label} exceeds the ${maxBytes} byte download limit`);
 	}
