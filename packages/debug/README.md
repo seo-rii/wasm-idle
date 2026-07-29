@@ -29,6 +29,8 @@ that array to plain byte values instead of relying on implicit typed-array seria
 
 LLDB pause, frame, and breakpoint events carry the SHA-256 of the compiled source when the artifact
 provides it. Hosts should call `markSourceRevisionStale(sourcePath)` when an editor model changes
-during an active session. The controller keeps execution controls available but clears the paused
-line for that source and exposes `sourceRevisionStale`, preventing a valid DWARF location from being
-drawn against newer text.
+during an active session. This includes non-selected workspace sources that are added, replaced, or
+removed through a programmatic workspace update; compare the complete replacement against the
+session workspace instead of tracking only the active editor model. The controller keeps execution
+controls available but clears the paused line for that source and exposes `sourceRevisionStale`,
+preventing a valid DWARF location from being drawn against newer text.

@@ -330,6 +330,21 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/debug\.frameId === frame\.id && 'debug-entry--current'/);
 	});
 
+	it('marks replaced non-active workspace sources stale during an active debug session', () => {
+		expect(source).toMatch(
+			/const previousWorkspaceFiles = new Map\(\s*files\.map\(\(file\) => \[file\.path, file\.content\]\)\s*\);/s
+		);
+		expect(source).toMatch(
+			/const replacementWorkspaceFiles = new Map\(\s*sanitizedFiles\.map\(\(file\) => \[file\.path, file\.content\]\)\s*\);/s
+		);
+		expect(source).toMatch(
+			/const replacedSourcePaths = new Set\(\s*\[\s*\.\.\.previousWorkspaceFiles\.keys\(\),\s*\.\.\.replacementWorkspaceFiles\.keys\(\)\s*\]\.filter\(\s*\(sourcePath\) => sourcePath !== nextActiveFilePath\s*\)\s*\);/s
+		);
+		expect(source).toMatch(
+			/if \(\s*debug\.active &&\s*previousWorkspaceFiles\.get\(sourcePath\) !==\s*replacementWorkspaceFiles\.get\(sourcePath\)\s*\) \{\s*debug\.markSourceRevisionStale\(`\/workspace\/\$\{sourcePath\}`\);\s*\}/s
+		);
+	});
+
 	it('keeps browser stdin helper wiring separate from the shared debug controller', () => {
 		expect(source).not.toMatch(/terminalControl\?\.debugEvaluate/);
 		expect(source).toMatch(/createDebugSessionController/);

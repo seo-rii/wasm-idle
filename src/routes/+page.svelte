@@ -1747,9 +1747,29 @@
 				const nextActiveFilePath =
 					normalizePath(nextActivePath || activePath) || defaultPathForLanguage();
 				const activeContent = editor?.getValue() || activeFile?.content || '';
+				const previousWorkspaceFiles = new Map(
+					files.map((file) => [file.path, file.content])
+				);
 				const sanitizedFiles = sanitizeFiles(nextFiles).filter(
 					(file) => file.path !== nextActiveFilePath
 				);
+				const replacementWorkspaceFiles = new Map(
+					sanitizedFiles.map((file) => [file.path, file.content])
+				);
+				const replacedSourcePaths = new Set(
+					[...previousWorkspaceFiles.keys(), ...replacementWorkspaceFiles.keys()].filter(
+						(sourcePath) => sourcePath !== nextActiveFilePath
+					)
+				);
+				for (const sourcePath of replacedSourcePaths) {
+					if (
+						debug.active &&
+						previousWorkspaceFiles.get(sourcePath) !==
+							replacementWorkspaceFiles.get(sourcePath)
+					) {
+						debug.markSourceRevisionStale(`/workspace/${sourcePath}`);
+					}
+				}
 				files = [{ path: nextActiveFilePath, content: activeContent }, ...sanitizedFiles];
 				activePath = nextActiveFilePath;
 				openTabs = [nextActiveFilePath];
