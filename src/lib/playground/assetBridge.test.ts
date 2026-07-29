@@ -522,12 +522,16 @@ describe('WorkerAssetBridge asset requests', () => {
 
 	it('assembles streamed fetches without retaining copied chunks', async () => {
 		const postMessage = vi.fn();
+		const cancel = vi.fn(async () => undefined);
+		const releaseLock = vi.fn();
 		const reader = {
 			read: vi
 				.fn()
 				.mockResolvedValueOnce({ done: false, value: new Uint8Array([1, 2, 3]) })
 				.mockResolvedValueOnce({ done: false, value: new Uint8Array([4, 5, 6]) })
-				.mockResolvedValueOnce({ done: true, value: undefined })
+				.mockResolvedValueOnce({ done: true, value: undefined }),
+			cancel,
+			releaseLock
 		};
 		vi.stubGlobal(
 			'fetch',
@@ -558,6 +562,8 @@ describe('WorkerAssetBridge asset requests', () => {
 		expect(copySpy).not.toHaveBeenCalled();
 		const transferred = postMessage.mock.calls[0]?.[1]?.[0] as ArrayBuffer;
 		expect([...new Uint8Array(transferred)]).toEqual([1, 2, 3, 4, 5, 6]);
+		expect(cancel).not.toHaveBeenCalled();
+		expect(releaseLock).toHaveBeenCalledOnce();
 	});
 
 	it.each([
@@ -650,13 +656,15 @@ describe('WorkerAssetBridge asset requests', () => {
 
 	it('cancels a stream that crosses the runtime asset limit', async () => {
 		const postMessage = vi.fn();
-		const cancel = vi.fn();
+		const cancel = vi.fn(async () => undefined);
+		const releaseLock = vi.fn();
 		const reader = {
 			read: vi.fn().mockResolvedValueOnce({
 				done: false,
 				value: { byteLength: 128 * 1024 * 1024 + 1 } as Uint8Array
 			}),
-			cancel
+			cancel,
+			releaseLock
 		};
 		vi.stubGlobal(
 			'fetch',
@@ -678,6 +686,7 @@ describe('WorkerAssetBridge asset requests', () => {
 		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
 
 		expect(cancel).toHaveBeenCalledOnce();
+		expect(releaseLock).toHaveBeenCalledOnce();
 		expect(postMessage).toHaveBeenCalledWith({
 			assetResponse: {
 				id: 20,
@@ -685,6 +694,42 @@ describe('WorkerAssetBridge asset requests', () => {
 				error: `Runtime asset ${asset} exceeds the ${128 * 1024 * 1024} byte limit`
 			}
 		});
+	});
+
+	it('cancels and releases a response reader when streaming fails', async () => {
+		const postMessage = vi.fn();
+		const cancel = vi.fn(async () => undefined);
+		const releaseLock = vi.fn();
+		const read = vi.fn().mockRejectedValueOnce(new Error('asset stream failed'));
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue({
+				ok: true,
+				url: '',
+				headers: new Headers(),
+				body: { getReader: () => ({ cancel, read, releaseLock }) }
+			})
+		);
+		const bridge = new WorkerAssetBridge({ postMessage } as unknown as Worker, 'clang', {
+			baseUrl: 'https://assets.example.com/clang/',
+			useAssetBridge: true
+		});
+		const asset = RUNTIME_LOAD_ASSETS.clang[0];
+
+		bridge.handleMessage({
+			data: { assetRequest: { id: 28, asset } }
+		} as MessageEvent);
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
+
+		expect(postMessage).toHaveBeenCalledWith({
+			assetResponse: {
+				id: 28,
+				ok: false,
+				error: 'asset stream failed'
+			}
+		});
+		expect(cancel).toHaveBeenCalledOnce();
+		expect(releaseLock).toHaveBeenCalledOnce();
 	});
 
 	it('aborts stale loads and never forwards their response after rebind', async () => {

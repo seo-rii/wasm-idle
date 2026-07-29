@@ -435,33 +435,39 @@ export class WorkerAssetBridge {
 		const reader = response.body.getReader();
 		let receivedLength = 0;
 		let bytes = new Uint8Array(contentLength || DEFAULT_STREAM_BUFFER_BYTES);
-		while (true) {
-			const { done, value } = await reader.read();
-			if (done) break;
-			if (!value) continue;
-			const nextLength = receivedLength + value.byteLength;
-			if (nextLength > MAX_RUNTIME_ASSET_BYTES) {
-				await reader.cancel();
-				throw new Error(
-					`Runtime asset ${asset} exceeds the ${MAX_RUNTIME_ASSET_BYTES} byte limit`
-				);
+		try {
+			while (true) {
+				const { done, value } = await reader.read();
+				if (done) break;
+				if (!value) continue;
+				const nextLength = receivedLength + value.byteLength;
+				if (nextLength > MAX_RUNTIME_ASSET_BYTES) {
+					throw new Error(
+						`Runtime asset ${asset} exceeds the ${MAX_RUNTIME_ASSET_BYTES} byte limit`
+					);
+				}
+				if (nextLength > bytes.byteLength) {
+					const nextCapacity = Math.min(
+						MAX_RUNTIME_ASSET_BYTES,
+						Math.max(nextLength, bytes.byteLength * 2)
+					);
+					const grown = new Uint8Array(nextCapacity);
+					grown.set(bytes.subarray(0, receivedLength));
+					bytes = grown;
+				}
+				bytes.set(value, receivedLength);
+				receivedLength = nextLength;
+				this.progress.update(asset, receivedLength, contentLength);
 			}
-			if (nextLength > bytes.byteLength) {
-				const nextCapacity = Math.min(
-					MAX_RUNTIME_ASSET_BYTES,
-					Math.max(nextLength, bytes.byteLength * 2)
-				);
-				const grown = new Uint8Array(nextCapacity);
-				grown.set(bytes.subarray(0, receivedLength));
-				bytes = grown;
-			}
-			bytes.set(value, receivedLength);
-			receivedLength = nextLength;
-			this.progress.update(asset, receivedLength, contentLength);
+			if (receivedLength !== bytes.byteLength) bytes = bytes.slice(0, receivedLength);
+			this.progress.update(asset, receivedLength, contentLength ?? receivedLength);
+			return { bytes, contentEncoding, mimeType, transferOwnership: true };
+		} catch (error) {
+			await reader.cancel(error).catch(() => undefined);
+			throw error;
+		} finally {
+			reader.releaseLock();
 		}
-		if (receivedLength !== bytes.byteLength) bytes = bytes.slice(0, receivedLength);
-		this.progress.update(asset, receivedLength, contentLength ?? receivedLength);
-		return { bytes, contentEncoding, mimeType, transferOwnership: true };
 	}
 
 	private requireAllowedAssetUrl(asset: string, value: string) {
