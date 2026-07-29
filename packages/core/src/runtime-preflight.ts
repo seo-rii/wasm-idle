@@ -200,12 +200,12 @@ async function readBoundedResponse(
 	const cancelReader = () => {
 		void reader.cancel(signal.reason).catch(() => {});
 	};
-	if (signal.aborted) {
-		await reader.cancel(signal.reason);
-		throw signal.reason;
-	}
 	signal.addEventListener('abort', cancelReader, { once: true });
 	try {
+		if (signal.aborted) {
+			await reader.cancel(signal.reason);
+			throw signal.reason;
+		}
 		let receivedLength = 0;
 		let bytes = new Uint8Array(
 			Math.min(maxAssetBytes, declaredLength ?? DEFAULT_STREAM_BUFFER_BYTES)
@@ -248,6 +248,7 @@ async function readBoundedResponse(
 		return bytes;
 	} finally {
 		signal.removeEventListener('abort', cancelReader);
+		reader.releaseLock();
 	}
 }
 

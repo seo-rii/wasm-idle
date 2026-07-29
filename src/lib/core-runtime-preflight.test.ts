@@ -137,6 +137,45 @@ describe('runtime registry asset preflight', () => {
 		expect(Object.isFrozen(result.assets)).toBe(true);
 	});
 
+	it('releases a successful streamed response reader without cancelling it', async () => {
+		const cancel = vi.fn(async () => {});
+		const releaseLock = vi.fn();
+		const read = vi
+			.fn()
+			.mockResolvedValueOnce({ done: false, value: loaderBytes })
+			.mockResolvedValueOnce({ done: true, value: undefined });
+		const response = {
+			url: '',
+			ok: true,
+			status: 200,
+			headers: new Headers({
+				'content-length': String(loaderBytes.byteLength),
+				'content-type': 'text/javascript; charset=utf-8'
+			}),
+			body: {
+				cancel,
+				getReader: () => ({ read, cancel, releaseLock })
+			}
+		} as unknown as Response;
+
+		await expect(
+			preflightRuntimeAssets({
+				manifest: createManifest([assets[0]!]),
+				runtimeId: 'fortran/preflight-test',
+				rootUrl: 'https://example.test/',
+				fetch: async () => response
+			})
+		).resolves.toMatchObject({
+			assets: {
+				loader: {
+					deliveryIntegrity: { sha256: sha256(loaderBytes) }
+				}
+			}
+		});
+		expect(releaseLock).toHaveBeenCalledOnce();
+		expect(cancel).not.toHaveBeenCalled();
+	});
+
 	it('rejects credentialed asset roots without copying secrets into the error', async () => {
 		const secret = 'root-password-must-not-leak';
 		let rejected: unknown;
