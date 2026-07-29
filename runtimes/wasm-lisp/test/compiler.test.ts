@@ -258,6 +258,7 @@ describe('wasm-lisp Puppy Scheme runtime', () => {
 
 	it('rejects runtime responses from a substituted final URL', async () => {
 		let cancelled = false;
+		const secret = 'signed-query-secret';
 		const compiler = await createCompilerWithFetch(async () => {
 			const response = new Response(
 				new ReadableStream<Uint8Array>({
@@ -267,7 +268,7 @@ describe('wasm-lisp Puppy Scheme runtime', () => {
 				})
 			);
 			Object.defineProperty(response, 'url', {
-				value: 'https://cdn.example.invalid/substituted.wasm'
+				value: `https://cdn.example.invalid/substituted.wasm?signature=${secret}`
 			});
 			return response;
 		}, 4);
@@ -276,17 +277,19 @@ describe('wasm-lisp Puppy Scheme runtime', () => {
 
 		expect(compiled.success).toBe(false);
 		expect(compiled.stderr).toContain('unexpected final URL');
+		expect(compiled.stderr).not.toContain(secret);
 		expect(cancelled).toBe(true);
 	});
 
 	it('rejects malformed final URLs before reading and cancels every response', async () => {
 		const cancel = vi.fn(async () => {});
 		const getReader = vi.fn();
+		const invalidFinalUrl = '://invalid-final-url-secret';
 		const fetchImpl = vi.fn(
 			async () =>
 				({
 					ok: true,
-					url: '://invalid',
+					url: invalidFinalUrl,
 					headers: new Headers(),
 					body: { cancel, getReader }
 				}) as unknown as Response
@@ -296,9 +299,8 @@ describe('wasm-lisp Puppy Scheme runtime', () => {
 		const compiled = await compiler.compile({ code: '(display 1)' });
 
 		expect(compiled.success).toBe(false);
-		expect(compiled.stderr).toContain(
-			'wasm-lisp runtime asset returned an invalid final URL: ://invalid'
-		);
+		expect(compiled.stderr).toContain('wasm-lisp runtime asset returned an invalid final URL');
+		expect(compiled.stderr).not.toContain(invalidFinalUrl);
 		expect(getReader).not.toHaveBeenCalled();
 		expect(fetchImpl).toHaveBeenCalled();
 		expect(cancel).toHaveBeenCalledTimes(fetchImpl.mock.calls.length);

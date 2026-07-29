@@ -346,15 +346,11 @@ async function fetchBytes(
 			finalUrl = new URL(response.url);
 		} catch {
 			await response.body?.cancel().catch(() => {});
-			throw new Error(
-				`wasm-lisp runtime asset returned an invalid final URL: ${response.url}`
-			);
+			throw new Error('wasm-lisp runtime asset returned an invalid final URL');
 		}
 		if (finalUrl.href !== url.href) {
 			await response.body?.cancel().catch(() => {});
-			throw new Error(
-				`wasm-lisp runtime asset returned an unexpected final URL: ${response.url}`
-			);
+			throw new Error('wasm-lisp runtime asset returned an unexpected final URL');
 		}
 	}
 	if (!response.ok) {
