@@ -174,6 +174,30 @@ describe('bounded external LSP asset loading', () => {
 		expect(cancelled).toBe(true);
 	});
 
+	it('rejects a malformed final URL and cancels its body', async () => {
+		const cancel = vi.fn(async () => {});
+		const getReader = vi.fn();
+		const fetchMock = vi.fn(
+			async () =>
+				({
+					ok: true,
+					url: '://invalid',
+					headers: new Headers(),
+					body: { cancel, getReader }
+				}) as unknown as Response
+		);
+
+		await expect(
+			fetchBoundedExternalAsset({
+				url: 'https://assets.example.com/runtime.wasm',
+				label: 'test runtime',
+				fetch: fetchMock
+			})
+		).rejects.toThrow('test runtime returned an invalid final URL: ://invalid');
+		expect(getReader).not.toHaveBeenCalled();
+		expect(cancel).toHaveBeenCalledOnce();
+	});
+
 	it('cancels when the caller aborts while fetch is resolving', async () => {
 		let cancelled = false;
 		const controller = new AbortController();

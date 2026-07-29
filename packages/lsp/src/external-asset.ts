@@ -68,9 +68,18 @@ export async function fetchBoundedExternalAsset(
 			`Failed to load ${options.label} from ${requestUrl}: ${error instanceof Error ? error.message : String(error)}`
 		);
 	}
-	if (expectedFinalUrl && response.url && new URL(response.url).href !== expectedFinalUrl) {
-		await response.body?.cancel().catch(() => {});
-		throw new Error(`${options.label} returned an unexpected final URL: ${response.url}`);
+	if (expectedFinalUrl && response.url) {
+		let finalUrl: URL;
+		try {
+			finalUrl = new URL(response.url);
+		} catch {
+			await response.body?.cancel().catch(() => {});
+			throw new Error(`${options.label} returned an invalid final URL: ${response.url}`);
+		}
+		if (finalUrl.href !== expectedFinalUrl) {
+			await response.body?.cancel().catch(() => {});
+			throw new Error(`${options.label} returned an unexpected final URL: ${response.url}`);
+		}
 	}
 	if (!response.ok) {
 		await response.body?.cancel().catch(() => {});
