@@ -19,16 +19,20 @@ const SAFE_REQUEST_INIT = {
 	referrerPolicy: 'no-referrer'
 };
 
+function createToolAsset(url, bytes = 1) {
+	return { url, bytes, sha256: PLACEHOLDER_SHA256 };
+}
+
 function createManifest(files, runtimePackOverrides = {}) {
 	return {
 		version: 1,
 		generatedAt: '2026-07-29T00:00:00.000Z',
 		switchPrefix: '/switch',
-		findlibConf: '/static/toolchain/findlib.conf',
+		findlibConf: createToolAsset('/static/toolchain/findlib.conf'),
 		tools: {
-			ocamlc: '/tools/ocamlc.js',
-			js_of_ocaml: '/tools/js_of_ocaml.js',
-			wasm_of_ocaml: '/tools/wasm_of_ocaml.js'
+			ocamlc: createToolAsset('/tools/ocamlc.js'),
+			js_of_ocaml: createToolAsset('/tools/js_of_ocaml.js'),
+			wasm_of_ocaml: createToolAsset('/tools/wasm_of_ocaml.js')
 		},
 		runtimePack: {
 			format: 'wasm-of-js-of-ocaml-browser-native-runtime-pack-v1',
@@ -433,6 +437,30 @@ test('bounds manifest metadata and rejects substituted final URLs', async () => 
 			fetch: async () => substituted
 		}),
 		/final URL mismatch/
+	);
+});
+
+test('requires exact browser-native compiler asset receipts in the manifest', async () => {
+	const manifestUrl = new URL(
+		'/.cache/browser-native-bundle/browser-native-manifest.v1.json',
+		BASE_URL
+	).href;
+	const files = [{ path: '/static/toolchain/lib/ocaml/a.cmi', size: 1 }];
+	const validManifest = createManifest(files);
+	const loaded = await fetchBrowserNativeManifest({
+		baseUrl: BASE_URL,
+		fetch: async () => createResponse(encodeJson(validManifest), manifestUrl)
+	});
+	assert.deepEqual(loaded.tools.ocamlc, validManifest.tools.ocamlc);
+
+	const invalidManifest = createManifest(files);
+	invalidManifest.tools.ocamlc.sha256 = 'not-a-digest';
+	await assert.rejects(
+		fetchBrowserNativeManifest({
+			baseUrl: BASE_URL,
+			fetch: async () => createResponse(encodeJson(invalidManifest), manifestUrl)
+		}),
+		/browser-native compiler tool ocamlc has an invalid or oversized asset receipt/
 	);
 });
 

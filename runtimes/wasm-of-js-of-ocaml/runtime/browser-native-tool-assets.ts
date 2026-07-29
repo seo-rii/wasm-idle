@@ -14,10 +14,20 @@ export type BrowserToolInputBudget = {
 	usedBytes: number;
 };
 
+export type BrowserToolAssetReceipt = {
+	bytes: number;
+	sha256: string;
+};
+
+export type BrowserToolAssetDescriptor = BrowserToolAssetReceipt & {
+	url: string;
+};
+
 export type BrowserToolAssetOptions = {
 	baseUrl?: string | URL;
 	cache?: RequestCache;
 	fetch?: typeof fetch;
+	receipt?: BrowserToolAssetReceipt;
 	signal?: AbortSignal;
 };
 
@@ -26,6 +36,26 @@ function requirePositiveSafeInteger(value: number, label: string) {
 		throw new TypeError(`${label} must be a positive safe integer`);
 	}
 	return value;
+}
+
+export function validateBrowserToolAssetReceipt(
+	value: unknown,
+	label: string,
+	maxBytes = DEFAULT_MAX_BROWSER_TOOL_ASSET_BYTES
+): BrowserToolAssetReceipt {
+	if (
+		typeof value !== 'object' ||
+		value === null ||
+		Array.isArray(value) ||
+		!Number.isSafeInteger((value as BrowserToolAssetReceipt).bytes) ||
+		(value as BrowserToolAssetReceipt).bytes <= 0 ||
+		(value as BrowserToolAssetReceipt).bytes > maxBytes ||
+		typeof (value as BrowserToolAssetReceipt).sha256 !== 'string' ||
+		!/^[0-9a-f]{64}$/u.test((value as BrowserToolAssetReceipt).sha256)
+	) {
+		throw new Error(`${label} has an invalid or oversized asset receipt`);
+	}
+	return value as BrowserToolAssetReceipt;
 }
 
 export function createBrowserToolInputBudget(
@@ -154,6 +184,13 @@ async function readBrowserToolAssetBody(
 				readerCancelled = true;
 				throw new Error(`${label} exceeds the ${budget.maxAssetBytes} byte asset limit`);
 			}
+			if (contentLength !== undefined && nextReceivedBytes > contentLength) {
+				await reader.cancel().catch(() => {});
+				readerCancelled = true;
+				throw new Error(
+					`${label} size mismatch: expected ${contentLength} bytes, received more data`
+				);
+			}
 			if (nextReceivedBytes > accountedBytes) {
 				accountBrowserToolInputBytes(budget, label, nextReceivedBytes - accountedBytes);
 				accountedBytes = nextReceivedBytes;
@@ -187,6 +224,25 @@ async function readBrowserToolAssetBody(
 	}
 }
 
+async function verifyBrowserToolAssetSha256(
+	bytes: Uint8Array<ArrayBuffer>,
+	expectedSha256: string,
+	label: string,
+	signal?: AbortSignal
+) {
+	throwIfAborted(signal);
+	const subtle = globalThis.crypto?.subtle;
+	if (!subtle) throw new Error(`Web Crypto is required to verify ${label}`);
+	const digest = new Uint8Array(await subtle.digest('SHA-256', bytes));
+	throwIfAborted(signal);
+	const actualSha256 = Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join('');
+	if (actualSha256 !== expectedSha256) {
+		throw new Error(
+			`${label} SHA-256 mismatch: expected ${expectedSha256}, received ${actualSha256}`
+		);
+	}
+}
+
 export async function fetchBrowserToolAsset(
 	value: string,
 	label: string,
@@ -194,6 +250,9 @@ export async function fetchBrowserToolAsset(
 	options: BrowserToolAssetOptions = {}
 ) {
 	throwIfAborted(options.signal);
+	const receipt = options.receipt
+		? validateBrowserToolAssetReceipt(options.receipt, label, budget.maxAssetBytes)
+		: undefined;
 	const requestUrl = resolveBrowserToolAssetUrl(value, options.baseUrl);
 	const fetchImpl = options.fetch ?? globalThis.fetch?.bind(globalThis);
 	if (!fetchImpl) throw new Error(`fetch is required to load ${label}`);
@@ -248,15 +307,32 @@ export async function fetchBrowserToolAsset(
 		await cancelResponse(response, error);
 		throw error;
 	}
-	if (contentLength !== undefined) {
+	if (receipt && contentLength !== undefined && contentLength !== receipt.bytes) {
+		await cancelResponse(response);
+		throw new Error(
+			`${label} size mismatch: expected ${receipt.bytes} bytes, received ${contentLength}`
+		);
+	}
+	const expectedBytes = receipt?.bytes ?? contentLength;
+	if (expectedBytes !== undefined) {
 		try {
-			accountBrowserToolInputBytes(budget, label, contentLength);
+			accountBrowserToolInputBytes(budget, label, expectedBytes);
 		} catch (error) {
 			await cancelResponse(response, error);
 			throw error;
 		}
 	}
-	return readBrowserToolAssetBody(response, label, budget, contentLength, options.signal);
+	const bytes = await readBrowserToolAssetBody(
+		response,
+		label,
+		budget,
+		expectedBytes,
+		options.signal
+	);
+	if (receipt) {
+		await verifyBrowserToolAssetSha256(bytes, receipt.sha256, label, options.signal);
+	}
+	return bytes;
 }
 
 export function decodeBrowserToolSource(bytes: Uint8Array, label: string) {

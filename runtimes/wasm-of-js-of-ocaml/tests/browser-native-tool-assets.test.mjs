@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import test from 'node:test';
 
 import {
@@ -16,6 +17,10 @@ function responseWithUrl(body, url, headers = {}) {
 	return response;
 }
 
+function sha256(value) {
+	return createHash('sha256').update(value).digest('hex');
+}
+
 test('loads browser-native tool inputs through a bounded exact-URL request', async () => {
 	const expectedUrl = new URL('tools/ocamlc.js', BASE_URL).href;
 	const source = new TextEncoder().encode('tool');
@@ -24,6 +29,7 @@ test('loads browser-native tool inputs through a bounded exact-URL request', asy
 	const loaded = await fetchBrowserToolAsset('tools/ocamlc.js', 'OCaml tool', budget, {
 		baseUrl: BASE_URL,
 		cache: 'force-cache',
+		receipt: { bytes: source.byteLength, sha256: sha256(source) },
 		fetch: async (input, init) => {
 			calls.push({ input: String(input), init });
 			return responseWithUrl(source, expectedUrl, {
@@ -45,6 +51,58 @@ test('loads browser-native tool inputs through a bounded exact-URL request', asy
 			}
 		}
 	]);
+});
+
+test('rejects browser-native tool receipt size mismatches before reading', async () => {
+	let readerRequested = false;
+	let cancelled = false;
+	const assetUrl = new URL('tools/substituted.js', BASE_URL).href;
+	const response = {
+		url: assetUrl,
+		ok: true,
+		status: 200,
+		headers: new Headers({ 'content-length': '5' }),
+		body: {
+			async cancel() {
+				cancelled = true;
+			},
+			getReader() {
+				readerRequested = true;
+				throw new Error('mismatched body should not be read');
+			}
+		}
+	};
+
+	await assert.rejects(
+		fetchBrowserToolAsset(assetUrl, 'OCaml tool', createBrowserToolInputBudget(), {
+			fetch: async () => response,
+			receipt: { bytes: 4, sha256: sha256(new Uint8Array(4)) }
+		}),
+		/size mismatch: expected 4 bytes, received 5/
+	);
+	assert.equal(readerRequested, false);
+	assert.equal(cancelled, true);
+});
+
+test('rejects truncated and hash-mismatched browser-native tool assets', async () => {
+	const assetUrl = new URL('tools/ocamlc.js', BASE_URL).href;
+	const expected = new TextEncoder().encode('tool');
+
+	await assert.rejects(
+		fetchBrowserToolAsset(assetUrl, 'OCaml tool', createBrowserToolInputBudget(), {
+			fetch: async () => responseWithUrl(expected.subarray(0, 3), assetUrl),
+			receipt: { bytes: expected.byteLength, sha256: sha256(expected) }
+		}),
+		/size mismatch: expected 4 bytes, received 3/
+	);
+
+	await assert.rejects(
+		fetchBrowserToolAsset(assetUrl, 'OCaml tool', createBrowserToolInputBudget(), {
+			fetch: async () => responseWithUrl(new TextEncoder().encode('evil'), assetUrl),
+			receipt: { bytes: expected.byteLength, sha256: sha256(expected) }
+		}),
+		/SHA-256 mismatch/
+	);
 });
 
 test('rejects unsafe browser-native tool asset URLs before fetching', async () => {

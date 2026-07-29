@@ -298,6 +298,15 @@ function sha256(value) {
 	return createHash('sha256').update(value).digest('hex');
 }
 
+async function describeBrowserNativeAsset(filePath, url) {
+	const bytes = await readFile(filePath);
+	return {
+		url,
+		bytes: bytes.byteLength,
+		sha256: sha256(bytes)
+	};
+}
+
 async function patchVersionDuneToAvoidGitProbe(sourceDir) {
 	const versionDunePath = path.join(sourceDir, 'tools', 'version', 'dune');
 	const versionDuneSource = await readFile(versionDunePath, 'utf8');
@@ -689,20 +698,55 @@ const runtimePack = await writeRuntimePack(
 	runtimePackAssetPath,
 	runtimePackIndexPath
 );
+const [
+	findlibConfAsset,
+	ocamlcAsset,
+	jsOfOcamlAsset,
+	wasmOfOcamlAsset,
+	wasmOptAsset,
+	wasmMergeAsset,
+	wasmMetadceAsset
+] = await Promise.all([
+	describeBrowserNativeAsset(findlibConfOutPath, '/.cache/browser-native-bundle/findlib.conf'),
+	describeBrowserNativeAsset(
+		ocamlcOutPath,
+		'/.cache/browser-native-bundle/tools/ocamlc.byte.browser.js'
+	),
+	describeBrowserNativeAsset(
+		jsooOutPath,
+		'/.cache/browser-native-bundle/tools/js_of_ocaml.bc.browser.js'
+	),
+	describeBrowserNativeAsset(
+		wasmooOutPath,
+		'/.cache/browser-native-bundle/tools/wasm_of_ocaml.bc.browser.js'
+	),
+	describeBrowserNativeAsset(
+		wasmOptOutPath,
+		'/.cache/browser-native-bundle/tools/wasm-opt.browser.js'
+	),
+	describeBrowserNativeAsset(
+		wasmMergeOutPath,
+		'/.cache/browser-native-bundle/tools/wasm-merge.browser.js'
+	),
+	describeBrowserNativeAsset(
+		wasmMetadceOutPath,
+		'/.cache/browser-native-bundle/tools/wasm-metadce.browser.js'
+	)
+]);
 const manifest = {
 	version: 1,
 	generatedAt: new Date().toISOString(),
 	switchPrefix,
-	findlibConf: '/.cache/browser-native-bundle/findlib.conf',
+	findlibConf: findlibConfAsset,
 	tools: {
-		ocamlc: '/.cache/browser-native-bundle/tools/ocamlc.byte.browser.js',
-		js_of_ocaml: '/.cache/browser-native-bundle/tools/js_of_ocaml.bc.browser.js',
-		wasm_of_ocaml: '/.cache/browser-native-bundle/tools/wasm_of_ocaml.bc.browser.js'
+		ocamlc: ocamlcAsset,
+		js_of_ocaml: jsOfOcamlAsset,
+		wasm_of_ocaml: wasmOfOcamlAsset
 	},
 	binaryenTools: {
-		wasm_opt: '/.cache/browser-native-bundle/tools/wasm-opt.browser.js',
-		wasm_merge: '/.cache/browser-native-bundle/tools/wasm-merge.browser.js',
-		wasm_metadce: '/.cache/browser-native-bundle/tools/wasm-metadce.browser.js'
+		wasm_opt: wasmOptAsset,
+		wasm_merge: wasmMergeAsset,
+		wasm_metadce: wasmMetadceAsset
 	},
 	toolPatches: {
 		version_dune_static_placeholder: versionDunePatch,

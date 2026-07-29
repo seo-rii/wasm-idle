@@ -1,5 +1,9 @@
 import type { MemoryFileSystem } from './fs/memory-fs.js';
 import type { SystemDispatcher } from './system-dispatch.js';
+import type {
+	BrowserToolAssetDescriptor,
+	BrowserToolAssetReceipt
+} from './browser-native-tool-assets.js';
 
 export type BrowserNativeManifestFile = {
 	path: string;
@@ -29,20 +33,22 @@ export type BrowserNativeManifestPackage = {
 	files: BrowserNativeManifestFile[];
 };
 
+export type BrowserNativeManifestAsset = BrowserToolAssetDescriptor;
+
 export type BrowserNativeManifest = {
 	version: 1;
 	generatedAt: string;
 	switchPrefix: string;
-	findlibConf: string;
+	findlibConf: BrowserNativeManifestAsset;
 	tools: {
-		ocamlc: string;
-		js_of_ocaml: string;
-		wasm_of_ocaml: string;
+		ocamlc: BrowserNativeManifestAsset;
+		js_of_ocaml: BrowserNativeManifestAsset;
+		wasm_of_ocaml: BrowserNativeManifestAsset;
 	};
 	binaryenTools?: {
-		wasm_opt: string;
-		wasm_merge: string;
-		wasm_metadce: string;
+		wasm_opt: BrowserNativeManifestAsset;
+		wasm_merge: BrowserNativeManifestAsset;
+		wasm_metadce: BrowserNativeManifestAsset;
 	};
 	toolPatches?: Record<string, unknown>;
 	runtimePack?: BrowserNativeManifestRuntimePack;
@@ -80,6 +86,7 @@ type BrowserToolPreloadFile = {
 	url?: string;
 	text?: string;
 	bytes?: ArrayBuffer;
+	receipt?: BrowserToolAssetReceipt;
 };
 
 type BrowserToolResult = {
@@ -107,6 +114,7 @@ type WorkerResponse = {
 
 const DEFAULT_MAX_RUNTIME_ASSET_BYTES = 128 * 1024 * 1024;
 const DEFAULT_MAX_RUNTIME_METADATA_BYTES = 4 * 1024 * 1024;
+const DEFAULT_MAX_BROWSER_NATIVE_TOOL_ASSET_BYTES = 32 * 1024 * 1024;
 const DEFAULT_MAX_RUNTIME_PACK_ENTRIES = 4096;
 const DEFAULT_MAX_RUNTIME_PACK_ENTRY_BYTES = 32 * 1024 * 1024;
 const DEFAULT_MAX_RUNTIME_PACK_PATH_BYTES = 1024;
@@ -364,6 +372,43 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function validateBrowserNativeManifestAsset(
+	value: unknown,
+	label: string
+): BrowserNativeManifestAsset {
+	if (!isRecord(value) || typeof value['url'] !== 'string' || !value['url'].trim()) {
+		throw new Error(`${label} has an invalid browser-native asset descriptor`);
+	}
+	if (
+		!Number.isSafeInteger(value['bytes']) ||
+		(value['bytes'] as number) <= 0 ||
+		(value['bytes'] as number) > DEFAULT_MAX_BROWSER_NATIVE_TOOL_ASSET_BYTES ||
+		typeof value['sha256'] !== 'string' ||
+		!/^[0-9a-f]{64}$/u.test(value['sha256'])
+	) {
+		throw new Error(`${label} has an invalid or oversized asset receipt`);
+	}
+	return value as BrowserNativeManifestAsset;
+}
+
+function validateBrowserNativeToolAssets(value: Record<string, unknown>) {
+	validateBrowserNativeManifestAsset(value['findlibConf'], 'browser-native findlib config');
+	const tools = value['tools'];
+	if (!isRecord(tools)) throw new Error('invalid browser-native compiler tool assets');
+	for (const name of ['ocamlc', 'js_of_ocaml', 'wasm_of_ocaml']) {
+		validateBrowserNativeManifestAsset(tools[name], `browser-native compiler tool ${name}`);
+	}
+	const binaryenTools = value['binaryenTools'];
+	if (binaryenTools === undefined) return;
+	if (!isRecord(binaryenTools)) throw new Error('invalid browser-native Binaryen tool assets');
+	for (const name of ['wasm_opt', 'wasm_merge', 'wasm_metadce']) {
+		validateBrowserNativeManifestAsset(
+			binaryenTools[name],
+			`browser-native Binaryen tool ${name.replaceAll('_', '-')}`
+		);
+	}
+}
+
 function validateRuntimePackPath(path: string, maxPathBytes: number) {
 	if (new TextEncoder().encode(path).byteLength > maxPathBytes) {
 		throw new Error(`browser-native runtime pack path exceeds ${maxPathBytes} bytes: ${path}`);
@@ -589,7 +634,8 @@ function getToolchainPreloads(
 		),
 		{
 			path: '/static/toolchain/findlib.conf',
-			url: manifest.findlibConf
+			url: manifest.findlibConf.url,
+			receipt: manifest.findlibConf
 		}
 	];
 }
@@ -611,6 +657,7 @@ export async function fetchBrowserNativeManifest(options: BrowserNativeRuntimeAs
 	) {
 		throw new Error('invalid browser-native runtime manifest');
 	}
+	validateBrowserNativeToolAssets(parsed);
 	const manifest = parsed as BrowserNativeManifest;
 	expectedRuntimePackFiles(manifest, limits);
 	return manifest;
@@ -801,7 +848,7 @@ export async function loadBrowserNativeRuntimePack(
 }
 
 export async function runBrowserNativeTool(request: {
-	toolUrl: string;
+	tool: BrowserNativeManifestAsset;
 	argv: string[];
 	env: Record<string, string>;
 	preloadFiles: BrowserToolPreloadFile[];
@@ -850,7 +897,7 @@ export async function runBrowserNativeTool(request: {
 			worker.postMessage(
 				{
 					type: 'run-tool',
-					toolUrl: request.toolUrl,
+					tool: request.tool,
 					argv: request.argv,
 					env: request.env,
 					preloadFiles: request.preloadFiles,
@@ -924,7 +971,7 @@ export function createBrowserWorkerSystemDispatcher(options: {
 		}
 
 		const result = await runBrowserNativeTool({
-			toolUrl: options.manifest.tools[commandName],
+			tool: options.manifest.tools[commandName],
 			argv: toolArgv,
 			env,
 			preloadFiles: [

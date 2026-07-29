@@ -3,6 +3,8 @@ import {
 	createBrowserToolInputBudget,
 	decodeBrowserToolSource,
 	fetchBrowserToolAsset,
+	type BrowserToolAssetDescriptor,
+	type BrowserToolAssetReceipt,
 	type BrowserToolInputBudget
 } from '../runtime/browser-native-tool-assets.js';
 
@@ -11,17 +13,18 @@ type PreloadFile = {
 	url?: string;
 	text?: string;
 	bytes?: ArrayBuffer;
+	receipt?: BrowserToolAssetReceipt;
 };
 
 type RunToolRequest = {
 	type: 'run-tool';
-	toolUrl: string;
+	tool: BrowserToolAssetDescriptor;
 	argv: string[];
 	env: Record<string, string>;
 	preloadFiles: PreloadFile[];
 	outputPrefixes: string[];
 	systemBridge?: 'binaryen';
-	binaryenTools?: BinaryenToolUrls;
+	binaryenTools?: BinaryenToolAssets;
 };
 
 type RunToolResult = {
@@ -44,13 +47,13 @@ type VirtualMount = {
 
 type RuntimeGlobal = typeof globalThis & Record<string, unknown>;
 
-type BinaryenToolUrls = {
-	wasm_opt?: string;
-	wasm_merge?: string;
-	wasm_metadce?: string;
+type BinaryenToolAssets = {
+	wasm_opt?: BrowserToolAssetDescriptor;
+	wasm_merge?: BrowserToolAssetDescriptor;
+	wasm_metadce?: BrowserToolAssetDescriptor;
 };
 
-type BinaryenToolName = keyof BinaryenToolUrls;
+type BinaryenToolName = keyof BinaryenToolAssets;
 
 type BinaryenToolSources = Partial<
 	Record<
@@ -779,11 +782,11 @@ function runBinaryenTool(
 }
 
 async function materializeBinaryenToolSources(
-	toolUrls: BinaryenToolUrls | undefined,
+	toolAssets: BinaryenToolAssets | undefined,
 	budget: BrowserToolInputBudget,
 	fastMode: boolean
 ) {
-	if (!toolUrls) {
+	if (!toolAssets) {
 		throw new Error('browser-native Binaryen tools are missing from the tool request');
 	}
 	const selectedTools: BinaryenToolName[] = fastMode
@@ -792,19 +795,19 @@ async function materializeBinaryenToolSources(
 	const sources: BinaryenToolSources = {};
 	await Promise.all(
 		selectedTools.map(async (toolName) => {
-			const toolUrl = toolUrls[toolName];
+			const toolAsset = toolAssets[toolName];
 			const displayName = toolName.replaceAll('_', '-');
-			if (!toolUrl) {
+			if (!toolAsset) {
 				throw new Error(`browser-native Binaryen tool URL is missing: ${displayName}`);
 			}
 			const bytes = await fetchBrowserToolAsset(
-				toolUrl,
+				toolAsset.url,
 				`browser-native Binaryen tool ${displayName}`,
 				budget,
-				{ cache: 'force-cache' }
+				{ cache: 'force-cache', receipt: toolAsset }
 			);
 			sources[toolName] = {
-				url: toolUrl,
+				url: toolAsset.url,
 				source: decodeBrowserToolSource(
 					bytes,
 					`browser-native Binaryen tool ${displayName}`
@@ -843,7 +846,8 @@ async function materializePreloadFiles(
 				}
 				if (preloadFile.url) {
 					const content = await fetchBrowserToolAsset(preloadFile.url, label, budget, {
-						cache: 'force-cache'
+						cache: 'force-cache',
+						...(preloadFile.receipt ? { receipt: preloadFile.receipt } : {})
 					});
 					return {
 						name: preloadFile.path,
@@ -888,10 +892,10 @@ self.addEventListener('message', async (event: MessageEvent<RunToolRequest>) => 
 		const inputBudget = createBrowserToolInputBudget();
 		const preloadFiles = await materializePreloadFiles(request.preloadFiles, inputBudget);
 		const toolBytes = await fetchBrowserToolAsset(
-			request.toolUrl,
+			request.tool.url,
 			'browser-native tool source',
 			inputBudget,
-			{ cache: 'no-store' }
+			{ cache: 'no-store', receipt: request.tool }
 		);
 		const toolSource = patchToolSource(
 			decodeBrowserToolSource(toolBytes, 'browser-native tool source')
@@ -911,7 +915,7 @@ self.addEventListener('message', async (event: MessageEvent<RunToolRequest>) => 
 		runtimeSlots['jsoo_env'] = { ...request.env };
 		runtimeSlots['jsoo_fs_tmp'] = preloadFiles;
 		runtimeSlots['process'] = {
-			argv: ['browser', request.toolUrl.split('/').at(-1) || 'tool', ...request.argv],
+			argv: ['browser', request.tool.url.split('/').at(-1) || 'tool', ...request.argv],
 			env: { ...request.env },
 			exit(code: number) {
 				throw new ToolExit(code);
@@ -1116,7 +1120,7 @@ self.addEventListener('message', async (event: MessageEvent<RunToolRequest>) => 
 				},
 				{
 					main: {
-						filename: request.toolUrl
+						filename: request.tool.url
 					}
 				}
 			);
@@ -1141,7 +1145,7 @@ self.addEventListener('message', async (event: MessageEvent<RunToolRequest>) => 
 		let thrown = '';
 		let exitCode = 0;
 		try {
-			new Function(`${patchedToolSource}\n//# sourceURL=${request.toolUrl}`)();
+			new Function(`${patchedToolSource}\n//# sourceURL=${request.tool.url}`)();
 		} catch (error) {
 			if (error instanceof ToolExit) {
 				exitCode = error.code;

@@ -22,7 +22,7 @@ test('browser-native worker runs static Binaryen tools without the Binaryen API 
 	);
 	const typesSource = await readFile(path.join(projectRoot, 'src', 'types.ts'), 'utf8');
 
-	assert.match(workerSource, /type BinaryenToolUrls = \{/);
+	assert.match(workerSource, /type BinaryenToolAssets = \{/);
 	assert.match(workerSource, /request\.binaryenTools/);
 	assert.match(
 		workerSource,
@@ -36,8 +36,9 @@ test('browser-native worker runs static Binaryen tools without the Binaryen API 
 	assert.match(workerSource, /async function materializeBinaryenToolSources\(/);
 	assert.match(
 		workerSource,
-		/fetchBrowserToolAsset\(\s*toolUrl,\s*`browser-native Binaryen tool \$\{displayName\}`/u
+		/fetchBrowserToolAsset\(\s*toolAsset\.url,\s*`browser-native Binaryen tool \$\{displayName\}`/u
 	);
+	assert.match(workerSource, /receipt: toolAsset/);
 	assert.match(workerSource, /fastMode\s*\? \['wasm_merge'\]/u);
 	assert.match(workerSource, /new Function\(`\$\{toolAsset\.source\}/);
 	assert.match(
@@ -51,6 +52,7 @@ test('browser-native worker runs static Binaryen tools without the Binaryen API 
 		/parsed\.toolName === 'wasm-metadce' \|\| parsed\.toolName === 'wasm-opt'/
 	);
 	assert.match(dispatcherSource, /binaryenTools\?: \{/);
+	assert.match(dispatcherSource, /type BrowserNativeManifestAsset = BrowserToolAssetDescriptor/);
 	assert.match(dispatcherSource, /options\.manifest\.binaryenTools/);
 	assert.match(dispatcherSource, /env\['WASM_OF_JS_OF_OCAML_BROWSER_FAST_BINARYEN'\] \|\| '1'/);
 	assert.match(typesSource, /export type WasmBinaryenMode = 'fast' \| 'full';/);
@@ -87,6 +89,10 @@ test('browser-native worker applies one bounded budget to compiler and preload i
 		path.join(projectRoot, 'browser-harness', 'native-tool-worker.ts'),
 		'utf8'
 	);
+	const dispatcherSource = await readFile(
+		path.join(projectRoot, 'runtime', 'system-dispatch-browser-worker.ts'),
+		'utf8'
+	);
 	const materializeStart = workerSource.indexOf('async function materializePreloadFiles');
 	const materializeEnd = workerSource.indexOf(
 		"self.addEventListener('message'",
@@ -98,7 +104,13 @@ test('browser-native worker applies one bounded budget to compiler and preload i
 
 	assert.match(workerSource, /const inputBudget = createBrowserToolInputBudget\(\);/);
 	assert.match(workerSource, /materializePreloadFiles\(request\.preloadFiles, inputBudget\)/);
-	assert.match(workerSource, /fetchBrowserToolAsset\(\s*request\.toolUrl,[\s\S]*?inputBudget,/u);
+	assert.match(
+		workerSource,
+		/fetchBrowserToolAsset\(\s*request\.tool\.url,[\s\S]*?inputBudget,[\s\S]*?receipt: request\.tool/u
+	);
+	assert.match(workerSource, /receipt: preloadFile\.receipt/);
+	assert.match(workerSource, /receipt: toolAsset/);
+	assert.match(dispatcherSource, /receipt: manifest\.findlibConf/);
 	assert.match(materializeSource, /accountBrowserToolInputBytes\(budget, label,/);
 	assert.doesNotMatch(workerSource, /await toolResponse\.text\(\)/);
 	assert.doesNotMatch(materializeSource, /new Uint8Array\(await response\.arrayBuffer\(\)\)/);

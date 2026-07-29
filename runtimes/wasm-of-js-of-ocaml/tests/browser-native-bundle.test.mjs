@@ -15,6 +15,25 @@ const manifestPath = path.join(
 	'browser-native-manifest.v1.json'
 );
 
+async function assertAssetReceipt(asset, expectedUrl) {
+	assert.equal(asset.url, expectedUrl);
+	assert.equal(typeof asset.bytes, 'number');
+	assert.ok(asset.bytes > 0);
+	assert.match(asset.sha256, /^[0-9a-f]{64}$/u);
+	const bundlePrefix = '/.cache/browser-native-bundle/';
+	assert.ok(asset.url.startsWith(bundlePrefix));
+	const assetBytes = await readFile(
+		path.join(
+			projectRoot,
+			'.cache',
+			'browser-native-bundle',
+			asset.url.slice(bundlePrefix.length)
+		)
+	);
+	assert.equal(asset.bytes, assetBytes.byteLength);
+	assert.equal(createHash('sha256').update(assetBytes).digest('hex'), asset.sha256);
+}
+
 test('browser-native bundle records wasm_of_ocaml bridge patch metadata', async () => {
 	const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
 	const patch = manifest.toolPatches?.wasm_of_ocaml_binaryen_bridge;
@@ -35,11 +54,14 @@ test('browser-native bundle includes static Binaryen tool assets and patch metad
 	const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
 	const patch = manifest.toolPatches?.browser_binaryen_tools;
 
-	assert.deepEqual(manifest.binaryenTools, {
+	const expectedTools = {
 		wasm_opt: '/.cache/browser-native-bundle/tools/wasm-opt.browser.js',
 		wasm_merge: '/.cache/browser-native-bundle/tools/wasm-merge.browser.js',
 		wasm_metadce: '/.cache/browser-native-bundle/tools/wasm-metadce.browser.js'
-	});
+	};
+	for (const [name, url] of Object.entries(expectedTools)) {
+		await assertAssetReceipt(manifest.binaryenTools?.[name], url);
+	}
 	assert.ok(Array.isArray(patch));
 	assert.equal(patch.length, 3);
 	assert.deepEqual(patch.map((entry) => entry.tool).sort(), [
@@ -55,6 +77,23 @@ test('browser-native bundle includes static Binaryen tool assets and patch metad
 		assert.equal(typeof entry.patchedSha256, 'string');
 		assert.equal(entry.patchedSha256.length, 64);
 	}
+});
+
+test('browser-native bundle records compiler and findlib asset receipts', async () => {
+	const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+	await assertAssetReceipt(manifest.findlibConf, '/.cache/browser-native-bundle/findlib.conf');
+	await assertAssetReceipt(
+		manifest.tools?.ocamlc,
+		'/.cache/browser-native-bundle/tools/ocamlc.byte.browser.js'
+	);
+	await assertAssetReceipt(
+		manifest.tools?.js_of_ocaml,
+		'/.cache/browser-native-bundle/tools/js_of_ocaml.bc.browser.js'
+	);
+	await assertAssetReceipt(
+		manifest.tools?.wasm_of_ocaml,
+		'/.cache/browser-native-bundle/tools/wasm_of_ocaml.bc.browser.js'
+	);
 });
 
 test('browser-native bundle records static version patch metadata', async () => {
