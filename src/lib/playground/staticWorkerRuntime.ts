@@ -21,6 +21,7 @@ import {
 	type SandboxExecutionOptions
 } from '$lib/playground/options';
 import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
+import { StaticStdinRingHost } from '$lib/playground/staticStdinRing';
 
 export interface StaticWorkerRuntimeUrls {
 	baseUrl: string;
@@ -34,6 +35,10 @@ export type StaticWorkerRuntimeStdin =
 	  }
 	| {
 			readonly mode: 'prebuffered';
+			readonly sourceHintPattern: RegExp;
+	  }
+	| {
+			readonly mode: 'streaming';
 			readonly sourceHintPattern: RegExp;
 	  };
 
@@ -51,6 +56,7 @@ export interface StaticWorkerRuntimeConfig {
 
 type StaticWorkerMessage = {
 	__wasmIdleStaticWorkerReady?: boolean;
+	type?: 'stdin-request';
 	runId?: string;
 	output?: string;
 	results?: boolean | string;
@@ -73,6 +79,7 @@ type ActiveRun = {
 	progress?: SandboxProgress;
 	resolve: (result: boolean | string) => void;
 	reject: (reason: unknown) => void;
+	stdinRing?: StaticStdinRingHost;
 };
 
 type StaticWorkerExecutionControls = {
@@ -112,10 +119,18 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 	private startupReject: ((reason: Error) => void) | null = null;
 	private workerGeneration = 0;
 	private workerStartPromise: Promise<Worker> | null = null;
-	readonly stdinMode: RuntimeStdinMode;
 
-	constructor(private readonly config: StaticWorkerRuntimeConfig) {
-		this.stdinMode = config.stdin.mode;
+	constructor(private readonly config: StaticWorkerRuntimeConfig) {}
+
+	get stdinMode(): RuntimeStdinMode {
+		if (this.config.stdin.mode !== 'streaming') return this.config.stdin.mode;
+		const isolated = globalThis.crossOriginIsolated;
+		return typeof SharedArrayBuffer === 'function' &&
+			typeof Atomics === 'object' &&
+			typeof Atomics.notify === 'function' &&
+			(typeof isolated !== 'boolean' || isolated)
+			? 'streaming'
+			: 'prebuffered';
 	}
 
 	async load(
@@ -176,10 +191,28 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 	}
 
 	write(input: string) {
+		const activeRun = this.activeRun;
+		if (activeRun?.stdinRing) {
+			try {
+				activeRun.stdinRing.enqueue(input);
+			} catch (error) {
+				this.rejectRun(activeRun.id, error);
+			}
+			return;
+		}
 		this.pendingInput.push(input);
 	}
 
 	eof() {
+		const activeRun = this.activeRun;
+		if (activeRun?.stdinRing) {
+			try {
+				activeRun.stdinRing.close();
+			} catch (error) {
+				this.rejectRun(activeRun.id, error);
+			}
+			return;
+		}
 		this.pendingEof = true;
 		this.resolveStdinWaiters();
 	}
@@ -200,7 +233,7 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 	}
 
 	private sourceMayReadStdin(code: string) {
-		if (this.config.stdin.mode !== 'prebuffered') return false;
+		if (this.config.stdin.mode === 'none') return false;
 		const pattern = this.config.stdin.sourceHintPattern;
 		pattern.lastIndex = 0;
 		return pattern.test(code);
@@ -418,13 +451,15 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 let __wasmIdleRunId = null;
 const __wasmIdleExecutionKeys = ['output', 'results', 'error', 'diagnostic', 'progress'];
 self.addEventListener('message', (event) => {
-  const runId = event.data?.runId;
-  if (typeof runId === 'string') __wasmIdleRunId = runId;
+  const message = event.data;
+  const runId = message?.runId;
+  if (message?.run === true && typeof runId === 'string') __wasmIdleRunId = runId;
 }, { capture: true });
 self.postMessage = (message, transferOrOptions) => {
   const executionMessage = __wasmIdleRunId !== null &&
     message !== null && typeof message === 'object' &&
-    __wasmIdleExecutionKeys.some((key) => Object.prototype.hasOwnProperty.call(message, key));
+    (__wasmIdleExecutionKeys.some((key) => Object.prototype.hasOwnProperty.call(message, key)) ||
+      message.type === 'stdin-request');
   const correlated = executionMessage
     ? Object.assign({}, message, { runId: __wasmIdleRunId })
     : message;
@@ -561,6 +596,14 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 		const activeRun = this.activeRun;
 		if (!activeRun) return;
 		if (event.data?.runId !== activeRun.id) return;
+		if (event.data?.type === 'stdin-request') {
+			try {
+				activeRun.stdinRing?.consumerRequestedInput();
+			} catch (error) {
+				this.rejectRun(activeRun.id, error);
+			}
+			return;
+		}
 		const { output, results, error, diagnostic, progress } = event.data || {};
 		if (progress && typeof progress.percent === 'number') {
 			const runtimeProgress = Math.max(0, Math.min(progress.percent / 100, 1));
@@ -644,6 +687,7 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 		const activeRun = this.activeRun;
 		if (!activeRun || activeRun.id !== id) return;
 		activeRun.cleanup();
+		activeRun.stdinRing?.cancel();
 		this.elapse = Date.now() - this.begin;
 		this.exit = true;
 		this.activeRun = null;
@@ -658,6 +702,7 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 		const activeRun = this.activeRun;
 		if (!activeRun || activeRun.id !== id) return;
 		activeRun.cleanup();
+		activeRun.stdinRing?.cancel();
 		this.elapse = Date.now() - this.begin;
 		this.exit = true;
 		this.activeRun = null;
@@ -737,6 +782,31 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 		this.exit = false;
 		return new Promise<boolean | string>((resolve, reject) => {
 			const id = `static-${++this.uid}`;
+			let stdinRing: StaticStdinRingHost | undefined;
+			if (this.stdinMode === 'streaming') {
+				try {
+					const maxBufferedBytes = Math.min(
+						128 * 1024,
+						controls.limits.maxWorkspaceBytes
+					);
+					stdinRing = new StaticStdinRingHost({
+						capacity: Math.min(64 * 1024, maxBufferedBytes),
+						maxBufferedBytes
+					});
+					const explicitStdin = typeof options.stdin === 'string';
+					const initialInput = explicitStdin
+						? (options.stdin ?? '')
+						: this.pendingInput.join('');
+					const initialEof = explicitStdin || this.pendingEof;
+					this.clearPendingStdin();
+					stdinRing.enqueue(initialInput);
+					if (initialEof) stdinRing.close();
+				} catch (error) {
+					this.exit = true;
+					reject(error);
+					return;
+				}
+			}
 			let deadline: ReturnType<typeof setTimeout> | undefined;
 			const onAbort = () => {
 				const error = new CancelledError(`${this.config.displayName} run cancelled`, {
@@ -759,7 +829,8 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 				outputBytes: 0,
 				progress,
 				resolve,
-				reject
+				reject,
+				...(stdinRing ? { stdinRing } : {})
 			};
 			this.activeReject = reject;
 			this.begin = Date.now();
@@ -772,7 +843,11 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 			void (async () => {
 				try {
 					const worker = await this.ensureWorkerStarted(progress, controls);
-					const { stdin, stdinEof } = await this.collectStdinForRun(code, options);
+					const activeRun = this.activeRun;
+					if (!activeRun || activeRun.id !== id) return;
+					const { stdin, stdinEof } = activeRun.stdinRing
+						? { stdin: undefined, stdinEof: false }
+						: await this.collectStdinForRun(code, options);
 					if (this.activeRun?.id !== id) return;
 					const executionTimeoutMs = Math.min(
 						2_147_483_647,
@@ -810,6 +885,9 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 						args: programArgs,
 						stdin,
 						stdinEof,
+						...(activeRun.stdinRing
+							? { stdinChannel: activeRun.stdinRing.descriptor }
+							: {}),
 						activePath: workspace.activePath,
 						workspaceFiles: workspace.workspaceFiles,
 						log: _log
@@ -835,6 +913,7 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 		if (this.activeRun) {
 			const activeRun = this.activeRun;
 			activeRun.cleanup();
+			activeRun.stdinRing?.cancel();
 			this.activeRun = null;
 			this.activeReject = null;
 			activeRun.reject(reason);

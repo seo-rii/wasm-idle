@@ -92,8 +92,37 @@ import Nim from './nim';
 import Perl from './perl';
 import Pascal from './pascal';
 import Prolog from './prolog';
+import {
+	STATIC_STDIN_RING_CLOSED_INDEX,
+	STATIC_STDIN_RING_CONTROL_SLOTS,
+	STATIC_STDIN_RING_WRITE_INDEX
+} from './staticStdinRing';
 import { StaticWorkerRuntimeSandbox } from './staticWorkerRuntime';
 import Tcl from './tcl';
+
+function createStreamingTestSandbox() {
+	return new StaticWorkerRuntimeSandbox({
+		languageId: 'STREAMING_STDIN_TEST',
+		displayName: 'Streaming stdin test',
+		defaultActivePath: 'main.txt',
+		stdin: { mode: 'streaming', sourceHintPattern: /read/ },
+		resolveRuntimeAssets: () => ({
+			baseUrl: '/streaming-stdin-test/',
+			workerUrl: '/streaming-stdin-test/worker.js'
+		})
+	});
+}
+
+async function withCrossOriginIsolation(value: boolean, callback: () => Promise<void>) {
+	const previous = Object.getOwnPropertyDescriptor(globalThis, 'crossOriginIsolated');
+	Object.defineProperty(globalThis, 'crossOriginIsolated', { configurable: true, value });
+	try {
+		await callback();
+	} finally {
+		if (previous) Object.defineProperty(globalThis, 'crossOriginIsolated', previous);
+		else Reflect.deleteProperty(globalThis, 'crossOriginIsolated');
+	}
+}
 
 async function expectWorkerBootstrap(worker: MockWorker, targetUrl: string) {
 	expect(worker.url).toMatch(/^blob:wasm-idle-worker-/);
@@ -103,6 +132,7 @@ async function expectWorkerBootstrap(worker: MockWorker, targetUrl: string) {
 	expect(source).toContain(JSON.stringify(targetUrl));
 	expect(source).toContain("['output', 'results', 'error', 'diagnostic', 'progress']");
 	expect(source).toContain('runId: __wasmIdleRunId');
+	expect(source).toContain("message.type === 'stdin-request'");
 	expect(source.indexOf('self.postMessage =')).toBeLessThan(
 		source.indexOf(JSON.stringify(targetUrl))
 	);
@@ -180,6 +210,72 @@ describe('static worker backed language sandboxes', () => {
 		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
 			expect.objectContaining({ stdin: undefined, stdinEof: false })
 		);
+	});
+
+	it('streams run-correlated input after dispatch through a bounded shared ring', async () => {
+		await withCrossOriginIsolation(true, async () => {
+			const messages: any[] = [];
+			onPostMessage = (worker, message) => {
+				messages.push(message);
+				if (message.run) {
+					queueMicrotask(() => {
+						worker.onmessage?.({
+							data: { type: 'stdin-request', runId: message.runId }
+						} as MessageEvent<any>);
+					});
+				}
+			};
+			const sandbox = createStreamingTestSandbox();
+			expect(sandbox.stdinMode).toBe('streaming');
+			await sandbox.load();
+
+			const run = sandbox.run('print("prompt"); read()', false);
+			await vi.waitFor(() => expect(messages.some((message) => message.run)).toBe(true));
+			const runMessage = messages.find((message) => message.run);
+			expect(runMessage).toMatchObject({
+				run: true,
+				stdin: undefined,
+				stdinEof: false,
+				stdinChannel: {
+					protocol: 'wasm-idle-static-stdin-ring',
+					protocolVersion: 1
+				}
+			});
+
+			sandbox.write('after prompt\n');
+			const control = new Int32Array(
+				runMessage.stdinChannel.buffer,
+				0,
+				STATIC_STDIN_RING_CONTROL_SLOTS
+			);
+			expect(Atomics.load(control, STATIC_STDIN_RING_WRITE_INDEX)).toBe(13);
+			expect(messages).toEqual([runMessage]);
+
+			sandbox.eof();
+			expect(Atomics.load(control, STATIC_STDIN_RING_CLOSED_INDEX)).toBe(1);
+			workerInstances[0].onmessage?.({
+				data: { results: true, runId: runMessage.runId }
+			} as MessageEvent<any>);
+			await expect(run).resolves.toBe(true);
+		});
+	});
+
+	it('falls back to prebuffered stdin without cross-origin isolation', async () => {
+		await withCrossOriginIsolation(false, async () => {
+			const sandbox = createStreamingTestSandbox();
+			expect(sandbox.stdinMode).toBe('prebuffered');
+			await sandbox.load();
+			const run = sandbox.run('read()', false);
+			await Promise.resolve();
+			expect(workerInstances[0].postMessage).not.toHaveBeenCalled();
+
+			sandbox.write('fallback\n');
+			sandbox.eof();
+			await expect(run).resolves.toBe(true);
+			expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
+				expect.objectContaining({ stdin: 'fallback\n', stdinEof: true })
+			);
+		});
 	});
 
 	it('loads Prolog runtime urls and forwards stdin to the SWI-Prolog worker', async () => {
