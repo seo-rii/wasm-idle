@@ -1,4 +1,5 @@
 import { runWithSignalAndTimeout } from './lifecycle.js';
+import { verifyRuntimeAssetIntegrity, type RuntimeAssetIntegrityEntry } from '@wasm-idle/core';
 
 export type LanguageToolAssetRuntime = 'clangd';
 
@@ -38,11 +39,7 @@ export type LanguageToolAssetLoader = (
 	request: LanguageToolAssetLoadRequest
 ) => LanguageToolAssetLoaderResult | Promise<LanguageToolAssetLoaderResult>;
 
-export interface LanguageToolAssetIntegrityEntry {
-	sha256: string;
-	bytes?: number;
-	mediaType?: string;
-}
+export type LanguageToolAssetIntegrityEntry = RuntimeAssetIntegrityEntry;
 
 export type LanguageToolAssetIntegrityMap = Record<
 	string,
@@ -92,18 +89,6 @@ const enforceAssetSize = (asset: string, bytes: Uint8Array) => {
 	return bytes;
 };
 
-const sha256Hex = async (bytes: Uint8Array) => {
-	if (!globalThis.crypto?.subtle) throw new Error('Web Crypto SHA-256 is unavailable');
-	const input =
-		bytes.byteOffset === 0 &&
-		bytes.byteLength === bytes.buffer.byteLength &&
-		bytes.buffer instanceof ArrayBuffer
-			? bytes.buffer
-			: Uint8Array.from(bytes).buffer;
-	const digest = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', input));
-	return Array.from(digest, (value) => value.toString(16).padStart(2, '0')).join('');
-};
-
 const verifyAssetIntegrity = async (
 	asset: string,
 	loaded: LoadedLanguageToolAsset,
@@ -111,36 +96,14 @@ const verifyAssetIntegrity = async (
 ) => {
 	const configured = config.integrity?.[asset];
 	if (!configured) return loaded;
-	const expected = typeof configured === 'string' ? { sha256: configured } : configured;
-	if (expected.bytes !== undefined) {
-		if (!Number.isSafeInteger(expected.bytes) || expected.bytes < 0) {
-			throw new Error(`Runtime asset ${asset} has an invalid expected byte size`);
-		}
-		if (loaded.bytes.byteLength !== expected.bytes) {
-			throw new Error(
-				`Runtime asset ${asset} size mismatch: expected ${expected.bytes} bytes, received ${loaded.bytes.byteLength}`
-			);
-		}
-	}
-	if (!/^[a-f0-9]{64}$/u.test(expected.sha256)) {
-		throw new Error(`Runtime asset ${asset} has an invalid expected SHA-256 digest`);
-	}
-	if (expected.mediaType) {
-		const actualMediaType =
-			loaded.mimeType?.split(';', 1)[0]?.trim().toLowerCase() || 'missing';
-		const expectedMediaType = expected.mediaType.trim().toLowerCase();
-		if (actualMediaType !== expectedMediaType) {
-			throw new Error(
-				`Runtime asset ${asset} MIME type mismatch: expected ${expectedMediaType}, received ${actualMediaType}`
-			);
-		}
-	}
-	const actual = await sha256Hex(loaded.bytes);
-	if (actual !== expected.sha256) {
-		throw new Error(
-			`Runtime asset ${asset} SHA-256 mismatch: expected ${expected.sha256}, received ${actual}`
-		);
-	}
+	await verifyRuntimeAssetIntegrity({
+		asset,
+		bytes: loaded.bytes,
+		expected: configured,
+		stage: 'compressed',
+		mimeType: loaded.mimeType,
+		runtimeId: 'clangd'
+	});
 	return loaded;
 };
 

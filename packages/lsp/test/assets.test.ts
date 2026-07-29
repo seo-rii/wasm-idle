@@ -57,7 +57,7 @@ describe('language tool asset loading', () => {
 				vi.fn()
 			)
 		).rejects.toThrow(
-			'Runtime asset clangd.js SHA-256 mismatch: expected ' +
+			'Runtime asset clangd.js compressed SHA-256 mismatch: expected ' +
 				'0'.repeat(64) +
 				', received 039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81'
 		);
