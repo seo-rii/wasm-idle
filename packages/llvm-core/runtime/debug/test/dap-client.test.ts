@@ -80,6 +80,53 @@ describe('DapClient', () => {
 		await client.close();
 	});
 
+	it('allows execution requests to wait without a response timeout', async () => {
+		const inputDescriptor = createSharedByteQueue(4096, 9);
+		const outputDescriptor = createSharedByteQueue(4096, 9);
+		const input = new SharedByteQueue(inputDescriptor);
+		const output = new SharedByteQueue(outputDescriptor);
+		const client = new DapClient({
+			input: inputDescriptor,
+			output: outputDescriptor,
+			requestTimeoutMs: 25
+		}).start();
+		const resultPromise = client.request(
+			'continue',
+			{ threadId: 1 },
+			{ responseTimeoutMs: null }
+		);
+		let settlement: 'pending' | 'resolved' | 'rejected' = 'pending';
+		void resultPromise.then(
+			() => {
+				settlement = 'resolved';
+			},
+			() => {
+				settlement = 'rejected';
+			}
+		);
+		const chunk = new Uint8Array(256);
+		const length = await input.read(chunk);
+		const [request] = new DapMessageParser().push(chunk.slice(0, length)) as [DapRequest];
+
+		try {
+			await new Promise((resolve) => setTimeout(resolve, 50));
+			expect(settlement).toBe('pending');
+			await output.write(
+				encodeDapMessage({
+					seq: 12,
+					type: 'response',
+					request_seq: request.seq,
+					command: request.command,
+					success: true,
+					body: { allThreadsContinued: true }
+				})
+			);
+			await expect(resultPromise).resolves.toEqual({ allThreadsContinued: true });
+		} finally {
+			await client.close();
+		}
+	});
+
 	it('surfaces adapter failures', async () => {
 		const inputDescriptor = createSharedByteQueue(4096, 4);
 		const outputDescriptor = createSharedByteQueue(4096, 4);

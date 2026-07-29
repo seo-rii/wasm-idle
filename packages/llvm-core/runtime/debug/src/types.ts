@@ -113,8 +113,17 @@ export interface DapEvent<TBody = unknown> extends DapProtocolMessage {
 
 export type DapMessage = DapRequest | DapResponse | DapEvent;
 
+export interface DapRequestOptions {
+	/** Override the client response timeout. Set to `null` for commands that resolve on a later stop. */
+	responseTimeoutMs?: number | null;
+}
+
 export interface DapRequestSession {
-	request<TBody = unknown>(command: string, args?: unknown): Promise<TBody>;
+	request<TBody = unknown>(
+		command: string,
+		args?: unknown,
+		options?: DapRequestOptions
+	): Promise<TBody>;
 	onEvent(listener: (event: DapEvent) => void): () => void;
 }
 

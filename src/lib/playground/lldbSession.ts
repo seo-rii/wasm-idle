@@ -281,7 +281,11 @@ export class LldbSandboxSession {
 						? 'stepOut'
 						: 'continue';
 		this.stateVersion += 1;
-		const request = session.request(dapCommand, { threadId: this.activeThreadId });
+		const request = session.request(
+			dapCommand,
+			{ threadId: this.activeThreadId },
+			{ responseTimeoutMs: null }
+		);
 		this.options.onDebugEvent({ type: 'resume', command });
 		void request.catch((error: unknown) =>
 			this.fail(

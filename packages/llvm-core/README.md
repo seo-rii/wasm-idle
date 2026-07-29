@@ -70,6 +70,9 @@ do not contaminate the guest's stdout/stderr streams.
 The LLDB producer runs its blocking DAP main loop on an Emscripten pthread. Its JavaScript
 proxy-main stub returns as soon as that pthread starts, so the LLDB worker remains alive until the
 runtime reports a real exit, abort, or session disposal.
+LLDB may defer `continue`, `next`, `stepIn`, and `stepOut` responses until the target stops again.
+Those execution requests therefore opt out of the DAP response timeout while retaining the
+transport-write timeout; ordinary DAP requests still use the configured response deadline.
 
 The debug runtime requires a cross-origin-isolated page with `SharedArrayBuffer`. LLDB and WAMR
 assets are lazy-loaded from the versioned producer manifest and are not included in this npm

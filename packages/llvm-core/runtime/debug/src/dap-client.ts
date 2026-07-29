@@ -3,6 +3,7 @@ import type {
 	DapEvent,
 	DapMessage,
 	DapRequest,
+	DapRequestOptions,
 	DapRequestSession,
 	DapResponse,
 	SharedByteQueueDescriptor
@@ -109,7 +110,11 @@ export class DapClient implements DapRequestSession {
 		return this;
 	}
 
-	request<TBody = unknown>(command: string, args?: unknown): Promise<TBody> {
+	request<TBody = unknown>(
+		command: string,
+		args?: unknown,
+		options: DapRequestOptions = {}
+	): Promise<TBody> {
 		if (this.abortController.signal.aborted) {
 			return Promise.reject(new Error('DAP client is closed'));
 		}
@@ -135,6 +140,10 @@ export class DapClient implements DapRequestSession {
 			}, this.transportWriteTimeoutMs);
 		});
 		const frame = encodeDapMessage(request);
+		const responseTimeoutMs =
+			options.responseTimeoutMs === undefined
+				? this.requestTimeoutMs
+				: options.responseTimeoutMs;
 		const write = this.writeQueue.then(() =>
 			this.input.write(frame, this.abortController.signal)
 		);
@@ -145,10 +154,12 @@ export class DapClient implements DapRequestSession {
 				if (!pending) return;
 				if (pending.sendTimeout !== undefined) clearTimeout(pending.sendTimeout);
 				pending.sendTimeout = undefined;
-				pending.responseTimeout = setTimeout(() => {
-					this.pending.delete(seq);
-					pending.reject(new Error(`DAP request timed out: ${command}`));
-				}, this.requestTimeoutMs);
+				if (responseTimeoutMs !== null) {
+					pending.responseTimeout = setTimeout(() => {
+						this.pending.delete(seq);
+						pending.reject(new Error(`DAP request timed out: ${command}`));
+					}, responseTimeoutMs);
+				}
 			},
 			(error: unknown) => {
 				this.fail(

@@ -5,6 +5,7 @@ import { validateDebugSourcePath } from './worker/module-loader.js';
 import type {
 	BrowserLldbSessionOptions,
 	DapEvent,
+	DapRequestOptions,
 	DebugCapabilities,
 	DebugSessionGeneration,
 	DebugWorkerKind,
@@ -346,9 +347,13 @@ export class BrowserLldbSession {
 		}
 	}
 
-	request<TBody = unknown>(command: string, args?: unknown): Promise<TBody> {
+	request<TBody = unknown>(
+		command: string,
+		args?: unknown,
+		options?: DapRequestOptions
+	): Promise<TBody> {
 		if (!this.dap) throw new Error('LLDB debug session is not initialized');
-		return this.dap.request<TBody>(command, args);
+		return this.dap.request<TBody>(command, args, options);
 	}
 
 	onEvent(listener: (event: DapEvent) => void) {

@@ -399,7 +399,7 @@ describe('LldbSandboxSession', () => {
 
 	it('publishes a running target before a pending continue response settles', async () => {
 		const events: Array<{ type: string; command?: string }> = [];
-		let releaseContinue = () => undefined;
+		let releaseContinue: () => void = () => undefined;
 		runtimeState.continueGate = new Promise<void>((resolve) => {
 			releaseContinue = resolve;
 		});
