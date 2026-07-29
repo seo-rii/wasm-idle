@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { DEFAULT_MAX_RUNTIME_JSON_BYTES } from '../../core/src/wasm.js';
+
 const validEmptyWasm = new Uint8Array([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]);
 
 let runCalls: string[][] = [];
@@ -265,6 +267,111 @@ describe('Objective-C worker', () => {
 				})
 			);
 		}
+	});
+
+	it('rejects oversized Objective-C header metadata before reading its body', async () => {
+		let cancelled = false;
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (input: string | URL) => {
+				const url = String(input);
+				if (!url.endsWith('headers.json')) {
+					return new Response(responseBytesForObjectiveCAsset(url));
+				}
+				return new Response(
+					new ReadableStream({
+						pull() {
+							throw new Error('oversized metadata body should not be read');
+						},
+						cancel() {
+							cancelled = true;
+						}
+					}),
+					{
+						headers: {
+							'Content-Length': String(DEFAULT_MAX_RUNTIME_JSON_BYTES + 1)
+						}
+					}
+				);
+			})
+		);
+
+		await installWorker();
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				log: false,
+				clangAssets: { baseUrl: 'http://localhost/clang/', useAssetBridge: false },
+				objectivecAssets: {
+					libobjcUrl: 'http://localhost/wasm-objectivec/libobjc.a',
+					headersUrl: 'http://localhost/wasm-objectivec/headers.json',
+					libgnustepBaseUrl: 'http://localhost/wasm-objectivec/libgnustep-base.a',
+					libgnustepBaseObjectUrl: 'http://localhost/wasm-objectivec/libgnustep-base.o',
+					foundationHeadersUrl:
+						'http://localhost/wasm-objectivec/foundation-headers.json',
+					libffiUrl: 'http://localhost/wasm-objectivec/libffi.a'
+				}
+			}
+		});
+
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			error: `Runtime asset http://localhost/wasm-objectivec/headers.json size exceeds the ${DEFAULT_MAX_RUNTIME_JSON_BYTES} byte limit`
+		});
+		expect(cancelled).toBe(true);
+	});
+
+	it('keeps the Objective-C metadata limit on gzip fallback assets', async () => {
+		let cancelled = false;
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (input: string | URL) => {
+				const url = String(input);
+				if (url.endsWith('headers.json')) {
+					return new Response(null, { status: 404 });
+				}
+				if (!url.endsWith('headers.json.gz')) {
+					return new Response(responseBytesForObjectiveCAsset(url));
+				}
+				return new Response(
+					new ReadableStream({
+						pull() {
+							throw new Error('oversized compressed metadata body should not be read');
+						},
+						cancel() {
+							cancelled = true;
+						}
+					}),
+					{
+						headers: {
+							'Content-Length': String(DEFAULT_MAX_RUNTIME_JSON_BYTES + 1)
+						}
+					}
+				);
+			})
+		);
+
+		await installWorker();
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				log: false,
+				clangAssets: { baseUrl: 'http://localhost/clang/', useAssetBridge: false },
+				objectivecAssets: {
+					libobjcUrl: 'http://localhost/wasm-objectivec/libobjc.a',
+					headersUrl: 'http://localhost/wasm-objectivec/headers.json',
+					libgnustepBaseUrl: 'http://localhost/wasm-objectivec/libgnustep-base.a',
+					libgnustepBaseObjectUrl: 'http://localhost/wasm-objectivec/libgnustep-base.o',
+					foundationHeadersUrl:
+						'http://localhost/wasm-objectivec/foundation-headers.json',
+					libffiUrl: 'http://localhost/wasm-objectivec/libffi.a'
+				}
+			}
+		});
+
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			error: `Runtime asset http://localhost/wasm-objectivec/headers.json.gz download size exceeds the ${DEFAULT_MAX_RUNTIME_JSON_BYTES} byte limit`
+		});
+		expect(cancelled).toBe(true);
 	});
 
 	it('rejects oversized Objective-C startup assets before reading their bodies', async () => {

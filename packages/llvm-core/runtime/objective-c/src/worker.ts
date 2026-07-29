@@ -5,7 +5,10 @@ import {
 	loadRuntimeManifest,
 	resolveRuntimeManifestUrl
 } from '../../clang/src/index.js';
-import { readBuffer } from '../../core/src/wasm.js';
+import {
+	DEFAULT_MAX_RUNTIME_JSON_BYTES,
+	readBuffer
+} from '../../core/src/wasm.js';
 
 export interface ObjectiveCWorkspaceFile {
 	path: string;
@@ -177,10 +180,10 @@ const resolveInputPath = (activePath?: string) => {
 	return /\.[A-Za-z0-9_-]+$/.test(normalized) ? normalized : `${normalized}.m`;
 };
 
-async function fetchBytes(url: string, label: string) {
+async function fetchBytes(url: string, label: string, maxOutputBytes?: number) {
 	const resolvedUrl = new URL(url).href;
 	try {
-		return await readBuffer(resolvedUrl);
+		return await readBuffer(resolvedUrl, undefined, maxOutputBytes);
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
 		const failedResponsePrefix = `Failed to load runtime asset ${resolvedUrl}: `;
@@ -189,7 +192,7 @@ async function fetchBytes(url: string, label: string) {
 		compressedAssetUrl.pathname += '.gz';
 		const compressedUrl = compressedAssetUrl.href;
 		try {
-			return await readBuffer(compressedUrl);
+			return await readBuffer(compressedUrl, undefined, maxOutputBytes);
 		} catch (compressedError) {
 			const compressedMessage =
 				compressedError instanceof Error
@@ -209,7 +212,9 @@ async function fetchBytes(url: string, label: string) {
 }
 
 async function fetchJson(url: string, label: string) {
-	return JSON.parse(textDecoder.decode(await fetchBytes(url, label))) as Record<string, string>;
+	return JSON.parse(
+		textDecoder.decode(await fetchBytes(url, label, DEFAULT_MAX_RUNTIME_JSON_BYTES))
+	) as Record<string, string>;
 }
 
 function createObjectiveCLibffiImports(instanceRef: { current: WebAssembly.Instance | null }) {
