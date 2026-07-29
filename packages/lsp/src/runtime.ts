@@ -103,8 +103,12 @@ export function resolvePythonLanguageServerBaseUrl(
 const resolveFileUrl = (value: string, currentUrl = '') =>
 	currentUrl ? new URL(value, currentUrl).href : value;
 
-const resolveApplicationAssetUrl = (path: string, currentUrl = '') =>
-	resolveFileUrl(path.replace(/^\/+/, ''), currentUrl);
+const resolveApplicationAssetUrl = (path: string, _currentUrl = '') => {
+	throw new LanguageServerAssetConfigurationError(
+		`External LSP asset ${path}`,
+		'an explicit provider URL or rootUrl'
+	);
+};
 
 const resolveStaticRuntimeModuleUrl = (
 	options: EditorLanguageServerOptions | undefined,

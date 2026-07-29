@@ -92,9 +92,9 @@ describe('lsp runtime asset resolution', () => {
 		);
 	});
 
-	it('keeps every default runtime asset under the deployed application base', () => {
+	it('resolves declared runtime roots and rejects document-relative fallbacks', () => {
 		const applicationUrl = 'https://app.example.com/wasm-idle/';
-		const cases: [(options: undefined, currentUrl: string) => string, string][] = [
+		const cases: [(options: string | undefined, currentUrl: string) => string, string][] = [
 			[resolveAssemblyScriptLanguageServerModuleUrl, 'wasm-assemblyscript/runtime.mjs'],
 			[resolveRustLanguageServerCompilerUrl, 'wasm-rust/index.js'],
 			[resolveGoLanguageServerCompilerUrl, 'wasm-go/index.js'],
@@ -128,7 +128,6 @@ describe('lsp runtime asset resolution', () => {
 			[resolveHaskellLanguageServerBsdtarUrl, 'wasm-haskell/bsdtar.wasm'],
 			[resolveSqliteLanguageServerModuleUrl, 'wasm-sqlite/runtime.mjs'],
 			[resolveDuckDbLanguageServerModuleUrl, 'wasm-duckdb/runtime.mjs'],
-			[resolveDotnetLanguageServerModuleUrl, 'wasm-dotnet/index.js'],
 			[resolveFortranLanguageServerAnalyzerUrl, 'wasm-fortran/analyzer.js'],
 			[resolvePrologLanguageServerBaseUrl, 'wasm-prolog/'],
 			[resolvePrologLanguageServerWorkerUrl, 'wasm-prolog/runner-worker.js'],
@@ -145,7 +144,10 @@ describe('lsp runtime asset resolution', () => {
 		];
 
 		for (const [resolve, path] of cases) {
-			expect(resolve(undefined, applicationUrl), path).toBe(`${applicationUrl}${path}`);
+			expect(resolve('/wasm-idle', applicationUrl), path).toBe(`${applicationUrl}${path}`);
+			expect(() => resolve(undefined, applicationUrl), path).toThrow(
+				LanguageServerAssetConfigurationError
+			);
 		}
 	});
 
@@ -557,112 +559,5 @@ describe('lsp runtime asset resolution', () => {
 			loader,
 			allowedBaseUrls: ['https://app.example.com/wasm-idle/mirror/']
 		});
-	});
-
-	it('keeps remaining default runtime assets under the same origin', () => {
-		expect(
-			resolveRustLanguageServerCompilerUrl(undefined, 'https://app.example.com/editor')
-		).toBe('https://app.example.com/wasm-rust/index.js');
-		expect(
-			resolveGoLanguageServerCompilerUrl(undefined, 'https://app.example.com/editor')
-		).toBe('https://app.example.com/wasm-go/index.js');
-		expect(
-			resolveDotnetLanguageServerModuleUrl(undefined, 'https://app.example.com/editor')
-		).toBe('https://app.example.com/wasm-dotnet/index.js');
-		expect(resolveDLanguageServerModuleUrl(undefined, 'https://app.example.com/editor')).toBe(
-			'https://app.example.com/wasm-d/index.js'
-		);
-		expect(resolveTclLanguageServerBaseUrl(undefined, 'https://app.example.com/editor')).toBe(
-			'https://app.example.com/wasm-tcl/'
-		);
-		expect(resolveTclLanguageServerWorkerUrl(undefined, 'https://app.example.com/editor')).toBe(
-			'https://app.example.com/wasm-tcl/runner-worker.js'
-		);
-		expect(
-			resolvePascalLanguageServerBaseUrl(undefined, 'https://app.example.com/editor')
-		).toBe('https://app.example.com/wasm-pascal/');
-		expect(
-			resolvePascalLanguageServerWorkerUrl(undefined, 'https://app.example.com/editor')
-		).toBe('https://app.example.com/wasm-pascal/runner-worker.js');
-		expect(
-			resolveZigLanguageServerCompilerUrl(undefined, 'https://app.example.com/editor')
-		).toBe('https://app.example.com/wasm-zig/zig_small.wasm');
-		expect(resolveZigLanguageServerStdlibUrl(undefined, 'https://app.example.com/editor')).toBe(
-			'https://app.example.com/wasm-zig/std.tar.gz'
-		);
-		expect(resolveLuaLanguageServerModuleUrl(undefined, 'https://app.example.com/editor')).toBe(
-			'https://app.example.com/wasm-lua/index.js'
-		);
-		expect(resolveJanetLanguageServerBaseUrl(undefined, 'https://app.example.com/editor')).toBe(
-			'https://app.example.com/wasm-janet/'
-		);
-		expect(
-			resolveJanetLanguageServerWorkerUrl(undefined, 'https://app.example.com/editor')
-		).toBe('https://app.example.com/wasm-janet/runner-worker.js');
-		expect(
-			resolveLispLanguageServerModuleUrl(undefined, 'https://app.example.com/editor')
-		).toBe('https://app.example.com/wasm-lisp/index.js');
-		expect(
-			resolveOctaveLanguageServerBaseUrl(undefined, 'https://app.example.com/editor')
-		).toBe('https://app.example.com/wasm-octave/runtime/');
-		expect(
-			resolveOctaveLanguageServerWorkerUrl(undefined, 'https://app.example.com/editor')
-		).toBe('https://app.example.com/wasm-octave/runner-worker.js');
-		expect(
-			resolveOctaveLanguageServerManifestUrl(undefined, 'https://app.example.com/editor')
-		).toBe('https://app.example.com/wasm-octave/runtime/runtime-manifest.v1.json');
-		expect(
-			resolveOcamlLanguageServerModuleUrl(undefined, 'https://app.example.com/editor')
-		).toBe('https://app.example.com/wasm-of-js-of-ocaml/browser-native/src/index.js');
-		expect(
-			resolveOcamlLanguageServerManifestUrl(undefined, 'https://app.example.com/editor')
-		).toBe(
-			'https://app.example.com/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json'
-		);
-		expect(
-			resolveHaskellLanguageServerModuleUrl(undefined, 'https://app.example.com/editor')
-		).toBe('https://app.example.com/wasm-haskell/dyld.mjs');
-		expect(
-			resolveHaskellLanguageServerRootfsUrl(undefined, 'https://app.example.com/editor')
-		).toBe('https://app.example.com/wasm-haskell/rootfs.tar.zst');
-		expect(
-			resolveHaskellLanguageServerBsdtarUrl(undefined, 'https://app.example.com/editor')
-		).toBe('https://app.example.com/wasm-haskell/bsdtar.wasm');
-		expect(
-			resolveFortranLanguageServerAnalyzerUrl(undefined, 'https://app.example.com/editor')
-		).toBe('https://app.example.com/wasm-fortran/analyzer.js');
-		expect(resolveGleamLanguageServerBaseUrl(undefined, 'https://app.example.com/editor')).toBe(
-			'https://app.example.com/wasm-gleam/'
-		);
-		expect(
-			resolveGleamLanguageServerManifestUrl(undefined, 'https://app.example.com/editor')
-		).toBe('https://app.example.com/wasm-gleam/source-manifest.v1.json');
-		expect(
-			resolveElixirLanguageServerBundleUrl(undefined, 'https://app.example.com/editor')
-		).toBe('https://app.example.com/wasm-elixir/bundle.avm');
-		expect(
-			resolveErlangLanguageServerBundleUrl(undefined, 'https://app.example.com/editor')
-		).toBe('https://app.example.com/wasm-elixir/bundle.avm');
-		expect(
-			resolveElixirLanguageServerWorkerUrl(undefined, 'https://app.example.com/editor')
-		).toBe('');
-		expect(
-			resolveErlangLanguageServerWorkerUrl(undefined, 'https://app.example.com/editor')
-		).toBe('');
-		expect(resolveAwkLanguageServerBaseUrl(undefined, 'https://app.example.com/editor')).toBe(
-			'https://app.example.com/wasm-awk/'
-		);
-		expect(resolveAwkLanguageServerWorkerUrl(undefined, 'https://app.example.com/editor')).toBe(
-			'https://app.example.com/wasm-awk/runner-worker.js'
-		);
-		expect(resolvePerlLanguageServerBaseUrl(undefined, 'https://app.example.com/editor')).toBe(
-			'https://app.example.com/wasm-perl/'
-		);
-		expect(
-			resolvePerlLanguageServerWorkerUrl(undefined, 'https://app.example.com/editor')
-		).toBe('https://app.example.com/wasm-perl/runner-worker.js');
-		expect(resolveRLanguageServerBaseUrl(undefined, 'https://app.example.com/editor')).toBe(
-			'https://app.example.com/webr/'
-		);
 	});
 });

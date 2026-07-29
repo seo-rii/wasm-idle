@@ -328,6 +328,8 @@ describe('additional language server workers', () => {
 
 	it('starts SQL with SQLite wasm assets', async () => {
 		const handle = await getSqlLanguageServer({
+			rootUrl: 'https://static.example.com/repl_20240807',
+			currentUrl: 'https://app.example.com/editor',
 			sql: { wasmUrl: '/assets/sql-wasm.wasm' },
 			createWorker: () => new mockState.FakeWorker() as unknown as Worker
 		});
@@ -336,7 +338,7 @@ describe('additional language server workers', () => {
 			type: 'init',
 			options: {
 				dialect: 'sqlite',
-				moduleUrl: 'wasm-sqlite/runtime.mjs',
+				moduleUrl: 'https://static.example.com/repl_20240807/wasm-sqlite/runtime.mjs',
 				wasmUrl: '/assets/sql-wasm.wasm',
 				duckdbBundles: undefined
 			}
@@ -353,6 +355,8 @@ describe('additional language server workers', () => {
 			}
 		};
 		const handle = await getDuckDbLanguageServer({
+			rootUrl: 'https://static.example.com/repl_20240807',
+			currentUrl: 'https://app.example.com/editor',
 			sql: { duckdbBundles },
 			createWorker: () => new mockState.FakeWorker() as unknown as Worker
 		});
@@ -361,7 +365,7 @@ describe('additional language server workers', () => {
 			type: 'init',
 			options: {
 				dialect: 'duckdb',
-				moduleUrl: 'wasm-duckdb/runtime.mjs',
+				moduleUrl: 'https://static.example.com/repl_20240807/wasm-duckdb/runtime.mjs',
 				wasmUrl: undefined,
 				duckdbBundles
 			}
@@ -421,8 +425,9 @@ describe('additional language server workers', () => {
 		handle.dispose();
 	});
 
-	it('starts Fortran with the bundled analyzer by default', async () => {
+	it('starts Fortran with an analyzer derived from an explicit root', async () => {
 		const handle = await getFortranLanguageServer({
+			rootUrl: 'https://static.example.com/repl_20240807',
 			currentUrl: 'https://app.example.com/editor',
 			createWorker: () => new mockState.FakeWorker() as unknown as Worker
 		});
@@ -430,15 +435,16 @@ describe('additional language server workers', () => {
 		expect(mockState.workers[0]?.messages[0]).toEqual({
 			type: 'init',
 			options: {
-				analyzerUrl: 'https://app.example.com/wasm-fortran/analyzer.js'
+				analyzerUrl: 'https://static.example.com/repl_20240807/wasm-fortran/analyzer.js'
 			}
 		});
 
 		handle.dispose();
 	});
 
-	it('registers Fortran through the generic registry with the bundled analyzer', async () => {
+	it('registers Fortran through the generic registry with an explicit root', async () => {
 		const handle = await getEditorLanguageServer('f90', {
+			rootUrl: 'https://static.example.com/repl_20240807',
 			currentUrl: 'https://app.example.com/editor',
 			createWorker: () => new mockState.FakeWorker() as unknown as Worker
 		});
@@ -446,7 +452,7 @@ describe('additional language server workers', () => {
 		expect(mockState.workers[0]?.messages[0]).toEqual({
 			type: 'init',
 			options: {
-				analyzerUrl: 'https://app.example.com/wasm-fortran/analyzer.js'
+				analyzerUrl: 'https://static.example.com/repl_20240807/wasm-fortran/analyzer.js'
 			}
 		});
 
@@ -486,6 +492,8 @@ describe('additional language server workers', () => {
 
 	it('starts Ruby with an explicitly provided Ruby WASM URL', async () => {
 		const handle = await getRubyLanguageServer({
+			rootUrl: 'https://static.example.com/repl_20240807',
+			currentUrl: 'https://app.example.com/editor',
 			ruby: { wasmUrl: '/assets/ruby+stdlib.wasm' },
 			createWorker: () => new mockState.FakeWorker() as unknown as Worker
 		});
@@ -493,8 +501,8 @@ describe('additional language server workers', () => {
 		expect(mockState.workers[0]?.messages[0]).toEqual({
 			type: 'init',
 			options: {
-				moduleUrl: 'wasm-ruby/runtime.mjs',
-				wasmUrl: '/assets/ruby+stdlib.wasm'
+				moduleUrl: 'https://static.example.com/repl_20240807/wasm-ruby/runtime.mjs',
+				wasmUrl: 'https://app.example.com/assets/ruby+stdlib.wasm'
 			}
 		});
 

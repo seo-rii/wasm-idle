@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+	LanguageServerAssetConfigurationError,
 	resolveAssemblyScriptLanguageServerModuleUrl,
 	resolveDuckDbLanguageServerModuleUrl,
 	resolveRubyLanguageServerModuleUrl,
@@ -55,20 +56,18 @@ describe('heavy LSP runtime module resolution', () => {
 		).toBe('https://app.example.com/editor/ruby-runtime.mjs');
 	});
 
-	it('resolves defaults relative to the current application base', () => {
+	it('rejects document-relative runtime module fallbacks', () => {
 		const currentUrl = 'https://app.example.com/wasm-idle/';
 
-		expect(resolveAssemblyScriptLanguageServerModuleUrl(undefined, currentUrl)).toBe(
-			'https://app.example.com/wasm-idle/wasm-assemblyscript/runtime.mjs'
-		);
-		expect(resolveSqliteLanguageServerModuleUrl(undefined, currentUrl)).toBe(
-			'https://app.example.com/wasm-idle/wasm-sqlite/runtime.mjs'
-		);
-		expect(resolveDuckDbLanguageServerModuleUrl(undefined, currentUrl)).toBe(
-			'https://app.example.com/wasm-idle/wasm-duckdb/runtime.mjs'
-		);
-		expect(resolveRubyLanguageServerModuleUrl(undefined, currentUrl)).toBe(
-			'https://app.example.com/wasm-idle/wasm-ruby/runtime.mjs'
-		);
+		for (const resolve of [
+			resolveAssemblyScriptLanguageServerModuleUrl,
+			resolveSqliteLanguageServerModuleUrl,
+			resolveDuckDbLanguageServerModuleUrl,
+			resolveRubyLanguageServerModuleUrl
+		]) {
+			expect(() => resolve(undefined, currentUrl)).toThrow(
+				LanguageServerAssetConfigurationError
+			);
+		}
 	});
 });
