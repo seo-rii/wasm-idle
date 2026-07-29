@@ -472,7 +472,14 @@ test('loadRuntimeAssetBytes redacts malformed final URLs and cancels the body', 
 });
 
 test('loadRuntimeAssetBytes rejects invalid Content-Length values and cancels the body', async () => {
-	for (const contentLength of ['-1', '1.5', '1e2', '3, 3', '9007199254740992']) {
+	for (const contentLength of [
+		'',
+		'-1',
+		'1.5',
+		'1e2',
+		'3, content-length-secret',
+		'9007199254740992'
+	]) {
 		let cancelled = false;
 		let sent = false;
 		const body = new ReadableStream({
@@ -497,7 +504,14 @@ test('loadRuntimeAssetBytes rejects invalid Content-Length values and cancels th
 				fetchImpl: async () =>
 					new Response(body, { headers: { 'content-length': contentLength } })
 			}),
-			/invalid Content-Length/
+			(error) => {
+				assert.equal(
+					error.message,
+					'wasm-tinygo runtime asset go-probe.wasm has an invalid Content-Length'
+				);
+				if (contentLength) assert.equal(error.message.includes(contentLength), false);
+				return true;
+			}
 		);
 		assert.equal(cancelled, true, `expected ${contentLength} response body to be cancelled`);
 	}

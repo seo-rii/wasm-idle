@@ -453,7 +453,7 @@ async function fetchRuntimeAssetBytes(
 		if (!/^\d+$/u.test(contentLengthValue) || !Number.isSafeInteger(contentLength)) {
 			await response.body?.cancel().catch(() => {});
 			throw new Error(
-				`wasm-tinygo runtime asset ${assetLabel} has an invalid Content-Length: ${contentLengthValue}`
+				`wasm-tinygo runtime asset ${assetLabel} has an invalid Content-Length`
 			);
 		}
 	}
