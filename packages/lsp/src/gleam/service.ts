@@ -1,4 +1,5 @@
 import { positionAt, type LspDiagnostic, type WorkerLanguageService } from '../lsp.js';
+import { DEFAULT_MAX_EXTERNAL_ASSET_BYTES, fetchBoundedExternalAsset } from '../external-asset.js';
 
 export interface GleamWorkerOptions {
 	baseUrl: string;
@@ -44,6 +45,7 @@ const stdinFfiSource = `export function read_line() {
 `;
 
 let nextProjectId = 0;
+const MAX_GLEAM_STDLIB_SOURCE_FILES = 4_096;
 
 function assetUrl(baseUrl: string, path: string) {
 	return new URL(path, baseUrl).href;
@@ -64,15 +66,15 @@ async function defaultLoadGleamCompiler(baseUrl: string): Promise<GleamCompiler>
 }
 
 async function fetchJson(url: string) {
-	const response = await fetch(url, { cache: 'no-store' });
-	if (!response.ok) throw new Error(`Failed to load Gleam source manifest: ${response.status}`);
-	return await response.json();
-}
-
-async function fetchText(url: string) {
-	const response = await fetch(url);
-	if (!response.ok) throw new Error(`Failed to load ${url}: ${response.status}`);
-	return await response.text();
+	return JSON.parse(
+		new TextDecoder().decode(
+			await fetchBoundedExternalAsset({
+				url,
+				label: 'Gleam source manifest',
+				cache: 'no-store'
+			})
+		)
+	) as unknown;
 }
 
 function normalizeWorkspacePath(path: string) {
@@ -106,10 +108,49 @@ async function collectStdlibSources(baseUrl: string, manifest: unknown) {
 	const files = Array.isArray((manifest as { files?: unknown[] })?.files)
 		? (manifest as { files: unknown[] }).files
 		: [];
-	for (const entry of files) {
+	const sourceEntries = files.filter((entry) => {
 		const path = typeof entry === 'string' ? entry : (entry as { path?: unknown })?.path;
-		if (typeof path !== 'string' || !path.endsWith('.gleam')) continue;
-		sources.set(path, await fetchText(assetUrl(baseUrl, `src/${path}`)));
+		return typeof path === 'string' && path.endsWith('.gleam');
+	});
+	if (sourceEntries.length > MAX_GLEAM_STDLIB_SOURCE_FILES) {
+		throw new Error(
+			`Gleam source manifest exceeds the ${MAX_GLEAM_STDLIB_SOURCE_FILES} file limit`
+		);
+	}
+	const seenPaths = new Set<string>();
+	const validatedPaths: string[] = [];
+	for (const entry of sourceEntries) {
+		const path = typeof entry === 'string' ? entry : (entry as { path?: unknown })?.path;
+		if (typeof path !== 'string') continue;
+		const pathParts = path.replaceAll('\\', '/').split('/');
+		if (
+			path.startsWith('/') ||
+			path.includes('\\') ||
+			path.includes('\0') ||
+			path.includes('?') ||
+			path.includes('#') ||
+			pathParts.some(
+				(part) => !part || part === '.' || part === '..' || !/^[A-Za-z0-9_.-]+$/u.test(part)
+			)
+		) {
+			throw new Error(`Gleam source manifest contains an unsafe path: ${path}`);
+		}
+		if (seenPaths.has(path)) {
+			throw new Error(`Gleam source manifest contains a duplicate path: ${path}`);
+		}
+		seenPaths.add(path);
+		validatedPaths.push(path);
+	}
+	let totalBytes = 0;
+	for (const path of validatedPaths) {
+		const sourceUrl = assetUrl(baseUrl, `src/${path}`);
+		const bytes = await fetchBoundedExternalAsset({
+			url: sourceUrl,
+			label: `Gleam source ${sourceUrl}`,
+			maxBytes: DEFAULT_MAX_EXTERNAL_ASSET_BYTES - totalBytes
+		});
+		totalBytes += bytes.byteLength;
+		sources.set(path, new TextDecoder().decode(bytes));
 	}
 	return sources;
 }

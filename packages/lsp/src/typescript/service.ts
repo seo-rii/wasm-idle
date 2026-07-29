@@ -1,4 +1,6 @@
 import * as ts from 'typescript';
+import { decompressGzip } from '@wasm-idle/llvm-core';
+import { fetchBoundedExternalAsset } from '../external-asset.js';
 import {
 	fullDocumentRange,
 	offsetAt,
@@ -102,23 +104,12 @@ const scriptKind = (fileName: string) => {
 };
 
 async function loadTypeScriptLibsFromUrl(url: string | URL) {
-	const response = await fetch(url);
-	if (!response.ok) {
-		throw new Error(`Failed to load TypeScript standard libraries: ${response.status}`);
-	}
-	if (response.headers.get('content-encoding')?.toLowerCase().includes('gzip')) {
-		return (await response.json()) as Record<string, string>;
-	}
-	if (typeof DecompressionStream !== 'function') {
-		throw new Error(
-			"Failed to load TypeScript standard libraries: this browser does not support DecompressionStream('gzip')"
-		);
-	}
-	const sourceStream = response.body || new Blob([await response.arrayBuffer()]).stream();
-	const decompressedResponse = new Response(
-		sourceStream.pipeThrough(new DecompressionStream('gzip'))
-	);
-	return (await decompressedResponse.json()) as Record<string, string>;
+	const compressed = await fetchBoundedExternalAsset({
+		url,
+		label: 'TypeScript standard libraries'
+	});
+	const bytes = await decompressGzip(compressed, url);
+	return JSON.parse(new TextDecoder().decode(bytes)) as Record<string, string>;
 }
 
 export function createTypeScriptWorkerService(

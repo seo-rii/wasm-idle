@@ -7,6 +7,52 @@ import {
 } from '../src/index.js';
 
 describe('createOcamlWorkerService', () => {
+	it('loads the default compiler manifest through the bounded asset boundary', async () => {
+		const moduleUrl = `data:text/javascript,${encodeURIComponent(`
+			export async function compile() { return { success: true }; }
+			export function createBrowserWorkerSystemDispatcher() { return {}; }
+		`)}`;
+		const fetchMock = vi.fn(
+			async () =>
+				new Response(
+					JSON.stringify({
+						ocamlLibFiles: [],
+						packages: []
+					})
+				)
+		);
+		vi.stubGlobal('fetch', fetchMock);
+		const service = createOcamlWorkerService();
+		const context: LspDocumentContext = {
+			documents: new Map(),
+			publishDiagnostics: vi.fn(),
+			reportProgress: vi.fn()
+		};
+
+		try {
+			await service.initialize?.(
+				{
+					moduleUrl,
+					manifestUrl: 'https://static.example.com/ocaml/manifest.json'
+				},
+				context
+			);
+
+			expect(fetchMock).toHaveBeenCalledWith(
+				'https://static.example.com/ocaml/manifest.json',
+				expect.objectContaining({
+					cache: 'no-store',
+					credentials: 'omit',
+					redirect: 'error',
+					referrerPolicy: 'no-referrer'
+				})
+			);
+			expect(context.reportProgress).toHaveBeenCalledWith('load-ocaml-manifest');
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+
 	it('uses wasm-of-js-of-ocaml for diagnostics, completion, and hover', async () => {
 		const compile = vi.fn(async () => ({
 			success: false,

@@ -52,6 +52,14 @@ describe('TypeScript worker service', () => {
 		);
 
 		expect(fetchMock).toHaveBeenCalledOnce();
+		expect(fetchMock).toHaveBeenCalledWith(
+			'/lsp/typescript-libs.json.gz',
+			expect.objectContaining({
+				credentials: 'omit',
+				redirect: 'error',
+				referrerPolicy: 'no-referrer'
+			})
+		);
 	});
 
 	it('returns TypeScript diagnostics, completions, and hover details from the language service', async () => {

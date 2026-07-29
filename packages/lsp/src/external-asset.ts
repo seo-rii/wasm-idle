@@ -10,6 +10,7 @@ export interface FetchBoundedExternalAssetOptions {
 	fetch?: typeof fetch;
 	signal?: AbortSignal;
 	maxBytes?: number;
+	cache?: RequestCache;
 	reportProgress?: (loaded: number, total?: number) => void;
 }
 
@@ -55,6 +56,7 @@ export async function fetchBoundedExternalAsset(
 	let response: Response;
 	try {
 		response = await fetchImpl(requestUrl, {
+			cache: options.cache,
 			credentials: 'omit',
 			redirect: 'error',
 			referrerPolicy: 'no-referrer',

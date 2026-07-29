@@ -7,6 +7,7 @@ import {
 	type LspPosition,
 	type WorkerLanguageService
 } from '../lsp.js';
+import { fetchBoundedExternalAsset } from '../external-asset.js';
 
 export type OcamlLanguageServerTarget = 'js' | 'wasm';
 export type OcamlLanguageServerEffectsMode = 'cps' | 'jspi';
@@ -338,12 +339,16 @@ async function loadDefaultOcamlCompilerHost(
 		})(),
 		(async () => {
 			context.reportProgress('load-ocaml-manifest');
-			const response = await fetch(options.manifestUrl, { cache: 'no-store' });
-			if (!response.ok) {
-				throw new Error(`failed to fetch OCaml manifest: ${response.status}`);
-			}
 			return rewriteManifest(
-				(await response.json()) as BrowserNativeManifest,
+				JSON.parse(
+					new TextDecoder().decode(
+						await fetchBoundedExternalAsset({
+							url: options.manifestUrl,
+							label: 'OCaml manifest',
+							cache: 'no-store'
+						})
+					)
+				) as BrowserNativeManifest,
 				options.manifestUrl
 			);
 		})()
