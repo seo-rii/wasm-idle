@@ -32,6 +32,12 @@ function filterBenignPageErrors(pageErrors) {
 	);
 }
 
+/**
+ * @param {string} previousTranscript
+ * @param {string} transcript
+ * @param {string} expectedOutput
+ * @returns {'running' | 'success' | 'failure'}
+ */
 export function classifyTerminalRun(previousTranscript, transcript, expectedOutput) {
 	if (transcript === previousTranscript) return 'running';
 	const delta = transcript.startsWith(previousTranscript)
@@ -48,6 +54,13 @@ export function classifyTerminalRun(previousTranscript, transcript, expectedOutp
 	return 'running';
 }
 
+/**
+ * @template T
+ * @param {PromiseLike<T> | T} promise
+ * @param {number} timeoutMs
+ * @param {string} [label]
+ * @returns {Promise<T>}
+ */
 export async function withWallClockTimeout(promise, timeoutMs, label = 'browser operation') {
 	let timeoutId;
 	try {
@@ -139,6 +152,7 @@ async function readProbeSummary(page, activeState, pageErrors, consoleMessages) 
  * @property {boolean} [sendEof]
  * @property {string} source
  * @property {string} stdinText
+ * @property {string} [waitForOutputBeforeStdin]
  * @property {{ path: string; content: string }[]} [workspaceFiles]
  */
 
@@ -158,6 +172,7 @@ export async function runStdinBrowserProbe(options) {
 		sendEof = false,
 		source = '',
 		stdinText = '',
+		waitForOutputBeforeStdin = '',
 		workspaceFiles = []
 	} = options;
 	if (!browserUrl) {
@@ -438,6 +453,21 @@ export async function runStdinBrowserProbe(options) {
 		let stdinDelivery = Promise.resolve();
 		if (!usePreloadedStdin) {
 			stdinDelivery = (async () => {
+				if (waitForOutputBeforeStdin) {
+					await page.waitForFunction(
+						({ initial, marker }) => {
+							const transcript =
+								document.querySelector('[data-testid="terminal-debug-output"]')
+									?.textContent || '';
+							const delta = transcript.startsWith(initial)
+								? transcript.slice(initial.length)
+								: transcript;
+							return delta.includes(marker);
+						},
+						{ initial: initialTranscript, marker: waitForOutputBeforeStdin },
+						{ polling: 50, timeout: runTimeoutMs }
+					);
+				}
 				await page.evaluate(async (text) => {
 					await /** @type {any} */ (window).__wasmIdleDebug.writeTerminalInput(
 						text,
@@ -472,9 +502,11 @@ export async function runStdinBrowserProbe(options) {
 				).catch(() => '')) || '';
 			terminalRunStatus = classifyTerminalRun(initialTranscript, transcript, expectedOutput);
 			if (terminalRunStatus === 'running') {
-				await withWallClockTimeout(page.waitForTimeout(250), 500, 'terminal poll delay').catch(
-					() => {}
-				);
+				await withWallClockTimeout(
+					page.waitForTimeout(250),
+					500,
+					'terminal poll delay'
+				).catch(() => {});
 			}
 		}
 		if (stdinDeliveryError) {

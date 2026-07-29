@@ -36,6 +36,10 @@ const { publicEnv } = vi.hoisted(() => ({
 let onPostMessage: ((worker: MockWorker, message: any) => void) | null = null;
 let autoStartWorkers = true;
 let workerBootstrapId = 0;
+const initialCrossOriginIsolation = Object.getOwnPropertyDescriptor(
+	globalThis,
+	'crossOriginIsolated'
+);
 
 class MockWorker {
 	onmessage: ((event: MessageEvent<any>) => void) | null = null;
@@ -119,9 +123,13 @@ async function withCrossOriginIsolation(value: boolean, callback: () => Promise<
 	try {
 		await callback();
 	} finally {
-		if (previous) Object.defineProperty(globalThis, 'crossOriginIsolated', previous);
-		else Reflect.deleteProperty(globalThis, 'crossOriginIsolated');
+		restoreCrossOriginIsolation(previous);
 	}
+}
+
+function restoreCrossOriginIsolation(descriptor?: PropertyDescriptor) {
+	if (descriptor) Object.defineProperty(globalThis, 'crossOriginIsolated', descriptor);
+	else Reflect.deleteProperty(globalThis, 'crossOriginIsolated');
 }
 
 async function expectWorkerBootstrap(worker: MockWorker, targetUrl: string) {
@@ -140,6 +148,10 @@ async function expectWorkerBootstrap(worker: MockWorker, targetUrl: string) {
 
 describe('static worker backed language sandboxes', () => {
 	beforeEach(() => {
+		Object.defineProperty(globalThis, 'crossOriginIsolated', {
+			configurable: true,
+			value: false
+		});
 		workerInstances.length = 0;
 		workerBootstrapBlobs.clear();
 		onPostMessage = null;
@@ -168,9 +180,10 @@ describe('static worker backed language sandboxes', () => {
 
 	afterEach(() => {
 		vi.restoreAllMocks();
+		restoreCrossOriginIsolation(initialCrossOriginIsolation);
 	});
 
-	it('declares every static-worker stdin transport as prebuffered', () => {
+	it('reports prebuffered stdin for legacy runtimes and the non-isolated fallback', () => {
 		for (const Runtime of [
 			Awk,
 			Bqn,
@@ -183,11 +196,11 @@ describe('static worker backed language sandboxes', () => {
 			Nim,
 			Pascal,
 			Perl,
-			Prolog,
 			Tcl
 		]) {
 			expect(new Runtime().stdinMode).toBe('prebuffered');
 		}
+		expect(new Prolog().stdinMode).toBe('prebuffered');
 	});
 
 	it('does not forward input when a static runtime declares no stdin capability', async () => {
@@ -227,6 +240,7 @@ describe('static worker backed language sandboxes', () => {
 			};
 			const sandbox = createStreamingTestSandbox();
 			expect(sandbox.stdinMode).toBe('streaming');
+			expect(new Prolog().stdinMode).toBe('streaming');
 			await sandbox.load();
 
 			const run = sandbox.run('print("prompt"); read()', false);

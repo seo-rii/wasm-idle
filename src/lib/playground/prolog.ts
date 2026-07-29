@@ -11,7 +11,7 @@ class Prolog extends StaticWorkerRuntimeSandbox {
 			displayName: 'Prolog',
 			defaultActivePath: 'main.prolog',
 			stdin: {
-				mode: 'prebuffered',
+				mode: 'streaming',
 				sourceHintPattern:
 					/\b(read_line_to_string|read_line_to_codes|get_char|get_code|read\s*\(|read_string)\b/
 			},

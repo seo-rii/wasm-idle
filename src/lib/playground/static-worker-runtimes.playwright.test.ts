@@ -13,6 +13,7 @@ import { runStdinBrowserProbe as runBaseStdinBrowserProbe } from '../../../scrip
 const prologStdinSource = `:- use_module(library(readutil)).
 
 main :-
+    format("value?~n", []),
     read_line_to_string(user_input, Line),
     number_string(N, Line),
     Result is N + 5,
@@ -166,7 +167,8 @@ describe('wasm-idle static worker language browser integrations', () => {
 					language: 'PROLOG',
 					runTimeoutMs: Number(process.env.WASM_IDLE_PROLOG_RUN_TIMEOUT_MS || '240000'),
 					source: prologStdinSource,
-					stdinText: '68\n'
+					stdinText: '68\n',
+					waitForOutputBeforeStdin: 'value?'
 				});
 				expect(summary.activeState.crossOriginIsolated).toBe(true);
 				expect(summary.activeState.sharedArrayBuffer).toBe(true);

@@ -29,7 +29,50 @@ function prologString(value) {
 	return `'${String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
 }
 
-function createStdinReader(stdin) {
+function createSharedStdinReader(channel) {
+	if (channel === undefined) return null;
+	if (
+		channel?.protocol !== 'wasm-idle-static-stdin-ring' ||
+		channel?.protocolVersion !== 1 ||
+		channel?.controlBytes !== 16 ||
+		!Number.isSafeInteger(channel?.capacity) ||
+		channel.capacity <= 0 ||
+		typeof SharedArrayBuffer !== 'function' ||
+		!(channel.buffer instanceof SharedArrayBuffer) ||
+		channel.buffer.byteLength !== channel.controlBytes + channel.capacity ||
+		typeof Atomics.wait !== 'function'
+	) {
+		throw new Error('Invalid SWI-Prolog streaming stdin channel.');
+	}
+
+	const control = new Int32Array(channel.buffer, 0, 4);
+	const bytes = new Uint8Array(channel.buffer, channel.controlBytes, channel.capacity);
+	return () => {
+		while (true) {
+			if (Atomics.load(control, 3) === 1) {
+				throw new Error('SWI-Prolog streaming stdin was cancelled.');
+			}
+			const write = Atomics.load(control, 0);
+			const read = Atomics.load(control, 1);
+			const available = write - read;
+			if (available < 0 || available > bytes.byteLength) {
+				throw new Error('SWI-Prolog streaming stdin counters are invalid.');
+			}
+			if (available > 0) {
+				const value = bytes[read % bytes.byteLength];
+				Atomics.store(control, 1, read + 1);
+				return value;
+			}
+			if (Atomics.load(control, 2) === 1) return null;
+			self.postMessage({ type: 'stdin-request' });
+			Atomics.wait(control, 0, write);
+		}
+	};
+}
+
+function createStdinReader(stdin, channel) {
+	const sharedReader = createSharedStdinReader(channel);
+	if (sharedReader) return sharedReader;
 	const bytes = encoder.encode(typeof stdin === 'string' ? stdin : '');
 	let offset = 0;
 	return () => {
@@ -63,6 +106,7 @@ self.onmessage = async (event) => {
 		baseUrl,
 		code,
 		stdin,
+		stdinChannel,
 		activePath = 'main.prolog',
 		workspaceFiles = [],
 		diagnose = false,
@@ -119,7 +163,7 @@ self.onmessage = async (event) => {
 				if (diagnose) diagnosticOutput += `${output}\n`;
 				postOutput(output);
 			},
-			stdin: createStdinReader(stdin)
+			stdin: createStdinReader(stdin, stdinChannel)
 		});
 
 		for (const file of workspaceFiles) {
