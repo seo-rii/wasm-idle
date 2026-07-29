@@ -26,7 +26,7 @@ describe('editor defaults', () => {
 		expect(editorDefaults.vbnet).toContain('Sub Main(args As String())');
 		expect(editorDefaults.elixir).toContain('IO.gets("")');
 		expect(editorDefaults.erlang).toContain('io:get_line("")');
-		expect(editorDefaults.erlang).toContain('io:format("fibonacci=~w"');
+		expect(editorDefaults.erlang).toContain('io:format("fibonacci=~w~n"');
 		expect(editorDefaults.prolog).toContain('read_line_to_string(user_input, Line)');
 		expect(editorDefaults.gleam).toContain('import wasm_idle/stdin');
 		expect(editorDefaults.gleam).toContain('stdin.read_line()');
