@@ -281,7 +281,7 @@ export async function fetchBrowserToolAsset(
 	if (response.url) {
 		let finalUrl: URL;
 		try {
-			finalUrl = new URL(response.url, requestUrl);
+			finalUrl = new URL(response.url);
 		} catch (error) {
 			await cancelResponse(response, error);
 			throw new Error(`${label} returned an invalid final URL: ${response.url}`, {

@@ -240,3 +240,37 @@ test('rejects substituted final URLs and invalid UTF-8 tool sources', async () =
 		/not valid UTF-8/
 	);
 });
+
+test('rejects relative browser-native tool response URLs before reading', async () => {
+	let readerRequested = false;
+	let cancelled = false;
+	const requestedUrl = new URL('tool.js', BASE_URL).href;
+
+	await assert.rejects(
+		fetchBrowserToolAsset(
+			requestedUrl,
+			'OCaml tool',
+			createBrowserToolInputBudget({ maxAssetBytes: 8, maxTotalBytes: 16 }),
+			{
+				fetch: async () => ({
+					url: 'tool.js',
+					ok: true,
+					status: 200,
+					headers: new Headers(),
+					body: {
+						async cancel() {
+							cancelled = true;
+						},
+						getReader() {
+							readerRequested = true;
+							throw new Error('relative response body should not be read');
+						}
+					}
+				})
+			}
+		),
+		/invalid final URL/
+	);
+	assert.equal(readerRequested, false);
+	assert.equal(cancelled, true);
+});
