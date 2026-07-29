@@ -251,12 +251,107 @@ class ProcExit extends Error {
 	}
 }
 
-function createWasiRunner({ stdin = '', args = [], activePath = 'main.nim' }) {
+function createStdinReader(stdin, channel) {
+	if (channel === undefined) {
+		const bytes = textEncoder.encode(stdin);
+		let offset = 0;
+		return {
+			read(maxLength) {
+				const count = Math.min(maxLength, bytes.length - offset);
+				if (count <= 0) return new Uint8Array();
+				const chunk = bytes.slice(offset, offset + count);
+				offset += count;
+				return chunk;
+			}
+		};
+	}
+	if (
+		channel?.protocol !== 'wasm-idle-static-stdin-ring' ||
+		channel?.protocolVersion !== 1 ||
+		channel?.controlBytes !== 16 ||
+		!Number.isSafeInteger(channel?.capacity) ||
+		channel.capacity <= 0 ||
+		typeof SharedArrayBuffer !== 'function' ||
+		!(channel.buffer instanceof SharedArrayBuffer) ||
+		channel.buffer.byteLength !== channel.controlBytes + channel.capacity ||
+		typeof Atomics.wait !== 'function'
+	) {
+		throw new Error('Invalid Nim streaming stdin channel.');
+	}
+
+	const control = new Int32Array(channel.buffer, 0, 4);
+	const bytes = new Uint8Array(channel.buffer, channel.controlBytes, channel.capacity);
+	return {
+		read(maxLength) {
+			if (!Number.isSafeInteger(maxLength) || maxLength <= 0) return new Uint8Array();
+			while (true) {
+				if (Atomics.load(control, 3) === 1) {
+					throw new Error('Nim streaming stdin was cancelled.');
+				}
+				const write = Atomics.load(control, 0);
+				const read = Atomics.load(control, 1);
+				const available = write - read;
+				if (available < 0 || available > bytes.byteLength) {
+					throw new Error('Nim streaming stdin counters are invalid.');
+				}
+				if (available > 0) {
+					const count = Math.min(maxLength, available);
+					const chunk = new Uint8Array(count);
+					const start = read % bytes.byteLength;
+					const first = Math.min(count, bytes.byteLength - start);
+					chunk.set(bytes.subarray(start, start + first));
+					if (first < count) chunk.set(bytes.subarray(0, count - first), first);
+					Atomics.store(control, 1, read + count);
+					self.postMessage({ type: 'stdin-request' });
+					return chunk;
+				}
+				if (Atomics.load(control, 2) === 1) return new Uint8Array();
+				self.postMessage({ type: 'stdin-request' });
+				Atomics.wait(control, 0, write);
+			}
+		}
+	};
+}
+
+function createOutputCollector(onChunk) {
+	const chunks = [];
+	const decoder = new TextDecoder();
+	let finished = false;
+	return {
+		push(chunk) {
+			chunks.push(chunk);
+			const text = decoder.decode(chunk, { stream: true });
+			if (text) onChunk(text);
+		},
+		finish() {
+			if (finished) return;
+			finished = true;
+			const text = decoder.decode();
+			if (text) onChunk(text);
+		},
+		text() {
+			const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+			const all = new Uint8Array(total);
+			let offset = 0;
+			for (const chunk of chunks) {
+				all.set(chunk, offset);
+				offset += chunk.length;
+			}
+			return textDecoder.decode(all);
+		}
+	};
+}
+
+function createWasiRunner({
+	stdinReader,
+	args = [],
+	activePath = 'main.nim',
+	onStdout = () => {},
+	onStderr = () => {}
+}) {
 	let memory = null;
-	const stdinBytes = textEncoder.encode(stdin);
-	let stdinOffset = 0;
-	const stdout = [];
-	const stderr = [];
+	const stdout = createOutputCollector(onStdout);
+	const stderr = createOutputCollector(onStderr);
 	const u8 = () => new Uint8Array(memory.buffer);
 	const dv = () => new DataView(memory.buffer);
 	const errnoSuccess = 0;
@@ -281,18 +376,23 @@ function createWasiRunner({ stdin = '', args = [], activePath = 'main.nim' }) {
 	function readIovs(fd, iovsPtr, iovsLen, readPtr) {
 		if (fd !== 0) return errnoBadf;
 		const view = dv();
-		let total = 0;
+		const iovs = [];
+		let requested = 0;
 		for (let index = 0; index < iovsLen; index += 1) {
 			const ptr = view.getUint32(iovsPtr + index * 8, true);
 			const length = view.getUint32(iovsPtr + index * 8 + 4, true);
-			const available = Math.min(length, stdinBytes.length - stdinOffset);
-			if (available <= 0) break;
-			u8().set(stdinBytes.subarray(stdinOffset, stdinOffset + available), ptr);
-			stdinOffset += available;
-			total += available;
-			if (available !== length) break;
+			iovs.push({ ptr, length });
+			requested += length;
 		}
-		view.setUint32(readPtr, total, true);
+		const chunk = stdinReader.read(requested);
+		let offset = 0;
+		for (const { ptr, length } of iovs) {
+			const count = Math.min(length, chunk.length - offset);
+			if (count <= 0) break;
+			u8().set(chunk.subarray(offset, offset + count), ptr);
+			offset += count;
+		}
+		view.setUint32(readPtr, offset, true);
 		return errnoSuccess;
 	}
 
@@ -407,17 +507,6 @@ function createWasiRunner({ stdin = '', args = [], activePath = 'main.nim' }) {
 		return imports;
 	}
 
-	function join(chunks) {
-		const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
-		const all = new Uint8Array(total);
-		let offset = 0;
-		for (const chunk of chunks) {
-			all.set(chunk, offset);
-			offset += chunk.length;
-		}
-		return textDecoder.decode(all);
-	}
-
 	async function run(bytes) {
 		const module = await WebAssembly.compile(bytes);
 		const instance = await WebAssembly.instantiate(module, importsFor(module));
@@ -431,18 +520,22 @@ function createWasiRunner({ stdin = '', args = [], activePath = 'main.nim' }) {
 			} else {
 				throw error;
 			}
+		} finally {
+			stdout.finish();
+			stderr.finish();
 		}
-		return { code, stdout: join(stdout), stderr: join(stderr) };
+		return { code, stdout: stdout.text(), stderr: stderr.text() };
 	}
 
 	return { run };
 }
 
 self.onmessage = async (event) => {
-	const { baseUrl, code, stdin, args, activePath, log } = event.data || {};
+	const { baseUrl, code, stdin, stdinChannel, args, activePath, log } = event.data || {};
 	const compilerStdout = [];
 	const compilerStderr = [];
 	try {
+		const stdinReader = createStdinReader(stdin || '', stdinChannel);
 		if (log) console.log(`[wasm-idle:nim-worker] run start baseUrl=${baseUrl}`);
 		const wasmBytes = await buildWasm({
 			baseUrl,
@@ -452,12 +545,12 @@ self.onmessage = async (event) => {
 		});
 		postProgress(85, 'Running Nim program');
 		const result = await createWasiRunner({
-			stdin: stdin || '',
+			stdinReader,
 			args: Array.isArray(args) ? args : [],
-			activePath: activePath || 'main.nim'
+			activePath: activePath || 'main.nim',
+			onStdout: (output) => self.postMessage({ output }),
+			onStderr: (output) => self.postMessage({ output })
 		}).run(wasmBytes);
-		if (result.stdout) self.postMessage({ output: result.stdout });
-		if (result.stderr) self.postMessage({ output: result.stderr });
 		if (result.code !== 0) {
 			throw new Error(`Nim program exited with status ${result.code}.`);
 		}

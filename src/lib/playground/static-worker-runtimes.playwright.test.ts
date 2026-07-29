@@ -114,6 +114,8 @@ println("main=", n + 5)
 
 const nimStdinSource = `import strutils
 
+stdout.write("value?\\n")
+stdout.flushFile()
 let line = stdin.readLine()
 let n =
   try:
@@ -478,7 +480,8 @@ describe('wasm-idle static worker language browser integrations', () => {
 					language: 'NIM',
 					runTimeoutMs: Number(process.env.WASM_IDLE_NIM_RUN_TIMEOUT_MS || '420000'),
 					source: nimStdinSource,
-					stdinText: '68\n'
+					stdinText: '68\n',
+					waitForOutputBeforeStdin: 'value?'
 				});
 				expect(summary.activeState.crossOriginIsolated).toBe(true);
 				expect(summary.activeState.sharedArrayBuffer).toBe(true);
