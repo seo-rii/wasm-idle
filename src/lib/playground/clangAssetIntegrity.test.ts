@@ -41,8 +41,10 @@ describe('bundled clang asset integrity', () => {
 					runtimeAsset as keyof typeof BUNDLED_CLANG_ASSET_INTEGRITY
 				]
 			).toEqual({
-				bytes: runtimeBytes.byteLength,
-				sha256: createHash('sha256').update(runtimeBytes).digest('hex')
+				bytes: record?.size,
+				sha256: record?.sha256,
+				uncompressedBytes: runtimeBytes.byteLength,
+				uncompressedSha256: createHash('sha256').update(runtimeBytes).digest('hex')
 			});
 		}
 
@@ -51,7 +53,9 @@ describe('bundled clang asset integrity', () => {
 		);
 		expect(BUNDLED_CLANG_ASSET_INTEGRITY['runtime-manifest.v1.json']).toEqual({
 			bytes: manifestBytes.byteLength,
-			sha256: createHash('sha256').update(manifestBytes).digest('hex')
+			sha256: createHash('sha256').update(manifestBytes).digest('hex'),
+			uncompressedBytes: manifestBytes.byteLength,
+			uncompressedSha256: createHash('sha256').update(manifestBytes).digest('hex')
 		});
 		expect(Object.keys(BUNDLED_CLANG_ASSET_INTEGRITY).sort()).toEqual(
 			['runtime-manifest.v1.json', ...Object.keys(sourceByRuntimeAsset)].sort()
