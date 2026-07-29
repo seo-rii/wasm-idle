@@ -29,7 +29,20 @@
         (callback {:error (str "Could not load ClojureScript namespace " name)})))))
 
 (defn error-message [error]
-  (or (.-message error) (str error)))
+  (loop [current error
+         messages []]
+    (if current
+      (let [message (or (.-message current) (str current))]
+        (recur (ex-cause current)
+               (if (= message (peek messages)) messages (conj messages message))))
+      (string/join ": " messages))))
+
+(defn append-output! [context sink callback-name values]
+  (let [text (apply str values)
+        callback (aget context callback-name)]
+    (swap! sink conj text)
+    (when callback
+      (.call callback nil text))))
 
 (defn ^:export execute [source filename context callback]
   (reset! current-context context)
@@ -39,8 +52,8 @@
         previous-print *print-fn*
         previous-print-err *print-err-fn*
         previous-print-newline *print-newline*]
-    (set! *print-fn* (fn [& values] (swap! stdout conj (apply str values))))
-    (set! *print-err-fn* (fn [& values] (swap! stderr conj (apply str values))))
+    (set! *print-fn* (fn [& values] (append-output! context stdout "onStdout" values)))
+    (set! *print-err-fn* (fn [& values] (append-output! context stderr "onStderr" values)))
     (set! *print-newline* true)
     (cljs/eval-str
       compiler-state

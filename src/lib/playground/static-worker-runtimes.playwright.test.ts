@@ -61,8 +61,10 @@ end.
 const clojureScriptStdinSource = `(ns wasm-idle.main
   (:require [wasm-idle.runtime :as runtime]))
 
-(let [n (js/parseInt (runtime/read-line) 10)]
-  (println (str "main=" (+ n 5))))
+(do
+  (println "value?")
+  (let [n (js/parseInt (runtime/read-line) 10)]
+    (println (str "main=" (+ n 5)))))
 `;
 
 const forthStdinSource = `: READ-NUMBER ( -- n )
@@ -327,7 +329,8 @@ describe('wasm-idle static worker language browser integrations', () => {
 						process.env.WASM_IDLE_CLOJURESCRIPT_RUN_TIMEOUT_MS || '240000'
 					),
 					source: clojureScriptStdinSource,
-					stdinText: '68\n'
+					stdinText: '68\n',
+					waitForOutputBeforeStdin: 'value?'
 				});
 				expect(summary.activeState.crossOriginIsolated).toBe(true);
 				expect(summary.activeState.sharedArrayBuffer).toBe(true);

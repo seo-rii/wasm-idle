@@ -11,7 +11,7 @@ class ClojureScript extends StaticWorkerRuntimeSandbox {
 			displayName: 'ClojureScript',
 			defaultActivePath: 'main.cljs',
 			stdin: {
-				mode: 'prebuffered',
+				mode: 'streaming',
 				sourceHintPattern: /\b(?:wasm-idle\.runtime\/)?(?:read-line|stdin)\b|\bread-line\b/
 			},
 			resolveRuntimeAssets(runtimeAssets: string | PlaygroundRuntimeAssets, currentUrl) {

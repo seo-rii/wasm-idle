@@ -178,7 +178,7 @@
     "wasm-bash/bash.webc": 1808682,
     "wasm-bash/sdk/wasmer_js_bg.wasm": 5701868,
     "wasm-bqn/BQN.wasm": 1175370,
-    "wasm-clojurescript/compiler.js": 6587761,
+    "wasm-clojurescript/compiler.js": 6588133,
     "wasm-d/runtime/bin/ldc2.wasm": 23577090,
     "wasm-d/runtime/toolchain/toolchain.tar": 36239360,
     "wasm-dotnet/runtime/csharp/Microsoft.CodeAnalysis.CSharp.wasm": 5094681,
