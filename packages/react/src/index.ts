@@ -6,6 +6,7 @@ import {
 	type TerminalControl
 } from '@wasm-idle/core';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { disposeReactTerminalRef } from './lifecycle.js';
 
 export interface ReactWasmIdleHost {
 	binding: PlaygroundBinding;
@@ -39,11 +40,14 @@ export function useWasmIdleHost(
 		terminalRef.current = nextTerminal;
 		setTerminalState(nextTerminal);
 	}, []);
+	useEffect(
+		() => () => {
+			void disposeReactTerminalRef(terminalRef).catch(() => {});
+		},
+		[]
+	);
 	const dispose = useCallback(async () => {
-		const currentTerminal = terminalRef.current;
-		terminalRef.current = undefined;
-		setTerminalState(undefined);
-		if (currentTerminal) await currentTerminal.destroy();
+		await disposeReactTerminalRef(terminalRef, () => setTerminalState(undefined));
 		await binding.dispose();
 	}, [binding]);
 	return {
