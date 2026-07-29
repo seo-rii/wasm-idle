@@ -28,12 +28,14 @@ describe('Elixir worker', () => {
 		(globalThis as any).parent = undefined;
 		(globalThis as any).postMessage = vi.fn();
 		(globalThis as any).__wasmIdleAtomVmInit = atomVmInitMock;
-		(globalThis as any).fetch = vi.fn(async () => ({
-			ok: true,
-			status: 200,
-			statusText: 'OK',
-			arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer
-		}));
+		(globalThis as any).fetch = vi.fn(
+			async () =>
+				new Response(new Uint8Array([1, 2, 3]), {
+					status: 200,
+					statusText: 'OK',
+					headers: { 'content-length': '3' }
+				})
+		);
 		lastInitOptions.current = null;
 		lastModule.current = null;
 		atomVmInitMock.mockReset();
@@ -133,6 +135,23 @@ describe('Elixir worker', () => {
 	it('loads AtomVM with the Popcorn wasm asset and evaluates Elixir code inside the worker', async () => {
 		const popcornBrowserGlobal = ['globalThis', 'window'].join('.');
 		const popcornParentGlobal = [popcornBrowserGlobal, 'parent'].join('.');
+		const bundleUrl = new URL('/runtime/elixir/bundle.avm', globalThis.location.href).href;
+		(globalThis as any).fetch.mockResolvedValueOnce(
+			new Response(
+				new ReadableStream({
+					start(controller) {
+						controller.enqueue(new Uint8Array([1, 2]));
+						controller.enqueue(new Uint8Array([3]));
+						controller.close();
+					}
+				}),
+				{
+					status: 200,
+					statusText: 'OK',
+					headers: { 'content-length': '3' }
+				}
+			)
+		);
 		const buffer = new SharedArrayBuffer(1024);
 		await import('./elixir');
 		await (globalThis as any).self.onmessage({
@@ -144,15 +163,19 @@ describe('Elixir worker', () => {
 		});
 		await Promise.resolve();
 
-		expect((globalThis as any).fetch).toHaveBeenCalledWith('/runtime/elixir/bundle.avm');
+		expect((globalThis as any).fetch).toHaveBeenCalledWith(bundleUrl, {
+			credentials: 'omit',
+			redirect: 'error',
+			referrerPolicy: 'no-referrer'
+		});
 		expect(atomVmInitMock).toHaveBeenCalledTimes(1);
 		expect(lastInitOptions.current.locateFile('AtomVM.wasm')).toBe(
-			'http://localhost/runtime/elixir/AtomVM.wasm'
+			new URL('AtomVM.wasm', bundleUrl).href
 		);
 		expect(lastModule.current.FS.mkdir).toHaveBeenCalledWith('/data');
 		expect(lastModule.current.FS.writeFile).toHaveBeenCalledWith(
 			'/data/bundle.avm',
-			expect.any(Int8Array)
+			new Int8Array([1, 2, 3])
 		);
 		expect(lastModule.current.sendEvent).toEqual(expect.any(Function));
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ load: true });
@@ -229,6 +252,180 @@ describe('Elixir worker', () => {
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ buffer: true });
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ output: 'stdin=5\n' });
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: ':ok' });
+	});
+
+	it.each([
+		['data:application/octet-stream;base64,AQID', 'must use HTTP(S)'],
+		['https://user:secret@example.com/bundle.avm', 'must not include credentials'],
+		['https://example.com/bundle.avm#fragment', 'must not include a fragment']
+	])('rejects an unsafe AtomVM bundle URL: %s', async (bundleUrl, expectedError) => {
+		await import('./elixir');
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				bundleUrl,
+				log: false
+			}
+		});
+
+		expect((globalThis as any).fetch).not.toHaveBeenCalled();
+		expect((globalThis as any).postMessage).toHaveBeenLastCalledWith({
+			error: expect.stringContaining(expectedError)
+		});
+	});
+
+	it('rejects a missing bundle URL before fetching', async () => {
+		await import('./elixir');
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				log: false
+			}
+		});
+
+		expect((globalThis as any).fetch).not.toHaveBeenCalled();
+		expect((globalThis as any).postMessage).toHaveBeenLastCalledWith({
+			error: 'Elixir runtime is not configured. Set PUBLIC_WASM_ELIXIR_BUNDLE_URL or runtimeAssets.elixir.bundleUrl.'
+		});
+	});
+
+	it('rejects a substituted final bundle URL and cancels its body', async () => {
+		const bodyCancel = vi.fn(async () => undefined);
+		const bundleUrl = new URL('/runtime/elixir/bundle.avm', globalThis.location.href).href;
+		(globalThis as any).fetch.mockResolvedValueOnce({
+			body: { cancel: bodyCancel },
+			headers: new Headers(),
+			ok: true,
+			status: 200,
+			statusText: 'OK',
+			url: 'https://cdn.example.com/substituted.avm'
+		});
+		await import('./elixir');
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				bundleUrl: '/runtime/elixir/bundle.avm',
+				log: false
+			}
+		});
+
+		expect(bodyCancel).toHaveBeenCalledOnce();
+		expect((globalThis as any).postMessage).toHaveBeenLastCalledWith({
+			error: `Elixir bundle response URL mismatch: expected ${bundleUrl}, received https://cdn.example.com/substituted.avm`
+		});
+	});
+
+	it('cancels an unsuccessful bundle response before reporting it', async () => {
+		const bodyCancel = vi.fn(async () => undefined);
+		(globalThis as any).fetch.mockResolvedValueOnce({
+			body: { cancel: bodyCancel },
+			headers: new Headers(),
+			ok: false,
+			status: 503,
+			statusText: 'Unavailable',
+			url: ''
+		});
+		await import('./elixir');
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				bundleUrl: '/runtime/elixir/bundle.avm',
+				log: false
+			}
+		});
+
+		expect(bodyCancel).toHaveBeenCalledOnce();
+		expect((globalThis as any).postMessage).toHaveBeenLastCalledWith({
+			error: 'Failed to fetch Elixir bundle: 503 Unavailable'
+		});
+	});
+
+	it('rejects an oversized declared bundle before reading and cancels its body', async () => {
+		const bodyCancel = vi.fn(async () => undefined);
+		(globalThis as any).fetch.mockResolvedValueOnce({
+			body: { cancel: bodyCancel },
+			headers: new Headers({ 'content-length': String(128 * 1024 * 1024 + 1) }),
+			ok: true,
+			status: 200,
+			statusText: 'OK',
+			url: ''
+		});
+		await import('./elixir');
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				bundleUrl: '/runtime/elixir/bundle.avm',
+				log: false
+			}
+		});
+
+		expect(bodyCancel).toHaveBeenCalledOnce();
+		expect((globalThis as any).postMessage).toHaveBeenLastCalledWith({
+			error: 'Elixir bundle exceeds the 134217728 byte limit'
+		});
+	});
+
+	it('cancels an unknown-length stream when it crosses the bundle byte limit', async () => {
+		const readerCancel = vi.fn(async () => undefined);
+		const releaseLock = vi.fn();
+		const read = vi.fn().mockResolvedValueOnce({
+			done: false,
+			value: { byteLength: 128 * 1024 * 1024 + 1 }
+		});
+		(globalThis as any).fetch.mockResolvedValueOnce({
+			body: {
+				getReader: () => ({ cancel: readerCancel, read, releaseLock })
+			},
+			headers: new Headers(),
+			ok: true,
+			status: 200,
+			statusText: 'OK',
+			url: ''
+		});
+		await import('./elixir');
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				bundleUrl: '/runtime/elixir/bundle.avm',
+				log: false
+			}
+		});
+
+		expect(readerCancel).toHaveBeenCalledOnce();
+		expect(releaseLock).toHaveBeenCalledOnce();
+		expect((globalThis as any).postMessage).toHaveBeenLastCalledWith({
+			error: 'Elixir bundle exceeds the 134217728 byte limit'
+		});
+	});
+
+	it('cancels and releases a bundle reader when streaming fails', async () => {
+		const readerCancel = vi.fn(async () => undefined);
+		const releaseLock = vi.fn();
+		const read = vi.fn().mockRejectedValueOnce(new Error('bundle stream failed'));
+		(globalThis as any).fetch.mockResolvedValueOnce({
+			body: {
+				getReader: () => ({ cancel: readerCancel, read, releaseLock })
+			},
+			headers: new Headers(),
+			ok: true,
+			status: 200,
+			statusText: 'OK',
+			url: ''
+		});
+		await import('./elixir');
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				bundleUrl: '/runtime/elixir/bundle.avm',
+				log: false
+			}
+		});
+
+		expect(readerCancel).toHaveBeenCalledOnce();
+		expect(releaseLock).toHaveBeenCalledOnce();
+		expect((globalThis as any).postMessage).toHaveBeenLastCalledWith({
+			error: 'bundle stream failed'
+		});
 	});
 
 	it('requests additional stdin chunks for repeated IO.gets calls', async () => {

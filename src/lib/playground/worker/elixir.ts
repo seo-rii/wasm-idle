@@ -16,6 +16,8 @@ const workerHost = {
 const popcornBrowserGlobal = ['globalThis', 'window'].join('.');
 const popcornParentGlobal = [popcornBrowserGlobal, 'parent'].join('.');
 const workerHostGlobal = 'globalThis.__wasmIdleElixirWorkerHost';
+const DEFAULT_BUNDLE_BUFFER_BYTES = 64 * 1024;
+const MAX_ELIXIR_BUNDLE_BYTES = 128 * 1024 * 1024;
 
 self.document = workerDocument;
 (globalThis as any).__wasmIdleElixirWorkerHost = workerHost;
@@ -364,7 +366,7 @@ async function startVm(avmBundle: Int8Array, bundleAssetUrl: string, log: boolea
 }
 
 async function loadRuntime(nextBundleUrl: string, log: boolean) {
-	if (!nextBundleUrl) {
+	if (typeof nextBundleUrl !== 'string' || !nextBundleUrl.trim()) {
 		throw new Error(
 			'Elixir runtime is not configured. Set PUBLIC_WASM_ELIXIR_BUNDLE_URL or runtimeAssets.elixir.bundleUrl.'
 		);
@@ -377,15 +379,150 @@ async function loadRuntime(nextBundleUrl: string, log: boolean) {
 		if (log) {
 			console.log(`[wasm-idle:elixir-worker] load bundleUrl=${nextBundleUrl}`);
 		}
-		const bundleBuffer = await fetch(nextBundleUrl).then((response) => {
-			if (!response.ok) {
+		let requestUrl: URL;
+		try {
+			const locationOrigin = globalThis.location?.origin;
+			const locationHref = globalThis.location?.href;
+			const baseUrl =
+				locationOrigin && locationOrigin !== 'null'
+					? `${locationOrigin}/`
+					: locationHref?.startsWith('blob:')
+						? locationHref.slice('blob:'.length)
+						: locationHref || 'http://localhost/';
+			requestUrl = new URL(nextBundleUrl.trim(), baseUrl);
+		} catch {
+			throw new Error(`Elixir bundle URL is invalid: ${nextBundleUrl}`);
+		}
+		if (requestUrl.protocol !== 'http:' && requestUrl.protocol !== 'https:') {
+			throw new Error(`Elixir bundle URL must use HTTP(S): ${nextBundleUrl}`);
+		}
+		if (requestUrl.username || requestUrl.password) {
+			throw new Error(`Elixir bundle URL must not include credentials: ${nextBundleUrl}`);
+		}
+		if (requestUrl.hash) {
+			throw new Error(`Elixir bundle URL must not include a fragment: ${nextBundleUrl}`);
+		}
+
+		const response = await fetch(requestUrl.href, {
+			credentials: 'omit',
+			redirect: 'error',
+			referrerPolicy: 'no-referrer'
+		});
+		if (response.url) {
+			let responseUrl: URL;
+			try {
+				responseUrl = new URL(response.url);
+			} catch {
+				try {
+					await response.body?.cancel();
+				} catch {
+					// Preserve the URL validation failure.
+				}
+				throw new Error(`Elixir bundle response URL is invalid: ${response.url}`);
+			}
+			if (responseUrl.href !== requestUrl.href) {
+				try {
+					await response.body?.cancel();
+				} catch {
+					// Preserve the redirect/substitution failure.
+				}
 				throw new Error(
-					`Failed to fetch Elixir bundle: ${response.status} ${response.statusText}`
+					`Elixir bundle response URL mismatch: expected ${requestUrl.href}, received ${responseUrl.href}`
 				);
 			}
-			return response.arrayBuffer();
-		});
-		return await startVm(new Int8Array(bundleBuffer), nextBundleUrl, log);
+		}
+		if (!response.ok) {
+			try {
+				await response.body?.cancel();
+			} catch {
+				// Preserve the HTTP failure.
+			}
+			throw new Error(
+				`Failed to fetch Elixir bundle: ${response.status} ${response.statusText}`
+			);
+		}
+
+		const rawContentLength = response.headers.get('content-length');
+		let contentLength: number | undefined;
+		if (rawContentLength !== null) {
+			const parsedContentLength = Number(rawContentLength);
+			if (
+				!/^\d+$/u.test(rawContentLength.trim()) ||
+				!Number.isSafeInteger(parsedContentLength)
+			) {
+				try {
+					await response.body?.cancel();
+				} catch {
+					// Preserve the invalid-length failure.
+				}
+				throw new Error(`Elixir bundle has an invalid Content-Length: ${rawContentLength}`);
+			}
+			contentLength = parsedContentLength;
+		}
+		if (contentLength !== undefined && contentLength > MAX_ELIXIR_BUNDLE_BYTES) {
+			try {
+				await response.body?.cancel();
+			} catch {
+				// Preserve the size-limit failure.
+			}
+			throw new Error(`Elixir bundle exceeds the ${MAX_ELIXIR_BUNDLE_BYTES} byte limit`);
+		}
+
+		let bundleBytes: Uint8Array;
+		if (!response.body) {
+			bundleBytes = new Uint8Array(await response.arrayBuffer());
+			if (bundleBytes.byteLength > MAX_ELIXIR_BUNDLE_BYTES) {
+				throw new Error(`Elixir bundle exceeds the ${MAX_ELIXIR_BUNDLE_BYTES} byte limit`);
+			}
+		} else {
+			const reader = response.body.getReader();
+			let readerCancelled = false;
+			let receivedLength = 0;
+			let bytes = new Uint8Array(contentLength || DEFAULT_BUNDLE_BUFFER_BYTES);
+			try {
+				while (true) {
+					const { done, value } = await reader.read();
+					if (done) break;
+					if (!value) continue;
+					const nextLength = receivedLength + value.byteLength;
+					if (nextLength > MAX_ELIXIR_BUNDLE_BYTES) {
+						try {
+							await reader.cancel();
+						} catch {
+							// Preserve the size-limit failure.
+						}
+						readerCancelled = true;
+						throw new Error(
+							`Elixir bundle exceeds the ${MAX_ELIXIR_BUNDLE_BYTES} byte limit`
+						);
+					}
+					if (nextLength > bytes.byteLength) {
+						const nextCapacity = Math.min(
+							MAX_ELIXIR_BUNDLE_BYTES,
+							Math.max(nextLength, bytes.byteLength * 2)
+						);
+						const grown = new Uint8Array(nextCapacity);
+						grown.set(bytes.subarray(0, receivedLength));
+						bytes = grown;
+					}
+					bytes.set(value, receivedLength);
+					receivedLength = nextLength;
+				}
+			} catch (error) {
+				if (!readerCancelled) {
+					try {
+						await reader.cancel();
+					} catch {
+						// Preserve the stream failure.
+					}
+				}
+				throw error;
+			} finally {
+				reader.releaseLock();
+			}
+			bundleBytes = bytes.slice(0, receivedLength);
+		}
+		return await startVm(new Int8Array(bundleBytes), requestUrl.href, log);
 	})();
 	return await runtimePromise;
 }
