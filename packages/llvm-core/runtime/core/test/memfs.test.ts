@@ -28,11 +28,7 @@ describe('MemFS', () => {
 		});
 		await memfs.ready;
 
-		expect(compile).toHaveBeenCalledWith(
-			'https://example.test/memfs.zip',
-			undefined,
-			undefined
-		);
+		expect(compile).toHaveBeenCalledWith('https://example.test/memfs.zip', undefined);
 		expect(instantiate).toHaveBeenCalledWith(module, {
 			env: expect.objectContaining({
 				abort: expect.any(Function),

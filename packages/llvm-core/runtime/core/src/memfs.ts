@@ -48,7 +48,11 @@ export default class MemFS {
 			'copy_out'
 		);
 
-		this.ready = compile(options.moduleUrl, options.progress, options.signal)
+		this.ready = (
+			options.signal
+				? compile(options.moduleUrl, options.progress, options.signal)
+				: compile(options.moduleUrl, options.progress)
+		)
 			.then(
 				(module) =>
 					WebAssembly.instantiate(module, {
