@@ -271,6 +271,10 @@ Latest observed outcome:
     - Chromium harness probe
     - browser harness Vitest coverage
     - browser Playwright integration coverage
+- the wasm-idle Chromium regression retains every `browser rustc attempt ... failed; retrying`
+  console event separately from its bounded console tail and fails the run if any retry occurs
+    - repeated target runs therefore measure first-attempt stability instead of accepting a recovered
+      compile as a clean result
 - targeted browser coverage still included:
     - helper-thread startup/retry/runtime shims
     - richer Chromium browser harness regression

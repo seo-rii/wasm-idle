@@ -98,6 +98,19 @@ function findRustConsoleErrors(messages) {
 
 /**
  * @param {BrowserConsoleMessage[]} messages
+ */
+export function findRustCompilerRetries(messages) {
+	return messages
+		.filter(
+			(entry) =>
+				entry.text.includes('[wasm-rust] browser rustc attempt ') &&
+				entry.text.includes(' failed; retrying')
+		)
+		.map((entry) => `[${entry.type}] ${entry.text}`);
+}
+
+/**
+ * @param {BrowserConsoleMessage[]} messages
  * @param {string[]} pageErrors
  */
 function findMaximumCallStackErrors(messages, pageErrors) {
@@ -146,6 +159,7 @@ async function readProbeSummary(page, activeState, pageErrors, consoleMessages, 
 		consoleTail: summarizeConsole(consoleMessages),
 		bootstrapErrors: findBootstrapErrors(consoleMessages),
 		rustConsoleErrors: findRustConsoleErrors(consoleMessages),
+		compilerRetries: findRustCompilerRetries(consoleMessages),
 		callStackErrors: findMaximumCallStackErrors(consoleMessages, pageErrors)
 	};
 }
@@ -474,6 +488,9 @@ export async function runRustBrowserProbe({
 			throw new Error(
 				`unexpected rust console errors detected\n${JSON.stringify(summary, null, 2)}`
 			);
+		}
+		if (findRustCompilerRetries(consoleMessages).length > 0) {
+			throw new Error(`rust compiler retries detected\n${JSON.stringify(summary, null, 2)}`);
 		}
 		assertLoadingProgressTrace(summary.progressTrace, `Rust (${targetTriple})`);
 		if (summary.transcript.includes('Rust compilation failed')) {

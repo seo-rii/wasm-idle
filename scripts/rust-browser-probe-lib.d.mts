@@ -6,6 +6,10 @@
  */
 export function resolveChromiumExecutable(explicitPath?: string): Promise<string>;
 /**
+ * @param {BrowserConsoleMessage[]} messages
+ */
+export function findRustCompilerRetries(messages: BrowserConsoleMessage[]): string[];
+/**
  * @param {{ browserUrl: string; runTimeoutMs?: number; chromiumExecutable?: string; stdinText?: string; sendEof?: boolean; expectedOutput?: string; targetTriple?: 'wasm32-wasip1' | 'wasm32-wasip2' | 'wasm32-wasip3' }} options
  */
 export function runRustBrowserProbe({ browserUrl, runTimeoutMs, chromiumExecutable, stdinText, sendEof, expectedOutput, targetTriple }: {
@@ -31,6 +35,7 @@ export function runRustBrowserProbe({ browserUrl, runTimeoutMs, chromiumExecutab
     consoleTail: string[];
     bootstrapErrors: string[];
     rustConsoleErrors: string[];
+    compilerRetries: string[];
     callStackErrors: string[];
 }>;
 export type BrowserConsoleMessage = {

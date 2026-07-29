@@ -87,6 +87,7 @@ describe('wasm-idle rust browser playwright integration', () => {
 						).toEqual([]);
 						expect(summary.bootstrapErrors).toEqual([]);
 						expect(summary.rustConsoleErrors).toEqual([]);
+						expect(summary.compilerRetries).toEqual([]);
 						expect(summary.callStackErrors).toEqual([]);
 						expect(summary.transcript).toContain('factorial_plus_bonus=123');
 						if (targetTriple === 'wasm32-wasip2') {
