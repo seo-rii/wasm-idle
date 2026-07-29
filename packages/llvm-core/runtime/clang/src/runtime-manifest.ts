@@ -156,13 +156,15 @@ export function normalizeRuntimeManifest(value: RuntimeManifestV1 | unknown): Ru
 
 export async function loadRuntimeManifest(
 	manifestUrl: string | URL,
-	fetchImpl: typeof fetch = fetch
+	fetchImpl: typeof fetch = fetch,
+	signal?: AbortSignal
 ): Promise<RuntimeManifestV1> {
 	const resolvedUrl = resolveHostedRuntimeUrl(manifestUrl, 'wasm-clang runtime manifest URL');
 	return parseRuntimeManifest(
 		await fetchRuntimeJson(resolvedUrl, {
 			fetchImpl,
-			label: 'wasm-clang runtime manifest'
+			label: 'wasm-clang runtime manifest',
+			signal
 		})
 	);
 }

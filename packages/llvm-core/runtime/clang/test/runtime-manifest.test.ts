@@ -103,4 +103,20 @@ describe('runtime manifest', () => {
 		).rejects.toThrow(/size exceeds the 4194304 byte limit/u);
 		expect(cancelled).toBe(true);
 	});
+
+	it('preserves a pre-aborted manifest signal without fetching', async () => {
+		const fetchImpl = vi.fn();
+		const controller = new AbortController();
+		const reason = new Error('stop Clang manifest loading');
+		controller.abort(reason);
+
+		await expect(
+			loadRuntimeManifest(
+				'https://cdn.example.com/clang/v1/manifest.json',
+				fetchImpl,
+				controller.signal
+			)
+		).rejects.toBe(reason);
+		expect(fetchImpl).not.toHaveBeenCalled();
+	});
 });
