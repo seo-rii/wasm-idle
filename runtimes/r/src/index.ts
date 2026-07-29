@@ -13,7 +13,7 @@ export const WEBR_CORE_ASSETS = [
 export type WebRCoreAsset = (typeof WEBR_CORE_ASSETS)[number];
 
 export interface WebRAssetResolverOptions {
-	baseUrl?: string | URL;
+	baseUrl: string | URL;
 	currentUrl?: string | URL;
 }
 
@@ -33,15 +33,18 @@ const stringifyUrl = (url: string | URL) => (url instanceof URL ? url.href : url
 
 const canResolveWithUrl = (baseUrl: string) => ABSOLUTE_URL_PATTERN.test(baseUrl);
 
-export function normalizeWebRBaseUrl(baseUrl: string | URL = '/webr/', currentUrl?: string | URL) {
-	const normalized = ensureTrailingSlash(stringifyUrl(baseUrl));
+export function normalizeWebRBaseUrl(baseUrl: string | URL, currentUrl?: string | URL) {
+	if (baseUrl == null) throw new TypeError('webR asset base URL is required.');
+	const value = stringifyUrl(baseUrl).trim();
+	if (!value) throw new TypeError('webR asset base URL is required.');
+	const normalized = ensureTrailingSlash(value);
 	if (currentUrl) return new URL(normalized, stringifyUrl(currentUrl)).href;
 	return normalized;
 }
 
 export function resolveWebRAssetUrl(
 	asset: WebRCoreAsset | string,
-	options: WebRAssetResolverOptions = {}
+	options: WebRAssetResolverOptions
 ) {
 	if (ABSOLUTE_URL_PATTERN.test(asset)) return asset;
 	const baseUrl = normalizeWebRBaseUrl(options.baseUrl, options.currentUrl);
@@ -49,13 +52,13 @@ export function resolveWebRAssetUrl(
 	return `${baseUrl}${asset.replace(/^\/+/, '')}`;
 }
 
-export function createWebRAssetManifest(options: WebRAssetResolverOptions = {}) {
+export function createWebRAssetManifest(options: WebRAssetResolverOptions) {
 	return Object.fromEntries(
 		WEBR_CORE_ASSETS.map((asset) => [asset, resolveWebRAssetUrl(asset, options)])
 	) as Record<WebRCoreAsset, string>;
 }
 
-export function createWebRRuntimeOptions(options: WebRAssetResolverOptions = {}) {
+export function createWebRRuntimeOptions(options: WebRAssetResolverOptions) {
 	const baseUrl = normalizeWebRBaseUrl(options.baseUrl, options.currentUrl);
 	return {
 		baseUrl,

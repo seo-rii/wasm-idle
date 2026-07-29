@@ -9,7 +9,7 @@ export const QUICKJS_PACKAGE_ASSETS = [
 export type QuickJsPackageAsset = (typeof QUICKJS_PACKAGE_ASSETS)[number];
 
 export interface QuickJsAssetResolverOptions {
-	baseUrl?: string | URL;
+	baseUrl: string | URL;
 	currentUrl?: string | URL;
 }
 
@@ -53,18 +53,18 @@ const stringifyUrl = (url: string | URL) => (url instanceof URL ? url.href : url
 
 const canResolveWithUrl = (baseUrl: string) => ABSOLUTE_URL_PATTERN.test(baseUrl);
 
-export function normalizeQuickJsBaseUrl(
-	baseUrl: string | URL = '/quickjs/',
-	currentUrl?: string | URL
-) {
-	const normalized = ensureTrailingSlash(stringifyUrl(baseUrl));
+export function normalizeQuickJsBaseUrl(baseUrl: string | URL, currentUrl?: string | URL) {
+	if (baseUrl == null) throw new TypeError('QuickJS asset base URL is required.');
+	const value = stringifyUrl(baseUrl).trim();
+	if (!value) throw new TypeError('QuickJS asset base URL is required.');
+	const normalized = ensureTrailingSlash(value);
 	if (currentUrl) return new URL(normalized, stringifyUrl(currentUrl)).href;
 	return normalized;
 }
 
 export function resolveQuickJsAssetUrl(
 	asset: QuickJsPackageAsset | string,
-	options: QuickJsAssetResolverOptions = {}
+	options: QuickJsAssetResolverOptions
 ) {
 	if (ABSOLUTE_URL_PATTERN.test(asset)) return asset;
 	const baseUrl = normalizeQuickJsBaseUrl(options.baseUrl, options.currentUrl);
@@ -72,7 +72,7 @@ export function resolveQuickJsAssetUrl(
 	return `${baseUrl}${asset.replace(/^\/+/, '')}`;
 }
 
-export function createQuickJsAssetManifest(options: QuickJsAssetResolverOptions = {}) {
+export function createQuickJsAssetManifest(options: QuickJsAssetResolverOptions) {
 	return Object.fromEntries(
 		QUICKJS_PACKAGE_ASSETS.map((asset) => [asset, resolveQuickJsAssetUrl(asset, options)])
 	) as Record<QuickJsPackageAsset, string>;

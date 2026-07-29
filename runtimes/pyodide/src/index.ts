@@ -23,7 +23,7 @@ export type PyodideLoadAsset = (typeof PYODIDE_LOAD_ASSETS)[number];
 export type PyodidePackageAsset = (typeof PYODIDE_PACKAGE_ASSETS)[number];
 
 export interface PyodideAssetResolverOptions {
-	baseUrl?: string | URL;
+	baseUrl: string | URL;
 	currentUrl?: string | URL;
 }
 
@@ -44,18 +44,18 @@ const stringifyUrl = (url: string | URL) => (url instanceof URL ? url.href : url
 
 const canResolveWithUrl = (baseUrl: string) => ABSOLUTE_URL_PATTERN.test(baseUrl);
 
-export function normalizePyodideBaseUrl(
-	baseUrl: string | URL = '/pyodide/',
-	currentUrl?: string | URL
-) {
-	const normalized = ensureTrailingSlash(stringifyUrl(baseUrl));
+export function normalizePyodideBaseUrl(baseUrl: string | URL, currentUrl?: string | URL) {
+	if (baseUrl == null) throw new TypeError('Pyodide asset base URL is required.');
+	const value = stringifyUrl(baseUrl).trim();
+	if (!value) throw new TypeError('Pyodide asset base URL is required.');
+	const normalized = ensureTrailingSlash(value);
 	if (currentUrl) return new URL(normalized, stringifyUrl(currentUrl)).href;
 	return normalized;
 }
 
 export function resolvePyodideAssetUrl(
 	asset: PyodidePackageAsset | string,
-	options: PyodideAssetResolverOptions = {}
+	options: PyodideAssetResolverOptions
 ) {
 	if (ABSOLUTE_URL_PATTERN.test(asset)) return asset;
 	const baseUrl = normalizePyodideBaseUrl(options.baseUrl, options.currentUrl);
@@ -63,7 +63,7 @@ export function resolvePyodideAssetUrl(
 	return `${baseUrl}${asset.replace(/^\/+/, '')}`;
 }
 
-export function createPyodideAssetManifest(options: PyodideAssetResolverOptions = {}) {
+export function createPyodideAssetManifest(options: PyodideAssetResolverOptions) {
 	return Object.fromEntries(
 		PYODIDE_PACKAGE_ASSETS.map((asset) => [asset, resolvePyodideAssetUrl(asset, options)])
 	) as Record<PyodidePackageAsset, string>;
@@ -73,7 +73,13 @@ export async function loadWasmIdlePyodide(
 	options: WasmIdlePyodideLoadOptions = {}
 ): Promise<PyodideInterface> {
 	const { baseUrl, currentUrl, indexURL, loadPyodide, ...config } = options;
+	if (indexURL === undefined && baseUrl === undefined) {
+		throw new TypeError('Pyodide indexURL or asset base URL is required.');
+	}
+	if (indexURL !== undefined && !indexURL.trim()) {
+		throw new TypeError('Pyodide indexURL must be non-empty.');
+	}
+	const resolvedIndexURL = indexURL ?? normalizePyodideBaseUrl(baseUrl!, currentUrl);
 	const loader = loadPyodide ?? (await import('pyodide')).loadPyodide;
-	const resolvedIndexURL = indexURL ?? normalizePyodideBaseUrl(baseUrl, currentUrl);
 	return loader({ ...config, indexURL: resolvedIndexURL });
 }

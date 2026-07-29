@@ -15,7 +15,7 @@ export type RubyWasmAsset = (typeof RUBY_WASM_ASSETS)[number];
 export type RubyWasmEnvironment = 'browser' | 'browser-script';
 
 export interface RubyAssetResolverOptions {
-	baseUrl?: string | URL;
+	baseUrl: string | URL;
 	currentUrl?: string | URL;
 }
 
@@ -32,15 +32,18 @@ const stringifyUrl = (url: string | URL) => (url instanceof URL ? url.href : url
 
 const canResolveWithUrl = (baseUrl: string) => ABSOLUTE_URL_PATTERN.test(baseUrl);
 
-export function normalizeRubyBaseUrl(baseUrl: string | URL = '/ruby/', currentUrl?: string | URL) {
-	const normalized = ensureTrailingSlash(stringifyUrl(baseUrl));
+export function normalizeRubyBaseUrl(baseUrl: string | URL, currentUrl?: string | URL) {
+	if (baseUrl == null) throw new TypeError('Ruby asset base URL is required.');
+	const value = stringifyUrl(baseUrl).trim();
+	if (!value) throw new TypeError('Ruby asset base URL is required.');
+	const normalized = ensureTrailingSlash(value);
 	if (currentUrl) return new URL(normalized, stringifyUrl(currentUrl)).href;
 	return normalized;
 }
 
 export function resolveRubyAssetUrl(
 	asset: RubyWasmAsset | string,
-	options: RubyAssetResolverOptions = {}
+	options: RubyAssetResolverOptions
 ) {
 	if (ABSOLUTE_URL_PATTERN.test(asset)) return asset;
 	const baseUrl = normalizeRubyBaseUrl(options.baseUrl, options.currentUrl);
@@ -48,7 +51,7 @@ export function resolveRubyAssetUrl(
 	return `${baseUrl}${asset.replace(/^\/+/, '')}`;
 }
 
-export function createRubyAssetManifest(options: RubyAssetResolverOptions = {}) {
+export function createRubyAssetManifest(options: RubyAssetResolverOptions) {
 	return Object.fromEntries(
 		RUBY_WASM_ASSETS.map((asset) => [asset, resolveRubyAssetUrl(asset, options)])
 	) as Record<RubyWasmAsset, string>;

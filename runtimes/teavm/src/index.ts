@@ -8,7 +8,7 @@ export const TEAVM_LOAD_ASSETS = [
 export type TeaVmLoadAsset = (typeof TEAVM_LOAD_ASSETS)[number];
 
 export interface TeaVmAssetResolverOptions {
-	baseUrl?: string | URL;
+	baseUrl: string | URL;
 	currentUrl?: string | URL;
 }
 
@@ -24,18 +24,18 @@ const stringifyUrl = (url: string | URL) => (url instanceof URL ? url.href : url
 
 const canResolveWithUrl = (baseUrl: string) => ABSOLUTE_URL_PATTERN.test(baseUrl);
 
-export function normalizeTeaVmBaseUrl(
-	baseUrl: string | URL = '/teavm/',
-	currentUrl?: string | URL
-) {
-	const normalized = ensureTrailingSlash(stringifyUrl(baseUrl));
+export function normalizeTeaVmBaseUrl(baseUrl: string | URL, currentUrl?: string | URL) {
+	if (baseUrl == null) throw new TypeError('TeaVM asset base URL is required.');
+	const value = stringifyUrl(baseUrl).trim();
+	if (!value) throw new TypeError('TeaVM asset base URL is required.');
+	const normalized = ensureTrailingSlash(value);
 	if (currentUrl) return new URL(normalized, stringifyUrl(currentUrl)).href;
 	return normalized;
 }
 
 export function resolveTeaVmAssetUrl(
 	asset: TeaVmLoadAsset | string,
-	options: TeaVmAssetResolverOptions = {}
+	options: TeaVmAssetResolverOptions
 ) {
 	if (ABSOLUTE_URL_PATTERN.test(asset)) return asset;
 	const baseUrl = normalizeTeaVmBaseUrl(options.baseUrl, options.currentUrl);
@@ -43,7 +43,7 @@ export function resolveTeaVmAssetUrl(
 	return `${baseUrl}${asset.replace(/^\/+/, '')}`;
 }
 
-export function createTeaVmAssetManifest(options: TeaVmAssetResolverOptions = {}) {
+export function createTeaVmAssetManifest(options: TeaVmAssetResolverOptions) {
 	return Object.fromEntries(
 		TEAVM_LOAD_ASSETS.map((asset) => [asset, resolveTeaVmAssetUrl(asset, options)])
 	) as Record<TeaVmLoadAsset, string>;
@@ -51,7 +51,7 @@ export function createTeaVmAssetManifest(options: TeaVmAssetResolverOptions = {}
 
 export async function fetchTeaVmAsset(
 	asset: TeaVmLoadAsset,
-	options: TeaVmFetchAssetOptions = {}
+	options: TeaVmFetchAssetOptions
 ): Promise<Uint8Array> {
 	const fetchImpl = options.fetch ?? globalThis.fetch;
 	if (!fetchImpl) throw new Error('fetch is required to load TeaVM runtime assets.');
