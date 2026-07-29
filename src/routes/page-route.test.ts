@@ -290,7 +290,7 @@ describe('example route debug actions', () => {
 
 	it('exposes a browser debug hook that writes terminal stdin through the bound control', () => {
 		expect(source).toMatch(
-			/type WasmIdleDebugApi = \{\s+writeTerminalInput: \(text: string, eof\?: boolean\) => Promise<void>;\s+getEditorValue: \(\) => string;\s+setEditorValue: \(text: string\) => Promise<boolean>;\s+setWorkspaceFiles: \(files: WorkspaceFile\[], activePath\?: string\) => Promise<boolean>;\s+setBreakpoints: \(lines: number\[]\) => void;\s+getDebugState: \(\) => \{\s+paused: boolean;\s+frameId: number \| null;\s+callStack: DebugFrame\[];\s+scopes: DebugScope\[];\s+variablesByReference: Array<\[number, DebugVariable\[]\]>;\s+\};\s+selectDebugFrame: \(frameId: number\) => Promise<boolean>;\s+loadDebugVariables: \(\s+variablesReference: number,\s+start\?: number,\s+count\?: number\s+\) => Promise<DebugVariable\[]>;\s+readDebugMemory: \(\s+memoryReference: string,\s+offset: number,\s+count: number\s*\) => Promise<\{\s+address\?: string;\s+data: number\[\];\s+unreadableBytes: number;\s+\} \| null>;\s+setPreloadedStdin: \(text: string\) => void;\s+\};/s
+			/type WasmIdleDebugApi = \{\s+writeTerminalInput: \(text: string, eof\?: boolean\) => Promise<void>;\s+getEditorValue: \(\) => string;\s+setEditorValue: \(text: string\) => Promise<boolean>;\s+setWorkspaceFiles: \(files: WorkspaceFile\[], activePath\?: string\) => Promise<boolean>;\s+setBreakpoints: \(lines: number\[]\) => void;\s+getDebugState: \(\) => \{\s+paused: boolean;\s+pausedLine: number \| null;\s+sourcePath: string;\s+pausedSourcePath: string \| null;\s+sourceRevisionStale: boolean;\s+frameId: number \| null;\s+callStack: DebugFrame\[];\s+scopes: DebugScope\[];\s+variablesByReference: Array<\[number, DebugVariable\[]\]>;\s+\};\s+selectDebugFrame: \(frameId: number\) => Promise<boolean>;\s+loadDebugVariables: \(\s+variablesReference: number,\s+start\?: number,\s+count\?: number\s+\) => Promise<DebugVariable\[]>;\s+readDebugMemory: \(\s+memoryReference: string,\s+offset: number,\s+count: number\s*\) => Promise<\{\s+address\?: string;\s+data: number\[\];\s+unreadableBytes: number;\s+\} \| null>;\s+setPreloadedStdin: \(text: string\) => void;\s+\};/s
 		);
 		expect(source).toMatch(/let browserDebugHookVersion = 0;/);
 		expect(source).toMatch(/const debugHookVersion = \+\+browserDebugHookVersion;/);
@@ -312,7 +312,7 @@ describe('example route debug actions', () => {
 			/setBreakpoints\(lines: number\[]\) \{\s+debug\.setBreakpoints\(lines\);\s+\}/s
 		);
 		expect(source).toMatch(
-			/getDebugState\(\) \{[\s\S]*paused: debug\.paused,[\s\S]*frameId: debug\.frameId,[\s\S]*scopes: debug\.scopes\.map\([\s\S]*variablesByReference: Array\.from\(\s*debug\.variablesByReference,[\s\S]*\);\s+\}/s
+			/getDebugState\(\) \{[\s\S]*paused: debug\.paused,[\s\S]*pausedLine: debug\.pausedLine,[\s\S]*sourcePath: debug\.sourcePath,[\s\S]*pausedSourcePath: debug\.pausedSourcePath,[\s\S]*sourceRevisionStale: debug\.sourceRevisionStale,[\s\S]*frameId: debug\.frameId,[\s\S]*scopes: debug\.scopes\.map\([\s\S]*variablesByReference: Array\.from\(\s*debug\.variablesByReference,[\s\S]*\);\s+\}/s
 		);
 		expect(source).toMatch(
 			/loadDebugVariables\(variablesReference: number, start\?: number, count\?: number\) \{\s+return debug\.loadVariableChildren\(variablesReference, start, count\);\s+\}/s

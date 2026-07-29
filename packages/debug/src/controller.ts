@@ -117,6 +117,21 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 	let watchRequestVersion = 0;
 	let frameRequestVersion = 0;
 	let commandInFlight = false;
+	let commandRequestVersion = 0;
+
+	function beginCommandRequest() {
+		commandInFlight = true;
+		return ++commandRequestVersion;
+	}
+
+	function finishCommandRequest(version: number) {
+		if (version === commandRequestVersion) commandInFlight = false;
+	}
+
+	function releaseCommandRequest() {
+		commandRequestVersion += 1;
+		commandInFlight = false;
+	}
 
 	function shouldSyncBreakpoints() {
 		if (typeof options.syncBreakpointsWhile === 'function') {
@@ -217,6 +232,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 	}
 
 	function clearPauseState() {
+		releaseCommandRequest();
 		frameRequestVersion += 1;
 		runToCursorLineStore.set(null);
 		pausedLineStore.set(null);
@@ -263,6 +279,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 			return;
 		}
 		if (event.type === 'pause') {
+			releaseCommandRequest();
 			frameRequestVersion += 1;
 			activeStore.set(true);
 			const restoreBreakpoints = get(runToCursorLineStore) !== null;
@@ -410,12 +427,12 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 	async function sendCommand(command: DebugCommand) {
 		const terminal = get(terminalStore);
 		if (commandInFlight || !terminal?.debugCommand || !get(pausedStore)) return false;
-		commandInFlight = true;
+		const version = beginCommandRequest();
 		try {
 			await terminal.debugCommand(command);
 			return true;
 		} finally {
-			commandInFlight = false;
+			finishCommandRequest(version);
 		}
 	}
 
@@ -424,12 +441,12 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		if (commandInFlight || !terminal?.debugPause || !get(activeStore) || get(pausedStore)) {
 			return false;
 		}
-		commandInFlight = true;
+		const version = beginCommandRequest();
 		try {
 			await terminal.debugPause();
 			return true;
 		} finally {
-			commandInFlight = false;
+			finishCommandRequest(version);
 		}
 	}
 
@@ -450,13 +467,13 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 			? [...breakpoints]
 			: [...breakpoints, targetLine].sort((left, right) => left - right);
 		runToCursorLineStore.set(breakpoints.includes(targetLine) ? null : targetLine);
-		commandInFlight = true;
+		const version = beginCommandRequest();
 		try {
 			await dispatchBreakpoints(terminal, nextBreakpoints);
 			await terminal.debugCommand('continue');
 			return true;
 		} finally {
-			commandInFlight = false;
+			finishCommandRequest(version);
 		}
 	}
 

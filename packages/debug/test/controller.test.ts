@@ -217,6 +217,45 @@ describe('createDebugSessionController', () => {
 		await expect(continuing).resolves.toBe(true);
 	});
 
+	it('releases a pending command on pause without letting its late completion unlock the next command', async () => {
+		const commandResolvers: Array<() => void> = [];
+		const debugCommand = vi.fn(
+			() =>
+				new Promise<void>((resolve) => {
+					commandResolvers.push(resolve);
+				})
+		);
+		const controller = createDebugSessionController({
+			terminal: { debugCommand } as never
+		});
+
+		controller.handleEvent({
+			type: 'pause',
+			line: 6,
+			reason: 'entry',
+			locals: [],
+			callStack: []
+		});
+		const continuing = controller.sendCommand('continue');
+		controller.handleEvent({ type: 'resume', command: 'continue' });
+		controller.handleEvent({
+			type: 'pause',
+			line: 7,
+			reason: 'breakpoint',
+			locals: [],
+			callStack: []
+		});
+
+		const stepping = controller.sendCommand('nextLine');
+		expect(debugCommand).toHaveBeenCalledTimes(2);
+		commandResolvers[0]();
+		await expect(continuing).resolves.toBe(true);
+		await expect(controller.sendCommand('stepOut')).resolves.toBe(false);
+
+		commandResolvers[1]();
+		await expect(stepping).resolves.toBe(true);
+	});
+
 	it('restores persistent breakpoints after a run-to-cursor pause', async () => {
 		const setBreakpoints = vi.fn(async () => undefined);
 		const controller = createDebugSessionController({
@@ -439,5 +478,48 @@ describe('createDebugSessionController', () => {
 
 		controller.handleEvent({ type: 'resume', command: 'continue' });
 		expect(controller.sourceRevisionStale).toBe(false);
+	});
+
+	it('isolates stale locations while selecting frames across source tabs', async () => {
+		const controller = createDebugSessionController({
+			sourcePath: '/workspace/helper.h',
+			terminal: {
+				debugScopes: vi.fn(async () => [])
+			} as never
+		});
+
+		controller.begin();
+		controller.handleEvent({
+			type: 'pause',
+			line: 3,
+			reason: 'breakpoint',
+			sourcePath: '/workspace/helper.h',
+			locals: [],
+			callStack: [
+				{
+					id: 1,
+					functionName: 'add_three',
+					line: 3,
+					sourcePath: '/workspace/helper.h'
+				},
+				{
+					id: 2,
+					functionName: 'main',
+					line: 5,
+					sourcePath: '/workspace/main.c'
+				}
+			]
+		});
+		controller.markSourceRevisionStale('/workspace/main.c');
+
+		await expect(controller.selectFrame(2)).resolves.toBe(true);
+		controller.setSourcePath('/workspace/main.c');
+		expect(controller.sourceRevisionStale).toBe(true);
+		expect(controller.pausedLine).toBe(null);
+
+		await expect(controller.selectFrame(1)).resolves.toBe(true);
+		controller.setSourcePath('/workspace/helper.h');
+		expect(controller.sourceRevisionStale).toBe(false);
+		expect(controller.pausedLine).toBe(3);
 	});
 });

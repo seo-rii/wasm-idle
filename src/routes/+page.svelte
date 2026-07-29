@@ -412,6 +412,10 @@
 		setBreakpoints: (lines: number[]) => void;
 		getDebugState: () => {
 			paused: boolean;
+			pausedLine: number | null;
+			sourcePath: string;
+			pausedSourcePath: string | null;
+			sourceRevisionStale: boolean;
 			frameId: number | null;
 			callStack: DebugFrame[];
 			scopes: DebugScope[];
@@ -1786,6 +1790,10 @@
 			getDebugState() {
 				return {
 					paused: debug.paused,
+					pausedLine: debug.pausedLine,
+					sourcePath: debug.sourcePath,
+					pausedSourcePath: debug.pausedSourcePath,
+					sourceRevisionStale: debug.sourceRevisionStale,
 					frameId: debug.frameId,
 					callStack: debug.callStack.map((frame) => ({ ...frame })),
 					scopes: debug.scopes.map((scope) => ({

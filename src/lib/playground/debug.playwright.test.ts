@@ -108,6 +108,37 @@ int main(void) {
 		testId: 'c-recursive-frames'
 	},
 	{
+		activePath: 'multi-main.c',
+		backend: 'lldb',
+		breakpointLine: 3,
+		breakpointSourcePath: 'helper.h',
+		expectedLocal: { name: 'value', value: '70' },
+		expectedOutput: 'lldb-multifile=73',
+		expectedPausedLine: 3,
+		expectedTitle: 'C · LLDB / WAMR',
+		language: 'C',
+		programArgs: [],
+		source: `#include <stdio.h>
+#include "helper.h"
+
+int main(void) {
+    int value = add_three(70);
+    printf("lldb-multifile=%d\\n", value);
+    return 0;
+}`,
+		testId: 'c-multifile-source-revision',
+		workspaceFiles: [
+			{
+				path: 'helper.h',
+				content: `#pragma once
+static __attribute__((noinline)) int add_three(int value) {
+    int result = value + 3;
+    return result;
+}`
+			}
+		]
+	},
+	{
 		activePath: 'trap.c',
 		backend: 'lldb',
 		breakpointLine: 2,
@@ -295,11 +326,18 @@ afterAll(async () => {
 async function ensureSharedBrowserPage(page: Page, browserUrl: string) {
 	await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
 	for (let attempt = 0; attempt < 5; attempt += 1) {
-		const state = await page.evaluate(() => ({
-			crossOriginIsolated,
-			serviceWorkerControlled: !!navigator.serviceWorker?.controller,
-			sharedArrayBuffer: typeof SharedArrayBuffer !== 'undefined'
-		}));
+		let state;
+		try {
+			state = await page.evaluate(() => ({
+				crossOriginIsolated,
+				serviceWorkerControlled: !!navigator.serviceWorker?.controller,
+				sharedArrayBuffer: typeof SharedArrayBuffer !== 'undefined'
+			}));
+		} catch (error) {
+			if (!String(error).includes('Execution context was destroyed')) throw error;
+			await page.waitForLoadState('domcontentloaded');
+			continue;
+		}
 		if (state.crossOriginIsolated && state.serviceWorkerControlled && state.sharedArrayBuffer) {
 			return state;
 		}
@@ -512,12 +550,16 @@ describe('native-source browser debugging in Chromium', () => {
 								.fill(testCase.programArgs.join(' '));
 						}
 						const workspaceUpdated = await page.evaluate(
-							async (activePath) =>
+							async ({ activePath, workspaceFiles }) =>
 								await (window as any).__wasmIdleDebug.setWorkspaceFiles(
-									[],
+									workspaceFiles,
 									activePath
 								),
-							testCase.activePath
+							{
+								activePath: testCase.activePath,
+								workspaceFiles:
+									'workspaceFiles' in testCase ? testCase.workspaceFiles : []
+							}
 						);
 						expect(workspaceUpdated).toBe(true);
 						let editorUpdated = false;
@@ -541,10 +583,38 @@ describe('native-source browser debugging in Chromium', () => {
 							testCase.source
 						);
 						if (testCase.backend === 'lldb') {
+							if ('breakpointSourcePath' in testCase) {
+								const breakpointFile = testCase.workspaceFiles.find(
+									(file) => file.path === testCase.breakpointSourcePath
+								);
+								expect(breakpointFile).toBeDefined();
+								await page
+									.locator(
+										`.workspace-files button[title="${testCase.breakpointSourcePath}"]`
+									)
+									.click();
+								await page.waitForFunction(
+									(source) =>
+										(window as any).__wasmIdleDebug.getEditorValue() === source,
+									breakpointFile?.content
+								);
+							}
 							await page.evaluate(
 								(line) => (window as any).__wasmIdleDebug.setBreakpoints([line]),
 								testCase.breakpointLine
 							);
+							if ('breakpointSourcePath' in testCase) {
+								await page
+									.locator(
+										`.workspace-files button[title="${testCase.activePath}"]`
+									)
+									.click();
+								await page.waitForFunction(
+									(source) =>
+										(window as any).__wasmIdleDebug.getEditorValue() === source,
+									testCase.source
+								);
+							}
 						}
 
 						const debugButton = page.locator('button.action-button--debug');
@@ -637,34 +707,6 @@ describe('native-source browser debugging in Chromium', () => {
 							expect(
 								(await page.locator('.debug-hero__copy h2').textContent())?.trim()
 							).toBe(testCase.expectedTitle);
-							await page.waitForFunction(
-								() => {
-									const metric = Array.from(
-										document.querySelectorAll('.debug-metric')
-									).find(
-										(element) =>
-											element.querySelector('span')?.textContent?.trim() ===
-											'Breakpoints'
-									);
-									return (
-										metric?.querySelector('strong')?.textContent?.trim() ===
-										'1/1'
-									);
-								},
-								undefined,
-								{ timeout: 30_000 }
-							);
-							const breakpointMetric = await page.evaluate(() => {
-								const metric = Array.from(
-									document.querySelectorAll('.debug-metric')
-								).find(
-									(element) =>
-										element.querySelector('span')?.textContent?.trim() ===
-										'Breakpoints'
-								);
-								return metric?.querySelector('strong')?.textContent?.trim() || '';
-							});
-							expect(breakpointMetric).toBe('1/1');
 							expect(Object.fromEntries(debugAssetResponses)).toEqual(
 								expect.objectContaining(
 									Object.fromEntries(
@@ -738,21 +780,75 @@ describe('native-source browser debugging in Chromium', () => {
 							}
 							stepStartLine = await readPausedLine(page);
 						}
+						if (requireLldbDebug && testCase.backend === 'lldb') {
+							await page.waitForFunction(
+								() => {
+									const metric = Array.from(
+										document.querySelectorAll('.debug-metric')
+									).find(
+										(element) =>
+											element.querySelector('span')?.textContent?.trim() ===
+											'Breakpoints'
+									);
+									return (
+										metric?.querySelector('strong')?.textContent?.trim() ===
+										'1/1'
+									);
+								},
+								undefined,
+								{ timeout: 30_000 }
+							);
+							const breakpointMetric = await page.evaluate(() => {
+								const metric = Array.from(
+									document.querySelectorAll('.debug-metric')
+								).find(
+									(element) =>
+										element.querySelector('span')?.textContent?.trim() ===
+										'Breakpoints'
+								);
+								return metric?.querySelector('strong')?.textContent?.trim() || '';
+							});
+							expect(breakpointMetric).toBe('1/1');
+						}
+						if ('breakpointSourcePath' in testCase) {
+							await page.waitForFunction(
+								(sourcePath) => {
+									const state = (window as any).__wasmIdleDebug.getDebugState();
+									return (
+										state.paused &&
+										state.callStack.some(
+											(frame: { sourcePath?: string }) =>
+												frame.sourcePath === sourcePath
+										)
+									);
+								},
+								`/workspace/${testCase.breakpointSourcePath}`,
+								{
+									timeout: Number(
+										process.env.WASM_IDLE_DEBUG_PAUSE_TIMEOUT_MS || '120000'
+									)
+								}
+							);
+							stepStartLine = await readPausedLine(page);
+						}
 
-						await page.locator('button[aria-label="Next Line"]').click();
-						await page.waitForFunction((previousLine) => {
-							const metric = Array.from(
-								document.querySelectorAll('.debug-metric')
-							).find(
-								(element) =>
-									element.querySelector('span')?.textContent?.trim() === 'Line'
-							);
-							return (
-								document.querySelector('.debug-status-pill--paused') != null &&
-								metric?.querySelector('strong')?.textContent?.trim() !==
-									previousLine
-							);
-						}, stepStartLine);
+						if (!('breakpointSourcePath' in testCase)) {
+							await page.locator('button[aria-label="Next Line"]').click();
+							await page.waitForFunction((previousLine) => {
+								const metric = Array.from(
+									document.querySelectorAll('.debug-metric')
+								).find(
+									(element) =>
+										element.querySelector('span')?.textContent?.trim() ===
+										'Line'
+								);
+								return (
+									document.querySelector('.debug-status-pill--paused') != null &&
+									metric?.querySelector('strong')?.textContent?.trim() !==
+										previousLine
+								);
+							}, stepStartLine);
+						}
 						if (requireLldbDebug && testCase.backend === 'lldb') {
 							const debugState = await page.evaluate(() =>
 								(window as any).__wasmIdleDebug.getDebugState()
@@ -909,6 +1005,78 @@ describe('native-source browser debugging in Chromium', () => {
 										])
 									);
 								}
+							}
+							if ('breakpointSourcePath' in testCase) {
+								const helperPausedLine = await readPausedLine(page);
+								expect(helperPausedLine).toBe(`L${testCase.expectedPausedLine}`);
+								const multiSourceState = await page.evaluate(() =>
+									(window as any).__wasmIdleDebug.getDebugState()
+								);
+								const helperFrame = multiSourceState.callStack.find(
+									(frame: { sourcePath?: string }) =>
+										frame.sourcePath ===
+										`/workspace/${testCase.breakpointSourcePath}`
+								);
+								const mainFrame = multiSourceState.callStack.find(
+									(frame: { sourcePath?: string }) =>
+										frame.sourcePath === `/workspace/${testCase.activePath}`
+								);
+								expect(helperFrame?.id).toBeTypeOf('number');
+								expect(mainFrame?.id).toBeTypeOf('number');
+								const editedMainSource = `${testCase.source}
+// edited while paused in helper.h`;
+								const workspaceReplaced = await page.evaluate(
+									async ({ activePath, activeSourcePath, editedMainSource }) =>
+										await (window as any).__wasmIdleDebug.setWorkspaceFiles(
+											[{ path: activePath, content: editedMainSource }],
+											activeSourcePath
+										),
+									{
+										activePath: testCase.activePath,
+										activeSourcePath: testCase.breakpointSourcePath,
+										editedMainSource
+									}
+								);
+								expect(workspaceReplaced).toBe(true);
+								const mainFrameSelected = await page.evaluate(
+									(frameId) =>
+										(window as any).__wasmIdleDebug.selectDebugFrame(frameId),
+									mainFrame.id
+								);
+								expect(mainFrameSelected).toBe(true);
+								await page.waitForFunction((sourcePath) => {
+									const state = (window as any).__wasmIdleDebug.getDebugState();
+									return (
+										state.paused &&
+										state.pausedSourcePath === sourcePath &&
+										state.sourceRevisionStale &&
+										state.pausedLine === null
+									);
+								}, `/workspace/${testCase.activePath}`);
+								const helperFrameSelected = await page.evaluate(
+									(frameId) =>
+										(window as any).__wasmIdleDebug.selectDebugFrame(frameId),
+									helperFrame.id
+								);
+								expect(helperFrameSelected).toBe(true);
+								await page.waitForFunction(
+									({ sourcePath, pausedLine }) => {
+										const state = (
+											window as any
+										).__wasmIdleDebug.getDebugState();
+										return (
+											state.paused &&
+											state.pausedSourcePath === sourcePath &&
+											!state.sourceRevisionStale &&
+											state.pausedLine === pausedLine
+										);
+									},
+									{
+										sourcePath: `/workspace/${testCase.breakpointSourcePath}`,
+										pausedLine: testCase.expectedPausedLine
+									}
+								);
+								expect(helperPausedLine).toBe(`L${testCase.expectedPausedLine}`);
 							}
 						}
 						if (
@@ -1098,13 +1266,40 @@ describe('native-source browser debugging in Chromium', () => {
 							}
 							await page.getByRole('button', { name: 'Stop Debug' }).click();
 						} else {
-							await page.waitForFunction(
-								(expectedOutput) =>
-									document
-										.querySelector('[data-testid="terminal-debug-output"]')
-										?.textContent?.includes(expectedOutput),
-								testCase.expectedOutput
-							);
+							try {
+								await page.waitForFunction(
+									(expectedOutput) =>
+										document
+											.querySelector('[data-testid="terminal-debug-output"]')
+											?.textContent?.includes(expectedOutput),
+									testCase.expectedOutput
+								);
+							} catch (error) {
+								const debugState = await page
+									.evaluate(() => (window as any).__wasmIdleDebug.getDebugState())
+									.catch(() => null);
+								const transcript =
+									(await page
+										.locator('[data-testid="terminal-debug-output"]')
+										.textContent()
+										.catch(() => '')) || '';
+								throw new Error(
+									`${testCase.language} did not complete with ${testCase.expectedOutput}\n${JSON.stringify(
+										{
+											error:
+												error instanceof Error
+													? error.stack || error.message
+													: String(error),
+											debugState,
+											consoleTail: consoleMessages.slice(-80),
+											pageErrors,
+											transcript
+										},
+										null,
+										2
+									)}`
+								);
+							}
 						}
 						await page
 							.locator('button.action-button--debug')

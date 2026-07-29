@@ -34,3 +34,7 @@ removed through a programmatic workspace update; compare the complete replacemen
 session workspace instead of tracking only the active editor model. The controller keeps execution
 controls available but clears the paused line for that source and exposes `sourceRevisionStale`,
 preventing a valid DWARF location from being drawn against newer text.
+
+Command serialization also treats a runtime `pause` event as completion of the command that resumed
+the target. Locks are versioned so a late `continue` promise cannot unlock a newer step request;
+hosts may therefore issue the next step as soon as the stopped state is published.

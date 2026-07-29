@@ -3,6 +3,49 @@ import { describe, expect, it, vi } from 'vitest';
 import { attachMonacoDebugActions, MonacoDebugView } from '../../src/editor/monaco.js';
 
 describe('MonacoDebugView', () => {
+	it('ignores a paused line outside the active editor model', () => {
+		const inlineValueDecorations = { set: vi.fn(), clear: vi.fn() };
+		const breakpointDecorations = { set: vi.fn(), clear: vi.fn() };
+		const getLineMaxColumn = vi.fn(() => {
+			throw new Error('Illegal value for lineNumber');
+		});
+		const editor = {
+			createDecorationsCollection: vi
+				.fn()
+				.mockReturnValueOnce(breakpointDecorations)
+				.mockReturnValueOnce(inlineValueDecorations),
+			onMouseDown: vi.fn(() => ({ dispose: vi.fn() })),
+			getModel: vi.fn(() => ({
+				getLineCount: vi.fn(() => 5),
+				getLineMaxColumn,
+				getLineContent: vi.fn()
+			})),
+			getOption: vi.fn(() => ({ lineHeight: 20 })),
+			getLayoutInfo: vi.fn(() => ({ contentWidth: 640 })),
+			addContentWidget: vi.fn(),
+			layoutContentWidget: vi.fn(),
+			removeContentWidget: vi.fn(),
+			revealLineInCenterIfOutsideViewport: vi.fn()
+		};
+		const Monaco = {
+			Range: class {},
+			editor: {
+				EditorOption: { fontInfo: 50 },
+				ContentWidgetPositionPreference: { EXACT: 0 },
+				MouseTargetType: {
+					GUTTER_GLYPH_MARGIN: 2,
+					GUTTER_LINE_DECORATIONS: 3
+				}
+			}
+		};
+		const view = new MonacoDebugView(Monaco as never, editor as never, undefined);
+
+		expect(() => view.setPauseState(42, [], null)).not.toThrow();
+		expect(getLineMaxColumn).not.toHaveBeenCalled();
+		expect(editor.addContentWidget).not.toHaveBeenCalled();
+		expect(inlineValueDecorations.set).toHaveBeenCalledWith([]);
+	});
+
 	it('keeps inline debug hints visible for empty end-of-line ranges', () => {
 		const inlineValueDecorations = { set: vi.fn(), clear: vi.fn() };
 		const breakpointDecorations = { set: vi.fn(), clear: vi.fn() };
@@ -13,6 +56,7 @@ describe('MonacoDebugView', () => {
 				.mockReturnValueOnce(inlineValueDecorations),
 			onMouseDown: vi.fn(() => ({ dispose: vi.fn() })),
 			getModel: vi.fn(() => ({
+				getLineCount: vi.fn(() => 20),
 				getLineMaxColumn: vi.fn(() => 14),
 				getLineContent: vi.fn(() => '    sum += num;')
 			})),

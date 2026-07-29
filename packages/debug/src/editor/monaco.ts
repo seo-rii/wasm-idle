@@ -65,10 +65,18 @@ export class MonacoDebugView {
 		locals: DebugVariable[],
 		adapter: DebugLanguageAdapter | null
 	) {
-		const lineMaxColumn = pausedLine
-			? this.editor.getModel()?.getLineMaxColumn(pausedLine) || 1
+		const model = this.editor.getModel();
+		const renderedPausedLine =
+			pausedLine !== null &&
+			Number.isInteger(pausedLine) &&
+			pausedLine > 0 &&
+			pausedLine <= (model?.getLineCount() ?? 0)
+				? pausedLine
+				: null;
+		const lineMaxColumn = renderedPausedLine
+			? model?.getLineMaxColumn(renderedPausedLine) || 1
 			: 1;
-		if (pausedLine) {
+		if (renderedPausedLine) {
 			const fontInfo = this.editor.getOption(this.Monaco.editor.EditorOption.fontInfo);
 			if (!this.pausedLineWidgetNode) {
 				this.pausedLineWidgetNode = document.createElement('div');
@@ -81,7 +89,7 @@ export class MonacoDebugView {
 					getId: () => 'wasm-idle-debug-current-line',
 					getDomNode: () => this.pausedLineWidgetNode!,
 					getPosition: () => ({
-						position: { lineNumber: pausedLine, column: 1 },
+						position: { lineNumber: renderedPausedLine, column: 1 },
 						preference: [this.Monaco.editor.ContentWidgetPositionPreference.EXACT]
 					})
 				};
@@ -89,27 +97,27 @@ export class MonacoDebugView {
 			} else {
 				this.editor.layoutContentWidget(this.pausedLineWidget);
 			}
-			this.editor.revealLineInCenterIfOutsideViewport(pausedLine);
+			this.editor.revealLineInCenterIfOutsideViewport(renderedPausedLine);
 		} else if (this.pausedLineWidget) {
 			this.editor.removeContentWidget(this.pausedLineWidget);
 			this.pausedLineWidget = null;
 			this.pausedLineWidgetNode = null;
 		}
 		const inlineLocals =
-			pausedLine && adapter
+			renderedPausedLine && adapter
 				? adapter.selectInlineLocals(
-						this.editor.getModel()?.getLineContent(pausedLine) || '',
+						model?.getLineContent(renderedPausedLine) || '',
 						locals
 					)
 				: [];
 		this.inlineValueDecorations.set(
-			pausedLine && inlineLocals.length
+			renderedPausedLine && inlineLocals.length
 				? [
 						{
 							range: new this.Monaco.Range(
-								pausedLine,
+								renderedPausedLine,
 								lineMaxColumn,
-								pausedLine,
+								renderedPausedLine,
 								lineMaxColumn
 							),
 							options: {
