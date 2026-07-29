@@ -153,9 +153,12 @@ export async function createWorkerLanguageServerClient(
 	};
 	const writer = new BrowserMessageWriter(activeWorker);
 	status.ready();
+	let disposed = false;
 	return {
 		transport: { reader: filteredReader, writer },
 		dispose: () => {
+			if (disposed) return;
+			disposed = true;
 			activeWorker.terminate();
 			reader.dispose();
 			writer.dispose();

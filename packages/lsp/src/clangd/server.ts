@@ -199,12 +199,15 @@ export async function createClangdLanguageServer(
 	const reader = new BrowserMessageReader(worker);
 	const writer = new BrowserMessageWriter(worker);
 
+	let disposed = false;
 	return {
 		transport: { reader, writer },
 		syncFile: (path: string) => {
 			worker.postMessage({ type: 'sync-file', name: path });
 		},
 		dispose: () => {
+			if (disposed) return;
+			disposed = true;
 			worker.terminate();
 			reader.dispose();
 			writer.dispose();

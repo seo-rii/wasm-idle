@@ -109,9 +109,12 @@ export async function createPythonLanguageServer(
 	const reader = new BrowserMessageReader(worker);
 	const writer = new BrowserMessageWriter(worker);
 
+	let disposed = false;
 	return {
 		transport: { reader, writer },
 		dispose: () => {
+			if (disposed) return;
+			disposed = true;
 			worker.terminate();
 			reader.dispose();
 			writer.dispose();
