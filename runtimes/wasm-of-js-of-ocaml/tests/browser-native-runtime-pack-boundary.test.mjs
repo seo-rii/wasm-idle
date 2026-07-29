@@ -438,6 +438,32 @@ test('bounds manifest metadata and rejects substituted final URLs', async () => 
 		}),
 		/final URL mismatch/
 	);
+
+	let readerRequested = false;
+	let cancelled = false;
+	await assert.rejects(
+		fetchBrowserNativeManifest({
+			baseUrl: BASE_URL,
+			fetch: async () => ({
+				url: 'browser-native-manifest.v1.json',
+				ok: true,
+				status: 200,
+				headers: new Headers(),
+				body: {
+					async cancel() {
+						cancelled = true;
+					},
+					getReader() {
+						readerRequested = true;
+						throw new Error('relative response body should not be read');
+					}
+				}
+			})
+		}),
+		/invalid final URL/
+	);
+	assert.equal(readerRequested, false);
+	assert.equal(cancelled, true);
 });
 
 test('requires exact browser-native compiler asset receipts in the manifest', async () => {

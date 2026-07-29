@@ -272,7 +272,7 @@ async function fetchBoundedRuntimeAsset(
 	if (response.url) {
 		let finalUrl: URL;
 		try {
-			finalUrl = new URL(response.url, requestUrl);
+			finalUrl = new URL(response.url);
 		} catch {
 			try {
 				await response.body?.cancel();
