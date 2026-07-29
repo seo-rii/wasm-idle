@@ -1,10 +1,105 @@
 import { gzipSync } from 'node:zlib';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { fetchRuntimeAssetBytes } from '../src/runtime-asset.js';
 
 describe('runtime asset fetch fallback', () => {
+	it('uses least-authority fetch options and accepts an exact final URL', async () => {
+		const assetUrl = 'https://example.test/runtime/data.bin';
+		const response = new Response(new Uint8Array([1, 2, 3]));
+		Object.defineProperty(response, 'url', { value: assetUrl });
+		const fetchImpl = vi.fn(async () => response);
+
+		await expect(
+			fetchRuntimeAssetBytes(assetUrl, 'data.bin', fetchImpl, false)
+		).resolves.toEqual(new Uint8Array([1, 2, 3]));
+		expect(fetchImpl).toHaveBeenCalledWith(assetUrl, {
+			credentials: 'omit',
+			redirect: 'error',
+			referrerPolicy: 'no-referrer'
+		});
+	});
+
+	it.each([
+		'data:application/wasm;base64,AGFzbQ==',
+		'https://user:secret@example.test/runtime/data.bin',
+		'https://example.test/runtime/data.bin#fragment'
+	])('rejects an unsafe runtime asset URL before fetching: %s', async (assetUrl) => {
+		const fetchImpl = vi.fn(async () => new Response(new Uint8Array()));
+
+		await expect(
+			fetchRuntimeAssetBytes(assetUrl, 'data.bin', fetchImpl, false)
+		).rejects.toThrow(/runtime asset URL/);
+		expect(fetchImpl).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		['relative', 'data.bin', 'invalid final URL'],
+		['malformed', 'http://[', 'invalid final URL'],
+		['mismatched', 'https://mirror.test/runtime/data.bin', 'unexpected final URL']
+	])('rejects and cancels a %s response URL', async (_caseName, responseUrl, message) => {
+		let cancelled = false;
+		let readerRequested = false;
+		const response = new Response(
+			new ReadableStream({
+				cancel() {
+					cancelled = true;
+				}
+			})
+		);
+		Object.defineProperty(response, 'url', { value: responseUrl });
+		Object.defineProperty(response.body, 'getReader', {
+			value: () => {
+				readerRequested = true;
+				throw new Error('rejected response body should not be read');
+			}
+		});
+
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.test/runtime/data.bin',
+				'data.bin',
+				async () => response,
+				false
+			)
+		).rejects.toThrow(message);
+		expect(readerRequested).toBe(false);
+		expect(cancelled).toBe(true);
+	});
+
+	it('cancels a failed response before trying the gzip fallback', async () => {
+		const assetUrl = 'https://example.test/runtime/llvm/lld.wasm';
+		let cancelled = false;
+		let sent = false;
+		const failedResponse = new Response(
+			new ReadableStream({
+				pull(controller) {
+					if (sent) {
+						controller.close();
+						return;
+					}
+					sent = true;
+					controller.enqueue(new TextEncoder().encode('missing'));
+				},
+				cancel() {
+					cancelled = true;
+				}
+			}),
+			{ status: 404 }
+		);
+		Object.defineProperty(failedResponse, 'url', { value: assetUrl });
+		const gzipResponse = new Response(gzipSync(new Uint8Array([0x00, 0x61, 0x73, 0x6d])));
+		Object.defineProperty(gzipResponse, 'url', { value: `${assetUrl}.gz` });
+
+		await expect(
+			fetchRuntimeAssetBytes(assetUrl, 'lld.wasm', async (input) => {
+				return String(input).endsWith('.gz') ? gzipResponse : failedResponse;
+			})
+		).resolves.toEqual(new Uint8Array([0x00, 0x61, 0x73, 0x6d]));
+		expect(cancelled).toBe(true);
+	});
+
 	it('retries the gzip variant when a raw wasm asset resolves to html', async () => {
 		const requestedUrls: string[] = [];
 

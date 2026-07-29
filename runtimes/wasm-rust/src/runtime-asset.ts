@@ -54,14 +54,73 @@ export async function fetchRuntimeAssetBytes(
 	allowCompressedFallback = true,
 	onProgress?: (progress: RuntimeAssetDownloadProgress) => void
 ) {
-	const resolvedAssetUrl = assetUrl.toString();
-	const resolvedAssetUrlObject = new URL(resolvedAssetUrl);
+	let resolvedAssetUrlObject: URL;
+	try {
+		resolvedAssetUrlObject = new URL(assetUrl.toString());
+	} catch {
+		throw new Error('wasm-rust runtime asset URLs must be absolute');
+	}
+	if (
+		resolvedAssetUrlObject.protocol !== 'http:' &&
+		resolvedAssetUrlObject.protocol !== 'https:'
+	) {
+		throw new Error(
+			`unsupported wasm-rust runtime asset URL scheme: ${resolvedAssetUrlObject.protocol}`
+		);
+	}
+	if (resolvedAssetUrlObject.username || resolvedAssetUrlObject.password) {
+		throw new Error('wasm-rust runtime asset URLs must not include credentials');
+	}
+	if (resolvedAssetUrlObject.hash) {
+		throw new Error('wasm-rust runtime asset URLs must not include fragments');
+	}
+	const resolvedAssetUrl = resolvedAssetUrlObject.href;
 	let response: Response;
 	try {
-		response = await fetchImpl(resolvedAssetUrl);
+		response = await fetchImpl(resolvedAssetUrl, {
+			credentials: 'omit',
+			redirect: 'error',
+			referrerPolicy: 'no-referrer'
+		});
 	} catch (error) {
 		throw new Error(
 			`failed to fetch ${assetLabel} from ${resolvedAssetUrl}: ${error instanceof Error ? error.message : String(error)}. This usually means the browser loaded a stale wasm-rust bundle or blocked a nested runtime asset request; hard refresh and resync the runtime assets.`
+		);
+	}
+	if (response.url) {
+		let finalUrl: URL;
+		try {
+			finalUrl = new URL(response.url);
+		} catch {
+			await response.body?.cancel().catch(() => undefined);
+			throw new Error(
+				`wasm-rust runtime asset ${assetLabel} returned an invalid final URL: ${response.url}`
+			);
+		}
+		if (finalUrl.href !== resolvedAssetUrl) {
+			await response.body?.cancel().catch(() => undefined);
+			throw new Error(
+				`wasm-rust runtime asset ${assetLabel} returned an unexpected final URL: ${response.url}`
+			);
+		}
+	}
+	if (!response.ok) {
+		await response.body?.cancel().catch(() => undefined);
+		if (allowCompressedFallback && !resolvedAssetUrlObject.pathname.endsWith('.gz')) {
+			const compressedAssetUrl = new URL(resolvedAssetUrl);
+			compressedAssetUrl.pathname = `${compressedAssetUrl.pathname}.gz`;
+			try {
+				return await fetchRuntimeAssetBytes(
+					compressedAssetUrl,
+					assetLabel,
+					fetchImpl,
+					false,
+					onProgress
+				);
+			} catch {}
+		}
+		throw new Error(
+			`failed to fetch ${assetLabel} from ${resolvedAssetUrl} (status ${response.status}). This usually means the browser loaded a stale wasm-rust bundle or a nested runtime asset is missing.`
 		);
 	}
 	const assetBytes = await readResponseBytes(response, onProgress);
@@ -78,7 +137,7 @@ export async function fetchRuntimeAssetBytes(
 	if (
 		allowCompressedFallback &&
 		!resolvedAssetUrlObject.pathname.endsWith('.gz') &&
-		(!response.ok || responseLooksLikeHtml)
+		responseLooksLikeHtml
 	) {
 		const compressedAssetUrl = new URL(resolvedAssetUrl);
 		compressedAssetUrl.pathname = `${compressedAssetUrl.pathname}.gz`;
@@ -91,11 +150,6 @@ export async function fetchRuntimeAssetBytes(
 				onProgress
 			);
 		} catch {}
-	}
-	if (!response.ok) {
-		throw new Error(
-			`failed to fetch ${assetLabel} from ${resolvedAssetUrl} (status ${response.status}). This usually means the browser loaded a stale wasm-rust bundle or a nested runtime asset is missing.`
-		);
 	}
 	if (responseLooksLikeHtml) {
 		throw new Error(
