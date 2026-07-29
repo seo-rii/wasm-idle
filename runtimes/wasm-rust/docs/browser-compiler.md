@@ -131,13 +131,15 @@ The real browser-hosted `rustc.wasm` still has a narrow transient failure mode:
 
 - helper or LLVM worker threads may still throw `memory access out of bounds`
 - this can happen before or during optimization/summary passes
-- the failure is intermittent, but the shipped path now treats it as a recoverable internal fault
+- the failure is intermittent, and a compile that produces no artifact is returned to the caller
+  without a hidden fresh-worker retry
 
 Observed recovery behavior:
 
 - rustc often still mirrors `.no-opt.bc` before the worker failure becomes terminal
 - `llvm-wasm` can link that mirrored bitcode into runnable wasm
-- retrying the browser rustc attempt materially improves success rate
+- the host keeps a short grace window for a mirrored artifact and can recover it within the same
+  worker attempt
 
 Shipped mitigation:
 
@@ -151,24 +153,15 @@ Shipped mitigation:
   startup stability in Chromium
 - `src/worker-status.ts` records the last helper-thread start-arg snapshot so recovered OOBs still
   leave actionable context in diagnostics
-- `src/compiler.ts` permits one fresh-worker retry (`2` attempts total) for transient browser failures
+- `src/compiler.ts` makes exactly one browser-rustc worker attempt per compile request
 - `src/compiler.ts` now also gives mirrored-bitcode recovery a short grace window before turning a
   helper-thread failure into a user-visible compile failure
-- retries are currently triggered for:
-    - `memory access out of bounds`
-    - `browser rustc timed out before producing LLVM bitcode`
-    - transient metadata decode / invalid-rlib panic surfaces such as:
-        - `invalid enum variant tag while decoding`
-        - `found invalid metadata files for crate`
-        - `failed to parse rlib`
-- helper-worker/transient retry diagnostics are now emitted as visible warnings with the retry
-  reason when `compile({ log: true })` is enabled
-    - successful consumers should not surface those recovered internal failures as user-visible
-      terminal errors
+- helper-thread, timeout, bootstrap, and stale-metadata failures that produce no artifact are returned
+  as terminal compile failures from that attempt
 - when `compile({ log: true })` is used, compile-time browser-rustc log lines are returned through
   `result.logs`
     - the same data is also available as structured `result.logRecords` with preserved `level`
-    - this includes retry warnings and forwarded `compiler-worker` log lines
+    - this includes forwarded `compiler-worker` log lines, without retry warnings
     - consumers can forward those logs into their terminal surface without scraping browser console
 - `compile({ onProgress })` now receives structured stage/attempt/percent updates directly instead
   of inferring progress from mixed stdout text
@@ -179,9 +172,10 @@ This is an intentional product behavior, not just a probe-only trick.
 
 ## Consumer-facing behavior
 
-The browser retry path is now part of the consumer contract:
+The single-attempt browser path is now part of the consumer contract:
 
-- compile retries are visible as warnings when `compile({ log: true })` is enabled
+- one compile request starts at most one browser-rustc worker
+- a terminal worker failure is returned without retry warnings or a hidden second attempt
 - recovered internal worker failures should not be forwarded into user-facing program output
 - a final `success: true` compile result is the only outcome the consumer should treat as decisive
 - `extendedTimeout: true` is the current public timeout knob
@@ -279,10 +273,12 @@ Latest observed outcome:
       compile as a clean result
 - the Chromium readiness probe retries when a Service Worker navigation replaces Playwright's
   execution context, while unrelated evaluation failures still fail immediately
-- after moving the helper handshake to the entry boundary, five fresh `wasm32-wasip1` Chromium
-  sessions completed with zero compiler retries and zero memory-OOB reports
-- a subsequent preview-build run completed `wasm32-wasip1`, `wasm32-wasip2`, and
-  `wasm32-wasip3` with zero compiler retries and zero memory-OOB reports
+- after moving the helper handshake to the entry boundary, ten fresh wasm-idle Chromium sessions
+  completed without retry markers or memory-OOB reports: four `wasm32-wasip1`, four
+  `wasm32-wasip2`, and two `wasm32-wasip3`
+- the standalone Chromium suite completed `wasm32-wasip1`, `wasm32-wasip2`, and
+  `wasm32-wasip3`, plus a constrained `wasm32-wasip1` run with 6,400 initial and 8,192 maximum
+  Wasm pages (400/512 MiB), without retry markers or memory-OOB reports
 - targeted browser coverage still included:
     - helper-thread startup/retry/runtime shims
     - richer Chromium browser harness regression
@@ -309,11 +305,12 @@ Observed recovery markers from the successful browser run:
 - the shared mirror logged `mirrored artifact updated seq=2 bytes=4996 overflowed=false`
 - the linker logged `mirrored bitcode settled; linking through llvm-wasm`
 
-That historical run established why a bounded recovery path remains:
+That historical run established why same-attempt mirrored-artifact recovery remains:
 
 - mirrored-bitcode recovery can preserve a usable artifact after a transient worker fault
-- current browser gates require clean first-attempt compilation, and the fallback is limited to one
-  fresh worker retry rather than treating repeated retries as normal success
+- current browser gates require clean single-attempt compilation and fail on any legacy retry marker
+- a failure without a recoverable mirrored artifact is returned immediately; no fresh compiler worker
+  is started behind the caller's request
 
 Minor harness note:
 
@@ -349,8 +346,11 @@ What is now proven:
 
 What is still true:
 
-- success currently relies on retrying around intermittent browser-rustc LLVM worker failures
-- that is acceptable for `wasm-rust` standalone validation today
-- consumer reintegration should treat that retry-based recovery as a conscious tradeoff
+- helper-thread faults can still be recovered when usable output was already mirrored within the same
+  attempt
+- helper-thread faults without a recoverable artifact now fail deterministically instead of consuming
+  a hidden second compile attempt
+- the ten-session consumer stress gate and constrained-memory standalone gate protect this
+  single-attempt contract
 - local full preview2 packaging still depends on a matching custom install root that actually contains
   the `wasm32-wasip2` sysroot

@@ -41,12 +41,13 @@ Latest validated outcome from that wrapper:
 
 Current browser baseline:
 
-- five repeated `wasm32-wasip1` sessions and a later `wasm32-wasip1`/`wasm32-wasip2`/
-  `wasm32-wasip3` preview run completed without compiler retries or memory-OOB reports
-- the shipped fallback permits one fresh-worker retry and continues when mirrored `.no-opt.bc` is
-  available
-- the wasm-idle Chromium regression fails if a retry is observed, so recovered compilation is not
-  counted as a clean stress result
+- ten fresh wasm-idle sessions (four `wasm32-wasip1`, four `wasm32-wasip2`, and two
+  `wasm32-wasip3`) completed without compiler retry markers or memory-OOB reports
+- standalone coverage also completed all three targets plus a constrained `wasm32-wasip1` run at
+  400 MiB initial/512 MiB maximum Wasm memory
+- each compile request starts at most one browser-rustc worker; mirrored `.no-opt.bc` recovery remains
+  available only within that attempt
+- the wasm-idle Chromium regression still rejects any legacy retry marker
 - a `favicon.ico` `404` in the harness console is expected noise and not a product failure
 
 ## Standalone browser harness

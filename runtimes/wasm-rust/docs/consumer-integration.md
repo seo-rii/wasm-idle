@@ -104,33 +104,29 @@ Recommended behavior:
     - this only works while emitted browser imports still stay on WASIp2 interfaces
     - if upstream starts emitting real preview3 browser imports, the consumer should reject that
       artifact until a browser-safe preview3 shim exists
-- treat successful `compile()` as authoritative even if the browser console showed transient internal
-  retry warnings before success
+- treat successful `compile()` as authoritative; a failure without a recoverable same-attempt
+  artifact is returned directly rather than retried on a fresh compiler worker
 
 `wasm-idle` now follows this path on its Rust worker runtime.
 
-## Retry behavior
+## Single-attempt behavior
 
-`wasm-rust` permits one fresh-worker retry after a transient browser-rustc failure.
+`wasm-rust` starts at most one browser-rustc worker for each `compile()` request.
 
-This is a bounded fallback rather than the normal success path. Browser regression coverage requires
-first-attempt success, but a consumer can still see a warning like the following when
-`compile({ log: true })` is enabled:
-
-```text
-[wasm-rust] browser rustc attempt 1/2 failed; retrying
-```
+The compiler still waits briefly for mirrored output after a helper-thread fault. If usable output
+appears within that same attempt, it can be finalized; otherwise the failure is returned without a
+fresh-worker fallback.
 
 Important implications:
 
-- a retry warning does not mean compile failed
-- user-facing terminals should only surface the final compile failure, not recovered internal worker
-  crashes
-- if `compile()` returns `success: true`, the recovered path is considered valid
+- consumers never need to interpret a retry warning or reconcile two worker attempts
+- user-facing terminals should surface the returned compile failure when no same-attempt artifact was
+  recovered
+- if `compile()` returns `success: true`, the returned artifact is authoritative
 - when `log: true` is enabled, compile-time browser-rustc logs are returned in `result.logs`
     - `result.logRecords` exposes the same lines with preserved `level` metadata
     - consumers can forward those logs into their terminal before running the final wasm artifact
-    - the browser console is no longer the only place to inspect retry and worker log lines
+    - the browser console is no longer the only place to inspect worker log lines
 - when `onProgress` is provided, progress bar state should come from that callback instead of
   parsing stdout/log text
 - `extendedTimeout: true` is the current public timeout knob

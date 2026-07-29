@@ -44,9 +44,12 @@ stability inside the browser-hosted LLVM path.
 Current stabilization status:
 
 - helper startup now waits for the `wasi_thread_start` entry boundary
-- five repeated `wasm32-wasip1` sessions and a later all-target preview run completed without a
-  compiler retry or memory-OOB report
-- one fresh-worker retry remains as a bounded fallback while longer stress coverage accumulates
+- ten fresh consumer sessions completed without a compiler retry or memory-OOB report across four
+  `wasm32-wasip1`, four `wasm32-wasip2`, and two `wasm32-wasip3` runs
+- the standalone all-target run and a constrained `wasm32-wasip1` run at 400/512 MiB also completed
+  without a retry or memory-OOB report
+- the fresh-worker fallback has been removed; each compile request now makes one browser-rustc
+  attempt
 
 Previously observed symptom:
 
@@ -57,8 +60,8 @@ Previously observed symptom:
 
 Current product behavior:
 
-- transient browser-rustc failures receive at most one fresh-worker retry
-- mirrored `.no-opt.bc` recovery plus `llvm-wasm` linking remains available for that fallback
+- transient browser-rustc failures without an artifact are returned from the sole worker attempt
+- mirrored `.no-opt.bc` recovery plus `llvm-wasm` linking remains available within that same attempt
 
 What is not blocked anymore:
 
@@ -68,8 +71,8 @@ What is not blocked anymore:
 - final linker availability
 - wasm artifact shape for consumers
 
-So the remaining question is no longer "can we make real rustc work at all?" It is whether longer
-browser stress coverage is clean enough to remove the final bounded retry.
+So the remaining question is no longer "can we make real rustc work at all?" It is whether ongoing
+browser stress coverage keeps the single-attempt path stable across browser/runtime updates.
 
 ## Resolved blocker chain
 
@@ -187,7 +190,8 @@ Resolution:
 - preserve the mirrored bitcode
 - lower and link it with packaged `llvm-wasm`
 - originally retry transient browser-rustc failures up to `5` attempts
-- after fixing the helper entry handshake, reduce the current fallback to one retry
+- after fixing the helper entry handshake, reduce the fallback to one retry
+- after clean ten-session and constrained-memory gates, remove the fresh-worker retry entirely
 
 This is the architecture that shipped.
 
@@ -209,8 +213,10 @@ Accepted current state:
 
 - standalone Chromium compile+run succeeds
 - the module fulfills the browser compiler contract expected by consumers
-- success currently relies on retrying around intermittent browser-rustc LLVM worker faults
+- compilation makes one browser-rustc attempt and returns a deterministic failure when that attempt
+  produces no recoverable artifact
+- same-attempt mirrored-artifact recovery remains available when rustc produced usable output before
+  a helper-thread fault
 
-If that retry-based behavior becomes unacceptable later, the next work item is not bootstrap or
-sysroot recovery anymore. It is reducing the browser-host LLVM worker failure rate enough to stop
-depending on retries.
+The remaining reliability work is to keep the single-attempt browser-host LLVM path clean under the
+required consumer stress and constrained-memory gates.

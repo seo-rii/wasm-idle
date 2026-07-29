@@ -82,11 +82,13 @@ Current product behavior:
 
 - helper startup waits for the `wasi_thread_start` entry boundary instead of returning after runtime
   instantiation
-- five repeated `wasm32-wasip1` Chromium sessions and a subsequent all-target preview run completed
+- ten fresh consumer sessions completed across four `wasm32-wasip1`, four `wasm32-wasip2`, and two
+  `wasm32-wasip3` runs without retries or memory-OOB reports
+- the standalone all-target gate and a constrained 400/512 MiB `wasm32-wasip1` run also completed
   without retries or memory-OOB reports
-- the compiler keeps one fresh-worker retry as a bounded fallback, while browser regression coverage
-  fails if any retry occurs
-- mirrored `.no-opt.bc` recovery plus `llvm-wasm` linking remains available for that fallback
+- the compiler now starts one browser-rustc worker per request; browser regression coverage still
+  fails on any legacy retry marker
+- mirrored `.no-opt.bc` recovery plus `llvm-wasm` linking remains available within that attempt
 - `wasm32-wasip3` is still a transitional browser target
     - toolchain and packaging work with the patched custom Rust build
     - browser execution still assumes WASIp2-style browser imports

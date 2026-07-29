@@ -38,14 +38,10 @@ function createRetryDependencies(workers: FakeWorker[]) {
 	};
 }
 
-describe('compileRust retry behavior', () => {
-	it('retries after a transient timeout and succeeds on the next worker attempt', async () => {
-		const bitcode = new Uint8Array([1, 2, 3, 4]);
+describe('compileRust single-attempt behavior', () => {
+	it('returns the timeout from the sole worker attempt', async () => {
 		const firstWorker = new FakeWorker();
-		const secondWorker = new FakeWorker((message) => {
-			mirrorBitcode(message.sharedBitcodeBuffer, bitcode);
-		});
-		const linkBitcodeCalls: Uint8Array[] = [];
+		const secondWorker = new FakeWorker();
 
 		const result = await compileRust(
 			{
@@ -55,35 +51,27 @@ describe('compileRust retry behavior', () => {
 			},
 			{
 				...createRetryDependencies([firstWorker, secondWorker]).dependencies,
-				linkBitcode: async (receivedBitcode) => {
-					linkBitcodeCalls.push(receivedBitcode);
-					return {
-						wasm: new Uint8Array([9, 8, 7]),
-						targetTriple: 'wasm32-wasip1',
-						format: 'core-wasm'
-					};
+				linkBitcode: async () => {
+					throw new Error('linker should not run after a compile timeout');
 				}
 			}
 		);
 
-		expect(result.success).toBe(true);
-		expect(result.artifact?.wasm).toEqual(new Uint8Array([9, 8, 7]));
-		expect(linkBitcodeCalls).toEqual([bitcode]);
+		expect(result.success).toBe(false);
+		expect(result.stderr).toContain('timed out before producing');
+		expect(result.artifact).toBeUndefined();
 		expect(firstWorker.terminated).toBe(true);
-		expect(secondWorker.terminated).toBe(true);
+		expect(secondWorker.terminated).toBe(false);
 	});
 
-	it('retries after a transient memory-access worker failure and succeeds on the next attempt', async () => {
-		const bitcode = new Uint8Array([0x42, 0x43, 0xc0, 0xde]);
+	it('returns a transient memory-access failure from the sole worker attempt', async () => {
 		const firstWorker = new FakeWorker((_, worker) => {
 			worker.emitMessage({
 				type: 'error',
 				message: 'memory access out of bounds'
 			});
 		});
-		const secondWorker = new FakeWorker((message) => {
-			mirrorBitcode(message.sharedBitcodeBuffer, bitcode);
-		});
+		const secondWorker = new FakeWorker();
 
 		const result = await compileRust(
 			{
@@ -93,21 +81,20 @@ describe('compileRust retry behavior', () => {
 			},
 			{
 				...createRetryDependencies([firstWorker, secondWorker]).dependencies,
-				linkBitcode: async () => ({
-					wasm: new Uint8Array([7, 7, 7]),
-					targetTriple: 'wasm32-wasip1',
-					format: 'core-wasm'
-				})
+				linkBitcode: async () => {
+					throw new Error('linker should not run after a worker failure');
+				}
 			}
 		);
 
-		expect(result.success).toBe(true);
-		expect(result.artifact?.wasm).toEqual(new Uint8Array([7, 7, 7]));
+		expect(result.success).toBe(false);
+		expect(result.stderr).toBe('memory access out of bounds');
+		expect(result.artifact).toBeUndefined();
 		expect(firstWorker.terminated).toBe(true);
-		expect(secondWorker.terminated).toBe(true);
+		expect(secondWorker.terminated).toBe(false);
 	});
 
-	it('limits transient recovery to one fresh worker retry', async () => {
+	it('never starts a fresh worker after a transient failure', async () => {
 		const emitTransientFailure = (worker: FakeWorker) => {
 			worker.emitMessage({
 				type: 'error',
@@ -138,14 +125,14 @@ describe('compileRust retry behavior', () => {
 		);
 
 		expect(result.success).toBe(false);
-		expect(result.logs).toContain('[wasm-rust] browser rustc attempt 1/2 failed; retrying');
+		expect(result.logs).toContain('[wasm-rust] compile worker started attempt=1/1');
+		expect(result.logs?.some((message) => message.includes('retrying'))).toBe(false);
 		expect(firstWorker.terminated).toBe(true);
-		expect(secondWorker.terminated).toBe(true);
+		expect(secondWorker.terminated).toBe(false);
 		expect(thirdWorker.terminated).toBe(false);
 	});
 
-	it('preserves failed attempt logs when a later retry succeeds', async () => {
-		const bitcode = new Uint8Array([0x13, 0x37, 0x13, 0x37]);
+	it('preserves sole-attempt logs on terminal failure', async () => {
 		const firstWorker = new FakeWorker((_, worker) => {
 			worker.emitMessage({
 				type: 'log',
@@ -156,12 +143,11 @@ describe('compileRust retry behavior', () => {
 				message: 'memory access out of bounds'
 			});
 		});
-		const secondWorker = new FakeWorker((message, worker) => {
+		const secondWorker = new FakeWorker((_, worker) => {
 			worker.emitMessage({
 				type: 'log',
 				message: '[wasm-rust:compiler-worker] second attempt ready'
 			});
-			mirrorBitcode(message.sharedBitcodeBuffer, bitcode);
 		});
 
 		const result = await compileRust(
@@ -181,31 +167,21 @@ describe('compileRust retry behavior', () => {
 			}
 		);
 
-		expect(result.success).toBe(true);
-		expect(result.logs).toEqual(
-			expect.arrayContaining([
-				'[wasm-rust:compiler-worker] first attempt warmup',
-				'[wasm-rust] browser rustc attempt 1/2 failed; retrying',
-				'[wasm-rust:compiler-worker] second attempt ready'
-			])
-		);
+		expect(result.success).toBe(false);
+		expect(result.logs).toContain('[wasm-rust:compiler-worker] first attempt warmup');
+		expect(result.logs).not.toContain('[wasm-rust:compiler-worker] second attempt ready');
+		expect(result.logs?.some((message) => message.includes('retrying'))).toBe(false);
 		expect(result.logRecords).toEqual(
 			expect.arrayContaining([
 				{
 					level: 'log',
 					message: '[wasm-rust:compiler-worker] first attempt warmup'
-				},
-				{
-					level: 'warn',
-					message: '[wasm-rust] browser rustc attempt 1/2 failed; retrying'
 				}
 			])
 		);
-		expect(
-			result.logs?.indexOf('[wasm-rust:compiler-worker] first attempt warmup')
-		).toBeLessThan(
-			result.logs?.indexOf('[wasm-rust] browser rustc attempt 1/2 failed; retrying') ?? -1
-		);
+		expect(result.logRecords?.some((record) => record.level === 'warn')).toBe(false);
+		expect(firstWorker.terminated).toBe(true);
+		expect(secondWorker.terminated).toBe(false);
 	});
 
 	it('waits for mirrored bitcode after a helper-thread failure report before giving up on the attempt', async () => {
@@ -324,8 +300,7 @@ describe('compileRust retry behavior', () => {
 		expect(worker.terminated).toBe(true);
 	});
 
-	it('retries after a transient worker bootstrap script error and succeeds on the next attempt', async () => {
-		const bitcode = new Uint8Array([0xde, 0xad, 0xbe, 0xef]);
+	it('returns a worker bootstrap script error from the sole attempt', async () => {
 		const firstWorker = new FakeWorker((_, worker) => {
 			worker.emitErrorEvent({
 				message: 'worker script error',
@@ -334,9 +309,7 @@ describe('compileRust retry behavior', () => {
 				colno: 24
 			});
 		});
-		const secondWorker = new FakeWorker((message) => {
-			mirrorBitcode(message.sharedBitcodeBuffer, bitcode);
-		});
+		const secondWorker = new FakeWorker();
 
 		const result = await compileRust(
 			{
@@ -346,22 +319,20 @@ describe('compileRust retry behavior', () => {
 			},
 			{
 				...createRetryDependencies([firstWorker, secondWorker]).dependencies,
-				linkBitcode: async () => ({
-					wasm: new Uint8Array([6, 6, 6, 6]),
-					targetTriple: 'wasm32-wasip1',
-					format: 'core-wasm'
-				})
+				linkBitcode: async () => {
+					throw new Error('linker should not run after a bootstrap failure');
+				}
 			}
 		);
 
-		expect(result.success).toBe(true);
-		expect(result.artifact?.wasm).toEqual(new Uint8Array([6, 6, 6, 6]));
+		expect(result.success).toBe(false);
+		expect(result.stderr).toContain('worker script error');
+		expect(result.stderr).toContain('compiler-worker.js');
 		expect(firstWorker.terminated).toBe(true);
-		expect(secondWorker.terminated).toBe(true);
+		expect(secondWorker.terminated).toBe(false);
 	});
 
-	it('retries when the worker provides a structured transient failure kind', async () => {
-		const bitcode = new Uint8Array([0xde, 0xad, 0xfa, 0xce]);
+	it('does not turn a structured helper-thread failure into a host retry', async () => {
 		const firstWorker = new FakeWorker((_, worker) => {
 			worker.emitMessage({
 				type: 'error',
@@ -369,9 +340,7 @@ describe('compileRust retry behavior', () => {
 				failureKind: 'helper-thread'
 			} as any);
 		});
-		const secondWorker = new FakeWorker((message) => {
-			mirrorBitcode(message.sharedBitcodeBuffer, bitcode);
-		});
+		const secondWorker = new FakeWorker();
 
 		const result = await compileRust(
 			{
@@ -381,22 +350,19 @@ describe('compileRust retry behavior', () => {
 			},
 			{
 				...createRetryDependencies([firstWorker, secondWorker]).dependencies,
-				linkBitcode: async () => ({
-					wasm: new Uint8Array([8, 6, 7, 5]),
-					targetTriple: 'wasm32-wasip1',
-					format: 'core-wasm'
-				})
+				linkBitcode: async () => {
+					throw new Error('linker should not run after a helper-thread failure');
+				}
 			}
 		);
 
-		expect(result.success).toBe(true);
-		expect(result.artifact?.wasm).toEqual(new Uint8Array([8, 6, 7, 5]));
+		expect(result.success).toBe(false);
+		expect(result.stderr).toBe('generic transient worker failure');
 		expect(firstWorker.terminated).toBe(true);
-		expect(secondWorker.terminated).toBe(true);
+		expect(secondWorker.terminated).toBe(false);
 	});
 
-	it('retries when the worker provides a structured stale-runtime-metadata failure kind', async () => {
-		const bitcode = new Uint8Array([0xab, 0xcd, 0xef, 0x01]);
+	it('does not turn stale-runtime metadata into a host retry', async () => {
 		const firstWorker = new FakeWorker((_, worker) => {
 			worker.emitMessage({
 				type: 'error',
@@ -404,9 +370,7 @@ describe('compileRust retry behavior', () => {
 				failureKind: 'stale-runtime-metadata'
 			} as any);
 		});
-		const secondWorker = new FakeWorker((message) => {
-			mirrorBitcode(message.sharedBitcodeBuffer, bitcode);
-		});
+		const secondWorker = new FakeWorker();
 
 		const result = await compileRust(
 			{
@@ -416,22 +380,19 @@ describe('compileRust retry behavior', () => {
 			},
 			{
 				...createRetryDependencies([firstWorker, secondWorker]).dependencies,
-				linkBitcode: async () => ({
-					wasm: new Uint8Array([2, 4, 6, 8]),
-					targetTriple: 'wasm32-wasip1',
-					format: 'core-wasm'
-				})
+				linkBitcode: async () => {
+					throw new Error('linker should not run after a metadata failure');
+				}
 			}
 		);
 
-		expect(result.success).toBe(true);
-		expect(result.artifact?.wasm).toEqual(new Uint8Array([2, 4, 6, 8]));
+		expect(result.success).toBe(false);
+		expect(result.stderr).toBe('transient metadata decode mismatch');
 		expect(firstWorker.terminated).toBe(true);
-		expect(secondWorker.terminated).toBe(true);
+		expect(secondWorker.terminated).toBe(false);
 	});
 
-	it('does not emit console errors for transient bootstrap failures that succeed on retry', async () => {
-		const bitcode = new Uint8Array([0xfa, 0xce, 0xb0, 0x0c]);
+	it('reports a terminal bootstrap failure without retry warnings', async () => {
 		const firstWorker = new FakeWorker((_, worker) => {
 			worker.emitErrorEvent({
 				message: 'worker script error',
@@ -440,9 +401,7 @@ describe('compileRust retry behavior', () => {
 				colno: 24
 			});
 		});
-		const secondWorker = new FakeWorker((message) => {
-			mirrorBitcode(message.sharedBitcodeBuffer, bitcode);
-		});
+		const secondWorker = new FakeWorker();
 		const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 		const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
 		const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -457,22 +416,19 @@ describe('compileRust retry behavior', () => {
 				},
 				{
 					...createRetryDependencies([firstWorker, secondWorker]).dependencies,
-					linkBitcode: async () => ({
-						wasm: new Uint8Array([6, 6, 6, 6]),
-						targetTriple: 'wasm32-wasip1',
-						format: 'core-wasm'
-					})
+					linkBitcode: async () => {
+						throw new Error('linker should not run after a bootstrap failure');
+					}
 				}
 			);
 
-			expect(result.success).toBe(true);
+			expect(result.success).toBe(false);
 			expect(errorSpy).not.toHaveBeenCalled();
-			expect(warnSpy).toHaveBeenCalledWith(
-				expect.stringContaining('[wasm-rust] browser rustc attempt 1/2 failed; retrying')
-			);
-			expect(debugSpy).not.toHaveBeenCalledWith(
+			expect(warnSpy).not.toHaveBeenCalled();
+			expect(debugSpy).toHaveBeenCalledWith(
 				expect.stringContaining('[wasm-rust] compile worker bootstrap failed')
 			);
+			expect(secondWorker.terminated).toBe(false);
 		} finally {
 			errorSpy.mockRestore();
 			debugSpy.mockRestore();
@@ -516,19 +472,17 @@ describe('compileRust retry behavior', () => {
 		expect(result.stdout).toBeUndefined();
 		expect(result.logs).toBeUndefined();
 		expect(createWorkerCalls).toBe(1);
+		expect(secondWorker.terminated).toBe(false);
 	});
 
-	it('retries helper-thread exhaustion errors instead of waiting for the full timeout path', async () => {
-		const bitcode = new Uint8Array([9, 9, 9, 9]);
+	it('returns helper-thread exhaustion from the sole worker attempt', async () => {
 		const firstWorker = new FakeWorker((_, worker) => {
 			worker.emitMessage({
 				type: 'error',
 				message: 'rustc browser thread pool exhausted in worker'
 			});
 		});
-		const secondWorker = new FakeWorker((message) => {
-			mirrorBitcode(message.sharedBitcodeBuffer, bitcode);
-		});
+		const secondWorker = new FakeWorker();
 
 		const result = await compileRust(
 			{
@@ -538,22 +492,19 @@ describe('compileRust retry behavior', () => {
 			},
 			{
 				...createRetryDependencies([firstWorker, secondWorker]).dependencies,
-				linkBitcode: async () => ({
-					wasm: new Uint8Array([1, 2, 3, 4]),
-					targetTriple: 'wasm32-wasip1',
-					format: 'core-wasm'
-				})
+				linkBitcode: async () => {
+					throw new Error('linker should not run after helper-thread exhaustion');
+				}
 			}
 		);
 
-		expect(result.success).toBe(true);
-		expect(result.artifact?.wasm).toEqual(new Uint8Array([1, 2, 3, 4]));
+		expect(result.success).toBe(false);
+		expect(result.stderr).toBe('rustc browser thread pool exhausted in worker');
 		expect(firstWorker.terminated).toBe(true);
-		expect(secondWorker.terminated).toBe(true);
+		expect(secondWorker.terminated).toBe(false);
 	});
 
-	it('retries after a transient rust metadata decode panic and succeeds on the next attempt', async () => {
-		const bitcode = new Uint8Array([0xaa, 0xbb, 0xcc, 0xdd]);
+	it('surfaces a rust metadata decode panic without retrying', async () => {
 		const firstWorker = new FakeWorker((_, worker) => {
 			worker.emitMessage({
 				type: 'result',
@@ -566,9 +517,7 @@ describe('compileRust retry behavior', () => {
 				].join('\n')
 			});
 		});
-		const secondWorker = new FakeWorker((message) => {
-			mirrorBitcode(message.sharedBitcodeBuffer, bitcode);
-		});
+		const secondWorker = new FakeWorker();
 
 		const result = await compileRust(
 			{
@@ -578,30 +527,26 @@ describe('compileRust retry behavior', () => {
 			},
 			{
 				...createRetryDependencies([firstWorker, secondWorker]).dependencies,
-				linkBitcode: async () => ({
-					wasm: new Uint8Array([5, 4, 3, 2]),
-					targetTriple: 'wasm32-wasip1',
-					format: 'core-wasm'
-				})
+				linkBitcode: async () => {
+					throw new Error('linker should not run after a metadata panic');
+				}
 			}
 		);
 
-		expect(result.success).toBe(true);
-		expect(result.artifact?.wasm).toEqual(new Uint8Array([5, 4, 3, 2]));
+		expect(result.success).toBe(false);
+		expect(result.stderr).toContain('error[E0786]');
+		expect(result.stderr).toContain('invalid enum variant tag');
 		expect(firstWorker.terminated).toBe(true);
-		expect(secondWorker.terminated).toBe(true);
+		expect(secondWorker.terminated).toBe(false);
 	});
 
-	it('retries immediately when a helper thread marks the shared status buffer as failed', async () => {
-		const bitcode = new Uint8Array([7, 1, 7, 1]);
+	it('returns a shared-status helper failure from the sole worker attempt', async () => {
 		const firstWorker = new FakeWorker((message) => {
 			const state = new Int32Array(message.sharedStatusBuffer);
 			Atomics.store(state, 0, 1);
 			Atomics.store(state, 1, 1);
 		});
-		const secondWorker = new FakeWorker((message) => {
-			mirrorBitcode(message.sharedBitcodeBuffer, bitcode);
-		});
+		const secondWorker = new FakeWorker();
 
 		const result = await compileRust(
 			{
@@ -611,18 +556,23 @@ describe('compileRust retry behavior', () => {
 			},
 			{
 				...createRetryDependencies([firstWorker, secondWorker]).dependencies,
-				linkBitcode: async () => ({
-					wasm: new Uint8Array([4, 4, 4, 4]),
-					targetTriple: 'wasm32-wasip1',
-					format: 'core-wasm'
-				})
+				loadManifest: async () =>
+					createRuntimeManifest({
+						compileTimeoutMs: 2_000,
+						artifactIdleMs: 500
+					}),
+				linkBitcode: async () => {
+					throw new Error('linker should not run after a shared-status failure');
+				}
 			}
 		);
 
-		expect(result.success).toBe(true);
-		expect(result.artifact?.wasm).toEqual(new Uint8Array([4, 4, 4, 4]));
+		expect(result.success).toBe(false);
+		expect(result.stderr).toContain(
+			'browser rustc helper thread failed before producing LLVM bitcode'
+		);
 		expect(firstWorker.terminated).toBe(true);
-		expect(secondWorker.terminated).toBe(true);
+		expect(secondWorker.terminated).toBe(false);
 	});
 
 	it('links mirrored bitcode even when the compile worker settles with an error', async () => {

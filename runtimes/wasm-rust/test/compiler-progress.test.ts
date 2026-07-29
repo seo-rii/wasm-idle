@@ -182,9 +182,8 @@ describe('compileRust progress contract', () => {
 		).toBeGreaterThan(95);
 	});
 
-	it('keeps progress monotonic across retries and exposes the next attempt', async () => {
+	it('keeps failed-attempt progress monotonic without exposing a retry stage', async () => {
 		const progressEvents: BrowserRustCompileProgress[] = [];
-		const bitcode = new Uint8Array([4, 2, 4, 2]);
 		const workers = [
 			new FakeWorker((_, currentWorker) => {
 				currentWorker.emitMessage({
@@ -192,24 +191,7 @@ describe('compileRust progress contract', () => {
 					message: 'memory access out of bounds'
 				});
 			}),
-			new FakeWorker((message, currentWorker) => {
-				currentWorker.emitMessage({
-					type: 'progress',
-					progress: {
-						stage: 'fetch-rustc',
-						completed: 1,
-						total: 1,
-						message: 'rustc.wasm ready'
-					}
-				});
-				mirrorBitcode(message.sharedBitcodeBuffer, bitcode);
-				currentWorker.emitMessage({
-					type: 'result',
-					exitCode: 0,
-					stdout: '',
-					stderr: ''
-				});
-			})
+			new FakeWorker()
 		];
 		let nextWorker = 0;
 
@@ -237,16 +219,18 @@ describe('compileRust progress contract', () => {
 			}
 		);
 
-		expect(result.success).toBe(true);
-		expect(progressEvents.some((event) => event.stage === 'retry' && event.attempt === 2)).toBe(
-			true
-		);
+		expect(result.success).toBe(false);
+		expect(nextWorker).toBe(1);
+		expect(workers[1]?.terminated).toBe(false);
+		expect(progressEvents.some((event) => event.stage === 'retry')).toBe(false);
+		expect(progressEvents.every((event) => event.attempt === 1)).toBe(true);
+		expect(progressEvents.every((event) => event.maxAttempts === 1)).toBe(true);
 		for (let index = 1; index < progressEvents.length; index += 1) {
 			expect(progressEvents[index]?.percent).toBeGreaterThanOrEqual(
 				progressEvents[index - 1]?.percent || 0
 			);
 		}
-		expect(progressEvents.at(-1)?.stage).toBe('done');
-		expect(progressEvents.at(-1)?.percent).toBe(100);
+		expect(progressEvents.at(-1)?.stage).not.toBe('done');
+		expect(progressEvents.at(-1)?.percent).toBeLessThan(100);
 	});
 });

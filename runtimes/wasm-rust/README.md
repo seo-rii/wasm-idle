@@ -185,15 +185,17 @@ Important runtime notes:
 - The shipped browser harness serves COOP/COEP headers for that reason.
 - The runtime manifest defaults the shared compiler workspace to 128 MiB through
   `workerSharedWorkspaceBytes`; deployments can raise it when compiling unusually large sources.
-- The compiler permits one fresh-worker retry for a transient browser-rustc failure.
-- Retry transitions are intentionally surfaced as warnings when `compile({ log: true })` is used.
+- The compiler starts at most one browser-rustc worker for each compile request and returns a
+  terminal failure without a hidden fresh-worker retry.
+- Mirrored-artifact recovery remains available within that same attempt when rustc produced usable
+  output before a helper-thread fault.
 - Helper-thread startup waits for the `wasi_thread_start` entry boundary before a pooled worker
   returns its thread id, so the parent cannot reuse shared startup storage while the helper is only
   instantiated.
 - Internal worker assets are spawned as direct same-origin module workers, not `blob:` wrappers.
   This avoids deployment-only CSP failures that otherwise show up as a generic `worker script error`.
-- Successful compile results are still authoritative if the single transient browser-rustc retry
-  succeeds.
+- Successful compile results are authoritative; consumers never need to reconcile multiple compiler
+  attempts.
 
 ## Standalone browser harness
 
