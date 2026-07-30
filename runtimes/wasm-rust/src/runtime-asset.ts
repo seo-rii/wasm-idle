@@ -29,28 +29,54 @@ async function readBoundedStream(
 ): Promise<Uint8Array<ArrayBuffer>> {
 	throwIfRuntimeAssetAborted(signal);
 	const reader = stream.getReader();
-	let abortCancellation: Promise<void> | undefined;
-	const cancelOnAbort = () => {
-		if (!signal) return;
-		abortCancellation = reader.cancel(runtimeAssetAbortReason(signal)).then(
-			() => undefined,
-			() => undefined
-		);
+	let readerCancelled = false;
+	const cancelReader = (reason?: unknown) => {
+		if (readerCancelled) return;
+		readerCancelled = true;
+		try {
+			void reader.cancel(reason).catch(() => {});
+		} catch {}
 	};
-	signal?.addEventListener('abort', cancelOnAbort, { once: true });
+	if (signal?.aborted) {
+		const reason = runtimeAssetAbortReason(signal);
+		cancelReader(reason);
+		try {
+			reader.releaseLock();
+		} catch {}
+		throw reason;
+	}
+	let cancelOnAbort: (() => void) | undefined;
+	const aborted = signal
+		? new Promise<never>((_resolve, reject) => {
+				cancelOnAbort = () => {
+					const reason = runtimeAssetAbortReason(signal);
+					cancelReader(reason);
+					reject(reason);
+				};
+				signal.addEventListener('abort', cancelOnAbort, { once: true });
+			})
+		: undefined;
 	let bytes = new Uint8Array(total ?? 0);
 	let loaded = 0;
+	let loadedBytes!: Uint8Array<ArrayBuffer>;
+	let releaseFailure: { error: unknown } | undefined;
 	try {
 		while (true) {
-			const { done, value } = await reader.read();
+			throwIfRuntimeAssetAborted(signal);
+			const pendingRead = reader.read();
+			const { done, value } = aborted
+				? await Promise.race([pendingRead, aborted])
+				: await pendingRead;
 			throwIfRuntimeAssetAborted(signal);
 			if (done) break;
 			if (!value) continue;
 			const nextLength = loaded + value.byteLength;
 			if (!Number.isSafeInteger(nextLength) || nextLength > maxAssetBytes) {
-				throw new Error(
+				const error = new Error(
 					`wasm-rust runtime asset ${assetLabel} ${sizeKind} size exceeds the ${maxAssetBytes} byte limit`
 				);
+				cancelReader(error);
+				throw error;
 			}
 			if (nextLength > bytes.byteLength) {
 				const nextCapacity = Math.min(
@@ -68,24 +94,34 @@ async function readBoundedStream(
 				...(total !== undefined ? { total } : {})
 			});
 		}
+		throwIfRuntimeAssetAborted(signal);
 		if (loaded === 0) {
 			onProgress?.({ loaded: 0, total: total ?? 0 });
 		}
-		throwIfRuntimeAssetAborted(signal);
-		return bytes.subarray(0, loaded);
+		loadedBytes = bytes.subarray(0, loaded);
 	} catch (error) {
-		if (abortCancellation) await abortCancellation;
-		else {
-			try {
-				await reader.cancel(error);
-			} catch {}
+		if (signal?.aborted) {
+			const reason = runtimeAssetAbortReason(signal);
+			cancelReader(reason);
+			throw reason;
 		}
-		throwIfRuntimeAssetAborted(signal);
+		cancelReader(error);
 		throw error;
 	} finally {
-		signal?.removeEventListener('abort', cancelOnAbort);
-		reader.releaseLock();
+		if (cancelOnAbort) signal?.removeEventListener('abort', cancelOnAbort);
+		try {
+			reader.releaseLock();
+		} catch (error) {
+			if (!signal?.aborted) releaseFailure = { error };
+		}
 	}
+	if (signal?.aborted) {
+		const reason = runtimeAssetAbortReason(signal);
+		cancelReader(reason);
+		throw reason;
+	}
+	if (releaseFailure) throw releaseFailure.error;
+	return loadedBytes;
 }
 
 async function readResponseBytes(

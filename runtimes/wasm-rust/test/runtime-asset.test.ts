@@ -425,45 +425,186 @@ describe('runtime asset fetch fallback', () => {
 		expect(reader.releaseLock).toHaveBeenCalledOnce();
 	});
 
-	it('preserves the abort reason while reading gzip output', async () => {
+	it.each([
+		['while reader cancellation remains pending', false, false, false],
+		['when reader cancellation resolves without settling the read', true, true, false],
+		['when reader cancellation settles the read with a late chunk', true, false, true]
+	])(
+		'rejects an uncooperative pending stream promptly %s',
+		async (_case, resolveCancellation, throwOnRelease, settleReadFromCancel) => {
+			let markReadStarted!: () => void;
+			const readStarted = new Promise<void>((resolve) => {
+				markReadStarted = resolve;
+			});
+			let resolveRead!: (result: ReadableStreamReadResult<Uint8Array>) => void;
+			const pendingRead = new Promise<ReadableStreamReadResult<Uint8Array>>((resolve) => {
+				resolveRead = resolve;
+			});
+			const read = vi
+				.fn()
+				.mockImplementationOnce(() => {
+					markReadStarted();
+					return pendingRead;
+				})
+				.mockResolvedValue({ done: true, value: undefined });
+			let resolveCancel!: () => void;
+			const pendingCancel = new Promise<void>((resolve) => {
+				resolveCancel = resolve;
+			});
+			const cancel = vi.fn(() => {
+				if (settleReadFromCancel) {
+					resolveRead({ done: false, value: Uint8Array.of(1) });
+				}
+				return resolveCancellation ? Promise.resolve() : pendingCancel;
+			});
+			const releaseFailure = new Error('wasm-rust reader release failed during abort');
+			const releaseLock = vi.fn(() => {
+				if (throwOnRelease) throw releaseFailure;
+			});
+			const response = {
+				url: '',
+				ok: true,
+				status: 200,
+				headers: new Headers(),
+				body: { getReader: () => ({ read, cancel, releaseLock }) }
+			} as unknown as Response;
+			const controller = new AbortController();
+			const reason = resolveCancellation
+				? new DOMException('wasm-rust asset deadline exceeded', 'TimeoutError')
+				: new Error('cancelled during uncooperative read');
+			const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+			const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+			const onProgress = vi.fn();
+			const loading = fetchRuntimeAssetBytes(
+				'https://example.test/runtime/data.bin',
+				'data.bin',
+				async () => response,
+				false,
+				onProgress,
+				{ signal: controller.signal }
+			);
+			let timeout: ReturnType<typeof setTimeout> | undefined;
+
+			try {
+				await readStarted;
+				controller.abort(reason);
+				const outcome = await Promise.race([
+					loading.then(
+						(value) => ({ status: 'resolved' as const, value }),
+						(error) => ({ status: 'rejected' as const, reason: error as unknown })
+					),
+					new Promise<{ status: 'pending' }>((resolve) => {
+						timeout = setTimeout(() => resolve({ status: 'pending' }), 25);
+					})
+				]);
+
+				expect(outcome.status).toBe('rejected');
+				expect('reason' in outcome ? outcome.reason : undefined).toBe(reason);
+				expect(cancel).toHaveBeenCalledOnce();
+				expect(cancel).toHaveBeenCalledWith(reason);
+				expect(releaseLock).toHaveBeenCalledOnce();
+				const abortRegistrations = addEventListener.mock.calls.filter(
+					([type]) => type === 'abort'
+				);
+				expect(abortRegistrations).toHaveLength(1);
+				expect(removeEventListener).toHaveBeenCalledWith(
+					'abort',
+					abortRegistrations[0]?.[1]
+				);
+				expect(onProgress).not.toHaveBeenCalled();
+
+				resolveCancel();
+				resolveRead({ done: false, value: Uint8Array.of(1) });
+				await Promise.resolve();
+				await Promise.resolve();
+				expect(onProgress).not.toHaveBeenCalled();
+			} finally {
+				if (timeout) clearTimeout(timeout);
+				resolveCancel();
+				resolveRead({ done: false, value: Uint8Array.of(1) });
+				await loading.catch(() => {});
+			}
+		}
+	);
+
+	it('rejects promptly when a gzip output reader remains pending after cancellation', async () => {
 		const controller = new AbortController();
 		const reason = new Error('cancelled during decompression');
-		let markDecompressionStarted: (() => void) | undefined;
-		const decompressionStarted = new Promise<void>((resolve) => {
-			markDecompressionStarted = resolve;
+		let markDecompressionReadStarted!: () => void;
+		const decompressionReadStarted = new Promise<void>((resolve) => {
+			markDecompressionReadStarted = resolve;
 		});
-		let outputCancellationReason: unknown;
+		let resolveRead!: (result: ReadableStreamReadResult<Uint8Array>) => void;
+		const pendingRead = new Promise<ReadableStreamReadResult<Uint8Array>>((resolve) => {
+			resolveRead = resolve;
+		});
+		const read = vi.fn(() => {
+			markDecompressionReadStarted();
+			return pendingRead;
+		});
+		const cancel = vi.fn(async () => undefined);
+		const releaseLock = vi.fn();
+		const onProgress = vi.fn();
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
 
 		class TestDecompressionStream {
-			readonly readable = new ReadableStream<Uint8Array>({
-				start(outputController) {
-					outputController.enqueue(new Uint8Array([1]));
-					markDecompressionStarted?.();
-				},
-				cancel(cancelReason) {
-					outputCancellationReason = cancelReason;
-				}
-			});
+			readonly readable = new ReadableStream<Uint8Array>();
 			readonly writable = new WritableStream<BufferSource>();
+
+			constructor() {
+				Object.defineProperty(this.readable, 'getReader', {
+					value: () => ({ read, cancel, releaseLock })
+				});
+			}
 		}
 
 		vi.stubGlobal('DecompressionStream', TestDecompressionStream);
+		let timeout: ReturnType<typeof setTimeout> | undefined;
+		let load: Promise<Uint8Array> | undefined;
 		try {
-			const load = fetchRuntimeAssetBytes(
+			load = fetchRuntimeAssetBytes(
 				'https://example.test/runtime/data.bin.gz',
 				'data.bin.gz',
 				async () => new Response(new Uint8Array([0x1f, 0x8b])),
 				false,
-				undefined,
+				onProgress,
 				{ signal: controller.signal }
 			);
-			const rejection = expect(load).rejects.toBe(reason);
-			await decompressionStarted;
+			await decompressionReadStarted;
+			const progressCallCount = onProgress.mock.calls.length;
 			controller.abort(reason);
+			const outcome = await Promise.race([
+				load.then(
+					(value) => ({ status: 'resolved' as const, value }),
+					(error) => ({ status: 'rejected' as const, reason: error as unknown })
+				),
+				new Promise<{ status: 'pending' }>((resolve) => {
+					timeout = setTimeout(() => resolve({ status: 'pending' }), 25);
+				})
+			]);
 
-			await rejection;
-			expect(outputCancellationReason).toBe(reason);
+			expect(outcome.status).toBe('rejected');
+			expect('reason' in outcome ? outcome.reason : undefined).toBe(reason);
+			expect(cancel).toHaveBeenCalledOnce();
+			expect(cancel).toHaveBeenCalledWith(reason);
+			expect(releaseLock).toHaveBeenCalledOnce();
+			const abortRegistrations = addEventListener.mock.calls.filter(
+				([type]) => type === 'abort'
+			);
+			expect(removeEventListener).toHaveBeenCalledWith(
+				'abort',
+				abortRegistrations.at(-1)?.[1]
+			);
+
+			resolveRead({ done: false, value: Uint8Array.of(1) });
+			await Promise.resolve();
+			await Promise.resolve();
+			expect(onProgress).toHaveBeenCalledTimes(progressCallCount);
 		} finally {
+			if (timeout) clearTimeout(timeout);
+			resolveRead({ done: true, value: undefined });
+			await load?.catch(() => {});
 			vi.unstubAllGlobals();
 		}
 	});
