@@ -66,7 +66,9 @@ await session.setBreakpoints({ path: '/workspace/main.cpp' }, [12, 18]);
 `setBreakpoints()` updates the session's resolved-breakpoint cache as well as sending DAP. Later
 `breakpoint` events therefore retain the IDs and source mapping from dynamic editor changes;
 out-of-order responses cannot replace the newest cached set. Use `getResolvedBreakpoints(path)` to
-read the current normalized snapshot.
+read the current normalized snapshot. If the response omitted an ID, a later event can promote the
+matching source line to its assigned ID. IDs retired by a subsequent source replacement remain
+ignored, so delayed events cannot attach themselves to a new ID-less breakpoint on the same line.
 
 Compile C/C++ LLDB artifacts with `compileArtifact(..., { debugMode: 'lldb' })`. They contain
 untouched source, embedded DWARF, stable `/workspace/...` paths, and exact Clang provenance.

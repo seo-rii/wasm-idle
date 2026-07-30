@@ -56,6 +56,7 @@ export class BrowserLldbSession {
 	private readonly workerEventDisposers: Array<() => void> = [];
 	private readonly resolvedBreakpoints = new Map<string, ResolvedBreakpoint[]>();
 	private readonly breakpointRequestVersions = new Map<string, number>();
+	private readonly retiredBreakpointIds = new Set<number>();
 	private readonly lifecycleAbortController = new AbortController();
 	private initializePromise?: Promise<DebugCapabilities>;
 	private disposePromise?: Promise<void>;
@@ -365,6 +366,17 @@ export class BrowserLldbSession {
 			} satisfies ResolvedBreakpoint;
 		});
 		if (this.breakpointRequestVersions.get(source.path) === requestVersion) {
+			const activeIds = new Set(
+				resolved.flatMap((breakpoint) =>
+					breakpoint.id === undefined ? [] : [breakpoint.id]
+				)
+			);
+			for (const breakpoint of this.resolvedBreakpoints.get(source.path) ?? []) {
+				if (breakpoint.id !== undefined && !activeIds.has(breakpoint.id)) {
+					this.retiredBreakpointIds.add(breakpoint.id);
+				}
+			}
+			for (const id of activeIds) this.retiredBreakpointIds.delete(id);
 			this.resolvedBreakpoints.set(source.path, resolved);
 		}
 		return resolved;
@@ -389,10 +401,13 @@ export class BrowserLldbSession {
 			| undefined;
 		const breakpoint = body?.breakpoint;
 		if (!breakpoint) return;
+		if (breakpoint.id !== undefined && this.retiredBreakpointIds.has(breakpoint.id)) {
+			return;
+		}
 		const sourcePath = breakpoint.source?.path;
 		for (const [path, current] of this.resolvedBreakpoints) {
 			if (sourcePath && sourcePath !== path) continue;
-			const index =
+			let index =
 				breakpoint.id === undefined
 					? current.findIndex(
 							(candidate) =>
@@ -401,10 +416,26 @@ export class BrowserLldbSession {
 								candidate.line === breakpoint.line
 						)
 					: current.findIndex((candidate) => candidate.id === breakpoint.id);
+			if (
+				index < 0 &&
+				body?.reason !== 'removed' &&
+				breakpoint.id !== undefined &&
+				sourcePath === path
+			) {
+				index = current.findIndex(
+					(candidate) =>
+						candidate.id === undefined &&
+						candidate.line !== undefined &&
+						candidate.line === breakpoint.line
+				);
+			}
 			if (index < 0) continue;
 			const next = [...current];
 			if (body?.reason === 'removed') {
 				next.splice(index, 1);
+				if (breakpoint.id !== undefined) {
+					this.retiredBreakpointIds.add(breakpoint.id);
+				}
 			} else {
 				next[index] = {
 					...next[index],
@@ -511,6 +542,7 @@ export class BrowserLldbSession {
 			this.rspQueues.length = 0;
 			this.resolvedBreakpoints.clear();
 			this.breakpointRequestVersions.clear();
+			this.retiredBreakpointIds.clear();
 			this.eventListeners.clear();
 		})();
 		return this.disposePromise;

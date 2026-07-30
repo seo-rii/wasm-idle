@@ -410,6 +410,7 @@ describe('BrowserLldbSession', () => {
 			body: {
 				reason: 'changed',
 				breakpoint: {
+					id: 77,
 					verified: true,
 					line: 7,
 					source: { path: '/workspace/main.cpp' }
@@ -420,11 +421,42 @@ describe('BrowserLldbSession', () => {
 			.poll(() => session.getResolvedBreakpoints('/workspace/main.cpp'))
 			.toEqual([
 				{
+					id: 77,
 					verified: true,
 					line: 7,
 					source: { path: '/workspace/main.cpp' }
 				}
 			]);
+		await session.setBreakpoints({ path: '/workspace/main.cpp' }, [7]);
+		const staleEventReceived = new Promise<void>((resolve) => {
+			const dispose = session.onEvent((event) => {
+				if (event.seq !== 502) return;
+				dispose();
+				resolve();
+			});
+		});
+		await lldbWorker?.emitDapEvent({
+			seq: 502,
+			type: 'event',
+			event: 'breakpoint',
+			body: {
+				reason: 'changed',
+				breakpoint: {
+					id: 77,
+					verified: true,
+					line: 7,
+					source: { path: '/workspace/main.cpp' }
+				}
+			}
+		});
+		await staleEventReceived;
+		expect(session.getResolvedBreakpoints('/workspace/main.cpp')).toEqual([
+			{
+				verified: false,
+				line: 7,
+				source: { path: '/workspace/main.cpp' }
+			}
+		]);
 		expect(targetInit).toMatchObject({ stdin: { generation: expect.any(Number) } });
 		if (!targetInit || targetInit.type !== 'initialize-target' || !targetInit.stdin) {
 			throw new Error('target stdin queue was not initialized');
