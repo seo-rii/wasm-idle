@@ -486,27 +486,46 @@ async function readGzipResponse(
 	let receivedLength = 0;
 	let readerDone = false;
 	let readerReleased = false;
+	let readerCancelled = false;
 	const releaseReader = () => {
 		if (readerReleased) return;
 		readerReleased = true;
 		reader.releaseLock();
 	};
-	const cancelReader = async (reason?: unknown) => {
-		if (readerReleased) return;
+	const cancelReader = (reason?: unknown) => {
+		if (readerReleased || readerCancelled) return;
+		readerCancelled = true;
 		try {
-			await reader.cancel(reason);
-		} finally {
+			void Promise.resolve(reader.cancel(reason)).catch(() => {});
+		} catch {}
+		try {
 			releaseReader();
-		}
+		} catch {}
 	};
-	const cancelOnAbort = () => {
-		void cancelReader(runtimeAbortReason(signal!)).catch(() => {});
-	};
-	signal?.addEventListener('abort', cancelOnAbort, { once: true });
+	if (signal?.aborted) {
+		const reason = runtimeAbortReason(signal);
+		cancelReader(reason);
+		throw reason;
+	}
+	let cancelOnAbort: (() => void) | undefined;
+	const aborted = signal
+		? new Promise<never>((_resolve, reject) => {
+				cancelOnAbort = () => {
+					const reason = runtimeAbortReason(signal);
+					cancelReader(reason);
+					reject(reason);
+				};
+				signal.addEventListener('abort', cancelOnAbort, { once: true });
+			})
+		: undefined;
 	try {
 		throwIfRuntimeAssetAborted(signal);
 		while (leadingLength < 2) {
-			const { done, value } = await reader.read();
+			const pendingRead = reader.read();
+			const { done, value } = aborted
+				? await Promise.race([pendingRead, aborted])
+				: await pendingRead;
+			throwIfRuntimeAssetAborted(signal);
 			if (done) {
 				readerDone = true;
 				releaseReader();
@@ -518,7 +537,7 @@ async function readGzipResponse(
 				const error = new Error(
 					`Runtime asset ${assetUrl} download size exceeds the ${maxOutputBytes} byte limit`
 				);
-				await cancelReader(error);
+				cancelReader(error);
 				throw error;
 			}
 			leadingChunks.push(value);
@@ -530,11 +549,11 @@ async function readGzipResponse(
 		}
 		throwIfRuntimeAssetAborted(signal);
 	} catch (error) {
-		await cancelReader(error).catch(() => {});
+		cancelReader(error);
 		if (signal?.aborted) throw runtimeAbortReason(signal);
 		throw error;
 	} finally {
-		signal?.removeEventListener('abort', cancelOnAbort);
+		if (cancelOnAbort) signal?.removeEventListener('abort', cancelOnAbort);
 	}
 
 	let firstByte: number | undefined;
@@ -561,6 +580,7 @@ async function readGzipResponse(
 			}
 			try {
 				const { done, value } = await reader.read();
+				throwIfRuntimeAssetAborted(signal);
 				if (done) {
 					readerDone = true;
 					releaseReader();
@@ -573,7 +593,7 @@ async function readGzipResponse(
 					const error = new Error(
 						`Runtime asset ${assetUrl} download size exceeds the ${maxOutputBytes} byte limit`
 					);
-					await cancelReader(error);
+					cancelReader(error);
 					controller.error(error);
 					return;
 				}
@@ -583,22 +603,23 @@ async function readGzipResponse(
 				}
 				controller.enqueue(value);
 			} catch (error) {
-				await cancelReader(error).catch(() => {});
+				cancelReader(error);
 				controller.error(error);
 			}
 		},
 		cancel(reason) {
-			return cancelReader(reason);
+			cancelReader(reason);
 		}
 	});
 
 	let output = source;
 	if (firstByte === 0x1f && secondByte === 0x8b) {
 		if (typeof DecompressionStream !== 'function') {
-			await cancelReader();
-			throw new Error(
+			const error = new Error(
 				`Failed to decompress runtime asset ${assetUrl}: DecompressionStream('gzip') is unavailable`
 			);
+			cancelReader(error);
+			throw error;
 		}
 		const decompressor = new DecompressionStream('gzip');
 		output = source.pipeThrough({
@@ -617,7 +638,7 @@ async function readGzipResponse(
 		progress?.set?.(1);
 		return result;
 	} catch (error) {
-		await cancelReader(error).catch(() => {});
+		cancelReader(error);
 		if (signal?.aborted) throw runtimeAbortReason(signal);
 		throw new Error(
 			`Failed to decompress runtime asset ${assetUrl}: ${error instanceof Error ? error.message : String(error)}`

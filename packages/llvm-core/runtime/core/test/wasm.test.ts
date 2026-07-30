@@ -855,6 +855,143 @@ describe('WebAssembly loading utilities', () => {
 		}
 	});
 
+	it.each(['pending', 'throw', 'reject'] as const)(
+		'aborts a stalled streamed gzip sniff without awaiting %s cleanup',
+		async (cancellationMode) => {
+			const url = `https://cdn.test/llvm/streamed-sniff-${cancellationMode}.wasm.gz`;
+			let resolveRead!: (result: ReadableStreamReadResult<Uint8Array>) => void;
+			const stalledRead = new Promise<ReadableStreamReadResult<Uint8Array>>((resolve) => {
+				resolveRead = resolve;
+			});
+			let resolveCancellation!: () => void;
+			const stalledCancellation = new Promise<void>((resolve) => {
+				resolveCancellation = resolve;
+			});
+			const reader = {
+				read: vi.fn(() => stalledRead),
+				cancel: vi.fn((reason?: unknown) => {
+					if (cancellationMode === 'throw') {
+						throw new Error('streamed gzip cancellation threw');
+					}
+					if (cancellationMode === 'reject') {
+						return Promise.reject(new Error('streamed gzip cancellation rejected'));
+					}
+					return stalledCancellation;
+				}),
+				releaseLock: vi.fn(() => {
+					throw new Error('streamed gzip reader lock cannot be released');
+				})
+			};
+			const response = {
+				url,
+				ok: true,
+				status: 200,
+				headers: new Headers(),
+				body: { getReader: vi.fn(() => reader) }
+			} as unknown as Response;
+			vi.stubGlobal(
+				'fetch',
+				vi.fn(async () => response)
+			);
+			const controller = new AbortController();
+			const reason = new Error(`stop streamed gzip sniff ${cancellationMode}`);
+			const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+			const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+			const progress = { set: vi.fn() };
+			const pending = readBuffer(url, progress, undefined, controller.signal);
+			let timeout: ReturnType<typeof setTimeout> | undefined;
+
+			try {
+				await vi.waitFor(() => expect(reader.read).toHaveBeenCalledOnce());
+				controller.abort(reason);
+				const outcome = await Promise.race([
+					pending.then(
+						(value) => ({ status: 'resolved' as const, value }),
+						(error) => ({ status: 'rejected' as const, reason: error as unknown })
+					),
+					new Promise<{ status: 'pending' }>((resolve) => {
+						timeout = setTimeout(() => resolve({ status: 'pending' }), 25);
+					})
+				]);
+
+				expect(outcome).toEqual({ status: 'rejected', reason });
+				expect(reader.cancel).toHaveBeenCalledOnce();
+				expect(reader.cancel).toHaveBeenCalledWith(reason);
+				expect(reader.releaseLock).toHaveBeenCalledOnce();
+				const abortRegistrations = addEventListener.mock.calls.filter(
+					([type]) => type === 'abort'
+				);
+				for (const registration of abortRegistrations) {
+					expect(removeEventListener).toHaveBeenCalledWith('abort', registration[1]);
+				}
+				expect(progress.set).not.toHaveBeenCalledWith(1);
+			} finally {
+				if (timeout) clearTimeout(timeout);
+				resolveRead({ done: true, value: undefined });
+				resolveCancellation();
+				await pending.catch(() => {});
+			}
+		}
+	);
+
+	it('preserves streamed gzip read failures without awaiting cancellation', async () => {
+		const url = 'https://cdn.test/llvm/streamed-read-failure.wasm.gz';
+		const sourceFailure = new Error('streamed gzip response failed');
+		let resolveCancellation!: () => void;
+		const stalledCancellation = new Promise<void>((resolve) => {
+			resolveCancellation = resolve;
+		});
+		const reader = {
+			read: vi
+				.fn()
+				.mockResolvedValueOnce({ done: false as const, value: Uint8Array.of(1, 2) })
+				.mockRejectedValueOnce(sourceFailure),
+			cancel: vi.fn((_reason?: unknown) => stalledCancellation),
+			releaseLock: vi.fn(() => {
+				throw new Error('failed streamed reader lock cannot be released');
+			})
+		};
+		const response = {
+			url,
+			ok: true,
+			status: 200,
+			headers: new Headers(),
+			body: { getReader: vi.fn(() => reader) }
+		} as unknown as Response;
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => response)
+		);
+		const progress = { set: vi.fn() };
+		const pending = readBuffer(url, progress);
+		let timeout: ReturnType<typeof setTimeout> | undefined;
+
+		try {
+			const outcome = await Promise.race([
+				pending.then(
+					(value) => ({ status: 'resolved' as const, value }),
+					(error) => ({ status: 'rejected' as const, reason: error as unknown })
+				),
+				new Promise<{ status: 'pending' }>((resolve) => {
+					timeout = setTimeout(() => resolve({ status: 'pending' }), 25);
+				})
+			]);
+
+			expect(outcome.status).toBe('rejected');
+			if (outcome.status !== 'rejected') throw new Error('expected streamed read to reject');
+			expect(outcome.reason).toBeInstanceOf(Error);
+			expect((outcome.reason as Error).message).toContain(sourceFailure.message);
+			expect(reader.cancel).toHaveBeenCalledOnce();
+			expect(reader.cancel).toHaveBeenCalledWith(sourceFailure);
+			expect(reader.releaseLock).toHaveBeenCalledOnce();
+			expect(progress.set).not.toHaveBeenCalledWith(1);
+		} finally {
+			if (timeout) clearTimeout(timeout);
+			resolveCancellation();
+			await pending.catch(() => {});
+		}
+	});
+
 	it('rejects an oversized gzip transfer before starting decompression', async () => {
 		const contents = gzipSync(Uint8Array.of(1, 2, 3), { level: 9, mtime: 0 });
 		const url = 'https://cdn.test/llvm/gzip-download-limit.wasm.gz';
