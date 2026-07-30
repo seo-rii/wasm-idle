@@ -817,6 +817,72 @@ test('loadRuntimeAssetBytes separates runtime pack caches by fetch identity', as
 	clearTinyGoRuntimePackCache();
 });
 
+test('loadRuntimeAssetBytes rejects promptly and cleans a late custom fetch response', async () => {
+	const controller = new AbortController();
+	const reason = new Error('cancelled stalled TinyGo fetch');
+	let markFetchStarted;
+	const fetchStarted = new Promise((resolve) => {
+		markFetchStarted = resolve;
+	});
+	let releaseResponse;
+	const responsePromise = new Promise((resolve) => {
+		releaseResponse = resolve;
+	});
+	let markCancelled;
+	const cancelled = new Promise((resolve) => {
+		markCancelled = resolve;
+	});
+	let cancelReason;
+	let requestSignal;
+	const response = new Response(
+		new ReadableStream({
+			cancel(value) {
+				cancelReason = value;
+				markCancelled();
+			}
+		})
+	);
+	const progress = [];
+	const loading = loadRuntimeAssetBytes({
+		assetPath: 'tools/go-probe.wasm',
+		assetUrl: 'https://assets.invalid/tools/go-probe.wasm',
+		label: 'go-probe.wasm',
+		signal: controller.signal,
+		onProgress: (event) => progress.push(event),
+		fetchImpl: async (_url, init) => {
+			requestSignal = init.signal;
+			markFetchStarted();
+			return await responsePromise;
+		}
+	});
+
+	await fetchStarted;
+	assert.equal(requestSignal, controller.signal);
+	controller.abort(reason);
+	try {
+		const outcome = await Promise.race([
+			loading.then(
+				(value) => ({ status: 'resolved', value }),
+				(error) => ({ status: 'rejected', reason: error })
+			),
+			new Promise((resolve) => {
+				setImmediate(() => resolve({ status: 'pending' }));
+			})
+		]);
+
+		assert.equal(outcome.status, 'rejected', 'custom fetch remained pending after abort');
+		assert.equal(outcome.reason, reason);
+		assert.deepEqual(progress, []);
+		assert.equal(getEventListeners(controller.signal, 'abort').length, 0);
+		releaseResponse(response);
+		await cancelled;
+		assert.equal(cancelReason, reason);
+	} finally {
+		releaseResponse(response);
+		await loading.catch(() => {});
+	}
+});
+
 test('loadRuntimeAssetBytes rejects pre-aborted loads before invoking hooks', async () => {
 	const controller = new AbortController();
 	const reason = new Error('cancelled by test');

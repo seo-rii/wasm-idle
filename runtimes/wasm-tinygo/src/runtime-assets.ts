@@ -106,28 +106,43 @@ function runtimeAssetAbortReason(signal: AbortSignal) {
 	return signal.reason ?? new Error('wasm-tinygo runtime asset load was aborted');
 }
 
-async function invokeRuntimeAssetLoader(
-	loader: TinyGoRuntimeAssetLoader,
-	options: Parameters<TinyGoRuntimeAssetLoader>[0]
+async function runAbortableRuntimeAssetOperation<T>(
+	operation: () => T | Promise<T>,
+	signal?: AbortSignal,
+	onLateResult?: (result: T, reason: unknown) => void | Promise<void>
 ) {
-	const { signal } = options;
-	if (!signal) return await loader(options);
+	if (!signal) return await operation();
 	if (signal.aborted) throw runtimeAssetAbortReason(signal);
 	let cancelOnAbort: (() => void) | undefined;
 	const aborted = new Promise<never>((_resolve, reject) => {
 		cancelOnAbort = () => reject(runtimeAssetAbortReason(signal));
 		signal.addEventListener('abort', cancelOnAbort, { once: true });
 	});
+	let pending: Promise<T> | undefined;
 	try {
-		const result = await Promise.race([Promise.resolve(loader(options)), aborted]);
+		pending = Promise.resolve(operation());
+		const result = await Promise.race([pending, aborted]);
 		if (signal.aborted) throw runtimeAssetAbortReason(signal);
 		return result;
 	} catch (error) {
-		if (signal.aborted) throw runtimeAssetAbortReason(signal);
+		if (signal.aborted) {
+			const reason = runtimeAssetAbortReason(signal);
+			if (pending && onLateResult) {
+				void pending.then((result) => onLateResult(result, reason)).catch(() => {});
+			}
+			throw reason;
+		}
 		throw error;
 	} finally {
 		if (cancelOnAbort) signal.removeEventListener('abort', cancelOnAbort);
 	}
+}
+
+async function invokeRuntimeAssetLoader(
+	loader: TinyGoRuntimeAssetLoader,
+	options: Parameters<TinyGoRuntimeAssetLoader>[0]
+) {
+	return await runAbortableRuntimeAssetOperation(() => loader(options), options.signal);
 }
 
 function expectObject(value: unknown, label: string): Record<string, unknown> {
@@ -450,12 +465,19 @@ async function fetchRuntimeAssetBytes(
 	};
 	let response: Response;
 	try {
-		response = await fetchImpl(resolvedAssetUrl, {
-			credentials: 'omit',
-			redirect: 'error',
-			referrerPolicy: 'no-referrer',
-			signal: options.signal
-		});
+		response = await runAbortableRuntimeAssetOperation(
+			() =>
+				fetchImpl(resolvedAssetUrl, {
+					credentials: 'omit',
+					redirect: 'error',
+					referrerPolicy: 'no-referrer',
+					signal: options.signal
+				}),
+			options.signal,
+			async (lateResponse, reason) => {
+				await lateResponse.body?.cancel(reason).catch(() => {});
+			}
+		);
 	} catch (error) {
 		if (options.signal?.aborted) {
 			throw options.signal.reason ?? new Error('wasm-tinygo runtime asset load was aborted');
