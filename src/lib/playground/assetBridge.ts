@@ -354,10 +354,34 @@ export class WorkerAssetBridge {
 			this.progress.update(asset, result.byteLength, result.byteLength);
 			return { bytes: result };
 		}
-		if (result instanceof Blob) {
-			const bytes = new Uint8Array(await result.arrayBuffer());
+		const loaderBlob =
+			result instanceof Blob
+				? { blob: result, mimeType: result.type || undefined }
+				: 'data' in result && result.data instanceof Blob
+					? {
+							blob: result.data,
+							mimeType: result.mimeType || result.data.type || undefined
+						}
+					: undefined;
+		if (loaderBlob) {
+			const { blob, mimeType } = loaderBlob;
+			let cancelOnAbort: (() => void) | undefined;
+			const aborted = new Promise<never>((_resolve, reject) => {
+				cancelOnAbort = () => reject(runtimeAssetAbortReason(signal));
+				signal.addEventListener('abort', cancelOnAbort, { once: true });
+			});
+			let source: ArrayBuffer;
+			try {
+				if (signal.aborted) throw runtimeAssetAbortReason(signal);
+				const materialized = blob.arrayBuffer();
+				source = await Promise.race([materialized, aborted]);
+				if (signal.aborted) throw runtimeAssetAbortReason(signal);
+			} finally {
+				if (cancelOnAbort) signal.removeEventListener('abort', cancelOnAbort);
+			}
+			const bytes = new Uint8Array(source);
 			this.progress.update(asset, bytes.byteLength, bytes.byteLength);
-			return { bytes, mimeType: result.type || undefined, transferOwnership: true };
+			return { bytes, mimeType, transferOwnership: true };
 		}
 		if ('url' in result && result.url) {
 			return await this.fetchAsset(String(result.url), asset, signal);
@@ -385,13 +409,6 @@ export class WorkerAssetBridge {
 					transferOwnership: result.transferOwnership === true
 				};
 			}
-			const bytes = new Uint8Array(await result.data.arrayBuffer());
-			this.progress.update(asset, bytes.byteLength, bytes.byteLength);
-			return {
-				bytes,
-				mimeType: result.mimeType || result.data.type || undefined,
-				transferOwnership: true
-			};
 		}
 		return null;
 	}

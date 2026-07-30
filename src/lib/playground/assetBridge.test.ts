@@ -177,6 +177,84 @@ describe('WorkerAssetBridge asset requests', () => {
 		}
 	});
 
+	it.each([
+		{ label: 'bare', wrap: (blob: Blob) => blob },
+		{
+			label: 'wrapped',
+			wrap: (blob: Blob) => ({ data: blob, mimeType: 'application/wasm' })
+		}
+	])('aborts stalled $label loader-owned Blob materialization', async ({ wrap }) => {
+		let markMaterializationStarted!: () => void;
+		const materializationStarted = new Promise<void>((resolve) => {
+			markMaterializationStarted = resolve;
+		});
+		let resolveArrayBuffer!: (value: ArrayBuffer) => void;
+		const arrayBufferPromise = new Promise<ArrayBuffer>((resolve) => {
+			resolveArrayBuffer = resolve;
+		});
+		const arrayBuffer = vi.fn(() => {
+			markMaterializationStarted();
+			return arrayBufferPromise;
+		});
+		const blob = new Blob([], { type: 'application/octet-stream' });
+		Object.defineProperty(blob, 'arrayBuffer', { value: arrayBuffer });
+		const progress = { set: vi.fn() };
+		const bridge = new WorkerAssetBridge(
+			{ postMessage: vi.fn() } as unknown as Worker,
+			'clang',
+			{
+				baseUrl: '/clang/',
+				loader: vi.fn().mockResolvedValue(wrap(blob)),
+				useAssetBridge: true
+			},
+			progress
+		);
+		progress.set.mockClear();
+		const asset = RUNTIME_LOAD_ASSETS.clang[0];
+		const loadAsset = (
+			bridge as unknown as {
+				loadAsset(assetName: string, signal: AbortSignal): Promise<unknown>;
+			}
+		).loadAsset.bind(bridge);
+		const controller = new AbortController();
+		const reason = new Error('stop loader-owned Blob materialization');
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const loading = loadAsset(asset, controller.signal);
+		let timeout: ReturnType<typeof setTimeout> | undefined;
+
+		try {
+			await materializationStarted;
+			controller.abort(reason);
+			const outcome = await Promise.race([
+				loading.then(
+					(value) => ({ status: 'resolved' as const, value }),
+					(error) => ({ status: 'rejected' as const, reason: error as unknown })
+				),
+				new Promise<{ status: 'pending' }>((resolve) => {
+					timeout = setTimeout(() => resolve({ status: 'pending' }), 25);
+				})
+			]);
+
+			expect(outcome).toEqual({ status: 'rejected', reason });
+			const abortRegistrations = addEventListener.mock.calls.filter(
+				([type]) => type === 'abort'
+			);
+			expect(abortRegistrations).toHaveLength(2);
+			for (const registration of abortRegistrations) {
+				expect(removeEventListener).toHaveBeenCalledWith('abort', registration[1]);
+			}
+			resolveArrayBuffer(Uint8Array.of(1, 2, 3).buffer);
+			await Promise.resolve();
+			await Promise.resolve();
+			expect(progress.set).not.toHaveBeenCalled();
+		} finally {
+			if (timeout) clearTimeout(timeout);
+			resolveArrayBuffer(Uint8Array.of(1, 2, 3).buffer);
+			await loading.catch(() => {});
+		}
+	});
+
 	it('loads an integrity-pinned Clang runtime manifest through the bridge', async () => {
 		const postMessage = vi.fn();
 		const bytes = new Uint8Array([1, 2, 3]);
