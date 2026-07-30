@@ -166,6 +166,13 @@ function decodeBase64(data: string) {
 	return bytes;
 }
 
+function cloneResolvedBreakpoints(breakpoints: readonly ResolvedBreakpoint[]) {
+	return breakpoints.map((breakpoint) => ({
+		...breakpoint,
+		source: cloneDebugSource(breakpoint.source)
+	}));
+}
+
 function mapCapabilities(
 	capabilities: DapCapabilities,
 	options: LldbDapAdapterOptions
@@ -204,6 +211,7 @@ export class LldbDapAdapter implements DebugAdapter {
 	readonly #options: LldbDapAdapterOptions;
 	readonly #events = createDebugAdapterEventChannel();
 	readonly #breakpointsById = new Map<number, ResolvedBreakpoint>();
+	readonly #breakpointsBySource = new Map<string, ResolvedBreakpoint[]>();
 	readonly #breakpointIdsBySource = new Map<string, Set<number>>();
 	readonly #breakpointRequestVersions = new Map<string, number>();
 	#capabilities: DebugCapabilities | null = null;
@@ -261,11 +269,19 @@ export class LldbDapAdapter implements DebugAdapter {
 		const sourceKey = debugSourceKey(requestSource);
 		const requestVersion = (this.#breakpointRequestVersions.get(sourceKey) ?? 0) + 1;
 		this.#breakpointRequestVersions.set(sourceKey, requestVersion);
-		const response = await this.#session.request<DapSetBreakpointsResponse>('setBreakpoints', {
-			source: requestSource,
-			breakpoints: requestedLines.map((line) => ({ line })),
-			lines: requestedLines
-		});
+		let response: DapSetBreakpointsResponse;
+		try {
+			response = await this.#session.request<DapSetBreakpointsResponse>('setBreakpoints', {
+				source: requestSource,
+				breakpoints: requestedLines.map((line) => ({ line })),
+				lines: requestedLines
+			});
+		} catch (error) {
+			if (this.#breakpointRequestVersions.get(sourceKey) !== requestVersion) {
+				return cloneResolvedBreakpoints(this.#breakpointsBySource.get(sourceKey) ?? []);
+			}
+			throw error;
+		}
 		const dapBreakpoints = response?.breakpoints || [];
 		const resolved = requestedLines.map((requestedLine, index) =>
 			this.#normalizeBreakpoint(dapBreakpoints[index], requestSource, requestedLine)
@@ -273,7 +289,7 @@ export class LldbDapAdapter implements DebugAdapter {
 		if (this.#breakpointRequestVersions.get(sourceKey) === requestVersion) {
 			this.#replaceTrackedBreakpoints(requestSource, resolved);
 		}
-		return resolved;
+		return cloneResolvedBreakpoints(this.#breakpointsBySource.get(sourceKey) ?? []);
 	}
 
 	async continue(threadId: number) {
@@ -431,8 +447,10 @@ export class LldbDapAdapter implements DebugAdapter {
 			this.#breakpointsById.delete(id);
 		}
 
+		const snapshot = cloneResolvedBreakpoints(breakpoints);
+		this.#breakpointsBySource.set(sourceKey, snapshot);
 		const ids = new Set<number>();
-		for (const breakpoint of breakpoints) {
+		for (const breakpoint of snapshot) {
 			if (breakpoint.id === undefined) continue;
 			ids.add(breakpoint.id);
 			this.#breakpointsById.set(breakpoint.id, breakpoint);
@@ -594,19 +612,37 @@ export class LldbDapAdapter implements DebugAdapter {
 				requestedLine
 			);
 			if (breakpoint.id !== undefined) {
+				const storedBreakpoint = cloneResolvedBreakpoints([breakpoint])[0]!;
 				const sourceKey = debugSourceKey(breakpoint.source);
 				const previousSourceKey = tracked ? debugSourceKey(tracked.source) : sourceKey;
 				if (previousSourceKey !== sourceKey) {
 					this.#breakpointIdsBySource.get(previousSourceKey)?.delete(breakpoint.id);
+					const previousBreakpoints =
+						this.#breakpointsBySource.get(previousSourceKey) ?? [];
+					this.#breakpointsBySource.set(
+						previousSourceKey,
+						previousBreakpoints.filter((candidate) => candidate.id !== breakpoint.id)
+					);
 				}
 				if (body.reason === 'removed') {
 					this.#breakpointsById.delete(breakpoint.id);
-					this.#breakpointIdsBySource.get(sourceKey)?.delete(breakpoint.id);
+					this.#breakpointIdsBySource.get(previousSourceKey)?.delete(breakpoint.id);
+					const current = this.#breakpointsBySource.get(previousSourceKey) ?? [];
+					this.#breakpointsBySource.set(
+						previousSourceKey,
+						current.filter((candidate) => candidate.id !== breakpoint.id)
+					);
 				} else {
-					this.#breakpointsById.set(breakpoint.id, breakpoint);
+					this.#breakpointsById.set(breakpoint.id, storedBreakpoint);
 					const ids = this.#breakpointIdsBySource.get(sourceKey) ?? new Set<number>();
 					ids.add(breakpoint.id);
 					this.#breakpointIdsBySource.set(sourceKey, ids);
+					const current = this.#breakpointsBySource.get(sourceKey) ?? [];
+					const index = current.findIndex((candidate) => candidate.id === breakpoint.id);
+					const next = [...current];
+					if (index < 0) next.push(storedBreakpoint);
+					else next[index] = storedBreakpoint;
+					this.#breakpointsBySource.set(sourceKey, next);
 				}
 			}
 			return { type: 'breakpoint', reason: body.reason, breakpoint };

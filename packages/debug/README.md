@@ -54,10 +54,12 @@ delayed DAP response cannot replace the adapter's current breakpoint IDs or rest
 the UI. DAP `new` events enter the same per-source replacement set as response IDs, while `changed`
 and `removed` keep that set synchronized. A later source replacement therefore retires event-created
 IDs, and late events for an untracked ID are discarded. Superseded controller calls resolve with the
-current source snapshot instead of returning their stale result. The adapter controller and
-playground host also ignore a superseded request's late failure instead of surfacing it after the
-current update succeeds. Updates for different workspace files remain independent, while failures
-from the latest request still propagate.
+current source snapshot instead of returning their stale result. Direct `LldbDapAdapter` calls use
+the same rule for both late successes and failures, and returned breakpoint/source objects are
+isolated from its event-correlation cache. The adapter controller and playground host also ignore a
+superseded request's late failure instead of surfacing it after the current update succeeds. Updates
+for different workspace files remain independent, while failures from the latest request still
+propagate.
 
 When a selected LLDB stack frame names another `/workspace/...` source, the host should await
 `selectFrame()`, open the matching workspace file, and then update the controller source path. This

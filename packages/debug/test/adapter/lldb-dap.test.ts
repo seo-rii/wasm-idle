@@ -187,6 +187,41 @@ describe('LldbDapAdapter', () => {
 		});
 	});
 
+	it('isolates tracked breakpoint metadata from mutations to returned snapshots', async () => {
+		const session = new FakeDapSession();
+		session.setResponse('initialize', {});
+		session.setResponse('setBreakpoints', {
+			breakpoints: [{ id: 61, verified: true, line: 6 }]
+		});
+		const adapter = createLldbDapAdapter(session);
+		const events: DebugAdapterEvent[] = [];
+		adapter.onEvent((event) => events.push(event));
+		await adapter.initialize();
+
+		const breakpoints = await adapter.setBreakpoints({ path: '/workspace/main.cpp' }, [5]);
+		breakpoints[0]!.source.path = '/workspace/caller-mutated.cpp';
+		breakpoints[0]!.requestedLine = 50;
+		session.emit({
+			event: 'breakpoint',
+			body: {
+				reason: 'changed',
+				breakpoint: { id: 61, verified: true, line: 7 }
+			}
+		});
+
+		expect(events.at(-1)).toEqual({
+			type: 'breakpoint',
+			reason: 'changed',
+			breakpoint: {
+				id: 61,
+				verified: true,
+				source: { path: '/workspace/main.cpp' },
+				requestedLine: 5,
+				line: 7
+			}
+		});
+	});
+
 	it('keeps the newest source metadata when breakpoint responses arrive out of order', async () => {
 		const session = new FakeDapSession();
 		session.setResponse('initialize', {});
@@ -212,9 +247,18 @@ describe('LldbDapAdapter', () => {
 		const older = adapter.setBreakpoints({ path: '/workspace/main.cpp' }, [3]);
 		const newer = adapter.setBreakpoints({ path: '/workspace/main.cpp' }, [7]);
 		resolveNewer({ breakpoints: [{ id: 72, verified: true, line: 7 }] });
-		await newer;
+		const currentBreakpoints = [
+			{
+				id: 72,
+				verified: true,
+				source: { path: '/workspace/main.cpp' },
+				requestedLine: 7,
+				line: 7
+			}
+		];
+		await expect(newer).resolves.toEqual(currentBreakpoints);
 		resolveOlder({ breakpoints: [{ id: 31, verified: true, line: 3 }] });
-		await older;
+		await expect(older).resolves.toEqual(currentBreakpoints);
 		session.emit({
 			event: 'breakpoint',
 			body: {
@@ -290,6 +334,44 @@ describe('LldbDapAdapter', () => {
 			}
 		});
 		expect(events).toHaveLength(eventCountAfterReplacement);
+	});
+
+	it('ignores a superseded breakpoint failure after the newest source update succeeds', async () => {
+		const session = new FakeDapSession();
+		session.setResponse('initialize', {});
+		let rejectOlder!: (error: Error) => void;
+		let resolveNewer!: (response: unknown) => void;
+		session.queueResponse(
+			'setBreakpoints',
+			new Promise((_resolve, reject) => {
+				rejectOlder = reject;
+			})
+		);
+		session.queueResponse(
+			'setBreakpoints',
+			new Promise((resolve) => {
+				resolveNewer = resolve;
+			})
+		);
+		const adapter = createLldbDapAdapter(session);
+		await adapter.initialize();
+
+		const older = adapter.setBreakpoints({ path: '/workspace/main.cpp' }, [3]);
+		const newer = adapter.setBreakpoints({ path: '/workspace/main.cpp' }, [9]);
+		const currentBreakpoints = [
+			{
+				id: 79,
+				verified: true,
+				source: { path: '/workspace/main.cpp' },
+				requestedLine: 9,
+				line: 9
+			}
+		];
+		resolveNewer({ breakpoints: [{ id: 79, verified: true, line: 9 }] });
+		await expect(newer).resolves.toEqual(currentBreakpoints);
+		const supersededResult = expect(older).resolves.toEqual(currentBreakpoints);
+		rejectOlder(new Error('obsolete breakpoint failure'));
+		await supersededResult;
 	});
 
 	it('keeps variable children lazy and forwards paging to DAP', async () => {
