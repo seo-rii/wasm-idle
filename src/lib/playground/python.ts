@@ -40,9 +40,11 @@ class Python implements Sandbox {
 	pendingEof = false;
 	exit = true;
 	assetBridge: WorkerAssetBridge | null = null;
+	private activeRunCleanup: (() => void) | null = null;
 	private readonly workerSession = new WorkerSession({
 		label: 'Python',
 		onDispose: (worker) => {
+			this.activeRunCleanup?.();
 			if (this.worker === worker) delete this.worker;
 			this.assetBridge = null;
 			this.exit = true;
@@ -143,7 +145,27 @@ class Python implements Sandbox {
 		this.exit = false;
 		return new Promise<boolean | string>((resolve, reject) => {
 			if (!this.worker) return reject('Worker not loaded');
+			this.activeRunCleanup?.();
 			const operation = this.workerSession.beginRun(this.worker, reject);
+			const signal = options.signal;
+			let onAbort: (() => void) | undefined;
+			const cleanup = () => {
+				if (onAbort) signal?.removeEventListener('abort', onAbort);
+				if (this.activeRunCleanup === cleanup) this.activeRunCleanup = null;
+			};
+			this.activeRunCleanup = cleanup;
+			if (signal) {
+				onAbort = () => {
+					this.terminate(
+						signal.reason ?? new DOMException('Python execution aborted', 'AbortError')
+					);
+				};
+				signal.addEventListener('abort', onAbort, { once: true });
+				if (signal.aborted) {
+					onAbort();
+					return;
+				}
+			}
 			this.setBreakpoints(options.debug ? [...(options.breakpoints || [])] : []);
 			const interrupt = new Uint8Array(this.interruptBuffer),
 				_uid = ++this.uid;
@@ -170,6 +192,7 @@ class Python implements Sandbox {
 				if (output) this.output(output);
 				if (debugEvent) this.ondebug?.(debugEvent);
 				if (results) {
+					cleanup();
 					this.elapse = Date.now() - this.begin;
 					this.exit = true;
 					this.waitingForInput = false;
@@ -180,6 +203,7 @@ class Python implements Sandbox {
 				}
 				if (log) console.log(log);
 				if (error) {
+					cleanup();
 					this.elapse = Date.now() - this.begin;
 					this.exit = true;
 					this.waitingForInput = false;
@@ -255,7 +279,8 @@ class Python implements Sandbox {
 		this.terminate();
 	}
 
-	terminate() {
+	terminate(reason: unknown = 'Process terminated') {
+		this.activeRunCleanup?.();
 		this.waitingForInput = false;
 		this.pendingEof = false;
 		this.uid += 1;
@@ -263,7 +288,7 @@ class Python implements Sandbox {
 		const control = new Int32Array(this.debugBuffer);
 		Atomics.add(control, 0, 1);
 		Atomics.notify(control, 0);
-		this.workerSession.terminate();
+		this.workerSession.terminate(reason);
 		this.exit = true;
 	}
 

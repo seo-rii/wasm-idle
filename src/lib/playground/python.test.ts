@@ -46,6 +46,9 @@ describe('Python sandbox', () => {
 	it('passes complex Python source with multiple assignment and mutual recursion to the worker', async () => {
 		const sandbox = new Python();
 		const outputs: string[] = [];
+		const controller = new AbortController();
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
 		const code = `def is_even(value):
     return True if value == 0 else is_odd(value - 1)
 
@@ -58,7 +61,9 @@ print(f"{left + right}:{is_even(left + right)}")`;
 		sandbox.output = (chunk: string) => outputs.push(chunk);
 
 		await sandbox.load('/');
-		await expect(sandbox.run(code, false)).resolves.toBe(true);
+		await expect(
+			sandbox.run(code, false, true, undefined, [], { signal: controller.signal })
+		).resolves.toBe(true);
 
 		expect(workerInstances).toHaveLength(1);
 		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
@@ -69,6 +74,14 @@ print(f"{left + right}:{is_even(left + right)}")`;
 			})
 		);
 		expect(outputs).toContain('10:True\n');
+		const abortRegistrations = addEventListener.mock.calls.filter(
+			(registration: unknown[]) => registration[0] === 'abort'
+		);
+		for (const registration of abortRegistrations) {
+			expect(removeEventListener).toHaveBeenCalledWith('abort', registration[1]);
+		}
+		controller.abort(new Error('late successful-run abort'));
+		expect(workerInstances[0].terminate).not.toHaveBeenCalled();
 	});
 
 	it('forwards separate execution and debug paths to the worker', async () => {
@@ -102,6 +115,9 @@ print(f"{left + right}:{is_even(left + right)}")`;
 		const sandbox = new Python();
 		const worker = new MockWorker();
 		const events: any[] = [];
+		const controller = new AbortController();
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
 
 		sandbox.ondebug = (event) => events.push(event);
 		sandbox.worker = worker as unknown as Worker;
@@ -117,10 +133,22 @@ print(f"{left + right}:{is_even(left + right)}")`;
 			sandbox.run(
 				`left = right = 10
 print((left + right) // (left - left))`,
-				false
+				false,
+				true,
+				undefined,
+				[],
+				{ signal: controller.signal }
 			)
 		).rejects.toContain('ZeroDivisionError');
 		expect(events).toEqual([{ type: 'stop' }]);
+		const abortRegistrations = addEventListener.mock.calls.filter(
+			(registration: unknown[]) => registration[0] === 'abort'
+		);
+		for (const registration of abortRegistrations) {
+			expect(removeEventListener).toHaveBeenCalledWith('abort', registration[1]);
+		}
+		controller.abort(new Error('late failed-run abort'));
+		expect(worker.terminate).not.toHaveBeenCalled();
 	});
 
 	it('aliases kill to terminate for Python sessions', () => {
@@ -142,6 +170,80 @@ print((left + right) // (left - left))`,
 
 		await expect(running).rejects.toBe('Process terminated');
 		expect(worker.terminate).toHaveBeenCalledTimes(1);
+	});
+
+	it('aborts an active non-debug Python run and ignores late worker messages', async () => {
+		const sandbox = new Python();
+		const outputs: string[] = [];
+		const controller = new AbortController();
+		const reason = new Error('stop active Python execution');
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		sandbox.output = (chunk: string) => outputs.push(chunk);
+
+		await sandbox.load('/');
+		const worker = workerInstances[workerInstances.length - 1];
+		worker.postMessage.mockImplementationOnce(() => {});
+		const running = sandbox.run('print("late")', false, true, undefined, [], {
+			signal: controller.signal
+		});
+		const lateHandler = worker.onmessage;
+		let timeout: ReturnType<typeof setTimeout> | undefined;
+
+		try {
+			controller.abort(reason);
+			const outcome = await Promise.race([
+				running.then(
+					(value) => ({ status: 'resolved' as const, value }),
+					(error) => ({ status: 'rejected' as const, reason: error as unknown })
+				),
+				new Promise<{ status: 'pending' }>((resolve) => {
+					timeout = setTimeout(() => resolve({ status: 'pending' }), 25);
+				})
+			]);
+
+			expect(outcome).toEqual({ status: 'rejected', reason });
+			expect(worker.terminate).toHaveBeenCalledOnce();
+			const abortRegistrations = addEventListener.mock.calls.filter(
+				(registration: unknown[]) => registration[0] === 'abort'
+			);
+			for (const registration of abortRegistrations) {
+				expect(removeEventListener).toHaveBeenCalledWith('abort', registration[1]);
+			}
+
+			lateHandler?.({
+				data: { output: 'late output', results: true }
+			} as MessageEvent<any>);
+			expect(outputs).toEqual([]);
+
+			await sandbox.load('/');
+			await expect(sandbox.run('print("retry")', false)).resolves.toBe(true);
+			expect(workerInstances).toHaveLength(2);
+		} finally {
+			if (timeout) clearTimeout(timeout);
+			sandbox.kill();
+			await running.catch(() => {});
+		}
+	});
+
+	it('does not dispatch a pre-aborted non-debug Python run', async () => {
+		const sandbox = new Python();
+		const controller = new AbortController();
+		const reason = new Error('stop before Python execution');
+		sandbox.output = () => {};
+		controller.abort(reason);
+
+		await sandbox.load('/');
+		const worker = workerInstances[workerInstances.length - 1];
+		const callsBeforeRun = worker.postMessage.mock.calls.length;
+
+		await expect(
+			sandbox.run('print("never")', false, true, undefined, [], {
+				signal: controller.signal
+			})
+		).rejects.toBe(reason);
+		expect(worker.postMessage).toHaveBeenCalledTimes(callsBeforeRun);
+		expect(worker.terminate).toHaveBeenCalledOnce();
 	});
 
 	it('evaluates watch expressions through the worker debug buffers', async () => {
