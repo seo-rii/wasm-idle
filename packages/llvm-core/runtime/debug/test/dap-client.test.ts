@@ -57,6 +57,29 @@ describe('DapClient', () => {
 		).toThrow(/positive finite timeout/u);
 	});
 
+	it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
+		'rejects invalid per-request response timeout %s before sending',
+		async (responseTimeoutMs) => {
+			const inputDescriptor = createSharedByteQueue(4096, 31);
+			const outputDescriptor = createSharedByteQueue(4096, 31);
+			const input = new SharedByteQueue(inputDescriptor);
+			const client = new DapClient({
+				input: inputDescriptor,
+				output: outputDescriptor,
+				requestTimeoutMs: 1_000
+			}).start();
+
+			try {
+				await expect(
+					client.request('threads', undefined, { responseTimeoutMs })
+				).rejects.toThrow(/positive finite timeout/u);
+				expect(input.available).toBe(0);
+			} finally {
+				await client.close();
+			}
+		}
+	);
+
 	it('correlates responses and forwards events over partial shared-ring reads', async () => {
 		const inputDescriptor = createSharedByteQueue(4096, 3);
 		const outputDescriptor = createSharedByteQueue(4096, 3);

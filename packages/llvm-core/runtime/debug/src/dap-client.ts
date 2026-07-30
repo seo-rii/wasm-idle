@@ -134,6 +134,19 @@ export class DapClient implements DapRequestSession {
 		if (this.abortController.signal.aborted) {
 			return Promise.reject(new Error('DAP client is closed'));
 		}
+		let responseTimeoutMs: number | null;
+		try {
+			responseTimeoutMs =
+				options.responseTimeoutMs === null
+					? null
+					: resolveDapTimeout(
+							options.responseTimeoutMs,
+							this.requestTimeoutMs,
+							'responseTimeoutMs'
+						);
+		} catch (error) {
+			return Promise.reject(error);
+		}
 		const seq = this.sequence;
 		this.sequence += 1;
 		const request: DapRequest = {
@@ -156,10 +169,6 @@ export class DapClient implements DapRequestSession {
 			}, this.transportWriteTimeoutMs);
 		});
 		const frame = encodeDapMessage(request);
-		const responseTimeoutMs =
-			options.responseTimeoutMs === undefined
-				? this.requestTimeoutMs
-				: options.responseTimeoutMs;
 		const write = this.writeQueue.then(() =>
 			this.input.write(frame, this.abortController.signal)
 		);

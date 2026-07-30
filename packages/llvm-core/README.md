@@ -109,7 +109,9 @@ transport-write timeout; ordinary DAP requests still use the configured response
 Configured DAP response, transport-write, and worker-ready timeouts must be positive finite
 millisecond values. The session validates and snapshots them before loading assets or creating
 workers, so invalid or concurrently changed timer settings cannot produce immediate or overflowing
-browser timers.
+browser timers. Per-request DAP response timeout overrides follow the same numeric rule and are
+rejected before the request is sent; `null` is the explicit opt-out for execution requests whose
+response arrives only after the target stops.
 
 Current producer modules expose Emscripten's canonical `HEAPU8` view. Each worker samples only its
 backing buffer length, emits an initial `onMemory(worker, bytes)` value, and emits again only when
