@@ -38,6 +38,9 @@ otherwise verified binary.
 worker to a dedicated WAMR target worker. DAP and GDB RSP are carried on separate
 `SharedArrayBuffer` byte queues, and stdin, stdout, and stderr use independent queues. The session
 verifies the module, source, loader, Wasm, and pthread-sidecar hashes before creating either worker.
+When `initialize()` starts, it snapshots the module, source files, configured breakpoints, and launch
+arguments used by the workers and DAP. Mutating the caller-owned option objects while asset
+verification is in flight therefore cannot change the already validated debug target.
 
 ```ts
 import { createBrowserLldbSession } from '@wasm-idle/llvm-core/debug';

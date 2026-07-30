@@ -116,7 +116,19 @@ export class BrowserLldbSession {
 				'LLDB debugging requires cross-origin isolation (COOP and COEP response headers)'
 			);
 		}
-		for (const breakpoint of this.options.breakpoints ?? []) {
+		const sources = this.options.sources.map((source) => ({ ...source }));
+		const breakpoints = (this.options.breakpoints ?? []).map((breakpoint) => ({
+			source: { ...breakpoint.source },
+			lines: [...breakpoint.lines]
+		}));
+		const launch = this.options.launch
+			? {
+					...this.options.launch,
+					...(this.options.launch.args ? { args: [...this.options.launch.args] } : {}),
+					...(this.options.launch.env ? { env: { ...this.options.launch.env } } : {})
+				}
+			: undefined;
+		for (const breakpoint of breakpoints) {
 			validateDebugSourcePath(breakpoint.source.path);
 			validateBreakpointLines(breakpoint.lines);
 		}
@@ -135,7 +147,7 @@ export class BrowserLldbSession {
 			}
 		}
 		const sourcePaths = new Set<string>();
-		for (const source of this.options.sources) {
+		for (const source of sources) {
 			validateDebugSourcePath(source.path);
 			if (sourcePaths.has(source.path)) {
 				throw new Error(`duplicate debug source path: ${source.path}`);
@@ -243,10 +255,10 @@ export class BrowserLldbSession {
 				type: 'initialize-target',
 				generation: this.generation,
 				module,
-				args: this.options.launch?.args ?? [],
-				env: this.options.launch?.env ?? {},
-				cwd: this.options.launch?.cwd ?? '/workspace',
-				workspaceFiles: this.options.sources,
+				args: launch?.args ?? [],
+				env: launch?.env ?? {},
+				cwd: launch?.cwd ?? '/workspace',
+				workspaceFiles: sources,
 				rspInput: lldbToTarget,
 				rspOutput: targetToLldb,
 				stdout,
@@ -263,7 +275,7 @@ export class BrowserLldbSession {
 				type: 'initialize-lldb',
 				generation: this.generation,
 				module,
-				sources: this.options.sources,
+				sources,
 				dapInput,
 				dapOutput,
 				rspInput: targetToLldb,
@@ -309,11 +321,11 @@ export class BrowserLldbSession {
 				})
 			);
 			const attachResponse = this.dap.request('attach', {
-				program: this.options.launch?.program ?? '/workspace/program.wasm',
-				stopOnEntry: this.options.launch?.stopOnEntry ?? false,
-				args: this.options.launch?.args ?? [],
-				env: this.options.launch?.env ?? {},
-				cwd: this.options.launch?.cwd ?? '/workspace',
+				program: launch?.program ?? '/workspace/program.wasm',
+				stopOnEntry: launch?.stopOnEntry ?? false,
+				args: launch?.args ?? [],
+				env: launch?.env ?? {},
+				cwd: launch?.cwd ?? '/workspace',
 				attachCommands: [
 					`process connect --plugin wasm wasm-messageport://${this.generation}`
 				]
@@ -339,7 +351,7 @@ export class BrowserLldbSession {
 					if (initializedTimeout !== undefined) clearTimeout(initializedTimeout);
 				})
 			);
-			for (const breakpoint of this.options.breakpoints ?? []) {
+			for (const breakpoint of breakpoints) {
 				await this.setBreakpoints(breakpoint.source, breakpoint.lines);
 			}
 			await this.awaitWhileActive(this.dap.request('configurationDone'));

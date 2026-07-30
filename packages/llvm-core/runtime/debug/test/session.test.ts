@@ -4,6 +4,7 @@ import { DapMessageParser, encodeDapMessage } from '../src/dap-client.js';
 import { BrowserLldbSession } from '../src/session.js';
 import { SharedByteQueue } from '../src/shared-byte-queue.js';
 import type {
+	BrowserLldbSessionOptions,
 	DapRequest,
 	DapResponse,
 	DapEvent,
@@ -684,6 +685,121 @@ describe('BrowserLldbSession', () => {
 
 		await session.disconnect();
 		expect(commands).toContain('disconnect');
+	});
+
+	it('snapshots mutable initialization inputs before awaiting runtime assets', async () => {
+		const commands: string[] = [];
+		const workers: FakeWorker[] = [];
+		let releaseAssets!: () => void;
+		const assetGate = new Promise<void>((resolve) => {
+			releaseAssets = resolve;
+		});
+		let reportAssetFetchStarted!: () => void;
+		const assetFetchStarted = new Promise<void>((resolve) => {
+			reportAssetFetchStarted = resolve;
+		});
+		let reportedAssetFetch = false;
+		const options: BrowserLldbSessionOptions = {
+			manifest,
+			runtimeBaseUrl: 'https://cdn.example/debug/',
+			module: Uint8Array.of(0, 97, 115, 109),
+			sources: [
+				{
+					path: '/workspace/main.cpp',
+					content: 'int main() { return 0; }',
+					contentSha256:
+						'80a7161009ffaf868641acac3f5e49bc5f86021ee1d177f3b1cbb47573513649'
+				}
+			],
+			breakpoints: [
+				{
+					source: { path: '/workspace/main.cpp' },
+					lines: [1]
+				}
+			],
+			launch: {
+				program: '/workspace/program.wasm',
+				args: ['original'],
+				env: { MODE: 'original' },
+				cwd: '/workspace'
+			},
+			fetchImpl: async () => {
+				if (!reportedAssetFetch) {
+					reportedAssetFetch = true;
+					reportAssetFetchStarted();
+				}
+				await assetGate;
+				return new Response('debug-asset');
+			},
+			workerFactory: (kind) => {
+				const worker = new FakeWorker(kind, commands);
+				workers.push(worker);
+				return worker;
+			},
+			requestTimeoutMs: 1_000,
+			readyTimeoutMs: 1_000
+		};
+		const session = new BrowserLldbSession(options);
+		const initialization = session.initialize();
+		await assetFetchStarted;
+
+		options.sources[0]!.content = 'int main() { return 1; }';
+		options.sources.push({
+			path: '/workspace/injected.cpp',
+			content: 'int injected;'
+		});
+		options.breakpoints![0]!.source.path = '/workspace/injected.cpp';
+		options.breakpoints![0]!.lines[0] = 9;
+		options.launch!.args!.push('mutated');
+		options.launch!.env!.MODE = 'mutated';
+		releaseAssets();
+
+		try {
+			await initialization;
+			const targetInit = workers
+				.flatMap((worker) => worker.received)
+				.find((message) => message.type === 'initialize-target');
+			const lldbInit = workers
+				.flatMap((worker) => worker.received)
+				.find((message) => message.type === 'initialize-lldb');
+			expect(targetInit).toMatchObject({
+				type: 'initialize-target',
+				args: ['original'],
+				env: { MODE: 'original' },
+				workspaceFiles: [
+					{
+						path: '/workspace/main.cpp',
+						content: 'int main() { return 0; }'
+					}
+				]
+			});
+			expect(lldbInit).toMatchObject({
+				type: 'initialize-lldb',
+				sources: [
+					{
+						path: '/workspace/main.cpp',
+						content: 'int main() { return 0; }'
+					}
+				]
+			});
+			const lldbWorker = workers.find((worker) => worker.kind === 'lldb');
+			expect(
+				lldbWorker?.requests.find((request) => request.command === 'attach')?.arguments
+			).toMatchObject({
+				args: ['original'],
+				env: { MODE: 'original' }
+			});
+			expect(
+				lldbWorker?.requests.find((request) => request.command === 'setBreakpoints')
+					?.arguments
+			).toMatchObject({
+				source: { path: '/workspace/main.cpp' },
+				lines: [1]
+			});
+		} finally {
+			releaseAssets();
+			await session.dispose();
+		}
 	});
 
 	it('disposes a running target without waiting for the disconnect response', async () => {
