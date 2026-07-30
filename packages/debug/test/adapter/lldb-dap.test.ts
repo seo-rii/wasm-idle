@@ -13,15 +13,23 @@ import {
 class FakeDapSession implements DapSession {
 	readonly requests: Array<{ command: string; requestArguments?: unknown }> = [];
 	readonly #responses = new Map<string, unknown>();
+	readonly #queuedResponses = new Map<string, unknown[]>();
 	readonly #listeners = new Set<(event: DapEvent) => void>();
 
 	setResponse(command: string, response: unknown) {
 		this.#responses.set(command, response);
 	}
 
+	queueResponse(command: string, response: unknown) {
+		const responses = this.#queuedResponses.get(command) ?? [];
+		responses.push(response);
+		this.#queuedResponses.set(command, responses);
+	}
+
 	async request<TBody = unknown>(command: string, requestArguments?: unknown): Promise<TBody> {
 		this.requests.push({ command, requestArguments });
-		return this.#responses.get(command) as TBody;
+		const queued = this.#queuedResponses.get(command);
+		return (await (queued?.length ? queued.shift() : this.#responses.get(command))) as TBody;
 	}
 
 	onEvent(listener: (event: DapEvent) => void) {
@@ -175,6 +183,55 @@ describe('LldbDapAdapter', () => {
 				source: { name: 'main.cpp', path: '/workspace/main.cpp' },
 				breakpoints: [{ line: 5 }, { line: 12 }],
 				lines: [5, 12]
+			}
+		});
+	});
+
+	it('keeps the newest source metadata when breakpoint responses arrive out of order', async () => {
+		const session = new FakeDapSession();
+		session.setResponse('initialize', {});
+		let resolveOlder!: (response: unknown) => void;
+		let resolveNewer!: (response: unknown) => void;
+		session.queueResponse(
+			'setBreakpoints',
+			new Promise((resolve) => {
+				resolveOlder = resolve;
+			})
+		);
+		session.queueResponse(
+			'setBreakpoints',
+			new Promise((resolve) => {
+				resolveNewer = resolve;
+			})
+		);
+		const adapter = createLldbDapAdapter(session);
+		const events: DebugAdapterEvent[] = [];
+		adapter.onEvent((event) => events.push(event));
+		await adapter.initialize();
+
+		const older = adapter.setBreakpoints({ path: '/workspace/main.cpp' }, [3]);
+		const newer = adapter.setBreakpoints({ path: '/workspace/main.cpp' }, [7]);
+		resolveNewer({ breakpoints: [{ id: 72, verified: true, line: 7 }] });
+		await newer;
+		resolveOlder({ breakpoints: [{ id: 31, verified: true, line: 3 }] });
+		await older;
+		session.emit({
+			event: 'breakpoint',
+			body: {
+				reason: 'changed',
+				breakpoint: { id: 72, verified: true, line: 8 }
+			}
+		});
+
+		expect(events.at(-1)).toEqual({
+			type: 'breakpoint',
+			reason: 'changed',
+			breakpoint: {
+				id: 72,
+				verified: true,
+				source: { path: '/workspace/main.cpp' },
+				requestedLine: 7,
+				line: 8
 			}
 		});
 	});

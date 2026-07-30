@@ -205,6 +205,7 @@ export class LldbDapAdapter implements DebugAdapter {
 	readonly #events = createDebugAdapterEventChannel();
 	readonly #breakpointsById = new Map<number, ResolvedBreakpoint>();
 	readonly #breakpointIdsBySource = new Map<string, Set<number>>();
+	readonly #breakpointRequestVersions = new Map<string, number>();
 	#capabilities: DebugCapabilities | null = null;
 	#initializeRequest: Promise<DebugCapabilities> | null = null;
 
@@ -257,6 +258,9 @@ export class LldbDapAdapter implements DebugAdapter {
 		this.#requireInitialized();
 		const requestedLines = validateBreakpointLines(lines);
 		const requestSource = cloneDebugSource(source);
+		const sourceKey = debugSourceKey(requestSource);
+		const requestVersion = (this.#breakpointRequestVersions.get(sourceKey) ?? 0) + 1;
+		this.#breakpointRequestVersions.set(sourceKey, requestVersion);
 		const response = await this.#session.request<DapSetBreakpointsResponse>('setBreakpoints', {
 			source: requestSource,
 			breakpoints: requestedLines.map((line) => ({ line })),
@@ -266,7 +270,9 @@ export class LldbDapAdapter implements DebugAdapter {
 		const resolved = requestedLines.map((requestedLine, index) =>
 			this.#normalizeBreakpoint(dapBreakpoints[index], requestSource, requestedLine)
 		);
-		this.#replaceTrackedBreakpoints(requestSource, resolved);
+		if (this.#breakpointRequestVersions.get(sourceKey) === requestVersion) {
+			this.#replaceTrackedBreakpoints(requestSource, resolved);
+		}
 		return resolved;
 	}
 
