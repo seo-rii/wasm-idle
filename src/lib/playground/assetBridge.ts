@@ -38,6 +38,26 @@ const MAX_RUNTIME_ASSET_BYTES = 128 * 1024 * 1024;
 const runtimeAssetAbortReason = (signal: AbortSignal) =>
 	signal.reason ?? new DOMException('Runtime asset load aborted', 'AbortError');
 
+const readAbortableArrayBuffer = async (
+	source: { arrayBuffer(): Promise<ArrayBuffer> },
+	signal: AbortSignal
+) => {
+	if (signal.aborted) throw runtimeAssetAbortReason(signal);
+	let cancelOnAbort: (() => void) | undefined;
+	const aborted = new Promise<never>((_resolve, reject) => {
+		cancelOnAbort = () => reject(runtimeAssetAbortReason(signal));
+		signal.addEventListener('abort', cancelOnAbort, { once: true });
+	});
+	try {
+		const materialized = source.arrayBuffer();
+		const bytes = await Promise.race([materialized, aborted]);
+		if (signal.aborted) throw runtimeAssetAbortReason(signal);
+		return bytes;
+	} finally {
+		if (cancelOnAbort) signal.removeEventListener('abort', cancelOnAbort);
+	}
+};
+
 const transferBuffer = (bytes: Uint8Array, transferOwnership = false) =>
 	transferOwnership &&
 	bytes.byteOffset === 0 &&
@@ -365,20 +385,7 @@ export class WorkerAssetBridge {
 					: undefined;
 		if (loaderBlob) {
 			const { blob, mimeType } = loaderBlob;
-			let cancelOnAbort: (() => void) | undefined;
-			const aborted = new Promise<never>((_resolve, reject) => {
-				cancelOnAbort = () => reject(runtimeAssetAbortReason(signal));
-				signal.addEventListener('abort', cancelOnAbort, { once: true });
-			});
-			let source: ArrayBuffer;
-			try {
-				if (signal.aborted) throw runtimeAssetAbortReason(signal);
-				const materialized = blob.arrayBuffer();
-				source = await Promise.race([materialized, aborted]);
-				if (signal.aborted) throw runtimeAssetAbortReason(signal);
-			} finally {
-				if (cancelOnAbort) signal.removeEventListener('abort', cancelOnAbort);
-			}
+			const source = await readAbortableArrayBuffer(blob, signal);
 			const bytes = new Uint8Array(source);
 			this.progress.update(asset, bytes.byteLength, bytes.byteLength);
 			return { bytes, mimeType, transferOwnership: true };
@@ -520,7 +527,7 @@ export class WorkerAssetBridge {
 		const mimeType = response.headers.get('content-type') || undefined;
 		const contentEncoding = response.headers.get('content-encoding') || undefined;
 		if (!response.body) {
-			const bytes = new Uint8Array(await response.arrayBuffer());
+			const bytes = new Uint8Array(await readAbortableArrayBuffer(response, signal));
 			this.progress.update(asset, bytes.byteLength, contentLength ?? bytes.byteLength);
 			return { bytes, contentEncoding, mimeType, transferOwnership: true };
 		}
