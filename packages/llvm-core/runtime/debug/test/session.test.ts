@@ -878,6 +878,56 @@ describe('BrowserLldbSession', () => {
 		await session.dispose();
 	});
 
+	it('snapshots the runtime manifest and base URL before source verification awaits', async () => {
+		const mutableManifest = structuredClone(manifest);
+		const runtimeBaseUrl = new URL('https://cdn.example/original/');
+		const requestedUrls: string[] = [];
+		const workers: FakeWorker[] = [];
+		const session = new BrowserLldbSession({
+			manifest: mutableManifest,
+			runtimeBaseUrl,
+			module: Uint8Array.of(0, 97, 115, 109),
+			sources: [
+				{
+					path: '/workspace/main.cpp',
+					content: 'int main() { return 0; }',
+					contentSha256:
+						'80a7161009ffaf868641acac3f5e49bc5f86021ee1d177f3b1cbb47573513649'
+				}
+			],
+			fetchImpl: async (input) => {
+				requestedUrls.push(String(input));
+				return new Response('debug-asset');
+			},
+			workerFactory: (kind) => {
+				const worker = new FakeWorker(kind, []);
+				workers.push(worker);
+				return worker;
+			},
+			requestTimeoutMs: 1_000,
+			readyTimeoutMs: 1_000
+		});
+		const initialization = session.initialize();
+		mutableManifest.debugger.lldb.js = 'mutated/lldb.js';
+		runtimeBaseUrl.pathname = '/mutated/';
+
+		try {
+			await initialization;
+			expect(requestedUrls).toHaveLength(6);
+			expect(requestedUrls[0]).toBe('https://cdn.example/original/lldb.js');
+			const lldbInit = workers
+				.flatMap((worker) => worker.received)
+				.find((message) => message.type === 'initialize-lldb');
+			expect(lldbInit).toMatchObject({
+				assets: {
+					js: 'https://cdn.example/original/lldb.js'
+				}
+			});
+		} finally {
+			await session.dispose();
+		}
+	});
+
 	it('drains final target output before publishing the target exit', async () => {
 		const workers: FakeWorker[] = [];
 		const output: string[] = [];

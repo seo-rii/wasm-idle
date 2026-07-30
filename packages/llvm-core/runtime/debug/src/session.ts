@@ -1,5 +1,5 @@
 import { DapClient } from './dap-client.js';
-import { preflightDebugRuntimeAssets, sha256Hex } from './manifest.js';
+import { parseDebugRuntimeManifest, preflightDebugRuntimeAssets, sha256Hex } from './manifest.js';
 import { createSharedByteQueue, SharedByteQueue } from './shared-byte-queue.js';
 import { validateDebugSourcePath } from './worker/module-loader.js';
 import type {
@@ -116,6 +116,8 @@ export class BrowserLldbSession {
 				'LLDB debugging requires cross-origin isolation (COOP and COEP response headers)'
 			);
 		}
+		const manifest = parseDebugRuntimeManifest(this.options.manifest);
+		const runtimeBaseUrl = this.options.runtimeBaseUrl.toString();
 		const sources = this.options.sources.map((source) => ({ ...source }));
 		const breakpoints = (this.options.breakpoints ?? []).map((breakpoint) => ({
 			source: { ...breakpoint.source },
@@ -177,8 +179,8 @@ export class BrowserLldbSession {
 		const stderr = createSharedByteQueue(queueCapacity, queueGeneration);
 		const assets = await this.awaitWhileActive(
 			preflightDebugRuntimeAssets(
-				this.options.manifest,
-				this.options.runtimeBaseUrl,
+				manifest,
+				runtimeBaseUrl,
 				this.options.fetchImpl ?? fetch,
 				this.lifecycleAbortController.signal
 			)

@@ -41,7 +41,9 @@ verifies the module, source, loader, Wasm, and pthread-sidecar hashes before cre
 When `initialize()` starts, it snapshots the module and its expected hash, source files, configured
 breakpoints, and launch arguments used by the workers and DAP. Mutating the caller-owned option
 objects while integrity and asset verification are in flight therefore cannot change the already
-validated debug target.
+validated debug target. The runtime manifest is parsed into an independent snapshot and the asset
+base URL is captured at the same boundary, so later mutations cannot redirect LLDB or WAMR asset
+loading.
 
 ```ts
 import { createBrowserLldbSession } from '@wasm-idle/llvm-core/debug';
