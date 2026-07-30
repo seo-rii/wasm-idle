@@ -124,9 +124,9 @@ function resolveBrowserToolAssetUrl(value: string, baseUrl?: string | URL) {
 	return resolved;
 }
 
-async function cancelResponse(response: Response, reason?: unknown) {
+function cancelResponse(response: Response, reason?: unknown) {
 	try {
-		await response.body?.cancel(reason);
+		void Promise.resolve(response.body?.cancel(reason)).catch(() => {});
 	} catch {
 		// Preserve the boundary failure that caused cancellation.
 	}
@@ -358,7 +358,7 @@ export async function fetchBrowserToolAsset(
 				void pendingResponse.then(
 					(candidate) => {
 						if (settled) {
-							void cancelResponse(candidate, abortReason(signal));
+							cancelResponse(candidate, abortReason(signal));
 							return;
 						}
 						settled = true;
@@ -383,26 +383,27 @@ export async function fetchBrowserToolAsset(
 		);
 	}
 	if (options.signal?.aborted) {
-		await cancelResponse(response, abortReason(options.signal));
-		throw abortReason(options.signal);
+		const reason = abortReason(options.signal);
+		cancelResponse(response, reason);
+		throw reason;
 	}
 	if (response.url) {
 		let finalUrl: URL;
 		try {
 			finalUrl = new URL(response.url);
 		} catch (error) {
-			await cancelResponse(response, error);
+			cancelResponse(response, error);
 			throw new Error(`${label} returned an invalid final URL`, {
 				cause: error
 			});
 		}
 		if (finalUrl.href !== requestUrl.href) {
-			await cancelResponse(response);
+			cancelResponse(response);
 			throw new Error(`${label} final URL mismatch`);
 		}
 	}
 	if (!response.ok) {
-		await cancelResponse(response);
+		cancelResponse(response);
 		throw new Error(`failed to fetch ${label}: HTTP ${response.status}`);
 	}
 
@@ -410,11 +411,11 @@ export async function fetchBrowserToolAsset(
 	try {
 		contentLength = parseContentLength(response, label);
 	} catch (error) {
-		await cancelResponse(response, error);
+		cancelResponse(response, error);
 		throw error;
 	}
 	if (receipt && contentLength !== undefined && contentLength !== receipt.bytes) {
-		await cancelResponse(response);
+		cancelResponse(response);
 		throw new Error(
 			`${label} size mismatch: expected ${receipt.bytes} bytes, received ${contentLength}`
 		);
@@ -424,7 +425,7 @@ export async function fetchBrowserToolAsset(
 		try {
 			accountBrowserToolInputBytes(budget, label, expectedBytes);
 		} catch (error) {
-			await cancelResponse(response, error);
+			cancelResponse(response, error);
 			throw error;
 		}
 	}

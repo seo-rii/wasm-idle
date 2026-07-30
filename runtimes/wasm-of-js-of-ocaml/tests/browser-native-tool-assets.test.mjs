@@ -243,36 +243,67 @@ for (const cancellationMode of ['pending', 'resolved', 'chunk']) {
 	});
 }
 
-test('rejects browser-native tool receipt size mismatches before reading', async () => {
-	let readerRequested = false;
-	let cancelled = false;
-	const assetUrl = new URL('tools/substituted.js', BASE_URL).href;
-	const response = {
-		url: assetUrl,
-		ok: true,
-		status: 200,
-		headers: new Headers({ 'content-length': '5' }),
-		body: {
-			async cancel() {
-				cancelled = true;
-			},
-			getReader() {
-				readerRequested = true;
-				throw new Error('mismatched body should not be read');
+for (const cancellationMode of ['pending', 'throw', 'reject']) {
+	test(`rejects receipt size mismatches without awaiting ${cancellationMode} cancellation`, async () => {
+		let resolveCancellation;
+		const pendingCancellation = new Promise((resolve) => {
+			resolveCancellation = resolve;
+		});
+		const cancelReasons = [];
+		let readerRequested = false;
+		const assetUrl = new URL(`tools/substituted-${cancellationMode}.js`, BASE_URL).href;
+		const response = {
+			url: assetUrl,
+			ok: true,
+			status: 200,
+			headers: new Headers({ 'content-length': '5' }),
+			body: {
+				cancel(reason) {
+					cancelReasons.push(reason);
+					if (cancellationMode === 'throw') {
+						throw new Error('OCaml response cancellation threw');
+					}
+					if (cancellationMode === 'reject') {
+						return Promise.reject(new Error('OCaml response cancellation rejected'));
+					}
+					return pendingCancellation;
+				},
+				getReader() {
+					readerRequested = true;
+					throw new Error('mismatched body should not be read');
+				}
 			}
-		}
-	};
-
-	await assert.rejects(
-		fetchBrowserToolAsset(assetUrl, 'OCaml tool', createBrowserToolInputBudget(), {
+		};
+		const budget = createBrowserToolInputBudget();
+		const loading = fetchBrowserToolAsset(assetUrl, 'OCaml tool', budget, {
 			fetch: async () => response,
 			receipt: { bytes: 4, sha256: sha256(new Uint8Array(4)) }
-		}),
-		/size mismatch: expected 4 bytes, received 5/
-	);
-	assert.equal(readerRequested, false);
-	assert.equal(cancelled, true);
-});
+		});
+		let timeout;
+
+		try {
+			const outcome = await Promise.race([
+				loading.then(
+					(value) => ({ status: 'resolved', value }),
+					(error) => ({ status: 'rejected', reason: error })
+				),
+				new Promise((resolve) => {
+					timeout = setTimeout(() => resolve({ status: 'pending' }), 25);
+				})
+			]);
+
+			assert.equal(outcome.status, 'rejected');
+			assert.match(outcome.reason.message, /size mismatch: expected 4 bytes, received 5/);
+			assert.deepEqual(cancelReasons, [undefined]);
+			assert.equal(readerRequested, false);
+			assert.equal(budget.usedBytes, 0);
+		} finally {
+			clearTimeout(timeout);
+			resolveCancellation();
+			await loading.catch(() => {});
+		}
+	});
+}
 
 test('rejects truncated and hash-mismatched browser-native tool assets', async () => {
 	const assetUrl = new URL('tools/ocamlc.js', BASE_URL).href;
