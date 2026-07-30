@@ -243,6 +243,45 @@ describe('DapClient', () => {
 		}
 	});
 
+	it('defers listeners registered during dispatch until the next event', async () => {
+		const inputDescriptor = createSharedByteQueue(4096, 39);
+		const outputDescriptor = createSharedByteQueue(4096, 39);
+		const output = new SharedByteQueue(outputDescriptor);
+		const client = new DapClient({
+			input: inputDescriptor,
+			output: outputDescriptor,
+			requestTimeoutMs: 1_000
+		}).start();
+		const observed: string[] = [];
+		const lateListener = (event: DapEvent) => observed.push(`late:${event.seq}`);
+		client.onEvent(() => {
+			client.onEvent(lateListener);
+		});
+		client.onEvent((event) => observed.push(`existing:${event.seq}`));
+
+		try {
+			await output.write(
+				encodeDapMessage({
+					seq: 30,
+					type: 'event',
+					event: 'continued'
+				})
+			);
+			await expect.poll(() => observed).toEqual(['existing:30']);
+
+			await output.write(
+				encodeDapMessage({
+					seq: 31,
+					type: 'event',
+					event: 'continued'
+				})
+			);
+			await expect.poll(() => observed).toEqual(['existing:30', 'existing:31', 'late:31']);
+		} finally {
+			await client.close();
+		}
+	});
+
 	it('allows execution requests to wait without a response timeout', async () => {
 		const inputDescriptor = createSharedByteQueue(4096, 9);
 		const outputDescriptor = createSharedByteQueue(4096, 9);

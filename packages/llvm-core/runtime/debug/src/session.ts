@@ -345,7 +345,8 @@ export class BrowserLldbSession {
 			this.disposeDapEvents = this.dap.onEvent((event) => {
 				if (event.event === 'initialized') resolveInitialized();
 				this.applyBreakpointEvent(event);
-				for (const listener of this.eventListeners) {
+				for (const listener of [...this.eventListeners]) {
+					if (!this.eventListeners.has(listener)) continue;
 					this.invokeConsumerCallback('event', () => listener(event));
 				}
 			});

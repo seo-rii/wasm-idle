@@ -270,7 +270,8 @@ export class DapClient implements DapRequestSession {
 
 	private handleMessage(message: DapMessage) {
 		if (message.type === 'event') {
-			for (const listener of this.eventListeners) {
+			for (const listener of [...this.eventListeners]) {
+				if (!this.eventListeners.has(listener)) continue;
 				try {
 					listener(message);
 				} catch (error) {

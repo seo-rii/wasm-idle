@@ -126,6 +126,9 @@ such as `"false"` as success.
 Direct `DapClient` consumers can set `onEventError(error, event)` to observe an event-listener
 exception. Throwing listeners and a throwing error hook are isolated from one another, and the
 client continues parsing later events and responses on the same byte stream.
+`DapClient` and `BrowserLldbSession` snapshot listener registrations when each event dispatch
+starts. A listener registered by another callback begins with the next event, while a listener
+removed before its turn is skipped. Dispatch therefore cannot grow without bound during one event.
 The streaming DAP parser caps an unterminated header at 8 KiB and a declared JSON body at 16 MiB.
 Oversized declarations fail before the body is buffered, preventing a corrupt worker frame from
 growing browser memory without bound.

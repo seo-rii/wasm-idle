@@ -939,6 +939,53 @@ describe('BrowserLldbSession', () => {
 		}
 	});
 
+	it('defers session listeners registered during dispatch until the next event', async () => {
+		const commands: string[] = [];
+		const workers: FakeWorker[] = [];
+		const session = new BrowserLldbSession({
+			manifest,
+			runtimeBaseUrl: 'https://cdn.example/debug/',
+			module: Uint8Array.of(0, 97, 115, 109),
+			sources: [],
+			fetchImpl: async () => new Response('debug-asset'),
+			workerFactory: (kind) => {
+				const worker = new FakeWorker(kind, commands);
+				workers.push(worker);
+				return worker;
+			},
+			requestTimeoutMs: 1_000,
+			readyTimeoutMs: 1_000
+		});
+
+		try {
+			await session.initialize();
+			const observed: string[] = [];
+			const lateListener = (event: DapEvent) => observed.push(`late:${event.seq}`);
+			session.onEvent(() => {
+				session.onEvent(lateListener);
+			});
+			session.onEvent((event) => observed.push(`existing:${event.seq}`));
+			const lldbWorker = workers.find((worker) => worker.kind === 'lldb');
+			if (!lldbWorker) throw new Error('LLDB worker was not initialized');
+
+			await lldbWorker.emitDapEvent({
+				seq: 700,
+				type: 'event',
+				event: 'continued'
+			});
+			await expect.poll(() => observed).toEqual(['existing:700']);
+
+			await lldbWorker.emitDapEvent({
+				seq: 701,
+				type: 'event',
+				event: 'continued'
+			});
+			await expect.poll(() => observed).toEqual(['existing:700', 'existing:701', 'late:701']);
+		} finally {
+			await session.dispose();
+		}
+	});
+
 	it('disposes a running target without waiting for the disconnect response', async () => {
 		const commands: string[] = [];
 		const workers: FakeWorker[] = [];
