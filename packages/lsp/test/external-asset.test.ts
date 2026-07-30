@@ -175,6 +175,84 @@ describe('bounded external LSP asset loading', () => {
 		}
 	});
 
+	it.each([
+		['while reader cancellation remains pending', false],
+		['when reader cancellation resolves without settling the read', true]
+	])('rejects a stalled stream read promptly on abort %s', async (_case, resolveCancellation) => {
+		let markReadStarted!: () => void;
+		const readStarted = new Promise<void>((resolve) => {
+			markReadStarted = resolve;
+		});
+		let resolveRead!: (result: { done: true; value: undefined }) => void;
+		const pendingRead = new Promise<{ done: true; value: undefined }>((resolve) => {
+			resolveRead = resolve;
+		});
+		const read = vi.fn(() => {
+			markReadStarted();
+			return pendingRead;
+		});
+		let resolveCancel!: () => void;
+		const pendingCancel = new Promise<void>((resolve) => {
+			resolveCancel = resolve;
+		});
+		const cancel = vi.fn(() => (resolveCancellation ? Promise.resolve() : pendingCancel));
+		const releaseLock = vi.fn();
+		const fetchMock = vi.fn(
+			async () =>
+				({
+					ok: true,
+					url: 'https://assets.example.com/runtime.wasm',
+					headers: new Headers(),
+					body: { getReader: () => ({ read, cancel, releaseLock }) }
+				}) as unknown as Response
+		);
+		const controller = new AbortController();
+		const reason = new Error('cancelled during stalled external stream read');
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const reportProgress = vi.fn();
+		const loading = fetchBoundedExternalAsset({
+			url: 'https://assets.example.com/runtime.wasm',
+			label: 'test runtime',
+			fetch: fetchMock,
+			signal: controller.signal,
+			reportProgress
+		});
+		let timeout: ReturnType<typeof setTimeout> | undefined;
+
+		try {
+			await readStarted;
+			controller.abort(reason);
+			const outcome = await Promise.race([
+				loading.then(
+					(value) => ({ status: 'resolved' as const, value }),
+					(error) => ({ status: 'rejected' as const, reason: error as unknown })
+				),
+				new Promise<{ status: 'pending' }>((resolve) => {
+					timeout = setTimeout(() => resolve({ status: 'pending' }), 25);
+				})
+			]);
+
+			expect(outcome).toEqual({ status: 'rejected', reason });
+			expect(cancel).toHaveBeenCalledOnce();
+			expect(cancel).toHaveBeenCalledWith(reason);
+			expect(releaseLock).toHaveBeenCalledOnce();
+			const abortRegistrations = addEventListener.mock.calls.filter(
+				([type]) => type === 'abort'
+			);
+			expect(abortRegistrations).toHaveLength(2);
+			for (const registration of abortRegistrations) {
+				expect(removeEventListener).toHaveBeenCalledWith('abort', registration[1]);
+			}
+			expect(reportProgress).not.toHaveBeenCalled();
+		} finally {
+			if (timeout) clearTimeout(timeout);
+			resolveCancel();
+			resolveRead({ done: true, value: undefined });
+			await loading.catch(() => {});
+		}
+	});
+
 	it('cancels an unknown-length stream when it crosses the byte limit', async () => {
 		let cancelled = false;
 		const fetchMock = vi.fn(

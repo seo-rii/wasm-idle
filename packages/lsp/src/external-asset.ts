@@ -167,23 +167,56 @@ export async function fetchBoundedExternalAsset(
 	}
 
 	const reader = response.body.getReader();
-	const cancelOnAbort = () => {
-		void reader.cancel(abortReason(options.signal!)).catch(() => {});
+	let readerCancelled = false;
+	const cancelReader = (reason?: unknown) => {
+		if (readerCancelled) return;
+		readerCancelled = true;
+		try {
+			void reader.cancel(reason).catch(() => {});
+		} catch {}
 	};
-	options.signal?.addEventListener('abort', cancelOnAbort, { once: true });
+	if (options.signal?.aborted) {
+		const reason = abortReason(options.signal);
+		cancelReader(reason);
+		try {
+			reader.releaseLock();
+		} catch {}
+		throw reason;
+	}
+	let cancelOnAbort: (() => void) | undefined;
+	const aborted = options.signal
+		? new Promise<never>((_resolve, reject) => {
+				cancelOnAbort = () => {
+					const reason = abortReason(options.signal!);
+					cancelReader(reason);
+					reject(reason);
+				};
+				options.signal!.addEventListener('abort', cancelOnAbort, { once: true });
+			})
+		: undefined;
 	let bytes = new Uint8Array(
 		Math.min(maxBytes, contentLength ?? DEFAULT_EXTERNAL_ASSET_BUFFER_BYTES)
 	);
 	let receivedLength = 0;
+	let loadedBytes!: Uint8Array<ArrayBuffer>;
+	let releaseError: unknown;
 	try {
-		if (options.signal?.aborted) throw abortReason(options.signal);
 		while (true) {
-			const { done, value } = await reader.read();
+			if (options.signal?.aborted) throw abortReason(options.signal);
+			const pendingRead = reader.read();
+			const { done, value } = aborted
+				? await Promise.race([pendingRead, aborted])
+				: await pendingRead;
+			if (options.signal?.aborted) throw abortReason(options.signal);
 			if (done) break;
 			if (!value) continue;
 			const nextLength = receivedLength + value.byteLength;
 			if (nextLength > maxBytes) {
-				throw new Error(`${options.label} exceeds the ${maxBytes} byte download limit`);
+				const error = new Error(
+					`${options.label} exceeds the ${maxBytes} byte download limit`
+				);
+				cancelReader(error);
+				throw error;
 			}
 			if (nextLength > bytes.byteLength) {
 				const nextCapacity = Math.min(
@@ -200,13 +233,23 @@ export async function fetchBoundedExternalAsset(
 		}
 		if (options.signal?.aborted) throw abortReason(options.signal);
 		options.reportProgress?.(receivedLength, contentLength ?? receivedLength);
-		return bytes.subarray(0, receivedLength);
+		loadedBytes = bytes.subarray(0, receivedLength);
 	} catch (error) {
-		await reader.cancel(error).catch(() => {});
-		if (options.signal?.aborted) throw abortReason(options.signal);
+		if (options.signal?.aborted) {
+			const reason = abortReason(options.signal);
+			cancelReader(reason);
+			throw reason;
+		}
+		cancelReader(error);
 		throw error;
 	} finally {
-		options.signal?.removeEventListener('abort', cancelOnAbort);
-		reader.releaseLock();
+		if (cancelOnAbort) options.signal?.removeEventListener('abort', cancelOnAbort);
+		try {
+			reader.releaseLock();
+		} catch (error) {
+			if (!options.signal?.aborted) releaseError = error;
+		}
 	}
+	if (releaseError) throw releaseError;
+	return loadedBytes;
 }
