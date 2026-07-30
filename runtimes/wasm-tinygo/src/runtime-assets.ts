@@ -356,35 +356,58 @@ async function readBoundedAssetStream(options: {
 	signal?: AbortSignal;
 	onChunk?: (loaded: number, total: number | null) => void;
 }) {
+	const signal = options.signal;
 	const reader = options.stream.getReader();
-	let cancellation: Promise<void> | undefined;
+	let readerCancelled = false;
 	const cancelReader = (reason?: unknown) => {
-		cancellation ??= reader.cancel(reason).catch(() => {});
-		return cancellation;
+		if (readerCancelled) return;
+		readerCancelled = true;
+		try {
+			void Promise.resolve(reader.cancel(reason)).catch(() => {});
+		} catch {}
 	};
-	const cancelOnAbort = () => {
-		void cancelReader(
-			options.signal?.reason ?? new Error('wasm-tinygo runtime asset load was aborted')
-		);
-	};
-	options.signal?.addEventListener('abort', cancelOnAbort, { once: true });
+	if (signal?.aborted) {
+		const reason = runtimeAssetAbortReason(signal);
+		cancelReader(reason);
+		try {
+			reader.releaseLock();
+		} catch {}
+		throw reason;
+	}
+	let cancelOnAbort: (() => void) | undefined;
+	const aborted = signal
+		? new Promise<never>((_resolve, reject) => {
+				cancelOnAbort = () => {
+					const reason = runtimeAssetAbortReason(signal);
+					cancelReader(reason);
+					reject(reason);
+				};
+				signal.addEventListener('abort', cancelOnAbort, { once: true });
+			})
+		: undefined;
 	let bytes = new Uint8Array(
 		Math.min(options.maxAssetBytes, options.total ?? DEFAULT_TINYGO_ASSET_BUFFER_BYTES)
 	);
 	let loaded = 0;
+	let loadedBytes!: Uint8Array<ArrayBuffer>;
+	let releaseFailure: { error: unknown } | undefined;
 	try {
-		if (options.signal?.aborted) {
-			throw options.signal.reason ?? new Error('wasm-tinygo runtime asset load was aborted');
-		}
 		while (true) {
-			const { done, value } = await reader.read();
+			if (signal?.aborted) throw runtimeAssetAbortReason(signal);
+			const pendingRead = reader.read();
+			const { done, value } = aborted
+				? await Promise.race([pendingRead, aborted])
+				: await pendingRead;
+			if (signal?.aborted) throw runtimeAssetAbortReason(signal);
 			if (done) break;
 			if (!value) continue;
 			const nextLength = loaded + value.byteLength;
 			if (nextLength > options.maxAssetBytes) {
-				throw new Error(
+				const error = new Error(
 					`${options.assetLabel} ${options.sizeKind} size exceeds the ${options.maxAssetBytes} byte limit`
 				);
+				cancelReader(error);
+				throw error;
 			}
 			if (nextLength > bytes.byteLength) {
 				const nextCapacity = Math.min(
@@ -399,21 +422,34 @@ async function readBoundedAssetStream(options: {
 			loaded = nextLength;
 			options.onChunk?.(loaded, options.total ?? null);
 		}
-		if (options.signal?.aborted) {
-			throw options.signal.reason ?? new Error('wasm-tinygo runtime asset load was aborted');
+		if (signal?.aborted) {
+			throw runtimeAssetAbortReason(signal);
 		}
 		options.onChunk?.(loaded, options.total ?? loaded);
-		return bytes.subarray(0, loaded);
+		loadedBytes = bytes.subarray(0, loaded);
 	} catch (error) {
-		await cancelReader(error);
-		if (options.signal?.aborted) {
-			throw options.signal.reason ?? new Error('wasm-tinygo runtime asset load was aborted');
+		if (signal?.aborted) {
+			const reason = runtimeAssetAbortReason(signal);
+			cancelReader(reason);
+			throw reason;
 		}
+		cancelReader(error);
 		throw error;
 	} finally {
-		options.signal?.removeEventListener('abort', cancelOnAbort);
-		reader.releaseLock();
+		if (cancelOnAbort) signal?.removeEventListener('abort', cancelOnAbort);
+		try {
+			reader.releaseLock();
+		} catch (error) {
+			if (!signal?.aborted) releaseFailure = { error };
+		}
 	}
+	if (signal?.aborted) {
+		const reason = runtimeAssetAbortReason(signal);
+		cancelReader(reason);
+		throw reason;
+	}
+	if (releaseFailure) throw releaseFailure.error;
+	return loadedBytes;
 }
 
 async function fetchRuntimeAssetBytes(

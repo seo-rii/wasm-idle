@@ -440,6 +440,61 @@ test('loadRuntimeAssetBytes reports byte progress for streamed direct fetches', 
 	assert.equal(progressEvents.at(-1).total, 5);
 });
 
+test('loadRuntimeAssetBytes ignores a response chunk settled synchronously by cancellation', async () => {
+	const controller = new AbortController();
+	const reason = new Error('cancelled before the late TinyGo response chunk');
+	let markReadStarted;
+	const readStarted = new Promise((resolve) => {
+		markReadStarted = resolve;
+	});
+	let resolveRead;
+	const pendingRead = new Promise((resolve) => {
+		resolveRead = resolve;
+	});
+	const cancelReasons = [];
+	let releaseCount = 0;
+	const progress = [];
+	const reader = {
+		read() {
+			markReadStarted();
+			return pendingRead;
+		},
+		async cancel(cancelReason) {
+			cancelReasons.push(cancelReason);
+			resolveRead({ done: false, value: Uint8Array.of(9) });
+		},
+		releaseLock() {
+			releaseCount += 1;
+		}
+	};
+	const response = {
+		url: '',
+		ok: true,
+		status: 200,
+		headers: new Headers(),
+		body: { getReader: () => reader }
+	};
+	const loading = loadRuntimeAssetBytes({
+		assetPath: 'tools/go-probe.wasm',
+		assetUrl: 'https://assets.invalid/tools/go-probe.wasm',
+		label: 'go-probe.wasm',
+		fetchImpl: async () => response,
+		onProgress(value) {
+			progress.push(value);
+		},
+		signal: controller.signal
+	});
+
+	await readStarted;
+	controller.abort(reason);
+
+	await assert.rejects(loading, (error) => error === reason);
+	assert.deepEqual(cancelReasons, [reason]);
+	assert.equal(releaseCount, 1);
+	assert.equal(getEventListeners(controller.signal, 'abort').length, 0);
+	assert.deepEqual(progress, []);
+});
+
 test('loadRuntimeAssetBytes rejects unsafe URLs before fetching', async () => {
 	let fetchCount = 0;
 	const fetchImpl = async () => {
@@ -764,6 +819,104 @@ test('loadRuntimeAssetBytes cancels and releases loader-owned Blob streams', asy
 			resolveRead({ done: true, value: undefined });
 			await loading.catch(() => {});
 		}
+	}
+});
+
+test('loadRuntimeAssetBytes aborts a stalled Blob read when cancellation does not settle it', async () => {
+	const controller = new AbortController();
+	const reason = new DOMException('TinyGo asset deadline exceeded', 'TimeoutError');
+	let markReadStarted;
+	const readStarted = new Promise((resolve) => {
+		markReadStarted = resolve;
+	});
+	let resolveRead;
+	const pendingRead = new Promise((resolve) => {
+		resolveRead = resolve;
+	});
+	let resolveCancellation;
+	const pendingCancellation = new Promise((resolve) => {
+		resolveCancellation = resolve;
+	});
+	const cancelReasons = [];
+	let releaseCount = 0;
+	let streamCount = 0;
+	let arrayBufferCount = 0;
+	const progress = [];
+	const reader = {
+		read() {
+			markReadStarted();
+			return pendingRead;
+		},
+		cancel(cancelReason) {
+			cancelReasons.push(cancelReason);
+			return pendingCancellation;
+		},
+		releaseLock() {
+			releaseCount += 1;
+			throw new Error('TinyGo reader release failed during abort');
+		}
+	};
+	const blob = new Blob([Uint8Array.of(1, 2, 3)]);
+	Object.defineProperty(blob, 'arrayBuffer', {
+		value: () => {
+			arrayBufferCount += 1;
+			return Promise.resolve(Uint8Array.of(1, 2, 3).buffer);
+		}
+	});
+	Object.defineProperty(blob, 'stream', {
+		value: () => {
+			streamCount += 1;
+			return { getReader: () => reader };
+		}
+	});
+	let fetchCalled = false;
+	const loading = loadRuntimeAssetBytes({
+		assetPath: 'tools/go-probe.wasm',
+		assetUrl: 'https://assets.invalid/tools/go-probe.wasm',
+		label: 'go-probe.wasm',
+		loader: async () => blob,
+		onProgress(value) {
+			progress.push(value);
+		},
+		signal: controller.signal,
+		maxAssetBytes: 8,
+		fetchImpl: async () => {
+			fetchCalled = true;
+			return new Response(new Uint8Array());
+		}
+	});
+
+	try {
+		await readStarted;
+		controller.abort(reason);
+		const outcome = await Promise.race([
+			loading.then(
+				(value) => ({ status: 'resolved', value }),
+				(error) => ({ status: 'rejected', reason: error })
+			),
+			new Promise((resolve) => {
+				setImmediate(() => resolve({ status: 'pending' }));
+			})
+		]);
+
+		assert.equal(outcome.status, 'rejected', 'stalled Blob read remained pending after abort');
+		assert.equal(outcome.reason, reason);
+		assert.deepEqual(cancelReasons, [reason]);
+		assert.equal(releaseCount, 1);
+		assert.equal(streamCount, 1);
+		assert.equal(arrayBufferCount, 0);
+		assert.equal(fetchCalled, false);
+		assert.equal(getEventListeners(controller.signal, 'abort').length, 0);
+		assert.deepEqual(progress, []);
+
+		resolveRead({ done: false, value: Uint8Array.of(9) });
+		await Promise.resolve();
+		await Promise.resolve();
+		assert.deepEqual(progress, []);
+	} finally {
+		resolveCancellation();
+		resolveRead({ done: true, value: undefined });
+		await loading.catch(() => {});
 	}
 });
 
