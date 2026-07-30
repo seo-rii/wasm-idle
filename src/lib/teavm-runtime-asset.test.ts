@@ -226,6 +226,36 @@ describe('TeaVM runtime asset boundary', () => {
 		await vi.waitFor(() => expect(cancel).toHaveBeenCalledWith(reason));
 	});
 
+	it('rejects promptly when a bodyless response ignores abort during materialization', async () => {
+		let resolveArrayBuffer!: (buffer: ArrayBuffer) => void;
+		const arrayBuffer = vi.fn(
+			() =>
+				new Promise<ArrayBuffer>((resolve) => {
+					resolveArrayBuffer = resolve;
+				})
+		);
+		const controller = new AbortController();
+		const reason = new Error('stop TeaVM response materialization');
+		const pending = fetchTeaVmAsset('compiler.wasm', {
+			baseUrl: 'https://assets.example/teavm/',
+			fetch: async () =>
+				({
+					ok: true,
+					url: 'https://assets.example/teavm/compiler.wasm',
+					headers: new Headers(),
+					body: null,
+					arrayBuffer
+				}) as unknown as Response,
+			signal: controller.signal
+		});
+
+		await vi.waitFor(() => expect(arrayBuffer).toHaveBeenCalledOnce());
+		controller.abort(reason);
+
+		await expect(pending).rejects.toBe(reason);
+		resolveArrayBuffer(Uint8Array.of(1, 2, 3).buffer);
+	});
+
 	it('rejects substituted final URLs and unknown runtime assets', async () => {
 		let cancelled = false;
 		const fetchMock = vi.fn(async () => {

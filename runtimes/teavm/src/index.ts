@@ -201,11 +201,37 @@ export async function fetchTeaVmAsset(
 		throw new Error(`TeaVM runtime asset ${asset} exceeds the ${maxAssetBytes} byte limit`);
 	}
 	if (!response.body) {
-		const bytes = new Uint8Array(await response.arrayBuffer());
-		if (bytes.byteLength > maxAssetBytes) {
-			throw new Error(`TeaVM runtime asset ${asset} exceeds the ${maxAssetBytes} byte limit`);
+		const signal = options.signal;
+		let cancelOnAbort: (() => void) | undefined;
+		const aborted = signal
+			? new Promise<never>((_resolve, reject) => {
+					cancelOnAbort = () =>
+						reject(signal.reason ?? new Error('TeaVM runtime asset load was aborted.'));
+					signal.addEventListener('abort', cancelOnAbort, { once: true });
+				})
+			: undefined;
+		try {
+			if (signal?.aborted) {
+				throw signal.reason ?? new Error('TeaVM runtime asset load was aborted.');
+			}
+			const materialized = response.arrayBuffer();
+			const bytes = new Uint8Array(
+				aborted ? await Promise.race([materialized, aborted]) : await materialized
+			);
+			if (signal?.aborted) {
+				throw signal.reason ?? new Error('TeaVM runtime asset load was aborted.');
+			}
+			if (bytes.byteLength > maxAssetBytes) {
+				throw new Error(
+					`TeaVM runtime asset ${asset} exceeds the ${maxAssetBytes} byte limit`
+				);
+			}
+			return bytes;
+		} finally {
+			if (cancelOnAbort) {
+				signal?.removeEventListener('abort', cancelOnAbort);
+			}
 		}
-		return bytes;
 	}
 
 	const reader = response.body.getReader();
