@@ -142,6 +142,65 @@ describe('DapClient', () => {
 		await client.close();
 	});
 
+	it('isolates event listener exceptions while continuing the response stream', async () => {
+		const inputDescriptor = createSharedByteQueue(4096, 33);
+		const outputDescriptor = createSharedByteQueue(4096, 33);
+		const input = new SharedByteQueue(inputDescriptor);
+		const output = new SharedByteQueue(outputDescriptor);
+		const listenerErrors: Array<{ event: string; message: string }> = [];
+		const client = new DapClient({
+			input: inputDescriptor,
+			output: outputDescriptor,
+			requestTimeoutMs: 1_000,
+			onEventError: (error: unknown, event: DapEvent) => {
+				listenerErrors.push({
+					event: event.event,
+					message: error instanceof Error ? error.message : String(error)
+				});
+				throw new Error('event error reporter failed');
+			}
+		}).start();
+		const observedEvents: string[] = [];
+		client.onEvent(() => {
+			throw new Error('event listener failed');
+		});
+		client.onEvent((event) => observedEvents.push(event.event));
+
+		try {
+			const resultPromise = client.request<{ threads: unknown[] }>('threads');
+			const chunk = new Uint8Array(256);
+			const length = await input.read(chunk);
+			const [request] = new DapMessageParser().push(chunk.slice(0, length)) as [DapRequest];
+			const event: DapEvent = {
+				seq: 20,
+				type: 'event',
+				event: 'continued',
+				body: { threadId: 1 }
+			};
+			await output.write(
+				new Uint8Array([
+					...encodeDapMessage(event),
+					...encodeDapMessage({
+						seq: 21,
+						type: 'response',
+						request_seq: request.seq,
+						command: request.command,
+						success: true,
+						body: { threads: [] }
+					})
+				])
+			);
+
+			await expect(resultPromise).resolves.toEqual({ threads: [] });
+			expect(observedEvents).toEqual(['continued']);
+			expect(listenerErrors).toEqual([
+				{ event: 'continued', message: 'event listener failed' }
+			]);
+		} finally {
+			await client.close();
+		}
+	});
+
 	it('allows execution requests to wait without a response timeout', async () => {
 		const inputDescriptor = createSharedByteQueue(4096, 9);
 		const outputDescriptor = createSharedByteQueue(4096, 9);

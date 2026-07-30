@@ -117,6 +117,9 @@ response arrives only after the target stops.
 DAP responses are correlated by both request sequence and command. A mismatched command is treated
 as a transport protocol failure: every pending request is rejected and both byte queues are closed
 instead of resolving a request with another command's body.
+Direct `DapClient` consumers can set `onEventError(error, event)` to observe an event-listener
+exception. Throwing listeners and a throwing error hook are isolated from one another, and the
+client continues parsing later events and responses on the same byte stream.
 The streaming DAP parser caps an unterminated header at 8 KiB and a declared JSON body at 16 MiB.
 Oversized declarations fail before the body is buffered, preventing a corrupt worker frame from
 growing browser memory without bound.

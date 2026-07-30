@@ -104,6 +104,8 @@ export interface DapClientOptions {
 	output: SharedByteQueueDescriptor;
 	requestTimeoutMs?: number;
 	transportWriteTimeoutMs?: number;
+	/** Receives event-listener exceptions without closing the DAP transport. */
+	onEventError?: (error: unknown, event: DapEvent) => void;
 }
 
 export class DapClient implements DapRequestSession {
@@ -115,6 +117,7 @@ export class DapClient implements DapRequestSession {
 	private readonly abortController = new AbortController();
 	private readonly requestTimeoutMs: number;
 	private readonly transportWriteTimeoutMs: number;
+	private readonly onEventError?: DapClientOptions['onEventError'];
 	private readLoopPromise?: Promise<void>;
 	private writeQueue: Promise<void> = Promise.resolve();
 	private sequence = 1;
@@ -132,6 +135,7 @@ export class DapClient implements DapRequestSession {
 			15_000,
 			'transportWriteTimeoutMs'
 		);
+		this.onEventError = options.onEventError;
 	}
 
 	start() {
@@ -259,7 +263,17 @@ export class DapClient implements DapRequestSession {
 
 	private handleMessage(message: DapMessage) {
 		if (message.type === 'event') {
-			for (const listener of this.eventListeners) listener(message);
+			for (const listener of this.eventListeners) {
+				try {
+					listener(message);
+				} catch (error) {
+					try {
+						this.onEventError?.(error, message);
+					} catch {
+						// Consumer error reporting must not close the DAP transport.
+					}
+				}
+			}
 			return;
 		}
 		if (message.type !== 'response') return;

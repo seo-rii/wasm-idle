@@ -1,4 +1,5 @@
 export { DapClient, DapMessageParser, encodeDapMessage } from './dap-client.js';
+export type { DapClientOptions } from './dap-client.js';
 export {
 	parseDebugRuntimeManifest,
 	preflightDebugRuntimeAssets,
