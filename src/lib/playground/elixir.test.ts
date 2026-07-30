@@ -63,6 +63,9 @@ describe('Elixir sandbox', () => {
 		const sandbox = new Elixir();
 		const output = vi.fn();
 		const progress = { set: vi.fn() };
+		const controller = new AbortController();
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
 		sandbox.output = output;
 
 		await sandbox.load(
@@ -74,7 +77,7 @@ describe('Elixir sandbox', () => {
 			'IO.puts("hello")',
 			true,
 			[],
-			{},
+			{ signal: controller.signal },
 			progress
 		);
 
@@ -88,6 +91,15 @@ describe('Elixir sandbox', () => {
 			})
 		);
 		expect(progress.set).toHaveBeenCalledWith(1);
+		const abortRegistrations = addEventListener.mock.calls.filter(
+			(registration: unknown[]) => registration[0] === 'abort'
+		);
+		expect(abortRegistrations).toHaveLength(1);
+		for (const registration of abortRegistrations) {
+			expect(removeEventListener).toHaveBeenCalledWith('abort', registration[1]);
+		}
+		controller.abort(new Error('late successful Elixir load abort'));
+		expect(workerInstances[0].terminate).not.toHaveBeenCalled();
 
 		await expect(sandbox.run('IO.puts("hello")', true, true, progress)).resolves.toBe(true);
 		await sandbox.clear();
@@ -198,6 +210,218 @@ describe('Elixir sandbox', () => {
 		await expect(loadPromise).rejects.toContain(
 			'Elixir worker script error: worker script error (/worker/elixir.js:88:24)'
 		);
+	});
+
+	it('does not create an Elixir worker for a pre-aborted load', async () => {
+		const sandbox = new Elixir();
+		const controller = new AbortController();
+		const reason = new Error('stop before Elixir startup');
+		const progress = { set: vi.fn() };
+		controller.abort(reason);
+
+		await expect(
+			sandbox.load(
+				{
+					elixir: {
+						bundleUrl: '/runtime/elixir/bundle.avm'
+					}
+				},
+				'',
+				true,
+				[],
+				{ signal: controller.signal },
+				progress
+			)
+		).rejects.toBe(reason);
+		expect(workerInstances).toHaveLength(0);
+		expect(progress.set).not.toHaveBeenCalled();
+	});
+
+	it('owns the Elixir worker before startup progress can abort the load', async () => {
+		const sandbox = new Elixir();
+		const controller = new AbortController();
+		const reason = new Error('stop from Elixir startup progress');
+		const progress = {
+			set: vi.fn((value: number) => {
+				if (value === 0.5) controller.abort(reason);
+			})
+		};
+
+		try {
+			await expect(
+				sandbox.load(
+					{
+						elixir: {
+							bundleUrl: '/runtime/elixir/bundle.avm'
+						}
+					},
+					'',
+					true,
+					[],
+					{ signal: controller.signal },
+					progress
+				)
+			).rejects.toBe(reason);
+
+			expect(workerInstances).toHaveLength(1);
+			expect(workerInstances[0].terminate).toHaveBeenCalledOnce();
+			expect(workerInstances[0].postMessage).not.toHaveBeenCalled();
+		} finally {
+			sandbox.terminate();
+		}
+	});
+
+	it('aborts a stalled Elixir worker load and permits a clean retry', async () => {
+		suppressAutoLoadAck = true;
+		const sandbox = new Elixir();
+		const controller = new AbortController();
+		const reason = new Error('stop active Elixir startup');
+		const progress = { set: vi.fn() };
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const loadPromise = sandbox.load(
+			{
+				elixir: {
+					bundleUrl: '/runtime/elixir/bundle.avm'
+				}
+			},
+			'',
+			true,
+			[],
+			{ signal: controller.signal },
+			progress
+		);
+		await vi.dynamicImportSettled();
+		const worker = workerInstances[0];
+		const lateHandler = worker.onmessage;
+		let timeout: ReturnType<typeof setTimeout> | undefined;
+
+		try {
+			controller.abort(reason);
+			const outcome = await Promise.race([
+				loadPromise.then(
+					() => ({ status: 'resolved' as const }),
+					(error) => ({ status: 'rejected' as const, reason: error as unknown })
+				),
+				new Promise<{ status: 'pending' }>((resolve) => {
+					timeout = setTimeout(() => resolve({ status: 'pending' }), 25);
+				})
+			]);
+
+			expect(outcome).toEqual({ status: 'rejected', reason });
+			expect(worker.terminate).toHaveBeenCalledOnce();
+			const abortRegistrations = addEventListener.mock.calls.filter(
+				(registration: unknown[]) => registration[0] === 'abort'
+			);
+			expect(abortRegistrations).toHaveLength(1);
+			for (const registration of abortRegistrations) {
+				expect(removeEventListener).toHaveBeenCalledWith('abort', registration[1]);
+			}
+
+			lateHandler?.({ data: { load: true } } as MessageEvent<any>);
+			expect(progress.set).not.toHaveBeenCalledWith(1);
+
+			suppressAutoLoadAck = false;
+			await expect(
+				sandbox.load({
+					elixir: {
+						bundleUrl: '/runtime/elixir/bundle.avm'
+					}
+				})
+			).resolves.toBeUndefined();
+			expect(workerInstances).toHaveLength(2);
+		} finally {
+			if (timeout) clearTimeout(timeout);
+			sandbox.terminate();
+			await loadPromise.catch(() => {});
+		}
+	});
+
+	it('ignores an old load abort after a replacement load starts', async () => {
+		suppressAutoLoadAck = true;
+		const sandbox = new Elixir();
+		const controller = new AbortController();
+		const firstLoad = sandbox.load(
+			{
+				elixir: {
+					bundleUrl: '/runtime/elixir/bundle.avm'
+				}
+			},
+			'',
+			true,
+			[],
+			{ signal: controller.signal }
+		);
+		const firstOutcome = firstLoad.then(
+			() => ({ status: 'resolved' as const }),
+			(error) => ({ status: 'rejected' as const, reason: error as unknown })
+		);
+		await vi.dynamicImportSettled();
+		const worker = workerInstances[0];
+
+		try {
+			suppressAutoLoadAck = false;
+			const replacementLoad = sandbox.load({
+				elixir: {
+					bundleUrl: '/runtime/elixir/bundle.avm'
+				}
+			});
+			controller.abort(new Error('late superseded load abort'));
+
+			await expect(firstOutcome).resolves.toEqual({
+				status: 'rejected',
+				reason: 'Worker operation superseded'
+			});
+			await expect(replacementLoad).resolves.toBeUndefined();
+			expect(worker.terminate).not.toHaveBeenCalled();
+			expect(workerInstances).toHaveLength(1);
+		} finally {
+			sandbox.terminate();
+			await firstLoad.catch(() => {});
+		}
+	});
+
+	it('ignores an old load abort after a run starts', async () => {
+		suppressAutoLoadAck = true;
+		const sandbox = new Elixir();
+		const controller = new AbortController();
+		const firstLoad = sandbox.load(
+			{
+				elixir: {
+					bundleUrl: '/runtime/elixir/bundle.avm'
+				}
+			},
+			'',
+			true,
+			[],
+			{ signal: controller.signal }
+		);
+		const firstOutcome = firstLoad.then(
+			() => ({ status: 'resolved' as const }),
+			(error) => ({ status: 'rejected' as const, reason: error as unknown })
+		);
+		await vi.dynamicImportSettled();
+		const worker = workerInstances[0];
+		worker.postMessage.mockImplementationOnce(() => {
+			queueMicrotask(() =>
+				worker.onmessage?.({ data: { results: true } } as MessageEvent<any>)
+			);
+		});
+
+		try {
+			const running = sandbox.run('IO.puts("ready")', false);
+			controller.abort(new Error('late load abort after run start'));
+
+			await expect(firstOutcome).resolves.toEqual({
+				status: 'rejected',
+				reason: 'Worker operation superseded'
+			});
+			await expect(running).resolves.toBe(true);
+			expect(worker.terminate).not.toHaveBeenCalled();
+		} finally {
+			sandbox.terminate();
+			await firstLoad.catch(() => {});
+		}
 	});
 
 	it('flushes queued terminal input into the worker stdin buffer when Elixir requests it', async () => {

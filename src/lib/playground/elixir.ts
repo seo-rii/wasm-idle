@@ -51,17 +51,41 @@ class Elixir implements Sandbox {
 		_code = '',
 		log = true,
 		_args: string[] = [],
-		_options: SandboxExecutionOptions = {},
+		options: SandboxExecutionOptions = {},
 		progress?: SandboxProgress
 	) {
-		return this.workerSession.load(async (resolve, reject) => {
+		const signal = options.signal;
+		const runtimeLabel = this.language === 'ERLANG' ? 'Erlang' : 'Elixir';
+		if (signal?.aborted) {
+			return Promise.reject(
+				signal.reason ??
+					new DOMException(`${runtimeLabel} runtime startup aborted`, 'AbortError')
+			);
+		}
+		const activeUid = ++this.uid;
+		let onAbort: (() => void) | undefined;
+		const cleanup = () => {
+			if (onAbort) signal?.removeEventListener('abort', onAbort);
+		};
+		if (signal) {
+			onAbort = () => {
+				cleanup();
+				if (activeUid !== this.uid) return;
+				this.terminate(
+					signal.reason ??
+						new DOMException(`${runtimeLabel} runtime startup aborted`, 'AbortError')
+				);
+			};
+			signal.addEventListener('abort', onAbort, { once: true });
+		}
+		const loadPromise = this.workerSession.load(async (resolve, reject) => {
 			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
 			const nextBundleUrl =
 				this.language === 'ERLANG'
 					? resolveErlangBundleUrl(runtimeAssets, currentUrl)
 					: resolveElixirBundleUrl(runtimeAssets, currentUrl);
-			const runtimeLabel = this.language === 'ERLANG' ? 'Erlang' : 'Elixir';
 			if (!nextBundleUrl) {
+				cleanup();
 				return reject(
 					`${runtimeLabel} runtime is not configured. Set ${
 						this.language === 'ERLANG'
@@ -84,26 +108,40 @@ class Elixir implements Sandbox {
 			}
 			if (!this.worker) {
 				progress?.set?.(0.2);
-				this.worker = new (await import('$lib/playground/worker/elixir?worker')).default();
+				const WorkerConstructor = (await import('$lib/playground/worker/elixir?worker'))
+					.default;
+				if (activeUid !== this.uid || signal?.aborted) return;
+				const worker = new WorkerConstructor();
+				this.worker = worker;
+				this.workerSession.attach(worker);
 				progress?.set?.(0.5);
-				this.workerSession.attach(this.worker);
-				this.worker.onmessage = (event: MessageEvent<any>) => {
+				if (activeUid !== this.uid || signal?.aborted || this.worker !== worker) return;
+				worker.onmessage = (event: MessageEvent<any>) => {
+					if (activeUid !== this.uid || signal?.aborted || this.worker !== worker) return;
 					if (event.data?.load) {
+						cleanup();
 						progress?.set?.(1);
 						resolve();
 					}
-					if (event.data?.error) reject(event.data.error);
+					if (event.data?.error) {
+						cleanup();
+						reject(event.data.error);
+					}
 				};
-				this.worker.postMessage({
+				worker.postMessage({
 					load: true,
 					bundleUrl: this.bundleUrl,
 					log
 				});
 			} else {
+				cleanup();
 				progress?.set?.(1);
 				resolve();
 			}
 		});
+		if (!signal) return loadPromise;
+		if (signal.aborted) onAbort?.();
+		return loadPromise.finally(cleanup);
 	}
 
 	write(input: string) {
@@ -200,13 +238,13 @@ class Elixir implements Sandbox {
 		this.terminate();
 	}
 
-	terminate() {
+	terminate(reason: unknown = 'Process terminated') {
 		this.uid += 1;
 		this.prepared = false;
 		this.hasExecuted = false;
 		this.waitingForInput = false;
 		this.pendingEof = false;
-		this.workerSession.terminate();
+		this.workerSession.terminate(reason);
 		this.exit = true;
 	}
 
