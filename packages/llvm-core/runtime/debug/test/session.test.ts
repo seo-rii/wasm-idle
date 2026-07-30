@@ -858,6 +858,87 @@ describe('BrowserLldbSession', () => {
 		}
 	});
 
+	it('isolates consumer callback exceptions from the debug session lifecycle', async () => {
+		const commands: string[] = [];
+		const workers: FakeWorker[] = [];
+		const callbackErrors: Array<{ callback: string; message: string }> = [];
+		const session = new BrowserLldbSession({
+			manifest,
+			runtimeBaseUrl: 'https://cdn.example/debug/',
+			module: Uint8Array.of(0, 97, 115, 109),
+			sources: [],
+			fetchImpl: async () => new Response('debug-asset'),
+			workerFactory: (kind) => {
+				const worker = new FakeWorker(kind, commands);
+				workers.push(worker);
+				return worker;
+			},
+			onOutput: () => {
+				throw new Error('output callback failed');
+			},
+			onMemory: (worker) => {
+				throw new Error(`${worker} memory callback failed`);
+			},
+			onLifecycle: (event) => {
+				throw new Error(`${event.type} callback failed`);
+			},
+			onCallbackError: (
+				error: unknown,
+				callback: 'event' | 'lifecycle' | 'memory' | 'output'
+			) => {
+				callbackErrors.push({
+					callback,
+					message: error instanceof Error ? error.message : String(error)
+				});
+				throw new Error('callback error reporter failed');
+			},
+			requestTimeoutMs: 1_000,
+			readyTimeoutMs: 1_000
+		});
+
+		try {
+			await expect(session.initialize()).resolves.toBeDefined();
+			await expect
+				.poll(() => callbackErrors)
+				.toEqual(
+					expect.arrayContaining([
+						{ callback: 'output', message: 'output callback failed' },
+						{ callback: 'memory', message: 'target memory callback failed' },
+						{ callback: 'memory', message: 'lldb memory callback failed' }
+					])
+				);
+
+			const observedEvents: string[] = [];
+			session.onEvent(() => {
+				throw new Error('event callback failed');
+			});
+			session.onEvent((event) => observedEvents.push(event.event));
+			const lldbWorker = workers.find((worker) => worker.kind === 'lldb');
+			if (!lldbWorker) throw new Error('LLDB worker was not initialized');
+			await lldbWorker.emitDapEvent({
+				seq: 600,
+				type: 'event',
+				event: 'continued'
+			});
+			await expect.poll(() => observedEvents).toContain('continued');
+			await expect(session.request('threads')).resolves.toEqual({});
+
+			const targetWorker = workers.find((worker) => worker.kind === 'target');
+			if (!targetWorker) throw new Error('target worker was not initialized');
+			targetWorker.emitFinalOutputAndExit('final output\n');
+			await expect
+				.poll(() => callbackErrors)
+				.toEqual(
+					expect.arrayContaining([
+						{ callback: 'event', message: 'event callback failed' },
+						{ callback: 'lifecycle', message: 'target-exit callback failed' }
+					])
+				);
+		} finally {
+			await session.dispose();
+		}
+	});
+
 	it('disposes a running target without waiting for the disconnect response', async () => {
 		const commands: string[] = [];
 		const workers: FakeWorker[] = [];

@@ -9,6 +9,7 @@ export {
 export { BrowserLldbSession, createBrowserLldbSession } from './session.js';
 export { SharedByteQueue, createSharedByteQueue } from './shared-byte-queue.js';
 export type {
+	BrowserLldbCallbackKind,
 	BrowserLldbSessionOptions,
 	DapEvent,
 	DapMessage,

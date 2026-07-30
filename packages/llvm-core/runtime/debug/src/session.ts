@@ -3,6 +3,7 @@ import { parseDebugRuntimeManifest, preflightDebugRuntimeAssets, sha256Hex } fro
 import { createSharedByteQueue, SharedByteQueue } from './shared-byte-queue.js';
 import { validateDebugSourcePath } from './worker/module-loader.js';
 import type {
+	BrowserLldbCallbackKind,
 	BrowserLldbSessionOptions,
 	DapEvent,
 	DapRequestOptions,
@@ -82,6 +83,18 @@ export class BrowserLldbSession {
 
 	constructor(options: BrowserLldbSessionOptions) {
 		this.options = options;
+	}
+
+	private invokeConsumerCallback(callback: BrowserLldbCallbackKind, invoke: () => void) {
+		try {
+			invoke();
+		} catch (error) {
+			try {
+				this.options.onCallbackError?.(error, callback);
+			} catch {
+				// Consumer error reporting must not interrupt debugger transport or cleanup.
+			}
+		}
 	}
 
 	initialize(): Promise<DebugCapabilities> {
@@ -249,20 +262,30 @@ export class BrowserLldbSession {
 								const output = decoder.decode(buffer.subarray(0, length), {
 									stream: true
 								});
-								if (output) this.options.onOutput?.(channel, output);
+								if (output) {
+									this.invokeConsumerCallback('output', () =>
+										this.options.onOutput?.(channel, output)
+									);
+								}
 							}
 							const output = decoder.decode();
-							if (output) this.options.onOutput?.(channel, output);
+							if (output) {
+								this.invokeConsumerCallback('output', () =>
+									this.options.onOutput?.(channel, output)
+								);
+							}
 						} catch (error) {
 							if (!this.outputAbortController.signal.aborted) {
-								this.options.onLifecycle?.({
-									type: 'worker-error',
-									worker: 'target',
-									message:
-										error instanceof Error
-											? error.message
-											: 'failed to read target output'
-								});
+								this.invokeConsumerCallback('lifecycle', () =>
+									this.options.onLifecycle?.({
+										type: 'worker-error',
+										worker: 'target',
+										message:
+											error instanceof Error
+												? error.message
+												: 'failed to read target output'
+									})
+								);
 								void this.dispose();
 							}
 						}
@@ -322,7 +345,9 @@ export class BrowserLldbSession {
 			this.disposeDapEvents = this.dap.onEvent((event) => {
 				if (event.event === 'initialized') resolveInitialized();
 				this.applyBreakpointEvent(event);
-				for (const listener of this.eventListeners) listener(event);
+				for (const listener of this.eventListeners) {
+					this.invokeConsumerCallback('event', () => listener(event));
+				}
 			});
 
 			const capabilities = await this.awaitWhileActive(
@@ -621,18 +646,24 @@ export class BrowserLldbSession {
 			if (message.generation !== this.generation) return;
 			if (this.disposed) return;
 			if (message.type === 'output') {
-				this.options.onOutput?.(message.channel, message.data);
+				this.invokeConsumerCallback('output', () =>
+					this.options.onOutput?.(message.channel, message.data)
+				);
 			}
 			if (message.type === 'memory') {
-				this.options.onMemory?.(message.worker, message.bytes);
+				this.invokeConsumerCallback('memory', () =>
+					this.options.onMemory?.(message.worker, message.bytes)
+				);
 			}
 			if (message.type === 'error') {
 				const reportError = () => {
-					this.options.onLifecycle?.({
-						type: 'worker-error',
-						worker: message.worker,
-						message: message.message
-					});
+					this.invokeConsumerCallback('lifecycle', () =>
+						this.options.onLifecycle?.({
+							type: 'worker-error',
+							worker: message.worker,
+							message: message.message
+						})
+					);
 					void this.dispose();
 				};
 				if (worker === this.targetWorker) {
@@ -643,21 +674,25 @@ export class BrowserLldbSession {
 			}
 			if (message.type === 'exit' && worker === this.targetWorker) {
 				this.afterTargetOutputDrained(() => {
-					this.options.onLifecycle?.({
-						type: 'target-exit',
-						exitCode: message.exitCode
-					});
+					this.invokeConsumerCallback('lifecycle', () =>
+						this.options.onLifecycle?.({
+							type: 'target-exit',
+							exitCode: message.exitCode
+						})
+					);
 				});
 			}
 		};
 		const fail = (error: Error) => {
 			if (this.disposed) return;
 			const reportError = () => {
-				this.options.onLifecycle?.({
-					type: 'worker-error',
-					worker: kind,
-					message: error.message
-				});
+				this.invokeConsumerCallback('lifecycle', () =>
+					this.options.onLifecycle?.({
+						type: 'worker-error',
+						worker: kind,
+						message: error.message
+					})
+				);
 				void this.dispose();
 			};
 			if (worker === this.targetWorker) {

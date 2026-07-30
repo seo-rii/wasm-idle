@@ -129,6 +129,10 @@ and exit events. Callers can retain the maximum value per worker as the session'
 memory; the callback does not expose memory contents and does not include the browser engine's
 separate JavaScript heap. Older compatible producer assets without `HEAPU8` continue to run but do
 not emit memory samples.
+Consumer `onOutput`, `onMemory`, `onLifecycle`, and DAP event-listener exceptions are isolated from
+the byte transports and required session cleanup. Set `onCallbackError(error, callbackKind)` to
+observe the original exception. Exceptions thrown by that error hook are also contained so
+reporting code cannot terminate the debugger.
 The required product Chromium gate retains the peak reported by each worker during its basic C
 fixture and requires at least one sample from both workers. Its default linear-memory ceilings are
 640 MiB for LLDB and 320 MiB for WAMR, leaving 25% headroom above their pinned 512 MiB and 256 MiB

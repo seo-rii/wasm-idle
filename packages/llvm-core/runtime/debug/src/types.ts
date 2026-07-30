@@ -204,6 +204,7 @@ export interface DebugBreakpointConfiguration {
 }
 
 export type DebugWorkerKind = 'lldb' | 'target';
+export type BrowserLldbCallbackKind = 'event' | 'lifecycle' | 'memory' | 'output';
 
 export interface SharedByteQueueDescriptor {
 	control: SharedArrayBuffer;
@@ -333,4 +334,6 @@ export interface BrowserLldbSessionOptions {
 			| { type: 'worker-error'; worker: DebugWorkerKind; message: string }
 			| { type: 'target-exit'; exitCode: number | null }
 	) => void;
+	/** Receives exceptions thrown by consumer callbacks without interrupting the debug session. */
+	onCallbackError?: (error: unknown, callback: BrowserLldbCallbackKind) => void;
 }
