@@ -274,8 +274,15 @@ describe('WebAssembly loading utilities', () => {
 	it('keeps aborted compilation outside the shared module cache', async () => {
 		const url = 'https://cdn.test/llvm/cancelled-compilation.wasm';
 		const module = new WebAssembly.Module(emptyWasm);
+		// Warm Undici before its lazy llhttp compilation can consume the compile spy below.
+		void new Headers({
+			'Content-Length': String(emptyWasm.byteLength)
+		});
 		let compilationStarted!: () => void;
 		let finishCompilation!: () => void;
+		let compilationFinished = false;
+		let addEventListener!: ReturnType<typeof vi.spyOn>;
+		let abortRegistrationsBeforeCompile = 0;
 		const started = new Promise<void>((resolve) => {
 			compilationStarted = resolve;
 		});
@@ -285,8 +292,10 @@ describe('WebAssembly loading utilities', () => {
 		const compileSpy = vi
 			.spyOn(WebAssembly, 'compile')
 			.mockImplementationOnce(async () => {
+				abortRegistrationsBeforeCompile = addEventListener.mock.calls.length;
 				compilationStarted();
 				await finish;
+				compilationFinished = true;
 				return module;
 			})
 			.mockResolvedValueOnce(module);
@@ -294,18 +303,43 @@ describe('WebAssembly loading utilities', () => {
 		vi.stubGlobal('fetch', fetchMock);
 		const controller = new AbortController();
 		const reason = new Error('stop WebAssembly compilation');
+		addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		let pending: Promise<WebAssembly.Module> | undefined;
 
 		try {
-			const pending = compile(url, undefined, controller.signal);
+			pending = compile(url, undefined, controller.signal);
 			await started;
+			expect(addEventListener.mock.calls.length).toBeGreaterThan(
+				abortRegistrationsBeforeCompile
+			);
+			const compileAbortRegistration = addEventListener.mock.calls.at(-1);
+			expect(compileAbortRegistration?.[0]).toBe('abort');
 			controller.abort(reason);
-			finishCompilation();
+			const outcome = await Promise.race([
+				pending.then(
+					(value) => ({ status: 'resolved', value }),
+					(error) => ({ status: 'rejected', reason: error })
+				),
+				new Promise((resolve) => {
+					setTimeout(() => resolve({ status: 'pending' }), 25);
+				})
+			]);
 
-			await expect(pending).rejects.toBe(reason);
+			expect(outcome).toEqual({ status: 'rejected', reason });
+			expect(compilationFinished).toBe(false);
+			expect(removeEventListener).toHaveBeenCalledWith(
+				'abort',
+				compileAbortRegistration?.[1]
+			);
+			finishCompilation();
+			await new Promise((resolve) => setTimeout(resolve, 0));
 			await expect(compile(url)).resolves.toBe(module);
 			expect(compileSpy).toHaveBeenCalledTimes(2);
 			expect(fetchMock).toHaveBeenCalledTimes(2);
 		} finally {
+			finishCompilation();
+			await pending?.catch(() => {});
 			compileSpy.mockRestore();
 		}
 	});

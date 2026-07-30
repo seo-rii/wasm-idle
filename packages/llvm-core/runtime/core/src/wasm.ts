@@ -661,7 +661,7 @@ export async function compile(filename: string, progress?: ProgressSink, signal?
 			signal
 		);
 		throwIfRuntimeAssetAborted(signal);
-		const module = await WebAssembly.compile(bytes);
+		const module = await waitForRuntimeAssetOperation(WebAssembly.compile(bytes), signal);
 		throwIfRuntimeAssetAborted(signal);
 		return module;
 	})();
