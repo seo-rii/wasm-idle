@@ -97,6 +97,14 @@ type StdinWaiter = {
 const WORKER_READY_MESSAGE = '__wasmIdleStaticWorkerReady';
 const outputEncoder = new TextEncoder();
 
+function cancelWorkerScriptResponse(response: Response, reason?: unknown) {
+	try {
+		void Promise.resolve(response.body?.cancel(reason)).catch(() => undefined);
+	} catch {
+		// Preserve the boundary failure that caused cancellation.
+	}
+}
+
 export class StaticWorkerRuntimeSandbox implements Sandbox {
 	output: any = null;
 	worker?: Worker = <any>null;
@@ -399,9 +407,7 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 							const reason =
 								phaseController.signal.reason ??
 								new DOMException('Worker script fetch aborted', 'AbortError');
-							void Promise.resolve()
-								.then(() => candidate.body?.cancel(reason))
-								.catch(() => undefined);
+							cancelWorkerScriptResponse(candidate, reason);
 							return;
 						}
 						settled = true;
@@ -426,7 +432,7 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 						`${this.config.displayName} worker script returned an invalid final URL: ${response.url}`,
 						{ phase: 'asset', runtimeId: this.config.languageId }
 					);
-					await response.body?.cancel(error).catch(() => undefined);
+					cancelWorkerScriptResponse(response, error);
 					throw error;
 				}
 				if (finalResponseUrl !== workerRequestUrl.href) {
@@ -434,7 +440,7 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 						`${this.config.displayName} worker script response URL mismatch: expected ${workerRequestUrl.href}, received ${finalResponseUrl}`,
 						{ phase: 'asset', runtimeId: this.config.languageId }
 					);
-					await response.body?.cancel(error).catch(() => undefined);
+					cancelWorkerScriptResponse(response, error);
 					throw error;
 				}
 			}
@@ -443,7 +449,7 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 					`${this.config.displayName} worker script failed to load: HTTP ${response.status}`,
 					{ runtimeId: this.config.languageId }
 				);
-				await response.body?.cancel(error).catch(() => undefined);
+				cancelWorkerScriptResponse(response, error);
 				throw error;
 			}
 
@@ -460,7 +466,7 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 						`${this.config.displayName} worker script has an invalid Content-Length: ${rawContentLength}`,
 						{ phase: 'asset', runtimeId: this.config.languageId }
 					);
-					await response.body?.cancel(error).catch(() => undefined);
+					cancelWorkerScriptResponse(response, error);
 					throw error;
 				}
 				total = declaredLength;
@@ -474,7 +480,7 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 						runtimeId: this.config.languageId
 					}
 				);
-				await response.body?.cancel(error).catch(() => undefined);
+				cancelWorkerScriptResponse(response, error);
 				throw error;
 			}
 			if (!response.body) {

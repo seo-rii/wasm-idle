@@ -1528,26 +1528,65 @@ describe('static worker backed language sandboxes', () => {
 		}
 	);
 
-	it('cancels a failed static worker response before reporting its status', async () => {
-		const cancel = vi.fn(async () => undefined);
-		vi.mocked(fetch).mockResolvedValueOnce({
-			ok: false,
-			status: 503,
-			url: '',
-			headers: new Headers(),
-			body: { cancel }
-		} as unknown as Response);
-		const sandbox = new Prolog();
+	it.each(['pending', 'throw', 'reject'] as const)(
+		'reports failed static worker responses without awaiting %s cancellation',
+		async (cancellationMode) => {
+			let resolveCancellation!: () => void;
+			const stalledCancellation = new Promise<void>((resolve) => {
+				resolveCancellation = resolve;
+			});
+			const cancel = vi.fn((reason?: unknown) => {
+				if (cancellationMode === 'throw') {
+					throw new Error('static worker response cancellation threw');
+				}
+				if (cancellationMode === 'reject') {
+					return Promise.reject(
+						new Error('static worker response cancellation rejected')
+					);
+				}
+				return stalledCancellation;
+			});
+			vi.mocked(fetch).mockResolvedValueOnce({
+				ok: false,
+				status: 503,
+				url: '',
+				headers: new Headers(),
+				body: { cancel }
+			} as unknown as Response);
+			const sandbox = new Prolog();
+			const loading = sandbox.load('/absproxy/5173');
+			let timeout: ReturnType<typeof setTimeout> | undefined;
 
-		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
-			name: 'AssetNotFoundError',
-			code: 'asset-not-found',
-			phase: 'asset',
-			runtimeId: 'PROLOG'
-		});
-		expect(cancel).toHaveBeenCalledOnce();
-		expect(workerInstances).toHaveLength(0);
-	});
+			try {
+				const outcome = await Promise.race([
+					loading.then(
+						(value) => ({ status: 'resolved' as const, value }),
+						(error) => ({ status: 'rejected' as const, reason: error as unknown })
+					),
+					new Promise<{ status: 'pending' }>((resolve) => {
+						timeout = setTimeout(() => resolve({ status: 'pending' }), 25);
+					})
+				]);
+
+				expect(outcome.status).toBe('rejected');
+				if (outcome.status !== 'rejected')
+					throw new Error('expected worker load to reject');
+				expect(outcome.reason).toMatchObject({
+					name: 'AssetNotFoundError',
+					code: 'asset-not-found',
+					phase: 'asset',
+					runtimeId: 'PROLOG'
+				});
+				expect(cancel).toHaveBeenCalledOnce();
+				expect(cancel.mock.calls[0]?.[0]).toBe(outcome.reason);
+				expect(workerInstances).toHaveLength(0);
+			} finally {
+				if (timeout) clearTimeout(timeout);
+				resolveCancellation();
+				await loading.catch(() => {});
+			}
+		}
+	);
 
 	it.each(['', '-1', '1.5', '1e2', '3, 3', '9007199254740992'])(
 		'rejects an invalid static worker Content-Length before reading: %s',
