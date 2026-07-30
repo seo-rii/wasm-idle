@@ -59,6 +59,45 @@ export interface RuntimeAssetPreflightResult {
 const DEFAULT_STREAM_BUFFER_BYTES = 64 * 1024;
 const DEFAULT_MAX_CONCURRENT_DOWNLOADS = 4;
 
+function waitForAbortable<T>(
+	operation: Promise<T>,
+	signal: AbortSignal,
+	onLateValue?: (value: T, reason: unknown) => void | Promise<void>
+): Promise<T> {
+	return new Promise<T>((resolve, reject) => {
+		let settled = false;
+		const cancelOnAbort = () => {
+			if (settled) return;
+			settled = true;
+			signal.removeEventListener('abort', cancelOnAbort);
+			reject(signal.reason ?? new Error('Runtime asset preflight was aborted'));
+		};
+		signal.addEventListener('abort', cancelOnAbort, { once: true });
+		operation.then(
+			(value) => {
+				if (settled) {
+					if (onLateValue) {
+						void Promise.resolve()
+							.then(() => onLateValue(value, signal.reason))
+							.catch(() => {});
+					}
+					return;
+				}
+				settled = true;
+				signal.removeEventListener('abort', cancelOnAbort);
+				resolve(value);
+			},
+			(error) => {
+				if (settled) return;
+				settled = true;
+				signal.removeEventListener('abort', cancelOnAbort);
+				reject(error);
+			}
+		);
+		if (signal.aborted) cancelOnAbort();
+	});
+}
+
 function normalizeRootUrl(value: string | URL): URL {
 	let url: URL;
 	try {
@@ -181,37 +220,27 @@ async function readBoundedResponse(
 		throw error;
 	}
 	if (!response.body) {
-		let cancelOnAbort: (() => void) | undefined;
-		const aborted = new Promise<never>((_resolve, reject) => {
-			cancelOnAbort = () =>
-				reject(signal.reason ?? new Error('Runtime asset preflight was aborted'));
-			signal.addEventListener('abort', cancelOnAbort, { once: true });
-		});
-		try {
-			if (signal.aborted) {
-				throw signal.reason ?? new Error('Runtime asset preflight was aborted');
-			}
-			const materialized = response.arrayBuffer();
-			const bytes = new Uint8Array(await Promise.race([materialized, aborted]));
-			if (signal.aborted) {
-				throw signal.reason ?? new Error('Runtime asset preflight was aborted');
-			}
-			if (bytes.byteLength > maxAssetBytes) {
-				throw new AssetTooLargeError(
-					`Runtime asset ${asset.key} exceeds the ${maxAssetBytes} byte limit`,
-					{
-						limit: maxAssetBytes,
-						actual: bytes.byteLength,
-						runtimeId,
-						profileId
-					}
-				);
-			}
-			reportProgress(bytes.byteLength);
-			return bytes;
-		} finally {
-			if (cancelOnAbort) signal.removeEventListener('abort', cancelOnAbort);
+		if (signal.aborted) {
+			throw signal.reason ?? new Error('Runtime asset preflight was aborted');
 		}
+		const materialized = response.arrayBuffer();
+		const bytes = new Uint8Array(await waitForAbortable(materialized, signal));
+		if (signal.aborted) {
+			throw signal.reason ?? new Error('Runtime asset preflight was aborted');
+		}
+		if (bytes.byteLength > maxAssetBytes) {
+			throw new AssetTooLargeError(
+				`Runtime asset ${asset.key} exceeds the ${maxAssetBytes} byte limit`,
+				{
+					limit: maxAssetBytes,
+					actual: bytes.byteLength,
+					runtimeId,
+					profileId
+				}
+			);
+		}
+		reportProgress(bytes.byteLength);
+		return bytes;
 	}
 
 	const reader = response.body.getReader();
@@ -310,12 +339,24 @@ async function preflightAsset(
 	);
 	let response: Response;
 	try {
-		response = await fetchImpl(requestUrl.href, {
-			credentials: 'omit',
-			redirect: 'follow',
-			referrerPolicy: 'no-referrer',
-			signal
+		if (signal.aborted) {
+			throw signal.reason ?? new Error('Runtime asset preflight was aborted');
+		}
+		const pendingResponse = Promise.resolve(
+			fetchImpl(requestUrl.href, {
+				credentials: 'omit',
+				redirect: 'follow',
+				referrerPolicy: 'no-referrer',
+				signal
+			})
+		);
+		response = await waitForAbortable(pendingResponse, signal, async (lateResponse, reason) => {
+			await lateResponse.body?.cancel(reason).catch(() => undefined);
 		});
+		if (signal.aborted) {
+			await response.body?.cancel(signal.reason).catch(() => undefined);
+			throw signal.reason ?? new Error('Runtime asset preflight was aborted');
+		}
 	} catch (error) {
 		if (signal.aborted) throw error;
 		throw new AssetNotFoundError(`Failed to load runtime asset ${asset.key}`, {

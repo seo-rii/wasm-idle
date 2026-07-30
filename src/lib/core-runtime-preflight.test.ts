@@ -258,8 +258,49 @@ describe('runtime registry asset preflight', () => {
 		});
 		resolveArrayBuffer(loaderBytes.buffer.slice(0));
 		await new Promise((resolve) => setTimeout(resolve, 0));
-		expect(removeEventListener).toHaveBeenCalledOnce();
+		expect(removeEventListener).toHaveBeenCalledTimes(2);
 		expect(reportProgress).not.toHaveBeenCalled();
+	});
+
+	it('cancels an uncooperative fetch promptly and disposes its late response', async () => {
+		let resolveFetch!: (response: Response) => void;
+		let removeEventListener!: ReturnType<typeof vi.spyOn>;
+		const fetch = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+			removeEventListener = vi.spyOn(init?.signal as AbortSignal, 'removeEventListener');
+			return new Promise<Response>((resolve) => {
+				resolveFetch = resolve;
+			});
+		});
+		const controller = new AbortController();
+		const reason = new Error('cancel uncooperative preflight fetch');
+		const pending = preflightRuntimeAssets({
+			manifest: createManifest([assets[0]!]),
+			runtimeId: 'fortran/preflight-test',
+			rootUrl: 'https://example.test/',
+			fetch,
+			signal: controller.signal
+		});
+
+		await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+		controller.abort(reason);
+
+		await expect(pending).rejects.toMatchObject({
+			name: 'CancelledError',
+			code: 'cancelled',
+			phase: 'asset',
+			cause: reason
+		});
+
+		const cancel = vi.fn(async () => {});
+		resolveFetch({
+			url: '',
+			ok: true,
+			status: 200,
+			headers: new Headers(),
+			body: { cancel }
+		} as unknown as Response);
+		await vi.waitFor(() => expect(cancel).toHaveBeenCalledWith(reason));
+		expect(removeEventListener).toHaveBeenCalledOnce();
 	});
 
 	it('rejects credentialed asset roots without copying secrets into the error', async () => {
