@@ -319,43 +319,64 @@ async function normalizeLoaderResult(
 		reportProgress(result.byteLength, result.byteLength);
 		return { bytes: result };
 	}
-	if (result instanceof Blob) {
-		if (result.size > MAX_LANGUAGE_TOOL_ASSET_BYTES) {
+	const normalizedResult: LanguageToolAssetDataResult | LanguageToolAssetUrlResult =
+		result instanceof Blob ? { data: result, mimeType: result.type || undefined } : result;
+	if ('url' in normalizedResult && normalizedResult.url) {
+		return await fetchAsset(
+			String(normalizedResult.url),
+			asset,
+			config,
+			reportProgress,
+			signal
+		);
+	}
+	if ('data' in normalizedResult) {
+		if (typeof normalizedResult.data === 'string') {
+			const bytes = enforceAssetSize(asset, textEncoder.encode(normalizedResult.data));
+			reportProgress(bytes.byteLength, bytes.byteLength);
+			return { bytes, mimeType: normalizedResult.mimeType };
+		}
+		if (normalizedResult.data instanceof ArrayBuffer) {
+			const bytes = enforceAssetSize(asset, new Uint8Array(normalizedResult.data));
+			reportProgress(bytes.byteLength, bytes.byteLength);
+			return { bytes, mimeType: normalizedResult.mimeType };
+		}
+		if (normalizedResult.data instanceof Uint8Array) {
+			enforceAssetSize(asset, normalizedResult.data);
+			reportProgress(normalizedResult.data.byteLength, normalizedResult.data.byteLength);
+			return { bytes: normalizedResult.data, mimeType: normalizedResult.mimeType };
+		}
+		if (normalizedResult.data.size > MAX_LANGUAGE_TOOL_ASSET_BYTES) {
 			throw new Error(
 				`Runtime asset ${asset} exceeds the ${MAX_LANGUAGE_TOOL_ASSET_BYTES} byte limit`
 			);
 		}
-		const bytes = enforceAssetSize(asset, new Uint8Array(await result.arrayBuffer()));
-		reportProgress(bytes.byteLength, bytes.byteLength);
-		return { bytes, mimeType: result.type || undefined };
-	}
-	if ('url' in result && result.url) {
-		return await fetchAsset(String(result.url), asset, config, reportProgress, signal);
-	}
-	if ('data' in result) {
-		if (typeof result.data === 'string') {
-			const bytes = enforceAssetSize(asset, textEncoder.encode(result.data));
-			reportProgress(bytes.byteLength, bytes.byteLength);
-			return { bytes, mimeType: result.mimeType };
-		}
-		if (result.data instanceof ArrayBuffer) {
-			const bytes = enforceAssetSize(asset, new Uint8Array(result.data));
-			reportProgress(bytes.byteLength, bytes.byteLength);
-			return { bytes, mimeType: result.mimeType };
-		}
-		if (result.data instanceof Uint8Array) {
-			enforceAssetSize(asset, result.data);
-			reportProgress(result.data.byteLength, result.data.byteLength);
-			return { bytes: result.data, mimeType: result.mimeType };
-		}
-		if (result.data.size > MAX_LANGUAGE_TOOL_ASSET_BYTES) {
-			throw new Error(
-				`Runtime asset ${asset} exceeds the ${MAX_LANGUAGE_TOOL_ASSET_BYTES} byte limit`
+		let cancelOnAbort: (() => void) | undefined;
+		const aborted = new Promise<never>((_resolve, reject) => {
+			cancelOnAbort = () =>
+				reject(signal.reason ?? new Error('Runtime asset load was aborted'));
+			signal.addEventListener('abort', cancelOnAbort, { once: true });
+		});
+		try {
+			if (signal.aborted) {
+				throw signal.reason ?? new Error('Runtime asset load was aborted');
+			}
+			const materialized = normalizedResult.data.arrayBuffer();
+			const bytes = enforceAssetSize(
+				asset,
+				new Uint8Array(await Promise.race([materialized, aborted]))
 			);
+			if (signal.aborted) {
+				throw signal.reason ?? new Error('Runtime asset load was aborted');
+			}
+			reportProgress(bytes.byteLength, bytes.byteLength);
+			return {
+				bytes,
+				mimeType: normalizedResult.mimeType || normalizedResult.data.type || undefined
+			};
+		} finally {
+			if (cancelOnAbort) signal.removeEventListener('abort', cancelOnAbort);
 		}
-		const bytes = enforceAssetSize(asset, new Uint8Array(await result.data.arrayBuffer()));
-		reportProgress(bytes.byteLength, bytes.byteLength);
-		return { bytes, mimeType: result.mimeType || result.data.type || undefined };
 	}
 	return null;
 }

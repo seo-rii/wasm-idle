@@ -533,6 +533,48 @@ describe('language tool asset loading', () => {
 		expect(arrayBuffer).not.toHaveBeenCalled();
 	});
 
+	it.each(['bare', 'wrapped'] as const)(
+		'does not publish a %s loader-owned Blob after cancellation',
+		async (shape) => {
+			let resolveArrayBuffer!: (buffer: ArrayBuffer) => void;
+			const blob = new Blob([Uint8Array.of(1, 2, 3)], {
+				type: 'application/wasm'
+			});
+			const arrayBuffer = vi.spyOn(blob, 'arrayBuffer').mockImplementation(
+				() =>
+					new Promise<ArrayBuffer>((resolve) => {
+						resolveArrayBuffer = resolve;
+					})
+			);
+			let removeEventListener!: ReturnType<typeof vi.spyOn>;
+			const controller = new AbortController();
+			const reason = new Error(`cancelled during ${shape} Blob read`);
+			const reportProgress = vi.fn();
+			const loading = loadLanguageToolAsset(
+				'clangd',
+				'clangd.js',
+				{
+					baseUrl: 'https://assets.example.com/clangd/',
+					loader: ({ signal }) => {
+						removeEventListener = vi.spyOn(signal, 'removeEventListener');
+						return shape === 'bare' ? blob : { data: blob };
+					}
+				},
+				reportProgress,
+				{ signal: controller.signal }
+			);
+
+			await vi.waitFor(() => expect(arrayBuffer).toHaveBeenCalledOnce());
+			controller.abort(reason);
+
+			await expect(loading).rejects.toBe(reason);
+			resolveArrayBuffer(Uint8Array.of(1, 2, 3).buffer);
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			expect(removeEventListener).toHaveBeenCalledOnce();
+			expect(reportProgress).not.toHaveBeenCalled();
+		}
+	);
+
 	it('aborts a loader that exceeds its configured timeout', async () => {
 		vi.useFakeTimers();
 		let loaderSignal: AbortSignal | undefined;
