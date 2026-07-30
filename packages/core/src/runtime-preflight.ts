@@ -190,6 +190,14 @@ function parseContentLength(
 	return value;
 }
 
+function cancelResponseBody(response: Response, reason?: unknown) {
+	try {
+		void Promise.resolve(response.body?.cancel(reason)).catch(() => undefined);
+	} catch {
+		// Preserve the boundary failure that caused cancellation.
+	}
+}
+
 async function readBoundedResponse(
 	response: Response,
 	asset: RuntimeRegistryAsset,
@@ -203,7 +211,7 @@ async function readBoundedResponse(
 	try {
 		declaredLength = parseContentLength(response, asset, runtimeId, profileId);
 	} catch (error) {
-		await response.body?.cancel(error).catch(() => undefined);
+		cancelResponseBody(response, error);
 		throw error;
 	}
 	if (declaredLength !== undefined && declaredLength > maxAssetBytes) {
@@ -216,7 +224,7 @@ async function readBoundedResponse(
 				profileId
 			}
 		);
-		await response.body?.cancel(error).catch(() => undefined);
+		cancelResponseBody(response, error);
 		throw error;
 	}
 	if (!response.body) {
@@ -382,12 +390,13 @@ async function preflightAsset(
 				signal
 			})
 		);
-		response = await waitForAbortable(pendingResponse, signal, async (lateResponse, reason) => {
-			await lateResponse.body?.cancel(reason).catch(() => undefined);
+		response = await waitForAbortable(pendingResponse, signal, (lateResponse, reason) => {
+			cancelResponseBody(lateResponse, reason);
 		});
 		if (signal.aborted) {
-			await response.body?.cancel(signal.reason).catch(() => undefined);
-			throw signal.reason ?? new Error('Runtime asset preflight was aborted');
+			const reason = signal.reason ?? new Error('Runtime asset preflight was aborted');
+			cancelResponseBody(response, reason);
+			throw reason;
 		}
 	} catch (error) {
 		if (signal.aborted) throw error;
@@ -409,7 +418,7 @@ async function preflightAsset(
 			false
 		);
 	} catch (error) {
-		await response.body?.cancel(error).catch(() => undefined);
+		cancelResponseBody(response, error);
 		throw error;
 	}
 	if (!response.ok) {
@@ -417,7 +426,7 @@ async function preflightAsset(
 			`Failed to load runtime asset ${asset.key}: HTTP ${response.status}`,
 			{ runtimeId, profileId, recoverable: response.status >= 500 }
 		);
-		await response.body?.cancel(error).catch(() => undefined);
+		cancelResponseBody(response, error);
 		throw error;
 	}
 	const contentEncoding = response.headers.get('content-encoding') || undefined;
@@ -433,7 +442,7 @@ async function preflightAsset(
 			`Runtime asset ${asset.key} delivery bytes were transparently ${asset.encoding}-decoded by HTTP`,
 			{ runtimeId, profileId }
 		);
-		await response.body?.cancel(error).catch(() => undefined);
+		cancelResponseBody(response, error);
 		throw error;
 	}
 	const bytes = await readBoundedResponse(

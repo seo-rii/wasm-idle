@@ -830,52 +830,88 @@ describe('runtime registry asset preflight', () => {
 		}
 	);
 
-	it('cancels a failed HTTP response before returning the asset error', async () => {
-		let cancelReason: unknown;
-		let readerRequested = false;
-		let arrayBufferRequested = false;
-		const response = {
-			url: '',
-			ok: false,
-			status: 503,
-			headers: new Headers(),
-			body: {
-				async cancel(reason?: unknown) {
-					cancelReason = reason;
-				},
-				getReader() {
-					readerRequested = true;
-					throw new Error('failed HTTP response body should not be read');
+	it.each(['pending', 'throw', 'reject'] as const)(
+		'returns the HTTP asset error without awaiting %s cancellation',
+		async (cancellationMode) => {
+			let cancelReason: unknown;
+			let readerRequested = false;
+			let arrayBufferRequested = false;
+			let resolveCancellation!: () => void;
+			const stalledCancellation = new Promise<void>((resolve) => {
+				resolveCancellation = resolve;
+			});
+			const cancel = vi.fn((reason?: unknown) => {
+				cancelReason = reason;
+				if (cancellationMode === 'throw') throw new Error('cleanup threw');
+				if (cancellationMode === 'reject') {
+					return Promise.reject(new Error('cleanup rejected'));
 				}
-			},
-			async arrayBuffer() {
-				arrayBufferRequested = true;
-				throw new Error('failed HTTP response body should not be materialized');
-			}
-		} as unknown as Response;
-
-		await expect(
-			preflightRuntimeAssets({
+				return stalledCancellation;
+			});
+			const response = {
+				url: '',
+				ok: false,
+				status: 503,
+				headers: new Headers(),
+				body: {
+					cancel,
+					getReader() {
+						readerRequested = true;
+						throw new Error('failed HTTP response body should not be read');
+					}
+				},
+				async arrayBuffer() {
+					arrayBufferRequested = true;
+					throw new Error('failed HTTP response body should not be materialized');
+				}
+			} as unknown as Response;
+			const pending = preflightRuntimeAssets({
 				manifest: createManifest([assets[0]!]),
 				runtimeId: 'fortran/preflight-test',
 				rootUrl: 'https://example.test/',
 				fetch: async () => response
-			})
-		).rejects.toMatchObject({
-			name: 'AssetNotFoundError',
-			code: 'asset-not-found',
-			phase: 'asset',
-			runtimeId: 'fortran/preflight-test',
-			profileId: 'preflight-v1',
-			recoverable: true
-		});
-		expect(cancelReason).toMatchObject({
-			name: 'AssetNotFoundError',
-			code: 'asset-not-found'
-		});
-		expect(readerRequested).toBe(false);
-		expect(arrayBufferRequested).toBe(false);
-	});
+			});
+			let timeout: ReturnType<typeof setTimeout> | undefined;
+
+			try {
+				const outcome = await Promise.race([
+					pending.then(
+						() => ({ status: 'resolved' as const }),
+						(error) => ({ status: 'rejected' as const, reason: error as unknown })
+					),
+					new Promise<{ status: 'pending' }>((resolve) => {
+						timeout = setTimeout(() => resolve({ status: 'pending' }), 25);
+					})
+				]);
+
+				expect(outcome).toMatchObject({
+					status: 'rejected',
+					reason: {
+						name: 'AssetNotFoundError',
+						code: 'asset-not-found',
+						phase: 'asset',
+						runtimeId: 'fortran/preflight-test',
+						profileId: 'preflight-v1',
+						recoverable: true
+					}
+				});
+				if (outcome.status === 'rejected') {
+					expect(outcome.reason).toBe(cancelReason);
+				}
+				expect(cancel).toHaveBeenCalledOnce();
+				expect(cancelReason).toMatchObject({
+					name: 'AssetNotFoundError',
+					code: 'asset-not-found'
+				});
+				expect(readerRequested).toBe(false);
+				expect(arrayBufferRequested).toBe(false);
+			} finally {
+				if (timeout) clearTimeout(timeout);
+				resolveCancellation();
+				await pending.catch(() => {});
+			}
+		}
+	);
 
 	it('rejects redirect targets outside the manifest asset root', async () => {
 		const response = responseFor('https://example.test/runtime/loader.js');
