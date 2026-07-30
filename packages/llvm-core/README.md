@@ -177,6 +177,10 @@ source pause, the gate also verifies that LLDB scopes remain lazy until their
 The C++ fixture additionally follows the structure's and a pointer's own `variablesReference`
 values and verifies their `first` and `second` fields without eagerly flattening either variable
 tree.
+Rust coverage includes a basic argument/output fixture, a structure and field tree plus an enum
+value, three selectable recursive frames with distinct arguments, and a panic that must preserve
+stderr before the target reports exit code 101. These fixtures continue to use the pinned generic
+DWARF path: the runtime does not advertise arbitrary Rust expression evaluation.
 A WASI file fixture mounts `/workspace/data/input.txt` into both debugger workers, pauses before
 the guest opens it, and requires WAMR to print the file's value after continuing. Set
 `WASM_IDLE_DEBUG_BROWSER_CASES=c-wasi-file` to run only this fixture locally.

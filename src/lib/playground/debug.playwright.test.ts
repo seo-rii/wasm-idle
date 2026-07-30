@@ -330,7 +330,93 @@ int main(void) {
     value += 3;
     let argument = std::env::args().nth(1).unwrap_or_else(|| "missing".to_owned());
     println!("lldb-rust={value}:{argument}");
-}`
+}`,
+		testId: 'rust-basic'
+	},
+	{
+		activePath: 'composite.rs',
+		backend: 'lldb',
+		breakpointLine: 15,
+		expectedLocal: { name: 'result', value: '73' },
+		expectedOutput: 'lldb-rust-composite=73:73',
+		expectedTitle: 'Rust · LLDB / WAMR',
+		expectedVariableTrees: [
+			{
+				parent: 'pair',
+				variables: [
+					{ name: 'first', value: '35' },
+					{ name: 'second', value: '38' }
+				]
+			}
+		],
+		expectedVariableValueIncludes: [{ name: 'marker', value: 'Ready' }],
+		language: 'RUST',
+		programArgs: [],
+		source: `#[derive(Copy, Clone)]
+struct Pair {
+    first: i32,
+    second: i32,
+}
+
+#[repr(i32)]
+enum Marker {
+    Ready = 73,
+}
+
+fn main() {
+    let pair = Pair { first: 35, second: 38 };
+    let marker = Marker::Ready;
+    let result = pair.first + pair.second;
+    println!("lldb-rust-composite={result}:{}", marker as i32);
+}`,
+		testId: 'rust-composite-types'
+	},
+	{
+		activePath: 'recursive.rs',
+		backend: 'lldb',
+		breakpointLine: 5,
+		expectedFrameFunction: 'recurse',
+		expectedFrameLocals: [
+			{ name: 'n', value: '1' },
+			{ name: 'n', value: '2' },
+			{ name: 'n', value: '3' }
+		],
+		expectedLocal: { name: 'doubled', value: '2' },
+		expectedOutput: 'lldb-rust-recursive=12',
+		expectedTitle: 'Rust · LLDB / WAMR',
+		language: 'RUST',
+		programArgs: [],
+		source: `#[inline(never)]
+fn recurse(n: i32) -> i32 {
+    let doubled = n * 2;
+    if n == 1 {
+        let stop = doubled;
+        return std::hint::black_box(stop);
+    }
+    doubled + recurse(n - 1)
+}
+
+fn main() {
+    let result = recurse(3);
+    println!("lldb-rust-recursive={result}");
+}`,
+		testId: 'rust-recursive-frames'
+	},
+	{
+		activePath: 'panic.rs',
+		backend: 'lldb',
+		breakpointLine: 2,
+		expectedLocal: { name: 'value', value: '73' },
+		expectedOutput: 'lldb-rust-panic=73',
+		expectedTerminalError: 'Debug target exited with code 101.',
+		expectedTitle: 'Rust · LLDB / WAMR',
+		language: 'RUST',
+		programArgs: [],
+		source: `fn main() {
+    let value = 73;
+    panic!("lldb-rust-panic={value}");
+}`,
+		testId: 'rust-panic'
 	},
 	{
 		activePath: 'main.m',
@@ -1232,6 +1318,14 @@ describe('native-source browser debugging in Chromium', () => {
 									);
 								}
 							}
+							if ('expectedVariableValueIncludes' in testCase) {
+								for (const expectedVariable of testCase.expectedVariableValueIncludes) {
+									const variable = loadedVariables.find(
+										(candidate) => candidate.name === expectedVariable.name
+									);
+									expect(variable?.value).toContain(expectedVariable.value);
+								}
+							}
 							const loadedState = await page.evaluate(() =>
 								(window as any).__wasmIdleDebug.getDebugState()
 							);
@@ -1275,9 +1369,13 @@ describe('native-source browser debugging in Chromium', () => {
 								);
 							}
 							if ('expectedFrameLocals' in testCase) {
+								const expectedFrameFunction =
+									'expectedFrameFunction' in testCase
+										? testCase.expectedFrameFunction
+										: 'recurse';
 								const recursiveFrames = debugState.callStack.filter(
 									(frame: { id?: number; functionName?: string }) =>
-										frame.functionName === 'recurse'
+										frame.functionName?.includes(expectedFrameFunction)
 								);
 								expect(recursiveFrames).toHaveLength(
 									testCase.expectedFrameLocals.length
@@ -1691,6 +1789,15 @@ describe('native-source browser debugging in Chromium', () => {
 										null,
 										2
 									)}`
+								);
+							}
+							if ('expectedTerminalError' in testCase) {
+								await page.waitForFunction(
+									(expectedError) =>
+										document
+											.querySelector('[data-testid="terminal-debug-output"]')
+											?.textContent?.includes(expectedError),
+									testCase.expectedTerminalError
 								);
 							}
 						}

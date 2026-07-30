@@ -118,4 +118,16 @@ describe('LLDB browser integration workflow', () => {
 		expect(browserTest).toContain('expectedFrameLocals:');
 		expect(browserTest).toContain('selectDebugFrame');
 	});
+
+	it('covers Rust composite values, recursive frames, and panic termination with LLDB', async () => {
+		const browserTest = await readFile('src/lib/playground/debug.playwright.test.ts', 'utf8');
+
+		expect(browserTest).toContain("testId: 'rust-composite-types'");
+		expect(browserTest).toContain("testId: 'rust-recursive-frames'");
+		expect(browserTest).toContain("testId: 'rust-panic'");
+		expect(browserTest).toContain("expectedFrameFunction: 'recurse'");
+		expect(browserTest).toContain(
+			"expectedTerminalError: 'Debug target exited with code 101.'"
+		);
+	});
 });
