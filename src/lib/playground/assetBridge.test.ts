@@ -313,6 +313,92 @@ describe('WorkerAssetBridge asset requests', () => {
 		expect(new Uint8Array(response.assetResponse.bytes)).toEqual(runtimeBytes);
 	});
 
+	it('disposes stalled gzip decompression without publishing a response', async () => {
+		const deliveryBytes = Uint8Array.from(gzipSync(Uint8Array.of(1, 2, 3), { level: 9 }));
+		let loadSignal: AbortSignal | undefined;
+		let addEventListener: ReturnType<typeof vi.spyOn> | undefined;
+		let removeEventListener: ReturnType<typeof vi.spyOn> | undefined;
+		const loader = vi.fn((request: { signal?: AbortSignal }) => {
+			loadSignal = request.signal;
+			if (loadSignal) {
+				addEventListener = vi.spyOn(loadSignal, 'addEventListener');
+				removeEventListener = vi.spyOn(loadSignal, 'removeEventListener');
+			}
+			return deliveryBytes;
+		});
+		let outputController!: ReadableStreamDefaultController<Uint8Array>;
+		let cancellationReason: unknown;
+		const decompressed = new ReadableStream<Uint8Array>({
+			start(controller) {
+				outputController = controller;
+			},
+			cancel(reason) {
+				cancellationReason = reason;
+			}
+		});
+		const getReader = vi.spyOn(decompressed, 'getReader');
+		const writable = new WritableStream<Uint8Array>();
+		vi.stubGlobal(
+			'DecompressionStream',
+			class {
+				readonly readable = decompressed;
+				readonly writable = writable;
+			}
+		);
+		const postMessage = vi.fn();
+		const bridge = new WorkerAssetBridge({ postMessage } as unknown as Worker, 'clang', {
+			baseUrl: '/clang/',
+			loader,
+			useAssetBridge: true
+		});
+		const asset = 'bin/memfs.wasm.gz';
+		const respond = (
+			bridge as unknown as {
+				respond(request: { id: number; asset: string }): Promise<void>;
+			}
+		).respond.bind(bridge);
+		const responding = respond({ id: 32, asset });
+		let timeout: ReturnType<typeof setTimeout> | undefined;
+
+		try {
+			await vi.waitFor(() => expect(getReader).toHaveBeenCalledOnce());
+			bridge.dispose();
+			const outcome = await Promise.race([
+				responding.then(
+					() => ({ status: 'resolved' as const }),
+					(error) => ({ status: 'rejected' as const, error: error as unknown })
+				),
+				new Promise<{ status: 'pending' }>((resolve) => {
+					timeout = setTimeout(() => resolve({ status: 'pending' }), 25);
+				})
+			]);
+
+			expect(outcome).toEqual({ status: 'resolved' });
+			expect(loadSignal?.aborted).toBe(true);
+			expect(cancellationReason).toBe(loadSignal?.reason);
+			const abortRegistrations = addEventListener?.mock.calls.filter(
+				(registration: unknown[]) => registration[0] === 'abort'
+			);
+			expect(abortRegistrations).toHaveLength(2);
+			for (const registration of abortRegistrations ?? []) {
+				expect(removeEventListener).toHaveBeenCalledWith('abort', registration[1]);
+			}
+			expect(postMessage).not.toHaveBeenCalled();
+			try {
+				outputController.close();
+			} catch {}
+			await Promise.resolve();
+			await Promise.resolve();
+			expect(postMessage).not.toHaveBeenCalled();
+		} finally {
+			if (timeout) clearTimeout(timeout);
+			try {
+				outputController.close();
+			} catch {}
+			await responding;
+		}
+	});
+
 	it('accepts HTTP gzip responses already decoded by content encoding', async () => {
 		const postMessage = vi.fn();
 		const runtimeBytes = new Uint8Array([1, 2, 3]);

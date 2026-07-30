@@ -201,7 +201,12 @@ export class WorkerAssetBridge {
 				);
 			}
 			const runtimeBytes = request.asset.endsWith('.gz')
-				? await decompressGzip(loaded.bytes, request.asset)
+				? await decompressGzip(
+						loaded.bytes,
+						request.asset,
+						MAX_RUNTIME_ASSET_BYTES,
+						controller.signal
+					)
 				: loaded.bytes;
 			if (runtimeBytes.byteLength > MAX_RUNTIME_ASSET_BYTES) {
 				throw new Error(
