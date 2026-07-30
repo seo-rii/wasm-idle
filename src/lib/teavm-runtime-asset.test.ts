@@ -256,6 +256,92 @@ describe('TeaVM runtime asset boundary', () => {
 		resolveArrayBuffer(Uint8Array.of(1, 2, 3).buffer);
 	});
 
+	it.each([
+		['while cancellation and the read remain pending', 'pending', false],
+		['when cancellation resolves without settling the read', 'resolved', false],
+		['when cancellation settles the read before rejection', 'settles-read', true]
+	])('rejects a stalled streamed response promptly %s', async (_case, mode, throwOnRelease) => {
+		let markReadStarted!: () => void;
+		const readStarted = new Promise<void>((resolve) => {
+			markReadStarted = resolve;
+		});
+		let resolveRead!: (result: { done: true; value: undefined }) => void;
+		const pendingRead = new Promise<{ done: true; value: undefined }>((resolve) => {
+			resolveRead = resolve;
+		});
+		const read = vi.fn(() => {
+			markReadStarted();
+			return pendingRead;
+		});
+		let resolveCancel!: () => void;
+		const pendingCancel = new Promise<void>((resolve) => {
+			resolveCancel = resolve;
+		});
+		const cancel = vi.fn(() => {
+			if (mode === 'pending') return pendingCancel;
+			if (mode === 'settles-read') resolveRead({ done: true, value: undefined });
+			return Promise.resolve();
+		});
+		const releaseFailure = new Error('TeaVM reader release failed during abort');
+		const releaseLock = vi.fn(() => {
+			if (throwOnRelease) throw releaseFailure;
+		});
+		const fetchMock = vi.fn(
+			async () =>
+				({
+					ok: true,
+					url: 'https://assets.example/teavm/compiler.wasm',
+					headers: new Headers(),
+					body: { getReader: () => ({ read, cancel, releaseLock }) }
+				}) as unknown as Response
+		);
+		const controller = new AbortController();
+		const reason =
+			mode === 'resolved'
+				? new DOMException('TeaVM asset deadline exceeded', 'TimeoutError')
+				: new Error('stop stalled TeaVM stream read');
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const loading = fetchTeaVmAsset('compiler.wasm', {
+			baseUrl: 'https://assets.example/teavm/',
+			fetch: fetchMock,
+			signal: controller.signal
+		});
+		let timeout: ReturnType<typeof setTimeout> | undefined;
+
+		try {
+			await readStarted;
+			controller.abort(reason);
+			const outcome = await Promise.race([
+				loading.then(
+					(value) => ({ status: 'resolved' as const, value }),
+					(error) => ({ status: 'rejected' as const, reason: error as unknown })
+				),
+				new Promise<{ status: 'pending' }>((resolve) => {
+					timeout = setTimeout(() => resolve({ status: 'pending' }), 25);
+				})
+			]);
+
+			expect(outcome.status).toBe('rejected');
+			expect('reason' in outcome ? outcome.reason : undefined).toBe(reason);
+			expect(cancel).toHaveBeenCalledOnce();
+			expect(cancel).toHaveBeenCalledWith(reason);
+			expect(releaseLock).toHaveBeenCalledOnce();
+			const abortRegistrations = addEventListener.mock.calls.filter(
+				([type]) => type === 'abort'
+			);
+			expect(abortRegistrations).toHaveLength(2);
+			for (const registration of abortRegistrations) {
+				expect(removeEventListener).toHaveBeenCalledWith('abort', registration[1]);
+			}
+		} finally {
+			if (timeout) clearTimeout(timeout);
+			resolveCancel();
+			resolveRead({ done: true, value: undefined });
+			await loading.catch(() => {});
+		}
+	});
+
 	it('rejects substituted final URLs and unknown runtime assets', async () => {
 		let cancelled = false;
 		const fetchMock = vi.fn(async () => {

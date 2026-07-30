@@ -235,34 +235,62 @@ export async function fetchTeaVmAsset(
 	}
 
 	const reader = response.body.getReader();
-	let cancellation: Promise<void> | undefined;
+	let readerCancelled = false;
 	const cancelReader = (reason?: unknown) => {
-		cancellation ??= reader.cancel(reason).catch(() => {});
-		return cancellation;
+		if (readerCancelled) return;
+		readerCancelled = true;
+		try {
+			void reader.cancel(reason).catch(() => {});
+		} catch {}
 	};
-	const cancelOnAbort = () => {
-		void cancelReader(
-			options.signal?.reason ?? new Error('TeaVM runtime asset load was aborted.')
-		);
-	};
-	options.signal?.addEventListener('abort', cancelOnAbort, { once: true });
+	if (options.signal?.aborted) {
+		const reason = options.signal.reason ?? new Error('TeaVM runtime asset load was aborted.');
+		cancelReader(reason);
+		try {
+			reader.releaseLock();
+		} catch {}
+		throw reason;
+	}
+	let cancelOnAbort: (() => void) | undefined;
+	const aborted = options.signal
+		? new Promise<never>((_resolve, reject) => {
+				cancelOnAbort = () => {
+					const reason =
+						options.signal?.reason ??
+						new Error('TeaVM runtime asset load was aborted.');
+					cancelReader(reason);
+					reject(reason);
+				};
+				options.signal!.addEventListener('abort', cancelOnAbort, { once: true });
+			})
+		: undefined;
 	let bytes = new Uint8Array(
 		Math.min(maxAssetBytes, contentLength ?? DEFAULT_TEAVM_ASSET_BUFFER_BYTES)
 	);
 	let receivedLength = 0;
+	let loadedBytes!: Uint8Array<ArrayBuffer>;
+	let releaseFailure: { error: unknown } | undefined;
 	try {
-		if (options.signal?.aborted) {
-			throw options.signal.reason ?? new Error('TeaVM runtime asset load was aborted.');
-		}
 		while (true) {
-			const { done, value } = await reader.read();
+			if (options.signal?.aborted) {
+				throw options.signal.reason ?? new Error('TeaVM runtime asset load was aborted.');
+			}
+			const pendingRead = reader.read();
+			const { done, value } = aborted
+				? await Promise.race([pendingRead, aborted])
+				: await pendingRead;
+			if (options.signal?.aborted) {
+				throw options.signal.reason ?? new Error('TeaVM runtime asset load was aborted.');
+			}
 			if (done) break;
 			if (!value) continue;
 			const nextLength = receivedLength + value.byteLength;
 			if (nextLength > maxAssetBytes) {
-				throw new Error(
+				const error = new Error(
 					`TeaVM runtime asset ${asset} exceeds the ${maxAssetBytes} byte limit`
 				);
+				cancelReader(error);
+				throw error;
 			}
 			if (nextLength > bytes.byteLength) {
 				const nextCapacity = Math.min(
@@ -279,15 +307,24 @@ export async function fetchTeaVmAsset(
 		if (options.signal?.aborted) {
 			throw options.signal.reason ?? new Error('TeaVM runtime asset load was aborted.');
 		}
-		return bytes.subarray(0, receivedLength);
+		loadedBytes = bytes.subarray(0, receivedLength);
 	} catch (error) {
-		await cancelReader(error);
 		if (options.signal?.aborted) {
-			throw options.signal.reason ?? new Error('TeaVM runtime asset load was aborted.');
+			const reason =
+				options.signal.reason ?? new Error('TeaVM runtime asset load was aborted.');
+			cancelReader(reason);
+			throw reason;
 		}
+		cancelReader(error);
 		throw error;
 	} finally {
-		options.signal?.removeEventListener('abort', cancelOnAbort);
-		reader.releaseLock();
+		if (cancelOnAbort) options.signal?.removeEventListener('abort', cancelOnAbort);
+		try {
+			reader.releaseLock();
+		} catch (error) {
+			if (!options.signal?.aborted) releaseFailure = { error };
+		}
 	}
+	if (releaseFailure) throw releaseFailure.error;
+	return loadedBytes;
 }
