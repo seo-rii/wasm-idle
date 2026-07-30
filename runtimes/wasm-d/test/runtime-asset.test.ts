@@ -1,10 +1,15 @@
 import { gzipSync } from 'node:zlib';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_MAX_RUNTIME_ASSET_BYTES, fetchRuntimeAssetBytes } from '../src/runtime-asset.js';
 import {
 	DEFAULT_MAX_RUNTIME_MANIFEST_BYTES,
 	loadRuntimeManifest
 } from '../src/runtime-manifest.js';
+
+afterEach(() => {
+	vi.useRealTimers();
+	vi.unstubAllGlobals();
+});
 
 describe('runtime asset loader', () => {
 	it('inflates gzip-compressed assets after fetch', async () => {
@@ -415,6 +420,105 @@ describe('runtime asset loader', () => {
 		expect(cancelled).toBe(true);
 	});
 
+	it.each([
+		['while cancellation and the read remain pending', 'pending', false],
+		['when cancellation resolves without settling the read', 'resolved', false],
+		['when cancellation settles the read before rejection', 'settles-read', true]
+	])('rejects a stalled streamed download promptly %s', async (_case, mode, throwOnRelease) => {
+		let markReadStarted!: () => void;
+		const readStarted = new Promise<void>((resolve) => {
+			markReadStarted = resolve;
+		});
+		let resolveRead!: (result: ReadableStreamReadResult<Uint8Array>) => void;
+		const pendingRead = new Promise<ReadableStreamReadResult<Uint8Array>>((resolve) => {
+			resolveRead = resolve;
+		});
+		const read = vi
+			.fn()
+			.mockImplementationOnce(() => {
+				markReadStarted();
+				return pendingRead;
+			})
+			.mockResolvedValue({ done: true, value: undefined });
+		let resolveCancel!: () => void;
+		const pendingCancel = new Promise<void>((resolve) => {
+			resolveCancel = resolve;
+		});
+		const cancel = vi.fn(() => {
+			if (mode === 'pending') return pendingCancel;
+			if (mode === 'settles-read') resolveRead({ done: true, value: undefined });
+			return Promise.resolve();
+		});
+		const releaseFailure = new Error('D reader release failed during abort');
+		const releaseLock = vi.fn(() => {
+			if (throwOnRelease) throw releaseFailure;
+		});
+		const response = {
+			ok: true,
+			status: 200,
+			url: '',
+			headers: new Headers(),
+			body: { getReader: () => ({ read, cancel, releaseLock }) }
+		} as unknown as Response;
+		const controller = new AbortController();
+		const reason =
+			mode === 'resolved'
+				? new DOMException('D asset deadline exceeded', 'TimeoutError')
+				: new Error('stop stalled D asset stream read');
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const reportProgress = vi.fn();
+		const loading = fetchRuntimeAssetBytes(
+			'https://example.test/runtime/toolchain.tar',
+			'D toolchain',
+			async () => response,
+			reportProgress,
+			undefined,
+			DEFAULT_MAX_RUNTIME_ASSET_BYTES,
+			controller.signal
+		);
+		let timeout: ReturnType<typeof setTimeout> | undefined;
+
+		try {
+			await readStarted;
+			controller.abort(reason);
+			const outcome = await Promise.race([
+				loading.then(
+					(value) => ({ status: 'resolved' as const, value }),
+					(error) => ({ status: 'rejected' as const, reason: error as unknown })
+				),
+				new Promise<{ status: 'pending' }>((resolve) => {
+					timeout = setTimeout(() => resolve({ status: 'pending' }), 25);
+				})
+			]);
+
+			expect(outcome.status).toBe('rejected');
+			expect('reason' in outcome ? outcome.reason : undefined).toBe(reason);
+			expect(cancel).toHaveBeenCalledOnce();
+			expect(cancel).toHaveBeenCalledWith(reason);
+			expect(releaseLock).toHaveBeenCalledOnce();
+			const abortRegistrations = addEventListener.mock.calls.filter(
+				([type]) => type === 'abort'
+			);
+			expect(abortRegistrations).toHaveLength(2);
+			for (const registration of abortRegistrations) {
+				expect(removeEventListener).toHaveBeenCalledWith('abort', registration[1]);
+			}
+			expect(reportProgress).not.toHaveBeenCalled();
+
+			resolveCancel();
+			resolveRead({ done: false, value: Uint8Array.of(1) });
+			await Promise.resolve();
+			await Promise.resolve();
+			expect(reportProgress).not.toHaveBeenCalled();
+		} finally {
+			if (timeout) clearTimeout(timeout);
+			resolveCancel();
+			resolveRead({ done: false, value: Uint8Array.of(1) });
+			await loading.catch(() => {});
+		}
+	});
+
 	it('rejects promptly when a bodyless asset read is aborted', async () => {
 		vi.useFakeTimers();
 		const controller = new AbortController();
@@ -509,6 +613,125 @@ describe('runtime asset loader', () => {
 
 		await expect(pending).rejects.toBe(reason);
 		await vi.waitFor(() => expect(cancelled).toBe(true));
+	});
+
+	it('suppresses queued gzip progress after a stalled decompression read is aborted', async () => {
+		let transformChunk!: (
+			chunk: Uint8Array,
+			controller: TransformStreamDefaultController<Uint8Array>
+		) => void;
+		let flushTransform!: (controller: TransformStreamDefaultController<Uint8Array>) => void;
+		vi.stubGlobal(
+			'TransformStream',
+			class {
+				constructor(transformer: Transformer<Uint8Array, Uint8Array>) {
+					transformChunk = transformer.transform!.bind(transformer);
+					flushTransform = transformer.flush!.bind(transformer);
+				}
+			}
+		);
+		vi.stubGlobal(
+			'DecompressionStream',
+			class {
+				readonly readable = {};
+				readonly writable = {};
+			}
+		);
+		let markReadStarted!: () => void;
+		const readStarted = new Promise<void>((resolve) => {
+			markReadStarted = resolve;
+		});
+		let resolveRead!: (result: { done: true; value: undefined }) => void;
+		const pendingRead = new Promise<{ done: true; value: undefined }>((resolve) => {
+			resolveRead = resolve;
+		});
+		const read = vi.fn(() => {
+			markReadStarted();
+			return pendingRead;
+		});
+		let resolveCancel!: () => void;
+		const pendingCancel = new Promise<void>((resolve) => {
+			resolveCancel = resolve;
+		});
+		const cancel = vi.fn(() => pendingCancel);
+		const releaseLock = vi.fn();
+		const decompressedStream = { getReader: () => ({ read, cancel, releaseLock }) };
+		const limitedDownload = { pipeThrough: vi.fn(() => decompressedStream) };
+		const response = {
+			ok: true,
+			status: 200,
+			url: '',
+			headers: new Headers(),
+			body: { pipeThrough: vi.fn(() => limitedDownload) }
+		} as unknown as Response;
+		const controller = new AbortController();
+		const reason = new Error('stop stalled D gzip output read');
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const reportProgress = vi.fn();
+		const loading = fetchRuntimeAssetBytes(
+			'https://example.test/runtime/toolchain.tar.gz',
+			'D toolchain',
+			async () => response,
+			reportProgress,
+			'gzip',
+			DEFAULT_MAX_RUNTIME_ASSET_BYTES,
+			controller.signal
+		);
+		let timeout: ReturnType<typeof setTimeout> | undefined;
+
+		try {
+			await readStarted;
+			controller.abort(reason);
+			const outcome = await Promise.race([
+				loading.then(
+					(value) => ({ status: 'resolved' as const, value }),
+					(error) => ({ status: 'rejected' as const, reason: error as unknown })
+				),
+				new Promise<{ status: 'pending' }>((resolve) => {
+					timeout = setTimeout(() => resolve({ status: 'pending' }), 25);
+				})
+			]);
+
+			expect(outcome.status).toBe('rejected');
+			expect('reason' in outcome ? outcome.reason : undefined).toBe(reason);
+			expect(cancel).toHaveBeenCalledOnce();
+			expect(cancel).toHaveBeenCalledWith(reason);
+			expect(releaseLock).toHaveBeenCalledOnce();
+			const abortRegistrations = addEventListener.mock.calls.filter(
+				([type]) => type === 'abort'
+			);
+			expect(abortRegistrations).toHaveLength(2);
+			for (const registration of abortRegistrations) {
+				expect(removeEventListener).toHaveBeenCalledWith('abort', registration[1]);
+			}
+			expect(reportProgress).not.toHaveBeenCalled();
+
+			const streamController = {
+				enqueue: vi.fn()
+			} as unknown as TransformStreamDefaultController<Uint8Array>;
+			let transformError: unknown;
+			try {
+				transformChunk(Uint8Array.of(1, 2, 3), streamController);
+			} catch (error) {
+				transformError = error;
+			}
+			expect(transformError).toBe(reason);
+			let flushError: unknown;
+			try {
+				flushTransform(streamController);
+			} catch (error) {
+				flushError = error;
+			}
+			expect(flushError).toBe(reason);
+			expect(reportProgress).not.toHaveBeenCalled();
+			expect(streamController.enqueue).not.toHaveBeenCalled();
+		} finally {
+			if (timeout) clearTimeout(timeout);
+			resolveCancel();
+			resolveRead({ done: true, value: undefined });
+			await loading.catch(() => {});
+		}
 	});
 
 	it('bounds streamed gzip output before materializing a decompression bomb', async () => {

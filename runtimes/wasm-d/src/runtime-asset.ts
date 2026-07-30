@@ -67,25 +67,56 @@ async function readBoundedStream(
 	signal?: AbortSignal
 ) {
 	const reader = stream.getReader();
-	const cancelOnAbort = () => {
-		void reader.cancel(abortReason(signal!)).catch(() => {});
+	let readerCancelled = false;
+	const cancelReader = (reason?: unknown) => {
+		if (readerCancelled) return;
+		readerCancelled = true;
+		try {
+			void reader.cancel(reason).catch(() => {});
+		} catch {}
 	};
-	signal?.addEventListener('abort', cancelOnAbort, { once: true });
+	if (signal?.aborted) {
+		const reason = abortReason(signal);
+		cancelReader(reason);
+		try {
+			reader.releaseLock();
+		} catch {}
+		throw reason;
+	}
+	let cancelOnAbort: (() => void) | undefined;
+	const aborted = signal
+		? new Promise<never>((_resolve, reject) => {
+				cancelOnAbort = () => {
+					const reason = abortReason(signal);
+					cancelReader(reason);
+					reject(reason);
+				};
+				signal.addEventListener('abort', cancelOnAbort, { once: true });
+			})
+		: undefined;
 	let bytes = new Uint8Array(
 		Math.min(maxOutputBytes, total || DEFAULT_RUNTIME_ASSET_BUFFER_BYTES)
 	);
 	let receivedLength = 0;
+	let loadedBytes!: Uint8Array<ArrayBuffer>;
+	let releaseFailure: { error: unknown } | undefined;
 	try {
-		throwIfAborted(signal);
 		while (true) {
-			const { done, value } = await reader.read();
+			throwIfAborted(signal);
+			const pendingRead = reader.read();
+			const { done, value } = aborted
+				? await Promise.race([pendingRead, aborted])
+				: await pendingRead;
+			throwIfAborted(signal);
 			if (done) break;
 			if (!value) continue;
 			const nextLength = receivedLength + value.byteLength;
 			if (nextLength > maxOutputBytes) {
-				throw new Error(
+				const error = new Error(
 					`${assetLabel} ${sizeKind} exceeds the ${maxOutputBytes} byte limit`
 				);
+				cancelReader(error);
+				throw error;
 			}
 			if (nextLength > bytes.byteLength) {
 				const nextCapacity = Math.min(
@@ -102,15 +133,25 @@ async function readBoundedStream(
 		}
 		throwIfAborted(signal);
 		reportProgress?.(receivedLength, total ?? receivedLength);
-		return bytes.subarray(0, receivedLength);
+		loadedBytes = bytes.subarray(0, receivedLength);
 	} catch (error) {
-		await reader.cancel(error).catch(() => {});
-		if (signal?.aborted) throw abortReason(signal);
+		if (signal?.aborted) {
+			const reason = abortReason(signal);
+			cancelReader(reason);
+			throw reason;
+		}
+		cancelReader(error);
 		throw error;
 	} finally {
-		signal?.removeEventListener('abort', cancelOnAbort);
-		reader.releaseLock();
+		if (cancelOnAbort) signal?.removeEventListener('abort', cancelOnAbort);
+		try {
+			reader.releaseLock();
+		} catch (error) {
+			if (!signal?.aborted) releaseFailure = { error };
+		}
 	}
+	if (releaseFailure) throw releaseFailure.error;
+	return loadedBytes;
 }
 
 async function decompressGzip(
@@ -294,6 +335,7 @@ export async function fetchRuntimeAssetBytes(
 		const limitedDownload = response.body.pipeThrough(
 			new TransformStream<Uint8Array, Uint8Array>({
 				transform(chunk, controller) {
+					throwIfAborted(signal);
 					const nextLength = receivedLength + chunk.byteLength;
 					if (nextLength > maxOutputBytes) {
 						throw new Error(
@@ -305,6 +347,7 @@ export async function fetchRuntimeAssetBytes(
 					controller.enqueue(chunk);
 				},
 				flush() {
+					throwIfAborted(signal);
 					reportProgress?.(receivedLength, contentLength ?? receivedLength);
 				}
 			})
