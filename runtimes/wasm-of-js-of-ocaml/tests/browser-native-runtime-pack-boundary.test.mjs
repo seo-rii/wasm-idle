@@ -515,6 +515,94 @@ test('requires exact browser-native compiler asset receipts in the manifest', as
 	);
 });
 
+test('aborts bodyless manifest materialization promptly and ignores late bytes', async () => {
+	const manifestUrl = new URL(
+		'/.cache/browser-native-bundle/browser-native-manifest.v1.json',
+		BASE_URL
+	).href;
+	let markArrayBufferStarted;
+	const arrayBufferStarted = new Promise((resolve) => {
+		markArrayBufferStarted = resolve;
+	});
+	let resolveArrayBuffer;
+	const pendingArrayBuffer = new Promise((resolve) => {
+		resolveArrayBuffer = resolve;
+	});
+	const response = {
+		url: manifestUrl,
+		ok: true,
+		status: 200,
+		headers: new Headers(),
+		body: null,
+		arrayBuffer() {
+			markArrayBufferStarted();
+			return pendingArrayBuffer;
+		}
+	};
+	const controller = new AbortController();
+	const reason = new Error('stop bodyless manifest load');
+	const addedAbortListeners = [];
+	const removedAbortListeners = [];
+	const originalAddEventListener = controller.signal.addEventListener.bind(controller.signal);
+	const originalRemoveEventListener = controller.signal.removeEventListener.bind(
+		controller.signal
+	);
+	Object.defineProperty(controller.signal, 'addEventListener', {
+		configurable: true,
+		value(type, listener, options) {
+			if (type === 'abort') addedAbortListeners.push(listener);
+			return originalAddEventListener(type, listener, options);
+		}
+	});
+	Object.defineProperty(controller.signal, 'removeEventListener', {
+		configurable: true,
+		value(type, listener, options) {
+			if (type === 'abort') removedAbortListeners.push(listener);
+			return originalRemoveEventListener(type, listener, options);
+		}
+	});
+	const manifest = fetchBrowserNativeManifest({
+		baseUrl: BASE_URL,
+		fetch: async () => response,
+		signal: controller.signal
+	});
+	const lateBytes = encodeJson(
+		createManifest([{ path: '/static/toolchain/lib/ocaml/a.cmi', size: 1 }])
+	);
+	let timeout;
+
+	try {
+		await arrayBufferStarted;
+		controller.abort(reason);
+		const outcome = await Promise.race([
+			manifest.then(
+				(value) => ({ status: 'resolved', value }),
+				(error) => ({ status: 'rejected', reason: error })
+			),
+			new Promise((resolve) => {
+				timeout = setTimeout(() => resolve({ status: 'pending' }), 25);
+			})
+		]);
+
+		assert.equal(outcome.status, 'rejected');
+		assert.equal(outcome.reason, reason);
+		assert.ok(addedAbortListeners.length > 0);
+		for (const listener of addedAbortListeners) {
+			assert.ok(removedAbortListeners.includes(listener));
+		}
+		resolveArrayBuffer(lateBytes.buffer);
+		await Promise.resolve();
+		await Promise.resolve();
+		assert.equal(outcome.status, 'rejected');
+	} finally {
+		clearTimeout(timeout);
+		resolveArrayBuffer(lateBytes.buffer);
+		await manifest.catch(() => {});
+		delete controller.signal.addEventListener;
+		delete controller.signal.removeEventListener;
+	}
+});
+
 test('does not fetch a runtime pack when the caller is already aborted', async () => {
 	const controller = new AbortController();
 	const reason = new Error('stop loading');

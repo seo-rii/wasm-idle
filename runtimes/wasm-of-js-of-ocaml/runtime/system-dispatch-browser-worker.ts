@@ -323,12 +323,33 @@ async function fetchBoundedRuntimeAsset(
 		throw new Error(`${label} exceeds the ${maxBytes} byte limit`);
 	}
 	if (!response.body) {
-		const bytes = new Uint8Array(await response.arrayBuffer());
-		throwIfAborted(options.signal);
-		if (bytes.byteLength > maxBytes) {
-			throw new Error(`${label} exceeds the ${maxBytes} byte limit`);
+		let cancelOnAbort: (() => void) | undefined;
+		const aborted = options.signal
+			? new Promise<never>((_resolve, reject) => {
+					cancelOnAbort = () => reject(abortReason(options.signal!));
+					options.signal!.addEventListener('abort', cancelOnAbort, { once: true });
+				})
+			: undefined;
+		try {
+			throwIfAborted(options.signal);
+			const materialized = response.arrayBuffer();
+			const source = aborted
+				? await Promise.race([materialized, aborted])
+				: await materialized;
+			throwIfAborted(options.signal);
+			const bytes = new Uint8Array(source);
+			if (bytes.byteLength > maxBytes) {
+				throw new Error(`${label} exceeds the ${maxBytes} byte limit`);
+			}
+			return bytes;
+		} catch (error) {
+			if (options.signal?.aborted) throw abortReason(options.signal);
+			throw error;
+		} finally {
+			if (cancelOnAbort) {
+				options.signal?.removeEventListener('abort', cancelOnAbort);
+			}
 		}
-		return bytes;
 	}
 	return readBoundedStream(response.body, label, maxBytes, options.signal, contentLength);
 }
