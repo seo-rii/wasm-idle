@@ -4,7 +4,7 @@ import {
 	RuntimeProfileActivationStore,
 	type RuntimeRegistryManifest
 } from '@wasm-idle/core';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 const encoder = new TextEncoder();
 const compressed = encoder.encode('compressed runtime');
@@ -183,19 +183,58 @@ describe('runtime profile activation', () => {
 	it('does not publish a profile when cancellation wins during verification', async () => {
 		const store = new RuntimeProfileActivationStore();
 		const controller = new AbortController();
+		const reason = new Error('stop integrity verification');
+		let rejectDigest!: (reason: unknown) => void;
+		const digest = vi.spyOn(globalThis.crypto.subtle, 'digest').mockImplementation(
+			() =>
+				new Promise<ArrayBuffer>((_resolve, reject) => {
+					rejectDigest = reject;
+				})
+		);
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
 		const pending = store.activate({
 			manifest: createManifest(),
 			runtimeId: 'fortran/f2c',
 			assets: activationAssets(),
 			signal: controller.signal
 		});
-		controller.abort(new Error('stop'));
+		let timeout: ReturnType<typeof setTimeout> | undefined;
 
-		await expect(pending).rejects.toMatchObject({
-			name: 'CancelledError',
-			code: 'cancelled',
-			phase: 'asset'
-		});
-		expect(store.get('fortran/f2c')).toBeUndefined();
+		try {
+			await vi.waitFor(() => expect(digest).toHaveBeenCalledTimes(2));
+			controller.abort(reason);
+			const outcome = await Promise.race([
+				pending.then(
+					(value) => ({ status: 'resolved', value }),
+					(error) => ({ status: 'rejected', reason: error })
+				),
+				new Promise((resolve) => {
+					timeout = setTimeout(() => resolve({ status: 'pending' }), 25);
+				})
+			]);
+
+			expect(outcome.status).toBe('rejected');
+			expect('reason' in outcome ? outcome.reason : undefined).toMatchObject({
+				name: 'CancelledError',
+				code: 'cancelled',
+				phase: 'asset',
+				cause: reason
+			});
+			const abortRegistration = addEventListener.mock.calls.find(
+				([type]) => type === 'abort'
+			);
+			expect(abortRegistration).toBeDefined();
+			expect(removeEventListener).toHaveBeenCalledWith('abort', abortRegistration?.[1]);
+
+			rejectDigest(new Error('late integrity mismatch'));
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			expect(store.get('fortran/f2c')).toBeUndefined();
+		} finally {
+			if (timeout) clearTimeout(timeout);
+			rejectDigest(new Error('release integrity verification'));
+			await pending.catch(() => {});
+			digest.mockRestore();
+		}
 	});
 });

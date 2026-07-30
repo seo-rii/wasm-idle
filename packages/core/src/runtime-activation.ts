@@ -91,7 +91,7 @@ export class RuntimeProfileActivationStore {
 		const activationVersion = (this.activationVersions.get(runtime.runtimeId) ?? 0) + 1;
 		this.activationVersions.set(runtime.runtimeId, activationVersion);
 
-		const verifiedAssets = await Promise.all(
+		const verification = Promise.all(
 			runtime.assets.map(async (asset) => {
 				const candidate = request.assets[asset.key]!;
 				if (!candidate.cacheKey || candidate.cacheKey.includes('\0')) {
@@ -124,6 +124,44 @@ export class RuntimeProfileActivationStore {
 				] as const;
 			})
 		);
+		let verifiedAssets: Awaited<typeof verification>;
+		if (!request.signal) {
+			verifiedAssets = await verification;
+		} else {
+			const signal = request.signal;
+			verifiedAssets = await new Promise<Awaited<typeof verification>>((resolve, reject) => {
+				let settled = false;
+				const cancelOnAbort = () => {
+					if (settled) return;
+					settled = true;
+					signal.removeEventListener('abort', cancelOnAbort);
+					reject(
+						new CancelledError('Runtime profile activation cancelled', {
+							phase: 'asset',
+							runtimeId: runtime.runtimeId,
+							profileId: runtime.identity.profile.profileId,
+							cause: signal.reason
+						})
+					);
+				};
+				signal.addEventListener('abort', cancelOnAbort, { once: true });
+				void verification.then(
+					(value) => {
+						if (settled) return;
+						settled = true;
+						signal.removeEventListener('abort', cancelOnAbort);
+						resolve(value);
+					},
+					(error) => {
+						if (settled) return;
+						settled = true;
+						signal.removeEventListener('abort', cancelOnAbort);
+						reject(error);
+					}
+				);
+				if (signal.aborted) cancelOnAbort();
+			});
+		}
 		if (request.signal?.aborted) {
 			throw new CancelledError('Runtime profile activation cancelled', {
 				phase: 'asset',
