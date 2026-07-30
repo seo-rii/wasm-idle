@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { DapClient, DapMessageParser, encodeDapMessage } from '../src/dap-client.js';
 import { SharedByteQueue, createSharedByteQueue } from '../src/shared-byte-queue.js';
-import type { DapEvent, DapRequest, DapResponse } from '../src/types.js';
+import type { DapEvent, DapMessage, DapRequest, DapResponse } from '../src/types.js';
 
 describe('DAP framing', () => {
 	it('parses fragmented and coalesced UTF-8 frames', () => {
@@ -450,6 +450,47 @@ describe('DapClient', () => {
 				await expect(requestPromise).rejects.toThrow(
 					new RegExp(`invalid DAP response: ${corruption.field}`, 'u')
 				);
+				expect(input.closed).toBe(true);
+				expect(output.closed).toBe(true);
+			} finally {
+				await client.close();
+			}
+		}
+	});
+
+	it('fails the DAP stream for malformed incoming message envelopes', async () => {
+		const corruptions = [
+			{
+				error: /invalid DAP message: seq/u,
+				message: { seq: 0, type: 'event', event: 'continued' }
+			},
+			{
+				error: /invalid DAP message: type/u,
+				message: { seq: 50, type: 'unknown' }
+			},
+			{
+				error: /invalid DAP event: event/u,
+				message: { seq: 51, type: 'event', event: 42 }
+			}
+		] as const;
+
+		for (const [index, corruption] of corruptions.entries()) {
+			const inputDescriptor = createSharedByteQueue(4096, 40 + index);
+			const outputDescriptor = createSharedByteQueue(4096, 40 + index);
+			const input = new SharedByteQueue(inputDescriptor);
+			const output = new SharedByteQueue(outputDescriptor);
+			const client = new DapClient({
+				input: inputDescriptor,
+				output: outputDescriptor,
+				requestTimeoutMs: 100
+			}).start();
+
+			try {
+				const requestPromise = client.request('threads');
+				await input.read(new Uint8Array(256));
+				await output.write(encodeDapMessage(corruption.message as unknown as DapMessage));
+
+				await expect(requestPromise).rejects.toThrow(corruption.error);
 				expect(input.closed).toBe(true);
 				expect(output.closed).toBe(true);
 			} finally {

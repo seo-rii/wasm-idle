@@ -269,7 +269,19 @@ export class DapClient implements DapRequestSession {
 	}
 
 	private handleMessage(message: DapMessage) {
+		if (!Number.isSafeInteger(message.seq) || message.seq <= 0) {
+			this.fail(new Error('invalid DAP message: seq must be a positive safe integer'));
+			return;
+		}
+		if (message.type !== 'request' && message.type !== 'response' && message.type !== 'event') {
+			this.fail(new Error('invalid DAP message: type must be request, response, or event'));
+			return;
+		}
 		if (message.type === 'event') {
+			if (typeof message.event !== 'string' || message.event.length === 0) {
+				this.fail(new Error('invalid DAP event: event must be a non-empty string'));
+				return;
+			}
 			for (const listener of [...this.eventListeners]) {
 				if (!this.eventListeners.has(listener)) continue;
 				try {
@@ -284,7 +296,7 @@ export class DapClient implements DapRequestSession {
 			}
 			return;
 		}
-		if (message.type !== 'response') return;
+		if (message.type === 'request') return;
 		this.handleResponse(message);
 	}
 

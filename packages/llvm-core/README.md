@@ -123,6 +123,10 @@ instead of resolving a request with another command's body. Response envelopes a
 at runtime: `request_seq` must be a positive safe integer, `command` a non-empty string, and
 `success` a boolean. Malformed values fail the stream instead of timing out or treating a string
 such as `"false"` as success.
+Every incoming DAP message must also carry a positive safe-integer `seq` and a recognized
+`request`, `response`, or `event` type. Event names must be non-empty strings. Invalid common or
+event envelopes fail the stream before listener dispatch or request timeout can hide the protocol
+error.
 Direct `DapClient` consumers can set `onEventError(error, event)` to observe an event-listener
 exception. Throwing listeners and a throwing error hook are isolated from one another, and the
 client continues parsing later events and responses on the same byte stream.
