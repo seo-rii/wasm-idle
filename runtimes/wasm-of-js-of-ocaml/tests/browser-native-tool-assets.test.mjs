@@ -206,6 +206,103 @@ test('rejects truncated and hash-mismatched browser-native tool assets', async (
 	);
 });
 
+test('aborts browser-native tool digest verification promptly and ignores a late failure', async () => {
+	const assetUrl = new URL('tools/ocamlc.js', BASE_URL).href;
+	const source = new TextEncoder().encode('tool');
+	const budget = createBrowserToolInputBudget({ maxAssetBytes: 8, maxTotalBytes: 16 });
+	let markDigestStarted;
+	const digestStarted = new Promise((resolve) => {
+		markDigestStarted = resolve;
+	});
+	let rejectDigest;
+	const pendingDigest = new Promise((_resolve, reject) => {
+		rejectDigest = reject;
+	});
+	const subtle = globalThis.crypto.subtle;
+	const originalDigestDescriptor = Object.getOwnPropertyDescriptor(subtle, 'digest');
+	Object.defineProperty(subtle, 'digest', {
+		configurable: true,
+		value() {
+			markDigestStarted();
+			return pendingDigest;
+		}
+	});
+	const controller = new AbortController();
+	const reason = new Error('stop browser-native tool hashing');
+	const addedAbortListeners = [];
+	const removedAbortListeners = [];
+	const originalAddEventListener = controller.signal.addEventListener.bind(controller.signal);
+	const originalRemoveEventListener = controller.signal.removeEventListener.bind(
+		controller.signal
+	);
+	Object.defineProperty(controller.signal, 'addEventListener', {
+		configurable: true,
+		value(type, listener, options) {
+			if (type === 'abort') addedAbortListeners.push(listener);
+			return originalAddEventListener(type, listener, options);
+		}
+	});
+	Object.defineProperty(controller.signal, 'removeEventListener', {
+		configurable: true,
+		value(type, listener, options) {
+			if (type === 'abort') removedAbortListeners.push(listener);
+			return originalRemoveEventListener(type, listener, options);
+		}
+	});
+	let returnedBytes;
+	const loading = fetchBrowserToolAsset(assetUrl, 'OCaml tool', budget, {
+		fetch: async () =>
+			responseWithUrl(source, assetUrl, {
+				'content-length': String(source.byteLength)
+			}),
+		receipt: { bytes: source.byteLength, sha256: sha256(source) },
+		signal: controller.signal
+	});
+	const observed = loading.then(
+		(value) => {
+			returnedBytes = value;
+			return { status: 'resolved', value };
+		},
+		(error) => ({ status: 'rejected', reason: error })
+	);
+	let timeout;
+
+	try {
+		await digestStarted;
+		controller.abort(reason);
+		const outcome = await Promise.race([
+			observed,
+			new Promise((resolve) => {
+				timeout = setTimeout(() => resolve({ status: 'pending' }), 25);
+			})
+		]);
+
+		assert.equal(outcome.status, 'rejected');
+		assert.equal(outcome.reason, reason);
+		assert.equal(returnedBytes, undefined);
+		assert.equal(budget.usedBytes, source.byteLength);
+		assert.ok(addedAbortListeners.length > 0);
+		for (const listener of addedAbortListeners) {
+			assert.ok(removedAbortListeners.includes(listener));
+		}
+		rejectDigest(new Error('late browser-native tool digest failure'));
+		await Promise.resolve();
+		await Promise.resolve();
+		assert.equal(returnedBytes, undefined);
+	} finally {
+		clearTimeout(timeout);
+		rejectDigest(new Error('late browser-native tool digest cleanup'));
+		await loading.catch(() => {});
+		if (originalDigestDescriptor) {
+			Object.defineProperty(subtle, 'digest', originalDigestDescriptor);
+		} else {
+			delete subtle.digest;
+		}
+		delete controller.signal.addEventListener;
+		delete controller.signal.removeEventListener;
+	}
+});
+
 test('rejects unsafe browser-native tool asset URLs before fetching', async () => {
 	let fetchCount = 0;
 	const fetcher = async () => {

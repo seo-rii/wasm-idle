@@ -233,7 +233,35 @@ async function verifyBrowserToolAssetSha256(
 	throwIfAborted(signal);
 	const subtle = globalThis.crypto?.subtle;
 	if (!subtle) throw new Error(`Web Crypto is required to verify ${label}`);
-	const digest = new Uint8Array(await subtle.digest('SHA-256', bytes));
+	const pendingDigest = subtle.digest('SHA-256', bytes);
+	const digestBuffer = signal
+		? await new Promise<ArrayBuffer>((resolve, reject) => {
+				let settled = false;
+				const onAbort = () => {
+					if (settled) return;
+					settled = true;
+					signal.removeEventListener('abort', onAbort);
+					reject(abortReason(signal));
+				};
+				signal.addEventListener('abort', onAbort, { once: true });
+				void pendingDigest.then(
+					(value) => {
+						if (settled) return;
+						settled = true;
+						signal.removeEventListener('abort', onAbort);
+						resolve(value);
+					},
+					(error) => {
+						if (settled) return;
+						settled = true;
+						signal.removeEventListener('abort', onAbort);
+						reject(error);
+					}
+				);
+				if (signal.aborted) onAbort();
+			})
+		: await pendingDigest;
+	const digest = new Uint8Array(digestBuffer);
 	throwIfAborted(signal);
 	const actualSha256 = Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join('');
 	if (actualSha256 !== expectedSha256) {
