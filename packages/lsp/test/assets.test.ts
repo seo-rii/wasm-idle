@@ -471,6 +471,89 @@ describe('language tool asset loading', () => {
 		expect(releaseLock).toHaveBeenCalledOnce();
 	});
 
+	it.each([
+		['while reader cancellation remains pending', false],
+		['when reader cancellation resolves without settling the read', true]
+	])('releases a stalled stream read on caller abort %s', async (_case, resolveCancellation) => {
+		let markReadStarted!: () => void;
+		const readStarted = new Promise<void>((resolve) => {
+			markReadStarted = resolve;
+		});
+		let resolveRead!: (result: { done: true; value: undefined }) => void;
+		const pendingRead = new Promise<{ done: true; value: undefined }>((resolve) => {
+			resolveRead = resolve;
+		});
+		const read = vi.fn(() => {
+			markReadStarted();
+			return pendingRead;
+		});
+		let resolveCancel!: () => void;
+		const pendingCancel = new Promise<void>((resolve) => {
+			resolveCancel = resolve;
+		});
+		const cancel = vi.fn(() => (resolveCancellation ? Promise.resolve() : pendingCancel));
+		let markReleased!: () => void;
+		const released = new Promise<void>((resolve) => {
+			markReleased = resolve;
+		});
+		const releaseLock = vi.fn(() => markReleased());
+		let addEventListener: ReturnType<typeof vi.spyOn> | undefined;
+		let removeEventListener: ReturnType<typeof vi.spyOn> | undefined;
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+				const signal = init?.signal as AbortSignal;
+				addEventListener = vi.spyOn(signal, 'addEventListener');
+				removeEventListener = vi.spyOn(signal, 'removeEventListener');
+				return {
+					ok: true,
+					url: 'https://assets.example.com/clangd/clangd.js',
+					headers: { get: vi.fn(() => null) },
+					body: { getReader: () => ({ read, cancel, releaseLock }) }
+				};
+			})
+		);
+		const controller = new AbortController();
+		const reason = new Error('cancelled during stalled stream read');
+		const reportProgress = vi.fn();
+		const loading = loadLanguageToolAsset(
+			'clangd',
+			'clangd.js',
+			{ baseUrl: 'https://assets.example.com/clangd/' },
+			reportProgress,
+			{ signal: controller.signal }
+		);
+		let timeout: ReturnType<typeof setTimeout> | undefined;
+
+		try {
+			await readStarted;
+			controller.abort(reason);
+			await expect(loading).rejects.toBe(reason);
+			const cleanup = await Promise.race([
+				released.then(() => 'released' as const),
+				new Promise<'pending'>((resolve) => {
+					timeout = setTimeout(() => resolve('pending'), 25);
+				})
+			]);
+
+			expect(cleanup).toBe('released');
+			expect(cancel).toHaveBeenCalledOnce();
+			expect(cancel).toHaveBeenCalledWith(reason);
+			expect(releaseLock).toHaveBeenCalledOnce();
+			const abortRegistrations = addEventListener?.mock.calls.filter(
+				([type]) => type === 'abort'
+			);
+			expect(abortRegistrations).toHaveLength(1);
+			expect(removeEventListener).toHaveBeenCalledWith('abort', abortRegistrations?.[0]?.[1]);
+			expect(reportProgress).not.toHaveBeenCalled();
+		} finally {
+			if (timeout) clearTimeout(timeout);
+			resolveCancel();
+			resolveRead({ done: true, value: undefined });
+			await loading.catch(() => {});
+		}
+	});
+
 	it('does not publish a bodyless response after cancellation during materialization', async () => {
 		let resolveArrayBuffer!: (buffer: ArrayBuffer) => void;
 		const arrayBuffer = vi.fn(

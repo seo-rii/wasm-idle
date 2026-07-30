@@ -242,30 +242,54 @@ async function fetchAsset(
 	}
 
 	const reader = response.body.getReader();
-	let cancellation: Promise<void> | undefined;
+	let readerCancelled = false;
 	const cancelReader = (reason?: unknown) => {
-		cancellation ??= reader.cancel(reason).catch(() => {});
-		return cancellation;
+		if (readerCancelled) return;
+		readerCancelled = true;
+		try {
+			void reader.cancel(reason).catch(() => {});
+		} catch {}
 	};
-	const cancelOnAbort = () => {
-		void cancelReader(signal.reason ?? new Error('Runtime asset load was aborted'));
-	};
-	signal.addEventListener('abort', cancelOnAbort, { once: true });
+	if (signal.aborted) {
+		const reason = signal.reason ?? new Error('Runtime asset load was aborted');
+		cancelReader(reason);
+		try {
+			reader.releaseLock();
+		} catch {}
+		throw reason;
+	}
+	let cancelOnAbort: (() => void) | undefined;
+	const aborted = new Promise<never>((_resolve, reject) => {
+		cancelOnAbort = () => {
+			const reason = signal.reason ?? new Error('Runtime asset load was aborted');
+			cancelReader(reason);
+			reject(reason);
+		};
+		signal.addEventListener('abort', cancelOnAbort, { once: true });
+	});
+	let loadedAsset!: LoadedLanguageToolAsset;
+	let releaseError: unknown;
 	try {
-		if (signal.aborted) {
-			throw signal.reason ?? new Error('Runtime asset load was aborted');
-		}
 		let receivedLength = 0;
 		let bytes = new Uint8Array(contentLength ?? DEFAULT_STREAM_BUFFER_BYTES);
 		while (true) {
-			const { done, value } = await reader.read();
+			if (signal.aborted) {
+				throw signal.reason ?? new Error('Runtime asset load was aborted');
+			}
+			const pendingRead = reader.read();
+			const { done, value } = await Promise.race([pendingRead, aborted]);
+			if (signal.aborted) {
+				throw signal.reason ?? new Error('Runtime asset load was aborted');
+			}
 			if (done) break;
 			if (!value) continue;
 			const nextLength = receivedLength + value.byteLength;
 			if (nextLength > MAX_LANGUAGE_TOOL_ASSET_BYTES) {
-				throw new Error(
+				const error = new Error(
 					`Runtime asset ${asset} exceeds the ${MAX_LANGUAGE_TOOL_ASSET_BYTES} byte limit`
 				);
+				cancelReader(error);
+				throw error;
 			}
 			if (nextLength > bytes.byteLength) {
 				const capacity = Math.min(
@@ -285,17 +309,25 @@ async function fetchAsset(
 		}
 		if (receivedLength !== bytes.byteLength) bytes = bytes.slice(0, receivedLength);
 		reportProgress(receivedLength, contentLength ?? receivedLength);
-		return { bytes, mimeType };
+		loadedAsset = { bytes, mimeType };
 	} catch (error) {
-		await cancelReader(error);
 		if (signal.aborted) {
-			throw signal.reason ?? new Error('Runtime asset load was aborted');
+			const reason = signal.reason ?? new Error('Runtime asset load was aborted');
+			cancelReader(reason);
+			throw reason;
 		}
+		cancelReader(error);
 		throw error;
 	} finally {
-		signal.removeEventListener('abort', cancelOnAbort);
-		reader.releaseLock();
+		if (cancelOnAbort) signal.removeEventListener('abort', cancelOnAbort);
+		try {
+			reader.releaseLock();
+		} catch (error) {
+			if (!signal.aborted) releaseError = error;
+		}
 	}
+	if (releaseError) throw releaseError;
+	return loadedAsset;
 }
 
 async function normalizeLoaderResult(
