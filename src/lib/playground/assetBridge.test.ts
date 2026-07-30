@@ -417,6 +417,85 @@ describe('WorkerAssetBridge asset requests', () => {
 		});
 	});
 
+	it('disposes promptly while integrity verification is stalled', async () => {
+		let markDigestStarted!: () => void;
+		const digestStarted = new Promise<void>((resolve) => {
+			markDigestStarted = resolve;
+		});
+		let rejectDigest!: (reason: unknown) => void;
+		const digestPending = new Promise<ArrayBuffer>((_resolve, reject) => {
+			rejectDigest = reject;
+		});
+		vi.spyOn(globalThis.crypto.subtle, 'digest').mockImplementationOnce(() => {
+			markDigestStarted();
+			return digestPending;
+		});
+		let loadSignal: AbortSignal | undefined;
+		let addEventListener: ReturnType<typeof vi.spyOn> | undefined;
+		let removeEventListener: ReturnType<typeof vi.spyOn> | undefined;
+		const bytes = new Uint8Array([1, 2, 3]);
+		const loader = vi.fn((request: { signal?: AbortSignal }) => {
+			loadSignal = request.signal;
+			if (loadSignal) {
+				addEventListener = vi.spyOn(loadSignal, 'addEventListener');
+				removeEventListener = vi.spyOn(loadSignal, 'removeEventListener');
+			}
+			return bytes;
+		});
+		const postMessage = vi.fn();
+		const asset = RUNTIME_LOAD_ASSETS.clang[0];
+		const bridge = new WorkerAssetBridge({ postMessage } as unknown as Worker, 'clang', {
+			baseUrl: '/clang/',
+			loader,
+			integrity: {
+				[asset]: { bytes: bytes.byteLength, sha256: '0'.repeat(64) }
+			},
+			useAssetBridge: true
+		});
+		const respond = (
+			bridge as unknown as {
+				respond(request: { id: number; asset: string }): Promise<void>;
+			}
+		).respond.bind(bridge);
+		const responding = respond({ id: 31, asset });
+		let timeout: ReturnType<typeof setTimeout> | undefined;
+		const lateFailure = new Error('late integrity digest failure');
+
+		try {
+			await digestStarted;
+			bridge.dispose();
+			const outcome = await Promise.race([
+				responding.then(
+					() => ({ status: 'resolved' as const }),
+					(error) => ({ status: 'rejected' as const, error: error as unknown })
+				),
+				new Promise<{ status: 'pending' }>((resolve) => {
+					timeout = setTimeout(() => resolve({ status: 'pending' }), 25);
+				})
+			]);
+
+			expect(outcome).toEqual({ status: 'resolved' });
+			expect(loadSignal?.aborted).toBe(true);
+			const abortRegistrations = addEventListener?.mock.calls.filter(
+				(registration: unknown[]) => registration[0] === 'abort'
+			);
+			expect(abortRegistrations).toHaveLength(2);
+			for (const registration of abortRegistrations ?? []) {
+				expect(removeEventListener).toHaveBeenCalledWith('abort', registration[1]);
+			}
+			expect(postMessage).not.toHaveBeenCalled();
+			rejectDigest(lateFailure);
+			await digestPending.catch(() => undefined);
+			await Promise.resolve();
+			expect(postMessage).not.toHaveBeenCalled();
+		} finally {
+			if (timeout) clearTimeout(timeout);
+			rejectDigest(lateFailure);
+			await digestPending.catch(() => undefined);
+			await responding;
+		}
+	});
+
 	it('rejects an asset whose SHA-256 digest does not match', async () => {
 		const postMessage = vi.fn();
 		const asset = RUNTIME_LOAD_ASSETS.clang[0];

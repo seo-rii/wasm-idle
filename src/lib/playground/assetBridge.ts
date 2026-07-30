@@ -213,13 +213,26 @@ export class WorkerAssetBridge {
 				.split(',')
 				.map((encoding) => encoding.trim())
 				.includes('gzip');
-			await this.verifyIntegrity(
-				request.asset,
-				loaded.bytes,
-				runtimeBytes,
-				loaded.mimeType,
-				!httpDecodedGzip
-			);
+			if (controller.signal.aborted || generation !== this.generation) return;
+			let cancelOnAbort: (() => void) | undefined;
+			const aborted = new Promise<never>((_resolve, reject) => {
+				cancelOnAbort = () => reject(runtimeAssetAbortReason(controller.signal));
+				controller.signal.addEventListener('abort', cancelOnAbort, { once: true });
+			});
+			try {
+				const verification = this.verifyIntegrity(
+					request.asset,
+					loaded.bytes,
+					runtimeBytes,
+					loaded.mimeType,
+					!httpDecodedGzip
+				);
+				await Promise.race([verification, aborted]);
+			} finally {
+				if (cancelOnAbort) {
+					controller.signal.removeEventListener('abort', cancelOnAbort);
+				}
+			}
 			if (controller.signal.aborted || generation !== this.generation) return;
 			const buffer = transferBuffer(
 				runtimeBytes,
