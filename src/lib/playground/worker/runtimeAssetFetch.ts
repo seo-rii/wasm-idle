@@ -35,17 +35,23 @@ function resolveRuntimeAssetUrl(value: string, label: string) {
 	return url;
 }
 
-async function cancelResponseBody(response: Response) {
+async function cancelResponseBody(response: Response, reason?: unknown) {
 	try {
-		await response.body?.cancel();
+		await response.body?.cancel(reason);
 	} catch {
 		// Preserve the validation or HTTP failure that caused cancellation.
 	}
 }
 
+function abortReason(signal: AbortSignal) {
+	return (
+		signal.reason ?? new DOMException('The runtime asset download was aborted', 'AbortError')
+	);
+}
+
 function throwIfAborted(signal?: AbortSignal) {
 	if (!signal?.aborted) return;
-	throw signal.reason ?? new DOMException('The runtime asset download was aborted', 'AbortError');
+	throw abortReason(signal);
 }
 
 export async function fetchRuntimeAssetBytes({
@@ -68,9 +74,39 @@ export async function fetchRuntimeAssetBytes({
 	};
 	if (cache) requestInit.cache = cache;
 	if (signal) requestInit.signal = signal;
-	const response = await fetch(requestUrl.href, requestInit);
+	const pendingResponse = Promise.resolve(fetch(requestUrl.href, requestInit));
+	const response = signal
+		? await new Promise<Response>((resolve, reject) => {
+				let settled = false;
+				const onAbort = () => {
+					if (settled) return;
+					settled = true;
+					signal.removeEventListener('abort', onAbort);
+					reject(abortReason(signal));
+				};
+				signal.addEventListener('abort', onAbort, { once: true });
+				void pendingResponse.then(
+					(candidate) => {
+						if (settled) {
+							void cancelResponseBody(candidate, abortReason(signal));
+							return;
+						}
+						settled = true;
+						signal.removeEventListener('abort', onAbort);
+						resolve(candidate);
+					},
+					(error) => {
+						if (settled) return;
+						settled = true;
+						signal.removeEventListener('abort', onAbort);
+						reject(error);
+					}
+				);
+				if (signal.aborted) onAbort();
+			})
+		: await pendingResponse;
 	if (signal?.aborted) {
-		await cancelResponseBody(response);
+		await cancelResponseBody(response, abortReason(signal));
 		throwIfAborted(signal);
 	}
 

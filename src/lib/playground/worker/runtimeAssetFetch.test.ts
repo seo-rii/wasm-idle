@@ -69,6 +69,68 @@ describe('runtime asset fetch', () => {
 		expect(streamed.releaseLock).toHaveBeenCalledOnce();
 	});
 
+	it('aborts an uncooperative fetch promptly and cancels its late response', async () => {
+		let resolveFetch!: (response: unknown) => void;
+		const fetchStarted = new Promise<void>((resolve) => {
+			(globalThis as any).fetch = vi.fn(() => {
+				resolve();
+				return new Promise((resolveResponse) => {
+					resolveFetch = resolveResponse;
+				});
+			});
+		});
+		const cancel = vi.fn(async () => undefined);
+		const getReader = vi.fn();
+		const lateResponse = {
+			body: { cancel, getReader },
+			headers: new Headers(),
+			ok: true,
+			status: 200,
+			url: assetUrl
+		};
+		const controller = new AbortController();
+		const reason = new Error('stop common worker asset fetch');
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const progress = vi.fn();
+		const loading = fetchRuntimeAssetBytes({
+			url: assetUrl,
+			label: 'test compiler',
+			onProgress: progress,
+			signal: controller.signal
+		});
+		let timeout: ReturnType<typeof setTimeout> | undefined;
+
+		try {
+			await fetchStarted;
+			controller.abort(reason);
+			const outcome = await Promise.race([
+				loading.then(
+					(value) => ({ status: 'resolved' as const, value }),
+					(error) => ({ status: 'rejected' as const, reason: error as unknown })
+				),
+				new Promise<{ status: 'pending' }>((resolve) => {
+					timeout = setTimeout(() => resolve({ status: 'pending' }), 25);
+				})
+			]);
+
+			expect(outcome).toEqual({ status: 'rejected', reason });
+			const abortRegistration = addEventListener.mock.calls.find(
+				([type]) => type === 'abort'
+			);
+			expect(abortRegistration).toBeDefined();
+			expect(removeEventListener).toHaveBeenCalledWith('abort', abortRegistration?.[1]);
+			resolveFetch(lateResponse);
+			await vi.waitFor(() => expect(cancel).toHaveBeenCalledWith(reason));
+			expect(getReader).not.toHaveBeenCalled();
+			expect(progress).not.toHaveBeenCalled();
+		} finally {
+			if (timeout) clearTimeout(timeout);
+			resolveFetch(lateResponse);
+			await loading.catch(() => {});
+		}
+	});
+
 	it.each([
 		'/runtime/compiler.wasm',
 		'file:///tmp/compiler.wasm',
