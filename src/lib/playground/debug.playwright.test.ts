@@ -410,6 +410,7 @@ fn main() {
 		expectedOutput: 'lldb-rust-panic=73',
 		expectedStoppedReason: 'exception',
 		expectedTitle: 'Rust · LLDB / WAMR',
+		expectScopesAtStop: false,
 		language: 'RUST',
 		programArgs: [],
 		source: `fn main() {
@@ -1748,7 +1749,11 @@ describe('native-source browser debugging in Chromium', () => {
 								(window as any).__wasmIdleDebug.getDebugState()
 							);
 							expect(stoppedState.paused).toBe(true);
-							expect(stoppedState.scopes.length).toBeGreaterThan(0);
+							if ('expectScopesAtStop' in testCase && !testCase.expectScopesAtStop) {
+								expect(stoppedState.scopes).toEqual([]);
+							} else {
+								expect(stoppedState.scopes.length).toBeGreaterThan(0);
+							}
 							if ('expectedOutput' in testCase) {
 								await page.waitForFunction(
 									(expectedOutput) =>

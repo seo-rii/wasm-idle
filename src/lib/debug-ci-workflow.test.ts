@@ -135,5 +135,6 @@ describe('LLDB browser integration workflow', () => {
 		expect(browserTest).toMatch(
 			/expectedOutput: 'lldb-rust-panic=73',[\s\S]{0,160}expectedStoppedReason: 'exception'/
 		);
+		expect(browserTest).toMatch(/expectScopesAtStop: false,[\s\S]{0,200}testId: 'rust-panic'/);
 	});
 });
