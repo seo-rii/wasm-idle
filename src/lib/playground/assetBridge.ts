@@ -551,18 +551,54 @@ export class WorkerAssetBridge {
 		}
 
 		const reader = response.body.getReader();
+		let readerCancelled = false;
+		if (signal.aborted) {
+			const reason = runtimeAssetAbortReason(signal);
+			readerCancelled = true;
+			try {
+				void reader.cancel(reason).catch(() => undefined);
+			} catch {}
+			try {
+				reader.releaseLock();
+			} catch {}
+			throw reason;
+		}
+		let cancelOnAbort: (() => void) | undefined;
+		const aborted = new Promise<never>((_resolve, reject) => {
+			cancelOnAbort = () => {
+				const reason = runtimeAssetAbortReason(signal);
+				if (!readerCancelled) {
+					readerCancelled = true;
+					try {
+						void reader.cancel(reason).catch(() => undefined);
+					} catch {}
+				}
+				reject(reason);
+			};
+			signal.addEventListener('abort', cancelOnAbort, { once: true });
+		});
 		let receivedLength = 0;
 		let bytes = new Uint8Array(contentLength || DEFAULT_STREAM_BUFFER_BYTES);
+		let loadedAsset!: LoadedAsset;
+		let releaseError: unknown;
 		try {
 			while (true) {
-				const { done, value } = await reader.read();
+				if (signal.aborted) throw runtimeAssetAbortReason(signal);
+				const pendingRead = reader.read();
+				const { done, value } = await Promise.race([pendingRead, aborted]);
+				if (signal.aborted) throw runtimeAssetAbortReason(signal);
 				if (done) break;
 				if (!value) continue;
 				const nextLength = receivedLength + value.byteLength;
 				if (nextLength > MAX_RUNTIME_ASSET_BYTES) {
-					throw new Error(
+					const error = new Error(
 						`Runtime asset ${asset} exceeds the ${MAX_RUNTIME_ASSET_BYTES} byte limit`
 					);
+					readerCancelled = true;
+					try {
+						void reader.cancel(error).catch(() => undefined);
+					} catch {}
+					throw error;
 				}
 				if (nextLength > bytes.byteLength) {
 					const nextCapacity = Math.min(
@@ -579,13 +615,35 @@ export class WorkerAssetBridge {
 			}
 			if (receivedLength !== bytes.byteLength) bytes = bytes.slice(0, receivedLength);
 			this.progress.update(asset, receivedLength, contentLength ?? receivedLength);
-			return { bytes, contentEncoding, mimeType, transferOwnership: true };
+			loadedAsset = { bytes, contentEncoding, mimeType, transferOwnership: true };
 		} catch (error) {
-			await reader.cancel(error).catch(() => undefined);
+			if (signal.aborted) {
+				const reason = runtimeAssetAbortReason(signal);
+				if (!readerCancelled) {
+					readerCancelled = true;
+					try {
+						void reader.cancel(reason).catch(() => undefined);
+					} catch {}
+				}
+				throw reason;
+			}
+			if (!readerCancelled) {
+				readerCancelled = true;
+				try {
+					void reader.cancel(error).catch(() => undefined);
+				} catch {}
+			}
 			throw error;
 		} finally {
-			reader.releaseLock();
+			if (cancelOnAbort) signal.removeEventListener('abort', cancelOnAbort);
+			try {
+				reader.releaseLock();
+			} catch (error) {
+				if (!signal.aborted) releaseError = error;
+			}
 		}
+		if (releaseError) throw releaseError;
+		return loadedAsset;
 	}
 
 	private requireAllowedAssetUrl(asset: string, value: string) {
