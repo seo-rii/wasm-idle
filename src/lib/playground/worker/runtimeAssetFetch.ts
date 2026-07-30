@@ -174,22 +174,49 @@ export async function fetchRuntimeAssetBytes({
 
 	const reader = response.body.getReader();
 	let readerCancelled = false;
+	let abortCancellation: Promise<void> | undefined;
+	let cancelOnAbort: (() => void) | undefined;
+	const aborted = signal
+		? new Promise<never>((_resolve, reject) => {
+				cancelOnAbort = () => {
+					const reason = abortReason(signal);
+					if (!readerCancelled) {
+						readerCancelled = true;
+						try {
+							abortCancellation = reader.cancel(reason).then(
+								() => undefined,
+								() => undefined
+							);
+						} catch {
+							abortCancellation = Promise.resolve();
+						}
+					}
+					reject(reason);
+				};
+				signal.addEventListener('abort', cancelOnAbort, { once: true });
+			})
+		: undefined;
+	if (signal?.aborted) cancelOnAbort?.();
 	let receivedLength = 0;
 	let bytes = new Uint8Array(Math.min(maxAssetBytes, total ?? DEFAULT_STREAM_BUFFER_BYTES));
 	try {
 		while (true) {
 			throwIfAborted(signal);
-			const { done, value } = await reader.read();
+			const pendingRead = reader.read();
+			const { done, value } = aborted
+				? await Promise.race([pendingRead, aborted])
+				: await pendingRead;
+			throwIfAborted(signal);
 			if (done) break;
 			if (!value) continue;
 			const nextLength = receivedLength + value.byteLength;
 			if (nextLength > maxAssetBytes) {
+				readerCancelled = true;
 				try {
 					await reader.cancel();
 				} catch {
 					// Preserve the size-limit failure.
 				}
-				readerCancelled = true;
 				throw new Error(`${label} exceeds the ${maxAssetBytes} byte limit`);
 			}
 			if (nextLength > bytes.byteLength) {
@@ -206,15 +233,19 @@ export async function fetchRuntimeAssetBytes({
 			onProgress?.({ loaded: receivedLength, total });
 		}
 	} catch (error) {
-		if (!readerCancelled) {
+		if (abortCancellation) await abortCancellation;
+		else if (!readerCancelled) {
+			readerCancelled = true;
 			try {
-				await reader.cancel();
+				await reader.cancel(error);
 			} catch {
 				// Preserve the stream or cancellation failure.
 			}
 		}
+		throwIfAborted(signal);
 		throw error;
 	} finally {
+		if (cancelOnAbort) signal?.removeEventListener('abort', cancelOnAbort);
 		reader.releaseLock();
 	}
 

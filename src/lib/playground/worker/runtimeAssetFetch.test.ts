@@ -69,6 +69,75 @@ describe('runtime asset fetch', () => {
 		expect(streamed.releaseLock).toHaveBeenCalledOnce();
 	});
 
+	it('aborts a stalled stream read and releases its reader', async () => {
+		let markReadStarted!: () => void;
+		const readStarted = new Promise<void>((resolve) => {
+			markReadStarted = resolve;
+		});
+		let resolveRead!: (result: { done: true; value: undefined }) => void;
+		const readPending = new Promise<{ done: true; value: undefined }>((resolve) => {
+			resolveRead = resolve;
+		});
+		const read = vi.fn(() => {
+			markReadStarted();
+			return readPending;
+		});
+		const cancel = vi.fn(async () => {
+			resolveRead({ done: true, value: undefined });
+		});
+		const releaseLock = vi.fn();
+		(globalThis as any).fetch = vi.fn(async () => ({
+			body: { getReader: () => ({ cancel, read, releaseLock }) },
+			headers: new Headers(),
+			ok: true,
+			status: 200,
+			url: assetUrl
+		}));
+		const controller = new AbortController();
+		const reason = new Error('stop stalled common worker asset stream');
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const progress = vi.fn();
+		const loading = fetchRuntimeAssetBytes({
+			url: assetUrl,
+			label: 'test compiler',
+			onProgress: progress,
+			signal: controller.signal
+		});
+		let timeout: ReturnType<typeof setTimeout> | undefined;
+
+		try {
+			await readStarted;
+			controller.abort(reason);
+			const outcome = await Promise.race([
+				loading.then(
+					(value) => ({ status: 'resolved' as const, value }),
+					(error) => ({ status: 'rejected' as const, reason: error as unknown })
+				),
+				new Promise<{ status: 'pending' }>((resolve) => {
+					timeout = setTimeout(() => resolve({ status: 'pending' }), 25);
+				})
+			]);
+
+			expect(outcome).toEqual({ status: 'rejected', reason });
+			expect(cancel).toHaveBeenCalledOnce();
+			expect(cancel).toHaveBeenCalledWith(reason);
+			expect(releaseLock).toHaveBeenCalledOnce();
+			const abortRegistrations = addEventListener.mock.calls.filter(
+				([type]) => type === 'abort'
+			);
+			expect(abortRegistrations).toHaveLength(2);
+			for (const registration of abortRegistrations) {
+				expect(removeEventListener).toHaveBeenCalledWith('abort', registration[1]);
+			}
+			expect(progress).not.toHaveBeenCalled();
+		} finally {
+			if (timeout) clearTimeout(timeout);
+			resolveRead({ done: true, value: undefined });
+			await loading.catch(() => {});
+		}
+	});
+
 	it('aborts an uncooperative fetch promptly and cancels its late response', async () => {
 		let resolveFetch!: (response: unknown) => void;
 		const fetchStarted = new Promise<void>((resolve) => {
