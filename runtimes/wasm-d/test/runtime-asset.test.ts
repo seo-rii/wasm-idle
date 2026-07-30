@@ -84,6 +84,50 @@ describe('runtime asset loader', () => {
 		expect(fetchImpl).not.toHaveBeenCalled();
 	});
 
+	it('cancels an uncooperative fetch and disposes its late response', async () => {
+		let resolveFetch!: (response: Response) => void;
+		const fetchImpl = vi.fn(
+			() =>
+				new Promise<Response>((resolve) => {
+					resolveFetch = resolve;
+				})
+		);
+		const controller = new AbortController();
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const reason = new Error('stop uncooperative D asset fetch');
+		const reportProgress = vi.fn();
+		const pending = fetchRuntimeAssetBytes(
+			'https://example.test/runtime/bin/ldc2.wasm',
+			'ldc2.wasm',
+			fetchImpl,
+			reportProgress,
+			undefined,
+			DEFAULT_MAX_RUNTIME_ASSET_BYTES,
+			controller.signal
+		);
+
+		await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledOnce());
+		controller.abort(reason);
+
+		await expect(pending).rejects.toBe(reason);
+
+		const cancel = vi.fn(async () => {});
+		const getReader = vi.fn();
+		resolveFetch({
+			ok: true,
+			status: 200,
+			headers: new Headers(),
+			body: { cancel, getReader }
+		} as unknown as Response);
+		await vi.waitFor(() => expect(cancel).toHaveBeenCalledWith(reason));
+		const abortRegistration = addEventListener.mock.calls.find(([type]) => type === 'abort');
+		expect(abortRegistration).toBeDefined();
+		expect(removeEventListener).toHaveBeenCalledWith('abort', abortRegistration?.[1]);
+		expect(getReader).not.toHaveBeenCalled();
+		expect(reportProgress).not.toHaveBeenCalled();
+	});
+
 	it('rejects embedded URL credentials before invoking fetch', async () => {
 		const fetchImpl = vi.fn();
 

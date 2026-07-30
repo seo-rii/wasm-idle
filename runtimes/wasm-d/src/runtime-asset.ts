@@ -173,12 +173,48 @@ export async function fetchRuntimeAssetBytes(
 	const resolvedAssetUrl = resolvedUrl.href;
 	let response: Response;
 	try {
-		response = await fetchImpl(resolvedAssetUrl, {
-			credentials: 'omit',
-			redirect: 'error',
-			referrerPolicy: 'no-referrer',
-			...(signal ? { signal } : {})
-		});
+		const pendingResponse = Promise.resolve(
+			fetchImpl(resolvedAssetUrl, {
+				credentials: 'omit',
+				redirect: 'error',
+				referrerPolicy: 'no-referrer',
+				...(signal ? { signal } : {})
+			})
+		);
+		if (!signal) {
+			response = await pendingResponse;
+		} else {
+			response = await new Promise<Response>((resolve, reject) => {
+				let settled = false;
+				const cancelOnAbort = () => {
+					if (settled) return;
+					settled = true;
+					signal.removeEventListener('abort', cancelOnAbort);
+					reject(abortReason(signal));
+				};
+				signal.addEventListener('abort', cancelOnAbort, { once: true });
+				pendingResponse.then(
+					(fetchedResponse) => {
+						if (settled) {
+							void Promise.resolve()
+								.then(() => fetchedResponse.body?.cancel(abortReason(signal)))
+								.catch(() => {});
+							return;
+						}
+						settled = true;
+						signal.removeEventListener('abort', cancelOnAbort);
+						resolve(fetchedResponse);
+					},
+					(error) => {
+						if (settled) return;
+						settled = true;
+						signal.removeEventListener('abort', cancelOnAbort);
+						reject(error);
+					}
+				);
+				if (signal.aborted) cancelOnAbort();
+			});
+		}
 	} catch (error) {
 		if (signal?.aborted) throw abortReason(signal);
 		throw new Error(
