@@ -515,6 +515,106 @@ test('requires exact browser-native compiler asset receipts in the manifest', as
 	);
 });
 
+test('aborts an uncooperative manifest fetch and cancels its late response', async () => {
+	let markFetchStarted;
+	const fetchStarted = new Promise((resolve) => {
+		markFetchStarted = resolve;
+	});
+	let resolveFetch;
+	const pendingFetch = new Promise((resolve) => {
+		resolveFetch = resolve;
+	});
+	let requestSignal;
+	const fetcher = (_input, init) => {
+		requestSignal = init.signal;
+		markFetchStarted();
+		return pendingFetch;
+	};
+	const controller = new AbortController();
+	const reason = new Error('stop uncooperative manifest fetch');
+	const addedAbortListeners = [];
+	const removedAbortListeners = [];
+	const originalAddEventListener = controller.signal.addEventListener.bind(controller.signal);
+	const originalRemoveEventListener = controller.signal.removeEventListener.bind(
+		controller.signal
+	);
+	Object.defineProperty(controller.signal, 'addEventListener', {
+		configurable: true,
+		value(type, listener, options) {
+			if (type === 'abort') addedAbortListeners.push(listener);
+			return originalAddEventListener(type, listener, options);
+		}
+	});
+	Object.defineProperty(controller.signal, 'removeEventListener', {
+		configurable: true,
+		value(type, listener, options) {
+			if (type === 'abort') removedAbortListeners.push(listener);
+			return originalRemoveEventListener(type, listener, options);
+		}
+	});
+	const cancelReasons = [];
+	let markCancelled;
+	const cancelled = new Promise((resolve) => {
+		markCancelled = resolve;
+	});
+	let readerRequested = false;
+	const lateResponse = {
+		url: new URL('/.cache/browser-native-bundle/browser-native-manifest.v1.json', BASE_URL)
+			.href,
+		ok: true,
+		status: 200,
+		headers: new Headers(),
+		body: {
+			async cancel(cancelReason) {
+				cancelReasons.push(cancelReason);
+				markCancelled();
+			},
+			getReader() {
+				readerRequested = true;
+				throw new Error('late manifest body should not be read');
+			}
+		}
+	};
+	const manifest = fetchBrowserNativeManifest({
+		baseUrl: BASE_URL,
+		fetch: fetcher,
+		signal: controller.signal
+	});
+	let timeout;
+
+	try {
+		await fetchStarted;
+		assert.equal(requestSignal, controller.signal);
+		controller.abort(reason);
+		const outcome = await Promise.race([
+			manifest.then(
+				(value) => ({ status: 'resolved', value }),
+				(error) => ({ status: 'rejected', reason: error })
+			),
+			new Promise((resolve) => {
+				timeout = setTimeout(() => resolve({ status: 'pending' }), 25);
+			})
+		]);
+
+		assert.equal(outcome.status, 'rejected');
+		assert.equal(outcome.reason, reason);
+		assert.ok(addedAbortListeners.length > 0);
+		for (const listener of addedAbortListeners) {
+			assert.ok(removedAbortListeners.includes(listener));
+		}
+		resolveFetch(lateResponse);
+		await cancelled;
+		assert.deepEqual(cancelReasons, [reason]);
+		assert.equal(readerRequested, false);
+	} finally {
+		clearTimeout(timeout);
+		resolveFetch(lateResponse);
+		await manifest.catch(() => {});
+		delete controller.signal.addEventListener;
+		delete controller.signal.removeEventListener;
+	}
+});
+
 test('aborts bodyless manifest materialization promptly and ignores late bytes', async () => {
 	const manifestUrl = new URL(
 		'/.cache/browser-native-bundle/browser-native-manifest.v1.json',
