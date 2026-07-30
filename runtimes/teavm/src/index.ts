@@ -114,12 +114,54 @@ export async function fetchTeaVmAsset(
 			: undefined;
 	let response: Response;
 	try {
-		response = await fetchImpl(assetUrl, {
-			credentials: 'omit',
-			redirect: 'error',
-			referrerPolicy: 'no-referrer',
-			signal: options.signal
-		});
+		const fetchPromise = Promise.resolve(
+			fetchImpl(assetUrl, {
+				credentials: 'omit',
+				redirect: 'error',
+				referrerPolicy: 'no-referrer',
+				signal: options.signal
+			})
+		);
+		if (!options.signal) {
+			response = await fetchPromise;
+		} else {
+			const signal = options.signal;
+			response = await new Promise<Response>((resolve, reject) => {
+				let settled = false;
+				const onAbort = () => {
+					if (settled) return;
+					settled = true;
+					signal.removeEventListener('abort', onAbort);
+					reject(signal.reason ?? new Error('TeaVM runtime asset load was aborted.'));
+				};
+				signal.addEventListener('abort', onAbort, { once: true });
+				fetchPromise.then(
+					(fetchedResponse) => {
+						if (settled) {
+							void Promise.resolve()
+								.then(() =>
+									fetchedResponse.body?.cancel(
+										signal.reason ??
+											new Error('TeaVM runtime asset load was aborted.')
+									)
+								)
+								.catch(() => {});
+							return;
+						}
+						settled = true;
+						signal.removeEventListener('abort', onAbort);
+						resolve(fetchedResponse);
+					},
+					(error) => {
+						if (settled) return;
+						settled = true;
+						signal.removeEventListener('abort', onAbort);
+						reject(error);
+					}
+				);
+				if (signal.aborted) onAbort();
+			});
+		}
 	} catch (error) {
 		if (options.signal?.aborted) {
 			throw options.signal.reason ?? new Error('TeaVM runtime asset load was aborted.');

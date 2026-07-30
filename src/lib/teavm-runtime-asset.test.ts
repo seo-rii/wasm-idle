@@ -195,6 +195,37 @@ describe('TeaVM runtime asset boundary', () => {
 		expect(cancelled).toBe(true);
 	});
 
+	it('rejects promptly and cancels a late response when custom fetch ignores abort', async () => {
+		let resolveFetch!: (response: Response) => void;
+		const fetchMock = vi.fn(
+			() =>
+				new Promise<Response>((resolve) => {
+					resolveFetch = resolve;
+				})
+		);
+		const controller = new AbortController();
+		const reason = new Error('stop TeaVM asset loading');
+		const pending = fetchTeaVmAsset('compiler.wasm', {
+			baseUrl: 'https://assets.example/teavm/',
+			fetch: fetchMock,
+			signal: controller.signal
+		});
+
+		await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+		controller.abort(reason);
+
+		await expect(pending).rejects.toBe(reason);
+
+		const cancel = vi.fn(async () => {});
+		resolveFetch({
+			ok: true,
+			url: 'https://assets.example/teavm/compiler.wasm',
+			headers: new Headers(),
+			body: { cancel }
+		} as unknown as Response);
+		await vi.waitFor(() => expect(cancel).toHaveBeenCalledWith(reason));
+	});
+
 	it('rejects substituted final URLs and unknown runtime assets', async () => {
 		let cancelled = false;
 		const fetchMock = vi.fn(async () => {
