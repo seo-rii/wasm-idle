@@ -534,6 +534,70 @@ describe('runtime asset fetch fallback', () => {
 		expect(jsonFetch).not.toHaveBeenCalled();
 	});
 
+	it('rejects promptly when a bodyless asset read is aborted', async () => {
+		vi.useFakeTimers();
+		const controller = new AbortController();
+		const reason = new Error('cancelled during stalled bodyless read');
+		const onProgress = vi.fn();
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		let markMaterializationStarted!: () => void;
+		const materializationStarted = new Promise<void>((resolve) => {
+			markMaterializationStarted = resolve;
+		});
+		let resolveArrayBuffer!: (value: ArrayBuffer) => void;
+		const arrayBufferPromise = new Promise<ArrayBuffer>((resolve) => {
+			resolveArrayBuffer = resolve;
+		});
+		const arrayBuffer = vi.fn(() => {
+			markMaterializationStarted();
+			return arrayBufferPromise;
+		});
+		const pending = fetchRuntimeAssetBytes(
+			'https://example.test/runtime/data.bin',
+			'data.bin',
+			async () =>
+				({
+					url: '',
+					ok: true,
+					status: 200,
+					headers: new Headers(),
+					body: null,
+					arrayBuffer
+				}) as unknown as Response,
+			false,
+			onProgress,
+			{ signal: controller.signal }
+		);
+
+		await materializationStarted;
+		controller.abort(reason);
+		try {
+			const outcome = Promise.race([
+				pending.then(
+					(value) => ({ status: 'resolved', value }),
+					(error) => ({ status: 'rejected', reason: error })
+				),
+				new Promise((resolve) => {
+					setTimeout(() => resolve({ status: 'pending' }), 1);
+				})
+			]);
+			await vi.advanceTimersByTimeAsync(1);
+
+			expect(await outcome).toEqual({ status: 'rejected', reason });
+			expect(onProgress).not.toHaveBeenCalled();
+			const abortRegistration = addEventListener.mock.calls.find(
+				([type]) => type === 'abort'
+			);
+			expect(abortRegistration).toBeDefined();
+			expect(removeEventListener).toHaveBeenCalledWith('abort', abortRegistration?.[1]);
+		} finally {
+			resolveArrayBuffer(Uint8Array.of(1, 2, 3).buffer);
+			await pending.catch(() => {});
+			vi.useRealTimers();
+		}
+	});
+
 	it('cancels a failed response before trying the gzip fallback', async () => {
 		const assetUrl = 'https://example.test/runtime/llvm/lld.wasm';
 		let cancelled = false;

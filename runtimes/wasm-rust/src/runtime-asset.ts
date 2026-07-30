@@ -118,8 +118,23 @@ async function readResponseBytes(
 		);
 	}
 	if (!response.body) {
-		const bytes = new Uint8Array(await response.arrayBuffer());
-		throwIfRuntimeAssetAborted(signal);
+		let cancelOnAbort: (() => void) | undefined;
+		const aborted = signal
+			? new Promise<never>((_resolve, reject) => {
+					cancelOnAbort = () => reject(runtimeAssetAbortReason(signal));
+					signal.addEventListener('abort', cancelOnAbort, { once: true });
+				})
+			: undefined;
+		let source: ArrayBuffer;
+		try {
+			throwIfRuntimeAssetAborted(signal);
+			const materialized = response.arrayBuffer();
+			source = aborted ? await Promise.race([materialized, aborted]) : await materialized;
+			throwIfRuntimeAssetAborted(signal);
+		} finally {
+			if (cancelOnAbort) signal?.removeEventListener('abort', cancelOnAbort);
+		}
+		const bytes = new Uint8Array(source);
 		if (bytes.byteLength > maxAssetBytes) {
 			throw new Error(
 				`wasm-rust runtime asset ${assetLabel} download size exceeds the ${maxAssetBytes} byte limit`
