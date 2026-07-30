@@ -387,15 +387,19 @@ describe('BrowserLldbSession', () => {
 					source: { path: '/workspace/main.cpp' }
 				}
 			]);
-		await expect(session.setBreakpoints({ path: '/workspace/main.cpp' }, [7])).resolves.toEqual(
-			[
-				{
-					verified: false,
-					line: 7,
-					source: { path: '/workspace/main.cpp' }
-				}
-			]
+		const dynamicBreakpoints = await session.setBreakpoints(
+			{ path: '/workspace/main.cpp' },
+			[7]
 		);
+		expect(dynamicBreakpoints).toEqual([
+			{
+				verified: false,
+				line: 7,
+				source: { path: '/workspace/main.cpp' }
+			}
+		]);
+		dynamicBreakpoints[0]!.verified = true;
+		dynamicBreakpoints[0]!.source!.path = '/workspace/caller-mutated.cpp';
 		expect(session.getResolvedBreakpoints('/workspace/main.cpp')).toEqual([
 			{
 				verified: false,
@@ -403,6 +407,24 @@ describe('BrowserLldbSession', () => {
 				source: { path: '/workspace/main.cpp' }
 			}
 		]);
+		const breakpointSnapshot = session.getResolvedBreakpoints('/workspace/main.cpp');
+		breakpointSnapshot[0]!.verified = true;
+		breakpointSnapshot[0]!.source!.path = '/workspace/snapshot-mutated.cpp';
+		expect(session.getResolvedBreakpoints('/workspace/main.cpp')).toEqual([
+			{
+				verified: false,
+				line: 7,
+				source: { path: '/workspace/main.cpp' }
+			}
+		]);
+		const disposeMutatingEventListener = session.onEvent((event) => {
+			if (event.seq !== 501) return;
+			const body = event.body as { breakpoint?: { source?: { path: string } } } | undefined;
+			if (body?.breakpoint?.source) {
+				body.breakpoint.source.path = '/workspace/listener-mutated.cpp';
+			}
+			disposeMutatingEventListener();
+		});
 		await lldbWorker?.emitDapEvent({
 			seq: 501,
 			type: 'event',

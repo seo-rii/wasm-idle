@@ -25,6 +25,13 @@ function createGeneration(): DebugSessionGeneration {
 	return `wasm-debug-${Date.now().toString(36)}-${generation.toString(36)}`;
 }
 
+function cloneResolvedBreakpoints(breakpoints: readonly ResolvedBreakpoint[]) {
+	return breakpoints.map((breakpoint) => ({
+		...breakpoint,
+		...(breakpoint.source ? { source: { ...breakpoint.source } } : {})
+	}));
+}
+
 function defaultWorkerFactory(kind: DebugWorkerKind): WorkerLike {
 	if (kind === 'lldb') {
 		return new Worker(new URL('./worker/lldb-worker.js', import.meta.url), {
@@ -377,9 +384,9 @@ export class BrowserLldbSession {
 				}
 			}
 			for (const id of activeIds) this.retiredBreakpointIds.delete(id);
-			this.resolvedBreakpoints.set(source.path, resolved);
+			this.resolvedBreakpoints.set(source.path, cloneResolvedBreakpoints(resolved));
 		}
-		return resolved;
+		return cloneResolvedBreakpoints(resolved);
 	}
 
 	onEvent(listener: (event: DapEvent) => void) {
@@ -388,7 +395,7 @@ export class BrowserLldbSession {
 	}
 
 	getResolvedBreakpoints(sourcePath: string) {
-		return [...(this.resolvedBreakpoints.get(sourcePath) ?? [])];
+		return cloneResolvedBreakpoints(this.resolvedBreakpoints.get(sourcePath) ?? []);
 	}
 
 	private applyBreakpointEvent(event: DapEvent) {
@@ -437,11 +444,12 @@ export class BrowserLldbSession {
 					this.retiredBreakpointIds.add(breakpoint.id);
 				}
 			} else {
+				const resolvedSource = breakpoint.source ?? next[index].source;
 				next[index] = {
 					...next[index],
 					...breakpoint,
 					verified: breakpoint.verified === true,
-					source: breakpoint.source ?? next[index].source
+					...(resolvedSource ? { source: { ...resolvedSource } } : {})
 				};
 			}
 			this.resolvedBreakpoints.set(path, next);
