@@ -63,6 +63,9 @@ await session.initialize();
 await session.setBreakpoints({ path: '/workspace/main.cpp' }, [12, 18]);
 ```
 
+Configured and dynamic breakpoint lines must be positive integers. Invalid lines are rejected before
+debug workers or a DAP request are created, and do not supersede an in-flight valid update.
+
 `setBreakpoints()` updates the session's resolved-breakpoint cache as well as sending DAP. Later
 `breakpoint` events therefore retain the IDs and source mapping from dynamic editor changes;
 out-of-order responses cannot replace the newest cached set. A superseded call resolves to that

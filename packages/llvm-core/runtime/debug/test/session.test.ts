@@ -522,6 +522,19 @@ describe('BrowserLldbSession', () => {
 				source: { path: '/workspace/main.cpp' }
 			}
 		]);
+		const invalidLineRequestCount = lldbWorker!.requests.length;
+		const invalidLineResults = await Promise.allSettled(
+			[0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY].map((line) =>
+				session.setBreakpoints({ path: '/workspace/main.cpp' }, [line])
+			)
+		);
+		expect(invalidLineResults.map((result) => result.status)).toEqual(
+			Array.from({ length: invalidLineResults.length }, () => 'rejected')
+		);
+		for (const result of invalidLineResults) {
+			if (result.status === 'rejected') expect(result.reason).toBeInstanceOf(RangeError);
+		}
+		expect(lldbWorker!.requests).toHaveLength(invalidLineRequestCount);
 		const setBreakpointRequestCount = lldbWorker!.requests.filter(
 			(request) => request.command === 'setBreakpoints'
 		).length;
@@ -792,6 +805,45 @@ describe('BrowserLldbSession', () => {
 			expect(created).toBe(false);
 		}
 	});
+
+	it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])(
+		'rejects configured breakpoint line $line before creating workers',
+		async (line) => {
+			let created = false;
+			const session = new BrowserLldbSession({
+				manifest,
+				runtimeBaseUrl: 'https://cdn.example/debug/',
+				module: Uint8Array.of(0, 97, 115, 109),
+				sources: [
+					{
+						path: '/workspace/main.cpp',
+						content: 'int main() { return 0; }'
+					}
+				],
+				breakpoints: [
+					{
+						source: { path: '/workspace/main.cpp' },
+						lines: [line]
+					}
+				],
+				fetchImpl: async () => new Response('debug-asset'),
+				workerFactory: (kind) => {
+					created = true;
+					return new FakeWorker(kind, []);
+				},
+				requestTimeoutMs: 1_000,
+				readyTimeoutMs: 1_000
+			});
+
+			const result = await session.initialize().then(
+				() => undefined,
+				(error: unknown) => error
+			);
+			await session.dispose();
+			expect(result).toBeInstanceOf(RangeError);
+			expect(created).toBe(false);
+		}
+	);
 
 	it('shares one initialization flight across concurrent callers', async () => {
 		const commands: string[] = [];

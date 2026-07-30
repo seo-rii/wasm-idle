@@ -32,6 +32,15 @@ function cloneResolvedBreakpoints(breakpoints: readonly ResolvedBreakpoint[]) {
 	}));
 }
 
+function validateBreakpointLines(lines: readonly number[]) {
+	for (const line of lines) {
+		if (!Number.isInteger(line) || line < 1) {
+			throw new RangeError(`Breakpoint lines must be positive integers; received ${line}.`);
+		}
+	}
+	return [...lines];
+}
+
 function defaultWorkerFactory(kind: DebugWorkerKind): WorkerLike {
 	if (kind === 'lldb') {
 		return new Worker(new URL('./worker/lldb-worker.js', import.meta.url), {
@@ -106,6 +115,10 @@ export class BrowserLldbSession {
 			throw new Error(
 				'LLDB debugging requires cross-origin isolation (COOP and COEP response headers)'
 			);
+		}
+		for (const breakpoint of this.options.breakpoints ?? []) {
+			validateDebugSourcePath(breakpoint.source.path);
+			validateBreakpointLines(breakpoint.lines);
 		}
 
 		const module = new Uint8Array(
@@ -352,10 +365,10 @@ export class BrowserLldbSession {
 
 	async setBreakpoints(source: DebugSource, lines: number[]) {
 		validateDebugSourcePath(source.path);
+		const requestedLines = validateBreakpointLines(lines);
 		const sourcePath = source.path;
 		const requestVersion = (this.breakpointRequestVersions.get(sourcePath) ?? 0) + 1;
 		this.breakpointRequestVersions.set(sourcePath, requestVersion);
-		const requestedLines = [...lines];
 		let response: { breakpoints?: ResolvedBreakpoint[] };
 		try {
 			response = await this.awaitWhileActive(
