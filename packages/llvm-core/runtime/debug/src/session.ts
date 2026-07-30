@@ -433,6 +433,8 @@ export class BrowserLldbSession {
 					breakpoint?: ResolvedBreakpoint;
 			  }
 			| undefined;
+		const reason = body?.reason;
+		if (reason !== 'new' && reason !== 'changed' && reason !== 'removed') return;
 		const breakpoint = body?.breakpoint;
 		if (!breakpoint) return;
 		if (breakpoint.id !== undefined && this.retiredBreakpointIds.has(breakpoint.id)) {
@@ -452,7 +454,7 @@ export class BrowserLldbSession {
 					: current.findIndex((candidate) => candidate.id === breakpoint.id);
 			if (
 				index < 0 &&
-				body?.reason !== 'removed' &&
+				reason !== 'removed' &&
 				breakpoint.id !== undefined &&
 				sourcePath === path
 			) {
@@ -465,7 +467,7 @@ export class BrowserLldbSession {
 			}
 			if (index < 0) continue;
 			const next = [...current];
-			if (body?.reason === 'removed') {
+			if (reason === 'removed') {
 				next.splice(index, 1);
 				if (breakpoint.id !== undefined) {
 					this.retiredBreakpointIds.add(breakpoint.id);

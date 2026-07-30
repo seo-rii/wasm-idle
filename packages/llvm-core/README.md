@@ -68,7 +68,9 @@ debug workers or a DAP request are created, and do not supersede an in-flight va
 
 `setBreakpoints()` updates the session's resolved-breakpoint cache as well as sending DAP. Later
 `breakpoint` events therefore retain the IDs and source mapping from dynamic editor changes;
-out-of-order responses cannot replace the newest cached set. A superseded call resolves to that
+only `new`, `changed`, and `removed` reasons can mutate the cache, while malformed reasons remain
+available to raw event listeners without changing state.
+Out-of-order responses cannot replace the newest cached set. A superseded call resolves to that
 current snapshot even when its obsolete DAP response fails; only the current request propagates its
 failure. Use `getResolvedBreakpoints(path)` to read the current normalized snapshot. Returned
 breakpoint and source objects are isolated copies, and the request source is captured before awaiting

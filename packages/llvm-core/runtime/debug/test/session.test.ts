@@ -522,6 +522,34 @@ describe('BrowserLldbSession', () => {
 				source: { path: '/workspace/main.cpp' }
 			}
 		]);
+		const malformedEventReceived = new Promise<void>((resolve) => {
+			const dispose = session.onEvent((event) => {
+				if (event.seq !== 504) return;
+				dispose();
+				resolve();
+			});
+		});
+		await lldbWorker?.emitDapEvent({
+			seq: 504,
+			type: 'event',
+			event: 'breakpoint',
+			body: {
+				reason: 'unexpected',
+				breakpoint: {
+					verified: true,
+					line: 7,
+					source: { path: '/workspace/main.cpp' }
+				}
+			}
+		});
+		await malformedEventReceived;
+		expect(session.getResolvedBreakpoints('/workspace/main.cpp')).toEqual([
+			{
+				verified: false,
+				line: 7,
+				source: { path: '/workspace/main.cpp' }
+			}
+		]);
 		const invalidLineRequestCount = lldbWorker!.requests.length;
 		const invalidLineResults = await Promise.allSettled(
 			[0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY].map((line) =>
