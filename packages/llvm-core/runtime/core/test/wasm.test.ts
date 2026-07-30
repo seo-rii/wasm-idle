@@ -718,7 +718,65 @@ describe('WebAssembly loading utilities', () => {
 		);
 	});
 
-	it('cancels stalled bodyless gzip decompression with the caller reason', async () => {
+	it('rejects decompression limits without awaiting reader cleanup', async () => {
+		const contents = Uint8Array.of(1, 2, 3, 4, 5);
+		const compressed = Uint8Array.from(gzipSync(contents, { level: 9, mtime: 0 }));
+		let resolveCancellation!: () => void;
+		const stalledCancellation = new Promise<void>((resolve) => {
+			resolveCancellation = resolve;
+		});
+		const reader = {
+			read: vi.fn(async () => ({ done: false as const, value: contents })),
+			cancel: vi.fn((_reason?: unknown) => stalledCancellation),
+			releaseLock: vi.fn(() => {
+				throw new Error('oversized reader lock cannot be released');
+			})
+		};
+		const decompressed = new ReadableStream<Uint8Array>();
+		vi.spyOn(decompressed, 'getReader').mockReturnValue(reader as never);
+		const writable = new WritableStream<Uint8Array>();
+		vi.stubGlobal(
+			'DecompressionStream',
+			class {
+				readonly readable = decompressed;
+				readonly writable = writable;
+			}
+		);
+		const pending = decompressGzip(compressed, 'oversized.wasm.gz', 4);
+		let timeout: ReturnType<typeof setTimeout> | undefined;
+
+		try {
+			const outcome = await Promise.race([
+				pending.then(
+					(value) => ({ status: 'resolved' as const, value }),
+					(error) => ({ status: 'rejected' as const, reason: error as unknown })
+				),
+				new Promise<{ status: 'pending' }>((resolve) => {
+					timeout = setTimeout(() => resolve({ status: 'pending' }), 25);
+				})
+			]);
+
+			expect(outcome.status).toBe('rejected');
+			if (outcome.status !== 'rejected') throw new Error('expected decompression to reject');
+			expect(outcome.reason).toBeInstanceOf(Error);
+			expect((outcome.reason as Error).message).toContain(
+				'Runtime asset oversized.wasm.gz decompressed size exceeds the 4 byte limit'
+			);
+			expect(reader.cancel).toHaveBeenCalledOnce();
+			const cancellationReason = reader.cancel.mock.calls[0]?.[0];
+			expect(cancellationReason).toBeInstanceOf(Error);
+			expect((cancellationReason as Error).message).toBe(
+				'Runtime asset oversized.wasm.gz decompressed size exceeds the 4 byte limit'
+			);
+			expect(reader.releaseLock).toHaveBeenCalledOnce();
+		} finally {
+			if (timeout) clearTimeout(timeout);
+			resolveCancellation();
+			await pending.catch(() => {});
+		}
+	});
+
+	it('aborts stalled bodyless gzip decompression without awaiting cancellation', async () => {
 		const contents = Uint8Array.of(1, 2, 3, 4);
 		const compressed = Uint8Array.from(gzipSync(contents, { level: 9, mtime: 0 }));
 		const url = 'https://cdn.test/llvm/bodyless-decompression.wasm.gz';
@@ -732,17 +790,23 @@ describe('WebAssembly loading utilities', () => {
 				arrayBuffer: async () => compressed.buffer
 			}))
 		);
-		let outputController!: ReadableStreamDefaultController<Uint8Array>;
-		let cancellationReason: unknown;
-		const decompressed = new ReadableStream<Uint8Array>({
-			start(controller) {
-				outputController = controller;
-			},
-			cancel(reason) {
-				cancellationReason = reason;
-			}
+		let resolveRead!: (result: ReadableStreamReadResult<Uint8Array>) => void;
+		const stalledRead = new Promise<ReadableStreamReadResult<Uint8Array>>((resolve) => {
+			resolveRead = resolve;
 		});
-		const getReader = vi.spyOn(decompressed, 'getReader');
+		let resolveCancellation!: () => void;
+		const stalledCancellation = new Promise<void>((resolve) => {
+			resolveCancellation = resolve;
+		});
+		const reader = {
+			read: vi.fn(() => stalledRead),
+			cancel: vi.fn((_reason?: unknown) => stalledCancellation),
+			releaseLock: vi.fn(() => {
+				throw new Error('stalled reader lock cannot be released');
+			})
+		};
+		const decompressed = new ReadableStream<Uint8Array>();
+		const getReader = vi.spyOn(decompressed, 'getReader').mockReturnValue(reader as never);
 		const writable = new WritableStream<Uint8Array>();
 		vi.stubGlobal(
 			'DecompressionStream',
@@ -773,7 +837,9 @@ describe('WebAssembly loading utilities', () => {
 			]);
 
 			expect(outcome).toEqual({ status: 'rejected', reason });
-			expect(cancellationReason).toBe(reason);
+			expect(reader.cancel).toHaveBeenCalledOnce();
+			expect(reader.cancel).toHaveBeenCalledWith(reason);
+			expect(reader.releaseLock).toHaveBeenCalledOnce();
 			const abortRegistrations = addEventListener.mock.calls.filter(
 				([type]) => type === 'abort'
 			);
@@ -783,9 +849,8 @@ describe('WebAssembly loading utilities', () => {
 			expect(progress.set).not.toHaveBeenCalledWith(1);
 		} finally {
 			if (timeout) clearTimeout(timeout);
-			try {
-				outputController.close();
-			} catch {}
+			resolveRead({ done: true, value: undefined });
+			resolveCancellation();
 			await pending.catch(() => {});
 		}
 	});

@@ -26,21 +26,51 @@ async function readBoundedDecompressionStream(
 	signal?: AbortSignal
 ) {
 	const reader = stream.getReader();
-	const cancelOnAbort = () => {
-		void reader.cancel(runtimeAbortReason(signal!)).catch(() => {});
-	};
-	signal?.addEventListener('abort', cancelOnAbort, { once: true });
+	const abortSignal = signal;
+	let readerCancelled = false;
+	if (abortSignal?.aborted) {
+		readerCancelled = true;
+		const reason = runtimeAbortReason(abortSignal);
+		try {
+			void Promise.resolve(reader.cancel(reason)).catch(() => {});
+		} catch {}
+		try {
+			reader.releaseLock();
+		} catch {}
+		throw reason;
+	}
+	let cancelOnAbort: (() => void) | undefined;
+	const aborted = abortSignal
+		? new Promise<never>((_resolve, reject) => {
+				cancelOnAbort = () => {
+					if (readerCancelled) return;
+					readerCancelled = true;
+					const reason = runtimeAbortReason(abortSignal);
+					try {
+						void Promise.resolve(reader.cancel(reason)).catch(() => {});
+					} catch {}
+					reject(reason);
+				};
+				abortSignal.addEventListener('abort', cancelOnAbort, { once: true });
+			})
+		: undefined;
 	let bytes = new Uint8Array(Math.min(DEFAULT_DECOMPRESSION_BUFFER_BYTES, maxOutputBytes));
 	let receivedLength = 0;
+	let completed = false;
+	let result!: Uint8Array;
+	let releaseFailure: { error: unknown } | undefined;
 	try {
-		throwIfRuntimeAssetAborted(signal);
+		throwIfRuntimeAssetAborted(abortSignal);
 		while (true) {
-			const { done, value } = await reader.read();
+			const pendingRead = reader.read();
+			const { done, value } = aborted
+				? await Promise.race([pendingRead, aborted])
+				: await pendingRead;
+			throwIfRuntimeAssetAborted(abortSignal);
 			if (done) break;
 			if (!value) continue;
 			const nextLength = receivedLength + value.byteLength;
 			if (nextLength > maxOutputBytes) {
-				await reader.cancel().catch(() => {});
 				throw new Error(
 					`Runtime asset ${assetUrl} decompressed size exceeds the ${maxOutputBytes} byte limit`
 				);
@@ -57,15 +87,28 @@ async function readBoundedDecompressionStream(
 			bytes.set(value, receivedLength);
 			receivedLength = nextLength;
 		}
-		throwIfRuntimeAssetAborted(signal);
-		return bytes.subarray(0, receivedLength);
+		throwIfRuntimeAssetAborted(abortSignal);
+		result = bytes.subarray(0, receivedLength);
+		completed = true;
 	} catch (error) {
-		if (signal?.aborted) throw runtimeAbortReason(signal);
+		if (abortSignal?.aborted) throw runtimeAbortReason(abortSignal);
+		if (!readerCancelled) {
+			readerCancelled = true;
+			try {
+				void Promise.resolve(reader.cancel(error)).catch(() => {});
+			} catch {}
+		}
 		throw error;
 	} finally {
-		signal?.removeEventListener('abort', cancelOnAbort);
-		reader.releaseLock();
+		if (cancelOnAbort) abortSignal?.removeEventListener('abort', cancelOnAbort);
+		try {
+			reader.releaseLock();
+		} catch (error) {
+			if (completed) releaseFailure = { error };
+		}
 	}
+	if (releaseFailure) throw releaseFailure.error;
+	return result;
 }
 
 function resolveRuntimeAssetUrl(name: string) {
