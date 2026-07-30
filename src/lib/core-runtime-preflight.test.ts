@@ -303,6 +303,75 @@ describe('runtime registry asset preflight', () => {
 		expect(removeEventListener).toHaveBeenCalledOnce();
 	});
 
+	it('cancels integrity verification promptly and ignores a late digest failure', async () => {
+		let rejectDigest!: (reason: unknown) => void;
+		const digest = vi.spyOn(globalThis.crypto.subtle, 'digest').mockImplementation(
+			() =>
+				new Promise<ArrayBuffer>((_resolve, reject) => {
+					rejectDigest = reject;
+				})
+		);
+		let addEventListener!: ReturnType<typeof vi.spyOn>;
+		let removeEventListener!: ReturnType<typeof vi.spyOn>;
+		const controller = new AbortController();
+		const reason = new Error('cancel integrity verification');
+		let published = false;
+		const pending = preflightRuntimeAssets({
+			manifest: createManifest([assets[0]!]),
+			runtimeId: 'fortran/preflight-test',
+			rootUrl: 'https://example.test/',
+			fetch: async (_input, init) => {
+				const signal = init?.signal as AbortSignal;
+				addEventListener = vi.spyOn(signal, 'addEventListener');
+				removeEventListener = vi.spyOn(signal, 'removeEventListener');
+				return responseFor('https://example.test/runtime/loader.js');
+			},
+			signal: controller.signal
+		}).then((result) => {
+			published = true;
+			return result;
+		});
+		let timeout: ReturnType<typeof setTimeout> | undefined;
+
+		try {
+			await vi.waitFor(() => expect(digest).toHaveBeenCalledOnce());
+			controller.abort(reason);
+			const outcome = await Promise.race([
+				pending.then(
+					(value) => ({ status: 'resolved', value }),
+					(error) => ({ status: 'rejected', reason: error })
+				),
+				new Promise((resolve) => {
+					timeout = setTimeout(() => resolve({ status: 'pending' }), 25);
+				})
+			]);
+
+			expect(outcome.status).toBe('rejected');
+			expect('reason' in outcome ? outcome.reason : undefined).toMatchObject({
+				name: 'CancelledError',
+				code: 'cancelled',
+				phase: 'asset',
+				cause: reason
+			});
+			const abortRegistrations = addEventListener.mock.calls.filter(
+				([type]) => type === 'abort'
+			);
+			expect(abortRegistrations.length).toBeGreaterThan(0);
+			for (const registration of abortRegistrations) {
+				expect(removeEventListener).toHaveBeenCalledWith('abort', registration[1]);
+			}
+
+			rejectDigest(new Error('late integrity failure'));
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			expect(published).toBe(false);
+		} finally {
+			if (timeout) clearTimeout(timeout);
+			rejectDigest(new Error('release integrity verification'));
+			await pending.catch(() => {});
+			digest.mockRestore();
+		}
+	});
+
 	it('rejects credentialed asset roots without copying secrets into the error', async () => {
 		const secret = 'root-password-must-not-leak';
 		let rejected: unknown;

@@ -420,27 +420,39 @@ async function preflightAsset(
 		uncompressedSha256: asset.uncompressedSha256,
 		uncompressedBytes: asset.uncompressedBytes
 	};
-	const deliveryIntegrity = await verifyRuntimeAssetIntegrity({
-		asset: asset.path,
-		bytes,
-		expected,
-		stage: 'compressed',
-		runtimeId,
-		profileId
-	});
+	if (signal.aborted) {
+		throw signal.reason ?? new Error('Runtime asset preflight was aborted');
+	}
+	const deliveryIntegrity = await waitForAbortable(
+		verifyRuntimeAssetIntegrity({
+			asset: asset.path,
+			bytes,
+			expected,
+			stage: 'compressed',
+			runtimeId,
+			profileId
+		}),
+		signal
+	);
 	const mimeType = response.headers.get('content-type') || undefined;
-	const runtimeIntegrity =
-		asset.encoding === 'identity'
-			? await verifyRuntimeAssetIntegrity({
-					asset: asset.path,
-					bytes,
-					expected,
-					stage: 'uncompressed',
-					mimeType,
-					runtimeId,
-					profileId
-				})
-			: undefined;
+	let runtimeIntegrity: VerifiedRuntimeAssetIntegrity | undefined;
+	if (asset.encoding === 'identity') {
+		if (signal.aborted) {
+			throw signal.reason ?? new Error('Runtime asset preflight was aborted');
+		}
+		runtimeIntegrity = await waitForAbortable(
+			verifyRuntimeAssetIntegrity({
+				asset: asset.path,
+				bytes,
+				expected,
+				stage: 'uncompressed',
+				mimeType,
+				runtimeId,
+				profileId
+			}),
+			signal
+		);
+	}
 	return Object.freeze({
 		key: asset.key,
 		path: asset.path,
