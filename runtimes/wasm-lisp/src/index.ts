@@ -112,6 +112,34 @@ function throwIfAborted(signal?: AbortSignal) {
 	if (signal?.aborted) throw abortReason(signal);
 }
 
+function waitForPromiseWithSignal<T>(pending: Promise<T>, signal: AbortSignal) {
+	return new Promise<T>((resolve, reject) => {
+		let settled = false;
+		const onAbort = () => {
+			if (settled) return;
+			settled = true;
+			signal.removeEventListener('abort', onAbort);
+			reject(abortReason(signal));
+		};
+		signal.addEventListener('abort', onAbort, { once: true });
+		void pending.then(
+			(value) => {
+				if (settled) return;
+				settled = true;
+				signal.removeEventListener('abort', onAbort);
+				resolve(value);
+			},
+			(error) => {
+				if (settled) return;
+				settled = true;
+				signal.removeEventListener('abort', onAbort);
+				reject(error);
+			}
+		);
+		if (signal.aborted) onAbort();
+	});
+}
+
 class BufferedInput {
 	private chunk: Uint8Array<ArrayBufferLike> = new Uint8Array(0);
 	private offset = 0;
@@ -618,31 +646,7 @@ export async function createLispCompiler(
 			const bytes = await fetchBytes(moduleUrl, fetcher, maxAssetBytes, signal);
 			throwIfAborted(signal);
 			const pendingCompile = WebAssembly.compile(bytes);
-			const compiled = await new Promise<WebAssembly.Module>((resolve, reject) => {
-				let settled = false;
-				const onAbort = () => {
-					if (settled) return;
-					settled = true;
-					signal.removeEventListener('abort', onAbort);
-					reject(abortReason(signal));
-				};
-				signal.addEventListener('abort', onAbort, { once: true });
-				void pendingCompile.then(
-					(module) => {
-						if (settled) return;
-						settled = true;
-						signal.removeEventListener('abort', onAbort);
-						resolve(module);
-					},
-					(error) => {
-						if (settled) return;
-						settled = true;
-						signal.removeEventListener('abort', onAbort);
-						reject(error);
-					}
-				);
-				if (signal.aborted) onAbort();
-			});
+			const compiled = await waitForPromiseWithSignal(pendingCompile, signal);
 			throwIfAborted(signal);
 			coreModuleCache.set(key, compiled);
 			return compiled;
@@ -677,8 +681,12 @@ export async function createLispCompiler(
 			});
 			let exitCode = 0;
 			try {
+				const compilerModule = request.signal
+					? await waitForPromiseWithSignal(compilerModulePromise, request.signal)
+					: await compilerModulePromise;
+				throwIfAborted(request.signal);
 				exitCode = await runComponentModule(
-					await compilerModulePromise,
+					compilerModule,
 					(moduleName) => getCompilerCoreModule(moduleName, request.signal),
 					wasi.imports
 				);

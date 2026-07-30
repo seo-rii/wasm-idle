@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -65,6 +66,86 @@ describe('wasm-lisp Puppy Scheme runtime', () => {
 			compiler.compile({ code: '(display 1)', signal: controller.signal })
 		).rejects.toBe(reason);
 		expect(fetchImpl).not.toHaveBeenCalled();
+	});
+
+	it('aborts a stalled compiler-module import without poisoning a retry', async () => {
+		const temporaryRuntime = await mkdtemp(path.join(tmpdir(), 'wasm-lisp-import-'));
+		const fixtureKey = `__wasm_lisp_import_${path.basename(temporaryRuntime)}`;
+		let markImportStarted!: () => void;
+		const importStarted = new Promise<void>((resolve) => {
+			markImportStarted = resolve;
+		});
+		let releaseImport!: () => void;
+		const importGate = new Promise<void>((resolve) => {
+			releaseImport = resolve;
+		});
+		const state = {
+			gate: importGate,
+			markStarted: markImportStarted,
+			evaluated: false,
+			instantiateCalls: 0
+		};
+		const fixtureGlobals = globalThis as unknown as Record<string, unknown>;
+		fixtureGlobals[fixtureKey] = state;
+		await writeFile(path.join(temporaryRuntime, 'package.json'), '{"type":"module"}\n');
+		await writeFile(
+			path.join(temporaryRuntime, 'puppyc.js'),
+			`const state = globalThis[${JSON.stringify(fixtureKey)}];
+state.markStarted();
+await state.gate;
+state.evaluated = true;
+
+export async function instantiate() {
+	state.instantiateCalls += 1;
+	return { run: { async run() {} } };
+}
+`
+		);
+		const runtime = await loadRuntime();
+		const compiler = await runtime.createLispCompiler({
+			runtimeBaseUrl: pathToFileURL(`${temporaryRuntime}/`)
+		});
+		const controller = new AbortController();
+		const reason = new Error('stop stalled Puppy compiler import');
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const compile = compiler.compile({ code: '(display 1)', signal: controller.signal });
+		let timeout: ReturnType<typeof setTimeout> | undefined;
+
+		try {
+			await importStarted;
+			controller.abort(reason);
+			const outcome = await Promise.race([
+				compile.then(
+					(value: unknown) => ({ status: 'resolved' as const, value }),
+					(error: unknown) => ({ status: 'rejected' as const, reason: error })
+				),
+				new Promise<{ status: 'pending' }>((resolve) => {
+					timeout = setTimeout(() => resolve({ status: 'pending' }), 25);
+				})
+			]);
+
+			expect(outcome).toEqual({ status: 'rejected', reason });
+			const abortRegistrations = addEventListener.mock.calls.filter(
+				([type]) => type === 'abort'
+			);
+			expect(abortRegistrations).toHaveLength(1);
+			expect(removeEventListener).toHaveBeenCalledWith('abort', abortRegistrations[0]?.[1]);
+
+			releaseImport();
+			await vi.waitFor(() => expect(state.evaluated).toBe(true));
+			expect(state.instantiateCalls).toBe(0);
+
+			const retried = await compiler.compile({ code: '(display 1)' });
+			expect(retried.success).toBe(false);
+			expect(state.instantiateCalls).toBe(1);
+		} finally {
+			if (timeout) clearTimeout(timeout);
+			releaseImport();
+			await compile.catch(() => {});
+			delete fixtureGlobals[fixtureKey];
+			await rm(temporaryRuntime, { recursive: true, force: true });
+		}
 	});
 
 	it('rejects promptly and cancels a response that arrives after an uncooperative fetch', async () => {
