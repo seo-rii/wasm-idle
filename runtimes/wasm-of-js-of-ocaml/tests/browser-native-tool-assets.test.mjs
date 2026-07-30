@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { getEventListeners } from 'node:events';
 import test from 'node:test';
 
 import {
@@ -153,6 +154,94 @@ test('aborts an uncooperative tool fetch and cancels its late response', async (
 		delete controller.signal.removeEventListener;
 	}
 });
+
+for (const cancellationMode of ['pending', 'resolved', 'chunk']) {
+	test(`aborts a stalled tool asset read with ${cancellationMode} cancellation`, async () => {
+		const assetUrl = new URL(`tools/stalled-${cancellationMode}.js`, BASE_URL).href;
+		const budget = createBrowserToolInputBudget({ maxAssetBytes: 8, maxTotalBytes: 16 });
+		let markReadStarted;
+		const readStarted = new Promise((resolve) => {
+			markReadStarted = resolve;
+		});
+		let resolveRead;
+		const pendingRead = new Promise((resolve) => {
+			resolveRead = resolve;
+		});
+		let resolveCancellation;
+		const pendingCancellation = new Promise((resolve) => {
+			resolveCancellation = resolve;
+		});
+		const cancelReasons = [];
+		let releaseCount = 0;
+		const reader = {
+			read() {
+				markReadStarted();
+				return pendingRead;
+			},
+			cancel(reason) {
+				cancelReasons.push(reason);
+				if (cancellationMode === 'chunk') {
+					resolveRead({ done: false, value: Uint8Array.of(1, 2, 3, 4) });
+				}
+				return cancellationMode === 'pending' ? pendingCancellation : Promise.resolve();
+			},
+			releaseLock() {
+				releaseCount += 1;
+				if (cancellationMode === 'resolved') {
+					throw new Error('OCaml tool reader release failed during abort');
+				}
+			}
+		};
+		const response = {
+			url: assetUrl,
+			ok: true,
+			status: 200,
+			headers: new Headers(),
+			body: { getReader: () => reader }
+		};
+		const controller = new AbortController();
+		const reason =
+			cancellationMode === 'resolved'
+				? new DOMException('OCaml tool deadline exceeded', 'TimeoutError')
+				: new Error(`stop stalled ${cancellationMode} OCaml tool read`);
+		const loading = fetchBrowserToolAsset(assetUrl, 'OCaml tool', budget, {
+			fetch: async () => response,
+			signal: controller.signal
+		});
+		let timeout;
+
+		try {
+			await readStarted;
+			controller.abort(reason);
+			const outcome = await Promise.race([
+				loading.then(
+					(value) => ({ status: 'resolved', value }),
+					(error) => ({ status: 'rejected', reason: error })
+				),
+				new Promise((resolve) => {
+					timeout = setTimeout(() => resolve({ status: 'pending' }), 25);
+				})
+			]);
+
+			assert.equal(outcome.status, 'rejected');
+			assert.equal(outcome.reason, reason);
+			assert.deepEqual(cancelReasons, [reason]);
+			assert.equal(releaseCount, 1);
+			assert.equal(getEventListeners(controller.signal, 'abort').length, 0);
+			assert.equal(budget.usedBytes, 0);
+
+			resolveRead({ done: false, value: Uint8Array.of(1, 2, 3, 4) });
+			await Promise.resolve();
+			await Promise.resolve();
+			assert.equal(budget.usedBytes, 0);
+		} finally {
+			clearTimeout(timeout);
+			resolveCancellation();
+			resolveRead({ done: true, value: undefined });
+			await loading.catch(() => {});
+		}
+	});
+}
 
 test('rejects browser-native tool receipt size mismatches before reading', async () => {
 	let readerRequested = false;

@@ -155,24 +155,54 @@ async function readBrowserToolAssetBody(
 		throw new Error(`${label} has no readable response body`);
 	}
 
+	const abortSignal = signal;
 	const reader = response.body.getReader();
-	const cancelOnAbort = () => {
-		void reader.cancel(abortReason(signal!)).catch(() => {});
+	let readerCancelled = false;
+	const cancelReader = (reason?: unknown) => {
+		if (readerCancelled) return;
+		readerCancelled = true;
+		try {
+			void Promise.resolve(reader.cancel(reason)).catch(() => {});
+		} catch {}
 	};
-	signal?.addEventListener('abort', cancelOnAbort, { once: true });
-	let bytes = new Uint8Array(
-		Math.min(
-			budget.maxAssetBytes,
-			Math.max(contentLength ?? DEFAULT_BROWSER_TOOL_ASSET_BUFFER_BYTES, 1)
-		)
-	);
+	if (abortSignal?.aborted) {
+		const reason = abortReason(abortSignal);
+		cancelReader(reason);
+		try {
+			reader.releaseLock();
+		} catch {}
+		throw reason;
+	}
+	let cancelOnAbort: (() => void) | undefined;
+	const aborted = abortSignal
+		? new Promise<never>((_resolve, reject) => {
+				cancelOnAbort = () => {
+					const reason = abortReason(abortSignal);
+					cancelReader(reason);
+					reject(reason);
+				};
+				abortSignal.addEventListener('abort', cancelOnAbort, { once: true });
+			})
+		: undefined;
+	let bytes!: Uint8Array<ArrayBuffer>;
 	let receivedBytes = 0;
 	let accountedBytes = contentLength ?? 0;
-	let readerCancelled = false;
+	let loadedBytes!: Uint8Array<ArrayBuffer>;
+	let releaseFailure: { error: unknown } | undefined;
 	try {
-		throwIfAborted(signal);
+		bytes = new Uint8Array(
+			Math.min(
+				budget.maxAssetBytes,
+				Math.max(contentLength ?? DEFAULT_BROWSER_TOOL_ASSET_BUFFER_BYTES, 1)
+			)
+		);
 		while (true) {
-			const { done, value } = await reader.read();
+			throwIfAborted(abortSignal);
+			const pendingRead = reader.read();
+			const { done, value } = aborted
+				? await Promise.race([pendingRead, aborted])
+				: await pendingRead;
+			throwIfAborted(abortSignal);
 			if (done) break;
 			if (!value) continue;
 			const nextReceivedBytes = receivedBytes + value.byteLength;
@@ -180,16 +210,18 @@ async function readBrowserToolAssetBody(
 				!Number.isSafeInteger(nextReceivedBytes) ||
 				nextReceivedBytes > budget.maxAssetBytes
 			) {
-				await reader.cancel().catch(() => {});
-				readerCancelled = true;
-				throw new Error(`${label} exceeds the ${budget.maxAssetBytes} byte asset limit`);
+				const error = new Error(
+					`${label} exceeds the ${budget.maxAssetBytes} byte asset limit`
+				);
+				cancelReader(error);
+				throw error;
 			}
 			if (contentLength !== undefined && nextReceivedBytes > contentLength) {
-				await reader.cancel().catch(() => {});
-				readerCancelled = true;
-				throw new Error(
+				const error = new Error(
 					`${label} size mismatch: expected ${contentLength} bytes, received more data`
 				);
+				cancelReader(error);
+				throw error;
 			}
 			if (nextReceivedBytes > accountedBytes) {
 				accountBrowserToolInputBytes(budget, label, nextReceivedBytes - accountedBytes);
@@ -207,21 +239,36 @@ async function readBrowserToolAssetBody(
 			bytes.set(value, receivedBytes);
 			receivedBytes = nextReceivedBytes;
 		}
-		throwIfAborted(signal);
+		throwIfAborted(abortSignal);
 		if (contentLength !== undefined && receivedBytes !== contentLength) {
 			throw new Error(
 				`${label} size mismatch: expected ${contentLength} bytes, received ${receivedBytes}`
 			);
 		}
-		return receivedBytes === bytes.byteLength ? bytes : bytes.slice(0, receivedBytes);
+		loadedBytes = receivedBytes === bytes.byteLength ? bytes : bytes.slice(0, receivedBytes);
 	} catch (error) {
-		if (!readerCancelled) await reader.cancel(error).catch(() => {});
-		if (signal?.aborted) throw abortReason(signal);
+		if (abortSignal?.aborted) {
+			const reason = abortReason(abortSignal);
+			cancelReader(reason);
+			throw reason;
+		}
+		cancelReader(error);
 		throw error;
 	} finally {
-		signal?.removeEventListener('abort', cancelOnAbort);
-		reader.releaseLock();
+		if (cancelOnAbort) abortSignal?.removeEventListener('abort', cancelOnAbort);
+		try {
+			reader.releaseLock();
+		} catch (error) {
+			if (!abortSignal?.aborted) releaseFailure = { error };
+		}
 	}
+	if (abortSignal?.aborted) {
+		const reason = abortReason(abortSignal);
+		cancelReader(reason);
+		throw reason;
+	}
+	if (releaseFailure) throw releaseFailure.error;
+	return loadedBytes;
 }
 
 async function verifyBrowserToolAssetSha256(
