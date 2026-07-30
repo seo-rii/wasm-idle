@@ -45,7 +45,9 @@ describe('LldbDapAdapter', () => {
 			supportsEvaluateForHovers: true,
 			supportsReadMemoryRequest: true,
 			supportsDataBreakpoints: true,
-			supportsSetVariable: false
+			supportsSetVariable: true,
+			supportsRestartRequest: true,
+			supportsTerminateRequest: true
 		});
 		const adapter = createLldbDapAdapter(session);
 
@@ -63,6 +65,7 @@ describe('LldbDapAdapter', () => {
 			supportsReadMemory: true,
 			supportsLogPoints: false,
 			supportsDataBreakpoints: false,
+			supportsSetVariable: false,
 			supportsRestart: false,
 			supportsTerminate: false
 		});

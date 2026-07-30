@@ -23,6 +23,10 @@ LLDB's generic DAP advertisement alone. These capabilities remain false unless t
 WAMR product leaves all three disabled because target-side expression evaluation and watchpoints
 are not supported.
 
+Variable mutation, restart, and standalone terminate requests also remain false even when a generic
+DAP server advertises them, because the `DebugAdapter` contract does not expose those operations.
+Add the adapter method and its product-path tests before enabling the corresponding capability.
+
 `createAdapterDebugSessionController()` provides the shared view model. Variable children remain
 lazy through `variablesReference`; consumers should not serialize an entire LLDB variable tree.
 Supply an LLDB DAP session from `@wasm-idle/llvm-core/debug`. Runtime assets remain owned by the

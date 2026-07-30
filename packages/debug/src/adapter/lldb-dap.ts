@@ -206,11 +206,9 @@ function mapCapabilities(
 		supportsDataBreakpoints:
 			featureSupport?.dataBreakpoints === true &&
 			capabilities.supportsDataBreakpoints === true,
-		supportsSetVariable: capabilities.supportsSetVariable === true,
-		supportsRestart: capabilities.supportsRestartRequest === true,
-		supportsTerminate:
-			capabilities.supportsTerminateRequest === true ||
-			capabilities.supportTerminateDebuggee === true
+		supportsSetVariable: false,
+		supportsRestart: false,
+		supportsTerminate: false
 	});
 }
 
