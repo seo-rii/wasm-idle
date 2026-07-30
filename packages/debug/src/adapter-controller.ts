@@ -155,13 +155,16 @@ export function createAdapterDebugSessionController(adapter: DebugAdapter) {
 			}
 			return breakpoints;
 		} catch (error) {
-			if (
+			const isCurrentRequest =
 				isCurrentSession(sessionToken) &&
-				breakpointRequestTokens.get(sourceKey) === requestToken
-			) {
+				breakpointRequestTokens.get(sourceKey) === requestToken;
+			if (isCurrentRequest) {
 				recordError(error);
+				throw error;
 			}
-			throw error;
+			return breakpointsState.current.filter(
+				(breakpoint) => debugSourceKey(breakpoint.source) === sourceKey
+			);
 		}
 	}
 

@@ -69,7 +69,7 @@ class FakeDebugAdapter implements DebugAdapter {
 			requestedLine: line,
 			line
 		}));
-	continueHandler = async (_threadId: number) => undefined;
+	continueHandler: (threadId: number) => Promise<void> = async (_threadId) => undefined;
 	pauseHandler = async (_threadId: number) => undefined;
 	nextHandler = async (_threadId: number) => undefined;
 	stepInHandler = async (_threadId: number) => undefined;
@@ -351,6 +351,42 @@ describe('createAdapterDebugSessionController', () => {
 			}
 		});
 		expect(controller.breakpoints.map((breakpoint) => breakpoint.id)).toEqual([2]);
+	});
+
+	it('ignores superseded breakpoint failures while preserving current failures', async () => {
+		const adapter = new FakeDebugAdapter();
+		const older = deferred<ResolvedBreakpoint[]>();
+		const newer = deferred<ResolvedBreakpoint[]>();
+		adapter.setBreakpointsHandler = async (_source, lines) =>
+			lines[0] === 3 ? older.promise : newer.promise;
+		const controller = createAdapterDebugSessionController(adapter);
+		const source = { path: '/workspace/main.cpp' };
+
+		const olderRequest = controller.setBreakpoints(source, [3]);
+		const newerRequest = controller.setBreakpoints(source, [7]);
+		const currentBreakpoints = [
+			{
+				id: 7,
+				verified: true,
+				source,
+				requestedLine: 7,
+				line: 7
+			}
+		];
+		newer.resolve(currentBreakpoints);
+		await expect(newerRequest).resolves.toEqual(currentBreakpoints);
+		older.reject(new Error('obsolete breakpoint failure'));
+
+		await expect(olderRequest).resolves.toEqual(currentBreakpoints);
+		expect(controller.breakpoints).toEqual(currentBreakpoints);
+		expect(controller.error).toBeNull();
+
+		const currentFailure = new Error('current breakpoint failure');
+		adapter.setBreakpointsHandler = async () => {
+			throw currentFailure;
+		};
+		await expect(controller.setBreakpoints(source, [11])).rejects.toBe(currentFailure);
+		expect(controller.error).toBe(currentFailure);
 	});
 
 	it('loads newly selected threads and frames and delegates execution and inspection methods', async () => {
