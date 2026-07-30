@@ -478,19 +478,53 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 				throw error;
 			}
 			if (!response.body) {
-				const bytes = await response.arrayBuffer();
-				if (bytes.byteLength > limits.maxAssetBytes) {
-					throw new AssetTooLargeError(
-						`${this.config.displayName} worker script exceeds ${limits.maxAssetBytes} bytes`,
-						{
-							actual: bytes.byteLength,
-							limit: limits.maxAssetBytes,
-							runtimeId: this.config.languageId
-						}
+				let cancelOnAbort: (() => void) | undefined;
+				const aborted = new Promise<never>((_resolve, reject) => {
+					cancelOnAbort = () =>
+						reject(
+							phaseController.signal.reason ??
+								new DOMException('Worker script read aborted', 'AbortError')
+						);
+					phaseController.signal.addEventListener('abort', cancelOnAbort, {
+						once: true
+					});
+				});
+				try {
+					if (phaseController.signal.aborted) {
+						throw (
+							phaseController.signal.reason ??
+							new DOMException('Worker script read aborted', 'AbortError')
+						);
+					}
+					const materialized = response.arrayBuffer();
+					const bytes = await Promise.race([materialized, aborted]);
+					if (phaseController.signal.aborted) {
+						throw (
+							phaseController.signal.reason ??
+							new DOMException('Worker script read aborted', 'AbortError')
+						);
+					}
+					if (bytes.byteLength > limits.maxAssetBytes) {
+						throw new AssetTooLargeError(
+							`${this.config.displayName} worker script exceeds ${limits.maxAssetBytes} bytes`,
+							{
+								actual: bytes.byteLength,
+								limit: limits.maxAssetBytes,
+								runtimeId: this.config.languageId
+							}
+						);
+					}
+					this.reportProgress(
+						progress,
+						0.2,
+						`${this.config.displayName} worker downloaded`
 					);
+					return;
+				} finally {
+					if (cancelOnAbort) {
+						phaseController.signal.removeEventListener('abort', cancelOnAbort);
+					}
 				}
-				this.reportProgress(progress, 0.2, `${this.config.displayName} worker downloaded`);
-				return;
 			}
 
 			const reader = response.body.getReader();

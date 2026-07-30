@@ -1273,6 +1273,102 @@ describe('static worker backed language sandboxes', () => {
 		}
 	});
 
+	it('cancels stalled bodyless worker-script materialization promptly', async () => {
+		let markMaterializationStarted!: () => void;
+		const materializationStarted = new Promise<void>((resolve) => {
+			markMaterializationStarted = resolve;
+		});
+		let resolveArrayBuffer!: (value: ArrayBuffer) => void;
+		const arrayBufferPending = new Promise<ArrayBuffer>((resolve) => {
+			resolveArrayBuffer = resolve;
+		});
+		const arrayBuffer = vi.fn(() => {
+			markMaterializationStarted();
+			return arrayBufferPending;
+		});
+		let phaseSignal: AbortSignal | undefined;
+		let phaseAddEventListener: ReturnType<typeof vi.spyOn> | undefined;
+		let phaseRemoveEventListener: ReturnType<typeof vi.spyOn> | undefined;
+		vi.mocked(fetch).mockImplementationOnce((_input, init) => {
+			phaseSignal = init?.signal ?? undefined;
+			if (phaseSignal) {
+				phaseAddEventListener = vi.spyOn(phaseSignal, 'addEventListener');
+				phaseRemoveEventListener = vi.spyOn(phaseSignal, 'removeEventListener');
+			}
+			return Promise.resolve({
+				ok: true,
+				status: 200,
+				url: '',
+				headers: new Headers(),
+				body: null,
+				arrayBuffer
+			} as unknown as Response);
+		});
+		const controller = new AbortController();
+		const reason = new Error('stop bodyless worker-script read');
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const progress = { set: vi.fn() };
+		const sandbox = new Prolog();
+		const loading = sandbox.load(
+			'/absproxy/5173',
+			'',
+			true,
+			[],
+			{ signal: controller.signal },
+			progress
+		);
+		let timeout: ReturnType<typeof setTimeout> | undefined;
+
+		try {
+			await materializationStarted;
+			controller.abort(reason);
+			const outcome = await Promise.race([
+				loading.then(
+					(value) => ({ status: 'resolved' as const, value }),
+					(error) => ({ status: 'rejected' as const, error: error as unknown })
+				),
+				new Promise<{ status: 'pending' }>((resolve) => {
+					timeout = setTimeout(() => resolve({ status: 'pending' }), 25);
+				})
+			]);
+
+			expect(outcome).toMatchObject({
+				status: 'rejected',
+				error: {
+					name: 'CancelledError',
+					code: 'cancelled',
+					phase: 'asset',
+					runtimeId: 'PROLOG',
+					cause: reason
+				}
+			});
+			expect(phaseSignal?.aborted).toBe(true);
+			const phaseAbortRegistrations = phaseAddEventListener?.mock.calls.filter(
+				(registration: unknown[]) => registration[0] === 'abort'
+			);
+			expect(phaseAbortRegistrations).toHaveLength(2);
+			for (const registration of phaseAbortRegistrations ?? []) {
+				expect(phaseRemoveEventListener).toHaveBeenCalledWith('abort', registration[1]);
+			}
+			const callerAbortRegistrations = addEventListener.mock.calls.filter(
+				([type]) => type === 'abort'
+			);
+			for (const registration of callerAbortRegistrations) {
+				expect(removeEventListener).toHaveBeenCalledWith('abort', registration[1]);
+			}
+			resolveArrayBuffer(Uint8Array.of(1, 2, 3).buffer);
+			await Promise.resolve();
+			await Promise.resolve();
+			expect(progress.set).not.toHaveBeenCalledWith(0.2, 'Prolog worker downloaded');
+			expect(workerInstances).toHaveLength(0);
+		} finally {
+			if (timeout) clearTimeout(timeout);
+			resolveArrayBuffer(Uint8Array.of(1, 2, 3).buffer);
+			await loading.catch(() => {});
+		}
+	});
+
 	it('preloads static worker scripts with least-authority request options', async () => {
 		const sandbox = new Prolog();
 
