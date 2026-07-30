@@ -299,11 +299,13 @@ export async function fetchRuntimeJson(
 export async function decompressGzip(
 	bytes: Uint8Array,
 	assetUrl: string | URL = 'runtime asset',
-	maxOutputBytes = DEFAULT_MAX_DECOMPRESSED_ASSET_BYTES
+	maxOutputBytes = DEFAULT_MAX_DECOMPRESSED_ASSET_BYTES,
+	signal?: AbortSignal
 ) {
 	if (!Number.isSafeInteger(maxOutputBytes) || maxOutputBytes < 0) {
 		throw new Error('Runtime asset decompression limit must be a non-negative safe integer');
 	}
+	throwIfRuntimeAssetAborted(signal);
 	// Browsers expose an already-decoded body when the server sets Content-Encoding: gzip.
 	if (!isGzip(bytes)) {
 		if (bytes.byteLength > maxOutputBytes) {
@@ -331,8 +333,9 @@ export async function decompressGzip(
 			readable: decompressor.readable as ReadableStream<Uint8Array>,
 			writable: decompressor.writable as WritableStream<Uint8Array>
 		});
-		return await readBoundedDecompressionStream(stream, assetUrl, maxOutputBytes);
+		return await readBoundedDecompressionStream(stream, assetUrl, maxOutputBytes, signal);
 	} catch (error) {
+		if (signal?.aborted) throw runtimeAbortReason(signal);
 		throw new Error(
 			`Failed to decompress runtime asset ${assetUrl}: ${error instanceof Error ? error.message : String(error)}`
 		);
@@ -374,7 +377,7 @@ async function readGzipResponse(
 				`Runtime asset ${assetUrl} download size exceeds the ${maxOutputBytes} byte limit`
 			);
 		}
-		const result = await decompressGzip(source, assetUrl, maxOutputBytes);
+		const result = await decompressGzip(source, assetUrl, maxOutputBytes, signal);
 		throwIfRuntimeAssetAborted(signal);
 		progress?.set?.(1);
 		return result;

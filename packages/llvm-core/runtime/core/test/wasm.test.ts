@@ -582,6 +582,78 @@ describe('WebAssembly loading utilities', () => {
 		);
 	});
 
+	it('cancels stalled bodyless gzip decompression with the caller reason', async () => {
+		const contents = Uint8Array.of(1, 2, 3, 4);
+		const compressed = Uint8Array.from(gzipSync(contents, { level: 9, mtime: 0 }));
+		const url = 'https://cdn.test/llvm/bodyless-decompression.wasm.gz';
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => ({
+				ok: true,
+				status: 200,
+				headers: new Headers(),
+				body: null,
+				arrayBuffer: async () => compressed.buffer
+			}))
+		);
+		let outputController!: ReadableStreamDefaultController<Uint8Array>;
+		let cancellationReason: unknown;
+		const decompressed = new ReadableStream<Uint8Array>({
+			start(controller) {
+				outputController = controller;
+			},
+			cancel(reason) {
+				cancellationReason = reason;
+			}
+		});
+		const getReader = vi.spyOn(decompressed, 'getReader');
+		const writable = new WritableStream<Uint8Array>();
+		vi.stubGlobal(
+			'DecompressionStream',
+			class {
+				readonly readable = decompressed;
+				readonly writable = writable;
+			}
+		);
+		const controller = new AbortController();
+		const reason = new Error('stop bodyless gzip decompression');
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const progress = { set: vi.fn() };
+		const pending = readBuffer(url, progress, undefined, controller.signal);
+		let timeout: ReturnType<typeof setTimeout> | undefined;
+
+		try {
+			await vi.waitFor(() => expect(getReader).toHaveBeenCalledOnce());
+			controller.abort(reason);
+			const outcome = await Promise.race([
+				pending.then(
+					(value) => ({ status: 'resolved' as const, value }),
+					(error) => ({ status: 'rejected' as const, reason: error as unknown })
+				),
+				new Promise<{ status: 'pending' }>((resolve) => {
+					timeout = setTimeout(() => resolve({ status: 'pending' }), 25);
+				})
+			]);
+
+			expect(outcome).toEqual({ status: 'rejected', reason });
+			expect(cancellationReason).toBe(reason);
+			const abortRegistrations = addEventListener.mock.calls.filter(
+				([type]) => type === 'abort'
+			);
+			for (const registration of abortRegistrations) {
+				expect(removeEventListener).toHaveBeenCalledWith('abort', registration[1]);
+			}
+			expect(progress.set).not.toHaveBeenCalledWith(1);
+		} finally {
+			if (timeout) clearTimeout(timeout);
+			try {
+				outputController.close();
+			} catch {}
+			await pending.catch(() => {});
+		}
+	});
+
 	it('rejects an oversized gzip transfer before starting decompression', async () => {
 		const contents = gzipSync(Uint8Array.of(1, 2, 3), { level: 9, mtime: 0 });
 		const url = 'https://cdn.test/llvm/gzip-download-limit.wasm.gz';
