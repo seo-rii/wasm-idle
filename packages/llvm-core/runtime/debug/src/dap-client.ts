@@ -256,6 +256,14 @@ export class DapClient implements DapRequestSession {
 	private handleResponse(response: DapResponse) {
 		const pending = this.pending.get(response.request_seq);
 		if (!pending) return;
+		if (response.command !== pending.command) {
+			this.fail(
+				new Error(
+					`DAP response command mismatch: expected ${pending.command}, received ${response.command}`
+				)
+			);
+			return;
+		}
 		this.pending.delete(response.request_seq);
 		if (pending.sendTimeout !== undefined) clearTimeout(pending.sendTimeout);
 		if (pending.responseTimeout !== undefined) clearTimeout(pending.responseTimeout);

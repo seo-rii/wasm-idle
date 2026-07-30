@@ -112,6 +112,9 @@ workers, so invalid or concurrently changed timer settings cannot produce immedi
 browser timers. Per-request DAP response timeout overrides follow the same numeric rule and are
 rejected before the request is sent; `null` is the explicit opt-out for execution requests whose
 response arrives only after the target stops.
+DAP responses are correlated by both request sequence and command. A mismatched command is treated
+as a transport protocol failure: every pending request is rejected and both byte queues are closed
+instead of resolving a request with another command's body.
 
 Current producer modules expose Emscripten's canonical `HEAPU8` view. Each worker samples only its
 backing buffer length, emits an initial `onMemory(worker, bytes)` value, and emits again only when

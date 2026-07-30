@@ -201,6 +201,40 @@ describe('DapClient', () => {
 		await client.close();
 	});
 
+	it('fails the DAP stream when a response command does not match its request', async () => {
+		const inputDescriptor = createSharedByteQueue(4096, 32);
+		const outputDescriptor = createSharedByteQueue(4096, 32);
+		const input = new SharedByteQueue(inputDescriptor);
+		const output = new SharedByteQueue(outputDescriptor);
+		const client = new DapClient({
+			input: inputDescriptor,
+			output: outputDescriptor,
+			requestTimeoutMs: 1_000
+		}).start();
+		const requestPromise = client.request('threads');
+		const chunk = new Uint8Array(256);
+		const length = await input.read(chunk);
+		const [request] = new DapMessageParser().push(chunk.slice(0, length)) as [DapRequest];
+
+		try {
+			await output.write(
+				encodeDapMessage({
+					seq: 15,
+					type: 'response',
+					request_seq: request.seq,
+					command: 'stackTrace',
+					success: true,
+					body: { threads: [] }
+				})
+			);
+			await expect(requestPromise).rejects.toThrow(/response command mismatch/u);
+			expect(input.closed).toBe(true);
+			expect(output.closed).toBe(true);
+		} finally {
+			await client.close();
+		}
+	});
+
 	it('rejects immediately when the request transport is closed', async () => {
 		const inputDescriptor = createSharedByteQueue(4096, 5);
 		const outputDescriptor = createSharedByteQueue(4096, 5);
