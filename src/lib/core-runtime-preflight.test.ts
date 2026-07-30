@@ -301,7 +301,7 @@ describe('runtime registry asset preflight', () => {
 				expect(cancel).toHaveBeenCalledWith(reason);
 				expect(releaseLock).toHaveBeenCalledOnce();
 				const abortRegistrations = addEventListener.mock.calls.filter(
-					([type]) => type === 'abort'
+					(registration: unknown[]) => registration[0] === 'abort'
 				);
 				expect(abortRegistrations).toHaveLength(2);
 				for (const registration of abortRegistrations) {
@@ -390,7 +390,7 @@ describe('runtime registry asset preflight', () => {
 			expect(cancel).toHaveBeenCalledWith(internalSignal.reason);
 			expect(releaseLock).toHaveBeenCalledOnce();
 			const abortRegistrations = addEventListener.mock.calls.filter(
-				([type]) => type === 'abort'
+				(registration: unknown[]) => registration[0] === 'abort'
 			);
 			expect(abortRegistrations).toHaveLength(2);
 			for (const registration of abortRegistrations) {
