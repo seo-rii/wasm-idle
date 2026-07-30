@@ -328,7 +328,42 @@ async function fetchBytes(
 			referrerPolicy: 'no-referrer'
 		};
 		if (signal) requestInit.signal = signal;
-		response = await fetcher(url.href, requestInit);
+		const pendingResponse = Promise.resolve(fetcher(url.href, requestInit));
+		if (!signal) {
+			response = await pendingResponse;
+		} else {
+			response = await new Promise<Response>((resolve, reject) => {
+				let settled = false;
+				const onAbort = () => {
+					if (settled) return;
+					settled = true;
+					signal.removeEventListener('abort', onAbort);
+					reject(abortReason(signal));
+				};
+				signal.addEventListener('abort', onAbort, { once: true });
+				void pendingResponse.then(
+					(candidate) => {
+						if (settled) {
+							const reason = abortReason(signal);
+							void Promise.resolve()
+								.then(() => candidate.body?.cancel(reason))
+								.catch(() => {});
+							return;
+						}
+						settled = true;
+						signal.removeEventListener('abort', onAbort);
+						resolve(candidate);
+					},
+					(error) => {
+						if (settled) return;
+						settled = true;
+						signal.removeEventListener('abort', onAbort);
+						reject(error);
+					}
+				);
+				if (signal.aborted) onAbort();
+			});
+		}
 	} catch (error) {
 		if (signal?.aborted) throw abortReason(signal);
 		throw new Error(

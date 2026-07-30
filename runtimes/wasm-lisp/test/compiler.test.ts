@@ -67,6 +67,61 @@ describe('wasm-lisp Puppy Scheme runtime', () => {
 		expect(fetchImpl).not.toHaveBeenCalled();
 	});
 
+	it('rejects promptly and cancels a response that arrives after an uncooperative fetch', async () => {
+		const resolveFetches: Array<(response: Response) => void> = [];
+		const fetchImpl = vi.fn(
+			() =>
+				new Promise<Response>((resolve) => {
+					resolveFetches.push(resolve);
+				})
+		);
+		const compiler = await createCompilerWithFetch(fetchImpl, 1024);
+		const controller = new AbortController();
+		const reason = new Error('stop uncooperative core fetch');
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const cancel = vi.fn(async () => {});
+		const getReader = vi.fn();
+		const lateResponse = {
+			ok: true,
+			status: 200,
+			url: '',
+			headers: new Headers(),
+			body: { cancel, getReader }
+		} as unknown as Response;
+		const compile = compiler.compile({ code: '(display 1)', signal: controller.signal });
+
+		await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalled());
+		controller.abort(reason);
+		const fetchCount = resolveFetches.length;
+		try {
+			const outcome = await Promise.race([
+				compile.then(
+					(value) => ({ status: 'resolved', value }),
+					(error) => ({ status: 'rejected', reason: error })
+				),
+				new Promise((resolve) => {
+					setTimeout(() => resolve({ status: 'pending' }), 25);
+				})
+			]);
+
+			expect(outcome).toEqual({ status: 'rejected', reason });
+			const abortRegistration = addEventListener.mock.calls.find(
+				([type]) => type === 'abort'
+			);
+			expect(abortRegistration).toBeDefined();
+			expect(removeEventListener).toHaveBeenCalledWith('abort', abortRegistration?.[1]);
+
+			for (const resolveFetch of resolveFetches) resolveFetch(lateResponse);
+			await vi.waitFor(() => expect(cancel).toHaveBeenCalledTimes(fetchCount));
+			expect(cancel).toHaveBeenCalledWith(reason);
+			expect(getReader).not.toHaveBeenCalled();
+		} finally {
+			for (const resolveFetch of resolveFetches) resolveFetch(lateResponse);
+			await compile.catch(() => {});
+		}
+	});
+
 	it('cancels a streamed core module with the caller signal and permits a clean retry', async () => {
 		let fetchCount = 0;
 		let requestSignal: AbortSignal | null | undefined;
