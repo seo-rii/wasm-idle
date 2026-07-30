@@ -703,6 +703,114 @@ test('aborts bodyless manifest materialization promptly and ignores late bytes',
 	}
 });
 
+test('aborts runtime-pack digest verification promptly and ignores a late failure', async () => {
+	const files = [{ path: '/static/toolchain/lib/ocaml/a.cmi', size: 4 }];
+	const indexBytes = encodeJson(createIndex(files));
+	const payload = new Uint8Array([1, 2, 3, 4]);
+	const compressed = gzipSync(payload);
+	const manifest = createManifest(
+		files,
+		createRuntimePackReceipts(indexBytes, compressed, payload)
+	);
+	const calls = [];
+	const fetcher = createFetch(
+		new Map([
+			[INDEX_URL, createResponse(indexBytes, INDEX_URL)],
+			[ASSET_URL, createResponse(compressed, ASSET_URL)]
+		]),
+		calls
+	);
+	let markDigestStarted;
+	const digestStarted = new Promise((resolve) => {
+		markDigestStarted = resolve;
+	});
+	let rejectDigest;
+	const pendingDigest = new Promise((_resolve, reject) => {
+		rejectDigest = reject;
+	});
+	const subtle = globalThis.crypto.subtle;
+	const originalDigestDescriptor = Object.getOwnPropertyDescriptor(subtle, 'digest');
+	Object.defineProperty(subtle, 'digest', {
+		configurable: true,
+		value() {
+			markDigestStarted();
+			return pendingDigest;
+		}
+	});
+	const controller = new AbortController();
+	const reason = new Error('stop runtime-pack hashing');
+	const addedAbortListeners = [];
+	const removedAbortListeners = [];
+	const originalAddEventListener = controller.signal.addEventListener.bind(controller.signal);
+	const originalRemoveEventListener = controller.signal.removeEventListener.bind(
+		controller.signal
+	);
+	Object.defineProperty(controller.signal, 'addEventListener', {
+		configurable: true,
+		value(type, listener, options) {
+			if (type === 'abort') addedAbortListeners.push(listener);
+			return originalAddEventListener(type, listener, options);
+		}
+	});
+	Object.defineProperty(controller.signal, 'removeEventListener', {
+		configurable: true,
+		value(type, listener, options) {
+			if (type === 'abort') removedAbortListeners.push(listener);
+			return originalRemoveEventListener(type, listener, options);
+		}
+	});
+	const loading = loadBrowserNativeRuntimePack(manifest, {
+		baseUrl: BASE_URL,
+		fetch: fetcher,
+		signal: controller.signal,
+		limits: { maxAssetBytes: 1024, maxMetadataBytes: 1024 }
+	});
+	let timeout;
+
+	try {
+		await digestStarted;
+		controller.abort(reason);
+		const outcome = await Promise.race([
+			loading.then(
+				(value) => ({ status: 'resolved', value }),
+				(error) => ({ status: 'rejected', reason: error })
+			),
+			new Promise((resolve) => {
+				timeout = setTimeout(() => resolve({ status: 'pending' }), 25);
+			})
+		]);
+
+		assert.equal(outcome.status, 'rejected');
+		assert.equal(outcome.reason, reason);
+		assert.ok(addedAbortListeners.length > 0);
+		for (const listener of addedAbortListeners) {
+			assert.ok(removedAbortListeners.includes(listener));
+		}
+		assert.deepEqual(
+			calls.map(({ url }) => url),
+			[INDEX_URL]
+		);
+		rejectDigest(new Error('late runtime-pack digest failure'));
+		await Promise.resolve();
+		await Promise.resolve();
+		assert.deepEqual(
+			calls.map(({ url }) => url),
+			[INDEX_URL]
+		);
+	} finally {
+		clearTimeout(timeout);
+		rejectDigest(new Error('late runtime-pack digest cleanup'));
+		await loading.catch(() => {});
+		if (originalDigestDescriptor) {
+			Object.defineProperty(subtle, 'digest', originalDigestDescriptor);
+		} else {
+			delete subtle.digest;
+		}
+		delete controller.signal.addEventListener;
+		delete controller.signal.removeEventListener;
+	}
+});
+
 test('does not fetch a runtime pack when the caller is already aborted', async () => {
 	const controller = new AbortController();
 	const reason = new Error('stop loading');
