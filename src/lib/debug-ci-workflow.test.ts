@@ -20,13 +20,13 @@ describe('LLDB browser integration workflow', () => {
 			expect(workflow).toContain(sha256);
 		}
 		expect(workflow).toContain(
-			'https://raw.githubusercontent.com/seo-rii/wasm-llvm/8f26af58c622553b1a23cb4d26e4738066fbc4fb/artifacts/runtime-source'
+			'https://raw.githubusercontent.com/seo-rii/wasm-llvm/4e5a696be2b44aec3fe9f364956c19c6dda098db/artifacts/runtime-source'
 		);
 		expect(workflow).not.toContain('/wasm-llvm/main/artifacts/runtime-source');
 		for (const [asset, sha256] of [
 			[
 				'runtime-manifest.v2.json',
-				'2a005d2856f54ae883ad5b851ee6bd49ac853ce8ce1bfb7afee4a3f068ccd8cd'
+				'ca8986926b1789ba09231167aa20854ffd67fe05782b1781a0244b4eb427f7b3'
 			],
 			[
 				'debug/lldb-web-dap.js',
@@ -34,7 +34,7 @@ describe('LLDB browser integration workflow', () => {
 			],
 			[
 				'debug/lldb-web-dap.wasm',
-				'f725266503568c94fdbb2c40dcc49f7956a6f0b3c838bf4809e4da14c2d33e7c'
+				'4d355af4301df8955b91e5cd0d78f9845c6d81e6508982e7e9beae4a3f778711'
 			],
 			[
 				'debug/lldb-web-dap.pthread.mjs',

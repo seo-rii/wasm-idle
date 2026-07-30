@@ -44,7 +44,7 @@ jobs:
                   sha256sum --check <<<"68437624a81c465b93895615e7afd3f235ff256de17dc1927b124e783614e3e4  static/clang/bin/sysroot.tar.gz"
             - name: Download pinned LLDB and WAMR browser assets
               env:
-                  WASM_LLVM_DEBUG_RELEASE_URL: https://raw.githubusercontent.com/seo-rii/wasm-llvm/8f26af58c622553b1a23cb4d26e4738066fbc4fb/artifacts/runtime-source
+                  WASM_LLVM_DEBUG_RELEASE_URL: https://raw.githubusercontent.com/seo-rii/wasm-llvm/4e5a696be2b44aec3fe9f364956c19c6dda098db/artifacts/runtime-source
               run: |
                   mkdir -p static/wasm-debug/debug
                   curl --fail --location --retry 3 --header "Cookie: dev_bypass_waf=seorii_bypass_token_is_this" "$WASM_LLVM_DEBUG_RELEASE_URL/runtime-manifest.v2.json" --output static/wasm-debug/runtime-manifest.v2.json
@@ -54,9 +54,9 @@ jobs:
                   curl --fail --location --retry 3 --header "Cookie: dev_bypass_waf=seorii_bypass_token_is_this" "$WASM_LLVM_DEBUG_RELEASE_URL/debug/wamr-debug.js" --output static/wasm-debug/debug/wamr-debug.js
                   curl --fail --location --retry 3 --header "Cookie: dev_bypass_waf=seorii_bypass_token_is_this" "$WASM_LLVM_DEBUG_RELEASE_URL/debug/wamr-debug.wasm" --output static/wasm-debug/debug/wamr-debug.wasm
                   curl --fail --location --retry 3 --header "Cookie: dev_bypass_waf=seorii_bypass_token_is_this" "$WASM_LLVM_DEBUG_RELEASE_URL/debug/wamr-debug.worker.mjs" --output static/wasm-debug/debug/wamr-debug.worker.mjs
-                  sha256sum --check <<<"2a005d2856f54ae883ad5b851ee6bd49ac853ce8ce1bfb7afee4a3f068ccd8cd  static/wasm-debug/runtime-manifest.v2.json"
+                  sha256sum --check <<<"ca8986926b1789ba09231167aa20854ffd67fe05782b1781a0244b4eb427f7b3  static/wasm-debug/runtime-manifest.v2.json"
                   sha256sum --check <<<"e459d2588fad29e1d24b992a5acee2d4b3f84d414cf8b517bddeac61c6b92c60  static/wasm-debug/debug/lldb-web-dap.js"
-                  sha256sum --check <<<"f725266503568c94fdbb2c40dcc49f7956a6f0b3c838bf4809e4da14c2d33e7c  static/wasm-debug/debug/lldb-web-dap.wasm"
+                  sha256sum --check <<<"4d355af4301df8955b91e5cd0d78f9845c6d81e6508982e7e9beae4a3f778711  static/wasm-debug/debug/lldb-web-dap.wasm"
                   sha256sum --check <<<"d40975277aa0c98c6570f9a35d52ab9be475ded4e7a4796fc6d0f8f314c9652d  static/wasm-debug/debug/lldb-web-dap.pthread.mjs"
                   sha256sum --check <<<"9948dc4dc7fe7cf575a6480abac6de3b451ad10e3a7b851d4e43f435df0ddcec  static/wasm-debug/debug/wamr-debug.js"
                   sha256sum --check <<<"e3c848b676cbc65b9014d19a3b36f480f7989309ce2e2385fcbeafa75240d338  static/wasm-debug/debug/wamr-debug.wasm"
