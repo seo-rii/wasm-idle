@@ -180,26 +180,59 @@ async function readResponseBytes(
 		return bytes;
 	}
 
+	const abortSignal = signal;
 	const reader = response.body.getReader();
-	const cancelOnAbort = () => {
-		void reader.cancel(runtimeAbortReason(signal!)).catch(() => {});
+	let readerCancelled = false;
+	const cancelReader = (reason?: unknown) => {
+		if (readerCancelled) return;
+		readerCancelled = true;
+		try {
+			void Promise.resolve(reader.cancel(reason)).catch(() => {});
+		} catch {}
 	};
-	signal?.addEventListener('abort', cancelOnAbort, { once: true });
-	let bytes = new Uint8Array(
-		Math.min(maxOutputBytes, contentLength || DEFAULT_DECOMPRESSION_BUFFER_BYTES)
-	);
+	if (abortSignal?.aborted) {
+		const reason = runtimeAbortReason(abortSignal);
+		cancelReader(reason);
+		try {
+			reader.releaseLock();
+		} catch {}
+		throw reason;
+	}
+	let cancelOnAbort: (() => void) | undefined;
+	const aborted = abortSignal
+		? new Promise<never>((_resolve, reject) => {
+				cancelOnAbort = () => {
+					const reason = runtimeAbortReason(abortSignal);
+					cancelReader(reason);
+					reject(reason);
+				};
+				abortSignal.addEventListener('abort', cancelOnAbort, { once: true });
+			})
+		: undefined;
+	let bytes!: Uint8Array<ArrayBuffer>;
 	let receivedLength = 0;
+	let receivedBytes!: Uint8Array<ArrayBuffer>;
+	let releaseFailure: { error: unknown } | undefined;
 	try {
-		if (signal?.aborted) throw runtimeAbortReason(signal);
+		bytes = new Uint8Array(
+			Math.min(maxOutputBytes, contentLength || DEFAULT_DECOMPRESSION_BUFFER_BYTES)
+		);
 		while (true) {
-			const { done, value } = await reader.read();
+			throwIfRuntimeAssetAborted(abortSignal);
+			const pendingRead = reader.read();
+			const { done, value } = aborted
+				? await Promise.race([pendingRead, aborted])
+				: await pendingRead;
+			throwIfRuntimeAssetAborted(abortSignal);
 			if (done) break;
 			if (!value) continue;
 			const nextLength = receivedLength + value.byteLength;
 			if (nextLength > maxOutputBytes) {
-				throw new Error(
+				const error = new Error(
 					`Runtime asset ${assetUrl} size exceeds the ${maxOutputBytes} byte limit`
 				);
+				cancelReader(error);
+				throw error;
 			}
 			if (nextLength > bytes.byteLength) {
 				const nextCapacity = Math.min(
@@ -214,16 +247,31 @@ async function readResponseBytes(
 			receivedLength = nextLength;
 			if (contentLength > 0) progress?.set?.(receivedLength / contentLength);
 		}
-		if (signal?.aborted) throw runtimeAbortReason(signal);
-		return bytes.subarray(0, receivedLength);
+		throwIfRuntimeAssetAborted(abortSignal);
+		receivedBytes = bytes.subarray(0, receivedLength);
 	} catch (error) {
-		await reader.cancel(error).catch(() => {});
-		if (signal?.aborted) throw runtimeAbortReason(signal);
+		if (abortSignal?.aborted) {
+			const reason = runtimeAbortReason(abortSignal);
+			cancelReader(reason);
+			throw reason;
+		}
+		cancelReader(error);
 		throw error;
 	} finally {
-		signal?.removeEventListener('abort', cancelOnAbort);
-		reader.releaseLock();
+		if (cancelOnAbort) abortSignal?.removeEventListener('abort', cancelOnAbort);
+		try {
+			reader.releaseLock();
+		} catch (error) {
+			if (!abortSignal?.aborted) releaseFailure = { error };
+		}
 	}
+	if (abortSignal?.aborted) {
+		const reason = runtimeAbortReason(abortSignal);
+		cancelReader(reason);
+		throw reason;
+	}
+	if (releaseFailure) throw releaseFailure.error;
+	return receivedBytes;
 }
 
 export async function fetchRuntimeJson(

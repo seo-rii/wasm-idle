@@ -141,36 +141,172 @@ describe('WebAssembly loading utilities', () => {
 		}
 	);
 
-	it('cancels active raw asset readers without poisoning a later retry', async () => {
-		const url = 'https://cdn.test/llvm/cancelled-runtime.bin';
-		let cancelled = false;
-		const body = new ReadableStream<Uint8Array>({
-			cancel() {
-				cancelled = true;
+	it.each([
+		['asset with pending cancellation', 'asset', 'pending'],
+		['JSON with detached cancellation', 'json', 'resolved'],
+		['asset with a cancellation-settled chunk', 'asset', 'chunk']
+	] as const)(
+		'cancels an uncooperative active %s reader without poisoning a later retry',
+		async (_case, kind, cancellationMode) => {
+			const url = `https://cdn.test/llvm/cancelled-${cancellationMode}-runtime.${kind === 'asset' ? 'bin' : 'json'}`;
+			let markReadStarted!: () => void;
+			const readStarted = new Promise<void>((resolve) => {
+				markReadStarted = resolve;
+			});
+			let resolveRead!: (result: ReadableStreamReadResult<Uint8Array>) => void;
+			const pendingRead = new Promise<ReadableStreamReadResult<Uint8Array>>((resolve) => {
+				resolveRead = resolve;
+			});
+			const read = vi
+				.fn()
+				.mockImplementationOnce(() => {
+					markReadStarted();
+					return pendingRead;
+				})
+				.mockResolvedValue({ done: true, value: undefined });
+			let resolveCancellation!: () => void;
+			const pendingCancellation = new Promise<void>((resolve) => {
+				resolveCancellation = resolve;
+			});
+			const cancel = vi.fn(() => {
+				if (cancellationMode === 'chunk') {
+					resolveRead({ done: false, value: Uint8Array.of(1) });
+					return Promise.resolve();
+				}
+				return cancellationMode === 'pending' ? pendingCancellation : Promise.resolve();
+			});
+			const releaseLock = vi.fn(() => {
+				if (kind === 'json')
+					throw new Error('llvm-core reader release failed during abort');
+			});
+			const firstResponse = {
+				url: '',
+				ok: true,
+				status: 200,
+				headers: new Headers({ 'content-length': '1' }),
+				body: { getReader: () => ({ read, cancel, releaseLock }) }
+			} as unknown as Response;
+			const retryBytes =
+				kind === 'asset' ? Uint8Array.of(7, 8, 9) : new TextEncoder().encode('{"ok":true}');
+			const fetchMock = vi
+				.fn()
+				.mockResolvedValueOnce(firstResponse)
+				.mockResolvedValueOnce(new Response(retryBytes));
+			if (kind === 'asset') vi.stubGlobal('fetch', fetchMock);
+			const controller = new AbortController();
+			const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+			const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+			const reason =
+				kind === 'asset'
+					? new Error('stop uncooperative raw asset read')
+					: new DOMException('runtime JSON deadline exceeded', 'TimeoutError');
+			const progress = { set: vi.fn() };
+			const loading =
+				kind === 'asset'
+					? readBuffer(url, progress, undefined, controller.signal)
+					: fetchRuntimeJson(url, {
+							fetchImpl: fetchMock,
+							signal: controller.signal
+						});
+			let timeout: ReturnType<typeof setTimeout> | undefined;
+
+			try {
+				await readStarted;
+				controller.abort(reason);
+				const outcome = await Promise.race([
+					loading.then(
+						(value) => ({ status: 'resolved' as const, value }),
+						(error) => ({ status: 'rejected' as const, reason: error as unknown })
+					),
+					new Promise<{ status: 'pending' }>((resolve) => {
+						timeout = setTimeout(() => resolve({ status: 'pending' }), 25);
+					})
+				]);
+
+				expect(outcome.status).toBe('rejected');
+				expect('reason' in outcome ? outcome.reason : undefined).toBe(reason);
+				expect(cancel).toHaveBeenCalledOnce();
+				expect(cancel).toHaveBeenCalledWith(reason);
+				expect(releaseLock).toHaveBeenCalledOnce();
+				const abortRegistrations = addEventListener.mock.calls.filter(
+					([type]) => type === 'abort'
+				);
+				for (const registration of abortRegistrations) {
+					expect(removeEventListener).toHaveBeenCalledWith('abort', registration[1]);
+				}
+				expect(progress.set).not.toHaveBeenCalled();
+
+				resolveRead({ done: false, value: Uint8Array.of(1) });
+				await Promise.resolve();
+				await Promise.resolve();
+				expect(progress.set).not.toHaveBeenCalled();
+
+				if (kind === 'asset') {
+					expect(fetchMock).toHaveBeenNthCalledWith(
+						1,
+						new URL(url),
+						expect.objectContaining({ signal: controller.signal })
+					);
+					await expect(readBuffer(url)).resolves.toEqual(retryBytes);
+				} else {
+					await expect(fetchRuntimeJson(url, { fetchImpl: fetchMock })).resolves.toEqual({
+						ok: true
+					});
+				}
+				expect(fetchMock).toHaveBeenCalledTimes(2);
+			} finally {
+				if (timeout) clearTimeout(timeout);
+				resolveCancellation();
+				resolveRead({ done: true, value: undefined });
+				await loading.catch(() => {});
 			}
-		});
-		const getReaderSpy = vi.spyOn(body, 'getReader');
-		const fetchMock = vi
-			.fn()
-			.mockResolvedValueOnce(new Response(body))
-			.mockResolvedValueOnce(new Response(Uint8Array.of(7, 8, 9)));
-		vi.stubGlobal('fetch', fetchMock);
+		}
+	);
+
+	it('cleans an active raw reader when initial stream allocation fails', async () => {
+		const url = 'https://cdn.test/llvm/oversized-allocation-runtime.bin';
 		const controller = new AbortController();
-		const reason = new Error('stop raw asset load');
-		const pending = readBuffer(url, undefined, undefined, controller.signal);
-
-		await vi.waitFor(() => expect(getReaderSpy).toHaveBeenCalledOnce());
-		controller.abort(reason);
-
-		await expect(pending).rejects.toBe(reason);
-		expect(cancelled).toBe(true);
-		expect(fetchMock).toHaveBeenNthCalledWith(
-			1,
-			new URL(url),
-			expect.objectContaining({ signal: controller.signal })
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const read = vi.fn();
+		const cancel = vi.fn(async () => undefined);
+		const releaseLock = vi.fn();
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => {
+				return {
+					url: '',
+					ok: true,
+					status: 200,
+					headers: new Headers({
+						'content-length': String(Number.MAX_SAFE_INTEGER)
+					}),
+					body: { getReader: () => ({ read, cancel, releaseLock }) }
+				} as unknown as Response;
+			})
 		);
-		await expect(readBuffer(url)).resolves.toEqual(Uint8Array.of(7, 8, 9));
-		expect(fetchMock).toHaveBeenCalledTimes(2);
+		const progress = { set: vi.fn() };
+		let failure: unknown;
+
+		await readBuffer(url, progress, Number.MAX_SAFE_INTEGER, controller.signal).then(
+			() => {
+				throw new Error('expected initial stream allocation to fail');
+			},
+			(error: unknown) => {
+				failure = error;
+				expect(error).toBeInstanceOf(RangeError);
+			}
+		);
+
+		expect(read).not.toHaveBeenCalled();
+		expect(cancel).toHaveBeenCalledOnce();
+		expect(cancel).toHaveBeenCalledWith(failure);
+		expect(releaseLock).toHaveBeenCalledOnce();
+		const abortRegistrations = addEventListener.mock.calls.filter(([type]) => type === 'abort');
+		for (const registration of abortRegistrations) {
+			expect(removeEventListener).toHaveBeenCalledWith('abort', registration[1]);
+		}
+		expect(progress.set).not.toHaveBeenCalled();
 	});
 
 	it('cancels active gzip readers and preserves the caller reason', async () => {
