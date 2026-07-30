@@ -128,6 +128,7 @@ export class BrowserLldbSession {
 					...(this.options.launch.env ? { env: { ...this.options.launch.env } } : {})
 				}
 			: undefined;
+		const moduleSha256 = this.options.moduleSha256;
 		for (const breakpoint of breakpoints) {
 			validateDebugSourcePath(breakpoint.source.path);
 			validateBreakpointLines(breakpoint.lines);
@@ -138,11 +139,11 @@ export class BrowserLldbSession {
 				? this.options.module
 				: this.options.module.slice(0)
 		);
-		if (this.options.moduleSha256) {
+		if (moduleSha256) {
 			const actualSha256 = await this.awaitWhileActive(sha256Hex(module));
-			if (actualSha256 !== this.options.moduleSha256) {
+			if (actualSha256 !== moduleSha256) {
 				throw new Error(
-					`debug module SHA-256 mismatch: expected ${this.options.moduleSha256}, received ${actualSha256}`
+					`debug module SHA-256 mismatch: expected ${moduleSha256}, received ${actualSha256}`
 				);
 			}
 		}

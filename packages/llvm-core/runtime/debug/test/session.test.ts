@@ -932,6 +932,36 @@ describe('BrowserLldbSession', () => {
 		expect(created).toBe(false);
 	});
 
+	it('keeps the module hash expectation fixed while its digest is pending', async () => {
+		let created = false;
+		const options: BrowserLldbSessionOptions = {
+			manifest,
+			runtimeBaseUrl: 'https://cdn.example/debug/',
+			module: Uint8Array.of(0, 97, 115, 109),
+			moduleSha256: hash,
+			sources: [],
+			fetchImpl: async () => new Response('debug-asset'),
+			workerFactory: (kind) => {
+				created = true;
+				return new FakeWorker(kind, []);
+			},
+			requestTimeoutMs: 1_000,
+			readyTimeoutMs: 1_000
+		};
+		const session = new BrowserLldbSession(options);
+		const initialization = session.initialize();
+		options.moduleSha256 = 'cd5d4935a48c0672cb06407bb443bc0087aff947c6b864bac886982c73b3027f';
+
+		try {
+			await expect(initialization).rejects.toThrow(
+				`debug module SHA-256 mismatch: expected ${hash}`
+			);
+			expect(created).toBe(false);
+		} finally {
+			await session.dispose();
+		}
+	});
+
 	it('rejects corrupt runtime assets before creating workers', async () => {
 		let created = false;
 		const session = new BrowserLldbSession({
