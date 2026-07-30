@@ -169,7 +169,7 @@ boundary.
 Repository CI runs `test:browser:debug:lldb` for every pull request and `main` push in a dedicated
 Chromium job. The gate installs Chromium, downloads the four external Clang delivery assets,
 verifies every pinned SHA-256 receipt, and requires the product LLDB/WAMR binaries published by
-`wasm-llvm` commit `8f26af58c622553b1a23cb4d26e4738066fbc4fb` for C, C++, and Rust. The V2
+`wasm-llvm` commit `4e5a696be2b44aec3fe9f364956c19c6dda098db` for C, C++, and Rust. The V2
 manifest and all six debug assets are downloaded from that immutable revision and verified before
 the browser starts; the test cannot silently fall back to trace debugging. At each C, C++, and Rust
 source pause, the gate also verifies that LLDB scopes remain lazy until their

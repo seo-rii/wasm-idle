@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 describe('LLDB browser integration workflow', () => {
 	it('gates pull requests and main pushes with the product LLDB/WAMR Chromium test', async () => {
 		const workflow = await readFile('.github/workflows/debug-browser.yml', 'utf8');
+		const debugReadme = await readFile('packages/llvm-core/README.md', 'utf8');
 
 		expect(workflow).toContain('pull_request:');
 		expect(workflow).toContain('branches: [main]');
@@ -22,6 +23,11 @@ describe('LLDB browser integration workflow', () => {
 		expect(workflow).toContain(
 			'https://raw.githubusercontent.com/seo-rii/wasm-llvm/4e5a696be2b44aec3fe9f364956c19c6dda098db/artifacts/runtime-source'
 		);
+		const pinnedRuntimeRevision = workflow.match(
+			/wasm-llvm\/([0-9a-f]{40})\/artifacts\/runtime-source/
+		)?.[1];
+		expect(pinnedRuntimeRevision).toBeDefined();
+		expect(debugReadme).toContain(`wasm-llvm\` commit \`${pinnedRuntimeRevision}\``);
 		expect(workflow).not.toContain('/wasm-llvm/main/artifacts/runtime-source');
 		for (const [asset, sha256] of [
 			[
