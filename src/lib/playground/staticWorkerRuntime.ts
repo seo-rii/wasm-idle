@@ -528,14 +528,45 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 			}
 
 			const reader = response.body.getReader();
+			let readerCancelled = false;
+			let cancelOnAbort: (() => void) | undefined;
+			const aborted = new Promise<never>((_resolve, reject) => {
+				cancelOnAbort = () => {
+					const reason =
+						phaseController.signal.reason ??
+						new DOMException('Worker script read aborted', 'AbortError');
+					if (!readerCancelled) {
+						readerCancelled = true;
+						try {
+							void reader.cancel(reason).catch(() => undefined);
+						} catch {}
+					}
+					reject(reason);
+				};
+				phaseController.signal.addEventListener('abort', cancelOnAbort, { once: true });
+			});
 			let loaded = 0;
+			let releaseError: unknown;
 			try {
 				while (true) {
-					const { done, value } = await reader.read();
+					if (phaseController.signal.aborted) {
+						throw (
+							phaseController.signal.reason ??
+							new DOMException('Worker script read aborted', 'AbortError')
+						);
+					}
+					const pendingRead = reader.read();
+					const { done, value } = await Promise.race([pendingRead, aborted]);
+					if (phaseController.signal.aborted) {
+						throw (
+							phaseController.signal.reason ??
+							new DOMException('Worker script read aborted', 'AbortError')
+						);
+					}
 					if (done) break;
 					loaded += value.byteLength;
 					if (loaded > limits.maxAssetBytes) {
-						throw new AssetTooLargeError(
+						const error = new AssetTooLargeError(
 							`${this.config.displayName} worker script exceeds ${limits.maxAssetBytes} bytes`,
 							{
 								actual: loaded,
@@ -543,6 +574,11 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 								runtimeId: this.config.languageId
 							}
 						);
+						readerCancelled = true;
+						try {
+							void reader.cancel(error).catch(() => undefined);
+						} catch {}
+						throw error;
 					}
 					const ratio = total > 0 ? Math.min(loaded / total, 1) : 0.5;
 					this.reportProgress(
@@ -553,11 +589,36 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 				}
 				this.reportProgress(progress, 0.2, `${this.config.displayName} worker downloaded`);
 			} catch (error) {
-				await reader.cancel(error).catch(() => undefined);
+				if (phaseController.signal.aborted) {
+					const reason =
+						phaseController.signal.reason ??
+						new DOMException('Worker script read aborted', 'AbortError');
+					if (!readerCancelled) {
+						readerCancelled = true;
+						try {
+							void reader.cancel(reason).catch(() => undefined);
+						} catch {}
+					}
+					throw reason;
+				}
+				if (!readerCancelled) {
+					readerCancelled = true;
+					try {
+						void reader.cancel(error).catch(() => undefined);
+					} catch {}
+				}
 				throw error;
 			} finally {
-				reader.releaseLock();
+				if (cancelOnAbort) {
+					phaseController.signal.removeEventListener('abort', cancelOnAbort);
+				}
+				try {
+					reader.releaseLock();
+				} catch (error) {
+					if (!phaseController.signal.aborted) releaseError = error;
+				}
 			}
+			if (releaseError) throw releaseError;
 		} catch (error) {
 			if (isWasmIdleError(error)) throw error;
 			if (timedOut) {

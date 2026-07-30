@@ -1369,6 +1369,116 @@ describe('static worker backed language sandboxes', () => {
 		}
 	});
 
+	it.each([
+		['while cancellation and the read remain pending', false],
+		['when cancellation settles the read first', true]
+	])('cancels a stalled worker-script stream read %s', async (_case, settleReadOnCancel) => {
+		let markReadStarted!: () => void;
+		const readStarted = new Promise<void>((resolve) => {
+			markReadStarted = resolve;
+		});
+		let resolveRead!: (result: { done: true; value: undefined }) => void;
+		const readPending = new Promise<{ done: true; value: undefined }>((resolve) => {
+			resolveRead = resolve;
+		});
+		const read = vi.fn(() => {
+			markReadStarted();
+			return readPending;
+		});
+		let resolveCancel!: () => void;
+		const cancelPending = new Promise<void>((resolve) => {
+			resolveCancel = resolve;
+		});
+		const cancel = vi.fn(() => {
+			if (settleReadOnCancel) {
+				resolveRead({ done: true, value: undefined });
+				return Promise.resolve();
+			}
+			return cancelPending;
+		});
+		const releaseLock = vi.fn();
+		let phaseSignal: AbortSignal | undefined;
+		let phaseAddEventListener: ReturnType<typeof vi.spyOn> | undefined;
+		let phaseRemoveEventListener: ReturnType<typeof vi.spyOn> | undefined;
+		vi.mocked(fetch).mockImplementationOnce((_input, init) => {
+			phaseSignal = init?.signal ?? undefined;
+			if (phaseSignal) {
+				phaseAddEventListener = vi.spyOn(phaseSignal, 'addEventListener');
+				phaseRemoveEventListener = vi.spyOn(phaseSignal, 'removeEventListener');
+			}
+			return Promise.resolve({
+				ok: true,
+				status: 200,
+				url: '',
+				headers: new Headers(),
+				body: { getReader: () => ({ cancel, read, releaseLock }) }
+			} as unknown as Response);
+		});
+		const controller = new AbortController();
+		const reason = new Error('stop worker-script stream read');
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const progress = { set: vi.fn() };
+		const sandbox = new Prolog();
+		const loading = sandbox.load(
+			'/absproxy/5173',
+			'',
+			true,
+			[],
+			{ signal: controller.signal },
+			progress
+		);
+		let timeout: ReturnType<typeof setTimeout> | undefined;
+
+		try {
+			await readStarted;
+			controller.abort(reason);
+			const outcome = await Promise.race([
+				loading.then(
+					(value) => ({ status: 'resolved' as const, value }),
+					(error) => ({ status: 'rejected' as const, error: error as unknown })
+				),
+				new Promise<{ status: 'pending' }>((resolve) => {
+					timeout = setTimeout(() => resolve({ status: 'pending' }), 25);
+				})
+			]);
+
+			expect(outcome).toMatchObject({
+				status: 'rejected',
+				error: {
+					name: 'CancelledError',
+					code: 'cancelled',
+					phase: 'asset',
+					runtimeId: 'PROLOG',
+					cause: reason
+				}
+			});
+			expect(cancel).toHaveBeenCalledOnce();
+			expect(cancel).toHaveBeenCalledWith(reason);
+			expect(releaseLock).toHaveBeenCalledOnce();
+			const phaseAbortRegistrations = phaseAddEventListener?.mock.calls.filter(
+				(registration: unknown[]) => registration[0] === 'abort'
+			);
+			expect(phaseAbortRegistrations).toHaveLength(2);
+			for (const registration of phaseAbortRegistrations ?? []) {
+				expect(phaseRemoveEventListener).toHaveBeenCalledWith('abort', registration[1]);
+			}
+			const callerAbortRegistrations = addEventListener.mock.calls.filter(
+				([type]) => type === 'abort'
+			);
+			for (const registration of callerAbortRegistrations) {
+				expect(removeEventListener).toHaveBeenCalledWith('abort', registration[1]);
+			}
+			expect(progress.set).not.toHaveBeenCalledWith(0.2, 'Prolog worker downloaded');
+			expect(workerInstances).toHaveLength(0);
+		} finally {
+			if (timeout) clearTimeout(timeout);
+			resolveCancel();
+			resolveRead({ done: true, value: undefined });
+			await loading.catch(() => {});
+		}
+	});
+
 	it('preloads static worker scripts with least-authority request options', async () => {
 		const sandbox = new Prolog();
 
