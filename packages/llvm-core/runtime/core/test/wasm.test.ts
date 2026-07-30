@@ -161,6 +161,43 @@ describe('WebAssembly loading utilities', () => {
 		);
 	});
 
+	it.each([
+		['raw', 'https://cdn.test/llvm/bodyless-runtime.bin'],
+		['gzip', 'https://cdn.test/llvm/bodyless-runtime.wasm.gz']
+	] as const)('cancels a pending %s bodyless response read', async (kind, url) => {
+		let resolveArrayBuffer!: (buffer: ArrayBuffer) => void;
+		const arrayBuffer = vi.fn(
+			() =>
+				new Promise<ArrayBuffer>((resolve) => {
+					resolveArrayBuffer = resolve;
+				})
+		);
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => ({
+				ok: true,
+				status: 200,
+				headers: new Headers(),
+				body: null,
+				arrayBuffer
+			}))
+		);
+		const controller = new AbortController();
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const reason = new Error(`stop ${kind} bodyless response read`);
+		const progress = { set: vi.fn() };
+		const pending = readBuffer(url, progress, undefined, controller.signal);
+
+		await vi.waitFor(() => expect(arrayBuffer).toHaveBeenCalledOnce());
+		controller.abort(reason);
+
+		await expect(pending).rejects.toBe(reason);
+		resolveArrayBuffer(Uint8Array.of(1, 2, 3).buffer);
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(removeEventListener).toHaveBeenCalledOnce();
+		expect(progress.set).not.toHaveBeenCalled();
+	});
+
 	it('observes cancellation before extracting a downloaded ZIP', async () => {
 		const url = 'https://cdn.test/llvm/cancelled-runtime.zip';
 		const archive = await zipBytes('fixture.bin', Uint8Array.of(1, 2, 3));

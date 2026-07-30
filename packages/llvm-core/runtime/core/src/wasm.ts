@@ -99,6 +99,35 @@ function runtimeAbortReason(signal: AbortSignal) {
 	return signal.reason ?? new DOMException('Runtime asset load aborted', 'AbortError');
 }
 
+function waitForRuntimeAssetOperation<T>(operation: Promise<T>, signal?: AbortSignal): Promise<T> {
+	if (!signal) return operation;
+	return new Promise<T>((resolve, reject) => {
+		let settled = false;
+		const cancelOnAbort = () => {
+			if (settled) return;
+			settled = true;
+			signal.removeEventListener('abort', cancelOnAbort);
+			reject(runtimeAbortReason(signal));
+		};
+		signal.addEventListener('abort', cancelOnAbort, { once: true });
+		operation.then(
+			(value) => {
+				if (settled) return;
+				settled = true;
+				signal.removeEventListener('abort', cancelOnAbort);
+				resolve(value);
+			},
+			(error) => {
+				if (settled) return;
+				settled = true;
+				signal.removeEventListener('abort', cancelOnAbort);
+				reject(error);
+			}
+		);
+		if (signal.aborted) cancelOnAbort();
+	});
+}
+
 function throwIfRuntimeAssetAborted(signal?: AbortSignal) {
 	if (signal?.aborted) throw runtimeAbortReason(signal);
 }
@@ -127,7 +156,9 @@ async function readResponseBytes(
 		throw new Error(`Runtime asset ${assetUrl} size exceeds the ${maxOutputBytes} byte limit`);
 	}
 	if (!response.body) {
-		const bytes = new Uint8Array(await response.arrayBuffer());
+		const bytes = new Uint8Array(
+			await waitForRuntimeAssetOperation(response.arrayBuffer(), signal)
+		);
 		if (signal?.aborted) throw runtimeAbortReason(signal);
 		if (bytes.byteLength > maxOutputBytes) {
 			throw new Error(
@@ -311,7 +342,9 @@ async function readGzipResponse(
 		);
 	}
 	if (!response.body) {
-		const source = new Uint8Array(await response.arrayBuffer());
+		const source = new Uint8Array(
+			await waitForRuntimeAssetOperation(response.arrayBuffer(), signal)
+		);
 		throwIfRuntimeAssetAborted(signal);
 		if (source.byteLength > maxOutputBytes) {
 			throw new Error(
