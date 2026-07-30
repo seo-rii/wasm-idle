@@ -41,8 +41,10 @@ describe('LldbDapAdapter', () => {
 		session.setResponse('initialize', {
 			supportsConfigurationDoneRequest: true,
 			supportsConditionalBreakpoints: true,
+			supportsLogPoints: true,
 			supportsEvaluateForHovers: true,
 			supportsReadMemoryRequest: true,
+			supportsDataBreakpoints: true,
 			supportsSetVariable: false
 		});
 		const adapter = createLldbDapAdapter(session);
@@ -54,7 +56,7 @@ describe('LldbDapAdapter', () => {
 		await expect(first).resolves.toMatchObject({
 			supportsConfigurationDone: true,
 			supportsBreakpoints: true,
-			supportsConditionalBreakpoints: true,
+			supportsConditionalBreakpoints: false,
 			supportsPause: true,
 			supportsEvaluate: false,
 			supportsEvaluateForHovers: false,
@@ -80,6 +82,28 @@ describe('LldbDapAdapter', () => {
 				})
 			}
 		]);
+	});
+
+	it('requires explicit product support for advanced breakpoint capabilities', async () => {
+		const session = new FakeDapSession();
+		session.setResponse('initialize', {
+			supportsConditionalBreakpoints: true,
+			supportsLogPoints: true,
+			supportsDataBreakpoints: true
+		});
+		const adapter = createLldbDapAdapter(session, {
+			featureSupport: {
+				conditionalBreakpoints: true,
+				logPoints: true,
+				dataBreakpoints: true
+			}
+		});
+
+		await expect(adapter.initialize()).resolves.toMatchObject({
+			supportsConditionalBreakpoints: true,
+			supportsLogPoints: true,
+			supportsDataBreakpoints: true
+		});
 	});
 
 	it('requires initialization and maps launch, execution control, and disconnect requests', async () => {

@@ -29,6 +29,15 @@ export interface LldbDapAdapterOptions {
 	initializeArguments?: Partial<DapInitializeRequestArguments>;
 	featureSupport?: {
 		/**
+		 * Enable conditional breakpoints only for a target runtime that can
+		 * evaluate the breakpoint condition.
+		 */
+		conditionalBreakpoints?: boolean;
+		/** Enable logpoints only after target-side expression support is verified. */
+		logPoints?: boolean;
+		/** Enable data breakpoints only for a target runtime with watchpoint support. */
+		dataBreakpoints?: boolean;
+		/**
 		 * WebAssembly expression evaluation is not assumed merely because a DAP
 		 * transport exists. Set this only when the linked LLDB build supports it.
 		 */
@@ -170,13 +179,17 @@ function mapCapabilities(
 	capabilities: DapCapabilities,
 	options: LldbDapAdapterOptions
 ): DebugCapabilities {
-	const supportsEvaluate = options.featureSupport?.evaluate === true;
+	const featureSupport = options.featureSupport;
+	const supportsEvaluate = featureSupport?.evaluate === true;
 
 	return Object.freeze({
 		supportsConfigurationDone: capabilities.supportsConfigurationDoneRequest === true,
 		supportsBreakpoints: true,
-		supportsConditionalBreakpoints: capabilities.supportsConditionalBreakpoints === true,
-		supportsLogPoints: capabilities.supportsLogPoints === true,
+		supportsConditionalBreakpoints:
+			featureSupport?.conditionalBreakpoints === true &&
+			capabilities.supportsConditionalBreakpoints === true,
+		supportsLogPoints:
+			featureSupport?.logPoints === true && capabilities.supportsLogPoints === true,
 		supportsContinue: true,
 		supportsPause: true,
 		supportsStepIn: true,
@@ -190,7 +203,9 @@ function mapCapabilities(
 		supportsEvaluateForHovers:
 			supportsEvaluate && capabilities.supportsEvaluateForHovers === true,
 		supportsReadMemory: capabilities.supportsReadMemoryRequest === true,
-		supportsDataBreakpoints: capabilities.supportsDataBreakpoints === true,
+		supportsDataBreakpoints:
+			featureSupport?.dataBreakpoints === true &&
+			capabilities.supportsDataBreakpoints === true,
 		supportsSetVariable: capabilities.supportsSetVariable === true,
 		supportsRestart: capabilities.supportsRestartRequest === true,
 		supportsTerminate:

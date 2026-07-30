@@ -17,6 +17,12 @@ Debug execution is exposed through one adapter contract:
 - `LldbDapAdapter` maps standard DAP threads, frames, scopes, lazy variables, breakpoints, stepping,
   memory reads, output, and process lifecycle events.
 
+`LldbDapAdapter` does not infer conditional-breakpoint, logpoint, or data-breakpoint support from
+LLDB's generic DAP advertisement alone. These capabilities remain false unless the adapter's
+`featureSupport` explicitly enables them and the DAP server advertises them. The current browser
+WAMR product leaves all three disabled because target-side expression evaluation and watchpoints
+are not supported.
+
 `createAdapterDebugSessionController()` provides the shared view model. Variable children remain
 lazy through `variablesReference`; consumers should not serialize an entire LLDB variable tree.
 Supply an LLDB DAP session from `@wasm-idle/llvm-core/debug`. Runtime assets remain owned by the
