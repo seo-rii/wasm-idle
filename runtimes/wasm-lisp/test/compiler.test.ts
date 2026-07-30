@@ -239,6 +239,88 @@ describe('wasm-lisp Puppy Scheme runtime', () => {
 		}
 	});
 
+	it('rejects promptly while compiling a signal-bound core module and retries it cleanly', async () => {
+		const { compiler } = await createCompiler();
+		new Headers();
+		const originalCompile = WebAssembly.compile.bind(WebAssembly);
+		let markCompileStarted!: () => void;
+		const compileStarted = new Promise<void>((resolve) => {
+			markCompileStarted = resolve;
+		});
+		let resolveCompile!: (module: WebAssembly.Module) => void;
+		const pendingCompile = new Promise<WebAssembly.Module>((resolve) => {
+			resolveCompile = resolve;
+		});
+		let compileReleased = false;
+		let blockedBytes: Uint8Array<ArrayBuffer> | undefined;
+		const compileSpy = vi.spyOn(WebAssembly, 'compile').mockImplementation(async (source) => {
+			if (!blockedBytes) {
+				const view = ArrayBuffer.isView(source)
+					? new Uint8Array(source.buffer, source.byteOffset, source.byteLength)
+					: new Uint8Array(source);
+				blockedBytes = view.slice();
+				markCompileStarted();
+				return pendingCompile;
+			}
+			return originalCompile(source);
+		});
+		const controller = new AbortController();
+		const reason = new Error('stop Puppy core compilation');
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const compile = compiler.compile({ code: '(display 1)', signal: controller.signal });
+		let timeout: ReturnType<typeof setTimeout> | undefined;
+
+		try {
+			await compileStarted;
+			controller.abort(reason);
+			const outcome = await Promise.race([
+				compile.then(
+					(value) => ({ status: 'resolved', value }),
+					(error) => ({ status: 'rejected', reason: error })
+				),
+				new Promise((resolve) => {
+					timeout = setTimeout(() => resolve({ status: 'pending' }), 25);
+				})
+			]);
+
+			expect(outcome).toEqual({ status: 'rejected', reason });
+			const abortRegistrations = addEventListener.mock.calls.filter(
+				([type]) => type === 'abort'
+			);
+			expect(abortRegistrations.length).toBeGreaterThan(0);
+			for (const registration of abortRegistrations) {
+				expect(removeEventListener).toHaveBeenCalledWith('abort', registration[1]);
+			}
+
+			compileReleased = true;
+			resolveCompile(await originalCompile(blockedBytes!));
+			await Promise.resolve();
+			await Promise.resolve();
+			const compileCountBeforeRetry = compileSpy.mock.calls.length;
+			const retried = await compiler.compile({ code: '(display 1)' });
+			expect(retried.success).toBe(true);
+			expect(compileSpy.mock.calls.length).toBeGreaterThan(compileCountBeforeRetry);
+			const matchingCompileCalls = compileSpy.mock.calls.filter(([source]) => {
+				const view = ArrayBuffer.isView(source)
+					? new Uint8Array(source.buffer, source.byteOffset, source.byteLength)
+					: new Uint8Array(source);
+				return (
+					view.byteLength === blockedBytes!.byteLength &&
+					view.every((byte, index) => byte === blockedBytes![index])
+				);
+			});
+			expect(matchingCompileCalls.length).toBeGreaterThan(1);
+		} finally {
+			if (timeout) clearTimeout(timeout);
+			if (blockedBytes && !compileReleased) {
+				resolveCompile(await originalCompile(blockedBytes));
+			}
+			await compile.catch(() => {});
+			compileSpy.mockRestore();
+		}
+	});
+
 	it('bounds streamed compiler assets and omits ambient request authority', async () => {
 		let requestInit: RequestInit | undefined;
 		let cancelled = false;

@@ -617,7 +617,32 @@ export async function createLispCompiler(
 		if (signal) {
 			const bytes = await fetchBytes(moduleUrl, fetcher, maxAssetBytes, signal);
 			throwIfAborted(signal);
-			const compiled = await WebAssembly.compile(bytes);
+			const pendingCompile = WebAssembly.compile(bytes);
+			const compiled = await new Promise<WebAssembly.Module>((resolve, reject) => {
+				let settled = false;
+				const onAbort = () => {
+					if (settled) return;
+					settled = true;
+					signal.removeEventListener('abort', onAbort);
+					reject(abortReason(signal));
+				};
+				signal.addEventListener('abort', onAbort, { once: true });
+				void pendingCompile.then(
+					(module) => {
+						if (settled) return;
+						settled = true;
+						signal.removeEventListener('abort', onAbort);
+						resolve(module);
+					},
+					(error) => {
+						if (settled) return;
+						settled = true;
+						signal.removeEventListener('abort', onAbort);
+						reject(error);
+					}
+				);
+				if (signal.aborted) onAbort();
+			});
 			throwIfAborted(signal);
 			coreModuleCache.set(key, compiled);
 			return compiled;
