@@ -99,7 +99,11 @@ function runtimeAbortReason(signal: AbortSignal) {
 	return signal.reason ?? new DOMException('Runtime asset load aborted', 'AbortError');
 }
 
-function waitForRuntimeAssetOperation<T>(operation: Promise<T>, signal?: AbortSignal): Promise<T> {
+function waitForRuntimeAssetOperation<T>(
+	operation: Promise<T>,
+	signal?: AbortSignal,
+	onLateValue?: (value: T, reason: unknown) => void | Promise<void>
+): Promise<T> {
 	if (!signal) return operation;
 	return new Promise<T>((resolve, reject) => {
 		let settled = false;
@@ -112,7 +116,14 @@ function waitForRuntimeAssetOperation<T>(operation: Promise<T>, signal?: AbortSi
 		signal.addEventListener('abort', cancelOnAbort, { once: true });
 		operation.then(
 			(value) => {
-				if (settled) return;
+				if (settled) {
+					if (onLateValue) {
+						void Promise.resolve()
+							.then(() => onLateValue(value, signal.reason))
+							.catch(() => {});
+					}
+					return;
+				}
 				settled = true;
 				signal.removeEventListener('abort', cancelOnAbort);
 				resolve(value);
@@ -235,7 +246,19 @@ export async function fetchRuntimeJson(
 		referrerPolicy: 'no-referrer'
 	};
 	if (options.signal) requestInit.signal = options.signal;
-	const response = await fetchImpl(resolvedUrl.toString(), requestInit);
+	const pendingResponse = Promise.resolve(fetchImpl(resolvedUrl.toString(), requestInit));
+	const response = await waitForRuntimeAssetOperation(
+		pendingResponse,
+		options.signal,
+		async (lateResponse, reason) => {
+			await lateResponse.body?.cancel(reason).catch(() => {});
+		}
+	);
+	if (options.signal?.aborted) {
+		const reason = runtimeAbortReason(options.signal);
+		await response.body?.cancel(reason).catch(() => {});
+		throw reason;
+	}
 	if (response.url) {
 		let finalUrl: URL;
 		try {
@@ -554,7 +577,14 @@ export const readBuffer = async (
 			if (signal) requestInit.signal = signal;
 			let response: Response;
 			try {
-				response = await fetch(resolvedUrl, requestInit);
+				const pendingResponse = Promise.resolve(fetch(resolvedUrl, requestInit));
+				response = await waitForRuntimeAssetOperation(
+					pendingResponse,
+					signal,
+					async (lateResponse, reason) => {
+						await lateResponse.body?.cancel(reason).catch(() => {});
+					}
+				);
 			} catch (error) {
 				if (signal?.aborted) throw runtimeAbortReason(signal);
 				throw error;

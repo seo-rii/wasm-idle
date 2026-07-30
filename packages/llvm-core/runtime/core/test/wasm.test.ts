@@ -99,6 +99,48 @@ describe('WebAssembly loading utilities', () => {
 		await expect(pending).rejects.toBe(reason);
 	});
 
+	it.each(['asset', 'json'] as const)(
+		'cancels an uncooperative %s fetch and disposes its late response',
+		async (kind) => {
+			let resolveFetch!: (response: Response) => void;
+			const fetchMock = vi.fn(
+				(_input: RequestInfo | URL, _init?: RequestInit) =>
+					new Promise<Response>((resolve) => {
+						resolveFetch = resolve;
+					})
+			);
+			const controller = new AbortController();
+			const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+			const reason = new Error(`stop uncooperative ${kind} fetch`);
+			const url = `https://cdn.test/llvm/uncooperative-${kind}.bin`;
+			let pending: Promise<unknown>;
+			if (kind === 'asset') {
+				vi.stubGlobal('fetch', fetchMock);
+				pending = readBuffer(url, undefined, undefined, controller.signal);
+			} else {
+				pending = fetchRuntimeJson(url, {
+					fetchImpl: fetchMock,
+					signal: controller.signal
+				});
+			}
+
+			await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+			controller.abort(reason);
+
+			await expect(pending).rejects.toBe(reason);
+
+			const cancel = vi.fn(async () => {});
+			resolveFetch({
+				ok: true,
+				status: 200,
+				headers: new Headers(),
+				body: { cancel }
+			} as unknown as Response);
+			await vi.waitFor(() => expect(cancel).toHaveBeenCalledWith(reason));
+			expect(removeEventListener).toHaveBeenCalledOnce();
+		}
+	);
+
 	it('cancels active raw asset readers without poisoning a later retry', async () => {
 		const url = 'https://cdn.test/llvm/cancelled-runtime.bin';
 		let cancelled = false;
@@ -194,7 +236,7 @@ describe('WebAssembly loading utilities', () => {
 		await expect(pending).rejects.toBe(reason);
 		resolveArrayBuffer(Uint8Array.of(1, 2, 3).buffer);
 		await new Promise((resolve) => setTimeout(resolve, 0));
-		expect(removeEventListener).toHaveBeenCalledOnce();
+		expect(removeEventListener).toHaveBeenCalledTimes(2);
 		expect(progress.set).not.toHaveBeenCalled();
 	});
 
