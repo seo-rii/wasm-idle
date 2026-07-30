@@ -381,7 +381,7 @@ fn main() {
 			{ name: 'n', value: '2' },
 			{ name: 'n', value: '3' }
 		],
-		expectedLocal: { name: 'stop', value: '2' },
+		expectedLocal: { name: 'n', value: '1' },
 		expectedOutput: 'lldb-rust-recursive=12',
 		expectedTitle: 'Rust · LLDB / WAMR',
 		language: 'RUST',
