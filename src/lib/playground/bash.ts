@@ -42,7 +42,8 @@ class Bash implements Sandbox {
 	stdinWriter: WritableStreamDefaultWriter | null = null;
 	pendingInput: string[] = [];
 	pendingEof = false;
-	activeReject: ((reason: string) => void) | null = null;
+	activeReject: ((reason: unknown) => void) | null = null;
+	activeRunCleanup: (() => void) | null = null;
 	begin = 0;
 	elapse = 0;
 	uid = 0;
@@ -104,24 +105,26 @@ class Bash implements Sandbox {
 	write(input: string) {
 		this.pendingInput.push(input);
 		this.pendingEof = false;
-		void this.flushPendingInput();
+		void this.flushPendingInput().catch(() => undefined);
 	}
 
 	eof() {
 		this.pendingEof = true;
-		void this.flushPendingInput();
+		void this.flushPendingInput().catch(() => undefined);
 	}
 
 	private async flushPendingInput() {
-		if (!this.stdinWriter) return;
+		const writer = this.stdinWriter;
+		if (!writer) return;
 		const pending = this.pendingInput.splice(0);
 		for (const input of pending) {
-			await this.stdinWriter.write(new TextEncoder().encode(input));
+			await writer.write(new TextEncoder().encode(input));
+			if (this.stdinWriter !== writer) return;
 		}
-		if (this.pendingEof) {
+		if (this.pendingEof && this.stdinWriter === writer) {
 			this.pendingEof = false;
-			await this.stdinWriter.close();
-			this.stdinWriter = null;
+			await writer.close();
+			if (this.stdinWriter === writer) this.stdinWriter = null;
 		}
 	}
 
@@ -135,10 +138,10 @@ class Bash implements Sandbox {
 	): Promise<boolean | string> {
 		if (prepare) return true;
 		if (!this.runtimePackage) throw new Error('Bash runtime is not loaded');
-
-		this.exit = false;
-		this.begin = Date.now();
-		const runUid = ++this.uid;
+		const signal = options.signal;
+		if (signal?.aborted) {
+			throw signal.reason ?? new DOMException('Bash execution aborted', 'AbortError');
+		}
 		const { programArgs } = resolveSandboxExecutionArgs('BASH', args, options);
 		const activePath = options.activePath || 'main.sh';
 		const mountedFiles: Record<string, string> = {};
@@ -156,13 +159,51 @@ class Bash implements Sandbox {
 		mountedFiles[mountedActivePath] = code;
 		const queuedStdin = this.pendingInput.length > 0 ? this.pendingInput.join('') : undefined;
 		const suppliedStdin = options.stdin ?? (this.pendingEof ? queuedStdin || '' : undefined);
+		if (signal?.aborted) {
+			throw signal.reason ?? new DOMException('Bash execution aborted', 'AbortError');
+		}
+
+		this.exit = false;
+		this.begin = Date.now();
+		const runUid = ++this.uid;
 		if (suppliedStdin !== undefined) {
 			this.pendingInput = [];
 			this.pendingEof = false;
 		}
 
 		return new Promise<boolean | string>((resolve, reject) => {
+			let cleanedUp = false;
+			const cleanup = () => {
+				if (cleanedUp) return;
+				cleanedUp = true;
+				if (signal && onAbort) {
+					try {
+						signal.removeEventListener('abort', onAbort);
+					} catch {
+						// Cleanup must not replace the execution result.
+					}
+				}
+				if (this.activeRunCleanup === cleanup) this.activeRunCleanup = null;
+			};
+			const onAbort = signal
+				? () => {
+						if (runUid !== this.uid) {
+							cleanup();
+							return;
+						}
+						this.terminate(
+							signal.reason ??
+								new DOMException('Bash execution aborted', 'AbortError')
+						);
+					}
+				: undefined;
 			this.activeReject = reject;
+			this.activeRunCleanup = cleanup;
+			if (signal && onAbort) {
+				signal.addEventListener('abort', onAbort, { once: true });
+				if (signal.aborted) onAbort();
+			}
+			if (runUid !== this.uid) return;
 			void (async () => {
 				try {
 					const command = this.runtimePackage?.entrypoint;
@@ -174,13 +215,48 @@ class Bash implements Sandbox {
 						...(suppliedStdin === undefined ? {} : { stdin: suppliedStdin })
 					});
 					if (runUid !== this.uid) {
-						instance.free();
+						try {
+							instance.free();
+						} catch {
+							// The cancelled caller has already received its reason.
+						}
+						return;
+					}
+					let writer: WritableStreamDefaultWriter | null = null;
+					try {
+						writer =
+							suppliedStdin === undefined
+								? instance.stdin?.getWriter() || null
+								: null;
+					} catch (error) {
+						try {
+							instance.free();
+						} catch {
+							// Preserve the writer acquisition failure.
+						}
+						throw error;
+					}
+					if (runUid !== this.uid) {
+						if (writer) {
+							try {
+								void Promise.resolve(writer.abort(signal?.reason)).catch(
+									() => undefined
+								);
+							} catch {
+								// The cancelled caller has already received its reason.
+							}
+						}
+						try {
+							instance.free();
+						} catch {
+							// The cancelled caller has already received its reason.
+						}
 						return;
 					}
 					this.instance = instance;
-					this.stdinWriter =
-						suppliedStdin === undefined ? instance.stdin?.getWriter() || null : null;
+					this.stdinWriter = writer;
 					await this.flushPendingInput();
+					if (runUid !== this.uid) return;
 
 					const stdoutDone = instance.stdout.pipeTo(
 						new WritableStream({
@@ -200,13 +276,14 @@ class Bash implements Sandbox {
 							}
 						})
 					);
+					const outputDone = Promise.allSettled([stdoutDone, stderrDone]);
 					const result = await instance.wait();
-					await Promise.allSettled([stdoutDone, stderrDone]);
+					await outputDone;
 					if (runUid !== this.uid) return;
 
 					this.elapse = Date.now() - this.begin;
 					this.exit = true;
-					this.activeReject = null;
+					if (this.activeReject === reject) this.activeReject = null;
 					this.stdinWriter = null;
 					this.instance = null;
 					if (!result.ok) {
@@ -217,10 +294,12 @@ class Bash implements Sandbox {
 				} catch (error) {
 					if (runUid !== this.uid) return;
 					this.exit = true;
-					this.activeReject = null;
+					if (this.activeReject === reject) this.activeReject = null;
 					this.stdinWriter = null;
 					this.instance = null;
 					reject(error instanceof Error ? error.message : String(error));
+				} finally {
+					cleanup();
 				}
 			})();
 		});
@@ -230,17 +309,33 @@ class Bash implements Sandbox {
 		this.terminate();
 	}
 
-	terminate() {
-		this.activeReject?.('Process terminated');
+	terminate(reason: unknown = 'Process terminated') {
+		const reject = this.activeReject;
+		const cleanup = this.activeRunCleanup;
+		const writer = this.stdinWriter;
+		const instance = this.instance;
 		this.activeReject = null;
+		this.activeRunCleanup = null;
 		this.uid += 1;
-		void this.stdinWriter?.abort('Process terminated').catch(() => {});
 		this.stdinWriter = null;
-		this.instance?.free();
 		this.instance = null;
 		this.pendingInput = [];
 		this.pendingEof = false;
 		this.exit = true;
+		cleanup?.();
+		reject?.(reason);
+		if (writer) {
+			try {
+				void Promise.resolve(writer.abort(reason)).catch(() => undefined);
+			} catch {
+				// Preserve the termination reason.
+			}
+		}
+		try {
+			instance?.free();
+		} catch {
+			// Preserve the termination reason.
+		}
 	}
 
 	async clear() {
