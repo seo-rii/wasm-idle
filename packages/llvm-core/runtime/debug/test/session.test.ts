@@ -535,10 +535,37 @@ describe('BrowserLldbSession', () => {
 			if (result.status === 'rejected') expect(result.reason).toBeInstanceOf(RangeError);
 		}
 		expect(lldbWorker!.requests).toHaveLength(invalidLineRequestCount);
-		const setBreakpointRequestCount = lldbWorker!.requests.filter(
+		const mutableSource = { path: '/workspace/main.cpp' };
+		const sourceMutationRequestCount = lldbWorker!.requests.filter(
 			(request) => request.command === 'setBreakpoints'
 		).length;
 		deferredResponses.add('setBreakpoints');
+		const sourceMutationUpdate = session.setBreakpoints(mutableSource, [29]);
+		mutableSource.path = '/workspace/caller-mutated.cpp';
+		await expect
+			.poll(
+				() =>
+					lldbWorker!.requests.filter((request) => request.command === 'setBreakpoints')
+						.length
+			)
+			.toBe(sourceMutationRequestCount + 1);
+		await lldbWorker!.respondDapRequest(
+			lldbWorker!.requests.filter((request) => request.command === 'setBreakpoints').at(-1)!,
+			{
+				body: { breakpoints: [{ id: 129, verified: true, line: 29 }] }
+			}
+		);
+		await expect(sourceMutationUpdate).resolves.toEqual([
+			{
+				id: 129,
+				verified: true,
+				line: 29,
+				source: { path: '/workspace/main.cpp' }
+			}
+		]);
+		const setBreakpointRequestCount = lldbWorker!.requests.filter(
+			(request) => request.command === 'setBreakpoints'
+		).length;
 		const olderBreakpointUpdate = session.setBreakpoints({ path: '/workspace/main.cpp' }, [11]);
 		const newerBreakpointUpdate = session.setBreakpoints({ path: '/workspace/main.cpp' }, [13]);
 		await expect

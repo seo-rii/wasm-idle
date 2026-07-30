@@ -71,8 +71,9 @@ debug workers or a DAP request are created, and do not supersede an in-flight va
 out-of-order responses cannot replace the newest cached set. A superseded call resolves to that
 current snapshot even when its obsolete DAP response fails; only the current request propagates its
 failure. Use `getResolvedBreakpoints(path)` to read the current normalized snapshot. Returned
-breakpoint and source objects are isolated copies, so callers and DAP event listeners cannot mutate
-the cache through a retained reference. If the response omitted an ID, a later event can promote the
+breakpoint and source objects are isolated copies, and the request source is captured before awaiting
+DAP. Callers and DAP event listeners therefore cannot mutate the cache through a retained reference
+or an in-flight request argument. If the response omitted an ID, a later event can promote the
 matching source line to its assigned ID. Once an ID is known, later events match it before comparing
 the resolved source path; the cache remains keyed by the source whose breakpoints were requested
 even when LLDB reports the executable location in another file. IDs retired by a subsequent source

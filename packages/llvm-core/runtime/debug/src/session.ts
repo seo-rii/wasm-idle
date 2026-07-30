@@ -364,16 +364,17 @@ export class BrowserLldbSession {
 	}
 
 	async setBreakpoints(source: DebugSource, lines: number[]) {
-		validateDebugSourcePath(source.path);
+		const requestSource = { ...source };
+		validateDebugSourcePath(requestSource.path);
 		const requestedLines = validateBreakpointLines(lines);
-		const sourcePath = source.path;
+		const sourcePath = requestSource.path;
 		const requestVersion = (this.breakpointRequestVersions.get(sourcePath) ?? 0) + 1;
 		this.breakpointRequestVersions.set(sourcePath, requestVersion);
 		let response: { breakpoints?: ResolvedBreakpoint[] };
 		try {
 			response = await this.awaitWhileActive(
 				this.request<{ breakpoints?: ResolvedBreakpoint[] }>('setBreakpoints', {
-					source,
+					source: requestSource,
 					breakpoints: requestedLines.map((line) => ({ line })),
 					lines: requestedLines,
 					sourceModified: false
@@ -394,7 +395,7 @@ export class BrowserLldbSession {
 				...breakpoint,
 				verified: breakpoint?.verified === true,
 				line: breakpoint?.line ?? requestedLine,
-				source: breakpoint?.source ?? source
+				source: breakpoint?.source ?? requestSource
 			} satisfies ResolvedBreakpoint;
 		});
 		if (this.breakpointRequestVersions.get(sourcePath) === requestVersion) {
