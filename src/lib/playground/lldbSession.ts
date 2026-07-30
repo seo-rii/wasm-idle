@@ -116,6 +116,7 @@ export class LldbSandboxSession {
 	private breakpointVersion = 0;
 	private dapExitCode: number | null = null;
 	private readonly breakpointsBySource = new Map<`/workspace/${string}`, number[]>();
+	private readonly breakpointRequestVersions = new Map<string, number>();
 	private readonly sourceContentSha256ByPath = new Map<string, string>();
 
 	constructor(private readonly options: LldbSandboxSessionOptions) {
@@ -311,8 +312,11 @@ export class LldbSandboxSession {
 	async setBreakpoints(lines: number[], sourcePath = this.options.sourcePath) {
 		this.breakpointsBySource.set(sourcePath, [...lines]);
 		this.breakpointVersion += 1;
+		const requestVersion = (this.breakpointRequestVersions.get(sourcePath) ?? 0) + 1;
+		this.breakpointRequestVersions.set(sourcePath, requestVersion);
 		if (!this.session || !this.initialized) return;
-		const response = await this.requireSession().request<{
+		const session = this.requireSession();
+		const response = await session.request<{
 			breakpoints?: Array<{
 				verified?: boolean;
 				line?: number;
@@ -324,6 +328,12 @@ export class LldbSandboxSession {
 			lines,
 			sourceModified: false
 		});
+		if (
+			this.session !== session ||
+			this.breakpointRequestVersions.get(sourcePath) !== requestVersion
+		) {
+			return;
+		}
 		this.publishResolvedBreakpoints(response.breakpoints ?? [], lines, sourcePath);
 	}
 

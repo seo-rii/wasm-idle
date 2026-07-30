@@ -49,6 +49,10 @@ Command serialization also treats a runtime `pause` event as completion of the c
 the target. Locks are versioned so a late `continue` promise cannot unlock a newer step request;
 hosts may therefore issue the next step as soon as the stopped state is published.
 
+The playground host also versions concurrent breakpoint updates per source path. A delayed DAP
+response cannot restore an older breakpoint set for the same file, while updates for different
+workspace files remain independent.
+
 When a selected LLDB stack frame names another `/workspace/...` source, the host should await
 `selectFrame()`, open the matching workspace file, and then update the controller source path. This
 keeps the Monaco model, selected frame, paused line, and per-source revision state synchronized.
