@@ -471,6 +471,49 @@ describe('language tool asset loading', () => {
 		expect(releaseLock).toHaveBeenCalledOnce();
 	});
 
+	it('does not publish a bodyless response after cancellation during materialization', async () => {
+		let resolveArrayBuffer!: (buffer: ArrayBuffer) => void;
+		const arrayBuffer = vi.fn(
+			() =>
+				new Promise<ArrayBuffer>((resolve) => {
+					resolveArrayBuffer = resolve;
+				})
+		);
+		let removeEventListener: ReturnType<typeof vi.spyOn> | undefined;
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+				removeEventListener = vi.spyOn(init?.signal as AbortSignal, 'removeEventListener');
+				return {
+					ok: true,
+					url: 'https://assets.example.com/clangd/clangd.js',
+					headers: { get: vi.fn(() => null) },
+					body: null,
+					arrayBuffer
+				};
+			})
+		);
+		const controller = new AbortController();
+		const reason = new Error('cancelled during bodyless read');
+		const reportProgress = vi.fn();
+		const loading = loadLanguageToolAsset(
+			'clangd',
+			'clangd.js',
+			{ baseUrl: 'https://assets.example.com/clangd/' },
+			reportProgress,
+			{ signal: controller.signal }
+		);
+
+		await vi.waitFor(() => expect(arrayBuffer).toHaveBeenCalledOnce());
+		controller.abort(reason);
+
+		await expect(loading).rejects.toBe(reason);
+		await vi.waitFor(() => expect(removeEventListener).toHaveBeenCalledOnce());
+		resolveArrayBuffer(Uint8Array.of(1, 2, 3).buffer);
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(reportProgress).not.toHaveBeenCalled();
+	});
+
 	it('rejects oversized loader-owned blobs before materializing them', async () => {
 		const blob = new Blob();
 		Object.defineProperty(blob, 'size', { value: 128 * 1024 * 1024 + 1 });

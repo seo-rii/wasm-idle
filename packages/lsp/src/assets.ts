@@ -216,9 +216,29 @@ async function fetchAsset(
 	}
 	const mimeType = response.headers.get('content-type') || undefined;
 	if (!response.body) {
-		const bytes = enforceAssetSize(asset, new Uint8Array(await response.arrayBuffer()));
-		reportProgress(bytes.byteLength, contentLength ?? bytes.byteLength);
-		return { bytes, mimeType };
+		let cancelOnAbort: (() => void) | undefined;
+		const aborted = new Promise<never>((_resolve, reject) => {
+			cancelOnAbort = () =>
+				reject(signal.reason ?? new Error('Runtime asset load was aborted'));
+			signal.addEventListener('abort', cancelOnAbort, { once: true });
+		});
+		try {
+			if (signal.aborted) {
+				throw signal.reason ?? new Error('Runtime asset load was aborted');
+			}
+			const materialized = response.arrayBuffer();
+			const bytes = enforceAssetSize(
+				asset,
+				new Uint8Array(await Promise.race([materialized, aborted]))
+			);
+			if (signal.aborted) {
+				throw signal.reason ?? new Error('Runtime asset load was aborted');
+			}
+			reportProgress(bytes.byteLength, contentLength ?? bytes.byteLength);
+			return { bytes, mimeType };
+		} finally {
+			if (cancelOnAbort) signal.removeEventListener('abort', cancelOnAbort);
+		}
 	}
 
 	const reader = response.body.getReader();
