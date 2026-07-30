@@ -281,6 +281,20 @@ export class DapClient implements DapRequestSession {
 	}
 
 	private handleResponse(response: DapResponse) {
+		if (!Number.isSafeInteger(response.request_seq) || response.request_seq <= 0) {
+			this.fail(
+				new Error('invalid DAP response: request_seq must be a positive safe integer')
+			);
+			return;
+		}
+		if (typeof response.command !== 'string' || response.command.length === 0) {
+			this.fail(new Error('invalid DAP response: command must be a non-empty string'));
+			return;
+		}
+		if (typeof response.success !== 'boolean') {
+			this.fail(new Error('invalid DAP response: success must be a boolean'));
+			return;
+		}
 		const pending = this.pending.get(response.request_seq);
 		if (!pending) return;
 		if (response.command !== pending.command) {

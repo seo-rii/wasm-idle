@@ -310,6 +310,73 @@ describe('DapClient', () => {
 		}
 	});
 
+	it('fails the DAP stream for malformed response envelope fields', async () => {
+		const corruptions = [
+			{
+				field: 'request_seq',
+				create: (request: DapRequest) => ({
+					seq: 40,
+					type: 'response',
+					request_seq: request.seq + 0.5,
+					command: request.command,
+					success: true
+				})
+			},
+			{
+				field: 'command',
+				create: (request: DapRequest) => ({
+					seq: 41,
+					type: 'response',
+					request_seq: request.seq,
+					command: 42,
+					success: true
+				})
+			},
+			{
+				field: 'success',
+				create: (request: DapRequest) => ({
+					seq: 42,
+					type: 'response',
+					request_seq: request.seq,
+					command: request.command,
+					success: 'false'
+				})
+			}
+		] as const;
+
+		for (const [index, corruption] of corruptions.entries()) {
+			const inputDescriptor = createSharedByteQueue(4096, 34 + index);
+			const outputDescriptor = createSharedByteQueue(4096, 34 + index);
+			const input = new SharedByteQueue(inputDescriptor);
+			const output = new SharedByteQueue(outputDescriptor);
+			const client = new DapClient({
+				input: inputDescriptor,
+				output: outputDescriptor,
+				requestTimeoutMs: 100
+			}).start();
+
+			try {
+				const requestPromise = client.request('threads');
+				const chunk = new Uint8Array(256);
+				const length = await input.read(chunk);
+				const [request] = new DapMessageParser().push(chunk.slice(0, length)) as [
+					DapRequest
+				];
+				await output.write(
+					encodeDapMessage(corruption.create(request) as unknown as DapResponse)
+				);
+
+				await expect(requestPromise).rejects.toThrow(
+					new RegExp(`invalid DAP response: ${corruption.field}`, 'u')
+				);
+				expect(input.closed).toBe(true);
+				expect(output.closed).toBe(true);
+			} finally {
+				await client.close();
+			}
+		}
+	});
+
 	it('rejects immediately when the request transport is closed', async () => {
 		const inputDescriptor = createSharedByteQueue(4096, 5);
 		const outputDescriptor = createSharedByteQueue(4096, 5);
