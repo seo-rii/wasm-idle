@@ -447,6 +447,39 @@ describe('LldbSandboxSession', () => {
 			breakpoints: [{ requestedLine: 9, line: 9, verified: true }]
 		});
 
+		let rejectStale!: (error: Error) => void;
+		let resolveLatest!: (value: {
+			breakpoints: Array<{ verified: boolean; line: number }>;
+		}) => void;
+		runtimeState.breakpointResponseGates = [
+			new Promise((_resolve, reject) => {
+				rejectStale = reject;
+			}),
+			new Promise((resolve) => {
+				resolveLatest = resolve;
+			})
+		];
+		const staleFailure = controller.setBreakpoints([11]);
+		const latestUpdate = controller.setBreakpoints([13]);
+		resolveLatest({ breakpoints: [{ verified: true, line: 13 }] });
+		await latestUpdate;
+		rejectStale(new Error('obsolete breakpoint failure'));
+
+		await expect(staleFailure).resolves.toBeUndefined();
+		expect(events.filter((event) => event.type === 'breakpoints').at(-1)).toMatchObject({
+			breakpoints: [{ requestedLine: 13, line: 13, verified: true }]
+		});
+
+		let rejectCurrent!: (error: Error) => void;
+		runtimeState.breakpointResponseGates = [
+			new Promise((_resolve, reject) => {
+				rejectCurrent = reject;
+			})
+		];
+		const currentFailure = controller.setBreakpoints([17]);
+		rejectCurrent(new Error('current breakpoint failure'));
+		await expect(currentFailure).rejects.toThrow('current breakpoint failure');
+
 		runtimeState.session!.emitLifecycle({ type: 'target-exit', exitCode: 0 });
 		await completion;
 	});

@@ -50,8 +50,9 @@ the target. Locks are versioned so a late `continue` promise cannot unlock a new
 hosts may therefore issue the next step as soon as the stopped state is published.
 
 The playground host also versions concurrent breakpoint updates per source path. A delayed DAP
-response cannot restore an older breakpoint set for the same file, while updates for different
-workspace files remain independent.
+response cannot restore an older breakpoint set for the same file, and a superseded request's late
+failure is ignored instead of surfacing after the current update succeeds. Updates for different
+workspace files remain independent, while failures from the latest request still propagate.
 
 When a selected LLDB stack frame names another `/workspace/...` source, the host should await
 `selectFrame()`, open the matching workspace file, and then update the controller source path. This

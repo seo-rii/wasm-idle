@@ -316,18 +316,29 @@ export class LldbSandboxSession {
 		this.breakpointRequestVersions.set(sourcePath, requestVersion);
 		if (!this.session || !this.initialized) return;
 		const session = this.requireSession();
-		const response = await session.request<{
+		let response: {
 			breakpoints?: Array<{
 				verified?: boolean;
 				line?: number;
 				message?: string;
 			}>;
-		}>('setBreakpoints', {
-			source: { path: sourcePath },
-			breakpoints: lines.map((line) => ({ line })),
-			lines,
-			sourceModified: false
-		});
+		};
+		try {
+			response = await session.request('setBreakpoints', {
+				source: { path: sourcePath },
+				breakpoints: lines.map((line) => ({ line })),
+				lines,
+				sourceModified: false
+			});
+		} catch (error) {
+			if (
+				this.session !== session ||
+				this.breakpointRequestVersions.get(sourcePath) !== requestVersion
+			) {
+				return;
+			}
+			throw error;
+		}
 		if (
 			this.session !== session ||
 			this.breakpointRequestVersions.get(sourcePath) !== requestVersion
