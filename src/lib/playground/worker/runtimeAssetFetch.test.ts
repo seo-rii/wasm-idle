@@ -69,74 +69,158 @@ describe('runtime asset fetch', () => {
 		expect(streamed.releaseLock).toHaveBeenCalledOnce();
 	});
 
-	it('aborts a stalled stream read and releases its reader', async () => {
-		let markReadStarted!: () => void;
-		const readStarted = new Promise<void>((resolve) => {
-			markReadStarted = resolve;
-		});
-		let resolveRead!: (result: { done: true; value: undefined }) => void;
-		const readPending = new Promise<{ done: true; value: undefined }>((resolve) => {
-			resolveRead = resolve;
-		});
-		const read = vi.fn(() => {
-			markReadStarted();
-			return readPending;
-		});
-		const cancel = vi.fn(async () => {
-			resolveRead({ done: true, value: undefined });
-		});
+	it('cancels and releases the reader when the initial buffer allocation fails', async () => {
+		const cancel = vi.fn(async () => undefined);
+		const read = vi.fn();
 		const releaseLock = vi.fn();
 		(globalThis as any).fetch = vi.fn(async () => ({
 			body: { getReader: () => ({ cancel, read, releaseLock }) },
-			headers: new Headers(),
+			headers: new Headers({ 'content-length': String(Number.MAX_SAFE_INTEGER) }),
 			ok: true,
 			status: 200,
 			url: assetUrl
 		}));
 		const controller = new AbortController();
-		const reason = new Error('stop stalled common worker asset stream');
 		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
 		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
-		const progress = vi.fn();
+
 		const loading = fetchRuntimeAssetBytes({
 			url: assetUrl,
 			label: 'test compiler',
-			onProgress: progress,
+			maxAssetBytes: Number.MAX_SAFE_INTEGER,
 			signal: controller.signal
 		});
-		let timeout: ReturnType<typeof setTimeout> | undefined;
+		const outcome = await loading.then(
+			(value) => ({ status: 'resolved' as const, value }),
+			(error) => ({ status: 'rejected' as const, reason: error as unknown })
+		);
 
-		try {
-			await readStarted;
-			controller.abort(reason);
-			const outcome = await Promise.race([
-				loading.then(
-					(value) => ({ status: 'resolved' as const, value }),
-					(error) => ({ status: 'rejected' as const, reason: error as unknown })
-				),
-				new Promise<{ status: 'pending' }>((resolve) => {
-					timeout = setTimeout(() => resolve({ status: 'pending' }), 25);
-				})
-			]);
-
-			expect(outcome).toEqual({ status: 'rejected', reason });
-			expect(cancel).toHaveBeenCalledOnce();
-			expect(cancel).toHaveBeenCalledWith(reason);
-			expect(releaseLock).toHaveBeenCalledOnce();
-			const abortRegistrations = addEventListener.mock.calls.filter(
-				([type]) => type === 'abort'
-			);
-			expect(abortRegistrations).toHaveLength(2);
-			for (const registration of abortRegistrations) {
-				expect(removeEventListener).toHaveBeenCalledWith('abort', registration[1]);
-			}
-			expect(progress).not.toHaveBeenCalled();
-		} finally {
-			if (timeout) clearTimeout(timeout);
-			resolveRead({ done: true, value: undefined });
-			await loading.catch(() => {});
+		expect(outcome.status).toBe('rejected');
+		if (outcome.status !== 'rejected') throw new Error('expected asset fetch to reject');
+		expect(outcome.reason).toMatchObject({ name: 'RangeError' });
+		expect(read).not.toHaveBeenCalled();
+		expect(cancel).toHaveBeenCalledOnce();
+		expect(cancel).toHaveBeenCalledWith(outcome.reason);
+		expect(releaseLock).toHaveBeenCalledOnce();
+		const abortRegistrations = addEventListener.mock.calls.filter(([type]) => type === 'abort');
+		expect(abortRegistrations).toHaveLength(2);
+		for (const registration of abortRegistrations) {
+			expect(removeEventListener).toHaveBeenCalledWith('abort', registration[1]);
 		}
 	});
+
+	it('preserves an abort raised while acquiring the stream reader', async () => {
+		const controller = new AbortController();
+		const reason = new Error('stop while acquiring the common worker asset reader');
+		const cancel = vi.fn(async () => undefined);
+		const read = vi.fn();
+		const releaseLock = vi.fn();
+		(globalThis as any).fetch = vi.fn(async () => ({
+			body: {
+				getReader() {
+					controller.abort(reason);
+					return { cancel, read, releaseLock };
+				}
+			},
+			headers: new Headers(),
+			ok: true,
+			status: 200,
+			url: assetUrl
+		}));
+
+		await expect(
+			fetchRuntimeAssetBytes({
+				url: assetUrl,
+				label: 'test compiler',
+				signal: controller.signal
+			})
+		).rejects.toBe(reason);
+		expect(read).not.toHaveBeenCalled();
+		expect(cancel).toHaveBeenCalledOnce();
+		expect(cancel).toHaveBeenCalledWith(reason);
+		expect(releaseLock).toHaveBeenCalledOnce();
+	});
+
+	it.each(['pending', 'throw', 'reject'] as const)(
+		'aborts a stalled stream read without awaiting %s cancellation',
+		async (cancellationMode) => {
+			let markReadStarted!: () => void;
+			const readStarted = new Promise<void>((resolve) => {
+				markReadStarted = resolve;
+			});
+			let resolveRead!: (result: { done: true; value: undefined }) => void;
+			const readPending = new Promise<{ done: true; value: undefined }>((resolve) => {
+				resolveRead = resolve;
+			});
+			const read = vi.fn(() => {
+				markReadStarted();
+				return readPending;
+			});
+			let resolveCancellation!: () => void;
+			const stalledCancellation = new Promise<void>((resolve) => {
+				resolveCancellation = resolve;
+			});
+			const cancel = vi.fn(() => {
+				if (cancellationMode === 'throw') throw new Error('reader cleanup threw');
+				if (cancellationMode === 'reject') {
+					return Promise.reject(new Error('reader cleanup rejected'));
+				}
+				return stalledCancellation;
+			});
+			const releaseLock = vi.fn();
+			(globalThis as any).fetch = vi.fn(async () => ({
+				body: { getReader: () => ({ cancel, read, releaseLock }) },
+				headers: new Headers(),
+				ok: true,
+				status: 200,
+				url: assetUrl
+			}));
+			const controller = new AbortController();
+			const reason = new Error('stop stalled common worker asset stream');
+			const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+			const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+			const progress = vi.fn();
+			const loading = fetchRuntimeAssetBytes({
+				url: assetUrl,
+				label: 'test compiler',
+				onProgress: progress,
+				signal: controller.signal
+			});
+			let timeout: ReturnType<typeof setTimeout> | undefined;
+
+			try {
+				await readStarted;
+				controller.abort(reason);
+				const outcome = await Promise.race([
+					loading.then(
+						(value) => ({ status: 'resolved' as const, value }),
+						(error) => ({ status: 'rejected' as const, reason: error as unknown })
+					),
+					new Promise<{ status: 'pending' }>((resolve) => {
+						timeout = setTimeout(() => resolve({ status: 'pending' }), 25);
+					})
+				]);
+
+				expect(outcome).toEqual({ status: 'rejected', reason });
+				expect(cancel).toHaveBeenCalledOnce();
+				expect(cancel).toHaveBeenCalledWith(reason);
+				expect(releaseLock).toHaveBeenCalledOnce();
+				const abortRegistrations = addEventListener.mock.calls.filter(
+					([type]) => type === 'abort'
+				);
+				expect(abortRegistrations).toHaveLength(2);
+				for (const registration of abortRegistrations) {
+					expect(removeEventListener).toHaveBeenCalledWith('abort', registration[1]);
+				}
+				expect(progress).not.toHaveBeenCalled();
+			} finally {
+				if (timeout) clearTimeout(timeout);
+				resolveCancellation();
+				resolveRead({ done: true, value: undefined });
+				await loading.catch(() => {});
+			}
+		}
+	);
 
 	it('aborts an uncooperative fetch promptly and cancels its late response', async () => {
 		let resolveFetch!: (response: unknown) => void;
@@ -230,21 +314,57 @@ describe('runtime asset fetch', () => {
 		expect(bodyCancel).toHaveBeenCalledOnce();
 	});
 
-	it('cancels an unsuccessful response before reporting its status', async () => {
-		const bodyCancel = vi.fn(async () => undefined);
-		(globalThis as any).fetch = vi.fn(async () => ({
-			body: { cancel: bodyCancel },
-			headers: new Headers(),
-			ok: false,
-			status: 503,
-			url: assetUrl
-		}));
+	it.each(['pending', 'throw', 'reject'] as const)(
+		'reports an unsuccessful response without awaiting %s cancellation',
+		async (cancellationMode) => {
+			let resolveCancellation!: () => void;
+			const stalledCancellation = new Promise<void>((resolve) => {
+				resolveCancellation = resolve;
+			});
+			const bodyCancel = vi.fn((_reason?: unknown) => {
+				if (cancellationMode === 'throw') throw new Error('response cleanup threw');
+				if (cancellationMode === 'reject') {
+					return Promise.reject(new Error('response cleanup rejected'));
+				}
+				return stalledCancellation;
+			});
+			(globalThis as any).fetch = vi.fn(async () => ({
+				body: { cancel: bodyCancel },
+				headers: new Headers(),
+				ok: false,
+				status: 503,
+				url: assetUrl
+			}));
 
-		await expect(
-			fetchRuntimeAssetBytes({ url: assetUrl, label: 'test compiler' })
-		).rejects.toThrow(`failed to load test compiler from ${assetUrl}: 503`);
-		expect(bodyCancel).toHaveBeenCalledOnce();
-	});
+			const loading = fetchRuntimeAssetBytes({ url: assetUrl, label: 'test compiler' });
+			let timeout: ReturnType<typeof setTimeout> | undefined;
+
+			try {
+				const outcome = await Promise.race([
+					loading.then(
+						(value) => ({ status: 'resolved' as const, value }),
+						(error) => ({ status: 'rejected' as const, reason: error as unknown })
+					),
+					new Promise<{ status: 'pending' }>((resolve) => {
+						timeout = setTimeout(() => resolve({ status: 'pending' }), 25);
+					})
+				]);
+
+				expect(outcome.status).toBe('rejected');
+				if (outcome.status !== 'rejected')
+					throw new Error('expected asset fetch to reject');
+				expect(outcome.reason).toMatchObject({
+					message: `failed to load test compiler from ${assetUrl}: 503`
+				});
+				expect(bodyCancel).toHaveBeenCalledOnce();
+				expect(bodyCancel.mock.calls[0]?.[0]).toBe(outcome.reason);
+			} finally {
+				if (timeout) clearTimeout(timeout);
+				resolveCancellation();
+				await loading.catch(() => {});
+			}
+		}
+	);
 
 	it('cancels and releases an unknown-length stream at the byte limit', async () => {
 		const streamed = createStreamResponse([new Uint8Array(3), new Uint8Array(2)]);
@@ -257,24 +377,56 @@ describe('runtime asset fetch', () => {
 		expect(streamed.releaseLock).toHaveBeenCalledOnce();
 	});
 
-	it('cancels and releases a reader when the stream fails', async () => {
-		const cancel = vi.fn(async () => undefined);
-		const releaseLock = vi.fn();
-		const read = vi.fn().mockRejectedValueOnce(new Error('stream failed'));
-		(globalThis as any).fetch = vi.fn(async () => ({
-			body: { getReader: () => ({ cancel, read, releaseLock }) },
-			headers: new Headers(),
-			ok: true,
-			status: 200,
-			url: assetUrl
-		}));
+	it.each(['pending', 'throw', 'reject'] as const)(
+		'preserves a stream failure without awaiting %s cancellation',
+		async (cancellationMode) => {
+			let resolveCancellation!: () => void;
+			const stalledCancellation = new Promise<void>((resolve) => {
+				resolveCancellation = resolve;
+			});
+			const cancel = vi.fn(() => {
+				if (cancellationMode === 'throw') throw new Error('stream cleanup threw');
+				if (cancellationMode === 'reject') {
+					return Promise.reject(new Error('stream cleanup rejected'));
+				}
+				return stalledCancellation;
+			});
+			const releaseLock = vi.fn();
+			const reason = new Error('stream failed');
+			const read = vi.fn().mockRejectedValueOnce(reason);
+			(globalThis as any).fetch = vi.fn(async () => ({
+				body: { getReader: () => ({ cancel, read, releaseLock }) },
+				headers: new Headers(),
+				ok: true,
+				status: 200,
+				url: assetUrl
+			}));
 
-		await expect(
-			fetchRuntimeAssetBytes({ url: assetUrl, label: 'test compiler' })
-		).rejects.toThrow('stream failed');
-		expect(cancel).toHaveBeenCalledOnce();
-		expect(releaseLock).toHaveBeenCalledOnce();
-	});
+			const loading = fetchRuntimeAssetBytes({ url: assetUrl, label: 'test compiler' });
+			let timeout: ReturnType<typeof setTimeout> | undefined;
+
+			try {
+				const outcome = await Promise.race([
+					loading.then(
+						(value) => ({ status: 'resolved' as const, value }),
+						(error) => ({ status: 'rejected' as const, reason: error as unknown })
+					),
+					new Promise<{ status: 'pending' }>((resolve) => {
+						timeout = setTimeout(() => resolve({ status: 'pending' }), 25);
+					})
+				]);
+
+				expect(outcome).toEqual({ status: 'rejected', reason });
+				expect(cancel).toHaveBeenCalledOnce();
+				expect(cancel).toHaveBeenCalledWith(reason);
+				expect(releaseLock).toHaveBeenCalledOnce();
+			} finally {
+				if (timeout) clearTimeout(timeout);
+				resolveCancellation();
+				await loading.catch(() => {});
+			}
+		}
+	);
 
 	it('rejects a substituted final URL and cancels its body', async () => {
 		const bodyCancel = vi.fn(async () => undefined);

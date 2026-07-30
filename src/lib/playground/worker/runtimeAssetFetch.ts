@@ -35,9 +35,9 @@ function resolveRuntimeAssetUrl(value: string, label: string) {
 	return url;
 }
 
-async function cancelResponseBody(response: Response, reason?: unknown) {
+function cancelResponseBody(response: Response, reason?: unknown) {
 	try {
-		await response.body?.cancel(reason);
+		void Promise.resolve(response.body?.cancel(reason)).catch(() => undefined);
 	} catch {
 		// Preserve the validation or HTTP failure that caused cancellation.
 	}
@@ -106,7 +106,7 @@ export async function fetchRuntimeAssetBytes({
 			})
 		: await pendingResponse;
 	if (signal?.aborted) {
-		await cancelResponseBody(response, abortReason(signal));
+		cancelResponseBody(response, abortReason(signal));
 		throwIfAborted(signal);
 	}
 
@@ -115,19 +115,24 @@ export async function fetchRuntimeAssetBytes({
 		try {
 			responseUrl = new URL(response.url);
 		} catch {
-			await cancelResponseBody(response);
-			throw new Error(`${label} response URL is invalid: ${response.url}`);
+			const error = new Error(`${label} response URL is invalid: ${response.url}`);
+			cancelResponseBody(response, error);
+			throw error;
 		}
 		if (responseUrl.href !== requestUrl.href) {
-			await cancelResponseBody(response);
-			throw new Error(
+			const error = new Error(
 				`${label} response URL mismatch: expected ${requestUrl.href}, received ${responseUrl.href}`
 			);
+			cancelResponseBody(response, error);
+			throw error;
 		}
 	}
 	if (!response.ok) {
-		await cancelResponseBody(response);
-		throw new Error(`failed to load ${label} from ${requestUrl.href}: ${response.status}`);
+		const error = new Error(
+			`failed to load ${label} from ${requestUrl.href}: ${response.status}`
+		);
+		cancelResponseBody(response, error);
+		throw error;
 	}
 
 	const rawContentLength = response.headers.get('content-length');
@@ -136,14 +141,16 @@ export async function fetchRuntimeAssetBytes({
 		const normalizedContentLength = rawContentLength.trim();
 		const parsedContentLength = Number(normalizedContentLength);
 		if (!/^\d+$/u.test(normalizedContentLength) || !Number.isSafeInteger(parsedContentLength)) {
-			await cancelResponseBody(response);
-			throw new Error(`${label} has an invalid Content-Length`);
+			const error = new Error(`${label} has an invalid Content-Length`);
+			cancelResponseBody(response, error);
+			throw error;
 		}
 		total = parsedContentLength;
 	}
 	if (total !== undefined && total > maxAssetBytes) {
-		await cancelResponseBody(response);
-		throw new Error(`${label} exceeds the ${maxAssetBytes} byte limit`);
+		const error = new Error(`${label} exceeds the ${maxAssetBytes} byte limit`);
+		cancelResponseBody(response, error);
+		throw error;
 	}
 
 	if (!response.body) {
@@ -154,6 +161,7 @@ export async function fetchRuntimeAssetBytes({
 					signal.addEventListener('abort', cancelOnAbort, { once: true });
 				})
 			: undefined;
+		if (aborted) void aborted.catch(() => undefined);
 		try {
 			throwIfAborted(signal);
 			const materialized = response.arrayBuffer();
@@ -174,32 +182,43 @@ export async function fetchRuntimeAssetBytes({
 
 	const reader = response.body.getReader();
 	let readerCancelled = false;
-	let abortCancellation: Promise<void> | undefined;
+	const cancelReader = (reason?: unknown) => {
+		if (readerCancelled) return;
+		readerCancelled = true;
+		try {
+			void Promise.resolve(reader.cancel(reason)).catch(() => undefined);
+		} catch {
+			// Preserve the abort, stream, or size-limit failure.
+		}
+	};
+	if (signal?.aborted) {
+		const reason = abortReason(signal);
+		cancelReader(reason);
+		try {
+			reader.releaseLock();
+		} catch {
+			// Preserve the abort reason when the reader cannot release immediately.
+		}
+		throw reason;
+	}
 	let cancelOnAbort: (() => void) | undefined;
 	const aborted = signal
 		? new Promise<never>((_resolve, reject) => {
 				cancelOnAbort = () => {
 					const reason = abortReason(signal);
-					if (!readerCancelled) {
-						readerCancelled = true;
-						try {
-							abortCancellation = reader.cancel(reason).then(
-								() => undefined,
-								() => undefined
-							);
-						} catch {
-							abortCancellation = Promise.resolve();
-						}
-					}
+					cancelReader(reason);
 					reject(reason);
 				};
 				signal.addEventListener('abort', cancelOnAbort, { once: true });
 			})
 		: undefined;
+	if (aborted) void aborted.catch(() => undefined);
 	if (signal?.aborted) cancelOnAbort?.();
 	let receivedLength = 0;
-	let bytes = new Uint8Array(Math.min(maxAssetBytes, total ?? DEFAULT_STREAM_BUFFER_BYTES));
+	let bytes!: Uint8Array<ArrayBuffer>;
+	let releaseFailure: { error: unknown } | undefined;
 	try {
+		bytes = new Uint8Array(Math.min(maxAssetBytes, total ?? DEFAULT_STREAM_BUFFER_BYTES));
 		while (true) {
 			throwIfAborted(signal);
 			const pendingRead = reader.read();
@@ -211,13 +230,9 @@ export async function fetchRuntimeAssetBytes({
 			if (!value) continue;
 			const nextLength = receivedLength + value.byteLength;
 			if (nextLength > maxAssetBytes) {
-				readerCancelled = true;
-				try {
-					await reader.cancel();
-				} catch {
-					// Preserve the size-limit failure.
-				}
-				throw new Error(`${label} exceeds the ${maxAssetBytes} byte limit`);
+				const error = new Error(`${label} exceeds the ${maxAssetBytes} byte limit`);
+				cancelReader(error);
+				throw error;
 			}
 			if (nextLength > bytes.byteLength) {
 				const nextCapacity = Math.min(
@@ -233,21 +248,18 @@ export async function fetchRuntimeAssetBytes({
 			onProgress?.({ loaded: receivedLength, total });
 		}
 	} catch (error) {
-		if (abortCancellation) await abortCancellation;
-		else if (!readerCancelled) {
-			readerCancelled = true;
-			try {
-				await reader.cancel(error);
-			} catch {
-				// Preserve the stream or cancellation failure.
-			}
-		}
+		cancelReader(signal?.aborted ? abortReason(signal) : error);
 		throwIfAborted(signal);
 		throw error;
 	} finally {
 		if (cancelOnAbort) signal?.removeEventListener('abort', cancelOnAbort);
-		reader.releaseLock();
+		try {
+			reader.releaseLock();
+		} catch (error) {
+			if (!signal?.aborted) releaseFailure = { error };
+		}
 	}
+	if (releaseFailure) throw releaseFailure.error;
 
 	if (receivedLength !== bytes.byteLength) bytes = bytes.slice(0, receivedLength);
 	onProgress?.({ loaded: receivedLength, total: total ?? receivedLength });
