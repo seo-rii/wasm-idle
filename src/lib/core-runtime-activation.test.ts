@@ -206,10 +206,10 @@ describe('runtime profile activation', () => {
 			controller.abort(reason);
 			const outcome = await Promise.race([
 				pending.then(
-					(value) => ({ status: 'resolved', value }),
-					(error) => ({ status: 'rejected', reason: error })
+					(value) => ({ status: 'resolved' as const, value }),
+					(error) => ({ status: 'rejected' as const, reason: error as unknown })
 				),
-				new Promise((resolve) => {
+				new Promise<{ status: 'pending' }>((resolve) => {
 					timeout = setTimeout(() => resolve({ status: 'pending' }), 25);
 				})
 			]);

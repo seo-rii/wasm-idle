@@ -338,10 +338,10 @@ describe('runtime registry asset preflight', () => {
 			controller.abort(reason);
 			const outcome = await Promise.race([
 				pending.then(
-					(value) => ({ status: 'resolved', value }),
-					(error) => ({ status: 'rejected', reason: error })
+					(value) => ({ status: 'resolved' as const, value }),
+					(error) => ({ status: 'rejected' as const, reason: error as unknown })
 				),
-				new Promise((resolve) => {
+				new Promise<{ status: 'pending' }>((resolve) => {
 					timeout = setTimeout(() => resolve({ status: 'pending' }), 25);
 				})
 			]);
@@ -353,9 +353,9 @@ describe('runtime registry asset preflight', () => {
 				phase: 'asset',
 				cause: reason
 			});
-			const abortRegistrations = addEventListener.mock.calls.filter(
-				([type]) => type === 'abort'
-			);
+			const abortRegistrations = (
+				addEventListener.mock.calls as Array<[string, ...unknown[]]>
+			).filter(([type]) => type === 'abort');
 			expect(abortRegistrations.length).toBeGreaterThan(0);
 			for (const registration of abortRegistrations) {
 				expect(removeEventListener).toHaveBeenCalledWith('abort', registration[1]);
