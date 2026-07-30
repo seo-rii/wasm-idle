@@ -527,6 +527,85 @@ describe('WorkerAssetBridge asset requests', () => {
 		expect(cancel).toHaveBeenCalledOnce();
 	});
 
+	it('aborts an uncooperative asset fetch and cancels its late response', async () => {
+		let resolveFetch!: (response: unknown) => void;
+		let markFetchStarted!: () => void;
+		const fetchStarted = new Promise<void>((resolve) => {
+			markFetchStarted = resolve;
+		});
+		const fetchMock = vi.fn(() => {
+			markFetchStarted();
+			return new Promise((resolve) => {
+				resolveFetch = resolve;
+			});
+		});
+		vi.stubGlobal('fetch', fetchMock);
+		const cancel = vi.fn(async () => undefined);
+		const getReader = vi.fn();
+		const asset = RUNTIME_LOAD_ASSETS.clang[0];
+		const assetUrl = `https://assets.example.com/clang/${asset}`;
+		const lateResponse = {
+			ok: true,
+			status: 200,
+			url: assetUrl,
+			headers: new Headers(),
+			body: { cancel, getReader }
+		};
+		const postMessage = vi.fn();
+		const progress = { set: vi.fn() };
+		const bridge = new WorkerAssetBridge(
+			{ postMessage } as unknown as Worker,
+			'clang',
+			{
+				baseUrl: 'https://assets.example.com/clang/',
+				useAssetBridge: true
+			},
+			progress
+		);
+		progress.set.mockClear();
+		const loadAsset = (
+			bridge as unknown as {
+				loadAsset(assetName: string, signal: AbortSignal): Promise<unknown>;
+			}
+		).loadAsset.bind(bridge);
+		const controller = new AbortController();
+		const reason = new Error('stop application asset fetch');
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const loading = loadAsset(asset, controller.signal);
+		let timeout: ReturnType<typeof setTimeout> | undefined;
+
+		try {
+			await fetchStarted;
+			controller.abort(reason);
+			const outcome = await Promise.race([
+				loading.then(
+					(value) => ({ status: 'resolved' as const, value }),
+					(error) => ({ status: 'rejected' as const, reason: error as unknown })
+				),
+				new Promise<{ status: 'pending' }>((resolve) => {
+					timeout = setTimeout(() => resolve({ status: 'pending' }), 25);
+				})
+			]);
+
+			expect(outcome).toEqual({ status: 'rejected', reason });
+			const abortRegistration = addEventListener.mock.calls.find(
+				([type]) => type === 'abort'
+			);
+			expect(abortRegistration).toBeDefined();
+			expect(removeEventListener).toHaveBeenCalledWith('abort', abortRegistration?.[1]);
+			resolveFetch(lateResponse);
+			await vi.waitFor(() => expect(cancel).toHaveBeenCalledWith(reason));
+			expect(getReader).not.toHaveBeenCalled();
+			expect(progress.set).not.toHaveBeenCalled();
+			expect(postMessage).not.toHaveBeenCalled();
+		} finally {
+			if (timeout) clearTimeout(timeout);
+			resolveFetch(lateResponse);
+			await loading.catch(() => {});
+		}
+	});
+
 	it('rejects a relative final response URL before reading its body', async () => {
 		const postMessage = vi.fn();
 		const cancel = vi.fn(async () => undefined);

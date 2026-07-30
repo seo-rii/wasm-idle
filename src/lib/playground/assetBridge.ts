@@ -35,6 +35,9 @@ const encoder = new TextEncoder();
 const DEFAULT_STREAM_BUFFER_BYTES = 64 * 1024;
 const MAX_RUNTIME_ASSET_BYTES = 128 * 1024 * 1024;
 
+const runtimeAssetAbortReason = (signal: AbortSignal) =>
+	signal.reason ?? new DOMException('Runtime asset load aborted', 'AbortError');
+
 const transferBuffer = (bytes: Uint8Array, transferOwnership = false) =>
 	transferOwnership &&
 	bytes.byteOffset === 0 &&
@@ -239,7 +242,7 @@ export class WorkerAssetBridge {
 			throw new Error(`Runtime asset ${asset} is missing integrity metadata`);
 		}
 		if (signal.aborted) {
-			throw signal.reason ?? new DOMException('Runtime asset load aborted', 'AbortError');
+			throw runtimeAssetAbortReason(signal);
 		}
 		const reportProgress = (loaded: number, total?: number) => {
 			if (!signal.aborted) this.progress.update(asset, loaded, total);
@@ -259,10 +262,7 @@ export class WorkerAssetBridge {
 					if (settled) return;
 					settled = true;
 					signal.removeEventListener('abort', onAbort);
-					reject(
-						signal.reason ??
-							new DOMException('Runtime asset load aborted', 'AbortError')
-					);
+					reject(runtimeAssetAbortReason(signal));
 				};
 				signal.addEventListener('abort', onAbort, { once: true });
 				void pendingResult.then(
@@ -282,11 +282,11 @@ export class WorkerAssetBridge {
 				if (signal.aborted) onAbort();
 			});
 			if (signal.aborted) {
-				throw signal.reason ?? new DOMException('Runtime asset load aborted', 'AbortError');
+				throw runtimeAssetAbortReason(signal);
 			}
 			const loaded = await this.normalizeLoaderResult(result, asset, signal);
 			if (signal.aborted) {
-				throw signal.reason ?? new DOMException('Runtime asset load aborted', 'AbortError');
+				throw runtimeAssetAbortReason(signal);
 			}
 			if (loaded) return loaded;
 		}
@@ -402,12 +402,51 @@ export class WorkerAssetBridge {
 		signal: AbortSignal
 	): Promise<LoadedAsset> {
 		const requestUrl = this.requireAllowedAssetUrl(asset, url);
-		const response = await fetch(requestUrl.href, {
-			signal,
-			credentials: 'omit',
-			redirect: 'follow',
-			referrerPolicy: 'no-referrer'
+		if (signal.aborted) throw runtimeAssetAbortReason(signal);
+		const pendingResponse = Promise.resolve(
+			fetch(requestUrl.href, {
+				signal,
+				credentials: 'omit',
+				redirect: 'follow',
+				referrerPolicy: 'no-referrer'
+			})
+		);
+		const response = await new Promise<Response>((resolve, reject) => {
+			let settled = false;
+			const onAbort = () => {
+				if (settled) return;
+				settled = true;
+				signal.removeEventListener('abort', onAbort);
+				reject(runtimeAssetAbortReason(signal));
+			};
+			signal.addEventListener('abort', onAbort, { once: true });
+			void pendingResponse.then(
+				(candidate) => {
+					if (settled) {
+						const reason = runtimeAssetAbortReason(signal);
+						void Promise.resolve()
+							.then(() => candidate.body?.cancel(reason))
+							.catch(() => undefined);
+						return;
+					}
+					settled = true;
+					signal.removeEventListener('abort', onAbort);
+					resolve(candidate);
+				},
+				(error) => {
+					if (settled) return;
+					settled = true;
+					signal.removeEventListener('abort', onAbort);
+					reject(error);
+				}
+			);
+			if (signal.aborted) onAbort();
 		});
+		if (signal.aborted) {
+			const reason = runtimeAssetAbortReason(signal);
+			await response.body?.cancel(reason).catch(() => undefined);
+			throw reason;
+		}
 		let finalResponseUrl = requestUrl.href;
 		if (response.url) {
 			try {
