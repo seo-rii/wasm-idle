@@ -55,18 +55,61 @@ export async function fetchBoundedExternalAsset(
 	const { requestUrl, expectedFinalUrl } = resolveExternalAssetUrl(options.url);
 	let response: Response;
 	try {
-		response = await fetchImpl(requestUrl, {
-			cache: options.cache,
-			credentials: 'omit',
-			redirect: 'error',
-			referrerPolicy: 'no-referrer',
-			signal: options.signal
-		});
+		const pendingResponse = Promise.resolve(
+			fetchImpl(requestUrl, {
+				cache: options.cache,
+				credentials: 'omit',
+				redirect: 'error',
+				referrerPolicy: 'no-referrer',
+				signal: options.signal
+			})
+		);
+		if (!options.signal) {
+			response = await pendingResponse;
+		} else {
+			const signal = options.signal;
+			response = await new Promise<Response>((resolve, reject) => {
+				let settled = false;
+				const onAbort = () => {
+					if (settled) return;
+					settled = true;
+					signal.removeEventListener('abort', onAbort);
+					reject(abortReason(signal));
+				};
+				signal.addEventListener('abort', onAbort, { once: true });
+				void pendingResponse.then(
+					(candidate) => {
+						if (settled) {
+							const reason = abortReason(signal);
+							void Promise.resolve()
+								.then(() => candidate.body?.cancel(reason))
+								.catch(() => {});
+							return;
+						}
+						settled = true;
+						signal.removeEventListener('abort', onAbort);
+						resolve(candidate);
+					},
+					(error) => {
+						if (settled) return;
+						settled = true;
+						signal.removeEventListener('abort', onAbort);
+						reject(error);
+					}
+				);
+				if (signal.aborted) onAbort();
+			});
+		}
 	} catch (error) {
 		if (options.signal?.aborted) throw abortReason(options.signal);
 		throw new Error(
 			`Failed to load ${options.label} from ${requestUrl}: ${error instanceof Error ? error.message : String(error)}`
 		);
+	}
+	if (options.signal?.aborted) {
+		const reason = abortReason(options.signal);
+		await response.body?.cancel(reason).catch(() => {});
+		throw reason;
 	}
 	if (expectedFinalUrl && response.url) {
 		let finalUrl: URL;

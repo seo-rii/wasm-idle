@@ -319,6 +319,65 @@ describe('bounded external LSP asset loading', () => {
 		expect(cancelled).toBe(true);
 	});
 
+	it('rejects promptly when a custom fetch ignores cancellation and discards its late response', async () => {
+		let resolveFetch!: (response: Response) => void;
+		const pendingFetch = new Promise<Response>((resolve) => {
+			resolveFetch = resolve;
+		});
+		const fetchMock = vi.fn(() => pendingFetch);
+		const controller = new AbortController();
+		const reason = new Error('cancelled while custom fetch is pending');
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const cancel = vi.fn(async () => {});
+		const getReader = vi.fn(() => {
+			throw new Error('late response body should not be read');
+		});
+		const reportProgress = vi.fn();
+		const lateResponse = {
+			ok: true,
+			url: 'https://assets.example.com/runtime.wasm',
+			headers: new Headers(),
+			body: { cancel, getReader }
+		} as unknown as Response;
+		const loading = fetchBoundedExternalAsset({
+			url: 'https://assets.example.com/runtime.wasm',
+			label: 'test runtime',
+			fetch: fetchMock,
+			signal: controller.signal,
+			reportProgress
+		});
+
+		await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+		controller.abort(reason);
+		try {
+			const outcome = await Promise.race([
+				loading.then(
+					(value) => ({ status: 'resolved', value }),
+					(error) => ({ status: 'rejected', reason: error })
+				),
+				new Promise((resolve) => {
+					setTimeout(() => resolve({ status: 'pending' }), 25);
+				})
+			]);
+
+			expect(outcome).toEqual({ status: 'rejected', reason });
+			const abortRegistration = addEventListener.mock.calls.find(
+				([type]) => type === 'abort'
+			);
+			expect(abortRegistration).toBeDefined();
+			expect(removeEventListener).toHaveBeenCalledWith('abort', abortRegistration?.[1]);
+
+			resolveFetch(lateResponse);
+			await vi.waitFor(() => expect(cancel).toHaveBeenCalledWith(reason));
+			expect(getReader).not.toHaveBeenCalled();
+			expect(reportProgress).not.toHaveBeenCalled();
+		} finally {
+			resolveFetch(lateResponse);
+			await loading.catch(() => {});
+		}
+	});
+
 	it('rejects unsafe URLs and pre-aborted loads before fetching', async () => {
 		const fetchMock = vi.fn();
 		const controller = new AbortController();
