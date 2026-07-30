@@ -374,14 +374,14 @@ fn main() {
 	{
 		activePath: 'recursive.rs',
 		backend: 'lldb',
-		breakpointLine: 5,
+		breakpointLine: 6,
 		expectedFrameFunction: 'recurse',
 		expectedFrameLocals: [
 			{ name: 'n', value: '1' },
 			{ name: 'n', value: '2' },
 			{ name: 'n', value: '3' }
 		],
-		expectedLocal: { name: 'doubled', value: '2' },
+		expectedLocal: { name: 'stop', value: '2' },
 		expectedOutput: 'lldb-rust-recursive=12',
 		expectedTitle: 'Rust · LLDB / WAMR',
 		language: 'RUST',
