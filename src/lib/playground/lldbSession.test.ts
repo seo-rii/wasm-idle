@@ -243,8 +243,8 @@ describe('LldbSandboxSession', () => {
 			{
 				id: 91,
 				verified: true,
-				line: 6,
-				source: { path: '/workspace/main.cpp' }
+				line: 8,
+				source: { path: '/workspace/lib.cpp' }
 			}
 		]);
 		runtimeState.session!.emit({
@@ -254,8 +254,8 @@ describe('LldbSandboxSession', () => {
 				breakpoint: {
 					id: 91,
 					verified: true,
-					line: 6,
-					source: { path: '/workspace/main.cpp' }
+					line: 8,
+					source: { path: '/workspace/lib.cpp' }
 				}
 			}
 		});
@@ -266,7 +266,7 @@ describe('LldbSandboxSession', () => {
 			breakpoints: [
 				{
 					requestedLine: 6,
-					line: 6,
+					line: 8,
 					verified: true,
 					message: undefined
 				}

@@ -471,12 +471,10 @@ export class LldbSandboxSession {
 			const sourcePath = body?.breakpoint?.source?.path;
 			for (const [trackedSourcePath, requestedLines] of this.breakpointsBySource) {
 				const resolved = this.requireSession().getResolvedBreakpoints(trackedSourcePath);
-				if (sourcePath && sourcePath !== trackedSourcePath) continue;
-				if (
-					breakpointId !== undefined &&
-					!resolved.some((breakpoint) => breakpoint.id === breakpointId)
-				) {
-					continue;
+				if (breakpointId !== undefined) {
+					if (!resolved.some((breakpoint) => breakpoint.id === breakpointId)) continue;
+				} else {
+					if (sourcePath && sourcePath !== trackedSourcePath) continue;
 				}
 				this.publishResolvedBreakpoints(resolved, requestedLines, trackedSourcePath);
 			}

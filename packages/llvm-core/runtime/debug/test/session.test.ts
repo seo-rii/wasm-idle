@@ -427,16 +427,41 @@ describe('BrowserLldbSession', () => {
 					source: { path: '/workspace/main.cpp' }
 				}
 			]);
+		await lldbWorker?.emitDapEvent({
+			seq: 502,
+			type: 'event',
+			event: 'breakpoint',
+			body: {
+				reason: 'changed',
+				breakpoint: {
+					id: 77,
+					verified: true,
+					line: 9,
+					source: { path: '/workspace/helper.cpp' }
+				}
+			}
+		});
+		await expect
+			.poll(() => session.getResolvedBreakpoints('/workspace/main.cpp'))
+			.toEqual([
+				{
+					id: 77,
+					verified: true,
+					line: 9,
+					source: { path: '/workspace/helper.cpp' }
+				}
+			]);
+		expect(session.getResolvedBreakpoints('/workspace/helper.cpp')).toEqual([]);
 		await session.setBreakpoints({ path: '/workspace/main.cpp' }, [7]);
 		const staleEventReceived = new Promise<void>((resolve) => {
 			const dispose = session.onEvent((event) => {
-				if (event.seq !== 502) return;
+				if (event.seq !== 503) return;
 				dispose();
 				resolve();
 			});
 		});
 		await lldbWorker?.emitDapEvent({
-			seq: 502,
+			seq: 503,
 			type: 'event',
 			event: 'breakpoint',
 			body: {

@@ -406,7 +406,7 @@ export class BrowserLldbSession {
 		}
 		const sourcePath = breakpoint.source?.path;
 		for (const [path, current] of this.resolvedBreakpoints) {
-			if (sourcePath && sourcePath !== path) continue;
+			if (breakpoint.id === undefined && sourcePath && sourcePath !== path) continue;
 			let index =
 				breakpoint.id === undefined
 					? current.findIndex(
