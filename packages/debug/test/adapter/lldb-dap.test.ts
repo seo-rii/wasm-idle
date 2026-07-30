@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 
 import {
 	DebugAdapterStateError,
@@ -6,7 +6,8 @@ import {
 	createLldbDapAdapter,
 	type DapEvent,
 	type DapSession,
-	type DebugAdapterEvent
+	type DebugAdapterEvent,
+	type LldbDapAdapterOptions
 } from '../../src/adapter/index.js';
 
 class FakeDapSession implements DapSession {
@@ -36,6 +37,12 @@ class FakeDapSession implements DapSession {
 }
 
 describe('LldbDapAdapter', () => {
+	it('does not expose opt-ins for operations absent from the adapter contract', () => {
+		type FeatureSupport = NonNullable<LldbDapAdapterOptions['featureSupport']>;
+
+		expectTypeOf<Exclude<keyof FeatureSupport, 'evaluate'>>().toEqualTypeOf<never>();
+	});
+
 	it('initializes once and conservatively maps optional DAP capabilities', async () => {
 		const session = new FakeDapSession();
 		session.setResponse('initialize', {
@@ -85,28 +92,6 @@ describe('LldbDapAdapter', () => {
 				})
 			}
 		]);
-	});
-
-	it('requires explicit product support for advanced breakpoint capabilities', async () => {
-		const session = new FakeDapSession();
-		session.setResponse('initialize', {
-			supportsConditionalBreakpoints: true,
-			supportsLogPoints: true,
-			supportsDataBreakpoints: true
-		});
-		const adapter = createLldbDapAdapter(session, {
-			featureSupport: {
-				conditionalBreakpoints: true,
-				logPoints: true,
-				dataBreakpoints: true
-			}
-		});
-
-		await expect(adapter.initialize()).resolves.toMatchObject({
-			supportsConditionalBreakpoints: true,
-			supportsLogPoints: true,
-			supportsDataBreakpoints: true
-		});
 	});
 
 	it('requires initialization and maps launch, execution control, and disconnect requests', async () => {

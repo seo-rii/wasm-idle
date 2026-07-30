@@ -18,10 +18,10 @@ Debug execution is exposed through one adapter contract:
   memory reads, output, and process lifecycle events.
 
 `LldbDapAdapter` does not infer conditional-breakpoint, logpoint, or data-breakpoint support from
-LLDB's generic DAP advertisement alone. These capabilities remain false unless the adapter's
-`featureSupport` explicitly enables them and the DAP server advertises them. The current browser
-WAMR product leaves all three disabled because target-side expression evaluation and watchpoints
-are not supported.
+LLDB's generic DAP advertisement. These capabilities remain false because the public adapter
+contract cannot carry breakpoint conditions or log messages and does not expose data-breakpoint
+operations. Add the adapter methods and their product-path tests before enabling them; the current
+browser WAMR product also lacks the required target-side expression evaluation and watchpoints.
 
 Variable mutation, restart, and standalone terminate requests also remain false even when a generic
 DAP server advertises them, because the `DebugAdapter` contract does not expose those operations.
