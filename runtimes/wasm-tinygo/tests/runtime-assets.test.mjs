@@ -1,12 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { getEventListeners } from 'node:events';
 import { gzipSync } from 'node:zlib';
 
 import {
 	clearTinyGoRuntimePackCache,
 	loadRuntimeAssetBytes,
 	MAX_TINYGO_RUNTIME_PACK_FILES,
-	parseTinyGoRuntimePackIndex
+	parseTinyGoRuntimePackIndex,
+	resolveRuntimeAssetUrl
 } from '../src/runtime-assets.ts';
 
 function streamedResponse(chunks, headers = {}) {
@@ -349,6 +351,68 @@ test('loadRuntimeAssetBytes accepts loader-provided bytes without fetching', asy
 
 	assert.deepEqual([...bytes], [7, 8, 9]);
 	assert.equal(fetched, false);
+});
+
+test('TinyGo asset entry points reject promptly when a custom loader ignores abort', async () => {
+	for (const entryPoint of ['load bytes', 'resolve URL']) {
+		const controller = new AbortController();
+		const reason = new Error(`cancelled ${entryPoint}`);
+		let markLoaderStarted;
+		const loaderStarted = new Promise((resolve) => {
+			markLoaderStarted = resolve;
+		});
+		let releaseLoader;
+		const loaderResult = new Promise((resolve) => {
+			releaseLoader = resolve;
+		});
+		let fetchCalled = false;
+		const loader = () => {
+			markLoaderStarted();
+			return loaderResult;
+		};
+		const loading =
+			entryPoint === 'load bytes'
+				? loadRuntimeAssetBytes({
+						assetPath: 'tools/go-probe.wasm',
+						assetUrl: 'https://assets.invalid/tools/go-probe.wasm',
+						label: 'go-probe.wasm',
+						loader,
+						signal: controller.signal,
+						fetchImpl: async () => {
+							fetchCalled = true;
+							return new Response(new Uint8Array());
+						}
+					})
+				: resolveRuntimeAssetUrl({
+						assetPath: 'tools/go-probe.wasm',
+						assetUrl: 'https://assets.invalid/tools/go-probe.wasm',
+						label: 'go-probe.wasm',
+						loader,
+						signal: controller.signal
+					});
+
+		await loaderStarted;
+		controller.abort(reason);
+		try {
+			const outcome = await Promise.race([
+				loading.then(
+					(value) => ({ status: 'resolved', value }),
+					(error) => ({ status: 'rejected', reason: error })
+				),
+				new Promise((resolve) => {
+					setImmediate(() => resolve({ status: 'pending' }));
+				})
+			]);
+
+			assert.equal(outcome.status, 'rejected', `${entryPoint} remained pending after abort`);
+			assert.equal(outcome.reason, reason);
+			assert.equal(fetchCalled, false);
+			assert.equal(getEventListeners(controller.signal, 'abort').length, 0);
+		} finally {
+			releaseLoader(null);
+			await loading.catch(() => {});
+		}
+	}
 });
 
 test('loadRuntimeAssetBytes reports byte progress for streamed direct fetches', async () => {

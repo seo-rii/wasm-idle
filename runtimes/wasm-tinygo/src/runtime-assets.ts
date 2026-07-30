@@ -102,6 +102,34 @@ function resolveMaxAssetBytes(maxAssetBytes?: number) {
 	return resolved;
 }
 
+function runtimeAssetAbortReason(signal: AbortSignal) {
+	return signal.reason ?? new Error('wasm-tinygo runtime asset load was aborted');
+}
+
+async function invokeRuntimeAssetLoader(
+	loader: TinyGoRuntimeAssetLoader,
+	options: Parameters<TinyGoRuntimeAssetLoader>[0]
+) {
+	const { signal } = options;
+	if (!signal) return await loader(options);
+	if (signal.aborted) throw runtimeAssetAbortReason(signal);
+	let cancelOnAbort: (() => void) | undefined;
+	const aborted = new Promise<never>((_resolve, reject) => {
+		cancelOnAbort = () => reject(runtimeAssetAbortReason(signal));
+		signal.addEventListener('abort', cancelOnAbort, { once: true });
+	});
+	try {
+		const result = await Promise.race([Promise.resolve(loader(options)), aborted]);
+		if (signal.aborted) throw runtimeAssetAbortReason(signal);
+		return result;
+	} catch (error) {
+		if (signal.aborted) throw runtimeAssetAbortReason(signal);
+		throw error;
+	} finally {
+		if (cancelOnAbort) signal.removeEventListener('abort', cancelOnAbort);
+	}
+}
+
 function expectObject(value: unknown, label: string): Record<string, unknown> {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) {
 		throw new Error(`invalid ${label} in wasm-tinygo runtime pack index`);
@@ -760,7 +788,7 @@ export async function loadRuntimeAssetBytes(options: {
 	}
 	if (loader) {
 		const normalized = await normalizeLoaderResult(
-			await loader({
+			await invokeRuntimeAssetLoader(loader, {
 				assetPath: options.assetPath,
 				assetUrl: options.assetUrl,
 				label: options.label,
@@ -802,7 +830,7 @@ export async function resolveRuntimeAssetUrl(options: {
 	const loader = options.loader;
 	if (!loader) return options.assetUrl;
 	const normalized = await normalizeLoaderResult(
-		await loader({
+		await invokeRuntimeAssetLoader(loader, {
 			assetPath: options.assetPath,
 			assetUrl: options.assetUrl,
 			label: options.label,
