@@ -752,6 +752,55 @@ test('loadRuntimeAssetBytes rejects invalid response metadata without awaiting b
 	}
 });
 
+test('loadRuntimeAssetBytes cleans up its reader when initial stream allocation fails', async () => {
+	const controller = new AbortController();
+	const cancelReasons = [];
+	let releaseCount = 0;
+	let readCount = 0;
+	const reader = {
+		async read() {
+			readCount += 1;
+			return { done: true, value: undefined };
+		},
+		async cancel(reason) {
+			cancelReasons.push(reason);
+		},
+		releaseLock() {
+			releaseCount += 1;
+		}
+	};
+	const response = {
+		url: '',
+		ok: true,
+		status: 200,
+		headers: new Headers({
+			'content-length': String(Number.MAX_SAFE_INTEGER)
+		}),
+		body: { getReader: () => reader }
+	};
+	let failure;
+
+	await assert.rejects(
+		loadRuntimeAssetBytes({
+			assetPath: 'tools/go-probe.wasm',
+			assetUrl: 'https://assets.invalid/tools/go-probe.wasm',
+			label: 'go-probe.wasm',
+			maxAssetBytes: Number.MAX_SAFE_INTEGER,
+			fetchImpl: async () => response,
+			signal: controller.signal
+		}),
+		(error) => {
+			failure = error;
+			return error instanceof RangeError;
+		}
+	);
+
+	assert.equal(readCount, 0);
+	assert.deepEqual(cancelReasons, [failure]);
+	assert.equal(releaseCount, 1);
+	assert.equal(getEventListeners(controller.signal, 'abort').length, 0);
+});
+
 test('loadRuntimeAssetBytes bounds unknown-length response streams', async () => {
 	let cancelled = false;
 	let chunkIndex = 0;

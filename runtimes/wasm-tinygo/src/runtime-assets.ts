@@ -385,13 +385,14 @@ async function readBoundedAssetStream(options: {
 				signal.addEventListener('abort', cancelOnAbort, { once: true });
 			})
 		: undefined;
-	let bytes = new Uint8Array(
-		Math.min(options.maxAssetBytes, options.total ?? DEFAULT_TINYGO_ASSET_BUFFER_BYTES)
-	);
+	let bytes!: Uint8Array<ArrayBuffer>;
 	let loaded = 0;
 	let loadedBytes!: Uint8Array<ArrayBuffer>;
 	let releaseFailure: { error: unknown } | undefined;
 	try {
+		bytes = new Uint8Array(
+			Math.min(options.maxAssetBytes, options.total ?? DEFAULT_TINYGO_ASSET_BUFFER_BYTES)
+		);
 		while (true) {
 			if (signal?.aborted) throw runtimeAssetAbortReason(signal);
 			const pendingRead = reader.read();
