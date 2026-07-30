@@ -148,11 +148,14 @@ export function createAdapterDebugSessionController(adapter: DebugAdapter) {
 		try {
 			const breakpoints = await adapter.setBreakpoints(source, lines);
 			if (
-				isCurrentSession(sessionToken) &&
-				breakpointRequestTokens.get(sourceKey) === requestToken
+				!isCurrentSession(sessionToken) ||
+				breakpointRequestTokens.get(sourceKey) !== requestToken
 			) {
-				replaceBreakpointsForSource(source, breakpoints);
+				return breakpointsState.current.filter(
+					(breakpoint) => debugSourceKey(breakpoint.source) === sourceKey
+				);
 			}
+			replaceBreakpointsForSource(source, breakpoints);
 			return breakpoints;
 		} catch (error) {
 			const isCurrentRequest =

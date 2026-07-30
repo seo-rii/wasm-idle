@@ -353,6 +353,42 @@ describe('createAdapterDebugSessionController', () => {
 		expect(controller.breakpoints.map((breakpoint) => breakpoint.id)).toEqual([2]);
 	});
 
+	it('returns the current breakpoint snapshot from a superseded successful request', async () => {
+		const adapter = new FakeDebugAdapter();
+		const older = deferred<ResolvedBreakpoint[]>();
+		const newer = deferred<ResolvedBreakpoint[]>();
+		adapter.setBreakpointsHandler = async (_source, lines) =>
+			lines[0] === 3 ? older.promise : newer.promise;
+		const controller = createAdapterDebugSessionController(adapter);
+		const source = { path: '/workspace/main.cpp' };
+		const olderRequest = controller.setBreakpoints(source, [3]);
+		const newerRequest = controller.setBreakpoints(source, [7]);
+		const currentBreakpoints = [
+			{
+				id: 7,
+				verified: true,
+				source,
+				requestedLine: 7,
+				line: 7
+			}
+		];
+
+		newer.resolve(currentBreakpoints);
+		await newerRequest;
+		older.resolve([
+			{
+				id: 3,
+				verified: true,
+				source,
+				requestedLine: 3,
+				line: 3
+			}
+		]);
+
+		await expect(olderRequest).resolves.toEqual(currentBreakpoints);
+		expect(controller.breakpoints).toEqual(currentBreakpoints);
+	});
+
 	it('ignores superseded breakpoint failures while preserving current failures', async () => {
 		const adapter = new FakeDebugAdapter();
 		const older = deferred<ResolvedBreakpoint[]>();
