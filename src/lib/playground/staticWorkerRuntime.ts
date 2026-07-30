@@ -372,12 +372,50 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 		}, limits.assetTimeoutMs);
 		this.reportProgress(progress, 0.05, `Loading ${this.config.displayName} worker script`);
 		try {
-			const response = await fetch(workerRequestUrl.href, {
-				cache: 'force-cache',
-				credentials: 'omit',
-				redirect: 'error',
-				referrerPolicy: 'no-referrer',
-				signal: phaseController.signal
+			const pendingResponse = Promise.resolve(
+				fetch(workerRequestUrl.href, {
+					cache: 'force-cache',
+					credentials: 'omit',
+					redirect: 'error',
+					referrerPolicy: 'no-referrer',
+					signal: phaseController.signal
+				})
+			);
+			const response = await new Promise<Response>((resolve, reject) => {
+				let settled = false;
+				const onPhaseAbort = () => {
+					if (settled) return;
+					settled = true;
+					phaseController.signal.removeEventListener('abort', onPhaseAbort);
+					reject(
+						phaseController.signal.reason ??
+							new DOMException('Worker script fetch aborted', 'AbortError')
+					);
+				};
+				phaseController.signal.addEventListener('abort', onPhaseAbort, { once: true });
+				void pendingResponse.then(
+					(candidate) => {
+						if (settled) {
+							const reason =
+								phaseController.signal.reason ??
+								new DOMException('Worker script fetch aborted', 'AbortError');
+							void Promise.resolve()
+								.then(() => candidate.body?.cancel(reason))
+								.catch(() => undefined);
+							return;
+						}
+						settled = true;
+						phaseController.signal.removeEventListener('abort', onPhaseAbort);
+						resolve(candidate);
+					},
+					(error) => {
+						if (settled) return;
+						settled = true;
+						phaseController.signal.removeEventListener('abort', onPhaseAbort);
+						reject(error);
+					}
+				);
+				if (phaseController.signal.aborted) onPhaseAbort();
 			});
 			if (response.url) {
 				let finalResponseUrl: string;

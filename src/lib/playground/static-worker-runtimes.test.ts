@@ -1191,6 +1191,88 @@ describe('static worker backed language sandboxes', () => {
 		expect(workerInstances).toHaveLength(0);
 	});
 
+	it('enforces the asset deadline when worker-script fetch ignores its signal', async () => {
+		let markFetchStarted!: () => void;
+		const fetchStarted = new Promise<void>((resolve) => {
+			markFetchStarted = resolve;
+		});
+		let resolveFetch!: (response: Response) => void;
+		const fetchPending = new Promise<Response>((resolve) => {
+			resolveFetch = resolve;
+		});
+		let fetchSignal: AbortSignal | undefined;
+		let addEventListener: ReturnType<typeof vi.spyOn> | undefined;
+		let removeEventListener: ReturnType<typeof vi.spyOn> | undefined;
+		vi.mocked(fetch).mockImplementationOnce((_input, init) => {
+			fetchSignal = init?.signal ?? undefined;
+			if (fetchSignal) {
+				addEventListener = vi.spyOn(fetchSignal, 'addEventListener');
+				removeEventListener = vi.spyOn(fetchSignal, 'removeEventListener');
+			}
+			markFetchStarted();
+			return fetchPending;
+		});
+		const cancel = vi.fn(async () => undefined);
+		const getReader = vi.fn();
+		const lateResponse = {
+			ok: true,
+			status: 200,
+			url: '',
+			headers: new Headers(),
+			body: { cancel, getReader }
+		} as unknown as Response;
+		const progress = { set: vi.fn() };
+		const sandbox = new Prolog();
+		const loading = sandbox.load(
+			'/absproxy/5173',
+			'',
+			true,
+			[],
+			{ limits: { assetTimeoutMs: 5 } },
+			progress
+		);
+		let guard: ReturnType<typeof setTimeout> | undefined;
+
+		try {
+			await fetchStarted;
+			const outcome = await Promise.race([
+				loading.then(
+					(value) => ({ status: 'resolved' as const, value }),
+					(error) => ({ status: 'rejected' as const, error: error as unknown })
+				),
+				new Promise<{ status: 'pending' }>((resolve) => {
+					guard = setTimeout(() => resolve({ status: 'pending' }), 100);
+				})
+			]);
+
+			expect(outcome).toMatchObject({
+				status: 'rejected',
+				error: {
+					name: 'TimeoutError',
+					code: 'timeout',
+					phase: 'asset',
+					runtimeId: 'PROLOG',
+					timeoutMs: 5
+				}
+			});
+			expect(fetchSignal?.aborted).toBe(true);
+			const abortRegistration = addEventListener?.mock.calls.find(
+				(registration: unknown[]) => registration[0] === 'abort'
+			);
+			expect(abortRegistration).toBeDefined();
+			expect(removeEventListener).toHaveBeenCalledWith('abort', abortRegistration?.[1]);
+			resolveFetch(lateResponse);
+			await vi.waitFor(() => expect(cancel).toHaveBeenCalledWith(fetchSignal?.reason));
+			expect(getReader).not.toHaveBeenCalled();
+			expect(workerInstances).toHaveLength(0);
+			expect(progress.set).not.toHaveBeenCalledWith(0.2, 'Prolog worker downloaded');
+		} finally {
+			if (guard) clearTimeout(guard);
+			resolveFetch(lateResponse);
+			await loading.catch(() => {});
+		}
+	});
+
 	it('preloads static worker scripts with least-authority request options', async () => {
 		const sandbox = new Prolog();
 
