@@ -244,26 +244,47 @@ async function readBoundedResponse(
 	}
 
 	const reader = response.body.getReader();
-	let cancellation: Promise<void> | undefined;
+	let readerCancelled = false;
 	const cancelReader = (reason?: unknown) => {
-		cancellation ??= reader.cancel(reason).catch(() => {});
-		return cancellation;
+		if (readerCancelled) return;
+		readerCancelled = true;
+		try {
+			void reader.cancel(reason).catch(() => {});
+		} catch {}
 	};
-	const cancelOnAbort = () => {
-		void cancelReader(signal.reason);
-	};
-	signal.addEventListener('abort', cancelOnAbort, { once: true });
+	if (signal.aborted) {
+		const reason = signal.reason ?? new Error('Runtime asset preflight was aborted');
+		cancelReader(reason);
+		try {
+			reader.releaseLock();
+		} catch {}
+		throw reason;
+	}
+	let cancelOnAbort: (() => void) | undefined;
+	const aborted = new Promise<never>((_resolve, reject) => {
+		cancelOnAbort = () => {
+			const reason = signal.reason ?? new Error('Runtime asset preflight was aborted');
+			cancelReader(reason);
+			reject(reason);
+		};
+		signal.addEventListener('abort', cancelOnAbort, { once: true });
+	});
+	let loadedBytes!: Uint8Array;
+	let releaseFailure: { error: unknown } | undefined;
 	try {
-		if (signal.aborted) {
-			await cancelReader(signal.reason);
-			throw signal.reason;
-		}
 		let receivedLength = 0;
 		let bytes = new Uint8Array(
 			Math.min(maxAssetBytes, declaredLength ?? DEFAULT_STREAM_BUFFER_BYTES)
 		);
 		while (true) {
-			const { done, value } = await reader.read();
+			if (signal.aborted) {
+				throw signal.reason ?? new Error('Runtime asset preflight was aborted');
+			}
+			const pendingRead = reader.read();
+			const { done, value } = await Promise.race([pendingRead, aborted]);
+			if (signal.aborted) {
+				throw signal.reason ?? new Error('Runtime asset preflight was aborted');
+			}
 			if (done) break;
 			if (!value) continue;
 			const nextLength = receivedLength + value.byteLength;
@@ -277,7 +298,7 @@ async function readBoundedResponse(
 						profileId
 					}
 				);
-				await cancelReader(error);
+				cancelReader(error);
 				throw error;
 			}
 			if (nextLength > bytes.byteLength) {
@@ -298,14 +319,25 @@ async function readBoundedResponse(
 		}
 		if (receivedLength !== bytes.byteLength) bytes = bytes.slice(0, receivedLength);
 		reportProgress(receivedLength);
-		return bytes;
+		loadedBytes = bytes;
 	} catch (error) {
-		await cancelReader(error);
+		if (signal.aborted) {
+			const reason = signal.reason ?? new Error('Runtime asset preflight was aborted');
+			cancelReader(reason);
+			throw reason;
+		}
+		cancelReader(error);
 		throw error;
 	} finally {
-		signal.removeEventListener('abort', cancelOnAbort);
-		reader.releaseLock();
+		if (cancelOnAbort) signal.removeEventListener('abort', cancelOnAbort);
+		try {
+			reader.releaseLock();
+		} catch (error) {
+			if (!signal.aborted) releaseFailure = { error };
+		}
 	}
+	if (releaseFailure) throw releaseFailure.error;
+	return loadedBytes;
 }
 
 async function preflightAsset(

@@ -216,6 +216,194 @@ describe('runtime registry asset preflight', () => {
 		expect(releaseLock).toHaveBeenCalledOnce();
 	});
 
+	it.each([
+		['while reader cancellation remains pending', false, false],
+		['when reader cancellation settles the read before rejection', true, true]
+	])(
+		'cancels a stalled streamed response promptly %s',
+		async (_case, settleReadOnCancel, throwOnRelease) => {
+			let markReadStarted!: () => void;
+			const readStarted = new Promise<void>((resolve) => {
+				markReadStarted = resolve;
+			});
+			let resolveRead!: (result: { done: true; value: undefined }) => void;
+			const pendingRead = new Promise<{ done: true; value: undefined }>((resolve) => {
+				resolveRead = resolve;
+			});
+			const read = vi.fn(() => {
+				markReadStarted();
+				return pendingRead;
+			});
+			let resolveCancel!: () => void;
+			const pendingCancel = new Promise<void>((resolve) => {
+				resolveCancel = resolve;
+			});
+			const cancel = vi.fn(() => {
+				if (!settleReadOnCancel) return pendingCancel;
+				resolveRead({ done: true, value: undefined });
+				return Promise.resolve();
+			});
+			const releaseFailure = new Error('release failed during cancellation');
+			const releaseLock = vi.fn(() => {
+				if (throwOnRelease) throw releaseFailure;
+			});
+			let addEventListener!: ReturnType<typeof vi.spyOn>;
+			let removeEventListener!: ReturnType<typeof vi.spyOn>;
+			const response = {
+				url: '',
+				ok: true,
+				status: 200,
+				headers: new Headers({ 'content-type': 'text/javascript; charset=utf-8' }),
+				body: { getReader: () => ({ read, cancel, releaseLock }) }
+			} as unknown as Response;
+			const controller = new AbortController();
+			const reason = new Error('cancel stalled preflight stream read');
+			const reportProgress = vi.fn();
+			const preflight = preflightRuntimeAssets({
+				manifest: createManifest([assets[0]!]),
+				runtimeId: 'fortran/preflight-test',
+				rootUrl: 'https://example.test/',
+				fetch: async (_input, init) => {
+					const signal = init?.signal as AbortSignal;
+					addEventListener = vi.spyOn(signal, 'addEventListener');
+					removeEventListener = vi.spyOn(signal, 'removeEventListener');
+					return response;
+				},
+				signal: controller.signal,
+				reportProgress
+			});
+			let timeout: ReturnType<typeof setTimeout> | undefined;
+
+			try {
+				await readStarted;
+				controller.abort(reason);
+				const outcome = await Promise.race([
+					preflight.then(
+						(value) => ({ status: 'resolved' as const, value }),
+						(error) => ({ status: 'rejected' as const, reason: error as unknown })
+					),
+					new Promise<{ status: 'pending' }>((resolve) => {
+						timeout = setTimeout(() => resolve({ status: 'pending' }), 25);
+					})
+				]);
+
+				expect(outcome.status).toBe('rejected');
+				expect('reason' in outcome ? outcome.reason : undefined).toMatchObject({
+					name: 'CancelledError',
+					code: 'cancelled',
+					phase: 'asset',
+					cause: reason
+				});
+				expect(
+					'reason' in outcome ? (outcome.reason as { cause?: unknown }).cause : undefined
+				).toBe(reason);
+				expect(cancel).toHaveBeenCalledOnce();
+				expect(cancel).toHaveBeenCalledWith(reason);
+				expect(releaseLock).toHaveBeenCalledOnce();
+				const abortRegistrations = addEventListener.mock.calls.filter(
+					([type]) => type === 'abort'
+				);
+				expect(abortRegistrations).toHaveLength(2);
+				for (const registration of abortRegistrations) {
+					expect(removeEventListener).toHaveBeenCalledWith('abort', registration[1]);
+				}
+				expect(reportProgress).not.toHaveBeenCalled();
+
+				resolveCancel();
+				resolveRead({ done: true, value: undefined });
+				await new Promise((resolve) => setTimeout(resolve, 0));
+				expect(reportProgress).not.toHaveBeenCalled();
+			} finally {
+				if (timeout) clearTimeout(timeout);
+				resolveCancel();
+				resolveRead({ done: true, value: undefined });
+				await preflight.catch(() => {});
+			}
+		}
+	);
+
+	it('times out a stalled streamed response and preserves the internal abort reason', async () => {
+		vi.useFakeTimers();
+		let markReadStarted!: () => void;
+		const readStarted = new Promise<void>((resolve) => {
+			markReadStarted = resolve;
+		});
+		let resolveRead!: (result: { done: true; value: undefined }) => void;
+		const pendingRead = new Promise<{ done: true; value: undefined }>((resolve) => {
+			resolveRead = resolve;
+		});
+		const read = vi.fn(() => {
+			markReadStarted();
+			return pendingRead;
+		});
+		const cancel = vi.fn(async () => {});
+		const releaseLock = vi.fn();
+		let internalSignal!: AbortSignal;
+		let addEventListener!: ReturnType<typeof vi.spyOn>;
+		let removeEventListener!: ReturnType<typeof vi.spyOn>;
+		const reportProgress = vi.fn();
+		const preflight = preflightRuntimeAssets({
+			manifest: createManifest([assets[0]!]),
+			runtimeId: 'fortran/preflight-test',
+			rootUrl: 'https://example.test/',
+			fetch: async (_input, init) => {
+				internalSignal = init?.signal as AbortSignal;
+				addEventListener = vi.spyOn(internalSignal, 'addEventListener');
+				removeEventListener = vi.spyOn(internalSignal, 'removeEventListener');
+				return {
+					url: '',
+					ok: true,
+					status: 200,
+					headers: new Headers({ 'content-type': 'text/javascript; charset=utf-8' }),
+					body: { getReader: () => ({ read, cancel, releaseLock }) }
+				} as unknown as Response;
+			},
+			limits: { assetTimeoutMs: 10 },
+			reportProgress
+		});
+
+		try {
+			await readStarted;
+			const outcomePromise = Promise.race([
+				preflight.then(
+					(value) => ({ status: 'resolved' as const, value }),
+					(error) => ({ status: 'rejected' as const, reason: error as unknown })
+				),
+				new Promise<{ status: 'pending' }>((resolve) => {
+					setTimeout(() => resolve({ status: 'pending' }), 11);
+				})
+			]);
+			await vi.advanceTimersByTimeAsync(11);
+			const outcome = await outcomePromise;
+
+			expect(outcome.status).toBe('rejected');
+			expect('reason' in outcome ? outcome.reason : undefined).toMatchObject({
+				name: 'TimeoutError',
+				code: 'timeout',
+				phase: 'asset',
+				timeoutMs: 10
+			});
+			const timeoutCause =
+				'reason' in outcome ? (outcome.reason as { cause?: unknown }).cause : undefined;
+			expect(timeoutCause).toBe(internalSignal.reason);
+			expect(cancel).toHaveBeenCalledOnce();
+			expect(cancel).toHaveBeenCalledWith(internalSignal.reason);
+			expect(releaseLock).toHaveBeenCalledOnce();
+			const abortRegistrations = addEventListener.mock.calls.filter(
+				([type]) => type === 'abort'
+			);
+			expect(abortRegistrations).toHaveLength(2);
+			for (const registration of abortRegistrations) {
+				expect(removeEventListener).toHaveBeenCalledWith('abort', registration[1]);
+			}
+			expect(reportProgress).not.toHaveBeenCalled();
+		} finally {
+			resolveRead({ done: true, value: undefined });
+			await preflight.catch(() => {});
+			vi.useRealTimers();
+		}
+	});
+
 	it('cancels a bodyless response read promptly and suppresses late progress', async () => {
 		let resolveArrayBuffer!: (buffer: ArrayBuffer) => void;
 		const arrayBuffer = vi.fn(
