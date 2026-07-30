@@ -147,13 +147,29 @@ export async function fetchRuntimeAssetBytes({
 	}
 
 	if (!response.body) {
-		const bytes = new Uint8Array(await response.arrayBuffer());
-		throwIfAborted(signal);
-		if (bytes.byteLength > maxAssetBytes) {
-			throw new Error(`${label} exceeds the ${maxAssetBytes} byte limit`);
+		let cancelOnAbort: (() => void) | undefined;
+		const aborted = signal
+			? new Promise<never>((_resolve, reject) => {
+					cancelOnAbort = () => reject(abortReason(signal));
+					signal.addEventListener('abort', cancelOnAbort, { once: true });
+				})
+			: undefined;
+		try {
+			throwIfAborted(signal);
+			const materialized = response.arrayBuffer();
+			const source = aborted
+				? await Promise.race([materialized, aborted])
+				: await materialized;
+			throwIfAborted(signal);
+			const bytes = new Uint8Array(source);
+			if (bytes.byteLength > maxAssetBytes) {
+				throw new Error(`${label} exceeds the ${maxAssetBytes} byte limit`);
+			}
+			onProgress?.({ loaded: bytes.byteLength, total: total ?? bytes.byteLength });
+			return bytes;
+		} finally {
+			if (cancelOnAbort) signal?.removeEventListener('abort', cancelOnAbort);
 		}
-		onProgress?.({ loaded: bytes.byteLength, total: total ?? bytes.byteLength });
-		return bytes;
 	}
 
 	const reader = response.body.getReader();

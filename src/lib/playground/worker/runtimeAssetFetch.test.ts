@@ -253,4 +253,77 @@ describe('runtime asset fetch', () => {
 			fetchRuntimeAssetBytes({ url: assetUrl, label: 'test compiler', maxAssetBytes: 4 })
 		).rejects.toThrow('test compiler exceeds the 4 byte limit');
 	});
+
+	it('aborts bodyless response materialization promptly and suppresses late progress', async () => {
+		let markMaterializationStarted!: () => void;
+		const materializationStarted = new Promise<void>((resolve) => {
+			markMaterializationStarted = resolve;
+		});
+		let resolveArrayBuffer!: (value: ArrayBuffer) => void;
+		const pendingArrayBuffer = new Promise<ArrayBuffer>((resolve) => {
+			resolveArrayBuffer = resolve;
+		});
+		(globalThis as any).fetch = vi.fn(async () => ({
+			arrayBuffer() {
+				markMaterializationStarted();
+				return pendingArrayBuffer;
+			},
+			body: null,
+			headers: new Headers(),
+			ok: true,
+			status: 200,
+			url: assetUrl
+		}));
+		const controller = new AbortController();
+		const reason = new Error('stop bodyless common worker asset read');
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const progress = vi.fn();
+		let returnedBytes: Uint8Array | undefined;
+		const loading = fetchRuntimeAssetBytes({
+			url: assetUrl,
+			label: 'test compiler',
+			onProgress: progress,
+			signal: controller.signal
+		});
+		const observed = loading.then(
+			(value) => {
+				returnedBytes = value;
+				return { status: 'resolved' as const, value };
+			},
+			(error) => ({ status: 'rejected' as const, reason: error as unknown })
+		);
+		const lateBytes = new Uint8Array([1, 2, 3]);
+		let timeout: ReturnType<typeof setTimeout> | undefined;
+
+		try {
+			await materializationStarted;
+			controller.abort(reason);
+			const outcome = await Promise.race([
+				observed,
+				new Promise<{ status: 'pending' }>((resolve) => {
+					timeout = setTimeout(() => resolve({ status: 'pending' }), 25);
+				})
+			]);
+
+			expect(outcome).toEqual({ status: 'rejected', reason });
+			expect(returnedBytes).toBeUndefined();
+			const abortRegistrations = addEventListener.mock.calls.filter(
+				([type]) => type === 'abort'
+			);
+			expect(abortRegistrations.length).toBeGreaterThan(0);
+			for (const registration of abortRegistrations) {
+				expect(removeEventListener).toHaveBeenCalledWith('abort', registration[1]);
+			}
+			resolveArrayBuffer(lateBytes.buffer);
+			await Promise.resolve();
+			await Promise.resolve();
+			expect(returnedBytes).toBeUndefined();
+			expect(progress).not.toHaveBeenCalled();
+		} finally {
+			if (timeout) clearTimeout(timeout);
+			resolveArrayBuffer(lateBytes.buffer);
+			await loading.catch(() => {});
+		}
+	});
 });
