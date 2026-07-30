@@ -116,6 +116,9 @@ export class BrowserLldbSession {
 				'LLDB debugging requires cross-origin isolation (COOP and COEP response headers)'
 			);
 		}
+		const queueCapacity = this.options.queueCapacity ?? DEFAULT_QUEUE_CAPACITY;
+		const fetchImpl = this.options.fetchImpl ?? fetch;
+		const workerFactory = this.options.workerFactory ?? defaultWorkerFactory;
 		const requestTimeoutMs = resolveDapTimeout(
 			this.options.requestTimeoutMs,
 			15_000,
@@ -183,7 +186,6 @@ export class BrowserLldbSession {
 			}
 		}
 
-		const queueCapacity = this.options.queueCapacity ?? DEFAULT_QUEUE_CAPACITY;
 		const queueGeneration = nextGeneration;
 		const dapInput = createSharedByteQueue(queueCapacity, queueGeneration);
 		const dapOutput = createSharedByteQueue(queueCapacity, queueGeneration);
@@ -196,12 +198,11 @@ export class BrowserLldbSession {
 			preflightDebugRuntimeAssets(
 				manifest,
 				runtimeBaseUrl,
-				this.options.fetchImpl ?? fetch,
+				fetchImpl,
 				this.lifecycleAbortController.signal
 			)
 		);
 		this.assertActive();
-		const workerFactory = this.options.workerFactory ?? defaultWorkerFactory;
 		try {
 			this.dapQueues.push(new SharedByteQueue(dapInput), new SharedByteQueue(dapOutput));
 			this.rspQueues.push(

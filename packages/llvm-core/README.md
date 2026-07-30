@@ -43,7 +43,9 @@ breakpoints, and launch arguments used by the workers and DAP. Mutating the call
 objects while integrity and asset verification are in flight therefore cannot change the already
 validated debug target. The runtime manifest is parsed into an independent snapshot and the asset
 base URL is captured at the same boundary, so later mutations cannot redirect LLDB or WAMR asset
-loading.
+loading. Transport queue capacity, the asset fetch implementation, and the worker factory are also
+captured before verification starts, preventing in-flight option changes from resizing queues or
+replacing the code that loads assets and creates workers.
 
 ```ts
 import { createBrowserLldbSession } from '@wasm-idle/llvm-core/debug';

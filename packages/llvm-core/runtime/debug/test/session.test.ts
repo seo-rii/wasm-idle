@@ -802,6 +802,62 @@ describe('BrowserLldbSession', () => {
 		}
 	});
 
+	it('snapshots transport and embedding hooks before source verification awaits', async () => {
+		const commands: string[] = [];
+		const workers: FakeWorker[] = [];
+		let assetFetchCount = 0;
+		const options: BrowserLldbSessionOptions = {
+			manifest,
+			runtimeBaseUrl: 'https://cdn.example/debug/',
+			module: Uint8Array.of(0, 97, 115, 109),
+			sources: [
+				{
+					path: '/workspace/main.cpp',
+					content: 'int main() { return 0; }',
+					contentSha256:
+						'80a7161009ffaf868641acac3f5e49bc5f86021ee1d177f3b1cbb47573513649'
+				}
+			],
+			queueCapacity: 4 * 1024,
+			fetchImpl: async () => {
+				assetFetchCount += 1;
+				return new Response('debug-asset');
+			},
+			workerFactory: (kind) => {
+				const worker = new FakeWorker(kind, commands);
+				workers.push(worker);
+				return worker;
+			},
+			requestTimeoutMs: 1_000,
+			readyTimeoutMs: 1_000
+		};
+		const session = new BrowserLldbSession(options);
+		const initialization = session.initialize();
+
+		options.queueCapacity = 8 * 1024;
+		options.fetchImpl = async () => {
+			throw new Error('mutated fetch implementation was used');
+		};
+		options.workerFactory = () => {
+			throw new Error('mutated worker factory was used');
+		};
+
+		try {
+			await initialization;
+			expect(assetFetchCount).toBe(6);
+			expect(workers.map((worker) => worker.kind)).toEqual(['lldb', 'target']);
+			const lldbInit = workers
+				.flatMap((worker) => worker.received)
+				.find((message) => message.type === 'initialize-lldb');
+			if (!lldbInit || lldbInit.type !== 'initialize-lldb') {
+				throw new Error('LLDB worker was not initialized');
+			}
+			expect(new SharedByteQueue(lldbInit.dapInput).capacity).toBe(4 * 1024);
+		} finally {
+			await session.dispose();
+		}
+	});
+
 	it('disposes a running target without waiting for the disconnect response', async () => {
 		const commands: string[] = [];
 		const workers: FakeWorker[] = [];
