@@ -1,4 +1,4 @@
-import { DapClient } from './dap-client.js';
+import { DapClient, resolveDapTimeout } from './dap-client.js';
 import { parseDebugRuntimeManifest, preflightDebugRuntimeAssets, sha256Hex } from './manifest.js';
 import { createSharedByteQueue, SharedByteQueue } from './shared-byte-queue.js';
 import { validateDebugSourcePath } from './worker/module-loader.js';
@@ -116,6 +116,21 @@ export class BrowserLldbSession {
 				'LLDB debugging requires cross-origin isolation (COOP and COEP response headers)'
 			);
 		}
+		const requestTimeoutMs = resolveDapTimeout(
+			this.options.requestTimeoutMs,
+			15_000,
+			'requestTimeoutMs'
+		);
+		const transportWriteTimeoutMs = resolveDapTimeout(
+			this.options.transportWriteTimeoutMs,
+			15_000,
+			'transportWriteTimeoutMs'
+		);
+		const readyTimeoutMs = resolveDapTimeout(
+			this.options.readyTimeoutMs,
+			30_000,
+			'readyTimeoutMs'
+		);
 		const manifest = parseDebugRuntimeManifest(this.options.manifest);
 		const runtimeBaseUrl = this.options.runtimeBaseUrl.toString();
 		const sources = this.options.sources.map((source) => ({ ...source }));
@@ -209,8 +224,8 @@ export class BrowserLldbSession {
 
 			this.attachWorkerEvents(lldbWorker, 'lldb');
 			this.attachWorkerEvents(targetWorker, 'target');
-			const lldbReady = this.waitForReady(lldbWorker, 'lldb');
-			const targetReady = this.waitForReady(targetWorker, 'target');
+			const lldbReady = this.waitForReady(lldbWorker, 'lldb', readyTimeoutMs);
+			const targetReady = this.waitForReady(targetWorker, 'target', readyTimeoutMs);
 			const workersReady = Promise.all([lldbReady, targetReady]);
 			void workersReady.catch(() => undefined);
 			for (const [descriptor, channel] of [
@@ -296,8 +311,8 @@ export class BrowserLldbSession {
 			this.dap = new DapClient({
 				input: dapInput,
 				output: dapOutput,
-				requestTimeoutMs: this.options.requestTimeoutMs,
-				transportWriteTimeoutMs: this.options.transportWriteTimeoutMs
+				requestTimeoutMs,
+				transportWriteTimeoutMs
 			}).start();
 			let resolveInitialized!: () => void;
 			const adapterInitialized = new Promise<void>((resolve) => {
@@ -337,7 +352,6 @@ export class BrowserLldbSession {
 				() => new Promise<never>(() => undefined),
 				(error: unknown) => Promise.reject(error)
 			);
-			const initializedTimeoutMs = this.options.requestTimeoutMs ?? 15_000;
 			let initializedTimeout: ReturnType<typeof setTimeout> | undefined;
 			await this.awaitWhileActive(
 				Promise.race([
@@ -347,7 +361,7 @@ export class BrowserLldbSession {
 						initializedTimeout = setTimeout(
 							() =>
 								reject(new Error('DAP adapter did not send the initialized event')),
-							initializedTimeoutMs
+							requestTimeoutMs
 						);
 					})
 				]).finally(() => {
@@ -675,8 +689,7 @@ export class BrowserLldbSession {
 		});
 	}
 
-	private waitForReady(worker: WorkerLike, expectedKind: DebugWorkerKind) {
-		const timeoutMs = this.options.readyTimeoutMs ?? 30_000;
+	private waitForReady(worker: WorkerLike, expectedKind: DebugWorkerKind, timeoutMs: number) {
 		const signal = this.lifecycleAbortController.signal;
 		return new Promise<void>((resolve, reject) => {
 			let timeout: ReturnType<typeof setTimeout> | undefined;

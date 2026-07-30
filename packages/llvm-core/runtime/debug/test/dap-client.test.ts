@@ -34,6 +34,29 @@ describe('DAP framing', () => {
 });
 
 describe('DapClient', () => {
+	it.each([
+		['requestTimeoutMs', 0],
+		['requestTimeoutMs', -1],
+		['requestTimeoutMs', Number.NaN],
+		['requestTimeoutMs', Number.POSITIVE_INFINITY],
+		['transportWriteTimeoutMs', 0],
+		['transportWriteTimeoutMs', -1],
+		['transportWriteTimeoutMs', Number.NaN],
+		['transportWriteTimeoutMs', Number.POSITIVE_INFINITY]
+	] as const)('rejects invalid %s value %s', (option, value) => {
+		const input = createSharedByteQueue(4096, 30);
+		const output = createSharedByteQueue(4096, 30);
+
+		expect(
+			() =>
+				new DapClient({
+					input,
+					output,
+					[option]: value
+				})
+		).toThrow(/positive finite timeout/u);
+	});
+
 	it('correlates responses and forwards events over partial shared-ring reads', async () => {
 		const inputDescriptor = createSharedByteQueue(4096, 3);
 		const outputDescriptor = createSharedByteQueue(4096, 3);

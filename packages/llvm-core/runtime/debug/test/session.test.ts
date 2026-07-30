@@ -1096,6 +1096,41 @@ describe('BrowserLldbSession', () => {
 		}
 	);
 
+	it.each([
+		['requestTimeoutMs', 0],
+		['requestTimeoutMs', Number.NaN],
+		['transportWriteTimeoutMs', -1],
+		['transportWriteTimeoutMs', Number.POSITIVE_INFINITY],
+		['readyTimeoutMs', 0],
+		['readyTimeoutMs', Number.NaN]
+	] as const)('rejects invalid %s value %s before loading assets', async (option, value) => {
+		let fetched = false;
+		let created = false;
+		const session = new BrowserLldbSession({
+			manifest,
+			runtimeBaseUrl: 'https://cdn.example/debug/',
+			module: Uint8Array.of(0, 97, 115, 109),
+			sources: [],
+			[option]: value,
+			fetchImpl: async () => {
+				fetched = true;
+				return new Response('debug-asset');
+			},
+			workerFactory: (kind) => {
+				created = true;
+				return new FakeWorker(kind, []);
+			}
+		});
+
+		try {
+			await expect(session.initialize()).rejects.toThrow(/positive finite timeout/u);
+			expect(fetched).toBe(false);
+			expect(created).toBe(false);
+		} finally {
+			await session.dispose();
+		}
+	});
+
 	it('shares one initialization flight across concurrent callers', async () => {
 		const commands: string[] = [];
 		const workers: FakeWorker[] = [];

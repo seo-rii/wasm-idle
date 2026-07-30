@@ -29,6 +29,14 @@ function indexOfSequence(haystack: Uint8Array, needle: Uint8Array) {
 	return -1;
 }
 
+export function resolveDapTimeout(value: number | undefined, defaultValue: number, label: string) {
+	const timeoutMs = value ?? defaultValue;
+	if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+		throw new RangeError(`${label} must be a positive finite timeout in milliseconds`);
+	}
+	return timeoutMs;
+}
+
 export function encodeDapMessage(message: DapMessage): Uint8Array {
 	const body = new TextEncoder().encode(JSON.stringify(message));
 	const header = new TextEncoder().encode(`Content-Length: ${body.byteLength}\r\n\r\n`);
@@ -101,8 +109,16 @@ export class DapClient implements DapRequestSession {
 	constructor(options: DapClientOptions) {
 		this.input = new SharedByteQueue(options.input);
 		this.output = new SharedByteQueue(options.output);
-		this.requestTimeoutMs = options.requestTimeoutMs ?? 15_000;
-		this.transportWriteTimeoutMs = options.transportWriteTimeoutMs ?? 15_000;
+		this.requestTimeoutMs = resolveDapTimeout(
+			options.requestTimeoutMs,
+			15_000,
+			'requestTimeoutMs'
+		);
+		this.transportWriteTimeoutMs = resolveDapTimeout(
+			options.transportWriteTimeoutMs,
+			15_000,
+			'transportWriteTimeoutMs'
+		);
 	}
 
 	start() {

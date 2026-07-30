@@ -106,6 +106,10 @@ runtime reports a real exit, abort, or session disposal.
 LLDB may defer `continue`, `next`, `stepIn`, and `stepOut` responses until the target stops again.
 Those execution requests therefore opt out of the DAP response timeout while retaining the
 transport-write timeout; ordinary DAP requests still use the configured response deadline.
+Configured DAP response, transport-write, and worker-ready timeouts must be positive finite
+millisecond values. The session validates and snapshots them before loading assets or creating
+workers, so invalid or concurrently changed timer settings cannot produce immediate or overflowing
+browser timers.
 
 Current producer modules expose Emscripten's canonical `HEAPU8` view. Each worker samples only its
 backing buffer length, emits an initial `onMemory(worker, bytes)` value, and emits again only when
