@@ -114,6 +114,9 @@ workers, so invalid or concurrently changed timer settings cannot produce immedi
 browser timers. Per-request DAP response timeout overrides follow the same numeric rule and are
 rejected before the request is sent; `null` is the explicit opt-out for execution requests whose
 response arrives only after the target stops.
+DAP requests are fully encoded before pending transport state or send timers are registered.
+Circular, `BigInt`, or otherwise non-JSON arguments reject the returned Promise with the original
+encoding failure as its cause, while the client remains available for later valid requests.
 DAP responses are correlated by both request sequence and command. A mismatched command is treated
 as a transport protocol failure: every pending request is rejected and both byte queues are closed
 instead of resolving a request with another command's body. Response envelopes are also validated

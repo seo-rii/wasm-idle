@@ -172,6 +172,14 @@ export class DapClient implements DapRequestSession {
 			command,
 			...(args === undefined ? {} : { arguments: args })
 		};
+		let frame: Uint8Array;
+		try {
+			frame = encodeDapMessage(request);
+		} catch (error) {
+			return Promise.reject(
+				new Error(`failed to encode DAP request: ${command}`, { cause: error })
+			);
+		}
 
 		const response = new Promise<TBody>((resolve, reject) => {
 			const pending: PendingRequest = {
@@ -185,7 +193,6 @@ export class DapClient implements DapRequestSession {
 				this.fail(new Error(`DAP request send timed out: ${command}`));
 			}, this.transportWriteTimeoutMs);
 		});
-		const frame = encodeDapMessage(request);
 		const write = this.writeQueue.then(() =>
 			this.input.write(frame, this.abortController.signal)
 		);

@@ -96,6 +96,48 @@ describe('DapClient', () => {
 		}
 	);
 
+	it('rejects unencodable requests before registering pending transport state', async () => {
+		const inputDescriptor = createSharedByteQueue(4096, 38);
+		const outputDescriptor = createSharedByteQueue(4096, 38);
+		const input = new SharedByteQueue(inputDescriptor);
+		const output = new SharedByteQueue(outputDescriptor);
+		const client = new DapClient({
+			input: inputDescriptor,
+			output: outputDescriptor,
+			requestTimeoutMs: 1_000
+		}).start();
+		const circular: Record<string, unknown> = {};
+		circular.self = circular;
+
+		try {
+			await expect(client.request('evaluate', circular)).rejects.toThrow(
+				/failed to encode DAP request: evaluate/u
+			);
+			expect(input.available).toBe(0);
+			expect(input.closed).toBe(false);
+			expect(output.closed).toBe(false);
+
+			const validRequest = client.request<{ threads: unknown[] }>('threads');
+			const chunk = new Uint8Array(256);
+			const length = await input.read(chunk);
+			const [request] = new DapMessageParser().push(chunk.slice(0, length)) as [DapRequest];
+			await output.write(
+				encodeDapMessage({
+					seq: 9,
+					type: 'response',
+					request_seq: request.seq,
+					command: request.command,
+					success: true,
+					body: { threads: [] }
+				})
+			);
+
+			await expect(validRequest).resolves.toEqual({ threads: [] });
+		} finally {
+			await client.close();
+		}
+	});
+
 	it('correlates responses and forwards events over partial shared-ring reads', async () => {
 		const inputDescriptor = createSharedByteQueue(4096, 3);
 		const outputDescriptor = createSharedByteQueue(4096, 3);
