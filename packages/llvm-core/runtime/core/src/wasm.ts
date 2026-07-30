@@ -143,6 +143,12 @@ function throwIfRuntimeAssetAborted(signal?: AbortSignal) {
 	if (signal?.aborted) throw runtimeAbortReason(signal);
 }
 
+function cancelResponseBody(response: Response, reason?: unknown) {
+	try {
+		void response.body?.cancel(reason).catch(() => {});
+	} catch {}
+}
+
 async function readResponseBytes(
 	response: Response,
 	assetUrl: string | URL,
@@ -152,18 +158,18 @@ async function readResponseBytes(
 ) {
 	if (signal?.aborted) {
 		const reason = runtimeAbortReason(signal);
-		await response.body?.cancel(reason).catch(() => {});
+		cancelResponseBody(response, reason);
 		throw reason;
 	}
 	let contentLength: number;
 	try {
 		contentLength = readContentLength(response);
 	} catch (error) {
-		await response.body?.cancel(error).catch(() => {});
+		cancelResponseBody(response, error);
 		throw error;
 	}
 	if (contentLength > maxOutputBytes) {
-		await response.body?.cancel().catch(() => {});
+		cancelResponseBody(response);
 		throw new Error(`Runtime asset ${assetUrl} size exceeds the ${maxOutputBytes} byte limit`);
 	}
 	if (!response.body) {
@@ -298,13 +304,13 @@ export async function fetchRuntimeJson(
 	const response = await waitForRuntimeAssetOperation(
 		pendingResponse,
 		options.signal,
-		async (lateResponse, reason) => {
-			await lateResponse.body?.cancel(reason).catch(() => {});
+		(lateResponse, reason) => {
+			cancelResponseBody(lateResponse, reason);
 		}
 	);
 	if (options.signal?.aborted) {
 		const reason = runtimeAbortReason(options.signal);
-		await response.body?.cancel(reason).catch(() => {});
+		cancelResponseBody(response, reason);
 		throw reason;
 	}
 	if (response.url) {
@@ -312,16 +318,16 @@ export async function fetchRuntimeJson(
 		try {
 			finalUrl = new URL(response.url);
 		} catch {
-			await response.body?.cancel().catch(() => {});
+			cancelResponseBody(response);
 			throw new Error(`${label} returned an invalid final URL`);
 		}
 		if (finalUrl.href !== resolvedUrl.href) {
-			await response.body?.cancel().catch(() => {});
+			cancelResponseBody(response);
 			throw new Error(`${label} returned an unexpected final URL`);
 		}
 	}
 	if (!response.ok) {
-		await response.body?.cancel().catch(() => {});
+		cancelResponseBody(response);
 		throw new Error(`Failed to load ${label} from ${resolvedUrl}: ${response.status}`);
 	}
 	const bytes = await readResponseBytes(
@@ -399,18 +405,18 @@ async function readGzipResponse(
 ) {
 	if (signal?.aborted) {
 		const reason = runtimeAbortReason(signal);
-		await response.body?.cancel(reason).catch(() => {});
+		cancelResponseBody(response, reason);
 		throw reason;
 	}
 	let contentLength: number;
 	try {
 		contentLength = readContentLength(response);
 	} catch (error) {
-		await response.body?.cancel(error).catch(() => {});
+		cancelResponseBody(response, error);
 		throw error;
 	}
 	if (contentLength > maxOutputBytes) {
-		await response.body?.cancel().catch(() => {});
+		cancelResponseBody(response);
 		throw new Error(
 			`Runtime asset ${assetUrl} download size exceeds the ${maxOutputBytes} byte limit`
 		);
@@ -632,8 +638,8 @@ export const readBuffer = async (
 				response = await waitForRuntimeAssetOperation(
 					pendingResponse,
 					signal,
-					async (lateResponse, reason) => {
-						await lateResponse.body?.cancel(reason).catch(() => {});
+					(lateResponse, reason) => {
+						cancelResponseBody(lateResponse, reason);
 					}
 				);
 			} catch (error) {
@@ -642,7 +648,7 @@ export const readBuffer = async (
 			}
 			if (signal?.aborted) {
 				const reason = runtimeAbortReason(signal);
-				await response.body?.cancel(reason).catch(() => {});
+				cancelResponseBody(response, reason);
 				throw reason;
 			}
 			if (response.url) {
@@ -650,16 +656,16 @@ export const readBuffer = async (
 				try {
 					finalUrl = new URL(response.url);
 				} catch {
-					await response.body?.cancel().catch(() => {});
+					cancelResponseBody(response);
 					throw new Error('Runtime asset returned an invalid final URL');
 				}
 				if (finalUrl.href !== resolvedUrl.href) {
-					await response.body?.cancel().catch(() => {});
+					cancelResponseBody(response);
 					throw new Error('Runtime asset returned an unexpected final URL');
 				}
 			}
 			if (!response.ok) {
-				await response.body?.cancel().catch(() => {});
+				cancelResponseBody(response);
 				throw new Error(`Failed to load runtime asset ${resolvedUrl}: ${response.status}`);
 			}
 			if (resolvedUrl.pathname.endsWith('.gz')) {
