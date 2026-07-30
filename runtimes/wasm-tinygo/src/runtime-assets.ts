@@ -251,7 +251,8 @@ export function parseTinyGoRuntimePackIndex(value: unknown): TinyGoRuntimePackIn
 async function normalizeLoaderResult(
 	result: TinyGoRuntimeAssetLoaderResult,
 	assetPath: string,
-	maxAssetBytes: number
+	maxAssetBytes: number,
+	signal?: AbortSignal
 ): Promise<{ bytes?: Uint8Array; url?: string; mimeType?: string } | null> {
 	if (!result) return null;
 	if (typeof result === 'string' || result instanceof URL) {
@@ -271,11 +272,14 @@ async function normalizeLoaderResult(
 			);
 		}
 		return {
-			bytes: enforceAssetSize(
-				assetPath,
-				new Uint8Array(await result.arrayBuffer()),
-				maxAssetBytes
-			),
+			bytes: await readBoundedAssetStream({
+				stream: result.stream(),
+				assetLabel: `wasm-tinygo runtime asset ${assetPath}`,
+				maxAssetBytes,
+				sizeKind: 'download',
+				total: result.size,
+				signal
+			}),
 			mimeType: result.type || undefined
 		};
 	}
@@ -314,11 +318,14 @@ async function normalizeLoaderResult(
 			);
 		}
 		return {
-			bytes: enforceAssetSize(
-				assetPath,
-				new Uint8Array(await result.data.arrayBuffer()),
-				maxAssetBytes
-			),
+			bytes: await readBoundedAssetStream({
+				stream: result.data.stream(),
+				assetLabel: `wasm-tinygo runtime asset ${assetPath}`,
+				maxAssetBytes,
+				sizeKind: 'download',
+				total: result.data.size,
+				signal
+			}),
 			mimeType: result.mimeType || result.data.type || undefined
 		};
 	}
@@ -795,7 +802,8 @@ export async function loadRuntimeAssetBytes(options: {
 				signal: options.signal
 			}),
 			options.assetPath,
-			maxAssetBytes
+			maxAssetBytes,
+			options.signal
 		);
 		if (normalized?.bytes) return normalized.bytes;
 		if (normalized?.url) {
@@ -837,7 +845,8 @@ export async function resolveRuntimeAssetUrl(options: {
 			signal: options.signal
 		}),
 		options.assetPath,
-		maxAssetBytes
+		maxAssetBytes,
+		options.signal
 	);
 	if (!normalized) return options.assetUrl;
 	if (normalized.url) return normalized.url;

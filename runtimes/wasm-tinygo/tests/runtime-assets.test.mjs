@@ -676,6 +676,97 @@ test('loadRuntimeAssetBytes rejects oversized loader Blobs before materializing 
 	assert.equal(materialized, false);
 });
 
+test('loadRuntimeAssetBytes cancels and releases loader-owned Blob streams', async () => {
+	for (const resultShape of ['bare Blob', 'wrapped Blob']) {
+		const controller = new AbortController();
+		const reason = new Error(`cancelled ${resultShape}`);
+		let markMaterializationStarted;
+		const materializationStarted = new Promise((resolve) => {
+			markMaterializationStarted = resolve;
+		});
+		let resolveArrayBuffer;
+		const arrayBufferPromise = new Promise((resolve) => {
+			resolveArrayBuffer = resolve;
+		});
+		let resolveRead;
+		const readPromise = new Promise((resolve) => {
+			resolveRead = resolve;
+		});
+		const cancelReasons = [];
+		let releaseCount = 0;
+		let streamCount = 0;
+		let arrayBufferCount = 0;
+		const reader = {
+			read() {
+				markMaterializationStarted();
+				return readPromise;
+			},
+			async cancel(cancelReason) {
+				cancelReasons.push(cancelReason);
+				resolveRead({ done: true, value: undefined });
+			},
+			releaseLock() {
+				releaseCount += 1;
+			}
+		};
+		const blob = new Blob([Uint8Array.of(1, 2, 3)]);
+		Object.defineProperty(blob, 'arrayBuffer', {
+			value: () => {
+				arrayBufferCount += 1;
+				markMaterializationStarted();
+				return arrayBufferPromise;
+			}
+		});
+		Object.defineProperty(blob, 'stream', {
+			value: () => {
+				streamCount += 1;
+				return { getReader: () => reader };
+			}
+		});
+		let fetchCalled = false;
+		const loading = loadRuntimeAssetBytes({
+			assetPath: 'tools/go-probe.wasm',
+			assetUrl: 'https://assets.invalid/tools/go-probe.wasm',
+			label: 'go-probe.wasm',
+			loader: async () =>
+				resultShape === 'bare Blob' ? blob : { data: blob, mimeType: 'application/wasm' },
+			signal: controller.signal,
+			maxAssetBytes: 8,
+			fetchImpl: async () => {
+				fetchCalled = true;
+				return new Response(new Uint8Array());
+			}
+		});
+
+		await materializationStarted;
+		controller.abort(reason);
+		try {
+			const outcome = await Promise.race([
+				loading.then(
+					(value) => ({ status: 'resolved', value }),
+					(error) => ({ status: 'rejected', reason: error })
+				),
+				new Promise((resolve) => {
+					setImmediate(() => resolve({ status: 'pending' }));
+				})
+			]);
+
+			assert.equal(outcome.status, 'rejected', `${resultShape} remained pending after abort`);
+			assert.equal(outcome.reason, reason);
+			assert.deepEqual(cancelReasons, [reason]);
+			assert.equal(releaseCount, 1);
+			assert.equal(streamCount, 1);
+			assert.equal(arrayBufferCount, 0);
+			assert.equal(fetchCalled, false);
+			assert.equal(getEventListeners(controller.signal, 'abort').length, 0);
+		} finally {
+			resolveArrayBuffer(Uint8Array.of(1, 2, 3).buffer);
+			resolveRead({ done: true, value: undefined });
+			await loading.catch(() => {});
+		}
+	}
+});
+
 test('loadRuntimeAssetBytes separates runtime pack caches by fetch identity', async () => {
 	clearTinyGoRuntimePackCache();
 	const packIndex = new TextEncoder().encode(
