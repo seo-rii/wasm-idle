@@ -16,6 +16,7 @@ const runtimeState = vi.hoisted(() => ({
 
 class FakeRuntimeSession {
 	readonly requests: Array<{ command: string; args?: unknown }> = [];
+	readonly breakpointRequests: Array<{ source: { path: string }; lines: number[] }> = [];
 	readonly input: string[] = [];
 	readonly resolvedBreakpointsBySource = new Map<
 		string,
@@ -113,6 +114,24 @@ class FakeRuntimeSession {
 		}
 		if (command === 'evaluate') return { result: '42' } as T;
 		return {} as T;
+	}
+
+	async setBreakpoints(source: { path: string }, lines: number[]) {
+		this.breakpointRequests.push({ source, lines: [...lines] });
+		const response = await this.request<{
+			breakpoints?: Array<{ verified?: boolean; line?: number; message?: string }>;
+		}>('setBreakpoints', {
+			source,
+			breakpoints: lines.map((line) => ({ line })),
+			lines,
+			sourceModified: false
+		});
+		return lines.map((line, index) => ({
+			...response.breakpoints?.[index],
+			verified: response.breakpoints?.[index]?.verified === true,
+			line: response.breakpoints?.[index]?.line ?? line,
+			source
+		}));
 	}
 
 	async disconnect() {
@@ -294,6 +313,10 @@ describe('LldbSandboxSession', () => {
 
 		await controller.debugCommand('nextLine');
 		await controller.setBreakpoints([8, 9], '/workspace/lib.cpp');
+		expect(runtimeState.session!.breakpointRequests).toContainEqual({
+			source: { path: '/workspace/lib.cpp' },
+			lines: [8, 9]
+		});
 		await expect(controller.evaluate('answer')).resolves.toBe('42');
 		await expect(controller.variables(11)).resolves.toEqual([
 			{

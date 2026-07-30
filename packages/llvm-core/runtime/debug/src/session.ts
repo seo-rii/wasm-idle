@@ -8,6 +8,7 @@ import type {
 	DapRequestOptions,
 	DebugCapabilities,
 	DebugSessionGeneration,
+	DebugSource,
 	DebugWorkerKind,
 	DebugWorkerOutboundMessage,
 	ResolvedBreakpoint,
@@ -54,6 +55,7 @@ export class BrowserLldbSession {
 	private readonly rspQueues: SharedByteQueue[] = [];
 	private readonly workerEventDisposers: Array<() => void> = [];
 	private readonly resolvedBreakpoints = new Map<string, ResolvedBreakpoint[]>();
+	private readonly breakpointRequestVersions = new Map<string, number>();
 	private readonly lifecycleAbortController = new AbortController();
 	private initializePromise?: Promise<DebugCapabilities>;
 	private disposePromise?: Promise<void>;
@@ -317,27 +319,7 @@ export class BrowserLldbSession {
 				})
 			);
 			for (const breakpoint of this.options.breakpoints ?? []) {
-				const response = await this.awaitWhileActive(
-					this.dap.request<{
-						breakpoints?: ResolvedBreakpoint[];
-					}>('setBreakpoints', {
-						source: breakpoint.source,
-						breakpoints: breakpoint.lines.map((line) => ({ line })),
-						sourceModified: false
-					})
-				);
-				this.resolvedBreakpoints.set(
-					breakpoint.source.path,
-					breakpoint.lines.map((requestedLine, index) => {
-						const resolved = response.breakpoints?.[index];
-						return {
-							...resolved,
-							verified: resolved?.verified === true,
-							line: resolved?.line ?? requestedLine,
-							source: resolved?.source ?? breakpoint.source
-						};
-					})
-				);
+				await this.setBreakpoints(breakpoint.source, breakpoint.lines);
 			}
 			await this.awaitWhileActive(this.dap.request('configurationDone'));
 			await this.awaitWhileActive(attachResponse);
@@ -358,6 +340,34 @@ export class BrowserLldbSession {
 	): Promise<TBody> {
 		if (!this.dap) throw new Error('LLDB debug session is not initialized');
 		return this.dap.request<TBody>(command, args, options);
+	}
+
+	async setBreakpoints(source: DebugSource, lines: number[]) {
+		validateDebugSourcePath(source.path);
+		const requestVersion = (this.breakpointRequestVersions.get(source.path) ?? 0) + 1;
+		this.breakpointRequestVersions.set(source.path, requestVersion);
+		const requestedLines = [...lines];
+		const response = await this.awaitWhileActive(
+			this.request<{ breakpoints?: ResolvedBreakpoint[] }>('setBreakpoints', {
+				source,
+				breakpoints: requestedLines.map((line) => ({ line })),
+				lines: requestedLines,
+				sourceModified: false
+			})
+		);
+		const resolved = requestedLines.map((requestedLine, index) => {
+			const breakpoint = response.breakpoints?.[index];
+			return {
+				...breakpoint,
+				verified: breakpoint?.verified === true,
+				line: breakpoint?.line ?? requestedLine,
+				source: breakpoint?.source ?? source
+			} satisfies ResolvedBreakpoint;
+		});
+		if (this.breakpointRequestVersions.get(source.path) === requestVersion) {
+			this.resolvedBreakpoints.set(source.path, resolved);
+		}
+		return resolved;
 	}
 
 	onEvent(listener: (event: DapEvent) => void) {
@@ -500,6 +510,7 @@ export class BrowserLldbSession {
 			this.dapQueues.length = 0;
 			this.rspQueues.length = 0;
 			this.resolvedBreakpoints.clear();
+			this.breakpointRequestVersions.clear();
 			this.eventListeners.clear();
 		})();
 		return this.disposePromise;

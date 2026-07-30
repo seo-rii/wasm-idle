@@ -60,7 +60,13 @@ const session = await createBrowserLldbSession({
 	}
 });
 await session.initialize();
+await session.setBreakpoints({ path: '/workspace/main.cpp' }, [12, 18]);
 ```
+
+`setBreakpoints()` updates the session's resolved-breakpoint cache as well as sending DAP. Later
+`breakpoint` events therefore retain the IDs and source mapping from dynamic editor changes;
+out-of-order responses cannot replace the newest cached set. Use `getResolvedBreakpoints(path)` to
+read the current normalized snapshot.
 
 Compile C/C++ LLDB artifacts with `compileArtifact(..., { debugMode: 'lldb' })`. They contain
 untouched source, embedded DWARF, stable `/workspace/...` paths, and exact Clang provenance.

@@ -316,20 +316,9 @@ export class LldbSandboxSession {
 		this.breakpointRequestVersions.set(sourcePath, requestVersion);
 		if (!this.session || !this.initialized) return;
 		const session = this.requireSession();
-		let response: {
-			breakpoints?: Array<{
-				verified?: boolean;
-				line?: number;
-				message?: string;
-			}>;
-		};
+		let breakpoints: Array<{ verified?: boolean; line?: number; message?: string }>;
 		try {
-			response = await session.request('setBreakpoints', {
-				source: { path: sourcePath },
-				breakpoints: lines.map((line) => ({ line })),
-				lines,
-				sourceModified: false
-			});
+			breakpoints = await session.setBreakpoints({ path: sourcePath }, lines);
 		} catch (error) {
 			if (
 				this.session !== session ||
@@ -345,7 +334,7 @@ export class LldbSandboxSession {
 		) {
 			return;
 		}
-		this.publishResolvedBreakpoints(response.breakpoints ?? [], lines, sourcePath);
+		this.publishResolvedBreakpoints(breakpoints, lines, sourcePath);
 	}
 
 	async evaluate(expression: string) {

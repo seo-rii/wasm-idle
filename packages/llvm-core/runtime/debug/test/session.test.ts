@@ -387,6 +387,44 @@ describe('BrowserLldbSession', () => {
 					source: { path: '/workspace/main.cpp' }
 				}
 			]);
+		await expect(session.setBreakpoints({ path: '/workspace/main.cpp' }, [7])).resolves.toEqual(
+			[
+				{
+					verified: false,
+					line: 7,
+					source: { path: '/workspace/main.cpp' }
+				}
+			]
+		);
+		expect(session.getResolvedBreakpoints('/workspace/main.cpp')).toEqual([
+			{
+				verified: false,
+				line: 7,
+				source: { path: '/workspace/main.cpp' }
+			}
+		]);
+		await lldbWorker?.emitDapEvent({
+			seq: 501,
+			type: 'event',
+			event: 'breakpoint',
+			body: {
+				reason: 'changed',
+				breakpoint: {
+					verified: true,
+					line: 7,
+					source: { path: '/workspace/main.cpp' }
+				}
+			}
+		});
+		await expect
+			.poll(() => session.getResolvedBreakpoints('/workspace/main.cpp'))
+			.toEqual([
+				{
+					verified: true,
+					line: 7,
+					source: { path: '/workspace/main.cpp' }
+				}
+			]);
 		expect(targetInit).toMatchObject({ stdin: { generation: expect.any(Number) } });
 		if (!targetInit || targetInit.type !== 'initialize-target' || !targetInit.stdin) {
 			throw new Error('target stdin queue was not initialized');
