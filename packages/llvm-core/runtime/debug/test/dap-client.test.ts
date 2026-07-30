@@ -31,6 +31,22 @@ describe('DAP framing', () => {
 			/Content-Length/u
 		);
 	});
+
+	it('rejects an unterminated header larger than 8 KiB', () => {
+		const parser = new DapMessageParser();
+		const oversizedHeader = new Uint8Array(8 * 1024 + 1).fill('A'.charCodeAt(0));
+
+		expect(() => parser.push(oversizedHeader)).toThrow(/DAP header exceeds/u);
+	});
+
+	it('rejects a declared DAP body larger than 16 MiB before buffering it', () => {
+		const parser = new DapMessageParser();
+		const oversizedFrame = new TextEncoder().encode(
+			`Content-Length: ${16 * 1024 * 1024 + 1}\r\n\r\n`
+		);
+
+		expect(() => parser.push(oversizedFrame)).toThrow(/DAP body exceeds/u);
+	});
 });
 
 describe('DapClient', () => {

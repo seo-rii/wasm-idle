@@ -11,6 +11,8 @@ import type {
 
 const HEADER_SEPARATOR = new TextEncoder().encode('\r\n\r\n');
 const CONTENT_LENGTH_PATTERN = /(?:^|\r\n)Content-Length:\s*(\d+)(?:\r\n|$)/iu;
+const MAXIMUM_DAP_HEADER_BYTES = 8 * 1024;
+const MAXIMUM_DAP_BODY_BYTES = 16 * 1024 * 1024;
 
 function concatBytes(left: Uint8Array, right: Uint8Array) {
 	const result = new Uint8Array(left.byteLength + right.byteLength);
@@ -52,13 +54,24 @@ export class DapMessageParser {
 
 		while (true) {
 			const separator = indexOfSequence(this.buffer, HEADER_SEPARATOR);
-			if (separator < 0) break;
+			if (separator < 0) {
+				if (this.buffer.byteLength > MAXIMUM_DAP_HEADER_BYTES) {
+					throw new Error('invalid DAP frame: DAP header exceeds 8 KiB');
+				}
+				break;
+			}
+			if (separator > MAXIMUM_DAP_HEADER_BYTES) {
+				throw new Error('invalid DAP frame: DAP header exceeds 8 KiB');
+			}
 			const header = new TextDecoder().decode(this.buffer.subarray(0, separator + 2));
 			const match = CONTENT_LENGTH_PATTERN.exec(header);
 			if (!match) throw new Error('invalid DAP frame: missing Content-Length header');
 			const contentLength = Number(match[1]);
 			if (!Number.isSafeInteger(contentLength) || contentLength < 0) {
 				throw new Error('invalid DAP frame: invalid Content-Length header');
+			}
+			if (contentLength > MAXIMUM_DAP_BODY_BYTES) {
+				throw new Error('invalid DAP frame: DAP body exceeds 16 MiB');
 			}
 			const bodyStart = separator + HEADER_SEPARATOR.byteLength;
 			const frameEnd = bodyStart + contentLength;

@@ -115,6 +115,9 @@ response arrives only after the target stops.
 DAP responses are correlated by both request sequence and command. A mismatched command is treated
 as a transport protocol failure: every pending request is rejected and both byte queues are closed
 instead of resolving a request with another command's body.
+The streaming DAP parser caps an unterminated header at 8 KiB and a declared JSON body at 16 MiB.
+Oversized declarations fail before the body is buffered, preventing a corrupt worker frame from
+growing browser memory without bound.
 
 Current producer modules expose Emscripten's canonical `HEAPU8` view. Each worker samples only its
 backing buffer length, emits an initial `onMemory(worker, bytes)` value, and emits again only when
