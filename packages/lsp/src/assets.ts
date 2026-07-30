@@ -305,6 +305,9 @@ async function normalizeLoaderResult(
 	reportProgress: (loaded: number, total?: number) => void,
 	signal: AbortSignal
 ): Promise<LoadedLanguageToolAsset | null> {
+	if (signal.aborted) {
+		throw signal.reason ?? new Error('Runtime asset load was aborted');
+	}
 	if (!result) return null;
 	if (typeof result === 'string' || result instanceof URL) {
 		return await fetchAsset(String(result), asset, config, reportProgress, signal);
@@ -399,13 +402,34 @@ export async function loadLanguageToolAsset(
 		async (signal) => {
 			let loaded: LoadedLanguageToolAsset | null = null;
 			if (config.loader) {
+				let cancelOnAbort: (() => void) | undefined;
+				const aborted = new Promise<never>((_resolve, reject) => {
+					cancelOnAbort = () =>
+						reject(signal.reason ?? new Error('Runtime asset load was aborted'));
+					signal.addEventListener('abort', cancelOnAbort, { once: true });
+				});
+				let loaderResult: LanguageToolAssetLoaderResult;
+				try {
+					if (signal.aborted) {
+						throw signal.reason ?? new Error('Runtime asset load was aborted');
+					}
+					const pendingResult = Promise.resolve(
+						config.loader({
+							runtime,
+							asset,
+							signal,
+							reportProgress
+						})
+					);
+					loaderResult = await Promise.race([pendingResult, aborted]);
+					if (signal.aborted) {
+						throw signal.reason ?? new Error('Runtime asset load was aborted');
+					}
+				} finally {
+					if (cancelOnAbort) signal.removeEventListener('abort', cancelOnAbort);
+				}
 				loaded = await normalizeLoaderResult(
-					await config.loader({
-						runtime,
-						asset,
-						signal,
-						reportProgress
-					}),
+					loaderResult,
 					asset,
 					config,
 					reportProgress,

@@ -570,10 +570,42 @@ describe('language tool asset loading', () => {
 			await expect(loading).rejects.toBe(reason);
 			resolveArrayBuffer(Uint8Array.of(1, 2, 3).buffer);
 			await new Promise((resolve) => setTimeout(resolve, 0));
-			expect(removeEventListener).toHaveBeenCalledOnce();
+			expect(removeEventListener).toHaveBeenCalledTimes(2);
 			expect(reportProgress).not.toHaveBeenCalled();
 		}
 	);
+
+	it('discards a late custom-loader result after caller cancellation', async () => {
+		let resolveLoader!: (value: Uint8Array) => void;
+		let removeEventListener!: ReturnType<typeof vi.spyOn>;
+		const controller = new AbortController();
+		const reason = new Error('cancelled while custom loader is pending');
+		const reportProgress = vi.fn();
+		const loading = loadLanguageToolAsset(
+			'clangd',
+			'clangd.js',
+			{
+				baseUrl: 'https://assets.example.com/clangd/',
+				loader: ({ signal }) => {
+					removeEventListener = vi.spyOn(signal, 'removeEventListener');
+					return new Promise<Uint8Array>((resolve) => {
+						resolveLoader = resolve;
+					});
+				}
+			},
+			reportProgress,
+			{ signal: controller.signal }
+		);
+
+		await vi.waitFor(() => expect(removeEventListener).toBeDefined());
+		controller.abort(reason);
+
+		await expect(loading).rejects.toBe(reason);
+		resolveLoader(Uint8Array.of(1, 2, 3));
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(removeEventListener).toHaveBeenCalledOnce();
+		expect(reportProgress).not.toHaveBeenCalled();
+	});
 
 	it('aborts a loader that exceeds its configured timeout', async () => {
 		vi.useFakeTimers();
