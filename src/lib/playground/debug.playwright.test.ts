@@ -408,7 +408,7 @@ fn main() {
 		breakpointLine: 2,
 		expectedLocal: { name: 'value', value: '73' },
 		expectedOutput: 'lldb-rust-panic=73',
-		expectedTerminalError: 'Debug target exited with code 101.',
+		expectedStoppedReason: 'exception',
 		expectedTitle: 'Rust · LLDB / WAMR',
 		language: 'RUST',
 		programArgs: [],
@@ -1749,6 +1749,15 @@ describe('native-source browser debugging in Chromium', () => {
 							);
 							expect(stoppedState.paused).toBe(true);
 							expect(stoppedState.scopes.length).toBeGreaterThan(0);
+							if ('expectedOutput' in testCase) {
+								await page.waitForFunction(
+									(expectedOutput) =>
+										document
+											.querySelector('[data-testid="terminal-debug-output"]')
+											?.textContent?.includes(expectedOutput),
+									testCase.expectedOutput
+								);
+							}
 							const stoppedLine = await readPausedLine(page);
 							if ('afterContinue' in testCase) {
 								expect(stoppedLine).toMatch(/^L[34]$/);

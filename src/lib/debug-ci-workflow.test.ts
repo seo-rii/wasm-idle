@@ -132,8 +132,8 @@ describe('LLDB browser integration workflow', () => {
 		expect(browserTest).toContain("testId: 'rust-recursive-frames'");
 		expect(browserTest).toContain("testId: 'rust-panic'");
 		expect(browserTest).toContain("expectedFrameFunction: 'recurse'");
-		expect(browserTest).toContain(
-			"expectedTerminalError: 'Debug target exited with code 101.'"
+		expect(browserTest).toMatch(
+			/expectedOutput: 'lldb-rust-panic=73',[\s\S]{0,160}expectedStoppedReason: 'exception'/
 		);
 	});
 });
