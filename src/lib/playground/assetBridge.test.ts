@@ -1118,39 +1118,81 @@ describe('WorkerAssetBridge asset requests', () => {
 		}
 	);
 
-	it('cancels a failed HTTP response before reporting its status', async () => {
-		const postMessage = vi.fn();
-		const cancel = vi.fn(async () => undefined);
-		vi.stubGlobal(
-			'fetch',
-			vi.fn().mockResolvedValue({
-				ok: false,
-				status: 503,
-				url: '',
-				headers: new Headers(),
-				body: { cancel }
-			})
-		);
-		const asset = RUNTIME_LOAD_ASSETS.clang[0];
-		const bridge = new WorkerAssetBridge({ postMessage } as unknown as Worker, 'clang', {
-			baseUrl: 'https://assets.example.com/clang/',
-			useAssetBridge: true
-		});
+	it.each(['pending', 'throw', 'reject'] as const)(
+		'reports a failed HTTP response without awaiting %s cancellation',
+		async (cancellationMode) => {
+			let resolveResponse!: (message: unknown) => void;
+			const responsePosted = new Promise<unknown>((resolve) => {
+				resolveResponse = resolve;
+			});
+			const postMessage = vi.fn((message: unknown) => resolveResponse(message));
+			let resolveCancellation!: () => void;
+			const stalledCancellation = new Promise<void>((resolve) => {
+				resolveCancellation = resolve;
+			});
+			let cancelReason: unknown;
+			const cancel = vi.fn((reason?: unknown) => {
+				cancelReason = reason;
+				if (cancellationMode === 'throw') throw new Error('cleanup threw');
+				if (cancellationMode === 'reject') {
+					return Promise.reject(new Error('cleanup rejected'));
+				}
+				return stalledCancellation;
+			});
+			vi.stubGlobal(
+				'fetch',
+				vi.fn().mockResolvedValue({
+					ok: false,
+					status: 503,
+					url: '',
+					headers: new Headers(),
+					body: { cancel }
+				})
+			);
+			const asset = RUNTIME_LOAD_ASSETS.clang[0];
+			const bridge = new WorkerAssetBridge({ postMessage } as unknown as Worker, 'clang', {
+				baseUrl: 'https://assets.example.com/clang/',
+				useAssetBridge: true
+			});
+			let timeout: ReturnType<typeof setTimeout> | undefined;
 
-		bridge.handleMessage({
-			data: { assetRequest: { id: 26, asset } }
-		} as MessageEvent);
+			try {
+				bridge.handleMessage({
+					data: { assetRequest: { id: 26, asset } }
+				} as MessageEvent);
+				const outcome = await Promise.race([
+					responsePosted.then((message) => ({ status: 'posted' as const, message })),
+					new Promise<{ status: 'pending' }>((resolve) => {
+						timeout = setTimeout(() => resolve({ status: 'pending' }), 25);
+					})
+				]);
 
-		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
-		expect(postMessage).toHaveBeenCalledWith({
-			assetResponse: {
-				id: 26,
-				ok: false,
-				error: `Failed to load ${asset}: 503`
+				expect(outcome).toEqual({
+					status: 'posted',
+					message: {
+						assetResponse: {
+							id: 26,
+							ok: false,
+							error: `Failed to load ${asset}: 503`
+						}
+					}
+				});
+				expect(postMessage).toHaveBeenCalledOnce();
+				expect(cancel).toHaveBeenCalledOnce();
+				expect(cancel.mock.calls[0]?.[0]).toBe(cancelReason);
+				expect(cancelReason).toMatchObject({
+					message: `Failed to load ${asset}: 503`
+				});
+				expect(
+					(bridge as unknown as { activeLoads: Set<AbortController> }).activeLoads.size
+				).toBe(0);
+			} finally {
+				if (timeout) clearTimeout(timeout);
+				resolveCancellation();
+				await vi.waitFor(() => expect(postMessage).toHaveBeenCalled());
 			}
-		});
-		expect(cancel).toHaveBeenCalledOnce();
-	});
+		}
+	);
 
 	it('copies loader-owned buffers before transferring them to a worker', async () => {
 		const postMessage = vi.fn();

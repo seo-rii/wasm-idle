@@ -38,6 +38,14 @@ const MAX_RUNTIME_ASSET_BYTES = 128 * 1024 * 1024;
 const runtimeAssetAbortReason = (signal: AbortSignal) =>
 	signal.reason ?? new DOMException('Runtime asset load aborted', 'AbortError');
 
+const cancelResponseBody = (response: Response, reason?: unknown) => {
+	try {
+		void Promise.resolve(response.body?.cancel(reason)).catch(() => undefined);
+	} catch {
+		// Preserve the asset failure that caused cancellation.
+	}
+};
+
 const readAbortableArrayBuffer = async (
 	source: { arrayBuffer(): Promise<ArrayBuffer> },
 	signal: AbortSignal
@@ -466,9 +474,7 @@ export class WorkerAssetBridge {
 				(candidate) => {
 					if (settled) {
 						const reason = runtimeAssetAbortReason(signal);
-						void Promise.resolve()
-							.then(() => candidate.body?.cancel(reason))
-							.catch(() => undefined);
+						cancelResponseBody(candidate, reason);
 						return;
 					}
 					settled = true;
@@ -486,7 +492,7 @@ export class WorkerAssetBridge {
 		});
 		if (signal.aborted) {
 			const reason = runtimeAssetAbortReason(signal);
-			await response.body?.cancel(reason).catch(() => undefined);
+			cancelResponseBody(response, reason);
 			throw reason;
 		}
 		let finalResponseUrl = requestUrl.href;
@@ -497,19 +503,19 @@ export class WorkerAssetBridge {
 				const error = new Error(
 					`Runtime asset ${asset} has an invalid final response URL: ${response.url}`
 				);
-				await response.body?.cancel(error).catch(() => undefined);
+				cancelResponseBody(response, error);
 				throw error;
 			}
 		}
 		try {
 			this.requireAllowedAssetUrl(asset, finalResponseUrl);
 		} catch (error) {
-			await response.body?.cancel(error).catch(() => undefined);
+			cancelResponseBody(response, error);
 			throw error;
 		}
 		if (!response.ok) {
 			const error = new Error(`Failed to load ${asset}: ${response.status}`);
-			await response.body?.cancel(error).catch(() => undefined);
+			cancelResponseBody(response, error);
 			throw error;
 		}
 		const originalContentLength = response.headers.get('x-wasm-idle-original-content-length');
@@ -530,7 +536,7 @@ export class WorkerAssetBridge {
 					`Runtime asset ${asset} has an invalid ${contentLengthHeader}: ${rawContentLength}`,
 					{ phase: 'asset', runtimeId: this.runtime }
 				);
-				await response.body?.cancel(error).catch(() => undefined);
+				cancelResponseBody(response, error);
 				throw error;
 			}
 			contentLength = parsedContentLength;
@@ -539,7 +545,7 @@ export class WorkerAssetBridge {
 			const error = new Error(
 				`Runtime asset ${asset} exceeds the ${MAX_RUNTIME_ASSET_BYTES} byte limit`
 			);
-			await response.body?.cancel(error).catch(() => undefined);
+			cancelResponseBody(response, error);
 			throw error;
 		}
 		const mimeType = response.headers.get('content-type') || undefined;
