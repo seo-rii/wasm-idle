@@ -176,9 +176,16 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 			(async () => {
 				const resolved: DebugWatchValue[] = [];
 				for (const expression of expressions) {
+					const runtimeValue = await terminal.debugEvaluate!(expression);
+					const exactVariable = localVariables.find(
+						(variable) => variable.name === expression
+					);
 					resolved.push({
 						expression,
-						value: await terminal.debugEvaluate!(expression)
+						value:
+							runtimeValue === '?' && exactVariable
+								? exactVariable.value
+								: runtimeValue
 					});
 				}
 				if (version === watchRequestVersion) watchValuesStore.set(resolved);
@@ -499,6 +506,15 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 			next.set(variablesReference, [...variables]);
 			return next;
 		});
+		if (get(scopesStore).some((scope) => scope.variablesReference === variablesReference)) {
+			const variablesByReference = get(variablesByReferenceStore);
+			localsStore.set(
+				get(scopesStore).flatMap(
+					(scope) => variablesByReference.get(scope.variablesReference) ?? scope.variables
+				)
+			);
+			refreshWatchValues();
+		}
 		return variables;
 	}
 

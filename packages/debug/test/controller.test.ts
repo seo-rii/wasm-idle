@@ -69,6 +69,48 @@ describe('createDebugSessionController', () => {
 		expect(debugCommand).toHaveBeenLastCalledWith('continue');
 	});
 
+	it('resolves exact lazy LLDB variable names without advertising expression evaluation', async () => {
+		const debugEvaluate = vi.fn(async () => '?');
+		const debugVariables = vi.fn(async () => [
+			{ name: 'answer', value: '42', type: 'int', variablesReference: 0 }
+		]);
+		const controller = createDebugSessionController({
+			terminal: {
+				debugEvaluate,
+				debugVariables
+			} as never
+		});
+
+		controller.handleEvent({
+			type: 'pause',
+			line: 5,
+			reason: 'breakpoint',
+			locals: [],
+			callStack: [{ functionName: 'main', line: 5 }],
+			scopes: [
+				{
+					name: 'Locals',
+					variablesReference: 10,
+					expensive: false,
+					variables: []
+				}
+			]
+		});
+		controller.addWatchExpression('answer');
+		controller.addWatchExpression('answer + 1');
+
+		await controller.loadVariableChildren(10);
+
+		await vi.waitFor(() =>
+			expect(controller.watchValues).toEqual([
+				{ expression: 'answer', value: '42' },
+				{ expression: 'answer + 1', value: '?' }
+			])
+		);
+		expect(debugEvaluate).toHaveBeenCalledWith('answer');
+		expect(debugEvaluate).toHaveBeenCalledWith('answer + 1');
+	});
+
 	it('falls back to adapter evaluation, syncs breakpoints, and clears pause state on stop', () => {
 		const setBreakpoints = vi.fn(async () => undefined);
 		const controller = createDebugSessionController({

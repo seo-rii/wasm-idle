@@ -22,6 +22,11 @@ LLDB's generic DAP advertisement. These capabilities remain false because the pu
 contract cannot carry breakpoint conditions or log messages and does not expose data-breakpoint
 operations. Add the adapter methods and their product-path tests before enabling them; the current
 browser WAMR product also lacks the required target-side expression evaluation and watchpoints.
+
+The playground controller still supports an exact local or argument name as a watch after its lazy
+top-level scope has been loaded. When the runtime reports expression evaluation as unavailable, a
+watch such as `answer` resolves from the matching variable entry, while `answer + 1`, field paths,
+and other expressions remain `?`. This fallback does not advertise LLDB expression evaluation.
 Adapter initialization snapshots its request arguments and explicit feature opt-ins before awaiting
 the DAP response. Mutating a caller-owned options object in flight therefore cannot enable
 WebAssembly expression evaluation after the conservative capability decision has begun.
