@@ -352,17 +352,29 @@ export class BrowserLldbSession {
 
 	async setBreakpoints(source: DebugSource, lines: number[]) {
 		validateDebugSourcePath(source.path);
-		const requestVersion = (this.breakpointRequestVersions.get(source.path) ?? 0) + 1;
-		this.breakpointRequestVersions.set(source.path, requestVersion);
+		const sourcePath = source.path;
+		const requestVersion = (this.breakpointRequestVersions.get(sourcePath) ?? 0) + 1;
+		this.breakpointRequestVersions.set(sourcePath, requestVersion);
 		const requestedLines = [...lines];
-		const response = await this.awaitWhileActive(
-			this.request<{ breakpoints?: ResolvedBreakpoint[] }>('setBreakpoints', {
-				source,
-				breakpoints: requestedLines.map((line) => ({ line })),
-				lines: requestedLines,
-				sourceModified: false
-			})
-		);
+		let response: { breakpoints?: ResolvedBreakpoint[] };
+		try {
+			response = await this.awaitWhileActive(
+				this.request<{ breakpoints?: ResolvedBreakpoint[] }>('setBreakpoints', {
+					source,
+					breakpoints: requestedLines.map((line) => ({ line })),
+					lines: requestedLines,
+					sourceModified: false
+				})
+			);
+		} catch (error) {
+			if (
+				!this.disposed &&
+				this.breakpointRequestVersions.get(sourcePath) !== requestVersion
+			) {
+				return this.getResolvedBreakpoints(sourcePath);
+			}
+			throw error;
+		}
 		const resolved = requestedLines.map((requestedLine, index) => {
 			const breakpoint = response.breakpoints?.[index];
 			return {
@@ -372,21 +384,22 @@ export class BrowserLldbSession {
 				source: breakpoint?.source ?? source
 			} satisfies ResolvedBreakpoint;
 		});
-		if (this.breakpointRequestVersions.get(source.path) === requestVersion) {
+		if (this.breakpointRequestVersions.get(sourcePath) === requestVersion) {
 			const activeIds = new Set(
 				resolved.flatMap((breakpoint) =>
 					breakpoint.id === undefined ? [] : [breakpoint.id]
 				)
 			);
-			for (const breakpoint of this.resolvedBreakpoints.get(source.path) ?? []) {
+			for (const breakpoint of this.resolvedBreakpoints.get(sourcePath) ?? []) {
 				if (breakpoint.id !== undefined && !activeIds.has(breakpoint.id)) {
 					this.retiredBreakpointIds.add(breakpoint.id);
 				}
 			}
 			for (const id of activeIds) this.retiredBreakpointIds.delete(id);
-			this.resolvedBreakpoints.set(source.path, cloneResolvedBreakpoints(resolved));
+			this.resolvedBreakpoints.set(sourcePath, cloneResolvedBreakpoints(resolved));
+			return cloneResolvedBreakpoints(resolved);
 		}
-		return cloneResolvedBreakpoints(resolved);
+		return this.getResolvedBreakpoints(sourcePath);
 	}
 
 	onEvent(listener: (event: DapEvent) => void) {

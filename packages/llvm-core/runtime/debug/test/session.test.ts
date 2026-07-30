@@ -224,6 +224,23 @@ class FakeWorker implements WorkerLike {
 		await this.dapOutput.write(encodeDapMessage(event));
 	}
 
+	async respondDapRequest(
+		request: DapRequest,
+		response: { success?: boolean; body?: unknown; message?: string } = {}
+	) {
+		if (!this.dapOutput) throw new Error('LLDB DAP output was not initialized');
+		const message: DapResponse = {
+			seq: this.commands.length + 1_000,
+			type: 'response',
+			request_seq: request.seq,
+			command: request.command,
+			success: response.success !== false,
+			...(response.body === undefined ? {} : { body: response.body }),
+			...(response.message === undefined ? {} : { message: response.message })
+		};
+		await this.dapOutput.write(encodeDapMessage(message));
+	}
+
 	private emit(message: DebugWorkerOutboundMessage) {
 		for (const listener of this.listeners) {
 			listener({ data: message } as MessageEvent<DebugWorkerOutboundMessage>);
@@ -291,6 +308,7 @@ describe('BrowserLldbSession', () => {
 		const workers: FakeWorker[] = [];
 		const output: string[] = [];
 		const memory: string[] = [];
+		const deferredResponses = new Set<string>();
 		const session = new BrowserLldbSession({
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
@@ -309,7 +327,7 @@ describe('BrowserLldbSession', () => {
 				cwd: '/workspace'
 			},
 			workerFactory: (kind) => {
-				const worker = new FakeWorker(kind, commands);
+				const worker = new FakeWorker(kind, commands, false, false, deferredResponses);
 				workers.push(worker);
 				return worker;
 			},
@@ -504,6 +522,86 @@ describe('BrowserLldbSession', () => {
 				source: { path: '/workspace/main.cpp' }
 			}
 		]);
+		const setBreakpointRequestCount = lldbWorker!.requests.filter(
+			(request) => request.command === 'setBreakpoints'
+		).length;
+		deferredResponses.add('setBreakpoints');
+		const olderBreakpointUpdate = session.setBreakpoints({ path: '/workspace/main.cpp' }, [11]);
+		const newerBreakpointUpdate = session.setBreakpoints({ path: '/workspace/main.cpp' }, [13]);
+		await expect
+			.poll(
+				() =>
+					lldbWorker!.requests.filter((request) => request.command === 'setBreakpoints')
+						.length
+			)
+			.toBe(setBreakpointRequestCount + 2);
+		const successfulRequests = lldbWorker!.requests
+			.filter((request) => request.command === 'setBreakpoints')
+			.slice(-2);
+		const currentBreakpoints = [
+			{
+				id: 113,
+				verified: true,
+				line: 13,
+				source: { path: '/workspace/main.cpp' }
+			}
+		];
+		await lldbWorker!.respondDapRequest(successfulRequests[1]!, {
+			body: { breakpoints: [{ id: 113, verified: true, line: 13 }] }
+		});
+		await expect(newerBreakpointUpdate).resolves.toEqual(currentBreakpoints);
+		await lldbWorker!.respondDapRequest(successfulRequests[0]!, {
+			body: { breakpoints: [{ id: 111, verified: true, line: 11 }] }
+		});
+		await expect(olderBreakpointUpdate).resolves.toEqual(currentBreakpoints);
+		expect(session.getResolvedBreakpoints('/workspace/main.cpp')).toEqual(currentBreakpoints);
+
+		const staleFailure = session.setBreakpoints({ path: '/workspace/main.cpp' }, [17]);
+		const latestSuccess = session.setBreakpoints({ path: '/workspace/main.cpp' }, [19]);
+		await expect
+			.poll(
+				() =>
+					lldbWorker!.requests.filter((request) => request.command === 'setBreakpoints')
+						.length
+			)
+			.toBe(setBreakpointRequestCount + 4);
+		const failureRequests = lldbWorker!.requests
+			.filter((request) => request.command === 'setBreakpoints')
+			.slice(-2);
+		const latestBreakpoints = [
+			{
+				id: 119,
+				verified: true,
+				line: 19,
+				source: { path: '/workspace/main.cpp' }
+			}
+		];
+		await lldbWorker!.respondDapRequest(failureRequests[1]!, {
+			body: { breakpoints: [{ id: 119, verified: true, line: 19 }] }
+		});
+		await expect(latestSuccess).resolves.toEqual(latestBreakpoints);
+		await lldbWorker!.respondDapRequest(failureRequests[0]!, {
+			success: false,
+			message: 'obsolete breakpoint failure'
+		});
+		await expect(staleFailure).resolves.toEqual(latestBreakpoints);
+
+		const currentFailure = session.setBreakpoints({ path: '/workspace/main.cpp' }, [23]);
+		await expect
+			.poll(
+				() =>
+					lldbWorker!.requests.filter((request) => request.command === 'setBreakpoints')
+						.length
+			)
+			.toBe(setBreakpointRequestCount + 5);
+		const currentFailureRequest = lldbWorker!.requests
+			.filter((request) => request.command === 'setBreakpoints')
+			.at(-1)!;
+		await lldbWorker!.respondDapRequest(currentFailureRequest, {
+			success: false,
+			message: 'current breakpoint failure'
+		});
+		await expect(currentFailure).rejects.toThrow('current breakpoint failure');
 		expect(targetInit).toMatchObject({ stdin: { generation: expect.any(Number) } });
 		if (!targetInit || targetInit.type !== 'initialize-target' || !targetInit.stdin) {
 			throw new Error('target stdin queue was not initialized');
