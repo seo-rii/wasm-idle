@@ -233,14 +233,23 @@ export class LldbDapAdapter implements DebugAdapter {
 		if (this.#capabilities) return Promise.resolve(this.#capabilities);
 		if (this.#initializeRequest) return this.#initializeRequest;
 
+		const options: LldbDapAdapterOptions = {
+			...this.#options,
+			...(this.#options.initializeArguments
+				? { initializeArguments: { ...this.#options.initializeArguments } }
+				: {}),
+			...(this.#options.featureSupport
+				? { featureSupport: { ...this.#options.featureSupport } }
+				: {})
+		};
 		const initializeArguments = {
 			...defaultInitializeArguments,
-			...this.#options.initializeArguments
+			...options.initializeArguments
 		};
 		this.#initializeRequest = this.#session
 			.request<DapCapabilities>('initialize', initializeArguments)
 			.then((capabilities) => {
-				this.#capabilities = mapCapabilities(capabilities || {}, this.#options);
+				this.#capabilities = mapCapabilities(capabilities || {}, options);
 				return this.#capabilities;
 			})
 			.catch((error: unknown) => {

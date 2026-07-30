@@ -102,6 +102,29 @@ describe('LldbDapAdapter', () => {
 		]);
 	});
 
+	it('snapshots expression-evaluation opt-ins when initialization starts', async () => {
+		const session = new FakeDapSession();
+		let resolveInitialize!: (capabilities: unknown) => void;
+		session.queueResponse(
+			'initialize',
+			new Promise((resolve) => {
+				resolveInitialize = resolve;
+			})
+		);
+		const options: LldbDapAdapterOptions = {
+			featureSupport: { evaluate: false }
+		};
+		const adapter = createLldbDapAdapter(session, options);
+		const initialization = adapter.initialize();
+		options.featureSupport!.evaluate = true;
+		resolveInitialize({ supportsEvaluateForHovers: true });
+
+		await expect(initialization).resolves.toMatchObject({
+			supportsEvaluate: false,
+			supportsEvaluateForHovers: false
+		});
+	});
+
 	it('requires initialization and maps launch, execution control, and disconnect requests', async () => {
 		const session = new FakeDapSession();
 		session.setResponse('initialize', {});

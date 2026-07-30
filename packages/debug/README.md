@@ -22,6 +22,9 @@ LLDB's generic DAP advertisement. These capabilities remain false because the pu
 contract cannot carry breakpoint conditions or log messages and does not expose data-breakpoint
 operations. Add the adapter methods and their product-path tests before enabling them; the current
 browser WAMR product also lacks the required target-side expression evaluation and watchpoints.
+Adapter initialization snapshots its request arguments and explicit feature opt-ins before awaiting
+the DAP response. Mutating a caller-owned options object in flight therefore cannot enable
+WebAssembly expression evaluation after the conservative capability decision has begun.
 
 Variable mutation, restart, and standalone terminate requests also remain false even when a generic
 DAP server advertises them, because the `DebugAdapter` contract does not expose those operations.
