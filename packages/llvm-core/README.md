@@ -181,9 +181,9 @@ Rust coverage includes a basic argument/output fixture, a structure and field tr
 value, three selectable recursive frames with distinct arguments, and a panic that must preserve
 stderr before WAMR reports its `abort` as an LLDB exception stop. The panic fixture verifies its
 local at the source breakpoint; after Rust has aborted, WAMR has no inspectable scope for that
-terminal stop, so the gate explicitly expects an empty scope list there. These fixtures continue to
-use the pinned generic DWARF path: the runtime does not advertise arbitrary Rust expression
-evaluation.
+terminal stop, so the gate explicitly expects an empty scope list and no source line there. These
+fixtures continue to use the pinned generic DWARF path: the runtime does not advertise arbitrary
+Rust expression evaluation.
 A WASI file fixture mounts `/workspace/data/input.txt` into both debugger workers, pauses before
 the guest opens it, and requires WAMR to print the file's value after continuing. Set
 `WASM_IDLE_DEBUG_BROWSER_CASES=c-wasi-file` to run only this fixture locally.

@@ -408,6 +408,7 @@ fn main() {
 		breakpointLine: 2,
 		expectedLocal: { name: 'value', value: '73' },
 		expectedOutput: 'lldb-rust-panic=73',
+		expectedStoppedLine: null,
 		expectedStoppedReason: 'exception',
 		expectedTitle: 'Rust · LLDB / WAMR',
 		expectScopesAtStop: false,
@@ -1764,7 +1765,13 @@ describe('native-source browser debugging in Chromium', () => {
 								);
 							}
 							const stoppedLine = await readPausedLine(page);
-							if ('afterContinue' in testCase) {
+							if ('expectedStoppedLine' in testCase) {
+								expect(stoppedLine).toBe(
+									testCase.expectedStoppedLine == null
+										? '—'
+										: `L${testCase.expectedStoppedLine}`
+								);
+							} else if ('afterContinue' in testCase) {
 								expect(stoppedLine).toMatch(/^L[34]$/);
 							} else {
 								expect(stoppedLine).toBe('L3');
