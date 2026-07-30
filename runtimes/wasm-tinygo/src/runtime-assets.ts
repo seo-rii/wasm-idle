@@ -527,13 +527,17 @@ async function fetchRuntimeAssetBytes(
 		try {
 			finalUrl = new URL(response.url).href;
 		} catch {
-			await response.body?.cancel().catch(() => {});
+			try {
+				void response.body?.cancel().catch(() => {});
+			} catch {}
 			throw new Error(
 				`wasm-tinygo runtime asset ${assetLabel} returned an invalid final URL`
 			);
 		}
 		if (finalUrl !== resolvedAssetUrl) {
-			await response.body?.cancel().catch(() => {});
+			try {
+				void response.body?.cancel().catch(() => {});
+			} catch {}
 			throw new Error(
 				`wasm-tinygo runtime asset ${assetLabel} returned an unexpected final URL`
 			);
@@ -544,14 +548,18 @@ async function fetchRuntimeAssetBytes(
 	if (contentLengthValue !== null) {
 		contentLength = Number(contentLengthValue);
 		if (!/^\d+$/u.test(contentLengthValue) || !Number.isSafeInteger(contentLength)) {
-			await response.body?.cancel().catch(() => {});
+			try {
+				void response.body?.cancel().catch(() => {});
+			} catch {}
 			throw new Error(
 				`wasm-tinygo runtime asset ${assetLabel} has an invalid Content-Length`
 			);
 		}
 	}
 	if (contentLength !== undefined && contentLength > options.maxAssetBytes) {
-		await response.body?.cancel().catch(() => {});
+		try {
+			void response.body?.cancel().catch(() => {});
+		} catch {}
 		throw new Error(
 			`${assetLabel} download size exceeds the ${options.maxAssetBytes} byte limit`
 		);

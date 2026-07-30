@@ -660,6 +660,98 @@ test('loadRuntimeAssetBytes rejects oversized Content-Length before reading', as
 	assert.equal(cancelled, true);
 });
 
+test('loadRuntimeAssetBytes rejects invalid response metadata without awaiting body cancellation', async () => {
+	const assetUrl = 'https://assets.invalid/tools/go-probe.wasm';
+	const scenarios = [
+		{
+			name: 'malformed final URL',
+			finalUrl: '://invalid-final-url',
+			headers: {},
+			cancelMode: 'pending',
+			expected: /returned an invalid final URL/
+		},
+		{
+			name: 'substituted final URL',
+			finalUrl: 'https://mirror.invalid/tools/go-probe.wasm',
+			headers: {},
+			cancelMode: 'throw',
+			expected: /returned an unexpected final URL/
+		},
+		{
+			name: 'invalid Content-Length',
+			finalUrl: assetUrl,
+			headers: { 'content-length': '1, 2' },
+			cancelMode: 'reject',
+			expected: /has an invalid Content-Length/
+		},
+		{
+			name: 'oversized Content-Length',
+			finalUrl: assetUrl,
+			headers: { 'content-length': '9' },
+			cancelMode: 'pending',
+			expected: /download size exceeds the 8 byte limit/
+		}
+	];
+
+	for (const scenario of scenarios) {
+		let resolveCancellation;
+		const pendingCancellation = new Promise((resolve) => {
+			resolveCancellation = resolve;
+		});
+		const cancelReasons = [];
+		let getReaderCount = 0;
+		const response = {
+			url: scenario.finalUrl,
+			ok: true,
+			status: 200,
+			headers: new Headers(scenario.headers),
+			body: {
+				cancel(reason) {
+					cancelReasons.push(reason);
+					if (scenario.cancelMode === 'throw') {
+						throw new Error('TinyGo body cancellation threw');
+					}
+					if (scenario.cancelMode === 'reject') {
+						return Promise.reject(new Error('TinyGo body cancellation rejected'));
+					}
+					return pendingCancellation;
+				},
+				getReader() {
+					getReaderCount += 1;
+					throw new Error('response body should not be read');
+				}
+			}
+		};
+		const loading = loadRuntimeAssetBytes({
+			assetPath: 'tools/go-probe.wasm',
+			assetUrl,
+			label: 'go-probe.wasm',
+			maxAssetBytes: 8,
+			fetchImpl: async () => response
+		});
+
+		try {
+			const outcome = await Promise.race([
+				loading.then(
+					(value) => ({ status: 'resolved', value }),
+					(error) => ({ status: 'rejected', reason: error })
+				),
+				new Promise((resolve) => {
+					setImmediate(() => resolve({ status: 'pending' }));
+				})
+			]);
+
+			assert.equal(outcome.status, 'rejected', `${scenario.name} awaited body cancellation`);
+			assert.match(outcome.reason.message, scenario.expected);
+			assert.deepEqual(cancelReasons, [undefined]);
+			assert.equal(getReaderCount, 0);
+		} finally {
+			resolveCancellation();
+			await loading.catch(() => {});
+		}
+	}
+});
+
 test('loadRuntimeAssetBytes bounds unknown-length response streams', async () => {
 	let cancelled = false;
 	let chunkIndex = 0;
