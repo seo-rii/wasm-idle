@@ -219,6 +219,19 @@ describe('LldbDapAdapter', () => {
 			event: 'breakpoint',
 			body: {
 				reason: 'changed',
+				breakpoint: {
+					id: 31,
+					verified: true,
+					source: { path: '/workspace/main.cpp' },
+					line: 4
+				}
+			}
+		});
+		expect(events).toEqual([]);
+		session.emit({
+			event: 'breakpoint',
+			body: {
+				reason: 'changed',
 				breakpoint: { id: 72, verified: true, line: 8 }
 			}
 		});
@@ -232,6 +245,30 @@ describe('LldbDapAdapter', () => {
 				source: { path: '/workspace/main.cpp' },
 				requestedLine: 7,
 				line: 8
+			}
+		});
+
+		session.emit({
+			event: 'breakpoint',
+			body: {
+				reason: 'new',
+				breakpoint: {
+					id: 99,
+					verified: true,
+					source: { path: '/workspace/helper.cpp' },
+					line: 2
+				}
+			}
+		});
+		expect(events.at(-1)).toEqual({
+			type: 'breakpoint',
+			reason: 'new',
+			breakpoint: {
+				id: 99,
+				verified: true,
+				source: { path: '/workspace/helper.cpp' },
+				requestedLine: 2,
+				line: 2
 			}
 		});
 	});

@@ -51,10 +51,12 @@ hosts may therefore issue the next step as soon as the stopped state is publishe
 
 The LLDB adapter and playground host version concurrent breakpoint updates per source path. A
 delayed DAP response cannot replace the adapter's current breakpoint IDs or restore an older set in
-the UI. Superseded controller calls resolve with the current source snapshot instead of returning
-their stale result. The adapter controller and playground host also ignore a superseded request's
-late failure instead of surfacing it after the current update succeeds. Updates for different
-workspace files remain independent, while failures from the latest request still propagate.
+the UI. Late `changed` or `removed` events for an untracked ID are discarded, while DAP `new`
+events can still introduce a breakpoint. Superseded controller calls resolve with the current
+source snapshot instead of returning their stale result. The adapter controller and playground host
+also ignore a superseded request's late failure instead of surfacing it after the current update
+succeeds. Updates for different workspace files remain independent, while failures from the latest
+request still propagate.
 
 When a selected LLDB stack frame names another `/workspace/...` source, the host should await
 `selectFrame()`, open the matching workspace file, and then update the controller source path. This

@@ -583,6 +583,9 @@ export class LldbDapAdapter implements DebugAdapter {
 				body.breakpoint.id === undefined
 					? undefined
 					: this.#breakpointsById.get(body.breakpoint.id);
+			if (body.breakpoint.id !== undefined && !tracked && body.reason !== 'new') {
+				return null;
+			}
 			const fallbackSource = body.breakpoint.source || tracked?.source || {};
 			const requestedLine = tracked?.requestedLine || body.breakpoint.line || 1;
 			const breakpoint = this.#normalizeBreakpoint(
