@@ -238,19 +238,56 @@ export class WorkerAssetBridge {
 		if (this.config.integrity && !Object.hasOwn(this.config.integrity, asset)) {
 			throw new Error(`Runtime asset ${asset} is missing integrity metadata`);
 		}
-		const reportProgress = (loaded: number, total?: number) =>
-			this.progress.update(asset, loaded, total);
+		if (signal.aborted) {
+			throw signal.reason ?? new DOMException('Runtime asset load aborted', 'AbortError');
+		}
+		const reportProgress = (loaded: number, total?: number) => {
+			if (!signal.aborted) this.progress.update(asset, loaded, total);
+		};
 		if (this.config.loader) {
-			const loaded = await this.normalizeLoaderResult(
-				await this.config.loader({
+			const pendingResult = Promise.resolve(
+				this.config.loader({
 					runtime: this.runtime,
 					asset,
 					reportProgress,
 					signal
-				}),
-				asset,
-				signal
+				})
 			);
+			const result = await new Promise<RuntimeAssetLoaderResult>((resolve, reject) => {
+				let settled = false;
+				const onAbort = () => {
+					if (settled) return;
+					settled = true;
+					signal.removeEventListener('abort', onAbort);
+					reject(
+						signal.reason ??
+							new DOMException('Runtime asset load aborted', 'AbortError')
+					);
+				};
+				signal.addEventListener('abort', onAbort, { once: true });
+				void pendingResult.then(
+					(value) => {
+						if (settled) return;
+						settled = true;
+						signal.removeEventListener('abort', onAbort);
+						resolve(value);
+					},
+					(error) => {
+						if (settled) return;
+						settled = true;
+						signal.removeEventListener('abort', onAbort);
+						reject(error);
+					}
+				);
+				if (signal.aborted) onAbort();
+			});
+			if (signal.aborted) {
+				throw signal.reason ?? new DOMException('Runtime asset load aborted', 'AbortError');
+			}
+			const loaded = await this.normalizeLoaderResult(result, asset, signal);
+			if (signal.aborted) {
+				throw signal.reason ?? new DOMException('Runtime asset load aborted', 'AbortError');
+			}
 			if (loaded) return loaded;
 		}
 		return await this.fetchAsset(asset, asset, signal);

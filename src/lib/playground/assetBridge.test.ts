@@ -96,6 +96,87 @@ describe('WorkerAssetBridge asset requests', () => {
 		});
 	});
 
+	it('aborts an uncooperative custom loader without fallback or late progress', async () => {
+		let resolveLoader!: (value: null) => void;
+		let markLoaderStarted!: () => void;
+		const loaderStarted = new Promise<void>((resolve) => {
+			markLoaderStarted = resolve;
+		});
+		let loaderRequest:
+			| {
+					reportProgress: (loaded: number, total?: number) => void;
+			  }
+			| undefined;
+		const loader = vi.fn(
+			(request: { reportProgress: (loaded: number, total?: number) => void }) => {
+				loaderRequest = request;
+				markLoaderStarted();
+				return new Promise<null>((resolve) => {
+					resolveLoader = resolve;
+				});
+			}
+		);
+		const postMessage = vi.fn();
+		const progress = { set: vi.fn() };
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+		const bridge = new WorkerAssetBridge(
+			{ postMessage } as unknown as Worker,
+			'clang',
+			{
+				baseUrl: '/clang/',
+				loader,
+				useAssetBridge: true
+			},
+			progress
+		);
+		progress.set.mockClear();
+		const asset = RUNTIME_LOAD_ASSETS.clang[0];
+		const loadAsset = (
+			bridge as unknown as {
+				loadAsset(assetName: string, signal: AbortSignal): Promise<unknown>;
+			}
+		).loadAsset.bind(bridge);
+		const controller = new AbortController();
+		const reason = new Error('stop custom runtime asset loader');
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const loading = loadAsset(asset, controller.signal);
+		let timeout: ReturnType<typeof setTimeout> | undefined;
+
+		try {
+			await loaderStarted;
+			controller.abort(reason);
+			const outcome = await Promise.race([
+				loading.then(
+					(value) => ({ status: 'resolved' as const, value }),
+					(error) => ({ status: 'rejected' as const, reason: error as unknown })
+				),
+				new Promise<{ status: 'pending' }>((resolve) => {
+					timeout = setTimeout(() => resolve({ status: 'pending' }), 25);
+				})
+			]);
+
+			expect(outcome).toEqual({ status: 'rejected', reason });
+			const abortRegistration = addEventListener.mock.calls.find(
+				([type]) => type === 'abort'
+			);
+			expect(abortRegistration).toBeDefined();
+			expect(removeEventListener).toHaveBeenCalledWith('abort', abortRegistration?.[1]);
+			loaderRequest?.reportProgress(1, 1);
+			resolveLoader(null);
+			await Promise.resolve();
+			await Promise.resolve();
+			expect(fetchMock).not.toHaveBeenCalled();
+			expect(progress.set).not.toHaveBeenCalled();
+			expect(postMessage).not.toHaveBeenCalled();
+		} finally {
+			if (timeout) clearTimeout(timeout);
+			resolveLoader(null);
+			await loading.catch(() => {});
+		}
+	});
+
 	it('loads an integrity-pinned Clang runtime manifest through the bridge', async () => {
 		const postMessage = vi.fn();
 		const bytes = new Uint8Array([1, 2, 3]);
