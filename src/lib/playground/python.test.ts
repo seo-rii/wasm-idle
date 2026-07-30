@@ -246,6 +246,46 @@ print((left + right) // (left - left))`,
 		expect(worker.terminate).toHaveBeenCalledOnce();
 	});
 
+	it('rejects an overlapping Python run without replacing the active handler', async () => {
+		const sandbox = new Python();
+		const outputs: string[] = [];
+		sandbox.output = (chunk: string) => outputs.push(chunk);
+
+		await sandbox.load('/');
+		const worker = workerInstances[workerInstances.length - 1];
+		worker.postMessage.mockImplementationOnce(() => {
+			queueMicrotask(() =>
+				worker.onmessage?.({
+					data: { output: 'first output', results: true }
+				} as MessageEvent<any>)
+			);
+		});
+		const firstRun = sandbox.run('print("first")', false);
+		const activeHandler = worker.onmessage;
+		const callsBeforeOverlap = worker.postMessage.mock.calls.length;
+		const secondRun = sandbox.run('print("second")', false);
+
+		try {
+			await expect(secondRun).rejects.toMatchObject({
+				name: 'BusyError',
+				code: 'busy',
+				runtimeId: 'PYTHON3',
+				recoverable: true
+			});
+			expect(worker.postMessage).toHaveBeenCalledTimes(callsBeforeOverlap);
+			expect(worker.onmessage).toBe(activeHandler);
+
+			await expect(firstRun).resolves.toBe(true);
+			expect(outputs).toEqual(['first output']);
+
+			await expect(sandbox.run('print("third")', false)).resolves.toBe(true);
+			expect(outputs).toEqual(['first output', '10:True\n']);
+		} finally {
+			sandbox.kill();
+			await Promise.allSettled([firstRun, secondRun]);
+		}
+	});
+
 	it('evaluates watch expressions through the worker debug buffers', async () => {
 		const sandbox = new Python();
 		sandbox.worker = {} as Worker;

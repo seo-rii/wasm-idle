@@ -16,6 +16,7 @@ import {
 import { createWasmIdleSharedBuffer, requireSharedArrayBuffer } from '$lib/playground/sharedBuffer';
 import { WorkerSession } from '$lib/playground/workerSession';
 import { reportWorkerProgress } from '$lib/playground/workerProgress';
+import { BusyError } from '@wasm-idle/core';
 
 const debugBreakpointBufferInts = 1028;
 
@@ -141,6 +142,13 @@ class Python implements Sandbox {
 		_args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
+		if (!options.debug && this.activeRunCleanup) {
+			return Promise.reject(
+				new BusyError('Python runtime already has an active run', {
+					runtimeId: 'PYTHON3'
+				})
+			);
+		}
 		if (options.debug) requireSharedArrayBuffer('Python debugging');
 		this.exit = false;
 		return new Promise<boolean | string>((resolve, reject) => {
