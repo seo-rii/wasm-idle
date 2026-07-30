@@ -271,6 +271,25 @@ describe('LldbDapAdapter', () => {
 				line: 2
 			}
 		});
+
+		session.setResponse('setBreakpoints', {
+			breakpoints: [{ id: 100, verified: true, line: 5 }]
+		});
+		await adapter.setBreakpoints({ path: '/workspace/helper.cpp' }, [5]);
+		const eventCountAfterReplacement = events.length;
+		session.emit({
+			event: 'breakpoint',
+			body: {
+				reason: 'changed',
+				breakpoint: {
+					id: 99,
+					verified: true,
+					source: { path: '/workspace/helper.cpp' },
+					line: 3
+				}
+			}
+		});
+		expect(events).toHaveLength(eventCountAfterReplacement);
 	});
 
 	it('keeps variable children lazy and forwards paging to DAP', async () => {

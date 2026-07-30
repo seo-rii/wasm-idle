@@ -594,8 +594,20 @@ export class LldbDapAdapter implements DebugAdapter {
 				requestedLine
 			);
 			if (breakpoint.id !== undefined) {
-				if (body.reason === 'removed') this.#breakpointsById.delete(breakpoint.id);
-				else this.#breakpointsById.set(breakpoint.id, breakpoint);
+				const sourceKey = debugSourceKey(breakpoint.source);
+				const previousSourceKey = tracked ? debugSourceKey(tracked.source) : sourceKey;
+				if (previousSourceKey !== sourceKey) {
+					this.#breakpointIdsBySource.get(previousSourceKey)?.delete(breakpoint.id);
+				}
+				if (body.reason === 'removed') {
+					this.#breakpointsById.delete(breakpoint.id);
+					this.#breakpointIdsBySource.get(sourceKey)?.delete(breakpoint.id);
+				} else {
+					this.#breakpointsById.set(breakpoint.id, breakpoint);
+					const ids = this.#breakpointIdsBySource.get(sourceKey) ?? new Set<number>();
+					ids.add(breakpoint.id);
+					this.#breakpointIdsBySource.set(sourceKey, ids);
+				}
 			}
 			return { type: 'breakpoint', reason: body.reason, breakpoint };
 		}
