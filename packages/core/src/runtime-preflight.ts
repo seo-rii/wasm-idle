@@ -181,20 +181,37 @@ async function readBoundedResponse(
 		throw error;
 	}
 	if (!response.body) {
-		const bytes = new Uint8Array(await response.arrayBuffer());
-		if (bytes.byteLength > maxAssetBytes) {
-			throw new AssetTooLargeError(
-				`Runtime asset ${asset.key} exceeds the ${maxAssetBytes} byte limit`,
-				{
-					limit: maxAssetBytes,
-					actual: bytes.byteLength,
-					runtimeId,
-					profileId
-				}
-			);
+		let cancelOnAbort: (() => void) | undefined;
+		const aborted = new Promise<never>((_resolve, reject) => {
+			cancelOnAbort = () =>
+				reject(signal.reason ?? new Error('Runtime asset preflight was aborted'));
+			signal.addEventListener('abort', cancelOnAbort, { once: true });
+		});
+		try {
+			if (signal.aborted) {
+				throw signal.reason ?? new Error('Runtime asset preflight was aborted');
+			}
+			const materialized = response.arrayBuffer();
+			const bytes = new Uint8Array(await Promise.race([materialized, aborted]));
+			if (signal.aborted) {
+				throw signal.reason ?? new Error('Runtime asset preflight was aborted');
+			}
+			if (bytes.byteLength > maxAssetBytes) {
+				throw new AssetTooLargeError(
+					`Runtime asset ${asset.key} exceeds the ${maxAssetBytes} byte limit`,
+					{
+						limit: maxAssetBytes,
+						actual: bytes.byteLength,
+						runtimeId,
+						profileId
+					}
+				);
+			}
+			reportProgress(bytes.byteLength);
+			return bytes;
+		} finally {
+			if (cancelOnAbort) signal.removeEventListener('abort', cancelOnAbort);
 		}
-		reportProgress(bytes.byteLength);
-		return bytes;
 	}
 
 	const reader = response.body.getReader();

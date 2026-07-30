@@ -216,6 +216,52 @@ describe('runtime registry asset preflight', () => {
 		expect(releaseLock).toHaveBeenCalledOnce();
 	});
 
+	it('cancels a bodyless response read promptly and suppresses late progress', async () => {
+		let resolveArrayBuffer!: (buffer: ArrayBuffer) => void;
+		const arrayBuffer = vi.fn(
+			() =>
+				new Promise<ArrayBuffer>((resolve) => {
+					resolveArrayBuffer = resolve;
+				})
+		);
+		let removeEventListener!: ReturnType<typeof vi.spyOn>;
+		const controller = new AbortController();
+		const reason = new Error('cancel bodyless preflight read');
+		const reportProgress = vi.fn();
+		const pending = preflightRuntimeAssets({
+			manifest: createManifest([assets[0]!]),
+			runtimeId: 'fortran/preflight-test',
+			rootUrl: 'https://example.test/',
+			fetch: async (_input, init) => {
+				removeEventListener = vi.spyOn(init?.signal as AbortSignal, 'removeEventListener');
+				return {
+					url: '',
+					ok: true,
+					status: 200,
+					headers: new Headers(),
+					body: null,
+					arrayBuffer
+				} as unknown as Response;
+			},
+			signal: controller.signal,
+			reportProgress
+		});
+
+		await vi.waitFor(() => expect(arrayBuffer).toHaveBeenCalledOnce());
+		controller.abort(reason);
+
+		await expect(pending).rejects.toMatchObject({
+			name: 'CancelledError',
+			code: 'cancelled',
+			phase: 'asset',
+			cause: reason
+		});
+		resolveArrayBuffer(loaderBytes.buffer.slice(0));
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(removeEventListener).toHaveBeenCalledOnce();
+		expect(reportProgress).not.toHaveBeenCalled();
+	});
+
 	it('rejects credentialed asset roots without copying secrets into the error', async () => {
 		const secret = 'root-password-must-not-leak';
 		let rejected: unknown;
