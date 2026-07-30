@@ -1792,13 +1792,17 @@ describe('native-source browser debugging in Chromium', () => {
 								);
 							}
 							if ('expectedTerminalError' in testCase) {
-								await page.waitForFunction(
-									(expectedError) =>
-										document
-											.querySelector('[data-testid="terminal-debug-output"]')
-											?.textContent?.includes(expectedError),
-									testCase.expectedTerminalError
-								);
+								await debugButton.waitFor({
+									state: 'visible',
+									timeout: Number(
+										process.env.WASM_IDLE_DEBUG_STOP_TIMEOUT_MS || '30000'
+									)
+								});
+								const transcript =
+									(await page
+										.locator('[data-testid="terminal-debug-output"]')
+										.textContent()) || '';
+								expect(transcript).toContain(testCase.expectedTerminalError);
 							}
 						}
 						await page
