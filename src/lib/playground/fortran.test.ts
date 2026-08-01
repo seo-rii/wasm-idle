@@ -142,11 +142,14 @@ describe('Fortran browser runtime', () => {
 				response.writeHead(403).end();
 				return;
 			}
+			let assetBytes: Buffer;
 			try {
-				response.writeHead(200).end(readFileSync(assetPath));
+				assetBytes = readFileSync(assetPath);
 			} catch {
 				response.writeHead(404).end();
+				return;
 			}
+			response.writeHead(200).end(assetBytes);
 		});
 		await new Promise<void>((resolve, reject) => {
 			server.once('error', reject);

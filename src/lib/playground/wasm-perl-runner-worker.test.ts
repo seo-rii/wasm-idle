@@ -94,7 +94,7 @@ describe('WebPerl runner worker', () => {
 		].sort()) {
 			hash.update(fileName);
 			hash.update('\0');
-			const compressed = fileName !== 'runner-worker.js';
+			const compressed = fileName === 'emperl.data' || fileName === 'emperl.wasm';
 			const stored = await readFile(
 				new URL(compressed ? `${fileName}.gz` : fileName, staticRuntimeUrl)
 			);
