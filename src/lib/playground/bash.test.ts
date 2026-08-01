@@ -951,6 +951,88 @@ describe('Bash sandbox', () => {
 	});
 
 	it.each([
+		{ name: 'success', result: { ok: true, code: 0 } },
+		{ name: 'non-zero exit', result: { ok: false, code: 2 } }
+	])('isolates explicit Bash stdin after $name', async ({ result }) => {
+		let finishExplicit!: (value: { ok: boolean; code: number }) => void;
+		const explicitFinished = new Promise<{ ok: boolean; code: number }>((resolve) => {
+			finishExplicit = resolve;
+		});
+		const explicitWait = vi.fn(() => explicitFinished);
+		commandRun.mockResolvedValueOnce({
+			stdin: undefined,
+			stdout: byteStream(''),
+			stderr: byteStream(''),
+			wait: explicitWait,
+			free: vi.fn()
+		});
+		const writes: Uint8Array[] = [];
+		const write = vi.fn(async (chunk: Uint8Array) => {
+			writes.push(chunk);
+		});
+		const close = vi.fn(async () => {});
+		let finishRetry!: (value: { ok: boolean; code: number }) => void;
+		const retryFinished = new Promise<{ ok: boolean; code: number }>((resolve) => {
+			finishRetry = resolve;
+		});
+		const retryWait = vi.fn(() => retryFinished);
+		commandRun.mockResolvedValueOnce({
+			stdin: {
+				getWriter: () => ({ write, close, abort: vi.fn(async () => {}) })
+			},
+			stdout: byteStream(''),
+			stderr: byteStream(''),
+			wait: retryWait,
+			free: vi.fn()
+		});
+		const sandbox = new Bash();
+		await sandbox.load('/assets');
+		sandbox.write('stale before explicit\n');
+		sandbox.eof();
+		const explicitRun = sandbox.run('read value', false, true, undefined, [], {
+			stdin: 'explicit\n'
+		});
+		let retryRun: Promise<boolean | string> | undefined;
+
+		try {
+			await vi.waitFor(() => expect(explicitWait).toHaveBeenCalledOnce());
+			expect(commandRun).toHaveBeenNthCalledWith(
+				1,
+				expect.objectContaining({ stdin: 'explicit\n' })
+			);
+			expect(sandbox.pendingInput).toEqual([]);
+			expect(sandbox.pendingEof).toBe(false);
+
+			sandbox.write('stale during explicit\n');
+			sandbox.eof();
+			expect(sandbox.pendingInput).toEqual(['stale during explicit\n']);
+			expect(sandbox.pendingEof).toBe(true);
+			finishExplicit(result);
+			if (result.ok) await expect(explicitRun).resolves.toBe(true);
+			else await expect(explicitRun).rejects.toBe('Bash exited with status 2.');
+			expect(sandbox.pendingInput).toEqual([]);
+			expect(sandbox.pendingEof).toBe(false);
+
+			retryRun = sandbox.run('read value', false);
+			await vi.waitFor(() => expect(retryWait).toHaveBeenCalledOnce());
+			expect(write).not.toHaveBeenCalled();
+			expect(close).not.toHaveBeenCalled();
+			sandbox.write('fresh\n');
+			await vi.waitFor(() => expect(write).toHaveBeenCalledOnce());
+			sandbox.eof();
+			await vi.waitFor(() => expect(close).toHaveBeenCalledOnce());
+			finishRetry({ ok: true, code: 0 });
+			await expect(retryRun).resolves.toBe(true);
+			expect(writes.map((chunk) => new TextDecoder().decode(chunk))).toEqual(['fresh\n']);
+		} finally {
+			finishExplicit(result);
+			finishRetry({ ok: true, code: 0 });
+			await explicitRun.catch(() => {});
+			await retryRun?.catch(() => {});
+		}
+	});
+
+	it.each([
 		{
 			name: 'empty path',
 			code: 'printf ok',
@@ -1056,7 +1138,10 @@ describe('Bash sandbox', () => {
 			sandbox.eof();
 
 			await expect(
-				sandbox.run(code, false, true, undefined, [], options)
+				sandbox.run(code, false, true, undefined, [], {
+					...options,
+					stdin: 'replacement\n'
+				})
 			).rejects.toMatchObject({
 				name: 'WorkspaceValidationError',
 				...expected

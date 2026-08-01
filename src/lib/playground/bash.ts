@@ -334,6 +334,7 @@ class Bash implements Sandbox {
 		);
 		const mountedActivePath = workspace.activePath ?? 'main.sh';
 		mountedFiles[mountedActivePath] = code;
+		const hasExplicitStdin = options.stdin !== undefined;
 		const queuedStdin = this.pendingInput.length > 0 ? this.pendingInput.join('') : undefined;
 		const suppliedStdin = options.stdin ?? (this.pendingEof ? queuedStdin || '' : undefined);
 		if (signal?.aborted) {
@@ -353,6 +354,10 @@ class Bash implements Sandbox {
 			const cleanup = () => {
 				if (cleanedUp) return;
 				cleanedUp = true;
+				if (hasExplicitStdin) {
+					this.pendingInput = [];
+					this.pendingEof = false;
+				}
 				if (signal && onAbort) {
 					try {
 						signal.removeEventListener('abort', onAbort);
