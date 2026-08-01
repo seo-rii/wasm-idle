@@ -239,6 +239,123 @@ describe('COBOL sandbox workspace boundary', () => {
 		expect(sandbox.activeCobolBaseUrl).not.toBe('');
 	});
 
+	it('rejects a pre-aborted startup without changing loaded runtime state', async () => {
+		const sandbox = new Cobol();
+		await sandbox.load('/assets');
+		const worker = workerInstances[0];
+		const handler = worker.onmessage;
+		const assetBridge = sandbox.assetBridge;
+		const activeCobolBaseUrl = sandbox.activeCobolBaseUrl;
+		sandbox.write('queued input\n');
+		const controller = new AbortController();
+		const reason = new Error('COBOL startup pre-aborted');
+		controller.abort(reason);
+
+		await expect(
+			sandbox.load('/other-assets', '', false, [], { signal: controller.signal })
+		).rejects.toBe(reason);
+		expect(worker.postMessage).toHaveBeenCalledOnce();
+		expect(worker.onmessage).toBe(handler);
+		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(sandbox.worker).toBe(worker);
+		expect(sandbox.assetBridge).toBe(assetBridge);
+		expect(sandbox.activeCobolBaseUrl).toBe(activeCobolBaseUrl);
+		expect(sandbox.log).toBe(true);
+		expect(sandbox.pendingInput).toEqual(['queued input\n']);
+	});
+
+	it('preserves an explicit null startup abort reason', async () => {
+		const sandbox = new Cobol();
+		const controller = new AbortController();
+		controller.abort(null);
+
+		await expect(
+			sandbox.load('/assets', '', true, [], { signal: controller.signal })
+		).rejects.toBeNull();
+		expect(workerInstances).toHaveLength(0);
+		expect(sandbox.worker).toBeNull();
+	});
+
+	it('aborts before scheduled startup can create a worker', async () => {
+		autoResolveLoad = false;
+		const sandbox = new Cobol();
+		const controller = new AbortController();
+		const reason = new Error('COBOL startup cancelled before import');
+		const loading = sandbox.load('/assets', '', true, [], {
+			signal: controller.signal
+		});
+
+		controller.abort(reason);
+
+		await expect(loading).rejects.toBe(reason);
+		expect(workerInstances).toHaveLength(0);
+		expect(sandbox.worker).toBeNull();
+		expect(sandbox.assetBridge).toBeNull();
+
+		autoResolveLoad = true;
+		await expect(sandbox.load('/assets')).resolves.toBeUndefined();
+		expect(workerInstances).toHaveLength(1);
+	});
+
+	it('aborts startup during asset bridge construction and permits retry', async () => {
+		autoResolveLoad = false;
+		const sandbox = new Cobol();
+		const controller = new AbortController();
+		const reason = new Error('COBOL startup cancelled during bridge construction');
+		const loading = sandbox.load(
+			'/assets',
+			'',
+			true,
+			[],
+			{ signal: controller.signal },
+			{
+				set() {
+					controller.abort(reason);
+				}
+			}
+		);
+
+		await expect(loading).rejects.toBe(reason);
+		expect(workerInstances).toHaveLength(1);
+		expect(workerInstances[0].terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeNull();
+		expect(sandbox.assetBridge).toBeNull();
+
+		autoResolveLoad = true;
+		await expect(sandbox.load('/assets')).resolves.toBeUndefined();
+		expect(workerInstances).toHaveLength(2);
+	});
+
+	it('aborts active startup with its exact reason and ignores stale readiness', async () => {
+		autoResolveLoad = false;
+		const sandbox = new Cobol();
+		const controller = new AbortController();
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const loading = sandbox.load('/assets', '', true, [], {
+			signal: controller.signal
+		});
+
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
+		const oldWorker = workerInstances[0];
+		const staleHandler = oldWorker.onmessage;
+		const registration = addEventListener.mock.calls.find(([type]) => type === 'abort');
+		const reason = new Error('COBOL readiness cancelled');
+		controller.abort(reason);
+
+		await expect(loading).rejects.toBe(reason);
+		expect(removeEventListener).toHaveBeenCalledWith('abort', registration?.[1]);
+		expect(oldWorker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.assetBridge).toBeNull();
+
+		autoResolveLoad = true;
+		await expect(sandbox.load('/assets')).resolves.toBeUndefined();
+		const replacementWorker = workerInstances[1];
+		staleHandler?.({ data: { load: true } } as MessageEvent<any>);
+		expect(sandbox.worker).toBe(replacementWorker);
+	});
+
 	it('permits an immediate clean retry after terminating startup', async () => {
 		autoResolveLoad = false;
 		const sandbox = new Cobol();
@@ -300,6 +417,93 @@ describe('COBOL sandbox workspace boundary', () => {
 		).toBe(false);
 	});
 
+	it('propagates startup signal cancellation into an in-flight asset loader', async () => {
+		autoResolveLoad = false;
+		const sandbox = new Cobol();
+		const controller = new AbortController();
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		let finishLoader: ((value: Uint8Array) => void) | undefined;
+		let loaderSignal: AbortSignal | undefined;
+		const loader = vi.fn(({ signal }: { signal?: AbortSignal }) => {
+			loaderSignal = signal;
+			return new Promise<Uint8Array>((resolve) => {
+				finishLoader = resolve;
+			});
+		});
+		const loading = sandbox.load({ clang: { loader } }, '', true, [], {
+			signal: controller.signal
+		});
+
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
+		const oldWorker = workerInstances[0];
+		oldWorker.onmessage?.({
+			data: {
+				assetRequest: { id: 9, asset: 'bin/clang.wasm.gz' }
+			}
+		} as MessageEvent<any>);
+		await vi.waitFor(() => expect(loader).toHaveBeenCalledOnce());
+		const reason = new Error('COBOL asset startup cancelled');
+
+		controller.abort(reason);
+
+		await expect(loading).rejects.toBe(reason);
+		expect(removeEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
+		expect(loaderSignal?.aborted).toBe(true);
+		finishLoader?.(new Uint8Array([4, 5, 6]));
+		await Promise.resolve();
+		await Promise.resolve();
+		expect(oldWorker.postMessage.mock.calls.some(([message]) => message.assetResponse)).toBe(
+			false
+		);
+
+		autoResolveLoad = true;
+		await expect(sandbox.load('/assets')).resolves.toBeUndefined();
+		expect(workerInstances).toHaveLength(2);
+		expect(
+			workerInstances[1].postMessage.mock.calls.some(([message]) => message.assetResponse)
+		).toBe(false);
+	});
+
+	it('allows an asset abort callback to start a replacement load', async () => {
+		autoResolveLoad = false;
+		const sandbox = new Cobol();
+		const controller = new AbortController();
+		let reentrantLoad: Promise<void> | undefined;
+		const loader = vi.fn(({ signal }: { signal?: AbortSignal }) => {
+			signal?.addEventListener(
+				'abort',
+				() => {
+					reentrantLoad = sandbox.load('/assets');
+					void reentrantLoad.catch(() => undefined);
+				},
+				{ once: true }
+			);
+			return new Promise<Uint8Array>(() => undefined);
+		});
+		const loading = sandbox.load({ clang: { loader } }, '', true, [], {
+			signal: controller.signal
+		});
+
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
+		const oldWorker = workerInstances[0];
+		oldWorker.onmessage?.({
+			data: {
+				assetRequest: { id: 10, asset: 'bin/clang.wasm.gz' }
+			}
+		} as MessageEvent<any>);
+		await vi.waitFor(() => expect(loader).toHaveBeenCalledOnce());
+		const reason = new Error('replace cancelled COBOL asset startup');
+
+		controller.abort(reason);
+		autoResolveLoad = true;
+
+		await expect(loading).rejects.toBe(reason);
+		await expect(reentrantLoad).resolves.toBeUndefined();
+		expect(oldWorker.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(sandbox.worker).toBe(workerInstances[1]);
+	});
+
 	it('hides a disposed worker from reentrant operations during asset abort', async () => {
 		autoResolveLoad = false;
 		autoResolveRun = false;
@@ -343,10 +547,16 @@ describe('COBOL sandbox workspace boundary', () => {
 		async (kind) => {
 			autoResolveLoad = false;
 			const sandbox = new Cobol();
-			const loading = sandbox.load('/assets');
+			const controller = new AbortController();
+			const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+			const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+			const loading = sandbox.load('/assets', '', true, [], {
+				signal: controller.signal
+			});
 
 			await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
 			const worker = workerInstances[0];
+			const registration = addEventListener.mock.calls.find(([type]) => type === 'abort');
 			if (kind === 'script error') {
 				worker.onerror?.({
 					message: 'worker crashed',
@@ -363,6 +573,7 @@ describe('COBOL sandbox workspace boundary', () => {
 					? 'COBOL worker script error: worker crashed'
 					: 'COBOL worker message deserialization failed'
 			);
+			expect(removeEventListener).toHaveBeenCalledWith('abort', registration?.[1]);
 			expect(worker.terminate).toHaveBeenCalledOnce();
 			expect(sandbox.worker).toBeUndefined();
 			expect(sandbox.assetBridge).toBeNull();
@@ -408,6 +619,140 @@ describe('COBOL sandbox workspace boundary', () => {
 		expect(worker.postMessage).toHaveBeenCalledOnce();
 		worker.resolveLoad();
 		await expect(loading).resolves.toBeUndefined();
+	});
+
+	it('rejects a pre-aborted run without changing loaded runtime state', async () => {
+		const sandbox = new Cobol();
+		await sandbox.load('/assets');
+		const worker = workerInstances[0];
+		const handler = worker.onmessage;
+		const assetBridge = sandbox.assetBridge;
+		const uid = sandbox.uid;
+		const begin = sandbox.begin;
+		sandbox.write('queued input\n');
+		const controller = new AbortController();
+		const reason = new Error('COBOL execution pre-aborted');
+		controller.abort(reason);
+
+		await expect(
+			sandbox.run('IDENTIFICATION DIVISION.', false, true, undefined, [], {
+				signal: controller.signal
+			})
+		).rejects.toBe(reason);
+		expect(worker.postMessage).toHaveBeenCalledOnce();
+		expect(worker.onmessage).toBe(handler);
+		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(sandbox.worker).toBe(worker);
+		expect(sandbox.assetBridge).toBe(assetBridge);
+		expect(sandbox.uid).toBe(uid);
+		expect(sandbox.begin).toBe(begin);
+		expect(sandbox.exit).toBe(true);
+		expect(sandbox.pendingInput).toEqual(['queued input\n']);
+	});
+
+	it('aborts an active run with its exact reason and ignores stale completion', async () => {
+		const sandbox = new Cobol();
+		const output = vi.fn();
+		sandbox.output = output;
+		await sandbox.load('/assets');
+		autoResolveRun = false;
+		const oldWorker = workerInstances[0];
+		const controller = new AbortController();
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const running = sandbox.run('IDENTIFICATION DIVISION.', false, true, undefined, [], {
+			signal: controller.signal
+		});
+		const staleHandler = oldWorker.onmessage;
+		const registration = addEventListener.mock.calls.find(([type]) => type === 'abort');
+		const reason = new Error('COBOL execution cancelled');
+
+		controller.abort(reason);
+
+		await expect(running).rejects.toBe(reason);
+		expect(removeEventListener).toHaveBeenCalledWith('abort', registration?.[1]);
+		expect(oldWorker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.assetBridge).toBeNull();
+		expect(sandbox.exit).toBe(true);
+		staleHandler?.({ data: { output: 'stale\n', results: true } } as MessageEvent<any>);
+		expect(output).not.toHaveBeenCalled();
+
+		autoResolveLoad = true;
+		autoResolveRun = true;
+		await sandbox.load('/assets');
+		await expect(sandbox.run('PROGRAM-ID. RETRY.', false)).resolves.toBe(true);
+		expect(workerInstances).toHaveLength(2);
+	});
+
+	it('stops processing a result when output aborts the active run', async () => {
+		const sandbox = new Cobol();
+		await sandbox.load('/assets');
+		autoResolveRun = false;
+		const worker = workerInstances[0];
+		const controller = new AbortController();
+		const reason = new Error('COBOL output callback cancelled execution');
+		sandbox.output = () => controller.abort(reason);
+		const running = sandbox.run('IDENTIFICATION DIVISION.', false, true, undefined, [], {
+			signal: controller.signal
+		});
+
+		worker.resolveRun('stop\n');
+
+		await expect(running).rejects.toBe(reason);
+		expect(worker.terminate).toHaveBeenCalledOnce();
+
+		autoResolveRun = true;
+		sandbox.output = vi.fn();
+		await sandbox.load('/assets');
+		await expect(sandbox.run('PROGRAM-ID. RETRY.', false)).resolves.toBe(true);
+	});
+
+	it('removes settled signal listeners and keeps late aborts inert', async () => {
+		autoResolveLoad = false;
+		const sandbox = new Cobol();
+		const loadController = new AbortController();
+		const loadAddEventListener = vi.spyOn(loadController.signal, 'addEventListener');
+		const loadRemoveEventListener = vi.spyOn(loadController.signal, 'removeEventListener');
+		const loading = sandbox.load('/assets', '', true, [], {
+			signal: loadController.signal
+		});
+
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
+		const worker = workerInstances[0];
+		const loadRegistration = loadAddEventListener.mock.calls.find(([type]) => type === 'abort');
+		worker.resolveLoad();
+		loadController.abort(new Error('same-turn COBOL startup abort'));
+		await expect(loading).resolves.toBeUndefined();
+		expect(loadRemoveEventListener).toHaveBeenCalledWith('abort', loadRegistration?.[1]);
+		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(sandbox.worker).toBe(worker);
+
+		autoResolveRun = false;
+		const runController = new AbortController();
+		const runAddEventListener = vi.spyOn(runController.signal, 'addEventListener');
+		const runRemoveEventListener = vi.spyOn(runController.signal, 'removeEventListener');
+		const running = sandbox.run('IDENTIFICATION DIVISION.', false, true, undefined, [], {
+			signal: runController.signal
+		});
+		const runRegistration = runAddEventListener.mock.calls.find(([type]) => type === 'abort');
+		worker.resolveRun();
+		runController.abort(new Error('same-turn COBOL execution abort'));
+		await expect(running).resolves.toBe(true);
+		expect(runRemoveEventListener).toHaveBeenCalledWith('abort', runRegistration?.[1]);
+		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(sandbox.worker).toBe(worker);
+
+		autoResolveRun = false;
+		const replacementRun = sandbox.run('PROGRAM-ID. STILL-READY.', false);
+		const staleRunListener = runRegistration?.[1];
+		if (typeof staleRunListener === 'function') {
+			staleRunListener.call(runController.signal, new Event('abort'));
+		}
+		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(sandbox.worker).toBe(worker);
+		worker.resolveRun();
+		await expect(replacementRun).resolves.toBe(true);
 	});
 
 	it('preserves a pending execution across run and load overlaps', async () => {
@@ -524,9 +869,16 @@ describe('COBOL sandbox workspace boundary', () => {
 	it('releases startup ownership after synchronous worker dispatch failure', async () => {
 		const sandbox = new Cobol();
 		const dispatchError = new Error('COBOL load dispatch failed');
+		const controller = new AbortController();
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
 		loadDispatchError = dispatchError;
 
-		await expect(sandbox.load('/assets')).rejects.toBe(dispatchError);
+		await expect(
+			sandbox.load('/assets', '', true, [], { signal: controller.signal })
+		).rejects.toBe(dispatchError);
+		const registration = addEventListener.mock.calls.find(([type]) => type === 'abort');
+		expect(removeEventListener).toHaveBeenCalledWith('abort', registration?.[1]);
 		expect(workerInstances).toHaveLength(1);
 		expect(workerInstances[0].terminate).toHaveBeenCalledOnce();
 		expect(sandbox.worker).toBeUndefined();
@@ -559,9 +911,18 @@ describe('COBOL sandbox workspace boundary', () => {
 		const worker = workerInstances[0];
 		const assetBridge = sandbox.assetBridge;
 		const dispatchError = new Error('COBOL run dispatch failed');
+		const controller = new AbortController();
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
 		runDispatchError = dispatchError;
 
-		await expect(sandbox.run('IDENTIFICATION DIVISION.', false)).rejects.toBe(dispatchError);
+		await expect(
+			sandbox.run('IDENTIFICATION DIVISION.', false, true, undefined, [], {
+				signal: controller.signal
+			})
+		).rejects.toBe(dispatchError);
+		const registration = addEventListener.mock.calls.find(([type]) => type === 'abort');
+		expect(removeEventListener).toHaveBeenCalledWith('abort', registration?.[1]);
 		expect(worker.terminate).not.toHaveBeenCalled();
 		expect(sandbox.worker).toBe(worker);
 		expect(sandbox.assetBridge).toBe(assetBridge);
