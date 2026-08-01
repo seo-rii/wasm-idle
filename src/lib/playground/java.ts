@@ -278,6 +278,13 @@ class Java implements Sandbox {
 		} catch (error) {
 			return Promise.reject(error);
 		}
+		const hasExplicitStdin = options.stdin !== undefined;
+		if (hasExplicitStdin) {
+			this.pendingInput = [];
+			this.pendingEof = false;
+			this.waitingForInput = false;
+			resetBufferedStdin(this.buffer);
+		}
 		const assetBridge = this.assetBridge;
 		this.exit = false;
 		return new Promise<boolean | string>((resolve, reject) => {
@@ -287,6 +294,12 @@ class Java implements Sandbox {
 			const cleanup = () => {
 				if (cleanedUp) return;
 				cleanedUp = true;
+				if (hasExplicitStdin) {
+					this.pendingInput = [];
+					this.pendingEof = false;
+					this.waitingForInput = false;
+					resetBufferedStdin(this.buffer);
+				}
 				if (signal && onAbort) {
 					try {
 						signal.removeEventListener('abort', onAbort);

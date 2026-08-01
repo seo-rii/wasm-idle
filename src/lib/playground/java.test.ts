@@ -769,6 +769,41 @@ public class Main {
 		expect(readBufferedStdin(runMessage.buffer)).toBeNull();
 	});
 
+	it('clears queued input before and after an explicit Java stdin run', async () => {
+		const sandbox = new Java();
+		const worker = new MockWorker();
+		const runMessages: any[] = [];
+		const bufferedValues: Array<string | null> = [];
+
+		sandbox.worker = worker as unknown as Worker;
+		worker.postMessage.mockImplementation((message) => {
+			runMessages.push(message);
+			queueMicrotask(() => {
+				worker.onmessage?.({ data: { buffer: true } } as MessageEvent<any>);
+				bufferedValues.push(readBufferedStdin(message.buffer));
+				if (runMessages.length === 1) {
+					sandbox.write('during\n');
+					sandbox.eof();
+				}
+				worker.onmessage?.({ data: { results: true } } as MessageEvent<any>);
+			});
+		});
+		sandbox.write('stale\n');
+		sandbox.eof();
+
+		await expect(
+			sandbox.run('public class Main {}', false, true, undefined, [], {
+				stdin: 'injected\n'
+			})
+		).resolves.toBe(true);
+		await expect(sandbox.run('public class Main {}', false)).resolves.toBe(true);
+
+		expect(runMessages).toHaveLength(2);
+		expect(runMessages[0].stdin).toBe('injected\n');
+		expect(runMessages[1].stdin).toBe('');
+		expect(bufferedValues).toEqual(['', '']);
+	});
+
 	it('rejects the active run when kill terminates the worker', async () => {
 		const sandbox = new Java();
 
