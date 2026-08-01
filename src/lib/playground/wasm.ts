@@ -1,4 +1,5 @@
 import {
+	BusyError,
 	DEFAULT_WORKSPACE_LIMITS,
 	resolveExecutionLimits,
 	validateExecutionWorkspace
@@ -27,10 +28,13 @@ class Wasm implements Sandbox {
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	waitingForInput = false;
 	pendingEof = false;
+	private activeLoad = false;
+	private activeRun = false;
 	private readonly workerSession = new WorkerSession({
 		label: 'WASM',
 		onDispose: (worker) => {
 			if (this.worker === worker) delete this.worker;
+			this.activeRun = false;
 			this.exit = true;
 			this.waitingForInput = false;
 			this.pendingEof = false;
@@ -45,29 +49,44 @@ class Wasm implements Sandbox {
 		_options: SandboxExecutionOptions = {},
 		progress?: SandboxProgress
 	) {
-		return this.workerSession.load(async (resolve, reject) => {
-			this.pendingInput = [];
-			this.waitingForInput = false;
-			this.pendingEof = false;
-			if (!this.worker) {
-				this.worker = new (await import('$lib/playground/worker/wasm?worker')).default();
-				this.workerSession.attach(this.worker);
-				this.worker.onmessage = (event: MessageEvent<any>) => {
-					if (event.data?.load) {
-						progress?.set?.(1);
-						resolve();
-					}
-					if (event.data?.error) reject(event.data.error);
-				};
-				this.worker.postMessage({
-					load: true,
-					log: _log
-				});
-			} else {
-				progress?.set?.(1);
-				resolve();
-			}
-		});
+		if (this.activeLoad || this.activeRun) {
+			return Promise.reject(
+				new BusyError('WASM runtime already has an active operation', {
+					runtimeId: 'WASM',
+					phase: this.activeLoad ? 'startup' : 'execute'
+				})
+			);
+		}
+		this.activeLoad = true;
+		return this.workerSession
+			.load(async (resolve, reject) => {
+				this.pendingInput = [];
+				this.waitingForInput = false;
+				this.pendingEof = false;
+				if (!this.worker) {
+					this.worker = new (
+						await import('$lib/playground/worker/wasm?worker')
+					).default();
+					this.workerSession.attach(this.worker);
+					this.worker.onmessage = (event: MessageEvent<any>) => {
+						if (event.data?.load) {
+							progress?.set?.(1);
+							resolve();
+						}
+						if (event.data?.error) reject(event.data.error);
+					};
+					this.worker.postMessage({
+						load: true,
+						log: _log
+					});
+				} else {
+					progress?.set?.(1);
+					resolve();
+				}
+			})
+			.finally(() => {
+				this.activeLoad = false;
+			});
 	}
 
 	write(input: string) {
@@ -102,6 +121,14 @@ class Wasm implements Sandbox {
 		_args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
+		if (this.activeLoad || this.activeRun) {
+			return Promise.reject(
+				new BusyError('WASM runtime already has an active operation', {
+					runtimeId: 'WASM',
+					phase: this.activeLoad ? 'startup' : 'execute'
+				})
+			);
+		}
 		const worker = this.worker;
 		if (!worker) return Promise.reject('Worker not loaded');
 		let workspace: ReturnType<typeof validateExecutionWorkspace>;
@@ -128,13 +155,16 @@ class Wasm implements Sandbox {
 		} catch (error) {
 			return Promise.reject(error);
 		}
+		this.activeRun = true;
 		this.exit = false;
 		return new Promise<boolean | string>((resolve, reject) => {
 			const _uid = ++this.uid;
 			const operation = this.workerSession.beginRun(worker, reject);
 			const handler = (event: Event & { data: any }) => {
-				if (!this.worker) return reject('Worker not loaded');
-				if (_uid !== this.uid) return (this.worker.onmessage = null);
+				if (this.worker !== worker || worker.onmessage !== handler || _uid !== this.uid) {
+					if (worker.onmessage === handler) worker.onmessage = null;
+					return;
+				}
 				const { output, results, error, buffer, diagnostic, progress } = event.data;
 				if (buffer) {
 					this.waitingForInput = true;
@@ -144,6 +174,7 @@ class Wasm implements Sandbox {
 				if (output) this.output?.(output);
 				if (diagnostic) this.oncompilerdiagnostic?.(diagnostic);
 				if (results) {
+					this.activeRun = false;
 					this.elapse = Date.now() - this.begin;
 					this.exit = true;
 					this.waitingForInput = false;
@@ -152,6 +183,7 @@ class Wasm implements Sandbox {
 					resolve(results as string);
 				}
 				if (error) {
+					this.activeRun = false;
 					this.elapse = Date.now() - this.begin;
 					this.exit = true;
 					this.waitingForInput = false;
@@ -162,16 +194,21 @@ class Wasm implements Sandbox {
 			};
 			worker.onmessage = handler;
 			this.begin = Date.now();
-			worker.postMessage({
-				code,
-				prepare,
-				buffer: this.buffer,
-				stdin: options.stdin,
-				args: _args,
-				activePath: workspace.activePath,
-				workspaceFiles: workspace.workspaceFiles,
-				log: _log
-			});
+			try {
+				worker.postMessage({
+					code,
+					prepare,
+					buffer: this.buffer,
+					stdin: options.stdin,
+					args: _args,
+					activePath: workspace.activePath,
+					workspaceFiles: workspace.workspaceFiles,
+					log: _log
+				});
+			} catch (error) {
+				this.activeRun = false;
+				this.workerSession.terminate(error);
+			}
 		});
 	}
 
@@ -180,6 +217,7 @@ class Wasm implements Sandbox {
 	}
 
 	terminate() {
+		this.activeRun = false;
 		this.waitingForInput = false;
 		this.pendingEof = false;
 		this.uid += 1;

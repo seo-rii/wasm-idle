@@ -188,6 +188,127 @@ describe('WASM sandbox', () => {
 		}
 	);
 
+	it('rejects overlapping WASM run and load operations without replacing ownership', async () => {
+		const sandbox = new Wasm();
+		const worker = new MockWorker();
+		worker.postMessage.mockImplementation(() => undefined);
+		sandbox.worker = worker as unknown as Worker;
+		const outputs: string[] = [];
+		sandbox.output = (chunk: string) => outputs.push(chunk);
+
+		const firstRun = sandbox.run('AGFzbQ==', false);
+		const firstHandler = worker.onmessage;
+		await expect(sandbox.run('AGFzbQ==', false)).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			phase: 'execute',
+			runtimeId: 'WASM'
+		});
+		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			phase: 'execute',
+			runtimeId: 'WASM'
+		});
+
+		expect(worker.postMessage).toHaveBeenCalledOnce();
+		expect(worker.onmessage).toBe(firstHandler);
+		expect(worker.terminate).not.toHaveBeenCalled();
+
+		firstHandler?.({ data: { output: 'first\n', results: true } } as MessageEvent<any>);
+		await expect(firstRun).resolves.toBe(true);
+		expect(outputs).toEqual(['first\n']);
+
+		worker.postMessage.mockImplementationOnce(() => {
+			queueMicrotask(() => {
+				worker.onmessage?.({ data: { results: true } } as MessageEvent<any>);
+			});
+		});
+		await expect(sandbox.run('AGFzbQ==', false)).resolves.toBe(true);
+		expect(worker.postMessage).toHaveBeenCalledTimes(2);
+	});
+
+	it('rejects overlapping WASM startup operations without superseding readiness', async () => {
+		suppressAutoLoadAck = true;
+		const sandbox = new Wasm();
+		const loading = sandbox.load('/absproxy/5173');
+		await vi.dynamicImportSettled();
+		const worker = workerInstances[0];
+		const loadHandler = worker.onmessage;
+
+		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			phase: 'startup',
+			runtimeId: 'WASM'
+		});
+		await expect(sandbox.run('AGFzbQ==', false)).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			phase: 'startup',
+			runtimeId: 'WASM'
+		});
+		expect(worker.onmessage).toBe(loadHandler);
+		expect(worker.postMessage).toHaveBeenCalledOnce();
+
+		loadHandler?.({ data: { load: true } } as MessageEvent<any>);
+		await expect(loading).resolves.toBeUndefined();
+	});
+
+	it('releases WASM run activity after synchronous dispatch failure', async () => {
+		const sandbox = new Wasm();
+		const worker = new MockWorker();
+		const dispatchFailure = new Error('WASM dispatch failed');
+		worker.postMessage.mockImplementationOnce(() => {
+			throw dispatchFailure;
+		});
+		sandbox.worker = worker as unknown as Worker;
+
+		await expect(sandbox.run('AGFzbQ==', false)).rejects.toBe(dispatchFailure);
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.exit).toBe(true);
+
+		await sandbox.load('/absproxy/5173');
+		await expect(sandbox.run('AGFzbQ==', false)).resolves.toBe(true);
+	});
+
+	it('keeps a replacement WASM handler when a terminated run posts a stale message', async () => {
+		const sandbox = new Wasm();
+		const oldWorker = new MockWorker();
+		oldWorker.postMessage.mockImplementation(() => undefined);
+		sandbox.worker = oldWorker as unknown as Worker;
+		const oldRun = sandbox.run('AGFzbQ==', false);
+		const oldHandler = oldWorker.onmessage;
+
+		sandbox.kill();
+		await expect(oldRun).rejects.toBe('Process terminated');
+		expect(oldWorker.terminate).toHaveBeenCalledOnce();
+
+		await sandbox.load('/absproxy/5173');
+		const replacementWorker = workerInstances.at(-1)!;
+		replacementWorker.postMessage.mockImplementation(() => undefined);
+		const replacementRun = sandbox.run('AGFzbQ==', false);
+		const replacementHandler = replacementWorker.onmessage;
+		let replacementSettled = false;
+		void replacementRun.then(
+			() => {
+				replacementSettled = true;
+			},
+			() => {
+				replacementSettled = true;
+			}
+		);
+
+		oldHandler?.({ data: { output: 'stale\n', results: true } } as MessageEvent<any>);
+		await Promise.resolve();
+		expect(replacementWorker.onmessage).toBe(replacementHandler);
+		expect(replacementSettled).toBe(false);
+
+		replacementHandler?.({ data: { results: true } } as MessageEvent<any>);
+		await expect(replacementRun).resolves.toBe(true);
+	});
+
 	it('rejects load when the WASM worker script fails before posting load', async () => {
 		suppressAutoLoadAck = true;
 		const sandbox = new Wasm();
