@@ -119,6 +119,131 @@ describe('Lisp sandbox', () => {
 		]);
 	});
 
+	it('rejects an overlapping Lisp run without disturbing the active execution', async () => {
+		const sandbox = new Lisp();
+		const worker = new MockWorker();
+		worker.postMessage.mockImplementation(() => undefined);
+		sandbox.worker = worker as unknown as Worker;
+		const outputs: string[] = [];
+		sandbox.output = (chunk: string) => outputs.push(chunk);
+
+		const firstRun = sandbox.run('(display "first")', false);
+		const firstHandler = worker.onmessage;
+		await expect(sandbox.run('(display "second")', false)).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			runtimeId: 'LISP'
+		});
+
+		expect(worker.postMessage).toHaveBeenCalledOnce();
+		expect(worker.onmessage).toBe(firstHandler);
+		expect(worker.terminate).not.toHaveBeenCalled();
+
+		firstHandler?.({ data: { output: 'first\n', results: true } } as MessageEvent<any>);
+		await expect(firstRun).resolves.toBe(true);
+		expect(outputs).toEqual(['first\n']);
+
+		worker.postMessage.mockImplementationOnce(() => {
+			queueMicrotask(() => {
+				worker.onmessage?.({ data: { results: true } } as MessageEvent<any>);
+			});
+		});
+		await expect(sandbox.run('(display "retry")', false)).resolves.toBe(true);
+		expect(worker.postMessage).toHaveBeenCalledTimes(2);
+	});
+
+	it('rejects overlapping Lisp startup operations without superseding readiness', async () => {
+		suppressAutoLoadAck = true;
+		const sandbox = new Lisp();
+		const loading = sandbox.load('/absproxy/5173');
+		await vi.dynamicImportSettled();
+		const worker = workerInstances[0];
+		const loadHandler = worker.onmessage;
+
+		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			runtimeId: 'LISP'
+		});
+		await expect(sandbox.run('(display "blocked")', false)).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			runtimeId: 'LISP'
+		});
+		expect(worker.postMessage).toHaveBeenCalledOnce();
+		expect(worker.onmessage).toBe(loadHandler);
+
+		loadHandler?.({ data: { load: true } } as MessageEvent<any>);
+		await expect(loading).resolves.toBeUndefined();
+		suppressAutoLoadAck = false;
+		await expect(sandbox.run('(display "ready")', false)).resolves.toBe(true);
+	});
+
+	it('rejects Lisp load while a run is active without replacing its handler', async () => {
+		const sandbox = new Lisp();
+		const worker = new MockWorker();
+		worker.postMessage.mockImplementation(() => undefined);
+		sandbox.worker = worker as unknown as Worker;
+
+		const running = sandbox.run('(display "active")', false);
+		const runHandler = worker.onmessage;
+		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			runtimeId: 'LISP'
+		});
+		expect(worker.postMessage).toHaveBeenCalledOnce();
+		expect(worker.onmessage).toBe(runHandler);
+
+		runHandler?.({ data: { results: true } } as MessageEvent<any>);
+		await expect(running).resolves.toBe(true);
+	});
+
+	it('releases Lisp run activity after synchronous dispatch failure', async () => {
+		const sandbox = new Lisp();
+		const worker = new MockWorker();
+		const dispatchError = new Error('Lisp dispatch failed');
+		worker.postMessage.mockImplementationOnce(() => {
+			throw dispatchError;
+		});
+		sandbox.worker = worker as unknown as Worker;
+
+		await expect(sandbox.run('(display "fail")', false)).rejects.toBe(dispatchError);
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.exit).toBe(true);
+
+		await sandbox.load('/absproxy/5173');
+		await expect(sandbox.run('(display "retry")', false)).resolves.toBe(true);
+	});
+
+	it('keeps Lisp execution idle when no worker is loaded', async () => {
+		const sandbox = new Lisp();
+
+		await expect(sandbox.run('(display "missing")', false)).rejects.toBe('Worker not loaded');
+		expect(sandbox.uid).toBe(0);
+		expect(sandbox.exit).toBe(true);
+
+		await sandbox.load('/absproxy/5173');
+		await expect(sandbox.run('(display "ready")', false)).resolves.toBe(true);
+	});
+
+	it('releases Lisp startup activity after termination', async () => {
+		suppressAutoLoadAck = true;
+		const sandbox = new Lisp();
+		const loading = sandbox.load('/absproxy/5173');
+		await vi.dynamicImportSettled();
+		const worker = workerInstances[0];
+
+		sandbox.terminate();
+		await expect(loading).rejects.toBe('Process terminated');
+		expect(worker.terminate).toHaveBeenCalledOnce();
+
+		suppressAutoLoadAck = false;
+		await sandbox.load('/absproxy/5173');
+		await expect(sandbox.run('(display "retry")', false)).resolves.toBe(true);
+	});
+
 	it('rejects load when no Lisp module url is configured', async () => {
 		publicEnv.PUBLIC_WASM_LISP_MODULE_URL = '';
 		const sandbox = new Lisp();
