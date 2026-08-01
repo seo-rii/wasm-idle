@@ -438,6 +438,248 @@ describe('R sandbox', () => {
 		expect(retryWorker.terminate).not.toHaveBeenCalled();
 	});
 
+	it.each([
+		{ stage: 'streamed', message: { progress: { percent: 50 } } },
+		{ stage: 'ready', message: { load: true } }
+	])('retires the R worker when the $stage progress callback throws', async ({ message }) => {
+		suppressAutoLoadAck = true;
+		const sandbox = new R();
+		const callbackError = new Error('R startup progress failed');
+		const controller = new AbortController();
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const progress = {
+			set: vi.fn(() => {
+				throw callbackError;
+			})
+		};
+		const loading = sandbox.load(
+			{ r: { baseUrl: '/webr/test/' } },
+			'',
+			true,
+			[],
+			{ signal: controller.signal },
+			progress
+		);
+		await vi.dynamicImportSettled();
+		const worker = workerInstances[0];
+		const staleHandler = worker.onmessage;
+
+		expect(() => staleHandler?.({ data: message } as MessageEvent<any>)).not.toThrow();
+		await expect(loading).rejects.toBe(callbackError);
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(removeEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
+		expect(sandbox.worker).toBeUndefined();
+		controller.abort(new Error('late failed startup abort'));
+		staleHandler?.({ data: { load: true } } as MessageEvent<any>);
+		expect(progress.set).toHaveBeenCalledOnce();
+
+		suppressAutoLoadAck = false;
+		await expect(sandbox.load({ r: { baseUrl: '/webr/test/' } })).resolves.toBeUndefined();
+		expect(workerInstances).toHaveLength(2);
+	});
+
+	it('preserves an R replacement after startup progress terminates and throws', async () => {
+		const sandbox = new R();
+		const terminationReason = new Error('terminate R startup progress');
+		const callbackError = new Error('R startup callback throw after termination');
+		let replacement: Promise<void> | undefined;
+		const loading = sandbox.load(
+			{ r: { baseUrl: '/webr/cancelled/' } },
+			'',
+			true,
+			[],
+			{},
+			{
+				set() {
+					sandbox.terminate(terminationReason);
+					replacement = sandbox.load({ r: { baseUrl: '/webr/replacement/' } });
+					throw callbackError;
+				}
+			}
+		);
+		const outcome = loading.catch((error) => error);
+
+		await expect(outcome).resolves.toBe(terminationReason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(sandbox.baseUrl).toBe('http://localhost:3000/webr/replacement/');
+		expect(sandbox.worker).toBe(workerInstances[1]);
+		expect(workerInstances[0]?.terminate).toHaveBeenCalledOnce();
+	});
+
+	it('terminates a pending R startup when the sandbox is cleared', async () => {
+		suppressAutoLoadAck = true;
+		const sandbox = new R();
+		const loading = sandbox.load({ r: { baseUrl: '/webr/test/' } });
+		await vi.dynamicImportSettled();
+		const worker = workerInstances[0];
+
+		await sandbox.clear();
+		await expect(loading).rejects.toBe('Process terminated');
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+
+		suppressAutoLoadAck = false;
+		await expect(sandbox.load({ r: { baseUrl: '/webr/retry/' } })).resolves.toBeUndefined();
+	});
+
+	it('keeps the active R operation while callbacks attempt reentrant work', async () => {
+		const sandbox = new R();
+		const worker = new MockWorker();
+		worker.postMessage.mockImplementation(() => undefined);
+		sandbox.worker = worker as unknown as Worker;
+		let reentrantRun: Promise<boolean | string> | undefined;
+		let reentrantLoad: Promise<void> | undefined;
+		sandbox.output = () => {
+			reentrantRun = sandbox.run('cat("reentrant\\n")', false);
+			reentrantLoad = sandbox.load({ r: { baseUrl: '/webr/replacement/' } });
+		};
+
+		const running = sandbox.run('cat("first\\n")', false);
+		const handler = worker.onmessage;
+		handler?.({ data: { output: 'trigger\n', results: true } } as MessageEvent<any>);
+
+		await expect(reentrantRun).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			runtimeId: 'R'
+		});
+		await expect(reentrantLoad).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			runtimeId: 'R'
+		});
+		await expect(running).resolves.toBe(true);
+		expect(worker.onmessage).toBeNull();
+		expect(worker.terminate).not.toHaveBeenCalled();
+	});
+
+	it('preserves a replacement after an R callback terminates and throws', async () => {
+		const sandbox = new R();
+		await sandbox.load({ r: { baseUrl: '/webr/test/' } });
+		const worker = workerInstances[0];
+		worker.postMessage.mockImplementation(() => undefined);
+		const controller = new AbortController();
+		const abortReason = new Error('R callback abort');
+		const callbackError = new Error('R callback throw after abort');
+		let replacement: Promise<void> | undefined;
+		sandbox.output = () => {
+			controller.abort(abortReason);
+			replacement = sandbox.load({ r: { baseUrl: '/webr/replacement/' } });
+			throw callbackError;
+		};
+		const running = sandbox.run('cat("first\\n")', false, true, undefined, [], {
+			stdin: 'fixed\n',
+			signal: controller.signal
+		});
+		const outcome = running.catch((error) => error);
+		const staleHandler = worker.onmessage;
+
+		expect(() =>
+			staleHandler?.({
+				data: { output: 'trigger\n', results: true }
+			} as MessageEvent<any>)
+		).not.toThrow();
+		await expect(outcome).resolves.toBe(abortReason);
+		await expect(replacement).resolves.toBeUndefined();
+		const replacementWorker = workerInstances[1];
+		const replacementHandler = replacementWorker.onmessage;
+		sandbox.write('replacement input\n');
+		sandbox.eof();
+
+		staleHandler?.({ data: { output: 'stale\n', results: true } } as MessageEvent<any>);
+		expect(sandbox.worker).toBe(replacementWorker);
+		expect(replacementWorker.onmessage).toBe(replacementHandler);
+		expect(sandbox.pendingInput).toEqual(['replacement input\n']);
+		expect(sandbox.pendingEof).toBe(true);
+	});
+
+	it.each(['progress', 'output', 'diagnostic'] as const)(
+		'rejects and retires the R worker when a %s callback throws',
+		async (callbackKind) => {
+			const sandbox = new R();
+			const worker = new MockWorker();
+			worker.postMessage.mockImplementation(() => undefined);
+			sandbox.worker = worker as unknown as Worker;
+			const callbackError = new Error(`R ${callbackKind} callback failed`);
+			const controller = new AbortController();
+			const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+			const progress = {
+				set: vi.fn(() => {
+					if (callbackKind === 'progress') throw callbackError;
+				})
+			};
+			const output = vi.fn(() => {
+				if (callbackKind === 'output') throw callbackError;
+			});
+			const diagnostic = vi.fn(() => {
+				if (callbackKind === 'diagnostic') throw callbackError;
+			});
+			sandbox.output = output;
+			sandbox.oncompilerdiagnostic = diagnostic;
+
+			const running = sandbox.run('cat("first\\n")', false, true, progress, [], {
+				stdin: 'fixed\n',
+				signal: controller.signal
+			});
+			const handler = worker.onmessage;
+			sandbox.write('discard after explicit stdin\n');
+			expect(() =>
+				handler?.({
+					data: {
+						progress: 0.5,
+						output: 'callback output\n',
+						diagnostic: { message: 'callback diagnostic' },
+						results: true
+					}
+				} as MessageEvent<any>)
+			).not.toThrow();
+
+			await expect(running).rejects.toBe(callbackError);
+			expect(worker.terminate).toHaveBeenCalledOnce();
+			expect(worker.onmessage).toBeNull();
+			expect(removeEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
+			expect(sandbox.worker).toBeUndefined();
+			expect(sandbox.pendingInput).toEqual([]);
+			expect(sandbox.pendingEof).toBe(false);
+			if (callbackKind === 'progress') {
+				expect(output).not.toHaveBeenCalled();
+				expect(diagnostic).not.toHaveBeenCalled();
+			} else if (callbackKind === 'output') {
+				expect(diagnostic).not.toHaveBeenCalled();
+			}
+
+			handler?.({ data: { output: 'stale\n', results: true } } as MessageEvent<any>);
+			sandbox.output = vi.fn();
+			sandbox.oncompilerdiagnostic = vi.fn();
+			await sandbox.load({ r: { baseUrl: '/webr/test/' } });
+			await expect(sandbox.run('cat("retry\\n")', false)).resolves.toBe(true);
+			expect(workerInstances.at(-1)).not.toBe(worker);
+		}
+	);
+
+	it('releases the R operation after a normal worker error', async () => {
+		const sandbox = new R();
+		const worker = new MockWorker();
+		worker.postMessage.mockImplementation(() => undefined);
+		sandbox.worker = worker as unknown as Worker;
+		const runtimeError = new Error('R worker execution failed');
+
+		const running = sandbox.run('stop("fail")', false);
+		worker.onmessage?.({ data: { error: runtimeError } } as MessageEvent<any>);
+
+		await expect(running).rejects.toBe(runtimeError);
+		expect(worker.onmessage).toBeNull();
+		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(sandbox.exit).toBe(true);
+
+		worker.postMessage.mockImplementationOnce(() => {
+			queueMicrotask(() => {
+				worker.onmessage?.({ data: { results: true } } as MessageEvent<any>);
+			});
+		});
+		await expect(sandbox.run('cat("retry\\n")', false)).resolves.toBe(true);
+	});
+
 	it('writes queued terminal input when the worker requests stdin', async () => {
 		const sandbox = new R();
 		const worker = new MockWorker();
@@ -495,5 +737,25 @@ describe('R sandbox', () => {
 		expect(runMessages[0].stdin).toBe('injected\n');
 		expect(runMessages[1].stdin).toBeUndefined();
 		expect(bufferedValues).toEqual(['', '']);
+	});
+
+	it('does not stream terminal input into an explicit R stdin run', async () => {
+		const sandbox = new R();
+		const worker = new MockWorker();
+		worker.postMessage.mockImplementation(() => undefined);
+		sandbox.worker = worker as unknown as Worker;
+
+		const running = sandbox.run('cat("explicit\\n")', false, true, undefined, [], {
+			stdin: 'authoritative\n'
+		});
+		const handler = worker.onmessage;
+		sandbox.write('terminal input\n');
+		handler?.({ data: { buffer: true } } as MessageEvent<any>);
+
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
+		expect(sandbox.pendingInput).toEqual(['terminal input\n']);
+		handler?.({ data: { results: true } } as MessageEvent<any>);
+		await expect(running).resolves.toBe(true);
+		expect(sandbox.pendingInput).toEqual([]);
 	});
 });
