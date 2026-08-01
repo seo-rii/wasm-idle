@@ -1355,6 +1355,68 @@ describe('BrowserLldbSession', () => {
 
 	it.each([
 		{
+			caseName: 'module type',
+			override: { module: 'not wasm bytes' as unknown as Uint8Array },
+			error: /module must be a Uint8Array or ArrayBuffer/u
+		},
+		{
+			caseName: 'source content type',
+			override: {
+				sources: [
+					{ path: '/workspace/main.cpp', content: 42 }
+				] as unknown as BrowserLldbSessionOptions['sources']
+			},
+			error: /source content must be a string/u
+		},
+		{
+			caseName: 'module hash',
+			override: { moduleSha256: '' },
+			error: /module SHA-256 must be 64 lowercase hexadecimal characters/u
+		},
+		{
+			caseName: 'source hash',
+			override: {
+				sources: [
+					{ path: '/workspace/main.cpp', content: 'int main() {}', contentSha256: '' }
+				]
+			},
+			error: /source SHA-256 must be 64 lowercase hexadecimal characters/u
+		}
+	] as const)(
+		'rejects invalid artifact $caseName before runtime preflight',
+		async ({ override, error }) => {
+			let assetFetches = 0;
+			let created = false;
+			const session = new BrowserLldbSession({
+				manifest,
+				runtimeBaseUrl: 'https://cdn.example/debug/',
+				module: Uint8Array.of(0, 97, 115, 109),
+				sources: [],
+				fetchImpl: async () => {
+					assetFetches += 1;
+					return new Response('debug-asset');
+				},
+				workerFactory: (kind) => {
+					created = true;
+					return new FakeWorker(kind, []);
+				},
+				requestTimeoutMs: 1_000,
+				readyTimeoutMs: 1_000,
+				...override
+			});
+
+			try {
+				await expect(session.initialize()).rejects.toThrow(error);
+				expect(assetFetches).toBe(0);
+				expect(created).toBe(false);
+			} finally {
+				await session.dispose();
+			}
+		}
+	);
+
+	it.each([
+		{
 			caseName: 'NUL guest argument',
 			launch: { args: ['invalid\0argument'] },
 			error: /arguments cannot contain NUL/u

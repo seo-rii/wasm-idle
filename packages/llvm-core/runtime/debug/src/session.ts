@@ -333,7 +333,35 @@ export class BrowserLldbSession {
 		);
 		const manifest = parseDebugRuntimeManifest(this.options.manifest);
 		const runtimeBaseUrl = this.options.runtimeBaseUrl.toString();
+		const moduleValue: unknown = this.options.module;
+		if (!(moduleValue instanceof Uint8Array) && !(moduleValue instanceof ArrayBuffer)) {
+			throw new TypeError('debug module must be a Uint8Array or ArrayBuffer');
+		}
+		const moduleSha256Value: unknown = this.options.moduleSha256;
+		if (
+			moduleSha256Value !== undefined &&
+			(typeof moduleSha256Value !== 'string' || !/^[\da-f]{64}$/u.test(moduleSha256Value))
+		) {
+			throw new TypeError('debug module SHA-256 must be 64 lowercase hexadecimal characters');
+		}
+		const moduleSha256 = moduleSha256Value as string | undefined;
 		const sources = this.options.sources.map((source) => ({ ...source }));
+		for (const source of sources) {
+			if (typeof source.content !== 'string') {
+				throw new TypeError(
+					`debug source content must be a string: ${String(source.path)}`
+				);
+			}
+			const contentSha256: unknown = source.contentSha256;
+			if (
+				contentSha256 !== undefined &&
+				(typeof contentSha256 !== 'string' || !/^[\da-f]{64}$/u.test(contentSha256))
+			) {
+				throw new TypeError(
+					`debug source SHA-256 must be 64 lowercase hexadecimal characters: ${String(source.path)}`
+				);
+			}
+		}
 		const breakpoints = (this.options.breakpoints ?? []).map((breakpoint) => ({
 			source: { ...breakpoint.source },
 			lines: [...breakpoint.lines]
@@ -403,18 +431,15 @@ export class BrowserLldbSession {
 					...(this.options.launch.env ? { env: { ...this.options.launch.env } } : {})
 				}
 			: undefined;
-		const moduleSha256 = this.options.moduleSha256;
 		for (const breakpoint of breakpoints) {
 			validateDebugSourcePath(breakpoint.source.path);
 			validateBreakpointLines(breakpoint.lines);
 		}
 
 		const module = new Uint8Array(
-			this.options.module instanceof Uint8Array
-				? this.options.module
-				: this.options.module.slice(0)
+			moduleValue instanceof Uint8Array ? moduleValue : moduleValue.slice(0)
 		);
-		if (moduleSha256) {
+		if (moduleSha256 !== undefined) {
 			const actualSha256 = await this.awaitWhileActive(sha256Hex(module));
 			if (actualSha256 !== moduleSha256) {
 				throw new Error(
@@ -429,7 +454,7 @@ export class BrowserLldbSession {
 				throw new Error(`duplicate debug source path: ${source.path}`);
 			}
 			sourcePaths.add(source.path);
-			if (source.contentSha256) {
+			if (source.contentSha256 !== undefined) {
 				const actualSha256 = await this.awaitWhileActive(
 					sha256Hex(new TextEncoder().encode(source.content))
 				);

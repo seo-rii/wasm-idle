@@ -49,6 +49,9 @@ closing, worker-global transport state from being released, or either Worker fro
 final target-output drain applies the same isolation so a stale channel cannot suppress the target
 exit or worker-error lifecycle event. The session verifies the module, source, loader, Wasm, and
 pthread-sidecar hashes before creating either worker.
+Module inputs must be `Uint8Array` or `ArrayBuffer` bytes, source contents must be strings, and any
+provided module or source SHA-256 must contain exactly 64 lowercase hexadecimal characters. Invalid
+artifact inputs fail before runtime asset preflight or Worker creation.
 Debug manifest assets must use canonical relative URL paths; percent-encoded dot segments and path
 separators are rejected before they can escape or change the configured runtime root.
 When `initialize()` starts, it snapshots the module and its expected hash, source files, configured
