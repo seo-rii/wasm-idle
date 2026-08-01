@@ -276,6 +276,91 @@ console.log(value);`;
 		);
 	});
 
+	it.each(['TYPESCRIPT', 'JAVASCRIPT'] as const)(
+		'rejects a pre-aborted %s startup without changing an existing worker',
+		async (language) => {
+			const sandbox = new TypeScriptSandbox(language);
+			await sandbox.load('/absproxy/5173');
+			const worker = workerInstances[0];
+			worker.postMessage.mockClear();
+			const progress = { set: vi.fn() };
+			const controller = new AbortController();
+			const reason = new Error(`${language} startup pre-aborted`);
+			controller.abort(reason);
+
+			await expect(
+				sandbox.load(
+					'/absproxy/5173',
+					'',
+					true,
+					[],
+					{ signal: controller.signal },
+					progress
+				)
+			).rejects.toBe(reason);
+
+			expect(sandbox.worker).toBe(worker);
+			expect(worker.postMessage).not.toHaveBeenCalled();
+			expect(worker.terminate).not.toHaveBeenCalled();
+			expect(progress.set).not.toHaveBeenCalled();
+		}
+	);
+
+	it.each(['TYPESCRIPT', 'JAVASCRIPT'] as const)(
+		'aborts an active %s startup and ignores stale completion',
+		async (language) => {
+			suppressAutoLoadAck = true;
+			const sandbox = new TypeScriptSandbox(language);
+			const progress = { set: vi.fn() };
+			const controller = new AbortController();
+			const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+			const reason = new Error(`${language} startup aborted`);
+			const loading = sandbox.load(
+				'/absproxy/5173',
+				'',
+				true,
+				[],
+				{ signal: controller.signal },
+				progress
+			);
+			await vi.dynamicImportSettled();
+			const worker = workerInstances[0];
+			const staleHandler = worker.onmessage;
+
+			await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+				name: 'BusyError',
+				code: 'busy',
+				runtimeId: language
+			});
+			await expect(sandbox.run('tooSoon()', false)).rejects.toMatchObject({
+				name: 'BusyError',
+				code: 'busy',
+				runtimeId: language
+			});
+			expect(worker.postMessage).toHaveBeenCalledOnce();
+
+			controller.abort(reason);
+			await expect(loading).rejects.toBe(reason);
+			expect(worker.terminate).toHaveBeenCalledOnce();
+			expect(removeEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
+			expect(sandbox.worker).toBeUndefined();
+
+			staleHandler?.({ data: { load: true } } as MessageEvent<any>);
+			expect(progress.set).not.toHaveBeenCalled();
+
+			suppressAutoLoadAck = false;
+			const settledController = new AbortController();
+			await sandbox.load('/absproxy/5173', '', true, [], {
+				signal: settledController.signal
+			});
+			const retryWorker = workerInstances.at(-1)!;
+			expect(retryWorker.terminate).not.toHaveBeenCalled();
+
+			settledController.abort(new Error('late startup abort'));
+			expect(retryWorker.terminate).not.toHaveBeenCalled();
+		}
+	);
+
 	it('writes queued terminal input when the worker requests stdin', async () => {
 		const sandbox = new TypeScriptSandbox('JAVASCRIPT');
 		const worker = new MockWorker();
