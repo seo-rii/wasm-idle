@@ -24,6 +24,7 @@ type OcamlOperation = {
 	token: symbol;
 	phase: 'startup' | 'execute';
 	cancelled: boolean;
+	explicitStdin: boolean;
 };
 
 class Ocaml implements Sandbox {
@@ -58,11 +59,12 @@ class Ocaml implements Sandbox {
 				phase: this.activeOperation.phase
 			});
 		}
-		const operation = {
+		const operation: OcamlOperation = {
 			token: Symbol(phase),
 			phase,
-			cancelled: false
-		} satisfies OcamlOperation;
+			cancelled: false,
+			explicitStdin: false
+		};
 		this.activeOperation = operation;
 		return operation;
 	}
@@ -73,6 +75,23 @@ class Ocaml implements Sandbox {
 
 	private isOperationActive(operation: OcamlOperation) {
 		return this.activeOperation?.token === operation.token && !operation.cancelled;
+	}
+
+	private resetExplicitStdinState() {
+		this.pendingInput = [];
+		this.pendingEof = false;
+		this.waitingForInput = false;
+		try {
+			resetBufferedStdin(this.buffer);
+		} catch {
+			// Explicit stdin never consumes the shared terminal buffer.
+		}
+	}
+
+	private finishExplicitStdin(operation: OcamlOperation) {
+		if (!operation.explicitStdin) return;
+		operation.explicitStdin = false;
+		this.resetExplicitStdinState();
 	}
 
 	load(
@@ -200,12 +219,18 @@ class Ocaml implements Sandbox {
 			const worker = this.worker;
 			const target: OcamlBackend = options.ocamlBackend || 'wasm';
 			const wasmBinaryenMode: OcamlWasmBinaryenMode = options.ocamlWasmBinaryenMode || 'fast';
+			const hasExplicitStdin = options.stdin !== undefined;
+			if (hasExplicitStdin) {
+				operation.explicitStdin = true;
+				this.resetExplicitStdinState();
+			}
 			this.exit = false;
 			return await new Promise<boolean | string>((resolve, reject) => {
 				const runUid = ++this.uid;
 				const workerOperation = this.workerSession.beginRun(worker, reject);
 				let handler: (event: Event & { data: any }) => void;
 				const failRun = (error: unknown, disposeWorker = false) => {
+					this.finishExplicitStdin(operation);
 					if (worker.onmessage === handler) worker.onmessage = null;
 					this.workerSession.complete(workerOperation);
 					if (disposeWorker && this.worker === worker) this.workerSession.reset();
@@ -236,7 +261,7 @@ class Ocaml implements Sandbox {
 						) {
 							return;
 						}
-						if (event.data?.buffer) {
+						if (event.data?.buffer && !hasExplicitStdin) {
 							this.waitingForInput = true;
 							this.flushPendingInput();
 							if (
@@ -281,6 +306,7 @@ class Ocaml implements Sandbox {
 							return;
 						}
 						if (results !== undefined) {
+							this.finishExplicitStdin(operation);
 							if (worker.onmessage === handler) worker.onmessage = null;
 							this.elapse = Date.now() - this.begin;
 							this.exit = true;
@@ -312,6 +338,7 @@ class Ocaml implements Sandbox {
 				}
 			});
 		} finally {
+			this.finishExplicitStdin(operation);
 			this.completeOperation(operation);
 		}
 	}
@@ -323,6 +350,7 @@ class Ocaml implements Sandbox {
 	terminate(reason: unknown = 'Process terminated') {
 		const operation = this.activeOperation;
 		if (operation) {
+			this.finishExplicitStdin(operation);
 			operation.cancelled = true;
 			this.completeOperation(operation);
 		}

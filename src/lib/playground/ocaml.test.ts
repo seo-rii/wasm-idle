@@ -267,6 +267,68 @@ describe('OCaml sandbox', () => {
 		expect(readBufferedStdin(runMessage.buffer)).toBeNull();
 	});
 
+	it('isolates empty explicit stdin from queued terminal input across runs', async () => {
+		const sandbox = new Ocaml();
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		suppressAutoRunAck = true;
+		sandbox.write('queued before explicit run\n');
+		sandbox.eof();
+		const explicitRun = sandbox.run(
+			'let () = ignore (read_line ())',
+			false,
+			true,
+			undefined,
+			[],
+			{
+				stdin: ''
+			}
+		);
+
+		expect(worker.postMessage).toHaveBeenNthCalledWith(
+			2,
+			expect.objectContaining({ stdin: '' })
+		);
+		sandbox.write('queued during explicit run\n');
+		sandbox.eof();
+		worker.onmessage?.({ data: { buffer: true } } as MessageEvent<any>);
+		expect(sandbox.waitingForInput).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
+
+		worker.onmessage?.({ data: { results: true } } as MessageEvent<any>);
+		await expect(explicitRun).resolves.toBe(true);
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.pendingEof).toBe(false);
+		expect(sandbox.waitingForInput).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
+
+		const bufferedRun = sandbox.run('let () = ignore (read_line ())', false);
+		worker.onmessage?.({ data: { buffer: true } } as MessageEvent<any>);
+		expect(sandbox.waitingForInput).toBe(true);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
+
+		sandbox.write('fresh input\n');
+		expect(sandbox.waitingForInput).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('fresh input\n');
+		worker.onmessage?.({ data: { results: true } } as MessageEvent<any>);
+		await expect(bufferedRun).resolves.toBe(true);
+	});
+
+	it('preserves queued input when explicit stdin is rejected before dispatch', async () => {
+		const sandbox = new Ocaml();
+		sandbox.write('preserved input\n');
+		sandbox.eof();
+
+		await expect(
+			sandbox.run('let () = ()', false, true, undefined, [], { stdin: '' })
+		).rejects.toBe('Worker not loaded');
+
+		expect(sandbox.pendingInput).toEqual(['preserved input\n']);
+		expect(sandbox.pendingEof).toBe(true);
+		expect(sandbox.waitingForInput).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
+	});
+
 	it('rejects overlapping startup and execution while load is pending', async () => {
 		suppressAutoLoadAck = true;
 		const sandbox = new Ocaml();
@@ -375,13 +437,21 @@ describe('OCaml sandbox', () => {
 		await sandbox.load('/absproxy/5173');
 		suppressAutoRunAck = true;
 		const oldWorker = workerInstances[0];
-		const firstRun = sandbox.run('let () = ()', false);
+		const firstRun = sandbox.run('let () = ()', false, true, undefined, [], {
+			stdin: ''
+		});
 		const firstResult = firstRun.catch((reason) => reason);
 		const staleHandler = oldWorker.onmessage;
 		const reason = new Error('stop active OCaml run');
 		suppressAutoLoadAck = true;
+		sandbox.write('queued during terminated explicit run\n');
+		sandbox.eof();
 
 		sandbox.terminate(reason);
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.pendingEof).toBe(false);
+		expect(sandbox.waitingForInput).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
 		const replacementLoad = sandbox.load('/absproxy/5173');
 
 		await vi.dynamicImportSettled();
@@ -403,16 +473,45 @@ describe('OCaml sandbox', () => {
 		await expect(sandbox.run('let () = ()', false)).resolves.toBe(true);
 	});
 
+	it('keeps input written after explicit-run termination', async () => {
+		const sandbox = new Ocaml();
+		await sandbox.load('/absproxy/5173');
+		suppressAutoRunAck = true;
+		const running = sandbox.run('let () = ()', false, true, undefined, [], {
+			stdin: ''
+		});
+		const result = running.catch((reason) => reason);
+		sandbox.write('discarded explicit-run input\n');
+		const reason = new Error('stop explicit OCaml run');
+
+		sandbox.terminate(reason);
+		sandbox.write('replacement input\n');
+
+		await expect(result).resolves.toBe(reason);
+		expect(sandbox.pendingInput).toEqual(['replacement input\n']);
+		expect(sandbox.pendingEof).toBe(false);
+		expect(sandbox.waitingForInput).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
+	});
+
 	it('cancels a run reentrantly without accepting the rest of the worker message', async () => {
 		const sandbox = new Ocaml();
 		await sandbox.load('/absproxy/5173');
 		const worker = workerInstances[0];
 		sandbox.output = () => sandbox.terminate('stopped from output');
+		sandbox.write('queued before cancelled explicit run\n');
+		const running = sandbox.run('let () = print_endline "stop"', false, true, undefined, [], {
+			stdin: ''
+		});
+		sandbox.write('queued during cancelled explicit run\n');
+		sandbox.eof();
 
-		await expect(sandbox.run('let () = print_endline "stop"', false)).rejects.toBe(
-			'stopped from output'
-		);
+		await expect(running).rejects.toBe('stopped from output');
 		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.pendingEof).toBe(false);
+		expect(sandbox.waitingForInput).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
 
 		sandbox.output = vi.fn();
 		await sandbox.load('/absproxy/5173');
@@ -427,12 +526,20 @@ describe('OCaml sandbox', () => {
 		sandbox.output = () => {
 			throw callbackError;
 		};
+		sandbox.write('queued before callback failure\n');
+		const running = sandbox.run('let () = print_endline "fail"', false, true, undefined, [], {
+			stdin: ''
+		});
+		sandbox.write('queued during callback failure\n');
+		sandbox.eof();
 
-		await expect(sandbox.run('let () = print_endline "fail"', false)).rejects.toBe(
-			callbackError
-		);
+		await expect(running).rejects.toBe(callbackError);
 		expect(worker.terminate).toHaveBeenCalledOnce();
 		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.pendingEof).toBe(false);
+		expect(sandbox.waitingForInput).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
 
 		sandbox.output = vi.fn();
 		await sandbox.load('/absproxy/5173');
@@ -446,12 +553,44 @@ describe('OCaml sandbox', () => {
 		const worker = workerInstances[0];
 		const dispatchError = new Error('postMessage failed');
 		runDispatchError = dispatchError;
+		sandbox.write('queued before failed explicit dispatch\n');
+		sandbox.eof();
 
-		await expect(sandbox.run('let () = ()', false)).rejects.toBe(dispatchError);
+		await expect(
+			sandbox.run('let () = ()', false, true, undefined, [], { stdin: '' })
+		).rejects.toBe(dispatchError);
 		expect(worker.terminate).not.toHaveBeenCalled();
 		expect(sandbox.worker).toBe(worker);
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.pendingEof).toBe(false);
+		expect(sandbox.waitingForInput).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
 
 		runDispatchError = null;
+		await expect(sandbox.run('let () = ()', false)).resolves.toBe(true);
+	});
+
+	it('clears explicit stdin state after a worker execution error', async () => {
+		const sandbox = new Ocaml();
+		await sandbox.load('/absproxy/5173');
+		suppressAutoRunAck = true;
+		const worker = workerInstances[0];
+		const running = sandbox.run('let () = ()', false, true, undefined, [], {
+			stdin: 'explicit input\n'
+		});
+		sandbox.write('queued during failed explicit run\n');
+		sandbox.eof();
+
+		worker.onmessage?.({ data: { error: 'OCaml execution failed' } } as MessageEvent<any>);
+
+		await expect(running).rejects.toBe('OCaml execution failed');
+		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.pendingEof).toBe(false);
+		expect(sandbox.waitingForInput).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
+
+		suppressAutoRunAck = false;
 		await expect(sandbox.run('let () = ()', false)).resolves.toBe(true);
 	});
 
@@ -498,32 +637,49 @@ describe('OCaml sandbox', () => {
 		await expect(sandbox.run('let () = ()', false)).resolves.toBe(true);
 	});
 
-	it('ignores a stale run handler after a worker error and allows a clean retry', async () => {
-		const sandbox = new Ocaml();
-		const output = vi.fn();
-		sandbox.output = output;
-		await sandbox.load('/absproxy/5173');
-		suppressAutoRunAck = true;
-		const worker = workerInstances[0];
-		const runPromise = sandbox.run('let () = ()', false);
-		const staleHandler = worker.onmessage;
+	it.each(['script error', 'message error'])(
+		'ignores a stale run handler after a worker $kind and allows a clean retry',
+		async (kind) => {
+			const sandbox = new Ocaml();
+			const output = vi.fn();
+			sandbox.output = output;
+			await sandbox.load('/absproxy/5173');
+			suppressAutoRunAck = true;
+			const worker = workerInstances[0];
+			const runPromise = sandbox.run('let () = ()', false, true, undefined, [], {
+				stdin: 'explicit input\n'
+			});
+			const staleHandler = worker.onmessage;
+			sandbox.write('queued during crashed explicit run\n');
+			sandbox.eof();
 
-		worker.onerror?.({
-			message: 'worker crashed',
-			filename: '/worker/ocaml.js',
-			lineno: 12,
-			colno: 8
-		} as ErrorEvent);
+			if (kind === 'script error') {
+				worker.onerror?.({
+					message: 'worker crashed',
+					filename: '/worker/ocaml.js',
+					lineno: 12,
+					colno: 8
+				} as ErrorEvent);
+			} else {
+				worker.onmessageerror?.({ data: null } as MessageEvent<any>);
+			}
 
-		await expect(runPromise).rejects.toContain(
-			'OCaml worker script error: worker crashed (/worker/ocaml.js:12:8)'
-		);
-		staleHandler?.({ data: { output: 'stale\n', results: true } } as MessageEvent<any>);
-		expect(output).not.toHaveBeenCalled();
+			await expect(runPromise).rejects.toContain(
+				kind === 'script error'
+					? 'OCaml worker script error: worker crashed (/worker/ocaml.js:12:8)'
+					: 'OCaml worker message deserialization failed'
+			);
+			staleHandler?.({ data: { output: 'stale\n', results: true } } as MessageEvent<any>);
+			expect(output).not.toHaveBeenCalled();
+			expect(sandbox.pendingInput).toEqual([]);
+			expect(sandbox.pendingEof).toBe(false);
+			expect(sandbox.waitingForInput).toBe(false);
+			expect(readBufferedStdin(sandbox.buffer)).toBe('');
 
-		suppressAutoRunAck = false;
-		await sandbox.load('/absproxy/5173');
-		await expect(sandbox.run('let () = ()', false)).resolves.toBe(true);
-		expect(workerInstances).toHaveLength(2);
-	});
+			suppressAutoRunAck = false;
+			await sandbox.load('/absproxy/5173');
+			await expect(sandbox.run('let () = ()', false)).resolves.toBe(true);
+			expect(workerInstances).toHaveLength(2);
+		}
+	);
 });

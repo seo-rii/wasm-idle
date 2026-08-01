@@ -294,8 +294,8 @@ async function executeCompileResult(result: CompileResult, log = false, stdin?: 
 	const sourceDir = programArtifact.path.replace(/\/[^/]+$/, '');
 	const createdObjectUrls: string[] = [];
 	const stdinEncoder = new TextEncoder();
-	let stdinChunkOcaml =
-		typeof stdin === 'string' ? stdinEncoder.encode(stdin) : new Uint8Array(0);
+	const hasExplicitStdinOcaml = typeof stdin === 'string';
+	let stdinChunkOcaml = hasExplicitStdinOcaml ? stdinEncoder.encode(stdin) : new Uint8Array(0);
 	let stdinChunkOffsetOcaml = 0;
 	const originalConsole = globalThis.console;
 	const originalFetch = globalThis.fetch.bind(globalThis);
@@ -378,6 +378,7 @@ async function executeCompileResult(result: CompileResult, log = false, stdin?: 
 			return new Uint8Array(0);
 		}
 		while (stdinChunkOffsetOcaml >= stdinChunkOcaml.length) {
+			if (hasExplicitStdinOcaml) return null;
 			const chunk = waitForBufferedStdin(stdinBufferOcaml, () =>
 				postMessage({ buffer: true })
 			);

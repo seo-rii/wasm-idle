@@ -179,6 +179,72 @@ describe('OCaml worker', () => {
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
 	});
 
+	it('treats empty explicit stdin as EOF without requesting the shared buffer', async () => {
+		const compilerModuleUrl = await createMockOcamlCompilerModule(`
+			export async function compile() {
+				return {
+					success: true,
+					stdout: '',
+					stderr: '',
+					diagnostics: [],
+					artifacts: [
+						{
+							path: '/workspace/_build/main.js',
+							kind: 'js',
+							data: \`
+								var mc=0,aha=0,ow=0;
+								function cz(){throw new Error("stdin bridge missing")}
+								function a4I(a){var d=a.length,c=new Uint8Array(d),b=0;for(;b<d;b++)c[b]=a.charCodeAt(b);return c}
+								class Base{}
+								class Device extends Base{constructor(a,b){super();this.flags=b}read(a,b,c,d){cz(d,mc,aha,ow)}}
+								globalThis.__wasm_of_js_of_ocaml_runtime_promise=Promise.resolve().then(()=>{
+									const device=new Device(0,{});
+									const bytes=new Uint8Array(64);
+									const length=device.read(bytes,0,64,false);
+									if(length!==0)throw new Error('expected explicit EOF');
+									console.log('explicit eof');
+								});
+							\`
+						}
+					]
+				};
+			}
+
+			export function createBrowserWorkerSystemDispatcher() {
+				return {};
+			}
+		`);
+		const buffer = new SharedArrayBuffer(1024);
+
+		await import('./ocaml');
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				moduleUrl: compilerModuleUrl,
+				manifestUrl:
+					'https://example.test/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json'
+			}
+		});
+		await Promise.resolve();
+
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: 'let () = ignore (read_line ())',
+				prepare: false,
+				target: 'js',
+				buffer,
+				stdin: ''
+			}
+		});
+		await Promise.resolve();
+
+		expect((globalThis as any).postMessage).not.toHaveBeenCalledWith({ buffer: true });
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			output: 'explicit eof\n'
+		});
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
+	});
+
 	it('does not replay cached wasm compile stderr on the execution pass', async () => {
 		const compilerModuleUrl = await createMockOcamlCompilerModule(`
 			let compileCount = 0;
@@ -385,6 +451,22 @@ describe('OCaml worker', () => {
 
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ buffer: true });
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ output: '7\n' });
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
+
+		(globalThis as any).postMessage.mockClear();
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: 'let () = print_endline (read_line ())',
+				prepare: false,
+				target: 'wasm',
+				buffer,
+				stdin: '9\n'
+			}
+		});
+		await Promise.resolve();
+
+		expect((globalThis as any).postMessage).not.toHaveBeenCalledWith({ buffer: true });
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ output: '9\n' });
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
 	});
 
