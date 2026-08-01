@@ -30,9 +30,12 @@ class TypeScriptSandbox implements Sandbox {
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	waitingForInput = false;
 	pendingEof = false;
+	private activeRunCleanup: (() => void) | null = null;
 	private readonly workerSession = new WorkerSession({
 		label: () => this.languageLabel,
 		onDispose: (worker) => {
+			this.activeRunCleanup?.();
+			this.activeRunCleanup = null;
 			if (this.worker === worker) delete this.worker;
 			this.exit = true;
 			this.waitingForInput = false;
@@ -138,14 +141,38 @@ class TypeScriptSandbox implements Sandbox {
 			);
 		}
 		const worker = this.worker;
+		const signal = options.signal;
+		if (signal?.aborted) {
+			return Promise.reject(
+				signal.reason ??
+					new DOMException(`${this.languageLabel} execution aborted`, 'AbortError')
+			);
+		}
 		const { programArgs } = resolveSandboxExecutionArgs(this.language, args, options);
 		this.exit = false;
 		return new Promise<boolean | string>((resolve, reject) => {
 			const _uid = ++this.uid;
 			const operation = this.workerSession.beginRun(worker, reject);
+			let onAbort: (() => void) | undefined;
+			let cleanedUp = false;
+			const cleanup = () => {
+				if (cleanedUp) return;
+				cleanedUp = true;
+				if (signal && onAbort) {
+					try {
+						signal.removeEventListener('abort', onAbort);
+					} catch {
+						// Cleanup must not replace the execution result.
+					}
+				}
+				if (this.activeRunCleanup === cleanup) this.activeRunCleanup = null;
+			};
 			const handler = (event: Event & { data: any }) => {
-				if (this.worker !== worker) return reject('Worker not loaded');
-				if (_uid !== this.uid) return (worker.onmessage = null);
+				if (this.worker !== worker || worker.onmessage !== handler || _uid !== this.uid) {
+					cleanup();
+					if (worker.onmessage === handler) worker.onmessage = null;
+					return;
+				}
 				const { output, results, error, buffer, diagnostic, progress } = event.data;
 				if (buffer) {
 					this.waitingForInput = true;
@@ -155,6 +182,7 @@ class TypeScriptSandbox implements Sandbox {
 				if (output) this.output?.(output);
 				if (diagnostic) this.oncompilerdiagnostic?.(diagnostic);
 				if (results) {
+					cleanup();
 					this.elapse = Date.now() - this.begin;
 					this.exit = true;
 					this.waitingForInput = false;
@@ -163,6 +191,7 @@ class TypeScriptSandbox implements Sandbox {
 					resolve(results as string);
 				}
 				if (error) {
+					cleanup();
 					this.elapse = Date.now() - this.begin;
 					this.exit = true;
 					this.waitingForInput = false;
@@ -171,20 +200,51 @@ class TypeScriptSandbox implements Sandbox {
 					reject(error);
 				}
 			};
+			onAbort = signal
+				? () => {
+						if (
+							this.worker !== worker ||
+							worker.onmessage !== handler ||
+							_uid !== this.uid
+						) {
+							cleanup();
+							return;
+						}
+						this.terminate(
+							signal.reason ??
+								new DOMException(
+									`${this.languageLabel} execution aborted`,
+									'AbortError'
+								)
+						);
+					}
+				: undefined;
+			this.activeRunCleanup = cleanup;
 			worker.onmessage = handler;
+			if (signal && onAbort) {
+				signal.addEventListener('abort', onAbort, { once: true });
+				if (signal.aborted) onAbort();
+			}
+			if (this.worker !== worker || worker.onmessage !== handler || _uid !== this.uid) return;
 			this.begin = Date.now();
-			worker.postMessage({
-				code,
-				prepare,
-				buffer: this.buffer,
-				args: programArgs,
-				stdin: options.stdin,
-				language: this.compileLanguage,
-				activePath:
-					options.activePath || (this.language === 'JAVASCRIPT' ? 'main.js' : 'main.ts'),
-				workspaceFiles: options.workspaceFiles || [],
-				log: _log
-			});
+			try {
+				worker.postMessage({
+					code,
+					prepare,
+					buffer: this.buffer,
+					args: programArgs,
+					stdin: options.stdin,
+					language: this.compileLanguage,
+					activePath:
+						options.activePath ||
+						(this.language === 'JAVASCRIPT' ? 'main.js' : 'main.ts'),
+					workspaceFiles: options.workspaceFiles || [],
+					log: _log
+				});
+			} catch (error) {
+				cleanup();
+				this.workerSession.terminate(error);
+			}
 		});
 	}
 
@@ -192,11 +252,14 @@ class TypeScriptSandbox implements Sandbox {
 		this.terminate();
 	}
 
-	terminate() {
+	terminate(reason: unknown = 'Process terminated') {
+		const cleanup = this.activeRunCleanup;
+		this.activeRunCleanup = null;
+		cleanup?.();
 		this.waitingForInput = false;
 		this.pendingEof = false;
 		this.uid += 1;
-		this.workerSession.terminate();
+		this.workerSession.terminate(reason);
 		this.exit = true;
 	}
 

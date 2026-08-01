@@ -175,6 +175,81 @@ console.log(value);`;
 		}
 	);
 
+	it.each(['TYPESCRIPT', 'JAVASCRIPT'] as const)(
+		'rejects a pre-aborted %s run without changing worker state',
+		async (language) => {
+			const sandbox = new TypeScriptSandbox(language);
+			const worker = new MockWorker();
+			const originalHandler = vi.fn();
+			worker.onmessage = originalHandler;
+			sandbox.worker = worker as unknown as Worker;
+			const controller = new AbortController();
+			const reason = new Error(`${language} pre-aborted`);
+			controller.abort(reason);
+
+			await expect(
+				sandbox.run('cancelled()', false, true, undefined, [], {
+					signal: controller.signal
+				})
+			).rejects.toBe(reason);
+
+			expect(worker.postMessage).not.toHaveBeenCalled();
+			expect(worker.terminate).not.toHaveBeenCalled();
+			expect(worker.onmessage).toBe(originalHandler);
+			expect(sandbox.worker).toBe(worker);
+			expect(sandbox.uid).toBe(0);
+			expect(sandbox.exit).toBe(true);
+
+			await expect(sandbox.run('retry()', false)).resolves.toBe(true);
+			expect(worker.postMessage).toHaveBeenCalledOnce();
+		}
+	);
+
+	it.each(['TYPESCRIPT', 'JAVASCRIPT'] as const)(
+		'aborts an active %s run with its exact reason and permits a clean retry',
+		async (language) => {
+			const sandbox = new TypeScriptSandbox(language);
+			const worker = new MockWorker();
+			worker.postMessage.mockImplementation(() => undefined);
+			sandbox.worker = worker as unknown as Worker;
+			const outputs: string[] = [];
+			sandbox.output = (chunk: string) => outputs.push(chunk);
+			const controller = new AbortController();
+			const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+			const reason = new Error(`${language} active abort`);
+
+			const running = sandbox.run('pending()', false, true, undefined, [], {
+				signal: controller.signal
+			});
+			const lateHandler = worker.onmessage;
+			controller.abort(reason);
+
+			await expect(running).rejects.toBe(reason);
+			expect(worker.terminate).toHaveBeenCalledOnce();
+			expect(removeEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
+			expect(sandbox.worker).toBeUndefined();
+			expect(sandbox.exit).toBe(true);
+
+			lateHandler?.({
+				data: { output: 'late\n', results: true }
+			} as MessageEvent<any>);
+			expect(outputs).toEqual([]);
+
+			await sandbox.load('/absproxy/5173');
+			const retryWorker = workerInstances.at(-1)!;
+			const settledController = new AbortController();
+			await expect(
+				sandbox.run('retry()', false, true, undefined, [], {
+					signal: settledController.signal
+				})
+			).resolves.toBe(true);
+			expect(retryWorker.terminate).not.toHaveBeenCalled();
+
+			settledController.abort(new Error('late abort'));
+			expect(retryWorker.terminate).not.toHaveBeenCalled();
+		}
+	);
+
 	it('rejects load when no wasm-typescript module url is configured', async () => {
 		publicEnv.PUBLIC_WASM_TYPESCRIPT_MODULE_URL = '';
 		const sandbox = new TypeScriptSandbox('TYPESCRIPT');
