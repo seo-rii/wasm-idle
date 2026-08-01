@@ -24,7 +24,7 @@ class Wat implements Sandbox {
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	waitingForInput = false;
 	pendingEof = false;
-	private activeLoad = false;
+	private activeLoadCleanup: (() => void) | null = null;
 	private activeRun = false;
 	private activeRunCleanup: (() => void) | null = null;
 	private readonly workerSession = new WorkerSession({
@@ -45,27 +45,68 @@ class Wat implements Sandbox {
 		_code = '',
 		_log = true,
 		_args: string[] = [],
-		_options: SandboxExecutionOptions = {},
+		options: SandboxExecutionOptions = {},
 		progress?: SandboxProgress
 	) {
-		if (this.activeLoad || this.activeRun) {
+		const signal = options.signal;
+		if (signal?.aborted) {
+			return Promise.reject(
+				signal.reason ?? new DOMException('WAT runtime startup aborted', 'AbortError')
+			);
+		}
+		if (this.activeLoadCleanup || this.activeRun) {
 			return Promise.reject(
 				new BusyError('WAT runtime already has an active operation', {
 					runtimeId: 'WAT',
-					phase: this.activeLoad ? 'startup' : 'execute'
+					phase: this.activeLoadCleanup ? 'startup' : 'execute'
 				})
 			);
 		}
-		this.activeLoad = true;
-		return this.workerSession
-			.load(async (resolve, reject) => {
+		let onAbort: (() => void) | undefined;
+		let cleanedUp = false;
+		const cleanup = () => {
+			if (cleanedUp) return;
+			cleanedUp = true;
+			if (signal && onAbort) {
+				try {
+					signal.removeEventListener('abort', onAbort);
+				} catch {
+					// Cleanup must not replace the startup result.
+				}
+			}
+			if (this.activeLoadCleanup === cleanup) this.activeLoadCleanup = null;
+		};
+		onAbort = signal
+			? () => {
+					if (this.activeLoadCleanup !== cleanup) {
+						cleanup();
+						return;
+					}
+					const reason =
+						signal.reason ??
+						new DOMException('WAT runtime startup aborted', 'AbortError');
+					cleanup();
+					this.workerSession.terminate(reason);
+				}
+			: undefined;
+		const loadPromise = this.workerSession.load(async (resolve, reject) => {
+			const resolveLoad = () => {
+				cleanup();
+				resolve();
+			};
+			const rejectLoad = (reason?: unknown) => {
+				cleanup();
+				reject(reason);
+			};
+			try {
+				if (this.activeLoadCleanup !== cleanup || signal?.aborted) return;
 				this.pendingInput = [];
 				this.waitingForInput = false;
 				this.pendingEof = false;
 				const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
 				const nextModuleUrl = resolveWatModuleUrl(runtimeAssets, currentUrl);
 				if (!nextModuleUrl) {
-					return reject(
+					return rejectLoad(
 						'WAT runtime is not configured. Set PUBLIC_WASM_WAT_MODULE_URL or runtimeAssets.wat.moduleUrl.'
 					);
 				}
@@ -75,27 +116,51 @@ class Wat implements Sandbox {
 					this.workerSession.reset();
 				}
 				if (!this.worker) {
-					this.worker = new (await import('$lib/playground/worker/wat?worker')).default();
-					this.workerSession.attach(this.worker);
-					this.worker.onmessage = (event: MessageEvent<any>) => {
+					const WorkerConstructor = (await import('$lib/playground/worker/wat?worker'))
+						.default;
+					if (this.activeLoadCleanup !== cleanup || signal?.aborted) return;
+					const worker = new WorkerConstructor();
+					if (this.activeLoadCleanup !== cleanup || signal?.aborted) {
+						worker.terminate();
+						return;
+					}
+					this.worker = worker;
+					this.workerSession.attach(worker);
+					worker.onmessage = (event: MessageEvent<any>) => {
+						if (
+							this.activeLoadCleanup !== cleanup ||
+							signal?.aborted ||
+							this.worker !== worker
+						) {
+							return;
+						}
+						reportWorkerProgress(progress, event.data?.progress);
 						if (event.data?.load) {
 							progress?.set?.(1);
-							resolve();
+							if (this.activeLoadCleanup !== cleanup || signal?.aborted) return;
+							resolveLoad();
 						}
-						if (event.data?.error) reject(event.data.error);
+						if (event.data?.error) rejectLoad(event.data.error);
 					};
-					this.worker.postMessage({
+					worker.postMessage({
 						load: true,
 						moduleUrl: this.moduleUrl
 					});
 				} else {
 					progress?.set?.(1);
-					resolve();
+					if (this.activeLoadCleanup !== cleanup || signal?.aborted) return;
+					resolveLoad();
 				}
-			})
-			.finally(() => {
-				this.activeLoad = false;
-			});
+			} catch (error) {
+				rejectLoad(error);
+			}
+		});
+		this.activeLoadCleanup = cleanup;
+		if (signal && onAbort) {
+			signal.addEventListener('abort', onAbort, { once: true });
+			if (signal.aborted) onAbort();
+		}
+		return loadPromise.finally(cleanup);
 	}
 
 	write(input: string) {
@@ -130,11 +195,11 @@ class Wat implements Sandbox {
 		_args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
-		if (this.activeLoad || this.activeRun) {
+		if (this.activeLoadCleanup || this.activeRun) {
 			return Promise.reject(
 				new BusyError('WAT runtime already has an active operation', {
 					runtimeId: 'WAT',
-					phase: this.activeLoad ? 'startup' : 'execute'
+					phase: this.activeLoadCleanup ? 'startup' : 'execute'
 				})
 			);
 		}
@@ -247,6 +312,9 @@ class Wat implements Sandbox {
 	}
 
 	terminate(reason: unknown = 'Process terminated') {
+		const loadCleanup = this.activeLoadCleanup;
+		this.activeLoadCleanup = null;
+		loadCleanup?.();
 		const cleanup = this.activeRunCleanup;
 		this.activeRunCleanup = null;
 		cleanup?.();
@@ -264,7 +332,7 @@ class Wat implements Sandbox {
 		this.pendingEof = false;
 		if (this.worker) this.worker.onmessage = null;
 		resetBufferedStdin(this.buffer);
-		if (!this.exit) {
+		if (!this.exit || this.activeLoadCleanup) {
 			this.terminate();
 		}
 	}
