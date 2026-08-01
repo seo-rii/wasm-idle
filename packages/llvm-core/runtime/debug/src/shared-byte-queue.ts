@@ -45,6 +45,16 @@ function sleep(milliseconds: number) {
 	return new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 }
 
+function loadAvailable(header: Int32Array, capacity: number) {
+	const read = Atomics.load(header, READ_OFFSET) >>> 0;
+	const write = Atomics.load(header, WRITE_OFFSET) >>> 0;
+	const available = (write - read) >>> 0;
+	if (available > capacity) {
+		throw new Error('shared-ring-v1 cursor invariant was violated');
+	}
+	return available;
+}
+
 export function createSharedByteQueue(
 	capacity = 64 * 1024,
 	generation = 1
@@ -93,6 +103,11 @@ export class SharedByteQueue {
 			throw new Error('shared-ring-v1 capacity metadata does not match its data buffer');
 		}
 		this.assertGeneration();
+		const state = Atomics.load(this.header, STATE);
+		if (state !== 0 && state !== 1) {
+			throw new Error('shared-ring-v1 state metadata must be 0 or 1');
+		}
+		loadAvailable(this.header, this.capacity);
 	}
 
 	get closed() {
@@ -102,13 +117,7 @@ export class SharedByteQueue {
 
 	get available() {
 		this.assertGeneration();
-		const read = Atomics.load(this.header, READ_OFFSET) >>> 0;
-		const write = Atomics.load(this.header, WRITE_OFFSET) >>> 0;
-		const available = (write - read) >>> 0;
-		if (available > this.capacity) {
-			throw new Error('shared-ring-v1 cursor invariant was violated');
-		}
-		return available;
+		return loadAvailable(this.header, this.capacity);
 	}
 
 	get remaining() {

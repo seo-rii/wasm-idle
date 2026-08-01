@@ -42,7 +42,8 @@ indefinitely for a queue signal. Blocking operations accept a non-negative finit
 `Infinity`; invalid values are rejected before bytes move or a wait begins. Queue generations are
 integers from 1 through 2147483647 because the transport stores them in signed `Int32Array`
 metadata. Each descriptor must provide distinct control and data buffers so payload writes cannot
-overwrite queue metadata. Every queue state accessor, including
+overwrite queue metadata. Attaching a descriptor also validates its closed-state flag and cursor
+distance before runtime code can consume it. Every queue state accessor, including
 the closed-state check used during cleanup, rejects stale-generation metadata. Session and worker
 disposal isolate each queue close, so one corrupt transport cannot prevent the remaining queues from
 closing, worker-global transport state from being released, or either Worker from terminating. The

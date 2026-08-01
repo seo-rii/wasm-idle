@@ -31,6 +31,20 @@ describe('SharedByteQueue', () => {
 		).toThrow(/distinct control and data SharedArrayBuffers/u);
 	});
 
+	it('rejects descriptors with an invalid initial cursor distance', () => {
+		const descriptor = createSharedByteQueue(4096, 18);
+		Atomics.store(new Int32Array(descriptor.control), 1, 4097);
+
+		expect(() => new SharedByteQueue(descriptor)).toThrow(/cursor invariant/u);
+	});
+
+	it('rejects descriptors with invalid closed-state metadata', () => {
+		const descriptor = createSharedByteQueue(4096, 19);
+		Atomics.store(new Int32Array(descriptor.control), 2, 2);
+
+		expect(() => new SharedByteQueue(descriptor)).toThrow(/state metadata/u);
+	});
+
 	it('rejects a stale generation when reading closed state', () => {
 		const descriptor = createSharedByteQueue(4096, 14);
 		const queue = new SharedByteQueue(descriptor);
