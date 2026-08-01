@@ -176,7 +176,7 @@ async function writeDeliveryBundle(sourceDir, targetDir) {
 				`wasm-cobol runtime asset ${asset.source} must contain only ${asset.entry}`
 			);
 		}
-		const compressed = gzipSync(files[0][1], { level: 9, mtime: 0 });
+		const compressed = gzipSync(files[0][1], { level: 9 });
 		await writeFile(path.join(targetDir, asset.target), compressed);
 		deliveryAssets.push({
 			asset: asset.target,

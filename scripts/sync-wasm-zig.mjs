@@ -193,7 +193,7 @@ export async function syncWasmZigAssets({
 		tarParts.push(Buffer.alloc(1024));
 		files.push({
 			fileName: 'std.tar.gz',
-			data: gzipSync(Buffer.concat(tarParts), { level: 9, mtime: 0 })
+			data: gzipSync(Buffer.concat(tarParts), { level: 9 })
 		});
 	}
 

@@ -282,15 +282,18 @@ async function validateBundle(bundleDir, layout) {
 	}
 }
 
+/** @param {NodeJS.ArrayBufferView} bytes */
 function sha256(bytes) {
 	return createHash('sha256').update(bytes).digest('hex');
 }
 
+/** @param {string} filePath @param {unknown} value */
 async function writeJson(filePath, value) {
 	await mkdir(path.dirname(filePath), { recursive: true });
 	await writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
 }
 
+/** @param {string} sourceDir @param {string} targetRoot */
 async function writeDeliveryBundle(sourceDir, targetRoot) {
 	for (const asset of ASSETS) {
 		const sourcePath = path.join(sourceDir, asset.source);
@@ -315,7 +318,7 @@ async function writeDeliveryBundle(sourceDir, targetRoot) {
 				`wasm-clang runtime asset ${asset.source} must contain only ${asset.entry}`
 			);
 		}
-		await writeFile(targetPath, gzipSync(files[0][1], { level: 9, mtime: 0 }));
+		await writeFile(targetPath, gzipSync(files[0][1], { level: 9 }));
 	}
 
 	const sourceManifest = JSON.parse(
