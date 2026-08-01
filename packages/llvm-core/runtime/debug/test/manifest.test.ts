@@ -120,6 +120,19 @@ describe('debug runtime manifest', () => {
 		}
 	});
 
+	it.each([
+		'%2e%2e/lldb.js',
+		'.%2e/lldb.js',
+		'%2e./lldb.js',
+		'debug/%2fescape/lldb.js',
+		'debug/%5cescape/lldb.js'
+	])('rejects encoded debug asset traversal path %s', (path) => {
+		const escaped = manifest();
+		escaped.debugger.lldb.js = path;
+
+		expect(() => parseDebugRuntimeManifest(escaped)).toThrow(/asset path/u);
+	});
+
 	it('verifies asset hashes', async () => {
 		const bytes = new TextEncoder().encode('lldb');
 		await expect(

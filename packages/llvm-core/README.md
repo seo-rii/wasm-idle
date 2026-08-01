@@ -47,6 +47,8 @@ disposal isolate each queue close, so one corrupt transport cannot prevent the r
 closing, worker-global transport state from being released, or either Worker from terminating. The
 session verifies the module, source, loader, Wasm, and
 pthread-sidecar hashes before creating either worker.
+Debug manifest assets must use canonical relative URL paths; percent-encoded dot segments and path
+separators are rejected before they can escape or change the configured runtime root.
 When `initialize()` starts, it snapshots the module and its expected hash, source files, configured
 breakpoints, and launch arguments used by the workers and DAP. Mutating the caller-owned option
 objects while integrity and asset verification are in flight therefore cannot change the already

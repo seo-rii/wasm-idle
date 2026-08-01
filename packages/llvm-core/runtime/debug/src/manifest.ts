@@ -46,6 +46,12 @@ function parseAsset(value: unknown, label: string): RuntimeDebugAsset {
 	};
 	for (const [kind, path] of Object.entries(paths)) {
 		const segments = path.split('/');
+		let decodedSegments: string[];
+		try {
+			decodedSegments = segments.map((segment) => decodeURIComponent(segment));
+		} catch {
+			throw new Error(`invalid ${label}.${kind} asset path in wasm debug runtime manifest`);
+		}
 		if (
 			path.startsWith('/') ||
 			path.includes('\\') ||
@@ -53,7 +59,18 @@ function parseAsset(value: unknown, label: string): RuntimeDebugAsset {
 			path.includes(':') ||
 			path.includes('?') ||
 			path.includes('#') ||
-			segments.some((segment) => segment.length === 0 || segment === '.' || segment === '..')
+			segments.some(
+				(segment) => segment.length === 0 || segment === '.' || segment === '..'
+			) ||
+			decodedSegments.some(
+				(segment) =>
+					segment.length === 0 ||
+					segment === '.' ||
+					segment === '..' ||
+					segment.includes('/') ||
+					segment.includes('\\') ||
+					segment.includes('\0')
+			)
 		) {
 			throw new Error(`invalid ${label}.${kind} asset path in wasm debug runtime manifest`);
 		}
