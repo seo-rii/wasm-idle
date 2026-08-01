@@ -172,6 +172,77 @@ void main() {
 		expect(worker.postMessage).toHaveBeenCalledTimes(2);
 	});
 
+	it('rejects a pre-aborted D run without changing worker state', async () => {
+		const sandbox = new D();
+		const worker = new MockWorker();
+		const originalHandler = vi.fn();
+		worker.onmessage = originalHandler;
+		sandbox.worker = worker as unknown as Worker;
+		const controller = new AbortController();
+		const reason = new Error('D pre-aborted');
+		controller.abort(reason);
+
+		await expect(
+			sandbox.run('void main() {}', false, true, undefined, [], {
+				signal: controller.signal
+			})
+		).rejects.toBe(reason);
+
+		expect(worker.postMessage).not.toHaveBeenCalled();
+		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(worker.onmessage).toBe(originalHandler);
+		expect(sandbox.worker).toBe(worker);
+		expect(sandbox.uid).toBe(0);
+		expect(sandbox.exit).toBe(true);
+
+		await expect(sandbox.run('void main() {}', false)).resolves.toBe(true);
+		expect(worker.postMessage).toHaveBeenCalledOnce();
+	});
+
+	it('aborts an active D run with its exact reason and permits a clean retry', async () => {
+		const sandbox = new D();
+		const worker = new MockWorker();
+		worker.postMessage.mockImplementation(() => undefined);
+		sandbox.worker = worker as unknown as Worker;
+		const outputs: string[] = [];
+		const progress = { set: vi.fn() };
+		sandbox.output = (chunk: string) => outputs.push(chunk);
+		const controller = new AbortController();
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const reason = new Error('D active abort');
+
+		const running = sandbox.run('void main() {}', false, true, progress, [], {
+			signal: controller.signal
+		});
+		const lateHandler = worker.onmessage;
+		controller.abort(reason);
+
+		await expect(running).rejects.toBe(reason);
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(removeEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.exit).toBe(true);
+
+		lateHandler?.({
+			data: { output: 'late\n', progress: 0.8, results: true }
+		} as MessageEvent<any>);
+		expect(outputs).toEqual([]);
+		expect(progress.set).not.toHaveBeenCalled();
+
+		await sandbox.load('/absproxy/5173');
+		const retryWorker = workerInstances.at(-1)!;
+		const settledController = new AbortController();
+		await expect(
+			sandbox.run('void main() {}', false, true, undefined, [], {
+				signal: settledController.signal
+			})
+		).resolves.toBe(true);
+		expect(retryWorker.terminate).not.toHaveBeenCalled();
+
+		settledController.abort(new Error('late abort'));
+		expect(retryWorker.terminate).not.toHaveBeenCalled();
+	});
+
 	it('rejects overlapping D startup operations without superseding readiness', async () => {
 		suppressAutoLoadAck = true;
 		const sandbox = new D();
