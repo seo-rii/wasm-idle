@@ -186,7 +186,12 @@ describe('OCaml sandbox', () => {
 	it('rejects load when the OCaml worker script fails before posting load', async () => {
 		suppressAutoLoadAck = true;
 		const sandbox = new Ocaml();
-		const loadPromise = sandbox.load('/absproxy/5173');
+		const controller = new AbortController();
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const loadPromise = sandbox.load('/absproxy/5173', '', true, [], {
+			signal: controller.signal
+		});
 		await vi.dynamicImportSettled();
 		const worker = workerInstances[0];
 
@@ -200,6 +205,8 @@ describe('OCaml sandbox', () => {
 		await expect(loadPromise).rejects.toContain(
 			'OCaml worker script error: worker script error (/worker/ocaml.js:88:24)'
 		);
+		const abortRegistration = addEventListener.mock.calls.find((call) => call[0] === 'abort');
+		expect(removeEventListener).toHaveBeenCalledWith('abort', abortRegistration?.[1]);
 	});
 
 	it('rejects load when the OCaml bundle URLs are missing', async () => {
@@ -210,6 +217,161 @@ describe('OCaml sandbox', () => {
 		await expect(sandbox.load({ rootUrl: '' })).rejects.toContain(
 			'OCaml runtime is not configured'
 		);
+	});
+
+	it('rejects a pre-aborted OCaml startup without creating a worker', async () => {
+		const sandbox = new Ocaml();
+		const controller = new AbortController();
+		const reason = new Error('stop before OCaml startup');
+		controller.abort(reason);
+
+		await expect(
+			sandbox.load('/absproxy/5173', '', true, [], { signal: controller.signal })
+		).rejects.toBe(reason);
+		expect(workerInstances).toHaveLength(0);
+		expect(sandbox.uid).toBe(0);
+		expect(sandbox.moduleUrl).toBe('');
+		expect(sandbox.manifestUrl).toBe('');
+
+		await expect(sandbox.load('/absproxy/5173')).resolves.toBeUndefined();
+		expect(workerInstances).toHaveLength(1);
+	});
+
+	it('preserves a null abort reason and supplies phase-specific fallback errors', async () => {
+		const nullController = new AbortController();
+		nullController.abort(null);
+		await expect(
+			new Ocaml().load('/absproxy/5173', '', true, [], { signal: nullController.signal })
+		).rejects.toBeNull();
+
+		const fallbackSignal = {
+			aborted: true,
+			reason: undefined,
+			addEventListener: vi.fn(),
+			removeEventListener: vi.fn()
+		} as unknown as AbortSignal;
+		await expect(
+			new Ocaml().load('/absproxy/5173', '', true, [], { signal: fallbackSignal })
+		).rejects.toMatchObject({
+			name: 'AbortError',
+			message: 'OCaml runtime startup aborted'
+		});
+
+		const sandbox = new Ocaml();
+		await sandbox.load('/absproxy/5173');
+		await expect(
+			sandbox.run('let () = ()', false, true, undefined, [], { signal: fallbackSignal })
+		).rejects.toMatchObject({
+			name: 'AbortError',
+			message: 'OCaml execution aborted'
+		});
+		expect(workerInstances[0].postMessage).toHaveBeenCalledOnce();
+		expect(workerInstances[0].terminate).not.toHaveBeenCalled();
+	});
+
+	it('rejects a pre-aborted OCaml execution without mutating worker or stdin state', async () => {
+		const sandbox = new Ocaml();
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		const handler = worker.onmessage;
+		const uid = sandbox.uid;
+		const controller = new AbortController();
+		const reason = new Error('stop before OCaml execution');
+		sandbox.write('preserved input\n');
+		sandbox.eof();
+		controller.abort(reason);
+
+		await expect(
+			sandbox.run('let () = ()', false, true, undefined, [], {
+				signal: controller.signal,
+				stdin: ''
+			})
+		).rejects.toBe(reason);
+		expect(worker.postMessage).toHaveBeenCalledOnce();
+		expect(worker.onmessage).toBe(handler);
+		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(sandbox.uid).toBe(uid);
+		expect(sandbox.exit).toBe(true);
+		expect(sandbox.pendingInput).toEqual(['preserved input\n']);
+		expect(sandbox.pendingEof).toBe(true);
+	});
+
+	it('aborts OCaml startup before worker import and permits a clean retry', async () => {
+		const sandbox = new Ocaml();
+		const controller = new AbortController();
+		const reason = new Error('stop OCaml before worker import');
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const loading = sandbox.load('/absproxy/5173', '', true, [], {
+			signal: controller.signal
+		});
+
+		controller.abort(reason);
+
+		await expect(loading).rejects.toBe(reason);
+		await vi.dynamicImportSettled();
+		expect(workerInstances).toHaveLength(0);
+		const abortRegistration = addEventListener.mock.calls.find((call) => call[0] === 'abort');
+		expect(abortRegistration).toBeDefined();
+		expect(removeEventListener).toHaveBeenCalledWith('abort', abortRegistration?.[1]);
+
+		await expect(sandbox.load('/absproxy/5173')).resolves.toBeUndefined();
+		expect(workerInstances).toHaveLength(1);
+	});
+
+	it('aborts a stalled OCaml startup without letting stale listeners affect its replacement', async () => {
+		suppressAutoLoadAck = true;
+		const sandbox = new Ocaml();
+		const controller = new AbortController();
+		const reason = new Error('stop stalled OCaml startup');
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const loading = sandbox.load('/absproxy/5173', '', true, [], {
+			signal: controller.signal
+		});
+		const loadingResult = loading.catch((error) => error);
+		await vi.dynamicImportSettled();
+		const oldWorker = workerInstances[0];
+		const staleHandler = oldWorker.onmessage;
+		const abortRegistration = addEventListener.mock.calls.find((call) => call[0] === 'abort');
+		const staleAbort = abortRegistration?.[1] as (() => void) | undefined;
+
+		controller.abort(reason);
+		const replacementLoad = sandbox.load('/absproxy/5173');
+
+		await vi.dynamicImportSettled();
+		await expect(loadingResult).resolves.toBe(reason);
+		expect(oldWorker.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		const replacementWorker = workerInstances[1];
+		staleAbort?.();
+		staleHandler?.({ data: { load: true } } as MessageEvent<any>);
+		expect(sandbox.worker).toBe(replacementWorker);
+		expect(replacementWorker.terminate).not.toHaveBeenCalled();
+
+		replacementWorker.onmessage?.({ data: { load: true } } as MessageEvent<any>);
+		await expect(replacementLoad).resolves.toBeUndefined();
+	});
+
+	it('ignores an abort fired immediately after successful OCaml readiness', async () => {
+		suppressAutoLoadAck = true;
+		const sandbox = new Ocaml();
+		const controller = new AbortController();
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const loading = sandbox.load('/absproxy/5173', '', true, [], {
+			signal: controller.signal
+		});
+		await vi.dynamicImportSettled();
+		const worker = workerInstances[0];
+
+		worker.onmessage?.({ data: { load: true } } as MessageEvent<any>);
+		controller.abort(new Error('late successful OCaml startup abort'));
+
+		await expect(loading).resolves.toBeUndefined();
+		expect(worker.terminate).not.toHaveBeenCalled();
+		const abortRegistration = addEventListener.mock.calls.find((call) => call[0] === 'abort');
+		expect(removeEventListener).toHaveBeenCalledWith('abort', abortRegistration?.[1]);
+		await expect(sandbox.run('let () = ()', false)).resolves.toBe(true);
 	});
 
 	it('writes queued terminal input when the OCaml worker requests stdin', async () => {
@@ -380,12 +542,15 @@ describe('OCaml sandbox', () => {
 		suppressAutoLoadAck = true;
 		const sandbox = new Ocaml();
 		const callbackError = new Error('progress callback failed');
+		const controller = new AbortController();
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
 		const loadPromise = sandbox.load(
 			'/absproxy/5173',
 			'',
 			true,
 			[],
-			{},
+			{ signal: controller.signal },
 			{
 				set() {
 					throw callbackError;
@@ -401,6 +566,8 @@ describe('OCaml sandbox', () => {
 		expect(sandbox.moduleUrl).toBe('');
 		expect(sandbox.manifestUrl).toBe('');
 		expect(worker.terminate).toHaveBeenCalledOnce();
+		const abortRegistration = addEventListener.mock.calls.find((call) => call[0] === 'abort');
+		expect(removeEventListener).toHaveBeenCalledWith('abort', abortRegistration?.[1]);
 
 		suppressAutoLoadAck = false;
 		await expect(sandbox.load('/absproxy/5173')).resolves.toBeUndefined();
@@ -494,6 +661,148 @@ describe('OCaml sandbox', () => {
 		expect(readBufferedStdin(sandbox.buffer)).toBe('');
 	});
 
+	it('aborts an active OCaml run and confines stale handlers and listeners to its worker', async () => {
+		const sandbox = new Ocaml();
+		const output = vi.fn();
+		sandbox.output = output;
+		await sandbox.load('/absproxy/5173');
+		suppressAutoRunAck = true;
+		const oldWorker = workerInstances[0];
+		const controller = new AbortController();
+		const reason = new Error('stop active OCaml execution');
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const running = sandbox.run('let () = ()', false, true, undefined, [], {
+			signal: controller.signal,
+			stdin: ''
+		});
+		const staleHandler = oldWorker.onmessage;
+		const abortRegistration = addEventListener.mock.calls.find((call) => call[0] === 'abort');
+		const staleAbort = abortRegistration?.[1] as (() => void) | undefined;
+		sandbox.write('discarded input\n');
+		sandbox.eof();
+
+		controller.abort(reason);
+		sandbox.write('replacement input\n');
+
+		await expect(running).rejects.toBe(reason);
+		expect(oldWorker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.pendingInput).toEqual(['replacement input\n']);
+		expect(sandbox.pendingEof).toBe(false);
+		expect(sandbox.waitingForInput).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
+		expect(removeEventListener).toHaveBeenCalledWith('abort', abortRegistration?.[1]);
+		staleHandler?.({ data: { output: 'stale\n', results: true } } as MessageEvent<any>);
+		expect(output).not.toHaveBeenCalled();
+
+		suppressAutoLoadAck = true;
+		const replacementLoad = sandbox.load('/absproxy/5173');
+		await vi.dynamicImportSettled();
+		const replacementWorker = workerInstances[1];
+		staleAbort?.();
+		expect(sandbox.worker).toBe(replacementWorker);
+		expect(replacementWorker.terminate).not.toHaveBeenCalled();
+		replacementWorker.onmessage?.({ data: { load: true } } as MessageEvent<any>);
+		await expect(replacementLoad).resolves.toBeUndefined();
+
+		suppressAutoRunAck = false;
+		await expect(sandbox.run('let () = ()', false)).resolves.toBe(true);
+	});
+
+	it.each(['progress', 'output'])(
+		'aborts an OCaml run reentrantly from its $kind callback',
+		async (kind) => {
+			const sandbox = new Ocaml();
+			await sandbox.load('/absproxy/5173');
+			const worker = workerInstances[0];
+			const controller = new AbortController();
+			const reason = new Error(`stop from OCaml ${kind}`);
+			const progress = {
+				set: vi.fn(() => {
+					if (kind === 'progress') controller.abort(reason);
+				})
+			};
+			sandbox.output = vi.fn(() => {
+				if (kind === 'output') controller.abort(reason);
+			});
+
+			await expect(
+				sandbox.run(
+					'let () = print_endline "stop"',
+					kind === 'progress',
+					true,
+					progress,
+					[],
+					{
+						signal: controller.signal
+					}
+				)
+			).rejects.toBe(reason);
+			expect(worker.terminate).toHaveBeenCalledOnce();
+			expect(sandbox.worker).toBeUndefined();
+			if (kind === 'progress') {
+				expect(progress.set).toHaveBeenCalledWith(0.35, 'compile-ready');
+			} else {
+				expect(sandbox.output).toHaveBeenCalledWith('hello from ocaml wasm\n');
+			}
+
+			await sandbox.load('/absproxy/5173');
+			await expect(sandbox.run('let () = ()', false)).resolves.toBe(true);
+		}
+	);
+
+	it('preserves replacement input when an aborting output callback subsequently throws', async () => {
+		const sandbox = new Ocaml();
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		const controller = new AbortController();
+		const abortReason = new Error('stop before replacement OCaml input');
+		const callbackError = new Error('throw after OCaml abort');
+		sandbox.output = () => {
+			controller.abort(abortReason);
+			sandbox.write('replacement input\n');
+			sandbox.eof();
+			throw callbackError;
+		};
+
+		await expect(
+			sandbox.run('let () = print_endline "stop"', false, true, undefined, [], {
+				signal: controller.signal,
+				stdin: ''
+			})
+		).rejects.toBe(abortReason);
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.pendingInput).toEqual(['replacement input\n']);
+		expect(sandbox.pendingEof).toBe(true);
+		expect(sandbox.waitingForInput).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
+	});
+
+	it('ignores an abort fired immediately after a successful OCaml result', async () => {
+		const sandbox = new Ocaml();
+		await sandbox.load('/absproxy/5173');
+		suppressAutoRunAck = true;
+		const worker = workerInstances[0];
+		const controller = new AbortController();
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const running = sandbox.run('let () = ()', false, true, undefined, [], {
+			signal: controller.signal
+		});
+
+		worker.onmessage?.({ data: { results: true } } as MessageEvent<any>);
+		controller.abort(new Error('late successful OCaml result abort'));
+
+		await expect(running).resolves.toBe(true);
+		expect(worker.terminate).not.toHaveBeenCalled();
+		const abortRegistration = addEventListener.mock.calls.find((call) => call[0] === 'abort');
+		expect(removeEventListener).toHaveBeenCalledWith('abort', abortRegistration?.[1]);
+
+		suppressAutoRunAck = false;
+		await expect(sandbox.run('let () = ()', false)).resolves.toBe(true);
+	});
+
 	it('cancels a run reentrantly without accepting the rest of the worker message', async () => {
 		const sandbox = new Ocaml();
 		await sandbox.load('/absproxy/5173');
@@ -523,11 +832,15 @@ describe('OCaml sandbox', () => {
 		await sandbox.load('/absproxy/5173');
 		const worker = workerInstances[0];
 		const callbackError = new Error('output callback failed');
+		const controller = new AbortController();
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
 		sandbox.output = () => {
 			throw callbackError;
 		};
 		sandbox.write('queued before callback failure\n');
 		const running = sandbox.run('let () = print_endline "fail"', false, true, undefined, [], {
+			signal: controller.signal,
 			stdin: ''
 		});
 		sandbox.write('queued during callback failure\n');
@@ -540,6 +853,8 @@ describe('OCaml sandbox', () => {
 		expect(sandbox.pendingEof).toBe(false);
 		expect(sandbox.waitingForInput).toBe(false);
 		expect(readBufferedStdin(sandbox.buffer)).toBe('');
+		const abortRegistration = addEventListener.mock.calls.find((call) => call[0] === 'abort');
+		expect(removeEventListener).toHaveBeenCalledWith('abort', abortRegistration?.[1]);
 
 		sandbox.output = vi.fn();
 		await sandbox.load('/absproxy/5173');
@@ -552,12 +867,18 @@ describe('OCaml sandbox', () => {
 		await sandbox.load('/absproxy/5173');
 		const worker = workerInstances[0];
 		const dispatchError = new Error('postMessage failed');
+		const controller = new AbortController();
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
 		runDispatchError = dispatchError;
 		sandbox.write('queued before failed explicit dispatch\n');
 		sandbox.eof();
 
 		await expect(
-			sandbox.run('let () = ()', false, true, undefined, [], { stdin: '' })
+			sandbox.run('let () = ()', false, true, undefined, [], {
+				signal: controller.signal,
+				stdin: ''
+			})
 		).rejects.toBe(dispatchError);
 		expect(worker.terminate).not.toHaveBeenCalled();
 		expect(sandbox.worker).toBe(worker);
@@ -565,6 +886,8 @@ describe('OCaml sandbox', () => {
 		expect(sandbox.pendingEof).toBe(false);
 		expect(sandbox.waitingForInput).toBe(false);
 		expect(readBufferedStdin(sandbox.buffer)).toBe('');
+		const abortRegistration = addEventListener.mock.calls.find((call) => call[0] === 'abort');
+		expect(removeEventListener).toHaveBeenCalledWith('abort', abortRegistration?.[1]);
 
 		runDispatchError = null;
 		await expect(sandbox.run('let () = ()', false)).resolves.toBe(true);
@@ -575,7 +898,11 @@ describe('OCaml sandbox', () => {
 		await sandbox.load('/absproxy/5173');
 		suppressAutoRunAck = true;
 		const worker = workerInstances[0];
+		const controller = new AbortController();
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
 		const running = sandbox.run('let () = ()', false, true, undefined, [], {
+			signal: controller.signal,
 			stdin: 'explicit input\n'
 		});
 		sandbox.write('queued during failed explicit run\n');
@@ -589,6 +916,8 @@ describe('OCaml sandbox', () => {
 		expect(sandbox.pendingEof).toBe(false);
 		expect(sandbox.waitingForInput).toBe(false);
 		expect(readBufferedStdin(sandbox.buffer)).toBe('');
+		const abortRegistration = addEventListener.mock.calls.find((call) => call[0] === 'abort');
+		expect(removeEventListener).toHaveBeenCalledWith('abort', abortRegistration?.[1]);
 
 		suppressAutoRunAck = false;
 		await expect(sandbox.run('let () = ()', false)).resolves.toBe(true);
@@ -642,11 +971,15 @@ describe('OCaml sandbox', () => {
 		async (kind) => {
 			const sandbox = new Ocaml();
 			const output = vi.fn();
+			const controller = new AbortController();
+			const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+			const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
 			sandbox.output = output;
 			await sandbox.load('/absproxy/5173');
 			suppressAutoRunAck = true;
 			const worker = workerInstances[0];
 			const runPromise = sandbox.run('let () = ()', false, true, undefined, [], {
+				signal: controller.signal,
 				stdin: 'explicit input\n'
 			});
 			const staleHandler = worker.onmessage;
@@ -675,9 +1008,15 @@ describe('OCaml sandbox', () => {
 			expect(sandbox.pendingEof).toBe(false);
 			expect(sandbox.waitingForInput).toBe(false);
 			expect(readBufferedStdin(sandbox.buffer)).toBe('');
+			const abortRegistration = addEventListener.mock.calls.find(
+				(call) => call[0] === 'abort'
+			);
+			expect(removeEventListener).toHaveBeenCalledWith('abort', abortRegistration?.[1]);
 
 			suppressAutoRunAck = false;
 			await sandbox.load('/absproxy/5173');
+			controller.abort(new Error('late failed OCaml run abort'));
+			expect(workerInstances[1].terminate).not.toHaveBeenCalled();
 			await expect(sandbox.run('let () = ()', false)).resolves.toBe(true);
 			expect(workerInstances).toHaveLength(2);
 		}

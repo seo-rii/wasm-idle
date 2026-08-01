@@ -25,6 +25,8 @@ type OcamlOperation = {
 	phase: 'startup' | 'execute';
 	cancelled: boolean;
 	explicitStdin: boolean;
+	signal?: AbortSignal;
+	onAbort?: () => void;
 };
 
 class Ocaml implements Sandbox {
@@ -71,6 +73,16 @@ class Ocaml implements Sandbox {
 
 	private completeOperation(operation: OcamlOperation) {
 		if (this.activeOperation?.token === operation.token) this.activeOperation = null;
+		const { signal, onAbort } = operation;
+		operation.signal = undefined;
+		operation.onAbort = undefined;
+		if (signal && onAbort) {
+			try {
+				signal.removeEventListener('abort', onAbort);
+			} catch {
+				// Listener cleanup must not replace the operation result.
+			}
+		}
 	}
 
 	private isOperationActive(operation: OcamlOperation) {
@@ -94,14 +106,41 @@ class Ocaml implements Sandbox {
 		this.resetExplicitStdinState();
 	}
 
+	private abortReason(signal: AbortSignal, phase: OcamlOperation['phase']) {
+		if (signal.reason !== undefined) return signal.reason;
+		return new DOMException(
+			phase === 'startup' ? 'OCaml runtime startup aborted' : 'OCaml execution aborted',
+			'AbortError'
+		);
+	}
+
+	private bindAbortSignal(operation: OcamlOperation, signal?: AbortSignal) {
+		if (!signal) return;
+		const onAbort = () => {
+			if (!this.isOperationActive(operation)) {
+				this.completeOperation(operation);
+				return;
+			}
+			this.terminate(this.abortReason(signal, operation.phase));
+		};
+		operation.signal = signal;
+		operation.onAbort = onAbort;
+		signal.addEventListener('abort', onAbort, { once: true });
+		if (signal.aborted) onAbort();
+	}
+
 	load(
 		runtimeAssets: string | PlaygroundRuntimeAssets = '',
 		_code = '',
 		_log = true,
 		_args: string[] = [],
-		_options: SandboxExecutionOptions = {},
+		options: SandboxExecutionOptions = {},
 		progress?: SandboxProgress
 	) {
+		const signal = options.signal;
+		if (signal?.aborted) {
+			return Promise.reject(this.abortReason(signal, 'startup'));
+		}
 		let operation: OcamlOperation;
 		try {
 			operation = this.beginOperation('startup');
@@ -158,6 +197,7 @@ class Ocaml implements Sandbox {
 							worker.onmessage = null;
 							this.moduleUrl = nextModuleUrl;
 							this.manifestUrl = nextManifestUrl;
+							this.completeOperation(operation);
 							resolve();
 							return;
 						}
@@ -175,9 +215,15 @@ class Ocaml implements Sandbox {
 			} else {
 				progress?.set?.(1);
 				if (!this.isOperationActive(operation)) return;
+				this.completeOperation(operation);
 				resolve();
 			}
 		});
+		try {
+			this.bindAbortSignal(operation, signal);
+		} catch (error) {
+			this.terminate(error);
+		}
 		return loading.finally(() => this.completeOperation(operation));
 	}
 
@@ -213,6 +259,8 @@ class Ocaml implements Sandbox {
 		_args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
+		const signal = options.signal;
+		if (signal?.aborted) throw this.abortReason(signal, 'execute');
 		const operation = this.beginOperation('execute');
 		try {
 			if (!this.worker) throw 'Worker not loaded';
@@ -229,7 +277,13 @@ class Ocaml implements Sandbox {
 				const runUid = ++this.uid;
 				const workerOperation = this.workerSession.beginRun(worker, reject);
 				let handler: (event: Event & { data: any }) => void;
+				const ownsRun = () =>
+					this.isOperationActive(operation) &&
+					this.worker === worker &&
+					worker.onmessage === handler &&
+					runUid === this.uid;
 				const failRun = (error: unknown, disposeWorker = false) => {
+					if (!ownsRun()) return;
 					this.finishExplicitStdin(operation);
 					if (worker.onmessage === handler) worker.onmessage = null;
 					this.workerSession.complete(workerOperation);
@@ -238,60 +292,36 @@ class Ocaml implements Sandbox {
 					this.exit = true;
 					this.waitingForInput = false;
 					this.pendingEof = false;
+					this.completeOperation(operation);
 					reject(error);
 				};
 				handler = (event) => {
-					if (
-						!this.isOperationActive(operation) ||
-						this.worker !== worker ||
-						worker.onmessage !== handler ||
-						runUid !== this.uid
-					) {
+					if (!ownsRun()) {
 						return;
 					}
 					try {
 						const { output, results, error, diagnostic, progress, runtime } =
 							event.data;
 						reportWorkerProgress(_prog, progress);
-						if (
-							!this.isOperationActive(operation) ||
-							this.worker !== worker ||
-							worker.onmessage !== handler ||
-							runUid !== this.uid
-						) {
+						if (!ownsRun()) {
 							return;
 						}
 						if (event.data?.buffer && !hasExplicitStdin) {
 							this.waitingForInput = true;
 							this.flushPendingInput();
-							if (
-								!this.isOperationActive(operation) ||
-								this.worker !== worker ||
-								worker.onmessage !== handler ||
-								runUid !== this.uid
-							) {
+							if (!ownsRun()) {
 								return;
 							}
 						}
 						if (output) {
 							this.output?.(output);
-							if (
-								!this.isOperationActive(operation) ||
-								this.worker !== worker ||
-								worker.onmessage !== handler ||
-								runUid !== this.uid
-							) {
+							if (!ownsRun()) {
 								return;
 							}
 						}
 						if (diagnostic) {
 							this.oncompilerdiagnostic?.(diagnostic);
-							if (
-								!this.isOperationActive(operation) ||
-								this.worker !== worker ||
-								worker.onmessage !== handler ||
-								runUid !== this.uid
-							) {
+							if (!ownsRun()) {
 								return;
 							}
 						}
@@ -313,6 +343,7 @@ class Ocaml implements Sandbox {
 							this.waitingForInput = false;
 							this.pendingEof = false;
 							this.workerSession.complete(workerOperation);
+							this.completeOperation(operation);
 							resolve(results as boolean | string);
 							return;
 						}
@@ -322,6 +353,15 @@ class Ocaml implements Sandbox {
 					}
 				};
 				worker.onmessage = handler;
+				try {
+					this.bindAbortSignal(operation, signal);
+				} catch (error) {
+					failRun(error);
+					return;
+				}
+				if (!ownsRun()) {
+					return;
+				}
 				this.begin = Date.now();
 				try {
 					worker.postMessage({
