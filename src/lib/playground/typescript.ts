@@ -1,4 +1,5 @@
 import { resolveTypeScriptModuleUrl, type PlaygroundRuntimeAssets } from '$lib/playground/assets';
+import { BusyError } from '@wasm-idle/core';
 import {
 	resolveSandboxExecutionArgs,
 	type CompilerDiagnostic,
@@ -128,15 +129,23 @@ class TypeScriptSandbox implements Sandbox {
 		args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
+		if (!this.worker) return Promise.reject('Worker not loaded');
+		if (!this.exit) {
+			return Promise.reject(
+				new BusyError(`${this.languageLabel} runtime already has an active run`, {
+					runtimeId: this.language
+				})
+			);
+		}
+		const worker = this.worker;
+		const { programArgs } = resolveSandboxExecutionArgs(this.language, args, options);
 		this.exit = false;
 		return new Promise<boolean | string>((resolve, reject) => {
-			if (!this.worker) return reject('Worker not loaded');
-			const { programArgs } = resolveSandboxExecutionArgs(this.language, args, options);
 			const _uid = ++this.uid;
-			const operation = this.workerSession.beginRun(this.worker, reject);
+			const operation = this.workerSession.beginRun(worker, reject);
 			const handler = (event: Event & { data: any }) => {
-				if (!this.worker) return reject('Worker not loaded');
-				if (_uid !== this.uid) return (this.worker.onmessage = null);
+				if (this.worker !== worker) return reject('Worker not loaded');
+				if (_uid !== this.uid) return (worker.onmessage = null);
 				const { output, results, error, buffer, diagnostic, progress } = event.data;
 				if (buffer) {
 					this.waitingForInput = true;
@@ -162,9 +171,9 @@ class TypeScriptSandbox implements Sandbox {
 					reject(error);
 				}
 			};
-			this.worker.onmessage = handler;
+			worker.onmessage = handler;
 			this.begin = Date.now();
-			this.worker.postMessage({
+			worker.postMessage({
 				code,
 				prepare,
 				buffer: this.buffer,

@@ -142,6 +142,39 @@ console.log(value);`;
 		);
 	});
 
+	it.each(['TYPESCRIPT', 'JAVASCRIPT'] as const)(
+		'rejects an overlapping %s run without disturbing the active execution',
+		async (language) => {
+			const sandbox = new TypeScriptSandbox(language);
+			const worker = new MockWorker();
+			worker.postMessage.mockImplementation(() => undefined);
+			sandbox.worker = worker as unknown as Worker;
+
+			const firstRun = sandbox.run('first()', false);
+			const firstHandler = worker.onmessage;
+			await expect(sandbox.run('second()', false)).rejects.toMatchObject({
+				name: 'BusyError',
+				code: 'busy',
+				runtimeId: language
+			});
+
+			expect(worker.postMessage).toHaveBeenCalledOnce();
+			expect(worker.onmessage).toBe(firstHandler);
+			expect(worker.terminate).not.toHaveBeenCalled();
+
+			firstHandler?.({ data: { results: true } } as MessageEvent<any>);
+			await expect(firstRun).resolves.toBe(true);
+
+			worker.postMessage.mockImplementationOnce(() => {
+				queueMicrotask(() => {
+					worker.onmessage?.({ data: { results: true } } as MessageEvent<any>);
+				});
+			});
+			await expect(sandbox.run('retry()', false)).resolves.toBe(true);
+			expect(worker.postMessage).toHaveBeenCalledTimes(2);
+		}
+	);
+
 	it('rejects load when no wasm-typescript module url is configured', async () => {
 		publicEnv.PUBLIC_WASM_TYPESCRIPT_MODULE_URL = '';
 		const sandbox = new TypeScriptSandbox('TYPESCRIPT');
