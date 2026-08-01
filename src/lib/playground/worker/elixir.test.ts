@@ -488,6 +488,82 @@ describe('Elixir worker', () => {
 		);
 	});
 
+	it.each([
+		{
+			name: 'non-empty Elixir',
+			language: 'ELIXIR',
+			stdin: '5\n',
+			code: 'IO.inspect({IO.gets(""), IO.gets("")})',
+			action: 'eval_elixir',
+			inputLiteral: '"5\\n"',
+			eofPattern: /\bnil\b/g,
+			eofCount: 1
+		},
+		{
+			name: 'empty Elixir',
+			language: 'ELIXIR',
+			stdin: '',
+			code: 'IO.inspect({IO.gets(""), IO.gets("")})',
+			action: 'eval_elixir',
+			inputLiteral: null,
+			eofPattern: /\bnil\b/g,
+			eofCount: 2
+		},
+		{
+			name: 'non-empty Erlang',
+			language: 'ERLANG',
+			stdin: '73\n',
+			code: 'io:format("~p", [{io:get_line(""), io:get_line("")}]).',
+			action: 'eval_erlang',
+			inputLiteral: '"73\\n"',
+			eofPattern: /\beof\b/g,
+			eofCount: 1
+		},
+		{
+			name: 'empty Erlang',
+			language: 'ERLANG',
+			stdin: '',
+			code: 'io:format("~p", [{io:get_line(""), io:get_line("")}]).',
+			action: 'eval_erlang',
+			inputLiteral: null,
+			eofPattern: /\beof\b/g,
+			eofCount: 2
+		}
+	])('treats $name explicit stdin as authoritative through EOF', async (testCase) => {
+		const buffer = new SharedArrayBuffer(1024);
+		await import('./elixir');
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				bundleUrl: '/runtime/elixir/bundle.avm',
+				log: true
+			}
+		});
+		await Promise.resolve();
+
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: testCase.code,
+				language: testCase.language,
+				prepare: false,
+				buffer,
+				stdin: testCase.stdin,
+				log: true
+			}
+		});
+		await Promise.resolve();
+
+		expect(waitForBufferedStdinMock).not.toHaveBeenCalled();
+		expect((globalThis as any).postMessage).not.toHaveBeenCalledWith({ buffer: true });
+		const [, payload] = lastModule.current.rawCall.mock.calls.at(-1);
+		const [action, rewrittenSource] = JSON.parse(payload);
+		expect(action).toBe(testCase.action);
+		if (testCase.inputLiteral) {
+			expect(rewrittenSource).toContain(testCase.inputLiteral);
+		}
+		expect(rewrittenSource.match(testCase.eofPattern) ?? []).toHaveLength(testCase.eofCount);
+	});
+
 	it('evaluates Erlang expressions and bridges io:get_line stdin calls', async () => {
 		const buffer = new SharedArrayBuffer(1024);
 		await import('./elixir');

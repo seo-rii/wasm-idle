@@ -261,6 +261,17 @@ class Elixir implements Sandbox {
 		}
 	}
 
+	private resetExplicitStdinState() {
+		this.pendingInput = [];
+		this.pendingEof = false;
+		this.waitingForInput = false;
+		try {
+			resetBufferedStdin(this.buffer);
+		} catch {
+			// Explicit stdin never consumes the shared terminal buffer.
+		}
+	}
+
 	run(
 		code: string,
 		prepare: boolean,
@@ -286,6 +297,7 @@ class Elixir implements Sandbox {
 				signal.reason ?? new DOMException(`${runtimeLabel} execution aborted`, 'AbortError')
 			);
 		}
+		const hasExplicitStdin = !prepare && options.stdin !== undefined;
 		this.exit = false;
 		return new Promise<boolean | string>((resolve, reject) => {
 			const activeUid = ++this.uid;
@@ -301,6 +313,7 @@ class Elixir implements Sandbox {
 						// Cleanup must not replace the execution result.
 					}
 				}
+				if (hasExplicitStdin) this.resetExplicitStdinState();
 				if (this.activeRunCleanup === cleanup) this.activeRunCleanup = null;
 			};
 			const rejectRun = (reason?: unknown) => {
@@ -311,6 +324,7 @@ class Elixir implements Sandbox {
 				reject(reason);
 			};
 			this.activeRunCleanup = cleanup;
+			if (hasExplicitStdin) this.resetExplicitStdinState();
 			const operation = this.workerSession.beginRun(worker, rejectRun);
 			let handler: (event: Event & { data: any }) => void;
 			const ownsRun = () =>
@@ -332,7 +346,7 @@ class Elixir implements Sandbox {
 						event.data || {},
 						'results'
 					);
-					if (buffer) {
+					if (buffer && !hasExplicitStdin) {
 						this.waitingForInput = true;
 						this.flushPendingInput();
 					}

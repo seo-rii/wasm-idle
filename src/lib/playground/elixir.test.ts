@@ -486,12 +486,18 @@ describe('Elixir sandbox', () => {
 
 	it('keeps Elixir idle when run is called without a loaded worker', async () => {
 		const sandbox = new Elixir();
+		sandbox.write('preserved input\n');
+		sandbox.eof();
 
-		await expect(sandbox.run('IO.puts("missing")', false)).rejects.toBe('Worker not loaded');
+		await expect(
+			sandbox.run('IO.puts("missing")', false, true, undefined, [], { stdin: '' })
+		).rejects.toBe('Worker not loaded');
 		expect(sandbox.uid).toBe(0);
 		expect(sandbox.exit).toBe(true);
 		expect(sandbox.prepared).toBe(false);
 		expect(sandbox.hasExecuted).toBe(false);
+		expect(sandbox.pendingInput).toEqual(['preserved input\n']);
+		expect(sandbox.pendingEof).toBe(true);
 	});
 
 	it('releases Elixir operation ownership after synchronous dispatch failure', async () => {
@@ -506,11 +512,19 @@ describe('Elixir sandbox', () => {
 		worker.postMessage.mockImplementationOnce(() => {
 			throw dispatchError;
 		});
+		sandbox.write('queued before explicit dispatch\n');
+		sandbox.eof();
 
-		await expect(sandbox.run('IO.puts("fail")', false)).rejects.toBe(dispatchError);
+		await expect(
+			sandbox.run('IO.puts("fail")', false, true, undefined, [], { stdin: '' })
+		).rejects.toBe(dispatchError);
 		expect(worker.terminate).toHaveBeenCalledOnce();
 		expect(sandbox.worker).toBeUndefined();
 		expect(sandbox.exit).toBe(true);
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.pendingEof).toBe(false);
+		expect(sandbox.waitingForInput).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
 
 		await expect(
 			sandbox.load({
@@ -522,6 +536,87 @@ describe('Elixir sandbox', () => {
 		await expect(sandbox.run('IO.puts("retry")', false)).resolves.toBe(':ok');
 		expect(workerInstances).toHaveLength(2);
 	});
+
+	it('clears explicit stdin state after a worker execution error', async () => {
+		const sandbox = new Elixir();
+		await sandbox.load({
+			elixir: {
+				bundleUrl: '/runtime/elixir/bundle.avm'
+			}
+		});
+		const worker = workerInstances[0];
+		worker.postMessage.mockImplementationOnce(() => undefined);
+		const running = sandbox.run('IO.puts("fail")', false, true, undefined, [], {
+			stdin: 'explicit input\n'
+		});
+		sandbox.write('queued during failed explicit run\n');
+		sandbox.eof();
+
+		worker.onmessage?.({ data: { error: 'Elixir execution failed' } } as MessageEvent<any>);
+
+		await expect(running).rejects.toBe('Elixir execution failed');
+		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.pendingEof).toBe(false);
+		expect(sandbox.waitingForInput).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
+		await expect(sandbox.run('IO.puts("retry")', false)).resolves.toBe(':ok');
+	});
+
+	it.each(['script error', 'message error'])(
+		'clears explicit stdin state after an Elixir worker $kind',
+		async (kind) => {
+			const sandbox = new Elixir();
+			const output = vi.fn();
+			sandbox.output = output;
+			await sandbox.load({
+				elixir: {
+					bundleUrl: '/runtime/elixir/bundle.avm'
+				}
+			});
+			const worker = workerInstances[0];
+			worker.postMessage.mockImplementationOnce(() => undefined);
+			const running = sandbox.run('IO.puts("fail")', false, true, undefined, [], {
+				stdin: 'explicit input\n'
+			});
+			const staleHandler = worker.onmessage;
+			sandbox.write('queued during failed explicit run\n');
+			sandbox.eof();
+
+			if (kind === 'script error') {
+				worker.onerror?.({
+					message: 'run crashed',
+					filename: '/worker/elixir.js',
+					lineno: 12,
+					colno: 8
+				} as ErrorEvent);
+			} else {
+				worker.onmessageerror?.({ data: null } as MessageEvent<any>);
+			}
+
+			await expect(running).rejects.toContain(
+				kind === 'script error'
+					? 'Elixir worker script error: run crashed (/worker/elixir.js:12:8)'
+					: 'Elixir worker message deserialization failed'
+			);
+			expect(worker.terminate).toHaveBeenCalledOnce();
+			expect(sandbox.worker).toBeUndefined();
+			expect(sandbox.pendingInput).toEqual([]);
+			expect(sandbox.pendingEof).toBe(false);
+			expect(sandbox.waitingForInput).toBe(false);
+			expect(readBufferedStdin(sandbox.buffer)).toBe('');
+			staleHandler?.({ data: { output: 'stale\n', results: ':stale' } } as MessageEvent<any>);
+			expect(output).not.toHaveBeenCalled();
+
+			await sandbox.load({
+				elixir: {
+					bundleUrl: '/runtime/elixir/bundle.avm'
+				}
+			});
+			await expect(sandbox.run('IO.puts("retry")', false)).resolves.toBe(':ok');
+			expect(workerInstances).toHaveLength(2);
+		}
+	);
 
 	it('rejects a run when the streaming output callback throws and permits a clean retry', async () => {
 		const sandbox = new Elixir();
@@ -536,12 +631,20 @@ describe('Elixir sandbox', () => {
 			}
 		});
 		const worker = workerInstances[0];
-		const running = sandbox.run('IO.puts("fail")', false);
+		const running = sandbox.run('IO.puts("fail")', false, true, undefined, [], {
+			stdin: ''
+		});
 		const staleHandler = worker.onmessage;
+		sandbox.write('queued during callback failure\n');
+		sandbox.eof();
 
 		await expect(running).rejects.toBe(callbackError);
 		expect(worker.terminate).toHaveBeenCalledOnce();
 		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.pendingEof).toBe(false);
+		expect(sandbox.waitingForInput).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
 		staleHandler?.({ data: { output: 'stale\n', results: ':stale' } } as MessageEvent<any>);
 		expect(failedOutput).not.toHaveBeenCalledWith('stale\n');
 
@@ -574,13 +677,22 @@ describe('Elixir sandbox', () => {
 		});
 		await sandbox.load(testCase.runtimeAssets);
 		const worker = workerInstances[0];
+		const running = sandbox.run('result_output_failure', false, true, undefined, [], {
+			stdin: ''
+		});
+		sandbox.write('queued during result callback failure\n');
+		sandbox.eof();
 
-		await expect(sandbox.run('result_output_failure', false)).rejects.toBe(callbackError);
+		await expect(running).rejects.toBe(callbackError);
 		expect(worker.terminate).toHaveBeenCalledOnce();
 		expect(sandbox.worker).toBeUndefined();
 		expect(sandbox.exit).toBe(true);
 		expect(sandbox.prepared).toBe(false);
 		expect(sandbox.hasExecuted).toBe(false);
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.pendingEof).toBe(false);
+		expect(sandbox.waitingForInput).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
 
 		sandbox.output = vi.fn();
 		await sandbox.load(testCase.runtimeAssets);
@@ -669,12 +781,21 @@ describe('Elixir sandbox', () => {
 		});
 		const worker = workerInstances[0];
 		worker.postMessage.mockImplementationOnce(() => undefined);
-		const running = sandbox.run('IO.puts("wait")', false);
+		const running = sandbox.run('IO.puts("wait")', false, true, undefined, [], {
+			stdin: ''
+		});
+		sandbox.write('discarded input\n');
+		sandbox.eof();
 
 		sandbox.kill();
+		sandbox.write('fresh input\n');
 
 		await expect(running).rejects.toBe('Process terminated');
 		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.pendingInput).toEqual(['fresh input\n']);
+		expect(sandbox.pendingEof).toBe(false);
+		expect(sandbox.waitingForInput).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
 		await expect(
 			sandbox.load({
 				elixir: {
@@ -697,11 +818,14 @@ describe('Elixir sandbox', () => {
 		const uid = sandbox.uid;
 		const controller = new AbortController();
 		const reason = new Error('stop before Elixir execution');
+		sandbox.write('preserved pre-abort input\n');
+		sandbox.eof();
 		controller.abort(reason);
 
 		await expect(
 			sandbox.run('IO.puts("never")', false, true, undefined, [], {
-				signal: controller.signal
+				signal: controller.signal,
+				stdin: ''
 			})
 		).rejects.toBe(reason);
 		expect(worker.postMessage).toHaveBeenCalledOnce();
@@ -709,6 +833,8 @@ describe('Elixir sandbox', () => {
 		expect(worker.terminate).not.toHaveBeenCalled();
 		expect(sandbox.uid).toBe(uid);
 		expect(sandbox.exit).toBe(true);
+		expect(sandbox.pendingInput).toEqual(['preserved pre-abort input\n']);
+		expect(sandbox.pendingEof).toBe(true);
 	});
 
 	it('aborts only the active Elixir execution and permits a clean retry', async () => {
@@ -727,9 +853,12 @@ describe('Elixir sandbox', () => {
 		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
 		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
 		const running = sandbox.run('IO.puts("wait")', false, true, undefined, [], {
-			signal: controller.signal
+			signal: controller.signal,
+			stdin: ''
 		});
 		const staleHandler = worker.onmessage;
+		sandbox.write('queued during aborted explicit run\n');
+		sandbox.eof();
 
 		controller.abort(reason);
 
@@ -737,6 +866,10 @@ describe('Elixir sandbox', () => {
 		expect(worker.terminate).toHaveBeenCalledOnce();
 		expect(sandbox.worker).toBeUndefined();
 		expect(sandbox.exit).toBe(true);
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.pendingEof).toBe(false);
+		expect(sandbox.waitingForInput).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
 		const abortRegistrations = addEventListener.mock.calls.filter(
 			(registration: unknown[]) => registration[0] === 'abort'
 		);
@@ -786,6 +919,87 @@ describe('Elixir sandbox', () => {
 		expect(worker.terminate).not.toHaveBeenCalled();
 		await expect(sandbox.run('IO.puts("again")', false)).resolves.toBe(':ok');
 	});
+
+	it.each([
+		{
+			name: 'Elixir',
+			language: 'ELIXIR' as const,
+			runtimeAssets: { elixir: { bundleUrl: '/runtime/elixir/bundle.avm' } }
+		},
+		{
+			name: 'Erlang',
+			language: 'ERLANG' as const,
+			runtimeAssets: { erlang: { bundleUrl: '/runtime/erlang/bundle.avm' } }
+		}
+	])(
+		'isolates empty explicit stdin from the $name terminal queue and following run',
+		async (testCase) => {
+			const sandbox = new Elixir(testCase.language);
+			await sandbox.load(testCase.runtimeAssets);
+			const worker = workerInstances[0];
+			let explicitMessage: any;
+			let explicitSnapshot:
+				| {
+						pendingInput: string[];
+						pendingEof: boolean;
+						waitingForInput: boolean;
+						bufferedInput: string | null;
+				  }
+				| undefined;
+			sandbox.write('queued before explicit run\n');
+			sandbox.eof();
+			worker.postMessage.mockImplementationOnce((message: any) => {
+				explicitMessage = message;
+				sandbox.write('queued during explicit run\n');
+				sandbox.eof();
+				worker.onmessage?.({ data: { buffer: true } } as MessageEvent<any>);
+				explicitSnapshot = {
+					pendingInput: [...sandbox.pendingInput],
+					pendingEof: sandbox.pendingEof,
+					waitingForInput: sandbox.waitingForInput,
+					bufferedInput: readBufferedStdin(sandbox.buffer)
+				};
+				worker.onmessage?.({ data: { results: true } } as MessageEvent<any>);
+			});
+
+			await expect(
+				sandbox.run('stdin_read', false, true, undefined, [], { stdin: '' })
+			).resolves.toBe(true);
+			expect(explicitMessage).toEqual(
+				expect.objectContaining({
+					language: testCase.language,
+					stdin: ''
+				})
+			);
+			expect(explicitSnapshot).toEqual({
+				pendingInput: ['queued during explicit run\n'],
+				pendingEof: true,
+				waitingForInput: false,
+				bufferedInput: ''
+			});
+			expect(sandbox.pendingInput).toEqual([]);
+			expect(sandbox.pendingEof).toBe(false);
+			expect(sandbox.waitingForInput).toBe(false);
+			expect(readBufferedStdin(sandbox.buffer)).toBe('');
+
+			let waitingBeforeFreshInput = false;
+			let bufferedBeforeFreshInput: string | null = null;
+			let bufferedAfterFreshInput: string | null = null;
+			worker.postMessage.mockImplementationOnce(() => {
+				worker.onmessage?.({ data: { buffer: true } } as MessageEvent<any>);
+				waitingBeforeFreshInput = sandbox.waitingForInput;
+				bufferedBeforeFreshInput = readBufferedStdin(sandbox.buffer);
+				sandbox.write('fresh input\n');
+				bufferedAfterFreshInput = readBufferedStdin(sandbox.buffer);
+				worker.onmessage?.({ data: { results: true } } as MessageEvent<any>);
+			});
+
+			await expect(sandbox.run('stdin_read', false)).resolves.toBe(true);
+			expect(waitingBeforeFreshInput).toBe(true);
+			expect(bufferedBeforeFreshInput).toBe('');
+			expect(bufferedAfterFreshInput).toBe('fresh input\n');
+		}
+	);
 
 	it('flushes queued terminal input into the worker stdin buffer when Elixir requests it', async () => {
 		const sandbox = new Elixir();

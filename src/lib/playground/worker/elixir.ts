@@ -675,8 +675,8 @@ self.onmessage = async (event: { data: any }) => {
 			evalCode = rewritten;
 		}
 		if (evalLanguage === 'ERLANG' && currentStdinBuffer && /\bio:/.test(code)) {
-			let bufferedInput = '';
-			let reachedEof = false;
+			let bufferedInput = typeof stdin === 'string' ? stdin : '';
+			let reachedEof = typeof stdin === 'string';
 			const pullStdinChunk = () => {
 				if (reachedEof) return false;
 				const nextChunk = waitForBufferedStdin(currentStdinBuffer, () =>
