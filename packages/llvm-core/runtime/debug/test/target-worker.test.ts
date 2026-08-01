@@ -185,6 +185,32 @@ describe('WAMR target worker launch', () => {
 		handleTargetWorkerMessage({ type: 'dispose', generation: active.generation });
 	});
 
+	it('ignores a replayed initialization for the active target generation', async () => {
+		workerMocks.lifecycle = 'pending';
+		const { handleTargetWorkerMessage } = await loadTargetWorker();
+		const active = initializeMessage('target-worker-replay');
+		const stdout = new SharedByteQueue(active.stdout);
+		const stderr = new SharedByteQueue(active.stderr);
+
+		handleTargetWorkerMessage(active);
+		await vi.waitFor(() =>
+			expect(workerMocks.postWorkerMessage).toHaveBeenCalledWith({
+				type: 'ready',
+				worker: 'target',
+				generation: active.generation
+			})
+		);
+		handleTargetWorkerMessage(initializeMessage(active.generation));
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(workerMocks.callMain).toHaveBeenCalledOnce();
+		expect(workerMocks.postWorkerError).not.toHaveBeenCalled();
+		expect(stdout.closed).toBe(false);
+		expect(stderr.closed).toBe(false);
+
+		handleTargetWorkerMessage({ type: 'dispose', generation: active.generation });
+	});
+
 	it('passes cwd, environment, and guest arguments to the debug runtime', async () => {
 		const { handleTargetWorkerMessage } = await loadTargetWorker();
 		const message = initializeMessage('target-worker-launch');

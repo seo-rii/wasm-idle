@@ -174,11 +174,13 @@ async function initialize(message: TargetWorkerInitializeMessage) {
 export function handleTargetWorkerMessage(message: DebugWorkerInboundMessage) {
 	if (message.type === 'initialize-target') {
 		if (activeGeneration) {
-			postWorkerError(
-				'target',
-				message.generation,
-				new Error('target worker is already initialized')
-			);
+			if (message.generation !== activeGeneration) {
+				postWorkerError(
+					'target',
+					message.generation,
+					new Error('target worker is already initialized')
+				);
+			}
 			return;
 		}
 		void initialize(message).catch((error) => {

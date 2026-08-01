@@ -120,6 +120,16 @@ async function initialize(message: LldbWorkerInitializeMessage) {
 
 export function handleLldbWorkerMessage(message: DebugWorkerInboundMessage) {
 	if (message.type === 'initialize-lldb') {
+		if (activeGeneration) {
+			if (message.generation !== activeGeneration) {
+				postWorkerError(
+					'lldb',
+					message.generation,
+					new Error('LLDB worker is already initialized')
+				);
+			}
+			return;
+		}
 		void initialize(message).catch((error) =>
 			postWorkerError('lldb', message.generation, error)
 		);

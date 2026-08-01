@@ -124,8 +124,11 @@ The target Worker repeats the working-directory, collection-shape, value-type, a
 argument/environment checks as a defense-in-depth boundary for direct worker messages. It performs
 that validation before claiming the session generation, creating transports, loading WAMR, or
 mounting files, so a rejected message neither executes runtime code nor leaves the Worker occupied.
-Once a target generation is active, a duplicate initialization is rejected before starting another
-initialization lifecycle; its failure cannot close the live target's stdout or stderr queues.
+Once a target generation is active, initialization for a competing generation is rejected before
+starting another lifecycle; its failure cannot close the live target's stdout or stderr queues.
+Both Workers treat an initialization replay carrying their already-active generation as idempotent:
+they neither start the runtime twice nor emit a fatal current-generation error. A competing
+generation is still rejected explicitly.
 The same preflight-validated `/workspace/...` files provided to LLDB are mounted into WAMR's
 MEMFS before launch, so guest WASI file access observes the workspace used to compile the DWARF
 artifact. File paths must remain canonical beneath `/workspace`, and `/workspace/program.wasm` is

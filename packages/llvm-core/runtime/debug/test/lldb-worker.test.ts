@@ -85,7 +85,9 @@ describe('LLDB worker lifecycle', () => {
 		await vi.waitFor(() =>
 			expect(workerMocks.callMain).toHaveBeenCalledWith([message.generation])
 		);
+		handleLldbWorkerMessage(message);
 		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(workerMocks.callMain).toHaveBeenCalledOnce();
 		expect(workerMocks.postWorkerError).not.toHaveBeenCalled();
 
 		const onExit = workerMocks.moduleOptions?.onExit;
