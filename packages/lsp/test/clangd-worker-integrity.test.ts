@@ -9,7 +9,8 @@ vi.mock('@wasm-idle/llvm-core', () => ({
 	decompressGzip: mocks.decompressGzip
 }));
 
-vi.mock('@wasm-idle/core', () => ({
+vi.mock('@wasm-idle/core', async (importOriginal) => ({
+	...(await importOriginal<typeof import('@wasm-idle/core')>()),
 	verifyRuntimeAssetIntegrity: mocks.verifyRuntimeAssetIntegrity
 }));
 
@@ -32,6 +33,7 @@ class FakeClangdWorkerScope {
 
 describe('clangd worker asset integrity', () => {
 	let scope: FakeClangdWorkerScope;
+	let getRegisterCalls: () => unknown[][];
 
 	beforeEach(async () => {
 		vi.resetModules();
@@ -40,6 +42,9 @@ describe('clangd worker asset integrity', () => {
 		scope = new FakeClangdWorkerScope();
 		vi.stubGlobal('self', scope);
 		vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:clangd-runtime');
+		const { ClangdWorkspaceFileRegistry } = await import('../src/clangd/workspace.js');
+		const registerWorkspaceFile = vi.spyOn(ClangdWorkspaceFileRegistry.prototype, 'register');
+		getRegisterCalls = () => registerWorkspaceFile.mock.calls;
 		await import('../src/clangd/worker.js');
 	});
 
@@ -62,6 +67,32 @@ describe('clangd worker asset integrity', () => {
 			message: 'clangd init requires an explicit baseUrl'
 		});
 		expect(mocks.decompressGzip).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		'/workspace/../../usr/include/injected.hpp',
+		'/workspaceevil/prefix.cpp',
+		'/tmp/outside.cpp',
+		'file:///workspace/remote.cpp',
+		'include/./nested.hpp',
+		'include/bad\0.hpp',
+		42
+	])('rejects an unsafe direct sync-file message for %s', async (path) => {
+		await scope.dispatch({ type: 'sync-file', name: path });
+
+		expect(scope.messages).toEqual([
+			{
+				type: 'error',
+				message: expect.stringContaining('Failed to sync clangd workspace file')
+			}
+		]);
+	});
+
+	it('validates but does not reserve a workspace file before runtime initialization', async () => {
+		await scope.dispatch({ type: 'sync-file', name: 'include\\header.hpp' });
+
+		expect(scope.messages).toEqual([]);
+		expect(getRegisterCalls()).toHaveLength(0);
 	});
 
 	it('verifies decompressed Wasm bytes before importing the runtime module', async () => {

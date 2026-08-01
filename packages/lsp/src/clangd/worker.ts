@@ -14,6 +14,7 @@ import {
 } from './config.js';
 import { JsonStream } from '@wasm-idle/llvm-core/core/json-stream';
 import type { ClangdWorkerInboundMessage } from './protocol.js';
+import { ClangdWorkspaceFileRegistry, normalizeClangdWorkspaceFilePath } from './workspace.js';
 
 interface ClangdWorkerScope {
 	addEventListener(
@@ -73,6 +74,7 @@ const stdinReady = async () => {
 
 let writer: BrowserMessageWriterInstance | null = null;
 let clangdRuntime: any = null;
+const workspaceFiles = new ClangdWorkspaceFileRegistry();
 
 const stdout = (charCode: number) => {
 	const json = jsonStream.insert(charCode);
@@ -98,20 +100,34 @@ const onAbort = () => {
 };
 
 const syncWorkspaceFile = (filePath: string) => {
+	const normalizedPath = normalizeClangdWorkspaceFilePath(filePath);
 	if (!clangdRuntime) return;
-	const normalizedFilePath = filePath.startsWith(CLANGD_WORKSPACE_PATH)
-		? filePath
-		: `${CLANGD_WORKSPACE_PATH}/${filePath.replace(/^\/+/, '')}`;
-	const lastSlash = normalizedFilePath.lastIndexOf('/');
+	const registered = workspaceFiles.register(normalizedPath);
+	const lastSlash = registered.path.lastIndexOf('/');
 	const directoryPath =
-		lastSlash > 0 ? normalizedFilePath.slice(0, lastSlash) : CLANGD_WORKSPACE_PATH;
-	clangdRuntime.FS.mkdirTree(directoryPath);
-	clangdRuntime.FS.writeFile(normalizedFilePath, '');
+		lastSlash > 0 ? registered.path.slice(0, lastSlash) : CLANGD_WORKSPACE_PATH;
+	try {
+		clangdRuntime.FS.mkdirTree(directoryPath);
+		clangdRuntime.FS.writeFile(registered.path, '');
+	} catch (error) {
+		if (registered.added) workspaceFiles.unregister(registered.path);
+		throw error;
+	}
 };
 
 self.addEventListener('message', async (event: MessageEvent<ClangdWorkerInboundMessage>) => {
-	if (event.data?.type === 'sync-file' && typeof event.data?.name === 'string') {
-		syncWorkspaceFile(event.data.name);
+	if (event.data?.type === 'sync-file') {
+		try {
+			if (typeof event.data.name !== 'string') {
+				throw new TypeError('clangd sync-file name must be a string');
+			}
+			syncWorkspaceFile(event.data.name);
+		} catch (error) {
+			self.postMessage({
+				type: 'error',
+				message: `Failed to sync clangd workspace file: ${error instanceof Error ? error.message : String(error)}`
+			});
+		}
 		return;
 	}
 	if (event.data?.type !== 'init') return;

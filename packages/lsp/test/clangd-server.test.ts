@@ -115,11 +115,27 @@ describe('getCppLanguageServer', () => {
 		expect(status).toHaveBeenCalledWith({ state: 'ready' });
 
 		handle.syncFile?.('/workspace/problem.cpp');
+		handle.syncFile?.('include\\header.hpp');
 
 		expect(worker?.messages[1]).toEqual({
 			type: 'sync-file',
 			name: '/workspace/problem.cpp'
 		});
+		expect(worker?.messages[2]).toEqual({
+			type: 'sync-file',
+			name: '/workspace/include/header.hpp'
+		});
+		for (const path of [
+			'/workspace/../../usr/include/injected.hpp',
+			'/workspaceevil/prefix.cpp',
+			'/tmp/outside.cpp',
+			'file:///workspace/remote.cpp',
+			'include/./nested.hpp',
+			'include/bad\0.hpp'
+		]) {
+			expect(() => handle.syncFile?.(path)).toThrowError();
+		}
+		expect(worker?.messages).toHaveLength(3);
 
 		handle.dispose();
 		expect(worker?.terminated).toBe(true);

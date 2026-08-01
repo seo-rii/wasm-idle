@@ -14,6 +14,7 @@ import type {
 import { createLanguageServerProgressReporter } from '../worker-client.js';
 import type { ClangdStatus } from './config.js';
 import type { ClangdPreloadedAssets, ClangdWorkerOutboundMessage } from './protocol.js';
+import { ClangdWorkspaceFileRegistry } from './workspace.js';
 
 export interface ClangdLanguageServerOptions extends EditorLanguageServerRuntimeOptions {
 	createWorker?: () => Worker;
@@ -198,12 +199,19 @@ export async function createClangdLanguageServer(
 	);
 	const reader = new BrowserMessageReader(worker);
 	const writer = new BrowserMessageWriter(worker);
+	const workspaceFiles = new ClangdWorkspaceFileRegistry();
 
 	let disposed = false;
 	return {
 		transport: { reader, writer },
 		syncFile: (path: string) => {
-			worker.postMessage({ type: 'sync-file', name: path });
+			const registered = workspaceFiles.register(path);
+			try {
+				worker.postMessage({ type: 'sync-file', name: registered.path });
+			} catch (error) {
+				if (registered.added) workspaceFiles.unregister(registered.path);
+				throw error;
+			}
 		},
 		dispose: () => {
 			if (disposed) return;
