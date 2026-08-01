@@ -193,14 +193,11 @@ describe('syncWasmSwiftAssets', () => {
 	});
 
 	it('loads Swift contracts from wasm-idle', async () => {
-		const [source, declarations] = await Promise.all([
-			readFile(path.resolve('scripts', 'sync-wasm-swift.mjs'), 'utf8'),
-			readFile(path.resolve('scripts', 'sync-wasm-swift.d.mts'), 'utf8')
-		]);
+		const source = await readFile(path.resolve('scripts', 'sync-wasm-swift.mjs'), 'utf8');
 
 		expect(source).toContain("from './llvm-contracts/swift/runtime-manifest.mjs'");
 		expect(source).toContain("from './llvm-contracts/swift/runtime-build-info.mjs'");
-		expect(`${source}\n${declarations}`).not.toMatch(/from\s+['"]@seo-rii\/wasm-llvm/u);
+		expect(source).not.toMatch(/from\s+['"]@seo-rii\/wasm-llvm/u);
 		expect(validateSwiftRuntimeContract(createSwiftRuntimeContract())).toEqual([]);
 	});
 

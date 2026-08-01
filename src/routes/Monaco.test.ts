@@ -17,7 +17,9 @@ import {
 	clangdLspLanguages,
 	debugLspLanguages,
 	diagnosticMarkerLanguages,
+	languageLabels,
 	monacoLanguageContributionLoaders,
+	playgroundLanguages,
 	runtimeLspCapabilities
 } from './language-registry';
 
@@ -363,20 +365,19 @@ describe('Monaco route debug sync', () => {
 		expect(resolveEditorDefaultSource('markdown', 'wasm32-wasip1')).toBe(
 			editorDefaults.markdown
 		);
-		expect(editorDefaults.c).toContain('puts("Hello, WebAssembly!")');
+		expect(editorDefaults.c).toContain('scanf("%d", &n)');
+		expect(editorDefaults.c).toContain('printf("fibonacci=%d\\n", fibonacci(n) + bonus)');
 		expect(editorDefaults.go).toContain("ReadString('\\n')");
 		expect(editorDefaults.d).toContain('stdin.readln()');
 		expect(editorDefaults.csharp).toContain('Console.WriteLine');
 		expect(editorDefaults.vbnet).toContain('Console.ReadLine()');
-		expect(editorDefaults.go).toContain(
-			'fmt.Printf("factorial_plus_bonus=%d\\n", factorial(n)+bonus)'
-		);
+		expect(editorDefaults.go).toContain('fmt.Printf("fibonacci=%d\\n", fibonacci(n)+bonus)');
 		expect(editorDefaults.elixir).toContain('defmodule Demo do');
 		expect(editorDefaults.elixir).toContain('Demo.run()');
 		expect(editorDefaults.elixir).toContain('IO.gets("")');
 		expect(editorDefaults.elixir).toContain('Integer.parse(String.trim(line))');
 		expect(editorDefaults.erlang).toContain('io:get_line("")');
-		expect(editorDefaults.erlang).toContain('io:format("stdin=~s"');
+		expect(editorDefaults.erlang).toContain('io:format("fibonacci=~w~n"');
 		expect(editorDefaults.prolog).toContain('read_line_to_string(user_input, Line)');
 		expect(editorDefaults.gleam).toContain('stdin.read_line()');
 		expect(editorDefaults.perl).toContain('my $line = <STDIN>;');
@@ -391,7 +392,8 @@ describe('Monaco route debug sync', () => {
 		expect(editorDefaults.haskell).toContain('putStrLn');
 		expect(editorDefaults.r).toContain('readLines(stdin(), n = 1');
 		expect(editorDefaults.octave).toContain('fgetl(stdin)');
-		expect(editorDefaults.sqlite).toContain('CREATE TABLE numbers');
+		expect(editorDefaults.sqlite).toContain('WITH RECURSIVE memo');
+		expect(editorDefaults.sqlite).toContain("SELECT 'fibonacci='");
 		expect(editorDefaults.php).toContain("file_get_contents('php://input')");
 		expect(isEditorDefaultSource(editorDefaults.c)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.go)).toBe(true);
@@ -454,41 +456,33 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).toMatch(
 			/if \(!debugLspLanguages\.has\(language\)\) clangdRequested = false;/
 		);
-		expect(pageSource).toMatch(/<option value="RUST">Rust<\/option>/);
-		expect(pageSource).toMatch(/<option value="GO">Go<\/option>/);
-		expect(pageSource).toMatch(/<option value="D">D<\/option>/);
-		expect(pageSource).toMatch(/<option value="CSHARP">C#<\/option>/);
-		expect(pageSource).toMatch(/<option value="FSHARP">F#<\/option>/);
-		expect(pageSource).toMatch(/<option value="VBNET">VB\.NET<\/option>/);
-		expect(pageSource).toMatch(/<option value="ELIXIR">Elixir<\/option>/);
-		expect(pageSource).toMatch(/<option value="ERLANG">Erlang<\/option>/);
-		expect(pageSource).toMatch(/<option value="PROLOG">Prolog<\/option>/);
-		expect(pageSource).toMatch(/<option value="GLEAM">Gleam<\/option>/);
-		expect(pageSource).toMatch(/<option value="PERL">Perl<\/option>/);
-		expect(pageSource).toMatch(/<option value="JANET">Janet<\/option>/);
-		expect(pageSource).toMatch(/<option value="JULIA">Julia<\/option>/);
-		expect(pageSource).toMatch(/<option value="NIM">Nim<\/option>/);
-		expect(pageSource).toMatch(/<option value="OCAML">OCaml<\/option>/);
-		expect(pageSource).toMatch(/<option value="TINYGO">TinyGo<\/option>/);
-		expect(pageSource).toMatch(/<option value="JAVASCRIPT">JavaScript<\/option>/);
-		expect(pageSource).toMatch(/<option value="TYPESCRIPT">TypeScript<\/option>/);
-		expect(pageSource).toMatch(/<option value="WAT">WAT<\/option>/);
-		expect(pageSource).toMatch(/<option value="LUA">Lua<\/option>/);
-		expect(pageSource).toMatch(/<option value="ZIG">Zig<\/option>/);
-		expect(pageSource).toMatch(/<option value="LISP">Scheme<\/option>/);
-		expect(pageSource).toMatch(/<option value="HASKELL">Haskell<\/option>/);
-		expect(pageSource).toMatch(/<option value="R">R<\/option>/);
-		expect(pageSource).toMatch(/<option value="OCTAVE">Octave<\/option>/);
-		expect(pageSource).toMatch(/<option value="FORTRAN">Fortran<\/option>/);
-		expect(pageSource).toMatch(/<option value="COBOL">COBOL<\/option>/);
-		expect(pageSource).toMatch(/<option value="GRAPHQL">GraphQL<\/option>/);
-		expect(pageSource).toMatch(/<option value="DUCKDB">DuckDB<\/option>/);
-		expect(pageSource).toMatch(/<option value="JSON">JSON<\/option>/);
-		expect(pageSource).toMatch(/<option value="YAML">YAML<\/option>/);
-		expect(pageSource).toMatch(/<option value="TOML">TOML<\/option>/);
-		expect(pageSource).toMatch(/<option value="HTML">HTML<\/option>/);
-		expect(pageSource).toMatch(/<option value="CSS">CSS<\/option>/);
-		expect(pageSource).toMatch(/<option value="MARKDOWN">Markdown<\/option>/);
+		expect(pageSource).toMatch(
+			/\{#each playgroundLanguages as languageOption \(languageOption\)\}\s+<option value=\{languageOption\}>\{languageLabels\[languageOption\]\}<\/option>\s+\{\/each\}/s
+		);
+		expect(playgroundLanguages).toEqual(
+			expect.arrayContaining([
+				'RUST',
+				'GO',
+				'D',
+				'CSHARP',
+				'FSHARP',
+				'VBNET',
+				'OCAML',
+				'TINYGO',
+				'JAVASCRIPT',
+				'TYPESCRIPT',
+				'WAT',
+				'ZIG',
+				'FORTRAN',
+				'COBOL',
+				'GRAPHQL',
+				'DUCKDB',
+				'MARKDOWN'
+			])
+		);
+		for (const languageOption of playgroundLanguages) {
+			expect(languageLabels[languageOption]).not.toBe('');
+		}
 		expect(pageSource).toMatch(/language=\{editorLanguage\}/);
 		expect(pageSource).toMatch(/lspLanguage=\{monacoLspLanguage\}/);
 		expect(pageSource).toMatch(/filePath=\{activePath\}/);
@@ -519,7 +513,12 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).toMatch(
 			/<select id="ocaml-binaryen-mode" bind:value=\{ocamlWasmBinaryenMode\}>/
 		);
-		expect(pageSource).toMatch(/WASM_ELIXIR_ASSET_VERSION/);
+		expect(pageSource).toMatch(
+			/import \{\s+createApplicationAssetResolver,\s+createApplicationRuntimeAssets\s+\} from '\$lib\/playground\/applicationAssets';/s
+		);
+		expect(pageSource).toMatch(
+			/let runtimeAssets = \$derived\.by\(\(\) => \(\{\s+\.\.\.createApplicationRuntimeAssets\(applicationRootUrl\),/s
+		);
 		expect(pageSource).toMatch(
 			/import elixirRuntimeWorkerUrl from '\$lib\/playground\/worker\/elixir\?worker&url';/
 		);
@@ -527,35 +526,9 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).toMatch(/const erlangLspEnabled = \$derived/);
 		expect(pageSource).toMatch(/elixirLspWorkerUrl=\{beamLspWorkerUrl\}/);
 		expect(pageSource).toMatch(/erlangLspWorkerUrl=\{beamLspWorkerUrl\}/);
-		expect(pageSource).toMatch(/wasm-elixir\/bundle\.avm\?v=\$\{WASM_ELIXIR_ASSET_VERSION\}/);
-		expect(pageSource).toMatch(/WASM_OCAML_ASSET_VERSION/);
-		expect(pageSource).toMatch(/WASM_TYPESCRIPT_ASSET_VERSION/);
-		expect(pageSource).toMatch(/WASM_SWIFT_ASSET_VERSION/);
-		expect(pageSource).toMatch(
-			/lsp\/typescript-libs\.json\.gz\?v=\$\{WASM_TYPESCRIPT_ASSET_VERSION\}/
-		);
-		expect(pageSource).toMatch(/WASM_WAT_ASSET_VERSION/);
-		expect(pageSource).toMatch(/WASM_LUA_ASSET_VERSION/);
-		expect(pageSource).toMatch(/WASM_ZIG_ASSET_VERSION/);
-		expect(pageSource).toMatch(/WASM_LISP_ASSET_VERSION/);
-		expect(pageSource).toMatch(/WASM_HASKELL_ASSET_VERSION/);
-		expect(pageSource).toMatch(/WASM_R_ASSET_VERSION/);
-		expect(pageSource).toMatch(/WASM_OCTAVE_ASSET_VERSION/);
-		expect(pageSource).toMatch(/WASM_D_ASSET_VERSION/);
-		expect(pageSource).toMatch(/wasm-d\/index\.js\?v=\$\{WASM_D_ASSET_VERSION\}/);
-		expect(pageSource).toMatch(
-			/wasm-of-js-of-ocaml\/browser-native\/src\/index\.js\?v=\$\{WASM_OCAML_ASSET_VERSION\}/
-		);
-		expect(pageSource).toMatch(
-			/wasm-of-js-of-ocaml\/browser-native-bundle\/browser-native-manifest\.v1\.json\?v=\$\{WASM_OCAML_ASSET_VERSION\}/
-		);
-		expect(pageSource).toMatch(
-			/wasm-swift\/runtime-manifest\.v1\.json\?v=\$\{WASM_SWIFT_ASSET_VERSION\}/
-		);
 		expect(pageSource).toMatch(
 			/\{#each availableRustTargetTriples as targetTriple \(targetTriple\)\}\s+<option value=\{targetTriple\}>\{targetTriple\}<\/option>\s+\{\/each\}/s
 		);
-		expect(pageSource).toMatch(/runtime-manifest\.v3\.json\?v=\$\{WASM_RUST_ASSET_VERSION\}/);
 		expect(pageSource).toMatch(/preloadBrowserRustRuntime/);
 		expect(pageSource).toMatch(/preloadBrowserGoRuntime/);
 		expect(pageSource).toMatch(

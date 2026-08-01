@@ -186,7 +186,7 @@ describe('TinyGo sandbox', () => {
 		});
 		expect(runtimeFixtureState.workspaceFiles?.['main.go']).toContain("ReadString('\\n')");
 		expect(runtimeFixtureState.workspaceFiles?.['main.go']).toContain(
-			'fmt.Printf("factorial_plus_bonus=%d\\n", factorial(n)+bonus)'
+			'fmt.Printf("fibonacci=%d\\n", fibonacci(n)+bonus)'
 		);
 		expect(runtimeFixtureState.bootCalls).toBe(1);
 		expect(runtimeFixtureState.planCalls).toBe(1);
