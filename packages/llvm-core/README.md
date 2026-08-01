@@ -138,6 +138,10 @@ Every incoming DAP message must also carry a positive safe-integer `seq` and a r
 `request`, `response`, or `event` type. Event names must be non-empty strings. Invalid common or
 event envelopes fail the stream before listener dispatch or request timeout can hide the protocol
 error.
+The browser client does not implement adapter-to-client reverse requests such as `runInTerminal`.
+Receiving one fails and closes the DAP stream explicitly, instead of silently leaving LLDB waiting
+for a response that the browser host cannot provide. Reverse-request commands are validated before
+the unsupported-operation error is reported.
 The live playground session also validates the command-specific bodies it consumes after envelope
 parsing. Malformed `scopes`, `variables`, `readMemory`, or `evaluate` data raises a `ProtocolError`,
 stops the debug view, and disposes both workers. In particular, memory data must be valid Base64 and

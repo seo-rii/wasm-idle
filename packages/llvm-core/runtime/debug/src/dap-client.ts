@@ -296,7 +296,14 @@ export class DapClient implements DapRequestSession {
 			}
 			return;
 		}
-		if (message.type === 'request') return;
+		if (message.type === 'request') {
+			if (typeof message.command !== 'string' || message.command.length === 0) {
+				this.fail(new Error('invalid DAP request: command must be a non-empty string'));
+				return;
+			}
+			this.fail(new Error(`unsupported DAP reverse request: ${message.command}`));
+			return;
+		}
 		this.handleResponse(message);
 	}
 

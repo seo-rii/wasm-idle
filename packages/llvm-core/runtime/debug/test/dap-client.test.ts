@@ -499,6 +499,48 @@ describe('DapClient', () => {
 		}
 	});
 
+	it.each([
+		{
+			command: 'runInTerminal',
+			error: /unsupported DAP reverse request: runInTerminal/u
+		},
+		{
+			command: '',
+			error: /invalid DAP request: command must be a non-empty string/u
+		}
+	])(
+		'fails the DAP stream for reverse request command "$command"',
+		async ({ command, error }) => {
+			const inputDescriptor = createSharedByteQueue(4096, 43);
+			const outputDescriptor = createSharedByteQueue(4096, 43);
+			const input = new SharedByteQueue(inputDescriptor);
+			const output = new SharedByteQueue(outputDescriptor);
+			const client = new DapClient({
+				input: inputDescriptor,
+				output: outputDescriptor,
+				requestTimeoutMs: 100
+			}).start();
+
+			try {
+				const requestPromise = client.request('threads');
+				await input.read(new Uint8Array(256));
+				await output.write(
+					encodeDapMessage({
+						seq: 52,
+						type: 'request',
+						command
+					})
+				);
+
+				await expect(requestPromise).rejects.toThrow(error);
+				expect(input.closed).toBe(true);
+				expect(output.closed).toBe(true);
+			} finally {
+				await client.close();
+			}
+		}
+	);
+
 	it('rejects immediately when the request transport is closed', async () => {
 		const inputDescriptor = createSharedByteQueue(4096, 5);
 		const outputDescriptor = createSharedByteQueue(4096, 5);
