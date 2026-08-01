@@ -511,6 +511,108 @@ describe('Elixir sandbox', () => {
 		await expect(sandbox.run('IO.puts("retry")', false)).resolves.toBe(':ok');
 	});
 
+	it('does not start a pre-aborted Elixir execution', async () => {
+		const sandbox = new Elixir();
+		await sandbox.load({
+			elixir: {
+				bundleUrl: '/runtime/elixir/bundle.avm'
+			}
+		});
+		const worker = workerInstances[0];
+		const handler = worker.onmessage;
+		const uid = sandbox.uid;
+		const controller = new AbortController();
+		const reason = new Error('stop before Elixir execution');
+		controller.abort(reason);
+
+		await expect(
+			sandbox.run('IO.puts("never")', false, true, undefined, [], {
+				signal: controller.signal
+			})
+		).rejects.toBe(reason);
+		expect(worker.postMessage).toHaveBeenCalledOnce();
+		expect(worker.onmessage).toBe(handler);
+		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(sandbox.uid).toBe(uid);
+		expect(sandbox.exit).toBe(true);
+	});
+
+	it('aborts only the active Elixir execution and permits a clean retry', async () => {
+		const sandbox = new Elixir();
+		const output = vi.fn();
+		sandbox.output = output;
+		await sandbox.load({
+			elixir: {
+				bundleUrl: '/runtime/elixir/bundle.avm'
+			}
+		});
+		const worker = workerInstances[0];
+		worker.postMessage.mockImplementationOnce(() => undefined);
+		const controller = new AbortController();
+		const reason = new Error('stop active Elixir execution');
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const running = sandbox.run('IO.puts("wait")', false, true, undefined, [], {
+			signal: controller.signal
+		});
+		const staleHandler = worker.onmessage;
+
+		controller.abort(reason);
+
+		await expect(running).rejects.toBe(reason);
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.exit).toBe(true);
+		const abortRegistrations = addEventListener.mock.calls.filter(
+			(registration: unknown[]) => registration[0] === 'abort'
+		);
+		expect(abortRegistrations).toHaveLength(1);
+		for (const registration of abortRegistrations) {
+			expect(removeEventListener).toHaveBeenCalledWith('abort', registration[1]);
+		}
+
+		staleHandler?.({ data: { output: 'stale\n', results: ':stale' } } as MessageEvent<any>);
+		expect(output).not.toHaveBeenCalled();
+
+		await sandbox.load({
+			elixir: {
+				bundleUrl: '/runtime/elixir/bundle.avm'
+			}
+		});
+		await expect(sandbox.run('IO.puts("retry")', false)).resolves.toBe(':ok');
+		expect(workerInstances).toHaveLength(2);
+	});
+
+	it('removes an Elixir execution abort listener after success', async () => {
+		const sandbox = new Elixir();
+		await sandbox.load({
+			elixir: {
+				bundleUrl: '/runtime/elixir/bundle.avm'
+			}
+		});
+		const worker = workerInstances[0];
+		const controller = new AbortController();
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+
+		await expect(
+			sandbox.run('IO.puts("done")', false, true, undefined, [], {
+				signal: controller.signal
+			})
+		).resolves.toBe(':ok');
+		const abortRegistrations = addEventListener.mock.calls.filter(
+			(registration: unknown[]) => registration[0] === 'abort'
+		);
+		expect(abortRegistrations).toHaveLength(1);
+		for (const registration of abortRegistrations) {
+			expect(removeEventListener).toHaveBeenCalledWith('abort', registration[1]);
+		}
+
+		controller.abort(new Error('late successful Elixir run abort'));
+		expect(worker.terminate).not.toHaveBeenCalled();
+		await expect(sandbox.run('IO.puts("again")', false)).resolves.toBe(':ok');
+	});
+
 	it('flushes queued terminal input into the worker stdin buffer when Elixir requests it', async () => {
 		const sandbox = new Elixir();
 		const output = vi.fn();
