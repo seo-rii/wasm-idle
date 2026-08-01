@@ -83,8 +83,12 @@ async function loadManifest(url: string, fetchImpl: typeof fetch): Promise<Runti
 	return parseDebugRuntimeManifest(await response.json());
 }
 
+function invalidDapPayload(subject: string, path: string, expectation: string): never {
+	throw new ProtocolError(`Invalid LLDB DAP ${subject} at ${path}: ${expectation}.`);
+}
+
 function invalidDapResponse(command: string, path: string, expectation: string): never {
-	throw new ProtocolError(`Invalid LLDB DAP ${command} response at ${path}: ${expectation}.`);
+	invalidDapPayload(`${command} response`, path, expectation);
 }
 
 function assertDapRecord(
@@ -103,6 +107,16 @@ function assertDapString(value: unknown, command: string, path: string): asserts
 
 function assertDapBoolean(value: unknown, command: string, path: string): asserts value is boolean {
 	if (typeof value !== 'boolean') invalidDapResponse(command, path, 'expected a boolean');
+}
+
+function assertDapPositiveSafeInteger(
+	value: unknown,
+	subject: string,
+	path: string
+): asserts value is number {
+	if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 1) {
+		invalidDapPayload(subject, path, 'expected a positive safe integer');
+	}
 }
 
 function assertDapNonNegativeSafeInteger(
@@ -239,7 +253,12 @@ export class LldbSandboxSession {
 		this.session = session;
 		session.onEvent((event) => {
 			if (lifecycleVersion === this.lifecycleVersion && this.session === session) {
-				this.handleDapEvent(event);
+				try {
+					this.handleDapEvent(event);
+				} catch (error) {
+					if (!(error instanceof ProtocolError)) throw error;
+					this.fail(error);
+				}
 			}
 		});
 		try {
@@ -529,16 +548,32 @@ export class LldbSandboxSession {
 			return;
 		}
 		if (event.event === 'stopped') {
-			const body = event.body as
-				| { reason?: string; threadId?: number; allThreadsStopped?: boolean }
-				| undefined;
+			if (
+				typeof event.body !== 'object' ||
+				event.body === null ||
+				Array.isArray(event.body)
+			) {
+				invalidDapPayload('stopped event', 'body', 'expected an object');
+			}
+			const body = event.body as Record<string, unknown>;
+			if (typeof body.reason !== 'string') {
+				invalidDapPayload('stopped event', 'reason', 'expected a string');
+			}
+			const threadId = body.threadId;
+			if (threadId !== undefined) {
+				assertDapPositiveSafeInteger(threadId, 'stopped event', 'threadId');
+			}
+			if (
+				body.allThreadsStopped !== undefined &&
+				typeof body.allThreadsStopped !== 'boolean'
+			) {
+				invalidDapPayload('stopped event', 'allThreadsStopped', 'expected a boolean');
+			}
 			const reason =
-				this.pauseRequested && body?.reason === 'exception'
-					? 'pause'
-					: body?.reason || 'pause';
+				this.pauseRequested && body.reason === 'exception' ? 'pause' : body.reason;
 			this.pauseRequested = false;
 			const version = ++this.stateVersion;
-			void this.resolveStoppedState(body?.threadId, reason, version).catch((error) =>
+			void this.resolveStoppedState(threadId, reason, version).catch((error) =>
 				this.fail(
 					error instanceof Error ? error : new Error('Unable to read LLDB stopped state.')
 				)
@@ -572,8 +607,18 @@ export class LldbSandboxSession {
 			return;
 		}
 		if (event.event === 'exited') {
-			const body = event.body as { exitCode?: number } | undefined;
-			this.dapExitCode = body?.exitCode ?? 0;
+			if (
+				typeof event.body !== 'object' ||
+				event.body === null ||
+				Array.isArray(event.body)
+			) {
+				invalidDapPayload('exited event', 'body', 'expected an object');
+			}
+			const exitCode = (event.body as Record<string, unknown>).exitCode;
+			if (typeof exitCode !== 'number' || !Number.isSafeInteger(exitCode)) {
+				invalidDapPayload('exited event', 'exitCode', 'expected a safe integer');
+			}
+			this.dapExitCode = exitCode;
 			return;
 		}
 		if (event.event === 'terminated') return;
@@ -586,17 +631,53 @@ export class LldbSandboxSession {
 	) {
 		const session = this.requireSession();
 		let threadId = requestedThreadId;
-		if (!threadId) {
-			const response = await session.request<{ threads?: DapThread[] }>('threads');
-			threadId = response.threads?.[0]?.id;
+		if (threadId === undefined) {
+			const response = await session.request<unknown>('threads');
+			const threads = dapResponseCollection(response, 'threads', 'threads').map<DapThread>(
+				(thread, index) => {
+					const path = `threads[${index}]`;
+					assertDapRecord(thread, 'threads', path);
+					assertDapPositiveSafeInteger(thread.id, 'threads response', `${path}.id`);
+					assertDapString(thread.name, 'threads', `${path}.name`);
+					return { id: thread.id, name: thread.name };
+				}
+			);
+			threadId = threads[0]?.id;
 		}
 		if (!threadId) throw new Error('LLDB stopped without a WebAssembly thread.');
-		const stack = await session.request<{ stackFrames?: DapStackFrame[] }>('stackTrace', {
+		const response = await session.request<unknown>('stackTrace', {
 			threadId,
 			startFrame: 0,
 			levels: 100
 		});
-		const frames = stack.stackFrames ?? [];
+		const frames = dapResponseCollection(
+			response,
+			'stackTrace',
+			'stackFrames'
+		).map<DapStackFrame>((frame, index) => {
+			const path = `stackFrames[${index}]`;
+			assertDapRecord(frame, 'stackTrace', path);
+			assertDapPositiveSafeInteger(frame.id, 'stackTrace response', `${path}.id`);
+			assertDapString(frame.name, 'stackTrace', `${path}.name`);
+			assertDapNonNegativeSafeInteger(frame.line, 'stackTrace', `${path}.line`);
+			assertDapNonNegativeSafeInteger(frame.column, 'stackTrace', `${path}.column`);
+			let source: { path?: string } | undefined;
+			if (frame.source !== undefined) {
+				assertDapRecord(frame.source, 'stackTrace', `${path}.source`);
+				const sourcePath = frame.source.path;
+				if (sourcePath !== undefined) {
+					assertDapString(sourcePath, 'stackTrace', `${path}.source.path`);
+				}
+				source = sourcePath === undefined ? {} : { path: sourcePath };
+			}
+			return {
+				id: frame.id,
+				name: frame.name,
+				source,
+				line: frame.line,
+				column: frame.column
+			};
+		});
 		const selectedFrame = frames[0];
 		if (!selectedFrame) throw new Error('LLDB stopped without a stack frame.');
 		const isWorkspaceFrame = this.options.artifact.sources.some(

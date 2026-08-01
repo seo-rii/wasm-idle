@@ -894,15 +894,130 @@ describe('LldbSandboxSession', () => {
 			});
 
 			const completion = controller.start();
+			const completionError = completion.then(
+				() => null,
+				(error: unknown) => error
+			);
 			await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
 			runtimeState.responseOverrides.set(command, response);
 
 			await expect(invoke(controller)).rejects.toBeInstanceOf(ProtocolError);
-			await expect(completion).rejects.toBeInstanceOf(ProtocolError);
+			await expect(completionError).resolves.toBeInstanceOf(ProtocolError);
 			await vi.waitFor(() => expect(runtimeState.session!.disposeCount).toBe(1));
 			expect(events.filter((event) => event.type === 'stop')).toHaveLength(1);
 		}
 	);
+
+	it.each([
+		{
+			caseName: 'stopped event',
+			responseCommand: undefined,
+			response: undefined,
+			event: { event: 'stopped', body: { reason: 7, threadId: 7 } }
+		},
+		{
+			caseName: 'threads response',
+			responseCommand: 'threads',
+			response: { threads: [{ id: -1, name: 'wasm' }] },
+			event: { event: 'stopped', body: { reason: 'breakpoint' } }
+		},
+		{
+			caseName: 'stackTrace response',
+			responseCommand: 'stackTrace',
+			response: {
+				stackFrames: [
+					{
+						id: 41,
+						name: 'main',
+						source: { path: '/workspace/main.cpp' },
+						line: -1,
+						column: 1
+					}
+				]
+			},
+			event: { event: 'stopped', body: { reason: 'breakpoint', threadId: 7 } }
+		}
+	])(
+		'fails and disposes the live session for a malformed $caseName',
+		async ({ responseCommand, response, event }) => {
+			const events: Array<{ type: string }> = [];
+			const controller = new LldbSandboxSession({
+				manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+				runtimeBaseUrl: 'https://example.com/debug/',
+				artifact: {
+					bytes: Uint8Array.of(0),
+					sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+				},
+				sourcePath: '/workspace/main.cpp',
+				breakpoints: [],
+				pauseOnEntry: true,
+				onDebugEvent: (debugEvent) => events.push(debugEvent),
+				onOutput: () => undefined,
+				fetchImpl: vi.fn(async () => ({
+					ok: true,
+					json: async () => ({ manifestVersion: 2 })
+				})) as unknown as typeof fetch
+			});
+
+			const completion = controller.start();
+			const completionError = completion.then(
+				() => null,
+				(error: unknown) => error
+			);
+			await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+			if (responseCommand) runtimeState.responseOverrides.set(responseCommand, response);
+			runtimeState.session!.emit(event);
+
+			await vi.waitFor(() =>
+				expect(
+					runtimeState.session!.disposeCount > 0 ||
+						events.some((debugEvent) => debugEvent.type === 'pause')
+				).toBe(true)
+			);
+			if (runtimeState.session!.disposeCount === 0) {
+				runtimeState.session!.emitLifecycle({ type: 'target-exit', exitCode: 0 });
+			}
+
+			await expect(completionError).resolves.toBeInstanceOf(ProtocolError);
+			expect(runtimeState.session!.disposeCount).toBe(1);
+			expect(events.filter((debugEvent) => debugEvent.type === 'pause')).toHaveLength(0);
+			expect(events.filter((debugEvent) => debugEvent.type === 'stop')).toHaveLength(1);
+		}
+	);
+
+	it('fails and disposes the live session for a malformed exited event', async () => {
+		const events: Array<{ type: string }> = [];
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: true,
+			onDebugEvent: (event) => events.push(event),
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({ manifestVersion: 2 })
+			})) as unknown as typeof fetch
+		});
+
+		const completion = controller.start();
+		const completionError = completion.then(
+			() => null,
+			(error: unknown) => error
+		);
+		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+		runtimeState.session!.emit({ event: 'exited', body: { exitCode: 'zero' } });
+		runtimeState.session!.emitLifecycle({ type: 'target-exit', exitCode: null });
+
+		await expect(completionError).resolves.toBeInstanceOf(ProtocolError);
+		expect(runtimeState.session!.disposeCount).toBe(1);
+		expect(events.filter((event) => event.type === 'stop')).toHaveLength(1);
+	});
 
 	it('keeps a fast target exit successful when disposal rejects in-flight initialization', async () => {
 		let rejectInitialize!: (error: Error) => void;
