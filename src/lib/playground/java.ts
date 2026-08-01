@@ -5,7 +5,13 @@ import {
 } from '$lib/playground/options';
 import { WorkerAssetBridge } from '$lib/playground/assetBridge';
 import { resolveRuntimeAssetConfig, type PlaygroundRuntimeAssets } from '$lib/playground/assets';
-import { BusyError } from '@wasm-idle/core';
+import {
+	BusyError,
+	DEFAULT_WORKSPACE_LIMITS,
+	resolveExecutionLimits,
+	validateExecutionWorkspace
+} from '@wasm-idle/core';
+import { resolveJavaSourceIdentity } from '$lib/playground/javaSource';
 import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
 import {
 	flushBufferedEof,
@@ -246,8 +252,29 @@ class Java implements Sandbox {
 			);
 		}
 		let programArgs: string[];
+		let workspace: ReturnType<typeof validateExecutionWorkspace>;
 		try {
 			programArgs = resolveSandboxExecutionArgs('JAVA', args, options).programArgs;
+			const { sourcePath } = resolveJavaSourceIdentity(code);
+			const limits = resolveExecutionLimits(options.limits);
+			workspace = validateExecutionWorkspace(
+				code,
+				options.workspaceFiles ?? [],
+				options.activePath ?? sourcePath,
+				{
+					...options.workspaceLimits,
+					maxFileBytes: Math.min(
+						options.workspaceLimits?.maxFileBytes ??
+							DEFAULT_WORKSPACE_LIMITS.maxFileBytes,
+						limits.maxWorkspaceBytes
+					),
+					maxTotalBytes: Math.min(
+						options.workspaceLimits?.maxTotalBytes ??
+							DEFAULT_WORKSPACE_LIMITS.maxTotalBytes,
+						limits.maxWorkspaceBytes
+					)
+				}
+			);
 		} catch (error) {
 			return Promise.reject(error);
 		}
@@ -356,7 +383,9 @@ class Java implements Sandbox {
 					buffer: this.buffer,
 					args: programArgs,
 					stdin: options.stdin || '',
-					baseUrl: this.baseUrl
+					baseUrl: this.baseUrl,
+					activePath: workspace.activePath,
+					workspaceFiles: workspace.workspaceFiles
 				});
 			} catch (error) {
 				if (worker.onmessage === handler) worker.onmessage = null;

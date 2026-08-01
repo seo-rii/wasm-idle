@@ -112,6 +112,68 @@ describe('TeaVM Java stdin integration', () => {
 		expect(outputs.join('')).toBe('factorial=120\n');
 	}, 60_000);
 
+	it('compiles and runs a canonical multi-file Java workspace', async () => {
+		const { runtime, compilerWasm, sdk, runtimeClasslib } = await loadTeaVmArtifacts();
+		const compilerModule = await runtime.load(compilerWasm, {
+			stackDeobfuscator: { enabled: false }
+		});
+		const compiler = compilerModule.exports.createCompiler();
+		const diagnostics: string[] = [];
+
+		compiler.setSdk(sdk);
+		compiler.setTeaVMClasslib(runtimeClasslib);
+		compiler.onDiagnostic((diagnostic: { message?: string }) => {
+			diagnostics.push(String(diagnostic.message || ''));
+		});
+		compiler.addSourceFile(
+			'Main.java',
+			`package demo;
+
+public class Main {
+    public static void main(String[] args) {
+        System.out.println(Helper.value());
+    }
+}`
+		);
+		compiler.addSourceFile(
+			'Helper.java',
+			`package demo;
+
+final class Helper {
+    static int value() {
+        return 42;
+    }
+}`
+		);
+
+		expect(compiler.compile(), diagnostics.join('\n')).toBe(true);
+		expect(Array.from(compiler.detectMainClasses())).toEqual(['demo/Main']);
+		expect(compiler.generateWebAssembly({ outputName: 'app', mainClass: 'demo.Main' })).toBe(
+			true
+		);
+		expect(diagnostics).toEqual([]);
+
+		const wasm = new Uint8Array(compiler.getWebAssemblyOutputFile('app.wasm'));
+		const outputs: string[] = [];
+		const module = await runtime.load(wasm, {
+			installImports(imports: {
+				teavmConsole: {
+					putcharStdout: (code: number) => void;
+					putcharStderr: (code: number) => void;
+				};
+			}) {
+				imports.teavmConsole.putcharStdout = (charCode) =>
+					outputs.push(String.fromCharCode(charCode));
+				imports.teavmConsole.putcharStderr = (charCode) =>
+					outputs.push(String.fromCharCode(charCode));
+			},
+			stackDeobfuscator: { enabled: false }
+		});
+
+		module.exports.main([]);
+		expect(outputs.join('')).toBe('42\n');
+	}, 60_000);
+
 	it('compiles and runs NIO byte buffer code under Wasm GC', async () => {
 		const { runtime, compilerWasm, sdk, runtimeClasslib } = await loadTeaVmArtifacts();
 		// The bundled runtime classlib must not retain JS-only @JSByRef typed array paths.

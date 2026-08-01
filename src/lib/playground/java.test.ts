@@ -123,7 +123,9 @@ describe('TeaVM Java sandbox', () => {
 			expect.objectContaining({
 				prepare: true,
 				code,
-				args: []
+				args: [],
+				activePath: 'Main.java',
+				workspaceFiles: []
 			})
 		);
 		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
@@ -132,7 +134,9 @@ describe('TeaVM Java sandbox', () => {
 				prepare: false,
 				code,
 				args: ['one', 'two'],
-				stdin: '4\n6\n'
+				stdin: '4\n6\n',
+				activePath: 'Main.java',
+				workspaceFiles: []
 			})
 		);
 		expect(outputs).toContain('sum=10\n');
@@ -146,6 +150,141 @@ describe('TeaVM Java sandbox', () => {
 			}
 		]);
 	});
+
+	it('normalizes a valid Java workspace before worker dispatch', async () => {
+		const sandbox = new Java();
+		const code = `package nested;
+
+public class Main {
+    public static void main(String[] args) {
+        System.out.println(Helper.value());
+    }
+}`;
+		await sandbox.load('/absproxy/5173');
+
+		await expect(
+			sandbox.run(code, false, true, undefined, [], {
+				activePath: 'nested\\Main.java',
+				workspaceFiles: [
+					{
+						path: 'nested\\Helper.java',
+						content:
+							'package nested; final class Helper { static int value() { return 42; } }'
+					}
+				]
+			})
+		).resolves.toBe(true);
+
+		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
+			2,
+			expect.objectContaining({
+				activePath: 'nested/Main.java',
+				workspaceFiles: [
+					{
+						path: 'nested/Helper.java',
+						content:
+							'package nested; final class Helper { static int value() { return 42; } }'
+					}
+				]
+			})
+		);
+	});
+
+	it.each([
+		{
+			name: 'traversal path',
+			code: 'class Main {}',
+			options: { activePath: '../Main.java' },
+			expected: { code: 'invalid-path', path: '../Main.java' }
+		},
+		{
+			name: 'absolute path',
+			code: 'class Main {}',
+			options: { activePath: '/tmp/Main.java' },
+			expected: { code: 'invalid-path', path: '/tmp/Main.java' }
+		},
+		{
+			name: 'NUL path',
+			code: 'class Main {}',
+			options: { activePath: 'bad\0.java' },
+			expected: { code: 'invalid-path', path: 'bad\0.java' }
+		},
+		{
+			name: 'duplicate path',
+			code: 'class Main {}',
+			options: {
+				workspaceFiles: [
+					{ path: 'lib/Helper.java', content: 'class Helper {}' },
+					{ path: 'lib/Helper.java', content: 'class Other {}' }
+				]
+			},
+			expected: { code: 'duplicate-path', path: 'lib/Helper.java' }
+		},
+		{
+			name: 'case-colliding path',
+			code: 'class Main {}',
+			options: {
+				workspaceFiles: [
+					{ path: 'LIB/Helper.java', content: 'class Helper {}' },
+					{ path: 'lib/helper.java', content: 'class Other {}' }
+				]
+			},
+			expected: { code: 'case-collision', path: 'lib/helper.java' }
+		},
+		{
+			name: 'file count overflow',
+			code: 'class Main {}',
+			options: {
+				workspaceFiles: [{ path: 'Helper.java', content: 'class Helper {}' }],
+				workspaceLimits: { maxFiles: 1 }
+			},
+			expected: { code: 'file-count-limit', limit: 1, actual: 2 }
+		},
+		{
+			name: 'per-file overflow clamped to execution limits',
+			code: 'class A {}',
+			options: {
+				limits: { maxWorkspaceBytes: 4 },
+				workspaceLimits: { maxFileBytes: 100 }
+			},
+			expected: { code: 'file-size-limit', limit: 4, actual: 10 }
+		},
+		{
+			name: 'aggregate overflow clamped to execution limits',
+			code: 'class A {}',
+			options: {
+				limits: { maxWorkspaceBytes: 10 },
+				workspaceFiles: [{ path: 'B.java', content: 'X' }],
+				workspaceLimits: { maxTotalBytes: 100 }
+			},
+			expected: { code: 'total-size-limit', limit: 10, actual: 11 }
+		}
+	])(
+		'rejects a Java workspace with $name before changing execution state',
+		async ({ code, options, expected }) => {
+			const sandbox = new Java();
+			await sandbox.load('/absproxy/5173');
+			const worker = workerInstances[0];
+			const handler = worker.onmessage;
+			const assetBridge = sandbox.assetBridge;
+
+			await expect(
+				sandbox.run(code, false, true, undefined, [], options)
+			).rejects.toMatchObject({
+				name: 'WorkspaceValidationError',
+				...expected
+			});
+			expect(worker.postMessage).toHaveBeenCalledOnce();
+			expect(worker.onmessage).toBe(handler);
+			expect(worker.terminate).not.toHaveBeenCalled();
+			expect(sandbox.worker).toBe(worker);
+			expect(sandbox.assetBridge).toBe(assetBridge);
+			expect(sandbox.uid).toBe(0);
+			expect(sandbox.exit).toBe(true);
+
+			await expect(sandbox.run('class Retry {}', false)).resolves.toBe(true);
+		}
+	);
 
 	it('rejects operations that overlap a pending Java load', async () => {
 		suppressAutoLoadAck = true;

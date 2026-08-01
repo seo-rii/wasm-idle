@@ -1,4 +1,5 @@
 import { prepareJavaStdinInjection } from '$lib/playground/javaStdin';
+import { resolveJavaSourceIdentity } from '$lib/playground/javaSource';
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
 import {
 	configureWorkerRuntimeAssets,
@@ -28,7 +29,9 @@ let compiledCode = '';
 let compiledStdin = '';
 let compiledMainClass = '';
 let compiledWasm: Uint8Array | null = null;
-let currentSourcePath = '';
+let compiledActivePath = '';
+let compiledWorkspaceFiles: Array<{ path: string; content: string }> = [];
+let currentSourcePaths = new Set<string>();
 const decoder = new TextDecoder();
 
 const toInt8Array = (bytes: Uint8Array) =>
@@ -58,7 +61,17 @@ const pushStderr = (charCode: number) => {
 
 self.addEventListener('message', async (event) => {
 	if (handleWorkerAssetMessage(event.data)) return;
-	const { load, assets, buffer, code, prepare, args = [], stdin = '' } = event.data;
+	const {
+		load,
+		assets,
+		buffer,
+		code,
+		prepare,
+		args = [],
+		stdin = '',
+		activePath,
+		workspaceFiles = []
+	} = event.data;
 	try {
 		if (load) {
 			const runtimeAssets = assets as WorkerRuntimeAssetConfig | undefined;
@@ -96,6 +109,9 @@ self.addEventListener('message', async (event) => {
 				compiledStdin = '';
 				compiledMainClass = '';
 				compiledWasm = null;
+				compiledActivePath = '';
+				compiledWorkspaceFiles = [];
+				currentSourcePaths = new Set();
 			}
 			self.postMessage({ load: true });
 			return;
@@ -105,32 +121,52 @@ self.addEventListener('message', async (event) => {
 		stdoutBuffer = '';
 		stderrBuffer = '';
 		const stdinInjection = prepareJavaStdinInjection(code, stdin);
+		const sourceIdentity = resolveJavaSourceIdentity(code);
+		const sourcePath =
+			typeof activePath === 'string' && activePath ? activePath : sourceIdentity.sourcePath;
+		const sourceFileName = sourcePath.split('/').pop() || sourcePath;
+		if (
+			!Array.isArray(workspaceFiles) ||
+			!workspaceFiles.every(
+				(file) => file && typeof file.path === 'string' && typeof file.content === 'string'
+			)
+		) {
+			throw new Error('Invalid Java workspace files');
+		}
+		const sourceFiles = workspaceFiles as Array<{ path: string; content: string }>;
+		const workspaceChanged =
+			compiledActivePath !== sourcePath ||
+			compiledWorkspaceFiles.length !== sourceFiles.length ||
+			compiledWorkspaceFiles.some(
+				(file, index) =>
+					file.path !== sourceFiles[index]?.path ||
+					file.content !== sourceFiles[index]?.content
+			);
+		if (
+			stdinInjection.usesStdin &&
+			stdinInjection.helperSourcePath &&
+			(sourcePath === stdinInjection.helperSourcePath ||
+				sourceFiles.some((file) => file.path === stdinInjection.helperSourcePath))
+		) {
+			throw new Error(
+				`Java workspace conflicts with generated stdin helper: ${stdinInjection.helperSourcePath}`
+			);
+		}
 
 		if (
 			prepare ||
 			compiledCode !== code ||
 			compiledStdin !== stdinInjection.stdinCacheKey ||
+			workspaceChanged ||
 			!compiledWasm
 		) {
-			const packageMatch = code.match(/^\s*package\s+([A-Za-z_][\w.]*)\s*;/m);
-			const typeMatch =
-				code.match(
-					/^\s*public\s+(?:final\s+|abstract\s+)?(?:class|record|enum|interface)\s+([A-Za-z_]\w*)\b/m
-				) ||
-				code.match(
-					/^\s*(?:final\s+|abstract\s+)?(?:class|record|enum|interface)\s+([A-Za-z_]\w*)\b/m
-				);
-			const className = typeMatch?.[1];
-			if (!className)
-				throw new Error(
-					'Java source must define a top-level class, record, enum, or interface'
-				);
-			const packageName = packageMatch?.[1] || '';
-			const sourcePath = packageName
-				? `${packageName.replaceAll('.', '/')}/${className}.java`
-				: `${className}.java`;
-			const mainClass = packageName ? `${packageName}.${className}` : className;
-			currentSourcePath = sourcePath;
+			const mainClass = sourceIdentity.mainClass;
+			currentSourcePaths = new Set(
+				[sourcePath, ...sourceFiles.map((file) => file.path)].flatMap((path) => [
+					path,
+					path.split('/').pop() || path
+				])
+			);
 			const diagnosticLines: string[] = [];
 			const diagnosticRegistration = compiler.onDiagnostic((diagnostic: any) => {
 				const severity = diagnostic.severity
@@ -141,11 +177,7 @@ self.addEventListener('message', async (event) => {
 					: 'TeaVM';
 				diagnosticLines.push(`${location}: ${severity}: ${diagnostic.message}`);
 				const fileName = diagnostic.fileName ? String(diagnostic.fileName) : null;
-				if (
-					fileName &&
-					fileName !== currentSourcePath &&
-					fileName !== currentSourcePath.split('/').pop()
-				) {
+				if (fileName && !currentSourcePaths.has(fileName)) {
 					return;
 				}
 				self.postMessage({
@@ -173,15 +205,25 @@ self.addEventListener('message', async (event) => {
 			compiler.clearSourceFiles?.();
 			compiler.clearInputClassFiles?.();
 			compiler.clearOutputFiles?.();
-			compiler.addSourceFile(sourcePath, stdinInjection.transformedCode);
+			// TeaVM derives packages from source text but validates public types against the basename.
+			compiler.addSourceFile(sourceFileName, stdinInjection.transformedCode);
+			for (const file of sourceFiles) {
+				compiler.addSourceFile(file.path.split('/').pop() || file.path, file.content);
+			}
 			if (
 				stdinInjection.usesStdin &&
 				stdinInjection.helperSourcePath &&
 				stdinInjection.helperSource
 			) {
 				compiler.addSourceFile(
-					stdinInjection.helperSourcePath,
+					stdinInjection.helperSourcePath.split('/').pop() ||
+						stdinInjection.helperSourcePath,
 					stdinInjection.helperSource
+				);
+				currentSourcePaths.add(stdinInjection.helperSourcePath);
+				currentSourcePaths.add(
+					stdinInjection.helperSourcePath.split('/').pop() ||
+						stdinInjection.helperSourcePath
 				);
 			}
 			const javacOk = compiler.compile();
@@ -212,6 +254,8 @@ self.addEventListener('message', async (event) => {
 			compiledStdin = stdinInjection.stdinCacheKey;
 			compiledMainClass = mainClass;
 			compiledWasm = new Uint8Array(compiler.getWebAssemblyOutputFile('app.wasm'));
+			compiledActivePath = sourcePath;
+			compiledWorkspaceFiles = sourceFiles.map((file) => ({ ...file }));
 		}
 
 		if (prepare) {
