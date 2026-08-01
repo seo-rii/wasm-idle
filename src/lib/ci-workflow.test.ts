@@ -18,4 +18,16 @@ describe('required CI workflow gates', () => {
 		expect(prepareAssets).toBeGreaterThanOrEqual(0);
 		expect(unitTests).toBeGreaterThan(prepareAssets);
 	});
+
+	it('prepares pinned OCaml assets before the full browser LSP matrix', async () => {
+		const workflow = await readFile('.github/workflows/ci.yml', 'utf8');
+		const fullJobStart = workflow.indexOf('    lsp-browser-full:');
+		const fullJob = workflow.slice(fullJobStart);
+		const prepareAssets = fullJob.indexOf('- run: node scripts/prepare-ocaml-lsp-assets.mjs');
+		const browserTests = fullJob.indexOf('- run: pnpm run test:lsp:browser:full');
+
+		expect(fullJobStart).toBeGreaterThanOrEqual(0);
+		expect(prepareAssets).toBeGreaterThanOrEqual(0);
+		expect(browserTests).toBeGreaterThan(prepareAssets);
+	});
 });

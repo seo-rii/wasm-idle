@@ -65,4 +65,5 @@ jobs:
             - run: pnpm install --frozen-lockfile
             - run: pnpm exec playwright-core install --with-deps chromium
             - run: node scripts/prepare-clangd-assets.mjs
+            - run: node scripts/prepare-ocaml-lsp-assets.mjs
             - run: pnpm run test:lsp:browser:full

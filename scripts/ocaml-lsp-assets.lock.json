@@ -1,0 +1,116 @@
+{
+	"format": "wasm-idle-ocaml-lsp-assets-v1",
+	"revision": "2c221c05b1e4a7fe3f848fc4f2f9c2e72a9178b3",
+	"assets": [
+		{
+			"path": "wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json",
+			"size": 58798,
+			"sha256": "0bbb643036ae7c96f63eec80ebaa3efdb079a851a3aab98f82a3edd1cfcd4951"
+		},
+		{
+			"path": "wasm-of-js-of-ocaml/browser-native-bundle/browser-native-runtime-pack.v1.bin.gz",
+			"size": 18132361,
+			"sha256": "3aaa3dec4bdce49f1786eb2373c782d0bf2803013ee105dc81791ef6b936f2da"
+		},
+		{
+			"path": "wasm-of-js-of-ocaml/browser-native-bundle/browser-native-runtime-pack.v1.index.json",
+			"size": 70441,
+			"sha256": "ac426368561253a13f6b645e09d7278ffab2fc80816c6ad1096f9e9919050d59"
+		},
+		{
+			"path": "wasm-of-js-of-ocaml/browser-native-bundle/findlib.conf",
+			"size": 181,
+			"sha256": "7a3f7339e24631f266e25a996a2001eca1633fcd4a66cc9b3074863ffee572b7"
+		},
+		{
+			"path": "wasm-of-js-of-ocaml/browser-native-bundle/tools/js_of_ocaml.bc.browser.js.gz",
+			"size": 912890,
+			"sha256": "84187e16cf17380b09e4d77fd271d12f4fa20ae16026e5f300cf14ab71b50605"
+		},
+		{
+			"path": "wasm-of-js-of-ocaml/browser-native-bundle/tools/ocamlc.byte.browser.js.gz",
+			"size": 592521,
+			"sha256": "6c5b08402094e1b9aff93fb84b000d92941dd1b55a89b936cf4723db541a42d9"
+		},
+		{
+			"path": "wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-merge.browser.js.gz",
+			"size": 2262168,
+			"sha256": "9089923b7f5cdceaeb779d684ca8090e745276cd11e53d832a1660094ee99726"
+		},
+		{
+			"path": "wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-metadce.browser.js.gz",
+			"size": 2270320,
+			"sha256": "361b932dbde1ee3d2fc68ff65d9480b154930c8d7c140c0ae9aee38aae41d452"
+		},
+		{
+			"path": "wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-opt.browser.js.gz",
+			"size": 2503199,
+			"sha256": "5d6d3f31579a91229dd24d3b0bfd1e7abf0614123ba9d5ed2cf3147894f7b349"
+		},
+		{
+			"path": "wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm_of_ocaml.bc.browser.js.gz",
+			"size": 1162811,
+			"sha256": "dd886dbca4e07341f07ae29f2f338f58926576a868fda72ac4fc2f070424736b"
+		},
+		{
+			"path": "wasm-of-js-of-ocaml/browser-native/browser-harness/main.js",
+			"size": 2442,
+			"sha256": "f339e720e1b3e26c8e124f557c96669359cd3248b6371fa47a3328015f7ed731"
+		},
+		{
+			"path": "wasm-of-js-of-ocaml/browser-native/browser-harness/native-compile.js",
+			"size": 11365,
+			"sha256": "c3bf2bc4f4ef64c91749fcb795c5654a4b033726e98e1c9618fd957d1ab7f2fa"
+		},
+		{
+			"path": "wasm-of-js-of-ocaml/browser-native/browser-harness/native-tool-worker.js",
+			"size": 41858,
+			"sha256": "37c5a36a9a2c415ba37f143edba42cea6487f8c00ae494b961cf8aa96c7d7198"
+		},
+		{
+			"path": "wasm-of-js-of-ocaml/browser-native/runtime/fs/memory-fs.js",
+			"size": 4673,
+			"sha256": "b1c44dbd8edbd92b27f66c1adcc62354622906196e601cadb0b87ca205855982"
+		},
+		{
+			"path": "wasm-of-js-of-ocaml/browser-native/runtime/system-dispatch-browser-worker.js",
+			"size": 14259,
+			"sha256": "cef884adaadf9bfbda2f7a58cdc812b16e1b0618b50c94f13c1ab28797aea719"
+		},
+		{
+			"path": "wasm-of-js-of-ocaml/browser-native/runtime/system-dispatch-node.js",
+			"size": 4875,
+			"sha256": "eba03289849e7c3e63e061729996cfacd94c91d2c2f3ba3c3125fae4fa82897a"
+		},
+		{
+			"path": "wasm-of-js-of-ocaml/browser-native/runtime/system-dispatch.js",
+			"size": 1105,
+			"sha256": "5cc5b27c952875f370049633336584e2af16bd85e81705431b69c9eeadd48387"
+		},
+		{
+			"path": "wasm-of-js-of-ocaml/browser-native/src/compiler-worker.js",
+			"size": 12331,
+			"sha256": "d57997796a1a1c284c15ba1049f795addad24b02bc2e1ef1dee2cd1dcb1f6aae"
+		},
+		{
+			"path": "wasm-of-js-of-ocaml/browser-native/src/index.js",
+			"size": 1892,
+			"sha256": "17d80beb633799e9021dc1b851bc76283494d981ec20fc315462d740284fa13a"
+		},
+		{
+			"path": "wasm-of-js-of-ocaml/browser-native/src/node.js",
+			"size": 6026,
+			"sha256": "34afac088667b55a8fde8b8b5a95126b5bf2307f0c786875217cb294d497750d"
+		},
+		{
+			"path": "wasm-of-js-of-ocaml/browser-native/src/types.js",
+			"size": 11,
+			"sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+		},
+		{
+			"path": "wasm-of-js-of-ocaml/browser-native/src/worker-protocol.js",
+			"size": 11,
+			"sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881"
+		}
+	]
+}

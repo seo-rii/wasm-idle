@@ -1,7 +1,8 @@
-import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+
+import { preparePinnedAssets } from './prepare-pinned-assets.mjs';
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const REPOSITORY_ROOT = path.resolve(path.dirname(THIS_FILE), '..');
@@ -89,93 +90,21 @@ async function prepareClangAssets(options, selection) {
 		);
 	}
 
-	const sourceBase = new URL(baseUrl);
-	if (!['https:', 'http:'].includes(sourceBase.protocol)) {
-		throw new Error(`Unsupported ${selection.label} asset URL scheme: ${sourceBase.protocol}`);
-	}
-	if (!sourceBase.pathname.endsWith('/')) sourceBase.pathname += '/';
-
-	let downloaded = 0;
-	let reused = 0;
-	for (const asset of assets) {
-		if (
-			!Number.isSafeInteger(asset.size) ||
-			asset.size < 0 ||
-			typeof asset.sha256 !== 'string' ||
-			!/^[a-f0-9]{64}$/u.test(asset.sha256)
-		) {
-			throw new Error(`Invalid ${selection.label} receipt entry: ${asset.asset}`);
-		}
-		const targetPath = path.resolve(staticDir, selection.targetAsset(asset.asset));
-		const relativeTarget = path.relative(staticDir, targetPath);
-		if (
-			relativeTarget === '..' ||
-			relativeTarget.startsWith(`..${path.sep}`) ||
-			path.isAbsolute(relativeTarget)
-		) {
-			throw new Error(
-				`${selection.label} asset escapes the static directory: ${asset.asset}`
-			);
-		}
-		const existing = await stat(targetPath).catch(() => null);
-		if (existing?.isFile() && existing.size === asset.size) {
-			const digest = createHash('sha256')
-				.update(await readFile(targetPath))
-				.digest('hex');
-			if (digest === asset.sha256) {
-				reused += 1;
-				continue;
-			}
-		}
-
-		const sourceUrl = new URL(selection.sourceAsset(asset.asset), sourceBase);
-		const response = await fetchImpl(sourceUrl, {
-			headers: {
-				Cookie: bypassCookie,
-				'User-Agent': selection.userAgent
-			},
-			redirect: 'follow',
-			signal: AbortSignal.timeout(timeoutMs)
-		});
-		const finalUrl = new URL(response.url || sourceUrl.href);
-		if (
-			finalUrl.origin !== sourceBase.origin ||
-			!finalUrl.pathname.startsWith(sourceBase.pathname)
-		) {
-			throw new Error(
-				`${selection.label} asset redirected outside its trusted base: ${finalUrl.href}`
-			);
-		}
-		if (!response.ok) {
-			throw new Error(`Failed to download ${sourceUrl.href}: ${response.status}`);
-		}
-		const declaredLength = Number(response.headers.get('content-length') || 0);
-		const contentEncoding = response.headers.get('content-encoding');
-		if (declaredLength && !contentEncoding && declaredLength !== asset.size) {
-			throw new Error(
-				`${selection.label} asset ${asset.asset} size mismatch: expected ${asset.size}, received ${declaredLength}`
-			);
-		}
-		const bytes = new Uint8Array(await response.arrayBuffer());
-		const digest = createHash('sha256').update(bytes).digest('hex');
-		if (bytes.byteLength !== asset.size || digest !== asset.sha256) {
-			throw new Error(
-				`Downloaded ${selection.label} asset failed receipt validation: ${asset.asset}`
-			);
-		}
-
-		await mkdir(path.dirname(targetPath), { recursive: true });
-		const temporaryPath = `${targetPath}.tmp-${process.pid}-${randomUUID()}`;
-		try {
-			await writeFile(temporaryPath, bytes);
-			await rename(temporaryPath, targetPath);
-		} finally {
-			await rm(temporaryPath, { force: true });
-		}
-		downloaded += 1;
-	}
-
-	return { downloaded, reused };
+	return preparePinnedAssets({
+		assets: assets.map((asset) => ({
+			sourcePath: selection.sourceAsset(asset.asset),
+			targetPath: selection.targetAsset(asset.asset),
+			size: asset.size,
+			sha256: asset.sha256
+		})),
+		targetRoot: staticDir,
+		sourceBaseUrl: baseUrl,
+		label: selection.label,
+		userAgent: selection.userAgent,
+		bypassCookie,
+		fetchImpl,
+		timeoutMs
+	});
 }
 
 /** @param {PrepareClangAssetsOptions} [options] */

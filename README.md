@@ -424,6 +424,13 @@ checks their exact sizes and SHA-256 digests, and reuses a local file only when 
 this step automatically. `WASM_IDLE_TEST_ASSET_BASE_URL` and `WASM_IDLE_TEST_BYPASS_COOKIE` can
 override the trusted asset origin and access cookie for a compatible mirror.
 
+The scheduled full browser-LSP matrix similarly runs
+`node scripts/prepare-ocaml-lsp-assets.mjs`. Its lock receipt pins the deployed OCaml browser
+compiler graph to an exact `gh-pages` revision and records every file size and SHA-256 digest; a
+clean checkout therefore does not rebuild the OPAM switch merely to exercise OCaml diagnostics.
+Set `WASM_IDLE_OCAML_LSP_ASSET_BASE_URL` only when serving the same receipt-pinned files from a
+compatible mirror.
+
 Browser-level Rust and TinyGo checks are reproducible from this repo:
 
 ```bash
