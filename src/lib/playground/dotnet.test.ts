@@ -196,6 +196,161 @@ End Module`;
 		);
 	});
 
+	it('rejects pre-aborted startup and execution without changing dotnet state', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		const startupController = new AbortController();
+		startupController.abort(null);
+		sandbox.write('queued before abort\n');
+
+		await expect(
+			sandbox.load('/absproxy/5173', '', true, [], { signal: startupController.signal })
+		).rejects.toBeNull();
+		expect(workerInstances).toHaveLength(0);
+		expect(sandbox.moduleUrl).toBe('');
+		expect(sandbox.pendingInput).toEqual(['queued before abort\n']);
+		expect(sandbox.uid).toBe(0);
+
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		const fallbackSignal = {
+			aborted: true,
+			reason: undefined,
+			addEventListener: vi.fn(),
+			removeEventListener: vi.fn()
+		} as unknown as AbortSignal;
+		await expect(
+			sandbox.run('Console.WriteLine("never dispatched");', false, true, undefined, [], {
+				signal: fallbackSignal
+			})
+		).rejects.toMatchObject({
+			name: 'AbortError',
+			message: 'C# execution aborted'
+		});
+		expect(worker?.postMessage).toHaveBeenCalledOnce();
+		expect(worker?.terminate).not.toHaveBeenCalled();
+		expect(sandbox.pendingInput).toEqual(['queued before abort\n']);
+		expect(sandbox.uid).toBe(0);
+		await expect(sandbox.run('Console.WriteLine("retry");', false)).resolves.toBe(true);
+	});
+
+	it('aborts before scheduled worker startup can create a dotnet worker', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		const controller = new AbortController();
+		const reason = new Error('cancel dotnet before worker import');
+		const loading = sandbox.load('/absproxy/5173', '', true, [], {
+			signal: controller.signal
+		});
+		const outcome = loading.catch((error) => error);
+
+		controller.abort(reason);
+		await expect(outcome).resolves.toBe(reason);
+		await vi.dynamicImportSettled();
+		expect(workerInstances).toHaveLength(0);
+		expect(sandbox.moduleUrl).toBe('');
+		await expect(sandbox.load('/absproxy/5173')).resolves.toBeUndefined();
+		expect(workerInstances).toHaveLength(1);
+	});
+
+	it('aborts stalled worker startup and quarantines its stale readiness handler', async () => {
+		suppressAutoLoadAck = true;
+		const sandbox = new Dotnet('CSHARP');
+		const controller = new AbortController();
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const reason = new Error('cancel stalled dotnet startup');
+		const loading = sandbox.load('/absproxy/5173', '', true, [], {
+			signal: controller.signal
+		});
+		const outcome = loading.catch((error) => error);
+		await vi.dynamicImportSettled();
+		const worker = workerInstances[0];
+		const staleHandler = worker?.onmessage;
+		const registration = addEventListener.mock.calls.find(([type]) => type === 'abort');
+
+		controller.abort(reason);
+		await expect(outcome).resolves.toBe(reason);
+		expect(removeEventListener).toHaveBeenCalledWith('abort', registration?.[1]);
+		expect(worker?.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+
+		suppressAutoLoadAck = false;
+		const retry = sandbox.load('/absproxy/5173');
+		await expect(retry).resolves.toBeUndefined();
+		const replacement = workerInstances[1];
+		staleHandler?.({ data: { load: true } } as MessageEvent<any>);
+		expect(sandbox.worker).toBe(replacement);
+		expect(replacement?.terminate).not.toHaveBeenCalled();
+	});
+
+	it('keeps the abort reason and replacement stdin when an output callback throws', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		await sandbox.load('/absproxy/5173');
+		suppressAutoRunAck = true;
+		const worker = workerInstances[0];
+		const controller = new AbortController();
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const reason = new Error('abort dotnet output callback');
+		const callbackError = new Error('throw after dotnet abort');
+		sandbox.output = () => {
+			controller.abort(reason);
+			sandbox.write('fresh after abort\n');
+			sandbox.eof();
+			throw callbackError;
+		};
+		const running = sandbox.run('var input = Console.ReadLine();', false, true, undefined, [], {
+			stdin: '',
+			signal: controller.signal
+		});
+		const outcome = running.catch((error) => error);
+		await vi.waitFor(() => expect(worker?.postMessage).toHaveBeenCalledTimes(2));
+		const staleHandler = worker?.onmessage;
+		sandbox.write('discard with explicit stdin\n');
+
+		staleHandler?.({ data: { output: 'trigger abort\n' } } as MessageEvent<any>);
+		await expect(outcome).resolves.toBe(reason);
+		expect(worker?.terminate).toHaveBeenCalledOnce();
+		expect(removeEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
+		expect(sandbox.pendingInput).toEqual(['fresh after abort\n']);
+		expect(sandbox.pendingEof).toBe(true);
+
+		sandbox.output = vi.fn();
+		await sandbox.load('/absproxy/5173');
+		const replacement = workerInstances[1];
+		const retry = sandbox.run('var input = Console.ReadLine();', false);
+		await vi.waitFor(() => expect(replacement?.postMessage).toHaveBeenCalledTimes(2));
+		expect(replacement?.postMessage.mock.calls[1]?.[0]).toEqual(
+			expect.objectContaining({ stdin: 'fresh after abort\n' })
+		);
+		const replacementHandler = replacement?.onmessage;
+		staleHandler?.({ data: { results: true } } as MessageEvent<any>);
+		expect(replacement?.onmessage).toBe(replacementHandler);
+		replacement?.onmessage?.({ data: { results: true } } as MessageEvent<any>);
+		await expect(retry).resolves.toBe(true);
+	});
+
+	it('removes settled dotnet listeners and keeps late aborts inert', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		const loadController = new AbortController();
+		const loadRemoveEventListener = vi.spyOn(loadController.signal, 'removeEventListener');
+		await sandbox.load('/absproxy/5173', '', true, [], { signal: loadController.signal });
+		const worker = workerInstances[0];
+		expect(loadRemoveEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
+
+		loadController.abort(new Error('late dotnet startup abort'));
+		expect(worker?.terminate).not.toHaveBeenCalled();
+
+		const runController = new AbortController();
+		const runRemoveEventListener = vi.spyOn(runController.signal, 'removeEventListener');
+		await sandbox.run('Console.WriteLine("done");', false, true, undefined, [], {
+			signal: runController.signal
+		});
+		expect(runRemoveEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
+
+		runController.abort(new Error('late dotnet execution abort'));
+		expect(worker?.terminate).not.toHaveBeenCalled();
+		await expect(sandbox.run('Console.WriteLine("retry");', false)).resolves.toBe(true);
+	});
+
 	it('rejects run and load calls while worker startup remains active', async () => {
 		suppressAutoLoadAck = true;
 		const sandbox = new Dotnet('CSHARP');
@@ -814,6 +969,249 @@ export async function executeBrowserDotnetArtifact() {
 		} finally {
 			delete (globalThis as any)[fixtureKey];
 		}
+	});
+
+	it('aborts main-thread startup during compiler creation without committing candidates', async () => {
+		vi.stubGlobal('crossOriginIsolated', true);
+		vi.stubGlobal('navigator', { serviceWorker: { controller: {} } });
+		const fixtureKey = '__wasm_idle_dotnet_factory_abort_fixture';
+		const controller = new AbortController();
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const reason = new Error('abort dotnet compiler factory');
+		const compile = vi.fn(async () => ({ success: true, artifact: { id: 'fixture' } }));
+		const fixture = {
+			abortOnCreate: true,
+			create: vi.fn(() => {
+				if (fixture.abortOnCreate) controller.abort(reason);
+				return { compile };
+			})
+		};
+		(globalThis as any)[fixtureKey] = fixture;
+		const moduleSource = `
+const fixture = globalThis[${JSON.stringify(fixtureKey)}];
+export function createDotnetCompiler() {
+	return fixture.create();
+}
+export async function executeBrowserDotnetArtifact() {
+	return { exitCode: 0, stdout: '', stderr: '' };
+}
+`;
+		const moduleUrl = `data:text/javascript;charset=utf-8,${encodeURIComponent(moduleSource)}`;
+		const sandbox = new Dotnet('CSHARP');
+
+		try {
+			await expect(
+				sandbox.load({ dotnet: { moduleUrl } }, '', true, [], { signal: controller.signal })
+			).rejects.toBe(reason);
+			expect(removeEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
+			expect(sandbox.moduleUrl).toBe('');
+			expect(sandbox.runtimeModule).toBeNull();
+			expect(sandbox.compiler).toBeNull();
+
+			fixture.abortOnCreate = false;
+			await expect(sandbox.load({ dotnet: { moduleUrl } })).resolves.toBeUndefined();
+			expect(sandbox.moduleUrl).toBe(moduleUrl);
+			expect(sandbox.runtimeModule).not.toBeNull();
+			expect(sandbox.compiler).not.toBeNull();
+			expect(fixture.create).toHaveBeenCalledTimes(2);
+		} finally {
+			delete (globalThis as any)[fixtureKey];
+		}
+	});
+
+	it('rejects main-thread compilation abort promptly but holds Busy until compile settles', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		let markCompileStarted!: () => void;
+		const compileStarted = new Promise<void>((resolve) => {
+			markCompileStarted = resolve;
+		});
+		let releaseCompile!: () => void;
+		const compileGate = new Promise<void>((resolve) => {
+			releaseCompile = resolve;
+		});
+		const diagnostic = {
+			fileName: 'Program.cs',
+			lineNumber: 1,
+			severity: 'warning' as const,
+			message: 'late diagnostic'
+		};
+		const compile = vi
+			.fn()
+			.mockImplementationOnce(
+				async (request: {
+					onProgress?: (progress: { percent: number; stage: string }) => void;
+				}) => {
+					markCompileStarted();
+					await compileGate;
+					request.onProgress?.({ percent: 0.9, stage: 'late-compile' });
+					return {
+						success: true,
+						artifact: { id: 'cancelled-artifact' },
+						diagnostics: [diagnostic],
+						logs: ['late log'],
+						stdout: 'late stdout'
+					};
+				}
+			)
+			.mockResolvedValue({ success: true, artifact: { id: 'retry-artifact' } });
+		const execute = vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' }));
+		sandbox.runtimeModule = {
+			createDotnetCompiler: () => ({ compile }),
+			executeBrowserDotnetArtifact: execute
+		};
+		sandbox.compiler = { compile };
+		const progress = { set: vi.fn() };
+		const output = vi.fn();
+		const oncompilerdiagnostic = vi.fn();
+		sandbox.output = output;
+		sandbox.oncompilerdiagnostic = oncompilerdiagnostic;
+		const controller = new AbortController();
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const reason = new Error('abort dotnet main-thread compile');
+		const running = sandbox.run('Console.WriteLine("compile");', true, true, progress, [], {
+			signal: controller.signal
+		});
+		const outcome = running.catch((error) => error);
+		await compileStarted;
+
+		controller.abort(reason);
+		await expect(outcome).resolves.toBe(reason);
+		expect(removeEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
+		await expect(sandbox.run('Console.WriteLine("busy");', true)).rejects.toMatchObject({
+			name: 'BusyError',
+			phase: 'execute',
+			runtimeId: 'CSHARP'
+		});
+
+		releaseCompile();
+		await vi.waitFor(() => expect((sandbox as any).activeOperation).toBeNull());
+		expect(progress.set).not.toHaveBeenCalled();
+		expect(output).not.toHaveBeenCalled();
+		expect(oncompilerdiagnostic).not.toHaveBeenCalled();
+		expect(sandbox.compiledArtifact).toBeNull();
+		expect(sandbox.compiledCacheKey).toBe('');
+		await expect(sandbox.run('Console.WriteLine("compile");', true)).resolves.toBe(true);
+		expect(compile).toHaveBeenCalledTimes(2);
+		expect(execute).not.toHaveBeenCalled();
+	});
+
+	it('suppresses late main-thread execution output and preserves replacement stdin after abort', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		const code = 'Console.WriteLine("execute");';
+		const compile = vi.fn(async () => ({ success: true, artifact: { id: 'artifact' } }));
+		let markExecutionStarted!: () => void;
+		const executionStarted = new Promise<void>((resolve) => {
+			markExecutionStarted = resolve;
+		});
+		let releaseExecution!: () => void;
+		const executionGate = new Promise<void>((resolve) => {
+			releaseExecution = resolve;
+		});
+		let cancelledOptions:
+			| { stdin?: string; stdout?: (chunk: string) => void; stderr?: (chunk: string) => void }
+			| undefined;
+		const execute = vi
+			.fn()
+			.mockImplementationOnce(
+				async (
+					_artifact: unknown,
+					options?: {
+						stdin?: string;
+						stdout?: (chunk: string) => void;
+						stderr?: (chunk: string) => void;
+					}
+				) => {
+					cancelledOptions = options;
+					markExecutionStarted();
+					await executionGate;
+					return { exitCode: 0, stdout: '', stderr: '' };
+				}
+			)
+			.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+		sandbox.runtimeModule = {
+			createDotnetCompiler: () => ({ compile }),
+			executeBrowserDotnetArtifact: execute
+		};
+		sandbox.compiler = { compile };
+		const output = vi.fn();
+		sandbox.output = output;
+		const controller = new AbortController();
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const reason = new Error('abort dotnet main-thread execution');
+		const running = sandbox.run(code, false, true, undefined, [], {
+			stdin: '',
+			signal: controller.signal
+		});
+		const outcome = running.catch((error) => error);
+		await executionStarted;
+
+		controller.abort(reason);
+		sandbox.write('fresh after main-thread abort\n');
+		sandbox.eof();
+		cancelledOptions?.stdout?.('late stdout');
+		cancelledOptions?.stderr?.('late stderr');
+		await expect(outcome).resolves.toBe(reason);
+		expect(removeEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
+		expect(output).not.toHaveBeenCalled();
+		expect(sandbox.pendingInput).toEqual(['fresh after main-thread abort\n']);
+		expect(sandbox.pendingEof).toBe(true);
+		await expect(sandbox.run(code, false)).rejects.toMatchObject({
+			name: 'BusyError',
+			phase: 'execute'
+		});
+
+		releaseExecution();
+		await vi.waitFor(() => expect((sandbox as any).activeOperation).toBeNull());
+		expect(sandbox.pendingInput).toEqual(['fresh after main-thread abort\n']);
+		expect(sandbox.pendingEof).toBe(true);
+		await expect(sandbox.run(code, false)).resolves.toBe(true);
+		expect(execute.mock.calls[1]?.[1]).toEqual(
+			expect.objectContaining({ stdin: 'fresh after main-thread abort\n' })
+		);
+		expect(compile).toHaveBeenCalledOnce();
+	});
+
+	it('wakes an aborted main-thread stdin waiter without consuming replacement input', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		const code = 'var input = Console.ReadLine();';
+		const compile = vi.fn(async () => ({ success: true, artifact: { id: 'artifact' } }));
+		const execute = vi.fn(
+			async (
+				_artifact: unknown,
+				_options?: {
+					stdin?: string;
+					stdout?: (chunk: string) => void;
+					stderr?: (chunk: string) => void;
+				}
+			) => ({ exitCode: 0, stdout: '', stderr: '' })
+		);
+		sandbox.runtimeModule = {
+			createDotnetCompiler: () => ({ compile }),
+			executeBrowserDotnetArtifact: execute
+		};
+		sandbox.compiler = { compile };
+		const controller = new AbortController();
+		const reason = new Error('abort dotnet main-thread stdin wait');
+		const running = sandbox.run(code, false, true, undefined, [], {
+			signal: controller.signal
+		});
+		const outcome = running.catch((error) => error);
+		await vi.waitFor(() => expect(compile).toHaveBeenCalledOnce());
+		await Promise.resolve();
+		expect(execute).not.toHaveBeenCalled();
+
+		controller.abort(reason);
+		sandbox.write('replacement main-thread input\n');
+		await expect(outcome).resolves.toBe(reason);
+		await vi.waitFor(() => expect((sandbox as any).activeOperation).toBeNull());
+		expect(sandbox.pendingInput).toEqual(['replacement main-thread input\n']);
+		expect(execute).not.toHaveBeenCalled();
+
+		await expect(sandbox.run(code, false)).resolves.toBe(true);
+		expect(execute).toHaveBeenCalledOnce();
+		expect(execute.mock.calls[0]?.[1]).toEqual(
+			expect.objectContaining({ stdin: 'replacement main-thread input\n' })
+		);
 	});
 
 	it('keeps a cancelled main-thread operation busy until compilation settles', async () => {

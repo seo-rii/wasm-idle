@@ -15,6 +15,10 @@ type DotnetOperation = {
 	token: symbol;
 	phase: 'startup' | 'execute';
 	cancelled: boolean;
+	deferCompletion: boolean;
+	signal?: AbortSignal;
+	onAbort?: () => void;
+	abortReject?: (reason: unknown) => void;
 };
 type DotnetRuntimeModule = {
 	createDotnetCompiler: (options?: { loadReferences?: boolean }) => {
@@ -100,21 +104,85 @@ class Dotnet implements Sandbox {
 				phase: this.activeOperation.phase
 			});
 		}
-		const operation = {
+		const operation: DotnetOperation = {
 			token: Symbol(phase),
 			phase,
-			cancelled: false
-		} satisfies DotnetOperation;
+			cancelled: false,
+			deferCompletion: false
+		};
 		this.activeOperation = operation;
 		return operation;
 	}
 
 	private completeOperation(operation: DotnetOperation) {
 		if (this.activeOperation?.token === operation.token) this.activeOperation = null;
+		this.releaseAbortSignal(operation);
+		operation.abortReject = undefined;
 	}
 
 	private isOperationActive(operation: DotnetOperation) {
 		return this.activeOperation?.token === operation.token && !operation.cancelled;
+	}
+
+	private releaseAbortSignal(operation: DotnetOperation) {
+		const { signal, onAbort } = operation;
+		operation.signal = undefined;
+		operation.onAbort = undefined;
+		if (signal && onAbort) {
+			try {
+				signal.removeEventListener('abort', onAbort);
+			} catch {
+				// Listener cleanup must not replace the operation result.
+			}
+		}
+	}
+
+	private abortReason(signal: AbortSignal, phase: DotnetOperation['phase']) {
+		if (signal.reason !== undefined) return signal.reason;
+		return new DOMException(
+			phase === 'startup'
+				? `${this.languageLabel} runtime startup aborted`
+				: `${this.languageLabel} execution aborted`,
+			'AbortError'
+		);
+	}
+
+	private abortOperation(operation: DotnetOperation, reason: unknown) {
+		if (!this.isOperationActive(operation)) {
+			this.releaseAbortSignal(operation);
+			return;
+		}
+		const rejectAbort = operation.abortReject;
+		operation.abortReject = undefined;
+		operation.cancelled = true;
+		this.releaseAbortSignal(operation);
+		if (!operation.deferCompletion) this.completeOperation(operation);
+		this.activeExplicitStdinCleanup?.();
+		this.uid += 1;
+		this.resolveStdinWaiters();
+		this.workerSession.terminate(reason);
+		this.exit = true;
+		rejectAbort?.(reason);
+	}
+
+	private bindAbortSignal(operation: DotnetOperation, signal?: AbortSignal) {
+		if (!signal) return;
+		const onAbort = () => {
+			if (!this.isOperationActive(operation)) {
+				this.releaseAbortSignal(operation);
+				return;
+			}
+			this.abortOperation(operation, this.abortReason(signal, operation.phase));
+		};
+		operation.signal = signal;
+		operation.onAbort = onAbort;
+		try {
+			signal.addEventListener('abort', onAbort, { once: true });
+		} catch (error) {
+			this.abortOperation(operation, error);
+			return;
+		}
+		if (signal.aborted) onAbort();
 	}
 
 	private shouldRunOnMainThread() {
@@ -131,9 +199,13 @@ class Dotnet implements Sandbox {
 		_code = '',
 		_log = true,
 		_args: string[] = [],
-		_options: SandboxExecutionOptions = {},
+		options: SandboxExecutionOptions = {},
 		progress?: SandboxProgress
 	) {
+		const signal = options.signal;
+		if (signal?.aborted) {
+			return Promise.reject(this.abortReason(signal, 'startup'));
+		}
 		let operation: DotnetOperation;
 		try {
 			operation = this.beginOperation('startup');
@@ -184,6 +256,7 @@ class Dotnet implements Sandbox {
 						this.compiledArtifact = null;
 						this.compiledCacheKey = '';
 					}
+					this.completeOperation(operation);
 					resolve();
 					return;
 				}
@@ -210,6 +283,7 @@ class Dotnet implements Sandbox {
 								this.compiler = null;
 								this.compiledArtifact = null;
 								this.compiledCacheKey = '';
+								this.completeOperation(operation);
 								resolve();
 								return;
 							}
@@ -231,12 +305,14 @@ class Dotnet implements Sandbox {
 					this.compiler = null;
 					this.compiledArtifact = null;
 					this.compiledCacheKey = '';
+					this.completeOperation(operation);
 					resolve();
 				}
 			} catch (error: any) {
 				reject(error?.message || String(error));
 			}
 		});
+		this.bindAbortSignal(operation, signal);
 		return loading.finally(() => this.completeOperation(operation));
 	}
 
@@ -297,13 +373,29 @@ class Dotnet implements Sandbox {
 		args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
+		const signal = options.signal;
+		if (signal?.aborted) throw this.abortReason(signal, 'execute');
 		const operation = this.beginOperation('execute');
+		let completionDeferred = false;
 		try {
 			if (options.stdin !== undefined && typeof options.stdin !== 'string') {
 				throw new TypeError(`${this.languageLabel} stdin must be a string`);
 			}
 			if (this.runtimeModule && this.compiler) {
-				return await this.runOnMainThread(
+				operation.deferCompletion = true;
+				let abortPromise: Promise<never> | undefined;
+				if (signal) {
+					abortPromise = new Promise<never>((_resolve, reject) => {
+						operation.abortReject = reject;
+					});
+				}
+				this.bindAbortSignal(operation, signal);
+				if (!this.isOperationActive(operation)) {
+					operation.deferCompletion = false;
+					this.completeOperation(operation);
+					return await abortPromise!;
+				}
+				const execution = this.runOnMainThread(
 					operation,
 					code,
 					prepare,
@@ -311,7 +403,11 @@ class Dotnet implements Sandbox {
 					_prog,
 					args,
 					options
-				);
+				).finally(() => this.completeOperation(operation));
+				completionDeferred = true;
+				return abortPromise
+					? await Promise.race<boolean | string>([abortPromise, execution])
+					: await execution;
 			}
 			if (!this.worker) throw 'Worker not loaded';
 			const worker = this.worker;
@@ -335,60 +431,38 @@ class Dotnet implements Sandbox {
 					this.activeExplicitStdinCleanup = cleanupExplicitStdin;
 				}
 				let handler: (event: Event & { data: any }) => void;
+				const ownsRun = () =>
+					this.isOperationActive(operation) &&
+					this.worker === worker &&
+					worker.onmessage === handler &&
+					_uid === this.uid;
 				const failRun = (error: unknown, disposeWorker = false) => {
+					if (!ownsRun()) return;
 					cleanupExplicitStdin();
 					if (worker.onmessage === handler) worker.onmessage = null;
 					this.workerSession.complete(workerOperation);
 					if (disposeWorker && this.worker === worker) this.workerSession.reset();
 					this.exit = true;
+					this.completeOperation(operation);
 					reject(error);
 				};
 				handler = (event: Event & { data: any }) => {
-					if (
-						!this.isOperationActive(operation) ||
-						this.worker !== worker ||
-						worker.onmessage !== handler ||
-						_uid !== this.uid
-					) {
-						cleanupExplicitStdin();
-						if (worker.onmessage === handler) worker.onmessage = null;
-						return;
-					}
+					if (!ownsRun()) return;
 					try {
 						const { output, results, error, diagnostic, progress } = event.data;
 						reportWorkerProgress(_prog, progress);
-						if (
-							!this.isOperationActive(operation) ||
-							this.worker !== worker ||
-							worker.onmessage !== handler ||
-							_uid !== this.uid
-						) {
-							return;
-						}
+						if (!ownsRun()) return;
 						if (output) this.output?.(output);
-						if (
-							!this.isOperationActive(operation) ||
-							this.worker !== worker ||
-							worker.onmessage !== handler ||
-							_uid !== this.uid
-						) {
-							return;
-						}
+						if (!ownsRun()) return;
 						if (diagnostic) this.oncompilerdiagnostic?.(diagnostic);
-						if (
-							!this.isOperationActive(operation) ||
-							this.worker !== worker ||
-							worker.onmessage !== handler ||
-							_uid !== this.uid
-						) {
-							return;
-						}
+						if (!ownsRun()) return;
 						if (results) {
 							cleanupExplicitStdin();
 							if (worker.onmessage === handler) worker.onmessage = null;
 							this.elapse = Date.now() - this.begin;
 							this.exit = true;
 							this.workerSession.complete(workerOperation);
+							this.completeOperation(operation);
 							resolve(results as string);
 							return;
 						}
@@ -401,17 +475,12 @@ class Dotnet implements Sandbox {
 					}
 				};
 				worker.onmessage = handler;
+				this.bindAbortSignal(operation, signal);
+				if (!ownsRun()) return;
 				this.begin = Date.now();
 				this.collectStdinForRun(code, prepare, options, _uid)
 					.then((stdin) => {
-						if (
-							!this.isOperationActive(operation) ||
-							this.worker !== worker ||
-							worker.onmessage !== handler ||
-							_uid !== this.uid
-						) {
-							return;
-						}
+						if (!ownsRun()) return;
 						worker.postMessage({
 							code,
 							language: this.compileLanguage,
@@ -426,7 +495,7 @@ class Dotnet implements Sandbox {
 					});
 			});
 		} finally {
-			this.completeOperation(operation);
+			if (!completionDeferred) this.completeOperation(operation);
 		}
 	}
 
@@ -543,12 +612,18 @@ class Dotnet implements Sandbox {
 		this.terminate();
 	}
 
-	terminate() {
-		if (this.activeOperation) this.activeOperation.cancelled = true;
+	terminate(reason: unknown = 'Process terminated') {
+		const operation = this.activeOperation;
+		if (operation) {
+			operation.cancelled = true;
+			operation.abortReject = undefined;
+			this.releaseAbortSignal(operation);
+			if (!operation.deferCompletion) this.completeOperation(operation);
+		}
 		this.activeExplicitStdinCleanup?.();
 		this.uid += 1;
 		this.resolveStdinWaiters();
-		this.workerSession.terminate();
+		this.workerSession.terminate(reason);
 		this.exit = true;
 	}
 
