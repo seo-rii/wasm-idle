@@ -269,6 +269,66 @@ void main() {
 		await expect(sandbox.run('void main() {}', false)).resolves.toBe(true);
 	});
 
+	it('rejects a pre-aborted D startup without changing an existing worker', async () => {
+		const sandbox = new D();
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		worker.postMessage.mockClear();
+		const progress = { set: vi.fn() };
+		const controller = new AbortController();
+		const reason = new Error('D startup pre-aborted');
+		controller.abort(reason);
+
+		await expect(
+			sandbox.load('/absproxy/5173', '', true, [], { signal: controller.signal }, progress)
+		).rejects.toBe(reason);
+
+		expect(sandbox.worker).toBe(worker);
+		expect(worker.postMessage).not.toHaveBeenCalled();
+		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(progress.set).not.toHaveBeenCalled();
+	});
+
+	it('aborts an active D startup and ignores stale completion', async () => {
+		suppressAutoLoadAck = true;
+		const sandbox = new D();
+		const progress = { set: vi.fn() };
+		const controller = new AbortController();
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const reason = new Error('D startup aborted');
+		const loading = sandbox.load(
+			'/absproxy/5173',
+			'',
+			true,
+			[],
+			{ signal: controller.signal },
+			progress
+		);
+		await vi.dynamicImportSettled();
+		const worker = workerInstances[0];
+		const staleHandler = worker.onmessage;
+
+		controller.abort(reason);
+		await expect(loading).rejects.toBe(reason);
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(removeEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
+		expect(sandbox.worker).toBeUndefined();
+
+		staleHandler?.({ data: { progress: 0.8, load: true } } as MessageEvent<any>);
+		expect(progress.set).not.toHaveBeenCalled();
+
+		suppressAutoLoadAck = false;
+		const settledController = new AbortController();
+		await sandbox.load('/absproxy/5173', '', true, [], {
+			signal: settledController.signal
+		});
+		const retryWorker = workerInstances.at(-1)!;
+		expect(retryWorker.terminate).not.toHaveBeenCalled();
+
+		settledController.abort(new Error('late startup abort'));
+		expect(retryWorker.terminate).not.toHaveBeenCalled();
+	});
+
 	it('releases D run activity after synchronous dispatch failure', async () => {
 		const sandbox = new D();
 		const worker = new MockWorker();
