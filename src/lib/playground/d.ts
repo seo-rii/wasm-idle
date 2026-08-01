@@ -1,5 +1,10 @@
 import { resolveDModuleUrl, type PlaygroundRuntimeAssets } from '$lib/playground/assets';
-import { BusyError } from '@wasm-idle/core';
+import {
+	BusyError,
+	DEFAULT_WORKSPACE_LIMITS,
+	resolveExecutionLimits,
+	validateExecutionWorkspace
+} from '@wasm-idle/core';
 import {
 	resolveSandboxExecutionArgs,
 	type CompilerDiagnostic,
@@ -209,8 +214,28 @@ class D implements Sandbox {
 			);
 		}
 		let programArgs: string[];
+		let workspace: ReturnType<typeof validateExecutionWorkspace>;
 		try {
 			programArgs = resolveSandboxExecutionArgs('D', args, options).programArgs;
+			const limits = resolveExecutionLimits(options.limits);
+			workspace = validateExecutionWorkspace(
+				code,
+				options.workspaceFiles ?? [],
+				options.activePath ?? 'main.d',
+				{
+					...options.workspaceLimits,
+					maxFileBytes: Math.min(
+						options.workspaceLimits?.maxFileBytes ??
+							DEFAULT_WORKSPACE_LIMITS.maxFileBytes,
+						limits.maxWorkspaceBytes
+					),
+					maxTotalBytes: Math.min(
+						options.workspaceLimits?.maxTotalBytes ??
+							DEFAULT_WORKSPACE_LIMITS.maxTotalBytes,
+						limits.maxWorkspaceBytes
+					)
+				}
+			);
 		} catch (error) {
 			return Promise.reject(error);
 		}
@@ -295,7 +320,7 @@ class D implements Sandbox {
 					buffer: this.buffer,
 					args: programArgs,
 					stdin: options.stdin,
-					fileName: options.activePath || 'main.d',
+					fileName: workspace.activePath,
 					log: _log
 				});
 			} catch (error) {
