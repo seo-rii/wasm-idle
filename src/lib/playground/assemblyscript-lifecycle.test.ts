@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { readBufferedStdin } from './stdinBuffer';
 
 const workerInstances: MockWorker[] = [];
 let autoResolveLoad = true;
@@ -203,10 +204,12 @@ describe('AssemblyScript operation lifecycle', () => {
 			true,
 			undefined,
 			[],
-			{ signal: controller.signal }
+			{ signal: controller.signal, stdin: '' }
 		);
 		const oldWorker = workerInstances[0];
 		const staleResult = oldWorker?.onmessage;
+		sandbox.write('discard on abort\n');
+		sandbox.eof();
 
 		controller.abort(reason);
 		autoResolveLoad = true;
@@ -214,6 +217,8 @@ describe('AssemblyScript operation lifecycle', () => {
 
 		await expect(running).rejects.toBe(reason);
 		await expect(retryLoad).resolves.toBeUndefined();
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.pendingEof).toBe(false);
 		expect(oldWorker?.terminate).toHaveBeenCalledOnce();
 		const replacementWorker = workerInstances[1];
 		const replacementRun = sandbox.run('export function replacement(): void {}', false);
@@ -250,6 +255,84 @@ describe('AssemblyScript operation lifecycle', () => {
 		await expect(retry).resolves.toBeUndefined();
 		expect(oldWorker?.terminate).toHaveBeenCalledOnce();
 		expect(workerInstances).toHaveLength(2);
+	});
+
+	it('isolates explicit stdin from queued terminal input', async () => {
+		autoResolveRun = false;
+		const sandbox = new AssemblyScript();
+		await sandbox.load('/assets');
+		const worker = workerInstances[0];
+		sandbox.write('stale\n');
+		sandbox.eof();
+
+		const explicitRun = sandbox.run(
+			'export function explicitRun(): void {}',
+			false,
+			true,
+			undefined,
+			[],
+			{ stdin: '' }
+		);
+		const explicitMessage = worker?.postMessage.mock.calls.at(-1)?.[0];
+		worker?.onmessage?.({ data: { buffer: true } } as MessageEvent<any>);
+		sandbox.write('during\n');
+		sandbox.eof();
+
+		expect(explicitMessage.stdin).toBe('');
+		expect(readBufferedStdin(explicitMessage.buffer)).toBe('');
+		worker?.resolveRun();
+		await expect(explicitRun).resolves.toBe(true);
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.pendingEof).toBe(false);
+
+		const bufferedRun = sandbox.run('export function bufferedRun(): void {}', false);
+		const bufferedMessage = worker?.postMessage.mock.calls.at(-1)?.[0];
+		worker?.onmessage?.({ data: { buffer: true } } as MessageEvent<any>);
+
+		expect(bufferedMessage.stdin).toBeUndefined();
+		expect(readBufferedStdin(bufferedMessage.buffer)).toBe('');
+		sandbox.write('fresh\n');
+		expect(readBufferedStdin(bufferedMessage.buffer)).toBe('fresh\n');
+		worker?.resolveRun();
+		await expect(bufferedRun).resolves.toBe(true);
+	});
+
+	it('clears explicit stdin state after worker and dispatch failures', async () => {
+		autoResolveRun = false;
+		const sandbox = new AssemblyScript();
+		await sandbox.load('/assets');
+		const worker = workerInstances[0];
+		const workerError = new Error('AssemblyScript execution failed');
+		const failedRun = sandbox.run(
+			'export function failedRun(): void {}',
+			false,
+			true,
+			undefined,
+			[],
+			{ stdin: 'fixed\n' }
+		);
+		sandbox.write('discard after worker failure\n');
+		sandbox.eof();
+
+		worker?.rejectRun(workerError);
+		await expect(failedRun).rejects.toBe(workerError);
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.pendingEof).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
+
+		const dispatchError = new Error('AssemblyScript dispatch failed');
+		runDispatchError = dispatchError;
+		sandbox.write('discard after dispatch failure\n');
+		sandbox.eof();
+
+		await expect(
+			sandbox.run('export function dispatchFailure(): void {}', false, true, undefined, [], {
+				stdin: ''
+			})
+		).rejects.toBe(dispatchError);
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.pendingEof).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
 	});
 
 	it('removes a settled execution listener and keeps late abort inert', async () => {

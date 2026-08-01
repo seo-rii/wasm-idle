@@ -223,6 +223,17 @@ class AssemblyScriptSandbox implements Sandbox {
 			return Promise.reject('Worker not loaded');
 		}
 		const worker = this.worker;
+		const hasExplicitStdin = options.stdin !== undefined;
+		if (hasExplicitStdin) {
+			this.pendingInput = [];
+			this.pendingEof = false;
+			this.waitingForInput = false;
+			try {
+				resetBufferedStdin(this.buffer);
+			} catch {
+				// Explicit stdin does not consume the shared terminal buffer.
+			}
+		}
 		this.exit = false;
 		let cleanupSignal: () => void = () => undefined;
 		const running = new Promise<boolean | string>((resolve, reject) => {
@@ -240,7 +251,7 @@ class AssemblyScriptSandbox implements Sandbox {
 					return;
 				}
 				const { output, results, error, buffer, diagnostic, progress } = event.data;
-				if (buffer) {
+				if (buffer && !hasExplicitStdin) {
 					this.waitingForInput = true;
 					this.flushPendingInput();
 				}
@@ -297,6 +308,16 @@ class AssemblyScriptSandbox implements Sandbox {
 			}
 		});
 		return running.finally(() => {
+			if (hasExplicitStdin && this.isOperationActive(activeOperation)) {
+				this.pendingInput = [];
+				this.pendingEof = false;
+				this.waitingForInput = false;
+				try {
+					resetBufferedStdin(this.buffer);
+				} catch {
+					// Stdin cleanup must not replace the execution result.
+				}
+			}
 			cleanupSignal();
 			this.completeOperation(activeOperation);
 		});
