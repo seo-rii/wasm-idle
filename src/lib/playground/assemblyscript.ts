@@ -1,5 +1,10 @@
 import type { CompilerDiagnostic, SandboxExecutionOptions } from '$lib/playground/options';
-import { BusyError } from '@wasm-idle/core';
+import {
+	BusyError,
+	DEFAULT_WORKSPACE_LIMITS,
+	resolveExecutionLimits,
+	validateExecutionWorkspace
+} from '@wasm-idle/core';
 import {
 	resolveAssemblyScriptRuntimeModuleUrl,
 	type PlaygroundRuntimeAssets
@@ -223,6 +228,31 @@ class AssemblyScriptSandbox implements Sandbox {
 			return Promise.reject('Worker not loaded');
 		}
 		const worker = this.worker;
+		let workspace: ReturnType<typeof validateExecutionWorkspace>;
+		try {
+			const limits = resolveExecutionLimits(options.limits);
+			workspace = validateExecutionWorkspace(
+				code,
+				options.workspaceFiles ?? [],
+				options.activePath ?? 'main.as.ts',
+				{
+					...options.workspaceLimits,
+					maxFileBytes: Math.min(
+						options.workspaceLimits?.maxFileBytes ??
+							DEFAULT_WORKSPACE_LIMITS.maxFileBytes,
+						limits.maxWorkspaceBytes
+					),
+					maxTotalBytes: Math.min(
+						options.workspaceLimits?.maxTotalBytes ??
+							DEFAULT_WORKSPACE_LIMITS.maxTotalBytes,
+						limits.maxWorkspaceBytes
+					)
+				}
+			);
+		} catch (error) {
+			this.completeOperation(activeOperation);
+			return Promise.reject(error);
+		}
 		const hasExplicitStdin = options.stdin !== undefined;
 		if (hasExplicitStdin) {
 			this.pendingInput = [];
@@ -293,8 +323,8 @@ class AssemblyScriptSandbox implements Sandbox {
 					prepare,
 					buffer: this.buffer,
 					stdin: options.stdin,
-					activePath: options.activePath || 'main.as.ts',
-					workspaceFiles: options.workspaceFiles || [],
+					activePath: workspace.activePath,
+					workspaceFiles: workspace.workspaceFiles,
 					log: _log
 				});
 			} catch (error) {

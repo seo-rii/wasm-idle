@@ -394,6 +394,152 @@ describe('AssemblyScript operation lifecycle', () => {
 		await expect(sandbox.run('export function retry(): void {}', false)).resolves.toBe(true);
 	});
 
+	it('canonicalizes AssemblyScript workspace paths before worker dispatch', async () => {
+		const sandbox = new AssemblyScript();
+		const code = 'export function main(): i32 { return helper(); }';
+		await sandbox.load('/assets');
+
+		await expect(
+			sandbox.run(code, false, true, undefined, [], {
+				activePath: 'src\\main.as.ts',
+				workspaceFiles: [
+					{
+						path: 'src\\helper.as.ts',
+						content: 'export function helper(): i32 { return 1; }'
+					}
+				]
+			})
+		).resolves.toBe(true);
+
+		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
+			2,
+			expect.objectContaining({
+				code,
+				activePath: 'src/main.as.ts',
+				workspaceFiles: [
+					{
+						path: 'src/helper.as.ts',
+						content: 'export function helper(): i32 { return 1; }'
+					}
+				]
+			})
+		);
+	});
+
+	it.each([
+		{
+			name: 'active path traversal',
+			code: 'A',
+			options: { activePath: '../main.as.ts' },
+			expected: { code: 'invalid-path', path: '../main.as.ts' }
+		},
+		{
+			name: 'workspace path traversal',
+			code: 'A',
+			options: {
+				workspaceFiles: [{ path: 'src/../secret.as.ts', content: 'B' }]
+			},
+			expected: { code: 'invalid-path', path: 'src/../secret.as.ts' }
+		},
+		{
+			name: 'absolute path',
+			code: 'A',
+			options: { activePath: '/tmp/main.as.ts' },
+			expected: { code: 'invalid-path', path: '/tmp/main.as.ts' }
+		},
+		{
+			name: 'NUL path',
+			code: 'A',
+			options: {
+				workspaceFiles: [{ path: 'src/bad\0.as.ts', content: 'B' }]
+			},
+			expected: { code: 'invalid-path', path: 'src/bad\0.as.ts' }
+		},
+		{
+			name: 'duplicate path',
+			code: 'A',
+			options: {
+				workspaceFiles: [
+					{ path: 'src/helper.as.ts', content: 'B' },
+					{ path: 'src/helper.as.ts', content: 'C' }
+				]
+			},
+			expected: { code: 'duplicate-path', path: 'src/helper.as.ts' }
+		},
+		{
+			name: 'case-colliding path',
+			code: 'A',
+			options: {
+				workspaceFiles: [
+					{ path: 'SRC/helper.as.ts', content: 'B' },
+					{ path: 'src/helper.as.ts', content: 'C' }
+				]
+			},
+			expected: { code: 'case-collision', path: 'src/helper.as.ts' }
+		},
+		{
+			name: 'file count overflow',
+			code: 'A',
+			options: {
+				workspaceFiles: [{ path: 'src/helper.as.ts', content: 'B' }],
+				workspaceLimits: { maxFiles: 1 }
+			},
+			expected: { code: 'file-count-limit', limit: 1, actual: 2 }
+		},
+		{
+			name: 'per-file overflow clamped to execution limits',
+			code: '12345',
+			options: {
+				limits: { maxWorkspaceBytes: 4 },
+				workspaceLimits: { maxFileBytes: 100 }
+			},
+			expected: { code: 'file-size-limit', limit: 4, actual: 5 }
+		},
+		{
+			name: 'aggregate overflow clamped to execution limits',
+			code: '123',
+			options: {
+				limits: { maxWorkspaceBytes: 4 },
+				workspaceFiles: [{ path: 'src/helper.as.ts', content: '45' }],
+				workspaceLimits: { maxTotalBytes: 100 }
+			},
+			expected: { code: 'total-size-limit', limit: 4, actual: 5 }
+		}
+	])(
+		'rejects an AssemblyScript workspace with $name before changing execution state',
+		async ({ code, options, expected }) => {
+			const sandbox = new AssemblyScript();
+			await sandbox.load('/assets');
+			const worker = workerInstances[0];
+			const loadHandler = worker.onmessage;
+			const begin = sandbox.begin;
+			sandbox.write('queued input\n');
+
+			await expect(
+				sandbox.run(code, false, true, undefined, [], options)
+			).rejects.toMatchObject({
+				name: 'WorkspaceValidationError',
+				...expected
+			});
+			expect(worker.postMessage).toHaveBeenCalledOnce();
+			expect(worker.onmessage).toBe(loadHandler);
+			expect(worker.terminate).not.toHaveBeenCalled();
+			expect(sandbox.uid).toBe(0);
+			expect(sandbox.begin).toBe(begin);
+			expect(sandbox.exit).toBe(true);
+			expect(sandbox.pendingInput).toEqual(['queued input\n']);
+
+			await expect(sandbox.run('export function retry(): void {}', false)).resolves.toBe(
+				true
+			);
+			expect(worker.postMessage).toHaveBeenCalledTimes(2);
+			expect(worker.postMessage).toHaveBeenNthCalledWith(
+				2,
+				expect.objectContaining({ activePath: 'main.as.ts', workspaceFiles: [] })
+			);
+		}
+	);
+
 	it('ignores a retained handler from a terminated worker after retry', async () => {
 		autoResolveRun = false;
 		const sandbox = new AssemblyScript();
