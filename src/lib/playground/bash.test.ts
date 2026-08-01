@@ -950,6 +950,132 @@ describe('Bash sandbox', () => {
 		expect(commandRun.mock.calls[0]?.[0]).not.toHaveProperty('stdin');
 	});
 
+	it.each([
+		{
+			name: 'empty path',
+			code: 'printf ok',
+			options: { activePath: '' },
+			expected: { code: 'invalid-path', path: '' }
+		},
+		{
+			name: 'traversal path',
+			code: 'printf ok',
+			options: { activePath: '../main.sh' },
+			expected: { code: 'invalid-path', path: '../main.sh' }
+		},
+		{
+			name: 'absolute path',
+			code: 'printf ok',
+			options: { activePath: '/tmp/main.sh' },
+			expected: { code: 'invalid-path', path: '/tmp/main.sh' }
+		},
+		{
+			name: 'NUL path',
+			code: 'printf ok',
+			options: { activePath: 'bad\0.sh' },
+			expected: { code: 'invalid-path', path: 'bad\0.sh' }
+		},
+		{
+			name: 'URL-style path',
+			code: 'printf ok',
+			options: { activePath: 'file:main.sh' },
+			expected: { code: 'invalid-path', path: 'file:main.sh' }
+		},
+		{
+			name: 'duplicate path',
+			code: 'printf ok',
+			options: {
+				workspaceFiles: [
+					{ path: 'lib/helper.sh', content: 'printf first' },
+					{ path: 'lib\\helper.sh', content: 'printf second' }
+				]
+			},
+			expected: { code: 'duplicate-path', path: 'lib/helper.sh' }
+		},
+		{
+			name: 'active-path case collision',
+			code: 'printf ok',
+			options: {
+				activePath: 'main.sh',
+				workspaceFiles: [{ path: 'MAIN.sh', content: 'printf stale' }]
+			},
+			expected: { code: 'case-collision', path: 'main.sh' }
+		},
+		{
+			name: 'file count overflow',
+			code: 'x',
+			options: {
+				workspaceFiles: [{ path: 'helper.sh', content: 'y' }],
+				workspaceLimits: { maxFiles: 1 }
+			},
+			expected: { code: 'file-count-limit', limit: 1, actual: 2 }
+		},
+		{
+			name: 'path byte overflow',
+			code: 'x',
+			options: {
+				activePath: 'é',
+				workspaceLimits: { maxPathBytes: 1 }
+			},
+			expected: { code: 'path-size-limit', path: 'é', limit: 1, actual: 2 }
+		},
+		{
+			name: 'per-file overflow clamped to execution limits',
+			code: '12345',
+			options: {
+				limits: { maxWorkspaceBytes: 4 },
+				workspaceLimits: { maxFileBytes: 100 }
+			},
+			expected: { code: 'file-size-limit', limit: 4, actual: 5 }
+		},
+		{
+			name: 'aggregate overflow clamped to execution limits',
+			code: '12345',
+			options: {
+				limits: { maxWorkspaceBytes: 10 },
+				workspaceFiles: [{ path: 'helper.sh', content: '123456' }],
+				workspaceLimits: { maxTotalBytes: 100 }
+			},
+			expected: { code: 'total-size-limit', limit: 10, actual: 11 }
+		}
+	])(
+		'rejects a Bash workspace with $name before changing execution state',
+		async ({ code, options, expected }) => {
+			commandRun.mockResolvedValue({
+				stdin: undefined,
+				stdout: byteStream('retry\n'),
+				stderr: byteStream(''),
+				wait: vi.fn(async () => ({ ok: true, code: 0 })),
+				free: vi.fn()
+			});
+			const sandbox = new Bash();
+			await sandbox.load('/assets');
+			const runtimePackage = sandbox.runtimePackage;
+			const webcUrl = sandbox.webcUrl;
+			sandbox.write('queued\n');
+			sandbox.eof();
+
+			await expect(
+				sandbox.run(code, false, true, undefined, [], options)
+			).rejects.toMatchObject({
+				name: 'WorkspaceValidationError',
+				...expected
+			});
+			expect(commandRun).not.toHaveBeenCalled();
+			expect(sandbox.runtimePackage).toBe(runtimePackage);
+			expect(sandbox.webcUrl).toBe(webcUrl);
+			expect(sandbox.uid).toBe(0);
+			expect(sandbox.exit).toBe(true);
+			expect(sandbox.pendingInput).toEqual(['queued\n']);
+			expect(sandbox.pendingEof).toBe(true);
+			expect(sandbox.activeReject).toBeNull();
+			expect(sandbox.activeRunCleanup).toBeNull();
+
+			await expect(sandbox.run('printf retry', false)).resolves.toBe(true);
+			expect(commandRun).toHaveBeenCalledOnce();
+		}
+	);
+
 	it('mounts workspace files next to the active Bash script', async () => {
 		commandRun.mockResolvedValue({
 			stdin: undefined,
@@ -962,12 +1088,16 @@ describe('Bash sandbox', () => {
 		await sandbox.load();
 
 		await sandbox.run('source lib/helper.sh; helper', false, true, undefined, [], {
-			activePath: 'scripts/main.sh',
-			workspaceFiles: [{ path: 'lib/helper.sh', content: 'helper() { printf "helper\\n"; }' }]
+			activePath: 'scripts\\main.sh',
+			workspaceFiles: [
+				{ path: 'lib\\helper.sh', content: 'helper() { printf "helper\\n"; }' },
+				{ path: 'scripts\\main.sh', content: 'printf stale' }
+			]
 		});
 
 		expect(commandRun).toHaveBeenCalledWith(
 			expect.objectContaining({
+				args: ['-c', 'source lib/helper.sh; helper', 'scripts/main.sh'],
 				mount: {
 					'/workspace': {
 						'lib/helper.sh': 'helper() { printf "helper\\n"; }',

@@ -7,7 +7,12 @@ import {
 import { importRuntimeModule } from '$lib/playground/runtimeModule';
 import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
 import { fetchRuntimeAssetBytes } from '$lib/playground/worker/runtimeAssetFetch';
-import { BusyError } from '@wasm-idle/core';
+import {
+	BusyError,
+	DEFAULT_WORKSPACE_LIMITS,
+	resolveExecutionLimits,
+	validateExecutionWorkspace
+} from '@wasm-idle/core';
 
 type BashRuntimeAssetConfig = PlaygroundRuntimeAssets & {
 	bash?: { moduleUrl?: string; webcUrl?: string; workerUrl?: string };
@@ -306,19 +311,28 @@ class Bash implements Sandbox {
 			throw signal.reason ?? new DOMException('Bash execution aborted', 'AbortError');
 		}
 		const { programArgs } = resolveSandboxExecutionArgs('BASH', args, options);
-		const activePath = options.activePath || 'main.sh';
-		const mountedFiles: Record<string, string> = {};
-		for (const file of options.workspaceFiles || []) {
-			const path = file.path.replace(/^\/+/, '');
-			if (!path || path.split('/').includes('..')) {
-				throw new Error(`Invalid Bash workspace path: ${file.path}`);
+		const limits = resolveExecutionLimits(options.limits);
+		const workspace = validateExecutionWorkspace(
+			code,
+			options.workspaceFiles ?? [],
+			options.activePath ?? 'main.sh',
+			{
+				...options.workspaceLimits,
+				maxFileBytes: Math.min(
+					options.workspaceLimits?.maxFileBytes ?? DEFAULT_WORKSPACE_LIMITS.maxFileBytes,
+					limits.maxWorkspaceBytes
+				),
+				maxTotalBytes: Math.min(
+					options.workspaceLimits?.maxTotalBytes ??
+						DEFAULT_WORKSPACE_LIMITS.maxTotalBytes,
+					limits.maxWorkspaceBytes
+				)
 			}
-			mountedFiles[path] = file.content;
-		}
-		const mountedActivePath = activePath.replace(/^\/+/, '');
-		if (!mountedActivePath || mountedActivePath.split('/').includes('..')) {
-			throw new Error(`Invalid Bash active path: ${activePath}`);
-		}
+		);
+		const mountedFiles = Object.fromEntries(
+			workspace.workspaceFiles.map((file) => [file.path, file.content])
+		);
+		const mountedActivePath = workspace.activePath ?? 'main.sh';
 		mountedFiles[mountedActivePath] = code;
 		const queuedStdin = this.pendingInput.length > 0 ? this.pendingInput.join('') : undefined;
 		const suppliedStdin = options.stdin ?? (this.pendingEof ? queuedStdin || '' : undefined);
