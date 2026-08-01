@@ -5,7 +5,19 @@ export function createDebugAdapterEventChannel() {
 
 	return {
 		emit(event: DebugAdapterEvent) {
-			for (const listener of [...listeners]) listener(event);
+			let firstError: unknown;
+			let listenerFailed = false;
+			for (const listener of [...listeners]) {
+				if (!listeners.has(listener)) continue;
+				try {
+					listener(event);
+				} catch (error) {
+					if (listenerFailed) continue;
+					firstError = error;
+					listenerFailed = true;
+				}
+			}
+			if (listenerFailed) throw firstError;
 		},
 		subscribe(listener: (event: DebugAdapterEvent) => void) {
 			listeners.add(listener);

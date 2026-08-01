@@ -45,6 +45,10 @@ Execution control follows the same event-authoritative ordering. Once a `continu
 event supersedes a pending continue, step, or pause request, a late transport failure resolves
 without replacing the newer state or surfacing an obsolete command error; failures from the current
 state still reject and remain visible.
+Adapter event delivery snapshots its listeners. A listener added during dispatch starts with the
+next event, one removed before its turn is skipped, and a throwing listener cannot prevent later UI
+consumers from seeing the event. After delivery finishes, the first listener exception is rethrown
+so the hosting transport can report or isolate it.
 When callers provide a DAP `start` offset, the returned page is merged at that offset instead of
 replacing children loaded by earlier pages; omitting `start` remains an explicit full refresh.
 Supply an LLDB DAP session from `@wasm-idle/llvm-core/debug`. Runtime assets remain owned by the
