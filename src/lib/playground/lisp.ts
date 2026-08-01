@@ -28,7 +28,7 @@ class Lisp implements Sandbox {
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	waitingForInput = false;
 	pendingEof = false;
-	private loading = false;
+	private activeLoadCleanup: (() => void) | null = null;
 	private activeRunCleanup: (() => void) | null = null;
 	private readonly workerSession = new WorkerSession({
 		label: 'Lisp',
@@ -47,27 +47,68 @@ class Lisp implements Sandbox {
 		_code = '',
 		_log = true,
 		_args: string[] = [],
-		_options: SandboxExecutionOptions = {},
+		options: SandboxExecutionOptions = {},
 		progress?: SandboxProgress
 	) {
-		if (this.loading || !this.exit) {
+		const signal = options.signal;
+		if (signal?.aborted) {
+			return Promise.reject(
+				signal.reason ?? new DOMException('Lisp runtime startup aborted', 'AbortError')
+			);
+		}
+		if (this.activeLoadCleanup || !this.exit) {
 			return Promise.reject(
 				new BusyError('Lisp runtime already has an active operation', {
 					runtimeId: 'LISP',
-					phase: this.loading ? 'startup' : 'execute'
+					phase: this.activeLoadCleanup ? 'startup' : 'execute'
 				})
 			);
 		}
-		this.loading = true;
-		return this.workerSession
-			.load(async (resolve, reject) => {
+		let onAbort: (() => void) | undefined;
+		let cleanedUp = false;
+		const cleanup = () => {
+			if (cleanedUp) return;
+			cleanedUp = true;
+			if (signal && onAbort) {
+				try {
+					signal.removeEventListener('abort', onAbort);
+				} catch {
+					// Cleanup must not replace the startup result.
+				}
+			}
+			if (this.activeLoadCleanup === cleanup) this.activeLoadCleanup = null;
+		};
+		onAbort = signal
+			? () => {
+					if (this.activeLoadCleanup !== cleanup) {
+						cleanup();
+						return;
+					}
+					const reason =
+						signal.reason ??
+						new DOMException('Lisp runtime startup aborted', 'AbortError');
+					cleanup();
+					this.workerSession.terminate(reason);
+				}
+			: undefined;
+		const loadPromise = this.workerSession.load(async (resolve, reject) => {
+			const resolveLoad = () => {
+				cleanup();
+				resolve();
+			};
+			const rejectLoad = (reason?: unknown) => {
+				cleanup();
+				reject(reason);
+			};
+			try {
+				if (this.activeLoadCleanup !== cleanup || signal?.aborted) return;
 				this.pendingInput = [];
 				this.waitingForInput = false;
 				this.pendingEof = false;
 				const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
 				const nextModuleUrl = resolveLispModuleUrl(runtimeAssets, currentUrl);
 				if (!nextModuleUrl) {
-					return reject(
+					return rejectLoad(
 						'Lisp runtime is not configured. Set PUBLIC_WASM_LISP_MODULE_URL or runtimeAssets.lisp.moduleUrl.'
 					);
 				}
@@ -79,15 +120,28 @@ class Lisp implements Sandbox {
 				if (!this.worker) {
 					const WorkerConstructor = (await import('$lib/playground/worker/lisp?worker'))
 						.default;
+					if (this.activeLoadCleanup !== cleanup || signal?.aborted) return;
 					const worker = new WorkerConstructor();
+					if (this.activeLoadCleanup !== cleanup || signal?.aborted) {
+						worker.terminate();
+						return;
+					}
 					this.worker = worker;
 					this.workerSession.attach(worker);
 					worker.onmessage = (event: MessageEvent<any>) => {
+						if (
+							this.activeLoadCleanup !== cleanup ||
+							signal?.aborted ||
+							this.worker !== worker
+						) {
+							return;
+						}
 						if (event.data?.load) {
 							progress?.set?.(1);
-							resolve();
+							if (this.activeLoadCleanup !== cleanup || signal?.aborted) return;
+							resolveLoad();
 						}
-						if (event.data?.error) reject(event.data.error);
+						if (event.data?.error) rejectLoad(event.data.error);
 					};
 					worker.postMessage({
 						load: true,
@@ -95,12 +149,19 @@ class Lisp implements Sandbox {
 					});
 				} else {
 					progress?.set?.(1);
-					resolve();
+					if (this.activeLoadCleanup !== cleanup || signal?.aborted) return;
+					resolveLoad();
 				}
-			})
-			.finally(() => {
-				this.loading = false;
-			});
+			} catch (error) {
+				rejectLoad(error);
+			}
+		});
+		this.activeLoadCleanup = cleanup;
+		if (signal && onAbort) {
+			signal.addEventListener('abort', onAbort, { once: true });
+			if (signal.aborted) onAbort();
+		}
+		return loadPromise.finally(cleanup);
 	}
 
 	write(input: string) {
@@ -135,11 +196,11 @@ class Lisp implements Sandbox {
 		args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
-		if (this.loading || !this.exit) {
+		if (this.activeLoadCleanup || !this.exit) {
 			return Promise.reject(
 				new BusyError('Lisp runtime already has an active operation', {
 					runtimeId: 'LISP',
-					phase: this.loading ? 'startup' : 'execute'
+					phase: this.activeLoadCleanup ? 'startup' : 'execute'
 				})
 			);
 		}
@@ -258,6 +319,9 @@ class Lisp implements Sandbox {
 	}
 
 	terminate(reason: unknown = 'Process terminated') {
+		const loadCleanup = this.activeLoadCleanup;
+		this.activeLoadCleanup = null;
+		loadCleanup?.();
 		const cleanup = this.activeRunCleanup;
 		this.activeRunCleanup = null;
 		cleanup?.();
@@ -274,7 +338,7 @@ class Lisp implements Sandbox {
 		this.pendingEof = false;
 		if (this.worker) this.worker.onmessage = null;
 		resetBufferedStdin(this.buffer);
-		if (!this.exit || this.loading) {
+		if (!this.exit || this.activeLoadCleanup) {
 			this.terminate();
 		}
 	}
