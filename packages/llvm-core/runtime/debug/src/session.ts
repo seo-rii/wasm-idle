@@ -42,6 +42,105 @@ function validateBreakpointLines(lines: readonly number[]) {
 	return [...lines];
 }
 
+export class DapProtocolError extends Error {
+	readonly command: string;
+	readonly path: string;
+
+	constructor(command: string, path: string, expectation: string) {
+		super(`Invalid DAP ${command} response at ${path}: ${expectation}.`);
+		this.name = 'DapProtocolError';
+		this.command = command;
+		this.path = path;
+	}
+}
+
+function invalidDapResponse(command: string, path: string, expectation: string): never {
+	throw new DapProtocolError(command, path, expectation);
+}
+
+function normalizeDapBreakpoint(
+	value: unknown,
+	command: string,
+	path: string,
+	fallback?: ResolvedBreakpoint
+): ResolvedBreakpoint {
+	if (value === undefined && fallback) return cloneResolvedBreakpoints([fallback])[0]!;
+	if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+		invalidDapResponse(command, path, 'expected an object');
+	}
+	const record = value as Record<string, unknown>;
+	if (typeof record.verified !== 'boolean') {
+		invalidDapResponse(command, `${path}.verified`, 'expected a boolean');
+	}
+	const id = record.id;
+	if (id !== undefined && (typeof id !== 'number' || !Number.isSafeInteger(id) || id < 1)) {
+		invalidDapResponse(command, `${path}.id`, 'expected a positive safe integer');
+	}
+	const line = record.line;
+	if (
+		line !== undefined &&
+		(typeof line !== 'number' || !Number.isSafeInteger(line) || line < 0)
+	) {
+		invalidDapResponse(command, `${path}.line`, 'expected a non-negative safe integer');
+	}
+	const column = record.column;
+	if (
+		column !== undefined &&
+		(typeof column !== 'number' || !Number.isSafeInteger(column) || column < 0)
+	) {
+		invalidDapResponse(command, `${path}.column`, 'expected a non-negative safe integer');
+	}
+	const message = record.message;
+	if (message !== undefined && typeof message !== 'string') {
+		invalidDapResponse(command, `${path}.message`, 'expected a string');
+	}
+	let source: DebugSource | undefined;
+	if (record.source !== undefined) {
+		if (
+			typeof record.source !== 'object' ||
+			record.source === null ||
+			Array.isArray(record.source)
+		) {
+			invalidDapResponse(command, `${path}.source`, 'expected an object');
+		}
+		const sourceRecord = record.source as Record<string, unknown>;
+		const name = sourceRecord.name;
+		if (name !== undefined && typeof name !== 'string') {
+			invalidDapResponse(command, `${path}.source.name`, 'expected a string');
+		}
+		const sourcePath = sourceRecord.path;
+		if (typeof sourcePath !== 'string') {
+			invalidDapResponse(command, `${path}.source.path`, 'expected a string');
+		}
+		const sourceReference = sourceRecord.sourceReference;
+		if (
+			sourceReference !== undefined &&
+			(typeof sourceReference !== 'number' ||
+				!Number.isSafeInteger(sourceReference) ||
+				sourceReference < 0)
+		) {
+			invalidDapResponse(
+				command,
+				`${path}.source.sourceReference`,
+				'expected a non-negative safe integer'
+			);
+		}
+		source = {
+			...(name === undefined ? {} : { name }),
+			path: sourcePath,
+			...(sourceReference === undefined ? {} : { sourceReference })
+		};
+	}
+	return {
+		...(id === undefined ? {} : { id }),
+		verified: record.verified,
+		...(line === undefined ? {} : { line }),
+		...(column === undefined ? {} : { column }),
+		...(message === undefined ? {} : { message }),
+		...(source === undefined ? {} : { source })
+	};
+}
+
 function defaultWorkerFactory(kind: DebugWorkerKind): WorkerLike {
 	if (kind === 'lldb') {
 		return new Worker(new URL('./worker/lldb-worker.js', import.meta.url), {
@@ -426,10 +525,10 @@ export class BrowserLldbSession {
 		const sourcePath = requestSource.path;
 		const requestVersion = (this.breakpointRequestVersions.get(sourcePath) ?? 0) + 1;
 		this.breakpointRequestVersions.set(sourcePath, requestVersion);
-		let response: { breakpoints?: ResolvedBreakpoint[] };
+		let response: unknown;
 		try {
 			response = await this.awaitWhileActive(
-				this.request<{ breakpoints?: ResolvedBreakpoint[] }>('setBreakpoints', {
+				this.request<unknown>('setBreakpoints', {
 					source: requestSource,
 					breakpoints: requestedLines.map((line) => ({ line })),
 					lines: requestedLines,
@@ -445,31 +544,40 @@ export class BrowserLldbSession {
 			}
 			throw error;
 		}
+		if (this.breakpointRequestVersions.get(sourcePath) !== requestVersion) {
+			return this.getResolvedBreakpoints(sourcePath);
+		}
+		if (typeof response !== 'object' || response === null || Array.isArray(response)) {
+			invalidDapResponse('setBreakpoints', 'body', 'expected an object');
+		}
+		const breakpointValues = (response as Record<string, unknown>).breakpoints;
+		if (!Array.isArray(breakpointValues)) {
+			invalidDapResponse('setBreakpoints', 'breakpoints', 'expected an array');
+		}
 		const resolved = requestedLines.map((requestedLine, index) => {
-			const breakpoint = response.breakpoints?.[index];
+			const breakpoint = normalizeDapBreakpoint(
+				breakpointValues[index],
+				'setBreakpoints',
+				`breakpoints[${index}]`,
+				{ verified: false, line: requestedLine, source: requestSource }
+			);
 			return {
 				...breakpoint,
-				verified: breakpoint?.verified === true,
-				line: breakpoint?.line ?? requestedLine,
-				source: breakpoint?.source ?? requestSource
+				line: breakpoint.line ?? requestedLine,
+				source: breakpoint.source ?? requestSource
 			} satisfies ResolvedBreakpoint;
 		});
-		if (this.breakpointRequestVersions.get(sourcePath) === requestVersion) {
-			const activeIds = new Set(
-				resolved.flatMap((breakpoint) =>
-					breakpoint.id === undefined ? [] : [breakpoint.id]
-				)
-			);
-			for (const breakpoint of this.resolvedBreakpoints.get(sourcePath) ?? []) {
-				if (breakpoint.id !== undefined && !activeIds.has(breakpoint.id)) {
-					this.retiredBreakpointIds.add(breakpoint.id);
-				}
+		const activeIds = new Set(
+			resolved.flatMap((breakpoint) => (breakpoint.id === undefined ? [] : [breakpoint.id]))
+		);
+		for (const breakpoint of this.resolvedBreakpoints.get(sourcePath) ?? []) {
+			if (breakpoint.id !== undefined && !activeIds.has(breakpoint.id)) {
+				this.retiredBreakpointIds.add(breakpoint.id);
 			}
-			for (const id of activeIds) this.retiredBreakpointIds.delete(id);
-			this.resolvedBreakpoints.set(sourcePath, cloneResolvedBreakpoints(resolved));
-			return cloneResolvedBreakpoints(resolved);
 		}
-		return this.getResolvedBreakpoints(sourcePath);
+		for (const id of activeIds) this.retiredBreakpointIds.delete(id);
+		this.resolvedBreakpoints.set(sourcePath, cloneResolvedBreakpoints(resolved));
+		return cloneResolvedBreakpoints(resolved);
 	}
 
 	onEvent(listener: (event: DapEvent) => void) {
@@ -491,8 +599,13 @@ export class BrowserLldbSession {
 			| undefined;
 		const reason = body?.reason;
 		if (reason !== 'new' && reason !== 'changed' && reason !== 'removed') return;
-		const breakpoint = body?.breakpoint;
-		if (!breakpoint) return;
+		let breakpoint: ResolvedBreakpoint;
+		try {
+			breakpoint = normalizeDapBreakpoint(body?.breakpoint, 'breakpoint event', 'breakpoint');
+		} catch (error) {
+			if (error instanceof DapProtocolError) return;
+			throw error;
+		}
 		if (breakpoint.id !== undefined && this.retiredBreakpointIds.has(breakpoint.id)) {
 			return;
 		}

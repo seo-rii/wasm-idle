@@ -136,6 +136,11 @@ Stopped-state publication has the same boundary: `stopped` and `exited` event fi
 follow-up `threads` and `stackTrace` responses are checked before they can change the selected
 thread, frame, source location, call stack, or process exit code. A malformed value fails and
 disposes the live session instead of publishing a corrupt pause or exit snapshot.
+`BrowserLldbSession` also normalizes every resolved breakpoint before updating its cache. A
+malformed current `setBreakpoints` response rejects with the exported `DapProtocolError`; a stale
+response remains ignored, while an omitted per-line result stays unverified at its requested
+location. A malformed asynchronous `breakpoint` event is delivered to raw listeners but cannot
+mutate the cache used by the playground.
 Direct `DapClient` consumers can set `onEventError(error, event)` to observe an event-listener
 exception. Throwing listeners and a throwing error hook are isolated from one another, and the
 client continues parsing later events and responses on the same byte stream.

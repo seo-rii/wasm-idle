@@ -7,7 +7,7 @@ export {
 	sha256Hex,
 	verifyAssetSha256
 } from './manifest.js';
-export { BrowserLldbSession, createBrowserLldbSession } from './session.js';
+export { BrowserLldbSession, DapProtocolError, createBrowserLldbSession } from './session.js';
 export { SharedByteQueue, createSharedByteQueue } from './shared-byte-queue.js';
 export type {
 	BrowserLldbCallbackKind,

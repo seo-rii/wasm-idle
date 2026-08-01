@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { DapMessageParser, encodeDapMessage } from '../src/dap-client.js';
-import { BrowserLldbSession } from '../src/session.js';
+import { BrowserLldbSession, DapProtocolError } from '../src/session.js';
 import { SharedByteQueue } from '../src/shared-byte-queue.js';
 import type {
 	BrowserLldbSessionOptions,
@@ -283,7 +283,14 @@ class FakeWorker implements WorkerLike {
 									supportsConfigurationDoneRequest: true,
 									supportsReadMemoryRequest: true
 								}
-							: {}
+							: request.command === 'setBreakpoints'
+								? {
+										breakpoints: (
+											(request.arguments as { lines?: number[] } | undefined)
+												?.lines ?? []
+										).map((line) => ({ verified: false, line }))
+									}
+								: {}
 				};
 				await output.write(encodeDapMessage(response));
 				if (request.command === 'configurationDone' && pendingAttach) {
@@ -551,6 +558,35 @@ describe('BrowserLldbSession', () => {
 				source: { path: '/workspace/main.cpp' }
 			}
 		]);
+		const malformedBreakpointReceived = new Promise<void>((resolve) => {
+			const dispose = session.onEvent((event) => {
+				if (event.seq !== 505) return;
+				dispose();
+				resolve();
+			});
+		});
+		await lldbWorker?.emitDapEvent({
+			seq: 505,
+			type: 'event',
+			event: 'breakpoint',
+			body: {
+				reason: 'changed',
+				breakpoint: {
+					verified: true,
+					line: 7,
+					column: '3',
+					source: { path: '/workspace/main.cpp' }
+				}
+			}
+		});
+		await malformedBreakpointReceived;
+		expect(session.getResolvedBreakpoints('/workspace/main.cpp')).toEqual([
+			{
+				verified: false,
+				line: 7,
+				source: { path: '/workspace/main.cpp' }
+			}
+		]);
 		const invalidLineRequestCount = lldbWorker!.requests.length;
 		const invalidLineResults = await Promise.allSettled(
 			[0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY].map((line) =>
@@ -671,6 +707,59 @@ describe('BrowserLldbSession', () => {
 			message: 'current breakpoint failure'
 		});
 		await expect(currentFailure).rejects.toThrow('current breakpoint failure');
+
+		const malformedResponse = session.setBreakpoints({ path: '/workspace/main.cpp' }, [31]);
+		const malformedResponseError = malformedResponse.then(
+			() => null,
+			(error: unknown) => error
+		);
+		await expect
+			.poll(
+				() =>
+					lldbWorker!.requests.filter((request) => request.command === 'setBreakpoints')
+						.length
+			)
+			.toBe(setBreakpointRequestCount + 6);
+		const malformedResponseRequest = lldbWorker!.requests
+			.filter((request) => request.command === 'setBreakpoints')
+			.at(-1)!;
+		await lldbWorker!.respondDapRequest(malformedResponseRequest, {
+			body: {
+				breakpoints: [{ verified: true, line: 31, column: '3' }]
+			}
+		});
+		await expect(malformedResponseError).resolves.toMatchObject({
+			name: 'DapProtocolError',
+			command: 'setBreakpoints',
+			path: 'breakpoints[0].column',
+			message:
+				'Invalid DAP setBreakpoints response at breakpoints[0].column: expected a non-negative safe integer.'
+		});
+		await expect(malformedResponseError).resolves.toBeInstanceOf(DapProtocolError);
+		expect(session.getResolvedBreakpoints('/workspace/main.cpp')).toEqual(latestBreakpoints);
+
+		const omittedBreakpointResponse = session.setBreakpoints(
+			{ path: '/workspace/main.cpp' },
+			[33]
+		);
+		await expect
+			.poll(
+				() =>
+					lldbWorker!.requests.filter((request) => request.command === 'setBreakpoints')
+						.length
+			)
+			.toBe(setBreakpointRequestCount + 7);
+		await lldbWorker!.respondDapRequest(
+			lldbWorker!.requests.filter((request) => request.command === 'setBreakpoints').at(-1)!,
+			{ body: { breakpoints: [] } }
+		);
+		await expect(omittedBreakpointResponse).resolves.toEqual([
+			{
+				verified: false,
+				line: 33,
+				source: { path: '/workspace/main.cpp' }
+			}
+		]);
 		expect(targetInit).toMatchObject({ stdin: { generation: expect.any(Number) } });
 		if (!targetInit || targetInit.type !== 'initialize-target' || !targetInit.stdin) {
 			throw new Error('target stdin queue was not initialized');
