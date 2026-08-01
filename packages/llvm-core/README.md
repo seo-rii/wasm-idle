@@ -188,8 +188,9 @@ client continues parsing later events and responses on the same byte stream.
 `DapClient` and `BrowserLldbSession` snapshot listener registrations when each event dispatch
 starts. A listener registered by another callback begins with the next event, while a listener
 removed before its turn is skipped. Dispatch therefore cannot grow without bound during one event.
-The streaming DAP parser rejects duplicate `Content-Length` fields, caps an unterminated header at
-8 KiB, and caps a declared JSON body at 16 MiB.
+The streaming DAP parser rejects malformed UTF-8 and duplicate `Content-Length` fields, caps an
+unterminated header at 8 KiB, and caps a declared JSON body at 16 MiB. Invalid bytes therefore
+cannot be replacement-decoded into silently changed source paths, expressions, or variable names.
 Oversized declarations fail before the body is buffered, preventing a corrupt worker frame from
 growing browser memory without bound.
 

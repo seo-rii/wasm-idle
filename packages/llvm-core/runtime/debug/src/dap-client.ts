@@ -32,6 +32,14 @@ function indexOfSequence(haystack: Uint8Array, needle: Uint8Array) {
 	return -1;
 }
 
+function decodeDapUtf8(bytes: Uint8Array, section: 'header' | 'body') {
+	try {
+		return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+	} catch (error) {
+		throw new Error(`invalid DAP frame: DAP ${section} is not valid UTF-8`, { cause: error });
+	}
+}
+
 export function resolveDapTimeout(value: number | undefined, defaultValue: number, label: string) {
 	const timeoutMs = value ?? defaultValue;
 	if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
@@ -64,7 +72,7 @@ export class DapMessageParser {
 			if (separator > MAXIMUM_DAP_HEADER_BYTES) {
 				throw new Error('invalid DAP frame: DAP header exceeds 8 KiB');
 			}
-			const header = new TextDecoder().decode(this.buffer.subarray(0, separator + 2));
+			const header = decodeDapUtf8(this.buffer.subarray(0, separator + 2), 'header');
 			const contentLengthHeaders = header
 				.split('\r\n')
 				.filter((line) => CONTENT_LENGTH_HEADER_PATTERN.test(line));
@@ -88,7 +96,7 @@ export class DapMessageParser {
 			if (this.buffer.byteLength < frameEnd) break;
 
 			const value: unknown = JSON.parse(
-				new TextDecoder().decode(this.buffer.subarray(bodyStart, frameEnd))
+				decodeDapUtf8(this.buffer.subarray(bodyStart, frameEnd), 'body')
 			);
 			if (!value || typeof value !== 'object' || Array.isArray(value)) {
 				throw new Error('invalid DAP frame body');

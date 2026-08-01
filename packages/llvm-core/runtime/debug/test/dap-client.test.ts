@@ -25,6 +25,24 @@ describe('DAP framing', () => {
 		expect(parser.push(bytes.subarray(37))).toEqual([first, second]);
 	});
 
+	it('rejects malformed UTF-8 in a DAP header', () => {
+		const parser = new DapMessageParser();
+		const prefix = new TextEncoder().encode('Content-Length: 2\r\nX-Invalid: ');
+		const suffix = new TextEncoder().encode('\r\n\r\n{}');
+		const frame = new Uint8Array([...prefix, 0xff, ...suffix]);
+
+		expect(() => parser.push(frame)).toThrow(/DAP header is not valid UTF-8/u);
+	});
+
+	it('rejects malformed UTF-8 in a DAP body', () => {
+		const parser = new DapMessageParser();
+		const header = new TextEncoder().encode('Content-Length: 9\r\n\r\n');
+		const body = new Uint8Array([0x7b, 0x22, 0x78, 0x22, 0x3a, 0x22, 0xff, 0x22, 0x7d]);
+		const frame = new Uint8Array([...header, ...body]);
+
+		expect(() => parser.push(frame)).toThrow(/DAP body is not valid UTF-8/u);
+	});
+
 	it('rejects frames without a content length', () => {
 		const parser = new DapMessageParser();
 		expect(() => parser.push(new TextEncoder().encode('Other: 1\r\n\r\n{}'))).toThrow(
