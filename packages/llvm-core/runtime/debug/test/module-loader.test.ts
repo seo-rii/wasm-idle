@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+	mountDebugFiles,
 	startLinearMemoryTelemetry,
 	type EmscriptenDebugModule
 } from '../src/worker/module-loader.js';
@@ -16,6 +17,62 @@ function debugModule(bytes?: number): EmscriptenDebugModule {
 		callMain: vi.fn()
 	};
 }
+
+describe('debug file mounting', () => {
+	it.each([
+		{
+			name: 'program type',
+			program: 'not-wasm-bytes',
+			sources: [],
+			error: /debug program must be a Uint8Array/u
+		},
+		{
+			name: 'source collection',
+			program: Uint8Array.of(0, 97, 115, 109),
+			sources: {},
+			error: /debug sources must be an array/u
+		},
+		{
+			name: 'source entry',
+			program: Uint8Array.of(0, 97, 115, 109),
+			sources: [null],
+			error: /debug source entry must be an object/u
+		},
+		{
+			name: 'source path type',
+			program: Uint8Array.of(0, 97, 115, 109),
+			sources: [{ path: 42, content: 'int main() {}' }],
+			error: /debug source path must be a string/u
+		},
+		{
+			name: 'source content type',
+			program: Uint8Array.of(0, 97, 115, 109),
+			sources: [{ path: '/workspace/main.c', content: 42 }],
+			error: /debug source content must be a string/u
+		},
+		{
+			name: 'duplicate source path',
+			program: Uint8Array.of(0, 97, 115, 109),
+			sources: [
+				{ path: '/workspace/main.c', content: 'int value;' },
+				{ path: '/workspace/main.c', content: 'int main() {}' }
+			],
+			error: /duplicate debug source path/u
+		}
+	])('rejects an invalid $name before mutating MEMFS', ({ program, sources, error }) => {
+		const module = debugModule();
+
+		expect(() =>
+			mountDebugFiles(
+				module,
+				program as Uint8Array,
+				sources as Array<{ path: string; content: string }>
+			)
+		).toThrow(error);
+		expect(module.FS.mkdirTree).not.toHaveBeenCalled();
+		expect(module.FS.writeFile).not.toHaveBeenCalled();
+	});
+});
 
 describe('linear memory telemetry', () => {
 	afterEach(() => {
@@ -64,12 +121,7 @@ describe('linear memory telemetry', () => {
 	it('is a no-op for an older runtime without the memory export', () => {
 		const postMessage = vi.fn();
 		vi.stubGlobal('postMessage', postMessage);
-		const stop = startLinearMemoryTelemetry(
-			debugModule(),
-			'target',
-			'legacy-generation',
-			10
-		);
+		const stop = startLinearMemoryTelemetry(debugModule(), 'target', 'legacy-generation', 10);
 
 		stop();
 		expect(postMessage).not.toHaveBeenCalled();
@@ -82,9 +134,7 @@ describe('linear memory telemetry', () => {
 		Object.defineProperty(module, 'HEAPU8', {
 			configurable: true,
 			get() {
-				throw new Error(
-					"'HEAPU8' was not exported. add it to EXPORTED_RUNTIME_METHODS"
-				);
+				throw new Error("'HEAPU8' was not exported. add it to EXPORTED_RUNTIME_METHODS");
 			}
 		});
 

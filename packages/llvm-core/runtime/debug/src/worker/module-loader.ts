@@ -51,9 +51,7 @@ export interface WasmLldbSharedRingRegistry {
 
 declare global {
 	// This is consumed by the Emscripten JS libraries owned by the LLDB/WAMR producers.
-	// eslint-disable-next-line no-var
 	var __wasmIdleDebugTransport: BrowserDebugTransportBindings | undefined;
-	// eslint-disable-next-line no-var
 	var wasmLldbSharedRingV1: WasmLldbSharedRingRegistry | undefined;
 }
 
@@ -90,10 +88,38 @@ export function mountDebugFiles(
 	program: Uint8Array,
 	sources: Array<{ path: string; content: string }>
 ) {
-	module.FS.mkdirTree('/workspace');
-	module.FS.writeFile('/workspace/program.wasm', program);
-	for (const source of sources) {
+	const programValue: unknown = program;
+	if (!(programValue instanceof Uint8Array)) {
+		throw new TypeError('debug program must be a Uint8Array');
+	}
+	const sourceValues: unknown = sources;
+	if (!Array.isArray(sourceValues)) {
+		throw new TypeError('debug sources must be an array');
+	}
+	const validatedSources: Array<{ path: string; content: string }> = [];
+	const sourcePaths = new Set<string>();
+	for (const sourceValue of sourceValues) {
+		if (typeof sourceValue !== 'object' || sourceValue === null || Array.isArray(sourceValue)) {
+			throw new TypeError('debug source entry must be an object');
+		}
+		const source = sourceValue as Record<string, unknown>;
+		if (typeof source.path !== 'string') {
+			throw new TypeError('debug source path must be a string');
+		}
 		validateDebugSourcePath(source.path);
+		if (typeof source.content !== 'string') {
+			throw new TypeError(`debug source content must be a string: ${source.path}`);
+		}
+		if (sourcePaths.has(source.path)) {
+			throw new Error(`duplicate debug source path: ${source.path}`);
+		}
+		sourcePaths.add(source.path);
+		validatedSources.push({ path: source.path, content: source.content });
+	}
+
+	module.FS.mkdirTree('/workspace');
+	module.FS.writeFile('/workspace/program.wasm', programValue);
+	for (const source of validatedSources) {
 		const parent = source.path.slice(0, source.path.lastIndexOf('/')) || '/workspace';
 		module.FS.mkdirTree(parent);
 		module.FS.writeFile(source.path, source.content);
@@ -173,11 +199,7 @@ export function startLinearMemoryTelemetry(
 	intervalMs = 250
 ) {
 	const descriptor = Object.getOwnPropertyDescriptor(module, 'HEAPU8');
-	if (
-		!descriptor ||
-		!('value' in descriptor) ||
-		!(descriptor.value instanceof Uint8Array)
-	) {
+	if (!descriptor || !('value' in descriptor) || !(descriptor.value instanceof Uint8Array)) {
 		return () => undefined;
 	}
 	let previousBytes = 0;

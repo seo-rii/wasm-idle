@@ -124,7 +124,9 @@ mounting files, so a rejected message neither executes runtime code nor leaves t
 The same preflight-validated `/workspace/...` files provided to LLDB are mounted into WAMR's
 MEMFS before launch, so guest WASI file access observes the workspace used to compile the DWARF
 artifact. File paths must remain canonical beneath `/workspace`, and `/workspace/program.wasm` is
-reserved for the debug target.
+reserved for the debug target. The shared LLDB/WAMR mount boundary revalidates the program byte
+view plus every source entry, content value, canonical path, and duplicate path before making any
+MEMFS call. A malformed direct Worker artifact therefore cannot leave a partially mounted target.
 The target launch also reserves a 1 MiB WAMR app heap for the debugger's scratch region, matching
 the verified native source-debug baseline, and runs WAMR at verbosity zero so runtime diagnostics
 do not contaminate the guest's stdout/stderr streams.
