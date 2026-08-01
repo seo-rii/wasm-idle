@@ -32,6 +32,11 @@ type OctaveWorkerMessage = {
 	progress?: { percent?: number; stage?: string };
 };
 
+type OctaveLoadOperation = {
+	token: symbol;
+	reject: (reason?: unknown) => void;
+};
+
 class Octave implements Sandbox {
 	output: any = null;
 	worker?: Worker = <any>null;
@@ -48,7 +53,7 @@ class Octave implements Sandbox {
 	waitingForInput = false;
 	pendingEof = false;
 	stdinWaiters: Array<() => void> = [];
-	private activeLoad = false;
+	private activeLoad: OctaveLoadOperation | null = null;
 	private activeRun: symbol | null = null;
 	private readonly workerSession = new WorkerSession({
 		label: 'Octave',
@@ -60,14 +65,26 @@ class Octave implements Sandbox {
 		}
 	});
 
+	private abortReason(signal: AbortSignal, phase: 'startup' | 'execute') {
+		if (signal.reason !== undefined) return signal.reason;
+		return new DOMException(
+			phase === 'startup' ? 'Octave runtime startup aborted' : 'Octave execution aborted',
+			'AbortError'
+		);
+	}
+
 	load(
 		runtimeAssets: string | PlaygroundRuntimeAssets = '',
 		_code = '',
 		_log = true,
 		_args: string[] = [],
-		_options: SandboxExecutionOptions = {},
+		options: SandboxExecutionOptions = {},
 		progress?: SandboxProgress
 	) {
+		const signal = options.signal;
+		if (signal?.aborted) {
+			return Promise.reject(this.abortReason(signal, 'startup'));
+		}
 		if (this.activeLoad || this.activeRun) {
 			return Promise.reject(
 				new BusyError('Octave runtime already has an active operation', {
@@ -76,21 +93,72 @@ class Octave implements Sandbox {
 				})
 			);
 		}
-		this.activeLoad = true;
-		return new Promise<void>((resolve) => {
-			this.pendingInput = [];
-			this.waitingForInput = false;
-			this.pendingEof = false;
-			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
-			const config = resolveOctaveRuntimeAssetConfig(runtimeAssets, currentUrl);
-			this.baseUrl = config.baseUrl;
-			this.workerUrl = config.workerUrl;
-			this.manifestUrl = config.manifestUrl;
-			progress?.set?.(1);
-			resolve();
-		}).finally(() => {
-			this.activeLoad = false;
+		const operation: OctaveLoadOperation = {
+			token: Symbol('Octave load'),
+			reject: () => undefined
+		};
+		this.activeLoad = operation;
+		let cleanup = () => {
+			if (this.activeLoad?.token === operation.token) this.activeLoad = null;
+		};
+		const loading = new Promise<void>((resolve, reject) => {
+			let onAbort: (() => void) | undefined;
+			let listenerRegistered = false;
+			let cleanedUp = false;
+			const ownsLoad = () => this.activeLoad?.token === operation.token;
+			cleanup = () => {
+				if (cleanedUp) return;
+				cleanedUp = true;
+				if (ownsLoad()) this.activeLoad = null;
+				if (signal && onAbort && listenerRegistered) {
+					listenerRegistered = false;
+					try {
+						signal.removeEventListener('abort', onAbort);
+					} catch {
+						// Listener cleanup must not replace the startup result.
+					}
+				}
+			};
+			const rejectLoad = (reason?: unknown) => {
+				if (!ownsLoad()) {
+					cleanup();
+					return;
+				}
+				cleanup();
+				reject(reason);
+			};
+			operation.reject = rejectLoad;
+			onAbort = signal ? () => rejectLoad(this.abortReason(signal, 'startup')) : undefined;
+			if (signal && onAbort) {
+				try {
+					signal.addEventListener('abort', onAbort, { once: true });
+					listenerRegistered = true;
+				} catch (error) {
+					rejectLoad(error);
+					return;
+				}
+				if (signal.aborted) onAbort();
+			}
+			if (!ownsLoad()) return;
+			try {
+				const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
+				const config = resolveOctaveRuntimeAssetConfig(runtimeAssets, currentUrl);
+				if (!ownsLoad()) return;
+				progress?.set?.(1);
+				if (!ownsLoad()) return;
+				this.pendingInput = [];
+				this.waitingForInput = false;
+				this.pendingEof = false;
+				this.baseUrl = config.baseUrl;
+				this.workerUrl = config.workerUrl;
+				this.manifestUrl = config.manifestUrl;
+				cleanup();
+				resolve();
+			} catch (error) {
+				rejectLoad(error);
+			}
 		});
+		return loading.finally(() => cleanup());
 	}
 
 	write(input: string) {
@@ -178,9 +246,7 @@ class Octave implements Sandbox {
 		}
 		const signal = options.signal;
 		if (signal?.aborted) {
-			return Promise.reject(
-				signal.reason ?? new DOMException('Octave execution aborted', 'AbortError')
-			);
+			return Promise.reject(this.abortReason(signal, 'execute'));
 		}
 		let programArgs: string[];
 		let workspace: ReturnType<typeof validateExecutionWorkspace>;
@@ -261,10 +327,7 @@ class Octave implements Sandbox {
 							cleanup();
 							return;
 						}
-						this.terminate(
-							signal.reason ??
-								new DOMException('Octave execution aborted', 'AbortError')
-						);
+						this.terminate(this.abortReason(signal, 'execute'));
 					}
 				: undefined;
 			if (signal && onAbort) {
@@ -352,7 +415,7 @@ class Octave implements Sandbox {
 	}
 
 	terminate(reason: unknown = 'Process terminated') {
-		this.activeLoad = false;
+		this.activeLoad?.reject(reason);
 		this.activeRun = null;
 		this.waitingForInput = false;
 		this.pendingEof = false;

@@ -307,6 +307,182 @@ describe('Octave sandbox', () => {
 		expect(workerInstances).toHaveLength(0);
 	});
 
+	it('rejects a pre-aborted Octave startup without changing runtime state', async () => {
+		const sandbox = new Octave();
+		await sandbox.load('/absproxy/5173');
+		await sandbox.run('disp("create worker")', false);
+		const worker = workerInstances[0];
+		sandbox.write('queued before startup abort\n');
+		const previousState = {
+			baseUrl: sandbox.baseUrl,
+			workerUrl: sandbox.workerUrl,
+			manifestUrl: sandbox.manifestUrl,
+			uid: sandbox.uid
+		};
+		const controller = new AbortController();
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		controller.abort(null);
+
+		await expect(
+			sandbox.load(
+				{
+					octave: {
+						baseUrl: '/replacement/runtime/',
+						workerUrl: '/replacement/worker.js',
+						manifestUrl: '/replacement/manifest.json'
+					}
+				},
+				'',
+				true,
+				[],
+				{ signal: controller.signal }
+			)
+		).rejects.toBeNull();
+		expect(addEventListener).not.toHaveBeenCalled();
+		const fallbackSignal = {
+			aborted: true,
+			reason: undefined,
+			addEventListener: vi.fn(),
+			removeEventListener: vi.fn()
+		} as unknown as AbortSignal;
+		await expect(
+			sandbox.load('/fallback/', '', true, [], { signal: fallbackSignal })
+		).rejects.toMatchObject({
+			name: 'AbortError',
+			message: 'Octave runtime startup aborted'
+		});
+		expect({
+			baseUrl: sandbox.baseUrl,
+			workerUrl: sandbox.workerUrl,
+			manifestUrl: sandbox.manifestUrl,
+			uid: sandbox.uid
+		}).toEqual(previousState);
+		expect(sandbox.pendingInput).toEqual(['queued before startup abort\n']);
+		expect(sandbox.worker).toBe(worker);
+		expect(worker.terminate).not.toHaveBeenCalled();
+	});
+
+	it('preserves an aborting Octave startup reason and replacement load state', async () => {
+		const sandbox = new Octave();
+		await sandbox.load('/initial/');
+		await sandbox.run('disp("idle worker")', false);
+		const idleWorker = workerInstances[0];
+		sandbox.write('stale before replacement\n');
+		const controller = new AbortController();
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const abortReason = new Error('abort Octave startup progress');
+		const callbackError = new Error('throw after Octave startup abort');
+		let replacement: Promise<void> | undefined;
+		const loading = sandbox.load(
+			{
+				octave: {
+					baseUrl: '/cancelled/runtime/',
+					workerUrl: '/cancelled/worker.js',
+					manifestUrl: '/cancelled/manifest.json'
+				}
+			},
+			'',
+			true,
+			[],
+			{ signal: controller.signal },
+			{
+				set() {
+					controller.abort(abortReason);
+					replacement = sandbox.load({
+						octave: {
+							baseUrl: '/replacement/runtime/',
+							workerUrl: '/replacement/worker.js',
+							manifestUrl: '/replacement/manifest.json'
+						}
+					});
+					sandbox.write('replacement startup input\n');
+					throw callbackError;
+				}
+			}
+		);
+		const outcome = loading.catch((error) => error);
+
+		await expect(outcome).resolves.toBe(abortReason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(removeEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
+		expect(sandbox.baseUrl).toBe('http://localhost:3000/replacement/runtime/');
+		expect(sandbox.workerUrl).toBe('http://localhost:3000/replacement/worker.js');
+		expect(sandbox.manifestUrl).toBe('http://localhost:3000/replacement/manifest.json');
+		expect(sandbox.pendingInput).toEqual(['replacement startup input\n']);
+		expect(sandbox.worker).toBe(idleWorker);
+		expect(idleWorker.terminate).not.toHaveBeenCalled();
+		await expect(sandbox.run('disp("replacement")', false)).resolves.toBe(true);
+	});
+
+	it('settles a progress-time Octave termination without clearing its replacement load', async () => {
+		const sandbox = new Octave();
+		await sandbox.load('/initial/');
+		const terminationReason = new Error('terminate Octave startup progress');
+		const callbackError = new Error('throw after Octave startup termination');
+		let replacement: Promise<void> | undefined;
+		const loading = sandbox.load(
+			'/cancelled/',
+			'',
+			true,
+			[],
+			{},
+			{
+				set() {
+					sandbox.terminate(terminationReason);
+					replacement = sandbox.load('/replacement/');
+					throw callbackError;
+				}
+			}
+		);
+		const outcome = loading.catch((error) => error);
+
+		await expect(outcome).resolves.toBe(terminationReason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(sandbox.baseUrl).toBe('http://localhost:3000/replacement/wasm-octave/runtime/');
+		await expect(sandbox.run('disp("replacement")', false)).resolves.toBe(true);
+	});
+
+	it('removes Octave startup listeners on success and callback failure', async () => {
+		const sandbox = new Octave();
+		const settledController = new AbortController();
+		const settledRemoveEventListener = vi.spyOn(
+			settledController.signal,
+			'removeEventListener'
+		);
+		await sandbox.load('/settled/', '', true, [], { signal: settledController.signal });
+		const settledState = [sandbox.baseUrl, sandbox.workerUrl, sandbox.manifestUrl];
+		expect(settledRemoveEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
+
+		settledController.abort(new Error('late Octave startup abort'));
+		expect([sandbox.baseUrl, sandbox.workerUrl, sandbox.manifestUrl]).toEqual(settledState);
+
+		const callbackController = new AbortController();
+		const callbackRemoveEventListener = vi.spyOn(
+			callbackController.signal,
+			'removeEventListener'
+		);
+		const callbackError = new Error('Octave startup progress failed');
+		await expect(
+			sandbox.load(
+				'/failed/',
+				'',
+				true,
+				[],
+				{ signal: callbackController.signal },
+				{
+					set() {
+						throw callbackError;
+					}
+				}
+			)
+		).rejects.toBe(callbackError);
+		expect(callbackRemoveEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
+		expect([sandbox.baseUrl, sandbox.workerUrl, sandbox.manifestUrl]).toEqual(settledState);
+
+		callbackController.abort(new Error('late failed Octave startup abort'));
+		await expect(sandbox.load('/retry/')).resolves.toBeUndefined();
+	});
+
 	it('keeps Octave idle when runtime configuration is missing', async () => {
 		const sandbox = new Octave();
 
@@ -494,14 +670,13 @@ describe('Octave sandbox', () => {
 		const sandbox = new Octave();
 		await sandbox.load('/absproxy/5173');
 		const controller = new AbortController();
-		const reason = new Error('Octave pre-aborted');
-		controller.abort(reason);
+		controller.abort(null);
 
 		await expect(
 			sandbox.run('disp("cancelled")', false, true, undefined, [], {
 				signal: controller.signal
 			})
-		).rejects.toBe(reason);
+		).rejects.toBeNull();
 
 		expect(sandbox.uid).toBe(0);
 		expect(sandbox.exit).toBe(true);
