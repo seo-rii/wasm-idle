@@ -1,6 +1,8 @@
 // @vitest-environment node
 
 import { EventEmitter } from 'node:events';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it, vi } from 'vitest';
 
@@ -11,6 +13,8 @@ import {
 	runAllLanguageBrowserTests
 } from '../../scripts/run-all-language-browser-tests.mjs';
 import { supportMatrixRows } from '../../scripts/support-matrix.mjs';
+
+const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
 describe('all-language browser test runner', () => {
 	it('includes every browserTest environment declared by the support matrix', () => {
@@ -107,7 +111,7 @@ describe('all-language browser test runner', () => {
 		expect(startPreview).toHaveBeenCalledTimes(1);
 		expect(spawnProcess).toHaveBeenCalledTimes(1);
 		expect(spawnProcess.mock.calls[0]?.[2]).toMatchObject({
-			cwd: expect.stringMatching(/\/wasm-idle$/),
+			cwd: repositoryRoot,
 			stdio: 'inherit'
 		});
 		expect(close).toHaveBeenCalledTimes(1);
