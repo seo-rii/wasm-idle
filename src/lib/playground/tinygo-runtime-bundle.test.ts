@@ -1,11 +1,18 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-const assetsDir = path.resolve('/home/seorii/dev/hancomac/wasm-idle/static/wasm-tinygo/assets');
-const toolsDir = path.resolve('/home/seorii/dev/hancomac/wasm-idle/static/wasm-tinygo/tools');
+const checkoutRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+const assetsDir = path.join(checkoutRoot, 'static', 'wasm-tinygo', 'assets');
+const toolsDir = path.join(checkoutRoot, 'static', 'wasm-tinygo', 'tools');
 
 describe('bundled wasm-tinygo runtime', () => {
+	it('resolves runtime fixtures from the active checkout', () => {
+		expect(path.relative(checkoutRoot, assetsDir)).toBe('static/wasm-tinygo/assets');
+		expect(path.relative(checkoutRoot, toolsDir)).toBe('static/wasm-tinygo/tools');
+	});
+
 	it('ships the direct-mode runtime and runtime asset progress through the bundled browser module', () => {
 		const runtimeChunk = readdirSync(assetsDir).find(
 			(entry) => entry.startsWith('runtime-') && entry.endsWith('.js')
