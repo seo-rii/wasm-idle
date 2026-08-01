@@ -13,6 +13,24 @@ let activeGeneration: string | undefined;
 let disposed = false;
 let finishActiveLifecycle: (() => void) | undefined;
 
+function closeActiveLldbTransports() {
+	const transport = globalThis.__wasmIdleDebugTransport;
+	for (const queue of [
+		transport?.dapInput,
+		transport?.dapOutput,
+		transport?.rspInput,
+		transport?.rspOutput
+	]) {
+		try {
+			queue?.close();
+		} catch {
+			// Continue releasing worker state when one shared queue is stale.
+		}
+	}
+	globalThis.__wasmIdleDebugTransport = undefined;
+	globalThis.wasmLldbSharedRingV1 = undefined;
+}
+
 async function initialize(message: LldbWorkerInitializeMessage) {
 	if (activeGeneration) throw new Error('LLDB worker is already initialized');
 	activeGeneration = message.generation;
@@ -130,9 +148,12 @@ export function handleLldbWorkerMessage(message: DebugWorkerInboundMessage) {
 			}
 			return;
 		}
-		void initialize(message).catch((error) =>
-			postWorkerError('lldb', message.generation, error)
-		);
+		void initialize(message).catch((error) => {
+			closeActiveLldbTransports();
+			if (activeGeneration === message.generation) activeGeneration = undefined;
+			finishActiveLifecycle = undefined;
+			postWorkerError('lldb', message.generation, error);
+		});
 		return;
 	}
 	if (!activeGeneration || message.generation !== activeGeneration) return;
@@ -140,21 +161,7 @@ export function handleLldbWorkerMessage(message: DebugWorkerInboundMessage) {
 		disposed = true;
 		finishActiveLifecycle?.();
 		finishActiveLifecycle = undefined;
-		const transport = globalThis.__wasmIdleDebugTransport;
-		for (const queue of [
-			transport?.dapInput,
-			transport?.dapOutput,
-			transport?.rspInput,
-			transport?.rspOutput
-		]) {
-			try {
-				queue?.close();
-			} catch {
-				// Continue releasing worker state when one shared queue is stale.
-			}
-		}
-		globalThis.__wasmIdleDebugTransport = undefined;
-		globalThis.wasmLldbSharedRingV1 = undefined;
+		closeActiveLldbTransports();
 	}
 }
 

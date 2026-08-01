@@ -135,6 +135,10 @@ If WAMR loading or target setup fails after claiming a generation, the target Wo
 active RSP and WASI stream, clears its worker-global transport, and releases that generation before
 reporting the error. A later valid initialization can therefore recover without reusing stale
 queues.
+The LLDB Worker applies the same recovery contract to all DAP and RSP streams and clears its shared
+ring registry when its loader, module setup, or adapter lifecycle fails. It releases the failed
+generation before emitting the worker error, so a replacement adapter cannot observe stale
+connections.
 The same preflight-validated `/workspace/...` files provided to LLDB are mounted into WAMR's
 MEMFS before launch, so guest WASI file access observes the workspace used to compile the DWARF
 artifact. File paths must remain canonical beneath `/workspace`, and `/workspace/program.wasm` is
