@@ -283,3 +283,16 @@ export class SharedByteQueue {
 		});
 	}
 }
+
+export function assertDistinctSharedByteQueueBuffers(
+	queues: readonly SharedByteQueue[],
+	message: string
+) {
+	const buffers = new Set<SharedArrayBuffer>();
+	for (const queue of queues) {
+		for (const buffer of [queue.descriptor.control, queue.descriptor.data]) {
+			if (buffers.has(buffer)) throw new Error(message);
+			buffers.add(buffer);
+		}
+	}
+}

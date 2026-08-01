@@ -44,7 +44,8 @@ integers from 1 through 2147483647 because the transport stores them in signed `
 metadata. Each descriptor must provide distinct control and data buffers so payload writes cannot
 overwrite queue metadata. Worker transport bindings additionally require DAP input/output as a
 complete pair and reject every control or data buffer reused across RSP and DAP directions, so one
-logical stream cannot consume or corrupt another. Attaching a descriptor also validates its
+logical stream cannot consume or corrupt another. Direct `DapClient` construction applies the same
+buffer-isolation rule to its input/output pair. Attaching a descriptor also validates its
 closed-state flag and cursor distance before runtime code can consume it. Every queue state accessor, including
 the closed-state check used during cleanup, rejects stale-generation metadata. Session and worker
 disposal isolate each queue close, so one corrupt transport cannot prevent the remaining queues from

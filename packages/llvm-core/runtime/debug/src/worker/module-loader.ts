@@ -1,4 +1,4 @@
-import { SharedByteQueue } from '../shared-byte-queue.js';
+import { assertDistinctSharedByteQueueBuffers, SharedByteQueue } from '../shared-byte-queue.js';
 import type {
 	DebugSessionGeneration,
 	DebugWorkerKind,
@@ -81,16 +81,10 @@ export function createTransportBindings(options: {
 	const rspOutput = new SharedByteQueue(options.rspOutput);
 	const dapInput = options.dapInput ? new SharedByteQueue(options.dapInput) : undefined;
 	const dapOutput = options.dapOutput ? new SharedByteQueue(options.dapOutput) : undefined;
-	const buffers = new Set<SharedArrayBuffer>();
-	for (const queue of [rspInput, rspOutput, dapInput, dapOutput]) {
-		if (!queue) continue;
-		for (const buffer of [queue.descriptor.control, queue.descriptor.data]) {
-			if (buffers.has(buffer)) {
-				throw new Error('debug transport channels must not reuse shared buffers');
-			}
-			buffers.add(buffer);
-		}
-	}
+	assertDistinctSharedByteQueueBuffers(
+		[rspInput, rspOutput, ...(dapInput ? [dapInput] : []), ...(dapOutput ? [dapOutput] : [])],
+		'debug transport channels must not reuse shared buffers'
+	);
 	return {
 		generation: options.generation,
 		rspInput,

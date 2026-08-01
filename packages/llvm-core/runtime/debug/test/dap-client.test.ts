@@ -128,6 +128,23 @@ describe('DAP framing', () => {
 });
 
 describe('DapClient', () => {
+	it('rejects one shared queue reused for DAP input and output', () => {
+		const shared = createSharedByteQueue(4096, 29);
+
+		expect(() => new DapClient({ input: shared, output: shared })).toThrow(
+			/DAP input and output must not reuse shared buffers/u
+		);
+	});
+
+	it('rejects a payload buffer shared by distinct DAP descriptors', () => {
+		const input = createSharedByteQueue(4096, 29);
+		const output = createSharedByteQueue(4096, 29);
+
+		expect(() => new DapClient({ input, output: { ...output, data: input.data } })).toThrow(
+			/DAP input and output must not reuse shared buffers/u
+		);
+	});
+
 	it.each([
 		['requestTimeoutMs', 0],
 		['requestTimeoutMs', -1],

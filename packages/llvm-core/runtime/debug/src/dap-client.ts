@@ -1,4 +1,4 @@
-import { SharedByteQueue } from './shared-byte-queue.js';
+import { assertDistinctSharedByteQueueBuffers, SharedByteQueue } from './shared-byte-queue.js';
 import type {
 	DapEvent,
 	DapMessage,
@@ -204,6 +204,10 @@ export class DapClient implements DapRequestSession {
 	constructor(options: DapClientOptions) {
 		this.input = new SharedByteQueue(options.input);
 		this.output = new SharedByteQueue(options.output);
+		assertDistinctSharedByteQueueBuffers(
+			[this.input, this.output],
+			'DAP input and output must not reuse shared buffers'
+		);
 		this.requestTimeoutMs = resolveDapTimeout(
 			options.requestTimeoutMs,
 			15_000,
