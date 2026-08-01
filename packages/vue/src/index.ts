@@ -25,6 +25,14 @@ export interface VueWasmIdleHost {
 	dispose: () => Promise<void>;
 }
 
+function disposeInBackground(dispose: () => Promise<void>) {
+	try {
+		void dispose().catch(() => undefined);
+	} catch {
+		// Vue lifecycle callbacks cannot await cleanup. Explicit dispose() still reports failures.
+	}
+}
+
 export function useWasmIdlePlayground(
 	runtimeAssets: MaybeRef<SandboxRuntimeAssets>,
 	loadSandbox: MaybeRef<SandboxLoader>
@@ -40,11 +48,13 @@ export function useWasmIdlePlayground(
 			currentAssets = nextAssets;
 			currentLoader = nextLoader;
 			currentBinding = createPlaygroundBinding(nextAssets, nextLoader);
-			void previousBinding.dispose();
+			disposeInBackground(() => previousBinding.dispose());
 		}
 		return currentBinding;
 	});
-	if (getCurrentScope()) onScopeDispose(() => void currentBinding.dispose());
+	if (getCurrentScope()) {
+		onScopeDispose(() => disposeInBackground(() => currentBinding.dispose()));
+	}
 	return binding;
 }
 
@@ -57,10 +67,23 @@ export function useWasmIdleHost(
 	const dispose = async () => {
 		const currentTerminal = terminal.value;
 		terminal.value = undefined;
-		if (currentTerminal) await currentTerminal.destroy();
-		await binding.value.dispose();
+		const failures: unknown[] = [];
+		try {
+			if (currentTerminal) await currentTerminal.destroy();
+		} catch (error) {
+			failures.push(error);
+		}
+		try {
+			await binding.value.dispose();
+		} catch (error) {
+			failures.push(error);
+		}
+		if (failures.length === 1) throw failures[0];
+		if (failures.length > 1) {
+			throw new AggregateError(failures, 'Failed to dispose the Vue wasm-idle host');
+		}
 	};
-	if (getCurrentScope()) onScopeDispose(() => void dispose());
+	if (getCurrentScope()) onScopeDispose(() => disposeInBackground(dispose));
 	return {
 		binding,
 		terminal,
