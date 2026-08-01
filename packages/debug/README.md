@@ -41,12 +41,13 @@ Supply an LLDB DAP session from `@wasm-idle/llvm-core/debug`. Runtime assets rem
 `wasm-llvm` producer and are deliberately excluded from this package.
 
 LLDB response bodies are validated again at the adapter boundary even though the lower-level DAP
-client already validates message envelopes. `threads`, `stackTrace`, `scopes`, and `variables`
-must contain their required arrays and well-formed identifiers, source descriptors, counts, and
-presentation fields. A malformed body rejects with `DebugAdapterProtocolError`, whose `command`
-and `path` identify the failed field; hosts should treat it as a session failure and dispose the
-LLDB/WAMR workers. Stack and scope line or column values may be zero, matching DAP's representation
-for an unavailable source location.
+client already validates message envelopes. `threads`, `stackTrace`, `scopes`, `variables`,
+`readMemory`, and `evaluate` must contain their required collections and fields plus well-formed
+identifiers, source descriptors, counts, and presentation data. Memory data must decode as Base64
+and cannot exceed the requested byte count. A malformed body rejects with
+`DebugAdapterProtocolError`, whose `command` and `path` identify the failed field; hosts should treat
+it as a session failure and dispose the LLDB/WAMR workers. Stack and scope line or column values may
+be zero, matching DAP's representation for an unavailable source location.
 
 The playground-facing controller also exposes `readMemory(memoryReference, offset, count)` while
 the target is paused. `DebugMemory` crosses the framework-neutral Sandbox and Terminal contracts

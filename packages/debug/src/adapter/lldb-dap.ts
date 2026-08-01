@@ -54,22 +54,6 @@ interface DapSetBreakpointsResponse {
 	breakpoints?: DapBreakpoint[];
 }
 
-interface DapReadMemoryResponse {
-	address?: string;
-	data?: string;
-	unreadableBytes?: number;
-}
-
-interface DapEvaluateResponse {
-	result: string;
-	type?: string;
-	presentationHint?: DebugVariablePresentationHint;
-	variablesReference?: number;
-	namedVariables?: number;
-	indexedVariables?: number;
-	memoryReference?: string;
-}
-
 const defaultInitializeArguments: DapInitializeRequestArguments = {
 	clientID: 'wasm-idle',
 	clientName: 'wasm-idle',
@@ -151,6 +135,10 @@ function assertDapStringEnum<const TValue extends string>(
 	}
 }
 
+function dapPropertyPath(path: string, field: string) {
+	return path ? `${path}.${field}` : field;
+}
+
 function dapOptionalString(
 	record: Record<string, unknown>,
 	field: string,
@@ -159,7 +147,7 @@ function dapOptionalString(
 ) {
 	const value = record[field];
 	if (value === undefined) return undefined;
-	assertDapString(value, command, `${path}.${field}`);
+	assertDapString(value, command, dapPropertyPath(path, field));
 	return value;
 }
 
@@ -171,7 +159,7 @@ function dapOptionalBoolean(
 ) {
 	const value = record[field];
 	if (value === undefined) return undefined;
-	assertDapBoolean(value, command, `${path}.${field}`);
+	assertDapBoolean(value, command, dapPropertyPath(path, field));
 	return value;
 }
 
@@ -183,7 +171,7 @@ function dapOptionalNonNegativeSafeInteger(
 ) {
 	const value = record[field];
 	if (value === undefined) return undefined;
-	assertDapNonNegativeSafeInteger(value, command, `${path}.${field}`);
+	assertDapNonNegativeSafeInteger(value, command, dapPropertyPath(path, field));
 	return value;
 }
 
@@ -196,7 +184,7 @@ function dapOptionalStringEnum<const TValue extends string>(
 ) {
 	const value = record[field];
 	if (value === undefined) return undefined;
-	assertDapStringEnum(value, values, command, `${path}.${field}`);
+	assertDapStringEnum(value, values, command, dapPropertyPath(path, field));
 	return value;
 }
 
@@ -237,6 +225,37 @@ function normalizeDapSource(value: unknown, command: string, path: string): Debu
 	};
 }
 
+function normalizeDapVariablePresentationHint(
+	value: unknown,
+	command: string,
+	path: string
+): DebugVariablePresentationHint {
+	assertDapRecord(value, command, path);
+	const kind = dapOptionalString(value, 'kind', command, path);
+	const visibility = dapOptionalString(value, 'visibility', command, path);
+	let attributes: string[] | undefined;
+	if (value.attributes !== undefined) {
+		if (!Array.isArray(value.attributes)) {
+			invalidDapResponse(command, `${path}.attributes`, 'expected an array');
+		}
+		attributes = value.attributes.map((attribute, attributeIndex) => {
+			assertDapString(attribute, command, `${path}.attributes[${attributeIndex}]`);
+			return attribute;
+		});
+	}
+	const lazy = dapOptionalBoolean(value, 'lazy', command, path);
+	return {
+		...(kind === undefined ? {} : { kind: kind as DebugVariablePresentationHint['kind'] }),
+		...(attributes === undefined
+			? {}
+			: { attributes: attributes as DebugVariablePresentationHint['attributes'] }),
+		...(visibility === undefined
+			? {}
+			: { visibility: visibility as DebugVariablePresentationHint['visibility'] }),
+		...(lazy === undefined ? {} : { lazy })
+	};
+}
+
 function assertPositiveInteger(value: number, name: string) {
 	if (!Number.isInteger(value) || value < 1) {
 		throw new RangeError(`${name} must be a positive integer.`);
@@ -247,15 +266,6 @@ function assertNonNegativeInteger(value: number, name: string) {
 	if (!Number.isInteger(value) || value < 0) {
 		throw new RangeError(`${name} must be a non-negative integer.`);
 	}
-}
-
-function decodeBase64(data: string) {
-	const binary = globalThis.atob(data);
-	const bytes = new Uint8Array(binary.length);
-	for (let index = 0; index < binary.length; index += 1) {
-		bytes[index] = binary.charCodeAt(index);
-	}
-	return bytes;
 }
 
 function cloneResolvedBreakpoints(breakpoints: readonly ResolvedBreakpoint[]) {
@@ -614,69 +624,14 @@ export class LldbDapAdapter implements DebugAdapter {
 					'variables',
 					path
 				);
-				let presentationHint: DebugVariablePresentationHint | undefined;
-				if (variable.presentationHint !== undefined) {
-					assertDapRecord(
-						variable.presentationHint,
-						'variables',
-						`${path}.presentationHint`
-					);
-					const hint = variable.presentationHint;
-					const kind = dapOptionalString(
-						hint,
-						'kind',
-						'variables',
-						`${path}.presentationHint`
-					);
-					const visibility = dapOptionalString(
-						hint,
-						'visibility',
-						'variables',
-						`${path}.presentationHint`
-					);
-					let attributes: string[] | undefined;
-					if (hint.attributes !== undefined) {
-						if (!Array.isArray(hint.attributes)) {
-							invalidDapResponse(
+				const presentationHint =
+					variable.presentationHint === undefined
+						? undefined
+						: normalizeDapVariablePresentationHint(
+								variable.presentationHint,
 								'variables',
-								`${path}.presentationHint.attributes`,
-								'expected an array'
+								`${path}.presentationHint`
 							);
-						}
-						hint.attributes.forEach((attribute, attributeIndex) => {
-							assertDapString(
-								attribute,
-								'variables',
-								`${path}.presentationHint.attributes[${attributeIndex}]`
-							);
-						});
-						attributes = [...hint.attributes];
-					}
-					const lazy = dapOptionalBoolean(
-						hint,
-						'lazy',
-						'variables',
-						`${path}.presentationHint`
-					);
-					presentationHint = {
-						...(kind === undefined
-							? {}
-							: { kind: kind as DebugVariablePresentationHint['kind'] }),
-						...(attributes === undefined
-							? {}
-							: {
-									attributes:
-										attributes as DebugVariablePresentationHint['attributes']
-								}),
-						...(visibility === undefined
-							? {}
-							: {
-									visibility:
-										visibility as DebugVariablePresentationHint['visibility']
-								}),
-						...(lazy === undefined ? {} : { lazy })
-					};
-				}
 				return {
 					name: variable.name,
 					value: variable.value,
@@ -697,30 +652,88 @@ export class LldbDapAdapter implements DebugAdapter {
 		if (!Number.isInteger(offset)) throw new RangeError('offset must be an integer.');
 		assertNonNegativeInteger(count, 'count');
 
-		const response = await this.#session.request<DapReadMemoryResponse>('readMemory', {
+		const response = await this.#session.request<unknown>('readMemory', {
 			memoryReference,
 			offset,
 			count
 		});
+		assertDapRecord(response, 'readMemory', 'body');
+		assertDapString(response.address, 'readMemory', 'address');
+		const encodedData = dapOptionalString(response, 'data', 'readMemory', '');
+		const unreadableBytes =
+			dapOptionalNonNegativeSafeInteger(response, 'unreadableBytes', 'readMemory', '') ?? 0;
+		let data = new Uint8Array();
+		if (encodedData !== undefined) {
+			let binary: string;
+			try {
+				binary = globalThis.atob(encodedData);
+			} catch {
+				invalidDapResponse('readMemory', 'data', 'expected valid Base64');
+			}
+			if (binary.length > count) {
+				invalidDapResponse(
+					'readMemory',
+					'data',
+					`decoded ${binary.length} bytes for a ${count}-byte request`
+				);
+			}
+			data = new Uint8Array(binary.length);
+			for (let index = 0; index < binary.length; index += 1) {
+				data[index] = binary.charCodeAt(index);
+			}
+		}
 		return {
-			address: response?.address,
-			data: decodeBase64(response?.data || ''),
-			unreadableBytes: response?.unreadableBytes || 0
+			address: response.address,
+			data,
+			unreadableBytes
 		} satisfies DebugMemory;
 	}
 
 	async evaluate(expression: string, frameId?: number) {
 		this.#requireCapability('supportsEvaluate', 'evaluate expressions');
 		if (frameId !== undefined) assertPositiveInteger(frameId, 'frameId');
-		const response = await this.#session.request<DapEvaluateResponse>('evaluate', {
+		const response = await this.#session.request<unknown>('evaluate', {
 			expression,
 			context: 'watch',
 			...(frameId === undefined ? {} : { frameId })
 		});
+		assertDapRecord(response, 'evaluate', 'body');
+		assertDapString(response.result, 'evaluate', 'result');
+		assertDapNonNegativeSafeInteger(
+			response.variablesReference,
+			'evaluate',
+			'variablesReference'
+		);
+		const resultType = dapOptionalString(response, 'type', 'evaluate', '');
+		const namedVariables = dapOptionalNonNegativeSafeInteger(
+			response,
+			'namedVariables',
+			'evaluate',
+			''
+		);
+		const indexedVariables = dapOptionalNonNegativeSafeInteger(
+			response,
+			'indexedVariables',
+			'evaluate',
+			''
+		);
+		const memoryReference = dapOptionalString(response, 'memoryReference', 'evaluate', '');
+		const presentationHint =
+			response.presentationHint === undefined
+				? undefined
+				: normalizeDapVariablePresentationHint(
+						response.presentationHint,
+						'evaluate',
+						'presentationHint'
+					);
 		return {
-			...response,
 			result: response.result,
-			variablesReference: response.variablesReference || 0
+			...(resultType === undefined ? {} : { type: resultType }),
+			...(presentationHint === undefined ? {} : { presentationHint }),
+			variablesReference: response.variablesReference,
+			...(namedVariables === undefined ? {} : { namedVariables }),
+			...(indexedVariables === undefined ? {} : { indexedVariables }),
+			...(memoryReference === undefined ? {} : { memoryReference })
 		} satisfies DebugEvaluateResult;
 	}
 

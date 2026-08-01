@@ -688,6 +688,85 @@ describe('LldbDapAdapter', () => {
 		]);
 	});
 
+	it.each([
+		{
+			command: 'readMemory',
+			response: { data: '' },
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) =>
+				adapter.readMemory('memory', 0, 1),
+			path: 'address'
+		},
+		{
+			command: 'readMemory',
+			response: { address: '0x1000', data: '***' },
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) =>
+				adapter.readMemory('memory', 0, 1),
+			path: 'data'
+		},
+		{
+			command: 'readMemory',
+			response: { address: '0x1000', unreadableBytes: -1 },
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) =>
+				adapter.readMemory('memory', 0, 1),
+			path: 'unreadableBytes'
+		},
+		{
+			command: 'readMemory',
+			response: { address: '0x1000', data: 'AQI=' },
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) =>
+				adapter.readMemory('memory', 0, 1),
+			path: 'data'
+		},
+		{
+			command: 'evaluate',
+			response: { result: 42, variablesReference: 0 },
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) =>
+				adapter.evaluate('answer'),
+			path: 'result'
+		},
+		{
+			command: 'evaluate',
+			response: { result: '42' },
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) =>
+				adapter.evaluate('answer'),
+			path: 'variablesReference'
+		},
+		{
+			command: 'evaluate',
+			response: { result: '42', variablesReference: 0, namedVariables: -1 },
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) =>
+				adapter.evaluate('answer'),
+			path: 'namedVariables'
+		},
+		{
+			command: 'evaluate',
+			response: {
+				result: '42',
+				variablesReference: 0,
+				presentationHint: { attributes: [7] }
+			},
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) =>
+				adapter.evaluate('answer'),
+			path: 'presentationHint.attributes[0]'
+		}
+	])(
+		'rejects malformed $command value responses',
+		async ({ command, response, invoke, path }) => {
+			const session = new FakeDapSession();
+			session.setResponse('initialize', { supportsReadMemoryRequest: true });
+			session.setResponse(command, response);
+			const adapter = createLldbDapAdapter(session, { featureSupport: { evaluate: true } });
+			await adapter.initialize();
+
+			const result = invoke(adapter);
+			await expect(result).rejects.toBeInstanceOf(DebugAdapterProtocolError);
+			await expect(result).rejects.toMatchObject({
+				command,
+				path
+			});
+		}
+	);
+
 	it('normalizes DAP events and preserves tracked breakpoint source information', async () => {
 		const session = new FakeDapSession();
 		session.setResponse('initialize', {});
