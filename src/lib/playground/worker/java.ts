@@ -69,6 +69,7 @@ self.addEventListener('message', async (event) => {
 		prepare,
 		args = [],
 		stdin = '',
+		hasExplicitStdin = false,
 		activePath,
 		workspaceFiles = []
 	} = event.data;
@@ -120,7 +121,8 @@ self.addEventListener('message', async (event) => {
 		if (!compiler || !runtimeLoad) throw new Error('TeaVM compiler not loaded');
 		stdoutBuffer = '';
 		stderrBuffer = '';
-		const stdinInjection = prepareJavaStdinInjection(code, stdin);
+		const explicitStdin = hasExplicitStdin === true;
+		const stdinInjection = prepareJavaStdinInjection(code, stdin, explicitStdin);
 		const sourceIdentity = resolveJavaSourceIdentity(code);
 		const sourcePath =
 			typeof activePath === 'string' && activePath ? activePath : sourceIdentity.sourcePath;
@@ -264,7 +266,7 @@ self.addEventListener('message', async (event) => {
 		}
 
 		stdinBufferJava = new Int32Array(buffer);
-		stdinChunkJava = new TextEncoder().encode(stdin);
+		stdinChunkJava = explicitStdin ? new Uint8Array(0) : new TextEncoder().encode(stdin);
 		stdinChunkOffsetJava = 0;
 		const workerGlobal = globalThis as typeof globalThis & {
 			window?: Window & typeof globalThis;
@@ -278,6 +280,7 @@ self.addEventListener('message', async (event) => {
 					if (stdinChunkOffsetJava < stdinChunkJava.length) {
 						return stdinChunkJava[stdinChunkOffsetJava++] ?? -1;
 					}
+					if (explicitStdin) return -1;
 					const chunk = waitForBufferedStdin(stdinBufferJava!, () =>
 						self.postMessage({ buffer: true })
 					);

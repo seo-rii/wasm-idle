@@ -124,6 +124,7 @@ describe('TeaVM Java sandbox', () => {
 				prepare: true,
 				code,
 				args: [],
+				hasExplicitStdin: false,
 				activePath: 'Main.java',
 				workspaceFiles: []
 			})
@@ -135,6 +136,7 @@ describe('TeaVM Java sandbox', () => {
 				code,
 				args: ['one', 'two'],
 				stdin: '4\n6\n',
+				hasExplicitStdin: true,
 				activePath: 'Main.java',
 				workspaceFiles: []
 			})
@@ -1088,8 +1090,44 @@ public class Main {
 
 		expect(runMessages).toHaveLength(2);
 		expect(runMessages[0].stdin).toBe('injected\n');
+		expect(runMessages[0].hasExplicitStdin).toBe(true);
 		expect(runMessages[1].stdin).toBe('');
+		expect(runMessages[1].hasExplicitStdin).toBe(false);
 		expect(bufferedValues).toEqual(['', '']);
+	});
+
+	it('keeps terminal input out of explicit Java stdin and accepts fresh buffered input later', async () => {
+		const sandbox = new Java();
+		const worker = new MockWorker();
+		const runMessages: any[] = [];
+		worker.postMessage.mockImplementation((message) => runMessages.push(message));
+		sandbox.worker = worker as unknown as Worker;
+
+		const explicitRun = sandbox.run('public class Main {}', false, true, undefined, [], {
+			stdin: ''
+		});
+		const explicitHandler = worker.onmessage;
+		sandbox.write('terminal input during explicit run\n');
+		explicitHandler?.({ data: { buffer: true } } as MessageEvent<any>);
+
+		expect(runMessages[0].hasExplicitStdin).toBe(true);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
+		expect(sandbox.pendingInput).toEqual(['terminal input during explicit run\n']);
+
+		explicitHandler?.({ data: { results: true } } as MessageEvent<any>);
+		await expect(explicitRun).resolves.toBe(true);
+		expect(sandbox.pendingInput).toEqual([]);
+
+		const bufferedRun = sandbox.run('public class Main {}', false);
+		const bufferedHandler = worker.onmessage;
+		sandbox.write('fresh terminal input\n');
+		bufferedHandler?.({ data: { buffer: true } } as MessageEvent<any>);
+
+		expect(runMessages[1].hasExplicitStdin).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('fresh terminal input\n');
+
+		bufferedHandler?.({ data: { results: true } } as MessageEvent<any>);
+		await expect(bufferedRun).resolves.toBe(true);
 	});
 
 	it('rejects the active run when kill terminates the worker', async () => {

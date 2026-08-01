@@ -352,7 +352,7 @@ class Java implements Sandbox {
 					if (assetBridge?.handleMessage(event as MessageEvent<any>)) return;
 					if (!ownsRun()) return;
 					const { output, results, error, buffer, diagnostic } = event.data;
-					if (buffer) {
+					if (buffer && !hasExplicitStdin) {
 						this.waitingForInput = true;
 						this.flushPendingInput();
 						if (!ownsRun()) return;
@@ -421,7 +421,8 @@ class Java implements Sandbox {
 					prepare,
 					buffer: this.buffer,
 					args: programArgs,
-					stdin: options.stdin || '',
+					stdin: options.stdin ?? '',
+					hasExplicitStdin,
 					baseUrl: this.baseUrl,
 					activePath: workspace.activePath,
 					workspaceFiles: workspace.workspaceFiles

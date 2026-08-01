@@ -45,6 +45,20 @@ const loadTeaVmArtifacts = async () => {
 };
 
 describe('TeaVM Java stdin integration', () => {
+	it('separates explicitly empty stdin from a streaming helper in the compile cache', () => {
+		const code = `public class Main {
+    public static void main(String[] args) throws Exception {
+        System.out.println(System.in.read());
+    }
+}`;
+		const explicit = prepareJavaStdinInjection(code, '', true);
+		const streaming = prepareJavaStdinInjection(code, '', false);
+
+		expect(explicit.stdinCacheKey).not.toBe(streaming.stdinCacheKey);
+		expect(explicit.helperSource).toContain('HAS_EXPLICIT_INPUT = true');
+		expect(streaming.helperSource).toContain('HAS_EXPLICIT_INPUT = false');
+	});
+
 	it('generates Wasm from output class files', async () => {
 		const { runtime, compilerWasm, sdk, runtimeClasslib } = await loadTeaVmArtifacts();
 		const code = `public class Main {
@@ -257,8 +271,8 @@ public class Main {
         System.out.println("sum=" + sum);
     }
 }`;
-		const stdin = '1 2 3 4\n';
-		const injection = prepareJavaStdinInjection(code, stdin);
+		const stdin = 'é 1 2 3 4\n';
+		const injection = prepareJavaStdinInjection(code, stdin, true);
 		const compilerModule = await runtime.load(compilerWasm, {
 			stackDeobfuscator: { enabled: false }
 		});
@@ -282,7 +296,12 @@ public class Main {
 
 		const wasm = new Uint8Array(compiler.getWebAssemblyOutputFile('app.wasm'));
 		const outputs: string[] = [];
-		const restoreWindow = installJavaStdinWindow(() => -1);
+		let hostReadCount = 0;
+		const unexpectedHostBytes = ['9'.charCodeAt(0)];
+		const restoreWindow = installJavaStdinWindow(() => {
+			hostReadCount += 1;
+			return unexpectedHostBytes.shift() ?? -1;
+		});
 
 		try {
 			const module = await runtime.load(wasm, {
@@ -306,6 +325,69 @@ public class Main {
 		}
 
 		expect(outputs.join('')).toBe('sum=10\n');
+		expect(hostReadCount).toBe(0);
+	}, 60_000);
+
+	it('returns immediate EOF for explicitly empty stdin', async () => {
+		const { runtime, compilerWasm, sdk, runtimeClasslib } = await loadTeaVmArtifacts();
+		const code = `public class Main {
+    public static void main(String[] args) throws Exception {
+        System.out.println("value=" + System.in.read());
+    }
+}`;
+		const injection = prepareJavaStdinInjection(code, '', true);
+		const compilerModule = await runtime.load(compilerWasm, {
+			stackDeobfuscator: { enabled: false }
+		});
+		const compiler = compilerModule.exports.createCompiler();
+		const diagnostics: string[] = [];
+
+		compiler.setSdk(sdk);
+		compiler.setTeaVMClasslib(runtimeClasslib);
+		compiler.onDiagnostic((diagnostic: { message?: string }) => {
+			diagnostics.push(String(diagnostic.message || ''));
+		});
+		compiler.addSourceFile('Main.java', injection.transformedCode);
+		if (injection.helperSourcePath && injection.helperSource) {
+			compiler.addSourceFile(injection.helperSourcePath, injection.helperSource);
+		}
+
+		expect(compiler.compile()).toBe(true);
+		expect(Array.from(compiler.detectMainClasses())).toEqual(['Main']);
+		expect(compiler.generateWebAssembly({ outputName: 'app', mainClass: 'Main' })).toBe(true);
+		expect(diagnostics).toEqual([]);
+
+		const wasm = new Uint8Array(compiler.getWebAssemblyOutputFile('app.wasm'));
+		const outputs: string[] = [];
+		let hostReadCount = 0;
+		const restoreWindow = installJavaStdinWindow(() => {
+			hostReadCount += 1;
+			return 'A'.charCodeAt(0);
+		});
+
+		try {
+			const module = await runtime.load(wasm, {
+				installImports(imports: {
+					teavmConsole: {
+						putcharStdout: (code: number) => void;
+						putcharStderr: (code: number) => void;
+					};
+				}) {
+					imports.teavmConsole.putcharStdout = (charCode) =>
+						outputs.push(String.fromCharCode(charCode));
+					imports.teavmConsole.putcharStderr = (charCode) =>
+						outputs.push(String.fromCharCode(charCode));
+				},
+				stackDeobfuscator: { enabled: false }
+			});
+
+			module.exports.main([]);
+		} finally {
+			restoreWindow();
+		}
+
+		expect(outputs.join('')).toBe('value=-1\n');
+		expect(hostReadCount).toBe(0);
 	}, 60_000);
 
 	it('reads live stdin chunks through the custom TeaVM bridge', async () => {
@@ -318,7 +400,7 @@ public class Main {
         System.out.println("" + (char) first + (char) second + (char) third);
     }
 }`;
-		const injection = prepareJavaStdinInjection(code, '');
+		const injection = prepareJavaStdinInjection(code, '', false);
 		const compilerModule = await runtime.load(compilerWasm, {
 			stackDeobfuscator: { enabled: false }
 		});
@@ -409,7 +491,7 @@ public class Main {
 		];
 
 		for (const testCase of cases) {
-			const injection = prepareJavaStdinInjection(testCase.code, '1 2\n');
+			const injection = prepareJavaStdinInjection(testCase.code, '1 2\n', true);
 			const compilerModule = await runtime.load(compilerWasm, {
 				stackDeobfuscator: { enabled: false }
 			});

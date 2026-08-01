@@ -220,7 +220,8 @@ export interface PreparedJavaStdinInjection {
 
 export const prepareJavaStdinInjection = (
 	code: string,
-	stdin: string
+	stdin: string,
+	hasExplicitStdin: boolean
 ): PreparedJavaStdinInjection => {
 	const usesStdin = code.includes('System.in');
 	const usesScanner =
@@ -268,11 +269,13 @@ export const prepareJavaStdinInjection = (
 			.replaceAll(/\bjava\.util\.Scanner\b/g, 'Scanner');
 		transformedCode = `${transformedCode.trimEnd()}\n\n${JAVA_SCANNER_COMPAT_SHIM}\n`;
 	}
-	const encodedBytes = [...new TextEncoder().encode(stdin)].join(', ');
+	const encodedBytes = [...new TextEncoder().encode(stdin)]
+		.map((byte) => (byte > 0x7f ? byte - 0x100 : byte))
+		.join(', ');
 
 	return {
 		usesStdin: true,
-		stdinCacheKey: stdin,
+		stdinCacheKey: JSON.stringify([hasExplicitStdin, stdin]),
 		transformedCode,
 		helperSourcePath,
 		helperSource: `${packageName ? `package ${packageName};\n\n` : ''}import java.io.InputStream;
@@ -283,6 +286,7 @@ import org.teavm.jso.core.JSMapLike;
 
 final class ${JAVA_STDIN_HELPER_CLASS} extends InputStream {
     private static final byte[] INITIAL_DATA = new byte[] { ${encodedBytes} };
+    private static final boolean HAS_EXPLICIT_INPUT = ${hasExplicitStdin ? 'true' : 'false'};
     private static final ${JAVA_STDIN_HELPER_CLASS} INSTANCE = new ${JAVA_STDIN_HELPER_CLASS}();
     private int position = 0;
 
@@ -325,6 +329,9 @@ final class ${JAVA_STDIN_HELPER_CLASS} extends InputStream {
             position += count;
             return count;
         }
+        if (HAS_EXPLICIT_INPUT) {
+            return -1;
+        }
         int next = readFromHost();
         if (next == -1) {
             return -1;
@@ -335,7 +342,10 @@ final class ${JAVA_STDIN_HELPER_CLASS} extends InputStream {
 
     @Override
     public int read() {
-        return position < INITIAL_DATA.length ? INITIAL_DATA[position++] & 0xff : readFromHost();
+        if (position < INITIAL_DATA.length) {
+            return INITIAL_DATA[position++] & 0xff;
+        }
+        return HAS_EXPLICIT_INPUT ? -1 : readFromHost();
     }
 }
 `
