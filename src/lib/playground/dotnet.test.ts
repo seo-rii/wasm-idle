@@ -7,6 +7,8 @@ const { publicEnv } = vi.hoisted(() => ({
 	}
 }));
 let suppressAutoLoadAck = false;
+let suppressAutoRunAck = false;
+let runDispatchError: unknown;
 
 class MockWorker {
 	onmessage: ((event: MessageEvent<any>) => void) | null = null;
@@ -35,6 +37,8 @@ class MockWorker {
 			});
 			return;
 		}
+		if (runDispatchError) throw runDispatchError;
+		if (suppressAutoRunAck) return;
 		queueMicrotask(() =>
 			this.onmessage?.({
 				data: { output: 'factorial_plus_bonus=27\n', results: true }
@@ -63,6 +67,8 @@ describe('Dotnet sandbox', () => {
 		workerInstances.length = 0;
 		publicEnv.PUBLIC_WASM_DOTNET_MODULE_URL = '/wasm-dotnet/index.js';
 		suppressAutoLoadAck = false;
+		suppressAutoRunAck = false;
+		runDispatchError = undefined;
 	});
 
 	afterEach(() => {
@@ -250,6 +256,262 @@ End Module`;
 				stdin: ''
 			})
 		);
+	});
+
+	it('isolates empty explicit stdin from worker terminal input', async () => {
+		suppressAutoRunAck = true;
+		const sandbox = new Dotnet('CSHARP');
+		const code = 'var input = Console.ReadLine();';
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		sandbox.write('stale\n');
+		sandbox.eof();
+
+		const explicitRun = sandbox.run(code, false, true, undefined, [], { stdin: '' });
+		await vi.waitFor(() => expect(worker?.postMessage).toHaveBeenCalledTimes(2));
+		const explicitMessage = worker?.postMessage.mock.calls[1]?.[0];
+		expect(explicitMessage.stdin).toBe('');
+		sandbox.write('during\n');
+		sandbox.eof();
+
+		worker?.onmessage?.({ data: { results: true } } as MessageEvent<any>);
+		await expect(explicitRun).resolves.toBe(true);
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.pendingEof).toBe(false);
+
+		const bufferedRun = sandbox.run(code, false);
+		await Promise.resolve();
+		expect(worker?.postMessage).toHaveBeenCalledTimes(2);
+		sandbox.write('fresh\n');
+		await vi.waitFor(() => expect(worker?.postMessage).toHaveBeenCalledTimes(3));
+		expect(worker?.postMessage.mock.calls[2]?.[0]).toEqual(
+			expect.objectContaining({ stdin: 'fresh\n' })
+		);
+		worker?.onmessage?.({ data: { results: true } } as MessageEvent<any>);
+		await expect(bufferedRun).resolves.toBe(true);
+	});
+
+	it('clears explicit worker stdin after execution and dispatch failures', async () => {
+		suppressAutoRunAck = true;
+		const sandbox = new Dotnet('CSHARP');
+		const code = 'var input = Console.ReadLine();';
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		const workerError = new Error('dotnet worker execution failed');
+		const failedRun = sandbox.run(code, false, true, undefined, [], {
+			stdin: 'fixed\n'
+		});
+		await vi.waitFor(() => expect(worker?.postMessage).toHaveBeenCalledTimes(2));
+		sandbox.write('discard after worker failure\n');
+		sandbox.eof();
+
+		worker?.onmessage?.({ data: { error: workerError } } as MessageEvent<any>);
+		await expect(failedRun).rejects.toBe(workerError);
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.pendingEof).toBe(false);
+
+		const dispatchError = new Error('dotnet worker dispatch failed');
+		runDispatchError = dispatchError;
+		sandbox.write('stale before dispatch failure\n');
+		sandbox.eof();
+		await expect(sandbox.run(code, false, true, undefined, [], { stdin: '' })).rejects.toBe(
+			dispatchError
+		);
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.pendingEof).toBe(false);
+	});
+
+	it('clears an explicit worker stdin run on termination without stale cleanup', async () => {
+		suppressAutoRunAck = true;
+		const sandbox = new Dotnet('CSHARP');
+		const code = 'var input = Console.ReadLine();';
+		await sandbox.load('/absproxy/5173');
+		const running = sandbox.run(code, false, true, undefined, [], { stdin: '' });
+		await vi.waitFor(() => expect(workerInstances[0]?.postMessage).toHaveBeenCalledTimes(2));
+		sandbox.write('discard on terminate\n');
+		sandbox.eof();
+
+		sandbox.terminate();
+		sandbox.write('fresh after terminate\n');
+
+		await expect(running).rejects.toBe('Process terminated');
+		expect(sandbox.pendingInput).toEqual(['fresh after terminate\n']);
+		expect(sandbox.pendingEof).toBe(false);
+		suppressAutoLoadAck = false;
+		await sandbox.load('/absproxy/5173');
+		const replacementWorker = workerInstances[1];
+		const retry = sandbox.run(code, false);
+		await vi.waitFor(() => expect(replacementWorker?.postMessage).toHaveBeenCalledTimes(2));
+		expect(replacementWorker?.postMessage.mock.calls[1]?.[0]).toEqual(
+			expect.objectContaining({ stdin: 'fresh after terminate\n' })
+		);
+		replacementWorker?.onmessage?.({ data: { results: true } } as MessageEvent<any>);
+		await expect(retry).resolves.toBe(true);
+	});
+
+	it('does not let a terminated worker stdin waiter consume replacement input', async () => {
+		suppressAutoRunAck = true;
+		const sandbox = new Dotnet('CSHARP');
+		const code = 'var input = Console.ReadLine();';
+		await sandbox.load('/absproxy/5173');
+		const staleRun = sandbox.run(code, false);
+		await vi.dynamicImportSettled();
+		expect(workerInstances[0]?.postMessage).toHaveBeenCalledOnce();
+
+		sandbox.terminate();
+		sandbox.write('fresh after waiter termination\n');
+
+		await expect(staleRun).rejects.toBe('Process terminated');
+		expect(sandbox.pendingInput).toEqual(['fresh after waiter termination\n']);
+		await sandbox.load('/absproxy/5173');
+		const replacementWorker = workerInstances[1];
+		const retry = sandbox.run(code, false);
+		await vi.waitFor(() => expect(replacementWorker?.postMessage).toHaveBeenCalledTimes(2));
+		expect(replacementWorker?.postMessage.mock.calls[1]?.[0]).toEqual(
+			expect.objectContaining({ stdin: 'fresh after waiter termination\n' })
+		);
+		replacementWorker?.onmessage?.({ data: { results: true } } as MessageEvent<any>);
+		await expect(retry).resolves.toBe(true);
+	});
+
+	it('does not let a worker stdin waiter superseded by load consume replacement input', async () => {
+		suppressAutoRunAck = true;
+		const sandbox = new Dotnet('CSHARP');
+		const code = 'var input = Console.ReadLine();';
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		const staleRun = sandbox.run(code, false);
+		await vi.dynamicImportSettled();
+		expect(worker?.postMessage).toHaveBeenCalledOnce();
+
+		const reload = sandbox.load('/absproxy/5173');
+		sandbox.write('fresh after reload\n');
+
+		await expect(staleRun).rejects.toBe('Worker operation superseded');
+		await expect(reload).resolves.toBeUndefined();
+		expect(sandbox.pendingInput).toEqual(['fresh after reload\n']);
+		expect(worker?.postMessage).toHaveBeenCalledOnce();
+		expect(worker?.terminate).toHaveBeenCalledOnce();
+		const replacementWorker = workerInstances[1];
+		const retry = sandbox.run(code, false);
+		await vi.waitFor(() => expect(replacementWorker?.postMessage).toHaveBeenCalledTimes(2));
+		expect(replacementWorker?.postMessage.mock.calls[1]?.[0]).toEqual(
+			expect.objectContaining({ stdin: 'fresh after reload\n' })
+		);
+		replacementWorker?.onmessage?.({ data: { results: true } } as MessageEvent<any>);
+		await expect(retry).resolves.toBe(true);
+	});
+
+	it('isolates explicit stdin on the main-thread dotnet runtime', async () => {
+		vi.stubGlobal('crossOriginIsolated', true);
+		vi.stubGlobal('navigator', { serviceWorker: { controller: {} } });
+		const fixtureKey = '__wasm_idle_dotnet_explicit_stdin_fixture';
+		let markExecutionStarted!: () => void;
+		const executionStarted = new Promise<void>((resolve) => {
+			markExecutionStarted = resolve;
+		});
+		let releaseExecution!: () => void;
+		const executionGate = new Promise<void>((resolve) => {
+			releaseExecution = resolve;
+		});
+		const compile = vi.fn(async () => ({ success: true, artifact: { id: 'fixture' } }));
+		const execute = vi
+			.fn()
+			.mockImplementationOnce(async () => {
+				markExecutionStarted();
+				await executionGate;
+				return { exitCode: 0, stdout: '', stderr: '' };
+			})
+			.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+		(globalThis as any)[fixtureKey] = { compile, execute };
+		const moduleSource = `
+const fixture = globalThis[${JSON.stringify(fixtureKey)}];
+export function createDotnetCompiler() {
+  return { compile: (request) => fixture.compile(request) };
+}
+export function executeBrowserDotnetArtifact(artifact, options) {
+  return fixture.execute(artifact, options);
+}
+`;
+		const moduleUrl = `data:text/javascript;charset=utf-8,${encodeURIComponent(moduleSource)}`;
+		const sandbox = new Dotnet('CSHARP');
+		const code = 'var input = Console.ReadLine();';
+
+		try {
+			await sandbox.load({ dotnet: { moduleUrl } });
+			expect(workerInstances).toHaveLength(0);
+			sandbox.write('stale\n');
+			sandbox.eof();
+			const explicitRun = sandbox.run(code, false, true, undefined, [], { stdin: '' });
+			await executionStarted;
+			expect(execute.mock.calls[0]?.[1]).toEqual(expect.objectContaining({ stdin: '' }));
+			sandbox.write('during\n');
+			sandbox.eof();
+			releaseExecution();
+
+			await expect(explicitRun).resolves.toBe(true);
+			expect(sandbox.pendingInput).toEqual([]);
+			expect(sandbox.pendingEof).toBe(false);
+			const bufferedRun = sandbox.run(code, false);
+			await Promise.resolve();
+			expect(execute).toHaveBeenCalledOnce();
+			sandbox.write('fresh\n');
+			await vi.waitFor(() => expect(execute).toHaveBeenCalledTimes(2));
+			expect(execute.mock.calls[1]?.[1]).toEqual(
+				expect.objectContaining({ stdin: 'fresh\n' })
+			);
+			await expect(bufferedRun).resolves.toBe(true);
+
+			const staleRun = sandbox.run(code, false);
+			await Promise.resolve();
+			expect(execute).toHaveBeenCalledTimes(2);
+			sandbox.terminate();
+			sandbox.write('fresh after main-thread termination\n');
+			await expect(staleRun).resolves.toBe(false);
+			expect(sandbox.pendingInput).toEqual(['fresh after main-thread termination\n']);
+
+			const retry = sandbox.run(code, false);
+			await vi.waitFor(() => expect(execute).toHaveBeenCalledTimes(3));
+			expect(execute.mock.calls[2]?.[1]).toEqual(
+				expect.objectContaining({ stdin: 'fresh after main-thread termination\n' })
+			);
+			await expect(retry).resolves.toBe(true);
+
+			const staleReloadRun = sandbox.run(code, false);
+			await Promise.resolve();
+			expect(execute).toHaveBeenCalledTimes(3);
+			const reload = sandbox.load({ dotnet: { moduleUrl } });
+			sandbox.write('fresh after main-thread reload\n');
+			await expect(staleReloadRun).resolves.toBe(false);
+			await expect(reload).resolves.toBeUndefined();
+			expect(sandbox.pendingInput).toEqual(['fresh after main-thread reload\n']);
+
+			const reloadRetry = sandbox.run(code, false);
+			await vi.waitFor(() => expect(execute).toHaveBeenCalledTimes(4));
+			expect(execute.mock.calls[3]?.[1]).toEqual(
+				expect.objectContaining({ stdin: 'fresh after main-thread reload\n' })
+			);
+			await expect(reloadRetry).resolves.toBe(true);
+		} finally {
+			releaseExecution();
+			delete (globalThis as any)[fixtureKey];
+		}
+	});
+
+	it('rejects invalid explicit stdin before changing worker state', async () => {
+		const sandbox = new Dotnet();
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		sandbox.write('queued\n');
+
+		await expect(
+			sandbox.run('printfn "hello"', false, true, undefined, [], {
+				stdin: null as never
+			})
+		).rejects.toThrow('stdin must be a string');
+		expect(worker?.postMessage).toHaveBeenCalledOnce();
+		expect(sandbox.pendingInput).toEqual(['queued\n']);
+		expect(sandbox.exit).toBe(true);
 	});
 
 	it('rejects load when no dotnet runtime urls are configured', async () => {

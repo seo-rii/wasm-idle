@@ -62,9 +62,11 @@ class Dotnet implements Sandbox {
 	compiledArtifact: unknown = null;
 	compiledCacheKey = '';
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
+	private activeExplicitStdinCleanup: (() => void) | null = null;
 	private readonly workerSession = new WorkerSession({
 		label: () => this.languageLabel,
 		onDispose: (worker) => {
+			this.activeExplicitStdinCleanup?.();
 			if (this.worker === worker) delete this.worker;
 			this.exit = true;
 		}
@@ -101,6 +103,13 @@ class Dotnet implements Sandbox {
 		_options: SandboxExecutionOptions = {},
 		progress?: SandboxProgress
 	) {
+		if (!this.exit) {
+			this.uid += 1;
+			this.activeExplicitStdinCleanup?.();
+			this.resetStdinState();
+			if (this.worker) this.workerSession.reset();
+			this.exit = true;
+		}
 		return this.workerSession.load(async (resolve, reject) => {
 			try {
 				const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
@@ -187,21 +196,32 @@ class Dotnet implements Sandbox {
 		for (const resolve of waiters) resolve();
 	}
 
+	private resetStdinState() {
+		this.pendingInput = [];
+		this.pendingEof = false;
+		this.resolveStdinWaiters();
+	}
+
 	private async collectStdinForRun(
 		code: string,
 		prepare: boolean,
-		options: SandboxExecutionOptions
+		options: SandboxExecutionOptions,
+		runUid: number
 	) {
+		const hasExplicitStdin = !prepare && options.stdin !== undefined;
+		if (runUid !== this.uid) return '';
 		if (
 			!prepare &&
-			!options.stdin &&
+			!hasExplicitStdin &&
 			this.pendingInput.length === 0 &&
 			!this.pendingEof &&
 			readsConsoleStdin(code)
 		) {
 			await new Promise<void>((resolve) => this.stdinWaiters.push(resolve));
 		}
-		const stdin = `${options.stdin || ''}${this.pendingInput.join('')}`;
+		if (runUid !== this.uid) return '';
+		if (hasExplicitStdin) return options.stdin as string;
+		const stdin = `${options.stdin ?? ''}${this.pendingInput.join('')}`;
 		if (!prepare) {
 			this.pendingInput = [];
 			this.pendingEof = false;
@@ -217,17 +237,34 @@ class Dotnet implements Sandbox {
 		args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
+		if (options.stdin !== undefined && typeof options.stdin !== 'string') {
+			return Promise.reject(new TypeError(`${this.languageLabel} stdin must be a string`));
+		}
 		if (this.runtimeModule && this.compiler) {
 			return this.runOnMainThread(code, prepare, _log, _prog, args, options);
 		}
-		this.exit = false;
 		if (!this.worker) return Promise.reject('Worker not loaded');
 		const worker = this.worker;
+		this.exit = false;
 		return new Promise<boolean | string>((resolve, reject) => {
 			const { programArgs } = resolveSandboxExecutionArgs(this.language, args, options);
 			const _uid = ++this.uid;
 			const operation = this.workerSession.beginRun(worker, reject);
-			worker.onmessage = (event: Event & { data: any }) => {
+			const hasExplicitStdin = !prepare && options.stdin !== undefined;
+			this.activeExplicitStdinCleanup?.();
+			let explicitStdinCleaned = false;
+			const cleanupExplicitStdin = () => {
+				if (!hasExplicitStdin || explicitStdinCleaned) return;
+				explicitStdinCleaned = true;
+				if (this.activeExplicitStdinCleanup !== cleanupExplicitStdin) return;
+				this.activeExplicitStdinCleanup = null;
+				this.resetStdinState();
+			};
+			if (hasExplicitStdin) {
+				this.resetStdinState();
+				this.activeExplicitStdinCleanup = cleanupExplicitStdin;
+			}
+			const handler = (event: Event & { data: any }) => {
 				if (this.worker !== worker) return reject('Worker not loaded');
 				if (_uid !== this.uid) return (worker.onmessage = null);
 				const { output, results, error, diagnostic, progress } = event.data;
@@ -235,22 +272,25 @@ class Dotnet implements Sandbox {
 				if (output) this.output?.(output);
 				if (diagnostic) this.oncompilerdiagnostic?.(diagnostic);
 				if (results) {
+					cleanupExplicitStdin();
 					this.elapse = Date.now() - this.begin;
 					this.exit = true;
 					this.workerSession.complete(operation);
 					resolve(results as string);
 				}
 				if (error) {
+					cleanupExplicitStdin();
 					this.elapse = Date.now() - this.begin;
 					this.exit = true;
 					this.workerSession.complete(operation);
 					reject(error);
 				}
 			};
+			worker.onmessage = handler;
 			this.begin = Date.now();
-			this.collectStdinForRun(code, prepare, options)
+			this.collectStdinForRun(code, prepare, options, _uid)
 				.then((stdin) => {
-					if (this.worker !== worker) return reject('Worker not loaded');
+					if (this.worker !== worker || _uid !== this.uid) return;
 					worker.postMessage({
 						code,
 						language: this.compileLanguage,
@@ -261,7 +301,10 @@ class Dotnet implements Sandbox {
 					});
 				})
 				.catch((error) => {
+					cleanupExplicitStdin();
+					if (worker.onmessage === handler) worker.onmessage = null;
 					this.workerSession.complete(operation);
+					this.exit = true;
 					reject(error);
 				});
 		});
@@ -280,6 +323,20 @@ class Dotnet implements Sandbox {
 		this.begin = Date.now();
 		const _uid = ++this.uid;
 		const { programArgs } = resolveSandboxExecutionArgs(this.language, args, options);
+		const hasExplicitStdin = !prepare && options.stdin !== undefined;
+		this.activeExplicitStdinCleanup?.();
+		let explicitStdinCleaned = false;
+		const cleanupExplicitStdin = () => {
+			if (!hasExplicitStdin || explicitStdinCleaned) return;
+			explicitStdinCleaned = true;
+			if (this.activeExplicitStdinCleanup !== cleanupExplicitStdin) return;
+			this.activeExplicitStdinCleanup = null;
+			this.resetStdinState();
+		};
+		if (hasExplicitStdin) {
+			this.resetStdinState();
+			this.activeExplicitStdinCleanup = cleanupExplicitStdin;
+		}
 		try {
 			const compileCacheKey = `${this.compileLanguage}\n${code}`;
 			if (!this.compiledArtifact || this.compiledCacheKey !== compileCacheKey) {
@@ -314,7 +371,7 @@ class Dotnet implements Sandbox {
 			}
 			if (prepare) return true;
 
-			const stdin = await this.collectStdinForRun(code, prepare, options);
+			const stdin = await this.collectStdinForRun(code, prepare, options, _uid);
 			if (_uid !== this.uid) return false;
 			const execution = await this.runtimeModule.executeBrowserDotnetArtifact(
 				this.compiledArtifact,
@@ -340,8 +397,11 @@ class Dotnet implements Sandbox {
 			}
 			return true;
 		} finally {
-			this.elapse = Date.now() - this.begin;
-			this.exit = true;
+			cleanupExplicitStdin();
+			if (_uid === this.uid) {
+				this.elapse = Date.now() - this.begin;
+				this.exit = true;
+			}
 		}
 	}
 
@@ -350,6 +410,7 @@ class Dotnet implements Sandbox {
 	}
 
 	terminate() {
+		this.activeExplicitStdinCleanup?.();
 		this.uid += 1;
 		this.resolveStdinWaiters();
 		this.workerSession.terminate();
@@ -358,9 +419,7 @@ class Dotnet implements Sandbox {
 
 	async clear() {
 		if (this.worker) this.worker.onmessage = null;
-		this.pendingInput = [];
-		this.pendingEof = false;
-		this.resolveStdinWaiters();
+		this.resetStdinState();
 		if (!this.exit) {
 			this.terminate();
 		}
