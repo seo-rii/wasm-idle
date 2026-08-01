@@ -8,6 +8,26 @@ class MockWorker {
 	terminate = vi.fn();
 }
 
+async function expectStaleWorkerHandlerIgnored(
+	selectHandler: (worker: MockWorker) => ((event: never) => void) | null,
+	event: ErrorEvent | MessageEvent
+) {
+	const oldWorker = new MockWorker();
+	const nextWorker = new MockWorker();
+	const session = new WorkerSession({ label: 'TinyGo' });
+	await session.waitForLoad(oldWorker as unknown as Worker, (resolve) => resolve());
+	const staleHandler = selectHandler(oldWorker);
+	await session.waitForLoad(nextWorker as unknown as Worker, (resolve) => resolve());
+	const rejectRun = vi.fn();
+	const operation = session.beginRun(nextWorker as unknown as Worker, rejectRun);
+
+	staleHandler?.(event as never);
+
+	expect(rejectRun).not.toHaveBeenCalled();
+	expect(nextWorker.terminate).not.toHaveBeenCalled();
+	expect(session.complete(operation)).toBe(true);
+}
+
 describe('WorkerSession', () => {
 	it('rejects and disposes a worker that fails while loading', async () => {
 		const worker = new MockWorker();
@@ -71,6 +91,19 @@ describe('WorkerSession', () => {
 		expect(worker.terminate).toHaveBeenCalledOnce();
 	});
 
+	it('ignores a stale script error after attaching a replacement worker', async () => {
+		await expectStaleWorkerHandlerIgnored((worker) => worker.onerror, {
+			message: 'old worker crashed'
+		} as ErrorEvent);
+	});
+
+	it('ignores a stale message error after attaching a replacement worker', async () => {
+		await expectStaleWorkerHandlerIgnored(
+			(worker) => worker.onmessageerror,
+			{} as MessageEvent
+		);
+	});
+
 	it('rejects the active operation and clears handlers when terminated', async () => {
 		const worker = new MockWorker();
 		const session = new WorkerSession({ label: 'Ruby' });
@@ -83,6 +116,28 @@ describe('WorkerSession', () => {
 		expect(worker.onerror).toBeNull();
 		expect(worker.onmessageerror).toBeNull();
 		expect(worker.terminate).toHaveBeenCalledOnce();
+	});
+
+	it('preserves the termination reason when worker cleanup throws', async () => {
+		const worker = new MockWorker();
+		worker.terminate.mockImplementation(() => {
+			throw new Error('worker termination failed');
+		});
+		const onDispose = vi.fn(() => {
+			throw new Error('worker disposal callback failed');
+		});
+		const session = new WorkerSession({ label: 'Ruby', onDispose });
+		const load = session.waitForLoad(worker as unknown as Worker, () => {});
+		const reason = new Error('cancel worker startup');
+
+		expect(() => session.terminate(reason)).not.toThrow();
+
+		await expect(load).rejects.toBe(reason);
+		expect(worker.onmessage).toBeNull();
+		expect(worker.onerror).toBeNull();
+		expect(worker.onmessageerror).toBeNull();
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(onDispose).toHaveBeenCalledWith(worker);
 	});
 
 	it('releases a compiler worker without ending the active debug operation', () => {

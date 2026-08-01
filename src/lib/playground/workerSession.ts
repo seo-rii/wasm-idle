@@ -29,14 +29,16 @@ export class WorkerSession {
 		if (this.worker === worker) return worker;
 		if (this.worker) {
 			const replacedWorker = this.disposeWorker();
-			if (replacedWorker) this.options.onDispose?.(replacedWorker);
+			if (replacedWorker) this.notifyDisposed(replacedWorker);
 		}
 
 		this.worker = worker;
 		worker.onerror = (event: ErrorEvent) => {
+			if (this.worker !== worker) return;
 			this.fail(scriptErrorMessage(this.label, event));
 		};
 		worker.onmessageerror = () => {
+			if (this.worker !== worker) return;
 			this.fail(`${this.label} worker message deserialization failed`);
 		};
 		return worker;
@@ -96,14 +98,14 @@ export class WorkerSession {
 
 	reset() {
 		const worker = this.disposeWorker();
-		if (worker) this.options.onDispose?.(worker);
+		if (worker) this.notifyDisposed(worker);
 	}
 
 	terminate(reason: unknown = 'Process terminated') {
 		const activeOperation = this.activeOperation;
 		this.activeOperation = null;
 		const worker = this.disposeWorker();
-		if (worker) this.options.onDispose?.(worker);
+		if (worker) this.notifyDisposed(worker);
 		activeOperation?.reject(reason);
 	}
 
@@ -127,8 +129,16 @@ export class WorkerSession {
 		const activeOperation = this.activeOperation;
 		this.activeOperation = null;
 		const worker = this.disposeWorker();
-		if (worker) this.options.onDispose?.(worker);
+		if (worker) this.notifyDisposed(worker);
 		activeOperation?.reject(reason);
+	}
+
+	private notifyDisposed(worker: Worker) {
+		try {
+			this.options.onDispose?.(worker);
+		} catch {
+			// Cleanup must not replace the worker operation result.
+		}
 	}
 
 	private disposeWorker() {
@@ -139,7 +149,11 @@ export class WorkerSession {
 		worker.onmessage = null;
 		worker.onerror = null;
 		worker.onmessageerror = null;
-		worker.terminate();
+		try {
+			worker.terminate();
+		} catch {
+			// The worker is already detached; cleanup remains best effort.
+		}
 		return worker;
 	}
 }
