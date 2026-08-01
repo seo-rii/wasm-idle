@@ -208,6 +208,29 @@ describe('LldbSandboxSession', () => {
 		runtimeState.breakpointResponseGates = [];
 	});
 
+	it('rejects invalid configured breakpoint lines before loading the runtime', () => {
+		const fetchImpl = vi.fn();
+
+		expect(
+			() =>
+				new LldbSandboxSession({
+					manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+					runtimeBaseUrl: 'https://example.com/debug/',
+					artifact: {
+						bytes: Uint8Array.of(0),
+						sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+					},
+					sourcePath: '/workspace/main.cpp',
+					breakpoints: [0],
+					pauseOnEntry: true,
+					onDebugEvent: () => undefined,
+					onOutput: () => undefined,
+					fetchImpl: fetchImpl as unknown as typeof fetch
+				})
+		).toThrow('LLDB breakpoint lines must be positive safe integers.');
+		expect(fetchImpl).not.toHaveBeenCalled();
+	});
+
 	it('maps DAP stopped state to source frames and top-level scopes', async () => {
 		const events: unknown[] = [];
 		const output: string[] = [];
@@ -1223,6 +1246,70 @@ describe('LldbSandboxSession', () => {
 		expect(runtimeState.session!.disposeCount).toBe(1);
 
 		releaseDispose();
+		await expect(completion).resolves.toBe(true);
+	});
+
+	it('rejects invalid dynamic breakpoints before replacing the current source state', async () => {
+		const events: Array<{
+			type: string;
+			breakpoints?: Array<{ requestedLine: number }>;
+		}> = [];
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [6],
+			pauseOnEntry: true,
+			onDebugEvent: (event) => events.push(event),
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({ manifestVersion: 2 })
+			})) as unknown as typeof fetch
+		});
+		const completion = controller.start();
+		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+		const requestCount = runtimeState.session!.breakpointRequests.length;
+		const lowLevelFailure = Promise.reject(new RangeError('low-level breakpoint validation'));
+		void lowLevelFailure.catch(() => undefined);
+		runtimeState.breakpointResponseGates = [lowLevelFailure];
+
+		await expect(controller.setBreakpoints([0])).rejects.toThrow(
+			'LLDB breakpoint lines must be positive safe integers.'
+		);
+		expect(runtimeState.session!.breakpointRequests).toHaveLength(requestCount);
+		expect(runtimeState.breakpointResponseGates).toHaveLength(1);
+
+		runtimeState.session!.resolvedBreakpointsBySource.set('/workspace/main.cpp', [
+			{
+				id: 91,
+				verified: true,
+				line: 6,
+				source: { path: '/workspace/main.cpp' }
+			}
+		]);
+		runtimeState.session!.emit({
+			event: 'breakpoint',
+			body: {
+				reason: 'changed',
+				breakpoint: {
+					id: 91,
+					verified: true,
+					line: 6,
+					source: { path: '/workspace/main.cpp' }
+				}
+			}
+		});
+		expect(events.filter((event) => event.type === 'breakpoints').at(-1)?.breakpoints).toEqual([
+			expect.objectContaining({ requestedLine: 6 })
+		]);
+
+		runtimeState.breakpointResponseGates = [];
+		runtimeState.session!.emitLifecycle({ type: 'target-exit', exitCode: 0 });
 		await expect(completion).resolves.toBe(true);
 	});
 

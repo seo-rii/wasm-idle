@@ -137,6 +137,13 @@ function dapResponseCollection(response: unknown, command: string, path: string)
 	return collection;
 }
 
+function snapshotBreakpointLines(lines: readonly number[]) {
+	if (lines.some((line) => !Number.isSafeInteger(line) || line < 1)) {
+		throw new RangeError('LLDB breakpoint lines must be positive safe integers.');
+	}
+	return [...lines];
+}
+
 export class LldbSandboxSession {
 	private session?: BrowserLldbSession;
 	private activeThreadId = 1;
@@ -167,7 +174,7 @@ export class LldbSandboxSession {
 			? options.sourceBreakpoints
 			: [{ sourcePath: options.sourcePath, lines: options.breakpoints }];
 		for (const { sourcePath, lines } of sourceBreakpoints) {
-			this.breakpointsBySource.set(sourcePath, [...lines]);
+			this.breakpointsBySource.set(sourcePath, snapshotBreakpointLines(lines));
 		}
 		for (const source of options.artifact.sources) {
 			if (source.contentSha256) {
@@ -379,7 +386,8 @@ export class LldbSandboxSession {
 	}
 
 	async setBreakpoints(lines: number[], sourcePath = this.options.sourcePath) {
-		this.breakpointsBySource.set(sourcePath, [...lines]);
+		const requestedLines = snapshotBreakpointLines(lines);
+		this.breakpointsBySource.set(sourcePath, requestedLines);
 		this.breakpointVersion += 1;
 		const requestVersion = (this.breakpointRequestVersions.get(sourcePath) ?? 0) + 1;
 		this.breakpointRequestVersions.set(sourcePath, requestVersion);
@@ -387,7 +395,7 @@ export class LldbSandboxSession {
 		const session = this.requireSession();
 		let breakpoints: Array<{ verified?: boolean; line?: number; message?: string }>;
 		try {
-			breakpoints = await session.setBreakpoints({ path: sourcePath }, lines);
+			breakpoints = await session.setBreakpoints({ path: sourcePath }, requestedLines);
 		} catch (error) {
 			if (
 				this.session !== session ||
@@ -404,7 +412,7 @@ export class LldbSandboxSession {
 		) {
 			return;
 		}
-		this.publishResolvedBreakpoints(breakpoints, lines, sourcePath);
+		this.publishResolvedBreakpoints(breakpoints, requestedLines, sourcePath);
 	}
 
 	async evaluate(expression: string) {
