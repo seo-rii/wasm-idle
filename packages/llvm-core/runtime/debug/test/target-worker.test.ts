@@ -8,7 +8,7 @@ const workerMocks = vi.hoisted(() => ({
 	chdir: vi.fn(),
 	closeRspInput: vi.fn(),
 	closeRspOutput: vi.fn(),
-	lifecycle: 'exit' as 'exit' | 'abort',
+	lifecycle: 'exit' as 'exit' | 'abort' | 'pending',
 	mountDebugFiles: vi.fn(),
 	postWorkerError: vi.fn(),
 	postWorkerMessage: vi.fn()
@@ -28,6 +28,7 @@ vi.mock('../src/worker/module-loader.js', () => ({
 		HEAPU8: new Uint8Array(256),
 		callMain: (args: string[]) => {
 			workerMocks.callMain(args);
+			if (workerMocks.lifecycle === 'pending') return 0;
 			queueMicrotask(() => {
 				if (workerMocks.lifecycle === 'abort') {
 					(options.onAbort as (reason: unknown) => void)('runtime crash');
@@ -152,6 +153,37 @@ describe('WAMR target worker launch', () => {
 			);
 		}
 	);
+
+	it('rejects duplicate initialization without closing the active target outputs', async () => {
+		workerMocks.lifecycle = 'pending';
+		const { handleTargetWorkerMessage } = await loadTargetWorker();
+		const active = initializeMessage('target-worker-active');
+		const stdout = new SharedByteQueue(active.stdout);
+		const stderr = new SharedByteQueue(active.stderr);
+
+		handleTargetWorkerMessage(active);
+		await vi.waitFor(() =>
+			expect(workerMocks.postWorkerMessage).toHaveBeenCalledWith({
+				type: 'ready',
+				worker: 'target',
+				generation: active.generation
+			})
+		);
+
+		const duplicate = initializeMessage('target-worker-duplicate');
+		handleTargetWorkerMessage(duplicate);
+		await vi.waitFor(() =>
+			expect(workerMocks.postWorkerError).toHaveBeenCalledWith(
+				'target',
+				duplicate.generation,
+				expect.objectContaining({ message: 'target worker is already initialized' })
+			)
+		);
+		expect(stdout.closed).toBe(false);
+		expect(stderr.closed).toBe(false);
+
+		handleTargetWorkerMessage({ type: 'dispose', generation: active.generation });
+	});
 
 	it('passes cwd, environment, and guest arguments to the debug runtime', async () => {
 		const { handleTargetWorkerMessage } = await loadTargetWorker();
