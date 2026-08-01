@@ -124,6 +124,7 @@ async function initialize(message: TargetWorkerInitializeMessage) {
 		rejectLifecycle(error);
 	};
 	const factory = await loadEmscriptenModuleFactory(message.assets.js);
+	if (disposed) return;
 	const module = await factory({
 		noInitialRun: true,
 		wasmIdleDebugTransport: transport,
@@ -163,6 +164,7 @@ async function initialize(message: TargetWorkerInitializeMessage) {
 			rejectTarget(new Error(`WAMR aborted: ${String(reason)}`));
 		}
 	});
+	if (disposed) return;
 	mountDebugFiles(module, message.module, message.workspaceFiles);
 	module.FS.chdir(cwd);
 	const stopMemoryTelemetry = startLinearMemoryTelemetry(module, 'target', message.generation);

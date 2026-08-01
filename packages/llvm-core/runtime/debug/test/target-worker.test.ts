@@ -10,6 +10,7 @@ const workerMocks = vi.hoisted(() => ({
 	closeRspOutput: vi.fn(),
 	lifecycle: 'exit' as 'exit' | 'abort' | 'pending',
 	loadFailure: undefined as Error | undefined,
+	loadGate: undefined as Promise<void> | undefined,
 	mountDebugFiles: vi.fn(),
 	postWorkerError: vi.fn(),
 	postWorkerMessage: vi.fn()
@@ -29,6 +30,7 @@ vi.mock('../src/worker/module-loader.js', () => ({
 		}
 	})),
 	loadEmscriptenModuleFactory: vi.fn(async () => {
+		if (workerMocks.loadGate) await workerMocks.loadGate;
 		if (workerMocks.loadFailure) {
 			const failure = workerMocks.loadFailure;
 			workerMocks.loadFailure = undefined;
@@ -112,6 +114,7 @@ describe('WAMR target worker launch', () => {
 		vi.clearAllMocks();
 		workerMocks.lifecycle = 'exit';
 		workerMocks.loadFailure = undefined;
+		workerMocks.loadGate = undefined;
 	});
 
 	it.each([
@@ -236,6 +239,27 @@ describe('WAMR target worker launch', () => {
 				generation: recovery.generation
 			})
 		);
+	});
+
+	it('does not launch WAMR when disposal wins the loader race', async () => {
+		let releaseLoader!: () => void;
+		workerMocks.loadGate = new Promise<void>((resolve) => {
+			releaseLoader = resolve;
+		});
+		const { handleTargetWorkerMessage } = await loadTargetWorker();
+		const message = initializeMessage('target-worker-disposed-during-load');
+
+		handleTargetWorkerMessage(message);
+		handleTargetWorkerMessage({ type: 'dispose', generation: message.generation });
+		releaseLoader();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(workerMocks.mountDebugFiles).not.toHaveBeenCalled();
+		expect(workerMocks.callMain).not.toHaveBeenCalled();
+		expect(workerMocks.postWorkerMessage).not.toHaveBeenCalledWith(
+			expect.objectContaining({ type: 'ready', generation: message.generation })
+		);
+		expect(workerMocks.postWorkerError).not.toHaveBeenCalled();
 	});
 
 	it('rejects duplicate initialization without closing the active target outputs', async () => {

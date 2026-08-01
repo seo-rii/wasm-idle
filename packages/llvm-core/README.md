@@ -135,6 +135,9 @@ If WAMR loading or target setup fails after claiming a generation, the target Wo
 active RSP and WASI stream, clears its worker-global transport, and releases that generation before
 reporting the error. A later valid initialization can therefore recover without reusing stale
 queues.
+If target disposal wins while the Emscripten loader or factory is pending, initialization stops at
+that async boundary; it does not mount files, report readiness, or enter WAMR with already-closed
+streams.
 The LLDB Worker applies the same recovery contract to all DAP and RSP streams and clears its shared
 ring registry when its loader, module setup, or adapter lifecycle fails. It releases the failed
 generation before emitting the worker error, so a replacement adapter cannot observe stale
