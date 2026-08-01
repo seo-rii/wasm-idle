@@ -123,6 +123,59 @@ describe('Lua sandbox', () => {
 		]);
 	});
 
+	it('rejects an overlapping run without disturbing the active Lua execution', async () => {
+		const sandbox = new Lua();
+		const worker = new MockWorker();
+		worker.postMessage.mockImplementation(() => undefined);
+		sandbox.worker = worker as unknown as Worker;
+		const outputs: string[] = [];
+		sandbox.output = (chunk: string) => outputs.push(chunk);
+
+		const firstRun = sandbox.run('print("first")', false);
+		const firstHandler = worker.onmessage;
+		await expect(sandbox.run('print("second")', false)).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			runtimeId: 'LUA'
+		});
+
+		expect(worker.postMessage).toHaveBeenCalledOnce();
+		expect(worker.onmessage).toBe(firstHandler);
+		expect(worker.terminate).not.toHaveBeenCalled();
+
+		firstHandler?.({
+			data: { output: 'first\n', results: true }
+		} as MessageEvent<any>);
+		await expect(firstRun).resolves.toBe(true);
+		expect(outputs).toEqual(['first\n']);
+
+		worker.postMessage.mockImplementationOnce(() => {
+			queueMicrotask(() => {
+				worker.onmessage?.({ data: { results: true } } as MessageEvent<any>);
+			});
+		});
+		await expect(sandbox.run('print("retry")', false)).resolves.toBe(true);
+		expect(worker.postMessage).toHaveBeenCalledTimes(2);
+	});
+
+	it('releases Lua run activity after synchronous dispatch failure', async () => {
+		const sandbox = new Lua();
+		const worker = new MockWorker();
+		const dispatchFailure = new Error('Lua dispatch failed');
+		worker.postMessage.mockImplementationOnce(() => {
+			throw dispatchFailure;
+		});
+		sandbox.worker = worker as unknown as Worker;
+
+		await expect(sandbox.run('print("fail")', false)).rejects.toBe(dispatchFailure);
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.exit).toBe(true);
+
+		await sandbox.load('/absproxy/5173');
+		await expect(sandbox.run('print("retry")', false)).resolves.toBe(true);
+	});
+
 	it('rejects load when no Lua module url is configured', async () => {
 		publicEnv.PUBLIC_WASM_LUA_MODULE_URL = '';
 		const sandbox = new Lua();
