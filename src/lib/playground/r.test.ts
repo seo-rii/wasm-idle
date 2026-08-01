@@ -106,6 +106,116 @@ describe('R sandbox', () => {
 		expect(outputs).toContain('factorial_plus_bonus=27\n');
 	});
 
+	it('normalizes a valid R workspace before worker dispatch', async () => {
+		const sandbox = new R();
+		await sandbox.load({ r: { baseUrl: '/webr/test/' } });
+
+		await expect(
+			sandbox.run('main()', false, true, undefined, [], {
+				activePath: 'nested\\main.R',
+				workspaceFiles: [{ path: 'fixtures\\helper.R', content: 'helper <- 1' }]
+			})
+		).resolves.toBe(true);
+
+		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
+			2,
+			expect.objectContaining({
+				activePath: 'nested/main.R',
+				workspaceFiles: [{ path: 'fixtures/helper.R', content: 'helper <- 1' }]
+			})
+		);
+	});
+
+	it.each([
+		{
+			name: 'traversal path',
+			code: 'A',
+			options: { activePath: '../main.R' },
+			expected: { code: 'invalid-path', path: '../main.R' }
+		},
+		{
+			name: 'absolute path',
+			code: 'A',
+			options: { activePath: '/tmp/main.R' },
+			expected: { code: 'invalid-path', path: '/tmp/main.R' }
+		},
+		{
+			name: 'NUL path',
+			code: 'A',
+			options: { activePath: 'bad\0.R' },
+			expected: { code: 'invalid-path', path: 'bad\0.R' }
+		},
+		{
+			name: 'duplicate path',
+			code: 'A',
+			options: {
+				workspaceFiles: [
+					{ path: 'data/module.R', content: 'A' },
+					{ path: 'data/module.R', content: 'B' }
+				]
+			},
+			expected: { code: 'duplicate-path', path: 'data/module.R' }
+		},
+		{
+			name: 'case-colliding path',
+			code: 'A',
+			options: {
+				workspaceFiles: [
+					{ path: 'DATA/module.R', content: 'A' },
+					{ path: 'data/module.R', content: 'B' }
+				]
+			},
+			expected: { code: 'case-collision', path: 'data/module.R' }
+		},
+		{
+			name: 'file count overflow',
+			code: 'A',
+			options: {
+				workspaceFiles: [{ path: 'data/module.R', content: 'B' }],
+				workspaceLimits: { maxFiles: 1 }
+			},
+			expected: { code: 'file-count-limit', limit: 1, actual: 2 }
+		},
+		{
+			name: 'per-file overflow clamped to execution limits',
+			code: '12345',
+			options: {
+				limits: { maxWorkspaceBytes: 4 },
+				workspaceLimits: { maxFileBytes: 100 }
+			},
+			expected: { code: 'file-size-limit', limit: 4, actual: 5 }
+		},
+		{
+			name: 'aggregate overflow clamped to execution limits',
+			code: '123',
+			options: {
+				limits: { maxWorkspaceBytes: 4 },
+				workspaceFiles: [{ path: 'data/module.R', content: '45' }],
+				workspaceLimits: { maxTotalBytes: 100 }
+			},
+			expected: { code: 'total-size-limit', limit: 4, actual: 5 }
+		}
+	])(
+		'rejects an R workspace with $name before changing execution state',
+		async ({ code, options, expected }) => {
+			const sandbox = new R();
+			await sandbox.load({ r: { baseUrl: '/webr/test/' } });
+			const worker = workerInstances[0];
+			const loadHandler = worker.onmessage;
+
+			await expect(
+				sandbox.run(code, false, true, undefined, [], options)
+			).rejects.toMatchObject({
+				name: 'WorkspaceValidationError',
+				...expected
+			});
+			expect(worker.postMessage).toHaveBeenCalledTimes(1);
+			expect(worker.onmessage).toBe(loadHandler);
+			expect(sandbox.uid).toBe(0);
+			expect(sandbox.exit).toBe(true);
+		}
+	);
+
 	it('rejects an overlapping run without disturbing the active R execution', async () => {
 		const sandbox = new R();
 		const worker = new MockWorker();
